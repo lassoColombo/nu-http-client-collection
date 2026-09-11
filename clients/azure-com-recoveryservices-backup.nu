@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-backupconfig-vaultconfig get-backup-configs" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "backup-vault-configs-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -128,7 +128,7 @@ export def commands []: nothing -> table {
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{vaultName}/backupconfig/vaultconfig
 # operationId: BackupVaultConfigs_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-backupconfig-vaultconfig get-backup-configs" [
+export def "backup-vault-configs-get" [
   subscription_id: string
   resource_group_name: string
   vault_name: string
@@ -171,7 +171,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # PATCH /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{vaultName}/backupconfig/vaultconfig
 # operationId: BackupVaultConfigs_Update
 # --properties shape: {enhancedSecurityState?: "Invalid"|"Enabled"|"Disabled", storageType?: "Invalid"|"GeoRedundant"|"LocallyRedundant", storageTypeState?: "Invalid"|"Locked"|"Unlocked"}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-backupconfig-vaultconfig update-backup-configs" [
+export def "backup-vault-configs-update" [
   subscription_id: string
   resource_group_name: string
   vault_name: string
@@ -218,7 +218,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{vaultName}/backupstorageconfig/vaultstorageconfig
 # operationId: BackupStorageConfigs_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-backupstorageconfig-vaultstorageconfig get-backup-storage-configs" [
+export def "backup-storage-configs-get" [
   subscription_id: string
   resource_group_name: string
   vault_name: string
@@ -261,7 +261,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # PATCH /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{vaultName}/backupstorageconfig/vaultstorageconfig
 # operationId: BackupStorageConfigs_Update
 # --properties shape: {storageModelType?: "Invalid"|"GeoRedundant"|"LocallyRedundant", storageType?: "Invalid"|"GeoRedundant"|"LocallyRedundant", storageTypeState?: "Invalid"|"Locked"|"Unlocked"}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-backupstorageconfig-vaultstorageconfig update-backup-storage-configs" [
+export def "backup-storage-configs-update" [
   subscription_id: string
   resource_group_name: string
   vault_name: string

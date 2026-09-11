@@ -102,7 +102,7 @@ def accept-completer [] { ["application/json" "application/xml" "text/json" "tex
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "reporting-mortgagesbycreateddate get-controller-mortgages-by-created-date" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "reporting-controller-mortgages-by-created-date" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -126,7 +126,7 @@ export def commands []: nothing -> table {
 #
 # GET /v3/reporting/{shortName}/mortgagesbycreateddate
 # operationId: ReportingController_MortgagesByCreatedDate
-export def "reporting-mortgagesbycreateddate get-controller-mortgages-by-created-date" [
+export def "reporting-controller-mortgages-by-created-date" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -168,7 +168,7 @@ export def "reporting-mortgagesbycreateddate get-controller-mortgages-by-created
 #
 # GET /v3/reporting/{shortName}/mortgagesbyupdateddate
 # operationId: ReportingController_MortgagesByUpdatedDate
-export def "reporting-mortgagesbyupdateddate get-controller-mortgages-by-updated-date" [
+export def "reporting-controller-mortgages-by-updated-date" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -210,7 +210,7 @@ export def "reporting-mortgagesbyupdateddate get-controller-mortgages-by-updated
 #
 # GET /v3/reporting/{shortName}/repossesionsbycreateddate
 # operationId: ReportingController_RepossessionsByCreatedDate
-export def "reporting-repossesionsbycreateddate get-controller-repossessions-by-created-date" [
+export def "reporting-controller-repossessions-by-created-date" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -252,7 +252,7 @@ export def "reporting-repossesionsbycreateddate get-controller-repossessions-by-
 #
 # GET /v3/reporting/{shortName}/repossesionsbyupdateddate
 # operationId: ReportingController_RepossessionsByUpdatedDate
-export def "reporting-repossesionsbyupdateddate get-controller-repossessions-by-updated-date" [
+export def "reporting-controller-repossessions-by-updated-date" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

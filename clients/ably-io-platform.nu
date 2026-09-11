@@ -133,7 +133,7 @@ def unit-completer [] { ["day" "hour" "minute" "month"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "channels get-metadata-of-list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-metadata-of-all-channels" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -157,7 +157,7 @@ export def commands []: nothing -> table {
 #
 # GET /channels
 # operationId: getMetadataOfAllChannels
-export def "channels get-metadata-of-list" [
+export def "get-metadata-of-all-channels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -200,7 +200,7 @@ export def "channels get-metadata-of-list" [
 #
 # GET /channels/{channel_id}
 # operationId: getMetadataOfChannel
-export def "channels get-metadata" [
+export def "get-metadata-of-channel" [
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -236,7 +236,7 @@ export def "channels get-metadata" [
 #
 # GET /channels/{channel_id}/messages
 # operationId: getMessagesByChannel
-export def "channels-messages get" [
+export def "get-messages-by-channel" [
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -279,7 +279,7 @@ export def "channels-messages get" [
 # POST /channels/{channel_id}/messages
 # operationId: publishMessagesToChannel
 # --extras shape: {push?: record}
-export def "channels-messages publish" [
+export def "publish-messages-to-channel" [
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -325,7 +325,7 @@ export def "channels-messages publish" [
 #
 # GET /channels/{channel_id}/presence
 # operationId: getPresenceOfChannel
-export def "channels-presence get" [
+export def "get-presence-of-channel" [
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -366,7 +366,7 @@ export def "channels-presence get" [
 #
 # GET /channels/{channel_id}/presence/history
 # operationId: getPresenceHistoryOfChannel
-export def "channels-presence-history get" [
+export def "get-presence-history-of-channel" [
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -408,7 +408,7 @@ export def "channels-presence-history get" [
 #
 # POST /keys/{keyName}/requestToken
 # operationId: requestAccessToken
-export def "keys-request-token request-access" [
+export def "request-access-token" [
   key_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -453,7 +453,7 @@ export def "keys-request-token request-access" [
 #
 # DELETE /push/channelSubscriptions
 # operationId: deletePushDeviceDetails
-export def "push-channel-subscriptions delete-device-details" [
+export def "delete-push-device-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -495,7 +495,7 @@ export def "push-channel-subscriptions delete-device-details" [
 #
 # GET /push/channelSubscriptions
 # operationId: getPushSubscriptionsOnChannels
-export def "push-channel-subscriptions get" [
+export def "get-push-subscriptions-on-channels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -538,7 +538,7 @@ export def "push-channel-subscriptions get" [
 #
 # POST /push/channelSubscriptions
 # operationId: subscribePushDeviceToChannel
-export def "push-channel-subscriptions subscribe-device" [
+export def "subscribe-push-device-to-channel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -583,7 +583,7 @@ export def "push-channel-subscriptions subscribe-device" [
 #
 # GET /push/channels
 # operationId: getChannelsWithPushSubscribers
-export def "push-channels get-with-subscribers" [
+export def "get-channels-with-push-subscribers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -623,7 +623,7 @@ export def "push-channels get-with-subscribers" [
 #
 # DELETE /push/deviceRegistrations
 # operationId: unregisterAllPushDevices
-export def "push-device-registrations delete-list" [
+export def "unregister-all-push-devices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -664,7 +664,7 @@ export def "push-device-registrations delete-list" [
 #
 # GET /push/deviceRegistrations
 # operationId: getRegisteredPushDevices
-export def "push-device-registrations get-registered" [
+export def "get-registered-push-devices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -708,7 +708,7 @@ export def "push-device-registrations get-registered" [
 # POST /push/deviceRegistrations
 # operationId: registerPushDevice
 # --push.recipient shape: {clientId?: string, deviceId?: string, deviceToken?: string, registrationToken?: string, transportType?: "apns"|"fcm"|"gcm"}
-export def "push-device-registrations create" [
+export def "register-push-device" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -758,7 +758,7 @@ export def "push-device-registrations create" [
 #
 # DELETE /push/deviceRegistrations/{device_id}
 # operationId: unregisterPushDevice
-export def "push-device-registrations delete" [
+export def "unregister-push-device" [
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -794,7 +794,7 @@ export def "push-device-registrations delete" [
 #
 # GET /push/deviceRegistrations/{device_id}
 # operationId: getPushDeviceDetails
-export def "push-device-registrations get-details" [
+export def "get-push-device-details" [
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -832,7 +832,7 @@ export def "push-device-registrations get-details" [
 # PATCH /push/deviceRegistrations/{device_id}
 # operationId: patchPushDeviceDetails
 # --push.recipient shape: {clientId?: string, deviceId?: string, deviceToken?: string, registrationToken?: string, transportType?: "apns"|"fcm"|"gcm"}
-export def "push-device-registrations update-details-by-device-id" [
+export def "patch-push-device-details" [
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -880,7 +880,7 @@ export def "push-device-registrations update-details-by-device-id" [
 # PUT /push/deviceRegistrations/{device_id}
 # operationId: putPushDeviceDetails
 # --push.recipient shape: {clientId?: string, deviceId?: string, deviceToken?: string, registrationToken?: string, transportType?: "apns"|"fcm"|"gcm"}
-export def "push-device-registrations update-details-by-device-id-1" [
+export def "put-push-device-details" [
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -927,7 +927,7 @@ export def "push-device-registrations update-details-by-device-id-1" [
 #
 # GET /push/deviceRegistrations/{device_id}/resetUpdateToken
 # operationId: updatePushDeviceDetails
-export def "push-device-registrations-reset-update-token update-details" [
+export def "update-push-device-details" [
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -966,7 +966,7 @@ export def "push-device-registrations-reset-update-token update-details" [
 # operationId: publishPushNotificationToDevices
 # --push shape: {apns?: record, data?: string, fcm?: record, notification?: record, web?: record}
 # --recipient shape: {clientId?: string, deviceId?: string, deviceToken?: string, registrationToken?: string, transportType?: "apns"|"fcm"|"gcm"}
-export def "push-publish publish-notification-to-devices" [
+export def "publish-push-notification-to-devices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1010,7 +1010,7 @@ export def "push-publish publish-notification-to-devices" [
 #
 # GET /stats
 # operationId: getStats
-export def "stats get" [
+export def "get-stats" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1050,7 +1050,7 @@ export def "stats get" [
 #
 # GET /time
 # operationId: getTime
-export def "time get" [
+export def "get-time" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

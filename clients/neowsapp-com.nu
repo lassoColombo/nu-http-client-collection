@@ -97,7 +97,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "rest-feed get-near-earth-object" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "retrieve-near-earth-object-feed" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -121,7 +121,7 @@ export def commands []: nothing -> table {
 #
 # GET /rest/v1/feed
 # operationId: retrieveNearEarthObjectFeed
-export def "rest-feed get-near-earth-object" [
+export def "retrieve-near-earth-object-feed" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -159,7 +159,7 @@ export def "rest-feed get-near-earth-object" [
 #
 # GET /rest/v1/feed/today
 # operationId: retrieveNEOFeedToday
-export def "rest-feed-today get-neo" [
+export def "retrieve-neo-feed-today" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -195,7 +195,7 @@ export def "rest-feed-today get-neo" [
 #
 # GET /rest/v1/neo/browse
 # operationId: browseNearEarthObjects
-export def "rest-neo-browse get-near-earth-objects" [
+export def "browse-near-earth-objects" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -232,7 +232,7 @@ export def "rest-neo-browse get-near-earth-objects" [
 #
 # GET /rest/v1/neo/sentry
 # operationId: retrieveSentryRiskData
-export def "rest-neo-sentry list" [
+export def "retrieve-sentry-risk-data" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -270,7 +270,7 @@ export def "rest-neo-sentry list" [
 #
 # GET /rest/v1/neo/sentry/{asteroid_id}
 # operationId: retrieveSentryRiskDataById
-export def "rest-neo-sentry get-risk-data" [
+export def "retrieve-sentry-risk-data-by-id" [
   asteroid_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -306,7 +306,7 @@ export def "rest-neo-sentry get-risk-data" [
 #
 # GET /rest/v1/neo/{asteroid_id}
 # operationId: retrieveNearEarthObjectById
-export def "rest-neo get-near-earth-object" [
+export def "retrieve-near-earth-object-by-id" [
   asteroid_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -342,7 +342,7 @@ export def "rest-neo get-near-earth-object" [
 #
 # GET /rest/v1/stats
 # operationId: retrieveCurrentNeoStatistics
-export def "rest-stats get-neo-statistics" [
+export def "retrieve-current-neo-statistics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

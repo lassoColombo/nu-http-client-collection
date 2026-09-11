@@ -128,7 +128,7 @@ def delivery-method-completer [] { ["dedicated" "shared"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -152,7 +152,7 @@ export def commands []: nothing -> table {
 #
 # GET /accounts
 # operationId: accounts_list
-export def "accounts list" [
+export def "accounts-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -194,7 +194,7 @@ export def "accounts list" [
 #
 # POST /accounts
 # operationId: accounts_create
-export def "accounts create" [
+export def "accounts-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -239,7 +239,7 @@ export def "accounts create" [
 #
 # DELETE /accounts/{id}
 # operationId: accounts_destroy
-export def "accounts delete" [
+export def "accounts-destroy" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -275,7 +275,7 @@ export def "accounts delete" [
 #
 # GET /accounts/{id}
 # operationId: accounts_read
-export def "accounts get" [
+export def "accounts-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -311,7 +311,7 @@ export def "accounts get" [
 #
 # PATCH /accounts/{id}
 # operationId: accounts_partial_update
-export def "accounts update-by-id" [
+export def "accounts-partial-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -351,7 +351,7 @@ export def "accounts update-by-id" [
 #
 # PUT /accounts/{id}
 # operationId: accounts_update
-export def "accounts update-by-id-1" [
+export def "accounts-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -398,7 +398,7 @@ export def "accounts update-by-id-1" [
 #
 # POST /auth/refresh
 # operationId: auth_token_refresh
-export def "auth-refresh refresh-token" [
+export def "auth-token-refresh" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -436,7 +436,7 @@ export def "auth-refresh refresh-token" [
 #
 # POST /auth/token
 # operationId: auth_token_create
-export def "auth-token create" [
+export def "auth-token-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -475,7 +475,7 @@ export def "auth-token create" [
 #
 # GET /connections
 # operationId: connections_list
-export def "connections list" [
+export def "connections-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -520,7 +520,7 @@ export def "connections list" [
 #
 # GET /connections/{id}
 # operationId: connections_read
-export def "connections get" [
+export def "connections-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -556,7 +556,7 @@ export def "connections get" [
 #
 # GET /contacts
 # operationId: contacts_list
-export def "contacts list" [
+export def "contacts-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -595,7 +595,7 @@ export def "contacts list" [
 #
 # POST /contacts
 # operationId: contacts_create
-export def "contacts create" [
+export def "contacts-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -638,7 +638,7 @@ export def "contacts create" [
 #
 # DELETE /contacts/{id}
 # operationId: contacts_destroy
-export def "contacts delete" [
+export def "contacts-destroy" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -674,7 +674,7 @@ export def "contacts delete" [
 #
 # GET /contacts/{id}
 # operationId: contacts_read
-export def "contacts get" [
+export def "contacts-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -710,7 +710,7 @@ export def "contacts get" [
 #
 # PATCH /contacts/{id}
 # operationId: contacts_partial_update
-export def "contacts update-by-id" [
+export def "contacts-partial-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -750,7 +750,7 @@ export def "contacts update-by-id" [
 #
 # PUT /contacts/{id}
 # operationId: contacts_update
-export def "contacts update-by-id-1" [
+export def "contacts-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -795,7 +795,7 @@ export def "contacts update-by-id-1" [
 #
 # GET /devices
 # operationId: devices_list
-export def "devices list" [
+export def "devices-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -841,7 +841,7 @@ export def "devices list" [
 #
 # GET /devices/{id}
 # operationId: devices_read
-export def "devices get" [
+export def "devices-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -877,7 +877,7 @@ export def "devices get" [
 #
 # GET /facilities
 # operationId: facilities_list
-export def "facilities list" [
+export def "facilities-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -925,7 +925,7 @@ export def "facilities list" [
 #
 # GET /facilities/{id}
 # operationId: facilities_read
-export def "facilities get" [
+export def "facilities-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -961,7 +961,7 @@ export def "facilities get" [
 #
 # GET /health
 # operationId: api_health_read
-export def "health get" [
+export def "api-health-read" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -995,7 +995,7 @@ export def "health get" [
 #
 # GET /implementation
 # operationId: api_implementation_read
-export def "implementation get" [
+export def "api-implementation-read" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1029,7 +1029,7 @@ export def "implementation get" [
 #
 # GET /ips
 # operationId: ips_list
-export def "ips list" [
+export def "ips-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1077,7 +1077,7 @@ export def "ips list" [
 #
 # POST /ips
 # operationId: ips_create
-export def "ips create" [
+export def "ips-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1123,7 +1123,7 @@ export def "ips create" [
 #
 # GET /ips/{id}
 # operationId: ips_read
-export def "ips get" [
+export def "ips-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1159,7 +1159,7 @@ export def "ips get" [
 #
 # PATCH /ips/{id}
 # operationId: ips_partial_update
-export def "ips update-by-id" [
+export def "ips-partial-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1199,7 +1199,7 @@ export def "ips update-by-id" [
 #
 # PUT /ips/{id}
 # operationId: ips_update
-export def "ips update-by-id-1" [
+export def "ips-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1247,7 +1247,7 @@ export def "ips update-by-id-1" [
 #
 # GET /macs
 # operationId: macs_list
-export def "macs list" [
+export def "macs-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1291,7 +1291,7 @@ export def "macs list" [
 #
 # POST /macs
 # operationId: macs_create
-export def "macs create" [
+export def "macs-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1334,7 +1334,7 @@ export def "macs create" [
 #
 # DELETE /macs/{id}
 # operationId: macs_destroy
-export def "macs delete" [
+export def "macs-destroy" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1370,7 +1370,7 @@ export def "macs delete" [
 #
 # GET /macs/{id}
 # operationId: macs_read
-export def "macs get" [
+export def "macs-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1406,7 +1406,7 @@ export def "macs get" [
 #
 # GET /member-joining-rules
 # operationId: member_joining_rules_list
-export def "member-joining-rules list" [
+export def "member-joining-rules-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1444,7 +1444,7 @@ export def "member-joining-rules list" [
 # POST /member-joining-rules
 # Discriminator (request): type = allow, deny
 # operationId: member_joining_rules_create
-export def "member-joining-rules create" [
+export def "member-joining-rules-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1483,7 +1483,7 @@ export def "member-joining-rules create" [
 # DELETE /member-joining-rules/{id}
 # Discriminator (response): type = allow, deny
 # operationId: member_joining_rules_destroy
-export def "member-joining-rules delete" [
+export def "member-joining-rules-destroy" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1520,7 +1520,7 @@ export def "member-joining-rules delete" [
 # GET /member-joining-rules/{id}
 # Discriminator (response): type = allow, deny
 # operationId: member_joining_rules_read
-export def "member-joining-rules get" [
+export def "member-joining-rules-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1557,7 +1557,7 @@ export def "member-joining-rules get" [
 # PATCH /member-joining-rules/{id}
 # Discriminator (request): type = allow, deny
 # operationId: member_joining_rules_partial_update
-export def "member-joining-rules update-by-id" [
+export def "member-joining-rules-partial-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1598,7 +1598,7 @@ export def "member-joining-rules update-by-id" [
 # PUT /member-joining-rules/{id}
 # Discriminator (request): type = allow, deny
 # operationId: member_joining_rules_update
-export def "member-joining-rules update-by-id-1" [
+export def "member-joining-rules-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1638,7 +1638,7 @@ export def "member-joining-rules update-by-id-1" [
 #
 # GET /metro-area-networks
 # operationId: metro_area_networks_list
-export def "metro-area-networks list" [
+export def "metro-area-networks-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1677,7 +1677,7 @@ export def "metro-area-networks list" [
 #
 # GET /metro-area-networks/{id}
 # operationId: metro_area_networks_read
-export def "metro-area-networks get" [
+export def "metro-area-networks-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1713,7 +1713,7 @@ export def "metro-area-networks get" [
 #
 # GET /metro-areas
 # operationId: metro_areas_list
-export def "metro-areas list" [
+export def "metro-areas-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1749,7 +1749,7 @@ export def "metro-areas list" [
 #
 # GET /metro-areas/{id}
 # operationId: metro_areas_read
-export def "metro-areas get" [
+export def "metro-areas-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1785,7 +1785,7 @@ export def "metro-areas get" [
 #
 # GET /network-feature-configs
 # operationId: network_feature_configs_list
-export def "network-feature-configs list" [
+export def "network-feature-configs-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1830,7 +1830,7 @@ export def "network-feature-configs list" [
 # POST /network-feature-configs
 # Discriminator (request): type = route_server
 # operationId: network_feature_configs_create
-export def "network-feature-configs create" [
+export def "network-feature-configs-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1869,7 +1869,7 @@ export def "network-feature-configs create" [
 # DELETE /network-feature-configs/{id}
 # Discriminator (response): type = route_server
 # operationId: network_feature_configs_destroy
-export def "network-feature-configs delete" [
+export def "network-feature-configs-destroy" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1906,7 +1906,7 @@ export def "network-feature-configs delete" [
 # GET /network-feature-configs/{id}
 # Discriminator (response): type = route_server
 # operationId: network_feature_configs_read
-export def "network-feature-configs get" [
+export def "network-feature-configs-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1943,7 +1943,7 @@ export def "network-feature-configs get" [
 # PATCH /network-feature-configs/{id}
 # Discriminator (request): type = route_server
 # operationId: network_feature_configs_partial_update
-export def "network-feature-configs update-by-id" [
+export def "network-feature-configs-partial-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1984,7 +1984,7 @@ export def "network-feature-configs update-by-id" [
 # PUT /network-feature-configs/{id}
 # Discriminator (request): type = route_server
 # operationId: network_feature_configs_update
-export def "network-feature-configs update-by-id-1" [
+export def "network-feature-configs-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2024,7 +2024,7 @@ export def "network-feature-configs update-by-id-1" [
 #
 # GET /network-features
 # operationId: network_features_list
-export def "network-features list" [
+export def "network-features-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2065,7 +2065,7 @@ export def "network-features list" [
 # GET /network-features/{id}
 # Discriminator (response): type = route_server
 # operationId: network_features_read
-export def "network-features get" [
+export def "network-features-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2101,7 +2101,7 @@ export def "network-features get" [
 #
 # GET /network-service-configs
 # operationId: network_service_configs_list
-export def "network-service-configs list" [
+export def "network-service-configs-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2150,7 +2150,7 @@ export def "network-service-configs list" [
 # POST /network-service-configs
 # Discriminator (request): type = cloud_vc, exchange_lan, mp2mp_vc, p2mp_vc, p2p_vc
 # operationId: network_service_configs_create
-export def "network-service-configs create" [
+export def "network-service-configs-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2189,7 +2189,7 @@ export def "network-service-configs create" [
 # DELETE /network-service-configs/{id}
 # Discriminator (response): type = cloud_vc, exchange_lan, mp2mp_vc, p2mp_vc, p2p_vc
 # operationId: network_service_configs_destroy
-export def "network-service-configs delete" [
+export def "network-service-configs-destroy" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2230,7 +2230,7 @@ export def "network-service-configs delete" [
 # GET /network-service-configs/{id}
 # Discriminator (response): type = cloud_vc, exchange_lan, mp2mp_vc, p2mp_vc, p2p_vc
 # operationId: network_service_configs_read
-export def "network-service-configs get" [
+export def "network-service-configs-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2267,7 +2267,7 @@ export def "network-service-configs get" [
 # PATCH /network-service-configs/{id}
 # Discriminator (request): type = cloud_vc, exchange_lan, mp2mp_vc, p2mp_vc, p2p_vc
 # operationId: network_service_configs_partial_update
-export def "network-service-configs update-by-id" [
+export def "network-service-configs-partial-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2308,7 +2308,7 @@ export def "network-service-configs update-by-id" [
 # PUT /network-service-configs/{id}
 # Discriminator (request): type = cloud_vc, exchange_lan, mp2mp_vc, p2mp_vc, p2p_vc
 # operationId: network_service_configs_update
-export def "network-service-configs update-by-id-1" [
+export def "network-service-configs-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2348,7 +2348,7 @@ export def "network-service-configs update-by-id-1" [
 #
 # GET /network-service-configs/{id}/cancellation-policy
 # operationId: network_service_config_cancellation_policy_read
-export def "network-service-configs-cancellation-policy get" [
+export def "network-service-config-cancellation-policy-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2386,7 +2386,7 @@ export def "network-service-configs-cancellation-policy get" [
 #
 # GET /network-services
 # operationId: network_services_list
-export def "network-services list" [
+export def "network-services-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2431,7 +2431,7 @@ export def "network-services list" [
 # POST /network-services
 # Discriminator (request): type = cloud_vc, mp2mp_vc, p2mp_vc, p2p_vc
 # operationId: network_services_create
-export def "network-services create" [
+export def "network-services-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2470,7 +2470,7 @@ export def "network-services create" [
 # DELETE /network-services/{id}
 # Discriminator (response): type = cloud_vc, exchange_lan, mp2mp_vc, p2mp_vc, p2p_vc
 # operationId: network_services_destroy
-export def "network-services delete" [
+export def "network-services-destroy" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2511,7 +2511,7 @@ export def "network-services delete" [
 # GET /network-services/{id}
 # Discriminator (response): type = cloud_vc, exchange_lan, mp2mp_vc, p2mp_vc, p2p_vc
 # operationId: network_services_read
-export def "network-services get" [
+export def "network-services-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2548,7 +2548,7 @@ export def "network-services get" [
 # PATCH /network-services/{id}
 # Discriminator (request): type = cloud_vc, mp2mp_vc, p2mp_vc, p2p_vc
 # operationId: network_services_partial_update
-export def "network-services update-by-id" [
+export def "network-services-partial-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2589,7 +2589,7 @@ export def "network-services update-by-id" [
 # PUT /network-services/{id}
 # Discriminator (request): type = cloud_vc, mp2mp_vc, p2mp_vc, p2p_vc
 # operationId: network_services_update
-export def "network-services update-by-id-1" [
+export def "network-services-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2629,7 +2629,7 @@ export def "network-services update-by-id-1" [
 #
 # GET /network-services/{id}/cancellation-policy
 # operationId: network_service_cancellation_policy_read
-export def "network-services-cancellation-policy get" [
+export def "network-service-cancellation-policy-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2667,7 +2667,7 @@ export def "network-services-cancellation-policy get" [
 #
 # DELETE /network-services/{id}/change-request
 # operationId: network_service_change_request_destroy
-export def "network-services-change-request delete" [
+export def "network-service-change-request-destroy" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2703,7 +2703,7 @@ export def "network-services-change-request delete" [
 #
 # GET /network-services/{id}/change-request
 # operationId: network_service_change_request_read
-export def "network-services-change-request get" [
+export def "network-service-change-request-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2739,7 +2739,7 @@ export def "network-services-change-request get" [
 #
 # POST /network-services/{id}/change-request
 # operationId: network-service-change-request_create
-export def "network-services-change-request create" [
+export def "network-service-change-request-create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2780,7 +2780,7 @@ export def "network-services-change-request create" [
 #
 # GET /pops
 # operationId: pops_list
-export def "pops list" [
+export def "pops-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2824,7 +2824,7 @@ export def "pops list" [
 #
 # GET /pops/{id}
 # operationId: pops_read
-export def "pops get" [
+export def "pops-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2860,7 +2860,7 @@ export def "pops get" [
 #
 # GET /ports
 # operationId: ports_list
-export def "ports list" [
+export def "ports-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2905,7 +2905,7 @@ export def "ports list" [
 #
 # GET /ports/{id}
 # operationId: ports_read
-export def "ports get" [
+export def "ports-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2941,7 +2941,7 @@ export def "ports get" [
 #
 # GET /product-offerings
 # operationId: product_offerings_list
-export def "product-offerings list" [
+export def "product-offerings-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2994,7 +2994,7 @@ export def "product-offerings list" [
 # GET /product-offerings/{id}
 # Discriminator (response): type = cloud_vc, exchange_lan, mp2mp_vc, p2mp_vc, p2p_vc
 # operationId: product_offerings_read
-export def "product-offerings get" [
+export def "product-offerings-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3030,7 +3030,7 @@ export def "product-offerings get" [
 #
 # GET /role-assignments
 # operationId: role_assignments_list
-export def "role-assignments list" [
+export def "role-assignments-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3068,7 +3068,7 @@ export def "role-assignments list" [
 #
 # POST /role-assignments
 # operationId: role_assignments_create
-export def "role-assignments create" [
+export def "role-assignments-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3107,7 +3107,7 @@ export def "role-assignments create" [
 #
 # DELETE /role-assignments/{assignment_id}
 # operationId: role_assignments_destroy
-export def "role-assignments delete" [
+export def "role-assignments-destroy" [
   assignment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3143,7 +3143,7 @@ export def "role-assignments delete" [
 #
 # GET /role-assignments/{assignment_id}
 # operationId: role_assignments_read
-export def "role-assignments get" [
+export def "role-assignments-read" [
   assignment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3179,7 +3179,7 @@ export def "role-assignments get" [
 #
 # GET /roles
 # operationId: roles_list
-export def "roles list" [
+export def "roles-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3217,7 +3217,7 @@ export def "roles list" [
 #
 # GET /roles/{id}
 # operationId: roles_read
-export def "roles get" [
+export def "roles-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

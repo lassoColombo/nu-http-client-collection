@@ -102,7 +102,7 @@ def sort-order-completer [] { ["ASCENDING" "DESCENDING"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "participant-complete-attachment-upload complete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "complete-attachment-upload" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -126,7 +126,7 @@ export def commands []: nothing -> table {
 #
 # POST /participant/complete-attachment-upload
 # operationId: CompleteAttachmentUpload
-export def "participant-complete-attachment-upload complete" [
+export def "complete-attachment-upload" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -175,7 +175,7 @@ export def "participant-complete-attachment-upload complete" [
 #
 # POST /participant/connection
 # operationId: CreateParticipantConnection
-export def "participant-connection create" [
+export def "create-participant-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -224,7 +224,7 @@ export def "participant-connection create" [
 #
 # POST /participant/disconnect
 # operationId: DisconnectParticipant
-export def "participant-disconnect create" [
+export def "disconnect-participant" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -272,7 +272,7 @@ export def "participant-disconnect create" [
 #
 # POST /participant/attachment
 # operationId: GetAttachment
-export def "participant-attachment get" [
+export def "get-attachment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -321,7 +321,7 @@ export def "participant-attachment get" [
 # POST /participant/transcript
 # operationId: GetTranscript
 # --StartPosition shape: {Id?: any, AbsoluteTime?: any, MostRecent?: any}
-export def "participant-transcript get" [
+export def "get-transcript" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -377,7 +377,7 @@ export def "participant-transcript get" [
 #
 # POST /participant/event
 # operationId: SendEvent
-export def "participant-event send" [
+export def "send-event" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -427,7 +427,7 @@ export def "participant-event send" [
 #
 # POST /participant/message
 # operationId: SendMessage
-export def "participant-message send" [
+export def "send-message" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -477,7 +477,7 @@ export def "participant-message send" [
 #
 # POST /participant/start-attachment-upload
 # operationId: StartAttachmentUpload
-export def "participant-start-attachment-upload start" [
+export def "start-attachment-upload" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

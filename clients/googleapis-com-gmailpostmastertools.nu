@@ -111,7 +111,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta1-domains list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "gmailpostmastertools-domains-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -135,7 +135,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1beta1/domains
 # operationId: gmailpostmastertools.domains.list
-export def "v1beta1-domains list" [
+export def "gmailpostmastertools-domains-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -183,7 +183,7 @@ export def "v1beta1-domains list" [
 #
 # GET /v1beta1/{name}
 # operationId: gmailpostmastertools.domains.trafficStats.get
-export def "v1beta1 get" [
+export def "gmailpostmastertools-domains-traffic-stats-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -231,7 +231,7 @@ export def "v1beta1 get" [
 #
 # GET /v1beta1/{parent}/trafficStats
 # operationId: gmailpostmastertools.domains.trafficStats.list
-export def "v1beta1-traffic-stats list" [
+export def "gmailpostmastertools-domains-traffic-stats-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

@@ -109,7 +109,7 @@ def priority-completer [] { ["crossBorder" "directDebit" "fast" "instant" "inter
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "transactions list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-transactions" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -133,7 +133,7 @@ export def commands []: nothing -> table {
 #
 # GET /transactions
 # operationId: get-transactions
-export def "transactions list" [
+export def "get-transactions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -176,7 +176,7 @@ export def "transactions list" [
 #
 # GET /transactions/{id}
 # operationId: get-transactions-id
-export def "transactions get" [
+export def "get-transactions-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -215,7 +215,7 @@ export def "transactions get" [
 # --amount shape: {currency: string, value: int}
 # --counterparty shape: {balanceAccountId?: string, bankAccount?: record, transferInstrumentId?: string}
 # --ultimateParty shape: {address?: record, dateOfBirth?: string, firstName?: string, fullName: string, lastName?: string, reference?: string, type?: "individual"|"organization"|"unknown"}
-export def "transfers create" [
+export def "post-transfers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

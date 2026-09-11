@@ -119,7 +119,7 @@ def payment-type-completer [] { ["API"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "bookings list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-bookings" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -143,7 +143,7 @@ export def commands []: nothing -> table {
 #
 # GET /bookings
 # operationId: listBookings
-export def "bookings list" [
+export def "list-bookings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -187,7 +187,7 @@ export def "bookings list" [
 # operationId: createBooking
 # --notes shape: {fromGuest?: string, fromSeller?: string}
 # --rooms item shape: {adults: float, notes?: record, rateId: string}
-export def "bookings create" [
+export def "create-booking" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -230,7 +230,7 @@ export def "bookings create" [
 #
 # DELETE /bookings/{bookingId}
 # operationId: cancelBooking
-export def "bookings cancel" [
+export def "cancel-booking" [
   booking_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -266,7 +266,7 @@ export def "bookings cancel" [
 #
 # GET /bookings/{bookingId}
 # operationId: retrieveBooking
-export def "bookings get" [
+export def "retrieve-booking" [
   booking_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -304,7 +304,7 @@ export def "bookings get" [
 # operationId: updateBooking
 # --notes shape: {fromGuest?: string, fromSeller?: string}
 # --rooms item shape: {adults: float, notes?: record, rateId: string}
-export def "bookings update" [
+export def "update-booking" [
   booking_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -351,7 +351,7 @@ export def "bookings update" [
 # PUT /bookings/{bookingId}/booking-contact
 # operationId: updateBookingContact
 # --bookingContact shape: {email: string, firstName: string, lastName: string}
-export def "bookings-booking-contact update" [
+export def "update-booking-contact" [
   booking_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -392,7 +392,7 @@ export def "bookings-booking-contact update" [
 #
 # GET /hotels
 # operationId: listHotels
-export def "hotels list" [
+export def "list-hotels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -441,7 +441,7 @@ export def "hotels list" [
 #
 # GET /hotels/{hotelId}
 # operationId: retrieveHotel
-export def "hotels get" [
+export def "retrieve-hotel" [
   hotel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -480,7 +480,7 @@ export def "hotels get" [
 #
 # GET /hotels/{hotelId}/rate-plans
 # operationId: listRatePlansForHotel
-export def "hotels-rate-plans list" [
+export def "list-rate-plans-for-hotel" [
   hotel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -523,7 +523,7 @@ export def "hotels-rate-plans list" [
 #
 # GET /hotels/{hotelId}/rate-plans/{ratePlanId}
 # operationId: listRatePlanForHotelForRatePlanId
-export def "hotels-rate-plans list-for" [
+export def "list-rate-plan-for-hotel-for-rate-plan-id" [
   hotel_id: string
   rate_plan_id: int
   --base-url(-b): string@base-url-completer # API base URL

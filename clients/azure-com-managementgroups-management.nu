@@ -127,7 +127,7 @@ def expand-completer [] { ["children"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-management-check-name-availability check" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "check-name-availability" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -151,7 +151,7 @@ export def commands []: nothing -> table {
 #
 # POST /providers/Microsoft.Management/checkNameAvailability
 # operationId: CheckNameAvailability
-export def "providers-microsoft-management-check-name-availability check" [
+export def "check-name-availability" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -192,7 +192,7 @@ export def "providers-microsoft-management-check-name-availability check" [
 #
 # POST /providers/Microsoft.Management/getEntities
 # operationId: Entities_List
-export def "providers-microsoft-management-get-entities list" [
+export def "entities-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -239,7 +239,7 @@ export def "providers-microsoft-management-get-entities list" [
 #
 # GET /providers/Microsoft.Management/managementGroups
 # operationId: ManagementGroups_List
-export def "providers-microsoft-management-management-groups list" [
+export def "management-groups-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -279,7 +279,7 @@ export def "providers-microsoft-management-management-groups list" [
 #
 # DELETE /providers/Microsoft.Management/managementGroups/{groupId}
 # operationId: ManagementGroups_Delete
-export def "providers-microsoft-management-management-groups delete" [
+export def "management-groups-delete" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -320,7 +320,7 @@ export def "providers-microsoft-management-management-groups delete" [
 #
 # GET /providers/Microsoft.Management/managementGroups/{groupId}
 # operationId: ManagementGroups_Get
-export def "providers-microsoft-management-management-groups get" [
+export def "management-groups-get" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -364,7 +364,7 @@ export def "providers-microsoft-management-management-groups get" [
 #
 # PATCH /providers/Microsoft.Management/managementGroups/{groupId}
 # operationId: ManagementGroups_Update
-export def "providers-microsoft-management-management-groups update" [
+export def "management-groups-update" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -411,7 +411,7 @@ export def "providers-microsoft-management-management-groups update" [
 # PUT /providers/Microsoft.Management/managementGroups/{groupId}
 # operationId: ManagementGroups_CreateOrUpdate
 # --properties shape: {details?: record, displayName?: string}
-export def "providers-microsoft-management-management-groups create-or-update" [
+export def "management-groups-create-or-update" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -457,7 +457,7 @@ export def "providers-microsoft-management-management-groups create-or-update" [
 #
 # GET /providers/Microsoft.Management/managementGroups/{groupId}/descendants
 # operationId: ManagementGroups_GetDescendants
-export def "providers-microsoft-management-management-groups-descendants get" [
+export def "management-groups-get-descendants" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -497,7 +497,7 @@ export def "providers-microsoft-management-management-groups-descendants get" [
 #
 # DELETE /providers/Microsoft.Management/managementGroups/{groupId}/subscriptions/{subscriptionId}
 # operationId: ManagementGroupSubscriptions_Delete
-export def "providers-microsoft-management-management-groups-subscriptions delete" [
+export def "management-group-subscriptions-delete" [
   group_id: string
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -540,7 +540,7 @@ export def "providers-microsoft-management-management-groups-subscriptions delet
 #
 # PUT /providers/Microsoft.Management/managementGroups/{groupId}/subscriptions/{subscriptionId}
 # operationId: ManagementGroupSubscriptions_Create
-export def "providers-microsoft-management-management-groups-subscriptions create" [
+export def "management-group-subscriptions-create" [
   group_id: string
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -583,7 +583,7 @@ export def "providers-microsoft-management-management-groups-subscriptions creat
 #
 # GET /providers/Microsoft.Management/operations
 # operationId: Operations_List
-export def "providers-microsoft-management-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -619,7 +619,7 @@ export def "providers-microsoft-management-operations list" [
 #
 # POST /providers/Microsoft.Management/startTenantBackfill
 # operationId: StartTenantBackfill
-export def "providers-microsoft-management-start-tenant-backfill start" [
+export def "start-tenant-backfill" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -655,7 +655,7 @@ export def "providers-microsoft-management-start-tenant-backfill start" [
 #
 # POST /providers/Microsoft.Management/tenantBackfillStatus
 # operationId: TenantBackfillStatus
-export def "providers-microsoft-management-tenant-backfill-status create" [
+export def "tenant-backfill-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

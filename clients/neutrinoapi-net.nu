@@ -115,7 +115,7 @@ def auth-scheme-completer [] { ["api-key" "user-id"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "bad-word-filter create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "bad-word-filter" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -139,7 +139,7 @@ export def commands []: nothing -> table {
 #
 # POST /bad-word-filter
 # operationId: BadWordFilter
-export def "bad-word-filter create" [
+export def "bad-word-filter" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api-key (api-key)
   --token-userid: string # Auth token for user-id (user-id)
@@ -180,7 +180,7 @@ export def "bad-word-filter create" [
 #
 # GET /bin-list-download
 # operationId: BINListDownload
-export def "bin-list-download list" [
+export def "bin-list-download" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api-key (api-key)
   --token-userid: string # Auth token for user-id (user-id)
@@ -217,7 +217,7 @@ export def "bin-list-download list" [
 #
 # GET /bin-lookup
 # operationId: BINLookup
-export def "bin-lookup get" [
+export def "bin-lookup" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api-key (api-key)
   --token-userid: string # Auth token for user-id (user-id)
@@ -254,7 +254,7 @@ export def "bin-lookup get" [
 #
 # POST /browser-bot
 # operationId: BrowserBot
-export def "browser-bot create" [
+export def "browser-bot" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api-key (api-key)
   --token-userid: string # Auth token for user-id (user-id)
@@ -299,7 +299,7 @@ export def "browser-bot create" [
 #
 # GET /convert
 # operationId: Convert
-export def "convert get" [
+export def "convert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api-key (api-key)
   --token-userid: string # Auth token for user-id (user-id)
@@ -337,7 +337,7 @@ export def "convert get" [
 #
 # GET /email-validate
 # operationId: EmailValidate
-export def "email-validate validate" [
+export def "email-validate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api-key (api-key)
   --token-userid: string # Auth token for user-id (user-id)
@@ -374,7 +374,7 @@ export def "email-validate validate" [
 #
 # GET /email-verify
 # operationId: EmailVerify
-export def "email-verify verify" [
+export def "email-verify" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api-key (api-key)
   --token-userid: string # Auth token for user-id (user-id)
@@ -411,7 +411,7 @@ export def "email-verify verify" [
 #
 # GET /geocode-address
 # operationId: GeocodeAddress
-export def "geocode-address get" [
+export def "geocode-address" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api-key (api-key)
   --token-userid: string # Auth token for user-id (user-id)
@@ -456,7 +456,7 @@ export def "geocode-address get" [
 #
 # GET /geocode-reverse
 # operationId: GeocodeReverse
-export def "geocode-reverse get" [
+export def "geocode-reverse" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api-key (api-key)
   --token-userid: string # Auth token for user-id (user-id)
@@ -495,7 +495,7 @@ export def "geocode-reverse get" [
 #
 # GET /hlr-lookup
 # operationId: HLRLookup
-export def "hlr-lookup get" [
+export def "hlr-lookup" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api-key (api-key)
   --token-userid: string # Auth token for user-id (user-id)
@@ -532,7 +532,7 @@ export def "hlr-lookup get" [
 #
 # GET /host-reputation
 # operationId: HostReputation
-export def "host-reputation get" [
+export def "host-reputation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api-key (api-key)
   --token-userid: string # Auth token for user-id (user-id)
@@ -570,7 +570,7 @@ export def "host-reputation get" [
 #
 # POST /html-clean
 # operationId: HTMLClean
-export def "html-clean create" [
+export def "html-clean" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api-key (api-key)
   --token-userid: string # Auth token for user-id (user-id)
@@ -610,7 +610,7 @@ export def "html-clean create" [
 #
 # POST /html-render
 # operationId: HTMLRender
-export def "html-render create" [
+export def "html-render" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api-key (api-key)
   --token-userid: string # Auth token for user-id (user-id)
@@ -670,7 +670,7 @@ export def "html-render create" [
 #
 # POST /image-resize
 # operationId: ImageResize
-export def "image-resize resize" [
+export def "image-resize" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api-key (api-key)
   --token-userid: string # Auth token for user-id (user-id)
@@ -714,7 +714,7 @@ export def "image-resize resize" [
 #
 # POST /image-watermark
 # operationId: ImageWatermark
-export def "image-watermark create" [
+export def "image-watermark" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api-key (api-key)
   --token-userid: string # Auth token for user-id (user-id)
@@ -761,7 +761,7 @@ export def "image-watermark create" [
 #
 # GET /ip-blocklist
 # operationId: IPBlocklist
-export def "ip-blocklist get" [
+export def "ip-blocklist" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api-key (api-key)
   --token-userid: string # Auth token for user-id (user-id)
@@ -798,7 +798,7 @@ export def "ip-blocklist get" [
 #
 # GET /ip-blocklist-download
 # operationId: IPBlocklistDownload
-export def "ip-blocklist-download download" [
+export def "ip-blocklist-download" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api-key (api-key)
   --token-userid: string # Auth token for user-id (user-id)
@@ -837,7 +837,7 @@ export def "ip-blocklist-download download" [
 #
 # GET /ip-info
 # operationId: IPInfo
-export def "ip-info get" [
+export def "ip-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api-key (api-key)
   --token-userid: string # Auth token for user-id (user-id)
@@ -874,7 +874,7 @@ export def "ip-info get" [
 #
 # GET /ip-probe
 # operationId: IPProbe
-export def "ip-probe get" [
+export def "ip-probe" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api-key (api-key)
   --token-userid: string # Auth token for user-id (user-id)
@@ -910,7 +910,7 @@ export def "ip-probe get" [
 #
 # POST /phone-playback
 # operationId: PhonePlayback
-export def "phone-playback create" [
+export def "phone-playback" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api-key (api-key)
   --token-userid: string # Auth token for user-id (user-id)
@@ -952,7 +952,7 @@ export def "phone-playback create" [
 #
 # GET /phone-validate
 # operationId: PhoneValidate
-export def "phone-validate validate" [
+export def "phone-validate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api-key (api-key)
   --token-userid: string # Auth token for user-id (user-id)
@@ -990,7 +990,7 @@ export def "phone-validate validate" [
 #
 # POST /phone-verify
 # operationId: PhoneVerify
-export def "phone-verify verify" [
+export def "phone-verify" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api-key (api-key)
   --token-userid: string # Auth token for user-id (user-id)
@@ -1036,7 +1036,7 @@ export def "phone-verify verify" [
 #
 # POST /qr-code
 # operationId: QRCode
-export def "qr-code create" [
+export def "qr-code" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api-key (api-key)
   --token-userid: string # Auth token for user-id (user-id)
@@ -1079,7 +1079,7 @@ export def "qr-code create" [
 #
 # POST /sms-verify
 # operationId: SMSVerify
-export def "sms-verify verify" [
+export def "sms-verify" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api-key (api-key)
   --token-userid: string # Auth token for user-id (user-id)
@@ -1124,7 +1124,7 @@ export def "sms-verify verify" [
 #
 # GET /ua-lookup
 # operationId: UALookup
-export def "ua-lookup get" [
+export def "ua-lookup" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api-key (api-key)
   --token-userid: string # Auth token for user-id (user-id)
@@ -1166,7 +1166,7 @@ export def "ua-lookup get" [
 #
 # GET /url-info
 # operationId: URLInfo
-export def "url-info get" [
+export def "url-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api-key (api-key)
   --token-userid: string # Auth token for user-id (user-id)
@@ -1206,7 +1206,7 @@ export def "url-info get" [
 #
 # GET /verify-security-code
 # operationId: VerifySecurityCode
-export def "verify-security-code verify" [
+export def "verify-security-code" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api-key (api-key)
   --token-userid: string # Auth token for user-id (user-id)

@@ -99,7 +99,7 @@ def auth-scheme-completer [] { ["ocp-apim-subscription-key" "query-key"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "roto-baller-premium-news get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "premium-news" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -123,7 +123,7 @@ export def commands []: nothing -> table {
 #
 # GET /{format}/RotoBallerPremiumNews
 # operationId: PremiumNews
-export def "roto-baller-premium-news get" [
+export def "premium-news" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -159,7 +159,7 @@ export def "roto-baller-premium-news get" [
 #
 # GET /{format}/RotoBallerPremiumNewsByDate/{date}
 # operationId: PremiumNewsByDate
-export def "roto-baller-premium-news-by-date get" [
+export def "premium-news-by-date" [
   format: string
   date: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -197,7 +197,7 @@ export def "roto-baller-premium-news-by-date get" [
 #
 # GET /{format}/RotoBallerPremiumNewsByPlayerID/{playerid}
 # operationId: PremiumNewsByPlayer
-export def "roto-baller-premium-news-by-player-id get" [
+export def "premium-news-by-player" [
   format: string
   playerid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -235,7 +235,7 @@ export def "roto-baller-premium-news-by-player-id get" [
 #
 # GET /{format}/RotoBallerPremiumNewsByTeam/{team}
 # operationId: PremiumNewsByTeam
-export def "roto-baller-premium-news-by-team get" [
+export def "premium-news-by-team" [
   format: string
   team: string
   --base-url(-b): string@base-url-completer # API base URL

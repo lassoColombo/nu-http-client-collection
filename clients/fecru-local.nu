@@ -115,7 +115,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "rest-service-fecru-admin-groups list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-rest-service-fecru-admin-groups" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -138,7 +138,7 @@ export def commands []: nothing -> table {
 # Retrieve a page of groups.
 #
 # GET /rest-service-fecru/admin/groups/
-export def "rest-service-fecru-admin-groups list" [
+export def "get-rest-service-fecru-admin-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -173,7 +173,7 @@ export def "rest-service-fecru-admin-groups list" [
 # Creates a new user group.
 #
 # POST /rest-service-fecru/admin/groups/
-export def "rest-service-fecru-admin-groups create" [
+export def "post-rest-service-fecru-admin-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -206,7 +206,7 @@ export def "rest-service-fecru-admin-groups create" [
 # Deletes a group by name
 #
 # DELETE /rest-service-fecru/admin/groups/{name}
-export def "rest-service-fecru-admin-groups delete" [
+export def "delete-rest-service-fecru-admin-groups-name" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -241,7 +241,7 @@ export def "rest-service-fecru-admin-groups delete" [
 # Retrieve a group by name.
 #
 # GET /rest-service-fecru/admin/groups/{name}
-export def "rest-service-fecru-admin-groups get" [
+export def "get-rest-service-fecru-admin-groups-name" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -276,7 +276,7 @@ export def "rest-service-fecru-admin-groups get" [
 # Updates an existing group.
 #
 # PUT /rest-service-fecru/admin/groups/{name}
-export def "rest-service-fecru-admin-groups update" [
+export def "put-rest-service-fecru-admin-groups-name" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -311,7 +311,7 @@ export def "rest-service-fecru-admin-groups update" [
 # Removes user from group
 #
 # DELETE /rest-service-fecru/admin/groups/{name}/users
-export def "rest-service-fecru-admin-groups-users delete" [
+export def "delete-rest-service-fecru-admin-groups-name-users" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -347,7 +347,7 @@ export def "rest-service-fecru-admin-groups-users delete" [
 #
 # GET /rest-service-fecru/admin/groups/{name}/users
 # operationId: listGroupUsers
-export def "rest-service-fecru-admin-groups-users list" [
+export def "list-group-users" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -382,7 +382,7 @@ export def "rest-service-fecru-admin-groups-users list" [
 # Adds user to group
 #
 # PUT /rest-service-fecru/admin/groups/{name}/users
-export def "rest-service-fecru-admin-groups-users update" [
+export def "put-rest-service-fecru-admin-groups-name-users" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -417,7 +417,7 @@ export def "rest-service-fecru-admin-groups-users update" [
 # Retrieve a page of permission schemes.
 #
 # GET /rest-service-fecru/admin/permission-schemes
-export def "rest-service-fecru-admin-permission-schemes list" [
+export def "get-rest-service-fecru-admin-permission-schemes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -452,7 +452,7 @@ export def "rest-service-fecru-admin-permission-schemes list" [
 # Creates a new permission scheme. The new permission scheme is blank or can be created from another existing permission scheme.
 #
 # POST /rest-service-fecru/admin/permission-schemes
-export def "rest-service-fecru-admin-permission-schemes create" [
+export def "post-rest-service-fecru-admin-permission-schemes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -487,7 +487,7 @@ export def "rest-service-fecru-admin-permission-schemes create" [
 # Deletes a permission scheme by name
 #
 # DELETE /rest-service-fecru/admin/permission-schemes/{name}
-export def "rest-service-fecru-admin-permission-schemes delete" [
+export def "delete-rest-service-fecru-admin-permission-schemes-name" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -522,7 +522,7 @@ export def "rest-service-fecru-admin-permission-schemes delete" [
 # Retrieve a permission scheme by name
 #
 # GET /rest-service-fecru/admin/permission-schemes/{name}
-export def "rest-service-fecru-admin-permission-schemes get" [
+export def "get-rest-service-fecru-admin-permission-schemes-name" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -557,7 +557,7 @@ export def "rest-service-fecru-admin-permission-schemes get" [
 # Updates an existing permission scheme.
 #
 # PUT /rest-service-fecru/admin/permission-schemes/{name}
-export def "rest-service-fecru-admin-permission-schemes update" [
+export def "put-rest-service-fecru-admin-permission-schemes-name" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -593,7 +593,7 @@ export def "rest-service-fecru-admin-permission-schemes update" [
 #
 # DELETE /rest-service-fecru/admin/permission-schemes/{name}/anonymous-users
 # operationId: deletePermissionSchemeAnonymousUsers
-export def "rest-service-fecru-admin-permission-schemes-anonymous-users delete" [
+export def "delete-permission-scheme-anonymous-users" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -629,7 +629,7 @@ export def "rest-service-fecru-admin-permission-schemes-anonymous-users delete" 
 #
 # GET /rest-service-fecru/admin/permission-schemes/{name}/anonymous-users
 # operationId: listAnonymousUsersPrincipalAssociation
-export def "rest-service-fecru-admin-permission-schemes-anonymous-users list-principal-association" [
+export def "list-anonymous-users-principal-association" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -667,7 +667,7 @@ export def "rest-service-fecru-admin-permission-schemes-anonymous-users list-pri
 #
 # PUT /rest-service-fecru/admin/permission-schemes/{name}/anonymous-users
 # operationId: addPermissionSchemeAnonymousUsers
-export def "rest-service-fecru-admin-permission-schemes-anonymous-users create" [
+export def "add-permission-scheme-anonymous-users" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -703,7 +703,7 @@ export def "rest-service-fecru-admin-permission-schemes-anonymous-users create" 
 #
 # DELETE /rest-service-fecru/admin/permission-schemes/{name}/groups
 # operationId: deletePermissionSchemeGroup
-export def "rest-service-fecru-admin-permission-schemes-groups delete" [
+export def "delete-permission-scheme-group" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -739,7 +739,7 @@ export def "rest-service-fecru-admin-permission-schemes-groups delete" [
 #
 # GET /rest-service-fecru/admin/permission-schemes/{name}/groups
 # operationId: listGroupPrincipalAssociation
-export def "rest-service-fecru-admin-permission-schemes-groups list-principal-association" [
+export def "list-group-principal-association" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -778,7 +778,7 @@ export def "rest-service-fecru-admin-permission-schemes-groups list-principal-as
 #
 # PUT /rest-service-fecru/admin/permission-schemes/{name}/groups
 # operationId: addPermissionSchemeGroup
-export def "rest-service-fecru-admin-permission-schemes-groups create" [
+export def "add-permission-scheme-group" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -814,7 +814,7 @@ export def "rest-service-fecru-admin-permission-schemes-groups create" [
 #
 # DELETE /rest-service-fecru/admin/permission-schemes/{name}/logged-in-users
 # operationId: deletePermissionSchemeLoggedUsers
-export def "rest-service-fecru-admin-permission-schemes-logged-in-users delete" [
+export def "delete-permission-scheme-logged-users" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -850,7 +850,7 @@ export def "rest-service-fecru-admin-permission-schemes-logged-in-users delete" 
 #
 # GET /rest-service-fecru/admin/permission-schemes/{name}/logged-in-users
 # operationId: listLoggedUsersPrincipalAssociation
-export def "rest-service-fecru-admin-permission-schemes-logged-in-users list-principal-association" [
+export def "list-logged-users-principal-association" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -888,7 +888,7 @@ export def "rest-service-fecru-admin-permission-schemes-logged-in-users list-pri
 #
 # PUT /rest-service-fecru/admin/permission-schemes/{name}/logged-in-users
 # operationId: addPermissionSchemeLoggedUsers
-export def "rest-service-fecru-admin-permission-schemes-logged-in-users create" [
+export def "add-permission-scheme-logged-users" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -924,7 +924,7 @@ export def "rest-service-fecru-admin-permission-schemes-logged-in-users create" 
 #
 # GET /rest-service-fecru/admin/permission-schemes/{name}/projects
 # operationId: listProjects
-export def "rest-service-fecru-admin-permission-schemes-projects list" [
+export def "list-projects" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -960,7 +960,7 @@ export def "rest-service-fecru-admin-permission-schemes-projects list" [
 #
 # DELETE /rest-service-fecru/admin/permission-schemes/{name}/review-roles
 # operationId: deletePermissionSchemeRole
-export def "rest-service-fecru-admin-permission-schemes-review-roles delete" [
+export def "delete-permission-scheme-role" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -996,7 +996,7 @@ export def "rest-service-fecru-admin-permission-schemes-review-roles delete" [
 #
 # GET /rest-service-fecru/admin/permission-schemes/{name}/review-roles
 # operationId: listRolesPrincipalAssociation
-export def "rest-service-fecru-admin-permission-schemes-review-roles list-principal-association" [
+export def "list-roles-principal-association" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1035,7 +1035,7 @@ export def "rest-service-fecru-admin-permission-schemes-review-roles list-princi
 #
 # PUT /rest-service-fecru/admin/permission-schemes/{name}/review-roles
 # operationId: addPermissionSchemeReviewRole
-export def "rest-service-fecru-admin-permission-schemes-review-roles create" [
+export def "add-permission-scheme-review-role" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1071,7 +1071,7 @@ export def "rest-service-fecru-admin-permission-schemes-review-roles create" [
 #
 # DELETE /rest-service-fecru/admin/permission-schemes/{name}/users
 # operationId: deletePermissionSchemeUser
-export def "rest-service-fecru-admin-permission-schemes-users delete" [
+export def "delete-permission-scheme-user" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1107,7 +1107,7 @@ export def "rest-service-fecru-admin-permission-schemes-users delete" [
 #
 # GET /rest-service-fecru/admin/permission-schemes/{name}/users
 # operationId: listUserPrincipalAssociation
-export def "rest-service-fecru-admin-permission-schemes-users list-principal-association" [
+export def "list-user-principal-association" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1146,7 +1146,7 @@ export def "rest-service-fecru-admin-permission-schemes-users list-principal-ass
 #
 # PUT /rest-service-fecru/admin/permission-schemes/{name}/users
 # operationId: addPermissionSchemeUser
-export def "rest-service-fecru-admin-permission-schemes-users create" [
+export def "add-permission-scheme-user" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1181,7 +1181,7 @@ export def "rest-service-fecru-admin-permission-schemes-users create" [
 # Retrieve a page of projects.
 #
 # GET /rest-service-fecru/admin/projects
-export def "rest-service-fecru-admin-projects list" [
+export def "get-rest-service-fecru-admin-projects" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1219,7 +1219,7 @@ export def "rest-service-fecru-admin-projects list" [
 # Creates a new project.
 #
 # POST /rest-service-fecru/admin/projects
-export def "rest-service-fecru-admin-projects create" [
+export def "post-rest-service-fecru-admin-projects" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1252,7 +1252,7 @@ export def "rest-service-fecru-admin-projects create" [
 # Deletes a project by key (including all reviews in this project). Use to move reviews to another project.
 #
 # DELETE /rest-service-fecru/admin/projects/{key}
-export def "rest-service-fecru-admin-projects delete" [
+export def "delete-rest-service-fecru-admin-projects-key" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1289,7 +1289,7 @@ export def "rest-service-fecru-admin-projects delete" [
 # Retrieve a project by key.
 #
 # GET /rest-service-fecru/admin/projects/{key}
-export def "rest-service-fecru-admin-projects get" [
+export def "get-rest-service-fecru-admin-projects-key" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1324,7 +1324,7 @@ export def "rest-service-fecru-admin-projects get" [
 # Updates an existing project.
 #
 # PUT /rest-service-fecru/admin/projects/{key}
-export def "rest-service-fecru-admin-projects update" [
+export def "put-rest-service-fecru-admin-projects-key" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1360,7 +1360,7 @@ export def "rest-service-fecru-admin-projects update" [
 #
 # DELETE /rest-service-fecru/admin/projects/{key}/allowed-reviewer-groups
 # operationId: deleteAllowedReviewerGroup
-export def "rest-service-fecru-admin-projects-allowed-reviewer-groups delete" [
+export def "delete-allowed-reviewer-group" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1396,7 +1396,7 @@ export def "rest-service-fecru-admin-projects-allowed-reviewer-groups delete" [
 #
 # GET /rest-service-fecru/admin/projects/{key}/allowed-reviewer-groups
 # operationId: allowedReviewerGroups
-export def "rest-service-fecru-admin-projects-allowed-reviewer-groups get" [
+export def "allowed-reviewer-groups" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1432,7 +1432,7 @@ export def "rest-service-fecru-admin-projects-allowed-reviewer-groups get" [
 #
 # PUT /rest-service-fecru/admin/projects/{key}/allowed-reviewer-groups
 # operationId: addAllowedReviewerGroup
-export def "rest-service-fecru-admin-projects-allowed-reviewer-groups create" [
+export def "add-allowed-reviewer-group" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1468,7 +1468,7 @@ export def "rest-service-fecru-admin-projects-allowed-reviewer-groups create" [
 #
 # DELETE /rest-service-fecru/admin/projects/{key}/allowed-reviewer-users
 # operationId: deleteAllowedReviewerUser
-export def "rest-service-fecru-admin-projects-allowed-reviewer-users delete" [
+export def "delete-allowed-reviewer-user" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1504,7 +1504,7 @@ export def "rest-service-fecru-admin-projects-allowed-reviewer-users delete" [
 #
 # GET /rest-service-fecru/admin/projects/{key}/allowed-reviewer-users
 # operationId: allowedReviewerUsers
-export def "rest-service-fecru-admin-projects-allowed-reviewer-users get" [
+export def "allowed-reviewer-users" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1540,7 +1540,7 @@ export def "rest-service-fecru-admin-projects-allowed-reviewer-users get" [
 #
 # PUT /rest-service-fecru/admin/projects/{key}/allowed-reviewer-users
 # operationId: addAllowedReviewerUser
-export def "rest-service-fecru-admin-projects-allowed-reviewer-users create" [
+export def "add-allowed-reviewer-user" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1576,7 +1576,7 @@ export def "rest-service-fecru-admin-projects-allowed-reviewer-users create" [
 #
 # DELETE /rest-service-fecru/admin/projects/{key}/default-reviewer-groups
 # operationId: deleteDefaultReviewerGroup
-export def "rest-service-fecru-admin-projects-default-reviewer-groups delete" [
+export def "delete-default-reviewer-group" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1612,7 +1612,7 @@ export def "rest-service-fecru-admin-projects-default-reviewer-groups delete" [
 #
 # GET /rest-service-fecru/admin/projects/{key}/default-reviewer-groups
 # operationId: defaultReviewerGroups
-export def "rest-service-fecru-admin-projects-default-reviewer-groups get" [
+export def "default-reviewer-groups" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1648,7 +1648,7 @@ export def "rest-service-fecru-admin-projects-default-reviewer-groups get" [
 #
 # PUT /rest-service-fecru/admin/projects/{key}/default-reviewer-groups
 # operationId: addDefaultReviewerGroup
-export def "rest-service-fecru-admin-projects-default-reviewer-groups create" [
+export def "add-default-reviewer-group" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1684,7 +1684,7 @@ export def "rest-service-fecru-admin-projects-default-reviewer-groups create" [
 #
 # DELETE /rest-service-fecru/admin/projects/{key}/default-reviewer-users
 # operationId: deleteDefaultReviewerUser
-export def "rest-service-fecru-admin-projects-default-reviewer-users delete" [
+export def "delete-default-reviewer-user" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1720,7 +1720,7 @@ export def "rest-service-fecru-admin-projects-default-reviewer-users delete" [
 #
 # GET /rest-service-fecru/admin/projects/{key}/default-reviewer-users
 # operationId: listDefaultReviewerUsers
-export def "rest-service-fecru-admin-projects-default-reviewer-users list" [
+export def "list-default-reviewer-users" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1756,7 +1756,7 @@ export def "rest-service-fecru-admin-projects-default-reviewer-users list" [
 #
 # PUT /rest-service-fecru/admin/projects/{key}/default-reviewer-users
 # operationId: addDefaultReviewerUser
-export def "rest-service-fecru-admin-projects-default-reviewer-users create" [
+export def "add-default-reviewer-user" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1792,7 +1792,7 @@ export def "rest-service-fecru-admin-projects-default-reviewer-users create" [
 #
 # PUT /rest-service-fecru/admin/projects/{sourceProjectKey}/move-reviews/{destinationProjectKey}
 # operationId: moveAllReviews
-export def "rest-service-fecru-admin-projects-move-reviews list" [
+export def "move-all-reviews" [
   source_project_key: string
   destination_project_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1829,7 +1829,7 @@ export def "rest-service-fecru-admin-projects-move-reviews list" [
 # Retrieve a page of repositories. Repository properties with default values may not be returned.
 #
 # GET /rest-service-fecru/admin/repositories
-export def "rest-service-fecru-admin-repositories list" [
+export def "get-rest-service-fecru-admin-repositories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1866,7 +1866,7 @@ export def "rest-service-fecru-admin-repositories list" [
 # Creates a repository.
 #
 # POST /rest-service-fecru/admin/repositories
-export def "rest-service-fecru-admin-repositories create" [
+export def "post-rest-service-fecru-admin-repositories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1900,7 +1900,7 @@ export def "rest-service-fecru-admin-repositories create" [
 #
 # POST /rest-service-fecru/admin/repositories-v1
 # operationId: addRepository
-export def "rest-service-fecru-admin-repositories-v1 create-repository" [
+export def "add-repository" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1933,7 +1933,7 @@ export def "rest-service-fecru-admin-repositories-v1 create-repository" [
 # Returns information about the status of the repository and the current indexing status
 #
 # GET /rest-service-fecru/admin/repositories-v1/{repository}
-export def "rest-service-fecru-admin-repositories-v1 get" [
+export def "get-rest-service-fecru-admin-repositories-v1-repository" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1969,7 +1969,7 @@ export def "rest-service-fecru-admin-repositories-v1 get" [
 #
 # DELETE /rest-service-fecru/admin/repositories-v1/{repository}/
 # operationId: deleteRepository
-export def "rest-service-fecru-admin-repositories-v1 delete" [
+export def "delete-repository" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2005,7 +2005,7 @@ export def "rest-service-fecru-admin-repositories-v1 delete" [
 #
 # POST /rest-service-fecru/admin/repositories-v1/{repository}/disable
 # operationId: disableRepository
-export def "rest-service-fecru-admin-repositories-v1-disable disable" [
+export def "disable-repository" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2041,7 +2041,7 @@ export def "rest-service-fecru-admin-repositories-v1-disable disable" [
 #
 # POST /rest-service-fecru/admin/repositories-v1/{repository}/enable
 # operationId: enableRepository
-export def "rest-service-fecru-admin-repositories-v1-enable enable" [
+export def "enable-repository" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2077,7 +2077,7 @@ export def "rest-service-fecru-admin-repositories-v1-enable enable" [
 #
 # POST /rest-service-fecru/admin/repositories-v1/{repository}/reindex-discussions
 # operationId: reindexChangesetComments
-export def "rest-service-fecru-admin-repositories-v1-reindex-discussions create-changeset-comments" [
+export def "reindex-changeset-comments" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2112,7 +2112,7 @@ export def "rest-service-fecru-admin-repositories-v1-reindex-discussions create-
 # Re-indexes the linecount data used to generate the LOC graphs. The linecount data will be recalculated in daily buckets based on the server timezone.
 #
 # POST /rest-service-fecru/admin/repositories-v1/{repository}/reindex-linecount
-export def "rest-service-fecru-admin-repositories-v1-reindex-linecount create" [
+export def "post-rest-service-fecru-admin-repositories-v1-repository-reindex-linecount" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2148,7 +2148,7 @@ export def "rest-service-fecru-admin-repositories-v1-reindex-linecount create" [
 #
 # POST /rest-service-fecru/admin/repositories-v1/{repository}/reindex-reviews
 # operationId: doReviewRevisionReindex
-export def "rest-service-fecru-admin-repositories-v1-reindex-reviews create-do-revision" [
+export def "do-review-revision-reindex" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2186,7 +2186,7 @@ export def "rest-service-fecru-admin-repositories-v1-reindex-reviews create-do-r
 #
 # POST /rest-service-fecru/admin/repositories-v1/{repository}/reindex-search
 # operationId: rebuildSearchIndex
-export def "rest-service-fecru-admin-repositories-v1-reindex-search list-rebuild-index" [
+export def "rebuild-search-index" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2221,7 +2221,7 @@ export def "rest-service-fecru-admin-repositories-v1-reindex-search list-rebuild
 # Deletes the existing cache and re-indexes the repository from scratch. For large or slow repositories this may take some time, during which some functionality will be unavailable. This action will also restart the repository.
 #
 # POST /rest-service-fecru/admin/repositories-v1/{repository}/reindex-source
-export def "rest-service-fecru-admin-repositories-v1-reindex-source create" [
+export def "post-rest-service-fecru-admin-repositories-v1-repository-reindex-source" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2258,7 +2258,7 @@ export def "rest-service-fecru-admin-repositories-v1-reindex-source create" [
 # Re-scans the repository metadata for SVN and Perforce repositories. Only valid for Perforce and SVN repositories.
 #
 # POST /rest-service-fecru/admin/repositories-v1/{repository}/rescan-metadata
-export def "rest-service-fecru-admin-repositories-v1-rescan-metadata create" [
+export def "post-rest-service-fecru-admin-repositories-v1-repository-rescan-metadata" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2297,7 +2297,7 @@ export def "rest-service-fecru-admin-repositories-v1-rescan-metadata create" [
 #
 # POST /rest-service-fecru/admin/repositories-v1/{repository}/scan
 # operationId: scan
-export def "rest-service-fecru-admin-repositories-v1-scan create" [
+export def "scan" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2335,7 +2335,7 @@ export def "rest-service-fecru-admin-repositories-v1-scan create" [
 #
 # POST /rest-service-fecru/admin/repositories-v1/{repository}/scan-cvs
 # operationId: scanCvs
-export def "rest-service-fecru-admin-repositories-v1-scan-cvs create" [
+export def "scan-cvs" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2371,7 +2371,7 @@ export def "rest-service-fecru-admin-repositories-v1-scan-cvs create" [
 #
 # POST /rest-service-fecru/admin/repositories-v1/{repository}/start
 # operationId: startRepository
-export def "rest-service-fecru-admin-repositories-v1-start start" [
+export def "start-repository" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2407,7 +2407,7 @@ export def "rest-service-fecru-admin-repositories-v1-start start" [
 #
 # POST /rest-service-fecru/admin/repositories-v1/{repository}/stop
 # operationId: stopRepository
-export def "rest-service-fecru-admin-repositories-v1-stop stop" [
+export def "stop-repository" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2442,7 +2442,7 @@ export def "rest-service-fecru-admin-repositories-v1-stop stop" [
 # Deletes a repository by key
 #
 # DELETE /rest-service-fecru/admin/repositories/{repository}
-export def "rest-service-fecru-admin-repositories delete" [
+export def "delete-rest-service-fecru-admin-repositories-repository" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2477,7 +2477,7 @@ export def "rest-service-fecru-admin-repositories delete" [
 # Retrieve a repository by key. Repository properties with default values may not be returned.
 #
 # GET /rest-service-fecru/admin/repositories/{repository}
-export def "rest-service-fecru-admin-repositories get" [
+export def "get-rest-service-fecru-admin-repositories-repository" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2512,7 +2512,7 @@ export def "rest-service-fecru-admin-repositories get" [
 # Updates an existing repository.
 #
 # PUT /rest-service-fecru/admin/repositories/{repository}
-export def "rest-service-fecru-admin-repositories update" [
+export def "put-rest-service-fecru-admin-repositories-repository" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2548,7 +2548,7 @@ export def "rest-service-fecru-admin-repositories update" [
 #
 # PUT /rest-service-fecru/admin/repositories/{repository}/full-incremental-index
 # operationId: fullIncrementalIndex
-export def "rest-service-fecru-admin-repositories-full-incremental-index update" [
+export def "full-incremental-index" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2584,7 +2584,7 @@ export def "rest-service-fecru-admin-repositories-full-incremental-index update"
 #
 # PUT /rest-service-fecru/admin/repositories/{repository}/incremental-index
 # operationId: incrementalIndex
-export def "rest-service-fecru-admin-repositories-incremental-index update" [
+export def "incremental-index" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2622,7 +2622,7 @@ export def "rest-service-fecru-admin-repositories-incremental-index update" [
 #
 # GET /rest-service-fecru/admin/repositories/{repository}/permissions
 # operationId: permissions
-export def "rest-service-fecru-admin-repositories-permissions get" [
+export def "permissions" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2658,7 +2658,7 @@ export def "rest-service-fecru-admin-repositories-permissions get" [
 #
 # PUT /rest-service-fecru/admin/repositories/{repository}/permissions
 # operationId: updatePermissions
-export def "rest-service-fecru-admin-repositories-permissions update" [
+export def "update-permissions" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2694,7 +2694,7 @@ export def "rest-service-fecru-admin-repositories-permissions update" [
 #
 # DELETE /rest-service-fecru/admin/repositories/{repository}/permissions/groups
 # operationId: removeGroupToPermissions
-export def "rest-service-fecru-admin-repositories-permissions-groups delete" [
+export def "remove-group-to-permissions" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2730,7 +2730,7 @@ export def "rest-service-fecru-admin-repositories-permissions-groups delete" [
 #
 # GET /rest-service-fecru/admin/repositories/{repository}/permissions/groups
 # operationId: permissionsGroups
-export def "rest-service-fecru-admin-repositories-permissions-groups get" [
+export def "permissions-groups" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2766,7 +2766,7 @@ export def "rest-service-fecru-admin-repositories-permissions-groups get" [
 #
 # PUT /rest-service-fecru/admin/repositories/{repository}/permissions/groups
 # operationId: addGroupToPermissions
-export def "rest-service-fecru-admin-repositories-permissions-groups create" [
+export def "add-group-to-permissions" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2802,7 +2802,7 @@ export def "rest-service-fecru-admin-repositories-permissions-groups create" [
 #
 # PUT /rest-service-fecru/admin/repositories/{repository}/reindex-changeset-discussion
 # operationId: reindexChangesetDiscussion
-export def "rest-service-fecru-admin-repositories-reindex-changeset-discussion update" [
+export def "reindex-changeset-discussion" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2837,7 +2837,7 @@ export def "rest-service-fecru-admin-repositories-reindex-changeset-discussion u
 # Re-indexes the linecount data used to generate the LOC graphs. The linecount data will be recalculated in daily buckets based on the server timezone.
 #
 # PUT /rest-service-fecru/admin/repositories/{repository}/reindex-linecount
-export def "rest-service-fecru-admin-repositories-reindex-linecount update" [
+export def "put-rest-service-fecru-admin-repositories-repository-reindex-linecount" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2873,7 +2873,7 @@ export def "rest-service-fecru-admin-repositories-reindex-linecount update" [
 #
 # PUT /rest-service-fecru/admin/repositories/{repository}/reindex-reviews
 # operationId: reindexReviews
-export def "rest-service-fecru-admin-repositories-reindex-reviews update" [
+export def "reindex-reviews" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2909,7 +2909,7 @@ export def "rest-service-fecru-admin-repositories-reindex-reviews update" [
 #
 # PUT /rest-service-fecru/admin/repositories/{repository}/reindex-search
 # operationId: reindexSearch
-export def "rest-service-fecru-admin-repositories-reindex-search list" [
+export def "reindex-search" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2944,7 +2944,7 @@ export def "rest-service-fecru-admin-repositories-reindex-search list" [
 # Deletes the existing cache and re-indexes the repository from scratch. For large or slow repositories this may take some time, during which some functionality will be unavailable. This action will also restart the repository.
 #
 # PUT /rest-service-fecru/admin/repositories/{repository}/reindex-source
-export def "rest-service-fecru-admin-repositories-reindex-source update" [
+export def "put-rest-service-fecru-admin-repositories-repository-reindex-source" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2981,7 +2981,7 @@ export def "rest-service-fecru-admin-repositories-reindex-source update" [
 # Re-scans the repository metadata. Only valid for Perforce and SVN repositories.
 #
 # PUT /rest-service-fecru/admin/repositories/{repository}/rescan-metadata
-export def "rest-service-fecru-admin-repositories-rescan-metadata update" [
+export def "put-rest-service-fecru-admin-repositories-repository-rescan-metadata" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3020,7 +3020,7 @@ export def "rest-service-fecru-admin-repositories-rescan-metadata update" [
 #
 # PUT /rest-service-fecru/admin/repositories/{repository}/start
 # operationId: start
-export def "rest-service-fecru-admin-repositories-start start" [
+export def "start" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3056,7 +3056,7 @@ export def "rest-service-fecru-admin-repositories-start start" [
 #
 # PUT /rest-service-fecru/admin/repositories/{repository}/stop
 # operationId: stop
-export def "rest-service-fecru-admin-repositories-stop stop" [
+export def "stop" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3092,7 +3092,7 @@ export def "rest-service-fecru-admin-repositories-stop stop" [
 #
 # GET /rest-service-fecru/admin/repositories/{repository}/updates
 # operationId: repositoryUpdates
-export def "rest-service-fecru-admin-repositories-updates get" [
+export def "repository-updates" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3127,7 +3127,7 @@ export def "rest-service-fecru-admin-repositories-updates get" [
 # PUT /rest-service-fecru/admin/repositories/{repository}/updates
 #
 # operationId: updateRepositoryUpdates
-export def "rest-service-fecru-admin-repositories-updates update" [
+export def "update-repository-updates" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3163,7 +3163,7 @@ export def "rest-service-fecru-admin-repositories-updates update" [
 #
 # GET /rest-service-fecru/admin/repositories/~defaults/permissions
 # operationId: defaultPermissions
-export def "rest-service-fecru-admin-repositories-defaults-permissions get-default" [
+export def "default-permissions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3197,7 +3197,7 @@ export def "rest-service-fecru-admin-repositories-defaults-permissions get-defau
 #
 # PUT /rest-service-fecru/admin/repositories/~defaults/permissions
 # operationId: updateDefaultPermissions
-export def "rest-service-fecru-admin-repositories-defaults-permissions update-default" [
+export def "update-default-permissions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3230,7 +3230,7 @@ export def "rest-service-fecru-admin-repositories-defaults-permissions update-de
 # Retrieve a page of users.
 #
 # GET /rest-service-fecru/admin/users/
-export def "rest-service-fecru-admin-users list" [
+export def "get-rest-service-fecru-admin-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3263,7 +3263,7 @@ export def "rest-service-fecru-admin-users list" [
 # Creates a new user. Tries to add the user to fisheye-users and crucible-users groups if those exist.
 #
 # POST /rest-service-fecru/admin/users/
-export def "rest-service-fecru-admin-users create" [
+export def "post-rest-service-fecru-admin-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3296,7 +3296,7 @@ export def "rest-service-fecru-admin-users create" [
 # Deletes a user by name
 #
 # DELETE /rest-service-fecru/admin/users/{name}
-export def "rest-service-fecru-admin-users delete" [
+export def "delete-rest-service-fecru-admin-users-name" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3331,7 +3331,7 @@ export def "rest-service-fecru-admin-users delete" [
 # Retrieve a user by name.
 #
 # GET /rest-service-fecru/admin/users/{name}
-export def "rest-service-fecru-admin-users get" [
+export def "get-rest-service-fecru-admin-users-name" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3366,7 +3366,7 @@ export def "rest-service-fecru-admin-users get" [
 # Updates an existing user.
 #
 # PUT /rest-service-fecru/admin/users/{name}
-export def "rest-service-fecru-admin-users update" [
+export def "put-rest-service-fecru-admin-users-name" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3401,7 +3401,7 @@ export def "rest-service-fecru-admin-users update" [
 # Removes user from group
 #
 # DELETE /rest-service-fecru/admin/users/{name}/groups
-export def "rest-service-fecru-admin-users-groups delete" [
+export def "delete-rest-service-fecru-admin-users-name-groups" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3437,7 +3437,7 @@ export def "rest-service-fecru-admin-users-groups delete" [
 #
 # GET /rest-service-fecru/admin/users/{name}/groups
 # operationId: listUserGroups
-export def "rest-service-fecru-admin-users-groups list" [
+export def "list-user-groups" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3472,7 +3472,7 @@ export def "rest-service-fecru-admin-users-groups list" [
 # Adds user to group
 #
 # PUT /rest-service-fecru/admin/users/{name}/groups
-export def "rest-service-fecru-admin-users-groups update" [
+export def "put-rest-service-fecru-admin-users-name-groups" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3508,7 +3508,7 @@ export def "rest-service-fecru-admin-users-groups update" [
 #
 # POST /rest-service-fecru/auth/login
 # operationId: login
-export def "rest-service-fecru-auth-login create" [
+export def "login" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3541,7 +3541,7 @@ export def "rest-service-fecru-auth-login create" [
 # Returns indexing status of given repository.
 #
 # GET /rest-service-fecru/indexing-status-v1/status/{repository}
-export def "rest-service-fecru-indexing-status-v1-status get" [
+export def "get-rest-service-fecru-indexing-status-v1-status-repository" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3577,7 +3577,7 @@ export def "rest-service-fecru-indexing-status-v1-status get" [
 #
 # GET /rest-service-fecru/recently-visited-v1
 # operationId: getRecent
-export def "rest-service-fecru-recently-visited-v1 get-recent" [
+export def "get-recent" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3611,7 +3611,7 @@ export def "rest-service-fecru-recently-visited-v1 get-recent" [
 #
 # GET /rest-service-fecru/recently-visited-v1/detailed
 # operationId: getRecentDetailed
-export def "rest-service-fecru-recently-visited-v1-detailed get-recent" [
+export def "get-recent-detailed" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3645,7 +3645,7 @@ export def "rest-service-fecru-recently-visited-v1-detailed get-recent" [
 #
 # GET /rest-service-fecru/recently-visited-v1/projects
 # operationId: getRecentProjects
-export def "rest-service-fecru-recently-visited-v1-projects get-recent" [
+export def "get-recent-projects" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3679,7 +3679,7 @@ export def "rest-service-fecru-recently-visited-v1-projects get-recent" [
 #
 # GET /rest-service-fecru/recently-visited-v1/projects/detailed
 # operationId: getRecentProjectsDetailed
-export def "rest-service-fecru-recently-visited-v1-projects-detailed get-recent" [
+export def "get-recent-projects-detailed" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3713,7 +3713,7 @@ export def "rest-service-fecru-recently-visited-v1-projects-detailed get-recent"
 #
 # GET /rest-service-fecru/recently-visited-v1/repositories
 # operationId: getRecentRepositories
-export def "rest-service-fecru-recently-visited-v1-repositories get-recent" [
+export def "get-recent-repositories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3747,7 +3747,7 @@ export def "rest-service-fecru-recently-visited-v1-repositories get-recent" [
 #
 # GET /rest-service-fecru/recently-visited-v1/repositories/detailed
 # operationId: getRecentRepositoriesDetailed
-export def "rest-service-fecru-recently-visited-v1-repositories-detailed get-recent" [
+export def "get-recent-repositories-detailed" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3781,7 +3781,7 @@ export def "rest-service-fecru-recently-visited-v1-repositories-detailed get-rec
 #
 # GET /rest-service-fecru/recently-visited-v1/reviews
 # operationId: getRecentReviews
-export def "rest-service-fecru-recently-visited-v1-reviews get-recent" [
+export def "get-recent-reviews" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3815,7 +3815,7 @@ export def "rest-service-fecru-recently-visited-v1-reviews get-recent" [
 #
 # GET /rest-service-fecru/recently-visited-v1/reviews/detailed
 # operationId: getRecentReviewsDetailed
-export def "rest-service-fecru-recently-visited-v1-reviews-detailed get-recent" [
+export def "get-recent-reviews-detailed" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3849,7 +3849,7 @@ export def "rest-service-fecru-recently-visited-v1-reviews-detailed get-recent" 
 #
 # GET /rest-service-fecru/recently-visited-v1/snippets
 # operationId: getRecentSnippets
-export def "rest-service-fecru-recently-visited-v1-snippets get-recent" [
+export def "get-recent-snippets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3883,7 +3883,7 @@ export def "rest-service-fecru-recently-visited-v1-snippets get-recent" [
 #
 # GET /rest-service-fecru/recently-visited-v1/snippets/detailed
 # operationId: getRecentSnippetsDetailed
-export def "rest-service-fecru-recently-visited-v1-snippets-detailed get-recent" [
+export def "get-recent-snippets-detailed" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3917,7 +3917,7 @@ export def "rest-service-fecru-recently-visited-v1-snippets-detailed get-recent"
 #
 # GET /rest-service-fecru/recently-visited-v1/users
 # operationId: getRecentUsers
-export def "rest-service-fecru-recently-visited-v1-users get-recent" [
+export def "get-recent-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3951,7 +3951,7 @@ export def "rest-service-fecru-recently-visited-v1-users get-recent" [
 #
 # GET /rest-service-fecru/recently-visited-v1/users/detailed
 # operationId: getRecentUsersDetailed
-export def "rest-service-fecru-recently-visited-v1-users-detailed get-recent" [
+export def "get-recent-users-detailed" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3985,7 +3985,7 @@ export def "rest-service-fecru-recently-visited-v1-users-detailed get-recent" [
 #
 # GET /rest-service-fecru/server-v1
 # operationId: getInfo
-export def "rest-service-fecru-server-v1 get" [
+export def "get-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4018,7 +4018,7 @@ export def "rest-service-fecru-server-v1 get" [
 # POST /rest-service-fecru/share-content-v1/share
 #
 # operationId: doShareContent
-export def "rest-service-fecru-share-content-v1-share create-do" [
+export def "do-share-content" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4052,7 +4052,7 @@ export def "rest-service-fecru-share-content-v1-share create-do" [
 #
 # POST /rest-service-fecru/user-prefs-v1
 # operationId: setPref
-export def "rest-service-fecru-user-prefs-v1 update" [
+export def "set-pref" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4086,7 +4086,7 @@ export def "rest-service-fecru-user-prefs-v1 update" [
 #
 # GET /rest-service-fecru/user-prefs-v1/{property}
 # operationId: getGlobalPref
-export def "rest-service-fecru-user-prefs-v1 get-global" [
+export def "get-global-pref" [
   property: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4122,7 +4122,7 @@ export def "rest-service-fecru-user-prefs-v1 get-global" [
 #
 # GET /rest-service-fecru/user-prefs-v1/{repository}/{property}
 # operationId: getRepoPref
-export def "rest-service-fecru-user-prefs-v1 get-repo" [
+export def "get-repo-pref" [
   repository: string
   property: string
   --base-url(-b): string@base-url-completer # API base URL

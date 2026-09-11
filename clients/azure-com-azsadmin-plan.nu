@@ -110,7 +110,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-subscriptions-admin-plans list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "plans-list-all" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -134,7 +134,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Subscriptions.Admin/plans
 # operationId: Plans_ListAll
-export def "subscriptions-providers-microsoft-subscriptions-admin-plans list" [
+export def "plans-list-all" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -172,7 +172,7 @@ export def "subscriptions-providers-microsoft-subscriptions-admin-plans list" [
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Subscriptions.Admin/plans
 # operationId: Plans_List
-export def "subscriptions-resourcegroups-providers-microsoft-subscriptions-admin-plans list" [
+export def "plans-list" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -212,7 +212,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-subscriptions-admin
 #
 # DELETE /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Subscriptions.Admin/plans/{plan}
 # operationId: Plans_Delete
-export def "subscriptions-resourcegroups-providers-microsoft-subscriptions-admin-plans delete" [
+export def "plans-delete" [
   subscription_id: string
   resource_group_name: string
   plan: string
@@ -254,7 +254,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-subscriptions-admin
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Subscriptions.Admin/plans/{plan}
 # operationId: Plans_Get
-export def "subscriptions-resourcegroups-providers-microsoft-subscriptions-admin-plans get" [
+export def "plans-get" [
   subscription_id: string
   resource_group_name: string
   plan: string
@@ -297,7 +297,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-subscriptions-admin
 # PUT /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Subscriptions.Admin/plans/{plan}
 # operationId: Plans_CreateOrUpdate
 # --properties shape: {description?: string, displayName?: string, externalReferenceId?: string, name?: string, quotaIds?: list<string>, skuIds?: list<string>, subscriptionCount?: int}
-export def "subscriptions-resourcegroups-providers-microsoft-subscriptions-admin-plans create-or-update" [
+export def "plans-create-or-update" [
   subscription_id: string
   resource_group_name: string
   plan: string
@@ -344,7 +344,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-subscriptions-admin
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Subscriptions.Admin/plans/{plan}/metricDefinitions
 # operationId: Plans_ListMetricDefinitions
-export def "subscriptions-resourcegroups-providers-microsoft-subscriptions-admin-plans-metric-definitions list" [
+export def "plans-list-metric-definitions" [
   subscription_id: string
   resource_group_name: string
   plan: string
@@ -386,7 +386,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-subscriptions-admin
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Subscriptions.Admin/plans/{plan}/metrics
 # operationId: Plans_ListMetrics
-export def "subscriptions-resourcegroups-providers-microsoft-subscriptions-admin-plans-metrics list" [
+export def "plans-list-metrics" [
   subscription_id: string
   resource_group_name: string
   plan: string

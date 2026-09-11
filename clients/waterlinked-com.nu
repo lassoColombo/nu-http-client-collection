@@ -131,7 +131,7 @@ def accept-completer-2 [] { ["application/vnd.waterlinked.operation_response+jso
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "about version" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "about-api-version" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -155,7 +155,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/
 # operationId: about#ApiVersion
-export def "about version" [
+export def "about-api-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -189,7 +189,7 @@ export def "about version" [
 #
 # GET /api/v1/about
 # operationId: about#Get
-export def "about get" [
+export def "about-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -223,7 +223,7 @@ export def "about get" [
 #
 # POST /api/v1/about/factoryreset
 # operationId: about#FactoryReset
-export def "about-factoryreset reset-factory" [
+export def "about-factory-reset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -257,7 +257,7 @@ export def "about-factoryreset reset-factory" [
 #
 # GET /api/v1/about/led
 # operationId: about#LED
-export def "about-led get" [
+export def "about-led" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -291,7 +291,7 @@ export def "about-led get" [
 #
 # GET /api/v1/about/status
 # operationId: about#Status
-export def "about-status get" [
+export def "about-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -325,7 +325,7 @@ export def "about-status get" [
 #
 # GET /api/v1/about/temperature
 # operationId: about#Temperature
-export def "about-temperature get" [
+export def "about-temperature" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -359,7 +359,7 @@ export def "about-temperature get" [
 #
 # GET /api/v1/config/antenna
 # operationId: config#GetAntennaConfig
-export def "config-antenna get" [
+export def "config-get-antenna-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -393,7 +393,7 @@ export def "config-antenna get" [
 #
 # PUT /api/v1/config/antenna
 # operationId: config#ModifyAntennaConfig
-export def "config-antenna update-modify" [
+export def "config-modify-antenna-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -434,7 +434,7 @@ export def "config-antenna update-modify" [
 #
 # GET /api/v1/config/generic
 # operationId: config#Get
-export def "config-generic get" [
+export def "config-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -469,7 +469,7 @@ export def "config-generic get" [
 #
 # PUT /api/v1/config/generic
 # operationId: config#Modify
-export def "config-generic update-modify" [
+export def "config-modify" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -526,7 +526,7 @@ export def "config-generic update-modify" [
 #
 # GET /api/v1/config/ip
 # operationId: config#GetIP
-export def "config-ip get" [
+export def "config-get-ip" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -560,7 +560,7 @@ export def "config-ip get" [
 #
 # PUT /api/v1/config/ip
 # operationId: config#ModifyIP
-export def "config-ip update-modify" [
+export def "config-modify-ip" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -602,7 +602,7 @@ export def "config-ip update-modify" [
 #
 # GET /api/v1/config/receivers/
 # operationId: config#ListReceiver
-export def "config-receivers list" [
+export def "config-list-receiver" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -636,7 +636,7 @@ export def "config-receivers list" [
 #
 # GET /api/v1/config/receivers/{ID}
 # operationId: config#ShowReceiver
-export def "config-receivers get-show" [
+export def "config-show-receiver" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -672,7 +672,7 @@ export def "config-receivers get-show" [
 #
 # PUT /api/v1/config/receivers/{ID}
 # operationId: config#ModifyReceiver
-export def "config-receivers update-modify" [
+export def "config-modify-receiver" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -715,7 +715,7 @@ export def "config-receivers update-modify" [
 #
 # GET /api/v1/config/wifi
 # operationId: config#GetWIFI
-export def "config-wifi get" [
+export def "config-get-wifi" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -749,7 +749,7 @@ export def "config-wifi get" [
 #
 # PUT /api/v1/config/wifi
 # operationId: config#ModifyWIFI
-export def "config-wifi update-modify" [
+export def "config-modify-wifi" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -789,7 +789,7 @@ export def "config-wifi update-modify" [
 #
 # PUT /api/v1/external/depth
 # operationId: external#SetDepth
-export def "external-depth update" [
+export def "external-set-depth" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -828,7 +828,7 @@ export def "external-depth update" [
 #
 # GET /api/v1/external/imu
 # operationId: external#GetVehicleIMU
-export def "external-imu get-vehicle" [
+export def "external-get-vehicle-imu" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -862,7 +862,7 @@ export def "external-imu get-vehicle" [
 #
 # PUT /api/v1/external/imu
 # operationId: external#SetVehicleIMU
-export def "external-imu update-vehicle" [
+export def "external-set-vehicle-imu" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -905,7 +905,7 @@ export def "external-imu update-vehicle" [
 #
 # PUT /api/v1/external/master
 # operationId: external#SetMaster
-export def "external-master update" [
+export def "external-set-master" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -950,7 +950,7 @@ export def "external-master update" [
 #
 # GET /api/v1/external/orientation
 # operationId: external#GetOrientation
-export def "external-orientation get" [
+export def "external-get-orientation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -985,7 +985,7 @@ export def "external-orientation get" [
 #
 # PUT /api/v1/external/orientation
 # operationId: external#SetOrientation
-export def "external-orientation update" [
+export def "external-set-orientation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1023,7 +1023,7 @@ export def "external-orientation update" [
 #
 # GET /api/v1/imu/calibrate
 # operationId: imu#Get
-export def "imu-calibrate get" [
+export def "imu-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1057,7 +1057,7 @@ export def "imu-calibrate get" [
 #
 # POST /api/v1/imu/calibrate
 # operationId: imu#Calibrate
-export def "imu-calibrate create" [
+export def "imu-calibrate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1095,7 +1095,7 @@ export def "imu-calibrate create" [
 #
 # POST /api/v1/imu/resetgyros
 # operationId: imu#ResetGyro
-export def "imu-resetgyros reset-gyro" [
+export def "imu-reset-gyro" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1129,7 +1129,7 @@ export def "imu-resetgyros reset-gyro" [
 #
 # POST /api/v1/imu/setnorth
 # operationId: imu#SetNorth
-export def "imu-setnorth update-north" [
+export def "imu-set-north" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1167,7 +1167,7 @@ export def "imu-setnorth update-north" [
 #
 # GET /api/v1/poi/
 # operationId: poi#List
-export def "poi list" [
+export def "poi-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1201,7 +1201,7 @@ export def "poi list" [
 #
 # POST /api/v1/poi/
 # operationId: poi#Create
-export def "poi create" [
+export def "poi-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1245,7 +1245,7 @@ export def "poi create" [
 #
 # DELETE /api/v1/poi/{ID}
 # operationId: poi#Delete
-export def "poi delete" [
+export def "poi-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1281,7 +1281,7 @@ export def "poi delete" [
 #
 # GET /api/v1/poi/{ID}
 # operationId: poi#Show
-export def "poi get-show" [
+export def "poi-show" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1317,7 +1317,7 @@ export def "poi get-show" [
 #
 # PATCH /api/v1/poi/{ID}
 # operationId: poi#Update
-export def "poi update" [
+export def "poi-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1363,7 +1363,7 @@ export def "poi update" [
 #
 # GET /api/v1/position/acoustic/filtered
 # operationId: position#AcousticFiltered
-export def "position-acoustic-filtered get" [
+export def "position-acoustic-filtered" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1397,7 +1397,7 @@ export def "position-acoustic-filtered get" [
 #
 # GET /api/v1/position/acoustic/raw
 # operationId: position#AcousticRaw
-export def "position-acoustic-raw get" [
+export def "position-acoustic-raw" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1431,7 +1431,7 @@ export def "position-acoustic-raw get" [
 #
 # GET /api/v1/position/global
 # operationId: position#Get
-export def "position-global get" [
+export def "position-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1465,7 +1465,7 @@ export def "position-global get" [
 #
 # GET /api/v1/position/master
 # operationId: position#GetMaster
-export def "position-master get" [
+export def "position-get-master" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1499,7 +1499,7 @@ export def "position-master get" [
 #
 # GET /api/v1/status_report/
 # operationId: status_report#Get
-export def "status-report get" [
+export def "status-report-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1533,7 +1533,7 @@ export def "status-report get" [
 #
 # GET /api/v1/warnings/
 # operationId: warnings#Get
-export def "warnings get" [
+export def "warnings-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

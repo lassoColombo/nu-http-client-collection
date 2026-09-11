@@ -110,7 +110,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-insights-diagnostic-settings-service get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "service-diagnostic-settings-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -134,7 +134,7 @@ export def commands []: nothing -> table {
 #
 # GET /{resourceUri}/providers/microsoft.insights/diagnosticSettings/service
 # operationId: ServiceDiagnosticSettings_Get
-export def "providers-microsoft-insights-diagnostic-settings-service get" [
+export def "service-diagnostic-settings-get" [
   resource_uri: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -173,7 +173,7 @@ export def "providers-microsoft-insights-diagnostic-settings-service get" [
 # PATCH /{resourceUri}/providers/microsoft.insights/diagnosticSettings/service
 # operationId: ServiceDiagnosticSettings_Update
 # --properties shape: {eventHubAuthorizationRuleId?: string, logs?: list, metrics?: list, serviceBusRuleId?: string, storageAccountId?: string, workspaceId?: string}
-export def "providers-microsoft-insights-diagnostic-settings-service update" [
+export def "service-diagnostic-settings-update" [
   resource_uri: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -217,7 +217,7 @@ export def "providers-microsoft-insights-diagnostic-settings-service update" [
 # PUT /{resourceUri}/providers/microsoft.insights/diagnosticSettings/service
 # operationId: ServiceDiagnosticSettings_CreateOrUpdate
 # --properties shape: {eventHubAuthorizationRuleId?: string, logs?: list, metrics?: list, serviceBusRuleId?: string, storageAccountId?: string, workspaceId?: string}
-export def "providers-microsoft-insights-diagnostic-settings-service create-or-update" [
+export def "service-diagnostic-settings-create-or-update" [
   resource_uri: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

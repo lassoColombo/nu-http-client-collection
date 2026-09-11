@@ -97,7 +97,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "collection get-by-id" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-collection-by-id" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -121,7 +121,7 @@ export def commands []: nothing -> table {
 #
 # GET /collection/{id}
 # operationId: getCollectionById
-export def "collection get-by-id" [
+export def "get-collection-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -157,7 +157,7 @@ export def "collection get-by-id" [
 #
 # GET /collection/{id}/icons
 # operationId: getCollectionIconsById
-export def "collection-icons get-by-id" [
+export def "get-collection-icons-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -197,7 +197,7 @@ export def "collection-icons get-by-id" [
 #
 # GET /collection/{slug}
 # operationId: getCollectionBySlug
-export def "collection get-by-slug" [
+export def "get-collection-by-slug" [
   slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -233,7 +233,7 @@ export def "collection get-by-slug" [
 #
 # GET /collection/{slug}/icons
 # operationId: getCollectionIconsBySlug
-export def "collection-icons get-by-slug" [
+export def "get-collection-icons-by-slug" [
   slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -273,7 +273,7 @@ export def "collection-icons get-by-slug" [
 #
 # GET /collections
 # operationId: getAllCollections
-export def "collections get-list" [
+export def "get-all-collections" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -311,7 +311,7 @@ export def "collections get-list" [
 #
 # GET /icon/{id}
 # operationId: getIconById
-export def "icon get-by-id" [
+export def "get-icon-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -347,7 +347,7 @@ export def "icon get-by-id" [
 #
 # GET /icon/{term}
 # operationId: getIconByTerm
-export def "icon get-by-term" [
+export def "get-icon-by-term" [
   term: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -383,7 +383,7 @@ export def "icon get-by-term" [
 #
 # GET /icons/recent_uploads
 # operationId: getRecentIcons
-export def "icons-recent-uploads get" [
+export def "get-recent-icons" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -421,7 +421,7 @@ export def "icons-recent-uploads get" [
 #
 # GET /icons/{term}
 # operationId: getIconsByTerm
-export def "icons get" [
+export def "get-icons-by-term" [
   term: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -462,7 +462,7 @@ export def "icons get" [
 #
 # GET /oauth/usage
 # operationId: getApiQuotaStatus
-export def "oauth-usage get-quota-status" [
+export def "get-api-quota-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -496,7 +496,7 @@ export def "oauth-usage get-quota-status" [
 #
 # GET /user/{user_id}/collections
 # operationId: getUserCollections
-export def "user-collections list" [
+export def "get-user-collections" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -532,7 +532,7 @@ export def "user-collections list" [
 #
 # GET /user/{user_id}/collections/{slug}
 # operationId: getUserCollection
-export def "user-collections get" [
+export def "get-user-collection" [
   user_id: int
   slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -570,7 +570,7 @@ export def "user-collections get" [
 #
 # GET /user/{username}/uploads
 # operationId: getUserUploadsWithUser
-export def "user-uploads get" [
+export def "get-user-uploads-with-user" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

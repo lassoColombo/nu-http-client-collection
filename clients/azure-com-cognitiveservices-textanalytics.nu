@@ -99,7 +99,7 @@ def auth-scheme-completer [] { ["ocp-apim-subscription-key"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "entities create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "entities" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -124,7 +124,7 @@ export def commands []: nothing -> table {
 # POST /entities
 # operationId: Entities
 # --documents item shape: {id?: string, language?: string, text?: string}
-export def "entities create" [
+export def "entities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -163,7 +163,7 @@ export def "entities create" [
 # POST /keyPhrases
 # operationId: Key Phrases
 # --documents item shape: {id?: string, language?: string, text?: string}
-export def "key-phrases create" [
+export def "key-phrases" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -202,7 +202,7 @@ export def "key-phrases create" [
 # POST /languages
 # operationId: Detect Language
 # --documents item shape: {id?: string, text?: string}
-export def "languages create-detect" [
+export def "detect-language" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -241,7 +241,7 @@ export def "languages create-detect" [
 # POST /sentiment
 # operationId: Sentiment
 # --documents item shape: {id?: string, language?: string, text?: string}
-export def "sentiment create" [
+export def "sentiment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

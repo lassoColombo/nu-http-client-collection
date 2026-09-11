@@ -119,7 +119,7 @@ def status-completer [] { ["ACCOUNT_LINK_STATUS_UNKNOWN" "ACCOUNT_LINK_STATUS_UN
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "hotels-set-live-on-google update" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "travelpartner-accounts-hotels-set-live-on-google" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -143,7 +143,7 @@ export def commands []: nothing -> table {
 #
 # POST /v3/{account}/hotels:setLiveOnGoogle
 # operationId: travelpartner.accounts.hotels.setLiveOnGoogle
-export def "hotels-set-live-on-google update" [
+export def "travelpartner-accounts-hotels-set-live-on-google" [
   account: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -196,7 +196,7 @@ export def "hotels-set-live-on-google update" [
 #
 # DELETE /v3/{name}
 # operationId: travelpartner.accounts.accountLinks.delete
-export def "accounts delete" [
+export def "travelpartner-accounts-account-links-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -244,7 +244,7 @@ export def "accounts delete" [
 #
 # GET /v3/{name}
 # operationId: travelpartner.accounts.reconciliationReports.get
-export def "accounts get" [
+export def "travelpartner-accounts-reconciliation-reports-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -299,7 +299,7 @@ export def "accounts get" [
 # --displayNameDisapprovalReason item shape: {disapprovalReason?: "DISAPPROVAL_REASON_UNSPECIFIED"|"PUNCTUATION"|"MARKETING_LANGUAGE"|"LANDING_PAGE_NOT_MATCHED", languageCode?: string}
 # --displayNames item shape: {languageCode?: string, text?: string}
 # --submittedDisplayNames item shape: {languageCode?: string, text?: string}
-export def "accounts update" [
+export def "travelpartner-accounts-brands-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -354,7 +354,7 @@ export def "accounts update" [
 #
 # GET /v3/{name}/freeBookingLinksReportViews:query
 # operationId: travelpartner.accounts.freeBookingLinksReportViews.query
-export def "free-booking-links-report-views-query list" [
+export def "travelpartner-accounts-free-booking-links-report-views-query" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -406,7 +406,7 @@ export def "free-booking-links-report-views-query list" [
 #
 # GET /v3/{name}/participationReportViews:query
 # operationId: travelpartner.accounts.participationReportViews.query
-export def "participation-report-views-query list" [
+export def "travelpartner-accounts-participation-report-views-query" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -458,7 +458,7 @@ export def "participation-report-views-query list" [
 #
 # GET /v3/{name}/propertyPerformanceReportViews:query
 # operationId: travelpartner.accounts.propertyPerformanceReportViews.query
-export def "property-performance-report-views-query list" [
+export def "travelpartner-accounts-property-performance-report-views-query" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -510,7 +510,7 @@ export def "property-performance-report-views-query list" [
 #
 # GET /v3/{parent}/accountLinks
 # operationId: travelpartner.accounts.accountLinks.list
-export def "account-links list" [
+export def "travelpartner-accounts-account-links-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -559,7 +559,7 @@ export def "account-links list" [
 # POST /v3/{parent}/accountLinks
 # operationId: travelpartner.accounts.accountLinks.create
 # --accountLinkTarget shape: {allHotels?: bool, hotelList?: record}
-export def "account-links create" [
+export def "travelpartner-accounts-account-links-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -614,7 +614,7 @@ export def "account-links create" [
 #
 # GET /v3/{parent}/brands
 # operationId: travelpartner.accounts.brands.list
-export def "brands list" [
+export def "travelpartner-accounts-brands-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -666,7 +666,7 @@ export def "brands list" [
 # --displayNameDisapprovalReason item shape: {disapprovalReason?: "DISAPPROVAL_REASON_UNSPECIFIED"|"PUNCTUATION"|"MARKETING_LANGUAGE"|"LANDING_PAGE_NOT_MATCHED", languageCode?: string}
 # --displayNames item shape: {languageCode?: string, text?: string}
 # --submittedDisplayNames item shape: {languageCode?: string, text?: string}
-export def "brands create" [
+export def "travelpartner-accounts-brands-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -720,7 +720,7 @@ export def "brands create" [
 #
 # GET /v3/{parent}/hotelViews
 # operationId: travelpartner.accounts.hotelViews.list
-export def "hotel-views list" [
+export def "travelpartner-accounts-hotel-views-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -771,7 +771,7 @@ export def "hotel-views list" [
 #
 # GET /v3/{parent}/hotelViews:summarize
 # operationId: travelpartner.accounts.hotelViews.summarize
-export def "hotel-views-summarize get" [
+export def "travelpartner-accounts-hotel-views-summarize" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -819,7 +819,7 @@ export def "hotel-views-summarize get" [
 #
 # GET /v3/{parent}/icons
 # operationId: travelpartner.accounts.icons.list
-export def "icons list" [
+export def "travelpartner-accounts-icons-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -867,7 +867,7 @@ export def "icons list" [
 #
 # POST /v3/{parent}/icons
 # operationId: travelpartner.accounts.icons.create
-export def "icons create" [
+export def "travelpartner-accounts-icons-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -920,7 +920,7 @@ export def "icons create" [
 #
 # POST /v3/{parent}/listings:verify
 # operationId: travelpartner.accounts.listings.verify
-export def "listings-verify verify" [
+export def "travelpartner-accounts-listings-verify" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -972,7 +972,7 @@ export def "listings-verify verify" [
 #
 # GET /v3/{parent}/priceAccuracyViews
 # operationId: travelpartner.accounts.priceAccuracyViews.list
-export def "price-accuracy-views list" [
+export def "travelpartner-accounts-price-accuracy-views-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1020,7 +1020,7 @@ export def "price-accuracy-views list" [
 #
 # GET /v3/{parent}/priceAccuracyViews:summarize
 # operationId: travelpartner.accounts.priceAccuracyViews.summarize
-export def "price-accuracy-views-summarize get" [
+export def "travelpartner-accounts-price-accuracy-views-summarize" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1068,7 +1068,7 @@ export def "price-accuracy-views-summarize get" [
 #
 # GET /v3/{parent}/priceCoverageViews
 # operationId: travelpartner.accounts.priceCoverageViews.list
-export def "price-coverage-views list" [
+export def "travelpartner-accounts-price-coverage-views-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1116,7 +1116,7 @@ export def "price-coverage-views list" [
 #
 # GET /v3/{parent}/priceCoverageViews:latest
 # operationId: travelpartner.accounts.priceCoverageViews.getLatest
-export def "price-coverage-views-latest get" [
+export def "travelpartner-accounts-price-coverage-views-get-latest" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1164,7 +1164,7 @@ export def "price-coverage-views-latest get" [
 #
 # GET /v3/{parent}/reconciliationReports
 # operationId: travelpartner.accounts.reconciliationReports.list
-export def "reconciliation-reports list" [
+export def "travelpartner-accounts-reconciliation-reports-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1214,7 +1214,7 @@ export def "reconciliation-reports list" [
 #
 # POST /v3/{parent}/reconciliationReports
 # operationId: travelpartner.accounts.reconciliationReports.create
-export def "reconciliation-reports create" [
+export def "travelpartner-accounts-reconciliation-reports-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1268,7 +1268,7 @@ export def "reconciliation-reports create" [
 #
 # POST /v3/{parent}/reconciliationReports:validate
 # operationId: travelpartner.accounts.reconciliationReports.validate
-export def "reconciliation-reports-validate validate" [
+export def "travelpartner-accounts-reconciliation-reports-validate" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

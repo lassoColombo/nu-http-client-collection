@@ -130,7 +130,7 @@ def cert-type-completer [] { ["SHA_1" "SHA_256" "SHA_CERTIFICATE_TYPE_UNSPECIFIE
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta1-available-projects list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "firebase-available-projects-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -154,7 +154,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1beta1/availableProjects
 # operationId: firebase.availableProjects.list
-export def "v1beta1-available-projects list" [
+export def "firebase-available-projects-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -202,7 +202,7 @@ export def "v1beta1-available-projects list" [
 #
 # GET /v1beta1/projects
 # operationId: firebase.projects.list
-export def "v1beta1-projects list" [
+export def "firebase-projects-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -251,7 +251,7 @@ export def "v1beta1-projects list" [
 #
 # DELETE /v1beta1/{name}
 # operationId: firebase.projects.androidApps.sha.delete
-export def "v1beta1 delete-by-name" [
+export def "firebase-projects-android-apps-sha-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -299,7 +299,7 @@ export def "v1beta1 delete-by-name" [
 #
 # GET /v1beta1/{name}
 # operationId: firebase.projects.webApps.getConfig
-export def "v1beta1 get-config" [
+export def "firebase-projects-web-apps-get-config" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -347,7 +347,7 @@ export def "v1beta1 get-config" [
 #
 # PATCH /v1beta1/{name}
 # operationId: firebase.projects.webApps.patch
-export def "v1beta1 update" [
+export def "firebase-projects-web-apps-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -404,7 +404,7 @@ export def "v1beta1 update" [
 #
 # POST /v1beta1/{name}:remove
 # operationId: firebase.projects.webApps.remove
-export def "v1beta1 delete-by-name-1" [
+export def "firebase-projects-web-apps-remove" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -459,7 +459,7 @@ export def "v1beta1 delete-by-name-1" [
 #
 # POST /v1beta1/{name}:undelete
 # operationId: firebase.projects.webApps.undelete
-export def "v1beta1 create-undelete" [
+export def "firebase-projects-web-apps-undelete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -512,7 +512,7 @@ export def "v1beta1 create-undelete" [
 #
 # GET /v1beta1/{parent}/androidApps
 # operationId: firebase.projects.androidApps.list
-export def "v1beta1-android-apps list" [
+export def "firebase-projects-android-apps-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -563,7 +563,7 @@ export def "v1beta1-android-apps list" [
 #
 # POST /v1beta1/{parent}/androidApps
 # operationId: firebase.projects.androidApps.create
-export def "v1beta1-android-apps create" [
+export def "firebase-projects-android-apps-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -621,7 +621,7 @@ export def "v1beta1-android-apps create" [
 #
 # GET /v1beta1/{parent}/availableLocations
 # operationId: firebase.projects.availableLocations.list
-export def "v1beta1-available-locations list" [
+export def "firebase-projects-available-locations-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -671,7 +671,7 @@ export def "v1beta1-available-locations list" [
 #
 # POST /v1beta1/{parent}/defaultLocation:finalize
 # operationId: firebase.projects.defaultLocation.finalize
-export def "v1beta1-default-location-finalize finalize" [
+export def "firebase-projects-default-location-finalize" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -723,7 +723,7 @@ export def "v1beta1-default-location-finalize finalize" [
 #
 # GET /v1beta1/{parent}/iosApps
 # operationId: firebase.projects.iosApps.list
-export def "v1beta1-ios-apps list" [
+export def "firebase-projects-ios-apps-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -774,7 +774,7 @@ export def "v1beta1-ios-apps list" [
 #
 # POST /v1beta1/{parent}/iosApps
 # operationId: firebase.projects.iosApps.create
-export def "v1beta1-ios-apps create" [
+export def "firebase-projects-ios-apps-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -832,7 +832,7 @@ export def "v1beta1-ios-apps create" [
 #
 # GET /v1beta1/{parent}/sha
 # operationId: firebase.projects.androidApps.sha.list
-export def "v1beta1-sha list" [
+export def "firebase-projects-android-apps-sha-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -880,7 +880,7 @@ export def "v1beta1-sha list" [
 #
 # POST /v1beta1/{parent}/sha
 # operationId: firebase.projects.androidApps.sha.create
-export def "v1beta1-sha create" [
+export def "firebase-projects-android-apps-sha-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -934,7 +934,7 @@ export def "v1beta1-sha create" [
 #
 # GET /v1beta1/{parent}/webApps
 # operationId: firebase.projects.webApps.list
-export def "v1beta1-web-apps list" [
+export def "firebase-projects-web-apps-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -985,7 +985,7 @@ export def "v1beta1-web-apps list" [
 #
 # POST /v1beta1/{parent}/webApps
 # operationId: firebase.projects.webApps.create
-export def "v1beta1-web-apps create" [
+export def "firebase-projects-web-apps-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1041,7 +1041,7 @@ export def "v1beta1-web-apps create" [
 #
 # POST /v1beta1/{parent}:addGoogleAnalytics
 # operationId: firebase.projects.addGoogleAnalytics
-export def "v1beta1 create-google-analytics" [
+export def "firebase-projects-add-google-analytics" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1094,7 +1094,7 @@ export def "v1beta1 create-google-analytics" [
 #
 # POST /v1beta1/{parent}:removeAnalytics
 # operationId: firebase.projects.removeAnalytics
-export def "v1beta1 delete-analytics" [
+export def "firebase-projects-remove-analytics" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1146,7 +1146,7 @@ export def "v1beta1 delete-analytics" [
 #
 # GET /v1beta1/{parent}:searchApps
 # operationId: firebase.projects.searchApps
-export def "v1beta1 list-apps" [
+export def "firebase-projects-search-apps" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1198,7 +1198,7 @@ export def "v1beta1 list-apps" [
 #
 # POST /v1beta1/{project}:addFirebase
 # operationId: firebase.projects.addFirebase
-export def "v1beta1 create-firebase" [
+export def "firebase-projects-add-firebase" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

@@ -110,7 +110,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "artifact-formats get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-artifact-formats" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -133,7 +133,7 @@ export def commands []: nothing -> table {
 # Artifact formats
 #
 # GET /artifact-formats
-export def "artifact-formats get" [
+export def "get-artifact-formats" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -166,7 +166,7 @@ export def "artifact-formats get" [
 # List assignments
 #
 # GET /assignments
-export def "assignments list" [
+export def "get-assignments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -211,7 +211,7 @@ export def "assignments list" [
 # POST /assignments
 # --cover shape: {artifacts?: list, id?: string, media?: record}
 # --tags item shape: {colour?: string, id: string, name: string, tagSet?: record, urlWords?: string}
-export def "assignments create" [
+export def "post-assignments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -261,7 +261,7 @@ export def "assignments create" [
 # Delete this assignment and all of it's contributions
 #
 # DELETE /assignments/{id}
-export def "assignments delete" [
+export def "delete-assignments-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -296,7 +296,7 @@ export def "assignments delete" [
 # Get a single assigment by id
 #
 # GET /assignments/{id}
-export def "assignments get" [
+export def "get-assignments-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -331,7 +331,7 @@ export def "assignments get" [
 # Recent changes
 #
 # GET /change-log
-export def "change-log get" [
+export def "get-change-log" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -364,7 +364,7 @@ export def "change-log get" [
 # List valid contribution refinement types
 #
 # GET /contribution-refinement-types
-export def "contribution-refinement-types get" [
+export def "get-contribution-refinement-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -397,7 +397,7 @@ export def "contribution-refinement-types get" [
 # List contribution refinement options
 #
 # GET /contribution-refinements
-export def "contribution-refinements get" [
+export def "get-contribution-refinements" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -446,7 +446,7 @@ export def "contribution-refinements get" [
 # List contributions
 #
 # GET /contributions
-export def "contributions list" [
+export def "get-contributions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -502,7 +502,7 @@ export def "contributions list" [
 # --moderationHistory item shape: {action?: record, date: string, notes?: string}
 # --place shape: {country?: string, geohash?: string, google?: string, latLong?: record, name?: string, osm?: record}
 # --via shape: {authority?: record, ipAddress?: string, ipAddressPlace?: record}
-export def "contributions create" [
+export def "post-contributions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -549,7 +549,7 @@ export def "contributions create" [
 # Delete this contribution
 #
 # DELETE /contributions/{id}
-export def "contributions delete" [
+export def "delete-contributions-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -584,7 +584,7 @@ export def "contributions delete" [
 # Get a single contribution by id
 #
 # GET /contributions/{id}
-export def "contributions get" [
+export def "get-contributions-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -619,7 +619,7 @@ export def "contributions get" [
 # Raise a flag against this contribution
 #
 # POST /contributions/{id}/flag
-export def "contributions-flag create" [
+export def "post-contributions-id-flag" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -662,7 +662,7 @@ export def "contributions-flag create" [
 # Allows a user to mark a contribution as liked
 #
 # POST /contributions/{id}/like
-export def "contributions-like create" [
+export def "post-contributions-id-like" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -697,7 +697,7 @@ export def "contributions-like create" [
 # List users who have liked this contributions
 #
 # GET /contributions/{id}/likes
-export def "contributions-likes get" [
+export def "get-contributions-id-likes" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -733,7 +733,7 @@ export def "contributions-likes get" [
 #
 # POST /contributions/{id}/moderate
 # --action shape: {id: string, label: string, resultingState: record}
-export def "contributions-moderate create" [
+export def "post-contributions-id-moderate" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -773,7 +773,7 @@ export def "contributions-moderate create" [
 # List the credentials associated with the authenticated user.
 #
 # GET /credentials
-export def "credentials get" [
+export def "get-credentials" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -806,7 +806,7 @@ export def "credentials get" [
 # Event types
 #
 # GET /event-types
-export def "event-types get" [
+export def "get-event-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -839,7 +839,7 @@ export def "event-types get" [
 # Export contributions.
 #
 # POST /export
-export def "export create" [
+export def "post-export" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -891,7 +891,7 @@ export def "export create" [
 # Export contributions preflight summary.
 #
 # POST /export-summary
-export def "export-summary create" [
+export def "post-export-summary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -938,7 +938,7 @@ export def "export-summary create" [
 # Get a single export job; poll to follow export progress.
 #
 # GET /exports/{id}
-export def "exports get" [
+export def "get-exports-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -973,7 +973,7 @@ export def "exports get" [
 # List form responses
 #
 # GET /form-responses
-export def "form-responses list" [
+export def "get-form-responses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1010,7 +1010,7 @@ export def "form-responses list" [
 # Submit a response to a form
 #
 # POST /form-responses
-export def "form-responses create" [
+export def "post-form-responses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1049,7 +1049,7 @@ export def "form-responses create" [
 # Get a single form response by id
 #
 # GET /form-responses/{id}
-export def "form-responses get" [
+export def "get-form-responses-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1084,7 +1084,7 @@ export def "form-responses get" [
 # List forms
 #
 # GET /forms
-export def "forms list" [
+export def "get-forms" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1121,7 +1121,7 @@ export def "forms list" [
 # POST /forms
 # --fields item shape: {description?: string, label?: string, name?: string, options?: list<string>, public?: bool, required?: bool, type?: string}
 # --tags item shape: {colour?: string, id: string, name: string, tagSet?: record, urlWords?: string}
-export def "forms create" [
+export def "post-forms" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1164,7 +1164,7 @@ export def "forms create" [
 # Delete this form and all of it's responses.
 #
 # DELETE /forms/{id}
-export def "forms delete" [
+export def "delete-forms-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1199,7 +1199,7 @@ export def "forms delete" [
 # Get a single form by id
 #
 # GET /forms/{id}
-export def "forms get" [
+export def "get-forms-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1234,7 +1234,7 @@ export def "forms get" [
 # Submit a new media file
 #
 # POST /media
-export def "media create" [
+export def "post-media" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1269,7 +1269,7 @@ export def "media create" [
 }
 
 # GET /notifications/contributions/{id}/preview
-export def "notifications-contributions-preview get" [
+export def "get-notifications-contributions-id-preview" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1306,7 +1306,7 @@ export def "notifications-contributions-preview get" [
 # Scopes
 #
 # GET /scopes
-export def "scopes get" [
+export def "get-scopes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1339,7 +1339,7 @@ export def "scopes get" [
 # Subscription types
 #
 # GET /subscription-types
-export def "subscription-types get" [
+export def "get-subscription-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1372,7 +1372,7 @@ export def "subscription-types get" [
 # List subscriptions for the authorised user.
 #
 # GET /subscriptions
-export def "subscriptions get" [
+export def "get-subscriptions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1405,7 +1405,7 @@ export def "subscriptions get" [
 # Delete a subscription.
 #
 # DELETE /subscriptions/{id}
-export def "subscriptions delete" [
+export def "delete-subscriptions-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1440,7 +1440,7 @@ export def "subscriptions delete" [
 # List tags
 #
 # GET /tags
-export def "tags list" [
+export def "get-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1478,7 +1478,7 @@ export def "tags list" [
 #
 # POST /tags
 # --tagSet shape: {id: string, name: string}
-export def "tags create" [
+export def "post-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1518,7 +1518,7 @@ export def "tags create" [
 # Retrieve a single tag by id
 #
 # GET /tags/{id}
-export def "tags get" [
+export def "get-tags-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1553,7 +1553,7 @@ export def "tags get" [
 # List tag sets
 #
 # GET /tagsets
-export def "tagsets list" [
+export def "get-tagsets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1589,7 +1589,7 @@ export def "tagsets list" [
 # Create a new tag set
 #
 # POST /tagsets
-export def "tagsets create" [
+export def "post-tagsets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1627,7 +1627,7 @@ export def "tagsets create" [
 # Retrieve a single tag set by id
 #
 # GET /tagsets/{id}
-export def "tagsets get" [
+export def "get-tagsets-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1662,7 +1662,7 @@ export def "tagsets get" [
 # List users
 #
 # GET /users
-export def "users list" [
+export def "get-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1704,7 +1704,7 @@ export def "users list" [
 # Retrieve a single user by id
 #
 # GET /users/{id}
-export def "users get" [
+export def "get-users-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1739,7 +1739,7 @@ export def "users get" [
 # Retrieve a users linked profile by type
 #
 # GET /users/{id}/linked/{type}
-export def "users-linked get" [
+export def "get-users-id-linked-type" [
   id: string
   type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1776,7 +1776,7 @@ export def "users-linked get" [
 # Verify token and return details of the owning user
 #
 # POST /verify
-export def "verify create" [
+export def "post-verify" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

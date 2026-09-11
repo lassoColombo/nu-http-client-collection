@@ -110,7 +110,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-aadiam-diagnostic-settings list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "diagnostic-settings-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -134,7 +134,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/microsoft.aadiam/diagnosticSettings
 # operationId: DiagnosticSettings_List
-export def "providers-microsoft-aadiam-diagnostic-settings list" [
+export def "diagnostic-settings-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -170,7 +170,7 @@ export def "providers-microsoft-aadiam-diagnostic-settings list" [
 #
 # DELETE /providers/microsoft.aadiam/diagnosticSettings/{name}
 # operationId: DiagnosticSettings_Delete
-export def "providers-microsoft-aadiam-diagnostic-settings delete" [
+export def "diagnostic-settings-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -208,7 +208,7 @@ export def "providers-microsoft-aadiam-diagnostic-settings delete" [
 #
 # GET /providers/microsoft.aadiam/diagnosticSettings/{name}
 # operationId: DiagnosticSettings_Get
-export def "providers-microsoft-aadiam-diagnostic-settings get" [
+export def "diagnostic-settings-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -247,7 +247,7 @@ export def "providers-microsoft-aadiam-diagnostic-settings get" [
 # PUT /providers/microsoft.aadiam/diagnosticSettings/{name}
 # operationId: DiagnosticSettings_CreateOrUpdate
 # --properties shape: {eventHubAuthorizationRuleId?: string, eventHubName?: string, logs?: list, serviceBusRuleId?: string, storageAccountId?: string, workspaceId?: string}
-export def "providers-microsoft-aadiam-diagnostic-settings create-or-update" [
+export def "diagnostic-settings-create-or-update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -289,7 +289,7 @@ export def "providers-microsoft-aadiam-diagnostic-settings create-or-update" [
 #
 # GET /providers/microsoft.aadiam/diagnosticSettingsCategories
 # operationId: DiagnosticSettingsCategory_List
-export def "providers-microsoft-aadiam-diagnostic-settings-categories list-category" [
+export def "diagnostic-settings-category-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -325,7 +325,7 @@ export def "providers-microsoft-aadiam-diagnostic-settings-categories list-categ
 #
 # GET /providers/microsoft.aadiam/operations
 # operationId: Operations_List
-export def "providers-microsoft-aadiam-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

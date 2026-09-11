@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-web-recommendations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "recommendations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -128,7 +128,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Web/recommendations
 # operationId: Recommendations_List
-export def "subscriptions-providers-microsoft-web-recommendations list" [
+export def "recommendations-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -168,7 +168,7 @@ export def "subscriptions-providers-microsoft-web-recommendations list" [
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Web/recommendations/reset
 # operationId: Recommendations_ResetAllFilters
-export def "subscriptions-providers-microsoft-web-recommendations-reset list-filters" [
+export def "recommendations-reset-all-filters" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -206,7 +206,7 @@ export def "subscriptions-providers-microsoft-web-recommendations-reset list-fil
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Web/recommendations/{name}/disable
 # operationId: Recommendations_DisableRecommendationForSubscription
-export def "subscriptions-providers-microsoft-web-recommendations-disable disable" [
+export def "recommendations-disable-recommendation-for-subscription" [
   subscription_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -246,7 +246,7 @@ export def "subscriptions-providers-microsoft-web-recommendations-disable disabl
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{hostingEnvironmentName}/recommendationHistory
 # operationId: Recommendations_ListHistoryForHostingEnvironment
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-recommendation-history list" [
+export def "recommendations-list-history-for-hosting-environment" [
   subscription_id: string
   resource_group_name: string
   hosting_environment_name: string
@@ -290,7 +290,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{hostingEnvironmentName}/recommendations
 # operationId: Recommendations_ListRecommendedRulesForHostingEnvironment
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-recommendations list-recommended-rules" [
+export def "recommendations-list-recommended-rules-for-hosting-environment" [
   subscription_id: string
   resource_group_name: string
   hosting_environment_name: string
@@ -334,7 +334,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{hostingEnvironmentName}/recommendations/disable
 # operationId: Recommendations_DisableAllForHostingEnvironment
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-recommendations-disable list" [
+export def "recommendations-disable-all-for-hosting-environment" [
   subscription_id: string
   resource_group_name: string
   hosting_environment_name: string
@@ -377,7 +377,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{hostingEnvironmentName}/recommendations/reset
 # operationId: Recommendations_ResetAllFiltersForHostingEnvironment
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-recommendations-reset list-filters" [
+export def "recommendations-reset-all-filters-for-hosting-environment" [
   subscription_id: string
   resource_group_name: string
   hosting_environment_name: string
@@ -420,7 +420,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{hostingEnvironmentName}/recommendations/{name}
 # operationId: Recommendations_GetRuleDetailsByHostingEnvironment
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-recommendations get-rule-details" [
+export def "recommendations-get-rule-details-by-hosting-environment" [
   subscription_id: string
   resource_group_name: string
   hosting_environment_name: string
@@ -466,7 +466,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{hostingEnvironmentName}/recommendations/{name}/disable
 # operationId: Recommendations_DisableRecommendationForHostingEnvironment
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-recommendations-disable disable" [
+export def "recommendations-disable-recommendation-for-hosting-environment" [
   subscription_id: string
   resource_group_name: string
   hosting_environment_name: string
@@ -511,7 +511,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{siteName}/recommendationHistory
 # operationId: Recommendations_ListHistoryForWebApp
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-recommendation-history list-for-app" [
+export def "recommendations-list-history-for-web-app" [
   subscription_id: string
   resource_group_name: string
   site_name: string
@@ -555,7 +555,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-recommen
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{siteName}/recommendations
 # operationId: Recommendations_ListRecommendedRulesForWebApp
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-recommendations list-recommended-rules-for-app" [
+export def "recommendations-list-recommended-rules-for-web-app" [
   subscription_id: string
   resource_group_name: string
   site_name: string
@@ -599,7 +599,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-recommen
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{siteName}/recommendations/disable
 # operationId: Recommendations_DisableAllForWebApp
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-recommendations-disable list-for-app" [
+export def "recommendations-disable-all-for-web-app" [
   subscription_id: string
   resource_group_name: string
   site_name: string
@@ -641,7 +641,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-recommen
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{siteName}/recommendations/reset
 # operationId: Recommendations_ResetAllFiltersForWebApp
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-recommendations-reset list-filters-for-app" [
+export def "recommendations-reset-all-filters-for-web-app" [
   subscription_id: string
   resource_group_name: string
   site_name: string
@@ -683,7 +683,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-recommen
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{siteName}/recommendations/{name}
 # operationId: Recommendations_GetRuleDetailsByWebApp
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-recommendations get-rule-details-by-app" [
+export def "recommendations-get-rule-details-by-web-app" [
   subscription_id: string
   resource_group_name: string
   site_name: string
@@ -729,7 +729,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-recommen
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{siteName}/recommendations/{name}/disable
 # operationId: Recommendations_DisableRecommendationForSite
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-recommendations-disable disable" [
+export def "recommendations-disable-recommendation-for-site" [
   subscription_id: string
   resource_group_name: string
   site_name: string

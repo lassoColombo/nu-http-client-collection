@@ -112,7 +112,7 @@ def provisioning-state-completer [] { ["Accepted" "Failed" "NotSpecified" "Succe
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-subscriptions-admin-subscriptions-acquired-plans list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "acquired-plans-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -136,7 +136,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Subscriptions.Admin/subscriptions/{targetSubscriptionId}/acquiredPlans
 # operationId: AcquiredPlans_List
-export def "subscriptions-providers-microsoft-subscriptions-admin-subscriptions-acquired-plans list" [
+export def "acquired-plans-list" [
   subscription_id: string
   target_subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -176,7 +176,7 @@ export def "subscriptions-providers-microsoft-subscriptions-admin-subscriptions-
 #
 # DELETE /subscriptions/{subscriptionId}/providers/Microsoft.Subscriptions.Admin/subscriptions/{targetSubscriptionId}/acquiredPlans/{planAcquisitionId}
 # operationId: AcquiredPlans_Delete
-export def "subscriptions-providers-microsoft-subscriptions-admin-subscriptions-acquired-plans delete" [
+export def "acquired-plans-delete" [
   subscription_id: string
   target_subscription_id: string
   plan_acquisition_id: string
@@ -218,7 +218,7 @@ export def "subscriptions-providers-microsoft-subscriptions-admin-subscriptions-
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Subscriptions.Admin/subscriptions/{targetSubscriptionId}/acquiredPlans/{planAcquisitionId}
 # operationId: AcquiredPlans_Get
-export def "subscriptions-providers-microsoft-subscriptions-admin-subscriptions-acquired-plans get" [
+export def "acquired-plans-get" [
   subscription_id: string
   target_subscription_id: string
   plan_acquisition_id: string
@@ -260,7 +260,7 @@ export def "subscriptions-providers-microsoft-subscriptions-admin-subscriptions-
 #
 # PUT /subscriptions/{subscriptionId}/providers/Microsoft.Subscriptions.Admin/subscriptions/{targetSubscriptionId}/acquiredPlans/{planAcquisitionId}
 # operationId: AcquiredPlans_Create
-export def "subscriptions-providers-microsoft-subscriptions-admin-subscriptions-acquired-plans create" [
+export def "acquired-plans-create" [
   subscription_id: string
   target_subscription_id: string
   plan_acquisition_id: string

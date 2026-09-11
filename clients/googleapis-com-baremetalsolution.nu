@@ -135,7 +135,7 @@ def workload-profile-completer-1 [] { ["WORKLOAD_PROFILE_GENERIC" "WORKLOAD_PROF
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects create-detach-lun" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "baremetalsolution-projects-locations-instances-detach-lun" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -159,7 +159,7 @@ export def commands []: nothing -> table {
 #
 # POST /v2/{instance}:detachLun
 # operationId: baremetalsolution.projects.locations.instances.detachLun
-export def "projects create-detach-lun" [
+export def "baremetalsolution-projects-locations-instances-detach-lun" [
   instance: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -212,7 +212,7 @@ export def "projects create-detach-lun" [
 #
 # GET /v2/{location}/instanceProvisioningSettings:fetch
 # operationId: baremetalsolution.projects.locations.instanceProvisioningSettings.fetch
-export def "instance-provisioning-settings-fetch get" [
+export def "baremetalsolution-projects-locations-instance-provisioning-settings-fetch" [
   location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -260,7 +260,7 @@ export def "instance-provisioning-settings-fetch get" [
 #
 # GET /v2/{location}/networks:listNetworkUsage
 # operationId: baremetalsolution.projects.locations.networks.listNetworkUsage
-export def "networks-list-network-usage list" [
+export def "baremetalsolution-projects-locations-networks-list-network-usage" [
   location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -308,7 +308,7 @@ export def "networks-list-network-usage list" [
 #
 # DELETE /v2/{name}
 # operationId: baremetalsolution.projects.locations.volumes.snapshots.delete
-export def "projects delete" [
+export def "baremetalsolution-projects-locations-volumes-snapshots-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -356,7 +356,7 @@ export def "projects delete" [
 #
 # GET /v2/{name}
 # operationId: baremetalsolution.projects.locations.volumes.snapshots.get
-export def "projects get" [
+export def "baremetalsolution-projects-locations-volumes-snapshots-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -405,7 +405,7 @@ export def "projects get" [
 # PATCH /v2/{name}
 # operationId: baremetalsolution.projects.locations.volumes.patch
 # --snapshotReservationDetail shape: {reservedSpaceGib?: string, reservedSpacePercent?: int, reservedSpaceRemainingGib?: string, reservedSpaceUsedPercent?: int}
-export def "projects update" [
+export def "baremetalsolution-projects-locations-volumes-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -477,7 +477,7 @@ export def "projects update" [
 #
 # GET /v2/{name}/locations
 # operationId: baremetalsolution.projects.locations.list
-export def "locations list" [
+export def "baremetalsolution-projects-locations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -528,7 +528,7 @@ export def "locations list" [
 #
 # POST /v2/{name}:disableInteractiveSerialConsole
 # operationId: baremetalsolution.projects.locations.instances.disableInteractiveSerialConsole
-export def "projects disable-interactive-serial-console" [
+export def "baremetalsolution-projects-locations-instances-disable-interactive-serial-console" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -580,7 +580,7 @@ export def "projects disable-interactive-serial-console" [
 #
 # POST /v2/{name}:enableInteractiveSerialConsole
 # operationId: baremetalsolution.projects.locations.instances.enableInteractiveSerialConsole
-export def "projects enable-interactive-serial-console" [
+export def "baremetalsolution-projects-locations-instances-enable-interactive-serial-console" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -632,7 +632,7 @@ export def "projects enable-interactive-serial-console" [
 #
 # POST /v2/{name}:evict
 # operationId: baremetalsolution.projects.locations.volumes.luns.evict
-export def "projects create-evict" [
+export def "baremetalsolution-projects-locations-volumes-luns-evict" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -684,7 +684,7 @@ export def "projects create-evict" [
 #
 # POST /v2/{name}:rename
 # operationId: baremetalsolution.projects.locations.volumes.rename
-export def "projects rename" [
+export def "baremetalsolution-projects-locations-volumes-rename" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -736,7 +736,7 @@ export def "projects rename" [
 #
 # POST /v2/{name}:reset
 # operationId: baremetalsolution.projects.locations.instances.reset
-export def "projects reset" [
+export def "baremetalsolution-projects-locations-instances-reset" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -788,7 +788,7 @@ export def "projects reset" [
 #
 # POST /v2/{name}:start
 # operationId: baremetalsolution.projects.locations.instances.start
-export def "projects start" [
+export def "baremetalsolution-projects-locations-instances-start" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -840,7 +840,7 @@ export def "projects start" [
 #
 # POST /v2/{name}:stop
 # operationId: baremetalsolution.projects.locations.instances.stop
-export def "projects stop" [
+export def "baremetalsolution-projects-locations-instances-stop" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -892,7 +892,7 @@ export def "projects stop" [
 #
 # GET /v2/{parent}/instances
 # operationId: baremetalsolution.projects.locations.instances.list
-export def "instances list" [
+export def "baremetalsolution-projects-locations-instances-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -947,7 +947,7 @@ export def "instances list" [
 # --luns item shape: {bootLun?: bool, id?: string, multiprotocolType?: "MULTIPROTOCOL_TYPE_UNSPECIFIED"|"LINUX", shareable?: bool, sizeGb?: string, state?: "STATE_UNSPECIFIED"|"CREATING"|"UPDATING"|"READY"|"DELETING"|"COOL_OFF", storageType?: "STORAGE_TYPE_UNSPECIFIED"|"SSD"|"HDD", storageVolume?: string, wwid?: string}
 # --networks item shape: {cidr?: string, id?: string, ipAddress?: string, jumboFramesEnabled?: bool, labels?: record, macAddress?: list<string>, mountPoints?: list, reservations?: list, servicesCidr?: string, state?: "STATE_UNSPECIFIED"|"PROVISIONING"|"PROVISIONED"|"DEPROVISIONING"|"UPDATING", type?: "TYPE_UNSPECIFIED"|"CLIENT"|"PRIVATE", vlanId?: string, vrf?: record}
 # --volumes item shape: {autoGrownSizeGib?: string, currentSizeGib?: string, emergencySizeGib?: string, id?: string, labels?: record, maxSizeGib?: string, notes?: string, originallyRequestedSizeGib?: string, performanceTier?: "VOLUME_PERFORMANCE_TIER_UNSPECIFIED"|"VOLUME_PERFORMANCE_TIER_SHARED"|"VOLUME_PERFORMANCE_TIER_ASSIGNED"|"VOLUME_PERFORMANCE_TIER_HT", pod?: string, remainingSpaceGib?: string, requestedSizeGib?: string, ... (8 more fields)}
-export def "instances create" [
+export def "baremetalsolution-projects-locations-instances-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1009,7 +1009,7 @@ export def "instances create" [
 #
 # GET /v2/{parent}/luns
 # operationId: baremetalsolution.projects.locations.volumes.luns.list
-export def "luns list" [
+export def "baremetalsolution-projects-locations-volumes-luns-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1059,7 +1059,7 @@ export def "luns list" [
 #
 # GET /v2/{parent}/networks
 # operationId: baremetalsolution.projects.locations.networks.list
-export def "networks list" [
+export def "baremetalsolution-projects-locations-networks-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1110,7 +1110,7 @@ export def "networks list" [
 #
 # GET /v2/{parent}/nfsShares
 # operationId: baremetalsolution.projects.locations.nfsShares.list
-export def "nfs-shares list" [
+export def "baremetalsolution-projects-locations-nfs-shares-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1162,7 +1162,7 @@ export def "nfs-shares list" [
 # POST /v2/{parent}/nfsShares
 # operationId: baremetalsolution.projects.locations.nfsShares.create
 # --allowedClients item shape: {allowDev?: bool, allowSuid?: bool, allowedClientsCidr?: string, mountPermissions?: "MOUNT_PERMISSIONS_UNSPECIFIED"|"READ"|"READ_WRITE", network?: string, noRootSquash?: bool}
-export def "nfs-shares create" [
+export def "baremetalsolution-projects-locations-nfs-shares-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1221,7 +1221,7 @@ export def "nfs-shares create" [
 # --instances item shape: {accountNetworksEnabled?: bool, clientNetwork?: record, hyperthreading?: bool, id?: string, instanceType?: string, logicalInterfaces?: list, networkConfig?: "NETWORKCONFIG_UNSPECIFIED"|"SINGLE_VLAN"|"MULTI_VLAN", networkTemplate?: string, osImage?: string, privateNetwork?: record, userNote?: string}
 # --networks item shape: {bandwidth?: "BANDWIDTH_UNSPECIFIED"|"BW_1_GBPS"|"BW_2_GBPS"|"BW_5_GBPS"|"BW_10_GBPS", cidr?: string, gcpService?: string, id?: string, jumboFramesEnabled?: bool, serviceCidr?: "SERVICE_CIDR_UNSPECIFIED"|"DISABLED"|"HIGH_26"|"HIGH_27"|"HIGH_28", type?: "TYPE_UNSPECIFIED"|"CLIENT"|"PRIVATE", userNote?: string, vlanAttachments?: list, vlanSameProject?: bool}
 # --volumes item shape: {gcpService?: string, id?: string, lunRanges?: list, machineIds?: list<string>, nfsExports?: list, performanceTier?: "VOLUME_PERFORMANCE_TIER_UNSPECIFIED"|"VOLUME_PERFORMANCE_TIER_SHARED"|"VOLUME_PERFORMANCE_TIER_ASSIGNED"|"VOLUME_PERFORMANCE_TIER_HT", protocol?: "PROTOCOL_UNSPECIFIED"|"PROTOCOL_FC"|"PROTOCOL_NFS", sizeGb?: int, snapshotsEnabled?: bool, storageAggregatePool?: string, type?: "TYPE_UNSPECIFIED"|"FLASH"|"DISK", userNote?: string}
-export def "provisioning-configs create" [
+export def "baremetalsolution-projects-locations-provisioning-configs-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1284,7 +1284,7 @@ export def "provisioning-configs create" [
 # POST /v2/{parent}/provisioningConfigs:submit
 # operationId: baremetalsolution.projects.locations.provisioningConfigs.submit
 # --provisioningConfig shape: {customId?: string, email?: string, handoverServiceAccount?: string, instances?: list, location?: string, networks?: list, statusMessage?: string, ticketId?: string, volumes?: list, vpcScEnabled?: bool}
-export def "provisioning-configs-submit submit" [
+export def "baremetalsolution-projects-locations-provisioning-configs-submit" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1337,7 +1337,7 @@ export def "provisioning-configs-submit submit" [
 #
 # GET /v2/{parent}/provisioningQuotas
 # operationId: baremetalsolution.projects.locations.provisioningQuotas.list
-export def "provisioning-quotas list" [
+export def "baremetalsolution-projects-locations-provisioning-quotas-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1387,7 +1387,7 @@ export def "provisioning-quotas list" [
 #
 # GET /v2/{parent}/snapshots
 # operationId: baremetalsolution.projects.locations.volumes.snapshots.list
-export def "snapshots list" [
+export def "baremetalsolution-projects-locations-volumes-snapshots-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1437,7 +1437,7 @@ export def "snapshots list" [
 #
 # POST /v2/{parent}/snapshots
 # operationId: baremetalsolution.projects.locations.volumes.snapshots.create
-export def "snapshots create" [
+export def "baremetalsolution-projects-locations-volumes-snapshots-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1490,7 +1490,7 @@ export def "snapshots create" [
 #
 # GET /v2/{parent}/sshKeys
 # operationId: baremetalsolution.projects.locations.sshKeys.list
-export def "ssh-keys list" [
+export def "baremetalsolution-projects-locations-ssh-keys-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1540,7 +1540,7 @@ export def "ssh-keys list" [
 #
 # POST /v2/{parent}/sshKeys
 # operationId: baremetalsolution.projects.locations.sshKeys.create
-export def "ssh-keys create" [
+export def "baremetalsolution-projects-locations-ssh-keys-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1593,7 +1593,7 @@ export def "ssh-keys create" [
 #
 # GET /v2/{parent}/volumes
 # operationId: baremetalsolution.projects.locations.volumes.list
-export def "volumes list" [
+export def "baremetalsolution-projects-locations-volumes-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1644,7 +1644,7 @@ export def "volumes list" [
 #
 # POST /v2/{volumeSnapshot}:restoreVolumeSnapshot
 # operationId: baremetalsolution.projects.locations.volumes.snapshots.restoreVolumeSnapshot
-export def "projects create-restore-volume-snapshot" [
+export def "baremetalsolution-projects-locations-volumes-snapshots-restore-volume-snapshot" [
   volume_snapshot: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1696,7 +1696,7 @@ export def "projects create-restore-volume-snapshot" [
 #
 # POST /v2/{volume}:resize
 # operationId: baremetalsolution.projects.locations.volumes.resize
-export def "projects resize" [
+export def "baremetalsolution-projects-locations-volumes-resize" [
   volume: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

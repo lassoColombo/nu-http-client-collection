@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-sql-virtual-machine-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.SqlVirtualMachine/operations
 # operationId: Operations_List
-export def "providers-microsoft-sql-virtual-machine-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -176,7 +176,7 @@ export def "providers-microsoft-sql-virtual-machine-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachineGroups
 # operationId: SqlVirtualMachineGroups_List
-export def "subscriptions-providers-microsoft-sql-virtual-machine-sql-virtual-machine-groups list" [
+export def "sql-virtual-machine-groups-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -214,7 +214,7 @@ export def "subscriptions-providers-microsoft-sql-virtual-machine-sql-virtual-ma
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachines
 # operationId: SqlVirtualMachines_List
-export def "subscriptions-providers-microsoft-sql-virtual-machine-sql-virtual-machines list" [
+export def "sql-virtual-machines-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -252,7 +252,7 @@ export def "subscriptions-providers-microsoft-sql-virtual-machine-sql-virtual-ma
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachineGroups
 # operationId: SqlVirtualMachineGroups_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machine-sql-virtual-machine-groups list" [
+export def "sql-virtual-machine-groups-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -292,7 +292,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machin
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachineGroups/{sqlVirtualMachineGroupName}
 # operationId: SqlVirtualMachineGroups_Delete
-export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machine-sql-virtual-machine-groups delete" [
+export def "sql-virtual-machine-groups-delete" [
   subscription_id: string
   resource_group_name: string
   sql_virtual_machine_group_name: string
@@ -334,7 +334,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machin
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachineGroups/{sqlVirtualMachineGroupName}
 # operationId: SqlVirtualMachineGroups_Get
-export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machine-sql-virtual-machine-groups get" [
+export def "sql-virtual-machine-groups-get" [
   subscription_id: string
   resource_group_name: string
   sql_virtual_machine_group_name: string
@@ -376,7 +376,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machin
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachineGroups/{sqlVirtualMachineGroupName}
 # operationId: SqlVirtualMachineGroups_Update
-export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machine-sql-virtual-machine-groups update" [
+export def "sql-virtual-machine-groups-update" [
   subscription_id: string
   resource_group_name: string
   sql_virtual_machine_group_name: string
@@ -423,7 +423,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machin
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachineGroups/{sqlVirtualMachineGroupName}
 # operationId: SqlVirtualMachineGroups_CreateOrUpdate
 # --properties shape: {sqlImageOffer?: string, sqlImageSku?: "Developer"|"Enterprise", wsfcDomainProfile?: record}
-export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machine-sql-virtual-machine-groups create-or-update" [
+export def "sql-virtual-machine-groups-create-or-update" [
   subscription_id: string
   resource_group_name: string
   sql_virtual_machine_group_name: string
@@ -471,7 +471,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machin
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachineGroups/{sqlVirtualMachineGroupName}/availabilityGroupListeners
 # operationId: AvailabilityGroupListeners_ListByGroup
-export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machine-sql-virtual-machine-groups-availability-group-list-eners list" [
+export def "availability-group-listeners-list-by-group" [
   subscription_id: string
   resource_group_name: string
   sql_virtual_machine_group_name: string
@@ -513,7 +513,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machin
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachineGroups/{sqlVirtualMachineGroupName}/availabilityGroupListeners/{availabilityGroupListenerName}
 # operationId: AvailabilityGroupListeners_Delete
-export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machine-sql-virtual-machine-groups-availability-group-list-eners delete" [
+export def "availability-group-listeners-delete" [
   subscription_id: string
   resource_group_name: string
   sql_virtual_machine_group_name: string
@@ -557,7 +557,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machin
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachineGroups/{sqlVirtualMachineGroupName}/availabilityGroupListeners/{availabilityGroupListenerName}
 # operationId: AvailabilityGroupListeners_Get
-export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machine-sql-virtual-machine-groups-availability-group-list-eners get" [
+export def "availability-group-listeners-get" [
   subscription_id: string
   resource_group_name: string
   sql_virtual_machine_group_name: string
@@ -602,7 +602,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machin
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachineGroups/{sqlVirtualMachineGroupName}/availabilityGroupListeners/{availabilityGroupListenerName}
 # operationId: AvailabilityGroupListeners_CreateOrUpdate
 # --properties shape: {availabilityGroupName?: string, createDefaultAvailabilityGroupIfNotExist?: bool, loadBalancerConfigurations?: list, port?: int}
-export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machine-sql-virtual-machine-groups-availability-group-list-eners create-or-update" [
+export def "availability-group-listeners-create-or-update" [
   subscription_id: string
   resource_group_name: string
   sql_virtual_machine_group_name: string
@@ -650,7 +650,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machin
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachineGroups/{sqlVirtualMachineGroupName}/sqlVirtualMachines
 # operationId: SqlVirtualMachines_ListBySqlVmGroup
-export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machine-sql-virtual-machine-groups-sql-virtual-machines list-by-vm" [
+export def "sql-virtual-machines-list-by-sql-vm-group" [
   subscription_id: string
   resource_group_name: string
   sql_virtual_machine_group_name: string
@@ -692,7 +692,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machin
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachines
 # operationId: SqlVirtualMachines_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machine-sql-virtual-machines list" [
+export def "sql-virtual-machines-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -732,7 +732,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machin
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachines/{sqlVirtualMachineName}
 # operationId: SqlVirtualMachines_Delete
-export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machine-sql-virtual-machines delete" [
+export def "sql-virtual-machines-delete" [
   subscription_id: string
   resource_group_name: string
   sql_virtual_machine_name: string
@@ -774,7 +774,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machin
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachines/{sqlVirtualMachineName}
 # operationId: SqlVirtualMachines_Get
-export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machine-sql-virtual-machines get" [
+export def "sql-virtual-machines-get" [
   subscription_id: string
   resource_group_name: string
   sql_virtual_machine_name: string
@@ -817,7 +817,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machin
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachines/{sqlVirtualMachineName}
 # operationId: SqlVirtualMachines_Update
-export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machine-sql-virtual-machines update" [
+export def "sql-virtual-machines-update" [
   subscription_id: string
   resource_group_name: string
   sql_virtual_machine_name: string
@@ -865,7 +865,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machin
 # operationId: SqlVirtualMachines_CreateOrUpdate
 # --identity shape: {type?: "SystemAssigned"}
 # --properties shape: {autoBackupSettings?: record, autoPatchingSettings?: record, keyVaultCredentialSettings?: record, serverConfigurationsManagementSettings?: record, sqlImageOffer?: string, sqlImageSku?: "Developer"|"Express"|"Standard"|"Enterprise"|"Web", sqlManagement?: "Full"|"LightWeight"|"NoAgent", sqlServerLicenseType?: "PAYG"|"AHUB"|"DR", sqlVirtualMachineGroupResourceId?: string, storageConfigurationSettings?: record, virtualMachineResourceId?: string, wsfcDomainCredentials?: record}
-export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machine-sql-virtual-machines create-or-update" [
+export def "sql-virtual-machines-create-or-update" [
   subscription_id: string
   resource_group_name: string
   sql_virtual_machine_name: string

@@ -101,7 +101,7 @@ def product-type-completer [] { ["EC2" "Fargate" "Lambda" "SageMaker"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-savings-plan create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-savings-plan" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -125,7 +125,7 @@ export def commands []: nothing -> table {
 #
 # POST /CreateSavingsPlan
 # operationId: CreateSavingsPlan
-export def "create-savings-plan create" [
+export def "create-savings-plan" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -177,7 +177,7 @@ export def "create-savings-plan create" [
 #
 # POST /DeleteQueuedSavingsPlan
 # operationId: DeleteQueuedSavingsPlan
-export def "delete-queued-savings-plan delete" [
+export def "delete-queued-savings-plan" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -225,7 +225,7 @@ export def "delete-queued-savings-plan delete" [
 # POST /DescribeSavingsPlanRates
 # operationId: DescribeSavingsPlanRates
 # --filters item shape: {name?: any, values?: any}
-export def "describe-savings-plan-rates get" [
+export def "describe-savings-plan-rates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -276,7 +276,7 @@ export def "describe-savings-plan-rates get" [
 # POST /DescribeSavingsPlans
 # operationId: DescribeSavingsPlans
 # --filters item shape: {name?: any, values?: any}
-export def "describe-savings-plans get" [
+export def "describe-savings-plans" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -329,7 +329,7 @@ export def "describe-savings-plans get" [
 # POST /DescribeSavingsPlansOfferingRates
 # operationId: DescribeSavingsPlansOfferingRates
 # --filters item shape: {name?: any, values?: any}
-export def "describe-savings-plans-offering-rates get" [
+export def "describe-savings-plans-offering-rates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -386,7 +386,7 @@ export def "describe-savings-plans-offering-rates get" [
 # POST /DescribeSavingsPlansOfferings
 # operationId: DescribeSavingsPlansOfferings
 # --filters item shape: {name?: any, values?: any}
-export def "describe-savings-plans-offerings get" [
+export def "describe-savings-plans-offerings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -445,7 +445,7 @@ export def "describe-savings-plans-offerings get" [
 #
 # POST /ListTagsForResource
 # operationId: ListTagsForResource
-export def "list-tags-for-resource list" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -492,7 +492,7 @@ export def "list-tags-for-resource list" [
 #
 # POST /TagResource
 # operationId: TagResource
-export def "tag-resource tag" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -540,7 +540,7 @@ export def "tag-resource tag" [
 #
 # POST /UntagResource
 # operationId: UntagResource
-export def "untag-resource untag" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

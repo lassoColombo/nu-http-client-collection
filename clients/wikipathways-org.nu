@@ -105,7 +105,7 @@ def format-completer [] { ["dump" "html" "jpg" "json" "pdf" "xml"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-pathway create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-create-pathway" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -128,7 +128,7 @@ export def commands []: nothing -> table {
 # createPathwayCreate a new pathway on the wiki with the given GPML code.Note: To create/modify pathways via the web service, you need to have an account with web service write permissions. Please contact us to request write access for the web service.
 #
 # POST /createPathway
-export def "create-pathway create" [
+export def "post-create-pathway" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -166,7 +166,7 @@ export def "create-pathway create" [
 # findInteractionsFind interactions defined in WikiPathways pathways.
 #
 # GET /findInteractions
-export def "find-interactions get" [
+export def "get-find-interactions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -202,7 +202,7 @@ export def "find-interactions get" [
 # findPathwaysByLiterature
 #
 # GET /findPathwaysByLiterature
-export def "find-pathways-by-literature get" [
+export def "get-find-pathways-by-literature" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -238,7 +238,7 @@ export def "find-pathways-by-literature get" [
 # findPathwaysByText
 #
 # GET /findPathwaysByText
-export def "find-pathways-by-text get" [
+export def "get-find-pathways-by-text" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -275,7 +275,7 @@ export def "find-pathways-by-text get" [
 # findPathwaysByXref
 #
 # GET /findPathwaysByXref
-export def "find-pathways-by-xref get" [
+export def "get-find-pathways-by-xref" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -312,7 +312,7 @@ export def "find-pathways-by-xref get" [
 # getColoredPathwayGet a colored image version of the pathway.
 #
 # GET /getColoredPathway
-export def "get-colored-pathway get" [
+export def "get-get-colored-pathway" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -352,7 +352,7 @@ export def "get-colored-pathway get" [
 # getCurationTagHistory
 #
 # GET /getCurationTagHistory
-export def "get-curation-tag-history get" [
+export def "get-get-curation-tag-history" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -389,7 +389,7 @@ export def "get-curation-tag-history get" [
 # getCurationTagsGet all curation tags for the given tag name. Use this method if you want to find all pathways that are tagged with a specific curation tag.
 #
 # GET /getCurationTags
-export def "get-curation-tags get" [
+export def "get-get-curation-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -425,7 +425,7 @@ export def "get-curation-tags get" [
 # getCurationTagsByNameGet all curation tags for the given tag name. Use this method if you want to find all pathways that are tagged with a specific curation tag.
 #
 # GET /getCurationTagsByName
-export def "get-curation-tags-by-name get" [
+export def "get-get-curation-tags-by-name" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -461,7 +461,7 @@ export def "get-curation-tags-by-name get" [
 # getOntologyTermsByPathway
 #
 # GET /getOntologyTermsByPathway
-export def "get-ontology-terms-by-pathway get" [
+export def "get-get-ontology-terms-by-pathway" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -497,7 +497,7 @@ export def "get-ontology-terms-by-pathway get" [
 # getPathway
 #
 # GET /getPathway
-export def "get-pathway get" [
+export def "get-get-pathway" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -534,7 +534,7 @@ export def "get-pathway get" [
 # getPathwayAsDownload a pathway in the specified file format.
 #
 # GET /getPathwayAs
-export def "get-pathway-as get" [
+export def "get-get-pathway-as" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -572,7 +572,7 @@ export def "get-pathway-as get" [
 # getPathwayHistoryGet the revision history of a pathway.
 #
 # GET /getPathwayHistory
-export def "get-pathway-history get" [
+export def "get-get-pathway-history" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -609,7 +609,7 @@ export def "get-pathway-history get" [
 # getPathwayInfoGet some general info about the pathway, such as the name, species, without downloading the GPML.
 #
 # GET /getPathwayInfo
-export def "get-pathway-info get" [
+export def "get-get-pathway-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -645,7 +645,7 @@ export def "get-pathway-info get" [
 # getPathwaysByOntologyTerm
 #
 # GET /getPathwaysByOntologyTerm
-export def "get-pathways-by-ontology-term get" [
+export def "get-get-pathways-by-ontology-term" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -681,7 +681,7 @@ export def "get-pathways-by-ontology-term get" [
 # getPathwaysByParentOntologyTerm
 #
 # GET /getPathwaysByParentOntologyTerm
-export def "get-pathways-by-parent-ontology-term get" [
+export def "get-get-pathways-by-parent-ontology-term" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -717,7 +717,7 @@ export def "get-pathways-by-parent-ontology-term get" [
 # getRecentChangesGet the recently changed pathways.Note: the recent changes table only retains items for a limited time (2 months), so there is no guarantee that you will get all changes when the timestamp points to a date that is more than 2 months in the past.
 #
 # GET /getRecentChanges
-export def "get-recent-changes get" [
+export def "get-get-recent-changes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -753,7 +753,7 @@ export def "get-recent-changes get" [
 # getUserByOrcid
 #
 # GET /getUserByOrcid
-export def "get-user-by-orcid get" [
+export def "get-get-user-by-orcid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -789,7 +789,7 @@ export def "get-user-by-orcid get" [
 # getXrefList
 #
 # GET /getXrefList
-export def "get-xref-list get" [
+export def "get-get-xref-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -826,7 +826,7 @@ export def "get-xref-list get" [
 # listOrganisms
 #
 # GET /listOrganisms
-export def "list-organisms get" [
+export def "get-list-organisms" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -861,7 +861,7 @@ export def "list-organisms get" [
 # listPathways
 #
 # GET /listPathways
-export def "list-pathways get" [
+export def "get-list-pathways" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -897,7 +897,7 @@ export def "list-pathways get" [
 # loginStart a logged in session, using an existing WikiPathways account. This function will return an authentication code that can be used to excecute methods that need authentication (e.g. updatePathway).
 #
 # GET /login
-export def "login get" [
+export def "get-login" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -934,7 +934,7 @@ export def "login get" [
 # removeCurationTagRemove a curation tag from a pathway.
 #
 # GET /removeCurationTag
-export def "remove-curation-tag get" [
+export def "get-remove-curation-tag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -973,7 +973,7 @@ export def "remove-curation-tag get" [
 # removeOntologyTag
 #
 # GET /removeOntologyTag
-export def "remove-ontology-tag get" [
+export def "get-remove-ontology-tag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1012,7 +1012,7 @@ export def "remove-ontology-tag get" [
 # saveCurationTag
 #
 # GET /saveCurationTag
-export def "save-curation-tag get" [
+export def "get-save-curation-tag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1053,7 +1053,7 @@ export def "save-curation-tag get" [
 # saveOntologyTag
 #
 # GET /saveOntologyTag
-export def "save-ontology-tag get" [
+export def "get-save-ontology-tag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1093,7 +1093,7 @@ export def "save-ontology-tag get" [
 # updatePathwayUpdate a pathway on the wiki with the given GPML code.Note: To create/modify pathways via the web service, you need to have an account with web service write permissions. Please contact us to request write access for the web service.
 #
 # GET /updatePathway
-export def "update-pathway get" [
+export def "get-update-pathway" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

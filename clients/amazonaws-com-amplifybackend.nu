@@ -106,7 +106,7 @@ def service-name-completer [] { ["S3"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "backend-environments-clone clone" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "clone-backend" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -130,7 +130,7 @@ export def commands []: nothing -> table {
 #
 # POST /backend/{appId}/environments/{backendEnvironmentName}/clone
 # operationId: CloneBackend
-export def "backend-environments-clone clone" [
+export def "clone-backend" [
   app_id: string
   backend_environment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -181,7 +181,7 @@ export def "backend-environments-clone clone" [
 #
 # POST /backend
 # operationId: CreateBackend
-export def "backend create" [
+export def "create-backend" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -233,7 +233,7 @@ export def "backend create" [
 # POST /backend/{appId}/api
 # operationId: CreateBackendAPI
 # --resourceConfig shape: {AdditionalAuthTypes?: any, ApiName?: any, ConflictResolution?: any, DefaultAuthType?: any, Service?: any, TransformSchema?: any}
-export def "backend create-by-app-id" [
+export def "create-backend-api" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -285,7 +285,7 @@ export def "backend create-by-app-id" [
 # POST /backend/{appId}/auth
 # operationId: CreateBackendAuth
 # --resourceConfig shape: {AuthResources?: any, IdentityPoolConfigs?: any, Service?: any, UserPoolConfigs?: any}
-export def "backend-auth create" [
+export def "create-backend-auth" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -336,7 +336,7 @@ export def "backend-auth create" [
 #
 # POST /backend/{appId}/config
 # operationId: CreateBackendConfig
-export def "backend-config create" [
+export def "create-backend-config" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -386,7 +386,7 @@ export def "backend-config create" [
 # POST /backend/{appId}/storage
 # operationId: CreateBackendStorage
 # --resourceConfig shape: {BucketName?: any, Permissions?: any, ServiceName?: any}
-export def "backend-storage create" [
+export def "create-backend-storage" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -437,7 +437,7 @@ export def "backend-storage create" [
 #
 # POST /backend/{appId}/challenge
 # operationId: CreateToken
-export def "backend-challenge create-token" [
+export def "create-token" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -482,7 +482,7 @@ export def "backend-challenge create-token" [
 #
 # POST /backend/{appId}/environments/{backendEnvironmentName}/remove
 # operationId: DeleteBackend
-export def "backend-environments-remove delete" [
+export def "delete-backend" [
   app_id: string
   backend_environment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -530,7 +530,7 @@ export def "backend-environments-remove delete" [
 # POST /backend/{appId}/api/{backendEnvironmentName}/remove
 # operationId: DeleteBackendAPI
 # --resourceConfig shape: {AdditionalAuthTypes?: any, ApiName?: any, ConflictResolution?: any, DefaultAuthType?: any, Service?: any, TransformSchema?: any}
-export def "backend-remove delete" [
+export def "delete-backend-api" [
   app_id: string
   backend_environment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -582,7 +582,7 @@ export def "backend-remove delete" [
 #
 # POST /backend/{appId}/auth/{backendEnvironmentName}/remove
 # operationId: DeleteBackendAuth
-export def "backend-auth-remove delete" [
+export def "delete-backend-auth" [
   app_id: string
   backend_environment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -633,7 +633,7 @@ export def "backend-auth-remove delete" [
 #
 # POST /backend/{appId}/storage/{backendEnvironmentName}/remove
 # operationId: DeleteBackendStorage
-export def "backend-storage-remove delete" [
+export def "delete-backend-storage" [
   app_id: string
   backend_environment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -685,7 +685,7 @@ export def "backend-storage-remove delete" [
 #
 # POST /backend/{appId}/challenge/{sessionId}/remove
 # operationId: DeleteToken
-export def "backend-challenge-remove delete-token" [
+export def "delete-token" [
   app_id: string
   session_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -732,7 +732,7 @@ export def "backend-challenge-remove delete-token" [
 #
 # POST /backend/{appId}/api/{backendEnvironmentName}/generateModels
 # operationId: GenerateBackendAPIModels
-export def "backend-generate-models generate" [
+export def "generate-backend-api-models" [
   app_id: string
   backend_environment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -783,7 +783,7 @@ export def "backend-generate-models generate" [
 #
 # POST /backend/{appId}/details
 # operationId: GetBackend
-export def "backend-details get-by-app-id" [
+export def "get-backend" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -833,7 +833,7 @@ export def "backend-details get-by-app-id" [
 # POST /backend/{appId}/api/{backendEnvironmentName}/details
 # operationId: GetBackendAPI
 # --resourceConfig shape: {AdditionalAuthTypes?: any, ApiName?: any, ConflictResolution?: any, DefaultAuthType?: any, Service?: any, TransformSchema?: any}
-export def "backend-details get-by-app-id-backend-environment-name" [
+export def "get-backend-api" [
   app_id: string
   backend_environment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -885,7 +885,7 @@ export def "backend-details get-by-app-id-backend-environment-name" [
 #
 # POST /backend/{appId}/api/{backendEnvironmentName}/getModels
 # operationId: GetBackendAPIModels
-export def "backend-get-models get" [
+export def "get-backend-api-models" [
   app_id: string
   backend_environment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -936,7 +936,7 @@ export def "backend-get-models get" [
 #
 # POST /backend/{appId}/auth/{backendEnvironmentName}/details
 # operationId: GetBackendAuth
-export def "backend-auth-details get" [
+export def "get-backend-auth" [
   app_id: string
   backend_environment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -987,7 +987,7 @@ export def "backend-auth-details get" [
 #
 # GET /backend/{appId}/job/{backendEnvironmentName}/{jobId}
 # operationId: GetBackendJob
-export def "backend-job get" [
+export def "get-backend-job" [
   app_id: string
   backend_environment_name: string
   job_id: string
@@ -1036,7 +1036,7 @@ export def "backend-job get" [
 #
 # POST /backend/{appId}/job/{backendEnvironmentName}/{jobId}
 # operationId: UpdateBackendJob
-export def "backend-job update" [
+export def "update-backend-job" [
   app_id: string
   backend_environment_name: string
   job_id: string
@@ -1090,7 +1090,7 @@ export def "backend-job update" [
 #
 # POST /backend/{appId}/storage/{backendEnvironmentName}/details
 # operationId: GetBackendStorage
-export def "backend-storage-details get" [
+export def "get-backend-storage" [
   app_id: string
   backend_environment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1141,7 +1141,7 @@ export def "backend-storage-details get" [
 #
 # GET /backend/{appId}/challenge/{sessionId}
 # operationId: GetToken
-export def "backend-challenge get-token" [
+export def "get-token" [
   app_id: string
   session_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1188,7 +1188,7 @@ export def "backend-challenge get-token" [
 #
 # POST /backend/{appId}/auth/{backendEnvironmentName}/import
 # operationId: ImportBackendAuth
-export def "backend-auth-import import" [
+export def "import-backend-auth" [
   app_id: string
   backend_environment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1242,7 +1242,7 @@ export def "backend-auth-import import" [
 #
 # POST /backend/{appId}/storage/{backendEnvironmentName}/import
 # operationId: ImportBackendStorage
-export def "backend-storage-import import" [
+export def "import-backend-storage" [
   app_id: string
   backend_environment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1294,7 +1294,7 @@ export def "backend-storage-import import" [
 #
 # POST /backend/{appId}/job/{backendEnvironmentName}
 # operationId: ListBackendJobs
-export def "backend-job list" [
+export def "list-backend-jobs" [
   app_id: string
   backend_environment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1352,7 +1352,7 @@ export def "backend-job list" [
 #
 # POST /s3Buckets
 # operationId: ListS3Buckets
-export def "s3-buckets list" [
+export def "list-s3-buckets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1399,7 +1399,7 @@ export def "s3-buckets list" [
 #
 # POST /backend/{appId}/remove
 # operationId: RemoveAllBackends
-export def "backend-remove list" [
+export def "remove-all-backends" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1448,7 +1448,7 @@ export def "backend-remove list" [
 #
 # POST /backend/{appId}/config/remove
 # operationId: RemoveBackendConfig
-export def "backend-config-remove delete" [
+export def "remove-backend-config" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1494,7 +1494,7 @@ export def "backend-config-remove delete" [
 # POST /backend/{appId}/api/{backendEnvironmentName}
 # operationId: UpdateBackendAPI
 # --resourceConfig shape: {AdditionalAuthTypes?: any, ApiName?: any, ConflictResolution?: any, DefaultAuthType?: any, Service?: any, TransformSchema?: any}
-export def "backend update" [
+export def "update-backend-api" [
   app_id: string
   backend_environment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1547,7 +1547,7 @@ export def "backend update" [
 # POST /backend/{appId}/auth/{backendEnvironmentName}
 # operationId: UpdateBackendAuth
 # --resourceConfig shape: {AuthResources?: any, IdentityPoolConfigs?: any, Service?: any, UserPoolConfigs?: any}
-export def "backend-auth update" [
+export def "update-backend-auth" [
   app_id: string
   backend_environment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1600,7 +1600,7 @@ export def "backend-auth update" [
 # POST /backend/{appId}/config/update
 # operationId: UpdateBackendConfig
 # --loginAuthConfig shape: {AwsCognitoIdentityPoolId?: any, AwsCognitoRegion?: any, AwsUserPoolsId?: any, AwsUserPoolsWebClientId?: any}
-export def "backend-config-update update" [
+export def "update-backend-config" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1650,7 +1650,7 @@ export def "backend-config-update update" [
 # POST /backend/{appId}/storage/{backendEnvironmentName}
 # operationId: UpdateBackendStorage
 # --resourceConfig shape: {Permissions?: any, ServiceName?: any}
-export def "backend-storage update" [
+export def "update-backend-storage" [
   app_id: string
   backend_environment_name: string
   --base-url(-b): string@base-url-completer # API base URL

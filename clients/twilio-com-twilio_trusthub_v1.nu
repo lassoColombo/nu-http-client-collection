@@ -113,7 +113,7 @@ def status-completer [] { ["draft" "in-review" "pending-review" "twilio-approved
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "customer-profiles list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-customer-profile" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -137,7 +137,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/CustomerProfiles
 # operationId: ListCustomerProfile
-export def "customer-profiles list" [
+export def "list-customer-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -178,7 +178,7 @@ export def "customer-profiles list" [
 #
 # POST /v1/CustomerProfiles
 # operationId: CreateCustomerProfile
-export def "customer-profiles create" [
+export def "create-customer-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -220,7 +220,7 @@ export def "customer-profiles create" [
 #
 # GET /v1/CustomerProfiles/{CustomerProfileSid}/ChannelEndpointAssignments
 # operationId: ListCustomerProfileChannelEndpointAssignment
-export def "customer-profiles-channel-endpoint-assignments list" [
+export def "list-customer-profile-channel-endpoint-assignment" [
   customer_profile_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -262,7 +262,7 @@ export def "customer-profiles-channel-endpoint-assignments list" [
 #
 # POST /v1/CustomerProfiles/{CustomerProfileSid}/ChannelEndpointAssignments
 # operationId: CreateCustomerProfileChannelEndpointAssignment
-export def "customer-profiles-channel-endpoint-assignments create" [
+export def "create-customer-profile-channel-endpoint-assignment" [
   customer_profile_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -304,7 +304,7 @@ export def "customer-profiles-channel-endpoint-assignments create" [
 #
 # DELETE /v1/CustomerProfiles/{CustomerProfileSid}/ChannelEndpointAssignments/{Sid}
 # operationId: DeleteCustomerProfileChannelEndpointAssignment
-export def "customer-profiles-channel-endpoint-assignments delete" [
+export def "delete-customer-profile-channel-endpoint-assignment" [
   customer_profile_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -342,7 +342,7 @@ export def "customer-profiles-channel-endpoint-assignments delete" [
 #
 # GET /v1/CustomerProfiles/{CustomerProfileSid}/ChannelEndpointAssignments/{Sid}
 # operationId: FetchCustomerProfileChannelEndpointAssignment
-export def "customer-profiles-channel-endpoint-assignments get" [
+export def "fetch-customer-profile-channel-endpoint-assignment" [
   customer_profile_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -380,7 +380,7 @@ export def "customer-profiles-channel-endpoint-assignments get" [
 #
 # GET /v1/CustomerProfiles/{CustomerProfileSid}/EntityAssignments
 # operationId: ListCustomerProfileEntityAssignment
-export def "customer-profiles-entity-assignments list" [
+export def "list-customer-profile-entity-assignment" [
   customer_profile_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -420,7 +420,7 @@ export def "customer-profiles-entity-assignments list" [
 #
 # POST /v1/CustomerProfiles/{CustomerProfileSid}/EntityAssignments
 # operationId: CreateCustomerProfileEntityAssignment
-export def "customer-profiles-entity-assignments create" [
+export def "create-customer-profile-entity-assignment" [
   customer_profile_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -461,7 +461,7 @@ export def "customer-profiles-entity-assignments create" [
 #
 # DELETE /v1/CustomerProfiles/{CustomerProfileSid}/EntityAssignments/{Sid}
 # operationId: DeleteCustomerProfileEntityAssignment
-export def "customer-profiles-entity-assignments delete" [
+export def "delete-customer-profile-entity-assignment" [
   customer_profile_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -499,7 +499,7 @@ export def "customer-profiles-entity-assignments delete" [
 #
 # GET /v1/CustomerProfiles/{CustomerProfileSid}/EntityAssignments/{Sid}
 # operationId: FetchCustomerProfileEntityAssignment
-export def "customer-profiles-entity-assignments get" [
+export def "fetch-customer-profile-entity-assignment" [
   customer_profile_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -537,7 +537,7 @@ export def "customer-profiles-entity-assignments get" [
 #
 # GET /v1/CustomerProfiles/{CustomerProfileSid}/Evaluations
 # operationId: ListCustomerProfileEvaluation
-export def "customer-profiles-evaluations list" [
+export def "list-customer-profile-evaluation" [
   customer_profile_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -577,7 +577,7 @@ export def "customer-profiles-evaluations list" [
 #
 # POST /v1/CustomerProfiles/{CustomerProfileSid}/Evaluations
 # operationId: CreateCustomerProfileEvaluation
-export def "customer-profiles-evaluations create" [
+export def "create-customer-profile-evaluation" [
   customer_profile_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -618,7 +618,7 @@ export def "customer-profiles-evaluations create" [
 #
 # GET /v1/CustomerProfiles/{CustomerProfileSid}/Evaluations/{Sid}
 # operationId: FetchCustomerProfileEvaluation
-export def "customer-profiles-evaluations get" [
+export def "fetch-customer-profile-evaluation" [
   customer_profile_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -656,7 +656,7 @@ export def "customer-profiles-evaluations get" [
 #
 # DELETE /v1/CustomerProfiles/{Sid}
 # operationId: DeleteCustomerProfile
-export def "customer-profiles delete" [
+export def "delete-customer-profile" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -692,7 +692,7 @@ export def "customer-profiles delete" [
 #
 # GET /v1/CustomerProfiles/{Sid}
 # operationId: FetchCustomerProfile
-export def "customer-profiles get" [
+export def "fetch-customer-profile" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -728,7 +728,7 @@ export def "customer-profiles get" [
 #
 # POST /v1/CustomerProfiles/{Sid}
 # operationId: UpdateCustomerProfile
-export def "customer-profiles update" [
+export def "update-customer-profile" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -772,7 +772,7 @@ export def "customer-profiles update" [
 #
 # GET /v1/EndUserTypes
 # operationId: ListEndUserType
-export def "end-user-types list" [
+export def "list-end-user-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -810,7 +810,7 @@ export def "end-user-types list" [
 #
 # GET /v1/EndUserTypes/{Sid}
 # operationId: FetchEndUserType
-export def "end-user-types get" [
+export def "fetch-end-user-type" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -846,7 +846,7 @@ export def "end-user-types get" [
 #
 # GET /v1/EndUsers
 # operationId: ListEndUser
-export def "end-users list" [
+export def "list-end-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -884,7 +884,7 @@ export def "end-users list" [
 #
 # POST /v1/EndUsers
 # operationId: CreateEndUser
-export def "end-users create" [
+export def "create-end-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -925,7 +925,7 @@ export def "end-users create" [
 #
 # DELETE /v1/EndUsers/{Sid}
 # operationId: DeleteEndUser
-export def "end-users delete" [
+export def "delete-end-user" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -961,7 +961,7 @@ export def "end-users delete" [
 #
 # GET /v1/EndUsers/{Sid}
 # operationId: FetchEndUser
-export def "end-users get" [
+export def "fetch-end-user" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -997,7 +997,7 @@ export def "end-users get" [
 #
 # POST /v1/EndUsers/{Sid}
 # operationId: UpdateEndUser
-export def "end-users update" [
+export def "update-end-user" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1039,7 +1039,7 @@ export def "end-users update" [
 #
 # GET /v1/Policies
 # operationId: ListPolicies
-export def "policies list" [
+export def "list-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1077,7 +1077,7 @@ export def "policies list" [
 #
 # GET /v1/Policies/{Sid}
 # operationId: FetchPolicies
-export def "policies get" [
+export def "fetch-policies" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1113,7 +1113,7 @@ export def "policies get" [
 #
 # GET /v1/SupportingDocumentTypes
 # operationId: ListSupportingDocumentType
-export def "supporting-document-types list" [
+export def "list-supporting-document-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1151,7 +1151,7 @@ export def "supporting-document-types list" [
 #
 # GET /v1/SupportingDocumentTypes/{Sid}
 # operationId: FetchSupportingDocumentType
-export def "supporting-document-types get" [
+export def "fetch-supporting-document-type" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1187,7 +1187,7 @@ export def "supporting-document-types get" [
 #
 # GET /v1/SupportingDocuments
 # operationId: ListSupportingDocument
-export def "supporting-documents list" [
+export def "list-supporting-document" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1225,7 +1225,7 @@ export def "supporting-documents list" [
 #
 # POST /v1/SupportingDocuments
 # operationId: CreateSupportingDocument
-export def "supporting-documents create" [
+export def "create-supporting-document" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1266,7 +1266,7 @@ export def "supporting-documents create" [
 #
 # DELETE /v1/SupportingDocuments/{Sid}
 # operationId: DeleteSupportingDocument
-export def "supporting-documents delete" [
+export def "delete-supporting-document" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1302,7 +1302,7 @@ export def "supporting-documents delete" [
 #
 # GET /v1/SupportingDocuments/{Sid}
 # operationId: FetchSupportingDocument
-export def "supporting-documents get" [
+export def "fetch-supporting-document" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1338,7 +1338,7 @@ export def "supporting-documents get" [
 #
 # POST /v1/SupportingDocuments/{Sid}
 # operationId: UpdateSupportingDocument
-export def "supporting-documents update" [
+export def "update-supporting-document" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1380,7 +1380,7 @@ export def "supporting-documents update" [
 #
 # GET /v1/TrustProducts
 # operationId: ListTrustProduct
-export def "trust-products list" [
+export def "list-trust-product" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1421,7 +1421,7 @@ export def "trust-products list" [
 #
 # POST /v1/TrustProducts
 # operationId: CreateTrustProduct
-export def "trust-products create" [
+export def "create-trust-product" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1463,7 +1463,7 @@ export def "trust-products create" [
 #
 # DELETE /v1/TrustProducts/{Sid}
 # operationId: DeleteTrustProduct
-export def "trust-products delete" [
+export def "delete-trust-product" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1499,7 +1499,7 @@ export def "trust-products delete" [
 #
 # GET /v1/TrustProducts/{Sid}
 # operationId: FetchTrustProduct
-export def "trust-products get" [
+export def "fetch-trust-product" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1535,7 +1535,7 @@ export def "trust-products get" [
 #
 # POST /v1/TrustProducts/{Sid}
 # operationId: UpdateTrustProduct
-export def "trust-products update" [
+export def "update-trust-product" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1579,7 +1579,7 @@ export def "trust-products update" [
 #
 # GET /v1/TrustProducts/{TrustProductSid}/ChannelEndpointAssignments
 # operationId: ListTrustProductChannelEndpointAssignment
-export def "trust-products-channel-endpoint-assignments list" [
+export def "list-trust-product-channel-endpoint-assignment" [
   trust_product_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1621,7 +1621,7 @@ export def "trust-products-channel-endpoint-assignments list" [
 #
 # POST /v1/TrustProducts/{TrustProductSid}/ChannelEndpointAssignments
 # operationId: CreateTrustProductChannelEndpointAssignment
-export def "trust-products-channel-endpoint-assignments create" [
+export def "create-trust-product-channel-endpoint-assignment" [
   trust_product_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1663,7 +1663,7 @@ export def "trust-products-channel-endpoint-assignments create" [
 #
 # DELETE /v1/TrustProducts/{TrustProductSid}/ChannelEndpointAssignments/{Sid}
 # operationId: DeleteTrustProductChannelEndpointAssignment
-export def "trust-products-channel-endpoint-assignments delete" [
+export def "delete-trust-product-channel-endpoint-assignment" [
   trust_product_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1701,7 +1701,7 @@ export def "trust-products-channel-endpoint-assignments delete" [
 #
 # GET /v1/TrustProducts/{TrustProductSid}/ChannelEndpointAssignments/{Sid}
 # operationId: FetchTrustProductChannelEndpointAssignment
-export def "trust-products-channel-endpoint-assignments get" [
+export def "fetch-trust-product-channel-endpoint-assignment" [
   trust_product_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1739,7 +1739,7 @@ export def "trust-products-channel-endpoint-assignments get" [
 #
 # GET /v1/TrustProducts/{TrustProductSid}/EntityAssignments
 # operationId: ListTrustProductEntityAssignment
-export def "trust-products-entity-assignments list" [
+export def "list-trust-product-entity-assignment" [
   trust_product_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1779,7 +1779,7 @@ export def "trust-products-entity-assignments list" [
 #
 # POST /v1/TrustProducts/{TrustProductSid}/EntityAssignments
 # operationId: CreateTrustProductEntityAssignment
-export def "trust-products-entity-assignments create" [
+export def "create-trust-product-entity-assignment" [
   trust_product_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1820,7 +1820,7 @@ export def "trust-products-entity-assignments create" [
 #
 # DELETE /v1/TrustProducts/{TrustProductSid}/EntityAssignments/{Sid}
 # operationId: DeleteTrustProductEntityAssignment
-export def "trust-products-entity-assignments delete" [
+export def "delete-trust-product-entity-assignment" [
   trust_product_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1858,7 +1858,7 @@ export def "trust-products-entity-assignments delete" [
 #
 # GET /v1/TrustProducts/{TrustProductSid}/EntityAssignments/{Sid}
 # operationId: FetchTrustProductEntityAssignment
-export def "trust-products-entity-assignments get" [
+export def "fetch-trust-product-entity-assignment" [
   trust_product_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1896,7 +1896,7 @@ export def "trust-products-entity-assignments get" [
 #
 # GET /v1/TrustProducts/{TrustProductSid}/Evaluations
 # operationId: ListTrustProductEvaluation
-export def "trust-products-evaluations list" [
+export def "list-trust-product-evaluation" [
   trust_product_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1936,7 +1936,7 @@ export def "trust-products-evaluations list" [
 #
 # POST /v1/TrustProducts/{TrustProductSid}/Evaluations
 # operationId: CreateTrustProductEvaluation
-export def "trust-products-evaluations create" [
+export def "create-trust-product-evaluation" [
   trust_product_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1977,7 +1977,7 @@ export def "trust-products-evaluations create" [
 #
 # GET /v1/TrustProducts/{TrustProductSid}/Evaluations/{Sid}
 # operationId: FetchTrustProductEvaluation
-export def "trust-products-evaluations get" [
+export def "fetch-trust-product-evaluation" [
   trust_product_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL

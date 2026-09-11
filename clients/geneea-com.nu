@@ -107,7 +107,7 @@ def accept-completer [] { ["application/json" "text/plain"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-info" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -131,7 +131,7 @@ export def commands []: nothing -> table {
 #
 # GET /account
 # operationId: getInfo
-export def "account get" [
+export def "get-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -165,7 +165,7 @@ export def "account get" [
 #
 # GET /s1/correction
 # operationId: correctionGet
-export def "s1-correction get" [
+export def "correction-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -206,7 +206,7 @@ export def "s1-correction get" [
 #
 # POST /s1/correction
 # operationId: correctionPost
-export def "s1-correction create" [
+export def "correction-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -250,7 +250,7 @@ export def "s1-correction create" [
 #
 # GET /s1/entities
 # operationId: entitiesGet
-export def "s1-entities get" [
+export def "entities-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -291,7 +291,7 @@ export def "s1-entities get" [
 #
 # POST /s1/entities
 # operationId: entitiesPost
-export def "s1-entities create" [
+export def "entities-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -335,7 +335,7 @@ export def "s1-entities create" [
 #
 # GET /s1/lemmatize
 # operationId: lemmatizeGet
-export def "s1-lemmatize get" [
+export def "lemmatize-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -376,7 +376,7 @@ export def "s1-lemmatize get" [
 #
 # POST /s1/lemmatize
 # operationId: lemmatizePost
-export def "s1-lemmatize create" [
+export def "lemmatize-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -420,7 +420,7 @@ export def "s1-lemmatize create" [
 #
 # GET /s1/sentiment
 # operationId: sentimentGet
-export def "s1-sentiment get" [
+export def "sentiment-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -461,7 +461,7 @@ export def "s1-sentiment get" [
 #
 # POST /s1/sentiment
 # operationId: sentimentPost
-export def "s1-sentiment create" [
+export def "sentiment-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -505,7 +505,7 @@ export def "s1-sentiment create" [
 #
 # GET /s1/topic
 # operationId: topicGet
-export def "s1-topic get" [
+export def "topic-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -546,7 +546,7 @@ export def "s1-topic get" [
 #
 # POST /s1/topic
 # operationId: topicPost
-export def "s1-topic create" [
+export def "topic-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -590,7 +590,7 @@ export def "s1-topic create" [
 #
 # GET /status
 # operationId: status
-export def "status get" [
+export def "status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

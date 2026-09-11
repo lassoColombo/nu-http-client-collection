@@ -97,7 +97,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "open-banking-v2-2-branches get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-open-banking-v2-2-branches" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -120,7 +120,7 @@ export def commands []: nothing -> table {
 # This API will return the branch details for all branches and is prepared to the Open Banking standards as defined by the Open Banking Implementation Entity (OBIE) in data dictionary version 2.2. It is regulated by the UK Competition and Markets Authority (CMA). Data is only available for the United Kingdom.
 #
 # GET /open-banking/v2.2/branches
-export def "open-banking-v2-2-branches get" [
+export def "get-open-banking-v2-2-branches" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -153,7 +153,7 @@ export def "open-banking-v2-2-branches get" [
 # This extended API will return the branch details for all branches in the specified country. It is based-on the Open Banking standards as defined by the Open Banking Implementation Entity (OBIE) in data dictionary version 2.2. The extended functionality may not fully adhere to the non-functional requirements of the regulator. Data is only available for the United Kingdom.
 #
 # GET /x-open-banking/v2.2/branches/country/{country}
-export def "x-open-banking-v2-2-branches-country get" [
+export def "get-x-open-banking-v2-2-branches-country-country" [
   country: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -188,7 +188,7 @@ export def "x-open-banking-v2-2-branches-country get" [
 # This extended API will return the branch details for all branches in the specified town. It is based-on the Open Banking standards as defined by the Open Banking Implementation Entity (OBIE) in data dictionary version 2.2. The extended functionality may not fully adhere to the non-functional requirements of the regulator. Data is only available for the United Kingdom.
 #
 # GET /x-open-banking/v2.2/branches/country/{country}/town/{town}
-export def "x-open-banking-v2-2-branches-country-town get" [
+export def "get-x-open-banking-v2-2-branches-country-country-town-town" [
   country: string
   town: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -225,7 +225,7 @@ export def "x-open-banking-v2-2-branches-country-town get" [
 # This API will return the branch details for all branches within a specified radius (1 to 10 miles) of the specified latitude and longitude. It is based-on the Open Banking standards as defined by the Open Banking Implementation Entity (OBIE) in data dictionary version 2.2. The extended functionality may not fully adhere to the non-functional requirements of the regulator. Data is only available for the United Kingdom.
 #
 # GET /x-open-banking/v2.2/branches/geo-location/lat/{latitude}/long/{longitude}
-export def "x-open-banking-v2-2-branches-geo-location-lat-long get" [
+export def "get-x-open-banking-v2-2-branches-geo-location-lat-latitude-long-longitude" [
   latitude: string
   longitude: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -264,7 +264,7 @@ export def "x-open-banking-v2-2-branches-geo-location-lat-long get" [
 # This extended API will return the branch details for all branches within a 5 mile radius of the specified postcode. It is based-on the Open Banking standards as defined by the Open Banking Implementation Entity (OBIE) in data dictionary version 2.2. The extended functionality may not fully adhere to the non-functional requirements of the regulator. Data is only available for the United Kingdom.
 #
 # GET /x-open-banking/v2.2/branches/postcode/{postcode}
-export def "x-open-banking-v2-2-branches-postcode get" [
+export def "get-x-open-banking-v2-2-branches-postcode-postcode" [
   postcode: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -299,7 +299,7 @@ export def "x-open-banking-v2-2-branches-postcode get" [
 # This extended API will return the branch details for a branch specified by its sort code. It is based-on the Open Banking standards as defined by the Open Banking Implementation Entity (OBIE) in data dictionary version 2.2. The extended functionality may not fully adhere to the non-functional requirements of the regulator. Data is only available for the United Kingdom.
 #
 # GET /x-open-banking/v2.2/branches/sortcode/{sortcode}
-export def "x-open-banking-v2-2-branches-sortcode get" [
+export def "get-x-open-banking-v2-2-branches-sortcode-sortcode" [
   sortcode: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

@@ -123,7 +123,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-api-management-service-api-version-sets list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api-version-set-list-by-service" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -147,7 +147,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/api-version-sets
 # operationId: ApiVersionSet_ListByService
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-api-version-sets list" [
+export def "api-version-set-list-by-service" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -192,7 +192,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/api-version-sets/{versionSetId}
 # operationId: ApiVersionSet_Delete
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-api-version-sets delete" [
+export def "api-version-set-delete" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -239,7 +239,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/api-version-sets/{versionSetId}
 # operationId: ApiVersionSet_Get
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-api-version-sets get" [
+export def "api-version-set-get" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -283,7 +283,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # HEAD /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/api-version-sets/{versionSetId}
 # operationId: ApiVersionSet_GetEntityTag
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-api-version-sets get-entity-tag" [
+export def "api-version-set-get-entity-tag" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -328,7 +328,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/api-version-sets/{versionSetId}
 # operationId: ApiVersionSet_Update
 # --properties shape: {displayName?: string, versioningScheme?: "Segment"|"Query"|"Header", description?: string, versionHeaderName?: string, versionQueryName?: string}
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-api-version-sets update" [
+export def "api-version-set-update" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -380,7 +380,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/api-version-sets/{versionSetId}
 # operationId: ApiVersionSet_CreateOrUpdate
 # --properties shape: {displayName: string, versioningScheme: "Segment"|"Query"|"Header", description?: string, versionHeaderName?: string, versionQueryName?: string}
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-api-version-sets create-or-update" [
+export def "api-version-set-create-or-update" [
   subscription_id: string
   resource_group_name: string
   service_name: string

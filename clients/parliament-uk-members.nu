@@ -102,7 +102,7 @@ def crop-type-completer [] { ["0" "1" "2" "3"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "location-browse get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-api-location-browse-location-type-location-name" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -125,7 +125,7 @@ export def commands []: nothing -> table {
 # Returns a list of locations, both parent and child
 #
 # GET /api/Location/Browse/{locationType}/{locationName}
-export def "location-browse get" [
+export def "get-api-location-browse-location-type-location-name" [
   location_type: int
   location_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -163,7 +163,7 @@ export def "location-browse get" [
 # Returns a list of constituencies
 #
 # GET /api/Location/Constituency/Search
-export def "location-constituency-search get" [
+export def "get-api-location-constituency-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -201,7 +201,7 @@ export def "location-constituency-search get" [
 # Returns a constituency by ID
 #
 # GET /api/Location/Constituency/{id}
-export def "location-constituency get" [
+export def "get-api-location-constituency-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -237,7 +237,7 @@ export def "location-constituency get" [
 # Returns latest election result by constituency id
 #
 # GET /api/Location/Constituency/{id}/ElectionResult/Latest
-export def "location-constituency-election-result-latest get" [
+export def "get-api-location-constituency-id-election-result-latest" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -273,7 +273,7 @@ export def "location-constituency-election-result-latest get" [
 # Returns an election result by constituency and election id
 #
 # GET /api/Location/Constituency/{id}/ElectionResult/{electionId}
-export def "location-constituency-election-result get" [
+export def "get-api-location-constituency-id-election-result-election-id" [
   id: int
   election_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -311,7 +311,7 @@ export def "location-constituency-election-result get" [
 # Returns a list of election results by constituency ID
 #
 # GET /api/Location/Constituency/{id}/ElectionResults
-export def "location-constituency-election-results get" [
+export def "get-api-location-constituency-id-election-results" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -347,7 +347,7 @@ export def "location-constituency-election-results get" [
 # Returns geometry by constituency ID
 #
 # GET /api/Location/Constituency/{id}/Geometry
-export def "location-constituency-geometry get" [
+export def "get-api-location-constituency-id-geometry" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -383,7 +383,7 @@ export def "location-constituency-geometry get" [
 # Returns a list of representations by constituency ID
 #
 # GET /api/Location/Constituency/{id}/Representations
-export def "location-constituency-representations get" [
+export def "get-api-location-constituency-id-representations" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -419,7 +419,7 @@ export def "location-constituency-representations get" [
 # Returns a synopsis by constituency ID
 #
 # GET /api/Location/Constituency/{id}/Synopsis
-export def "location-constituency-synopsis get" [
+export def "get-api-location-constituency-id-synopsis" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -455,7 +455,7 @@ export def "location-constituency-synopsis get" [
 # Returns a list of registered interests
 #
 # GET /api/LordsInterests/Register
-export def "lords-interests-register get" [
+export def "get-api-lords-interests-register" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -493,7 +493,7 @@ export def "lords-interests-register get" [
 # Returns a list of staff
 #
 # GET /api/LordsInterests/Staff
-export def "lords-interests-staff get" [
+export def "get-api-lords-interests-staff" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -530,7 +530,7 @@ export def "lords-interests-staff get" [
 # Return members by ID with list of their historical names, parties and memberships
 #
 # GET /api/Members/History
-export def "members-history get" [
+export def "get-api-members-history" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -566,7 +566,7 @@ export def "members-history get" [
 # Returns a list of current members of the Commons or Lords
 #
 # GET /api/Members/Search
-export def "members-search get" [
+export def "get-api-members-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -621,7 +621,7 @@ export def "members-search get" [
 # Returns a list of members of the Commons or Lords
 #
 # GET /api/Members/SearchHistorical
-export def "members-search-historical get" [
+export def "get-api-members-search-historical" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -660,7 +660,7 @@ export def "members-search-historical get" [
 # Return member by ID
 #
 # GET /api/Members/{id}
-export def "members get" [
+export def "get-api-members-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -698,7 +698,7 @@ export def "members get" [
 # Return biography of member by ID
 #
 # GET /api/Members/{id}/Biography
-export def "members-biography get" [
+export def "get-api-members-id-biography" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -734,7 +734,7 @@ export def "members-biography get" [
 # Return list of contact details of member by ID
 #
 # GET /api/Members/{id}/Contact
-export def "members-contact get" [
+export def "get-api-members-id-contact" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -770,7 +770,7 @@ export def "members-contact get" [
 # Return contribution summary of member by ID
 #
 # GET /api/Members/{id}/ContributionSummary
-export def "members-contribution-summary get" [
+export def "get-api-members-id-contribution-summary" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -808,7 +808,7 @@ export def "members-contribution-summary get" [
 # Return list of early day motions of member by ID
 #
 # GET /api/Members/{id}/Edms
-export def "members-edms get" [
+export def "get-api-members-id-edms" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -846,7 +846,7 @@ export def "members-edms get" [
 # Return experience of member by ID
 #
 # GET /api/Members/{id}/Experience
-export def "members-experience get" [
+export def "get-api-members-id-experience" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -882,7 +882,7 @@ export def "members-experience get" [
 # Return list of areas of focus of member by ID
 #
 # GET /api/Members/{id}/Focus
-export def "members-focus get" [
+export def "get-api-members-id-focus" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -918,7 +918,7 @@ export def "members-focus get" [
 # Return latest election result of member by ID
 #
 # GET /api/Members/{id}/LatestElectionResult
-export def "members-latest-election-result get" [
+export def "get-api-members-id-latest-election-result" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -954,7 +954,7 @@ export def "members-latest-election-result get" [
 # Return portrait of member by ID
 #
 # GET /api/Members/{id}/Portrait
-export def "members-portrait get" [
+export def "get-api-members-id-portrait" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -992,7 +992,7 @@ export def "members-portrait get" [
 # Return portrait url of member by ID
 #
 # GET /api/Members/{id}/PortraitUrl
-export def "members-portrait-url get" [
+export def "get-api-members-id-portrait-url" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1028,7 +1028,7 @@ export def "members-portrait-url get" [
 # Return list of registered interests of member by ID
 #
 # GET /api/Members/{id}/RegisteredInterests
-export def "members-registered-interests get" [
+export def "get-api-members-id-registered-interests" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1066,7 +1066,7 @@ export def "members-registered-interests get" [
 # Return list of staff of member by ID
 #
 # GET /api/Members/{id}/Staff
-export def "members-staff get" [
+export def "get-api-members-id-staff" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1102,7 +1102,7 @@ export def "members-staff get" [
 # Return synopsis of member by ID
 #
 # GET /api/Members/{id}/Synopsis
-export def "members-synopsis get" [
+export def "get-api-members-id-synopsis" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1138,7 +1138,7 @@ export def "members-synopsis get" [
 # Return thumbnail of member by ID
 #
 # GET /api/Members/{id}/Thumbnail
-export def "members-thumbnail get" [
+export def "get-api-members-id-thumbnail" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1173,7 +1173,7 @@ export def "members-thumbnail get" [
 # Return thumbnail url of member by ID
 #
 # GET /api/Members/{id}/ThumbnailUrl
-export def "members-thumbnail-url get" [
+export def "get-api-members-id-thumbnail-url" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1209,7 +1209,7 @@ export def "members-thumbnail-url get" [
 # Return list of votes by member by ID
 #
 # GET /api/Members/{id}/Voting
-export def "members-voting get" [
+export def "get-api-members-id-voting" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1248,7 +1248,7 @@ export def "members-voting get" [
 # Return list of written questions by member by ID
 #
 # GET /api/Members/{id}/WrittenQuestions
-export def "members-written-questions get" [
+export def "get-api-members-id-written-questions" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1286,7 +1286,7 @@ export def "members-written-questions get" [
 # Returns a list of current parties with at least one active member.
 #
 # GET /api/Parties/GetActive/{house}
-export def "parties-get-active get" [
+export def "get-api-parties-get-active-house" [
   house: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1322,7 +1322,7 @@ export def "parties-get-active get" [
 # Returns the composition of the House of Lords by peerage type.
 #
 # GET /api/Parties/LordsByType/{forDate}
-export def "parties-lords-by-type get" [
+export def "get-api-parties-lords-by-type-for-date" [
   for_date: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1358,7 +1358,7 @@ export def "parties-lords-by-type get" [
 # Returns current state of parties
 #
 # GET /api/Parties/StateOfTheParties/{house}/{forDate}
-export def "parties-state-of-the-parties get" [
+export def "get-api-parties-state-of-the-parties-house-for-date" [
   house: int
   for_date: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1396,7 +1396,7 @@ export def "parties-state-of-the-parties get" [
 # Returns a list of departments.
 #
 # GET /api/Posts/Departments/{type}
-export def "posts-departments get" [
+export def "get-api-posts-departments-type" [
   type: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1432,7 +1432,7 @@ export def "posts-departments get" [
 # Returns a list of government posts.
 #
 # GET /api/Posts/GovernmentPosts
-export def "posts-government-posts get" [
+export def "get-api-posts-government-posts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1468,7 +1468,7 @@ export def "posts-government-posts get" [
 # Returns a list of opposition posts.
 #
 # GET /api/Posts/OppositionPosts
-export def "posts-opposition-posts get" [
+export def "get-api-posts-opposition-posts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1504,7 +1504,7 @@ export def "posts-opposition-posts get" [
 # Returns a list containing the speaker and deputy speakers.
 #
 # GET /api/Posts/SpeakerAndDeputies/{forDate}
-export def "posts-speaker-and-deputies get" [
+export def "get-api-posts-speaker-and-deputies-for-date" [
   for_date: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1540,7 +1540,7 @@ export def "posts-speaker-and-deputies get" [
 # Returns a list of spokespersons.
 #
 # GET /api/Posts/Spokespersons
-export def "posts-spokespersons get" [
+export def "get-api-posts-spokespersons" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1576,7 +1576,7 @@ export def "posts-spokespersons get" [
 # Returns a list of answering bodies.
 #
 # GET /api/Reference/AnsweringBodies
-export def "reference-answering-bodies get" [
+export def "get-api-reference-answering-bodies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1613,7 +1613,7 @@ export def "reference-answering-bodies get" [
 # Returns a list of departments.
 #
 # GET /api/Reference/Departments
-export def "reference-departments get" [
+export def "get-api-reference-departments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1650,7 +1650,7 @@ export def "reference-departments get" [
 # Returns department logo.
 #
 # GET /api/Reference/Departments/{id}/Logo
-export def "reference-departments-logo get" [
+export def "get-api-reference-departments-id-logo" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1685,7 +1685,7 @@ export def "reference-departments-logo get" [
 # Returns a list of policy interest.
 #
 # GET /api/Reference/PolicyInterests
-export def "reference-policy-interests get" [
+export def "get-api-reference-policy-interests" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

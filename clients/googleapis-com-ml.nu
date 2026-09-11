@@ -133,7 +133,7 @@ def state-completer-2 [] { ["ACTIVE" "COMPLETED" "REQUESTED" "STATE_UNSPECIFIED"
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "ml-projects-models-versions-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -157,7 +157,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1/{name}
 # operationId: ml.projects.models.versions.delete
-export def "projects delete" [
+export def "ml-projects-models-versions-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -205,7 +205,7 @@ export def "projects delete" [
 #
 # GET /v1/{name}
 # operationId: ml.projects.operations.get
-export def "projects get" [
+export def "ml-projects-operations-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -260,7 +260,7 @@ export def "projects get" [
 # --manualScaling shape: {nodes?: int}
 # --requestLoggingConfig shape: {bigqueryTableName?: string, samplingPercentage?: float}
 # --routes shape: {health?: string, predict?: string}
-export def "projects update" [
+export def "ml-projects-models-versions-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -336,7 +336,7 @@ export def "projects update" [
 #
 # GET /v1/{name}/operations
 # operationId: ml.projects.operations.list
-export def "operations list" [
+export def "ml-projects-operations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -388,7 +388,7 @@ export def "operations list" [
 # POST /v1/{name}:addMeasurement
 # operationId: ml.projects.locations.studies.trials.addMeasurement
 # --measurement shape: {elapsedTime?: string, metrics?: list, stepCount?: string}
-export def "projects create-measurement" [
+export def "ml-projects-locations-studies-trials-add-measurement" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -440,7 +440,7 @@ export def "projects create-measurement" [
 #
 # POST /v1/{name}:cancel
 # operationId: ml.projects.operations.cancel
-export def "projects cancel" [
+export def "ml-projects-operations-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -492,7 +492,7 @@ export def "projects cancel" [
 #
 # POST /v1/{name}:checkEarlyStoppingState
 # operationId: ml.projects.locations.studies.trials.checkEarlyStoppingState
-export def "projects check-early-stopping-state" [
+export def "ml-projects-locations-studies-trials-check-early-stopping-state" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -545,7 +545,7 @@ export def "projects check-early-stopping-state" [
 # POST /v1/{name}:complete
 # operationId: ml.projects.locations.studies.trials.complete
 # --finalMeasurement shape: {elapsedTime?: string, metrics?: list, stepCount?: string}
-export def "projects complete" [
+export def "ml-projects-locations-studies-trials-complete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -600,7 +600,7 @@ export def "projects complete" [
 # POST /v1/{name}:explain
 # operationId: ml.projects.explain
 # --httpBody shape: {contentType?: string, data?: string, extensions?: list}
-export def "projects create-explain" [
+export def "ml-projects-explain" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -652,7 +652,7 @@ export def "projects create-explain" [
 #
 # GET /v1/{name}:getConfig
 # operationId: ml.projects.getConfig
-export def "projects get-config" [
+export def "ml-projects-get-config" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -701,7 +701,7 @@ export def "projects get-config" [
 # POST /v1/{name}:predict
 # operationId: ml.projects.predict
 # --httpBody shape: {contentType?: string, data?: string, extensions?: list}
-export def "projects create-predict" [
+export def "ml-projects-predict" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -753,7 +753,7 @@ export def "projects create-predict" [
 #
 # POST /v1/{name}:setDefault
 # operationId: ml.projects.models.versions.setDefault
-export def "projects update-default" [
+export def "ml-projects-models-versions-set-default" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -805,7 +805,7 @@ export def "projects update-default" [
 #
 # POST /v1/{name}:stop
 # operationId: ml.projects.locations.studies.trials.stop
-export def "projects stop" [
+export def "ml-projects-locations-studies-trials-stop" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -857,7 +857,7 @@ export def "projects stop" [
 #
 # GET /v1/{parent}/jobs
 # operationId: ml.projects.jobs.list
-export def "jobs list" [
+export def "ml-projects-jobs-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -912,7 +912,7 @@ export def "jobs list" [
 # --predictionOutput shape: {errorCount?: string, nodeHours?: float, outputPath?: string, predictionCount?: string}
 # --trainingInput shape: {args?: list<string>, enableWebAccess?: bool, encryptionConfig?: record, evaluatorConfig?: record, evaluatorCount?: string, evaluatorType?: string, hyperparameters?: record, jobDir?: string, masterConfig?: record, masterType?: string, network?: string, packageUris?: list<string>, parameterServerConfig?: record, parameterServerCount?: string, parameterServerType?: string, pythonModule?: string, pythonVersion?: string, region?: string, runtimeVersion?: string, ... (7 more fields)}
 # --trainingOutput shape: {builtInAlgorithmOutput?: record, completedTrialCount?: string, consumedMLUnits?: float, hyperparameterMetricTag?: string, isBuiltInAlgorithmJob?: bool, isHyperparameterTuningJob?: bool, trials?: list}
-export def "jobs create" [
+export def "ml-projects-jobs-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -975,7 +975,7 @@ export def "jobs create" [
 #
 # GET /v1/{parent}/locations
 # operationId: ml.projects.locations.list
-export def "locations list" [
+export def "ml-projects-locations-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1025,7 +1025,7 @@ export def "locations list" [
 #
 # GET /v1/{parent}/models
 # operationId: ml.projects.models.list
-export def "models list" [
+export def "ml-projects-models-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1077,7 +1077,7 @@ export def "models list" [
 # POST /v1/{parent}/models
 # operationId: ml.projects.models.create
 # --defaultVersion shape: {acceleratorConfig?: record, autoScaling?: record, container?: record, createTime?: string, deploymentUri?: string, description?: string, errorMessage?: string, etag?: string, explanationConfig?: record, framework?: "FRAMEWORK_UNSPECIFIED"|"TENSORFLOW"|"SCIKIT_LEARN"|"XGBOOST", isDefault?: bool, labels?: record, lastUseTime?: string, machineType?: string, manualScaling?: record, name?: string, packageUris?: list<string>, predictionClass?: string, pythonVersion?: string, ... (5 more fields)}
-export def "models create" [
+export def "ml-projects-models-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1136,7 +1136,7 @@ export def "models create" [
 #
 # GET /v1/{parent}/studies
 # operationId: ml.projects.locations.studies.list
-export def "studies list" [
+export def "ml-projects-locations-studies-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1185,7 +1185,7 @@ export def "studies list" [
 # POST /v1/{parent}/studies
 # operationId: ml.projects.locations.studies.create
 # --studyConfig shape: {algorithm?: "ALGORITHM_UNSPECIFIED"|"GAUSSIAN_PROCESS_BANDIT"|"GRID_SEARCH"|"RANDOM_SEARCH", automatedStoppingConfig?: record, metrics?: list, parameters?: list}
-export def "studies create" [
+export def "ml-projects-locations-studies-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1238,7 +1238,7 @@ export def "studies create" [
 #
 # GET /v1/{parent}/trials
 # operationId: ml.projects.locations.studies.trials.list
-export def "trials list" [
+export def "ml-projects-locations-studies-trials-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1289,7 +1289,7 @@ export def "trials list" [
 # --finalMeasurement shape: {elapsedTime?: string, metrics?: list, stepCount?: string}
 # --measurements item shape: {elapsedTime?: string, metrics?: list, stepCount?: string}
 # --parameters item shape: {floatValue?: float, intValue?: string, parameter?: string, stringValue?: string}
-export def "trials create" [
+export def "ml-projects-locations-studies-trials-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1344,7 +1344,7 @@ export def "trials create" [
 #
 # POST /v1/{parent}/trials:listOptimalTrials
 # operationId: ml.projects.locations.studies.trials.listOptimalTrials
-export def "trials-list-optimal-trials list" [
+export def "ml-projects-locations-studies-trials-list-optimal-trials" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1396,7 +1396,7 @@ export def "trials-list-optimal-trials list" [
 #
 # POST /v1/{parent}/trials:suggest
 # operationId: ml.projects.locations.studies.trials.suggest
-export def "trials-suggest create" [
+export def "ml-projects-locations-studies-trials-suggest" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1449,7 +1449,7 @@ export def "trials-suggest create" [
 #
 # GET /v1/{parent}/versions
 # operationId: ml.projects.models.versions.list
-export def "versions list" [
+export def "ml-projects-models-versions-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1507,7 +1507,7 @@ export def "versions list" [
 # --manualScaling shape: {nodes?: int}
 # --requestLoggingConfig shape: {bigqueryTableName?: string, samplingPercentage?: float}
 # --routes shape: {health?: string, predict?: string}
-export def "versions create" [
+export def "ml-projects-models-versions-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1582,7 +1582,7 @@ export def "versions create" [
 #
 # GET /v1/{resource}:getIamPolicy
 # operationId: ml.projects.models.getIamPolicy
-export def "projects get-iam-policy" [
+export def "ml-projects-models-get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1632,7 +1632,7 @@ export def "projects get-iam-policy" [
 # POST /v1/{resource}:setIamPolicy
 # operationId: ml.projects.models.setIamPolicy
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
-export def "projects update-iam-policy" [
+export def "ml-projects-models-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1685,7 +1685,7 @@ export def "projects update-iam-policy" [
 #
 # POST /v1/{resource}:testIamPermissions
 # operationId: ml.projects.models.testIamPermissions
-export def "projects test-iam-permissions" [
+export def "ml-projects-models-test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

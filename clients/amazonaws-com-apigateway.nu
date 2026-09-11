@@ -135,7 +135,7 @@ def mode-completer-1 [] { ["import"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "apikeys create-key" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-api-key" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -160,7 +160,7 @@ export def commands []: nothing -> table {
 # POST /apikeys
 # operationId: CreateApiKey
 # --stageKeys item shape: {restApiId?: any, stageName?: any}
-export def "apikeys create-key" [
+export def "create-api-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -214,7 +214,7 @@ export def "apikeys create-key" [
 #
 # GET /apikeys
 # operationId: GetApiKeys
-export def "apikeys get-keys" [
+export def "get-api-keys" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -263,7 +263,7 @@ export def "apikeys get-keys" [
 #
 # POST /restapis/{restapi_id}/authorizers
 # operationId: CreateAuthorizer
-export def "restapis-authorizers create" [
+export def "create-authorizer" [
   restapi_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -320,7 +320,7 @@ export def "restapis-authorizers create" [
 #
 # GET /restapis/{restapi_id}/authorizers
 # operationId: GetAuthorizers
-export def "restapis-authorizers list" [
+export def "get-authorizers" [
   restapi_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -368,7 +368,7 @@ export def "restapis-authorizers list" [
 #
 # POST /domainnames/{domain_name}/basepathmappings
 # operationId: CreateBasePathMapping
-export def "domainnames-basepathmappings create-base-path-mapping" [
+export def "create-base-path-mapping" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -419,7 +419,7 @@ export def "domainnames-basepathmappings create-base-path-mapping" [
 #
 # GET /domainnames/{domain_name}/basepathmappings
 # operationId: GetBasePathMappings
-export def "domainnames-basepathmappings get-base-path-mappings" [
+export def "get-base-path-mappings" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -468,7 +468,7 @@ export def "domainnames-basepathmappings get-base-path-mappings" [
 # POST /restapis/{restapi_id}/deployments
 # operationId: CreateDeployment
 # --canarySettings shape: {percentTraffic?: any, stageVariableOverrides?: any, useStageCache?: any}
-export def "restapis-deployments create" [
+export def "create-deployment" [
   restapi_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -524,7 +524,7 @@ export def "restapis-deployments create" [
 #
 # GET /restapis/{restapi_id}/deployments
 # operationId: GetDeployments
-export def "restapis-deployments list" [
+export def "get-deployments" [
   restapi_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -573,7 +573,7 @@ export def "restapis-deployments list" [
 # POST /restapis/{restapi_id}/documentation/parts
 # operationId: CreateDocumentationPart
 # --location shape: {type?: any, path?: any, method?: any, statusCode?: any, name?: any}
-export def "restapis-documentation-parts create" [
+export def "create-documentation-part" [
   restapi_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -623,7 +623,7 @@ export def "restapis-documentation-parts create" [
 #
 # GET /restapis/{restapi_id}/documentation/parts
 # operationId: GetDocumentationParts
-export def "restapis-documentation-parts list" [
+export def "get-documentation-parts" [
   restapi_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -675,7 +675,7 @@ export def "restapis-documentation-parts list" [
 #
 # PUT /restapis/{restapi_id}/documentation/parts
 # operationId: ImportDocumentationParts
-export def "restapis-documentation-parts import" [
+export def "import-documentation-parts" [
   restapi_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -727,7 +727,7 @@ export def "restapis-documentation-parts import" [
 #
 # POST /restapis/{restapi_id}/documentation/versions
 # operationId: CreateDocumentationVersion
-export def "restapis-documentation-versions create" [
+export def "create-documentation-version" [
   restapi_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -778,7 +778,7 @@ export def "restapis-documentation-versions create" [
 #
 # GET /restapis/{restapi_id}/documentation/versions
 # operationId: GetDocumentationVersions
-export def "restapis-documentation-versions list" [
+export def "get-documentation-versions" [
   restapi_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -828,7 +828,7 @@ export def "restapis-documentation-versions list" [
 # operationId: CreateDomainName
 # --endpointConfiguration shape: {types?: any, vpcEndpointIds?: any}
 # --mutualTlsAuthentication shape: {truststoreUri?: any, truststoreVersion?: any}
-export def "domainnames create-domain-name" [
+export def "create-domain-name" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -887,7 +887,7 @@ export def "domainnames create-domain-name" [
 #
 # GET /domainnames
 # operationId: GetDomainNames
-export def "domainnames get-domain-names" [
+export def "get-domain-names" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -933,7 +933,7 @@ export def "domainnames get-domain-names" [
 #
 # POST /restapis/{restapi_id}/models
 # operationId: CreateModel
-export def "restapis-models create" [
+export def "create-model" [
   restapi_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -985,7 +985,7 @@ export def "restapis-models create" [
 #
 # GET /restapis/{restapi_id}/models
 # operationId: GetModels
-export def "restapis-models list" [
+export def "get-models" [
   restapi_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1033,7 +1033,7 @@ export def "restapis-models list" [
 #
 # POST /restapis/{restapi_id}/requestvalidators
 # operationId: CreateRequestValidator
-export def "restapis-requestvalidators create-request-validator" [
+export def "create-request-validator" [
   restapi_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1084,7 +1084,7 @@ export def "restapis-requestvalidators create-request-validator" [
 #
 # GET /restapis/{restapi_id}/requestvalidators
 # operationId: GetRequestValidators
-export def "restapis-requestvalidators get-request-validators" [
+export def "get-request-validators" [
   restapi_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1132,7 +1132,7 @@ export def "restapis-requestvalidators get-request-validators" [
 #
 # POST /restapis/{restapi_id}/resources/{parent_id}
 # operationId: CreateResource
-export def "restapis-resources create" [
+export def "create-resource" [
   restapi_id: string
   parent_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1184,7 +1184,7 @@ export def "restapis-resources create" [
 # POST /restapis
 # operationId: CreateRestApi
 # --endpointConfiguration shape: {types?: any, vpcEndpointIds?: any}
-export def "restapis create-rest" [
+export def "create-rest-api" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1241,7 +1241,7 @@ export def "restapis create-rest" [
 #
 # GET /restapis
 # operationId: GetRestApis
-export def "restapis list" [
+export def "get-rest-apis" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1288,7 +1288,7 @@ export def "restapis list" [
 # POST /restapis/{restapi_id}/stages
 # operationId: CreateStage
 # --canarySettings shape: {percentTraffic?: any, deploymentId?: any, stageVariableOverrides?: any, useStageCache?: any}
-export def "restapis-stages create" [
+export def "create-stage" [
   restapi_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1346,7 +1346,7 @@ export def "restapis-stages create" [
 #
 # GET /restapis/{restapi_id}/stages
 # operationId: GetStages
-export def "restapis-stages list" [
+export def "get-stages" [
   restapi_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1396,7 +1396,7 @@ export def "restapis-stages list" [
 # --apiStages item shape: {apiId?: any, stage?: any, throttle?: any}
 # --throttle shape: {burstLimit?: any, rateLimit?: any}
 # --quota shape: {limit?: any, offset?: any, period?: any}
-export def "usageplans create-usage-plan" [
+export def "create-usage-plan" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1448,7 +1448,7 @@ export def "usageplans create-usage-plan" [
 #
 # GET /usageplans
 # operationId: GetUsagePlans
-export def "usageplans get-usage-plans" [
+export def "get-usage-plans" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1495,7 +1495,7 @@ export def "usageplans get-usage-plans" [
 #
 # POST /usageplans/{usageplanId}/keys
 # operationId: CreateUsagePlanKey
-export def "usageplans-keys create-usage-plan" [
+export def "create-usage-plan-key" [
   usageplan_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1545,7 +1545,7 @@ export def "usageplans-keys create-usage-plan" [
 #
 # GET /usageplans/{usageplanId}/keys
 # operationId: GetUsagePlanKeys
-export def "usageplans-keys list" [
+export def "get-usage-plan-keys" [
   usageplan_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1594,7 +1594,7 @@ export def "usageplans-keys list" [
 #
 # POST /vpclinks
 # operationId: CreateVpcLink
-export def "vpclinks create-vpc-link" [
+export def "create-vpc-link" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1644,7 +1644,7 @@ export def "vpclinks create-vpc-link" [
 #
 # GET /vpclinks
 # operationId: GetVpcLinks
-export def "vpclinks get-vpc-links" [
+export def "get-vpc-links" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1690,7 +1690,7 @@ export def "vpclinks get-vpc-links" [
 #
 # DELETE /apikeys/{api_Key}
 # operationId: DeleteApiKey
-export def "apikeys delete" [
+export def "delete-api-key" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1735,7 +1735,7 @@ export def "apikeys delete" [
 #
 # GET /apikeys/{api_Key}
 # operationId: GetApiKey
-export def "apikeys get" [
+export def "get-api-key" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1783,7 +1783,7 @@ export def "apikeys get" [
 # PATCH /apikeys/{api_Key}
 # operationId: UpdateApiKey
 # --patchOperations item shape: {op?: any, path?: any, value?: any, from?: any}
-export def "apikeys update" [
+export def "update-api-key" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1832,7 +1832,7 @@ export def "apikeys update" [
 #
 # DELETE /restapis/{restapi_id}/authorizers/{authorizer_id}
 # operationId: DeleteAuthorizer
-export def "restapis-authorizers delete" [
+export def "delete-authorizer" [
   restapi_id: string
   authorizer_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1879,7 +1879,7 @@ export def "restapis-authorizers delete" [
 #
 # GET /restapis/{restapi_id}/authorizers/{authorizer_id}
 # operationId: GetAuthorizer
-export def "restapis-authorizers get" [
+export def "get-authorizer" [
   restapi_id: string
   authorizer_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1926,7 +1926,7 @@ export def "restapis-authorizers get" [
 #
 # POST /restapis/{restapi_id}/authorizers/{authorizer_id}
 # operationId: TestInvokeAuthorizer
-export def "restapis-authorizers test-invoke" [
+export def "test-invoke-authorizer" [
   restapi_id: string
   authorizer_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1983,7 +1983,7 @@ export def "restapis-authorizers test-invoke" [
 # PATCH /restapis/{restapi_id}/authorizers/{authorizer_id}
 # operationId: UpdateAuthorizer
 # --patchOperations item shape: {op?: any, path?: any, value?: any, from?: any}
-export def "restapis-authorizers update" [
+export def "update-authorizer" [
   restapi_id: string
   authorizer_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2034,7 +2034,7 @@ export def "restapis-authorizers update" [
 #
 # DELETE /domainnames/{domain_name}/basepathmappings/{base_path}
 # operationId: DeleteBasePathMapping
-export def "domainnames-basepathmappings delete-mapping" [
+export def "delete-base-path-mapping" [
   domain_name: string
   base_path: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2081,7 +2081,7 @@ export def "domainnames-basepathmappings delete-mapping" [
 #
 # GET /domainnames/{domain_name}/basepathmappings/{base_path}
 # operationId: GetBasePathMapping
-export def "domainnames-basepathmappings get-mapping" [
+export def "get-base-path-mapping" [
   domain_name: string
   base_path: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2129,7 +2129,7 @@ export def "domainnames-basepathmappings get-mapping" [
 # PATCH /domainnames/{domain_name}/basepathmappings/{base_path}
 # operationId: UpdateBasePathMapping
 # --patchOperations item shape: {op?: any, path?: any, value?: any, from?: any}
-export def "domainnames-basepathmappings update-mapping" [
+export def "update-base-path-mapping" [
   domain_name: string
   base_path: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2180,7 +2180,7 @@ export def "domainnames-basepathmappings update-mapping" [
 #
 # DELETE /clientcertificates/{clientcertificate_id}
 # operationId: DeleteClientCertificate
-export def "clientcertificates delete-client-certificate" [
+export def "delete-client-certificate" [
   clientcertificate_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2225,7 +2225,7 @@ export def "clientcertificates delete-client-certificate" [
 #
 # GET /clientcertificates/{clientcertificate_id}
 # operationId: GetClientCertificate
-export def "clientcertificates get-client-certificate" [
+export def "get-client-certificate" [
   clientcertificate_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2271,7 +2271,7 @@ export def "clientcertificates get-client-certificate" [
 # PATCH /clientcertificates/{clientcertificate_id}
 # operationId: UpdateClientCertificate
 # --patchOperations item shape: {op?: any, path?: any, value?: any, from?: any}
-export def "clientcertificates update-client-certificate" [
+export def "update-client-certificate" [
   clientcertificate_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2320,7 +2320,7 @@ export def "clientcertificates update-client-certificate" [
 #
 # DELETE /restapis/{restapi_id}/deployments/{deployment_id}
 # operationId: DeleteDeployment
-export def "restapis-deployments delete" [
+export def "delete-deployment" [
   restapi_id: string
   deployment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2367,7 +2367,7 @@ export def "restapis-deployments delete" [
 #
 # GET /restapis/{restapi_id}/deployments/{deployment_id}
 # operationId: GetDeployment
-export def "restapis-deployments get" [
+export def "get-deployment" [
   restapi_id: string
   deployment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2417,7 +2417,7 @@ export def "restapis-deployments get" [
 # PATCH /restapis/{restapi_id}/deployments/{deployment_id}
 # operationId: UpdateDeployment
 # --patchOperations item shape: {op?: any, path?: any, value?: any, from?: any}
-export def "restapis-deployments update" [
+export def "update-deployment" [
   restapi_id: string
   deployment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2468,7 +2468,7 @@ export def "restapis-deployments update" [
 #
 # DELETE /restapis/{restapi_id}/documentation/parts/{part_id}
 # operationId: DeleteDocumentationPart
-export def "restapis-documentation-parts delete" [
+export def "delete-documentation-part" [
   restapi_id: string
   part_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2515,7 +2515,7 @@ export def "restapis-documentation-parts delete" [
 #
 # GET /restapis/{restapi_id}/documentation/parts/{part_id}
 # operationId: GetDocumentationPart
-export def "restapis-documentation-parts get" [
+export def "get-documentation-part" [
   restapi_id: string
   part_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2563,7 +2563,7 @@ export def "restapis-documentation-parts get" [
 # PATCH /restapis/{restapi_id}/documentation/parts/{part_id}
 # operationId: UpdateDocumentationPart
 # --patchOperations item shape: {op?: any, path?: any, value?: any, from?: any}
-export def "restapis-documentation-parts update" [
+export def "update-documentation-part" [
   restapi_id: string
   part_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2614,7 +2614,7 @@ export def "restapis-documentation-parts update" [
 #
 # DELETE /restapis/{restapi_id}/documentation/versions/{doc_version}
 # operationId: DeleteDocumentationVersion
-export def "restapis-documentation-versions delete" [
+export def "delete-documentation-version" [
   restapi_id: string
   doc_version: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2661,7 +2661,7 @@ export def "restapis-documentation-versions delete" [
 #
 # GET /restapis/{restapi_id}/documentation/versions/{doc_version}
 # operationId: GetDocumentationVersion
-export def "restapis-documentation-versions get" [
+export def "get-documentation-version" [
   restapi_id: string
   doc_version: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2709,7 +2709,7 @@ export def "restapis-documentation-versions get" [
 # PATCH /restapis/{restapi_id}/documentation/versions/{doc_version}
 # operationId: UpdateDocumentationVersion
 # --patchOperations item shape: {op?: any, path?: any, value?: any, from?: any}
-export def "restapis-documentation-versions update" [
+export def "update-documentation-version" [
   restapi_id: string
   doc_version: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2760,7 +2760,7 @@ export def "restapis-documentation-versions update" [
 #
 # DELETE /domainnames/{domain_name}
 # operationId: DeleteDomainName
-export def "domainnames delete" [
+export def "delete-domain-name" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2805,7 +2805,7 @@ export def "domainnames delete" [
 #
 # GET /domainnames/{domain_name}
 # operationId: GetDomainName
-export def "domainnames get" [
+export def "get-domain-name" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2851,7 +2851,7 @@ export def "domainnames get" [
 # PATCH /domainnames/{domain_name}
 # operationId: UpdateDomainName
 # --patchOperations item shape: {op?: any, path?: any, value?: any, from?: any}
-export def "domainnames update" [
+export def "update-domain-name" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2900,7 +2900,7 @@ export def "domainnames update" [
 #
 # DELETE /restapis/{restapi_id}/gatewayresponses/{response_type}
 # operationId: DeleteGatewayResponse
-export def "restapis-gatewayresponses delete-gateway" [
+export def "delete-gateway-response" [
   restapi_id: string
   response_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2947,7 +2947,7 @@ export def "restapis-gatewayresponses delete-gateway" [
 #
 # GET /restapis/{restapi_id}/gatewayresponses/{response_type}
 # operationId: GetGatewayResponse
-export def "restapis-gatewayresponses get-gateway" [
+export def "get-gateway-response" [
   restapi_id: string
   response_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2994,7 +2994,7 @@ export def "restapis-gatewayresponses get-gateway" [
 #
 # PUT /restapis/{restapi_id}/gatewayresponses/{response_type}
 # operationId: PutGatewayResponse
-export def "restapis-gatewayresponses update-gateway-by-restapi-id-response-type" [
+export def "put-gateway-response" [
   restapi_id: string
   response_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3048,7 +3048,7 @@ export def "restapis-gatewayresponses update-gateway-by-restapi-id-response-type
 # PATCH /restapis/{restapi_id}/gatewayresponses/{response_type}
 # operationId: UpdateGatewayResponse
 # --patchOperations item shape: {op?: any, path?: any, value?: any, from?: any}
-export def "restapis-gatewayresponses update-gateway-by-restapi-id-response-type-1" [
+export def "update-gateway-response" [
   restapi_id: string
   response_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3099,7 +3099,7 @@ export def "restapis-gatewayresponses update-gateway-by-restapi-id-response-type
 #
 # DELETE /restapis/{restapi_id}/resources/{resource_id}/methods/{http_method}/integration
 # operationId: DeleteIntegration
-export def "restapis-resources-methods-integration delete" [
+export def "delete-integration" [
   restapi_id: string
   resource_id: string
   http_method: string
@@ -3148,7 +3148,7 @@ export def "restapis-resources-methods-integration delete" [
 #
 # GET /restapis/{restapi_id}/resources/{resource_id}/methods/{http_method}/integration
 # operationId: GetIntegration
-export def "restapis-resources-methods-integration get" [
+export def "get-integration" [
   restapi_id: string
   resource_id: string
   http_method: string
@@ -3198,7 +3198,7 @@ export def "restapis-resources-methods-integration get" [
 # PUT /restapis/{restapi_id}/resources/{resource_id}/methods/{http_method}/integration
 # operationId: PutIntegration
 # --tlsConfig shape: {insecureSkipVerification?: any}
-export def "restapis-resources-methods-integration update-by-restapi-id-resource-id-http-method" [
+export def "put-integration" [
   restapi_id: string
   resource_id: string
   http_method: string
@@ -3265,7 +3265,7 @@ export def "restapis-resources-methods-integration update-by-restapi-id-resource
 # PATCH /restapis/{restapi_id}/resources/{resource_id}/methods/{http_method}/integration
 # operationId: UpdateIntegration
 # --patchOperations item shape: {op?: any, path?: any, value?: any, from?: any}
-export def "restapis-resources-methods-integration update-by-restapi-id-resource-id-http-method-1" [
+export def "update-integration" [
   restapi_id: string
   resource_id: string
   http_method: string
@@ -3318,7 +3318,7 @@ export def "restapis-resources-methods-integration update-by-restapi-id-resource
 #
 # DELETE /restapis/{restapi_id}/resources/{resource_id}/methods/{http_method}/integration/responses/{status_code}
 # operationId: DeleteIntegrationResponse
-export def "restapis-resources-methods-integration-responses delete" [
+export def "delete-integration-response" [
   restapi_id: string
   resource_id: string
   http_method: string
@@ -3369,7 +3369,7 @@ export def "restapis-resources-methods-integration-responses delete" [
 #
 # GET /restapis/{restapi_id}/resources/{resource_id}/methods/{http_method}/integration/responses/{status_code}
 # operationId: GetIntegrationResponse
-export def "restapis-resources-methods-integration-responses get" [
+export def "get-integration-response" [
   restapi_id: string
   resource_id: string
   http_method: string
@@ -3420,7 +3420,7 @@ export def "restapis-resources-methods-integration-responses get" [
 #
 # PUT /restapis/{restapi_id}/resources/{resource_id}/methods/{http_method}/integration/responses/{status_code}
 # operationId: PutIntegrationResponse
-export def "restapis-resources-methods-integration-responses update-by-restapi-id-resource-id-http-method-status-code" [
+export def "put-integration-response" [
   restapi_id: string
   resource_id: string
   http_method: string
@@ -3479,7 +3479,7 @@ export def "restapis-resources-methods-integration-responses update-by-restapi-i
 # PATCH /restapis/{restapi_id}/resources/{resource_id}/methods/{http_method}/integration/responses/{status_code}
 # operationId: UpdateIntegrationResponse
 # --patchOperations item shape: {op?: any, path?: any, value?: any, from?: any}
-export def "restapis-resources-methods-integration-responses update-by-restapi-id-resource-id-http-method-status-code-1" [
+export def "update-integration-response" [
   restapi_id: string
   resource_id: string
   http_method: string
@@ -3534,7 +3534,7 @@ export def "restapis-resources-methods-integration-responses update-by-restapi-i
 #
 # DELETE /restapis/{restapi_id}/resources/{resource_id}/methods/{http_method}
 # operationId: DeleteMethod
-export def "restapis-resources-methods delete" [
+export def "delete-method" [
   restapi_id: string
   resource_id: string
   http_method: string
@@ -3583,7 +3583,7 @@ export def "restapis-resources-methods delete" [
 #
 # GET /restapis/{restapi_id}/resources/{resource_id}/methods/{http_method}
 # operationId: GetMethod
-export def "restapis-resources-methods get" [
+export def "get-method" [
   restapi_id: string
   resource_id: string
   http_method: string
@@ -3632,7 +3632,7 @@ export def "restapis-resources-methods get" [
 #
 # PUT /restapis/{restapi_id}/resources/{resource_id}/methods/{http_method}
 # operationId: PutMethod
-export def "restapis-resources-methods update-by-restapi-id-resource-id-http-method" [
+export def "put-method" [
   restapi_id: string
   resource_id: string
   http_method: string
@@ -3692,7 +3692,7 @@ export def "restapis-resources-methods update-by-restapi-id-resource-id-http-met
 #
 # POST /restapis/{restapi_id}/resources/{resource_id}/methods/{http_method}
 # operationId: TestInvokeMethod
-export def "restapis-resources-methods test-invoke" [
+export def "test-invoke-method" [
   restapi_id: string
   resource_id: string
   http_method: string
@@ -3751,7 +3751,7 @@ export def "restapis-resources-methods test-invoke" [
 # PATCH /restapis/{restapi_id}/resources/{resource_id}/methods/{http_method}
 # operationId: UpdateMethod
 # --patchOperations item shape: {op?: any, path?: any, value?: any, from?: any}
-export def "restapis-resources-methods update-by-restapi-id-resource-id-http-method-1" [
+export def "update-method" [
   restapi_id: string
   resource_id: string
   http_method: string
@@ -3804,7 +3804,7 @@ export def "restapis-resources-methods update-by-restapi-id-resource-id-http-met
 #
 # DELETE /restapis/{restapi_id}/resources/{resource_id}/methods/{http_method}/responses/{status_code}
 # operationId: DeleteMethodResponse
-export def "restapis-resources-methods-responses delete" [
+export def "delete-method-response" [
   restapi_id: string
   resource_id: string
   http_method: string
@@ -3855,7 +3855,7 @@ export def "restapis-resources-methods-responses delete" [
 #
 # GET /restapis/{restapi_id}/resources/{resource_id}/methods/{http_method}/responses/{status_code}
 # operationId: GetMethodResponse
-export def "restapis-resources-methods-responses get" [
+export def "get-method-response" [
   restapi_id: string
   resource_id: string
   http_method: string
@@ -3906,7 +3906,7 @@ export def "restapis-resources-methods-responses get" [
 #
 # PUT /restapis/{restapi_id}/resources/{resource_id}/methods/{http_method}/responses/{status_code}
 # operationId: PutMethodResponse
-export def "restapis-resources-methods-responses update-by-restapi-id-resource-id-http-method-status-code" [
+export def "put-method-response" [
   restapi_id: string
   resource_id: string
   http_method: string
@@ -3963,7 +3963,7 @@ export def "restapis-resources-methods-responses update-by-restapi-id-resource-i
 # PATCH /restapis/{restapi_id}/resources/{resource_id}/methods/{http_method}/responses/{status_code}
 # operationId: UpdateMethodResponse
 # --patchOperations item shape: {op?: any, path?: any, value?: any, from?: any}
-export def "restapis-resources-methods-responses update-by-restapi-id-resource-id-http-method-status-code-1" [
+export def "update-method-response" [
   restapi_id: string
   resource_id: string
   http_method: string
@@ -4018,7 +4018,7 @@ export def "restapis-resources-methods-responses update-by-restapi-id-resource-i
 #
 # DELETE /restapis/{restapi_id}/models/{model_name}
 # operationId: DeleteModel
-export def "restapis-models delete" [
+export def "delete-model" [
   restapi_id: string
   model_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4065,7 +4065,7 @@ export def "restapis-models delete" [
 #
 # GET /restapis/{restapi_id}/models/{model_name}
 # operationId: GetModel
-export def "restapis-models get" [
+export def "get-model" [
   restapi_id: string
   model_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4115,7 +4115,7 @@ export def "restapis-models get" [
 # PATCH /restapis/{restapi_id}/models/{model_name}
 # operationId: UpdateModel
 # --patchOperations item shape: {op?: any, path?: any, value?: any, from?: any}
-export def "restapis-models update" [
+export def "update-model" [
   restapi_id: string
   model_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4166,7 +4166,7 @@ export def "restapis-models update" [
 #
 # DELETE /restapis/{restapi_id}/requestvalidators/{requestvalidator_id}
 # operationId: DeleteRequestValidator
-export def "restapis-requestvalidators delete-request-validator" [
+export def "delete-request-validator" [
   restapi_id: string
   requestvalidator_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4213,7 +4213,7 @@ export def "restapis-requestvalidators delete-request-validator" [
 #
 # GET /restapis/{restapi_id}/requestvalidators/{requestvalidator_id}
 # operationId: GetRequestValidator
-export def "restapis-requestvalidators get-request-validator" [
+export def "get-request-validator" [
   restapi_id: string
   requestvalidator_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4261,7 +4261,7 @@ export def "restapis-requestvalidators get-request-validator" [
 # PATCH /restapis/{restapi_id}/requestvalidators/{requestvalidator_id}
 # operationId: UpdateRequestValidator
 # --patchOperations item shape: {op?: any, path?: any, value?: any, from?: any}
-export def "restapis-requestvalidators update-request-validator" [
+export def "update-request-validator" [
   restapi_id: string
   requestvalidator_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4312,7 +4312,7 @@ export def "restapis-requestvalidators update-request-validator" [
 #
 # DELETE /restapis/{restapi_id}/resources/{resource_id}
 # operationId: DeleteResource
-export def "restapis-resources delete" [
+export def "delete-resource" [
   restapi_id: string
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4359,7 +4359,7 @@ export def "restapis-resources delete" [
 #
 # GET /restapis/{restapi_id}/resources/{resource_id}
 # operationId: GetResource
-export def "restapis-resources get" [
+export def "get-resource" [
   restapi_id: string
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4409,7 +4409,7 @@ export def "restapis-resources get" [
 # PATCH /restapis/{restapi_id}/resources/{resource_id}
 # operationId: UpdateResource
 # --patchOperations item shape: {op?: any, path?: any, value?: any, from?: any}
-export def "restapis-resources update" [
+export def "update-resource" [
   restapi_id: string
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4460,7 +4460,7 @@ export def "restapis-resources update" [
 #
 # DELETE /restapis/{restapi_id}
 # operationId: DeleteRestApi
-export def "restapis delete-rest" [
+export def "delete-rest-api" [
   restapi_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4505,7 +4505,7 @@ export def "restapis delete-rest" [
 #
 # GET /restapis/{restapi_id}
 # operationId: GetRestApi
-export def "restapis get-rest" [
+export def "get-rest-api" [
   restapi_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4550,7 +4550,7 @@ export def "restapis get-rest" [
 #
 # PUT /restapis/{restapi_id}
 # operationId: PutRestApi
-export def "restapis update-rest-by-restapi-id" [
+export def "put-rest-api" [
   restapi_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4604,7 +4604,7 @@ export def "restapis update-rest-by-restapi-id" [
 # PATCH /restapis/{restapi_id}
 # operationId: UpdateRestApi
 # --patchOperations item shape: {op?: any, path?: any, value?: any, from?: any}
-export def "restapis update-rest-by-restapi-id-1" [
+export def "update-rest-api" [
   restapi_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4653,7 +4653,7 @@ export def "restapis update-rest-by-restapi-id-1" [
 #
 # DELETE /restapis/{restapi_id}/stages/{stage_name}
 # operationId: DeleteStage
-export def "restapis-stages delete" [
+export def "delete-stage" [
   restapi_id: string
   stage_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4700,7 +4700,7 @@ export def "restapis-stages delete" [
 #
 # GET /restapis/{restapi_id}/stages/{stage_name}
 # operationId: GetStage
-export def "restapis-stages get" [
+export def "get-stage" [
   restapi_id: string
   stage_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4748,7 +4748,7 @@ export def "restapis-stages get" [
 # PATCH /restapis/{restapi_id}/stages/{stage_name}
 # operationId: UpdateStage
 # --patchOperations item shape: {op?: any, path?: any, value?: any, from?: any}
-export def "restapis-stages update" [
+export def "update-stage" [
   restapi_id: string
   stage_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4799,7 +4799,7 @@ export def "restapis-stages update" [
 #
 # DELETE /usageplans/{usageplanId}
 # operationId: DeleteUsagePlan
-export def "usageplans delete-usage-plan" [
+export def "delete-usage-plan" [
   usageplan_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4844,7 +4844,7 @@ export def "usageplans delete-usage-plan" [
 #
 # GET /usageplans/{usageplanId}
 # operationId: GetUsagePlan
-export def "usageplans get-usage-plan" [
+export def "get-usage-plan" [
   usageplan_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4890,7 +4890,7 @@ export def "usageplans get-usage-plan" [
 # PATCH /usageplans/{usageplanId}
 # operationId: UpdateUsagePlan
 # --patchOperations item shape: {op?: any, path?: any, value?: any, from?: any}
-export def "usageplans update-usage-plan" [
+export def "update-usage-plan" [
   usageplan_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4939,7 +4939,7 @@ export def "usageplans update-usage-plan" [
 #
 # DELETE /usageplans/{usageplanId}/keys/{keyId}
 # operationId: DeleteUsagePlanKey
-export def "usageplans-keys delete-usage-plan" [
+export def "delete-usage-plan-key" [
   usageplan_id: string
   key_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4986,7 +4986,7 @@ export def "usageplans-keys delete-usage-plan" [
 #
 # GET /usageplans/{usageplanId}/keys/{keyId}
 # operationId: GetUsagePlanKey
-export def "usageplans-keys get-usage-plan" [
+export def "get-usage-plan-key" [
   usageplan_id: string
   key_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5033,7 +5033,7 @@ export def "usageplans-keys get-usage-plan" [
 #
 # DELETE /vpclinks/{vpclink_id}
 # operationId: DeleteVpcLink
-export def "vpclinks delete-vpc-link" [
+export def "delete-vpc-link" [
   vpclink_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5078,7 +5078,7 @@ export def "vpclinks delete-vpc-link" [
 #
 # GET /vpclinks/{vpclink_id}
 # operationId: GetVpcLink
-export def "vpclinks get-vpc-link" [
+export def "get-vpc-link" [
   vpclink_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5124,7 +5124,7 @@ export def "vpclinks get-vpc-link" [
 # PATCH /vpclinks/{vpclink_id}
 # operationId: UpdateVpcLink
 # --patchOperations item shape: {op?: any, path?: any, value?: any, from?: any}
-export def "vpclinks update-vpc-link" [
+export def "update-vpc-link" [
   vpclink_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5173,7 +5173,7 @@ export def "vpclinks update-vpc-link" [
 #
 # DELETE /restapis/{restapi_id}/stages/{stage_name}/cache/authorizers
 # operationId: FlushStageAuthorizersCache
-export def "restapis-stages-cache-authorizers delete-flush" [
+export def "flush-stage-authorizers-cache" [
   restapi_id: string
   stage_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5220,7 +5220,7 @@ export def "restapis-stages-cache-authorizers delete-flush" [
 #
 # DELETE /restapis/{restapi_id}/stages/{stage_name}/cache/data
 # operationId: FlushStageCache
-export def "restapis-stages-cache-data delete-flush" [
+export def "flush-stage-cache" [
   restapi_id: string
   stage_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5267,7 +5267,7 @@ export def "restapis-stages-cache-data delete-flush" [
 #
 # POST /clientcertificates
 # operationId: GenerateClientCertificate
-export def "clientcertificates generate-client-certificate" [
+export def "generate-client-certificate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5315,7 +5315,7 @@ export def "clientcertificates generate-client-certificate" [
 #
 # GET /clientcertificates
 # operationId: GetClientCertificates
-export def "clientcertificates get-client-certificates" [
+export def "get-client-certificates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5361,7 +5361,7 @@ export def "clientcertificates get-client-certificates" [
 #
 # GET /account
 # operationId: GetAccount
-export def "account get" [
+export def "get-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5405,7 +5405,7 @@ export def "account get" [
 # PATCH /account
 # operationId: UpdateAccount
 # --patchOperations item shape: {op?: any, path?: any, value?: any, from?: any}
-export def "account update" [
+export def "update-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5452,7 +5452,7 @@ export def "account update" [
 #
 # GET /restapis/{restapi_id}/stages/{stage_name}/exports/{export_type}
 # operationId: GetExport
-export def "restapis-stages-exports get" [
+export def "get-export" [
   restapi_id: string
   stage_name: string
   export_type: string
@@ -5504,7 +5504,7 @@ export def "restapis-stages-exports get" [
 #
 # GET /restapis/{restapi_id}/gatewayresponses
 # operationId: GetGatewayResponses
-export def "restapis-gatewayresponses get-gateway-responses" [
+export def "get-gateway-responses" [
   restapi_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5552,7 +5552,7 @@ export def "restapis-gatewayresponses get-gateway-responses" [
 #
 # GET /restapis/{restapi_id}/models/{model_name}/default_template
 # operationId: GetModelTemplate
-export def "restapis-models-default-template get" [
+export def "get-model-template" [
   restapi_id: string
   model_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5599,7 +5599,7 @@ export def "restapis-models-default-template get" [
 #
 # GET /restapis/{restapi_id}/resources
 # operationId: GetResources
-export def "restapis-resources list" [
+export def "get-resources" [
   restapi_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5648,7 +5648,7 @@ export def "restapis-resources list" [
 #
 # GET /restapis/{restapi_id}/stages/{stage_name}/sdks/{sdk_type}
 # operationId: GetSdk
-export def "restapis-stages-sdks get" [
+export def "get-sdk" [
   restapi_id: string
   stage_name: string
   sdk_type: string
@@ -5699,7 +5699,7 @@ export def "restapis-stages-sdks get" [
 #
 # GET /sdktypes/{sdktype_id}
 # operationId: GetSdkType
-export def "sdktypes get-sdk-type" [
+export def "get-sdk-type" [
   sdktype_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5744,7 +5744,7 @@ export def "sdktypes get-sdk-type" [
 #
 # GET /sdktypes
 # operationId: GetSdkTypes
-export def "sdktypes get-sdk-types" [
+export def "get-sdk-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5790,7 +5790,7 @@ export def "sdktypes get-sdk-types" [
 #
 # GET /tags/{resource_arn}
 # operationId: GetTags
-export def "tags get" [
+export def "get-tags" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5838,7 +5838,7 @@ export def "tags get" [
 #
 # PUT /tags/{resource_arn}
 # operationId: TagResource
-export def "tags tag" [
+export def "tag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5887,7 +5887,7 @@ export def "tags tag" [
 #
 # GET /usageplans/{usageplanId}/usage
 # operationId: GetUsage
-export def "usageplans-usage get" [
+export def "get-usage" [
   usageplan_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5938,7 +5938,7 @@ export def "usageplans-usage get" [
 #
 # POST /apikeys
 # operationId: ImportApiKeys
-export def "apikeys import-keys" [
+export def "import-api-keys" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5989,7 +5989,7 @@ export def "apikeys import-keys" [
 #
 # POST /restapis
 # operationId: ImportRestApi
-export def "restapis import-rest" [
+export def "import-rest-api" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6040,7 +6040,7 @@ export def "restapis import-rest" [
 #
 # DELETE /tags/{resource_arn}
 # operationId: UntagResource
-export def "tags untag" [
+export def "untag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6088,7 +6088,7 @@ export def "tags untag" [
 # PATCH /usageplans/{usageplanId}/keys/{keyId}/usage
 # operationId: UpdateUsage
 # --patchOperations item shape: {op?: any, path?: any, value?: any, from?: any}
-export def "usageplans-keys-usage update" [
+export def "update-usage" [
   usageplan_id: string
   key_id: string
   --base-url(-b): string@base-url-completer # API base URL

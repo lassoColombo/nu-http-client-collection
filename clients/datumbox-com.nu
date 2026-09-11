@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "1-0-adult-content-detection-json create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "adult-content-detection" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -122,7 +122,7 @@ export def commands []: nothing -> table {
 #
 # POST /1.0/AdultContentDetection.json
 # operationId: AdultContentDetection
-export def "1-0-adult-content-detection-json create" [
+export def "adult-content-detection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -162,7 +162,7 @@ export def "1-0-adult-content-detection-json create" [
 #
 # POST /1.0/CommercialDetection.json
 # operationId: CommercialDetection
-export def "1-0-commercial-detection-json create" [
+export def "commercial-detection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -202,7 +202,7 @@ export def "1-0-commercial-detection-json create" [
 #
 # POST /1.0/DocumentSimilarity.json
 # operationId: DocumentSimilarity
-export def "1-0-document-similarity-json create" [
+export def "document-similarity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -243,7 +243,7 @@ export def "1-0-document-similarity-json create" [
 #
 # POST /1.0/EducationalDetection.json
 # operationId: EducationalDetection
-export def "1-0-educational-detection-json create" [
+export def "educational-detection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -283,7 +283,7 @@ export def "1-0-educational-detection-json create" [
 #
 # POST /1.0/GenderDetection.json
 # operationId: GenderDetection
-export def "1-0-gender-detection-json create" [
+export def "gender-detection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -323,7 +323,7 @@ export def "1-0-gender-detection-json create" [
 #
 # POST /1.0/KeywordExtraction.json
 # operationId: KeywordExtraction
-export def "1-0-keyword-extraction-json create" [
+export def "keyword-extraction" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -364,7 +364,7 @@ export def "1-0-keyword-extraction-json create" [
 #
 # POST /1.0/LanguageDetection.json
 # operationId: LanguageDetection
-export def "1-0-language-detection-json create" [
+export def "language-detection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -404,7 +404,7 @@ export def "1-0-language-detection-json create" [
 #
 # POST /1.0/ReadabilityAssessment.json
 # operationId: ReadabilityAssessment
-export def "1-0-readability-assessment-json create" [
+export def "readability-assessment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -444,7 +444,7 @@ export def "1-0-readability-assessment-json create" [
 #
 # POST /1.0/SentimentAnalysis.json
 # operationId: SentimentAnalysis
-export def "1-0-sentiment-analysis-json create" [
+export def "sentiment-analysis" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -484,7 +484,7 @@ export def "1-0-sentiment-analysis-json create" [
 #
 # POST /1.0/SpamDetection.json
 # operationId: SpamDetection
-export def "1-0-spam-detection-json create" [
+export def "spam-detection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -524,7 +524,7 @@ export def "1-0-spam-detection-json create" [
 #
 # POST /1.0/SubjectivityAnalysis.json
 # operationId: SubjectivityAnalysis
-export def "1-0-subjectivity-analysis-json create" [
+export def "subjectivity-analysis" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -564,7 +564,7 @@ export def "1-0-subjectivity-analysis-json create" [
 #
 # POST /1.0/TextExtraction.json
 # operationId: TextExtraction
-export def "1-0-text-extraction-json create" [
+export def "text-extraction" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -604,7 +604,7 @@ export def "1-0-text-extraction-json create" [
 #
 # POST /1.0/TopicClassification.json
 # operationId: TopicClassification
-export def "1-0-topic-classification-json create" [
+export def "topic-classification" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -644,7 +644,7 @@ export def "1-0-topic-classification-json create" [
 #
 # POST /1.0/TwitterSentimentAnalysis.json
 # operationId: TwitterSentimentAnalysis
-export def "1-0-twitter-sentiment-analysis-json create" [
+export def "twitter-sentiment-analysis" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -110,7 +110,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-insights-diagnostic-settings list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "diagnostic-settings-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -134,7 +134,7 @@ export def commands []: nothing -> table {
 #
 # GET /{resourceUri}/providers/microsoft.insights/diagnosticSettings
 # operationId: DiagnosticSettings_List
-export def "providers-microsoft-insights-diagnostic-settings list" [
+export def "diagnostic-settings-list" [
   resource_uri: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -172,7 +172,7 @@ export def "providers-microsoft-insights-diagnostic-settings list" [
 #
 # DELETE /{resourceUri}/providers/microsoft.insights/diagnosticSettings/{name}
 # operationId: DiagnosticSettings_Delete
-export def "providers-microsoft-insights-diagnostic-settings delete" [
+export def "diagnostic-settings-delete" [
   resource_uri: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -212,7 +212,7 @@ export def "providers-microsoft-insights-diagnostic-settings delete" [
 #
 # GET /{resourceUri}/providers/microsoft.insights/diagnosticSettings/{name}
 # operationId: DiagnosticSettings_Get
-export def "providers-microsoft-insights-diagnostic-settings get" [
+export def "diagnostic-settings-get" [
   resource_uri: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -253,7 +253,7 @@ export def "providers-microsoft-insights-diagnostic-settings get" [
 # PUT /{resourceUri}/providers/microsoft.insights/diagnosticSettings/{name}
 # operationId: DiagnosticSettings_CreateOrUpdate
 # --properties shape: {eventHubAuthorizationRuleId?: string, eventHubName?: string, logAnalyticsDestinationType?: string, logs?: list, metrics?: list, serviceBusRuleId?: string, storageAccountId?: string, workspaceId?: string}
-export def "providers-microsoft-insights-diagnostic-settings create-or-update" [
+export def "diagnostic-settings-create-or-update" [
   resource_uri: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL

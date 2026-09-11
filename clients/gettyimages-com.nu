@@ -133,7 +133,7 @@ def release-status-completer [] { ["fully_released" "release_not_important"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "affiliates-search-images get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-v3-affiliates-search-images" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -154,7 +154,7 @@ export def commands []: nothing -> table {
 }
 
 # GET /v3/affiliates/search/images
-export def "affiliates-search-images get" [
+export def "get-v3-affiliates-search-images" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -191,7 +191,7 @@ export def "affiliates-search-images get" [
 }
 
 # GET /v3/affiliates/search/videos
-export def "affiliates-search-videos get" [
+export def "get-v3-affiliates-search-videos" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -229,7 +229,7 @@ export def "affiliates-search-videos get" [
 # Search for images by a photographer
 #
 # GET /v3/artists/images
-export def "artists-images get" [
+export def "get-v3-artists-images" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -270,7 +270,7 @@ export def "artists-images get" [
 # Search for videos by a photographer
 #
 # GET /v3/artists/videos
-export def "artists-videos get" [
+export def "get-v3-artists-videos" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -311,7 +311,7 @@ export def "artists-videos get" [
 # Get asset change notifications.
 #
 # PUT /v3/asset-changes/change-sets
-export def "asset-changes-change-sets update" [
+export def "put-v3-asset-changes-change-sets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -347,7 +347,7 @@ export def "asset-changes-change-sets update" [
 # Confirm asset change notifications.
 #
 # DELETE /v3/asset-changes/change-sets/{change-set-id}
-export def "asset-changes-change-sets delete" [
+export def "delete-v3-asset-changes-change-sets-change-set-id" [
   change_set_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -382,7 +382,7 @@ export def "asset-changes-change-sets delete" [
 # Get a list of asset change notification channels.
 #
 # GET /v3/asset-changes/channels
-export def "asset-changes-channels get" [
+export def "get-v3-asset-changes-channels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -415,7 +415,7 @@ export def "asset-changes-channels get" [
 # Endpoint for acquiring extended licenses with iStock credits for an asset.
 #
 # POST /v3/asset-licensing/{assetId}
-export def "asset-licensing create" [
+export def "post-v3-asset-licensing-asset-id" [
   asset_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -456,7 +456,7 @@ export def "asset-licensing create" [
 }
 
 # GET /v3/asset-management/assets/send-events
-export def "asset-management-assets-send-events get" [
+export def "get-v3-asset-management-assets-send-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -496,7 +496,7 @@ export def "asset-management-assets-send-events get" [
 # Get all boards that the user participates in
 #
 # GET /v3/boards
-export def "boards list" [
+export def "get-v3-boards" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -537,7 +537,7 @@ export def "boards list" [
 # Create a new board
 #
 # POST /v3/boards
-export def "boards create" [
+export def "post-v3-boards" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -578,7 +578,7 @@ export def "boards create" [
 # Delete a board
 #
 # DELETE /v3/boards/{board_id}
-export def "boards delete" [
+export def "delete-v3-boards-board-id" [
   board_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -616,7 +616,7 @@ export def "boards delete" [
 # Get assets and metadata for a specific board
 #
 # GET /v3/boards/{board_id}
-export def "boards get" [
+export def "get-v3-boards-board-id" [
   board_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -654,7 +654,7 @@ export def "boards get" [
 # Update a board
 #
 # PUT /v3/boards/{board_id}
-export def "boards update" [
+export def "put-v3-boards-board-id" [
   board_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -697,7 +697,7 @@ export def "boards update" [
 # Remove assets from a board
 #
 # DELETE /v3/boards/{board_id}/assets
-export def "boards-assets delete-by-board-id" [
+export def "delete-v3-boards-board-id-assets" [
   board_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -737,7 +737,7 @@ export def "boards-assets delete-by-board-id" [
 # Add assets to a board
 #
 # PUT /v3/boards/{board_id}/assets
-export def "boards-assets update-by-board-id" [
+export def "put-v3-boards-board-id-assets" [
   board_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -779,7 +779,7 @@ export def "boards-assets update-by-board-id" [
 # Remove an asset from a board
 #
 # DELETE /v3/boards/{board_id}/assets/{asset_id}
-export def "boards-assets delete-by-board-id-asset-id" [
+export def "delete-v3-boards-board-id-assets-asset-id" [
   board_id: string
   asset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -819,7 +819,7 @@ export def "boards-assets delete-by-board-id-asset-id" [
 # Add an asset to a board
 #
 # PUT /v3/boards/{board_id}/assets/{asset_id}
-export def "boards-assets update-by-board-id-asset-id" [
+export def "put-v3-boards-board-id-assets-asset-id" [
   board_id: string
   asset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -859,7 +859,7 @@ export def "boards-assets update-by-board-id-asset-id" [
 # Get comments from a board
 #
 # GET /v3/boards/{board_id}/comments
-export def "boards-comments get" [
+export def "get-v3-boards-board-id-comments" [
   board_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -897,7 +897,7 @@ export def "boards-comments get" [
 # Add a comment to a board
 #
 # POST /v3/boards/{board_id}/comments
-export def "boards-comments create" [
+export def "post-v3-boards-board-id-comments" [
   board_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -939,7 +939,7 @@ export def "boards-comments create" [
 # Delete a comment from a board
 #
 # DELETE /v3/boards/{board_id}/comments/{comment_id}
-export def "boards-comments delete" [
+export def "delete-v3-boards-board-id-comments-comment-id" [
   board_id: string
   comment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -979,7 +979,7 @@ export def "boards-comments delete" [
 # Gets collections applicable for the customer.
 #
 # GET /v3/collections
-export def "collections get" [
+export def "get-v3-collections" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1015,7 +1015,7 @@ export def "collections get" [
 # Gets countries codes and names.
 #
 # GET /v3/countries
-export def "countries get" [
+export def "get-v3-countries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1051,7 +1051,7 @@ export def "countries get" [
 # Returns information about the current user.
 #
 # GET /v3/customers/current
-export def "customers-current get" [
+export def "get-v3-customers-current" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1087,7 +1087,7 @@ export def "customers-current get" [
 # Returns information about a customer's downloaded assets.
 #
 # GET /v3/downloads
-export def "downloads get" [
+export def "get-v3-downloads" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1131,7 +1131,7 @@ export def "downloads get" [
 # Download an image
 #
 # POST /v3/downloads/images/{id}
-export def "downloads-images create" [
+export def "post-v3-downloads-images-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1181,7 +1181,7 @@ export def "downloads-images create" [
 # Download a video
 #
 # POST /v3/downloads/videos/{id}
-export def "downloads-videos create" [
+export def "post-v3-downloads-videos-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1230,7 +1230,7 @@ export def "downloads-videos create" [
 # Get metadata for multiple events
 #
 # GET /v3/events
-export def "events list" [
+export def "get-v3-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1269,7 +1269,7 @@ export def "events list" [
 # Get metadata for a single event
 #
 # GET /v3/events/{id}
-export def "events get" [
+export def "get-v3-events-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1309,7 +1309,7 @@ export def "events get" [
 # Get metadata for multiple images by supplying multiple image ids
 #
 # GET /v3/images
-export def "images list" [
+export def "get-v3-images" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1348,7 +1348,7 @@ export def "images list" [
 # Get metadata for a single image by supplying one image id
 #
 # GET /v3/images/{id}
-export def "images get" [
+export def "get-v3-images-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1388,7 +1388,7 @@ export def "images get" [
 # Returns information about a customer's download history for a specific asset
 #
 # GET /v3/images/{id}/downloadhistory
-export def "images-downloadhistory get" [
+export def "get-v3-images-id-downloadhistory" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1428,7 +1428,7 @@ export def "images-downloadhistory get" [
 # Retrieve creative images from the same series
 #
 # GET /v3/images/{id}/same-series
-export def "images-same-series get" [
+export def "get-v3-images-id-same-series" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1470,7 +1470,7 @@ export def "images-same-series get" [
 # Retrieve similar images
 #
 # GET /v3/images/{id}/similar
-export def "images-similar get" [
+export def "get-v3-images-id-similar" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1512,7 +1512,7 @@ export def "images-similar get" [
 # Get order metadata
 #
 # GET /v3/orders/{id}
-export def "orders get" [
+export def "get-v3-orders-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1550,7 +1550,7 @@ export def "orders get" [
 # Get Products
 #
 # GET /v3/products
-export def "products get" [
+export def "get-v3-products" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1588,7 +1588,7 @@ export def "products get" [
 # Get Previously Purchased Images and Video
 #
 # GET /v3/purchased-assets
-export def "purchased-assets get" [
+export def "get-v3-purchased-assets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1630,7 +1630,7 @@ export def "purchased-assets get" [
 # Upload image for use by the search creative images/videos operations
 #
 # PUT /v3/search/by-image/uploads/{file-name}
-export def "search-by-image-uploads update" [
+export def "put-v3-search-by-image-uploads-file-name" [
   file_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1669,7 +1669,7 @@ export def "search-by-image-uploads update" [
 # Search for events
 #
 # GET /v3/search/events
-export def "search-events get" [
+export def "get-v3-search-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1715,7 +1715,7 @@ export def "search-events get" [
 # Search for both creative and editorial images - *** DEPRECATED ***
 #
 # GET /v3/search/images
-export def "search-images get" [
+export def "get-v3-search-images" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1778,7 +1778,7 @@ export def "search-images get" [
 # Search for creative images only
 #
 # GET /v3/search/images/creative
-export def "search-images-creative get" [
+export def "get-v3-search-images-creative" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1845,7 +1845,7 @@ export def "search-images-creative get" [
 # Search for creative images based on url
 #
 # GET /v3/search/images/creative/by-image
-export def "search-images-creative-by-image get" [
+export def "get-v3-search-images-creative-by-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1893,7 +1893,7 @@ export def "search-images-creative-by-image get" [
 # Search for editorial images only
 #
 # GET /v3/search/images/editorial
-export def "search-images-editorial get" [
+export def "get-v3-search-images-editorial" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1962,7 +1962,7 @@ export def "search-images-editorial get" [
 # Search for creative videos
 #
 # GET /v3/search/videos/creative
-export def "search-videos-creative get" [
+export def "get-v3-search-videos-creative" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2030,7 +2030,7 @@ export def "search-videos-creative get" [
 # Search for creative videos based on url
 #
 # GET /v3/search/videos/creative/by-image
-export def "search-videos-creative-by-image get" [
+export def "get-v3-search-videos-creative-by-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2078,7 +2078,7 @@ export def "search-videos-creative-by-image get" [
 # Search for editorial videos
 #
 # GET /v3/search/videos/editorial
-export def "search-videos-editorial get" [
+export def "get-v3-search-videos-editorial" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2144,7 +2144,7 @@ export def "search-videos-editorial get" [
 #
 # PUT /v3/usage-batches/{id}
 # --asset_usages item shape: {asset_id?: string, quantity?: int, usage_date?: string}
-export def "usage-batches update" [
+export def "put-v3-usage-batches-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2183,7 +2183,7 @@ export def "usage-batches update" [
 # Get metadata for multiple videos by supplying multiple video ids
 #
 # GET /v3/videos
-export def "videos list" [
+export def "get-v3-videos" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2222,7 +2222,7 @@ export def "videos list" [
 # Get metadata for a single video by supplying one video id
 #
 # GET /v3/videos/{id}
-export def "videos get" [
+export def "get-v3-videos-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2262,7 +2262,7 @@ export def "videos get" [
 # Returns information about a customer's download history for a specific asset
 #
 # GET /v3/videos/{id}/downloadhistory
-export def "videos-downloadhistory get" [
+export def "get-v3-videos-id-downloadhistory" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2302,7 +2302,7 @@ export def "videos-downloadhistory get" [
 # Retrieve creative videos from the same series
 #
 # GET /v3/videos/{id}/same-series
-export def "videos-same-series get" [
+export def "get-v3-videos-id-same-series" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2344,7 +2344,7 @@ export def "videos-same-series get" [
 # Retrieve similar videos
 #
 # GET /v3/videos/{id}/similar
-export def "videos-similar get" [
+export def "get-v3-videos-id-similar" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

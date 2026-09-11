@@ -117,7 +117,7 @@ def track-links-completer [] { ["HtmlAndTextTracking" "HtmlOnlyTracking" "None" 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "domains list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-domains" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -141,7 +141,7 @@ export def commands []: nothing -> table {
 #
 # GET /domains
 # operationId: listDomains
-export def "domains list" [
+export def "list-domains" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -181,7 +181,7 @@ export def "domains list" [
 #
 # POST /domains
 # operationId: createDomain
-export def "domains create" [
+export def "create-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -223,7 +223,7 @@ export def "domains create" [
 #
 # DELETE /domains/{domainid}
 # operationId: deleteDomain
-export def "domains delete" [
+export def "delete-domain" [
   domainid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -262,7 +262,7 @@ export def "domains delete" [
 #
 # GET /domains/{domainid}
 # operationId: getDomain
-export def "domains get" [
+export def "get-domain" [
   domainid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -301,7 +301,7 @@ export def "domains get" [
 #
 # PUT /domains/{domainid}
 # operationId: editDomain
-export def "domains update-edit" [
+export def "edit-domain" [
   domainid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -344,7 +344,7 @@ export def "domains update-edit" [
 #
 # POST /domains/{domainid}/rotatedkim
 # operationId: rotateDKIMKeyForDomain
-export def "domains-rotatedkim create-rotate-dkim-key" [
+export def "rotate-dkim-key-for-domain" [
   domainid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -383,7 +383,7 @@ export def "domains-rotatedkim create-rotate-dkim-key" [
 #
 # PUT /domains/{domainid}/verifydkim
 # operationId: requestDkimVerificationForDomain
-export def "domains-verifydkim request-dkim-verification" [
+export def "request-dkim-verification-for-domain" [
   domainid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -422,7 +422,7 @@ export def "domains-verifydkim request-dkim-verification" [
 #
 # PUT /domains/{domainid}/verifyreturnpath
 # operationId: requestReturnPathVerificationForDomain
-export def "domains-verifyreturnpath request-return-path-verification" [
+export def "request-return-path-verification-for-domain" [
   domainid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -461,7 +461,7 @@ export def "domains-verifyreturnpath request-return-path-verification" [
 #
 # POST /domains/{domainid}/verifyspf
 # operationId: requestSPFVerificationForDomain
-export def "domains-verifyspf request-spf-verification" [
+export def "request-spf-verification-for-domain" [
   domainid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -500,7 +500,7 @@ export def "domains-verifyspf request-spf-verification" [
 #
 # GET /senders
 # operationId: listSenderSignatures
-export def "senders list-signatures" [
+export def "list-sender-signatures" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -540,7 +540,7 @@ export def "senders list-signatures" [
 #
 # POST /senders
 # operationId: createSenderSignature
-export def "senders create-signature" [
+export def "create-sender-signature" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -584,7 +584,7 @@ export def "senders create-signature" [
 #
 # DELETE /senders/{signatureid}
 # operationId: deleteSenderSignature
-export def "senders delete-signature" [
+export def "delete-sender-signature" [
   signatureid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -623,7 +623,7 @@ export def "senders delete-signature" [
 #
 # GET /senders/{signatureid}
 # operationId: getSenderSignature
-export def "senders get-signature" [
+export def "get-sender-signature" [
   signatureid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -662,7 +662,7 @@ export def "senders get-signature" [
 #
 # PUT /senders/{signatureid}
 # operationId: editSenderSignature
-export def "senders update-edit-signature" [
+export def "edit-sender-signature" [
   signatureid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -707,7 +707,7 @@ export def "senders update-edit-signature" [
 #
 # POST /senders/{signatureid}/requestnewdkim
 # operationId: requestNewDKIMKeyForSenderSignature
-export def "senders-requestnewdkim request-new-dkim-key-for-signature" [
+export def "request-new-dkim-key-for-sender-signature" [
   signatureid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -746,7 +746,7 @@ export def "senders-requestnewdkim request-new-dkim-key-for-signature" [
 #
 # POST /senders/{signatureid}/resend
 # operationId: resendSenderSignatureConfirmationEmail
-export def "senders-resend resend-signature-confirmation-email" [
+export def "resend-sender-signature-confirmation-email" [
   signatureid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -785,7 +785,7 @@ export def "senders-resend resend-signature-confirmation-email" [
 #
 # POST /senders/{signatureid}/verifyspf
 # operationId: requestSPFVerificationForSenderSignature
-export def "senders-verifyspf request-spf-verification-for-signature" [
+export def "request-spf-verification-for-sender-signature" [
   signatureid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -824,7 +824,7 @@ export def "senders-verifyspf request-spf-verification-for-signature" [
 #
 # GET /servers
 # operationId: listServers
-export def "servers list" [
+export def "list-servers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -865,7 +865,7 @@ export def "servers list" [
 #
 # POST /servers
 # operationId: createServer
-export def "servers create" [
+export def "create-server" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -919,7 +919,7 @@ export def "servers create" [
 #
 # DELETE /servers/{serverid}
 # operationId: deleteServer
-export def "servers delete" [
+export def "delete-server" [
   serverid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -958,7 +958,7 @@ export def "servers delete" [
 #
 # GET /servers/{serverid}
 # operationId: getServerInformation
-export def "servers get-information" [
+export def "get-server-information" [
   serverid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -997,7 +997,7 @@ export def "servers get-information" [
 #
 # PUT /servers/{serverid}
 # operationId: editServerInformation
-export def "servers update-edit-information" [
+export def "edit-server-information" [
   serverid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1053,7 +1053,7 @@ export def "servers update-edit-information" [
 #
 # PUT /templates/push
 # operationId: pushTemplates
-export def "templates-push push" [
+export def "push-templates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

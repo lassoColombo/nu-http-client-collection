@@ -273,7 +273,7 @@ def action-completer-157 [] { ["UploadSigningCertificate"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api get-create-client-to-open-connect-provider" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-add-client-id-to-open-id-connect-provider" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -297,7 +297,7 @@ export def commands []: nothing -> table {
 #
 # GET /
 # operationId: GET_AddClientIDToOpenIDConnectProvider
-export def "api get-create-client-to-open-connect-provider" [
+export def "get-add-client-id-to-open-id-connect-provider" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -345,7 +345,7 @@ export def "api get-create-client-to-open-connect-provider" [
 #
 # POST /
 # operationId: POST_AddClientIDToOpenIDConnectProvider
-export def "api create-client-to-open-connect-provider" [
+export def "post-add-client-id-to-open-id-connect-provider" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -395,7 +395,7 @@ export def "api create-client-to-open-connect-provider" [
 #
 # GET /
 # operationId: GET_AddRoleToInstanceProfile
-export def "api get-create-role-to-instance-profile" [
+export def "get-add-role-to-instance-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -443,7 +443,7 @@ export def "api get-create-role-to-instance-profile" [
 #
 # POST /
 # operationId: POST_AddRoleToInstanceProfile
-export def "api create-role-to-instance-profile" [
+export def "post-add-role-to-instance-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -493,7 +493,7 @@ export def "api create-role-to-instance-profile" [
 #
 # GET /
 # operationId: GET_AddUserToGroup
-export def "api get-create-user-to-group" [
+export def "get-add-user-to-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -541,7 +541,7 @@ export def "api get-create-user-to-group" [
 #
 # POST /
 # operationId: POST_AddUserToGroup
-export def "api create-user-to-group" [
+export def "post-add-user-to-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -591,7 +591,7 @@ export def "api create-user-to-group" [
 #
 # GET /
 # operationId: GET_AttachGroupPolicy
-export def "api get-attach-group-policy" [
+export def "get-attach-group-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -639,7 +639,7 @@ export def "api get-attach-group-policy" [
 #
 # POST /
 # operationId: POST_AttachGroupPolicy
-export def "api create-attach-group-policy" [
+export def "post-attach-group-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -689,7 +689,7 @@ export def "api create-attach-group-policy" [
 #
 # GET /
 # operationId: GET_AttachRolePolicy
-export def "api get-attach-role-policy" [
+export def "get-attach-role-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -737,7 +737,7 @@ export def "api get-attach-role-policy" [
 #
 # POST /
 # operationId: POST_AttachRolePolicy
-export def "api create-attach-role-policy" [
+export def "post-attach-role-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -787,7 +787,7 @@ export def "api create-attach-role-policy" [
 #
 # GET /
 # operationId: GET_AttachUserPolicy
-export def "api get-attach-user-policy" [
+export def "get-attach-user-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -835,7 +835,7 @@ export def "api get-attach-user-policy" [
 #
 # POST /
 # operationId: POST_AttachUserPolicy
-export def "api create-attach-user-policy" [
+export def "post-attach-user-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -885,7 +885,7 @@ export def "api create-attach-user-policy" [
 #
 # GET /
 # operationId: GET_ChangePassword
-export def "api get-change-password" [
+export def "get-change-password" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -933,7 +933,7 @@ export def "api get-change-password" [
 #
 # POST /
 # operationId: POST_ChangePassword
-export def "api create-change-password" [
+export def "post-change-password" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -983,7 +983,7 @@ export def "api create-change-password" [
 #
 # GET /
 # operationId: GET_CreateAccessKey
-export def "api get-create-access-key" [
+export def "get-create-access-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1030,7 +1030,7 @@ export def "api get-create-access-key" [
 #
 # POST /
 # operationId: POST_CreateAccessKey
-export def "api create-access-key" [
+export def "post-create-access-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1080,7 +1080,7 @@ export def "api create-access-key" [
 #
 # GET /
 # operationId: GET_CreateAccountAlias
-export def "api get-create-account-alias" [
+export def "get-create-account-alias" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1127,7 +1127,7 @@ export def "api get-create-account-alias" [
 #
 # POST /
 # operationId: POST_CreateAccountAlias
-export def "api create-account-alias" [
+export def "post-create-account-alias" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1177,7 +1177,7 @@ export def "api create-account-alias" [
 #
 # GET /
 # operationId: GET_CreateGroup
-export def "api get-create-group" [
+export def "get-create-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1225,7 +1225,7 @@ export def "api get-create-group" [
 #
 # POST /
 # operationId: POST_CreateGroup
-export def "api create-group" [
+export def "post-create-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1275,7 +1275,7 @@ export def "api create-group" [
 #
 # GET /
 # operationId: GET_CreateInstanceProfile
-export def "api get-create-instance-profile" [
+export def "get-create-instance-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1324,7 +1324,7 @@ export def "api get-create-instance-profile" [
 #
 # POST /
 # operationId: POST_CreateInstanceProfile
-export def "api create-instance-profile" [
+export def "post-create-instance-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1374,7 +1374,7 @@ export def "api create-instance-profile" [
 #
 # GET /
 # operationId: GET_CreateLoginProfile
-export def "api get-create-login-profile" [
+export def "get-create-login-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1423,7 +1423,7 @@ export def "api get-create-login-profile" [
 #
 # POST /
 # operationId: POST_CreateLoginProfile
-export def "api create-login-profile" [
+export def "post-create-login-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1473,7 +1473,7 @@ export def "api create-login-profile" [
 #
 # GET /
 # operationId: GET_CreateOpenIDConnectProvider
-export def "api get-create-open-connect-provider" [
+export def "get-create-open-id-connect-provider" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1523,7 +1523,7 @@ export def "api get-create-open-connect-provider" [
 #
 # POST /
 # operationId: POST_CreateOpenIDConnectProvider
-export def "api create-open-connect-provider" [
+export def "post-create-open-id-connect-provider" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1573,7 +1573,7 @@ export def "api create-open-connect-provider" [
 #
 # GET /
 # operationId: GET_CreatePolicy
-export def "api get-create-policy" [
+export def "get-create-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1624,7 +1624,7 @@ export def "api get-create-policy" [
 #
 # POST /
 # operationId: POST_CreatePolicy
-export def "api create-policy" [
+export def "post-create-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1674,7 +1674,7 @@ export def "api create-policy" [
 #
 # GET /
 # operationId: GET_CreatePolicyVersion
-export def "api get-create-policy-version" [
+export def "get-create-policy-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1723,7 +1723,7 @@ export def "api get-create-policy-version" [
 #
 # POST /
 # operationId: POST_CreatePolicyVersion
-export def "api create-policy-version" [
+export def "post-create-policy-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1773,7 +1773,7 @@ export def "api create-policy-version" [
 #
 # GET /
 # operationId: GET_CreateRole
-export def "api get-create-role" [
+export def "get-create-role" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1826,7 +1826,7 @@ export def "api get-create-role" [
 #
 # POST /
 # operationId: POST_CreateRole
-export def "api create-role" [
+export def "post-create-role" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1876,7 +1876,7 @@ export def "api create-role" [
 #
 # GET /
 # operationId: GET_CreateSAMLProvider
-export def "api get-create-saml-provider" [
+export def "get-create-saml-provider" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1925,7 +1925,7 @@ export def "api get-create-saml-provider" [
 #
 # POST /
 # operationId: POST_CreateSAMLProvider
-export def "api create-saml-provider" [
+export def "post-create-saml-provider" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1975,7 +1975,7 @@ export def "api create-saml-provider" [
 #
 # GET /
 # operationId: GET_CreateServiceLinkedRole
-export def "api get-create-service-linked-role" [
+export def "get-create-service-linked-role" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2024,7 +2024,7 @@ export def "api get-create-service-linked-role" [
 #
 # POST /
 # operationId: POST_CreateServiceLinkedRole
-export def "api create-service-linked-role" [
+export def "post-create-service-linked-role" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2074,7 +2074,7 @@ export def "api create-service-linked-role" [
 #
 # GET /
 # operationId: GET_CreateServiceSpecificCredential
-export def "api get-create-service-specific-credential" [
+export def "get-create-service-specific-credential" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2122,7 +2122,7 @@ export def "api get-create-service-specific-credential" [
 #
 # POST /
 # operationId: POST_CreateServiceSpecificCredential
-export def "api create-service-specific-credential" [
+export def "post-create-service-specific-credential" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2172,7 +2172,7 @@ export def "api create-service-specific-credential" [
 #
 # GET /
 # operationId: GET_CreateUser
-export def "api get-create-user" [
+export def "get-create-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2222,7 +2222,7 @@ export def "api get-create-user" [
 #
 # POST /
 # operationId: POST_CreateUser
-export def "api create-user" [
+export def "post-create-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2272,7 +2272,7 @@ export def "api create-user" [
 #
 # GET /
 # operationId: GET_CreateVirtualMFADevice
-export def "api get-create-virtual-mfa-device" [
+export def "get-create-virtual-mfa-device" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2321,7 +2321,7 @@ export def "api get-create-virtual-mfa-device" [
 #
 # POST /
 # operationId: POST_CreateVirtualMFADevice
-export def "api create-virtual-mfa-device" [
+export def "post-create-virtual-mfa-device" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2371,7 +2371,7 @@ export def "api create-virtual-mfa-device" [
 #
 # GET /
 # operationId: GET_DeactivateMFADevice
-export def "api get-deactivate-mfa-device" [
+export def "get-deactivate-mfa-device" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2419,7 +2419,7 @@ export def "api get-deactivate-mfa-device" [
 #
 # POST /
 # operationId: POST_DeactivateMFADevice
-export def "api create-deactivate-mfa-device" [
+export def "post-deactivate-mfa-device" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2469,7 +2469,7 @@ export def "api create-deactivate-mfa-device" [
 #
 # GET /
 # operationId: GET_DeleteAccessKey
-export def "api get-delete-access-key" [
+export def "get-delete-access-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2517,7 +2517,7 @@ export def "api get-delete-access-key" [
 #
 # POST /
 # operationId: POST_DeleteAccessKey
-export def "api create-delete-access-key" [
+export def "post-delete-access-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2567,7 +2567,7 @@ export def "api create-delete-access-key" [
 #
 # GET /
 # operationId: GET_DeleteAccountAlias
-export def "api get-delete-account-alias" [
+export def "get-delete-account-alias" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2614,7 +2614,7 @@ export def "api get-delete-account-alias" [
 #
 # POST /
 # operationId: POST_DeleteAccountAlias
-export def "api create-delete-account-alias" [
+export def "post-delete-account-alias" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2664,7 +2664,7 @@ export def "api create-delete-account-alias" [
 #
 # GET /
 # operationId: GET_DeleteAccountPasswordPolicy
-export def "api get-delete-account-password-policy" [
+export def "get-delete-account-password-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2710,7 +2710,7 @@ export def "api get-delete-account-password-policy" [
 #
 # POST /
 # operationId: POST_DeleteAccountPasswordPolicy
-export def "api create-delete-account-password-policy" [
+export def "post-delete-account-password-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2756,7 +2756,7 @@ export def "api create-delete-account-password-policy" [
 #
 # GET /
 # operationId: GET_DeleteGroup
-export def "api get-delete-group" [
+export def "get-delete-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2803,7 +2803,7 @@ export def "api get-delete-group" [
 #
 # POST /
 # operationId: POST_DeleteGroup
-export def "api create-delete-group" [
+export def "post-delete-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2853,7 +2853,7 @@ export def "api create-delete-group" [
 #
 # GET /
 # operationId: GET_DeleteGroupPolicy
-export def "api get-delete-group-policy" [
+export def "get-delete-group-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2901,7 +2901,7 @@ export def "api get-delete-group-policy" [
 #
 # POST /
 # operationId: POST_DeleteGroupPolicy
-export def "api create-delete-group-policy" [
+export def "post-delete-group-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2951,7 +2951,7 @@ export def "api create-delete-group-policy" [
 #
 # GET /
 # operationId: GET_DeleteInstanceProfile
-export def "api get-delete-instance-profile" [
+export def "get-delete-instance-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2998,7 +2998,7 @@ export def "api get-delete-instance-profile" [
 #
 # POST /
 # operationId: POST_DeleteInstanceProfile
-export def "api create-delete-instance-profile" [
+export def "post-delete-instance-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3048,7 +3048,7 @@ export def "api create-delete-instance-profile" [
 #
 # GET /
 # operationId: GET_DeleteLoginProfile
-export def "api get-delete-login-profile" [
+export def "get-delete-login-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3095,7 +3095,7 @@ export def "api get-delete-login-profile" [
 #
 # POST /
 # operationId: POST_DeleteLoginProfile
-export def "api create-delete-login-profile" [
+export def "post-delete-login-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3145,7 +3145,7 @@ export def "api create-delete-login-profile" [
 #
 # GET /
 # operationId: GET_DeleteOpenIDConnectProvider
-export def "api get-delete-open-connect-provider" [
+export def "get-delete-open-id-connect-provider" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3192,7 +3192,7 @@ export def "api get-delete-open-connect-provider" [
 #
 # POST /
 # operationId: POST_DeleteOpenIDConnectProvider
-export def "api create-delete-open-connect-provider" [
+export def "post-delete-open-id-connect-provider" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3242,7 +3242,7 @@ export def "api create-delete-open-connect-provider" [
 #
 # GET /
 # operationId: GET_DeletePolicy
-export def "api get-delete-policy" [
+export def "get-delete-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3289,7 +3289,7 @@ export def "api get-delete-policy" [
 #
 # POST /
 # operationId: POST_DeletePolicy
-export def "api create-delete-policy" [
+export def "post-delete-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3339,7 +3339,7 @@ export def "api create-delete-policy" [
 #
 # GET /
 # operationId: GET_DeletePolicyVersion
-export def "api get-delete-policy-version" [
+export def "get-delete-policy-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3387,7 +3387,7 @@ export def "api get-delete-policy-version" [
 #
 # POST /
 # operationId: POST_DeletePolicyVersion
-export def "api create-delete-policy-version" [
+export def "post-delete-policy-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3437,7 +3437,7 @@ export def "api create-delete-policy-version" [
 #
 # GET /
 # operationId: GET_DeleteRole
-export def "api get-delete-role" [
+export def "get-delete-role" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3484,7 +3484,7 @@ export def "api get-delete-role" [
 #
 # POST /
 # operationId: POST_DeleteRole
-export def "api create-delete-role" [
+export def "post-delete-role" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3534,7 +3534,7 @@ export def "api create-delete-role" [
 #
 # GET /
 # operationId: GET_DeleteRolePermissionsBoundary
-export def "api get-delete-role-permissions-boundary" [
+export def "get-delete-role-permissions-boundary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3581,7 +3581,7 @@ export def "api get-delete-role-permissions-boundary" [
 #
 # POST /
 # operationId: POST_DeleteRolePermissionsBoundary
-export def "api create-delete-role-permissions-boundary" [
+export def "post-delete-role-permissions-boundary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3631,7 +3631,7 @@ export def "api create-delete-role-permissions-boundary" [
 #
 # GET /
 # operationId: GET_DeleteRolePolicy
-export def "api get-delete-role-policy" [
+export def "get-delete-role-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3679,7 +3679,7 @@ export def "api get-delete-role-policy" [
 #
 # POST /
 # operationId: POST_DeleteRolePolicy
-export def "api create-delete-role-policy" [
+export def "post-delete-role-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3729,7 +3729,7 @@ export def "api create-delete-role-policy" [
 #
 # GET /
 # operationId: GET_DeleteSAMLProvider
-export def "api get-delete-saml-provider" [
+export def "get-delete-saml-provider" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3776,7 +3776,7 @@ export def "api get-delete-saml-provider" [
 #
 # POST /
 # operationId: POST_DeleteSAMLProvider
-export def "api create-delete-saml-provider" [
+export def "post-delete-saml-provider" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3826,7 +3826,7 @@ export def "api create-delete-saml-provider" [
 #
 # GET /
 # operationId: GET_DeleteSSHPublicKey
-export def "api get-delete-ssh-public-key" [
+export def "get-delete-ssh-public-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3874,7 +3874,7 @@ export def "api get-delete-ssh-public-key" [
 #
 # POST /
 # operationId: POST_DeleteSSHPublicKey
-export def "api create-delete-ssh-public-key" [
+export def "post-delete-ssh-public-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3924,7 +3924,7 @@ export def "api create-delete-ssh-public-key" [
 #
 # GET /
 # operationId: GET_DeleteServerCertificate
-export def "api get-delete-server-certificate" [
+export def "get-delete-server-certificate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3971,7 +3971,7 @@ export def "api get-delete-server-certificate" [
 #
 # POST /
 # operationId: POST_DeleteServerCertificate
-export def "api create-delete-server-certificate" [
+export def "post-delete-server-certificate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4021,7 +4021,7 @@ export def "api create-delete-server-certificate" [
 #
 # GET /
 # operationId: GET_DeleteServiceLinkedRole
-export def "api get-delete-service-linked-role" [
+export def "get-delete-service-linked-role" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4068,7 +4068,7 @@ export def "api get-delete-service-linked-role" [
 #
 # POST /
 # operationId: POST_DeleteServiceLinkedRole
-export def "api create-delete-service-linked-role" [
+export def "post-delete-service-linked-role" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4118,7 +4118,7 @@ export def "api create-delete-service-linked-role" [
 #
 # GET /
 # operationId: GET_DeleteServiceSpecificCredential
-export def "api get-delete-service-specific-credential" [
+export def "get-delete-service-specific-credential" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4166,7 +4166,7 @@ export def "api get-delete-service-specific-credential" [
 #
 # POST /
 # operationId: POST_DeleteServiceSpecificCredential
-export def "api create-delete-service-specific-credential" [
+export def "post-delete-service-specific-credential" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4216,7 +4216,7 @@ export def "api create-delete-service-specific-credential" [
 #
 # GET /
 # operationId: GET_DeleteSigningCertificate
-export def "api get-delete-signing-certificate" [
+export def "get-delete-signing-certificate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4264,7 +4264,7 @@ export def "api get-delete-signing-certificate" [
 #
 # POST /
 # operationId: POST_DeleteSigningCertificate
-export def "api create-delete-signing-certificate" [
+export def "post-delete-signing-certificate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4314,7 +4314,7 @@ export def "api create-delete-signing-certificate" [
 #
 # GET /
 # operationId: GET_DeleteUser
-export def "api get-delete-user" [
+export def "get-delete-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4361,7 +4361,7 @@ export def "api get-delete-user" [
 #
 # POST /
 # operationId: POST_DeleteUser
-export def "api create-delete-user" [
+export def "post-delete-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4411,7 +4411,7 @@ export def "api create-delete-user" [
 #
 # GET /
 # operationId: GET_DeleteUserPermissionsBoundary
-export def "api get-delete-user-permissions-boundary" [
+export def "get-delete-user-permissions-boundary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4458,7 +4458,7 @@ export def "api get-delete-user-permissions-boundary" [
 #
 # POST /
 # operationId: POST_DeleteUserPermissionsBoundary
-export def "api create-delete-user-permissions-boundary" [
+export def "post-delete-user-permissions-boundary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4508,7 +4508,7 @@ export def "api create-delete-user-permissions-boundary" [
 #
 # GET /
 # operationId: GET_DeleteUserPolicy
-export def "api get-delete-user-policy" [
+export def "get-delete-user-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4556,7 +4556,7 @@ export def "api get-delete-user-policy" [
 #
 # POST /
 # operationId: POST_DeleteUserPolicy
-export def "api create-delete-user-policy" [
+export def "post-delete-user-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4606,7 +4606,7 @@ export def "api create-delete-user-policy" [
 #
 # GET /
 # operationId: GET_DeleteVirtualMFADevice
-export def "api get-delete-virtual-mfa-device" [
+export def "get-delete-virtual-mfa-device" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4653,7 +4653,7 @@ export def "api get-delete-virtual-mfa-device" [
 #
 # POST /
 # operationId: POST_DeleteVirtualMFADevice
-export def "api create-delete-virtual-mfa-device" [
+export def "post-delete-virtual-mfa-device" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4703,7 +4703,7 @@ export def "api create-delete-virtual-mfa-device" [
 #
 # GET /
 # operationId: GET_DetachGroupPolicy
-export def "api get-detach-group-policy" [
+export def "get-detach-group-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4751,7 +4751,7 @@ export def "api get-detach-group-policy" [
 #
 # POST /
 # operationId: POST_DetachGroupPolicy
-export def "api create-detach-group-policy" [
+export def "post-detach-group-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4801,7 +4801,7 @@ export def "api create-detach-group-policy" [
 #
 # GET /
 # operationId: GET_DetachRolePolicy
-export def "api get-detach-role-policy" [
+export def "get-detach-role-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4849,7 +4849,7 @@ export def "api get-detach-role-policy" [
 #
 # POST /
 # operationId: POST_DetachRolePolicy
-export def "api create-detach-role-policy" [
+export def "post-detach-role-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4899,7 +4899,7 @@ export def "api create-detach-role-policy" [
 #
 # GET /
 # operationId: GET_DetachUserPolicy
-export def "api get-detach-user-policy" [
+export def "get-detach-user-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4947,7 +4947,7 @@ export def "api get-detach-user-policy" [
 #
 # POST /
 # operationId: POST_DetachUserPolicy
-export def "api create-detach-user-policy" [
+export def "post-detach-user-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4997,7 +4997,7 @@ export def "api create-detach-user-policy" [
 #
 # GET /
 # operationId: GET_EnableMFADevice
-export def "api get-enable-mfa-device" [
+export def "get-enable-mfa-device" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5047,7 +5047,7 @@ export def "api get-enable-mfa-device" [
 #
 # POST /
 # operationId: POST_EnableMFADevice
-export def "api create-enable-mfa-device" [
+export def "post-enable-mfa-device" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5097,7 +5097,7 @@ export def "api create-enable-mfa-device" [
 #
 # GET /
 # operationId: GET_GenerateCredentialReport
-export def "api get-generate-credential-report" [
+export def "get-generate-credential-report" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5143,7 +5143,7 @@ export def "api get-generate-credential-report" [
 #
 # POST /
 # operationId: POST_GenerateCredentialReport
-export def "api create-generate-credential-report" [
+export def "post-generate-credential-report" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5189,7 +5189,7 @@ export def "api create-generate-credential-report" [
 #
 # GET /
 # operationId: GET_GenerateOrganizationsAccessReport
-export def "api get-generate-organizations-access-report" [
+export def "get-generate-organizations-access-report" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5237,7 +5237,7 @@ export def "api get-generate-organizations-access-report" [
 #
 # POST /
 # operationId: POST_GenerateOrganizationsAccessReport
-export def "api create-generate-organizations-access-report" [
+export def "post-generate-organizations-access-report" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5287,7 +5287,7 @@ export def "api create-generate-organizations-access-report" [
 #
 # GET /
 # operationId: GET_GenerateServiceLastAccessedDetails
-export def "api get-generate-service-last-accessed-details" [
+export def "get-generate-service-last-accessed-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5335,7 +5335,7 @@ export def "api get-generate-service-last-accessed-details" [
 #
 # POST /
 # operationId: POST_GenerateServiceLastAccessedDetails
-export def "api create-generate-service-last-accessed-details" [
+export def "post-generate-service-last-accessed-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5385,7 +5385,7 @@ export def "api create-generate-service-last-accessed-details" [
 #
 # GET /
 # operationId: GET_GetAccessKeyLastUsed
-export def "api get-access-key-last-used" [
+export def "get-get-access-key-last-used" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5432,7 +5432,7 @@ export def "api get-access-key-last-used" [
 #
 # POST /
 # operationId: POST_GetAccessKeyLastUsed
-export def "api create-get-access-key-last-used" [
+export def "post-get-access-key-last-used" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5482,7 +5482,7 @@ export def "api create-get-access-key-last-used" [
 #
 # GET /
 # operationId: GET_GetAccountAuthorizationDetails
-export def "api get-account-authorization-details" [
+export def "get-get-account-authorization-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5531,7 +5531,7 @@ export def "api get-account-authorization-details" [
 #
 # POST /
 # operationId: POST_GetAccountAuthorizationDetails
-export def "api create-get-account-authorization-details" [
+export def "post-get-account-authorization-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5583,7 +5583,7 @@ export def "api create-get-account-authorization-details" [
 #
 # GET /
 # operationId: GET_GetAccountPasswordPolicy
-export def "api get-account-password-policy" [
+export def "get-get-account-password-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5629,7 +5629,7 @@ export def "api get-account-password-policy" [
 #
 # POST /
 # operationId: POST_GetAccountPasswordPolicy
-export def "api create-get-account-password-policy" [
+export def "post-get-account-password-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5675,7 +5675,7 @@ export def "api create-get-account-password-policy" [
 #
 # GET /
 # operationId: GET_GetAccountSummary
-export def "api get-account-summary" [
+export def "get-get-account-summary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5721,7 +5721,7 @@ export def "api get-account-summary" [
 #
 # POST /
 # operationId: POST_GetAccountSummary
-export def "api create-get-account-summary" [
+export def "post-get-account-summary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5767,7 +5767,7 @@ export def "api create-get-account-summary" [
 #
 # GET /
 # operationId: GET_GetContextKeysForCustomPolicy
-export def "api get-context-keys-for-custom-policy" [
+export def "get-get-context-keys-for-custom-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5814,7 +5814,7 @@ export def "api get-context-keys-for-custom-policy" [
 #
 # POST /
 # operationId: POST_GetContextKeysForCustomPolicy
-export def "api create-get-context-keys-for-custom-policy" [
+export def "post-get-context-keys-for-custom-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5864,7 +5864,7 @@ export def "api create-get-context-keys-for-custom-policy" [
 #
 # GET /
 # operationId: GET_GetContextKeysForPrincipalPolicy
-export def "api get-context-keys-for-principal-policy" [
+export def "get-get-context-keys-for-principal-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5912,7 +5912,7 @@ export def "api get-context-keys-for-principal-policy" [
 #
 # POST /
 # operationId: POST_GetContextKeysForPrincipalPolicy
-export def "api create-get-context-keys-for-principal-policy" [
+export def "post-get-context-keys-for-principal-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5962,7 +5962,7 @@ export def "api create-get-context-keys-for-principal-policy" [
 #
 # GET /
 # operationId: GET_GetCredentialReport
-export def "api get-credential-report" [
+export def "get-get-credential-report" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6008,7 +6008,7 @@ export def "api get-credential-report" [
 #
 # POST /
 # operationId: POST_GetCredentialReport
-export def "api create-get-credential-report" [
+export def "post-get-credential-report" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6054,7 +6054,7 @@ export def "api create-get-credential-report" [
 #
 # GET /
 # operationId: GET_GetGroup
-export def "api get-group" [
+export def "get-get-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6103,7 +6103,7 @@ export def "api get-group" [
 #
 # POST /
 # operationId: POST_GetGroup
-export def "api create-get-group" [
+export def "post-get-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6155,7 +6155,7 @@ export def "api create-get-group" [
 #
 # GET /
 # operationId: GET_GetGroupPolicy
-export def "api get-group-policy" [
+export def "get-get-group-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6203,7 +6203,7 @@ export def "api get-group-policy" [
 #
 # POST /
 # operationId: POST_GetGroupPolicy
-export def "api create-get-group-policy" [
+export def "post-get-group-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6253,7 +6253,7 @@ export def "api create-get-group-policy" [
 #
 # GET /
 # operationId: GET_GetInstanceProfile
-export def "api get-instance-profile" [
+export def "get-get-instance-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6300,7 +6300,7 @@ export def "api get-instance-profile" [
 #
 # POST /
 # operationId: POST_GetInstanceProfile
-export def "api create-get-instance-profile" [
+export def "post-get-instance-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6350,7 +6350,7 @@ export def "api create-get-instance-profile" [
 #
 # GET /
 # operationId: GET_GetLoginProfile
-export def "api get-login-profile" [
+export def "get-get-login-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6397,7 +6397,7 @@ export def "api get-login-profile" [
 #
 # POST /
 # operationId: POST_GetLoginProfile
-export def "api create-get-login-profile" [
+export def "post-get-login-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6447,7 +6447,7 @@ export def "api create-get-login-profile" [
 #
 # GET /
 # operationId: GET_GetOpenIDConnectProvider
-export def "api get-open-connect-provider" [
+export def "get-get-open-id-connect-provider" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6494,7 +6494,7 @@ export def "api get-open-connect-provider" [
 #
 # POST /
 # operationId: POST_GetOpenIDConnectProvider
-export def "api create-get-open-connect-provider" [
+export def "post-get-open-id-connect-provider" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6544,7 +6544,7 @@ export def "api create-get-open-connect-provider" [
 #
 # GET /
 # operationId: GET_GetOrganizationsAccessReport
-export def "api get-organizations-access-report" [
+export def "get-get-organizations-access-report" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6594,7 +6594,7 @@ export def "api get-organizations-access-report" [
 #
 # POST /
 # operationId: POST_GetOrganizationsAccessReport
-export def "api create-get-organizations-access-report" [
+export def "post-get-organizations-access-report" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6644,7 +6644,7 @@ export def "api create-get-organizations-access-report" [
 #
 # GET /
 # operationId: GET_GetPolicy
-export def "api get-policy" [
+export def "get-get-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6691,7 +6691,7 @@ export def "api get-policy" [
 #
 # POST /
 # operationId: POST_GetPolicy
-export def "api create-get-policy" [
+export def "post-get-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6741,7 +6741,7 @@ export def "api create-get-policy" [
 #
 # GET /
 # operationId: GET_GetPolicyVersion
-export def "api get-policy-version" [
+export def "get-get-policy-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6789,7 +6789,7 @@ export def "api get-policy-version" [
 #
 # POST /
 # operationId: POST_GetPolicyVersion
-export def "api create-get-policy-version" [
+export def "post-get-policy-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6839,7 +6839,7 @@ export def "api create-get-policy-version" [
 #
 # GET /
 # operationId: GET_GetRole
-export def "api get-role" [
+export def "get-get-role" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6886,7 +6886,7 @@ export def "api get-role" [
 #
 # POST /
 # operationId: POST_GetRole
-export def "api create-get-role" [
+export def "post-get-role" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6936,7 +6936,7 @@ export def "api create-get-role" [
 #
 # GET /
 # operationId: GET_GetRolePolicy
-export def "api get-role-policy" [
+export def "get-get-role-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6984,7 +6984,7 @@ export def "api get-role-policy" [
 #
 # POST /
 # operationId: POST_GetRolePolicy
-export def "api create-get-role-policy" [
+export def "post-get-role-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7034,7 +7034,7 @@ export def "api create-get-role-policy" [
 #
 # GET /
 # operationId: GET_GetSAMLProvider
-export def "api get-saml-provider" [
+export def "get-get-saml-provider" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7081,7 +7081,7 @@ export def "api get-saml-provider" [
 #
 # POST /
 # operationId: POST_GetSAMLProvider
-export def "api create-get-saml-provider" [
+export def "post-get-saml-provider" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7131,7 +7131,7 @@ export def "api create-get-saml-provider" [
 #
 # GET /
 # operationId: GET_GetSSHPublicKey
-export def "api get-ssh-public-key" [
+export def "get-get-ssh-public-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7180,7 +7180,7 @@ export def "api get-ssh-public-key" [
 #
 # POST /
 # operationId: POST_GetSSHPublicKey
-export def "api create-get-ssh-public-key" [
+export def "post-get-ssh-public-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7230,7 +7230,7 @@ export def "api create-get-ssh-public-key" [
 #
 # GET /
 # operationId: GET_GetServerCertificate
-export def "api get-server-certificate" [
+export def "get-get-server-certificate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7277,7 +7277,7 @@ export def "api get-server-certificate" [
 #
 # POST /
 # operationId: POST_GetServerCertificate
-export def "api create-get-server-certificate" [
+export def "post-get-server-certificate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7327,7 +7327,7 @@ export def "api create-get-server-certificate" [
 #
 # GET /
 # operationId: GET_GetServiceLastAccessedDetails
-export def "api get-service-last-accessed-details" [
+export def "get-get-service-last-accessed-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7376,7 +7376,7 @@ export def "api get-service-last-accessed-details" [
 #
 # POST /
 # operationId: POST_GetServiceLastAccessedDetails
-export def "api create-get-service-last-accessed-details" [
+export def "post-get-service-last-accessed-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7426,7 +7426,7 @@ export def "api create-get-service-last-accessed-details" [
 #
 # GET /
 # operationId: GET_GetServiceLastAccessedDetailsWithEntities
-export def "api get-service-last-accessed-details-with-entities" [
+export def "get-get-service-last-accessed-details-with-entities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7476,7 +7476,7 @@ export def "api get-service-last-accessed-details-with-entities" [
 #
 # POST /
 # operationId: POST_GetServiceLastAccessedDetailsWithEntities
-export def "api create-get-service-last-accessed-details-with-entities" [
+export def "post-get-service-last-accessed-details-with-entities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7526,7 +7526,7 @@ export def "api create-get-service-last-accessed-details-with-entities" [
 #
 # GET /
 # operationId: GET_GetServiceLinkedRoleDeletionStatus
-export def "api get-service-linked-role-deletion-status" [
+export def "get-get-service-linked-role-deletion-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7573,7 +7573,7 @@ export def "api get-service-linked-role-deletion-status" [
 #
 # POST /
 # operationId: POST_GetServiceLinkedRoleDeletionStatus
-export def "api create-get-service-linked-role-deletion-status" [
+export def "post-get-service-linked-role-deletion-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7623,7 +7623,7 @@ export def "api create-get-service-linked-role-deletion-status" [
 #
 # GET /
 # operationId: GET_GetUser
-export def "api get-user" [
+export def "get-get-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7670,7 +7670,7 @@ export def "api get-user" [
 #
 # POST /
 # operationId: POST_GetUser
-export def "api create-get-user" [
+export def "post-get-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7720,7 +7720,7 @@ export def "api create-get-user" [
 #
 # GET /
 # operationId: GET_GetUserPolicy
-export def "api get-user-policy" [
+export def "get-get-user-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7768,7 +7768,7 @@ export def "api get-user-policy" [
 #
 # POST /
 # operationId: POST_GetUserPolicy
-export def "api create-get-user-policy" [
+export def "post-get-user-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7818,7 +7818,7 @@ export def "api create-get-user-policy" [
 #
 # GET /
 # operationId: GET_ListAccessKeys
-export def "api get-list-access-keys" [
+export def "get-list-access-keys" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7867,7 +7867,7 @@ export def "api get-list-access-keys" [
 #
 # POST /
 # operationId: POST_ListAccessKeys
-export def "api create-list-access-keys" [
+export def "post-list-access-keys" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7919,7 +7919,7 @@ export def "api create-list-access-keys" [
 #
 # GET /
 # operationId: GET_ListAccountAliases
-export def "api get-list-account-aliases" [
+export def "get-list-account-aliases" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7967,7 +7967,7 @@ export def "api get-list-account-aliases" [
 #
 # POST /
 # operationId: POST_ListAccountAliases
-export def "api create-list-account-aliases" [
+export def "post-list-account-aliases" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8019,7 +8019,7 @@ export def "api create-list-account-aliases" [
 #
 # GET /
 # operationId: GET_ListAttachedGroupPolicies
-export def "api get-list-attached-group-policies" [
+export def "get-list-attached-group-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8069,7 +8069,7 @@ export def "api get-list-attached-group-policies" [
 #
 # POST /
 # operationId: POST_ListAttachedGroupPolicies
-export def "api create-list-attached-group-policies" [
+export def "post-list-attached-group-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8121,7 +8121,7 @@ export def "api create-list-attached-group-policies" [
 #
 # GET /
 # operationId: GET_ListAttachedRolePolicies
-export def "api get-list-attached-role-policies" [
+export def "get-list-attached-role-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8171,7 +8171,7 @@ export def "api get-list-attached-role-policies" [
 #
 # POST /
 # operationId: POST_ListAttachedRolePolicies
-export def "api create-list-attached-role-policies" [
+export def "post-list-attached-role-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8223,7 +8223,7 @@ export def "api create-list-attached-role-policies" [
 #
 # GET /
 # operationId: GET_ListAttachedUserPolicies
-export def "api get-list-attached-user-policies" [
+export def "get-list-attached-user-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8273,7 +8273,7 @@ export def "api get-list-attached-user-policies" [
 #
 # POST /
 # operationId: POST_ListAttachedUserPolicies
-export def "api create-list-attached-user-policies" [
+export def "post-list-attached-user-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8325,7 +8325,7 @@ export def "api create-list-attached-user-policies" [
 #
 # GET /
 # operationId: GET_ListEntitiesForPolicy
-export def "api get-list-entities-for-policy" [
+export def "get-list-entities-for-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8377,7 +8377,7 @@ export def "api get-list-entities-for-policy" [
 #
 # POST /
 # operationId: POST_ListEntitiesForPolicy
-export def "api create-list-entities-for-policy" [
+export def "post-list-entities-for-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8429,7 +8429,7 @@ export def "api create-list-entities-for-policy" [
 #
 # GET /
 # operationId: GET_ListGroupPolicies
-export def "api get-list-group-policies" [
+export def "get-list-group-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8478,7 +8478,7 @@ export def "api get-list-group-policies" [
 #
 # POST /
 # operationId: POST_ListGroupPolicies
-export def "api create-list-group-policies" [
+export def "post-list-group-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8530,7 +8530,7 @@ export def "api create-list-group-policies" [
 #
 # GET /
 # operationId: GET_ListGroups
-export def "api get-list-groups" [
+export def "get-list-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8579,7 +8579,7 @@ export def "api get-list-groups" [
 #
 # POST /
 # operationId: POST_ListGroups
-export def "api create-list-groups" [
+export def "post-list-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8631,7 +8631,7 @@ export def "api create-list-groups" [
 #
 # GET /
 # operationId: GET_ListGroupsForUser
-export def "api get-list-groups-for-user" [
+export def "get-list-groups-for-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8680,7 +8680,7 @@ export def "api get-list-groups-for-user" [
 #
 # POST /
 # operationId: POST_ListGroupsForUser
-export def "api create-list-groups-for-user" [
+export def "post-list-groups-for-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8732,7 +8732,7 @@ export def "api create-list-groups-for-user" [
 #
 # GET /
 # operationId: GET_ListInstanceProfileTags
-export def "api get-list-instance-profile-tags" [
+export def "get-list-instance-profile-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8781,7 +8781,7 @@ export def "api get-list-instance-profile-tags" [
 #
 # POST /
 # operationId: POST_ListInstanceProfileTags
-export def "api create-list-instance-profile-tags" [
+export def "post-list-instance-profile-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8831,7 +8831,7 @@ export def "api create-list-instance-profile-tags" [
 #
 # GET /
 # operationId: GET_ListInstanceProfiles
-export def "api get-list-instance-profiles" [
+export def "get-list-instance-profiles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8880,7 +8880,7 @@ export def "api get-list-instance-profiles" [
 #
 # POST /
 # operationId: POST_ListInstanceProfiles
-export def "api create-list-instance-profiles" [
+export def "post-list-instance-profiles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8932,7 +8932,7 @@ export def "api create-list-instance-profiles" [
 #
 # GET /
 # operationId: GET_ListInstanceProfilesForRole
-export def "api get-list-instance-profiles-for-role" [
+export def "get-list-instance-profiles-for-role" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8981,7 +8981,7 @@ export def "api get-list-instance-profiles-for-role" [
 #
 # POST /
 # operationId: POST_ListInstanceProfilesForRole
-export def "api create-list-instance-profiles-for-role" [
+export def "post-list-instance-profiles-for-role" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9033,7 +9033,7 @@ export def "api create-list-instance-profiles-for-role" [
 #
 # GET /
 # operationId: GET_ListMFADeviceTags
-export def "api get-list-mfa-device-tags" [
+export def "get-list-mfa-device-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9082,7 +9082,7 @@ export def "api get-list-mfa-device-tags" [
 #
 # POST /
 # operationId: POST_ListMFADeviceTags
-export def "api create-list-mfa-device-tags" [
+export def "post-list-mfa-device-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9132,7 +9132,7 @@ export def "api create-list-mfa-device-tags" [
 #
 # GET /
 # operationId: GET_ListMFADevices
-export def "api get-list-mfa-devices" [
+export def "get-list-mfa-devices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9181,7 +9181,7 @@ export def "api get-list-mfa-devices" [
 #
 # POST /
 # operationId: POST_ListMFADevices
-export def "api create-list-mfa-devices" [
+export def "post-list-mfa-devices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9233,7 +9233,7 @@ export def "api create-list-mfa-devices" [
 #
 # GET /
 # operationId: GET_ListOpenIDConnectProviderTags
-export def "api get-list-open-connect-provider-tags" [
+export def "get-list-open-id-connect-provider-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9282,7 +9282,7 @@ export def "api get-list-open-connect-provider-tags" [
 #
 # POST /
 # operationId: POST_ListOpenIDConnectProviderTags
-export def "api create-list-open-connect-provider-tags" [
+export def "post-list-open-id-connect-provider-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9332,7 +9332,7 @@ export def "api create-list-open-connect-provider-tags" [
 #
 # GET /
 # operationId: GET_ListOpenIDConnectProviders
-export def "api get-list-open-connect-providers" [
+export def "get-list-open-id-connect-providers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9378,7 +9378,7 @@ export def "api get-list-open-connect-providers" [
 #
 # POST /
 # operationId: POST_ListOpenIDConnectProviders
-export def "api create-list-open-connect-providers" [
+export def "post-list-open-id-connect-providers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9428,7 +9428,7 @@ export def "api create-list-open-connect-providers" [
 #
 # GET /
 # operationId: GET_ListPolicies
-export def "api get-list-policies" [
+export def "get-list-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9480,7 +9480,7 @@ export def "api get-list-policies" [
 #
 # POST /
 # operationId: POST_ListPolicies
-export def "api create-list-policies" [
+export def "post-list-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9532,7 +9532,7 @@ export def "api create-list-policies" [
 #
 # GET /
 # operationId: GET_ListPoliciesGrantingServiceAccess
-export def "api get-list-policies-granting-service-access" [
+export def "get-list-policies-granting-service-access" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9581,7 +9581,7 @@ export def "api get-list-policies-granting-service-access" [
 #
 # POST /
 # operationId: POST_ListPoliciesGrantingServiceAccess
-export def "api create-list-policies-granting-service-access" [
+export def "post-list-policies-granting-service-access" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9631,7 +9631,7 @@ export def "api create-list-policies-granting-service-access" [
 #
 # GET /
 # operationId: GET_ListPolicyTags
-export def "api get-list-policy-tags" [
+export def "get-list-policy-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9680,7 +9680,7 @@ export def "api get-list-policy-tags" [
 #
 # POST /
 # operationId: POST_ListPolicyTags
-export def "api create-list-policy-tags" [
+export def "post-list-policy-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9730,7 +9730,7 @@ export def "api create-list-policy-tags" [
 #
 # GET /
 # operationId: GET_ListPolicyVersions
-export def "api get-list-policy-versions" [
+export def "get-list-policy-versions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9779,7 +9779,7 @@ export def "api get-list-policy-versions" [
 #
 # POST /
 # operationId: POST_ListPolicyVersions
-export def "api create-list-policy-versions" [
+export def "post-list-policy-versions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9831,7 +9831,7 @@ export def "api create-list-policy-versions" [
 #
 # GET /
 # operationId: GET_ListRolePolicies
-export def "api get-list-role-policies" [
+export def "get-list-role-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9880,7 +9880,7 @@ export def "api get-list-role-policies" [
 #
 # POST /
 # operationId: POST_ListRolePolicies
-export def "api create-list-role-policies" [
+export def "post-list-role-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9932,7 +9932,7 @@ export def "api create-list-role-policies" [
 #
 # GET /
 # operationId: GET_ListRoleTags
-export def "api get-list-role-tags" [
+export def "get-list-role-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9981,7 +9981,7 @@ export def "api get-list-role-tags" [
 #
 # POST /
 # operationId: POST_ListRoleTags
-export def "api create-list-role-tags" [
+export def "post-list-role-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10031,7 +10031,7 @@ export def "api create-list-role-tags" [
 #
 # GET /
 # operationId: GET_ListRoles
-export def "api get-list-roles" [
+export def "get-list-roles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10080,7 +10080,7 @@ export def "api get-list-roles" [
 #
 # POST /
 # operationId: POST_ListRoles
-export def "api create-list-roles" [
+export def "post-list-roles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10132,7 +10132,7 @@ export def "api create-list-roles" [
 #
 # GET /
 # operationId: GET_ListSAMLProviderTags
-export def "api get-list-saml-provider-tags" [
+export def "get-list-saml-provider-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10181,7 +10181,7 @@ export def "api get-list-saml-provider-tags" [
 #
 # POST /
 # operationId: POST_ListSAMLProviderTags
-export def "api create-list-saml-provider-tags" [
+export def "post-list-saml-provider-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10231,7 +10231,7 @@ export def "api create-list-saml-provider-tags" [
 #
 # GET /
 # operationId: GET_ListSAMLProviders
-export def "api get-list-saml-providers" [
+export def "get-list-saml-providers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10277,7 +10277,7 @@ export def "api get-list-saml-providers" [
 #
 # POST /
 # operationId: POST_ListSAMLProviders
-export def "api create-list-saml-providers" [
+export def "post-list-saml-providers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10327,7 +10327,7 @@ export def "api create-list-saml-providers" [
 #
 # GET /
 # operationId: GET_ListSSHPublicKeys
-export def "api get-list-ssh-public-keys" [
+export def "get-list-ssh-public-keys" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10376,7 +10376,7 @@ export def "api get-list-ssh-public-keys" [
 #
 # POST /
 # operationId: POST_ListSSHPublicKeys
-export def "api create-list-ssh-public-keys" [
+export def "post-list-ssh-public-keys" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10428,7 +10428,7 @@ export def "api create-list-ssh-public-keys" [
 #
 # GET /
 # operationId: GET_ListServerCertificateTags
-export def "api get-list-server-certificate-tags" [
+export def "get-list-server-certificate-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10477,7 +10477,7 @@ export def "api get-list-server-certificate-tags" [
 #
 # POST /
 # operationId: POST_ListServerCertificateTags
-export def "api create-list-server-certificate-tags" [
+export def "post-list-server-certificate-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10527,7 +10527,7 @@ export def "api create-list-server-certificate-tags" [
 #
 # GET /
 # operationId: GET_ListServerCertificates
-export def "api get-list-server-certificates" [
+export def "get-list-server-certificates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10576,7 +10576,7 @@ export def "api get-list-server-certificates" [
 #
 # POST /
 # operationId: POST_ListServerCertificates
-export def "api create-list-server-certificates" [
+export def "post-list-server-certificates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10628,7 +10628,7 @@ export def "api create-list-server-certificates" [
 #
 # GET /
 # operationId: GET_ListServiceSpecificCredentials
-export def "api get-list-service-specific-credentials" [
+export def "get-list-service-specific-credentials" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10676,7 +10676,7 @@ export def "api get-list-service-specific-credentials" [
 #
 # POST /
 # operationId: POST_ListServiceSpecificCredentials
-export def "api create-list-service-specific-credentials" [
+export def "post-list-service-specific-credentials" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10726,7 +10726,7 @@ export def "api create-list-service-specific-credentials" [
 #
 # GET /
 # operationId: GET_ListSigningCertificates
-export def "api get-list-signing-certificates" [
+export def "get-list-signing-certificates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10775,7 +10775,7 @@ export def "api get-list-signing-certificates" [
 #
 # POST /
 # operationId: POST_ListSigningCertificates
-export def "api create-list-signing-certificates" [
+export def "post-list-signing-certificates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10827,7 +10827,7 @@ export def "api create-list-signing-certificates" [
 #
 # GET /
 # operationId: GET_ListUserPolicies
-export def "api get-list-user-policies" [
+export def "get-list-user-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10876,7 +10876,7 @@ export def "api get-list-user-policies" [
 #
 # POST /
 # operationId: POST_ListUserPolicies
-export def "api create-list-user-policies" [
+export def "post-list-user-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10928,7 +10928,7 @@ export def "api create-list-user-policies" [
 #
 # GET /
 # operationId: GET_ListUserTags
-export def "api get-list-user-tags" [
+export def "get-list-user-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10977,7 +10977,7 @@ export def "api get-list-user-tags" [
 #
 # POST /
 # operationId: POST_ListUserTags
-export def "api create-list-user-tags" [
+export def "post-list-user-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11029,7 +11029,7 @@ export def "api create-list-user-tags" [
 #
 # GET /
 # operationId: GET_ListUsers
-export def "api get-list-users" [
+export def "get-list-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11078,7 +11078,7 @@ export def "api get-list-users" [
 #
 # POST /
 # operationId: POST_ListUsers
-export def "api create-list-users" [
+export def "post-list-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11130,7 +11130,7 @@ export def "api create-list-users" [
 #
 # GET /
 # operationId: GET_ListVirtualMFADevices
-export def "api get-list-virtual-mfa-devices" [
+export def "get-list-virtual-mfa-devices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11179,7 +11179,7 @@ export def "api get-list-virtual-mfa-devices" [
 #
 # POST /
 # operationId: POST_ListVirtualMFADevices
-export def "api create-list-virtual-mfa-devices" [
+export def "post-list-virtual-mfa-devices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11231,7 +11231,7 @@ export def "api create-list-virtual-mfa-devices" [
 #
 # GET /
 # operationId: GET_PutGroupPolicy
-export def "api get-update-group-policy" [
+export def "get-put-group-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11280,7 +11280,7 @@ export def "api get-update-group-policy" [
 #
 # POST /
 # operationId: POST_PutGroupPolicy
-export def "api create-update-group-policy" [
+export def "post-put-group-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11330,7 +11330,7 @@ export def "api create-update-group-policy" [
 #
 # GET /
 # operationId: GET_PutRolePermissionsBoundary
-export def "api get-update-role-permissions-boundary" [
+export def "get-put-role-permissions-boundary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11378,7 +11378,7 @@ export def "api get-update-role-permissions-boundary" [
 #
 # POST /
 # operationId: POST_PutRolePermissionsBoundary
-export def "api create-update-role-permissions-boundary" [
+export def "post-put-role-permissions-boundary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11428,7 +11428,7 @@ export def "api create-update-role-permissions-boundary" [
 #
 # GET /
 # operationId: GET_PutRolePolicy
-export def "api get-update-role-policy" [
+export def "get-put-role-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11477,7 +11477,7 @@ export def "api get-update-role-policy" [
 #
 # POST /
 # operationId: POST_PutRolePolicy
-export def "api create-update-role-policy" [
+export def "post-put-role-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11527,7 +11527,7 @@ export def "api create-update-role-policy" [
 #
 # GET /
 # operationId: GET_PutUserPermissionsBoundary
-export def "api get-update-user-permissions-boundary" [
+export def "get-put-user-permissions-boundary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11575,7 +11575,7 @@ export def "api get-update-user-permissions-boundary" [
 #
 # POST /
 # operationId: POST_PutUserPermissionsBoundary
-export def "api create-update-user-permissions-boundary" [
+export def "post-put-user-permissions-boundary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11625,7 +11625,7 @@ export def "api create-update-user-permissions-boundary" [
 #
 # GET /
 # operationId: GET_PutUserPolicy
-export def "api get-update-user-policy" [
+export def "get-put-user-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11674,7 +11674,7 @@ export def "api get-update-user-policy" [
 #
 # POST /
 # operationId: POST_PutUserPolicy
-export def "api create-update-user-policy" [
+export def "post-put-user-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11724,7 +11724,7 @@ export def "api create-update-user-policy" [
 #
 # GET /
 # operationId: GET_RemoveClientIDFromOpenIDConnectProvider
-export def "api get-delete-client-from-open-connect-provider" [
+export def "get-remove-client-id-from-open-id-connect-provider" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11772,7 +11772,7 @@ export def "api get-delete-client-from-open-connect-provider" [
 #
 # POST /
 # operationId: POST_RemoveClientIDFromOpenIDConnectProvider
-export def "api create-delete-client-from-open-connect-provider" [
+export def "post-remove-client-id-from-open-id-connect-provider" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11822,7 +11822,7 @@ export def "api create-delete-client-from-open-connect-provider" [
 #
 # GET /
 # operationId: GET_RemoveRoleFromInstanceProfile
-export def "api get-delete-role-from-instance-profile" [
+export def "get-remove-role-from-instance-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11870,7 +11870,7 @@ export def "api get-delete-role-from-instance-profile" [
 #
 # POST /
 # operationId: POST_RemoveRoleFromInstanceProfile
-export def "api create-delete-role-from-instance-profile" [
+export def "post-remove-role-from-instance-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11920,7 +11920,7 @@ export def "api create-delete-role-from-instance-profile" [
 #
 # GET /
 # operationId: GET_RemoveUserFromGroup
-export def "api get-delete-user-from-group" [
+export def "get-remove-user-from-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11968,7 +11968,7 @@ export def "api get-delete-user-from-group" [
 #
 # POST /
 # operationId: POST_RemoveUserFromGroup
-export def "api create-delete-user-from-group" [
+export def "post-remove-user-from-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12018,7 +12018,7 @@ export def "api create-delete-user-from-group" [
 #
 # GET /
 # operationId: GET_ResetServiceSpecificCredential
-export def "api get-reset-service-specific-credential" [
+export def "get-reset-service-specific-credential" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12066,7 +12066,7 @@ export def "api get-reset-service-specific-credential" [
 #
 # POST /
 # operationId: POST_ResetServiceSpecificCredential
-export def "api create-reset-service-specific-credential" [
+export def "post-reset-service-specific-credential" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12116,7 +12116,7 @@ export def "api create-reset-service-specific-credential" [
 #
 # GET /
 # operationId: GET_ResyncMFADevice
-export def "api get-resync-mfa-device" [
+export def "get-resync-mfa-device" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12166,7 +12166,7 @@ export def "api get-resync-mfa-device" [
 #
 # POST /
 # operationId: POST_ResyncMFADevice
-export def "api create-resync-mfa-device" [
+export def "post-resync-mfa-device" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12216,7 +12216,7 @@ export def "api create-resync-mfa-device" [
 #
 # GET /
 # operationId: GET_SetDefaultPolicyVersion
-export def "api get-update-default-policy-version" [
+export def "get-set-default-policy-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12264,7 +12264,7 @@ export def "api get-update-default-policy-version" [
 #
 # POST /
 # operationId: POST_SetDefaultPolicyVersion
-export def "api create-update-default-policy-version" [
+export def "post-set-default-policy-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12314,7 +12314,7 @@ export def "api create-update-default-policy-version" [
 #
 # GET /
 # operationId: GET_SetSecurityTokenServicePreferences
-export def "api get-update-security-token-service-preferences" [
+export def "get-set-security-token-service-preferences" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12361,7 +12361,7 @@ export def "api get-update-security-token-service-preferences" [
 #
 # POST /
 # operationId: POST_SetSecurityTokenServicePreferences
-export def "api create-update-security-token-service-preferences" [
+export def "post-set-security-token-service-preferences" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12411,7 +12411,7 @@ export def "api create-update-security-token-service-preferences" [
 #
 # GET /
 # operationId: GET_SimulateCustomPolicy
-export def "api get-simulate-custom-policy" [
+export def "get-simulate-custom-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12468,7 +12468,7 @@ export def "api get-simulate-custom-policy" [
 #
 # POST /
 # operationId: POST_SimulateCustomPolicy
-export def "api create-simulate-custom-policy" [
+export def "post-simulate-custom-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12520,7 +12520,7 @@ export def "api create-simulate-custom-policy" [
 #
 # GET /
 # operationId: GET_SimulatePrincipalPolicy
-export def "api get-simulate-principal-policy" [
+export def "get-simulate-principal-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12578,7 +12578,7 @@ export def "api get-simulate-principal-policy" [
 #
 # POST /
 # operationId: POST_SimulatePrincipalPolicy
-export def "api create-simulate-principal-policy" [
+export def "post-simulate-principal-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12630,7 +12630,7 @@ export def "api create-simulate-principal-policy" [
 #
 # GET /
 # operationId: GET_TagInstanceProfile
-export def "api get-tag-instance-profile" [
+export def "get-tag-instance-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12678,7 +12678,7 @@ export def "api get-tag-instance-profile" [
 #
 # POST /
 # operationId: POST_TagInstanceProfile
-export def "api create-tag-instance-profile" [
+export def "post-tag-instance-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12728,7 +12728,7 @@ export def "api create-tag-instance-profile" [
 #
 # GET /
 # operationId: GET_TagMFADevice
-export def "api get-tag-mfa-device" [
+export def "get-tag-mfa-device" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12776,7 +12776,7 @@ export def "api get-tag-mfa-device" [
 #
 # POST /
 # operationId: POST_TagMFADevice
-export def "api create-tag-mfa-device" [
+export def "post-tag-mfa-device" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12826,7 +12826,7 @@ export def "api create-tag-mfa-device" [
 #
 # GET /
 # operationId: GET_TagOpenIDConnectProvider
-export def "api get-tag-open-connect-provider" [
+export def "get-tag-open-id-connect-provider" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12874,7 +12874,7 @@ export def "api get-tag-open-connect-provider" [
 #
 # POST /
 # operationId: POST_TagOpenIDConnectProvider
-export def "api create-tag-open-connect-provider" [
+export def "post-tag-open-id-connect-provider" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12924,7 +12924,7 @@ export def "api create-tag-open-connect-provider" [
 #
 # GET /
 # operationId: GET_TagPolicy
-export def "api get-tag-policy" [
+export def "get-tag-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12972,7 +12972,7 @@ export def "api get-tag-policy" [
 #
 # POST /
 # operationId: POST_TagPolicy
-export def "api create-tag-policy" [
+export def "post-tag-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13022,7 +13022,7 @@ export def "api create-tag-policy" [
 #
 # GET /
 # operationId: GET_TagRole
-export def "api get-tag-role" [
+export def "get-tag-role" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13070,7 +13070,7 @@ export def "api get-tag-role" [
 #
 # POST /
 # operationId: POST_TagRole
-export def "api create-tag-role" [
+export def "post-tag-role" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13120,7 +13120,7 @@ export def "api create-tag-role" [
 #
 # GET /
 # operationId: GET_TagSAMLProvider
-export def "api get-tag-saml-provider" [
+export def "get-tag-saml-provider" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13168,7 +13168,7 @@ export def "api get-tag-saml-provider" [
 #
 # POST /
 # operationId: POST_TagSAMLProvider
-export def "api create-tag-saml-provider" [
+export def "post-tag-saml-provider" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13218,7 +13218,7 @@ export def "api create-tag-saml-provider" [
 #
 # GET /
 # operationId: GET_TagServerCertificate
-export def "api get-tag-server-certificate" [
+export def "get-tag-server-certificate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13266,7 +13266,7 @@ export def "api get-tag-server-certificate" [
 #
 # POST /
 # operationId: POST_TagServerCertificate
-export def "api create-tag-server-certificate" [
+export def "post-tag-server-certificate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13316,7 +13316,7 @@ export def "api create-tag-server-certificate" [
 #
 # GET /
 # operationId: GET_TagUser
-export def "api get-tag-user" [
+export def "get-tag-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13364,7 +13364,7 @@ export def "api get-tag-user" [
 #
 # POST /
 # operationId: POST_TagUser
-export def "api create-tag-user" [
+export def "post-tag-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13414,7 +13414,7 @@ export def "api create-tag-user" [
 #
 # GET /
 # operationId: GET_UntagInstanceProfile
-export def "api get-untag-instance-profile" [
+export def "get-untag-instance-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13462,7 +13462,7 @@ export def "api get-untag-instance-profile" [
 #
 # POST /
 # operationId: POST_UntagInstanceProfile
-export def "api create-untag-instance-profile" [
+export def "post-untag-instance-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13512,7 +13512,7 @@ export def "api create-untag-instance-profile" [
 #
 # GET /
 # operationId: GET_UntagMFADevice
-export def "api get-untag-mfa-device" [
+export def "get-untag-mfa-device" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13560,7 +13560,7 @@ export def "api get-untag-mfa-device" [
 #
 # POST /
 # operationId: POST_UntagMFADevice
-export def "api create-untag-mfa-device" [
+export def "post-untag-mfa-device" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13610,7 +13610,7 @@ export def "api create-untag-mfa-device" [
 #
 # GET /
 # operationId: GET_UntagOpenIDConnectProvider
-export def "api get-untag-open-connect-provider" [
+export def "get-untag-open-id-connect-provider" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13658,7 +13658,7 @@ export def "api get-untag-open-connect-provider" [
 #
 # POST /
 # operationId: POST_UntagOpenIDConnectProvider
-export def "api create-untag-open-connect-provider" [
+export def "post-untag-open-id-connect-provider" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13708,7 +13708,7 @@ export def "api create-untag-open-connect-provider" [
 #
 # GET /
 # operationId: GET_UntagPolicy
-export def "api get-untag-policy" [
+export def "get-untag-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13756,7 +13756,7 @@ export def "api get-untag-policy" [
 #
 # POST /
 # operationId: POST_UntagPolicy
-export def "api create-untag-policy" [
+export def "post-untag-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13806,7 +13806,7 @@ export def "api create-untag-policy" [
 #
 # GET /
 # operationId: GET_UntagRole
-export def "api get-untag-role" [
+export def "get-untag-role" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13854,7 +13854,7 @@ export def "api get-untag-role" [
 #
 # POST /
 # operationId: POST_UntagRole
-export def "api create-untag-role" [
+export def "post-untag-role" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13904,7 +13904,7 @@ export def "api create-untag-role" [
 #
 # GET /
 # operationId: GET_UntagSAMLProvider
-export def "api get-untag-saml-provider" [
+export def "get-untag-saml-provider" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13952,7 +13952,7 @@ export def "api get-untag-saml-provider" [
 #
 # POST /
 # operationId: POST_UntagSAMLProvider
-export def "api create-untag-saml-provider" [
+export def "post-untag-saml-provider" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14002,7 +14002,7 @@ export def "api create-untag-saml-provider" [
 #
 # GET /
 # operationId: GET_UntagServerCertificate
-export def "api get-untag-server-certificate" [
+export def "get-untag-server-certificate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14050,7 +14050,7 @@ export def "api get-untag-server-certificate" [
 #
 # POST /
 # operationId: POST_UntagServerCertificate
-export def "api create-untag-server-certificate" [
+export def "post-untag-server-certificate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14100,7 +14100,7 @@ export def "api create-untag-server-certificate" [
 #
 # GET /
 # operationId: GET_UntagUser
-export def "api get-untag-user" [
+export def "get-untag-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14148,7 +14148,7 @@ export def "api get-untag-user" [
 #
 # POST /
 # operationId: POST_UntagUser
-export def "api create-untag-user" [
+export def "post-untag-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14198,7 +14198,7 @@ export def "api create-untag-user" [
 #
 # GET /
 # operationId: GET_UpdateAccessKey
-export def "api get-update-access-key" [
+export def "get-update-access-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14247,7 +14247,7 @@ export def "api get-update-access-key" [
 #
 # POST /
 # operationId: POST_UpdateAccessKey
-export def "api create-update-access-key" [
+export def "post-update-access-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14297,7 +14297,7 @@ export def "api create-update-access-key" [
 #
 # GET /
 # operationId: GET_UpdateAccountPasswordPolicy
-export def "api get-update-account-password-policy" [
+export def "get-update-account-password-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14352,7 +14352,7 @@ export def "api get-update-account-password-policy" [
 #
 # POST /
 # operationId: POST_UpdateAccountPasswordPolicy
-export def "api create-update-account-password-policy" [
+export def "post-update-account-password-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14402,7 +14402,7 @@ export def "api create-update-account-password-policy" [
 #
 # GET /
 # operationId: GET_UpdateAssumeRolePolicy
-export def "api get-update-assume-role-policy" [
+export def "get-update-assume-role-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14450,7 +14450,7 @@ export def "api get-update-assume-role-policy" [
 #
 # POST /
 # operationId: POST_UpdateAssumeRolePolicy
-export def "api create-update-assume-role-policy" [
+export def "post-update-assume-role-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14500,7 +14500,7 @@ export def "api create-update-assume-role-policy" [
 #
 # GET /
 # operationId: GET_UpdateGroup
-export def "api get-update-group" [
+export def "get-update-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14549,7 +14549,7 @@ export def "api get-update-group" [
 #
 # POST /
 # operationId: POST_UpdateGroup
-export def "api create-update-group" [
+export def "post-update-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14599,7 +14599,7 @@ export def "api create-update-group" [
 #
 # GET /
 # operationId: GET_UpdateLoginProfile
-export def "api get-update-login-profile" [
+export def "get-update-login-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14648,7 +14648,7 @@ export def "api get-update-login-profile" [
 #
 # POST /
 # operationId: POST_UpdateLoginProfile
-export def "api create-update-login-profile" [
+export def "post-update-login-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14698,7 +14698,7 @@ export def "api create-update-login-profile" [
 #
 # GET /
 # operationId: GET_UpdateOpenIDConnectProviderThumbprint
-export def "api get-update-open-connect-provider-thumbprint" [
+export def "get-update-open-id-connect-provider-thumbprint" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14746,7 +14746,7 @@ export def "api get-update-open-connect-provider-thumbprint" [
 #
 # POST /
 # operationId: POST_UpdateOpenIDConnectProviderThumbprint
-export def "api create-update-open-connect-provider-thumbprint" [
+export def "post-update-open-id-connect-provider-thumbprint" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14796,7 +14796,7 @@ export def "api create-update-open-connect-provider-thumbprint" [
 #
 # GET /
 # operationId: GET_UpdateRole
-export def "api get-update-role" [
+export def "get-update-role" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14845,7 +14845,7 @@ export def "api get-update-role" [
 #
 # POST /
 # operationId: POST_UpdateRole
-export def "api create-update-role" [
+export def "post-update-role" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14895,7 +14895,7 @@ export def "api create-update-role" [
 #
 # GET /
 # operationId: GET_UpdateRoleDescription
-export def "api get-update-role-description" [
+export def "get-update-role-description" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14943,7 +14943,7 @@ export def "api get-update-role-description" [
 #
 # POST /
 # operationId: POST_UpdateRoleDescription
-export def "api create-update-role-description" [
+export def "post-update-role-description" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14993,7 +14993,7 @@ export def "api create-update-role-description" [
 #
 # GET /
 # operationId: GET_UpdateSAMLProvider
-export def "api get-update-saml-provider" [
+export def "get-update-saml-provider" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15041,7 +15041,7 @@ export def "api get-update-saml-provider" [
 #
 # POST /
 # operationId: POST_UpdateSAMLProvider
-export def "api create-update-saml-provider" [
+export def "post-update-saml-provider" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15091,7 +15091,7 @@ export def "api create-update-saml-provider" [
 #
 # GET /
 # operationId: GET_UpdateSSHPublicKey
-export def "api get-update-ssh-public-key" [
+export def "get-update-ssh-public-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15140,7 +15140,7 @@ export def "api get-update-ssh-public-key" [
 #
 # POST /
 # operationId: POST_UpdateSSHPublicKey
-export def "api create-update-ssh-public-key" [
+export def "post-update-ssh-public-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15190,7 +15190,7 @@ export def "api create-update-ssh-public-key" [
 #
 # GET /
 # operationId: GET_UpdateServerCertificate
-export def "api get-update-server-certificate" [
+export def "get-update-server-certificate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15239,7 +15239,7 @@ export def "api get-update-server-certificate" [
 #
 # POST /
 # operationId: POST_UpdateServerCertificate
-export def "api create-update-server-certificate" [
+export def "post-update-server-certificate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15289,7 +15289,7 @@ export def "api create-update-server-certificate" [
 #
 # GET /
 # operationId: GET_UpdateServiceSpecificCredential
-export def "api get-update-service-specific-credential" [
+export def "get-update-service-specific-credential" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15338,7 +15338,7 @@ export def "api get-update-service-specific-credential" [
 #
 # POST /
 # operationId: POST_UpdateServiceSpecificCredential
-export def "api create-update-service-specific-credential" [
+export def "post-update-service-specific-credential" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15388,7 +15388,7 @@ export def "api create-update-service-specific-credential" [
 #
 # GET /
 # operationId: GET_UpdateSigningCertificate
-export def "api get-update-signing-certificate" [
+export def "get-update-signing-certificate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15437,7 +15437,7 @@ export def "api get-update-signing-certificate" [
 #
 # POST /
 # operationId: POST_UpdateSigningCertificate
-export def "api create-update-signing-certificate" [
+export def "post-update-signing-certificate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15487,7 +15487,7 @@ export def "api create-update-signing-certificate" [
 #
 # GET /
 # operationId: GET_UpdateUser
-export def "api get-update-user" [
+export def "get-update-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15536,7 +15536,7 @@ export def "api get-update-user" [
 #
 # POST /
 # operationId: POST_UpdateUser
-export def "api create-update-user" [
+export def "post-update-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15586,7 +15586,7 @@ export def "api create-update-user" [
 #
 # GET /
 # operationId: GET_UploadSSHPublicKey
-export def "api get-upload-ssh-public-key" [
+export def "get-upload-ssh-public-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15634,7 +15634,7 @@ export def "api get-upload-ssh-public-key" [
 #
 # POST /
 # operationId: POST_UploadSSHPublicKey
-export def "api create-upload-ssh-public-key" [
+export def "post-upload-ssh-public-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15684,7 +15684,7 @@ export def "api create-upload-ssh-public-key" [
 #
 # GET /
 # operationId: GET_UploadServerCertificate
-export def "api get-upload-server-certificate" [
+export def "get-upload-server-certificate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15736,7 +15736,7 @@ export def "api get-upload-server-certificate" [
 #
 # POST /
 # operationId: POST_UploadServerCertificate
-export def "api create-upload-server-certificate" [
+export def "post-upload-server-certificate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15786,7 +15786,7 @@ export def "api create-upload-server-certificate" [
 #
 # GET /
 # operationId: GET_UploadSigningCertificate
-export def "api get-upload-signing-certificate" [
+export def "get-upload-signing-certificate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15834,7 +15834,7 @@ export def "api get-upload-signing-certificate" [
 #
 # POST /
 # operationId: POST_UploadSigningCertificate
-export def "api create-upload-signing-certificate" [
+export def "post-upload-signing-certificate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

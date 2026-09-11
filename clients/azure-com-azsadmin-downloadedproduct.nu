@@ -110,7 +110,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resourcegroups-providers-microsoft-azure-bridge-admin-activations-downloaded-products list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "downloaded-products-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -134,7 +134,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroup}/providers/Microsoft.AzureBridge.Admin/activations/{activationName}/downloadedProducts
 # operationId: DownloadedProducts_List
-export def "subscriptions-resourcegroups-providers-microsoft-azure-bridge-admin-activations-downloaded-products list" [
+export def "downloaded-products-list" [
   subscription_id: string
   resource_group: string
   activation_name: string
@@ -176,7 +176,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-azure-bridge-admin-
 #
 # DELETE /subscriptions/{subscriptionId}/resourcegroups/{resourceGroup}/providers/Microsoft.AzureBridge.Admin/activations/{activationName}/downloadedProducts/{productName}
 # operationId: DownloadedProducts_Delete
-export def "subscriptions-resourcegroups-providers-microsoft-azure-bridge-admin-activations-downloaded-products delete" [
+export def "downloaded-products-delete" [
   subscription_id: string
   resource_group: string
   activation_name: string
@@ -220,7 +220,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-azure-bridge-admin-
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroup}/providers/Microsoft.AzureBridge.Admin/activations/{activationName}/downloadedProducts/{productName}
 # operationId: DownloadedProducts_Get
-export def "subscriptions-resourcegroups-providers-microsoft-azure-bridge-admin-activations-downloaded-products get" [
+export def "downloaded-products-get" [
   subscription_id: string
   resource_group: string
   activation_name: string
@@ -265,7 +265,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-azure-bridge-admin-
 # PUT /subscriptions/{subscriptionId}/resourcegroups/{resourceGroup}/providers/Microsoft.AzureBridge.Admin/activations/{activationName}/downloadedProducts/{productName}
 # operationId: DownloadedProducts_Create
 # --properties shape: {legalTerms?: string, links?: list, privacyPolicy?: string, productDetailsProperties?: record, provisioningState?: "Stopped"|"Starting"|"Running"|"Stopping"|"Succeeded"|"Downloading", vmExtensionType?: string, billingPartNumber?: string, compatibility?: record, description?: string, displayName?: string, galleryItemIdentity?: string, iconUris?: record, offer?: string, offerVersion?: string, payloadLength?: int, productKind?: string, productProperties?: record, publisherDisplayName?: string, ... (2 more fields)}
-export def "subscriptions-resourcegroups-providers-microsoft-azure-bridge-admin-activations-downloaded-products create" [
+export def "downloaded-products-create" [
   subscription_id: string
   resource_group: string
   activation_name: string

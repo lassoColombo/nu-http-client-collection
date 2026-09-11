@@ -133,7 +133,7 @@ def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken" "none"
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "checkout-pub-gateway-callback create-process-order" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "process-order" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -157,7 +157,7 @@ export def commands []: nothing -> table {
 #
 # POST /api/checkout/pub/gatewayCallback/{orderGroup}
 # operationId: ProcessOrder
-export def "checkout-pub-gateway-callback create-process-order" [
+export def "process-order" [
   order_group: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -198,7 +198,7 @@ export def "checkout-pub-gateway-callback create-process-order" [
 #
 # GET /api/checkout/pub/orderForm
 # operationId: CreateANewCart
-export def "checkout-pub-order-form create-new-cart" [
+export def "create-a-new-cart" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -238,7 +238,7 @@ export def "checkout-pub-order-form create-new-cart" [
 #
 # GET /api/checkout/pub/orderForm/{orderFormId}
 # operationId: GetCartInformationById
-export def "checkout-pub-order-form get-cart-information" [
+export def "get-cart-information-by-id" [
   order_form_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -280,7 +280,7 @@ export def "checkout-pub-order-form get-cart-information" [
 #
 # POST /api/checkout/pub/orderForm/{orderFormId}/attachments/clientPreferencesData
 # operationId: AddClientPreferences
-export def "checkout-pub-order-form-attachments-client-preferences-data create" [
+export def "add-client-preferences" [
   order_form_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -327,7 +327,7 @@ export def "checkout-pub-order-form-attachments-client-preferences-data create" 
 #
 # POST /api/checkout/pub/orderForm/{orderFormId}/attachments/clientProfileData
 # operationId: AddClientProfile
-export def "checkout-pub-order-form-attachments-client-profile-data create" [
+export def "add-client-profile" [
   order_form_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -384,7 +384,7 @@ export def "checkout-pub-order-form-attachments-client-profile-data create" [
 #
 # POST /api/checkout/pub/orderForm/{orderFormId}/attachments/marketingData
 # operationId: AddMarketingData
-export def "checkout-pub-order-form-attachments-marketing-data create" [
+export def "add-marketing-data" [
   order_form_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -438,7 +438,7 @@ export def "checkout-pub-order-form-attachments-marketing-data create" [
 # POST /api/checkout/pub/orderForm/{orderFormId}/attachments/merchantContextData
 # operationId: AddMerchantContextData
 # --salesAssociateData shape: {salesAssociateId?: string}
-export def "checkout-pub-order-form-attachments-merchant-context-data create" [
+export def "add-merchant-context-data" [
   order_form_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -485,7 +485,7 @@ export def "checkout-pub-order-form-attachments-merchant-context-data create" [
 # POST /api/checkout/pub/orderForm/{orderFormId}/attachments/paymentData
 # operationId: AddPaymentData
 # --payments item shape: {group?: string, hasDefaultBillingAddress?: bool, installments?: int, installmentsInterestRate?: float, installmentsValue?: int, paymentSystem?: int, paymentSystemName?: string, referenceValue?: int, value?: int}
-export def "checkout-pub-order-form-attachments-payment-data create" [
+export def "add-payment-data" [
   order_form_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -533,7 +533,7 @@ export def "checkout-pub-order-form-attachments-payment-data create" [
 # operationId: AddShippingAddress
 # --logisticsInfo item shape: {itemIndex?: int, selectedDeliveryChannel?: string, selectedSla?: string}
 # --selectedAddresses item shape: {addressType?: string, city?: string, complement?: string, country?: string, geoCoordinates?: list<float>, neighborhood?: string, number?: string, postalCode?: string, receiverName?: string, reference?: string, state?: string, street?: string}
-export def "checkout-pub-order-form-attachments-shipping-data create-address" [
+export def "add-shipping-address" [
   order_form_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -581,7 +581,7 @@ export def "checkout-pub-order-form-attachments-shipping-data create-address" [
 #
 # POST /api/checkout/pub/orderForm/{orderFormId}/coupons
 # operationId: AddCoupons
-export def "checkout-pub-order-form-coupons create" [
+export def "add-coupons" [
   order_form_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -627,7 +627,7 @@ export def "checkout-pub-order-form-coupons create" [
 #
 # PUT /api/checkout/pub/orderForm/{orderFormId}/customData/{appId}
 # operationId: SetMultipleCustomFieldValues
-export def "checkout-pub-order-form-custom-data update-multiple-field-values" [
+export def "set-multiple-custom-field-values" [
   order_form_id: string
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -675,7 +675,7 @@ export def "checkout-pub-order-form-custom-data update-multiple-field-values" [
 #
 # DELETE /api/checkout/pub/orderForm/{orderFormId}/customData/{appId}/{appFieldName}
 # operationId: Removesinglecustomfieldvalue
-export def "checkout-pub-order-form-custom-data delete-singlecustomfieldvalue" [
+export def "removesinglecustomfieldvalue" [
   order_form_id: string
   app_id: string
   app_field_name: string
@@ -719,7 +719,7 @@ export def "checkout-pub-order-form-custom-data delete-singlecustomfieldvalue" [
 #
 # PUT /api/checkout/pub/orderForm/{orderFormId}/customData/{appId}/{appFieldName}
 # operationId: SetSingleCustomFieldValue
-export def "checkout-pub-order-form-custom-data update-single-field-value" [
+export def "set-single-custom-field-value" [
   order_form_id: string
   app_id: string
   app_field_name: string
@@ -769,7 +769,7 @@ export def "checkout-pub-order-form-custom-data update-single-field-value" [
 #
 # GET /api/checkout/pub/orderForm/{orderFormId}/installments
 # operationId: GetCartInstallments
-export def "checkout-pub-order-form-installments get-cart" [
+export def "get-cart-installments" [
   order_form_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -812,7 +812,7 @@ export def "checkout-pub-order-form-installments get-cart" [
 # POST /api/checkout/pub/orderForm/{orderFormId}/items
 # operationId: Items
 # --orderItems item shape: {id: string, index: int, price?: int, quantity: int, seller: string}
-export def "checkout-pub-order-form-items create" [
+export def "items" [
   order_form_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -860,7 +860,7 @@ export def "checkout-pub-order-form-items create" [
 #
 # POST /api/checkout/pub/orderForm/{orderFormId}/items/removeAll
 # operationId: RemoveAllItems
-export def "checkout-pub-order-form-items-remove-all delete" [
+export def "remove-all-items" [
   order_form_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -907,7 +907,7 @@ export def "checkout-pub-order-form-items-remove-all delete" [
 # POST /api/checkout/pub/orderForm/{orderFormId}/items/update
 # operationId: ItemsUpdate
 # --orderItems item shape: {index: int, quantity: int}
-export def "checkout-pub-order-form-items-update update" [
+export def "items-update" [
   order_form_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -955,7 +955,7 @@ export def "checkout-pub-order-form-items-update update" [
 #
 # PUT /api/checkout/pub/orderForm/{orderFormId}/items/{itemIndex}/price
 # operationId: PriceChange
-export def "checkout-pub-order-form-items-price update-change" [
+export def "price-change" [
   order_form_id: string
   item_index: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1003,7 +1003,7 @@ export def "checkout-pub-order-form-items-price update-change" [
 #
 # POST /api/checkout/pub/orderForm/{orderFormId}/messages/clear
 # operationId: ClearorderFormMessages
-export def "checkout-pub-order-form-messages-clear create-clearorder" [
+export def "clearorder-form-messages" [
   order_form_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1049,7 +1049,7 @@ export def "checkout-pub-order-form-messages-clear create-clearorder" [
 #
 # PATCH /api/checkout/pub/orderForm/{orderFormId}/profile
 # operationId: IgnoreProfileData
-export def "checkout-pub-order-form-profile update-ignore-data" [
+export def "ignore-profile-data" [
   order_form_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1095,7 +1095,7 @@ export def "checkout-pub-order-form-profile update-ignore-data" [
 #
 # POST /api/checkout/pub/orderForm/{orderFormId}/transaction
 # operationId: PlaceOrderFromExistingOrderForm
-export def "checkout-pub-order-form-transaction create-place-from-existing" [
+export def "place-order-from-existing-order-form" [
   order_form_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1147,7 +1147,7 @@ export def "checkout-pub-order-form-transaction create-place-from-existing" [
 # POST /api/checkout/pub/orderForms/simulation
 # operationId: CartSimulation
 # --items item shape: {id?: string, quantity?: int, seller?: string}
-export def "checkout-pub-order-forms-simulation create-cart" [
+export def "cart-simulation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1203,7 +1203,7 @@ export def "checkout-pub-order-forms-simulation create-cart" [
 # --paymentData shape: {giftCardMessages?: list, giftCards?: list, paymentSystems?: list, payments: list, updateStatus?: string}
 # --salesAssociateData shape: {salesAssociateId?: string}
 # --shippingData shape: {address?: record, logisticsInfo?: list, updateStatus?: string}
-export def "checkout-pub-orders update-place" [
+export def "place-order" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -1255,7 +1255,7 @@ export def "checkout-pub-orders update-place" [
 #
 # GET /api/checkout/pub/pickup-points
 # operationId: ListPickupPpointsByLocation
-export def "checkout-pub-pickup-points list-ppoints-by-location" [
+export def "list-pickup-ppoints-by-location" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1297,7 +1297,7 @@ export def "checkout-pub-pickup-points list-ppoints-by-location" [
 #
 # GET /api/checkout/pub/postal-code/{countryCode}/{postalCode}
 # operationId: GetAddressByPostalCode
-export def "checkout-pub-postal-code get-address" [
+export def "get-address-by-postal-code" [
   country_code: string
   postal_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1339,7 +1339,7 @@ export def "checkout-pub-postal-code get-address" [
 #
 # GET /api/checkout/pub/profiles
 # operationId: GetClientProfileByEmail
-export def "checkout-pub-profiles get-client-by-email" [
+export def "get-client-profile-by-email" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1379,7 +1379,7 @@ export def "checkout-pub-profiles get-client-by-email" [
 #
 # GET /api/checkout/pub/regions/{regionId}
 # operationId: GetSellersByRegion
-export def "checkout-pub-regions get-sellers" [
+export def "get-sellers-by-region" [
   region_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1423,7 +1423,7 @@ export def "checkout-pub-regions get-sellers" [
 #
 # GET /api/checkout/pvt/configuration/orderForm
 # operationId: GetorderFormconfiguration
-export def "checkout-pvt-configuration-order-form get-formconfiguration" [
+export def "getorder-formconfiguration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -1464,7 +1464,7 @@ export def "checkout-pvt-configuration-order-form get-formconfiguration" [
 # --apps item shape: {fields?: list<string>, id?: string, major?: int}
 # --paymentConfiguration shape: {allowInstallmentsMerge?: bool, requiresAuthenticationForPreAuthorizedPaymentOption: bool}
 # --taxConfiguration shape: {appId?: string, authorizationHeader?: string, url?: string}
-export def "checkout-pvt-configuration-order-form update-formconfiguration" [
+export def "updateorder-formconfiguration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -1519,7 +1519,7 @@ export def "checkout-pvt-configuration-order-form update-formconfiguration" [
 #
 # GET /api/checkout/pvt/configuration/window-to-change-seller
 # operationId: GetWindowToChangeSeller
-export def "checkout-pvt-configuration-window-to-change-seller get" [
+export def "get-window-to-change-seller" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -1557,7 +1557,7 @@ export def "checkout-pvt-configuration-window-to-change-seller get" [
 #
 # POST /api/checkout/pvt/configuration/window-to-change-seller
 # operationId: UpdateWindowToChangeSeller
-export def "checkout-pvt-configuration-window-to-change-seller update" [
+export def "update-window-to-change-seller" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -1601,7 +1601,7 @@ export def "checkout-pvt-configuration-window-to-change-seller update" [
 #
 # GET /checkout/changeToAnonymousUser/{orderFormId}
 # operationId: Removeallpersonaldata
-export def "checkout-change-to-anonymous-user delete-allpersonaldata" [
+export def "removeallpersonaldata" [
   order_form_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

@@ -112,7 +112,7 @@ def access-type-completer [] { ["CustomerOwnedIp" "Private"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "s3-outposts-create-endpoint create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-endpoint" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -136,7 +136,7 @@ export def commands []: nothing -> table {
 #
 # POST /S3Outposts/CreateEndpoint
 # operationId: CreateEndpoint
-export def "s3-outposts-create-endpoint create" [
+export def "create-endpoint" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -187,7 +187,7 @@ export def "s3-outposts-create-endpoint create" [
 #
 # DELETE /S3Outposts/DeleteEndpoint
 # operationId: DeleteEndpoint
-export def "s3-outposts-delete-endpoint delete" [
+export def "delete-endpoint" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -233,7 +233,7 @@ export def "s3-outposts-delete-endpoint delete" [
 #
 # GET /S3Outposts/ListEndpoints
 # operationId: ListEndpoints
-export def "s3-outposts-list-endpoints list" [
+export def "list-endpoints" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -281,7 +281,7 @@ export def "s3-outposts-list-endpoints list" [
 #
 # GET /S3Outposts/ListOutpostsWithS3
 # operationId: ListOutpostsWithS3
-export def "s3-outposts-list-outposts-with-s3 list" [
+export def "list-outposts-with-s3" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -329,7 +329,7 @@ export def "s3-outposts-list-outposts-with-s3 list" [
 #
 # GET /S3Outposts/ListSharedEndpoints
 # operationId: ListSharedEndpoints
-export def "s3-outposts-list-shared-endpoints list" [
+export def "list-shared-endpoints" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

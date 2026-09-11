@@ -123,7 +123,7 @@ def user-type-completer [] { ["Guest" "Member"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "applications list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "applications-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -147,7 +147,7 @@ export def commands []: nothing -> table {
 #
 # GET /{tenantID}/applications
 # operationId: Applications_List
-export def "applications list" [
+export def "applications-list" [
   tenant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -195,7 +195,7 @@ export def "applications list" [
 # --passwordCredentials item shape: {customKeyIdentifier?: string, endDate?: string, keyId?: string, startDate?: string, value?: string}
 # --preAuthorizedApplications item shape: {appId?: string, extensions?: list, permissions?: list}
 # --requiredResourceAccess item shape: {resourceAccess: list, resourceAppId?: string}
-export def "applications create" [
+export def "applications-create" [
   tenant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -268,7 +268,7 @@ export def "applications create" [
 #
 # DELETE /{tenantID}/applications/{applicationObjectId}
 # operationId: Applications_Delete
-export def "applications delete" [
+export def "applications-delete" [
   tenant_id: string
   application_object_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -309,7 +309,7 @@ export def "applications delete" [
 #
 # GET /{tenantID}/applications/{applicationObjectId}
 # operationId: Applications_Get
-export def "applications get" [
+export def "applications-get" [
   tenant_id: string
   application_object_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -358,7 +358,7 @@ export def "applications get" [
 # --passwordCredentials item shape: {customKeyIdentifier?: string, endDate?: string, keyId?: string, startDate?: string, value?: string}
 # --preAuthorizedApplications item shape: {appId?: string, extensions?: list, permissions?: list}
 # --requiredResourceAccess item shape: {resourceAccess: list, resourceAppId?: string}
-export def "applications update" [
+export def "applications-patch" [
   tenant_id: string
   application_object_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -433,7 +433,7 @@ export def "applications update" [
 #
 # POST /{tenantID}/applications/{applicationObjectId}/$links/owners
 # operationId: Applications_AddOwner
-export def "applications-links-owners create" [
+export def "applications-add-owner" [
   tenant_id: string
   application_object_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -478,7 +478,7 @@ export def "applications-links-owners create" [
 #
 # DELETE /{tenantID}/applications/{applicationObjectId}/$links/owners/{ownerObjectId}
 # operationId: Applications_RemoveOwner
-export def "applications-links-owners delete" [
+export def "applications-remove-owner" [
   tenant_id: string
   application_object_id: string
   owner_object_id: string
@@ -521,7 +521,7 @@ export def "applications-links-owners delete" [
 #
 # GET /{tenantID}/applications/{applicationObjectId}/keyCredentials
 # operationId: Applications_ListKeyCredentials
-export def "applications-key-credentials list" [
+export def "applications-list-key-credentials" [
   tenant_id: string
   application_object_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -563,7 +563,7 @@ export def "applications-key-credentials list" [
 # PATCH /{tenantID}/applications/{applicationObjectId}/keyCredentials
 # operationId: Applications_UpdateKeyCredentials
 # --value item shape: {customKeyIdentifier?: string, endDate?: string, keyId?: string, startDate?: string, type?: string, usage?: string, value?: string}
-export def "applications-key-credentials update" [
+export def "applications-update-key-credentials" [
   tenant_id: string
   application_object_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -608,7 +608,7 @@ export def "applications-key-credentials update" [
 #
 # GET /{tenantID}/applications/{applicationObjectId}/owners
 # operationId: Applications_ListOwners
-export def "applications-owners list" [
+export def "applications-list-owners" [
   tenant_id: string
   application_object_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -649,7 +649,7 @@ export def "applications-owners list" [
 #
 # GET /{tenantID}/applications/{applicationObjectId}/passwordCredentials
 # operationId: Applications_ListPasswordCredentials
-export def "applications-password-credentials list" [
+export def "applications-list-password-credentials" [
   tenant_id: string
   application_object_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -691,7 +691,7 @@ export def "applications-password-credentials list" [
 # PATCH /{tenantID}/applications/{applicationObjectId}/passwordCredentials
 # operationId: Applications_UpdatePasswordCredentials
 # --value item shape: {customKeyIdentifier?: string, endDate?: string, keyId?: string, startDate?: string, value?: string}
-export def "applications-password-credentials update" [
+export def "applications-update-password-credentials" [
   tenant_id: string
   application_object_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -736,7 +736,7 @@ export def "applications-password-credentials update" [
 #
 # GET /{tenantID}/deletedApplications
 # operationId: DeletedApplications_List
-export def "deleted-applications list" [
+export def "deleted-applications-list" [
   tenant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -776,7 +776,7 @@ export def "deleted-applications list" [
 #
 # DELETE /{tenantID}/deletedApplications/{applicationObjectId}
 # operationId: DeletedApplications_HardDelete
-export def "deleted-applications delete-hard" [
+export def "deleted-applications-hard-delete" [
   tenant_id: string
   application_object_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -817,7 +817,7 @@ export def "deleted-applications delete-hard" [
 #
 # POST /{tenantID}/deletedApplications/{objectId}/restore
 # operationId: DeletedApplications_Restore
-export def "deleted-applications-restore create" [
+export def "deleted-applications-restore" [
   tenant_id: string
   object_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -858,7 +858,7 @@ export def "deleted-applications-restore create" [
 #
 # GET /{tenantID}/domains
 # operationId: Domains_List
-export def "domains list" [
+export def "domains-list" [
   tenant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -898,7 +898,7 @@ export def "domains list" [
 #
 # GET /{tenantID}/domains/{domainName}
 # operationId: Domains_Get
-export def "domains get" [
+export def "domains-get" [
   tenant_id: string
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -939,7 +939,7 @@ export def "domains get" [
 #
 # POST /{tenantID}/getObjectsByObjectIds
 # operationId: Objects_GetObjectsByObjectIds
-export def "get-objects-by-object-ids get" [
+export def "objects-get-objects-by-object-ids" [
   tenant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -984,7 +984,7 @@ export def "get-objects-by-object-ids get" [
 #
 # GET /{tenantID}/groups
 # operationId: Groups_List
-export def "groups list" [
+export def "groups-list" [
   tenant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1024,7 +1024,7 @@ export def "groups list" [
 #
 # POST /{tenantID}/groups
 # operationId: Groups_Create
-export def "groups create" [
+export def "groups-create" [
   tenant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1070,7 +1070,7 @@ export def "groups create" [
 #
 # POST /{tenantID}/groups/{groupObjectId}/$links/members
 # operationId: Groups_AddMember
-export def "groups-links-members create" [
+export def "groups-add-member" [
   tenant_id: string
   group_object_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1115,7 +1115,7 @@ export def "groups-links-members create" [
 #
 # DELETE /{tenantID}/groups/{groupObjectId}/$links/members/{memberObjectId}
 # operationId: Groups_RemoveMember
-export def "groups-links-members delete" [
+export def "groups-remove-member" [
   tenant_id: string
   group_object_id: string
   member_object_id: string
@@ -1158,7 +1158,7 @@ export def "groups-links-members delete" [
 #
 # DELETE /{tenantID}/groups/{objectId}
 # operationId: Groups_Delete
-export def "groups delete" [
+export def "groups-delete" [
   tenant_id: string
   object_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1199,7 +1199,7 @@ export def "groups delete" [
 #
 # GET /{tenantID}/groups/{objectId}
 # operationId: Groups_Get
-export def "groups get" [
+export def "groups-get" [
   tenant_id: string
   object_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1240,7 +1240,7 @@ export def "groups get" [
 #
 # POST /{tenantID}/groups/{objectId}/$links/owners
 # operationId: Groups_AddOwner
-export def "groups-links-owners create" [
+export def "groups-add-owner" [
   tenant_id: string
   object_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1285,7 +1285,7 @@ export def "groups-links-owners create" [
 #
 # DELETE /{tenantID}/groups/{objectId}/$links/owners/{ownerObjectId}
 # operationId: Groups_RemoveOwner
-export def "groups-links-owners delete" [
+export def "groups-remove-owner" [
   tenant_id: string
   object_id: string
   owner_object_id: string
@@ -1328,7 +1328,7 @@ export def "groups-links-owners delete" [
 #
 # POST /{tenantID}/groups/{objectId}/getMemberGroups
 # operationId: Groups_GetMemberGroups
-export def "groups-get-member-groups get" [
+export def "groups-get-member-groups" [
   tenant_id: string
   object_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1373,7 +1373,7 @@ export def "groups-get-member-groups get" [
 #
 # GET /{tenantID}/groups/{objectId}/members
 # operationId: Groups_GetGroupMembers
-export def "groups-members get" [
+export def "groups-get-group-members" [
   tenant_id: string
   object_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1414,7 +1414,7 @@ export def "groups-members get" [
 #
 # GET /{tenantID}/groups/{objectId}/owners
 # operationId: Groups_ListOwners
-export def "groups-owners list" [
+export def "groups-list-owners" [
   tenant_id: string
   object_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1455,7 +1455,7 @@ export def "groups-owners list" [
 #
 # POST /{tenantID}/isMemberOf
 # operationId: Groups_IsMemberOf
-export def "is-member-of create-groups" [
+export def "groups-is-member-of" [
   tenant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1499,7 +1499,7 @@ export def "is-member-of create-groups" [
 #
 # GET /{tenantID}/me
 # operationId: SignedInUser_Get
-export def "me get-signed-in-user" [
+export def "signed-in-user-get" [
   tenant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1538,7 +1538,7 @@ export def "me get-signed-in-user" [
 #
 # GET /{tenantID}/me/ownedObjects
 # operationId: SignedInUser_ListOwnedObjects
-export def "me-owned-objects list-signed-in-user" [
+export def "signed-in-user-list-owned-objects" [
   tenant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1577,7 +1577,7 @@ export def "me-owned-objects list-signed-in-user" [
 #
 # GET /{tenantID}/oauth2PermissionGrants
 # operationId: OAuth2PermissionGrant_List
-export def "oauth2-permission-grants list-o-auth2" [
+export def "o-auth2-permission-grant-list" [
   tenant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1616,7 +1616,7 @@ export def "oauth2-permission-grants list-o-auth2" [
 #
 # POST /{tenantID}/oauth2PermissionGrants
 # operationId: OAuth2PermissionGrant_Create
-export def "oauth2-permission-grants create-o-auth2" [
+export def "o-auth2-permission-grant-create" [
   tenant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1666,7 +1666,7 @@ export def "oauth2-permission-grants create-o-auth2" [
 #
 # DELETE /{tenantID}/oauth2PermissionGrants/{objectId}
 # operationId: OAuth2PermissionGrant_Delete
-export def "oauth2-permission-grants delete-o-auth2" [
+export def "o-auth2-permission-grant-delete" [
   tenant_id: string
   object_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1707,7 +1707,7 @@ export def "oauth2-permission-grants delete-o-auth2" [
 #
 # GET /{tenantID}/servicePrincipals
 # operationId: ServicePrincipals_List
-export def "service-principals list" [
+export def "service-principals-list" [
   tenant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1749,7 +1749,7 @@ export def "service-principals list" [
 # operationId: ServicePrincipals_Create
 # --keyCredentials item shape: {customKeyIdentifier?: string, endDate?: string, keyId?: string, startDate?: string, type?: string, usage?: string, value?: string}
 # --passwordCredentials item shape: {customKeyIdentifier?: string, endDate?: string, keyId?: string, startDate?: string, value?: string}
-export def "service-principals create" [
+export def "service-principals-create" [
   tenant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1798,7 +1798,7 @@ export def "service-principals create" [
 #
 # DELETE /{tenantID}/servicePrincipals/{objectId}
 # operationId: ServicePrincipals_Delete
-export def "service-principals delete" [
+export def "service-principals-delete" [
   tenant_id: string
   object_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1839,7 +1839,7 @@ export def "service-principals delete" [
 #
 # GET /{tenantID}/servicePrincipals/{objectId}
 # operationId: ServicePrincipals_Get
-export def "service-principals get" [
+export def "service-principals-get" [
   tenant_id: string
   object_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1882,7 +1882,7 @@ export def "service-principals get" [
 # operationId: ServicePrincipals_Update
 # --keyCredentials item shape: {customKeyIdentifier?: string, endDate?: string, keyId?: string, startDate?: string, type?: string, usage?: string, value?: string}
 # --passwordCredentials item shape: {customKeyIdentifier?: string, endDate?: string, keyId?: string, startDate?: string, value?: string}
-export def "service-principals update" [
+export def "service-principals-update" [
   tenant_id: string
   object_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1932,7 +1932,7 @@ export def "service-principals update" [
 #
 # POST /{tenantID}/servicePrincipals/{objectId}/$links/owners
 # operationId: ServicePrincipals_AddOwner
-export def "service-principals-links-owners create" [
+export def "service-principals-add-owner" [
   tenant_id: string
   object_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1977,7 +1977,7 @@ export def "service-principals-links-owners create" [
 #
 # DELETE /{tenantID}/servicePrincipals/{objectId}/$links/owners/{ownerObjectId}
 # operationId: ServicePrincipals_RemoveOwner
-export def "service-principals-links-owners delete" [
+export def "service-principals-remove-owner" [
   tenant_id: string
   object_id: string
   owner_object_id: string
@@ -2020,7 +2020,7 @@ export def "service-principals-links-owners delete" [
 #
 # GET /{tenantID}/servicePrincipals/{objectId}/appRoleAssignedTo
 # operationId: ServicePrincipals_ListAppRoleAssignedTo
-export def "service-principals-app-role-assigned-to list" [
+export def "service-principals-list-app-role-assigned-to" [
   tenant_id: string
   object_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2061,7 +2061,7 @@ export def "service-principals-app-role-assigned-to list" [
 #
 # GET /{tenantID}/servicePrincipals/{objectId}/appRoleAssignments
 # operationId: ServicePrincipals_ListAppRoleAssignments
-export def "service-principals-app-role-assignments list" [
+export def "service-principals-list-app-role-assignments" [
   tenant_id: string
   object_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2102,7 +2102,7 @@ export def "service-principals-app-role-assignments list" [
 #
 # GET /{tenantID}/servicePrincipals/{objectId}/keyCredentials
 # operationId: ServicePrincipals_ListKeyCredentials
-export def "service-principals-key-credentials list" [
+export def "service-principals-list-key-credentials" [
   tenant_id: string
   object_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2144,7 +2144,7 @@ export def "service-principals-key-credentials list" [
 # PATCH /{tenantID}/servicePrincipals/{objectId}/keyCredentials
 # operationId: ServicePrincipals_UpdateKeyCredentials
 # --value item shape: {customKeyIdentifier?: string, endDate?: string, keyId?: string, startDate?: string, type?: string, usage?: string, value?: string}
-export def "service-principals-key-credentials update" [
+export def "service-principals-update-key-credentials" [
   tenant_id: string
   object_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2189,7 +2189,7 @@ export def "service-principals-key-credentials update" [
 #
 # GET /{tenantID}/servicePrincipals/{objectId}/owners
 # operationId: ServicePrincipals_ListOwners
-export def "service-principals-owners list" [
+export def "service-principals-list-owners" [
   tenant_id: string
   object_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2230,7 +2230,7 @@ export def "service-principals-owners list" [
 #
 # GET /{tenantID}/servicePrincipals/{objectId}/passwordCredentials
 # operationId: ServicePrincipals_ListPasswordCredentials
-export def "service-principals-password-credentials list" [
+export def "service-principals-list-password-credentials" [
   tenant_id: string
   object_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2272,7 +2272,7 @@ export def "service-principals-password-credentials list" [
 # PATCH /{tenantID}/servicePrincipals/{objectId}/passwordCredentials
 # operationId: ServicePrincipals_UpdatePasswordCredentials
 # --value item shape: {customKeyIdentifier?: string, endDate?: string, keyId?: string, startDate?: string, value?: string}
-export def "service-principals-password-credentials update" [
+export def "service-principals-update-password-credentials" [
   tenant_id: string
   object_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2317,7 +2317,7 @@ export def "service-principals-password-credentials update" [
 #
 # GET /{tenantID}/servicePrincipalsByAppId/{applicationID}/objectId
 # operationId: Applications_GetServicePrincipalsIdByAppId
-export def "service-principals-by-app-id-object-id get-applications" [
+export def "applications-get-service-principals-id-by-app-id" [
   tenant_id: string
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2358,7 +2358,7 @@ export def "service-principals-by-app-id-object-id get-applications" [
 #
 # GET /{tenantID}/users
 # operationId: Users_List
-export def "users list" [
+export def "users-list" [
   tenant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2401,7 +2401,7 @@ export def "users list" [
 # POST /{tenantID}/users
 # operationId: Users_Create
 # --passwordProfile shape: {forceChangePasswordNextLogin?: bool, password: string}
-export def "users create" [
+export def "users-create" [
   tenant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2454,7 +2454,7 @@ export def "users create" [
 #
 # POST /{tenantID}/users/{objectId}/getMemberGroups
 # operationId: Users_GetMemberGroups
-export def "users-get-member-groups get" [
+export def "users-get-member-groups" [
   tenant_id: string
   object_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2499,7 +2499,7 @@ export def "users-get-member-groups get" [
 #
 # DELETE /{tenantID}/users/{upnOrObjectId}
 # operationId: Users_Delete
-export def "users delete" [
+export def "users-delete" [
   tenant_id: string
   upn_or_object_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2540,7 +2540,7 @@ export def "users delete" [
 #
 # GET /{tenantID}/users/{upnOrObjectId}
 # operationId: Users_Get
-export def "users get" [
+export def "users-get" [
   tenant_id: string
   upn_or_object_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2582,7 +2582,7 @@ export def "users get" [
 # PATCH /{tenantID}/users/{upnOrObjectId}
 # operationId: Users_Update
 # --passwordProfile shape: {forceChangePasswordNextLogin?: bool, password: string}
-export def "users update" [
+export def "users-update" [
   tenant_id: string
   upn_or_object_id: string
   --base-url(-b): string@base-url-completer # API base URL

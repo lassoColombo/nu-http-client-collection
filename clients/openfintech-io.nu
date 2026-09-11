@@ -97,7 +97,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "banks list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-banks" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -120,7 +120,7 @@ export def commands []: nothing -> table {
 # List of banks
 #
 # GET /banks
-export def "banks list" [
+export def "get-banks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -160,7 +160,7 @@ export def "banks list" [
 # Bank by ID
 #
 # GET /banks/{id}
-export def "banks get" [
+export def "get-banks-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -195,7 +195,7 @@ export def "banks get" [
 # List of countries
 #
 # GET /countries
-export def "countries list" [
+export def "get-countries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -234,7 +234,7 @@ export def "countries list" [
 # Country by ID
 #
 # GET /countries/{id}
-export def "countries get" [
+export def "get-countries-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -269,7 +269,7 @@ export def "countries get" [
 # List of currencies
 #
 # GET /currencies
-export def "currencies list" [
+export def "get-currencies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -312,7 +312,7 @@ export def "currencies list" [
 # Currency by ID
 #
 # GET /currencies/{id}
-export def "currencies get" [
+export def "get-currencies-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -347,7 +347,7 @@ export def "currencies get" [
 # List of deposit methods
 #
 # GET /deposit-methods
-export def "deposit-methods list" [
+export def "get-deposit-methods" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -389,7 +389,7 @@ export def "deposit-methods list" [
 # Deposit method by ID
 #
 # GET /deposit-methods/{id}
-export def "deposit-methods get" [
+export def "get-deposit-methods-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -424,7 +424,7 @@ export def "deposit-methods get" [
 # List of exchangers
 #
 # GET /exchangers
-export def "exchangers list" [
+export def "get-exchangers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -463,7 +463,7 @@ export def "exchangers list" [
 # Exchanger by ID
 #
 # GET /exchangers/{id}
-export def "exchangers get" [
+export def "get-exchangers-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -498,7 +498,7 @@ export def "exchangers get" [
 # List of merchant industries
 #
 # GET /merchant-industries
-export def "merchant-industries list" [
+export def "get-merchant-industries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -535,7 +535,7 @@ export def "merchant-industries list" [
 # Merchant industry by ID
 #
 # GET /merchant-industries/{id}
-export def "merchant-industries get" [
+export def "get-merchant-industries-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -570,7 +570,7 @@ export def "merchant-industries get" [
 # List of organizations
 #
 # GET /organizations
-export def "organizations list" [
+export def "get-organizations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -612,7 +612,7 @@ export def "organizations list" [
 # Organization by ID
 #
 # GET /organizations/{id}
-export def "organizations get" [
+export def "get-organizations-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -647,7 +647,7 @@ export def "organizations get" [
 # List of payment methods
 #
 # GET /payment-methods
-export def "payment-methods list" [
+export def "get-payment-methods" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -689,7 +689,7 @@ export def "payment-methods list" [
 # Payment method by ID
 #
 # GET /payment-methods/{id}
-export def "payment-methods get" [
+export def "get-payment-methods-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -724,7 +724,7 @@ export def "payment-methods get" [
 # List of payment providers
 #
 # GET /payment-providers
-export def "payment-providers list" [
+export def "get-payment-providers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -767,7 +767,7 @@ export def "payment-providers list" [
 # Payment provider by ID
 #
 # GET /payment-providers/{id}
-export def "payment-providers get" [
+export def "get-payment-providers-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

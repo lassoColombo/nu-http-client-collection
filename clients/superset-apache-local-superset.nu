@@ -151,7 +151,7 @@ def provider-completer [] { ["db" "ldap"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "annotation-layer delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "delete-annotation-layer" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -174,7 +174,7 @@ export def commands []: nothing -> table {
 # Deletes multiple annotation layers in a bulk operation.
 #
 # DELETE /annotation_layer/
-export def "annotation-layer delete" [
+export def "delete-annotation-layer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -209,7 +209,7 @@ export def "annotation-layer delete" [
 # Get a list of Annotation layers, use Rison or JSON query parameters for filtering, sorting, pagination and for selecting specific columns and metadata.
 #
 # GET /annotation_layer/
-export def "annotation-layer list" [
+export def "get-annotation-layer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -244,7 +244,7 @@ export def "annotation-layer list" [
 # Create an Annotation layer
 #
 # POST /annotation_layer/
-export def "annotation-layer create" [
+export def "post-annotation-layer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -282,7 +282,7 @@ export def "annotation-layer create" [
 # Get metadata information about this API resource
 #
 # GET /annotation_layer/_info
-export def "annotation-layer-info get" [
+export def "get-annotation-layer-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -315,7 +315,7 @@ export def "annotation-layer-info get" [
 }
 
 # GET /annotation_layer/related/{column_name}
-export def "annotation-layer-related get" [
+export def "get-annotation-layer-related-column-name" [
   column_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -352,7 +352,7 @@ export def "annotation-layer-related get" [
 # Delete Annotation layer
 #
 # DELETE /annotation_layer/{pk}
-export def "annotation-layer delete-by-pk" [
+export def "delete-annotation-layer-pk" [
   pk: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -387,7 +387,7 @@ export def "annotation-layer delete-by-pk" [
 # Get an Annotation layer
 #
 # GET /annotation_layer/{pk}
-export def "annotation-layer get" [
+export def "get-annotation-layer-pk" [
   pk: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -424,7 +424,7 @@ export def "annotation-layer get" [
 # Update an Annotation layer
 #
 # PUT /annotation_layer/{pk}
-export def "annotation-layer update" [
+export def "put-annotation-layer-pk" [
   pk: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -464,7 +464,7 @@ export def "annotation-layer update" [
 # Deletes multiple annotation in a bulk operation.
 #
 # DELETE /annotation_layer/{pk}/annotation/
-export def "annotation-layer-annotation delete-by-pk" [
+export def "delete-annotation-layer-pk-annotation" [
   pk: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -501,7 +501,7 @@ export def "annotation-layer-annotation delete-by-pk" [
 # Get a list of Annotation layers, use Rison or JSON query parameters for filtering, sorting, pagination and for selecting specific columns and metadata.
 #
 # GET /annotation_layer/{pk}/annotation/
-export def "annotation-layer-annotation list" [
+export def "get-annotation-layer-pk-annotation" [
   pk: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -538,7 +538,7 @@ export def "annotation-layer-annotation list" [
 # Create an Annotation layer
 #
 # POST /annotation_layer/{pk}/annotation/
-export def "annotation-layer-annotation create" [
+export def "post-annotation-layer-pk-annotation" [
   pk: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -581,7 +581,7 @@ export def "annotation-layer-annotation create" [
 # Delete Annotation layer
 #
 # DELETE /annotation_layer/{pk}/annotation/{annotation_id}
-export def "annotation-layer-annotation delete-by-pk-annotation-id" [
+export def "delete-annotation-layer-pk-annotation-annotation-id" [
   pk: int
   annotation_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -618,7 +618,7 @@ export def "annotation-layer-annotation delete-by-pk-annotation-id" [
 # Get an Annotation layer
 #
 # GET /annotation_layer/{pk}/annotation/{annotation_id}
-export def "annotation-layer-annotation get" [
+export def "get-annotation-layer-pk-annotation-annotation-id" [
   pk: int
   annotation_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -657,7 +657,7 @@ export def "annotation-layer-annotation get" [
 # Update an Annotation layer
 #
 # PUT /annotation_layer/{pk}/annotation/{annotation_id}
-export def "annotation-layer-annotation update" [
+export def "put-annotation-layer-pk-annotation-annotation-id" [
   pk: int
   annotation_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -702,7 +702,7 @@ export def "annotation-layer-annotation update" [
 # Reads off of the Redis events stream, using the user's JWT token and optional query params for last event received.
 #
 # GET /async_event/
-export def "async-event get" [
+export def "get-async-event" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -738,7 +738,7 @@ export def "async-event get" [
 #
 # POST /cachekey/invalidate
 # --datasources item shape: {database_name?: string, datasource_name?: string, datasource_type: "druid"|"table"|"view", schema?: string}
-export def "cachekey-invalidate create" [
+export def "post-cachekey-invalidate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -776,7 +776,7 @@ export def "cachekey-invalidate create" [
 # Deletes multiple Charts in a bulk operation.
 #
 # DELETE /chart/
-export def "chart delete" [
+export def "delete-chart" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -811,7 +811,7 @@ export def "chart delete" [
 # Get a list of charts, use Rison or JSON query parameters for filtering, sorting, pagination and for selecting specific columns and metadata.
 #
 # GET /chart/
-export def "chart list" [
+export def "get-chart" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -846,7 +846,7 @@ export def "chart list" [
 # Create a new Chart.
 #
 # POST /chart/
-export def "chart create" [
+export def "post-chart" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -893,7 +893,7 @@ export def "chart create" [
 # Several metadata information about chart API endpoints.
 #
 # GET /chart/_info
-export def "chart-info get" [
+export def "get-chart-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -930,7 +930,7 @@ export def "chart-info get" [
 # POST /chart/data
 # --datasource shape: {id: int, type?: "druid"|"table"}
 # --queries item shape: {annotation_layers?: list, applied_time_extras?: record, apply_fetch_values_predicate?: bool, columns?: list<string>, datasource?: any, druid_time_origin?: string, extras?: any, filters?: list, granularity?: string, granularity_sqla?: string, groupby?: list<string>, having?: string, having_filters?: list, is_rowcount?: bool, is_timeseries?: bool, metrics?: list, order_desc?: bool, orderby?: list, post_processing?: list, result_type?: any, row_limit?: int, row_offset?: int, ... (7 more fields)}
-export def "chart-data create" [
+export def "post-chart-data" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -971,7 +971,7 @@ export def "chart-data create" [
 # Takes a query context cache key and returns payload data response for the given query.
 #
 # GET /chart/data/{cache_key}
-export def "chart-data get-by-cache-key" [
+export def "get-chart-data-cache-key" [
   cache_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1006,7 +1006,7 @@ export def "chart-data get-by-cache-key" [
 # Exports multiple charts and downloads them as YAML files
 #
 # GET /chart/export/
-export def "chart-export get" [
+export def "get-chart-export" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1041,7 +1041,7 @@ export def "chart-export get" [
 # Check favorited dashboards for current user
 #
 # GET /chart/favorite_status/
-export def "chart-favorite-status get" [
+export def "get-chart-favorite-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1074,7 +1074,7 @@ export def "chart-favorite-status get" [
 }
 
 # POST /chart/import/
-export def "chart-import create" [
+export def "post-chart-import" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1115,7 +1115,7 @@ export def "chart-import create" [
 # Get a list of all possible owners for a chart. Use `owners` has the `column_name` parameter
 #
 # GET /chart/related/{column_name}
-export def "chart-related get" [
+export def "get-chart-related-column-name" [
   column_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1152,7 +1152,7 @@ export def "chart-related get" [
 # Deletes a Chart.
 #
 # DELETE /chart/{pk}
-export def "chart delete-by-pk" [
+export def "delete-chart-pk" [
   pk: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1187,7 +1187,7 @@ export def "chart delete-by-pk" [
 # Get a chart detail information.
 #
 # GET /chart/{pk}
-export def "chart get" [
+export def "get-chart-pk" [
   pk: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1224,7 +1224,7 @@ export def "chart get" [
 # Changes a Chart.
 #
 # PUT /chart/{pk}
-export def "chart update" [
+export def "put-chart-pk" [
   pk: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1272,7 +1272,7 @@ export def "chart update" [
 # Compute and cache a screenshot.
 #
 # GET /chart/{pk}/cache_screenshot/
-export def "chart-cache-screenshot get" [
+export def "get-chart-pk-cache-screenshot" [
   pk: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1309,7 +1309,7 @@ export def "chart-cache-screenshot get" [
 # Takes a chart ID and uses the query context stored when the chart was saved to return payload data response.
 #
 # GET /chart/{pk}/data/
-export def "chart-data get-by-pk" [
+export def "get-chart-pk-data" [
   pk: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1347,7 +1347,7 @@ export def "chart-data get-by-pk" [
 # Get a computed screenshot from cache.
 #
 # GET /chart/{pk}/screenshot/{digest}/
-export def "chart-screenshot get" [
+export def "get-chart-pk-screenshot-digest" [
   pk: int
   digest: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1384,7 +1384,7 @@ export def "chart-screenshot get" [
 # Compute or get already computed chart thumbnail from cache.
 #
 # GET /chart/{pk}/thumbnail/{digest}/
-export def "chart-thumbnail get" [
+export def "get-chart-pk-thumbnail-digest" [
   pk: int
   digest: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1421,7 +1421,7 @@ export def "chart-thumbnail get" [
 # Deletes multiple css templates in a bulk operation.
 #
 # DELETE /css_template/
-export def "css-template delete" [
+export def "delete-css-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1456,7 +1456,7 @@ export def "css-template delete" [
 # Get a list of CSS templates, use Rison or JSON query parameters for filtering, sorting, pagination and for selecting specific columns and metadata.
 #
 # GET /css_template/
-export def "css-template list" [
+export def "get-css-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1491,7 +1491,7 @@ export def "css-template list" [
 # Create a CSS template
 #
 # POST /css_template/
-export def "css-template create" [
+export def "post-css-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1529,7 +1529,7 @@ export def "css-template create" [
 # Get metadata information about this API resource
 #
 # GET /css_template/_info
-export def "css-template-info get" [
+export def "get-css-template-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1562,7 +1562,7 @@ export def "css-template-info get" [
 }
 
 # GET /css_template/related/{column_name}
-export def "css-template-related get" [
+export def "get-css-template-related-column-name" [
   column_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1599,7 +1599,7 @@ export def "css-template-related get" [
 # Delete CSS template
 #
 # DELETE /css_template/{pk}
-export def "css-template delete-by-pk" [
+export def "delete-css-template-pk" [
   pk: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1634,7 +1634,7 @@ export def "css-template delete-by-pk" [
 # Get a CSS template
 #
 # GET /css_template/{pk}
-export def "css-template get" [
+export def "get-css-template-pk" [
   pk: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1671,7 +1671,7 @@ export def "css-template get" [
 # Update a CSS template
 #
 # PUT /css_template/{pk}
-export def "css-template update" [
+export def "put-css-template-pk" [
   pk: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1711,7 +1711,7 @@ export def "css-template update" [
 # Deletes multiple Dashboards in a bulk operation.
 #
 # DELETE /dashboard/
-export def "dashboard delete" [
+export def "delete-dashboard" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1746,7 +1746,7 @@ export def "dashboard delete" [
 # Get a list of dashboards, use Rison or JSON query parameters for filtering, sorting, pagination and for selecting specific columns and metadata.
 #
 # GET /dashboard/
-export def "dashboard list" [
+export def "get-dashboard" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1781,7 +1781,7 @@ export def "dashboard list" [
 # Create a new Dashboard.
 #
 # POST /dashboard/
-export def "dashboard create" [
+export def "post-dashboard" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1825,7 +1825,7 @@ export def "dashboard create" [
 # Several metadata information about dashboard API endpoints.
 #
 # GET /dashboard/_info
-export def "dashboard-info get" [
+export def "get-dashboard-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1860,7 +1860,7 @@ export def "dashboard-info get" [
 # Exports multiple Dashboards and downloads them as YAML files.
 #
 # GET /dashboard/export/
-export def "dashboard-export get" [
+export def "get-dashboard-export" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1895,7 +1895,7 @@ export def "dashboard-export get" [
 # Check favorited dashboards for current user
 #
 # GET /dashboard/favorite_status/
-export def "dashboard-favorite-status get" [
+export def "get-dashboard-favorite-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1928,7 +1928,7 @@ export def "dashboard-favorite-status get" [
 }
 
 # POST /dashboard/import/
-export def "dashboard-import create" [
+export def "post-dashboard-import" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1969,7 +1969,7 @@ export def "dashboard-import create" [
 # Get a list of all possible owners for a dashboard.
 #
 # GET /dashboard/related/{column_name}
-export def "dashboard-related get" [
+export def "get-dashboard-related-column-name" [
   column_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2006,7 +2006,7 @@ export def "dashboard-related get" [
 # Get a dashboard detail information.
 #
 # GET /dashboard/{id_or_slug}
-export def "dashboard get" [
+export def "get-dashboard-id-or-slug" [
   id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2041,7 +2041,7 @@ export def "dashboard get" [
 # Get the chart definitions for a given dashboard
 #
 # GET /dashboard/{id_or_slug}/charts
-export def "dashboard-charts get" [
+export def "get-dashboard-id-or-slug-charts" [
   id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2076,7 +2076,7 @@ export def "dashboard-charts get" [
 # Returns a list of a dashboard's datasets. Each dataset includes only the information necessary to render the dashboard's charts.
 #
 # GET /dashboard/{id_or_slug}/datasets
-export def "dashboard-datasets get" [
+export def "get-dashboard-id-or-slug-datasets" [
   id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2111,7 +2111,7 @@ export def "dashboard-datasets get" [
 # Deletes a Dashboard.
 #
 # DELETE /dashboard/{pk}
-export def "dashboard delete-by-pk" [
+export def "delete-dashboard-pk" [
   pk: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2146,7 +2146,7 @@ export def "dashboard delete-by-pk" [
 # Changes a Dashboard.
 #
 # PUT /dashboard/{pk}
-export def "dashboard update" [
+export def "put-dashboard-pk" [
   pk: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2192,7 +2192,7 @@ export def "dashboard update" [
 # Compute async or get already computed dashboard thumbnail from cache.
 #
 # GET /dashboard/{pk}/thumbnail/{digest}/
-export def "dashboard-thumbnail get" [
+export def "get-dashboard-pk-thumbnail-digest" [
   pk: int
   digest: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2232,7 +2232,7 @@ export def "dashboard-thumbnail get" [
 # Get a list of models
 #
 # GET /database/
-export def "database list" [
+export def "get-database" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2267,7 +2267,7 @@ export def "database list" [
 # Create a new Database.
 #
 # POST /database/
-export def "database create" [
+export def "post-database" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2321,7 +2321,7 @@ export def "database create" [
 # Get metadata information about this API resource
 #
 # GET /database/_info
-export def "database-info get" [
+export def "get-database-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2356,7 +2356,7 @@ export def "database-info get" [
 # Get names of databases currently available
 #
 # GET /database/available/
-export def "database-available get" [
+export def "get-database-available" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2389,7 +2389,7 @@ export def "database-available get" [
 # Download database(s) and associated dataset(s) as a zip file
 #
 # GET /database/export/
-export def "database-export get" [
+export def "get-database-export" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2422,7 +2422,7 @@ export def "database-export get" [
 }
 
 # POST /database/import/
-export def "database-import create" [
+export def "post-database-import" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2463,7 +2463,7 @@ export def "database-import create" [
 # Tests a database connection
 #
 # POST /database/test_connection
-export def "database-test-connection create" [
+export def "post-database-test-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2508,7 +2508,7 @@ export def "database-test-connection create" [
 # Validates parameters used to connect to a database
 #
 # POST /database/validate_parameters
-export def "database-validate-parameters create" [
+export def "post-database-validate-parameters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2552,7 +2552,7 @@ export def "database-validate-parameters create" [
 # Deletes a Database.
 #
 # DELETE /database/{pk}
-export def "database delete" [
+export def "delete-database-pk" [
   pk: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2587,7 +2587,7 @@ export def "database delete" [
 # Get an item model
 #
 # GET /database/{pk}
-export def "database get" [
+export def "get-database-pk" [
   pk: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2624,7 +2624,7 @@ export def "database get" [
 # Changes a Database.
 #
 # PUT /database/{pk}
-export def "database update" [
+export def "put-database-pk" [
   pk: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2680,7 +2680,7 @@ export def "database update" [
 # Get function names supported by a database
 #
 # GET /database/{pk}/function_names/
-export def "database-function-names get" [
+export def "get-database-pk-function-names" [
   pk: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2715,7 +2715,7 @@ export def "database-function-names get" [
 # Get charts and dashboards count associated to a database
 #
 # GET /database/{pk}/related_objects/
-export def "database-related-objects get" [
+export def "get-database-pk-related-objects" [
   pk: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2750,7 +2750,7 @@ export def "database-related-objects get" [
 # Get all schemas from a database
 #
 # GET /database/{pk}/schemas/
-export def "database-schemas get" [
+export def "get-database-pk-schemas" [
   pk: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2787,7 +2787,7 @@ export def "database-schemas get" [
 # Get database select star for table
 #
 # GET /database/{pk}/select_star/{table_name}/
-export def "database-select-star list" [
+export def "get-database-pk-select-star-table-name" [
   pk: int
   table_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2826,7 +2826,7 @@ export def "database-select-star list" [
 # Get database select star for table
 #
 # GET /database/{pk}/select_star/{table_name}/{schema_name}/
-export def "database-select-star get" [
+export def "get-database-pk-select-star-table-name-schema-name" [
   pk: int
   table_name: string
   schema_name: string
@@ -2865,7 +2865,7 @@ export def "database-select-star get" [
 # Get database table metadata
 #
 # GET /database/{pk}/table/{table_name}/{schema_name}/
-export def "database-table get" [
+export def "get-database-pk-table-table-name-schema-name" [
   pk: int
   table_name: string
   schema_name: string
@@ -2904,7 +2904,7 @@ export def "database-table get" [
 # Deletes multiple Datasets in a bulk operation.
 #
 # DELETE /dataset/
-export def "dataset delete" [
+export def "delete-dataset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2939,7 +2939,7 @@ export def "dataset delete" [
 # Get a list of models
 #
 # GET /dataset/
-export def "dataset list" [
+export def "get-dataset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2974,7 +2974,7 @@ export def "dataset list" [
 # Create a new Dataset
 #
 # POST /dataset/
-export def "dataset create" [
+export def "post-dataset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3014,7 +3014,7 @@ export def "dataset create" [
 # Get metadata information about this API resource
 #
 # GET /dataset/_info
-export def "dataset-info get" [
+export def "get-dataset-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3047,7 +3047,7 @@ export def "dataset-info get" [
 }
 
 # GET /dataset/distinct/{column_name}
-export def "dataset-distinct get" [
+export def "get-dataset-distinct-column-name" [
   column_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3084,7 +3084,7 @@ export def "dataset-distinct get" [
 # Exports multiple datasets and downloads them as YAML files
 #
 # GET /dataset/export/
-export def "dataset-export get" [
+export def "get-dataset-export" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3117,7 +3117,7 @@ export def "dataset-export get" [
 }
 
 # POST /dataset/import/
-export def "dataset-import create" [
+export def "post-dataset-import" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3156,7 +3156,7 @@ export def "dataset-import create" [
 }
 
 # GET /dataset/related/{column_name}
-export def "dataset-related get" [
+export def "get-dataset-related-column-name" [
   column_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3193,7 +3193,7 @@ export def "dataset-related get" [
 # Deletes a Dataset
 #
 # DELETE /dataset/{pk}
-export def "dataset delete-by-pk" [
+export def "delete-dataset-pk" [
   pk: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3228,7 +3228,7 @@ export def "dataset delete-by-pk" [
 # Get an item model
 #
 # GET /dataset/{pk}
-export def "dataset get" [
+export def "get-dataset-pk" [
   pk: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3267,7 +3267,7 @@ export def "dataset get" [
 # PUT /dataset/{pk}
 # --columns item shape: {column_name: string, description?: string, expression?: string, filterable?: bool, groupby?: bool, id?: int, is_active?: bool, is_dttm?: bool, python_date_format?: string, type?: string, uuid?: string, verbose_name?: string}
 # --metrics item shape: {d3format?: string, description?: string, expression: string, id?: int, metric_name: string, metric_type?: string, warning_text?: string}
-export def "dataset update" [
+export def "put-dataset-pk" [
   pk: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3324,7 +3324,7 @@ export def "dataset update" [
 # Delete a Dataset column
 #
 # DELETE /dataset/{pk}/column/{column_id}
-export def "dataset-column delete" [
+export def "delete-dataset-pk-column-column-id" [
   pk: int
   column_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3361,7 +3361,7 @@ export def "dataset-column delete" [
 # Delete a Dataset metric
 #
 # DELETE /dataset/{pk}/metric/{metric_id}
-export def "dataset-metric delete" [
+export def "delete-dataset-pk-metric-metric-id" [
   pk: int
   metric_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3398,7 +3398,7 @@ export def "dataset-metric delete" [
 # Refreshes and updates columns of a dataset
 #
 # PUT /dataset/{pk}/refresh
-export def "dataset-refresh update" [
+export def "put-dataset-pk-refresh" [
   pk: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3433,7 +3433,7 @@ export def "dataset-refresh update" [
 # Get charts and dashboards count associated to a dataset
 #
 # GET /dataset/{pk}/related_objects
-export def "dataset-related-objects get" [
+export def "get-dataset-pk-related-objects" [
   pk: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3468,7 +3468,7 @@ export def "dataset-related-objects get" [
 # Get a list of models
 #
 # GET /log/
-export def "log list" [
+export def "get-log" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3501,7 +3501,7 @@ export def "log list" [
 }
 
 # POST /log/
-export def "log create" [
+export def "post-log" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3538,7 +3538,7 @@ export def "log create" [
 # Get an item model
 #
 # GET /log/{pk}
-export def "log get" [
+export def "get-log-pk" [
   pk: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3575,7 +3575,7 @@ export def "log get" [
 # Get the menu data structure. Returns a forest like structure with the menu the user has access to
 #
 # GET /menu/
-export def "menu get" [
+export def "get-menu" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3608,7 +3608,7 @@ export def "menu get" [
 # Get the OpenAPI spec for a specific API version
 #
 # GET /openapi/{version}/_openapi
-export def "openapi-openapi get" [
+export def "get-openapi-version-openapi" [
   version: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3643,7 +3643,7 @@ export def "openapi-openapi get" [
 # Get a list of queries, use Rison or JSON query parameters for filtering, sorting, pagination and for selecting specific columns and metadata.
 #
 # GET /query/
-export def "query list" [
+export def "get-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3676,7 +3676,7 @@ export def "query list" [
 }
 
 # GET /query/distinct/{column_name}
-export def "query-distinct get" [
+export def "get-query-distinct-column-name" [
   column_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3711,7 +3711,7 @@ export def "query-distinct get" [
 }
 
 # GET /query/related/{column_name}
-export def "query-related get" [
+export def "get-query-related-column-name" [
   column_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3748,7 +3748,7 @@ export def "query-related get" [
 # Get query detail information.
 #
 # GET /query/{pk}
-export def "query get" [
+export def "get-query-pk" [
   pk: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3785,7 +3785,7 @@ export def "query get" [
 # Deletes multiple report schedules in a bulk operation.
 #
 # DELETE /report/
-export def "report delete" [
+export def "delete-report" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3820,7 +3820,7 @@ export def "report delete" [
 # Get a list of report schedules, use Rison or JSON query parameters for filtering, sorting, pagination and for selecting specific columns and metadata.
 #
 # GET /report/
-export def "report list" [
+export def "get-report" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3857,7 +3857,7 @@ export def "report list" [
 # POST /report/
 # --recipients item shape: {recipient_config_json?: record, type: "Email"|"Slack"}
 # --validator_config_json shape: {op?: "<"|"<="|">"|">="|"=="|"!=", threshold?: int}
-export def "report create" [
+export def "post-report" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3913,7 +3913,7 @@ export def "report create" [
 # Get metadata information about this API resource
 #
 # GET /report/_info
-export def "report-info get" [
+export def "get-report-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3946,7 +3946,7 @@ export def "report-info get" [
 }
 
 # GET /report/related/{column_name}
-export def "report-related get" [
+export def "get-report-related-column-name" [
   column_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3983,7 +3983,7 @@ export def "report-related get" [
 # Delete a report schedule
 #
 # DELETE /report/{pk}
-export def "report delete-by-pk" [
+export def "delete-report-pk" [
   pk: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4018,7 +4018,7 @@ export def "report delete-by-pk" [
 # Get a report schedule
 #
 # GET /report/{pk}
-export def "report get" [
+export def "get-report-pk" [
   pk: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4057,7 +4057,7 @@ export def "report get" [
 # PUT /report/{pk}
 # --recipients item shape: {recipient_config_json?: record, type: "Email"|"Slack"}
 # --validator_config_json shape: {op?: "<"|"<="|">"|">="|"=="|"!=", threshold?: int}
-export def "report update" [
+export def "put-report-pk" [
   pk: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4115,7 +4115,7 @@ export def "report update" [
 # Get a list of report schedule logs, use Rison or JSON query parameters for filtering, sorting, pagination and for selecting specific columns and metadata.
 #
 # GET /report/{pk}/log/
-export def "report-log list" [
+export def "get-report-pk-log" [
   pk: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4152,7 +4152,7 @@ export def "report-log list" [
 # Get a report schedule log
 #
 # GET /report/{pk}/log/{log_id}
-export def "report-log get" [
+export def "get-report-pk-log-log-id" [
   pk: int
   log_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4191,7 +4191,7 @@ export def "report-log get" [
 # Deletes multiple saved queries in a bulk operation.
 #
 # DELETE /saved_query/
-export def "saved-query delete" [
+export def "delete-saved-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4226,7 +4226,7 @@ export def "saved-query delete" [
 # Get a list of saved queries, use Rison or JSON query parameters for filtering, sorting, pagination and for selecting specific columns and metadata.
 #
 # GET /saved_query/
-export def "saved-query list" [
+export def "get-saved-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4261,7 +4261,7 @@ export def "saved-query list" [
 # Create a saved query
 #
 # POST /saved_query/
-export def "saved-query create" [
+export def "post-saved-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4302,7 +4302,7 @@ export def "saved-query create" [
 # Get metadata information about this API resource
 #
 # GET /saved_query/_info
-export def "saved-query-info get" [
+export def "get-saved-query-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4335,7 +4335,7 @@ export def "saved-query-info get" [
 }
 
 # GET /saved_query/distinct/{column_name}
-export def "saved-query-distinct get" [
+export def "get-saved-query-distinct-column-name" [
   column_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4372,7 +4372,7 @@ export def "saved-query-distinct get" [
 # Exports multiple saved queries and downloads them as YAML files
 #
 # GET /saved_query/export/
-export def "saved-query-export get" [
+export def "get-saved-query-export" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4405,7 +4405,7 @@ export def "saved-query-export get" [
 }
 
 # POST /saved_query/import/
-export def "saved-query-import create" [
+export def "post-saved-query-import" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4444,7 +4444,7 @@ export def "saved-query-import create" [
 }
 
 # GET /saved_query/related/{column_name}
-export def "saved-query-related get" [
+export def "get-saved-query-related-column-name" [
   column_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4481,7 +4481,7 @@ export def "saved-query-related get" [
 # Delete saved query
 #
 # DELETE /saved_query/{pk}
-export def "saved-query delete-by-pk" [
+export def "delete-saved-query-pk" [
   pk: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4516,7 +4516,7 @@ export def "saved-query delete-by-pk" [
 # Get a saved query
 #
 # GET /saved_query/{pk}
-export def "saved-query get" [
+export def "get-saved-query-pk" [
   pk: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4553,7 +4553,7 @@ export def "saved-query get" [
 # Update a saved query
 #
 # PUT /saved_query/{pk}
-export def "saved-query update" [
+export def "put-saved-query-pk" [
   pk: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4596,7 +4596,7 @@ export def "saved-query update" [
 # Fetch the CSRF token
 #
 # GET /security/csrf_token/
-export def "security-csrf-token get" [
+export def "get-security-csrf-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4629,7 +4629,7 @@ export def "security-csrf-token get" [
 # Authenticate and get a JWT access and refresh token
 #
 # POST /security/login
-export def "security-login create" [
+export def "post-security-login" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4669,7 +4669,7 @@ export def "security-login create" [
 # Use the refresh token to get a new JWT access token
 #
 # POST /security/refresh
-export def "security-refresh create" [
+export def "post-security-refresh" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

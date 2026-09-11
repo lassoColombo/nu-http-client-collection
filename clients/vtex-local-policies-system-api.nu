@@ -115,7 +115,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "policy-engine-evaluate create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "policy-evaluate" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -139,7 +139,7 @@ export def commands []: nothing -> table {
 #
 # POST /api/policy-engine/evaluate
 # operationId: Policy_Evaluate
-export def "policy-engine-evaluate create" [
+export def "policy-evaluate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,7 +184,7 @@ export def "policy-engine-evaluate create" [
 #
 # GET /api/policy-engine/policies
 # operationId: Policy_List
-export def "policy-engine-policies list" [
+export def "policy-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -222,7 +222,7 @@ export def "policy-engine-policies list" [
 #
 # DELETE /api/policy-engine/policies/{id}
 # operationId: Policy_Delete
-export def "policy-engine-policies delete" [
+export def "policy-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -262,7 +262,7 @@ export def "policy-engine-policies delete" [
 #
 # GET /api/policy-engine/policies/{id}
 # operationId: Policy_Get
-export def "policy-engine-policies get" [
+export def "policy-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -303,7 +303,7 @@ export def "policy-engine-policies get" [
 # POST /api/policy-engine/policies/{id}
 # operationId: Policy_CreateOrUpdate
 # --statements item shape: {actions?: list, condition?: record, effect: string, operation?: string, resource?: string}
-export def "policy-engine-policies create-or-update" [
+export def "policy-create-or-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -351,7 +351,7 @@ export def "policy-engine-policies create-or-update" [
 #
 # PUT /api/policy-engine/policies/{id}
 # --statements item shape: {actions?: list, condition?: record, effect: string, operation?: string, resource?: string}
-export def "policy-engine-policies update" [
+export def "put-api-policy-engine-policies-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

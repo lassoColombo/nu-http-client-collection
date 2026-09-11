@@ -135,7 +135,7 @@ def scope4-completer [] { ["Chores" "ChoresAdmin" "WishList" "WishListAdmin"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "appkey update" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "appkey-patch" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -161,7 +161,7 @@ export def commands []: nothing -> table {
 # DEPRECATED
 # operationId: appkey_patch
 @deprecated
-export def "appkey update" [
+export def "appkey-patch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -200,7 +200,7 @@ export def "appkey update" [
 # DEPRECATED
 # operationId: appkey_post
 @deprecated
-export def "appkey create" [
+export def "appkey-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -240,7 +240,7 @@ export def "appkey create" [
 # DEPRECATED
 # operationId: appkey_put
 @deprecated
-export def "appkey update-1" [
+export def "appkey-put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -276,7 +276,7 @@ export def "appkey update-1" [
 #
 # PATCH /authentication/appkey
 # operationId: auth_appkey_patch
-export def "authentication-appkey update-auth" [
+export def "auth-appkey-patch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -313,7 +313,7 @@ export def "authentication-appkey update-auth" [
 #
 # POST /authentication/appkey
 # operationId: auth_appkey_post
-export def "authentication-appkey create-auth" [
+export def "auth-appkey-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -351,7 +351,7 @@ export def "authentication-appkey create-auth" [
 #
 # PUT /authentication/appkey
 # operationId: auth_appkey_put
-export def "authentication-appkey update-auth-1" [
+export def "auth-appkey-put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -387,7 +387,7 @@ export def "authentication-appkey update-auth-1" [
 #
 # GET /authentication/authkey
 # operationId: auth_authkey_get
-export def "authentication-authkey get-auth" [
+export def "auth-authkey-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -427,7 +427,7 @@ export def "authentication-authkey get-auth" [
 #
 # PATCH /authentication/authkey
 # operationId: auth_authkey_patch
-export def "authentication-authkey update-auth" [
+export def "auth-authkey-patch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -464,7 +464,7 @@ export def "authentication-authkey update-auth" [
 #
 # POST /authentication/authkey
 # operationId: auth_authkey_post
-export def "authentication-authkey create-auth" [
+export def "auth-authkey-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -502,7 +502,7 @@ export def "authentication-authkey create-auth" [
 #
 # PUT /authentication/authkey
 # operationId: auth_authkey_put
-export def "authentication-authkey update-auth-1" [
+export def "auth-authkey-put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -538,7 +538,7 @@ export def "authentication-authkey update-auth-1" [
 #
 # GET /authentication/verifyotp
 # operationId: auth_verifyotp_get
-export def "authentication-verifyotp get-auth" [
+export def "auth-verifyotp-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -576,7 +576,7 @@ export def "authentication-verifyotp get-auth" [
 # DEPRECATED
 # operationId: authkey_get
 @deprecated
-export def "authkey get" [
+export def "authkey-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -616,7 +616,7 @@ export def "authkey get" [
 # DEPRECATED
 # operationId: authkey_patch
 @deprecated
-export def "authkey update" [
+export def "authkey-patch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -655,7 +655,7 @@ export def "authkey update" [
 # DEPRECATED
 # operationId: authkey_post
 @deprecated
-export def "authkey create" [
+export def "authkey-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -695,7 +695,7 @@ export def "authkey create" [
 # DEPRECATED
 # operationId: authkey_put
 @deprecated
-export def "authkey update-1" [
+export def "authkey-put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -731,7 +731,7 @@ export def "authkey update-1" [
 #
 # GET /kkid/allowance
 # operationId: kkid_allowance_get
-export def "kkid-allowance get" [
+export def "kkid-allowance-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -768,7 +768,7 @@ export def "kkid-allowance get" [
 #
 # POST /kkid/allowance
 # operationId: kkid_allowance_post
-export def "kkid-allowance create" [
+export def "kkid-allowance-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -807,7 +807,7 @@ export def "kkid-allowance create" [
 #
 # POST /kkid/apns
 # operationId: kkid_apns_post
-export def "kkid-apns create" [
+export def "kkid-apns-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -852,7 +852,7 @@ export def "kkid-apns create" [
 #
 # DELETE /kkid/chorelist
 # operationId: kkid_chorelist_delete
-export def "kkid-chorelist delete" [
+export def "kkid-chorelist-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -888,7 +888,7 @@ export def "kkid-chorelist delete" [
 #
 # GET /kkid/chorelist
 # operationId: kkid_chorelist_get
-export def "kkid-chorelist get" [
+export def "kkid-chorelist-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -930,7 +930,7 @@ export def "kkid-chorelist get" [
 #
 # POST /kkid/chorelist
 # operationId: kkid_chorelist_post
-export def "kkid-chorelist create" [
+export def "kkid-chorelist-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -985,7 +985,7 @@ export def "kkid-chorelist create" [
 #
 # PUT /kkid/chorelist
 # operationId: kkid_chorelist_put
-export def "kkid-chorelist update" [
+export def "kkid-chorelist-put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1033,7 +1033,7 @@ export def "kkid-chorelist update" [
 #
 # POST /kkid/masteruser
 # operationId: kkid_masteruser_post
-export def "kkid-masteruser create" [
+export def "kkid-masteruser-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1073,7 +1073,7 @@ export def "kkid-masteruser create" [
 #
 # GET /kkid/share
 # operationId: kkid_share_get
-export def "kkid-share get" [
+export def "kkid-share-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1114,7 +1114,7 @@ export def "kkid-share get" [
 #
 # GET /kkid/user
 # operationId: kkid_user_get
-export def "kkid-user get" [
+export def "kkid-user-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1150,7 +1150,7 @@ export def "kkid-user get" [
 #
 # DELETE /kkid/userlist
 # operationId: kkid_userlist_delete
-export def "kkid-userlist delete" [
+export def "kkid-userlist-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1186,7 +1186,7 @@ export def "kkid-userlist delete" [
 #
 # GET /kkid/userlist
 # operationId: kkid_userlist_get
-export def "kkid-userlist get" [
+export def "kkid-userlist-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1229,7 +1229,7 @@ export def "kkid-userlist get" [
 #
 # POST /kkid/userlist
 # operationId: kkid_userlist_post
-export def "kkid-userlist create" [
+export def "kkid-userlist-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1269,7 +1269,7 @@ export def "kkid-userlist create" [
 #
 # PUT /kkid/userlist
 # operationId: kkid_userlist_put
-export def "kkid-userlist update" [
+export def "kkid-userlist-put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1317,7 +1317,7 @@ export def "kkid-userlist update" [
 #
 # DELETE /kkid/wishlist
 # operationId: kkid_wishlist_delete
-export def "kkid-wishlist delete" [
+export def "kkid-wishlist-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1353,7 +1353,7 @@ export def "kkid-wishlist delete" [
 #
 # GET /kkid/wishlist
 # operationId: kkid_wishlist_get
-export def "kkid-wishlist get" [
+export def "kkid-wishlist-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1389,7 +1389,7 @@ export def "kkid-wishlist get" [
 #
 # POST /kkid/wishlist
 # operationId: kkid_wishlist_post
-export def "kkid-wishlist create" [
+export def "kkid-wishlist-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1429,7 +1429,7 @@ export def "kkid-wishlist create" [
 #
 # PUT /kkid/wishlist
 # operationId: kkid_wishlist_put
-export def "kkid-wishlist update" [
+export def "kkid-wishlist-put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

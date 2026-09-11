@@ -106,7 +106,7 @@ def decision-completer [] { ["Approve" "Deny"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-customer-lockbox-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -130,7 +130,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.CustomerLockbox/operations
 # operationId: Operations_List
-export def "providers-microsoft-customer-lockbox-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -166,7 +166,7 @@ export def "providers-microsoft-customer-lockbox-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.CustomerLockbox/requests
 # operationId: Requests_List
-export def "subscriptions-providers-microsoft-customer-lockbox-requests list" [
+export def "requests-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -204,7 +204,7 @@ export def "subscriptions-providers-microsoft-customer-lockbox-requests list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.CustomerLockbox/requests/{requestId}
 # operationId: Requests_Get
-export def "subscriptions-providers-microsoft-customer-lockbox-requests get" [
+export def "requests-get" [
   subscription_id: string
   request_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -244,7 +244,7 @@ export def "subscriptions-providers-microsoft-customer-lockbox-requests get" [
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.CustomerLockbox/requests/{requestId}/UpdateApproval
 # operationId: Requests_UpdateStatus
-export def "subscriptions-providers-microsoft-customer-lockbox-requests-update-approval update-status" [
+export def "requests-update-status" [
   subscription_id: string
   request_id: string
   --base-url(-b): string@base-url-completer # API base URL

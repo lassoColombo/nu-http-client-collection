@@ -110,7 +110,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-workload-groups list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "workload-groups-list-by-database" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -134,7 +134,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/workloadGroups
 # operationId: WorkloadGroups_ListByDatabase
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-workload-groups list" [
+export def "workload-groups-list-by-database" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -178,7 +178,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/workloadGroups/{workloadGroupName}
 # operationId: WorkloadGroups_Delete
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-workload-groups delete" [
+export def "workload-groups-delete" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -224,7 +224,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/workloadGroups/{workloadGroupName}
 # operationId: WorkloadGroups_Get
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-workload-groups get" [
+export def "workload-groups-get" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -271,7 +271,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/workloadGroups/{workloadGroupName}
 # operationId: WorkloadGroups_CreateOrUpdate
 # --properties shape: {importance?: string, maxResourcePercent: int, maxResourcePercentPerRequest?: float, minResourcePercent: int, minResourcePercentPerRequest: float, queryExecutionTimeout?: int}
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-workload-groups create-or-update" [
+export def "workload-groups-create-or-update" [
   subscription_id: string
   resource_group_name: string
   server_name: string

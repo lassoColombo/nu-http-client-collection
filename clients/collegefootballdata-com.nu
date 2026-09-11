@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "calendar get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-calendar" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -122,7 +122,7 @@ export def commands []: nothing -> table {
 #
 # GET /calendar
 # operationId: getCalendar
-export def "calendar get" [
+export def "get-calendar" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -158,7 +158,7 @@ export def "calendar get" [
 #
 # GET /coaches
 # operationId: getCoaches
-export def "coaches get" [
+export def "get-coaches" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -199,7 +199,7 @@ export def "coaches get" [
 #
 # GET /conferences
 # operationId: getConferences
-export def "conferences get" [
+export def "get-conferences" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -233,7 +233,7 @@ export def "conferences get" [
 #
 # GET /draft/picks
 # operationId: getDraftPicks
-export def "draft-picks get" [
+export def "get-draft-picks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -273,7 +273,7 @@ export def "draft-picks get" [
 #
 # GET /draft/positions
 # operationId: getNFLPositions
-export def "draft-positions get-nfl" [
+export def "get-nfl-positions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -307,7 +307,7 @@ export def "draft-positions get-nfl" [
 #
 # GET /draft/teams
 # operationId: getNFLTeams
-export def "draft-teams get-nfl" [
+export def "get-nfl-teams" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -341,7 +341,7 @@ export def "draft-teams get-nfl" [
 #
 # GET /drives
 # operationId: getDrives
-export def "drives get" [
+export def "get-drives" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -386,7 +386,7 @@ export def "drives get" [
 #
 # GET /game/box/advanced
 # operationId: getAdvancedBoxScore
-export def "game-box-advanced get-score" [
+export def "get-advanced-box-score" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -422,7 +422,7 @@ export def "game-box-advanced get-score" [
 #
 # GET /games
 # operationId: getGames
-export def "games get" [
+export def "get-games" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -466,7 +466,7 @@ export def "games get" [
 #
 # GET /games/media
 # operationId: getGameMedia
-export def "games-media get" [
+export def "get-game-media" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -508,7 +508,7 @@ export def "games-media get" [
 #
 # GET /games/players
 # operationId: getPlayerGameStats
-export def "games-players get-stats" [
+export def "get-player-game-stats" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -550,7 +550,7 @@ export def "games-players get-stats" [
 #
 # GET /games/teams
 # operationId: getTeamGameStats
-export def "games-teams get-stats" [
+export def "get-team-game-stats" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -592,7 +592,7 @@ export def "games-teams get-stats" [
 #
 # GET /games/weather
 # operationId: getGameWeather
-export def "games-weather get" [
+export def "get-game-weather" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -634,7 +634,7 @@ export def "games-weather get" [
 #
 # GET /lines
 # operationId: getLines
-export def "lines get" [
+export def "get-lines" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -677,7 +677,7 @@ export def "lines get" [
 #
 # GET /live/plays
 # operationId: getLivePlays
-export def "live-plays get" [
+export def "get-live-plays" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -713,7 +713,7 @@ export def "live-plays get" [
 #
 # GET /metrics/wp
 # operationId: getWinProbabilityData
-export def "metrics-wp get-win-probability-data" [
+export def "get-win-probability-data" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -749,7 +749,7 @@ export def "metrics-wp get-win-probability-data" [
 #
 # GET /metrics/wp/pregame
 # operationId: getPregameWinProbabilities
-export def "metrics-wp-pregame get-win-probabilities" [
+export def "get-pregame-win-probabilities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -788,7 +788,7 @@ export def "metrics-wp-pregame get-win-probabilities" [
 #
 # GET /play/stat/types
 # operationId: getPlayStatTypes
-export def "play-stat-types get" [
+export def "get-play-stat-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -822,7 +822,7 @@ export def "play-stat-types get" [
 #
 # GET /play/stats
 # operationId: getPlayStats
-export def "play-stats get" [
+export def "get-play-stats" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -865,7 +865,7 @@ export def "play-stats get" [
 #
 # GET /play/types
 # operationId: getPlayTypes
-export def "play-types get" [
+export def "get-play-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -899,7 +899,7 @@ export def "play-types get" [
 #
 # GET /player/portal
 # operationId: getTransferPortal
-export def "player-portal get-transfer" [
+export def "get-transfer-portal" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -935,7 +935,7 @@ export def "player-portal get-transfer" [
 #
 # GET /player/returning
 # operationId: getReturningProduction
-export def "player-returning get-production" [
+export def "get-returning-production" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -973,7 +973,7 @@ export def "player-returning get-production" [
 #
 # GET /player/search
 # operationId: playerSearch
-export def "player-search list" [
+export def "player-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1012,7 +1012,7 @@ export def "player-search list" [
 #
 # GET /player/usage
 # operationId: getPlayerUsage
-export def "player-usage get" [
+export def "get-player-usage" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1053,7 +1053,7 @@ export def "player-usage get" [
 #
 # GET /plays
 # operationId: getPlays
-export def "plays get" [
+export def "get-plays" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1099,7 +1099,7 @@ export def "plays get" [
 #
 # GET /ppa/games
 # operationId: getGamePPA
-export def "ppa-games get" [
+export def "get-game-ppa" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1140,7 +1140,7 @@ export def "ppa-games get" [
 #
 # GET /ppa/players/games
 # operationId: getPlayerGamePPA
-export def "ppa-players-games get" [
+export def "get-player-game-ppa" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1183,7 +1183,7 @@ export def "ppa-players-games get" [
 #
 # GET /ppa/players/season
 # operationId: getPlayerSeasonPPA
-export def "ppa-players-season get" [
+export def "get-player-season-ppa" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1225,7 +1225,7 @@ export def "ppa-players-season get" [
 #
 # GET /ppa/predicted
 # operationId: getPredictedPoints
-export def "ppa-predicted get-points" [
+export def "get-predicted-points" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1262,7 +1262,7 @@ export def "ppa-predicted get-points" [
 #
 # GET /ppa/teams
 # operationId: getTeamPPA
-export def "ppa-teams get" [
+export def "get-team-ppa" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1301,7 +1301,7 @@ export def "ppa-teams get" [
 #
 # GET /rankings
 # operationId: getRankings
-export def "rankings get" [
+export def "get-rankings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1339,7 +1339,7 @@ export def "rankings get" [
 #
 # GET /ratings/elo
 # operationId: getEloRatings
-export def "ratings-elo get" [
+export def "get-elo-ratings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1378,7 +1378,7 @@ export def "ratings-elo get" [
 #
 # GET /ratings/sp
 # operationId: getSPRatings
-export def "ratings-sp get" [
+export def "get-sp-ratings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1415,7 +1415,7 @@ export def "ratings-sp get" [
 #
 # GET /ratings/sp/conferences
 # operationId: getConferenceSPRatings
-export def "ratings-sp-conferences get" [
+export def "get-conference-sp-ratings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1452,7 +1452,7 @@ export def "ratings-sp-conferences get" [
 #
 # GET /ratings/srs
 # operationId: getSRSRatings
-export def "ratings-srs get" [
+export def "get-srs-ratings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1490,7 +1490,7 @@ export def "ratings-srs get" [
 #
 # GET /records
 # operationId: getTeamRecords
-export def "records get-team" [
+export def "get-team-records" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1528,7 +1528,7 @@ export def "records get-team" [
 #
 # GET /recruiting/groups
 # operationId: getRecruitingGroups
-export def "recruiting-groups get" [
+export def "get-recruiting-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1567,7 +1567,7 @@ export def "recruiting-groups get" [
 #
 # GET /recruiting/players
 # operationId: getRecruitingPlayers
-export def "recruiting-players get" [
+export def "get-recruiting-players" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1607,7 +1607,7 @@ export def "recruiting-players get" [
 #
 # GET /recruiting/teams
 # operationId: getRecruitingTeams
-export def "recruiting-teams get" [
+export def "get-recruiting-teams" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1644,7 +1644,7 @@ export def "recruiting-teams get" [
 #
 # GET /roster
 # operationId: getRoster
-export def "roster get" [
+export def "get-roster" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1681,7 +1681,7 @@ export def "roster get" [
 #
 # GET /scoreboard
 # operationId: getScoreboard
-export def "scoreboard get" [
+export def "get-scoreboard" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1718,7 +1718,7 @@ export def "scoreboard get" [
 #
 # GET /stats/categories
 # operationId: getStatCategories
-export def "stats-categories get" [
+export def "get-stat-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1752,7 +1752,7 @@ export def "stats-categories get" [
 #
 # GET /stats/game/advanced
 # operationId: getAdvancedTeamGameStats
-export def "stats-game-advanced get-team" [
+export def "get-advanced-team-game-stats" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1793,7 +1793,7 @@ export def "stats-game-advanced get-team" [
 #
 # GET /stats/player/season
 # operationId: getPlayerSeasonStats
-export def "stats-player-season get" [
+export def "get-player-season-stats" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1835,7 +1835,7 @@ export def "stats-player-season get" [
 #
 # GET /stats/season
 # operationId: getTeamSeasonStats
-export def "stats-season get-team" [
+export def "get-team-season-stats" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1875,7 +1875,7 @@ export def "stats-season get-team" [
 #
 # GET /stats/season/advanced
 # operationId: getAdvancedTeamSeasonStats
-export def "stats-season-advanced get-team" [
+export def "get-advanced-team-season-stats" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1915,7 +1915,7 @@ export def "stats-season-advanced get-team" [
 #
 # GET /talent
 # operationId: getTalent
-export def "talent get" [
+export def "get-talent" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1951,7 +1951,7 @@ export def "talent get" [
 #
 # GET /teams
 # operationId: getTeams
-export def "teams get" [
+export def "get-teams" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1987,7 +1987,7 @@ export def "teams get" [
 #
 # GET /teams/fbs
 # operationId: getFbsTeams
-export def "teams-fbs get" [
+export def "get-fbs-teams" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2023,7 +2023,7 @@ export def "teams-fbs get" [
 #
 # GET /teams/matchup
 # operationId: getTeamMatchup
-export def "teams-matchup get" [
+export def "get-team-matchup" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2062,7 +2062,7 @@ export def "teams-matchup get" [
 #
 # GET /venues
 # operationId: getVenues
-export def "venues get" [
+export def "get-venues" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

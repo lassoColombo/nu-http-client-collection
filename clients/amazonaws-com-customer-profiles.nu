@@ -122,7 +122,7 @@ def logical-operator-completer [] { ["AND" "OR"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "domains-profiles-keys create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "add-profile-key" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # POST /domains/{DomainName}/profiles/keys
 # operationId: AddProfileKey
-export def "domains-profiles-keys create" [
+export def "add-profile-key" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -198,7 +198,7 @@ export def "domains-profiles-keys create" [
 # POST /domains/{DomainName}
 # operationId: CreateDomain
 # --Matching shape: {Enabled?: any, JobSchedule?: any, AutoMerging?: any, ExportingConfig?: any}
-export def "domains create" [
+export def "create-domain" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -251,7 +251,7 @@ export def "domains create" [
 #
 # DELETE /domains/{DomainName}
 # operationId: DeleteDomain
-export def "domains delete" [
+export def "delete-domain" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -296,7 +296,7 @@ export def "domains delete" [
 #
 # GET /domains/{DomainName}
 # operationId: GetDomain
-export def "domains get" [
+export def "get-domain" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -342,7 +342,7 @@ export def "domains get" [
 # PUT /domains/{DomainName}
 # operationId: UpdateDomain
 # --Matching shape: {Enabled?: any, JobSchedule?: any, AutoMerging?: any, ExportingConfig?: any}
-export def "domains update" [
+export def "update-domain" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -396,7 +396,7 @@ export def "domains update" [
 # POST /domains/{DomainName}/workflows/integrations
 # operationId: CreateIntegrationWorkflow
 # --IntegrationConfig shape: {AppflowIntegration?: any}
-export def "domains-workflows-integrations create" [
+export def "create-integration-workflow" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -455,7 +455,7 @@ export def "domains-workflows-integrations create" [
 # --BillingAddress shape: {Address1?: any, Address2?: any, Address3?: any, Address4?: any, City?: any, County?: any, State?: any, Province?: any, Country?: any, PostalCode?: any}
 @deprecated --flag party-type
 @deprecated --flag gender
-export def "domains-profiles create" [
+export def "create-profile" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -532,7 +532,7 @@ export def "domains-profiles create" [
 # --BillingAddress shape: {Address1?: any, Address2?: any, Address3?: any, Address4?: any, City?: any, County?: any, State?: any, Province?: any, Country?: any, PostalCode?: any}
 @deprecated --flag party-type
 @deprecated --flag gender
-export def "domains-profiles update" [
+export def "update-profile" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -604,7 +604,7 @@ export def "domains-profiles update" [
 #
 # POST /domains/{DomainName}/integrations/delete
 # operationId: DeleteIntegration
-export def "domains-integrations-delete delete" [
+export def "delete-integration" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -653,7 +653,7 @@ export def "domains-integrations-delete delete" [
 #
 # POST /domains/{DomainName}/profiles/delete
 # operationId: DeleteProfile
-export def "domains-profiles-delete delete" [
+export def "delete-profile" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -702,7 +702,7 @@ export def "domains-profiles-delete delete" [
 #
 # POST /domains/{DomainName}/profiles/keys/delete
 # operationId: DeleteProfileKey
-export def "domains-profiles-keys-delete delete" [
+export def "delete-profile-key" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -753,7 +753,7 @@ export def "domains-profiles-keys-delete delete" [
 #
 # POST /domains/{DomainName}/profiles/objects/delete
 # operationId: DeleteProfileObject
-export def "domains-profiles-objects-delete delete" [
+export def "delete-profile-object" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -804,7 +804,7 @@ export def "domains-profiles-objects-delete delete" [
 #
 # DELETE /domains/{DomainName}/object-types/{ObjectTypeName}
 # operationId: DeleteProfileObjectType
-export def "domains-object-types delete-profile" [
+export def "delete-profile-object-type" [
   domain_name: string
   object_type_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -851,7 +851,7 @@ export def "domains-object-types delete-profile" [
 #
 # GET /domains/{DomainName}/object-types/{ObjectTypeName}
 # operationId: GetProfileObjectType
-export def "domains-object-types get-profile" [
+export def "get-profile-object-type" [
   domain_name: string
   object_type_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -898,7 +898,7 @@ export def "domains-object-types get-profile" [
 #
 # PUT /domains/{DomainName}/object-types/{ObjectTypeName}
 # operationId: PutProfileObjectType
-export def "domains-object-types update-profile" [
+export def "put-profile-object-type" [
   domain_name: string
   object_type_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -957,7 +957,7 @@ export def "domains-object-types update-profile" [
 #
 # DELETE /domains/{DomainName}/workflows/{WorkflowId}
 # operationId: DeleteWorkflow
-export def "domains-workflows delete" [
+export def "delete-workflow" [
   domain_name: string
   workflow_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1004,7 +1004,7 @@ export def "domains-workflows delete" [
 #
 # GET /domains/{DomainName}/workflows/{WorkflowId}
 # operationId: GetWorkflow
-export def "domains-workflows get" [
+export def "get-workflow" [
   domain_name: string
   workflow_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1053,7 +1053,7 @@ export def "domains-workflows get" [
 # operationId: GetAutoMergingPreview
 # --Consolidation shape: {MatchingAttributesList?: any}
 # --ConflictResolution shape: {ConflictResolvingModel?: any, SourceName?: any}
-export def "domains-identity-resolution-jobs-auto-merging-preview get" [
+export def "get-auto-merging-preview" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1104,7 +1104,7 @@ export def "domains-identity-resolution-jobs-auto-merging-preview get" [
 #
 # GET /domains/{DomainName}/identity-resolution-jobs/{JobId}
 # operationId: GetIdentityResolutionJob
-export def "domains-identity-resolution-jobs get" [
+export def "get-identity-resolution-job" [
   domain_name: string
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1151,7 +1151,7 @@ export def "domains-identity-resolution-jobs get" [
 #
 # POST /domains/{DomainName}/integrations
 # operationId: GetIntegration
-export def "domains-integrations get" [
+export def "get-integration" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1200,7 +1200,7 @@ export def "domains-integrations get" [
 #
 # GET /domains/{DomainName}/integrations
 # operationId: ListIntegrations
-export def "domains-integrations list" [
+export def "list-integrations" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1250,7 +1250,7 @@ export def "domains-integrations list" [
 # PUT /domains/{DomainName}/integrations
 # operationId: PutIntegration
 # --FlowDefinition shape: {Description?: any, FlowName?: any, KmsArn?: any, SourceFlowConfig?: any, Tasks?: any, TriggerConfig?: any}
-export def "domains-integrations update" [
+export def "put-integration" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1303,7 +1303,7 @@ export def "domains-integrations update" [
 #
 # GET /domains/{DomainName}/matches
 # operationId: GetMatches
-export def "domains-matches get" [
+export def "get-matches" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1351,7 +1351,7 @@ export def "domains-matches get" [
 #
 # GET /templates/{TemplateId}
 # operationId: GetProfileObjectTypeTemplate
-export def "templates get-profile-object-type" [
+export def "get-profile-object-type-template" [
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1396,7 +1396,7 @@ export def "templates get-profile-object-type" [
 #
 # GET /domains/{DomainName}/workflows/{WorkflowId}/steps
 # operationId: GetWorkflowSteps
-export def "domains-workflows-steps get" [
+export def "get-workflow-steps" [
   domain_name: string
   workflow_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1446,7 +1446,7 @@ export def "domains-workflows-steps get" [
 #
 # POST /integrations
 # operationId: ListAccountIntegrations
-export def "integrations list-account" [
+export def "list-account-integrations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1497,7 +1497,7 @@ export def "integrations list-account" [
 #
 # GET /domains
 # operationId: ListDomains
-export def "domains list" [
+export def "list-domains" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1543,7 +1543,7 @@ export def "domains list" [
 #
 # GET /domains/{DomainName}/identity-resolution-jobs
 # operationId: ListIdentityResolutionJobs
-export def "domains-identity-resolution-jobs list" [
+export def "list-identity-resolution-jobs" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1591,7 +1591,7 @@ export def "domains-identity-resolution-jobs list" [
 #
 # GET /templates
 # operationId: ListProfileObjectTypeTemplates
-export def "templates list-profile-object-type" [
+export def "list-profile-object-type-templates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1637,7 +1637,7 @@ export def "templates list-profile-object-type" [
 #
 # GET /domains/{DomainName}/object-types
 # operationId: ListProfileObjectTypes
-export def "domains-object-types list-profile" [
+export def "list-profile-object-types" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1686,7 +1686,7 @@ export def "domains-object-types list-profile" [
 # POST /domains/{DomainName}/profiles/objects
 # operationId: ListProfileObjects
 # --ObjectFilter shape: {KeyName?: any, Values?: any}
-export def "domains-profiles-objects list" [
+export def "list-profile-objects" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1740,7 +1740,7 @@ export def "domains-profiles-objects list" [
 #
 # PUT /domains/{DomainName}/profiles/objects
 # operationId: PutProfileObject
-export def "domains-profiles-objects update" [
+export def "put-profile-object" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1790,7 +1790,7 @@ export def "domains-profiles-objects update" [
 #
 # GET /tags/{resourceArn}
 # operationId: ListTagsForResource
-export def "tags list-for-resource" [
+export def "list-tags-for-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1835,7 +1835,7 @@ export def "tags list-for-resource" [
 #
 # POST /tags/{resourceArn}
 # operationId: TagResource
-export def "tags tag-resource" [
+export def "tag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1884,7 +1884,7 @@ export def "tags tag-resource" [
 #
 # POST /domains/{DomainName}/workflows
 # operationId: ListWorkflows
-export def "domains-workflows list" [
+export def "list-workflows" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1940,7 +1940,7 @@ export def "domains-workflows list" [
 # POST /domains/{DomainName}/profiles/objects/merge
 # operationId: MergeProfiles
 # --FieldSourceProfileIds shape: {AccountNumber?: any, AdditionalInformation?: any, PartyType?: any, BusinessName?: any, FirstName?: any, MiddleName?: any, LastName?: any, BirthDate?: any, Gender?: any, PhoneNumber?: any, MobilePhoneNumber?: any, HomePhoneNumber?: any, BusinessPhoneNumber?: any, EmailAddress?: any, PersonalEmailAddress?: any, BusinessEmailAddress?: any, Address?: any, ShippingAddress?: any, MailingAddress?: any, BillingAddress?: any, Attributes?: any}
-export def "domains-profiles-objects-merge create" [
+export def "merge-profiles" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1992,7 +1992,7 @@ export def "domains-profiles-objects-merge create" [
 # POST /domains/{DomainName}/profiles/search
 # operationId: SearchProfiles
 # --AdditionalSearchKeys item shape: {KeyName: any, Values: any}
-export def "domains-profiles-search list" [
+export def "search-profiles" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2047,7 +2047,7 @@ export def "domains-profiles-search list" [
 #
 # DELETE /tags/{resourceArn}
 # operationId: UntagResource
-export def "tags untag-resource" [
+export def "untag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

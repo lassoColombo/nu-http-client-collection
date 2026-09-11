@@ -97,7 +97,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "tax-countrycode get-rates-by-country-code" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "tax-rates-by-country-code" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -121,7 +121,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/tax/countrycode
 # operationId: taxRatesByCountryCode
-export def "tax-countrycode get-rates-by-country-code" [
+export def "tax-rates-by-country-code" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -163,7 +163,7 @@ export def "tax-countrycode get-rates-by-country-code" [
 #
 # GET /v1/tax/ip
 # operationId: taxRatesByIpAddress
-export def "tax-ip get-rates-by-address" [
+export def "tax-rates-by-ip-address" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -203,7 +203,7 @@ export def "tax-ip get-rates-by-address" [
 #
 # GET /v3/tax/rates
 # operationId: allTaxRates
-export def "tax-rates list" [
+export def "all-tax-rates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

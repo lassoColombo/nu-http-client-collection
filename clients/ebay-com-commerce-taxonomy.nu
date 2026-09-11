@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "category-tree get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-category-tree" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -122,7 +122,7 @@ export def commands []: nothing -> table {
 #
 # GET /category_tree/{category_tree_id}
 # operationId: getCategoryTree
-export def "category-tree get" [
+export def "get-category-tree" [
   category_tree_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -158,7 +158,7 @@ export def "category-tree get" [
 #
 # GET /category_tree/{category_tree_id}/fetch_item_aspects
 # operationId: fetchItemAspects
-export def "category-tree-fetch-item-aspects get" [
+export def "fetch-item-aspects" [
   category_tree_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -194,7 +194,7 @@ export def "category-tree-fetch-item-aspects get" [
 #
 # GET /category_tree/{category_tree_id}/get_category_subtree
 # operationId: getCategorySubtree
-export def "category-tree-get-category-subtree get" [
+export def "get-category-subtree" [
   category_tree_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -232,7 +232,7 @@ export def "category-tree-get-category-subtree get" [
 #
 # GET /category_tree/{category_tree_id}/get_category_suggestions
 # operationId: getCategorySuggestions
-export def "category-tree-get-category-suggestions get" [
+export def "get-category-suggestions" [
   category_tree_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -270,7 +270,7 @@ export def "category-tree-get-category-suggestions get" [
 #
 # GET /category_tree/{category_tree_id}/get_compatibility_properties
 # operationId: getCompatibilityProperties
-export def "category-tree-get-compatibility-properties get" [
+export def "get-compatibility-properties" [
   category_tree_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -308,7 +308,7 @@ export def "category-tree-get-compatibility-properties get" [
 #
 # GET /category_tree/{category_tree_id}/get_compatibility_property_values
 # operationId: getCompatibilityPropertyValues
-export def "category-tree-get-compatibility-property-values get" [
+export def "get-compatibility-property-values" [
   category_tree_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -348,7 +348,7 @@ export def "category-tree-get-compatibility-property-values get" [
 #
 # GET /category_tree/{category_tree_id}/get_item_aspects_for_category
 # operationId: getItemAspectsForCategory
-export def "category-tree-get-item-aspects-for-category get" [
+export def "get-item-aspects-for-category" [
   category_tree_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -386,7 +386,7 @@ export def "category-tree-get-item-aspects-for-category get" [
 #
 # GET /get_default_category_tree_id
 # operationId: getDefaultCategoryTreeId
-export def "get-default-category-tree-id get" [
+export def "get-default-category-tree-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

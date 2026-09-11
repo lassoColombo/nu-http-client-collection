@@ -136,7 +136,7 @@ def message-reply-option-completer [] { ["MESSAGE_REPLY_OPTION_UNSPECIFIED" "REP
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "media download" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "chat-media-download" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -160,7 +160,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/media/{resourceName}
 # operationId: chat.media.download
-export def "media download" [
+export def "chat-media-download" [
   resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -208,7 +208,7 @@ export def "media download" [
 #
 # GET /v1/spaces
 # operationId: chat.spaces.list
-export def "spaces list" [
+export def "chat-spaces-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -256,7 +256,7 @@ export def "spaces list" [
 #
 # DELETE /v1/{name}
 # operationId: chat.spaces.messages.delete
-export def "spaces delete" [
+export def "chat-spaces-messages-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -304,7 +304,7 @@ export def "spaces delete" [
 #
 # GET /v1/{name}
 # operationId: chat.spaces.messages.attachments.get
-export def "spaces get" [
+export def "chat-spaces-messages-attachments-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -361,7 +361,7 @@ export def "spaces get" [
 # --slashCommand shape: {commandId?: string}
 # --space shape: {displayName?: string, name?: string, singleUserBotDm?: bool, spaceDetails?: record}
 # --thread shape: {name?: string, threadKey?: string}
-export def "spaces update-by-name" [
+export def "chat-spaces-messages-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -436,7 +436,7 @@ export def "spaces update-by-name" [
 # --slashCommand shape: {commandId?: string}
 # --space shape: {displayName?: string, name?: string, singleUserBotDm?: bool, spaceDetails?: record}
 # --thread shape: {name?: string, threadKey?: string}
-export def "spaces update-by-name-1" [
+export def "chat-spaces-messages-update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -502,7 +502,7 @@ export def "spaces update-by-name-1" [
 #
 # GET /v1/{parent}/members
 # operationId: chat.spaces.members.list
-export def "members list" [
+export def "chat-spaces-members-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -561,7 +561,7 @@ export def "members list" [
 # --slashCommand shape: {commandId?: string}
 # --space shape: {displayName?: string, name?: string, singleUserBotDm?: bool, spaceDetails?: record}
 # --thread shape: {name?: string, threadKey?: string}
-export def "messages create" [
+export def "chat-spaces-messages-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

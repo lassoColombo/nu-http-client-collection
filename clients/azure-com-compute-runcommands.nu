@@ -106,7 +106,7 @@ def accept-completer [] { ["application/json" "text/json"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-compute-locations-run-commands list-virtual-machine" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "virtual-machine-run-commands-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -130,7 +130,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Compute/locations/{location}/runCommands
 # operationId: VirtualMachineRunCommands_List
-export def "subscriptions-providers-microsoft-compute-locations-run-commands list-virtual-machine" [
+export def "virtual-machine-run-commands-list" [
   subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -171,7 +171,7 @@ export def "subscriptions-providers-microsoft-compute-locations-run-commands lis
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Compute/locations/{location}/runCommands/{commandId}
 # operationId: VirtualMachineRunCommands_Get
-export def "subscriptions-providers-microsoft-compute-locations-run-commands get-virtual-machine" [
+export def "virtual-machine-run-commands-get" [
   subscription_id: string
   location: string
   command_id: string
@@ -215,7 +215,7 @@ export def "subscriptions-providers-microsoft-compute-locations-run-commands get
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachineScaleSets/{vmScaleSetName}/virtualmachines/{instanceId}/runCommand
 # operationId: VirtualMachineScaleSetVMs_RunCommand
 # --parameters item shape: {name: string, value: string}
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machine-scale-sets-virtualmachines-run-command update-v-ms" [
+export def "virtual-machine-scale-set-v-ms-run-command" [
   subscription_id: string
   resource_group_name: string
   vm_scale_set_name: string
@@ -267,7 +267,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}/runCommand
 # operationId: VirtualMachines_RunCommand
 # --parameters item shape: {name: string, value: string}
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machines-run-command create" [
+export def "virtual-machines-run-command" [
   subscription_id: string
   resource_group_name: string
   vm_name: string

@@ -119,7 +119,7 @@ def visual-style-completer [] { ["CUSTOM_STYLE" "DEFAULT_STYLE" "UNKNOWN_VISUAL_
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "install-attribution create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "firebasedynamiclinks-install-attribution" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -144,7 +144,7 @@ export def commands []: nothing -> table {
 # POST /v1/installAttribution
 # operationId: firebasedynamiclinks.installAttribution
 # --device shape: {deviceModelName?: string, languageCode?: string, languageCodeFromWebview?: string, languageCodeRaw?: string, screenResolutionHeight?: string, screenResolutionWidth?: string, timezone?: string}
-export def "install-attribution create" [
+export def "firebasedynamiclinks-install-attribution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -203,7 +203,7 @@ export def "install-attribution create" [
 # operationId: firebasedynamiclinks.managedShortLinks.create
 # --dynamicLinkInfo shape: {analyticsInfo?: record, androidInfo?: record, desktopInfo?: record, domainUriPrefix?: string, dynamicLinkDomain?: string, iosInfo?: record, link?: string, navigationInfo?: record, socialMetaTagInfo?: record}
 # --suffix shape: {customSuffix?: string, option?: "OPTION_UNSPECIFIED"|"UNGUESSABLE"|"SHORT"|"CUSTOM"}
-export def "managed-short-links-create create" [
+export def "firebasedynamiclinks-managed-short-links-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -257,7 +257,7 @@ export def "managed-short-links-create create" [
 #
 # POST /v1/reopenAttribution
 # operationId: firebasedynamiclinks.reopenAttribution
-export def "reopen-attribution create" [
+export def "firebasedynamiclinks-reopen-attribution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -311,7 +311,7 @@ export def "reopen-attribution create" [
 # operationId: firebasedynamiclinks.shortLinks.create
 # --dynamicLinkInfo shape: {analyticsInfo?: record, androidInfo?: record, desktopInfo?: record, domainUriPrefix?: string, dynamicLinkDomain?: string, iosInfo?: record, link?: string, navigationInfo?: record, socialMetaTagInfo?: record}
 # --suffix shape: {customSuffix?: string, option?: "OPTION_UNSPECIFIED"|"UNGUESSABLE"|"SHORT"|"CUSTOM"}
-export def "short-links create" [
+export def "firebasedynamiclinks-short-links-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -364,7 +364,7 @@ export def "short-links create" [
 #
 # GET /v1/{dynamicLink}/linkStats
 # operationId: firebasedynamiclinks.getLinkStats
-export def "link-stats get" [
+export def "firebasedynamiclinks-get-link-stats" [
   dynamic_link: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

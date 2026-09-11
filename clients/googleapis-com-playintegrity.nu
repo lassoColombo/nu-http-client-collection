@@ -112,7 +112,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1 create-decode-integrity-token" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "playintegrity-decode-integrity-token" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -136,7 +136,7 @@ export def commands []: nothing -> table {
 #
 # POST /v1/{packageName}:decodeIntegrityToken
 # operationId: playintegrity.decodeIntegrityToken
-export def "v1 create-decode-integrity-token" [
+export def "playintegrity-decode-integrity-token" [
   package_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

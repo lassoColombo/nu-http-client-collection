@@ -110,7 +110,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers-keys list-by-instance" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "server-keys-list-by-instance" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -134,7 +134,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforMySQL/servers/{serverName}/keys
 # operationId: ServerKeys_ListByInstance
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers-keys list-by-instance" [
+export def "server-keys-list-by-instance" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -176,7 +176,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-serv
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforMySQL/servers/{serverName}/keys/{keyName}
 # operationId: ServerKeys_Delete
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers-keys delete" [
+export def "server-keys-delete" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -220,7 +220,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-serv
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforMySQL/servers/{serverName}/keys/{keyName}
 # operationId: ServerKeys_Get
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers-keys get" [
+export def "server-keys-get" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -265,7 +265,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-serv
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforMySQL/servers/{serverName}/keys/{keyName}
 # operationId: ServerKeys_CreateOrUpdate
 # --properties shape: {serverKeyType: "AzureKeyVault", uri?: string}
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers-keys create-or-update" [
+export def "server-keys-create-or-update" [
   subscription_id: string
   resource_group_name: string
   server_name: string

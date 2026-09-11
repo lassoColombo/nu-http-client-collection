@@ -121,7 +121,7 @@ def theme-completer [] { ["DARK" "LIGHT"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "certificates create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "certificate-create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -147,7 +147,7 @@ export def commands []: nothing -> table {
 # operationId: certificate_create
 # --contact shape: {email: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, phone: string, suffix?: string}
 # --organization shape: {address?: any, assumedName?: string, name: string, phone: string, registrationAgent?: string, registrationNumber?: string}
-export def "certificates create" [
+export def "certificate-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -200,7 +200,7 @@ export def "certificates create" [
 # operationId: certificate_validate
 # --contact shape: {email: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, phone: string, suffix?: string}
 # --organization shape: {address?: any, assumedName?: string, name: string, phone: string, registrationAgent?: string, registrationNumber?: string}
-export def "certificates-validate validate" [
+export def "certificate-validate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -251,7 +251,7 @@ export def "certificates-validate validate" [
 #
 # GET /v1/certificates/{certificateId}
 # operationId: certificate_get
-export def "certificates get" [
+export def "certificate-get" [
   certificate_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -287,7 +287,7 @@ export def "certificates get" [
 #
 # GET /v1/certificates/{certificateId}/actions
 # operationId: certificate_action_retrieve
-export def "certificates-actions get" [
+export def "certificate-action-retrieve" [
   certificate_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -323,7 +323,7 @@ export def "certificates-actions get" [
 #
 # DELETE /v1/certificates/{certificateId}/callback
 # operationId: certificate_callback_delete
-export def "certificates-callback delete" [
+export def "certificate-callback-delete" [
   certificate_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -359,7 +359,7 @@ export def "certificates-callback delete" [
 #
 # GET /v1/certificates/{certificateId}/callback
 # operationId: certificate_callback_get
-export def "certificates-callback get" [
+export def "certificate-callback-get" [
   certificate_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -395,7 +395,7 @@ export def "certificates-callback get" [
 #
 # PUT /v1/certificates/{certificateId}/callback
 # operationId: certificate_callback_replace
-export def "certificates-callback update" [
+export def "certificate-callback-replace" [
   certificate_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -433,7 +433,7 @@ export def "certificates-callback update" [
 #
 # POST /v1/certificates/{certificateId}/cancel
 # operationId: certificate_cancel
-export def "certificates-cancel cancel" [
+export def "certificate-cancel" [
   certificate_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -469,7 +469,7 @@ export def "certificates-cancel cancel" [
 #
 # GET /v1/certificates/{certificateId}/download
 # operationId: certificate_download
-export def "certificates-download download" [
+export def "certificate-download" [
   certificate_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -505,7 +505,7 @@ export def "certificates-download download" [
 #
 # GET /v1/certificates/{certificateId}/email/history
 # operationId: certificate_email_history
-export def "certificates-email-history get" [
+export def "certificate-email-history" [
   certificate_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -541,7 +541,7 @@ export def "certificates-email-history get" [
 #
 # POST /v1/certificates/{certificateId}/email/resend/{emailAddress}
 # operationId: certificate_alternate_email_address
-export def "certificates-email-resend create-alternate-address" [
+export def "certificate-alternate-email-address" [
   certificate_id: string
   email_address: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -579,7 +579,7 @@ export def "certificates-email-resend create-alternate-address" [
 #
 # POST /v1/certificates/{certificateId}/email/{emailId}/resend
 # operationId: certificate_resend_email
-export def "certificates-email-resend resend" [
+export def "certificate-resend-email" [
   certificate_id: string
   email_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -617,7 +617,7 @@ export def "certificates-email-resend resend" [
 #
 # POST /v1/certificates/{certificateId}/email/{emailId}/resend/{emailAddress}
 # operationId: certificate_resend_email_address
-export def "certificates-email-resend resend-address" [
+export def "certificate-resend-email-address" [
   certificate_id: string
   email_id: string
   email_address: string
@@ -657,7 +657,7 @@ export def "certificates-email-resend resend-address" [
 #
 # POST /v1/certificates/{certificateId}/reissue
 # operationId: certificate_reissue
-export def "certificates-reissue create" [
+export def "certificate-reissue" [
   certificate_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -703,7 +703,7 @@ export def "certificates-reissue create" [
 #
 # POST /v1/certificates/{certificateId}/renew
 # operationId: certificate_renew
-export def "certificates-renew create" [
+export def "certificate-renew" [
   certificate_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -748,7 +748,7 @@ export def "certificates-renew create" [
 #
 # POST /v1/certificates/{certificateId}/revoke
 # operationId: certificate_revoke
-export def "certificates-revoke delete" [
+export def "certificate-revoke" [
   certificate_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -788,7 +788,7 @@ export def "certificates-revoke delete" [
 #
 # GET /v1/certificates/{certificateId}/siteSeal
 # operationId: certificate_siteseal_get
-export def "certificates-site-seal get-siteseal" [
+export def "certificate-siteseal-get" [
   certificate_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -827,7 +827,7 @@ export def "certificates-site-seal get-siteseal" [
 #
 # POST /v1/certificates/{certificateId}/verifyDomainControl
 # operationId: certificate_verifydomaincontrol
-export def "certificates-verify-domain-control create-verifydomaincontrol" [
+export def "certificate-verifydomaincontrol" [
   certificate_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -863,7 +863,7 @@ export def "certificates-verify-domain-control create-verifydomaincontrol" [
 #
 # GET /v2/certificates
 # operationId: certificate_get_entitlement
-export def "certificates get-entitlement" [
+export def "certificate-get-entitlement" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -900,7 +900,7 @@ export def "certificates get-entitlement" [
 #
 # GET /v2/certificates/download
 # operationId: certificate_download_entitlement
-export def "certificates-download download-entitlement" [
+export def "certificate-download-entitlement" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -936,7 +936,7 @@ export def "certificates-download download-entitlement" [
 #
 # GET /v2/customers/{customerId}/certificates
 # operationId: getCustomerCertificatesByCustomerId
-export def "customers-certificates get" [
+export def "get-customer-certificates-by-customer-id" [
   customer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -975,7 +975,7 @@ export def "customers-certificates get" [
 #
 # GET /v2/customers/{customerId}/certificates/acme/externalAccountBinding
 # operationId: getAcmeExternalAccountBinding
-export def "customers-certificates-acme-external-account-binding get" [
+export def "get-acme-external-account-binding" [
   customer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1011,7 +1011,7 @@ export def "customers-certificates-acme-external-account-binding get" [
 #
 # GET /v2/customers/{customerId}/certificates/{certificateId}
 # operationId: getCertificateDetailByCertIdentifier
-export def "customers-certificates get-detail-by-cert-identifier" [
+export def "get-certificate-detail-by-cert-identifier" [
   customer_id: string
   certificate_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1049,7 +1049,7 @@ export def "customers-certificates get-detail-by-cert-identifier" [
 #
 # GET /v2/customers/{customerId}/certificates/{certificateId}/domainVerifications
 # operationId: getDomainInformationByCertificateId
-export def "customers-certificates-domain-verifications get-information" [
+export def "get-domain-information-by-certificate-id" [
   customer_id: string
   certificate_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1087,7 +1087,7 @@ export def "customers-certificates-domain-verifications get-information" [
 #
 # GET /v2/customers/{customerId}/certificates/{certificateId}/domainVerifications/{domain}
 # operationId: getDomainDetailsByDomain
-export def "customers-certificates-domain-verifications get-details" [
+export def "get-domain-details-by-domain" [
   customer_id: string
   certificate_id: string
   domain: string

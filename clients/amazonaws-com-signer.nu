@@ -118,7 +118,7 @@ def status-completer [] { ["Failed" "InProgress" "Succeeded"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "signing-profiles-permissions create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "add-profile-permission" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -142,7 +142,7 @@ export def commands []: nothing -> table {
 #
 # POST /signing-profiles/{profileName}/permissions
 # operationId: AddProfilePermission
-export def "signing-profiles-permissions create" [
+export def "add-profile-permission" [
   profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -195,7 +195,7 @@ export def "signing-profiles-permissions create" [
 #
 # GET /signing-profiles/{profileName}/permissions
 # operationId: ListProfilePermissions
-export def "signing-profiles-permissions list" [
+export def "list-profile-permissions" [
   profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -242,7 +242,7 @@ export def "signing-profiles-permissions list" [
 #
 # DELETE /signing-profiles/{profileName}
 # operationId: CancelSigningProfile
-export def "signing-profiles cancel" [
+export def "cancel-signing-profile" [
   profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -287,7 +287,7 @@ export def "signing-profiles cancel" [
 #
 # GET /signing-profiles/{profileName}
 # operationId: GetSigningProfile
-export def "signing-profiles get" [
+export def "get-signing-profile" [
   profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -337,7 +337,7 @@ export def "signing-profiles get" [
 # --signingMaterial shape: {certificateArn?: any}
 # --signatureValidityPeriod shape: {value?: any, type?: any}
 # --overrides shape: {signingConfiguration?: any, signingImageFormat?: any}
-export def "signing-profiles update" [
+export def "put-signing-profile" [
   profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -391,7 +391,7 @@ export def "signing-profiles update" [
 #
 # GET /signing-jobs/{jobId}
 # operationId: DescribeSigningJob
-export def "signing-jobs get" [
+export def "describe-signing-job" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -436,7 +436,7 @@ export def "signing-jobs get" [
 #
 # GET /signing-platforms/{platformId}
 # operationId: GetSigningPlatform
-export def "signing-platforms get" [
+export def "get-signing-platform" [
   platform_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -481,7 +481,7 @@ export def "signing-platforms get" [
 #
 # GET /signing-jobs
 # operationId: ListSigningJobs
-export def "signing-jobs list" [
+export def "list-signing-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -536,7 +536,7 @@ export def "signing-jobs list" [
 # operationId: StartSigningJob
 # --source shape: {s3?: any}
 # --destination shape: {s3?: any}
-export def "signing-jobs start" [
+export def "start-signing-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -587,7 +587,7 @@ export def "signing-jobs start" [
 #
 # GET /signing-platforms
 # operationId: ListSigningPlatforms
-export def "signing-platforms list" [
+export def "list-signing-platforms" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -636,7 +636,7 @@ export def "signing-platforms list" [
 #
 # GET /signing-profiles
 # operationId: ListSigningProfiles
-export def "signing-profiles list" [
+export def "list-signing-profiles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -685,7 +685,7 @@ export def "signing-profiles list" [
 #
 # GET /tags/{resourceArn}
 # operationId: ListTagsForResource
-export def "tags list-for-resource" [
+export def "list-tags-for-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -730,7 +730,7 @@ export def "tags list-for-resource" [
 #
 # POST /tags/{resourceArn}
 # operationId: TagResource
-export def "tags tag-resource" [
+export def "tag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -779,7 +779,7 @@ export def "tags tag-resource" [
 #
 # DELETE /signing-profiles/{profileName}/permissions/{statementId}
 # operationId: RemoveProfilePermission
-export def "signing-profiles-permissions delete" [
+export def "remove-profile-permission" [
   profile_name: string
   statement_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -828,7 +828,7 @@ export def "signing-profiles-permissions delete" [
 #
 # PUT /signing-jobs/{jobId}/revoke
 # operationId: RevokeSignature
-export def "signing-jobs-revoke delete-signature" [
+export def "revoke-signature" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -878,7 +878,7 @@ export def "signing-jobs-revoke delete-signature" [
 #
 # PUT /signing-profiles/{profileName}/revoke
 # operationId: RevokeSigningProfile
-export def "signing-profiles-revoke delete" [
+export def "revoke-signing-profile" [
   profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -929,7 +929,7 @@ export def "signing-profiles-revoke delete" [
 #
 # DELETE /tags/{resourceArn}
 # operationId: UntagResource
-export def "tags untag-resource" [
+export def "untag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

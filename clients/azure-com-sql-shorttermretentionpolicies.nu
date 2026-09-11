@@ -110,7 +110,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-backup-short-term-retention-policies list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "backup-short-term-retention-policies-list-by-database" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -134,7 +134,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/backupShortTermRetentionPolicies
 # operationId: BackupShortTermRetentionPolicies_ListByDatabase
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-backup-short-term-retention-policies list" [
+export def "backup-short-term-retention-policies-list-by-database" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -178,7 +178,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/backupShortTermRetentionPolicies/{policyName}
 # operationId: BackupShortTermRetentionPolicies_Get
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-backup-short-term-retention-policies get" [
+export def "backup-short-term-retention-policies-get" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -225,7 +225,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/backupShortTermRetentionPolicies/{policyName}
 # operationId: BackupShortTermRetentionPolicies_Update
 # --properties shape: {retentionDays?: int}
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-backup-short-term-retention-policies update" [
+export def "backup-short-term-retention-policies-update" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -276,7 +276,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/backupShortTermRetentionPolicies/{policyName}
 # operationId: BackupShortTermRetentionPolicies_CreateOrUpdate
 # --properties shape: {retentionDays?: int}
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-backup-short-term-retention-policies create-or-update" [
+export def "backup-short-term-retention-policies-create-or-update" [
   subscription_id: string
   resource_group_name: string
   server_name: string

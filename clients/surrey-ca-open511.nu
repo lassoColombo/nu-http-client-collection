@@ -97,7 +97,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "areas get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-areas" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -120,7 +120,7 @@ export def commands []: nothing -> table {
 # Provides the geographical boundaries for all the jurisdictions.
 #
 # GET /areas
-export def "areas get" [
+export def "get-areas" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -155,7 +155,7 @@ export def "areas get" [
 # Provides real time traffic obstruction events. The event resource provides information about road events (constructions, special events, etc.).
 #
 # GET /events
-export def "events get" [
+export def "get-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -199,7 +199,7 @@ export def "events get" [
 # Lists the jurisdictions publishing data through this Open511 API implementation.
 #
 # GET /jurisdiction
-export def "jurisdiction get" [
+export def "get-jurisdiction" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -234,7 +234,7 @@ export def "jurisdiction get" [
 # Provides the geographical boundaries for all the jurisdictions.
 #
 # GET /jurisdictiongeography
-export def "jurisdictiongeography get" [
+export def "get-jurisdictiongeography" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

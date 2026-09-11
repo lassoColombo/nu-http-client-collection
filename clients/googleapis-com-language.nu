@@ -113,7 +113,7 @@ def encoding-type-completer [] { ["NONE" "UTF16" "UTF32" "UTF8"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta1-documents-analyze-entities create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "language-documents-analyze-entities" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -138,7 +138,7 @@ export def commands []: nothing -> table {
 # POST /v1beta1/documents:analyzeEntities
 # operationId: language.documents.analyzeEntities
 # --document shape: {content?: string, gcsContentUri?: string, language?: string, type?: "TYPE_UNSPECIFIED"|"PLAIN_TEXT"|"HTML"}
-export def "v1beta1-documents-analyze-entities create" [
+export def "language-documents-analyze-entities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -190,7 +190,7 @@ export def "v1beta1-documents-analyze-entities create" [
 # POST /v1beta1/documents:analyzeSentiment
 # operationId: language.documents.analyzeSentiment
 # --document shape: {content?: string, gcsContentUri?: string, language?: string, type?: "TYPE_UNSPECIFIED"|"PLAIN_TEXT"|"HTML"}
-export def "v1beta1-documents-analyze-sentiment create" [
+export def "language-documents-analyze-sentiment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -242,7 +242,7 @@ export def "v1beta1-documents-analyze-sentiment create" [
 # POST /v1beta1/documents:analyzeSyntax
 # operationId: language.documents.analyzeSyntax
 # --document shape: {content?: string, gcsContentUri?: string, language?: string, type?: "TYPE_UNSPECIFIED"|"PLAIN_TEXT"|"HTML"}
-export def "v1beta1-documents-analyze-syntax create" [
+export def "language-documents-analyze-syntax" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -295,7 +295,7 @@ export def "v1beta1-documents-analyze-syntax create" [
 # operationId: language.documents.annotateText
 # --document shape: {content?: string, gcsContentUri?: string, language?: string, type?: "TYPE_UNSPECIFIED"|"PLAIN_TEXT"|"HTML"}
 # --features shape: {extractDocumentSentiment?: bool, extractEntities?: bool, extractSyntax?: bool}
-export def "v1beta1-documents-annotate-text create" [
+export def "language-documents-annotate-text" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)

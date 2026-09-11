@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "companies-connections-data-commerce-customers list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-customers" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -122,7 +122,7 @@ export def commands []: nothing -> table {
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/commerce-customers
 # operationId: list-customers
-export def "companies-connections-data-commerce-customers list" [
+export def "list-customers" [
   company_id: any
   connection_id: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -165,7 +165,7 @@ export def "companies-connections-data-commerce-customers list" [
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/commerce-disputes
 # operationId: list-disputes
-export def "companies-connections-data-commerce-disputes list" [
+export def "list-disputes" [
   company_id: any
   connection_id: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -208,7 +208,7 @@ export def "companies-connections-data-commerce-disputes list" [
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/commerce-info
 # operationId: get-company-info
-export def "companies-connections-data-commerce-info get-company" [
+export def "get-company-info" [
   company_id: string
   connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -246,7 +246,7 @@ export def "companies-connections-data-commerce-info get-company" [
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/commerce-locations
 # operationId: list-locations
-export def "companies-connections-data-commerce-locations list" [
+export def "list-locations" [
   company_id: string
   connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -284,7 +284,7 @@ export def "companies-connections-data-commerce-locations list" [
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/commerce-orders
 # operationId: list-orders
-export def "companies-connections-data-commerce-orders list" [
+export def "list-orders" [
   company_id: any
   connection_id: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -327,7 +327,7 @@ export def "companies-connections-data-commerce-orders list" [
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/commerce-paymentMethods
 # operationId: list-payment-methods
-export def "companies-connections-data-commerce-payment-methods list" [
+export def "list-payment-methods" [
   company_id: any
   connection_id: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -370,7 +370,7 @@ export def "companies-connections-data-commerce-payment-methods list" [
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/commerce-payments
 # operationId: list-payments
-export def "companies-connections-data-commerce-payments list" [
+export def "list-payments" [
   company_id: any
   connection_id: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -413,7 +413,7 @@ export def "companies-connections-data-commerce-payments list" [
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/commerce-productCategories
 # operationId: list-product-categories
-export def "companies-connections-data-commerce-product-categories list" [
+export def "list-product-categories" [
   company_id: any
   connection_id: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -456,7 +456,7 @@ export def "companies-connections-data-commerce-product-categories list" [
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/commerce-products
 # operationId: list-products
-export def "companies-connections-data-commerce-products list" [
+export def "list-products" [
   company_id: any
   connection_id: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -499,7 +499,7 @@ export def "companies-connections-data-commerce-products list" [
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/commerce-taxComponents
 # operationId: get-tax-components
-export def "companies-connections-data-commerce-tax-components get" [
+export def "get-tax-components" [
   company_id: string
   connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -537,7 +537,7 @@ export def "companies-connections-data-commerce-tax-components get" [
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/commerce-transactions
 # operationId: list-transactions
-export def "companies-connections-data-commerce-transactions list" [
+export def "list-transactions" [
   company_id: any
   connection_id: any
   --base-url(-b): string@base-url-completer # API base URL

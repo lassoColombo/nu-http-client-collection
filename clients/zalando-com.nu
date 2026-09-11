@@ -101,7 +101,7 @@ def sort-completer-1 [] { ["activationdate" "popularity" "priceasc" "pricedesc" 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "article-reviews list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-article-reviews" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -124,7 +124,7 @@ export def commands []: nothing -> table {
 # Get Article Reviews
 #
 # GET /article-reviews
-export def "article-reviews list" [
+export def "get-article-reviews" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -169,7 +169,7 @@ export def "article-reviews list" [
 # Get Article Reviews Summaries
 #
 # GET /article-reviews-summaries
-export def "article-reviews-summaries list" [
+export def "get-article-reviews-summaries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -210,7 +210,7 @@ export def "article-reviews-summaries list" [
 # Get Article Reviews Summaries by articleModelId
 #
 # GET /article-reviews-summaries/{articleModelId}
-export def "article-reviews-summaries get" [
+export def "get-article-reviews-summaries-article-model-id" [
   article_model_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -250,7 +250,7 @@ export def "article-reviews-summaries get" [
 # Get Article Reviews by reviewId
 #
 # GET /article-reviews/{reviewId}
-export def "article-reviews get" [
+export def "get-article-reviews-review-id" [
   review_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -290,7 +290,7 @@ export def "article-reviews get" [
 # Search for Articles
 #
 # GET /articles
-export def "articles list" [
+export def "get-articles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -365,7 +365,7 @@ export def "articles list" [
 # Get Article by articleId
 #
 # GET /articles/{articleId}
-export def "articles get" [
+export def "get-articles-article-id" [
   article_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -405,7 +405,7 @@ export def "articles get" [
 # Get Article media by articleId
 #
 # GET /articles/{articleId}/media
-export def "articles-media get" [
+export def "get-articles-article-id-media" [
   article_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -445,7 +445,7 @@ export def "articles-media get" [
 # Get Article reviews by articleId
 #
 # GET /articles/{articleId}/reviews
-export def "articles-reviews get" [
+export def "get-articles-article-id-reviews" [
   article_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -490,7 +490,7 @@ export def "articles-reviews get" [
 # Get Article reviews summary by articleId
 #
 # GET /articles/{articleId}/reviews-summary
-export def "articles-reviews-summary get" [
+export def "get-articles-article-id-reviews-summary" [
   article_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -530,7 +530,7 @@ export def "articles-reviews-summary get" [
 # Get Article units by articleId
 #
 # GET /articles/{articleId}/units
-export def "articles-units list" [
+export def "get-articles-article-id-units" [
   article_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -570,7 +570,7 @@ export def "articles-units list" [
 # Get Article units by articleId snd unitId
 #
 # GET /articles/{articleId}/units/{unitId}
-export def "articles-units get" [
+export def "get-articles-article-id-units-unit-id" [
   article_id: string
   unit_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -612,7 +612,7 @@ export def "articles-units get" [
 # Shop Brands
 #
 # GET /brands
-export def "brands list" [
+export def "get-brands" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -656,7 +656,7 @@ export def "brands list" [
 # Get Single Brand by Key
 #
 # GET /brands/{key}
-export def "brands get" [
+export def "get-brands-key" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -696,7 +696,7 @@ export def "brands get" [
 # Shop Categories
 #
 # GET /categories
-export def "categories list" [
+export def "get-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -745,7 +745,7 @@ export def "categories list" [
 # Get Single Category by Key
 #
 # GET /categories/{key}
-export def "categories get" [
+export def "get-categories-key" [
   key: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -785,7 +785,7 @@ export def "categories get" [
 # Shop Domains
 #
 # GET /domains
-export def "domains get" [
+export def "get-domains" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -818,7 +818,7 @@ export def "domains get" [
 # Shop Facets
 #
 # GET /facets
-export def "facets get" [
+export def "get-facets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -888,7 +888,7 @@ export def "facets get" [
 # Shop Filters
 #
 # GET /filters
-export def "filters list" [
+export def "get-filters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -926,7 +926,7 @@ export def "filters list" [
 # Get Single Filter by filterName
 #
 # GET /filters/{filterName}
-export def "filters get" [
+export def "get-filters-filter-name" [
   filter_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -966,7 +966,7 @@ export def "filters get" [
 # Get Recommendations by articleId
 #
 # GET /recommendations/{articleIds}
-export def "recommendations get" [
+export def "get-recommendations-article-ids" [
   article_ids: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

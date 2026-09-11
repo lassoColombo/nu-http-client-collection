@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms-shares-operationresults get-containers-migration-status" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "containers-migration-status" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -128,7 +128,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Storage.Admin/farms/{farmId}/shares/operationresults/{operationId}
 # operationId: Containers_MigrationStatus
-export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms-shares-operationresults get-containers-migration-status" [
+export def "containers-migration-status" [
   subscription_id: string
   resource_group_name: string
   farm_id: string
@@ -172,7 +172,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms
 #
 # POST /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Storage.Admin/farms/{farmId}/shares/operationresults/{operationId}
 # operationId: Containers_CancelMigration
-export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms-shares-operationresults cancel-containers-migration" [
+export def "containers-cancel-migration" [
   subscription_id: string
   resource_group_name: string
   farm_id: string
@@ -216,7 +216,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Storage.Admin/farms/{farmId}/shares/{shareName}/containers
 # operationId: Containers_List
-export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms-shares-containers list" [
+export def "containers-list" [
   subscription_id: string
   resource_group_name: string
   farm_id: string
@@ -263,7 +263,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Storage.Admin/farms/{farmId}/shares/{shareName}/destinationshares
 # operationId: Containers_ListDestinationShares
-export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms-shares-destinationshares list-containers-destination" [
+export def "containers-list-destination-shares" [
   subscription_id: string
   resource_group_name: string
   farm_id: string
@@ -307,7 +307,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms
 #
 # POST /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Storage.Admin/farms/{farmId}/shares/{shareName}/migrate
 # operationId: Containers_Migrate
-export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms-shares-migrate create-containers" [
+export def "containers-migrate" [
   subscription_id: string
   resource_group_name: string
   farm_id: string

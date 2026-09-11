@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-connections list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "connection-list-by-automation-account" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -141,7 +141,7 @@ export def commands []: nothing -> table {
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/connections
 # Docs: http://aka.ms/azureautomationsdk/connectionoperations
 # operationId: Connection_ListByAutomationAccount
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-connections list" [
+export def "connection-list-by-automation-account" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -184,7 +184,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/connections/{connectionName}
 # Docs: http://aka.ms/azureautomationsdk/connectionoperations
 # operationId: Connection_Delete
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-connections delete" [
+export def "connection-delete" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -229,7 +229,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/connections/{connectionName}
 # Docs: http://aka.ms/azureautomationsdk/connectionoperations
 # operationId: Connection_Get
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-connections get" [
+export def "connection-get" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -275,7 +275,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # Docs: http://aka.ms/azureautomationsdk/connectionoperations
 # operationId: Connection_Update
 # --properties shape: {description?: string, fieldDefinitionValues?: record}
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-connections update" [
+export def "connection-update" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -326,7 +326,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # Docs: http://aka.ms/azureautomationsdk/connectionoperations
 # operationId: Connection_CreateOrUpdate
 # --properties shape: {connectionType: any, description?: string, fieldDefinitionValues?: record}
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-connections create-or-update" [
+export def "connection-create-or-update" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string

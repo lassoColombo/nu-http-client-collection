@@ -129,7 +129,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta1 delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "bigqueryconnection-projects-locations-connections-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -153,7 +153,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1beta1/{name}
 # operationId: bigqueryconnection.projects.locations.connections.delete
-export def "v1beta1 delete" [
+export def "bigqueryconnection-projects-locations-connections-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -201,7 +201,7 @@ export def "v1beta1 delete" [
 #
 # GET /v1beta1/{name}
 # operationId: bigqueryconnection.projects.locations.connections.get
-export def "v1beta1 get" [
+export def "bigqueryconnection-projects-locations-connections-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -250,7 +250,7 @@ export def "v1beta1 get" [
 # PATCH /v1beta1/{name}
 # operationId: bigqueryconnection.projects.locations.connections.updateCredential
 # --cloudSql shape: {password?: string, username?: string}
-export def "v1beta1 update-credential" [
+export def "bigqueryconnection-projects-locations-connections-update-credential" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -302,7 +302,7 @@ export def "v1beta1 update-credential" [
 #
 # GET /v1beta1/{parent}/connections
 # operationId: bigqueryconnection.projects.locations.connections.list
-export def "v1beta1-connections list" [
+export def "bigqueryconnection-projects-locations-connections-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -353,7 +353,7 @@ export def "v1beta1-connections list" [
 # POST /v1beta1/{parent}/connections
 # operationId: bigqueryconnection.projects.locations.connections.create
 # --cloudSql shape: {credential?: record, database?: string, instanceId?: string, type?: "DATABASE_TYPE_UNSPECIFIED"|"POSTGRES"|"MYSQL"}
-export def "v1beta1-connections create" [
+export def "bigqueryconnection-projects-locations-connections-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -410,7 +410,7 @@ export def "v1beta1-connections create" [
 # POST /v1beta1/{resource}:getIamPolicy
 # operationId: bigqueryconnection.projects.locations.connections.getIamPolicy
 # --options shape: {requestedPolicyVersion?: int}
-export def "v1beta1 get-iam-policy" [
+export def "bigqueryconnection-projects-locations-connections-get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -463,7 +463,7 @@ export def "v1beta1 get-iam-policy" [
 # POST /v1beta1/{resource}:setIamPolicy
 # operationId: bigqueryconnection.projects.locations.connections.setIamPolicy
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
-export def "v1beta1 update-iam-policy" [
+export def "bigqueryconnection-projects-locations-connections-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -516,7 +516,7 @@ export def "v1beta1 update-iam-policy" [
 #
 # POST /v1beta1/{resource}:testIamPermissions
 # operationId: bigqueryconnection.projects.locations.connections.testIamPermissions
-export def "v1beta1 test-iam-permissions" [
+export def "bigqueryconnection-projects-locations-connections-test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

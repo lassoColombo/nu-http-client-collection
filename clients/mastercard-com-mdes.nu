@@ -103,7 +103,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accountholdermessaging create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-accountholdermessaging" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -127,7 +127,7 @@ export def commands []: nothing -> table {
 #
 # POST /accountholdermessaging
 # --AccountHolderMessagingRequest shape: {AuditInfo: any, IssuerApplicationMessageDisplay: string, MessageExpiration: string, MessageIdentifier: string, MessageLanguageCode: string, MessageText: string, TokenUniqueReference: string}
-export def "accountholdermessaging create" [
+export def "post-accountholdermessaging" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -165,7 +165,7 @@ export def "accountholdermessaging create" [
 #
 # POST /search
 # --SearchRequest shape: {AccountPan?: string, AlternateAccountIdentifier?: string, AuditInfo: any, CommentId?: string, ExcludeDeletedIndicator?: "true"|"false", PaymentAppInstanceId?: string, Token?: string, TokenUniqueReference?: string}
-export def "search create" [
+export def "post-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -202,7 +202,7 @@ export def "search create" [
 # Returns the overall system status of the Mastercard Digital Enablement Service.
 #
 # GET /systemstatus
-export def "systemstatus get" [
+export def "get-systemstatus" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -236,7 +236,7 @@ export def "systemstatus get" [
 #
 # POST /token/activate
 # --TokenActivateRequest shape: {AccountPan?: string, AuditInfo: any, CommentText?: string, PaymentAppInstanceId?: string, ReasonCode: string, TokenUniqueReference?: string}
-export def "token-activate create" [
+export def "post-token-activate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -274,7 +274,7 @@ export def "token-activate create" [
 #
 # POST /token/activationmethods
 # --TokenActivationMethodsRequest shape: {AuditInfo?: any, TokenUniqueReference: string}
-export def "token-activationmethods create" [
+export def "post-token-activationmethods" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -312,7 +312,7 @@ export def "token-activationmethods create" [
 #
 # POST /token/comments
 # --TokenCommentsRequest shape: {AuditInfo?: any, TokenUniqueReference: string}
-export def "token-comments create" [
+export def "post-token-comments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -350,7 +350,7 @@ export def "token-comments create" [
 #
 # POST /token/delete
 # --TokenDeleteRequest shape: {AuditInfo: any, CommentText?: string, ReasonCode: string, TokenUniqueReference: string}
-export def "token-delete create" [
+export def "post-token-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -388,7 +388,7 @@ export def "token-delete create" [
 #
 # POST /token/resendactivationcode
 # --TokenResendActivationCodeRequest shape: {ActivationMethodId: string, AuditInfo: any, TokenUniqueReference: string}
-export def "token-resendactivationcode create" [
+export def "post-token-resendactivationcode" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -426,7 +426,7 @@ export def "token-resendactivationcode create" [
 #
 # POST /token/resetmobilepin
 # --TokenResetMobilePinRequest shape: {AuditInfo: any, CommentText?: string, ReasonCode: string, TokenUniqueReference: string}
-export def "token-resetmobilepin create" [
+export def "post-token-resetmobilepin" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -464,7 +464,7 @@ export def "token-resetmobilepin create" [
 #
 # POST /token/statushistory
 # --TokenStatusHistoryRequest shape: {AuditInfo?: any, TokenUniqueReference: string}
-export def "token-statushistory create" [
+export def "post-token-statushistory" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -502,7 +502,7 @@ export def "token-statushistory create" [
 #
 # POST /token/suspend
 # --TokenSuspendRequest shape: {AuditInfo: any, CommentText?: string, ReasonCode: string, TokenUniqueReference: string}
-export def "token-suspend create" [
+export def "post-token-suspend" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -540,7 +540,7 @@ export def "token-suspend create" [
 #
 # POST /token/unsuspend
 # --TokenUnsuspendRequest shape: {AuditInfo: any, CommentText?: string, ReasonCode: string, TokenUniqueReference: string}
-export def "token-unsuspend create" [
+export def "post-token-unsuspend" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -578,7 +578,7 @@ export def "token-unsuspend create" [
 #
 # POST /token/update
 # --TokenUpdateRequest shape: {AccountPanSequenceNumber?: string, AuditInfo: any, CommentText?: string, CurrentAccountPan?: string, ExpirationDate?: string, IssuerProductConfigurationId?: string, NewAccountPan?: string, TokenUniqueReference?: string, UpdateWalletProviderIndicator?: string}
-export def "token-update create" [
+export def "post-token-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -616,7 +616,7 @@ export def "token-update create" [
 #
 # POST /transactions
 # --TransactionsRequest shape: {AuditInfo: any, TokenUniqueReference: string}
-export def "transactions create" [
+export def "post-transactions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -654,7 +654,7 @@ export def "transactions create" [
 #
 # POST /updatetokenassurance
 # --UpdateTokenAssuranceRequest shape: {AuditInfo: any, CommentText?: string, TokenUniqueReference: string}
-export def "update-tokenassurance create" [
+export def "post-updatetokenassurance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

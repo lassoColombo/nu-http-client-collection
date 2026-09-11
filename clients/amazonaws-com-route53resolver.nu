@@ -163,7 +163,7 @@ def x-amz-target-completer-62 [] { ["Route53Resolver.UpdateResolverRule"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-associate-firewall-rule-group" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associate-firewall-rule-group" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -187,7 +187,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AssociateFirewallRuleGroup
-export def "api create-associate-firewall-rule-group" [
+export def "associate-firewall-rule-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -241,7 +241,7 @@ export def "api create-associate-firewall-rule-group" [
 #
 # POST /
 # operationId: AssociateResolverEndpointIpAddress
-export def "api create-associate-resolver-endpoint-ip-address" [
+export def "associate-resolver-endpoint-ip-address" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -290,7 +290,7 @@ export def "api create-associate-resolver-endpoint-ip-address" [
 #
 # POST /
 # operationId: AssociateResolverQueryLogConfig
-export def "api list-associate-resolver-log-config" [
+export def "associate-resolver-query-log-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -339,7 +339,7 @@ export def "api list-associate-resolver-log-config" [
 #
 # POST /
 # operationId: AssociateResolverRule
-export def "api create-associate-resolver-rule" [
+export def "associate-resolver-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -389,7 +389,7 @@ export def "api create-associate-resolver-rule" [
 #
 # POST /
 # operationId: CreateFirewallDomainList
-export def "api create-firewall-domain-list" [
+export def "create-firewall-domain-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -439,7 +439,7 @@ export def "api create-firewall-domain-list" [
 #
 # POST /
 # operationId: CreateFirewallRule
-export def "api create-firewall-rule" [
+export def "create-firewall-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -496,7 +496,7 @@ export def "api create-firewall-rule" [
 #
 # POST /
 # operationId: CreateFirewallRuleGroup
-export def "api create-firewall-rule-group" [
+export def "create-firewall-rule-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -546,7 +546,7 @@ export def "api create-firewall-rule-group" [
 #
 # POST /
 # operationId: CreateResolverEndpoint
-export def "api create-resolver-endpoint" [
+export def "create-resolver-endpoint" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -600,7 +600,7 @@ export def "api create-resolver-endpoint" [
 #
 # POST /
 # operationId: CreateResolverQueryLogConfig
-export def "api create-resolver-list-log-config" [
+export def "create-resolver-query-log-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -651,7 +651,7 @@ export def "api create-resolver-list-log-config" [
 #
 # POST /
 # operationId: CreateResolverRule
-export def "api create-resolver-rule" [
+export def "create-resolver-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -705,7 +705,7 @@ export def "api create-resolver-rule" [
 #
 # POST /
 # operationId: DeleteFirewallDomainList
-export def "api delete-firewall-domain-list" [
+export def "delete-firewall-domain-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -753,7 +753,7 @@ export def "api delete-firewall-domain-list" [
 #
 # POST /
 # operationId: DeleteFirewallRule
-export def "api delete-firewall-rule" [
+export def "delete-firewall-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -802,7 +802,7 @@ export def "api delete-firewall-rule" [
 #
 # POST /
 # operationId: DeleteFirewallRuleGroup
-export def "api delete-firewall-rule-group" [
+export def "delete-firewall-rule-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -850,7 +850,7 @@ export def "api delete-firewall-rule-group" [
 #
 # POST /
 # operationId: DeleteResolverEndpoint
-export def "api delete-resolver-endpoint" [
+export def "delete-resolver-endpoint" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -898,7 +898,7 @@ export def "api delete-resolver-endpoint" [
 #
 # POST /
 # operationId: DeleteResolverQueryLogConfig
-export def "api delete-resolver-list-log-config" [
+export def "delete-resolver-query-log-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -946,7 +946,7 @@ export def "api delete-resolver-list-log-config" [
 #
 # POST /
 # operationId: DeleteResolverRule
-export def "api delete-resolver-rule" [
+export def "delete-resolver-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -994,7 +994,7 @@ export def "api delete-resolver-rule" [
 #
 # POST /
 # operationId: DisassociateFirewallRuleGroup
-export def "api create-disassociate-firewall-rule-group" [
+export def "disassociate-firewall-rule-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1042,7 +1042,7 @@ export def "api create-disassociate-firewall-rule-group" [
 #
 # POST /
 # operationId: DisassociateResolverEndpointIpAddress
-export def "api create-disassociate-resolver-endpoint-ip-address" [
+export def "disassociate-resolver-endpoint-ip-address" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1091,7 +1091,7 @@ export def "api create-disassociate-resolver-endpoint-ip-address" [
 #
 # POST /
 # operationId: DisassociateResolverQueryLogConfig
-export def "api list-disassociate-resolver-log-config" [
+export def "disassociate-resolver-query-log-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1140,7 +1140,7 @@ export def "api list-disassociate-resolver-log-config" [
 #
 # POST /
 # operationId: DisassociateResolverRule
-export def "api create-disassociate-resolver-rule" [
+export def "disassociate-resolver-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1189,7 +1189,7 @@ export def "api create-disassociate-resolver-rule" [
 #
 # POST /
 # operationId: GetFirewallConfig
-export def "api get-firewall-config" [
+export def "get-firewall-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1237,7 +1237,7 @@ export def "api get-firewall-config" [
 #
 # POST /
 # operationId: GetFirewallDomainList
-export def "api get-firewall-domain-list" [
+export def "get-firewall-domain-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1285,7 +1285,7 @@ export def "api get-firewall-domain-list" [
 #
 # POST /
 # operationId: GetFirewallRuleGroup
-export def "api get-firewall-rule-group" [
+export def "get-firewall-rule-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1333,7 +1333,7 @@ export def "api get-firewall-rule-group" [
 #
 # POST /
 # operationId: GetFirewallRuleGroupAssociation
-export def "api get-firewall-rule-group-association" [
+export def "get-firewall-rule-group-association" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1381,7 +1381,7 @@ export def "api get-firewall-rule-group-association" [
 #
 # POST /
 # operationId: GetFirewallRuleGroupPolicy
-export def "api get-firewall-rule-group-policy" [
+export def "get-firewall-rule-group-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1429,7 +1429,7 @@ export def "api get-firewall-rule-group-policy" [
 #
 # POST /
 # operationId: GetResolverConfig
-export def "api get-resolver-config" [
+export def "get-resolver-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1477,7 +1477,7 @@ export def "api get-resolver-config" [
 #
 # POST /
 # operationId: GetResolverDnssecConfig
-export def "api get-resolver-dnssec-config" [
+export def "get-resolver-dnssec-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1525,7 +1525,7 @@ export def "api get-resolver-dnssec-config" [
 #
 # POST /
 # operationId: GetResolverEndpoint
-export def "api get-resolver-endpoint" [
+export def "get-resolver-endpoint" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1573,7 +1573,7 @@ export def "api get-resolver-endpoint" [
 #
 # POST /
 # operationId: GetResolverQueryLogConfig
-export def "api get-resolver-list-log-config" [
+export def "get-resolver-query-log-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1621,7 +1621,7 @@ export def "api get-resolver-list-log-config" [
 #
 # POST /
 # operationId: GetResolverQueryLogConfigAssociation
-export def "api get-resolver-list-log-config-association" [
+export def "get-resolver-query-log-config-association" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1669,7 +1669,7 @@ export def "api get-resolver-list-log-config-association" [
 #
 # POST /
 # operationId: GetResolverQueryLogConfigPolicy
-export def "api get-resolver-list-log-config-policy" [
+export def "get-resolver-query-log-config-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1717,7 +1717,7 @@ export def "api get-resolver-list-log-config-policy" [
 #
 # POST /
 # operationId: GetResolverRule
-export def "api get-resolver-rule" [
+export def "get-resolver-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1765,7 +1765,7 @@ export def "api get-resolver-rule" [
 #
 # POST /
 # operationId: GetResolverRuleAssociation
-export def "api get-resolver-rule-association" [
+export def "get-resolver-rule-association" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1813,7 +1813,7 @@ export def "api get-resolver-rule-association" [
 #
 # POST /
 # operationId: GetResolverRulePolicy
-export def "api get-resolver-rule-policy" [
+export def "get-resolver-rule-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1861,7 +1861,7 @@ export def "api get-resolver-rule-policy" [
 #
 # POST /
 # operationId: ImportFirewallDomains
-export def "api import-firewall-domains" [
+export def "import-firewall-domains" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1911,7 +1911,7 @@ export def "api import-firewall-domains" [
 #
 # POST /
 # operationId: ListFirewallConfigs
-export def "api list-firewall-configs" [
+export def "list-firewall-configs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1963,7 +1963,7 @@ export def "api list-firewall-configs" [
 #
 # POST /
 # operationId: ListFirewallDomainLists
-export def "api list-firewall-domain-lists" [
+export def "list-firewall-domain-lists" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2015,7 +2015,7 @@ export def "api list-firewall-domain-lists" [
 #
 # POST /
 # operationId: ListFirewallDomains
-export def "api list-firewall-domains" [
+export def "list-firewall-domains" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2068,7 +2068,7 @@ export def "api list-firewall-domains" [
 #
 # POST /
 # operationId: ListFirewallRuleGroupAssociations
-export def "api list-firewall-rule-group-associations" [
+export def "list-firewall-rule-group-associations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2124,7 +2124,7 @@ export def "api list-firewall-rule-group-associations" [
 #
 # POST /
 # operationId: ListFirewallRuleGroups
-export def "api list-firewall-rule-groups" [
+export def "list-firewall-rule-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2176,7 +2176,7 @@ export def "api list-firewall-rule-groups" [
 #
 # POST /
 # operationId: ListFirewallRules
-export def "api list-firewall-rules" [
+export def "list-firewall-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2231,7 +2231,7 @@ export def "api list-firewall-rules" [
 #
 # POST /
 # operationId: ListResolverConfigs
-export def "api list-resolver-configs" [
+export def "list-resolver-configs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2283,7 +2283,7 @@ export def "api list-resolver-configs" [
 #
 # POST /
 # operationId: ListResolverDnssecConfigs
-export def "api list-resolver-dnssec-configs" [
+export def "list-resolver-dnssec-configs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2336,7 +2336,7 @@ export def "api list-resolver-dnssec-configs" [
 #
 # POST /
 # operationId: ListResolverEndpointIpAddresses
-export def "api list-resolver-endpoint-ip-addresses" [
+export def "list-resolver-endpoint-ip-addresses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2389,7 +2389,7 @@ export def "api list-resolver-endpoint-ip-addresses" [
 #
 # POST /
 # operationId: ListResolverEndpoints
-export def "api list-resolver-endpoints" [
+export def "list-resolver-endpoints" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2442,7 +2442,7 @@ export def "api list-resolver-endpoints" [
 #
 # POST /
 # operationId: ListResolverQueryLogConfigAssociations
-export def "api list-resolver-log-config-associations" [
+export def "list-resolver-query-log-config-associations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2497,7 +2497,7 @@ export def "api list-resolver-log-config-associations" [
 #
 # POST /
 # operationId: ListResolverQueryLogConfigs
-export def "api list-resolver-log-configs" [
+export def "list-resolver-query-log-configs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2552,7 +2552,7 @@ export def "api list-resolver-log-configs" [
 #
 # POST /
 # operationId: ListResolverRuleAssociations
-export def "api list-resolver-rule-associations" [
+export def "list-resolver-rule-associations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2605,7 +2605,7 @@ export def "api list-resolver-rule-associations" [
 #
 # POST /
 # operationId: ListResolverRules
-export def "api list-resolver-rules" [
+export def "list-resolver-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2658,7 +2658,7 @@ export def "api list-resolver-rules" [
 #
 # POST /
 # operationId: ListTagsForResource
-export def "api list-tags-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2711,7 +2711,7 @@ export def "api list-tags-for-resource" [
 #
 # POST /
 # operationId: PutFirewallRuleGroupPolicy
-export def "api update-firewall-rule-group-policy" [
+export def "put-firewall-rule-group-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2760,7 +2760,7 @@ export def "api update-firewall-rule-group-policy" [
 #
 # POST /
 # operationId: PutResolverQueryLogConfigPolicy
-export def "api update-resolver-list-log-config-policy" [
+export def "put-resolver-query-log-config-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2809,7 +2809,7 @@ export def "api update-resolver-list-log-config-policy" [
 #
 # POST /
 # operationId: PutResolverRulePolicy
-export def "api update-resolver-rule-policy" [
+export def "put-resolver-rule-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2858,7 +2858,7 @@ export def "api update-resolver-rule-policy" [
 #
 # POST /
 # operationId: TagResource
-export def "api tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2907,7 +2907,7 @@ export def "api tag-resource" [
 #
 # POST /
 # operationId: UntagResource
-export def "api untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2956,7 +2956,7 @@ export def "api untag-resource" [
 #
 # POST /
 # operationId: UpdateFirewallConfig
-export def "api update-firewall-config" [
+export def "update-firewall-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3005,7 +3005,7 @@ export def "api update-firewall-config" [
 #
 # POST /
 # operationId: UpdateFirewallDomains
-export def "api update-firewall-domains" [
+export def "update-firewall-domains" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3055,7 +3055,7 @@ export def "api update-firewall-domains" [
 #
 # POST /
 # operationId: UpdateFirewallRule
-export def "api update-firewall-rule" [
+export def "update-firewall-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3111,7 +3111,7 @@ export def "api update-firewall-rule" [
 #
 # POST /
 # operationId: UpdateFirewallRuleGroupAssociation
-export def "api update-firewall-rule-group-association" [
+export def "update-firewall-rule-group-association" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3162,7 +3162,7 @@ export def "api update-firewall-rule-group-association" [
 #
 # POST /
 # operationId: UpdateResolverConfig
-export def "api update-resolver-config" [
+export def "update-resolver-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3211,7 +3211,7 @@ export def "api update-resolver-config" [
 #
 # POST /
 # operationId: UpdateResolverDnssecConfig
-export def "api update-resolver-dnssec-config" [
+export def "update-resolver-dnssec-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3260,7 +3260,7 @@ export def "api update-resolver-dnssec-config" [
 #
 # POST /
 # operationId: UpdateResolverEndpoint
-export def "api update-resolver-endpoint" [
+export def "update-resolver-endpoint" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3311,7 +3311,7 @@ export def "api update-resolver-endpoint" [
 #
 # POST /
 # operationId: UpdateResolverRule
-export def "api update-resolver-rule" [
+export def "update-resolver-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

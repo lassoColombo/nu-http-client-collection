@@ -112,7 +112,7 @@ def platform-completer [] { ["ANDROID" "JAVASCRIPT" "LINUX" "OBJC" "OSX" "SWIFT"
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-project" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -136,7 +136,7 @@ export def commands []: nothing -> table {
 #
 # POST /projects
 # operationId: CreateProject
-export def "projects create" [
+export def "create-project" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -187,7 +187,7 @@ export def "projects create" [
 #
 # GET /projects
 # operationId: ListProjects
-export def "projects list" [
+export def "list-projects" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -233,7 +233,7 @@ export def "projects list" [
 #
 # DELETE /projects/{projectId}
 # operationId: DeleteProject
-export def "projects delete" [
+export def "delete-project" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -278,7 +278,7 @@ export def "projects delete" [
 #
 # GET /bundles/{bundleId}
 # operationId: DescribeBundle
-export def "bundles get" [
+export def "describe-bundle" [
   bundle_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -323,7 +323,7 @@ export def "bundles get" [
 #
 # POST /bundles/{bundleId}
 # operationId: ExportBundle
-export def "bundles export" [
+export def "export-bundle" [
   bundle_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -371,7 +371,7 @@ export def "bundles export" [
 #
 # GET /project
 # operationId: DescribeProject
-export def "project get" [
+export def "describe-project" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -417,7 +417,7 @@ export def "project get" [
 #
 # POST /exports/{projectId}
 # operationId: ExportProject
-export def "exports export-project" [
+export def "export-project" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -462,7 +462,7 @@ export def "exports export-project" [
 #
 # GET /bundles
 # operationId: ListBundles
-export def "bundles list" [
+export def "list-bundles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -508,7 +508,7 @@ export def "bundles list" [
 #
 # POST /update
 # operationId: UpdateProject
-export def "update update-project" [
+export def "update-project" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

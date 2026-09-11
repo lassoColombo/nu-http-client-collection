@@ -124,7 +124,7 @@ def kind-completer [] { ["fhir" "fhir-R4" "fhir-Stu3"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-healthcare-apis-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -148,7 +148,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.HealthcareApis/operations
 # operationId: Operations_List
-export def "providers-microsoft-healthcare-apis-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,7 +184,7 @@ export def "providers-microsoft-healthcare-apis-operations list" [
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.HealthcareApis/checkNameAvailability
 # operationId: Services_CheckNameAvailability
-export def "subscriptions-providers-microsoft-healthcare-apis-check-name-availability check-services" [
+export def "services-check-name-availability" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -227,7 +227,7 @@ export def "subscriptions-providers-microsoft-healthcare-apis-check-name-availab
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.HealthcareApis/locations/{locationName}/operationresults/{operationResultId}
 # operationId: OperationResults_Get
-export def "subscriptions-providers-microsoft-healthcare-apis-locations-operationresults get-operation-results" [
+export def "operation-results-get" [
   subscription_id: string
   location_name: string
   operation_result_id: string
@@ -269,7 +269,7 @@ export def "subscriptions-providers-microsoft-healthcare-apis-locations-operatio
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.HealthcareApis/services
 # operationId: Services_List
-export def "subscriptions-providers-microsoft-healthcare-apis-services list" [
+export def "services-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -307,7 +307,7 @@ export def "subscriptions-providers-microsoft-healthcare-apis-services list" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HealthcareApis/services
 # operationId: Services_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-healthcare-apis-services list" [
+export def "services-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -347,7 +347,7 @@ export def "subscriptions-resource-groups-providers-microsoft-healthcare-apis-se
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HealthcareApis/services/{resourceName}
 # operationId: Services_Delete
-export def "subscriptions-resource-groups-providers-microsoft-healthcare-apis-services delete" [
+export def "services-delete" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -389,7 +389,7 @@ export def "subscriptions-resource-groups-providers-microsoft-healthcare-apis-se
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HealthcareApis/services/{resourceName}
 # operationId: Services_Get
-export def "subscriptions-resource-groups-providers-microsoft-healthcare-apis-services get" [
+export def "services-get" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -431,7 +431,7 @@ export def "subscriptions-resource-groups-providers-microsoft-healthcare-apis-se
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HealthcareApis/services/{resourceName}
 # operationId: Services_Update
-export def "subscriptions-resource-groups-providers-microsoft-healthcare-apis-services update" [
+export def "services-update" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -478,7 +478,7 @@ export def "subscriptions-resource-groups-providers-microsoft-healthcare-apis-se
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HealthcareApis/services/{resourceName}
 # operationId: Services_CreateOrUpdate
 # --properties shape: {accessPolicies: list, authenticationConfiguration?: record, corsConfiguration?: record, cosmosDbConfiguration?: record}
-export def "subscriptions-resource-groups-providers-microsoft-healthcare-apis-services create-or-update" [
+export def "services-create-or-update" [
   subscription_id: string
   resource_group_name: string
   resource_name: string

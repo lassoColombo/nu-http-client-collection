@@ -112,7 +112,7 @@ def format-completer [] { ["pdf"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "agcer-certificate create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "agcer" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -138,7 +138,7 @@ export def commands []: nothing -> table {
 # operationId: agcer
 # --certificateParameters shape: {Name: string, RefNo: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "agcer-certificate create" [
+export def "agcer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -181,7 +181,7 @@ export def "agcer-certificate create" [
 # operationId: bacer
 # --certificateParameters shape: {Name: string, RefNo: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "bacer-certificate create" [
+export def "bacer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -224,7 +224,7 @@ export def "bacer-certificate create" [
 # operationId: bhcer
 # --certificateParameters shape: {Name: string, RefNo: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "bhcer-certificate create" [
+export def "bhcer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -267,7 +267,7 @@ export def "bhcer-certificate create" [
 # operationId: chcer
 # --certificateParameters shape: {Name: string, RefNo: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "chcer-certificate create" [
+export def "chcer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -310,7 +310,7 @@ export def "chcer-certificate create" [
 # operationId: dccer
 # --certificateParameters shape: {Name: string, RefNo: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "dccer-certificate create" [
+export def "dccer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -353,7 +353,7 @@ export def "dccer-certificate create" [
 # operationId: ffcer
 # --certificateParameters shape: {Name: string, RefNo: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "ffcer-certificate create" [
+export def "ffcer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -396,7 +396,7 @@ export def "ffcer-certificate create" [
 # operationId: incer
 # --certificateParameters shape: {Name: string, RefNo: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "incer-certificate create" [
+export def "incer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -439,7 +439,7 @@ export def "incer-certificate create" [
 # operationId: lhcer
 # --certificateParameters shape: {Name: string, RefNo: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "lhcer-certificate create" [
+export def "lhcer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -482,7 +482,7 @@ export def "lhcer-certificate create" [
 # operationId: mncer
 # --certificateParameters shape: {Name: string, RefNo: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "mncer-certificate create" [
+export def "mncer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -525,7 +525,7 @@ export def "mncer-certificate create" [
 # operationId: obcer
 # --certificateParameters shape: {Name: string, RefNo: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "obcer-certificate create" [
+export def "obcer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -568,7 +568,7 @@ export def "obcer-certificate create" [
 # operationId: psprt
 # --certificateParameters shape: {Name: string, RefNo: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "psprt-certificate create" [
+export def "psprt" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -611,7 +611,7 @@ export def "psprt-certificate create" [
 # operationId: racer
 # --certificateParameters shape: {Name: string, RefNo: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "racer-certificate create" [
+export def "racer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -654,7 +654,7 @@ export def "racer-certificate create" [
 # operationId: rmcer
 # --certificateParameters shape: {Name: string, RefNo: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "rmcer-certificate create" [
+export def "rmcer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -697,7 +697,7 @@ export def "rmcer-certificate create" [
 # operationId: shcer
 # --certificateParameters shape: {Name: string, RefNo: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "shcer-certificate create" [
+export def "shcer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)

@@ -128,7 +128,7 @@ def folder-type-completer [] { ["Car" "ChargingStation" "Coffee" "ElecticityFold
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "access-token update" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "access-token-put" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -152,7 +152,7 @@ export def commands []: nothing -> table {
 #
 # PUT /api/AccessToken
 # operationId: AccessToken_Put
-export def "access-token update" [
+export def "access-token-put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -191,7 +191,7 @@ export def "access-token update" [
 # GET /api/Account/login
 #
 # operationId: Account_Login
-export def "account-login get" [
+export def "account-login" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -223,7 +223,7 @@ export def "account-login get" [
 }
 
 # POST /api/Account/login
-export def "account-login create" [
+export def "post-api-account-login" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -259,7 +259,7 @@ export def "account-login create" [
 # POST /api/Actions
 # operationId: Actions_Post
 # --Actions item shape: {ObisCode?: string, Value?: float}
-export def "actions create" [
+export def "actions-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -298,7 +298,7 @@ export def "actions create" [
 #
 # GET /api/Actions/{id}
 # operationId: Actions_Get
-export def "actions get" [
+export def "actions-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -335,7 +335,7 @@ export def "actions get" [
 #
 # GET /api/AdditionalDeviceInformation/{id}
 # operationId: AdditionalDeviceInformation_Get
-export def "additional-device-information get" [
+export def "additional-device-information-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -372,7 +372,7 @@ export def "additional-device-information get" [
 #
 # GET /api/CustomDevice
 # operationId: CustomDevice_Get
-export def "custom-device list" [
+export def "custom-device-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -408,7 +408,7 @@ export def "custom-device list" [
 # POST /api/CustomDevice
 # operationId: CustomDevice_Post
 # --Values item shape: {Name?: string, Value?: float}
-export def "custom-device create" [
+export def "custom-device-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -450,7 +450,7 @@ export def "custom-device create" [
 # Gets a Custom Device by it's ID
 #
 # GET /api/CustomDevice/{id}
-export def "custom-device get" [
+export def "get-api-custom-device-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -487,7 +487,7 @@ export def "custom-device get" [
 #
 # GET /api/DeviceBySerial
 # operationId: DeviceBySerial_Get
-export def "device-by-serial get" [
+export def "device-by-serial-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -524,7 +524,7 @@ export def "device-by-serial get" [
 #
 # GET /api/Devices
 # operationId: Devices_Get
-export def "devices list" [
+export def "devices-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -559,7 +559,7 @@ export def "devices list" [
 #
 # POST /api/Devices
 # operationId: Devices_Post
-export def "devices create" [
+export def "devices-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -623,7 +623,7 @@ export def "devices create" [
 # Gets a Device by it's ID
 #
 # GET /api/Devices/{id}
-export def "devices get" [
+export def "get-api-devices-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -660,7 +660,7 @@ export def "devices get" [
 #
 # PUT /api/Devices/{id}
 # operationId: Devices_Put
-export def "devices update" [
+export def "devices-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -700,7 +700,7 @@ export def "devices update" [
 #
 # GET /api/DevicesByEnergy
 # operationId: DevicesByEnergy_Get
-export def "devices-by-energy get" [
+export def "devices-by-energy-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -737,7 +737,7 @@ export def "devices-by-energy get" [
 #
 # GET /api/DevicesBySubType
 # operationId: DevicesBySubType_Get
-export def "devices-by-sub-type get" [
+export def "devices-by-sub-type-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -774,7 +774,7 @@ export def "devices-by-sub-type get" [
 #
 # GET /api/FastSendDeviceValues/{id}
 # operationId: FastSendDeviceValues_Get
-export def "fast-send-device-values get" [
+export def "fast-send-device-values-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -810,7 +810,7 @@ export def "fast-send-device-values get" [
 #
 # GET /api/Folder/{id}
 # operationId: Folder_Get
-export def "folder get" [
+export def "folder-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -847,7 +847,7 @@ export def "folder get" [
 #
 # GET /api/FolderMenu
 # operationId: FolderMenu_Get
-export def "folder-menu get" [
+export def "folder-menu-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -885,7 +885,7 @@ export def "folder-menu get" [
 # POST /api/FolderMenu
 # operationId: FolderMenu_Post
 # --Items item shape: {AutoExportSettings?: record, Children?: list, Description?: string, FolderType?: "Folder"|"Location"|"Factory"|"House"|"Office"|"Machine"|"VirtualMeter"|"ElecticityFolder"|"WaterFolder"|"HeatFolder"|"GasFolder"|"TemperatureFolder"|"Sun"|"Light"|"Ice"|"Sofa"|"Food"|"Coffee"|"Car"|"ChargingStation"|"Meter"|"User"|"Trash"|"GridPhotovoltaicPowerSystem", Icon?: string, Id?: string, MeterSerialNumber?: string, Name?: string, UserId?: string}
-export def "folder-menu create" [
+export def "folder-menu-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -925,7 +925,7 @@ export def "folder-menu create" [
 #
 # GET /api/Health
 # operationId: Health_Get
-export def "health get" [
+export def "health-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -960,7 +960,7 @@ export def "health get" [
 #
 # POST /api/MBus
 # operationId: MBus_Post
-export def "m-bus create" [
+export def "m-bus-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1000,7 +1000,7 @@ export def "m-bus create" [
 #
 # POST /api/MeterFolderInformation
 # operationId: MeterFolderInformation_Post
-export def "meter-folder-information create" [
+export def "meter-folder-information-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1039,7 +1039,7 @@ export def "meter-folder-information create" [
 #
 # GET /api/MeterFolderInformation/{id}
 # operationId: MeterFolderInformation_Get
-export def "meter-folder-information get" [
+export def "meter-folder-information-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1076,7 +1076,7 @@ export def "meter-folder-information get" [
 #
 # GET /api/MeterValues/{id}
 # operationId: MeterValues_Get
-export def "meter-values get" [
+export def "meter-values-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1115,7 +1115,7 @@ export def "meter-values get" [
 #
 # GET /api/RegisterForRealtimeApi
 # operationId: RegisterForRealtimeApi_Get
-export def "register-for-realtime-api get" [
+export def "register-for-realtime-api-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1150,7 +1150,7 @@ export def "register-for-realtime-api get" [
 #
 # POST /api/RegisterForRealtimeApi
 # operationId: RegisterForRealtimeApi_Post
-export def "register-for-realtime-api create" [
+export def "register-for-realtime-api-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1194,7 +1194,7 @@ export def "register-for-realtime-api create" [
 #
 # DELETE /api/RegisterForRealtimeApi/{id}
 # operationId: RegisterForRealtimeApi_Delete
-export def "register-for-realtime-api delete" [
+export def "register-for-realtime-api-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1233,7 +1233,7 @@ export def "register-for-realtime-api delete" [
 # --InputConfiguration item shape: {Name?: string, Number?: int, OffText?: string, OnText?: string, Type?: "TariffInput"|"DigitalInput"}
 # --OutputConfiguration item shape: {DigitalOutputNoConnectionAction?: "Nothing"|"TurnOff"|"TurnOn"|"SetPwmValue", Name?: string, Number?: int, S0PulseValue?: "PulseValue1000Kwh"|"PulseValue10000Kwh", Type?: "ImpulseOutputActiveEnergy"|"ImpulseOutputActiveEnergyImport"|"ImpulseOutputActiveEnergyExport"|"ImpulseOutputReactiveEnergy"|"DigitalOutput"|"AnalogPwmSignalOutput"|"Disabled"}
 # --SwitchConfiguration item shape: {CanSwitchOff?: bool, Number?: int}
-export def "smart-me-device-configuration create" [
+export def "smart-me-device-configuration-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1280,7 +1280,7 @@ export def "smart-me-device-configuration create" [
 #
 # GET /api/SmartMeDeviceConfiguration/{id}
 # operationId: SmartMeDeviceConfiguration_Get
-export def "smart-me-device-configuration get" [
+export def "smart-me-device-configuration-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1317,7 +1317,7 @@ export def "smart-me-device-configuration get" [
 #
 # POST /api/SubUser
 # operationId: SubUser_Post
-export def "sub-user create" [
+export def "sub-user-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1361,7 +1361,7 @@ export def "sub-user create" [
 #
 # DELETE /api/SubUser/{id}
 # operationId: SubUser_Delete
-export def "sub-user delete" [
+export def "sub-user-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1397,7 +1397,7 @@ export def "sub-user delete" [
 #
 # GET /api/SubUser/{id}
 # operationId: SubUser_Get
-export def "sub-user get" [
+export def "sub-user-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1434,7 +1434,7 @@ export def "sub-user get" [
 #
 # DELETE /api/User
 # operationId: User_Delete
-export def "user delete" [
+export def "user-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1469,7 +1469,7 @@ export def "user delete" [
 #
 # GET /api/User
 # operationId: User_Get
-export def "user get" [
+export def "user-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1504,7 +1504,7 @@ export def "user get" [
 #
 # GET /api/Values/{id}
 # operationId: Values_Get
-export def "values get" [
+export def "values-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1541,7 +1541,7 @@ export def "values get" [
 #
 # GET /api/ValuesInPast/{id}
 # operationId: ValuesInPast_Get
-export def "values-in-past get" [
+export def "values-in-past-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1580,7 +1580,7 @@ export def "values-in-past get" [
 #
 # GET /api/ValuesInPastMultiple/{id}
 # operationId: ValuesInPastMultiple_Get
-export def "values-in-past-multiple get" [
+export def "values-in-past-multiple-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1621,7 +1621,7 @@ export def "values-in-past-multiple get" [
 #
 # GET /api/VirtualBillingMeterActive
 # operationId: VirtualBillingMeterActive_Get
-export def "virtual-billing-meter-active get" [
+export def "virtual-billing-meter-active-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1656,7 +1656,7 @@ export def "virtual-billing-meter-active get" [
 #
 # POST /api/VirtualBillingMeterActive
 # operationId: VirtualBillingMeterActive_Post
-export def "virtual-billing-meter-active create" [
+export def "virtual-billing-meter-active-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1695,7 +1695,7 @@ export def "virtual-billing-meter-active create" [
 #
 # POST /api/VirtualBillingMeterDeactivate
 # operationId: VirtualBillingMeterDeactivate_Post
-export def "virtual-billing-meter-deactivate create" [
+export def "virtual-billing-meter-deactivate-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1734,7 +1734,7 @@ export def "virtual-billing-meter-deactivate create" [
 #
 # GET /api/VirtualBillingMeters
 # operationId: VirtualBillingMeters_Get
-export def "virtual-billing-meters get" [
+export def "virtual-billing-meters-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1769,7 +1769,7 @@ export def "virtual-billing-meters get" [
 #
 # GET /api/VirtualMeterCalculateFormula
 # operationId: VirtualMeterCalculateFormula_Get
-export def "virtual-meter-calculate-formula get" [
+export def "virtual-meter-calculate-formula-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1806,7 +1806,7 @@ export def "virtual-meter-calculate-formula get" [
 #
 # GET /api/VirtualTariff
 # operationId: VirtualTariff_Get
-export def "virtual-tariff list" [
+export def "virtual-tariff-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1840,7 +1840,7 @@ export def "virtual-tariff list" [
 # Gets all virtual tariffs of a folder
 #
 # GET /api/VirtualTariff/{id}
-export def "virtual-tariff get" [
+export def "get-api-virtual-tariff-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1877,7 +1877,7 @@ export def "virtual-tariff get" [
 #
 # GET /api/VirtualTariffConsumption
 # operationId: VirtualTariffConsumption_Get
-export def "virtual-tariff-consumption get" [
+export def "virtual-tariff-consumption-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1916,7 +1916,7 @@ export def "virtual-tariff-consumption get" [
 #
 # GET /api/VirtualTariffsForProperty/{id}
 # operationId: VirtualTariffsForProperty_Get
-export def "virtual-tariffs-for-property get" [
+export def "virtual-tariffs-for-property-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1953,7 +1953,7 @@ export def "virtual-tariffs-for-property get" [
 #
 # GET /api/VirtualTariffsStatusForProperty/{id}
 # operationId: VirtualTariffsStatusForProperty_Get
-export def "virtual-tariffs-status-for-property get" [
+export def "virtual-tariffs-status-for-property-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1990,7 +1990,7 @@ export def "virtual-tariffs-status-for-property get" [
 #
 # POST /api/folder/assign
 # operationId: FolderAssign_Post
-export def "folder-assign create" [
+export def "folder-assign-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2027,7 +2027,7 @@ export def "folder-assign create" [
 #
 # DELETE /api/folder/settings/{id}
 # operationId: FolderSettings_Delete
-export def "folder-settings delete" [
+export def "folder-settings-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2063,7 +2063,7 @@ export def "folder-settings delete" [
 #
 # GET /api/folder/settings/{id}
 # operationId: FolderSettings_Get
-export def "folder-settings get" [
+export def "folder-settings-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2100,7 +2100,7 @@ export def "folder-settings get" [
 #
 # POST /api/folder/settings/{id}
 # operationId: FolderSettings_Post
-export def "folder-settings create" [
+export def "folder-settings-post" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2150,7 +2150,7 @@ export def "folder-settings create" [
 #
 # DELETE /api/folder/user/assign
 # operationId: UserToFolderAssign_Delete
-export def "folder-user-assign delete-to" [
+export def "user-to-folder-assign-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2187,7 +2187,7 @@ export def "folder-user-assign delete-to" [
 #
 # POST /api/folder/user/assign
 # operationId: UserToFolderAssign_Post
-export def "folder-user-assign create-to" [
+export def "user-to-folder-assign-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2224,7 +2224,7 @@ export def "folder-user-assign create-to" [
 # GET /api/oauth/authorize
 #
 # operationId: OAuth_Authorize
-export def "oauth-authorize get-o-auth" [
+export def "o-auth-authorize" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2262,7 +2262,7 @@ export def "oauth-authorize get-o-auth" [
 }
 
 # POST /api/oauth/authorize
-export def "oauth-authorize create" [
+export def "post-api-oauth-authorize" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2303,7 +2303,7 @@ export def "oauth-authorize create" [
 #
 # GET /api/pico
 # operationId: Pico_Get
-export def "pico get" [
+export def "pico-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2338,7 +2338,7 @@ export def "pico get" [
 #
 # GET /api/pico/charging/{id}
 # operationId: PicoCharging_Get
-export def "pico-charging get" [
+export def "pico-charging-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2375,7 +2375,7 @@ export def "pico-charging get" [
 #
 # GET /api/pico/history/{id}
 # operationId: PicoChargingHistory_Get
-export def "pico-history get-charging" [
+export def "pico-charging-history-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2411,7 +2411,7 @@ export def "pico-history get-charging" [
 # GET: api/pico/loadmanagementgroup Returns all available load management groups
 #
 # GET /api/pico/loadmanagementgroup
-export def "pico-loadmanagementgroup get" [
+export def "get-api-pico-loadmanagementgroup" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2446,7 +2446,7 @@ export def "pico-loadmanagementgroup get" [
 #
 # POST /api/pico/loadmanagementgroup/current/{serial}
 # operationId: PicoLoadmanagementSetDynamicCurrent_Post
-export def "pico-loadmanagementgroup-current update-loadmanagement-dynamic-create" [
+export def "pico-loadmanagement-set-dynamic-current-post" [
   serial: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2485,7 +2485,7 @@ export def "pico-loadmanagementgroup-current update-loadmanagement-dynamic-creat
 #
 # GET /api/pico/loadmanagementgroup/{id}
 # operationId: PicoLoadmanagementGroup_Get
-export def "pico-loadmanagementgroup get-loadmanagement-group" [
+export def "pico-loadmanagement-group-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2522,7 +2522,7 @@ export def "pico-loadmanagementgroup get-loadmanagement-group" [
 #
 # GET /api/pico/settings/{id}
 # operationId: PicoSettings_Get
-export def "pico-settings get" [
+export def "pico-settings-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2559,7 +2559,7 @@ export def "pico-settings get" [
 #
 # POST /api/pico/tryenablecablelock/{id}
 # operationId: PicoEnableFixCableLock_Post
-export def "pico-tryenablecablelock enable-fix-cable-lock-create" [
+export def "pico-enable-fix-cable-lock-post" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

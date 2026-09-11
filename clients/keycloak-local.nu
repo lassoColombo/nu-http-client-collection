@@ -118,7 +118,7 @@ def policy-completer [] { ["FAIL" "OVERWRITE" "SKIP"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "root get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -141,7 +141,7 @@ export def commands []: nothing -> table {
 # Get themes, social providers, auth providers, and event listeners available on this server
 #
 # GET /
-export def "root get" [
+export def "get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -190,7 +190,7 @@ export def "root get" [
 # --userFederationMappers item shape: {config?: record, federationMapperType?: string, federationProviderDisplayName?: string, id?: string, name?: string}
 # --userFederationProviders item shape: {changedSyncPeriod?: int, config?: record, displayName?: string, fullSyncPeriod?: int, id?: string, lastSync?: int, priority?: int, providerName?: string}
 # --users item shape: {access?: record, attributes?: record, clientConsents?: list, clientRoles?: record, createdTimestamp?: int, credentials?: list, disableableCredentialTypes?: list<string>, email?: string, emailVerified?: bool, enabled?: bool, federatedIdentities?: list, federationLink?: string, firstName?: string, groups?: list<string>, id?: string, lastName?: string, notBefore?: int, origin?: string, realmRoles?: list<string>, requiredActions?: list<string>, self?: string, serviceAccountClientId?: string, ... (1 more fields)}
-export def "realms-admin create" [
+export def "post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -341,7 +341,7 @@ export def "realms-admin create" [
 # Need this for admin console to display simple name of provider when displaying client detail KEYCLOAK-4328
 #
 # GET /{id}/name
-export def "name get" [
+export def "get-id-name" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -376,7 +376,7 @@ export def "name get" [
 # Delete the realm
 #
 # DELETE /{realm}
-export def "realms-admin delete" [
+export def "delete-realm" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -411,7 +411,7 @@ export def "realms-admin delete" [
 # Get the top-level representation of the realm It will not include nested information like User and Client representations.
 #
 # GET /{realm}
-export def "realms-admin get" [
+export def "get-realm" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -462,7 +462,7 @@ export def "realms-admin get" [
 # --userFederationMappers item shape: {config?: record, federationMapperType?: string, federationProviderDisplayName?: string, id?: string, name?: string}
 # --userFederationProviders item shape: {changedSyncPeriod?: int, config?: record, displayName?: string, fullSyncPeriod?: int, id?: string, lastSync?: int, priority?: int, providerName?: string}
 # --users item shape: {access?: record, attributes?: record, clientConsents?: list, clientRoles?: record, createdTimestamp?: int, credentials?: list, disableableCredentialTypes?: list<string>, email?: string, emailVerified?: bool, enabled?: bool, federatedIdentities?: list, federationLink?: string, firstName?: string, groups?: list<string>, id?: string, lastName?: string, notBefore?: int, origin?: string, realmRoles?: list<string>, requiredActions?: list<string>, self?: string, serviceAccountClientId?: string, ... (1 more fields)}
-export def "realms-admin update" [
+export def "put-realm" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -615,7 +615,7 @@ export def "realms-admin update" [
 # Delete all admin events
 #
 # DELETE /{realm}/admin-events
-export def "admin-events delete" [
+export def "delete-realm-admin-events" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -650,7 +650,7 @@ export def "admin-events delete" [
 # Get admin events Returns all admin events, or filters events based on URL query parameters listed here
 #
 # GET /{realm}/admin-events
-export def "admin-events get" [
+export def "get-realm-admin-events" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -697,7 +697,7 @@ export def "admin-events get" [
 # Clear any user login failures for all users This can release temporary disabled users
 #
 # DELETE /{realm}/attack-detection/brute-force/users
-export def "attack-detection-brute-force-users delete-by-realm" [
+export def "delete-realm-attack-detection-brute-force-users" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -732,7 +732,7 @@ export def "attack-detection-brute-force-users delete-by-realm" [
 # Clear any user login failures for the user This can release temporary disabled user
 #
 # DELETE /{realm}/attack-detection/brute-force/users/{userId}
-export def "attack-detection-brute-force-users delete-by-realm-user-id" [
+export def "delete-realm-attack-detection-brute-force-users-user-id" [
   realm: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -769,7 +769,7 @@ export def "attack-detection-brute-force-users delete-by-realm-user-id" [
 # Get status of a username in brute force detection
 #
 # GET /{realm}/attack-detection/brute-force/users/{userId}
-export def "attack-detection-brute-force-users get" [
+export def "get-realm-attack-detection-brute-force-users-user-id" [
   realm: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -806,7 +806,7 @@ export def "attack-detection-brute-force-users get" [
 # Get authenticator providers Returns a list of authenticator providers.
 #
 # GET /{realm}/authentication/authenticator-providers
-export def "authentication-authenticator-providers get" [
+export def "get-realm-authentication-authenticator-providers" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -841,7 +841,7 @@ export def "authentication-authenticator-providers get" [
 # Get client authenticator providers Returns a list of client authenticator providers.
 #
 # GET /{realm}/authentication/client-authenticator-providers
-export def "authentication-client-authenticator-providers get" [
+export def "get-realm-authentication-client-authenticator-providers" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -876,7 +876,7 @@ export def "authentication-client-authenticator-providers get" [
 # Get authenticator provider’s configuration description
 #
 # GET /{realm}/authentication/config-description/{providerId}
-export def "authentication-config-description get" [
+export def "get-realm-authentication-config-description-provider-id" [
   realm: string
   provider_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -913,7 +913,7 @@ export def "authentication-config-description get" [
 # Delete authenticator configuration
 #
 # DELETE /{realm}/authentication/config/{id}
-export def "authentication-config delete" [
+export def "delete-realm-authentication-config-id" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -950,7 +950,7 @@ export def "authentication-config delete" [
 # Get authenticator configuration
 #
 # GET /{realm}/authentication/config/{id}
-export def "authentication-config get" [
+export def "get-realm-authentication-config-id" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -987,7 +987,7 @@ export def "authentication-config get" [
 # Update authenticator configuration
 #
 # PUT /{realm}/authentication/config/{id}
-export def "authentication-config update" [
+export def "put-realm-authentication-config-id" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1030,7 +1030,7 @@ export def "authentication-config update" [
 # Add new authentication execution
 #
 # POST /{realm}/authentication/executions
-export def "authentication-executions create" [
+export def "post-realm-authentication-executions" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1077,7 +1077,7 @@ export def "authentication-executions create" [
 # Delete execution
 #
 # DELETE /{realm}/authentication/executions/{executionId}
-export def "authentication-executions delete" [
+export def "delete-realm-authentication-executions-execution-id" [
   realm: string
   execution_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1114,7 +1114,7 @@ export def "authentication-executions delete" [
 # Get Single Execution
 #
 # GET /{realm}/authentication/executions/{executionId}
-export def "authentication-executions get" [
+export def "get-realm-authentication-executions-execution-id" [
   realm: string
   execution_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1151,7 +1151,7 @@ export def "authentication-executions get" [
 # Update execution with new configuration
 #
 # POST /{realm}/authentication/executions/{executionId}/config
-export def "authentication-executions-config create" [
+export def "post-realm-authentication-executions-execution-id-config" [
   realm: string
   execution_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1194,7 +1194,7 @@ export def "authentication-executions-config create" [
 # Lower execution’s priority
 #
 # POST /{realm}/authentication/executions/{executionId}/lower-priority
-export def "authentication-executions-lower-priority create" [
+export def "post-realm-authentication-executions-execution-id-lower-priority" [
   realm: string
   execution_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1231,7 +1231,7 @@ export def "authentication-executions-lower-priority create" [
 # Raise execution’s priority
 #
 # POST /{realm}/authentication/executions/{executionId}/raise-priority
-export def "authentication-executions-raise-priority create" [
+export def "post-realm-authentication-executions-execution-id-raise-priority" [
   realm: string
   execution_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1268,7 +1268,7 @@ export def "authentication-executions-raise-priority create" [
 # Get authentication flows Returns a list of authentication flows.
 #
 # GET /{realm}/authentication/flows
-export def "authentication-flows list" [
+export def "get-realm-authentication-flows" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1304,7 +1304,7 @@ export def "authentication-flows list" [
 #
 # POST /{realm}/authentication/flows
 # --authenticationExecutions item shape: {authenticator?: string, authenticatorConfig?: string, authenticatorFlow?: bool, autheticatorFlow?: bool, flowAlias?: string, priority?: int, requirement?: string, userSetupAllowed?: bool}
-export def "authentication-flows create" [
+export def "post-realm-authentication-flows" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1349,7 +1349,7 @@ export def "authentication-flows create" [
 # Copy existing authentication flow under a new name The new name is given as 'newName' attribute of the passed JSON object
 #
 # POST /{realm}/authentication/flows/{flowAlias}/copy
-export def "authentication-flows-copy create" [
+export def "post-realm-authentication-flows-flow-alias-copy" [
   realm: string
   flow_alias: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1390,7 +1390,7 @@ export def "authentication-flows-copy create" [
 # Get authentication executions for a flow
 #
 # GET /{realm}/authentication/flows/{flowAlias}/executions
-export def "authentication-flows-executions get" [
+export def "get-realm-authentication-flows-flow-alias-executions" [
   realm: string
   flow_alias: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1427,7 +1427,7 @@ export def "authentication-flows-executions get" [
 # Update authentication executions of a flow
 #
 # PUT /{realm}/authentication/flows/{flowAlias}/executions
-export def "authentication-flows-executions update" [
+export def "put-realm-authentication-flows-flow-alias-executions" [
   realm: string
   flow_alias: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1479,7 +1479,7 @@ export def "authentication-flows-executions update" [
 # Add new authentication execution to a flow
 #
 # POST /{realm}/authentication/flows/{flowAlias}/executions/execution
-export def "authentication-flows-executions-execution create" [
+export def "post-realm-authentication-flows-flow-alias-executions-execution" [
   realm: string
   flow_alias: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1520,7 +1520,7 @@ export def "authentication-flows-executions-execution create" [
 # Add new flow with new execution to existing flow
 #
 # POST /{realm}/authentication/flows/{flowAlias}/executions/flow
-export def "authentication-flows-executions-flow create" [
+export def "post-realm-authentication-flows-flow-alias-executions-flow" [
   realm: string
   flow_alias: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1561,7 +1561,7 @@ export def "authentication-flows-executions-flow create" [
 # Delete an authentication flow
 #
 # DELETE /{realm}/authentication/flows/{id}
-export def "authentication-flows delete" [
+export def "delete-realm-authentication-flows-id" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1598,7 +1598,7 @@ export def "authentication-flows delete" [
 # Get authentication flow for id
 #
 # GET /{realm}/authentication/flows/{id}
-export def "authentication-flows get" [
+export def "get-realm-authentication-flows-id" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1636,7 +1636,7 @@ export def "authentication-flows get" [
 #
 # PUT /{realm}/authentication/flows/{id}
 # --authenticationExecutions item shape: {authenticator?: string, authenticatorConfig?: string, authenticatorFlow?: bool, autheticatorFlow?: bool, flowAlias?: string, priority?: int, requirement?: string, userSetupAllowed?: bool}
-export def "authentication-flows update" [
+export def "put-realm-authentication-flows-id" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1683,7 +1683,7 @@ export def "authentication-flows update" [
 # Get form action providers Returns a list of form action providers.
 #
 # GET /{realm}/authentication/form-action-providers
-export def "authentication-form-action-providers get" [
+export def "get-realm-authentication-form-action-providers" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1718,7 +1718,7 @@ export def "authentication-form-action-providers get" [
 # Get form providers Returns a list of form providers.
 #
 # GET /{realm}/authentication/form-providers
-export def "authentication-form-providers get" [
+export def "get-realm-authentication-form-providers" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1753,7 +1753,7 @@ export def "authentication-form-providers get" [
 # Get configuration descriptions for all clients
 #
 # GET /{realm}/authentication/per-client-config-description
-export def "authentication-per-client-config-description get" [
+export def "get-realm-authentication-per-client-config-description" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1788,7 +1788,7 @@ export def "authentication-per-client-config-description get" [
 # Register a new required actions
 #
 # POST /{realm}/authentication/register-required-action
-export def "authentication-register-required-action create" [
+export def "post-realm-authentication-register-required-action" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1827,7 +1827,7 @@ export def "authentication-register-required-action create" [
 # Get required actions Returns a list of required actions.
 #
 # GET /{realm}/authentication/required-actions
-export def "authentication-required-actions list" [
+export def "get-realm-authentication-required-actions" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1862,7 +1862,7 @@ export def "authentication-required-actions list" [
 # Delete required action
 #
 # DELETE /{realm}/authentication/required-actions/{alias}
-export def "authentication-required-actions delete" [
+export def "delete-realm-authentication-required-actions-alias" [
   realm: string
   alias: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1899,7 +1899,7 @@ export def "authentication-required-actions delete" [
 # Get required action for alias
 #
 # GET /{realm}/authentication/required-actions/{alias}
-export def "authentication-required-actions get" [
+export def "get-realm-authentication-required-actions-alias" [
   realm: string
   alias: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1936,7 +1936,7 @@ export def "authentication-required-actions get" [
 # Update required action
 #
 # PUT /{realm}/authentication/required-actions/{alias}
-export def "authentication-required-actions update" [
+export def "put-realm-authentication-required-actions-alias" [
   realm: string
   alias: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1983,7 +1983,7 @@ export def "authentication-required-actions update" [
 # Lower required action’s priority
 #
 # POST /{realm}/authentication/required-actions/{alias}/lower-priority
-export def "authentication-required-actions-lower-priority create" [
+export def "post-realm-authentication-required-actions-alias-lower-priority" [
   realm: string
   alias: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2020,7 +2020,7 @@ export def "authentication-required-actions-lower-priority create" [
 # Raise required action’s priority
 #
 # POST /{realm}/authentication/required-actions/{alias}/raise-priority
-export def "authentication-required-actions-raise-priority create" [
+export def "post-realm-authentication-required-actions-alias-raise-priority" [
   realm: string
   alias: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2057,7 +2057,7 @@ export def "authentication-required-actions-raise-priority create" [
 # Get unregistered required actions Returns a list of unregistered required actions.
 #
 # GET /{realm}/authentication/unregistered-required-actions
-export def "authentication-unregistered-required-actions get" [
+export def "get-realm-authentication-unregistered-required-actions" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2092,7 +2092,7 @@ export def "authentication-unregistered-required-actions get" [
 # Clear cache of external public keys (Public keys of clients or Identity providers)
 #
 # POST /{realm}/clear-keys-cache
-export def "clear-keys-cache create" [
+export def "post-realm-clear-keys-cache" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2127,7 +2127,7 @@ export def "clear-keys-cache create" [
 # Clear realm cache
 #
 # POST /{realm}/clear-realm-cache
-export def "clear-realm-cache create" [
+export def "post-realm-clear-realm-cache" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2162,7 +2162,7 @@ export def "clear-realm-cache create" [
 # Clear user cache
 #
 # POST /{realm}/clear-user-cache
-export def "clear-user-cache create" [
+export def "post-realm-clear-user-cache" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2197,7 +2197,7 @@ export def "clear-user-cache create" [
 # Base path for importing clients under this realm.
 #
 # POST /{realm}/client-description-converter
-export def "client-description-converter create" [
+export def "post-realm-client-description-converter" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2236,7 +2236,7 @@ export def "client-description-converter create" [
 # Base path for retrieve providers with the configProperties properly filled
 #
 # GET /{realm}/client-registration-policy/providers
-export def "client-registration-policy-providers get" [
+export def "get-realm-client-registration-policy-providers" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2271,7 +2271,7 @@ export def "client-registration-policy-providers get" [
 # Get client scopes belonging to the realm Returns a list of client scopes belonging to the realm
 #
 # GET /{realm}/client-scopes
-export def "client-scopes list" [
+export def "get-realm-client-scopes" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2307,7 +2307,7 @@ export def "client-scopes list" [
 #
 # POST /{realm}/client-scopes
 # --protocolMappers item shape: {config?: record, id?: string, name?: string, protocol?: string, protocolMapper?: string}
-export def "client-scopes create" [
+export def "post-realm-client-scopes" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2351,7 +2351,7 @@ export def "client-scopes create" [
 # Delete the mapper
 #
 # DELETE /{realm}/client-scopes/{id1}/protocol-mappers/models/{id2}
-export def "client-scopes-protocol-mappers-models delete" [
+export def "delete-realm-client-scopes-id1-protocol-mappers-models-id2" [
   realm: string
   id1: string
   id2: string
@@ -2390,7 +2390,7 @@ export def "client-scopes-protocol-mappers-models delete" [
 # Get mapper by id
 #
 # GET /{realm}/client-scopes/{id1}/protocol-mappers/models/{id2}
-export def "client-scopes-protocol-mappers-models get" [
+export def "get-realm-client-scopes-id1-protocol-mappers-models-id2" [
   realm: string
   id1: string
   id2: string
@@ -2429,7 +2429,7 @@ export def "client-scopes-protocol-mappers-models get" [
 # Update the mapper
 #
 # PUT /{realm}/client-scopes/{id1}/protocol-mappers/models/{id2}
-export def "client-scopes-protocol-mappers-models update" [
+export def "put-realm-client-scopes-id1-protocol-mappers-models-id2" [
   realm: string
   id1: string
   id2: string
@@ -2476,7 +2476,7 @@ export def "client-scopes-protocol-mappers-models update" [
 # Delete the client scope
 #
 # DELETE /{realm}/client-scopes/{id}
-export def "client-scopes delete" [
+export def "delete-realm-client-scopes-id" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2513,7 +2513,7 @@ export def "client-scopes delete" [
 # Get representation of the client scope
 #
 # GET /{realm}/client-scopes/{id}
-export def "client-scopes get" [
+export def "get-realm-client-scopes-id" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2551,7 +2551,7 @@ export def "client-scopes get" [
 #
 # PUT /{realm}/client-scopes/{id}
 # --protocolMappers item shape: {config?: record, id?: string, name?: string, protocol?: string, protocolMapper?: string}
-export def "client-scopes update" [
+export def "put-realm-client-scopes-id" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2597,7 +2597,7 @@ export def "client-scopes update" [
 # Create multiple mappers
 #
 # POST /{realm}/client-scopes/{id}/protocol-mappers/add-models
-export def "client-scopes-protocol-mappers-add-models create" [
+export def "post-realm-client-scopes-id-protocol-mappers-add-models" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2638,7 +2638,7 @@ export def "client-scopes-protocol-mappers-add-models create" [
 # Get mappers
 #
 # GET /{realm}/client-scopes/{id}/protocol-mappers/models
-export def "client-scopes-protocol-mappers-models list" [
+export def "get-realm-client-scopes-id-protocol-mappers-models" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2675,7 +2675,7 @@ export def "client-scopes-protocol-mappers-models list" [
 # Create a mapper
 #
 # POST /{realm}/client-scopes/{id}/protocol-mappers/models
-export def "client-scopes-protocol-mappers-models create" [
+export def "post-realm-client-scopes-id-protocol-mappers-models" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2720,7 +2720,7 @@ export def "client-scopes-protocol-mappers-models create" [
 # Get mappers by name for a specific protocol
 #
 # GET /{realm}/client-scopes/{id}/protocol-mappers/protocol/{protocol}
-export def "client-scopes-protocol-mappers-protocol get" [
+export def "get-realm-client-scopes-id-protocol-mappers-protocol-protocol" [
   realm: string
   id: string
   protocol: string
@@ -2759,7 +2759,7 @@ export def "client-scopes-protocol-mappers-protocol get" [
 # Get all scope mappings for the client
 #
 # GET /{realm}/client-scopes/{id}/scope-mappings
-export def "client-scopes-scope-mappings get" [
+export def "get-realm-client-scopes-id-scope-mappings" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2796,7 +2796,7 @@ export def "client-scopes-scope-mappings get" [
 # Remove client-level roles from the client’s scope.
 #
 # DELETE /{realm}/client-scopes/{id}/scope-mappings/clients/{client}
-export def "client-scopes-scope-mappings-clients delete" [
+export def "delete-realm-client-scopes-id-scope-mappings-clients-client" [
   realm: string
   id: string
   client: string
@@ -2839,7 +2839,7 @@ export def "client-scopes-scope-mappings-clients delete" [
 # Get the roles associated with a client’s scope Returns roles for the client.
 #
 # GET /{realm}/client-scopes/{id}/scope-mappings/clients/{client}
-export def "client-scopes-scope-mappings-clients get" [
+export def "get-realm-client-scopes-id-scope-mappings-clients-client" [
   realm: string
   id: string
   client: string
@@ -2878,7 +2878,7 @@ export def "client-scopes-scope-mappings-clients get" [
 # Add client-level roles to the client’s scope
 #
 # POST /{realm}/client-scopes/{id}/scope-mappings/clients/{client}
-export def "client-scopes-scope-mappings-clients create" [
+export def "post-realm-client-scopes-id-scope-mappings-clients-client" [
   realm: string
   id: string
   client: string
@@ -2921,7 +2921,7 @@ export def "client-scopes-scope-mappings-clients create" [
 # The available client-level roles Returns the roles for the client that can be associated with the client’s scope
 #
 # GET /{realm}/client-scopes/{id}/scope-mappings/clients/{client}/available
-export def "client-scopes-scope-mappings-clients-available get" [
+export def "get-realm-client-scopes-id-scope-mappings-clients-client-available" [
   realm: string
   id: string
   client: string
@@ -2960,7 +2960,7 @@ export def "client-scopes-scope-mappings-clients-available get" [
 # Get effective client roles Returns the roles for the client that are associated with the client’s scope.
 #
 # GET /{realm}/client-scopes/{id}/scope-mappings/clients/{client}/composite
-export def "client-scopes-scope-mappings-clients-composite get" [
+export def "get-realm-client-scopes-id-scope-mappings-clients-client-composite" [
   realm: string
   id: string
   client: string
@@ -2999,7 +2999,7 @@ export def "client-scopes-scope-mappings-clients-composite get" [
 # Remove a set of realm-level roles from the client’s scope
 #
 # DELETE /{realm}/client-scopes/{id}/scope-mappings/realm
-export def "client-scopes-scope-mappings-realm delete" [
+export def "delete-realm-client-scopes-id-scope-mappings-realm" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3040,7 +3040,7 @@ export def "client-scopes-scope-mappings-realm delete" [
 # Get realm-level roles associated with the client’s scope
 #
 # GET /{realm}/client-scopes/{id}/scope-mappings/realm
-export def "client-scopes-scope-mappings-realm get" [
+export def "get-realm-client-scopes-id-scope-mappings-realm" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3077,7 +3077,7 @@ export def "client-scopes-scope-mappings-realm get" [
 # Add a set of realm-level roles to the client’s scope
 #
 # POST /{realm}/client-scopes/{id}/scope-mappings/realm
-export def "client-scopes-scope-mappings-realm create" [
+export def "post-realm-client-scopes-id-scope-mappings-realm" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3118,7 +3118,7 @@ export def "client-scopes-scope-mappings-realm create" [
 # Get realm-level roles that are available to attach to this client’s scope
 #
 # GET /{realm}/client-scopes/{id}/scope-mappings/realm/available
-export def "client-scopes-scope-mappings-realm-available get" [
+export def "get-realm-client-scopes-id-scope-mappings-realm-available" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3155,7 +3155,7 @@ export def "client-scopes-scope-mappings-realm-available get" [
 # Get effective realm-level roles associated with the client’s scope What this does is recurse any composite roles associated with the client’s scope and adds the roles to this lists.
 #
 # GET /{realm}/client-scopes/{id}/scope-mappings/realm/composite
-export def "client-scopes-scope-mappings-realm-composite get" [
+export def "get-realm-client-scopes-id-scope-mappings-realm-composite" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3192,7 +3192,7 @@ export def "client-scopes-scope-mappings-realm-composite get" [
 # Get client session stats Returns a JSON map.
 #
 # GET /{realm}/client-session-stats
-export def "client-session-stats get" [
+export def "get-realm-client-session-stats" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3227,7 +3227,7 @@ export def "client-session-stats get" [
 # Get clients belonging to the realm Returns a list of clients belonging to the realm
 #
 # GET /{realm}/clients
-export def "clients list" [
+export def "get-realm-clients" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3270,7 +3270,7 @@ export def "clients list" [
 # POST /{realm}/clients
 # --authorizationSettings shape: {allowRemoteResourceManagement?: bool, clientId?: string, decisionStrategy?: "AFFIRMATIVE"|"UNANIMOUS"|"CONSENSUS", id?: string, name?: string, policies?: list, policyEnforcementMode?: "ENFORCING"|"PERMISSIVE"|"DISABLED", resources?: list, scopes?: list}
 # --protocolMappers item shape: {config?: record, id?: string, name?: string, protocol?: string, protocolMapper?: string}
-export def "clients create" [
+export def "post-realm-clients" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3344,7 +3344,7 @@ export def "clients create" [
 }
 
 # GET /{realm}/clients-initial-access
-export def "clients-initial-access get" [
+export def "get-realm-clients-initial-access" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3379,7 +3379,7 @@ export def "clients-initial-access get" [
 # Create a new initial access token.
 #
 # POST /{realm}/clients-initial-access
-export def "clients-initial-access create" [
+export def "post-realm-clients-initial-access" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3417,7 +3417,7 @@ export def "clients-initial-access create" [
 }
 
 # DELETE /{realm}/clients-initial-access/{id}
-export def "clients-initial-access delete" [
+export def "delete-realm-clients-initial-access-id" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3454,7 +3454,7 @@ export def "clients-initial-access delete" [
 # Delete the mapper
 #
 # DELETE /{realm}/clients/{id1}/protocol-mappers/models/{id2}
-export def "clients-protocol-mappers-models delete" [
+export def "delete-realm-clients-id1-protocol-mappers-models-id2" [
   realm: string
   id1: string
   id2: string
@@ -3493,7 +3493,7 @@ export def "clients-protocol-mappers-models delete" [
 # Get mapper by id
 #
 # GET /{realm}/clients/{id1}/protocol-mappers/models/{id2}
-export def "clients-protocol-mappers-models get" [
+export def "get-realm-clients-id1-protocol-mappers-models-id2" [
   realm: string
   id1: string
   id2: string
@@ -3532,7 +3532,7 @@ export def "clients-protocol-mappers-models get" [
 # Update the mapper
 #
 # PUT /{realm}/clients/{id1}/protocol-mappers/models/{id2}
-export def "clients-protocol-mappers-models update" [
+export def "put-realm-clients-id1-protocol-mappers-models-id2" [
   realm: string
   id1: string
   id2: string
@@ -3579,7 +3579,7 @@ export def "clients-protocol-mappers-models update" [
 # Delete the client
 #
 # DELETE /{realm}/clients/{id}
-export def "clients delete" [
+export def "delete-realm-clients-id" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3616,7 +3616,7 @@ export def "clients delete" [
 # Get representation of the client
 #
 # GET /{realm}/clients/{id}
-export def "clients get" [
+export def "get-realm-clients-id" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3655,7 +3655,7 @@ export def "clients get" [
 # PUT /{realm}/clients/{id}
 # --authorizationSettings shape: {allowRemoteResourceManagement?: bool, clientId?: string, decisionStrategy?: "AFFIRMATIVE"|"UNANIMOUS"|"CONSENSUS", id?: string, name?: string, policies?: list, policyEnforcementMode?: "ENFORCING"|"PERMISSIVE"|"DISABLED", resources?: list, scopes?: list}
 # --protocolMappers item shape: {config?: record, id?: string, name?: string, protocol?: string, protocolMapper?: string}
-export def "clients update" [
+export def "put-realm-clients-id" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3733,7 +3733,7 @@ export def "clients update" [
 # Get key info
 #
 # GET /{realm}/clients/{id}/certificates/{attr}
-export def "clients-certificates get" [
+export def "get-realm-clients-id-certificates-attr" [
   realm: string
   id: string
   attr: string
@@ -3772,7 +3772,7 @@ export def "clients-certificates get" [
 # Get a keystore file for the client, containing private key and public certificate
 #
 # POST /{realm}/clients/{id}/certificates/{attr}/download
-export def "clients-certificates-download create" [
+export def "post-realm-clients-id-certificates-attr-download" [
   realm: string
   id: string
   attr: string
@@ -3820,7 +3820,7 @@ export def "clients-certificates-download create" [
 # Generate a new certificate with new key pair
 #
 # POST /{realm}/clients/{id}/certificates/{attr}/generate
-export def "clients-certificates-generate create" [
+export def "post-realm-clients-id-certificates-attr-generate" [
   realm: string
   id: string
   attr: string
@@ -3859,7 +3859,7 @@ export def "clients-certificates-generate create" [
 # Generate a new keypair and certificate, and get the private key file Generates a keypair and certificate and serves the private key in a specified keystore format.
 #
 # POST /{realm}/clients/{id}/certificates/{attr}/generate-and-download
-export def "clients-certificates-generate-and-download create" [
+export def "post-realm-clients-id-certificates-attr-generate-and-download" [
   realm: string
   id: string
   attr: string
@@ -3907,7 +3907,7 @@ export def "clients-certificates-generate-and-download create" [
 # Upload certificate and eventually private key
 #
 # POST /{realm}/clients/{id}/certificates/{attr}/upload
-export def "clients-certificates-upload create" [
+export def "post-realm-clients-id-certificates-attr-upload" [
   realm: string
   id: string
   attr: string
@@ -3946,7 +3946,7 @@ export def "clients-certificates-upload create" [
 # Upload only certificate, not private key
 #
 # POST /{realm}/clients/{id}/certificates/{attr}/upload-certificate
-export def "clients-certificates-upload-certificate create" [
+export def "post-realm-clients-id-certificates-attr-upload-certificate" [
   realm: string
   id: string
   attr: string
@@ -3985,7 +3985,7 @@ export def "clients-certificates-upload-certificate create" [
 # Get the client secret
 #
 # GET /{realm}/clients/{id}/client-secret
-export def "clients-client-secret get" [
+export def "get-realm-clients-id-client-secret" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4022,7 +4022,7 @@ export def "clients-client-secret get" [
 # Generate a new secret for the client
 #
 # POST /{realm}/clients/{id}/client-secret
-export def "clients-client-secret create" [
+export def "post-realm-clients-id-client-secret" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4059,7 +4059,7 @@ export def "clients-client-secret create" [
 # Get default client scopes.
 #
 # GET /{realm}/clients/{id}/default-client-scopes
-export def "clients-default-client-scopes get" [
+export def "get-realm-clients-id-default-client-scopes" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4094,7 +4094,7 @@ export def "clients-default-client-scopes get" [
 }
 
 # DELETE /{realm}/clients/{id}/default-client-scopes/{clientScopeId}
-export def "clients-default-client-scopes delete" [
+export def "delete-realm-clients-id-default-client-scopes-client-scope-id" [
   realm: string
   id: string
   client_scope_id: string
@@ -4131,7 +4131,7 @@ export def "clients-default-client-scopes delete" [
 }
 
 # PUT /{realm}/clients/{id}/default-client-scopes/{clientScopeId}
-export def "clients-default-client-scopes update" [
+export def "put-realm-clients-id-default-client-scopes-client-scope-id" [
   realm: string
   id: string
   client_scope_id: string
@@ -4170,7 +4170,7 @@ export def "clients-default-client-scopes update" [
 # Create JSON with payload of example access token
 #
 # GET /{realm}/clients/{id}/evaluate-scopes/generate-example-access-token
-export def "clients-evaluate-scopes-generate-example-access-token get" [
+export def "get-realm-clients-id-evaluate-scopes-generate-example-access-token" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4210,7 +4210,7 @@ export def "clients-evaluate-scopes-generate-example-access-token get" [
 # Return list of all protocol mappers, which will be used when generating tokens issued for particular client.
 #
 # GET /{realm}/clients/{id}/evaluate-scopes/protocol-mappers
-export def "clients-evaluate-scopes-protocol-mappers get" [
+export def "get-realm-clients-id-evaluate-scopes-protocol-mappers" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4249,7 +4249,7 @@ export def "clients-evaluate-scopes-protocol-mappers get" [
 # Get effective scope mapping of all roles of particular role container, which this client is defacto allowed to have in the accessToken issued for him.
 #
 # GET /{realm}/clients/{id}/evaluate-scopes/scope-mappings/{roleContainerId}/granted
-export def "clients-evaluate-scopes-scope-mappings-granted get" [
+export def "get-realm-clients-id-evaluate-scopes-scope-mappings-role-container-id-granted" [
   realm: string
   id: string
   role_container_id: string
@@ -4290,7 +4290,7 @@ export def "clients-evaluate-scopes-scope-mappings-granted get" [
 # Get roles, which this client doesn’t have scope for and can’t have them in the accessToken issued for him.
 #
 # GET /{realm}/clients/{id}/evaluate-scopes/scope-mappings/{roleContainerId}/not-granted
-export def "clients-evaluate-scopes-scope-mappings-not-granted get" [
+export def "get-realm-clients-id-evaluate-scopes-scope-mappings-role-container-id-not-granted" [
   realm: string
   id: string
   role_container_id: string
@@ -4329,7 +4329,7 @@ export def "clients-evaluate-scopes-scope-mappings-not-granted get" [
 }
 
 # GET /{realm}/clients/{id}/installation/providers/{providerId}
-export def "clients-installation-providers get" [
+export def "get-realm-clients-id-installation-providers-provider-id" [
   realm: string
   id: string
   provider_id: string
@@ -4368,7 +4368,7 @@ export def "clients-installation-providers get" [
 # Return object stating whether client Authorization permissions have been initialized or not and a reference
 #
 # GET /{realm}/clients/{id}/management/permissions
-export def "clients-management-permissions get" [
+export def "get-realm-clients-id-management-permissions" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4405,7 +4405,7 @@ export def "clients-management-permissions get" [
 # Return object stating whether client Authorization permissions have been initialized or not and a reference
 #
 # PUT /{realm}/clients/{id}/management/permissions
-export def "clients-management-permissions update" [
+export def "put-realm-clients-id-management-permissions" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4448,7 +4448,7 @@ export def "clients-management-permissions update" [
 # Register a cluster node with the client Manually register cluster node to this client - usually it’s not needed to call this directly as adapter should handle by sending registration request to Keycloak
 #
 # POST /{realm}/clients/{id}/nodes
-export def "clients-nodes create" [
+export def "post-realm-clients-id-nodes" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4489,7 +4489,7 @@ export def "clients-nodes create" [
 # Unregister a cluster node from the client
 #
 # DELETE /{realm}/clients/{id}/nodes/{node}
-export def "clients-nodes delete" [
+export def "delete-realm-clients-id-nodes-node" [
   realm: string
   id: string
   node: string
@@ -4528,7 +4528,7 @@ export def "clients-nodes delete" [
 # Get application offline session count Returns a number of offline user sessions associated with this client { "count": number }
 #
 # GET /{realm}/clients/{id}/offline-session-count
-export def "clients-offline-session-count get" [
+export def "get-realm-clients-id-offline-session-count" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4565,7 +4565,7 @@ export def "clients-offline-session-count get" [
 # Get offline sessions for client Returns a list of offline user sessions associated with this client
 #
 # GET /{realm}/clients/{id}/offline-sessions
-export def "clients-offline-sessions get" [
+export def "get-realm-clients-id-offline-sessions" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4605,7 +4605,7 @@ export def "clients-offline-sessions get" [
 # Get optional client scopes.
 #
 # GET /{realm}/clients/{id}/optional-client-scopes
-export def "clients-optional-client-scopes get" [
+export def "get-realm-clients-id-optional-client-scopes" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4640,7 +4640,7 @@ export def "clients-optional-client-scopes get" [
 }
 
 # DELETE /{realm}/clients/{id}/optional-client-scopes/{clientScopeId}
-export def "clients-optional-client-scopes delete" [
+export def "delete-realm-clients-id-optional-client-scopes-client-scope-id" [
   realm: string
   id: string
   client_scope_id: string
@@ -4677,7 +4677,7 @@ export def "clients-optional-client-scopes delete" [
 }
 
 # PUT /{realm}/clients/{id}/optional-client-scopes/{clientScopeId}
-export def "clients-optional-client-scopes update" [
+export def "put-realm-clients-id-optional-client-scopes-client-scope-id" [
   realm: string
   id: string
   client_scope_id: string
@@ -4716,7 +4716,7 @@ export def "clients-optional-client-scopes update" [
 # Create multiple mappers
 #
 # POST /{realm}/clients/{id}/protocol-mappers/add-models
-export def "clients-protocol-mappers-add-models create" [
+export def "post-realm-clients-id-protocol-mappers-add-models" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4757,7 +4757,7 @@ export def "clients-protocol-mappers-add-models create" [
 # Get mappers
 #
 # GET /{realm}/clients/{id}/protocol-mappers/models
-export def "clients-protocol-mappers-models list" [
+export def "get-realm-clients-id-protocol-mappers-models" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4794,7 +4794,7 @@ export def "clients-protocol-mappers-models list" [
 # Create a mapper
 #
 # POST /{realm}/clients/{id}/protocol-mappers/models
-export def "clients-protocol-mappers-models create" [
+export def "post-realm-clients-id-protocol-mappers-models" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4839,7 +4839,7 @@ export def "clients-protocol-mappers-models create" [
 # Get mappers by name for a specific protocol
 #
 # GET /{realm}/clients/{id}/protocol-mappers/protocol/{protocol}
-export def "clients-protocol-mappers-protocol get" [
+export def "get-realm-clients-id-protocol-mappers-protocol-protocol" [
   realm: string
   id: string
   protocol: string
@@ -4878,7 +4878,7 @@ export def "clients-protocol-mappers-protocol get" [
 # Push the client’s revocation policy to its admin URL If the client has an admin URL, push revocation policy to it.
 #
 # POST /{realm}/clients/{id}/push-revocation
-export def "clients-push-revocation create" [
+export def "post-realm-clients-id-push-revocation" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4915,7 +4915,7 @@ export def "clients-push-revocation create" [
 # Generate a new registration access token for the client
 #
 # POST /{realm}/clients/{id}/registration-access-token
-export def "clients-registration-access-token create" [
+export def "post-realm-clients-id-registration-access-token" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4952,7 +4952,7 @@ export def "clients-registration-access-token create" [
 # Get all roles for the realm or client
 #
 # GET /{realm}/clients/{id}/roles
-export def "clients-roles list" [
+export def "get-realm-clients-id-roles" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4995,7 +4995,7 @@ export def "clients-roles list" [
 #
 # POST /{realm}/clients/{id}/roles
 # --composites shape: {client?: record, realm?: list<string>}
-export def "clients-roles create" [
+export def "post-realm-clients-id-roles" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5043,7 +5043,7 @@ export def "clients-roles create" [
 # Delete a role by name
 #
 # DELETE /{realm}/clients/{id}/roles/{role-name}
-export def "clients-roles delete" [
+export def "delete-realm-clients-id-roles-role-name" [
   realm: string
   id: string
   role_name: string
@@ -5082,7 +5082,7 @@ export def "clients-roles delete" [
 # Get a role by name
 #
 # GET /{realm}/clients/{id}/roles/{role-name}
-export def "clients-roles get" [
+export def "get-realm-clients-id-roles-role-name" [
   realm: string
   id: string
   role_name: string
@@ -5122,7 +5122,7 @@ export def "clients-roles get" [
 #
 # PUT /{realm}/clients/{id}/roles/{role-name}
 # --composites shape: {client?: record, realm?: list<string>}
-export def "clients-roles update" [
+export def "put-realm-clients-id-roles-role-name" [
   realm: string
   id: string
   role_name: string
@@ -5172,7 +5172,7 @@ export def "clients-roles update" [
 # Remove roles from the role’s composite
 #
 # DELETE /{realm}/clients/{id}/roles/{role-name}/composites
-export def "clients-roles-composites delete" [
+export def "delete-realm-clients-id-roles-role-name-composites" [
   realm: string
   id: string
   role_name: string
@@ -5215,7 +5215,7 @@ export def "clients-roles-composites delete" [
 # Get composites of the role
 #
 # GET /{realm}/clients/{id}/roles/{role-name}/composites
-export def "clients-roles-composites get" [
+export def "get-realm-clients-id-roles-role-name-composites" [
   realm: string
   id: string
   role_name: string
@@ -5254,7 +5254,7 @@ export def "clients-roles-composites get" [
 # Add a composite to the role
 #
 # POST /{realm}/clients/{id}/roles/{role-name}/composites
-export def "clients-roles-composites create" [
+export def "post-realm-clients-id-roles-role-name-composites" [
   realm: string
   id: string
   role_name: string
@@ -5297,7 +5297,7 @@ export def "clients-roles-composites create" [
 # An app-level roles for the specified app for the role’s composite
 #
 # GET /{realm}/clients/{id}/roles/{role-name}/composites/clients/{client}
-export def "clients-roles-composites-clients get" [
+export def "get-realm-clients-id-roles-role-name-composites-clients-client" [
   realm: string
   id: string
   role_name: string
@@ -5338,7 +5338,7 @@ export def "clients-roles-composites-clients get" [
 # Get realm-level roles of the role’s composite
 #
 # GET /{realm}/clients/{id}/roles/{role-name}/composites/realm
-export def "clients-roles-composites-realm get" [
+export def "get-realm-clients-id-roles-role-name-composites-realm" [
   realm: string
   id: string
   role_name: string
@@ -5377,7 +5377,7 @@ export def "clients-roles-composites-realm get" [
 # Return List of Groups that have the specified role name
 #
 # GET /{realm}/clients/{id}/roles/{role-name}/groups
-export def "clients-roles-groups get" [
+export def "get-realm-clients-id-roles-role-name-groups" [
   realm: string
   id: string
   role_name: string
@@ -5420,7 +5420,7 @@ export def "clients-roles-groups get" [
 # Return object stating whether role Authoirzation permissions have been initialized or not and a reference
 #
 # GET /{realm}/clients/{id}/roles/{role-name}/management/permissions
-export def "clients-roles-management-permissions get" [
+export def "get-realm-clients-id-roles-role-name-management-permissions" [
   realm: string
   id: string
   role_name: string
@@ -5459,7 +5459,7 @@ export def "clients-roles-management-permissions get" [
 # Return object stating whether role Authoirzation permissions have been initialized or not and a reference
 #
 # PUT /{realm}/clients/{id}/roles/{role-name}/management/permissions
-export def "clients-roles-management-permissions update" [
+export def "put-realm-clients-id-roles-role-name-management-permissions" [
   realm: string
   id: string
   role_name: string
@@ -5504,7 +5504,7 @@ export def "clients-roles-management-permissions update" [
 # Return List of Users that have the specified role name
 #
 # GET /{realm}/clients/{id}/roles/{role-name}/users
-export def "clients-roles-users get" [
+export def "get-realm-clients-id-roles-role-name-users" [
   realm: string
   id: string
   role_name: string
@@ -5546,7 +5546,7 @@ export def "clients-roles-users get" [
 # Get all scope mappings for the client
 #
 # GET /{realm}/clients/{id}/scope-mappings
-export def "clients-scope-mappings get" [
+export def "get-realm-clients-id-scope-mappings" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5583,7 +5583,7 @@ export def "clients-scope-mappings get" [
 # Remove client-level roles from the client’s scope.
 #
 # DELETE /{realm}/clients/{id}/scope-mappings/clients/{client}
-export def "clients-scope-mappings-clients delete" [
+export def "delete-realm-clients-id-scope-mappings-clients-client" [
   realm: string
   id: string
   client: string
@@ -5626,7 +5626,7 @@ export def "clients-scope-mappings-clients delete" [
 # Get the roles associated with a client’s scope Returns roles for the client.
 #
 # GET /{realm}/clients/{id}/scope-mappings/clients/{client}
-export def "clients-scope-mappings-clients get" [
+export def "get-realm-clients-id-scope-mappings-clients-client" [
   realm: string
   id: string
   client: string
@@ -5665,7 +5665,7 @@ export def "clients-scope-mappings-clients get" [
 # Add client-level roles to the client’s scope
 #
 # POST /{realm}/clients/{id}/scope-mappings/clients/{client}
-export def "clients-scope-mappings-clients create" [
+export def "post-realm-clients-id-scope-mappings-clients-client" [
   realm: string
   id: string
   client: string
@@ -5708,7 +5708,7 @@ export def "clients-scope-mappings-clients create" [
 # The available client-level roles Returns the roles for the client that can be associated with the client’s scope
 #
 # GET /{realm}/clients/{id}/scope-mappings/clients/{client}/available
-export def "clients-scope-mappings-clients-available get" [
+export def "get-realm-clients-id-scope-mappings-clients-client-available" [
   realm: string
   id: string
   client: string
@@ -5747,7 +5747,7 @@ export def "clients-scope-mappings-clients-available get" [
 # Get effective client roles Returns the roles for the client that are associated with the client’s scope.
 #
 # GET /{realm}/clients/{id}/scope-mappings/clients/{client}/composite
-export def "clients-scope-mappings-clients-composite get" [
+export def "get-realm-clients-id-scope-mappings-clients-client-composite" [
   realm: string
   id: string
   client: string
@@ -5786,7 +5786,7 @@ export def "clients-scope-mappings-clients-composite get" [
 # Remove a set of realm-level roles from the client’s scope
 #
 # DELETE /{realm}/clients/{id}/scope-mappings/realm
-export def "clients-scope-mappings-realm delete" [
+export def "delete-realm-clients-id-scope-mappings-realm" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5827,7 +5827,7 @@ export def "clients-scope-mappings-realm delete" [
 # Get realm-level roles associated with the client’s scope
 #
 # GET /{realm}/clients/{id}/scope-mappings/realm
-export def "clients-scope-mappings-realm get" [
+export def "get-realm-clients-id-scope-mappings-realm" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5864,7 +5864,7 @@ export def "clients-scope-mappings-realm get" [
 # Add a set of realm-level roles to the client’s scope
 #
 # POST /{realm}/clients/{id}/scope-mappings/realm
-export def "clients-scope-mappings-realm create" [
+export def "post-realm-clients-id-scope-mappings-realm" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5905,7 +5905,7 @@ export def "clients-scope-mappings-realm create" [
 # Get realm-level roles that are available to attach to this client’s scope
 #
 # GET /{realm}/clients/{id}/scope-mappings/realm/available
-export def "clients-scope-mappings-realm-available get" [
+export def "get-realm-clients-id-scope-mappings-realm-available" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5942,7 +5942,7 @@ export def "clients-scope-mappings-realm-available get" [
 # Get effective realm-level roles associated with the client’s scope What this does is recurse any composite roles associated with the client’s scope and adds the roles to this lists.
 #
 # GET /{realm}/clients/{id}/scope-mappings/realm/composite
-export def "clients-scope-mappings-realm-composite get" [
+export def "get-realm-clients-id-scope-mappings-realm-composite" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5979,7 +5979,7 @@ export def "clients-scope-mappings-realm-composite get" [
 # Get a user dedicated to the service account
 #
 # GET /{realm}/clients/{id}/service-account-user
-export def "clients-service-account-user get" [
+export def "get-realm-clients-id-service-account-user" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6016,7 +6016,7 @@ export def "clients-service-account-user get" [
 # Get application session count Returns a number of user sessions associated with this client { "count": number }
 #
 # GET /{realm}/clients/{id}/session-count
-export def "clients-session-count get" [
+export def "get-realm-clients-id-session-count" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6053,7 +6053,7 @@ export def "clients-session-count get" [
 # Test if registered cluster nodes are available Tests availability by sending 'ping' request to all cluster nodes.
 #
 # GET /{realm}/clients/{id}/test-nodes-available
-export def "clients-test-nodes-available get" [
+export def "get-realm-clients-id-test-nodes-available" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6090,7 +6090,7 @@ export def "clients-test-nodes-available get" [
 # Get user sessions for client Returns a list of user sessions associated with this client
 #
 # GET /{realm}/clients/{id}/user-sessions
-export def "clients-user-sessions get" [
+export def "get-realm-clients-id-user-sessions" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6128,7 +6128,7 @@ export def "clients-user-sessions get" [
 }
 
 # GET /{realm}/components
-export def "components list" [
+export def "get-realm-components" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6167,7 +6167,7 @@ export def "components list" [
 # POST /{realm}/components
 #
 # --config shape: {empty?: bool, loadFactor?: float, threshold?: int}
-export def "components create" [
+export def "post-realm-components" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6210,7 +6210,7 @@ export def "components create" [
 }
 
 # DELETE /{realm}/components/{id}
-export def "components delete" [
+export def "delete-realm-components-id" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6245,7 +6245,7 @@ export def "components delete" [
 }
 
 # GET /{realm}/components/{id}
-export def "components get" [
+export def "get-realm-components-id" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6282,7 +6282,7 @@ export def "components get" [
 # PUT /{realm}/components/{id}
 #
 # --config shape: {empty?: bool, loadFactor?: float, threshold?: int}
-export def "components update" [
+export def "put-realm-components-id" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6329,7 +6329,7 @@ export def "components update" [
 # List of subcomponent types that are available to configure for a particular parent component.
 #
 # GET /{realm}/components/{id}/sub-component-types
-export def "components-sub-component-types get" [
+export def "get-realm-components-id-sub-component-types" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6366,7 +6366,7 @@ export def "components-sub-component-types get" [
 }
 
 # GET /{realm}/credential-registrators
-export def "credential-registrators get" [
+export def "get-realm-credential-registrators" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6401,7 +6401,7 @@ export def "credential-registrators get" [
 # Get realm default client scopes.
 #
 # GET /{realm}/default-default-client-scopes
-export def "default-default-client-scopes get" [
+export def "get-realm-default-default-client-scopes" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6434,7 +6434,7 @@ export def "default-default-client-scopes get" [
 }
 
 # DELETE /{realm}/default-default-client-scopes/{clientScopeId}
-export def "default-default-client-scopes delete" [
+export def "delete-realm-default-default-client-scopes-client-scope-id" [
   realm: string
   client_scope_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6469,7 +6469,7 @@ export def "default-default-client-scopes delete" [
 }
 
 # PUT /{realm}/default-default-client-scopes/{clientScopeId}
-export def "default-default-client-scopes update" [
+export def "put-realm-default-default-client-scopes-client-scope-id" [
   realm: string
   client_scope_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6506,7 +6506,7 @@ export def "default-default-client-scopes update" [
 # Get group hierarchy.
 #
 # GET /{realm}/default-groups
-export def "default-groups get" [
+export def "get-realm-default-groups" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6539,7 +6539,7 @@ export def "default-groups get" [
 }
 
 # DELETE /{realm}/default-groups/{groupId}
-export def "default-groups delete" [
+export def "delete-realm-default-groups-group-id" [
   realm: string
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6574,7 +6574,7 @@ export def "default-groups delete" [
 }
 
 # PUT /{realm}/default-groups/{groupId}
-export def "default-groups update" [
+export def "put-realm-default-groups-group-id" [
   realm: string
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6611,7 +6611,7 @@ export def "default-groups update" [
 # Get realm optional client scopes.
 #
 # GET /{realm}/default-optional-client-scopes
-export def "default-optional-client-scopes get" [
+export def "get-realm-default-optional-client-scopes" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6644,7 +6644,7 @@ export def "default-optional-client-scopes get" [
 }
 
 # DELETE /{realm}/default-optional-client-scopes/{clientScopeId}
-export def "default-optional-client-scopes delete" [
+export def "delete-realm-default-optional-client-scopes-client-scope-id" [
   realm: string
   client_scope_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6679,7 +6679,7 @@ export def "default-optional-client-scopes delete" [
 }
 
 # PUT /{realm}/default-optional-client-scopes/{clientScopeId}
-export def "default-optional-client-scopes update" [
+export def "put-realm-default-optional-client-scopes-client-scope-id" [
   realm: string
   client_scope_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6716,7 +6716,7 @@ export def "default-optional-client-scopes update" [
 # Delete all events
 #
 # DELETE /{realm}/events
-export def "events delete" [
+export def "delete-realm-events" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6751,7 +6751,7 @@ export def "events delete" [
 # Get events Returns all events, or filters them based on URL query parameters listed here
 #
 # GET /{realm}/events
-export def "events get" [
+export def "get-realm-events" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6795,7 +6795,7 @@ export def "events get" [
 # Get the events provider configuration Returns JSON object with events provider configuration
 #
 # GET /{realm}/events/config
-export def "events-config get" [
+export def "get-realm-events-config" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6830,7 +6830,7 @@ export def "events-config get" [
 # Update the events provider Change the events provider and/or its configuration
 #
 # PUT /{realm}/events/config
-export def "events-config update" [
+export def "put-realm-events-config" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6872,7 +6872,7 @@ export def "events-config update" [
 }
 
 # GET /{realm}/group-by-path/{path}
-export def "group-by-path get" [
+export def "get-realm-group-by-path-path" [
   realm: string
   path: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6909,7 +6909,7 @@ export def "group-by-path get" [
 # Get group hierarchy.
 #
 # GET /{realm}/groups
-export def "groups list" [
+export def "get-realm-groups" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6950,7 +6950,7 @@ export def "groups list" [
 #
 # POST /{realm}/groups
 # --subGroups item shape: {access?: record, attributes?: record, clientRoles?: record, id?: string, name?: string, path?: string, realmRoles?: list<string>, subGroups?: list}
-export def "groups create" [
+export def "post-realm-groups" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6996,7 +6996,7 @@ export def "groups create" [
 # Returns the groups counts.
 #
 # GET /{realm}/groups/count
-export def "groups-count get" [
+export def "get-realm-groups-count" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7032,7 +7032,7 @@ export def "groups-count get" [
 }
 
 # DELETE /{realm}/groups/{id}
-export def "groups delete" [
+export def "delete-realm-groups-id" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7067,7 +7067,7 @@ export def "groups delete" [
 }
 
 # GET /{realm}/groups/{id}
-export def "groups get" [
+export def "get-realm-groups-id" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7105,7 +7105,7 @@ export def "groups get" [
 #
 # PUT /{realm}/groups/{id}
 # --subGroups item shape: {access?: record, attributes?: record, clientRoles?: record, id?: string, name?: string, path?: string, realmRoles?: list<string>, subGroups?: list}
-export def "groups update" [
+export def "put-realm-groups-id" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7154,7 +7154,7 @@ export def "groups update" [
 #
 # POST /{realm}/groups/{id}/children
 # --subGroups item shape: {access?: record, attributes?: record, clientRoles?: record, id?: string, name?: string, path?: string, realmRoles?: list<string>, subGroups?: list}
-export def "groups-children create" [
+export def "post-realm-groups-id-children" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7202,7 +7202,7 @@ export def "groups-children create" [
 # Return object stating whether client Authorization permissions have been initialized or not and a reference
 #
 # GET /{realm}/groups/{id}/management/permissions
-export def "groups-management-permissions get" [
+export def "get-realm-groups-id-management-permissions" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7239,7 +7239,7 @@ export def "groups-management-permissions get" [
 # Return object stating whether client Authorization permissions have been initialized or not and a reference
 #
 # PUT /{realm}/groups/{id}/management/permissions
-export def "groups-management-permissions update" [
+export def "put-realm-groups-id-management-permissions" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7282,7 +7282,7 @@ export def "groups-management-permissions update" [
 # Get users Returns a list of users, filtered according to query parameters
 #
 # GET /{realm}/groups/{id}/members
-export def "groups-members get" [
+export def "get-realm-groups-id-members" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7323,7 +7323,7 @@ export def "groups-members get" [
 # Get role mappings
 #
 # GET /{realm}/groups/{id}/role-mappings
-export def "groups-role-mappings get" [
+export def "get-realm-groups-id-role-mappings" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7360,7 +7360,7 @@ export def "groups-role-mappings get" [
 # Delete client-level roles from user role mapping
 #
 # DELETE /{realm}/groups/{id}/role-mappings/clients/{client}
-export def "groups-role-mappings-clients delete" [
+export def "delete-realm-groups-id-role-mappings-clients-client" [
   realm: string
   id: string
   client: string
@@ -7403,7 +7403,7 @@ export def "groups-role-mappings-clients delete" [
 # Get client-level role mappings for the user, and the app
 #
 # GET /{realm}/groups/{id}/role-mappings/clients/{client}
-export def "groups-role-mappings-clients get" [
+export def "get-realm-groups-id-role-mappings-clients-client" [
   realm: string
   id: string
   client: string
@@ -7442,7 +7442,7 @@ export def "groups-role-mappings-clients get" [
 # Add client-level roles to the user role mapping
 #
 # POST /{realm}/groups/{id}/role-mappings/clients/{client}
-export def "groups-role-mappings-clients create" [
+export def "post-realm-groups-id-role-mappings-clients-client" [
   realm: string
   id: string
   client: string
@@ -7485,7 +7485,7 @@ export def "groups-role-mappings-clients create" [
 # Get available client-level roles that can be mapped to the user
 #
 # GET /{realm}/groups/{id}/role-mappings/clients/{client}/available
-export def "groups-role-mappings-clients-available get" [
+export def "get-realm-groups-id-role-mappings-clients-client-available" [
   realm: string
   id: string
   client: string
@@ -7524,7 +7524,7 @@ export def "groups-role-mappings-clients-available get" [
 # Get effective client-level role mappings This recurses any composite roles
 #
 # GET /{realm}/groups/{id}/role-mappings/clients/{client}/composite
-export def "groups-role-mappings-clients-composite get" [
+export def "get-realm-groups-id-role-mappings-clients-client-composite" [
   realm: string
   id: string
   client: string
@@ -7563,7 +7563,7 @@ export def "groups-role-mappings-clients-composite get" [
 # Delete realm-level role mappings
 #
 # DELETE /{realm}/groups/{id}/role-mappings/realm
-export def "groups-role-mappings-realm delete" [
+export def "delete-realm-groups-id-role-mappings-realm" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7604,7 +7604,7 @@ export def "groups-role-mappings-realm delete" [
 # Get realm-level role mappings
 #
 # GET /{realm}/groups/{id}/role-mappings/realm
-export def "groups-role-mappings-realm get" [
+export def "get-realm-groups-id-role-mappings-realm" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7641,7 +7641,7 @@ export def "groups-role-mappings-realm get" [
 # Add realm-level role mappings to the user
 #
 # POST /{realm}/groups/{id}/role-mappings/realm
-export def "groups-role-mappings-realm create" [
+export def "post-realm-groups-id-role-mappings-realm" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7682,7 +7682,7 @@ export def "groups-role-mappings-realm create" [
 # Get realm-level roles that can be mapped
 #
 # GET /{realm}/groups/{id}/role-mappings/realm/available
-export def "groups-role-mappings-realm-available get" [
+export def "get-realm-groups-id-role-mappings-realm-available" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7719,7 +7719,7 @@ export def "groups-role-mappings-realm-available get" [
 # Get effective realm-level role mappings This will recurse all composite roles to get the result.
 #
 # GET /{realm}/groups/{id}/role-mappings/realm/composite
-export def "groups-role-mappings-realm-composite get" [
+export def "get-realm-groups-id-role-mappings-realm-composite" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7756,7 +7756,7 @@ export def "groups-role-mappings-realm-composite get" [
 # Import identity provider from uploaded JSON file
 #
 # POST /{realm}/identity-provider/import-config
-export def "identity-provider-import-config create" [
+export def "post-realm-identity-provider-import-config" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7791,7 +7791,7 @@ export def "identity-provider-import-config create" [
 # Get identity providers
 #
 # GET /{realm}/identity-provider/instances
-export def "identity-provider-instances list" [
+export def "get-realm-identity-provider-instances" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7826,7 +7826,7 @@ export def "identity-provider-instances list" [
 # Create a new identity provider
 #
 # POST /{realm}/identity-provider/instances
-export def "identity-provider-instances create" [
+export def "post-realm-identity-provider-instances" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7876,7 +7876,7 @@ export def "identity-provider-instances create" [
 # Delete the identity provider
 #
 # DELETE /{realm}/identity-provider/instances/{alias}
-export def "identity-provider-instances delete" [
+export def "delete-realm-identity-provider-instances-alias" [
   realm: string
   alias: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7913,7 +7913,7 @@ export def "identity-provider-instances delete" [
 # Get the identity provider
 #
 # GET /{realm}/identity-provider/instances/{alias}
-export def "identity-provider-instances get" [
+export def "get-realm-identity-provider-instances-alias" [
   realm: string
   alias: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7950,7 +7950,7 @@ export def "identity-provider-instances get" [
 # Update the identity provider
 #
 # PUT /{realm}/identity-provider/instances/{alias}
-export def "identity-provider-instances update" [
+export def "put-realm-identity-provider-instances-alias" [
   realm: string
   alias: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8002,7 +8002,7 @@ export def "identity-provider-instances update" [
 # Export public broker configuration for identity provider
 #
 # GET /{realm}/identity-provider/instances/{alias}/export
-export def "identity-provider-instances-export get" [
+export def "get-realm-identity-provider-instances-alias-export" [
   realm: string
   alias: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8041,7 +8041,7 @@ export def "identity-provider-instances-export get" [
 # Return object stating whether client Authorization permissions have been initialized or not and a reference
 #
 # GET /{realm}/identity-provider/instances/{alias}/management/permissions
-export def "identity-provider-instances-management-permissions get" [
+export def "get-realm-identity-provider-instances-alias-management-permissions" [
   realm: string
   alias: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8078,7 +8078,7 @@ export def "identity-provider-instances-management-permissions get" [
 # Return object stating whether client Authorization permissions have been initialized or not and a reference
 #
 # PUT /{realm}/identity-provider/instances/{alias}/management/permissions
-export def "identity-provider-instances-management-permissions update" [
+export def "put-realm-identity-provider-instances-alias-management-permissions" [
   realm: string
   alias: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8121,7 +8121,7 @@ export def "identity-provider-instances-management-permissions update" [
 # Get mapper types for identity provider
 #
 # GET /{realm}/identity-provider/instances/{alias}/mapper-types
-export def "identity-provider-instances-mapper-types get" [
+export def "get-realm-identity-provider-instances-alias-mapper-types" [
   realm: string
   alias: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8158,7 +8158,7 @@ export def "identity-provider-instances-mapper-types get" [
 # Get mappers for identity provider
 #
 # GET /{realm}/identity-provider/instances/{alias}/mappers
-export def "identity-provider-instances-mappers list" [
+export def "get-realm-identity-provider-instances-alias-mappers" [
   realm: string
   alias: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8195,7 +8195,7 @@ export def "identity-provider-instances-mappers list" [
 # Add a mapper to identity provider
 #
 # POST /{realm}/identity-provider/instances/{alias}/mappers
-export def "identity-provider-instances-mappers create" [
+export def "post-realm-identity-provider-instances-alias-mappers" [
   realm: string
   alias: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8240,7 +8240,7 @@ export def "identity-provider-instances-mappers create" [
 # Delete a mapper for the identity provider
 #
 # DELETE /{realm}/identity-provider/instances/{alias}/mappers/{id}
-export def "identity-provider-instances-mappers delete" [
+export def "delete-realm-identity-provider-instances-alias-mappers-id" [
   realm: string
   alias: string
   id: string
@@ -8279,7 +8279,7 @@ export def "identity-provider-instances-mappers delete" [
 # Get mapper by id for the identity provider
 #
 # GET /{realm}/identity-provider/instances/{alias}/mappers/{id}
-export def "identity-provider-instances-mappers get" [
+export def "get-realm-identity-provider-instances-alias-mappers-id" [
   realm: string
   alias: string
   id: string
@@ -8318,7 +8318,7 @@ export def "identity-provider-instances-mappers get" [
 # Update a mapper for the identity provider
 #
 # PUT /{realm}/identity-provider/instances/{alias}/mappers/{id}
-export def "identity-provider-instances-mappers update" [
+export def "put-realm-identity-provider-instances-alias-mappers-id" [
   realm: string
   alias: string
   id: string
@@ -8365,7 +8365,7 @@ export def "identity-provider-instances-mappers update" [
 # Get identity providers
 #
 # GET /{realm}/identity-provider/providers/{provider_id}
-export def "identity-provider-providers get" [
+export def "get-realm-identity-provider-providers-provider-id" [
   realm: string
   provider_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8400,7 +8400,7 @@ export def "identity-provider-providers get" [
 }
 
 # GET /{realm}/keys
-export def "keys get" [
+export def "get-realm-keys" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8435,7 +8435,7 @@ export def "keys get" [
 # Removes all user sessions.
 #
 # POST /{realm}/logout-all
-export def "logout-all create" [
+export def "post-realm-logout-all" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8470,7 +8470,7 @@ export def "logout-all create" [
 # Partial export of existing realm into a JSON file.
 #
 # POST /{realm}/partial-export
-export def "partial-export create" [
+export def "post-realm-partial-export" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8513,7 +8513,7 @@ export def "partial-export create" [
 # --identityProviders item shape: {addReadTokenRoleOnCreate?: bool, alias?: string, config?: record, displayName?: string, enabled?: bool, firstBrokerLoginFlowAlias?: string, internalId?: string, linkOnly?: bool, postBrokerLoginFlowAlias?: string, providerId?: string, storeToken?: bool, trustEmail?: bool}
 # --roles shape: {client?: record, realm?: list}
 # --users item shape: {access?: record, attributes?: record, clientConsents?: list, clientRoles?: record, createdTimestamp?: int, credentials?: list, disableableCredentialTypes?: list<string>, email?: string, emailVerified?: bool, enabled?: bool, federatedIdentities?: list, federationLink?: string, firstName?: string, groups?: list<string>, id?: string, lastName?: string, notBefore?: int, origin?: string, realmRoles?: list<string>, requiredActions?: list<string>, self?: string, serviceAccountClientId?: string, ... (1 more fields)}
-export def "partial-import create" [
+export def "post-realm-partial-import" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8558,7 +8558,7 @@ export def "partial-import create" [
 # Push the realm’s revocation policy to any client that has an admin url associated with it.
 #
 # POST /{realm}/push-revocation
-export def "push-revocation create" [
+export def "post-realm-push-revocation" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8593,7 +8593,7 @@ export def "push-revocation create" [
 # Get all roles for the realm or client
 #
 # GET /{realm}/roles
-export def "roles list" [
+export def "get-realm-roles" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8634,7 +8634,7 @@ export def "roles list" [
 #
 # POST /{realm}/roles
 # --composites shape: {client?: record, realm?: list<string>}
-export def "roles create" [
+export def "post-realm-roles" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8680,7 +8680,7 @@ export def "roles create" [
 # Delete the role
 #
 # DELETE /{realm}/roles-by-id/{role-id}
-export def "roles-by-id delete" [
+export def "delete-realm-roles-by-id-role-id" [
   realm: string
   role_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8717,7 +8717,7 @@ export def "roles-by-id delete" [
 # Get a specific role’s representation
 #
 # GET /{realm}/roles-by-id/{role-id}
-export def "roles-by-id get" [
+export def "get-realm-roles-by-id-role-id" [
   realm: string
   role_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8755,7 +8755,7 @@ export def "roles-by-id get" [
 #
 # PUT /{realm}/roles-by-id/{role-id}
 # --composites shape: {client?: record, realm?: list<string>}
-export def "roles-by-id update" [
+export def "put-realm-roles-by-id-role-id" [
   realm: string
   role_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8803,7 +8803,7 @@ export def "roles-by-id update" [
 # Remove a set of roles from the role’s composite
 #
 # DELETE /{realm}/roles-by-id/{role-id}/composites
-export def "roles-by-id-composites delete" [
+export def "delete-realm-roles-by-id-role-id-composites" [
   realm: string
   role_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8844,7 +8844,7 @@ export def "roles-by-id-composites delete" [
 # Get role’s children Returns a set of role’s children provided the role is a composite.
 #
 # GET /{realm}/roles-by-id/{role-id}/composites
-export def "roles-by-id-composites get" [
+export def "get-realm-roles-by-id-role-id-composites" [
   realm: string
   role_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8881,7 +8881,7 @@ export def "roles-by-id-composites get" [
 # Make the role a composite role by associating some child roles
 #
 # POST /{realm}/roles-by-id/{role-id}/composites
-export def "roles-by-id-composites create" [
+export def "post-realm-roles-by-id-role-id-composites" [
   realm: string
   role_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8922,7 +8922,7 @@ export def "roles-by-id-composites create" [
 # Get client-level roles for the client that are in the role’s composite
 #
 # GET /{realm}/roles-by-id/{role-id}/composites/clients/{client}
-export def "roles-by-id-composites-clients get" [
+export def "get-realm-roles-by-id-role-id-composites-clients-client" [
   realm: string
   role_id: string
   client: string
@@ -8961,7 +8961,7 @@ export def "roles-by-id-composites-clients get" [
 # Get realm-level roles that are in the role’s composite
 #
 # GET /{realm}/roles-by-id/{role-id}/composites/realm
-export def "roles-by-id-composites-realm get" [
+export def "get-realm-roles-by-id-role-id-composites-realm" [
   realm: string
   role_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8998,7 +8998,7 @@ export def "roles-by-id-composites-realm get" [
 # Return object stating whether role Authoirzation permissions have been initialized or not and a reference
 #
 # GET /{realm}/roles-by-id/{role-id}/management/permissions
-export def "roles-by-id-management-permissions get" [
+export def "get-realm-roles-by-id-role-id-management-permissions" [
   realm: string
   role_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9035,7 +9035,7 @@ export def "roles-by-id-management-permissions get" [
 # Return object stating whether role Authoirzation permissions have been initialized or not and a reference
 #
 # PUT /{realm}/roles-by-id/{role-id}/management/permissions
-export def "roles-by-id-management-permissions update" [
+export def "put-realm-roles-by-id-role-id-management-permissions" [
   realm: string
   role_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9078,7 +9078,7 @@ export def "roles-by-id-management-permissions update" [
 # Delete a role by name
 #
 # DELETE /{realm}/roles/{role-name}
-export def "roles delete" [
+export def "delete-realm-roles-role-name" [
   realm: string
   role_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9115,7 +9115,7 @@ export def "roles delete" [
 # Get a role by name
 #
 # GET /{realm}/roles/{role-name}
-export def "roles get" [
+export def "get-realm-roles-role-name" [
   realm: string
   role_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9153,7 +9153,7 @@ export def "roles get" [
 #
 # PUT /{realm}/roles/{role-name}
 # --composites shape: {client?: record, realm?: list<string>}
-export def "roles update" [
+export def "put-realm-roles-role-name" [
   realm: string
   role_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9201,7 +9201,7 @@ export def "roles update" [
 # Remove roles from the role’s composite
 #
 # DELETE /{realm}/roles/{role-name}/composites
-export def "roles-composites delete" [
+export def "delete-realm-roles-role-name-composites" [
   realm: string
   role_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9242,7 +9242,7 @@ export def "roles-composites delete" [
 # Get composites of the role
 #
 # GET /{realm}/roles/{role-name}/composites
-export def "roles-composites get" [
+export def "get-realm-roles-role-name-composites" [
   realm: string
   role_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9279,7 +9279,7 @@ export def "roles-composites get" [
 # Add a composite to the role
 #
 # POST /{realm}/roles/{role-name}/composites
-export def "roles-composites create" [
+export def "post-realm-roles-role-name-composites" [
   realm: string
   role_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9320,7 +9320,7 @@ export def "roles-composites create" [
 # An app-level roles for the specified app for the role’s composite
 #
 # GET /{realm}/roles/{role-name}/composites/clients/{client}
-export def "roles-composites-clients get" [
+export def "get-realm-roles-role-name-composites-clients-client" [
   realm: string
   role_name: string
   client: string
@@ -9359,7 +9359,7 @@ export def "roles-composites-clients get" [
 # Get realm-level roles of the role’s composite
 #
 # GET /{realm}/roles/{role-name}/composites/realm
-export def "roles-composites-realm get" [
+export def "get-realm-roles-role-name-composites-realm" [
   realm: string
   role_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9396,7 +9396,7 @@ export def "roles-composites-realm get" [
 # Return List of Groups that have the specified role name
 #
 # GET /{realm}/roles/{role-name}/groups
-export def "roles-groups get" [
+export def "get-realm-roles-role-name-groups" [
   realm: string
   role_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9437,7 +9437,7 @@ export def "roles-groups get" [
 # Return object stating whether role Authoirzation permissions have been initialized or not and a reference
 #
 # GET /{realm}/roles/{role-name}/management/permissions
-export def "roles-management-permissions get" [
+export def "get-realm-roles-role-name-management-permissions" [
   realm: string
   role_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9474,7 +9474,7 @@ export def "roles-management-permissions get" [
 # Return object stating whether role Authoirzation permissions have been initialized or not and a reference
 #
 # PUT /{realm}/roles/{role-name}/management/permissions
-export def "roles-management-permissions update" [
+export def "put-realm-roles-role-name-management-permissions" [
   realm: string
   role_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9517,7 +9517,7 @@ export def "roles-management-permissions update" [
 # Return List of Users that have the specified role name
 #
 # GET /{realm}/roles/{role-name}/users
-export def "roles-users get" [
+export def "get-realm-roles-role-name-users" [
   realm: string
   role_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9557,7 +9557,7 @@ export def "roles-users get" [
 # Remove a specific user session.
 #
 # DELETE /{realm}/sessions/{session}
-export def "sessions delete" [
+export def "delete-realm-sessions-session" [
   realm: string
   session: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9594,7 +9594,7 @@ export def "sessions delete" [
 # Test LDAP connection
 #
 # POST /{realm}/testLDAPConnection
-export def "test-ldap-connection create" [
+export def "post-realm-test-ldap-connection" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9638,7 +9638,7 @@ export def "test-ldap-connection create" [
 }
 
 # POST /{realm}/testSMTPConnection
-export def "test-smtp-connection create" [
+export def "post-realm-test-smtp-connection" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9677,7 +9677,7 @@ export def "test-smtp-connection create" [
 # Need this for admin console to display simple name of provider when displaying user detail KEYCLOAK-4328
 #
 # GET /{realm}/user-storage/{id}/name
-export def "user-storage-name get" [
+export def "get-realm-user-storage-id-name" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9714,7 +9714,7 @@ export def "user-storage-name get" [
 # Remove imported users
 #
 # POST /{realm}/user-storage/{id}/remove-imported-users
-export def "user-storage-remove-imported-users create" [
+export def "post-realm-user-storage-id-remove-imported-users" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9751,7 +9751,7 @@ export def "user-storage-remove-imported-users create" [
 # Trigger sync of users Action can be "triggerFullSync" or "triggerChangedUsersSync"
 #
 # POST /{realm}/user-storage/{id}/sync
-export def "user-storage-sync create" [
+export def "post-realm-user-storage-id-sync" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9790,7 +9790,7 @@ export def "user-storage-sync create" [
 # Unlink imported users from a storage provider
 #
 # POST /{realm}/user-storage/{id}/unlink-users
-export def "user-storage-unlink-users create" [
+export def "post-realm-user-storage-id-unlink-users" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9827,7 +9827,7 @@ export def "user-storage-unlink-users create" [
 # Trigger sync of mapper data related to ldap mapper (roles, groups, …​) direction is "fedToKeycloak" or "keycloakToFed"
 #
 # POST /{realm}/user-storage/{parentId}/mappers/{id}/sync
-export def "user-storage-mappers-sync create" [
+export def "post-realm-user-storage-parent-id-mappers-id-sync" [
   realm: string
   parent_id: string
   id: string
@@ -9868,7 +9868,7 @@ export def "user-storage-mappers-sync create" [
 # Get users Returns a list of users, filtered according to query parameters
 #
 # GET /{realm}/users
-export def "users list" [
+export def "get-realm-users" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9915,7 +9915,7 @@ export def "users list" [
 # --clientConsents item shape: {clientId?: string, createdDate?: int, grantedClientScopes?: list<string>, lastUpdatedDate?: int}
 # --credentials item shape: {createdDate?: int, credentialData?: string, id?: string, priority?: int, secretData?: string, temporary?: bool, type?: string, userLabel?: string, value?: string}
 # --federatedIdentities item shape: {identityProvider?: string, userId?: string, userName?: string}
-export def "users create" [
+export def "post-realm-users" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9974,7 +9974,7 @@ export def "users create" [
 }
 
 # GET /{realm}/users-management-permissions
-export def "users-management-permissions get" [
+export def "get-realm-users-management-permissions" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10007,7 +10007,7 @@ export def "users-management-permissions get" [
 }
 
 # PUT /{realm}/users-management-permissions
-export def "users-management-permissions update" [
+export def "put-realm-users-management-permissions" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10048,7 +10048,7 @@ export def "users-management-permissions update" [
 # Returns the number of users that match the given criteria.
 #
 # GET /{realm}/users/count
-export def "users-count get" [
+export def "get-realm-users-count" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10089,7 +10089,7 @@ export def "users-count get" [
 # Delete the user
 #
 # DELETE /{realm}/users/{id}
-export def "users delete" [
+export def "delete-realm-users-id" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10126,7 +10126,7 @@ export def "users delete" [
 # Get representation of the user
 #
 # GET /{realm}/users/{id}
-export def "users get" [
+export def "get-realm-users-id" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10166,7 +10166,7 @@ export def "users get" [
 # --clientConsents item shape: {clientId?: string, createdDate?: int, grantedClientScopes?: list<string>, lastUpdatedDate?: int}
 # --credentials item shape: {createdDate?: int, credentialData?: string, id?: string, priority?: int, secretData?: string, temporary?: bool, type?: string, userLabel?: string, value?: string}
 # --federatedIdentities item shape: {identityProvider?: string, userId?: string, userName?: string}
-export def "users update" [
+export def "put-realm-users-id" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10229,7 +10229,7 @@ export def "users update" [
 # Return credential types, which are provided by the user storage where user is stored.
 #
 # GET /{realm}/users/{id}/configured-user-storage-credential-types
-export def "users-configured-user-storage-credential-types get" [
+export def "get-realm-users-id-configured-user-storage-credential-types" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10266,7 +10266,7 @@ export def "users-configured-user-storage-credential-types get" [
 # Get consents granted by the user
 #
 # GET /{realm}/users/{id}/consents
-export def "users-consents get" [
+export def "get-realm-users-id-consents" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10303,7 +10303,7 @@ export def "users-consents get" [
 # Revoke consent and offline tokens for particular client from user
 #
 # DELETE /{realm}/users/{id}/consents/{client}
-export def "users-consents delete" [
+export def "delete-realm-users-id-consents-client" [
   realm: string
   id: string
   client: string
@@ -10340,7 +10340,7 @@ export def "users-consents delete" [
 }
 
 # GET /{realm}/users/{id}/credentials
-export def "users-credentials get" [
+export def "get-realm-users-id-credentials" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10377,7 +10377,7 @@ export def "users-credentials get" [
 # Remove a credential for a user
 #
 # DELETE /{realm}/users/{id}/credentials/{credentialId}
-export def "users-credentials delete" [
+export def "delete-realm-users-id-credentials-credential-id" [
   realm: string
   id: string
   credential_id: string
@@ -10416,7 +10416,7 @@ export def "users-credentials delete" [
 # Move a credential to a position behind another credential
 #
 # POST /{realm}/users/{id}/credentials/{credentialId}/moveAfter/{newPreviousCredentialId}
-export def "users-credentials-move-after create" [
+export def "post-realm-users-id-credentials-credential-id-move-after-new-previous-credential-id" [
   realm: string
   id: string
   credential_id: string
@@ -10457,7 +10457,7 @@ export def "users-credentials-move-after create" [
 # Move a credential to a first position in the credentials list of the user
 #
 # POST /{realm}/users/{id}/credentials/{credentialId}/moveToFirst
-export def "users-credentials-move-to-first create" [
+export def "post-realm-users-id-credentials-credential-id-move-to-first" [
   realm: string
   id: string
   credential_id: string
@@ -10496,7 +10496,7 @@ export def "users-credentials-move-to-first create" [
 # Update a credential label for a user
 #
 # PUT /{realm}/users/{id}/credentials/{credentialId}/userLabel
-export def "users-credentials-user-label update" [
+export def "put-realm-users-id-credentials-credential-id-user-label" [
   realm: string
   id: string
   credential_id: string
@@ -10539,7 +10539,7 @@ export def "users-credentials-user-label update" [
 # Disable all credentials for a user of a specific type
 #
 # PUT /{realm}/users/{id}/disable-credential-types
-export def "users-disable-credential-types update" [
+export def "put-realm-users-id-disable-credential-types" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10580,7 +10580,7 @@ export def "users-disable-credential-types update" [
 # Send a update account email to the user An email contains a link the user can click to perform a set of required actions.
 #
 # PUT /{realm}/users/{id}/execute-actions-email
-export def "users-execute-actions-email update" [
+export def "put-realm-users-id-execute-actions-email" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10625,7 +10625,7 @@ export def "users-execute-actions-email update" [
 # Get social logins associated with the user
 #
 # GET /{realm}/users/{id}/federated-identity
-export def "users-federated-identity get" [
+export def "get-realm-users-id-federated-identity" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10662,7 +10662,7 @@ export def "users-federated-identity get" [
 # Remove a social login provider from user
 #
 # DELETE /{realm}/users/{id}/federated-identity/{provider}
-export def "users-federated-identity delete" [
+export def "delete-realm-users-id-federated-identity-provider" [
   realm: string
   id: string
   provider: string
@@ -10701,7 +10701,7 @@ export def "users-federated-identity delete" [
 # Add a social login provider to the user
 #
 # POST /{realm}/users/{id}/federated-identity/{provider}
-export def "users-federated-identity create" [
+export def "post-realm-users-id-federated-identity-provider" [
   realm: string
   id: string
   provider: string
@@ -10744,7 +10744,7 @@ export def "users-federated-identity create" [
 }
 
 # GET /{realm}/users/{id}/groups
-export def "users-groups get" [
+export def "get-realm-users-id-groups" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10784,7 +10784,7 @@ export def "users-groups get" [
 }
 
 # GET /{realm}/users/{id}/groups/count
-export def "users-groups-count get" [
+export def "get-realm-users-id-groups-count" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10821,7 +10821,7 @@ export def "users-groups-count get" [
 }
 
 # DELETE /{realm}/users/{id}/groups/{groupId}
-export def "users-groups delete" [
+export def "delete-realm-users-id-groups-group-id" [
   realm: string
   id: string
   group_id: string
@@ -10858,7 +10858,7 @@ export def "users-groups delete" [
 }
 
 # PUT /{realm}/users/{id}/groups/{groupId}
-export def "users-groups update" [
+export def "put-realm-users-id-groups-group-id" [
   realm: string
   id: string
   group_id: string
@@ -10897,7 +10897,7 @@ export def "users-groups update" [
 # Impersonate the user
 #
 # POST /{realm}/users/{id}/impersonation
-export def "users-impersonation create" [
+export def "post-realm-users-id-impersonation" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10934,7 +10934,7 @@ export def "users-impersonation create" [
 # Remove all user sessions associated with the user Also send notification to all clients that have an admin URL to invalidate the sessions for the particular user.
 #
 # POST /{realm}/users/{id}/logout
-export def "users-logout create" [
+export def "post-realm-users-id-logout" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10971,7 +10971,7 @@ export def "users-logout create" [
 # Get offline sessions associated with the user and client
 #
 # GET /{realm}/users/{id}/offline-sessions/{clientId}
-export def "users-offline-sessions get" [
+export def "get-realm-users-id-offline-sessions-client-id" [
   realm: string
   id: string
   client_id: string
@@ -11010,7 +11010,7 @@ export def "users-offline-sessions get" [
 # Set up a new password for the user.
 #
 # PUT /{realm}/users/{id}/reset-password
-export def "users-reset-password update" [
+export def "put-realm-users-id-reset-password" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11059,7 +11059,7 @@ export def "users-reset-password update" [
 # Get role mappings
 #
 # GET /{realm}/users/{id}/role-mappings
-export def "users-role-mappings get" [
+export def "get-realm-users-id-role-mappings" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11096,7 +11096,7 @@ export def "users-role-mappings get" [
 # Delete client-level roles from user role mapping
 #
 # DELETE /{realm}/users/{id}/role-mappings/clients/{client}
-export def "users-role-mappings-clients delete" [
+export def "delete-realm-users-id-role-mappings-clients-client" [
   realm: string
   id: string
   client: string
@@ -11139,7 +11139,7 @@ export def "users-role-mappings-clients delete" [
 # Get client-level role mappings for the user, and the app
 #
 # GET /{realm}/users/{id}/role-mappings/clients/{client}
-export def "users-role-mappings-clients get" [
+export def "get-realm-users-id-role-mappings-clients-client" [
   realm: string
   id: string
   client: string
@@ -11178,7 +11178,7 @@ export def "users-role-mappings-clients get" [
 # Add client-level roles to the user role mapping
 #
 # POST /{realm}/users/{id}/role-mappings/clients/{client}
-export def "users-role-mappings-clients create" [
+export def "post-realm-users-id-role-mappings-clients-client" [
   realm: string
   id: string
   client: string
@@ -11221,7 +11221,7 @@ export def "users-role-mappings-clients create" [
 # Get available client-level roles that can be mapped to the user
 #
 # GET /{realm}/users/{id}/role-mappings/clients/{client}/available
-export def "users-role-mappings-clients-available get" [
+export def "get-realm-users-id-role-mappings-clients-client-available" [
   realm: string
   id: string
   client: string
@@ -11260,7 +11260,7 @@ export def "users-role-mappings-clients-available get" [
 # Get effective client-level role mappings This recurses any composite roles
 #
 # GET /{realm}/users/{id}/role-mappings/clients/{client}/composite
-export def "users-role-mappings-clients-composite get" [
+export def "get-realm-users-id-role-mappings-clients-client-composite" [
   realm: string
   id: string
   client: string
@@ -11299,7 +11299,7 @@ export def "users-role-mappings-clients-composite get" [
 # Delete realm-level role mappings
 #
 # DELETE /{realm}/users/{id}/role-mappings/realm
-export def "users-role-mappings-realm delete" [
+export def "delete-realm-users-id-role-mappings-realm" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11340,7 +11340,7 @@ export def "users-role-mappings-realm delete" [
 # Get realm-level role mappings
 #
 # GET /{realm}/users/{id}/role-mappings/realm
-export def "users-role-mappings-realm get" [
+export def "get-realm-users-id-role-mappings-realm" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11377,7 +11377,7 @@ export def "users-role-mappings-realm get" [
 # Add realm-level role mappings to the user
 #
 # POST /{realm}/users/{id}/role-mappings/realm
-export def "users-role-mappings-realm create" [
+export def "post-realm-users-id-role-mappings-realm" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11418,7 +11418,7 @@ export def "users-role-mappings-realm create" [
 # Get realm-level roles that can be mapped
 #
 # GET /{realm}/users/{id}/role-mappings/realm/available
-export def "users-role-mappings-realm-available get" [
+export def "get-realm-users-id-role-mappings-realm-available" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11455,7 +11455,7 @@ export def "users-role-mappings-realm-available get" [
 # Get effective realm-level role mappings This will recurse all composite roles to get the result.
 #
 # GET /{realm}/users/{id}/role-mappings/realm/composite
-export def "users-role-mappings-realm-composite get" [
+export def "get-realm-users-id-role-mappings-realm-composite" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11492,7 +11492,7 @@ export def "users-role-mappings-realm-composite get" [
 # Send an email-verification email to the user An email contains a link the user can click to verify their email address.
 #
 # PUT /{realm}/users/{id}/send-verify-email
-export def "users-send-verify-email update" [
+export def "put-realm-users-id-send-verify-email" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11532,7 +11532,7 @@ export def "users-send-verify-email update" [
 # Get sessions associated with the user
 #
 # GET /{realm}/users/{id}/sessions
-export def "users-sessions get" [
+export def "get-realm-users-id-sessions" [
   realm: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL

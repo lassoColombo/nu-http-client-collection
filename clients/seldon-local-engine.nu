@@ -99,7 +99,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "seldon-v1-0-feedback send" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "send-feedback" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -125,7 +125,7 @@ export def commands []: nothing -> table {
 # --request shape: {binData?: string, data?: record, meta?: record, status?: record, strData?: string}
 # --response shape: {binData?: string, data?: record, meta?: record, status?: record, strData?: string}
 # --truth shape: {binData?: string, data?: record, meta?: record, status?: record, strData?: string}
-export def "seldon-v1-0-feedback send" [
+export def "send-feedback" [
   namespace: string
   deployment: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -172,7 +172,7 @@ export def "seldon-v1-0-feedback send" [
 # --data shape: {names?: list<string>, ndarray?: list, tensor?: record, tftensor?: record}
 # --meta shape: {metrics?: list, puid?: string, requestPath?: record, routing?: record, tags?: record}
 # --status shape: {code?: int, info?: string, reason?: string, status?: "SUCCESS"|"FAILURE"}
-export def "seldon-v1-0-predictions create-predict" [
+export def "predict" [
   namespace: string
   deployment: string
   --base-url(-b): string@base-url-completer # API base URL

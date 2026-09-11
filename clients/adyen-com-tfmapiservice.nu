@@ -101,7 +101,7 @@ def auth-scheme-completer [] { ["x-api-key" "basic" "basic-credentials"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "assign-terminals create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-assign-terminals" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -125,7 +125,7 @@ export def commands []: nothing -> table {
 #
 # POST /assignTerminals
 # operationId: post-assignTerminals
-export def "assign-terminals create" [
+export def "post-assign-terminals" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -167,7 +167,7 @@ export def "assign-terminals create" [
 #
 # POST /findTerminal
 # operationId: post-findTerminal
-export def "find-terminal create" [
+export def "post-find-terminal" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -205,7 +205,7 @@ export def "find-terminal create" [
 #
 # POST /getStoresUnderAccount
 # operationId: post-getStoresUnderAccount
-export def "get-stores-under-account create" [
+export def "post-get-stores-under-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -244,7 +244,7 @@ export def "get-stores-under-account create" [
 #
 # POST /getTerminalDetails
 # operationId: post-getTerminalDetails
-export def "get-terminal-details create" [
+export def "post-get-terminal-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -282,7 +282,7 @@ export def "get-terminal-details create" [
 #
 # POST /getTerminalsUnderAccount
 # operationId: post-getTerminalsUnderAccount
-export def "get-terminals-under-account create" [
+export def "post-get-terminals-under-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

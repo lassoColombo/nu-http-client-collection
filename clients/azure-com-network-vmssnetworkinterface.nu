@@ -100,7 +100,7 @@ def api-version-completer [] { ["2017-03-30"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-compute-virtual-machine-scale-sets-network-interfaces list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "network-interfaces-list-virtual-machine-scale-set-network-interfaces" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -124,7 +124,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/microsoft.Compute/virtualMachineScaleSets/{virtualMachineScaleSetName}/networkInterfaces
 # operationId: NetworkInterfaces_ListVirtualMachineScaleSetNetworkInterfaces
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machine-scale-sets-network-interfaces list" [
+export def "network-interfaces-list-virtual-machine-scale-set-network-interfaces" [
   subscription_id: string
   resource_group_name: string
   virtual_machine_scale_set_name: string
@@ -166,7 +166,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/microsoft.Compute/virtualMachineScaleSets/{virtualMachineScaleSetName}/virtualMachines/{virtualmachineIndex}/networkInterfaces
 # operationId: NetworkInterfaces_ListVirtualMachineScaleSetVMNetworkInterfaces
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machine-scale-sets-virtual-machines-network-interfaces list-vm" [
+export def "network-interfaces-list-virtual-machine-scale-set-vm-network-interfaces" [
   subscription_id: string
   resource_group_name: string
   virtual_machine_scale_set_name: string
@@ -210,7 +210,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/microsoft.Compute/virtualMachineScaleSets/{virtualMachineScaleSetName}/virtualMachines/{virtualmachineIndex}/networkInterfaces/{networkInterfaceName}
 # operationId: NetworkInterfaces_GetVirtualMachineScaleSetNetworkInterface
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machine-scale-sets-virtual-machines-network-interfaces get" [
+export def "network-interfaces-get-virtual-machine-scale-set-network-interface" [
   subscription_id: string
   resource_group_name: string
   virtual_machine_scale_set_name: string
@@ -257,7 +257,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/microsoft.Compute/virtualMachineScaleSets/{virtualMachineScaleSetName}/virtualMachines/{virtualmachineIndex}/networkInterfaces/{networkInterfaceName}/ipConfigurations
 # operationId: NetworkInterfaces_ListVirtualMachineScaleSetIpConfigurations
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machine-scale-sets-virtual-machines-network-interfaces-ip-configurations list" [
+export def "network-interfaces-list-virtual-machine-scale-set-ip-configurations" [
   subscription_id: string
   resource_group_name: string
   virtual_machine_scale_set_name: string
@@ -304,7 +304,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/microsoft.Compute/virtualMachineScaleSets/{virtualMachineScaleSetName}/virtualMachines/{virtualmachineIndex}/networkInterfaces/{networkInterfaceName}/ipConfigurations/{ipConfigurationName}
 # operationId: NetworkInterfaces_GetVirtualMachineScaleSetIpConfiguration
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machine-scale-sets-virtual-machines-network-interfaces-ip-configurations get" [
+export def "network-interfaces-get-virtual-machine-scale-set-ip-configuration" [
   subscription_id: string
   resource_group_name: string
   virtual_machine_scale_set_name: string

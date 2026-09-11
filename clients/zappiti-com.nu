@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "check-zappiti-service create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-check-zappiti-service" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -121,7 +121,7 @@ export def commands []: nothing -> table {
 # Check if Zappiti Service app status on the player
 #
 # POST /CheckZappitiService
-export def "check-zappiti-service create" [
+export def "post-check-zappiti-service" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -158,7 +158,7 @@ export def "check-zappiti-service create" [
 # Get user's login details
 #
 # POST /ConnectionDetails
-export def "connection-details create" [
+export def "post-connection-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -195,7 +195,7 @@ export def "connection-details create" [
 # Open a popup that allow the user to install Zappiti Service, if not already installed
 #
 # POST /InstallZappitiService
-export def "install-zappiti-service create" [
+export def "post-install-zappiti-service" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -232,7 +232,7 @@ export def "install-zappiti-service create" [
 # Get server status
 #
 # POST /IsAlive
-export def "is-alive create" [
+export def "post-is-alive" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -269,7 +269,7 @@ export def "is-alive create" [
 # Get informations about last media playback
 #
 # POST /LastMedia
-export def "last-media create" [
+export def "post-last-media" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -306,7 +306,7 @@ export def "last-media create" [
 # Start the playback
 #
 # POST /StartVideo
-export def "start-video create" [
+export def "post-start-video" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -348,7 +348,7 @@ export def "start-video create" [
 # Start Zappiti Service if not started yet
 #
 # POST /StartZappitiService
-export def "start-zappiti-service create" [
+export def "post-start-zappiti-service" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

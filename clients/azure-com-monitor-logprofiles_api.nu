@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-insights-logprofiles list-log-profiles" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "log-profiles-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/microsoft.insights/logprofiles
 # operationId: LogProfiles_List
-export def "subscriptions-providers-microsoft-insights-logprofiles list-log-profiles" [
+export def "log-profiles-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -178,7 +178,7 @@ export def "subscriptions-providers-microsoft-insights-logprofiles list-log-prof
 #
 # DELETE /subscriptions/{subscriptionId}/providers/microsoft.insights/logprofiles/{logProfileName}
 # operationId: LogProfiles_Delete
-export def "subscriptions-providers-microsoft-insights-logprofiles delete-log-profiles" [
+export def "log-profiles-delete" [
   subscription_id: string
   log_profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -218,7 +218,7 @@ export def "subscriptions-providers-microsoft-insights-logprofiles delete-log-pr
 #
 # GET /subscriptions/{subscriptionId}/providers/microsoft.insights/logprofiles/{logProfileName}
 # operationId: LogProfiles_Get
-export def "subscriptions-providers-microsoft-insights-logprofiles get-log-profiles" [
+export def "log-profiles-get" [
   subscription_id: string
   log_profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -259,7 +259,7 @@ export def "subscriptions-providers-microsoft-insights-logprofiles get-log-profi
 # PATCH /subscriptions/{subscriptionId}/providers/microsoft.insights/logprofiles/{logProfileName}
 # operationId: LogProfiles_Update
 # --properties shape: {categories: list<string>, locations: list<string>, retentionPolicy: any, serviceBusRuleId?: string, storageAccountId?: string}
-export def "subscriptions-providers-microsoft-insights-logprofiles update-log-profiles" [
+export def "log-profiles-update" [
   subscription_id: string
   log_profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -305,7 +305,7 @@ export def "subscriptions-providers-microsoft-insights-logprofiles update-log-pr
 # PUT /subscriptions/{subscriptionId}/providers/microsoft.insights/logprofiles/{logProfileName}
 # operationId: LogProfiles_CreateOrUpdate
 # --properties shape: {categories: list<string>, locations: list<string>, retentionPolicy: any, serviceBusRuleId?: string, storageAccountId?: string}
-export def "subscriptions-providers-microsoft-insights-logprofiles create-log-profiles-or-update" [
+export def "log-profiles-create-or-update" [
   subscription_id: string
   log_profile_name: string
   --base-url(-b): string@base-url-completer # API base URL

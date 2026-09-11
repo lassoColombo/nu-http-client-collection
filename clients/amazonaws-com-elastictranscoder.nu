@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "2012-09-25-jobs cancel" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cancel-job" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /2012-09-25/jobs/{Id}
 # operationId: CancelJob
-export def "2012-09-25-jobs cancel" [
+export def "cancel-job" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -185,7 +185,7 @@ export def "2012-09-25-jobs cancel" [
 #
 # GET /2012-09-25/jobs/{Id}
 # operationId: ReadJob
-export def "2012-09-25-jobs get" [
+export def "read-job" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -235,7 +235,7 @@ export def "2012-09-25-jobs get" [
 # --Output shape: {Key?: any, ThumbnailPattern?: any, ThumbnailEncryption?: any, Rotate?: any, PresetId?: any, SegmentDuration?: any, Watermarks?: any, AlbumArt?: any, Composition?: any, Captions?: any, Encryption?: any}
 # --Outputs item shape: {Key?: any, ThumbnailPattern?: any, ThumbnailEncryption?: any, Rotate?: any, PresetId?: any, SegmentDuration?: any, Watermarks?: any, AlbumArt?: any, Composition?: any, Captions?: any, Encryption?: any}
 # --Playlists item shape: {Name?: any, Format?: any, OutputKeys?: any, HlsContentProtection?: any, PlayReadyDrm?: any}
-export def "2012-09-25-jobs create" [
+export def "create-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -292,7 +292,7 @@ export def "2012-09-25-jobs create" [
 # --Notifications shape: {Progressing?: any, Completed?: any, Warning?: any, Error?: any}
 # --ContentConfig shape: {Bucket?: any, StorageClass?: any, Permissions?: any}
 # --ThumbnailConfig shape: {Bucket?: any, StorageClass?: any, Permissions?: any}
-export def "2012-09-25-pipelines create" [
+export def "create-pipeline" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -346,7 +346,7 @@ export def "2012-09-25-pipelines create" [
 #
 # GET /2012-09-25/pipelines
 # operationId: ListPipelines
-export def "2012-09-25-pipelines list" [
+export def "list-pipelines" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -395,7 +395,7 @@ export def "2012-09-25-pipelines list" [
 # --Video shape: {Codec?: any, CodecOptions?: any, KeyframesMaxDist?: any, FixedGOP?: any, BitRate?: any, FrameRate?: any, MaxFrameRate?: any, Resolution?: any, AspectRatio?: any, MaxWidth?: any, MaxHeight?: any, DisplayAspectRatio?: any, SizingPolicy?: any, PaddingPolicy?: any, Watermarks?: any}
 # --Audio shape: {Codec?: any, SampleRate?: any, BitRate?: any, Channels?: any, AudioPackingMode?: any, CodecOptions?: any}
 # --Thumbnails shape: {Format?: any, Interval?: any, Resolution?: any, AspectRatio?: any, MaxWidth?: any, MaxHeight?: any, SizingPolicy?: any, PaddingPolicy?: any}
-export def "2012-09-25-presets create" [
+export def "create-preset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -447,7 +447,7 @@ export def "2012-09-25-presets create" [
 #
 # GET /2012-09-25/presets
 # operationId: ListPresets
-export def "2012-09-25-presets list" [
+export def "list-presets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -493,7 +493,7 @@ export def "2012-09-25-presets list" [
 #
 # DELETE /2012-09-25/pipelines/{Id}
 # operationId: DeletePipeline
-export def "2012-09-25-pipelines delete" [
+export def "delete-pipeline" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -538,7 +538,7 @@ export def "2012-09-25-pipelines delete" [
 #
 # GET /2012-09-25/pipelines/{Id}
 # operationId: ReadPipeline
-export def "2012-09-25-pipelines get" [
+export def "read-pipeline" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -586,7 +586,7 @@ export def "2012-09-25-pipelines get" [
 # --Notifications shape: {Progressing?: any, Completed?: any, Warning?: any, Error?: any}
 # --ContentConfig shape: {Bucket?: any, StorageClass?: any, Permissions?: any}
 # --ThumbnailConfig shape: {Bucket?: any, StorageClass?: any, Permissions?: any}
-export def "2012-09-25-pipelines update" [
+export def "update-pipeline" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -641,7 +641,7 @@ export def "2012-09-25-pipelines update" [
 #
 # DELETE /2012-09-25/presets/{Id}
 # operationId: DeletePreset
-export def "2012-09-25-presets delete" [
+export def "delete-preset" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -686,7 +686,7 @@ export def "2012-09-25-presets delete" [
 #
 # GET /2012-09-25/presets/{Id}
 # operationId: ReadPreset
-export def "2012-09-25-presets get" [
+export def "read-preset" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -731,7 +731,7 @@ export def "2012-09-25-presets get" [
 #
 # GET /2012-09-25/jobsByPipeline/{PipelineId}
 # operationId: ListJobsByPipeline
-export def "2012-09-25-jobs-by-pipeline list" [
+export def "list-jobs-by-pipeline" [
   pipeline_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -779,7 +779,7 @@ export def "2012-09-25-jobs-by-pipeline list" [
 #
 # GET /2012-09-25/jobsByStatus/{Status}
 # operationId: ListJobsByStatus
-export def "2012-09-25-jobs-by-status list" [
+export def "list-jobs-by-status" [
   status: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -829,7 +829,7 @@ export def "2012-09-25-jobs-by-status list" [
 # DEPRECATED
 # operationId: TestRole
 @deprecated
-export def "2012-09-25-role-tests test" [
+export def "test-role" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -880,7 +880,7 @@ export def "2012-09-25-role-tests test" [
 # POST /2012-09-25/pipelines/{Id}/notifications
 # operationId: UpdatePipelineNotifications
 # --Notifications shape: {Progressing?: any, Completed?: any, Warning?: any, Error?: any}
-export def "2012-09-25-pipelines-notifications update" [
+export def "update-pipeline-notifications" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -929,7 +929,7 @@ export def "2012-09-25-pipelines-notifications update" [
 #
 # POST /2012-09-25/pipelines/{Id}/status
 # operationId: UpdatePipelineStatus
-export def "2012-09-25-pipelines-status update" [
+export def "update-pipeline-status" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

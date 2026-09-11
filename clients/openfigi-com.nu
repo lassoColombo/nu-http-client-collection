@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["x-openfigi-apikey"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "mapping create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-mapping" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -127,7 +127,7 @@ export def commands []: nothing -> table {
 # Allows mapping from third-party identifiers to FIGIs.
 #
 # POST /mapping
-export def "mapping create" [
+export def "post-mapping" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -164,7 +164,7 @@ export def "mapping create" [
 # Get values for enum-like fields.
 #
 # GET /mapping/values/{key}
-export def "mapping-values get" [
+export def "get-mapping-values-key" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

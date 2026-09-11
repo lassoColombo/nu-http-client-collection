@@ -112,7 +112,7 @@ def accept-completer [] { ["application/json" "text/yaml"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "versions-publish-anon create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-versions-publish-anon" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -136,7 +136,7 @@ export def commands []: nothing -> table {
 #
 # POST /versions/publish/anon
 # operationId: POST_versions-publish-anon
-export def "versions-publish-anon create" [
+export def "post-versions-publish-anon" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -175,7 +175,7 @@ export def "versions-publish-anon create" [
 #
 # GET /versions/{versionId}/export/{format}
 # operationId: GET_versions-versionId-export-format
-export def "versions-export get" [
+export def "get-versions-version-id-export-format" [
   version_id: string
   format: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -215,7 +215,7 @@ export def "versions-export get" [
 # PUT /versions/{versionId}/import
 # operationId: PUT_versions-versionId-import
 # --options shape: {removeExtraEndpoints?: bool, removeExtraSchemas?: bool, removeExtraTextSections?: bool, removeExtraTraits?: bool}
-export def "versions-import update" [
+export def "put-versions-version-id-import" [
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -257,7 +257,7 @@ export def "versions-import update" [
 #
 # POST /versions/{versionId}/publish
 # operationId: POST_versions-versionId-publish
-export def "versions-publish create" [
+export def "post-versions-version-id-publish" [
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -293,7 +293,7 @@ export def "versions-publish create" [
 #
 # PUT /versions/{versionId}/unpublish
 # operationId: PUT_versions-versionId-unpublish
-export def "versions-unpublish update" [
+export def "put-versions-version-id-unpublish" [
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

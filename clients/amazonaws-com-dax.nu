@@ -121,7 +121,7 @@ def x-amz-target-completer-20 [] { ["AmazonDAXV3.UpdateSubnetGroup"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-cluster" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -145,7 +145,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CreateCluster
-export def "api create" [
+export def "create-cluster" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -206,7 +206,7 @@ export def "api create" [
 #
 # POST /
 # operationId: CreateParameterGroup
-export def "api create-parameter-group" [
+export def "create-parameter-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -255,7 +255,7 @@ export def "api create-parameter-group" [
 #
 # POST /
 # operationId: CreateSubnetGroup
-export def "api create-subnet-group" [
+export def "create-subnet-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -305,7 +305,7 @@ export def "api create-subnet-group" [
 #
 # POST /
 # operationId: DecreaseReplicationFactor
-export def "api create-decrease-replication-factor" [
+export def "decrease-replication-factor" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -356,7 +356,7 @@ export def "api create-decrease-replication-factor" [
 #
 # POST /
 # operationId: DeleteCluster
-export def "api delete" [
+export def "delete-cluster" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -404,7 +404,7 @@ export def "api delete" [
 #
 # POST /
 # operationId: DeleteParameterGroup
-export def "api delete-parameter-group" [
+export def "delete-parameter-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -452,7 +452,7 @@ export def "api delete-parameter-group" [
 #
 # POST /
 # operationId: DeleteSubnetGroup
-export def "api delete-subnet-group" [
+export def "delete-subnet-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -500,7 +500,7 @@ export def "api delete-subnet-group" [
 #
 # POST /
 # operationId: DescribeClusters
-export def "api get-clusters" [
+export def "describe-clusters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -550,7 +550,7 @@ export def "api get-clusters" [
 #
 # POST /
 # operationId: DescribeDefaultParameters
-export def "api get-default-parameters" [
+export def "describe-default-parameters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -599,7 +599,7 @@ export def "api get-default-parameters" [
 #
 # POST /
 # operationId: DescribeEvents
-export def "api get-events" [
+export def "describe-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -653,7 +653,7 @@ export def "api get-events" [
 #
 # POST /
 # operationId: DescribeParameterGroups
-export def "api get-parameter-groups" [
+export def "describe-parameter-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -703,7 +703,7 @@ export def "api get-parameter-groups" [
 #
 # POST /
 # operationId: DescribeParameters
-export def "api get-parameters" [
+export def "describe-parameters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -754,7 +754,7 @@ export def "api get-parameters" [
 #
 # POST /
 # operationId: DescribeSubnetGroups
-export def "api get-subnet-groups" [
+export def "describe-subnet-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -804,7 +804,7 @@ export def "api get-subnet-groups" [
 #
 # POST /
 # operationId: IncreaseReplicationFactor
-export def "api create-increase-replication-factor" [
+export def "increase-replication-factor" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -854,7 +854,7 @@ export def "api create-increase-replication-factor" [
 #
 # POST /
 # operationId: ListTags
-export def "api list-tags" [
+export def "list-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -903,7 +903,7 @@ export def "api list-tags" [
 #
 # POST /
 # operationId: RebootNode
-export def "api create-reboot-node" [
+export def "reboot-node" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -952,7 +952,7 @@ export def "api create-reboot-node" [
 #
 # POST /
 # operationId: TagResource
-export def "api tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1001,7 +1001,7 @@ export def "api tag-resource" [
 #
 # POST /
 # operationId: UntagResource
-export def "api untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1050,7 +1050,7 @@ export def "api untag-resource" [
 #
 # POST /
 # operationId: UpdateCluster
-export def "api update" [
+export def "update-cluster" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1104,7 +1104,7 @@ export def "api update" [
 #
 # POST /
 # operationId: UpdateParameterGroup
-export def "api update-parameter-group" [
+export def "update-parameter-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1153,7 +1153,7 @@ export def "api update-parameter-group" [
 #
 # POST /
 # operationId: UpdateSubnetGroup
-export def "api update-subnet-group" [
+export def "update-subnet-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-azure-stack-registrations-products list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "products-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -128,7 +128,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.AzureStack/registrations/{registrationName}/products
 # operationId: Products_List
-export def "subscriptions-resource-groups-providers-microsoft-azure-stack-registrations-products list" [
+export def "products-list" [
   subscription_id: string
   resource_group: string
   registration_name: string
@@ -170,7 +170,7 @@ export def "subscriptions-resource-groups-providers-microsoft-azure-stack-regist
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.AzureStack/registrations/{registrationName}/products/_all/GetProducts
 # operationId: Products_GetProducts
-export def "subscriptions-resource-groups-providers-microsoft-azure-stack-registrations-products-all-get-products get" [
+export def "products-get-products" [
   subscription_id: string
   resource_group: string
   registration_name: string
@@ -216,7 +216,7 @@ export def "subscriptions-resource-groups-providers-microsoft-azure-stack-regist
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.AzureStack/registrations/{registrationName}/products/{productName}
 # operationId: Products_Get
-export def "subscriptions-resource-groups-providers-microsoft-azure-stack-registrations-products get" [
+export def "products-get" [
   subscription_id: string
   resource_group: string
   registration_name: string
@@ -260,7 +260,7 @@ export def "subscriptions-resource-groups-providers-microsoft-azure-stack-regist
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.AzureStack/registrations/{registrationName}/products/{productName}/GetProduct
 # operationId: Products_GetProduct
-export def "subscriptions-resource-groups-providers-microsoft-azure-stack-registrations-products-get-product get" [
+export def "products-get-product" [
   subscription_id: string
   resource_group: string
   registration_name: string
@@ -308,7 +308,7 @@ export def "subscriptions-resource-groups-providers-microsoft-azure-stack-regist
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.AzureStack/registrations/{registrationName}/products/{productName}/listDetails
 # operationId: Products_ListDetails
-export def "subscriptions-resource-groups-providers-microsoft-azure-stack-registrations-products-list-details list" [
+export def "products-list-details" [
   subscription_id: string
   resource_group: string
   registration_name: string
@@ -352,7 +352,7 @@ export def "subscriptions-resource-groups-providers-microsoft-azure-stack-regist
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.AzureStack/registrations/{registrationName}/products/{productName}/uploadProductLog
 # operationId: Products_UploadLog
-export def "subscriptions-resource-groups-providers-microsoft-azure-stack-registrations-products-upload-product-log upload" [
+export def "products-upload-log" [
   subscription_id: string
   resource_group: string
   registration_name: string

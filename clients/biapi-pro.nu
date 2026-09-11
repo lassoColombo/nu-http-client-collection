@@ -154,7 +154,7 @@ def accept-completer-9 [] { ["application/json" "token"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account-types list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-account-types" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -177,7 +177,7 @@ export def commands []: nothing -> table {
 # Get account types
 #
 # GET /account_types
-export def "account-types list" [
+export def "get-account-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -212,7 +212,7 @@ export def "account-types list" [
 # Get an account type
 #
 # GET /account_types/{id_account_type}
-export def "account-types get" [
+export def "get-account-types-id-account-type" [
   id_account_type: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -249,7 +249,7 @@ export def "account-types get" [
 # Generate a jwt manage token
 #
 # POST /admin/jwt
-export def "admin-jwt create" [
+export def "post-admin-jwt" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -290,7 +290,7 @@ export def "admin-jwt create" [
 # Create a new anonymous user
 #
 # POST /auth/init
-export def "auth-init create" [
+export def "post-auth-init" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -331,7 +331,7 @@ export def "auth-init create" [
 # Generate a user jwt token
 #
 # POST /auth/jwt
-export def "auth-jwt create" [
+export def "post-auth-jwt" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -375,7 +375,7 @@ export def "auth-jwt create" [
 # Get a new access token given an user id and client credentials
 #
 # POST /auth/renew
-export def "auth-renew create" [
+export def "post-auth-renew" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -419,7 +419,7 @@ export def "auth-renew create" [
 # Remove user access
 #
 # DELETE /auth/token
-export def "auth-token delete" [
+export def "delete-auth-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -452,7 +452,7 @@ export def "auth-token delete" [
 # Login to API with credentials
 #
 # POST /auth/token
-export def "auth-token create" [
+export def "post-auth-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -496,7 +496,7 @@ export def "auth-token create" [
 # Transform a temporary code to a access_token
 #
 # POST /auth/token/access
-export def "auth-token-access create" [
+export def "post-auth-token-access" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -540,7 +540,7 @@ export def "auth-token-access create" [
 # Generate a user temporary token
 #
 # GET /auth/token/code
-export def "auth-token-code get" [
+export def "get-auth-token-code" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -574,7 +574,7 @@ export def "auth-token-code get" [
 # Get list of connectors
 #
 # GET /banks
-export def "banks list" [
+export def "get-banks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -609,7 +609,7 @@ export def "banks list" [
 # Create bank categories
 #
 # POST /banks/categories
-export def "banks-categories create" [
+export def "post-banks-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -650,7 +650,7 @@ export def "banks-categories create" [
 # Delete the supplied category
 #
 # DELETE /banks/categories/{id_category}
-export def "banks-categories delete" [
+export def "delete-banks-categories-id-category" [
   id_category: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -687,7 +687,7 @@ export def "banks-categories delete" [
 # Edit a bank categories
 #
 # POST /banks/categories/{id_category}
-export def "banks-categories create-by-id-category" [
+export def "post-banks-categories-id-category" [
   id_category: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -730,7 +730,7 @@ export def "banks-categories create-by-id-category" [
 # Get a connector
 #
 # GET /banks/{id_bank}
-export def "banks get" [
+export def "get-banks-id-bank" [
   id_bank: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -767,7 +767,7 @@ export def "banks get" [
 # Get a subset of id_connection for a given bank. Different selection methode are possible
 #
 # GET /banks/{id_connector}/connections
-export def "banks-connections get" [
+export def "get-banks-id-connector-connections" [
   id_connector: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -810,7 +810,7 @@ export def "banks-connections get" [
 # Get all links to the files associated with this connector.
 #
 # GET /banks/{id_connector}/logos
-export def "banks-logos get" [
+export def "get-banks-id-connector-logos" [
   id_connector: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -847,7 +847,7 @@ export def "banks-logos get" [
 # Get all links to the files associated with this connector.
 #
 # GET /banks/{id_connector}/logos/main
-export def "banks-logos-main get" [
+export def "get-banks-id-connector-logos-main" [
   id_connector: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -884,7 +884,7 @@ export def "banks-logos-main get" [
 # Get all links to the files associated with this connector.
 #
 # GET /banks/{id_connector}/logos/thumbnail
-export def "banks-logos-thumbnail get" [
+export def "get-banks-id-connector-logos-thumbnail" [
   id_connector: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -921,7 +921,7 @@ export def "banks-logos-thumbnail get" [
 # Get list of connector sources
 #
 # GET /banks/{id_connector}/sources
-export def "banks-sources list" [
+export def "get-banks-id-connector-sources" [
   id_connector: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -958,7 +958,7 @@ export def "banks-sources list" [
 # Get fields specific to a domain and a source
 #
 # GET /banks/{id_connector}/sources/{id_connector_source}/fields
-export def "banks-sources-fields get" [
+export def "get-banks-id-connector-sources-id-connector-source-fields" [
   id_connector: int
   id_connector_source: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -997,7 +997,7 @@ export def "banks-sources-fields get" [
 # Get the connector source
 #
 # GET /banks/{id_connector}/sources/{id_source}
-export def "banks-sources get" [
+export def "get-banks-id-connector-sources-id-source" [
   id_connector: int
   id_source: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1036,7 +1036,7 @@ export def "banks-sources get" [
 # Get all categories
 #
 # GET /categories
-export def "categories get" [
+export def "get-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1071,7 +1071,7 @@ export def "categories get" [
 # Add a new keyword associated with a category in the database.
 #
 # POST /categories/keywords
-export def "categories-keywords create" [
+export def "post-categories-keywords" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1106,7 +1106,7 @@ export def "categories-keywords create" [
 # Delete a particular key-value pair on a transaction.
 #
 # DELETE /categories/keywords/{id_keyword}
-export def "categories-keywords delete" [
+export def "delete-categories-keywords-id-keyword" [
   id_keyword: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1143,7 +1143,7 @@ export def "categories-keywords delete" [
 # categorize transactions without storing them
 #
 # POST /categorize
-export def "categorize create" [
+export def "post-categorize" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1185,7 +1185,7 @@ export def "categorize create" [
 # Get the latest certificate of a type
 #
 # GET /certificate/{type}
-export def "certificate get" [
+export def "get-certificate-type" [
   type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1222,7 +1222,7 @@ export def "certificate get" [
 # List clients
 #
 # GET /clients
-export def "clients list" [
+export def "get-clients" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1257,7 +1257,7 @@ export def "clients list" [
 # Create a client
 #
 # POST /clients
-export def "clients create" [
+export def "post-clients" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1301,7 +1301,7 @@ export def "clients create" [
 # Delete a client
 #
 # DELETE /clients/{id_client}
-export def "clients delete" [
+export def "delete-clients-id-client" [
   id_client: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1338,7 +1338,7 @@ export def "clients delete" [
 # Get information about a client
 #
 # GET /clients/{id_client}
-export def "clients get" [
+export def "get-clients-id-client" [
   id_client: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1375,7 +1375,7 @@ export def "clients get" [
 # Update a client
 #
 # PUT /clients/{id_client}
-export def "clients update" [
+export def "put-clients-id-client" [
   id_client: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1429,7 +1429,7 @@ export def "clients update" [
 # Delete the client logo
 #
 # DELETE /clients/{id_client}/logo
-export def "clients-logo delete" [
+export def "delete-clients-id-client-logo" [
   id_client: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1466,7 +1466,7 @@ export def "clients-logo delete" [
 # Update the client logo
 #
 # POST /clients/{id_client}/logo
-export def "clients-logo create" [
+export def "post-clients-id-client-logo" [
   id_client: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1503,7 +1503,7 @@ export def "clients-logo create" [
 # Get configuration of the API.
 #
 # GET /config
-export def "config get" [
+export def "get-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1538,7 +1538,7 @@ export def "config get" [
 # Insert/update configuration key(s)/value(s) on the API.
 #
 # POST /config
-export def "config create" [
+export def "post-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1571,7 +1571,7 @@ export def "config create" [
 # Get configuration change history of the API.
 #
 # GET /config/logs
-export def "config-logs get" [
+export def "get-config-logs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1610,7 +1610,7 @@ export def "config-logs get" [
 # Get connections without a user
 #
 # GET /connections
-export def "connections get" [
+export def "get-connections" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1645,7 +1645,7 @@ export def "connections get" [
 # Get connection logs
 #
 # GET /connections/{id_connection}/logs
-export def "connections-logs get" [
+export def "get-connections-id-connection-logs" [
   id_connection: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1694,7 +1694,7 @@ export def "connections-logs get" [
 # Get connection sources
 #
 # GET /connections/{id_connection}/sources
-export def "connections-sources get" [
+export def "get-connections-id-connection-sources" [
   id_connection: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1731,7 +1731,7 @@ export def "connections-sources get" [
 # Disable a connection source
 #
 # DELETE /connections/{id_connection}/sources/{id_source}
-export def "connections-sources delete" [
+export def "delete-connections-id-connection-sources-id-source" [
   id_connection: int
   id_source: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1770,7 +1770,7 @@ export def "connections-sources delete" [
 # "
 #
 # POST /connections/{id_connection}/sources/{id_source}
-export def "connections-sources create" [
+export def "post-connections-id-connection-sources-id-source" [
   id_connection: int
   id_source: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1817,7 +1817,7 @@ export def "connections-sources create" [
 # Update connection source
 #
 # PUT /connections/{id_connection}/sources/{id_source}
-export def "connections-sources update" [
+export def "put-connections-id-connection-sources-id-source" [
   id_connection: int
   id_source: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1865,7 +1865,7 @@ export def "connections-sources update" [
 # Get list of connectors
 #
 # GET /connectors
-export def "connectors list" [
+export def "get-connectors" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1900,7 +1900,7 @@ export def "connectors list" [
 # Request a new connector
 #
 # POST /connectors
-export def "connectors create" [
+export def "post-connectors" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1948,7 +1948,7 @@ export def "connectors create" [
 # Enable/disable several connectors
 #
 # PUT /connectors
-export def "connectors update" [
+export def "put-connectors" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1989,7 +1989,7 @@ export def "connectors update" [
 # Get a connector
 #
 # GET /connectors/{id_connector}
-export def "connectors get" [
+export def "get-connectors-id-connector" [
   id_connector: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2026,7 +2026,7 @@ export def "connectors get" [
 # Edit the provided connector
 #
 # PUT /connectors/{id_connector}
-export def "connectors update-by-id-connector" [
+export def "put-connectors-id-connector" [
   id_connector: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2073,7 +2073,7 @@ export def "connectors update-by-id-connector" [
 # Get all links to the files associated with this connector.
 #
 # GET /connectors/{id_connector}/logos
-export def "connectors-logos get" [
+export def "get-connectors-id-connector-logos" [
   id_connector: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2110,7 +2110,7 @@ export def "connectors-logos get" [
 # Create a connector Logo
 #
 # POST /connectors/{id_connector}/logos
-export def "connectors-logos create" [
+export def "post-connectors-id-connector-logos" [
   id_connector: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2147,7 +2147,7 @@ export def "connectors-logos create" [
 # Create or Update a connector Logo
 #
 # PUT /connectors/{id_connector}/logos
-export def "connectors-logos update-by-id-connector" [
+export def "put-connectors-id-connector-logos" [
   id_connector: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2184,7 +2184,7 @@ export def "connectors-logos update-by-id-connector" [
 # Get all links to the files associated with this connector.
 #
 # GET /connectors/{id_connector}/logos/main
-export def "connectors-logos-main get" [
+export def "get-connectors-id-connector-logos-main" [
   id_connector: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2221,7 +2221,7 @@ export def "connectors-logos-main get" [
 # Get all links to the files associated with this connector.
 #
 # GET /connectors/{id_connector}/logos/thumbnail
-export def "connectors-logos-thumbnail get" [
+export def "get-connectors-id-connector-logos-thumbnail" [
   id_connector: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2258,7 +2258,7 @@ export def "connectors-logos-thumbnail get" [
 # Delete a single Logo object.
 #
 # DELETE /connectors/{id_connector}/logos/{id_logo}
-export def "connectors-logos delete" [
+export def "delete-connectors-id-connector-logos-id-logo" [
   id_connector: int
   id_logo: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2297,7 +2297,7 @@ export def "connectors-logos delete" [
 # Create or Update a connector Logo.
 #
 # PUT /connectors/{id_connector}/logos/{id_logo}
-export def "connectors-logos update-by-id-connector-id-logo" [
+export def "put-connectors-id-connector-logos-id-logo" [
   id_connector: int
   id_logo: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2336,7 +2336,7 @@ export def "connectors-logos update-by-id-connector-id-logo" [
 # Get list of connector sources
 #
 # GET /connectors/{id_connector}/sources
-export def "connectors-sources list" [
+export def "get-connectors-id-connector-sources" [
   id_connector: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2373,7 +2373,7 @@ export def "connectors-sources list" [
 # Edit several connector sources
 #
 # PUT /connectors/{id_connector}/sources
-export def "connectors-sources update-by-id-connector" [
+export def "put-connectors-id-connector-sources" [
   id_connector: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2417,7 +2417,7 @@ export def "connectors-sources update-by-id-connector" [
 # Get fields specific to a domain and a source
 #
 # GET /connectors/{id_connector}/sources/{id_connector_source}/fields
-export def "connectors-sources-fields get" [
+export def "get-connectors-id-connector-sources-id-connector-source-fields" [
   id_connector: int
   id_connector_source: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2456,7 +2456,7 @@ export def "connectors-sources-fields get" [
 # Get the connector source
 #
 # GET /connectors/{id_connector}/sources/{id_source}
-export def "connectors-sources get" [
+export def "get-connectors-id-connector-sources-id-source" [
   id_connector: int
   id_source: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2495,7 +2495,7 @@ export def "connectors-sources get" [
 # Edit the provided connector source
 #
 # PUT /connectors/{id_connector}/sources/{id_source}
-export def "connectors-sources update-by-id-connector-id-source" [
+export def "put-connectors-id-connector-sources-id-source" [
   id_connector: int
   id_source: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2544,7 +2544,7 @@ export def "connectors-sources update-by-id-connector-id-source" [
 # Get incidents logs.
 #
 # GET /incidents
-export def "incidents get" [
+export def "get-incidents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2585,7 +2585,7 @@ export def "incidents get" [
 # Get invoicing data for a given period (default is the current month).
 #
 # GET /invoicing
-export def "invoicing get" [
+export def "get-invoicing" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2632,7 +2632,7 @@ export def "invoicing get" [
 # Get connection logs
 #
 # GET /logs
-export def "logs get" [
+export def "get-logs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2679,7 +2679,7 @@ export def "logs get" [
 # get performances stats on this instance
 #
 # GET /monitoring
-export def "monitoring get" [
+export def "get-monitoring" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2714,7 +2714,7 @@ export def "monitoring get" [
 # Get list of connectors
 #
 # GET /providers
-export def "providers list" [
+export def "get-providers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2749,7 +2749,7 @@ export def "providers list" [
 # Get a random subset of provider's id_connection
 #
 # GET /providers/{id_connector}/connections
-export def "providers-connections get" [
+export def "get-providers-id-connector-connections" [
   id_connector: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2787,7 +2787,7 @@ export def "providers-connections get" [
 # Get all links to the files associated with this connector.
 #
 # GET /providers/{id_connector}/logos
-export def "providers-logos get" [
+export def "get-providers-id-connector-logos" [
   id_connector: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2824,7 +2824,7 @@ export def "providers-logos get" [
 # Get all links to the files associated with this connector.
 #
 # GET /providers/{id_connector}/logos/main
-export def "providers-logos-main get" [
+export def "get-providers-id-connector-logos-main" [
   id_connector: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2861,7 +2861,7 @@ export def "providers-logos-main get" [
 # Get all links to the files associated with this connector.
 #
 # GET /providers/{id_connector}/logos/thumbnail
-export def "providers-logos-thumbnail get" [
+export def "get-providers-id-connector-logos-thumbnail" [
   id_connector: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2898,7 +2898,7 @@ export def "providers-logos-thumbnail get" [
 # Get list of connector sources
 #
 # GET /providers/{id_connector}/sources
-export def "providers-sources list" [
+export def "get-providers-id-connector-sources" [
   id_connector: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2935,7 +2935,7 @@ export def "providers-sources list" [
 # Get fields specific to a domain and a source
 #
 # GET /providers/{id_connector}/sources/{id_connector_source}/fields
-export def "providers-sources-fields get" [
+export def "get-providers-id-connector-sources-id-connector-source-fields" [
   id_connector: int
   id_connector_source: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2974,7 +2974,7 @@ export def "providers-sources-fields get" [
 # Get the connector source
 #
 # GET /providers/{id_connector}/sources/{id_source}
-export def "providers-sources get" [
+export def "get-providers-id-connector-sources-id-source" [
   id_connector: int
   id_source: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3013,7 +3013,7 @@ export def "providers-sources get" [
 # Get a connector
 #
 # GET /providers/{id_provider}
-export def "providers get" [
+export def "get-providers-id-provider" [
   id_provider: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3050,7 +3050,7 @@ export def "providers get" [
 # Get details on all psd2 registrations
 #
 # GET /psd2-registrations
-export def "psd2-registrations list" [
+export def "get-psd2-registrations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3085,7 +3085,7 @@ export def "psd2-registrations list" [
 # Get details for a given psd2 registration
 #
 # GET /psd2-registrations/{id_psd2-registration}
-export def "psd2-registrations get" [
+export def "get-psd2-registrations-id-psd2-registration" [
   id_psd2_registration: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3122,7 +3122,7 @@ export def "psd2-registrations get" [
 # Get psd2 registration logs.
 #
 # GET /psd2-registrations/{id_psd2registration}/logs
-export def "psd2-registrations-logs get" [
+export def "get-psd2-registrations-id-psd2registration-logs" [
   id_psd2registration: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3163,7 +3163,7 @@ export def "psd2-registrations-logs get" [
 # Get public encryption key of the API.
 #
 # GET /publickey
-export def "publickey get" [
+export def "get-publickey" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3196,7 +3196,7 @@ export def "publickey get" [
 # Test synchronization on a random connection.
 #
 # POST /test/sync
-export def "test-sync create" [
+export def "post-test-sync" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3229,7 +3229,7 @@ export def "test-sync create" [
 # Test synchronization on a random connection.
 #
 # POST /test/webhooks
-export def "test-webhooks create" [
+export def "post-test-webhooks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3262,7 +3262,7 @@ export def "test-webhooks create" [
 # Get users
 #
 # GET /users
-export def "users list" [
+export def "get-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3298,7 +3298,7 @@ export def "users list" [
 # Delete the user
 #
 # DELETE /users/{id_user}
-export def "users delete" [
+export def "delete-users-id-user" [
   id_user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3335,7 +3335,7 @@ export def "users delete" [
 # Get a user
 #
 # GET /users/{id_user}
-export def "users get" [
+export def "get-users-id-user" [
   id_user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3372,7 +3372,7 @@ export def "users get" [
 # Get account types
 #
 # GET /users/{id_user}/account_types
-export def "users-account-types list" [
+export def "get-users-id-user-account-types" [
   id_user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3409,7 +3409,7 @@ export def "users-account-types list" [
 # Get an account type
 #
 # GET /users/{id_user}/account_types/{id_account_type}
-export def "users-account-types get" [
+export def "get-users-id-user-account-types-id-account-type" [
   id_user: string
   id_account_type: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3448,7 +3448,7 @@ export def "users-account-types get" [
 # Get the category
 #
 # GET /users/{id_user}/accounts/{id_account}/categories
-export def "users-accounts-categories get" [
+export def "get-users-id-user-accounts-id-account-categories" [
   id_user: string
   id_account: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3485,7 +3485,7 @@ export def "users-accounts-categories get" [
 # Get clustered transactions
 #
 # GET /users/{id_user}/accounts/{id_account}/transactionsclusters
-export def "users-accounts-transactionsclusters get" [
+export def "get-users-id-user-accounts-id-account-transactionsclusters" [
   id_user: string
   id_account: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3524,7 +3524,7 @@ export def "users-accounts-transactionsclusters get" [
 # Create clustered transaction
 #
 # POST /users/{id_user}/accounts/{id_account}/transactionsclusters
-export def "users-accounts-transactionsclusters create" [
+export def "post-users-id-user-accounts-id-account-transactionsclusters" [
   id_user: string
   id_account: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3563,7 +3563,7 @@ export def "users-accounts-transactionsclusters create" [
 # Delete a clustered transaction
 #
 # DELETE /users/{id_user}/accounts/{id_account}/transactionsclusters/{id_transactionscluster}
-export def "users-accounts-transactionsclusters delete" [
+export def "delete-users-id-user-accounts-id-account-transactionsclusters-id-transactionscluster" [
   id_user: string
   id_account: int
   id_transactionscluster: int
@@ -3604,7 +3604,7 @@ export def "users-accounts-transactionsclusters delete" [
 # Edit a clustered transaction
 #
 # PUT /users/{id_user}/accounts/{id_account}/transactionsclusters/{id_transactionscluster}
-export def "users-accounts-transactionsclusters update" [
+export def "put-users-id-user-accounts-id-account-transactionsclusters-id-transactionscluster" [
   id_user: string
   id_account: int
   id_transactionscluster: int
@@ -3645,7 +3645,7 @@ export def "users-accounts-transactionsclusters update" [
 # Get alerts
 #
 # GET /users/{id_user}/alerts
-export def "users-alerts get" [
+export def "get-users-id-user-alerts" [
   id_user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3682,7 +3682,7 @@ export def "users-alerts get" [
 # Get the category
 #
 # GET /users/{id_user}/categories
-export def "users-categories get" [
+export def "get-users-id-user-categories" [
   id_user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3717,7 +3717,7 @@ export def "users-categories get" [
 # Get the category
 #
 # GET /users/{id_user}/categories/full
-export def "users-categories-full get" [
+export def "get-users-id-user-categories-full" [
   id_user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3754,7 +3754,7 @@ export def "users-categories-full get" [
 # Create a new transaction category
 #
 # POST /users/{id_user}/categories/full
-export def "users-categories-full create" [
+export def "post-users-id-user-categories-full" [
   id_user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3803,7 +3803,7 @@ export def "users-categories-full create" [
 # Delete a user-created transaction category
 #
 # DELETE /users/{id_user}/categories/full/{id_full}
-export def "users-categories-full delete" [
+export def "delete-users-id-user-categories-full-id-full" [
   id_user: string
   id_full: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3842,7 +3842,7 @@ export def "users-categories-full delete" [
 # Modify a user-created category
 #
 # PUT /users/{id_user}/categories/full/{id_full}
-export def "users-categories-full update" [
+export def "put-users-id-user-categories-full-id-full" [
   id_user: string
   id_full: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3888,7 +3888,7 @@ export def "users-categories-full update" [
 # Delete the given user configurations. deletions on keys prefixed by 'biapi.' (except callback_url) are ignored
 #
 # DELETE /users/{id_user}/config
-export def "users-config delete" [
+export def "delete-users-id-user-config" [
   id_user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3923,7 +3923,7 @@ export def "users-config delete" [
 # Get configuration of a user.
 #
 # GET /users/{id_user}/config
-export def "users-config get" [
+export def "get-users-id-user-config" [
   id_user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3959,7 +3959,7 @@ export def "users-config get" [
 # Change configuration of a user. modifications on keys prefixed by 'biapi.' (except callback_url) are ignored
 #
 # POST /users/{id_user}/config
-export def "users-config create" [
+export def "post-users-id-user-config" [
   id_user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3994,7 +3994,7 @@ export def "users-config create" [
 # Delete all connections
 #
 # DELETE /users/{id_user}/connections
-export def "users-connections delete-by-id-user" [
+export def "delete-users-id-user-connections" [
   id_user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4031,7 +4031,7 @@ export def "users-connections delete-by-id-user" [
 # Get connections
 #
 # GET /users/{id_user}/connections
-export def "users-connections get" [
+export def "get-users-id-user-connections" [
   id_user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4068,7 +4068,7 @@ export def "users-connections get" [
 # Add a new connection.
 #
 # POST /users/{id_user}/connections
-export def "users-connections create-by-id-user" [
+export def "post-users-id-user-connections" [
   id_user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4113,7 +4113,7 @@ export def "users-connections create-by-id-user" [
 # Delete a connection.
 #
 # DELETE /users/{id_user}/connections/{id_connection}
-export def "users-connections delete-by-id-user-id-connection" [
+export def "delete-users-id-user-connections-id-connection" [
   id_user: string
   id_connection: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4152,7 +4152,7 @@ export def "users-connections delete-by-id-user-id-connection" [
 # Update a connection.
 #
 # POST /users/{id_user}/connections/{id_connection}
-export def "users-connections create-by-id-user-id-connection" [
+export def "post-users-id-user-connections-id-connection" [
   id_user: string
   id_connection: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4204,7 +4204,7 @@ export def "users-connections create-by-id-user-id-connection" [
 # Force synchronisation of a connection.
 #
 # PUT /users/{id_user}/connections/{id_connection}
-export def "users-connections update" [
+export def "put-users-id-user-connections-id-connection" [
   id_user: string
   id_connection: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4246,7 +4246,7 @@ export def "users-connections update" [
 # Delete all accounts
 #
 # DELETE /users/{id_user}/connections/{id_connection}/accounts
-export def "users-connections-accounts delete-by-id-user-id-connection" [
+export def "delete-users-id-user-connections-id-connection-accounts" [
   id_user: string
   id_connection: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4285,7 +4285,7 @@ export def "users-connections-accounts delete-by-id-user-id-connection" [
 # Get accounts list.
 #
 # GET /users/{id_user}/connections/{id_connection}/accounts
-export def "users-connections-accounts get" [
+export def "get-users-id-user-connections-id-connection-accounts" [
   id_user: string
   id_connection: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4324,7 +4324,7 @@ export def "users-connections-accounts get" [
 # Create an account
 #
 # POST /users/{id_user}/connections/{id_connection}/accounts
-export def "users-connections-accounts create" [
+export def "post-users-id-user-connections-id-connection-accounts" [
   id_user: string
   id_connection: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4374,7 +4374,7 @@ export def "users-connections-accounts create" [
 # Update many accounts at once
 #
 # PUT /users/{id_user}/connections/{id_connection}/accounts
-export def "users-connections-accounts update-by-id-user-id-connection" [
+export def "put-users-id-user-connections-id-connection-accounts" [
   id_user: string
   id_connection: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4413,7 +4413,7 @@ export def "users-connections-accounts update-by-id-user-id-connection" [
 # Delete an account.
 #
 # DELETE /users/{id_user}/connections/{id_connection}/accounts/{id_account}
-export def "users-connections-accounts delete-by-id-user-id-connection-id-account" [
+export def "delete-users-id-user-connections-id-connection-accounts-id-account" [
   id_user: string
   id_connection: int
   id_account: int
@@ -4454,7 +4454,7 @@ export def "users-connections-accounts delete-by-id-user-id-connection-id-accoun
 # Update an account
 #
 # PUT /users/{id_user}/connections/{id_connection}/accounts/{id_account}
-export def "users-connections-accounts update-by-id-user-id-connection-id-account" [
+export def "put-users-id-user-connections-id-connection-accounts-id-account" [
   id_user: string
   id_connection: int
   id_account: int
@@ -4507,7 +4507,7 @@ export def "users-connections-accounts update-by-id-user-id-connection-id-accoun
 # Get the category
 #
 # GET /users/{id_user}/connections/{id_connection}/accounts/{id_account}/categories
-export def "users-connections-accounts-categories get" [
+export def "get-users-id-user-connections-id-connection-accounts-id-account-categories" [
   id_user: string
   id_connection: int
   id_account: int
@@ -4546,7 +4546,7 @@ export def "users-connections-accounts-categories get" [
 # Get deltas of accounts
 #
 # GET /users/{id_user}/connections/{id_connection}/accounts/{id_account}/delta
-export def "users-connections-accounts-delta get" [
+export def "get-users-id-user-connections-id-connection-accounts-id-account-delta" [
   id_user: string
   id_connection: int
   id_account: int
@@ -4589,7 +4589,7 @@ export def "users-connections-accounts-delta get" [
 # Get accounts logs.
 #
 # GET /users/{id_user}/connections/{id_connection}/accounts/{id_account}/logs
-export def "users-connections-accounts-logs get" [
+export def "get-users-id-user-connections-id-connection-accounts-id-account-logs" [
   id_user: string
   id_connection: int
   id_account: int
@@ -4634,7 +4634,7 @@ export def "users-connections-accounts-logs get" [
 # Get account sources
 #
 # GET /users/{id_user}/connections/{id_connection}/accounts/{id_account}/sources
-export def "users-connections-accounts-sources get" [
+export def "get-users-id-user-connections-id-connection-accounts-id-account-sources" [
   id_user: string
   id_connection: int
   id_account: int
@@ -4675,7 +4675,7 @@ export def "users-connections-accounts-sources get" [
 # Delete transactions
 #
 # DELETE /users/{id_user}/connections/{id_connection}/accounts/{id_account}/transactions
-export def "users-connections-accounts-transactions delete" [
+export def "delete-users-id-user-connections-id-connection-accounts-id-account-transactions" [
   id_user: string
   id_connection: int
   id_account: int
@@ -4716,7 +4716,7 @@ export def "users-connections-accounts-transactions delete" [
 # Get transactions
 #
 # GET /users/{id_user}/connections/{id_connection}/accounts/{id_account}/transactions
-export def "users-connections-accounts-transactions get" [
+export def "get-users-id-user-connections-id-connection-accounts-id-account-transactions" [
   id_user: string
   id_connection: int
   id_account: int
@@ -4771,7 +4771,7 @@ export def "users-connections-accounts-transactions get" [
 # Create transactions
 #
 # POST /users/{id_user}/connections/{id_connection}/accounts/{id_account}/transactions
-export def "users-connections-accounts-transactions create" [
+export def "post-users-id-user-connections-id-connection-accounts-id-account-transactions" [
   id_user: string
   id_connection: int
   id_account: int
@@ -4827,7 +4827,7 @@ export def "users-connections-accounts-transactions create" [
 # Edit a transaction meta-data
 #
 # PUT /users/{id_user}/connections/{id_connection}/accounts/{id_account}/transactions/{id_transaction}
-export def "users-connections-accounts-transactions update" [
+export def "put-users-id-user-connections-id-connection-accounts-id-account-transactions-id-transaction" [
   id_user: string
   id_connection: int
   id_account: int
@@ -4880,7 +4880,7 @@ export def "users-connections-accounts-transactions update" [
 # Delete all arbitrary key-value pairs of a transaction
 #
 # DELETE /users/{id_user}/connections/{id_connection}/accounts/{id_account}/transactions/{id_transaction}/informations
-export def "users-connections-accounts-transactions-informations delete-by-id-user-id-connection-id-account-id-transaction" [
+export def "delete-users-id-user-connections-id-connection-accounts-id-account-transactions-id-transaction-informations" [
   id_user: string
   id_connection: int
   id_account: int
@@ -4923,7 +4923,7 @@ export def "users-connections-accounts-transactions-informations delete-by-id-us
 # List all arbitrary key-value pairs on a transaction
 #
 # GET /users/{id_user}/connections/{id_connection}/accounts/{id_account}/transactions/{id_transaction}/informations
-export def "users-connections-accounts-transactions-informations list" [
+export def "get-users-id-user-connections-id-connection-accounts-id-account-transactions-id-transaction-informations" [
   id_user: string
   id_connection: int
   id_account: int
@@ -4966,7 +4966,7 @@ export def "users-connections-accounts-transactions-informations list" [
 # Add or edit transaction arbitrary key-value pairs
 #
 # PUT /users/{id_user}/connections/{id_connection}/accounts/{id_account}/transactions/{id_transaction}/informations
-export def "users-connections-accounts-transactions-informations update" [
+export def "put-users-id-user-connections-id-connection-accounts-id-account-transactions-id-transaction-informations" [
   id_user: string
   id_connection: int
   id_account: int
@@ -5009,7 +5009,7 @@ export def "users-connections-accounts-transactions-informations update" [
 # Delete a particular key-value pair on a transaction.
 #
 # DELETE /users/{id_user}/connections/{id_connection}/accounts/{id_account}/transactions/{id_transaction}/informations/{id_information}
-export def "users-connections-accounts-transactions-informations delete-by-id-user-id-connection-id-account-id-transaction-id-information" [
+export def "delete-users-id-user-connections-id-connection-accounts-id-account-transactions-id-transaction-informations-id-information" [
   id_user: string
   id_connection: int
   id_account: int
@@ -5054,7 +5054,7 @@ export def "users-connections-accounts-transactions-informations delete-by-id-us
 # Get a particular arbitrary key-value pair on a transaction
 #
 # GET /users/{id_user}/connections/{id_connection}/accounts/{id_account}/transactions/{id_transaction}/informations/{id_information}
-export def "users-connections-accounts-transactions-informations get" [
+export def "get-users-id-user-connections-id-connection-accounts-id-account-transactions-id-transaction-informations-id-information" [
   id_user: string
   id_connection: int
   id_account: int
@@ -5099,7 +5099,7 @@ export def "users-connections-accounts-transactions-informations get" [
 # Get clustered transactions
 #
 # GET /users/{id_user}/connections/{id_connection}/accounts/{id_account}/transactionsclusters
-export def "users-connections-accounts-transactionsclusters get" [
+export def "get-users-id-user-connections-id-connection-accounts-id-account-transactionsclusters" [
   id_user: string
   id_connection: int
   id_account: int
@@ -5140,7 +5140,7 @@ export def "users-connections-accounts-transactionsclusters get" [
 # Create clustered transaction
 #
 # POST /users/{id_user}/connections/{id_connection}/accounts/{id_account}/transactionsclusters
-export def "users-connections-accounts-transactionsclusters create" [
+export def "post-users-id-user-connections-id-connection-accounts-id-account-transactionsclusters" [
   id_user: string
   id_connection: int
   id_account: int
@@ -5181,7 +5181,7 @@ export def "users-connections-accounts-transactionsclusters create" [
 # Delete a clustered transaction
 #
 # DELETE /users/{id_user}/connections/{id_connection}/accounts/{id_account}/transactionsclusters/{id_transactionscluster}
-export def "users-connections-accounts-transactionsclusters delete" [
+export def "delete-users-id-user-connections-id-connection-accounts-id-account-transactionsclusters-id-transactionscluster" [
   id_user: string
   id_connection: int
   id_account: int
@@ -5224,7 +5224,7 @@ export def "users-connections-accounts-transactionsclusters delete" [
 # Edit a clustered transaction
 #
 # PUT /users/{id_user}/connections/{id_connection}/accounts/{id_account}/transactionsclusters/{id_transactionscluster}
-export def "users-connections-accounts-transactionsclusters update" [
+export def "put-users-id-user-connections-id-connection-accounts-id-account-transactionsclusters-id-transactionscluster" [
   id_user: string
   id_connection: int
   id_account: int
@@ -5267,7 +5267,7 @@ export def "users-connections-accounts-transactionsclusters update" [
 # Get connection additionnal informations
 #
 # GET /users/{id_user}/connections/{id_connection}/informations
-export def "users-connections-informations get" [
+export def "get-users-id-user-connections-id-connection-informations" [
   id_user: string
   id_connection: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5307,7 +5307,7 @@ export def "users-connections-informations get" [
 # Get connection logs
 #
 # GET /users/{id_user}/connections/{id_connection}/logs
-export def "users-connections-logs get" [
+export def "get-users-id-user-connections-id-connection-logs" [
   id_user: string
   id_connection: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5358,7 +5358,7 @@ export def "users-connections-logs get" [
 # Get connection sources
 #
 # GET /users/{id_user}/connections/{id_connection}/sources
-export def "users-connections-sources get" [
+export def "get-users-id-user-connections-id-connection-sources" [
   id_user: string
   id_connection: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5397,7 +5397,7 @@ export def "users-connections-sources get" [
 # Disable a connection source
 #
 # DELETE /users/{id_user}/connections/{id_connection}/sources/{id_source}
-export def "users-connections-sources delete" [
+export def "delete-users-id-user-connections-id-connection-sources-id-source" [
   id_user: string
   id_connection: int
   id_source: int
@@ -5438,7 +5438,7 @@ export def "users-connections-sources delete" [
 # "
 #
 # POST /users/{id_user}/connections/{id_connection}/sources/{id_source}
-export def "users-connections-sources create" [
+export def "post-users-id-user-connections-id-connection-sources-id-source" [
   id_user: string
   id_connection: int
   id_source: int
@@ -5487,7 +5487,7 @@ export def "users-connections-sources create" [
 # Update connection source
 #
 # PUT /users/{id_user}/connections/{id_connection}/sources/{id_source}
-export def "users-connections-sources update" [
+export def "put-users-id-user-connections-id-connection-sources-id-source" [
   id_user: string
   id_connection: int
   id_source: int
@@ -5537,7 +5537,7 @@ export def "users-connections-sources update" [
 # Get clustered transactions
 #
 # GET /users/{id_user}/connections/{id_connection}/transactionsclusters
-export def "users-connections-transactionsclusters get" [
+export def "get-users-id-user-connections-id-connection-transactionsclusters" [
   id_user: string
   id_connection: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5576,7 +5576,7 @@ export def "users-connections-transactionsclusters get" [
 # Create clustered transaction
 #
 # POST /users/{id_user}/connections/{id_connection}/transactionsclusters
-export def "users-connections-transactionsclusters create" [
+export def "post-users-id-user-connections-id-connection-transactionsclusters" [
   id_user: string
   id_connection: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5615,7 +5615,7 @@ export def "users-connections-transactionsclusters create" [
 # Delete a clustered transaction
 #
 # DELETE /users/{id_user}/connections/{id_connection}/transactionsclusters/{id_transactionscluster}
-export def "users-connections-transactionsclusters delete" [
+export def "delete-users-id-user-connections-id-connection-transactionsclusters-id-transactionscluster" [
   id_user: string
   id_connection: int
   id_transactionscluster: int
@@ -5656,7 +5656,7 @@ export def "users-connections-transactionsclusters delete" [
 # Edit a clustered transaction
 #
 # PUT /users/{id_user}/connections/{id_connection}/transactionsclusters/{id_transactionscluster}
-export def "users-connections-transactionsclusters update" [
+export def "put-users-id-user-connections-id-connection-transactionsclusters-id-transactionscluster" [
   id_user: string
   id_connection: int
   id_transactionscluster: int
@@ -5697,7 +5697,7 @@ export def "users-connections-transactionsclusters update" [
 # Get forecast
 #
 # GET /users/{id_user}/forecast
-export def "users-forecast get" [
+export def "get-users-id-user-forecast" [
   id_user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5732,7 +5732,7 @@ export def "users-forecast get" [
 # Get connection logs
 #
 # GET /users/{id_user}/logs
-export def "users-logs get" [
+export def "get-users-id-user-logs" [
   id_user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5781,7 +5781,7 @@ export def "users-logs get" [
 # Get profiles
 #
 # GET /users/{id_user}/profiles
-export def "users-profiles list" [
+export def "get-users-id-user-profiles" [
   id_user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5818,7 +5818,7 @@ export def "users-profiles list" [
 # Get the main profile
 #
 # GET /users/{id_user}/profiles/main
-export def "users-profiles-main get" [
+export def "get-users-id-user-profiles-main" [
   id_user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5855,7 +5855,7 @@ export def "users-profiles-main get" [
 # Get a profile
 #
 # GET /users/{id_user}/profiles/{id_profile}
-export def "users-profiles get" [
+export def "get-users-id-user-profiles-id-profile" [
   id_user: string
   id_profile: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5894,7 +5894,7 @@ export def "users-profiles get" [
 # Create a token
 #
 # POST /users/{id_user}/token
-export def "users-token create" [
+export def "post-users-id-user-token" [
   id_user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5936,7 +5936,7 @@ export def "users-token create" [
 # Get clustered transactions
 #
 # GET /users/{id_user}/transactionsclusters
-export def "users-transactionsclusters get" [
+export def "get-users-id-user-transactionsclusters" [
   id_user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5973,7 +5973,7 @@ export def "users-transactionsclusters get" [
 # Create clustered transaction
 #
 # POST /users/{id_user}/transactionsclusters
-export def "users-transactionsclusters create" [
+export def "post-users-id-user-transactionsclusters" [
   id_user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6010,7 +6010,7 @@ export def "users-transactionsclusters create" [
 # Delete a clustered transaction
 #
 # DELETE /users/{id_user}/transactionsclusters/{id_transactionscluster}
-export def "users-transactionsclusters delete" [
+export def "delete-users-id-user-transactionsclusters-id-transactionscluster" [
   id_user: string
   id_transactionscluster: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6049,7 +6049,7 @@ export def "users-transactionsclusters delete" [
 # Edit a clustered transaction
 #
 # PUT /users/{id_user}/transactionsclusters/{id_transactionscluster}
-export def "users-transactionsclusters update" [
+export def "put-users-id-user-transactionsclusters-id-transactionscluster" [
   id_user: string
   id_transactionscluster: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6088,7 +6088,7 @@ export def "users-transactionsclusters update" [
 # First step to establish an oAuth2 connection.
 #
 # GET /webauth
-export def "webauth get" [
+export def "get-webauth" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6121,7 +6121,7 @@ export def "webauth get" [
 # Deletes all webhooks
 #
 # DELETE /webhooks
-export def "webhooks delete" [
+export def "delete-webhooks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6156,7 +6156,7 @@ export def "webhooks delete" [
 # Get webhooks
 #
 # GET /webhooks
-export def "webhooks get" [
+export def "get-webhooks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6191,7 +6191,7 @@ export def "webhooks get" [
 # Adds a new webhook
 #
 # POST /webhooks
-export def "webhooks create" [
+export def "post-webhooks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6237,7 +6237,7 @@ export def "webhooks create" [
 # Deletes all webhook authentication types
 #
 # DELETE /webhooks/auth
-export def "webhooks-auth delete" [
+export def "delete-webhooks-auth" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6272,7 +6272,7 @@ export def "webhooks-auth delete" [
 # Get webhooks authentication types
 #
 # GET /webhooks/auth
-export def "webhooks-auth get" [
+export def "get-webhooks-auth" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6307,7 +6307,7 @@ export def "webhooks-auth get" [
 # Adds a new webhook authentication type
 #
 # POST /webhooks/auth
-export def "webhooks-auth create" [
+export def "post-webhooks-auth" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6350,7 +6350,7 @@ export def "webhooks-auth create" [
 # Deletes the webhook authentication type
 #
 # DELETE /webhooks/auth/{id_auth}
-export def "webhooks-auth delete-by-id-auth" [
+export def "delete-webhooks-auth-id-auth" [
   id_auth: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6387,7 +6387,7 @@ export def "webhooks-auth delete-by-id-auth" [
 # Updates the webhook authentication type
 #
 # POST /webhooks/auth/{id_auth}
-export def "webhooks-auth create-by-id-auth" [
+export def "post-webhooks-auth-id-auth" [
   id_auth: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6432,7 +6432,7 @@ export def "webhooks-auth create-by-id-auth" [
 # Updates the webhook authentication type
 #
 # PUT /webhooks/auth/{id_auth}
-export def "webhooks-auth update" [
+export def "put-webhooks-auth-id-auth" [
   id_auth: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6477,7 +6477,7 @@ export def "webhooks-auth update" [
 # Deletes a webhook
 #
 # DELETE /webhooks/{id_webhook}
-export def "webhooks delete-by-id-webhook" [
+export def "delete-webhooks-id-webhook" [
   id_webhook: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6514,7 +6514,7 @@ export def "webhooks delete-by-id-webhook" [
 # Updates a webhook
 #
 # POST /webhooks/{id_webhook}
-export def "webhooks create-by-id-webhook" [
+export def "post-webhooks-id-webhook" [
   id_webhook: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6562,7 +6562,7 @@ export def "webhooks create-by-id-webhook" [
 # Updates a webhook
 #
 # PUT /webhooks/{id_webhook}
-export def "webhooks update" [
+export def "put-webhooks-id-webhook" [
   id_webhook: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6610,7 +6610,7 @@ export def "webhooks update" [
 # delete all entries
 #
 # DELETE /webhooks/{id_webhook}/add_to_data
-export def "webhooks-add-to-data delete-by-id-webhook" [
+export def "delete-webhooks-id-webhook-add-to-data" [
   id_webhook: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6647,7 +6647,7 @@ export def "webhooks-add-to-data delete-by-id-webhook" [
 # retrieve the list of the value to add in webhooks when sending the requested webhook
 #
 # GET /webhooks/{id_webhook}/add_to_data
-export def "webhooks-add-to-data list" [
+export def "get-webhooks-id-webhook-add-to-data" [
   id_webhook: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6684,7 +6684,7 @@ export def "webhooks-add-to-data list" [
 # Setup a field to store in user config when calling the endpoint
 #
 # POST /webhooks/{id_webhook}/add_to_data
-export def "webhooks-add-to-data create-by-id-webhook" [
+export def "post-webhooks-id-webhook-add-to-data" [
   id_webhook: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6721,7 +6721,7 @@ export def "webhooks-add-to-data create-by-id-webhook" [
 # delete the requested entry
 #
 # DELETE /webhooks/{id_webhook}/add_to_data/{key}
-export def "webhooks-add-to-data delete-by-id-webhook-key" [
+export def "delete-webhooks-id-webhook-add-to-data-key" [
   id_webhook: int
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6760,7 +6760,7 @@ export def "webhooks-add-to-data delete-by-id-webhook-key" [
 # retrieve the value to add in the requested webhook for the requested name
 #
 # GET /webhooks/{id_webhook}/add_to_data/{key}
-export def "webhooks-add-to-data get" [
+export def "get-webhooks-id-webhook-add-to-data-key" [
   id_webhook: int
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6799,7 +6799,7 @@ export def "webhooks-add-to-data get" [
 # upate the requested field to store in user config when calling the endpoint
 #
 # POST /webhooks/{id_webhook}/add_to_data/{key}
-export def "webhooks-add-to-data create-by-id-webhook-key" [
+export def "post-webhooks-id-webhook-add-to-data-key" [
   id_webhook: int
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6838,7 +6838,7 @@ export def "webhooks-add-to-data create-by-id-webhook-key" [
 # Get webhooks logs.
 #
 # GET /webhooks/{id_webhook}/logs
-export def "webhooks-logs get" [
+export def "get-webhooks-id-webhook-logs" [
   id_webhook: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

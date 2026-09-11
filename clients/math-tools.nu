@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["x-mathtools-api-secret"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "numbers-base get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-numbers-base" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -121,7 +121,7 @@ export def commands []: nothing -> table {
 # Convert a given number from one base to another base
 #
 # GET /numbers/base
-export def "numbers-base get" [
+export def "get-numbers-base" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -158,7 +158,7 @@ export def "numbers-base get" [
 # Convert a given number to binary
 #
 # GET /numbers/base/binary
-export def "numbers-base-binary get" [
+export def "get-numbers-base-binary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -194,7 +194,7 @@ export def "numbers-base-binary get" [
 # Convert a given number to hexadecimal
 #
 # GET /numbers/base/hex
-export def "numbers-base-hex get" [
+export def "get-numbers-base-hex" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -230,7 +230,7 @@ export def "numbers-base-hex get" [
 # Convert a given number to octal
 #
 # GET /numbers/base/octal
-export def "numbers-base-octal get" [
+export def "get-numbers-base-octal" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -266,7 +266,7 @@ export def "numbers-base-octal get" [
 # Get the cardinal of the given number
 #
 # GET /numbers/cardinal
-export def "numbers-cardinal get" [
+export def "get-numbers-cardinal" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -302,7 +302,7 @@ export def "numbers-cardinal get" [
 # Spells out the number as a currency
 #
 # GET /numbers/currency
-export def "numbers-currency get" [
+export def "get-numbers-currency" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -338,7 +338,7 @@ export def "numbers-currency get" [
 # Get a random fact about a number
 #
 # GET /numbers/fact
-export def "numbers-fact get" [
+export def "get-numbers-fact" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -373,7 +373,7 @@ export def "numbers-fact get" [
 # Checks whether a given number is a cube number or not.
 #
 # GET /numbers/is-cube
-export def "numbers-is-cube get" [
+export def "get-numbers-is-cube" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -408,7 +408,7 @@ export def "numbers-is-cube get" [
 # Checks whether a given number is a palindrome number or not.
 #
 # GET /numbers/is-palindrome
-export def "numbers-is-palindrome get" [
+export def "get-numbers-is-palindrome" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -443,7 +443,7 @@ export def "numbers-is-palindrome get" [
 # Checks whether a given number is a square number or not.
 #
 # GET /numbers/is-square
-export def "numbers-is-square get" [
+export def "get-numbers-is-square" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -478,7 +478,7 @@ export def "numbers-is-square get" [
 # Checks whether a given number is a triangle number or not.
 #
 # GET /numbers/is-triangle
-export def "numbers-is-triangle get" [
+export def "get-numbers-is-triangle" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -513,7 +513,7 @@ export def "numbers-is-triangle get" [
 # Get the number of the day for current day
 #
 # GET /numbers/nod
-export def "numbers-nod get" [
+export def "get-numbers-nod" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -546,7 +546,7 @@ export def "numbers-nod get" [
 # Convert base 10 representation of a given number to chinese numeral.
 #
 # GET /numbers/numeral/chinese
-export def "numbers-numeral-chinese get" [
+export def "get-numbers-numeral-chinese" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -581,7 +581,7 @@ export def "numbers-numeral-chinese get" [
 # Convert base 10 representation of a given number to egyptian numeral.
 #
 # GET /numbers/numeral/egyptian
-export def "numbers-numeral-egyptian get" [
+export def "get-numbers-numeral-egyptian" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -616,7 +616,7 @@ export def "numbers-numeral-egyptian get" [
 # Convert base 10 representation of a given number to roman numeral.
 #
 # GET /numbers/numeral/roman
-export def "numbers-numeral-roman get" [
+export def "get-numbers-numeral-roman" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -651,7 +651,7 @@ export def "numbers-numeral-roman get" [
 # Get the ordinal of the given number
 #
 # GET /numbers/ordinal
-export def "numbers-ordinal get" [
+export def "get-numbers-ordinal" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -686,7 +686,7 @@ export def "numbers-ordinal get" [
 # Get digits of pi (Ï€)
 #
 # GET /numbers/pi
-export def "numbers-pi get" [
+export def "get-numbers-pi" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -722,7 +722,7 @@ export def "numbers-pi get" [
 # Get the prime factors of a given number.
 #
 # GET /numbers/prime/factors
-export def "numbers-prime-factors get" [
+export def "get-numbers-prime-factors" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -757,7 +757,7 @@ export def "numbers-prime-factors get" [
 # Checks whether a given number is a known fermat prime number or not.
 #
 # GET /numbers/prime/is-fermat-prime
-export def "numbers-prime-is-fermat-prime get" [
+export def "get-numbers-prime-is-fermat-prime" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -792,7 +792,7 @@ export def "numbers-prime-is-fermat-prime get" [
 # Checks whether a given number is a known fibonacci prime number or not.
 #
 # GET /numbers/prime/is-fibonacci-prime
-export def "numbers-prime-is-fibonacci-prime get" [
+export def "get-numbers-prime-is-fibonacci-prime" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -827,7 +827,7 @@ export def "numbers-prime-is-fibonacci-prime get" [
 # Checks whether a given number is a known mersenne prime number or not.
 #
 # GET /numbers/prime/is-mersenne-prime
-export def "numbers-prime-is-mersenne-prime get" [
+export def "get-numbers-prime-is-mersenne-prime" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -862,7 +862,7 @@ export def "numbers-prime-is-mersenne-prime get" [
 # Checks whether a given number is a known partition prime number or not.
 #
 # GET /numbers/prime/is-partition-prime
-export def "numbers-prime-is-partition-prime get" [
+export def "get-numbers-prime-is-partition-prime" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -897,7 +897,7 @@ export def "numbers-prime-is-partition-prime get" [
 # Checks whether a given number is a known pell prime number or not.
 #
 # GET /numbers/prime/is-pell-prime
-export def "numbers-prime-is-pell-prime get" [
+export def "get-numbers-prime-is-pell-prime" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -932,7 +932,7 @@ export def "numbers-prime-is-pell-prime get" [
 # Checks whether a given number is a perfect number or not.
 #
 # GET /numbers/prime/is-perfect
-export def "numbers-prime-is-perfect get" [
+export def "get-numbers-prime-is-perfect" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -967,7 +967,7 @@ export def "numbers-prime-is-perfect get" [
 # Checks whether a given number is a known prime number or not.
 #
 # GET /numbers/prime/is-prime
-export def "numbers-prime-is-prime get" [
+export def "get-numbers-prime-is-prime" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1002,7 +1002,7 @@ export def "numbers-prime-is-prime get" [
 # Generate random number(s)
 #
 # GET /numbers/random
-export def "numbers-random get" [
+export def "get-numbers-random" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

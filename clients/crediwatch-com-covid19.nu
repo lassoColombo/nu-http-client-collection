@@ -97,7 +97,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "status-call get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "status-call-api-v1-status-call-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -121,7 +121,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/v1/status/call
 # operationId: status_call_api_v1_status_call_get
-export def "status-call get" [
+export def "status-call-api-v1-status-call-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -157,7 +157,7 @@ export def "status-call get" [
 #
 # GET /api/v1/status/sku
 # operationId: status_sku_api_v1_status_sku_get
-export def "status-sku get" [
+export def "status-sku-api-v1-status-sku-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -193,7 +193,7 @@ export def "status-sku get" [
 #
 # GET /api/v1/verify/name
 # operationId: verify_name_api_v1_verify_name_get
-export def "verify-name get" [
+export def "verify-name-api-v1-verify-name-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -231,7 +231,7 @@ export def "verify-name get" [
 #
 # GET /api/v1/verify/phone
 # operationId: verify_business_api_v1_verify_phone_get
-export def "verify-phone get-business" [
+export def "verify-business-api-v1-verify-phone-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -268,7 +268,7 @@ export def "verify-phone get-business" [
 #
 # GET /api/v1/verify/sku
 # operationId: verify_sku_api_v1_verify_sku_get
-export def "verify-sku get" [
+export def "verify-sku-api-v1-verify-sku-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

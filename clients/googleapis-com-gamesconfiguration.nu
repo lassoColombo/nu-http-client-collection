@@ -132,7 +132,7 @@ def score-order-completer [] { ["LARGER_IS_BETTER" "SCORE_ORDER_UNSPECIFIED" "SM
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "games-v1configuration-achievements delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "games-configuration-achievement-configurations-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -156,7 +156,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /games/v1configuration/achievements/{achievementId}
 # operationId: gamesConfiguration.achievementConfigurations.delete
-export def "games-v1configuration-achievements delete" [
+export def "games-configuration-achievement-configurations-delete" [
   achievement_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -204,7 +204,7 @@ export def "games-v1configuration-achievements delete" [
 #
 # GET /games/v1configuration/achievements/{achievementId}
 # operationId: gamesConfiguration.achievementConfigurations.get
-export def "games-v1configuration-achievements get" [
+export def "games-configuration-achievement-configurations-get" [
   achievement_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -254,7 +254,7 @@ export def "games-v1configuration-achievements get" [
 # operationId: gamesConfiguration.achievementConfigurations.update
 # --draft shape: {description?: record, iconUrl?: string, kind?: string, name?: record, pointValue?: int, sortRank?: int}
 # --published shape: {description?: record, iconUrl?: string, kind?: string, name?: record, pointValue?: int, sortRank?: int}
-export def "games-v1configuration-achievements update" [
+export def "games-configuration-achievement-configurations-update" [
   achievement_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -313,7 +313,7 @@ export def "games-v1configuration-achievements update" [
 #
 # GET /games/v1configuration/applications/{applicationId}/achievements
 # operationId: gamesConfiguration.achievementConfigurations.list
-export def "games-v1configuration-applications-achievements list" [
+export def "games-configuration-achievement-configurations-list" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -365,7 +365,7 @@ export def "games-v1configuration-applications-achievements list" [
 # operationId: gamesConfiguration.achievementConfigurations.insert
 # --draft shape: {description?: record, iconUrl?: string, kind?: string, name?: record, pointValue?: int, sortRank?: int}
 # --published shape: {description?: record, iconUrl?: string, kind?: string, name?: record, pointValue?: int, sortRank?: int}
-export def "games-v1configuration-applications-achievements create" [
+export def "games-configuration-achievement-configurations-insert" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -424,7 +424,7 @@ export def "games-v1configuration-applications-achievements create" [
 #
 # GET /games/v1configuration/applications/{applicationId}/leaderboards
 # operationId: gamesConfiguration.leaderboardConfigurations.list
-export def "games-v1configuration-applications-leaderboards list" [
+export def "games-configuration-leaderboard-configurations-list" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -476,7 +476,7 @@ export def "games-v1configuration-applications-leaderboards list" [
 # operationId: gamesConfiguration.leaderboardConfigurations.insert
 # --draft shape: {iconUrl?: string, kind?: string, name?: record, scoreFormat?: record, sortRank?: int}
 # --published shape: {iconUrl?: string, kind?: string, name?: record, scoreFormat?: record, sortRank?: int}
-export def "games-v1configuration-applications-leaderboards create" [
+export def "games-configuration-leaderboard-configurations-insert" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -535,7 +535,7 @@ export def "games-v1configuration-applications-leaderboards create" [
 #
 # DELETE /games/v1configuration/leaderboards/{leaderboardId}
 # operationId: gamesConfiguration.leaderboardConfigurations.delete
-export def "games-v1configuration-leaderboards delete" [
+export def "games-configuration-leaderboard-configurations-delete" [
   leaderboard_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -583,7 +583,7 @@ export def "games-v1configuration-leaderboards delete" [
 #
 # GET /games/v1configuration/leaderboards/{leaderboardId}
 # operationId: gamesConfiguration.leaderboardConfigurations.get
-export def "games-v1configuration-leaderboards get" [
+export def "games-configuration-leaderboard-configurations-get" [
   leaderboard_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -633,7 +633,7 @@ export def "games-v1configuration-leaderboards get" [
 # operationId: gamesConfiguration.leaderboardConfigurations.update
 # --draft shape: {iconUrl?: string, kind?: string, name?: record, scoreFormat?: record, sortRank?: int}
 # --published shape: {iconUrl?: string, kind?: string, name?: record, scoreFormat?: record, sortRank?: int}
-export def "games-v1configuration-leaderboards update" [
+export def "games-configuration-leaderboard-configurations-update" [
   leaderboard_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

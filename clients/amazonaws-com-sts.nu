@@ -114,7 +114,7 @@ def action-completer-7 [] { ["GetSessionToken"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api get-assume-role" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-assume-role" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -138,7 +138,7 @@ export def commands []: nothing -> table {
 #
 # GET /
 # operationId: GET_AssumeRole
-export def "api get-assume-role" [
+export def "get-assume-role" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -195,7 +195,7 @@ export def "api get-assume-role" [
 #
 # POST /
 # operationId: POST_AssumeRole
-export def "api create-assume-role" [
+export def "post-assume-role" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -245,7 +245,7 @@ export def "api create-assume-role" [
 #
 # GET /
 # operationId: GET_AssumeRoleWithSAML
-export def "api get-assume-role-with-saml" [
+export def "get-assume-role-with-saml" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -297,7 +297,7 @@ export def "api get-assume-role-with-saml" [
 #
 # POST /
 # operationId: POST_AssumeRoleWithSAML
-export def "api create-assume-role-with-saml" [
+export def "post-assume-role-with-saml" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -347,7 +347,7 @@ export def "api create-assume-role-with-saml" [
 #
 # GET /
 # operationId: GET_AssumeRoleWithWebIdentity
-export def "api get-assume-role-with-web-identity" [
+export def "get-assume-role-with-web-identity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -400,7 +400,7 @@ export def "api get-assume-role-with-web-identity" [
 #
 # POST /
 # operationId: POST_AssumeRoleWithWebIdentity
-export def "api create-assume-role-with-web-identity" [
+export def "post-assume-role-with-web-identity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -450,7 +450,7 @@ export def "api create-assume-role-with-web-identity" [
 #
 # GET /
 # operationId: GET_DecodeAuthorizationMessage
-export def "api get-decode-authorization-message" [
+export def "get-decode-authorization-message" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -497,7 +497,7 @@ export def "api get-decode-authorization-message" [
 #
 # POST /
 # operationId: POST_DecodeAuthorizationMessage
-export def "api create-decode-authorization-message" [
+export def "post-decode-authorization-message" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -547,7 +547,7 @@ export def "api create-decode-authorization-message" [
 #
 # GET /
 # operationId: GET_GetAccessKeyInfo
-export def "api get-access-key" [
+export def "get-get-access-key-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -594,7 +594,7 @@ export def "api get-access-key" [
 #
 # POST /
 # operationId: POST_GetAccessKeyInfo
-export def "api create-get-access-key" [
+export def "post-get-access-key-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -644,7 +644,7 @@ export def "api create-get-access-key" [
 #
 # GET /
 # operationId: GET_GetCallerIdentity
-export def "api get-caller-identity" [
+export def "get-get-caller-identity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -690,7 +690,7 @@ export def "api get-caller-identity" [
 #
 # POST /
 # operationId: POST_GetCallerIdentity
-export def "api create-get-caller-identity" [
+export def "post-get-caller-identity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -740,7 +740,7 @@ export def "api create-get-caller-identity" [
 #
 # GET /
 # operationId: GET_GetFederationToken
-export def "api get-federation-token" [
+export def "get-get-federation-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -791,7 +791,7 @@ export def "api get-federation-token" [
 #
 # POST /
 # operationId: POST_GetFederationToken
-export def "api create-get-federation-token" [
+export def "post-get-federation-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -841,7 +841,7 @@ export def "api create-get-federation-token" [
 #
 # GET /
 # operationId: GET_GetSessionToken
-export def "api get-session-token" [
+export def "get-get-session-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -890,7 +890,7 @@ export def "api get-session-token" [
 #
 # POST /
 # operationId: POST_GetSessionToken
-export def "api create-get-session-token" [
+export def "post-get-session-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

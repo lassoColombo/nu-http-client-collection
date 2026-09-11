@@ -97,7 +97,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "open-banking-v2-2-atms get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-open-banking-v2-2-atms" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -120,7 +120,7 @@ export def commands []: nothing -> table {
 # This API will return data about all our ATMs and is prepared to the Open Banking standards as defined by the Open Banking Implementation Entity (OBIE) in data dictionary version 2.2. It is regulated by the UK Competition and Markets Authority (CMA). Data is only available for the United Kingdom.
 #
 # GET /open-banking/v2.2/atms
-export def "open-banking-v2-2-atms get" [
+export def "get-open-banking-v2-2-atms" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -153,7 +153,7 @@ export def "open-banking-v2-2-atms get" [
 # This extended API will return data about all ATMs in the specified country. It is based-on the Open Banking standards as defined by the Open Banking Implementation Entity (OBIE) in data dictionary version 2.2. The extended functionality may not fully adhere to the non-functional requirements of the regulator. Data is only available for the United Kingdom.
 #
 # GET /x-open-banking/v2.2/atms/country/{country}
-export def "x-open-banking-v2-2-atms-country get" [
+export def "get-x-open-banking-v2-2-atms-country-country" [
   country: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -188,7 +188,7 @@ export def "x-open-banking-v2-2-atms-country get" [
 # This extended API will return data about all ATMs in the specified town. It is based-on the Open Banking standards as defined by the Open Banking Implementation Entity (OBIE) in data dictionary version 2.2. The extended functionality may not fully adhere to the non-functional requirements of the regulator. Data is only available for the United Kingdom.
 #
 # GET /x-open-banking/v2.2/atms/country/{country}/town/{town}
-export def "x-open-banking-v2-2-atms-country-town get" [
+export def "get-x-open-banking-v2-2-atms-country-country-town-town" [
   country: string
   town: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -225,7 +225,7 @@ export def "x-open-banking-v2-2-atms-country-town get" [
 # This extended API will data about all ATMs within a specified radius (1 to 10 miles) of the specified latitude and longitude. It is based-on the Open Banking standards as defined by the Open Banking Implementation Entity (OBIE) in data dictionary version 2.2. The extended functionality may not fully adhere to the non-functional requirements of the regulator. Data is only available for the United Kingdom.
 #
 # GET /x-open-banking/v2.2/atms/geo-location/lat/{latitude}/long/{longitude}
-export def "x-open-banking-v2-2-atms-geo-location-lat-long get" [
+export def "get-x-open-banking-v2-2-atms-geo-location-lat-latitude-long-longitude" [
   latitude: string
   longitude: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -264,7 +264,7 @@ export def "x-open-banking-v2-2-atms-geo-location-lat-long get" [
 # This extended API will return data about all ATMs within a 5 mile radius of the specified postcode. It is based-on the Open Banking standards as defined by the Open Banking Implementation Entity (OBIE) in data dictionary version 2.2. The extended functionality may not fully adhere to the non-functional requirements of the regulator. Data is only available for the United Kingdom.
 #
 # GET /x-open-banking/v2.2/atms/postcode/{postcode}
-export def "x-open-banking-v2-2-atms-postcode get" [
+export def "get-x-open-banking-v2-2-atms-postcode-postcode" [
   postcode: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

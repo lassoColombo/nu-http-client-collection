@@ -119,7 +119,7 @@ def severity-completer [] { ["critical" "minimal" "moderate"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-support-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -143,7 +143,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.Support/operations
 # operationId: Operations_List
-export def "providers-microsoft-support-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -179,7 +179,7 @@ export def "providers-microsoft-support-operations list" [
 #
 # GET /providers/Microsoft.Support/services
 # operationId: Services_List
-export def "providers-microsoft-support-services list" [
+export def "services-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -215,7 +215,7 @@ export def "providers-microsoft-support-services list" [
 #
 # GET /providers/Microsoft.Support/services/{serviceName}
 # operationId: Services_Get
-export def "providers-microsoft-support-services get" [
+export def "services-get" [
   service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -253,7 +253,7 @@ export def "providers-microsoft-support-services get" [
 #
 # GET /providers/Microsoft.Support/services/{serviceName}/problemClassifications
 # operationId: ProblemClassifications_List
-export def "providers-microsoft-support-services-problem-classifications list" [
+export def "problem-classifications-list" [
   service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -291,7 +291,7 @@ export def "providers-microsoft-support-services-problem-classifications list" [
 #
 # GET /providers/Microsoft.Support/services/{serviceName}/problemClassifications/{problemClassificationName}
 # operationId: ProblemClassifications_Get
-export def "providers-microsoft-support-services-problem-classifications get" [
+export def "problem-classifications-get" [
   service_name: string
   problem_classification_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -331,7 +331,7 @@ export def "providers-microsoft-support-services-problem-classifications get" [
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Support/checkNameAvailability
 # operationId: SupportTickets_CheckNameAvailability
-export def "subscriptions-providers-microsoft-support-check-name-availability check-tickets" [
+export def "support-tickets-check-name-availability" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -374,7 +374,7 @@ export def "subscriptions-providers-microsoft-support-check-name-availability ch
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Support/supportTickets
 # operationId: SupportTickets_List
-export def "subscriptions-providers-microsoft-support-support-tickets list" [
+export def "support-tickets-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -414,7 +414,7 @@ export def "subscriptions-providers-microsoft-support-support-tickets list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Support/supportTickets/{supportTicketName}
 # operationId: SupportTickets_Get
-export def "subscriptions-providers-microsoft-support-support-tickets get" [
+export def "support-tickets-get" [
   subscription_id: string
   support_ticket_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -455,7 +455,7 @@ export def "subscriptions-providers-microsoft-support-support-tickets get" [
 # PATCH /subscriptions/{subscriptionId}/providers/Microsoft.Support/supportTickets/{supportTicketName}
 # operationId: SupportTickets_Update
 # --contactDetails shape: {additionalEmailAddresses?: list<string>, country?: string, firstName?: string, lastName?: string, phoneNumber?: string, preferredContactMethod?: "email"|"phone", preferredSupportLanguage?: string, preferredTimeZone?: string, primaryEmailAddress?: string}
-export def "subscriptions-providers-microsoft-support-support-tickets update" [
+export def "support-tickets-update" [
   subscription_id: string
   support_ticket_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -501,7 +501,7 @@ export def "subscriptions-providers-microsoft-support-support-tickets update" [
 # PUT /subscriptions/{subscriptionId}/providers/Microsoft.Support/supportTickets/{supportTicketName}
 # operationId: SupportTickets_Create
 # --properties shape: {contactDetails: record, description: string, problemClassificationId: string, problemStartTime?: string, quotaTicketDetails?: record, require24X7Response?: bool, serviceId: string, serviceLevelAgreement?: record, severity: "minimal"|"moderate"|"critical", supportEngineer?: record, supportTicketId?: string, technicalTicketDetails?: record, title: string}
-export def "subscriptions-providers-microsoft-support-support-tickets create" [
+export def "support-tickets-create" [
   subscription_id: string
   support_ticket_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -545,7 +545,7 @@ export def "subscriptions-providers-microsoft-support-support-tickets create" [
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Support/supportTickets/{supportTicketName}/checkNameAvailability
 # operationId: Communications_CheckNameAvailability
-export def "subscriptions-providers-microsoft-support-support-tickets-check-name-availability check-communications" [
+export def "communications-check-name-availability" [
   subscription_id: string
   support_ticket_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -590,7 +590,7 @@ export def "subscriptions-providers-microsoft-support-support-tickets-check-name
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Support/supportTickets/{supportTicketName}/communications
 # operationId: Communications_List
-export def "subscriptions-providers-microsoft-support-support-tickets-communications list" [
+export def "communications-list" [
   subscription_id: string
   support_ticket_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -632,7 +632,7 @@ export def "subscriptions-providers-microsoft-support-support-tickets-communicat
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Support/supportTickets/{supportTicketName}/communications/{communicationName}
 # operationId: Communications_Get
-export def "subscriptions-providers-microsoft-support-support-tickets-communications get" [
+export def "communications-get" [
   subscription_id: string
   support_ticket_name: string
   communication_name: string
@@ -675,7 +675,7 @@ export def "subscriptions-providers-microsoft-support-support-tickets-communicat
 # PUT /subscriptions/{subscriptionId}/providers/Microsoft.Support/supportTickets/{supportTicketName}/communications/{communicationName}
 # operationId: Communications_Create
 # --properties shape: {body: string, sender?: string, subject: string}
-export def "subscriptions-providers-microsoft-support-support-tickets-communications create" [
+export def "communications-create" [
   subscription_id: string
   support_ticket_name: string
   communication_name: string

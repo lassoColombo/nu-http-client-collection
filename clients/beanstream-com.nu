@@ -115,7 +115,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "payments create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-payments" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -144,7 +144,7 @@ export def commands []: nothing -> table {
 # --payment_profile shape: {card_id: int, complete?: bool, customer_code: string}
 # --shipping shape: {address_line1?: string, address_line2?: string, city?: string, country?: string, email_address?: string, name?: string, phone_number?: string, postal_code?: string, province?: string}
 # --token shape: {code: string, complete?: bool, name: string}
-export def "payments create" [
+export def "post-payments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -193,7 +193,7 @@ export def "payments create" [
 # Get payment
 #
 # GET /payments/{transId}
-export def "payments get" [
+export def "get-payments-trans-id" [
   trans_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -234,7 +234,7 @@ export def "payments get" [
 # --payment_profile shape: {card_id: int, complete?: bool, customer_code: string}
 # --shipping shape: {address_line1?: string, address_line2?: string, city?: string, country?: string, email_address?: string, name?: string, phone_number?: string, postal_code?: string, province?: string}
 # --token shape: {code: string, complete?: bool, name: string}
-export def "payments-completions create" [
+export def "post-payments-trans-id-completions" [
   trans_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -285,7 +285,7 @@ export def "payments-completions create" [
 # Return payment
 #
 # POST /payments/{transId}/returns
-export def "payments-returns create" [
+export def "post-payments-trans-id-returns" [
   trans_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -325,7 +325,7 @@ export def "payments-returns create" [
 # Void Transaction
 #
 # POST /payments/{transId}/void
-export def "payments-void create" [
+export def "post-payments-trans-id-void" [
   trans_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -368,7 +368,7 @@ export def "payments-void create" [
 # --card shape: {cvd?: string, expiry_month: string, expiry_year: string, name: string, number: string}
 # --custom shape: {ref1?: string, ref2?: string, ref3?: string, ref4?: string, ref5?: string}
 # --token shape: {code: string, name: string}
-export def "profiles create" [
+export def "post-profiles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -410,7 +410,7 @@ export def "profiles create" [
 # Delete profile
 #
 # DELETE /profiles/{profileId}
-export def "profiles delete" [
+export def "delete-profiles-profile-id" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -445,7 +445,7 @@ export def "profiles delete" [
 # Get profile
 #
 # GET /profiles/{profileId}
-export def "profiles get" [
+export def "get-profiles-profile-id" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -483,7 +483,7 @@ export def "profiles get" [
 # --billing shape: {address_line1?: string, address_line2?: string, city?: string, country?: string, email_address?: string, name?: string, phone_number?: string, postal_code?: string, province?: string}
 # --card shape: {code?: string, name?: string}
 # --custom shape: {ref1?: string, ref2?: string, ref3?: string, ref4?: string, ref5?: string}
-export def "profiles update" [
+export def "put-profiles-profile-id" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -526,7 +526,7 @@ export def "profiles update" [
 # Get cards
 #
 # GET /profiles/{profileId}/cards
-export def "profiles-cards get" [
+export def "get-profiles-profile-id-cards" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -561,7 +561,7 @@ export def "profiles-cards get" [
 # Add card
 #
 # POST /profiles/{profileId}/cards
-export def "profiles-cards create" [
+export def "post-profiles-profile-id-cards" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -603,7 +603,7 @@ export def "profiles-cards create" [
 # Delete card
 #
 # DELETE /profiles/{profileId}/cards/{cardId}
-export def "profiles-cards delete" [
+export def "delete-profiles-profile-id-cards-card-id" [
   profile_id: string
   card_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -640,7 +640,7 @@ export def "profiles-cards delete" [
 # Update card
 #
 # PUT /profiles/{profileId}/cards/{cardId}
-export def "profiles-cards update" [
+export def "put-profiles-profile-id-cards-card-id" [
   profile_id: string
   card_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -685,7 +685,7 @@ export def "profiles-cards update" [
 #
 # POST /reports
 # --criteria item shape: {field?: float, operator?: string, value?: string}
-export def "reports create" [
+export def "post-reports" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -727,7 +727,7 @@ export def "reports create" [
 # Tokenize credit card
 #
 # POST /scripts/tokenization/tokens
-export def "scripts-tokenization-tokens create" [
+export def "post-scripts-tokenization-tokens" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

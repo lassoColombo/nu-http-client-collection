@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-sql-servers-auditing-policies list-table" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "server-table-auditing-policies-list-by-server" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -130,7 +130,7 @@ export def commands []: nothing -> table {
 # DEPRECATED
 # operationId: ServerTableAuditingPolicies_ListByServer
 @deprecated
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-auditing-policies list-table" [
+export def "server-table-auditing-policies-list-by-server" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -174,7 +174,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-auditi
 # DEPRECATED
 # operationId: ServerTableAuditingPolicies_Get
 @deprecated
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-auditing-policies get-table" [
+export def "server-table-auditing-policies-get" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -220,7 +220,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-auditi
 # DEPRECATED
 # operationId: ServerTableAuditingPolicies_CreateOrUpdate
 @deprecated
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-auditing-policies create-table-or-update" [
+export def "server-table-auditing-policies-create-or-update" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -270,7 +270,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-auditi
 # DEPRECATED
 # operationId: DatabaseTableAuditingPolicies_ListByDatabase
 @deprecated
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-auditing-policies list-table" [
+export def "database-table-auditing-policies-list-by-database" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -316,7 +316,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 # DEPRECATED
 # operationId: DatabaseTableAuditingPolicies_Get
 @deprecated
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-auditing-policies get-table" [
+export def "database-table-auditing-policies-get" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -365,7 +365,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 # operationId: DatabaseTableAuditingPolicies_CreateOrUpdate
 # --properties shape: {useServerDefault?: string, auditLogsTableName?: string, auditingState?: string, eventTypesToAudit?: string, fullAuditLogsTableName?: string, retentionDays?: string, storageAccountKey?: string, storageAccountName?: string, storageAccountResourceGroupName?: string, storageAccountSecondaryKey?: string, storageAccountSubscriptionId?: string, storageTableEndpoint?: string}
 @deprecated
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-auditing-policies create-table-or-update" [
+export def "database-table-auditing-policies-create-or-update" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -417,7 +417,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 # DEPRECATED
 # operationId: DatabaseConnectionPolicies_Get
 @deprecated
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-connection-policies get" [
+export def "database-connection-policies-get" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -466,7 +466,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 # operationId: DatabaseConnectionPolicies_CreateOrUpdate
 # --properties shape: {proxyDnsName?: string, proxyPort?: string, redirectionState?: string, securityEnabledAccess?: string, state?: string, useServerDefault?: string, visibility?: string}
 @deprecated
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-connection-policies create-or-update" [
+export def "database-connection-policies-create-or-update" [
   subscription_id: string
   resource_group_name: string
   server_name: string

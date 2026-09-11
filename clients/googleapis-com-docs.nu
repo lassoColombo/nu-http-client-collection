@@ -118,7 +118,7 @@ def suggestions-view-mode-completer [] { ["DEFAULT_FOR_CURRENT_ACCESS" "PREVIEW_
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "documents create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "docs-documents-create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -145,7 +145,7 @@ export def commands []: nothing -> table {
 # --body shape: {content?: list}
 # --documentStyle shape: {background?: record, defaultFooterId?: string, defaultHeaderId?: string, evenPageFooterId?: string, evenPageHeaderId?: string, firstPageFooterId?: string, firstPageHeaderId?: string, marginBottom?: record, marginFooter?: record, marginHeader?: record, marginLeft?: record, marginRight?: record, marginTop?: record, pageNumberStart?: int, pageSize?: record, useCustomHeaderFooterMargins?: bool, useEvenPageHeaderFooter?: bool, useFirstPageHeaderFooter?: bool}
 # --namedStyles shape: {styles?: list}
-export def "documents create" [
+export def "docs-documents-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -210,7 +210,7 @@ export def "documents create" [
 #
 # GET /v1/documents/{documentId}
 # operationId: docs.documents.get
-export def "documents get" [
+export def "docs-documents-get" [
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -261,7 +261,7 @@ export def "documents get" [
 # operationId: docs.documents.batchUpdate
 # --requests item shape: {createFooter?: record, createFootnote?: record, createHeader?: record, createNamedRange?: record, createParagraphBullets?: record, deleteContentRange?: record, deleteFooter?: record, deleteHeader?: record, deleteNamedRange?: record, deleteParagraphBullets?: record, deletePositionedObject?: record, deleteTableColumn?: record, deleteTableRow?: record, insertInlineImage?: record, insertPageBreak?: record, insertSectionBreak?: record, insertTable?: record, insertTableColumn?: record, ... (15 more fields)}
 # --writeControl shape: {requiredRevisionId?: string, targetRevisionId?: string}
-export def "documents update-batch" [
+export def "docs-documents-batch-update" [
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

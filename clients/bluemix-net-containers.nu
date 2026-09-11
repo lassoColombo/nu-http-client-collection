@@ -121,7 +121,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "build create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-build" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -144,7 +144,7 @@ export def commands []: nothing -> table {
 # Build a Docker image from a Dockerfile
 #
 # POST /build
-export def "build create" [
+export def "post-build" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -191,7 +191,7 @@ export def "build create" [
 #
 # POST /containers/create
 # --HostConfig shape: {Binds?: list<string>, ExtraHosts?: list<string>, Links?: list<string>, PortBindings?: list<string>}
-export def "containers-create create" [
+export def "post-containers-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -243,7 +243,7 @@ export def "containers-create create" [
 # List available public IP addresses in a space
 #
 # GET /containers/floating-ips
-export def "containers-floating-ips get" [
+export def "get-containers-floating-ips" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -282,7 +282,7 @@ export def "containers-floating-ips get" [
 # Request a public IP address for a space
 #
 # POST /containers/floating-ips/request
-export def "containers-floating-ips-request create" [
+export def "post-containers-floating-ips-request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -319,7 +319,7 @@ export def "containers-floating-ips-request create" [
 # Release public IP address
 #
 # POST /containers/floating-ips/{ip}/release
-export def "containers-floating-ips-release create" [
+export def "post-containers-floating-ips-ip-release" [
   ip: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -358,7 +358,7 @@ export def "containers-floating-ips-release create" [
 # List all container groups in a space
 #
 # GET /containers/groups
-export def "containers-groups list" [
+export def "get-containers-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -397,7 +397,7 @@ export def "containers-groups list" [
 # POST /containers/groups
 # --NumberInstances shape: {Desired?: int, Max?: int, Min?: int}
 # --Route shape: {domain?: string, host?: string}
-export def "containers-groups create" [
+export def "post-containers-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -448,7 +448,7 @@ export def "containers-groups create" [
 # Stop and delete all container instances in a container group.
 #
 # DELETE /containers/groups/{name_or_id}
-export def "containers-groups delete" [
+export def "delete-containers-groups-name-or-id" [
   name_or_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -489,7 +489,7 @@ export def "containers-groups delete" [
 # Inspect a container group.
 #
 # GET /containers/groups/{name_or_id}
-export def "containers-groups get" [
+export def "get-containers-groups-name-or-id" [
   name_or_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -529,7 +529,7 @@ export def "containers-groups get" [
 #
 # PATCH /containers/groups/{name_or_id}
 # --NumberInstances shape: {Desired?: int, Max?: int, Min?: int}
-export def "containers-groups update" [
+export def "patch-containers-groups-name-or-id" [
   name_or_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -574,7 +574,7 @@ export def "containers-groups update" [
 # Map a public route to a container group.
 #
 # POST /containers/groups/{name_or_id}/maproute
-export def "containers-groups-maproute create" [
+export def "post-containers-groups-name-or-id-maproute" [
   name_or_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -618,7 +618,7 @@ export def "containers-groups-maproute create" [
 # Unmap a public route from a container group
 #
 # POST /containers/groups/{name_or_id}/unmaproute
-export def "containers-groups-unmaproute create" [
+export def "post-containers-groups-name-or-id-unmaproute" [
   name_or_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -662,7 +662,7 @@ export def "containers-groups-unmaproute create" [
 # List single containers in a space.
 #
 # GET /containers/json
-export def "containers-json list" [
+export def "get-containers-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -702,7 +702,7 @@ export def "containers-json list" [
 # List messages for the user
 #
 # GET /containers/messages
-export def "containers-messages get" [
+export def "get-containers-messages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -739,7 +739,7 @@ export def "containers-messages get" [
 # Retrieve organization and space specific quota
 #
 # GET /containers/quota
-export def "containers-quota get" [
+export def "get-containers-quota" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -776,7 +776,7 @@ export def "containers-quota get" [
 # Update space quota
 #
 # PUT /containers/quota
-export def "containers-quota update" [
+export def "put-containers-quota" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -818,7 +818,7 @@ export def "containers-quota update" [
 # List container sizes and quota limits
 #
 # GET /containers/usage
-export def "containers-usage get" [
+export def "get-containers-usage" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -855,7 +855,7 @@ export def "containers-usage get" [
 # List latest API version
 #
 # GET /containers/version
-export def "containers-version get" [
+export def "get-containers-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -888,7 +888,7 @@ export def "containers-version get" [
 # List the current state of a container.
 #
 # GET /containers/{id}/status
-export def "containers-status get" [
+export def "get-containers-id-status" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -927,7 +927,7 @@ export def "containers-status get" [
 # Remove a single container
 #
 # DELETE /containers/{name_or_id}
-export def "containers delete" [
+export def "delete-containers-name-or-id" [
   name_or_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -968,7 +968,7 @@ export def "containers delete" [
 # Bind a public IP address to a single container
 #
 # POST /containers/{name_or_id}/floating-ips/{ip}/bind
-export def "containers-floating-ips-bind create" [
+export def "post-containers-name-or-id-floating-ips-ip-bind" [
   name_or_id: string
   ip: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1009,7 +1009,7 @@ export def "containers-floating-ips-bind create" [
 # Unbind a public IP address from a container
 #
 # POST /containers/{name_or_id}/floating-ips/{ip}/unbind
-export def "containers-floating-ips-unbind create" [
+export def "post-containers-name-or-id-floating-ips-ip-unbind" [
   name_or_id: string
   ip: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1050,7 +1050,7 @@ export def "containers-floating-ips-unbind create" [
 # Inspect a single container
 #
 # GET /containers/{name_or_id}/json
-export def "containers-json get" [
+export def "get-containers-name-or-id-json" [
   name_or_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1089,7 +1089,7 @@ export def "containers-json get" [
 # Pause a single container
 #
 # POST /containers/{name_or_id}/pause
-export def "containers-pause create" [
+export def "post-containers-name-or-id-pause" [
   name_or_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1128,7 +1128,7 @@ export def "containers-pause create" [
 # Rename a single container
 #
 # POST /containers/{name_or_id}/rename
-export def "containers-rename create" [
+export def "post-containers-name-or-id-rename" [
   name_or_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1169,7 +1169,7 @@ export def "containers-rename create" [
 # Restart a single container
 #
 # POST /containers/{name_or_id}/restart
-export def "containers-restart create" [
+export def "post-containers-name-or-id-restart" [
   name_or_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1210,7 +1210,7 @@ export def "containers-restart create" [
 # Start a single container
 #
 # POST /containers/{name_or_id}/start
-export def "containers-start create" [
+export def "post-containers-name-or-id-start" [
   name_or_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1249,7 +1249,7 @@ export def "containers-start create" [
 # Stop a single container
 #
 # POST /containers/{name_or_id}/stop
-export def "containers-stop create" [
+export def "post-containers-name-or-id-stop" [
   name_or_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1290,7 +1290,7 @@ export def "containers-stop create" [
 # Unpause a single container
 #
 # POST /containers/{name_or_id}/unpause
-export def "containers-unpause create" [
+export def "post-containers-name-or-id-unpause" [
   name_or_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1329,7 +1329,7 @@ export def "containers-unpause create" [
 # List all Docker images that are available in your private Bluemix registry.
 #
 # GET /images/json
-export def "images-json list" [
+export def "get-images-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1366,7 +1366,7 @@ export def "images-json list" [
 # Remove a Docker image.
 #
 # DELETE /images/{id}
-export def "images delete" [
+export def "delete-images-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1405,7 +1405,7 @@ export def "images delete" [
 # Inspect a Docker image in private Bluemix registry
 #
 # GET /images/{name_or_id}/json
-export def "images-json get" [
+export def "get-images-name-or-id-json" [
   name_or_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1444,7 +1444,7 @@ export def "images-json get" [
 # Retrieve the namespace of an organization.
 #
 # GET /registry/namespaces
-export def "registry-namespaces list" [
+export def "get-registry-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1481,7 +1481,7 @@ export def "registry-namespaces list" [
 # Check the availability of a namespace
 #
 # GET /registry/namespaces/{namespace}
-export def "registry-namespaces get" [
+export def "get-registry-namespaces-namespace" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1520,7 +1520,7 @@ export def "registry-namespaces get" [
 # Set a namespace for your private Bluemix registry.
 #
 # PUT /registry/namespaces/{namespace}
-export def "registry-namespaces update" [
+export def "put-registry-namespaces-namespace" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1559,7 +1559,7 @@ export def "registry-namespaces update" [
 # Retrieve the TLS Certificate
 #
 # GET /tlskey
-export def "tlskey get" [
+export def "get-tlskey" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1596,7 +1596,7 @@ export def "tlskey get" [
 # Refresh the TLS Certificate
 #
 # PUT /tlskey/refresh
-export def "tlskey-refresh update" [
+export def "put-tlskey-refresh" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1633,7 +1633,7 @@ export def "tlskey-refresh update" [
 # Create a volume in a space
 #
 # POST /volumes/create
-export def "volumes-create create" [
+export def "post-volumes-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1673,7 +1673,7 @@ export def "volumes-create create" [
 # Create a file share in a space
 #
 # POST /volumes/fs/create
-export def "volumes-fs-create create" [
+export def "post-volumes-fs-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1716,7 +1716,7 @@ export def "volumes-fs-create create" [
 # List available file share sizes
 #
 # GET /volumes/fs/flavors/json
-export def "volumes-fs-flavors-json get" [
+export def "get-volumes-fs-flavors-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1753,7 +1753,7 @@ export def "volumes-fs-flavors-json get" [
 # List available file shares in a space
 #
 # GET /volumes/fs/json
-export def "volumes-fs-json list" [
+export def "get-volumes-fs-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1790,7 +1790,7 @@ export def "volumes-fs-json list" [
 # Delete a file share
 #
 # DELETE /volumes/fs/{name}
-export def "volumes-fs delete" [
+export def "delete-volumes-fs-name" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1829,7 +1829,7 @@ export def "volumes-fs delete" [
 # Inspect a file share
 #
 # GET /volumes/fs/{name}/json
-export def "volumes-fs-json get" [
+export def "get-volumes-fs-name-json" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1868,7 +1868,7 @@ export def "volumes-fs-json get" [
 # List all volumes for a space
 #
 # GET /volumes/json
-export def "volumes-json list" [
+export def "get-volumes-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1905,7 +1905,7 @@ export def "volumes-json list" [
 # Delete a volume
 #
 # DELETE /volumes/{name}
-export def "volumes delete" [
+export def "delete-volumes-name" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1944,7 +1944,7 @@ export def "volumes delete" [
 # Share a volume with another space
 #
 # POST /volumes/{name}
-export def "volumes create" [
+export def "post-volumes-name" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1988,7 +1988,7 @@ export def "volumes create" [
 # Retrieve detailed information about a volume.
 #
 # GET /volumes/{name}/json
-export def "volumes-json get" [
+export def "get-volumes-name-json" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

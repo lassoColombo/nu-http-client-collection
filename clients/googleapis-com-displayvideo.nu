@@ -146,7 +146,7 @@ def version-completer [] { ["SDF_VERSION_3_1" "SDF_VERSION_4" "SDF_VERSION_4_1" 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "download get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "displayvideo-media-download" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -170,7 +170,7 @@ export def commands []: nothing -> table {
 #
 # GET /download/{resourceName}
 # operationId: displayvideo.media.download
-export def "download get" [
+export def "displayvideo-media-download" [
   resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -218,7 +218,7 @@ export def "download get" [
 #
 # POST /media/{resourceName}
 # operationId: displayvideo.media.upload
-export def "media upload" [
+export def "displayvideo-media-upload" [
   resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -270,7 +270,7 @@ export def "media upload" [
 #
 # GET /v2/advertisers
 # operationId: displayvideo.advertisers.list
-export def "advertisers list" [
+export def "displayvideo-advertisers-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -328,7 +328,7 @@ export def "advertisers list" [
 # --generalConfig shape: {currencyCode?: string, domainUrl?: string}
 # --integrationDetails shape: {details?: string, integrationCode?: string}
 # --servingConfig shape: {exemptTvFromViewabilityTargeting?: bool}
-export def "advertisers create" [
+export def "displayvideo-advertisers-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -388,7 +388,7 @@ export def "advertisers create" [
 #
 # DELETE /v2/advertisers/{advertiserId}
 # operationId: displayvideo.advertisers.delete
-export def "advertisers delete" [
+export def "displayvideo-advertisers-delete" [
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -436,7 +436,7 @@ export def "advertisers delete" [
 #
 # GET /v2/advertisers/{advertiserId}
 # operationId: displayvideo.advertisers.get
-export def "advertisers get" [
+export def "displayvideo-advertisers-get" [
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -491,7 +491,7 @@ export def "advertisers get" [
 # --generalConfig shape: {currencyCode?: string, domainUrl?: string}
 # --integrationDetails shape: {details?: string, integrationCode?: string}
 # --servingConfig shape: {exemptTvFromViewabilityTargeting?: bool}
-export def "advertisers update" [
+export def "displayvideo-advertisers-patch" [
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -554,7 +554,7 @@ export def "advertisers update" [
 #
 # POST /v2/advertisers/{advertiserId}/assets
 # operationId: displayvideo.advertisers.assets.upload
-export def "advertisers-assets upload" [
+export def "displayvideo-advertisers-assets-upload" [
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -606,7 +606,7 @@ export def "advertisers-assets upload" [
 #
 # GET /v2/advertisers/{advertiserId}/campaigns
 # operationId: displayvideo.advertisers.campaigns.list
-export def "advertisers-campaigns list" [
+export def "displayvideo-advertisers-campaigns-list" [
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -662,7 +662,7 @@ export def "advertisers-campaigns list" [
 # --campaignFlight shape: {plannedDates?: record, plannedSpendAmountMicros?: string}
 # --campaignGoal shape: {campaignGoalType?: "CAMPAIGN_GOAL_TYPE_UNSPECIFIED"|"CAMPAIGN_GOAL_TYPE_APP_INSTALL"|"CAMPAIGN_GOAL_TYPE_BRAND_AWARENESS"|"CAMPAIGN_GOAL_TYPE_OFFLINE_ACTION"|"CAMPAIGN_GOAL_TYPE_ONLINE_ACTION", performanceGoal?: record}
 # --frequencyCap shape: {maxImpressions?: int, maxViews?: int, timeUnit?: "TIME_UNIT_UNSPECIFIED"|"TIME_UNIT_LIFETIME"|"TIME_UNIT_MONTHS"|"TIME_UNIT_WEEKS"|"TIME_UNIT_DAYS"|"TIME_UNIT_HOURS"|"TIME_UNIT_MINUTES", timeUnitCount?: int, unlimited?: bool}
-export def "advertisers-campaigns create" [
+export def "displayvideo-advertisers-campaigns-create" [
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -719,7 +719,7 @@ export def "advertisers-campaigns create" [
 #
 # DELETE /v2/advertisers/{advertiserId}/campaigns/{campaignId}
 # operationId: displayvideo.advertisers.campaigns.delete
-export def "advertisers-campaigns delete" [
+export def "displayvideo-advertisers-campaigns-delete" [
   advertiser_id: string
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -769,7 +769,7 @@ export def "advertisers-campaigns delete" [
 #
 # GET /v2/advertisers/{advertiserId}/campaigns/{campaignId}
 # operationId: displayvideo.advertisers.campaigns.get
-export def "advertisers-campaigns get" [
+export def "displayvideo-advertisers-campaigns-get" [
   advertiser_id: string
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -823,7 +823,7 @@ export def "advertisers-campaigns get" [
 # --campaignFlight shape: {plannedDates?: record, plannedSpendAmountMicros?: string}
 # --campaignGoal shape: {campaignGoalType?: "CAMPAIGN_GOAL_TYPE_UNSPECIFIED"|"CAMPAIGN_GOAL_TYPE_APP_INSTALL"|"CAMPAIGN_GOAL_TYPE_BRAND_AWARENESS"|"CAMPAIGN_GOAL_TYPE_OFFLINE_ACTION"|"CAMPAIGN_GOAL_TYPE_ONLINE_ACTION", performanceGoal?: record}
 # --frequencyCap shape: {maxImpressions?: int, maxViews?: int, timeUnit?: "TIME_UNIT_UNSPECIFIED"|"TIME_UNIT_LIFETIME"|"TIME_UNIT_MONTHS"|"TIME_UNIT_WEEKS"|"TIME_UNIT_DAYS"|"TIME_UNIT_HOURS"|"TIME_UNIT_MINUTES", timeUnitCount?: int, unlimited?: bool}
-export def "advertisers-campaigns update" [
+export def "displayvideo-advertisers-campaigns-patch" [
   advertiser_id: string
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -883,7 +883,7 @@ export def "advertisers-campaigns update" [
 #
 # GET /v2/advertisers/{advertiserId}/campaigns/{campaignId}/targetingTypes/{targetingType}/assignedTargetingOptions
 # operationId: displayvideo.advertisers.campaigns.targetingTypes.assignedTargetingOptions.list
-export def "advertisers-campaigns-targeting-types-assigned-targeting-options list" [
+export def "displayvideo-advertisers-campaigns-targeting-types-assigned-targeting-options-list" [
   advertiser_id: string
   campaign_id: string
   targeting_type: string
@@ -939,7 +939,7 @@ export def "advertisers-campaigns-targeting-types-assigned-targeting-options lis
 #
 # GET /v2/advertisers/{advertiserId}/campaigns/{campaignId}/targetingTypes/{targetingType}/assignedTargetingOptions/{assignedTargetingOptionId}
 # operationId: displayvideo.advertisers.campaigns.targetingTypes.assignedTargetingOptions.get
-export def "advertisers-campaigns-targeting-types-assigned-targeting-options get" [
+export def "displayvideo-advertisers-campaigns-targeting-types-assigned-targeting-options-get" [
   advertiser_id: string
   campaign_id: string
   targeting_type: string
@@ -993,7 +993,7 @@ export def "advertisers-campaigns-targeting-types-assigned-targeting-options get
 #
 # GET /v2/advertisers/{advertiserId}/campaigns/{campaignId}:listAssignedTargetingOptions
 # operationId: displayvideo.advertisers.campaigns.listAssignedTargetingOptions
-export def "advertisers-campaigns list-assigned-targeting-options" [
+export def "displayvideo-advertisers-campaigns-list-assigned-targeting-options" [
   advertiser_id: string
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1047,7 +1047,7 @@ export def "advertisers-campaigns list-assigned-targeting-options" [
 #
 # GET /v2/advertisers/{advertiserId}/channels
 # operationId: displayvideo.advertisers.channels.list
-export def "advertisers-channels list" [
+export def "displayvideo-advertisers-channels-list" [
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1100,7 +1100,7 @@ export def "advertisers-channels list" [
 #
 # POST /v2/advertisers/{advertiserId}/channels
 # operationId: displayvideo.advertisers.channels.create
-export def "advertisers-channels create" [
+export def "displayvideo-advertisers-channels-create" [
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1155,7 +1155,7 @@ export def "advertisers-channels create" [
 #
 # PATCH /v2/advertisers/{advertiserId}/channels/{channelId}
 # operationId: displayvideo.advertisers.channels.patch
-export def "advertisers-channels update" [
+export def "displayvideo-advertisers-channels-patch" [
   advertiser_id: string
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1213,7 +1213,7 @@ export def "advertisers-channels update" [
 #
 # GET /v2/advertisers/{advertiserId}/channels/{channelId}/sites
 # operationId: displayvideo.advertisers.channels.sites.list
-export def "advertisers-channels-sites list" [
+export def "displayvideo-advertisers-channels-sites-list" [
   advertiser_id: string
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1268,7 +1268,7 @@ export def "advertisers-channels-sites list" [
 #
 # DELETE /v2/advertisers/{advertiserId}/channels/{channelId}/sites/{urlOrAppId}
 # operationId: displayvideo.advertisers.channels.sites.delete
-export def "advertisers-channels-sites delete" [
+export def "displayvideo-advertisers-channels-sites-delete" [
   advertiser_id: string
   channel_id: string
   url_or_app_id: string
@@ -1322,7 +1322,7 @@ export def "advertisers-channels-sites delete" [
 # POST /v2/advertisers/{advertiserId}/channels/{channelId}/sites:bulkEdit
 # operationId: displayvideo.advertisers.channels.sites.bulkEdit
 # --createdSites item shape: {urlOrAppId?: string}
-export def "advertisers-channels-sites-bulk-edit create" [
+export def "displayvideo-advertisers-channels-sites-bulk-edit" [
   advertiser_id: string
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1380,7 +1380,7 @@ export def "advertisers-channels-sites-bulk-edit create" [
 # POST /v2/advertisers/{advertiserId}/channels/{channelId}/sites:replace
 # operationId: displayvideo.advertisers.channels.sites.replace
 # --newSites item shape: {urlOrAppId?: string}
-export def "advertisers-channels-sites-replace update" [
+export def "displayvideo-advertisers-channels-sites-replace" [
   advertiser_id: string
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1436,7 +1436,7 @@ export def "advertisers-channels-sites-replace update" [
 #
 # GET /v2/advertisers/{advertiserId}/creatives
 # operationId: displayvideo.advertisers.creatives.list
-export def "advertisers-creatives list" [
+export def "displayvideo-advertisers-creatives-list" [
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1502,7 +1502,7 @@ export def "advertisers-creatives list" [
 # --timerEvents item shape: {name?: string, reportingName?: string}
 # --transcodes item shape: {audioBitRateKbps?: string, audioSampleRateHz?: string, bitRateKbps?: string, dimensions?: record, fileSizeBytes?: string, frameRate?: float, mimeType?: string, name?: string, transcoded?: bool}
 # --universalAdId shape: {id?: string, registry?: "UNIVERSAL_AD_REGISTRY_UNSPECIFIED"|"UNIVERSAL_AD_REGISTRY_OTHER"|"UNIVERSAL_AD_REGISTRY_AD_ID"|"UNIVERSAL_AD_REGISTRY_CLEARCAST"|"UNIVERSAL_AD_REGISTRY_DV360"|"UNIVERSAL_AD_REGISTRY_CM"}
-export def "advertisers-creatives create" [
+export def "displayvideo-advertisers-creatives-create" [
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1585,7 +1585,7 @@ export def "advertisers-creatives create" [
 #
 # DELETE /v2/advertisers/{advertiserId}/creatives/{creativeId}
 # operationId: displayvideo.advertisers.creatives.delete
-export def "advertisers-creatives delete" [
+export def "displayvideo-advertisers-creatives-delete" [
   advertiser_id: string
   creative_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1635,7 +1635,7 @@ export def "advertisers-creatives delete" [
 #
 # GET /v2/advertisers/{advertiserId}/creatives/{creativeId}
 # operationId: displayvideo.advertisers.creatives.get
-export def "advertisers-creatives get" [
+export def "displayvideo-advertisers-creatives-get" [
   advertiser_id: string
   creative_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1699,7 +1699,7 @@ export def "advertisers-creatives get" [
 # --timerEvents item shape: {name?: string, reportingName?: string}
 # --transcodes item shape: {audioBitRateKbps?: string, audioSampleRateHz?: string, bitRateKbps?: string, dimensions?: record, fileSizeBytes?: string, frameRate?: float, mimeType?: string, name?: string, transcoded?: bool}
 # --universalAdId shape: {id?: string, registry?: "UNIVERSAL_AD_REGISTRY_UNSPECIFIED"|"UNIVERSAL_AD_REGISTRY_OTHER"|"UNIVERSAL_AD_REGISTRY_AD_ID"|"UNIVERSAL_AD_REGISTRY_CLEARCAST"|"UNIVERSAL_AD_REGISTRY_DV360"|"UNIVERSAL_AD_REGISTRY_CM"}
-export def "advertisers-creatives update" [
+export def "displayvideo-advertisers-creatives-patch" [
   advertiser_id: string
   creative_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1785,7 +1785,7 @@ export def "advertisers-creatives update" [
 #
 # GET /v2/advertisers/{advertiserId}/insertionOrders
 # operationId: displayvideo.advertisers.insertionOrders.list
-export def "advertisers-insertion-orders list" [
+export def "displayvideo-advertisers-insertion-orders-list" [
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1844,7 +1844,7 @@ export def "advertisers-insertion-orders list" [
 # --pacing shape: {dailyMaxImpressions?: string, dailyMaxMicros?: string, pacingPeriod?: "PACING_PERIOD_UNSPECIFIED"|"PACING_PERIOD_DAILY"|"PACING_PERIOD_FLIGHT", pacingType?: "PACING_TYPE_UNSPECIFIED"|"PACING_TYPE_AHEAD"|"PACING_TYPE_ASAP"|"PACING_TYPE_EVEN"}
 # --partnerCosts item shape: {costType?: "PARTNER_COST_TYPE_UNSPECIFIED"|"PARTNER_COST_TYPE_ADLOOX"|"PARTNER_COST_TYPE_ADLOOX_PREBID"|"PARTNER_COST_TYPE_ADSAFE"|"PARTNER_COST_TYPE_ADXPOSE"|"PARTNER_COST_TYPE_AGGREGATE_KNOWLEDGE"|"PARTNER_COST_TYPE_AGENCY_TRADING_DESK"|"PARTNER_COST_TYPE_DV360_FEE"|"PARTNER_COST_TYPE_COMSCORE_VCE"|"PARTNER_COST_TYPE_DATA_MANAGEMENT_PLATFORM"|"PARTNER_COST_TYPE_DEFAULT"|"PARTNER_COST_TYPE_DOUBLE_VERIFY"|"PARTNER_COST_TYPE_DOUBLE_VERIFY_PREBID"|"PARTNER_COST_TYPE_EVIDON"|"PARTNER_COST_TYPE_INTEGRAL_AD_SCIENCE_VIDEO"|"PARTNER_COST_TYPE_INTEGRAL_AD_SCIENCE_PREBID"|"PARTNER_COST_TYPE_MEDIA_COST_DATA"|"PARTNER_COST_TYPE_MOAT_VIDEO"|"PARTNER_COST_TYPE_NIELSEN_DAR"|"PARTNER_COST_TYPE_SHOP_LOCAL"|"PARTNER_COST_TYPE_TERACENT"|"PARTNER_COST_TYPE_THIRD_PARTY_AD_SERVER"|"PARTNER_COST_TYPE_TRUST_METRICS"|"PARTNER_COST_TYPE_VIZU"|"PARTNER_COST_TYPE_ADLINGO_FEE"|"PARTNER_COST_TYPE_CUSTOM_FEE_1"|"PARTNER_COST_TYPE_CUSTOM_FEE_2"|"PARTNER_COST_TYPE_CUSTOM_FEE_3"|"PARTNER_COST_TYPE_CUSTOM_FEE_4"|"PARTNER_COST_TYPE_CUSTOM_FEE_5", ... (4 more fields)}
 # --performanceGoal shape: {performanceGoalAmountMicros?: string, performanceGoalPercentageMicros?: string, performanceGoalString?: string, ... (1 more fields)}
-export def "advertisers-insertion-orders create" [
+export def "displayvideo-advertisers-insertion-orders-create" [
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1907,7 +1907,7 @@ export def "advertisers-insertion-orders create" [
 #
 # DELETE /v2/advertisers/{advertiserId}/insertionOrders/{insertionOrderId}
 # operationId: displayvideo.advertisers.insertionOrders.delete
-export def "advertisers-insertion-orders delete" [
+export def "displayvideo-advertisers-insertion-orders-delete" [
   advertiser_id: string
   insertion_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1957,7 +1957,7 @@ export def "advertisers-insertion-orders delete" [
 #
 # GET /v2/advertisers/{advertiserId}/insertionOrders/{insertionOrderId}
 # operationId: displayvideo.advertisers.insertionOrders.get
-export def "advertisers-insertion-orders get" [
+export def "displayvideo-advertisers-insertion-orders-get" [
   advertiser_id: string
   insertion_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2014,7 +2014,7 @@ export def "advertisers-insertion-orders get" [
 # --pacing shape: {dailyMaxImpressions?: string, dailyMaxMicros?: string, pacingPeriod?: "PACING_PERIOD_UNSPECIFIED"|"PACING_PERIOD_DAILY"|"PACING_PERIOD_FLIGHT", pacingType?: "PACING_TYPE_UNSPECIFIED"|"PACING_TYPE_AHEAD"|"PACING_TYPE_ASAP"|"PACING_TYPE_EVEN"}
 # --partnerCosts item shape: {costType?: "PARTNER_COST_TYPE_UNSPECIFIED"|"PARTNER_COST_TYPE_ADLOOX"|"PARTNER_COST_TYPE_ADLOOX_PREBID"|"PARTNER_COST_TYPE_ADSAFE"|"PARTNER_COST_TYPE_ADXPOSE"|"PARTNER_COST_TYPE_AGGREGATE_KNOWLEDGE"|"PARTNER_COST_TYPE_AGENCY_TRADING_DESK"|"PARTNER_COST_TYPE_DV360_FEE"|"PARTNER_COST_TYPE_COMSCORE_VCE"|"PARTNER_COST_TYPE_DATA_MANAGEMENT_PLATFORM"|"PARTNER_COST_TYPE_DEFAULT"|"PARTNER_COST_TYPE_DOUBLE_VERIFY"|"PARTNER_COST_TYPE_DOUBLE_VERIFY_PREBID"|"PARTNER_COST_TYPE_EVIDON"|"PARTNER_COST_TYPE_INTEGRAL_AD_SCIENCE_VIDEO"|"PARTNER_COST_TYPE_INTEGRAL_AD_SCIENCE_PREBID"|"PARTNER_COST_TYPE_MEDIA_COST_DATA"|"PARTNER_COST_TYPE_MOAT_VIDEO"|"PARTNER_COST_TYPE_NIELSEN_DAR"|"PARTNER_COST_TYPE_SHOP_LOCAL"|"PARTNER_COST_TYPE_TERACENT"|"PARTNER_COST_TYPE_THIRD_PARTY_AD_SERVER"|"PARTNER_COST_TYPE_TRUST_METRICS"|"PARTNER_COST_TYPE_VIZU"|"PARTNER_COST_TYPE_ADLINGO_FEE"|"PARTNER_COST_TYPE_CUSTOM_FEE_1"|"PARTNER_COST_TYPE_CUSTOM_FEE_2"|"PARTNER_COST_TYPE_CUSTOM_FEE_3"|"PARTNER_COST_TYPE_CUSTOM_FEE_4"|"PARTNER_COST_TYPE_CUSTOM_FEE_5", ... (4 more fields)}
 # --performanceGoal shape: {performanceGoalAmountMicros?: string, performanceGoalPercentageMicros?: string, performanceGoalString?: string, ... (1 more fields)}
-export def "advertisers-insertion-orders update" [
+export def "displayvideo-advertisers-insertion-orders-patch" [
   advertiser_id: string
   insertion_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2080,7 +2080,7 @@ export def "advertisers-insertion-orders update" [
 #
 # GET /v2/advertisers/{advertiserId}/insertionOrders/{insertionOrderId}/targetingTypes/{targetingType}/assignedTargetingOptions
 # operationId: displayvideo.advertisers.insertionOrders.targetingTypes.assignedTargetingOptions.list
-export def "advertisers-insertion-orders-targeting-types-assigned-targeting-options list" [
+export def "displayvideo-advertisers-insertion-orders-targeting-types-assigned-targeting-options-list" [
   advertiser_id: string
   insertion_order_id: string
   targeting_type: string
@@ -2184,7 +2184,7 @@ export def "advertisers-insertion-orders-targeting-types-assigned-targeting-opti
 # --viewabilityDetails shape: {viewability?: "VIEWABILITY_UNSPECIFIED"|"VIEWABILITY_10_PERCENT_OR_MORE"|"VIEWABILITY_20_PERCENT_OR_MORE"|"VIEWABILITY_30_PERCENT_OR_MORE"|"VIEWABILITY_40_PERCENT_OR_MORE"|"VIEWABILITY_50_PERCENT_OR_MORE"|"VIEWABILITY_60_PERCENT_OR_MORE"|"VIEWABILITY_70_PERCENT_OR_MORE"|"VIEWABILITY_80_PERCENT_OR_MORE"|"VIEWABILITY_90_PERCENT_OR_MORE"}
 # --youtubeChannelDetails shape: {channelId?: string, negative?: bool}
 # --youtubeVideoDetails shape: {negative?: bool, videoId?: string}
-export def "advertisers-insertion-orders-targeting-types-assigned-targeting-options create" [
+export def "displayvideo-advertisers-insertion-orders-targeting-types-assigned-targeting-options-create" [
   advertiser_id: string
   insertion_order_id: string
   targeting_type: string
@@ -2287,7 +2287,7 @@ export def "advertisers-insertion-orders-targeting-types-assigned-targeting-opti
 #
 # DELETE /v2/advertisers/{advertiserId}/insertionOrders/{insertionOrderId}/targetingTypes/{targetingType}/assignedTargetingOptions/{assignedTargetingOptionId}
 # operationId: displayvideo.advertisers.insertionOrders.targetingTypes.assignedTargetingOptions.delete
-export def "advertisers-insertion-orders-targeting-types-assigned-targeting-options delete" [
+export def "displayvideo-advertisers-insertion-orders-targeting-types-assigned-targeting-options-delete" [
   advertiser_id: string
   insertion_order_id: string
   targeting_type: string
@@ -2341,7 +2341,7 @@ export def "advertisers-insertion-orders-targeting-types-assigned-targeting-opti
 #
 # GET /v2/advertisers/{advertiserId}/insertionOrders/{insertionOrderId}/targetingTypes/{targetingType}/assignedTargetingOptions/{assignedTargetingOptionId}
 # operationId: displayvideo.advertisers.insertionOrders.targetingTypes.assignedTargetingOptions.get
-export def "advertisers-insertion-orders-targeting-types-assigned-targeting-options get" [
+export def "displayvideo-advertisers-insertion-orders-targeting-types-assigned-targeting-options-get" [
   advertiser_id: string
   insertion_order_id: string
   targeting_type: string
@@ -2395,7 +2395,7 @@ export def "advertisers-insertion-orders-targeting-types-assigned-targeting-opti
 #
 # GET /v2/advertisers/{advertiserId}/insertionOrders/{insertionOrderId}:listAssignedTargetingOptions
 # operationId: displayvideo.advertisers.insertionOrders.listAssignedTargetingOptions
-export def "advertisers-insertion-orders list-assigned-targeting-options" [
+export def "displayvideo-advertisers-insertion-orders-list-assigned-targeting-options" [
   advertiser_id: string
   insertion_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2449,7 +2449,7 @@ export def "advertisers-insertion-orders list-assigned-targeting-options" [
 #
 # GET /v2/advertisers/{advertiserId}/invoices
 # operationId: displayvideo.advertisers.invoices.list
-export def "advertisers-invoices list" [
+export def "displayvideo-advertisers-invoices-list" [
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2501,7 +2501,7 @@ export def "advertisers-invoices list" [
 #
 # GET /v2/advertisers/{advertiserId}/invoices:lookupInvoiceCurrency
 # operationId: displayvideo.advertisers.invoices.lookupInvoiceCurrency
-export def "advertisers-invoices-lookup-invoice-currency get" [
+export def "displayvideo-advertisers-invoices-lookup-invoice-currency" [
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2550,7 +2550,7 @@ export def "advertisers-invoices-lookup-invoice-currency get" [
 #
 # GET /v2/advertisers/{advertiserId}/lineItems
 # operationId: displayvideo.advertisers.lineItems.list
-export def "advertisers-line-items list" [
+export def "displayvideo-advertisers-line-items-list" [
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2614,7 +2614,7 @@ export def "advertisers-line-items list" [
 # --partnerRevenueModel shape: {markupAmount?: string, markupType?: "PARTNER_REVENUE_MODEL_MARKUP_TYPE_UNSPECIFIED"|"PARTNER_REVENUE_MODEL_MARKUP_TYPE_CPM"|"PARTNER_REVENUE_MODEL_MARKUP_TYPE_MEDIA_COST_MARKUP"|"PARTNER_REVENUE_MODEL_MARKUP_TYPE_TOTAL_MEDIA_COST_MARKUP"}
 # --targetingExpansion shape: {excludeFirstPartyAudience?: bool, targetingExpansionLevel?: "TARGETING_EXPANSION_LEVEL_UNSPECIFIED"|"NO_EXPANSION"|"LEAST_EXPANSION"|"SOME_EXPANSION"|"BALANCED_EXPANSION"|"MORE_EXPANSION"|"MOST_EXPANSION"}
 # --youtubeAndPartnersSettings shape: {biddingStrategy?: record, contentCategory?: "YOUTUBE_AND_PARTNERS_CONTENT_CATEGORY_UNSPECIFIED"|"YOUTUBE_AND_PARTNERS_CONTENT_CATEGORY_STANDARD"|"YOUTUBE_AND_PARTNERS_CONTENT_CATEGORY_EXPANDED"|"YOUTUBE_AND_PARTNERS_CONTENT_CATEGORY_LIMITED", inventorySourceSettings?: record, leadFormId?: string, linkedMerchantId?: string, relatedVideoIds?: list<string>, targetFrequency?: record, thirdPartyMeasurementSettings?: record, videoAdSequenceSettings?: record, viewFrequencyCap?: record}
-export def "advertisers-line-items create" [
+export def "displayvideo-advertisers-line-items-create" [
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2683,7 +2683,7 @@ export def "advertisers-line-items create" [
 #
 # DELETE /v2/advertisers/{advertiserId}/lineItems/{lineItemId}
 # operationId: displayvideo.advertisers.lineItems.delete
-export def "advertisers-line-items delete" [
+export def "displayvideo-advertisers-line-items-delete" [
   advertiser_id: string
   line_item_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2733,7 +2733,7 @@ export def "advertisers-line-items delete" [
 #
 # GET /v2/advertisers/{advertiserId}/lineItems/{lineItemId}
 # operationId: displayvideo.advertisers.lineItems.get
-export def "advertisers-line-items get" [
+export def "displayvideo-advertisers-line-items-get" [
   advertiser_id: string
   line_item_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2795,7 +2795,7 @@ export def "advertisers-line-items get" [
 # --partnerRevenueModel shape: {markupAmount?: string, markupType?: "PARTNER_REVENUE_MODEL_MARKUP_TYPE_UNSPECIFIED"|"PARTNER_REVENUE_MODEL_MARKUP_TYPE_CPM"|"PARTNER_REVENUE_MODEL_MARKUP_TYPE_MEDIA_COST_MARKUP"|"PARTNER_REVENUE_MODEL_MARKUP_TYPE_TOTAL_MEDIA_COST_MARKUP"}
 # --targetingExpansion shape: {excludeFirstPartyAudience?: bool, targetingExpansionLevel?: "TARGETING_EXPANSION_LEVEL_UNSPECIFIED"|"NO_EXPANSION"|"LEAST_EXPANSION"|"SOME_EXPANSION"|"BALANCED_EXPANSION"|"MORE_EXPANSION"|"MOST_EXPANSION"}
 # --youtubeAndPartnersSettings shape: {biddingStrategy?: record, contentCategory?: "YOUTUBE_AND_PARTNERS_CONTENT_CATEGORY_UNSPECIFIED"|"YOUTUBE_AND_PARTNERS_CONTENT_CATEGORY_STANDARD"|"YOUTUBE_AND_PARTNERS_CONTENT_CATEGORY_EXPANDED"|"YOUTUBE_AND_PARTNERS_CONTENT_CATEGORY_LIMITED", inventorySourceSettings?: record, leadFormId?: string, linkedMerchantId?: string, relatedVideoIds?: list<string>, targetFrequency?: record, thirdPartyMeasurementSettings?: record, videoAdSequenceSettings?: record, viewFrequencyCap?: record}
-export def "advertisers-line-items update" [
+export def "displayvideo-advertisers-line-items-patch" [
   advertiser_id: string
   line_item_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2867,7 +2867,7 @@ export def "advertisers-line-items update" [
 #
 # GET /v2/advertisers/{advertiserId}/lineItems/{lineItemId}/targetingTypes/{targetingType}/assignedTargetingOptions
 # operationId: displayvideo.advertisers.lineItems.targetingTypes.assignedTargetingOptions.list
-export def "advertisers-line-items-targeting-types-assigned-targeting-options list" [
+export def "displayvideo-advertisers-line-items-targeting-types-assigned-targeting-options-list" [
   advertiser_id: string
   line_item_id: string
   targeting_type: string
@@ -2971,7 +2971,7 @@ export def "advertisers-line-items-targeting-types-assigned-targeting-options li
 # --viewabilityDetails shape: {viewability?: "VIEWABILITY_UNSPECIFIED"|"VIEWABILITY_10_PERCENT_OR_MORE"|"VIEWABILITY_20_PERCENT_OR_MORE"|"VIEWABILITY_30_PERCENT_OR_MORE"|"VIEWABILITY_40_PERCENT_OR_MORE"|"VIEWABILITY_50_PERCENT_OR_MORE"|"VIEWABILITY_60_PERCENT_OR_MORE"|"VIEWABILITY_70_PERCENT_OR_MORE"|"VIEWABILITY_80_PERCENT_OR_MORE"|"VIEWABILITY_90_PERCENT_OR_MORE"}
 # --youtubeChannelDetails shape: {channelId?: string, negative?: bool}
 # --youtubeVideoDetails shape: {negative?: bool, videoId?: string}
-export def "advertisers-line-items-targeting-types-assigned-targeting-options create" [
+export def "displayvideo-advertisers-line-items-targeting-types-assigned-targeting-options-create" [
   advertiser_id: string
   line_item_id: string
   targeting_type: string
@@ -3074,7 +3074,7 @@ export def "advertisers-line-items-targeting-types-assigned-targeting-options cr
 #
 # DELETE /v2/advertisers/{advertiserId}/lineItems/{lineItemId}/targetingTypes/{targetingType}/assignedTargetingOptions/{assignedTargetingOptionId}
 # operationId: displayvideo.advertisers.lineItems.targetingTypes.assignedTargetingOptions.delete
-export def "advertisers-line-items-targeting-types-assigned-targeting-options delete" [
+export def "displayvideo-advertisers-line-items-targeting-types-assigned-targeting-options-delete" [
   advertiser_id: string
   line_item_id: string
   targeting_type: string
@@ -3128,7 +3128,7 @@ export def "advertisers-line-items-targeting-types-assigned-targeting-options de
 #
 # GET /v2/advertisers/{advertiserId}/lineItems/{lineItemId}/targetingTypes/{targetingType}/assignedTargetingOptions/{assignedTargetingOptionId}
 # operationId: displayvideo.advertisers.lineItems.targetingTypes.assignedTargetingOptions.get
-export def "advertisers-line-items-targeting-types-assigned-targeting-options get" [
+export def "displayvideo-advertisers-line-items-targeting-types-assigned-targeting-options-get" [
   advertiser_id: string
   line_item_id: string
   targeting_type: string
@@ -3182,7 +3182,7 @@ export def "advertisers-line-items-targeting-types-assigned-targeting-options ge
 #
 # POST /v2/advertisers/{advertiserId}/lineItems/{lineItemId}:duplicate
 # operationId: displayvideo.advertisers.lineItems.duplicate
-export def "advertisers-line-items create-duplicate" [
+export def "displayvideo-advertisers-line-items-duplicate" [
   advertiser_id: string
   line_item_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3238,7 +3238,7 @@ export def "advertisers-line-items create-duplicate" [
 # operationId: displayvideo.advertisers.lineItems.bulkEditAssignedTargetingOptions
 # --createRequests item shape: {assignedTargetingOptions?: list, ... (1 more fields)}
 # --deleteRequests item shape: {assignedTargetingOptionIds?: list<string>, ... (1 more fields)}
-export def "advertisers-line-items-bulk-edit-assigned-targeting-options create" [
+export def "displayvideo-advertisers-line-items-bulk-edit-assigned-targeting-options" [
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3292,7 +3292,7 @@ export def "advertisers-line-items-bulk-edit-assigned-targeting-options create" 
 #
 # GET /v2/advertisers/{advertiserId}/lineItems:bulkListAssignedTargetingOptions
 # operationId: displayvideo.advertisers.lineItems.bulkListAssignedTargetingOptions
-export def "advertisers-line-items-bulk-list-assigned-targeting-options list" [
+export def "displayvideo-advertisers-line-items-bulk-list-assigned-targeting-options" [
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3346,7 +3346,7 @@ export def "advertisers-line-items-bulk-list-assigned-targeting-options list" [
 # POST /v2/advertisers/{advertiserId}/lineItems:bulkUpdate
 # operationId: displayvideo.advertisers.lineItems.bulkUpdate
 # --targetLineItem shape: {bidStrategy?: record, budget?: record, conversionCounting?: record, creativeIds?: list<string>, displayName?: string, entityStatus?: "ENTITY_STATUS_UNSPECIFIED"|"ENTITY_STATUS_ACTIVE"|"ENTITY_STATUS_ARCHIVED"|"ENTITY_STATUS_DRAFT"|"ENTITY_STATUS_PAUSED"|"ENTITY_STATUS_SCHEDULED_FOR_DELETION", excludeNewExchanges?: bool, flight?: record, frequencyCap?: record, insertionOrderId?: string, integrationDetails?: record, ... (7 more fields)}
-export def "advertisers-line-items-bulk-update update" [
+export def "displayvideo-advertisers-line-items-bulk-update" [
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3401,7 +3401,7 @@ export def "advertisers-line-items-bulk-update update" [
 # POST /v2/advertisers/{advertiserId}/lineItems:generateDefault
 # operationId: displayvideo.advertisers.lineItems.generateDefault
 # --mobileApp shape: {appId?: string}
-export def "advertisers-line-items-generate-default generate" [
+export def "displayvideo-advertisers-line-items-generate-default" [
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3456,7 +3456,7 @@ export def "advertisers-line-items-generate-default generate" [
 #
 # GET /v2/advertisers/{advertiserId}/locationLists
 # operationId: displayvideo.advertisers.locationLists.list
-export def "advertisers-location-lists list" [
+export def "displayvideo-advertisers-location-lists-list" [
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3508,7 +3508,7 @@ export def "advertisers-location-lists list" [
 #
 # POST /v2/advertisers/{advertiserId}/locationLists
 # operationId: displayvideo.advertisers.locationLists.create
-export def "advertisers-location-lists create" [
+export def "displayvideo-advertisers-location-lists-create" [
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3562,7 +3562,7 @@ export def "advertisers-location-lists create" [
 #
 # PATCH /v2/advertisers/{advertiserId}/locationLists/{locationListId}
 # operationId: displayvideo.advertisers.locationLists.patch
-export def "advertisers-location-lists update" [
+export def "displayvideo-advertisers-location-lists-patch" [
   advertiser_id: string
   location_list_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3619,7 +3619,7 @@ export def "advertisers-location-lists update" [
 #
 # GET /v2/advertisers/{advertiserId}/locationLists/{locationListId}/assignedLocations
 # operationId: displayvideo.advertisers.locationLists.assignedLocations.list
-export def "advertisers-location-lists-assigned-locations list" [
+export def "displayvideo-advertisers-location-lists-assigned-locations-list" [
   advertiser_id: string
   location_list_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3673,7 +3673,7 @@ export def "advertisers-location-lists-assigned-locations list" [
 #
 # POST /v2/advertisers/{advertiserId}/locationLists/{locationListId}/assignedLocations
 # operationId: displayvideo.advertisers.locationLists.assignedLocations.create
-export def "advertisers-location-lists-assigned-locations create" [
+export def "displayvideo-advertisers-location-lists-assigned-locations-create" [
   advertiser_id: string
   location_list_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3727,7 +3727,7 @@ export def "advertisers-location-lists-assigned-locations create" [
 #
 # DELETE /v2/advertisers/{advertiserId}/locationLists/{locationListId}/assignedLocations/{assignedLocationId}
 # operationId: displayvideo.advertisers.locationLists.assignedLocations.delete
-export def "advertisers-location-lists-assigned-locations delete" [
+export def "displayvideo-advertisers-location-lists-assigned-locations-delete" [
   advertiser_id: string
   location_list_id: string
   assigned_location_id: string
@@ -3780,7 +3780,7 @@ export def "advertisers-location-lists-assigned-locations delete" [
 # POST /v2/advertisers/{advertiserId}/locationLists/{locationListId}/assignedLocations:bulkEdit
 # operationId: displayvideo.advertisers.locationLists.assignedLocations.bulkEdit
 # --createdAssignedLocations item shape: {targetingOptionId?: string}
-export def "advertisers-location-lists-assigned-locations-bulk-edit create" [
+export def "displayvideo-advertisers-location-lists-assigned-locations-bulk-edit" [
   advertiser_id: string
   location_list_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3835,7 +3835,7 @@ export def "advertisers-location-lists-assigned-locations-bulk-edit create" [
 #
 # GET /v2/advertisers/{advertiserId}/manualTriggers
 # operationId: displayvideo.advertisers.manualTriggers.list
-export def "advertisers-manual-triggers list" [
+export def "displayvideo-advertisers-manual-triggers-list" [
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3887,7 +3887,7 @@ export def "advertisers-manual-triggers list" [
 #
 # POST /v2/advertisers/{advertiserId}/manualTriggers
 # operationId: displayvideo.advertisers.manualTriggers.create
-export def "advertisers-manual-triggers create" [
+export def "displayvideo-advertisers-manual-triggers-create" [
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3941,7 +3941,7 @@ export def "advertisers-manual-triggers create" [
 #
 # GET /v2/advertisers/{advertiserId}/manualTriggers/{triggerId}
 # operationId: displayvideo.advertisers.manualTriggers.get
-export def "advertisers-manual-triggers get" [
+export def "displayvideo-advertisers-manual-triggers-get" [
   advertiser_id: string
   trigger_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3991,7 +3991,7 @@ export def "advertisers-manual-triggers get" [
 #
 # PATCH /v2/advertisers/{advertiserId}/manualTriggers/{triggerId}
 # operationId: displayvideo.advertisers.manualTriggers.patch
-export def "advertisers-manual-triggers update" [
+export def "displayvideo-advertisers-manual-triggers-patch" [
   advertiser_id: string
   trigger_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4048,7 +4048,7 @@ export def "advertisers-manual-triggers update" [
 #
 # POST /v2/advertisers/{advertiserId}/manualTriggers/{triggerId}:activate
 # operationId: displayvideo.advertisers.manualTriggers.activate
-export def "advertisers-manual-triggers create-activate" [
+export def "displayvideo-advertisers-manual-triggers-activate" [
   advertiser_id: string
   trigger_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4102,7 +4102,7 @@ export def "advertisers-manual-triggers create-activate" [
 #
 # POST /v2/advertisers/{advertiserId}/manualTriggers/{triggerId}:deactivate
 # operationId: displayvideo.advertisers.manualTriggers.deactivate
-export def "advertisers-manual-triggers create-deactivate" [
+export def "displayvideo-advertisers-manual-triggers-deactivate" [
   advertiser_id: string
   trigger_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4156,7 +4156,7 @@ export def "advertisers-manual-triggers create-deactivate" [
 #
 # GET /v2/advertisers/{advertiserId}/negativeKeywordLists
 # operationId: displayvideo.advertisers.negativeKeywordLists.list
-export def "advertisers-negative-keyword-lists list" [
+export def "displayvideo-advertisers-negative-keyword-lists-list" [
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4206,7 +4206,7 @@ export def "advertisers-negative-keyword-lists list" [
 #
 # POST /v2/advertisers/{advertiserId}/negativeKeywordLists
 # operationId: displayvideo.advertisers.negativeKeywordLists.create
-export def "advertisers-negative-keyword-lists create" [
+export def "displayvideo-advertisers-negative-keyword-lists-create" [
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4258,7 +4258,7 @@ export def "advertisers-negative-keyword-lists create" [
 #
 # PATCH /v2/advertisers/{advertiserId}/negativeKeywordLists/{negativeKeywordListId}
 # operationId: displayvideo.advertisers.negativeKeywordLists.patch
-export def "advertisers-negative-keyword-lists update" [
+export def "displayvideo-advertisers-negative-keyword-lists-patch" [
   advertiser_id: string
   negative_keyword_list_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4313,7 +4313,7 @@ export def "advertisers-negative-keyword-lists update" [
 #
 # GET /v2/advertisers/{advertiserId}/negativeKeywordLists/{negativeKeywordListId}/negativeKeywords
 # operationId: displayvideo.advertisers.negativeKeywordLists.negativeKeywords.list
-export def "advertisers-negative-keyword-lists-negative-keywords list" [
+export def "displayvideo-advertisers-negative-keyword-lists-negative-keywords-list" [
   advertiser_id: string
   negative_keyword_list_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4367,7 +4367,7 @@ export def "advertisers-negative-keyword-lists-negative-keywords list" [
 #
 # DELETE /v2/advertisers/{advertiserId}/negativeKeywordLists/{negativeKeywordListId}/negativeKeywords/{keywordValue}
 # operationId: displayvideo.advertisers.negativeKeywordLists.negativeKeywords.delete
-export def "advertisers-negative-keyword-lists-negative-keywords delete" [
+export def "displayvideo-advertisers-negative-keyword-lists-negative-keywords-delete" [
   advertiser_id: string
   negative_keyword_list_id: string
   keyword_value: string
@@ -4420,7 +4420,7 @@ export def "advertisers-negative-keyword-lists-negative-keywords delete" [
 # POST /v2/advertisers/{advertiserId}/negativeKeywordLists/{negativeKeywordListId}/negativeKeywords:bulkEdit
 # operationId: displayvideo.advertisers.negativeKeywordLists.negativeKeywords.bulkEdit
 # --createdNegativeKeywords item shape: {keywordValue?: string}
-export def "advertisers-negative-keyword-lists-negative-keywords-bulk-edit create" [
+export def "displayvideo-advertisers-negative-keyword-lists-negative-keywords-bulk-edit" [
   advertiser_id: string
   negative_keyword_list_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4476,7 +4476,7 @@ export def "advertisers-negative-keyword-lists-negative-keywords-bulk-edit creat
 # POST /v2/advertisers/{advertiserId}/negativeKeywordLists/{negativeKeywordListId}/negativeKeywords:replace
 # operationId: displayvideo.advertisers.negativeKeywordLists.negativeKeywords.replace
 # --newNegativeKeywords item shape: {keywordValue?: string}
-export def "advertisers-negative-keyword-lists-negative-keywords-replace update" [
+export def "displayvideo-advertisers-negative-keyword-lists-negative-keywords-replace" [
   advertiser_id: string
   negative_keyword_list_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4530,7 +4530,7 @@ export def "advertisers-negative-keyword-lists-negative-keywords-replace update"
 #
 # GET /v2/advertisers/{advertiserId}/targetingTypes/{targetingType}/assignedTargetingOptions
 # operationId: displayvideo.advertisers.targetingTypes.assignedTargetingOptions.list
-export def "advertisers-targeting-types-assigned-targeting-options list" [
+export def "displayvideo-advertisers-targeting-types-assigned-targeting-options-list" [
   advertiser_id: string
   targeting_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4632,7 +4632,7 @@ export def "advertisers-targeting-types-assigned-targeting-options list" [
 # --viewabilityDetails shape: {viewability?: "VIEWABILITY_UNSPECIFIED"|"VIEWABILITY_10_PERCENT_OR_MORE"|"VIEWABILITY_20_PERCENT_OR_MORE"|"VIEWABILITY_30_PERCENT_OR_MORE"|"VIEWABILITY_40_PERCENT_OR_MORE"|"VIEWABILITY_50_PERCENT_OR_MORE"|"VIEWABILITY_60_PERCENT_OR_MORE"|"VIEWABILITY_70_PERCENT_OR_MORE"|"VIEWABILITY_80_PERCENT_OR_MORE"|"VIEWABILITY_90_PERCENT_OR_MORE"}
 # --youtubeChannelDetails shape: {channelId?: string, negative?: bool}
 # --youtubeVideoDetails shape: {negative?: bool, videoId?: string}
-export def "advertisers-targeting-types-assigned-targeting-options create" [
+export def "displayvideo-advertisers-targeting-types-assigned-targeting-options-create" [
   advertiser_id: string
   targeting_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4733,7 +4733,7 @@ export def "advertisers-targeting-types-assigned-targeting-options create" [
 #
 # DELETE /v2/advertisers/{advertiserId}/targetingTypes/{targetingType}/assignedTargetingOptions/{assignedTargetingOptionId}
 # operationId: displayvideo.advertisers.targetingTypes.assignedTargetingOptions.delete
-export def "advertisers-targeting-types-assigned-targeting-options delete" [
+export def "displayvideo-advertisers-targeting-types-assigned-targeting-options-delete" [
   advertiser_id: string
   targeting_type: string
   assigned_targeting_option_id: string
@@ -4785,7 +4785,7 @@ export def "advertisers-targeting-types-assigned-targeting-options delete" [
 #
 # GET /v2/advertisers/{advertiserId}/targetingTypes/{targetingType}/assignedTargetingOptions/{assignedTargetingOptionId}
 # operationId: displayvideo.advertisers.targetingTypes.assignedTargetingOptions.get
-export def "advertisers-targeting-types-assigned-targeting-options get" [
+export def "displayvideo-advertisers-targeting-types-assigned-targeting-options-get" [
   advertiser_id: string
   targeting_type: string
   assigned_targeting_option_id: string
@@ -4837,7 +4837,7 @@ export def "advertisers-targeting-types-assigned-targeting-options get" [
 #
 # GET /v2/advertisers/{advertiserId}/youtubeAdGroupAds
 # operationId: displayvideo.advertisers.youtubeAdGroupAds.list
-export def "advertisers-youtube-ad-group-ads list" [
+export def "displayvideo-advertisers-youtube-ad-group-ads-list" [
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4889,7 +4889,7 @@ export def "advertisers-youtube-ad-group-ads list" [
 #
 # GET /v2/advertisers/{advertiserId}/youtubeAdGroupAds/{youtubeAdGroupAdId}
 # operationId: displayvideo.advertisers.youtubeAdGroupAds.get
-export def "advertisers-youtube-ad-group-ads get" [
+export def "displayvideo-advertisers-youtube-ad-group-ads-get" [
   advertiser_id: string
   youtube_ad_group_ad_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4939,7 +4939,7 @@ export def "advertisers-youtube-ad-group-ads get" [
 #
 # GET /v2/advertisers/{advertiserId}/youtubeAdGroups
 # operationId: displayvideo.advertisers.youtubeAdGroups.list
-export def "advertisers-youtube-ad-groups list" [
+export def "displayvideo-advertisers-youtube-ad-groups-list" [
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4991,7 +4991,7 @@ export def "advertisers-youtube-ad-groups list" [
 #
 # GET /v2/advertisers/{advertiserId}/youtubeAdGroups/{youtubeAdGroupId}
 # operationId: displayvideo.advertisers.youtubeAdGroups.get
-export def "advertisers-youtube-ad-groups get" [
+export def "displayvideo-advertisers-youtube-ad-groups-get" [
   advertiser_id: string
   youtube_ad_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5041,7 +5041,7 @@ export def "advertisers-youtube-ad-groups get" [
 #
 # GET /v2/advertisers/{advertiserId}/youtubeAdGroups/{youtubeAdGroupId}/targetingTypes/{targetingType}/assignedTargetingOptions
 # operationId: displayvideo.advertisers.youtubeAdGroups.targetingTypes.assignedTargetingOptions.list
-export def "advertisers-youtube-ad-groups-targeting-types-assigned-targeting-options list" [
+export def "displayvideo-advertisers-youtube-ad-groups-targeting-types-assigned-targeting-options-list" [
   advertiser_id: string
   youtube_ad_group_id: string
   targeting_type: string
@@ -5097,7 +5097,7 @@ export def "advertisers-youtube-ad-groups-targeting-types-assigned-targeting-opt
 #
 # GET /v2/advertisers/{advertiserId}/youtubeAdGroups/{youtubeAdGroupId}/targetingTypes/{targetingType}/assignedTargetingOptions/{assignedTargetingOptionId}
 # operationId: displayvideo.advertisers.youtubeAdGroups.targetingTypes.assignedTargetingOptions.get
-export def "advertisers-youtube-ad-groups-targeting-types-assigned-targeting-options get" [
+export def "displayvideo-advertisers-youtube-ad-groups-targeting-types-assigned-targeting-options-get" [
   advertiser_id: string
   youtube_ad_group_id: string
   targeting_type: string
@@ -5151,7 +5151,7 @@ export def "advertisers-youtube-ad-groups-targeting-types-assigned-targeting-opt
 #
 # GET /v2/advertisers/{advertiserId}/youtubeAdGroups:bulkListAdGroupAssignedTargetingOptions
 # operationId: displayvideo.advertisers.youtubeAdGroups.bulkListAdGroupAssignedTargetingOptions
-export def "advertisers-youtube-ad-groups-bulk-list-ad-group-assigned-targeting-options list" [
+export def "displayvideo-advertisers-youtube-ad-groups-bulk-list-ad-group-assigned-targeting-options" [
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5204,7 +5204,7 @@ export def "advertisers-youtube-ad-groups-bulk-list-ad-group-assigned-targeting-
 #
 # GET /v2/advertisers/{advertiserId}:audit
 # operationId: displayvideo.advertisers.audit
-export def "advertisers get-audit" [
+export def "displayvideo-advertisers-audit" [
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5255,7 +5255,7 @@ export def "advertisers get-audit" [
 # operationId: displayvideo.advertisers.editAssignedTargetingOptions
 # --createRequests item shape: {assignedTargetingOptions?: list, ... (1 more fields)}
 # --deleteRequests item shape: {assignedTargetingOptionIds?: list<string>, ... (1 more fields)}
-export def "advertisers create-edit-assigned-targeting-options" [
+export def "displayvideo-advertisers-edit-assigned-targeting-options" [
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5308,7 +5308,7 @@ export def "advertisers create-edit-assigned-targeting-options" [
 #
 # GET /v2/advertisers/{advertiserId}:listAssignedTargetingOptions
 # operationId: displayvideo.advertisers.listAssignedTargetingOptions
-export def "advertisers list-assigned-targeting-options" [
+export def "displayvideo-advertisers-list-assigned-targeting-options" [
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5360,7 +5360,7 @@ export def "advertisers list-assigned-targeting-options" [
 #
 # GET /v2/combinedAudiences
 # operationId: displayvideo.combinedAudiences.list
-export def "combined-audiences list" [
+export def "displayvideo-combined-audiences-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -5412,7 +5412,7 @@ export def "combined-audiences list" [
 #
 # GET /v2/combinedAudiences/{combinedAudienceId}
 # operationId: displayvideo.combinedAudiences.get
-export def "combined-audiences get" [
+export def "displayvideo-combined-audiences-get" [
   combined_audience_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5462,7 +5462,7 @@ export def "combined-audiences get" [
 #
 # GET /v2/customBiddingAlgorithms
 # operationId: displayvideo.customBiddingAlgorithms.list
-export def "custom-bidding-algorithms list" [
+export def "displayvideo-custom-bidding-algorithms-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -5515,7 +5515,7 @@ export def "custom-bidding-algorithms list" [
 # POST /v2/customBiddingAlgorithms
 # operationId: displayvideo.customBiddingAlgorithms.create
 # --modelDetails item shape: {advertiserId?: string, readinessState?: "READINESS_STATE_UNSPECIFIED"|"READINESS_STATE_ACTIVE"|"READINESS_STATE_INSUFFICIENT_DATA"|"READINESS_STATE_TRAINING"|"READINESS_STATE_NO_VALID_SCRIPT"}
-export def "custom-bidding-algorithms create" [
+export def "displayvideo-custom-bidding-algorithms-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -5570,7 +5570,7 @@ export def "custom-bidding-algorithms create" [
 #
 # GET /v2/customBiddingAlgorithms/{customBiddingAlgorithmId}
 # operationId: displayvideo.customBiddingAlgorithms.get
-export def "custom-bidding-algorithms get" [
+export def "displayvideo-custom-bidding-algorithms-get" [
   custom_bidding_algorithm_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5621,7 +5621,7 @@ export def "custom-bidding-algorithms get" [
 # PATCH /v2/customBiddingAlgorithms/{customBiddingAlgorithmId}
 # operationId: displayvideo.customBiddingAlgorithms.patch
 # --modelDetails item shape: {advertiserId?: string, readinessState?: "READINESS_STATE_UNSPECIFIED"|"READINESS_STATE_ACTIVE"|"READINESS_STATE_INSUFFICIENT_DATA"|"READINESS_STATE_TRAINING"|"READINESS_STATE_NO_VALID_SCRIPT"}
-export def "custom-bidding-algorithms update" [
+export def "displayvideo-custom-bidding-algorithms-patch" [
   custom_bidding_algorithm_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5679,7 +5679,7 @@ export def "custom-bidding-algorithms update" [
 #
 # GET /v2/customBiddingAlgorithms/{customBiddingAlgorithmId}/scripts
 # operationId: displayvideo.customBiddingAlgorithms.scripts.list
-export def "custom-bidding-algorithms-scripts list" [
+export def "displayvideo-custom-bidding-algorithms-scripts-list" [
   custom_bidding_algorithm_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5734,7 +5734,7 @@ export def "custom-bidding-algorithms-scripts list" [
 # operationId: displayvideo.customBiddingAlgorithms.scripts.create
 # --errors item shape: {column?: string, errorCode?: "ERROR_CODE_UNSPECIFIED"|"SYNTAX_ERROR"|"DEPRECATED_SYNTAX"|"INTERNAL_ERROR", errorMessage?: string, line?: string}
 # --script shape: {resourceName?: string}
-export def "custom-bidding-algorithms-scripts create" [
+export def "displayvideo-custom-bidding-algorithms-scripts-create" [
   custom_bidding_algorithm_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5788,7 +5788,7 @@ export def "custom-bidding-algorithms-scripts create" [
 #
 # GET /v2/customBiddingAlgorithms/{customBiddingAlgorithmId}/scripts/{customBiddingScriptId}
 # operationId: displayvideo.customBiddingAlgorithms.scripts.get
-export def "custom-bidding-algorithms-scripts get" [
+export def "displayvideo-custom-bidding-algorithms-scripts-get" [
   custom_bidding_algorithm_id: string
   custom_bidding_script_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5840,7 +5840,7 @@ export def "custom-bidding-algorithms-scripts get" [
 #
 # GET /v2/customBiddingAlgorithms/{customBiddingAlgorithmId}:uploadScript
 # operationId: displayvideo.customBiddingAlgorithms.uploadScript
-export def "custom-bidding-algorithms upload-script" [
+export def "displayvideo-custom-bidding-algorithms-upload-script" [
   custom_bidding_algorithm_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5890,7 +5890,7 @@ export def "custom-bidding-algorithms upload-script" [
 #
 # GET /v2/customLists
 # operationId: displayvideo.customLists.list
-export def "custom-lists list" [
+export def "displayvideo-custom-lists-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -5941,7 +5941,7 @@ export def "custom-lists list" [
 #
 # GET /v2/customLists/{customListId}
 # operationId: displayvideo.customLists.get
-export def "custom-lists get" [
+export def "displayvideo-custom-lists-get" [
   custom_list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5990,7 +5990,7 @@ export def "custom-lists get" [
 #
 # GET /v2/firstAndThirdPartyAudiences
 # operationId: displayvideo.firstAndThirdPartyAudiences.list
-export def "first-and-third-party-audiences list" [
+export def "displayvideo-first-and-third-party-audiences-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -6044,7 +6044,7 @@ export def "first-and-third-party-audiences list" [
 # operationId: displayvideo.firstAndThirdPartyAudiences.create
 # --contactInfoList shape: {contactInfos?: list}
 # --mobileDeviceIdList shape: {mobileDeviceIds?: list<string>}
-export def "first-and-third-party-audiences create" [
+export def "displayvideo-first-and-third-party-audiences-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -6102,7 +6102,7 @@ export def "first-and-third-party-audiences create" [
 #
 # GET /v2/firstAndThirdPartyAudiences/{firstAndThirdPartyAudienceId}
 # operationId: displayvideo.firstAndThirdPartyAudiences.get
-export def "first-and-third-party-audiences get" [
+export def "displayvideo-first-and-third-party-audiences-get" [
   first_and_third_party_audience_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -6154,7 +6154,7 @@ export def "first-and-third-party-audiences get" [
 # operationId: displayvideo.firstAndThirdPartyAudiences.patch
 # --contactInfoList shape: {contactInfos?: list}
 # --mobileDeviceIdList shape: {mobileDeviceIds?: list<string>}
-export def "first-and-third-party-audiences update" [
+export def "displayvideo-first-and-third-party-audiences-patch" [
   first_and_third_party_audience_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -6217,7 +6217,7 @@ export def "first-and-third-party-audiences update" [
 # operationId: displayvideo.firstAndThirdPartyAudiences.editCustomerMatchMembers
 # --addedContactInfoList shape: {contactInfos?: list}
 # --addedMobileDeviceIdList shape: {mobileDeviceIds?: list<string>}
-export def "first-and-third-party-audiences create-edit-customer-match-members" [
+export def "displayvideo-first-and-third-party-audiences-edit-customer-match-members" [
   first_and_third_party_audience_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -6271,7 +6271,7 @@ export def "first-and-third-party-audiences create-edit-customer-match-members" 
 #
 # GET /v2/floodlightGroups/{floodlightGroupId}
 # operationId: displayvideo.floodlightGroups.get
-export def "floodlight-groups get" [
+export def "displayvideo-floodlight-groups-get" [
   floodlight_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -6320,7 +6320,7 @@ export def "floodlight-groups get" [
 #
 # GET /v2/googleAudiences
 # operationId: displayvideo.googleAudiences.list
-export def "google-audiences list" [
+export def "displayvideo-google-audiences-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -6372,7 +6372,7 @@ export def "google-audiences list" [
 #
 # GET /v2/googleAudiences/{googleAudienceId}
 # operationId: displayvideo.googleAudiences.get
-export def "google-audiences get" [
+export def "displayvideo-google-audiences-get" [
   google_audience_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -6422,7 +6422,7 @@ export def "google-audiences get" [
 #
 # GET /v2/guaranteedOrders
 # operationId: displayvideo.guaranteedOrders.list
-export def "guaranteed-orders list" [
+export def "displayvideo-guaranteed-orders-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -6475,7 +6475,7 @@ export def "guaranteed-orders list" [
 # POST /v2/guaranteedOrders
 # operationId: displayvideo.guaranteedOrders.create
 # --status shape: {entityPauseReason?: string, entityStatus?: "ENTITY_STATUS_UNSPECIFIED"|"ENTITY_STATUS_ACTIVE"|"ENTITY_STATUS_ARCHIVED"|"ENTITY_STATUS_DRAFT"|"ENTITY_STATUS_PAUSED"|"ENTITY_STATUS_SCHEDULED_FOR_DELETION"}
-export def "guaranteed-orders create" [
+export def "displayvideo-guaranteed-orders-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -6535,7 +6535,7 @@ export def "guaranteed-orders create" [
 #
 # GET /v2/guaranteedOrders/{guaranteedOrderId}
 # operationId: displayvideo.guaranteedOrders.get
-export def "guaranteed-orders get" [
+export def "displayvideo-guaranteed-orders-get" [
   guaranteed_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -6586,7 +6586,7 @@ export def "guaranteed-orders get" [
 # PATCH /v2/guaranteedOrders/{guaranteedOrderId}
 # operationId: displayvideo.guaranteedOrders.patch
 # --status shape: {entityPauseReason?: string, entityStatus?: "ENTITY_STATUS_UNSPECIFIED"|"ENTITY_STATUS_ACTIVE"|"ENTITY_STATUS_ARCHIVED"|"ENTITY_STATUS_DRAFT"|"ENTITY_STATUS_PAUSED"|"ENTITY_STATUS_SCHEDULED_FOR_DELETION"}
-export def "guaranteed-orders update" [
+export def "displayvideo-guaranteed-orders-patch" [
   guaranteed_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -6649,7 +6649,7 @@ export def "guaranteed-orders update" [
 #
 # POST /v2/guaranteedOrders/{guaranteedOrderId}:editGuaranteedOrderReadAccessors
 # operationId: displayvideo.guaranteedOrders.editGuaranteedOrderReadAccessors
-export def "guaranteed-orders get-edit-accessors" [
+export def "displayvideo-guaranteed-orders-edit-guaranteed-order-read-accessors" [
   guaranteed_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -6704,7 +6704,7 @@ export def "guaranteed-orders get-edit-accessors" [
 #
 # GET /v2/inventorySourceGroups
 # operationId: displayvideo.inventorySourceGroups.list
-export def "inventory-source-groups list" [
+export def "displayvideo-inventory-source-groups-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -6756,7 +6756,7 @@ export def "inventory-source-groups list" [
 #
 # POST /v2/inventorySourceGroups
 # operationId: displayvideo.inventorySourceGroups.create
-export def "inventory-source-groups create" [
+export def "displayvideo-inventory-source-groups-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -6808,7 +6808,7 @@ export def "inventory-source-groups create" [
 #
 # DELETE /v2/inventorySourceGroups/{inventorySourceGroupId}
 # operationId: displayvideo.inventorySourceGroups.delete
-export def "inventory-source-groups delete" [
+export def "displayvideo-inventory-source-groups-delete" [
   inventory_source_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -6858,7 +6858,7 @@ export def "inventory-source-groups delete" [
 #
 # GET /v2/inventorySourceGroups/{inventorySourceGroupId}
 # operationId: displayvideo.inventorySourceGroups.get
-export def "inventory-source-groups get" [
+export def "displayvideo-inventory-source-groups-get" [
   inventory_source_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -6908,7 +6908,7 @@ export def "inventory-source-groups get" [
 #
 # GET /v2/inventorySourceGroups/{inventorySourceGroupId}/assignedInventorySources
 # operationId: displayvideo.inventorySourceGroups.assignedInventorySources.list
-export def "inventory-source-groups-assigned-inventory-sources list" [
+export def "displayvideo-inventory-source-groups-assigned-inventory-sources-list" [
   inventory_source_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -6962,7 +6962,7 @@ export def "inventory-source-groups-assigned-inventory-sources list" [
 #
 # POST /v2/inventorySourceGroups/{inventorySourceGroupId}/assignedInventorySources
 # operationId: displayvideo.inventorySourceGroups.assignedInventorySources.create
-export def "inventory-source-groups-assigned-inventory-sources create" [
+export def "displayvideo-inventory-source-groups-assigned-inventory-sources-create" [
   inventory_source_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -7016,7 +7016,7 @@ export def "inventory-source-groups-assigned-inventory-sources create" [
 #
 # DELETE /v2/inventorySourceGroups/{inventorySourceGroupId}/assignedInventorySources/{assignedInventorySourceId}
 # operationId: displayvideo.inventorySourceGroups.assignedInventorySources.delete
-export def "inventory-source-groups-assigned-inventory-sources delete" [
+export def "displayvideo-inventory-source-groups-assigned-inventory-sources-delete" [
   inventory_source_group_id: string
   assigned_inventory_source_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7069,7 +7069,7 @@ export def "inventory-source-groups-assigned-inventory-sources delete" [
 # POST /v2/inventorySourceGroups/{inventorySourceGroupId}/assignedInventorySources:bulkEdit
 # operationId: displayvideo.inventorySourceGroups.assignedInventorySources.bulkEdit
 # --createdAssignedInventorySources item shape: {inventorySourceId?: string}
-export def "inventory-source-groups-assigned-inventory-sources-bulk-edit create" [
+export def "displayvideo-inventory-source-groups-assigned-inventory-sources-bulk-edit" [
   inventory_source_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -7124,7 +7124,7 @@ export def "inventory-source-groups-assigned-inventory-sources-bulk-edit create"
 #
 # GET /v2/inventorySources
 # operationId: displayvideo.inventorySources.list
-export def "inventory-sources list" [
+export def "displayvideo-inventory-sources-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -7181,7 +7181,7 @@ export def "inventory-sources list" [
 # --readWriteAccessors shape: {advertisers?: record, partner?: record}
 # --status shape: {entityPauseReason?: string, entityStatus?: "ENTITY_STATUS_UNSPECIFIED"|"ENTITY_STATUS_ACTIVE"|"ENTITY_STATUS_ARCHIVED"|"ENTITY_STATUS_DRAFT"|"ENTITY_STATUS_PAUSED"|"ENTITY_STATUS_SCHEDULED_FOR_DELETION"}
 # --timeRange shape: {endTime?: string, startTime?: string}
-export def "inventory-sources create" [
+export def "displayvideo-inventory-sources-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -7246,7 +7246,7 @@ export def "inventory-sources create" [
 #
 # GET /v2/inventorySources/{inventorySourceId}
 # operationId: displayvideo.inventorySources.get
-export def "inventory-sources get" [
+export def "displayvideo-inventory-sources-get" [
   inventory_source_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -7300,7 +7300,7 @@ export def "inventory-sources get" [
 # --readWriteAccessors shape: {advertisers?: record, partner?: record}
 # --status shape: {entityPauseReason?: string, entityStatus?: "ENTITY_STATUS_UNSPECIFIED"|"ENTITY_STATUS_ACTIVE"|"ENTITY_STATUS_ARCHIVED"|"ENTITY_STATUS_DRAFT"|"ENTITY_STATUS_PAUSED"|"ENTITY_STATUS_SCHEDULED_FOR_DELETION"}
 # --timeRange shape: {endTime?: string, startTime?: string}
-export def "inventory-sources update" [
+export def "displayvideo-inventory-sources-patch" [
   inventory_source_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -7369,7 +7369,7 @@ export def "inventory-sources update" [
 # POST /v2/inventorySources/{inventorySourceId}:editInventorySourceReadWriteAccessors
 # operationId: displayvideo.inventorySources.editInventorySourceReadWriteAccessors
 # --advertisersUpdate shape: {addedAdvertisers?: list<string>, removedAdvertisers?: list<string>}
-export def "inventory-sources get-edit-write-accessors" [
+export def "displayvideo-inventory-sources-edit-inventory-source-read-write-accessors" [
   inventory_source_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -7423,7 +7423,7 @@ export def "inventory-sources get-edit-write-accessors" [
 #
 # GET /v2/partners
 # operationId: displayvideo.partners.list
-export def "partners list" [
+export def "displayvideo-partners-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -7473,7 +7473,7 @@ export def "partners list" [
 #
 # GET /v2/partners/{partnerId}
 # operationId: displayvideo.partners.get
-export def "partners get" [
+export def "displayvideo-partners-get" [
   partner_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -7521,7 +7521,7 @@ export def "partners get" [
 #
 # GET /v2/partners/{partnerId}/channels
 # operationId: displayvideo.partners.channels.list
-export def "partners-channels list" [
+export def "displayvideo-partners-channels-list" [
   partner_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -7574,7 +7574,7 @@ export def "partners-channels list" [
 #
 # POST /v2/partners/{partnerId}/channels
 # operationId: displayvideo.partners.channels.create
-export def "partners-channels create" [
+export def "displayvideo-partners-channels-create" [
   partner_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -7629,7 +7629,7 @@ export def "partners-channels create" [
 #
 # PATCH /v2/partners/{partnerId}/channels/{channelId}
 # operationId: displayvideo.partners.channels.patch
-export def "partners-channels update" [
+export def "displayvideo-partners-channels-patch" [
   partner_id: string
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7687,7 +7687,7 @@ export def "partners-channels update" [
 #
 # GET /v2/partners/{partnerId}/channels/{channelId}/sites
 # operationId: displayvideo.partners.channels.sites.list
-export def "partners-channels-sites list" [
+export def "displayvideo-partners-channels-sites-list" [
   partner_id: string
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7742,7 +7742,7 @@ export def "partners-channels-sites list" [
 #
 # DELETE /v2/partners/{partnerId}/channels/{channelId}/sites/{urlOrAppId}
 # operationId: displayvideo.partners.channels.sites.delete
-export def "partners-channels-sites delete" [
+export def "displayvideo-partners-channels-sites-delete" [
   partner_id: string
   channel_id: string
   url_or_app_id: string
@@ -7796,7 +7796,7 @@ export def "partners-channels-sites delete" [
 # POST /v2/partners/{partnerId}/channels/{channelId}/sites:bulkEdit
 # operationId: displayvideo.partners.channels.sites.bulkEdit
 # --createdSites item shape: {urlOrAppId?: string}
-export def "partners-channels-sites-bulk-edit create" [
+export def "displayvideo-partners-channels-sites-bulk-edit" [
   partner_id: string
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7854,7 +7854,7 @@ export def "partners-channels-sites-bulk-edit create" [
 # POST /v2/partners/{partnerId}/channels/{channelId}/sites:replace
 # operationId: displayvideo.partners.channels.sites.replace
 # --newSites item shape: {urlOrAppId?: string}
-export def "partners-channels-sites-replace update" [
+export def "displayvideo-partners-channels-sites-replace" [
   partner_id: string
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7910,7 +7910,7 @@ export def "partners-channels-sites-replace update" [
 #
 # GET /v2/partners/{partnerId}/targetingTypes/{targetingType}/assignedTargetingOptions
 # operationId: displayvideo.partners.targetingTypes.assignedTargetingOptions.list
-export def "partners-targeting-types-assigned-targeting-options list" [
+export def "displayvideo-partners-targeting-types-assigned-targeting-options-list" [
   partner_id: string
   targeting_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8012,7 +8012,7 @@ export def "partners-targeting-types-assigned-targeting-options list" [
 # --viewabilityDetails shape: {viewability?: "VIEWABILITY_UNSPECIFIED"|"VIEWABILITY_10_PERCENT_OR_MORE"|"VIEWABILITY_20_PERCENT_OR_MORE"|"VIEWABILITY_30_PERCENT_OR_MORE"|"VIEWABILITY_40_PERCENT_OR_MORE"|"VIEWABILITY_50_PERCENT_OR_MORE"|"VIEWABILITY_60_PERCENT_OR_MORE"|"VIEWABILITY_70_PERCENT_OR_MORE"|"VIEWABILITY_80_PERCENT_OR_MORE"|"VIEWABILITY_90_PERCENT_OR_MORE"}
 # --youtubeChannelDetails shape: {channelId?: string, negative?: bool}
 # --youtubeVideoDetails shape: {negative?: bool, videoId?: string}
-export def "partners-targeting-types-assigned-targeting-options create" [
+export def "displayvideo-partners-targeting-types-assigned-targeting-options-create" [
   partner_id: string
   targeting_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8113,7 +8113,7 @@ export def "partners-targeting-types-assigned-targeting-options create" [
 #
 # DELETE /v2/partners/{partnerId}/targetingTypes/{targetingType}/assignedTargetingOptions/{assignedTargetingOptionId}
 # operationId: displayvideo.partners.targetingTypes.assignedTargetingOptions.delete
-export def "partners-targeting-types-assigned-targeting-options delete" [
+export def "displayvideo-partners-targeting-types-assigned-targeting-options-delete" [
   partner_id: string
   targeting_type: string
   assigned_targeting_option_id: string
@@ -8165,7 +8165,7 @@ export def "partners-targeting-types-assigned-targeting-options delete" [
 #
 # GET /v2/partners/{partnerId}/targetingTypes/{targetingType}/assignedTargetingOptions/{assignedTargetingOptionId}
 # operationId: displayvideo.partners.targetingTypes.assignedTargetingOptions.get
-export def "partners-targeting-types-assigned-targeting-options get" [
+export def "displayvideo-partners-targeting-types-assigned-targeting-options-get" [
   partner_id: string
   targeting_type: string
   assigned_targeting_option_id: string
@@ -8219,7 +8219,7 @@ export def "partners-targeting-types-assigned-targeting-options get" [
 # operationId: displayvideo.partners.editAssignedTargetingOptions
 # --createRequests item shape: {assignedTargetingOptions?: list, ... (1 more fields)}
 # --deleteRequests item shape: {assignedTargetingOptionIds?: list<string>, ... (1 more fields)}
-export def "partners create-edit-assigned-targeting-options" [
+export def "displayvideo-partners-edit-assigned-targeting-options" [
   partner_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -8275,7 +8275,7 @@ export def "partners create-edit-assigned-targeting-options" [
 # --idFilter shape: {adGroupAdIds?: list<string>, adGroupIds?: list<string>, campaignIds?: list<string>, insertionOrderIds?: list<string>, lineItemIds?: list<string>, mediaProductIds?: list<string>}
 # --inventorySourceFilter shape: {inventorySourceIds?: list<string>}
 # --parentEntityFilter shape: {fileType?: list<string>, filterIds?: list<string>, filterType?: "FILTER_TYPE_UNSPECIFIED"|"FILTER_TYPE_NONE"|"FILTER_TYPE_ADVERTISER_ID"|"FILTER_TYPE_CAMPAIGN_ID"|"FILTER_TYPE_MEDIA_PRODUCT_ID"|"FILTER_TYPE_INSERTION_ORDER_ID"|"FILTER_TYPE_LINE_ITEM_ID"}
-export def "sdfdownloadtasks create" [
+export def "displayvideo-sdfdownloadtasks-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -8330,7 +8330,7 @@ export def "sdfdownloadtasks create" [
 #
 # GET /v2/targetingTypes/{targetingType}/targetingOptions
 # operationId: displayvideo.targetingTypes.targetingOptions.list
-export def "targeting-types-targeting-options list" [
+export def "displayvideo-targeting-types-targeting-options-list" [
   targeting_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -8383,7 +8383,7 @@ export def "targeting-types-targeting-options list" [
 #
 # GET /v2/targetingTypes/{targetingType}/targetingOptions/{targetingOptionId}
 # operationId: displayvideo.targetingTypes.targetingOptions.get
-export def "targeting-types-targeting-options get" [
+export def "displayvideo-targeting-types-targeting-options-get" [
   targeting_type: string
   targeting_option_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8437,7 +8437,7 @@ export def "targeting-types-targeting-options get" [
 # --businessChainSearchTerms shape: {businessChainQuery?: string, regionQuery?: string}
 # --geoRegionSearchTerms shape: {geoRegionQuery?: string}
 # --poiSearchTerms shape: {poiQuery?: string}
-export def "targeting-types-targeting-options-search list" [
+export def "displayvideo-targeting-types-targeting-options-search" [
   targeting_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -8494,7 +8494,7 @@ export def "targeting-types-targeting-options-search list" [
 #
 # GET /v2/users
 # operationId: displayvideo.users.list
-export def "users list" [
+export def "displayvideo-users-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -8545,7 +8545,7 @@ export def "users list" [
 # POST /v2/users
 # operationId: displayvideo.users.create
 # --assignedUserRoles item shape: {advertiserId?: string, partnerId?: string, userRole?: "USER_ROLE_UNSPECIFIED"|"ADMIN"|"ADMIN_PARTNER_CLIENT"|"STANDARD"|"STANDARD_PLANNER"|"STANDARD_PLANNER_LIMITED"|"STANDARD_PARTNER_CLIENT"|"READ_ONLY"|"REPORTING_ONLY"|"LIMITED_REPORTING_ONLY"|"CREATIVE"|"CREATIVE_ADMIN"}
-export def "users create" [
+export def "displayvideo-users-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -8597,7 +8597,7 @@ export def "users create" [
 #
 # DELETE /v2/users/{userId}
 # operationId: displayvideo.users.delete
-export def "users delete" [
+export def "displayvideo-users-delete" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -8645,7 +8645,7 @@ export def "users delete" [
 #
 # GET /v2/users/{userId}
 # operationId: displayvideo.users.get
-export def "users get" [
+export def "displayvideo-users-get" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -8694,7 +8694,7 @@ export def "users get" [
 # PATCH /v2/users/{userId}
 # operationId: displayvideo.users.patch
 # --assignedUserRoles item shape: {advertiserId?: string, partnerId?: string, userRole?: "USER_ROLE_UNSPECIFIED"|"ADMIN"|"ADMIN_PARTNER_CLIENT"|"STANDARD"|"STANDARD_PLANNER"|"STANDARD_PLANNER_LIMITED"|"STANDARD_PARTNER_CLIENT"|"READ_ONLY"|"REPORTING_ONLY"|"LIMITED_REPORTING_ONLY"|"CREATIVE"|"CREATIVE_ADMIN"}
-export def "users update" [
+export def "displayvideo-users-patch" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -8750,7 +8750,7 @@ export def "users update" [
 # POST /v2/users/{userId}:bulkEditAssignedUserRoles
 # operationId: displayvideo.users.bulkEditAssignedUserRoles
 # --createdAssignedUserRoles item shape: {advertiserId?: string, partnerId?: string, userRole?: "USER_ROLE_UNSPECIFIED"|"ADMIN"|"ADMIN_PARTNER_CLIENT"|"STANDARD"|"STANDARD_PLANNER"|"STANDARD_PLANNER_LIMITED"|"STANDARD_PARTNER_CLIENT"|"READ_ONLY"|"REPORTING_ONLY"|"LIMITED_REPORTING_ONLY"|"CREATIVE"|"CREATIVE_ADMIN"}
-export def "users create-bulk-edit-assigned-roles" [
+export def "displayvideo-users-bulk-edit-assigned-user-roles" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -8803,7 +8803,7 @@ export def "users create-bulk-edit-assigned-roles" [
 #
 # GET /v2/{name}
 # operationId: displayvideo.sdfdownloadtasks.operations.get
-export def "sdfdownloadtasks get" [
+export def "displayvideo-sdfdownloadtasks-operations-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

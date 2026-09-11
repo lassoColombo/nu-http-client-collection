@@ -107,7 +107,7 @@ def language-completer-1 [] { ["ar" "cs" "da" "de" "el" "en" "es" "fi" "fr" "hu"
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "analyze create-image" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "analyze-image" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -131,7 +131,7 @@ export def commands []: nothing -> table {
 #
 # POST /analyze
 # operationId: AnalyzeImage
-export def "analyze create-image" [
+export def "analyze-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -173,7 +173,7 @@ export def "analyze create-image" [
 #
 # POST /describe
 # operationId: DescribeImage
-export def "describe get-image" [
+export def "describe-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -214,7 +214,7 @@ export def "describe get-image" [
 #
 # POST /generateThumbnail
 # operationId: GenerateThumbnail
-export def "generate-thumbnail generate" [
+export def "generate-thumbnail" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -256,7 +256,7 @@ export def "generate-thumbnail generate" [
 #
 # GET /models
 # operationId: ListModels
-export def "models list" [
+export def "list-models" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -290,7 +290,7 @@ export def "models list" [
 #
 # POST /models/{model}/analyze
 # operationId: AnalyzeImageByDomain
-export def "models-analyze create-image-by-domain" [
+export def "analyze-image-by-domain" [
   model: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -332,7 +332,7 @@ export def "models-analyze create-image-by-domain" [
 #
 # POST /ocr
 # operationId: RecognizePrintedText
-export def "ocr create-recognize-printed-text" [
+export def "recognize-printed-text" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -373,7 +373,7 @@ export def "ocr create-recognize-printed-text" [
 #
 # POST /recognizeText
 # operationId: RecognizeText
-export def "recognize-text create" [
+export def "recognize-text" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -413,7 +413,7 @@ export def "recognize-text create" [
 #
 # POST /tag
 # operationId: TagImage
-export def "tag tag-image" [
+export def "tag-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -453,7 +453,7 @@ export def "tag tag-image" [
 #
 # GET /textOperations/{operationId}
 # operationId: GetTextOperationResult
-export def "text-operations get-result" [
+export def "get-text-operation-result" [
   operation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

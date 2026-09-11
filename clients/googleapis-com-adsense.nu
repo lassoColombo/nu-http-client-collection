@@ -116,7 +116,7 @@ def alt-completer [] { ["csv" "json"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "adsense-accounts-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # GET /accounts
 # operationId: adsense.accounts.list
-export def "accounts list" [
+export def "adsense-accounts-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -184,7 +184,7 @@ export def "accounts list" [
 #
 # GET /accounts/{accountId}
 # operationId: adsense.accounts.get
-export def "accounts get" [
+export def "adsense-accounts-get" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -229,7 +229,7 @@ export def "accounts get" [
 #
 # GET /accounts/{accountId}/adclients
 # operationId: adsense.accounts.adclients.list
-export def "accounts-adclients list" [
+export def "adsense-accounts-adclients-list" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -275,7 +275,7 @@ export def "accounts-adclients list" [
 #
 # GET /accounts/{accountId}/adclients/{adClientId}/adcode
 # operationId: adsense.accounts.adclients.getAdCode
-export def "accounts-adclients-adcode get-ad-code" [
+export def "adsense-accounts-adclients-get-ad-code" [
   account_id: string
   ad_client_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -322,7 +322,7 @@ export def "accounts-adclients-adcode get-ad-code" [
 #
 # GET /accounts/{accountId}/adclients/{adClientId}/adunits
 # operationId: adsense.accounts.adunits.list
-export def "accounts-adclients-adunits list" [
+export def "adsense-accounts-adunits-list" [
   account_id: string
   ad_client_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -371,7 +371,7 @@ export def "accounts-adclients-adunits list" [
 #
 # GET /accounts/{accountId}/adclients/{adClientId}/adunits/{adUnitId}
 # operationId: adsense.accounts.adunits.get
-export def "accounts-adclients-adunits get" [
+export def "adsense-accounts-adunits-get" [
   account_id: string
   ad_client_id: string
   ad_unit_id: string
@@ -419,7 +419,7 @@ export def "accounts-adclients-adunits get" [
 #
 # GET /accounts/{accountId}/adclients/{adClientId}/adunits/{adUnitId}/adcode
 # operationId: adsense.accounts.adunits.getAdCode
-export def "accounts-adclients-adunits-adcode get-ad-code" [
+export def "adsense-accounts-adunits-get-ad-code" [
   account_id: string
   ad_client_id: string
   ad_unit_id: string
@@ -467,7 +467,7 @@ export def "accounts-adclients-adunits-adcode get-ad-code" [
 #
 # GET /accounts/{accountId}/adclients/{adClientId}/adunits/{adUnitId}/customchannels
 # operationId: adsense.accounts.adunits.customchannels.list
-export def "accounts-adclients-adunits-customchannels list" [
+export def "adsense-accounts-adunits-customchannels-list" [
   account_id: string
   ad_client_id: string
   ad_unit_id: string
@@ -517,7 +517,7 @@ export def "accounts-adclients-adunits-customchannels list" [
 #
 # GET /accounts/{accountId}/adclients/{adClientId}/customchannels
 # operationId: adsense.accounts.customchannels.list
-export def "accounts-adclients-customchannels list" [
+export def "adsense-accounts-customchannels-list" [
   account_id: string
   ad_client_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -565,7 +565,7 @@ export def "accounts-adclients-customchannels list" [
 #
 # GET /accounts/{accountId}/adclients/{adClientId}/customchannels/{customChannelId}
 # operationId: adsense.accounts.customchannels.get
-export def "accounts-adclients-customchannels get" [
+export def "adsense-accounts-customchannels-get" [
   account_id: string
   ad_client_id: string
   custom_channel_id: string
@@ -613,7 +613,7 @@ export def "accounts-adclients-customchannels get" [
 #
 # GET /accounts/{accountId}/adclients/{adClientId}/customchannels/{customChannelId}/adunits
 # operationId: adsense.accounts.customchannels.adunits.list
-export def "accounts-adclients-customchannels-adunits list" [
+export def "adsense-accounts-customchannels-adunits-list" [
   account_id: string
   ad_client_id: string
   custom_channel_id: string
@@ -664,7 +664,7 @@ export def "accounts-adclients-customchannels-adunits list" [
 #
 # GET /accounts/{accountId}/adclients/{adClientId}/urlchannels
 # operationId: adsense.accounts.urlchannels.list
-export def "accounts-adclients-urlchannels list" [
+export def "adsense-accounts-urlchannels-list" [
   account_id: string
   ad_client_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -712,7 +712,7 @@ export def "accounts-adclients-urlchannels list" [
 #
 # GET /accounts/{accountId}/alerts
 # operationId: adsense.accounts.alerts.list
-export def "accounts-alerts list" [
+export def "adsense-accounts-alerts-list" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -757,7 +757,7 @@ export def "accounts-alerts list" [
 #
 # DELETE /accounts/{accountId}/alerts/{alertId}
 # operationId: adsense.accounts.alerts.delete
-export def "accounts-alerts delete" [
+export def "adsense-accounts-alerts-delete" [
   account_id: string
   alert_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -803,7 +803,7 @@ export def "accounts-alerts delete" [
 #
 # GET /accounts/{accountId}/payments
 # operationId: adsense.accounts.payments.list
-export def "accounts-payments list" [
+export def "adsense-accounts-payments-list" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -847,7 +847,7 @@ export def "accounts-payments list" [
 #
 # GET /accounts/{accountId}/reports
 # operationId: adsense.accounts.reports.generate
-export def "accounts-reports list" [
+export def "adsense-accounts-reports-generate" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -902,7 +902,7 @@ export def "accounts-reports list" [
 #
 # GET /accounts/{accountId}/reports/saved
 # operationId: adsense.accounts.reports.saved.list
-export def "accounts-reports-saved list" [
+export def "adsense-accounts-reports-saved-list" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -948,7 +948,7 @@ export def "accounts-reports-saved list" [
 #
 # GET /accounts/{accountId}/reports/{savedReportId}
 # operationId: adsense.accounts.reports.saved.generate
-export def "accounts-reports generate" [
+export def "adsense-accounts-reports-saved-generate" [
   account_id: string
   saved_report_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -997,7 +997,7 @@ export def "accounts-reports generate" [
 #
 # GET /accounts/{accountId}/savedadstyles
 # operationId: adsense.accounts.savedadstyles.list
-export def "accounts-savedadstyles list" [
+export def "adsense-accounts-savedadstyles-list" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1043,7 +1043,7 @@ export def "accounts-savedadstyles list" [
 #
 # GET /accounts/{accountId}/savedadstyles/{savedAdStyleId}
 # operationId: adsense.accounts.savedadstyles.get
-export def "accounts-savedadstyles get" [
+export def "adsense-accounts-savedadstyles-get" [
   account_id: string
   saved_ad_style_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1089,7 +1089,7 @@ export def "accounts-savedadstyles get" [
 #
 # GET /adclients
 # operationId: adsense.adclients.list
-export def "adclients list" [
+export def "adsense-adclients-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1133,7 +1133,7 @@ export def "adclients list" [
 #
 # GET /adclients/{adClientId}/adunits
 # operationId: adsense.adunits.list
-export def "adclients-adunits list" [
+export def "adsense-adunits-list" [
   ad_client_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1180,7 +1180,7 @@ export def "adclients-adunits list" [
 #
 # GET /adclients/{adClientId}/adunits/{adUnitId}
 # operationId: adsense.adunits.get
-export def "adclients-adunits get" [
+export def "adsense-adunits-get" [
   ad_client_id: string
   ad_unit_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1226,7 +1226,7 @@ export def "adclients-adunits get" [
 #
 # GET /adclients/{adClientId}/adunits/{adUnitId}/adcode
 # operationId: adsense.adunits.getAdCode
-export def "adclients-adunits-adcode get-ad-code" [
+export def "adsense-adunits-get-ad-code" [
   ad_client_id: string
   ad_unit_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1272,7 +1272,7 @@ export def "adclients-adunits-adcode get-ad-code" [
 #
 # GET /adclients/{adClientId}/adunits/{adUnitId}/customchannels
 # operationId: adsense.adunits.customchannels.list
-export def "adclients-adunits-customchannels list" [
+export def "adsense-adunits-customchannels-list" [
   ad_client_id: string
   ad_unit_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1320,7 +1320,7 @@ export def "adclients-adunits-customchannels list" [
 #
 # GET /adclients/{adClientId}/customchannels
 # operationId: adsense.customchannels.list
-export def "adclients-customchannels list" [
+export def "adsense-customchannels-list" [
   ad_client_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1366,7 +1366,7 @@ export def "adclients-customchannels list" [
 #
 # GET /adclients/{adClientId}/customchannels/{customChannelId}
 # operationId: adsense.customchannels.get
-export def "adclients-customchannels get" [
+export def "adsense-customchannels-get" [
   ad_client_id: string
   custom_channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1412,7 +1412,7 @@ export def "adclients-customchannels get" [
 #
 # GET /adclients/{adClientId}/customchannels/{customChannelId}/adunits
 # operationId: adsense.customchannels.adunits.list
-export def "adclients-customchannels-adunits list" [
+export def "adsense-customchannels-adunits-list" [
   ad_client_id: string
   custom_channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1461,7 +1461,7 @@ export def "adclients-customchannels-adunits list" [
 #
 # GET /adclients/{adClientId}/urlchannels
 # operationId: adsense.urlchannels.list
-export def "adclients-urlchannels list" [
+export def "adsense-urlchannels-list" [
   ad_client_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1507,7 +1507,7 @@ export def "adclients-urlchannels list" [
 #
 # GET /alerts
 # operationId: adsense.alerts.list
-export def "alerts list" [
+export def "adsense-alerts-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1550,7 +1550,7 @@ export def "alerts list" [
 #
 # DELETE /alerts/{alertId}
 # operationId: adsense.alerts.delete
-export def "alerts delete" [
+export def "adsense-alerts-delete" [
   alert_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1594,7 +1594,7 @@ export def "alerts delete" [
 #
 # GET /metadata/dimensions
 # operationId: adsense.metadata.dimensions.list
-export def "metadata-dimensions list" [
+export def "adsense-metadata-dimensions-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1636,7 +1636,7 @@ export def "metadata-dimensions list" [
 #
 # GET /metadata/metrics
 # operationId: adsense.metadata.metrics.list
-export def "metadata-metrics list" [
+export def "adsense-metadata-metrics-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1678,7 +1678,7 @@ export def "metadata-metrics list" [
 #
 # GET /payments
 # operationId: adsense.payments.list
-export def "payments list" [
+export def "adsense-payments-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1720,7 +1720,7 @@ export def "payments list" [
 #
 # GET /reports
 # operationId: adsense.reports.generate
-export def "reports list" [
+export def "adsense-reports-generate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1774,7 +1774,7 @@ export def "reports list" [
 #
 # GET /reports/saved
 # operationId: adsense.reports.saved.list
-export def "reports-saved list" [
+export def "adsense-reports-saved-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1818,7 +1818,7 @@ export def "reports-saved list" [
 #
 # GET /reports/{savedReportId}
 # operationId: adsense.reports.saved.generate
-export def "reports generate" [
+export def "adsense-reports-saved-generate" [
   saved_report_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1865,7 +1865,7 @@ export def "reports generate" [
 #
 # GET /savedadstyles
 # operationId: adsense.savedadstyles.list
-export def "savedadstyles list" [
+export def "adsense-savedadstyles-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1909,7 +1909,7 @@ export def "savedadstyles list" [
 #
 # GET /savedadstyles/{savedAdStyleId}
 # operationId: adsense.savedadstyles.get
-export def "savedadstyles get" [
+export def "adsense-savedadstyles-get" [
   saved_ad_style_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

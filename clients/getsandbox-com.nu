@@ -122,7 +122,7 @@ def stack-type-completer [] { ["JavaScript"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "1-activity-search get-sandboxes" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-sandboxes-activity" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # GET /1/activity/search
 # operationId: getSandboxesActivity
-export def "1-activity-search get-sandboxes" [
+export def "get-sandboxes-activity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -186,7 +186,7 @@ export def "1-activity-search get-sandboxes" [
 #
 # GET /1/sandboxes
 # operationId: getSandboxes
-export def "1-sandboxes get" [
+export def "get-sandboxes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -222,7 +222,7 @@ export def "1-sandboxes get" [
 #
 # POST /1/sandboxes
 # operationId: createSandbox
-export def "1-sandboxes create-sandbox" [
+export def "create-sandbox" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -265,7 +265,7 @@ export def "1-sandboxes create-sandbox" [
 #
 # DELETE /1/sandboxes/{sandboxName}
 # operationId: deleteSandbox
-export def "1-sandboxes delete-sandbox" [
+export def "delete-sandbox" [
   sandbox_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -301,7 +301,7 @@ export def "1-sandboxes delete-sandbox" [
 #
 # GET /1/sandboxes/{sandboxName}
 # operationId: getSandbox
-export def "1-sandboxes get-sandbox" [
+export def "get-sandbox" [
   sandbox_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -340,7 +340,7 @@ export def "1-sandboxes get-sandbox" [
 # --childSandboxes item shape: {apiDefinition?: "None"|"Apiary"|"Swagger_V2_Json"|"RAML_V08"|"WSDL", childSandboxes?: list, configuredRoutes?: list, description?: string, gitAccessToken?: string, gitUrl?: string, hasRepository?: bool, id?: string, ipWhitelist?: list<string>, name: string, parentSandbox?: record, properties?: record, proxyStatus?: "STARTED"|"STOPPED", runtimeVersion?: "VERSION_1"|"VERSION_2", sandboxUrl?: string, stackType?: "JavaScript", transportType?: "HTTP"}
 # --configuredRoutes item shape: {activeErrorOverride?: bool, activeLatency?: bool, defaultLatency?: int, errorOverrideType: "NONE"|"TIMEOUT"|"SERVICE_DOWN", loadLatency?: int, loadThreshold?: int, method?: string, path?: string, properties?: record, routeConfig?: record, transport?: string}
 # --parentSandbox shape: {apiDefinition?: "None"|"Apiary"|"Swagger_V2_Json"|"RAML_V08"|"WSDL", childSandboxes?: list, configuredRoutes?: list, description?: string, gitAccessToken?: string, gitUrl?: string, hasRepository?: bool, id?: string, ipWhitelist?: list<string>, name: string, parentSandbox?: record, properties?: record, proxyStatus?: "STARTED"|"STOPPED", runtimeVersion?: "VERSION_1"|"VERSION_2", sandboxUrl?: string, stackType?: "JavaScript", transportType?: "HTTP"}
-export def "1-sandboxes update-sandbox" [
+export def "update-sandbox" [
   sandbox_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -396,7 +396,7 @@ export def "1-sandboxes update-sandbox" [
 #
 # GET /1/sandboxes/{sandboxName}/fork
 # operationId: forkSandbox
-export def "1-sandboxes-fork get-sandbox" [
+export def "fork-sandbox" [
   sandbox_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -432,7 +432,7 @@ export def "1-sandboxes-fork get-sandbox" [
 #
 # DELETE /1/sandboxes/{sandboxName}/state
 # operationId: deleteSandboxState
-export def "1-sandboxes-state delete-sandbox" [
+export def "delete-sandbox-state" [
   sandbox_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -468,7 +468,7 @@ export def "1-sandboxes-state delete-sandbox" [
 #
 # GET /1/sandboxes/{sandboxName}/state
 # operationId: getSandboxState
-export def "1-sandboxes-state get-sandbox" [
+export def "get-sandbox-state" [
   sandbox_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

@@ -119,7 +119,7 @@ def source-type-completer [] { ["events" "funnel" "impact" "notebook" "retention
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-insights-components-favorites list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "favorites-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -143,7 +143,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/components/{resourceName}/favorites
 # operationId: Favorites_List
-export def "subscriptions-resource-groups-providers-microsoft-insights-components-favorites list" [
+export def "favorites-list" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -189,7 +189,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/components/{resourceName}/favorites/{favoriteId}
 # operationId: Favorites_Delete
-export def "subscriptions-resource-groups-providers-microsoft-insights-components-favorites delete" [
+export def "favorites-delete" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -233,7 +233,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/components/{resourceName}/favorites/{favoriteId}
 # operationId: Favorites_Get
-export def "subscriptions-resource-groups-providers-microsoft-insights-components-favorites get" [
+export def "favorites-get" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -277,7 +277,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/components/{resourceName}/favorites/{favoriteId}
 # operationId: Favorites_Update
-export def "subscriptions-resource-groups-providers-microsoft-insights-components-favorites update" [
+export def "favorites-update" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -332,7 +332,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/components/{resourceName}/favorites/{favoriteId}
 # operationId: Favorites_Add
-export def "subscriptions-resource-groups-providers-microsoft-insights-components-favorites create" [
+export def "favorites-add" [
   subscription_id: string
   resource_group_name: string
   resource_name: string

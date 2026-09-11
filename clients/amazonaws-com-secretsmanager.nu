@@ -122,7 +122,7 @@ def x-amz-target-completer-21 [] { ["secretsmanager.ValidateResourcePolicy"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api cancel-rotate-secret" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cancel-rotate-secret" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CancelRotateSecret
-export def "api cancel-rotate-secret" [
+export def "cancel-rotate-secret" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -194,7 +194,7 @@ export def "api cancel-rotate-secret" [
 #
 # POST /
 # operationId: CreateSecret
-export def "api create-secret" [
+export def "create-secret" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -250,7 +250,7 @@ export def "api create-secret" [
 #
 # POST /
 # operationId: DeleteResourcePolicy
-export def "api delete-resource-policy" [
+export def "delete-resource-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -298,7 +298,7 @@ export def "api delete-resource-policy" [
 #
 # POST /
 # operationId: DeleteSecret
-export def "api delete-secret" [
+export def "delete-secret" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -348,7 +348,7 @@ export def "api delete-secret" [
 #
 # POST /
 # operationId: DescribeSecret
-export def "api get-secret" [
+export def "describe-secret" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -396,7 +396,7 @@ export def "api get-secret" [
 #
 # POST /
 # operationId: GetRandomPassword
-export def "api get-random-password" [
+export def "get-random-password" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -451,7 +451,7 @@ export def "api get-random-password" [
 #
 # POST /
 # operationId: GetResourcePolicy
-export def "api get-resource-policy" [
+export def "get-resource-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -499,7 +499,7 @@ export def "api get-resource-policy" [
 #
 # POST /
 # operationId: GetSecretValue
-export def "api get-secret-value" [
+export def "get-secret-value" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -549,7 +549,7 @@ export def "api get-secret-value" [
 #
 # POST /
 # operationId: ListSecretVersionIds
-export def "api list-secret-version" [
+export def "list-secret-version-ids" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -603,7 +603,7 @@ export def "api list-secret-version" [
 #
 # POST /
 # operationId: ListSecrets
-export def "api list-secrets" [
+export def "list-secrets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -658,7 +658,7 @@ export def "api list-secrets" [
 #
 # POST /
 # operationId: PutResourcePolicy
-export def "api update-resource-policy" [
+export def "put-resource-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -708,7 +708,7 @@ export def "api update-resource-policy" [
 #
 # POST /
 # operationId: PutSecretValue
-export def "api update-secret-value" [
+export def "put-secret-value" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -760,7 +760,7 @@ export def "api update-secret-value" [
 #
 # POST /
 # operationId: RemoveRegionsFromReplication
-export def "api delete-regions-from-replication" [
+export def "remove-regions-from-replication" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -809,7 +809,7 @@ export def "api delete-regions-from-replication" [
 #
 # POST /
 # operationId: ReplicateSecretToRegions
-export def "api create-replicate-secret-to-regions" [
+export def "replicate-secret-to-regions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -859,7 +859,7 @@ export def "api create-replicate-secret-to-regions" [
 #
 # POST /
 # operationId: RestoreSecret
-export def "api create-restore-secret" [
+export def "restore-secret" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -907,7 +907,7 @@ export def "api create-restore-secret" [
 #
 # POST /
 # operationId: RotateSecret
-export def "api create-rotate-secret" [
+export def "rotate-secret" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -959,7 +959,7 @@ export def "api create-rotate-secret" [
 #
 # POST /
 # operationId: StopReplicationToReplica
-export def "api stop-replication-to-replica" [
+export def "stop-replication-to-replica" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1007,7 +1007,7 @@ export def "api stop-replication-to-replica" [
 #
 # POST /
 # operationId: TagResource
-export def "api tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1056,7 +1056,7 @@ export def "api tag-resource" [
 #
 # POST /
 # operationId: UntagResource
-export def "api untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1105,7 +1105,7 @@ export def "api untag-resource" [
 #
 # POST /
 # operationId: UpdateSecret
-export def "api update-secret" [
+export def "update-secret" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1158,7 +1158,7 @@ export def "api update-secret" [
 #
 # POST /
 # operationId: UpdateSecretVersionStage
-export def "api update-secret-version-stage" [
+export def "update-secret-version-stage" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1209,7 +1209,7 @@ export def "api update-secret-version-stage" [
 #
 # POST /
 # operationId: ValidateResourcePolicy
-export def "api validate-resource-policy" [
+export def "validate-resource-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

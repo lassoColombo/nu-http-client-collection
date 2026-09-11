@@ -124,7 +124,7 @@ def add-remove-completer [] { ["Add" "Remove"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-lab-services-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "provider-operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -148,7 +148,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.LabServices/operations
 # operationId: ProviderOperations_List
-export def "providers-microsoft-lab-services-operations list" [
+export def "provider-operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,7 +184,7 @@ export def "providers-microsoft-lab-services-operations list" [
 #
 # POST /providers/Microsoft.LabServices/users/{userName}/getEnvironment
 # operationId: GlobalUsers_GetEnvironment
-export def "providers-microsoft-lab-services-users-get-environment get-global" [
+export def "global-users-get-environment" [
   user_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -227,7 +227,7 @@ export def "providers-microsoft-lab-services-users-get-environment get-global" [
 #
 # POST /providers/Microsoft.LabServices/users/{userName}/getOperationBatchStatus
 # operationId: GlobalUsers_GetOperationBatchStatus
-export def "providers-microsoft-lab-services-users-get-operation-batch-status get-global" [
+export def "global-users-get-operation-batch-status" [
   user_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -269,7 +269,7 @@ export def "providers-microsoft-lab-services-users-get-operation-batch-status ge
 #
 # POST /providers/Microsoft.LabServices/users/{userName}/getOperationStatus
 # operationId: GlobalUsers_GetOperationStatus
-export def "providers-microsoft-lab-services-users-get-operation-status get-global" [
+export def "global-users-get-operation-status" [
   user_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -311,7 +311,7 @@ export def "providers-microsoft-lab-services-users-get-operation-status get-glob
 #
 # POST /providers/Microsoft.LabServices/users/{userName}/getPersonalPreferences
 # operationId: GlobalUsers_GetPersonalPreferences
-export def "providers-microsoft-lab-services-users-get-personal-preferences get-global" [
+export def "global-users-get-personal-preferences" [
   user_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -355,7 +355,7 @@ export def "providers-microsoft-lab-services-users-get-personal-preferences get-
 #
 # POST /providers/Microsoft.LabServices/users/{userName}/listEnvironments
 # operationId: GlobalUsers_ListEnvironments
-export def "providers-microsoft-lab-services-users-list-environments list-global" [
+export def "global-users-list-environments" [
   user_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -397,7 +397,7 @@ export def "providers-microsoft-lab-services-users-list-environments list-global
 #
 # POST /providers/Microsoft.LabServices/users/{userName}/listLabs
 # operationId: GlobalUsers_ListLabs
-export def "providers-microsoft-lab-services-users-list-labs list-global" [
+export def "global-users-list-labs" [
   user_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -435,7 +435,7 @@ export def "providers-microsoft-lab-services-users-list-labs list-global" [
 #
 # POST /providers/Microsoft.LabServices/users/{userName}/register
 # operationId: GlobalUsers_Register
-export def "providers-microsoft-lab-services-users-register create-global" [
+export def "global-users-register" [
   user_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -477,7 +477,7 @@ export def "providers-microsoft-lab-services-users-register create-global" [
 #
 # POST /providers/Microsoft.LabServices/users/{userName}/resetPassword
 # operationId: GlobalUsers_ResetPassword
-export def "providers-microsoft-lab-services-users-reset-password reset-global" [
+export def "global-users-reset-password" [
   user_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -521,7 +521,7 @@ export def "providers-microsoft-lab-services-users-reset-password reset-global" 
 #
 # POST /providers/Microsoft.LabServices/users/{userName}/startEnvironment
 # operationId: GlobalUsers_StartEnvironment
-export def "providers-microsoft-lab-services-users-start-environment start-global" [
+export def "global-users-start-environment" [
   user_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -563,7 +563,7 @@ export def "providers-microsoft-lab-services-users-start-environment start-globa
 #
 # POST /providers/Microsoft.LabServices/users/{userName}/stopEnvironment
 # operationId: GlobalUsers_StopEnvironment
-export def "providers-microsoft-lab-services-users-stop-environment stop-global" [
+export def "global-users-stop-environment" [
   user_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -605,7 +605,7 @@ export def "providers-microsoft-lab-services-users-stop-environment stop-global"
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.LabServices/labaccounts
 # operationId: LabAccounts_ListBySubscription
-export def "subscriptions-providers-microsoft-lab-services-labaccounts list-accounts" [
+export def "lab-accounts-list-by-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -647,7 +647,7 @@ export def "subscriptions-providers-microsoft-lab-services-labaccounts list-acco
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.LabServices/locations/{locationName}/operations/{operationName}
 # operationId: Operations_Get
-export def "subscriptions-providers-microsoft-lab-services-locations-operations get" [
+export def "operations-get" [
   subscription_id: string
   location_name: string
   operation_name: string
@@ -689,7 +689,7 @@ export def "subscriptions-providers-microsoft-lab-services-locations-operations 
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.LabServices/labaccounts
 # operationId: LabAccounts_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-lab-services-labaccounts list-accounts" [
+export def "lab-accounts-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -733,7 +733,7 @@ export def "subscriptions-resource-groups-providers-microsoft-lab-services-labac
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.LabServices/labaccounts/{labAccountName}
 # operationId: LabAccounts_Delete
-export def "subscriptions-resource-groups-providers-microsoft-lab-services-labaccounts delete-accounts" [
+export def "lab-accounts-delete" [
   subscription_id: string
   resource_group_name: string
   lab_account_name: string
@@ -775,7 +775,7 @@ export def "subscriptions-resource-groups-providers-microsoft-lab-services-labac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.LabServices/labaccounts/{labAccountName}
 # operationId: LabAccounts_Get
-export def "subscriptions-resource-groups-providers-microsoft-lab-services-labaccounts get-accounts" [
+export def "lab-accounts-get" [
   subscription_id: string
   resource_group_name: string
   lab_account_name: string
@@ -819,7 +819,7 @@ export def "subscriptions-resource-groups-providers-microsoft-lab-services-labac
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.LabServices/labaccounts/{labAccountName}
 # operationId: LabAccounts_Update
 # --properties shape: {enabledRegionSelection?: bool, provisioningState?: string, uniqueIdentifier?: string}
-export def "subscriptions-resource-groups-providers-microsoft-lab-services-labaccounts update-accounts" [
+export def "lab-accounts-update" [
   subscription_id: string
   resource_group_name: string
   lab_account_name: string
@@ -868,7 +868,7 @@ export def "subscriptions-resource-groups-providers-microsoft-lab-services-labac
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.LabServices/labaccounts/{labAccountName}
 # operationId: LabAccounts_CreateOrUpdate
 # --properties shape: {enabledRegionSelection?: bool, latestOperationResult?: record, provisioningState?: string, sizeConfiguration?: record, uniqueIdentifier?: string}
-export def "subscriptions-resource-groups-providers-microsoft-lab-services-labaccounts create-accounts-or-update" [
+export def "lab-accounts-create-or-update" [
   subscription_id: string
   resource_group_name: string
   lab_account_name: string
@@ -918,7 +918,7 @@ export def "subscriptions-resource-groups-providers-microsoft-lab-services-labac
 # operationId: LabAccounts_CreateLab
 # --environmentSettingCreationParameters shape: {resourceSettingCreationParameters: record}
 # --labCreationParameters shape: {maxUsersInLab?: int}
-export def "subscriptions-resource-groups-providers-microsoft-lab-services-labaccounts-create-lab create-accounts" [
+export def "lab-accounts-create-lab" [
   subscription_id: string
   resource_group_name: string
   lab_account_name: string
@@ -968,7 +968,7 @@ export def "subscriptions-resource-groups-providers-microsoft-lab-services-labac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.LabServices/labaccounts/{labAccountName}/galleryimages
 # operationId: GalleryImages_List
-export def "subscriptions-resource-groups-providers-microsoft-lab-services-labaccounts-galleryimages list-gallery-images" [
+export def "gallery-images-list" [
   subscription_id: string
   resource_group_name: string
   lab_account_name: string
@@ -1014,7 +1014,7 @@ export def "subscriptions-resource-groups-providers-microsoft-lab-services-labac
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.LabServices/labaccounts/{labAccountName}/galleryimages/{galleryImageName}
 # operationId: GalleryImages_Delete
-export def "subscriptions-resource-groups-providers-microsoft-lab-services-labaccounts-galleryimages delete-gallery-images" [
+export def "gallery-images-delete" [
   subscription_id: string
   resource_group_name: string
   lab_account_name: string
@@ -1058,7 +1058,7 @@ export def "subscriptions-resource-groups-providers-microsoft-lab-services-labac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.LabServices/labaccounts/{labAccountName}/galleryimages/{galleryImageName}
 # operationId: GalleryImages_Get
-export def "subscriptions-resource-groups-providers-microsoft-lab-services-labaccounts-galleryimages get-gallery-images" [
+export def "gallery-images-get" [
   subscription_id: string
   resource_group_name: string
   lab_account_name: string
@@ -1104,7 +1104,7 @@ export def "subscriptions-resource-groups-providers-microsoft-lab-services-labac
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.LabServices/labaccounts/{labAccountName}/galleryimages/{galleryImageName}
 # operationId: GalleryImages_Update
 # --properties shape: {isEnabled?: bool, isOverride?: bool, isPlanAuthorized?: bool, provisioningState?: string, uniqueIdentifier?: string}
-export def "subscriptions-resource-groups-providers-microsoft-lab-services-labaccounts-galleryimages update-gallery-images" [
+export def "gallery-images-update" [
   subscription_id: string
   resource_group_name: string
   lab_account_name: string
@@ -1155,7 +1155,7 @@ export def "subscriptions-resource-groups-providers-microsoft-lab-services-labac
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.LabServices/labaccounts/{labAccountName}/galleryimages/{galleryImageName}
 # operationId: GalleryImages_CreateOrUpdate
 # --properties shape: {imageReference?: record, isEnabled?: bool, isOverride?: bool, isPlanAuthorized?: bool, latestOperationResult?: record, provisioningState?: string, uniqueIdentifier?: string}
-export def "subscriptions-resource-groups-providers-microsoft-lab-services-labaccounts-galleryimages create-gallery-images-or-update" [
+export def "gallery-images-create-or-update" [
   subscription_id: string
   resource_group_name: string
   lab_account_name: string
@@ -1205,7 +1205,7 @@ export def "subscriptions-resource-groups-providers-microsoft-lab-services-labac
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.LabServices/labaccounts/{labAccountName}/getRegionalAvailability
 # operationId: LabAccounts_GetRegionalAvailability
-export def "subscriptions-resource-groups-providers-microsoft-lab-services-labaccounts-get-regional-availability get-accounts" [
+export def "lab-accounts-get-regional-availability" [
   subscription_id: string
   resource_group_name: string
   lab_account_name: string
@@ -1247,7 +1247,7 @@ export def "subscriptions-resource-groups-providers-microsoft-lab-services-labac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.LabServices/labaccounts/{labAccountName}/labs
 # operationId: Labs_List
-export def "subscriptions-resource-groups-providers-microsoft-lab-services-labaccounts-labs list" [
+export def "labs-list" [
   subscription_id: string
   resource_group_name: string
   lab_account_name: string
@@ -1293,7 +1293,7 @@ export def "subscriptions-resource-groups-providers-microsoft-lab-services-labac
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.LabServices/labaccounts/{labAccountName}/labs/{labName}
 # operationId: Labs_Delete
-export def "subscriptions-resource-groups-providers-microsoft-lab-services-labaccounts-labs delete" [
+export def "labs-delete" [
   subscription_id: string
   resource_group_name: string
   lab_account_name: string
@@ -1337,7 +1337,7 @@ export def "subscriptions-resource-groups-providers-microsoft-lab-services-labac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.LabServices/labaccounts/{labAccountName}/labs/{labName}
 # operationId: Labs_Get
-export def "subscriptions-resource-groups-providers-microsoft-lab-services-labaccounts-labs get" [
+export def "labs-get" [
   subscription_id: string
   resource_group_name: string
   lab_account_name: string
@@ -1383,7 +1383,7 @@ export def "subscriptions-resource-groups-providers-microsoft-lab-services-labac
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.LabServices/labaccounts/{labAccountName}/labs/{labName}
 # operationId: Labs_Update
 # --properties shape: {maxUsersInLab?: int, provisioningState?: string, uniqueIdentifier?: string, usageQuota?: string, userAccessMode?: "Restricted"|"Open"}
-export def "subscriptions-resource-groups-providers-microsoft-lab-services-labaccounts-labs update" [
+export def "labs-update" [
   subscription_id: string
   resource_group_name: string
   lab_account_name: string
@@ -1434,7 +1434,7 @@ export def "subscriptions-resource-groups-providers-microsoft-lab-services-labac
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.LabServices/labaccounts/{labAccountName}/labs/{labName}
 # operationId: Labs_CreateOrUpdate
 # --properties shape: {latestOperationResult?: record, maxUsersInLab?: int, provisioningState?: string, uniqueIdentifier?: string, usageQuota?: string, userAccessMode?: "Restricted"|"Open"}
-export def "subscriptions-resource-groups-providers-microsoft-lab-services-labaccounts-labs create-or-update" [
+export def "labs-create-or-update" [
   subscription_id: string
   resource_group_name: string
   lab_account_name: string
@@ -1484,7 +1484,7 @@ export def "subscriptions-resource-groups-providers-microsoft-lab-services-labac
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.LabServices/labaccounts/{labAccountName}/labs/{labName}/addUsers
 # operationId: Labs_AddUsers
-export def "subscriptions-resource-groups-providers-microsoft-lab-services-labaccounts-labs-add-users create" [
+export def "labs-add-users" [
   subscription_id: string
   resource_group_name: string
   lab_account_name: string
@@ -1532,7 +1532,7 @@ export def "subscriptions-resource-groups-providers-microsoft-lab-services-labac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.LabServices/labaccounts/{labAccountName}/labs/{labName}/environmentsettings
 # operationId: EnvironmentSettings_List
-export def "subscriptions-resource-groups-providers-microsoft-lab-services-labaccounts-labs-environmentsettings list-environment-settings" [
+export def "environment-settings-list" [
   subscription_id: string
   resource_group_name: string
   lab_account_name: string
@@ -1580,7 +1580,7 @@ export def "subscriptions-resource-groups-providers-microsoft-lab-services-labac
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.LabServices/labaccounts/{labAccountName}/labs/{labName}/environmentsettings/{environmentSettingName}
 # operationId: EnvironmentSettings_Delete
-export def "subscriptions-resource-groups-providers-microsoft-lab-services-labaccounts-labs-environmentsettings delete-environment-settings" [
+export def "environment-settings-delete" [
   subscription_id: string
   resource_group_name: string
   lab_account_name: string
@@ -1626,7 +1626,7 @@ export def "subscriptions-resource-groups-providers-microsoft-lab-services-labac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.LabServices/labaccounts/{labAccountName}/labs/{labName}/environmentsettings/{environmentSettingName}
 # operationId: EnvironmentSettings_Get
-export def "subscriptions-resource-groups-providers-microsoft-lab-services-labaccounts-labs-environmentsettings get-environment-settings" [
+export def "environment-settings-get" [
   subscription_id: string
   resource_group_name: string
   lab_account_name: string
@@ -1674,7 +1674,7 @@ export def "subscriptions-resource-groups-providers-microsoft-lab-services-labac
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.LabServices/labaccounts/{labAccountName}/labs/{labName}/environmentsettings/{environmentSettingName}
 # operationId: EnvironmentSettings_Update
 # --properties shape: {configurationState?: "NotApplicable"|"Completed", description?: string, provisioningState?: string, resourceSettings?: record, title?: string, uniqueIdentifier?: string}
-export def "subscriptions-resource-groups-providers-microsoft-lab-services-labaccounts-labs-environmentsettings update-environment-settings" [
+export def "environment-settings-update" [
   subscription_id: string
   resource_group_name: string
   lab_account_name: string
@@ -1727,7 +1727,7 @@ export def "subscriptions-resource-groups-providers-microsoft-lab-services-labac
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.LabServices/labaccounts/{labAccountName}/labs/{labName}/environmentsettings/{environmentSettingName}
 # operationId: EnvironmentSettings_CreateOrUpdate
 # --properties shape: {configurationState?: "NotApplicable"|"Completed", description?: string, latestOperationResult?: record, provisioningState?: string, resourceSettings: record, title?: string, uniqueIdentifier?: string}
-export def "subscriptions-resource-groups-providers-microsoft-lab-services-labaccounts-labs-environmentsettings create-environment-settings-or-update" [
+export def "environment-settings-create-or-update" [
   subscription_id: string
   resource_group_name: string
   lab_account_name: string
@@ -1779,7 +1779,7 @@ export def "subscriptions-resource-groups-providers-microsoft-lab-services-labac
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.LabServices/labaccounts/{labAccountName}/labs/{labName}/environmentsettings/{environmentSettingName}/claimAny
 # operationId: EnvironmentSettings_ClaimAny
-export def "subscriptions-resource-groups-providers-microsoft-lab-services-labaccounts-labs-environmentsettings-claim-any create-environment-settings" [
+export def "environment-settings-claim-any" [
   subscription_id: string
   resource_group_name: string
   lab_account_name: string
@@ -1825,7 +1825,7 @@ export def "subscriptions-resource-groups-providers-microsoft-lab-services-labac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.LabServices/labaccounts/{labAccountName}/labs/{labName}/environmentsettings/{environmentSettingName}/environments
 # operationId: Environments_List
-export def "subscriptions-resource-groups-providers-microsoft-lab-services-labaccounts-labs-environmentsettings-environments list" [
+export def "environments-list" [
   subscription_id: string
   resource_group_name: string
   lab_account_name: string
@@ -1875,7 +1875,7 @@ export def "subscriptions-resource-groups-providers-microsoft-lab-services-labac
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.LabServices/labaccounts/{labAccountName}/labs/{labName}/environmentsettings/{environmentSettingName}/environments/{environmentName}
 # operationId: Environments_Delete
-export def "subscriptions-resource-groups-providers-microsoft-lab-services-labaccounts-labs-environmentsettings-environments delete" [
+export def "environments-delete" [
   subscription_id: string
   resource_group_name: string
   lab_account_name: string
@@ -1923,7 +1923,7 @@ export def "subscriptions-resource-groups-providers-microsoft-lab-services-labac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.LabServices/labaccounts/{labAccountName}/labs/{labName}/environmentsettings/{environmentSettingName}/environments/{environmentName}
 # operationId: Environments_Get
-export def "subscriptions-resource-groups-providers-microsoft-lab-services-labaccounts-labs-environmentsettings-environments get" [
+export def "environments-get" [
   subscription_id: string
   resource_group_name: string
   lab_account_name: string
@@ -1973,7 +1973,7 @@ export def "subscriptions-resource-groups-providers-microsoft-lab-services-labac
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.LabServices/labaccounts/{labAccountName}/labs/{labName}/environmentsettings/{environmentSettingName}/environments/{environmentName}
 # operationId: Environments_Update
 # --properties shape: {provisioningState?: string, resourceSets?: record, uniqueIdentifier?: string}
-export def "subscriptions-resource-groups-providers-microsoft-lab-services-labaccounts-labs-environmentsettings-environments update" [
+export def "environments-update" [
   subscription_id: string
   resource_group_name: string
   lab_account_name: string
@@ -2028,7 +2028,7 @@ export def "subscriptions-resource-groups-providers-microsoft-lab-services-labac
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.LabServices/labaccounts/{labAccountName}/labs/{labName}/environmentsettings/{environmentSettingName}/environments/{environmentName}
 # operationId: Environments_CreateOrUpdate
 # --properties shape: {latestOperationResult?: record, networkInterface?: record, provisioningState?: string, resourceSets?: record, uniqueIdentifier?: string}
-export def "subscriptions-resource-groups-providers-microsoft-lab-services-labaccounts-labs-environmentsettings-environments create-or-update" [
+export def "environments-create-or-update" [
   subscription_id: string
   resource_group_name: string
   lab_account_name: string
@@ -2082,7 +2082,7 @@ export def "subscriptions-resource-groups-providers-microsoft-lab-services-labac
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.LabServices/labaccounts/{labAccountName}/labs/{labName}/environmentsettings/{environmentSettingName}/environments/{environmentName}/claim
 # operationId: Environments_Claim
-export def "subscriptions-resource-groups-providers-microsoft-lab-services-labaccounts-labs-environmentsettings-environments-claim create" [
+export def "environments-claim" [
   subscription_id: string
   resource_group_name: string
   lab_account_name: string
@@ -2130,7 +2130,7 @@ export def "subscriptions-resource-groups-providers-microsoft-lab-services-labac
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.LabServices/labaccounts/{labAccountName}/labs/{labName}/environmentsettings/{environmentSettingName}/environments/{environmentName}/resetPassword
 # operationId: Environments_ResetPassword
-export def "subscriptions-resource-groups-providers-microsoft-lab-services-labaccounts-labs-environmentsettings-environments-reset-password reset" [
+export def "environments-reset-password" [
   subscription_id: string
   resource_group_name: string
   lab_account_name: string
@@ -2184,7 +2184,7 @@ export def "subscriptions-resource-groups-providers-microsoft-lab-services-labac
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.LabServices/labaccounts/{labAccountName}/labs/{labName}/environmentsettings/{environmentSettingName}/environments/{environmentName}/start
 # operationId: Environments_Start
-export def "subscriptions-resource-groups-providers-microsoft-lab-services-labaccounts-labs-environmentsettings-environments-start start" [
+export def "environments-start" [
   subscription_id: string
   resource_group_name: string
   lab_account_name: string
@@ -2232,7 +2232,7 @@ export def "subscriptions-resource-groups-providers-microsoft-lab-services-labac
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.LabServices/labaccounts/{labAccountName}/labs/{labName}/environmentsettings/{environmentSettingName}/environments/{environmentName}/stop
 # operationId: Environments_Stop
-export def "subscriptions-resource-groups-providers-microsoft-lab-services-labaccounts-labs-environmentsettings-environments-stop stop" [
+export def "environments-stop" [
   subscription_id: string
   resource_group_name: string
   lab_account_name: string
@@ -2280,7 +2280,7 @@ export def "subscriptions-resource-groups-providers-microsoft-lab-services-labac
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.LabServices/labaccounts/{labAccountName}/labs/{labName}/environmentsettings/{environmentSettingName}/publish
 # operationId: EnvironmentSettings_Publish
-export def "subscriptions-resource-groups-providers-microsoft-lab-services-labaccounts-labs-environmentsettings-publish publish-environment-settings" [
+export def "environment-settings-publish" [
   subscription_id: string
   resource_group_name: string
   lab_account_name: string
@@ -2330,7 +2330,7 @@ export def "subscriptions-resource-groups-providers-microsoft-lab-services-labac
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.LabServices/labaccounts/{labAccountName}/labs/{labName}/environmentsettings/{environmentSettingName}/start
 # operationId: EnvironmentSettings_Start
-export def "subscriptions-resource-groups-providers-microsoft-lab-services-labaccounts-labs-environmentsettings-start start-environment-settings" [
+export def "environment-settings-start" [
   subscription_id: string
   resource_group_name: string
   lab_account_name: string
@@ -2376,7 +2376,7 @@ export def "subscriptions-resource-groups-providers-microsoft-lab-services-labac
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.LabServices/labaccounts/{labAccountName}/labs/{labName}/environmentsettings/{environmentSettingName}/stop
 # operationId: EnvironmentSettings_Stop
-export def "subscriptions-resource-groups-providers-microsoft-lab-services-labaccounts-labs-environmentsettings-stop stop-environment-settings" [
+export def "environment-settings-stop" [
   subscription_id: string
   resource_group_name: string
   lab_account_name: string
@@ -2422,7 +2422,7 @@ export def "subscriptions-resource-groups-providers-microsoft-lab-services-labac
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.LabServices/labaccounts/{labAccountName}/labs/{labName}/register
 # operationId: Labs_Register
-export def "subscriptions-resource-groups-providers-microsoft-lab-services-labaccounts-labs-register create" [
+export def "labs-register" [
   subscription_id: string
   resource_group_name: string
   lab_account_name: string
@@ -2466,7 +2466,7 @@ export def "subscriptions-resource-groups-providers-microsoft-lab-services-labac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.LabServices/labaccounts/{labAccountName}/labs/{labName}/users
 # operationId: Users_List
-export def "subscriptions-resource-groups-providers-microsoft-lab-services-labaccounts-labs-users list" [
+export def "users-list" [
   subscription_id: string
   resource_group_name: string
   lab_account_name: string
@@ -2514,7 +2514,7 @@ export def "subscriptions-resource-groups-providers-microsoft-lab-services-labac
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.LabServices/labaccounts/{labAccountName}/labs/{labName}/users/{userName}
 # operationId: Users_Delete
-export def "subscriptions-resource-groups-providers-microsoft-lab-services-labaccounts-labs-users delete" [
+export def "users-delete" [
   subscription_id: string
   resource_group_name: string
   lab_account_name: string
@@ -2560,7 +2560,7 @@ export def "subscriptions-resource-groups-providers-microsoft-lab-services-labac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.LabServices/labaccounts/{labAccountName}/labs/{labName}/users/{userName}
 # operationId: Users_Get
-export def "subscriptions-resource-groups-providers-microsoft-lab-services-labaccounts-labs-users get" [
+export def "users-get" [
   subscription_id: string
   resource_group_name: string
   lab_account_name: string
@@ -2608,7 +2608,7 @@ export def "subscriptions-resource-groups-providers-microsoft-lab-services-labac
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.LabServices/labaccounts/{labAccountName}/labs/{labName}/users/{userName}
 # operationId: Users_Update
 # --properties shape: {provisioningState?: string, uniqueIdentifier?: string}
-export def "subscriptions-resource-groups-providers-microsoft-lab-services-labaccounts-labs-users update" [
+export def "users-update" [
   subscription_id: string
   resource_group_name: string
   lab_account_name: string
@@ -2661,7 +2661,7 @@ export def "subscriptions-resource-groups-providers-microsoft-lab-services-labac
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.LabServices/labaccounts/{labAccountName}/labs/{labName}/users/{userName}
 # operationId: Users_CreateOrUpdate
 # --properties shape: {latestOperationResult?: record, provisioningState?: string, uniqueIdentifier?: string}
-export def "subscriptions-resource-groups-providers-microsoft-lab-services-labaccounts-labs-users create-or-update" [
+export def "users-create-or-update" [
   subscription_id: string
   resource_group_name: string
   lab_account_name: string

@@ -118,7 +118,7 @@ def sort-completer [] { ["-created_at" "-name" "-original_created_at" "created_a
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "clips list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-api-v1-clips" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -141,7 +141,7 @@ export def commands []: nothing -> table {
 # list clips
 #
 # GET /api/v1/clips
-export def "clips list" [
+export def "get-api-v1-clips" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -179,7 +179,7 @@ export def "clips list" [
 #
 # POST /api/v1/clips
 # --data shape: {attributes: record}
-export def "clips create" [
+export def "post-api-v1-clips" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -216,7 +216,7 @@ export def "clips create" [
 # delete clip
 #
 # DELETE /api/v1/clips/{id}
-export def "clips delete" [
+export def "delete-api-v1-clips-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -251,7 +251,7 @@ export def "clips delete" [
 # show clip
 #
 # GET /api/v1/clips/{id}
-export def "clips get" [
+export def "get-api-v1-clips-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -287,7 +287,7 @@ export def "clips get" [
 #
 # PUT /api/v1/clips/{id}
 # --data shape: {attributes: record}
-export def "clips update" [
+export def "put-api-v1-clips-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -326,7 +326,7 @@ export def "clips update" [
 # prepare presigned upload url
 #
 # GET /api/v1/direct_uploads
-export def "direct-uploads get" [
+export def "get-api-v1-direct-uploads" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -359,7 +359,7 @@ export def "direct-uploads get" [
 # list medias
 #
 # GET /api/v1/medias
-export def "medias list" [
+export def "get-api-v1-medias" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -397,7 +397,7 @@ export def "medias list" [
 #
 # POST /api/v1/medias
 # --data shape: {attributes: record}
-export def "medias create" [
+export def "post-api-v1-medias" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -434,7 +434,7 @@ export def "medias create" [
 # delete media
 #
 # DELETE /api/v1/medias/{id}
-export def "medias delete" [
+export def "delete-api-v1-medias-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -469,7 +469,7 @@ export def "medias delete" [
 # show media
 #
 # GET /api/v1/medias/{id}
-export def "medias get" [
+export def "get-api-v1-medias-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -505,7 +505,7 @@ export def "medias get" [
 #
 # PUT /api/v1/medias/{id}
 # --data shape: {attributes: record}
-export def "medias update" [
+export def "put-api-v1-medias-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -544,7 +544,7 @@ export def "medias update" [
 # list webhook subscriptions
 #
 # GET /api/v1/webhook_subscriptions
-export def "webhook-subscriptions list" [
+export def "get-api-v1-webhook-subscriptions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -581,7 +581,7 @@ export def "webhook-subscriptions list" [
 #
 # POST /api/v1/webhook_subscriptions
 # --data shape: {attributes: record}
-export def "webhook-subscriptions create" [
+export def "post-api-v1-webhook-subscriptions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -618,7 +618,7 @@ export def "webhook-subscriptions create" [
 # delete webhook subscription
 #
 # DELETE /api/v1/webhook_subscriptions/{id}
-export def "webhook-subscriptions delete" [
+export def "delete-api-v1-webhook-subscriptions-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -653,7 +653,7 @@ export def "webhook-subscriptions delete" [
 # show webhook subscription
 #
 # GET /api/v1/webhook_subscriptions/{id}
-export def "webhook-subscriptions get" [
+export def "get-api-v1-webhook-subscriptions-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

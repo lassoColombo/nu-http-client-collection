@@ -121,7 +121,7 @@ def container-completer [] { ["bank" "creditCard" "insurance" "investment" "loan
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts get-list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-all-accounts" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -145,7 +145,7 @@ export def commands []: nothing -> table {
 #
 # GET /accounts
 # operationId: getAllAccounts
-export def "accounts get-list" [
+export def "get-all-accounts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -187,7 +187,7 @@ export def "accounts get-list" [
 # POST /accounts
 # operationId: createManualAccount
 # --account shape: {accountName: string, accountNumber?: string, accountType: string, address?: record, amountDue?: record, balance?: record, dueDate?: string, frequency?: "DAILY"|"ONE_TIME"|"WEEKLY"|"EVERY_2_WEEKS"|"SEMI_MONTHLY"|"MONTHLY"|"QUARTERLY"|"SEMI_ANNUALLY"|"ANNUALLY"|"EVERY_2_MONTHS"|"EBILL"|"FIRST_DAY_MONTHLY"|"LAST_DAY_MONTHLY"|"EVERY_4_WEEKS"|"UNKNOWN"|"OTHER", homeValue?: record, includeInNetWorth?: string, memo?: string, nickname?: string, valuationType?: "SYSTEM"|"MANUAL"}
-export def "accounts create-manual" [
+export def "create-manual-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -226,7 +226,7 @@ export def "accounts create-manual" [
 # POST /accounts/evaluateAddress
 # operationId: evaluateAddress
 # --address shape: {address1?: string, address2?: string, address3?: string, city?: string, country?: string, sourceType?: string, state?: string, street: string, type?: "HOME"|"BUSINESS"|"POBOX"|"RETAIL"|"OFFICE"|"SMALL_BUSINESS"|"COMMUNICATION"|"PERMANENT"|"STATEMENT_ADDRESS"|"PAYMENT"|"PAYOFF"|"UNKNOWN", zip?: string}
-export def "accounts-evaluate-address create" [
+export def "evaluate-address" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -264,7 +264,7 @@ export def "accounts-evaluate-address create" [
 #
 # GET /accounts/historicalBalances
 # operationId: getHistoricalBalances
-export def "accounts-historical-balances get" [
+export def "get-historical-balances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -306,7 +306,7 @@ export def "accounts-historical-balances get" [
 #
 # DELETE /accounts/{accountId}
 # operationId: deleteAccount
-export def "accounts delete" [
+export def "delete-account" [
   account_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -342,7 +342,7 @@ export def "accounts delete" [
 #
 # GET /accounts/{accountId}
 # operationId: getAccount
-export def "accounts get" [
+export def "get-account" [
   account_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -381,7 +381,7 @@ export def "accounts get" [
 # PUT /accounts/{accountId}
 # operationId: updateAccount
 # --account shape: {accountName?: string, accountNumber?: string, accountStatus?: "ACTIVE"|"INACTIVE"|"TO_BE_CLOSED"|"CLOSED"|"DELETED", address?: record, amountDue?: record, balance?: record, container?: "bank"|"creditCard"|"investment"|"insurance"|"loan"|"reward"|"realEstate"|"otherAssets"|"otherLiabilities", dueDate?: string, ... (6 more fields)}
-export def "accounts update" [
+export def "update-account" [
   account_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -421,7 +421,7 @@ export def "accounts update" [
 #
 # GET /auth/apiKey
 # operationId: getApiKeys
-export def "auth-api-key get" [
+export def "get-api-keys" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -455,7 +455,7 @@ export def "auth-api-key get" [
 #
 # POST /auth/apiKey
 # operationId: generateApiKey
-export def "auth-api-key generate" [
+export def "generate-api-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -493,7 +493,7 @@ export def "auth-api-key generate" [
 #
 # DELETE /auth/apiKey/{key}
 # operationId: deleteApiKey
-export def "auth-api-key delete" [
+export def "delete-api-key" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -529,7 +529,7 @@ export def "auth-api-key delete" [
 #
 # DELETE /auth/token
 # operationId: deleteToken
-export def "auth-token delete" [
+export def "delete-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -563,7 +563,7 @@ export def "auth-token delete" [
 #
 # POST /auth/token
 # operationId: generateAccessToken
-export def "auth-token generate-access" [
+export def "generate-access-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -599,7 +599,7 @@ export def "auth-token generate-access" [
 # DEPRECATED
 # operationId: getSubscribedEvents
 @deprecated
-export def "cobrand-config-notifications-events get-subscribed" [
+export def "get-subscribed-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -637,7 +637,7 @@ export def "cobrand-config-notifications-events get-subscribed" [
 # DEPRECATED
 # operationId: deleteSubscribedEvent
 @deprecated
-export def "cobrand-config-notifications-events delete-subscribed" [
+export def "delete-subscribed-event" [
   event_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -676,7 +676,7 @@ export def "cobrand-config-notifications-events delete-subscribed" [
 # operationId: createSubscriptionEvent
 # --event shape: {callbackUrl?: string}
 @deprecated
-export def "cobrand-config-notifications-events create-subscription" [
+export def "create-subscription-event" [
   event_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -719,7 +719,7 @@ export def "cobrand-config-notifications-events create-subscription" [
 # operationId: updateSubscribedEvent
 # --event shape: {callbackUrl?: string}
 @deprecated
-export def "cobrand-config-notifications-events update-subscribed" [
+export def "update-subscribed-event" [
   event_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -760,7 +760,7 @@ export def "cobrand-config-notifications-events update-subscribed" [
 # POST /cobrand/login
 # operationId: cobrandLogin
 # --cobrand shape: {cobrandLogin: string, cobrandPassword: string, locale?: string}
-export def "cobrand-login create" [
+export def "cobrand-login" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -798,7 +798,7 @@ export def "cobrand-login create" [
 #
 # POST /cobrand/logout
 # operationId: cobrandLogout
-export def "cobrand-logout create" [
+export def "cobrand-logout" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -834,7 +834,7 @@ export def "cobrand-logout create" [
 # DEPRECATED
 # operationId: getPublicKey
 @deprecated
-export def "cobrand-public-key get" [
+export def "get-public-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -868,7 +868,7 @@ export def "cobrand-public-key get" [
 #
 # GET /configs/notifications/events
 # operationId: getSubscribedNotificationEvents
-export def "configs-notifications-events get-subscribed" [
+export def "get-subscribed-notification-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -904,7 +904,7 @@ export def "configs-notifications-events get-subscribed" [
 #
 # DELETE /configs/notifications/events/{eventName}
 # operationId: deleteSubscribedNotificationEvent
-export def "configs-notifications-events delete-subscribed" [
+export def "delete-subscribed-notification-event" [
   event_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -941,7 +941,7 @@ export def "configs-notifications-events delete-subscribed" [
 # POST /configs/notifications/events/{eventName}
 # operationId: createSubscriptionNotificationEvent
 # --event shape: {callbackUrl?: string}
-export def "configs-notifications-events create-subscription" [
+export def "create-subscription-notification-event" [
   event_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -982,7 +982,7 @@ export def "configs-notifications-events create-subscription" [
 # PUT /configs/notifications/events/{eventName}
 # operationId: updateSubscribedNotificationEvent
 # --event shape: {callbackUrl?: string}
-export def "configs-notifications-events update-subscribed" [
+export def "update-subscribed-notification-event" [
   event_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1022,7 +1022,7 @@ export def "configs-notifications-events update-subscribed" [
 #
 # GET /configs/publicKey
 # operationId: getPublicEncryptionKey
-export def "configs-public-key get-encryption" [
+export def "get-public-encryption-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1056,7 +1056,7 @@ export def "configs-public-key get-encryption" [
 #
 # GET /dataExtracts/events
 # operationId: getDataExtractsEvents
-export def "data-extracts-events get" [
+export def "get-data-extracts-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1094,7 +1094,7 @@ export def "data-extracts-events get" [
 #
 # GET /dataExtracts/userData
 # operationId: getDataExtractsUserData
-export def "data-extracts-user-data get" [
+export def "get-data-extracts-user-data" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1132,7 +1132,7 @@ export def "data-extracts-user-data get" [
 #
 # GET /derived/holdingSummary
 # operationId: getHoldingSummary
-export def "derived-holding-summary get" [
+export def "get-holding-summary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1170,7 +1170,7 @@ export def "derived-holding-summary get" [
 #
 # GET /derived/networth
 # operationId: getNetworth
-export def "derived-networth get" [
+export def "get-networth" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1213,7 +1213,7 @@ export def "derived-networth get" [
 #
 # GET /derived/transactionSummary
 # operationId: getTransactionSummary
-export def "derived-transaction-summary get" [
+export def "get-transaction-summary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1257,7 +1257,7 @@ export def "derived-transaction-summary get" [
 #
 # GET /documents
 # operationId: getDocuments
-export def "documents get" [
+export def "get-documents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1297,7 +1297,7 @@ export def "documents get" [
 #
 # DELETE /documents/{documentId}
 # operationId: deleteDocument
-export def "documents delete" [
+export def "delete-document" [
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1333,7 +1333,7 @@ export def "documents delete" [
 #
 # GET /documents/{documentId}
 # operationId: downloadDocument
-export def "documents download" [
+export def "download-document" [
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1369,7 +1369,7 @@ export def "documents download" [
 #
 # GET /holdings
 # operationId: getHoldings
-export def "holdings get" [
+export def "get-holdings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1409,7 +1409,7 @@ export def "holdings get" [
 #
 # GET /holdings/assetClassificationList
 # operationId: getAssetClassificationList
-export def "holdings-asset-classification-list get" [
+export def "get-asset-classification-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1443,7 +1443,7 @@ export def "holdings-asset-classification-list get" [
 #
 # GET /holdings/holdingTypeList
 # operationId: getHoldingTypeList
-export def "holdings-holding-type-list get" [
+export def "get-holding-type-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1477,7 +1477,7 @@ export def "holdings-holding-type-list get" [
 #
 # GET /holdings/securities
 # operationId: getSecurities
-export def "holdings-securities get" [
+export def "get-securities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1513,7 +1513,7 @@ export def "holdings-securities get" [
 #
 # GET /providerAccounts
 # operationId: getAllProviderAccounts
-export def "provider-accounts get-list" [
+export def "get-all-provider-accounts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1553,7 +1553,7 @@ export def "provider-accounts get-list" [
 # --dataset item shape: {attribute?: list, name?: "BASIC_AGG_DATA"|"ADVANCE_AGG_DATA"|"ACCT_PROFILE"|"DOCUMENT"}
 # --field item shape: {id?: string, image?: string, value?: string}
 # --preferences shape: {isAutoRefreshEnabled?: bool, isDataExtractsEnabled?: bool, linkedProviderAccountId?: int}
-export def "provider-accounts refresh-edit-credentials-or" [
+export def "edit-credentials-or-refresh-provider-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1598,7 +1598,7 @@ export def "provider-accounts refresh-edit-credentials-or" [
 #
 # GET /providerAccounts/profile
 # operationId: getProviderAccountProfiles
-export def "provider-accounts-profile get" [
+export def "get-provider-account-profiles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1634,7 +1634,7 @@ export def "provider-accounts-profile get" [
 #
 # DELETE /providerAccounts/{providerAccountId}
 # operationId: deleteProviderAccount
-export def "provider-accounts delete" [
+export def "delete-provider-account" [
   provider_account_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1670,7 +1670,7 @@ export def "provider-accounts delete" [
 #
 # GET /providerAccounts/{providerAccountId}
 # operationId: getProviderAccount
-export def "provider-accounts get" [
+export def "get-provider-account" [
   provider_account_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1710,7 +1710,7 @@ export def "provider-accounts get" [
 # PUT /providerAccounts/{providerAccountId}/preferences
 # operationId: updatePreferences
 # --preferences shape: {isAutoRefreshEnabled?: bool, isDataExtractsEnabled?: bool, linkedProviderAccountId?: int}
-export def "provider-accounts-preferences update" [
+export def "update-preferences" [
   provider_account_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1750,7 +1750,7 @@ export def "provider-accounts-preferences update" [
 #
 # GET /providers
 # operationId: getAllProviders
-export def "providers get-list" [
+export def "get-all-providers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1794,7 +1794,7 @@ export def "providers get-list" [
 #
 # GET /providers/count
 # operationId: getProvidersCount
-export def "providers-count get" [
+export def "get-providers-count" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1834,7 +1834,7 @@ export def "providers-count get" [
 #
 # GET /providers/{providerId}
 # operationId: getProvider
-export def "providers get" [
+export def "get-provider" [
   provider_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1870,7 +1870,7 @@ export def "providers get" [
 #
 # GET /statements
 # operationId: getStatements
-export def "statements get" [
+export def "get-statements" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1910,7 +1910,7 @@ export def "statements get" [
 #
 # GET /transactions
 # operationId: getTransactions
-export def "transactions get" [
+export def "get-transactions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1958,7 +1958,7 @@ export def "transactions get" [
 #
 # GET /transactions/categories
 # operationId: getTransactionCategories
-export def "transactions-categories get" [
+export def "get-transaction-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1992,7 +1992,7 @@ export def "transactions-categories get" [
 #
 # POST /transactions/categories
 # operationId: createTransactionCategory
-export def "transactions-categories create-category" [
+export def "create-transaction-category" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2031,7 +2031,7 @@ export def "transactions-categories create-category" [
 #
 # PUT /transactions/categories
 # operationId: updateTransactionCategory
-export def "transactions-categories update-category" [
+export def "update-transaction-category" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2074,7 +2074,7 @@ export def "transactions-categories update-category" [
 # DEPRECATED
 # operationId: getTransactionCategorizationRulesDeprecated
 @deprecated
-export def "transactions-categories-rules get-categorization-deprecated" [
+export def "get-transaction-categorization-rules-deprecated" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2108,7 +2108,7 @@ export def "transactions-categories-rules get-categorization-deprecated" [
 #
 # POST /transactions/categories/rules
 # operationId: createOrRunTransactionCategorizationRules
-export def "transactions-categories-rules create-or-run-categorization" [
+export def "create-or-run-transaction-categorization-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2145,7 +2145,7 @@ export def "transactions-categories-rules create-or-run-categorization" [
 #
 # DELETE /transactions/categories/rules/{ruleId}
 # operationId: deleteTransactionCategorizationRule
-export def "transactions-categories-rules delete-categorization" [
+export def "delete-transaction-categorization-rule" [
   rule_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2181,7 +2181,7 @@ export def "transactions-categories-rules delete-categorization" [
 #
 # POST /transactions/categories/rules/{ruleId}
 # operationId: runTransactionCategorizationRule
-export def "transactions-categories-rules create-run-categorization" [
+export def "run-transaction-categorization-rule" [
   rule_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2220,7 +2220,7 @@ export def "transactions-categories-rules create-run-categorization" [
 # PUT /transactions/categories/rules/{ruleId}
 # operationId: updateTransactionCategorizationRule
 # --rule shape: {categoryId: int, priority?: int, ruleClause: list, source?: "SYSTEM"|"USER"}
-export def "transactions-categories-rules update-categorization" [
+export def "update-transaction-categorization-rule" [
   rule_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2260,7 +2260,7 @@ export def "transactions-categories-rules update-categorization" [
 #
 # GET /transactions/categories/txnRules
 # operationId: getTransactionCategorizationRules
-export def "transactions-categories-txn-rules get-categorization" [
+export def "get-transaction-categorization-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2294,7 +2294,7 @@ export def "transactions-categories-txn-rules get-categorization" [
 #
 # DELETE /transactions/categories/{categoryId}
 # operationId: deleteTransactionCategory
-export def "transactions-categories delete-category" [
+export def "delete-transaction-category" [
   category_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2330,7 +2330,7 @@ export def "transactions-categories delete-category" [
 #
 # GET /transactions/count
 # operationId: getTransactionsCount
-export def "transactions-count get" [
+export def "get-transactions-count" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2377,7 +2377,7 @@ export def "transactions-count get" [
 # PUT /transactions/{transactionId}
 # operationId: updateTransaction
 # --transaction shape: {categoryId: int, categorySource: "SYSTEM"|"USER", container: "bank"|"creditCard"|"investment"|"insurance"|"loan"|"reward"|"realEstate"|"otherAssets"|"otherLiabilities", description?: record, memo?: string}
-export def "transactions update" [
+export def "update-transaction" [
   transaction_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2417,7 +2417,7 @@ export def "transactions update" [
 #
 # GET /user
 # operationId: getUser
-export def "user get" [
+export def "get-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2452,7 +2452,7 @@ export def "user get" [
 # PUT /user
 # operationId: updateUser
 # --user shape: {address?: record, email?: string, name?: record, preferences?: record, segmentName?: string}
-export def "user update" [
+export def "update-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2490,7 +2490,7 @@ export def "user update" [
 #
 # GET /user/accessTokens
 # operationId: getAccessTokens
-export def "user-access-tokens get" [
+export def "get-access-tokens" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2526,7 +2526,7 @@ export def "user-access-tokens get" [
 #
 # POST /user/logout
 # operationId: userLogout
-export def "user-logout create" [
+export def "user-logout" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2561,7 +2561,7 @@ export def "user-logout create" [
 # POST /user/register
 # operationId: registerUser
 # --user shape: {address?: record, email?: string, loginName: string, name?: record, preferences?: record, segmentName?: string}
-export def "user-register create" [
+export def "register-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2599,7 +2599,7 @@ export def "user-register create" [
 #
 # POST /user/samlLogin
 # operationId: samlLogin
-export def "user-saml-login create" [
+export def "saml-login" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2637,7 +2637,7 @@ export def "user-saml-login create" [
 #
 # DELETE /user/unregister
 # operationId: unregister
-export def "user-unregister delete" [
+export def "unregister" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2671,7 +2671,7 @@ export def "user-unregister delete" [
 #
 # GET /verification
 # operationId: getVerificationStatus
-export def "verification get-status" [
+export def "get-verification-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2710,7 +2710,7 @@ export def "verification get-status" [
 # POST /verification
 # operationId: initiateMatchingOrChallengeDepositeVerification
 # --verification shape: {account?: record, accountId?: int, providerAccountId?: int, verificationType?: "MATCHING"|"CHALLENGE_DEPOSIT"}
-export def "verification create-initiate-matching-or-challenge-deposite" [
+export def "initiate-matching-or-challenge-deposite-verification" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2749,7 +2749,7 @@ export def "verification create-initiate-matching-or-challenge-deposite" [
 # PUT /verification
 # operationId: verifyChallengeDeposit
 # --verification shape: {account?: record, accountId?: int, providerAccountId?: int, transaction: list, verificationType?: "MATCHING"|"CHALLENGE_DEPOSIT"}
-export def "verification verify-challenge-deposit" [
+export def "verify-challenge-deposit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2788,7 +2788,7 @@ export def "verification verify-challenge-deposit" [
 # POST /verifyAccount/{providerAccountId}
 # operationId: initiateAccountVerification
 # --transactionCriteria item shape: {amount: float, baseType?: "CREDIT"|"DEBIT", date: string, dateVariance?: string, keyword?: string}
-export def "verify-account create-initiate-verification" [
+export def "initiate-account-verification" [
   provider_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

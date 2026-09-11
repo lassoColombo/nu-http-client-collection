@@ -97,7 +97,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "emoji-auto-emojify get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "auto-emojify" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -121,7 +121,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/emoji/auto-emojify
 # operationId: Auto-Emojify
-export def "emoji-auto-emojify get" [
+export def "auto-emojify" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -157,7 +157,7 @@ export def "emoji-auto-emojify get" [
 #
 # GET /v1/emoji/suggestions
 # operationId: Emoji Suggestions
-export def "emoji-suggestions get" [
+export def "emoji-suggestions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -193,7 +193,7 @@ export def "emoji-suggestions get" [
 #
 # GET /v1/images/animate
 # operationId: Animate Image
-export def "images-animate get" [
+export def "animate-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -230,7 +230,7 @@ export def "images-animate get" [
 #
 # GET /v1/images/logo
 # operationId: Company Logo
-export def "images-logo get-company" [
+export def "company-logo" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -266,7 +266,7 @@ export def "images-logo get-company" [
 #
 # GET /v1/images/quote
 # operationId: Text to Image
-export def "images-quote get-text" [
+export def "text-to-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -318,7 +318,7 @@ export def "images-quote get-text" [
 #
 # GET /v1/link/cta
 # operationId: List of CTAs
-export def "link-cta list-of-ct" [
+export def "list-of-ct-as" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -352,7 +352,7 @@ export def "link-cta list-of-ct" [
 #
 # GET /v1/link/short-link
 # operationId: Shorten Link
-export def "link-short-link get-shorten" [
+export def "shorten-link" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -389,7 +389,7 @@ export def "link-short-link get-shorten" [
 #
 # GET /v1/search/trending
 # operationId: Trending Hashtags
-export def "search-trending get-hashtags" [
+export def "trending-hashtags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -426,7 +426,7 @@ export def "search-trending get-hashtags" [
 #
 # GET /v1/stats/auto-hashtag
 # operationId: Auto-Hashtag
-export def "stats-auto-hashtag get" [
+export def "auto-hashtag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -464,7 +464,7 @@ export def "stats-auto-hashtag get" [
 #
 # GET /v1/stats/hashtag-suggestions
 # operationId: Hashtag Suggestions
-export def "stats-hashtag-suggestions get" [
+export def "hashtag-suggestions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -500,7 +500,7 @@ export def "stats-hashtag-suggestions get" [
 #
 # GET /v1/stats/history/{hashtag}
 # operationId: Hashtag History
-export def "stats-history get" [
+export def "hashtag-history" [
   hashtag: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -536,7 +536,7 @@ export def "stats-history get" [
 #
 # GET /v1/stats/multiple-hashtags
 # operationId: Hashtag Stats
-export def "stats-multiple-hashtags stats" [
+export def "hashtag-stats" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -572,7 +572,7 @@ export def "stats-multiple-hashtags stats" [
 #
 # GET /v2/instagram/hashtags-cleaner
 # operationId: Hashtags cleaner
-export def "instagram-hashtags-cleaner get" [
+export def "hashtags-cleaner" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

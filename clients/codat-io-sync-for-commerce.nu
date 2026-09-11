@@ -110,7 +110,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "clients-config-ui-accounts-platform get-visible" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-visible-accounts" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -134,7 +134,7 @@ export def commands []: nothing -> table {
 #
 # GET /clients/{clientId}/config/ui/accounts/platform/{platformKey}
 # operationId: get-visible-accounts
-export def "clients-config-ui-accounts-platform get-visible" [
+export def "get-visible-accounts" [
   client_id: string
   platform_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -172,7 +172,7 @@ export def "clients-config-ui-accounts-platform get-visible" [
 #
 # POST /companies/{companyId}/sync/commerce/latest
 # operationId: request-sync
-export def "companies-sync-commerce-latest request" [
+export def "request-sync" [
   company_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -212,7 +212,7 @@ export def "companies-sync-commerce-latest request" [
 #
 # GET /config/companies/{companyId}/sync/commerce
 # operationId: get-configuration
-export def "config-companies-sync-commerce get-configuration" [
+export def "get-configuration" [
   company_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -248,7 +248,7 @@ export def "config-companies-sync-commerce get-configuration" [
 #
 # POST /config/companies/{companyId}/sync/commerce
 # operationId: set-configuration
-export def "config-companies-sync-commerce update-configuration" [
+export def "set-configuration" [
   company_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -284,7 +284,7 @@ export def "config-companies-sync-commerce update-configuration" [
 #
 # GET /config/integrations
 # operationId: list-integrations
-export def "config-integrations list" [
+export def "list-integrations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -323,7 +323,7 @@ export def "config-integrations list" [
 #
 # GET /config/integrations/{platformKey}/branding
 # operationId: get-integration-branding
-export def "config-integrations-branding get" [
+export def "get-integration-branding" [
   platform_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -359,7 +359,7 @@ export def "config-integrations-branding get" [
 #
 # GET /config/sync/commerce/{commerceKey}/{accountingKey}/start
 # operationId: get-sync-flow-url
-export def "config-sync-commerce-start get-flow-url" [
+export def "get-sync-flow-url" [
   commerce_key: string
   accounting_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -399,7 +399,7 @@ export def "config-sync-commerce-start get-flow-url" [
 #
 # GET /meta/companies
 # operationId: list-companies
-export def "meta-companies list" [
+export def "list-companies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -438,7 +438,7 @@ export def "meta-companies list" [
 #
 # POST /meta/companies/sync
 # operationId: create-company
-export def "meta-companies-sync create-company" [
+export def "create-company" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -476,7 +476,7 @@ export def "meta-companies-sync create-company" [
 #
 # GET /meta/companies/{companyId}/connections
 # operationId: list-connections
-export def "meta-companies-connections list" [
+export def "list-connections" [
   company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -517,7 +517,7 @@ export def "meta-companies-connections list" [
 #
 # POST /meta/companies/{companyId}/connections
 # operationId: create-connection
-export def "meta-companies-connections create" [
+export def "create-connection" [
   company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -557,7 +557,7 @@ export def "meta-companies-connections create" [
 #
 # PATCH /meta/companies/{companyId}/connections/{connectionId}
 # operationId: update-connection
-export def "meta-companies-connections update" [
+export def "update-connection" [
   company_id: any
   connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -599,7 +599,7 @@ export def "meta-companies-connections update" [
 #
 # POST /meta/companies/{companyId}/sync/commerce/historic
 # operationId: request-sync-for-date-range
-export def "meta-companies-sync-commerce-historic request-for-date-range" [
+export def "request-sync-for-date-range" [
   company_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -640,7 +640,7 @@ export def "meta-companies-sync-commerce-historic request-for-date-range" [
 #
 # GET /meta/companies/{companyId}/sync/commerce/status
 # operationId: get-sync-status
-export def "meta-companies-sync-commerce-status get" [
+export def "get-sync-status" [
   company_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -676,7 +676,7 @@ export def "meta-companies-sync-commerce-status get" [
 #
 # PATCH /sync/commerce/config/ui/accounts/platform/{commerceKey}
 # operationId: update-visible-accounts-sync-flow
-export def "sync-commerce-config-ui-accounts-platform update-visible-flow" [
+export def "update-visible-accounts-sync-flow" [
   commerce_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -716,7 +716,7 @@ export def "sync-commerce-config-ui-accounts-platform update-visible-flow" [
 #
 # GET /sync/commerce/config/ui/text
 # operationId: get-config-text-sync-flow
-export def "sync-commerce-config-ui-text get-flow" [
+export def "get-config-text-sync-flow" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -750,7 +750,7 @@ export def "sync-commerce-config-ui-text get-flow" [
 #
 # PATCH /sync/commerce/config/ui/text
 # operationId: update-config-text-sync-flow
-export def "sync-commerce-config-ui-text update-flow" [
+export def "update-config-text-sync-flow" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

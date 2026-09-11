@@ -109,7 +109,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "bet-complex create-place" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "place-complex-bet" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -134,7 +134,7 @@ export def commands []: nothing -> table {
 # POST /bet/complex
 # operationId: placeComplexBet
 # --bets item shape: {delayedBetId?: string, freeBetId?: string, legs: list, number: int, stake: float, typeCode: string}
-export def "bet-complex create-place" [
+export def "place-complex-bet" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -181,7 +181,7 @@ export def "bet-complex create-place" [
 #
 # POST /bet/single
 # operationId: placeSingleBet
-export def "bet-single create-place" [
+export def "place-single-bet" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -236,7 +236,7 @@ export def "bet-single create-place" [
 # POST /betslips
 # operationId: validateBetslip
 # --legs item shape: {parts: list, sort?: string, type: string}
-export def "betslips validate" [
+export def "validate-betslip" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -280,7 +280,7 @@ export def "betslips validate" [
 #
 # GET /freebets
 # operationId: getFreeBets
-export def "freebets get-free-bets" [
+export def "get-free-bets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -323,7 +323,7 @@ export def "freebets get-free-bets" [
 #
 # GET /history
 # operationId: getBetHistory
-export def "history get-bet" [
+export def "get-bet-history" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -372,7 +372,7 @@ export def "history get-bet" [
 #
 # PUT /{betId}/cashin
 # operationId: cashin
-export def "cashin update" [
+export def "cashin" [
   bet_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

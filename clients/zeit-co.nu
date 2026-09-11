@@ -110,7 +110,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "integrations-webhooks get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-webhooks" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -134,7 +134,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/integrations/webhooks
 # operationId: getWebhooks
-export def "integrations-webhooks get" [
+export def "get-webhooks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -170,7 +170,7 @@ export def "integrations-webhooks get" [
 #
 # POST /v1/integrations/webhooks
 # operationId: createWebhook
-export def "integrations-webhooks create" [
+export def "create-webhook" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -211,7 +211,7 @@ export def "integrations-webhooks create" [
 #
 # DELETE /v1/integrations/webhooks/:id
 # operationId: deleteWebhooks
-export def "integrations-webhooks-id delete" [
+export def "delete-webhooks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -247,7 +247,7 @@ export def "integrations-webhooks-id delete" [
 #
 # GET /v4/domains
 # operationId: getDomains
-export def "domains list" [
+export def "get-domains" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -283,7 +283,7 @@ export def "domains list" [
 #
 # GET /v4/domains/{name}
 # operationId: getDomain
-export def "domains get" [
+export def "get-domain" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

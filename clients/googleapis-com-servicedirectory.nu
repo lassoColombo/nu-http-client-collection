@@ -129,7 +129,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta1 delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "servicedirectory-projects-locations-namespaces-services-endpoints-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -153,7 +153,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1beta1/{name}
 # operationId: servicedirectory.projects.locations.namespaces.services.endpoints.delete
-export def "v1beta1 delete" [
+export def "servicedirectory-projects-locations-namespaces-services-endpoints-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -201,7 +201,7 @@ export def "v1beta1 delete" [
 #
 # GET /v1beta1/{name}
 # operationId: servicedirectory.projects.locations.namespaces.services.endpoints.get
-export def "v1beta1 get" [
+export def "servicedirectory-projects-locations-namespaces-services-endpoints-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -249,7 +249,7 @@ export def "v1beta1 get" [
 #
 # PATCH /v1beta1/{name}
 # operationId: servicedirectory.projects.locations.namespaces.services.endpoints.patch
-export def "v1beta1 update" [
+export def "servicedirectory-projects-locations-namespaces-services-endpoints-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -306,7 +306,7 @@ export def "v1beta1 update" [
 #
 # GET /v1beta1/{name}/locations
 # operationId: servicedirectory.projects.locations.list
-export def "v1beta1-locations list" [
+export def "servicedirectory-projects-locations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -357,7 +357,7 @@ export def "v1beta1-locations list" [
 #
 # POST /v1beta1/{name}:resolve
 # operationId: servicedirectory.projects.locations.namespaces.services.resolve
-export def "v1beta1 create-resolve" [
+export def "servicedirectory-projects-locations-namespaces-services-resolve" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -410,7 +410,7 @@ export def "v1beta1 create-resolve" [
 #
 # GET /v1beta1/{parent}/endpoints
 # operationId: servicedirectory.projects.locations.namespaces.services.endpoints.list
-export def "v1beta1-endpoints list" [
+export def "servicedirectory-projects-locations-namespaces-services-endpoints-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -462,7 +462,7 @@ export def "v1beta1-endpoints list" [
 #
 # POST /v1beta1/{parent}/endpoints
 # operationId: servicedirectory.projects.locations.namespaces.services.endpoints.create
-export def "v1beta1-endpoints create" [
+export def "servicedirectory-projects-locations-namespaces-services-endpoints-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -519,7 +519,7 @@ export def "v1beta1-endpoints create" [
 #
 # GET /v1beta1/{parent}/namespaces
 # operationId: servicedirectory.projects.locations.namespaces.list
-export def "v1beta1-namespaces list" [
+export def "servicedirectory-projects-locations-namespaces-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -571,7 +571,7 @@ export def "v1beta1-namespaces list" [
 #
 # POST /v1beta1/{parent}/namespaces
 # operationId: servicedirectory.projects.locations.namespaces.create
-export def "v1beta1-namespaces create" [
+export def "servicedirectory-projects-locations-namespaces-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -625,7 +625,7 @@ export def "v1beta1-namespaces create" [
 #
 # GET /v1beta1/{parent}/services
 # operationId: servicedirectory.projects.locations.namespaces.services.list
-export def "v1beta1-services list" [
+export def "servicedirectory-projects-locations-namespaces-services-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -678,7 +678,7 @@ export def "v1beta1-services list" [
 # POST /v1beta1/{parent}/services
 # operationId: servicedirectory.projects.locations.namespaces.services.create
 # --endpoints item shape: {address?: string, metadata?: record, name?: string, network?: string, port?: int}
-export def "v1beta1-services create" [
+export def "servicedirectory-projects-locations-namespaces-services-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -733,7 +733,7 @@ export def "v1beta1-services create" [
 # POST /v1beta1/{resource}:getIamPolicy
 # operationId: servicedirectory.projects.locations.registrationPolicies.getIamPolicy
 # --options shape: {requestedPolicyVersion?: int}
-export def "v1beta1 get-iam-policy" [
+export def "servicedirectory-projects-locations-registration-policies-get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -786,7 +786,7 @@ export def "v1beta1 get-iam-policy" [
 # POST /v1beta1/{resource}:setIamPolicy
 # operationId: servicedirectory.projects.locations.registrationPolicies.setIamPolicy
 # --policy shape: {bindings?: list, etag?: string, version?: int}
-export def "v1beta1 update-iam-policy" [
+export def "servicedirectory-projects-locations-registration-policies-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -838,7 +838,7 @@ export def "v1beta1 update-iam-policy" [
 #
 # POST /v1beta1/{resource}:testIamPermissions
 # operationId: servicedirectory.projects.locations.registrationPolicies.testIamPermissions
-export def "v1beta1 test-iam-permissions" [
+export def "servicedirectory-projects-locations-registration-policies-test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

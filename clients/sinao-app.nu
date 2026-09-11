@@ -140,7 +140,7 @@ def type-completer-5 [] { ["contact" "invoice" "quote"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "apps list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "app-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -164,7 +164,7 @@ export def commands []: nothing -> table {
 #
 # GET /apps
 # operationId: app.list
-export def "apps list" [
+export def "app-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -203,7 +203,7 @@ export def "apps list" [
 #
 # POST /apps
 # operationId: app.create
-export def "apps create" [
+export def "app-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -239,7 +239,7 @@ export def "apps create" [
 #
 # DELETE /apps/access/invite/{accessToken}
 # operationId: app.policies.registration.delete
-export def "apps-access-invite delete-by-access-token" [
+export def "app-policies-registration-delete" [
   access_token: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -275,7 +275,7 @@ export def "apps-access-invite delete-by-access-token" [
 #
 # GET /apps/access/invite/{accessToken}
 # operationId: app.policies.registration.get
-export def "apps-access-invite get" [
+export def "app-policies-registration-get" [
   access_token: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -311,7 +311,7 @@ export def "apps-access-invite get" [
 #
 # POST /apps/access/invite/{accessToken}/register
 # operationId: app.policies.registration.register
-export def "apps-access-invite-register create" [
+export def "app-policies-registration-register" [
   access_token: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -352,7 +352,7 @@ export def "apps-access-invite-register create" [
 #
 # GET /apps/{appId}
 # operationId: app.get
-export def "apps get" [
+export def "app-get" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -388,7 +388,7 @@ export def "apps get" [
 #
 # GET /apps/{appId}/access
 # operationId: app.policies.list
-export def "apps-access list" [
+export def "app-policies-list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -429,7 +429,7 @@ export def "apps-access list" [
 #
 # GET /apps/{appId}/access/invite
 # operationId: app.policies.invitations.list
-export def "apps-access-invite list" [
+export def "app-policies-invitations-list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -470,7 +470,7 @@ export def "apps-access-invite list" [
 #
 # POST /apps/{appId}/access/invite
 # operationId: app.policies.invitations.create
-export def "apps-access-invite create" [
+export def "app-policies-invitations-create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -513,7 +513,7 @@ export def "apps-access-invite create" [
 #
 # DELETE /apps/{appId}/access/invite/{id}
 # operationId: app.policies.invitations.delete
-export def "apps-access-invite delete-by-app-id" [
+export def "app-policies-invitations-delete" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -551,7 +551,7 @@ export def "apps-access-invite delete-by-app-id" [
 #
 # GET /apps/{appId}/access/profiles
 # operationId: app.policies.profiles.list
-export def "apps-access-profiles list" [
+export def "app-policies-profiles-list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -587,7 +587,7 @@ export def "apps-access-profiles list" [
 #
 # DELETE /apps/{appId}/access/{userId}
 # operationId: app.policies.delete
-export def "apps-access delete" [
+export def "app-policies-delete" [
   app_id: int
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -625,7 +625,7 @@ export def "apps-access delete" [
 #
 # GET /apps/{appId}/access/{userId}
 # operationId: app.policies.get
-export def "apps-access get" [
+export def "app-policies-get" [
   app_id: int
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -663,7 +663,7 @@ export def "apps-access get" [
 #
 # POST /apps/{appId}/access/{userId}
 # operationId: app.policies.update
-export def "apps-access update" [
+export def "app-policies-update" [
   app_id: int
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -703,7 +703,7 @@ export def "apps-access update" [
 #
 # GET /apps/{appId}/accountcategories/
 # operationId: app.accounting.categories.list
-export def "apps-accountcategories list" [
+export def "app-accounting-categories-list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -745,7 +745,7 @@ export def "apps-accountcategories list" [
 #
 # POST /apps/{appId}/accountcategories/
 # operationId: app.accounting.categories.create
-export def "apps-accountcategories create" [
+export def "app-accounting-categories-create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -785,7 +785,7 @@ export def "apps-accountcategories create" [
 #
 # DELETE /apps/{appId}/accountcategories/{id}
 # operationId: app.accounting.categories.delete
-export def "apps-accountcategories delete" [
+export def "app-accounting-categories-delete" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -823,7 +823,7 @@ export def "apps-accountcategories delete" [
 #
 # GET /apps/{appId}/accountcategories/{id}
 # operationId: app.accounting.categories.get
-export def "apps-accountcategories get" [
+export def "app-accounting-categories-get" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -861,7 +861,7 @@ export def "apps-accountcategories get" [
 #
 # POST /apps/{appId}/accountcategories/{id}
 # operationId: app.accounting.categories.update
-export def "apps-accountcategories update" [
+export def "app-accounting-categories-update" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -903,7 +903,7 @@ export def "apps-accountcategories update" [
 #
 # GET /apps/{appId}/accounting_entries/
 # operationId: app.accounting.entries.list
-export def "apps-accounting-entries list" [
+export def "app-accounting-entries-list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -945,7 +945,7 @@ export def "apps-accounting-entries list" [
 #
 # GET /apps/{appId}/accounts/
 # operationId: app.accounting.accounts.list
-export def "apps-accounts list" [
+export def "app-accounting-accounts-list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -987,7 +987,7 @@ export def "apps-accounts list" [
 #
 # POST /apps/{appId}/accounts/
 # operationId: app.accounting.accounts.create
-export def "apps-accounts create" [
+export def "app-accounting-accounts-create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1032,7 +1032,7 @@ export def "apps-accounts create" [
 #
 # POST /apps/{appId}/accounts/batch
 # operationId: app.accounting.accounts.batch
-export def "apps-accounts-batch create" [
+export def "app-accounting-accounts-batch" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1070,7 +1070,7 @@ export def "apps-accounts-batch create" [
 #
 # DELETE /apps/{appId}/accounts/{id}
 # operationId: app.accounting.accounts.delete
-export def "apps-accounts delete" [
+export def "app-accounting-accounts-delete" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1108,7 +1108,7 @@ export def "apps-accounts delete" [
 #
 # GET /apps/{appId}/accounts/{id}
 # operationId: app.accounting.accounts.get
-export def "apps-accounts get" [
+export def "app-accounting-accounts-get" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1146,7 +1146,7 @@ export def "apps-accounts get" [
 #
 # POST /apps/{appId}/accounts/{id}
 # operationId: app.accounting.accounts.update
-export def "apps-accounts update" [
+export def "app-accounting-accounts-update" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1193,7 +1193,7 @@ export def "apps-accounts update" [
 #
 # GET /apps/{appId}/apikeys
 # operationId: app.apikeys.list
-export def "apps-apikeys list" [
+export def "app-apikeys-list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1234,7 +1234,7 @@ export def "apps-apikeys list" [
 #
 # POST /apps/{appId}/apikeys
 # operationId: app.apikeys.create
-export def "apps-apikeys create" [
+export def "app-apikeys-create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1273,7 +1273,7 @@ export def "apps-apikeys create" [
 #
 # DELETE /apps/{appId}/apikeys/{id}
 # operationId: app.apikeys.delete
-export def "apps-apikeys delete" [
+export def "app-apikeys-delete" [
   app_id: int
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1311,7 +1311,7 @@ export def "apps-apikeys delete" [
 #
 # GET /apps/{appId}/apipartners
 # operationId: app.apipartners.list
-export def "apps-apipartners list" [
+export def "app-apipartners-list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1352,7 +1352,7 @@ export def "apps-apipartners list" [
 #
 # GET /apps/{appId}/attachments
 # operationId: app.attachments.list
-export def "apps-attachments list" [
+export def "app-attachments-list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1394,7 +1394,7 @@ export def "apps-attachments list" [
 #
 # POST /apps/{appId}/attachments
 # operationId: app.attachments.create
-export def "apps-attachments create" [
+export def "app-attachments-create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1434,7 +1434,7 @@ export def "apps-attachments create" [
 #
 # PUT /apps/{appId}/attachments
 # operationId: app.sapAttestations.generateSapAttestations
-export def "apps-attachments generate-sap-attestations" [
+export def "app-sap-attestations-generate-sap-attestations" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1470,7 +1470,7 @@ export def "apps-attachments generate-sap-attestations" [
 #
 # GET /apps/{appId}/attachments/download
 # operationId: app.attachments.download
-export def "apps-attachments-download download" [
+export def "app-attachments-download" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1509,7 +1509,7 @@ export def "apps-attachments-download download" [
 #
 # GET /apps/{appId}/attachments/sap-download
 # operationId: app.sapAttestations.download
-export def "apps-attachments-sap-download download" [
+export def "app-sap-attestations-download" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1548,7 +1548,7 @@ export def "apps-attachments-sap-download download" [
 #
 # DELETE /apps/{appId}/attachments/{id}
 # operationId: app.attachments.delete
-export def "apps-attachments delete" [
+export def "app-attachments-delete" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1586,7 +1586,7 @@ export def "apps-attachments delete" [
 #
 # GET /apps/{appId}/attachments/{id}
 # operationId: app.attachments.get
-export def "apps-attachments get" [
+export def "app-attachments-get" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1624,7 +1624,7 @@ export def "apps-attachments get" [
 #
 # GET /apps/{appId}/attachments/{id}/pdf
 # operationId: app.attachments.RedirectToPublicUrl
-export def "apps-attachments-pdf get-redirect-to-public-url" [
+export def "app-attachments-redirect-to-public-url" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1664,7 +1664,7 @@ export def "apps-attachments-pdf get-redirect-to-public-url" [
 #
 # GET /apps/{appId}/bankdetails
 # operationId: app.documents.sales.bankdetails.list
-export def "apps-bankdetails list" [
+export def "app-documents-sales-bankdetails-list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1706,7 +1706,7 @@ export def "apps-bankdetails list" [
 #
 # POST /apps/{appId}/bankdetails
 # operationId: app.documents.sales.bankdetails.create
-export def "apps-bankdetails create" [
+export def "app-documents-sales-bankdetails-create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1746,7 +1746,7 @@ export def "apps-bankdetails create" [
 #
 # DELETE /apps/{appId}/bankdetails/{id}
 # operationId: app.documents.sales.bankdetails.delete
-export def "apps-bankdetails delete" [
+export def "app-documents-sales-bankdetails-delete" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1784,7 +1784,7 @@ export def "apps-bankdetails delete" [
 #
 # GET /apps/{appId}/bankdetails/{id}
 # operationId: app.documents.sales.bankdetails.get
-export def "apps-bankdetails get" [
+export def "app-documents-sales-bankdetails-get" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1822,7 +1822,7 @@ export def "apps-bankdetails get" [
 #
 # POST /apps/{appId}/bankdetails/{id}
 # operationId: app.documents.sales.bankdetails.update
-export def "apps-bankdetails update" [
+export def "app-documents-sales-bankdetails-update" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1864,7 +1864,7 @@ export def "apps-bankdetails update" [
 #
 # DELETE /apps/{appId}/banks/
 # operationId: app.cashflow.banks.delete
-export def "apps-banks delete" [
+export def "app-cashflow-banks-delete" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1902,7 +1902,7 @@ export def "apps-banks delete" [
 #
 # GET /apps/{appId}/banks/
 # operationId: app.cashflow.banks.list
-export def "apps-banks list" [
+export def "app-cashflow-banks-list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1938,7 +1938,7 @@ export def "apps-banks list" [
 #
 # GET /apps/{appId}/banks/connect
 # operationId: app.cashflow.banks.connect
-export def "apps-banks-connect get" [
+export def "app-cashflow-banks-connect" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1974,7 +1974,7 @@ export def "apps-banks-connect get" [
 #
 # POST /apps/{appId}/banks/synchronize
 # operationId: app.cashflow.banks.synchronize
-export def "apps-banks-synchronize create" [
+export def "app-cashflow-banks-synchronize" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2013,7 +2013,7 @@ export def "apps-banks-synchronize create" [
 #
 # GET /apps/{appId}/banks/{id}/funnel/edit
 # operationId: app.cashflow.banks.url_edit
-export def "apps-banks-funnel-edit get-url" [
+export def "app-cashflow-banks-url-edit" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2051,7 +2051,7 @@ export def "apps-banks-funnel-edit get-url" [
 #
 # GET /apps/{appId}/banks/{id}/funnel/sync
 # operationId: app.cashflow.banks.url_sync
-export def "apps-banks-funnel-sync sync-url" [
+export def "app-cashflow-banks-url-sync" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2089,7 +2089,7 @@ export def "apps-banks-funnel-sync sync-url" [
 #
 # GET /apps/{appId}/banks/{id}/funnel/validate
 # operationId: app.cashflow.banks.url_validate
-export def "apps-banks-funnel-validate validate-url" [
+export def "app-cashflow-banks-url-validate" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2127,7 +2127,7 @@ export def "apps-banks-funnel-validate validate-url" [
 #
 # POST /apps/{appId}/banks/{id}/select_accounts
 # operationId: app.cashflow.banks.select_accounts
-export def "apps-banks-select-accounts create" [
+export def "app-cashflow-banks-select-accounts" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2167,7 +2167,7 @@ export def "apps-banks-select-accounts create" [
 #
 # GET /apps/{appId}/cashflowsources/
 # operationId: app.cashflow.cashflowsources.list
-export def "apps-cashflowsources list" [
+export def "app-cashflow-cashflowsources-list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2209,7 +2209,7 @@ export def "apps-cashflowsources list" [
 #
 # POST /apps/{appId}/cashflowsources/
 # operationId: app.cashflow.cashflowsources.create
-export def "apps-cashflowsources create" [
+export def "app-cashflow-cashflowsources-create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2252,7 +2252,7 @@ export def "apps-cashflowsources create" [
 #
 # DELETE /apps/{appId}/cashflowsources/{id}
 # operationId: app.cashflow.cashflowsources.delete
-export def "apps-cashflowsources delete" [
+export def "app-cashflow-cashflowsources-delete" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2290,7 +2290,7 @@ export def "apps-cashflowsources delete" [
 #
 # GET /apps/{appId}/cashflowsources/{id}
 # operationId: app.cashflow.cashflowsources.get
-export def "apps-cashflowsources get" [
+export def "app-cashflow-cashflowsources-get" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2328,7 +2328,7 @@ export def "apps-cashflowsources get" [
 #
 # POST /apps/{appId}/cashflowsources/{id}
 # operationId: app.cashflow.cashflowsources.update
-export def "apps-cashflowsources update" [
+export def "app-cashflow-cashflowsources-update" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2373,7 +2373,7 @@ export def "apps-cashflowsources update" [
 #
 # POST /apps/{appId}/contacts/merge
 # operationId: app.contacts.transform.merge
-export def "apps-contacts-merge create" [
+export def "app-contacts-transform-merge" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2411,7 +2411,7 @@ export def "apps-contacts-merge create" [
 #
 # POST /apps/{appId}/email/batch
 # operationId: app.contacts.email.batch
-export def "apps-email-batch create" [
+export def "app-contacts-email-batch" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2451,7 +2451,7 @@ export def "apps-email-batch create" [
 #
 # POST /apps/{appId}/email/document
 # operationId: app.contacts.email.send
-export def "apps-email-document send" [
+export def "app-contacts-email-send" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2496,7 +2496,7 @@ export def "apps-email-document send" [
 #
 # DELETE /apps/{appId}/establishments/{id}
 # operationId: app.contacts.establishments.delete
-export def "apps-establishments delete" [
+export def "app-contacts-establishments-delete" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2534,7 +2534,7 @@ export def "apps-establishments delete" [
 #
 # GET /apps/{appId}/establishments/{id}
 # operationId: app.contacts.establishments.get
-export def "apps-establishments get" [
+export def "app-contacts-establishments-get" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2572,7 +2572,7 @@ export def "apps-establishments get" [
 #
 # POST /apps/{appId}/establishments/{id}
 # operationId: app.contacts.establishments.update
-export def "apps-establishments update" [
+export def "app-contacts-establishments-update" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2616,7 +2616,7 @@ export def "apps-establishments update" [
 #
 # GET /apps/{appId}/exports
 # operationId: app.accounting.export.list
-export def "apps-exports list" [
+export def "app-accounting-export-list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2658,7 +2658,7 @@ export def "apps-exports list" [
 #
 # POST /apps/{appId}/exports
 # operationId: app.accounting.export.create
-export def "apps-exports create" [
+export def "app-accounting-export-create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2696,7 +2696,7 @@ export def "apps-exports create" [
 #
 # GET /apps/{appId}/exports/acd_compta
 # operationId: app.accounting.export.AcdComptaGetUuid
-export def "apps-exports-acd-compta get-uuid" [
+export def "app-accounting-export-acd-compta-get-uuid" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2732,7 +2732,7 @@ export def "apps-exports-acd-compta get-uuid" [
 #
 # POST /apps/{appId}/exports/acd_compta
 # operationId: app.accounting.export.AcdComptaSetUuid
-export def "apps-exports-acd-compta update-uuid" [
+export def "app-accounting-export-acd-compta-set-uuid" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2773,7 +2773,7 @@ export def "apps-exports-acd-compta update-uuid" [
 #
 # GET /apps/{appId}/exports/download
 # operationId: app.accounting.export.download
-export def "apps-exports-download download" [
+export def "app-accounting-export-download" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2816,7 +2816,7 @@ export def "apps-exports-download download" [
 #
 # GET /apps/{appId}/exports/months
 # operationId: app.accounting.export.list_by_months
-export def "apps-exports-months list" [
+export def "app-accounting-export-list-by-months" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2852,7 +2852,7 @@ export def "apps-exports-months list" [
 #
 # DELETE /apps/{appId}/exports/{id}
 # operationId: app.accounting.export.delete
-export def "apps-exports delete" [
+export def "app-accounting-export-delete" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2890,7 +2890,7 @@ export def "apps-exports delete" [
 #
 # GET /apps/{appId}/exports/{id}
 # operationId: app.accounting.export.get
-export def "apps-exports get" [
+export def "app-accounting-export-get" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2928,7 +2928,7 @@ export def "apps-exports get" [
 #
 # GET /apps/{appId}/invoices
 # operationId: app.documents.sales.invoices.list
-export def "apps-invoices list" [
+export def "app-documents-sales-invoices-list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2970,7 +2970,7 @@ export def "apps-invoices list" [
 #
 # POST /apps/{appId}/invoices
 # operationId: app.documents.sales.invoices.create
-export def "apps-invoices create" [
+export def "app-documents-sales-invoices-create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3027,7 +3027,7 @@ export def "apps-invoices create" [
 #
 # DELETE /apps/{appId}/invoices/batch
 # operationId: app.documents.sales.invoices.batch_delete
-export def "apps-invoices-batch delete" [
+export def "app-documents-sales-invoices-batch-delete" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3065,7 +3065,7 @@ export def "apps-invoices-batch delete" [
 #
 # POST /apps/{appId}/invoices/batch
 # operationId: app.documents.sales.invoices.batch
-export def "apps-invoices-batch create" [
+export def "app-documents-sales-invoices-batch" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3103,7 +3103,7 @@ export def "apps-invoices-batch create" [
 #
 # GET /apps/{appId}/invoices/download
 # operationId: app.documents.sales.invoices.download
-export def "apps-invoices-download download" [
+export def "app-documents-sales-invoices-download" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3142,7 +3142,7 @@ export def "apps-invoices-download download" [
 #
 # POST /apps/{appId}/invoices/fresh
 # operationId: app.documents.sales.invoices.fresh
-export def "apps-invoices-fresh create" [
+export def "app-documents-sales-invoices-fresh" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3180,7 +3180,7 @@ export def "apps-invoices-fresh create" [
 #
 # GET /apps/{appId}/invoices/nextnumber
 # operationId: app.documents.sales.invoices.nextnumber
-export def "apps-invoices-nextnumber get" [
+export def "app-documents-sales-invoices-nextnumber" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3218,7 +3218,7 @@ export def "apps-invoices-nextnumber get" [
 #
 # GET /apps/{appId}/invoices/statistics
 # operationId: app.documents.sales.invoices.statistics
-export def "apps-invoices-statistics get" [
+export def "app-documents-sales-invoices-statistics" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3257,7 +3257,7 @@ export def "apps-invoices-statistics get" [
 #
 # DELETE /apps/{appId}/invoices/{id}
 # operationId: app.documents.sales.invoices.delete
-export def "apps-invoices delete" [
+export def "app-documents-sales-invoices-delete" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3295,7 +3295,7 @@ export def "apps-invoices delete" [
 #
 # GET /apps/{appId}/invoices/{id}
 # operationId: app.documents.sales.invoices.get
-export def "apps-invoices get" [
+export def "app-documents-sales-invoices-get" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3333,7 +3333,7 @@ export def "apps-invoices get" [
 #
 # POST /apps/{appId}/invoices/{id}
 # operationId: app.documents.sales.invoices.update
-export def "apps-invoices update" [
+export def "app-documents-sales-invoices-update" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3391,7 +3391,7 @@ export def "apps-invoices update" [
 #
 # DELETE /apps/{appId}/invoices/{id}/attach
 # operationId: app.documents.sales.invoices.detach
-export def "apps-invoices-attach delete-detach" [
+export def "app-documents-sales-invoices-detach" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3431,7 +3431,7 @@ export def "apps-invoices-attach delete-detach" [
 #
 # POST /apps/{appId}/invoices/{id}/attach
 # operationId: app.documents.sales.invoices.attach
-export def "apps-invoices-attach attach" [
+export def "app-documents-sales-invoices-attach" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3471,7 +3471,7 @@ export def "apps-invoices-attach attach" [
 #
 # POST /apps/{appId}/invoices/{id}/avoid
 # operationId: app.documents.sales.invoices.avoid
-export def "apps-invoices-avoid create" [
+export def "app-documents-sales-invoices-avoid" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3509,7 +3509,7 @@ export def "apps-invoices-avoid create" [
 #
 # POST /apps/{appId}/invoices/{id}/duplicate
 # operationId: app.documents.sales.invoices.duplicate
-export def "apps-invoices-duplicate create" [
+export def "app-documents-sales-invoices-duplicate" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3547,7 +3547,7 @@ export def "apps-invoices-duplicate create" [
 #
 # POST /apps/{appId}/invoices/{id}/finalize
 # operationId: app.documents.sales.invoices.finalize
-export def "apps-invoices-finalize finalize" [
+export def "app-documents-sales-invoices-finalize" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3587,7 +3587,7 @@ export def "apps-invoices-finalize finalize" [
 #
 # GET /apps/{appId}/invoices/{id}/pdf
 # operationId: app.documents.sales.invoices.pdf
-export def "apps-invoices-pdf get" [
+export def "app-documents-sales-invoices-pdf" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3627,7 +3627,7 @@ export def "apps-invoices-pdf get" [
 #
 # GET /apps/{appId}/invoices/{id}/preview.jpg
 # operationId: app.documents.sales.invoices.preview
-export def "apps-invoices-preview-jpg get" [
+export def "app-documents-sales-invoices-preview" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3669,7 +3669,7 @@ export def "apps-invoices-preview-jpg get" [
 #
 # DELETE /apps/{appId}/invoices/{id}/tag
 # operationId: app.documents.sales.invoices.untag
-export def "apps-invoices-tag untag" [
+export def "app-documents-sales-invoices-untag" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3709,7 +3709,7 @@ export def "apps-invoices-tag untag" [
 #
 # POST /apps/{appId}/invoices/{id}/tag
 # operationId: app.documents.sales.invoices.tag
-export def "apps-invoices-tag tag" [
+export def "app-documents-sales-invoices-tag" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3749,7 +3749,7 @@ export def "apps-invoices-tag tag" [
 #
 # POST /apps/{appId}/invoices/{id}/updatestatus
 # operationId: app.documents.sales.invoices.updatestatus
-export def "apps-invoices-update-status update" [
+export def "app-documents-sales-invoices-updatestatus" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3789,7 +3789,7 @@ export def "apps-invoices-update-status update" [
 #
 # DELETE /apps/{appId}/logs/autoreconcile/
 # operationId: app.cashflow.logsautoreconciliations.clear
-export def "apps-logs-autoreconcile delete-clear" [
+export def "app-cashflow-logsautoreconciliations-clear" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3825,7 +3825,7 @@ export def "apps-logs-autoreconcile delete-clear" [
 #
 # GET /apps/{appId}/logs/autoreconcile/
 # operationId: app.cashflow.logsautoreconciliations.list
-export def "apps-logs-autoreconcile list" [
+export def "app-cashflow-logsautoreconciliations-list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3867,7 +3867,7 @@ export def "apps-logs-autoreconcile list" [
 #
 # POST /apps/{appId}/logs/autoreconcile/
 # operationId: app.cashflow.logsautoreconciliations.start
-export def "apps-logs-autoreconcile start" [
+export def "app-cashflow-logsautoreconciliations-start" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3903,7 +3903,7 @@ export def "apps-logs-autoreconcile start" [
 #
 # GET /apps/{appId}/organization
 # operationId: app.organization.get
-export def "apps-organization get" [
+export def "app-organization-get" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3939,7 +3939,7 @@ export def "apps-organization get" [
 #
 # POST /apps/{appId}/organization
 # operationId: app.organization.update
-export def "apps-organization update" [
+export def "app-organization-update" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3998,7 +3998,7 @@ export def "apps-organization update" [
 #
 # GET /apps/{appId}/organizations
 # operationId: app.contacts.organizations.list
-export def "apps-organizations list" [
+export def "app-contacts-organizations-list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4039,7 +4039,7 @@ export def "apps-organizations list" [
 #
 # POST /apps/{appId}/organizations
 # operationId: app.contacts.organizations.create
-export def "apps-organizations create" [
+export def "app-contacts-organizations-create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4095,7 +4095,7 @@ export def "apps-organizations create" [
 #
 # POST /apps/{appId}/organizations/batch
 # operationId: app.contacts.organizations.batch
-export def "apps-organizations-batch create" [
+export def "app-contacts-organizations-batch" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4133,7 +4133,7 @@ export def "apps-organizations-batch create" [
 #
 # DELETE /apps/{appId}/organizations/{id}
 # operationId: app.contacts.organizations.delete
-export def "apps-organizations delete" [
+export def "app-contacts-organizations-delete" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4171,7 +4171,7 @@ export def "apps-organizations delete" [
 #
 # GET /apps/{appId}/organizations/{id}
 # operationId: app.contacts.organizations.get
-export def "apps-organizations get" [
+export def "app-contacts-organizations-get" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4209,7 +4209,7 @@ export def "apps-organizations get" [
 #
 # POST /apps/{appId}/organizations/{id}
 # operationId: app.contacts.organizations.update
-export def "apps-organizations update" [
+export def "app-contacts-organizations-update" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4267,7 +4267,7 @@ export def "apps-organizations update" [
 #
 # GET /apps/{appId}/organizations/{id}/restore
 # operationId: app.contacts.organizations.restore
-export def "apps-organizations-restore get" [
+export def "app-contacts-organizations-restore" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4305,7 +4305,7 @@ export def "apps-organizations-restore get" [
 #
 # GET /apps/{appId}/payments
 # operationId: app.payments.payments.list
-export def "apps-payments list" [
+export def "app-payments-payments-list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4347,7 +4347,7 @@ export def "apps-payments list" [
 #
 # GET /apps/{appId}/payments/recipe_book
 # operationId: app.payments.payments.recipe_book
-export def "apps-payments-recipe-book get" [
+export def "app-payments-payments-recipe-book" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4383,7 +4383,7 @@ export def "apps-payments-recipe-book get" [
 #
 # DELETE /apps/{appId}/payments/{id}
 # operationId: app.payments.payments.delete
-export def "apps-payments delete" [
+export def "app-payments-payments-delete" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4421,7 +4421,7 @@ export def "apps-payments delete" [
 #
 # GET /apps/{appId}/payments/{id}
 # operationId: app.payments.payments.get
-export def "apps-payments get" [
+export def "app-payments-payments-get" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4459,7 +4459,7 @@ export def "apps-payments get" [
 #
 # GET /apps/{appId}/persons
 # operationId: app.contacts.persons.list
-export def "apps-persons list" [
+export def "app-contacts-persons-list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4500,7 +4500,7 @@ export def "apps-persons list" [
 #
 # POST /apps/{appId}/persons
 # operationId: app.contacts.persons.create
-export def "apps-persons create" [
+export def "app-contacts-persons-create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4542,7 +4542,7 @@ export def "apps-persons create" [
 #
 # POST /apps/{appId}/persons/batch
 # operationId: app.contacts.persons.batch
-export def "apps-persons-batch create" [
+export def "app-contacts-persons-batch" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4580,7 +4580,7 @@ export def "apps-persons-batch create" [
 #
 # DELETE /apps/{appId}/persons/{id}
 # operationId: app.contacts.persons.delete
-export def "apps-persons delete" [
+export def "app-contacts-persons-delete" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4618,7 +4618,7 @@ export def "apps-persons delete" [
 #
 # GET /apps/{appId}/persons/{id}
 # operationId: app.contacts.persons.get
-export def "apps-persons get" [
+export def "app-contacts-persons-get" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4656,7 +4656,7 @@ export def "apps-persons get" [
 #
 # POST /apps/{appId}/persons/{id}
 # operationId: app.contacts.persons.update
-export def "apps-persons update" [
+export def "app-contacts-persons-update" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4700,7 +4700,7 @@ export def "apps-persons update" [
 #
 # GET /apps/{appId}/persons/{id}/restore
 # operationId: app.contacts.persons.restore
-export def "apps-persons-restore get" [
+export def "app-contacts-persons-restore" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4738,7 +4738,7 @@ export def "apps-persons-restore get" [
 #
 # GET /apps/{appId}/ping
 # operationId: app.ping
-export def "apps-ping ping" [
+export def "app-ping" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4774,7 +4774,7 @@ export def "apps-ping ping" [
 #
 # GET /apps/{appId}/productcategory
 # operationId: app.catalog.categories.list
-export def "apps-productcategory list" [
+export def "app-catalog-categories-list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4816,7 +4816,7 @@ export def "apps-productcategory list" [
 #
 # POST /apps/{appId}/productcategory
 # operationId: app.catalog.categories.create
-export def "apps-productcategory create" [
+export def "app-catalog-categories-create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4856,7 +4856,7 @@ export def "apps-productcategory create" [
 #
 # DELETE /apps/{appId}/productcategory/{id}
 # operationId: app.catalog.categories.delete
-export def "apps-productcategory delete" [
+export def "app-catalog-categories-delete" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4894,7 +4894,7 @@ export def "apps-productcategory delete" [
 #
 # GET /apps/{appId}/productcategory/{id}
 # operationId: app.catalog.categories.get
-export def "apps-productcategory get" [
+export def "app-catalog-categories-get" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4932,7 +4932,7 @@ export def "apps-productcategory get" [
 #
 # POST /apps/{appId}/productcategory/{id}
 # operationId: app.catalog.categories.update
-export def "apps-productcategory update" [
+export def "app-catalog-categories-update" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4974,7 +4974,7 @@ export def "apps-productcategory update" [
 #
 # GET /apps/{appId}/products
 # operationId: app.catalog.products.list
-export def "apps-products list" [
+export def "app-catalog-products-list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5016,7 +5016,7 @@ export def "apps-products list" [
 #
 # POST /apps/{appId}/products
 # operationId: app.catalog.products.create
-export def "apps-products create" [
+export def "app-catalog-products-create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5067,7 +5067,7 @@ export def "apps-products create" [
 #
 # POST /apps/{appId}/products/batch
 # operationId: app.catalog.products.batch
-export def "apps-products-batch create" [
+export def "app-catalog-products-batch" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5105,7 +5105,7 @@ export def "apps-products-batch create" [
 #
 # DELETE /apps/{appId}/products/{id}
 # operationId: app.catalog.products.delete
-export def "apps-products delete" [
+export def "app-catalog-products-delete" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5143,7 +5143,7 @@ export def "apps-products delete" [
 #
 # GET /apps/{appId}/products/{id}
 # operationId: app.catalog.products.get
-export def "apps-products get" [
+export def "app-catalog-products-get" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5181,7 +5181,7 @@ export def "apps-products get" [
 #
 # POST /apps/{appId}/products/{id}
 # operationId: app.catalog.products.update
-export def "apps-products update" [
+export def "app-catalog-products-update" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5234,7 +5234,7 @@ export def "apps-products update" [
 #
 # DELETE /apps/{appId}/products/{id}/attach
 # operationId: app.catalog.products.detach
-export def "apps-products-attach delete-detach" [
+export def "app-catalog-products-detach" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5274,7 +5274,7 @@ export def "apps-products-attach delete-detach" [
 #
 # POST /apps/{appId}/products/{id}/attach
 # operationId: app.catalog.products.attach
-export def "apps-products-attach attach" [
+export def "app-catalog-products-attach" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5314,7 +5314,7 @@ export def "apps-products-attach attach" [
 #
 # GET /apps/{appId}/productstocks
 # operationId: app.catalog.stocks.list
-export def "apps-productstocks list" [
+export def "app-catalog-stocks-list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5356,7 +5356,7 @@ export def "apps-productstocks list" [
 #
 # POST /apps/{appId}/productstocks
 # operationId: app.catalog.stocks.create
-export def "apps-productstocks create" [
+export def "app-catalog-stocks-create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5402,7 +5402,7 @@ export def "apps-productstocks create" [
 #
 # DELETE /apps/{appId}/productstocks/{id}
 # operationId: app.catalog.stocks.delete
-export def "apps-productstocks delete" [
+export def "app-catalog-stocks-delete" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5440,7 +5440,7 @@ export def "apps-productstocks delete" [
 #
 # GET /apps/{appId}/productstocks/{id}
 # operationId: app.catalog.stocks.get
-export def "apps-productstocks get" [
+export def "app-catalog-stocks-get" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5478,7 +5478,7 @@ export def "apps-productstocks get" [
 #
 # POST /apps/{appId}/productstocks/{id}
 # operationId: app.catalog.stocks.update
-export def "apps-productstocks update" [
+export def "app-catalog-stocks-update" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5524,7 +5524,7 @@ export def "apps-productstocks update" [
 #
 # POST /apps/{appId}/productstocks/{id}/destruct
 # operationId: app.catalog.stocks.destruct
-export def "apps-productstocks-destruct create" [
+export def "app-catalog-stocks-destruct" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5565,7 +5565,7 @@ export def "apps-productstocks-destruct create" [
 #
 # POST /apps/{appId}/productstocks/{id}/rental/back
 # operationId: app.catalog.stocks.rental_back
-export def "apps-productstocks-rental-back create" [
+export def "app-catalog-stocks-rental-back" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5608,7 +5608,7 @@ export def "apps-productstocks-rental-back create" [
 #
 # POST /apps/{appId}/productstocks/{id}/rental/exit
 # operationId: app.catalog.stocks.rental_exit
-export def "apps-productstocks-rental-exit create" [
+export def "app-catalog-stocks-rental-exit" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5650,7 +5650,7 @@ export def "apps-productstocks-rental-exit create" [
 #
 # GET /apps/{appId}/purchases
 # operationId: app.documents.purchases.purchases.list
-export def "apps-purchases list" [
+export def "app-documents-purchases-purchases-list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5693,7 +5693,7 @@ export def "apps-purchases list" [
 #
 # POST /apps/{appId}/purchases
 # operationId: app.documents.purchases.purchases.create
-export def "apps-purchases create" [
+export def "app-documents-purchases-purchases-create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5748,7 +5748,7 @@ export def "apps-purchases create" [
 #
 # DELETE /apps/{appId}/purchases/batch
 # operationId: app.documents.purchases.purchases.batch_delete
-export def "apps-purchases-batch delete" [
+export def "app-documents-purchases-purchases-batch-delete" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5786,7 +5786,7 @@ export def "apps-purchases-batch delete" [
 #
 # POST /apps/{appId}/purchases/batch
 # operationId: app.documents.purchases.purchases.batch
-export def "apps-purchases-batch create" [
+export def "app-documents-purchases-purchases-batch" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5824,7 +5824,7 @@ export def "apps-purchases-batch create" [
 #
 # GET /apps/{appId}/purchases/download
 # operationId: app.documents.purchases.purchases.download
-export def "apps-purchases-download download" [
+export def "app-documents-purchases-purchases-download" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5862,7 +5862,7 @@ export def "apps-purchases-download download" [
 #
 # GET /apps/{appId}/purchases/statistics
 # operationId: app.documents.purchases.purchases.statistics
-export def "apps-purchases-statistics get" [
+export def "app-documents-purchases-purchases-statistics" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5901,7 +5901,7 @@ export def "apps-purchases-statistics get" [
 #
 # DELETE /apps/{appId}/purchases/{id}
 # operationId: app.documents.purchases.purchases.delete
-export def "apps-purchases delete" [
+export def "app-documents-purchases-purchases-delete" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5939,7 +5939,7 @@ export def "apps-purchases delete" [
 #
 # GET /apps/{appId}/purchases/{id}
 # operationId: app.documents.purchases.purchases.get
-export def "apps-purchases get" [
+export def "app-documents-purchases-purchases-get" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5977,7 +5977,7 @@ export def "apps-purchases get" [
 #
 # POST /apps/{appId}/purchases/{id}
 # operationId: app.documents.purchases.purchases.update
-export def "apps-purchases update" [
+export def "app-documents-purchases-purchases-update" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6034,7 +6034,7 @@ export def "apps-purchases update" [
 #
 # DELETE /apps/{appId}/purchases/{id}/attach
 # operationId: app.documents.purchases.purchases.detach
-export def "apps-purchases-attach delete-detach" [
+export def "app-documents-purchases-purchases-detach" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6074,7 +6074,7 @@ export def "apps-purchases-attach delete-detach" [
 #
 # POST /apps/{appId}/purchases/{id}/attach
 # operationId: app.documents.purchases.purchases.attach
-export def "apps-purchases-attach attach" [
+export def "app-documents-purchases-purchases-attach" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6114,7 +6114,7 @@ export def "apps-purchases-attach attach" [
 #
 # GET /apps/{appId}/purchases/{id}/original
 # operationId: app.documents.purchases.purchases.original
-export def "apps-purchases-original get" [
+export def "app-documents-purchases-purchases-original" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6152,7 +6152,7 @@ export def "apps-purchases-original get" [
 #
 # GET /apps/{appId}/purchases/{id}/preview.jpg
 # operationId: app.documents.purchases.purchases.preview
-export def "apps-purchases-preview-jpg get" [
+export def "app-documents-purchases-purchases-preview" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6190,7 +6190,7 @@ export def "apps-purchases-preview-jpg get" [
 #
 # DELETE /apps/{appId}/purchases/{id}/tag
 # operationId: app.documents.purchases.purchases.untag
-export def "apps-purchases-tag untag" [
+export def "app-documents-purchases-purchases-untag" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6230,7 +6230,7 @@ export def "apps-purchases-tag untag" [
 #
 # POST /apps/{appId}/purchases/{id}/tag
 # operationId: app.documents.purchases.purchases.tag
-export def "apps-purchases-tag tag" [
+export def "app-documents-purchases-purchases-tag" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6270,7 +6270,7 @@ export def "apps-purchases-tag tag" [
 #
 # GET /apps/{appId}/purchases/{id}/thumbnail.jpg
 # operationId: app.documents.purchases.purchases.thumbnail
-export def "apps-purchases-thumbnail-jpg get" [
+export def "app-documents-purchases-purchases-thumbnail" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6308,7 +6308,7 @@ export def "apps-purchases-thumbnail-jpg get" [
 #
 # POST /apps/{appId}/purchases/{id}/updatestatus
 # operationId: app.documents.purchases.purchases.updatestatus
-export def "apps-purchases-update-status update" [
+export def "app-documents-purchases-purchases-updatestatus" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6348,7 +6348,7 @@ export def "apps-purchases-update-status update" [
 #
 # GET /apps/{appId}/quotes
 # operationId: app.documents.sales.quotes.list
-export def "apps-quotes list" [
+export def "app-documents-sales-quotes-list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6390,7 +6390,7 @@ export def "apps-quotes list" [
 #
 # POST /apps/{appId}/quotes
 # operationId: app.documents.sales.quotes.create
-export def "apps-quotes create" [
+export def "app-documents-sales-quotes-create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6443,7 +6443,7 @@ export def "apps-quotes create" [
 #
 # DELETE /apps/{appId}/quotes/batch
 # operationId: app.documents.sales.quotes.batch_delete
-export def "apps-quotes-batch delete" [
+export def "app-documents-sales-quotes-batch-delete" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6481,7 +6481,7 @@ export def "apps-quotes-batch delete" [
 #
 # POST /apps/{appId}/quotes/batch
 # operationId: app.documents.sales.quotes.batch
-export def "apps-quotes-batch create" [
+export def "app-documents-sales-quotes-batch" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6519,7 +6519,7 @@ export def "apps-quotes-batch create" [
 #
 # GET /apps/{appId}/quotes/download
 # operationId: app.documents.sales.quotes.download
-export def "apps-quotes-download download" [
+export def "app-documents-sales-quotes-download" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6558,7 +6558,7 @@ export def "apps-quotes-download download" [
 #
 # POST /apps/{appId}/quotes/fresh
 # operationId: app.documents.sales.quotes.fresh
-export def "apps-quotes-fresh create" [
+export def "app-documents-sales-quotes-fresh" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6596,7 +6596,7 @@ export def "apps-quotes-fresh create" [
 #
 # POST /apps/{appId}/quotes/invoice
 # operationId: app.documents.sales.quotes.invoices
-export def "apps-quotes-invoice create-by-app-id" [
+export def "app-documents-sales-quotes-invoices" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6634,7 +6634,7 @@ export def "apps-quotes-invoice create-by-app-id" [
 #
 # GET /apps/{appId}/quotes/nextnumber
 # operationId: app.documents.sales.quotes.nextnumber
-export def "apps-quotes-nextnumber get" [
+export def "app-documents-sales-quotes-nextnumber" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6672,7 +6672,7 @@ export def "apps-quotes-nextnumber get" [
 #
 # GET /apps/{appId}/quotes/statistics
 # operationId: app.documents.sales.quotes.statistics
-export def "apps-quotes-statistics get" [
+export def "app-documents-sales-quotes-statistics" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6711,7 +6711,7 @@ export def "apps-quotes-statistics get" [
 #
 # DELETE /apps/{appId}/quotes/{id}
 # operationId: app.documents.sales.quotes.delete
-export def "apps-quotes delete" [
+export def "app-documents-sales-quotes-delete" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6749,7 +6749,7 @@ export def "apps-quotes delete" [
 #
 # GET /apps/{appId}/quotes/{id}
 # operationId: app.documents.sales.quotes.get
-export def "apps-quotes get" [
+export def "app-documents-sales-quotes-get" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6787,7 +6787,7 @@ export def "apps-quotes get" [
 #
 # POST /apps/{appId}/quotes/{id}
 # operationId: app.documents.sales.quotes.update
-export def "apps-quotes update" [
+export def "app-documents-sales-quotes-update" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6841,7 +6841,7 @@ export def "apps-quotes update" [
 #
 # DELETE /apps/{appId}/quotes/{id}/attach
 # operationId: app.documents.sales.quotes.detach
-export def "apps-quotes-attach delete-detach" [
+export def "app-documents-sales-quotes-detach" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6881,7 +6881,7 @@ export def "apps-quotes-attach delete-detach" [
 #
 # POST /apps/{appId}/quotes/{id}/attach
 # operationId: app.documents.sales.quotes.attach
-export def "apps-quotes-attach attach" [
+export def "app-documents-sales-quotes-attach" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6921,7 +6921,7 @@ export def "apps-quotes-attach attach" [
 #
 # POST /apps/{appId}/quotes/{id}/downpayment
 # operationId: app.documents.sales.quotes.downpayment
-export def "apps-quotes-downpayment create" [
+export def "app-documents-sales-quotes-downpayment" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6961,7 +6961,7 @@ export def "apps-quotes-downpayment create" [
 #
 # POST /apps/{appId}/quotes/{id}/duplicate
 # operationId: app.documents.sales.quotes.duplicate
-export def "apps-quotes-duplicate create" [
+export def "app-documents-sales-quotes-duplicate" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6999,7 +6999,7 @@ export def "apps-quotes-duplicate create" [
 #
 # POST /apps/{appId}/quotes/{id}/finalize
 # operationId: app.documents.sales.quotes.finalize
-export def "apps-quotes-finalize finalize" [
+export def "app-documents-sales-quotes-finalize" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -7037,7 +7037,7 @@ export def "apps-quotes-finalize finalize" [
 #
 # POST /apps/{appId}/quotes/{id}/invoice
 # operationId: app.documents.sales.quotes.invoice
-export def "apps-quotes-invoice create-by-app-id-1" [
+export def "app-documents-sales-quotes-invoice" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -7075,7 +7075,7 @@ export def "apps-quotes-invoice create-by-app-id-1" [
 #
 # GET /apps/{appId}/quotes/{id}/pdf
 # operationId: app.documents.sales.quotes.pdf
-export def "apps-quotes-pdf get" [
+export def "app-documents-sales-quotes-pdf" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -7115,7 +7115,7 @@ export def "apps-quotes-pdf get" [
 #
 # GET /apps/{appId}/quotes/{id}/preview.jpg
 # operationId: app.documents.sales.quotes.preview
-export def "apps-quotes-preview-jpg get" [
+export def "app-documents-sales-quotes-preview" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -7155,7 +7155,7 @@ export def "apps-quotes-preview-jpg get" [
 #
 # POST /apps/{appId}/quotes/{id}/situation_invoice
 # operationId: app.documents.sales.quotes.situation_invoice
-export def "apps-quotes-situation-invoice create" [
+export def "app-documents-sales-quotes-situation-invoice" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -7195,7 +7195,7 @@ export def "apps-quotes-situation-invoice create" [
 #
 # DELETE /apps/{appId}/quotes/{id}/tag
 # operationId: app.documents.sales.quotes.untag
-export def "apps-quotes-tag untag" [
+export def "app-documents-sales-quotes-untag" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -7235,7 +7235,7 @@ export def "apps-quotes-tag untag" [
 #
 # POST /apps/{appId}/quotes/{id}/tag
 # operationId: app.documents.sales.quotes.tag
-export def "apps-quotes-tag tag" [
+export def "app-documents-sales-quotes-tag" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -7275,7 +7275,7 @@ export def "apps-quotes-tag tag" [
 #
 # POST /apps/{appId}/quotes/{id}/updatestatus
 # operationId: app.documents.sales.quotes.updatestatus
-export def "apps-quotes-update-status update" [
+export def "app-documents-sales-quotes-updatestatus" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -7315,7 +7315,7 @@ export def "apps-quotes-update-status update" [
 #
 # GET /apps/{appId}/quotes/{id}/yousign/preview.jpg
 # operationId: app.documents.sales.quotes.yousign_preview
-export def "apps-quotes-yousign-preview-jpg get" [
+export def "app-documents-sales-quotes-yousign-preview" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -7355,7 +7355,7 @@ export def "apps-quotes-yousign-preview-jpg get" [
 #
 # DELETE /apps/{appId}/reconcile
 # operationId: app.payments.reconciliation.unreconcile
-export def "apps-reconcile delete-unreconcile" [
+export def "app-payments-reconciliation-unreconcile" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7394,7 +7394,7 @@ export def "apps-reconcile delete-unreconcile" [
 #
 # POST /apps/{appId}/reconcile
 # operationId: app.payments.reconciliation.reconcile
-export def "apps-reconcile create" [
+export def "app-payments-reconciliation-reconcile" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7437,7 +7437,7 @@ export def "apps-reconcile create" [
 #
 # POST /apps/{appId}/reconcile/batch
 # operationId: app.payments.reconciliation.batch
-export def "apps-reconcile-batch create" [
+export def "app-payments-reconciliation-batch" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7475,7 +7475,7 @@ export def "apps-reconcile-batch create" [
 #
 # GET /apps/{appId}/recurringinvoices
 # operationId: app.documents.sales.recurringinvoices.list
-export def "apps-recurringinvoices list" [
+export def "app-documents-sales-recurringinvoices-list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7517,7 +7517,7 @@ export def "apps-recurringinvoices list" [
 #
 # POST /apps/{appId}/recurringinvoices
 # operationId: app.documents.sales.recurringinvoices.create
-export def "apps-recurringinvoices create" [
+export def "app-documents-sales-recurringinvoices-create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7575,7 +7575,7 @@ export def "apps-recurringinvoices create" [
 #
 # DELETE /apps/{appId}/recurringinvoices/batch
 # operationId: app.documents.sales.recurringinvoices.batch_delete
-export def "apps-recurringinvoices-batch delete" [
+export def "app-documents-sales-recurringinvoices-batch-delete" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7613,7 +7613,7 @@ export def "apps-recurringinvoices-batch delete" [
 #
 # POST /apps/{appId}/recurringinvoices/batch
 # operationId: app.documents.sales.recurringinvoices.batch
-export def "apps-recurringinvoices-batch create" [
+export def "app-documents-sales-recurringinvoices-batch" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7651,7 +7651,7 @@ export def "apps-recurringinvoices-batch create" [
 #
 # GET /apps/{appId}/recurringinvoices/periods
 # operationId: app.documents.sales.recurringinvoices.getPeriods
-export def "apps-recurringinvoices-periods get" [
+export def "app-documents-sales-recurringinvoices-get-periods" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7689,7 +7689,7 @@ export def "apps-recurringinvoices-periods get" [
 #
 # DELETE /apps/{appId}/recurringinvoices/{id}
 # operationId: app.documents.sales.recurringinvoices.delete
-export def "apps-recurringinvoices delete" [
+export def "app-documents-sales-recurringinvoices-delete" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -7727,7 +7727,7 @@ export def "apps-recurringinvoices delete" [
 #
 # GET /apps/{appId}/recurringinvoices/{id}
 # operationId: app.documents.sales.recurringinvoices.get
-export def "apps-recurringinvoices get" [
+export def "app-documents-sales-recurringinvoices-get" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -7765,7 +7765,7 @@ export def "apps-recurringinvoices get" [
 #
 # POST /apps/{appId}/recurringinvoices/{id}
 # operationId: app.documents.sales.recurringinvoices.update
-export def "apps-recurringinvoices update" [
+export def "app-documents-sales-recurringinvoices-update" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -7825,7 +7825,7 @@ export def "apps-recurringinvoices update" [
 #
 # GET /apps/{appId}/recurringinvoices/{id}/plan
 # operationId: app.documents.sales.recurringinvoices.plan
-export def "apps-recurringinvoices-plan get" [
+export def "app-documents-sales-recurringinvoices-plan" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -7865,7 +7865,7 @@ export def "apps-recurringinvoices-plan get" [
 #
 # GET /apps/{appId}/relationships
 # operationId: app.contacts.relationships.list
-export def "apps-relationships list" [
+export def "app-contacts-relationships-list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7906,7 +7906,7 @@ export def "apps-relationships list" [
 #
 # GET /apps/{appId}/relationships/{id}
 # operationId: app.contacts.relationships.get
-export def "apps-relationships get" [
+export def "app-contacts-relationships-get" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -7944,7 +7944,7 @@ export def "apps-relationships get" [
 #
 # POST /apps/{appId}/relationships/{id}
 # operationId: app.contacts.relationships.update
-export def "apps-relationships update" [
+export def "app-contacts-relationships-update" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -7996,7 +7996,7 @@ export def "apps-relationships update" [
 #
 # DELETE /apps/{appId}/relationships/{id}/attach
 # operationId: app.contacts.relationships.detach
-export def "apps-relationships-attach delete-detach" [
+export def "app-contacts-relationships-detach" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -8036,7 +8036,7 @@ export def "apps-relationships-attach delete-detach" [
 #
 # POST /apps/{appId}/relationships/{id}/attach
 # operationId: app.contacts.relationships.attach
-export def "apps-relationships-attach attach" [
+export def "app-contacts-relationships-attach" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -8076,7 +8076,7 @@ export def "apps-relationships-attach attach" [
 #
 # POST /apps/{appId}/reset
 # operationId: app.reset
-export def "apps-reset reset" [
+export def "app-reset" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8112,7 +8112,7 @@ export def "apps-reset reset" [
 #
 # GET /apps/{appId}/rules/
 # operationId: app.rules.list
-export def "apps-rules list" [
+export def "app-rules-list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8154,7 +8154,7 @@ export def "apps-rules list" [
 #
 # POST /apps/{appId}/rules/
 # operationId: app.rules.create
-export def "apps-rules create" [
+export def "app-rules-create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8196,7 +8196,7 @@ export def "apps-rules create" [
 #
 # POST /apps/{appId}/rules/execute_on
 # operationId: app.rules.execute_on
-export def "apps-rules-execute-on create" [
+export def "app-rules-execute-on" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8234,7 +8234,7 @@ export def "apps-rules-execute-on create" [
 #
 # DELETE /apps/{appId}/rules/{id}
 # operationId: app.rules.delete
-export def "apps-rules delete" [
+export def "app-rules-delete" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -8272,7 +8272,7 @@ export def "apps-rules delete" [
 #
 # GET /apps/{appId}/rules/{id}
 # operationId: app.rules.get
-export def "apps-rules get" [
+export def "app-rules-get" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -8310,7 +8310,7 @@ export def "apps-rules get" [
 #
 # POST /apps/{appId}/rules/{id}
 # operationId: app.rules.update
-export def "apps-rules update" [
+export def "app-rules-update" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -8354,7 +8354,7 @@ export def "apps-rules update" [
 #
 # GET /apps/{appId}/salesdocumentmodels
 # operationId: app.documents.sales.models.list
-export def "apps-salesdocumentmodels list" [
+export def "app-documents-sales-models-list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8396,7 +8396,7 @@ export def "apps-salesdocumentmodels list" [
 #
 # POST /apps/{appId}/salesdocumentmodels
 # operationId: app.documents.sales.models.create
-export def "apps-salesdocumentmodels create" [
+export def "app-documents-sales-models-create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8437,7 +8437,7 @@ export def "apps-salesdocumentmodels create" [
 #
 # DELETE /apps/{appId}/salesdocumentmodels/{id}
 # operationId: app.documents.sales.models.delete
-export def "apps-salesdocumentmodels delete" [
+export def "app-documents-sales-models-delete" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -8475,7 +8475,7 @@ export def "apps-salesdocumentmodels delete" [
 #
 # GET /apps/{appId}/salesdocumentmodels/{id}
 # operationId: app.documents.sales.models.get
-export def "apps-salesdocumentmodels get" [
+export def "app-documents-sales-models-get" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -8513,7 +8513,7 @@ export def "apps-salesdocumentmodels get" [
 #
 # POST /apps/{appId}/salesdocumentmodels/{id}
 # operationId: app.documents.sales.models.update
-export def "apps-salesdocumentmodels update" [
+export def "app-documents-sales-models-update" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -8556,7 +8556,7 @@ export def "apps-salesdocumentmodels update" [
 #
 # GET /apps/{appId}/sepamandates/
 # operationId: app.payments.sepamandates.list
-export def "apps-sepamandates list" [
+export def "app-payments-sepamandates-list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8598,7 +8598,7 @@ export def "apps-sepamandates list" [
 #
 # POST /apps/{appId}/sepamandates/
 # operationId: app.payments.sepamandates.create
-export def "apps-sepamandates create" [
+export def "app-payments-sepamandates-create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8645,7 +8645,7 @@ export def "apps-sepamandates create" [
 #
 # GET /apps/{appId}/sepamandates/credittransfer
 # operationId: app.payments.sepacredittransfer.preview
-export def "apps-sepamandates-credittransfer get-preview" [
+export def "app-payments-sepacredittransfer-preview" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8683,7 +8683,7 @@ export def "apps-sepamandates-credittransfer get-preview" [
 #
 # POST /apps/{appId}/sepamandates/credittransfer
 # operationId: app.payments.sepacredittransfer.download
-export def "apps-sepamandates-credittransfer download" [
+export def "app-payments-sepacredittransfer-download" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8726,7 +8726,7 @@ export def "apps-sepamandates-credittransfer download" [
 #
 # GET /apps/{appId}/sepamandates/directdebit
 # operationId: app.payments.sepadirectdebit.preview
-export def "apps-sepamandates-directdebit get-preview" [
+export def "app-payments-sepadirectdebit-preview" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8764,7 +8764,7 @@ export def "apps-sepamandates-directdebit get-preview" [
 #
 # POST /apps/{appId}/sepamandates/directdebit
 # operationId: app.payments.sepadirectdebit.download
-export def "apps-sepamandates-directdebit download" [
+export def "app-payments-sepadirectdebit-download" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8808,7 +8808,7 @@ export def "apps-sepamandates-directdebit download" [
 #
 # DELETE /apps/{appId}/sepamandates/{id}
 # operationId: app.payments.sepamandates.delete
-export def "apps-sepamandates delete" [
+export def "app-payments-sepamandates-delete" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -8846,7 +8846,7 @@ export def "apps-sepamandates delete" [
 #
 # GET /apps/{appId}/sepamandates/{id}
 # operationId: app.payments.sepamandates.get
-export def "apps-sepamandates get" [
+export def "app-payments-sepamandates-get" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -8884,7 +8884,7 @@ export def "apps-sepamandates get" [
 #
 # POST /apps/{appId}/sepamandates/{id}
 # operationId: app.payments.sepamandates.update
-export def "apps-sepamandates update" [
+export def "app-payments-sepamandates-update" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -8933,7 +8933,7 @@ export def "apps-sepamandates update" [
 #
 # GET /apps/{appId}/services/stripe/webhook
 # operationId: app.services.stripe.webhook.ping
-export def "apps-services-stripe-webhook ping" [
+export def "app-services-stripe-webhook-ping" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8969,7 +8969,7 @@ export def "apps-services-stripe-webhook ping" [
 #
 # POST /apps/{appId}/services/stripe/webhook
 # operationId: app.services.stripe.webhook.handle
-export def "apps-services-stripe-webhook create-handle" [
+export def "app-services-stripe-webhook-handle" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9005,7 +9005,7 @@ export def "apps-services-stripe-webhook create-handle" [
 #
 # POST /apps/{appId}/services/yousign/webhook
 # operationId: app.services.yousign.webhook.handle
-export def "apps-services-yousign-webhook create-handle" [
+export def "app-services-yousign-webhook-handle" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9041,7 +9041,7 @@ export def "apps-services-yousign-webhook create-handle" [
 #
 # GET /apps/{appId}/settings
 # operationId: app.settings.get
-export def "apps-settings get" [
+export def "app-settings-get" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9079,7 +9079,7 @@ export def "apps-settings get" [
 #
 # POST /apps/{appId}/settings
 # operationId: app.settings.update
-export def "apps-settings update" [
+export def "app-settings-update" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9119,7 +9119,7 @@ export def "apps-settings update" [
 #
 # POST /apps/{appId}/signature
 # operationId: app.documents.sales.signature.create
-export def "apps-signature create" [
+export def "app-documents-sales-signature-create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9161,7 +9161,7 @@ export def "apps-signature create" [
 #
 # GET /apps/{appId}/statistics/charts/{type}
 # operationId: app.statistics.charts.get
-export def "apps-statistics-charts get" [
+export def "app-statistics-charts-get" [
   app_id: int
   type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9214,7 +9214,7 @@ export def "apps-statistics-charts get" [
 #
 # GET /apps/{appId}/statistics/timetable/purchases
 # operationId: app.statistics.timetable.purchases
-export def "apps-statistics-timetable-purchases get" [
+export def "app-statistics-timetable-purchases" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9253,7 +9253,7 @@ export def "apps-statistics-timetable-purchases get" [
 #
 # GET /apps/{appId}/statistics/timetable/sales
 # operationId: app.statistics.timetable.sales
-export def "apps-statistics-timetable-sales get" [
+export def "app-statistics-timetable-sales" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9292,7 +9292,7 @@ export def "apps-statistics-timetable-sales get" [
 #
 # GET /apps/{appId}/statistics/vat
 # operationId: app.statistics.vat.get
-export def "apps-statistics-vat get" [
+export def "app-statistics-vat-get" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9333,7 +9333,7 @@ export def "apps-statistics-vat get" [
 #
 # POST /apps/{appId}/subscription/anchordate
 # operationId: app.subscription.anchordate
-export def "apps-subscription-anchordate create" [
+export def "app-subscription-anchordate" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9369,7 +9369,7 @@ export def "apps-subscription-anchordate create" [
 #
 # GET /apps/{appId}/subscription/checkout_add_source
 # operationId: app.subscription.checkout_add_source
-export def "apps-subscription-checkout-add-source create" [
+export def "app-subscription-checkout-add-source" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9405,7 +9405,7 @@ export def "apps-subscription-checkout-add-source create" [
 #
 # POST /apps/{appId}/subscription/coupon
 # operationId: app.subscription.coupon
-export def "apps-subscription-coupon create" [
+export def "app-subscription-coupon" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9443,7 +9443,7 @@ export def "apps-subscription-coupon create" [
 #
 # POST /apps/{appId}/subscription/extend_trial
 # operationId: app.subscription.extend_trial
-export def "apps-subscription-extend-trial create" [
+export def "app-subscription-extend-trial" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9479,7 +9479,7 @@ export def "apps-subscription-extend-trial create" [
 #
 # POST /apps/{appId}/subscription/extra/{stripe_plan}
 # operationId: app.subscription.extra_enable
-export def "apps-subscription-extra enable" [
+export def "app-subscription-extra-enable" [
   app_id: int
   stripe_plan: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9517,7 +9517,7 @@ export def "apps-subscription-extra enable" [
 #
 # POST /apps/{appId}/subscription/pay_all
 # operationId: app.subscription.pay_all
-export def "apps-subscription-pay-all list" [
+export def "app-subscription-pay-all" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9553,7 +9553,7 @@ export def "apps-subscription-pay-all list" [
 #
 # DELETE /apps/{appId}/subscription/plan
 # operationId: app.subscription.end
-export def "apps-subscription-plan delete-end" [
+export def "app-subscription-end" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9589,7 +9589,7 @@ export def "apps-subscription-plan delete-end" [
 #
 # GET /apps/{appId}/subscription/plan
 # operationId: app.subscription.get
-export def "apps-subscription-plan get" [
+export def "app-subscription-get" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9625,7 +9625,7 @@ export def "apps-subscription-plan get" [
 #
 # GET /apps/{appId}/subscription/plans
 # operationId: app.subscription.list
-export def "apps-subscription-plans list" [
+export def "app-subscription-list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9661,7 +9661,7 @@ export def "apps-subscription-plans list" [
 #
 # GET /apps/{appId}/subscription/plans/{stripe_plan}
 # operationId: app.subscription.upcoming
-export def "apps-subscription-plans get-upcoming" [
+export def "app-subscription-upcoming" [
   app_id: int
   stripe_plan: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9701,7 +9701,7 @@ export def "apps-subscription-plans get-upcoming" [
 #
 # POST /apps/{appId}/subscription/plans/{stripe_plan}
 # operationId: app.subscription.pay
-export def "apps-subscription-plans create-pay" [
+export def "app-subscription-pay" [
   app_id: int
   stripe_plan: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9742,7 +9742,7 @@ export def "apps-subscription-plans create-pay" [
 #
 # GET /apps/{appId}/subscription/plans/{stripe_plan}/checkout
 # operationId: app.subscription.checkout
-export def "apps-subscription-plans-checkout get" [
+export def "app-subscription-checkout" [
   app_id: int
   stripe_plan: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9782,7 +9782,7 @@ export def "apps-subscription-plans-checkout get" [
 #
 # DELETE /apps/{appId}/subscription/source
 # operationId: app.subscription.remove_source
-export def "apps-subscription-source delete" [
+export def "app-subscription-remove-source" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9820,7 +9820,7 @@ export def "apps-subscription-source delete" [
 #
 # POST /apps/{appId}/subscription/source
 # operationId: app.subscription.add_source
-export def "apps-subscription-source create" [
+export def "app-subscription-add-source" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9858,7 +9858,7 @@ export def "apps-subscription-source create" [
 #
 # POST /apps/{appId}/subscription/source/default
 # operationId: app.subscription.set_default
-export def "apps-subscription-source-default update" [
+export def "app-subscription-set-default" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9896,7 +9896,7 @@ export def "apps-subscription-source-default update" [
 #
 # GET /apps/{appId}/tags
 # operationId: app.statistics.tags.get
-export def "apps-tags get" [
+export def "app-statistics-tags-get" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9934,7 +9934,7 @@ export def "apps-tags get" [
 #
 # GET /apps/{appId}/templates
 # operationId: app.settings.templates.list
-export def "apps-templates list" [
+export def "app-settings-templates-list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9970,7 +9970,7 @@ export def "apps-templates list" [
 #
 # POST /apps/{appId}/templates
 # operationId: app.settings.templates.create
-export def "apps-templates create" [
+export def "app-settings-templates-create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10006,7 +10006,7 @@ export def "apps-templates create" [
 #
 # POST /apps/{appId}/templates/batch
 # operationId: app.settings.templates.batch
-export def "apps-templates-batch create" [
+export def "app-settings-templates-batch" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10044,7 +10044,7 @@ export def "apps-templates-batch create" [
 #
 # GET /apps/{appId}/templates/default
 # operationId: app.settings.templates.default_template
-export def "apps-templates-default get" [
+export def "app-settings-templates-default-template" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10080,7 +10080,7 @@ export def "apps-templates-default get" [
 #
 # GET /apps/{appId}/templates/{id}
 # operationId: app.settings.templates.get
-export def "apps-templates get" [
+export def "app-settings-templates-get" [
   app_id: int
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10118,7 +10118,7 @@ export def "apps-templates get" [
 #
 # POST /apps/{appId}/templates/{id}
 # operationId: app.settings.templates.update
-export def "apps-templates update" [
+export def "app-settings-templates-update" [
   app_id: int
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10156,7 +10156,7 @@ export def "apps-templates update" [
 #
 # GET /apps/{appId}/transactions/
 # operationId: app.cashflow.transactions.list
-export def "apps-transactions list" [
+export def "app-cashflow-transactions-list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10198,7 +10198,7 @@ export def "apps-transactions list" [
 #
 # POST /apps/{appId}/transactions/
 # operationId: app.cashflow.transactions.create
-export def "apps-transactions create" [
+export def "app-cashflow-transactions-create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10245,7 +10245,7 @@ export def "apps-transactions create" [
 #
 # POST /apps/{appId}/transactions/batch
 # operationId: app.cashflow.transactions.batch
-export def "apps-transactions-batch create" [
+export def "app-cashflow-transactions-batch" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10283,7 +10283,7 @@ export def "apps-transactions-batch create" [
 #
 # DELETE /apps/{appId}/transactions/{id}
 # operationId: app.cashflow.transactions.delete
-export def "apps-transactions delete" [
+export def "app-cashflow-transactions-delete" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -10321,7 +10321,7 @@ export def "apps-transactions delete" [
 #
 # GET /apps/{appId}/transactions/{id}
 # operationId: app.cashflow.transactions.get
-export def "apps-transactions get" [
+export def "app-cashflow-transactions-get" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -10359,7 +10359,7 @@ export def "apps-transactions get" [
 #
 # POST /apps/{appId}/transactions/{id}
 # operationId: app.cashflow.transactions.update
-export def "apps-transactions update" [
+export def "app-cashflow-transactions-update" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -10408,7 +10408,7 @@ export def "apps-transactions update" [
 #
 # DELETE /apps/{appId}/transactions/{id}/attach
 # operationId: app.cashflow.transactions.detach
-export def "apps-transactions-attach delete-detach" [
+export def "app-cashflow-transactions-detach" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -10448,7 +10448,7 @@ export def "apps-transactions-attach delete-detach" [
 #
 # POST /apps/{appId}/transactions/{id}/attach
 # operationId: app.cashflow.transactions.attach
-export def "apps-transactions-attach attach" [
+export def "app-cashflow-transactions-attach" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -10488,7 +10488,7 @@ export def "apps-transactions-attach attach" [
 #
 # POST /apps/{appId}/urssaf/auth
 # operationId: app.payments.urssaftiers.auth
-export def "apps-urssaf-auth create" [
+export def "app-payments-urssaftiers-auth" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10527,7 +10527,7 @@ export def "apps-urssaf-auth create" [
 #
 # GET /apps/{appId}/urssaf/payment
 # operationId: app.payments.urssaftiers.get_status
-export def "apps-urssaf-payment get-status" [
+export def "app-payments-urssaftiers-get-status" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10565,7 +10565,7 @@ export def "apps-urssaf-payment get-status" [
 #
 # POST /apps/{appId}/urssaf/payment
 # operationId: app.payments.urssaftiers.send_payments
-export def "apps-urssaf-payment send" [
+export def "app-payments-urssaftiers-send-payments" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10601,7 +10601,7 @@ export def "apps-urssaf-payment send" [
 #
 # GET /apps/{appId}/urssaf/preview
 # operationId: app.payments.urssaftiers.preview
-export def "apps-urssaf-preview get" [
+export def "app-payments-urssaftiers-preview" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10640,7 +10640,7 @@ export def "apps-urssaf-preview get" [
 #
 # POST /apps/{appId}/urssaf/register_customer
 # operationId: app.payments.urssaftiers.register_customer
-export def "apps-urssaf-register-customer create" [
+export def "app-payments-urssaftiers-register-customer" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10676,7 +10676,7 @@ export def "apps-urssaf-register-customer create" [
 #
 # POST /changepassword
 # operationId: auth.changepassword
-export def "changepassword create" [
+export def "auth-changepassword" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10713,7 +10713,7 @@ export def "changepassword create" [
 #
 # POST /login
 # operationId: auth.login
-export def "login create" [
+export def "auth-login" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10750,7 +10750,7 @@ export def "login create" [
 #
 # POST /logout
 # operationId: auth.logout
-export def "logout create" [
+export def "auth-logout" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10784,7 +10784,7 @@ export def "logout create" [
 #
 # GET /me
 # operationId: account.get
-export def "me get" [
+export def "account-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10818,7 +10818,7 @@ export def "me get" [
 #
 # POST /me
 # operationId: account.update
-export def "me update" [
+export def "account-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10860,7 +10860,7 @@ export def "me update" [
 #
 # GET /ping
 # operationId: auth.ping
-export def "ping get" [
+export def "auth-ping" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10894,7 +10894,7 @@ export def "ping get" [
 #
 # GET /refresh
 # operationId: auth.refresh
-export def "refresh get" [
+export def "auth-refresh" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10928,7 +10928,7 @@ export def "refresh get" [
 #
 # POST /register
 # operationId: account.create
-export def "register create" [
+export def "account-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10969,7 +10969,7 @@ export def "register create" [
 #
 # POST /sendpassword
 # operationId: auth.sendpassword
-export def "sendpassword create" [
+export def "auth-sendpassword" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11005,7 +11005,7 @@ export def "sendpassword create" [
 #
 # POST /services/collector
 # operationId: admin.purchaseCollector.push
-export def "services-collector push" [
+export def "admin-purchase-collector-push" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11043,7 +11043,7 @@ export def "services-collector push" [
 #
 # GET /services/vies/{siren}
 # operationId: services.vies.get
-export def "services-vies get" [
+export def "services-vies-get" [
   siren: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

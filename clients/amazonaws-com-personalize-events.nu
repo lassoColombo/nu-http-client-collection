@@ -99,7 +99,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "events update" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "put-events" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -124,7 +124,7 @@ export def commands []: nothing -> table {
 # POST /events
 # operationId: PutEvents
 # --eventList item shape: {eventId?: any, eventType: any, eventValue?: any, itemId?: any, properties?: any, sentAt: any, recommendationId?: any, impression?: any, metricAttribution?: any}
-export def "events update" [
+export def "put-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -175,7 +175,7 @@ export def "events update" [
 # POST /items
 # operationId: PutItems
 # --items item shape: {itemId: any, properties?: any}
-export def "items update" [
+export def "put-items" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -224,7 +224,7 @@ export def "items update" [
 # POST /users
 # operationId: PutUsers
 # --users item shape: {userId: any, properties?: any}
-export def "users update" [
+export def "put-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

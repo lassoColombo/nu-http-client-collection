@@ -101,7 +101,7 @@ def accept-completer [] { ["application/json" "text/json" "text/plain"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "data-divisions-groupedbyparty get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-data-divisions-groupedbyparty" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -124,7 +124,7 @@ export def commands []: nothing -> table {
 # Return Divisions results grouped by party
 #
 # GET /data/Divisions/groupedbyparty
-export def "data-divisions-groupedbyparty get" [
+export def "get-data-divisions-groupedbyparty" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -169,7 +169,7 @@ export def "data-divisions-groupedbyparty get" [
 # Return voting records for a Member
 #
 # GET /data/Divisions/membervoting
-export def "data-divisions-membervoting get" [
+export def "get-data-divisions-membervoting" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -216,7 +216,7 @@ export def "data-divisions-membervoting get" [
 # Return a list of Divisions
 #
 # GET /data/Divisions/search
-export def "data-divisions-search get" [
+export def "get-data-divisions-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -263,7 +263,7 @@ export def "data-divisions-search get" [
 # Return total results count
 #
 # GET /data/Divisions/searchTotalResults
-export def "data-divisions-search-total-results get" [
+export def "get-data-divisions-search-total-results" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -308,7 +308,7 @@ export def "data-divisions-search-total-results get" [
 # Return a Division
 #
 # GET /data/Divisions/{divisionId}
-export def "data-divisions get" [
+export def "get-data-divisions-division-id" [
   division_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

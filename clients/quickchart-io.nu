@@ -106,7 +106,7 @@ def accept-completer-1 [] { ["image/png" "image/svg+xml"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "chart get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-chart" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -129,7 +129,7 @@ export def commands []: nothing -> table {
 # Generate a chart (GET)
 #
 # GET /chart
-export def "chart get" [
+export def "get-chart" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -169,7 +169,7 @@ export def "chart get" [
 # Generate a chart (POST)
 #
 # POST /chart
-export def "chart create" [
+export def "post-chart" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -211,7 +211,7 @@ export def "chart create" [
 # Generate a QR code (GET)
 #
 # GET /qr
-export def "qr get" [
+export def "get-qr" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -251,7 +251,7 @@ export def "qr get" [
 # Generate a QR code (POST)
 #
 # POST /qr
-export def "qr create" [
+export def "post-qr" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

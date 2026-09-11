@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["x-api-key"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api2-json-anonymize get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "anonymize" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -128,7 +128,7 @@ export def commands []: nothing -> table {
 #
 # GET /api2/json/anonymize/{source}/{anonymized}/{token}
 # operationId: anonymize
-export def "api2-json-anonymize get" [
+export def "anonymize" [
   source: string
   anonymized: bool
   token_arg: string
@@ -168,7 +168,7 @@ export def "api2-json-anonymize get" [
 #
 # GET /api2/json/apiKeyInfo
 # operationId: apiKeyInfo
-export def "api2-json-api-key-info get" [
+export def "api-key-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -202,7 +202,7 @@ export def "api2-json-api-key-info get" [
 #
 # GET /api2/json/apiServices
 # operationId: availableServices
-export def "api2-json-api-services get-available" [
+export def "available-services" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -236,7 +236,7 @@ export def "api2-json-api-services get-available" [
 #
 # GET /api2/json/apiStatus
 # operationId: apiStatus
-export def "api2-json-api-status get" [
+export def "api-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -270,7 +270,7 @@ export def "api2-json-api-status get" [
 #
 # GET /api2/json/apiUsage
 # operationId: apiUsage
-export def "api2-json-api-usage get" [
+export def "api-usage" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -304,7 +304,7 @@ export def "api2-json-api-usage get" [
 #
 # GET /api2/json/apiUsageHistory
 # operationId: apiUsageHistory
-export def "api2-json-api-usage-history get" [
+export def "api-usage-history" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -338,7 +338,7 @@ export def "api2-json-api-usage-history get" [
 #
 # GET /api2/json/apiUsageHistoryAggregate
 # operationId: apiUsageHistoryAggregate
-export def "api2-json-api-usage-history-aggregate get" [
+export def "api-usage-history-aggregate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -372,7 +372,7 @@ export def "api2-json-api-usage-history-aggregate get" [
 #
 # GET /api2/json/castegroupIndianFull/{subDivisionIso31662}/{personalNameFull}
 # operationId: castegroupIndianFull
-export def "api2-json-castegroup-indian-full get" [
+export def "castegroup-indian-full" [
   sub_division_iso31662: string
   personal_name_full: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -412,7 +412,7 @@ export def "api2-json-castegroup-indian-full get" [
 # operationId: castegroupIndianFullBatch
 # --facts item shape: {id?: string, name?: string}
 # --personalNames item shape: {id?: string, name?: string, subdivisionIso?: string}
-export def "api2-json-castegroup-indian-full-batch create" [
+export def "castegroup-indian-full-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -451,7 +451,7 @@ export def "api2-json-castegroup-indian-full-batch create" [
 #
 # GET /api2/json/chineseNameCandidates/{chineseSurnameLatin}/{chineseGivenNameLatin}
 # operationId: chineseNameCandidates
-export def "api2-json-chinese-name-candidates get" [
+export def "chinese-name-candidates" [
   chinese_surname_latin: string
   chinese_given_name_latin: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -491,7 +491,7 @@ export def "api2-json-chinese-name-candidates get" [
 # operationId: chineseNameCandidatesBatch
 # --facts item shape: {id?: string, name?: string}
 # --personalNames item shape: {firstName?: string, id?: string, lastName?: string}
-export def "api2-json-chinese-name-candidates-batch create" [
+export def "chinese-name-candidates-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -532,7 +532,7 @@ export def "api2-json-chinese-name-candidates-batch create" [
 # operationId: chineseNameCandidatesGenderBatch
 # --facts item shape: {id?: string, name?: string}
 # --personalNames item shape: {firstName?: string, gender?: string, id?: string, lastName?: string}
-export def "api2-json-chinese-name-candidates-gender-batch create" [
+export def "chinese-name-candidates-gender-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -571,7 +571,7 @@ export def "api2-json-chinese-name-candidates-gender-batch create" [
 #
 # GET /api2/json/chineseNameGenderCandidates/{chineseSurnameLatin}/{chineseGivenNameLatin}/{knownGender}
 # operationId: chineseNameGenderCandidates
-export def "api2-json-chinese-name-gender-candidates get" [
+export def "chinese-name-gender-candidates" [
   chinese_surname_latin: string
   chinese_given_name_latin: string
   known_gender: string
@@ -611,7 +611,7 @@ export def "api2-json-chinese-name-gender-candidates get" [
 #
 # GET /api2/json/chineseNameMatch/{chineseSurnameLatin}/{chineseGivenNameLatin}/{chineseName}
 # operationId: chineseNameMatch
-export def "api2-json-chinese-name-match get" [
+export def "chinese-name-match" [
   chinese_surname_latin: string
   chinese_given_name_latin: string
   chinese_name: string
@@ -653,7 +653,7 @@ export def "api2-json-chinese-name-match get" [
 # operationId: chineseNameMatchBatch
 # --facts item shape: {id?: string, name?: string}
 # --personalNames item shape: {id?: string, name1?: record, name2?: record}
-export def "api2-json-chinese-name-match-batch create" [
+export def "chinese-name-match-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -692,7 +692,7 @@ export def "api2-json-chinese-name-match-batch create" [
 #
 # GET /api2/json/corridor/{countryIso2From}/{firstNameFrom}/{lastNameFrom}/{countryIso2To}/{firstNameTo}/{lastNameTo}
 # operationId: corridor
-export def "api2-json-corridor get" [
+export def "corridor" [
   country_iso2_from: string
   first_name_from: string
   last_name_from: string
@@ -740,7 +740,7 @@ export def "api2-json-corridor get" [
 # operationId: corridorBatch
 # --corridorFromTo item shape: {firstLastNameGeoFrom?: record, firstLastNameGeoTo?: record, id?: string}
 # --facts item shape: {id?: string, name?: string}
-export def "api2-json-corridor-batch create" [
+export def "corridor-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -779,7 +779,7 @@ export def "api2-json-corridor-batch create" [
 #
 # GET /api2/json/country/{personalNameFull}
 # operationId: country
-export def "api2-json-country get" [
+export def "country" [
   personal_name_full: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -817,7 +817,7 @@ export def "api2-json-country get" [
 # operationId: countryBatch
 # --facts item shape: {id?: string, name?: string}
 # --personalNames item shape: {id?: string, name?: string}
-export def "api2-json-country-batch create" [
+export def "country-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -856,7 +856,7 @@ export def "api2-json-country-batch create" [
 #
 # GET /api2/json/diaspora/{countryIso2}/{firstName}/{lastName}
 # operationId: diaspora
-export def "api2-json-diaspora get" [
+export def "diaspora" [
   country_iso2: string
   first_name: string
   last_name: string
@@ -898,7 +898,7 @@ export def "api2-json-diaspora get" [
 # operationId: diasporaBatch
 # --facts item shape: {id?: string, name?: string}
 # --personalNames item shape: {countryIso2?: string, firstName?: string, id?: string, lastName?: string}
-export def "api2-json-diaspora-batch create" [
+export def "diaspora-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -937,7 +937,7 @@ export def "api2-json-diaspora-batch create" [
 #
 # GET /api2/json/gender/{firstName}
 # operationId: gender
-export def "api2-json-gender get" [
+export def "gender" [
   first_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -973,7 +973,7 @@ export def "api2-json-gender get" [
 #
 # GET /api2/json/gender/{firstName}/{lastName}
 # operationId: gender_1
-export def "api2-json-gender get-by-first-name-last-name" [
+export def "gender-1" [
   first_name: string
   last_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1013,7 +1013,7 @@ export def "api2-json-gender get-by-first-name-last-name" [
 # operationId: genderBatch
 # --facts item shape: {id?: string, name?: string}
 # --personalNames item shape: {firstName?: string, id?: string, lastName?: string}
-export def "api2-json-gender-batch create" [
+export def "gender-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1052,7 +1052,7 @@ export def "api2-json-gender-batch create" [
 #
 # GET /api2/json/genderChineseName/{chineseName}
 # operationId: genderChineseName
-export def "api2-json-gender-chinese-name get" [
+export def "gender-chinese-name" [
   chinese_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1090,7 +1090,7 @@ export def "api2-json-gender-chinese-name get" [
 # operationId: genderChineseNameBatch
 # --facts item shape: {id?: string, name?: string}
 # --personalNames item shape: {id?: string, name?: string}
-export def "api2-json-gender-chinese-name-batch create" [
+export def "gender-chinese-name-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1129,7 +1129,7 @@ export def "api2-json-gender-chinese-name-batch create" [
 #
 # GET /api2/json/genderChineseNamePinyin/{chineseSurnameLatin}/{chineseGivenNameLatin}
 # operationId: genderChineseNamePinyin
-export def "api2-json-gender-chinese-name-pinyin get" [
+export def "gender-chinese-name-pinyin" [
   chinese_surname_latin: string
   chinese_given_name_latin: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1169,7 +1169,7 @@ export def "api2-json-gender-chinese-name-pinyin get" [
 # operationId: genderChineseNamePinyinBatch
 # --facts item shape: {id?: string, name?: string}
 # --personalNames item shape: {firstName?: string, id?: string, lastName?: string}
-export def "api2-json-gender-chinese-name-pinyin-batch create" [
+export def "gender-chinese-name-pinyin-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1208,7 +1208,7 @@ export def "api2-json-gender-chinese-name-pinyin-batch create" [
 #
 # GET /api2/json/genderFull/{fullName}
 # operationId: genderFull
-export def "api2-json-gender-full get" [
+export def "gender-full" [
   full_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1246,7 +1246,7 @@ export def "api2-json-gender-full get" [
 # operationId: genderFullBatch
 # --facts item shape: {id?: string, name?: string}
 # --personalNames item shape: {id?: string, name?: string}
-export def "api2-json-gender-full-batch create" [
+export def "gender-full-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1285,7 +1285,7 @@ export def "api2-json-gender-full-batch create" [
 #
 # GET /api2/json/genderFullGeo/{fullName}/{countryIso2}
 # operationId: genderFullGeo
-export def "api2-json-gender-full-geo get" [
+export def "gender-full-geo" [
   full_name: string
   country_iso2: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1325,7 +1325,7 @@ export def "api2-json-gender-full-geo get" [
 # operationId: genderFullGeoBatch
 # --facts item shape: {id?: string, name?: string}
 # --personalNames item shape: {countryIso2?: string, id?: string, name?: string}
-export def "api2-json-gender-full-geo-batch create" [
+export def "gender-full-geo-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1364,7 +1364,7 @@ export def "api2-json-gender-full-geo-batch create" [
 #
 # GET /api2/json/genderGeo/{firstName}/{lastName}/{countryIso2}
 # operationId: genderGeo
-export def "api2-json-gender-geo get" [
+export def "gender-geo" [
   first_name: string
   last_name: string
   country_iso2: string
@@ -1406,7 +1406,7 @@ export def "api2-json-gender-geo get" [
 # operationId: genderGeoBatch
 # --facts item shape: {id?: string, name?: string}
 # --personalNames item shape: {countryIso2?: string, firstName?: string, id?: string, lastName?: string}
-export def "api2-json-gender-geo-batch create" [
+export def "gender-geo-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1445,7 +1445,7 @@ export def "api2-json-gender-geo-batch create" [
 #
 # GET /api2/json/genderJapaneseName/{japaneseSurname}/{japaneseGivenName}
 # operationId: genderJapaneseNamePinyin
-export def "api2-json-gender-japanese-name get-pinyin" [
+export def "gender-japanese-name-pinyin" [
   japanese_surname: string
   japanese_given_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1485,7 +1485,7 @@ export def "api2-json-gender-japanese-name get-pinyin" [
 # operationId: genderJapaneseNamePinyinBatch
 # --facts item shape: {id?: string, name?: string}
 # --personalNames item shape: {firstName?: string, id?: string, lastName?: string}
-export def "api2-json-gender-japanese-name-batch create-pinyin" [
+export def "gender-japanese-name-pinyin-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1524,7 +1524,7 @@ export def "api2-json-gender-japanese-name-batch create-pinyin" [
 #
 # GET /api2/json/genderJapaneseNameFull/{japaneseName}
 # operationId: genderJapaneseNameFull
-export def "api2-json-gender-japanese-name-full get" [
+export def "gender-japanese-name-full" [
   japanese_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1562,7 +1562,7 @@ export def "api2-json-gender-japanese-name-full get" [
 # operationId: genderJapaneseNameFullBatch
 # --facts item shape: {id?: string, name?: string}
 # --personalNames item shape: {id?: string, name?: string}
-export def "api2-json-gender-japanese-name-full-batch create" [
+export def "gender-japanese-name-full-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1603,7 +1603,7 @@ export def "api2-json-gender-japanese-name-full-batch create" [
 # operationId: japaneseNameGenderKanjiCandidatesBatch
 # --facts item shape: {id?: string, name?: string}
 # --personalNames item shape: {firstName?: string, gender?: string, id?: string, lastName?: string}
-export def "api2-json-japanese-name-gender-kanji-candidates-batch create" [
+export def "japanese-name-gender-kanji-candidates-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1642,7 +1642,7 @@ export def "api2-json-japanese-name-gender-kanji-candidates-batch create" [
 #
 # GET /api2/json/japaneseNameKanjiCandidates/{japaneseSurnameLatin}/{japaneseGivenNameLatin}
 # operationId: japaneseNameKanjiCandidates
-export def "api2-json-japanese-name-kanji-candidates get" [
+export def "japanese-name-kanji-candidates" [
   japanese_surname_latin: string
   japanese_given_name_latin: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1680,7 +1680,7 @@ export def "api2-json-japanese-name-kanji-candidates get" [
 #
 # GET /api2/json/japaneseNameKanjiCandidates/{japaneseSurnameLatin}/{japaneseGivenNameLatin}/{knownGender}
 # operationId: japaneseNameKanjiCandidates_1
-export def "api2-json-japanese-name-kanji-candidates get-by-japanese-surname-latin-japanese-given-name-latin-known-gender" [
+export def "japanese-name-kanji-candidates-1" [
   japanese_surname_latin: string
   japanese_given_name_latin: string
   known_gender: string
@@ -1722,7 +1722,7 @@ export def "api2-json-japanese-name-kanji-candidates get-by-japanese-surname-lat
 # operationId: japaneseNameKanjiCandidatesBatch
 # --facts item shape: {id?: string, name?: string}
 # --personalNames item shape: {firstName?: string, id?: string, lastName?: string}
-export def "api2-json-japanese-name-kanji-candidates-batch create" [
+export def "japanese-name-kanji-candidates-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1761,7 +1761,7 @@ export def "api2-json-japanese-name-kanji-candidates-batch create" [
 #
 # GET /api2/json/japaneseNameLatinCandidates/{japaneseSurnameKanji}/{japaneseGivenNameKanji}
 # operationId: japaneseNameLatinCandidates
-export def "api2-json-japanese-name-latin-candidates get" [
+export def "japanese-name-latin-candidates" [
   japanese_surname_kanji: string
   japanese_given_name_kanji: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1801,7 +1801,7 @@ export def "api2-json-japanese-name-latin-candidates get" [
 # operationId: japaneseNameLatinCandidatesBatch
 # --facts item shape: {id?: string, name?: string}
 # --personalNames item shape: {firstName?: string, id?: string, lastName?: string}
-export def "api2-json-japanese-name-latin-candidates-batch create" [
+export def "japanese-name-latin-candidates-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1840,7 +1840,7 @@ export def "api2-json-japanese-name-latin-candidates-batch create" [
 #
 # GET /api2/json/japaneseNameMatch/{japaneseSurnameLatin}/{japaneseGivenNameLatin}/{japaneseName}
 # operationId: japaneseNameMatch
-export def "api2-json-japanese-name-match get" [
+export def "japanese-name-match" [
   japanese_surname_latin: string
   japanese_given_name_latin: string
   japanese_name: string
@@ -1882,7 +1882,7 @@ export def "api2-json-japanese-name-match get" [
 # operationId: japaneseNameMatchBatch
 # --facts item shape: {id?: string, name?: string}
 # --personalNames item shape: {id?: string, name1?: record, name2?: record}
-export def "api2-json-japanese-name-match-batch create" [
+export def "japanese-name-match-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1921,7 +1921,7 @@ export def "api2-json-japanese-name-match-batch create" [
 #
 # GET /api2/json/japaneseNameMatchFeedbackLoop/{japaneseSurnameLatin}/{japaneseGivenNameLatin}/{japaneseName}
 # operationId: japaneseNameMatchFeedbackLoop
-export def "api2-json-japanese-name-match-feedback-loop get" [
+export def "japanese-name-match-feedback-loop" [
   japanese_surname_latin: string
   japanese_given_name_latin: string
   japanese_name: string
@@ -1961,7 +1961,7 @@ export def "api2-json-japanese-name-match-feedback-loop get" [
 #
 # GET /api2/json/learnable/{source}/{learnable}/{token}
 # operationId: learnable
-export def "api2-json-learnable get" [
+export def "learnable" [
   source: string
   learnable: bool
   token_arg: string
@@ -2001,7 +2001,7 @@ export def "api2-json-learnable get" [
 #
 # GET /api2/json/nameType/{properNoun}
 # operationId: nameType
-export def "api2-json-name-type get" [
+export def "name-type" [
   proper_noun: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2039,7 +2039,7 @@ export def "api2-json-name-type get" [
 # operationId: nameTypeBatch
 # --facts item shape: {id?: string, name?: string}
 # --properNouns item shape: {id?: string, name?: string}
-export def "api2-json-name-type-batch create" [
+export def "name-type-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2078,7 +2078,7 @@ export def "api2-json-name-type-batch create" [
 #
 # GET /api2/json/nameTypeGeo/{properNoun}/{countryIso2}
 # operationId: nameTypeGeo
-export def "api2-json-name-type-geo get" [
+export def "name-type-geo" [
   proper_noun: string
   country_iso2: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2118,7 +2118,7 @@ export def "api2-json-name-type-geo get" [
 # operationId: nameTypeGeoBatch
 # --facts item shape: {id?: string, name?: string}
 # --properNouns item shape: {countryIso2?: string, id?: string, name?: string}
-export def "api2-json-name-type-geo-batch create" [
+export def "name-type-geo-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2157,7 +2157,7 @@ export def "api2-json-name-type-geo-batch create" [
 #
 # GET /api2/json/origin/{firstName}/{lastName}
 # operationId: origin
-export def "api2-json-origin get" [
+export def "origin" [
   first_name: string
   last_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2197,7 +2197,7 @@ export def "api2-json-origin get" [
 # operationId: originBatch
 # --facts item shape: {id?: string, name?: string}
 # --personalNames item shape: {firstName?: string, id?: string, lastName?: string}
-export def "api2-json-origin-batch create" [
+export def "origin-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2236,7 +2236,7 @@ export def "api2-json-origin-batch create" [
 #
 # GET /api2/json/parseChineseName/{chineseName}
 # operationId: parseChineseName
-export def "api2-json-parse-chinese-name get" [
+export def "parse-chinese-name" [
   chinese_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2274,7 +2274,7 @@ export def "api2-json-parse-chinese-name get" [
 # operationId: parseChineseNameBatch
 # --facts item shape: {id?: string, name?: string}
 # --personalNames item shape: {id?: string, name?: string}
-export def "api2-json-parse-chinese-name-batch create" [
+export def "parse-chinese-name-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2313,7 +2313,7 @@ export def "api2-json-parse-chinese-name-batch create" [
 #
 # GET /api2/json/parseJapaneseName/{japaneseName}
 # operationId: parseJapaneseName
-export def "api2-json-parse-japanese-name get" [
+export def "parse-japanese-name" [
   japanese_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2351,7 +2351,7 @@ export def "api2-json-parse-japanese-name get" [
 # operationId: parseJapaneseNameBatch
 # --facts item shape: {id?: string, name?: string}
 # --personalNames item shape: {id?: string, name?: string}
-export def "api2-json-parse-japanese-name-batch create" [
+export def "parse-japanese-name-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2390,7 +2390,7 @@ export def "api2-json-parse-japanese-name-batch create" [
 #
 # GET /api2/json/parseName/{nameFull}
 # operationId: parseName
-export def "api2-json-parse-name get" [
+export def "parse-name" [
   name_full: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2426,7 +2426,7 @@ export def "api2-json-parse-name get" [
 #
 # GET /api2/json/parseName/{nameFull}/{countryIso2}
 # operationId: parseNameGeo
-export def "api2-json-parse-name get-geo" [
+export def "parse-name-geo" [
   name_full: string
   country_iso2: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2466,7 +2466,7 @@ export def "api2-json-parse-name get-geo" [
 # operationId: parseNameBatch
 # --facts item shape: {id?: string, name?: string}
 # --personalNames item shape: {id?: string, name?: string}
-export def "api2-json-parse-name-batch create" [
+export def "parse-name-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2507,7 +2507,7 @@ export def "api2-json-parse-name-batch create" [
 # operationId: parseNameGeoBatch
 # --facts item shape: {id?: string, name?: string}
 # --personalNames item shape: {countryIso2?: string, id?: string, name?: string}
-export def "api2-json-parse-name-geo-batch create" [
+export def "parse-name-geo-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2546,7 +2546,7 @@ export def "api2-json-parse-name-geo-batch create" [
 #
 # GET /api2/json/phoneCode/{firstName}/{lastName}/{phoneNumber}
 # operationId: phoneCode
-export def "api2-json-phone-code get" [
+export def "phone-code" [
   first_name: string
   last_name: string
   phone_number: string
@@ -2588,7 +2588,7 @@ export def "api2-json-phone-code get" [
 # operationId: phoneCodeBatch
 # --facts item shape: {id?: string, name?: string}
 # --personalNamesWithPhoneNumbers item shape: {firstName?: string, id?: string, lastName?: string, phoneNumber?: string}
-export def "api2-json-phone-code-batch create" [
+export def "phone-code-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2627,7 +2627,7 @@ export def "api2-json-phone-code-batch create" [
 #
 # GET /api2/json/phoneCodeGeo/{firstName}/{lastName}/{phoneNumber}/{countryIso2}
 # operationId: phoneCodeGeo
-export def "api2-json-phone-code-geo get" [
+export def "phone-code-geo" [
   first_name: string
   last_name: string
   phone_number: string
@@ -2671,7 +2671,7 @@ export def "api2-json-phone-code-geo get" [
 # operationId: phoneCodeGeoBatch
 # --facts item shape: {id?: string, name?: string}
 # --personalNamesWithPhoneNumbers item shape: {countryIso2?: string, countryIso2Alt?: string, firstName?: string, id?: string, lastName?: string, phoneNumber?: string}
-export def "api2-json-phone-code-geo-batch create" [
+export def "phone-code-geo-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2710,7 +2710,7 @@ export def "api2-json-phone-code-geo-batch create" [
 #
 # GET /api2/json/phoneCodeGeoFeedbackLoop/{firstName}/{lastName}/{phoneNumber}/{phoneNumberE164}/{countryIso2}
 # operationId: phoneCodeGeoFeedbackLoop
-export def "api2-json-phone-code-geo-feedback-loop get" [
+export def "phone-code-geo-feedback-loop" [
   first_name: string
   last_name: string
   phone_number: string
@@ -2754,7 +2754,7 @@ export def "api2-json-phone-code-geo-feedback-loop get" [
 #
 # GET /api2/json/pinyinChineseName/{chineseName}
 # operationId: pinyinChineseName
-export def "api2-json-pinyin-chinese-name get" [
+export def "pinyin-chinese-name" [
   chinese_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2792,7 +2792,7 @@ export def "api2-json-pinyin-chinese-name get" [
 # operationId: pinyinChineseNameBatch
 # --facts item shape: {id?: string, name?: string}
 # --personalNames item shape: {id?: string, name?: string}
-export def "api2-json-pinyin-chinese-name-batch create" [
+export def "pinyin-chinese-name-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2831,7 +2831,7 @@ export def "api2-json-pinyin-chinese-name-batch create" [
 #
 # GET /api2/json/regions
 # operationId: regions
-export def "api2-json-regions get" [
+export def "regions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2865,7 +2865,7 @@ export def "api2-json-regions get" [
 #
 # GET /api2/json/religionFull/{countryIso2}/{subDivisionIso31662}/{personalNameFull}
 # operationId: religionFull
-export def "api2-json-religion-full get" [
+export def "religion-full" [
   country_iso2: string
   sub_division_iso31662: string
   personal_name_full: string
@@ -2907,7 +2907,7 @@ export def "api2-json-religion-full get" [
 # operationId: religionFullBatch
 # --facts item shape: {id?: string, name?: string}
 # --personalNames item shape: {countryIso2?: string, id?: string, name?: string, subdivisionIso?: string}
-export def "api2-json-religion-full-batch create" [
+export def "religion-full-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2946,7 +2946,7 @@ export def "api2-json-religion-full-batch create" [
 #
 # GET /api2/json/religionIndianFull/{subDivisionIso31662}/{personalNameFull}
 # operationId: religion
-export def "api2-json-religion-indian-full get" [
+export def "religion" [
   sub_division_iso31662: string
   personal_name_full: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2986,7 +2986,7 @@ export def "api2-json-religion-indian-full get" [
 # operationId: religionIndianFullBatch
 # --facts item shape: {id?: string, name?: string}
 # --personalNames item shape: {id?: string, name?: string, subdivisionIso?: string}
-export def "api2-json-religion-indian-full-batch create" [
+export def "religion-indian-full-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3025,7 +3025,7 @@ export def "api2-json-religion-indian-full-batch create" [
 #
 # GET /api2/json/softwareVersion
 # operationId: softwareVersion
-export def "api2-json-software-version version" [
+export def "software-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3059,7 +3059,7 @@ export def "api2-json-software-version version" [
 #
 # GET /api2/json/subclassification/{countryIso2}/{firstName}/{lastName}
 # operationId: subclassification
-export def "api2-json-subclassification get" [
+export def "subclassification" [
   country_iso2: string
   first_name: string
   last_name: string
@@ -3101,7 +3101,7 @@ export def "api2-json-subclassification get" [
 # operationId: subclassificationBatch
 # --facts item shape: {id?: string, name?: string}
 # --personalNames item shape: {countryIso2?: string, firstName?: string, id?: string, lastName?: string}
-export def "api2-json-subclassification-batch create" [
+export def "subclassification-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3140,7 +3140,7 @@ export def "api2-json-subclassification-batch create" [
 #
 # GET /api2/json/subclassificationIndian/{firstName}/{lastName}
 # operationId: subclassificationIndian
-export def "api2-json-subclassification-indian get" [
+export def "subclassification-indian" [
   first_name: string
   last_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3180,7 +3180,7 @@ export def "api2-json-subclassification-indian get" [
 # operationId: subclassificationIndianBatch
 # --facts item shape: {id?: string, name?: string}
 # --personalNames item shape: {countryIso2?: string, firstName?: string, id?: string, lastName?: string}
-export def "api2-json-subclassification-indian-batch create" [
+export def "subclassification-indian-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3219,7 +3219,7 @@ export def "api2-json-subclassification-indian-batch create" [
 #
 # GET /api2/json/taxonomyClasses/{classifierName}
 # operationId: taxonomyClasses
-export def "api2-json-taxonomy-classes get" [
+export def "taxonomy-classes" [
   classifier_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3255,7 +3255,7 @@ export def "api2-json-taxonomy-classes get" [
 #
 # GET /api2/json/usRaceEthnicity/{firstName}/{lastName}
 # operationId: usRaceEthnicity
-export def "api2-json-us-race-ethnicity get" [
+export def "us-race-ethnicity" [
   first_name: string
   last_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3295,7 +3295,7 @@ export def "api2-json-us-race-ethnicity get" [
 # operationId: usRaceEthnicityBatch
 # --facts item shape: {id?: string, name?: string}
 # --personalNames item shape: {countryIso2?: string, firstName?: string, id?: string, lastName?: string}
-export def "api2-json-us-race-ethnicity-batch create" [
+export def "us-race-ethnicity-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3334,7 +3334,7 @@ export def "api2-json-us-race-ethnicity-batch create" [
 #
 # GET /api2/json/usRaceEthnicityZIP5/{firstName}/{lastName}/{zip5Code}
 # operationId: usRaceEthnicityZIP5
-export def "api2-json-us-race-ethnicity-zip5 get" [
+export def "us-race-ethnicity-zip5" [
   first_name: string
   last_name: string
   zip5_code: string
@@ -3376,7 +3376,7 @@ export def "api2-json-us-race-ethnicity-zip5 get" [
 # operationId: usZipRaceEthnicityBatch
 # --facts item shape: {id?: string, name?: string}
 # --personalNames item shape: {countryIso2?: string, firstName?: string, id?: string, lastName?: string, zipCode?: string}
-export def "api2-json-us-zip-race-ethnicity-batch create" [
+export def "us-zip-race-ethnicity-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

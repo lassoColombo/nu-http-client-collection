@@ -131,7 +131,7 @@ def type-completer-1 [] { ["OPEN_MESH" "SECURE_WEB_GATEWAY" "TYPE_UNSPECIFIED"] 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta1 delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "networkservices-projects-locations-tls-routes-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -155,7 +155,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1beta1/{name}
 # operationId: networkservices.projects.locations.tlsRoutes.delete
-export def "v1beta1 delete" [
+export def "networkservices-projects-locations-tls-routes-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -203,7 +203,7 @@ export def "v1beta1 delete" [
 #
 # GET /v1beta1/{name}
 # operationId: networkservices.projects.locations.tlsRoutes.get
-export def "v1beta1 get" [
+export def "networkservices-projects-locations-tls-routes-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -252,7 +252,7 @@ export def "v1beta1 get" [
 # PATCH /v1beta1/{name}
 # operationId: networkservices.projects.locations.tlsRoutes.patch
 # --rules item shape: {action?: record, matches?: list}
-export def "v1beta1 update" [
+export def "networkservices-projects-locations-tls-routes-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -309,7 +309,7 @@ export def "v1beta1 update" [
 #
 # GET /v1beta1/{name}/locations
 # operationId: networkservices.projects.locations.list
-export def "v1beta1-locations list" [
+export def "networkservices-projects-locations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -360,7 +360,7 @@ export def "v1beta1-locations list" [
 #
 # GET /v1beta1/{name}/operations
 # operationId: networkservices.projects.locations.operations.list
-export def "v1beta1-operations list" [
+export def "networkservices-projects-locations-operations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -411,7 +411,7 @@ export def "v1beta1-operations list" [
 #
 # POST /v1beta1/{name}:cancel
 # operationId: networkservices.projects.locations.operations.cancel
-export def "v1beta1 cancel" [
+export def "networkservices-projects-locations-operations-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -463,7 +463,7 @@ export def "v1beta1 cancel" [
 #
 # GET /v1beta1/{parent}/endpointPolicies
 # operationId: networkservices.projects.locations.endpointPolicies.list
-export def "v1beta1-endpoint-policies list" [
+export def "networkservices-projects-locations-endpoint-policies-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -515,7 +515,7 @@ export def "v1beta1-endpoint-policies list" [
 # operationId: networkservices.projects.locations.endpointPolicies.create
 # --endpointMatcher shape: {metadataLabelMatcher?: record}
 # --trafficPortSelector shape: {ports?: list<string>}
-export def "v1beta1-endpoint-policies create" [
+export def "networkservices-projects-locations-endpoint-policies-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -576,7 +576,7 @@ export def "v1beta1-endpoint-policies create" [
 #
 # GET /v1beta1/{parent}/gateways
 # operationId: networkservices.projects.locations.gateways.list
-export def "v1beta1-gateways list" [
+export def "networkservices-projects-locations-gateways-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -626,7 +626,7 @@ export def "v1beta1-gateways list" [
 #
 # POST /v1beta1/{parent}/gateways
 # operationId: networkservices.projects.locations.gateways.create
-export def "v1beta1-gateways create" [
+export def "networkservices-projects-locations-gateways-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -690,7 +690,7 @@ export def "v1beta1-gateways create" [
 #
 # GET /v1beta1/{parent}/grpcRoutes
 # operationId: networkservices.projects.locations.grpcRoutes.list
-export def "v1beta1-grpc-routes list" [
+export def "networkservices-projects-locations-grpc-routes-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -741,7 +741,7 @@ export def "v1beta1-grpc-routes list" [
 # POST /v1beta1/{parent}/grpcRoutes
 # operationId: networkservices.projects.locations.grpcRoutes.create
 # --rules item shape: {action?: record, matches?: list}
-export def "v1beta1-grpc-routes create" [
+export def "networkservices-projects-locations-grpc-routes-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -800,7 +800,7 @@ export def "v1beta1-grpc-routes create" [
 #
 # GET /v1beta1/{parent}/httpRoutes
 # operationId: networkservices.projects.locations.httpRoutes.list
-export def "v1beta1-http-routes list" [
+export def "networkservices-projects-locations-http-routes-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -851,7 +851,7 @@ export def "v1beta1-http-routes list" [
 # POST /v1beta1/{parent}/httpRoutes
 # operationId: networkservices.projects.locations.httpRoutes.create
 # --rules item shape: {action?: record, matches?: list}
-export def "v1beta1-http-routes create" [
+export def "networkservices-projects-locations-http-routes-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -910,7 +910,7 @@ export def "v1beta1-http-routes create" [
 #
 # GET /v1beta1/{parent}/meshes
 # operationId: networkservices.projects.locations.meshes.list
-export def "v1beta1-meshes list" [
+export def "networkservices-projects-locations-meshes-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -960,7 +960,7 @@ export def "v1beta1-meshes list" [
 #
 # POST /v1beta1/{parent}/meshes
 # operationId: networkservices.projects.locations.meshes.create
-export def "v1beta1-meshes create" [
+export def "networkservices-projects-locations-meshes-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1016,7 +1016,7 @@ export def "v1beta1-meshes create" [
 #
 # GET /v1beta1/{parent}/serviceBindings
 # operationId: networkservices.projects.locations.serviceBindings.list
-export def "v1beta1-service-bindings list" [
+export def "networkservices-projects-locations-service-bindings-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1066,7 +1066,7 @@ export def "v1beta1-service-bindings list" [
 #
 # POST /v1beta1/{parent}/serviceBindings
 # operationId: networkservices.projects.locations.serviceBindings.create
-export def "v1beta1-service-bindings create" [
+export def "networkservices-projects-locations-service-bindings-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1122,7 +1122,7 @@ export def "v1beta1-service-bindings create" [
 #
 # GET /v1beta1/{parent}/tcpRoutes
 # operationId: networkservices.projects.locations.tcpRoutes.list
-export def "v1beta1-tcp-routes list" [
+export def "networkservices-projects-locations-tcp-routes-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1173,7 +1173,7 @@ export def "v1beta1-tcp-routes list" [
 # POST /v1beta1/{parent}/tcpRoutes
 # operationId: networkservices.projects.locations.tcpRoutes.create
 # --rules item shape: {action?: record, matches?: list}
-export def "v1beta1-tcp-routes create" [
+export def "networkservices-projects-locations-tcp-routes-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1231,7 +1231,7 @@ export def "v1beta1-tcp-routes create" [
 #
 # GET /v1beta1/{parent}/tlsRoutes
 # operationId: networkservices.projects.locations.tlsRoutes.list
-export def "v1beta1-tls-routes list" [
+export def "networkservices-projects-locations-tls-routes-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1282,7 +1282,7 @@ export def "v1beta1-tls-routes list" [
 # POST /v1beta1/{parent}/tlsRoutes
 # operationId: networkservices.projects.locations.tlsRoutes.create
 # --rules item shape: {action?: record, matches?: list}
-export def "v1beta1-tls-routes create" [
+export def "networkservices-projects-locations-tls-routes-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1339,7 +1339,7 @@ export def "v1beta1-tls-routes create" [
 #
 # GET /v1beta1/{resource}:getIamPolicy
 # operationId: networkservices.projects.locations.serviceBindings.getIamPolicy
-export def "v1beta1 get-iam-policy" [
+export def "networkservices-projects-locations-service-bindings-get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1389,7 +1389,7 @@ export def "v1beta1 get-iam-policy" [
 # POST /v1beta1/{resource}:setIamPolicy
 # operationId: networkservices.projects.locations.serviceBindings.setIamPolicy
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
-export def "v1beta1 update-iam-policy" [
+export def "networkservices-projects-locations-service-bindings-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1442,7 +1442,7 @@ export def "v1beta1 update-iam-policy" [
 #
 # POST /v1beta1/{resource}:testIamPermissions
 # operationId: networkservices.projects.locations.serviceBindings.testIamPermissions
-export def "v1beta1 test-iam-permissions" [
+export def "networkservices-projects-locations-service-bindings-test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

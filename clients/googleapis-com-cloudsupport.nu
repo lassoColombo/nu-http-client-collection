@@ -125,7 +125,7 @@ def severity-completer [] { ["S0" "S1" "S2" "S3" "S4" "SEVERITY_UNSPECIFIED"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v2beta-case-classifications-search list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cloudsupport-case-classifications-search" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -149,7 +149,7 @@ export def commands []: nothing -> table {
 #
 # GET /v2beta/caseClassifications:search
 # operationId: cloudsupport.caseClassifications.search
-export def "v2beta-case-classifications-search list" [
+export def "cloudsupport-case-classifications-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -198,7 +198,7 @@ export def "v2beta-case-classifications-search list" [
 #
 # GET /v2beta/cases:search
 # operationId: cloudsupport.cases.search
-export def "v2beta-cases-search list" [
+export def "cloudsupport-cases-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -247,7 +247,7 @@ export def "v2beta-cases-search list" [
 #
 # GET /v2beta/{name}
 # operationId: cloudsupport.cases.get
-export def "v2beta get" [
+export def "cloudsupport-cases-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -297,7 +297,7 @@ export def "v2beta get" [
 # operationId: cloudsupport.cases.patch
 # --classification shape: {displayName?: string, id?: string}
 # --creator shape: {displayName?: string, email?: string}
-export def "v2beta update" [
+export def "cloudsupport-cases-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -362,7 +362,7 @@ export def "v2beta update" [
 #
 # POST /v2beta/{name}:close
 # operationId: cloudsupport.cases.close
-export def "v2beta close" [
+export def "cloudsupport-cases-close" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -414,7 +414,7 @@ export def "v2beta close" [
 #
 # GET /v2beta/{name}:download
 # operationId: cloudsupport.media.download
-export def "v2beta download" [
+export def "cloudsupport-media-download" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -463,7 +463,7 @@ export def "v2beta download" [
 # POST /v2beta/{name}:escalate
 # operationId: cloudsupport.cases.escalate
 # --escalation shape: {justification?: string, reason?: "REASON_UNSPECIFIED"|"RESOLUTION_TIME"|"TECHNICAL_EXPERTISE"|"BUSINESS_IMPACT"}
-export def "v2beta create-escalate" [
+export def "cloudsupport-cases-escalate" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -515,7 +515,7 @@ export def "v2beta create-escalate" [
 #
 # GET /v2beta/{parent}/attachments
 # operationId: cloudsupport.cases.attachments.list
-export def "v2beta-attachments list" [
+export def "cloudsupport-cases-attachments-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -565,7 +565,7 @@ export def "v2beta-attachments list" [
 #
 # POST /v2beta/{parent}/attachments
 # operationId: cloudsupport.media.upload
-export def "v2beta-attachments upload" [
+export def "cloudsupport-media-upload" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -617,7 +617,7 @@ export def "v2beta-attachments upload" [
 #
 # GET /v2beta/{parent}/cases
 # operationId: cloudsupport.cases.list
-export def "v2beta-cases list" [
+export def "cloudsupport-cases-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -670,7 +670,7 @@ export def "v2beta-cases list" [
 # operationId: cloudsupport.cases.create
 # --classification shape: {displayName?: string, id?: string}
 # --creator shape: {displayName?: string, email?: string}
-export def "v2beta-cases create" [
+export def "cloudsupport-cases-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -734,7 +734,7 @@ export def "v2beta-cases create" [
 #
 # GET /v2beta/{parent}/comments
 # operationId: cloudsupport.cases.comments.list
-export def "v2beta-comments list" [
+export def "cloudsupport-cases-comments-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -785,7 +785,7 @@ export def "v2beta-comments list" [
 # POST /v2beta/{parent}/comments
 # operationId: cloudsupport.cases.comments.create
 # --creator shape: {displayName?: string, email?: string}
-export def "v2beta-comments create" [
+export def "cloudsupport-cases-comments-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

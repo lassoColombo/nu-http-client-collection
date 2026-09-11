@@ -133,7 +133,7 @@ def total-result-size-completer [] { ["ACTUAL_SIZE" "ESTIMATED_SIZE" "TOTAL_RESU
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects create-initialize" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "contentwarehouse-projects-locations-initialize" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -157,7 +157,7 @@ export def commands []: nothing -> table {
 #
 # POST /v1/{location}:initialize
 # operationId: contentwarehouse.projects.locations.initialize
-export def "projects create-initialize" [
+export def "contentwarehouse-projects-locations-initialize" [
   location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -212,7 +212,7 @@ export def "projects create-initialize" [
 #
 # DELETE /v1/{name}
 # operationId: contentwarehouse.projects.locations.synonymSets.delete
-export def "projects delete-by-name" [
+export def "contentwarehouse-projects-locations-synonym-sets-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -260,7 +260,7 @@ export def "projects delete-by-name" [
 #
 # GET /v1/{name}
 # operationId: contentwarehouse.projects.locations.synonymSets.get
-export def "projects get-by-name" [
+export def "contentwarehouse-projects-locations-synonym-sets-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -309,7 +309,7 @@ export def "projects get-by-name" [
 # PATCH /v1/{name}
 # operationId: contentwarehouse.projects.locations.synonymSets.patch
 # --synonyms item shape: {words?: list<string>}
-export def "projects update" [
+export def "contentwarehouse-projects-locations-synonym-sets-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -364,7 +364,7 @@ export def "projects update" [
 # POST /v1/{name}:delete
 # operationId: contentwarehouse.projects.locations.documents.referenceId.delete
 # --requestMetadata shape: {userInfo?: record}
-export def "projects delete-by-name-1" [
+export def "contentwarehouse-projects-locations-documents-reference-id-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -417,7 +417,7 @@ export def "projects delete-by-name-1" [
 # POST /v1/{name}:get
 # operationId: contentwarehouse.projects.locations.documents.referenceId.get
 # --requestMetadata shape: {userInfo?: record}
-export def "projects get-by-name-1" [
+export def "contentwarehouse-projects-locations-documents-reference-id-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -470,7 +470,7 @@ export def "projects get-by-name-1" [
 # POST /v1/{name}:lock
 # operationId: contentwarehouse.projects.locations.documents.lock
 # --lockingUser shape: {groupIds?: list<string>, id?: string}
-export def "projects lock" [
+export def "contentwarehouse-projects-locations-documents-lock" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -525,7 +525,7 @@ export def "projects lock" [
 # operationId: contentwarehouse.projects.locations.documents.documentLinks.create
 # --documentLink shape: {description?: string, name?: string, sourceDocumentReference?: record, state?: "STATE_UNSPECIFIED"|"ACTIVE"|"SOFT_DELETED", targetDocumentReference?: record}
 # --requestMetadata shape: {userInfo?: record}
-export def "document-links create" [
+export def "contentwarehouse-projects-locations-documents-document-links-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -578,7 +578,7 @@ export def "document-links create" [
 #
 # GET /v1/{parent}/documentSchemas
 # operationId: contentwarehouse.projects.locations.documentSchemas.list
-export def "document-schemas list" [
+export def "contentwarehouse-projects-locations-document-schemas-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -629,7 +629,7 @@ export def "document-schemas list" [
 # POST /v1/{parent}/documentSchemas
 # operationId: contentwarehouse.projects.locations.documentSchemas.create
 # --propertyDefinitions item shape: {dateTimeTypeOptions?: record, displayName?: string, enumTypeOptions?: record, floatTypeOptions?: record, integerTypeOptions?: record, isFilterable?: bool, isMetadata?: bool, isRepeatable?: bool, isRequired?: bool, isSearchable?: bool, mapTypeOptions?: record, name?: string, propertyTypeOptions?: record, retrievalImportance?: "RETRIEVAL_IMPORTANCE_UNSPECIFIED"|"HIGHEST"|"HIGHER"|"HIGH"|"MEDIUM"|"LOW"|"LOWEST", schemaSources?: list, textTypeOptions?: record, timestampTypeOptions?: record}
-export def "document-schemas create" [
+export def "contentwarehouse-projects-locations-document-schemas-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -689,7 +689,7 @@ export def "document-schemas create" [
 # --document shape: {cloudAiDocument?: record, contentCategory?: "CONTENT_CATEGORY_UNSPECIFIED"|"CONTENT_CATEGORY_IMAGE"|"CONTENT_CATEGORY_AUDIO"|"CONTENT_CATEGORY_VIDEO", creator?: string, displayName?: string, displayUri?: string, documentSchemaName?: string, inlineRawDocument?: string, name?: string, plainText?: string, properties?: list, ... (7 more fields)}
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
 # --requestMetadata shape: {userInfo?: record}
-export def "documents create" [
+export def "contentwarehouse-projects-locations-documents-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -748,7 +748,7 @@ export def "documents create" [
 # --documentQuery shape: {customPropertyFilter?: string, customWeightsMetadata?: record, documentCreatorFilter?: list<string>, documentSchemaNames?: list<string>, fileTypeFilter?: record, folderNameFilter?: string, isNlQuery?: bool, propertyFilter?: list, query?: string, queryContext?: list<string>, timeFilters?: list}
 # --histogramQueries item shape: {filters?: record, histogramQuery?: string, requirePreciseResultSize?: bool}
 # --requestMetadata shape: {userInfo?: record}
-export def "documents-search list" [
+export def "contentwarehouse-projects-locations-documents-search" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -810,7 +810,7 @@ export def "documents-search list" [
 # POST /v1/{parent}/linkedSources
 # operationId: contentwarehouse.projects.locations.documents.linkedSources
 # --requestMetadata shape: {userInfo?: record}
-export def "linked-sources create" [
+export def "contentwarehouse-projects-locations-documents-linked-sources" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -865,7 +865,7 @@ export def "linked-sources create" [
 # POST /v1/{parent}/linkedTargets
 # operationId: contentwarehouse.projects.locations.documents.linkedTargets
 # --requestMetadata shape: {userInfo?: record}
-export def "linked-targets create" [
+export def "contentwarehouse-projects-locations-documents-linked-targets" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -917,7 +917,7 @@ export def "linked-targets create" [
 #
 # GET /v1/{parent}/ruleSets
 # operationId: contentwarehouse.projects.locations.ruleSets.list
-export def "rule-sets list" [
+export def "contentwarehouse-projects-locations-rule-sets-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -968,7 +968,7 @@ export def "rule-sets list" [
 # POST /v1/{parent}/ruleSets
 # operationId: contentwarehouse.projects.locations.ruleSets.create
 # --rules item shape: {actions?: list, condition?: string, description?: string, ruleId?: string, triggerType?: "UNKNOWN"|"ON_CREATE"|"ON_UPDATE"}
-export def "rule-sets create" [
+export def "contentwarehouse-projects-locations-rule-sets-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1023,7 +1023,7 @@ export def "rule-sets create" [
 #
 # GET /v1/{parent}/synonymSets
 # operationId: contentwarehouse.projects.locations.synonymSets.list
-export def "synonym-sets list" [
+export def "contentwarehouse-projects-locations-synonym-sets-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1074,7 +1074,7 @@ export def "synonym-sets list" [
 # POST /v1/{parent}/synonymSets
 # operationId: contentwarehouse.projects.locations.synonymSets.create
 # --synonyms item shape: {words?: list<string>}
-export def "synonym-sets create" [
+export def "contentwarehouse-projects-locations-synonym-sets-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1129,7 +1129,7 @@ export def "synonym-sets create" [
 # POST /v1/{resource}:fetchAcl
 # operationId: contentwarehouse.projects.locations.documents.fetchAcl
 # --requestMetadata shape: {userInfo?: record}
-export def "projects get-acl" [
+export def "contentwarehouse-projects-locations-documents-fetch-acl" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1184,7 +1184,7 @@ export def "projects get-acl" [
 # operationId: contentwarehouse.projects.locations.documents.setAcl
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
 # --requestMetadata shape: {userInfo?: record}
-export def "projects update-acl" [
+export def "contentwarehouse-projects-locations-documents-set-acl" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

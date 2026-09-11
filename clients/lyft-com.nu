@@ -113,7 +113,7 @@ def status-completer [] { ["accepted" "arrived" "canceled" "droppedOff" "pending
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cost get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-cost" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -137,7 +137,7 @@ export def commands []: nothing -> table {
 #
 # GET /cost
 # operationId: GetCost
-export def "cost get" [
+export def "get-cost" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -177,7 +177,7 @@ export def "cost get" [
 #
 # GET /drivers
 # operationId: GetDrivers
-export def "drivers get" [
+export def "get-drivers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -214,7 +214,7 @@ export def "drivers get" [
 #
 # GET /eta
 # operationId: GetETA
-export def "eta get" [
+export def "get-eta" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -254,7 +254,7 @@ export def "eta get" [
 #
 # GET /profile
 # operationId: GetProfile
-export def "profile get" [
+export def "get-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -288,7 +288,7 @@ export def "profile get" [
 #
 # GET /rides
 # operationId: GetRides
-export def "rides list" [
+export def "get-rides" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -326,7 +326,7 @@ export def "rides list" [
 #
 # POST /rides
 # operationId: NewRide
-export def "rides create-new" [
+export def "new-ride" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -368,7 +368,7 @@ export def "rides create-new" [
 #
 # GET /rides/{id}
 # operationId: GetRide
-export def "rides get" [
+export def "get-ride" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -404,7 +404,7 @@ export def "rides get" [
 #
 # POST /rides/{id}/cancel
 # operationId: CancelRide
-export def "rides-cancel cancel" [
+export def "cancel-ride" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -444,7 +444,7 @@ export def "rides-cancel cancel" [
 #
 # PUT /rides/{id}/destination
 # operationId: SetRideDestination
-export def "rides-destination update" [
+export def "set-ride-destination" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -486,7 +486,7 @@ export def "rides-destination update" [
 #
 # PUT /rides/{id}/rating
 # operationId: SetRideRating
-export def "rides-rating update" [
+export def "set-ride-rating" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -528,7 +528,7 @@ export def "rides-rating update" [
 #
 # GET /rides/{id}/receipt
 # operationId: GetRideReceipt
-export def "rides-receipt get" [
+export def "get-ride-receipt" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -564,7 +564,7 @@ export def "rides-receipt get" [
 #
 # GET /ridetypes
 # operationId: GetRideTypes
-export def "ridetypes get-ride-types" [
+export def "get-ride-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -602,7 +602,7 @@ export def "ridetypes get-ride-types" [
 #
 # PUT /sandbox/primetime
 # operationId: SetPrimeTime
-export def "sandbox-primetime update-prime-time" [
+export def "set-prime-time" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -642,7 +642,7 @@ export def "sandbox-primetime update-prime-time" [
 #
 # PUT /sandbox/rides/{id}
 # operationId: SetRideStatus
-export def "sandbox-rides update-status" [
+export def "set-ride-status" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -682,7 +682,7 @@ export def "sandbox-rides update-status" [
 #
 # PUT /sandbox/ridetypes
 # operationId: SetRideTypes
-export def "sandbox-ridetypes update-ride-types" [
+export def "set-ride-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -722,7 +722,7 @@ export def "sandbox-ridetypes update-ride-types" [
 #
 # PUT /sandbox/ridetypes/{ride_type}
 # operationId: SetRideTypeAvailability
-export def "sandbox-ridetypes update-availability" [
+export def "set-ride-type-availability" [
   ride_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

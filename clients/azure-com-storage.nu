@@ -132,7 +132,7 @@ def expand-completer-1 [] { ["kerb"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-storage-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -156,7 +156,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.Storage/operations
 # operationId: Operations_List
-export def "providers-microsoft-storage-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -192,7 +192,7 @@ export def "providers-microsoft-storage-operations list" [
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Storage/checkNameAvailability
 # operationId: StorageAccounts_CheckNameAvailability
-export def "subscriptions-providers-microsoft-storage-check-name-availability check-accounts" [
+export def "storage-accounts-check-name-availability" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -235,7 +235,7 @@ export def "subscriptions-providers-microsoft-storage-check-name-availability ch
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Storage/locations/{location}/usages
 # operationId: Usages_ListByLocation
-export def "subscriptions-providers-microsoft-storage-locations-usages list" [
+export def "usages-list-by-location" [
   subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -275,7 +275,7 @@ export def "subscriptions-providers-microsoft-storage-locations-usages list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Storage/skus
 # operationId: Skus_List
-export def "subscriptions-providers-microsoft-storage-skus list" [
+export def "skus-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -313,7 +313,7 @@ export def "subscriptions-providers-microsoft-storage-skus list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Storage/storageAccounts
 # operationId: StorageAccounts_List
-export def "subscriptions-providers-microsoft-storage-storage-accounts list" [
+export def "storage-accounts-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -351,7 +351,7 @@ export def "subscriptions-providers-microsoft-storage-storage-accounts list" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Storage/storageAccounts
 # operationId: StorageAccounts_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts list" [
+export def "storage-accounts-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -391,7 +391,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Storage/storageAccounts/{accountName}
 # operationId: StorageAccounts_Delete
-export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts delete" [
+export def "storage-accounts-delete" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -433,7 +433,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Storage/storageAccounts/{accountName}
 # operationId: StorageAccounts_GetProperties
-export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts get-properties" [
+export def "storage-accounts-get-properties" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -479,7 +479,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
 # --identity shape: {type: "SystemAssigned"}
 # --properties shape: {accessTier?: "Hot"|"Cool", azureFilesIdentityBasedAuthentication?: any, customDomain?: any, encryption?: any, largeFileSharesState?: "Disabled"|"Enabled", networkAcls?: any, supportsHttpsTrafficOnly?: bool}
 # --sku shape: {name: "Standard_LRS"|"Standard_GRS"|"Standard_RAGRS"|"Standard_ZRS"|"Premium_LRS"|"Premium_ZRS"|"Standard_GZRS"|"Standard_RAGZRS", restrictions?: list}
-export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts update" [
+export def "storage-accounts-update" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -532,7 +532,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
 # --identity shape: {type: "SystemAssigned"}
 # --properties shape: {accessTier?: "Hot"|"Cool", azureFilesIdentityBasedAuthentication?: any, customDomain?: any, encryption?: any, isHnsEnabled?: bool, largeFileSharesState?: "Disabled"|"Enabled", networkAcls?: any, supportsHttpsTrafficOnly?: bool}
 # --sku shape: {name: "Standard_LRS"|"Standard_GRS"|"Standard_RAGRS"|"Standard_ZRS"|"Premium_LRS"|"Premium_ZRS"|"Standard_GZRS"|"Standard_RAGZRS", restrictions?: list}
-export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts create" [
+export def "storage-accounts-create" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -583,7 +583,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Storage/storageAccounts/{accountName}/ListAccountSas
 # operationId: StorageAccounts_ListAccountSAS
-export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-list-account-sas list" [
+export def "storage-accounts-list-account-sas" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -636,7 +636,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Storage/storageAccounts/{accountName}/ListServiceSas
 # operationId: StorageAccounts_ListServiceSAS
-export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-list-service-sas list" [
+export def "storage-accounts-list-service-sas" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -699,7 +699,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Storage/storageAccounts/{accountName}/failover
 # operationId: StorageAccounts_Failover
-export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-failover create" [
+export def "storage-accounts-failover" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -741,7 +741,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Storage/storageAccounts/{accountName}/listKeys
 # operationId: StorageAccounts_ListKeys
-export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-list-keys list" [
+export def "storage-accounts-list-keys" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -784,7 +784,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Storage/storageAccounts/{accountName}/managementPolicies/{managementPolicyName}
 # operationId: ManagementPolicies_Delete
-export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-management-policies delete" [
+export def "management-policies-delete" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -828,7 +828,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Storage/storageAccounts/{accountName}/managementPolicies/{managementPolicyName}
 # operationId: ManagementPolicies_Get
-export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-management-policies get" [
+export def "management-policies-get" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -873,7 +873,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Storage/storageAccounts/{accountName}/managementPolicies/{managementPolicyName}
 # operationId: ManagementPolicies_CreateOrUpdate
 # --properties shape: {policy: any}
-export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-management-policies create-or-update" [
+export def "management-policies-create-or-update" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -921,7 +921,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Storage/storageAccounts/{accountName}/regenerateKey
 # operationId: StorageAccounts_RegenerateKey
-export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-regenerate-key create" [
+export def "storage-accounts-regenerate-key" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -967,7 +967,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Storage/storageAccounts/{accountName}/revokeUserDelegationKeys
 # operationId: StorageAccounts_RevokeUserDelegationKeys
-export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-revoke-user-delegation-keys delete" [
+export def "storage-accounts-revoke-user-delegation-keys" [
   subscription_id: string
   resource_group_name: string
   account_name: string

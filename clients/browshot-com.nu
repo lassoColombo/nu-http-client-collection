@@ -140,7 +140,7 @@ def accept-completer [] { ["image/jpeg" "image/png"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account-info get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-account-info" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -164,7 +164,7 @@ export def commands []: nothing -> table {
 #
 # GET /account/info
 # operationId: GetAccountInfo
-export def "account-info get" [
+export def "get-account-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -200,7 +200,7 @@ export def "account-info get" [
 #
 # POST /batch/ceate
 # operationId: CreateBatch
-export def "batch-ceate create" [
+export def "create-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -267,7 +267,7 @@ export def "batch-ceate create" [
 #
 # GET /batch/info
 # operationId: GetBatchInfo
-export def "batch-info get" [
+export def "get-batch-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -303,7 +303,7 @@ export def "batch-info get" [
 #
 # GET /browser/info
 # operationId: GetBrowserInfo
-export def "browser-info get" [
+export def "get-browser-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -339,7 +339,7 @@ export def "browser-info get" [
 #
 # GET /browser/list
 # operationId: GetBrowsersInfo
-export def "browser-list get" [
+export def "get-browsers-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -373,7 +373,7 @@ export def "browser-list get" [
 #
 # GET /instance/info
 # operationId: GetInstanceInfo
-export def "instance-info get" [
+export def "get-instance-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -409,7 +409,7 @@ export def "instance-info get" [
 #
 # GET /instance/list
 # operationId: GetInstancesInfo
-export def "instance-list get" [
+export def "get-instances-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -443,7 +443,7 @@ export def "instance-list get" [
 #
 # GET /screenshot/create
 # operationId: CreateScreenshot
-export def "screenshot-create create" [
+export def "create-screenshot" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -504,7 +504,7 @@ export def "screenshot-create create" [
 #
 # GET /screenshot/delete
 # operationId: DeleteScreenshot
-export def "screenshot-delete delete" [
+export def "delete-screenshot" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -541,7 +541,7 @@ export def "screenshot-delete delete" [
 #
 # GET /screenshot/host
 # operationId: HostScreenshot
-export def "screenshot-host get" [
+export def "host-screenshot" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -584,7 +584,7 @@ export def "screenshot-host get" [
 #
 # GET /screenshot/html
 # operationId: GetHTML
-export def "screenshot-html get" [
+export def "get-html" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -620,7 +620,7 @@ export def "screenshot-html get" [
 #
 # GET /screenshot/info
 # operationId: GetScreenshotInfo
-export def "screenshot-info get" [
+export def "get-screenshot-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -657,7 +657,7 @@ export def "screenshot-info get" [
 #
 # GET /screenshot/list
 # operationId: GetMultipleScreenshotsInfo
-export def "screenshot-list get-multiple" [
+export def "get-multiple-screenshots-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -694,7 +694,7 @@ export def "screenshot-list get-multiple" [
 #
 # GET /screenshot/multiple
 # operationId: CreateMultipleScreenshots
-export def "screenshot-multiple create" [
+export def "create-multiple-screenshots" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -753,7 +753,7 @@ export def "screenshot-multiple create" [
 #
 # GET /screenshot/search
 # operationId: SearchScreenshot
-export def "screenshot-search list" [
+export def "search-screenshot" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -791,7 +791,7 @@ export def "screenshot-search list" [
 #
 # GET /screenshot/share
 # operationId: ShareScreenshot
-export def "screenshot-share get" [
+export def "share-screenshot" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -828,7 +828,7 @@ export def "screenshot-share get" [
 #
 # GET /screenshot/thumbnail
 # operationId: GetThumbnail
-export def "screenshot-thumbnail get" [
+export def "get-thumbnail" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

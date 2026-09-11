@@ -141,7 +141,7 @@ def x-amz-target-completer-40 [] { ["AmazonEC2ContainerRegistry_V20150921.Upload
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api check-batch-layer-availability" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "batch-check-layer-availability" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -165,7 +165,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: BatchCheckLayerAvailability
-export def "api check-batch-layer-availability" [
+export def "batch-check-layer-availability" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -215,7 +215,7 @@ export def "api check-batch-layer-availability" [
 #
 # POST /
 # operationId: BatchDeleteImage
-export def "api delete-batch-image" [
+export def "batch-delete-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -265,7 +265,7 @@ export def "api delete-batch-image" [
 #
 # POST /
 # operationId: BatchGetImage
-export def "api get-batch-image" [
+export def "batch-get-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -316,7 +316,7 @@ export def "api get-batch-image" [
 #
 # POST /
 # operationId: BatchGetRepositoryScanningConfiguration
-export def "api get-batch-repository-scanning-configuration" [
+export def "batch-get-repository-scanning-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -364,7 +364,7 @@ export def "api get-batch-repository-scanning-configuration" [
 #
 # POST /
 # operationId: CompleteLayerUpload
-export def "api complete-layer-upload" [
+export def "complete-layer-upload" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -415,7 +415,7 @@ export def "api complete-layer-upload" [
 #
 # POST /
 # operationId: CreatePullThroughCacheRule
-export def "api create-pull-through-cache-rule" [
+export def "create-pull-through-cache-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -465,7 +465,7 @@ export def "api create-pull-through-cache-rule" [
 #
 # POST /
 # operationId: CreateRepository
-export def "api create-repository" [
+export def "create-repository" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -518,7 +518,7 @@ export def "api create-repository" [
 #
 # POST /
 # operationId: DeleteLifecyclePolicy
-export def "api delete-lifecycle-policy" [
+export def "delete-lifecycle-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -567,7 +567,7 @@ export def "api delete-lifecycle-policy" [
 #
 # POST /
 # operationId: DeletePullThroughCacheRule
-export def "api delete-pull-through-cache-rule" [
+export def "delete-pull-through-cache-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -616,7 +616,7 @@ export def "api delete-pull-through-cache-rule" [
 #
 # POST /
 # operationId: DeleteRegistryPolicy
-export def "api delete-registry-policy" [
+export def "delete-registry-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -664,7 +664,7 @@ export def "api delete-registry-policy" [
 #
 # POST /
 # operationId: DeleteRepository
-export def "api delete-repository" [
+export def "delete-repository" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -714,7 +714,7 @@ export def "api delete-repository" [
 #
 # POST /
 # operationId: DeleteRepositoryPolicy
-export def "api delete-repository-policy" [
+export def "delete-repository-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -764,7 +764,7 @@ export def "api delete-repository-policy" [
 # POST /
 # operationId: DescribeImageReplicationStatus
 # --imageId shape: {imageDigest?: any, imageTag?: any}
-export def "api get-image-replication-status" [
+export def "describe-image-replication-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -815,7 +815,7 @@ export def "api get-image-replication-status" [
 # POST /
 # operationId: DescribeImageScanFindings
 # --imageId shape: {imageDigest?: any, imageTag?: any}
-export def "api get-image-scan-findings" [
+export def "describe-image-scan-findings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -870,7 +870,7 @@ export def "api get-image-scan-findings" [
 #
 # POST /
 # operationId: DescribeImages
-export def "api get-images" [
+export def "describe-images" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -926,7 +926,7 @@ export def "api get-images" [
 #
 # POST /
 # operationId: DescribePullThroughCacheRules
-export def "api get-pull-through-cache-rules" [
+export def "describe-pull-through-cache-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -980,7 +980,7 @@ export def "api get-pull-through-cache-rules" [
 #
 # POST /
 # operationId: DescribeRegistry
-export def "api get-registry" [
+export def "describe-registry" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1028,7 +1028,7 @@ export def "api get-registry" [
 #
 # POST /
 # operationId: DescribeRepositories
-export def "api get-repositories" [
+export def "describe-repositories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1082,7 +1082,7 @@ export def "api get-repositories" [
 #
 # POST /
 # operationId: GetAuthorizationToken
-export def "api get-authorization-token" [
+export def "get-authorization-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1130,7 +1130,7 @@ export def "api get-authorization-token" [
 #
 # POST /
 # operationId: GetDownloadUrlForLayer
-export def "api get-download-url-for-layer" [
+export def "get-download-url-for-layer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1180,7 +1180,7 @@ export def "api get-download-url-for-layer" [
 #
 # POST /
 # operationId: GetLifecyclePolicy
-export def "api get-lifecycle-policy" [
+export def "get-lifecycle-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1229,7 +1229,7 @@ export def "api get-lifecycle-policy" [
 #
 # POST /
 # operationId: GetLifecyclePolicyPreview
-export def "api get-lifecycle-policy-preview" [
+export def "get-lifecycle-policy-preview" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1285,7 +1285,7 @@ export def "api get-lifecycle-policy-preview" [
 #
 # POST /
 # operationId: GetRegistryPolicy
-export def "api get-registry-policy" [
+export def "get-registry-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1333,7 +1333,7 @@ export def "api get-registry-policy" [
 #
 # POST /
 # operationId: GetRegistryScanningConfiguration
-export def "api get-registry-scanning-configuration" [
+export def "get-registry-scanning-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1381,7 +1381,7 @@ export def "api get-registry-scanning-configuration" [
 #
 # POST /
 # operationId: GetRepositoryPolicy
-export def "api get-repository-policy" [
+export def "get-repository-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1430,7 +1430,7 @@ export def "api get-repository-policy" [
 #
 # POST /
 # operationId: InitiateLayerUpload
-export def "api upload-initiate-layer" [
+export def "initiate-layer-upload" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1479,7 +1479,7 @@ export def "api upload-initiate-layer" [
 #
 # POST /
 # operationId: ListImages
-export def "api list-images" [
+export def "list-images" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1534,7 +1534,7 @@ export def "api list-images" [
 #
 # POST /
 # operationId: ListTagsForResource
-export def "api list-tags-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1582,7 +1582,7 @@ export def "api list-tags-for-resource" [
 #
 # POST /
 # operationId: PutImage
-export def "api update-image" [
+export def "put-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1635,7 +1635,7 @@ export def "api update-image" [
 #
 # POST /
 # operationId: PutImageScanningConfiguration
-export def "api update-image-scanning-configuration" [
+export def "put-image-scanning-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1685,7 +1685,7 @@ export def "api update-image-scanning-configuration" [
 #
 # POST /
 # operationId: PutImageTagMutability
-export def "api update-image-tag-mutability" [
+export def "put-image-tag-mutability" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1735,7 +1735,7 @@ export def "api update-image-tag-mutability" [
 #
 # POST /
 # operationId: PutLifecyclePolicy
-export def "api update-lifecycle-policy" [
+export def "put-lifecycle-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1785,7 +1785,7 @@ export def "api update-lifecycle-policy" [
 #
 # POST /
 # operationId: PutRegistryPolicy
-export def "api update-registry-policy" [
+export def "put-registry-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1833,7 +1833,7 @@ export def "api update-registry-policy" [
 #
 # POST /
 # operationId: PutRegistryScanningConfiguration
-export def "api update-registry-scanning-configuration" [
+export def "put-registry-scanning-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1882,7 +1882,7 @@ export def "api update-registry-scanning-configuration" [
 #
 # POST /
 # operationId: PutReplicationConfiguration
-export def "api update-replication-configuration" [
+export def "put-replication-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1930,7 +1930,7 @@ export def "api update-replication-configuration" [
 #
 # POST /
 # operationId: SetRepositoryPolicy
-export def "api update-repository-policy" [
+export def "set-repository-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1982,7 +1982,7 @@ export def "api update-repository-policy" [
 # POST /
 # operationId: StartImageScan
 # --imageId shape: {imageDigest?: any, imageTag?: any}
-export def "api start-image-scan" [
+export def "start-image-scan" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2032,7 +2032,7 @@ export def "api start-image-scan" [
 #
 # POST /
 # operationId: StartLifecyclePolicyPreview
-export def "api start-lifecycle-policy-preview" [
+export def "start-lifecycle-policy-preview" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2082,7 +2082,7 @@ export def "api start-lifecycle-policy-preview" [
 #
 # POST /
 # operationId: TagResource
-export def "api tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2131,7 +2131,7 @@ export def "api tag-resource" [
 #
 # POST /
 # operationId: UntagResource
-export def "api untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2180,7 +2180,7 @@ export def "api untag-resource" [
 #
 # POST /
 # operationId: UploadLayerPart
-export def "api upload-layer-part" [
+export def "upload-layer-part" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

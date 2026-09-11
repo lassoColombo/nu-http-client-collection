@@ -110,7 +110,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-insights-components-api-keys delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api-keys-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -134,7 +134,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/components/{resourceName}/APIKeys/{keyId}
 # operationId: APIKeys_Delete
-export def "subscriptions-resource-groups-providers-microsoft-insights-components-api-keys delete" [
+export def "api-keys-delete" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -178,7 +178,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/components/{resourceName}/APIKeys/{keyId}
 # operationId: APIKeys_Get
-export def "subscriptions-resource-groups-providers-microsoft-insights-components-api-keys get" [
+export def "api-keys-get" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -222,7 +222,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/components/{resourceName}/ApiKeys
 # operationId: APIKeys_List
-export def "subscriptions-resource-groups-providers-microsoft-insights-components-api-keys list" [
+export def "api-keys-list" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -264,7 +264,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/components/{resourceName}/ApiKeys
 # operationId: APIKeys_Create
-export def "subscriptions-resource-groups-providers-microsoft-insights-components-api-keys create" [
+export def "api-keys-create" [
   subscription_id: string
   resource_group_name: string
   resource_name: string

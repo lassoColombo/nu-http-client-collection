@@ -138,7 +138,7 @@ def type-completer-2 [] { ["ANONYMOUS" "GROUP" "INVITE" "ORGANIZATION" "USER"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "documents-versions abort-upload" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "abort-document-version-upload" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -162,7 +162,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /api/v1/documents/{DocumentId}/versions/{VersionId}
 # operationId: AbortDocumentVersionUpload
-export def "documents-versions abort-upload" [
+export def "abort-document-version-upload" [
   document_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -210,7 +210,7 @@ export def "documents-versions abort-upload" [
 #
 # GET /api/v1/documents/{DocumentId}/versions/{VersionId}
 # operationId: GetDocumentVersion
-export def "documents-versions get" [
+export def "get-document-version" [
   document_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -261,7 +261,7 @@ export def "documents-versions get" [
 #
 # PATCH /api/v1/documents/{DocumentId}/versions/{VersionId}
 # operationId: UpdateDocumentVersion
-export def "documents-versions update" [
+export def "update-document-version" [
   document_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -313,7 +313,7 @@ export def "documents-versions update" [
 #
 # POST /api/v1/users/{UserId}/activation
 # operationId: ActivateUser
-export def "users-activation create-activate" [
+export def "activate-user" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -359,7 +359,7 @@ export def "users-activation create-activate" [
 #
 # DELETE /api/v1/users/{UserId}/activation
 # operationId: DeactivateUser
-export def "users-activation delete-deactivate" [
+export def "deactivate-user" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -407,7 +407,7 @@ export def "users-activation delete-deactivate" [
 # operationId: AddResourcePermissions
 # --Principals item shape: {Id: any, Type: any, Role: any}
 # --NotificationOptions shape: {SendEmail?: any, EmailMessage?: any}
-export def "resources-permissions create" [
+export def "add-resource-permissions" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -458,7 +458,7 @@ export def "resources-permissions create" [
 #
 # GET /api/v1/resources/{ResourceId}/permissions
 # operationId: DescribeResourcePermissions
-export def "resources-permissions get" [
+export def "describe-resource-permissions" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -510,7 +510,7 @@ export def "resources-permissions get" [
 #
 # DELETE /api/v1/resources/{ResourceId}/permissions
 # operationId: RemoveAllResourcePermissions
-export def "resources-permissions delete-list" [
+export def "remove-all-resource-permissions" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -556,7 +556,7 @@ export def "resources-permissions delete-list" [
 #
 # POST /api/v1/documents/{DocumentId}/versions/{VersionId}/comment
 # operationId: CreateComment
-export def "documents-versions-comment create" [
+export def "create-comment" [
   document_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -612,7 +612,7 @@ export def "documents-versions-comment create" [
 #
 # PUT /api/v1/resources/{ResourceId}/customMetadata
 # operationId: CreateCustomMetadata
-export def "resources-custom-metadata create" [
+export def "create-custom-metadata" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -664,7 +664,7 @@ export def "resources-custom-metadata create" [
 #
 # DELETE /api/v1/resources/{ResourceId}/customMetadata
 # operationId: DeleteCustomMetadata
-export def "resources-custom-metadata delete" [
+export def "delete-custom-metadata" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -714,7 +714,7 @@ export def "resources-custom-metadata delete" [
 #
 # POST /api/v1/folders
 # operationId: CreateFolder
-export def "folders create" [
+export def "create-folder" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -763,7 +763,7 @@ export def "folders create" [
 #
 # PUT /api/v1/resources/{ResourceId}/labels
 # operationId: CreateLabels
-export def "resources-labels create" [
+export def "create-labels" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -813,7 +813,7 @@ export def "resources-labels create" [
 #
 # DELETE /api/v1/resources/{ResourceId}/labels
 # operationId: DeleteLabels
-export def "resources-labels delete" [
+export def "delete-labels" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -862,7 +862,7 @@ export def "resources-labels delete" [
 #
 # POST /api/v1/organizations/{OrganizationId}/subscriptions
 # operationId: CreateNotificationSubscription
-export def "organizations-subscriptions create-notification" [
+export def "create-notification-subscription" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -913,7 +913,7 @@ export def "organizations-subscriptions create-notification" [
 #
 # GET /api/v1/organizations/{OrganizationId}/subscriptions
 # operationId: DescribeNotificationSubscriptions
-export def "organizations-subscriptions get-notification" [
+export def "describe-notification-subscriptions" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -964,7 +964,7 @@ export def "organizations-subscriptions get-notification" [
 # POST /api/v1/users
 # operationId: CreateUser
 # --StorageRule shape: {StorageAllocatedInBytes?: any, StorageType?: any}
-export def "users create" [
+export def "create-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1019,7 +1019,7 @@ export def "users create" [
 #
 # GET /api/v1/users
 # operationId: DescribeUsers
-export def "users get" [
+export def "describe-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1075,7 +1075,7 @@ export def "users get" [
 #
 # DELETE /api/v1/documents/{DocumentId}/versions/{VersionId}/comment/{CommentId}
 # operationId: DeleteComment
-export def "documents-versions-comment delete" [
+export def "delete-comment" [
   document_id: string
   version_id: string
   comment_id: string
@@ -1125,7 +1125,7 @@ export def "documents-versions-comment delete" [
 #
 # DELETE /api/v1/documents/{DocumentId}
 # operationId: DeleteDocument
-export def "documents delete" [
+export def "delete-document" [
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1171,7 +1171,7 @@ export def "documents delete" [
 #
 # GET /api/v1/documents/{DocumentId}
 # operationId: GetDocument
-export def "documents get" [
+export def "get-document" [
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1219,7 +1219,7 @@ export def "documents get" [
 #
 # PATCH /api/v1/documents/{DocumentId}
 # operationId: UpdateDocument
-export def "documents update" [
+export def "update-document" [
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1271,7 +1271,7 @@ export def "documents update" [
 #
 # DELETE /api/v1/documentVersions/{DocumentId}/versions/{VersionId}
 # operationId: DeleteDocumentVersion
-export def "document-versions-versions delete" [
+export def "delete-document-version" [
   document_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1321,7 +1321,7 @@ export def "document-versions-versions delete" [
 #
 # DELETE /api/v1/folders/{FolderId}
 # operationId: DeleteFolder
-export def "folders delete" [
+export def "delete-folder" [
   folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1367,7 +1367,7 @@ export def "folders delete" [
 #
 # GET /api/v1/folders/{FolderId}
 # operationId: GetFolder
-export def "folders get" [
+export def "get-folder" [
   folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1415,7 +1415,7 @@ export def "folders get" [
 #
 # PATCH /api/v1/folders/{FolderId}
 # operationId: UpdateFolder
-export def "folders update" [
+export def "update-folder" [
   folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1467,7 +1467,7 @@ export def "folders update" [
 #
 # DELETE /api/v1/folders/{FolderId}/contents
 # operationId: DeleteFolderContents
-export def "folders-contents delete" [
+export def "delete-folder-contents" [
   folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1513,7 +1513,7 @@ export def "folders-contents delete" [
 #
 # GET /api/v1/folders/{FolderId}/contents
 # operationId: DescribeFolderContents
-export def "folders-contents get" [
+export def "describe-folder-contents" [
   folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1568,7 +1568,7 @@ export def "folders-contents get" [
 #
 # DELETE /api/v1/organizations/{OrganizationId}/subscriptions/{SubscriptionId}
 # operationId: DeleteNotificationSubscription
-export def "organizations-subscriptions delete-notification" [
+export def "delete-notification-subscription" [
   organization_id: string
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1615,7 +1615,7 @@ export def "organizations-subscriptions delete-notification" [
 #
 # DELETE /api/v1/users/{UserId}
 # operationId: DeleteUser
-export def "users delete" [
+export def "delete-user" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1662,7 +1662,7 @@ export def "users delete" [
 # PATCH /api/v1/users/{UserId}
 # operationId: UpdateUser
 # --StorageRule shape: {StorageAllocatedInBytes?: any, StorageType?: any}
-export def "users update" [
+export def "update-user" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1718,7 +1718,7 @@ export def "users update" [
 #
 # GET /api/v1/activities
 # operationId: DescribeActivities
-export def "activities get" [
+export def "describe-activities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1774,7 +1774,7 @@ export def "activities get" [
 #
 # GET /api/v1/documents/{DocumentId}/versions/{VersionId}/comments
 # operationId: DescribeComments
-export def "documents-versions-comments get" [
+export def "describe-comments" [
   document_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1827,7 +1827,7 @@ export def "documents-versions-comments get" [
 #
 # GET /api/v1/documents/{DocumentId}/versions
 # operationId: DescribeDocumentVersions
-export def "documents-versions list" [
+export def "describe-document-versions" [
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1880,7 +1880,7 @@ export def "documents-versions list" [
 #
 # GET /api/v1/groups
 # operationId: DescribeGroups
-export def "groups get" [
+export def "describe-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1931,7 +1931,7 @@ export def "groups get" [
 #
 # GET /api/v1/me/root
 # operationId: DescribeRootFolders
-export def "me-root get-folders" [
+export def "describe-root-folders" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1980,7 +1980,7 @@ export def "me-root get-folders" [
 #
 # GET /api/v1/me
 # operationId: GetCurrentUser
-export def "me get-user" [
+export def "get-current-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2024,7 +2024,7 @@ export def "me get-user" [
 #
 # GET /api/v1/documents/{DocumentId}/path
 # operationId: GetDocumentPath
-export def "documents-path get" [
+export def "get-document-path" [
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2074,7 +2074,7 @@ export def "documents-path get" [
 #
 # GET /api/v1/folders/{FolderId}/path
 # operationId: GetFolderPath
-export def "folders-path get" [
+export def "get-folder-path" [
   folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2124,7 +2124,7 @@ export def "folders-path get" [
 #
 # GET /api/v1/resources
 # operationId: GetResources
-export def "resources get" [
+export def "get-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2173,7 +2173,7 @@ export def "resources get" [
 #
 # POST /api/v1/documents
 # operationId: InitiateDocumentVersionUpload
-export def "documents version-initiate-upload" [
+export def "initiate-document-version-upload" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2227,7 +2227,7 @@ export def "documents version-initiate-upload" [
 #
 # DELETE /api/v1/resources/{ResourceId}/permissions/{PrincipalId}
 # operationId: RemoveResourcePermission
-export def "resources-permissions delete" [
+export def "remove-resource-permission" [
   resource_id: string
   principal_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2277,7 +2277,7 @@ export def "resources-permissions delete" [
 #
 # POST /api/v1/documentVersions/restore/{DocumentId}
 # operationId: RestoreDocumentVersions
-export def "document-versions-restore create" [
+export def "restore-document-versions" [
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2325,7 +2325,7 @@ export def "document-versions-restore create" [
 # operationId: SearchResources
 # --Filters shape: {TextLocales?: any, ContentCategories?: any, ResourceTypes?: any, Labels?: any, Principals?: any, AncestorIds?: any, SearchCollectionTypes?: any, SizeRange?: any, CreatedRange?: any, ModifiedRange?: any}
 # --OrderBy item shape: {Field?: any, Order?: any}
-export def "search list-resources" [
+export def "search-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

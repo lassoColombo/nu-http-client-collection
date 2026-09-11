@@ -133,7 +133,7 @@ def x-amz-target-completer-32 [] { ["AWSLookoutEquipmentFrontendService.UpdateLa
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-dataset" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-dataset" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -157,7 +157,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CreateDataset
-export def "api create-dataset" [
+export def "create-dataset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -209,7 +209,7 @@ export def "api create-dataset" [
 #
 # POST /
 # operationId: CreateInferenceScheduler
-export def "api create-inference-scheduler" [
+export def "create-inference-scheduler" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -266,7 +266,7 @@ export def "api create-inference-scheduler" [
 #
 # POST /
 # operationId: CreateLabel
-export def "api create-label" [
+export def "create-label" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -321,7 +321,7 @@ export def "api create-label" [
 #
 # POST /
 # operationId: CreateLabelGroup
-export def "api create-label-group" [
+export def "create-label-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -372,7 +372,7 @@ export def "api create-label-group" [
 #
 # POST /
 # operationId: CreateModel
-export def "api create-model" [
+export def "create-model" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -433,7 +433,7 @@ export def "api create-model" [
 #
 # POST /
 # operationId: DeleteDataset
-export def "api delete-dataset" [
+export def "delete-dataset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -481,7 +481,7 @@ export def "api delete-dataset" [
 #
 # POST /
 # operationId: DeleteInferenceScheduler
-export def "api delete-inference-scheduler" [
+export def "delete-inference-scheduler" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -529,7 +529,7 @@ export def "api delete-inference-scheduler" [
 #
 # POST /
 # operationId: DeleteLabel
-export def "api delete-label" [
+export def "delete-label" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -578,7 +578,7 @@ export def "api delete-label" [
 #
 # POST /
 # operationId: DeleteLabelGroup
-export def "api delete-label-group" [
+export def "delete-label-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -626,7 +626,7 @@ export def "api delete-label-group" [
 #
 # POST /
 # operationId: DeleteModel
-export def "api delete-model" [
+export def "delete-model" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -674,7 +674,7 @@ export def "api delete-model" [
 #
 # POST /
 # operationId: DescribeDataIngestionJob
-export def "api get-data-ingestion-job" [
+export def "describe-data-ingestion-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -722,7 +722,7 @@ export def "api get-data-ingestion-job" [
 #
 # POST /
 # operationId: DescribeDataset
-export def "api get-dataset" [
+export def "describe-dataset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -770,7 +770,7 @@ export def "api get-dataset" [
 #
 # POST /
 # operationId: DescribeInferenceScheduler
-export def "api get-inference-scheduler" [
+export def "describe-inference-scheduler" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -818,7 +818,7 @@ export def "api get-inference-scheduler" [
 #
 # POST /
 # operationId: DescribeLabel
-export def "api get-label" [
+export def "describe-label" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -867,7 +867,7 @@ export def "api get-label" [
 #
 # POST /
 # operationId: DescribeLabelGroup
-export def "api get-label-group" [
+export def "describe-label-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -915,7 +915,7 @@ export def "api get-label-group" [
 #
 # POST /
 # operationId: DescribeModel
-export def "api get-model" [
+export def "describe-model" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -963,7 +963,7 @@ export def "api get-model" [
 #
 # POST /
 # operationId: ListDataIngestionJobs
-export def "api list-data-ingestion-jobs" [
+export def "list-data-ingestion-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1017,7 +1017,7 @@ export def "api list-data-ingestion-jobs" [
 #
 # POST /
 # operationId: ListDatasets
-export def "api list-datasets" [
+export def "list-datasets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1070,7 +1070,7 @@ export def "api list-datasets" [
 #
 # POST /
 # operationId: ListInferenceEvents
-export def "api list-inference-events" [
+export def "list-inference-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1125,7 +1125,7 @@ export def "api list-inference-events" [
 #
 # POST /
 # operationId: ListInferenceExecutions
-export def "api list-inference-executions" [
+export def "list-inference-executions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1181,7 +1181,7 @@ export def "api list-inference-executions" [
 #
 # POST /
 # operationId: ListInferenceSchedulers
-export def "api list-inference-schedulers" [
+export def "list-inference-schedulers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1236,7 +1236,7 @@ export def "api list-inference-schedulers" [
 #
 # POST /
 # operationId: ListLabelGroups
-export def "api list-label-groups" [
+export def "list-label-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1289,7 +1289,7 @@ export def "api list-label-groups" [
 #
 # POST /
 # operationId: ListLabels
-export def "api list-labels" [
+export def "list-labels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1346,7 +1346,7 @@ export def "api list-labels" [
 #
 # POST /
 # operationId: ListModels
-export def "api list-models" [
+export def "list-models" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1401,7 +1401,7 @@ export def "api list-models" [
 #
 # POST /
 # operationId: ListSensorStatistics
-export def "api list-sensor-statistics" [
+export def "list-sensor-statistics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1455,7 +1455,7 @@ export def "api list-sensor-statistics" [
 #
 # POST /
 # operationId: ListTagsForResource
-export def "api list-tags-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1503,7 +1503,7 @@ export def "api list-tags-for-resource" [
 #
 # POST /
 # operationId: StartDataIngestionJob
-export def "api start-data-ingestion-job" [
+export def "start-data-ingestion-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1554,7 +1554,7 @@ export def "api start-data-ingestion-job" [
 #
 # POST /
 # operationId: StartInferenceScheduler
-export def "api start-inference-scheduler" [
+export def "start-inference-scheduler" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1602,7 +1602,7 @@ export def "api start-inference-scheduler" [
 #
 # POST /
 # operationId: StopInferenceScheduler
-export def "api stop-inference-scheduler" [
+export def "stop-inference-scheduler" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1650,7 +1650,7 @@ export def "api stop-inference-scheduler" [
 #
 # POST /
 # operationId: TagResource
-export def "api tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1699,7 +1699,7 @@ export def "api tag-resource" [
 #
 # POST /
 # operationId: UntagResource
-export def "api untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1748,7 +1748,7 @@ export def "api untag-resource" [
 #
 # POST /
 # operationId: UpdateInferenceScheduler
-export def "api update-inference-scheduler" [
+export def "update-inference-scheduler" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1801,7 +1801,7 @@ export def "api update-inference-scheduler" [
 #
 # POST /
 # operationId: UpdateLabelGroup
-export def "api update-label-group" [
+export def "update-label-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -122,7 +122,7 @@ def voice-name-completer [] { ["Aditi" "Agnieszka" "Alva" "Amy" "Astrid" "Bianca
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "calls list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-calls" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # GET /
 # operationId: getCalls
-export def "calls list" [
+export def "get-calls" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -188,7 +188,7 @@ export def "calls list" [
 #
 # POST /
 # operationId: createCall
-export def "calls create" [
+export def "create-call" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -226,7 +226,7 @@ export def "calls create" [
 #
 # GET /{uuid}
 # operationId: getCall
-export def "calls get" [
+export def "get-call" [
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -263,7 +263,7 @@ export def "calls get" [
 # PUT /{uuid}
 # operationId: updateCall
 # --destination shape: {ncco: list, type: string}
-export def "calls update" [
+export def "update-call" [
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -304,7 +304,7 @@ export def "calls update" [
 #
 # PUT /{uuid}/dtmf
 # operationId: startDTMF
-export def "dtmf start" [
+export def "start-dtmf" [
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -344,7 +344,7 @@ export def "dtmf start" [
 #
 # DELETE /{uuid}/stream
 # operationId: stopStream
-export def "stream stop" [
+export def "stop-stream" [
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -380,7 +380,7 @@ export def "stream stop" [
 #
 # PUT /{uuid}/stream
 # operationId: startStream
-export def "stream start" [
+export def "start-stream" [
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -422,7 +422,7 @@ export def "stream start" [
 #
 # DELETE /{uuid}/talk
 # operationId: stopTalk
-export def "talk stop" [
+export def "stop-talk" [
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -459,7 +459,7 @@ export def "talk stop" [
 # PUT /{uuid}/talk
 # operationId: startTalk
 @deprecated --flag voice-name
-export def "talk start" [
+export def "start-talk" [
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

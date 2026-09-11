@@ -123,7 +123,7 @@ def signing-algo-completer [] { ["HMAC_SHA256"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "self get-user" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-user" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -147,7 +147,7 @@ export def commands []: nothing -> table {
 #
 # GET /self
 # operationId: getUser
-export def "self get-user" [
+export def "get-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -181,7 +181,7 @@ export def "self get-user" [
 #
 # GET /self/account
 # operationId: getAccount
-export def "self-account get" [
+export def "get-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -215,7 +215,7 @@ export def "self-account get" [
 #
 # GET /self/calls
 # operationId: listCalls
-export def "self-calls list" [
+export def "list-calls" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -258,7 +258,7 @@ export def "self-calls list" [
 #
 # POST /self/calls
 # operationId: createCall
-export def "self-calls create" [
+export def "create-call" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -296,7 +296,7 @@ export def "self-calls create" [
 #
 # GET /self/calls/count
 # operationId: getCallsCount
-export def "self-calls-count get" [
+export def "get-calls-count" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -335,7 +335,7 @@ export def "self-calls-count get" [
 #
 # DELETE /self/calls/{id}
 # operationId: destroyCall
-export def "self-calls delete" [
+export def "destroy-call" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -371,7 +371,7 @@ export def "self-calls delete" [
 #
 # GET /self/calls/{id}
 # operationId: getRoles
-export def "self-calls get-roles" [
+export def "get-roles" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -407,7 +407,7 @@ export def "self-calls get-roles" [
 #
 # PUT /self/calls/{id}/answer
 # operationId: callAnswer
-export def "self-calls-answer update" [
+export def "call-answer" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -443,7 +443,7 @@ export def "self-calls-answer update" [
 #
 # DELETE /self/calls/{id}/hold
 # operationId: callUnold
-export def "self-calls-hold delete-unold" [
+export def "call-unold" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -479,7 +479,7 @@ export def "self-calls-hold delete-unold" [
 #
 # PUT /self/calls/{id}/hold
 # operationId: callHold
-export def "self-calls-hold update" [
+export def "call-hold" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -515,7 +515,7 @@ export def "self-calls-hold update" [
 #
 # POST /self/calls/{id}/transfer
 # operationId: callTransfer
-export def "self-calls-transfer create" [
+export def "call-transfer" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -555,7 +555,7 @@ export def "self-calls-transfer create" [
 #
 # PUT /self/calls/{id}/vmtransfer
 # operationId: callVMTransfer
-export def "self-calls-vmtransfer update-vm-transfer" [
+export def "call-vm-transfer" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -591,7 +591,7 @@ export def "self-calls-vmtransfer update-vm-transfer" [
 #
 # GET /self/events
 # operationId: listEvents
-export def "self-events list" [
+export def "list-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -635,7 +635,7 @@ export def "self-events list" [
 #
 # GET /self/events/count
 # operationId: getEventsCount
-export def "self-events-count get" [
+export def "get-events-count" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -674,7 +674,7 @@ export def "self-events-count get" [
 #
 # GET /self/events/{id}
 # operationId: getEvent
-export def "self-events get" [
+export def "get-event" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -710,7 +710,7 @@ export def "self-events get" [
 #
 # GET /self/webhooks
 # operationId: listWebhooks
-export def "self-webhooks list" [
+export def "list-webhooks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -744,7 +744,7 @@ export def "self-webhooks list" [
 #
 # POST /self/webhooks
 # operationId: createWebhook
-export def "self-webhooks create" [
+export def "create-webhook" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -786,7 +786,7 @@ export def "self-webhooks create" [
 #
 # DELETE /self/webhooks/{id}
 # operationId: destroyWebhook
-export def "self-webhooks delete" [
+export def "destroy-webhook" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -822,7 +822,7 @@ export def "self-webhooks delete" [
 #
 # GET /self/webhooks/{id}
 # operationId: viewWebhook
-export def "self-webhooks get-view" [
+export def "view-webhook" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -858,7 +858,7 @@ export def "self-webhooks get-view" [
 #
 # PUT /self/webhooks/{id}/renew
 # operationId: renewWebhook
-export def "self-webhooks-renew update" [
+export def "renew-webhook" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

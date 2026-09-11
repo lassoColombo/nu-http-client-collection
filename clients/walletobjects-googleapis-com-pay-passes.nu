@@ -146,7 +146,7 @@ def trip-type-completer [] { ["ONE_WAY" "ROUND_TRIP" "TRIP_TYPE_UNSPECIFIED" "on
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "walletobjects-event-ticket-class list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "walletobjects-eventticketclass-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -170,7 +170,7 @@ export def commands []: nothing -> table {
 #
 # GET /walletobjects/v1/eventTicketClass
 # operationId: walletobjects.eventticketclass.list
-export def "walletobjects-event-ticket-class list" [
+export def "walletobjects-eventticketclass-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -243,7 +243,7 @@ export def "walletobjects-event-ticket-class list" [
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --venue shape: {address?: record, kind?: string, name?: record}
 # --wordMark shape: {contentDescription?: record, kind?: string, sourceUri?: record}
-export def "walletobjects-event-ticket-class create" [
+export def "walletobjects-eventticketclass-insert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -334,7 +334,7 @@ export def "walletobjects-event-ticket-class create" [
 #
 # GET /walletobjects/v1/eventTicketClass/{resourceId}
 # operationId: walletobjects.eventticketclass.get
-export def "walletobjects-event-ticket-class get" [
+export def "walletobjects-eventticketclass-get" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -406,7 +406,7 @@ export def "walletobjects-event-ticket-class get" [
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --venue shape: {address?: record, kind?: string, name?: record}
 # --wordMark shape: {contentDescription?: record, kind?: string, sourceUri?: record}
-export def "walletobjects-event-ticket-class update-by-resource-id" [
+export def "walletobjects-eventticketclass-patch" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -523,7 +523,7 @@ export def "walletobjects-event-ticket-class update-by-resource-id" [
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --venue shape: {address?: record, kind?: string, name?: record}
 # --wordMark shape: {contentDescription?: record, kind?: string, sourceUri?: record}
-export def "walletobjects-event-ticket-class update-by-resource-id-1" [
+export def "walletobjects-eventticketclass-update" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -617,7 +617,7 @@ export def "walletobjects-event-ticket-class update-by-resource-id-1" [
 # POST /walletobjects/v1/eventTicketClass/{resourceId}/addMessage
 # operationId: walletobjects.eventticketclass.addmessage
 # --message shape: {body?: string, displayInterval?: record, header?: string, id?: string, kind?: string, localizedBody?: record, localizedHeader?: record, messageType?: "MESSAGE_TYPE_UNSPECIFIED"|"TEXT"|"text"|"EXPIRATION_NOTIFICATION"|"expirationNotification"}
-export def "walletobjects-event-ticket-class-add-message create-addmessage" [
+export def "walletobjects-eventticketclass-addmessage" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -669,7 +669,7 @@ export def "walletobjects-event-ticket-class-add-message create-addmessage" [
 #
 # GET /walletobjects/v1/eventTicketObject
 # operationId: walletobjects.eventticketobject.list
-export def "walletobjects-event-ticket-object list" [
+export def "walletobjects-eventticketobject-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -736,7 +736,7 @@ export def "walletobjects-event-ticket-object list" [
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --ticketType shape: {defaultValue?: record, kind?: string, translatedValues?: list}
 # --validTimeInterval shape: {end?: record, kind?: string, start?: record}
-export def "walletobjects-event-ticket-object create" [
+export def "walletobjects-eventticketobject-insert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -816,7 +816,7 @@ export def "walletobjects-event-ticket-object create" [
 #
 # GET /walletobjects/v1/eventTicketObject/{resourceId}
 # operationId: walletobjects.eventticketobject.get
-export def "walletobjects-event-ticket-object get" [
+export def "walletobjects-eventticketobject-get" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -882,7 +882,7 @@ export def "walletobjects-event-ticket-object get" [
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --ticketType shape: {defaultValue?: record, kind?: string, translatedValues?: list}
 # --validTimeInterval shape: {end?: record, kind?: string, start?: record}
-export def "walletobjects-event-ticket-object update-by-resource-id" [
+export def "walletobjects-eventticketobject-patch" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -982,7 +982,7 @@ export def "walletobjects-event-ticket-object update-by-resource-id" [
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --ticketType shape: {defaultValue?: record, kind?: string, translatedValues?: list}
 # --validTimeInterval shape: {end?: record, kind?: string, start?: record}
-export def "walletobjects-event-ticket-object update-by-resource-id-1" [
+export def "walletobjects-eventticketobject-update" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1065,7 +1065,7 @@ export def "walletobjects-event-ticket-object update-by-resource-id-1" [
 # POST /walletobjects/v1/eventTicketObject/{resourceId}/addMessage
 # operationId: walletobjects.eventticketobject.addmessage
 # --message shape: {body?: string, displayInterval?: record, header?: string, id?: string, kind?: string, localizedBody?: record, localizedHeader?: record, messageType?: "MESSAGE_TYPE_UNSPECIFIED"|"TEXT"|"text"|"EXPIRATION_NOTIFICATION"|"expirationNotification"}
-export def "walletobjects-event-ticket-object-add-message create-addmessage" [
+export def "walletobjects-eventticketobject-addmessage" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1118,7 +1118,7 @@ export def "walletobjects-event-ticket-object-add-message create-addmessage" [
 # POST /walletobjects/v1/eventTicketObject/{resourceId}/modifyLinkedOfferObjects
 # operationId: walletobjects.eventticketobject.modifylinkedofferobjects
 # --linkedOfferObjectIds shape: {addLinkedOfferObjectIds?: list<string>, removeLinkedOfferObjectIds?: list<string>}
-export def "walletobjects-event-ticket-object-modify-linked-offer-objects create-modifylinkedofferobjects" [
+export def "walletobjects-eventticketobject-modifylinkedofferobjects" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1170,7 +1170,7 @@ export def "walletobjects-event-ticket-object-modify-linked-offer-objects create
 #
 # GET /walletobjects/v1/flightClass
 # operationId: walletobjects.flightclass.list
-export def "walletobjects-flight-class list" [
+export def "walletobjects-flightclass-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1237,7 +1237,7 @@ export def "walletobjects-flight-class list" [
 # --securityAnimation shape: {animationType?: "ANIMATION_UNSPECIFIED"|"FOIL_SHIMMER"|"foilShimmer"}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --wordMark shape: {contentDescription?: record, kind?: string, sourceUri?: record}
-export def "walletobjects-flight-class create" [
+export def "walletobjects-flightclass-insert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1324,7 +1324,7 @@ export def "walletobjects-flight-class create" [
 #
 # GET /walletobjects/v1/flightClass/{resourceId}
 # operationId: walletobjects.flightclass.get
-export def "walletobjects-flight-class get" [
+export def "walletobjects-flightclass-get" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1390,7 +1390,7 @@ export def "walletobjects-flight-class get" [
 # --securityAnimation shape: {animationType?: "ANIMATION_UNSPECIFIED"|"FOIL_SHIMMER"|"foilShimmer"}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --wordMark shape: {contentDescription?: record, kind?: string, sourceUri?: record}
-export def "walletobjects-flight-class update-by-resource-id" [
+export def "walletobjects-flightclass-patch" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1497,7 +1497,7 @@ export def "walletobjects-flight-class update-by-resource-id" [
 # --securityAnimation shape: {animationType?: "ANIMATION_UNSPECIFIED"|"FOIL_SHIMMER"|"foilShimmer"}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --wordMark shape: {contentDescription?: record, kind?: string, sourceUri?: record}
-export def "walletobjects-flight-class update-by-resource-id-1" [
+export def "walletobjects-flightclass-update" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1587,7 +1587,7 @@ export def "walletobjects-flight-class update-by-resource-id-1" [
 # POST /walletobjects/v1/flightClass/{resourceId}/addMessage
 # operationId: walletobjects.flightclass.addmessage
 # --message shape: {body?: string, displayInterval?: record, header?: string, id?: string, kind?: string, localizedBody?: record, localizedHeader?: record, messageType?: "MESSAGE_TYPE_UNSPECIFIED"|"TEXT"|"text"|"EXPIRATION_NOTIFICATION"|"expirationNotification"}
-export def "walletobjects-flight-class-add-message create-addmessage" [
+export def "walletobjects-flightclass-addmessage" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1639,7 +1639,7 @@ export def "walletobjects-flight-class-add-message create-addmessage" [
 #
 # GET /walletobjects/v1/flightObject
 # operationId: walletobjects.flightobject.list
-export def "walletobjects-flight-object list" [
+export def "walletobjects-flightobject-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1705,7 +1705,7 @@ export def "walletobjects-flight-object list" [
 # --securityProgramLogo shape: {contentDescription?: record, kind?: string, sourceUri?: record}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --validTimeInterval shape: {end?: record, kind?: string, start?: record}
-export def "walletobjects-flight-object create" [
+export def "walletobjects-flightobject-insert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1782,7 +1782,7 @@ export def "walletobjects-flight-object create" [
 #
 # GET /walletobjects/v1/flightObject/{resourceId}
 # operationId: walletobjects.flightobject.get
-export def "walletobjects-flight-object get" [
+export def "walletobjects-flightobject-get" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1847,7 +1847,7 @@ export def "walletobjects-flight-object get" [
 # --securityProgramLogo shape: {contentDescription?: record, kind?: string, sourceUri?: record}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --validTimeInterval shape: {end?: record, kind?: string, start?: record}
-export def "walletobjects-flight-object update-by-resource-id" [
+export def "walletobjects-flightobject-patch" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1943,7 +1943,7 @@ export def "walletobjects-flight-object update-by-resource-id" [
 # --securityProgramLogo shape: {contentDescription?: record, kind?: string, sourceUri?: record}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --validTimeInterval shape: {end?: record, kind?: string, start?: record}
-export def "walletobjects-flight-object update-by-resource-id-1" [
+export def "walletobjects-flightobject-update" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2023,7 +2023,7 @@ export def "walletobjects-flight-object update-by-resource-id-1" [
 # POST /walletobjects/v1/flightObject/{resourceId}/addMessage
 # operationId: walletobjects.flightobject.addmessage
 # --message shape: {body?: string, displayInterval?: record, header?: string, id?: string, kind?: string, localizedBody?: record, localizedHeader?: record, messageType?: "MESSAGE_TYPE_UNSPECIFIED"|"TEXT"|"text"|"EXPIRATION_NOTIFICATION"|"expirationNotification"}
-export def "walletobjects-flight-object-add-message create-addmessage" [
+export def "walletobjects-flightobject-addmessage" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2075,7 +2075,7 @@ export def "walletobjects-flight-object-add-message create-addmessage" [
 #
 # GET /walletobjects/v1/genericClass
 # operationId: walletobjects.genericclass.list
-export def "walletobjects-generic-class list" [
+export def "walletobjects-genericclass-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -2130,7 +2130,7 @@ export def "walletobjects-generic-class list" [
 # --linksModuleData shape: {uris?: list}
 # --securityAnimation shape: {animationType?: "ANIMATION_UNSPECIFIED"|"FOIL_SHIMMER"|"foilShimmer"}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
-export def "walletobjects-generic-class create" [
+export def "walletobjects-genericclass-insert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -2190,7 +2190,7 @@ export def "walletobjects-generic-class create" [
 #
 # GET /walletobjects/v1/genericClass/{resourceId}
 # operationId: walletobjects.genericclass.get
-export def "walletobjects-generic-class get" [
+export def "walletobjects-genericclass-get" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2244,7 +2244,7 @@ export def "walletobjects-generic-class get" [
 # --linksModuleData shape: {uris?: list}
 # --securityAnimation shape: {animationType?: "ANIMATION_UNSPECIFIED"|"FOIL_SHIMMER"|"foilShimmer"}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
-export def "walletobjects-generic-class update-by-resource-id" [
+export def "walletobjects-genericclass-patch" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2312,7 +2312,7 @@ export def "walletobjects-generic-class update-by-resource-id" [
 # --linksModuleData shape: {uris?: list}
 # --securityAnimation shape: {animationType?: "ANIMATION_UNSPECIFIED"|"FOIL_SHIMMER"|"foilShimmer"}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
-export def "walletobjects-generic-class update-by-resource-id-1" [
+export def "walletobjects-genericclass-update" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2374,7 +2374,7 @@ export def "walletobjects-generic-class update-by-resource-id-1" [
 #
 # GET /walletobjects/v1/genericObject
 # operationId: walletobjects.genericobject.list
-export def "walletobjects-generic-object list" [
+export def "walletobjects-genericobject-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -2438,7 +2438,7 @@ export def "walletobjects-generic-object list" [
 # --subheader shape: {defaultValue?: record, kind?: string, translatedValues?: list}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --validTimeInterval shape: {end?: record, kind?: string, start?: record}
-export def "walletobjects-generic-object create" [
+export def "walletobjects-genericobject-insert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -2509,7 +2509,7 @@ export def "walletobjects-generic-object create" [
 #
 # GET /walletobjects/v1/genericObject/{resourceId}
 # operationId: walletobjects.genericobject.get
-export def "walletobjects-generic-object get" [
+export def "walletobjects-genericobject-get" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2572,7 +2572,7 @@ export def "walletobjects-generic-object get" [
 # --subheader shape: {defaultValue?: record, kind?: string, translatedValues?: list}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --validTimeInterval shape: {end?: record, kind?: string, start?: record}
-export def "walletobjects-generic-object update-by-resource-id" [
+export def "walletobjects-genericobject-patch" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2660,7 +2660,7 @@ export def "walletobjects-generic-object update-by-resource-id" [
 # --subheader shape: {defaultValue?: record, kind?: string, translatedValues?: list}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --validTimeInterval shape: {end?: record, kind?: string, start?: record}
-export def "walletobjects-generic-object update-by-resource-id-1" [
+export def "walletobjects-genericobject-update" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2733,7 +2733,7 @@ export def "walletobjects-generic-object update-by-resource-id-1" [
 #
 # GET /walletobjects/v1/giftCardClass
 # operationId: walletobjects.giftcardclass.list
-export def "walletobjects-gift-card-class list" [
+export def "walletobjects-giftcardclass-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -2801,7 +2801,7 @@ export def "walletobjects-gift-card-class list" [
 # --securityAnimation shape: {animationType?: "ANIMATION_UNSPECIFIED"|"FOIL_SHIMMER"|"foilShimmer"}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --wordMark shape: {contentDescription?: record, kind?: string, sourceUri?: record}
-export def "walletobjects-gift-card-class create" [
+export def "walletobjects-giftcardclass-insert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -2886,7 +2886,7 @@ export def "walletobjects-gift-card-class create" [
 #
 # GET /walletobjects/v1/giftCardClass/{resourceId}
 # operationId: walletobjects.giftcardclass.get
-export def "walletobjects-gift-card-class get" [
+export def "walletobjects-giftcardclass-get" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2953,7 +2953,7 @@ export def "walletobjects-gift-card-class get" [
 # --securityAnimation shape: {animationType?: "ANIMATION_UNSPECIFIED"|"FOIL_SHIMMER"|"foilShimmer"}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --wordMark shape: {contentDescription?: record, kind?: string, sourceUri?: record}
-export def "walletobjects-gift-card-class update-by-resource-id" [
+export def "walletobjects-giftcardclass-patch" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3059,7 +3059,7 @@ export def "walletobjects-gift-card-class update-by-resource-id" [
 # --securityAnimation shape: {animationType?: "ANIMATION_UNSPECIFIED"|"FOIL_SHIMMER"|"foilShimmer"}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --wordMark shape: {contentDescription?: record, kind?: string, sourceUri?: record}
-export def "walletobjects-gift-card-class update-by-resource-id-1" [
+export def "walletobjects-giftcardclass-update" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3147,7 +3147,7 @@ export def "walletobjects-gift-card-class update-by-resource-id-1" [
 # POST /walletobjects/v1/giftCardClass/{resourceId}/addMessage
 # operationId: walletobjects.giftcardclass.addmessage
 # --message shape: {body?: string, displayInterval?: record, header?: string, id?: string, kind?: string, localizedBody?: record, localizedHeader?: record, messageType?: "MESSAGE_TYPE_UNSPECIFIED"|"TEXT"|"text"|"EXPIRATION_NOTIFICATION"|"expirationNotification"}
-export def "walletobjects-gift-card-class-add-message create-addmessage" [
+export def "walletobjects-giftcardclass-addmessage" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3199,7 +3199,7 @@ export def "walletobjects-gift-card-class-add-message create-addmessage" [
 #
 # GET /walletobjects/v1/giftCardObject
 # operationId: walletobjects.giftcardobject.list
-export def "walletobjects-gift-card-object list" [
+export def "walletobjects-giftcardobject-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -3264,7 +3264,7 @@ export def "walletobjects-gift-card-object list" [
 # --rotatingBarcode shape: {alternateText?: string, renderEncoding?: "RENDER_ENCODING_UNSPECIFIED"|"UTF_8", showCodeText?: record, totpDetails?: record, type?: "BARCODE_TYPE_UNSPECIFIED"|"AZTEC"|"aztec"|"CODE_39"|"code39"|"CODE_128"|"code128"|"CODABAR"|"codabar"|"DATA_MATRIX"|"dataMatrix"|"EAN_8"|"ean8"|"EAN_13"|"ean13"|"EAN13"|"ITF_14"|"itf14"|"PDF_417"|"pdf417"|"PDF417"|"QR_CODE"|"qrCode"|"qrcode"|"UPC_A"|"upcA"|"TEXT_ONLY"|"textOnly", valuePattern?: string}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --validTimeInterval shape: {end?: record, kind?: string, start?: record}
-export def "walletobjects-gift-card-object create" [
+export def "walletobjects-giftcardobject-insert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -3341,7 +3341,7 @@ export def "walletobjects-gift-card-object create" [
 #
 # GET /walletobjects/v1/giftCardObject/{resourceId}
 # operationId: walletobjects.giftcardobject.get
-export def "walletobjects-gift-card-object get" [
+export def "walletobjects-giftcardobject-get" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3405,7 +3405,7 @@ export def "walletobjects-gift-card-object get" [
 # --rotatingBarcode shape: {alternateText?: string, renderEncoding?: "RENDER_ENCODING_UNSPECIFIED"|"UTF_8", showCodeText?: record, totpDetails?: record, type?: "BARCODE_TYPE_UNSPECIFIED"|"AZTEC"|"aztec"|"CODE_39"|"code39"|"CODE_128"|"code128"|"CODABAR"|"codabar"|"DATA_MATRIX"|"dataMatrix"|"EAN_8"|"ean8"|"EAN_13"|"ean13"|"EAN13"|"ITF_14"|"itf14"|"PDF_417"|"pdf417"|"PDF417"|"QR_CODE"|"qrCode"|"qrcode"|"UPC_A"|"upcA"|"TEXT_ONLY"|"textOnly", valuePattern?: string}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --validTimeInterval shape: {end?: record, kind?: string, start?: record}
-export def "walletobjects-gift-card-object update-by-resource-id" [
+export def "walletobjects-giftcardobject-patch" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3500,7 +3500,7 @@ export def "walletobjects-gift-card-object update-by-resource-id" [
 # --rotatingBarcode shape: {alternateText?: string, renderEncoding?: "RENDER_ENCODING_UNSPECIFIED"|"UTF_8", showCodeText?: record, totpDetails?: record, type?: "BARCODE_TYPE_UNSPECIFIED"|"AZTEC"|"aztec"|"CODE_39"|"code39"|"CODE_128"|"code128"|"CODABAR"|"codabar"|"DATA_MATRIX"|"dataMatrix"|"EAN_8"|"ean8"|"EAN_13"|"ean13"|"EAN13"|"ITF_14"|"itf14"|"PDF_417"|"pdf417"|"PDF417"|"QR_CODE"|"qrCode"|"qrcode"|"UPC_A"|"upcA"|"TEXT_ONLY"|"textOnly", valuePattern?: string}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --validTimeInterval shape: {end?: record, kind?: string, start?: record}
-export def "walletobjects-gift-card-object update-by-resource-id-1" [
+export def "walletobjects-giftcardobject-update" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3580,7 +3580,7 @@ export def "walletobjects-gift-card-object update-by-resource-id-1" [
 # POST /walletobjects/v1/giftCardObject/{resourceId}/addMessage
 # operationId: walletobjects.giftcardobject.addmessage
 # --message shape: {body?: string, displayInterval?: record, header?: string, id?: string, kind?: string, localizedBody?: record, localizedHeader?: record, messageType?: "MESSAGE_TYPE_UNSPECIFIED"|"TEXT"|"text"|"EXPIRATION_NOTIFICATION"|"expirationNotification"}
-export def "walletobjects-gift-card-object-add-message create-addmessage" [
+export def "walletobjects-giftcardobject-addmessage" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3632,7 +3632,7 @@ export def "walletobjects-gift-card-object-add-message create-addmessage" [
 #
 # GET /walletobjects/v1/issuer
 # operationId: walletobjects.issuer.list
-export def "walletobjects-issuer list" [
+export def "walletobjects-issuer-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -3680,7 +3680,7 @@ export def "walletobjects-issuer list" [
 # operationId: walletobjects.issuer.insert
 # --contactInfo shape: {alertsEmails?: list<string>, email?: string, name?: string, phone?: string}
 # --smartTapMerchantData shape: {authenticationKeys?: list, smartTapMerchantId?: string}
-export def "walletobjects-issuer create" [
+export def "walletobjects-issuer-insert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -3734,7 +3734,7 @@ export def "walletobjects-issuer create" [
 #
 # GET /walletobjects/v1/issuer/{resourceId}
 # operationId: walletobjects.issuer.get
-export def "walletobjects-issuer get" [
+export def "walletobjects-issuer-get" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3784,7 +3784,7 @@ export def "walletobjects-issuer get" [
 # operationId: walletobjects.issuer.patch
 # --contactInfo shape: {alertsEmails?: list<string>, email?: string, name?: string, phone?: string}
 # --smartTapMerchantData shape: {authenticationKeys?: list, smartTapMerchantId?: string}
-export def "walletobjects-issuer update-by-resource-id" [
+export def "walletobjects-issuer-patch" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3842,7 +3842,7 @@ export def "walletobjects-issuer update-by-resource-id" [
 # operationId: walletobjects.issuer.update
 # --contactInfo shape: {alertsEmails?: list<string>, email?: string, name?: string, phone?: string}
 # --smartTapMerchantData shape: {authenticationKeys?: list, smartTapMerchantId?: string}
-export def "walletobjects-issuer update-by-resource-id-1" [
+export def "walletobjects-issuer-update" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3898,7 +3898,7 @@ export def "walletobjects-issuer update-by-resource-id-1" [
 #
 # POST /walletobjects/v1/jwt
 # operationId: walletobjects.jwt.insert
-export def "walletobjects-jwt create" [
+export def "walletobjects-jwt-insert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -3948,7 +3948,7 @@ export def "walletobjects-jwt create" [
 #
 # GET /walletobjects/v1/loyaltyClass
 # operationId: walletobjects.loyaltyclass.list
-export def "walletobjects-loyalty-class list" [
+export def "walletobjects-loyaltyclass-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -4020,7 +4020,7 @@ export def "walletobjects-loyalty-class list" [
 # --securityAnimation shape: {animationType?: "ANIMATION_UNSPECIFIED"|"FOIL_SHIMMER"|"foilShimmer"}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --wordMark shape: {contentDescription?: record, kind?: string, sourceUri?: record}
-export def "walletobjects-loyalty-class create" [
+export def "walletobjects-loyaltyclass-insert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -4111,7 +4111,7 @@ export def "walletobjects-loyalty-class create" [
 #
 # GET /walletobjects/v1/loyaltyClass/{resourceId}
 # operationId: walletobjects.loyaltyclass.get
-export def "walletobjects-loyalty-class get" [
+export def "walletobjects-loyaltyclass-get" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4182,7 +4182,7 @@ export def "walletobjects-loyalty-class get" [
 # --securityAnimation shape: {animationType?: "ANIMATION_UNSPECIFIED"|"FOIL_SHIMMER"|"foilShimmer"}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --wordMark shape: {contentDescription?: record, kind?: string, sourceUri?: record}
-export def "walletobjects-loyalty-class update-by-resource-id" [
+export def "walletobjects-loyaltyclass-patch" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4298,7 +4298,7 @@ export def "walletobjects-loyalty-class update-by-resource-id" [
 # --securityAnimation shape: {animationType?: "ANIMATION_UNSPECIFIED"|"FOIL_SHIMMER"|"foilShimmer"}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --wordMark shape: {contentDescription?: record, kind?: string, sourceUri?: record}
-export def "walletobjects-loyalty-class update-by-resource-id-1" [
+export def "walletobjects-loyaltyclass-update" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4392,7 +4392,7 @@ export def "walletobjects-loyalty-class update-by-resource-id-1" [
 # POST /walletobjects/v1/loyaltyClass/{resourceId}/addMessage
 # operationId: walletobjects.loyaltyclass.addmessage
 # --message shape: {body?: string, displayInterval?: record, header?: string, id?: string, kind?: string, localizedBody?: record, localizedHeader?: record, messageType?: "MESSAGE_TYPE_UNSPECIFIED"|"TEXT"|"text"|"EXPIRATION_NOTIFICATION"|"expirationNotification"}
-export def "walletobjects-loyalty-class-add-message create-addmessage" [
+export def "walletobjects-loyaltyclass-addmessage" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4444,7 +4444,7 @@ export def "walletobjects-loyalty-class-add-message create-addmessage" [
 #
 # GET /walletobjects/v1/loyaltyObject
 # operationId: walletobjects.loyaltyobject.list
-export def "walletobjects-loyalty-object list" [
+export def "walletobjects-loyaltyobject-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -4509,7 +4509,7 @@ export def "walletobjects-loyalty-object list" [
 # --secondaryLoyaltyPoints shape: {balance?: record, label?: string, localizedLabel?: record}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --validTimeInterval shape: {end?: record, kind?: string, start?: record}
-export def "walletobjects-loyalty-object create" [
+export def "walletobjects-loyaltyobject-insert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -4586,7 +4586,7 @@ export def "walletobjects-loyalty-object create" [
 #
 # GET /walletobjects/v1/loyaltyObject/{resourceId}
 # operationId: walletobjects.loyaltyobject.get
-export def "walletobjects-loyalty-object get" [
+export def "walletobjects-loyaltyobject-get" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4650,7 +4650,7 @@ export def "walletobjects-loyalty-object get" [
 # --secondaryLoyaltyPoints shape: {balance?: record, label?: string, localizedLabel?: record}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --validTimeInterval shape: {end?: record, kind?: string, start?: record}
-export def "walletobjects-loyalty-object update-by-resource-id" [
+export def "walletobjects-loyaltyobject-patch" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4745,7 +4745,7 @@ export def "walletobjects-loyalty-object update-by-resource-id" [
 # --secondaryLoyaltyPoints shape: {balance?: record, label?: string, localizedLabel?: record}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --validTimeInterval shape: {end?: record, kind?: string, start?: record}
-export def "walletobjects-loyalty-object update-by-resource-id-1" [
+export def "walletobjects-loyaltyobject-update" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4825,7 +4825,7 @@ export def "walletobjects-loyalty-object update-by-resource-id-1" [
 # POST /walletobjects/v1/loyaltyObject/{resourceId}/addMessage
 # operationId: walletobjects.loyaltyobject.addmessage
 # --message shape: {body?: string, displayInterval?: record, header?: string, id?: string, kind?: string, localizedBody?: record, localizedHeader?: record, messageType?: "MESSAGE_TYPE_UNSPECIFIED"|"TEXT"|"text"|"EXPIRATION_NOTIFICATION"|"expirationNotification"}
-export def "walletobjects-loyalty-object-add-message create-addmessage" [
+export def "walletobjects-loyaltyobject-addmessage" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4878,7 +4878,7 @@ export def "walletobjects-loyalty-object-add-message create-addmessage" [
 # POST /walletobjects/v1/loyaltyObject/{resourceId}/modifyLinkedOfferObjects
 # operationId: walletobjects.loyaltyobject.modifylinkedofferobjects
 # --linkedOfferObjectIds shape: {addLinkedOfferObjectIds?: list<string>, removeLinkedOfferObjectIds?: list<string>}
-export def "walletobjects-loyalty-object-modify-linked-offer-objects create-modifylinkedofferobjects" [
+export def "walletobjects-loyaltyobject-modifylinkedofferobjects" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4930,7 +4930,7 @@ export def "walletobjects-loyalty-object-modify-linked-offer-objects create-modi
 #
 # GET /walletobjects/v1/offerClass
 # operationId: walletobjects.offerclass.list
-export def "walletobjects-offer-class list" [
+export def "walletobjects-offerclass-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -5000,7 +5000,7 @@ export def "walletobjects-offer-class list" [
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --titleImage shape: {contentDescription?: record, kind?: string, sourceUri?: record}
 # --wordMark shape: {contentDescription?: record, kind?: string, sourceUri?: record}
-export def "walletobjects-offer-class create" [
+export def "walletobjects-offerclass-insert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -5088,7 +5088,7 @@ export def "walletobjects-offer-class create" [
 #
 # GET /walletobjects/v1/offerClass/{resourceId}
 # operationId: walletobjects.offerclass.get
-export def "walletobjects-offer-class get" [
+export def "walletobjects-offerclass-get" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5157,7 +5157,7 @@ export def "walletobjects-offer-class get" [
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --titleImage shape: {contentDescription?: record, kind?: string, sourceUri?: record}
 # --wordMark shape: {contentDescription?: record, kind?: string, sourceUri?: record}
-export def "walletobjects-offer-class update-by-resource-id" [
+export def "walletobjects-offerclass-patch" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5268,7 +5268,7 @@ export def "walletobjects-offer-class update-by-resource-id" [
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --titleImage shape: {contentDescription?: record, kind?: string, sourceUri?: record}
 # --wordMark shape: {contentDescription?: record, kind?: string, sourceUri?: record}
-export def "walletobjects-offer-class update-by-resource-id-1" [
+export def "walletobjects-offerclass-update" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5359,7 +5359,7 @@ export def "walletobjects-offer-class update-by-resource-id-1" [
 # POST /walletobjects/v1/offerClass/{resourceId}/addMessage
 # operationId: walletobjects.offerclass.addmessage
 # --message shape: {body?: string, displayInterval?: record, header?: string, id?: string, kind?: string, localizedBody?: record, localizedHeader?: record, messageType?: "MESSAGE_TYPE_UNSPECIFIED"|"TEXT"|"text"|"EXPIRATION_NOTIFICATION"|"expirationNotification"}
-export def "walletobjects-offer-class-add-message create-addmessage" [
+export def "walletobjects-offerclass-addmessage" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5411,7 +5411,7 @@ export def "walletobjects-offer-class-add-message create-addmessage" [
 #
 # GET /walletobjects/v1/offerObject
 # operationId: walletobjects.offerobject.list
-export def "walletobjects-offer-object list" [
+export def "walletobjects-offerobject-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -5474,7 +5474,7 @@ export def "walletobjects-offer-object list" [
 # --rotatingBarcode shape: {alternateText?: string, renderEncoding?: "RENDER_ENCODING_UNSPECIFIED"|"UTF_8", showCodeText?: record, totpDetails?: record, type?: "BARCODE_TYPE_UNSPECIFIED"|"AZTEC"|"aztec"|"CODE_39"|"code39"|"CODE_128"|"code128"|"CODABAR"|"codabar"|"DATA_MATRIX"|"dataMatrix"|"EAN_8"|"ean8"|"EAN_13"|"ean13"|"EAN13"|"ITF_14"|"itf14"|"PDF_417"|"pdf417"|"PDF417"|"QR_CODE"|"qrCode"|"qrcode"|"UPC_A"|"upcA"|"TEXT_ONLY"|"textOnly", valuePattern?: string}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --validTimeInterval shape: {end?: record, kind?: string, start?: record}
-export def "walletobjects-offer-object create" [
+export def "walletobjects-offerobject-insert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -5546,7 +5546,7 @@ export def "walletobjects-offer-object create" [
 #
 # GET /walletobjects/v1/offerObject/{resourceId}
 # operationId: walletobjects.offerobject.get
-export def "walletobjects-offer-object get" [
+export def "walletobjects-offerobject-get" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5608,7 +5608,7 @@ export def "walletobjects-offer-object get" [
 # --rotatingBarcode shape: {alternateText?: string, renderEncoding?: "RENDER_ENCODING_UNSPECIFIED"|"UTF_8", showCodeText?: record, totpDetails?: record, type?: "BARCODE_TYPE_UNSPECIFIED"|"AZTEC"|"aztec"|"CODE_39"|"code39"|"CODE_128"|"code128"|"CODABAR"|"codabar"|"DATA_MATRIX"|"dataMatrix"|"EAN_8"|"ean8"|"EAN_13"|"ean13"|"EAN13"|"ITF_14"|"itf14"|"PDF_417"|"pdf417"|"PDF417"|"QR_CODE"|"qrCode"|"qrcode"|"UPC_A"|"upcA"|"TEXT_ONLY"|"textOnly", valuePattern?: string}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --validTimeInterval shape: {end?: record, kind?: string, start?: record}
-export def "walletobjects-offer-object update-by-resource-id" [
+export def "walletobjects-offerobject-patch" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5696,7 +5696,7 @@ export def "walletobjects-offer-object update-by-resource-id" [
 # --rotatingBarcode shape: {alternateText?: string, renderEncoding?: "RENDER_ENCODING_UNSPECIFIED"|"UTF_8", showCodeText?: record, totpDetails?: record, type?: "BARCODE_TYPE_UNSPECIFIED"|"AZTEC"|"aztec"|"CODE_39"|"code39"|"CODE_128"|"code128"|"CODABAR"|"codabar"|"DATA_MATRIX"|"dataMatrix"|"EAN_8"|"ean8"|"EAN_13"|"ean13"|"EAN13"|"ITF_14"|"itf14"|"PDF_417"|"pdf417"|"PDF417"|"QR_CODE"|"qrCode"|"qrcode"|"UPC_A"|"upcA"|"TEXT_ONLY"|"textOnly", valuePattern?: string}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --validTimeInterval shape: {end?: record, kind?: string, start?: record}
-export def "walletobjects-offer-object update-by-resource-id-1" [
+export def "walletobjects-offerobject-update" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5771,7 +5771,7 @@ export def "walletobjects-offer-object update-by-resource-id-1" [
 # POST /walletobjects/v1/offerObject/{resourceId}/addMessage
 # operationId: walletobjects.offerobject.addmessage
 # --message shape: {body?: string, displayInterval?: record, header?: string, id?: string, kind?: string, localizedBody?: record, localizedHeader?: record, messageType?: "MESSAGE_TYPE_UNSPECIFIED"|"TEXT"|"text"|"EXPIRATION_NOTIFICATION"|"expirationNotification"}
-export def "walletobjects-offer-object-add-message create-addmessage" [
+export def "walletobjects-offerobject-addmessage" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5823,7 +5823,7 @@ export def "walletobjects-offer-object-add-message create-addmessage" [
 #
 # GET /walletobjects/v1/permissions/{resourceId}
 # operationId: walletobjects.permissions.get
-export def "walletobjects-permissions get" [
+export def "walletobjects-permissions-get" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5872,7 +5872,7 @@ export def "walletobjects-permissions get" [
 # PUT /walletobjects/v1/permissions/{resourceId}
 # operationId: walletobjects.permissions.update
 # --permissions item shape: {emailAddress?: string, role?: "ROLE_UNSPECIFIED"|"OWNER"|"owner"|"READER"|"reader"|"WRITER"|"writer"}
-export def "walletobjects-permissions update" [
+export def "walletobjects-permissions-update" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5927,7 +5927,7 @@ export def "walletobjects-permissions update" [
 # operationId: walletobjects.walletobjects.v1.privateContent.uploadPrivateData
 # --text shape: {body?: record, header?: record}
 # --uri shape: {description?: record, uri?: string}
-export def "walletobjects-private-content-upload-private-data upload" [
+export def "walletobjects-walletobjects-v1-private-content-upload-private-data" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -5979,7 +5979,7 @@ export def "walletobjects-private-content-upload-private-data upload" [
 #
 # POST /walletobjects/v1/privateContent/{issuerId}/uploadPrivateImage
 # operationId: walletobjects.media.upload
-export def "walletobjects-private-content-upload-private-image upload" [
+export def "walletobjects-media-upload" [
   issuer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -6032,7 +6032,7 @@ export def "walletobjects-private-content-upload-private-image upload" [
 # POST /walletobjects/v1/smartTap
 # operationId: walletobjects.smarttap.insert
 # --infos item shape: {action?: "ACTION_UNSPECIFIED"|"S2AP"|"s2ap"|"SIGN_UP"|"signUp", signUpInfo?: record, url?: string, value?: string}
-export def "walletobjects-smart-tap create" [
+export def "walletobjects-smarttap-insert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -6085,7 +6085,7 @@ export def "walletobjects-smart-tap create" [
 #
 # GET /walletobjects/v1/transitClass
 # operationId: walletobjects.transitclass.list
-export def "walletobjects-transit-class list" [
+export def "walletobjects-transitclass-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -6171,7 +6171,7 @@ export def "walletobjects-transit-class list" [
 # --transitOperatorName shape: {defaultValue?: record, kind?: string, translatedValues?: list}
 # --watermark shape: {contentDescription?: record, kind?: string, sourceUri?: record}
 # --wordMark shape: {contentDescription?: record, kind?: string, sourceUri?: record}
-export def "walletobjects-transit-class create" [
+export def "walletobjects-transitclass-insert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -6271,7 +6271,7 @@ export def "walletobjects-transit-class create" [
 #
 # GET /walletobjects/v1/transitClass/{resourceId}
 # operationId: walletobjects.transitclass.get
-export def "walletobjects-transit-class get" [
+export def "walletobjects-transitclass-get" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -6356,7 +6356,7 @@ export def "walletobjects-transit-class get" [
 # --transitOperatorName shape: {defaultValue?: record, kind?: string, translatedValues?: list}
 # --watermark shape: {contentDescription?: record, kind?: string, sourceUri?: record}
 # --wordMark shape: {contentDescription?: record, kind?: string, sourceUri?: record}
-export def "walletobjects-transit-class update-by-resource-id" [
+export def "walletobjects-transitclass-patch" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -6495,7 +6495,7 @@ export def "walletobjects-transit-class update-by-resource-id" [
 # --transitOperatorName shape: {defaultValue?: record, kind?: string, translatedValues?: list}
 # --watermark shape: {contentDescription?: record, kind?: string, sourceUri?: record}
 # --wordMark shape: {contentDescription?: record, kind?: string, sourceUri?: record}
-export def "walletobjects-transit-class update-by-resource-id-1" [
+export def "walletobjects-transitclass-update" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -6598,7 +6598,7 @@ export def "walletobjects-transit-class update-by-resource-id-1" [
 # POST /walletobjects/v1/transitClass/{resourceId}/addMessage
 # operationId: walletobjects.transitclass.addmessage
 # --message shape: {body?: string, displayInterval?: record, header?: string, id?: string, kind?: string, localizedBody?: record, localizedHeader?: record, messageType?: "MESSAGE_TYPE_UNSPECIFIED"|"TEXT"|"text"|"EXPIRATION_NOTIFICATION"|"expirationNotification"}
-export def "walletobjects-transit-class-add-message create-addmessage" [
+export def "walletobjects-transitclass-addmessage" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -6650,7 +6650,7 @@ export def "walletobjects-transit-class-add-message create-addmessage" [
 #
 # GET /walletobjects/v1/transitObject
 # operationId: walletobjects.transitobject.list
-export def "walletobjects-transit-object list" [
+export def "walletobjects-transitobject-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -6721,7 +6721,7 @@ export def "walletobjects-transit-object list" [
 # --ticketLegs item shape: {arrivalDateTime?: string, carriage?: string, departureDateTime?: string, destinationName?: record, destinationStationCode?: string, fareName?: record, originName?: record, originStationCode?: string, platform?: string, ticketSeat?: record, ticketSeats?: list, transitOperatorName?: record, transitTerminusName?: record, zone?: string}
 # --ticketRestrictions shape: {otherRestrictions?: record, routeRestrictions?: record, routeRestrictionsDetails?: record, timeRestrictions?: record}
 # --validTimeInterval shape: {end?: record, kind?: string, start?: record}
-export def "walletobjects-transit-object create" [
+export def "walletobjects-transitobject-insert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -6808,7 +6808,7 @@ export def "walletobjects-transit-object create" [
 #
 # GET /walletobjects/v1/transitObject/{resourceId}
 # operationId: walletobjects.transitobject.get
-export def "walletobjects-transit-object get" [
+export def "walletobjects-transitobject-get" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -6878,7 +6878,7 @@ export def "walletobjects-transit-object get" [
 # --ticketLegs item shape: {arrivalDateTime?: string, carriage?: string, departureDateTime?: string, destinationName?: record, destinationStationCode?: string, fareName?: record, originName?: record, originStationCode?: string, platform?: string, ticketSeat?: record, ticketSeats?: list, transitOperatorName?: record, transitTerminusName?: record, zone?: string}
 # --ticketRestrictions shape: {otherRestrictions?: record, routeRestrictions?: record, routeRestrictionsDetails?: record, timeRestrictions?: record}
 # --validTimeInterval shape: {end?: record, kind?: string, start?: record}
-export def "walletobjects-transit-object update-by-resource-id" [
+export def "walletobjects-transitobject-patch" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -6989,7 +6989,7 @@ export def "walletobjects-transit-object update-by-resource-id" [
 # --ticketLegs item shape: {arrivalDateTime?: string, carriage?: string, departureDateTime?: string, destinationName?: record, destinationStationCode?: string, fareName?: record, originName?: record, originStationCode?: string, platform?: string, ticketSeat?: record, ticketSeats?: list, transitOperatorName?: record, transitTerminusName?: record, zone?: string}
 # --ticketRestrictions shape: {otherRestrictions?: record, routeRestrictions?: record, routeRestrictionsDetails?: record, timeRestrictions?: record}
 # --validTimeInterval shape: {end?: record, kind?: string, start?: record}
-export def "walletobjects-transit-object update-by-resource-id-1" [
+export def "walletobjects-transitobject-update" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -7079,7 +7079,7 @@ export def "walletobjects-transit-object update-by-resource-id-1" [
 # POST /walletobjects/v1/transitObject/{resourceId}/addMessage
 # operationId: walletobjects.transitobject.addmessage
 # --message shape: {body?: string, displayInterval?: record, header?: string, id?: string, kind?: string, localizedBody?: record, localizedHeader?: record, messageType?: "MESSAGE_TYPE_UNSPECIFIED"|"TEXT"|"text"|"EXPIRATION_NOTIFICATION"|"expirationNotification"}
-export def "walletobjects-transit-object-add-message create-addmessage" [
+export def "walletobjects-transitobject-addmessage" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

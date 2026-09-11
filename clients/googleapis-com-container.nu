@@ -130,7 +130,7 @@ def action-completer [] { ["GENERATE_PASSWORD" "SET_PASSWORD" "SET_USERNAME" "UN
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta1-projects-zones-clusters list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "container-projects-zones-clusters-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -154,7 +154,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1beta1/projects/{projectId}/zones/{zone}/clusters
 # operationId: container.projects.zones.clusters.list
-export def "v1beta1-projects-zones-clusters list" [
+export def "container-projects-zones-clusters-list" [
   project_id: string
   zone: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -206,7 +206,7 @@ export def "v1beta1-projects-zones-clusters list" [
 # POST /v1beta1/projects/{projectId}/zones/{zone}/clusters
 # operationId: container.projects.zones.clusters.create
 # --cluster shape: {addonsConfig?: record, authenticatorGroupsConfig?: record, autopilot?: record, autoscaling?: record, binaryAuthorization?: record, clusterIpv4Cidr?: string, clusterTelemetry?: record, conditions?: list, confidentialNodes?: record, costManagementConfig?: record, createTime?: string, currentMasterVersion?: string, currentNodeCount?: int, currentNodeVersion?: string, databaseEncryption?: record, defaultMaxPodsConstraint?: record, description?: string, enableKubernetesAlpha?: bool, enableTpu?: bool, ... (53 more fields)}
-export def "v1beta1-projects-zones-clusters create" [
+export def "container-projects-zones-clusters-create" [
   project_id: string
   zone: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -263,7 +263,7 @@ export def "v1beta1-projects-zones-clusters create" [
 #
 # DELETE /v1beta1/projects/{projectId}/zones/{zone}/clusters/{clusterId}
 # operationId: container.projects.zones.clusters.delete
-export def "v1beta1-projects-zones-clusters delete" [
+export def "container-projects-zones-clusters-delete" [
   project_id: string
   zone: string
   cluster_id: string
@@ -316,7 +316,7 @@ export def "v1beta1-projects-zones-clusters delete" [
 #
 # GET /v1beta1/projects/{projectId}/zones/{zone}/clusters/{clusterId}
 # operationId: container.projects.zones.clusters.get
-export def "v1beta1-projects-zones-clusters get" [
+export def "container-projects-zones-clusters-get" [
   project_id: string
   zone: string
   cluster_id: string
@@ -370,7 +370,7 @@ export def "v1beta1-projects-zones-clusters get" [
 # PUT /v1beta1/projects/{projectId}/zones/{zone}/clusters/{clusterId}
 # operationId: container.projects.zones.clusters.update
 # --update shape: {additionalPodRangesConfig?: record, desiredAddonsConfig?: record, desiredAuthenticatorGroupsConfig?: record, desiredBinaryAuthorization?: record, desiredClusterAutoscaling?: record, desiredClusterTelemetry?: record, desiredCostManagementConfig?: record, desiredDatabaseEncryption?: record, desiredDatapathProvider?: "DATAPATH_PROVIDER_UNSPECIFIED"|"LEGACY_DATAPATH"|"ADVANCED_DATAPATH", desiredDefaultSnatStatus?: record, desiredDnsConfig?: record, desiredEnablePrivateEndpoint?: bool, ... (37 more fields)}
-export def "v1beta1-projects-zones-clusters update" [
+export def "container-projects-zones-clusters-update" [
   project_id: string
   zone: string
   cluster_id: string
@@ -431,7 +431,7 @@ export def "v1beta1-projects-zones-clusters update" [
 # POST /v1beta1/projects/{projectId}/zones/{zone}/clusters/{clusterId}/addons
 # operationId: container.projects.zones.clusters.addons
 # --addonsConfig shape: {cloudRunConfig?: record, configConnectorConfig?: record, dnsCacheConfig?: record, gcePersistentDiskCsiDriverConfig?: record, gcpFilestoreCsiDriverConfig?: record, gkeBackupAgentConfig?: record, horizontalPodAutoscaling?: record, httpLoadBalancing?: record, istioConfig?: record, kalmConfig?: record, kubernetesDashboard?: record, networkPolicyConfig?: record}
-export def "v1beta1-projects-zones-clusters-addons create" [
+export def "container-projects-zones-clusters-addons" [
   project_id: string
   zone: string
   cluster_id: string
@@ -491,7 +491,7 @@ export def "v1beta1-projects-zones-clusters-addons create" [
 #
 # POST /v1beta1/projects/{projectId}/zones/{zone}/clusters/{clusterId}/legacyAbac
 # operationId: container.projects.zones.clusters.legacyAbac
-export def "v1beta1-projects-zones-clusters-legacy-abac create" [
+export def "container-projects-zones-clusters-legacy-abac" [
   project_id: string
   zone: string
   cluster_id: string
@@ -551,7 +551,7 @@ export def "v1beta1-projects-zones-clusters-legacy-abac create" [
 #
 # POST /v1beta1/projects/{projectId}/zones/{zone}/clusters/{clusterId}/locations
 # operationId: container.projects.zones.clusters.locations
-export def "v1beta1-projects-zones-clusters-locations create" [
+export def "container-projects-zones-clusters-locations" [
   project_id: string
   zone: string
   cluster_id: string
@@ -611,7 +611,7 @@ export def "v1beta1-projects-zones-clusters-locations create" [
 #
 # POST /v1beta1/projects/{projectId}/zones/{zone}/clusters/{clusterId}/logging
 # operationId: container.projects.zones.clusters.logging
-export def "v1beta1-projects-zones-clusters-logging create" [
+export def "container-projects-zones-clusters-logging" [
   project_id: string
   zone: string
   cluster_id: string
@@ -671,7 +671,7 @@ export def "v1beta1-projects-zones-clusters-logging create" [
 #
 # POST /v1beta1/projects/{projectId}/zones/{zone}/clusters/{clusterId}/master
 # operationId: container.projects.zones.clusters.master
-export def "v1beta1-projects-zones-clusters-master create" [
+export def "container-projects-zones-clusters-master" [
   project_id: string
   zone: string
   cluster_id: string
@@ -731,7 +731,7 @@ export def "v1beta1-projects-zones-clusters-master create" [
 #
 # POST /v1beta1/projects/{projectId}/zones/{zone}/clusters/{clusterId}/monitoring
 # operationId: container.projects.zones.clusters.monitoring
-export def "v1beta1-projects-zones-clusters-monitoring create" [
+export def "container-projects-zones-clusters-monitoring" [
   project_id: string
   zone: string
   cluster_id: string
@@ -791,7 +791,7 @@ export def "v1beta1-projects-zones-clusters-monitoring create" [
 #
 # GET /v1beta1/projects/{projectId}/zones/{zone}/clusters/{clusterId}/nodePools
 # operationId: container.projects.zones.clusters.nodePools.list
-export def "v1beta1-projects-zones-clusters-node-pools list" [
+export def "container-projects-zones-clusters-node-pools-list" [
   project_id: string
   zone: string
   cluster_id: string
@@ -845,7 +845,7 @@ export def "v1beta1-projects-zones-clusters-node-pools list" [
 # POST /v1beta1/projects/{projectId}/zones/{zone}/clusters/{clusterId}/nodePools
 # operationId: container.projects.zones.clusters.nodePools.create
 # --nodePool shape: {autoscaling?: record, conditions?: list, config?: record, etag?: string, initialNodeCount?: int, instanceGroupUrls?: list<string>, locations?: list<string>, management?: record, maxPodsConstraint?: record, name?: string, networkConfig?: record, placementPolicy?: record, podIpv4CidrSize?: int, selfLink?: string, status?: "STATUS_UNSPECIFIED"|"PROVISIONING"|"RUNNING"|"RUNNING_WITH_ERROR"|"RECONCILING"|"STOPPING"|"ERROR", statusMessage?: string, updateInfo?: record, upgradeSettings?: record, ... (1 more fields)}
-export def "v1beta1-projects-zones-clusters-node-pools create" [
+export def "container-projects-zones-clusters-node-pools-create" [
   project_id: string
   zone: string
   cluster_id: string
@@ -905,7 +905,7 @@ export def "v1beta1-projects-zones-clusters-node-pools create" [
 #
 # DELETE /v1beta1/projects/{projectId}/zones/{zone}/clusters/{clusterId}/nodePools/{nodePoolId}
 # operationId: container.projects.zones.clusters.nodePools.delete
-export def "v1beta1-projects-zones-clusters-node-pools delete" [
+export def "container-projects-zones-clusters-node-pools-delete" [
   project_id: string
   zone: string
   cluster_id: string
@@ -960,7 +960,7 @@ export def "v1beta1-projects-zones-clusters-node-pools delete" [
 #
 # GET /v1beta1/projects/{projectId}/zones/{zone}/clusters/{clusterId}/nodePools/{nodePoolId}
 # operationId: container.projects.zones.clusters.nodePools.get
-export def "v1beta1-projects-zones-clusters-node-pools get" [
+export def "container-projects-zones-clusters-node-pools-get" [
   project_id: string
   zone: string
   cluster_id: string
@@ -1016,7 +1016,7 @@ export def "v1beta1-projects-zones-clusters-node-pools get" [
 # POST /v1beta1/projects/{projectId}/zones/{zone}/clusters/{clusterId}/nodePools/{nodePoolId}/autoscaling
 # operationId: container.projects.zones.clusters.nodePools.autoscaling
 # --autoscaling shape: {autoprovisioned?: bool, enabled?: bool, locationPolicy?: "LOCATION_POLICY_UNSPECIFIED"|"BALANCED"|"ANY", maxNodeCount?: int, minNodeCount?: int, totalMaxNodeCount?: int, totalMinNodeCount?: int}
-export def "v1beta1-projects-zones-clusters-node-pools-autoscaling create" [
+export def "container-projects-zones-clusters-node-pools-autoscaling" [
   project_id: string
   zone: string
   cluster_id: string
@@ -1080,7 +1080,7 @@ export def "v1beta1-projects-zones-clusters-node-pools-autoscaling create" [
 # POST /v1beta1/projects/{projectId}/zones/{zone}/clusters/{clusterId}/nodePools/{nodePoolId}/setManagement
 # operationId: container.projects.zones.clusters.nodePools.setManagement
 # --management shape: {autoRepair?: bool, autoUpgrade?: bool, upgradeOptions?: record}
-export def "v1beta1-projects-zones-clusters-node-pools-set-management update" [
+export def "container-projects-zones-clusters-node-pools-set-management" [
   project_id: string
   zone: string
   cluster_id: string
@@ -1143,7 +1143,7 @@ export def "v1beta1-projects-zones-clusters-node-pools-set-management update" [
 #
 # POST /v1beta1/projects/{projectId}/zones/{zone}/clusters/{clusterId}/nodePools/{nodePoolId}/setSize
 # operationId: container.projects.zones.clusters.nodePools.setSize
-export def "v1beta1-projects-zones-clusters-node-pools-set-size update" [
+export def "container-projects-zones-clusters-node-pools-set-size" [
   project_id: string
   zone: string
   cluster_id: string
@@ -1221,7 +1221,7 @@ export def "v1beta1-projects-zones-clusters-node-pools-set-size update" [
 # --upgradeSettings shape: {blueGreenSettings?: record, maxSurge?: int, maxUnavailable?: int, strategy?: "NODE_POOL_UPDATE_STRATEGY_UNSPECIFIED"|"BLUE_GREEN"|"SURGE"}
 # --windowsNodeConfig shape: {osVersion?: "OS_VERSION_UNSPECIFIED"|"OS_VERSION_LTSC2019"|"OS_VERSION_LTSC2022"}
 # --workloadMetadataConfig shape: {mode?: "MODE_UNSPECIFIED"|"GCE_METADATA"|"GKE_METADATA", nodeMetadata?: "UNSPECIFIED"|"SECURE"|"EXPOSE"|"GKE_METADATA_SERVER"}
-export def "v1beta1-projects-zones-clusters-node-pools-update update" [
+export def "container-projects-zones-clusters-node-pools-update" [
   project_id: string
   zone: string
   cluster_id: string
@@ -1302,7 +1302,7 @@ export def "v1beta1-projects-zones-clusters-node-pools-update update" [
 #
 # POST /v1beta1/projects/{projectId}/zones/{zone}/clusters/{clusterId}/nodePools/{nodePoolId}:rollback
 # operationId: container.projects.zones.clusters.nodePools.rollback
-export def "v1beta1-projects-zones-clusters-node-pools create-rollback" [
+export def "container-projects-zones-clusters-node-pools-rollback" [
   project_id: string
   zone: string
   cluster_id: string
@@ -1365,7 +1365,7 @@ export def "v1beta1-projects-zones-clusters-node-pools create-rollback" [
 #
 # POST /v1beta1/projects/{projectId}/zones/{zone}/clusters/{clusterId}/resourceLabels
 # operationId: container.projects.zones.clusters.resourceLabels
-export def "v1beta1-projects-zones-clusters-resource-labels create" [
+export def "container-projects-zones-clusters-resource-labels" [
   project_id: string
   zone: string
   cluster_id: string
@@ -1426,7 +1426,7 @@ export def "v1beta1-projects-zones-clusters-resource-labels create" [
 #
 # POST /v1beta1/projects/{projectId}/zones/{zone}/clusters/{clusterId}:completeIpRotation
 # operationId: container.projects.zones.clusters.completeIpRotation
-export def "v1beta1-projects-zones-clusters complete-ip-rotation" [
+export def "container-projects-zones-clusters-complete-ip-rotation" [
   project_id: string
   zone: string
   cluster_id: string
@@ -1486,7 +1486,7 @@ export def "v1beta1-projects-zones-clusters complete-ip-rotation" [
 # POST /v1beta1/projects/{projectId}/zones/{zone}/clusters/{clusterId}:setMaintenancePolicy
 # operationId: container.projects.zones.clusters.setMaintenancePolicy
 # --maintenancePolicy shape: {resourceVersion?: string, window?: record}
-export def "v1beta1-projects-zones-clusters update-maintenance-policy" [
+export def "container-projects-zones-clusters-set-maintenance-policy" [
   project_id: string
   zone: string
   cluster_id: string
@@ -1547,7 +1547,7 @@ export def "v1beta1-projects-zones-clusters update-maintenance-policy" [
 # POST /v1beta1/projects/{projectId}/zones/{zone}/clusters/{clusterId}:setMasterAuth
 # operationId: container.projects.zones.clusters.setMasterAuth
 # --update shape: {clientCertificate?: string, clientCertificateConfig?: record, clientKey?: string, clusterCaCertificate?: string, password?: string, username?: string}
-export def "v1beta1-projects-zones-clusters update-master-auth" [
+export def "container-projects-zones-clusters-set-master-auth" [
   project_id: string
   zone: string
   cluster_id: string
@@ -1609,7 +1609,7 @@ export def "v1beta1-projects-zones-clusters update-master-auth" [
 # POST /v1beta1/projects/{projectId}/zones/{zone}/clusters/{clusterId}:setNetworkPolicy
 # operationId: container.projects.zones.clusters.setNetworkPolicy
 # --networkPolicy shape: {enabled?: bool, provider?: "PROVIDER_UNSPECIFIED"|"CALICO"}
-export def "v1beta1-projects-zones-clusters update-network-policy" [
+export def "container-projects-zones-clusters-set-network-policy" [
   project_id: string
   zone: string
   cluster_id: string
@@ -1669,7 +1669,7 @@ export def "v1beta1-projects-zones-clusters update-network-policy" [
 #
 # POST /v1beta1/projects/{projectId}/zones/{zone}/clusters/{clusterId}:startIpRotation
 # operationId: container.projects.zones.clusters.startIpRotation
-export def "v1beta1-projects-zones-clusters start-ip-rotation" [
+export def "container-projects-zones-clusters-start-ip-rotation" [
   project_id: string
   zone: string
   cluster_id: string
@@ -1729,7 +1729,7 @@ export def "v1beta1-projects-zones-clusters start-ip-rotation" [
 #
 # GET /v1beta1/projects/{projectId}/zones/{zone}/operations
 # operationId: container.projects.zones.operations.list
-export def "v1beta1-projects-zones-operations list" [
+export def "container-projects-zones-operations-list" [
   project_id: string
   zone: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1780,7 +1780,7 @@ export def "v1beta1-projects-zones-operations list" [
 #
 # GET /v1beta1/projects/{projectId}/zones/{zone}/operations/{operationId}
 # operationId: container.projects.zones.operations.get
-export def "v1beta1-projects-zones-operations get" [
+export def "container-projects-zones-operations-get" [
   project_id: string
   zone: string
   operation_id: string
@@ -1833,7 +1833,7 @@ export def "v1beta1-projects-zones-operations get" [
 #
 # POST /v1beta1/projects/{projectId}/zones/{zone}/operations/{operationId}:cancel
 # operationId: container.projects.zones.operations.cancel
-export def "v1beta1-projects-zones-operations cancel" [
+export def "container-projects-zones-operations-cancel" [
   project_id: string
   zone: string
   operation_id: string
@@ -1892,7 +1892,7 @@ export def "v1beta1-projects-zones-operations cancel" [
 #
 # GET /v1beta1/projects/{projectId}/zones/{zone}/serverconfig
 # operationId: container.projects.zones.getServerconfig
-export def "v1beta1-projects-zones-serverconfig get" [
+export def "container-projects-zones-get-serverconfig" [
   project_id: string
   zone: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1943,7 +1943,7 @@ export def "v1beta1-projects-zones-serverconfig get" [
 #
 # DELETE /v1beta1/{name}
 # operationId: container.projects.locations.clusters.nodePools.delete
-export def "v1beta1 delete" [
+export def "container-projects-locations-clusters-node-pools-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1995,7 +1995,7 @@ export def "v1beta1 delete" [
 #
 # GET /v1beta1/{name}
 # operationId: container.projects.locations.operations.get
-export def "v1beta1 get" [
+export def "container-projects-locations-operations-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2061,7 +2061,7 @@ export def "v1beta1 get" [
 # --upgradeSettings shape: {blueGreenSettings?: record, maxSurge?: int, maxUnavailable?: int, strategy?: "NODE_POOL_UPDATE_STRATEGY_UNSPECIFIED"|"BLUE_GREEN"|"SURGE"}
 # --windowsNodeConfig shape: {osVersion?: "OS_VERSION_UNSPECIFIED"|"OS_VERSION_LTSC2019"|"OS_VERSION_LTSC2022"}
 # --workloadMetadataConfig shape: {mode?: "MODE_UNSPECIFIED"|"GCE_METADATA"|"GKE_METADATA", nodeMetadata?: "UNSPECIFIED"|"SECURE"|"EXPOSE"|"GKE_METADATA_SERVER"}
-export def "v1beta1 update" [
+export def "container-projects-locations-clusters-node-pools-update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2136,7 +2136,7 @@ export def "v1beta1 update" [
 #
 # GET /v1beta1/{name}/serverConfig
 # operationId: container.projects.locations.getServerConfig
-export def "v1beta1-server-config get" [
+export def "container-projects-locations-get-server-config" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2186,7 +2186,7 @@ export def "v1beta1-server-config get" [
 #
 # POST /v1beta1/{name}:cancel
 # operationId: container.projects.locations.operations.cancel
-export def "v1beta1 cancel" [
+export def "container-projects-locations-operations-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2241,7 +2241,7 @@ export def "v1beta1 cancel" [
 #
 # POST /v1beta1/{name}:completeIpRotation
 # operationId: container.projects.locations.clusters.completeIpRotation
-export def "v1beta1 complete-ip-rotation" [
+export def "container-projects-locations-clusters-complete-ip-rotation" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2296,7 +2296,7 @@ export def "v1beta1 complete-ip-rotation" [
 #
 # POST /v1beta1/{name}:completeUpgrade
 # operationId: container.projects.locations.clusters.nodePools.completeUpgrade
-export def "v1beta1 complete-upgrade" [
+export def "container-projects-locations-clusters-node-pools-complete-upgrade" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2348,7 +2348,7 @@ export def "v1beta1 complete-upgrade" [
 #
 # POST /v1beta1/{name}:rollback
 # operationId: container.projects.locations.clusters.nodePools.rollback
-export def "v1beta1 create-rollback" [
+export def "container-projects-locations-clusters-node-pools-rollback" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2406,7 +2406,7 @@ export def "v1beta1 create-rollback" [
 # POST /v1beta1/{name}:setAddons
 # operationId: container.projects.locations.clusters.setAddons
 # --addonsConfig shape: {cloudRunConfig?: record, configConnectorConfig?: record, dnsCacheConfig?: record, gcePersistentDiskCsiDriverConfig?: record, gcpFilestoreCsiDriverConfig?: record, gkeBackupAgentConfig?: record, horizontalPodAutoscaling?: record, httpLoadBalancing?: record, istioConfig?: record, kalmConfig?: record, kubernetesDashboard?: record, networkPolicyConfig?: record}
-export def "v1beta1 update-addons" [
+export def "container-projects-locations-clusters-set-addons" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2463,7 +2463,7 @@ export def "v1beta1 update-addons" [
 # POST /v1beta1/{name}:setAutoscaling
 # operationId: container.projects.locations.clusters.nodePools.setAutoscaling
 # --autoscaling shape: {autoprovisioned?: bool, enabled?: bool, locationPolicy?: "LOCATION_POLICY_UNSPECIFIED"|"BALANCED"|"ANY", maxNodeCount?: int, minNodeCount?: int, totalMaxNodeCount?: int, totalMinNodeCount?: int}
-export def "v1beta1 update-autoscaling" [
+export def "container-projects-locations-clusters-node-pools-set-autoscaling" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2520,7 +2520,7 @@ export def "v1beta1 update-autoscaling" [
 #
 # POST /v1beta1/{name}:setLegacyAbac
 # operationId: container.projects.locations.clusters.setLegacyAbac
-export def "v1beta1 update-legacy-abac" [
+export def "container-projects-locations-clusters-set-legacy-abac" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2576,7 +2576,7 @@ export def "v1beta1 update-legacy-abac" [
 #
 # POST /v1beta1/{name}:setLocations
 # operationId: container.projects.locations.clusters.setLocations
-export def "v1beta1 update-locations" [
+export def "container-projects-locations-clusters-set-locations" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2632,7 +2632,7 @@ export def "v1beta1 update-locations" [
 #
 # POST /v1beta1/{name}:setLogging
 # operationId: container.projects.locations.clusters.setLogging
-export def "v1beta1 update-logging" [
+export def "container-projects-locations-clusters-set-logging" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2689,7 +2689,7 @@ export def "v1beta1 update-logging" [
 # POST /v1beta1/{name}:setMaintenancePolicy
 # operationId: container.projects.locations.clusters.setMaintenancePolicy
 # --maintenancePolicy shape: {resourceVersion?: string, window?: record}
-export def "v1beta1 update-maintenance-policy" [
+export def "container-projects-locations-clusters-set-maintenance-policy" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2746,7 +2746,7 @@ export def "v1beta1 update-maintenance-policy" [
 # POST /v1beta1/{name}:setManagement
 # operationId: container.projects.locations.clusters.nodePools.setManagement
 # --management shape: {autoRepair?: bool, autoUpgrade?: bool, upgradeOptions?: record}
-export def "v1beta1 update-management" [
+export def "container-projects-locations-clusters-node-pools-set-management" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2804,7 +2804,7 @@ export def "v1beta1 update-management" [
 # POST /v1beta1/{name}:setMasterAuth
 # operationId: container.projects.locations.clusters.setMasterAuth
 # --update shape: {clientCertificate?: string, clientCertificateConfig?: record, clientKey?: string, clusterCaCertificate?: string, password?: string, username?: string}
-export def "v1beta1 update-master-auth" [
+export def "container-projects-locations-clusters-set-master-auth" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2861,7 +2861,7 @@ export def "v1beta1 update-master-auth" [
 #
 # POST /v1beta1/{name}:setMonitoring
 # operationId: container.projects.locations.clusters.setMonitoring
-export def "v1beta1 update-monitoring" [
+export def "container-projects-locations-clusters-set-monitoring" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2918,7 +2918,7 @@ export def "v1beta1 update-monitoring" [
 # POST /v1beta1/{name}:setNetworkPolicy
 # operationId: container.projects.locations.clusters.setNetworkPolicy
 # --networkPolicy shape: {enabled?: bool, provider?: "PROVIDER_UNSPECIFIED"|"CALICO"}
-export def "v1beta1 update-network-policy" [
+export def "container-projects-locations-clusters-set-network-policy" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2974,7 +2974,7 @@ export def "v1beta1 update-network-policy" [
 #
 # POST /v1beta1/{name}:setResourceLabels
 # operationId: container.projects.locations.clusters.setResourceLabels
-export def "v1beta1 update-resource-labels" [
+export def "container-projects-locations-clusters-set-resource-labels" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3031,7 +3031,7 @@ export def "v1beta1 update-resource-labels" [
 #
 # POST /v1beta1/{name}:setSize
 # operationId: container.projects.locations.clusters.nodePools.setSize
-export def "v1beta1 update-size" [
+export def "container-projects-locations-clusters-node-pools-set-size" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3088,7 +3088,7 @@ export def "v1beta1 update-size" [
 #
 # POST /v1beta1/{name}:startIpRotation
 # operationId: container.projects.locations.clusters.startIpRotation
-export def "v1beta1 start-ip-rotation" [
+export def "container-projects-locations-clusters-start-ip-rotation" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3144,7 +3144,7 @@ export def "v1beta1 start-ip-rotation" [
 #
 # POST /v1beta1/{name}:updateMaster
 # operationId: container.projects.locations.clusters.updateMaster
-export def "v1beta1 update-master" [
+export def "container-projects-locations-clusters-update-master" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3200,7 +3200,7 @@ export def "v1beta1 update-master" [
 #
 # GET /v1beta1/{parent}/.well-known/openid-configuration
 # operationId: container.projects.locations.clusters.well-known.getOpenid-configuration
-export def "v1beta1-well-known-openid-configuration get" [
+export def "container-projects-locations-clusters-well-known-get-openid-configuration" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3248,7 +3248,7 @@ export def "v1beta1-well-known-openid-configuration get" [
 #
 # GET /v1beta1/{parent}/aggregated/usableSubnetworks
 # operationId: container.projects.aggregated.usableSubnetworks.list
-export def "v1beta1-aggregated-usable-subnetworks list" [
+export def "container-projects-aggregated-usable-subnetworks-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3299,7 +3299,7 @@ export def "v1beta1-aggregated-usable-subnetworks list" [
 #
 # GET /v1beta1/{parent}/clusters
 # operationId: container.projects.locations.clusters.list
-export def "v1beta1-clusters list" [
+export def "container-projects-locations-clusters-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3350,7 +3350,7 @@ export def "v1beta1-clusters list" [
 # POST /v1beta1/{parent}/clusters
 # operationId: container.projects.locations.clusters.create
 # --cluster shape: {addonsConfig?: record, authenticatorGroupsConfig?: record, autopilot?: record, autoscaling?: record, binaryAuthorization?: record, clusterIpv4Cidr?: string, clusterTelemetry?: record, conditions?: list, confidentialNodes?: record, costManagementConfig?: record, createTime?: string, currentMasterVersion?: string, currentNodeCount?: int, currentNodeVersion?: string, databaseEncryption?: record, defaultMaxPodsConstraint?: record, description?: string, enableKubernetesAlpha?: bool, enableTpu?: bool, ... (53 more fields)}
-export def "v1beta1-clusters create" [
+export def "container-projects-locations-clusters-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3405,7 +3405,7 @@ export def "v1beta1-clusters create" [
 #
 # GET /v1beta1/{parent}/jwks
 # operationId: container.projects.locations.clusters.getJwks
-export def "v1beta1-jwks get" [
+export def "container-projects-locations-clusters-get-jwks" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3453,7 +3453,7 @@ export def "v1beta1-jwks get" [
 #
 # GET /v1beta1/{parent}/locations
 # operationId: container.projects.locations.list
-export def "v1beta1-locations list" [
+export def "container-projects-locations-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3501,7 +3501,7 @@ export def "v1beta1-locations list" [
 #
 # GET /v1beta1/{parent}/nodePools
 # operationId: container.projects.locations.clusters.nodePools.list
-export def "v1beta1-node-pools list" [
+export def "container-projects-locations-clusters-node-pools-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3553,7 +3553,7 @@ export def "v1beta1-node-pools list" [
 # POST /v1beta1/{parent}/nodePools
 # operationId: container.projects.locations.clusters.nodePools.create
 # --nodePool shape: {autoscaling?: record, conditions?: list, config?: record, etag?: string, initialNodeCount?: int, instanceGroupUrls?: list<string>, locations?: list<string>, management?: record, maxPodsConstraint?: record, name?: string, networkConfig?: record, placementPolicy?: record, podIpv4CidrSize?: int, selfLink?: string, status?: "STATUS_UNSPECIFIED"|"PROVISIONING"|"RUNNING"|"RUNNING_WITH_ERROR"|"RECONCILING"|"STOPPING"|"ERROR", statusMessage?: string, updateInfo?: record, upgradeSettings?: record, ... (1 more fields)}
-export def "v1beta1-node-pools create" [
+export def "container-projects-locations-clusters-node-pools-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3609,7 +3609,7 @@ export def "v1beta1-node-pools create" [
 #
 # GET /v1beta1/{parent}/operations
 # operationId: container.projects.locations.operations.list
-export def "v1beta1-operations list" [
+export def "container-projects-locations-operations-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

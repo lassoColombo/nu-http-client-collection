@@ -110,7 +110,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-hd-insight-clusters-extensions-clustermonitoring disable-monitoring" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "extensions-disable-monitoring" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -134,7 +134,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HDInsight/clusters/{clusterName}/extensions/clustermonitoring
 # operationId: Extensions_DisableMonitoring
-export def "subscriptions-resource-groups-providers-microsoft-hd-insight-clusters-extensions-clustermonitoring disable-monitoring" [
+export def "extensions-disable-monitoring" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -176,7 +176,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hd-insight-cluster
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HDInsight/clusters/{clusterName}/extensions/clustermonitoring
 # operationId: Extensions_GetMonitoringStatus
-export def "subscriptions-resource-groups-providers-microsoft-hd-insight-clusters-extensions-clustermonitoring get-monitoring-status" [
+export def "extensions-get-monitoring-status" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -218,7 +218,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hd-insight-cluster
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HDInsight/clusters/{clusterName}/extensions/clustermonitoring
 # operationId: Extensions_EnableMonitoring
-export def "subscriptions-resource-groups-providers-microsoft-hd-insight-clusters-extensions-clustermonitoring enable-monitoring" [
+export def "extensions-enable-monitoring" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -265,7 +265,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hd-insight-cluster
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HDInsight/clusters/{clusterName}/extensions/{extensionName}
 # operationId: Extensions_Delete
-export def "subscriptions-resource-groups-providers-microsoft-hd-insight-clusters-extensions delete" [
+export def "extensions-delete" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -309,7 +309,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hd-insight-cluster
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HDInsight/clusters/{clusterName}/extensions/{extensionName}
 # operationId: Extensions_Get
-export def "subscriptions-resource-groups-providers-microsoft-hd-insight-clusters-extensions get" [
+export def "extensions-get" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -353,7 +353,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hd-insight-cluster
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HDInsight/clusters/{clusterName}/extensions/{extensionName}
 # operationId: Extensions_Create
-export def "subscriptions-resource-groups-providers-microsoft-hd-insight-clusters-extensions create" [
+export def "extensions-create" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string

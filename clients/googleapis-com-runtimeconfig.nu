@@ -130,7 +130,7 @@ def state-completer [] { ["DELETED" "UPDATED" "VARIABLE_STATE_UNSPECIFIED"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta1 delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "runtimeconfig-projects-configs-waiters-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -154,7 +154,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1beta1/{name}
 # operationId: runtimeconfig.projects.configs.waiters.delete
-export def "v1beta1 delete" [
+export def "runtimeconfig-projects-configs-waiters-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -203,7 +203,7 @@ export def "v1beta1 delete" [
 #
 # GET /v1beta1/{name}
 # operationId: runtimeconfig.projects.configs.waiters.get
-export def "v1beta1 get" [
+export def "runtimeconfig-projects-configs-waiters-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -251,7 +251,7 @@ export def "v1beta1 get" [
 #
 # PUT /v1beta1/{name}
 # operationId: runtimeconfig.projects.configs.variables.update
-export def "v1beta1 update" [
+export def "runtimeconfig-projects-configs-variables-update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -307,7 +307,7 @@ export def "v1beta1 update" [
 #
 # POST /v1beta1/{name}:watch
 # operationId: runtimeconfig.projects.configs.variables.watch
-export def "v1beta1 watch" [
+export def "runtimeconfig-projects-configs-variables-watch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -359,7 +359,7 @@ export def "v1beta1 watch" [
 #
 # GET /v1beta1/{parent}/configs
 # operationId: runtimeconfig.projects.configs.list
-export def "v1beta1-configs list" [
+export def "runtimeconfig-projects-configs-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -409,7 +409,7 @@ export def "v1beta1-configs list" [
 #
 # POST /v1beta1/{parent}/configs
 # operationId: runtimeconfig.projects.configs.create
-export def "v1beta1-configs create" [
+export def "runtimeconfig-projects-configs-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -463,7 +463,7 @@ export def "v1beta1-configs create" [
 #
 # GET /v1beta1/{parent}/variables
 # operationId: runtimeconfig.projects.configs.variables.list
-export def "v1beta1-variables list" [
+export def "runtimeconfig-projects-configs-variables-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -515,7 +515,7 @@ export def "v1beta1-variables list" [
 #
 # POST /v1beta1/{parent}/variables
 # operationId: runtimeconfig.projects.configs.variables.create
-export def "v1beta1-variables create" [
+export def "runtimeconfig-projects-configs-variables-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -572,7 +572,7 @@ export def "v1beta1-variables create" [
 #
 # GET /v1beta1/{parent}/waiters
 # operationId: runtimeconfig.projects.configs.waiters.list
-export def "v1beta1-waiters list" [
+export def "runtimeconfig-projects-configs-waiters-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -625,7 +625,7 @@ export def "v1beta1-waiters list" [
 # --error shape: {code?: int, details?: list, message?: string}
 # --failure shape: {cardinality?: record}
 # --success shape: {cardinality?: record}
-export def "v1beta1-waiters create" [
+export def "runtimeconfig-projects-configs-waiters-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -684,7 +684,7 @@ export def "v1beta1-waiters create" [
 #
 # GET /v1beta1/{resource}:getIamPolicy
 # operationId: runtimeconfig.projects.configs.getIamPolicy
-export def "v1beta1 get-iam-policy" [
+export def "runtimeconfig-projects-configs-get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -734,7 +734,7 @@ export def "v1beta1 get-iam-policy" [
 # POST /v1beta1/{resource}:setIamPolicy
 # operationId: runtimeconfig.projects.configs.setIamPolicy
 # --policy shape: {bindings?: list, etag?: string, version?: int}
-export def "v1beta1 update-iam-policy" [
+export def "runtimeconfig-projects-configs-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -786,7 +786,7 @@ export def "v1beta1 update-iam-policy" [
 #
 # POST /v1beta1/{resource}:testIamPermissions
 # operationId: runtimeconfig.projects.configs.waiters.testIamPermissions
-export def "v1beta1 test-iam-permissions" [
+export def "runtimeconfig-projects-configs-waiters-test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

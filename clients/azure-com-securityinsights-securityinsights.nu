@@ -114,7 +114,7 @@ def kind-completer-1 [] { ["AmazonWebServicesCloudTrail" "AzureActiveDirectory" 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-security-insights-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -138,7 +138,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.SecurityInsights/operations
 # operationId: Operations_List
-export def "providers-microsoft-security-insights-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -174,7 +174,7 @@ export def "providers-microsoft-security-insights-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/providers/Microsoft.SecurityInsights/alertRules
 # operationId: AlertRules_List
-export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-providers-microsoft-security-insights-alert-rules list" [
+export def "alert-rules-list" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -216,7 +216,7 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/providers/Microsoft.SecurityInsights/alertRules/{ruleId}
 # operationId: AlertRules_Delete
-export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-providers-microsoft-security-insights-alert-rules delete" [
+export def "alert-rules-delete" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -260,7 +260,7 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/providers/Microsoft.SecurityInsights/alertRules/{ruleId}
 # operationId: AlertRules_Get
-export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-providers-microsoft-security-insights-alert-rules get" [
+export def "alert-rules-get" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -305,7 +305,7 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/providers/Microsoft.SecurityInsights/alertRules/{ruleId}
 # Discriminator (request): kind
 # operationId: AlertRules_CreateOrUpdate
-export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-providers-microsoft-security-insights-alert-rules create-or-update" [
+export def "alert-rules-create-or-update" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -354,7 +354,7 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/providers/Microsoft.SecurityInsights/alertRules/{ruleId}/actions
 # operationId: Actions_ListByAlertRule
-export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-providers-microsoft-security-insights-alert-rules-actions list" [
+export def "actions-list-by-alert-rule" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -398,7 +398,7 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/providers/Microsoft.SecurityInsights/alertRules/{ruleId}/actions/{actionId}
 # operationId: AlertRules_DeleteAction
-export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-providers-microsoft-security-insights-alert-rules-actions delete" [
+export def "alert-rules-delete-action" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -444,7 +444,7 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/providers/Microsoft.SecurityInsights/alertRules/{ruleId}/actions/{actionId}
 # operationId: AlertRules_GetAction
-export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-providers-microsoft-security-insights-alert-rules-actions get" [
+export def "alert-rules-get-action" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -491,7 +491,7 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/providers/Microsoft.SecurityInsights/alertRules/{ruleId}/actions/{actionId}
 # operationId: AlertRules_CreateOrUpdateAction
 # --properties shape: {triggerUri?: string, logicAppResourceId: string}
-export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-providers-microsoft-security-insights-alert-rules-actions create-or-update" [
+export def "alert-rules-create-or-update-action" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -542,7 +542,7 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/providers/Microsoft.SecurityInsights/dataConnectors
 # operationId: DataConnectors_List
-export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-providers-microsoft-security-insights-data-connectors list" [
+export def "data-connectors-list" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -584,7 +584,7 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/providers/Microsoft.SecurityInsights/dataConnectors/{dataConnectorId}
 # operationId: DataConnectors_Delete
-export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-providers-microsoft-security-insights-data-connectors delete" [
+export def "data-connectors-delete" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -628,7 +628,7 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/providers/Microsoft.SecurityInsights/dataConnectors/{dataConnectorId}
 # operationId: DataConnectors_Get
-export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-providers-microsoft-security-insights-data-connectors get" [
+export def "data-connectors-get" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -673,7 +673,7 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/providers/Microsoft.SecurityInsights/dataConnectors/{dataConnectorId}
 # Discriminator (request): kind
 # operationId: DataConnectors_CreateOrUpdate
-export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-providers-microsoft-security-insights-data-connectors create-or-update" [
+export def "data-connectors-create-or-update" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string

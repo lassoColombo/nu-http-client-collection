@@ -113,7 +113,7 @@ def order-completer [] { ["ASC" "DESC"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "apis list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "search-apis" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -137,7 +137,7 @@ export def commands []: nothing -> table {
 #
 # GET /apis
 # operationId: search_apis
-export def "apis list" [
+export def "search-apis" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -177,7 +177,7 @@ export def "apis list" [
 #
 # GET /apis/{owner}
 # operationId: get_owner_apis
-export def "apis get" [
+export def "get-owner-apis" [
   owner: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -216,7 +216,7 @@ export def "apis get" [
 #
 # DELETE /apis/{owner}/{api}
 # operationId: delete_api
-export def "apis delete-by-owner-api" [
+export def "delete-api" [
   owner: string
   api: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -254,7 +254,7 @@ export def "apis delete-by-owner-api" [
 #
 # GET /apis/{owner}/{api}
 # operationId: get_api_versions
-export def "apis get-versions" [
+export def "get-api-versions" [
   owner: string
   api: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -292,7 +292,7 @@ export def "apis get-versions" [
 #
 # POST /apis/{owner}/{api}
 # operationId: save_definition
-export def "apis create-save-definition" [
+export def "save-definition" [
   owner: string
   api: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -337,7 +337,7 @@ export def "apis create-save-definition" [
 #
 # DELETE /apis/{owner}/{api}/{version}
 # operationId: delete_api_version
-export def "apis delete-by-owner-api-version" [
+export def "delete-api-version" [
   owner: string
   api: string
   version: string
@@ -377,7 +377,7 @@ export def "apis delete-by-owner-api-version" [
 #
 # POST /apis/{owner}/{api}/{version}
 # operationId: publish_api_version
-export def "apis publish" [
+export def "publish-api-version" [
   owner: string
   api: string
   version: string
@@ -417,7 +417,7 @@ export def "apis publish" [
 #
 # GET /apis/{owner}/{api}/{version}/swagger.json
 # operationId: get_json_definition
-export def "apis-swagger-json get-definition" [
+export def "get-json-definition" [
   owner: string
   api: string
   version: string
@@ -457,7 +457,7 @@ export def "apis-swagger-json get-definition" [
 #
 # GET /apis/{owner}/{api}/{version}/swagger.yaml
 # operationId: get_yaml_definition
-export def "apis-swagger-yaml get-definition" [
+export def "get-yaml-definition" [
   owner: string
   api: string
   version: string
@@ -497,7 +497,7 @@ export def "apis-swagger-yaml get-definition" [
 #
 # POST /auth/login
 # operationId: login
-export def "auth-login create" [
+export def "login" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -536,7 +536,7 @@ export def "auth-login create" [
 #
 # POST /auth/login/apinf
 # operationId: login_apinf
-export def "auth-login-apinf create" [
+export def "login-apinf" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -575,7 +575,7 @@ export def "auth-login-apinf create" [
 #
 # POST /auth/login/apinf_token
 # operationId: login_apinf_token
-export def "auth-login-apinf-token create" [
+export def "login-apinf-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -614,7 +614,7 @@ export def "auth-login-apinf-token create" [
 #
 # POST /auth/logout
 # operationId: logout
-export def "auth-logout create" [
+export def "logout" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -648,7 +648,7 @@ export def "auth-logout create" [
 #
 # POST /auth/ping
 # operationId: ping
-export def "auth-ping ping" [
+export def "ping" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -682,7 +682,7 @@ export def "auth-ping ping" [
 #
 # POST /auth/register
 # operationId: register
-export def "auth-register create" [
+export def "register" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

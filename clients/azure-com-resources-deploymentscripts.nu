@@ -118,7 +118,7 @@ def kind-completer [] { ["AzureCLI" "AzurePowerShell"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-resources-deployment-scripts list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "deployment-scripts-list-by-subscription" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -142,7 +142,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Resources/deploymentScripts
 # operationId: DeploymentScripts_ListBySubscription
-export def "subscriptions-providers-microsoft-resources-deployment-scripts list" [
+export def "deployment-scripts-list-by-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -180,7 +180,7 @@ export def "subscriptions-providers-microsoft-resources-deployment-scripts list"
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Resources/deploymentScripts
 # operationId: DeploymentScripts_ListByResourceGroup
-export def "subscriptions-resourcegroups-providers-microsoft-resources-deployment-scripts list-by-group" [
+export def "deployment-scripts-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -220,7 +220,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-resources-deploymen
 #
 # DELETE /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Resources/deploymentScripts/{scriptName}
 # operationId: DeploymentScripts_Delete
-export def "subscriptions-resourcegroups-providers-microsoft-resources-deployment-scripts delete" [
+export def "deployment-scripts-delete" [
   subscription_id: string
   resource_group_name: string
   script_name: string
@@ -262,7 +262,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-resources-deploymen
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Resources/deploymentScripts/{scriptName}
 # operationId: DeploymentScripts_Get
-export def "subscriptions-resourcegroups-providers-microsoft-resources-deployment-scripts get" [
+export def "deployment-scripts-get" [
   subscription_id: string
   resource_group_name: string
   script_name: string
@@ -304,7 +304,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-resources-deploymen
 #
 # PATCH /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Resources/deploymentScripts/{scriptName}
 # operationId: DeploymentScripts_Update
-export def "subscriptions-resourcegroups-providers-microsoft-resources-deployment-scripts update" [
+export def "deployment-scripts-update" [
   subscription_id: string
   resource_group_name: string
   script_name: string
@@ -352,7 +352,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-resources-deploymen
 # Discriminator (request): kind
 # operationId: DeploymentScripts_Create
 # --identity shape: {type?: "UserAssigned", userAssignedIdentities?: record}
-export def "subscriptions-resourcegroups-providers-microsoft-resources-deployment-scripts create" [
+export def "deployment-scripts-create" [
   subscription_id: string
   resource_group_name: string
   script_name: string
@@ -401,7 +401,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-resources-deploymen
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Resources/deploymentScripts/{scriptName}/logs
 # operationId: DeploymentScripts_GetLogs
-export def "subscriptions-resourcegroups-providers-microsoft-resources-deployment-scripts-logs get" [
+export def "deployment-scripts-get-logs" [
   subscription_id: string
   resource_group_name: string
   script_name: string
@@ -443,7 +443,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-resources-deploymen
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Resources/deploymentScripts/{scriptName}/logs/default
 # operationId: DeploymentScripts_GetLogsDefault
-export def "subscriptions-resourcegroups-providers-microsoft-resources-deployment-scripts-logs-default get" [
+export def "deployment-scripts-get-logs-default" [
   subscription_id: string
   resource_group_name: string
   script_name: string

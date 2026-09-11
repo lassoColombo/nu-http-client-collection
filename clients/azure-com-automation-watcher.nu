@@ -122,7 +122,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-watchers list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "watcher-list-by-automation-account" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -147,7 +147,7 @@ export def commands []: nothing -> table {
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/watchers
 # Docs: http://aka.ms/azureautomationsdk/watcheroperations
 # operationId: Watcher_ListByAutomationAccount
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-watchers list" [
+export def "watcher-list-by-automation-account" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -191,7 +191,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/watchers/{watcherName}
 # Docs: http://aka.ms/azureautomationsdk/watcheroperations
 # operationId: Watcher_Delete
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-watchers delete" [
+export def "watcher-delete" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -236,7 +236,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/watchers/{watcherName}
 # Docs: http://aka.ms/azureautomationsdk/watcheroperations
 # operationId: Watcher_Get
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-watchers get" [
+export def "watcher-get" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -282,7 +282,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # Docs: http://aka.ms/azureautomationsdk/watcheroperations
 # operationId: Watcher_Update
 # --properties shape: {executionFrequencyInSeconds?: int}
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-watchers update" [
+export def "watcher-update" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -333,7 +333,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # Docs: http://aka.ms/azureautomationsdk/watcheroperations
 # operationId: Watcher_CreateOrUpdate
 # --properties shape: {description?: string, executionFrequencyInSeconds?: int, scriptName?: string, scriptParameters?: record, scriptRunOn?: string}
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-watchers create-or-update" [
+export def "watcher-create-or-update" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -385,7 +385,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/watchers/{watcherName}/start
 # Docs: http://aka.ms/azureautomationsdk/watcheroperations
 # operationId: Watcher_Start
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-watchers-start start" [
+export def "watcher-start" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -430,7 +430,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/watchers/{watcherName}/stop
 # Docs: http://aka.ms/azureautomationsdk/watcheroperations
 # operationId: Watcher_Stop
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-watchers-stop stop" [
+export def "watcher-stop" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string

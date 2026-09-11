@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "group-associate update-resource" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associate-resource" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # PATCH /group/{groupIdentifier}/associate
 # operationId: AssociateResource
-export def "group-associate update-resource" [
+export def "associate-resource" [
   group_identifier: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -194,7 +194,7 @@ export def "group-associate update-resource" [
 # --RunConfig shape: {TimeoutInSeconds?: any, MemoryInMB?: any, ActiveTracing?: any, EnvironmentVariables?: any}
 # --VpcConfig shape: {SubnetIds?: any, SecurityGroupIds?: any}
 # --ArtifactConfig shape: {S3Encryption?: any}
-export def "canary create" [
+export def "create-canary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -252,7 +252,7 @@ export def "canary create" [
 #
 # POST /group
 # operationId: CreateGroup
-export def "group create" [
+export def "create-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -300,7 +300,7 @@ export def "group create" [
 #
 # DELETE /canary/{name}
 # operationId: DeleteCanary
-export def "canary delete" [
+export def "delete-canary" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -347,7 +347,7 @@ export def "canary delete" [
 #
 # GET /canary/{name}
 # operationId: GetCanary
-export def "canary get" [
+export def "get-canary" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -398,7 +398,7 @@ export def "canary get" [
 # --VpcConfig shape: {SubnetIds?: any, SecurityGroupIds?: any}
 # --VisualReference shape: {BaseScreenshots?: any, BaseCanaryRunId?: any}
 # --ArtifactConfig shape: {S3Encryption?: any}
-export def "canary update" [
+export def "update-canary" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -457,7 +457,7 @@ export def "canary update" [
 #
 # DELETE /group/{groupIdentifier}
 # operationId: DeleteGroup
-export def "group delete" [
+export def "delete-group" [
   group_identifier: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -502,7 +502,7 @@ export def "group delete" [
 #
 # GET /group/{groupIdentifier}
 # operationId: GetGroup
-export def "group get" [
+export def "get-group" [
   group_identifier: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -547,7 +547,7 @@ export def "group get" [
 #
 # POST /canaries
 # operationId: DescribeCanaries
-export def "canaries get" [
+export def "describe-canaries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -599,7 +599,7 @@ export def "canaries get" [
 #
 # POST /canaries/last-run
 # operationId: DescribeCanariesLastRun
-export def "canaries-last-run get" [
+export def "describe-canaries-last-run" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -651,7 +651,7 @@ export def "canaries-last-run get" [
 #
 # POST /runtime-versions
 # operationId: DescribeRuntimeVersions
-export def "runtime-versions get" [
+export def "describe-runtime-versions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -702,7 +702,7 @@ export def "runtime-versions get" [
 #
 # PATCH /group/{groupIdentifier}/disassociate
 # operationId: DisassociateResource
-export def "group-disassociate update-resource" [
+export def "disassociate-resource" [
   group_identifier: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -751,7 +751,7 @@ export def "group-disassociate update-resource" [
 #
 # POST /canary/{name}/runs
 # operationId: GetCanaryRuns
-export def "canary-runs get" [
+export def "get-canary-runs" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -804,7 +804,7 @@ export def "canary-runs get" [
 #
 # POST /resource/{resourceArn}/groups
 # operationId: ListAssociatedGroups
-export def "resource-groups list-associated" [
+export def "list-associated-groups" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -857,7 +857,7 @@ export def "resource-groups list-associated" [
 #
 # POST /group/{groupIdentifier}/resources
 # operationId: ListGroupResources
-export def "group-resources list" [
+export def "list-group-resources" [
   group_identifier: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -910,7 +910,7 @@ export def "group-resources list" [
 #
 # POST /groups
 # operationId: ListGroups
-export def "groups list" [
+export def "list-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -961,7 +961,7 @@ export def "groups list" [
 #
 # GET /tags/{resourceArn}
 # operationId: ListTagsForResource
-export def "tags list-for-resource" [
+export def "list-tags-for-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1006,7 +1006,7 @@ export def "tags list-for-resource" [
 #
 # POST /tags/{resourceArn}
 # operationId: TagResource
-export def "tags tag-resource" [
+export def "tag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1055,7 +1055,7 @@ export def "tags tag-resource" [
 #
 # POST /canary/{name}/start
 # operationId: StartCanary
-export def "canary-start start" [
+export def "start-canary" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1100,7 +1100,7 @@ export def "canary-start start" [
 #
 # POST /canary/{name}/stop
 # operationId: StopCanary
-export def "canary-stop stop" [
+export def "stop-canary" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1145,7 +1145,7 @@ export def "canary-stop stop" [
 #
 # DELETE /tags/{resourceArn}
 # operationId: UntagResource
-export def "tags untag-resource" [
+export def "untag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

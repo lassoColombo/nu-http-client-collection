@@ -112,7 +112,7 @@ def wt-completer-1 [] { ["json" "xml"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "enm-investigation get-results" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-investigation-results" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -136,7 +136,7 @@ export def commands []: nothing -> table {
 #
 # GET /enm/{db}/investigation
 # operationId: getInvestigationResults
-export def "enm-investigation get-results" [
+export def "get-investigation-results" [
   db: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -181,7 +181,7 @@ export def "enm-investigation get-results" [
 # GET /enm/{db}/query/compound/{term}/{representation}
 # Docs: http://ambit.sf.net — Learn more about operations provided by this API.
 # operationId: searchByIdentifier
-export def "enm-query-compound list-by-identifier" [
+export def "search-by-identifier" [
   db: string
   term: string
   representation: string
@@ -230,7 +230,7 @@ export def "enm-query-compound list-by-identifier" [
 # GET /enm/{db}/query/similarity
 # Docs: http://ambit.sf.net — Learn more about operations provided by this API.
 # operationId: searchBySimilarity
-export def "enm-query-similarity list" [
+export def "search-by-similarity" [
   db: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -279,7 +279,7 @@ export def "enm-query-similarity list" [
 # GET /enm/{db}/query/smarts
 # Docs: http://ambit.sf.net — Learn more about operations provided by this API.
 # operationId: searchBySmarts
-export def "enm-query-smarts list" [
+export def "search-by-smarts" [
   db: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -326,7 +326,7 @@ export def "enm-query-smarts list" [
 #
 # GET /enm/{db}/query/study
 # operationId: getEndpointSummary
-export def "enm-query-study get-endpoint-summary" [
+export def "get-endpoint-summary" [
   db: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -365,7 +365,7 @@ export def "enm-query-study get-endpoint-summary" [
 #
 # GET /enm/{db}/substance
 # operationId: getSubstances
-export def "enm-substance list" [
+export def "get-substances" [
   db: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -410,7 +410,7 @@ export def "enm-substance list" [
 #
 # GET /enm/{db}/substance/{uuid}
 # operationId: getSubstanceByUUID
-export def "enm-substance get" [
+export def "get-substance-by-uuid" [
   db: string
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -452,7 +452,7 @@ export def "enm-substance get" [
 #
 # GET /enm/{db}/substance/{uuid}/composition
 # operationId: getSubstanceComposition
-export def "enm-substance-composition get" [
+export def "get-substance-composition" [
   db: string
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -494,7 +494,7 @@ export def "enm-substance-composition get" [
 #
 # GET /enm/{db}/substance/{uuid}/structures
 # operationId: getSubstanceStructures
-export def "enm-substance-structures get" [
+export def "get-substance-structures" [
   db: string
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -535,7 +535,7 @@ export def "enm-substance-structures get" [
 #
 # GET /enm/{db}/substance/{uuid}/study
 # operationId: getSubstanceStudy
-export def "enm-substance-study get" [
+export def "get-substance-study" [
   db: string
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -581,7 +581,7 @@ export def "enm-substance-study get" [
 #
 # GET /enm/{db}/substance/{uuid}/studySummary
 # operationId: getSubstanceStudySummary
-export def "enm-substance-study-summary get" [
+export def "get-substance-study-summary" [
   db: string
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -627,7 +627,7 @@ export def "enm-substance-study-summary get" [
 #
 # GET /select
 # operationId: solrquery_get
-export def "select get-solrquery" [
+export def "solrquery-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -670,7 +670,7 @@ export def "select get-solrquery" [
 # POST /select
 # operationId: solrquery_post
 # --params shape: {fl?: list<string>, rows?: int}
-export def "select create-solrquery" [
+export def "solrquery-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -99,7 +99,7 @@ def accept-completer [] { ["application/json" "text/json" "text/plain"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "message-message-current get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-api-message-message-annunciator-current" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -122,7 +122,7 @@ export def commands []: nothing -> table {
 # Return the current message by annunciator type
 #
 # GET /api/Message/message/{annunciator}/current
-export def "message-message-current get" [
+export def "get-api-message-message-annunciator-current" [
   annunciator: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -158,7 +158,7 @@ export def "message-message-current get" [
 # Return the most recent message by annunciator after date time specified
 #
 # GET /api/Message/message/{annunciator}/{date}
-export def "message-message get" [
+export def "get-api-message-message-annunciator-date" [
   annunciator: string
   date: string
   --base-url(-b): string@base-url-completer # API base URL

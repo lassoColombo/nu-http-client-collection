@@ -110,7 +110,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-infrastructure-insights-admin-region-healths-alerts list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "alerts-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -134,7 +134,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.InfrastructureInsights.Admin/regionHealths/{location}/alerts
 # operationId: Alerts_List
-export def "subscriptions-resource-groups-providers-microsoft-infrastructure-insights-admin-region-healths-alerts list" [
+export def "alerts-list" [
   subscription_id: string
   resource_group_name: string
   location: string
@@ -177,7 +177,7 @@ export def "subscriptions-resource-groups-providers-microsoft-infrastructure-ins
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.InfrastructureInsights.Admin/regionHealths/{location}/alerts/{alertName}
 # operationId: Alerts_Get
-export def "subscriptions-resource-groups-providers-microsoft-infrastructure-insights-admin-region-healths-alerts get" [
+export def "alerts-get" [
   subscription_id: string
   resource_group_name: string
   location: string
@@ -222,7 +222,7 @@ export def "subscriptions-resource-groups-providers-microsoft-infrastructure-ins
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.InfrastructureInsights.Admin/regionHealths/{location}/alerts/{alertName}
 # operationId: Alerts_Close
 # --properties shape: {alertId?: string, alertProperties?: record, closedByUserAlias?: string, closedTimestamp?: string, createdTimestamp?: string, description?: list, faultId?: string, faultTypeId?: string, hasValidRemediationAction?: bool, impactedResourceDisplayName?: string, impactedResourceId?: string, lastUpdatedTimestamp?: string, remediation?: list, resourceProviderRegistrationId?: string, resourceRegistrationId?: string, severity?: string, state?: string, title?: string}
-export def "subscriptions-resource-groups-providers-microsoft-infrastructure-insights-admin-region-healths-alerts close" [
+export def "alerts-close" [
   subscription_id: string
   resource_group_name: string
   location: string
@@ -273,7 +273,7 @@ export def "subscriptions-resource-groups-providers-microsoft-infrastructure-ins
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.InfrastructureInsights.Admin/regionHealths/{location}/alerts/{alertName}/repair
 # operationId: Alerts_Repair
-export def "subscriptions-resource-groups-providers-microsoft-infrastructure-insights-admin-region-healths-alerts-repair create" [
+export def "alerts-repair" [
   subscription_id: string
   resource_group_name: string
   location: string

@@ -103,7 +103,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "auth-default-login create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-auth-default-login" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -126,7 +126,7 @@ export def commands []: nothing -> table {
 # Returns Native Ads Publisher API token
 #
 # POST /auth/default/login
-export def "auth-default-login create" [
+export def "post-auth-default-login" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -165,7 +165,7 @@ export def "auth-default-login create" [
 # Returns publisher statistics split by date
 #
 # GET /publisher/reports/daily
-export def "publisher-reports-daily get" [
+export def "get-publisher-reports-daily" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -204,7 +204,7 @@ export def "publisher-reports-daily get" [
 # Returns publisher statistics split by website
 #
 # GET /publisher/reports/website
-export def "publisher-reports-website get" [
+export def "get-publisher-reports-website" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -243,7 +243,7 @@ export def "publisher-reports-website get" [
 # Returns publisher statistics split by widget
 #
 # GET /publisher/reports/widget
-export def "publisher-reports-widget get" [
+export def "get-publisher-reports-widget" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

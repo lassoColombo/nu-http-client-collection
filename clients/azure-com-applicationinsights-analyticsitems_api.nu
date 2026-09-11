@@ -114,7 +114,7 @@ def type-completer-1 [] { ["folder" "function" "query" "recent"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-insights-components list-analytics-items" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "analytics-items-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -138,7 +138,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/microsoft.insights/components/{resourceName}/{scopePath}
 # operationId: AnalyticsItems_List
-export def "subscriptions-resource-groups-providers-microsoft-insights-components list-analytics-items" [
+export def "analytics-items-list" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -185,7 +185,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/microsoft.insights/components/{resourceName}/{scopePath}/item
 # operationId: AnalyticsItems_Delete
-export def "subscriptions-resource-groups-providers-microsoft-insights-components-item delete-analytics" [
+export def "analytics-items-delete" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -231,7 +231,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/microsoft.insights/components/{resourceName}/{scopePath}/item
 # operationId: AnalyticsItems_Get
-export def "subscriptions-resource-groups-providers-microsoft-insights-components-item get-analytics" [
+export def "analytics-items-get" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -278,7 +278,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/microsoft.insights/components/{resourceName}/{scopePath}/item
 # operationId: AnalyticsItems_Put
 # --Properties shape: {functionAlias?: string}
-export def "subscriptions-resource-groups-providers-microsoft-insights-components-item update-analytics" [
+export def "analytics-items-put" [
   subscription_id: string
   resource_group_name: string
   resource_name: string

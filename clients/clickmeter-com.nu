@@ -138,7 +138,7 @@ def type-completer-5 [] { ["dp" "gr" "tl" "tp"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -162,7 +162,7 @@ export def commands []: nothing -> table {
 #
 # GET /account
 # operationId: Account_Get
-export def "account get" [
+export def "account-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -197,7 +197,7 @@ export def "account get" [
 #
 # POST /account
 # operationId: Account_Post
-export def "account create" [
+export def "account-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -248,7 +248,7 @@ export def "account create" [
 #
 # GET /account/domainwhitelist
 # operationId: Account_GetDomainWhitelist
-export def "account-domainwhitelist get-domain-whitelist" [
+export def "account-get-domain-whitelist" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -286,7 +286,7 @@ export def "account-domainwhitelist get-domain-whitelist" [
 #
 # POST /account/domainwhitelist
 # operationId: Account_PutDomainWhitelist
-export def "account-domainwhitelist update-domain-whitelist" [
+export def "account-put-domain-whitelist" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -326,7 +326,7 @@ export def "account-domainwhitelist update-domain-whitelist" [
 #
 # DELETE /account/domainwhitelist/{whitelistId}
 # operationId: Account_DeleteDomainWhitelist
-export def "account-domainwhitelist delete-domain-whitelist" [
+export def "account-delete-domain-whitelist" [
   whitelist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -363,7 +363,7 @@ export def "account-domainwhitelist delete-domain-whitelist" [
 #
 # GET /account/guests
 # operationId: Account_GetGuests
-export def "account-guests list" [
+export def "account-get-guests" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -408,7 +408,7 @@ export def "account-guests list" [
 # --currentGrant shape: {DatapointType?: string, Entity?: record, EntityName?: string, EntityType?: string, Type?: string}
 # --extendedGrants shape: {allowAllGrants?: bool, allowGroupCreation?: bool}
 # --hitOptions shape: {hideReferrer?: bool}
-export def "account-guests update" [
+export def "account-put-guest" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -471,7 +471,7 @@ export def "account-guests update" [
 #
 # GET /account/guests/count
 # operationId: Account_GetGuestsCount
-export def "account-guests-count get" [
+export def "account-get-guests-count" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -508,7 +508,7 @@ export def "account-guests-count get" [
 #
 # DELETE /account/guests/{guestId}
 # operationId: Account_DeleteGuest
-export def "account-guests delete" [
+export def "account-delete-guest" [
   guest_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -545,7 +545,7 @@ export def "account-guests delete" [
 #
 # GET /account/guests/{guestId}
 # operationId: Account_GetGuest
-export def "account-guests get" [
+export def "account-get-guest" [
   guest_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -586,7 +586,7 @@ export def "account-guests get" [
 # --currentGrant shape: {DatapointType?: string, Entity?: record, EntityName?: string, EntityType?: string, Type?: string}
 # --extendedGrants shape: {allowAllGrants?: bool, allowGroupCreation?: bool}
 # --hitOptions shape: {hideReferrer?: bool}
-export def "account-guests create" [
+export def "account-post-guest" [
   guest_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -651,7 +651,7 @@ export def "account-guests create" [
 #
 # GET /account/guests/{guestId}/permissions
 # operationId: Account_GetPermissions
-export def "account-guests-permissions get" [
+export def "account-get-permissions" [
   guest_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -694,7 +694,7 @@ export def "account-guests-permissions get" [
 #
 # GET /account/guests/{guestId}/permissions/count
 # operationId: Account_GetPermissionsCount
-export def "account-guests-permissions-count get" [
+export def "account-get-permissions-count" [
   guest_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -734,7 +734,7 @@ export def "account-guests-permissions-count get" [
 # Change the permission on a shared object
 #
 # POST /account/guests/{guestId}/{type}/permissions/patch
-export def "account-guests-permissions-patch create" [
+export def "post-account-guests-guest-id-type-permissions-patch" [
   guest_id: int
   type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -779,7 +779,7 @@ export def "account-guests-permissions-patch create" [
 #
 # PUT /account/guests/{guestId}/{type}/permissions/patch
 # operationId: Account_PatchPermissions
-export def "account-guests-permissions-patch update" [
+export def "account-patch-permissions" [
   guest_id: int
   type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -824,7 +824,7 @@ export def "account-guests-permissions-patch update" [
 #
 # GET /account/ipblacklist
 # operationId: Account_GetIpBlacklist
-export def "account-ipblacklist get-ip-blacklist" [
+export def "account-get-ip-blacklist" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -862,7 +862,7 @@ export def "account-ipblacklist get-ip-blacklist" [
 #
 # POST /account/ipblacklist
 # operationId: Account_PutIpBlacklist
-export def "account-ipblacklist update-ip-blacklist" [
+export def "account-put-ip-blacklist" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -902,7 +902,7 @@ export def "account-ipblacklist update-ip-blacklist" [
 #
 # DELETE /account/ipblacklist/{blacklistId}
 # operationId: Account_DeleteIpBlacklist
-export def "account-ipblacklist delete-ip-blacklist" [
+export def "account-delete-ip-blacklist" [
   blacklist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -939,7 +939,7 @@ export def "account-ipblacklist delete-ip-blacklist" [
 #
 # GET /account/plan
 # operationId: Account_GetPlan
-export def "account-plan get" [
+export def "account-get-plan" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -974,7 +974,7 @@ export def "account-plan get" [
 #
 # GET /aggregated
 # operationId: Aggregated_GetStatisticsSingle
-export def "aggregated get-statistics-single" [
+export def "aggregated-get-statistics-single" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1015,7 +1015,7 @@ export def "aggregated get-statistics-single" [
 #
 # GET /aggregated/list
 # operationId: Aggregated_GetStatisticsList
-export def "aggregated-list get-statistics" [
+export def "aggregated-get-statistics-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1055,7 +1055,7 @@ export def "aggregated-list get-statistics" [
 #
 # GET /aggregated/summary/conversions
 # operationId: Aggregated_GetConversionsSummary
-export def "aggregated-summary-conversions get" [
+export def "aggregated-get-conversions-summary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1100,7 +1100,7 @@ export def "aggregated-summary-conversions get" [
 #
 # GET /aggregated/summary/datapoints
 # operationId: Aggregated_GetDatapointsSummary
-export def "aggregated-summary-datapoints get" [
+export def "aggregated-get-datapoints-summary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1149,7 +1149,7 @@ export def "aggregated-summary-datapoints get" [
 #
 # GET /aggregated/summary/groups
 # operationId: Aggregated_GetGroupsSummary
-export def "aggregated-summary-groups get" [
+export def "aggregated-get-groups-summary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1196,7 +1196,7 @@ export def "aggregated-summary-groups get" [
 #
 # GET /clickstream
 # operationId: ClickStream_Get
-export def "clickstream get-click-stream" [
+export def "click-stream-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1237,7 +1237,7 @@ export def "clickstream get-click-stream" [
 #
 # GET /conversions
 # operationId: Conversions_Get
-export def "conversions list" [
+export def "conversions-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1279,7 +1279,7 @@ export def "conversions list" [
 #
 # POST /conversions
 # operationId: Conversions_Put
-export def "conversions update" [
+export def "conversions-put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1325,7 +1325,7 @@ export def "conversions update" [
 #
 # GET /conversions/aggregated/list
 # operationId: Conversions_GetStatisticsAllList
-export def "conversions-aggregated-list get-statistics-list" [
+export def "conversions-get-statistics-all-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1366,7 +1366,7 @@ export def "conversions-aggregated-list get-statistics-list" [
 #
 # GET /conversions/count
 # operationId: Conversions_Count
-export def "conversions-count get" [
+export def "conversions-count" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1406,7 +1406,7 @@ export def "conversions-count get" [
 #
 # DELETE /conversions/{conversionId}
 # operationId: Conversions_Delete
-export def "conversions delete" [
+export def "conversions-delete" [
   conversion_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1442,7 +1442,7 @@ export def "conversions delete" [
 # Retrieve conversion specified by id
 #
 # GET /conversions/{conversionId}
-export def "conversions get" [
+export def "get-conversions-conversion-id" [
   conversion_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1479,7 +1479,7 @@ export def "conversions get" [
 #
 # POST /conversions/{conversionId}
 # operationId: Conversions_Post
-export def "conversions create" [
+export def "conversions-post" [
   conversion_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1527,7 +1527,7 @@ export def "conversions create" [
 #
 # GET /conversions/{conversionId}/aggregated
 # operationId: Conversions_GetStatisticsSingle
-export def "conversions-aggregated get-statistics-single" [
+export def "conversions-get-statistics-single" [
   conversion_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1571,7 +1571,7 @@ export def "conversions-aggregated get-statistics-single" [
 #
 # GET /conversions/{conversionId}/aggregated/list
 # operationId: Conversions_GetStatisticsList
-export def "conversions-aggregated-list get-statistics" [
+export def "conversions-get-statistics-list" [
   conversion_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1613,7 +1613,7 @@ export def "conversions-aggregated-list get-statistics" [
 #
 # GET /conversions/{conversionId}/datapoints
 # operationId: Conversions_GetDatapoints
-export def "conversions-datapoints get" [
+export def "conversions-get-datapoints" [
   conversion_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1659,7 +1659,7 @@ export def "conversions-datapoints get" [
 #
 # PUT /conversions/{conversionId}/datapoints/batch/patch
 # --PatchRequests item shape: {Action?: string, Id?: int}
-export def "conversions-datapoints-batch-patch update" [
+export def "put-conversions-conversion-id-datapoints-batch-patch" [
   conversion_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1700,7 +1700,7 @@ export def "conversions-datapoints-batch-patch update" [
 #
 # GET /conversions/{conversionId}/datapoints/count
 # operationId: Conversions_GetDatapointsCount
-export def "conversions-datapoints-count get" [
+export def "conversions-get-datapoints-count" [
   conversion_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1744,7 +1744,7 @@ export def "conversions-datapoints-count get" [
 #
 # PUT /conversions/{conversionId}/datapoints/patch
 # operationId: Conversions_Patch
-export def "conversions-datapoints-patch update" [
+export def "conversions-patch" [
   conversion_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1787,7 +1787,7 @@ export def "conversions-datapoints-patch update" [
 #
 # GET /conversions/{conversionId}/hits
 # operationId: Conversions_GetHits
-export def "conversions-hits get" [
+export def "conversions-get-hits" [
   conversion_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1831,7 +1831,7 @@ export def "conversions-hits get" [
 #
 # PUT /conversions/{conversionId}/notes
 # operationId: Conversions_PatchNotes
-export def "conversions-notes update" [
+export def "conversions-patch-notes" [
   conversion_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1872,7 +1872,7 @@ export def "conversions-notes update" [
 #
 # GET /datapoints
 # operationId: DataPoints_Get
-export def "datapoints get-data-points" [
+export def "data-points-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1922,7 +1922,7 @@ export def "datapoints get-data-points" [
 # --tags item shape: {datapoints?: list<int>, groups?: list<int>, id?: int, name?: string}
 # --typeTL shape: {appendQuery?: bool, browserDestinationItem?: record, destinationMode?: "Simple"|"RandomDestination"|"DestinationByLanguage"|"SpilloverDestination"|"DynamicUrl"|"BrowserDestination"|"DestinationByNation"|"UniqueDestination"|"SequentialDestination"|"WeightedDestination", domainId?: int, encodeUrl?: bool, expirationClicks?: int, expirationDate?: string, firstUrl?: string, goDomainId?: int, hideUrl?: bool, hideUrlTitle?: string, isABTest?: bool, password?: string, pauseAfterClicksExpiration?: bool, ... (14 more fields)}
 # --typeTP shape: {parameterNote?: string}
-export def "datapoints update-data-points" [
+export def "data-points-put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1990,7 +1990,7 @@ export def "datapoints update-data-points" [
 #
 # GET /datapoints/aggregated
 # operationId: DataPoints_GetStatisticsAggregatedSingle
-export def "datapoints-aggregated list" [
+export def "data-points-get-statistics-aggregated-single" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2034,7 +2034,7 @@ export def "datapoints-aggregated list" [
 #
 # GET /datapoints/aggregated/list
 # operationId: DataPoints_GetStatisticsAllList
-export def "datapoints-aggregated-list get-data-points-statistics-list" [
+export def "data-points-get-statistics-all-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2079,7 +2079,7 @@ export def "datapoints-aggregated-list get-data-points-statistics-list" [
 # DELETE /datapoints/batch
 # operationId: DataPoints_BatchDelete
 # --Entities item shape: {id?: int, uri?: string}
-export def "datapoints-batch delete-data-points" [
+export def "data-points-batch-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2119,7 +2119,7 @@ export def "datapoints-batch delete-data-points" [
 # POST /datapoints/batch
 # operationId: DataPoints_BatchPost
 # --List item shape: {creationDate?: string, encodeIp?: bool, fifthConversionId?: int, fifthConversionName?: string, firstConversionId?: int, firstConversionName?: string, fourthConversionId?: int, fourthConversionName?: string, groupId?: int, groupName?: string, id?: int, isPublic?: bool, isSecured?: bool, lightTracking?: bool, name?: string, notes?: string, preferred?: bool, redirectOnly?: bool, secondConversionId?: int, secondConversionName?: string, status?: "Active"|"Paused"|"Abuse"|"Deleted", tags?: list, ... (8 more fields)}
-export def "datapoints-batch create-data-points" [
+export def "data-points-batch-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2159,7 +2159,7 @@ export def "datapoints-batch create-data-points" [
 # PUT /datapoints/batch
 # operationId: DataPoints_BatchPut
 # --List item shape: {creationDate?: string, encodeIp?: bool, fifthConversionId?: int, fifthConversionName?: string, firstConversionId?: int, firstConversionName?: string, fourthConversionId?: int, fourthConversionName?: string, groupId?: int, groupName?: string, id?: int, isPublic?: bool, isSecured?: bool, lightTracking?: bool, name?: string, notes?: string, preferred?: bool, redirectOnly?: bool, secondConversionId?: int, secondConversionName?: string, status?: "Active"|"Paused"|"Abuse"|"Deleted", tags?: list, ... (8 more fields)}
-export def "datapoints-batch update-data-points" [
+export def "data-points-batch-put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2198,7 +2198,7 @@ export def "datapoints-batch update-data-points" [
 #
 # GET /datapoints/count
 # operationId: DataPoints_Count
-export def "datapoints-count get-data-points" [
+export def "data-points-count" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2241,7 +2241,7 @@ export def "datapoints-count get-data-points" [
 #
 # DELETE /datapoints/{id}
 # operationId: DataPoints_Delete
-export def "datapoints delete-data-points" [
+export def "data-points-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2277,7 +2277,7 @@ export def "datapoints delete-data-points" [
 # Get a datapoint
 #
 # GET /datapoints/{id}
-export def "datapoints get" [
+export def "get-datapoints-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2317,7 +2317,7 @@ export def "datapoints get" [
 # --tags item shape: {datapoints?: list<int>, groups?: list<int>, id?: int, name?: string}
 # --typeTL shape: {appendQuery?: bool, browserDestinationItem?: record, destinationMode?: "Simple"|"RandomDestination"|"DestinationByLanguage"|"SpilloverDestination"|"DynamicUrl"|"BrowserDestination"|"DestinationByNation"|"UniqueDestination"|"SequentialDestination"|"WeightedDestination", domainId?: int, encodeUrl?: bool, expirationClicks?: int, expirationDate?: string, firstUrl?: string, goDomainId?: int, hideUrl?: bool, hideUrlTitle?: string, isABTest?: bool, password?: string, pauseAfterClicksExpiration?: bool, ... (14 more fields)}
 # --typeTP shape: {parameterNote?: string}
-export def "datapoints create-data-points" [
+export def "data-points-post" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2387,7 +2387,7 @@ export def "datapoints create-data-points" [
 #
 # GET /datapoints/{id}/aggregated
 # operationId: DataPoints_GetStatisticsSingle
-export def "datapoints-aggregated get-data-points-statistics-single" [
+export def "data-points-get-statistics-single" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2429,7 +2429,7 @@ export def "datapoints-aggregated get-data-points-statistics-single" [
 #
 # GET /datapoints/{id}/aggregated/list
 # operationId: DataPoints_GetStatisticsList
-export def "datapoints-aggregated-list get-data-points-statistics" [
+export def "data-points-get-statistics-list" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2471,7 +2471,7 @@ export def "datapoints-aggregated-list get-data-points-statistics" [
 #
 # PUT /datapoints/{id}/favourite
 # operationId: DataPoints_PatchFavourite
-export def "datapoints-favourite update-data-points" [
+export def "data-points-patch-favourite" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2508,7 +2508,7 @@ export def "datapoints-favourite update-data-points" [
 #
 # GET /datapoints/{id}/hits
 # operationId: DataPoints_GetHits
-export def "datapoints-hits get-data-points" [
+export def "data-points-get-hits" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2552,7 +2552,7 @@ export def "datapoints-hits get-data-points" [
 #
 # PUT /datapoints/{id}/notes
 # operationId: DataPoints_PatchNotes
-export def "datapoints-notes update-data-points" [
+export def "data-points-patch-notes" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2593,7 +2593,7 @@ export def "datapoints-notes update-data-points" [
 #
 # GET /domains
 # operationId: Domains_Get
-export def "domains list" [
+export def "domains-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2633,7 +2633,7 @@ export def "domains list" [
 #
 # POST /domains
 # operationId: Domains_Put
-export def "domains update" [
+export def "domains-put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2676,7 +2676,7 @@ export def "domains update" [
 #
 # GET /domains/count
 # operationId: Domains_Count
-export def "domains-count get" [
+export def "domains-count" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2714,7 +2714,7 @@ export def "domains-count get" [
 #
 # DELETE /domains/{id}
 # operationId: Domains_Delete
-export def "domains delete" [
+export def "domains-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2750,7 +2750,7 @@ export def "domains delete" [
 # Get a domain
 #
 # GET /domains/{id}
-export def "domains get" [
+export def "get-domains-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2787,7 +2787,7 @@ export def "domains get" [
 #
 # POST /domains/{id}
 # operationId: Domains_Update
-export def "domains update-by-id" [
+export def "domains-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2832,7 +2832,7 @@ export def "domains update-by-id" [
 #
 # GET /groups
 # operationId: Groups_Get
-export def "groups list" [
+export def "groups-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2877,7 +2877,7 @@ export def "groups list" [
 # POST /groups
 # operationId: Groups_Put
 # --tags item shape: {datapoints?: list<int>, groups?: list<int>, id?: int, name?: string}
-export def "groups update" [
+export def "groups-put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2925,7 +2925,7 @@ export def "groups update" [
 #
 # GET /groups/aggregated
 # operationId: Groups_GetStatisticsAggregatedSingle
-export def "groups-aggregated list" [
+export def "groups-get-statistics-aggregated-single" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2968,7 +2968,7 @@ export def "groups-aggregated list" [
 #
 # GET /groups/aggregated/list
 # operationId: Groups_GetStatisticsAllList
-export def "groups-aggregated-list get-statistics-list" [
+export def "groups-get-statistics-all-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3011,7 +3011,7 @@ export def "groups-aggregated-list get-statistics-list" [
 #
 # GET /groups/count
 # operationId: Groups_Count
-export def "groups-count get" [
+export def "groups-count" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3053,7 +3053,7 @@ export def "groups-count get" [
 #
 # DELETE /groups/{id}
 # operationId: Groups_Delete
-export def "groups delete" [
+export def "groups-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3089,7 +3089,7 @@ export def "groups delete" [
 # Get a group
 #
 # GET /groups/{id}
-export def "groups get" [
+export def "get-groups-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3127,7 +3127,7 @@ export def "groups get" [
 # POST /groups/{id}
 # operationId: Groups_Post
 # --tags item shape: {datapoints?: list<int>, groups?: list<int>, id?: int, name?: string}
-export def "groups create" [
+export def "groups-post" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3177,7 +3177,7 @@ export def "groups create" [
 #
 # GET /groups/{id}/aggregated
 # operationId: Groups_GetStatisticsSingle
-export def "groups-aggregated get-statistics-single" [
+export def "groups-get-statistics-single" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3219,7 +3219,7 @@ export def "groups-aggregated get-statistics-single" [
 #
 # GET /groups/{id}/aggregated/list
 # operationId: Groups_GetStatisticsList
-export def "groups-aggregated-list get-statistics" [
+export def "groups-get-statistics-list" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3261,7 +3261,7 @@ export def "groups-aggregated-list get-statistics" [
 #
 # GET /groups/{id}/aggregated/summary
 # operationId: Groups_GetDatapointsSummary
-export def "groups-aggregated-summary get-datapoints" [
+export def "groups-get-datapoints-summary" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3311,7 +3311,7 @@ export def "groups-aggregated-summary get-datapoints" [
 #
 # GET /groups/{id}/datapoints
 # operationId: Groups_GetDatapoints
-export def "groups-datapoints get" [
+export def "groups-get-datapoints" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3363,7 +3363,7 @@ export def "groups-datapoints get" [
 # --tags item shape: {datapoints?: list<int>, groups?: list<int>, id?: int, name?: string}
 # --typeTL shape: {appendQuery?: bool, browserDestinationItem?: record, destinationMode?: "Simple"|"RandomDestination"|"DestinationByLanguage"|"SpilloverDestination"|"DynamicUrl"|"BrowserDestination"|"DestinationByNation"|"UniqueDestination"|"SequentialDestination"|"WeightedDestination", domainId?: int, encodeUrl?: bool, expirationClicks?: int, expirationDate?: string, firstUrl?: string, goDomainId?: int, hideUrl?: bool, hideUrlTitle?: string, isABTest?: bool, password?: string, pauseAfterClicksExpiration?: bool, ... (14 more fields)}
 # --typeTP shape: {parameterNote?: string}
-export def "groups-datapoints update" [
+export def "groups-put-datapoint" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3433,7 +3433,7 @@ export def "groups-datapoints update" [
 #
 # GET /groups/{id}/datapoints/count
 # operationId: Groups_GetDatapointsCount
-export def "groups-datapoints-count get" [
+export def "groups-get-datapoints-count" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3478,7 +3478,7 @@ export def "groups-datapoints-count get" [
 #
 # PUT /groups/{id}/favourite
 # operationId: Groups_PatchFavourite
-export def "groups-favourite update" [
+export def "groups-patch-favourite" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3515,7 +3515,7 @@ export def "groups-favourite update" [
 #
 # GET /groups/{id}/hits
 # operationId: Groups_GetHits
-export def "groups-hits get" [
+export def "groups-get-hits" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3559,7 +3559,7 @@ export def "groups-hits get" [
 #
 # PUT /groups/{id}/notes
 # operationId: Groups_PatchNotes
-export def "groups-notes update" [
+export def "groups-patch-notes" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3600,7 +3600,7 @@ export def "groups-notes update" [
 #
 # GET /hits
 # operationId: Hits_GetHits
-export def "hits get" [
+export def "hits-get-hits" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3642,7 +3642,7 @@ export def "hits get" [
 #
 # GET /me
 # operationId: Me_GetMe
-export def "me get" [
+export def "me-get-me" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3677,7 +3677,7 @@ export def "me get" [
 #
 # GET /me/plan
 # operationId: Me_GetMePlan
-export def "me-plan get" [
+export def "me-get-me-plan" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3712,7 +3712,7 @@ export def "me-plan get" [
 #
 # GET /retargeting
 # operationId: Retargeting_Get
-export def "retargeting list" [
+export def "retargeting-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3750,7 +3750,7 @@ export def "retargeting list" [
 #
 # POST /retargeting
 # operationId: Retargeting_Put
-export def "retargeting update" [
+export def "retargeting-put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3791,7 +3791,7 @@ export def "retargeting update" [
 #
 # GET /retargeting/count
 # operationId: Retargeting_Count
-export def "retargeting-count get" [
+export def "retargeting-count" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3826,7 +3826,7 @@ export def "retargeting-count get" [
 #
 # DELETE /retargeting/{id}
 # operationId: Retargeting_Delete
-export def "retargeting delete" [
+export def "retargeting-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3862,7 +3862,7 @@ export def "retargeting delete" [
 # Get a retargeting script object
 #
 # GET /retargeting/{id}
-export def "retargeting get" [
+export def "get-retargeting-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3899,7 +3899,7 @@ export def "retargeting get" [
 #
 # POST /retargeting/{id}
 # operationId: Retargeting_Post
-export def "retargeting create" [
+export def "retargeting-post" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3942,7 +3942,7 @@ export def "retargeting create" [
 #
 # GET /retargeting/{id}/datapoints
 # operationId: Retargeting_GetDatapoints
-export def "retargeting-datapoints get" [
+export def "retargeting-get-datapoints" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3990,7 +3990,7 @@ export def "retargeting-datapoints get" [
 #
 # GET /retargeting/{id}/datapoints/count
 # operationId: Retargeting_GetDatapointsCount
-export def "retargeting-datapoints-count get" [
+export def "retargeting-get-datapoints-count" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4034,7 +4034,7 @@ export def "retargeting-datapoints-count get" [
 #
 # GET /tags
 # operationId: Tags_Get
-export def "tags list" [
+export def "tags-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4076,7 +4076,7 @@ export def "tags list" [
 #
 # POST /tags
 # operationId: Tags_Put
-export def "tags update" [
+export def "tags-put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4118,7 +4118,7 @@ export def "tags update" [
 #
 # GET /tags/count
 # operationId: Tags_Count
-export def "tags-count get" [
+export def "tags-count" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4158,7 +4158,7 @@ export def "tags-count get" [
 #
 # DELETE /tags/{tagId}
 # operationId: Tags_Delete
-export def "tags delete" [
+export def "tags-delete" [
   tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4194,7 +4194,7 @@ export def "tags delete" [
 # Retrieve a tag
 #
 # GET /tags/{tagId}
-export def "tags get" [
+export def "get-tags-tag-id" [
   tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4231,7 +4231,7 @@ export def "tags get" [
 #
 # DELETE /tags/{tagId}/datapoints
 # operationId: Tags_DeleteRelatedDatapoints
-export def "tags-datapoints delete-related" [
+export def "tags-delete-related-datapoints" [
   tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4268,7 +4268,7 @@ export def "tags-datapoints delete-related" [
 #
 # GET /tags/{tagId}/datapoints
 # operationId: Tags_GetDatapoints
-export def "tags-datapoints get" [
+export def "tags-get-datapoints" [
   tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4313,7 +4313,7 @@ export def "tags-datapoints get" [
 #
 # GET /tags/{tagId}/datapoints/count
 # operationId: Tags_GetDatapointsCount
-export def "tags-datapoints-count get" [
+export def "tags-get-datapoints-count" [
   tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4356,7 +4356,7 @@ export def "tags-datapoints-count get" [
 #
 # PUT /tags/{tagId}/datapoints/patch
 # operationId: Tags_PatchDataPoint
-export def "tags-datapoints-patch update-data-point" [
+export def "tags-patch-data-point" [
   tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4398,7 +4398,7 @@ export def "tags-datapoints-patch update-data-point" [
 #
 # DELETE /tags/{tagId}/groups
 # operationId: Tags_DeleteRelatedGroups
-export def "tags-groups delete-related" [
+export def "tags-delete-related-groups" [
   tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4435,7 +4435,7 @@ export def "tags-groups delete-related" [
 #
 # GET /tags/{tagId}/groups
 # operationId: Tags_GetGroups
-export def "tags-groups get" [
+export def "tags-get-groups" [
   tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4479,7 +4479,7 @@ export def "tags-groups get" [
 #
 # GET /tags/{tagId}/groups/count
 # operationId: Tags_GetGroupsCount
-export def "tags-groups-count get" [
+export def "tags-get-groups-count" [
   tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4521,7 +4521,7 @@ export def "tags-groups-count get" [
 #
 # PUT /tags/{tagId}/groups/patch
 # operationId: Tags_PatchGroup
-export def "tags-groups-patch update" [
+export def "tags-patch-group" [
   tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4563,7 +4563,7 @@ export def "tags-groups-patch update" [
 #
 # PUT /tags/{tagId}/name
 # operationId: Tags_PatchTagName
-export def "tags-name update" [
+export def "tags-patch-tag-name" [
   tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

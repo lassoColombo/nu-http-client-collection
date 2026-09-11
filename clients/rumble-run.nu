@@ -124,7 +124,7 @@ def type-completer [] { ["aws_access_secret" "miradore_api_key_v1"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account-agents get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-account-agents" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -148,7 +148,7 @@ export def commands []: nothing -> table {
 #
 # GET /account/agents
 # operationId: getAccountAgents
-export def "account-agents get" [
+export def "get-account-agents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,7 +184,7 @@ export def "account-agents get" [
 #
 # GET /account/credentials
 # operationId: getAccountCredentials
-export def "account-credentials list" [
+export def "get-account-credentials" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -220,7 +220,7 @@ export def "account-credentials list" [
 #
 # PUT /account/credentials
 # operationId: createAccountCredential
-export def "account-credentials create" [
+export def "create-account-credential" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -263,7 +263,7 @@ export def "account-credentials create" [
 #
 # DELETE /account/credentials/{credential_id}
 # operationId: removeAccountCredential
-export def "account-credentials delete" [
+export def "remove-account-credential" [
   credential_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -299,7 +299,7 @@ export def "account-credentials delete" [
 #
 # GET /account/credentials/{credential_id}
 # operationId: getAccountCredential
-export def "account-credentials get" [
+export def "get-account-credential" [
   credential_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -335,7 +335,7 @@ export def "account-credentials get" [
 #
 # GET /account/events.json
 # operationId: exportEventsJSON
-export def "account-events-json export" [
+export def "export-events-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -372,7 +372,7 @@ export def "account-events-json export" [
 #
 # GET /account/events.jsonl
 # operationId: exportEventsJSONL
-export def "account-events-jsonl export" [
+export def "export-events-jsonl" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -409,7 +409,7 @@ export def "account-events-jsonl export" [
 #
 # GET /account/groups
 # operationId: getAccountGroups
-export def "account-groups list" [
+export def "get-account-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -443,7 +443,7 @@ export def "account-groups list" [
 #
 # POST /account/groups
 # operationId: createAccountGroup
-export def "account-groups create" [
+export def "create-account-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -485,7 +485,7 @@ export def "account-groups create" [
 #
 # PUT /account/groups
 # operationId: updateAccountGroup
-export def "account-groups update" [
+export def "update-account-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -528,7 +528,7 @@ export def "account-groups update" [
 #
 # DELETE /account/groups/{group_id}
 # operationId: removeAccountGroup
-export def "account-groups delete" [
+export def "remove-account-group" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -564,7 +564,7 @@ export def "account-groups delete" [
 #
 # GET /account/groups/{group_id}
 # operationId: getAccountGroup
-export def "account-groups get" [
+export def "get-account-group" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -600,7 +600,7 @@ export def "account-groups get" [
 #
 # GET /account/keys
 # operationId: getAccountKeys
-export def "account-keys list" [
+export def "get-account-keys" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -634,7 +634,7 @@ export def "account-keys list" [
 #
 # PUT /account/keys
 # operationId: createAccountKey
-export def "account-keys create" [
+export def "create-account-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -673,7 +673,7 @@ export def "account-keys create" [
 #
 # DELETE /account/keys/{key_id}
 # operationId: removeAccountKey
-export def "account-keys delete" [
+export def "remove-account-key" [
   key_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -709,7 +709,7 @@ export def "account-keys delete" [
 #
 # GET /account/keys/{key_id}
 # operationId: getAccountKey
-export def "account-keys get" [
+export def "get-account-key" [
   key_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -745,7 +745,7 @@ export def "account-keys get" [
 #
 # PATCH /account/keys/{key_id}/rotate
 # operationId: rotateAccountKey
-export def "account-keys-rotate update" [
+export def "rotate-account-key" [
   key_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -781,7 +781,7 @@ export def "account-keys-rotate update" [
 #
 # GET /account/license
 # operationId: getAccountLicense
-export def "account-license get" [
+export def "get-account-license" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -815,7 +815,7 @@ export def "account-license get" [
 #
 # GET /account/orgs
 # operationId: getAccountOrganizations
-export def "account-orgs get-organizations" [
+export def "get-account-organizations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -851,7 +851,7 @@ export def "account-orgs get-organizations" [
 #
 # PUT /account/orgs
 # operationId: createAccountOrganization
-export def "account-orgs create-organization" [
+export def "create-account-organization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -896,7 +896,7 @@ export def "account-orgs create-organization" [
 #
 # DELETE /account/orgs/{org_id}
 # operationId: removeAccountOrganization
-export def "account-orgs delete-organization" [
+export def "remove-account-organization" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -932,7 +932,7 @@ export def "account-orgs delete-organization" [
 #
 # GET /account/orgs/{org_id}
 # operationId: getAccountOrganization
-export def "account-orgs get-organization" [
+export def "get-account-organization" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -968,7 +968,7 @@ export def "account-orgs get-organization" [
 #
 # PATCH /account/orgs/{org_id}
 # operationId: updateAccountOrganization
-export def "account-orgs update-organization" [
+export def "update-account-organization" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1015,7 +1015,7 @@ export def "account-orgs update-organization" [
 #
 # DELETE /account/orgs/{org_id}/exportToken
 # operationId: deleteAccountOrganizationExportToken
-export def "account-orgs-export-token delete-organization" [
+export def "delete-account-organization-export-token" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1051,7 +1051,7 @@ export def "account-orgs-export-token delete-organization" [
 #
 # PATCH /account/orgs/{org_id}/exportToken/rotate
 # operationId: rotateAccountOrganizationExportToken
-export def "account-orgs-export-token-rotate export-organization" [
+export def "rotate-account-organization-export-token" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1087,7 +1087,7 @@ export def "account-orgs-export-token-rotate export-organization" [
 #
 # GET /account/sites
 # operationId: getAccountSites
-export def "account-sites get" [
+export def "get-account-sites" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1123,7 +1123,7 @@ export def "account-sites get" [
 #
 # GET /account/sso/groups
 # operationId: getAccountGroupMappings
-export def "account-sso-groups get-mappings" [
+export def "get-account-group-mappings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1157,7 +1157,7 @@ export def "account-sso-groups get-mappings" [
 #
 # POST /account/sso/groups
 # operationId: createAccountGroupMapping
-export def "account-sso-groups create-mapping" [
+export def "create-account-group-mapping" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1203,7 +1203,7 @@ export def "account-sso-groups create-mapping" [
 #
 # PUT /account/sso/groups
 # operationId: updateAccountGroupMapping
-export def "account-sso-groups update-mapping" [
+export def "update-account-group-mapping" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1249,7 +1249,7 @@ export def "account-sso-groups update-mapping" [
 #
 # DELETE /account/sso/groups/{group_mapping_id}
 # operationId: removeAccountGroupMapping
-export def "account-sso-groups delete" [
+export def "remove-account-group-mapping" [
   group_mapping_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1285,7 +1285,7 @@ export def "account-sso-groups delete" [
 #
 # GET /account/sso/groups/{group_mapping_id}
 # operationId: getAccountGroupMapping
-export def "account-sso-groups get" [
+export def "get-account-group-mapping" [
   group_mapping_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1321,7 +1321,7 @@ export def "account-sso-groups get" [
 #
 # GET /account/tasks
 # operationId: getAccountTasks
-export def "account-tasks get" [
+export def "get-account-tasks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1357,7 +1357,7 @@ export def "account-tasks get" [
 #
 # GET /account/tasks/templates
 # operationId: getAccountScanTemplates
-export def "account-tasks-templates get-scan" [
+export def "get-account-scan-templates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1393,7 +1393,7 @@ export def "account-tasks-templates get-scan" [
 #
 # POST /account/tasks/templates
 # operationId: createAccountScanTemplate
-export def "account-tasks-templates create-scan" [
+export def "create-account-scan-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1435,7 +1435,7 @@ export def "account-tasks-templates create-scan" [
 #
 # PUT /account/tasks/templates
 # operationId: updateAccountScanTemplate
-export def "account-tasks-templates update-scan" [
+export def "update-account-scan-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1507,7 +1507,7 @@ export def "account-tasks-templates update-scan" [
 #
 # DELETE /account/tasks/templates/{scan_template_id}
 # operationId: removeAccountScanTemplate
-export def "account-tasks-templates delete" [
+export def "remove-account-scan-template" [
   scan_template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1543,7 +1543,7 @@ export def "account-tasks-templates delete" [
 #
 # GET /account/tasks/templates/{scan_template_id}
 # operationId: getAccountScanTemplate
-export def "account-tasks-templates get" [
+export def "get-account-scan-template" [
   scan_template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1579,7 +1579,7 @@ export def "account-tasks-templates get" [
 #
 # GET /account/users
 # operationId: getAccountUsers
-export def "account-users list" [
+export def "get-account-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1613,7 +1613,7 @@ export def "account-users list" [
 #
 # PUT /account/users
 # operationId: createAccountUser
-export def "account-users create" [
+export def "create-account-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1656,7 +1656,7 @@ export def "account-users create" [
 #
 # PUT /account/users/invite
 # operationId: createAccountUserInvite
-export def "account-users-invite create" [
+export def "create-account-user-invite" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1701,7 +1701,7 @@ export def "account-users-invite create" [
 #
 # DELETE /account/users/{user_id}
 # operationId: removeAccountUser
-export def "account-users delete" [
+export def "remove-account-user" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1737,7 +1737,7 @@ export def "account-users delete" [
 #
 # GET /account/users/{user_id}
 # operationId: getAccountUser
-export def "account-users get" [
+export def "get-account-user" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1773,7 +1773,7 @@ export def "account-users get" [
 #
 # PATCH /account/users/{user_id}
 # operationId: updateAccountUser
-export def "account-users update" [
+export def "update-account-user" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1818,7 +1818,7 @@ export def "account-users update" [
 #
 # PATCH /account/users/{user_id}/resetLockout
 # operationId: resetAccountUserLockout
-export def "account-users-reset-lockout reset" [
+export def "reset-account-user-lockout" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1854,7 +1854,7 @@ export def "account-users-reset-lockout reset" [
 #
 # PATCH /account/users/{user_id}/resetMFA
 # operationId: resetAccountUserMFA
-export def "account-users-reset-mfa reset" [
+export def "reset-account-user-mfa" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1890,7 +1890,7 @@ export def "account-users-reset-mfa reset" [
 #
 # PATCH /account/users/{user_id}/resetPassword
 # operationId: resetAccountUserPassword
-export def "account-users-reset-password reset" [
+export def "reset-account-user-password" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1926,7 +1926,7 @@ export def "account-users-reset-password reset" [
 #
 # GET /export/org/assets.cisco.csv
 # operationId: exportAssetsCiscoCSV
-export def "export-org-assets-cisco-csv export" [
+export def "export-assets-cisco-csv" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1962,7 +1962,7 @@ export def "export-org-assets-cisco-csv export" [
 #
 # GET /export/org/assets.csv
 # operationId: exportAssetsCSV
-export def "export-org-assets-csv export" [
+export def "export-assets-csv" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1998,7 +1998,7 @@ export def "export-org-assets-csv export" [
 #
 # GET /export/org/assets.json
 # operationId: exportAssetsJSON
-export def "export-org-assets-json export" [
+export def "export-assets-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2035,7 +2035,7 @@ export def "export-org-assets-json export" [
 #
 # GET /export/org/assets.jsonl
 # operationId: exportAssetsJSONL
-export def "export-org-assets-jsonl export" [
+export def "export-assets-jsonl" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2072,7 +2072,7 @@ export def "export-org-assets-jsonl export" [
 #
 # GET /export/org/assets.nmap.xml
 # operationId: exportAssetsNmapXML
-export def "export-org-assets-nmap-xml export" [
+export def "export-assets-nmap-xml" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2108,7 +2108,7 @@ export def "export-org-assets-nmap-xml export" [
 #
 # GET /export/org/assets.servicenow.csv
 # operationId: snowExportAssetsCSV
-export def "export-org-assets-servicenow-csv export-snow" [
+export def "snow-export-assets-csv" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2142,7 +2142,7 @@ export def "export-org-assets-servicenow-csv export-snow" [
 #
 # GET /export/org/assets.servicenow.json
 # operationId: snowExportAssetsJSON
-export def "export-org-assets-servicenow-json export-snow" [
+export def "snow-export-assets-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2176,7 +2176,7 @@ export def "export-org-assets-servicenow-json export-snow" [
 #
 # GET /export/org/assets/sync/created/assets.json
 # operationId: splunkAssetSyncCreatedJSON
-export def "export-org-assets-sync-created-assets-json sync-splunk" [
+export def "splunk-asset-sync-created-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2214,7 +2214,7 @@ export def "export-org-assets-sync-created-assets-json sync-splunk" [
 #
 # GET /export/org/assets/sync/updated/assets.json
 # operationId: splunkAssetSyncUpdatedJSON
-export def "export-org-assets-sync-updated-assets-json sync-splunk" [
+export def "splunk-asset-sync-updated-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2252,7 +2252,7 @@ export def "export-org-assets-sync-updated-assets-json sync-splunk" [
 #
 # GET /export/org/services.csv
 # operationId: exportServicesCSV
-export def "export-org-services-csv export" [
+export def "export-services-csv" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2288,7 +2288,7 @@ export def "export-org-services-csv export" [
 #
 # GET /export/org/services.json
 # operationId: exportServicesJSON
-export def "export-org-services-json export" [
+export def "export-services-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2325,7 +2325,7 @@ export def "export-org-services-json export" [
 #
 # GET /export/org/services.jsonl
 # operationId: exportServicesJSONL
-export def "export-org-services-jsonl export" [
+export def "export-services-jsonl" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2362,7 +2362,7 @@ export def "export-org-services-jsonl export" [
 #
 # GET /export/org/services.servicenow.csv
 # operationId: snowExportServicesCSV
-export def "export-org-services-servicenow-csv export-snow" [
+export def "snow-export-services-csv" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2396,7 +2396,7 @@ export def "export-org-services-servicenow-csv export-snow" [
 #
 # GET /export/org/sites.csv
 # operationId: exportSitesCSV
-export def "export-org-sites-csv export" [
+export def "export-sites-csv" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2430,7 +2430,7 @@ export def "export-org-sites-csv export" [
 #
 # GET /export/org/sites.json
 # operationId: exportSitesJSON
-export def "export-org-sites-json export" [
+export def "export-sites-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2467,7 +2467,7 @@ export def "export-org-sites-json export" [
 #
 # GET /export/org/sites.jsonl
 # operationId: exportSitesJSONL
-export def "export-org-sites-jsonl export" [
+export def "export-sites-jsonl" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2504,7 +2504,7 @@ export def "export-org-sites-jsonl export" [
 #
 # GET /export/org/wireless.csv
 # operationId: exportWirelessCSV
-export def "export-org-wireless-csv export" [
+export def "export-wireless-csv" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2540,7 +2540,7 @@ export def "export-org-wireless-csv export" [
 #
 # GET /export/org/wireless.json
 # operationId: exportWirelessJSON
-export def "export-org-wireless-json export" [
+export def "export-wireless-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2577,7 +2577,7 @@ export def "export-org-wireless-json export" [
 #
 # GET /export/org/wireless.jsonl
 # operationId: exportWirelessJSONL
-export def "export-org-wireless-jsonl export" [
+export def "export-wireless-jsonl" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2614,7 +2614,7 @@ export def "export-org-wireless-jsonl export" [
 #
 # GET /org
 # operationId: getOrganization
-export def "org get-organization" [
+export def "get-organization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2648,7 +2648,7 @@ export def "org get-organization" [
 #
 # PATCH /org
 # operationId: updateOrganization
-export def "org update-organization" [
+export def "update-organization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2693,7 +2693,7 @@ export def "org update-organization" [
 #
 # GET /org/agents
 # operationId: getAgents
-export def "org-agents list" [
+export def "get-agents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2727,7 +2727,7 @@ export def "org-agents list" [
 #
 # DELETE /org/agents/{agent_id}
 # operationId: removeAgent
-export def "org-agents delete" [
+export def "remove-agent" [
   agent_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2763,7 +2763,7 @@ export def "org-agents delete" [
 #
 # GET /org/agents/{agent_id}
 # operationId: getAgent
-export def "org-agents get" [
+export def "get-agent" [
   agent_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2799,7 +2799,7 @@ export def "org-agents get" [
 #
 # PATCH /org/agents/{agent_id}
 # operationId: updateAgentSite
-export def "org-agents update-site" [
+export def "update-agent-site" [
   agent_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2839,7 +2839,7 @@ export def "org-agents update-site" [
 #
 # POST /org/agents/{agent_id}/update
 # operationId: upgradeAgent
-export def "org-agents-update create-upgrade" [
+export def "upgrade-agent" [
   agent_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2875,7 +2875,7 @@ export def "org-agents-update create-upgrade" [
 #
 # GET /org/assets
 # operationId: getAssets
-export def "org-assets list" [
+export def "get-assets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2911,7 +2911,7 @@ export def "org-assets list" [
 #
 # POST /org/assets/bulk/clearTags
 # operationId: clearBulkAssetTags
-export def "org-assets-bulk-clear-tags create" [
+export def "clear-bulk-asset-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2949,7 +2949,7 @@ export def "org-assets-bulk-clear-tags create" [
 #
 # PATCH /org/assets/bulk/tags
 # operationId: updateBulkAssetTags
-export def "org-assets-bulk-tags update" [
+export def "update-bulk-asset-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2988,7 +2988,7 @@ export def "org-assets-bulk-tags update" [
 #
 # GET /org/assets/top.hw.csv
 # operationId: exportAssetTopHWCSV
-export def "org-assets-top-hw-csv export-hwcsv" [
+export def "export-asset-top-hwcsv" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3022,7 +3022,7 @@ export def "org-assets-top-hw-csv export-hwcsv" [
 #
 # GET /org/assets/top.os.csv
 # operationId: exportAssetTopOSCSV
-export def "org-assets-top-os-csv export-oscsv" [
+export def "export-asset-top-oscsv" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3056,7 +3056,7 @@ export def "org-assets-top-os-csv export-oscsv" [
 #
 # GET /org/assets/top.tags.csv
 # operationId: exportAssetTopTagsCSV
-export def "org-assets-top-tags-csv export" [
+export def "export-asset-top-tags-csv" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3090,7 +3090,7 @@ export def "org-assets-top-tags-csv export" [
 #
 # GET /org/assets/top.types.csv
 # operationId: exportAssetTopTypesCSV
-export def "org-assets-top-types-csv export" [
+export def "export-asset-top-types-csv" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3124,7 +3124,7 @@ export def "org-assets-top-types-csv export" [
 #
 # DELETE /org/assets/{asset_id}
 # operationId: removeAsset
-export def "org-assets delete" [
+export def "remove-asset" [
   asset_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3160,7 +3160,7 @@ export def "org-assets delete" [
 #
 # GET /org/assets/{asset_id}
 # operationId: getAsset
-export def "org-assets get" [
+export def "get-asset" [
   asset_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3196,7 +3196,7 @@ export def "org-assets get" [
 #
 # PATCH /org/assets/{asset_id}/comments
 # operationId: updateAssetComments
-export def "org-assets-comments update" [
+export def "update-asset-comments" [
   asset_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3236,7 +3236,7 @@ export def "org-assets-comments update" [
 #
 # PATCH /org/assets/{asset_id}/tags
 # operationId: updateAssetTags
-export def "org-assets-tags update" [
+export def "update-asset-tags" [
   asset_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3276,7 +3276,7 @@ export def "org-assets-tags update" [
 #
 # DELETE /org/key
 # operationId: removeKey
-export def "org-key delete" [
+export def "remove-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3310,7 +3310,7 @@ export def "org-key delete" [
 #
 # GET /org/key
 # operationId: getKey
-export def "org-key get" [
+export def "get-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3344,7 +3344,7 @@ export def "org-key get" [
 #
 # PATCH /org/key/rotate
 # operationId: rotateKey
-export def "org-key-rotate update" [
+export def "rotate-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3378,7 +3378,7 @@ export def "org-key-rotate update" [
 #
 # GET /org/services
 # operationId: getServices
-export def "org-services list" [
+export def "get-services" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3414,7 +3414,7 @@ export def "org-services list" [
 #
 # GET /org/services/subnet.stats.csv
 # operationId: exportSubnetUtilizationStatsCSV
-export def "org-services-subnet-stats-csv export-utilization" [
+export def "export-subnet-utilization-stats-csv" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3450,7 +3450,7 @@ export def "org-services-subnet-stats-csv export-utilization" [
 #
 # GET /org/services/top.products.csv
 # operationId: exportServicesTopProductsCSV
-export def "org-services-top-products-csv export" [
+export def "export-services-top-products-csv" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3484,7 +3484,7 @@ export def "org-services-top-products-csv export" [
 #
 # GET /org/services/top.protocols.csv
 # operationId: exportServicesTopProtocolsCSV
-export def "org-services-top-protocols-csv export" [
+export def "export-services-top-protocols-csv" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3518,7 +3518,7 @@ export def "org-services-top-protocols-csv export" [
 #
 # GET /org/services/top.tcp.csv
 # operationId: exportServicesTopTCPCSV
-export def "org-services-top-tcp-csv export-tcpcsv" [
+export def "export-services-top-tcpcsv" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3552,7 +3552,7 @@ export def "org-services-top-tcp-csv export-tcpcsv" [
 #
 # GET /org/services/top.udp.csv
 # operationId: exportServicesTopUDPCSV
-export def "org-services-top-udp-csv export-udpcsv" [
+export def "export-services-top-udpcsv" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3586,7 +3586,7 @@ export def "org-services-top-udp-csv export-udpcsv" [
 #
 # DELETE /org/services/{service_id}
 # operationId: removeService
-export def "org-services delete" [
+export def "remove-service" [
   service_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3622,7 +3622,7 @@ export def "org-services delete" [
 #
 # GET /org/services/{service_id}
 # operationId: getService
-export def "org-services get" [
+export def "get-service" [
   service_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3658,7 +3658,7 @@ export def "org-services get" [
 #
 # GET /org/sites
 # operationId: getSites
-export def "org-sites list" [
+export def "get-sites" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3692,7 +3692,7 @@ export def "org-sites list" [
 #
 # PUT /org/sites
 # operationId: createSite
-export def "org-sites create" [
+export def "create-site" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3733,7 +3733,7 @@ export def "org-sites create" [
 #
 # DELETE /org/sites/{site_id}
 # operationId: removeSite
-export def "org-sites delete" [
+export def "remove-site" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3769,7 +3769,7 @@ export def "org-sites delete" [
 #
 # GET /org/sites/{site_id}
 # operationId: getSite
-export def "org-sites get" [
+export def "get-site" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3805,7 +3805,7 @@ export def "org-sites get" [
 #
 # PATCH /org/sites/{site_id}
 # operationId: updateSite
-export def "org-sites update" [
+export def "update-site" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3848,7 +3848,7 @@ export def "org-sites update" [
 #
 # PUT /org/sites/{site_id}/import
 # operationId: importScanData
-export def "org-sites-import import-scan-data" [
+export def "import-scan-data" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3888,7 +3888,7 @@ export def "org-sites-import import-scan-data" [
 #
 # PUT /org/sites/{site_id}/import/nessus
 # operationId: importNessusScanData
-export def "org-sites-import-nessus import-scan-data" [
+export def "import-nessus-scan-data" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3928,7 +3928,7 @@ export def "org-sites-import-nessus import-scan-data" [
 #
 # PUT /org/sites/{site_id}/scan
 # operationId: createScan
-export def "org-sites-scan create" [
+export def "create-scan" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3968,7 +3968,7 @@ export def "org-sites-scan create" [
 #
 # GET /org/tasks
 # operationId: getTasks
-export def "org-tasks list" [
+export def "get-tasks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4005,7 +4005,7 @@ export def "org-tasks list" [
 #
 # GET /org/tasks/{task_id}
 # operationId: getTask
-export def "org-tasks get" [
+export def "get-task" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4041,7 +4041,7 @@ export def "org-tasks get" [
 #
 # PATCH /org/tasks/{task_id}
 # operationId: updateTask
-export def "org-tasks update" [
+export def "update-task" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4106,7 +4106,7 @@ export def "org-tasks update" [
 #
 # GET /org/tasks/{task_id}/changes
 # operationId: getTaskChangeReport
-export def "org-tasks-changes get-report" [
+export def "get-task-change-report" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4142,7 +4142,7 @@ export def "org-tasks-changes get-report" [
 #
 # GET /org/tasks/{task_id}/data
 # operationId: getTaskScanData
-export def "org-tasks-data get-scan" [
+export def "get-task-scan-data" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4178,7 +4178,7 @@ export def "org-tasks-data get-scan" [
 #
 # POST /org/tasks/{task_id}/hide
 # operationId: hideTask
-export def "org-tasks-hide create" [
+export def "hide-task" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4214,7 +4214,7 @@ export def "org-tasks-hide create" [
 #
 # GET /org/tasks/{task_id}/log
 # operationId: getTaskLog
-export def "org-tasks-log get" [
+export def "get-task-log" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4250,7 +4250,7 @@ export def "org-tasks-log get" [
 #
 # POST /org/tasks/{task_id}/stop
 # operationId: stopTask
-export def "org-tasks-stop stop" [
+export def "stop-task" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4286,7 +4286,7 @@ export def "org-tasks-stop stop" [
 #
 # GET /org/wireless
 # operationId: getWirelessLANs
-export def "org-wireless get-la-ns" [
+export def "get-wireless-la-ns" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4322,7 +4322,7 @@ export def "org-wireless get-la-ns" [
 #
 # DELETE /org/wireless/{wireless_id}
 # operationId: removeWirelessLAN
-export def "org-wireless delete-lan" [
+export def "remove-wireless-lan" [
   wireless_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4358,7 +4358,7 @@ export def "org-wireless delete-lan" [
 #
 # GET /org/wireless/{wireless_id}
 # operationId: getWirelessLAN
-export def "org-wireless get-lan" [
+export def "get-wireless-lan" [
   wireless_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4394,7 +4394,7 @@ export def "org-wireless get-lan" [
 #
 # GET /releases/agent/version
 # operationId: getLatestAgentVersion
-export def "releases-agent-version get-latest" [
+export def "get-latest-agent-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4428,7 +4428,7 @@ export def "releases-agent-version get-latest" [
 #
 # GET /releases/platform/version
 # operationId: getLatestPlatformVersion
-export def "releases-platform-version get-latest" [
+export def "get-latest-platform-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4462,7 +4462,7 @@ export def "releases-platform-version get-latest" [
 #
 # GET /releases/scanner/version
 # operationId: getLatestScannerVersion
-export def "releases-scanner-version get-latest" [
+export def "get-latest-scanner-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -111,7 +111,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta1-catalogs-search list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cloudprivatecatalog-organizations-catalogs-search" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -135,7 +135,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1beta1/{resource}/catalogs:search
 # operationId: cloudprivatecatalog.organizations.catalogs.search
-export def "v1beta1-catalogs-search list" [
+export def "cloudprivatecatalog-organizations-catalogs-search" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -186,7 +186,7 @@ export def "v1beta1-catalogs-search list" [
 #
 # GET /v1beta1/{resource}/products:search
 # operationId: cloudprivatecatalog.organizations.products.search
-export def "v1beta1-products-search list" [
+export def "cloudprivatecatalog-organizations-products-search" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -237,7 +237,7 @@ export def "v1beta1-products-search list" [
 #
 # GET /v1beta1/{resource}/versions:search
 # operationId: cloudprivatecatalog.organizations.versions.search
-export def "v1beta1-versions-search list" [
+export def "cloudprivatecatalog-organizations-versions-search" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

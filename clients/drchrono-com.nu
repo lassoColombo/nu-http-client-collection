@@ -122,7 +122,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "allergies list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "allergies-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/allergies
 # operationId: allergies_list
-export def "allergies list" [
+export def "allergies-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -185,7 +185,7 @@ export def "allergies list" [
 #
 # POST /api/allergies
 # operationId: allergies_create
-export def "allergies create" [
+export def "allergies-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -222,7 +222,7 @@ export def "allergies create" [
 #
 # GET /api/allergies/{id}
 # operationId: allergies_read
-export def "allergies get" [
+export def "allergies-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -261,7 +261,7 @@ export def "allergies get" [
 #
 # PATCH /api/allergies/{id}
 # operationId: allergies_partial_update
-export def "allergies update-by-id" [
+export def "allergies-partial-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -300,7 +300,7 @@ export def "allergies update-by-id" [
 #
 # PUT /api/allergies/{id}
 # operationId: allergies_update
-export def "allergies update-by-id-1" [
+export def "allergies-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -339,7 +339,7 @@ export def "allergies update-by-id-1" [
 #
 # GET /api/amendments
 # operationId: amendments_list
-export def "amendments list" [
+export def "amendments-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -379,7 +379,7 @@ export def "amendments list" [
 #
 # POST /api/amendments
 # operationId: amendments_create
-export def "amendments create" [
+export def "amendments-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -417,7 +417,7 @@ export def "amendments create" [
 #
 # DELETE /api/amendments/{id}
 # operationId: amendments_delete
-export def "amendments delete" [
+export def "amendments-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -457,7 +457,7 @@ export def "amendments delete" [
 #
 # GET /api/amendments/{id}
 # operationId: amendments_read
-export def "amendments get" [
+export def "amendments-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -497,7 +497,7 @@ export def "amendments get" [
 #
 # PATCH /api/amendments/{id}
 # operationId: amendments_partial_update
-export def "amendments update-by-id" [
+export def "amendments-partial-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -537,7 +537,7 @@ export def "amendments update-by-id" [
 #
 # PUT /api/amendments/{id}
 # operationId: amendments_update
-export def "amendments update-by-id-1" [
+export def "amendments-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -577,7 +577,7 @@ export def "amendments update-by-id-1" [
 #
 # GET /api/appointment_profiles
 # operationId: appointment_profiles_list
-export def "appointment-profiles list" [
+export def "appointment-profiles-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -615,7 +615,7 @@ export def "appointment-profiles list" [
 #
 # POST /api/appointment_profiles
 # operationId: appointment_profiles_create
-export def "appointment-profiles create" [
+export def "appointment-profiles-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -651,7 +651,7 @@ export def "appointment-profiles create" [
 #
 # DELETE /api/appointment_profiles/{id}
 # operationId: appointment_profiles_delete
-export def "appointment-profiles delete" [
+export def "appointment-profiles-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -689,7 +689,7 @@ export def "appointment-profiles delete" [
 #
 # GET /api/appointment_profiles/{id}
 # operationId: appointment_profiles_read
-export def "appointment-profiles get" [
+export def "appointment-profiles-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -727,7 +727,7 @@ export def "appointment-profiles get" [
 #
 # PATCH /api/appointment_profiles/{id}
 # operationId: appointment_profiles_partial_update
-export def "appointment-profiles update-by-id" [
+export def "appointment-profiles-partial-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -765,7 +765,7 @@ export def "appointment-profiles update-by-id" [
 #
 # PUT /api/appointment_profiles/{id}
 # operationId: appointment_profiles_update
-export def "appointment-profiles update-by-id-1" [
+export def "appointment-profiles-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -803,7 +803,7 @@ export def "appointment-profiles update-by-id-1" [
 #
 # GET /api/appointment_templates
 # operationId: appointment_templates_list
-export def "appointment-templates list" [
+export def "appointment-templates-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -843,7 +843,7 @@ export def "appointment-templates list" [
 #
 # POST /api/appointment_templates
 # operationId: appointment_templates_create
-export def "appointment-templates create" [
+export def "appointment-templates-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -881,7 +881,7 @@ export def "appointment-templates create" [
 #
 # DELETE /api/appointment_templates/{id}
 # operationId: appointment_templates_delete
-export def "appointment-templates delete" [
+export def "appointment-templates-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -921,7 +921,7 @@ export def "appointment-templates delete" [
 #
 # GET /api/appointment_templates/{id}
 # operationId: appointment_templates_read
-export def "appointment-templates get" [
+export def "appointment-templates-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -961,7 +961,7 @@ export def "appointment-templates get" [
 #
 # PATCH /api/appointment_templates/{id}
 # operationId: appointment_templates_partial_update
-export def "appointment-templates update-by-id" [
+export def "appointment-templates-partial-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1001,7 +1001,7 @@ export def "appointment-templates update-by-id" [
 #
 # PUT /api/appointment_templates/{id}
 # operationId: appointment_templates_update
-export def "appointment-templates update-by-id-1" [
+export def "appointment-templates-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1041,7 +1041,7 @@ export def "appointment-templates update-by-id-1" [
 #
 # GET /api/appointments
 # operationId: appointments_list
-export def "appointments list" [
+export def "appointments-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1085,7 +1085,7 @@ export def "appointments list" [
 #
 # POST /api/appointments
 # operationId: appointments_create
-export def "appointments create" [
+export def "appointments-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1127,7 +1127,7 @@ export def "appointments create" [
 #
 # DELETE /api/appointments/{id}
 # operationId: appointments_delete
-export def "appointments delete" [
+export def "appointments-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1171,7 +1171,7 @@ export def "appointments delete" [
 #
 # GET /api/appointments/{id}
 # operationId: appointments_read
-export def "appointments get" [
+export def "appointments-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1215,7 +1215,7 @@ export def "appointments get" [
 #
 # PATCH /api/appointments/{id}
 # operationId: appointments_partial_update
-export def "appointments update-by-id" [
+export def "appointments-partial-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1259,7 +1259,7 @@ export def "appointments update-by-id" [
 #
 # PUT /api/appointments/{id}
 # operationId: appointments_update
-export def "appointments update-by-id-1" [
+export def "appointments-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1303,7 +1303,7 @@ export def "appointments update-by-id-1" [
 #
 # GET /api/billing_profiles
 # operationId: billing_profiles_list
-export def "billing-profiles list" [
+export def "billing-profiles-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1341,7 +1341,7 @@ export def "billing-profiles list" [
 #
 # GET /api/billing_profiles/{id}
 # operationId: billing_profiles_read
-export def "billing-profiles get" [
+export def "billing-profiles-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1379,7 +1379,7 @@ export def "billing-profiles get" [
 #
 # GET /api/care_plans
 # operationId: care_plans_list
-export def "care-plans list" [
+export def "care-plans-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1419,7 +1419,7 @@ export def "care-plans list" [
 #
 # GET /api/care_plans/{id}
 # operationId: care_plans_read
-export def "care-plans get" [
+export def "care-plans-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1458,7 +1458,7 @@ export def "care-plans get" [
 # GET /api/care_team_members
 #
 # operationId: care_team_members_list
-export def "care-team-members list" [
+export def "care-team-members-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1497,7 +1497,7 @@ export def "care-team-members list" [
 # GET /api/care_team_members/{id}
 #
 # operationId: care_team_members_read
-export def "care-team-members get" [
+export def "care-team-members-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1537,7 +1537,7 @@ export def "care-team-members get" [
 #
 # GET /api/claim_billing_notes
 # operationId: claim_billing_notes_list
-export def "claim-billing-notes list" [
+export def "claim-billing-notes-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1576,7 +1576,7 @@ export def "claim-billing-notes list" [
 #
 # POST /api/claim_billing_notes
 # operationId: claim_billing_notes_create
-export def "claim-billing-notes create" [
+export def "claim-billing-notes-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1613,7 +1613,7 @@ export def "claim-billing-notes create" [
 #
 # GET /api/claim_billing_notes/{id}
 # operationId: claim_billing_notes_read
-export def "claim-billing-notes get" [
+export def "claim-billing-notes-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1652,7 +1652,7 @@ export def "claim-billing-notes get" [
 #
 # GET /api/clinical_note_field_types
 # operationId: clinical_note_field_types_list
-export def "clinical-note-field-types list" [
+export def "clinical-note-field-types-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1691,7 +1691,7 @@ export def "clinical-note-field-types list" [
 #
 # GET /api/clinical_note_field_types/{id}
 # operationId: clinical_note_field_types_read
-export def "clinical-note-field-types get" [
+export def "clinical-note-field-types-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1730,7 +1730,7 @@ export def "clinical-note-field-types get" [
 #
 # GET /api/clinical_note_field_values
 # operationId: clinical_note_field_values_list
-export def "clinical-note-field-values list" [
+export def "clinical-note-field-values-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1772,7 +1772,7 @@ export def "clinical-note-field-values list" [
 #
 # POST /api/clinical_note_field_values
 # operationId: clinical_note_field_values_create
-export def "clinical-note-field-values create" [
+export def "clinical-note-field-values-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1812,7 +1812,7 @@ export def "clinical-note-field-values create" [
 #
 # GET /api/clinical_note_field_values/{id}
 # operationId: clinical_note_field_values_read
-export def "clinical-note-field-values get" [
+export def "clinical-note-field-values-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1854,7 +1854,7 @@ export def "clinical-note-field-values get" [
 #
 # PATCH /api/clinical_note_field_values/{id}
 # operationId: clinical_note_field_values_partial_update
-export def "clinical-note-field-values update-by-id" [
+export def "clinical-note-field-values-partial-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1896,7 +1896,7 @@ export def "clinical-note-field-values update-by-id" [
 #
 # PUT /api/clinical_note_field_values/{id}
 # operationId: clinical_note_field_values_update
-export def "clinical-note-field-values update-by-id-1" [
+export def "clinical-note-field-values-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1938,7 +1938,7 @@ export def "clinical-note-field-values update-by-id-1" [
 #
 # GET /api/clinical_note_templates
 # operationId: clinical_note_templates_list
-export def "clinical-note-templates list" [
+export def "clinical-note-templates-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1976,7 +1976,7 @@ export def "clinical-note-templates list" [
 #
 # GET /api/clinical_note_templates/{id}
 # operationId: clinical_note_templates_read
-export def "clinical-note-templates get" [
+export def "clinical-note-templates-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2013,7 +2013,7 @@ export def "clinical-note-templates get" [
 # GET /api/clinical_notes
 #
 # operationId: clinical_notes_list
-export def "clinical-notes list" [
+export def "clinical-notes-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2055,7 +2055,7 @@ export def "clinical-notes list" [
 # GET /api/clinical_notes/{id}
 #
 # operationId: clinical_notes_read
-export def "clinical-notes get" [
+export def "clinical-notes-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2098,7 +2098,7 @@ export def "clinical-notes get" [
 #
 # GET /api/comm_logs
 # operationId: comm_logs_list
-export def "comm-logs list" [
+export def "comm-logs-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2138,7 +2138,7 @@ export def "comm-logs list" [
 #
 # POST /api/comm_logs
 # operationId: comm_logs_create
-export def "comm-logs create" [
+export def "comm-logs-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2176,7 +2176,7 @@ export def "comm-logs create" [
 #
 # GET /api/comm_logs/{id}
 # operationId: comm_logs_read
-export def "comm-logs get" [
+export def "comm-logs-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2216,7 +2216,7 @@ export def "comm-logs get" [
 #
 # PATCH /api/comm_logs/{id}
 # operationId: comm_logs_partial_update
-export def "comm-logs update-by-id" [
+export def "comm-logs-partial-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2256,7 +2256,7 @@ export def "comm-logs update-by-id" [
 #
 # PUT /api/comm_logs/{id}
 # operationId: comm_logs_update
-export def "comm-logs update-by-id-1" [
+export def "comm-logs-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2296,7 +2296,7 @@ export def "comm-logs update-by-id-1" [
 #
 # GET /api/consent_forms
 # operationId: consent_forms_list
-export def "consent-forms list" [
+export def "consent-forms-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2334,7 +2334,7 @@ export def "consent-forms list" [
 #
 # POST /api/consent_forms
 # operationId: consent_forms_create
-export def "consent-forms create" [
+export def "consent-forms-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2370,7 +2370,7 @@ export def "consent-forms create" [
 #
 # GET /api/consent_forms/{id}
 # operationId: consent_forms_read
-export def "consent-forms get" [
+export def "consent-forms-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2408,7 +2408,7 @@ export def "consent-forms get" [
 #
 # PATCH /api/consent_forms/{id}
 # operationId: consent_forms_partial_update
-export def "consent-forms update-by-id" [
+export def "consent-forms-partial-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2446,7 +2446,7 @@ export def "consent-forms update-by-id" [
 #
 # PUT /api/consent_forms/{id}
 # operationId: consent_forms_update
-export def "consent-forms update-by-id-1" [
+export def "consent-forms-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2484,7 +2484,7 @@ export def "consent-forms update-by-id-1" [
 #
 # POST /api/consent_forms/{id}/apply_to_appointment
 # operationId: consent_forms_apply_to_appointment
-export def "consent-forms-apply-to-appointment create" [
+export def "consent-forms-apply-to-appointment" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2522,7 +2522,7 @@ export def "consent-forms-apply-to-appointment create" [
 #
 # POST /api/consent_forms/{id}/unapply_from_appointment
 # operationId: consent_forms_unapply_from_appointment
-export def "consent-forms-unapply-from-appointment create" [
+export def "consent-forms-unapply-from-appointment" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2560,7 +2560,7 @@ export def "consent-forms-unapply-from-appointment create" [
 #
 # GET /api/custom_appointment_fields
 # operationId: custom_appointment_fields_list
-export def "custom-appointment-fields list" [
+export def "custom-appointment-fields-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2598,7 +2598,7 @@ export def "custom-appointment-fields list" [
 #
 # POST /api/custom_appointment_fields
 # operationId: custom_appointment_fields_create
-export def "custom-appointment-fields create" [
+export def "custom-appointment-fields-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2634,7 +2634,7 @@ export def "custom-appointment-fields create" [
 #
 # GET /api/custom_appointment_fields/{id}
 # operationId: custom_appointment_fields_read
-export def "custom-appointment-fields get" [
+export def "custom-appointment-fields-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2672,7 +2672,7 @@ export def "custom-appointment-fields get" [
 #
 # PATCH /api/custom_appointment_fields/{id}
 # operationId: custom_appointment_fields_partial_update
-export def "custom-appointment-fields update-by-id" [
+export def "custom-appointment-fields-partial-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2710,7 +2710,7 @@ export def "custom-appointment-fields update-by-id" [
 #
 # PUT /api/custom_appointment_fields/{id}
 # operationId: custom_appointment_fields_update
-export def "custom-appointment-fields update-by-id-1" [
+export def "custom-appointment-fields-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2748,7 +2748,7 @@ export def "custom-appointment-fields update-by-id-1" [
 #
 # GET /api/custom_demographics
 # operationId: custom_demographics_list
-export def "custom-demographics list" [
+export def "custom-demographics-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2786,7 +2786,7 @@ export def "custom-demographics list" [
 #
 # POST /api/custom_demographics
 # operationId: custom_demographics_create
-export def "custom-demographics create" [
+export def "custom-demographics-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2822,7 +2822,7 @@ export def "custom-demographics create" [
 #
 # GET /api/custom_demographics/{id}
 # operationId: custom_demographics_read
-export def "custom-demographics get" [
+export def "custom-demographics-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2860,7 +2860,7 @@ export def "custom-demographics get" [
 #
 # PATCH /api/custom_demographics/{id}
 # operationId: custom_demographics_partial_update
-export def "custom-demographics update-by-id" [
+export def "custom-demographics-partial-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2898,7 +2898,7 @@ export def "custom-demographics update-by-id" [
 #
 # PUT /api/custom_demographics/{id}
 # operationId: custom_demographics_update
-export def "custom-demographics update-by-id-1" [
+export def "custom-demographics-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2936,7 +2936,7 @@ export def "custom-demographics update-by-id-1" [
 #
 # GET /api/custom_insurance_plan_names
 # operationId: custom_insurance_plan_names_list
-export def "custom-insurance-plan-names list" [
+export def "custom-insurance-plan-names-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2977,7 +2977,7 @@ export def "custom-insurance-plan-names list" [
 #
 # GET /api/custom_insurance_plan_names/{id}
 # operationId: custom_insurance_plan_names_read
-export def "custom-insurance-plan-names get" [
+export def "custom-insurance-plan-names-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3018,7 +3018,7 @@ export def "custom-insurance-plan-names get" [
 #
 # GET /api/custom_vitals
 # operationId: custom_vitals_list
-export def "custom-vitals list" [
+export def "custom-vitals-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3056,7 +3056,7 @@ export def "custom-vitals list" [
 #
 # GET /api/custom_vitals/{id}
 # operationId: custom_vitals_read
-export def "custom-vitals get" [
+export def "custom-vitals-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3094,7 +3094,7 @@ export def "custom-vitals get" [
 #
 # GET /api/doctors
 # operationId: doctors_list
-export def "doctors list" [
+export def "doctors-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3132,7 +3132,7 @@ export def "doctors list" [
 #
 # GET /api/doctors/{id}
 # operationId: doctors_read
-export def "doctors get" [
+export def "doctors-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3170,7 +3170,7 @@ export def "doctors get" [
 #
 # GET /api/documents
 # operationId: documents_list
-export def "documents list" [
+export def "documents-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3210,7 +3210,7 @@ export def "documents list" [
 #
 # POST /api/documents
 # operationId: documents_create
-export def "documents create" [
+export def "documents-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3248,7 +3248,7 @@ export def "documents create" [
 #
 # DELETE /api/documents/{id}
 # operationId: documents_delete
-export def "documents delete" [
+export def "documents-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3288,7 +3288,7 @@ export def "documents delete" [
 #
 # GET /api/documents/{id}
 # operationId: documents_read
-export def "documents get" [
+export def "documents-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3328,7 +3328,7 @@ export def "documents get" [
 #
 # PATCH /api/documents/{id}
 # operationId: documents_partial_update
-export def "documents update-by-id" [
+export def "documents-partial-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3368,7 +3368,7 @@ export def "documents update-by-id" [
 #
 # PUT /api/documents/{id}
 # operationId: documents_update
-export def "documents update-by-id-1" [
+export def "documents-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3408,7 +3408,7 @@ export def "documents update-by-id-1" [
 #
 # GET /api/eligibility_checks
 # operationId: eligibility_checks_list
-export def "eligibility-checks list" [
+export def "eligibility-checks-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3452,7 +3452,7 @@ export def "eligibility-checks list" [
 #
 # GET /api/eligibility_checks/{id}
 # operationId: eligibility_checks_read
-export def "eligibility-checks get" [
+export def "eligibility-checks-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3496,7 +3496,7 @@ export def "eligibility-checks get" [
 #
 # GET /api/eobs
 # operationId: eobs_list
-export def "eobs list" [
+export def "eobs-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3534,7 +3534,7 @@ export def "eobs list" [
 #
 # POST /api/eobs
 # operationId: eobs_create
-export def "eobs create" [
+export def "eobs-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3570,7 +3570,7 @@ export def "eobs create" [
 #
 # GET /api/eobs/{id}
 # operationId: eobs_read
-export def "eobs get" [
+export def "eobs-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3607,7 +3607,7 @@ export def "eobs get" [
 # GET /api/fee_schedules
 #
 # operationId: fee_schedules_list
-export def "fee-schedules list" [
+export def "fee-schedules-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3648,7 +3648,7 @@ export def "fee-schedules list" [
 # GET /api/fee_schedules/{id}
 #
 # operationId: fee_schedules_read
-export def "fee-schedules get" [
+export def "fee-schedules-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3690,7 +3690,7 @@ export def "fee-schedules get" [
 #
 # GET /api/implantable_devices
 # operationId: implantable_devices_list
-export def "implantable-devices list" [
+export def "implantable-devices-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3731,7 +3731,7 @@ export def "implantable-devices list" [
 #
 # GET /api/implantable_devices/{id}
 # operationId: implantable_devices_read
-export def "implantable-devices get" [
+export def "implantable-devices-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3771,7 +3771,7 @@ export def "implantable-devices get" [
 # GET /api/insurances
 #
 # operationId: insurances_list
-export def "insurances list" [
+export def "insurances-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3809,7 +3809,7 @@ export def "insurances list" [
 # GET /api/insurances/{id}
 #
 # operationId: insurances_read
-export def "insurances get" [
+export def "insurances-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3848,7 +3848,7 @@ export def "insurances get" [
 #
 # GET /api/inventory_categories
 # operationId: inventory_categories_list
-export def "inventory-categories list" [
+export def "inventory-categories-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3887,7 +3887,7 @@ export def "inventory-categories list" [
 #
 # GET /api/inventory_categories/{id}
 # operationId: inventory_categories_read
-export def "inventory-categories get" [
+export def "inventory-categories-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3926,7 +3926,7 @@ export def "inventory-categories get" [
 #
 # GET /api/inventory_vaccines
 # operationId: inventory_vaccines_list
-export def "inventory-vaccines list" [
+export def "inventory-vaccines-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3967,7 +3967,7 @@ export def "inventory-vaccines list" [
 #
 # POST /api/inventory_vaccines
 # operationId: inventory_vaccines_create
-export def "inventory-vaccines create" [
+export def "inventory-vaccines-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4006,7 +4006,7 @@ export def "inventory-vaccines create" [
 #
 # GET /api/inventory_vaccines/{id}
 # operationId: inventory_vaccines_read
-export def "inventory-vaccines get" [
+export def "inventory-vaccines-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4047,7 +4047,7 @@ export def "inventory-vaccines get" [
 #
 # GET /api/lab_documents
 # operationId: lab_documents_list
-export def "lab-documents list" [
+export def "lab-documents-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4086,7 +4086,7 @@ export def "lab-documents list" [
 #
 # POST /api/lab_documents
 # operationId: lab_documents_create
-export def "lab-documents create" [
+export def "lab-documents-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4123,7 +4123,7 @@ export def "lab-documents create" [
 #
 # DELETE /api/lab_documents/{id}
 # operationId: lab_documents_delete
-export def "lab-documents delete" [
+export def "lab-documents-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4162,7 +4162,7 @@ export def "lab-documents delete" [
 #
 # GET /api/lab_documents/{id}
 # operationId: lab_documents_read
-export def "lab-documents get" [
+export def "lab-documents-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4201,7 +4201,7 @@ export def "lab-documents get" [
 #
 # PATCH /api/lab_documents/{id}
 # operationId: lab_documents_partial_update
-export def "lab-documents update-by-id" [
+export def "lab-documents-partial-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4240,7 +4240,7 @@ export def "lab-documents update-by-id" [
 #
 # PUT /api/lab_documents/{id}
 # operationId: lab_documents_update
-export def "lab-documents update-by-id-1" [
+export def "lab-documents-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4279,7 +4279,7 @@ export def "lab-documents update-by-id-1" [
 #
 # GET /api/lab_orders
 # operationId: lab_orders_list
-export def "lab-orders list" [
+export def "lab-orders-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4318,7 +4318,7 @@ export def "lab-orders list" [
 #
 # POST /api/lab_orders
 # operationId: lab_orders_create
-export def "lab-orders create" [
+export def "lab-orders-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4355,7 +4355,7 @@ export def "lab-orders create" [
 #
 # DELETE /api/lab_orders/{id}
 # operationId: lab_orders_delete
-export def "lab-orders delete" [
+export def "lab-orders-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4394,7 +4394,7 @@ export def "lab-orders delete" [
 #
 # GET /api/lab_orders/{id}
 # operationId: lab_orders_read
-export def "lab-orders get" [
+export def "lab-orders-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4433,7 +4433,7 @@ export def "lab-orders get" [
 #
 # PATCH /api/lab_orders/{id}
 # operationId: lab_orders_partial_update
-export def "lab-orders update-by-id" [
+export def "lab-orders-partial-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4472,7 +4472,7 @@ export def "lab-orders update-by-id" [
 #
 # PUT /api/lab_orders/{id}
 # operationId: lab_orders_update
-export def "lab-orders update-by-id-1" [
+export def "lab-orders-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4510,7 +4510,7 @@ export def "lab-orders update-by-id-1" [
 # GET /api/lab_orders_summary
 #
 # operationId: lab_orders_summary_list
-export def "lab-orders-summary list" [
+export def "lab-orders-summary-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4549,7 +4549,7 @@ export def "lab-orders-summary list" [
 # GET /api/lab_orders_summary/{id}
 #
 # operationId: lab_orders_summary_read
-export def "lab-orders-summary get" [
+export def "lab-orders-summary-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4589,7 +4589,7 @@ export def "lab-orders-summary get" [
 #
 # GET /api/lab_results
 # operationId: lab_results_list
-export def "lab-results list" [
+export def "lab-results-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4628,7 +4628,7 @@ export def "lab-results list" [
 #
 # POST /api/lab_results
 # operationId: lab_results_create
-export def "lab-results create" [
+export def "lab-results-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4665,7 +4665,7 @@ export def "lab-results create" [
 #
 # DELETE /api/lab_results/{id}
 # operationId: lab_results_delete
-export def "lab-results delete" [
+export def "lab-results-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4704,7 +4704,7 @@ export def "lab-results delete" [
 #
 # GET /api/lab_results/{id}
 # operationId: lab_results_read
-export def "lab-results get" [
+export def "lab-results-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4743,7 +4743,7 @@ export def "lab-results get" [
 #
 # PATCH /api/lab_results/{id}
 # operationId: lab_results_partial_update
-export def "lab-results update-by-id" [
+export def "lab-results-partial-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4782,7 +4782,7 @@ export def "lab-results update-by-id" [
 #
 # PUT /api/lab_results/{id}
 # operationId: lab_results_update
-export def "lab-results update-by-id-1" [
+export def "lab-results-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4821,7 +4821,7 @@ export def "lab-results update-by-id-1" [
 #
 # GET /api/lab_tests
 # operationId: lab_tests_list
-export def "lab-tests list" [
+export def "lab-tests-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4860,7 +4860,7 @@ export def "lab-tests list" [
 #
 # POST /api/lab_tests
 # operationId: lab_tests_create
-export def "lab-tests create" [
+export def "lab-tests-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4897,7 +4897,7 @@ export def "lab-tests create" [
 #
 # DELETE /api/lab_tests/{id}
 # operationId: lab_tests_delete
-export def "lab-tests delete" [
+export def "lab-tests-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4936,7 +4936,7 @@ export def "lab-tests delete" [
 #
 # GET /api/lab_tests/{id}
 # operationId: lab_tests_read
-export def "lab-tests get" [
+export def "lab-tests-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4975,7 +4975,7 @@ export def "lab-tests get" [
 #
 # PATCH /api/lab_tests/{id}
 # operationId: lab_tests_partial_update
-export def "lab-tests update-by-id" [
+export def "lab-tests-partial-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5014,7 +5014,7 @@ export def "lab-tests update-by-id" [
 #
 # PUT /api/lab_tests/{id}
 # operationId: lab_tests_update
-export def "lab-tests update-by-id-1" [
+export def "lab-tests-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5053,7 +5053,7 @@ export def "lab-tests update-by-id-1" [
 #
 # GET /api/line_items
 # operationId: line_items_list
-export def "line-items list" [
+export def "line-items-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5097,7 +5097,7 @@ export def "line-items list" [
 #
 # POST /api/line_items
 # operationId: line_items_create
-export def "line-items create" [
+export def "line-items-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5138,7 +5138,7 @@ export def "line-items create" [
 # DELETE /api/line_items/{id}
 #
 # operationId: line_items_delete
-export def "line-items delete" [
+export def "line-items-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5182,7 +5182,7 @@ export def "line-items delete" [
 #
 # GET /api/line_items/{id}
 # operationId: line_items_read
-export def "line-items get" [
+export def "line-items-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5225,7 +5225,7 @@ export def "line-items get" [
 # PATCH /api/line_items/{id}
 #
 # operationId: line_items_partial_update
-export def "line-items update-by-id" [
+export def "line-items-partial-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5268,7 +5268,7 @@ export def "line-items update-by-id" [
 # PUT /api/line_items/{id}
 #
 # operationId: line_items_update
-export def "line-items update-by-id-1" [
+export def "line-items-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5312,7 +5312,7 @@ export def "line-items update-by-id-1" [
 #
 # GET /api/medications
 # operationId: medications_list
-export def "medications list" [
+export def "medications-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5351,7 +5351,7 @@ export def "medications list" [
 #
 # POST /api/medications
 # operationId: medications_create
-export def "medications create" [
+export def "medications-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5388,7 +5388,7 @@ export def "medications create" [
 #
 # GET /api/medications/{id}
 # operationId: medications_read
-export def "medications get" [
+export def "medications-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5427,7 +5427,7 @@ export def "medications get" [
 #
 # PATCH /api/medications/{id}
 # operationId: medications_partial_update
-export def "medications update-by-id" [
+export def "medications-partial-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5466,7 +5466,7 @@ export def "medications update-by-id" [
 #
 # PUT /api/medications/{id}
 # operationId: medications_update
-export def "medications update-by-id-1" [
+export def "medications-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5505,7 +5505,7 @@ export def "medications update-by-id-1" [
 #
 # PATCH /api/medications/{id}/append_to_pharmacy_note
 # operationId: medications_append_to_pharmacy_note
-export def "medications-append-to-pharmacy-note create" [
+export def "medications-append-to-pharmacy-note" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5544,7 +5544,7 @@ export def "medications-append-to-pharmacy-note create" [
 #
 # GET /api/messages
 # operationId: messages_list
-export def "messages list" [
+export def "messages-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5588,7 +5588,7 @@ export def "messages list" [
 #
 # POST /api/messages
 # operationId: messages_create
-export def "messages create" [
+export def "messages-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5630,7 +5630,7 @@ export def "messages create" [
 #
 # DELETE /api/messages/{id}
 # operationId: messages_delete
-export def "messages delete" [
+export def "messages-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5674,7 +5674,7 @@ export def "messages delete" [
 #
 # GET /api/messages/{id}
 # operationId: messages_read
-export def "messages get" [
+export def "messages-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5718,7 +5718,7 @@ export def "messages get" [
 #
 # PATCH /api/messages/{id}
 # operationId: messages_partial_update
-export def "messages update-by-id" [
+export def "messages-partial-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5762,7 +5762,7 @@ export def "messages update-by-id" [
 #
 # PUT /api/messages/{id}
 # operationId: messages_update
-export def "messages update-by-id-1" [
+export def "messages-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5806,7 +5806,7 @@ export def "messages update-by-id-1" [
 #
 # GET /api/offices
 # operationId: offices_list
-export def "offices list" [
+export def "offices-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5844,7 +5844,7 @@ export def "offices list" [
 #
 # GET /api/offices/{id}
 # operationId: offices_read
-export def "offices get" [
+export def "offices-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5882,7 +5882,7 @@ export def "offices get" [
 #
 # PATCH /api/offices/{id}
 # operationId: offices_partial_update
-export def "offices update-by-id" [
+export def "offices-partial-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5920,7 +5920,7 @@ export def "offices update-by-id" [
 #
 # PUT /api/offices/{id}
 # operationId: offices_update
-export def "offices update-by-id-1" [
+export def "offices-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5958,7 +5958,7 @@ export def "offices update-by-id-1" [
 #
 # POST /api/offices/{id}/add_exam_room
 # operationId: offices_add_exam_room
-export def "offices-add-exam-room create" [
+export def "offices-add-exam-room" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5996,7 +5996,7 @@ export def "offices-add-exam-room create" [
 #
 # GET /api/patient_communications
 # operationId: patient_communications_list
-export def "patient-communications list" [
+export def "patient-communications-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6035,7 +6035,7 @@ export def "patient-communications list" [
 #
 # POST /api/patient_communications
 # operationId: patient_communications_create
-export def "patient-communications create" [
+export def "patient-communications-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6072,7 +6072,7 @@ export def "patient-communications create" [
 #
 # GET /api/patient_communications/{id}
 # operationId: patient_communications_read
-export def "patient-communications get" [
+export def "patient-communications-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6111,7 +6111,7 @@ export def "patient-communications get" [
 #
 # PATCH /api/patient_communications/{id}
 # operationId: patient_communications_partial_update
-export def "patient-communications update-by-id" [
+export def "patient-communications-partial-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6150,7 +6150,7 @@ export def "patient-communications update-by-id" [
 #
 # PUT /api/patient_communications/{id}
 # operationId: patient_communications_update
-export def "patient-communications update-by-id-1" [
+export def "patient-communications-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6189,7 +6189,7 @@ export def "patient-communications update-by-id-1" [
 #
 # GET /api/patient_flag_types
 # operationId: patient_flag_types_list
-export def "patient-flag-types list" [
+export def "patient-flag-types-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6227,7 +6227,7 @@ export def "patient-flag-types list" [
 #
 # POST /api/patient_flag_types
 # operationId: patient_flag_types_create
-export def "patient-flag-types create" [
+export def "patient-flag-types-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6263,7 +6263,7 @@ export def "patient-flag-types create" [
 #
 # GET /api/patient_flag_types/{id}
 # operationId: patient_flag_types_read
-export def "patient-flag-types get" [
+export def "patient-flag-types-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6301,7 +6301,7 @@ export def "patient-flag-types get" [
 #
 # PATCH /api/patient_flag_types/{id}
 # operationId: patient_flag_types_partial_update
-export def "patient-flag-types update-by-id" [
+export def "patient-flag-types-partial-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6339,7 +6339,7 @@ export def "patient-flag-types update-by-id" [
 #
 # PUT /api/patient_flag_types/{id}
 # operationId: patient_flag_types_update
-export def "patient-flag-types update-by-id-1" [
+export def "patient-flag-types-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6377,7 +6377,7 @@ export def "patient-flag-types update-by-id-1" [
 #
 # GET /api/patient_interventions
 # operationId: patient_interventions_list
-export def "patient-interventions list" [
+export def "patient-interventions-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6416,7 +6416,7 @@ export def "patient-interventions list" [
 #
 # POST /api/patient_interventions
 # operationId: patient_interventions_create
-export def "patient-interventions create" [
+export def "patient-interventions-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6453,7 +6453,7 @@ export def "patient-interventions create" [
 #
 # GET /api/patient_interventions/{id}
 # operationId: patient_interventions_read
-export def "patient-interventions get" [
+export def "patient-interventions-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6492,7 +6492,7 @@ export def "patient-interventions get" [
 #
 # PATCH /api/patient_interventions/{id}
 # operationId: patient_interventions_partial_update
-export def "patient-interventions update-by-id" [
+export def "patient-interventions-partial-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6531,7 +6531,7 @@ export def "patient-interventions update-by-id" [
 #
 # PUT /api/patient_interventions/{id}
 # operationId: patient_interventions_update
-export def "patient-interventions update-by-id-1" [
+export def "patient-interventions-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6569,7 +6569,7 @@ export def "patient-interventions update-by-id-1" [
 # GET /api/patient_lab_results
 #
 # operationId: patient_lab_results_list
-export def "patient-lab-results list" [
+export def "patient-lab-results-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6609,7 +6609,7 @@ export def "patient-lab-results list" [
 # POST /api/patient_lab_results
 #
 # operationId: patient_lab_results_create
-export def "patient-lab-results create" [
+export def "patient-lab-results-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6647,7 +6647,7 @@ export def "patient-lab-results create" [
 # DELETE /api/patient_lab_results/{id}
 #
 # operationId: patient_lab_results_delete
-export def "patient-lab-results delete" [
+export def "patient-lab-results-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6687,7 +6687,7 @@ export def "patient-lab-results delete" [
 # GET /api/patient_lab_results/{id}
 #
 # operationId: patient_lab_results_read
-export def "patient-lab-results get" [
+export def "patient-lab-results-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6727,7 +6727,7 @@ export def "patient-lab-results get" [
 # PATCH /api/patient_lab_results/{id}
 #
 # operationId: patient_lab_results_partial_update
-export def "patient-lab-results update-by-id" [
+export def "patient-lab-results-partial-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6767,7 +6767,7 @@ export def "patient-lab-results update-by-id" [
 # PUT /api/patient_lab_results/{id}
 #
 # operationId: patient_lab_results_update
-export def "patient-lab-results update-by-id-1" [
+export def "patient-lab-results-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6807,7 +6807,7 @@ export def "patient-lab-results update-by-id-1" [
 # GET /api/patient_messages
 #
 # operationId: patient_messages_list
-export def "patient-messages list" [
+export def "patient-messages-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6846,7 +6846,7 @@ export def "patient-messages list" [
 # POST /api/patient_messages
 #
 # operationId: patient_messages_create
-export def "patient-messages create" [
+export def "patient-messages-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6883,7 +6883,7 @@ export def "patient-messages create" [
 # GET /api/patient_messages/{id}
 #
 # operationId: patient_messages_read
-export def "patient-messages get" [
+export def "patient-messages-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6922,7 +6922,7 @@ export def "patient-messages get" [
 # PATCH /api/patient_messages/{id}
 #
 # operationId: patient_messages_partial_update
-export def "patient-messages update-by-id" [
+export def "patient-messages-partial-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6961,7 +6961,7 @@ export def "patient-messages update-by-id" [
 # PUT /api/patient_messages/{id}
 #
 # operationId: patient_messages_update
-export def "patient-messages update-by-id-1" [
+export def "patient-messages-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7001,7 +7001,7 @@ export def "patient-messages update-by-id-1" [
 #
 # GET /api/patient_payment_log
 # operationId: patient_payment_log_list
-export def "patient-payment-log list" [
+export def "patient-payment-log-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7041,7 +7041,7 @@ export def "patient-payment-log list" [
 #
 # GET /api/patient_payment_log/{id}
 # operationId: patient_payment_log_read
-export def "patient-payment-log get" [
+export def "patient-payment-log-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7081,7 +7081,7 @@ export def "patient-payment-log get" [
 #
 # GET /api/patient_payments
 # operationId: patient_payments_list
-export def "patient-payments list" [
+export def "patient-payments-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7121,7 +7121,7 @@ export def "patient-payments list" [
 #
 # POST /api/patient_payments
 # operationId: patient_payments_create
-export def "patient-payments create" [
+export def "patient-payments-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7159,7 +7159,7 @@ export def "patient-payments create" [
 #
 # GET /api/patient_payments/{id}
 # operationId: patient_payments_read
-export def "patient-payments get" [
+export def "patient-payments-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7199,7 +7199,7 @@ export def "patient-payments get" [
 #
 # GET /api/patient_physical_exams
 # operationId: patient_physical_exams_list
-export def "patient-physical-exams list" [
+export def "patient-physical-exams-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7238,7 +7238,7 @@ export def "patient-physical-exams list" [
 #
 # POST /api/patient_physical_exams
 # operationId: patient_physical_exams_create
-export def "patient-physical-exams create" [
+export def "patient-physical-exams-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7275,7 +7275,7 @@ export def "patient-physical-exams create" [
 #
 # GET /api/patient_physical_exams/{id}
 # operationId: patient_physical_exams_read
-export def "patient-physical-exams get" [
+export def "patient-physical-exams-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7314,7 +7314,7 @@ export def "patient-physical-exams get" [
 #
 # PATCH /api/patient_physical_exams/{id}
 # operationId: patient_physical_exams_partial_update
-export def "patient-physical-exams update-by-id" [
+export def "patient-physical-exams-partial-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7353,7 +7353,7 @@ export def "patient-physical-exams update-by-id" [
 #
 # PUT /api/patient_physical_exams/{id}
 # operationId: patient_physical_exams_update
-export def "patient-physical-exams update-by-id-1" [
+export def "patient-physical-exams-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7391,7 +7391,7 @@ export def "patient-physical-exams update-by-id-1" [
 # GET /api/patient_risk_assessments
 #
 # operationId: patient_risk_assessments_list
-export def "patient-risk-assessments list" [
+export def "patient-risk-assessments-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7429,7 +7429,7 @@ export def "patient-risk-assessments list" [
 # POST /api/patient_risk_assessments
 #
 # operationId: patient_risk_assessments_create
-export def "patient-risk-assessments create" [
+export def "patient-risk-assessments-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7465,7 +7465,7 @@ export def "patient-risk-assessments create" [
 # GET /api/patient_risk_assessments/{id}
 #
 # operationId: patient_risk_assessments_read
-export def "patient-risk-assessments get" [
+export def "patient-risk-assessments-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7503,7 +7503,7 @@ export def "patient-risk-assessments get" [
 # PATCH /api/patient_risk_assessments/{id}
 #
 # operationId: patient_risk_assessments_partial_update
-export def "patient-risk-assessments update-by-id" [
+export def "patient-risk-assessments-partial-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7541,7 +7541,7 @@ export def "patient-risk-assessments update-by-id" [
 # PUT /api/patient_risk_assessments/{id}
 #
 # operationId: patient_risk_assessments_update
-export def "patient-risk-assessments update-by-id-1" [
+export def "patient-risk-assessments-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7580,7 +7580,7 @@ export def "patient-risk-assessments update-by-id-1" [
 #
 # GET /api/patient_vaccine_records
 # operationId: patient_vaccine_records_list
-export def "patient-vaccine-records list" [
+export def "patient-vaccine-records-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7621,7 +7621,7 @@ export def "patient-vaccine-records list" [
 #
 # POST /api/patient_vaccine_records
 # operationId: patient_vaccine_records_create
-export def "patient-vaccine-records create" [
+export def "patient-vaccine-records-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7660,7 +7660,7 @@ export def "patient-vaccine-records create" [
 #
 # GET /api/patient_vaccine_records/{id}
 # operationId: patient_vaccine_records_read
-export def "patient-vaccine-records get" [
+export def "patient-vaccine-records-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7701,7 +7701,7 @@ export def "patient-vaccine-records get" [
 #
 # PATCH /api/patient_vaccine_records/{id}
 # operationId: patient_vaccine_records_partial_update
-export def "patient-vaccine-records update-by-id" [
+export def "patient-vaccine-records-partial-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7742,7 +7742,7 @@ export def "patient-vaccine-records update-by-id" [
 #
 # PUT /api/patient_vaccine_records/{id}
 # operationId: patient_vaccine_records_update
-export def "patient-vaccine-records update-by-id-1" [
+export def "patient-vaccine-records-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7783,7 +7783,7 @@ export def "patient-vaccine-records update-by-id-1" [
 #
 # GET /api/patients
 # operationId: patients_list
-export def "patients list" [
+export def "patients-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7831,7 +7831,7 @@ export def "patients list" [
 #
 # POST /api/patients
 # operationId: patients_create
-export def "patients create" [
+export def "patients-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7877,7 +7877,7 @@ export def "patients create" [
 #
 # DELETE /api/patients/{id}
 # operationId: patients_delete
-export def "patients delete" [
+export def "patients-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7925,7 +7925,7 @@ export def "patients delete" [
 #
 # GET /api/patients/{id}
 # operationId: patients_read
-export def "patients get" [
+export def "patients-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7973,7 +7973,7 @@ export def "patients get" [
 #
 # PATCH /api/patients/{id}
 # operationId: patients_partial_update
-export def "patients update-by-id" [
+export def "patients-partial-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8021,7 +8021,7 @@ export def "patients update-by-id" [
 #
 # PUT /api/patients/{id}
 # operationId: patients_update
-export def "patients update-by-id-1" [
+export def "patients-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8069,7 +8069,7 @@ export def "patients update-by-id-1" [
 #
 # GET /api/patients/{id}/ccda
 # operationId: patients_ccda
-export def "patients-ccda get" [
+export def "patients-ccda" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8117,7 +8117,7 @@ export def "patients-ccda get" [
 #
 # DELETE /api/patients/{id}/onpatient_access
 # operationId: patients_onpatient_access_delete
-export def "patients-onpatient-access delete" [
+export def "patients-onpatient-access-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8165,7 +8165,7 @@ export def "patients-onpatient-access delete" [
 #
 # GET /api/patients/{id}/onpatient_access
 # operationId: patients_onpatient_access_read
-export def "patients-onpatient-access get" [
+export def "patients-onpatient-access-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8213,7 +8213,7 @@ export def "patients-onpatient-access get" [
 #
 # POST /api/patients/{id}/onpatient_access
 # operationId: patients_onpatient_access_create
-export def "patients-onpatient-access create" [
+export def "patients-onpatient-access-create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8261,7 +8261,7 @@ export def "patients-onpatient-access create" [
 #
 # GET /api/patients/{id}/qrda1
 # operationId: patients_qrda1
-export def "patients-qrda1 get" [
+export def "patients-qrda1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8308,7 +8308,7 @@ export def "patients-qrda1 get" [
 # GET /api/patients_summary
 #
 # operationId: patients_summary_list
-export def "patients-summary list" [
+export def "patients-summary-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8350,7 +8350,7 @@ export def "patients-summary list" [
 # POST /api/patients_summary
 #
 # operationId: patients_summary_create
-export def "patients-summary create" [
+export def "patients-summary-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8390,7 +8390,7 @@ export def "patients-summary create" [
 # DELETE /api/patients_summary/{id}
 #
 # operationId: patients_summary_delete
-export def "patients-summary delete" [
+export def "patients-summary-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8432,7 +8432,7 @@ export def "patients-summary delete" [
 # GET /api/patients_summary/{id}
 #
 # operationId: patients_summary_read
-export def "patients-summary get" [
+export def "patients-summary-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8474,7 +8474,7 @@ export def "patients-summary get" [
 # PATCH /api/patients_summary/{id}
 #
 # operationId: patients_summary_partial_update
-export def "patients-summary update-by-id" [
+export def "patients-summary-partial-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8516,7 +8516,7 @@ export def "patients-summary update-by-id" [
 # PUT /api/patients_summary/{id}
 #
 # operationId: patients_summary_update
-export def "patients-summary update-by-id-1" [
+export def "patients-summary-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8559,7 +8559,7 @@ export def "patients-summary update-by-id-1" [
 #
 # GET /api/prescription_messages
 # operationId: prescription_messages_list
-export def "prescription-messages list" [
+export def "prescription-messages-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8600,7 +8600,7 @@ export def "prescription-messages list" [
 #
 # GET /api/prescription_messages/{id}
 # operationId: prescription_messages_read
-export def "prescription-messages get" [
+export def "prescription-messages-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8641,7 +8641,7 @@ export def "prescription-messages get" [
 #
 # GET /api/problems
 # operationId: problems_list
-export def "problems list" [
+export def "problems-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8680,7 +8680,7 @@ export def "problems list" [
 #
 # POST /api/problems
 # operationId: problems_create
-export def "problems create" [
+export def "problems-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8717,7 +8717,7 @@ export def "problems create" [
 #
 # GET /api/problems/{id}
 # operationId: problems_read
-export def "problems get" [
+export def "problems-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8756,7 +8756,7 @@ export def "problems get" [
 #
 # PATCH /api/problems/{id}
 # operationId: problems_partial_update
-export def "problems update-by-id" [
+export def "problems-partial-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8795,7 +8795,7 @@ export def "problems update-by-id" [
 #
 # PUT /api/problems/{id}
 # operationId: problems_update
-export def "problems update-by-id-1" [
+export def "problems-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8833,7 +8833,7 @@ export def "problems update-by-id-1" [
 # GET /api/procedures
 #
 # operationId: procedures_list
-export def "procedures list" [
+export def "procedures-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8875,7 +8875,7 @@ export def "procedures list" [
 # GET /api/procedures/{id}
 #
 # operationId: procedures_read
-export def "procedures get" [
+export def "procedures-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8918,7 +8918,7 @@ export def "procedures get" [
 #
 # GET /api/reminder_profiles
 # operationId: reminder_profiles_list
-export def "reminder-profiles list" [
+export def "reminder-profiles-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8956,7 +8956,7 @@ export def "reminder-profiles list" [
 #
 # POST /api/reminder_profiles
 # operationId: reminder_profiles_create
-export def "reminder-profiles create" [
+export def "reminder-profiles-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8992,7 +8992,7 @@ export def "reminder-profiles create" [
 #
 # DELETE /api/reminder_profiles/{id}
 # operationId: reminder_profiles_delete
-export def "reminder-profiles delete" [
+export def "reminder-profiles-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9030,7 +9030,7 @@ export def "reminder-profiles delete" [
 #
 # GET /api/reminder_profiles/{id}
 # operationId: reminder_profiles_read
-export def "reminder-profiles get" [
+export def "reminder-profiles-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9068,7 +9068,7 @@ export def "reminder-profiles get" [
 #
 # PATCH /api/reminder_profiles/{id}
 # operationId: reminder_profiles_partial_update
-export def "reminder-profiles update-by-id" [
+export def "reminder-profiles-partial-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9106,7 +9106,7 @@ export def "reminder-profiles update-by-id" [
 #
 # PUT /api/reminder_profiles/{id}
 # operationId: reminder_profiles_update
-export def "reminder-profiles update-by-id-1" [
+export def "reminder-profiles-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9144,7 +9144,7 @@ export def "reminder-profiles update-by-id-1" [
 #
 # GET /api/sublabs
 # operationId: sublabs_list
-export def "sublabs list" [
+export def "sublabs-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9181,7 +9181,7 @@ export def "sublabs list" [
 #
 # POST /api/sublabs
 # operationId: sublabs_create
-export def "sublabs create" [
+export def "sublabs-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9215,7 +9215,7 @@ export def "sublabs create" [
 #
 # DELETE /api/sublabs/{id}
 # operationId: sublabs_delete
-export def "sublabs delete" [
+export def "sublabs-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9251,7 +9251,7 @@ export def "sublabs delete" [
 #
 # GET /api/sublabs/{id}
 # operationId: sublabs_read
-export def "sublabs get" [
+export def "sublabs-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9287,7 +9287,7 @@ export def "sublabs get" [
 #
 # PATCH /api/sublabs/{id}
 # operationId: sublabs_partial_update
-export def "sublabs update-by-id" [
+export def "sublabs-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9323,7 +9323,7 @@ export def "sublabs update-by-id" [
 #
 # PUT /api/sublabs/{id}
 # operationId: sublabs_update
-export def "sublabs update-by-id-1" [
+export def "sublabs-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9359,7 +9359,7 @@ export def "sublabs update-by-id-1" [
 #
 # GET /api/task_categories
 # operationId: task_categories_list
-export def "task-categories list" [
+export def "task-categories-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9397,7 +9397,7 @@ export def "task-categories list" [
 #
 # POST /api/task_categories
 # operationId: task_categories_create
-export def "task-categories create" [
+export def "task-categories-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9433,7 +9433,7 @@ export def "task-categories create" [
 #
 # GET /api/task_categories/{id}
 # operationId: task_categories_read
-export def "task-categories get" [
+export def "task-categories-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9471,7 +9471,7 @@ export def "task-categories get" [
 #
 # PATCH /api/task_categories/{id}
 # operationId: task_categories_partial_update
-export def "task-categories update-by-id" [
+export def "task-categories-partial-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9509,7 +9509,7 @@ export def "task-categories update-by-id" [
 #
 # PUT /api/task_categories/{id}
 # operationId: task_categories_update
-export def "task-categories update-by-id-1" [
+export def "task-categories-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9547,7 +9547,7 @@ export def "task-categories update-by-id-1" [
 #
 # GET /api/task_notes
 # operationId: task_notes_list
-export def "task-notes list" [
+export def "task-notes-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9586,7 +9586,7 @@ export def "task-notes list" [
 #
 # POST /api/task_notes
 # operationId: task_notes_create
-export def "task-notes create" [
+export def "task-notes-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9623,7 +9623,7 @@ export def "task-notes create" [
 #
 # GET /api/task_notes/{id}
 # operationId: task_notes_read
-export def "task-notes get" [
+export def "task-notes-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9662,7 +9662,7 @@ export def "task-notes get" [
 #
 # PATCH /api/task_notes/{id}
 # operationId: task_notes_partial_update
-export def "task-notes update-by-id" [
+export def "task-notes-partial-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9701,7 +9701,7 @@ export def "task-notes update-by-id" [
 #
 # PUT /api/task_notes/{id}
 # operationId: task_notes_update
-export def "task-notes update-by-id-1" [
+export def "task-notes-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9740,7 +9740,7 @@ export def "task-notes update-by-id-1" [
 #
 # GET /api/task_statuses
 # operationId: task_statuses_list
-export def "task-statuses list" [
+export def "task-statuses-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9778,7 +9778,7 @@ export def "task-statuses list" [
 #
 # POST /api/task_statuses
 # operationId: task_statuses_create
-export def "task-statuses create" [
+export def "task-statuses-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9814,7 +9814,7 @@ export def "task-statuses create" [
 #
 # GET /api/task_statuses/{id}
 # operationId: task_statuses_read
-export def "task-statuses get" [
+export def "task-statuses-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9852,7 +9852,7 @@ export def "task-statuses get" [
 #
 # PATCH /api/task_statuses/{id}
 # operationId: task_statuses_partial_update
-export def "task-statuses update-by-id" [
+export def "task-statuses-partial-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9890,7 +9890,7 @@ export def "task-statuses update-by-id" [
 #
 # PUT /api/task_statuses/{id}
 # operationId: task_statuses_update
-export def "task-statuses update-by-id-1" [
+export def "task-statuses-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9928,7 +9928,7 @@ export def "task-statuses update-by-id-1" [
 #
 # GET /api/task_templates
 # operationId: task_templates_list
-export def "task-templates list" [
+export def "task-templates-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9970,7 +9970,7 @@ export def "task-templates list" [
 #
 # POST /api/task_templates
 # operationId: task_templates_create
-export def "task-templates create" [
+export def "task-templates-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10010,7 +10010,7 @@ export def "task-templates create" [
 #
 # GET /api/task_templates/{id}
 # operationId: task_templates_read
-export def "task-templates get" [
+export def "task-templates-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10052,7 +10052,7 @@ export def "task-templates get" [
 #
 # PATCH /api/task_templates/{id}
 # operationId: task_templates_partial_update
-export def "task-templates update-by-id" [
+export def "task-templates-partial-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10094,7 +10094,7 @@ export def "task-templates update-by-id" [
 #
 # PUT /api/task_templates/{id}
 # operationId: task_templates_update
-export def "task-templates update-by-id-1" [
+export def "task-templates-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10136,7 +10136,7 @@ export def "task-templates update-by-id-1" [
 #
 # GET /api/tasks
 # operationId: tasks_list
-export def "tasks list" [
+export def "tasks-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10182,7 +10182,7 @@ export def "tasks list" [
 #
 # POST /api/tasks
 # operationId: tasks_create
-export def "tasks create" [
+export def "tasks-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10226,7 +10226,7 @@ export def "tasks create" [
 #
 # GET /api/tasks/{id}
 # operationId: tasks_read
-export def "tasks get" [
+export def "tasks-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10272,7 +10272,7 @@ export def "tasks get" [
 #
 # PATCH /api/tasks/{id}
 # operationId: tasks_partial_update
-export def "tasks update-by-id" [
+export def "tasks-partial-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10318,7 +10318,7 @@ export def "tasks update-by-id" [
 #
 # PUT /api/tasks/{id}
 # operationId: tasks_update
-export def "tasks update-by-id-1" [
+export def "tasks-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10364,7 +10364,7 @@ export def "tasks update-by-id-1" [
 #
 # GET /api/transactions
 # operationId: transactions_list
-export def "transactions list" [
+export def "transactions-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10406,7 +10406,7 @@ export def "transactions list" [
 #
 # GET /api/transactions/{id}
 # operationId: transactions_read
-export def "transactions get" [
+export def "transactions-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10448,7 +10448,7 @@ export def "transactions get" [
 #
 # GET /api/user_groups
 # operationId: user_groups_list
-export def "user-groups list" [
+export def "user-groups-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10486,7 +10486,7 @@ export def "user-groups list" [
 #
 # GET /api/user_groups/{id}
 # operationId: user_groups_read
-export def "user-groups get" [
+export def "user-groups-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10524,7 +10524,7 @@ export def "user-groups get" [
 #
 # GET /api/users
 # operationId: users_list
-export def "users list" [
+export def "users-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10562,7 +10562,7 @@ export def "users list" [
 #
 # GET /api/users/{id}
 # operationId: users_read
-export def "users get" [
+export def "users-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

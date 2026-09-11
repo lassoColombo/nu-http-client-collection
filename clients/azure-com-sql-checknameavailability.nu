@@ -101,7 +101,7 @@ def type-completer [] { ["Microsoft.Sql/servers"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-sql-check-name-availability check-servers" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "servers-check-name-availability" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -125,7 +125,7 @@ export def commands []: nothing -> table {
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Sql/checkNameAvailability
 # operationId: Servers_CheckNameAvailability
-export def "subscriptions-providers-microsoft-sql-check-name-availability check-servers" [
+export def "servers-check-name-availability" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

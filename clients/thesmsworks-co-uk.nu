@@ -110,7 +110,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "batch-any create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-batch-any" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -133,7 +133,7 @@ export def commands []: nothing -> table {
 # Sends a collection of unique SMS messages. Batches may contain up to 5000 messages at a time.
 #
 # POST /batch/any
-export def "batch-any create" [
+export def "post-batch-any" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -170,7 +170,7 @@ export def "batch-any create" [
 # Schedules a batch of SMS messages to be sent at the date time you specify
 #
 # POST /batch/schedule
-export def "batch-schedule create" [
+export def "post-batch-schedule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -214,7 +214,7 @@ export def "batch-schedule create" [
 # Send a single SMS message to multiple recipients. Batches may contain up to 5000 messages at a time.
 #
 # POST /batch/send
-export def "batch-send create" [
+export def "post-batch-send" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -258,7 +258,7 @@ export def "batch-send create" [
 # Retrieve all messages in a batch with the given batch ID
 #
 # GET /batch/{batchid}
-export def "batch get" [
+export def "get-batch-batchid" [
   batchid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -293,7 +293,7 @@ export def "batch get" [
 # Cancels a scheduled SMS message
 #
 # DELETE /batches/schedule/{batchid}
-export def "batches-schedule delete" [
+export def "delete-batches-schedule-batchid" [
   batchid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -328,7 +328,7 @@ export def "batches-schedule delete" [
 # Returns the number of credits currently available on the account
 #
 # GET /credits/balance
-export def "credits-balance get" [
+export def "get-credits-balance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -362,7 +362,7 @@ export def "credits-balance get" [
 #
 # POST /message/flash
 # operationId: sendFlashMessage
-export def "message-flash send" [
+export def "send-flash-message" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -408,7 +408,7 @@ export def "message-flash send" [
 # Schedules an SMS message to be sent at the date-time you specify
 #
 # POST /message/schedule
-export def "message-schedule create" [
+export def "post-message-schedule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -454,7 +454,7 @@ export def "message-schedule create" [
 # Send an SMS Message
 #
 # POST /message/send
-export def "message-send create" [
+export def "post-message-send" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -500,7 +500,7 @@ export def "message-send create" [
 # Retrieve up to 1000 messages matching your search criteria
 #
 # POST /messages
-export def "messages create" [
+export def "post-messages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -547,7 +547,7 @@ export def "messages create" [
 # Get failed messages matching your search criteria
 #
 # POST /messages/failed
-export def "messages-failed create" [
+export def "post-messages-failed" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -594,7 +594,7 @@ export def "messages-failed create" [
 # Get unread uncoming messages matching your search criteria
 #
 # POST /messages/inbox
-export def "messages-inbox create" [
+export def "post-messages-inbox" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -641,7 +641,7 @@ export def "messages-inbox create" [
 # Returns a list of messages scheduled from your account, comprising any messages scheduled in the last 3 months and any scheduled to send in the future
 #
 # GET /messages/schedule
-export def "messages-schedule get" [
+export def "get-messages-schedule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -674,7 +674,7 @@ export def "messages-schedule get" [
 # Cancels a scheduled SMS message
 #
 # DELETE /messages/schedule/{messageid}
-export def "messages-schedule delete" [
+export def "delete-messages-schedule-messageid" [
   messageid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -709,7 +709,7 @@ export def "messages-schedule delete" [
 # Delete the message with the mathcing messageid
 #
 # DELETE /messages/{messageid}
-export def "messages delete" [
+export def "delete-messages-messageid" [
   messageid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -744,7 +744,7 @@ export def "messages delete" [
 # Retrieve a logged message by the message ID
 #
 # GET /messages/{messageid}
-export def "messages get" [
+export def "get-messages-messageid" [
   messageid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -779,7 +779,7 @@ export def "messages get" [
 # Returns a sample error object for the given error code. Useful for designing code to react to errors when they occur for real.
 #
 # GET /utils/errors/{errorcode}
-export def "utils-errors get" [
+export def "get-utils-errors-errorcode" [
   errorcode: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -814,7 +814,7 @@ export def "utils-errors get" [
 # Returns the customer ID to the caller
 #
 # GET /utils/test
-export def "utils-test get" [
+export def "get-utils-test" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

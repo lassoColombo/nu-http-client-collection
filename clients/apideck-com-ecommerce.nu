@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "ecommerce-customers list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "customers-all" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -122,7 +122,7 @@ export def commands []: nothing -> table {
 #
 # GET /ecommerce/customers
 # operationId: customersAll
-export def "ecommerce-customers list" [
+export def "customers-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -167,7 +167,7 @@ export def "ecommerce-customers list" [
 #
 # GET /ecommerce/customers/{id}
 # operationId: customersOne
-export def "ecommerce-customers get-one" [
+export def "customers-one" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -211,7 +211,7 @@ export def "ecommerce-customers get-one" [
 #
 # GET /ecommerce/orders
 # operationId: ordersAll
-export def "ecommerce-orders list" [
+export def "orders-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -256,7 +256,7 @@ export def "ecommerce-orders list" [
 #
 # GET /ecommerce/orders/{id}
 # operationId: ordersOne
-export def "ecommerce-orders get-one" [
+export def "orders-one" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -300,7 +300,7 @@ export def "ecommerce-orders get-one" [
 #
 # GET /ecommerce/products
 # operationId: productsAll
-export def "ecommerce-products list" [
+export def "products-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -344,7 +344,7 @@ export def "ecommerce-products list" [
 #
 # GET /ecommerce/products/{id}
 # operationId: productsOne
-export def "ecommerce-products get-one" [
+export def "products-one" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -388,7 +388,7 @@ export def "ecommerce-products get-one" [
 #
 # GET /ecommerce/store
 # operationId: storesOne
-export def "ecommerce-store get-one" [
+export def "stores-one" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

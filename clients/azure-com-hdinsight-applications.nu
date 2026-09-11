@@ -110,7 +110,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-hd-insight-clusters-applications list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "applications-list-by-cluster" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -134,7 +134,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HDInsight/clusters/{clusterName}/applications
 # operationId: Applications_ListByCluster
-export def "subscriptions-resource-groups-providers-microsoft-hd-insight-clusters-applications list" [
+export def "applications-list-by-cluster" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -176,7 +176,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hd-insight-cluster
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HDInsight/clusters/{clusterName}/applications/{applicationName}
 # operationId: Applications_Delete
-export def "subscriptions-resource-groups-providers-microsoft-hd-insight-clusters-applications delete" [
+export def "applications-delete" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -220,7 +220,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hd-insight-cluster
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HDInsight/clusters/{clusterName}/applications/{applicationName}
 # operationId: Applications_Get
-export def "subscriptions-resource-groups-providers-microsoft-hd-insight-clusters-applications get" [
+export def "applications-get" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -265,7 +265,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hd-insight-cluster
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HDInsight/clusters/{clusterName}/applications/{applicationName}
 # operationId: Applications_Create
 # --properties shape: {applicationType?: string, computeProfile?: any, errors?: list, httpsEndpoints?: list, installScriptActions?: list, sshEndpoints?: list, uninstallScriptActions?: list}
-export def "subscriptions-resource-groups-providers-microsoft-hd-insight-clusters-applications create" [
+export def "applications-create" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string

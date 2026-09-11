@@ -120,7 +120,7 @@ def status-completer [] { ["suspended"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "groups get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-groups" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -143,7 +143,7 @@ export def commands []: nothing -> table {
 # Get groups
 #
 # GET /groups
-export def "groups get" [
+export def "get-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -179,7 +179,7 @@ export def "groups get" [
 # Get attendees by group
 #
 # GET /groups/{groupKey}/attendees
-export def "groups-attendees get" [
+export def "get-groups-group-key-attendees" [
   group_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -220,7 +220,7 @@ export def "groups-attendees get" [
 # Get historical meetings by group
 #
 # GET /groups/{groupKey}/historicalMeetings
-export def "groups-historical-meetings get" [
+export def "get-groups-group-key-historical-meetings" [
   group_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -263,7 +263,7 @@ export def "groups-historical-meetings get" [
 # GET /groups/{groupKey}/meetings
 # DEPRECATED
 @deprecated
-export def "groups-meetings get" [
+export def "get-groups-group-key-meetings" [
   group_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -305,7 +305,7 @@ export def "groups-meetings get" [
 # Get organizers by group
 #
 # GET /groups/{groupKey}/organizers
-export def "groups-organizers get" [
+export def "get-groups-group-key-organizers" [
   group_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -343,7 +343,7 @@ export def "groups-organizers get" [
 # Create organizer in group
 #
 # POST /groups/{groupKey}/organizers
-export def "groups-organizers create" [
+export def "post-groups-group-key-organizers" [
   group_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -388,7 +388,7 @@ export def "groups-organizers create" [
 # Get upcoming meetings by group
 #
 # GET /groups/{groupKey}/upcomingMeetings
-export def "groups-upcoming-meetings get" [
+export def "get-groups-group-key-upcoming-meetings" [
   group_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -426,7 +426,7 @@ export def "groups-upcoming-meetings get" [
 # Get historical meetings
 #
 # GET /historicalMeetings
-export def "historical-meetings get" [
+export def "get-historical-meetings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -467,7 +467,7 @@ export def "historical-meetings get" [
 # GET /meetings
 # DEPRECATED
 @deprecated
-export def "meetings list" [
+export def "get-meetings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -507,7 +507,7 @@ export def "meetings list" [
 # Create meeting
 #
 # POST /meetings
-export def "meetings create" [
+export def "post-meetings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -553,7 +553,7 @@ export def "meetings create" [
 # Delete meeting
 #
 # DELETE /meetings/{meetingId}
-export def "meetings delete" [
+export def "delete-meetings-meeting-id" [
   meeting_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -591,7 +591,7 @@ export def "meetings delete" [
 # Get meeting
 #
 # GET /meetings/{meetingId}
-export def "meetings get" [
+export def "get-meetings-meeting-id" [
   meeting_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -629,7 +629,7 @@ export def "meetings get" [
 # Update meeting
 #
 # PUT /meetings/{meetingId}
-export def "meetings update" [
+export def "put-meetings-meeting-id" [
   meeting_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -677,7 +677,7 @@ export def "meetings update" [
 # Get attendees by meeting
 #
 # GET /meetings/{meetingId}/attendees
-export def "meetings-attendees get" [
+export def "get-meetings-meeting-id-attendees" [
   meeting_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -715,7 +715,7 @@ export def "meetings-attendees get" [
 # Start meeting
 #
 # GET /meetings/{meetingId}/start
-export def "meetings-start get" [
+export def "get-meetings-meeting-id-start" [
   meeting_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -753,7 +753,7 @@ export def "meetings-start get" [
 # Delete organizer by email
 #
 # DELETE /organizers
-export def "organizers delete" [
+export def "delete-organizers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -791,7 +791,7 @@ export def "organizers delete" [
 # Get organizer by email / Get all organizers
 #
 # GET /organizers
-export def "organizers list" [
+export def "get-organizers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -829,7 +829,7 @@ export def "organizers list" [
 # Create organizer
 #
 # POST /organizers
-export def "organizers create" [
+export def "post-organizers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -872,7 +872,7 @@ export def "organizers create" [
 # Delete organizer
 #
 # DELETE /organizers/{organizerKey}
-export def "organizers delete-by-organizer-key" [
+export def "delete-organizers-organizer-key" [
   organizer_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -910,7 +910,7 @@ export def "organizers delete-by-organizer-key" [
 # Get organizer
 #
 # GET /organizers/{organizerKey}
-export def "organizers get" [
+export def "get-organizers-organizer-key" [
   organizer_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -948,7 +948,7 @@ export def "organizers get" [
 # Update organizer
 #
 # PUT /organizers/{organizerKey}
-export def "organizers update" [
+export def "put-organizers-organizer-key" [
   organizer_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -991,7 +991,7 @@ export def "organizers update" [
 # Get attendees by organizer
 #
 # GET /organizers/{organizerKey}/attendees
-export def "organizers-attendees get" [
+export def "get-organizers-organizer-key-attendees" [
   organizer_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1032,7 +1032,7 @@ export def "organizers-attendees get" [
 # Get historical meetings by organizer
 #
 # GET /organizers/{organizerKey}/historicalMeetings
-export def "organizers-historical-meetings get" [
+export def "get-organizers-organizer-key-historical-meetings" [
   organizer_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1075,7 +1075,7 @@ export def "organizers-historical-meetings get" [
 # GET /organizers/{organizerKey}/meetings
 # DEPRECATED
 @deprecated
-export def "organizers-meetings get" [
+export def "get-organizers-organizer-key-meetings" [
   organizer_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1118,7 +1118,7 @@ export def "organizers-meetings get" [
 # Get upcoming meetings by organizer
 #
 # GET /organizers/{organizerKey}/upcomingMeetings
-export def "organizers-upcoming-meetings get" [
+export def "get-organizers-organizer-key-upcoming-meetings" [
   organizer_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1156,7 +1156,7 @@ export def "organizers-upcoming-meetings get" [
 # Get upcoming meetings
 #
 # GET /upcomingMeetings
-export def "upcoming-meetings get" [
+export def "get-upcoming-meetings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

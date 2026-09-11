@@ -99,7 +99,7 @@ def auth-scheme-completer [] { ["bearer" "ckan_api_key"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "action-organization-activity-list get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-action-organization-activity-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -122,7 +122,7 @@ export def commands []: nothing -> table {
 # Get the activity stream of an organization
 #
 # GET /action/organization_activity_list
-export def "action-organization-activity-list get" [
+export def "get-action-organization-activity-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -157,7 +157,7 @@ export def "action-organization-activity-list get" [
 # Get the activity stream of an organization, HTML format
 #
 # GET /action/organization_activity_list_html
-export def "action-organization-activity-list-html get" [
+export def "get-action-organization-activity-list-html" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -192,7 +192,7 @@ export def "action-organization-activity-list-html get" [
 # Get names of organizations that match a query string
 #
 # GET /action/organization_autocomplete
-export def "action-organization-autocomplete get" [
+export def "get-action-organization-autocomplete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -228,7 +228,7 @@ export def "action-organization-autocomplete get" [
 # Get number of followers of an organization
 #
 # GET /action/organization_follower_count
-export def "action-organization-follower-count get" [
+export def "get-action-organization-follower-count" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -263,7 +263,7 @@ export def "action-organization-follower-count get" [
 # Get users following an organization
 #
 # GET /action/organization_follower_list
-export def "action-organization-follower-list get" [
+export def "get-action-organization-follower-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -298,7 +298,7 @@ export def "action-organization-follower-list get" [
 # Get names of all organizations
 #
 # GET /action/organization_list
-export def "action-organization-list get" [
+export def "get-action-organization-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -334,7 +334,7 @@ export def "action-organization-list get" [
 # Get organizations that a user has a given permission for
 #
 # GET /action/organization_list_for_user
-export def "action-organization-list-for-user get" [
+export def "get-action-organization-list-for-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -369,7 +369,7 @@ export def "action-organization-list-for-user get" [
 # Get organization revisions
 #
 # GET /action/organization_revision_list
-export def "action-organization-revision-list get" [
+export def "get-action-organization-revision-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -404,7 +404,7 @@ export def "action-organization-revision-list get" [
 # Get details of a specific organization
 #
 # GET /action/organization_show
-export def "action-organization-show get" [
+export def "get-action-organization-show" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -440,7 +440,7 @@ export def "action-organization-show get" [
 # Get the activity stream of a package (dataset)
 #
 # GET /action/package_activity_list
-export def "action-package-activity-list get" [
+export def "get-action-package-activity-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -477,7 +477,7 @@ export def "action-package-activity-list get" [
 # Get the activity stream of a package (dataset), HTML format
 #
 # GET /action/package_activity_list_html
-export def "action-package-activity-list-html get" [
+export def "get-action-package-activity-list-html" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -514,7 +514,7 @@ export def "action-package-activity-list-html get" [
 # Find packages (datasets) matching a query
 #
 # GET /action/package_autocomplete
-export def "action-package-autocomplete get" [
+export def "get-action-package-autocomplete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -550,7 +550,7 @@ export def "action-package-autocomplete get" [
 # Get a list of all packages (datasets)
 #
 # GET /action/package_list
-export def "action-package-list get" [
+export def "get-action-package-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -586,7 +586,7 @@ export def "action-package-list get" [
 # Get package (dataset) relationships
 #
 # GET /action/package_relationships_list
-export def "action-package-relationships-list get" [
+export def "get-action-package-relationships-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -623,7 +623,7 @@ export def "action-package-relationships-list get" [
 # Get list of revisions for a package (dataset)
 #
 # GET /action/package_revision_list
-export def "action-package-revision-list get" [
+export def "get-action-package-revision-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -658,7 +658,7 @@ export def "action-package-revision-list get" [
 # Find packages (datasets) matching query terms
 #
 # GET /action/package_search
-export def "action-package-search get" [
+export def "get-action-package-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -693,7 +693,7 @@ export def "action-package-search get" [
 # Get metadata about one specific package (dataset)
 #
 # GET /action/package_show
-export def "action-package-show get" [
+export def "get-action-package-show" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -728,7 +728,7 @@ export def "action-package-show get" [
 # Gets items related to a package (dataset)
 #
 # GET /action/related_list
-export def "action-related-list get" [
+export def "get-action-related-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -767,7 +767,7 @@ export def "action-related-list get" [
 # Find resources
 #
 # GET /action/resource_search
-export def "action-resource-search get" [
+export def "get-action-resource-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -806,7 +806,7 @@ export def "action-resource-search get" [
 # Get metadata for a specific resource
 #
 # GET /action/resource_show
-export def "action-resource-show get" [
+export def "get-action-resource-show" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -842,7 +842,7 @@ export def "action-resource-show get" [
 # Get the site status
 #
 # GET /action/status_show
-export def "action-status-show get" [
+export def "get-action-status-show" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -875,7 +875,7 @@ export def "action-status-show get" [
 # Get a list of tags
 #
 # GET /action/tag_list
-export def "action-tag-list get" [
+export def "get-action-tag-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

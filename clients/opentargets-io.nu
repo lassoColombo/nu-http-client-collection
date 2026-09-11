@@ -103,7 +103,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "platform-docs get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-api-docs" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -127,7 +127,7 @@ export def commands []: nothing -> table {
 #
 # GET /platform/docs
 # operationId: getApiDocs
-export def "platform-docs get" [
+export def "get-api-docs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -161,7 +161,7 @@ export def "platform-docs get" [
 #
 # GET /platform/docs/swagger-ui
 # operationId: getApiSwaggerUI
-export def "platform-docs-swagger-ui get" [
+export def "get-api-swagger-ui" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -195,7 +195,7 @@ export def "platform-docs-swagger-ui get" [
 #
 # GET /platform/private/autocomplete
 # operationId: getAutocomplete
-export def "platform-private-autocomplete get" [
+export def "get-autocomplete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -232,7 +232,7 @@ export def "platform-private-autocomplete get" [
 #
 # POST /platform/private/besthitsearch
 # operationId: postBestHitSearch
-export def "platform-private-besthitsearch create-best-hit-list" [
+export def "post-best-hit-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -270,7 +270,7 @@ export def "platform-private-besthitsearch create-best-hit-list" [
 #
 # POST /platform/private/disease
 # operationId: postDiseaseById
-export def "platform-private-disease create" [
+export def "post-disease-by-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -308,7 +308,7 @@ export def "platform-private-disease create" [
 #
 # GET /platform/private/disease/{disease}
 # operationId: getDiseaseById
-export def "platform-private-disease get" [
+export def "get-disease-by-id" [
   disease: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -344,7 +344,7 @@ export def "platform-private-disease get" [
 #
 # GET /platform/private/drug/{DRUG_ID}
 # operationId: getDrugByID
-export def "platform-private-drug get" [
+export def "get-drug-by-id" [
   drug_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -382,7 +382,7 @@ export def "platform-private-drug get" [
 #
 # GET /platform/private/eco/{ECO_ID}
 # operationId: getECObyID
-export def "platform-private-eco get-ec-oby" [
+export def "get-ec-oby-id" [
   eco_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -418,7 +418,7 @@ export def "platform-private-eco get-ec-oby" [
 #
 # POST /platform/private/enrichment/targets
 # operationId: postEnrichmentTarget
-export def "platform-private-enrichment-targets create" [
+export def "post-enrichment-target" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -456,7 +456,7 @@ export def "platform-private-enrichment-targets create" [
 #
 # GET /platform/private/quicksearch
 # operationId: getQuickSearch
-export def "platform-private-quicksearch get-quick-list" [
+export def "get-quick-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -493,7 +493,7 @@ export def "platform-private-quicksearch get-quick-list" [
 #
 # POST /platform/private/relation
 # operationId: postRelation
-export def "platform-private-relation create" [
+export def "post-relation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -531,7 +531,7 @@ export def "platform-private-relation create" [
 #
 # GET /platform/private/relation/disease/{disease}
 # operationId: getRelationByEFOID
-export def "platform-private-relation-disease get-by-efoid" [
+export def "get-relation-by-efoid" [
   disease: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -567,7 +567,7 @@ export def "platform-private-relation-disease get-by-efoid" [
 #
 # GET /platform/private/relation/target/{target}
 # operationId: getRelationByENSGID
-export def "platform-private-relation-target get-by-ensgid" [
+export def "get-relation-by-ensgid" [
   target: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -603,7 +603,7 @@ export def "platform-private-relation-target get-by-ensgid" [
 #
 # POST /platform/private/target
 # operationId: postTargetByENSGID
-export def "platform-private-target create-by-ensgid" [
+export def "post-target-by-ensgid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -641,7 +641,7 @@ export def "platform-private-target create-by-ensgid" [
 #
 # GET /platform/private/target/expression
 # operationId: getTargetExpressionByENSGID
-export def "platform-private-target-expression get-by-ensgid" [
+export def "get-target-expression-by-ensgid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -677,7 +677,7 @@ export def "platform-private-target-expression get-by-ensgid" [
 #
 # POST /platform/private/target/expression
 # operationId: postTargetExpressionByENSGID
-export def "platform-private-target-expression create-by-ensgid" [
+export def "post-target-expression-by-ensgid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -715,7 +715,7 @@ export def "platform-private-target-expression create-by-ensgid" [
 #
 # GET /platform/private/target/{target}
 # operationId: getTargetByENSGID
-export def "platform-private-target get-by-ensgid" [
+export def "get-target-by-ensgid" [
   target: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -751,7 +751,7 @@ export def "platform-private-target get-by-ensgid" [
 #
 # GET /platform/public/association
 # operationId: getAssociationById
-export def "platform-public-association get" [
+export def "get-association-by-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -787,7 +787,7 @@ export def "platform-public-association get" [
 #
 # GET /platform/public/association/filter
 # operationId: getAssociationFilter
-export def "platform-public-association-filter get" [
+export def "get-association-filter" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -842,7 +842,7 @@ export def "platform-public-association-filter get" [
 #
 # POST /platform/public/association/filter
 # operationId: postAssociationFilter
-export def "platform-public-association-filter create" [
+export def "post-association-filter" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -880,7 +880,7 @@ export def "platform-public-association-filter create" [
 #
 # GET /platform/public/evidence
 # operationId: getEvidenceById
-export def "platform-public-evidence get" [
+export def "get-evidence-by-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -916,7 +916,7 @@ export def "platform-public-evidence get" [
 #
 # POST /platform/public/evidence
 # operationId: postEvidenceById
-export def "platform-public-evidence create" [
+export def "post-evidence-by-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -954,7 +954,7 @@ export def "platform-public-evidence create" [
 #
 # GET /platform/public/evidence/filter
 # operationId: getEvidenceFilter
-export def "platform-public-evidence-filter get" [
+export def "get-evidence-filter" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1003,7 +1003,7 @@ export def "platform-public-evidence-filter get" [
 #
 # POST /platform/public/evidence/filter
 # operationId: postEvidenceFilter
-export def "platform-public-evidence-filter create" [
+export def "post-evidence-filter" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1041,7 +1041,7 @@ export def "platform-public-evidence-filter create" [
 #
 # GET /platform/public/search
 # operationId: getSearch
-export def "platform-public-search get" [
+export def "get-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1080,7 +1080,7 @@ export def "platform-public-search get" [
 #
 # GET /platform/public/utils/metrics
 # operationId: getDataMetrics
-export def "platform-public-utils-metrics get-data" [
+export def "get-data-metrics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1114,7 +1114,7 @@ export def "platform-public-utils-metrics get-data" [
 #
 # GET /platform/public/utils/ping
 # operationId: getPing
-export def "platform-public-utils-ping get" [
+export def "get-ping" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1148,7 +1148,7 @@ export def "platform-public-utils-ping get" [
 #
 # GET /platform/public/utils/stats
 # operationId: getDataStats
-export def "platform-public-utils-stats get-data" [
+export def "get-data-stats" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1182,7 +1182,7 @@ export def "platform-public-utils-stats get-data" [
 #
 # GET /platform/public/utils/therapeuticareas
 # operationId: getTherapeuticAreas
-export def "platform-public-utils-therapeuticareas get-therapeutic-areas" [
+export def "get-therapeutic-areas" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1216,7 +1216,7 @@ export def "platform-public-utils-therapeuticareas get-therapeutic-areas" [
 #
 # GET /platform/public/utils/version
 # operationId: getVersion
-export def "platform-public-utils-version get" [
+export def "get-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1250,7 +1250,7 @@ export def "platform-public-utils-version get" [
 #
 # GET /platform/swagger
 # operationId: getSwagger
-export def "platform-swagger get" [
+export def "get-swagger" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

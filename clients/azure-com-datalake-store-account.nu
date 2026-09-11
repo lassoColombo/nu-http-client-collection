@@ -124,7 +124,7 @@ def type-completer [] { ["Microsoft.DataLakeStore/accounts"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-data-lake-store-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -148,7 +148,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.DataLakeStore/operations
 # operationId: Operations_List
-export def "providers-microsoft-data-lake-store-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,7 +184,7 @@ export def "providers-microsoft-data-lake-store-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.DataLakeStore/accounts
 # operationId: Accounts_List
-export def "subscriptions-providers-microsoft-data-lake-store-accounts list" [
+export def "accounts-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -228,7 +228,7 @@ export def "subscriptions-providers-microsoft-data-lake-store-accounts list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.DataLakeStore/locations/{location}/capability
 # operationId: Locations_GetCapability
-export def "subscriptions-providers-microsoft-data-lake-store-locations-capability get" [
+export def "locations-get-capability" [
   subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -268,7 +268,7 @@ export def "subscriptions-providers-microsoft-data-lake-store-locations-capabili
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.DataLakeStore/locations/{location}/checkNameAvailability
 # operationId: Accounts_CheckNameAvailability
-export def "subscriptions-providers-microsoft-data-lake-store-locations-check-name-availability check-accounts" [
+export def "accounts-check-name-availability" [
   subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -313,7 +313,7 @@ export def "subscriptions-providers-microsoft-data-lake-store-locations-check-na
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.DataLakeStore/locations/{location}/usages
 # operationId: Locations_GetUsage
-export def "subscriptions-providers-microsoft-data-lake-store-locations-usages get" [
+export def "locations-get-usage" [
   subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -353,7 +353,7 @@ export def "subscriptions-providers-microsoft-data-lake-store-locations-usages g
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeStore/accounts
 # operationId: Accounts_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-accounts list" [
+export def "accounts-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -399,7 +399,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-ac
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeStore/accounts/{accountName}
 # operationId: Accounts_Delete
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-accounts delete" [
+export def "accounts-delete" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -441,7 +441,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-ac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeStore/accounts/{accountName}
 # operationId: Accounts_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-accounts get" [
+export def "accounts-get" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -484,7 +484,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-ac
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeStore/accounts/{accountName}
 # operationId: Accounts_Update
 # --properties shape: {defaultGroup?: string, encryptionConfig?: any, firewallAllowAzureIps?: "Enabled"|"Disabled", firewallRules?: list, firewallState?: "Enabled"|"Disabled", newTier?: "Consumption"|"Commitment_1TB"|"Commitment_10TB"|"Commitment_100TB"|"Commitment_500TB"|"Commitment_1PB"|"Commitment_5PB", trustedIdProviderState?: "Enabled"|"Disabled", trustedIdProviders?: list, virtualNetworkRules?: list}
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-accounts update" [
+export def "accounts-update" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -533,7 +533,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-ac
 # operationId: Accounts_Create
 # --identity shape: {type: "SystemAssigned"}
 # --properties shape: {defaultGroup?: string, encryptionConfig?: any, encryptionState?: "Enabled"|"Disabled", firewallAllowAzureIps?: "Enabled"|"Disabled", firewallRules?: list, firewallState?: "Enabled"|"Disabled", newTier?: "Consumption"|"Commitment_1TB"|"Commitment_10TB"|"Commitment_100TB"|"Commitment_500TB"|"Commitment_1PB"|"Commitment_5PB", trustedIdProviderState?: "Enabled"|"Disabled", trustedIdProviders?: list, virtualNetworkRules?: list}
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-accounts create" [
+export def "accounts-create" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -582,7 +582,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-ac
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeStore/accounts/{accountName}/enableKeyVault
 # operationId: Accounts_EnableKeyVault
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-accounts-enable-key-vault enable" [
+export def "accounts-enable-key-vault" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -624,7 +624,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-ac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeStore/accounts/{accountName}/firewallRules
 # operationId: FirewallRules_ListByAccount
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-accounts-firewall-rules list" [
+export def "firewall-rules-list-by-account" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -666,7 +666,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-ac
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeStore/accounts/{accountName}/firewallRules/{firewallRuleName}
 # operationId: FirewallRules_Delete
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-accounts-firewall-rules delete" [
+export def "firewall-rules-delete" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -710,7 +710,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-ac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeStore/accounts/{accountName}/firewallRules/{firewallRuleName}
 # operationId: FirewallRules_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-accounts-firewall-rules get" [
+export def "firewall-rules-get" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -755,7 +755,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-ac
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeStore/accounts/{accountName}/firewallRules/{firewallRuleName}
 # operationId: FirewallRules_Update
 # --properties shape: {endIpAddress?: string, startIpAddress?: string}
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-accounts-firewall-rules update" [
+export def "firewall-rules-update" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -804,7 +804,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-ac
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeStore/accounts/{accountName}/firewallRules/{firewallRuleName}
 # operationId: FirewallRules_CreateOrUpdate
 # --properties shape: {endIpAddress: string, startIpAddress: string}
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-accounts-firewall-rules create-or-update" [
+export def "firewall-rules-create-or-update" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -852,7 +852,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-ac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeStore/accounts/{accountName}/trustedIdProviders
 # operationId: TrustedIdProviders_ListByAccount
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-accounts-trusted-id-providers list" [
+export def "trusted-id-providers-list-by-account" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -894,7 +894,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-ac
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeStore/accounts/{accountName}/trustedIdProviders/{trustedIdProviderName}
 # operationId: TrustedIdProviders_Delete
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-accounts-trusted-id-providers delete" [
+export def "trusted-id-providers-delete" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -938,7 +938,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-ac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeStore/accounts/{accountName}/trustedIdProviders/{trustedIdProviderName}
 # operationId: TrustedIdProviders_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-accounts-trusted-id-providers get" [
+export def "trusted-id-providers-get" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -983,7 +983,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-ac
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeStore/accounts/{accountName}/trustedIdProviders/{trustedIdProviderName}
 # operationId: TrustedIdProviders_Update
 # --properties shape: {idProvider?: string}
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-accounts-trusted-id-providers update" [
+export def "trusted-id-providers-update" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1032,7 +1032,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-ac
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeStore/accounts/{accountName}/trustedIdProviders/{trustedIdProviderName}
 # operationId: TrustedIdProviders_CreateOrUpdate
 # --properties shape: {idProvider: string}
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-accounts-trusted-id-providers create-or-update" [
+export def "trusted-id-providers-create-or-update" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1080,7 +1080,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-ac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeStore/accounts/{accountName}/virtualNetworkRules
 # operationId: VirtualNetworkRules_ListByAccount
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-accounts-virtual-network-rules list" [
+export def "virtual-network-rules-list-by-account" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1122,7 +1122,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-ac
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeStore/accounts/{accountName}/virtualNetworkRules/{virtualNetworkRuleName}
 # operationId: VirtualNetworkRules_Delete
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-accounts-virtual-network-rules delete" [
+export def "virtual-network-rules-delete" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1166,7 +1166,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-ac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeStore/accounts/{accountName}/virtualNetworkRules/{virtualNetworkRuleName}
 # operationId: VirtualNetworkRules_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-accounts-virtual-network-rules get" [
+export def "virtual-network-rules-get" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1211,7 +1211,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-ac
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeStore/accounts/{accountName}/virtualNetworkRules/{virtualNetworkRuleName}
 # operationId: VirtualNetworkRules_Update
 # --properties shape: {subnetId?: string}
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-accounts-virtual-network-rules update" [
+export def "virtual-network-rules-update" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1260,7 +1260,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-ac
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeStore/accounts/{accountName}/virtualNetworkRules/{virtualNetworkRuleName}
 # operationId: VirtualNetworkRules_CreateOrUpdate
 # --properties shape: {subnetId: string}
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-store-accounts-virtual-network-rules create-or-update" [
+export def "virtual-network-rules-create-or-update" [
   subscription_id: string
   resource_group_name: string
   account_name: string

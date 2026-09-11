@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-sql-managed-instances-databases-schemas list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "managed-database-schemas-list-by-database" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -122,7 +122,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/managedInstances/{managedInstanceName}/databases/{databaseName}/schemas
 # operationId: ManagedDatabaseSchemas_ListByDatabase
-export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instances-databases-schemas list" [
+export def "managed-database-schemas-list-by-database" [
   subscription_id: string
   resource_group_name: string
   managed_instance_name: string
@@ -167,7 +167,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instan
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/managedInstances/{managedInstanceName}/databases/{databaseName}/schemas/{schemaName}
 # operationId: ManagedDatabaseSchemas_Get
-export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instances-databases-schemas get" [
+export def "managed-database-schemas-get" [
   subscription_id: string
   resource_group_name: string
   managed_instance_name: string
@@ -213,7 +213,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instan
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/managedInstances/{managedInstanceName}/databases/{databaseName}/schemas/{schemaName}/tables
 # operationId: ManagedDatabaseTables_ListBySchema
-export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instances-databases-schemas-tables list" [
+export def "managed-database-tables-list-by-schema" [
   subscription_id: string
   resource_group_name: string
   managed_instance_name: string
@@ -260,7 +260,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instan
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/managedInstances/{managedInstanceName}/databases/{databaseName}/schemas/{schemaName}/tables/{tableName}
 # operationId: ManagedDatabaseTables_Get
-export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instances-databases-schemas-tables get" [
+export def "managed-database-tables-get" [
   subscription_id: string
   resource_group_name: string
   managed_instance_name: string
@@ -308,7 +308,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instan
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/managedInstances/{managedInstanceName}/databases/{databaseName}/schemas/{schemaName}/tables/{tableName}/columns
 # operationId: ManagedDatabaseColumns_ListByTable
-export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instances-databases-schemas-tables-columns list" [
+export def "managed-database-columns-list-by-table" [
   subscription_id: string
   resource_group_name: string
   managed_instance_name: string
@@ -357,7 +357,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instan
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/managedInstances/{managedInstanceName}/databases/{databaseName}/schemas/{schemaName}/tables/{tableName}/columns/{columnName}
 # operationId: ManagedDatabaseColumns_Get
-export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instances-databases-schemas-tables-columns get" [
+export def "managed-database-columns-get" [
   subscription_id: string
   resource_group_name: string
   managed_instance_name: string

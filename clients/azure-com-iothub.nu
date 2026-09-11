@@ -124,7 +124,7 @@ def routing-source-completer [] { ["DeviceJobLifecycleEvents" "DeviceLifecycleEv
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-devices-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -148,7 +148,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.Devices/operations
 # operationId: Operations_List
-export def "providers-microsoft-devices-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,7 +184,7 @@ export def "providers-microsoft-devices-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Devices/IotHubs
 # operationId: IotHubResource_ListBySubscription
-export def "subscriptions-providers-microsoft-devices-iot-hubs list-resource" [
+export def "iot-hub-resource-list-by-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -222,7 +222,7 @@ export def "subscriptions-providers-microsoft-devices-iot-hubs list-resource" [
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Devices/checkNameAvailability
 # operationId: IotHubResource_CheckNameAvailability
-export def "subscriptions-providers-microsoft-devices-check-name-availability check-iot-hub-resource" [
+export def "iot-hub-resource-check-name-availability" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -264,7 +264,7 @@ export def "subscriptions-providers-microsoft-devices-check-name-availability ch
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Devices/usages
 # operationId: ResourceProviderCommon_GetSubscriptionQuota
-export def "subscriptions-providers-microsoft-devices-usages get-resource-common-quota" [
+export def "resource-provider-common-get-subscription-quota" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -302,7 +302,7 @@ export def "subscriptions-providers-microsoft-devices-usages get-resource-common
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/IotHubs
 # operationId: IotHubResource_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs list" [
+export def "iot-hub-resource-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -342,7 +342,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs l
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/IotHubs/{iotHubName}/failover
 # operationId: IotHub_ManualFailover
-export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-failover create-manual" [
+export def "iot-hub-manual-failover" [
   subscription_id: string
   resource_group_name: string
   iot_hub_name: string
@@ -390,7 +390,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-f
 # operationId: IotHubResource_TestAllRoutes
 # --message shape: {appProperties?: record, body?: string, systemProperties?: record}
 # --twin shape: {properties?: any, tags?: record}
-export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-routing-routes-testall test-list" [
+export def "iot-hub-resource-test-all-routes" [
   subscription_id: string
   resource_group_name: string
   iot_hub_name: string
@@ -441,7 +441,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-r
 # --message shape: {appProperties?: record, body?: string, systemProperties?: record}
 # --route shape: {condition?: string, endpointNames: list<string>, isEnabled: bool, name: string, source: "Invalid"|"DeviceMessages"|"TwinChangeEvents"|"DeviceLifecycleEvents"|"DeviceJobLifecycleEvents"|"DigitalTwinChangeEvents"}
 # --twin shape: {properties?: any, tags?: record}
-export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-routing-routes-testnew test" [
+export def "iot-hub-resource-test-route" [
   subscription_id: string
   resource_group_name: string
   iot_hub_name: string
@@ -489,7 +489,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-r
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/IotHubs/{iotHubName}/routingEndpointsHealth
 # operationId: IotHubResource_GetEndpointHealth
-export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-routing-endpoints-health get" [
+export def "iot-hub-resource-get-endpoint-health" [
   subscription_id: string
   resource_group_name: string
   iot_hub_name: string
@@ -531,7 +531,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-r
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/IotHubs/{resourceName}
 # operationId: IotHubResource_Delete
-export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs delete" [
+export def "iot-hub-resource-delete" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -573,7 +573,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs d
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/IotHubs/{resourceName}
 # operationId: IotHubResource_Get
-export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs get" [
+export def "iot-hub-resource-get" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -615,7 +615,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs g
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/IotHubs/{resourceName}
 # operationId: IotHubResource_Update
-export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs update" [
+export def "iot-hub-resource-update" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -663,7 +663,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs u
 # operationId: IotHubResource_CreateOrUpdate
 # --properties shape: {authorizationPolicies?: list, cloudToDevice?: record, comments?: string, deviceStreams?: record, enableFileUploadNotifications?: bool, eventHubEndpoints?: record, features?: "None"|"DeviceManagement", ipFilterRules?: list, messagingEndpoints?: record, routing?: record, storageEndpoints?: record}
 # --sku shape: {capacity?: int, name: "F1"|"S1"|"S2"|"S3"|"B1"|"B2"|"B3"}
-export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs create-or-update" [
+export def "iot-hub-resource-create-or-update" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -716,7 +716,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs c
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/IotHubs/{resourceName}/IotHubKeys/{keyName}/listkeys
 # operationId: IotHubResource_GetKeysForKeyName
-export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-iot-hub-keys-listkeys get-for-name" [
+export def "iot-hub-resource-get-keys-for-key-name" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -760,7 +760,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-i
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/IotHubs/{resourceName}/IotHubStats
 # operationId: IotHubResource_GetStats
-export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-iot-hub-stats get" [
+export def "iot-hub-resource-get-stats" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -802,7 +802,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-i
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/IotHubs/{resourceName}/certificates
 # operationId: Certificates_ListByIotHub
-export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-certificates list" [
+export def "certificates-list-by-iot-hub" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -844,7 +844,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-c
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/IotHubs/{resourceName}/certificates/{certificateName}
 # operationId: Certificates_Delete
-export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-certificates delete" [
+export def "certificates-delete" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -891,7 +891,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-c
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/IotHubs/{resourceName}/certificates/{certificateName}
 # operationId: Certificates_Get
-export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-certificates get" [
+export def "certificates-get" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -935,7 +935,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-c
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/IotHubs/{resourceName}/certificates/{certificateName}
 # operationId: Certificates_CreateOrUpdate
-export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-certificates create-or-update" [
+export def "certificates-create-or-update" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -986,7 +986,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-c
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/IotHubs/{resourceName}/certificates/{certificateName}/generateVerificationCode
 # operationId: Certificates_GenerateVerificationCode
-export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-certificates-generate-verification-code generate" [
+export def "certificates-generate-verification-code" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -1033,7 +1033,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-c
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/IotHubs/{resourceName}/certificates/{certificateName}/verify
 # operationId: Certificates_Verify
-export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-certificates-verify verify" [
+export def "certificates-verify" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -1084,7 +1084,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-c
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/IotHubs/{resourceName}/eventHubEndpoints/{eventHubEndpointName}/ConsumerGroups
 # operationId: IotHubResource_ListEventHubConsumerGroups
-export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-event-hub-endpoints-consumer-groups list" [
+export def "iot-hub-resource-list-event-hub-consumer-groups" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -1128,7 +1128,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-e
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/IotHubs/{resourceName}/eventHubEndpoints/{eventHubEndpointName}/ConsumerGroups/{name}
 # operationId: IotHubResource_DeleteEventHubConsumerGroup
-export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-event-hub-endpoints-consumer-groups delete" [
+export def "iot-hub-resource-delete-event-hub-consumer-group" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -1174,7 +1174,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-e
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/IotHubs/{resourceName}/eventHubEndpoints/{eventHubEndpointName}/ConsumerGroups/{name}
 # operationId: IotHubResource_GetEventHubConsumerGroup
-export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-event-hub-endpoints-consumer-groups get" [
+export def "iot-hub-resource-get-event-hub-consumer-group" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -1220,7 +1220,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-e
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/IotHubs/{resourceName}/eventHubEndpoints/{eventHubEndpointName}/ConsumerGroups/{name}
 # operationId: IotHubResource_CreateEventHubConsumerGroup
-export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-event-hub-endpoints-consumer-groups create" [
+export def "iot-hub-resource-create-event-hub-consumer-group" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -1266,7 +1266,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-e
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/IotHubs/{resourceName}/exportDevices
 # operationId: IotHubResource_ExportDevices
-export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-export-devices export" [
+export def "iot-hub-resource-export-devices" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -1313,7 +1313,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-e
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/IotHubs/{resourceName}/importDevices
 # operationId: IotHubResource_ImportDevices
-export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-import-devices import" [
+export def "iot-hub-resource-import-devices" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -1360,7 +1360,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-i
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/IotHubs/{resourceName}/jobs
 # operationId: IotHubResource_ListJobs
-export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-jobs list" [
+export def "iot-hub-resource-list-jobs" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -1402,7 +1402,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-j
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/IotHubs/{resourceName}/jobs/{jobId}
 # operationId: IotHubResource_GetJob
-export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-jobs get" [
+export def "iot-hub-resource-get-job" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -1446,7 +1446,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-j
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/IotHubs/{resourceName}/listkeys
 # operationId: IotHubResource_ListKeys
-export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-listkeys list-keys" [
+export def "iot-hub-resource-list-keys" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -1488,7 +1488,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-l
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/IotHubs/{resourceName}/quotaMetrics
 # operationId: IotHubResource_GetQuotaMetrics
-export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-quota-metrics get" [
+export def "iot-hub-resource-get-quota-metrics" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -1530,7 +1530,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-q
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/IotHubs/{resourceName}/skus
 # operationId: IotHubResource_GetValidSkus
-export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-skus get-valid" [
+export def "iot-hub-resource-get-valid-skus" [
   subscription_id: string
   resource_group_name: string
   resource_name: string

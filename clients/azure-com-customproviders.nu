@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-custom-providers-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.CustomProviders/operations
 # operationId: Operations_List
-export def "providers-microsoft-custom-providers-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -176,7 +176,7 @@ export def "providers-microsoft-custom-providers-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.CustomProviders/resourceProviders
 # operationId: CustomResourceProvider_ListBySubscription
-export def "subscriptions-providers-microsoft-custom-providers-resource-providers list" [
+export def "custom-resource-provider-list-by-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -214,7 +214,7 @@ export def "subscriptions-providers-microsoft-custom-providers-resource-provider
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomProviders/resourceProviders
 # operationId: CustomResourceProvider_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-custom-providers-resource-providers list" [
+export def "custom-resource-provider-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -254,7 +254,7 @@ export def "subscriptions-resource-groups-providers-microsoft-custom-providers-r
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomProviders/resourceProviders/{resourceProviderName}
 # operationId: CustomResourceProvider_Delete
-export def "subscriptions-resource-groups-providers-microsoft-custom-providers-resource-providers delete" [
+export def "custom-resource-provider-delete" [
   subscription_id: string
   resource_group_name: string
   resource_provider_name: string
@@ -296,7 +296,7 @@ export def "subscriptions-resource-groups-providers-microsoft-custom-providers-r
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomProviders/resourceProviders/{resourceProviderName}
 # operationId: CustomResourceProvider_Get
-export def "subscriptions-resource-groups-providers-microsoft-custom-providers-resource-providers get" [
+export def "custom-resource-provider-get" [
   subscription_id: string
   resource_group_name: string
   resource_provider_name: string
@@ -338,7 +338,7 @@ export def "subscriptions-resource-groups-providers-microsoft-custom-providers-r
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomProviders/resourceProviders/{resourceProviderName}
 # operationId: CustomResourceProvider_Update
-export def "subscriptions-resource-groups-providers-microsoft-custom-providers-resource-providers update" [
+export def "custom-resource-provider-update" [
   subscription_id: string
   resource_group_name: string
   resource_provider_name: string
@@ -385,7 +385,7 @@ export def "subscriptions-resource-groups-providers-microsoft-custom-providers-r
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomProviders/resourceProviders/{resourceProviderName}
 # operationId: CustomResourceProvider_CreateOrUpdate
 # --properties shape: {actions?: list, resourceTypes?: list, validations?: list}
-export def "subscriptions-resource-groups-providers-microsoft-custom-providers-resource-providers create-or-update" [
+export def "custom-resource-provider-create-or-update" [
   subscription_id: string
   resource_group_name: string
   resource_provider_name: string
@@ -433,7 +433,7 @@ export def "subscriptions-resource-groups-providers-microsoft-custom-providers-r
 #
 # GET /{scope}/providers/Microsoft.CustomProviders/associations
 # operationId: Associations_ListAll
-export def "providers-microsoft-custom-providers-associations list" [
+export def "associations-list-all" [
   scope: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -471,7 +471,7 @@ export def "providers-microsoft-custom-providers-associations list" [
 #
 # DELETE /{scope}/providers/Microsoft.CustomProviders/associations/{associationName}
 # operationId: Associations_Delete
-export def "providers-microsoft-custom-providers-associations delete" [
+export def "associations-delete" [
   scope: string
   association_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -511,7 +511,7 @@ export def "providers-microsoft-custom-providers-associations delete" [
 #
 # GET /{scope}/providers/Microsoft.CustomProviders/associations/{associationName}
 # operationId: Associations_Get
-export def "providers-microsoft-custom-providers-associations get" [
+export def "associations-get" [
   scope: string
   association_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -552,7 +552,7 @@ export def "providers-microsoft-custom-providers-associations get" [
 # PUT /{scope}/providers/Microsoft.CustomProviders/associations/{associationName}
 # operationId: Associations_CreateOrUpdate
 # --properties shape: {targetResourceId?: string}
-export def "providers-microsoft-custom-providers-associations create-or-update" [
+export def "associations-create-or-update" [
   scope: string
   association_name: string
   --base-url(-b): string@base-url-completer # API base URL

@@ -134,7 +134,7 @@ def state-completer [] { ["STATE_CANARY_ACTIVE" "STATE_CANARY_PENDING_AGENTS" "S
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "controller-debuggees-register create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "clouddebugger-controller-debuggees-register" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -159,7 +159,7 @@ export def commands []: nothing -> table {
 # POST /v2/controller/debuggees/register
 # operationId: clouddebugger.controller.debuggees.register
 # --debuggee shape: {agentVersion?: string, canaryMode?: "CANARY_MODE_UNSPECIFIED"|"CANARY_MODE_ALWAYS_ENABLED"|"CANARY_MODE_ALWAYS_DISABLED"|"CANARY_MODE_DEFAULT_ENABLED"|"CANARY_MODE_DEFAULT_DISABLED", description?: string, extSourceContexts?: list, id?: string, isDisabled?: bool, isInactive?: bool, labels?: record, project?: string, sourceContexts?: list, status?: record, uniquifier?: string}
-export def "controller-debuggees-register create" [
+export def "clouddebugger-controller-debuggees-register" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -209,7 +209,7 @@ export def "controller-debuggees-register create" [
 #
 # GET /v2/controller/debuggees/{debuggeeId}/breakpoints
 # operationId: clouddebugger.controller.debuggees.breakpoints.list
-export def "controller-debuggees-breakpoints list" [
+export def "clouddebugger-controller-debuggees-breakpoints-list" [
   debuggee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -261,7 +261,7 @@ export def "controller-debuggees-breakpoints list" [
 # PUT /v2/controller/debuggees/{debuggeeId}/breakpoints/{id}
 # operationId: clouddebugger.controller.debuggees.breakpoints.update
 # --breakpoint shape: {action?: "CAPTURE"|"LOG", canaryExpireTime?: string, condition?: string, createTime?: string, evaluatedExpressions?: list, expressions?: list<string>, finalTime?: string, id?: string, isFinalState?: bool, labels?: record, location?: record, logLevel?: "INFO"|"WARNING"|"ERROR", logMessageFormat?: string, stackFrames?: list, state?: "STATE_UNSPECIFIED"|"STATE_CANARY_PENDING_AGENTS"|"STATE_CANARY_ACTIVE"|"STATE_ROLLING_TO_ALL"|"STATE_IS_FINAL", status?: record, userEmail?: string, ... (1 more fields)}
-export def "controller-debuggees-breakpoints update" [
+export def "clouddebugger-controller-debuggees-breakpoints-update" [
   debuggee_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -315,7 +315,7 @@ export def "controller-debuggees-breakpoints update" [
 #
 # GET /v2/debugger/debuggees
 # operationId: clouddebugger.debugger.debuggees.list
-export def "debugger-debuggees list" [
+export def "clouddebugger-debugger-debuggees-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -364,7 +364,7 @@ export def "debugger-debuggees list" [
 #
 # GET /v2/debugger/debuggees/{debuggeeId}/breakpoints
 # operationId: clouddebugger.debugger.debuggees.breakpoints.list
-export def "debugger-debuggees-breakpoints list" [
+export def "clouddebugger-debugger-debuggees-breakpoints-list" [
   debuggee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -423,7 +423,7 @@ export def "debugger-debuggees-breakpoints list" [
 # --stackFrames item shape: {arguments?: list, function?: string, locals?: list, location?: record}
 # --status shape: {description?: record, isError?: bool, refersTo?: "UNSPECIFIED"|"BREAKPOINT_SOURCE_LOCATION"|"BREAKPOINT_CONDITION"|"BREAKPOINT_EXPRESSION"|"BREAKPOINT_AGE"|"BREAKPOINT_CANARY_FAILED"|"VARIABLE_NAME"|"VARIABLE_VALUE"}
 # --variableTable item shape: {members?: list, name?: string, status?: record, type?: string, value?: string, varTableIndex?: int}
-export def "debugger-debuggees-breakpoints-set update" [
+export def "clouddebugger-debugger-debuggees-breakpoints-set" [
   debuggee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -494,7 +494,7 @@ export def "debugger-debuggees-breakpoints-set update" [
 #
 # DELETE /v2/debugger/debuggees/{debuggeeId}/breakpoints/{breakpointId}
 # operationId: clouddebugger.debugger.debuggees.breakpoints.delete
-export def "debugger-debuggees-breakpoints delete" [
+export def "clouddebugger-debugger-debuggees-breakpoints-delete" [
   debuggee_id: string
   breakpoint_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -545,7 +545,7 @@ export def "debugger-debuggees-breakpoints delete" [
 #
 # GET /v2/debugger/debuggees/{debuggeeId}/breakpoints/{breakpointId}
 # operationId: clouddebugger.debugger.debuggees.breakpoints.get
-export def "debugger-debuggees-breakpoints get" [
+export def "clouddebugger-debugger-debuggees-breakpoints-get" [
   debuggee_id: string
   breakpoint_id: string
   --base-url(-b): string@base-url-completer # API base URL

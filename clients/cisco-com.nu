@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "security-advisories-cvrf-advisory get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-security-advisories-cvrf-advisory-advisory-id" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -121,7 +121,7 @@ export def commands []: nothing -> table {
 # Used to obtain an advisory in CVRF format for a given advisory ID `advisory_id` (i.e., cisco-sa-20150819-pcp)
 #
 # GET /security/advisories/cvrf/advisory/{advisory_id}
-export def "security-advisories-cvrf-advisory get" [
+export def "get-security-advisories-cvrf-advisory-advisory-id" [
   advisory_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -156,7 +156,7 @@ export def "security-advisories-cvrf-advisory get" [
 # Used to obtain all advisories in Common Vulnerability Reporting Format (CVRF). For more information about CVRF go to https://communities.cisco.com/docs/DOC-63156 . By default the output is in JSON. To obtain the output in XML use the .xml extension. For example, /advisories/cvrf/all.xml
 #
 # GET /security/advisories/cvrf/all
-export def "security-advisories-cvrf-all get" [
+export def "get-security-advisories-cvrf-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -189,7 +189,7 @@ export def "security-advisories-cvrf-all get" [
 # Used to obtain an advisory in CVRF format for a given Common Vulnerability Enumerator (CVE). The `cve_id` format is CVE-YYYY-NNNN. For more information about CVE visit http://cve.mitre.org/
 #
 # GET /security/advisories/cvrf/cve/{cve_id}
-export def "security-advisories-cvrf-cve get" [
+export def "get-security-advisories-cvrf-cve-cve-id" [
   cve_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -224,7 +224,7 @@ export def "security-advisories-cvrf-cve get" [
 # Used to obtain all the latest security advisories in CVRF format given an absolute number. For instance, the latest 10 or latest 5.
 #
 # GET /security/advisories/cvrf/latest/{number}
-export def "security-advisories-cvrf-latest get" [
+export def "get-security-advisories-cvrf-latest-number" [
   number: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -259,7 +259,7 @@ export def "security-advisories-cvrf-latest get" [
 # Used to obtain all the advisories that affects the given product name.
 #
 # GET /security/advisories/cvrf/product
-export def "security-advisories-cvrf-product get" [
+export def "get-security-advisories-cvrf-product" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -294,7 +294,7 @@ export def "security-advisories-cvrf-product get" [
 # Used to obtain all security advisories for a given security impact rating (critical, high, medium, or low) in CVRF format.
 #
 # GET /security/advisories/cvrf/severity/{severity}
-export def "security-advisories-cvrf-severity get" [
+export def "get-security-advisories-cvrf-severity-severity" [
   severity: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -329,7 +329,7 @@ export def "security-advisories-cvrf-severity get" [
 # Used to obtain all security advisories for a given security impact rating (critical, high, medium, or low) in CVRF format and additionally filter based of firstpublished start date and enddate
 #
 # GET /security/advisories/cvrf/severity/{severity}/firstpublished
-export def "security-advisories-cvrf-severity-firstpublished get" [
+export def "get-security-advisories-cvrf-severity-severity-firstpublished" [
   severity: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -367,7 +367,7 @@ export def "security-advisories-cvrf-severity-firstpublished get" [
 # Used to obtain all security advisories for a given security impact rating (critical, high, medium, or low) in CVRF format.
 #
 # GET /security/advisories/cvrf/severity/{severity}/lastpublished
-export def "security-advisories-cvrf-severity-lastpublished get" [
+export def "get-security-advisories-cvrf-severity-severity-lastpublished" [
   severity: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -405,7 +405,7 @@ export def "security-advisories-cvrf-severity-lastpublished get" [
 # Used to obtain all security advisories that have were orginally published in a specific year `YYYY`.
 #
 # GET /security/advisories/cvrf/year/{year}
-export def "security-advisories-cvrf-year get" [
+export def "get-security-advisories-cvrf-year-year" [
   year: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -440,7 +440,7 @@ export def "security-advisories-cvrf-year get" [
 # Used to obtain all advisories that affects the given ios version
 #
 # GET /security/advisories/ios
-export def "security-advisories-ios get" [
+export def "get-security-advisories-ios" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -475,7 +475,7 @@ export def "security-advisories-ios get" [
 # Used to obtain all advisories that affects the given ios version
 #
 # GET /security/advisories/iosxe
-export def "security-advisories-iosxe get" [
+export def "get-security-advisories-iosxe" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -510,7 +510,7 @@ export def "security-advisories-iosxe get" [
 # Used to obtain OVAL definitions for a given advisory ID `advisory_id` (i.e., cisco-sa-20150819-pcp)
 #
 # GET /security/advisories/oval/advisory/{advisory_id}
-export def "security-advisories-oval-advisory get" [
+export def "get-security-advisories-oval-advisory-advisory-id" [
   advisory_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -545,7 +545,7 @@ export def "security-advisories-oval-advisory get" [
 # Used to obtain all Open Vulnerability and Assessment Language (OVAL) definitions available for Cisco security vulnerabilities. For more information about OVAL go to https://communities.cisco.com/docs/DOC-63158 . By default the output is in JSON. To obtain the output in XML use the .xml extension. For example, /advisories/oval/all.xml
 #
 # GET /security/advisories/oval/all
-export def "security-advisories-oval-all get" [
+export def "get-security-advisories-oval-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -578,7 +578,7 @@ export def "security-advisories-oval-all get" [
 # Used to obtain OVAL definitions for a given CVE Identifier. The `cve_id` format is CVE-YYYY-NNNN.
 #
 # GET /security/advisories/oval/cve/{cve_id}
-export def "security-advisories-oval-cve get" [
+export def "get-security-advisories-oval-cve-cve-id" [
   cve_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -613,7 +613,7 @@ export def "security-advisories-oval-cve get" [
 # Used to obtain all the latest OVAL definitions given an absolute number. For instance, the latest 10 or latest 5.
 #
 # GET /security/advisories/oval/latest/{number}
-export def "security-advisories-oval-latest get" [
+export def "get-security-advisories-oval-latest-number" [
   number: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -648,7 +648,7 @@ export def "security-advisories-oval-latest get" [
 # Used to obtain all the oval advisories that affects the given product name.
 #
 # GET /security/advisories/oval/product
-export def "security-advisories-oval-product get" [
+export def "get-security-advisories-oval-product" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -683,7 +683,7 @@ export def "security-advisories-oval-product get" [
 # Used to obtain all OVAL definitions for a given security impact rating (critical, high, medium, or low).
 #
 # GET /security/advisories/oval/severity/{severity}
-export def "security-advisories-oval-severity get" [
+export def "get-security-advisories-oval-severity-severity" [
   severity: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -718,7 +718,7 @@ export def "security-advisories-oval-severity get" [
 # Used to obtain all security advisories for a given security impact rating (critical, high, medium, or low) in OVAL format.
 #
 # GET /security/advisories/oval/severity/{severity}/firstpublished
-export def "security-advisories-oval-severity-firstpublished get" [
+export def "get-security-advisories-oval-severity-severity-firstpublished" [
   severity: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -756,7 +756,7 @@ export def "security-advisories-oval-severity-firstpublished get" [
 # Used to obtain all security advisories for a given security impact rating (critical, high, medium, or low) in OVAL format.
 #
 # GET /security/advisories/oval/severity/{severity}/lastpublished
-export def "security-advisories-oval-severity-lastpublished get" [
+export def "get-security-advisories-oval-severity-severity-lastpublished" [
   severity: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

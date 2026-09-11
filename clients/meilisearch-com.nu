@@ -121,7 +121,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "dumps create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-a-dump" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -145,7 +145,7 @@ export def commands []: nothing -> table {
 #
 # POST /dumps
 # operationId: createADump
-export def "dumps create" [
+export def "create-a-dump" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -179,7 +179,7 @@ export def "dumps create" [
 #
 # GET /health
 # operationId: health
-export def "health get" [
+export def "health" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -213,7 +213,7 @@ export def "health get" [
 #
 # GET /indexes
 # operationId: getIndexes
-export def "indexes get" [
+export def "get-indexes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -250,7 +250,7 @@ export def "indexes get" [
 #
 # POST /indexes
 # operationId: createIndexWithPrimaryKey
-export def "indexes create-index-with-primary-key" [
+export def "create-index-with-primary-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -289,7 +289,7 @@ export def "indexes create-index-with-primary-key" [
 #
 # DELETE /indexes/books
 # operationId: deleteAnIndex
-export def "indexes-books delete-index" [
+export def "delete-an-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -323,7 +323,7 @@ export def "indexes-books delete-index" [
 #
 # GET /indexes/books
 # operationId: showIndex
-export def "indexes-books get-show-index" [
+export def "show-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -357,7 +357,7 @@ export def "indexes-books get-show-index" [
 #
 # PATCH /indexes/books
 # operationId: udpateIndex
-export def "indexes-books update-udpate-index" [
+export def "udpate-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -395,7 +395,7 @@ export def "indexes-books update-udpate-index" [
 #
 # DELETE /indexes/books/documents
 # operationId: deleteAllDocuments
-export def "indexes-books-documents delete-list" [
+export def "delete-all-documents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -429,7 +429,7 @@ export def "indexes-books-documents delete-list" [
 #
 # GET /indexes/books/documents
 # operationId: getDocuments
-export def "indexes-books-documents get" [
+export def "get-documents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -467,7 +467,7 @@ export def "indexes-books-documents get" [
 #
 # POST /indexes/books/documents
 # operationId: addOrReplaceDocuments
-export def "indexes-books-documents create-or-update" [
+export def "add-or-replace-documents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -507,7 +507,7 @@ export def "indexes-books-documents create-or-update" [
 #
 # PUT /indexes/books/documents
 # operationId: addOrUpdateDocuments
-export def "indexes-books-documents create-or-update-1" [
+export def "add-or-update-documents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -547,7 +547,7 @@ export def "indexes-books-documents create-or-update-1" [
 #
 # DELETE /indexes/books/documents/1
 # operationId: deleteOneDocument
-export def "indexes-books-documents-1 delete-one" [
+export def "delete-one-document" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -585,7 +585,7 @@ export def "indexes-books-documents-1 delete-one" [
 #
 # GET /indexes/books/documents/2
 # operationId: getOneDocument
-export def "indexes-books-documents-2 get-one" [
+export def "get-one-document" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -621,7 +621,7 @@ export def "indexes-books-documents-2 get-one" [
 #
 # POST /indexes/books/documents/delete-batch
 # operationId: deleteDocuments
-export def "indexes-books-documents-delete-batch delete" [
+export def "delete-documents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -659,7 +659,7 @@ export def "indexes-books-documents-delete-batch delete" [
 #
 # GET /indexes/books/search
 # operationId: searchInIndex
-export def "indexes-books-search list-in-index" [
+export def "search-in-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -711,7 +711,7 @@ export def "indexes-books-search list-in-index" [
 #
 # POST /indexes/books/search
 # operationId: searchInIndex1
-export def "indexes-books-search list-in-index1" [
+export def "search-in-index1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -750,7 +750,7 @@ export def "indexes-books-search list-in-index1" [
 #
 # DELETE /indexes/books/settings
 # operationId: resetAllSettings
-export def "indexes-books-settings reset-list" [
+export def "reset-all-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -784,7 +784,7 @@ export def "indexes-books-settings reset-list" [
 #
 # GET /indexes/books/settings
 # operationId: getAllSettings
-export def "indexes-books-settings get-list" [
+export def "get-all-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -818,7 +818,7 @@ export def "indexes-books-settings get-list" [
 #
 # PATCH /indexes/books/settings
 # operationId: updateSettings
-export def "indexes-books-settings update" [
+export def "update-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -860,7 +860,7 @@ export def "indexes-books-settings update" [
 #
 # DELETE /indexes/books/settings/displayed-attributes
 # operationId: resetDisplayedAttributes
-export def "indexes-books-settings-displayed-attributes reset" [
+export def "reset-displayed-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -894,7 +894,7 @@ export def "indexes-books-settings-displayed-attributes reset" [
 #
 # GET /indexes/books/settings/displayed-attributes
 # operationId: getDisplayedAttributes
-export def "indexes-books-settings-displayed-attributes get" [
+export def "get-displayed-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -928,7 +928,7 @@ export def "indexes-books-settings-displayed-attributes get" [
 #
 # PUT /indexes/books/settings/displayed-attributes
 # operationId: updateDisplayedAttributes
-export def "indexes-books-settings-displayed-attributes update" [
+export def "update-displayed-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -966,7 +966,7 @@ export def "indexes-books-settings-displayed-attributes update" [
 #
 # DELETE /indexes/books/settings/distinct-attribute
 # operationId: resetDistinctAttribute
-export def "indexes-books-settings-distinct-attribute reset" [
+export def "reset-distinct-attribute" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1000,7 +1000,7 @@ export def "indexes-books-settings-distinct-attribute reset" [
 #
 # GET /indexes/books/settings/distinct-attribute
 # operationId: getDistinctAttribute
-export def "indexes-books-settings-distinct-attribute get" [
+export def "get-distinct-attribute" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1034,7 +1034,7 @@ export def "indexes-books-settings-distinct-attribute get" [
 #
 # PUT /indexes/books/settings/distinct-attribute
 # operationId: updateDistinctAttribute
-export def "indexes-books-settings-distinct-attribute update" [
+export def "update-distinct-attribute" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1072,7 +1072,7 @@ export def "indexes-books-settings-distinct-attribute update" [
 #
 # DELETE /indexes/books/settings/faceting
 # operationId: resetFaceting
-export def "indexes-books-settings-faceting reset" [
+export def "reset-faceting" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1106,7 +1106,7 @@ export def "indexes-books-settings-faceting reset" [
 #
 # GET /indexes/books/settings/faceting
 # operationId: getFaceting
-export def "indexes-books-settings-faceting get" [
+export def "get-faceting" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1140,7 +1140,7 @@ export def "indexes-books-settings-faceting get" [
 #
 # PATCH /indexes/books/settings/faceting
 # operationId: updateFaceting
-export def "indexes-books-settings-faceting update" [
+export def "update-faceting" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1178,7 +1178,7 @@ export def "indexes-books-settings-faceting update" [
 #
 # DELETE /indexes/books/settings/filterable-attributes
 # operationId: resetFilterableAttributes
-export def "indexes-books-settings-filterable-attributes reset" [
+export def "reset-filterable-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1212,7 +1212,7 @@ export def "indexes-books-settings-filterable-attributes reset" [
 #
 # GET /indexes/books/settings/filterable-attributes
 # operationId: getFilterableAttributes
-export def "indexes-books-settings-filterable-attributes get" [
+export def "get-filterable-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1246,7 +1246,7 @@ export def "indexes-books-settings-filterable-attributes get" [
 #
 # PUT /indexes/books/settings/filterable-attributes
 # operationId: updateFilterableAttributes
-export def "indexes-books-settings-filterable-attributes update" [
+export def "update-filterable-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1284,7 +1284,7 @@ export def "indexes-books-settings-filterable-attributes update" [
 #
 # DELETE /indexes/books/settings/pagination
 # operationId: resetPagination
-export def "indexes-books-settings-pagination reset" [
+export def "reset-pagination" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1318,7 +1318,7 @@ export def "indexes-books-settings-pagination reset" [
 #
 # GET /indexes/books/settings/pagination
 # operationId: getPagination
-export def "indexes-books-settings-pagination get" [
+export def "get-pagination" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1352,7 +1352,7 @@ export def "indexes-books-settings-pagination get" [
 #
 # PATCH /indexes/books/settings/pagination
 # operationId: updatePagination
-export def "indexes-books-settings-pagination update" [
+export def "update-pagination" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1390,7 +1390,7 @@ export def "indexes-books-settings-pagination update" [
 #
 # DELETE /indexes/books/settings/ranking-rules
 # operationId: resetRankingRules
-export def "indexes-books-settings-ranking-rules reset" [
+export def "reset-ranking-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1424,7 +1424,7 @@ export def "indexes-books-settings-ranking-rules reset" [
 #
 # GET /indexes/books/settings/ranking-rules
 # operationId: getRankingRules
-export def "indexes-books-settings-ranking-rules get" [
+export def "get-ranking-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1458,7 +1458,7 @@ export def "indexes-books-settings-ranking-rules get" [
 #
 # PUT /indexes/books/settings/ranking-rules
 # operationId: updateRankingRules
-export def "indexes-books-settings-ranking-rules update" [
+export def "update-ranking-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1496,7 +1496,7 @@ export def "indexes-books-settings-ranking-rules update" [
 #
 # DELETE /indexes/books/settings/searchable-attributes
 # operationId: resetSearchableAttributes
-export def "indexes-books-settings-searchable-attributes reset" [
+export def "reset-searchable-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1530,7 +1530,7 @@ export def "indexes-books-settings-searchable-attributes reset" [
 #
 # GET /indexes/books/settings/searchable-attributes
 # operationId: getSearchableAttributes
-export def "indexes-books-settings-searchable-attributes get" [
+export def "get-searchable-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1564,7 +1564,7 @@ export def "indexes-books-settings-searchable-attributes get" [
 #
 # PUT /indexes/books/settings/searchable-attributes
 # operationId: updateSearchableAttributes
-export def "indexes-books-settings-searchable-attributes update" [
+export def "update-searchable-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1602,7 +1602,7 @@ export def "indexes-books-settings-searchable-attributes update" [
 #
 # DELETE /indexes/books/settings/sortable-attributes
 # operationId: resetSortableAttributes
-export def "indexes-books-settings-sortable-attributes reset" [
+export def "reset-sortable-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1636,7 +1636,7 @@ export def "indexes-books-settings-sortable-attributes reset" [
 #
 # GET /indexes/books/settings/sortable-attributes
 # operationId: getSortableAttributes
-export def "indexes-books-settings-sortable-attributes get" [
+export def "get-sortable-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1670,7 +1670,7 @@ export def "indexes-books-settings-sortable-attributes get" [
 #
 # PUT /indexes/books/settings/sortable-attributes
 # operationId: updateSortableAttributes
-export def "indexes-books-settings-sortable-attributes update" [
+export def "update-sortable-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1708,7 +1708,7 @@ export def "indexes-books-settings-sortable-attributes update" [
 #
 # DELETE /indexes/books/settings/stop-words
 # operationId: resetStopWords
-export def "indexes-books-settings-stop-words reset" [
+export def "reset-stop-words" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1742,7 +1742,7 @@ export def "indexes-books-settings-stop-words reset" [
 #
 # GET /indexes/books/settings/stop-words
 # operationId: getStopWords
-export def "indexes-books-settings-stop-words get" [
+export def "get-stop-words" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1776,7 +1776,7 @@ export def "indexes-books-settings-stop-words get" [
 #
 # PUT /indexes/books/settings/stop-words
 # operationId: updateStopWords
-export def "indexes-books-settings-stop-words update" [
+export def "update-stop-words" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1814,7 +1814,7 @@ export def "indexes-books-settings-stop-words update" [
 #
 # DELETE /indexes/books/settings/synonyms
 # operationId: resetSynonyms
-export def "indexes-books-settings-synonyms reset" [
+export def "reset-synonyms" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1852,7 +1852,7 @@ export def "indexes-books-settings-synonyms reset" [
 #
 # GET /indexes/books/settings/synonyms
 # operationId: getSynonyms
-export def "indexes-books-settings-synonyms get" [
+export def "get-synonyms" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1886,7 +1886,7 @@ export def "indexes-books-settings-synonyms get" [
 #
 # PUT /indexes/books/settings/synonyms
 # operationId: updateSynonyms
-export def "indexes-books-settings-synonyms update" [
+export def "update-synonyms" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1925,7 +1925,7 @@ export def "indexes-books-settings-synonyms update" [
 #
 # DELETE /indexes/books/settings/typo-tolerance
 # operationId: resetTypoTolerance
-export def "indexes-books-settings-typo-tolerance reset" [
+export def "reset-typo-tolerance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1959,7 +1959,7 @@ export def "indexes-books-settings-typo-tolerance reset" [
 #
 # GET /indexes/books/settings/typo-tolerance
 # operationId: getTypoTolerance
-export def "indexes-books-settings-typo-tolerance get" [
+export def "get-typo-tolerance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1994,7 +1994,7 @@ export def "indexes-books-settings-typo-tolerance get" [
 # PATCH /indexes/books/settings/typo-tolerance
 # operationId: updateTypoTolerance
 # --minWordSizeForTypos shape: {oneTypo?: float, twoTypos?: float}
-export def "indexes-books-settings-typo-tolerance update" [
+export def "update-typo-tolerance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2034,7 +2034,7 @@ export def "indexes-books-settings-typo-tolerance update" [
 #
 # GET /indexes/books/stats
 # operationId: statsOfAnIndex
-export def "indexes-books-stats stats-of-index" [
+export def "stats-of-an-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2068,7 +2068,7 @@ export def "indexes-books-stats stats-of-index" [
 #
 # POST /indexes/swap-indexes
 # operationId: swapIndexes
-export def "indexes-swap-indexes create" [
+export def "swap-indexes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2106,7 +2106,7 @@ export def "indexes-swap-indexes create" [
 #
 # GET /keys
 # operationId: getKeys
-export def "keys get" [
+export def "get-keys" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2143,7 +2143,7 @@ export def "keys get" [
 #
 # POST /keys
 # operationId: createAKey
-export def "keys create" [
+export def "create-a-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2185,7 +2185,7 @@ export def "keys create" [
 #
 # GET /keys/L8l05tFb188aab693735bbaf1f898b9902fb39f865160d39dddba2b47b940115a0430705
 # operationId: getOneKey
-export def "keys-l8l05t-fb188aab693735bbaf1f898b9902fb39f865160d39dddba2b47b940115a0430705 get-one" [
+export def "get-one-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2219,7 +2219,7 @@ export def "keys-l8l05t-fb188aab693735bbaf1f898b9902fb39f865160d39dddba2b47b9401
 #
 # DELETE /keys/kN2aK9EO8a7b627e425717d9196c8081552ca004e513545ed178f8a56981dbd3080d4a5b
 # operationId: deleteAKey
-export def "keys-k-n2a-k9-eo8a7b627e425717d9196c8081552ca004e513545ed178f8a56981dbd3080d4a5b delete" [
+export def "delete-a-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2253,7 +2253,7 @@ export def "keys-k-n2a-k9-eo8a7b627e425717d9196c8081552ca004e513545ed178f8a56981
 #
 # PATCH /keys/wYZjGJyBcdb0621b97999c233246a8ec0a35d0fcd9a6417ef8ccee0c8978b64b123af2dd
 # operationId: updateAKey
-export def "keys-w-y-zj-g-jy-bcdb0621b97999c233246a8ec0a35d0fcd9a6417ef8ccee0c8978b64b123af2dd update" [
+export def "update-a-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2291,7 +2291,7 @@ export def "keys-w-y-zj-g-jy-bcdb0621b97999c233246a8ec0a35d0fcd9a6417ef8ccee0c89
 #
 # GET /stats
 # operationId: globalStats
-export def "stats stats-global" [
+export def "global-stats" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2325,7 +2325,7 @@ export def "stats stats-global" [
 #
 # DELETE /tasks
 # operationId: deleteTasks
-export def "tasks delete" [
+export def "delete-tasks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2373,7 +2373,7 @@ export def "tasks delete" [
 #
 # GET /tasks
 # operationId: getAllTasks
-export def "tasks get-list" [
+export def "get-all-tasks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2421,7 +2421,7 @@ export def "tasks get-list" [
 #
 # GET /tasks/0
 # operationId: getOneTask
-export def "tasks-0 get-one" [
+export def "get-one-task" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2455,7 +2455,7 @@ export def "tasks-0 get-one" [
 #
 # POST /tasks/cancel
 # operationId: cancelTasks
-export def "tasks-cancel cancel" [
+export def "cancel-tasks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2503,7 +2503,7 @@ export def "tasks-cancel cancel" [
 #
 # GET /version
 # operationId: version
-export def "version get" [
+export def "version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

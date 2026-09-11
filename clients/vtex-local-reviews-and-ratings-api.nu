@@ -127,7 +127,7 @@ def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "rating get-product" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-product-rating" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -151,7 +151,7 @@ export def commands []: nothing -> table {
 #
 # GET /rating/{productId}
 # operationId: GetProductRating
-export def "rating get-product" [
+export def "get-product-rating" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -191,7 +191,7 @@ export def "rating get-product" [
 #
 # POST /review
 # operationId: SaveReview
-export def "review create-save" [
+export def "save-review" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -239,7 +239,7 @@ export def "review create-save" [
 #
 # DELETE /review/{reviewId}
 # operationId: DeleteReview
-export def "review delete" [
+export def "delete-review" [
   review_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -279,7 +279,7 @@ export def "review delete" [
 #
 # GET /review/{reviewId}
 # operationId: GetReviewbyReviewId
-export def "review get-reviewby" [
+export def "get-reviewby-review-id" [
   review_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -319,7 +319,7 @@ export def "review get-reviewby" [
 #
 # PATCH /review/{reviewId}
 # operationId: EditReview
-export def "review update-edit" [
+export def "edit-review" [
   review_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -372,7 +372,7 @@ export def "review update-edit" [
 #
 # DELETE /reviews
 # operationId: DeleteMultipleReviews
-export def "reviews delete-multiple" [
+export def "delete-multiple-reviews" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -416,7 +416,7 @@ export def "reviews delete-multiple" [
 #
 # GET /reviews
 # operationId: GetalistofReviews
-export def "reviews get-alistof" [
+export def "getalistof-reviews" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -461,7 +461,7 @@ export def "reviews get-alistof" [
 #
 # POST /reviews
 # operationId: SaveMultipleReviews
-export def "reviews create-save-multiple" [
+export def "save-multiple-reviews" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)

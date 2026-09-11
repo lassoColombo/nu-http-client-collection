@@ -119,7 +119,7 @@ def operation-completer-1 [] { ["remove"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "vaults-multipart-uploads abort" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "abort-multipart-upload" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -143,7 +143,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /{accountId}/vaults/{vaultName}/multipart-uploads/{uploadId}
 # operationId: AbortMultipartUpload
-export def "vaults-multipart-uploads abort" [
+export def "abort-multipart-upload" [
   account_id: string
   vault_name: string
   upload_id: string
@@ -192,7 +192,7 @@ export def "vaults-multipart-uploads abort" [
 #
 # POST /{accountId}/vaults/{vaultName}/multipart-uploads/{uploadId}
 # operationId: CompleteMultipartUpload
-export def "vaults-multipart-uploads complete" [
+export def "complete-multipart-upload" [
   account_id: string
   vault_name: string
   upload_id: string
@@ -243,7 +243,7 @@ export def "vaults-multipart-uploads complete" [
 #
 # GET /{accountId}/vaults/{vaultName}/multipart-uploads/{uploadId}
 # operationId: ListParts
-export def "vaults-multipart-uploads list-parts" [
+export def "list-parts" [
   account_id: string
   vault_name: string
   upload_id: string
@@ -295,7 +295,7 @@ export def "vaults-multipart-uploads list-parts" [
 #
 # PUT /{accountId}/vaults/{vaultName}/multipart-uploads/{uploadId}
 # operationId: UploadMultipartPart
-export def "vaults-multipart-uploads upload-part" [
+export def "upload-multipart-part" [
   account_id: string
   vault_name: string
   upload_id: string
@@ -350,7 +350,7 @@ export def "vaults-multipart-uploads upload-part" [
 #
 # DELETE /{accountId}/vaults/{vaultName}/lock-policy
 # operationId: AbortVaultLock
-export def "vaults-lock-policy abort" [
+export def "abort-vault-lock" [
   account_id: string
   vault_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -397,7 +397,7 @@ export def "vaults-lock-policy abort" [
 #
 # GET /{accountId}/vaults/{vaultName}/lock-policy
 # operationId: GetVaultLock
-export def "vaults-lock-policy get" [
+export def "get-vault-lock" [
   account_id: string
   vault_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -445,7 +445,7 @@ export def "vaults-lock-policy get" [
 # POST /{accountId}/vaults/{vaultName}/lock-policy
 # operationId: InitiateVaultLock
 # --policy shape: {Policy?: any}
-export def "vaults-lock-policy lock-initiate" [
+export def "initiate-vault-lock" [
   account_id: string
   vault_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -496,7 +496,7 @@ export def "vaults-lock-policy lock-initiate" [
 #
 # POST /{accountId}/vaults/{vaultName}/tags
 # operationId: AddTagsToVault
-export def "vaults-tags create" [
+export def "add-tags-to-vault" [
   account_id: string
   vault_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -549,7 +549,7 @@ export def "vaults-tags create" [
 #
 # POST /{accountId}/vaults/{vaultName}/lock-policy/{lockId}
 # operationId: CompleteVaultLock
-export def "vaults-lock-policy complete" [
+export def "complete-vault-lock" [
   account_id: string
   vault_name: string
   lock_id: string
@@ -598,7 +598,7 @@ export def "vaults-lock-policy complete" [
 #
 # PUT /{accountId}/vaults/{vaultName}
 # operationId: CreateVault
-export def "vaults create" [
+export def "create-vault" [
   account_id: string
   vault_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -645,7 +645,7 @@ export def "vaults create" [
 #
 # DELETE /{accountId}/vaults/{vaultName}
 # operationId: DeleteVault
-export def "vaults delete" [
+export def "delete-vault" [
   account_id: string
   vault_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -692,7 +692,7 @@ export def "vaults delete" [
 #
 # GET /{accountId}/vaults/{vaultName}
 # operationId: DescribeVault
-export def "vaults get" [
+export def "describe-vault" [
   account_id: string
   vault_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -739,7 +739,7 @@ export def "vaults get" [
 #
 # DELETE /{accountId}/vaults/{vaultName}/archives/{archiveId}
 # operationId: DeleteArchive
-export def "vaults-archives delete" [
+export def "delete-archive" [
   account_id: string
   vault_name: string
   archive_id: string
@@ -788,7 +788,7 @@ export def "vaults-archives delete" [
 #
 # DELETE /{accountId}/vaults/{vaultName}/access-policy
 # operationId: DeleteVaultAccessPolicy
-export def "vaults-access-policy delete" [
+export def "delete-vault-access-policy" [
   account_id: string
   vault_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -835,7 +835,7 @@ export def "vaults-access-policy delete" [
 #
 # GET /{accountId}/vaults/{vaultName}/access-policy
 # operationId: GetVaultAccessPolicy
-export def "vaults-access-policy get" [
+export def "get-vault-access-policy" [
   account_id: string
   vault_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -883,7 +883,7 @@ export def "vaults-access-policy get" [
 # PUT /{accountId}/vaults/{vaultName}/access-policy
 # operationId: SetVaultAccessPolicy
 # --policy shape: {Policy?: any}
-export def "vaults-access-policy update" [
+export def "set-vault-access-policy" [
   account_id: string
   vault_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -934,7 +934,7 @@ export def "vaults-access-policy update" [
 #
 # DELETE /{accountId}/vaults/{vaultName}/notification-configuration
 # operationId: DeleteVaultNotifications
-export def "vaults-notification-configuration delete" [
+export def "delete-vault-notifications" [
   account_id: string
   vault_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -981,7 +981,7 @@ export def "vaults-notification-configuration delete" [
 #
 # GET /{accountId}/vaults/{vaultName}/notification-configuration
 # operationId: GetVaultNotifications
-export def "vaults-notification-configuration get" [
+export def "get-vault-notifications" [
   account_id: string
   vault_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1029,7 +1029,7 @@ export def "vaults-notification-configuration get" [
 # PUT /{accountId}/vaults/{vaultName}/notification-configuration
 # operationId: SetVaultNotifications
 # --vaultNotificationConfig shape: {SNSTopic?: any, Events?: any}
-export def "vaults-notification-configuration update" [
+export def "set-vault-notifications" [
   account_id: string
   vault_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1080,7 +1080,7 @@ export def "vaults-notification-configuration update" [
 #
 # GET /{accountId}/vaults/{vaultName}/jobs/{jobId}
 # operationId: DescribeJob
-export def "vaults-jobs get" [
+export def "describe-job" [
   account_id: string
   vault_name: string
   job_id: string
@@ -1129,7 +1129,7 @@ export def "vaults-jobs get" [
 #
 # GET /{accountId}/policies/data-retrieval
 # operationId: GetDataRetrievalPolicy
-export def "policies-data-retrieval get-policy" [
+export def "get-data-retrieval-policy" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1175,7 +1175,7 @@ export def "policies-data-retrieval get-policy" [
 # PUT /{accountId}/policies/data-retrieval
 # operationId: SetDataRetrievalPolicy
 # --Policy shape: {Rules?: any}
-export def "policies-data-retrieval update-policy" [
+export def "set-data-retrieval-policy" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1224,7 +1224,7 @@ export def "policies-data-retrieval update-policy" [
 #
 # GET /{accountId}/vaults/{vaultName}/jobs/{jobId}/output
 # operationId: GetJobOutput
-export def "vaults-jobs-output get" [
+export def "get-job-output" [
   account_id: string
   vault_name: string
   job_id: string
@@ -1275,7 +1275,7 @@ export def "vaults-jobs-output get" [
 # POST /{accountId}/vaults/{vaultName}/jobs
 # operationId: InitiateJob
 # --jobParameters shape: {Format?: any, Type?: any, ArchiveId?: any, Description?: any, SNSTopic?: any, RetrievalByteRange?: any, Tier?: any, InventoryRetrievalParameters?: any, SelectParameters?: any, OutputLocation?: any}
-export def "vaults-jobs create-initiate" [
+export def "initiate-job" [
   account_id: string
   vault_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1326,7 +1326,7 @@ export def "vaults-jobs create-initiate" [
 #
 # GET /{accountId}/vaults/{vaultName}/jobs
 # operationId: ListJobs
-export def "vaults-jobs list" [
+export def "list-jobs" [
   account_id: string
   vault_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1378,7 +1378,7 @@ export def "vaults-jobs list" [
 #
 # POST /{accountId}/vaults/{vaultName}/multipart-uploads
 # operationId: InitiateMultipartUpload
-export def "vaults-multipart-uploads upload-initiate" [
+export def "initiate-multipart-upload" [
   account_id: string
   vault_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1427,7 +1427,7 @@ export def "vaults-multipart-uploads upload-initiate" [
 #
 # GET /{accountId}/vaults/{vaultName}/multipart-uploads
 # operationId: ListMultipartUploads
-export def "vaults-multipart-uploads list" [
+export def "list-multipart-uploads" [
   account_id: string
   vault_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1477,7 +1477,7 @@ export def "vaults-multipart-uploads list" [
 #
 # GET /{accountId}/provisioned-capacity
 # operationId: ListProvisionedCapacity
-export def "provisioned-capacity list" [
+export def "list-provisioned-capacity" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1522,7 +1522,7 @@ export def "provisioned-capacity list" [
 #
 # POST /{accountId}/provisioned-capacity
 # operationId: PurchaseProvisionedCapacity
-export def "provisioned-capacity create-purchase" [
+export def "purchase-provisioned-capacity" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1567,7 +1567,7 @@ export def "provisioned-capacity create-purchase" [
 #
 # GET /{accountId}/vaults/{vaultName}/tags
 # operationId: ListTagsForVault
-export def "vaults-tags list" [
+export def "list-tags-for-vault" [
   account_id: string
   vault_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1614,7 +1614,7 @@ export def "vaults-tags list" [
 #
 # GET /{accountId}/vaults
 # operationId: ListVaults
-export def "vaults list" [
+export def "list-vaults" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1662,7 +1662,7 @@ export def "vaults list" [
 #
 # POST /{accountId}/vaults/{vaultName}/tags
 # operationId: RemoveTagsFromVault
-export def "vaults-tags delete" [
+export def "remove-tags-from-vault" [
   account_id: string
   vault_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1715,7 +1715,7 @@ export def "vaults-tags delete" [
 #
 # POST /{accountId}/vaults/{vaultName}/archives
 # operationId: UploadArchive
-export def "vaults-archives upload" [
+export def "upload-archive" [
   account_id: string
   vault_name: string
   --base-url(-b): string@base-url-completer # API base URL

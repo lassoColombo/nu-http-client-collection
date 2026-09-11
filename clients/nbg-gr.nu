@@ -129,7 +129,7 @@ def accept-completer [] { ["application/json" "application/json; charset=utf-8"]
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account-access-consents create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-account-access-consents" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -153,7 +153,7 @@ export def commands []: nothing -> table {
 #
 # POST /account-access-consents
 # --Data shape: {ExpirationDateTime?: string, Permissions: list<string>, TransactionFromDateTime?: string, TransactionToDateTime?: string}
-export def "account-access-consents create" [
+export def "post-account-access-consents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientcredentialstoken: string # Auth token for Client-Credentials-Token (Authorization)
   --token-clientid: string # Auth token for Client-Id (Client-Id)
@@ -199,7 +199,7 @@ export def "account-access-consents create" [
 # Delete Account Access Consents
 #
 # DELETE /account-access-consents/{consentId}
-export def "account-access-consents delete" [
+export def "delete-account-access-consents-consent-id" [
   consent_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientcredentialstoken: string # Auth token for Client-Credentials-Token (Authorization)
@@ -241,7 +241,7 @@ export def "account-access-consents delete" [
 # Get Account Access Consents
 #
 # GET /account-access-consents/{consentId}
-export def "account-access-consents get" [
+export def "get-account-access-consents-consent-id" [
   consent_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientcredentialstoken: string # Auth token for Client-Credentials-Token (Authorization)
@@ -284,7 +284,7 @@ export def "account-access-consents get" [
 # Get Accounts
 #
 # GET /accounts
-export def "accounts list" [
+export def "get-accounts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-authorizationcodetoken: string # Auth token for Authorization-Code-Token (Authorization)
   --token-clientid: string # Auth token for Client-Id (Client-Id)
@@ -325,7 +325,7 @@ export def "accounts list" [
 # Get Accounts
 #
 # GET /accounts/{accountId}
-export def "accounts get" [
+export def "get-accounts-account-id" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-authorizationcodetoken: string # Auth token for Authorization-Code-Token (Authorization)
@@ -368,7 +368,7 @@ export def "accounts get" [
 # Get Balances
 #
 # GET /accounts/{accountId}/balances
-export def "accounts-balances get" [
+export def "get-accounts-account-id-balances" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-authorizationcodetoken: string # Auth token for Authorization-Code-Token (Authorization)
@@ -411,7 +411,7 @@ export def "accounts-balances get" [
 # Get Beneficiaries
 #
 # GET /accounts/{accountId}/beneficiaries
-export def "accounts-beneficiaries get" [
+export def "get-accounts-account-id-beneficiaries" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-authorizationcodetoken: string # Auth token for Authorization-Code-Token (Authorization)
@@ -454,7 +454,7 @@ export def "accounts-beneficiaries get" [
 # Get Parties
 #
 # GET /accounts/{accountId}/parties
-export def "accounts-parties get" [
+export def "get-accounts-account-id-parties" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-authorizationcodetoken: string # Auth token for Authorization-Code-Token (Authorization)
@@ -497,7 +497,7 @@ export def "accounts-parties get" [
 # Get Party
 #
 # GET /accounts/{accountId}/party
-export def "accounts-party get" [
+export def "get-accounts-account-id-party" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-authorizationcodetoken: string # Auth token for Authorization-Code-Token (Authorization)
@@ -540,7 +540,7 @@ export def "accounts-party get" [
 # Get Scheduled Payments
 #
 # GET /accounts/{accountId}/scheduled-payments
-export def "accounts-scheduled-payments get" [
+export def "get-accounts-account-id-scheduled-payments" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-authorizationcodetoken: string # Auth token for Authorization-Code-Token (Authorization)
@@ -583,7 +583,7 @@ export def "accounts-scheduled-payments get" [
 # Get Standing Orders
 #
 # GET /accounts/{accountId}/standing-orders
-export def "accounts-standing-orders get" [
+export def "get-accounts-account-id-standing-orders" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-authorizationcodetoken: string # Auth token for Authorization-Code-Token (Authorization)
@@ -626,7 +626,7 @@ export def "accounts-standing-orders get" [
 # Get Statements
 #
 # GET /accounts/{accountId}/statements
-export def "accounts-statements list" [
+export def "get-accounts-account-id-statements" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-authorizationcodetoken: string # Auth token for Authorization-Code-Token (Authorization)
@@ -672,7 +672,7 @@ export def "accounts-statements list" [
 # Get Statements
 #
 # GET /accounts/{accountId}/statements/{statementId}
-export def "accounts-statements get" [
+export def "get-accounts-account-id-statements-statement-id" [
   account_id: string
   statement_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -717,7 +717,7 @@ export def "accounts-statements get" [
 # Get Statements
 #
 # GET /accounts/{accountId}/statements/{statementId}/file
-export def "accounts-statements-file get" [
+export def "get-accounts-account-id-statements-statement-id-file" [
   account_id: string
   statement_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -761,7 +761,7 @@ export def "accounts-statements-file get" [
 # Get Transactions
 #
 # GET /accounts/{accountId}/statements/{statementId}/transactions
-export def "accounts-statements-transactions get" [
+export def "get-accounts-account-id-statements-statement-id-transactions" [
   account_id: string
   statement_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -806,7 +806,7 @@ export def "accounts-statements-transactions get" [
 # Get Transactions
 #
 # GET /accounts/{accountId}/transactions
-export def "accounts-transactions get" [
+export def "get-accounts-account-id-transactions" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-authorizationcodetoken: string # Auth token for Authorization-Code-Token (Authorization)
@@ -852,7 +852,7 @@ export def "accounts-transactions get" [
 # Get Party
 #
 # GET /party
-export def "party get" [
+export def "get-party" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-authorizationcodetoken: string # Auth token for Authorization-Code-Token (Authorization)
   --token-clientid: string # Auth token for Client-Id (Client-Id)
@@ -893,7 +893,7 @@ export def "party get" [
 # Create Sandbox
 #
 # POST /sandbox
-export def "sandbox create" [
+export def "post-sandbox" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-authorizationcodetoken: string # Auth token for Authorization-Code-Token (Authorization)
   --token-clientid: string # Auth token for Client-Id (Client-Id)
@@ -932,7 +932,7 @@ export def "sandbox create" [
 #
 # PUT /sandbox
 # --users item shape: {accounts?: list, cards?: list, retryCacheEntries?: list, userId?: string}
-export def "sandbox update" [
+export def "put-sandbox" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-authorizationcodetoken: string # Auth token for Authorization-Code-Token (Authorization)
   --token-clientid: string # Auth token for Client-Id (Client-Id)
@@ -970,7 +970,7 @@ export def "sandbox update" [
 # Delete Sandbox
 #
 # DELETE /sandbox/{sandboxId}
-export def "sandbox delete" [
+export def "delete-sandbox-sandbox-id" [
   sandbox_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-authorizationcodetoken: string # Auth token for Authorization-Code-Token (Authorization)
@@ -1005,7 +1005,7 @@ export def "sandbox delete" [
 # Export Sandbox
 #
 # GET /sandbox/{sandboxId}
-export def "sandbox get" [
+export def "get-sandbox-sandbox-id" [
   sandbox_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-authorizationcodetoken: string # Auth token for Authorization-Code-Token (Authorization)

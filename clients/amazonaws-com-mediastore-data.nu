@@ -120,7 +120,7 @@ def x-amz-upload-availability-completer [] { ["STANDARD" "STREAMING"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api delete-object" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "delete-object" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -144,7 +144,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /{Path}
 # operationId: DeleteObject
-export def "api delete-object" [
+export def "delete-object" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -189,7 +189,7 @@ export def "api delete-object" [
 #
 # HEAD /{Path}
 # operationId: DescribeObject
-export def "api get-object-by-path" [
+export def "describe-object" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -234,7 +234,7 @@ export def "api get-object-by-path" [
 #
 # GET /{Path}
 # operationId: GetObject
-export def "api get-object-by-path-1" [
+export def "get-object" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -280,7 +280,7 @@ export def "api get-object-by-path-1" [
 #
 # PUT /{Path}
 # operationId: PutObject
-export def "api update-object" [
+export def "put-object" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -335,7 +335,7 @@ export def "api update-object" [
 #
 # GET /
 # operationId: ListItems
-export def "api list-items" [
+export def "list-items" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

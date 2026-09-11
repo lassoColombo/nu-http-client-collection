@@ -137,7 +137,7 @@ def x-amz-target-completer-36 [] { ["SWBExternalService.UpdatePermissionSet"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api attach-customer-managed-policy-reference-to-permission-update" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "attach-customer-managed-policy-reference-to-permission-set" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -161,7 +161,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AttachCustomerManagedPolicyReferenceToPermissionSet
-export def "api attach-customer-managed-policy-reference-to-permission-update" [
+export def "attach-customer-managed-policy-reference-to-permission-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -211,7 +211,7 @@ export def "api attach-customer-managed-policy-reference-to-permission-update" [
 #
 # POST /
 # operationId: AttachManagedPolicyToPermissionSet
-export def "api attach-managed-policy-to-permission-update" [
+export def "attach-managed-policy-to-permission-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -261,7 +261,7 @@ export def "api attach-managed-policy-to-permission-update" [
 #
 # POST /
 # operationId: CreateAccountAssignment
-export def "api create-account-assignment" [
+export def "create-account-assignment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -314,7 +314,7 @@ export def "api create-account-assignment" [
 #
 # POST /
 # operationId: CreateInstanceAccessControlAttributeConfiguration
-export def "api create-instance-access-control-attribute-configuration" [
+export def "create-instance-access-control-attribute-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -363,7 +363,7 @@ export def "api create-instance-access-control-attribute-configuration" [
 #
 # POST /
 # operationId: CreatePermissionSet
-export def "api create-permission-update" [
+export def "create-permission-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -416,7 +416,7 @@ export def "api create-permission-update" [
 #
 # POST /
 # operationId: DeleteAccountAssignment
-export def "api delete-account-assignment" [
+export def "delete-account-assignment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -469,7 +469,7 @@ export def "api delete-account-assignment" [
 #
 # POST /
 # operationId: DeleteInlinePolicyFromPermissionSet
-export def "api delete-inline-policy-from-permission-update" [
+export def "delete-inline-policy-from-permission-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -518,7 +518,7 @@ export def "api delete-inline-policy-from-permission-update" [
 #
 # POST /
 # operationId: DeleteInstanceAccessControlAttributeConfiguration
-export def "api delete-instance-access-control-attribute-configuration" [
+export def "delete-instance-access-control-attribute-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -566,7 +566,7 @@ export def "api delete-instance-access-control-attribute-configuration" [
 #
 # POST /
 # operationId: DeletePermissionSet
-export def "api delete-permission-update" [
+export def "delete-permission-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -615,7 +615,7 @@ export def "api delete-permission-update" [
 #
 # POST /
 # operationId: DeletePermissionsBoundaryFromPermissionSet
-export def "api delete-permissions-boundary-from-permission-update" [
+export def "delete-permissions-boundary-from-permission-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -664,7 +664,7 @@ export def "api delete-permissions-boundary-from-permission-update" [
 #
 # POST /
 # operationId: DescribeAccountAssignmentCreationStatus
-export def "api get-account-assignment-creation-status" [
+export def "describe-account-assignment-creation-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -713,7 +713,7 @@ export def "api get-account-assignment-creation-status" [
 #
 # POST /
 # operationId: DescribeAccountAssignmentDeletionStatus
-export def "api get-account-assignment-deletion-status" [
+export def "describe-account-assignment-deletion-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -762,7 +762,7 @@ export def "api get-account-assignment-deletion-status" [
 #
 # POST /
 # operationId: DescribeInstanceAccessControlAttributeConfiguration
-export def "api get-instance-access-control-attribute-configuration" [
+export def "describe-instance-access-control-attribute-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -810,7 +810,7 @@ export def "api get-instance-access-control-attribute-configuration" [
 #
 # POST /
 # operationId: DescribePermissionSet
-export def "api get-permission-update" [
+export def "describe-permission-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -859,7 +859,7 @@ export def "api get-permission-update" [
 #
 # POST /
 # operationId: DescribePermissionSetProvisioningStatus
-export def "api get-permission-update-provisioning-status" [
+export def "describe-permission-set-provisioning-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -908,7 +908,7 @@ export def "api get-permission-update-provisioning-status" [
 #
 # POST /
 # operationId: DetachCustomerManagedPolicyReferenceFromPermissionSet
-export def "api update-detach-customer-managed-policy-reference-from-permission" [
+export def "detach-customer-managed-policy-reference-from-permission-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -958,7 +958,7 @@ export def "api update-detach-customer-managed-policy-reference-from-permission"
 #
 # POST /
 # operationId: DetachManagedPolicyFromPermissionSet
-export def "api update-detach-managed-policy-from-permission" [
+export def "detach-managed-policy-from-permission-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1008,7 +1008,7 @@ export def "api update-detach-managed-policy-from-permission" [
 #
 # POST /
 # operationId: GetInlinePolicyForPermissionSet
-export def "api get-inline-policy-for-permission-update" [
+export def "get-inline-policy-for-permission-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1057,7 +1057,7 @@ export def "api get-inline-policy-for-permission-update" [
 #
 # POST /
 # operationId: GetPermissionsBoundaryForPermissionSet
-export def "api get-permissions-boundary-for-permission-update" [
+export def "get-permissions-boundary-for-permission-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1106,7 +1106,7 @@ export def "api get-permissions-boundary-for-permission-update" [
 #
 # POST /
 # operationId: ListAccountAssignmentCreationStatus
-export def "api list-account-assignment-creation-status" [
+export def "list-account-assignment-creation-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1160,7 +1160,7 @@ export def "api list-account-assignment-creation-status" [
 #
 # POST /
 # operationId: ListAccountAssignmentDeletionStatus
-export def "api list-account-assignment-deletion-status" [
+export def "list-account-assignment-deletion-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1214,7 +1214,7 @@ export def "api list-account-assignment-deletion-status" [
 #
 # POST /
 # operationId: ListAccountAssignments
-export def "api list-account-assignments" [
+export def "list-account-assignments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1269,7 +1269,7 @@ export def "api list-account-assignments" [
 #
 # POST /
 # operationId: ListAccountsForProvisionedPermissionSet
-export def "api list-accounts-for-provisioned-permission-update" [
+export def "list-accounts-for-provisioned-permission-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1324,7 +1324,7 @@ export def "api list-accounts-for-provisioned-permission-update" [
 #
 # POST /
 # operationId: ListCustomerManagedPolicyReferencesInPermissionSet
-export def "api list-customer-managed-policy-references-in-permission-update" [
+export def "list-customer-managed-policy-references-in-permission-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1378,7 +1378,7 @@ export def "api list-customer-managed-policy-references-in-permission-update" [
 #
 # POST /
 # operationId: ListInstances
-export def "api list-instances" [
+export def "list-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1430,7 +1430,7 @@ export def "api list-instances" [
 #
 # POST /
 # operationId: ListManagedPoliciesInPermissionSet
-export def "api list-managed-policies-in-permission-update" [
+export def "list-managed-policies-in-permission-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1484,7 +1484,7 @@ export def "api list-managed-policies-in-permission-update" [
 #
 # POST /
 # operationId: ListPermissionSetProvisioningStatus
-export def "api list-permission-update-provisioning-status" [
+export def "list-permission-set-provisioning-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1538,7 +1538,7 @@ export def "api list-permission-update-provisioning-status" [
 #
 # POST /
 # operationId: ListPermissionSets
-export def "api list-permission-sets" [
+export def "list-permission-sets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1591,7 +1591,7 @@ export def "api list-permission-sets" [
 #
 # POST /
 # operationId: ListPermissionSetsProvisionedToAccount
-export def "api list-permission-sets-provisioned-to-account" [
+export def "list-permission-sets-provisioned-to-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1646,7 +1646,7 @@ export def "api list-permission-sets-provisioned-to-account" [
 #
 # POST /
 # operationId: ListTagsForResource
-export def "api list-tags-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1698,7 +1698,7 @@ export def "api list-tags-for-resource" [
 #
 # POST /
 # operationId: ProvisionPermissionSet
-export def "api update-provision-permission" [
+export def "provision-permission-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1749,7 +1749,7 @@ export def "api update-provision-permission" [
 #
 # POST /
 # operationId: PutInlinePolicyToPermissionSet
-export def "api update-inline-policy-to-permission" [
+export def "put-inline-policy-to-permission-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1799,7 +1799,7 @@ export def "api update-inline-policy-to-permission" [
 #
 # POST /
 # operationId: PutPermissionsBoundaryToPermissionSet
-export def "api update-permissions-boundary-to-permission" [
+export def "put-permissions-boundary-to-permission-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1849,7 +1849,7 @@ export def "api update-permissions-boundary-to-permission" [
 #
 # POST /
 # operationId: TagResource
-export def "api tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1899,7 +1899,7 @@ export def "api tag-resource" [
 #
 # POST /
 # operationId: UntagResource
-export def "api untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1949,7 +1949,7 @@ export def "api untag-resource" [
 #
 # POST /
 # operationId: UpdateInstanceAccessControlAttributeConfiguration
-export def "api update-instance-access-control-attribute-configuration" [
+export def "update-instance-access-control-attribute-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1998,7 +1998,7 @@ export def "api update-instance-access-control-attribute-configuration" [
 #
 # POST /
 # operationId: UpdatePermissionSet
-export def "api update-permission" [
+export def "update-permission-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

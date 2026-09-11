@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "shipment-create-from-shipping-quote create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-from-shipping-quote" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -130,7 +130,7 @@ export def commands []: nothing -> table {
 # operationId: createFromShippingQuote
 # --additionalOptions item shape: {additionalCost?: record, optionType?: string}
 # --returnTo shape: {companyName?: string, contactAddress?: record, fullName?: string, primaryPhone?: record}
-export def "shipment-create-from-shipping-quote create" [
+export def "create-from-shipping-quote" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -173,7 +173,7 @@ export def "shipment-create-from-shipping-quote create" [
 #
 # GET /shipment/{shipmentId}
 # operationId: getShipment
-export def "shipment get" [
+export def "get-shipment" [
   shipment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -209,7 +209,7 @@ export def "shipment get" [
 #
 # POST /shipment/{shipmentId}/cancel
 # operationId: cancelShipment
-export def "shipment-cancel cancel" [
+export def "cancel-shipment" [
   shipment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -245,7 +245,7 @@ export def "shipment-cancel cancel" [
 #
 # GET /shipment/{shipmentId}/download_label_file
 # operationId: downloadLabelFile
-export def "shipment-download-label-file download" [
+export def "download-label-file" [
   shipment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -285,7 +285,7 @@ export def "shipment-download-label-file download" [
 # --packageSpecification shape: {dimensions?: record, weight?: record}
 # --shipFrom shape: {companyName?: string, contactAddress?: record, fullName?: string, primaryPhone?: record}
 # --shipTo shape: {companyName?: string, contactAddress?: record, fullName?: string, primaryPhone?: record}
-export def "shipping-quote create" [
+export def "create-shipping-quote" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -329,7 +329,7 @@ export def "shipping-quote create" [
 #
 # GET /shipping_quote/{shippingQuoteId}
 # operationId: getShippingQuote
-export def "shipping-quote get" [
+export def "get-shipping-quote" [
   shipping_quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "contacts get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-contacts" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -139,7 +139,7 @@ export def commands []: nothing -> table {
 # Get a paged result of contacts from a list
 #
 # GET /contacts
-export def "contacts get" [
+export def "get-contacts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -177,7 +177,7 @@ export def "contacts get" [
 # Get a paged result of contact lists.
 #
 # GET /contacts/lists
-export def "contacts-lists get" [
+export def "get-contacts-lists" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -216,7 +216,7 @@ export def "contacts-lists get" [
 # POST /contacts/lists
 # --customfields item shape: {key: string, label: string, required?: bool, type: int}
 # --eventcustomizations item shape: {redirecturl?: string, type: int}
-export def "contacts-lists create" [
+export def "post-contacts-lists" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -255,7 +255,7 @@ export def "contacts-lists create" [
 # Delete an existing contact list
 #
 # DELETE /contacts/lists/{listid}
-export def "contacts-lists delete" [
+export def "delete-contacts-lists-listid" [
   listid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -292,7 +292,7 @@ export def "contacts-lists delete" [
 # PUT /contacts/lists/{listid}
 # --customfields item shape: {key: string, label: string, required?: bool, type: int}
 # --eventcustomizations item shape: {redirecturl?: string, type: int}
-export def "contacts-lists update" [
+export def "put-contacts-lists-listid" [
   listid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -333,7 +333,7 @@ export def "contacts-lists update" [
 # Delete an existing contact
 #
 # DELETE /contacts/{contactid}
-export def "contacts delete" [
+export def "delete-contacts-contactid" [
   contactid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -368,7 +368,7 @@ export def "contacts delete" [
 # Update an existing contact
 #
 # PUT /contacts/{contactid}
-export def "contacts update" [
+export def "put-contacts-contactid" [
   contactid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -411,7 +411,7 @@ export def "contacts update" [
 # Subscribe an email address to a list. This api call has the same behavior as a regular subscribe form. However, single opt-in is allowed for system integration purposes. - If email address does not exist, a new contact will be added to the list. - If email address exists custom fields will be updated and status will be put to unconfirmed or active depending of singleoptin value. - If current status if Active, this operation will only update the custom fields. - If singleoptin is true, no email confirmation will be sent. In that case, you must provide the subscribe's origin ip and confirmation date-time.
 #
 # POST /subscription/{listid}
-export def "subscription create" [
+export def "post-subscription-listid" [
   listid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

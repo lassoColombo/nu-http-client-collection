@@ -166,7 +166,7 @@ def type-completer [] { ["projects" "servers" "users"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "auth-jwt-token-auth create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "auth-jwt-token-auth" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -190,7 +190,7 @@ export def commands []: nothing -> table {
 #
 # POST /auth/jwt-token-auth/
 # operationId: auth_jwt-token-auth
-export def "auth-jwt-token-auth create" [
+export def "auth-jwt-token-auth" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -230,7 +230,7 @@ export def "auth-jwt-token-auth create" [
 #
 # POST /auth/jwt-token-refresh/
 # operationId: auth_jwt-token-refresh
-export def "auth-jwt-token-refresh refresh" [
+export def "auth-jwt-token-refresh" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -269,7 +269,7 @@ export def "auth-jwt-token-refresh refresh" [
 #
 # POST /auth/jwt-token-verify/
 # operationId: auth_jwt-token-verify
-export def "auth-jwt-token-verify verify" [
+export def "auth-jwt-token-verify" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -307,7 +307,7 @@ export def "auth-jwt-token-verify verify" [
 # GET /auth/login/{provider}/
 #
 # operationId: oauth_login
-export def "auth-login get-oauth" [
+export def "oauth-login" [
   provider: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -345,7 +345,7 @@ export def "auth-login get-oauth" [
 # POST /auth/register/
 # operationId: auth_register
 # --profile shape: {avatar?: string, bio?: string, company?: string, location?: string, timezone?: string, url?: string}
-export def "auth-register create" [
+export def "auth-register" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -389,7 +389,7 @@ export def "auth-register create" [
 #
 # GET /v1/me
 # operationId: me
-export def "me get" [
+export def "me" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -424,7 +424,7 @@ export def "me get" [
 #
 # GET /v1/servers/options/server-size/
 # operationId: servers_options_sizes_list
-export def "servers-options-server-size list" [
+export def "servers-options-sizes-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -463,7 +463,7 @@ export def "servers-options-server-size list" [
 #
 # POST /v1/servers/options/server-size/
 # operationId: servers_options_server_size_create
-export def "servers-options-server-size create" [
+export def "servers-options-server-size-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -505,7 +505,7 @@ export def "servers-options-server-size create" [
 #
 # DELETE /v1/servers/options/server-size/{size}/
 # operationId: servers_options_server_size_delete
-export def "servers-options-server-size delete" [
+export def "servers-options-server-size-delete" [
   size: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -542,7 +542,7 @@ export def "servers-options-server-size delete" [
 #
 # GET /v1/servers/options/server-size/{size}/
 # operationId: servers_options_resources_read
-export def "servers-options-server-size get-resources" [
+export def "servers-options-resources-read" [
   size: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -579,7 +579,7 @@ export def "servers-options-server-size get-resources" [
 #
 # PATCH /v1/servers/options/server-size/{size}/
 # operationId: servers_options_server_size_update
-export def "servers-options-server-size update-by-size" [
+export def "servers-options-server-size-update" [
   size: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -623,7 +623,7 @@ export def "servers-options-server-size update-by-size" [
 #
 # PUT /v1/servers/options/server-size/{size}/
 # operationId: servers_options_server_size_replace
-export def "servers-options-server-size update-by-size-1" [
+export def "servers-options-server-size-replace" [
   size: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -667,7 +667,7 @@ export def "servers-options-server-size update-by-size-1" [
 #
 # GET /v1/teams/
 # operationId: teams_list
-export def "teams list" [
+export def "teams-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -705,7 +705,7 @@ export def "teams list" [
 #
 # POST /v1/teams/
 # operationId: teams_create
-export def "teams create" [
+export def "teams-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -749,7 +749,7 @@ export def "teams create" [
 #
 # DELETE /v1/teams/{team}/
 # operationId: teams_delete
-export def "teams delete" [
+export def "teams-delete" [
   team: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -786,7 +786,7 @@ export def "teams delete" [
 #
 # GET /v1/teams/{team}/
 # operationId: teams_read
-export def "teams get" [
+export def "teams-read" [
   team: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -823,7 +823,7 @@ export def "teams get" [
 #
 # PATCH /v1/teams/{team}/
 # operationId: teams_update
-export def "teams update-by-team" [
+export def "teams-update" [
   team: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -869,7 +869,7 @@ export def "teams update-by-team" [
 #
 # PUT /v1/teams/{team}/
 # operationId: teams_replace
-export def "teams update-by-team-1" [
+export def "teams-replace" [
   team: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -915,7 +915,7 @@ export def "teams update-by-team-1" [
 #
 # GET /v1/teams/{team}/billing/invoices/
 # operationId: teams_billing_invoices_list
-export def "teams-billing-invoices list" [
+export def "teams-billing-invoices-list" [
   team: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -955,7 +955,7 @@ export def "teams-billing-invoices list" [
 #
 # GET /v1/teams/{team}/billing/invoices/{id}/
 # operationId: teams_billing_invoices_read
-export def "teams-billing-invoices get" [
+export def "teams-billing-invoices-read" [
   team: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -994,7 +994,7 @@ export def "teams-billing-invoices get" [
 #
 # GET /v1/teams/{team}/billing/invoices/{invoice_id}/invoice-items/
 # operationId: teams_billing_invoice_items_list
-export def "teams-billing-invoices-invoice-items list" [
+export def "teams-billing-invoice-items-list" [
   team: string
   invoice_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1037,7 +1037,7 @@ export def "teams-billing-invoices-invoice-items list" [
 #
 # GET /v1/teams/{team}/billing/invoices/{invoice_id}/invoice-items/{id}
 # operationId: teams_billing_invoice_items_read
-export def "teams-billing-invoices-invoice-items get" [
+export def "teams-billing-invoice-items-read" [
   team: string
   invoice_id: string
   id: string
@@ -1078,7 +1078,7 @@ export def "teams-billing-invoices-invoice-items get" [
 #
 # GET /v1/teams/{team}/billing/subscriptions/
 # operationId: teams_billing_subscriptions_list
-export def "teams-billing-subscriptions list" [
+export def "teams-billing-subscriptions-list" [
   team: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1119,7 +1119,7 @@ export def "teams-billing-subscriptions list" [
 #
 # POST /v1/teams/{team}/billing/subscriptions/
 # operationId: teams_billing_subscriptions_create
-export def "teams-billing-subscriptions create" [
+export def "teams-billing-subscriptions-create" [
   team: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1160,7 +1160,7 @@ export def "teams-billing-subscriptions create" [
 #
 # DELETE /v1/teams/{team}/billing/subscriptions/{id}/
 # operationId: teams_billing_subscriptions_delete
-export def "teams-billing-subscriptions delete" [
+export def "teams-billing-subscriptions-delete" [
   team: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1199,7 +1199,7 @@ export def "teams-billing-subscriptions delete" [
 #
 # GET /v1/teams/{team}/billing/subscriptions/{id}/
 # operationId: teams_billing_subscriptions_read
-export def "teams-billing-subscriptions get" [
+export def "teams-billing-subscriptions-read" [
   team: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1238,7 +1238,7 @@ export def "teams-billing-subscriptions get" [
 #
 # GET /v1/teams/{team}/groups/
 # operationId: teams_groups_list
-export def "teams-groups list" [
+export def "teams-groups-list" [
   team: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1278,7 +1278,7 @@ export def "teams-groups list" [
 #
 # DELETE /v1/teams/{team}/groups/{group}/
 # operationId: teams_groups_delete
-export def "teams-groups delete" [
+export def "teams-groups-delete" [
   team: string
   group: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1317,7 +1317,7 @@ export def "teams-groups delete" [
 #
 # GET /v1/teams/{team}/groups/{group}/
 # operationId: teams_groups_read
-export def "teams-groups get" [
+export def "teams-groups-read" [
   team: string
   group: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1356,7 +1356,7 @@ export def "teams-groups get" [
 #
 # PATCH /v1/teams/{team}/groups/{group}/
 # operationId: teams_groups_update
-export def "teams-groups update-by-team-group" [
+export def "teams-groups-update" [
   team: string
   group: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1402,7 +1402,7 @@ export def "teams-groups update-by-team-group" [
 #
 # PUT /v1/teams/{team}/groups/{group}/
 # operationId: teams_groups_replace
-export def "teams-groups update-by-team-group-1" [
+export def "teams-groups-replace" [
   team: string
   group: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1448,7 +1448,7 @@ export def "teams-groups update-by-team-group-1" [
 #
 # POST /v1/teams/{team}/groups/{group}/add/
 # operationId: teams_groups_add_to_group
-export def "teams-groups-add create" [
+export def "teams-groups-add-to-group" [
   team: string
   group: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1487,7 +1487,7 @@ export def "teams-groups-add create" [
 #
 # POST /v1/teams/{team}/groups/{group}/remove/
 # operationId: teams_groups_remove_from_group
-export def "teams-groups-remove delete" [
+export def "teams-groups-remove-from-group" [
   team: string
   group: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1526,7 +1526,7 @@ export def "teams-groups-remove delete" [
 #
 # GET /v1/users/profiles/
 # operationId: users_list
-export def "users-profiles list" [
+export def "users-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1568,7 +1568,7 @@ export def "users-profiles list" [
 # POST /v1/users/profiles/
 # operationId: users_create
 # --profile shape: {avatar?: string, bio?: string, company?: string, location?: string, timezone?: string, url?: string}
-export def "users-profiles create" [
+export def "users-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1612,7 +1612,7 @@ export def "users-profiles create" [
 #
 # DELETE /v1/users/profiles/{user}/
 # operationId: users_delete
-export def "users-profiles delete" [
+export def "users-delete" [
   user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1649,7 +1649,7 @@ export def "users-profiles delete" [
 #
 # GET /v1/users/profiles/{user}/
 # operationId: users_read
-export def "users-profiles get" [
+export def "users-read" [
   user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1687,7 +1687,7 @@ export def "users-profiles get" [
 # PATCH /v1/users/profiles/{user}/
 # operationId: users_update
 # --profile shape: {avatar?: string, bio?: string, company?: string, location?: string, timezone?: string, url?: string}
-export def "users-profiles update" [
+export def "users-update" [
   user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1733,7 +1733,7 @@ export def "users-profiles update" [
 #
 # GET /v1/users/{user}/api-key/
 # operationId: users_api-key_list
-export def "users-api-key list" [
+export def "users-api-key-list" [
   user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1770,7 +1770,7 @@ export def "users-api-key list" [
 #
 # DELETE /v1/users/{user}/avatar/
 # operationId: user_avatar_delete
-export def "users-avatar delete" [
+export def "user-avatar-delete" [
   user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1807,7 +1807,7 @@ export def "users-avatar delete" [
 #
 # GET /v1/users/{user}/avatar/
 # operationId: user_avatar_get
-export def "users-avatar get" [
+export def "user-avatar-get" [
   user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1844,7 +1844,7 @@ export def "users-avatar get" [
 #
 # PATCH /v1/users/{user}/avatar/
 # operationId: user_avatar_update
-export def "users-avatar update-by-user" [
+export def "user-avatar-update" [
   user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1881,7 +1881,7 @@ export def "users-avatar update-by-user" [
 #
 # POST /v1/users/{user}/avatar/
 # operationId: user_avatar_set
-export def "users-avatar update-by-user-1" [
+export def "user-avatar-set" [
   user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1918,7 +1918,7 @@ export def "users-avatar update-by-user-1" [
 #
 # GET /v1/users/{user}/emails/
 # operationId: users_emails_list
-export def "users-emails list" [
+export def "users-emails-list" [
   user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1959,7 +1959,7 @@ export def "users-emails list" [
 #
 # POST /v1/users/{user}/emails/
 # operationId: users_emails_create
-export def "users-emails create" [
+export def "users-emails-create" [
   user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2002,7 +2002,7 @@ export def "users-emails create" [
 #
 # DELETE /v1/users/{user}/emails/{email_id}/
 # operationId: users_emails_delete
-export def "users-emails delete" [
+export def "users-emails-delete" [
   user: string
   email_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2041,7 +2041,7 @@ export def "users-emails delete" [
 #
 # GET /v1/users/{user}/emails/{email_id}/
 # operationId: users_emails_read
-export def "users-emails get" [
+export def "users-emails-read" [
   user: string
   email_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2080,7 +2080,7 @@ export def "users-emails get" [
 #
 # PATCH /v1/users/{user}/emails/{email_id}/
 # operationId: users_emails_update
-export def "users-emails update-by-user-email-id" [
+export def "users-emails-update" [
   user: string
   email_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2125,7 +2125,7 @@ export def "users-emails update-by-user-email-id" [
 #
 # PUT /v1/users/{user}/emails/{email_id}/
 # operationId: users_emails_replace
-export def "users-emails update-by-user-email-id-1" [
+export def "users-emails-replace" [
   user: string
   email_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2170,7 +2170,7 @@ export def "users-emails update-by-user-email-id-1" [
 #
 # GET /v1/users/{user}/ssh-key/
 # operationId: users_ssh-key_list
-export def "users-ssh-key list" [
+export def "users-ssh-key-list" [
   user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2207,7 +2207,7 @@ export def "users-ssh-key list" [
 #
 # POST /v1/users/{user}/ssh-key/reset/
 # operationId: users_ssh-key_reset
-export def "users-ssh-key-reset reset" [
+export def "users-ssh-key-reset" [
   user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2244,7 +2244,7 @@ export def "users-ssh-key-reset reset" [
 #
 # GET /v1/{namespace}/billing/cards/
 # operationId: billing_cards_list
-export def "billing-cards list" [
+export def "billing-cards-list" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2285,7 +2285,7 @@ export def "billing-cards list" [
 #
 # POST /v1/{namespace}/billing/cards/
 # operationId: billing_cards_create
-export def "billing-cards create" [
+export def "billing-cards-create" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2335,7 +2335,7 @@ export def "billing-cards create" [
 #
 # DELETE /v1/{namespace}/billing/cards/{id}/
 # operationId: billing_cards_delete
-export def "billing-cards delete" [
+export def "billing-cards-delete" [
   namespace: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2374,7 +2374,7 @@ export def "billing-cards delete" [
 #
 # GET /v1/{namespace}/billing/cards/{id}/
 # operationId: billing_cards_read
-export def "billing-cards get" [
+export def "billing-cards-read" [
   namespace: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2413,7 +2413,7 @@ export def "billing-cards get" [
 #
 # PATCH /v1/{namespace}/billing/cards/{id}/
 # operationId: billing_cards_update
-export def "billing-cards update-by-namespace-id" [
+export def "billing-cards-update" [
   namespace: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2464,7 +2464,7 @@ export def "billing-cards update-by-namespace-id" [
 #
 # PUT /v1/{namespace}/billing/cards/{id}/
 # operationId: billing_cards_replace
-export def "billing-cards update-by-namespace-id-1" [
+export def "billing-cards-replace" [
   namespace: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2515,7 +2515,7 @@ export def "billing-cards update-by-namespace-id-1" [
 #
 # GET /v1/{namespace}/billing/invoices/
 # operationId: billing_invoices_list
-export def "billing-invoices list" [
+export def "billing-invoices-list" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2556,7 +2556,7 @@ export def "billing-invoices list" [
 #
 # GET /v1/{namespace}/billing/invoices/{id}/
 # operationId: billing_invoices_read
-export def "billing-invoices get" [
+export def "billing-invoices-read" [
   namespace: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2595,7 +2595,7 @@ export def "billing-invoices get" [
 #
 # GET /v1/{namespace}/billing/invoices/{invoice_id}/invoice-items/
 # operationId: billing_invoice_items_list
-export def "billing-invoices-invoice-items list" [
+export def "billing-invoice-items-list" [
   namespace: string
   invoice_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2638,7 +2638,7 @@ export def "billing-invoices-invoice-items list" [
 #
 # GET /v1/{namespace}/billing/invoices/{invoice_id}/invoice-items/{id}
 # operationId: billing_invoice_items_read
-export def "billing-invoices-invoice-items get" [
+export def "billing-invoice-items-read" [
   namespace: string
   invoice_id: string
   id: string
@@ -2679,7 +2679,7 @@ export def "billing-invoices-invoice-items get" [
 #
 # GET /v1/{namespace}/billing/plans/
 # operationId: billing_plans_list
-export def "billing-plans list" [
+export def "billing-plans-list" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2720,7 +2720,7 @@ export def "billing-plans list" [
 #
 # GET /v1/{namespace}/billing/plans/{id}/
 # operationId: billing_plans_read
-export def "billing-plans get" [
+export def "billing-plans-read" [
   namespace: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2759,7 +2759,7 @@ export def "billing-plans get" [
 #
 # GET /v1/{namespace}/billing/subscriptions/
 # operationId: billing_subscriptions_list
-export def "billing-subscriptions list" [
+export def "billing-subscriptions-list" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2800,7 +2800,7 @@ export def "billing-subscriptions list" [
 #
 # POST /v1/{namespace}/billing/subscriptions/
 # operationId: billing_subscriptions_create
-export def "billing-subscriptions create" [
+export def "billing-subscriptions-create" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2841,7 +2841,7 @@ export def "billing-subscriptions create" [
 #
 # DELETE /v1/{namespace}/billing/subscriptions/{id}/
 # operationId: billing_subscriptions_delete
-export def "billing-subscriptions delete" [
+export def "billing-subscriptions-delete" [
   namespace: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2880,7 +2880,7 @@ export def "billing-subscriptions delete" [
 #
 # GET /v1/{namespace}/billing/subscriptions/{id}/
 # operationId: billing_subscriptions_read
-export def "billing-subscriptions get" [
+export def "billing-subscriptions-read" [
   namespace: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2919,7 +2919,7 @@ export def "billing-subscriptions get" [
 #
 # GET /v1/{namespace}/notifications/
 # operationId: notifications_list
-export def "notifications list" [
+export def "notifications-list" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2961,7 +2961,7 @@ export def "notifications list" [
 #
 # PATCH /v1/{namespace}/notifications/
 # operationId: notifications_update_list
-export def "notifications update-list" [
+export def "notifications-update-list" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3003,7 +3003,7 @@ export def "notifications update-list" [
 #
 # GET /v1/{namespace}/notifications/entity/{entity}
 # operationId: notifications_list_entity
-export def "notifications-entity list" [
+export def "notifications-list-entity" [
   namespace: string
   entity: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3047,7 +3047,7 @@ export def "notifications-entity list" [
 #
 # PATCH /v1/{namespace}/notifications/entity/{entity}
 # operationId: notifications_update_entity_list
-export def "notifications-entity update-list" [
+export def "notifications-update-entity-list" [
   namespace: string
   entity: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3091,7 +3091,7 @@ export def "notifications-entity update-list" [
 #
 # GET /v1/{namespace}/notifications/settings/
 # operationId: notification_settings_read
-export def "notifications-settings get" [
+export def "notification-settings-read" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3128,7 +3128,7 @@ export def "notifications-settings get" [
 #
 # PATCH /v1/{namespace}/notifications/settings/
 # operationId: notification_settings_update
-export def "notifications-settings update" [
+export def "notification-settings-update" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3170,7 +3170,7 @@ export def "notifications-settings update" [
 #
 # POST /v1/{namespace}/notifications/settings/
 # operationId: notification_settings_create
-export def "notifications-settings create" [
+export def "notification-settings-create" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3212,7 +3212,7 @@ export def "notifications-settings create" [
 #
 # GET /v1/{namespace}/notifications/settings/entity/{entity}
 # operationId: notification_settings_entity_read
-export def "notifications-settings-entity get" [
+export def "notification-settings-entity-read" [
   namespace: string
   entity: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3251,7 +3251,7 @@ export def "notifications-settings-entity get" [
 #
 # PATCH /v1/{namespace}/notifications/settings/entity/{entity}
 # operationId: notification_settings_entity_update
-export def "notifications-settings-entity update" [
+export def "notification-settings-entity-update" [
   namespace: string
   entity: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3295,7 +3295,7 @@ export def "notifications-settings-entity update" [
 #
 # POST /v1/{namespace}/notifications/settings/entity/{entity}
 # operationId: notification_settings_entity_create
-export def "notifications-settings-entity create" [
+export def "notification-settings-entity-create" [
   namespace: string
   entity: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3339,7 +3339,7 @@ export def "notifications-settings-entity create" [
 #
 # GET /v1/{namespace}/notifications/{notification_id}
 # operationId: notification_read
-export def "notifications get" [
+export def "notification-read" [
   namespace: string
   notification_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3378,7 +3378,7 @@ export def "notifications get" [
 #
 # PATCH /v1/{namespace}/notifications/{notification_id}
 # operationId: notification_update
-export def "notifications update" [
+export def "notification-update" [
   namespace: string
   notification_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3421,7 +3421,7 @@ export def "notifications update" [
 #
 # GET /v1/{namespace}/oauth/applications/
 # operationId: oauth_applications_list
-export def "oauth-applications list" [
+export def "oauth-applications-list" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3462,7 +3462,7 @@ export def "oauth-applications list" [
 #
 # POST /v1/{namespace}/oauth/applications/
 # operationId: oauth_application_create
-export def "oauth-applications create" [
+export def "oauth-application-create" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3506,7 +3506,7 @@ export def "oauth-applications create" [
 #
 # DELETE /v1/{namespace}/oauth/applications/{application}/
 # operationId: oauth_application_delete
-export def "oauth-applications delete" [
+export def "oauth-application-delete" [
   namespace: string
   application: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3545,7 +3545,7 @@ export def "oauth-applications delete" [
 #
 # GET /v1/{namespace}/oauth/applications/{application}/
 # operationId: oauth_application_read
-export def "oauth-applications get" [
+export def "oauth-application-read" [
   namespace: string
   application: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3584,7 +3584,7 @@ export def "oauth-applications get" [
 #
 # PATCH /v1/{namespace}/oauth/applications/{application}/
 # operationId: oauth_application_update
-export def "oauth-applications update-by-namespace-application" [
+export def "oauth-application-update" [
   namespace: string
   application: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3630,7 +3630,7 @@ export def "oauth-applications update-by-namespace-application" [
 #
 # PUT /v1/{namespace}/oauth/applications/{application}/
 # operationId: oauth_application_replace
-export def "oauth-applications update-by-namespace-application-1" [
+export def "oauth-application-replace" [
   namespace: string
   application: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3676,7 +3676,7 @@ export def "oauth-applications update-by-namespace-application-1" [
 #
 # GET /v1/{namespace}/projects/
 # operationId: projects_list
-export def "projects list" [
+export def "projects-list" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3719,7 +3719,7 @@ export def "projects list" [
 #
 # POST /v1/{namespace}/projects/
 # operationId: projects_create
-export def "projects create" [
+export def "projects-create" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3762,7 +3762,7 @@ export def "projects create" [
 #
 # HEAD /v1/{namespace}/projects/project-copy-check/
 # operationId: project_copy_check
-export def "projects-project-copy-check copy" [
+export def "project-copy-check" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3799,7 +3799,7 @@ export def "projects-project-copy-check copy" [
 #
 # POST /v1/{namespace}/projects/project-copy/
 # operationId: project_copy
-export def "projects-project-copy copy" [
+export def "project-copy" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3841,7 +3841,7 @@ export def "projects-project-copy copy" [
 #
 # DELETE /v1/{namespace}/projects/{project}/
 # operationId: projects_delete
-export def "projects delete" [
+export def "projects-delete" [
   namespace: string
   project: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3880,7 +3880,7 @@ export def "projects delete" [
 #
 # GET /v1/{namespace}/projects/{project}/
 # operationId: projects_read
-export def "projects get" [
+export def "projects-read" [
   namespace: string
   project: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3919,7 +3919,7 @@ export def "projects get" [
 #
 # PATCH /v1/{namespace}/projects/{project}/
 # operationId: projects_update
-export def "projects update-by-namespace-project" [
+export def "projects-update" [
   namespace: string
   project: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3964,7 +3964,7 @@ export def "projects update-by-namespace-project" [
 #
 # PUT /v1/{namespace}/projects/{project}/
 # operationId: projects_replace
-export def "projects update-by-namespace-project-1" [
+export def "projects-replace" [
   namespace: string
   project: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4009,7 +4009,7 @@ export def "projects update-by-namespace-project-1" [
 #
 # GET /v1/{namespace}/projects/{project}/collaborators/
 # operationId: projects_collaborators_list
-export def "projects-collaborators list" [
+export def "projects-collaborators-list" [
   namespace: string
   project: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4052,7 +4052,7 @@ export def "projects-collaborators list" [
 #
 # POST /v1/{namespace}/projects/{project}/collaborators/
 # operationId: projects_collaborators_create
-export def "projects-collaborators create" [
+export def "projects-collaborators-create" [
   namespace: string
   project: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4097,7 +4097,7 @@ export def "projects-collaborators create" [
 #
 # DELETE /v1/{namespace}/projects/{project}/collaborators/{collaborator}/
 # operationId: projects_collaborators_delete
-export def "projects-collaborators delete" [
+export def "projects-collaborators-delete" [
   namespace: string
   project: string
   collaborator: string
@@ -4138,7 +4138,7 @@ export def "projects-collaborators delete" [
 #
 # GET /v1/{namespace}/projects/{project}/collaborators/{collaborator}/
 # operationId: projects_collaborators_read
-export def "projects-collaborators get" [
+export def "projects-collaborators-read" [
   namespace: string
   project: string
   collaborator: string
@@ -4179,7 +4179,7 @@ export def "projects-collaborators get" [
 #
 # PATCH /v1/{namespace}/projects/{project}/collaborators/{collaborator}/
 # operationId: projects_collaborators_update
-export def "projects-collaborators update" [
+export def "projects-collaborators-update" [
   namespace: string
   project: string
   collaborator: string
@@ -4226,7 +4226,7 @@ export def "projects-collaborators update" [
 #
 # GET /v1/{namespace}/projects/{project}/deployments/
 # operationId: projects_deployments_list
-export def "projects-deployments list" [
+export def "projects-deployments-list" [
   namespace: string
   project: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4271,7 +4271,7 @@ export def "projects-deployments list" [
 # POST /v1/{namespace}/projects/{project}/deployments/
 # operationId: projects_deployments_create
 # --config shape: {files?: list<string>, handler?: string}
-export def "projects-deployments create" [
+export def "projects-deployments-create" [
   namespace: string
   project: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4317,7 +4317,7 @@ export def "projects-deployments create" [
 #
 # DELETE /v1/{namespace}/projects/{project}/deployments/{deployment}/
 # operationId: projects_deployment_delete
-export def "projects-deployments delete" [
+export def "projects-deployment-delete" [
   namespace: string
   project: string
   deployment: string
@@ -4358,7 +4358,7 @@ export def "projects-deployments delete" [
 #
 # GET /v1/{namespace}/projects/{project}/deployments/{deployment}/
 # operationId: projects_deployments_read
-export def "projects-deployments get" [
+export def "projects-deployments-read" [
   namespace: string
   project: string
   deployment: string
@@ -4400,7 +4400,7 @@ export def "projects-deployments get" [
 # PATCH /v1/{namespace}/projects/{project}/deployments/{deployment}/
 # operationId: projects_deployments_update
 # --config shape: {files?: list<string>, handler?: string}
-export def "projects-deployments update-by-namespace-project-deployment" [
+export def "projects-deployments-update" [
   namespace: string
   project: string
   deployment: string
@@ -4449,7 +4449,7 @@ export def "projects-deployments update-by-namespace-project-deployment" [
 # PUT /v1/{namespace}/projects/{project}/deployments/{deployment}/
 # operationId: projects_deployments_replace
 # --config shape: {files?: list<string>, handler?: string}
-export def "projects-deployments update-by-namespace-project-deployment-1" [
+export def "projects-deployments-replace" [
   namespace: string
   project: string
   deployment: string
@@ -4497,7 +4497,7 @@ export def "projects-deployments update-by-namespace-project-deployment-1" [
 #
 # POST /v1/{namespace}/projects/{project}/deployments/{deployment}/deploy/
 # operationId: projects_deployments_deploy
-export def "projects-deployments-deploy create" [
+export def "projects-deployments-deploy" [
   namespace: string
   project: string
   deployment: string
@@ -4538,7 +4538,7 @@ export def "projects-deployments-deploy create" [
 #
 # GET /v1/{namespace}/projects/{project}/project_files/
 # operationId: projects_project_files_list
-export def "projects-project-files list" [
+export def "projects-project-files-list" [
   namespace: string
   project: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4583,7 +4583,7 @@ export def "projects-project-files list" [
 #
 # POST /v1/{namespace}/projects/{project}/project_files/
 # operationId: projects_project_files_create
-export def "projects-project-files create" [
+export def "projects-project-files-create" [
   namespace: string
   project: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4631,7 +4631,7 @@ export def "projects-project-files create" [
 #
 # DELETE /v1/{namespace}/projects/{project}/project_files/{id}/
 # operationId: projects_project_files_delete
-export def "projects-project-files delete" [
+export def "projects-project-files-delete" [
   namespace: string
   project: string
   id: string
@@ -4672,7 +4672,7 @@ export def "projects-project-files delete" [
 #
 # GET /v1/{namespace}/projects/{project}/project_files/{id}/
 # operationId: projects_project_files_read
-export def "projects-project-files get" [
+export def "projects-project-files-read" [
   namespace: string
   project: string
   id: string
@@ -4715,7 +4715,7 @@ export def "projects-project-files get" [
 #
 # PATCH /v1/{namespace}/projects/{project}/project_files/{id}/
 # operationId: projects_project_files_update
-export def "projects-project-files update-by-namespace-project-id" [
+export def "projects-project-files-update" [
   namespace: string
   project: string
   id: string
@@ -4765,7 +4765,7 @@ export def "projects-project-files update-by-namespace-project-id" [
 #
 # PUT /v1/{namespace}/projects/{project}/project_files/{id}/
 # operationId: projects_project_files_replace
-export def "projects-project-files update-by-namespace-project-id-1" [
+export def "projects-project-files-replace" [
   namespace: string
   project: string
   id: string
@@ -4815,7 +4815,7 @@ export def "projects-project-files update-by-namespace-project-id-1" [
 #
 # GET /v1/{namespace}/projects/{project}/servers/
 # operationId: projects_servers_list
-export def "projects-servers list" [
+export def "projects-servers-list" [
   namespace: string
   project: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4860,7 +4860,7 @@ export def "projects-servers list" [
 # POST /v1/{namespace}/projects/{project}/servers/
 # operationId: projects_servers_create
 # --config shape: {command?: string, function?: string, script?: string, type?: "jupyter"|"restful"|"cron"}
-export def "projects-servers create" [
+export def "projects-servers-create" [
   namespace: string
   project: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4909,7 +4909,7 @@ export def "projects-servers create" [
 #
 # GET /v1/{namespace}/projects/{project}/servers/statuses/
 # operationId: projects_servers_statuses
-export def "projects-servers-statuses get" [
+export def "projects-servers-statuses" [
   namespace: string
   project: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4948,7 +4948,7 @@ export def "projects-servers-statuses get" [
 #
 # DELETE /v1/{namespace}/projects/{project}/servers/{server}/
 # operationId: projects_servers_delete
-export def "projects-servers delete" [
+export def "projects-servers-delete" [
   namespace: string
   project: string
   server: string
@@ -4989,7 +4989,7 @@ export def "projects-servers delete" [
 #
 # GET /v1/{namespace}/projects/{project}/servers/{server}/
 # operationId: projects_servers_read
-export def "projects-servers get" [
+export def "projects-servers-read" [
   namespace: string
   project: string
   server: string
@@ -5031,7 +5031,7 @@ export def "projects-servers get" [
 # PATCH /v1/{namespace}/projects/{project}/servers/{server}/
 # operationId: projects_servers_update
 # --config shape: {command?: string, function?: string, script?: string, type?: "jupyter"|"restful"|"cron"}
-export def "projects-servers update-by-namespace-project-server" [
+export def "projects-servers-update" [
   namespace: string
   project: string
   server: string
@@ -5083,7 +5083,7 @@ export def "projects-servers update-by-namespace-project-server" [
 # PUT /v1/{namespace}/projects/{project}/servers/{server}/
 # operationId: projects_servers_replace
 # --config shape: {command?: string, function?: string, script?: string, type?: "jupyter"|"restful"|"cron"}
-export def "projects-servers update-by-namespace-project-server-1" [
+export def "projects-servers-replace" [
   namespace: string
   project: string
   server: string
@@ -5134,7 +5134,7 @@ export def "projects-servers update-by-namespace-project-server-1" [
 #
 # GET /v1/{namespace}/projects/{project}/servers/{server}/api-key/
 # operationId: projects_servers_api-key
-export def "projects-servers-api-key get" [
+export def "projects-servers-api-key" [
   namespace: string
   project: string
   server: string
@@ -5175,7 +5175,7 @@ export def "projects-servers-api-key get" [
 #
 # POST /v1/{namespace}/projects/{project}/servers/{server}/auth/
 # operationId: projects_servers_auth
-export def "projects-servers-auth create" [
+export def "projects-servers-auth" [
   namespace: string
   project: string
   server: string
@@ -5216,7 +5216,7 @@ export def "projects-servers-auth create" [
 #
 # POST /v1/{namespace}/projects/{project}/servers/{server}/run-stats/
 # operationId: projects_servers_run-stats_create
-export def "projects-servers-run-stats create" [
+export def "projects-servers-run-stats-create" [
   namespace: string
   project: string
   server: string
@@ -5265,7 +5265,7 @@ export def "projects-servers-run-stats create" [
 #
 # DELETE /v1/{namespace}/projects/{project}/servers/{server}/run-stats/{id}/
 # operationId: projects_servers_run-stats_delete
-export def "projects-servers-run-stats delete" [
+export def "projects-servers-run-stats-delete" [
   namespace: string
   project: string
   server: string
@@ -5308,7 +5308,7 @@ export def "projects-servers-run-stats delete" [
 #
 # GET /v1/{namespace}/projects/{project}/servers/{server}/run-stats/{id}/
 # operationId: projects_servers_run-stats_read
-export def "projects-servers-run-stats get" [
+export def "projects-servers-run-stats-read" [
   namespace: string
   project: string
   server: string
@@ -5351,7 +5351,7 @@ export def "projects-servers-run-stats get" [
 #
 # PATCH /v1/{namespace}/projects/{project}/servers/{server}/run-stats/{id}/
 # operationId: projects_servers_run-stats_update
-export def "projects-servers-run-stats update-by-namespace-project-server-id" [
+export def "projects-servers-run-stats-update" [
   namespace: string
   project: string
   server: string
@@ -5402,7 +5402,7 @@ export def "projects-servers-run-stats update-by-namespace-project-server-id" [
 #
 # PUT /v1/{namespace}/projects/{project}/servers/{server}/run-stats/{id}/
 # operationId: projects_servers_run-stats_replace
-export def "projects-servers-run-stats update-by-namespace-project-server-id-1" [
+export def "projects-servers-run-stats-replace" [
   namespace: string
   project: string
   server: string
@@ -5453,7 +5453,7 @@ export def "projects-servers-run-stats update-by-namespace-project-server-id-1" 
 #
 # GET /v1/{namespace}/projects/{project}/servers/{server}/ssh-tunnels/
 # operationId: projects_servers_ssh-tunnels_list
-export def "projects-servers-ssh-tunnels list" [
+export def "projects-servers-ssh-tunnels-list" [
   namespace: string
   project: string
   server: string
@@ -5498,7 +5498,7 @@ export def "projects-servers-ssh-tunnels list" [
 #
 # POST /v1/{namespace}/projects/{project}/servers/{server}/ssh-tunnels/
 # operationId: projects_servers_ssh-tunnels_create
-export def "projects-servers-ssh-tunnels create" [
+export def "projects-servers-ssh-tunnels-create" [
   namespace: string
   project: string
   server: string
@@ -5548,7 +5548,7 @@ export def "projects-servers-ssh-tunnels create" [
 #
 # DELETE /v1/{namespace}/projects/{project}/servers/{server}/ssh-tunnels/{tunnel}/
 # operationId: projects_servers_ssh-tunnels_delete
-export def "projects-servers-ssh-tunnels delete" [
+export def "projects-servers-ssh-tunnels-delete" [
   namespace: string
   project: string
   server: string
@@ -5591,7 +5591,7 @@ export def "projects-servers-ssh-tunnels delete" [
 #
 # GET /v1/{namespace}/projects/{project}/servers/{server}/ssh-tunnels/{tunnel}/
 # operationId: projects_servers_ssh-tunnels_read
-export def "projects-servers-ssh-tunnels get" [
+export def "projects-servers-ssh-tunnels-read" [
   namespace: string
   project: string
   server: string
@@ -5634,7 +5634,7 @@ export def "projects-servers-ssh-tunnels get" [
 #
 # PATCH /v1/{namespace}/projects/{project}/servers/{server}/ssh-tunnels/{tunnel}/
 # operationId: projects_servers_ssh-tunnels_update
-export def "projects-servers-ssh-tunnels update-by-namespace-project-server-tunnel" [
+export def "projects-servers-ssh-tunnels-update" [
   namespace: string
   project: string
   server: string
@@ -5686,7 +5686,7 @@ export def "projects-servers-ssh-tunnels update-by-namespace-project-server-tunn
 #
 # PUT /v1/{namespace}/projects/{project}/servers/{server}/ssh-tunnels/{tunnel}/
 # operationId: projects_servers_ssh-tunnels_replace
-export def "projects-servers-ssh-tunnels update-by-namespace-project-server-tunnel-1" [
+export def "projects-servers-ssh-tunnels-replace" [
   namespace: string
   project: string
   server: string
@@ -5738,7 +5738,7 @@ export def "projects-servers-ssh-tunnels update-by-namespace-project-server-tunn
 #
 # POST /v1/{namespace}/projects/{project}/servers/{server}/start/
 # operationId: projects_servers_start
-export def "projects-servers-start start" [
+export def "projects-servers-start" [
   namespace: string
   project: string
   server: string
@@ -5779,7 +5779,7 @@ export def "projects-servers-start start" [
 #
 # DELETE /v1/{namespace}/projects/{project}/servers/{server}/stats/{id}/
 # operationId: projects_servers_stats_delete
-export def "projects-servers-stats delete" [
+export def "projects-servers-stats-delete" [
   namespace: string
   project: string
   server: string
@@ -5822,7 +5822,7 @@ export def "projects-servers-stats delete" [
 #
 # GET /v1/{namespace}/projects/{project}/servers/{server}/stats/{id}/
 # operationId: projects_servers_stats_read
-export def "projects-servers-stats get" [
+export def "projects-servers-stats-read" [
   namespace: string
   project: string
   server: string
@@ -5865,7 +5865,7 @@ export def "projects-servers-stats get" [
 #
 # PATCH /v1/{namespace}/projects/{project}/servers/{server}/stats/{id}/
 # operationId: projects_servers_stats_update
-export def "projects-servers-stats update-by-namespace-project-server-id" [
+export def "projects-servers-stats-update" [
   namespace: string
   project: string
   server: string
@@ -5916,7 +5916,7 @@ export def "projects-servers-stats update-by-namespace-project-server-id" [
 #
 # PUT /v1/{namespace}/projects/{project}/servers/{server}/stats/{id}/
 # operationId: projects_servers_stats_replace
-export def "projects-servers-stats update-by-namespace-project-server-id-1" [
+export def "projects-servers-stats-replace" [
   namespace: string
   project: string
   server: string
@@ -5967,7 +5967,7 @@ export def "projects-servers-stats update-by-namespace-project-server-id-1" [
 #
 # POST /v1/{namespace}/projects/{project}/servers/{server}/stop/
 # operationId: projects_servers_stop
-export def "projects-servers-stop stop" [
+export def "projects-servers-stop" [
   namespace: string
   project: string
   server: string
@@ -6008,7 +6008,7 @@ export def "projects-servers-stop stop" [
 #
 # GET /v1/{namespace}/projects/{project}/servers/{server}/triggers/
 # operationId: service_trigger_list
-export def "projects-servers-triggers list-service" [
+export def "service-trigger-list" [
   namespace: string
   project: string
   server: string
@@ -6055,7 +6055,7 @@ export def "projects-servers-triggers list-service" [
 # POST /v1/{namespace}/projects/{project}/servers/{server}/triggers/
 # operationId: service_trigger_create
 # --webhook shape: {payload?: record, url: string}
-export def "projects-servers-triggers create-service" [
+export def "service-trigger-create" [
   namespace: string
   project: string
   server: string
@@ -6102,7 +6102,7 @@ export def "projects-servers-triggers create-service" [
 #
 # DELETE /v1/{namespace}/projects/{project}/servers/{server}/triggers/{trigger}/
 # operationId: service_trigger_delete
-export def "projects-servers-triggers delete-service" [
+export def "service-trigger-delete" [
   namespace: string
   project: string
   server: string
@@ -6145,7 +6145,7 @@ export def "projects-servers-triggers delete-service" [
 #
 # GET /v1/{namespace}/projects/{project}/servers/{server}/triggers/{trigger}/
 # operationId: service_trigger_read
-export def "projects-servers-triggers get-service" [
+export def "service-trigger-read" [
   namespace: string
   project: string
   server: string
@@ -6189,7 +6189,7 @@ export def "projects-servers-triggers get-service" [
 # PATCH /v1/{namespace}/projects/{project}/servers/{server}/triggers/{trigger}/
 # operationId: service_trigger_update
 # --webhook shape: {payload?: record, url: string}
-export def "projects-servers-triggers update-service-by-namespace-project-server-trigger" [
+export def "service-trigger-update" [
   namespace: string
   project: string
   server: string
@@ -6239,7 +6239,7 @@ export def "projects-servers-triggers update-service-by-namespace-project-server
 # PUT /v1/{namespace}/projects/{project}/servers/{server}/triggers/{trigger}/
 # operationId: service_trigger_replace
 # --webhook shape: {payload?: record, url: string}
-export def "projects-servers-triggers update-service-by-namespace-project-server-trigger-1" [
+export def "service-trigger-replace" [
   namespace: string
   project: string
   server: string
@@ -6288,7 +6288,7 @@ export def "projects-servers-triggers update-service-by-namespace-project-server
 #
 # GET /v1/{namespace}/search/
 # operationId: search
-export def "search list" [
+export def "search" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

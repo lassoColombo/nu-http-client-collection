@@ -107,7 +107,7 @@ def autocomplete-mode-completer [] { ["oneTerm" "oneTermWithContext" "twoTerms"]
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "docs list-documents-get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "documents-search-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -132,7 +132,7 @@ export def commands []: nothing -> table {
 # GET /docs
 # Docs: https://docs.microsoft.com/rest/api/searchservice/Search-Documents
 # operationId: Documents_SearchGet
-export def "docs list-documents-get" [
+export def "documents-search-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -189,7 +189,7 @@ export def "docs list-documents-get" [
 # GET /docs('{key}')
 # Docs: https://docs.microsoft.com/rest/api/searchservice/lookup-document
 # operationId: Documents_Get
-export def "docs get-documents" [
+export def "documents-get" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -232,7 +232,7 @@ export def "docs get-documents" [
 # GET /docs/$count
 # Docs: https://docs.microsoft.com/rest/api/searchservice/Count-Documents
 # operationId: Documents_Count
-export def "docs-count get-documents-count" [
+export def "documents-count" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -272,7 +272,7 @@ export def "docs-count get-documents-count" [
 # GET /docs/search.autocomplete
 # Docs: https://docs.microsoft.com/rest/api/searchservice/autocomplete
 # operationId: Documents_AutocompleteGet
-export def "docs-search-autocomplete get-documents" [
+export def "documents-autocomplete-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -323,7 +323,7 @@ export def "docs-search-autocomplete get-documents" [
 # Docs: https://docs.microsoft.com/rest/api/searchservice/addupdate-or-delete-documents
 # operationId: Documents_Index
 # --value item shape: {@search.action?: "upload"|"merge"|"mergeOrUpload"|"delete"}
-export def "docs-search-index create-documents" [
+export def "documents-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -367,7 +367,7 @@ export def "docs-search-index create-documents" [
 # POST /docs/search.post.autocomplete
 # Docs: https://docs.microsoft.com/rest/api/searchservice/autocomplete
 # operationId: Documents_AutocompletePost
-export def "docs-search-post-autocomplete create-documents" [
+export def "documents-autocomplete-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -420,7 +420,7 @@ export def "docs-search-post-autocomplete create-documents" [
 # POST /docs/search.post.search
 # Docs: https://docs.microsoft.com/rest/api/searchservice/Search-Documents
 # operationId: Documents_SearchPost
-export def "docs-search-post-search list-documents" [
+export def "documents-search-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -480,7 +480,7 @@ export def "docs-search-post-search list-documents" [
 # POST /docs/search.post.suggest
 # Docs: https://docs.microsoft.com/rest/api/searchservice/suggestions
 # operationId: Documents_SuggestPost
-export def "docs-search-post-suggest create-documents" [
+export def "documents-suggest-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -534,7 +534,7 @@ export def "docs-search-post-suggest create-documents" [
 # GET /docs/search.suggest
 # Docs: https://docs.microsoft.com/rest/api/searchservice/suggestions
 # operationId: Documents_SuggestGet
-export def "docs-search-suggest get-documents" [
+export def "documents-suggest-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

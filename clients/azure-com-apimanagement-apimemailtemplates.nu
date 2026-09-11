@@ -123,7 +123,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-api-management-service-templates list-email" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "email-template-list-by-service" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -147,7 +147,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/templates
 # operationId: EmailTemplate_ListByService
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-templates list-email" [
+export def "email-template-list-by-service" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -192,7 +192,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/templates/{templateName}
 # operationId: EmailTemplate_Delete
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-templates delete-email" [
+export def "email-template-delete" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -239,7 +239,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/templates/{templateName}
 # operationId: EmailTemplate_Get
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-templates get-email" [
+export def "email-template-get" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -283,7 +283,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # HEAD /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/templates/{templateName}
 # operationId: EmailTemplate_GetEntityTag
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-templates get-email-entity-tag" [
+export def "email-template-get-entity-tag" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -328,7 +328,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/templates/{templateName}
 # operationId: EmailTemplate_Update
 # --properties shape: {body?: string, description?: string, parameters?: list, subject?: string, title?: string}
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-templates update-email" [
+export def "email-template-update" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -380,7 +380,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/templates/{templateName}
 # operationId: EmailTemplate_CreateOrUpdate
 # --properties shape: {body?: string, description?: string, parameters?: list, subject?: string, title?: string}
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-templates create-email-or-update" [
+export def "email-template-create-or-update" [
   subscription_id: string
   resource_group_name: string
   service_name: string

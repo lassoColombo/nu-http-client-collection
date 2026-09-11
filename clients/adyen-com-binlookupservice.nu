@@ -103,7 +103,7 @@ def shopper-interaction-completer [] { ["ContAuth" "Ecommerce" "Moto" "POS"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get3ds-availability create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-get3ds-availability" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -127,7 +127,7 @@ export def commands []: nothing -> table {
 #
 # POST /get3dsAvailability
 # operationId: post-get3dsAvailability
-export def "get3ds-availability create" [
+export def "post-get3ds-availability" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -174,7 +174,7 @@ export def "get3ds-availability create" [
 # --assumptions shape: {assume3DSecureAuthenticated?: bool, assumeLevel3Data?: bool, installments?: int}
 # --merchantDetails shape: {countryCode?: string, enrolledIn3DSecure?: bool, mcc?: string}
 # --recurring shape: {contract?: "ONECLICK"|"RECURRING"|"PAYOUT", recurringDetailName?: string, recurringExpiry?: string, recurringFrequency?: string, tokenService?: "VISATOKENSERVICE"|"MCTOKENSERVICE"}
-export def "get-cost-estimate create" [
+export def "post-get-cost-estimate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

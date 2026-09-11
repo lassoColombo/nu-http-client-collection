@@ -162,7 +162,7 @@ def auth-scheme-completer [] { ["x-appwrite-jwt" "x-appwrite-locale" "x-appwrite
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -186,7 +186,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /account
 # operationId: accountDelete
-export def "account delete" [
+export def "account-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
   --token-project: string # Auth token for Project (X-Appwrite-Project)
@@ -220,7 +220,7 @@ export def "account delete" [
 #
 # GET /account
 # operationId: accountGet
-export def "account get" [
+export def "account-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
   --token-project: string # Auth token for Project (X-Appwrite-Project)
@@ -254,7 +254,7 @@ export def "account get" [
 #
 # POST /account
 # operationId: accountCreate
-export def "account create" [
+export def "account-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -294,7 +294,7 @@ export def "account create" [
 #
 # PATCH /account/email
 # operationId: accountUpdateEmail
-export def "account-email update" [
+export def "account-update-email" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
   --token-project: string # Auth token for Project (X-Appwrite-Project)
@@ -333,7 +333,7 @@ export def "account-email update" [
 #
 # POST /account/jwt
 # operationId: accountCreateJWT
-export def "account-jwt create" [
+export def "account-create-jwt" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -367,7 +367,7 @@ export def "account-jwt create" [
 #
 # GET /account/logs
 # operationId: accountGetLogs
-export def "account-logs get" [
+export def "account-get-logs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
   --token-project: string # Auth token for Project (X-Appwrite-Project)
@@ -401,7 +401,7 @@ export def "account-logs get" [
 #
 # PATCH /account/name
 # operationId: accountUpdateName
-export def "account-name update" [
+export def "account-update-name" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
   --token-project: string # Auth token for Project (X-Appwrite-Project)
@@ -439,7 +439,7 @@ export def "account-name update" [
 #
 # PATCH /account/password
 # operationId: accountUpdatePassword
-export def "account-password update" [
+export def "account-update-password" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
   --token-project: string # Auth token for Project (X-Appwrite-Project)
@@ -478,7 +478,7 @@ export def "account-password update" [
 #
 # GET /account/prefs
 # operationId: accountGetPrefs
-export def "account-prefs get" [
+export def "account-get-prefs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
   --token-project: string # Auth token for Project (X-Appwrite-Project)
@@ -512,7 +512,7 @@ export def "account-prefs get" [
 #
 # PATCH /account/prefs
 # operationId: accountUpdatePrefs
-export def "account-prefs update" [
+export def "account-update-prefs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
   --token-project: string # Auth token for Project (X-Appwrite-Project)
@@ -550,7 +550,7 @@ export def "account-prefs update" [
 #
 # POST /account/recovery
 # operationId: accountCreateRecovery
-export def "account-recovery create" [
+export def "account-create-recovery" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
   --token-project: string # Auth token for Project (X-Appwrite-Project)
@@ -589,7 +589,7 @@ export def "account-recovery create" [
 #
 # PUT /account/recovery
 # operationId: accountUpdateRecovery
-export def "account-recovery update" [
+export def "account-update-recovery" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
   --token-project: string # Auth token for Project (X-Appwrite-Project)
@@ -630,7 +630,7 @@ export def "account-recovery update" [
 #
 # DELETE /account/sessions
 # operationId: accountDeleteSessions
-export def "account-sessions delete" [
+export def "account-delete-sessions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
   --token-project: string # Auth token for Project (X-Appwrite-Project)
@@ -664,7 +664,7 @@ export def "account-sessions delete" [
 #
 # GET /account/sessions
 # operationId: accountGetSessions
-export def "account-sessions list" [
+export def "account-get-sessions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
   --token-project: string # Auth token for Project (X-Appwrite-Project)
@@ -698,7 +698,7 @@ export def "account-sessions list" [
 #
 # POST /account/sessions
 # operationId: accountCreateSession
-export def "account-sessions create" [
+export def "account-create-session" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -737,7 +737,7 @@ export def "account-sessions create" [
 #
 # POST /account/sessions/anonymous
 # operationId: accountCreateAnonymousSession
-export def "account-sessions-anonymous create" [
+export def "account-create-anonymous-session" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -771,7 +771,7 @@ export def "account-sessions-anonymous create" [
 #
 # GET /account/sessions/oauth2/{provider}
 # operationId: accountCreateOAuth2Session
-export def "account-sessions-oauth2 create-o-auth2" [
+export def "account-create-o-auth2-session" [
   provider: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -811,7 +811,7 @@ export def "account-sessions-oauth2 create-o-auth2" [
 #
 # DELETE /account/sessions/{sessionId}
 # operationId: accountDeleteSession
-export def "account-sessions delete-by-session-id" [
+export def "account-delete-session" [
   session_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
@@ -847,7 +847,7 @@ export def "account-sessions delete-by-session-id" [
 #
 # GET /account/sessions/{sessionId}
 # operationId: accountGetSession
-export def "account-sessions get" [
+export def "account-get-session" [
   session_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
@@ -883,7 +883,7 @@ export def "account-sessions get" [
 #
 # POST /account/verification
 # operationId: accountCreateVerification
-export def "account-verification create" [
+export def "account-create-verification" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
   --token-project: string # Auth token for Project (X-Appwrite-Project)
@@ -921,7 +921,7 @@ export def "account-verification create" [
 #
 # PUT /account/verification
 # operationId: accountUpdateVerification
-export def "account-verification update" [
+export def "account-update-verification" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
   --token-project: string # Auth token for Project (X-Appwrite-Project)
@@ -960,7 +960,7 @@ export def "account-verification update" [
 #
 # GET /avatars/browsers/{code}
 # operationId: avatarsGetBrowser
-export def "avatars-browsers get" [
+export def "avatars-get-browser" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
@@ -1000,7 +1000,7 @@ export def "avatars-browsers get" [
 #
 # GET /avatars/credit-cards/{code}
 # operationId: avatarsGetCreditCard
-export def "avatars-credit-cards get" [
+export def "avatars-get-credit-card" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
@@ -1040,7 +1040,7 @@ export def "avatars-credit-cards get" [
 #
 # GET /avatars/favicon
 # operationId: avatarsGetFavicon
-export def "avatars-favicon get" [
+export def "avatars-get-favicon" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
   --token-project: string # Auth token for Project (X-Appwrite-Project)
@@ -1076,7 +1076,7 @@ export def "avatars-favicon get" [
 #
 # GET /avatars/flags/{code}
 # operationId: avatarsGetFlag
-export def "avatars-flags get" [
+export def "avatars-get-flag" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
@@ -1116,7 +1116,7 @@ export def "avatars-flags get" [
 #
 # GET /avatars/image
 # operationId: avatarsGetImage
-export def "avatars-image get" [
+export def "avatars-get-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
   --token-project: string # Auth token for Project (X-Appwrite-Project)
@@ -1154,7 +1154,7 @@ export def "avatars-image get" [
 #
 # GET /avatars/initials
 # operationId: avatarsGetInitials
-export def "avatars-initials get" [
+export def "avatars-get-initials" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
   --token-project: string # Auth token for Project (X-Appwrite-Project)
@@ -1194,7 +1194,7 @@ export def "avatars-initials get" [
 #
 # GET /avatars/qr
 # operationId: avatarsGetQR
-export def "avatars-qr get" [
+export def "avatars-get-qr" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
   --token-project: string # Auth token for Project (X-Appwrite-Project)
@@ -1233,7 +1233,7 @@ export def "avatars-qr get" [
 #
 # GET /database/collections/{collectionId}/documents
 # operationId: databaseListDocuments
-export def "database-collections-documents list" [
+export def "database-list-documents" [
   collection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
@@ -1277,7 +1277,7 @@ export def "database-collections-documents list" [
 #
 # POST /database/collections/{collectionId}/documents
 # operationId: databaseCreateDocument
-export def "database-collections-documents create" [
+export def "database-create-document" [
   collection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
@@ -1322,7 +1322,7 @@ export def "database-collections-documents create" [
 #
 # DELETE /database/collections/{collectionId}/documents/{documentId}
 # operationId: databaseDeleteDocument
-export def "database-collections-documents delete" [
+export def "database-delete-document" [
   collection_id: string
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1360,7 +1360,7 @@ export def "database-collections-documents delete" [
 #
 # GET /database/collections/{collectionId}/documents/{documentId}
 # operationId: databaseGetDocument
-export def "database-collections-documents get" [
+export def "database-get-document" [
   collection_id: string
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1398,7 +1398,7 @@ export def "database-collections-documents get" [
 #
 # PATCH /database/collections/{collectionId}/documents/{documentId}
 # operationId: databaseUpdateDocument
-export def "database-collections-documents update" [
+export def "database-update-document" [
   collection_id: string
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1442,7 +1442,7 @@ export def "database-collections-documents update" [
 #
 # GET /functions/{functionId}/executions
 # operationId: functionsListExecutions
-export def "functions-executions list" [
+export def "functions-list-executions" [
   function_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
@@ -1483,7 +1483,7 @@ export def "functions-executions list" [
 #
 # POST /functions/{functionId}/executions
 # operationId: functionsCreateExecution
-export def "functions-executions create" [
+export def "functions-create-execution" [
   function_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
@@ -1523,7 +1523,7 @@ export def "functions-executions create" [
 #
 # GET /functions/{functionId}/executions/{executionId}
 # operationId: functionsGetExecution
-export def "functions-executions get" [
+export def "functions-get-execution" [
   function_id: string
   execution_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1561,7 +1561,7 @@ export def "functions-executions get" [
 #
 # GET /locale
 # operationId: localeGet
-export def "locale get" [
+export def "locale-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
   --token-project: string # Auth token for Project (X-Appwrite-Project)
@@ -1595,7 +1595,7 @@ export def "locale get" [
 #
 # GET /locale/continents
 # operationId: localeGetContinents
-export def "locale-continents get" [
+export def "locale-get-continents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
   --token-project: string # Auth token for Project (X-Appwrite-Project)
@@ -1629,7 +1629,7 @@ export def "locale-continents get" [
 #
 # GET /locale/countries
 # operationId: localeGetCountries
-export def "locale-countries get" [
+export def "locale-get-countries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
   --token-project: string # Auth token for Project (X-Appwrite-Project)
@@ -1663,7 +1663,7 @@ export def "locale-countries get" [
 #
 # GET /locale/countries/eu
 # operationId: localeGetCountriesEU
-export def "locale-countries-eu get" [
+export def "locale-get-countries-eu" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
   --token-project: string # Auth token for Project (X-Appwrite-Project)
@@ -1697,7 +1697,7 @@ export def "locale-countries-eu get" [
 #
 # GET /locale/countries/phones
 # operationId: localeGetCountriesPhones
-export def "locale-countries-phones get" [
+export def "locale-get-countries-phones" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
   --token-project: string # Auth token for Project (X-Appwrite-Project)
@@ -1731,7 +1731,7 @@ export def "locale-countries-phones get" [
 #
 # GET /locale/currencies
 # operationId: localeGetCurrencies
-export def "locale-currencies get" [
+export def "locale-get-currencies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
   --token-project: string # Auth token for Project (X-Appwrite-Project)
@@ -1765,7 +1765,7 @@ export def "locale-currencies get" [
 #
 # GET /locale/languages
 # operationId: localeGetLanguages
-export def "locale-languages get" [
+export def "locale-get-languages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
   --token-project: string # Auth token for Project (X-Appwrite-Project)
@@ -1799,7 +1799,7 @@ export def "locale-languages get" [
 #
 # GET /storage/files
 # operationId: storageListFiles
-export def "storage-files list" [
+export def "storage-list-files" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
   --token-project: string # Auth token for Project (X-Appwrite-Project)
@@ -1838,7 +1838,7 @@ export def "storage-files list" [
 #
 # POST /storage/files
 # operationId: storageCreateFile
-export def "storage-files create" [
+export def "storage-create-file" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
   --token-project: string # Auth token for Project (X-Appwrite-Project)
@@ -1880,7 +1880,7 @@ export def "storage-files create" [
 #
 # DELETE /storage/files/{fileId}
 # operationId: storageDeleteFile
-export def "storage-files delete" [
+export def "storage-delete-file" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
@@ -1916,7 +1916,7 @@ export def "storage-files delete" [
 #
 # GET /storage/files/{fileId}
 # operationId: storageGetFile
-export def "storage-files get" [
+export def "storage-get-file" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
@@ -1952,7 +1952,7 @@ export def "storage-files get" [
 #
 # PUT /storage/files/{fileId}
 # operationId: storageUpdateFile
-export def "storage-files update" [
+export def "storage-update-file" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
@@ -1993,7 +1993,7 @@ export def "storage-files update" [
 #
 # GET /storage/files/{fileId}/download
 # operationId: storageGetFileDownload
-export def "storage-files-download get" [
+export def "storage-get-file-download" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
@@ -2029,7 +2029,7 @@ export def "storage-files-download get" [
 #
 # GET /storage/files/{fileId}/preview
 # operationId: storageGetFilePreview
-export def "storage-files-preview get" [
+export def "storage-get-file-preview" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
@@ -2077,7 +2077,7 @@ export def "storage-files-preview get" [
 #
 # GET /storage/files/{fileId}/view
 # operationId: storageGetFileView
-export def "storage-files-view get" [
+export def "storage-get-file-view" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
@@ -2113,7 +2113,7 @@ export def "storage-files-view get" [
 #
 # GET /teams
 # operationId: teamsList
-export def "teams list" [
+export def "teams-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
   --token-project: string # Auth token for Project (X-Appwrite-Project)
@@ -2152,7 +2152,7 @@ export def "teams list" [
 #
 # POST /teams
 # operationId: teamsCreate
-export def "teams create" [
+export def "teams-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
   --token-project: string # Auth token for Project (X-Appwrite-Project)
@@ -2191,7 +2191,7 @@ export def "teams create" [
 #
 # DELETE /teams/{teamId}
 # operationId: teamsDelete
-export def "teams delete" [
+export def "teams-delete" [
   team_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
@@ -2227,7 +2227,7 @@ export def "teams delete" [
 #
 # GET /teams/{teamId}
 # operationId: teamsGet
-export def "teams get" [
+export def "teams-get" [
   team_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
@@ -2263,7 +2263,7 @@ export def "teams get" [
 #
 # PUT /teams/{teamId}
 # operationId: teamsUpdate
-export def "teams update" [
+export def "teams-update" [
   team_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
@@ -2303,7 +2303,7 @@ export def "teams update" [
 #
 # GET /teams/{teamId}/memberships
 # operationId: teamsGetMemberships
-export def "teams-memberships get" [
+export def "teams-get-memberships" [
   team_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
@@ -2344,7 +2344,7 @@ export def "teams-memberships get" [
 #
 # POST /teams/{teamId}/memberships
 # operationId: teamsCreateMembership
-export def "teams-memberships create" [
+export def "teams-create-membership" [
   team_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
@@ -2387,7 +2387,7 @@ export def "teams-memberships create" [
 #
 # DELETE /teams/{teamId}/memberships/{membershipId}
 # operationId: teamsDeleteMembership
-export def "teams-memberships delete" [
+export def "teams-delete-membership" [
   team_id: string
   membership_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2425,7 +2425,7 @@ export def "teams-memberships delete" [
 #
 # PATCH /teams/{teamId}/memberships/{membershipId}
 # operationId: teamsUpdateMembershipRoles
-export def "teams-memberships update-roles" [
+export def "teams-update-membership-roles" [
   team_id: string
   membership_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2467,7 +2467,7 @@ export def "teams-memberships update-roles" [
 #
 # PATCH /teams/{teamId}/memberships/{membershipId}/status
 # operationId: teamsUpdateMembershipStatus
-export def "teams-memberships-status update" [
+export def "teams-update-membership-status" [
   team_id: string
   membership_id: string
   --base-url(-b): string@base-url-completer # API base URL

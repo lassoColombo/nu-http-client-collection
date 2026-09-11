@@ -119,7 +119,7 @@ def x-amz-target-completer-18 [] { ["OpsWorksCM_V2016_11_01.UpdateServerEngineAt
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-associate-node" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associate-node" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -143,7 +143,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AssociateNode
-export def "api create-associate-node" [
+export def "associate-node" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -193,7 +193,7 @@ export def "api create-associate-node" [
 #
 # POST /
 # operationId: CreateBackup
-export def "api create-backup" [
+export def "create-backup" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -243,7 +243,7 @@ export def "api create-backup" [
 #
 # POST /
 # operationId: CreateServer
-export def "api create-server" [
+export def "create-server" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -311,7 +311,7 @@ export def "api create-server" [
 #
 # POST /
 # operationId: DeleteBackup
-export def "api delete-backup" [
+export def "delete-backup" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -359,7 +359,7 @@ export def "api delete-backup" [
 #
 # POST /
 # operationId: DeleteServer
-export def "api delete-server" [
+export def "delete-server" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -407,7 +407,7 @@ export def "api delete-server" [
 #
 # POST /
 # operationId: DescribeAccountAttributes
-export def "api get-account-attributes" [
+export def "describe-account-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -455,7 +455,7 @@ export def "api get-account-attributes" [
 #
 # POST /
 # operationId: DescribeBackups
-export def "api get-backups" [
+export def "describe-backups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -509,7 +509,7 @@ export def "api get-backups" [
 #
 # POST /
 # operationId: DescribeEvents
-export def "api get-events" [
+export def "describe-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -562,7 +562,7 @@ export def "api get-events" [
 #
 # POST /
 # operationId: DescribeNodeAssociationStatus
-export def "api get-node-association-status" [
+export def "describe-node-association-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -611,7 +611,7 @@ export def "api get-node-association-status" [
 #
 # POST /
 # operationId: DescribeServers
-export def "api get-servers" [
+export def "describe-servers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -664,7 +664,7 @@ export def "api get-servers" [
 #
 # POST /
 # operationId: DisassociateNode
-export def "api create-disassociate-node" [
+export def "disassociate-node" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -714,7 +714,7 @@ export def "api create-disassociate-node" [
 #
 # POST /
 # operationId: ExportServerEngineAttribute
-export def "api export-server-engine-attribute" [
+export def "export-server-engine-attribute" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -764,7 +764,7 @@ export def "api export-server-engine-attribute" [
 #
 # POST /
 # operationId: ListTagsForResource
-export def "api list-tags-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -817,7 +817,7 @@ export def "api list-tags-for-resource" [
 #
 # POST /
 # operationId: RestoreServer
-export def "api create-restore-server" [
+export def "restore-server" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -868,7 +868,7 @@ export def "api create-restore-server" [
 #
 # POST /
 # operationId: StartMaintenance
-export def "api start-maintenance" [
+export def "start-maintenance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -917,7 +917,7 @@ export def "api start-maintenance" [
 #
 # POST /
 # operationId: TagResource
-export def "api tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -966,7 +966,7 @@ export def "api tag-resource" [
 #
 # POST /
 # operationId: UntagResource
-export def "api untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1015,7 +1015,7 @@ export def "api untag-resource" [
 #
 # POST /
 # operationId: UpdateServer
-export def "api update-server" [
+export def "update-server" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1067,7 +1067,7 @@ export def "api update-server" [
 #
 # POST /
 # operationId: UpdateServerEngineAttributes
-export def "api update-server-engine-attributes" [
+export def "update-server-engine-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -112,7 +112,7 @@ def subset-portfolios-enumeration-method-completer [] { ["complete" "randomSampl
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "assets-analysis-absorption-ratio create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-assets-analysis-absorption-ratio" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -136,7 +136,7 @@ export def commands []: nothing -> table {
 #
 # POST /assets/analysis/absorption-ratio
 # --assetsCovarianceMatrixEigenvectors shape: {eigenvectorsRetained?: int}
-export def "assets-analysis-absorption-ratio create" [
+export def "post-assets-analysis-absorption-ratio" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -175,7 +175,7 @@ export def "assets-analysis-absorption-ratio create" [
 # Turbulence Index
 #
 # POST /assets/analysis/turbulence-index
-export def "assets-analysis-turbulence-index create" [
+export def "post-assets-analysis-turbulence-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -216,7 +216,7 @@ export def "assets-analysis-turbulence-index create" [
 #
 # POST /assets/correlation/matrix
 # --assets item shape: {assetReturns: list<float>}
-export def "assets-correlation-matrix create" [
+export def "post-assets-correlation-matrix" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -254,7 +254,7 @@ export def "assets-correlation-matrix create" [
 # Correlation Matrix Bounds
 #
 # POST /assets/correlation/matrix/bounds
-export def "assets-correlation-matrix-bounds create" [
+export def "post-assets-correlation-matrix-bounds" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -293,7 +293,7 @@ export def "assets-correlation-matrix-bounds create" [
 # Denoised Correlation Matrix
 #
 # POST /assets/correlation/matrix/denoised
-export def "assets-correlation-matrix-denoised create" [
+export def "post-assets-correlation-matrix-denoised" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -333,7 +333,7 @@ export def "assets-correlation-matrix-denoised create" [
 # Correlation Matrix Distance
 #
 # POST /assets/correlation/matrix/distance
-export def "assets-correlation-matrix-distance create" [
+export def "post-assets-correlation-matrix-distance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -373,7 +373,7 @@ export def "assets-correlation-matrix-distance create" [
 # Correlation Matrix Effective Rank
 #
 # POST /assets/correlation/matrix/effective-rank
-export def "assets-correlation-matrix-effective-rank create" [
+export def "post-assets-correlation-matrix-effective-rank" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -411,7 +411,7 @@ export def "assets-correlation-matrix-effective-rank create" [
 # Correlation Matrix Informativeness
 #
 # POST /assets/correlation/matrix/informativeness
-export def "assets-correlation-matrix-informativeness create" [
+export def "post-assets-correlation-matrix-informativeness" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -450,7 +450,7 @@ export def "assets-correlation-matrix-informativeness create" [
 # Nearest Correlation Matrix
 #
 # POST /assets/correlation/matrix/nearest
-export def "assets-correlation-matrix-nearest create" [
+export def "post-assets-correlation-matrix-nearest" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -489,7 +489,7 @@ export def "assets-correlation-matrix-nearest create" [
 # Random Correlation Matrix
 #
 # POST /assets/correlation/matrix/random
-export def "assets-correlation-matrix-random create" [
+export def "post-assets-correlation-matrix-random" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -526,7 +526,7 @@ export def "assets-correlation-matrix-random create" [
 # Correlation Matrix Shrinkage
 #
 # POST /assets/correlation/matrix/shrinkage
-export def "assets-correlation-matrix-shrinkage create" [
+export def "post-assets-correlation-matrix-shrinkage" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -568,7 +568,7 @@ export def "assets-correlation-matrix-shrinkage create" [
 #
 # POST /assets/correlation/matrix/theory-implied
 # --assets item shape: {assetHierarchicalClassification: list}
-export def "assets-correlation-matrix-theory-implied create" [
+export def "post-assets-correlation-matrix-theory-implied" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -607,7 +607,7 @@ export def "assets-correlation-matrix-theory-implied create" [
 # Correlation Matrix Validation
 #
 # POST /assets/correlation/matrix/validation
-export def "assets-correlation-matrix-validation create" [
+export def "post-assets-correlation-matrix-validation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -646,7 +646,7 @@ export def "assets-correlation-matrix-validation create" [
 #
 # POST /assets/covariance/matrix
 # --assets item shape: {assetReturns: list<float>}
-export def "assets-covariance-matrix create" [
+export def "post-assets-covariance-matrix" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -686,7 +686,7 @@ export def "assets-covariance-matrix create" [
 # Covariance Matrix Effective Rank
 #
 # POST /assets/covariance/matrix/effective-rank
-export def "assets-covariance-matrix-effective-rank create" [
+export def "post-assets-covariance-matrix-effective-rank" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -725,7 +725,7 @@ export def "assets-covariance-matrix-effective-rank create" [
 #
 # POST /assets/covariance/matrix/exponentially-weighted
 # --assets item shape: {assetReturns: list<float>}
-export def "assets-covariance-matrix-exponentially-weighted create" [
+export def "post-assets-covariance-matrix-exponentially-weighted" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -763,7 +763,7 @@ export def "assets-covariance-matrix-exponentially-weighted create" [
 # Covariance Matrix Validation
 #
 # POST /assets/covariance/matrix/validation
-export def "assets-covariance-matrix-validation create" [
+export def "post-assets-covariance-matrix-validation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -802,7 +802,7 @@ export def "assets-covariance-matrix-validation create" [
 #
 # POST /assets/kurtosis
 # --assets item shape: {assetReturns: list<float>}
-export def "assets-kurtosis create" [
+export def "post-assets-kurtosis" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -840,7 +840,7 @@ export def "assets-kurtosis create" [
 #
 # POST /assets/prices/adjusted
 # --assets item shape: {assetDividends?: list, assetPrices: list, assetSplits?: list}
-export def "assets-prices-adjusted create" [
+export def "post-assets-prices-adjusted" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -878,7 +878,7 @@ export def "assets-prices-adjusted create" [
 #
 # POST /assets/prices/adjusted/forward
 # --assets item shape: {assetDividends?: list, assetPrices: list, assetSplits?: list}
-export def "assets-prices-adjusted-forward create" [
+export def "post-assets-prices-adjusted-forward" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -916,7 +916,7 @@ export def "assets-prices-adjusted-forward create" [
 #
 # POST /assets/returns
 # --assets item shape: {assetPrices: list<float>}
-export def "assets-returns create" [
+export def "post-assets-returns" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -954,7 +954,7 @@ export def "assets-returns create" [
 #
 # POST /assets/returns/average
 # --assets item shape: {assetReturns: list<float>}
-export def "assets-returns-average create" [
+export def "post-assets-returns-average" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -992,7 +992,7 @@ export def "assets-returns-average create" [
 #
 # POST /assets/returns/simulation/bootstrap
 # --assets item shape: {assetReturns: list<float>}
-export def "assets-returns-simulation-bootstrap create" [
+export def "post-assets-returns-simulation-bootstrap" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1035,7 +1035,7 @@ export def "assets-returns-simulation-bootstrap create" [
 #
 # POST /assets/skewness
 # --assets item shape: {assetReturns: list<float>}
-export def "assets-skewness create" [
+export def "post-assets-skewness" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1073,7 +1073,7 @@ export def "assets-skewness create" [
 #
 # POST /assets/variance
 # --assets item shape: {assetReturns: list<float>}
-export def "assets-variance create" [
+export def "post-assets-variance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1112,7 +1112,7 @@ export def "assets-variance create" [
 #
 # POST /assets/volatility
 # --assets item shape: {assetReturns: list<float>}
-export def "assets-volatility create" [
+export def "post-assets-volatility" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1151,7 +1151,7 @@ export def "assets-volatility create" [
 #
 # POST /factors/residualization
 # --factors item shape: {factorReturns: list<float>}
-export def "factors-residualization create" [
+export def "post-factors-residualization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1190,7 +1190,7 @@ export def "factors-residualization create" [
 #
 # POST /portfolio/analysis/alpha
 # --portfolios item shape: {portfolioReturns: list<float>}
-export def "portfolio-analysis-alpha create" [
+export def "post-portfolio-analysis-alpha" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1231,7 +1231,7 @@ export def "portfolio-analysis-alpha create" [
 #
 # POST /portfolio/analysis/beta
 # --portfolios item shape: {portfolioReturns: list<float>}
-export def "portfolio-analysis-beta create" [
+export def "post-portfolio-analysis-beta" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1272,7 +1272,7 @@ export def "portfolio-analysis-beta create" [
 #
 # POST /portfolio/analysis/conditional-value-at-risk
 # --portfolios item shape: {portfolioValues: list<float>}
-export def "portfolio-analysis-conditional-value-at-risk create" [
+export def "post-portfolio-analysis-conditional-value-at-risk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1311,7 +1311,7 @@ export def "portfolio-analysis-conditional-value-at-risk create" [
 #
 # POST /portfolio/analysis/contributions/return
 # --portfolios item shape: {assetsWeights: list<float>}
-export def "portfolio-analysis-contributions-return create" [
+export def "post-portfolio-analysis-contributions-return" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1352,7 +1352,7 @@ export def "portfolio-analysis-contributions-return create" [
 #
 # POST /portfolio/analysis/contributions/risk
 # --portfolios item shape: {assetsWeights: list<float>}
-export def "portfolio-analysis-contributions-risk create" [
+export def "post-portfolio-analysis-contributions-risk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1393,7 +1393,7 @@ export def "portfolio-analysis-contributions-risk create" [
 #
 # POST /portfolio/analysis/correlation-spectrum
 # --portfolios item shape: {assetsWeights: list<float>}
-export def "portfolio-analysis-correlation-spectrum create" [
+export def "post-portfolio-analysis-correlation-spectrum" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1433,7 +1433,7 @@ export def "portfolio-analysis-correlation-spectrum create" [
 #
 # POST /portfolio/analysis/diversification-ratio
 # --portfolios item shape: {assetsWeights: list<float>}
-export def "portfolio-analysis-diversification-ratio create" [
+export def "post-portfolio-analysis-diversification-ratio" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1473,7 +1473,7 @@ export def "portfolio-analysis-diversification-ratio create" [
 #
 # POST /portfolio/analysis/drawdowns
 # --portfolios item shape: {portfolioValues: list<float>}
-export def "portfolio-analysis-drawdowns create" [
+export def "post-portfolio-analysis-drawdowns" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1511,7 +1511,7 @@ export def "portfolio-analysis-drawdowns create" [
 #
 # POST /portfolio/analysis/effective-number-of-bets
 # --portfolios item shape: {assetsWeights: list<float>}
-export def "portfolio-analysis-effective-number-of-bets create" [
+export def "post-portfolio-analysis-effective-number-of-bets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1553,7 +1553,7 @@ export def "portfolio-analysis-effective-number-of-bets create" [
 # POST /portfolio/analysis/factors/exposures
 # --factors item shape: {factorReturns: list<float>}
 # --portfolios item shape: {portfolioReturns: list<float>}
-export def "portfolio-analysis-factors-exposures create" [
+export def "post-portfolio-analysis-factors-exposures" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1592,7 +1592,7 @@ export def "portfolio-analysis-factors-exposures create" [
 #
 # POST /portfolio/analysis/mean-variance/efficient-frontier
 # --constraints shape: {assetsGroups?: list, assetsGroupsMatrix?: list, maximumAssetsGroupsWeights?: list<float>, maximumAssetsWeights?: list<float>, maximumPortfolioExposure?: float, minimumAssetsWeights?: list<float>, minimumPortfolioExposure?: float}
-export def "portfolio-analysis-mean-variance-efficient-frontier create" [
+export def "post-portfolio-analysis-mean-variance-efficient-frontier" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1634,7 +1634,7 @@ export def "portfolio-analysis-mean-variance-efficient-frontier create" [
 #
 # POST /portfolio/analysis/mean-variance/minimum-variance-frontier
 # --constraints shape: {assetsGroups?: list, assetsGroupsMatrix?: list, maximumAssetsGroupsWeights?: list<float>, maximumAssetsWeights?: list<float>, maximumPortfolioExposure?: float, minimumAssetsWeights?: list<float>, minimumPortfolioExposure?: float}
-export def "portfolio-analysis-mean-variance-minimum-variance-frontier create" [
+export def "post-portfolio-analysis-mean-variance-minimum-variance-frontier" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1676,7 +1676,7 @@ export def "portfolio-analysis-mean-variance-minimum-variance-frontier create" [
 #
 # POST /portfolio/analysis/return
 # --portfolios item shape: {assetsWeights: list<float>}
-export def "portfolio-analysis-return create" [
+export def "post-portfolio-analysis-return" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1716,7 +1716,7 @@ export def "portfolio-analysis-return create" [
 #
 # POST /portfolio/analysis/returns/average
 # --portfolios item shape: {portfolioValues: list<float>}
-export def "portfolio-analysis-returns-average create" [
+export def "post-portfolio-analysis-returns-average" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1754,7 +1754,7 @@ export def "portfolio-analysis-returns-average create" [
 #
 # POST /portfolio/analysis/sharpe-ratio
 # --portfolios item shape: {assetsWeights: list<float>}
-export def "portfolio-analysis-sharpe-ratio create" [
+export def "post-portfolio-analysis-sharpe-ratio" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1796,7 +1796,7 @@ export def "portfolio-analysis-sharpe-ratio create" [
 #
 # POST /portfolio/analysis/sharpe-ratio/bias-adjusted
 # --portfolios item shape: {portfolioValues: list<float>}
-export def "portfolio-analysis-sharpe-ratio-bias-adjusted create" [
+export def "post-portfolio-analysis-sharpe-ratio-bias-adjusted" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1835,7 +1835,7 @@ export def "portfolio-analysis-sharpe-ratio-bias-adjusted create" [
 #
 # POST /portfolio/analysis/sharpe-ratio/confidence-interval
 # --portfolios item shape: {portfolioValues: list<float>}
-export def "portfolio-analysis-sharpe-ratio-confidence-interval create" [
+export def "post-portfolio-analysis-sharpe-ratio-confidence-interval" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1876,7 +1876,7 @@ export def "portfolio-analysis-sharpe-ratio-confidence-interval create" [
 #
 # POST /portfolio/analysis/sharpe-ratio/probabilistic
 # --portfolios item shape: {portfolioValues: list<float>}
-export def "portfolio-analysis-sharpe-ratio-probabilistic create" [
+export def "post-portfolio-analysis-sharpe-ratio-probabilistic" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1917,7 +1917,7 @@ export def "portfolio-analysis-sharpe-ratio-probabilistic create" [
 #
 # POST /portfolio/analysis/sharpe-ratio/probabilistic/minimum-track-record-length
 # --portfolios item shape: {portfolioValues: list<float>}
-export def "portfolio-analysis-sharpe-ratio-probabilistic-minimum-track-record-length create" [
+export def "post-portfolio-analysis-sharpe-ratio-probabilistic-minimum-track-record-length" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1959,7 +1959,7 @@ export def "portfolio-analysis-sharpe-ratio-probabilistic-minimum-track-record-l
 #
 # POST /portfolio/analysis/tracking-error
 # --portfolios item shape: {portfolioReturns: list<float>}
-export def "portfolio-analysis-tracking-error create" [
+export def "post-portfolio-analysis-tracking-error" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1998,7 +1998,7 @@ export def "portfolio-analysis-tracking-error create" [
 #
 # POST /portfolio/analysis/ulcer-index
 # --portfolios item shape: {portfolioValues: list<float>}
-export def "portfolio-analysis-ulcer-index create" [
+export def "post-portfolio-analysis-ulcer-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2037,7 +2037,7 @@ export def "portfolio-analysis-ulcer-index create" [
 #
 # POST /portfolio/analysis/ulcer-performance-index
 # --portfolios item shape: {portfolioValues: list<float>}
-export def "portfolio-analysis-ulcer-performance-index create" [
+export def "post-portfolio-analysis-ulcer-performance-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2076,7 +2076,7 @@ export def "portfolio-analysis-ulcer-performance-index create" [
 #
 # POST /portfolio/analysis/value-at-risk
 # --portfolios item shape: {portfolioValues: list<float>}
-export def "portfolio-analysis-value-at-risk create" [
+export def "post-portfolio-analysis-value-at-risk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2115,7 +2115,7 @@ export def "portfolio-analysis-value-at-risk create" [
 #
 # POST /portfolio/analysis/volatility
 # --portfolios item shape: {assetsWeights: list<float>}
-export def "portfolio-analysis-volatility create" [
+export def "post-portfolio-analysis-volatility" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2154,7 +2154,7 @@ export def "portfolio-analysis-volatility create" [
 # Investable Portfolio
 #
 # POST /portfolio/construction/investable
-export def "portfolio-construction-investable create" [
+export def "post-portfolio-construction-investable" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2202,7 +2202,7 @@ export def "portfolio-construction-investable create" [
 # POST /portfolio/construction/mimicking
 # --assets item shape: {assetReturns: list<float>}
 # --constraints shape: {assetsGroups?: list, assetsGroupsMatrix?: list, maximumAssetsGroupsWeights?: list<float>, maximumAssetsWeights?: list<float>, maximumPortfolioExposure?: float, minimumAssetsWeights?: list<float>, minimumPortfolioExposure?: float}
-export def "portfolio-construction-mimicking create" [
+export def "post-portfolio-construction-mimicking" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2242,7 +2242,7 @@ export def "portfolio-construction-mimicking create" [
 #
 # POST /portfolio/construction/random
 # --constraints shape: {maximumAssetsWeights?: list<float>, maximumPortfolioExposure?: float, minimumAssetsWeights?: list<float>, minimumPortfolioExposure?: float}
-export def "portfolio-construction-random create" [
+export def "post-portfolio-construction-random" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2282,7 +2282,7 @@ export def "portfolio-construction-random create" [
 #
 # POST /portfolio/optimization/equal-risk-contributions
 # --constraints shape: {maximumAssetsWeights?: list<float>, minimumAssetsWeights?: list<float>}
-export def "portfolio-optimization-equal-risk-contributions create" [
+export def "post-portfolio-optimization-equal-risk-contributions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2321,7 +2321,7 @@ export def "portfolio-optimization-equal-risk-contributions create" [
 # Equal Sharpe Ratio Contributions Portfolio
 #
 # POST /portfolio/optimization/equal-sharpe-ratio-contributions
-export def "portfolio-optimization-equal-sharpe-ratio-contributions create" [
+export def "post-portfolio-optimization-equal-sharpe-ratio-contributions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2361,7 +2361,7 @@ export def "portfolio-optimization-equal-sharpe-ratio-contributions create" [
 # Equal Volatility Weighted Portfolio
 #
 # POST /portfolio/optimization/equal-volatility-weighted
-export def "portfolio-optimization-equal-volatility-weighted create" [
+export def "post-portfolio-optimization-equal-volatility-weighted" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2399,7 +2399,7 @@ export def "portfolio-optimization-equal-volatility-weighted create" [
 # Equal Weighted Portfolio
 #
 # POST /portfolio/optimization/equal-weighted
-export def "portfolio-optimization-equal-weighted create" [
+export def "post-portfolio-optimization-equal-weighted" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2437,7 +2437,7 @@ export def "portfolio-optimization-equal-weighted create" [
 #
 # POST /portfolio/optimization/hierarchical-risk-parity
 # --constraints shape: {maximumAssetsWeights?: list<float>, maximumPortfolioExposure?: float, minimumAssetsWeights?: list<float>, minimumPortfolioExposure?: float}
-export def "portfolio-optimization-hierarchical-risk-parity create" [
+export def "post-portfolio-optimization-hierarchical-risk-parity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2479,7 +2479,7 @@ export def "portfolio-optimization-hierarchical-risk-parity create" [
 #
 # POST /portfolio/optimization/hierarchical-risk-parity/clustering-based
 # --constraints shape: {maximumAssetsWeights?: list<float>, maximumPortfolioExposure?: float, minimumAssetsWeights?: list<float>, minimumPortfolioExposure?: float}
-export def "portfolio-optimization-hierarchical-risk-parity-clustering-based create" [
+export def "post-portfolio-optimization-hierarchical-risk-parity-clustering-based" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2523,7 +2523,7 @@ export def "portfolio-optimization-hierarchical-risk-parity-clustering-based cre
 # Inverse Variance Weighted Portfolio
 #
 # POST /portfolio/optimization/inverse-variance-weighted
-export def "portfolio-optimization-inverse-variance-weighted create" [
+export def "post-portfolio-optimization-inverse-variance-weighted" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2561,7 +2561,7 @@ export def "portfolio-optimization-inverse-variance-weighted create" [
 # Inverse Volatility Weighted Portfolio
 #
 # POST /portfolio/optimization/inverse-volatility-weighted
-export def "portfolio-optimization-inverse-volatility-weighted create" [
+export def "post-portfolio-optimization-inverse-volatility-weighted" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2599,7 +2599,7 @@ export def "portfolio-optimization-inverse-volatility-weighted create" [
 # Market Capitalization Weighted Portfolio
 #
 # POST /portfolio/optimization/market-capitalization-weighted
-export def "portfolio-optimization-market-capitalization-weighted create" [
+export def "post-portfolio-optimization-market-capitalization-weighted" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2638,7 +2638,7 @@ export def "portfolio-optimization-market-capitalization-weighted create" [
 #
 # POST /portfolio/optimization/maximum-decorrelation
 # --constraints shape: {assetsGroups?: list, assetsGroupsMatrix?: list, maximumAssetsGroupsWeights?: list<float>, maximumAssetsWeights?: list<float>, maximumPortfolioExposure?: float, minimumAssetsWeights?: list<float>, minimumPortfolioExposure?: float}
-export def "portfolio-optimization-maximum-decorrelation create" [
+export def "post-portfolio-optimization-maximum-decorrelation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2679,7 +2679,7 @@ export def "portfolio-optimization-maximum-decorrelation create" [
 #
 # POST /portfolio/optimization/maximum-return
 # --constraints shape: {assetsGroups?: list, assetsGroupsMatrix?: list, maximumAssetsGroupsWeights?: list<float>, maximumAssetsWeights?: list<float>, maximumPortfolioExposure?: float, minimumAssetsWeights?: list<float>, minimumPortfolioExposure?: float}
-export def "portfolio-optimization-maximum-return create" [
+export def "post-portfolio-optimization-maximum-return" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2720,7 +2720,7 @@ export def "portfolio-optimization-maximum-return create" [
 #
 # POST /portfolio/optimization/maximum-return/diversified
 # --constraints shape: {assetsGroups?: list, assetsGroupsMatrix?: list, deltaReturn?: float, deltaVolatility?: float, maximumAssetsGroupsWeights?: list<float>, maximumAssetsWeights?: list<float>, maximumPortfolioExposure?: float, minimumAssetsWeights?: list<float>, minimumPortfolioExposure?: float}
-export def "portfolio-optimization-maximum-return-diversified create" [
+export def "post-portfolio-optimization-maximum-return-diversified" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2761,7 +2761,7 @@ export def "portfolio-optimization-maximum-return-diversified create" [
 #
 # POST /portfolio/optimization/maximum-return/subset-resampling-based
 # --constraints shape: {assetsGroups?: list, assetsGroupsMatrix?: list, maximumAssetsGroupsWeights?: list<float>, maximumAssetsWeights?: list<float>, maximumPortfolioExposure?: float, minimumAssetsWeights?: list<float>, minimumPortfolioExposure?: float}
-export def "portfolio-optimization-maximum-return-subset-resampling-based create" [
+export def "post-portfolio-optimization-maximum-return-subset-resampling-based" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2806,7 +2806,7 @@ export def "portfolio-optimization-maximum-return-subset-resampling-based create
 #
 # POST /portfolio/optimization/maximum-sharpe-ratio
 # --constraints shape: {assetsGroups?: list, assetsGroupsMatrix?: list, maximumAssetsGroupsWeights?: list<float>, maximumAssetsWeights?: list<float>, maximumPortfolioExposure?: float, minimumAssetsWeights?: list<float>, minimumPortfolioExposure?: float}
-export def "portfolio-optimization-maximum-sharpe-ratio create" [
+export def "post-portfolio-optimization-maximum-sharpe-ratio" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2848,7 +2848,7 @@ export def "portfolio-optimization-maximum-sharpe-ratio create" [
 #
 # POST /portfolio/optimization/maximum-sharpe-ratio/diversified
 # --constraints shape: {assetsGroups?: list, assetsGroupsMatrix?: list, deltaReturn?: float, deltaVolatility?: float, maximumAssetsGroupsWeights?: list<float>, maximumAssetsWeights?: list<float>, maximumPortfolioExposure?: float, minimumAssetsWeights?: list<float>, minimumPortfolioExposure?: float}
-export def "portfolio-optimization-maximum-sharpe-ratio-diversified create" [
+export def "post-portfolio-optimization-maximum-sharpe-ratio-diversified" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2890,7 +2890,7 @@ export def "portfolio-optimization-maximum-sharpe-ratio-diversified create" [
 #
 # POST /portfolio/optimization/maximum-sharpe-ratio/subset-resampling-based
 # --constraints shape: {assetsGroups?: list, assetsGroupsMatrix?: list, maximumAssetsGroupsWeights?: list<float>, maximumAssetsWeights?: list<float>, maximumPortfolioExposure?: float, minimumAssetsWeights?: list<float>, minimumPortfolioExposure?: float}
-export def "portfolio-optimization-maximum-sharpe-ratio-subset-resampling-based create" [
+export def "post-portfolio-optimization-maximum-sharpe-ratio-subset-resampling-based" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2937,7 +2937,7 @@ export def "portfolio-optimization-maximum-sharpe-ratio-subset-resampling-based 
 # POST /portfolio/optimization/maximum-ulcer-performance-index
 # --assets item shape: {assetPrices: list<float>}
 # --constraints shape: {assetsGroups?: list, assetsGroupsMatrix?: list, maximumAssetsGroupsWeights?: list<float>, maximumAssetsWeights?: list<float>, maximumPortfolioExposure?: float, minimumAssetsWeights?: list<float>, minimumPortfolioExposure?: float}
-export def "portfolio-optimization-maximum-ulcer-performance-index create" [
+export def "post-portfolio-optimization-maximum-ulcer-performance-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2977,7 +2977,7 @@ export def "portfolio-optimization-maximum-ulcer-performance-index create" [
 #
 # POST /portfolio/optimization/mean-variance-efficient
 # --constraints shape: {assetsGroups?: list, assetsGroupsMatrix?: list, maximumAssetsGroupsWeights?: list<float>, maximumAssetsWeights?: list<float>, maximumPortfolioExposure?: float, minimumAssetsWeights?: list<float>, minimumPortfolioExposure?: float, portfolioReturn?: float, portfolioVolatility?: float, riskTolerance?: float}
-export def "portfolio-optimization-mean-variance-efficient create" [
+export def "post-portfolio-optimization-mean-variance-efficient" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3018,7 +3018,7 @@ export def "portfolio-optimization-mean-variance-efficient create" [
 #
 # POST /portfolio/optimization/mean-variance-efficient/diversified
 # --constraints shape: {assetsGroups?: list, assetsGroupsMatrix?: list, deltaReturn?: float, deltaVolatility?: float, maximumAssetsGroupsWeights?: list<float>, maximumAssetsWeights?: list<float>, maximumPortfolioExposure?: float, minimumAssetsWeights?: list<float>, minimumPortfolioExposure?: float, portfolioReturn?: float, portfolioVolatility?: float, riskTolerance?: float}
-export def "portfolio-optimization-mean-variance-efficient-diversified create" [
+export def "post-portfolio-optimization-mean-variance-efficient-diversified" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3059,7 +3059,7 @@ export def "portfolio-optimization-mean-variance-efficient-diversified create" [
 #
 # POST /portfolio/optimization/mean-variance-efficient/subset-resampling-based
 # --constraints shape: {assetsGroups?: list, assetsGroupsMatrix?: list, maximumAssetsGroupsWeights?: list<float>, maximumAssetsWeights?: list<float>, maximumPortfolioExposure?: float, minimumAssetsWeights?: list<float>, minimumPortfolioExposure?: float, portfolioReturn?: float, portfolioVolatility?: float, riskTolerance?: float}
-export def "portfolio-optimization-mean-variance-efficient-subset-resampling-based create" [
+export def "post-portfolio-optimization-mean-variance-efficient-subset-resampling-based" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3103,7 +3103,7 @@ export def "portfolio-optimization-mean-variance-efficient-subset-resampling-bas
 # Minimum Correlation Portfolio
 #
 # POST /portfolio/optimization/minimum-correlation
-export def "portfolio-optimization-minimum-correlation create" [
+export def "post-portfolio-optimization-minimum-correlation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3144,7 +3144,7 @@ export def "portfolio-optimization-minimum-correlation create" [
 # POST /portfolio/optimization/minimum-ulcer-index
 # --assets item shape: {assetPrices: list<float>}
 # --constraints shape: {assetsGroups?: list, assetsGroupsMatrix?: list, maximumAssetsGroupsWeights?: list<float>, maximumAssetsWeights?: list<float>, maximumPortfolioExposure?: float, minimumAssetsWeights?: list<float>, minimumPortfolioExposure?: float}
-export def "portfolio-optimization-minimum-ulcer-index create" [
+export def "post-portfolio-optimization-minimum-ulcer-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3183,7 +3183,7 @@ export def "portfolio-optimization-minimum-ulcer-index create" [
 #
 # POST /portfolio/optimization/minimum-variance
 # --constraints shape: {assetsGroups?: list, assetsGroupsMatrix?: list, maximumAssetsGroupsWeights?: list<float>, maximumAssetsWeights?: list<float>, maximumPortfolioExposure?: float, minimumAssetsWeights?: list<float>, minimumPortfolioExposure?: float}
-export def "portfolio-optimization-minimum-variance create" [
+export def "post-portfolio-optimization-minimum-variance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3224,7 +3224,7 @@ export def "portfolio-optimization-minimum-variance create" [
 #
 # POST /portfolio/optimization/minimum-variance/diversified
 # --constraints shape: {assetsGroups?: list, assetsGroupsMatrix?: list, deltaReturn?: float, deltaVolatility?: float, maximumAssetsGroupsWeights?: list<float>, maximumAssetsWeights?: list<float>, maximumPortfolioExposure?: float, minimumAssetsWeights?: list<float>, minimumPortfolioExposure?: float}
-export def "portfolio-optimization-minimum-variance-diversified create" [
+export def "post-portfolio-optimization-minimum-variance-diversified" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3265,7 +3265,7 @@ export def "portfolio-optimization-minimum-variance-diversified create" [
 #
 # POST /portfolio/optimization/minimum-variance/subset-resampling-based
 # --constraints shape: {assetsGroups?: list, assetsGroupsMatrix?: list, maximumAssetsGroupsWeights?: list<float>, maximumAssetsWeights?: list<float>, maximumPortfolioExposure?: float, minimumAssetsWeights?: list<float>, minimumPortfolioExposure?: float}
-export def "portfolio-optimization-minimum-variance-subset-resampling-based create" [
+export def "post-portfolio-optimization-minimum-variance-subset-resampling-based" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3310,7 +3310,7 @@ export def "portfolio-optimization-minimum-variance-subset-resampling-based crea
 #
 # POST /portfolio/optimization/most-diversified
 # --constraints shape: {assetsGroups?: list, assetsGroupsMatrix?: list, maximumAssetsGroupsWeights?: list<float>, maximumAssetsWeights?: list<float>, maximumPortfolioExposure?: float, minimumAssetsWeights?: list<float>, minimumPortfolioExposure?: float}
-export def "portfolio-optimization-most-diversified create" [
+export def "post-portfolio-optimization-most-diversified" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3351,7 +3351,7 @@ export def "portfolio-optimization-most-diversified create" [
 # POST /portfolio/simulation/rebalancing/drift-weight
 # --assets item shape: {assetPrices: list<float>}
 # --portfolios item shape: {assetsWeights: list<float>}
-export def "portfolio-simulation-rebalancing-drift-weight create" [
+export def "post-portfolio-simulation-rebalancing-drift-weight" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3391,7 +3391,7 @@ export def "portfolio-simulation-rebalancing-drift-weight create" [
 # POST /portfolio/simulation/rebalancing/fixed-weight
 # --assets item shape: {assetPrices: list<float>}
 # --portfolios item shape: {assetsWeights: list<float>}
-export def "portfolio-simulation-rebalancing-fixed-weight create" [
+export def "post-portfolio-simulation-rebalancing-fixed-weight" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3430,7 +3430,7 @@ export def "portfolio-simulation-rebalancing-fixed-weight create" [
 #
 # POST /portfolio/simulation/rebalancing/random-weight
 # --assets item shape: {assetPrices: list<float>}
-export def "portfolio-simulation-rebalancing-random-weight create" [
+export def "post-portfolio-simulation-rebalancing-random-weight" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

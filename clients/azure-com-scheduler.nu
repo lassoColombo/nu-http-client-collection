@@ -123,7 +123,7 @@ def accept-completer [] { ["application/json" "text/json"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-scheduler-job-collections list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "job-collections-list-by-subscription" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -147,7 +147,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Scheduler/jobCollections
 # operationId: JobCollections_ListBySubscription
-export def "subscriptions-providers-microsoft-scheduler-job-collections list" [
+export def "job-collections-list-by-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -186,7 +186,7 @@ export def "subscriptions-providers-microsoft-scheduler-job-collections list" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Scheduler/jobCollections
 # operationId: JobCollections_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-collections list" [
+export def "job-collections-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -227,7 +227,7 @@ export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-coll
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Scheduler/jobCollections/{jobCollectionName}
 # operationId: JobCollections_Delete
-export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-collections delete" [
+export def "job-collections-delete" [
   subscription_id: string
   resource_group_name: string
   job_collection_name: string
@@ -270,7 +270,7 @@ export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-coll
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Scheduler/jobCollections/{jobCollectionName}
 # operationId: JobCollections_Get
-export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-collections get" [
+export def "job-collections-get" [
   subscription_id: string
   resource_group_name: string
   job_collection_name: string
@@ -314,7 +314,7 @@ export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-coll
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Scheduler/jobCollections/{jobCollectionName}
 # operationId: JobCollections_Patch
 # --properties shape: {quota?: any, sku?: any, state?: "Enabled"|"Disabled"|"Suspended"|"Deleted"}
-export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-collections update" [
+export def "job-collections-patch" [
   subscription_id: string
   resource_group_name: string
   job_collection_name: string
@@ -365,7 +365,7 @@ export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-coll
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Scheduler/jobCollections/{jobCollectionName}
 # operationId: JobCollections_CreateOrUpdate
 # --properties shape: {quota?: any, sku?: any, state?: "Enabled"|"Disabled"|"Suspended"|"Deleted"}
-export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-collections create-or-update" [
+export def "job-collections-create-or-update" [
   subscription_id: string
   resource_group_name: string
   job_collection_name: string
@@ -415,7 +415,7 @@ export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-coll
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Scheduler/jobCollections/{jobCollectionName}/disable
 # operationId: JobCollections_Disable
-export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-collections-disable disable" [
+export def "job-collections-disable" [
   subscription_id: string
   resource_group_name: string
   job_collection_name: string
@@ -458,7 +458,7 @@ export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-coll
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Scheduler/jobCollections/{jobCollectionName}/enable
 # operationId: JobCollections_Enable
-export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-collections-enable enable" [
+export def "job-collections-enable" [
   subscription_id: string
   resource_group_name: string
   job_collection_name: string
@@ -501,7 +501,7 @@ export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-coll
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Scheduler/jobCollections/{jobCollectionName}/jobs
 # operationId: Jobs_List
-export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-collections-jobs list" [
+export def "jobs-list" [
   subscription_id: string
   resource_group_name: string
   job_collection_name: string
@@ -547,7 +547,7 @@ export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-coll
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Scheduler/jobCollections/{jobCollectionName}/jobs/{jobName}
 # operationId: Jobs_Delete
-export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-collections-jobs delete" [
+export def "jobs-delete" [
   subscription_id: string
   resource_group_name: string
   job_collection_name: string
@@ -592,7 +592,7 @@ export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-coll
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Scheduler/jobCollections/{jobCollectionName}/jobs/{jobName}
 # operationId: Jobs_Get
-export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-collections-jobs get" [
+export def "jobs-get" [
   subscription_id: string
   resource_group_name: string
   job_collection_name: string
@@ -638,7 +638,7 @@ export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-coll
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Scheduler/jobCollections/{jobCollectionName}/jobs/{jobName}
 # operationId: Jobs_Patch
 # --properties shape: {action?: any, recurrence?: any, startTime?: string, state?: "Enabled"|"Disabled"|"Faulted"|"Completed", status?: any}
-export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-collections-jobs update" [
+export def "jobs-patch" [
   subscription_id: string
   resource_group_name: string
   job_collection_name: string
@@ -688,7 +688,7 @@ export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-coll
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Scheduler/jobCollections/{jobCollectionName}/jobs/{jobName}
 # operationId: Jobs_CreateOrUpdate
 # --properties shape: {action?: any, recurrence?: any, startTime?: string, state?: "Enabled"|"Disabled"|"Faulted"|"Completed", status?: any}
-export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-collections-jobs create-or-update" [
+export def "jobs-create-or-update" [
   subscription_id: string
   resource_group_name: string
   job_collection_name: string
@@ -737,7 +737,7 @@ export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-coll
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Scheduler/jobCollections/{jobCollectionName}/jobs/{jobName}/history
 # operationId: Jobs_ListJobHistory
-export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-collections-jobs-history list" [
+export def "jobs-list-job-history" [
   subscription_id: string
   resource_group_name: string
   job_collection_name: string
@@ -785,7 +785,7 @@ export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-coll
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Scheduler/jobCollections/{jobCollectionName}/jobs/{jobName}/run
 # operationId: Jobs_Run
-export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-collections-jobs-run create" [
+export def "jobs-run" [
   subscription_id: string
   resource_group_name: string
   job_collection_name: string

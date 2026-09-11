@@ -105,7 +105,7 @@ def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "adult-content create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-adult-content" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -128,7 +128,7 @@ export def commands []: nothing -> table {
 # Image contains nudity or sexually explicit content? [ image_url -> id ]
 #
 # POST /adult_content
-export def "adult-content create" [
+export def "post-adult-content" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -166,7 +166,7 @@ export def "adult-content create" [
 # Gets the adult_content task [ id -> adult content task ]
 #
 # GET /adult_content/{taskId}
-export def "adult-content get" [
+export def "get-adult-content-task-id" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -201,7 +201,7 @@ export def "adult-content get" [
 # Create an artistic image [ image_url, style_url -> id ]
 #
 # POST /artistic_image
-export def "artistic-image create" [
+export def "post-artistic-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -240,7 +240,7 @@ export def "artistic-image create" [
 # Gets a artistic image by task id [ id -> artistic image task ]
 #
 # GET /artistic_image/{taskId}
-export def "artistic-image get" [
+export def "get-artistic-image-task-id" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -275,7 +275,7 @@ export def "artistic-image get" [
 # What is that object? [ image_url -> id ]
 #
 # POST /detect_object
-export def "detect-object create" [
+export def "post-detect-object" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -313,7 +313,7 @@ export def "detect-object create" [
 # Gets the detect_object task [ id -> detect object task]
 #
 # GET /detect_object/{taskId}
-export def "detect-object get" [
+export def "get-detect-object-task-id" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -348,7 +348,7 @@ export def "detect-object get" [
 # Find all faces in the image [ image_url -> id ]
 #
 # POST /face
-export def "face create" [
+export def "post-face" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -386,7 +386,7 @@ export def "face create" [
 # Gets the face task [ id -> face task ]
 #
 # GET /face/{taskId}
-export def "face get" [
+export def "get-face-task-id" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -421,7 +421,7 @@ export def "face get" [
 # How old is the person in the image? [ image_url -> id ]
 #
 # POST /face_age
-export def "face-age create" [
+export def "post-face-age" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -459,7 +459,7 @@ export def "face-age create" [
 # Gets the face_age task [ id -> face age task ]
 #
 # GET /face_age/{taskId}
-export def "face-age get" [
+export def "get-face-age-task-id" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

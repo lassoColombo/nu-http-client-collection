@@ -126,7 +126,7 @@ def host-caching-completer [] { ["None" "ReadOnly" "ReadWrite"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-dev-test-lab-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "provider-operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -150,7 +150,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.DevTestLab/operations
 # operationId: ProviderOperations_List
-export def "providers-microsoft-dev-test-lab-operations list" [
+export def "provider-operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -186,7 +186,7 @@ export def "providers-microsoft-dev-test-lab-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.DevTestLab/labs
 # operationId: Labs_ListBySubscription
-export def "subscriptions-providers-microsoft-dev-test-lab-labs list" [
+export def "labs-list-by-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -228,7 +228,7 @@ export def "subscriptions-providers-microsoft-dev-test-lab-labs list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.DevTestLab/locations/{locationName}/operations/{name}
 # operationId: Operations_Get
-export def "subscriptions-providers-microsoft-dev-test-lab-locations-operations get" [
+export def "operations-get" [
   subscription_id: string
   location_name: string
   name: string
@@ -270,7 +270,7 @@ export def "subscriptions-providers-microsoft-dev-test-lab-locations-operations 
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.DevTestLab/schedules
 # operationId: GlobalSchedules_ListBySubscription
-export def "subscriptions-providers-microsoft-dev-test-lab-schedules list-global" [
+export def "global-schedules-list-by-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -312,7 +312,7 @@ export def "subscriptions-providers-microsoft-dev-test-lab-schedules list-global
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs
 # operationId: Labs_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs list" [
+export def "labs-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -356,7 +356,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs 
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/artifactsources
 # operationId: ArtifactSources_List
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-artifactsources list-artifact-sources" [
+export def "artifact-sources-list" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -402,7 +402,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/artifactsources/{artifactSourceName}/armtemplates
 # operationId: ArmTemplates_List
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-artifactsources-armtemplates list-arm-templates" [
+export def "arm-templates-list" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -450,7 +450,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/artifactsources/{artifactSourceName}/armtemplates/{name}
 # operationId: ArmTemplates_Get
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-artifactsources-armtemplates get-arm-templates" [
+export def "arm-templates-get" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -497,7 +497,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/artifactsources/{artifactSourceName}/artifacts
 # operationId: Artifacts_List
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-artifactsources-artifacts list" [
+export def "artifacts-list" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -545,7 +545,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/artifactsources/{artifactSourceName}/artifacts/{name}
 # operationId: Artifacts_Get
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-artifactsources-artifacts get" [
+export def "artifacts-get" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -593,7 +593,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/artifactsources/{artifactSourceName}/artifacts/{name}/generateArmTemplate
 # operationId: Artifacts_GenerateArmTemplate
 # --parameters item shape: {name?: string, value?: string}
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-artifactsources-artifacts-generate-arm-template generate" [
+export def "artifacts-generate-arm-template" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -646,7 +646,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/artifactsources/{name}
 # operationId: ArtifactSources_Delete
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-artifactsources delete-artifact-sources" [
+export def "artifact-sources-delete" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -690,7 +690,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/artifactsources/{name}
 # operationId: ArtifactSources_Get
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-artifactsources get-artifact-sources" [
+export def "artifact-sources-get" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -736,7 +736,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/artifactsources/{name}
 # operationId: ArtifactSources_Update
 # --properties shape: {armTemplateFolderPath?: string, branchRef?: string, displayName?: string, folderPath?: string, securityToken?: string, sourceType?: "VsoGit"|"GitHub", status?: "Enabled"|"Disabled", uri?: string}
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-artifactsources update-artifact-sources" [
+export def "artifact-sources-update" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -786,7 +786,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/artifactsources/{name}
 # operationId: ArtifactSources_CreateOrUpdate
 # --properties shape: {armTemplateFolderPath?: string, branchRef?: string, displayName?: string, folderPath?: string, securityToken?: string, sourceType?: "VsoGit"|"GitHub", status?: "Enabled"|"Disabled", uri?: string}
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-artifactsources create-artifact-sources-or-update" [
+export def "artifact-sources-create-or-update" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -836,7 +836,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/costs/{name}
 # operationId: Costs_Get
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-costs get" [
+export def "costs-get" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -882,7 +882,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/costs/{name}
 # operationId: Costs_CreateOrUpdate
 # --properties shape: {createdDate?: string, currencyCode?: string, endDateTime?: string, labCostSummary?: record, startDateTime?: string, targetCost?: record}
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-costs create-or-update" [
+export def "costs-create-or-update" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -932,7 +932,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/customimages
 # operationId: CustomImages_List
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-customimages list-custom-images" [
+export def "custom-images-list" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -978,7 +978,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/customimages/{name}
 # operationId: CustomImages_Delete
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-customimages delete-custom-images" [
+export def "custom-images-delete" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -1022,7 +1022,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/customimages/{name}
 # operationId: CustomImages_Get
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-customimages get-custom-images" [
+export def "custom-images-get" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -1068,7 +1068,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/customimages/{name}
 # operationId: CustomImages_Update
 # --properties shape: {author?: string, customImagePlan?: record, dataDiskStorageInfo?: list, description?: string, isPlanAuthorized?: bool, managedImageId?: string, managedSnapshotId?: string, vhd?: record, vm?: record}
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-customimages update-custom-images" [
+export def "custom-images-update" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -1118,7 +1118,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/customimages/{name}
 # operationId: CustomImages_CreateOrUpdate
 # --properties shape: {author?: string, customImagePlan?: record, dataDiskStorageInfo?: list, description?: string, isPlanAuthorized?: bool, managedImageId?: string, managedSnapshotId?: string, vhd?: record, vm?: record}
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-customimages create-custom-images-or-update" [
+export def "custom-images-create-or-update" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -1168,7 +1168,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/formulas
 # operationId: Formulas_List
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-formulas list" [
+export def "formulas-list" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -1214,7 +1214,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/formulas/{name}
 # operationId: Formulas_Delete
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-formulas delete" [
+export def "formulas-delete" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -1258,7 +1258,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/formulas/{name}
 # operationId: Formulas_Get
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-formulas get" [
+export def "formulas-get" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -1304,7 +1304,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/formulas/{name}
 # operationId: Formulas_Update
 # --properties shape: {author?: string, description?: string, formulaContent?: record, osType?: string, vm?: record}
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-formulas update" [
+export def "formulas-update" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -1354,7 +1354,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/formulas/{name}
 # operationId: Formulas_CreateOrUpdate
 # --properties shape: {author?: string, description?: string, formulaContent?: record, osType?: string, vm?: record}
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-formulas create-or-update" [
+export def "formulas-create-or-update" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -1404,7 +1404,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/galleryimages
 # operationId: GalleryImages_List
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-galleryimages list-gallery-images" [
+export def "gallery-images-list" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -1450,7 +1450,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/notificationchannels
 # operationId: NotificationChannels_List
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-notificationchannels list-notification-channels" [
+export def "notification-channels-list" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -1496,7 +1496,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/notificationchannels/{name}
 # operationId: NotificationChannels_Delete
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-notificationchannels delete-notification-channels" [
+export def "notification-channels-delete" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -1540,7 +1540,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/notificationchannels/{name}
 # operationId: NotificationChannels_Get
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-notificationchannels get-notification-channels" [
+export def "notification-channels-get" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -1586,7 +1586,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/notificationchannels/{name}
 # operationId: NotificationChannels_Update
 # --properties shape: {description?: string, emailRecipient?: string, events?: list, notificationLocale?: string, webHookUrl?: string}
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-notificationchannels update-notification-channels" [
+export def "notification-channels-update" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -1636,7 +1636,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/notificationchannels/{name}
 # operationId: NotificationChannels_CreateOrUpdate
 # --properties shape: {description?: string, emailRecipient?: string, events?: list, notificationLocale?: string, webHookUrl?: string}
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-notificationchannels create-notification-channels-or-update" [
+export def "notification-channels-create-or-update" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -1686,7 +1686,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/notificationchannels/{name}/notify
 # operationId: NotificationChannels_Notify
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-notificationchannels-notify notify-notification-channels" [
+export def "notification-channels-notify" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -1736,7 +1736,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/policysets/{name}/evaluatePolicies
 # operationId: PolicySets_EvaluatePolicies
 # --policies item shape: {factData?: string, factName?: string, userObjectId?: string, valueOffset?: string}
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-policysets-evaluate-policies create-policy-sets" [
+export def "policy-sets-evaluate-policies" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -1784,7 +1784,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/policysets/{policySetName}/policies
 # operationId: Policies_List
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-policysets-policies list" [
+export def "policies-list" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -1832,7 +1832,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/policysets/{policySetName}/policies/{name}
 # operationId: Policies_Delete
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-policysets-policies delete" [
+export def "policies-delete" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -1878,7 +1878,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/policysets/{policySetName}/policies/{name}
 # operationId: Policies_Get
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-policysets-policies get" [
+export def "policies-get" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -1926,7 +1926,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/policysets/{policySetName}/policies/{name}
 # operationId: Policies_Update
 # --properties shape: {description?: string, evaluatorType?: "AllowedValuesPolicy"|"MaxValuePolicy", factData?: string, factName?: "UserOwnedLabVmCount"|"UserOwnedLabPremiumVmCount"|"LabVmCount"|"LabPremiumVmCount"|"LabVmSize"|"GalleryImage"|"UserOwnedLabVmCountInSubnet"|"LabTargetCost"|"EnvironmentTemplate"|"ScheduleEditPermission", status?: "Enabled"|"Disabled", threshold?: string}
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-policysets-policies update" [
+export def "policies-update" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -1978,7 +1978,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/policysets/{policySetName}/policies/{name}
 # operationId: Policies_CreateOrUpdate
 # --properties shape: {description?: string, evaluatorType?: "AllowedValuesPolicy"|"MaxValuePolicy", factData?: string, factName?: "UserOwnedLabVmCount"|"UserOwnedLabPremiumVmCount"|"LabVmCount"|"LabPremiumVmCount"|"LabVmSize"|"GalleryImage"|"UserOwnedLabVmCountInSubnet"|"LabTargetCost"|"EnvironmentTemplate"|"ScheduleEditPermission", status?: "Enabled"|"Disabled", threshold?: string}
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-policysets-policies create-or-update" [
+export def "policies-create-or-update" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -2030,7 +2030,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/schedules
 # operationId: Schedules_List
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-schedules list" [
+export def "schedules-list" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -2076,7 +2076,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/schedules/{name}
 # operationId: Schedules_Delete
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-schedules delete" [
+export def "schedules-delete" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -2120,7 +2120,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/schedules/{name}
 # operationId: Schedules_Get
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-schedules get" [
+export def "schedules-get" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -2166,7 +2166,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/schedules/{name}
 # operationId: Schedules_Update
 # --properties shape: {dailyRecurrence?: record, hourlyRecurrence?: record, notificationSettings?: record, status?: "Enabled"|"Disabled", targetResourceId?: string, taskType?: string, timeZoneId?: string, weeklyRecurrence?: record}
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-schedules update" [
+export def "schedules-update" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -2216,7 +2216,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/schedules/{name}
 # operationId: Schedules_CreateOrUpdate
 # --properties shape: {dailyRecurrence?: record, hourlyRecurrence?: record, notificationSettings?: record, status?: "Enabled"|"Disabled", targetResourceId?: string, taskType?: string, timeZoneId?: string, weeklyRecurrence?: record}
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-schedules create-or-update" [
+export def "schedules-create-or-update" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -2266,7 +2266,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/schedules/{name}/execute
 # operationId: Schedules_Execute
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-schedules-execute create" [
+export def "schedules-execute" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -2310,7 +2310,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/schedules/{name}/listApplicable
 # operationId: Schedules_ListApplicable
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-schedules-list-applicable list" [
+export def "schedules-list-applicable" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -2354,7 +2354,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/servicerunners/{name}
 # operationId: ServiceRunners_Delete
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-servicerunners delete-service-runners" [
+export def "service-runners-delete" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -2398,7 +2398,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/servicerunners/{name}
 # operationId: ServiceRunners_Get
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-servicerunners get-service-runners" [
+export def "service-runners-get" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -2443,7 +2443,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/servicerunners/{name}
 # operationId: ServiceRunners_CreateOrUpdate
 # --identity shape: {clientSecretUrl?: string, principalId?: string, tenantId?: string, type?: string}
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-servicerunners create-service-runners-or-update" [
+export def "service-runners-create-or-update" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -2493,7 +2493,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/users
 # operationId: Users_List
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users list" [
+export def "users-list" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -2539,7 +2539,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/users/{name}
 # operationId: Users_Delete
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users delete" [
+export def "users-delete" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -2583,7 +2583,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/users/{name}
 # operationId: Users_Get
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users get" [
+export def "users-get" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -2629,7 +2629,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/users/{name}
 # operationId: Users_Update
 # --properties shape: {identity?: record, secretStore?: record}
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users update" [
+export def "users-update" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -2679,7 +2679,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/users/{name}
 # operationId: Users_CreateOrUpdate
 # --properties shape: {identity?: record, secretStore?: record}
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users create-or-update" [
+export def "users-create-or-update" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -2729,7 +2729,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/users/{userName}/disks
 # operationId: Disks_List
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users-disks list" [
+export def "disks-list" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -2777,7 +2777,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/users/{userName}/disks/{name}
 # operationId: Disks_Delete
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users-disks delete" [
+export def "disks-delete" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -2823,7 +2823,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/users/{userName}/disks/{name}
 # operationId: Disks_Get
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users-disks get" [
+export def "disks-get" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -2871,7 +2871,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/users/{userName}/disks/{name}
 # operationId: Disks_Update
 # --properties shape: {diskBlobName?: string, diskSizeGiB?: int, diskType?: "Standard"|"Premium"|"StandardSSD", diskUri?: string, hostCaching?: string, leasedByLabVmId?: string, managedDiskId?: string}
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users-disks update" [
+export def "disks-update" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -2923,7 +2923,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/users/{userName}/disks/{name}
 # operationId: Disks_CreateOrUpdate
 # --properties shape: {diskBlobName?: string, diskSizeGiB?: int, diskType?: "Standard"|"Premium"|"StandardSSD", diskUri?: string, hostCaching?: string, leasedByLabVmId?: string, managedDiskId?: string}
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users-disks create-or-update" [
+export def "disks-create-or-update" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -2975,7 +2975,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/users/{userName}/disks/{name}/attach
 # operationId: Disks_Attach
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users-disks-attach attach" [
+export def "disks-attach" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -3025,7 +3025,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/users/{userName}/disks/{name}/detach
 # operationId: Disks_Detach
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users-disks-detach create" [
+export def "disks-detach" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -3075,7 +3075,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/users/{userName}/environments
 # operationId: Environments_List
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users-environments list" [
+export def "environments-list" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -3123,7 +3123,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/users/{userName}/environments/{name}
 # operationId: Environments_Delete
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users-environments delete" [
+export def "environments-delete" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -3169,7 +3169,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/users/{userName}/environments/{name}
 # operationId: Environments_Get
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users-environments get" [
+export def "environments-get" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -3217,7 +3217,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/users/{userName}/environments/{name}
 # operationId: Environments_Update
 # --properties shape: {armTemplateDisplayName?: string, deploymentProperties?: record}
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users-environments update" [
+export def "environments-update" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -3269,7 +3269,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/users/{userName}/environments/{name}
 # operationId: Environments_CreateOrUpdate
 # --properties shape: {armTemplateDisplayName?: string, deploymentProperties?: record}
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users-environments create-or-update" [
+export def "environments-create-or-update" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -3321,7 +3321,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/users/{userName}/secrets
 # operationId: Secrets_List
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users-secrets list" [
+export def "secrets-list" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -3369,7 +3369,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/users/{userName}/secrets/{name}
 # operationId: Secrets_Delete
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users-secrets delete" [
+export def "secrets-delete" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -3415,7 +3415,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/users/{userName}/secrets/{name}
 # operationId: Secrets_Get
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users-secrets get" [
+export def "secrets-get" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -3463,7 +3463,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/users/{userName}/secrets/{name}
 # operationId: Secrets_Update
 # --properties shape: {value?: string}
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users-secrets update" [
+export def "secrets-update" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -3515,7 +3515,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/users/{userName}/secrets/{name}
 # operationId: Secrets_CreateOrUpdate
 # --properties shape: {value?: string}
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users-secrets create-or-update" [
+export def "secrets-create-or-update" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -3567,7 +3567,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/users/{userName}/servicefabrics
 # operationId: ServiceFabrics_List
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users-servicefabrics list-service-fabrics" [
+export def "service-fabrics-list" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -3615,7 +3615,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/users/{userName}/servicefabrics/{name}
 # operationId: ServiceFabrics_Delete
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users-servicefabrics delete-service-fabrics" [
+export def "service-fabrics-delete" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -3661,7 +3661,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/users/{userName}/servicefabrics/{name}
 # operationId: ServiceFabrics_Get
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users-servicefabrics get-service-fabrics" [
+export def "service-fabrics-get" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -3709,7 +3709,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/users/{userName}/servicefabrics/{name}
 # operationId: ServiceFabrics_Update
 # --properties shape: {environmentId?: string, externalServiceFabricId?: string}
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users-servicefabrics update-service-fabrics" [
+export def "service-fabrics-update" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -3761,7 +3761,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/users/{userName}/servicefabrics/{name}
 # operationId: ServiceFabrics_CreateOrUpdate
 # --properties shape: {applicableSchedule?: record, environmentId?: string, externalServiceFabricId?: string}
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users-servicefabrics create-service-fabrics-or-update" [
+export def "service-fabrics-create-or-update" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -3813,7 +3813,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/users/{userName}/servicefabrics/{name}/listApplicableSchedules
 # operationId: ServiceFabrics_ListApplicableSchedules
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users-servicefabrics-list-applicable-schedules list-service-fabrics" [
+export def "service-fabrics-list-applicable-schedules" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -3859,7 +3859,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/users/{userName}/servicefabrics/{name}/start
 # operationId: ServiceFabrics_Start
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users-servicefabrics-start start-service-fabrics" [
+export def "service-fabrics-start" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -3905,7 +3905,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/users/{userName}/servicefabrics/{name}/stop
 # operationId: ServiceFabrics_Stop
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users-servicefabrics-stop stop-service-fabrics" [
+export def "service-fabrics-stop" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -3951,7 +3951,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/users/{userName}/servicefabrics/{serviceFabricName}/schedules
 # operationId: ServiceFabricSchedules_List
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users-servicefabrics-schedules list-service-fabric" [
+export def "service-fabric-schedules-list" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -4001,7 +4001,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/users/{userName}/servicefabrics/{serviceFabricName}/schedules/{name}
 # operationId: ServiceFabricSchedules_Delete
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users-servicefabrics-schedules delete-service-fabric" [
+export def "service-fabric-schedules-delete" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -4049,7 +4049,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/users/{userName}/servicefabrics/{serviceFabricName}/schedules/{name}
 # operationId: ServiceFabricSchedules_Get
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users-servicefabrics-schedules get-service-fabric" [
+export def "service-fabric-schedules-get" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -4099,7 +4099,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/users/{userName}/servicefabrics/{serviceFabricName}/schedules/{name}
 # operationId: ServiceFabricSchedules_Update
 # --properties shape: {dailyRecurrence?: record, hourlyRecurrence?: record, notificationSettings?: record, status?: "Enabled"|"Disabled", targetResourceId?: string, taskType?: string, timeZoneId?: string, weeklyRecurrence?: record}
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users-servicefabrics-schedules update-service-fabric" [
+export def "service-fabric-schedules-update" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -4153,7 +4153,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/users/{userName}/servicefabrics/{serviceFabricName}/schedules/{name}
 # operationId: ServiceFabricSchedules_CreateOrUpdate
 # --properties shape: {dailyRecurrence?: record, hourlyRecurrence?: record, notificationSettings?: record, status?: "Enabled"|"Disabled", targetResourceId?: string, taskType?: string, timeZoneId?: string, weeklyRecurrence?: record}
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users-servicefabrics-schedules create-service-fabric-or-update" [
+export def "service-fabric-schedules-create-or-update" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -4207,7 +4207,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/users/{userName}/servicefabrics/{serviceFabricName}/schedules/{name}/execute
 # operationId: ServiceFabricSchedules_Execute
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-users-servicefabrics-schedules-execute create-service-fabric" [
+export def "service-fabric-schedules-execute" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -4255,7 +4255,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualmachines
 # operationId: VirtualMachines_List
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines list-virtual-machines" [
+export def "virtual-machines-list" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -4301,7 +4301,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualmachines/{name}
 # operationId: VirtualMachines_Delete
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines delete-virtual-machines" [
+export def "virtual-machines-delete" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -4345,7 +4345,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualmachines/{name}
 # operationId: VirtualMachines_Get
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines get-virtual-machines" [
+export def "virtual-machines-get" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -4391,7 +4391,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualmachines/{name}
 # operationId: VirtualMachines_Update
 # --properties shape: {allowClaim?: bool, artifactDeploymentStatus?: record, artifacts?: list, computeId?: string, createdByUser?: string, createdByUserId?: string, createdDate?: string, customImageId?: string, dataDiskParameters?: list, disallowPublicIpAddress?: bool, environmentId?: string, expirationDate?: string, fqdn?: string, galleryImageReference?: record, isAuthenticationWithSshKey?: bool, labSubnetName?: string, labVirtualNetworkId?: string, lastKnownPowerState?: string, networkInterface?: record, ... (12 more fields)}
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines update-virtual-machines" [
+export def "virtual-machines-update" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -4441,7 +4441,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualmachines/{name}
 # operationId: VirtualMachines_CreateOrUpdate
 # --properties shape: {allowClaim?: bool, applicableSchedule?: record, artifactDeploymentStatus?: record, artifacts?: list, computeId?: string, computeVm?: record, createdByUser?: string, createdByUserId?: string, createdDate?: string, customImageId?: string, dataDiskParameters?: list, disallowPublicIpAddress?: bool, environmentId?: string, expirationDate?: string, fqdn?: string, galleryImageReference?: record, isAuthenticationWithSshKey?: bool, labSubnetName?: string, labVirtualNetworkId?: string, ... (14 more fields)}
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines create-virtual-machines-or-update" [
+export def "virtual-machines-create-or-update" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -4492,7 +4492,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualmachines/{name}/addDataDisk
 # operationId: VirtualMachines_AddDataDisk
 # --attachNewDataDiskOptions shape: {diskName?: string, diskSizeGiB?: int, diskType?: "Standard"|"Premium"|"StandardSSD"}
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines-add-data-disk create-virtual-machines" [
+export def "virtual-machines-add-data-disk" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -4543,7 +4543,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualmachines/{name}/applyArtifacts
 # operationId: VirtualMachines_ApplyArtifacts
 # --artifacts item shape: {artifactId?: string, artifactTitle?: string, deploymentStatusMessage?: string, installTime?: string, parameters?: list, status?: string, vmExtensionStatusMessage?: string}
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines-apply-artifacts create-virtual-machines" [
+export def "virtual-machines-apply-artifacts" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -4591,7 +4591,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualmachines/{name}/claim
 # operationId: VirtualMachines_Claim
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines-claim create-virtual-machines" [
+export def "virtual-machines-claim" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -4635,7 +4635,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualmachines/{name}/detachDataDisk
 # operationId: VirtualMachines_DetachDataDisk
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines-detach-data-disk create-virtual-machines" [
+export def "virtual-machines-detach-data-disk" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -4683,7 +4683,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualmachines/{name}/getRdpFileContents
 # operationId: VirtualMachines_GetRdpFileContents
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines-get-rdp-file-contents get-virtual-machines" [
+export def "virtual-machines-get-rdp-file-contents" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -4727,7 +4727,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualmachines/{name}/listApplicableSchedules
 # operationId: VirtualMachines_ListApplicableSchedules
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines-list-applicable-schedules list-virtual-machines" [
+export def "virtual-machines-list-applicable-schedules" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -4771,7 +4771,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualmachines/{name}/redeploy
 # operationId: VirtualMachines_Redeploy
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines-redeploy create-virtual-machines" [
+export def "virtual-machines-redeploy" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -4815,7 +4815,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualmachines/{name}/resize
 # operationId: VirtualMachines_Resize
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines-resize resize-virtual-machines" [
+export def "virtual-machines-resize" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -4863,7 +4863,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualmachines/{name}/restart
 # operationId: VirtualMachines_Restart
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines-restart restart-virtual-machines" [
+export def "virtual-machines-restart" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -4907,7 +4907,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualmachines/{name}/start
 # operationId: VirtualMachines_Start
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines-start start-virtual-machines" [
+export def "virtual-machines-start" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -4951,7 +4951,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualmachines/{name}/stop
 # operationId: VirtualMachines_Stop
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines-stop stop-virtual-machines" [
+export def "virtual-machines-stop" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -4995,7 +4995,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualmachines/{name}/transferDisks
 # operationId: VirtualMachines_TransferDisks
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines-transfer-disks create-virtual-machines" [
+export def "virtual-machines-transfer-disks" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -5039,7 +5039,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualmachines/{name}/unClaim
 # operationId: VirtualMachines_UnClaim
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines-un-claim create-virtual-machines" [
+export def "virtual-machines-un-claim" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -5083,7 +5083,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualmachines/{virtualMachineName}/schedules
 # operationId: VirtualMachineSchedules_List
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines-schedules list-virtual-machine" [
+export def "virtual-machine-schedules-list" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -5131,7 +5131,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualmachines/{virtualMachineName}/schedules/{name}
 # operationId: VirtualMachineSchedules_Delete
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines-schedules delete-virtual-machine" [
+export def "virtual-machine-schedules-delete" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -5177,7 +5177,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualmachines/{virtualMachineName}/schedules/{name}
 # operationId: VirtualMachineSchedules_Get
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines-schedules get-virtual-machine" [
+export def "virtual-machine-schedules-get" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -5225,7 +5225,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualmachines/{virtualMachineName}/schedules/{name}
 # operationId: VirtualMachineSchedules_Update
 # --properties shape: {dailyRecurrence?: record, hourlyRecurrence?: record, notificationSettings?: record, status?: "Enabled"|"Disabled", targetResourceId?: string, taskType?: string, timeZoneId?: string, weeklyRecurrence?: record}
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines-schedules update-virtual-machine" [
+export def "virtual-machine-schedules-update" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -5277,7 +5277,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualmachines/{virtualMachineName}/schedules/{name}
 # operationId: VirtualMachineSchedules_CreateOrUpdate
 # --properties shape: {dailyRecurrence?: record, hourlyRecurrence?: record, notificationSettings?: record, status?: "Enabled"|"Disabled", targetResourceId?: string, taskType?: string, timeZoneId?: string, weeklyRecurrence?: record}
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines-schedules create-virtual-machine-or-update" [
+export def "virtual-machine-schedules-create-or-update" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -5329,7 +5329,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualmachines/{virtualMachineName}/schedules/{name}/execute
 # operationId: VirtualMachineSchedules_Execute
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualmachines-schedules-execute create-virtual-machine" [
+export def "virtual-machine-schedules-execute" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -5375,7 +5375,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualnetworks
 # operationId: VirtualNetworks_List
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualnetworks list-virtual-networks" [
+export def "virtual-networks-list" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -5421,7 +5421,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualnetworks/{name}
 # operationId: VirtualNetworks_Delete
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualnetworks delete-virtual-networks" [
+export def "virtual-networks-delete" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -5465,7 +5465,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualnetworks/{name}
 # operationId: VirtualNetworks_Get
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualnetworks get-virtual-networks" [
+export def "virtual-networks-get" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -5511,7 +5511,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualnetworks/{name}
 # operationId: VirtualNetworks_Update
 # --properties shape: {allowedSubnets?: list, description?: string, externalProviderResourceId?: string, subnetOverrides?: list}
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualnetworks update-virtual-networks" [
+export def "virtual-networks-update" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -5561,7 +5561,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{labName}/virtualnetworks/{name}
 # operationId: VirtualNetworks_CreateOrUpdate
 # --properties shape: {allowedSubnets?: list, description?: string, externalProviderResourceId?: string, subnetOverrides?: list}
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-virtualnetworks create-virtual-networks-or-update" [
+export def "virtual-networks-create-or-update" [
   subscription_id: string
   resource_group_name: string
   lab_name: string
@@ -5611,7 +5611,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{name}
 # operationId: Labs_Delete
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs delete" [
+export def "labs-delete" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -5653,7 +5653,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs 
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{name}
 # operationId: Labs_Get
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs get" [
+export def "labs-get" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -5697,7 +5697,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs 
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{name}
 # operationId: Labs_Update
 # --properties shape: {announcement?: record, environmentPermission?: "Reader"|"Contributor", extendedProperties?: record, labStorageType?: "Standard"|"Premium"|"StandardSSD", mandatoryArtifactsResourceIdsLinux?: list<string>, mandatoryArtifactsResourceIdsWindows?: list<string>, premiumDataDisks?: "Disabled"|"Enabled", support?: record}
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs update" [
+export def "labs-update" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -5745,7 +5745,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs 
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{name}
 # operationId: Labs_CreateOrUpdate
 # --properties shape: {announcement?: record, environmentPermission?: "Reader"|"Contributor", extendedProperties?: record, labStorageType?: "Standard"|"Premium"|"StandardSSD", mandatoryArtifactsResourceIdsLinux?: list<string>, mandatoryArtifactsResourceIdsWindows?: list<string>, premiumDataDisks?: "Disabled"|"Enabled", support?: record}
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs create-or-update" [
+export def "labs-create-or-update" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -5793,7 +5793,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs 
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{name}/claimAnyVm
 # operationId: Labs_ClaimAnyVm
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-claim-any-vm create" [
+export def "labs-claim-any-vm" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -5836,7 +5836,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{name}/createEnvironment
 # operationId: Labs_CreateEnvironment
 # --properties shape: {allowClaim?: bool, artifactDeploymentStatus?: record, artifacts?: list, bulkCreationParameters?: record, computeId?: string, createdByUser?: string, createdByUserId?: string, createdDate?: string, customImageId?: string, dataDiskParameters?: list, disallowPublicIpAddress?: bool, environmentId?: string, expirationDate?: string, fqdn?: string, galleryImageReference?: record, isAuthenticationWithSshKey?: bool, labSubnetName?: string, labVirtualNetworkId?: string, lastKnownPowerState?: string, ... (13 more fields)}
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-create-environment create" [
+export def "labs-create-environment" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -5885,7 +5885,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{name}/exportResourceUsage
 # operationId: Labs_ExportResourceUsage
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-export-resource-usage export" [
+export def "labs-export-resource-usage" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -5932,7 +5932,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{name}/generateUploadUri
 # operationId: Labs_GenerateUploadUri
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-generate-upload-uri generate" [
+export def "labs-generate-upload-uri" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -5978,7 +5978,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{name}/importVirtualMachine
 # operationId: Labs_ImportVirtualMachine
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-import-virtual-machine import" [
+export def "labs-import-virtual-machine" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -6025,7 +6025,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/labs/{name}/listVhds
 # operationId: Labs_ListVhds
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-list-vhds list" [
+export def "labs-list-vhds" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -6067,7 +6067,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-labs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/schedules
 # operationId: GlobalSchedules_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-schedules list-global" [
+export def "global-schedules-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6111,7 +6111,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-sched
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/schedules/{name}
 # operationId: GlobalSchedules_Delete
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-schedules delete-global" [
+export def "global-schedules-delete" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -6153,7 +6153,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-sched
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/schedules/{name}
 # operationId: GlobalSchedules_Get
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-schedules get-global" [
+export def "global-schedules-get" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -6197,7 +6197,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-sched
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/schedules/{name}
 # operationId: GlobalSchedules_Update
 # --properties shape: {dailyRecurrence?: record, hourlyRecurrence?: record, notificationSettings?: record, status?: "Enabled"|"Disabled", targetResourceId?: string, taskType?: string, timeZoneId?: string, weeklyRecurrence?: record}
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-schedules update-global" [
+export def "global-schedules-update" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -6245,7 +6245,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-sched
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/schedules/{name}
 # operationId: GlobalSchedules_CreateOrUpdate
 # --properties shape: {dailyRecurrence?: record, hourlyRecurrence?: record, notificationSettings?: record, status?: "Enabled"|"Disabled", targetResourceId?: string, taskType?: string, timeZoneId?: string, weeklyRecurrence?: record}
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-schedules create-global-or-update" [
+export def "global-schedules-create-or-update" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -6293,7 +6293,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-sched
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/schedules/{name}/execute
 # operationId: GlobalSchedules_Execute
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-schedules-execute create-global" [
+export def "global-schedules-execute" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -6335,7 +6335,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-sched
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevTestLab/schedules/{name}/retarget
 # operationId: GlobalSchedules_Retarget
-export def "subscriptions-resource-groups-providers-microsoft-dev-test-lab-schedules-retarget create-global" [
+export def "global-schedules-retarget" [
   subscription_id: string
   resource_group_name: string
   name: string

@@ -105,7 +105,7 @@ def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "phone-numbers get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "fetch-phone-number" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -129,7 +129,7 @@ export def commands []: nothing -> table {
 #
 # GET /v2/PhoneNumbers/{PhoneNumber}
 # operationId: FetchPhoneNumber
-export def "phone-numbers get" [
+export def "fetch-phone-number" [
   phone_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -165,7 +165,7 @@ export def "phone-numbers get" [
 #
 # POST /v2/PhoneNumbers/{PhoneNumber}
 # operationId: UpdatePhoneNumber
-export def "phone-numbers update" [
+export def "update-phone-number" [
   phone_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -206,7 +206,7 @@ export def "phone-numbers update" [
 # GET /v2/SipDomains/{SipDomain}
 #
 # operationId: FetchSipDomain
-export def "sip-domains get" [
+export def "fetch-sip-domain" [
   sip_domain: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -241,7 +241,7 @@ export def "sip-domains get" [
 # POST /v2/SipDomains/{SipDomain}
 #
 # operationId: UpdateSipDomain
-export def "sip-domains update" [
+export def "update-sip-domain" [
   sip_domain: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -283,7 +283,7 @@ export def "sip-domains update" [
 #
 # GET /v2/Trunks/{SipTrunkDomain}
 # operationId: FetchTrunks
-export def "trunks get" [
+export def "fetch-trunks" [
   sip_trunk_domain: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -319,7 +319,7 @@ export def "trunks get" [
 #
 # POST /v2/Trunks/{SipTrunkDomain}
 # operationId: UpdateTrunks
-export def "trunks update" [
+export def "update-trunks" [
   sip_trunk_domain: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

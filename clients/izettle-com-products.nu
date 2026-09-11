@@ -124,7 +124,7 @@ def taxation-mode-completer [] { ["EXCLUSIVE" "INCLUSIVE"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "organizations-categories get-product-types" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-product-types" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -148,7 +148,7 @@ export def commands []: nothing -> table {
 #
 # GET /organizations/{organizationUuid}/categories/v2
 # operationId: getProductTypes
-export def "organizations-categories get-product-types" [
+export def "get-product-types" [
   organization_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -185,7 +185,7 @@ export def "organizations-categories get-product-types" [
 # POST /organizations/{organizationUuid}/categories/v2
 # operationId: createCategories
 # --categories item shape: {name: string, uuid: string}
-export def "organizations-categories create" [
+export def "create-categories" [
   organization_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -225,7 +225,7 @@ export def "organizations-categories create" [
 #
 # DELETE /organizations/{organizationUuid}/categories/v2/{categoryUuid}
 # operationId: deleteCategory
-export def "organizations-categories delete-category" [
+export def "delete-category" [
   organization_uuid: string
   category_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -263,7 +263,7 @@ export def "organizations-categories delete-category" [
 #
 # PATCH /organizations/{organizationUuid}/categories/v2/{categoryUuid}
 # operationId: renameCategory
-export def "organizations-categories rename-category" [
+export def "rename-category" [
   organization_uuid: string
   category_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -305,7 +305,7 @@ export def "organizations-categories rename-category" [
 #
 # GET /organizations/{organizationUuid}/discounts
 # operationId: getAllDiscounts
-export def "organizations-discounts get-list" [
+export def "get-all-discounts" [
   organization_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -342,7 +342,7 @@ export def "organizations-discounts get-list" [
 # POST /organizations/{organizationUuid}/discounts
 # operationId: createDiscount
 # --amount shape: {amount: int, ... (1 more fields)}
-export def "organizations-discounts create" [
+export def "create-discount" [
   organization_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -388,7 +388,7 @@ export def "organizations-discounts create" [
 #
 # DELETE /organizations/{organizationUuid}/discounts/{discountUuid}
 # operationId: deleteDiscount
-export def "organizations-discounts delete" [
+export def "delete-discount" [
   organization_uuid: string
   discount_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -426,7 +426,7 @@ export def "organizations-discounts delete" [
 #
 # GET /organizations/{organizationUuid}/discounts/{discountUuid}
 # operationId: getDiscount
-export def "organizations-discounts get" [
+export def "get-discount" [
   organization_uuid: string
   discount_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -468,7 +468,7 @@ export def "organizations-discounts get" [
 # PUT /organizations/{organizationUuid}/discounts/{discountUuid}
 # operationId: updateDiscount
 # --amount shape: {amount: int, ... (1 more fields)}
-export def "organizations-discounts update" [
+export def "update-discount" [
   organization_uuid: string
   discount_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -519,7 +519,7 @@ export def "organizations-discounts update" [
 #
 # GET /organizations/{organizationUuid}/images
 # operationId: getAllImageUrls
-export def "organizations-images get-list-urls" [
+export def "get-all-image-urls" [
   organization_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -555,7 +555,7 @@ export def "organizations-images get-list-urls" [
 #
 # GET /organizations/{organizationUuid}/import/status
 # operationId: getLatestImportStatus
-export def "organizations-import-status get-latest" [
+export def "get-latest-import-status" [
   organization_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -591,7 +591,7 @@ export def "organizations-import-status get-latest" [
 #
 # GET /organizations/{organizationUuid}/import/status/{importUuid}
 # operationId: getStatusByUuid
-export def "organizations-import-status get-by-uuid" [
+export def "get-status-by-uuid" [
   organization_uuid: string
   import_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -630,7 +630,7 @@ export def "organizations-import-status get-by-uuid" [
 # POST /organizations/{organizationUuid}/import/v2
 # operationId: importLibraryV2
 # --products item shape: {categories?: list<string>, category?: record, description?: string, externalReference?: string, imageLookupKeys?: list<string>, metadata?: record, name: string, online?: record, presentation?: record, taxCode?: string, taxExempt?: bool, taxRates?: list<string>, unitName?: string, uuid: string, variantOptionDefinitions?: record, variants?: list, vatPercentage?: float}
-export def "organizations-import import-library" [
+export def "import-library-v2" [
   organization_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -670,7 +670,7 @@ export def "organizations-import import-library" [
 #
 # GET /organizations/{organizationUuid}/library
 # operationId: getLibrary
-export def "organizations-library get" [
+export def "get-library" [
   organization_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -711,7 +711,7 @@ export def "organizations-library get" [
 #
 # DELETE /organizations/{organizationUuid}/products
 # operationId: deleteProducts
-export def "organizations-products delete-by-organization-uuid" [
+export def "delete-products" [
   organization_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -749,7 +749,7 @@ export def "organizations-products delete-by-organization-uuid" [
 #
 # GET /organizations/{organizationUuid}/products
 # operationId: getAllProductsInPos
-export def "organizations-products get-list-in-pos" [
+export def "get-all-products-in-pos" [
   organization_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -791,7 +791,7 @@ export def "organizations-products get-list-in-pos" [
 # --presentation shape: {backgroundColor?: string, imageUrl?: string, textColor?: string}
 # --variantOptionDefinitions shape: {definitions: list}
 # --variants item shape: {barcode?: string, costPrice?: record, description?: string, name?: string, options?: list, presentation?: record, price?: record, sku?: string, uuid: string, vatPercentage?: float}
-export def "organizations-products create" [
+export def "create-product" [
   organization_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -850,7 +850,7 @@ export def "organizations-products create" [
 #
 # POST /organizations/{organizationUuid}/products/online/slug
 # operationId: createProductSlug
-export def "organizations-products-online-slug create" [
+export def "create-product-slug" [
   organization_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -890,7 +890,7 @@ export def "organizations-products-online-slug create" [
 #
 # GET /organizations/{organizationUuid}/products/options
 # operationId: getAllOptions
-export def "organizations-products-options get-list" [
+export def "get-all-options" [
   organization_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -926,7 +926,7 @@ export def "organizations-products-options get-list" [
 #
 # GET /organizations/{organizationUuid}/products/v2
 # operationId: getAllProductsV2
-export def "organizations-products get-list" [
+export def "get-all-products-v2" [
   organization_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -964,7 +964,7 @@ export def "organizations-products get-list" [
 #
 # GET /organizations/{organizationUuid}/products/v2/count
 # operationId: countAllProducts
-export def "organizations-products-count list" [
+export def "count-all-products" [
   organization_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1006,7 +1006,7 @@ export def "organizations-products-count list" [
 # --presentation shape: {backgroundColor?: string, imageUrl?: string, textColor?: string}
 # --variantOptionDefinitions shape: {definitions: list}
 # --variants item shape: {barcode?: string, costPrice?: record, description?: string, name?: string, options?: list, presentation?: record, price?: record, sku?: string, uuid: string, vatPercentage?: float}
-export def "organizations-products update" [
+export def "update-product" [
   organization_uuid: string
   product_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1067,7 +1067,7 @@ export def "organizations-products update" [
 #
 # DELETE /organizations/{organizationUuid}/products/{productUuid}
 # operationId: deleteProduct
-export def "organizations-products delete-by-organization-uuid-product-uuid" [
+export def "delete-product" [
   organization_uuid: string
   product_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1105,7 +1105,7 @@ export def "organizations-products delete-by-organization-uuid-product-uuid" [
 #
 # GET /organizations/{organizationUuid}/products/{productUuid}
 # operationId: getProduct
-export def "organizations-products get" [
+export def "get-product" [
   organization_uuid: string
   product_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1146,7 +1146,7 @@ export def "organizations-products get" [
 #
 # GET /v1/taxes
 # operationId: getTaxRates
-export def "taxes get-tax-rates" [
+export def "get-tax-rates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1181,7 +1181,7 @@ export def "taxes get-tax-rates" [
 # POST /v1/taxes
 # operationId: createTaxRates
 # --taxRates item shape: {default?: bool, label: string, percentage?: float, uuid: string}
-export def "taxes create-tax-rates" [
+export def "create-tax-rates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1219,7 +1219,7 @@ export def "taxes create-tax-rates" [
 #
 # GET /v1/taxes/count
 # operationId: getProductCountForAllTaxes
-export def "taxes-count get-product-for-list" [
+export def "get-product-count-for-all-taxes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1253,7 +1253,7 @@ export def "taxes-count get-product-for-list" [
 #
 # GET /v1/taxes/settings
 # operationId: getTaxSettings
-export def "taxes-settings get-tax" [
+export def "get-tax-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1287,7 +1287,7 @@ export def "taxes-settings get-tax" [
 #
 # PUT /v1/taxes/settings
 # operationId: setTaxationMode
-export def "taxes-settings update-taxation-mode" [
+export def "set-taxation-mode" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1325,7 +1325,7 @@ export def "taxes-settings update-taxation-mode" [
 #
 # DELETE /v1/taxes/{taxRateUuid}
 # operationId: deleteTaxRate
-export def "taxes delete-tax-rate" [
+export def "delete-tax-rate" [
   tax_rate_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1361,7 +1361,7 @@ export def "taxes delete-tax-rate" [
 #
 # GET /v1/taxes/{taxRateUuid}
 # operationId: getTaxRate
-export def "taxes get-tax-rate" [
+export def "get-tax-rate" [
   tax_rate_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1397,7 +1397,7 @@ export def "taxes get-tax-rate" [
 #
 # PUT /v1/taxes/{taxRateUuid}
 # operationId: updateTaxRate
-export def "taxes update-tax-rate" [
+export def "update-tax-rate" [
   tax_rate_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

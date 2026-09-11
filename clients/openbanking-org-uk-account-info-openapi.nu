@@ -110,7 +110,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account-access-consents create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-account-access-consents" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -135,7 +135,7 @@ export def commands []: nothing -> table {
 # POST /account-access-consents
 # operationId: CreateAccountAccessConsents
 # --Data shape: {ExpirationDateTime?: string, Permissions: list<string>, TransactionFromDateTime?: string, TransactionToDateTime?: string}
-export def "account-access-consents create" [
+export def "create-account-access-consents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -181,7 +181,7 @@ export def "account-access-consents create" [
 #
 # DELETE /account-access-consents/{ConsentId}
 # operationId: DeleteAccountAccessConsentsConsentId
-export def "account-access-consents delete" [
+export def "delete-account-access-consents-consent-id" [
   consent_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -224,7 +224,7 @@ export def "account-access-consents delete" [
 #
 # GET /account-access-consents/{ConsentId}
 # operationId: GetAccountAccessConsentsConsentId
-export def "account-access-consents get" [
+export def "get-account-access-consents-consent-id" [
   consent_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -267,7 +267,7 @@ export def "account-access-consents get" [
 #
 # GET /accounts
 # operationId: GetAccounts
-export def "accounts list" [
+export def "get-accounts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -308,7 +308,7 @@ export def "accounts list" [
 #
 # GET /accounts/{AccountId}
 # operationId: GetAccountsAccountId
-export def "accounts get" [
+export def "get-accounts-account-id" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -351,7 +351,7 @@ export def "accounts get" [
 #
 # GET /accounts/{AccountId}/balances
 # operationId: GetAccountsAccountIdBalances
-export def "accounts-balances get" [
+export def "get-accounts-account-id-balances" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -394,7 +394,7 @@ export def "accounts-balances get" [
 #
 # GET /accounts/{AccountId}/beneficiaries
 # operationId: GetAccountsAccountIdBeneficiaries
-export def "accounts-beneficiaries get" [
+export def "get-accounts-account-id-beneficiaries" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -437,7 +437,7 @@ export def "accounts-beneficiaries get" [
 #
 # GET /accounts/{AccountId}/direct-debits
 # operationId: GetAccountsAccountIdDirectDebits
-export def "accounts-direct-debits get" [
+export def "get-accounts-account-id-direct-debits" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -480,7 +480,7 @@ export def "accounts-direct-debits get" [
 #
 # GET /accounts/{AccountId}/offers
 # operationId: GetAccountsAccountIdOffers
-export def "accounts-offers get" [
+export def "get-accounts-account-id-offers" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -523,7 +523,7 @@ export def "accounts-offers get" [
 #
 # GET /accounts/{AccountId}/parties
 # operationId: GetAccountsAccountIdParties
-export def "accounts-parties get" [
+export def "get-accounts-account-id-parties" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -566,7 +566,7 @@ export def "accounts-parties get" [
 #
 # GET /accounts/{AccountId}/party
 # operationId: GetAccountsAccountIdParty
-export def "accounts-party get" [
+export def "get-accounts-account-id-party" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -609,7 +609,7 @@ export def "accounts-party get" [
 #
 # GET /accounts/{AccountId}/product
 # operationId: GetAccountsAccountIdProduct
-export def "accounts-product get" [
+export def "get-accounts-account-id-product" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -652,7 +652,7 @@ export def "accounts-product get" [
 #
 # GET /accounts/{AccountId}/scheduled-payments
 # operationId: GetAccountsAccountIdScheduledPayments
-export def "accounts-scheduled-payments get" [
+export def "get-accounts-account-id-scheduled-payments" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -695,7 +695,7 @@ export def "accounts-scheduled-payments get" [
 #
 # GET /accounts/{AccountId}/standing-orders
 # operationId: GetAccountsAccountIdStandingOrders
-export def "accounts-standing-orders get" [
+export def "get-accounts-account-id-standing-orders" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -738,7 +738,7 @@ export def "accounts-standing-orders get" [
 #
 # GET /accounts/{AccountId}/statements
 # operationId: GetAccountsAccountIdStatements
-export def "accounts-statements list" [
+export def "get-accounts-account-id-statements" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -784,7 +784,7 @@ export def "accounts-statements list" [
 #
 # GET /accounts/{AccountId}/statements/{StatementId}
 # operationId: GetAccountsAccountIdStatementsStatementId
-export def "accounts-statements get" [
+export def "get-accounts-account-id-statements-statement-id" [
   account_id: string
   statement_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -829,7 +829,7 @@ export def "accounts-statements get" [
 #
 # GET /accounts/{AccountId}/statements/{StatementId}/file
 # operationId: GetAccountsAccountIdStatementsStatementIdFile
-export def "accounts-statements-file get" [
+export def "get-accounts-account-id-statements-statement-id-file" [
   account_id: string
   statement_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -874,7 +874,7 @@ export def "accounts-statements-file get" [
 #
 # GET /accounts/{AccountId}/statements/{StatementId}/transactions
 # operationId: GetAccountsAccountIdStatementsStatementIdTransactions
-export def "accounts-statements-transactions get" [
+export def "get-accounts-account-id-statements-statement-id-transactions" [
   account_id: string
   statement_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -919,7 +919,7 @@ export def "accounts-statements-transactions get" [
 #
 # GET /accounts/{AccountId}/transactions
 # operationId: GetAccountsAccountIdTransactions
-export def "accounts-transactions get" [
+export def "get-accounts-account-id-transactions" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -965,7 +965,7 @@ export def "accounts-transactions get" [
 #
 # GET /balances
 # operationId: GetBalances
-export def "balances get" [
+export def "get-balances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1006,7 +1006,7 @@ export def "balances get" [
 #
 # GET /beneficiaries
 # operationId: GetBeneficiaries
-export def "beneficiaries get" [
+export def "get-beneficiaries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1047,7 +1047,7 @@ export def "beneficiaries get" [
 #
 # GET /direct-debits
 # operationId: GetDirectDebits
-export def "direct-debits get" [
+export def "get-direct-debits" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1088,7 +1088,7 @@ export def "direct-debits get" [
 #
 # GET /offers
 # operationId: GetOffers
-export def "offers get" [
+export def "get-offers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1129,7 +1129,7 @@ export def "offers get" [
 #
 # GET /party
 # operationId: GetParty
-export def "party get" [
+export def "get-party" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1170,7 +1170,7 @@ export def "party get" [
 #
 # GET /products
 # operationId: GetProducts
-export def "products get" [
+export def "get-products" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1211,7 +1211,7 @@ export def "products get" [
 #
 # GET /scheduled-payments
 # operationId: GetScheduledPayments
-export def "scheduled-payments get" [
+export def "get-scheduled-payments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1252,7 +1252,7 @@ export def "scheduled-payments get" [
 #
 # GET /standing-orders
 # operationId: GetStandingOrders
-export def "standing-orders get" [
+export def "get-standing-orders" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1293,7 +1293,7 @@ export def "standing-orders get" [
 #
 # GET /statements
 # operationId: GetStatements
-export def "statements get" [
+export def "get-statements" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1337,7 +1337,7 @@ export def "statements get" [
 #
 # GET /transactions
 # operationId: GetTransactions
-export def "transactions get" [
+export def "get-transactions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -135,7 +135,7 @@ def type-completer [] { ["ANDROID_APP_DATA_STREAM" "DATA_STREAM_TYPE_UNSPECIFIED
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta-account-summaries list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "analyticsadmin-account-summaries-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -159,7 +159,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1beta/accountSummaries
 # operationId: analyticsadmin.accountSummaries.list
-export def "v1beta-account-summaries list" [
+export def "analyticsadmin-account-summaries-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -207,7 +207,7 @@ export def "v1beta-account-summaries list" [
 #
 # GET /v1beta/accounts
 # operationId: analyticsadmin.accounts.list
-export def "v1beta-accounts list" [
+export def "analyticsadmin-accounts-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -257,7 +257,7 @@ export def "v1beta-accounts list" [
 # POST /v1beta/accounts:provisionAccountTicket
 # operationId: analyticsadmin.accounts.provisionAccountTicket
 # --account shape: {displayName?: string, regionCode?: string}
-export def "v1beta-accounts-provision-account-ticket create" [
+export def "analyticsadmin-accounts-provision-account-ticket" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -308,7 +308,7 @@ export def "v1beta-accounts-provision-account-ticket create" [
 #
 # GET /v1beta/properties
 # operationId: analyticsadmin.properties.list
-export def "v1beta-properties list" [
+export def "analyticsadmin-properties-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -358,7 +358,7 @@ export def "v1beta-properties list" [
 #
 # POST /v1beta/properties
 # operationId: analyticsadmin.properties.create
-export def "v1beta-properties create" [
+export def "analyticsadmin-properties-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -414,7 +414,7 @@ export def "v1beta-properties create" [
 #
 # POST /v1beta/{account}:searchChangeHistoryEvents
 # operationId: analyticsadmin.accounts.searchChangeHistoryEvents
-export def "v1beta list-change-history-events" [
+export def "analyticsadmin-accounts-search-change-history-events" [
   account: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -479,7 +479,7 @@ export def "v1beta list-change-history-events" [
 # --metricFilter shape: {accessFilter?: record, andGroup?: record, notExpression?: record, orGroup?: record}
 # --metrics item shape: {metricName?: string}
 # --orderBys item shape: {desc?: bool, dimension?: record, metric?: record}
-export def "v1beta create-run-access-report" [
+export def "analyticsadmin-properties-run-access-report" [
   entity: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -540,7 +540,7 @@ export def "v1beta create-run-access-report" [
 #
 # DELETE /v1beta/{name}
 # operationId: analyticsadmin.properties.googleAdsLinks.delete
-export def "v1beta delete" [
+export def "analyticsadmin-properties-google-ads-links-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -588,7 +588,7 @@ export def "v1beta delete" [
 #
 # GET /v1beta/{name}
 # operationId: analyticsadmin.properties.dataStreams.measurementProtocolSecrets.get
-export def "v1beta get" [
+export def "analyticsadmin-properties-data-streams-measurement-protocol-secrets-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -636,7 +636,7 @@ export def "v1beta get" [
 #
 # PATCH /v1beta/{name}
 # operationId: analyticsadmin.properties.googleAdsLinks.patch
-export def "v1beta update" [
+export def "analyticsadmin-properties-google-ads-links-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -690,7 +690,7 @@ export def "v1beta update" [
 #
 # POST /v1beta/{name}:archive
 # operationId: analyticsadmin.properties.customMetrics.archive
-export def "v1beta archive" [
+export def "analyticsadmin-properties-custom-metrics-archive" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -742,7 +742,7 @@ export def "v1beta archive" [
 #
 # GET /v1beta/{parent}/conversionEvents
 # operationId: analyticsadmin.properties.conversionEvents.list
-export def "v1beta-conversion-events list" [
+export def "analyticsadmin-properties-conversion-events-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -792,7 +792,7 @@ export def "v1beta-conversion-events list" [
 #
 # POST /v1beta/{parent}/conversionEvents
 # operationId: analyticsadmin.properties.conversionEvents.create
-export def "v1beta-conversion-events create" [
+export def "analyticsadmin-properties-conversion-events-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -844,7 +844,7 @@ export def "v1beta-conversion-events create" [
 #
 # GET /v1beta/{parent}/customDimensions
 # operationId: analyticsadmin.properties.customDimensions.list
-export def "v1beta-custom-dimensions list" [
+export def "analyticsadmin-properties-custom-dimensions-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -894,7 +894,7 @@ export def "v1beta-custom-dimensions list" [
 #
 # POST /v1beta/{parent}/customDimensions
 # operationId: analyticsadmin.properties.customDimensions.create
-export def "v1beta-custom-dimensions create" [
+export def "analyticsadmin-properties-custom-dimensions-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -950,7 +950,7 @@ export def "v1beta-custom-dimensions create" [
 #
 # GET /v1beta/{parent}/customMetrics
 # operationId: analyticsadmin.properties.customMetrics.list
-export def "v1beta-custom-metrics list" [
+export def "analyticsadmin-properties-custom-metrics-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1000,7 +1000,7 @@ export def "v1beta-custom-metrics list" [
 #
 # POST /v1beta/{parent}/customMetrics
 # operationId: analyticsadmin.properties.customMetrics.create
-export def "v1beta-custom-metrics create" [
+export def "analyticsadmin-properties-custom-metrics-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1057,7 +1057,7 @@ export def "v1beta-custom-metrics create" [
 #
 # GET /v1beta/{parent}/dataStreams
 # operationId: analyticsadmin.properties.dataStreams.list
-export def "v1beta-data-streams list" [
+export def "analyticsadmin-properties-data-streams-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1110,7 +1110,7 @@ export def "v1beta-data-streams list" [
 # --androidAppStreamData shape: {packageName?: string}
 # --iosAppStreamData shape: {bundleId?: string}
 # --webStreamData shape: {defaultUri?: string}
-export def "v1beta-data-streams create" [
+export def "analyticsadmin-properties-data-streams-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1166,7 +1166,7 @@ export def "v1beta-data-streams create" [
 #
 # GET /v1beta/{parent}/firebaseLinks
 # operationId: analyticsadmin.properties.firebaseLinks.list
-export def "v1beta-firebase-links list" [
+export def "analyticsadmin-properties-firebase-links-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1216,7 +1216,7 @@ export def "v1beta-firebase-links list" [
 #
 # POST /v1beta/{parent}/firebaseLinks
 # operationId: analyticsadmin.properties.firebaseLinks.create
-export def "v1beta-firebase-links create" [
+export def "analyticsadmin-properties-firebase-links-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1268,7 +1268,7 @@ export def "v1beta-firebase-links create" [
 #
 # GET /v1beta/{parent}/googleAdsLinks
 # operationId: analyticsadmin.properties.googleAdsLinks.list
-export def "v1beta-google-ads-links list" [
+export def "analyticsadmin-properties-google-ads-links-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1318,7 +1318,7 @@ export def "v1beta-google-ads-links list" [
 #
 # POST /v1beta/{parent}/googleAdsLinks
 # operationId: analyticsadmin.properties.googleAdsLinks.create
-export def "v1beta-google-ads-links create" [
+export def "analyticsadmin-properties-google-ads-links-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1371,7 +1371,7 @@ export def "v1beta-google-ads-links create" [
 #
 # GET /v1beta/{parent}/measurementProtocolSecrets
 # operationId: analyticsadmin.properties.dataStreams.measurementProtocolSecrets.list
-export def "v1beta-measurement-protocol-secrets list" [
+export def "analyticsadmin-properties-data-streams-measurement-protocol-secrets-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1421,7 +1421,7 @@ export def "v1beta-measurement-protocol-secrets list" [
 #
 # POST /v1beta/{parent}/measurementProtocolSecrets
 # operationId: analyticsadmin.properties.dataStreams.measurementProtocolSecrets.create
-export def "v1beta-measurement-protocol-secrets create" [
+export def "analyticsadmin-properties-data-streams-measurement-protocol-secrets-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1473,7 +1473,7 @@ export def "v1beta-measurement-protocol-secrets create" [
 #
 # POST /v1beta/{property}:acknowledgeUserDataCollection
 # operationId: analyticsadmin.properties.acknowledgeUserDataCollection
-export def "v1beta create-acknowledge-user-data-collection" [
+export def "analyticsadmin-properties-acknowledge-user-data-collection" [
   property: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

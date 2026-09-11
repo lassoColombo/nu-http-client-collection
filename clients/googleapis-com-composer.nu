@@ -130,7 +130,7 @@ def state-completer [] { ["CREATING" "DELETING" "ERROR" "RUNNING" "STATE_UNSPECI
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta1 check-upgrade" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "composer-projects-locations-environments-check-upgrade" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -154,7 +154,7 @@ export def commands []: nothing -> table {
 #
 # POST /v1beta1/{environment}:checkUpgrade
 # operationId: composer.projects.locations.environments.checkUpgrade
-export def "v1beta1 check-upgrade" [
+export def "composer-projects-locations-environments-check-upgrade" [
   environment: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -206,7 +206,7 @@ export def "v1beta1 check-upgrade" [
 #
 # POST /v1beta1/{environment}:loadSnapshot
 # operationId: composer.projects.locations.environments.loadSnapshot
-export def "v1beta1 create-load-snapshot" [
+export def "composer-projects-locations-environments-load-snapshot" [
   environment: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -262,7 +262,7 @@ export def "v1beta1 create-load-snapshot" [
 #
 # POST /v1beta1/{environment}:saveSnapshot
 # operationId: composer.projects.locations.environments.saveSnapshot
-export def "v1beta1 create-save-snapshot" [
+export def "composer-projects-locations-environments-save-snapshot" [
   environment: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -314,7 +314,7 @@ export def "v1beta1 create-save-snapshot" [
 #
 # DELETE /v1beta1/{name}
 # operationId: composer.projects.locations.operations.delete
-export def "v1beta1 delete" [
+export def "composer-projects-locations-operations-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -362,7 +362,7 @@ export def "v1beta1 delete" [
 #
 # GET /v1beta1/{name}
 # operationId: composer.projects.locations.operations.get
-export def "v1beta1 get" [
+export def "composer-projects-locations-operations-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -411,7 +411,7 @@ export def "v1beta1 get" [
 # PATCH /v1beta1/{name}
 # operationId: composer.projects.locations.environments.patch
 # --config shape: {databaseConfig?: record, encryptionConfig?: record, environmentSize?: "ENVIRONMENT_SIZE_UNSPECIFIED"|"ENVIRONMENT_SIZE_SMALL"|"ENVIRONMENT_SIZE_MEDIUM"|"ENVIRONMENT_SIZE_LARGE", maintenanceWindow?: record, masterAuthorizedNetworksConfig?: record, nodeConfig?: record, nodeCount?: int, privateEnvironmentConfig?: record, recoveryConfig?: record, softwareConfig?: record, webServerConfig?: record, webServerNetworkAccessControl?: record, workloadsConfig?: record}
-export def "v1beta1 update" [
+export def "composer-projects-locations-environments-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -467,7 +467,7 @@ export def "v1beta1 update" [
 #
 # GET /v1beta1/{name}/operations
 # operationId: composer.projects.locations.operations.list
-export def "v1beta1-operations list" [
+export def "composer-projects-locations-operations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -518,7 +518,7 @@ export def "v1beta1-operations list" [
 #
 # POST /v1beta1/{name}:restartWebServer
 # operationId: composer.projects.locations.environments.restartWebServer
-export def "v1beta1 restart-web-server" [
+export def "composer-projects-locations-environments-restart-web-server" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -570,7 +570,7 @@ export def "v1beta1 restart-web-server" [
 #
 # GET /v1beta1/{parent}/environments
 # operationId: composer.projects.locations.environments.list
-export def "v1beta1-environments list" [
+export def "composer-projects-locations-environments-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -621,7 +621,7 @@ export def "v1beta1-environments list" [
 # POST /v1beta1/{parent}/environments
 # operationId: composer.projects.locations.environments.create
 # --config shape: {databaseConfig?: record, encryptionConfig?: record, environmentSize?: "ENVIRONMENT_SIZE_UNSPECIFIED"|"ENVIRONMENT_SIZE_SMALL"|"ENVIRONMENT_SIZE_MEDIUM"|"ENVIRONMENT_SIZE_LARGE", maintenanceWindow?: record, masterAuthorizedNetworksConfig?: record, nodeConfig?: record, nodeCount?: int, privateEnvironmentConfig?: record, recoveryConfig?: record, softwareConfig?: record, webServerConfig?: record, webServerNetworkAccessControl?: record, workloadsConfig?: record}
-export def "v1beta1-environments create" [
+export def "composer-projects-locations-environments-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -676,7 +676,7 @@ export def "v1beta1-environments create" [
 #
 # GET /v1beta1/{parent}/imageVersions
 # operationId: composer.projects.locations.imageVersions.list
-export def "v1beta1-image-versions list" [
+export def "composer-projects-locations-image-versions-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["x-rapidapi-key"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "geo-admin-divisions find-using-get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "find-admin-divisions-using-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -122,7 +122,7 @@ export def commands []: nothing -> table {
 #
 # GET /geo/adminDivisions
 # operationId: findAdminDivisionsUsingGET
-export def "geo-admin-divisions find-using-get" [
+export def "find-admin-divisions-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -174,7 +174,7 @@ export def "geo-admin-divisions find-using-get" [
 #
 # GET /geo/adminDivisions/{divisionId}
 # operationId: getAdminDivisionUsingGET
-export def "geo-admin-divisions get-using" [
+export def "get-admin-division-using-get" [
   division_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -213,7 +213,7 @@ export def "geo-admin-divisions get-using" [
 #
 # GET /geo/adminDivisions/{divisionId}/nearbyCities
 # operationId: findCitiesNearAdminDivisionUsingGET
-export def "geo-admin-divisions-nearby-cities find-near-using-get" [
+export def "find-cities-near-admin-division-using-get" [
   division_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -267,7 +267,7 @@ export def "geo-admin-divisions-nearby-cities find-near-using-get" [
 #
 # GET /geo/adminDivisions/{divisionId}/nearbyDivisions
 # operationId: findDivisionsNearAdminDivisionUsingGET
-export def "geo-admin-divisions-nearby-divisions find-near-using-get" [
+export def "find-divisions-near-admin-division-using-get" [
   division_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -320,7 +320,7 @@ export def "geo-admin-divisions-nearby-divisions find-near-using-get" [
 #
 # GET /geo/cities
 # operationId: findCitiesUsingGET
-export def "geo-cities find-using-get" [
+export def "find-cities-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -373,7 +373,7 @@ export def "geo-cities find-using-get" [
 #
 # GET /geo/cities/{cityId}
 # operationId: getCityUsingGET
-export def "geo-cities get-city-using" [
+export def "get-city-using-get" [
   city_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -412,7 +412,7 @@ export def "geo-cities get-city-using" [
 #
 # GET /geo/cities/{cityId}/dateTime
 # operationId: getCityDateTimeUsingGET
-export def "geo-cities-date-time get-city-using" [
+export def "get-city-date-time-using-get" [
   city_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -448,7 +448,7 @@ export def "geo-cities-date-time get-city-using" [
 #
 # GET /geo/cities/{cityId}/distance
 # operationId: getCityDistanceUsingGET
-export def "geo-cities-distance get-city-using" [
+export def "get-city-distance-using-get" [
   city_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -487,7 +487,7 @@ export def "geo-cities-distance get-city-using" [
 #
 # GET /geo/cities/{cityId}/locatedIn
 # operationId: getCityLocatedInUsingGET
-export def "geo-cities-located-in get-city-using" [
+export def "get-city-located-in-using-get" [
   city_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -526,7 +526,7 @@ export def "geo-cities-located-in get-city-using" [
 #
 # GET /geo/cities/{cityId}/nearbyCities
 # operationId: findCitiesNearCityUsingGET
-export def "geo-cities-nearby-cities find-near-city-using-get" [
+export def "find-cities-near-city-using-get" [
   city_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -580,7 +580,7 @@ export def "geo-cities-nearby-cities find-near-city-using-get" [
 #
 # GET /geo/cities/{cityId}/time
 # operationId: getCityTimeUsingGET
-export def "geo-cities-time get-city-using" [
+export def "get-city-time-using-get" [
   city_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -616,7 +616,7 @@ export def "geo-cities-time get-city-using" [
 #
 # GET /geo/countries
 # operationId: getCountriesUsingGET
-export def "geo-countries get-using" [
+export def "get-countries-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -660,7 +660,7 @@ export def "geo-countries get-using" [
 #
 # GET /geo/countries/{countryId}
 # operationId: getCountryUsingGET
-export def "geo-countries get-country-using" [
+export def "get-country-using-get" [
   country_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -699,7 +699,7 @@ export def "geo-countries get-country-using" [
 #
 # GET /geo/countries/{countryId}/regions
 # operationId: getRegionsUsingGET
-export def "geo-countries-regions list" [
+export def "get-regions-using-get" [
   country_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -744,7 +744,7 @@ export def "geo-countries-regions list" [
 #
 # GET /geo/countries/{countryId}/regions/{regionCode}
 # operationId: getRegionUsingGET
-export def "geo-countries-regions get-using" [
+export def "get-region-using-get" [
   country_id: string
   region_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -785,7 +785,7 @@ export def "geo-countries-regions get-using" [
 #
 # GET /geo/countries/{countryId}/regions/{regionCode}/adminDivisions
 # operationId: findRegionDivisionsUsingGET
-export def "geo-countries-regions-admin-divisions find-using-get" [
+export def "find-region-divisions-using-get" [
   country_id: string
   region_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -836,7 +836,7 @@ export def "geo-countries-regions-admin-divisions find-using-get" [
 #
 # GET /geo/countries/{countryId}/regions/{regionCode}/cities
 # operationId: findRegionCitiesUsingGET
-export def "geo-countries-regions-cities find-using-get" [
+export def "find-region-cities-using-get" [
   country_id: string
   region_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -888,7 +888,7 @@ export def "geo-countries-regions-cities find-using-get" [
 #
 # GET /geo/locations/{locationId}/nearbyCities
 # operationId: findCitiesNearLocationUsingGET
-export def "geo-locations-nearby-cities find-near-using-get" [
+export def "find-cities-near-location-using-get" [
   location_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -942,7 +942,7 @@ export def "geo-locations-nearby-cities find-near-using-get" [
 #
 # GET /geo/locations/{locationId}/nearbyDivisions
 # operationId: findDivisionsNearLocationUsingGET
-export def "geo-locations-nearby-divisions find-near-using-get" [
+export def "find-divisions-near-location-using-get" [
   location_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -995,7 +995,7 @@ export def "geo-locations-nearby-divisions find-near-using-get" [
 #
 # GET /locale/currencies
 # operationId: getCurrenciesUsingGET
-export def "locale-currencies get-using" [
+export def "get-currencies-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1034,7 +1034,7 @@ export def "locale-currencies get-using" [
 #
 # GET /locale/languages
 # operationId: getLanguagesUsingGET
-export def "locale-languages get-using" [
+export def "get-languages-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1072,7 +1072,7 @@ export def "locale-languages get-using" [
 #
 # GET /locale/locales
 # operationId: getLocalesUsingGET
-export def "locale-locales get-using" [
+export def "get-locales-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1110,7 +1110,7 @@ export def "locale-locales get-using" [
 #
 # GET /locale/timezones
 # operationId: getTimezonesUsingGET
-export def "locale-timezones get-using" [
+export def "get-timezones-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1148,7 +1148,7 @@ export def "locale-timezones get-using" [
 #
 # GET /locale/timezones/{zoneId}
 # operationId: getTimeZoneUsingGET
-export def "locale-timezones get-time-zone-using" [
+export def "get-time-zone-using-get" [
   zone_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1184,7 +1184,7 @@ export def "locale-timezones get-time-zone-using" [
 #
 # GET /locale/timezones/{zoneId}/dateTime
 # operationId: getTimeZoneDateTimeUsingGET
-export def "locale-timezones-date-time get-zone-using" [
+export def "get-time-zone-date-time-using-get" [
   zone_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1220,7 +1220,7 @@ export def "locale-timezones-date-time get-zone-using" [
 #
 # GET /locale/timezones/{zoneId}/time
 # operationId: getTimeZoneTimeUsingGET
-export def "locale-timezones-time get-zone-using" [
+export def "get-time-zone-time-using-get" [
   zone_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

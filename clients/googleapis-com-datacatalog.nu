@@ -130,7 +130,7 @@ def type-completer [] { ["DATA_STREAM" "ENTRY_TYPE_UNSPECIFIED" "FILESET" "MODEL
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta1-catalog-search list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "datacatalog-catalog-search" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -155,7 +155,7 @@ export def commands []: nothing -> table {
 # POST /v1beta1/catalog:search
 # operationId: datacatalog.catalog.search
 # --scope shape: {includeGcpPublicDatasets?: bool, includeOrgIds?: list<string>, includeProjectIds?: list<string>, restrictedLocations?: list<string>}
-export def "v1beta1-catalog-search list" [
+export def "datacatalog-catalog-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -209,7 +209,7 @@ export def "v1beta1-catalog-search list" [
 #
 # GET /v1beta1/entries:lookup
 # operationId: datacatalog.entries.lookup
-export def "v1beta1-entries-lookup get" [
+export def "datacatalog-entries-lookup" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -257,7 +257,7 @@ export def "v1beta1-entries-lookup get" [
 #
 # DELETE /v1beta1/{name}
 # operationId: datacatalog.projects.locations.taxonomies.policyTags.delete
-export def "v1beta1 delete" [
+export def "datacatalog-projects-locations-taxonomies-policy-tags-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -306,7 +306,7 @@ export def "v1beta1 delete" [
 #
 # GET /v1beta1/{name}
 # operationId: datacatalog.projects.locations.taxonomies.policyTags.get
-export def "v1beta1 get" [
+export def "datacatalog-projects-locations-taxonomies-policy-tags-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -355,7 +355,7 @@ export def "v1beta1 get" [
 #
 # PATCH /v1beta1/{name}
 # operationId: datacatalog.projects.locations.taxonomies.policyTags.patch
-export def "v1beta1 update" [
+export def "datacatalog-projects-locations-taxonomies-policy-tags-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -410,7 +410,7 @@ export def "v1beta1 update" [
 #
 # POST /v1beta1/{name}:rename
 # operationId: datacatalog.projects.locations.tagTemplates.fields.enumValues.rename
-export def "v1beta1 rename" [
+export def "datacatalog-projects-locations-tag-templates-fields-enum-values-rename" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -462,7 +462,7 @@ export def "v1beta1 rename" [
 #
 # GET /v1beta1/{parent}/entries
 # operationId: datacatalog.projects.locations.entryGroups.entries.list
-export def "v1beta1-entries list" [
+export def "datacatalog-projects-locations-entry-groups-entries-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -518,7 +518,7 @@ export def "v1beta1-entries list" [
 # --schema shape: {columns?: list}
 # --sourceSystemTimestamps shape: {createTime?: string, updateTime?: string}
 # --usageSignal shape: {updateTime?: string, usageWithinTimeRange?: record}
-export def "v1beta1-entries create" [
+export def "datacatalog-projects-locations-entry-groups-entries-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -582,7 +582,7 @@ export def "v1beta1-entries create" [
 #
 # GET /v1beta1/{parent}/entryGroups
 # operationId: datacatalog.projects.locations.entryGroups.list
-export def "v1beta1-entry-groups list" [
+export def "datacatalog-projects-locations-entry-groups-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -633,7 +633,7 @@ export def "v1beta1-entry-groups list" [
 # POST /v1beta1/{parent}/entryGroups
 # operationId: datacatalog.projects.locations.entryGroups.create
 # --dataCatalogTimestamps shape: {createTime?: string, updateTime?: string}
-export def "v1beta1-entry-groups create" [
+export def "datacatalog-projects-locations-entry-groups-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -690,7 +690,7 @@ export def "v1beta1-entry-groups create" [
 # POST /v1beta1/{parent}/fields
 # operationId: datacatalog.projects.locations.tagTemplates.fields.create
 # --type shape: {enumType?: record, primitiveType?: "PRIMITIVE_TYPE_UNSPECIFIED"|"DOUBLE"|"STRING"|"BOOL"|"TIMESTAMP"}
-export def "v1beta1-fields create" [
+export def "datacatalog-projects-locations-tag-templates-fields-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -747,7 +747,7 @@ export def "v1beta1-fields create" [
 #
 # GET /v1beta1/{parent}/policyTags
 # operationId: datacatalog.projects.locations.taxonomies.policyTags.list
-export def "v1beta1-policy-tags list" [
+export def "datacatalog-projects-locations-taxonomies-policy-tags-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -797,7 +797,7 @@ export def "v1beta1-policy-tags list" [
 #
 # POST /v1beta1/{parent}/policyTags
 # operationId: datacatalog.projects.locations.taxonomies.policyTags.create
-export def "v1beta1-policy-tags create" [
+export def "datacatalog-projects-locations-taxonomies-policy-tags-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -851,7 +851,7 @@ export def "v1beta1-policy-tags create" [
 #
 # POST /v1beta1/{parent}/tagTemplates
 # operationId: datacatalog.projects.locations.tagTemplates.create
-export def "v1beta1-tag-templates create" [
+export def "datacatalog-projects-locations-tag-templates-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -906,7 +906,7 @@ export def "v1beta1-tag-templates create" [
 #
 # GET /v1beta1/{parent}/tags
 # operationId: datacatalog.projects.locations.entryGroups.tags.list
-export def "v1beta1-tags list" [
+export def "datacatalog-projects-locations-entry-groups-tags-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -956,7 +956,7 @@ export def "v1beta1-tags list" [
 #
 # POST /v1beta1/{parent}/tags
 # operationId: datacatalog.projects.locations.entryGroups.tags.create
-export def "v1beta1-tags create" [
+export def "datacatalog-projects-locations-entry-groups-tags-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1011,7 +1011,7 @@ export def "v1beta1-tags create" [
 #
 # GET /v1beta1/{parent}/taxonomies
 # operationId: datacatalog.projects.locations.taxonomies.list
-export def "v1beta1-taxonomies list" [
+export def "datacatalog-projects-locations-taxonomies-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1064,7 +1064,7 @@ export def "v1beta1-taxonomies list" [
 # operationId: datacatalog.projects.locations.taxonomies.create
 # --service shape: {identity?: string, name?: "MANAGING_SYSTEM_UNSPECIFIED"|"MANAGING_SYSTEM_DATAPLEX"|"MANAGING_SYSTEM_OTHER"}
 # --taxonomyTimestamps shape: {createTime?: string, updateTime?: string}
-export def "v1beta1-taxonomies create" [
+export def "datacatalog-projects-locations-taxonomies-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1120,7 +1120,7 @@ export def "v1beta1-taxonomies create" [
 #
 # GET /v1beta1/{parent}/taxonomies:export
 # operationId: datacatalog.projects.locations.taxonomies.export
-export def "v1beta1-taxonomies-export export" [
+export def "datacatalog-projects-locations-taxonomies-export" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1171,7 +1171,7 @@ export def "v1beta1-taxonomies-export export" [
 # POST /v1beta1/{parent}/taxonomies:import
 # operationId: datacatalog.projects.locations.taxonomies.import
 # --inlineSource shape: {taxonomies?: list}
-export def "v1beta1-taxonomies-import import" [
+export def "datacatalog-projects-locations-taxonomies-import" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1224,7 +1224,7 @@ export def "v1beta1-taxonomies-import import" [
 # POST /v1beta1/{resource}:getIamPolicy
 # operationId: datacatalog.projects.locations.taxonomies.policyTags.getIamPolicy
 # --options shape: {requestedPolicyVersion?: int}
-export def "v1beta1 get-iam-policy" [
+export def "datacatalog-projects-locations-taxonomies-policy-tags-get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1277,7 +1277,7 @@ export def "v1beta1 get-iam-policy" [
 # POST /v1beta1/{resource}:setIamPolicy
 # operationId: datacatalog.projects.locations.taxonomies.policyTags.setIamPolicy
 # --policy shape: {bindings?: list, etag?: string, version?: int}
-export def "v1beta1 update-iam-policy" [
+export def "datacatalog-projects-locations-taxonomies-policy-tags-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1329,7 +1329,7 @@ export def "v1beta1 update-iam-policy" [
 #
 # POST /v1beta1/{resource}:testIamPermissions
 # operationId: datacatalog.projects.locations.taxonomies.policyTags.testIamPermissions
-export def "v1beta1 test-iam-permissions" [
+export def "datacatalog-projects-locations-taxonomies-policy-tags-test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

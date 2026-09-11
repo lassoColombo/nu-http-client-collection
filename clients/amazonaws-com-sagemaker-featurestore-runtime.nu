@@ -118,7 +118,7 @@ def deletion-mode-completer [] { ["HardDelete" "SoftDelete"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "batch-get-record get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "batch-get-record" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -143,7 +143,7 @@ export def commands []: nothing -> table {
 # POST /BatchGetRecord
 # operationId: BatchGetRecord
 # --Identifiers item shape: {FeatureGroupName: any, RecordIdentifiersValueAsString: any, FeatureNames?: any}
-export def "batch-get-record get" [
+export def "batch-get-record" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -190,7 +190,7 @@ export def "batch-get-record get" [
 #
 # DELETE /FeatureGroup/{FeatureGroupName}
 # operationId: DeleteRecord
-export def "feature-group delete-record" [
+export def "delete-record" [
   feature_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -240,7 +240,7 @@ export def "feature-group delete-record" [
 #
 # GET /FeatureGroup/{FeatureGroupName}
 # operationId: GetRecord
-export def "feature-group get-record" [
+export def "get-record" [
   feature_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -289,7 +289,7 @@ export def "feature-group get-record" [
 # PUT /FeatureGroup/{FeatureGroupName}
 # operationId: PutRecord
 # --Record item shape: {FeatureName: any, ValueAsString: any}
-export def "feature-group update-record" [
+export def "put-record" [
   feature_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

@@ -112,7 +112,7 @@ def resource-type-completer [] { ["dedicated" "serviceSpecific" "shared" "standa
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-capacity-auto-quota-increase get-properties" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "auto-quota-increase-get-properties" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -136,7 +136,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Capacity/autoQuotaIncrease
 # operationId: AutoQuotaIncrease_GetProperties
-export def "subscriptions-providers-microsoft-capacity-auto-quota-increase get-properties" [
+export def "auto-quota-increase-get-properties" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -175,7 +175,7 @@ export def "subscriptions-providers-microsoft-capacity-auto-quota-increase get-p
 # PUT /subscriptions/{subscriptionId}/providers/Microsoft.Capacity/autoQuotaIncrease
 # operationId: AutoQuotaIncrease_Create
 # --properties shape: {onFailure?: record, onSuccess?: record, settings?: record, supportTicketAction?: record}
-export def "subscriptions-providers-microsoft-capacity-auto-quota-increase create" [
+export def "auto-quota-increase-create" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -217,7 +217,7 @@ export def "subscriptions-providers-microsoft-capacity-auto-quota-increase creat
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Capacity/resourceProviders/{providerId}/locations/{location}/serviceLimits
 # operationId: Quotas_listStatus
-export def "subscriptions-providers-microsoft-capacity-resource-providers-locations-service-limits list-quotas-status" [
+export def "quotas-list-status" [
   subscription_id: string
   provider_id: string
   location: string
@@ -259,7 +259,7 @@ export def "subscriptions-providers-microsoft-capacity-resource-providers-locati
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Capacity/resourceProviders/{providerId}/locations/{location}/serviceLimits/{resourceName}
 # operationId: Quota_listStatus
-export def "subscriptions-providers-microsoft-capacity-resource-providers-locations-service-limits list-quota-status" [
+export def "quota-list-status" [
   subscription_id: string
   provider_id: string
   location: string
@@ -304,7 +304,7 @@ export def "subscriptions-providers-microsoft-capacity-resource-providers-locati
 # PATCH /subscriptions/{subscriptionId}/providers/Microsoft.Capacity/resourceProviders/{providerId}/locations/{location}/serviceLimits/{resourceName}
 # operationId: QuotaRequest_Update
 # --name shape: {value?: string}
-export def "subscriptions-providers-microsoft-capacity-resource-providers-locations-service-limits request-quota-update" [
+export def "quota-request-update" [
   subscription_id: string
   provider_id: string
   location: string
@@ -360,7 +360,7 @@ export def "subscriptions-providers-microsoft-capacity-resource-providers-locati
 # PUT /subscriptions/{subscriptionId}/providers/Microsoft.Capacity/resourceProviders/{providerId}/locations/{location}/serviceLimits/{resourceName}
 # operationId: QuotaRequest_Create
 # --name shape: {value?: string}
-export def "subscriptions-providers-microsoft-capacity-resource-providers-locations-service-limits request-quota-create" [
+export def "quota-request-create" [
   subscription_id: string
   provider_id: string
   location: string
@@ -415,7 +415,7 @@ export def "subscriptions-providers-microsoft-capacity-resource-providers-locati
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Capacity/resourceProviders/{providerId}/locations/{location}/serviceLimitsRequests
 # operationId: QuotaRequests_ListStatus
-export def "subscriptions-providers-microsoft-capacity-resource-providers-locations-service-limits-requests list-quota-status" [
+export def "quota-requests-list-status" [
   subscription_id: string
   provider_id: string
   location: string
@@ -460,7 +460,7 @@ export def "subscriptions-providers-microsoft-capacity-resource-providers-locati
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Capacity/resourceProviders/{providerId}/locations/{location}/serviceLimitsRequests/{id}
 # operationId: QuotaRequests_GetStatus
-export def "subscriptions-providers-microsoft-capacity-resource-providers-locations-service-limits-requests get-quota-status" [
+export def "quota-requests-get-status" [
   subscription_id: string
   provider_id: string
   location: string

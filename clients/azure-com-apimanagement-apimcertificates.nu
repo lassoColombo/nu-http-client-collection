@@ -117,7 +117,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-api-management-service-certificates list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "certificate-list-by-service" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -141,7 +141,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/certificates
 # operationId: Certificate_ListByService
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-certificates list" [
+export def "certificate-list-by-service" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -186,7 +186,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/certificates/{certificateId}
 # operationId: Certificate_Delete
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-certificates delete" [
+export def "certificate-delete" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -233,7 +233,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/certificates/{certificateId}
 # operationId: Certificate_Get
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-certificates get" [
+export def "certificate-get" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -277,7 +277,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # HEAD /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/certificates/{certificateId}
 # operationId: Certificate_GetEntityTag
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-certificates get-entity-tag" [
+export def "certificate-get-entity-tag" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -323,7 +323,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 # Docs: https://azure.microsoft.com/en-us/documentation/articles/api-management-howto-mutual-certificates/ — How to secure back-end services using client certificate authentication in Azure API Management
 # operationId: Certificate_CreateOrUpdate
 # --properties shape: {data: string, password: string}
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-certificates create-or-update" [
+export def "certificate-create-or-update" [
   subscription_id: string
   resource_group_name: string
   service_name: string

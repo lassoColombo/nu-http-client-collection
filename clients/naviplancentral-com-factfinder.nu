@@ -141,7 +141,7 @@ def payer-completer [] { ["Client" "CoClient" "Joint" "Other"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account-types get-by-country" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account-types-get-by-country" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -165,7 +165,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/AccountTypes
 # operationId: AccountTypes_GetByCountry
-export def "account-types get-by-country" [
+export def "account-types-get-by-country" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -202,7 +202,7 @@ export def "account-types get-by-country" [
 #
 # GET /api/AccountTypes/{id}
 # operationId: AccountTypes_GetById
-export def "account-types get" [
+export def "account-types-get-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -239,7 +239,7 @@ export def "account-types get" [
 #
 # GET /api/Accounts
 # operationId: Accounts_GetAccountsByFactFinderIdByFactfinderidExternalsourceid
-export def "accounts get-by-fact-finder-by-factfinderid-externalsourceid" [
+export def "accounts-get-accounts-by-fact-finder-id-by-factfinderid-externalsourceid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -277,7 +277,7 @@ export def "accounts get-by-fact-finder-by-factfinderid-externalsourceid" [
 #
 # POST /api/Accounts
 # operationId: Accounts_PostByModel
-export def "accounts create-by-model" [
+export def "accounts-post-by-model" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -325,7 +325,7 @@ export def "accounts create-by-model" [
 #
 # GET /api/Accounts/{accountId}/Holdings
 # operationId: Accounts_GetAccountHoldingsByAccountid
-export def "accounts-holdings list" [
+export def "accounts-get-account-holdings-by-accountid" [
   account_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -362,7 +362,7 @@ export def "accounts-holdings list" [
 #
 # POST /api/Accounts/{accountId}/Holdings
 # operationId: Accounts_PostAccountHoldingByAccountidModel
-export def "accounts-holdings create-by-model" [
+export def "accounts-post-account-holding-by-accountid-model" [
   account_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -410,7 +410,7 @@ export def "accounts-holdings create-by-model" [
 # PUT /api/Accounts/{accountId}/Holdings
 # operationId: Accounts_PutHoldingsByAccountidHoldings
 # --holdings item shape: {costBasis?: float, cusip?: string, description: string, externalDestinationId?: string, marketValue?: float, symbol?: string, valuationDate?: string}
-export def "accounts-holdings update-by-account-id" [
+export def "accounts-put-holdings-by-accountid-holdings" [
   account_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -451,7 +451,7 @@ export def "accounts-holdings update-by-account-id" [
 #
 # DELETE /api/Accounts/{accountId}/Holdings/{id}
 # operationId: Accounts_DeleteAccountHoldingByAccountidId
-export def "accounts-holdings delete" [
+export def "accounts-delete-account-holding-by-accountid-id" [
   account_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -490,7 +490,7 @@ export def "accounts-holdings delete" [
 #
 # GET /api/Accounts/{accountId}/Holdings/{id}
 # operationId: Accounts_GetAccountHoldingByAccountidId
-export def "accounts-holdings get" [
+export def "accounts-get-account-holding-by-accountid-id" [
   account_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -529,7 +529,7 @@ export def "accounts-holdings get" [
 #
 # PUT /api/Accounts/{accountId}/Holdings/{id}
 # operationId: Accounts_PutByAccountidIdHolding
-export def "accounts-holdings update-by-account-id-1" [
+export def "accounts-put-by-accountid-id-holding" [
   account_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -578,7 +578,7 @@ export def "accounts-holdings update-by-account-id-1" [
 #
 # DELETE /api/Accounts/{accountId}/SavingsStrategies
 # operationId: Accounts_DeleteSavingsStrategiesByAccountid
-export def "accounts-savings-strategies delete" [
+export def "accounts-delete-savings-strategies-by-accountid" [
   account_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -615,7 +615,7 @@ export def "accounts-savings-strategies delete" [
 #
 # GET /api/Accounts/{accountId}/SavingsStrategies
 # operationId: Accounts_GetSavingsStrategiesByAccountIdByAccountid
-export def "accounts-savings-strategies get-by" [
+export def "accounts-get-savings-strategies-by-account-id-by-accountid" [
   account_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -652,7 +652,7 @@ export def "accounts-savings-strategies get-by" [
 #
 # POST /api/Accounts/{accountId}/SavingsStrategies
 # operationId: Accounts_PostSavingsStrategyByAccountidSavingsstrategy
-export def "accounts-savings-strategies create-strategy-by-savingsstrategy" [
+export def "accounts-post-savings-strategy-by-accountid-savingsstrategy" [
   account_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -704,7 +704,7 @@ export def "accounts-savings-strategies create-strategy-by-savingsstrategy" [
 #
 # DELETE /api/Accounts/{accountId}/SavingsStrategies/{id}
 # operationId: Accounts_DeleteSavingsStrategyByAccountidId
-export def "accounts-savings-strategies delete-strategy" [
+export def "accounts-delete-savings-strategy-by-accountid-id" [
   account_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -743,7 +743,7 @@ export def "accounts-savings-strategies delete-strategy" [
 #
 # GET /api/Accounts/{accountId}/SavingsStrategies/{id}
 # operationId: Accounts_GetSavingsStrategiesByAccountIdAndSavingsStrategyIdByAccountidId
-export def "accounts-savings-strategies get-by-and-strategy" [
+export def "accounts-get-savings-strategies-by-account-id-and-savings-strategy-id-by-accountid-id" [
   account_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -782,7 +782,7 @@ export def "accounts-savings-strategies get-by-and-strategy" [
 #
 # PUT /api/Accounts/{accountId}/SavingsStrategies/{id}
 # operationId: Accounts_PutSavingsStrategyByAccountidIdSavingsstrategy
-export def "accounts-savings-strategies update-strategy-by-savingsstrategy" [
+export def "accounts-put-savings-strategy-by-accountid-id-savingsstrategy" [
   account_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -836,7 +836,7 @@ export def "accounts-savings-strategies update-strategy-by-savingsstrategy" [
 #
 # DELETE /api/Accounts/{id}
 # operationId: Accounts_DeleteAccountById
-export def "accounts delete" [
+export def "accounts-delete-account-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -873,7 +873,7 @@ export def "accounts delete" [
 #
 # GET /api/Accounts/{id}
 # operationId: Accounts_GetById
-export def "accounts get" [
+export def "accounts-get-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -910,7 +910,7 @@ export def "accounts get" [
 #
 # PUT /api/Accounts/{id}
 # operationId: Accounts_PutByIdModel
-export def "accounts update-by-model" [
+export def "accounts-put-by-id-model" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -960,7 +960,7 @@ export def "accounts update-by-model" [
 #
 # POST /api/Clients
 # operationId: Clients_PostByModel
-export def "clients create-by-model" [
+export def "clients-post-by-model" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1001,7 +1001,7 @@ export def "clients create-by-model" [
 #
 # GET /api/CriticalIllnessInsurancePolicies
 # operationId: CriticalIllnessInsurancePolicies_GetCriticalIllnessInsurancePoliciesByFactFinderIdByFactfinderid
-export def "critical-illness-insurance-policies get-by-fact-finder-by-factfinderid" [
+export def "critical-illness-insurance-policies-get-critical-illness-insurance-policies-by-fact-finder-id-by-factfinderid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1038,7 +1038,7 @@ export def "critical-illness-insurance-policies get-by-fact-finder-by-factfinder
 #
 # POST /api/CriticalIllnessInsurancePolicies
 # operationId: CriticalIllnessInsurancePolicies_PostByModel
-export def "critical-illness-insurance-policies create-by-model" [
+export def "critical-illness-insurance-policies-post-by-model" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1084,7 +1084,7 @@ export def "critical-illness-insurance-policies create-by-model" [
 #
 # DELETE /api/CriticalIllnessInsurancePolicies/{id}
 # operationId: CriticalIllnessInsurancePolicies_DeleteById
-export def "critical-illness-insurance-policies delete" [
+export def "critical-illness-insurance-policies-delete-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1121,7 +1121,7 @@ export def "critical-illness-insurance-policies delete" [
 #
 # GET /api/CriticalIllnessInsurancePolicies/{id}
 # operationId: CriticalIllnessInsurancePolicies_GetById
-export def "critical-illness-insurance-policies get" [
+export def "critical-illness-insurance-policies-get-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1158,7 +1158,7 @@ export def "critical-illness-insurance-policies get" [
 #
 # PUT /api/CriticalIllnessInsurancePolicies/{id}
 # operationId: CriticalIllnessInsurancePolicies_PutByIdModel
-export def "critical-illness-insurance-policies update-by-model" [
+export def "critical-illness-insurance-policies-put-by-id-model" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1206,7 +1206,7 @@ export def "critical-illness-insurance-policies update-by-model" [
 #
 # GET /api/CriticalIllnessInsurancePolicyTypes
 # operationId: CriticalIllnessInsurancePolicyTypes_GetByCountry
-export def "critical-illness-insurance-policy-types get-by-country" [
+export def "critical-illness-insurance-policy-types-get-by-country" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1243,7 +1243,7 @@ export def "critical-illness-insurance-policy-types get-by-country" [
 #
 # GET /api/CriticalIllnessInsurancePolicyTypes/{id}
 # operationId: CriticalIllnessInsurancePolicyTypes_GetById
-export def "critical-illness-insurance-policy-types get" [
+export def "critical-illness-insurance-policy-types-get-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1280,7 +1280,7 @@ export def "critical-illness-insurance-policy-types get" [
 #
 # GET /api/DefinedBenefitPensions
 # operationId: DefinedBenefitPensions_GetDefinedBenefitPensionsByFactFinderIdByFactfinderid
-export def "defined-benefit-pensions get-by-fact-finder-by-factfinderid" [
+export def "defined-benefit-pensions-get-defined-benefit-pensions-by-fact-finder-id-by-factfinderid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1317,7 +1317,7 @@ export def "defined-benefit-pensions get-by-fact-finder-by-factfinderid" [
 #
 # POST /api/DefinedBenefitPensions
 # operationId: DefinedBenefitPensions_PostByModel
-export def "defined-benefit-pensions create-by-model" [
+export def "defined-benefit-pensions-post-by-model" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1361,7 +1361,7 @@ export def "defined-benefit-pensions create-by-model" [
 #
 # DELETE /api/DefinedBenefitPensions/{id}
 # operationId: DefinedBenefitPensions_DeleteDefinedBenefitPensionById
-export def "defined-benefit-pensions delete" [
+export def "defined-benefit-pensions-delete-defined-benefit-pension-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1398,7 +1398,7 @@ export def "defined-benefit-pensions delete" [
 #
 # GET /api/DefinedBenefitPensions/{id}
 # operationId: DefinedBenefitPensions_GetById
-export def "defined-benefit-pensions get" [
+export def "defined-benefit-pensions-get-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1435,7 +1435,7 @@ export def "defined-benefit-pensions get" [
 #
 # PUT /api/DefinedBenefitPensions/{id}
 # operationId: DefinedBenefitPensions_PutDefinedBenefitPensionByIdModel
-export def "defined-benefit-pensions update-by-model" [
+export def "defined-benefit-pensions-put-defined-benefit-pension-by-id-model" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1481,7 +1481,7 @@ export def "defined-benefit-pensions update-by-model" [
 #
 # GET /api/Demographics
 # operationId: Demographics_GetDemographicsByFactFinderIdByFactfinderid
-export def "demographics get-by-fact-finder-by-factfinderid" [
+export def "demographics-get-demographics-by-fact-finder-id-by-factfinderid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1520,7 +1520,7 @@ export def "demographics get-by-fact-finder-by-factfinderid" [
 # operationId: Demographics_PostByModel
 # --head1 shape: {alreadyRetired: bool, birthDate: string, externalDestinationId?: string, firstName: string, gender: "Male"|"Female"|"None", lastName: string, taxFilingStatus: int}
 # --head2 shape: {alreadyRetired: bool, birthDate: string, externalDestinationId?: string, firstName: string, gender: "Male"|"Female"|"None", lastName: string, taxFilingStatus: int}
-export def "demographics create-by-model" [
+export def "demographics-post-by-model" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1566,7 +1566,7 @@ export def "demographics create-by-model" [
 #
 # GET /api/Demographics/{demographicId}/Dependents
 # operationId: Demographics_GetDependentsByDemographicid
-export def "demographics-dependents list" [
+export def "demographics-get-dependents-by-demographicid" [
   demographic_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1603,7 +1603,7 @@ export def "demographics-dependents list" [
 #
 # POST /api/Demographics/{demographicId}/Dependents
 # operationId: Demographics_PostByDemographicidModel
-export def "demographics-dependents create-by-model" [
+export def "demographics-post-by-demographicid-model" [
   demographic_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1649,7 +1649,7 @@ export def "demographics-dependents create-by-model" [
 #
 # DELETE /api/Demographics/{demographicId}/Dependents/{id}
 # operationId: Demographics_DeleteDependentByDemographicidId
-export def "demographics-dependents delete" [
+export def "demographics-delete-dependent-by-demographicid-id" [
   demographic_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1688,7 +1688,7 @@ export def "demographics-dependents delete" [
 #
 # GET /api/Demographics/{demographicId}/Dependents/{id}
 # operationId: Demographics_GetDependentByDemographicidId
-export def "demographics-dependents get" [
+export def "demographics-get-dependent-by-demographicid-id" [
   demographic_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1727,7 +1727,7 @@ export def "demographics-dependents get" [
 #
 # PUT /api/Demographics/{demographicId}/Dependents/{id}
 # operationId: Demographics_PutByDemographicidIdModel
-export def "demographics-dependents update-by-model" [
+export def "demographics-put-by-demographicid-id-model" [
   demographic_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1775,7 +1775,7 @@ export def "demographics-dependents update-by-model" [
 #
 # GET /api/Demographics/{id}
 # operationId: Demographics_GetById
-export def "demographics get" [
+export def "demographics-get-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1814,7 +1814,7 @@ export def "demographics get" [
 # operationId: Demographics_PutByIdModel
 # --head1 shape: {alreadyRetired: bool, birthDate: string, externalDestinationId?: string, firstName: string, gender: "Male"|"Female"|"None", lastName: string, taxFilingStatus: int}
 # --head2 shape: {alreadyRetired: bool, birthDate: string, externalDestinationId?: string, firstName: string, gender: "Male"|"Female"|"None", lastName: string, taxFilingStatus: int}
-export def "demographics update-by-model" [
+export def "demographics-put-by-id-model" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1862,7 +1862,7 @@ export def "demographics update-by-model" [
 #
 # GET /api/DisabilityInsurancePolicies
 # operationId: DisabilityInsurancePolicies_GetDisabilityInsurancePoliciesByFactFinderIdByFactfinderid
-export def "disability-insurance-policies get-by-fact-finder-by-factfinderid" [
+export def "disability-insurance-policies-get-disability-insurance-policies-by-fact-finder-id-by-factfinderid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1899,7 +1899,7 @@ export def "disability-insurance-policies get-by-fact-finder-by-factfinderid" [
 #
 # POST /api/DisabilityInsurancePolicies
 # operationId: DisabilityInsurancePolicies_PostByModel
-export def "disability-insurance-policies create-by-model" [
+export def "disability-insurance-policies-post-by-model" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1947,7 +1947,7 @@ export def "disability-insurance-policies create-by-model" [
 #
 # DELETE /api/DisabilityInsurancePolicies/{id}
 # operationId: DisabilityInsurancePolicies_DeleteById
-export def "disability-insurance-policies delete" [
+export def "disability-insurance-policies-delete-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1984,7 +1984,7 @@ export def "disability-insurance-policies delete" [
 #
 # GET /api/DisabilityInsurancePolicies/{id}
 # operationId: DisabilityInsurancePolicies_GetById
-export def "disability-insurance-policies get" [
+export def "disability-insurance-policies-get-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2021,7 +2021,7 @@ export def "disability-insurance-policies get" [
 #
 # PUT /api/DisabilityInsurancePolicies/{id}
 # operationId: DisabilityInsurancePolicies_PutByIdModel
-export def "disability-insurance-policies update-by-model" [
+export def "disability-insurance-policies-put-by-id-model" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2071,7 +2071,7 @@ export def "disability-insurance-policies update-by-model" [
 #
 # GET /api/DisabilityInsurancePolicyTypes
 # operationId: DisabilityInsurancePolicyTypes_GetByCountry
-export def "disability-insurance-policy-types get-by-country" [
+export def "disability-insurance-policy-types-get-by-country" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2108,7 +2108,7 @@ export def "disability-insurance-policy-types get-by-country" [
 #
 # GET /api/DisabilityInsurancePolicyTypes/{id}
 # operationId: DisabilityInsurancePolicyTypes_GetById
-export def "disability-insurance-policy-types get" [
+export def "disability-insurance-policy-types-get-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2145,7 +2145,7 @@ export def "disability-insurance-policy-types get" [
 #
 # GET /api/EducationGoals
 # operationId: EducationGoals_GetEducationGoalsByFactFinderIdByFactfinderid
-export def "education-goals get-by-fact-finder-by-factfinderid" [
+export def "education-goals-get-education-goals-by-fact-finder-id-by-factfinderid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2182,7 +2182,7 @@ export def "education-goals get-by-fact-finder-by-factfinderid" [
 #
 # POST /api/EducationGoals
 # operationId: EducationGoals_PostByModel
-export def "education-goals create-by-model" [
+export def "education-goals-post-by-model" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2224,7 +2224,7 @@ export def "education-goals create-by-model" [
 #
 # GET /api/EducationGoals/{educationGoalId}/Expenses
 # operationId: EducationGoals_GetEducationExpensesByEducationGoalIdByEducationgoalid
-export def "education-goals-expenses get-by" [
+export def "education-goals-get-education-expenses-by-education-goal-id-by-educationgoalid" [
   education_goal_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2261,7 +2261,7 @@ export def "education-goals-expenses get-by" [
 #
 # POST /api/EducationGoals/{educationGoalId}/Expenses
 # operationId: EducationGoals_PostByEducationgoalidModel
-export def "education-goals-expenses create-by-model" [
+export def "education-goals-post-by-educationgoalid-model" [
   education_goal_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2307,7 +2307,7 @@ export def "education-goals-expenses create-by-model" [
 #
 # DELETE /api/EducationGoals/{educationGoalId}/Expenses/{id}
 # operationId: EducationGoals_DeleteByEducationgoalidId
-export def "education-goals-expenses delete" [
+export def "education-goals-delete-by-educationgoalid-id" [
   education_goal_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2346,7 +2346,7 @@ export def "education-goals-expenses delete" [
 #
 # GET /api/EducationGoals/{educationGoalId}/Expenses/{id}
 # operationId: EducationGoals_GetEducationExpenseByEducationgoalidId
-export def "education-goals-expenses get" [
+export def "education-goals-get-education-expense-by-educationgoalid-id" [
   education_goal_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2385,7 +2385,7 @@ export def "education-goals-expenses get" [
 #
 # PUT /api/EducationGoals/{educationGoalId}/Expenses/{id}
 # operationId: EducationGoals_PutByEducationgoalidIdModel
-export def "education-goals-expenses update-by-model" [
+export def "education-goals-put-by-educationgoalid-id-model" [
   education_goal_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2433,7 +2433,7 @@ export def "education-goals-expenses update-by-model" [
 #
 # DELETE /api/EducationGoals/{id}
 # operationId: EducationGoals_DeleteById
-export def "education-goals delete" [
+export def "education-goals-delete-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2470,7 +2470,7 @@ export def "education-goals delete" [
 #
 # GET /api/EducationGoals/{id}
 # operationId: EducationGoals_GetById
-export def "education-goals get" [
+export def "education-goals-get-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2507,7 +2507,7 @@ export def "education-goals get" [
 #
 # PUT /api/EducationGoals/{id}
 # operationId: EducationGoals_PutByIdModel
-export def "education-goals update-by-model" [
+export def "education-goals-put-by-id-model" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2551,7 +2551,7 @@ export def "education-goals update-by-model" [
 #
 # GET /api/ExpenseTypes
 # operationId: ExpenseTypes_GetByCountry
-export def "expense-types get-by-country" [
+export def "expense-types-get-by-country" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2588,7 +2588,7 @@ export def "expense-types get-by-country" [
 #
 # GET /api/ExpenseTypes/{id}
 # operationId: ExpenseTypes_GetById
-export def "expense-types get" [
+export def "expense-types-get-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2625,7 +2625,7 @@ export def "expense-types get" [
 #
 # GET /api/Expenses
 # operationId: Expenses_GetExpensesByFactFinderIdByFactfinderid
-export def "expenses get-by-fact-finder-by-factfinderid" [
+export def "expenses-get-expenses-by-fact-finder-id-by-factfinderid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2662,7 +2662,7 @@ export def "expenses get-by-fact-finder-by-factfinderid" [
 #
 # POST /api/Expenses
 # operationId: Expenses_PostByModel
-export def "expenses create-by-model" [
+export def "expenses-post-by-model" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2710,7 +2710,7 @@ export def "expenses create-by-model" [
 #
 # DELETE /api/Expenses/{id}
 # operationId: Expenses_DeleteById
-export def "expenses delete" [
+export def "expenses-delete-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2747,7 +2747,7 @@ export def "expenses delete" [
 #
 # GET /api/Expenses/{id}
 # operationId: Expenses_GetById
-export def "expenses get" [
+export def "expenses-get-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2784,7 +2784,7 @@ export def "expenses get" [
 #
 # PUT /api/Expenses/{id}
 # operationId: Expenses_PutByIdModel
-export def "expenses update-by-model" [
+export def "expenses-put-by-id-model" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2834,7 +2834,7 @@ export def "expenses update-by-model" [
 #
 # GET /api/FactFinders
 # operationId: FactFinders_GetByHouseholdIdByHouseholdid
-export def "fact-finders get-by-household-by-householdid" [
+export def "fact-finders-get-by-household-id-by-householdid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2871,7 +2871,7 @@ export def "fact-finders get-by-household-by-householdid" [
 #
 # POST /api/FactFinders
 # operationId: FactFinders_PostByModel
-export def "fact-finders create-by-model" [
+export def "fact-finders-post-by-model" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2912,7 +2912,7 @@ export def "fact-finders create-by-model" [
 #
 # POST /api/FactFinders/Populate
 # operationId: FactFinders_PostPopulateByModel
-export def "fact-finders-populate create-by-model" [
+export def "fact-finders-post-populate-by-model" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2954,7 +2954,7 @@ export def "fact-finders-populate create-by-model" [
 #
 # GET /api/FactFinders/{factFinderId}/Modules
 # operationId: FactFinderModules_GetByFactfinderid
-export def "fact-finders-modules list" [
+export def "fact-finder-modules-get-by-factfinderid" [
   fact_finder_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2991,7 +2991,7 @@ export def "fact-finders-modules list" [
 #
 # GET /api/FactFinders/{factFinderId}/Modules/{id}
 # operationId: FactFinderModules_GetByFactfinderidId
-export def "fact-finders-modules get" [
+export def "fact-finder-modules-get-by-factfinderid-id" [
   fact_finder_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3030,7 +3030,7 @@ export def "fact-finders-modules get" [
 #
 # PUT /api/FactFinders/{factFinderId}/Modules/{id}
 # operationId: FactFinderModules_PutByModelFactfinderidId
-export def "fact-finders-modules update-by-model" [
+export def "fact-finder-modules-put-by-model-factfinderid-id" [
   fact_finder_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3075,7 +3075,7 @@ export def "fact-finders-modules update-by-model" [
 #
 # GET /api/FactFinders/{factFinderId}/Snapshots
 # operationId: FactFinders_GetSnapshotsByFactfinderid
-export def "fact-finders-snapshots get" [
+export def "fact-finders-get-snapshots-by-factfinderid" [
   fact_finder_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3112,7 +3112,7 @@ export def "fact-finders-snapshots get" [
 #
 # POST /api/FactFinders/{factFinderId}/Snapshots
 # operationId: FactFinders_PostSnapshotsByFactfinderid
-export def "fact-finders-snapshots create" [
+export def "fact-finders-post-snapshots-by-factfinderid" [
   fact_finder_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3149,7 +3149,7 @@ export def "fact-finders-snapshots create" [
 #
 # DELETE /api/FactFinders/{id}
 # operationId: FactFinders_DeleteById
-export def "fact-finders delete" [
+export def "fact-finders-delete-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3186,7 +3186,7 @@ export def "fact-finders delete" [
 #
 # GET /api/FactFinders/{id}
 # operationId: FactFinders_GetById
-export def "fact-finders get" [
+export def "fact-finders-get-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3223,7 +3223,7 @@ export def "fact-finders get" [
 #
 # PUT /api/FactFinders/{id}
 # operationId: FactFinders_PutByIdModel
-export def "fact-finders update-by-model" [
+export def "fact-finders-put-by-id-model" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3264,7 +3264,7 @@ export def "fact-finders update-by-model" [
 #
 # PUT /api/FactFinders/{id}/Populate
 # operationId: FactFinders_PutPopulateFactFinderByIdModel
-export def "fact-finders-populate update-by-model" [
+export def "fact-finders-put-populate-fact-finder-by-id-model" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3305,7 +3305,7 @@ export def "fact-finders-populate update-by-model" [
 #
 # GET /api/FilingStatusTypes
 # operationId: FilingStatusTypes_GetByCountry
-export def "filing-status-types get-by-country" [
+export def "filing-status-types-get-by-country" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3342,7 +3342,7 @@ export def "filing-status-types get-by-country" [
 #
 # GET /api/FilingStatusTypes/{id}
 # operationId: FilingStatusTypes_GetById
-export def "filing-status-types get" [
+export def "filing-status-types-get-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3379,7 +3379,7 @@ export def "filing-status-types get" [
 #
 # GET /api/FrequencyTypes
 # operationId: FrequencyTypes_GetByEntityCountry
-export def "frequency-types get-by-entity-country" [
+export def "frequency-types-get-by-entity-country" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3417,7 +3417,7 @@ export def "frequency-types get-by-entity-country" [
 #
 # GET /api/FrequencyTypes/{id}
 # operationId: FrequencyTypes_GetById
-export def "frequency-types get" [
+export def "frequency-types-get-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3454,7 +3454,7 @@ export def "frequency-types get" [
 #
 # GET /api/IncomeTypes
 # operationId: IncomeTypes_GetByCountry
-export def "income-types get-by-country" [
+export def "income-types-get-by-country" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3491,7 +3491,7 @@ export def "income-types get-by-country" [
 #
 # GET /api/IncomeTypes/{id}
 # operationId: IncomeTypes_GetById
-export def "income-types get" [
+export def "income-types-get-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3528,7 +3528,7 @@ export def "income-types get" [
 #
 # GET /api/Incomes
 # operationId: Incomes_GetIncomesByFactFinderIdByFactfinderid
-export def "incomes get-by-fact-finder-by-factfinderid" [
+export def "incomes-get-incomes-by-fact-finder-id-by-factfinderid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3565,7 +3565,7 @@ export def "incomes get-by-fact-finder-by-factfinderid" [
 #
 # POST /api/Incomes
 # operationId: Incomes_PostByModel
-export def "incomes create-by-model" [
+export def "incomes-post-by-model" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3611,7 +3611,7 @@ export def "incomes create-by-model" [
 #
 # DELETE /api/Incomes/{id}
 # operationId: Incomes_DeleteById
-export def "incomes delete" [
+export def "incomes-delete-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3648,7 +3648,7 @@ export def "incomes delete" [
 #
 # GET /api/Incomes/{id}
 # operationId: Incomes_GetById
-export def "incomes get" [
+export def "incomes-get-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3685,7 +3685,7 @@ export def "incomes get" [
 #
 # PUT /api/Incomes/{id}
 # operationId: Incomes_PutByIdModel
-export def "incomes update-by-model" [
+export def "incomes-put-by-id-model" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3733,7 +3733,7 @@ export def "incomes update-by-model" [
 #
 # GET /api/Liabilities
 # operationId: Liabilities_GetLiabilitiesByFactFinderIdByFactfinderidExternalsourceid
-export def "liabilities get-by-fact-finder-by-factfinderid-externalsourceid" [
+export def "liabilities-get-liabilities-by-fact-finder-id-by-factfinderid-externalsourceid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3771,7 +3771,7 @@ export def "liabilities get-by-fact-finder-by-factfinderid-externalsourceid" [
 #
 # POST /api/Liabilities
 # operationId: Liabilities_PostByModel
-export def "liabilities create-by-model" [
+export def "liabilities-post-by-model" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3825,7 +3825,7 @@ export def "liabilities create-by-model" [
 #
 # DELETE /api/Liabilities/{id}
 # operationId: Liabilities_DeleteById
-export def "liabilities delete" [
+export def "liabilities-delete-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3862,7 +3862,7 @@ export def "liabilities delete" [
 #
 # GET /api/Liabilities/{id}
 # operationId: Liabilities_GetById
-export def "liabilities get" [
+export def "liabilities-get-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3899,7 +3899,7 @@ export def "liabilities get" [
 #
 # PUT /api/Liabilities/{id}
 # operationId: Liabilities_PutByIdModel
-export def "liabilities update-by-model" [
+export def "liabilities-put-by-id-model" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3955,7 +3955,7 @@ export def "liabilities update-by-model" [
 #
 # GET /api/LiabilityTypes
 # operationId: LiabilityTypes_GetByCountry
-export def "liability-types get-by-country" [
+export def "liability-types-get-by-country" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3992,7 +3992,7 @@ export def "liability-types get-by-country" [
 #
 # GET /api/LiabilityTypes/{id}
 # operationId: LiabilityTypes_GetById
-export def "liability-types get" [
+export def "liability-types-get-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4029,7 +4029,7 @@ export def "liability-types get" [
 #
 # GET /api/LifeInsurancePolicies
 # operationId: LifeInsurancePolicies_GetLifeInsurancePoliciesByFactFinderIdByFactfinderid
-export def "life-insurance-policies get-by-fact-finder-by-factfinderid" [
+export def "life-insurance-policies-get-life-insurance-policies-by-fact-finder-id-by-factfinderid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4066,7 +4066,7 @@ export def "life-insurance-policies get-by-fact-finder-by-factfinderid" [
 #
 # POST /api/LifeInsurancePolicies
 # operationId: LifeInsurancePolicies_PostByModel
-export def "life-insurance-policies create-by-model" [
+export def "life-insurance-policies-post-by-model" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4116,7 +4116,7 @@ export def "life-insurance-policies create-by-model" [
 #
 # DELETE /api/LifeInsurancePolicies/{id}
 # operationId: LifeInsurancePolicies_DeleteById
-export def "life-insurance-policies delete" [
+export def "life-insurance-policies-delete-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4153,7 +4153,7 @@ export def "life-insurance-policies delete" [
 #
 # GET /api/LifeInsurancePolicies/{id}
 # operationId: LifeInsurancePolicies_GetById
-export def "life-insurance-policies get" [
+export def "life-insurance-policies-get-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4190,7 +4190,7 @@ export def "life-insurance-policies get" [
 #
 # PUT /api/LifeInsurancePolicies/{id}
 # operationId: LifeInsurancePolicies_PutByIdModel
-export def "life-insurance-policies update-by-model" [
+export def "life-insurance-policies-put-by-id-model" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4242,7 +4242,7 @@ export def "life-insurance-policies update-by-model" [
 #
 # GET /api/LifeInsurancePolicies/{lifeInsurancePolicyId}/Subaccounts
 # operationId: LifeInsurancePolicies_GetSubaccountsByLifeinsurancepolicyid
-export def "life-insurance-policies-subaccounts list" [
+export def "life-insurance-policies-get-subaccounts-by-lifeinsurancepolicyid" [
   life_insurance_policy_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4279,7 +4279,7 @@ export def "life-insurance-policies-subaccounts list" [
 #
 # POST /api/LifeInsurancePolicies/{lifeInsurancePolicyId}/Subaccounts
 # operationId: LifeInsurancePolicies_PostSubaccountByLifeinsurancepolicyidModel
-export def "life-insurance-policies-subaccounts create-by-model" [
+export def "life-insurance-policies-post-subaccount-by-lifeinsurancepolicyid-model" [
   life_insurance_policy_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4323,7 +4323,7 @@ export def "life-insurance-policies-subaccounts create-by-model" [
 #
 # DELETE /api/LifeInsurancePolicies/{lifeInsurancePolicyId}/Subaccounts/{id}
 # operationId: LifeInsurancePolicies_DeleteSubaccountByLifeinsurancepolicyidId
-export def "life-insurance-policies-subaccounts delete" [
+export def "life-insurance-policies-delete-subaccount-by-lifeinsurancepolicyid-id" [
   life_insurance_policy_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4362,7 +4362,7 @@ export def "life-insurance-policies-subaccounts delete" [
 #
 # GET /api/LifeInsurancePolicies/{lifeInsurancePolicyId}/Subaccounts/{id}
 # operationId: LifeInsurancePolicies_GetSubaccountByLifeinsurancepolicyidId
-export def "life-insurance-policies-subaccounts get" [
+export def "life-insurance-policies-get-subaccount-by-lifeinsurancepolicyid-id" [
   life_insurance_policy_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4401,7 +4401,7 @@ export def "life-insurance-policies-subaccounts get" [
 #
 # PUT /api/LifeInsurancePolicies/{lifeInsurancePolicyId}/Subaccounts/{id}
 # operationId: LifeInsurancePolicies_PutSubaccountByLifeinsurancepolicyidIdModel
-export def "life-insurance-policies-subaccounts update-by-model" [
+export def "life-insurance-policies-put-subaccount-by-lifeinsurancepolicyid-id-model" [
   life_insurance_policy_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4447,7 +4447,7 @@ export def "life-insurance-policies-subaccounts update-by-model" [
 #
 # GET /api/LifeInsurancePolicyTypes
 # operationId: LifeInsurancePolicyTypes_GetByCountry
-export def "life-insurance-policy-types get-by-country" [
+export def "life-insurance-policy-types-get-by-country" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4484,7 +4484,7 @@ export def "life-insurance-policy-types get-by-country" [
 #
 # GET /api/LifeInsurancePolicyTypes/{id}
 # operationId: LifeInsurancePolicyTypes_GetById
-export def "life-insurance-policy-types get" [
+export def "life-insurance-policy-types-get-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4521,7 +4521,7 @@ export def "life-insurance-policy-types get" [
 #
 # GET /api/LifestyleAssetTypes
 # operationId: LifestyleAssetTypes_GetByCountry
-export def "lifestyle-asset-types get-by-country" [
+export def "lifestyle-asset-types-get-by-country" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4558,7 +4558,7 @@ export def "lifestyle-asset-types get-by-country" [
 #
 # GET /api/LifestyleAssetTypes/{id}
 # operationId: LifestyleAssetTypes_GetById
-export def "lifestyle-asset-types get" [
+export def "lifestyle-asset-types-get-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4595,7 +4595,7 @@ export def "lifestyle-asset-types get" [
 #
 # GET /api/LifestyleAssets
 # operationId: LifestyleAssets_GetLifestyleAssetsByFactFinderIdByFactfinderid
-export def "lifestyle-assets get-by-fact-finder-by-factfinderid" [
+export def "lifestyle-assets-get-lifestyle-assets-by-fact-finder-id-by-factfinderid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4632,7 +4632,7 @@ export def "lifestyle-assets get-by-fact-finder-by-factfinderid" [
 #
 # POST /api/LifestyleAssets
 # operationId: LifestyleAssets_PostByModel
-export def "lifestyle-assets create-by-model" [
+export def "lifestyle-assets-post-by-model" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4678,7 +4678,7 @@ export def "lifestyle-assets create-by-model" [
 #
 # DELETE /api/LifestyleAssets/{id}
 # operationId: LifestyleAssets_DeleteById
-export def "lifestyle-assets delete" [
+export def "lifestyle-assets-delete-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4715,7 +4715,7 @@ export def "lifestyle-assets delete" [
 #
 # GET /api/LifestyleAssets/{id}
 # operationId: LifestyleAssets_GetById
-export def "lifestyle-assets get" [
+export def "lifestyle-assets-get-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4752,7 +4752,7 @@ export def "lifestyle-assets get" [
 #
 # PUT /api/LifestyleAssets/{id}
 # operationId: LifestyleAssets_PutByIdModel
-export def "lifestyle-assets update-by-model" [
+export def "lifestyle-assets-put-by-id-model" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4800,7 +4800,7 @@ export def "lifestyle-assets update-by-model" [
 #
 # GET /api/LongTermCareInsurancePolicies
 # operationId: LongTermCareInsurancePolicies_GetLongTermCareInsurancePoliciesByFactFinderIdByFactfinderid
-export def "long-term-care-insurance-policies get-by-fact-finder-by-factfinderid" [
+export def "long-term-care-insurance-policies-get-long-term-care-insurance-policies-by-fact-finder-id-by-factfinderid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4837,7 +4837,7 @@ export def "long-term-care-insurance-policies get-by-fact-finder-by-factfinderid
 #
 # POST /api/LongTermCareInsurancePolicies
 # operationId: LongTermCareInsurancePolicies_PostByModel
-export def "long-term-care-insurance-policies create-by-model" [
+export def "long-term-care-insurance-policies-post-by-model" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4883,7 +4883,7 @@ export def "long-term-care-insurance-policies create-by-model" [
 #
 # DELETE /api/LongTermCareInsurancePolicies/{id}
 # operationId: LongTermCareInsurancePolicies_DeleteById
-export def "long-term-care-insurance-policies delete" [
+export def "long-term-care-insurance-policies-delete-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4920,7 +4920,7 @@ export def "long-term-care-insurance-policies delete" [
 #
 # GET /api/LongTermCareInsurancePolicies/{id}
 # operationId: LongTermCareInsurancePolicies_GetById
-export def "long-term-care-insurance-policies get" [
+export def "long-term-care-insurance-policies-get-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4957,7 +4957,7 @@ export def "long-term-care-insurance-policies get" [
 #
 # PUT /api/LongTermCareInsurancePolicies/{id}
 # operationId: LongTermCareInsurancePolicies_PutByIdModel
-export def "long-term-care-insurance-policies update-by-model" [
+export def "long-term-care-insurance-policies-put-by-id-model" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5005,7 +5005,7 @@ export def "long-term-care-insurance-policies update-by-model" [
 #
 # GET /api/MajorPurchaseGoalTypes
 # operationId: MajorPurchaseGoalTypes_GetByCountry
-export def "major-purchase-goal-types get-by-country" [
+export def "major-purchase-goal-types-get-by-country" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5042,7 +5042,7 @@ export def "major-purchase-goal-types get-by-country" [
 #
 # GET /api/MajorPurchaseGoalTypes/{id}
 # operationId: MajorPurchaseGoalTypes_GetById
-export def "major-purchase-goal-types get" [
+export def "major-purchase-goal-types-get-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5079,7 +5079,7 @@ export def "major-purchase-goal-types get" [
 #
 # GET /api/MajorPurchaseGoals
 # operationId: MajorPurchaseGoals_GetMajorPurchaseGoalsByFactFinderIdByFactfinderid
-export def "major-purchase-goals get-by-fact-finder-by-factfinderid" [
+export def "major-purchase-goals-get-major-purchase-goals-by-fact-finder-id-by-factfinderid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5116,7 +5116,7 @@ export def "major-purchase-goals get-by-fact-finder-by-factfinderid" [
 #
 # POST /api/MajorPurchaseGoals
 # operationId: MajorPurchaseGoals_PostByModel
-export def "major-purchase-goals create-by-model" [
+export def "major-purchase-goals-post-by-model" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5161,7 +5161,7 @@ export def "major-purchase-goals create-by-model" [
 #
 # DELETE /api/MajorPurchaseGoals/{id}
 # operationId: MajorPurchaseGoals_DeleteById
-export def "major-purchase-goals delete" [
+export def "major-purchase-goals-delete-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5198,7 +5198,7 @@ export def "major-purchase-goals delete" [
 #
 # GET /api/MajorPurchaseGoals/{id}
 # operationId: MajorPurchaseGoals_GetById
-export def "major-purchase-goals get" [
+export def "major-purchase-goals-get-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5235,7 +5235,7 @@ export def "major-purchase-goals get" [
 #
 # PUT /api/MajorPurchaseGoals/{id}
 # operationId: MajorPurchaseGoals_PutByIdModel
-export def "major-purchase-goals update-by-model" [
+export def "major-purchase-goals-put-by-id-model" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5282,7 +5282,7 @@ export def "major-purchase-goals update-by-model" [
 #
 # GET /api/Presentation/Accounts
 # operationId: Presentation_GetAccountsByFactfinderidExternalsourceid
-export def "presentation-accounts get-by-factfinderid-externalsourceid" [
+export def "presentation-get-accounts-by-factfinderid-externalsourceid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5320,7 +5320,7 @@ export def "presentation-accounts get-by-factfinderid-externalsourceid" [
 #
 # GET /api/Presentation/Demographics/Owners
 # operationId: Presentation_GetDemographicOwnersByFactfinderid
-export def "presentation-demographics-owners get-by-factfinderid" [
+export def "presentation-get-demographic-owners-by-factfinderid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5357,7 +5357,7 @@ export def "presentation-demographics-owners get-by-factfinderid" [
 #
 # GET /api/Presentation/Demographics/Relationships
 # operationId: Presentation_GetDemographicRelationships
-export def "presentation-demographics-relationships get" [
+export def "presentation-get-demographic-relationships" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5392,7 +5392,7 @@ export def "presentation-demographics-relationships get" [
 #
 # GET /api/Presentation/Incomes
 # operationId: Presentation_GetIncomesByFactfinderid
-export def "presentation-incomes get-by-factfinderid" [
+export def "presentation-get-incomes-by-factfinderid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5429,7 +5429,7 @@ export def "presentation-incomes get-by-factfinderid" [
 #
 # GET /api/Presentation/Liabilities
 # operationId: Presentation_GetLiabilitiesByFactfinderid
-export def "presentation-liabilities get-by-factfinderid" [
+export def "presentation-get-liabilities-by-factfinderid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5466,7 +5466,7 @@ export def "presentation-liabilities get-by-factfinderid" [
 #
 # GET /api/Presentation/LifeInsurancePolicies
 # operationId: Presentation_GetLifeInsurancePoliciesByFactfinderid
-export def "presentation-life-insurance-policies get-by-factfinderid" [
+export def "presentation-get-life-insurance-policies-by-factfinderid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5503,7 +5503,7 @@ export def "presentation-life-insurance-policies get-by-factfinderid" [
 #
 # GET /api/Presentation/Pensions
 # operationId: Presentation_GetPensionsByFactfinderid
-export def "presentation-pensions get-by-factfinderid" [
+export def "presentation-get-pensions-by-factfinderid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5540,7 +5540,7 @@ export def "presentation-pensions get-by-factfinderid" [
 #
 # GET /api/RealEstateAssets
 # operationId: RealEstateAssets_GetRealEstateAssetsByFactFinderIdByFactfinderid
-export def "real-estate-assets get-by-fact-finder-by-factfinderid" [
+export def "real-estate-assets-get-real-estate-assets-by-fact-finder-id-by-factfinderid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5577,7 +5577,7 @@ export def "real-estate-assets get-by-fact-finder-by-factfinderid" [
 #
 # POST /api/RealEstateAssets
 # operationId: RealEstateAssets_PostByModel
-export def "real-estate-assets create-by-model" [
+export def "real-estate-assets-post-by-model" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5624,7 +5624,7 @@ export def "real-estate-assets create-by-model" [
 #
 # DELETE /api/RealEstateAssets/{id}
 # operationId: RealEstateAssets_DeleteById
-export def "real-estate-assets delete" [
+export def "real-estate-assets-delete-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5661,7 +5661,7 @@ export def "real-estate-assets delete" [
 #
 # GET /api/RealEstateAssets/{id}
 # operationId: RealEstateAssets_GetById
-export def "real-estate-assets get" [
+export def "real-estate-assets-get-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5698,7 +5698,7 @@ export def "real-estate-assets get" [
 #
 # PUT /api/RealEstateAssets/{id}
 # operationId: RealEstateAssets_PutByIdModel
-export def "real-estate-assets update-by-model" [
+export def "real-estate-assets-put-by-id-model" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5747,7 +5747,7 @@ export def "real-estate-assets update-by-model" [
 #
 # GET /api/RetirementGoals
 # operationId: RetirementGoals_GetRetirementGoalsByFactFinderIdByFactfinderid
-export def "retirement-goals get-by-fact-finder-by-factfinderid" [
+export def "retirement-goals-get-retirement-goals-by-fact-finder-id-by-factfinderid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5784,7 +5784,7 @@ export def "retirement-goals get-by-fact-finder-by-factfinderid" [
 #
 # POST /api/RetirementGoals
 # operationId: RetirementGoals_PostByModel
-export def "retirement-goals create-by-model" [
+export def "retirement-goals-post-by-model" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5826,7 +5826,7 @@ export def "retirement-goals create-by-model" [
 #
 # DELETE /api/RetirementGoals/{id}
 # operationId: RetirementGoals_DeleteById
-export def "retirement-goals delete" [
+export def "retirement-goals-delete-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5863,7 +5863,7 @@ export def "retirement-goals delete" [
 #
 # GET /api/RetirementGoals/{id}
 # operationId: RetirementGoals_GetById
-export def "retirement-goals get" [
+export def "retirement-goals-get-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5900,7 +5900,7 @@ export def "retirement-goals get" [
 #
 # PUT /api/RetirementGoals/{id}
 # operationId: RetirementGoals_PutByIdModel
-export def "retirement-goals update-by-model" [
+export def "retirement-goals-put-by-id-model" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5944,7 +5944,7 @@ export def "retirement-goals update-by-model" [
 #
 # GET /api/RetirementGoals/{retirementGoalId}/Expenses
 # operationId: RetirementGoals_GetRetirementExpensesByRetirementGoalIdByRetirementgoalid
-export def "retirement-goals-expenses get-by" [
+export def "retirement-goals-get-retirement-expenses-by-retirement-goal-id-by-retirementgoalid" [
   retirement_goal_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5981,7 +5981,7 @@ export def "retirement-goals-expenses get-by" [
 #
 # POST /api/RetirementGoals/{retirementGoalId}/Expenses
 # operationId: RetirementGoals_PostByRetirementgoalidModel
-export def "retirement-goals-expenses create-by-model" [
+export def "retirement-goals-post-by-retirementgoalid-model" [
   retirement_goal_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6029,7 +6029,7 @@ export def "retirement-goals-expenses create-by-model" [
 #
 # DELETE /api/RetirementGoals/{retirementGoalId}/Expenses/{id}
 # operationId: RetirementGoals_DeleteByRetirementgoalidId
-export def "retirement-goals-expenses delete" [
+export def "retirement-goals-delete-by-retirementgoalid-id" [
   retirement_goal_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6068,7 +6068,7 @@ export def "retirement-goals-expenses delete" [
 #
 # GET /api/RetirementGoals/{retirementGoalId}/Expenses/{id}
 # operationId: RetirementGoals_GetRetirementExpenseByRetirementgoalidId
-export def "retirement-goals-expenses get" [
+export def "retirement-goals-get-retirement-expense-by-retirementgoalid-id" [
   retirement_goal_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6107,7 +6107,7 @@ export def "retirement-goals-expenses get" [
 #
 # PUT /api/RetirementGoals/{retirementGoalId}/Expenses/{id}
 # operationId: RetirementGoals_PutByRetirementgoalidIdModel
-export def "retirement-goals-expenses update-by-model" [
+export def "retirement-goals-put-by-retirementgoalid-id-model" [
   retirement_goal_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6157,7 +6157,7 @@ export def "retirement-goals-expenses update-by-model" [
 #
 # GET /api/ServiceInformation
 # operationId: FactFinderServiceInformation_Get
-export def "service-information get-fact-finder" [
+export def "fact-finder-service-information-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6192,7 +6192,7 @@ export def "service-information get-fact-finder" [
 #
 # GET /api/StatesProvinces
 # operationId: StatesProvinces_GetByCountry
-export def "states-provinces get-by-country" [
+export def "states-provinces-get-by-country" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6229,7 +6229,7 @@ export def "states-provinces get-by-country" [
 #
 # GET /api/StatesProvinces/{id}
 # operationId: StatesProvinces_GetById
-export def "states-provinces get" [
+export def "states-provinces-get-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

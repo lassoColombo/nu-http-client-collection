@@ -97,7 +97,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "conditions get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-condition" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -121,7 +121,7 @@ export def commands []: nothing -> table {
 #
 # GET /conditions/{id}
 # operationId: getCondition
-export def "conditions get" [
+export def "get-condition" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -157,7 +157,7 @@ export def "conditions get" [
 #
 # GET /document_categories
 # operationId: listDocumentCategories
-export def "document-categories list" [
+export def "list-document-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -191,7 +191,7 @@ export def "document-categories list" [
 #
 # GET /documents
 # operationId: listDocuments
-export def "documents list" [
+export def "list-documents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -228,7 +228,7 @@ export def "documents list" [
 #
 # GET /documents/{id}
 # operationId: getDocument
-export def "documents get" [
+export def "get-document" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -264,7 +264,7 @@ export def "documents get" [
 #
 # GET /fda_applications
 # operationId: listFDAApplications
-export def "fda-applications list" [
+export def "list-fda-applications" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -301,7 +301,7 @@ export def "fda-applications list" [
 #
 # GET /fda_applications/{id}
 # operationId: getFDAApplication
-export def "fda-applications get" [
+export def "get-fda-application" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -337,7 +337,7 @@ export def "fda-applications get" [
 #
 # GET /interventions/{id}
 # operationId: getIntervention
-export def "interventions get" [
+export def "get-intervention" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -373,7 +373,7 @@ export def "interventions get" [
 #
 # GET /organisations/{id}
 # operationId: getOrganisation
-export def "organisations get" [
+export def "get-organisation" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -409,7 +409,7 @@ export def "organisations get" [
 #
 # GET /persons/{id}
 # operationId: getPerson
-export def "persons get" [
+export def "get-person" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -445,7 +445,7 @@ export def "persons get" [
 #
 # GET /publications/{id}
 # operationId: getPublication
-export def "publications get" [
+export def "get-publication" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -481,7 +481,7 @@ export def "publications get" [
 #
 # GET /search
 # operationId: searchTrials
-export def "search list-trials" [
+export def "search-trials" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -519,7 +519,7 @@ export def "search list-trials" [
 #
 # GET /search/autocomplete/{in}
 # operationId: autocomplete
-export def "search-autocomplete get" [
+export def "autocomplete" [
   in_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -559,7 +559,7 @@ export def "search-autocomplete get" [
 #
 # GET /search/fda_documents
 # operationId: searchFDADocuments
-export def "search-fda-documents list" [
+export def "search-fda-documents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -598,7 +598,7 @@ export def "search-fda-documents list" [
 #
 # GET /sources
 # operationId: list
-export def "sources list" [
+export def "list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -632,7 +632,7 @@ export def "sources list" [
 #
 # GET /trials/{id}
 # operationId: getTrial
-export def "trials get" [
+export def "get-trial" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -668,7 +668,7 @@ export def "trials get" [
 #
 # GET /trials/{id}/records
 # operationId: getRecords
-export def "trials-records list" [
+export def "get-records" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -704,7 +704,7 @@ export def "trials-records list" [
 #
 # GET /trials/{trialId}/records/{id}
 # operationId: getRecord
-export def "trials-records get" [
+export def "get-record" [
   trial_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL

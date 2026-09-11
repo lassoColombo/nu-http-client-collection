@@ -123,7 +123,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1alpha2 delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "apigateway-projects-locations-operations-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -147,7 +147,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1alpha2/{name}
 # operationId: apigateway.projects.locations.operations.delete
-export def "v1alpha2 delete" [
+export def "apigateway-projects-locations-operations-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -195,7 +195,7 @@ export def "v1alpha2 delete" [
 #
 # GET /v1alpha2/{name}
 # operationId: apigateway.projects.locations.operations.get
-export def "v1alpha2 get" [
+export def "apigateway-projects-locations-operations-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -243,7 +243,7 @@ export def "v1alpha2 get" [
 #
 # GET /v1alpha2/{name}/locations
 # operationId: apigateway.projects.locations.list
-export def "v1alpha2-locations list" [
+export def "apigateway-projects-locations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -294,7 +294,7 @@ export def "v1alpha2-locations list" [
 #
 # GET /v1alpha2/{name}/operations
 # operationId: apigateway.projects.locations.operations.list
-export def "v1alpha2-operations list" [
+export def "apigateway-projects-locations-operations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -345,7 +345,7 @@ export def "v1alpha2-operations list" [
 #
 # POST /v1alpha2/{name}:cancel
 # operationId: apigateway.projects.locations.operations.cancel
-export def "v1alpha2 cancel" [
+export def "apigateway-projects-locations-operations-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -397,7 +397,7 @@ export def "v1alpha2 cancel" [
 #
 # GET /v1alpha2/{resource}:getIamPolicy
 # operationId: apigateway.projects.locations.gateways.getIamPolicy
-export def "v1alpha2 get-iam-policy" [
+export def "apigateway-projects-locations-gateways-get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -447,7 +447,7 @@ export def "v1alpha2 get-iam-policy" [
 # POST /v1alpha2/{resource}:setIamPolicy
 # operationId: apigateway.projects.locations.gateways.setIamPolicy
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
-export def "v1alpha2 update-iam-policy" [
+export def "apigateway-projects-locations-gateways-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -500,7 +500,7 @@ export def "v1alpha2 update-iam-policy" [
 #
 # POST /v1alpha2/{resource}:testIamPermissions
 # operationId: apigateway.projects.locations.gateways.testIamPermissions
-export def "v1alpha2 test-iam-permissions" [
+export def "apigateway-projects-locations-gateways-test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

@@ -129,7 +129,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "sourcerepo-projects-repos-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -153,7 +153,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1/{name}
 # operationId: sourcerepo.projects.repos.delete
-export def "projects delete" [
+export def "sourcerepo-projects-repos-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -201,7 +201,7 @@ export def "projects delete" [
 #
 # GET /v1/{name}
 # operationId: sourcerepo.projects.repos.get
-export def "projects get" [
+export def "sourcerepo-projects-repos-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -250,7 +250,7 @@ export def "projects get" [
 # PATCH /v1/{name}
 # operationId: sourcerepo.projects.repos.patch
 # --repo shape: {mirrorConfig?: record, name?: string, pubsubConfigs?: record, size?: string, url?: string}
-export def "projects update" [
+export def "sourcerepo-projects-repos-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -303,7 +303,7 @@ export def "projects update" [
 #
 # GET /v1/{name}/config
 # operationId: sourcerepo.projects.getConfig
-export def "config get" [
+export def "sourcerepo-projects-get-config" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -352,7 +352,7 @@ export def "config get" [
 # PATCH /v1/{name}/config
 # operationId: sourcerepo.projects.updateConfig
 # --projectConfig shape: {enablePrivateKeyCheck?: bool, name?: string, pubsubConfigs?: record}
-export def "config update" [
+export def "sourcerepo-projects-update-config" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -405,7 +405,7 @@ export def "config update" [
 #
 # GET /v1/{name}/repos
 # operationId: sourcerepo.projects.repos.list
-export def "repos list" [
+export def "sourcerepo-projects-repos-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -455,7 +455,7 @@ export def "repos list" [
 #
 # POST /v1/{name}:sync
 # operationId: sourcerepo.projects.repos.sync
-export def "projects sync" [
+export def "sourcerepo-projects-repos-sync" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -508,7 +508,7 @@ export def "projects sync" [
 # POST /v1/{parent}/repos
 # operationId: sourcerepo.projects.repos.create
 # --mirrorConfig shape: {deployKeyId?: string, url?: string, webhookId?: string}
-export def "repos create" [
+export def "sourcerepo-projects-repos-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -564,7 +564,7 @@ export def "repos create" [
 #
 # GET /v1/{resource}:getIamPolicy
 # operationId: sourcerepo.projects.repos.getIamPolicy
-export def "projects get-iam-policy" [
+export def "sourcerepo-projects-repos-get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -614,7 +614,7 @@ export def "projects get-iam-policy" [
 # POST /v1/{resource}:setIamPolicy
 # operationId: sourcerepo.projects.repos.setIamPolicy
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
-export def "projects update-iam-policy" [
+export def "sourcerepo-projects-repos-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -667,7 +667,7 @@ export def "projects update-iam-policy" [
 #
 # POST /v1/{resource}:testIamPermissions
 # operationId: sourcerepo.projects.repos.testIamPermissions
-export def "projects test-iam-permissions" [
+export def "sourcerepo-projects-repos-test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

@@ -122,7 +122,7 @@ def search-order-completer [] { ["Ascending" "Descending"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "bots-botversions-botlocales-customvocabulary-default-batchcreate create-batch-custom-vocabulary-item" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "batch-create-custom-vocabulary-item" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -147,7 +147,7 @@ export def commands []: nothing -> table {
 # PUT /bots/{botId}/botversions/{botVersion}/botlocales/{localeId}/customvocabulary/DEFAULT/batchcreate
 # operationId: BatchCreateCustomVocabularyItem
 # --customVocabularyItemList item shape: {phrase: any, weight?: any, displayAs?: any}
-export def "bots-botversions-botlocales-customvocabulary-default-batchcreate create-batch-custom-vocabulary-item" [
+export def "batch-create-custom-vocabulary-item" [
   bot_id: string
   bot_version: string
   locale_id: string
@@ -201,7 +201,7 @@ export def "bots-botversions-botlocales-customvocabulary-default-batchcreate cre
 # POST /bots/{botId}/botversions/{botVersion}/botlocales/{localeId}/customvocabulary/DEFAULT/batchdelete
 # operationId: BatchDeleteCustomVocabularyItem
 # --customVocabularyItemList item shape: {itemId: any}
-export def "bots-botversions-botlocales-customvocabulary-default-batchdelete delete-batch-custom-vocabulary-item" [
+export def "batch-delete-custom-vocabulary-item" [
   bot_id: string
   bot_version: string
   locale_id: string
@@ -255,7 +255,7 @@ export def "bots-botversions-botlocales-customvocabulary-default-batchdelete del
 # PUT /bots/{botId}/botversions/{botVersion}/botlocales/{localeId}/customvocabulary/DEFAULT/batchupdate
 # operationId: BatchUpdateCustomVocabularyItem
 # --customVocabularyItemList item shape: {itemId: any, phrase: any, weight?: any, displayAs?: any}
-export def "bots-botversions-botlocales-customvocabulary-default-batchupdate update-batch-custom-vocabulary-item" [
+export def "batch-update-custom-vocabulary-item" [
   bot_id: string
   bot_version: string
   locale_id: string
@@ -308,7 +308,7 @@ export def "bots-botversions-botlocales-customvocabulary-default-batchupdate upd
 #
 # POST /bots/{botId}/botversions/{botVersion}/botlocales/{localeId}/
 # operationId: BuildBotLocale
-export def "bots-botversions-botlocales build-locale" [
+export def "build-bot-locale" [
   bot_id: string
   bot_version: string
   locale_id: string
@@ -357,7 +357,7 @@ export def "bots-botversions-botlocales build-locale" [
 #
 # DELETE /bots/{botId}/botversions/{botVersion}/botlocales/{localeId}/
 # operationId: DeleteBotLocale
-export def "bots-botversions-botlocales delete-locale" [
+export def "delete-bot-locale" [
   bot_id: string
   bot_version: string
   locale_id: string
@@ -406,7 +406,7 @@ export def "bots-botversions-botlocales delete-locale" [
 #
 # GET /bots/{botId}/botversions/{botVersion}/botlocales/{localeId}/
 # operationId: DescribeBotLocale
-export def "bots-botversions-botlocales get-locale" [
+export def "describe-bot-locale" [
   bot_id: string
   bot_version: string
   locale_id: string
@@ -456,7 +456,7 @@ export def "bots-botversions-botlocales get-locale" [
 # PUT /bots/{botId}/botversions/{botVersion}/botlocales/{localeId}/
 # operationId: UpdateBotLocale
 # --voiceSettings shape: {voiceId?: any, engine?: any}
-export def "bots-botversions-botlocales update-locale" [
+export def "update-bot-locale" [
   bot_id: string
   bot_version: string
   locale_id: string
@@ -513,7 +513,7 @@ export def "bots-botversions-botlocales update-locale" [
 # operationId: CreateBot
 # --dataPrivacy shape: {childDirected?: any}
 # --botMembers item shape: {botMemberId: any, botMemberName: any, botMemberAliasId: any, botMemberAliasName: any, botMemberVersion: any}
-export def "bots create" [
+export def "create-bot" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -570,7 +570,7 @@ export def "bots create" [
 # operationId: ListBots
 # --sortBy shape: {attribute?: any, order?: any}
 # --filters item shape: {name: any, values: any, operator: any}
-export def "bots list" [
+export def "list-bots" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -625,7 +625,7 @@ export def "bots list" [
 # operationId: CreateBotAlias
 # --conversationLogSettings shape: {textLogSettings?: any, audioLogSettings?: any}
 # --sentimentAnalysisSettings shape: {detectSentiment?: any}
-export def "bots-botaliases create-alias" [
+export def "create-bot-alias" [
   bot_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -680,7 +680,7 @@ export def "bots-botaliases create-alias" [
 #
 # POST /bots/{botId}/botaliases/
 # operationId: ListBotAliases
-export def "bots-botaliases list-aliases" [
+export def "list-bot-aliases" [
   bot_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -734,7 +734,7 @@ export def "bots-botaliases list-aliases" [
 # PUT /bots/{botId}/botversions/{botVersion}/botlocales/
 # operationId: CreateBotLocale
 # --voiceSettings shape: {voiceId?: any, engine?: any}
-export def "bots-botversions-botlocales create-locale" [
+export def "create-bot-locale" [
   bot_id: string
   bot_version: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -790,7 +790,7 @@ export def "bots-botversions-botlocales create-locale" [
 # operationId: ListBotLocales
 # --sortBy shape: {attribute?: any, order?: any}
 # --filters item shape: {name: any, values: any, operator: any}
-export def "bots-botversions-botlocales list-locales" [
+export def "list-bot-locales" [
   bot_id: string
   bot_version: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -847,7 +847,7 @@ export def "bots-botversions-botlocales list-locales" [
 #
 # PUT /bots/{botId}/botversions/
 # operationId: CreateBotVersion
-export def "bots-botversions create-version" [
+export def "create-bot-version" [
   bot_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -898,7 +898,7 @@ export def "bots-botversions create-version" [
 # POST /bots/{botId}/botversions/
 # operationId: ListBotVersions
 # --sortBy shape: {attribute?: any, order?: any}
-export def "bots-botversions list-versions" [
+export def "list-bot-versions" [
   bot_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -953,7 +953,7 @@ export def "bots-botversions list-versions" [
 # PUT /exports/
 # operationId: CreateExport
 # --resourceSpecification shape: {botExportSpecification?: any, botLocaleExportSpecification?: any, customVocabularyExportSpecification?: any}
-export def "exports create" [
+export def "create-export" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1004,7 +1004,7 @@ export def "exports create" [
 # operationId: ListExports
 # --sortBy shape: {attribute?: any, order?: any}
 # --filters item shape: {name: any, values: any, operator: any}
-export def "exports list" [
+export def "list-exports" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1069,7 +1069,7 @@ export def "exports list" [
 # --outputContexts item shape: {name: any, timeToLiveInSeconds: any, turnsToLive: any}
 # --kendraConfiguration shape: {kendraIndex?: any, queryFilterStringEnabled?: any, queryFilterString?: any}
 # --initialResponseSetting shape: {initialResponse?: record, nextStep?: any, conditional?: record, codeHook?: record}
-export def "bots-botversions-botlocales-intents create" [
+export def "create-intent" [
   bot_id: string
   bot_version: string
   locale_id: string
@@ -1135,7 +1135,7 @@ export def "bots-botversions-botlocales-intents create" [
 # operationId: ListIntents
 # --sortBy shape: {attribute?: any, order?: any}
 # --filters item shape: {name: any, values: any, operator: any}
-export def "bots-botversions-botlocales-intents list" [
+export def "list-intents" [
   bot_id: string
   bot_version: string
   locale_id: string
@@ -1194,7 +1194,7 @@ export def "bots-botversions-botlocales-intents list" [
 #
 # POST /policy/{resourceArn}/
 # operationId: CreateResourcePolicy
-export def "policy create-resource" [
+export def "create-resource-policy" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1243,7 +1243,7 @@ export def "policy create-resource" [
 #
 # DELETE /policy/{resourceArn}/
 # operationId: DeleteResourcePolicy
-export def "policy delete-resource" [
+export def "delete-resource-policy" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1290,7 +1290,7 @@ export def "policy delete-resource" [
 #
 # GET /policy/{resourceArn}/
 # operationId: DescribeResourcePolicy
-export def "policy get-resource" [
+export def "describe-resource-policy" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1335,7 +1335,7 @@ export def "policy get-resource" [
 #
 # PUT /policy/{resourceArn}/
 # operationId: UpdateResourcePolicy
-export def "policy update-resource" [
+export def "update-resource-policy" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1387,7 +1387,7 @@ export def "policy update-resource" [
 # POST /policy/{resourceArn}/statements/
 # operationId: CreateResourcePolicyStatement
 # --principal item shape: {service?: any, arn?: any}
-export def "policy-statements create-resource" [
+export def "create-resource-policy-statement" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1446,7 +1446,7 @@ export def "policy-statements create-resource" [
 # --obfuscationSetting shape: {obfuscationSettingType?: any}
 # --multipleValuesSetting shape: {allowMultipleValues?: any}
 # --subSlotSetting shape: {expression?: any, slotSpecifications?: any}
-export def "bots-botversions-botlocales-intents-slots create" [
+export def "create-slot" [
   bot_id: string
   bot_version: string
   locale_id: string
@@ -1509,7 +1509,7 @@ export def "bots-botversions-botlocales-intents-slots create" [
 # operationId: ListSlots
 # --sortBy shape: {attribute?: any, order?: any}
 # --filters item shape: {name: any, values: any, operator: any}
-export def "bots-botversions-botlocales-intents-slots list" [
+export def "list-slots" [
   bot_id: string
   bot_version: string
   locale_id: string
@@ -1574,7 +1574,7 @@ export def "bots-botversions-botlocales-intents-slots list" [
 # --valueSelectionSetting shape: {resolutionStrategy?: any, regexFilter?: any, advancedRecognitionSetting?: any}
 # --externalSourceSetting shape: {grammarSlotTypeSetting?: any}
 # --compositeSlotTypeSetting shape: {subSlots?: any}
-export def "bots-botversions-botlocales-slottypes create-slot-type" [
+export def "create-slot-type" [
   bot_id: string
   bot_version: string
   locale_id: string
@@ -1635,7 +1635,7 @@ export def "bots-botversions-botlocales-slottypes create-slot-type" [
 # operationId: ListSlotTypes
 # --sortBy shape: {attribute?: any, order?: any}
 # --filters item shape: {name: any, values: any, operator: any}
-export def "bots-botversions-botlocales-slottypes list-slot-types" [
+export def "list-slot-types" [
   bot_id: string
   bot_version: string
   locale_id: string
@@ -1694,7 +1694,7 @@ export def "bots-botversions-botlocales-slottypes list-slot-types" [
 #
 # POST /createuploadurl/
 # operationId: CreateUploadUrl
-export def "create-uploadurl upload-url" [
+export def "create-upload-url" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1737,7 +1737,7 @@ export def "create-uploadurl upload-url" [
 #
 # DELETE /bots/{botId}/
 # operationId: DeleteBot
-export def "bots delete" [
+export def "delete-bot" [
   bot_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1784,7 +1784,7 @@ export def "bots delete" [
 #
 # GET /bots/{botId}/
 # operationId: DescribeBot
-export def "bots get" [
+export def "describe-bot" [
   bot_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1831,7 +1831,7 @@ export def "bots get" [
 # operationId: UpdateBot
 # --dataPrivacy shape: {childDirected?: any}
 # --botMembers item shape: {botMemberId: any, botMemberName: any, botMemberAliasId: any, botMemberAliasName: any, botMemberVersion: any}
-export def "bots update" [
+export def "update-bot" [
   bot_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1886,7 +1886,7 @@ export def "bots update" [
 #
 # DELETE /bots/{botId}/botaliases/{botAliasId}/
 # operationId: DeleteBotAlias
-export def "bots-botaliases delete-alias" [
+export def "delete-bot-alias" [
   bot_id: string
   bot_alias_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1935,7 +1935,7 @@ export def "bots-botaliases delete-alias" [
 #
 # GET /bots/{botId}/botaliases/{botAliasId}/
 # operationId: DescribeBotAlias
-export def "bots-botaliases get-alias" [
+export def "describe-bot-alias" [
   bot_id: string
   bot_alias_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1984,7 +1984,7 @@ export def "bots-botaliases get-alias" [
 # operationId: UpdateBotAlias
 # --conversationLogSettings shape: {textLogSettings?: any, audioLogSettings?: any}
 # --sentimentAnalysisSettings shape: {detectSentiment?: any}
-export def "bots-botaliases update-alias" [
+export def "update-bot-alias" [
   bot_id: string
   bot_alias_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2040,7 +2040,7 @@ export def "bots-botaliases update-alias" [
 #
 # DELETE /bots/{botId}/botversions/{botVersion}/
 # operationId: DeleteBotVersion
-export def "bots-botversions delete-version" [
+export def "delete-bot-version" [
   bot_id: string
   bot_version: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2089,7 +2089,7 @@ export def "bots-botversions delete-version" [
 #
 # GET /bots/{botId}/botversions/{botVersion}/
 # operationId: DescribeBotVersion
-export def "bots-botversions get-version" [
+export def "describe-bot-version" [
   bot_id: string
   bot_version: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2136,7 +2136,7 @@ export def "bots-botversions get-version" [
 #
 # DELETE /bots/{botId}/botversions/{botVersion}/botlocales/{localeId}/customvocabulary
 # operationId: DeleteCustomVocabulary
-export def "bots-botversions-botlocales-customvocabulary delete-custom-vocabulary" [
+export def "delete-custom-vocabulary" [
   bot_id: string
   bot_version: string
   locale_id: string
@@ -2185,7 +2185,7 @@ export def "bots-botversions-botlocales-customvocabulary delete-custom-vocabular
 #
 # DELETE /exports/{exportId}/
 # operationId: DeleteExport
-export def "exports delete" [
+export def "delete-export" [
   export_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2230,7 +2230,7 @@ export def "exports delete" [
 #
 # GET /exports/{exportId}/
 # operationId: DescribeExport
-export def "exports get" [
+export def "describe-export" [
   export_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2275,7 +2275,7 @@ export def "exports get" [
 #
 # PUT /exports/{exportId}/
 # operationId: UpdateExport
-export def "exports update" [
+export def "update-export" [
   export_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2324,7 +2324,7 @@ export def "exports update" [
 #
 # DELETE /imports/{importId}/
 # operationId: DeleteImport
-export def "imports delete" [
+export def "delete-import" [
   import_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2369,7 +2369,7 @@ export def "imports delete" [
 #
 # GET /imports/{importId}/
 # operationId: DescribeImport
-export def "imports get" [
+export def "describe-import" [
   import_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2414,7 +2414,7 @@ export def "imports get" [
 #
 # DELETE /bots/{botId}/botversions/{botVersion}/botlocales/{localeId}/intents/{intentId}/
 # operationId: DeleteIntent
-export def "bots-botversions-botlocales-intents delete" [
+export def "delete-intent" [
   bot_id: string
   bot_version: string
   locale_id: string
@@ -2465,7 +2465,7 @@ export def "bots-botversions-botlocales-intents delete" [
 #
 # GET /bots/{botId}/botversions/{botVersion}/botlocales/{localeId}/intents/{intentId}/
 # operationId: DescribeIntent
-export def "bots-botversions-botlocales-intents get" [
+export def "describe-intent" [
   bot_id: string
   bot_version: string
   locale_id: string
@@ -2526,7 +2526,7 @@ export def "bots-botversions-botlocales-intents get" [
 # --outputContexts item shape: {name: any, timeToLiveInSeconds: any, turnsToLive: any}
 # --kendraConfiguration shape: {kendraIndex?: any, queryFilterStringEnabled?: any, queryFilterString?: any}
 # --initialResponseSetting shape: {initialResponse?: record, nextStep?: any, conditional?: record, codeHook?: record}
-export def "bots-botversions-botlocales-intents update" [
+export def "update-intent" [
   bot_id: string
   bot_version: string
   locale_id: string
@@ -2593,7 +2593,7 @@ export def "bots-botversions-botlocales-intents update" [
 #
 # DELETE /policy/{resourceArn}/statements/{statementId}/
 # operationId: DeleteResourcePolicyStatement
-export def "policy-statements delete-resource" [
+export def "delete-resource-policy-statement" [
   resource_arn: string
   statement_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2642,7 +2642,7 @@ export def "policy-statements delete-resource" [
 #
 # DELETE /bots/{botId}/botversions/{botVersion}/botlocales/{localeId}/intents/{intentId}/slots/{slotId}/
 # operationId: DeleteSlot
-export def "bots-botversions-botlocales-intents-slots delete" [
+export def "delete-slot" [
   bot_id: string
   bot_version: string
   locale_id: string
@@ -2695,7 +2695,7 @@ export def "bots-botversions-botlocales-intents-slots delete" [
 #
 # GET /bots/{botId}/botversions/{botVersion}/botlocales/{localeId}/intents/{intentId}/slots/{slotId}/
 # operationId: DescribeSlot
-export def "bots-botversions-botlocales-intents-slots get" [
+export def "describe-slot" [
   bot_id: string
   bot_version: string
   locale_id: string
@@ -2752,7 +2752,7 @@ export def "bots-botversions-botlocales-intents-slots get" [
 # --obfuscationSetting shape: {obfuscationSettingType?: any}
 # --multipleValuesSetting shape: {allowMultipleValues?: any}
 # --subSlotSetting shape: {expression?: any, slotSpecifications?: any}
-export def "bots-botversions-botlocales-intents-slots update" [
+export def "update-slot" [
   bot_id: string
   bot_version: string
   locale_id: string
@@ -2815,7 +2815,7 @@ export def "bots-botversions-botlocales-intents-slots update" [
 #
 # DELETE /bots/{botId}/botversions/{botVersion}/botlocales/{localeId}/slottypes/{slotTypeId}/
 # operationId: DeleteSlotType
-export def "bots-botversions-botlocales-slottypes delete-slot-type" [
+export def "delete-slot-type" [
   bot_id: string
   bot_version: string
   locale_id: string
@@ -2868,7 +2868,7 @@ export def "bots-botversions-botlocales-slottypes delete-slot-type" [
 #
 # GET /bots/{botId}/botversions/{botVersion}/botlocales/{localeId}/slottypes/{slotTypeId}/
 # operationId: DescribeSlotType
-export def "bots-botversions-botlocales-slottypes get-slot-type" [
+export def "describe-slot-type" [
   bot_id: string
   bot_version: string
   locale_id: string
@@ -2923,7 +2923,7 @@ export def "bots-botversions-botlocales-slottypes get-slot-type" [
 # --valueSelectionSetting shape: {resolutionStrategy?: any, regexFilter?: any, advancedRecognitionSetting?: any}
 # --externalSourceSetting shape: {grammarSlotTypeSetting?: any}
 # --compositeSlotTypeSetting shape: {subSlots?: any}
-export def "bots-botversions-botlocales-slottypes update-slot-type" [
+export def "update-slot-type" [
   bot_id: string
   bot_version: string
   locale_id: string
@@ -2984,7 +2984,7 @@ export def "bots-botversions-botlocales-slottypes update-slot-type" [
 #
 # DELETE /bots/{botId}/utterances/
 # operationId: DeleteUtterances
-export def "bots-utterances delete" [
+export def "delete-utterances" [
   bot_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3032,7 +3032,7 @@ export def "bots-utterances delete" [
 #
 # GET /bots/{botId}/botversions/{botVersion}/botlocales/{localeId}/botrecommendations/{botRecommendationId}/
 # operationId: DescribeBotRecommendation
-export def "bots-botversions-botlocales-botrecommendations get-recommendation" [
+export def "describe-bot-recommendation" [
   bot_id: string
   bot_version: string
   locale_id: string
@@ -3084,7 +3084,7 @@ export def "bots-botversions-botlocales-botrecommendations get-recommendation" [
 # PUT /bots/{botId}/botversions/{botVersion}/botlocales/{localeId}/botrecommendations/{botRecommendationId}/
 # operationId: UpdateBotRecommendation
 # --encryptionSetting shape: {kmsKeyArn?: any, botLocaleExportPassword?: any, associatedTranscriptsPassword?: any}
-export def "bots-botversions-botlocales-botrecommendations update-recommendation" [
+export def "update-bot-recommendation" [
   bot_id: string
   bot_version: string
   locale_id: string
@@ -3139,7 +3139,7 @@ export def "bots-botversions-botlocales-botrecommendations update-recommendation
 #
 # GET /bots/{botId}/botversions/{botVersion}/botlocales/{localeId}/customvocabulary/DEFAULT/metadata
 # operationId: DescribeCustomVocabularyMetadata
-export def "bots-botversions-botlocales-customvocabulary-default-metadata get-custom-vocabulary" [
+export def "describe-custom-vocabulary-metadata" [
   bot_id: string
   bot_version: string
   locale_id: string
@@ -3191,7 +3191,7 @@ export def "bots-botversions-botlocales-customvocabulary-default-metadata get-cu
 # --aggregationDuration shape: {relativeAggregationDuration?: any}
 # --sortBy shape: {attribute?: any, order?: any}
 # --filters item shape: {name: any, values: any, operator: any}
-export def "bots-aggregatedutterances list-aggregated-utterances" [
+export def "list-aggregated-utterances" [
   bot_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3250,7 +3250,7 @@ export def "bots-aggregatedutterances list-aggregated-utterances" [
 #
 # POST /bots/{botId}/botversions/{botVersion}/botlocales/{localeId}/botrecommendations/
 # operationId: ListBotRecommendations
-export def "bots-botversions-botlocales-botrecommendations list-recommendations" [
+export def "list-bot-recommendations" [
   bot_id: string
   bot_version: string
   locale_id: string
@@ -3309,7 +3309,7 @@ export def "bots-botversions-botlocales-botrecommendations list-recommendations"
 # operationId: StartBotRecommendation
 # --transcriptSourceSetting shape: {s3BucketTranscriptSource?: any}
 # --encryptionSetting shape: {kmsKeyArn?: any, botLocaleExportPassword?: any, associatedTranscriptsPassword?: any}
-export def "bots-botversions-botlocales-botrecommendations start-recommendation" [
+export def "start-bot-recommendation" [
   bot_id: string
   bot_version: string
   locale_id: string
@@ -3364,7 +3364,7 @@ export def "bots-botversions-botlocales-botrecommendations start-recommendation"
 # POST /builtins/locales/{localeId}/intents/
 # operationId: ListBuiltInIntents
 # --sortBy shape: {attribute?: any, order?: any}
-export def "builtins-locales-intents list-built" [
+export def "list-built-in-intents" [
   locale_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3419,7 +3419,7 @@ export def "builtins-locales-intents list-built" [
 # POST /builtins/locales/{localeId}/slottypes/
 # operationId: ListBuiltInSlotTypes
 # --sortBy shape: {attribute?: any, order?: any}
-export def "builtins-locales-slottypes list-built-in-slot-types" [
+export def "list-built-in-slot-types" [
   locale_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3473,7 +3473,7 @@ export def "builtins-locales-slottypes list-built-in-slot-types" [
 #
 # POST /bots/{botId}/botversions/{botVersion}/botlocales/{localeId}/customvocabulary/DEFAULT/list
 # operationId: ListCustomVocabularyItems
-export def "bots-botversions-botlocales-customvocabulary-default-list list-custom-vocabulary-items" [
+export def "list-custom-vocabulary-items" [
   bot_id: string
   bot_version: string
   locale_id: string
@@ -3532,7 +3532,7 @@ export def "bots-botversions-botlocales-customvocabulary-default-list list-custo
 # operationId: ListImports
 # --sortBy shape: {attribute?: any, order?: any}
 # --filters item shape: {name: any, values: any, operator: any}
-export def "imports list" [
+export def "list-imports" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3589,7 +3589,7 @@ export def "imports list" [
 # PUT /imports/
 # operationId: StartImport
 # --resourceSpecification shape: {botImportSpecification?: any, botLocaleImportSpecification?: any, customVocabularyImportSpecification?: record}
-export def "imports start" [
+export def "start-import" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3639,7 +3639,7 @@ export def "imports start" [
 #
 # POST /bots/{botId}/botversions/{botVersion}/botlocales/{localeId}/botrecommendations/{botRecommendationId}/intents
 # operationId: ListRecommendedIntents
-export def "bots-botversions-botlocales-botrecommendations-intents list-recommended" [
+export def "list-recommended-intents" [
   bot_id: string
   bot_version: string
   locale_id: string
@@ -3698,7 +3698,7 @@ export def "bots-botversions-botlocales-botrecommendations-intents list-recommen
 #
 # GET /tags/{resourceARN}
 # operationId: ListTagsForResource
-export def "tags list-for-resource" [
+export def "list-tags-for-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3743,7 +3743,7 @@ export def "tags list-for-resource" [
 #
 # POST /tags/{resourceARN}
 # operationId: TagResource
-export def "tags tag-resource" [
+export def "tag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3793,7 +3793,7 @@ export def "tags tag-resource" [
 # POST /bots/{botId}/botversions/{botVersion}/botlocales/{localeId}/botrecommendations/{botRecommendationId}/associatedtranscripts
 # operationId: SearchAssociatedTranscripts
 # --filters item shape: {name: any, values: any}
-export def "bots-botversions-botlocales-botrecommendations-associatedtranscripts list-associated-transcripts" [
+export def "search-associated-transcripts" [
   bot_id: string
   bot_version: string
   locale_id: string
@@ -3851,7 +3851,7 @@ export def "bots-botversions-botlocales-botrecommendations-associatedtranscripts
 #
 # PUT /bots/{botId}/botversions/{botVersion}/botlocales/{localeId}/botrecommendations/{botRecommendationId}/stopbotrecommendation
 # operationId: StopBotRecommendation
-export def "bots-botversions-botlocales-botrecommendations-stopbotrecommendation stop-recommendation" [
+export def "stop-bot-recommendation" [
   bot_id: string
   bot_version: string
   locale_id: string
@@ -3902,7 +3902,7 @@ export def "bots-botversions-botlocales-botrecommendations-stopbotrecommendation
 #
 # DELETE /tags/{resourceARN}
 # operationId: UntagResource
-export def "tags untag-resource" [
+export def "untag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

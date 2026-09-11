@@ -117,7 +117,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "shelves list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "libraryagent-shelves-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -141,7 +141,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/shelves
 # operationId: libraryagent.shelves.list
-export def "shelves list" [
+export def "libraryagent-shelves-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -189,7 +189,7 @@ export def "shelves list" [
 #
 # GET /v1/{name}
 # operationId: libraryagent.shelves.books.get
-export def "shelves get" [
+export def "libraryagent-shelves-books-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -237,7 +237,7 @@ export def "shelves get" [
 #
 # POST /v1/{name}:borrow
 # operationId: libraryagent.shelves.books.borrow
-export def "shelves create-borrow" [
+export def "libraryagent-shelves-books-borrow" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -285,7 +285,7 @@ export def "shelves create-borrow" [
 #
 # POST /v1/{name}:return
 # operationId: libraryagent.shelves.books.return
-export def "shelves create-return" [
+export def "libraryagent-shelves-books-return" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -333,7 +333,7 @@ export def "shelves create-return" [
 #
 # GET /v1/{parent}/books
 # operationId: libraryagent.shelves.books.list
-export def "books list" [
+export def "libraryagent-shelves-books-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

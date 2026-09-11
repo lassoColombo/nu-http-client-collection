@@ -124,7 +124,7 @@ def legal-entity-type-completer [] { ["Company" "Joint Venture" "Partnership" "T
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "business-names get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-business-names" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -147,7 +147,7 @@ export def commands []: nothing -> table {
 # Retrieve a list of business names
 #
 # GET /business-names
-export def "business-names get" [
+export def "get-business-names" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -183,7 +183,7 @@ export def "business-names get" [
 # Retrieve a list of address types
 #
 # GET /classifications/address-types
-export def "classifications-address-types get" [
+export def "get-classifications-address-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -219,7 +219,7 @@ export def "classifications-address-types get" [
 # Retrieve a list of business name lifecycle states
 #
 # GET /classifications/business-name-lifecycle-states
-export def "classifications-business-name-lifecycle-states get" [
+export def "get-classifications-business-name-lifecycle-states" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -255,7 +255,7 @@ export def "classifications-business-name-lifecycle-states get" [
 # Retrieve a list of electronic address types
 #
 # GET /classifications/electronic-address-types
-export def "classifications-electronic-address-types get" [
+export def "get-classifications-electronic-address-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -291,7 +291,7 @@ export def "classifications-electronic-address-types get" [
 # Retrieve a list of genders
 #
 # GET /classifications/genders
-export def "classifications-genders get" [
+export def "get-classifications-genders" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -327,7 +327,7 @@ export def "classifications-genders get" [
 # Retrieve a list of legal entity types
 #
 # GET /classifications/legal-entity-types
-export def "classifications-legal-entity-types get" [
+export def "get-classifications-legal-entity-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -363,7 +363,7 @@ export def "classifications-legal-entity-types get" [
 # Retrieve a list of license lifecycle states
 #
 # GET /classifications/license-lifecycle-states
-export def "classifications-license-lifecycle-states get" [
+export def "get-classifications-license-lifecycle-states" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -399,7 +399,7 @@ export def "classifications-license-lifecycle-states get" [
 # Retrieve a list of license types
 #
 # GET /classifications/license-types
-export def "classifications-license-types get" [
+export def "get-classifications-license-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -435,7 +435,7 @@ export def "classifications-license-types get" [
 # Retrieve a list of name directions
 #
 # GET /classifications/name-directions
-export def "classifications-name-directions get" [
+export def "get-classifications-name-directions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -471,7 +471,7 @@ export def "classifications-name-directions get" [
 # Retrieve a list of name prefixes
 #
 # GET /classifications/name-prefixes
-export def "classifications-name-prefixes get" [
+export def "get-classifications-name-prefixes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -507,7 +507,7 @@ export def "classifications-name-prefixes get" [
 # Retrieve a list of name types
 #
 # GET /classifications/name-types
-export def "classifications-name-types get" [
+export def "get-classifications-name-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -543,7 +543,7 @@ export def "classifications-name-types get" [
 # Retrieve a list of registered identifier types
 #
 # GET /classifications/registered-identifier-types
-export def "classifications-registered-identifier-types get" [
+export def "get-classifications-registered-identifier-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -579,7 +579,7 @@ export def "classifications-registered-identifier-types get" [
 # Retrieve a list of roles
 #
 # GET /classifications/roles
-export def "classifications-roles get" [
+export def "get-classifications-roles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -615,7 +615,7 @@ export def "classifications-roles get" [
 # Retrieve a list of individuals
 #
 # GET /individuals
-export def "individuals list" [
+export def "get-individuals" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -657,7 +657,7 @@ export def "individuals list" [
 # --addresses item shape: {city?: string, country?: string, line1?: string, line2?: string, line3?: string, name?: string, postalCode?: string, suburb?: string, addressType?: "Mailing"|"Principal Place of Business"|"Principal Place of Residence"}
 # --electronicAddresses item shape: {areaCode?: string, countryPrefix?: string, electronicAddressType?: "Email"|"Fax"|"Landline"|"Mobile"|"Website", email?: string, extension?: string, number?: string, url?: string}
 # --names item shape: {direction?: "left-to-right"|"right-to-left", familyName?: string, formalSalutation?: string, givenName?: string, informalSalutation?: string, middleName?: string, namePrefix?: "Mr"|"Ms", nameSuffix?: string, nameType?: "Alias"|"Principal Name"}
-export def "individuals create" [
+export def "post-individuals" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -702,7 +702,7 @@ export def "individuals create" [
 # Delete an individual
 #
 # DELETE /individuals/{partyId}
-export def "individuals delete" [
+export def "delete-individuals-party-id" [
   party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -740,7 +740,7 @@ export def "individuals delete" [
 # Retrieve an individual
 #
 # GET /individuals/{partyId}
-export def "individuals get" [
+export def "get-individuals-party-id" [
   party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -781,7 +781,7 @@ export def "individuals get" [
 # --addresses item shape: {city?: string, country?: string, line1?: string, line2?: string, line3?: string, name?: string, postalCode?: string, suburb?: string, addressType?: "Mailing"|"Principal Place of Business"|"Principal Place of Residence"}
 # --electronicAddresses item shape: {areaCode?: string, countryPrefix?: string, electronicAddressType?: "Email"|"Fax"|"Landline"|"Mobile"|"Website", email?: string, extension?: string, number?: string, url?: string}
 # --names item shape: {direction?: "left-to-right"|"right-to-left", familyName?: string, formalSalutation?: string, givenName?: string, informalSalutation?: string, middleName?: string, namePrefix?: "Mr"|"Ms", nameSuffix?: string, nameType?: "Alias"|"Principal Name"}
-export def "individuals update" [
+export def "put-individuals-party-id" [
   party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -828,7 +828,7 @@ export def "individuals update" [
 # Retrieve a list of addresses
 #
 # GET /individuals/{partyId}/addresses
-export def "individuals-addresses list" [
+export def "get-individuals-party-id-addresses" [
   party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -866,7 +866,7 @@ export def "individuals-addresses list" [
 # Create an address
 #
 # POST /individuals/{partyId}/addresses
-export def "individuals-addresses create" [
+export def "post-individuals-party-id-addresses" [
   party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -915,7 +915,7 @@ export def "individuals-addresses create" [
 # Delete an address
 #
 # DELETE /individuals/{partyId}/addresses/{addressId}
-export def "individuals-addresses delete" [
+export def "delete-individuals-party-id-addresses-address-id" [
   party_id: string
   address_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -955,7 +955,7 @@ export def "individuals-addresses delete" [
 # Retrieve an address
 #
 # GET /individuals/{partyId}/addresses/{addressId}
-export def "individuals-addresses get" [
+export def "get-individuals-party-id-addresses-address-id" [
   party_id: string
   address_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -995,7 +995,7 @@ export def "individuals-addresses get" [
 # Update an address
 #
 # PUT /individuals/{partyId}/addresses/{addressId}
-export def "individuals-addresses update" [
+export def "put-individuals-party-id-addresses-address-id" [
   party_id: string
   address_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1046,7 +1046,7 @@ export def "individuals-addresses update" [
 # Retrieve a list of business names
 #
 # GET /individuals/{partyId}/business-names
-export def "individuals-business-names list" [
+export def "get-individuals-party-id-business-names" [
   party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1084,7 +1084,7 @@ export def "individuals-business-names list" [
 # Create a business name
 #
 # POST /individuals/{partyId}/business-names
-export def "individuals-business-names create" [
+export def "post-individuals-party-id-business-names" [
   party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1127,7 +1127,7 @@ export def "individuals-business-names create" [
 # Delete a business name
 #
 # DELETE /individuals/{partyId}/business-names/{productId}
-export def "individuals-business-names delete" [
+export def "delete-individuals-party-id-business-names-product-id" [
   party_id: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1167,7 +1167,7 @@ export def "individuals-business-names delete" [
 # Retrieve a business name
 #
 # GET /individuals/{partyId}/business-names/{productId}
-export def "individuals-business-names get" [
+export def "get-individuals-party-id-business-names-product-id" [
   party_id: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1207,7 +1207,7 @@ export def "individuals-business-names get" [
 # Update a business name
 #
 # PUT /individuals/{partyId}/business-names/{productId}
-export def "individuals-business-names update" [
+export def "put-individuals-party-id-business-names-product-id" [
   party_id: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1252,7 +1252,7 @@ export def "individuals-business-names update" [
 # Retrieve a list of electronic addresses
 #
 # GET /individuals/{partyId}/electronic-addresses
-export def "individuals-electronic-addresses list" [
+export def "get-individuals-party-id-electronic-addresses" [
   party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1290,7 +1290,7 @@ export def "individuals-electronic-addresses list" [
 # Create an electronic address
 #
 # POST /individuals/{partyId}/electronic-addresses
-export def "individuals-electronic-addresses create" [
+export def "post-individuals-party-id-electronic-addresses" [
   party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1338,7 +1338,7 @@ export def "individuals-electronic-addresses create" [
 # Delete an electronic address
 #
 # DELETE /individuals/{partyId}/electronic-addresses/{addressId}
-export def "individuals-electronic-addresses delete" [
+export def "delete-individuals-party-id-electronic-addresses-address-id" [
   party_id: string
   address_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1378,7 +1378,7 @@ export def "individuals-electronic-addresses delete" [
 # Retrieve an electronic address
 #
 # GET /individuals/{partyId}/electronic-addresses/{addressId}
-export def "individuals-electronic-addresses get" [
+export def "get-individuals-party-id-electronic-addresses-address-id" [
   party_id: string
   address_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1418,7 +1418,7 @@ export def "individuals-electronic-addresses get" [
 # Update an electronic address
 #
 # PUT /individuals/{partyId}/electronic-addresses/{addressId}
-export def "individuals-electronic-addresses update" [
+export def "put-individuals-party-id-electronic-addresses-address-id" [
   party_id: string
   address_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1468,7 +1468,7 @@ export def "individuals-electronic-addresses update" [
 # Retrieve a list of licenses
 #
 # GET /individuals/{partyId}/licenses
-export def "individuals-licenses list" [
+export def "get-individuals-party-id-licenses" [
   party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1506,7 +1506,7 @@ export def "individuals-licenses list" [
 # Create a license
 #
 # POST /individuals/{partyId}/licenses
-export def "individuals-licenses create" [
+export def "post-individuals-party-id-licenses" [
   party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1549,7 +1549,7 @@ export def "individuals-licenses create" [
 # Delete a license
 #
 # DELETE /individuals/{partyId}/licenses/{productId}
-export def "individuals-licenses delete" [
+export def "delete-individuals-party-id-licenses-product-id" [
   party_id: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1589,7 +1589,7 @@ export def "individuals-licenses delete" [
 # Retrieve a license
 #
 # GET /individuals/{partyId}/licenses/{productId}
-export def "individuals-licenses get" [
+export def "get-individuals-party-id-licenses-product-id" [
   party_id: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1629,7 +1629,7 @@ export def "individuals-licenses get" [
 # Update a license
 #
 # PUT /individuals/{partyId}/licenses/{productId}
-export def "individuals-licenses update" [
+export def "put-individuals-party-id-licenses-product-id" [
   party_id: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1674,7 +1674,7 @@ export def "individuals-licenses update" [
 # Retrieve a list of roles
 #
 # GET /individuals/{partyId}/roles
-export def "individuals-roles list" [
+export def "get-individuals-party-id-roles" [
   party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1712,7 +1712,7 @@ export def "individuals-roles list" [
 # Create a role
 #
 # POST /individuals/{partyId}/roles
-export def "individuals-roles create" [
+export def "post-individuals-party-id-roles" [
   party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1757,7 +1757,7 @@ export def "individuals-roles create" [
 # Delete a role
 #
 # DELETE /individuals/{partyId}/roles/{roleId}
-export def "individuals-roles delete" [
+export def "delete-individuals-party-id-roles-role-id" [
   party_id: string
   role_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1797,7 +1797,7 @@ export def "individuals-roles delete" [
 # Retrieve a role
 #
 # GET /individuals/{partyId}/roles/{roleId}
-export def "individuals-roles get" [
+export def "get-individuals-party-id-roles-role-id" [
   party_id: string
   role_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1837,7 +1837,7 @@ export def "individuals-roles get" [
 # Update a role
 #
 # PUT /individuals/{partyId}/roles/{roleId}
-export def "individuals-roles update" [
+export def "put-individuals-party-id-roles-role-id" [
   party_id: string
   role_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1884,7 +1884,7 @@ export def "individuals-roles update" [
 # Retrieve a list of licenses
 #
 # GET /licenses
-export def "licenses get" [
+export def "get-licenses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1920,7 +1920,7 @@ export def "licenses get" [
 # Retrieve a list of organisations
 #
 # GET /organisations
-export def "organisations list" [
+export def "get-organisations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1963,7 +1963,7 @@ export def "organisations list" [
 # --electronicAddresses item shape: {areaCode?: string, countryPrefix?: string, electronicAddressType?: "Email"|"Fax"|"Landline"|"Mobile"|"Website", email?: string, extension?: string, number?: string, url?: string}
 # --names item shape: {name?: string}
 # --registeredIdentifiers item shape: {identifier?: string, identifierType?: "ACN"|"ABN"}
-export def "organisations create" [
+export def "post-organisations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2008,7 +2008,7 @@ export def "organisations create" [
 # Delete an organisation
 #
 # DELETE /organisations/{partyId}
-export def "organisations delete" [
+export def "delete-organisations-party-id" [
   party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2046,7 +2046,7 @@ export def "organisations delete" [
 # Retrieve an organisation
 #
 # GET /organisations/{partyId}
-export def "organisations get" [
+export def "get-organisations-party-id" [
   party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2088,7 +2088,7 @@ export def "organisations get" [
 # --electronicAddresses item shape: {areaCode?: string, countryPrefix?: string, electronicAddressType?: "Email"|"Fax"|"Landline"|"Mobile"|"Website", email?: string, extension?: string, number?: string, url?: string}
 # --names item shape: {name?: string}
 # --registeredIdentifiers item shape: {identifier?: string, identifierType?: "ACN"|"ABN"}
-export def "organisations update" [
+export def "put-organisations-party-id" [
   party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2135,7 +2135,7 @@ export def "organisations update" [
 # Retrieve a list of addresses
 #
 # GET /organisations/{partyId}/addresses
-export def "organisations-addresses list" [
+export def "get-organisations-party-id-addresses" [
   party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2173,7 +2173,7 @@ export def "organisations-addresses list" [
 # Create an address
 #
 # POST /organisations/{partyId}/addresses
-export def "organisations-addresses create" [
+export def "post-organisations-party-id-addresses" [
   party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2222,7 +2222,7 @@ export def "organisations-addresses create" [
 # Delete an address
 #
 # DELETE /organisations/{partyId}/addresses/{addressId}
-export def "organisations-addresses delete" [
+export def "delete-organisations-party-id-addresses-address-id" [
   party_id: string
   address_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2262,7 +2262,7 @@ export def "organisations-addresses delete" [
 # Retrieve an address
 #
 # GET /organisations/{partyId}/addresses/{addressId}
-export def "organisations-addresses get" [
+export def "get-organisations-party-id-addresses-address-id" [
   party_id: string
   address_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2302,7 +2302,7 @@ export def "organisations-addresses get" [
 # Update an address
 #
 # PUT /organisations/{partyId}/addresses/{addressId}
-export def "organisations-addresses update" [
+export def "put-organisations-party-id-addresses-address-id" [
   party_id: string
   address_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2353,7 +2353,7 @@ export def "organisations-addresses update" [
 # Retrieve a list of business names
 #
 # GET /organisations/{partyId}/business-names
-export def "organisations-business-names list" [
+export def "get-organisations-party-id-business-names" [
   party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2391,7 +2391,7 @@ export def "organisations-business-names list" [
 # Create a business name
 #
 # POST /organisations/{partyId}/business-names
-export def "organisations-business-names create" [
+export def "post-organisations-party-id-business-names" [
   party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2434,7 +2434,7 @@ export def "organisations-business-names create" [
 # Delete a business name
 #
 # DELETE /organisations/{partyId}/business-names/{productId}
-export def "organisations-business-names delete" [
+export def "delete-organisations-party-id-business-names-product-id" [
   party_id: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2474,7 +2474,7 @@ export def "organisations-business-names delete" [
 # Retrieve a business name
 #
 # GET /organisations/{partyId}/business-names/{productId}
-export def "organisations-business-names get" [
+export def "get-organisations-party-id-business-names-product-id" [
   party_id: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2514,7 +2514,7 @@ export def "organisations-business-names get" [
 # Update a business name
 #
 # PUT /organisations/{partyId}/business-names/{productId}
-export def "organisations-business-names update" [
+export def "put-organisations-party-id-business-names-product-id" [
   party_id: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2559,7 +2559,7 @@ export def "organisations-business-names update" [
 # Retrieve a list of electronic addresses
 #
 # GET /organisations/{partyId}/electronic-addresses
-export def "organisations-electronic-addresses list" [
+export def "get-organisations-party-id-electronic-addresses" [
   party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2597,7 +2597,7 @@ export def "organisations-electronic-addresses list" [
 # Create an electronic address
 #
 # POST /organisations/{partyId}/electronic-addresses
-export def "organisations-electronic-addresses create" [
+export def "post-organisations-party-id-electronic-addresses" [
   party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2645,7 +2645,7 @@ export def "organisations-electronic-addresses create" [
 # Delete an electronic address
 #
 # DELETE /organisations/{partyId}/electronic-addresses/{addressId}
-export def "organisations-electronic-addresses delete" [
+export def "delete-organisations-party-id-electronic-addresses-address-id" [
   party_id: string
   address_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2685,7 +2685,7 @@ export def "organisations-electronic-addresses delete" [
 # Retrieve an electronic address
 #
 # GET /organisations/{partyId}/electronic-addresses/{addressId}
-export def "organisations-electronic-addresses get" [
+export def "get-organisations-party-id-electronic-addresses-address-id" [
   party_id: string
   address_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2725,7 +2725,7 @@ export def "organisations-electronic-addresses get" [
 # Update an electronic address
 #
 # PUT /organisations/{partyId}/electronic-addresses/{addressId}
-export def "organisations-electronic-addresses update" [
+export def "put-organisations-party-id-electronic-addresses-address-id" [
   party_id: string
   address_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2775,7 +2775,7 @@ export def "organisations-electronic-addresses update" [
 # Retrieve a list of licenses
 #
 # GET /organisations/{partyId}/licenses
-export def "organisations-licenses list" [
+export def "get-organisations-party-id-licenses" [
   party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2813,7 +2813,7 @@ export def "organisations-licenses list" [
 # Create a license
 #
 # POST /organisations/{partyId}/licenses
-export def "organisations-licenses create" [
+export def "post-organisations-party-id-licenses" [
   party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2856,7 +2856,7 @@ export def "organisations-licenses create" [
 # Delete a license
 #
 # DELETE /organisations/{partyId}/licenses/{productId}
-export def "organisations-licenses delete" [
+export def "delete-organisations-party-id-licenses-product-id" [
   party_id: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2896,7 +2896,7 @@ export def "organisations-licenses delete" [
 # Retrieve a license
 #
 # GET /organisations/{partyId}/licenses/{productId}
-export def "organisations-licenses get" [
+export def "get-organisations-party-id-licenses-product-id" [
   party_id: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2936,7 +2936,7 @@ export def "organisations-licenses get" [
 # Update a license
 #
 # PUT /organisations/{partyId}/licenses/{productId}
-export def "organisations-licenses update" [
+export def "put-organisations-party-id-licenses-product-id" [
   party_id: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2981,7 +2981,7 @@ export def "organisations-licenses update" [
 # Retrieve a list of roles
 #
 # GET /organisations/{partyId}/roles
-export def "organisations-roles list" [
+export def "get-organisations-party-id-roles" [
   party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3019,7 +3019,7 @@ export def "organisations-roles list" [
 # Create a role
 #
 # POST /organisations/{partyId}/roles
-export def "organisations-roles create" [
+export def "post-organisations-party-id-roles" [
   party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3064,7 +3064,7 @@ export def "organisations-roles create" [
 # Delete a role
 #
 # DELETE /organisations/{partyId}/roles/{roleId}
-export def "organisations-roles delete" [
+export def "delete-organisations-party-id-roles-role-id" [
   party_id: string
   role_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3104,7 +3104,7 @@ export def "organisations-roles delete" [
 # Retrieve a role
 #
 # GET /organisations/{partyId}/roles/{roleId}
-export def "organisations-roles get" [
+export def "get-organisations-party-id-roles-role-id" [
   party_id: string
   role_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3144,7 +3144,7 @@ export def "organisations-roles get" [
 # Update a role
 #
 # PUT /organisations/{partyId}/roles/{roleId}
-export def "organisations-roles update" [
+export def "put-organisations-party-id-roles-role-id" [
   party_id: string
   role_id: string
   --base-url(-b): string@base-url-completer # API base URL

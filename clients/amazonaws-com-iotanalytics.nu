@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "messages-batch update" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "batch-put-message" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -141,7 +141,7 @@ export def commands []: nothing -> table {
 # POST /messages/batch
 # operationId: BatchPutMessage
 # --messages item shape: {messageId: any, payload: any}
-export def "messages-batch update" [
+export def "batch-put-message" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -189,7 +189,7 @@ export def "messages-batch update" [
 #
 # DELETE /pipelines/{pipelineName}/reprocessing/{reprocessingId}
 # operationId: CancelPipelineReprocessing
-export def "pipelines-reprocessing cancel" [
+export def "cancel-pipeline-reprocessing" [
   pipeline_name: string
   reprocessing_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -239,7 +239,7 @@ export def "pipelines-reprocessing cancel" [
 # --channelStorage shape: {serviceManagedS3?: any, customerManagedS3?: any}
 # --retentionPeriod shape: {unlimited?: any, numberOfDays?: any}
 # --tags item shape: {key: any, value: any}
-export def "channels create" [
+export def "create-channel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -289,7 +289,7 @@ export def "channels create" [
 #
 # GET /channels
 # operationId: ListChannels
-export def "channels list" [
+export def "list-channels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -342,7 +342,7 @@ export def "channels list" [
 # --versioningConfiguration shape: {unlimited?: any, maxVersions?: any}
 # --tags item shape: {key: any, value: any}
 # --lateDataRules item shape: {ruleName?: any, ruleConfiguration: any}
-export def "datasets create" [
+export def "create-dataset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -396,7 +396,7 @@ export def "datasets create" [
 #
 # GET /datasets
 # operationId: ListDatasets
-export def "datasets list" [
+export def "list-datasets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -442,7 +442,7 @@ export def "datasets list" [
 #
 # POST /datasets/{datasetName}/content
 # operationId: CreateDatasetContent
-export def "datasets-content create" [
+export def "create-dataset-content" [
   dataset_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -491,7 +491,7 @@ export def "datasets-content create" [
 #
 # DELETE /datasets/{datasetName}/content
 # operationId: DeleteDatasetContent
-export def "datasets-content delete" [
+export def "delete-dataset-content" [
   dataset_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -538,7 +538,7 @@ export def "datasets-content delete" [
 #
 # GET /datasets/{datasetName}/content
 # operationId: GetDatasetContent
-export def "datasets-content get" [
+export def "get-dataset-content" [
   dataset_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -590,7 +590,7 @@ export def "datasets-content get" [
 # --tags item shape: {key: any, value: any}
 # --fileFormatConfiguration shape: {jsonConfiguration?: any, parquetConfiguration?: any}
 # --datastorePartitions shape: {partitions?: any}
-export def "datastores create" [
+export def "create-datastore" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -642,7 +642,7 @@ export def "datastores create" [
 #
 # GET /datastores
 # operationId: ListDatastores
-export def "datastores list" [
+export def "list-datastores" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -690,7 +690,7 @@ export def "datastores list" [
 # operationId: CreatePipeline
 # --pipelineActivities item shape: {channel?: any, lambda?: any, datastore?: any, addAttributes?: any, removeAttributes?: any, selectAttributes?: any, filter?: any, math?: any, deviceRegistryEnrich?: any, deviceShadowEnrich?: any}
 # --tags item shape: {key: any, value: any}
-export def "pipelines create" [
+export def "create-pipeline" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -739,7 +739,7 @@ export def "pipelines create" [
 #
 # GET /pipelines
 # operationId: ListPipelines
-export def "pipelines list" [
+export def "list-pipelines" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -785,7 +785,7 @@ export def "pipelines list" [
 #
 # DELETE /channels/{channelName}
 # operationId: DeleteChannel
-export def "channels delete" [
+export def "delete-channel" [
   channel_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -830,7 +830,7 @@ export def "channels delete" [
 #
 # GET /channels/{channelName}
 # operationId: DescribeChannel
-export def "channels get" [
+export def "describe-channel" [
   channel_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -879,7 +879,7 @@ export def "channels get" [
 # operationId: UpdateChannel
 # --channelStorage shape: {serviceManagedS3?: any, customerManagedS3?: any}
 # --retentionPeriod shape: {unlimited?: any, numberOfDays?: any}
-export def "channels update" [
+export def "update-channel" [
   channel_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -929,7 +929,7 @@ export def "channels update" [
 #
 # DELETE /datasets/{datasetName}
 # operationId: DeleteDataset
-export def "datasets delete" [
+export def "delete-dataset" [
   dataset_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -974,7 +974,7 @@ export def "datasets delete" [
 #
 # GET /datasets/{datasetName}
 # operationId: DescribeDataset
-export def "datasets get" [
+export def "describe-dataset" [
   dataset_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1025,7 +1025,7 @@ export def "datasets get" [
 # --retentionPeriod shape: {unlimited?: any, numberOfDays?: any}
 # --versioningConfiguration shape: {unlimited?: any, maxVersions?: any}
 # --lateDataRules item shape: {ruleName?: any, ruleConfiguration: any}
-export def "datasets update" [
+export def "update-dataset" [
   dataset_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1079,7 +1079,7 @@ export def "datasets update" [
 #
 # DELETE /datastores/{datastoreName}
 # operationId: DeleteDatastore
-export def "datastores delete" [
+export def "delete-datastore" [
   datastore_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1124,7 +1124,7 @@ export def "datastores delete" [
 #
 # GET /datastores/{datastoreName}
 # operationId: DescribeDatastore
-export def "datastores get" [
+export def "describe-datastore" [
   datastore_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1174,7 +1174,7 @@ export def "datastores get" [
 # --retentionPeriod shape: {unlimited?: any, numberOfDays?: any}
 # --datastoreStorage shape: {serviceManagedS3?: any, customerManagedS3?: any, iotSiteWiseMultiLayerStorage?: any}
 # --fileFormatConfiguration shape: {jsonConfiguration?: any, parquetConfiguration?: any}
-export def "datastores update" [
+export def "update-datastore" [
   datastore_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1225,7 +1225,7 @@ export def "datastores update" [
 #
 # DELETE /pipelines/{pipelineName}
 # operationId: DeletePipeline
-export def "pipelines delete" [
+export def "delete-pipeline" [
   pipeline_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1270,7 +1270,7 @@ export def "pipelines delete" [
 #
 # GET /pipelines/{pipelineName}
 # operationId: DescribePipeline
-export def "pipelines get" [
+export def "describe-pipeline" [
   pipeline_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1316,7 +1316,7 @@ export def "pipelines get" [
 # PUT /pipelines/{pipelineName}
 # operationId: UpdatePipeline
 # --pipelineActivities item shape: {channel?: any, lambda?: any, datastore?: any, addAttributes?: any, removeAttributes?: any, selectAttributes?: any, filter?: any, math?: any, deviceRegistryEnrich?: any, deviceShadowEnrich?: any}
-export def "pipelines update" [
+export def "update-pipeline" [
   pipeline_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1365,7 +1365,7 @@ export def "pipelines update" [
 #
 # GET /logging
 # operationId: DescribeLoggingOptions
-export def "logging get-options" [
+export def "describe-logging-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1409,7 +1409,7 @@ export def "logging get-options" [
 # PUT /logging
 # operationId: PutLoggingOptions
 # --loggingOptions shape: {roleArn?: any, level?: any, enabled?: any}
-export def "logging update-options" [
+export def "put-logging-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1456,7 +1456,7 @@ export def "logging update-options" [
 #
 # GET /datasets/{datasetName}/contents
 # operationId: ListDatasetContents
-export def "datasets-contents list" [
+export def "list-dataset-contents" [
   dataset_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1506,7 +1506,7 @@ export def "datasets-contents list" [
 #
 # GET /tags
 # operationId: ListTagsForResource
-export def "tags list-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1552,7 +1552,7 @@ export def "tags list-for-resource" [
 # POST /tags
 # operationId: TagResource
 # --tags item shape: {key: any, value: any}
-export def "tags tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1602,7 +1602,7 @@ export def "tags tag-resource" [
 # POST /pipelineactivities/run
 # operationId: RunPipelineActivity
 # --pipelineActivity shape: {channel?: any, lambda?: any, datastore?: any, addAttributes?: any, removeAttributes?: any, selectAttributes?: any, filter?: any, math?: any, deviceRegistryEnrich?: any, deviceShadowEnrich?: any}
-export def "pipelineactivities-run create-pipeline-activity" [
+export def "run-pipeline-activity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1650,7 +1650,7 @@ export def "pipelineactivities-run create-pipeline-activity" [
 #
 # GET /channels/{channelName}/sample
 # operationId: SampleChannelData
-export def "channels-sample get-data" [
+export def "sample-channel-data" [
   channel_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1700,7 +1700,7 @@ export def "channels-sample get-data" [
 # POST /pipelines/{pipelineName}/reprocessing
 # operationId: StartPipelineReprocessing
 # --channelMessages shape: {s3Paths?: any}
-export def "pipelines-reprocessing start" [
+export def "start-pipeline-reprocessing" [
   pipeline_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1751,7 +1751,7 @@ export def "pipelines-reprocessing start" [
 #
 # DELETE /tags
 # operationId: UntagResource
-export def "tags untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -120,7 +120,7 @@ def source-completer [] { ["administrator" "repository"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api-root get-version" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-version" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -144,7 +144,7 @@ export def commands []: nothing -> table {
 #
 # GET /
 # operationId: getVersion
-export def "api-root get-version" [
+export def "get-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -178,7 +178,7 @@ export def "api-root get-version" [
 #
 # GET /analyses/{analysis-id}
 # operationId: getAnalysis
-export def "analyses get" [
+export def "get-analysis" [
   analysis_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -214,7 +214,7 @@ export def "analyses get" [
 #
 # GET /analyses/{analysis-id}/alerts
 # operationId: getAlerts
-export def "analyses-alerts get" [
+export def "get-alerts" [
   analysis_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -254,7 +254,7 @@ export def "analyses-alerts get" [
 #
 # POST /analyses/{project-id}
 # operationId: requestAnalysis
-export def "analyses request-analysis" [
+export def "request-analysis" [
   project_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -293,7 +293,7 @@ export def "analyses request-analysis" [
 #
 # GET /analyses/{project-id}/commits/{commit-id}
 # operationId: getAnalysisForCommit
-export def "analyses-commits get-analysis" [
+export def "get-analysis-for-commit" [
   project_id: int
   commit_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -331,7 +331,7 @@ export def "analyses-commits get-analysis" [
 #
 # POST /codereviews/{project-id}
 # operationId: requestReview
-export def "codereviews request-review" [
+export def "request-review" [
   project_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -377,7 +377,7 @@ export def "codereviews request-review" [
 #
 # GET /codereviews/{review-id}
 # operationId: getCodeReview
-export def "codereviews get-code" [
+export def "get-code-review" [
   review_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -413,7 +413,7 @@ export def "codereviews get-code" [
 #
 # GET /issues/{project-id}/{alert-key}
 # operationId: getIssue
-export def "issues get" [
+export def "get-issue" [
   project_id: int
   alert_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -451,7 +451,7 @@ export def "issues get" [
 #
 # GET /openapi
 # operationId: getSpec
-export def "openapi get-spec" [
+export def "get-spec" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -485,7 +485,7 @@ export def "openapi get-spec" [
 #
 # GET /operations/{operation-id}
 # operationId: getOperation
-export def "operations get" [
+export def "get-operation" [
   operation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -521,7 +521,7 @@ export def "operations get" [
 #
 # GET /projects
 # operationId: getProjects
-export def "projects list" [
+export def "get-projects" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -558,7 +558,7 @@ export def "projects list" [
 #
 # POST /projects
 # operationId: addProject
-export def "projects create" [
+export def "add-project" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -603,7 +603,7 @@ export def "projects create" [
 #
 # DELETE /projects/{project-id}
 # operationId: deleteProject
-export def "projects delete" [
+export def "delete-project" [
   project_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -639,7 +639,7 @@ export def "projects delete" [
 #
 # GET /projects/{project-id}
 # operationId: getProject
-export def "projects get" [
+export def "get-project" [
   project_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -675,7 +675,7 @@ export def "projects get" [
 #
 # GET /projects/{project-id}/settings/analysis-configuration
 # operationId: getProjectConfig
-export def "projects-settings-analysis-configuration get-config" [
+export def "get-project-config" [
   project_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -713,7 +713,7 @@ export def "projects-settings-analysis-configuration get-config" [
 #
 # PUT /projects/{project-id}/settings/analysis-configuration
 # operationId: setProjectConfig
-export def "projects-settings-analysis-configuration update-config" [
+export def "set-project-config" [
   project_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -753,7 +753,7 @@ export def "projects-settings-analysis-configuration update-config" [
 #
 # GET /projects/{provider}/{org}/{name}
 # operationId: getProjectByUrlIdentifier
-export def "projects get-by-url-identifier" [
+export def "get-project-by-url-identifier" [
   provider: string
   org: string
   name: string
@@ -793,7 +793,7 @@ export def "projects get-by-url-identifier" [
 #
 # POST /queryjobs
 # operationId: createQueryJob
-export def "queryjobs create-list-job" [
+export def "create-query-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -835,7 +835,7 @@ export def "queryjobs create-list-job" [
 #
 # GET /queryjobs/{queryjob-id}
 # operationId: getQueryJob
-export def "queryjobs get-list-job" [
+export def "get-query-job" [
   queryjob_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -871,7 +871,7 @@ export def "queryjobs get-list-job" [
 #
 # GET /queryjobs/{queryjob-id}/results
 # operationId: getQueryJobResultsOverview
-export def "queryjobs-results get-list-job-overview" [
+export def "get-query-job-results-overview" [
   queryjob_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -911,7 +911,7 @@ export def "queryjobs-results get-list-job-overview" [
 #
 # GET /queryjobs/{queryjob-id}/results/{project-id}
 # operationId: getQueryJobResultsForProject
-export def "queryjobs-results get-list-job" [
+export def "get-query-job-results-for-project" [
   queryjob_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -953,7 +953,7 @@ export def "queryjobs-results get-list-job" [
 #
 # DELETE /snapshots/uploads/{session-id}
 # operationId: abortUpload
-export def "snapshots-uploads abort" [
+export def "abort-upload" [
   session_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -989,7 +989,7 @@ export def "snapshots-uploads abort" [
 #
 # POST /snapshots/uploads/{session-id}
 # operationId: completeUpload
-export def "snapshots-uploads complete" [
+export def "complete-upload" [
   session_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1025,7 +1025,7 @@ export def "snapshots-uploads complete" [
 #
 # PUT /snapshots/uploads/{session-id}
 # operationId: uploadPart
-export def "snapshots-uploads upload-part" [
+export def "upload-part" [
   session_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1065,7 +1065,7 @@ export def "snapshots-uploads upload-part" [
 #
 # GET /snapshots/{project-id}/{language}
 # operationId: getSnapshot
-export def "snapshots get" [
+export def "get-snapshot" [
   project_id: int
   language: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1103,7 +1103,7 @@ export def "snapshots get" [
 #
 # POST /snapshots/{project-id}/{language}
 # operationId: initSnapshotUpload
-export def "snapshots upload-init" [
+export def "init-snapshot-upload" [
   project_id: int
   language: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1144,7 +1144,7 @@ export def "snapshots upload-init" [
 #
 # GET /system/health
 # operationId: getHealth
-export def "system-health get" [
+export def "get-health" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1178,7 +1178,7 @@ export def "system-health get" [
 #
 # GET /system/metrics
 # operationId: getMetrics
-export def "system-metrics list" [
+export def "get-metrics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1212,7 +1212,7 @@ export def "system-metrics list" [
 #
 # GET /system/metrics/{metric-id}
 # operationId: getMetric
-export def "system-metrics get" [
+export def "get-metric" [
   metric_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

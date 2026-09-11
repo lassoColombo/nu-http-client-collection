@@ -100,7 +100,7 @@ def accept-completer [] { ["application/json" "application/vnd.collection.doc+js
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "stations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "search-stations" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -124,7 +124,7 @@ export def commands []: nothing -> table {
 #
 # GET /v3/stations
 # operationId: searchStations
-export def "stations list" [
+export def "search-stations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -168,7 +168,7 @@ export def "stations list" [
 #
 # GET /v3/stations/{stationId}
 # operationId: getStationById
-export def "stations get" [
+export def "get-station-by-id" [
   station_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

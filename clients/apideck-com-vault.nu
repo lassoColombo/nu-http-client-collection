@@ -117,7 +117,7 @@ def auth-scheme-completer [] { ["bearer" "x-apideck-app-id" "none"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "vault-authorize get-connections" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "connections-authorize" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -141,7 +141,7 @@ export def commands []: nothing -> table {
 #
 # GET /vault/authorize/{service_id}/{application_id}
 # operationId: connectionsAuthorize
-export def "vault-authorize get-connections" [
+export def "connections-authorize" [
   service_id: string
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -183,7 +183,7 @@ export def "vault-authorize get-connections" [
 #
 # GET /vault/callback
 # operationId: connectionsCallback
-export def "vault-callback get-connections" [
+export def "connections-callback" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -220,7 +220,7 @@ export def "vault-callback get-connections" [
 #
 # GET /vault/connections
 # operationId: connectionsAll
-export def "vault-connections list" [
+export def "connections-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -261,7 +261,7 @@ export def "vault-connections list" [
 #
 # DELETE /vault/connections/{unified_api}/{service_id}
 # operationId: connectionsDelete
-export def "vault-connections delete" [
+export def "connections-delete" [
   unified_api: string
   service_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -303,7 +303,7 @@ export def "vault-connections delete" [
 #
 # GET /vault/connections/{unified_api}/{service_id}
 # operationId: connectionsOne
-export def "vault-connections get-one" [
+export def "connections-one" [
   unified_api: string
   service_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -348,7 +348,7 @@ export def "vault-connections get-one" [
 # --configuration item shape: {defaults?: list, resource?: string}
 # --form_fields item shape: {allow_custom_values?: bool, custom_field?: bool, description?: string, disabled?: bool, hidden?: bool, id?: string, label?: string, options?: list, placeholder?: string, prefix?: string, required?: bool, sensitive?: bool, suffix?: string, type?: "text"|"checkbox"|"tel"|"email"|"url"|"textarea"|"select"|"filtered-select"|"multi-select"|"datetime"|"date"|"time"|"number"}
 # --subscriptions item shape: {created_at?: string, downstream_event_types?: list<string>, downstream_id?: string, execute_url?: string, unify_event_types?: list<string>}
-export def "vault-connections update" [
+export def "connections-update" [
   unified_api: string
   service_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -400,7 +400,7 @@ export def "vault-connections update" [
 # --configuration item shape: {defaults?: list, resource?: string}
 # --form_fields item shape: {allow_custom_values?: bool, custom_field?: bool, description?: string, disabled?: bool, hidden?: bool, id?: string, label?: string, options?: list, placeholder?: string, prefix?: string, required?: bool, sensitive?: bool, suffix?: string, type?: "text"|"checkbox"|"tel"|"email"|"url"|"textarea"|"select"|"filtered-select"|"multi-select"|"datetime"|"date"|"time"|"number"}
 # --subscriptions item shape: {created_at?: string, downstream_event_types?: list<string>, downstream_id?: string, execute_url?: string, unify_event_types?: list<string>}
-export def "vault-connections create" [
+export def "connections-add" [
   unified_api: string
   service_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -450,7 +450,7 @@ export def "vault-connections create" [
 # POST /vault/connections/{unified_api}/{service_id}/import
 # operationId: connectionsImport
 # --credentials shape: {access_token?: string, expires_in?: int, issued_at?: string, refresh_token: string}
-export def "vault-connections-import import" [
+export def "connections-import" [
   unified_api: string
   service_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -498,7 +498,7 @@ export def "vault-connections-import import" [
 #
 # POST /vault/connections/{unified_api}/{service_id}/token
 # operationId: connectionsToken
-export def "vault-connections-token create" [
+export def "connections-token" [
   unified_api: string
   service_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -544,7 +544,7 @@ export def "vault-connections-token create" [
 #
 # GET /vault/connections/{unified_api}/{service_id}/{resource}/config
 # operationId: connectionSettingsAll
-export def "vault-connections-config list-settings" [
+export def "connection-settings-all" [
   unified_api: string
   service_id: string
   resource: string
@@ -591,7 +591,7 @@ export def "vault-connections-config list-settings" [
 # --configuration item shape: {defaults?: list, resource?: string}
 # --form_fields item shape: {allow_custom_values?: bool, custom_field?: bool, description?: string, disabled?: bool, hidden?: bool, id?: string, label?: string, options?: list, placeholder?: string, prefix?: string, required?: bool, sensitive?: bool, suffix?: string, type?: "text"|"checkbox"|"tel"|"email"|"url"|"textarea"|"select"|"filtered-select"|"multi-select"|"datetime"|"date"|"time"|"number"}
 # --subscriptions item shape: {created_at?: string, downstream_event_types?: list<string>, downstream_id?: string, execute_url?: string, unify_event_types?: list<string>}
-export def "vault-connections-config update-settings" [
+export def "connection-settings-update" [
   unified_api: string
   service_id: string
   resource: string
@@ -642,7 +642,7 @@ export def "vault-connections-config update-settings" [
 #
 # GET /vault/consumers
 # operationId: consumersAll
-export def "vault-consumers list" [
+export def "consumers-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -685,7 +685,7 @@ export def "vault-consumers list" [
 # --connections item shape: {consumer_id?: string, created_at?: string, enabled?: bool, icon?: string, logo?: string, metadata?: record, name?: string, service_id?: string, settings?: record, state?: "available"|"callable"|"added"|"configured"|"authorized", unified_api?: string, updated_at?: string}
 # --metadata shape: {account_name?: string, email?: string, image?: string, user_name?: string}
 # --request_counts shape: {proxy?: float, unify?: float, vault?: float}
-export def "vault-consumers create" [
+export def "consumers-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -727,7 +727,7 @@ export def "vault-consumers create" [
 #
 # DELETE /vault/consumers/{consumer_id}
 # operationId: consumersDelete
-export def "vault-consumers delete" [
+export def "consumers-delete" [
   consumer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -766,7 +766,7 @@ export def "vault-consumers delete" [
 #
 # GET /vault/consumers/{consumer_id}
 # operationId: consumersOne
-export def "vault-consumers get-one" [
+export def "consumers-one" [
   consumer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -806,7 +806,7 @@ export def "vault-consumers get-one" [
 # PATCH /vault/consumers/{consumer_id}
 # operationId: consumersUpdate
 # --metadata shape: {account_name?: string, email?: string, image?: string, user_name?: string}
-export def "vault-consumers update" [
+export def "consumers-update" [
   consumer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -849,7 +849,7 @@ export def "vault-consumers update" [
 #
 # GET /vault/consumers/{consumer_id}/stats
 # operationId: consumerRequestCountsAll
-export def "vault-consumers-stats request-counts-list" [
+export def "consumer-request-counts-all" [
   consumer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -891,7 +891,7 @@ export def "vault-consumers-stats request-counts-list" [
 #
 # GET /vault/logs
 # operationId: logsAll
-export def "vault-logs list" [
+export def "logs-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -933,7 +933,7 @@ export def "vault-logs list" [
 #
 # GET /vault/revoke/{service_id}/{application_id}
 # operationId: connectionsRevoke
-export def "vault-revoke delete-connections" [
+export def "connections-revoke" [
   service_id: string
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -977,7 +977,7 @@ export def "vault-revoke delete-connections" [
 # --consumer_metadata shape: {account_name?: string, email?: string, image?: string, user_name?: string}
 # --settings shape: {allow_actions?: list<string>, auto_redirect?: bool, hide_guides?: bool, hide_resource_settings?: bool, isolation_mode?: bool, sandbox_mode?: bool, session_length?: string, show_logs?: bool, show_sidebar?: bool, show_suggestions?: bool, unified_apis?: list<string>}
 # --theme shape: {favicon?: string, logo?: string, primary_color?: string, privacy_url?: string, sidepanel_background_color?: string, sidepanel_text_color?: string, terms_url?: string, vault_name?: string}
-export def "vault-sessions create" [
+export def "sessions-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

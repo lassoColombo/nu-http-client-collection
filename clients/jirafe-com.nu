@@ -101,7 +101,7 @@ def status-completer [] { ["cancelled"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "batch create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-batch" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -130,7 +130,7 @@ export def commands []: nothing -> table {
 # --customer item shape: {active_flag?: bool, change_date: string, company?: string, cookies?: record, create_date: string, department?: string, email?: string, first_name?: string, id: string, last_name?: string, marketing_opt_in?: bool, name?: string, phone?: string, position?: string}
 # --order item shape: {cart_id?: string, change_date: string, create_date: string, currency: string, customer: record, items: list, order_date: string, order_number: string, previous_items?: list, status: "accepted", subtotal: float, total: float, total_discounts: float, total_payment_cost: float, total_shipping: float, total_tax: float}
 # --product item shape: {ancestors?: list<string>, attributes?: list, base_product?: record, brand?: string, catalog?: record, categories?: list, change_date: string, code: string, create_date: string, id: string, images?: list, is_order: bool, is_sku: bool, name?: string, rating?: float, urls?: record, vendors?: list}
-export def "batch create" [
+export def "post-batch" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -179,7 +179,7 @@ export def "batch create" [
 # --items item shape: {cart_item_number: string, change_date: string, create_date: string, discount_price: float, id: string, price: float, product: record, quantity: int}
 # --previous_items item shape: {cart_item_number: string, change_date: string, create_date: string, discount_price: float, id: string, price: float, product: record, quantity: int}
 # --visit shape: {last_pageview_id: string, pageview_id: string, visit_id: string, visitor_id: string}
-export def "cart create" [
+export def "post-cart" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -234,7 +234,7 @@ export def "cart create" [
 #
 # POST /{siteId}/category
 # operationId: postCategory
-export def "category create" [
+export def "post-category" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -275,7 +275,7 @@ export def "category create" [
 #
 # POST /{siteId}/customer
 # operationId: postCustomer
-export def "customer create" [
+export def "post-customer" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -328,7 +328,7 @@ export def "customer create" [
 #
 # POST /{siteId}/order
 # operationId: postOrderCancelled
-export def "order create-cancelled" [
+export def "post-order-cancelled" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -376,7 +376,7 @@ export def "order create-cancelled" [
 # --categories item shape: {id: string, name: string}
 # --urls shape: {admin?: string, store?: string}
 # --vendors item shape: {id?: string, name?: string}
-export def "product create" [
+export def "post-product" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

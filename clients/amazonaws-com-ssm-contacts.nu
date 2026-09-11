@@ -139,7 +139,7 @@ def x-amz-target-completer-38 [] { ["SSMContacts.UpdateRotation"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-accept-page" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accept-page" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -163,7 +163,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AcceptPage
-export def "api create-accept-page" [
+export def "accept-page" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -216,7 +216,7 @@ export def "api create-accept-page" [
 #
 # POST /
 # operationId: ActivateContactChannel
-export def "api create-activate-contact-channel" [
+export def "activate-contact-channel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -265,7 +265,7 @@ export def "api create-activate-contact-channel" [
 #
 # POST /
 # operationId: CreateContact
-export def "api create-contact" [
+export def "create-contact" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -318,7 +318,7 @@ export def "api create-contact" [
 #
 # POST /
 # operationId: CreateContactChannel
-export def "api create-contact-channel" [
+export def "create-contact-channel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -371,7 +371,7 @@ export def "api create-contact-channel" [
 #
 # POST /
 # operationId: CreateRotation
-export def "api create-rotation" [
+export def "create-rotation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -425,7 +425,7 @@ export def "api create-rotation" [
 #
 # POST /
 # operationId: CreateRotationOverride
-export def "api create-rotation-override" [
+export def "create-rotation-override" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -477,7 +477,7 @@ export def "api create-rotation-override" [
 #
 # POST /
 # operationId: DeactivateContactChannel
-export def "api create-deactivate-contact-channel" [
+export def "deactivate-contact-channel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -525,7 +525,7 @@ export def "api create-deactivate-contact-channel" [
 #
 # POST /
 # operationId: DeleteContact
-export def "api delete-contact" [
+export def "delete-contact" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -573,7 +573,7 @@ export def "api delete-contact" [
 #
 # POST /
 # operationId: DeleteContactChannel
-export def "api delete-contact-channel" [
+export def "delete-contact-channel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -621,7 +621,7 @@ export def "api delete-contact-channel" [
 #
 # POST /
 # operationId: DeleteRotation
-export def "api delete-rotation" [
+export def "delete-rotation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -669,7 +669,7 @@ export def "api delete-rotation" [
 #
 # POST /
 # operationId: DeleteRotationOverride
-export def "api delete-rotation-override" [
+export def "delete-rotation-override" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -718,7 +718,7 @@ export def "api delete-rotation-override" [
 #
 # POST /
 # operationId: DescribeEngagement
-export def "api get-engagement" [
+export def "describe-engagement" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -766,7 +766,7 @@ export def "api get-engagement" [
 #
 # POST /
 # operationId: DescribePage
-export def "api get-page" [
+export def "describe-page" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -814,7 +814,7 @@ export def "api get-page" [
 #
 # POST /
 # operationId: GetContact
-export def "api get-contact" [
+export def "get-contact" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -862,7 +862,7 @@ export def "api get-contact" [
 #
 # POST /
 # operationId: GetContactChannel
-export def "api get-contact-channel" [
+export def "get-contact-channel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -910,7 +910,7 @@ export def "api get-contact-channel" [
 #
 # POST /
 # operationId: GetContactPolicy
-export def "api get-contact-policy" [
+export def "get-contact-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -958,7 +958,7 @@ export def "api get-contact-policy" [
 #
 # POST /
 # operationId: GetRotation
-export def "api get-rotation" [
+export def "get-rotation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1006,7 +1006,7 @@ export def "api get-rotation" [
 #
 # POST /
 # operationId: GetRotationOverride
-export def "api get-rotation-override" [
+export def "get-rotation-override" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1055,7 +1055,7 @@ export def "api get-rotation-override" [
 #
 # POST /
 # operationId: ListContactChannels
-export def "api list-contact-channels" [
+export def "list-contact-channels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1108,7 +1108,7 @@ export def "api list-contact-channels" [
 #
 # POST /
 # operationId: ListContacts
-export def "api list-contacts" [
+export def "list-contacts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1162,7 +1162,7 @@ export def "api list-contacts" [
 #
 # POST /
 # operationId: ListEngagements
-export def "api list-engagements" [
+export def "list-engagements" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1216,7 +1216,7 @@ export def "api list-engagements" [
 #
 # POST /
 # operationId: ListPageReceipts
-export def "api list-page-receipts" [
+export def "list-page-receipts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1269,7 +1269,7 @@ export def "api list-page-receipts" [
 #
 # POST /
 # operationId: ListPageResolutions
-export def "api list-page-resolutions" [
+export def "list-page-resolutions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1320,7 +1320,7 @@ export def "api list-page-resolutions" [
 #
 # POST /
 # operationId: ListPagesByContact
-export def "api list-pages-by-contact" [
+export def "list-pages-by-contact" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1373,7 +1373,7 @@ export def "api list-pages-by-contact" [
 #
 # POST /
 # operationId: ListPagesByEngagement
-export def "api list-pages-by-engagement" [
+export def "list-pages-by-engagement" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1426,7 +1426,7 @@ export def "api list-pages-by-engagement" [
 #
 # POST /
 # operationId: ListPreviewRotationShifts
-export def "api list-preview-rotation-shifts" [
+export def "list-preview-rotation-shifts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1485,7 +1485,7 @@ export def "api list-preview-rotation-shifts" [
 #
 # POST /
 # operationId: ListRotationOverrides
-export def "api list-rotation-overrides" [
+export def "list-rotation-overrides" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1540,7 +1540,7 @@ export def "api list-rotation-overrides" [
 #
 # POST /
 # operationId: ListRotationShifts
-export def "api list-rotation-shifts" [
+export def "list-rotation-shifts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1595,7 +1595,7 @@ export def "api list-rotation-shifts" [
 #
 # POST /
 # operationId: ListRotations
-export def "api list-rotations" [
+export def "list-rotations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1648,7 +1648,7 @@ export def "api list-rotations" [
 #
 # POST /
 # operationId: ListTagsForResource
-export def "api list-tags-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1696,7 +1696,7 @@ export def "api list-tags-for-resource" [
 #
 # POST /
 # operationId: PutContactPolicy
-export def "api update-contact-policy" [
+export def "put-contact-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1745,7 +1745,7 @@ export def "api update-contact-policy" [
 #
 # POST /
 # operationId: SendActivationCode
-export def "api send-activation-code" [
+export def "send-activation-code" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1793,7 +1793,7 @@ export def "api send-activation-code" [
 #
 # POST /
 # operationId: StartEngagement
-export def "api start-engagement" [
+export def "start-engagement" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1848,7 +1848,7 @@ export def "api start-engagement" [
 #
 # POST /
 # operationId: StopEngagement
-export def "api stop-engagement" [
+export def "stop-engagement" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1897,7 +1897,7 @@ export def "api stop-engagement" [
 #
 # POST /
 # operationId: TagResource
-export def "api tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1946,7 +1946,7 @@ export def "api tag-resource" [
 #
 # POST /
 # operationId: UntagResource
-export def "api untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1995,7 +1995,7 @@ export def "api untag-resource" [
 #
 # POST /
 # operationId: UpdateContact
-export def "api update-contact" [
+export def "update-contact" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2045,7 +2045,7 @@ export def "api update-contact" [
 #
 # POST /
 # operationId: UpdateContactChannel
-export def "api update-contact-channel" [
+export def "update-contact-channel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2095,7 +2095,7 @@ export def "api update-contact-channel" [
 #
 # POST /
 # operationId: UpdateRotation
-export def "api update-rotation" [
+export def "update-rotation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

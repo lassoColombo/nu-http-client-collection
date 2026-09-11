@@ -108,7 +108,7 @@ def accept-completer-2 [] { ["application/mathml+xml" "application/problem+json"
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "feed-availability get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-feed-availability" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -131,7 +131,7 @@ export def commands []: nothing -> table {
 # Gets availability of featured feed content for the apps by wiki domain.
 #
 # GET /feed/availability
-export def "feed-availability get" [
+export def "get-feed-availability" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -165,7 +165,7 @@ export def "feed-availability get" [
 # Check and normalize a TeX formula.
 #
 # POST /media/math/check/{type}
-export def "media-math-check create" [
+export def "post-media-math-check-type" [
   type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -206,7 +206,7 @@ export def "media-math-check create" [
 # Get a previously-stored formula
 #
 # GET /media/math/formula/{hash}
-export def "media-math-formula get" [
+export def "get-media-math-formula-hash" [
   hash: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -242,7 +242,7 @@ export def "media-math-formula get" [
 # Get rendered formula in the given format.
 #
 # GET /media/math/render/{format}/{hash}
-export def "media-math-render get" [
+export def "get-media-math-render-format-hash" [
   format: string
   hash: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -280,7 +280,7 @@ export def "media-math-render get" [
 # Get the sum of absolute value of text bytes difference between current edit and previous one.
 #
 # GET /metrics/bytes-difference/absolute/aggregate/{project}/{editor-type}/{page-type}/{granularity}/{start}/{end}
-export def "metrics-bytes-difference-absolute-aggregate get" [
+export def "get-metrics-bytes-difference-absolute-aggregate-project-editor-type-page-type-granularity-start-end" [
   project: string
   editor_type: string
   page_type: string
@@ -326,7 +326,7 @@ export def "metrics-bytes-difference-absolute-aggregate get" [
 # Get the sum of absolute text bytes difference per page.
 #
 # GET /metrics/bytes-difference/absolute/per-page/{project}/{page-title}/{editor-type}/{granularity}/{start}/{end}
-export def "metrics-bytes-difference-absolute-per-page get" [
+export def "get-metrics-bytes-difference-absolute-per-page-project-page-title-editor-type-granularity-start-end" [
   project: string
   page_title: string
   editor_type: string
@@ -372,7 +372,7 @@ export def "metrics-bytes-difference-absolute-per-page get" [
 # Get the sum of net text bytes difference between current edit and previous one.
 #
 # GET /metrics/bytes-difference/net/aggregate/{project}/{editor-type}/{page-type}/{granularity}/{start}/{end}
-export def "metrics-bytes-difference-net-aggregate get" [
+export def "get-metrics-bytes-difference-net-aggregate-project-editor-type-page-type-granularity-start-end" [
   project: string
   editor_type: string
   page_type: string
@@ -418,7 +418,7 @@ export def "metrics-bytes-difference-net-aggregate get" [
 # Get the sum of net text bytes difference per page.
 #
 # GET /metrics/bytes-difference/net/per-page/{project}/{page-title}/{editor-type}/{granularity}/{start}/{end}
-export def "metrics-bytes-difference-net-per-page get" [
+export def "get-metrics-bytes-difference-net-per-page-project-page-title-editor-type-granularity-start-end" [
   project: string
   page_title: string
   editor_type: string
@@ -464,7 +464,7 @@ export def "metrics-bytes-difference-net-per-page get" [
 # Get edited-pages counts for a project.
 #
 # GET /metrics/edited-pages/aggregate/{project}/{editor-type}/{page-type}/{activity-level}/{granularity}/{start}/{end}
-export def "metrics-edited-pages-aggregate get" [
+export def "get-metrics-edited-pages-aggregate-project-editor-type-page-type-activity-level-granularity-start-end" [
   project: string
   editor_type: string
   page_type: string
@@ -512,7 +512,7 @@ export def "metrics-edited-pages-aggregate get" [
 # Get new pages counts for a project.
 #
 # GET /metrics/edited-pages/new/{project}/{editor-type}/{page-type}/{granularity}/{start}/{end}
-export def "metrics-edited-pages-new get" [
+export def "get-metrics-edited-pages-new-project-editor-type-page-type-granularity-start-end" [
   project: string
   editor_type: string
   page_type: string
@@ -558,7 +558,7 @@ export def "metrics-edited-pages-new get" [
 # Get top 100 edited-pages by absolute bytes-difference.
 #
 # GET /metrics/edited-pages/top-by-absolute-bytes-difference/{project}/{editor-type}/{page-type}/{year}/{month}/{day}
-export def "metrics-edited-pages-top-by-absolute-bytes-difference get" [
+export def "get-metrics-edited-pages-top-by-absolute-bytes-difference-project-editor-type-page-type-year-month-day" [
   project: string
   editor_type: string
   page_type: string
@@ -604,7 +604,7 @@ export def "metrics-edited-pages-top-by-absolute-bytes-difference get" [
 # Get top 100 edited-pages by edits count.
 #
 # GET /metrics/edited-pages/top-by-edits/{project}/{editor-type}/{page-type}/{year}/{month}/{day}
-export def "metrics-edited-pages-top-by-edits get" [
+export def "get-metrics-edited-pages-top-by-edits-project-editor-type-page-type-year-month-day" [
   project: string
   editor_type: string
   page_type: string
@@ -650,7 +650,7 @@ export def "metrics-edited-pages-top-by-edits get" [
 # Get top 100 edited-pages by net bytes-difference.
 #
 # GET /metrics/edited-pages/top-by-net-bytes-difference/{project}/{editor-type}/{page-type}/{year}/{month}/{day}
-export def "metrics-edited-pages-top-by-net-bytes-difference get" [
+export def "get-metrics-edited-pages-top-by-net-bytes-difference-project-editor-type-page-type-year-month-day" [
   project: string
   editor_type: string
   page_type: string
@@ -696,7 +696,7 @@ export def "metrics-edited-pages-top-by-net-bytes-difference get" [
 # Get editors counts for a project.
 #
 # GET /metrics/editors/aggregate/{project}/{editor-type}/{page-type}/{activity-level}/{granularity}/{start}/{end}
-export def "metrics-editors-aggregate get" [
+export def "get-metrics-editors-aggregate-project-editor-type-page-type-activity-level-granularity-start-end" [
   project: string
   editor_type: string
   page_type: string
@@ -744,7 +744,7 @@ export def "metrics-editors-aggregate get" [
 # Get top 100 editors by absolute bytes-difference.
 #
 # GET /metrics/editors/top-by-absolute-bytes-difference/{project}/{editor-type}/{page-type}/{year}/{month}/{day}
-export def "metrics-editors-top-by-absolute-bytes-difference get" [
+export def "get-metrics-editors-top-by-absolute-bytes-difference-project-editor-type-page-type-year-month-day" [
   project: string
   editor_type: string
   page_type: string
@@ -790,7 +790,7 @@ export def "metrics-editors-top-by-absolute-bytes-difference get" [
 # Get top 100 editors by edits count.
 #
 # GET /metrics/editors/top-by-edits/{project}/{editor-type}/{page-type}/{year}/{month}/{day}
-export def "metrics-editors-top-by-edits get" [
+export def "get-metrics-editors-top-by-edits-project-editor-type-page-type-year-month-day" [
   project: string
   editor_type: string
   page_type: string
@@ -836,7 +836,7 @@ export def "metrics-editors-top-by-edits get" [
 # Get top 100 editors by net bytes-difference.
 #
 # GET /metrics/editors/top-by-net-bytes-difference/{project}/{editor-type}/{page-type}/{year}/{month}/{day}
-export def "metrics-editors-top-by-net-bytes-difference get" [
+export def "get-metrics-editors-top-by-net-bytes-difference-project-editor-type-page-type-year-month-day" [
   project: string
   editor_type: string
   page_type: string
@@ -882,7 +882,7 @@ export def "metrics-editors-top-by-net-bytes-difference get" [
 # Get edits counts for a project.
 #
 # GET /metrics/edits/aggregate/{project}/{editor-type}/{page-type}/{granularity}/{start}/{end}
-export def "metrics-edits-aggregate get" [
+export def "get-metrics-edits-aggregate-project-editor-type-page-type-granularity-start-end" [
   project: string
   editor_type: string
   page_type: string
@@ -928,7 +928,7 @@ export def "metrics-edits-aggregate get" [
 # Get edit counts for a page in a project.
 #
 # GET /metrics/edits/per-page/{project}/{page-title}/{editor-type}/{granularity}/{start}/{end}
-export def "metrics-edits-per-page get" [
+export def "get-metrics-edits-per-page-project-page-title-editor-type-granularity-start-end" [
   project: string
   page_title: string
   editor_type: string
@@ -974,7 +974,7 @@ export def "metrics-edits-per-page get" [
 # Given a project and a date range, returns a timeseries of pagecounts. You can filter by access site (mobile or desktop) and you can choose between monthly, daily and hourly granularity as well. - Stability: [experimental](https://www.mediawiki.org/wiki/API_versioning#Experimental) - Rate limit: 100 req/s - License: Data accessible via this endpoint is available under the [CC0 1.0 license](https://creativecommons.org/publicdomain/zero/1.0/).
 #
 # GET /metrics/legacy/pagecounts/aggregate/{project}/{access-site}/{granularity}/{start}/{end}
-export def "metrics-legacy-pagecounts-aggregate get" [
+export def "get-metrics-legacy-pagecounts-aggregate-project-access-site-granularity-start-end" [
   project: string
   access_site: string
   granularity: string
@@ -1018,7 +1018,7 @@ export def "metrics-legacy-pagecounts-aggregate get" [
 # Get pageview counts for a project.
 #
 # GET /metrics/pageviews/aggregate/{project}/{access}/{agent}/{granularity}/{start}/{end}
-export def "metrics-pageviews-aggregate get" [
+export def "get-metrics-pageviews-aggregate-project-access-agent-granularity-start-end" [
   project: string
   access: string
   agent: string
@@ -1064,7 +1064,7 @@ export def "metrics-pageviews-aggregate get" [
 # Get pageview counts for a page.
 #
 # GET /metrics/pageviews/per-article/{project}/{access}/{agent}/{article}/{granularity}/{start}/{end}
-export def "metrics-pageviews-per-article get" [
+export def "get-metrics-pageviews-per-article-project-access-agent-article-granularity-start-end" [
   project: string
   access: string
   agent: string
@@ -1112,7 +1112,7 @@ export def "metrics-pageviews-per-article get" [
 # Get pageviews by country and access method.
 #
 # GET /metrics/pageviews/top-by-country/{project}/{access}/{year}/{month}
-export def "metrics-pageviews-top-by-country get" [
+export def "get-metrics-pageviews-top-by-country-project-access-year-month" [
   project: string
   access: string
   year: string
@@ -1154,7 +1154,7 @@ export def "metrics-pageviews-top-by-country get" [
 # Get the most viewed articles for a project.
 #
 # GET /metrics/pageviews/top/{project}/{access}/{year}/{month}/{day}
-export def "metrics-pageviews-top get" [
+export def "get-metrics-pageviews-top-project-access-year-month-day" [
   project: string
   access: string
   year: string
@@ -1198,7 +1198,7 @@ export def "metrics-pageviews-top get" [
 # Get newly registered users counts for a project.
 #
 # GET /metrics/registered-users/new/{project}/{granularity}/{start}/{end}
-export def "metrics-registered-users-new get" [
+export def "get-metrics-registered-users-new-project-granularity-start-end" [
   project: string
   granularity: string
   start: string
@@ -1240,7 +1240,7 @@ export def "metrics-registered-users-new get" [
 # Get unique devices count per project
 #
 # GET /metrics/unique-devices/{project}/{access-site}/{granularity}/{start}/{end}
-export def "metrics-unique-devices get" [
+export def "get-metrics-unique-devices-project-access-site-granularity-start-end" [
   project: string
   access_site: string
   granularity: string
@@ -1284,7 +1284,7 @@ export def "metrics-unique-devices get" [
 # Machine-translate content
 #
 # POST /transform/html/from/{from_lang}/to/{to_lang}
-export def "transform-html-from-to create-by-from-lang-to-lang" [
+export def "post-transform-html-from-from-lang-to-to-lang" [
   from_lang: string
   to_lang: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1327,7 +1327,7 @@ export def "transform-html-from-to create-by-from-lang-to-lang" [
 # Machine-translate content
 #
 # POST /transform/html/from/{from_lang}/to/{to_lang}/{provider}
-export def "transform-html-from-to create-by-from-lang-to-lang-provider" [
+export def "post-transform-html-from-from-lang-to-to-lang-provider" [
   from_lang: string
   to_lang: string
   provider: string
@@ -1372,7 +1372,7 @@ export def "transform-html-from-to create-by-from-lang-to-lang-provider" [
 # Lists the language pairs supported by the back-end
 #
 # GET /transform/list/languagepairs/
-export def "transform-list-languagepairs get" [
+export def "get-transform-list-languagepairs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1405,7 +1405,7 @@ export def "transform-list-languagepairs get" [
 # Lists the tools available for a language pair
 #
 # GET /transform/list/pair/{from}/{to}/
-export def "transform-list-pair get" [
+export def "get-transform-list-pair-from-to" [
   from: string
   to: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1443,7 +1443,7 @@ export def "transform-list-pair get" [
 # Lists the tools and language pairs available for the given tool category
 #
 # GET /transform/list/tool/{tool}
-export def "transform-list-tool get-by-tool" [
+export def "get-transform-list-tool-tool" [
   tool: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1479,7 +1479,7 @@ export def "transform-list-tool get-by-tool" [
 # Lists the tools and language pairs available for the given tool category
 #
 # GET /transform/list/tool/{tool}/{from}
-export def "transform-list-tool get-by-tool-from" [
+export def "get-transform-list-tool-tool-from" [
   tool: string
   from: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1517,7 +1517,7 @@ export def "transform-list-tool get-by-tool-from" [
 # Lists the tools and language pairs available for the given tool category
 #
 # GET /transform/list/tool/{tool}/{from}/{to}
-export def "transform-list-tool get-by-tool-from-to" [
+export def "get-transform-list-tool-tool-from-to" [
   tool: string
   from: string
   to: string
@@ -1557,7 +1557,7 @@ export def "transform-list-tool get-by-tool-from-to" [
 # Fetch the dictionary meaning of a word
 #
 # GET /transform/word/from/{from_lang}/to/{to_lang}/{word}
-export def "transform-word-from-to list" [
+export def "get-transform-word-from-from-lang-to-to-lang-word" [
   from_lang: string
   to_lang: string
   word: string
@@ -1597,7 +1597,7 @@ export def "transform-word-from-to list" [
 # Fetch the dictionary meaning of a word
 #
 # GET /transform/word/from/{from_lang}/to/{to_lang}/{word}/{provider}
-export def "transform-word-from-to get" [
+export def "get-transform-word-from-from-lang-to-to-lang-word-provider" [
   from_lang: string
   to_lang: string
   word: string

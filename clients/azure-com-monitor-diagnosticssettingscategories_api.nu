@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-insights-diagnostic-settings-categories list-category" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "diagnostic-settings-category-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -122,7 +122,7 @@ export def commands []: nothing -> table {
 #
 # GET /{resourceUri}/providers/microsoft.insights/diagnosticSettingsCategories
 # operationId: DiagnosticSettingsCategory_List
-export def "providers-microsoft-insights-diagnostic-settings-categories list-category" [
+export def "diagnostic-settings-category-list" [
   resource_uri: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -160,7 +160,7 @@ export def "providers-microsoft-insights-diagnostic-settings-categories list-cat
 #
 # GET /{resourceUri}/providers/microsoft.insights/diagnosticSettingsCategories/{name}
 # operationId: DiagnosticSettingsCategory_Get
-export def "providers-microsoft-insights-diagnostic-settings-categories get-category" [
+export def "diagnostic-settings-category-get" [
   resource_uri: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL

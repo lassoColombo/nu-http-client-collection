@@ -132,7 +132,7 @@ def auth-scheme-completer [] { ["jwt" "none"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "auth-jwt create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-jwt-auth" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -156,7 +156,7 @@ export def commands []: nothing -> table {
 #
 # POST /auth/jwt
 # operationId: post_jwt_auth
-export def "auth-jwt create" [
+export def "post-jwt-auth" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -200,7 +200,7 @@ export def "auth-jwt create" [
 #
 # GET /clients/{clientId}/datasets/{datasetId}/genes/{geneSymbol}
 # operationId: get_client_gene
-export def "clients-datasets-genes get" [
+export def "get-client-gene" [
   client_id: string
   dataset_id: string
   gene_symbol: string
@@ -242,7 +242,7 @@ export def "clients-datasets-genes get" [
 # GET /clients/{clientId}/datasets/{datasetId}/snps/
 #
 # operationId: get_client_snp_group
-export def "clients-datasets-snps get-group" [
+export def "get-client-snp-group" [
   client_id: string
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -283,7 +283,7 @@ export def "clients-datasets-snps get-group" [
 #
 # POST /clients/{clientId}/datasets/{datasetId}/snps/
 # operationId: post_client_snp_group
-export def "clients-datasets-snps create-group" [
+export def "post-client-snp-group" [
   client_id: string
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -329,7 +329,7 @@ export def "clients-datasets-snps create-group" [
 #
 # GET /clients/{clientId}/datasets/{datasetId}/snps/{snpId}
 # operationId: get_client_snp
-export def "clients-datasets-snps get" [
+export def "get-client-snp" [
   client_id: string
   dataset_id: string
   snp_id: string
@@ -372,7 +372,7 @@ export def "clients-datasets-snps get" [
 #
 # GET /products/{productId}
 # operationId: get_product
-export def "products get" [
+export def "get-product" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -410,7 +410,7 @@ export def "products get" [
 # GET /products/{productId}/authorizations
 #
 # operationId: get_authorizations_queue
-export def "products-authorizations get-queue" [
+export def "get-authorizations-queue" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -450,7 +450,7 @@ export def "products-authorizations get-queue" [
 # GET /products/{productId}/authorizations/{authorizationId}
 #
 # operationId: get_product_authorization
-export def "products-authorizations get" [
+export def "get-product-authorization" [
   product_id: string
   authorization_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -491,7 +491,7 @@ export def "products-authorizations get" [
 #
 # POST /products/{productId}/authorizations/{authorizationId}
 # operationId: post_product_authorization
-export def "products-authorizations create" [
+export def "post-product-authorization" [
   product_id: string
   authorization_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -529,7 +529,7 @@ export def "products-authorizations create" [
 #
 # POST /products/{productId}/authorizations/{authorizationId}/credentials
 # operationId: post_authorization_result_credentials
-export def "products-authorizations-credentials create-result" [
+export def "post-authorization-result-credentials" [
   product_id: string
   authorization_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -577,7 +577,7 @@ export def "products-authorizations-credentials create-result" [
 #
 # POST /products/{productId}/authorizations/{authorizationId}/file
 # operationId: post_authorization_result_file
-export def "products-authorizations-file create-result" [
+export def "post-authorization-result-file" [
   product_id: string
   authorization_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -626,7 +626,7 @@ export def "products-authorizations-file create-result" [
 #
 # POST /products/{productId}/authorizations/{authorizationId}/unfulfillable
 # operationId: post_product_authorization_unfulfillable
-export def "products-authorizations-unfulfillable create" [
+export def "post-product-authorization-unfulfillable" [
   product_id: string
   authorization_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -664,7 +664,7 @@ export def "products-authorizations-unfulfillable create" [
 #
 # GET /reference/genes/databases/{databaseName}/accessions/{accession}
 # operationId: get_gene
-export def "reference-genes-databases-accessions get" [
+export def "get-gene" [
   database_name: string
   accession: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -708,7 +708,7 @@ export def "reference-genes-databases-accessions get" [
 #
 # GET /reference/genomes/
 # operationId: get_reference_genomes_group
-export def "reference-genomes get-group" [
+export def "get-reference-genomes-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -745,7 +745,7 @@ export def "reference-genomes get-group" [
 #
 # GET /reference/genomes/{genomeBuildAccession}/chromosomes
 # operationId: get_reference_genome
-export def "reference-genomes-chromosomes list" [
+export def "get-reference-genome" [
   genome_build_accession: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -784,7 +784,7 @@ export def "reference-genomes-chromosomes list" [
 #
 # GET /reference/genomes/{genomeBuildAccession}/chromosomes/{chromosomeAccession}
 # operationId: get_reference_chromosome
-export def "reference-genomes-chromosomes get" [
+export def "get-reference-chromosome" [
   genome_build_accession: string
   chromosome_accession: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -828,7 +828,7 @@ export def "reference-genomes-chromosomes get" [
 #
 # GET /reference/snps/{snpAccession}
 # operationId: get_reference_snp
-export def "reference-snps get" [
+export def "get-reference-snp" [
   snp_accession: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

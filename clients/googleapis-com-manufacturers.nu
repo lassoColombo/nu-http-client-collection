@@ -129,7 +129,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "manufacturers-accounts-languages-product-certifications-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -153,7 +153,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1/{name}
 # operationId: manufacturers.accounts.languages.productCertifications.delete
-export def "accounts delete" [
+export def "manufacturers-accounts-languages-product-certifications-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -201,7 +201,7 @@ export def "accounts delete" [
 #
 # GET /v1/{name}
 # operationId: manufacturers.accounts.languages.productCertifications.get
-export def "accounts get" [
+export def "manufacturers-accounts-languages-product-certifications-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -252,7 +252,7 @@ export def "accounts get" [
 # --certification item shape: {authority?: string, link?: string, logo?: string, name?: string, validUntil?: string, value?: string}
 # --destinationStatuses item shape: {destination?: string, status?: "UNKNOWN"|"ACTIVE"|"PENDING"|"DISAPPROVED"}
 # --issues item shape: {attribute?: string, description?: string, destination?: string, resolution?: "RESOLUTION_UNSPECIFIED"|"USER_ACTION"|"PENDING_PROCESSING", severity?: "SEVERITY_UNSPECIFIED"|"ERROR"|"WARNING"|"INFO", timestamp?: string, title?: string, type?: string}
-export def "accounts update" [
+export def "manufacturers-accounts-languages-product-certifications-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -312,7 +312,7 @@ export def "accounts update" [
 #
 # GET /v1/{parent}/productCertifications
 # operationId: manufacturers.accounts.languages.productCertifications.list
-export def "product-certifications list" [
+export def "manufacturers-accounts-languages-product-certifications-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -362,7 +362,7 @@ export def "product-certifications list" [
 #
 # GET /v1/{parent}/products
 # operationId: manufacturers.accounts.products.list
-export def "products list" [
+export def "manufacturers-accounts-products-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -413,7 +413,7 @@ export def "products list" [
 #
 # DELETE /v1/{parent}/products/{name}
 # operationId: manufacturers.accounts.products.delete
-export def "products delete" [
+export def "manufacturers-accounts-products-delete" [
   parent: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -463,7 +463,7 @@ export def "products delete" [
 #
 # GET /v1/{parent}/products/{name}
 # operationId: manufacturers.accounts.products.get
-export def "products get" [
+export def "manufacturers-accounts-products-get" [
   parent: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -523,7 +523,7 @@ export def "products get" [
 # --nutrition shape: {addedSugars?: record, addedSugarsDailyPercentage?: float, calcium?: record, calciumDailyPercentage?: float, cholesterol?: record, cholesterolDailyPercentage?: float, dietaryFiber?: record, dietaryFiberDailyPercentage?: float, energy?: record, energyFromFat?: record, folateDailyPercentage?: float, folateFolicAcid?: record, folateMcgDfe?: float, iron?: record, ironDailyPercentage?: float, monounsaturatedFat?: record, nutritionFactMeasure?: string, polyols?: record, polyunsaturatedFat?: record, ... (24 more fields)}
 # --productDetail item shape: {attributeName?: string, attributeValue?: string, sectionName?: string}
 # --suggestedRetailPrice shape: {amount?: string, currency?: string}
-export def "products update" [
+export def "manufacturers-accounts-products-update" [
   parent: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL

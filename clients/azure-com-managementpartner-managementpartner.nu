@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-management-partner-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operation-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.ManagementPartner/operations
 # operationId: Operation_List
-export def "providers-microsoft-management-partner-operations list" [
+export def "operation-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -176,7 +176,7 @@ export def "providers-microsoft-management-partner-operations list" [
 #
 # GET /providers/Microsoft.ManagementPartner/partners
 # operationId: Partners_Get
-export def "providers-microsoft-management-partner-partners list" [
+export def "partners-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -212,7 +212,7 @@ export def "providers-microsoft-management-partner-partners list" [
 #
 # DELETE /providers/Microsoft.ManagementPartner/partners/{partnerId}
 # operationId: Partner_Delete
-export def "providers-microsoft-management-partner-partners delete" [
+export def "partner-delete" [
   partner_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -250,7 +250,7 @@ export def "providers-microsoft-management-partner-partners delete" [
 #
 # GET /providers/Microsoft.ManagementPartner/partners/{partnerId}
 # operationId: Partner_Get
-export def "providers-microsoft-management-partner-partners get" [
+export def "partner-get" [
   partner_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -288,7 +288,7 @@ export def "providers-microsoft-management-partner-partners get" [
 #
 # PATCH /providers/Microsoft.ManagementPartner/partners/{partnerId}
 # operationId: Partner_Update
-export def "providers-microsoft-management-partner-partners update" [
+export def "partner-update" [
   partner_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -326,7 +326,7 @@ export def "providers-microsoft-management-partner-partners update" [
 #
 # PUT /providers/Microsoft.ManagementPartner/partners/{partnerId}
 # operationId: Partner_Create
-export def "providers-microsoft-management-partner-partners create" [
+export def "partner-create" [
   partner_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

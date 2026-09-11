@@ -123,7 +123,7 @@ def vote-completer [] { ["NO" "YES"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accessors create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-accessor" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -147,7 +147,7 @@ export def commands []: nothing -> table {
 #
 # POST /accessors
 # operationId: CreateAccessor
-export def "accessors create" [
+export def "create-accessor" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -196,7 +196,7 @@ export def "accessors create" [
 #
 # GET /accessors
 # operationId: ListAccessors
-export def "accessors list" [
+export def "list-accessors" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -245,7 +245,7 @@ export def "accessors list" [
 # POST /networks/{networkId}/members
 # operationId: CreateMember
 # --MemberConfiguration shape: {Name?: any, Description?: any, FrameworkConfiguration?: any, LogPublishingConfiguration?: any, Tags?: any, KmsKeyArn?: any}
-export def "networks-members create" [
+export def "create-member" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -296,7 +296,7 @@ export def "networks-members create" [
 #
 # GET /networks/{networkId}/members
 # operationId: ListMembers
-export def "networks-members list" [
+export def "list-members" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -352,7 +352,7 @@ export def "networks-members list" [
 # --FrameworkConfiguration shape: {Fabric?: any}
 # --VotingPolicy shape: {ApprovalThresholdPolicy?: any}
 # --MemberConfiguration shape: {Name?: any, Description?: any, FrameworkConfiguration?: any, LogPublishingConfiguration?: any, Tags?: any, KmsKeyArn?: any}
-export def "networks create" [
+export def "create-network" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -407,7 +407,7 @@ export def "networks create" [
 #
 # GET /networks
 # operationId: ListNetworks
-export def "networks list" [
+export def "list-networks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -459,7 +459,7 @@ export def "networks list" [
 # POST /networks/{networkId}/nodes
 # operationId: CreateNode
 # --NodeConfiguration shape: {InstanceType?: any, AvailabilityZone?: any, LogPublishingConfiguration?: any, StateDB?: any}
-export def "networks-nodes create" [
+export def "create-node" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -511,7 +511,7 @@ export def "networks-nodes create" [
 #
 # GET /networks/{networkId}/nodes
 # operationId: ListNodes
-export def "networks-nodes list" [
+export def "list-nodes" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -564,7 +564,7 @@ export def "networks-nodes list" [
 # POST /networks/{networkId}/proposals
 # operationId: CreateProposal
 # --Actions shape: {Invitations?: any, Removals?: any}
-export def "networks-proposals create" [
+export def "create-proposal" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -617,7 +617,7 @@ export def "networks-proposals create" [
 #
 # GET /networks/{networkId}/proposals
 # operationId: ListProposals
-export def "networks-proposals list" [
+export def "list-proposals" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -667,7 +667,7 @@ export def "networks-proposals list" [
 #
 # DELETE /accessors/{AccessorId}
 # operationId: DeleteAccessor
-export def "accessors delete" [
+export def "delete-accessor" [
   accessor_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -712,7 +712,7 @@ export def "accessors delete" [
 #
 # GET /accessors/{AccessorId}
 # operationId: GetAccessor
-export def "accessors get" [
+export def "get-accessor" [
   accessor_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -757,7 +757,7 @@ export def "accessors get" [
 #
 # DELETE /networks/{networkId}/members/{memberId}
 # operationId: DeleteMember
-export def "networks-members delete" [
+export def "delete-member" [
   network_id: string
   member_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -804,7 +804,7 @@ export def "networks-members delete" [
 #
 # GET /networks/{networkId}/members/{memberId}
 # operationId: GetMember
-export def "networks-members get" [
+export def "get-member" [
   network_id: string
   member_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -852,7 +852,7 @@ export def "networks-members get" [
 # PATCH /networks/{networkId}/members/{memberId}
 # operationId: UpdateMember
 # --LogPublishingConfiguration shape: {Fabric?: any}
-export def "networks-members update" [
+export def "update-member" [
   network_id: string
   member_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -903,7 +903,7 @@ export def "networks-members update" [
 #
 # DELETE /networks/{networkId}/nodes/{nodeId}
 # operationId: DeleteNode
-export def "networks-nodes delete" [
+export def "delete-node" [
   network_id: string
   node_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -952,7 +952,7 @@ export def "networks-nodes delete" [
 #
 # GET /networks/{networkId}/nodes/{nodeId}
 # operationId: GetNode
-export def "networks-nodes get" [
+export def "get-node" [
   network_id: string
   node_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1002,7 +1002,7 @@ export def "networks-nodes get" [
 # PATCH /networks/{networkId}/nodes/{nodeId}
 # operationId: UpdateNode
 # --LogPublishingConfiguration shape: {Fabric?: any}
-export def "networks-nodes update" [
+export def "update-node" [
   network_id: string
   node_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1054,7 +1054,7 @@ export def "networks-nodes update" [
 #
 # GET /networks/{networkId}
 # operationId: GetNetwork
-export def "networks get" [
+export def "get-network" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1099,7 +1099,7 @@ export def "networks get" [
 #
 # GET /networks/{networkId}/proposals/{proposalId}
 # operationId: GetProposal
-export def "networks-proposals get" [
+export def "get-proposal" [
   network_id: string
   proposal_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1146,7 +1146,7 @@ export def "networks-proposals get" [
 #
 # GET /invitations
 # operationId: ListInvitations
-export def "invitations list" [
+export def "list-invitations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1194,7 +1194,7 @@ export def "invitations list" [
 #
 # GET /networks/{networkId}/proposals/{proposalId}/votes
 # operationId: ListProposalVotes
-export def "networks-proposals-votes list" [
+export def "list-proposal-votes" [
   network_id: string
   proposal_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1246,7 +1246,7 @@ export def "networks-proposals-votes list" [
 #
 # POST /networks/{networkId}/proposals/{proposalId}/votes
 # operationId: VoteOnProposal
-export def "networks-proposals-votes create" [
+export def "vote-on-proposal" [
   network_id: string
   proposal_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1298,7 +1298,7 @@ export def "networks-proposals-votes create" [
 #
 # GET /tags/{resourceArn}
 # operationId: ListTagsForResource
-export def "tags list-for-resource" [
+export def "list-tags-for-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1343,7 +1343,7 @@ export def "tags list-for-resource" [
 #
 # POST /tags/{resourceArn}
 # operationId: TagResource
-export def "tags tag-resource" [
+export def "tag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1392,7 +1392,7 @@ export def "tags tag-resource" [
 #
 # DELETE /invitations/{invitationId}
 # operationId: RejectInvitation
-export def "invitations reject" [
+export def "reject-invitation" [
   invitation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1437,7 +1437,7 @@ export def "invitations reject" [
 #
 # DELETE /tags/{resourceArn}
 # operationId: UntagResource
-export def "tags untag-resource" [
+export def "untag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

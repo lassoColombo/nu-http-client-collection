@@ -112,7 +112,7 @@ def database-state-completer [] { ["All" "Deleted" "Live"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-sql-locations-long-term-retention-backups list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "long-term-retention-backups-list-by-location" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -136,7 +136,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Sql/locations/{locationName}/longTermRetentionBackups
 # operationId: LongTermRetentionBackups_ListByLocation
-export def "subscriptions-providers-microsoft-sql-locations-long-term-retention-backups list" [
+export def "long-term-retention-backups-list-by-location" [
   subscription_id: string
   location_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -178,7 +178,7 @@ export def "subscriptions-providers-microsoft-sql-locations-long-term-retention-
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Sql/locations/{locationName}/longTermRetentionServers/{longTermRetentionServerName}/longTermRetentionBackups
 # operationId: LongTermRetentionBackups_ListByServer
-export def "subscriptions-providers-microsoft-sql-locations-long-term-retention-servers-long-term-retention-backups list" [
+export def "long-term-retention-backups-list-by-server" [
   subscription_id: string
   location_name: string
   long_term_retention_server_name: string
@@ -222,7 +222,7 @@ export def "subscriptions-providers-microsoft-sql-locations-long-term-retention-
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Sql/locations/{locationName}/longTermRetentionServers/{longTermRetentionServerName}/longTermRetentionDatabases/{longTermRetentionDatabaseName}/longTermRetentionBackups
 # operationId: LongTermRetentionBackups_ListByDatabase
-export def "subscriptions-providers-microsoft-sql-locations-long-term-retention-servers-long-term-retention-databases-long-term-retention-backups list" [
+export def "long-term-retention-backups-list-by-database" [
   subscription_id: string
   location_name: string
   long_term_retention_server_name: string
@@ -268,7 +268,7 @@ export def "subscriptions-providers-microsoft-sql-locations-long-term-retention-
 #
 # DELETE /subscriptions/{subscriptionId}/providers/Microsoft.Sql/locations/{locationName}/longTermRetentionServers/{longTermRetentionServerName}/longTermRetentionDatabases/{longTermRetentionDatabaseName}/longTermRetentionBackups/{backupName}
 # operationId: LongTermRetentionBackups_Delete
-export def "subscriptions-providers-microsoft-sql-locations-long-term-retention-servers-long-term-retention-databases-long-term-retention-backups delete" [
+export def "long-term-retention-backups-delete" [
   subscription_id: string
   location_name: string
   long_term_retention_server_name: string
@@ -314,7 +314,7 @@ export def "subscriptions-providers-microsoft-sql-locations-long-term-retention-
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Sql/locations/{locationName}/longTermRetentionServers/{longTermRetentionServerName}/longTermRetentionDatabases/{longTermRetentionDatabaseName}/longTermRetentionBackups/{backupName}
 # operationId: LongTermRetentionBackups_Get
-export def "subscriptions-providers-microsoft-sql-locations-long-term-retention-servers-long-term-retention-databases-long-term-retention-backups get" [
+export def "long-term-retention-backups-get" [
   subscription_id: string
   location_name: string
   long_term_retention_server_name: string
@@ -360,7 +360,7 @@ export def "subscriptions-providers-microsoft-sql-locations-long-term-retention-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/locations/{locationName}/longTermRetentionBackups
 # operationId: LongTermRetentionBackups_ListByResourceGroupLocation
-export def "subscriptions-resource-groups-providers-microsoft-sql-locations-long-term-retention-backups list" [
+export def "long-term-retention-backups-list-by-resource-group-location" [
   subscription_id: string
   resource_group_name: string
   location_name: string
@@ -404,7 +404,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-locations-long
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/locations/{locationName}/longTermRetentionServers/{longTermRetentionServerName}/longTermRetentionBackups
 # operationId: LongTermRetentionBackups_ListByResourceGroupServer
-export def "subscriptions-resource-groups-providers-microsoft-sql-locations-long-term-retention-servers-long-term-retention-backups list" [
+export def "long-term-retention-backups-list-by-resource-group-server" [
   subscription_id: string
   resource_group_name: string
   location_name: string
@@ -450,7 +450,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-locations-long
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/locations/{locationName}/longTermRetentionServers/{longTermRetentionServerName}/longTermRetentionDatabases/{longTermRetentionDatabaseName}/longTermRetentionBackups
 # operationId: LongTermRetentionBackups_ListByResourceGroupDatabase
-export def "subscriptions-resource-groups-providers-microsoft-sql-locations-long-term-retention-servers-long-term-retention-databases-long-term-retention-backups list" [
+export def "long-term-retention-backups-list-by-resource-group-database" [
   subscription_id: string
   resource_group_name: string
   location_name: string
@@ -498,7 +498,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-locations-long
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/locations/{locationName}/longTermRetentionServers/{longTermRetentionServerName}/longTermRetentionDatabases/{longTermRetentionDatabaseName}/longTermRetentionBackups/{backupName}
 # operationId: LongTermRetentionBackups_DeleteByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-sql-locations-long-term-retention-servers-long-term-retention-databases-long-term-retention-backups delete" [
+export def "long-term-retention-backups-delete-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   location_name: string
@@ -546,7 +546,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-locations-long
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/locations/{locationName}/longTermRetentionServers/{longTermRetentionServerName}/longTermRetentionDatabases/{longTermRetentionDatabaseName}/longTermRetentionBackups/{backupName}
 # operationId: LongTermRetentionBackups_GetByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-sql-locations-long-term-retention-servers-long-term-retention-databases-long-term-retention-backups get" [
+export def "long-term-retention-backups-get-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   location_name: string
@@ -594,7 +594,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-locations-long
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/backupLongTermRetentionPolicies
 # operationId: BackupLongTermRetentionPolicies_ListByDatabase
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-backup-long-term-retention-policies list" [
+export def "backup-long-term-retention-policies-list-by-database" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -638,7 +638,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/backupLongTermRetentionPolicies/{policyName}
 # operationId: BackupLongTermRetentionPolicies_Get
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-backup-long-term-retention-policies get" [
+export def "backup-long-term-retention-policies-get" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -685,7 +685,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/backupLongTermRetentionPolicies/{policyName}
 # operationId: BackupLongTermRetentionPolicies_CreateOrUpdate
 # --properties shape: {monthlyRetention?: string, weekOfYear?: int, weeklyRetention?: string, yearlyRetention?: string}
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-backup-long-term-retention-policies create-or-update" [
+export def "backup-long-term-retention-policies-create-or-update" [
   subscription_id: string
   resource_group_name: string
   server_name: string

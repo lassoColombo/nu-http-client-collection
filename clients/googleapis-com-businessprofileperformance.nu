@@ -102,7 +102,7 @@ def daily-sub-entity-type-day-of-week-completer [] { ["DAY_OF_WEEK_UNSPECIFIED" 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "locations get-multi-daily-metrics-time-series" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "businessprofileperformance-locations-fetch-multi-daily-metrics-time-series" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -126,7 +126,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/{location}:fetchMultiDailyMetricsTimeSeries
 # operationId: businessprofileperformance.locations.fetchMultiDailyMetricsTimeSeries
-export def "locations get-multi-daily-metrics-time-series" [
+export def "businessprofileperformance-locations-fetch-multi-daily-metrics-time-series" [
   location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -181,7 +181,7 @@ export def "locations get-multi-daily-metrics-time-series" [
 #
 # GET /v1/{name}:getDailyMetricsTimeSeries
 # operationId: businessprofileperformance.locations.getDailyMetricsTimeSeries
-export def "locations get-daily-metrics-time-series" [
+export def "businessprofileperformance-locations-get-daily-metrics-time-series" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -241,7 +241,7 @@ export def "locations get-daily-metrics-time-series" [
 #
 # GET /v1/{parent}/searchkeywords/impressions/monthly
 # operationId: businessprofileperformance.locations.searchkeywords.impressions.monthly.list
-export def "searchkeywords-impressions-monthly list" [
+export def "businessprofileperformance-locations-searchkeywords-impressions-monthly-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

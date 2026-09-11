@@ -124,7 +124,7 @@ def type-completer-3 [] { ["bankAccount" "recurringDetail"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "business-lines create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-business-lines" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -152,7 +152,7 @@ export def commands []: nothing -> table {
 # --webData item shape: {webAddress?: string}
 # --webDataExemption shape: {reason?: "noOnlinePresence"}
 @deprecated --flag capability
-export def "business-lines create" [
+export def "post-business-lines" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -197,7 +197,7 @@ export def "business-lines create" [
 #
 # DELETE /businessLines/{id}
 # operationId: delete-businessLines-id
-export def "business-lines delete" [
+export def "delete-business-lines-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -233,7 +233,7 @@ export def "business-lines delete" [
 #
 # GET /businessLines/{id}
 # operationId: get-businessLines-id
-export def "business-lines get" [
+export def "get-business-lines-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -273,7 +273,7 @@ export def "business-lines get" [
 # --webData item shape: {webAddress?: string}
 # --webDataExemption shape: {reason?: "noOnlinePresence"}
 @deprecated --flag capability
-export def "business-lines update" [
+export def "patch-business-lines-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -326,7 +326,7 @@ export def "business-lines update" [
 @deprecated --flag expiry-date
 @deprecated --flag issuer-country
 @deprecated --flag issuer-state
-export def "documents create" [
+export def "post-documents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -373,7 +373,7 @@ export def "documents create" [
 #
 # DELETE /documents/{id}
 # operationId: delete-documents-id
-export def "documents delete" [
+export def "delete-documents-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -409,7 +409,7 @@ export def "documents delete" [
 #
 # GET /documents/{id}
 # operationId: get-documents-id
-export def "documents get" [
+export def "get-documents-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -451,7 +451,7 @@ export def "documents get" [
 @deprecated --flag expiry-date
 @deprecated --flag issuer-country
 @deprecated --flag issuer-state
-export def "documents update" [
+export def "patch-documents-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -504,7 +504,7 @@ export def "documents update" [
 # --individual shape: {birthData?: record, email?: string, identificationData?: record, name: record, nationality?: string, phone?: record, residentialAddress: record, taxInformation?: list, webData?: record}
 # --organization shape: {dateOfIncorporation?: string, description?: string, doingBusinessAs?: string, email?: string, legalName: string, phone?: record, principalPlaceOfBusiness?: record, registeredAddress: record, registrationNumber?: string, stockData?: record, taxInformation?: list, taxReportingClassification?: record, type?: "associationIncorporated"|"governmentalOrganization"|"listedPublicCompany"|"nonProfit"|"partnershipIncorporated"|"privateCompany", vatAbsenceReason?: "industryExemption"|"belowTaxThreshold", ... (2 more fields)}
 # --soleProprietorship shape: {countryOfGoverningLaw: string, dateOfIncorporation?: string, doingBusinessAs?: string, name: string, principalPlaceOfBusiness?: record, registeredAddress: record, registrationNumber?: string, vatAbsenceReason?: "industryExemption"|"belowTaxThreshold", vatNumber?: string}
-export def "legal-entities create" [
+export def "post-legal-entities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -547,7 +547,7 @@ export def "legal-entities create" [
 #
 # GET /legalEntities/{id}
 # operationId: get-legalEntities-id
-export def "legal-entities get" [
+export def "get-legal-entities-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -587,7 +587,7 @@ export def "legal-entities get" [
 # --individual shape: {birthData?: record, email?: string, identificationData?: record, name: record, nationality?: string, phone?: record, residentialAddress: record, taxInformation?: list, webData?: record}
 # --organization shape: {dateOfIncorporation?: string, description?: string, doingBusinessAs?: string, email?: string, legalName: string, phone?: record, principalPlaceOfBusiness?: record, registeredAddress: record, registrationNumber?: string, stockData?: record, taxInformation?: list, taxReportingClassification?: record, type?: "associationIncorporated"|"governmentalOrganization"|"listedPublicCompany"|"nonProfit"|"partnershipIncorporated"|"privateCompany", vatAbsenceReason?: "industryExemption"|"belowTaxThreshold", ... (2 more fields)}
 # --soleProprietorship shape: {countryOfGoverningLaw: string, dateOfIncorporation?: string, doingBusinessAs?: string, name: string, principalPlaceOfBusiness?: record, registeredAddress: record, registrationNumber?: string, vatAbsenceReason?: "industryExemption"|"belowTaxThreshold", vatNumber?: string}
-export def "legal-entities update" [
+export def "patch-legal-entities-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -632,7 +632,7 @@ export def "legal-entities update" [
 #
 # GET /legalEntities/{id}/businessLines
 # operationId: get-legalEntities-id-businessLines
-export def "legal-entities-business-lines get" [
+export def "get-legal-entities-id-business-lines" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -668,7 +668,7 @@ export def "legal-entities-business-lines get" [
 #
 # POST /legalEntities/{id}/checkVerificationErrors
 # operationId: post-legalEntities-id-checkVerificationErrors
-export def "legal-entities-check-verification-errors create" [
+export def "post-legal-entities-id-check-verification-errors" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -704,7 +704,7 @@ export def "legal-entities-check-verification-errors create" [
 #
 # POST /legalEntities/{id}/onboardingLinks
 # operationId: post-legalEntities-id-onboardingLinks
-export def "legal-entities-onboarding-links create" [
+export def "post-legal-entities-id-onboarding-links" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -747,7 +747,7 @@ export def "legal-entities-onboarding-links create" [
 #
 # GET /legalEntities/{id}/pciQuestionnaires
 # operationId: get-legalEntities-id-pciQuestionnaires
-export def "legal-entities-pci-questionnaires list" [
+export def "get-legal-entities-id-pci-questionnaires" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -783,7 +783,7 @@ export def "legal-entities-pci-questionnaires list" [
 #
 # POST /legalEntities/{id}/pciQuestionnaires/generatePciTemplates
 # operationId: post-legalEntities-id-pciQuestionnaires-generatePciTemplates
-export def "legal-entities-pci-questionnaires-generate-pci-templates create" [
+export def "post-legal-entities-id-pci-questionnaires-generate-pci-templates" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -823,7 +823,7 @@ export def "legal-entities-pci-questionnaires-generate-pci-templates create" [
 #
 # POST /legalEntities/{id}/pciQuestionnaires/signPciTemplates
 # operationId: post-legalEntities-id-pciQuestionnaires-signPciTemplates
-export def "legal-entities-pci-questionnaires-sign-pci-templates create" [
+export def "post-legal-entities-id-pci-questionnaires-sign-pci-templates" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -864,7 +864,7 @@ export def "legal-entities-pci-questionnaires-sign-pci-templates create" [
 #
 # GET /legalEntities/{id}/pciQuestionnaires/{pciid}
 # operationId: get-legalEntities-id-pciQuestionnaires-pciid
-export def "legal-entities-pci-questionnaires get" [
+export def "get-legal-entities-id-pci-questionnaires-pciid" [
   id: string
   pciid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -902,7 +902,7 @@ export def "legal-entities-pci-questionnaires get" [
 #
 # POST /legalEntities/{id}/termsOfService
 # operationId: post-legalEntities-id-termsOfService
-export def "legal-entities-terms-of-service create" [
+export def "post-legal-entities-id-terms-of-service" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -943,7 +943,7 @@ export def "legal-entities-terms-of-service create" [
 #
 # PATCH /legalEntities/{id}/termsOfService/{termsofservicedocumentid}
 # operationId: patch-legalEntities-id-termsOfService-termsofservicedocumentid
-export def "legal-entities-terms-of-service update" [
+export def "patch-legal-entities-id-terms-of-service-termsofservicedocumentid" [
   id: string
   termsofservicedocumentid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -986,7 +986,7 @@ export def "legal-entities-terms-of-service update" [
 #
 # GET /legalEntities/{id}/termsOfServiceAcceptanceInfos
 # operationId: get-legalEntities-id-termsOfServiceAcceptanceInfos
-export def "legal-entities-terms-of-service-acceptance-infos get" [
+export def "get-legal-entities-id-terms-of-service-acceptance-infos" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1022,7 +1022,7 @@ export def "legal-entities-terms-of-service-acceptance-infos get" [
 #
 # GET /themes
 # operationId: get-themes
-export def "themes list" [
+export def "get-themes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1056,7 +1056,7 @@ export def "themes list" [
 #
 # GET /themes/{id}
 # operationId: get-themes-id
-export def "themes get" [
+export def "get-themes-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1093,7 +1093,7 @@ export def "themes get" [
 # POST /transferInstruments
 # operationId: post-transferInstruments
 # --bankAccount shape: {accountIdentification?: any, accountType?: string, countryCode?: string}
-export def "transfer-instruments create" [
+export def "post-transfer-instruments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1133,7 +1133,7 @@ export def "transfer-instruments create" [
 #
 # DELETE /transferInstruments/{id}
 # operationId: delete-transferInstruments-id
-export def "transfer-instruments delete" [
+export def "delete-transfer-instruments-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1169,7 +1169,7 @@ export def "transfer-instruments delete" [
 #
 # GET /transferInstruments/{id}
 # operationId: get-transferInstruments-id
-export def "transfer-instruments get" [
+export def "get-transfer-instruments-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1206,7 +1206,7 @@ export def "transfer-instruments get" [
 # PATCH /transferInstruments/{id}
 # operationId: patch-transferInstruments-id
 # --bankAccount shape: {accountIdentification?: any, accountType?: string, countryCode?: string}
-export def "transfer-instruments update" [
+export def "patch-transfer-instruments-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

@@ -140,7 +140,7 @@ def type-completer-1 [] { ["CURATED" "RAW" "TYPE_UNSPECIFIED"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "dataplex-projects-locations-operations-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -164,7 +164,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1/{name}
 # operationId: dataplex.projects.locations.operations.delete
-export def "projects delete" [
+export def "dataplex-projects-locations-operations-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -213,7 +213,7 @@ export def "projects delete" [
 #
 # GET /v1/{name}
 # operationId: dataplex.projects.locations.operations.get
-export def "projects get" [
+export def "dataplex-projects-locations-operations-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -267,7 +267,7 @@ export def "projects get" [
 # --resourceSpec shape: {name?: string, readAccessMode?: "ACCESS_MODE_UNSPECIFIED"|"DIRECT"|"MANAGED", type?: "TYPE_UNSPECIFIED"|"STORAGE_BUCKET"|"BIGQUERY_DATASET"}
 # --resourceStatus shape: {message?: string, state?: "STATE_UNSPECIFIED"|"READY"|"ERROR", updateTime?: string}
 # --securityStatus shape: {message?: string, state?: "STATE_UNSPECIFIED"|"READY"|"APPLYING"|"ERROR", updateTime?: string}
-export def "projects update-by-name" [
+export def "dataplex-projects-locations-lakes-zones-assets-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -331,7 +331,7 @@ export def "projects update-by-name" [
 # --compatibility shape: {bigquery?: record, hiveMetastore?: record}
 # --format shape: {compressionFormat?: "COMPRESSION_FORMAT_UNSPECIFIED"|"GZIP"|"BZIP2", csv?: record, iceberg?: record, json?: record, mimeType?: string}
 # --schema shape: {fields?: list, partitionFields?: list, partitionStyle?: "PARTITION_STYLE_UNSPECIFIED"|"HIVE_COMPATIBLE", userManaged?: bool}
-export def "projects update-by-name-1" [
+export def "dataplex-projects-locations-lakes-zones-entities-update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -396,7 +396,7 @@ export def "projects update-by-name-1" [
 #
 # GET /v1/{name}/locations
 # operationId: dataplex.projects.locations.list
-export def "locations list" [
+export def "dataplex-projects-locations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -447,7 +447,7 @@ export def "locations list" [
 #
 # GET /v1/{name}/operations
 # operationId: dataplex.projects.locations.operations.list
-export def "operations list" [
+export def "dataplex-projects-locations-operations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -498,7 +498,7 @@ export def "operations list" [
 #
 # POST /v1/{name}:cancel
 # operationId: dataplex.projects.locations.operations.cancel
-export def "projects cancel" [
+export def "dataplex-projects-locations-operations-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -550,7 +550,7 @@ export def "projects cancel" [
 #
 # POST /v1/{name}:run
 # operationId: dataplex.projects.locations.lakes.tasks.run
-export def "projects create-run" [
+export def "dataplex-projects-locations-lakes-tasks-run" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -602,7 +602,7 @@ export def "projects create-run" [
 #
 # GET /v1/{parent}/actions
 # operationId: dataplex.projects.locations.lakes.zones.assets.actions.list
-export def "actions list" [
+export def "dataplex-projects-locations-lakes-zones-assets-actions-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -652,7 +652,7 @@ export def "actions list" [
 #
 # GET /v1/{parent}/assets
 # operationId: dataplex.projects.locations.lakes.zones.assets.list
-export def "assets list" [
+export def "dataplex-projects-locations-lakes-zones-assets-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -709,7 +709,7 @@ export def "assets list" [
 # --resourceSpec shape: {name?: string, readAccessMode?: "ACCESS_MODE_UNSPECIFIED"|"DIRECT"|"MANAGED", type?: "TYPE_UNSPECIFIED"|"STORAGE_BUCKET"|"BIGQUERY_DATASET"}
 # --resourceStatus shape: {message?: string, state?: "STATE_UNSPECIFIED"|"READY"|"ERROR", updateTime?: string}
 # --securityStatus shape: {message?: string, state?: "STATE_UNSPECIFIED"|"READY"|"APPLYING"|"ERROR", updateTime?: string}
-export def "assets create" [
+export def "dataplex-projects-locations-lakes-zones-assets-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -770,7 +770,7 @@ export def "assets create" [
 #
 # GET /v1/{parent}/attributes
 # operationId: dataplex.projects.locations.dataTaxonomies.attributes.list
-export def "attributes list" [
+export def "dataplex-projects-locations-data-taxonomies-attributes-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -824,7 +824,7 @@ export def "attributes list" [
 # operationId: dataplex.projects.locations.dataTaxonomies.attributes.create
 # --dataAccessSpec shape: {readers?: list<string>}
 # --resourceAccessSpec shape: {owners?: list<string>, readers?: list<string>, writers?: list<string>}
-export def "attributes create" [
+export def "dataplex-projects-locations-data-taxonomies-attributes-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -884,7 +884,7 @@ export def "attributes create" [
 #
 # GET /v1/{parent}/content
 # operationId: dataplex.projects.locations.lakes.content.list
-export def "content list" [
+export def "dataplex-projects-locations-lakes-content-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -937,7 +937,7 @@ export def "content list" [
 # operationId: dataplex.projects.locations.lakes.content.create
 # --notebook shape: {kernelType?: "KERNEL_TYPE_UNSPECIFIED"|"PYTHON3"}
 # --sqlScript shape: {engine?: "QUERY_ENGINE_UNSPECIFIED"|"SPARK"}
-export def "content create" [
+export def "dataplex-projects-locations-lakes-content-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -995,7 +995,7 @@ export def "content create" [
 #
 # GET /v1/{parent}/contentitems
 # operationId: dataplex.projects.locations.lakes.contentitems.list
-export def "contentitems list" [
+export def "dataplex-projects-locations-lakes-contentitems-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1048,7 +1048,7 @@ export def "contentitems list" [
 # operationId: dataplex.projects.locations.lakes.contentitems.create
 # --notebook shape: {kernelType?: "KERNEL_TYPE_UNSPECIFIED"|"PYTHON3"}
 # --sqlScript shape: {engine?: "QUERY_ENGINE_UNSPECIFIED"|"SPARK"}
-export def "contentitems create" [
+export def "dataplex-projects-locations-lakes-contentitems-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1106,7 +1106,7 @@ export def "contentitems create" [
 #
 # GET /v1/{parent}/dataAttributeBindings
 # operationId: dataplex.projects.locations.dataAttributeBindings.list
-export def "data-attribute-bindings list" [
+export def "dataplex-projects-locations-data-attribute-bindings-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1159,7 +1159,7 @@ export def "data-attribute-bindings list" [
 # POST /v1/{parent}/dataAttributeBindings
 # operationId: dataplex.projects.locations.dataAttributeBindings.create
 # --paths item shape: {attributes?: list<string>, name?: string}
-export def "data-attribute-bindings create" [
+export def "dataplex-projects-locations-data-attribute-bindings-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1219,7 +1219,7 @@ export def "data-attribute-bindings create" [
 #
 # GET /v1/{parent}/dataScans
 # operationId: dataplex.projects.locations.dataScans.list
-export def "data-scans list" [
+export def "dataplex-projects-locations-data-scans-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1277,7 +1277,7 @@ export def "data-scans list" [
 # --dataQualitySpec shape: {rules?: list}
 # --executionSpec shape: {field?: string, trigger?: record}
 # --executionStatus shape: {latestJobEndTime?: string, latestJobStartTime?: string}
-export def "data-scans create" [
+export def "dataplex-projects-locations-data-scans-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1340,7 +1340,7 @@ export def "data-scans create" [
 #
 # GET /v1/{parent}/dataTaxonomies
 # operationId: dataplex.projects.locations.dataTaxonomies.list
-export def "data-taxonomies list" [
+export def "dataplex-projects-locations-data-taxonomies-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1392,7 +1392,7 @@ export def "data-taxonomies list" [
 #
 # POST /v1/{parent}/dataTaxonomies
 # operationId: dataplex.projects.locations.dataTaxonomies.create
-export def "data-taxonomies create" [
+export def "dataplex-projects-locations-data-taxonomies-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1449,7 +1449,7 @@ export def "data-taxonomies create" [
 #
 # GET /v1/{parent}/entities
 # operationId: dataplex.projects.locations.lakes.zones.entities.list
-export def "entities list" [
+export def "dataplex-projects-locations-lakes-zones-entities-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1504,7 +1504,7 @@ export def "entities list" [
 # --compatibility shape: {bigquery?: record, hiveMetastore?: record}
 # --format shape: {compressionFormat?: "COMPRESSION_FORMAT_UNSPECIFIED"|"GZIP"|"BZIP2", csv?: record, iceberg?: record, json?: record, mimeType?: string}
 # --schema shape: {fields?: list, partitionFields?: list, partitionStyle?: "PARTITION_STYLE_UNSPECIFIED"|"HIVE_COMPATIBLE", userManaged?: bool}
-export def "entities create" [
+export def "dataplex-projects-locations-lakes-zones-entities-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1569,7 +1569,7 @@ export def "entities create" [
 #
 # GET /v1/{parent}/environments
 # operationId: dataplex.projects.locations.lakes.environments.list
-export def "environments list" [
+export def "dataplex-projects-locations-lakes-environments-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1623,7 +1623,7 @@ export def "environments list" [
 # operationId: dataplex.projects.locations.lakes.environments.create
 # --infrastructureSpec shape: {compute?: record, osImage?: record}
 # --sessionSpec shape: {enableFastStartup?: bool, maxIdleDuration?: string}
-export def "environments create" [
+export def "dataplex-projects-locations-lakes-environments-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1683,7 +1683,7 @@ export def "environments create" [
 #
 # GET /v1/{parent}/jobs
 # operationId: dataplex.projects.locations.lakes.tasks.jobs.list
-export def "jobs list" [
+export def "dataplex-projects-locations-lakes-tasks-jobs-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1733,7 +1733,7 @@ export def "jobs list" [
 #
 # GET /v1/{parent}/lakes
 # operationId: dataplex.projects.locations.lakes.list
-export def "lakes list" [
+export def "dataplex-projects-locations-lakes-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1788,7 +1788,7 @@ export def "lakes list" [
 # --assetStatus shape: {activeAssets?: int, securityPolicyApplyingAssets?: int, updateTime?: string}
 # --metastore shape: {service?: string}
 # --metastoreStatus shape: {endpoint?: string, message?: string, state?: "STATE_UNSPECIFIED"|"NONE"|"READY"|"UPDATING"|"ERROR", updateTime?: string}
-export def "lakes create" [
+export def "dataplex-projects-locations-lakes-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1847,7 +1847,7 @@ export def "lakes create" [
 #
 # GET /v1/{parent}/partitions
 # operationId: dataplex.projects.locations.lakes.zones.entities.partitions.list
-export def "partitions list" [
+export def "dataplex-projects-locations-lakes-zones-entities-partitions-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1898,7 +1898,7 @@ export def "partitions list" [
 #
 # POST /v1/{parent}/partitions
 # operationId: dataplex.projects.locations.lakes.zones.entities.partitions.create
-export def "partitions create" [
+export def "dataplex-projects-locations-lakes-zones-entities-partitions-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1953,7 +1953,7 @@ export def "partitions create" [
 #
 # GET /v1/{parent}/sessions
 # operationId: dataplex.projects.locations.lakes.environments.sessions.list
-export def "sessions list" [
+export def "dataplex-projects-locations-lakes-environments-sessions-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2004,7 +2004,7 @@ export def "sessions list" [
 #
 # GET /v1/{parent}/tasks
 # operationId: dataplex.projects.locations.lakes.tasks.list
-export def "tasks list" [
+export def "dataplex-projects-locations-lakes-tasks-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2061,7 +2061,7 @@ export def "tasks list" [
 # --notebook shape: {archiveUris?: list<string>, fileUris?: list<string>, infrastructureSpec?: record, notebook?: string}
 # --spark shape: {archiveUris?: list<string>, fileUris?: list<string>, infrastructureSpec?: record, mainClass?: string, mainJarFileUri?: string, pythonScriptFile?: string, sqlScript?: string, sqlScriptFile?: string}
 # --triggerSpec shape: {disabled?: bool, maxRetries?: int, schedule?: string, startTime?: string, type?: "TYPE_UNSPECIFIED"|"ON_DEMAND"|"RECURRING"}
-export def "tasks create" [
+export def "dataplex-projects-locations-lakes-tasks-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2122,7 +2122,7 @@ export def "tasks create" [
 #
 # GET /v1/{parent}/zones
 # operationId: dataplex.projects.locations.lakes.zones.list
-export def "zones list" [
+export def "dataplex-projects-locations-lakes-zones-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2177,7 +2177,7 @@ export def "zones list" [
 # --assetStatus shape: {activeAssets?: int, securityPolicyApplyingAssets?: int, updateTime?: string}
 # --discoverySpec shape: {csvOptions?: record, enabled?: bool, excludePatterns?: list<string>, includePatterns?: list<string>, jsonOptions?: record, schedule?: string}
 # --resourceSpec shape: {locationType?: "LOCATION_TYPE_UNSPECIFIED"|"SINGLE_REGION"|"MULTI_REGION"}
-export def "zones create" [
+export def "dataplex-projects-locations-lakes-zones-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2237,7 +2237,7 @@ export def "zones create" [
 #
 # GET /v1/{resource}:getIamPolicy
 # operationId: dataplex.projects.locations.lakes.zones.assets.getIamPolicy
-export def "projects get-iam-policy" [
+export def "dataplex-projects-locations-lakes-zones-assets-get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2287,7 +2287,7 @@ export def "projects get-iam-policy" [
 # POST /v1/{resource}:setIamPolicy
 # operationId: dataplex.projects.locations.lakes.zones.assets.setIamPolicy
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
-export def "projects update-iam-policy" [
+export def "dataplex-projects-locations-lakes-zones-assets-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2340,7 +2340,7 @@ export def "projects update-iam-policy" [
 #
 # POST /v1/{resource}:testIamPermissions
 # operationId: dataplex.projects.locations.lakes.zones.assets.testIamPermissions
-export def "projects test-iam-permissions" [
+export def "dataplex-projects-locations-lakes-zones-assets-test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

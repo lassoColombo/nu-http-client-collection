@@ -100,7 +100,7 @@ def platform-completer [] { ["android" "c4" "ctv" "fm" "freesat" "ios" "p06" "ps
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "4od-episode-list-date get-4o-d-browse-by-feed" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "4o-d-browse-by-date-feed" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -124,7 +124,7 @@ export def commands []: nothing -> table {
 #
 # GET /4od/episode-list/date/{yyyy}/{mm}/{dd}.atom
 # operationId: 4oD_Browse_by_Date_Feed
-export def "4od-episode-list-date get-4o-d-browse-by-feed" [
+export def "4o-d-browse-by-date-feed" [
   yyyy: string
   mm: string
   dd: string
@@ -166,7 +166,7 @@ export def "4od-episode-list-date get-4o-d-browse-by-feed" [
 #
 # GET /4od/episode-list/popular.atom
 # operationId: 4oD_Most_Popular_Episodes_Feed
-export def "4od-episode-list-popular-atom get-4o-d-most-feed" [
+export def "4o-d-most-popular-episodes-feed" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -202,7 +202,7 @@ export def "4od-episode-list-popular-atom get-4o-d-most-feed" [
 #
 # GET /4od/recently-added/videos.atom
 # operationId: 4oD_Clips_Catch_Up_Feed
-export def "4od-recently-added-videos-atom get-4o-d-clips-catch-up-feed" [
+export def "4o-d-clips-catch-up-feed" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -238,7 +238,7 @@ export def "4od-recently-added-videos-atom get-4o-d-clips-catch-up-feed" [
 #
 # GET /atoz.atom
 # operationId: A_to_Z_Landing_Feed
-export def "atoz-atom get-to-z-landing-feed" [
+export def "a-to-z-landing-feed" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -274,7 +274,7 @@ export def "atoz-atom get-to-z-landing-feed" [
 #
 # GET /atoz/{start_letter}.atom
 # operationId: A_to_Z_Letter_Feed
-export def "atoz get-to-z-feed" [
+export def "a-to-z-letter-feed" [
   start_letter: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -312,7 +312,7 @@ export def "atoz get-to-z-feed" [
 #
 # GET /atoz/{start_letter}/page-{pageno}.atom
 # operationId: A_to_Z_Letter_Feed(2)
-export def "atoz-page-pageno-atom get-to-z-feed2" [
+export def "a-to-z-letter-feed2" [
   start_letter: string
   pageno: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -352,7 +352,7 @@ export def "atoz-page-pageno-atom get-to-z-feed2" [
 #
 # GET /brands/4od.atom
 # operationId: 4oD_Title_All_Brands_Feed
-export def "brands-4od-atom list-4o-d-title-feed" [
+export def "4o-d-title-all-brands-feed" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -388,7 +388,7 @@ export def "brands-4od-atom list-4o-d-title-feed" [
 #
 # GET /brands/4od/page-{pageno}.atom
 # operationId: 4oD_Title_All_Brands_Feed(2)
-export def "brands-4od-page-pageno-atom list-4o-d-title-feed2" [
+export def "4o-d-title-all-brands-feed2" [
   pageno: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -426,7 +426,7 @@ export def "brands-4od-page-pageno-atom list-4o-d-title-feed2" [
 #
 # GET /brands/4od/popular.atom
 # operationId: 4oD_Popular_All_Brands_Feed
-export def "brands-4od-popular-atom list-4o-d-feed" [
+export def "4o-d-popular-all-brands-feed" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -462,7 +462,7 @@ export def "brands-4od-popular-atom list-4o-d-feed" [
 #
 # GET /brands/4od/popular/page-{pageno}.atom
 # operationId: 4oD_Popular_All_Brands_Feed(2)
-export def "brands-4od-popular-page-pageno-atom list-4o-d-feed2" [
+export def "4o-d-popular-all-brands-feed2" [
   pageno: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -500,7 +500,7 @@ export def "brands-4od-popular-page-pageno-atom list-4o-d-feed2" [
 #
 # GET /brands/popular.atom
 # operationId: Popular_Brands_Feed
-export def "brands-popular-atom get-feed" [
+export def "popular-brands-feed" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -536,7 +536,7 @@ export def "brands-popular-atom get-feed" [
 #
 # GET /brands/popular/page-{pageno}.atom
 # operationId: Popular_Brands_Feed(2)
-export def "brands-popular-page-pageno-atom get-feed2" [
+export def "popular-brands-feed2" [
   pageno: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -574,7 +574,7 @@ export def "brands-popular-page-pageno-atom get-feed2" [
 #
 # GET /categories.atom
 # operationId: Categories_Landing_Feed
-export def "categories-atom get-landing-feed" [
+export def "categories-landing-feed" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -610,7 +610,7 @@ export def "categories-atom get-landing-feed" [
 #
 # GET /categories/{category}.atom
 # operationId: All_Programmes_by_TX_Date
-export def "categories list-programmes-by-tx-date" [
+export def "all-programmes-by-tx-date" [
   category: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -648,7 +648,7 @@ export def "categories list-programmes-by-tx-date" [
 #
 # GET /categories/{category}/4od.atom
 # operationId: 4oD_Programmes_by_TX_Date
-export def "categories-4od-atom get-4o-d-programmes-by-tx-date" [
+export def "4o-d-programmes-by-tx-date" [
   category: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -686,7 +686,7 @@ export def "categories-4od-atom get-4o-d-programmes-by-tx-date" [
 #
 # GET /categories/{category}/4od/page-{pageno}.atom
 # operationId: 4oD_Programmes_by_TX_Date(4)
-export def "categories-4od-page-pageno-atom get-4o-d-programmes-by-tx-date4" [
+export def "4o-d-programmes-by-tx-date4" [
   category: string
   pageno: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -726,7 +726,7 @@ export def "categories-4od-page-pageno-atom get-4o-d-programmes-by-tx-date4" [
 #
 # GET /categories/{category}/4od/popular.atom
 # operationId: Most_Popular_Brands_Feed
-export def "categories-4od-popular-atom get-most-brands-feed" [
+export def "most-popular-brands-feed" [
   category: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -764,7 +764,7 @@ export def "categories-4od-popular-atom get-most-brands-feed" [
 #
 # GET /categories/{category}/4od/popular/page-{pageno}.atom
 # operationId: Most_Popular_Brands_Feed(5)
-export def "categories-4od-popular-page-pageno-atom get-most-brands-feed5" [
+export def "most-popular-brands-feed5" [
   category: string
   pageno: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -804,7 +804,7 @@ export def "categories-4od-popular-page-pageno-atom get-most-brands-feed5" [
 #
 # GET /categories/{category}/4od/title.atom
 # operationId: 4oD_Programmes_by_Title
-export def "categories-4od-title-atom get-4o-d-programmes" [
+export def "4o-d-programmes-by-title" [
   category: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -842,7 +842,7 @@ export def "categories-4od-title-atom get-4o-d-programmes" [
 #
 # GET /categories/{category}/4od/title/page-{pageno}.atom
 # operationId: 4oD_Programmes_by_Title(4)
-export def "categories-4od-title-page-pageno-atom get-4o-d-programmes-by-title4" [
+export def "4o-d-programmes-by-title4" [
   category: string
   pageno: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -882,7 +882,7 @@ export def "categories-4od-title-page-pageno-atom get-4o-d-programmes-by-title4"
 #
 # GET /categories/{category}/channel/{channel}.atom
 # operationId: All_Programmes_by_TX_Date(2)
-export def "categories-channel list-programmes-by-tx-date2" [
+export def "all-programmes-by-tx-date2" [
   category: string
   channel: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -922,7 +922,7 @@ export def "categories-channel list-programmes-by-tx-date2" [
 #
 # GET /categories/{category}/channel/{channel}/4od.atom
 # operationId: 4oD_Programmes_by_TX_Date(2)
-export def "categories-channel-4od-atom get-4o-d-programmes-by-tx-date2" [
+export def "4o-d-programmes-by-tx-date2" [
   category: string
   channel: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -962,7 +962,7 @@ export def "categories-channel-4od-atom get-4o-d-programmes-by-tx-date2" [
 #
 # GET /categories/{category}/channel/{channel}/4od/page-{pageno}.atom
 # operationId: 4oD_Programmes_by_TX_Date(5)
-export def "categories-channel-4od-page-pageno-atom get-4o-d-programmes-by-tx-date5" [
+export def "4o-d-programmes-by-tx-date5" [
   category: string
   channel: string
   pageno: int
@@ -1004,7 +1004,7 @@ export def "categories-channel-4od-page-pageno-atom get-4o-d-programmes-by-tx-da
 #
 # GET /categories/{category}/channel/{channel}/4od/popular.atom
 # operationId: Most_Popular_Brands_Feed(3)
-export def "categories-channel-4od-popular-atom get-most-brands-feed3" [
+export def "most-popular-brands-feed3" [
   category: string
   channel: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1044,7 +1044,7 @@ export def "categories-channel-4od-popular-atom get-most-brands-feed3" [
 #
 # GET /categories/{category}/channel/{channel}/4od/popular/page-{pageno}.atom
 # operationId: Most_Popular_Brands_Feed(7)
-export def "categories-channel-4od-popular-page-pageno-atom get-most-brands-feed7" [
+export def "most-popular-brands-feed7" [
   category: string
   channel: string
   pageno: int
@@ -1086,7 +1086,7 @@ export def "categories-channel-4od-popular-page-pageno-atom get-most-brands-feed
 #
 # GET /categories/{category}/channel/{channel}/4od/title.atom
 # operationId: 4oD_Programmes_by_Title(2)
-export def "categories-channel-4od-title-atom get-4o-d-programmes-by-title2" [
+export def "4o-d-programmes-by-title2" [
   category: string
   channel: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1126,7 +1126,7 @@ export def "categories-channel-4od-title-atom get-4o-d-programmes-by-title2" [
 #
 # GET /categories/{category}/channel/{channel}/4od/title/page-{pageno}.atom
 # operationId: 4oD_Programmes_by_Title(5)
-export def "categories-channel-4od-title-page-pageno-atom get-4o-d-programmes-by-title5" [
+export def "4o-d-programmes-by-title5" [
   category: string
   channel: string
   pageno: int
@@ -1168,7 +1168,7 @@ export def "categories-channel-4od-title-page-pageno-atom get-4o-d-programmes-by
 #
 # GET /categories/{category}/channel/{channel}/page-{pageno}.atom
 # operationId: All_Programmes_by_TX_Date(5)
-export def "categories-channel-page-pageno-atom list-programmes-by-tx-date5" [
+export def "all-programmes-by-tx-date5" [
   category: string
   channel: string
   pageno: int
@@ -1210,7 +1210,7 @@ export def "categories-channel-page-pageno-atom list-programmes-by-tx-date5" [
 #
 # GET /categories/{category}/channel/{channel}/title.atom
 # operationId: All_Programmes_by_Title(2)
-export def "categories-channel-title-atom list-programmes-by-title2" [
+export def "all-programmes-by-title2" [
   category: string
   channel: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1250,7 +1250,7 @@ export def "categories-channel-title-atom list-programmes-by-title2" [
 #
 # GET /categories/{category}/channel/{channel}/title/page-{pageno}.atom
 # operationId: All_Programmes_by_Title(5)
-export def "categories-channel-title-page-pageno-atom list-programmes-by-title5" [
+export def "all-programmes-by-title5" [
   category: string
   channel: string
   pageno: int
@@ -1292,7 +1292,7 @@ export def "categories-channel-title-page-pageno-atom list-programmes-by-title5"
 #
 # GET /categories/{category}/derived/ad.atom
 # operationId: All_Programmes_by_TX_Date(3)
-export def "categories-derived-ad-atom list-programmes-by-tx-date3" [
+export def "all-programmes-by-tx-date3" [
   category: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1330,7 +1330,7 @@ export def "categories-derived-ad-atom list-programmes-by-tx-date3" [
 #
 # GET /categories/{category}/derived/ad/4od.atom
 # operationId: 4oD_Programmes_by_TX_Date(3)
-export def "categories-derived-ad-4od-atom get-4o-d-programmes-by-tx-date3" [
+export def "4o-d-programmes-by-tx-date3" [
   category: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1368,7 +1368,7 @@ export def "categories-derived-ad-4od-atom get-4o-d-programmes-by-tx-date3" [
 #
 # GET /categories/{category}/derived/ad/4od/page-{pageno}.atom
 # operationId: 4oD_Programmes_by_TX_Date(6)
-export def "categories-derived-ad-4od-page-pageno-atom get-4o-d-programmes-by-tx-date6" [
+export def "4o-d-programmes-by-tx-date6" [
   category: string
   pageno: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1408,7 +1408,7 @@ export def "categories-derived-ad-4od-page-pageno-atom get-4o-d-programmes-by-tx
 #
 # GET /categories/{category}/derived/ad/4od/popular.atom
 # operationId: Most_Popular_Brands_Feed(4)
-export def "categories-derived-ad-4od-popular-atom get-most-brands-feed4" [
+export def "most-popular-brands-feed4" [
   category: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1446,7 +1446,7 @@ export def "categories-derived-ad-4od-popular-atom get-most-brands-feed4" [
 #
 # GET /categories/{category}/derived/ad/4od/popular/page-{pageno}.atom
 # operationId: Most_Popular_Brands_Feed(8)
-export def "categories-derived-ad-4od-popular-page-pageno-atom get-most-brands-feed8" [
+export def "most-popular-brands-feed8" [
   category: string
   pageno: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1486,7 +1486,7 @@ export def "categories-derived-ad-4od-popular-page-pageno-atom get-most-brands-f
 #
 # GET /categories/{category}/derived/ad/4od/title.atom
 # operationId: 4oD_Programmes_by_Title(3)
-export def "categories-derived-ad-4od-title-atom get-4o-d-programmes-by-title3" [
+export def "4o-d-programmes-by-title3" [
   category: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1524,7 +1524,7 @@ export def "categories-derived-ad-4od-title-atom get-4o-d-programmes-by-title3" 
 #
 # GET /categories/{category}/derived/ad/4od/title/page-{pageno}.atom
 # operationId: 4oD_Programmes_by_Title(6)
-export def "categories-derived-ad-4od-title-page-pageno-atom get-4o-d-programmes-by-title6" [
+export def "4o-d-programmes-by-title6" [
   category: string
   pageno: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1564,7 +1564,7 @@ export def "categories-derived-ad-4od-title-page-pageno-atom get-4o-d-programmes
 #
 # GET /categories/{category}/derived/ad/page-{pageno}.atom
 # operationId: All_Programmes_by_TX_Date(6)
-export def "categories-derived-ad-page-pageno-atom list-programmes-by-tx-date6" [
+export def "all-programmes-by-tx-date6" [
   category: string
   pageno: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1604,7 +1604,7 @@ export def "categories-derived-ad-page-pageno-atom list-programmes-by-tx-date6" 
 #
 # GET /categories/{category}/derived/ad/title.atom
 # operationId: All_Programmes_by_Title(3)
-export def "categories-derived-ad-title-atom list-programmes-by-title3" [
+export def "all-programmes-by-title3" [
   category: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1642,7 +1642,7 @@ export def "categories-derived-ad-title-atom list-programmes-by-title3" [
 #
 # GET /categories/{category}/derived/ad/title/page-{pageno}.atom
 # operationId: All_Programmes_by_Title(6)
-export def "categories-derived-ad-title-page-pageno-atom list-programmes-by-title6" [
+export def "all-programmes-by-title6" [
   category: string
   pageno: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1682,7 +1682,7 @@ export def "categories-derived-ad-title-page-pageno-atom list-programmes-by-titl
 #
 # GET /categories/{category}/page-{pageno}.atom
 # operationId: All_Programmes_by_TX_Date(4)
-export def "categories-page-pageno-atom list-programmes-by-tx-date4" [
+export def "all-programmes-by-tx-date4" [
   category: string
   pageno: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1722,7 +1722,7 @@ export def "categories-page-pageno-atom list-programmes-by-tx-date4" [
 #
 # GET /categories/{category}/popular.atom
 # operationId: Most_Popular_Brands_Feed(2)
-export def "categories-popular-atom get-most-brands-feed2" [
+export def "most-popular-brands-feed2" [
   category: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1760,7 +1760,7 @@ export def "categories-popular-atom get-most-brands-feed2" [
 #
 # GET /categories/{category}/popular/page-{pageno}.atom
 # operationId: Most_Popular_Brands_Feed(6)
-export def "categories-popular-page-pageno-atom get-most-brands-feed6" [
+export def "most-popular-brands-feed6" [
   category: string
   pageno: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1800,7 +1800,7 @@ export def "categories-popular-page-pageno-atom get-most-brands-feed6" [
 #
 # GET /categories/{category}/title.atom
 # operationId: All_Programmes_by_Title
-export def "categories-title-atom list-programmes" [
+export def "all-programmes-by-title" [
   category: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1838,7 +1838,7 @@ export def "categories-title-atom list-programmes" [
 #
 # GET /categories/{category}/title/page-{pageno}.atom
 # operationId: All_Programmes_by_Title(4)
-export def "categories-title-page-pageno-atom list-programmes-by-title4" [
+export def "all-programmes-by-title4" [
   category: string
   pageno: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1878,7 +1878,7 @@ export def "categories-title-page-pageno-atom list-programmes-by-title4" [
 #
 # GET /collections/{collection_name}.atom
 # operationId: Collections_Feed(2)
-export def "collections get-feed2" [
+export def "collections-feed2" [
   collection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1916,7 +1916,7 @@ export def "collections get-feed2" [
 #
 # GET /collections/{collection_name}/4od.atom
 # operationId: Collections_Feed
-export def "collections-4od-atom get-feed" [
+export def "collections-feed" [
   collection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1954,7 +1954,7 @@ export def "collections-4od-atom get-feed" [
 #
 # GET /collections/{collection_name}/flattened.atom
 # operationId: Flattened_Collection_Feed(2)
-export def "collections-flattened-atom get-feed2" [
+export def "flattened-collection-feed2" [
   collection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1992,7 +1992,7 @@ export def "collections-flattened-atom get-feed2" [
 #
 # GET /collections/{collection_name}/flattened/4od.atom
 # operationId: Flattened_Collection_Feed
-export def "collections-flattened-4od-atom get-feed" [
+export def "flattened-collection-feed" [
   collection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2030,7 +2030,7 @@ export def "collections-flattened-4od-atom get-feed" [
 #
 # GET /coming-soon.atom
 # operationId: Coming_Soon_feed
-export def "coming-soon-atom get-feed" [
+export def "coming-soon-feed" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2066,7 +2066,7 @@ export def "coming-soon-atom get-feed" [
 #
 # GET /coming-soon/{category}.atom
 # operationId: Coming_Soon_feed(2)
-export def "coming-soon get-feed2" [
+export def "coming-soon-feed2" [
   category: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2104,7 +2104,7 @@ export def "coming-soon get-feed2" [
 #
 # GET /programme/{programme-id}.atom
 # operationId: Programme_Feed
-export def "programme get-feed" [
+export def "programme-feed" [
   programme_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2142,7 +2142,7 @@ export def "programme get-feed" [
 #
 # GET /search.atom
 # operationId: Search_Feed
-export def "search-atom list-feed" [
+export def "search-feed" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2179,7 +2179,7 @@ export def "search-atom list-feed" [
 #
 # GET /search/page-{pageno}.atom
 # operationId: Search_Feed(3)
-export def "search-page-pageno-atom list-feed3" [
+export def "search-feed3" [
   pageno: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2218,7 +2218,7 @@ export def "search-page-pageno-atom list-feed3" [
 #
 # GET /search/{q}.atom
 # operationId: Search_Feed(2)
-export def "search list-feed2" [
+export def "search-feed2" [
   q: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2256,7 +2256,7 @@ export def "search list-feed2" [
 #
 # GET /search/{q}/page-{pageno}.atom
 # operationId: Search_Feed(4)
-export def "search-page-pageno-atom list-feed4" [
+export def "search-feed4" [
   q: string
   pageno: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2296,7 +2296,7 @@ export def "search-page-pageno-atom list-feed4" [
 #
 # GET /tv-listings/daily/{yyyy}/{mm}/{dd}.atom
 # operationId: TV_Listings_Feed
-export def "tv-listings-daily get-feed" [
+export def "tv-listings-feed" [
   yyyy: string
   mm: string
   dd: string
@@ -2338,7 +2338,7 @@ export def "tv-listings-daily get-feed" [
 #
 # GET /tv-listings/daily/{yyyy}/{mm}/{dd}/{channel}.atom
 # operationId: TV_Listings_Feed(2)
-export def "tv-listings-daily get-feed2" [
+export def "tv-listings-feed2" [
   yyyy: string
   mm: string
   dd: string
@@ -2382,7 +2382,7 @@ export def "tv-listings-daily get-feed2" [
 #
 # GET /{brand-web-safe-title}.atom
 # operationId: Hub_Feed
-export def "metadataresources get-hub-feed" [
+export def "hub-feed" [
   brand_web_safe_title: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2420,7 +2420,7 @@ export def "metadataresources get-hub-feed" [
 #
 # GET /{brand-web-safe-title}/4od.atom
 # operationId: 4oD_Feed
-export def "4od-atom get-4o-d-feed" [
+export def "4o-d-feed" [
   brand_web_safe_title: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2458,7 +2458,7 @@ export def "4od-atom get-4o-d-feed" [
 #
 # GET /{brand-web-safe-title}/epg.atom
 # operationId: Brand_EPG_Atom_Feed
-export def "epg-atom get-feed" [
+export def "brand-epg-atom-feed" [
   brand_web_safe_title: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2496,7 +2496,7 @@ export def "epg-atom get-feed" [
 #
 # GET /{brand-web-safe-title}/episode-guide.atom
 # operationId: Episode_Guide_Feed_Series_Landing
-export def "episode-guide-atom get-feed-series-landing" [
+export def "episode-guide-feed-series-landing" [
   brand_web_safe_title: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2534,7 +2534,7 @@ export def "episode-guide-atom get-feed-series-landing" [
 #
 # GET /{brand-web-safe-title}/episode-guide/series-{series_number}.atom
 # operationId: Episode_Guide_Feed_Series_Detail
-export def "episode-guide-series-series-number-atom get-feed-detail" [
+export def "episode-guide-feed-series-detail" [
   brand_web_safe_title: string
   series_number: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2574,7 +2574,7 @@ export def "episode-guide-series-series-number-atom get-feed-detail" [
 #
 # GET /{brand-web-safe-title}/episode-guide/series-{series_number}/episode-{episode_number}.atom
 # operationId: Episode_Guide_Feed_Episode_Detail
-export def "episode-guide-series-series-number-episode-episode-number-atom get-feed-detail" [
+export def "episode-guide-feed-episode-detail" [
   brand_web_safe_title: string
   series_number: string
   episode_number: string
@@ -2616,7 +2616,7 @@ export def "episode-guide-series-series-number-episode-episode-number-atom get-f
 #
 # GET /{brand-web-safe-title}/videos/all.atom
 # operationId: Clips_Landing_Feed_Brand_Series_and_Episode_Levels
-export def "videos-all-atom get-clips-landing-feed-series-and-episode-levels" [
+export def "clips-landing-feed-brand-series-and-episode-levels" [
   brand_web_safe_title: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2654,7 +2654,7 @@ export def "videos-all-atom get-clips-landing-feed-series-and-episode-levels" [
 #
 # GET /{brand-web-safe-title}/videos/series-{series_number}.atom
 # operationId: Clips_Landing_Feed_Brand_Series_and_Episode_Levels(2)
-export def "videos-series-series-number-atom get-clips-landing-feed-and-episode-levels2" [
+export def "clips-landing-feed-brand-series-and-episode-levels2" [
   brand_web_safe_title: string
   series_number: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2694,7 +2694,7 @@ export def "videos-series-series-number-atom get-clips-landing-feed-and-episode-
 #
 # GET /{brand-web-safe-title}/videos/series-{series_number}/episode-{episode_number}.atom
 # operationId: Clips_Landing_Feed_Brand_Series_and_Episode_Levels(3)
-export def "videos-series-series-number-episode-episode-number-atom get-clips-landing-feed-and-levels3" [
+export def "clips-landing-feed-brand-series-and-episode-levels3" [
   brand_web_safe_title: string
   series_number: string
   episode_number: string
@@ -2736,7 +2736,7 @@ export def "videos-series-series-number-episode-episode-number-atom get-clips-la
 #
 # GET /{brand-web-safe-title}/videos/{clip-asset-id}.atom
 # operationId: Clip_Detail_Atom_Feed
-export def "videos get-detail-atom-feed" [
+export def "clip-detail-atom-feed" [
   brand_web_safe_title: string
   clip_asset_id: string
   --base-url(-b): string@base-url-completer # API base URL

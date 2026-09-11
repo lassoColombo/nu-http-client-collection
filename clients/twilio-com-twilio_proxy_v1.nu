@@ -116,7 +116,7 @@ def status-completer [] { ["closed" "failed" "in-progress" "open" "unknown"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "services list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-service" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/Services
 # operationId: ListService
-export def "services list" [
+export def "list-service" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -178,7 +178,7 @@ export def "services list" [
 #
 # POST /v1/Services
 # operationId: CreateService
-export def "services create" [
+export def "create-service" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -224,7 +224,7 @@ export def "services create" [
 #
 # GET /v1/Services/{ServiceSid}/PhoneNumbers
 # operationId: ListPhoneNumber
-export def "services-phone-numbers list" [
+export def "list-phone-number" [
   service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -264,7 +264,7 @@ export def "services-phone-numbers list" [
 #
 # POST /v1/Services/{ServiceSid}/PhoneNumbers
 # operationId: CreatePhoneNumber
-export def "services-phone-numbers create" [
+export def "create-phone-number" [
   service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -307,7 +307,7 @@ export def "services-phone-numbers create" [
 #
 # DELETE /v1/Services/{ServiceSid}/PhoneNumbers/{Sid}
 # operationId: DeletePhoneNumber
-export def "services-phone-numbers delete" [
+export def "delete-phone-number" [
   service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -345,7 +345,7 @@ export def "services-phone-numbers delete" [
 #
 # GET /v1/Services/{ServiceSid}/PhoneNumbers/{Sid}
 # operationId: FetchPhoneNumber
-export def "services-phone-numbers get" [
+export def "fetch-phone-number" [
   service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -383,7 +383,7 @@ export def "services-phone-numbers get" [
 #
 # POST /v1/Services/{ServiceSid}/PhoneNumbers/{Sid}
 # operationId: UpdatePhoneNumber
-export def "services-phone-numbers update" [
+export def "update-phone-number" [
   service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -426,7 +426,7 @@ export def "services-phone-numbers update" [
 #
 # GET /v1/Services/{ServiceSid}/Sessions
 # operationId: ListSession
-export def "services-sessions list" [
+export def "list-session" [
   service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -466,7 +466,7 @@ export def "services-sessions list" [
 #
 # POST /v1/Services/{ServiceSid}/Sessions
 # operationId: CreateSession
-export def "services-sessions create" [
+export def "create-session" [
   service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -512,7 +512,7 @@ export def "services-sessions create" [
 #
 # GET /v1/Services/{ServiceSid}/Sessions/{SessionSid}/Interactions
 # operationId: ListInteraction
-export def "services-sessions-interactions list" [
+export def "list-interaction" [
   service_sid: string
   session_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -554,7 +554,7 @@ export def "services-sessions-interactions list" [
 #
 # DELETE /v1/Services/{ServiceSid}/Sessions/{SessionSid}/Interactions/{Sid}
 # operationId: DeleteInteraction
-export def "services-sessions-interactions delete" [
+export def "delete-interaction" [
   service_sid: string
   session_sid: string
   sid: string
@@ -594,7 +594,7 @@ export def "services-sessions-interactions delete" [
 #
 # GET /v1/Services/{ServiceSid}/Sessions/{SessionSid}/Interactions/{Sid}
 # operationId: FetchInteraction
-export def "services-sessions-interactions get" [
+export def "fetch-interaction" [
   service_sid: string
   session_sid: string
   sid: string
@@ -634,7 +634,7 @@ export def "services-sessions-interactions get" [
 #
 # GET /v1/Services/{ServiceSid}/Sessions/{SessionSid}/Participants
 # operationId: ListParticipant
-export def "services-sessions-participants list" [
+export def "list-participant" [
   service_sid: string
   session_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -676,7 +676,7 @@ export def "services-sessions-participants list" [
 #
 # POST /v1/Services/{ServiceSid}/Sessions/{SessionSid}/Participants
 # operationId: CreateParticipant
-export def "services-sessions-participants create" [
+export def "create-participant" [
   service_sid: string
   session_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -721,7 +721,7 @@ export def "services-sessions-participants create" [
 # GET /v1/Services/{ServiceSid}/Sessions/{SessionSid}/Participants/{ParticipantSid}/MessageInteractions
 #
 # operationId: ListMessageInteraction
-export def "services-sessions-participants-message-interactions list" [
+export def "list-message-interaction" [
   service_sid: string
   session_sid: string
   participant_sid: string
@@ -765,7 +765,7 @@ export def "services-sessions-participants-message-interactions list" [
 #
 # POST /v1/Services/{ServiceSid}/Sessions/{SessionSid}/Participants/{ParticipantSid}/MessageInteractions
 # operationId: CreateMessageInteraction
-export def "services-sessions-participants-message-interactions create" [
+export def "create-message-interaction" [
   service_sid: string
   session_sid: string
   participant_sid: string
@@ -810,7 +810,7 @@ export def "services-sessions-participants-message-interactions create" [
 # GET /v1/Services/{ServiceSid}/Sessions/{SessionSid}/Participants/{ParticipantSid}/MessageInteractions/{Sid}
 #
 # operationId: FetchMessageInteraction
-export def "services-sessions-participants-message-interactions get" [
+export def "fetch-message-interaction" [
   service_sid: string
   session_sid: string
   participant_sid: string
@@ -852,7 +852,7 @@ export def "services-sessions-participants-message-interactions get" [
 #
 # DELETE /v1/Services/{ServiceSid}/Sessions/{SessionSid}/Participants/{Sid}
 # operationId: DeleteParticipant
-export def "services-sessions-participants delete" [
+export def "delete-participant" [
   service_sid: string
   session_sid: string
   sid: string
@@ -892,7 +892,7 @@ export def "services-sessions-participants delete" [
 #
 # GET /v1/Services/{ServiceSid}/Sessions/{SessionSid}/Participants/{Sid}
 # operationId: FetchParticipant
-export def "services-sessions-participants get" [
+export def "fetch-participant" [
   service_sid: string
   session_sid: string
   sid: string
@@ -932,7 +932,7 @@ export def "services-sessions-participants get" [
 #
 # DELETE /v1/Services/{ServiceSid}/Sessions/{Sid}
 # operationId: DeleteSession
-export def "services-sessions delete" [
+export def "delete-session" [
   service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -970,7 +970,7 @@ export def "services-sessions delete" [
 #
 # GET /v1/Services/{ServiceSid}/Sessions/{Sid}
 # operationId: FetchSession
-export def "services-sessions get" [
+export def "fetch-session" [
   service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1008,7 +1008,7 @@ export def "services-sessions get" [
 #
 # POST /v1/Services/{ServiceSid}/Sessions/{Sid}
 # operationId: UpdateSession
-export def "services-sessions update" [
+export def "update-session" [
   service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1053,7 +1053,7 @@ export def "services-sessions update" [
 #
 # GET /v1/Services/{ServiceSid}/ShortCodes
 # operationId: ListShortCode
-export def "services-short-codes list" [
+export def "list-short-code" [
   service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1093,7 +1093,7 @@ export def "services-short-codes list" [
 #
 # POST /v1/Services/{ServiceSid}/ShortCodes
 # operationId: CreateShortCode
-export def "services-short-codes create" [
+export def "create-short-code" [
   service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1134,7 +1134,7 @@ export def "services-short-codes create" [
 #
 # DELETE /v1/Services/{ServiceSid}/ShortCodes/{Sid}
 # operationId: DeleteShortCode
-export def "services-short-codes delete" [
+export def "delete-short-code" [
   service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1172,7 +1172,7 @@ export def "services-short-codes delete" [
 #
 # GET /v1/Services/{ServiceSid}/ShortCodes/{Sid}
 # operationId: FetchShortCode
-export def "services-short-codes get" [
+export def "fetch-short-code" [
   service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1210,7 +1210,7 @@ export def "services-short-codes get" [
 #
 # POST /v1/Services/{ServiceSid}/ShortCodes/{Sid}
 # operationId: UpdateShortCode
-export def "services-short-codes update" [
+export def "update-short-code" [
   service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1253,7 +1253,7 @@ export def "services-short-codes update" [
 #
 # DELETE /v1/Services/{Sid}
 # operationId: DeleteService
-export def "services delete" [
+export def "delete-service" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1289,7 +1289,7 @@ export def "services delete" [
 #
 # GET /v1/Services/{Sid}
 # operationId: FetchService
-export def "services get" [
+export def "fetch-service" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1325,7 +1325,7 @@ export def "services get" [
 #
 # POST /v1/Services/{Sid}
 # operationId: UpdateService
-export def "services update" [
+export def "update-service" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

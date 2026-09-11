@@ -112,7 +112,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "challenge-generate generate" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "verifiedaccess-challenge-generate" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -136,7 +136,7 @@ export def commands []: nothing -> table {
 #
 # POST /v2/challenge:generate
 # operationId: verifiedaccess.challenge.generate
-export def "challenge-generate generate" [
+export def "verifiedaccess-challenge-generate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -186,7 +186,7 @@ export def "challenge-generate generate" [
 #
 # POST /v2/challenge:verify
 # operationId: verifiedaccess.challenge.verify
-export def "challenge-verify verify" [
+export def "verifiedaccess-challenge-verify" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)

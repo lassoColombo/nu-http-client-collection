@@ -112,7 +112,7 @@ def view-completer [] { ["BASIC" "FULL" "NOTIFICATION_VIEW_UNSPECIFIED"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "organizations get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "advisorynotifications-organizations-locations-notifications-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -136,7 +136,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/{name}
 # operationId: advisorynotifications.organizations.locations.notifications.get
-export def "organizations get" [
+export def "advisorynotifications-organizations-locations-notifications-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -185,7 +185,7 @@ export def "organizations get" [
 #
 # GET /v1/{parent}/notifications
 # operationId: advisorynotifications.organizations.locations.notifications.list
-export def "notifications list" [
+export def "advisorynotifications-organizations-locations-notifications-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

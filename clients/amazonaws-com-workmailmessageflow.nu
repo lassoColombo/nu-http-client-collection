@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "messages get-raw-content" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-raw-message-content" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -128,7 +128,7 @@ export def commands []: nothing -> table {
 #
 # GET /messages/{messageId}
 # operationId: GetRawMessageContent
-export def "messages get-raw-content" [
+export def "get-raw-message-content" [
   message_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -174,7 +174,7 @@ export def "messages get-raw-content" [
 # POST /messages/{messageId}
 # operationId: PutRawMessageContent
 # --content shape: {s3Reference?: any}
-export def "messages update-raw-content" [
+export def "put-raw-message-content" [
   message_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "workspaces-alertmanager-definition create-alert-manager" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-alert-manager-definition" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # POST /workspaces/{workspaceId}/alertmanager/definition
 # operationId: CreateAlertManagerDefinition
-export def "workspaces-alertmanager-definition create-alert-manager" [
+export def "create-alert-manager-definition" [
   workspace_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -190,7 +190,7 @@ export def "workspaces-alertmanager-definition create-alert-manager" [
 #
 # DELETE /workspaces/{workspaceId}/alertmanager/definition
 # operationId: DeleteAlertManagerDefinition
-export def "workspaces-alertmanager-definition delete-alert-manager" [
+export def "delete-alert-manager-definition" [
   workspace_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -237,7 +237,7 @@ export def "workspaces-alertmanager-definition delete-alert-manager" [
 #
 # GET /workspaces/{workspaceId}/alertmanager/definition
 # operationId: DescribeAlertManagerDefinition
-export def "workspaces-alertmanager-definition get-alert-manager" [
+export def "describe-alert-manager-definition" [
   workspace_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -282,7 +282,7 @@ export def "workspaces-alertmanager-definition get-alert-manager" [
 #
 # PUT /workspaces/{workspaceId}/alertmanager/definition
 # operationId: PutAlertManagerDefinition
-export def "workspaces-alertmanager-definition update-alert-manager" [
+export def "put-alert-manager-definition" [
   workspace_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -332,7 +332,7 @@ export def "workspaces-alertmanager-definition update-alert-manager" [
 #
 # POST /workspaces/{workspaceId}/logging
 # operationId: CreateLoggingConfiguration
-export def "workspaces-logging create-configuration" [
+export def "create-logging-configuration" [
   workspace_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -382,7 +382,7 @@ export def "workspaces-logging create-configuration" [
 #
 # DELETE /workspaces/{workspaceId}/logging
 # operationId: DeleteLoggingConfiguration
-export def "workspaces-logging delete-configuration" [
+export def "delete-logging-configuration" [
   workspace_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -429,7 +429,7 @@ export def "workspaces-logging delete-configuration" [
 #
 # GET /workspaces/{workspaceId}/logging
 # operationId: DescribeLoggingConfiguration
-export def "workspaces-logging get-configuration" [
+export def "describe-logging-configuration" [
   workspace_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -474,7 +474,7 @@ export def "workspaces-logging get-configuration" [
 #
 # PUT /workspaces/{workspaceId}/logging
 # operationId: UpdateLoggingConfiguration
-export def "workspaces-logging update-configuration" [
+export def "update-logging-configuration" [
   workspace_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -524,7 +524,7 @@ export def "workspaces-logging update-configuration" [
 #
 # POST /workspaces/{workspaceId}/rulegroupsnamespaces
 # operationId: CreateRuleGroupsNamespace
-export def "workspaces-rulegroupsnamespaces create-rule-groups-namespace" [
+export def "create-rule-groups-namespace" [
   workspace_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -576,7 +576,7 @@ export def "workspaces-rulegroupsnamespaces create-rule-groups-namespace" [
 #
 # GET /workspaces/{workspaceId}/rulegroupsnamespaces
 # operationId: ListRuleGroupsNamespaces
-export def "workspaces-rulegroupsnamespaces list-rule-groups-namespaces" [
+export def "list-rule-groups-namespaces" [
   workspace_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -625,7 +625,7 @@ export def "workspaces-rulegroupsnamespaces list-rule-groups-namespaces" [
 #
 # POST /workspaces
 # operationId: CreateWorkspace
-export def "workspaces create" [
+export def "create-workspace" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -674,7 +674,7 @@ export def "workspaces create" [
 #
 # GET /workspaces
 # operationId: ListWorkspaces
-export def "workspaces list" [
+export def "list-workspaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -721,7 +721,7 @@ export def "workspaces list" [
 #
 # DELETE /workspaces/{workspaceId}/rulegroupsnamespaces/{name}
 # operationId: DeleteRuleGroupsNamespace
-export def "workspaces-rulegroupsnamespaces delete-rule-groups-namespace" [
+export def "delete-rule-groups-namespace" [
   workspace_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -770,7 +770,7 @@ export def "workspaces-rulegroupsnamespaces delete-rule-groups-namespace" [
 #
 # GET /workspaces/{workspaceId}/rulegroupsnamespaces/{name}
 # operationId: DescribeRuleGroupsNamespace
-export def "workspaces-rulegroupsnamespaces get-rule-groups-namespace" [
+export def "describe-rule-groups-namespace" [
   workspace_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -817,7 +817,7 @@ export def "workspaces-rulegroupsnamespaces get-rule-groups-namespace" [
 #
 # PUT /workspaces/{workspaceId}/rulegroupsnamespaces/{name}
 # operationId: PutRuleGroupsNamespace
-export def "workspaces-rulegroupsnamespaces update-rule-groups-namespace" [
+export def "put-rule-groups-namespace" [
   workspace_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -869,7 +869,7 @@ export def "workspaces-rulegroupsnamespaces update-rule-groups-namespace" [
 #
 # DELETE /workspaces/{workspaceId}
 # operationId: DeleteWorkspace
-export def "workspaces delete" [
+export def "delete-workspace" [
   workspace_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -916,7 +916,7 @@ export def "workspaces delete" [
 #
 # GET /workspaces/{workspaceId}
 # operationId: DescribeWorkspace
-export def "workspaces get" [
+export def "describe-workspace" [
   workspace_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -961,7 +961,7 @@ export def "workspaces get" [
 #
 # GET /tags/{resourceArn}
 # operationId: ListTagsForResource
-export def "tags list-for-resource" [
+export def "list-tags-for-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1006,7 +1006,7 @@ export def "tags list-for-resource" [
 #
 # POST /tags/{resourceArn}
 # operationId: TagResource
-export def "tags tag-resource" [
+export def "tag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1055,7 +1055,7 @@ export def "tags tag-resource" [
 #
 # DELETE /tags/{resourceArn}
 # operationId: UntagResource
-export def "tags untag-resource" [
+export def "untag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1102,7 +1102,7 @@ export def "tags untag-resource" [
 #
 # POST /workspaces/{workspaceId}/alias
 # operationId: UpdateWorkspaceAlias
-export def "workspaces-alias update" [
+export def "update-workspace-alias" [
   workspace_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

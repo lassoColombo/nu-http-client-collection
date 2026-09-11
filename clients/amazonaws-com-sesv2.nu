@@ -125,7 +125,7 @@ def behavior-on-mx-failure-completer [] { ["REJECT_MESSAGE" "USE_DEFAULT_VALUE"]
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "email-metrics-batch get-data" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "batch-get-metric-data" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -150,7 +150,7 @@ export def commands []: nothing -> table {
 # POST /v2/email/metrics/batch
 # operationId: BatchGetMetricData
 # --Queries item shape: {Id: any, Namespace: any, Metric: any, Dimensions?: any, StartDate: any, EndDate: any}
-export def "email-metrics-batch get-data" [
+export def "batch-get-metric-data" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -204,7 +204,7 @@ export def "email-metrics-batch get-data" [
 # --Tags item shape: {Key: any, Value: any}
 # --SuppressionOptions shape: {SuppressedReasons?: any}
 # --VdmOptions shape: {DashboardOptions?: any, GuardianOptions?: any}
-export def "email-configuration-sets create" [
+export def "create-configuration-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -258,7 +258,7 @@ export def "email-configuration-sets create" [
 #
 # GET /v2/email/configuration-sets
 # operationId: ListConfigurationSets
-export def "email-configuration-sets list" [
+export def "list-configuration-sets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -305,7 +305,7 @@ export def "email-configuration-sets list" [
 # POST /v2/email/configuration-sets/{ConfigurationSetName}/event-destinations
 # operationId: CreateConfigurationSetEventDestination
 # --EventDestination shape: {Enabled?: any, MatchingEventTypes?: any, KinesisFirehoseDestination?: any, CloudWatchDestination?: any, SnsDestination?: any, PinpointDestination?: any}
-export def "email-configuration-sets-event-destinations create" [
+export def "create-configuration-set-event-destination" [
   configuration_set_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -355,7 +355,7 @@ export def "email-configuration-sets-event-destinations create" [
 #
 # GET /v2/email/configuration-sets/{ConfigurationSetName}/event-destinations
 # operationId: GetConfigurationSetEventDestinations
-export def "email-configuration-sets-event-destinations get" [
+export def "get-configuration-set-event-destinations" [
   configuration_set_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -401,7 +401,7 @@ export def "email-configuration-sets-event-destinations get" [
 # POST /v2/email/contact-lists/{ContactListName}/contacts
 # operationId: CreateContact
 # --TopicPreferences item shape: {TopicName: any, SubscriptionStatus: any}
-export def "email-contact-lists-contacts create" [
+export def "create-contact" [
   contact_list_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -454,7 +454,7 @@ export def "email-contact-lists-contacts create" [
 # GET /v2/email/contact-lists/{ContactListName}/contacts
 # operationId: ListContacts
 # --Filter shape: {FilteredStatus?: any, TopicFilter?: any}
-export def "email-contact-lists-contacts list" [
+export def "list-contacts" [
   contact_list_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -504,7 +504,7 @@ export def "email-contact-lists-contacts list" [
 # operationId: CreateContactList
 # --Topics item shape: {TopicName: any, DisplayName: any, Description?: any, DefaultSubscriptionStatus: any}
 # --Tags item shape: {Key: any, Value: any}
-export def "email-contact-lists create" [
+export def "create-contact-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -554,7 +554,7 @@ export def "email-contact-lists create" [
 #
 # GET /v2/email/contact-lists
 # operationId: ListContactLists
-export def "email-contact-lists list" [
+export def "list-contact-lists" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -600,7 +600,7 @@ export def "email-contact-lists list" [
 #
 # POST /v2/email/custom-verification-email-templates
 # operationId: CreateCustomVerificationEmailTemplate
-export def "email-custom-verification-email-templates create" [
+export def "create-custom-verification-email-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -652,7 +652,7 @@ export def "email-custom-verification-email-templates create" [
 #
 # GET /v2/email/custom-verification-email-templates
 # operationId: ListCustomVerificationEmailTemplates
-export def "email-custom-verification-email-templates list" [
+export def "list-custom-verification-email-templates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -699,7 +699,7 @@ export def "email-custom-verification-email-templates list" [
 # POST /v2/email/dedicated-ip-pools
 # operationId: CreateDedicatedIpPool
 # --Tags item shape: {Key: any, Value: any}
-export def "email-dedicated-ip-pools create" [
+export def "create-dedicated-ip-pool" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -748,7 +748,7 @@ export def "email-dedicated-ip-pools create" [
 #
 # GET /v2/email/dedicated-ip-pools
 # operationId: ListDedicatedIpPools
-export def "email-dedicated-ip-pools list" [
+export def "list-dedicated-ip-pools" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -796,7 +796,7 @@ export def "email-dedicated-ip-pools list" [
 # operationId: CreateDeliverabilityTestReport
 # --Content shape: {Simple?: any, Raw?: any, Template?: any}
 # --Tags item shape: {Key: any, Value: any}
-export def "email-deliverability-dashboard-test create-report" [
+export def "create-deliverability-test-report" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -848,7 +848,7 @@ export def "email-deliverability-dashboard-test create-report" [
 # operationId: CreateEmailIdentity
 # --Tags item shape: {Key: any, Value: any}
 # --DkimSigningAttributes shape: {DomainSigningSelector?: any, DomainSigningPrivateKey?: any, NextSigningKeyLength?: any}
-export def "email-identities create-identity" [
+export def "create-email-identity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -898,7 +898,7 @@ export def "email-identities create-identity" [
 #
 # GET /v2/email/identities
 # operationId: ListEmailIdentities
-export def "email-identities list" [
+export def "list-email-identities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -944,7 +944,7 @@ export def "email-identities list" [
 #
 # POST /v2/email/identities/{EmailIdentity}/policies/{PolicyName}
 # operationId: CreateEmailIdentityPolicy
-export def "email-identities-policies create-identity-policy" [
+export def "create-email-identity-policy" [
   email_identity: string
   policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -995,7 +995,7 @@ export def "email-identities-policies create-identity-policy" [
 #
 # DELETE /v2/email/identities/{EmailIdentity}/policies/{PolicyName}
 # operationId: DeleteEmailIdentityPolicy
-export def "email-identities-policies delete-identity-policy" [
+export def "delete-email-identity-policy" [
   email_identity: string
   policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1042,7 +1042,7 @@ export def "email-identities-policies delete-identity-policy" [
 #
 # PUT /v2/email/identities/{EmailIdentity}/policies/{PolicyName}
 # operationId: UpdateEmailIdentityPolicy
-export def "email-identities-policies update-identity-policy" [
+export def "update-email-identity-policy" [
   email_identity: string
   policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1094,7 +1094,7 @@ export def "email-identities-policies update-identity-policy" [
 # POST /v2/email/templates
 # operationId: CreateEmailTemplate
 # --TemplateContent shape: {Subject?: any, Text?: any, Html?: any}
-export def "email-templates create" [
+export def "create-email-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1142,7 +1142,7 @@ export def "email-templates create" [
 #
 # GET /v2/email/templates
 # operationId: ListEmailTemplates
-export def "email-templates list" [
+export def "list-email-templates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1190,7 +1190,7 @@ export def "email-templates list" [
 # operationId: CreateImportJob
 # --ImportDestination shape: {SuppressionListDestination?: any, ContactListDestination?: any}
 # --ImportDataSource shape: {S3Url?: any, DataFormat?: any}
-export def "email-import-jobs create" [
+export def "create-import-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1238,7 +1238,7 @@ export def "email-import-jobs create" [
 #
 # GET /v2/email/import-jobs
 # operationId: ListImportJobs
-export def "email-import-jobs list" [
+export def "list-import-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1284,7 +1284,7 @@ export def "email-import-jobs list" [
 #
 # DELETE /v2/email/configuration-sets/{ConfigurationSetName}
 # operationId: DeleteConfigurationSet
-export def "email-configuration-sets delete" [
+export def "delete-configuration-set" [
   configuration_set_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1329,7 +1329,7 @@ export def "email-configuration-sets delete" [
 #
 # GET /v2/email/configuration-sets/{ConfigurationSetName}
 # operationId: GetConfigurationSet
-export def "email-configuration-sets get" [
+export def "get-configuration-set" [
   configuration_set_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1374,7 +1374,7 @@ export def "email-configuration-sets get" [
 #
 # DELETE /v2/email/configuration-sets/{ConfigurationSetName}/event-destinations/{EventDestinationName}
 # operationId: DeleteConfigurationSetEventDestination
-export def "email-configuration-sets-event-destinations delete" [
+export def "delete-configuration-set-event-destination" [
   configuration_set_name: string
   event_destination_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1422,7 +1422,7 @@ export def "email-configuration-sets-event-destinations delete" [
 # PUT /v2/email/configuration-sets/{ConfigurationSetName}/event-destinations/{EventDestinationName}
 # operationId: UpdateConfigurationSetEventDestination
 # --EventDestination shape: {Enabled?: any, MatchingEventTypes?: any, KinesisFirehoseDestination?: any, CloudWatchDestination?: any, SnsDestination?: any, PinpointDestination?: any}
-export def "email-configuration-sets-event-destinations update" [
+export def "update-configuration-set-event-destination" [
   configuration_set_name: string
   event_destination_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1473,7 +1473,7 @@ export def "email-configuration-sets-event-destinations update" [
 #
 # DELETE /v2/email/contact-lists/{ContactListName}/contacts/{EmailAddress}
 # operationId: DeleteContact
-export def "email-contact-lists-contacts delete" [
+export def "delete-contact" [
   contact_list_name: string
   email_address: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1520,7 +1520,7 @@ export def "email-contact-lists-contacts delete" [
 #
 # GET /v2/email/contact-lists/{ContactListName}/contacts/{EmailAddress}
 # operationId: GetContact
-export def "email-contact-lists-contacts get" [
+export def "get-contact" [
   contact_list_name: string
   email_address: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1568,7 +1568,7 @@ export def "email-contact-lists-contacts get" [
 # PUT /v2/email/contact-lists/{ContactListName}/contacts/{EmailAddress}
 # operationId: UpdateContact
 # --TopicPreferences item shape: {TopicName: any, SubscriptionStatus: any}
-export def "email-contact-lists-contacts update" [
+export def "update-contact" [
   contact_list_name: string
   email_address: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1621,7 +1621,7 @@ export def "email-contact-lists-contacts update" [
 #
 # DELETE /v2/email/contact-lists/{ContactListName}
 # operationId: DeleteContactList
-export def "email-contact-lists delete" [
+export def "delete-contact-list" [
   contact_list_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1666,7 +1666,7 @@ export def "email-contact-lists delete" [
 #
 # GET /v2/email/contact-lists/{ContactListName}
 # operationId: GetContactList
-export def "email-contact-lists get" [
+export def "get-contact-list" [
   contact_list_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1712,7 +1712,7 @@ export def "email-contact-lists get" [
 # PUT /v2/email/contact-lists/{ContactListName}
 # operationId: UpdateContactList
 # --Topics item shape: {TopicName: any, DisplayName: any, Description?: any, DefaultSubscriptionStatus: any}
-export def "email-contact-lists update" [
+export def "update-contact-list" [
   contact_list_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1762,7 +1762,7 @@ export def "email-contact-lists update" [
 #
 # DELETE /v2/email/custom-verification-email-templates/{TemplateName}
 # operationId: DeleteCustomVerificationEmailTemplate
-export def "email-custom-verification-email-templates delete" [
+export def "delete-custom-verification-email-template" [
   template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1807,7 +1807,7 @@ export def "email-custom-verification-email-templates delete" [
 #
 # GET /v2/email/custom-verification-email-templates/{TemplateName}
 # operationId: GetCustomVerificationEmailTemplate
-export def "email-custom-verification-email-templates get" [
+export def "get-custom-verification-email-template" [
   template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1852,7 +1852,7 @@ export def "email-custom-verification-email-templates get" [
 #
 # PUT /v2/email/custom-verification-email-templates/{TemplateName}
 # operationId: UpdateCustomVerificationEmailTemplate
-export def "email-custom-verification-email-templates update" [
+export def "update-custom-verification-email-template" [
   template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1905,7 +1905,7 @@ export def "email-custom-verification-email-templates update" [
 #
 # DELETE /v2/email/dedicated-ip-pools/{PoolName}
 # operationId: DeleteDedicatedIpPool
-export def "email-dedicated-ip-pools delete" [
+export def "delete-dedicated-ip-pool" [
   pool_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1950,7 +1950,7 @@ export def "email-dedicated-ip-pools delete" [
 #
 # GET /v2/email/dedicated-ip-pools/{PoolName}
 # operationId: GetDedicatedIpPool
-export def "email-dedicated-ip-pools get" [
+export def "get-dedicated-ip-pool" [
   pool_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1995,7 +1995,7 @@ export def "email-dedicated-ip-pools get" [
 #
 # DELETE /v2/email/identities/{EmailIdentity}
 # operationId: DeleteEmailIdentity
-export def "email-identities delete-identity" [
+export def "delete-email-identity" [
   email_identity: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2040,7 +2040,7 @@ export def "email-identities delete-identity" [
 #
 # GET /v2/email/identities/{EmailIdentity}
 # operationId: GetEmailIdentity
-export def "email-identities get-identity" [
+export def "get-email-identity" [
   email_identity: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2085,7 +2085,7 @@ export def "email-identities get-identity" [
 #
 # DELETE /v2/email/templates/{TemplateName}
 # operationId: DeleteEmailTemplate
-export def "email-templates delete" [
+export def "delete-email-template" [
   template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2130,7 +2130,7 @@ export def "email-templates delete" [
 #
 # GET /v2/email/templates/{TemplateName}
 # operationId: GetEmailTemplate
-export def "email-templates get" [
+export def "get-email-template" [
   template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2176,7 +2176,7 @@ export def "email-templates get" [
 # PUT /v2/email/templates/{TemplateName}
 # operationId: UpdateEmailTemplate
 # --TemplateContent shape: {Subject?: any, Text?: any, Html?: any}
-export def "email-templates update" [
+export def "update-email-template" [
   template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2225,7 +2225,7 @@ export def "email-templates update" [
 #
 # DELETE /v2/email/suppression/addresses/{EmailAddress}
 # operationId: DeleteSuppressedDestination
-export def "email-suppression-addresses delete-suppressed-destination" [
+export def "delete-suppressed-destination" [
   email_address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2270,7 +2270,7 @@ export def "email-suppression-addresses delete-suppressed-destination" [
 #
 # GET /v2/email/suppression/addresses/{EmailAddress}
 # operationId: GetSuppressedDestination
-export def "email-suppression-addresses get-suppressed-destination" [
+export def "get-suppressed-destination" [
   email_address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2315,7 +2315,7 @@ export def "email-suppression-addresses get-suppressed-destination" [
 #
 # GET /v2/email/account
 # operationId: GetAccount
-export def "email-account get" [
+export def "get-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2358,7 +2358,7 @@ export def "email-account get" [
 #
 # GET /v2/email/deliverability-dashboard/blacklist-report
 # operationId: GetBlacklistReports
-export def "email-deliverability-dashboard-blacklist-report get" [
+export def "get-blacklist-reports" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2403,7 +2403,7 @@ export def "email-deliverability-dashboard-blacklist-report get" [
 #
 # GET /v2/email/dedicated-ips/{IP}
 # operationId: GetDedicatedIp
-export def "email-dedicated-ips get" [
+export def "get-dedicated-ip" [
   ip: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2448,7 +2448,7 @@ export def "email-dedicated-ips get" [
 #
 # GET /v2/email/dedicated-ips
 # operationId: GetDedicatedIps
-export def "email-dedicated-ips list" [
+export def "get-dedicated-ips" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2495,7 +2495,7 @@ export def "email-dedicated-ips list" [
 #
 # GET /v2/email/deliverability-dashboard
 # operationId: GetDeliverabilityDashboardOptions
-export def "email-deliverability-dashboard get-options" [
+export def "get-deliverability-dashboard-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2539,7 +2539,7 @@ export def "email-deliverability-dashboard get-options" [
 # PUT /v2/email/deliverability-dashboard
 # operationId: PutDeliverabilityDashboardOption
 # --SubscribedDomains item shape: {Domain?: any, SubscriptionStartDate?: any, InboxPlacementTrackingOption?: any}
-export def "email-deliverability-dashboard update-option" [
+export def "put-deliverability-dashboard-option" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2587,7 +2587,7 @@ export def "email-deliverability-dashboard update-option" [
 #
 # GET /v2/email/deliverability-dashboard/test-reports/{ReportId}
 # operationId: GetDeliverabilityTestReport
-export def "email-deliverability-dashboard-test-reports get" [
+export def "get-deliverability-test-report" [
   report_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2632,7 +2632,7 @@ export def "email-deliverability-dashboard-test-reports get" [
 #
 # GET /v2/email/deliverability-dashboard/campaigns/{CampaignId}
 # operationId: GetDomainDeliverabilityCampaign
-export def "email-deliverability-dashboard-campaigns get-domain" [
+export def "get-domain-deliverability-campaign" [
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2677,7 +2677,7 @@ export def "email-deliverability-dashboard-campaigns get-domain" [
 #
 # GET /v2/email/deliverability-dashboard/statistics-report/{Domain}
 # operationId: GetDomainStatisticsReport
-export def "email-deliverability-dashboard-statistics-report get" [
+export def "get-domain-statistics-report" [
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2725,7 +2725,7 @@ export def "email-deliverability-dashboard-statistics-report get" [
 #
 # GET /v2/email/identities/{EmailIdentity}/policies
 # operationId: GetEmailIdentityPolicies
-export def "email-identities-policies get-identity" [
+export def "get-email-identity-policies" [
   email_identity: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2770,7 +2770,7 @@ export def "email-identities-policies get-identity" [
 #
 # GET /v2/email/import-jobs/{JobId}
 # operationId: GetImportJob
-export def "email-import-jobs get" [
+export def "get-import-job" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2815,7 +2815,7 @@ export def "email-import-jobs get" [
 #
 # GET /v2/email/deliverability-dashboard/test-reports
 # operationId: ListDeliverabilityTestReports
-export def "email-deliverability-dashboard-test-reports list" [
+export def "list-deliverability-test-reports" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2861,7 +2861,7 @@ export def "email-deliverability-dashboard-test-reports list" [
 #
 # GET /v2/email/deliverability-dashboard/domains/{SubscribedDomain}/campaigns
 # operationId: ListDomainDeliverabilityCampaigns
-export def "email-deliverability-dashboard-domains-campaigns list" [
+export def "list-domain-deliverability-campaigns" [
   subscribed_domain: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2911,7 +2911,7 @@ export def "email-deliverability-dashboard-domains-campaigns list" [
 #
 # POST /v2/email/vdm/recommendations
 # operationId: ListRecommendations
-export def "email-vdm-recommendations list" [
+export def "list-recommendations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2963,7 +2963,7 @@ export def "email-vdm-recommendations list" [
 #
 # GET /v2/email/suppression/addresses
 # operationId: ListSuppressedDestinations
-export def "email-suppression-addresses list-suppressed-destinations" [
+export def "list-suppressed-destinations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3012,7 +3012,7 @@ export def "email-suppression-addresses list-suppressed-destinations" [
 #
 # PUT /v2/email/suppression/addresses
 # operationId: PutSuppressedDestination
-export def "email-suppression-addresses update-suppressed-destination" [
+export def "put-suppressed-destination" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3060,7 +3060,7 @@ export def "email-suppression-addresses update-suppressed-destination" [
 #
 # GET /v2/email/tags
 # operationId: ListTagsForResource
-export def "email-tags list-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3105,7 +3105,7 @@ export def "email-tags list-for-resource" [
 #
 # PUT /v2/email/account/dedicated-ips/warmup
 # operationId: PutAccountDedicatedIpWarmupAttributes
-export def "email-account-dedicated-ips-warmup update-attributes" [
+export def "put-account-dedicated-ip-warmup-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3152,7 +3152,7 @@ export def "email-account-dedicated-ips-warmup update-attributes" [
 #
 # POST /v2/email/account/details
 # operationId: PutAccountDetails
-export def "email-account-details update" [
+export def "put-account-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3204,7 +3204,7 @@ export def "email-account-details update" [
 #
 # PUT /v2/email/account/sending
 # operationId: PutAccountSendingAttributes
-export def "email-account-sending update-attributes" [
+export def "put-account-sending-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3251,7 +3251,7 @@ export def "email-account-sending update-attributes" [
 #
 # PUT /v2/email/account/suppression
 # operationId: PutAccountSuppressionAttributes
-export def "email-account-suppression update-attributes" [
+export def "put-account-suppression-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3299,7 +3299,7 @@ export def "email-account-suppression update-attributes" [
 # PUT /v2/email/account/vdm
 # operationId: PutAccountVdmAttributes
 # --VdmAttributes shape: {VdmEnabled?: any, DashboardAttributes?: any, GuardianAttributes?: any}
-export def "email-account-vdm update-attributes" [
+export def "put-account-vdm-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3346,7 +3346,7 @@ export def "email-account-vdm update-attributes" [
 #
 # PUT /v2/email/configuration-sets/{ConfigurationSetName}/delivery-options
 # operationId: PutConfigurationSetDeliveryOptions
-export def "email-configuration-sets-delivery-options update" [
+export def "put-configuration-set-delivery-options" [
   configuration_set_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3396,7 +3396,7 @@ export def "email-configuration-sets-delivery-options update" [
 #
 # PUT /v2/email/configuration-sets/{ConfigurationSetName}/reputation-options
 # operationId: PutConfigurationSetReputationOptions
-export def "email-configuration-sets-reputation-options update" [
+export def "put-configuration-set-reputation-options" [
   configuration_set_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3445,7 +3445,7 @@ export def "email-configuration-sets-reputation-options update" [
 #
 # PUT /v2/email/configuration-sets/{ConfigurationSetName}/sending
 # operationId: PutConfigurationSetSendingOptions
-export def "email-configuration-sets-sending update-options" [
+export def "put-configuration-set-sending-options" [
   configuration_set_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3494,7 +3494,7 @@ export def "email-configuration-sets-sending update-options" [
 #
 # PUT /v2/email/configuration-sets/{ConfigurationSetName}/suppression-options
 # operationId: PutConfigurationSetSuppressionOptions
-export def "email-configuration-sets-suppression-options update" [
+export def "put-configuration-set-suppression-options" [
   configuration_set_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3543,7 +3543,7 @@ export def "email-configuration-sets-suppression-options update" [
 #
 # PUT /v2/email/configuration-sets/{ConfigurationSetName}/tracking-options
 # operationId: PutConfigurationSetTrackingOptions
-export def "email-configuration-sets-tracking-options update" [
+export def "put-configuration-set-tracking-options" [
   configuration_set_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3593,7 +3593,7 @@ export def "email-configuration-sets-tracking-options update" [
 # PUT /v2/email/configuration-sets/{ConfigurationSetName}/vdm-options
 # operationId: PutConfigurationSetVdmOptions
 # --VdmOptions shape: {DashboardOptions?: any, GuardianOptions?: any}
-export def "email-configuration-sets-vdm-options update" [
+export def "put-configuration-set-vdm-options" [
   configuration_set_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3642,7 +3642,7 @@ export def "email-configuration-sets-vdm-options update" [
 #
 # PUT /v2/email/dedicated-ips/{IP}/pool
 # operationId: PutDedicatedIpInPool
-export def "email-dedicated-ips-pool update" [
+export def "put-dedicated-ip-in-pool" [
   ip: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3690,7 +3690,7 @@ export def "email-dedicated-ips-pool update" [
 # PUT /v2/email/dedicated-ips/{IP}/warmup
 #
 # operationId: PutDedicatedIpWarmupAttributes
-export def "email-dedicated-ips-warmup update-attributes" [
+export def "put-dedicated-ip-warmup-attributes" [
   ip: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3739,7 +3739,7 @@ export def "email-dedicated-ips-warmup update-attributes" [
 #
 # PUT /v2/email/identities/{EmailIdentity}/configuration-set
 # operationId: PutEmailIdentityConfigurationSetAttributes
-export def "email-identities-configuration-set update-identity-attributes" [
+export def "put-email-identity-configuration-set-attributes" [
   email_identity: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3788,7 +3788,7 @@ export def "email-identities-configuration-set update-identity-attributes" [
 #
 # PUT /v2/email/identities/{EmailIdentity}/dkim
 # operationId: PutEmailIdentityDkimAttributes
-export def "email-identities-dkim update-identity-attributes" [
+export def "put-email-identity-dkim-attributes" [
   email_identity: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3838,7 +3838,7 @@ export def "email-identities-dkim update-identity-attributes" [
 # PUT /v1/email/identities/{EmailIdentity}/dkim/signing
 # operationId: PutEmailIdentityDkimSigningAttributes
 # --SigningAttributes shape: {DomainSigningSelector?: any, DomainSigningPrivateKey?: any, NextSigningKeyLength?: any}
-export def "email-identities-dkim-signing update-identity-attributes" [
+export def "put-email-identity-dkim-signing-attributes" [
   email_identity: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3888,7 +3888,7 @@ export def "email-identities-dkim-signing update-identity-attributes" [
 #
 # PUT /v2/email/identities/{EmailIdentity}/feedback
 # operationId: PutEmailIdentityFeedbackAttributes
-export def "email-identities-feedback update-identity-attributes" [
+export def "put-email-identity-feedback-attributes" [
   email_identity: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3937,7 +3937,7 @@ export def "email-identities-feedback update-identity-attributes" [
 #
 # PUT /v2/email/identities/{EmailIdentity}/mail-from
 # operationId: PutEmailIdentityMailFromAttributes
-export def "email-identities-mail-from update-identity-attributes" [
+export def "put-email-identity-mail-from-attributes" [
   email_identity: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3990,7 +3990,7 @@ export def "email-identities-mail-from update-identity-attributes" [
 # --DefaultEmailTags item shape: {Name: any, Value: any}
 # --DefaultContent shape: {Template?: any}
 # --BulkEmailEntries item shape: {Destination: any, ReplacementTags?: any, ReplacementEmailContent?: any}
-export def "email-outbound-bulk-emails send" [
+export def "send-bulk-email" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4045,7 +4045,7 @@ export def "email-outbound-bulk-emails send" [
 #
 # POST /v2/email/outbound-custom-verification-emails
 # operationId: SendCustomVerificationEmail
-export def "email-outbound-custom-verification-emails send" [
+export def "send-custom-verification-email" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4098,7 +4098,7 @@ export def "email-outbound-custom-verification-emails send" [
 # --Content shape: {Simple?: any, Raw?: any, Template?: any}
 # --EmailTags item shape: {Name: any, Value: any}
 # --ListManagementOptions shape: {ContactListName?: any, TopicName?: any}
-export def "email-outbound-emails send" [
+export def "send-email" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4155,7 +4155,7 @@ export def "email-outbound-emails send" [
 # POST /v2/email/tags
 # operationId: TagResource
 # --Tags item shape: {Key: any, Value: any}
-export def "email-tags tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4203,7 +4203,7 @@ export def "email-tags tag-resource" [
 #
 # POST /v2/email/templates/{TemplateName}/render
 # operationId: TestRenderEmailTemplate
-export def "email-templates-render test" [
+export def "test-render-email-template" [
   template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4252,7 +4252,7 @@ export def "email-templates-render test" [
 #
 # DELETE /v2/email/tags
 # operationId: UntagResource
-export def "email-tags untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

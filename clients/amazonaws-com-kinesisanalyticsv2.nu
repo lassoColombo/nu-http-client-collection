@@ -131,7 +131,7 @@ def x-amz-target-completer-30 [] { ["KinesisAnalytics_20180523.UpdateApplication
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-application-cloud-watch-logging-option" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "add-application-cloud-watch-logging-option" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -155,7 +155,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AddApplicationCloudWatchLoggingOption
-export def "api create-application-cloud-watch-logging-option" [
+export def "add-application-cloud-watch-logging-option" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -206,7 +206,7 @@ export def "api create-application-cloud-watch-logging-option" [
 #
 # POST /
 # operationId: AddApplicationInput
-export def "api create-application-input" [
+export def "add-application-input" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -256,7 +256,7 @@ export def "api create-application-input" [
 #
 # POST /
 # operationId: AddApplicationInputProcessingConfiguration
-export def "api create-application-input-processing-configuration" [
+export def "add-application-input-processing-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -307,7 +307,7 @@ export def "api create-application-input-processing-configuration" [
 #
 # POST /
 # operationId: AddApplicationOutput
-export def "api create-application-output" [
+export def "add-application-output" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -357,7 +357,7 @@ export def "api create-application-output" [
 #
 # POST /
 # operationId: AddApplicationReferenceDataSource
-export def "api create-application-reference-data-source" [
+export def "add-application-reference-data-source" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -407,7 +407,7 @@ export def "api create-application-reference-data-source" [
 #
 # POST /
 # operationId: AddApplicationVpcConfiguration
-export def "api create-application-vpc-configuration" [
+export def "add-application-vpc-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -458,7 +458,7 @@ export def "api create-application-vpc-configuration" [
 #
 # POST /
 # operationId: CreateApplication
-export def "api create-application" [
+export def "create-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -513,7 +513,7 @@ export def "api create-application" [
 #
 # POST /
 # operationId: CreateApplicationPresignedUrl
-export def "api create-application-presigned-url" [
+export def "create-application-presigned-url" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -563,7 +563,7 @@ export def "api create-application-presigned-url" [
 #
 # POST /
 # operationId: CreateApplicationSnapshot
-export def "api create-application-snapshot" [
+export def "create-application-snapshot" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -612,7 +612,7 @@ export def "api create-application-snapshot" [
 #
 # POST /
 # operationId: DeleteApplication
-export def "api delete-application" [
+export def "delete-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -661,7 +661,7 @@ export def "api delete-application" [
 #
 # POST /
 # operationId: DeleteApplicationCloudWatchLoggingOption
-export def "api delete-application-cloud-watch-logging-option" [
+export def "delete-application-cloud-watch-logging-option" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -712,7 +712,7 @@ export def "api delete-application-cloud-watch-logging-option" [
 #
 # POST /
 # operationId: DeleteApplicationInputProcessingConfiguration
-export def "api delete-application-input-processing-configuration" [
+export def "delete-application-input-processing-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -762,7 +762,7 @@ export def "api delete-application-input-processing-configuration" [
 #
 # POST /
 # operationId: DeleteApplicationOutput
-export def "api delete-application-output" [
+export def "delete-application-output" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -812,7 +812,7 @@ export def "api delete-application-output" [
 #
 # POST /
 # operationId: DeleteApplicationReferenceDataSource
-export def "api delete-application-reference-data-source" [
+export def "delete-application-reference-data-source" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -862,7 +862,7 @@ export def "api delete-application-reference-data-source" [
 #
 # POST /
 # operationId: DeleteApplicationSnapshot
-export def "api delete-application-snapshot" [
+export def "delete-application-snapshot" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -912,7 +912,7 @@ export def "api delete-application-snapshot" [
 #
 # POST /
 # operationId: DeleteApplicationVpcConfiguration
-export def "api delete-application-vpc-configuration" [
+export def "delete-application-vpc-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -963,7 +963,7 @@ export def "api delete-application-vpc-configuration" [
 #
 # POST /
 # operationId: DescribeApplication
-export def "api get-application" [
+export def "describe-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1012,7 +1012,7 @@ export def "api get-application" [
 #
 # POST /
 # operationId: DescribeApplicationSnapshot
-export def "api get-application-snapshot" [
+export def "describe-application-snapshot" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1061,7 +1061,7 @@ export def "api get-application-snapshot" [
 #
 # POST /
 # operationId: DescribeApplicationVersion
-export def "api get-application-version" [
+export def "describe-application-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1110,7 +1110,7 @@ export def "api get-application-version" [
 #
 # POST /
 # operationId: DiscoverInputSchema
-export def "api create-discover-input-schema" [
+export def "discover-input-schema" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1162,7 +1162,7 @@ export def "api create-discover-input-schema" [
 #
 # POST /
 # operationId: ListApplicationSnapshots
-export def "api list-application-snapshots" [
+export def "list-application-snapshots" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1212,7 +1212,7 @@ export def "api list-application-snapshots" [
 #
 # POST /
 # operationId: ListApplicationVersions
-export def "api list-application-versions" [
+export def "list-application-versions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1262,7 +1262,7 @@ export def "api list-application-versions" [
 #
 # POST /
 # operationId: ListApplications
-export def "api list-applications" [
+export def "list-applications" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1311,7 +1311,7 @@ export def "api list-applications" [
 #
 # POST /
 # operationId: ListTagsForResource
-export def "api list-tags-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1359,7 +1359,7 @@ export def "api list-tags-for-resource" [
 #
 # POST /
 # operationId: RollbackApplication
-export def "api create-rollback-application" [
+export def "rollback-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1408,7 +1408,7 @@ export def "api create-rollback-application" [
 #
 # POST /
 # operationId: StartApplication
-export def "api start-application" [
+export def "start-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1457,7 +1457,7 @@ export def "api start-application" [
 #
 # POST /
 # operationId: StopApplication
-export def "api stop-application" [
+export def "stop-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1506,7 +1506,7 @@ export def "api stop-application" [
 #
 # POST /
 # operationId: TagResource
-export def "api tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1555,7 +1555,7 @@ export def "api tag-resource" [
 #
 # POST /
 # operationId: UntagResource
-export def "api untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1604,7 +1604,7 @@ export def "api untag-resource" [
 #
 # POST /
 # operationId: UpdateApplication
-export def "api update-application" [
+export def "update-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1658,7 +1658,7 @@ export def "api update-application" [
 #
 # POST /
 # operationId: UpdateApplicationMaintenanceConfiguration
-export def "api update-application-maintenance-configuration" [
+export def "update-application-maintenance-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

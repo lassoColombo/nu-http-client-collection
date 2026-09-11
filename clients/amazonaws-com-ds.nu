@@ -167,7 +167,7 @@ def x-amz-target-completer-66 [] { ["DirectoryService_20150416.VerifyTrust"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-accept-shared-directory" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accept-shared-directory" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -191,7 +191,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AcceptSharedDirectory
-export def "api create-accept-shared-directory" [
+export def "accept-shared-directory" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -239,7 +239,7 @@ export def "api create-accept-shared-directory" [
 #
 # POST /
 # operationId: AddIpRoutes
-export def "api create-ip-routes" [
+export def "add-ip-routes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -290,7 +290,7 @@ export def "api create-ip-routes" [
 # POST /
 # operationId: AddRegion
 # --VPCSettings shape: {VpcId: any, SubnetIds: any}
-export def "api create-region" [
+export def "add-region" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -340,7 +340,7 @@ export def "api create-region" [
 #
 # POST /
 # operationId: AddTagsToResource
-export def "api create-tags-to-resource" [
+export def "add-tags-to-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -389,7 +389,7 @@ export def "api create-tags-to-resource" [
 #
 # POST /
 # operationId: CancelSchemaExtension
-export def "api cancel-schema-extension" [
+export def "cancel-schema-extension" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -438,7 +438,7 @@ export def "api cancel-schema-extension" [
 #
 # POST /
 # operationId: ConnectDirectory
-export def "api create-connect-directory" [
+export def "connect-directory" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -492,7 +492,7 @@ export def "api create-connect-directory" [
 #
 # POST /
 # operationId: CreateAlias
-export def "api create-alias" [
+export def "create-alias" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -541,7 +541,7 @@ export def "api create-alias" [
 #
 # POST /
 # operationId: CreateComputer
-export def "api create-computer" [
+export def "create-computer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -593,7 +593,7 @@ export def "api create-computer" [
 #
 # POST /
 # operationId: CreateConditionalForwarder
-export def "api create-conditional-forwarder" [
+export def "create-conditional-forwarder" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -643,7 +643,7 @@ export def "api create-conditional-forwarder" [
 #
 # POST /
 # operationId: CreateDirectory
-export def "api create-directory" [
+export def "create-directory" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -697,7 +697,7 @@ export def "api create-directory" [
 #
 # POST /
 # operationId: CreateLogSubscription
-export def "api create-log-subscription" [
+export def "create-log-subscription" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -746,7 +746,7 @@ export def "api create-log-subscription" [
 #
 # POST /
 # operationId: CreateMicrosoftAD
-export def "api create-microsoft-ad" [
+export def "create-microsoft-ad" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -800,7 +800,7 @@ export def "api create-microsoft-ad" [
 #
 # POST /
 # operationId: CreateSnapshot
-export def "api create-snapshot" [
+export def "create-snapshot" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -849,7 +849,7 @@ export def "api create-snapshot" [
 #
 # POST /
 # operationId: CreateTrust
-export def "api create-trust" [
+export def "create-trust" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -903,7 +903,7 @@ export def "api create-trust" [
 #
 # POST /
 # operationId: DeleteConditionalForwarder
-export def "api delete-conditional-forwarder" [
+export def "delete-conditional-forwarder" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -952,7 +952,7 @@ export def "api delete-conditional-forwarder" [
 #
 # POST /
 # operationId: DeleteDirectory
-export def "api delete-directory" [
+export def "delete-directory" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1000,7 +1000,7 @@ export def "api delete-directory" [
 #
 # POST /
 # operationId: DeleteLogSubscription
-export def "api delete-log-subscription" [
+export def "delete-log-subscription" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1048,7 +1048,7 @@ export def "api delete-log-subscription" [
 #
 # POST /
 # operationId: DeleteSnapshot
-export def "api delete-snapshot" [
+export def "delete-snapshot" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1096,7 +1096,7 @@ export def "api delete-snapshot" [
 #
 # POST /
 # operationId: DeleteTrust
-export def "api delete-trust" [
+export def "delete-trust" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1145,7 +1145,7 @@ export def "api delete-trust" [
 #
 # POST /
 # operationId: DeregisterCertificate
-export def "api create-deregister-certificate" [
+export def "deregister-certificate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1194,7 +1194,7 @@ export def "api create-deregister-certificate" [
 #
 # POST /
 # operationId: DeregisterEventTopic
-export def "api create-deregister-event-topic" [
+export def "deregister-event-topic" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1243,7 +1243,7 @@ export def "api create-deregister-event-topic" [
 #
 # POST /
 # operationId: DescribeCertificate
-export def "api get-certificate" [
+export def "describe-certificate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1292,7 +1292,7 @@ export def "api get-certificate" [
 #
 # POST /
 # operationId: DescribeClientAuthenticationSettings
-export def "api get-client-authentication-settings" [
+export def "describe-client-authentication-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1346,7 +1346,7 @@ export def "api get-client-authentication-settings" [
 #
 # POST /
 # operationId: DescribeConditionalForwarders
-export def "api get-conditional-forwarders" [
+export def "describe-conditional-forwarders" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1395,7 +1395,7 @@ export def "api get-conditional-forwarders" [
 #
 # POST /
 # operationId: DescribeDirectories
-export def "api get-directories" [
+export def "describe-directories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1448,7 +1448,7 @@ export def "api get-directories" [
 #
 # POST /
 # operationId: DescribeDomainControllers
-export def "api get-domain-controllers" [
+export def "describe-domain-controllers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1502,7 +1502,7 @@ export def "api get-domain-controllers" [
 #
 # POST /
 # operationId: DescribeEventTopics
-export def "api get-event-topics" [
+export def "describe-event-topics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1551,7 +1551,7 @@ export def "api get-event-topics" [
 #
 # POST /
 # operationId: DescribeLDAPSSettings
-export def "api get-ldaps-settings" [
+export def "describe-ldaps-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1605,7 +1605,7 @@ export def "api get-ldaps-settings" [
 #
 # POST /
 # operationId: DescribeRegions
-export def "api get-regions" [
+export def "describe-regions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1657,7 +1657,7 @@ export def "api get-regions" [
 #
 # POST /
 # operationId: DescribeSettings
-export def "api get-settings" [
+export def "describe-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1707,7 +1707,7 @@ export def "api get-settings" [
 #
 # POST /
 # operationId: DescribeSharedDirectories
-export def "api get-shared-directories" [
+export def "describe-shared-directories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1761,7 +1761,7 @@ export def "api get-shared-directories" [
 #
 # POST /
 # operationId: DescribeSnapshots
-export def "api get-snapshots" [
+export def "describe-snapshots" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1815,7 +1815,7 @@ export def "api get-snapshots" [
 #
 # POST /
 # operationId: DescribeTrusts
-export def "api get-trusts" [
+export def "describe-trusts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1869,7 +1869,7 @@ export def "api get-trusts" [
 #
 # POST /
 # operationId: DescribeUpdateDirectory
-export def "api get-update-directory" [
+export def "describe-update-directory" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1922,7 +1922,7 @@ export def "api get-update-directory" [
 #
 # POST /
 # operationId: DisableClientAuthentication
-export def "api disable-client-authentication" [
+export def "disable-client-authentication" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1971,7 +1971,7 @@ export def "api disable-client-authentication" [
 #
 # POST /
 # operationId: DisableLDAPS
-export def "api disable-ldaps" [
+export def "disable-ldaps" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2020,7 +2020,7 @@ export def "api disable-ldaps" [
 #
 # POST /
 # operationId: DisableRadius
-export def "api disable-radius" [
+export def "disable-radius" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2068,7 +2068,7 @@ export def "api disable-radius" [
 #
 # POST /
 # operationId: DisableSso
-export def "api disable-sso" [
+export def "disable-sso" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2118,7 +2118,7 @@ export def "api disable-sso" [
 #
 # POST /
 # operationId: EnableClientAuthentication
-export def "api enable-client-authentication" [
+export def "enable-client-authentication" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2167,7 +2167,7 @@ export def "api enable-client-authentication" [
 #
 # POST /
 # operationId: EnableLDAPS
-export def "api enable-ldaps" [
+export def "enable-ldaps" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2216,7 +2216,7 @@ export def "api enable-ldaps" [
 #
 # POST /
 # operationId: EnableRadius
-export def "api enable-radius" [
+export def "enable-radius" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2265,7 +2265,7 @@ export def "api enable-radius" [
 #
 # POST /
 # operationId: EnableSso
-export def "api enable-sso" [
+export def "enable-sso" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2315,7 +2315,7 @@ export def "api enable-sso" [
 #
 # POST /
 # operationId: GetDirectoryLimits
-export def "api get-directory-limits" [
+export def "get-directory-limits" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2363,7 +2363,7 @@ export def "api get-directory-limits" [
 #
 # POST /
 # operationId: GetSnapshotLimits
-export def "api get-snapshot-limits" [
+export def "get-snapshot-limits" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2411,7 +2411,7 @@ export def "api get-snapshot-limits" [
 #
 # POST /
 # operationId: ListCertificates
-export def "api list-certificates" [
+export def "list-certificates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2464,7 +2464,7 @@ export def "api list-certificates" [
 #
 # POST /
 # operationId: ListIpRoutes
-export def "api list-ip-routes" [
+export def "list-ip-routes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2517,7 +2517,7 @@ export def "api list-ip-routes" [
 #
 # POST /
 # operationId: ListLogSubscriptions
-export def "api list-log-subscriptions" [
+export def "list-log-subscriptions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2570,7 +2570,7 @@ export def "api list-log-subscriptions" [
 #
 # POST /
 # operationId: ListSchemaExtensions
-export def "api list-schema-extensions" [
+export def "list-schema-extensions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2623,7 +2623,7 @@ export def "api list-schema-extensions" [
 #
 # POST /
 # operationId: ListTagsForResource
-export def "api list-tags-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2676,7 +2676,7 @@ export def "api list-tags-for-resource" [
 #
 # POST /
 # operationId: RegisterCertificate
-export def "api create-certificate" [
+export def "register-certificate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2727,7 +2727,7 @@ export def "api create-certificate" [
 #
 # POST /
 # operationId: RegisterEventTopic
-export def "api create-event-topic" [
+export def "register-event-topic" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2776,7 +2776,7 @@ export def "api create-event-topic" [
 #
 # POST /
 # operationId: RejectSharedDirectory
-export def "api reject-shared-directory" [
+export def "reject-shared-directory" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2824,7 +2824,7 @@ export def "api reject-shared-directory" [
 #
 # POST /
 # operationId: RemoveIpRoutes
-export def "api delete-ip-routes" [
+export def "remove-ip-routes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2873,7 +2873,7 @@ export def "api delete-ip-routes" [
 #
 # POST /
 # operationId: RemoveRegion
-export def "api delete-region" [
+export def "remove-region" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2921,7 +2921,7 @@ export def "api delete-region" [
 #
 # POST /
 # operationId: RemoveTagsFromResource
-export def "api delete-tags-from-resource" [
+export def "remove-tags-from-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2970,7 +2970,7 @@ export def "api delete-tags-from-resource" [
 #
 # POST /
 # operationId: ResetUserPassword
-export def "api reset-user-password" [
+export def "reset-user-password" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3020,7 +3020,7 @@ export def "api reset-user-password" [
 #
 # POST /
 # operationId: RestoreFromSnapshot
-export def "api create-restore-from-snapshot" [
+export def "restore-from-snapshot" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3068,7 +3068,7 @@ export def "api create-restore-from-snapshot" [
 #
 # POST /
 # operationId: ShareDirectory
-export def "api create-share-directory" [
+export def "share-directory" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3119,7 +3119,7 @@ export def "api create-share-directory" [
 #
 # POST /
 # operationId: StartSchemaExtension
-export def "api start-schema-extension" [
+export def "start-schema-extension" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3170,7 +3170,7 @@ export def "api start-schema-extension" [
 #
 # POST /
 # operationId: UnshareDirectory
-export def "api create-unshare-directory" [
+export def "unshare-directory" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3219,7 +3219,7 @@ export def "api create-unshare-directory" [
 #
 # POST /
 # operationId: UpdateConditionalForwarder
-export def "api update-conditional-forwarder" [
+export def "update-conditional-forwarder" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3269,7 +3269,7 @@ export def "api update-conditional-forwarder" [
 #
 # POST /
 # operationId: UpdateDirectorySetup
-export def "api update-directory-setup" [
+export def "update-directory-setup" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3320,7 +3320,7 @@ export def "api update-directory-setup" [
 #
 # POST /
 # operationId: UpdateNumberOfDomainControllers
-export def "api update-number-of-domain-controllers" [
+export def "update-number-of-domain-controllers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3369,7 +3369,7 @@ export def "api update-number-of-domain-controllers" [
 #
 # POST /
 # operationId: UpdateRadius
-export def "api update-radius" [
+export def "update-radius" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3418,7 +3418,7 @@ export def "api update-radius" [
 #
 # POST /
 # operationId: UpdateSettings
-export def "api update-settings" [
+export def "update-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3467,7 +3467,7 @@ export def "api update-settings" [
 #
 # POST /
 # operationId: UpdateTrust
-export def "api update-trust" [
+export def "update-trust" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3516,7 +3516,7 @@ export def "api update-trust" [
 #
 # POST /
 # operationId: VerifyTrust
-export def "api verify-trust" [
+export def "verify-trust" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

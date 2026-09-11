@@ -134,7 +134,7 @@ def search-mode-completer [] { ["FEATURED_JOB_SEARCH" "JOB_SEARCH" "SEARCH_MODE_
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v3p1beta1 delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "jobs-projects-jobs-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -158,7 +158,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v3p1beta1/{name}
 # operationId: jobs.projects.jobs.delete
-export def "v3p1beta1 delete" [
+export def "jobs-projects-jobs-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -206,7 +206,7 @@ export def "v3p1beta1 delete" [
 #
 # GET /v3p1beta1/{name}
 # operationId: jobs.projects.operations.get
-export def "v3p1beta1 get" [
+export def "jobs-projects-operations-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -255,7 +255,7 @@ export def "v3p1beta1 get" [
 # PATCH /v3p1beta1/{name}
 # operationId: jobs.projects.jobs.patch
 # --job shape: {addresses?: list<string>, applicationInfo?: record, companyDisplayName?: string, companyName?: string, compensationInfo?: record, customAttributes?: record, degreeTypes?: list<string>, department?: string, derivedInfo?: record, description?: string, employmentTypes?: list<string>, incentives?: string, jobBenefits?: list<string>, jobEndTime?: string, jobLevel?: "JOB_LEVEL_UNSPECIFIED"|"ENTRY_LEVEL"|"EXPERIENCED"|"MANAGER"|"DIRECTOR"|"EXECUTIVE", jobStartTime?: string, languageCode?: string, ... (13 more fields)}
-export def "v3p1beta1 update" [
+export def "jobs-projects-jobs-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -308,7 +308,7 @@ export def "v3p1beta1 update" [
 #
 # GET /v3p1beta1/{name}:complete
 # operationId: jobs.projects.complete
-export def "v3p1beta1 complete" [
+export def "jobs-projects-complete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -364,7 +364,7 @@ export def "v3p1beta1 complete" [
 # POST /v3p1beta1/{parent}/clientEvents
 # operationId: jobs.projects.clientEvents.create
 # --clientEvent shape: {createTime?: string, eventId?: string, extraInfo?: record, jobEvent?: record, parentEventId?: string, requestId?: string}
-export def "v3p1beta1-client-events create" [
+export def "jobs-projects-client-events-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -416,7 +416,7 @@ export def "v3p1beta1-client-events create" [
 #
 # GET /v3p1beta1/{parent}/companies
 # operationId: jobs.projects.companies.list
-export def "v3p1beta1-companies list" [
+export def "jobs-projects-companies-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -468,7 +468,7 @@ export def "v3p1beta1-companies list" [
 # POST /v3p1beta1/{parent}/companies
 # operationId: jobs.projects.companies.create
 # --company shape: {careerSiteUri?: string, derivedInfo?: record, displayName?: string, eeoText?: string, externalId?: string, headquartersAddress?: string, hiringAgency?: bool, imageUri?: string, keywordSearchableJobCustomAttributes?: list<string>, name?: string, size?: "COMPANY_SIZE_UNSPECIFIED"|"MINI"|"SMALL"|"SMEDIUM"|"MEDIUM"|"BIG"|"BIGGER"|"GIANT", suspended?: bool, websiteUri?: string}
-export def "v3p1beta1-companies create" [
+export def "jobs-projects-companies-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -520,7 +520,7 @@ export def "v3p1beta1-companies create" [
 #
 # GET /v3p1beta1/{parent}/jobs
 # operationId: jobs.projects.jobs.list
-export def "v3p1beta1-jobs list" [
+export def "jobs-projects-jobs-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -573,7 +573,7 @@ export def "v3p1beta1-jobs list" [
 # POST /v3p1beta1/{parent}/jobs
 # operationId: jobs.projects.jobs.create
 # --job shape: {addresses?: list<string>, applicationInfo?: record, companyDisplayName?: string, companyName?: string, compensationInfo?: record, customAttributes?: record, degreeTypes?: list<string>, department?: string, derivedInfo?: record, description?: string, employmentTypes?: list<string>, incentives?: string, jobBenefits?: list<string>, jobEndTime?: string, jobLevel?: "JOB_LEVEL_UNSPECIFIED"|"ENTRY_LEVEL"|"EXPERIENCED"|"MANAGER"|"DIRECTOR"|"EXECUTIVE", jobStartTime?: string, languageCode?: string, ... (13 more fields)}
-export def "v3p1beta1-jobs create" [
+export def "jobs-projects-jobs-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -625,7 +625,7 @@ export def "v3p1beta1-jobs create" [
 #
 # POST /v3p1beta1/{parent}/jobs:batchDelete
 # operationId: jobs.projects.jobs.batchDelete
-export def "v3p1beta1-jobs-batch-delete delete" [
+export def "jobs-projects-jobs-batch-delete" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -682,7 +682,7 @@ export def "v3p1beta1-jobs-batch-delete delete" [
 # --histogramQueries item shape: {histogramQuery?: string}
 # --jobQuery shape: {commuteFilter?: record, companyDisplayNames?: list<string>, companyNames?: list<string>, compensationFilter?: record, customAttributeFilter?: string, disableSpellCheck?: bool, employmentTypes?: list<string>, excludedJobs?: list<string>, jobCategories?: list<string>, languageCodes?: list<string>, locationFilters?: list, publishTimeRange?: record, query?: string, queryLanguageCode?: string}
 # --requestMetadata shape: {deviceInfo?: record, domain?: string, sessionId?: string, userId?: string}
-export def "v3p1beta1-jobs-search list" [
+export def "jobs-projects-jobs-search" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -753,7 +753,7 @@ export def "v3p1beta1-jobs-search list" [
 # --histogramQueries item shape: {histogramQuery?: string}
 # --jobQuery shape: {commuteFilter?: record, companyDisplayNames?: list<string>, companyNames?: list<string>, compensationFilter?: record, customAttributeFilter?: string, disableSpellCheck?: bool, employmentTypes?: list<string>, excludedJobs?: list<string>, jobCategories?: list<string>, languageCodes?: list<string>, locationFilters?: list, publishTimeRange?: record, query?: string, queryLanguageCode?: string}
 # --requestMetadata shape: {deviceInfo?: record, domain?: string, sessionId?: string, userId?: string}
-export def "v3p1beta1-jobs-search-for-alert list" [
+export def "jobs-projects-jobs-search-for-alert" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

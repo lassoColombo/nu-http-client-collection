@@ -123,7 +123,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-api-management-service-identity-providers list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "identity-provider-list-by-service" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -148,7 +148,7 @@ export def commands []: nothing -> table {
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/identityProviders
 # Docs: https://docs.microsoft.com/en-us/azure/api-management/api-management-howto-aad#how-to-authorize-developer-accounts-using-azure-active-directory
 # operationId: IdentityProvider_ListByService
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-identity-providers list" [
+export def "identity-provider-list-by-service" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -190,7 +190,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/identityProviders/{identityProviderName}
 # operationId: IdentityProvider_Delete
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-identity-providers delete" [
+export def "identity-provider-delete" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -237,7 +237,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/identityProviders/{identityProviderName}
 # operationId: IdentityProvider_Get
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-identity-providers get" [
+export def "identity-provider-get" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -281,7 +281,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # HEAD /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/identityProviders/{identityProviderName}
 # operationId: IdentityProvider_GetEntityTag
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-identity-providers get-entity-tag" [
+export def "identity-provider-get-entity-tag" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -326,7 +326,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/identityProviders/{identityProviderName}
 # operationId: IdentityProvider_Update
 # --properties shape: {clientId?: string, clientSecret?: string, allowedTenants?: list<string>, authority?: string, passwordResetPolicyName?: string, profileEditingPolicyName?: string, signinPolicyName?: string, signinTenant?: string, signupPolicyName?: string, type?: "facebook"|"google"|"microsoft"|"twitter"|"aad"|"aadB2C"}
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-identity-providers update" [
+export def "identity-provider-update" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -378,7 +378,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/identityProviders/{identityProviderName}
 # operationId: IdentityProvider_CreateOrUpdate
 # --properties shape: {clientId: string, clientSecret: string, allowedTenants?: list<string>, authority?: string, passwordResetPolicyName?: string, profileEditingPolicyName?: string, signinPolicyName?: string, signinTenant?: string, signupPolicyName?: string, type?: "facebook"|"google"|"microsoft"|"twitter"|"aad"|"aadB2C"}
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-identity-providers create-or-update" [
+export def "identity-provider-create-or-update" [
   subscription_id: string
   resource_group_name: string
   service_name: string

@@ -97,7 +97,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "products-all-latest get-with-files" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-products-with-latest-product-files" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -121,7 +121,7 @@ export def commands []: nothing -> table {
 #
 # GET /products/all/latest
 # operationId: getProductsWithLatestProductFiles
-export def "products-all-latest get-with-files" [
+export def "get-products-with-latest-product-files" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -155,7 +155,7 @@ export def "products-all-latest get-with-files" [
 #
 # GET /products/byname/{productName}
 # operationId: getProductsByName
-export def "products-byname get-by-name" [
+export def "get-products-by-name" [
   product_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -200,7 +200,7 @@ export def "products-byname get-by-name" [
 #
 # GET /products/popular
 # operationId: getPopulartProducts
-export def "products-popular get-populart" [
+export def "get-populart-products" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -234,7 +234,7 @@ export def "products-popular get-populart" [
 #
 # GET /products/tree
 # operationId: getProductsTree
-export def "products-tree get" [
+export def "get-products-tree" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -268,7 +268,7 @@ export def "products-tree get" [
 #
 # GET /products/tree/{shortName}
 # operationId: getProductSubTree
-export def "products-tree get-sub" [
+export def "get-product-sub-tree" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -304,7 +304,7 @@ export def "products-tree get-sub" [
 #
 # GET /products/{shortName}
 # operationId: getProductsByShortName
-export def "products get-by-short-name" [
+export def "get-products-by-short-name" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -350,7 +350,7 @@ export def "products get-by-short-name" [
 #
 # GET /products/{shortName}/latest
 # operationId: getLatestProductFilesByProductIdAndTime
-export def "products-latest get-files-by-and-time" [
+export def "get-latest-product-files-by-product-id-and-time" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

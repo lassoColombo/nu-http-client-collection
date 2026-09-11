@@ -157,7 +157,7 @@ def response-version-completer [] { ["v1" "v2"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-account" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -181,7 +181,7 @@ export def commands []: nothing -> table {
 #
 # GET /account
 # operationId: getAccount
-export def "account get" [
+export def "get-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -224,7 +224,7 @@ export def "account get" [
 # --allowedIpRanges item shape: {ipEnd?: string, ipStart?: string}
 # --brandingSettings shape: {companyName?: string, customEmail?: string, theme?: string}
 # --quota shape: {noticeEnabled?: bool, noticeThreshold?: int, transactionsNoticeEnabled?: bool, transactionsNoticeThreshold?: int}
-export def "account update" [
+export def "update-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -276,7 +276,7 @@ export def "account update" [
 #
 # GET /activity/session
 # operationId: getSessionLogs
-export def "activity-session get-logs" [
+export def "get-session-logs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -324,7 +324,7 @@ export def "activity-session get-logs" [
 #
 # GET /activity/webhooks
 # operationId: getWebhookLogs
-export def "activity-webhooks get-logs" [
+export def "get-webhook-logs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -373,7 +373,7 @@ export def "activity-webhooks get-logs" [
 #
 # GET /email-lists
 # operationId: getEmailLists
-export def "email-lists list" [
+export def "get-email-lists" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -413,7 +413,7 @@ export def "email-lists list" [
 #
 # POST /email-lists
 # operationId: addEmailList
-export def "email-lists create" [
+export def "add-email-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -456,7 +456,7 @@ export def "email-lists create" [
 #
 # DELETE /email-lists/{id}
 # operationId: deleteEmailListById
-export def "email-lists delete" [
+export def "delete-email-list-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -496,7 +496,7 @@ export def "email-lists delete" [
 #
 # GET /email-lists/{id}
 # operationId: getEmailListById
-export def "email-lists get" [
+export def "get-email-list-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -538,7 +538,7 @@ export def "email-lists get" [
 #
 # PATCH /email-lists/{id}
 # operationId: updateEmailListById
-export def "email-lists update" [
+export def "update-email-list-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -583,7 +583,7 @@ export def "email-lists update" [
 #
 # POST /email/referral
 # operationId: sendReferralEmail
-export def "email-referral send" [
+export def "send-referral-email" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -626,7 +626,7 @@ export def "email-referral send" [
 #
 # POST /email/welcome/{username}
 # operationId: sendWelcomeEmail
-export def "email-welcome send" [
+export def "send-welcome-email" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -666,7 +666,7 @@ export def "email-welcome send" [
 #
 # GET /forms
 # operationId: getFormByShareHash
-export def "forms get-by-share-hash" [
+export def "get-form-by-share-hash" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -707,7 +707,7 @@ export def "forms get-by-share-hash" [
 #
 # DELETE /forms/entries/{id}
 # operationId: deleteFormMessageById
-export def "forms-entries delete-message" [
+export def "delete-form-message-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -747,7 +747,7 @@ export def "forms-entries delete-message" [
 #
 # GET /forms/entries/{id}
 # operationId: getFormEntries
-export def "forms-entries get" [
+export def "get-form-entries" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -790,7 +790,7 @@ export def "forms-entries get" [
 #
 # GET /forms/{id}
 # operationId: getFormById
-export def "forms get" [
+export def "get-form-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -833,7 +833,7 @@ export def "forms get" [
 # PATCH /forms/{id}
 # operationId: updateFormById
 # --elements item shape: {id?: int, name?: string, order?: int, settings?: record, type?: "name"|"email"|"text"|"textarea"|"upload_area"}
-export def "forms update" [
+export def "update-form-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -881,7 +881,7 @@ export def "forms update" [
 #
 # GET /notifications
 # operationId: listNotifications
-export def "notifications list" [
+export def "list-notifications" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -926,7 +926,7 @@ export def "notifications list" [
 #
 # POST /notifications
 # operationId: addNotification
-export def "notifications create" [
+export def "add-notification" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -974,7 +974,7 @@ export def "notifications create" [
 #
 # DELETE /notifications/{id}
 # operationId: deleteNotificationById
-export def "notifications delete" [
+export def "delete-notification-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1014,7 +1014,7 @@ export def "notifications delete" [
 #
 # GET /notifications/{id}
 # operationId: getNotificationById
-export def "notifications get" [
+export def "get-notification-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1056,7 +1056,7 @@ export def "notifications get" [
 #
 # PATCH /notifications/{id}
 # operationId: updateNotificationById
-export def "notifications update" [
+export def "update-notification-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1104,7 +1104,7 @@ export def "notifications update" [
 #
 # POST /recipients/shares/invites/{shareId}
 # operationId: resendInvitationsForShare
-export def "recipients-shares-invites resend-invitations" [
+export def "resend-invitations-for-share" [
   share_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1148,7 +1148,7 @@ export def "recipients-shares-invites resend-invitations" [
 #
 # DELETE /resources
 # operationId: deleteResources
-export def "resources delete" [
+export def "delete-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1190,7 +1190,7 @@ export def "resources delete" [
 #
 # GET /resources
 # operationId: getResourceInfo
-export def "resources list" [
+export def "get-resource-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1231,7 +1231,7 @@ export def "resources list" [
 #
 # POST /resources
 # operationId: addFolder
-export def "resources create-folder" [
+export def "add-folder" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1275,7 +1275,7 @@ export def "resources create-folder" [
 #
 # POST /resources/compress
 # operationId: compressFiles
-export def "resources-compress create-files" [
+export def "compress-files" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1319,7 +1319,7 @@ export def "resources-compress create-files" [
 #
 # POST /resources/copy
 # operationId: copyResources
-export def "resources-copy copy" [
+export def "copy-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1362,7 +1362,7 @@ export def "resources-copy copy" [
 #
 # GET /resources/download
 # operationId: download
-export def "resources-download download" [
+export def "download" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1404,7 +1404,7 @@ export def "resources-download download" [
 #
 # POST /resources/extract
 # operationId: extractFiles
-export def "resources-extract create-files" [
+export def "extract-files" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1447,7 +1447,7 @@ export def "resources-extract create-files" [
 #
 # GET /resources/list
 # operationId: listResources
-export def "resources-list list" [
+export def "list-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1493,7 +1493,7 @@ export def "resources-list list" [
 #
 # GET /resources/list/{id}
 # operationId: listResourceContents
-export def "resources-list list-contents" [
+export def "list-resource-contents" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1539,7 +1539,7 @@ export def "resources-list list-contents" [
 #
 # POST /resources/move
 # operationId: moveResources
-export def "resources-move move" [
+export def "move-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1582,7 +1582,7 @@ export def "resources-move move" [
 #
 # GET /resources/preview
 # operationId: getPreviewImage
-export def "resources-preview get-image" [
+export def "get-preview-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1626,7 +1626,7 @@ export def "resources-preview get-image" [
 #
 # POST /resources/upload
 # operationId: uploadFile
-export def "resources-upload upload-file" [
+export def "upload-file" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1676,7 +1676,7 @@ export def "resources-upload upload-file" [
 #
 # DELETE /resources/{id}
 # operationId: deleteResourceById
-export def "resources delete-by-id" [
+export def "delete-resource-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1716,7 +1716,7 @@ export def "resources delete-by-id" [
 #
 # GET /resources/{id}
 # operationId: getResourceInfoById
-export def "resources get" [
+export def "get-resource-info-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1758,7 +1758,7 @@ export def "resources get" [
 #
 # PATCH /resources/{id}
 # operationId: updateResourceById
-export def "resources update" [
+export def "update-resource-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1802,7 +1802,7 @@ export def "resources update" [
 #
 # GET /shares
 # operationId: listShares
-export def "shares list" [
+export def "list-shares" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1854,7 +1854,7 @@ export def "shares list" [
 # operationId: addShare
 # --accessMode shape: {delete?: bool, download?: bool, modify?: bool, upload?: bool}
 # --recipients item shape: {email?: string, type?: string}
-export def "shares create" [
+export def "add-share" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1911,7 +1911,7 @@ export def "shares create" [
 #
 # POST /shares/complete-send/{id}
 # operationId: completeDirectSend
-export def "shares-complete-send complete-direct" [
+export def "complete-direct-send" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1951,7 +1951,7 @@ export def "shares-complete-send complete-direct" [
 #
 # DELETE /shares/{id}
 # operationId: deleteShareById
-export def "shares delete" [
+export def "delete-share-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1991,7 +1991,7 @@ export def "shares delete" [
 #
 # GET /shares/{id}
 # operationId: getShareById
-export def "shares get" [
+export def "get-share-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2035,7 +2035,7 @@ export def "shares get" [
 # operationId: updateShareById
 # --accessMode shape: {delete?: bool, download?: bool, modify?: bool, upload?: bool}
 # --recipients item shape: {email?: string, type?: string}
-export def "shares update" [
+export def "update-share-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2093,7 +2093,7 @@ export def "shares update" [
 #
 # GET /ssh-keys
 # operationId: getSSHKeysList
-export def "ssh-keys get-list" [
+export def "get-ssh-keys-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2135,7 +2135,7 @@ export def "ssh-keys get-list" [
 #
 # POST /ssh-keys
 # operationId: addSSHKey
-export def "ssh-keys create" [
+export def "add-ssh-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2178,7 +2178,7 @@ export def "ssh-keys create" [
 #
 # DELETE /ssh-keys/{id}
 # operationId: deleteSSHKey
-export def "ssh-keys delete" [
+export def "delete-ssh-key" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2218,7 +2218,7 @@ export def "ssh-keys delete" [
 #
 # GET /ssh-keys/{id}
 # operationId: getSSHKey
-export def "ssh-keys get" [
+export def "get-ssh-key" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2258,7 +2258,7 @@ export def "ssh-keys get" [
 #
 # GET /users
 # operationId: listUsers
-export def "users list" [
+export def "list-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2309,7 +2309,7 @@ export def "users list" [
 # POST /users
 # operationId: addUser
 # --permissions shape: {changePassword?: bool, delete?: bool, deleteFormData?: bool, download?: bool, list?: bool, modify?: bool, notification?: bool, share?: bool, upload?: bool, viewFormData?: bool}
-export def "users create" [
+export def "add-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2362,7 +2362,7 @@ export def "users create" [
 #
 # DELETE /users/{id}
 # operationId: deleteUser
-export def "users delete" [
+export def "delete-user" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2402,7 +2402,7 @@ export def "users delete" [
 #
 # GET /users/{id}
 # operationId: getUserById
-export def "users get" [
+export def "get-user-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2445,7 +2445,7 @@ export def "users get" [
 # PATCH /users/{id}
 # operationId: updateUser
 # --permissions shape: {changePassword: bool, delete: bool, deleteFormData: bool, download: bool, list: bool, modify: bool, notification: bool, share: bool, upload: bool, viewFormData: bool}
-export def "users update" [
+export def "update-user" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2499,7 +2499,7 @@ export def "users update" [
 #
 # GET /webhooks
 # operationId: getWehooksList
-export def "webhooks get-wehooks-list" [
+export def "get-wehooks-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2542,7 +2542,7 @@ export def "webhooks get-wehooks-list" [
 # POST /webhooks
 # operationId: addWebhook
 # --triggers shape: {resources?: record, shares?: record}
-export def "webhooks create" [
+export def "add-webhook" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2587,7 +2587,7 @@ export def "webhooks create" [
 #
 # POST /webhooks/regenerate-token/{id}
 # operationId: regenerateWebhookToken
-export def "webhooks-regenerate-token create" [
+export def "regenerate-webhook-token" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2627,7 +2627,7 @@ export def "webhooks-regenerate-token create" [
 #
 # POST /webhooks/resend/{activityId}
 # operationId: resendWebhookActivityEntry
-export def "webhooks-resend resend-activity-entry" [
+export def "resend-webhook-activity-entry" [
   activity_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2667,7 +2667,7 @@ export def "webhooks-resend resend-activity-entry" [
 #
 # DELETE /webhooks/{id}
 # operationId: deleteWebhook
-export def "webhooks delete" [
+export def "delete-webhook" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2707,7 +2707,7 @@ export def "webhooks delete" [
 #
 # GET /webhooks/{id}
 # operationId: getWebhookById
-export def "webhooks get" [
+export def "get-webhook-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2750,7 +2750,7 @@ export def "webhooks get" [
 # PATCH /webhooks/{id}
 # operationId: updateWebhook
 # --triggers shape: {resources?: record, shares?: record}
-export def "webhooks update" [
+export def "update-webhook" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

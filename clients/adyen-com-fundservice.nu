@@ -103,7 +103,7 @@ def payout-speed-completer [] { ["INSTANT" "SAME_DAY" "STANDARD"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account-holder-balance create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-account-holder-balance" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -127,7 +127,7 @@ export def commands []: nothing -> table {
 #
 # POST /accountHolderBalance
 # operationId: post-accountHolderBalance
-export def "account-holder-balance create" [
+export def "post-account-holder-balance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -166,7 +166,7 @@ export def "account-holder-balance create" [
 # POST /accountHolderTransactionList
 # operationId: post-accountHolderTransactionList
 # --transactionListsPerAccount item shape: {accountCode: string, page: int}
-export def "account-holder-transaction-list create" [
+export def "post-account-holder-transaction-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -208,7 +208,7 @@ export def "account-holder-transaction-list create" [
 # operationId: post-debitAccountHolder
 # --amount shape: {currency: string, value: int}
 # --splits item shape: {account?: string, amount: record, description?: string, reference?: string, type: "BalanceAccount"|"Commission"|"Default"|"MarketPlace"|"PaymentFee"|"Remainder"|"Surcharge"|"Tip"|"VAT"|"Verification"}
-export def "debit-account-holder create" [
+export def "post-debit-account-holder" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -252,7 +252,7 @@ export def "debit-account-holder create" [
 # POST /payoutAccountHolder
 # operationId: post-payoutAccountHolder
 # --amount shape: {currency: string, value: int}
-export def "payout-account-holder create" [
+export def "post-payout-account-holder" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -298,7 +298,7 @@ export def "payout-account-holder create" [
 # POST /refundFundsTransfer
 # operationId: post-refundFundsTransfer
 # --amount shape: {currency: string, value: int}
-export def "refund-funds-transfer create" [
+export def "post-refund-funds-transfer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -338,7 +338,7 @@ export def "refund-funds-transfer create" [
 #
 # POST /refundNotPaidOutTransfers
 # operationId: post-refundNotPaidOutTransfers
-export def "refund-not-paid-out-transfers create" [
+export def "post-refund-not-paid-out-transfers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -377,7 +377,7 @@ export def "refund-not-paid-out-transfers create" [
 #
 # POST /setupBeneficiary
 # operationId: post-setupBeneficiary
-export def "setup-beneficiary create" [
+export def "post-setup-beneficiary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -418,7 +418,7 @@ export def "setup-beneficiary create" [
 # POST /transferFunds
 # operationId: post-transferFunds
 # --amount shape: {currency: string, value: int}
-export def "transfer-funds create" [
+export def "post-transfer-funds" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

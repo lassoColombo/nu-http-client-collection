@@ -110,7 +110,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resourcegroups-providers-microsoft-subscriptions-admin-directory-tenants list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "directory-tenants-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -134,7 +134,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Subscriptions.Admin/directoryTenants
 # operationId: DirectoryTenants_List
-export def "subscriptions-resourcegroups-providers-microsoft-subscriptions-admin-directory-tenants list" [
+export def "directory-tenants-list" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -174,7 +174,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-subscriptions-admin
 #
 # DELETE /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Subscriptions.Admin/directoryTenants/{tenant}
 # operationId: DirectoryTenants_Delete
-export def "subscriptions-resourcegroups-providers-microsoft-subscriptions-admin-directory-tenants delete" [
+export def "directory-tenants-delete" [
   subscription_id: string
   resource_group_name: string
   tenant: string
@@ -216,7 +216,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-subscriptions-admin
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Subscriptions.Admin/directoryTenants/{tenant}
 # operationId: DirectoryTenants_Get
-export def "subscriptions-resourcegroups-providers-microsoft-subscriptions-admin-directory-tenants get" [
+export def "directory-tenants-get" [
   subscription_id: string
   resource_group_name: string
   tenant: string
@@ -259,7 +259,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-subscriptions-admin
 # PUT /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Subscriptions.Admin/directoryTenants/{tenant}
 # operationId: DirectoryTenants_CreateOrUpdate
 # --properties shape: {tenantId?: string}
-export def "subscriptions-resourcegroups-providers-microsoft-subscriptions-admin-directory-tenants create-or-update" [
+export def "directory-tenants-create-or-update" [
   subscription_id: string
   resource_group_name: string
   tenant: string

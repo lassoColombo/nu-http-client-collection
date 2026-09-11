@@ -135,7 +135,7 @@ def view-completer-2 [] { ["ALL" "COUNT_RESULT_VIEW_UNSPECIFIED" "TOTAL_COUNT"] 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "matters list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "vault-matters-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -159,7 +159,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/matters
 # operationId: vault.matters.list
-export def "matters list" [
+export def "vault-matters-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -210,7 +210,7 @@ export def "matters list" [
 # POST /v1/matters
 # operationId: vault.matters.create
 # --matterPermissions item shape: {accountId?: string, role?: "ROLE_UNSPECIFIED"|"COLLABORATOR"|"OWNER"}
-export def "matters create" [
+export def "vault-matters-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -264,7 +264,7 @@ export def "matters create" [
 #
 # DELETE /v1/matters/{matterId}
 # operationId: vault.matters.delete
-export def "matters delete" [
+export def "vault-matters-delete" [
   matter_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -312,7 +312,7 @@ export def "matters delete" [
 #
 # GET /v1/matters/{matterId}
 # operationId: vault.matters.get
-export def "matters get" [
+export def "vault-matters-get" [
   matter_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -362,7 +362,7 @@ export def "matters get" [
 # PUT /v1/matters/{matterId}
 # operationId: vault.matters.update
 # --matterPermissions item shape: {accountId?: string, role?: "ROLE_UNSPECIFIED"|"COLLABORATOR"|"OWNER"}
-export def "matters update" [
+export def "vault-matters-update" [
   matter_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -418,7 +418,7 @@ export def "matters update" [
 #
 # GET /v1/matters/{matterId}/exports
 # operationId: vault.matters.exports.list
-export def "matters-exports list" [
+export def "vault-matters-exports-list" [
   matter_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -473,7 +473,7 @@ export def "matters-exports list" [
 # --query shape: {accountInfo?: record, corpus?: "CORPUS_TYPE_UNSPECIFIED"|"DRIVE"|"MAIL"|"GROUPS"|"HANGOUTS_CHAT"|"VOICE", dataScope?: "DATA_SCOPE_UNSPECIFIED"|"ALL_DATA"|"HELD_DATA"|"UNPROCESSED_DATA", driveOptions?: record, endTime?: string, hangoutsChatInfo?: record, hangoutsChatOptions?: record, mailOptions?: record, method?: "SEARCH_METHOD_UNSPECIFIED"|"ACCOUNT"|"ORG_UNIT"|"TEAM_DRIVE"|"ENTIRE_ORG"|"ROOM"|"SITES_URL"|"SHARED_DRIVE", orgUnitInfo?: record, ... (8 more fields)}
 # --requester shape: {displayName?: string, email?: string}
 # --stats shape: {exportedArtifactCount?: string, sizeInBytes?: string, totalArtifactCount?: string}
-export def "matters-exports create" [
+export def "vault-matters-exports-create" [
   matter_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -534,7 +534,7 @@ export def "matters-exports create" [
 #
 # DELETE /v1/matters/{matterId}/exports/{exportId}
 # operationId: vault.matters.exports.delete
-export def "matters-exports delete" [
+export def "vault-matters-exports-delete" [
   matter_id: string
   export_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -584,7 +584,7 @@ export def "matters-exports delete" [
 #
 # GET /v1/matters/{matterId}/exports/{exportId}
 # operationId: vault.matters.exports.get
-export def "matters-exports get" [
+export def "vault-matters-exports-get" [
   matter_id: string
   export_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -634,7 +634,7 @@ export def "matters-exports get" [
 #
 # GET /v1/matters/{matterId}/holds
 # operationId: vault.matters.holds.list
-export def "matters-holds list" [
+export def "vault-matters-holds-list" [
   matter_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -688,7 +688,7 @@ export def "matters-holds list" [
 # --accounts item shape: {accountId?: string, email?: string, firstName?: string, holdTime?: string, lastName?: string}
 # --orgUnit shape: {holdTime?: string, orgUnitId?: string}
 # --query shape: {driveQuery?: record, groupsQuery?: record, hangoutsChatQuery?: record, mailQuery?: record, voiceQuery?: record}
-export def "matters-holds create" [
+export def "vault-matters-holds-create" [
   matter_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -746,7 +746,7 @@ export def "matters-holds create" [
 #
 # DELETE /v1/matters/{matterId}/holds/{holdId}
 # operationId: vault.matters.holds.delete
-export def "matters-holds delete" [
+export def "vault-matters-holds-delete" [
   matter_id: string
   hold_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -796,7 +796,7 @@ export def "matters-holds delete" [
 #
 # GET /v1/matters/{matterId}/holds/{holdId}
 # operationId: vault.matters.holds.get
-export def "matters-holds get" [
+export def "vault-matters-holds-get" [
   matter_id: string
   hold_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -850,7 +850,7 @@ export def "matters-holds get" [
 # --accounts item shape: {accountId?: string, email?: string, firstName?: string, holdTime?: string, lastName?: string}
 # --orgUnit shape: {holdTime?: string, orgUnitId?: string}
 # --query shape: {driveQuery?: record, groupsQuery?: record, hangoutsChatQuery?: record, mailQuery?: record, voiceQuery?: record}
-export def "matters-holds update" [
+export def "vault-matters-holds-update" [
   matter_id: string
   hold_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -910,7 +910,7 @@ export def "matters-holds update" [
 #
 # GET /v1/matters/{matterId}/holds/{holdId}/accounts
 # operationId: vault.matters.holds.accounts.list
-export def "matters-holds-accounts list" [
+export def "vault-matters-holds-accounts-list" [
   matter_id: string
   hold_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -960,7 +960,7 @@ export def "matters-holds-accounts list" [
 #
 # POST /v1/matters/{matterId}/holds/{holdId}/accounts
 # operationId: vault.matters.holds.accounts.create
-export def "matters-holds-accounts create" [
+export def "vault-matters-holds-accounts-create" [
   matter_id: string
   hold_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1018,7 +1018,7 @@ export def "matters-holds-accounts create" [
 #
 # DELETE /v1/matters/{matterId}/holds/{holdId}/accounts/{accountId}
 # operationId: vault.matters.holds.accounts.delete
-export def "matters-holds-accounts delete" [
+export def "vault-matters-holds-accounts-delete" [
   matter_id: string
   hold_id: string
   account_id: string
@@ -1070,7 +1070,7 @@ export def "matters-holds-accounts delete" [
 #
 # POST /v1/matters/{matterId}/holds/{holdId}:addHeldAccounts
 # operationId: vault.matters.holds.addHeldAccounts
-export def "matters-holds create-held-accounts" [
+export def "vault-matters-holds-add-held-accounts" [
   matter_id: string
   hold_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1125,7 +1125,7 @@ export def "matters-holds create-held-accounts" [
 #
 # POST /v1/matters/{matterId}/holds/{holdId}:removeHeldAccounts
 # operationId: vault.matters.holds.removeHeldAccounts
-export def "matters-holds delete-held-accounts" [
+export def "vault-matters-holds-remove-held-accounts" [
   matter_id: string
   hold_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1179,7 +1179,7 @@ export def "matters-holds delete-held-accounts" [
 #
 # GET /v1/matters/{matterId}/savedQueries
 # operationId: vault.matters.savedQueries.list
-export def "matters-saved-queries list" [
+export def "vault-matters-saved-queries-list" [
   matter_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1230,7 +1230,7 @@ export def "matters-saved-queries list" [
 # POST /v1/matters/{matterId}/savedQueries
 # operationId: vault.matters.savedQueries.create
 # --query shape: {accountInfo?: record, corpus?: "CORPUS_TYPE_UNSPECIFIED"|"DRIVE"|"MAIL"|"GROUPS"|"HANGOUTS_CHAT"|"VOICE", dataScope?: "DATA_SCOPE_UNSPECIFIED"|"ALL_DATA"|"HELD_DATA"|"UNPROCESSED_DATA", driveOptions?: record, endTime?: string, hangoutsChatInfo?: record, hangoutsChatOptions?: record, mailOptions?: record, method?: "SEARCH_METHOD_UNSPECIFIED"|"ACCOUNT"|"ORG_UNIT"|"TEAM_DRIVE"|"ENTIRE_ORG"|"ROOM"|"SITES_URL"|"SHARED_DRIVE", orgUnitInfo?: record, ... (8 more fields)}
-export def "matters-saved-queries create" [
+export def "vault-matters-saved-queries-create" [
   matter_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1286,7 +1286,7 @@ export def "matters-saved-queries create" [
 #
 # DELETE /v1/matters/{matterId}/savedQueries/{savedQueryId}
 # operationId: vault.matters.savedQueries.delete
-export def "matters-saved-queries delete" [
+export def "vault-matters-saved-queries-delete" [
   matter_id: string
   saved_query_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1336,7 +1336,7 @@ export def "matters-saved-queries delete" [
 #
 # GET /v1/matters/{matterId}/savedQueries/{savedQueryId}
 # operationId: vault.matters.savedQueries.get
-export def "matters-saved-queries get" [
+export def "vault-matters-saved-queries-get" [
   matter_id: string
   saved_query_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1387,7 +1387,7 @@ export def "matters-saved-queries get" [
 # POST /v1/matters/{matterId}:addPermissions
 # operationId: vault.matters.addPermissions
 # --matterPermission shape: {accountId?: string, role?: "ROLE_UNSPECIFIED"|"COLLABORATOR"|"OWNER"}
-export def "matters create-permissions" [
+export def "vault-matters-add-permissions" [
   matter_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1441,7 +1441,7 @@ export def "matters create-permissions" [
 #
 # POST /v1/matters/{matterId}:close
 # operationId: vault.matters.close
-export def "matters close" [
+export def "vault-matters-close" [
   matter_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1494,7 +1494,7 @@ export def "matters close" [
 # POST /v1/matters/{matterId}:count
 # operationId: vault.matters.count
 # --query shape: {accountInfo?: record, corpus?: "CORPUS_TYPE_UNSPECIFIED"|"DRIVE"|"MAIL"|"GROUPS"|"HANGOUTS_CHAT"|"VOICE", dataScope?: "DATA_SCOPE_UNSPECIFIED"|"ALL_DATA"|"HELD_DATA"|"UNPROCESSED_DATA", driveOptions?: record, endTime?: string, hangoutsChatInfo?: record, hangoutsChatOptions?: record, mailOptions?: record, method?: "SEARCH_METHOD_UNSPECIFIED"|"ACCOUNT"|"ORG_UNIT"|"TEAM_DRIVE"|"ENTIRE_ORG"|"ROOM"|"SITES_URL"|"SHARED_DRIVE", orgUnitInfo?: record, ... (8 more fields)}
-export def "matters create-count" [
+export def "vault-matters-count" [
   matter_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1547,7 +1547,7 @@ export def "matters create-count" [
 #
 # POST /v1/matters/{matterId}:removePermissions
 # operationId: vault.matters.removePermissions
-export def "matters delete-permissions" [
+export def "vault-matters-remove-permissions" [
   matter_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1599,7 +1599,7 @@ export def "matters delete-permissions" [
 #
 # POST /v1/matters/{matterId}:reopen
 # operationId: vault.matters.reopen
-export def "matters create-reopen" [
+export def "vault-matters-reopen" [
   matter_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1651,7 +1651,7 @@ export def "matters create-reopen" [
 #
 # POST /v1/matters/{matterId}:undelete
 # operationId: vault.matters.undelete
-export def "matters create-undelete" [
+export def "vault-matters-undelete" [
   matter_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1703,7 +1703,7 @@ export def "matters create-undelete" [
 #
 # DELETE /v1/{name}
 # operationId: vault.operations.delete
-export def "operations delete" [
+export def "vault-operations-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1751,7 +1751,7 @@ export def "operations delete" [
 #
 # GET /v1/{name}
 # operationId: vault.operations.list
-export def "operations list" [
+export def "vault-operations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1802,7 +1802,7 @@ export def "operations list" [
 #
 # POST /v1/{name}:cancel
 # operationId: vault.operations.cancel
-export def "operations cancel" [
+export def "vault-operations-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

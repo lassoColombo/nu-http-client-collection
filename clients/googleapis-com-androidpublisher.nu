@@ -137,7 +137,7 @@ def status-completer [] { ["active" "inactive" "statusUnspecified"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "androidpublisher-applications-internalappsharing-artifacts-apk create-uploadapk" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "androidpublisher-internalappsharingartifacts-uploadapk" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -161,7 +161,7 @@ export def commands []: nothing -> table {
 #
 # POST /androidpublisher/v3/applications/internalappsharing/{packageName}/artifacts/apk
 # operationId: androidpublisher.internalappsharingartifacts.uploadapk
-export def "androidpublisher-applications-internalappsharing-artifacts-apk create-uploadapk" [
+export def "androidpublisher-internalappsharingartifacts-uploadapk" [
   package_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -209,7 +209,7 @@ export def "androidpublisher-applications-internalappsharing-artifacts-apk creat
 #
 # POST /androidpublisher/v3/applications/internalappsharing/{packageName}/artifacts/bundle
 # operationId: androidpublisher.internalappsharingartifacts.uploadbundle
-export def "androidpublisher-applications-internalappsharing-artifacts-bundle create-uploadbundle" [
+export def "androidpublisher-internalappsharingartifacts-uploadbundle" [
   package_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -257,7 +257,7 @@ export def "androidpublisher-applications-internalappsharing-artifacts-bundle cr
 #
 # GET /androidpublisher/v3/applications/{packageName}/deviceTierConfigs
 # operationId: androidpublisher.applications.deviceTierConfigs.list
-export def "androidpublisher-applications-device-tier-configs list" [
+export def "androidpublisher-applications-device-tier-configs-list" [
   package_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -310,7 +310,7 @@ export def "androidpublisher-applications-device-tier-configs list" [
 # --deviceGroups item shape: {deviceSelectors?: list, name?: string}
 # --deviceTierSet shape: {deviceTiers?: list}
 # --userCountrySets item shape: {countryCodes?: list<string>, name?: string}
-export def "androidpublisher-applications-device-tier-configs create" [
+export def "androidpublisher-applications-device-tier-configs-create" [
   package_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -365,7 +365,7 @@ export def "androidpublisher-applications-device-tier-configs create" [
 #
 # GET /androidpublisher/v3/applications/{packageName}/deviceTierConfigs/{deviceTierConfigId}
 # operationId: androidpublisher.applications.deviceTierConfigs.get
-export def "androidpublisher-applications-device-tier-configs get" [
+export def "androidpublisher-applications-device-tier-configs-get" [
   package_name: string
   device_tier_config_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -415,7 +415,7 @@ export def "androidpublisher-applications-device-tier-configs get" [
 #
 # POST /androidpublisher/v3/applications/{packageName}/edits
 # operationId: androidpublisher.edits.insert
-export def "androidpublisher-applications-edits create" [
+export def "androidpublisher-edits-insert" [
   package_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -467,7 +467,7 @@ export def "androidpublisher-applications-edits create" [
 #
 # DELETE /androidpublisher/v3/applications/{packageName}/edits/{editId}
 # operationId: androidpublisher.edits.delete
-export def "androidpublisher-applications-edits delete" [
+export def "androidpublisher-edits-delete" [
   package_name: string
   edit_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -517,7 +517,7 @@ export def "androidpublisher-applications-edits delete" [
 #
 # GET /androidpublisher/v3/applications/{packageName}/edits/{editId}
 # operationId: androidpublisher.edits.get
-export def "androidpublisher-applications-edits get" [
+export def "androidpublisher-edits-get" [
   package_name: string
   edit_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -567,7 +567,7 @@ export def "androidpublisher-applications-edits get" [
 #
 # GET /androidpublisher/v3/applications/{packageName}/edits/{editId}/apks
 # operationId: androidpublisher.edits.apks.list
-export def "androidpublisher-applications-edits-apks list" [
+export def "androidpublisher-edits-apks-list" [
   package_name: string
   edit_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -617,7 +617,7 @@ export def "androidpublisher-applications-edits-apks list" [
 #
 # POST /androidpublisher/v3/applications/{packageName}/edits/{editId}/apks
 # operationId: androidpublisher.edits.apks.upload
-export def "androidpublisher-applications-edits-apks upload" [
+export def "androidpublisher-edits-apks-upload" [
   package_name: string
   edit_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -668,7 +668,7 @@ export def "androidpublisher-applications-edits-apks upload" [
 # POST /androidpublisher/v3/applications/{packageName}/edits/{editId}/apks/externallyHosted
 # operationId: androidpublisher.edits.apks.addexternallyhosted
 # --externallyHostedApk shape: {applicationLabel?: string, certificateBase64s?: list<string>, externallyHostedUrl?: string, fileSha1Base64?: string, fileSha256Base64?: string, fileSize?: string, iconBase64?: string, maximumSdk?: int, minimumSdk?: int, nativeCodes?: list<string>, packageName?: string, usesFeatures?: list<string>, usesPermissions?: list, versionCode?: int, versionName?: string}
-export def "androidpublisher-applications-edits-apks-externally-hosted create-addexternallyhosted" [
+export def "androidpublisher-edits-apks-addexternallyhosted" [
   package_name: string
   edit_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -722,7 +722,7 @@ export def "androidpublisher-applications-edits-apks-externally-hosted create-ad
 #
 # POST /androidpublisher/v3/applications/{packageName}/edits/{editId}/apks/{apkVersionCode}/deobfuscationFiles/{deobfuscationFileType}
 # operationId: androidpublisher.edits.deobfuscationfiles.upload
-export def "androidpublisher-applications-edits-apks-deobfuscation-files upload" [
+export def "androidpublisher-edits-deobfuscationfiles-upload" [
   package_name: string
   edit_id: string
   apk_version_code: int
@@ -776,7 +776,7 @@ export def "androidpublisher-applications-edits-apks-deobfuscation-files upload"
 #
 # GET /androidpublisher/v3/applications/{packageName}/edits/{editId}/apks/{apkVersionCode}/expansionFiles/{expansionFileType}
 # operationId: androidpublisher.edits.expansionfiles.get
-export def "androidpublisher-applications-edits-apks-expansion-files get" [
+export def "androidpublisher-edits-expansionfiles-get" [
   package_name: string
   edit_id: string
   apk_version_code: int
@@ -830,7 +830,7 @@ export def "androidpublisher-applications-edits-apks-expansion-files get" [
 #
 # PATCH /androidpublisher/v3/applications/{packageName}/edits/{editId}/apks/{apkVersionCode}/expansionFiles/{expansionFileType}
 # operationId: androidpublisher.edits.expansionfiles.patch
-export def "androidpublisher-applications-edits-apks-expansion-files update-by-package-name-edit-id-apk-version-code-expansion-file-type" [
+export def "androidpublisher-edits-expansionfiles-patch" [
   package_name: string
   edit_id: string
   apk_version_code: int
@@ -889,7 +889,7 @@ export def "androidpublisher-applications-edits-apks-expansion-files update-by-p
 #
 # POST /androidpublisher/v3/applications/{packageName}/edits/{editId}/apks/{apkVersionCode}/expansionFiles/{expansionFileType}
 # operationId: androidpublisher.edits.expansionfiles.upload
-export def "androidpublisher-applications-edits-apks-expansion-files upload" [
+export def "androidpublisher-edits-expansionfiles-upload" [
   package_name: string
   edit_id: string
   apk_version_code: int
@@ -943,7 +943,7 @@ export def "androidpublisher-applications-edits-apks-expansion-files upload" [
 #
 # PUT /androidpublisher/v3/applications/{packageName}/edits/{editId}/apks/{apkVersionCode}/expansionFiles/{expansionFileType}
 # operationId: androidpublisher.edits.expansionfiles.update
-export def "androidpublisher-applications-edits-apks-expansion-files update-by-package-name-edit-id-apk-version-code-expansion-file-type-1" [
+export def "androidpublisher-edits-expansionfiles-update" [
   package_name: string
   edit_id: string
   apk_version_code: int
@@ -1002,7 +1002,7 @@ export def "androidpublisher-applications-edits-apks-expansion-files update-by-p
 #
 # GET /androidpublisher/v3/applications/{packageName}/edits/{editId}/bundles
 # operationId: androidpublisher.edits.bundles.list
-export def "androidpublisher-applications-edits-bundles list" [
+export def "androidpublisher-edits-bundles-list" [
   package_name: string
   edit_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1052,7 +1052,7 @@ export def "androidpublisher-applications-edits-bundles list" [
 #
 # POST /androidpublisher/v3/applications/{packageName}/edits/{editId}/bundles
 # operationId: androidpublisher.edits.bundles.upload
-export def "androidpublisher-applications-edits-bundles upload" [
+export def "androidpublisher-edits-bundles-upload" [
   package_name: string
   edit_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1104,7 +1104,7 @@ export def "androidpublisher-applications-edits-bundles upload" [
 #
 # GET /androidpublisher/v3/applications/{packageName}/edits/{editId}/countryAvailability/{track}
 # operationId: androidpublisher.edits.countryavailability.get
-export def "androidpublisher-applications-edits-country-availability get" [
+export def "androidpublisher-edits-countryavailability-get" [
   package_name: string
   edit_id: string
   track: string
@@ -1156,7 +1156,7 @@ export def "androidpublisher-applications-edits-country-availability get" [
 #
 # GET /androidpublisher/v3/applications/{packageName}/edits/{editId}/details
 # operationId: androidpublisher.edits.details.get
-export def "androidpublisher-applications-edits-details get" [
+export def "androidpublisher-edits-details-get" [
   package_name: string
   edit_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1206,7 +1206,7 @@ export def "androidpublisher-applications-edits-details get" [
 #
 # PATCH /androidpublisher/v3/applications/{packageName}/edits/{editId}/details
 # operationId: androidpublisher.edits.details.patch
-export def "androidpublisher-applications-edits-details update-by-package-name-edit-id" [
+export def "androidpublisher-edits-details-patch" [
   package_name: string
   edit_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1263,7 +1263,7 @@ export def "androidpublisher-applications-edits-details update-by-package-name-e
 #
 # PUT /androidpublisher/v3/applications/{packageName}/edits/{editId}/details
 # operationId: androidpublisher.edits.details.update
-export def "androidpublisher-applications-edits-details update-by-package-name-edit-id-1" [
+export def "androidpublisher-edits-details-update" [
   package_name: string
   edit_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1320,7 +1320,7 @@ export def "androidpublisher-applications-edits-details update-by-package-name-e
 #
 # DELETE /androidpublisher/v3/applications/{packageName}/edits/{editId}/listings
 # operationId: androidpublisher.edits.listings.deleteall
-export def "androidpublisher-applications-edits-listings delete-by-package-name-edit-id" [
+export def "androidpublisher-edits-listings-deleteall" [
   package_name: string
   edit_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1370,7 +1370,7 @@ export def "androidpublisher-applications-edits-listings delete-by-package-name-
 #
 # GET /androidpublisher/v3/applications/{packageName}/edits/{editId}/listings
 # operationId: androidpublisher.edits.listings.list
-export def "androidpublisher-applications-edits-listings list-by-package-name-edit-id" [
+export def "androidpublisher-edits-listings-list" [
   package_name: string
   edit_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1420,7 +1420,7 @@ export def "androidpublisher-applications-edits-listings list-by-package-name-ed
 #
 # DELETE /androidpublisher/v3/applications/{packageName}/edits/{editId}/listings/{language}
 # operationId: androidpublisher.edits.listings.delete
-export def "androidpublisher-applications-edits-listings delete-by-package-name-edit-id-language" [
+export def "androidpublisher-edits-listings-delete" [
   package_name: string
   edit_id: string
   language: string
@@ -1472,7 +1472,7 @@ export def "androidpublisher-applications-edits-listings delete-by-package-name-
 #
 # GET /androidpublisher/v3/applications/{packageName}/edits/{editId}/listings/{language}
 # operationId: androidpublisher.edits.listings.get
-export def "androidpublisher-applications-edits-listings get" [
+export def "androidpublisher-edits-listings-get" [
   package_name: string
   edit_id: string
   language: string
@@ -1524,7 +1524,7 @@ export def "androidpublisher-applications-edits-listings get" [
 #
 # PATCH /androidpublisher/v3/applications/{packageName}/edits/{editId}/listings/{language}
 # operationId: androidpublisher.edits.listings.patch
-export def "androidpublisher-applications-edits-listings update-by-package-name-edit-id-language" [
+export def "androidpublisher-edits-listings-patch" [
   package_name: string
   edit_id: string
   language: string
@@ -1584,7 +1584,7 @@ export def "androidpublisher-applications-edits-listings update-by-package-name-
 #
 # PUT /androidpublisher/v3/applications/{packageName}/edits/{editId}/listings/{language}
 # operationId: androidpublisher.edits.listings.update
-export def "androidpublisher-applications-edits-listings update-by-package-name-edit-id-language-1" [
+export def "androidpublisher-edits-listings-update" [
   package_name: string
   edit_id: string
   language: string
@@ -1644,7 +1644,7 @@ export def "androidpublisher-applications-edits-listings update-by-package-name-
 #
 # DELETE /androidpublisher/v3/applications/{packageName}/edits/{editId}/listings/{language}/{imageType}
 # operationId: androidpublisher.edits.images.deleteall
-export def "androidpublisher-applications-edits-listings delete-by-package-name-edit-id-language-image-type" [
+export def "androidpublisher-edits-images-deleteall" [
   package_name: string
   edit_id: string
   language: string
@@ -1698,7 +1698,7 @@ export def "androidpublisher-applications-edits-listings delete-by-package-name-
 #
 # GET /androidpublisher/v3/applications/{packageName}/edits/{editId}/listings/{language}/{imageType}
 # operationId: androidpublisher.edits.images.list
-export def "androidpublisher-applications-edits-listings list-by-package-name-edit-id-language-image-type" [
+export def "androidpublisher-edits-images-list" [
   package_name: string
   edit_id: string
   language: string
@@ -1752,7 +1752,7 @@ export def "androidpublisher-applications-edits-listings list-by-package-name-ed
 #
 # POST /androidpublisher/v3/applications/{packageName}/edits/{editId}/listings/{language}/{imageType}
 # operationId: androidpublisher.edits.images.upload
-export def "androidpublisher-applications-edits-listings upload" [
+export def "androidpublisher-edits-images-upload" [
   package_name: string
   edit_id: string
   language: string
@@ -1806,7 +1806,7 @@ export def "androidpublisher-applications-edits-listings upload" [
 #
 # DELETE /androidpublisher/v3/applications/{packageName}/edits/{editId}/listings/{language}/{imageType}/{imageId}
 # operationId: androidpublisher.edits.images.delete
-export def "androidpublisher-applications-edits-listings delete-by-package-name-edit-id-language-image-type-image-id" [
+export def "androidpublisher-edits-images-delete" [
   package_name: string
   edit_id: string
   language: string
@@ -1862,7 +1862,7 @@ export def "androidpublisher-applications-edits-listings delete-by-package-name-
 #
 # GET /androidpublisher/v3/applications/{packageName}/edits/{editId}/testers/{track}
 # operationId: androidpublisher.edits.testers.get
-export def "androidpublisher-applications-edits-testers get" [
+export def "androidpublisher-edits-testers-get" [
   package_name: string
   edit_id: string
   track: string
@@ -1914,7 +1914,7 @@ export def "androidpublisher-applications-edits-testers get" [
 #
 # PATCH /androidpublisher/v3/applications/{packageName}/edits/{editId}/testers/{track}
 # operationId: androidpublisher.edits.testers.patch
-export def "androidpublisher-applications-edits-testers update-by-package-name-edit-id-track" [
+export def "androidpublisher-edits-testers-patch" [
   package_name: string
   edit_id: string
   track: string
@@ -1970,7 +1970,7 @@ export def "androidpublisher-applications-edits-testers update-by-package-name-e
 #
 # PUT /androidpublisher/v3/applications/{packageName}/edits/{editId}/testers/{track}
 # operationId: androidpublisher.edits.testers.update
-export def "androidpublisher-applications-edits-testers update-by-package-name-edit-id-track-1" [
+export def "androidpublisher-edits-testers-update" [
   package_name: string
   edit_id: string
   track: string
@@ -2026,7 +2026,7 @@ export def "androidpublisher-applications-edits-testers update-by-package-name-e
 #
 # GET /androidpublisher/v3/applications/{packageName}/edits/{editId}/tracks
 # operationId: androidpublisher.edits.tracks.list
-export def "androidpublisher-applications-edits-tracks list" [
+export def "androidpublisher-edits-tracks-list" [
   package_name: string
   edit_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2076,7 +2076,7 @@ export def "androidpublisher-applications-edits-tracks list" [
 #
 # GET /androidpublisher/v3/applications/{packageName}/edits/{editId}/tracks/{track}
 # operationId: androidpublisher.edits.tracks.get
-export def "androidpublisher-applications-edits-tracks get" [
+export def "androidpublisher-edits-tracks-get" [
   package_name: string
   edit_id: string
   track: string
@@ -2129,7 +2129,7 @@ export def "androidpublisher-applications-edits-tracks get" [
 # PATCH /androidpublisher/v3/applications/{packageName}/edits/{editId}/tracks/{track}
 # operationId: androidpublisher.edits.tracks.patch
 # --releases item shape: {countryTargeting?: record, inAppUpdatePriority?: int, name?: string, releaseNotes?: list, status?: "statusUnspecified"|"draft"|"inProgress"|"halted"|"completed", userFraction?: float, versionCodes?: list<string>}
-export def "androidpublisher-applications-edits-tracks update-by-package-name-edit-id-track" [
+export def "androidpublisher-edits-tracks-patch" [
   package_name: string
   edit_id: string
   track: string
@@ -2187,7 +2187,7 @@ export def "androidpublisher-applications-edits-tracks update-by-package-name-ed
 # PUT /androidpublisher/v3/applications/{packageName}/edits/{editId}/tracks/{track}
 # operationId: androidpublisher.edits.tracks.update
 # --releases item shape: {countryTargeting?: record, inAppUpdatePriority?: int, name?: string, releaseNotes?: list, status?: "statusUnspecified"|"draft"|"inProgress"|"halted"|"completed", userFraction?: float, versionCodes?: list<string>}
-export def "androidpublisher-applications-edits-tracks update-by-package-name-edit-id-track-1" [
+export def "androidpublisher-edits-tracks-update" [
   package_name: string
   edit_id: string
   track: string
@@ -2244,7 +2244,7 @@ export def "androidpublisher-applications-edits-tracks update-by-package-name-ed
 #
 # POST /androidpublisher/v3/applications/{packageName}/edits/{editId}:commit
 # operationId: androidpublisher.edits.commit
-export def "androidpublisher-applications-edits commit" [
+export def "androidpublisher-edits-commit" [
   package_name: string
   edit_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2295,7 +2295,7 @@ export def "androidpublisher-applications-edits commit" [
 #
 # POST /androidpublisher/v3/applications/{packageName}/edits/{editId}:validate
 # operationId: androidpublisher.edits.validate
-export def "androidpublisher-applications-edits validate" [
+export def "androidpublisher-edits-validate" [
   package_name: string
   edit_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2345,7 +2345,7 @@ export def "androidpublisher-applications-edits validate" [
 #
 # GET /androidpublisher/v3/applications/{packageName}/generatedApks/{versionCode}
 # operationId: androidpublisher.generatedapks.list
-export def "androidpublisher-applications-generated-apks list" [
+export def "androidpublisher-generatedapks-list" [
   package_name: string
   version_code: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2395,7 +2395,7 @@ export def "androidpublisher-applications-generated-apks list" [
 #
 # GET /androidpublisher/v3/applications/{packageName}/generatedApks/{versionCode}/downloads/{downloadId}:download
 # operationId: androidpublisher.generatedapks.download
-export def "androidpublisher-applications-generated-apks-downloads download" [
+export def "androidpublisher-generatedapks-download" [
   package_name: string
   version_code: int
   download_id: string
@@ -2447,7 +2447,7 @@ export def "androidpublisher-applications-generated-apks-downloads download" [
 #
 # GET /androidpublisher/v3/applications/{packageName}/inappproducts
 # operationId: androidpublisher.inappproducts.list
-export def "androidpublisher-applications-inappproducts list" [
+export def "androidpublisher-inappproducts-list" [
   package_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2501,7 +2501,7 @@ export def "androidpublisher-applications-inappproducts list" [
 # --defaultPrice shape: {currency?: string, priceMicros?: string}
 # --managedProductTaxesAndComplianceSettings shape: {eeaWithdrawalRightType?: "WITHDRAWAL_RIGHT_TYPE_UNSPECIFIED"|"WITHDRAWAL_RIGHT_DIGITAL_CONTENT"|"WITHDRAWAL_RIGHT_SERVICE", taxRateInfoByRegionCode?: record}
 # --subscriptionTaxesAndComplianceSettings shape: {eeaWithdrawalRightType?: "WITHDRAWAL_RIGHT_TYPE_UNSPECIFIED"|"WITHDRAWAL_RIGHT_DIGITAL_CONTENT"|"WITHDRAWAL_RIGHT_SERVICE", taxRateInfoByRegionCode?: record}
-export def "androidpublisher-applications-inappproducts create" [
+export def "androidpublisher-inappproducts-insert" [
   package_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2566,7 +2566,7 @@ export def "androidpublisher-applications-inappproducts create" [
 #
 # DELETE /androidpublisher/v3/applications/{packageName}/inappproducts/{sku}
 # operationId: androidpublisher.inappproducts.delete
-export def "androidpublisher-applications-inappproducts delete" [
+export def "androidpublisher-inappproducts-delete" [
   package_name: string
   sku: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2616,7 +2616,7 @@ export def "androidpublisher-applications-inappproducts delete" [
 #
 # GET /androidpublisher/v3/applications/{packageName}/inappproducts/{sku}
 # operationId: androidpublisher.inappproducts.get
-export def "androidpublisher-applications-inappproducts get" [
+export def "androidpublisher-inappproducts-get" [
   package_name: string
   sku: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2669,7 +2669,7 @@ export def "androidpublisher-applications-inappproducts get" [
 # --defaultPrice shape: {currency?: string, priceMicros?: string}
 # --managedProductTaxesAndComplianceSettings shape: {eeaWithdrawalRightType?: "WITHDRAWAL_RIGHT_TYPE_UNSPECIFIED"|"WITHDRAWAL_RIGHT_DIGITAL_CONTENT"|"WITHDRAWAL_RIGHT_SERVICE", taxRateInfoByRegionCode?: record}
 # --subscriptionTaxesAndComplianceSettings shape: {eeaWithdrawalRightType?: "WITHDRAWAL_RIGHT_TYPE_UNSPECIFIED"|"WITHDRAWAL_RIGHT_DIGITAL_CONTENT"|"WITHDRAWAL_RIGHT_SERVICE", taxRateInfoByRegionCode?: record}
-export def "androidpublisher-applications-inappproducts update-by-package-name-sku" [
+export def "androidpublisher-inappproducts-patch" [
   package_name: string
   sku: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2739,7 +2739,7 @@ export def "androidpublisher-applications-inappproducts update-by-package-name-s
 # --defaultPrice shape: {currency?: string, priceMicros?: string}
 # --managedProductTaxesAndComplianceSettings shape: {eeaWithdrawalRightType?: "WITHDRAWAL_RIGHT_TYPE_UNSPECIFIED"|"WITHDRAWAL_RIGHT_DIGITAL_CONTENT"|"WITHDRAWAL_RIGHT_SERVICE", taxRateInfoByRegionCode?: record}
 # --subscriptionTaxesAndComplianceSettings shape: {eeaWithdrawalRightType?: "WITHDRAWAL_RIGHT_TYPE_UNSPECIFIED"|"WITHDRAWAL_RIGHT_DIGITAL_CONTENT"|"WITHDRAWAL_RIGHT_SERVICE", taxRateInfoByRegionCode?: record}
-export def "androidpublisher-applications-inappproducts update-by-package-name-sku-1" [
+export def "androidpublisher-inappproducts-update" [
   package_name: string
   sku: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2807,7 +2807,7 @@ export def "androidpublisher-applications-inappproducts update-by-package-name-s
 #
 # POST /androidpublisher/v3/applications/{packageName}/orders/{orderId}:refund
 # operationId: androidpublisher.orders.refund
-export def "androidpublisher-applications-orders create-refund" [
+export def "androidpublisher-orders-refund" [
   package_name: string
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2859,7 +2859,7 @@ export def "androidpublisher-applications-orders create-refund" [
 # POST /androidpublisher/v3/applications/{packageName}/pricing:convertRegionPrices
 # operationId: androidpublisher.monetization.convertRegionPrices
 # --price shape: {currencyCode?: string, nanos?: int, units?: string}
-export def "androidpublisher-applications-pricing-convert-region-prices create" [
+export def "androidpublisher-monetization-convert-region-prices" [
   package_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2911,7 +2911,7 @@ export def "androidpublisher-applications-pricing-convert-region-prices create" 
 #
 # GET /androidpublisher/v3/applications/{packageName}/purchases/products/{productId}/tokens/{token}
 # operationId: androidpublisher.purchases.products.get
-export def "androidpublisher-applications-purchases-products-tokens get" [
+export def "androidpublisher-purchases-products-get" [
   package_name: string
   product_id: string
   token_arg: string
@@ -2963,7 +2963,7 @@ export def "androidpublisher-applications-purchases-products-tokens get" [
 #
 # POST /androidpublisher/v3/applications/{packageName}/purchases/products/{productId}/tokens/{token}:acknowledge
 # operationId: androidpublisher.purchases.products.acknowledge
-export def "androidpublisher-applications-purchases-products-tokens create-acknowledge" [
+export def "androidpublisher-purchases-products-acknowledge" [
   package_name: string
   product_id: string
   token_arg: string
@@ -3019,7 +3019,7 @@ export def "androidpublisher-applications-purchases-products-tokens create-ackno
 #
 # POST /androidpublisher/v3/applications/{packageName}/purchases/products/{productId}/tokens/{token}:consume
 # operationId: androidpublisher.purchases.products.consume
-export def "androidpublisher-applications-purchases-products-tokens create-consume" [
+export def "androidpublisher-purchases-products-consume" [
   package_name: string
   product_id: string
   token_arg: string
@@ -3071,7 +3071,7 @@ export def "androidpublisher-applications-purchases-products-tokens create-consu
 #
 # GET /androidpublisher/v3/applications/{packageName}/purchases/subscriptions/{subscriptionId}/tokens/{token}
 # operationId: androidpublisher.purchases.subscriptions.get
-export def "androidpublisher-applications-purchases-subscriptions-tokens get" [
+export def "androidpublisher-purchases-subscriptions-get" [
   package_name: string
   subscription_id: string
   token_arg: string
@@ -3123,7 +3123,7 @@ export def "androidpublisher-applications-purchases-subscriptions-tokens get" [
 #
 # POST /androidpublisher/v3/applications/{packageName}/purchases/subscriptions/{subscriptionId}/tokens/{token}:acknowledge
 # operationId: androidpublisher.purchases.subscriptions.acknowledge
-export def "androidpublisher-applications-purchases-subscriptions-tokens create-acknowledge" [
+export def "androidpublisher-purchases-subscriptions-acknowledge" [
   package_name: string
   subscription_id: string
   token_arg: string
@@ -3179,7 +3179,7 @@ export def "androidpublisher-applications-purchases-subscriptions-tokens create-
 #
 # POST /androidpublisher/v3/applications/{packageName}/purchases/subscriptions/{subscriptionId}/tokens/{token}:cancel
 # operationId: androidpublisher.purchases.subscriptions.cancel
-export def "androidpublisher-applications-purchases-subscriptions-tokens cancel" [
+export def "androidpublisher-purchases-subscriptions-cancel" [
   package_name: string
   subscription_id: string
   token_arg: string
@@ -3232,7 +3232,7 @@ export def "androidpublisher-applications-purchases-subscriptions-tokens cancel"
 # POST /androidpublisher/v3/applications/{packageName}/purchases/subscriptions/{subscriptionId}/tokens/{token}:defer
 # operationId: androidpublisher.purchases.subscriptions.defer
 # --deferralInfo shape: {desiredExpiryTimeMillis?: string, expectedExpiryTimeMillis?: string}
-export def "androidpublisher-applications-purchases-subscriptions-tokens create-defer" [
+export def "androidpublisher-purchases-subscriptions-defer" [
   package_name: string
   subscription_id: string
   token_arg: string
@@ -3288,7 +3288,7 @@ export def "androidpublisher-applications-purchases-subscriptions-tokens create-
 #
 # POST /androidpublisher/v3/applications/{packageName}/purchases/subscriptions/{subscriptionId}/tokens/{token}:refund
 # operationId: androidpublisher.purchases.subscriptions.refund
-export def "androidpublisher-applications-purchases-subscriptions-tokens create-refund" [
+export def "androidpublisher-purchases-subscriptions-refund" [
   package_name: string
   subscription_id: string
   token_arg: string
@@ -3340,7 +3340,7 @@ export def "androidpublisher-applications-purchases-subscriptions-tokens create-
 #
 # POST /androidpublisher/v3/applications/{packageName}/purchases/subscriptions/{subscriptionId}/tokens/{token}:revoke
 # operationId: androidpublisher.purchases.subscriptions.revoke
-export def "androidpublisher-applications-purchases-subscriptions-tokens delete" [
+export def "androidpublisher-purchases-subscriptions-revoke" [
   package_name: string
   subscription_id: string
   token_arg: string
@@ -3392,7 +3392,7 @@ export def "androidpublisher-applications-purchases-subscriptions-tokens delete"
 #
 # GET /androidpublisher/v3/applications/{packageName}/purchases/subscriptionsv2/tokens/{token}
 # operationId: androidpublisher.purchases.subscriptionsv2.get
-export def "androidpublisher-applications-purchases-subscriptionsv2-tokens get" [
+export def "androidpublisher-purchases-subscriptionsv2-get" [
   package_name: string
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3442,7 +3442,7 @@ export def "androidpublisher-applications-purchases-subscriptionsv2-tokens get" 
 #
 # GET /androidpublisher/v3/applications/{packageName}/purchases/voidedpurchases
 # operationId: androidpublisher.purchases.voidedpurchases.list
-export def "androidpublisher-applications-purchases-voidedpurchases list" [
+export def "androidpublisher-purchases-voidedpurchases-list" [
   package_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3496,7 +3496,7 @@ export def "androidpublisher-applications-purchases-voidedpurchases list" [
 #
 # GET /androidpublisher/v3/applications/{packageName}/reviews
 # operationId: androidpublisher.reviews.list
-export def "androidpublisher-applications-reviews list" [
+export def "androidpublisher-reviews-list" [
   package_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3548,7 +3548,7 @@ export def "androidpublisher-applications-reviews list" [
 #
 # GET /androidpublisher/v3/applications/{packageName}/reviews/{reviewId}
 # operationId: androidpublisher.reviews.get
-export def "androidpublisher-applications-reviews get" [
+export def "androidpublisher-reviews-get" [
   package_name: string
   review_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3599,7 +3599,7 @@ export def "androidpublisher-applications-reviews get" [
 #
 # POST /androidpublisher/v3/applications/{packageName}/reviews/{reviewId}:reply
 # operationId: androidpublisher.reviews.reply
-export def "androidpublisher-applications-reviews create-reply" [
+export def "androidpublisher-reviews-reply" [
   package_name: string
   review_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3653,7 +3653,7 @@ export def "androidpublisher-applications-reviews create-reply" [
 #
 # GET /androidpublisher/v3/applications/{packageName}/subscriptions
 # operationId: androidpublisher.monetization.subscriptions.list
-export def "androidpublisher-applications-subscriptions list" [
+export def "androidpublisher-monetization-subscriptions-list" [
   package_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3707,7 +3707,7 @@ export def "androidpublisher-applications-subscriptions list" [
 # --basePlans item shape: {autoRenewingBasePlanType?: record, basePlanId?: string, offerTags?: list, otherRegionsConfig?: record, prepaidBasePlanType?: record, regionalConfigs?: list}
 # --listings item shape: {benefits?: list<string>, description?: string, languageCode?: string, title?: string}
 # --taxAndComplianceSettings shape: {eeaWithdrawalRightType?: "WITHDRAWAL_RIGHT_TYPE_UNSPECIFIED"|"WITHDRAWAL_RIGHT_DIGITAL_CONTENT"|"WITHDRAWAL_RIGHT_SERVICE", taxRateInfoByRegionCode?: record}
-export def "androidpublisher-applications-subscriptions create" [
+export def "androidpublisher-monetization-subscriptions-create" [
   package_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3765,7 +3765,7 @@ export def "androidpublisher-applications-subscriptions create" [
 #
 # DELETE /androidpublisher/v3/applications/{packageName}/subscriptions/{productId}
 # operationId: androidpublisher.monetization.subscriptions.delete
-export def "androidpublisher-applications-subscriptions delete" [
+export def "androidpublisher-monetization-subscriptions-delete" [
   package_name: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3815,7 +3815,7 @@ export def "androidpublisher-applications-subscriptions delete" [
 #
 # GET /androidpublisher/v3/applications/{packageName}/subscriptions/{productId}
 # operationId: androidpublisher.monetization.subscriptions.get
-export def "androidpublisher-applications-subscriptions get" [
+export def "androidpublisher-monetization-subscriptions-get" [
   package_name: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3868,7 +3868,7 @@ export def "androidpublisher-applications-subscriptions get" [
 # --basePlans item shape: {autoRenewingBasePlanType?: record, basePlanId?: string, offerTags?: list, otherRegionsConfig?: record, prepaidBasePlanType?: record, regionalConfigs?: list}
 # --listings item shape: {benefits?: list<string>, description?: string, languageCode?: string, title?: string}
 # --taxAndComplianceSettings shape: {eeaWithdrawalRightType?: "WITHDRAWAL_RIGHT_TYPE_UNSPECIFIED"|"WITHDRAWAL_RIGHT_DIGITAL_CONTENT"|"WITHDRAWAL_RIGHT_SERVICE", taxRateInfoByRegionCode?: record}
-export def "androidpublisher-applications-subscriptions update" [
+export def "androidpublisher-monetization-subscriptions-patch" [
   package_name: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3928,7 +3928,7 @@ export def "androidpublisher-applications-subscriptions update" [
 #
 # DELETE /androidpublisher/v3/applications/{packageName}/subscriptions/{productId}/basePlans/{basePlanId}
 # operationId: androidpublisher.monetization.subscriptions.basePlans.delete
-export def "androidpublisher-applications-subscriptions-base-plans delete" [
+export def "androidpublisher-monetization-subscriptions-base-plans-delete" [
   package_name: string
   product_id: string
   base_plan_id: string
@@ -3980,7 +3980,7 @@ export def "androidpublisher-applications-subscriptions-base-plans delete" [
 #
 # GET /androidpublisher/v3/applications/{packageName}/subscriptions/{productId}/basePlans/{basePlanId}/offers
 # operationId: androidpublisher.monetization.subscriptions.basePlans.offers.list
-export def "androidpublisher-applications-subscriptions-base-plans-offers list" [
+export def "androidpublisher-monetization-subscriptions-base-plans-offers-list" [
   package_name: string
   product_id: string
   base_plan_id: string
@@ -4039,7 +4039,7 @@ export def "androidpublisher-applications-subscriptions-base-plans-offers list" 
 # --phases item shape: {duration?: string, otherRegionsConfig?: record, recurrenceCount?: int, regionalConfigs?: list}
 # --regionalConfigs item shape: {newSubscriberAvailability?: bool, regionCode?: string}
 # --targeting shape: {acquisitionRule?: record, upgradeRule?: record}
-export def "androidpublisher-applications-subscriptions-base-plans-offers create" [
+export def "androidpublisher-monetization-subscriptions-base-plans-offers-create" [
   package_name: string
   product_id: string
   base_plan_id: string
@@ -4105,7 +4105,7 @@ export def "androidpublisher-applications-subscriptions-base-plans-offers create
 #
 # DELETE /androidpublisher/v3/applications/{packageName}/subscriptions/{productId}/basePlans/{basePlanId}/offers/{offerId}
 # operationId: androidpublisher.monetization.subscriptions.basePlans.offers.delete
-export def "androidpublisher-applications-subscriptions-base-plans-offers delete" [
+export def "androidpublisher-monetization-subscriptions-base-plans-offers-delete" [
   package_name: string
   product_id: string
   base_plan_id: string
@@ -4159,7 +4159,7 @@ export def "androidpublisher-applications-subscriptions-base-plans-offers delete
 #
 # GET /androidpublisher/v3/applications/{packageName}/subscriptions/{productId}/basePlans/{basePlanId}/offers/{offerId}
 # operationId: androidpublisher.monetization.subscriptions.basePlans.offers.get
-export def "androidpublisher-applications-subscriptions-base-plans-offers get" [
+export def "androidpublisher-monetization-subscriptions-base-plans-offers-get" [
   package_name: string
   product_id: string
   base_plan_id: string
@@ -4218,7 +4218,7 @@ export def "androidpublisher-applications-subscriptions-base-plans-offers get" [
 # --phases item shape: {duration?: string, otherRegionsConfig?: record, recurrenceCount?: int, regionalConfigs?: list}
 # --regionalConfigs item shape: {newSubscriberAvailability?: bool, regionCode?: string}
 # --targeting shape: {acquisitionRule?: record, upgradeRule?: record}
-export def "androidpublisher-applications-subscriptions-base-plans-offers update" [
+export def "androidpublisher-monetization-subscriptions-base-plans-offers-patch" [
   package_name: string
   product_id: string
   base_plan_id: string
@@ -4286,7 +4286,7 @@ export def "androidpublisher-applications-subscriptions-base-plans-offers update
 #
 # POST /androidpublisher/v3/applications/{packageName}/subscriptions/{productId}/basePlans/{basePlanId}/offers/{offerId}:activate
 # operationId: androidpublisher.monetization.subscriptions.basePlans.offers.activate
-export def "androidpublisher-applications-subscriptions-base-plans-offers create-activate" [
+export def "androidpublisher-monetization-subscriptions-base-plans-offers-activate" [
   package_name: string
   product_id: string
   base_plan_id: string
@@ -4344,7 +4344,7 @@ export def "androidpublisher-applications-subscriptions-base-plans-offers create
 #
 # POST /androidpublisher/v3/applications/{packageName}/subscriptions/{productId}/basePlans/{basePlanId}/offers/{offerId}:deactivate
 # operationId: androidpublisher.monetization.subscriptions.basePlans.offers.deactivate
-export def "androidpublisher-applications-subscriptions-base-plans-offers create-deactivate" [
+export def "androidpublisher-monetization-subscriptions-base-plans-offers-deactivate" [
   package_name: string
   product_id: string
   base_plan_id: string
@@ -4402,7 +4402,7 @@ export def "androidpublisher-applications-subscriptions-base-plans-offers create
 #
 # POST /androidpublisher/v3/applications/{packageName}/subscriptions/{productId}/basePlans/{basePlanId}:activate
 # operationId: androidpublisher.monetization.subscriptions.basePlans.activate
-export def "androidpublisher-applications-subscriptions-base-plans create-activate" [
+export def "androidpublisher-monetization-subscriptions-base-plans-activate" [
   package_name: string
   product_id: string
   base_plan_id: string
@@ -4458,7 +4458,7 @@ export def "androidpublisher-applications-subscriptions-base-plans create-activa
 #
 # POST /androidpublisher/v3/applications/{packageName}/subscriptions/{productId}/basePlans/{basePlanId}:deactivate
 # operationId: androidpublisher.monetization.subscriptions.basePlans.deactivate
-export def "androidpublisher-applications-subscriptions-base-plans create-deactivate" [
+export def "androidpublisher-monetization-subscriptions-base-plans-deactivate" [
   package_name: string
   product_id: string
   base_plan_id: string
@@ -4516,7 +4516,7 @@ export def "androidpublisher-applications-subscriptions-base-plans create-deacti
 # operationId: androidpublisher.monetization.subscriptions.basePlans.migratePrices
 # --regionalPriceMigrations item shape: {oldestAllowedPriceVersionTime?: string, regionCode?: string}
 # --regionsVersion shape: {version?: string}
-export def "androidpublisher-applications-subscriptions-base-plans create-migrate-prices" [
+export def "androidpublisher-monetization-subscriptions-base-plans-migrate-prices" [
   package_name: string
   product_id: string
   base_plan_id: string
@@ -4573,7 +4573,7 @@ export def "androidpublisher-applications-subscriptions-base-plans create-migrat
 #
 # POST /androidpublisher/v3/applications/{packageName}/subscriptions/{productId}:archive
 # operationId: androidpublisher.monetization.subscriptions.archive
-export def "androidpublisher-applications-subscriptions archive" [
+export def "androidpublisher-monetization-subscriptions-archive" [
   package_name: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4627,7 +4627,7 @@ export def "androidpublisher-applications-subscriptions archive" [
 #
 # GET /androidpublisher/v3/applications/{packageName}/systemApks/{versionCode}/variants
 # operationId: androidpublisher.systemapks.variants.list
-export def "androidpublisher-applications-system-apks-variants list" [
+export def "androidpublisher-systemapks-variants-list" [
   package_name: string
   version_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4678,7 +4678,7 @@ export def "androidpublisher-applications-system-apks-variants list" [
 # POST /androidpublisher/v3/applications/{packageName}/systemApks/{versionCode}/variants
 # operationId: androidpublisher.systemapks.variants.create
 # --deviceSpec shape: {screenDensity?: int, supportedAbis?: list<string>, supportedLocales?: list<string>}
-export def "androidpublisher-applications-system-apks-variants create" [
+export def "androidpublisher-systemapks-variants-create" [
   package_name: string
   version_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4732,7 +4732,7 @@ export def "androidpublisher-applications-system-apks-variants create" [
 #
 # GET /androidpublisher/v3/applications/{packageName}/systemApks/{versionCode}/variants/{variantId}
 # operationId: androidpublisher.systemapks.variants.get
-export def "androidpublisher-applications-system-apks-variants get" [
+export def "androidpublisher-systemapks-variants-get" [
   package_name: string
   version_code: string
   variant_id: int
@@ -4784,7 +4784,7 @@ export def "androidpublisher-applications-system-apks-variants get" [
 #
 # GET /androidpublisher/v3/applications/{packageName}/systemApks/{versionCode}/variants/{variantId}:download
 # operationId: androidpublisher.systemapks.variants.download
-export def "androidpublisher-applications-system-apks-variants download" [
+export def "androidpublisher-systemapks-variants-download" [
   package_name: string
   version_code: string
   variant_id: int
@@ -4836,7 +4836,7 @@ export def "androidpublisher-applications-system-apks-variants download" [
 #
 # DELETE /androidpublisher/v3/{name}
 # operationId: androidpublisher.users.delete
-export def "androidpublisher delete" [
+export def "androidpublisher-users-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4884,7 +4884,7 @@ export def "androidpublisher delete" [
 #
 # GET /androidpublisher/v3/{name}
 # operationId: androidpublisher.externaltransactions.getexternaltransaction
-export def "androidpublisher get-externaltransaction" [
+export def "androidpublisher-externaltransactions-getexternaltransaction" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4933,7 +4933,7 @@ export def "androidpublisher get-externaltransaction" [
 # PATCH /androidpublisher/v3/{name}
 # operationId: androidpublisher.users.patch
 # --grants item shape: {appLevelPermissions?: list<string>, name?: string, packageName?: string}
-export def "androidpublisher update" [
+export def "androidpublisher-users-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4990,7 +4990,7 @@ export def "androidpublisher update" [
 # POST /androidpublisher/v3/{name}:refund
 # operationId: androidpublisher.externaltransactions.refundexternaltransaction
 # --partialRefund shape: {refundId?: string, refundPreTaxAmount?: record}
-export def "androidpublisher create-refundexternaltransaction" [
+export def "androidpublisher-externaltransactions-refundexternaltransaction" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5051,7 +5051,7 @@ export def "androidpublisher create-refundexternaltransaction" [
 # --originalTaxAmount shape: {currency?: string, priceMicros?: string}
 # --recurringTransaction shape: {externalSubscription?: record, externalTransactionToken?: string, initialExternalTransactionId?: string}
 # --userTaxAddress shape: {regionCode?: string}
-export def "androidpublisher-external-transactions create-externaltransaction" [
+export def "androidpublisher-externaltransactions-createexternaltransaction" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5112,7 +5112,7 @@ export def "androidpublisher-external-transactions create-externaltransaction" [
 #
 # POST /androidpublisher/v3/{parent}/grants
 # operationId: androidpublisher.grants.create
-export def "androidpublisher-grants create" [
+export def "androidpublisher-grants-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5166,7 +5166,7 @@ export def "androidpublisher-grants create" [
 #
 # GET /androidpublisher/v3/{parent}/users
 # operationId: androidpublisher.users.list
-export def "androidpublisher-users list" [
+export def "androidpublisher-users-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5217,7 +5217,7 @@ export def "androidpublisher-users list" [
 # POST /androidpublisher/v3/{parent}/users
 # operationId: androidpublisher.users.create
 # --grants item shape: {appLevelPermissions?: list<string>, name?: string, packageName?: string}
-export def "androidpublisher-users create" [
+export def "androidpublisher-users-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

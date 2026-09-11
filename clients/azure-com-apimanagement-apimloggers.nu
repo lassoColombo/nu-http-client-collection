@@ -123,7 +123,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-api-management-service-loggers list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "logger-list-by-service" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -148,7 +148,7 @@ export def commands []: nothing -> table {
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/loggers
 # Docs: https://docs.microsoft.com/en-us/azure/api-management/api-management-howto-log-event-hubs
 # operationId: Logger_ListByService
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-loggers list" [
+export def "logger-list-by-service" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -193,7 +193,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/loggers/{loggerId}
 # operationId: Logger_Delete
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-loggers delete" [
+export def "logger-delete" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -241,7 +241,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/loggers/{loggerId}
 # operationId: Logger_Get
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-loggers get" [
+export def "logger-get" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -285,7 +285,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # HEAD /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/loggers/{loggerId}
 # operationId: Logger_GetEntityTag
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-loggers get-entity-tag" [
+export def "logger-get-entity-tag" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -330,7 +330,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/loggers/{loggerId}
 # operationId: Logger_Update
 # --properties shape: {credentials?: record, description?: string, isBuffered?: bool, loggerType?: "azureEventHub"|"applicationInsights"}
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-loggers update" [
+export def "logger-update" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -382,7 +382,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/loggers/{loggerId}
 # operationId: Logger_CreateOrUpdate
 # --properties shape: {credentials: record, description?: string, isBuffered?: bool, loggerType: "azureEventHub"|"applicationInsights", resourceId?: string}
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-loggers create-or-update" [
+export def "logger-create-or-update" [
   subscription_id: string
   resource_group_name: string
   service_name: string

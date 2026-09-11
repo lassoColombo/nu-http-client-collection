@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["api_key"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "applications-status get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-applications-status" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -127,7 +127,7 @@ export def commands []: nothing -> table {
 # Used to understand API usage
 #
 # GET /applications/status/
-export def "applications-status get" [
+export def "get-applications-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -162,7 +162,7 @@ export def "applications-status get" [
 # Obtain report output
 #
 # GET /reports/
-export def "reports get" [
+export def "get-reports" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -200,7 +200,7 @@ export def "reports get" [
 # Obtain report output
 #
 # POST /reports/
-export def "reports create" [
+export def "post-reports" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -238,7 +238,7 @@ export def "reports create" [
 # Step 3 of executing custom report
 #
 # GET /reports/custom/create/
-export def "reports-custom-create get" [
+export def "get-reports-custom-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -274,7 +274,7 @@ export def "reports-custom-create get" [
 # Step 3 of executing custom report
 #
 # POST /reports/custom/create/
-export def "reports-custom-create create" [
+export def "post-reports-custom-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -310,7 +310,7 @@ export def "reports-custom-create create" [
 # Step 1 of executing custom report
 #
 # GET /reports/custom/generate/
-export def "reports-custom-generate get" [
+export def "get-reports-custom-generate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -345,7 +345,7 @@ export def "reports-custom-generate get" [
 # Step 1 of executing custom report
 #
 # POST /reports/custom/generate/
-export def "reports-custom-generate create" [
+export def "post-reports-custom-generate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -380,7 +380,7 @@ export def "reports-custom-generate create" [
 # Step 2 of executing custom report
 #
 # GET /reports/custom/insert/
-export def "reports-custom-insert get" [
+export def "get-reports-custom-insert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -416,7 +416,7 @@ export def "reports-custom-insert get" [
 # Step 2 of executing custom report
 #
 # POST /reports/custom/insert/
-export def "reports-custom-insert create" [
+export def "post-reports-custom-insert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -452,7 +452,7 @@ export def "reports-custom-insert create" [
 # Get report dates available for a specific report
 #
 # GET /reports/dates/
-export def "reports-dates get" [
+export def "get-reports-dates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -487,7 +487,7 @@ export def "reports-dates get" [
 # Get report dates available for a specific report
 #
 # POST /reports/dates/
-export def "reports-dates create" [
+export def "post-reports-dates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -522,7 +522,7 @@ export def "reports-dates create" [
 # Get list of generated reports
 #
 # GET /reports/status/
-export def "reports-status get" [
+export def "get-reports-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -557,7 +557,7 @@ export def "reports-status get" [
 # Get list of generated reports
 #
 # POST /reports/status/
-export def "reports-status create" [
+export def "post-reports-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -592,7 +592,7 @@ export def "reports-status create" [
 # Used to create tweet reports
 #
 # GET /reports/tweet/create/
-export def "reports-tweet-create get" [
+export def "get-reports-tweet-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -631,7 +631,7 @@ export def "reports-tweet-create get" [
 # Used to create tweet reports
 #
 # POST /reports/tweet/create/
-export def "reports-tweet-create create" [
+export def "post-reports-tweet-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -670,7 +670,7 @@ export def "reports-tweet-create create" [
 # Used to create twitter follower report
 #
 # GET /reports/twitter/create/
-export def "reports-twitter-create get" [
+export def "get-reports-twitter-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -707,7 +707,7 @@ export def "reports-twitter-create get" [
 # Used to create twitter follower report
 #
 # POST /reports/twitter/create/
-export def "reports-twitter-create create" [
+export def "post-reports-twitter-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

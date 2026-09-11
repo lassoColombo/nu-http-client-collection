@@ -99,7 +99,7 @@ def is-groundhog-completer [] { ["0" "1" "false" "true"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "info get-root" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "root" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -123,7 +123,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/v1
 # operationId: root
-export def "info get-root" [
+export def "root" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -157,7 +157,7 @@ export def "info get-root" [
 #
 # GET /api/v1/groundhogs
 # operationId: groundhogs
-export def "groundhogs list" [
+export def "groundhogs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -194,7 +194,7 @@ export def "groundhogs list" [
 #
 # GET /api/v1/groundhogs/{slug}
 # operationId: groundhog
-export def "groundhogs get" [
+export def "groundhog" [
   slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -230,7 +230,7 @@ export def "groundhogs get" [
 #
 # GET /api/v1/predictions
 # operationId: predictions
-export def "predictions get" [
+export def "predictions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -266,7 +266,7 @@ export def "predictions get" [
 #
 # GET /api/v1/spec
 # operationId: spec
-export def "spec get" [
+export def "spec" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

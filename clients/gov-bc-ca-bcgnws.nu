@@ -106,7 +106,7 @@ def sort-by-completer-1 [] { ["decisionDate" "featureType" "name" "relevance"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "feature-categories get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-feature-categories" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -129,7 +129,7 @@ export def commands []: nothing -> table {
 # Get all feature categories
 #
 # GET /featureCategories
-export def "feature-categories get" [
+export def "get-feature-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -164,7 +164,7 @@ export def "feature-categories get" [
 # Get all feature classes
 #
 # GET /featureClasses
-export def "feature-classes get" [
+export def "get-feature-classes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -199,7 +199,7 @@ export def "feature-classes get" [
 # Get all feature types
 #
 # GET /featureTypes
-export def "feature-types get" [
+export def "get-feature-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -234,7 +234,7 @@ export def "feature-types get" [
 # Get a feature by its featureId
 #
 # GET /features/{featureId}
-export def "features get" [
+export def "get-features-feature-id" [
   feature_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -269,7 +269,7 @@ export def "features get" [
 # Get all name authorities
 #
 # GET /nameAuthorities
-export def "name-authorities get" [
+export def "get-name-authorities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -304,7 +304,7 @@ export def "name-authorities get" [
 # Search for names with metadata changes in a given period
 #
 # GET /names/changes
-export def "names-changes get" [
+export def "get-names-changes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -350,7 +350,7 @@ export def "names-changes get" [
 # Search for names affected by recent naming decision
 #
 # GET /names/decisions/recent
-export def "names-decisions-recent get" [
+export def "get-names-decisions-recent" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -395,7 +395,7 @@ export def "names-decisions-recent get" [
 # Search for names affected by naming decisions in a given year
 #
 # GET /names/decisions/year
-export def "names-decisions-year get" [
+export def "get-names-decisions-year" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -440,7 +440,7 @@ export def "names-decisions-year get" [
 # Search in a geographic area
 #
 # GET /names/inside
-export def "names-inside get" [
+export def "get-names-inside" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -485,7 +485,7 @@ export def "names-inside get" [
 # Search near to a geographic point
 #
 # GET /names/near
-export def "names-near get" [
+export def "get-names-near" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -531,7 +531,7 @@ export def "names-near get" [
 # Search by name, limit to unofficial names only
 #
 # GET /names/notOfficial/search
-export def "names-not-official-search get" [
+export def "get-names-not-official-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -577,7 +577,7 @@ export def "names-not-official-search get" [
 # Search by name, limit to official names only
 #
 # GET /names/official/search
-export def "names-official-search get" [
+export def "get-names-official-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -623,7 +623,7 @@ export def "names-official-search get" [
 # Search by name
 #
 # GET /names/search
-export def "names-search get" [
+export def "get-names-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -669,7 +669,7 @@ export def "names-search get" [
 # Get a name by its nameId
 #
 # GET /names/{nameId}.{outputFormat}
-export def "names get" [
+export def "get-names-name-id-output-format" [
   name_id: int
   output_format: string
   --base-url(-b): string@base-url-completer # API base URL

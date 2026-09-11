@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["query-apiKey"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "articles-dedup create-near-duplicate" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "near-duplicate-articles" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -128,7 +128,7 @@ export def commands []: nothing -> table {
 #
 # POST /articles/dedup
 # operationId: nearDuplicateArticles
-export def "articles-dedup create-near-duplicate" [
+export def "near-duplicate-articles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -170,7 +170,7 @@ export def "articles-dedup create-near-duplicate" [
 #
 # POST /articles/get
 # operationId: getArticleByCoreIdBatch
-export def "articles-get get-by-batch" [
+export def "get-article-by-core-id-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -216,7 +216,7 @@ export def "articles-get get-by-batch" [
 #
 # GET /articles/get/{coreId}
 # operationId: getArticleByCoreId
-export def "articles-get get" [
+export def "get-article-by-core-id" [
   core_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -260,7 +260,7 @@ export def "articles-get get" [
 #
 # GET /articles/get/{coreId}/download/pdf
 # operationId: getArticlePdfByCoreId
-export def "articles-get-download-pdf get" [
+export def "get-article-pdf-by-core-id" [
   core_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -296,7 +296,7 @@ export def "articles-get-download-pdf get" [
 #
 # GET /articles/get/{coreId}/history
 # operationId: getArticleHistoryByCoreId
-export def "articles-get-history get" [
+export def "get-article-history-by-core-id" [
   core_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -335,7 +335,7 @@ export def "articles-get-history get" [
 #
 # POST /articles/search
 # operationId: searchArticlesBatch
-export def "articles-search list-batch" [
+export def "search-articles-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -381,7 +381,7 @@ export def "articles-search list-batch" [
 #
 # GET /articles/search/{query}
 # operationId: searchArticles
-export def "articles-search list" [
+export def "search-articles" [
   query: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -427,7 +427,7 @@ export def "articles-search list" [
 #
 # POST /articles/similar
 # operationId: similarArticles
-export def "articles-similar create" [
+export def "similar-articles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -474,7 +474,7 @@ export def "articles-similar create" [
 #
 # POST /journals/get
 # operationId: getJournalByIssnBatch
-export def "journals-get get-by-issn-batch" [
+export def "get-journal-by-issn-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -512,7 +512,7 @@ export def "journals-get get-by-issn-batch" [
 #
 # GET /journals/get/{issn}
 # operationId: getJournalByIssn
-export def "journals-get get" [
+export def "get-journal-by-issn" [
   issn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -547,7 +547,7 @@ export def "journals-get get" [
 # Batch operation for search through journals
 #
 # POST /journals/search
-export def "journals-search create" [
+export def "post-journals-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -584,7 +584,7 @@ export def "journals-search create" [
 # Search through journals
 #
 # GET /journals/search/{query}
-export def "journals-search get" [
+export def "get-journals-search-query" [
   query: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -623,7 +623,7 @@ export def "journals-search get" [
 #
 # POST /repositories/get
 # operationId: getRepositoryByIdBatch
-export def "repositories-get get-repository-by-batch" [
+export def "get-repository-by-id-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -665,7 +665,7 @@ export def "repositories-get get-repository-by-batch" [
 #
 # GET /repositories/get/{repositoryId}
 # operationId: getRepositoryById
-export def "repositories-get get-repository" [
+export def "get-repository-by-id" [
   repository_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -704,7 +704,7 @@ export def "repositories-get get-repository" [
 # Batch operation for searching through repositories
 #
 # POST /repositories/search
-export def "repositories-search create" [
+export def "post-repositories-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -745,7 +745,7 @@ export def "repositories-search create" [
 # Search through all repositories
 #
 # GET /repositories/search/{query}
-export def "repositories-search get" [
+export def "get-repositories-search-query" [
   query: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -786,7 +786,7 @@ export def "repositories-search get" [
 # Batch operation for search through all resources
 #
 # POST /search
-export def "search create" [
+export def "post-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -823,7 +823,7 @@ export def "search create" [
 # Search through all resources
 #
 # GET /search/{query}
-export def "search get" [
+export def "get-search-query" [
   query: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

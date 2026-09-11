@@ -145,7 +145,7 @@ def accept-completer [] { ["application/json" "text/json" "text/plain"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "charts-axes get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "chart-axes-get-id" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -169,7 +169,7 @@ export def commands []: nothing -> table {
 #
 # GET /Charts/Axes/{id}
 # operationId: chart_axes_get_id
-export def "charts-axes get" [
+export def "chart-axes-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -205,7 +205,7 @@ export def "charts-axes get" [
 #
 # GET /Charts/AxisDataTypes
 # operationId: chart_axisdatatypes_get
-export def "charts-axis-data-types list" [
+export def "chart-axisdatatypes-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -239,7 +239,7 @@ export def "charts-axis-data-types list" [
 #
 # GET /Charts/AxisDataTypes/TypeId/{type_id}
 # operationId: chart_axisdatatypes_typeid_get_type_id
-export def "charts-axis-data-types-type-id get-axisdatatypes-typeid" [
+export def "chart-axisdatatypes-typeid-get-type-id" [
   type_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -275,7 +275,7 @@ export def "charts-axis-data-types-type-id get-axisdatatypes-typeid" [
 #
 # GET /Charts/AxisDataTypes/{id}
 # operationId: chart_axisdatatypes_get_id
-export def "charts-axis-data-types get-axisdatatypes" [
+export def "chart-axisdatatypes-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -311,7 +311,7 @@ export def "charts-axis-data-types get-axisdatatypes" [
 #
 # GET /Charts/ChartData/{id}
 # operationId: chart_chartdata_get_id
-export def "charts-chart-data get-chartdata" [
+export def "chart-chartdata-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -347,7 +347,7 @@ export def "charts-chart-data get-chartdata" [
 #
 # GET /Charts/ChartUpdate/{id}
 # operationId: charts_charts_chartupdate_get_id
-export def "charts-chart-update get-chartupdate" [
+export def "charts-charts-chartupdate-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -383,7 +383,7 @@ export def "charts-chart-update get-chartupdate" [
 #
 # PUT /Charts/ChartUpdate/{id}
 # operationId: charts_charts_chartupdate_put_id
-export def "charts-chart-update update-chartupdate" [
+export def "charts-charts-chartupdate-put-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -426,7 +426,7 @@ export def "charts-chart-update update-chartupdate" [
 #
 # GET /Charts/ChildObjects/{id}
 # operationId: charts_charts_childobjects_get_id
-export def "charts-child-objects get-childobjects" [
+export def "charts-charts-childobjects-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -462,7 +462,7 @@ export def "charts-child-objects get-childobjects" [
 #
 # GET /Charts/ColumnCollections/{id}
 # operationId: chart_columncollections_get_id
-export def "charts-column-collections get-columncollections" [
+export def "chart-columncollections-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -498,7 +498,7 @@ export def "charts-column-collections get-columncollections" [
 #
 # GET /Charts/Columns/{id}
 # operationId: chart_columns_get_id
-export def "charts-columns get" [
+export def "chart-columns-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -534,7 +534,7 @@ export def "charts-columns get" [
 #
 # GET /Charts/DataPoints/{id}
 # operationId: chart_datapoints_get_id
-export def "charts-data-points get-datapoints" [
+export def "chart-datapoints-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -570,7 +570,7 @@ export def "charts-data-points get-datapoints" [
 #
 # GET /Charts/Details/{id}
 # operationId: charts_charts_details_get_id
-export def "charts-details get" [
+export def "charts-charts-details-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -606,7 +606,7 @@ export def "charts-details get" [
 #
 # GET /Charts/OpenOfficeXml/{id}
 # operationId: charts_charts_openofficexml_get_id_updated
-export def "charts-open-office-xml get-openofficexml-updated" [
+export def "charts-charts-openofficexml-get-id-updated" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -644,7 +644,7 @@ export def "charts-open-office-xml get-openofficexml-updated" [
 #
 # PUT /Charts/OpenOfficeXml/{id}
 # operationId: charts_charts_openofficexml_put_id
-export def "charts-open-office-xml update-openofficexml" [
+export def "charts-charts-openofficexml-put-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -686,7 +686,7 @@ export def "charts-open-office-xml update-openofficexml" [
 #
 # GET /Charts/PlotType
 # operationId: chart_plottype_get
-export def "charts-plot-type list" [
+export def "chart-plottype-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -720,7 +720,7 @@ export def "charts-plot-type list" [
 #
 # GET /Charts/PlotType/TypeId/{type_id}
 # operationId: chart_plottype_typeid_get_type_id
-export def "charts-plot-type-type-id get-plottype-typeid" [
+export def "chart-plottype-typeid-get-type-id" [
   type_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -756,7 +756,7 @@ export def "charts-plot-type-type-id get-plottype-typeid" [
 #
 # GET /Charts/PlotType/{id}
 # operationId: chart_plottype_get_id
-export def "charts-plot-type get-plottype" [
+export def "chart-plottype-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -792,7 +792,7 @@ export def "charts-plot-type get-plottype" [
 #
 # GET /Charts/RowCol
 # operationId: chart_rowcol_get
-export def "charts-row-col list" [
+export def "chart-rowcol-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -826,7 +826,7 @@ export def "charts-row-col list" [
 #
 # GET /Charts/RowCol/TypeId/{type_id}
 # operationId: chart_rowcol_typeid_get_type_id
-export def "charts-row-col-type-id get-rowcol-typeid" [
+export def "chart-rowcol-typeid-get-type-id" [
   type_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -862,7 +862,7 @@ export def "charts-row-col-type-id get-rowcol-typeid" [
 #
 # GET /Charts/RowCol/{id}
 # operationId: chart_rowcol_get_id
-export def "charts-row-col get-rowcol" [
+export def "chart-rowcol-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -898,7 +898,7 @@ export def "charts-row-col get-rowcol" [
 #
 # GET /Charts/RowCollections/{id}
 # operationId: chart_rowcollections_get_id
-export def "charts-row-collections get-rowcollections" [
+export def "chart-rowcollections-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -934,7 +934,7 @@ export def "charts-row-collections get-rowcollections" [
 #
 # GET /Charts/RowNameFormatTypes
 # operationId: chart_rownameformattypes_get
-export def "charts-row-name-format-types list" [
+export def "chart-rownameformattypes-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -968,7 +968,7 @@ export def "charts-row-name-format-types list" [
 #
 # GET /Charts/RowNameFormatTypes/TypeId/{type_id}
 # operationId: chart_rownameformattypes_typeid_get_type_id
-export def "charts-row-name-format-types-type-id get-rownameformattypes-typeid" [
+export def "chart-rownameformattypes-typeid-get-type-id" [
   type_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1004,7 +1004,7 @@ export def "charts-row-name-format-types-type-id get-rownameformattypes-typeid" 
 #
 # GET /Charts/RowNameFormatTypes/{id}
 # operationId: chart_rownameformattypes_get_id
-export def "charts-row-name-format-types get-rownameformattypes" [
+export def "chart-rownameformattypes-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1040,7 +1040,7 @@ export def "charts-row-name-format-types get-rownameformattypes" [
 #
 # GET /Charts/Rows/{id}
 # operationId: chart_rows_get_id
-export def "charts-rows get" [
+export def "chart-rows-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1076,7 +1076,7 @@ export def "charts-rows get" [
 #
 # GET /Charts/Svg/{id}
 # operationId: charts_charts_svg_get_id_use_cache
-export def "charts-svg get-use-cache" [
+export def "charts-charts-svg-get-id-use-cache" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1114,7 +1114,7 @@ export def "charts-svg get-use-cache" [
 #
 # GET /Charts/{id}
 # operationId: charts_charts_get_id
-export def "charts get" [
+export def "charts-charts-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1150,7 +1150,7 @@ export def "charts get" [
 #
 # GET /ConnectionShapes/ChildObjects/{id}
 # operationId: slides_connectionshapes_childobjects_get_id
-export def "connection-shapes-child-objects get-slides-connectionshapes-childobjects" [
+export def "slides-connectionshapes-childobjects-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1186,7 +1186,7 @@ export def "connection-shapes-child-objects get-slides-connectionshapes-childobj
 #
 # GET /ConnectionShapes/Details/{id}
 # operationId: slides_connectionshapes_details_get_id
-export def "connection-shapes-details get-slides-connectionshapes" [
+export def "slides-connectionshapes-details-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1222,7 +1222,7 @@ export def "connection-shapes-details get-slides-connectionshapes" [
 #
 # GET /ConnectionShapes/OpenOfficeXml/{id}
 # operationId: slides_connectionshapes_openofficexml_get_id_updated
-export def "connection-shapes-open-office-xml get-slides-connectionshapes-openofficexml-updated" [
+export def "slides-connectionshapes-openofficexml-get-id-updated" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1260,7 +1260,7 @@ export def "connection-shapes-open-office-xml get-slides-connectionshapes-openof
 #
 # PUT /ConnectionShapes/OpenOfficeXml/{id}
 # operationId: slides_connectionshapes_openofficexml_put_id
-export def "connection-shapes-open-office-xml update-slides-connectionshapes-openofficexml" [
+export def "slides-connectionshapes-openofficexml-put-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1302,7 +1302,7 @@ export def "connection-shapes-open-office-xml update-slides-connectionshapes-ope
 #
 # GET /ConnectionShapes/Svg/{id}
 # operationId: slides_connectionshapes_svg_get_id_use_cache
-export def "connection-shapes-svg get-slides-connectionshapes-use-cache" [
+export def "slides-connectionshapes-svg-get-id-use-cache" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1340,7 +1340,7 @@ export def "connection-shapes-svg get-slides-connectionshapes-use-cache" [
 #
 # GET /ConnectionShapes/{id}
 # operationId: slides_connectionshapes_get_id
-export def "connection-shapes get-slides-connectionshapes" [
+export def "slides-connectionshapes-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1376,7 +1376,7 @@ export def "connection-shapes get-slides-connectionshapes" [
 #
 # POST /Documents
 # operationId: documents_post
-export def "documents create" [
+export def "documents-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1418,7 +1418,7 @@ export def "documents create" [
 #
 # GET /Documents/ChildObjects/{id}
 # operationId: documents_childobjects_get_id
-export def "documents-child-objects get-childobjects" [
+export def "documents-childobjects-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1455,7 +1455,7 @@ export def "documents-child-objects get-childobjects" [
 #
 # POST /Documents/Clone/{id}
 # operationId: documents_clone_post_id
-export def "documents-clone create" [
+export def "documents-clone-post-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1497,7 +1497,7 @@ export def "documents-clone create" [
 #
 # GET /Documents/DocumentType
 # operationId: documents_documenttype_get
-export def "documents-document-type list" [
+export def "documents-documenttype-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1531,7 +1531,7 @@ export def "documents-document-type list" [
 #
 # GET /Documents/DocumentType/TypeId/{type_id}
 # operationId: documents_documenttype_typeid_get_type_id
-export def "documents-document-type-type-id get-documenttype-typeid" [
+export def "documents-documenttype-typeid-get-type-id" [
   type_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1567,7 +1567,7 @@ export def "documents-document-type-type-id get-documenttype-typeid" [
 #
 # GET /Documents/DocumentType/{id}
 # operationId: documents_documenttype_get_id
-export def "documents-document-type get-documenttype" [
+export def "documents-documenttype-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1603,7 +1603,7 @@ export def "documents-document-type get-documenttype" [
 #
 # GET /Documents/Download/{id}
 # operationId: documents_download_get_id_orginal
-export def "documents-download get-orginal" [
+export def "documents-download-get-id-orginal" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1641,7 +1641,7 @@ export def "documents-download get-orginal" [
 #
 # DELETE /Documents/{id}
 # operationId: documents_delete_id
-export def "documents delete" [
+export def "documents-delete-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1677,7 +1677,7 @@ export def "documents delete" [
 #
 # GET /Documents/{id}
 # operationId: documents_get_id
-export def "documents get" [
+export def "documents-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1714,7 +1714,7 @@ export def "documents get" [
 #
 # GET /Groups/ChildObjects/{id}
 # operationId: slides_groups_childobjects_get_id
-export def "groups-child-objects get-slides-childobjects" [
+export def "slides-groups-childobjects-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1750,7 +1750,7 @@ export def "groups-child-objects get-slides-childobjects" [
 #
 # GET /Groups/Details/{id}
 # operationId: slides_groups_details_get_id
-export def "groups-details get-slides" [
+export def "slides-groups-details-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1786,7 +1786,7 @@ export def "groups-details get-slides" [
 #
 # GET /Groups/OpenOfficeXml/{id}
 # operationId: slides_groups_openofficexml_get_id_updated
-export def "groups-open-office-xml get-slides-openofficexml-updated" [
+export def "slides-groups-openofficexml-get-id-updated" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1824,7 +1824,7 @@ export def "groups-open-office-xml get-slides-openofficexml-updated" [
 #
 # PUT /Groups/OpenOfficeXml/{id}
 # operationId: slides_groups_openofficexml_put_id
-export def "groups-open-office-xml update-slides-openofficexml" [
+export def "slides-groups-openofficexml-put-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1866,7 +1866,7 @@ export def "groups-open-office-xml update-slides-openofficexml" [
 #
 # GET /Groups/Svg/{id}
 # operationId: slides_groups_svg_get_id_use_cache
-export def "groups-svg get-slides-use-cache" [
+export def "slides-groups-svg-get-id-use-cache" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1904,7 +1904,7 @@ export def "groups-svg get-slides-use-cache" [
 #
 # GET /Groups/{id}
 # operationId: slides_groups_get_id
-export def "groups get-slides" [
+export def "slides-groups-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1940,7 +1940,7 @@ export def "groups get-slides" [
 #
 # GET /Images/ChildObjects/{id}
 # operationId: shared_images_childobjects_get_id
-export def "images-child-objects get-shared-childobjects" [
+export def "shared-images-childobjects-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1976,7 +1976,7 @@ export def "images-child-objects get-shared-childobjects" [
 #
 # GET /Images/Details/{id}
 # operationId: shared_images_details_get_id
-export def "images-details get-shared" [
+export def "shared-images-details-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2012,7 +2012,7 @@ export def "images-details get-shared" [
 #
 # PUT /Images/GetImage/{Id}
 # operationId: shared_images_getimage_put_id
-export def "images-get-image update-shared" [
+export def "shared-images-getimage-put-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2048,7 +2048,7 @@ export def "images-get-image update-shared" [
 #
 # GET /Images/OpenOfficeXml/{id}
 # operationId: shared_images_openofficexml_get_id_updated
-export def "images-open-office-xml get-shared-openofficexml-updated" [
+export def "shared-images-openofficexml-get-id-updated" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2086,7 +2086,7 @@ export def "images-open-office-xml get-shared-openofficexml-updated" [
 #
 # PUT /Images/OpenOfficeXml/{id}
 # operationId: shared_images_openofficexml_put_id
-export def "images-open-office-xml update-shared-openofficexml" [
+export def "shared-images-openofficexml-put-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2128,7 +2128,7 @@ export def "images-open-office-xml update-shared-openofficexml" [
 #
 # GET /Images/Svg/{id}
 # operationId: shared_images_svg_get_id_use_cache
-export def "images-svg get-shared-use-cache" [
+export def "shared-images-svg-get-id-use-cache" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2166,7 +2166,7 @@ export def "images-svg get-shared-use-cache" [
 #
 # GET /Images/{id}
 # operationId: shared_images_get_id
-export def "images get-shared" [
+export def "shared-images-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2202,7 +2202,7 @@ export def "images get-shared" [
 #
 # GET /ShapeTrees/ChildObjects/{id}
 # operationId: slides_shapetrees_childobjects_get_id
-export def "shape-trees-child-objects get-slides-shapetrees-childobjects" [
+export def "slides-shapetrees-childobjects-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2238,7 +2238,7 @@ export def "shape-trees-child-objects get-slides-shapetrees-childobjects" [
 #
 # GET /ShapeTrees/Details/{id}
 # operationId: slides_shapetrees_details_get_id
-export def "shape-trees-details get-slides-shapetrees" [
+export def "slides-shapetrees-details-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2274,7 +2274,7 @@ export def "shape-trees-details get-slides-shapetrees" [
 #
 # GET /ShapeTrees/OpenOfficeXml/{id}
 # operationId: slides_shapetrees_openofficexml_get_id_updated
-export def "shape-trees-open-office-xml get-slides-shapetrees-openofficexml-updated" [
+export def "slides-shapetrees-openofficexml-get-id-updated" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2312,7 +2312,7 @@ export def "shape-trees-open-office-xml get-slides-shapetrees-openofficexml-upda
 #
 # PUT /ShapeTrees/OpenOfficeXml/{id}
 # operationId: slides_shapetrees_openofficexml_put_id
-export def "shape-trees-open-office-xml update-slides-shapetrees-openofficexml" [
+export def "slides-shapetrees-openofficexml-put-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2354,7 +2354,7 @@ export def "shape-trees-open-office-xml update-slides-shapetrees-openofficexml" 
 #
 # GET /ShapeTrees/Svg/{id}
 # operationId: slides_shapetrees_svg_get_id_use_cache
-export def "shape-trees-svg get-slides-shapetrees-use-cache" [
+export def "slides-shapetrees-svg-get-id-use-cache" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2392,7 +2392,7 @@ export def "shape-trees-svg get-slides-shapetrees-use-cache" [
 #
 # GET /ShapeTrees/{id}
 # operationId: slides_shapetrees_get_id
-export def "shape-trees get-slides-shapetrees" [
+export def "slides-shapetrees-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2428,7 +2428,7 @@ export def "shape-trees get-slides-shapetrees" [
 #
 # GET /Shapes/ChildObjects/{id}
 # operationId: slides_shapes_childobjects_get_id
-export def "shapes-child-objects get-slides-childobjects" [
+export def "slides-shapes-childobjects-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2464,7 +2464,7 @@ export def "shapes-child-objects get-slides-childobjects" [
 #
 # GET /Shapes/Details/{id}
 # operationId: slides_shapes_details_get_id
-export def "shapes-details get-slides" [
+export def "slides-shapes-details-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2500,7 +2500,7 @@ export def "shapes-details get-slides" [
 #
 # GET /Shapes/OpenOfficeXml/{id}
 # operationId: slides_shapes_openofficexml_get_id_updated
-export def "shapes-open-office-xml get-slides-openofficexml-updated" [
+export def "slides-shapes-openofficexml-get-id-updated" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2538,7 +2538,7 @@ export def "shapes-open-office-xml get-slides-openofficexml-updated" [
 #
 # PUT /Shapes/OpenOfficeXml/{id}
 # operationId: slides_shapes_openofficexml_put_id
-export def "shapes-open-office-xml update-slides-openofficexml" [
+export def "slides-shapes-openofficexml-put-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2580,7 +2580,7 @@ export def "shapes-open-office-xml update-slides-openofficexml" [
 #
 # GET /Shapes/Svg/{id}
 # operationId: slides_shapes_svg_get_id_use_cache
-export def "shapes-svg get-slides-use-cache" [
+export def "slides-shapes-svg-get-id-use-cache" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2618,7 +2618,7 @@ export def "shapes-svg get-slides-use-cache" [
 #
 # GET /Shapes/{id}
 # operationId: slides_shapes_get_id
-export def "shapes get-slides" [
+export def "slides-shapes-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2654,7 +2654,7 @@ export def "shapes get-slides" [
 #
 # GET /Shared/ColorTransformationAttributes/{id}
 # operationId: shared_colortransformationattributes_get_id
-export def "shared-color-transformation-attributes get-colortransformationattributes" [
+export def "shared-colortransformationattributes-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2690,7 +2690,7 @@ export def "shared-color-transformation-attributes get-colortransformationattrib
 #
 # GET /Shared/ColorTransformations/{id}
 # operationId: shared_colortransformations_get_id
-export def "shared-color-transformations get-colortransformations" [
+export def "shared-colortransformations-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2726,7 +2726,7 @@ export def "shared-color-transformations get-colortransformations" [
 #
 # GET /Shared/ColorTypes
 # operationId: shared_colortypes_get
-export def "shared-color-types list" [
+export def "shared-colortypes-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2760,7 +2760,7 @@ export def "shared-color-types list" [
 #
 # GET /Shared/ColorTypes/TypeId/{type_id}
 # operationId: shared_colortypes_typeid_get_type_id
-export def "shared-color-types-type-id get-colortypes-typeid" [
+export def "shared-colortypes-typeid-get-type-id" [
   type_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2796,7 +2796,7 @@ export def "shared-color-types-type-id get-colortypes-typeid" [
 #
 # GET /Shared/ColorTypes/{id}
 # operationId: shared_colortypes_get_id
-export def "shared-color-types get-colortypes" [
+export def "shared-colortypes-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2832,7 +2832,7 @@ export def "shared-color-types get-colortypes" [
 #
 # GET /Shared/DashTypes
 # operationId: shared_dashtypes_get
-export def "shared-dash-types list" [
+export def "shared-dashtypes-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2866,7 +2866,7 @@ export def "shared-dash-types list" [
 #
 # GET /Shared/DashTypes/TypeId/{type_id}
 # operationId: shared_dashtypes_typeid_get_type_id
-export def "shared-dash-types-type-id get-dashtypes-typeid" [
+export def "shared-dashtypes-typeid-get-type-id" [
   type_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2902,7 +2902,7 @@ export def "shared-dash-types-type-id get-dashtypes-typeid" [
 #
 # GET /Shared/DashTypes/{id}
 # operationId: shared_dashtypes_get_id
-export def "shared-dash-types get-dashtypes" [
+export def "shared-dashtypes-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2938,7 +2938,7 @@ export def "shared-dash-types get-dashtypes" [
 #
 # GET /Shared/EffectAttributes/{id}
 # operationId: shared_effectattributes_get_id
-export def "shared-effect-attributes get-effectattributes" [
+export def "shared-effectattributes-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2974,7 +2974,7 @@ export def "shared-effect-attributes get-effectattributes" [
 #
 # GET /Shared/EffectTypes
 # operationId: shared_effecttypes_get
-export def "shared-effect-types list" [
+export def "shared-effecttypes-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3008,7 +3008,7 @@ export def "shared-effect-types list" [
 #
 # GET /Shared/EffectTypes/TypeId/{type_id}
 # operationId: shared_effecttypes_typeid_get_type_id
-export def "shared-effect-types-type-id get-effecttypes-typeid" [
+export def "shared-effecttypes-typeid-get-type-id" [
   type_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3044,7 +3044,7 @@ export def "shared-effect-types-type-id get-effecttypes-typeid" [
 #
 # GET /Shared/EffectTypes/{id}
 # operationId: shared_effecttypes_get_id
-export def "shared-effect-types get-effecttypes" [
+export def "shared-effecttypes-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3080,7 +3080,7 @@ export def "shared-effect-types get-effecttypes" [
 #
 # GET /Shared/Effects/{id}
 # operationId: shared_effects_get_id
-export def "shared-effects get" [
+export def "shared-effects-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3116,7 +3116,7 @@ export def "shared-effects get" [
 #
 # GET /Shared/FillMap/{id}
 # operationId: shared_fillmap_get_id
-export def "shared-fill-map get-fillmap" [
+export def "shared-fillmap-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3152,7 +3152,7 @@ export def "shared-fill-map get-fillmap" [
 #
 # GET /Shared/FillTypes
 # operationId: shared_filltypes_get
-export def "shared-fill-types list" [
+export def "shared-filltypes-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3186,7 +3186,7 @@ export def "shared-fill-types list" [
 #
 # GET /Shared/FillTypes/TypeId/{type_id}
 # operationId: shared_filltypes_typeid_get_type_id
-export def "shared-fill-types-type-id get-filltypes-typeid" [
+export def "shared-filltypes-typeid-get-type-id" [
   type_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3222,7 +3222,7 @@ export def "shared-fill-types-type-id get-filltypes-typeid" [
 #
 # GET /Shared/FillTypes/{id}
 # operationId: shared_filltypes_get_id
-export def "shared-fill-types get-filltypes" [
+export def "shared-filltypes-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3258,7 +3258,7 @@ export def "shared-fill-types get-filltypes" [
 #
 # GET /Shared/GradientFills/{id}
 # operationId: shared_gradientfills_get_id
-export def "shared-gradient-fills get-gradientfills" [
+export def "shared-gradientfills-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3294,7 +3294,7 @@ export def "shared-gradient-fills get-gradientfills" [
 #
 # GET /Shared/GradientStops/{id}
 # operationId: shared_gradientstops_get_id
-export def "shared-gradient-stops get-gradientstops" [
+export def "shared-gradientstops-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3330,7 +3330,7 @@ export def "shared-gradient-stops get-gradientstops" [
 #
 # GET /Shared/ImageFills/{id}
 # operationId: shared_imagefills_get_id
-export def "shared-image-fills get-imagefills" [
+export def "shared-imagefills-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3366,7 +3366,7 @@ export def "shared-image-fills get-imagefills" [
 #
 # GET /Shared/LineEndSizes
 # operationId: shared_lineendsizes_get
-export def "shared-line-end-sizes list" [
+export def "shared-lineendsizes-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3400,7 +3400,7 @@ export def "shared-line-end-sizes list" [
 #
 # GET /Shared/LineEndSizes/TypeId/{type_id}
 # operationId: shared_lineendsizes_typeid_get_type_id
-export def "shared-line-end-sizes-type-id get-lineendsizes-typeid" [
+export def "shared-lineendsizes-typeid-get-type-id" [
   type_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3436,7 +3436,7 @@ export def "shared-line-end-sizes-type-id get-lineendsizes-typeid" [
 #
 # GET /Shared/LineEndSizes/{id}
 # operationId: shared_lineendsizes_get_id
-export def "shared-line-end-sizes get-lineendsizes" [
+export def "shared-lineendsizes-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3472,7 +3472,7 @@ export def "shared-line-end-sizes get-lineendsizes" [
 #
 # GET /Shared/LineEndTypes
 # operationId: shared_lineendtypes_get
-export def "shared-line-end-types list" [
+export def "shared-lineendtypes-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3506,7 +3506,7 @@ export def "shared-line-end-types list" [
 #
 # GET /Shared/LineEndTypes/TypeId/{type_id}
 # operationId: shared_lineendtypes_typeid_get_type_id
-export def "shared-line-end-types-type-id get-lineendtypes-typeid" [
+export def "shared-lineendtypes-typeid-get-type-id" [
   type_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3542,7 +3542,7 @@ export def "shared-line-end-types-type-id get-lineendtypes-typeid" [
 #
 # GET /Shared/LineEndTypes/{id}
 # operationId: shared_lineendtypes_get_id
-export def "shared-line-end-types get-lineendtypes" [
+export def "shared-lineendtypes-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3578,7 +3578,7 @@ export def "shared-line-end-types get-lineendtypes" [
 #
 # GET /Shared/Lines/{id}
 # operationId: shared_lines_get_id
-export def "shared-lines get" [
+export def "shared-lines-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3614,7 +3614,7 @@ export def "shared-lines get" [
 #
 # GET /Shared/Paragraph/{id}
 # operationId: shared_paragraph_get_id
-export def "shared-paragraph get" [
+export def "shared-paragraph-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3650,7 +3650,7 @@ export def "shared-paragraph get" [
 #
 # GET /Shared/SolidFills/{id}
 # operationId: shared_solidfills_get_id
-export def "shared-solid-fills get-solidfills" [
+export def "shared-solidfills-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3686,7 +3686,7 @@ export def "shared-solid-fills get-solidfills" [
 #
 # GET /Shared/Text/{id}
 # operationId: shared_text_get_id
-export def "shared-text get" [
+export def "shared-text-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3722,7 +3722,7 @@ export def "shared-text get" [
 #
 # GET /Shared/TextContainer/{id}
 # operationId: shared_textcontainer_get_id
-export def "shared-text-container get-textcontainer" [
+export def "shared-textcontainer-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3758,7 +3758,7 @@ export def "shared-text-container get-textcontainer" [
 #
 # GET /Slides/ChildObjects/{id}
 # operationId: slides_slides_childobjects_get_id
-export def "slides-child-objects get-childobjects" [
+export def "slides-slides-childobjects-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3794,7 +3794,7 @@ export def "slides-child-objects get-childobjects" [
 #
 # GET /Slides/ColorMaps/{id}
 # operationId: slides_colormaps_get_id
-export def "slides-color-maps get-colormaps" [
+export def "slides-colormaps-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3830,7 +3830,7 @@ export def "slides-color-maps get-colormaps" [
 #
 # GET /Slides/Details/{id}
 # operationId: slides_slides_details_get_id
-export def "slides-details get" [
+export def "slides-slides-details-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3866,7 +3866,7 @@ export def "slides-details get" [
 #
 # GET /Slides/GraphicTypes
 # operationId: slides_graphictypes_get
-export def "slides-graphic-types list" [
+export def "slides-graphictypes-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3900,7 +3900,7 @@ export def "slides-graphic-types list" [
 #
 # GET /Slides/GraphicTypes/TypeId/{type_id}
 # operationId: slides_graphictypes_typeid_get_type_id
-export def "slides-graphic-types-type-id get-graphictypes-typeid" [
+export def "slides-graphictypes-typeid-get-type-id" [
   type_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3936,7 +3936,7 @@ export def "slides-graphic-types-type-id get-graphictypes-typeid" [
 #
 # GET /Slides/GraphicTypes/{id}
 # operationId: slides_graphictypes_get_id
-export def "slides-graphic-types get-graphictypes" [
+export def "slides-graphictypes-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3972,7 +3972,7 @@ export def "slides-graphic-types get-graphictypes" [
 #
 # GET /Slides/Graphics/{id}
 # operationId: slides_graphics_get_id
-export def "slides-graphics get" [
+export def "slides-graphics-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4008,7 +4008,7 @@ export def "slides-graphics get" [
 #
 # GET /Slides/GroupElementTypes
 # operationId: slides_groupelementtypes_get
-export def "slides-group-element-types list" [
+export def "slides-groupelementtypes-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4042,7 +4042,7 @@ export def "slides-group-element-types list" [
 #
 # GET /Slides/GroupElementTypes/TypeId/{type_id}
 # operationId: slides_groupelementtypes_typeid_get_type_id
-export def "slides-group-element-types-type-id get-groupelementtypes-typeid" [
+export def "slides-groupelementtypes-typeid-get-type-id" [
   type_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4078,7 +4078,7 @@ export def "slides-group-element-types-type-id get-groupelementtypes-typeid" [
 #
 # GET /Slides/GroupElementTypes/{id}
 # operationId: slides_groupelementtypes_get_id
-export def "slides-group-element-types get-groupelementtypes" [
+export def "slides-groupelementtypes-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4114,7 +4114,7 @@ export def "slides-group-element-types get-groupelementtypes" [
 #
 # GET /Slides/GroupElements/{id}
 # operationId: slides_groupelements_get_id
-export def "slides-group-elements get-groupelements" [
+export def "slides-groupelements-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4150,7 +4150,7 @@ export def "slides-group-elements get-groupelements" [
 #
 # GET /Slides/OpenOfficeXml/{id}
 # operationId: slides_slides_openofficexml_get_id_updated
-export def "slides-open-office-xml get-openofficexml-updated" [
+export def "slides-slides-openofficexml-get-id-updated" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4188,7 +4188,7 @@ export def "slides-open-office-xml get-openofficexml-updated" [
 #
 # PUT /Slides/OpenOfficeXml/{id}
 # operationId: slides_slides_openofficexml_put_id
-export def "slides-open-office-xml update-openofficexml" [
+export def "slides-slides-openofficexml-put-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4230,7 +4230,7 @@ export def "slides-open-office-xml update-openofficexml" [
 #
 # GET /Slides/SlideMasters/{id}
 # operationId: slides_slidemasters_get_id
-export def "slides-slide-masters get-slidemasters" [
+export def "slides-slidemasters-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4266,7 +4266,7 @@ export def "slides-slide-masters get-slidemasters" [
 #
 # GET /Slides/Svg/{id}
 # operationId: slides_slides_svg_get_id_use_cache
-export def "slides-svg get-use-cache" [
+export def "slides-slides-svg-get-id-use-cache" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4304,7 +4304,7 @@ export def "slides-svg get-use-cache" [
 #
 # GET /Slides/{id}
 # operationId: slides_slides_get_id
-export def "slides get" [
+export def "slides-slides-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4340,7 +4340,7 @@ export def "slides get" [
 #
 # GET /SmartArts/ChildObjects/{id}
 # operationId: slides_smartarts_childobjects_get_id
-export def "smart-arts-child-objects get-slides-smartarts-childobjects" [
+export def "slides-smartarts-childobjects-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4376,7 +4376,7 @@ export def "smart-arts-child-objects get-slides-smartarts-childobjects" [
 #
 # GET /SmartArts/Details/{id}
 # operationId: slides_smartarts_details_get_id
-export def "smart-arts-details get-slides-smartarts" [
+export def "slides-smartarts-details-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4412,7 +4412,7 @@ export def "smart-arts-details get-slides-smartarts" [
 #
 # GET /SmartArts/OpenOfficeXml/{id}
 # operationId: slides_smartarts_openofficexml_get_id_updated
-export def "smart-arts-open-office-xml get-slides-smartarts-openofficexml-updated" [
+export def "slides-smartarts-openofficexml-get-id-updated" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4450,7 +4450,7 @@ export def "smart-arts-open-office-xml get-slides-smartarts-openofficexml-update
 #
 # PUT /SmartArts/OpenOfficeXml/{id}
 # operationId: slides_smartarts_openofficexml_put_id
-export def "smart-arts-open-office-xml update-slides-smartarts-openofficexml" [
+export def "slides-smartarts-openofficexml-put-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4492,7 +4492,7 @@ export def "smart-arts-open-office-xml update-slides-smartarts-openofficexml" [
 #
 # GET /SmartArts/Svg/{id}
 # operationId: slides_smartarts_svg_get_id_use_cache
-export def "smart-arts-svg get-slides-smartarts-use-cache" [
+export def "slides-smartarts-svg-get-id-use-cache" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4530,7 +4530,7 @@ export def "smart-arts-svg get-slides-smartarts-use-cache" [
 #
 # GET /SmartArts/{id}
 # operationId: slides_smartarts_get_id
-export def "smart-arts get-slides-smartarts" [
+export def "slides-smartarts-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4566,7 +4566,7 @@ export def "smart-arts get-slides-smartarts" [
 #
 # GET /Tables/Borders/{id}
 # operationId: tables_borders_get_id
-export def "tables-borders get" [
+export def "tables-borders-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4602,7 +4602,7 @@ export def "tables-borders get" [
 #
 # GET /Tables/Cells/{id}
 # operationId: tables_cells_get_id
-export def "tables-cells get" [
+export def "tables-cells-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4638,7 +4638,7 @@ export def "tables-cells get" [
 #
 # GET /Tables/ChildObjects/{id}
 # operationId: tables_tables_childobjects_get_id
-export def "tables-child-objects get-childobjects" [
+export def "tables-tables-childobjects-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4674,7 +4674,7 @@ export def "tables-child-objects get-childobjects" [
 #
 # GET /Tables/Columns/{id}
 # operationId: tables_columns_get_id
-export def "tables-columns get" [
+export def "tables-columns-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4710,7 +4710,7 @@ export def "tables-columns get" [
 #
 # GET /Tables/Details/{id}
 # operationId: tables_tables_details_get_id
-export def "tables-details get" [
+export def "tables-tables-details-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4746,7 +4746,7 @@ export def "tables-details get" [
 #
 # GET /Tables/OpenOfficeXml/{id}
 # operationId: tables_tables_openofficexml_get_id_updated
-export def "tables-open-office-xml get-openofficexml-updated" [
+export def "tables-tables-openofficexml-get-id-updated" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4784,7 +4784,7 @@ export def "tables-open-office-xml get-openofficexml-updated" [
 #
 # PUT /Tables/OpenOfficeXml/{id}
 # operationId: tables_tables_openofficexml_put_id
-export def "tables-open-office-xml update-openofficexml" [
+export def "tables-tables-openofficexml-put-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4826,7 +4826,7 @@ export def "tables-open-office-xml update-openofficexml" [
 #
 # GET /Tables/Rows/{id}
 # operationId: tables_rows_get_id
-export def "tables-rows get" [
+export def "tables-rows-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4862,7 +4862,7 @@ export def "tables-rows get" [
 #
 # GET /Tables/Svg/{id}
 # operationId: tables_tables_svg_get_id_use_cache
-export def "tables-svg get-use-cache" [
+export def "tables-tables-svg-get-id-use-cache" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4900,7 +4900,7 @@ export def "tables-svg get-use-cache" [
 #
 # GET /Tables/TableUpdate/{id}
 # operationId: tables_tables_tableupdate_get_id
-export def "tables-table-update get-tableupdate" [
+export def "tables-tables-tableupdate-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4936,7 +4936,7 @@ export def "tables-table-update get-tableupdate" [
 #
 # PUT /Tables/TableUpdate/{id}
 # operationId: tables_tables_tableupdate_put_id
-export def "tables-table-update update-tableupdate" [
+export def "tables-tables-tableupdate-put-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4977,7 +4977,7 @@ export def "tables-table-update update-tableupdate" [
 #
 # GET /Tables/{id}
 # operationId: tables_tables_get_id
-export def "tables get" [
+export def "tables-tables-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5013,7 +5013,7 @@ export def "tables get" [
 #
 # GET /Themes/BackgroundFills/{id}
 # operationId: themes_backgroundfills_get_id
-export def "themes-background-fills get-backgroundfills" [
+export def "themes-backgroundfills-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5049,7 +5049,7 @@ export def "themes-background-fills get-backgroundfills" [
 #
 # GET /Themes/ChildObjects/{id}
 # operationId: theme_themes_childobjects_get_id
-export def "themes-child-objects get-childobjects" [
+export def "theme-themes-childobjects-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5085,7 +5085,7 @@ export def "themes-child-objects get-childobjects" [
 #
 # GET /Themes/Colors/{id}
 # operationId: themes_colors_get_id
-export def "themes-colors get" [
+export def "themes-colors-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5121,7 +5121,7 @@ export def "themes-colors get" [
 #
 # GET /Themes/CustomColors/{id}
 # operationId: themes_customcolors_get_id
-export def "themes-custom-colors get-customcolors" [
+export def "themes-customcolors-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5157,7 +5157,7 @@ export def "themes-custom-colors get-customcolors" [
 #
 # GET /Themes/Details/{id}
 # operationId: theme_themes_details_get_id
-export def "themes-details get" [
+export def "theme-themes-details-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5193,7 +5193,7 @@ export def "themes-details get" [
 #
 # GET /Themes/EffectMap/{id}
 # operationId: themes_effectmap_get_id
-export def "themes-effect-map get-effectmap" [
+export def "themes-effectmap-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5229,7 +5229,7 @@ export def "themes-effect-map get-effectmap" [
 #
 # GET /Themes/Fills/{id}
 # operationId: themes_fills_get_id
-export def "themes-fills get" [
+export def "themes-fills-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5265,7 +5265,7 @@ export def "themes-fills get" [
 #
 # GET /Themes/Fonts/{id}
 # operationId: themes_fonts_get_id
-export def "themes-fonts get" [
+export def "themes-fonts-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5301,7 +5301,7 @@ export def "themes-fonts get" [
 #
 # GET /Themes/Intensity
 # operationId: themes_intensity_get
-export def "themes-intensity list" [
+export def "themes-intensity-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5335,7 +5335,7 @@ export def "themes-intensity list" [
 #
 # GET /Themes/Intensity/TypeId/{type_id}
 # operationId: themes_intensity_typeid_get_type_id
-export def "themes-intensity-type-id get-typeid" [
+export def "themes-intensity-typeid-get-type-id" [
   type_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5371,7 +5371,7 @@ export def "themes-intensity-type-id get-typeid" [
 #
 # GET /Themes/Intensity/{id}
 # operationId: themes_intensity_get_id
-export def "themes-intensity get" [
+export def "themes-intensity-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5407,7 +5407,7 @@ export def "themes-intensity get" [
 #
 # GET /Themes/LineMap/{id}
 # operationId: themes_linemap_get_id
-export def "themes-line-map get-linemap" [
+export def "themes-linemap-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5443,7 +5443,7 @@ export def "themes-line-map get-linemap" [
 #
 # GET /Themes/OpenOfficeXml/{id}
 # operationId: theme_themes_openofficexml_get_id_updated
-export def "themes-open-office-xml get-openofficexml-updated" [
+export def "theme-themes-openofficexml-get-id-updated" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5481,7 +5481,7 @@ export def "themes-open-office-xml get-openofficexml-updated" [
 #
 # PUT /Themes/OpenOfficeXml/{id}
 # operationId: theme_themes_openofficexml_put_id
-export def "themes-open-office-xml update-openofficexml" [
+export def "theme-themes-openofficexml-put-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5523,7 +5523,7 @@ export def "themes-open-office-xml update-openofficexml" [
 #
 # GET /Themes/Svg/{id}
 # operationId: theme_themes_svg_get_id_use_cache
-export def "themes-svg get-use-cache" [
+export def "theme-themes-svg-get-id-use-cache" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5561,7 +5561,7 @@ export def "themes-svg get-use-cache" [
 #
 # GET /Themes/{id}
 # operationId: theme_themes_get_id
-export def "themes get" [
+export def "theme-themes-get-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

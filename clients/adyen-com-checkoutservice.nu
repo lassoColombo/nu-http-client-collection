@@ -127,7 +127,7 @@ def merchant-refund-reason-completer [] { ["CUSTOMER REQUEST" "DUPLICATE" "FRAUD
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "apple-pay-sessions create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-apple-pay-sessions" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -151,7 +151,7 @@ export def commands []: nothing -> table {
 #
 # POST /applePay/sessions
 # operationId: post-applePay-sessions
-export def "apple-pay-sessions create" [
+export def "post-apple-pay-sessions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -194,7 +194,7 @@ export def "apple-pay-sessions create" [
 #
 # POST /cancels
 # operationId: post-cancels
-export def "cancels create" [
+export def "post-cancels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -237,7 +237,7 @@ export def "cancels create" [
 #
 # POST /cardDetails
 # operationId: post-cardDetails
-export def "card-details create" [
+export def "post-card-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -306,7 +306,7 @@ export def "card-details create" [
 # --threeDS2RequestData shape: {acctInfo?: record, acctType?: "01"|"02"|"03", acquirerBIN?: string, acquirerMerchantID?: string, addrMatch?: "Y"|"N", authenticationOnly?: bool, challengeIndicator?: "noPreference"|"requestNoChallenge"|"requestChallenge"|"requestChallengeAsMandate", deviceChannel: string, deviceRenderOptions?: record, homePhone?: record, mcc?: string, merchantName?: string, messageVersion?: string, mobilePhone?: record, notificationURL?: string, payTokenInd?: bool, paymentAuthenticationUseCase?: string, ... (22 more fields)}
 @deprecated --flag conversion-id
 @deprecated --flag three-ds-authentication-only
-export def "donations create" [
+export def "post-donations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -414,7 +414,7 @@ export def "donations create" [
 # POST /orders
 # operationId: post-orders
 # --amount shape: {currency: string, value: int}
-export def "orders create" [
+export def "post-orders" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -459,7 +459,7 @@ export def "orders create" [
 # POST /orders/cancel
 # operationId: post-orders-cancel
 # --order shape: {orderData: string, pspReference: string}
-export def "orders-cancel create" [
+export def "post-orders-cancel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -503,7 +503,7 @@ export def "orders-cancel create" [
 # DEPRECATED
 # operationId: post-originKeys
 @deprecated
-export def "origin-keys create" [
+export def "post-origin-keys" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -552,7 +552,7 @@ export def "origin-keys create" [
 # --riskData shape: {clientData?: string, customFields?: record, fraudOffset?: int, profileReference?: string}
 # --shopperName shape: {firstName: string, lastName: string}
 # --splits item shape: {account?: string, amount: record, description?: string, reference?: string, type: "BalanceAccount"|"Commission"|"Default"|"MarketPlace"|"PaymentFee"|"Remainder"|"Surcharge"|"Tip"|"VAT"|"Verification"}
-export def "payment-links create" [
+export def "post-payment-links" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -630,7 +630,7 @@ export def "payment-links create" [
 #
 # GET /paymentLinks/{linkId}
 # operationId: get-paymentLinks-linkId
-export def "payment-links get" [
+export def "get-payment-links-link-id" [
   link_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -666,7 +666,7 @@ export def "payment-links get" [
 #
 # PATCH /paymentLinks/{linkId}
 # operationId: patch-paymentLinks-linkId
-export def "payment-links update" [
+export def "patch-payment-links-link-id" [
   link_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -709,7 +709,7 @@ export def "payment-links update" [
 # --additionalData shape: {allow3DS2?: string, challengeWindowSize?: "01"|"02"|"03"|"04"|"05", executeThreeD?: string, mpiImplementationType?: string, scaExemption?: string, threeDSVersion?: string, airline.agency_invoice_number?: string, airline.agency_plan_name?: string, airline.airline_code?: string, airline.airline_designator_code?: string, airline.boarding_fee?: string, airline.computerized_reservation_system?: string, airline.customer_reference_number?: string, airline.document_type?: string, ... (180 more fields)}
 # --amount shape: {currency: string, value: int}
 # --order shape: {orderData: string, pspReference: string}
-export def "payment-methods create" [
+export def "post-payment-methods" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -777,7 +777,7 @@ export def "payment-methods create" [
 # --splits item shape: {account?: string, amount: record, description?: string, reference?: string, type: "BalanceAccount"|"Commission"|"Default"|"MarketPlace"|"PaymentFee"|"Remainder"|"Surcharge"|"Tip"|"VAT"|"Verification"}
 # --threeDS2RequestData shape: {acctInfo?: record, acctType?: "01"|"02"|"03", acquirerBIN?: string, acquirerMerchantID?: string, addrMatch?: "Y"|"N", authenticationOnly?: bool, challengeIndicator?: "noPreference"|"requestNoChallenge"|"requestChallenge"|"requestChallengeAsMandate", deviceChannel: string, deviceRenderOptions?: record, homePhone?: record, mcc?: string, merchantName?: string, messageVersion?: string, mobilePhone?: record, notificationURL?: string, payTokenInd?: bool, paymentAuthenticationUseCase?: string, ... (22 more fields)}
 @deprecated --flag three-ds-authentication-only
-export def "payment-methods-balance create" [
+export def "post-payment-methods-balance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -881,7 +881,7 @@ export def "payment-methods-balance create" [
 @deprecated
 @deprecated --flag conversion-id
 @deprecated --flag three-ds-authentication-only
-export def "payment-session create" [
+export def "post-payment-session" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1001,7 +1001,7 @@ export def "payment-session create" [
 # --threeDS2RequestData shape: {acctInfo?: record, acctType?: "01"|"02"|"03", acquirerBIN?: string, acquirerMerchantID?: string, addrMatch?: "Y"|"N", authenticationOnly?: bool, challengeIndicator?: "noPreference"|"requestNoChallenge"|"requestChallenge"|"requestChallengeAsMandate", deviceChannel: string, deviceRenderOptions?: record, homePhone?: record, mcc?: string, merchantName?: string, messageVersion?: string, mobilePhone?: record, notificationURL?: string, payTokenInd?: bool, paymentAuthenticationUseCase?: string, ... (22 more fields)}
 @deprecated --flag conversion-id
 @deprecated --flag three-ds-authentication-only
-export def "payments create" [
+export def "post-payments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1108,7 +1108,7 @@ export def "payments create" [
 # --authenticationData shape: {authenticationOnly?: bool}
 # --details shape: {MD?: string, PaReq?: string, PaRes?: string, billingToken?: string, cupsecureplus.smscode?: string, facilitatorAccessToken?: string, oneTimePasscode?: string, orderID?: string, payerID?: string, payload?: string, paymentID?: string, paymentStatus?: string, redirectResult?: string, resultCode?: string, threeDSResult?: string, threeds2.challengeResult?: string, threeds2.fingerprint?: string}
 @deprecated --flag three-ds-authentication-only
-export def "payments-details create" [
+export def "post-payments-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1154,7 +1154,7 @@ export def "payments-details create" [
 # DEPRECATED
 # operationId: post-payments-result
 @deprecated
-export def "payments-result create" [
+export def "post-payments-result" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1197,7 +1197,7 @@ export def "payments-result create" [
 # operationId: post-payments-paymentPspReference-amountUpdates
 # --amount shape: {currency: string, value: int}
 # --splits item shape: {account?: string, amount: record, description?: string, reference?: string, type: "BalanceAccount"|"Commission"|"Default"|"MarketPlace"|"PaymentFee"|"Remainder"|"Surcharge"|"Tip"|"VAT"|"Verification"}
-export def "payments-amount-updates create-psp-reference" [
+export def "post-payments-payment-psp-reference-amount-updates" [
   payment_psp_reference: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1244,7 +1244,7 @@ export def "payments-amount-updates create-psp-reference" [
 #
 # POST /payments/{paymentPspReference}/cancels
 # operationId: post-payments-paymentPspReference-cancels
-export def "payments-cancels create-psp-reference" [
+export def "post-payments-payment-psp-reference-cancels" [
   payment_psp_reference: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1291,7 +1291,7 @@ export def "payments-cancels create-psp-reference" [
 # --amount shape: {currency: string, value: int}
 # --lineItems item shape: {amountExcludingTax?: int, amountIncludingTax?: int, brand?: string, color?: string, description?: string, id?: string, imageUrl?: string, itemCategory?: string, manufacturer?: string, productUrl?: string, quantity?: int, receiverEmail?: string, size?: string, sku?: string, taxAmount?: int, taxPercentage?: int, upc?: string}
 # --splits item shape: {account?: string, amount: record, description?: string, reference?: string, type: "BalanceAccount"|"Commission"|"Default"|"MarketPlace"|"PaymentFee"|"Remainder"|"Surcharge"|"Tip"|"VAT"|"Verification"}
-export def "payments-captures create-psp-reference" [
+export def "post-payments-payment-psp-reference-captures" [
   payment_psp_reference: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1341,7 +1341,7 @@ export def "payments-captures create-psp-reference" [
 # --amount shape: {currency: string, value: int}
 # --lineItems item shape: {amountExcludingTax?: int, amountIncludingTax?: int, brand?: string, color?: string, description?: string, id?: string, imageUrl?: string, itemCategory?: string, manufacturer?: string, productUrl?: string, quantity?: int, receiverEmail?: string, size?: string, sku?: string, taxAmount?: int, taxPercentage?: int, upc?: string}
 # --splits item shape: {account?: string, amount: record, description?: string, reference?: string, type: "BalanceAccount"|"Commission"|"Default"|"MarketPlace"|"PaymentFee"|"Remainder"|"Surcharge"|"Tip"|"VAT"|"Verification"}
-export def "payments-refunds create-psp-reference" [
+export def "post-payments-payment-psp-reference-refunds" [
   payment_psp_reference: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1389,7 +1389,7 @@ export def "payments-refunds create-psp-reference" [
 #
 # POST /payments/{paymentPspReference}/reversals
 # operationId: post-payments-paymentPspReference-reversals
-export def "payments-reversals create-psp-reference" [
+export def "post-payments-payment-psp-reference-reversals" [
   payment_psp_reference: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1451,7 +1451,7 @@ export def "payments-reversals create-psp-reference" [
 # --shopperName shape: {firstName: string, lastName: string}
 # --splits item shape: {account?: string, amount: record, description?: string, reference?: string, type: "BalanceAccount"|"Commission"|"Default"|"MarketPlace"|"PaymentFee"|"Remainder"|"Surcharge"|"Tip"|"VAT"|"Verification"}
 @deprecated --flag three-ds-authentication-only
-export def "sessions create" [
+export def "post-sessions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1545,7 +1545,7 @@ export def "sessions create" [
 #
 # GET /storedPaymentMethods
 # operationId: get-storedPaymentMethods
-export def "stored-payment-methods get" [
+export def "get-stored-payment-methods" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1582,7 +1582,7 @@ export def "stored-payment-methods get" [
 #
 # DELETE /storedPaymentMethods/{recurringId}
 # operationId: delete-storedPaymentMethods-recurringId
-export def "stored-payment-methods delete-recurring" [
+export def "delete-stored-payment-methods-recurring-id" [
   recurring_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

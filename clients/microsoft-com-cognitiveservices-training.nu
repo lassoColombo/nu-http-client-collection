@@ -155,7 +155,7 @@ def training-type-completer [] { ["Advanced" "Regular"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "domains list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-domains" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -179,7 +179,7 @@ export def commands []: nothing -> table {
 #
 # GET /domains
 # operationId: GetDomains
-export def "domains list" [
+export def "get-domains" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -214,7 +214,7 @@ export def "domains list" [
 #
 # GET /domains/{domainId}
 # operationId: GetDomain
-export def "domains get" [
+export def "get-domain" [
   domain_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -251,7 +251,7 @@ export def "domains get" [
 #
 # GET /projects
 # operationId: GetProjects
-export def "projects list" [
+export def "get-projects" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -286,7 +286,7 @@ export def "projects list" [
 #
 # POST /projects
 # operationId: CreateProject
-export def "projects create" [
+export def "create-project" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -327,7 +327,7 @@ export def "projects create" [
 #
 # POST /projects/import
 # operationId: ImportProject
-export def "projects-import import" [
+export def "import-project" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -364,7 +364,7 @@ export def "projects-import import" [
 #
 # DELETE /projects/{projectId}
 # operationId: DeleteProject
-export def "projects delete" [
+export def "delete-project" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -400,7 +400,7 @@ export def "projects delete" [
 #
 # GET /projects/{projectId}
 # operationId: GetProject
-export def "projects get" [
+export def "get-project" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -438,7 +438,7 @@ export def "projects get" [
 # PATCH /projects/{projectId}
 # operationId: UpdateProject
 # --settings shape: {classificationType?: "Multiclass"|"Multilabel", domainId?: string, imageProcessingSettings?: record, targetExportPlatforms?: list<string>}
-export def "projects update" [
+export def "update-project" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -482,7 +482,7 @@ export def "projects update" [
 #
 # GET /projects/{projectId}/export
 # operationId: ExportProject
-export def "projects-export export" [
+export def "export-project" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -519,7 +519,7 @@ export def "projects-export export" [
 #
 # DELETE /projects/{projectId}/images
 # operationId: DeleteImages
-export def "projects-images delete" [
+export def "delete-images" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -560,7 +560,7 @@ export def "projects-images delete" [
 #
 # POST /projects/{projectId}/images
 # operationId: CreateImagesFromData
-export def "projects-images create-from-data" [
+export def "create-images-from-data" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -606,7 +606,7 @@ export def "projects-images create-from-data" [
 # POST /projects/{projectId}/images/files
 # operationId: CreateImagesFromFiles
 # --images item shape: {contents?: string, name?: string, regions?: list, tagIds?: list<string>}
-export def "projects-images-files create" [
+export def "create-images-from-files" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -648,7 +648,7 @@ export def "projects-images-files create" [
 #
 # GET /projects/{projectId}/images/id
 # operationId: GetImagesByIds
-export def "projects-images-id get" [
+export def "get-images-by-ids" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -689,7 +689,7 @@ export def "projects-images-id get" [
 # POST /projects/{projectId}/images/predictions
 # operationId: CreateImagesFromPredictions
 # --images item shape: {id?: string, regions?: list, tagIds?: list<string>}
-export def "projects-images-predictions create" [
+export def "create-images-from-predictions" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -731,7 +731,7 @@ export def "projects-images-predictions create" [
 #
 # DELETE /projects/{projectId}/images/regions
 # operationId: DeleteImageRegions
-export def "projects-images-regions delete" [
+export def "delete-image-regions" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -770,7 +770,7 @@ export def "projects-images-regions delete" [
 # POST /projects/{projectId}/images/regions
 # operationId: CreateImageRegions
 # --regions item shape: {height: float, imageId: string, left: float, tagId: string, top: float, width: float}
-export def "projects-images-regions create" [
+export def "create-image-regions" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -811,7 +811,7 @@ export def "projects-images-regions create" [
 #
 # POST /projects/{projectId}/images/suggested
 # operationId: QuerySuggestedImages
-export def "projects-images-suggested list" [
+export def "query-suggested-images" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -859,7 +859,7 @@ export def "projects-images-suggested list" [
 #
 # POST /projects/{projectId}/images/suggested/count
 # operationId: QuerySuggestedImageCount
-export def "projects-images-suggested-count list" [
+export def "query-suggested-image-count" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -903,7 +903,7 @@ export def "projects-images-suggested-count list" [
 #
 # GET /projects/{projectId}/images/tagged
 # operationId: GetTaggedImages
-export def "projects-images-tagged get" [
+export def "get-tagged-images" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -946,7 +946,7 @@ export def "projects-images-tagged get" [
 #
 # GET /projects/{projectId}/images/tagged/count
 # operationId: GetTaggedImageCount
-export def "projects-images-tagged-count get" [
+export def "get-tagged-image-count" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -986,7 +986,7 @@ export def "projects-images-tagged-count get" [
 #
 # DELETE /projects/{projectId}/images/tags
 # operationId: DeleteImageTags
-export def "projects-images-tags delete" [
+export def "delete-image-tags" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1026,7 +1026,7 @@ export def "projects-images-tags delete" [
 # POST /projects/{projectId}/images/tags
 # operationId: CreateImageTags
 # --tags item shape: {imageId?: string, tagId?: string}
-export def "projects-images-tags create" [
+export def "create-image-tags" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1067,7 +1067,7 @@ export def "projects-images-tags create" [
 #
 # GET /projects/{projectId}/images/untagged
 # operationId: GetUntaggedImages
-export def "projects-images-untagged get" [
+export def "get-untagged-images" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1109,7 +1109,7 @@ export def "projects-images-untagged get" [
 #
 # GET /projects/{projectId}/images/untagged/count
 # operationId: GetUntaggedImageCount
-export def "projects-images-untagged-count get" [
+export def "get-untagged-image-count" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1149,7 +1149,7 @@ export def "projects-images-untagged-count get" [
 # POST /projects/{projectId}/images/urls
 # operationId: CreateImagesFromUrls
 # --images item shape: {regions?: list, tagIds?: list<string>, url: string}
-export def "projects-images-urls create" [
+export def "create-images-from-urls" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1191,7 +1191,7 @@ export def "projects-images-urls create" [
 #
 # POST /projects/{projectId}/images/{imageId}/regionproposals
 # operationId: GetImageRegionProposals
-export def "projects-images-regionproposals get-region-proposals" [
+export def "get-image-region-proposals" [
   project_id: string
   image_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1229,7 +1229,7 @@ export def "projects-images-regionproposals get-region-proposals" [
 #
 # GET /projects/{projectId}/iterations
 # operationId: GetIterations
-export def "projects-iterations list" [
+export def "get-iterations" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1266,7 +1266,7 @@ export def "projects-iterations list" [
 #
 # DELETE /projects/{projectId}/iterations/{iterationId}
 # operationId: DeleteIteration
-export def "projects-iterations delete" [
+export def "delete-iteration" [
   project_id: string
   iteration_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1304,7 +1304,7 @@ export def "projects-iterations delete" [
 #
 # GET /projects/{projectId}/iterations/{iterationId}
 # operationId: GetIteration
-export def "projects-iterations get" [
+export def "get-iteration" [
   project_id: string
   iteration_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1343,7 +1343,7 @@ export def "projects-iterations get" [
 #
 # PATCH /projects/{projectId}/iterations/{iterationId}
 # operationId: UpdateIteration
-export def "projects-iterations update" [
+export def "update-iteration" [
   project_id: string
   iteration_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1386,7 +1386,7 @@ export def "projects-iterations update" [
 #
 # GET /projects/{projectId}/iterations/{iterationId}/export
 # operationId: GetExports
-export def "projects-iterations-export get" [
+export def "get-exports" [
   project_id: string
   iteration_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1425,7 +1425,7 @@ export def "projects-iterations-export get" [
 #
 # POST /projects/{projectId}/iterations/{iterationId}/export
 # operationId: ExportIteration
-export def "projects-iterations-export export" [
+export def "export-iteration" [
   project_id: string
   iteration_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1467,7 +1467,7 @@ export def "projects-iterations-export export" [
 #
 # GET /projects/{projectId}/iterations/{iterationId}/performance
 # operationId: GetIterationPerformance
-export def "projects-iterations-performance get" [
+export def "get-iteration-performance" [
   project_id: string
   iteration_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1509,7 +1509,7 @@ export def "projects-iterations-performance get" [
 #
 # GET /projects/{projectId}/iterations/{iterationId}/performance/images
 # operationId: GetImagePerformances
-export def "projects-iterations-performance-images get" [
+export def "get-image-performances" [
   project_id: string
   iteration_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1553,7 +1553,7 @@ export def "projects-iterations-performance-images get" [
 #
 # GET /projects/{projectId}/iterations/{iterationId}/performance/images/count
 # operationId: GetImagePerformanceCount
-export def "projects-iterations-performance-images-count get" [
+export def "get-image-performance-count" [
   project_id: string
   iteration_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1594,7 +1594,7 @@ export def "projects-iterations-performance-images-count get" [
 #
 # DELETE /projects/{projectId}/iterations/{iterationId}/publish
 # operationId: UnpublishIteration
-export def "projects-iterations-publish delete" [
+export def "unpublish-iteration" [
   project_id: string
   iteration_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1632,7 +1632,7 @@ export def "projects-iterations-publish delete" [
 #
 # POST /projects/{projectId}/iterations/{iterationId}/publish
 # operationId: PublishIteration
-export def "projects-iterations-publish publish" [
+export def "publish-iteration" [
   project_id: string
   iteration_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1674,7 +1674,7 @@ export def "projects-iterations-publish publish" [
 #
 # DELETE /projects/{projectId}/predictions
 # operationId: DeletePrediction
-export def "projects-predictions delete" [
+export def "delete-prediction" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1713,7 +1713,7 @@ export def "projects-predictions delete" [
 # POST /projects/{projectId}/predictions/query
 # operationId: QueryPredictions
 # --tags item shape: {id?: string, maxThreshold?: float, minThreshold?: float}
-export def "projects-predictions-query list" [
+export def "query-predictions" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1762,7 +1762,7 @@ export def "projects-predictions-query list" [
 #
 # POST /projects/{projectId}/quicktest/image
 # operationId: QuickTestImage
-export def "projects-quicktest-image test-quick" [
+export def "quick-test-image" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1808,7 +1808,7 @@ export def "projects-quicktest-image test-quick" [
 #
 # POST /projects/{projectId}/quicktest/url
 # operationId: QuickTestImageUrl
-export def "projects-quicktest-url test-quick-image" [
+export def "quick-test-image-url" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1852,7 +1852,7 @@ export def "projects-quicktest-url test-quick-image" [
 #
 # GET /projects/{projectId}/tags
 # operationId: GetTags
-export def "projects-tags list" [
+export def "get-tags" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1891,7 +1891,7 @@ export def "projects-tags list" [
 #
 # POST /projects/{projectId}/tags
 # operationId: CreateTag
-export def "projects-tags create" [
+export def "create-tag" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1932,7 +1932,7 @@ export def "projects-tags create" [
 #
 # DELETE /projects/{projectId}/tags/{tagId}
 # operationId: DeleteTag
-export def "projects-tags delete" [
+export def "delete-tag" [
   project_id: string
   tag_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1970,7 +1970,7 @@ export def "projects-tags delete" [
 #
 # GET /projects/{projectId}/tags/{tagId}
 # operationId: GetTag
-export def "projects-tags get" [
+export def "get-tag" [
   project_id: string
   tag_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2011,7 +2011,7 @@ export def "projects-tags get" [
 #
 # PATCH /projects/{projectId}/tags/{tagId}
 # operationId: UpdateTag
-export def "projects-tags update" [
+export def "update-tag" [
   project_id: string
   tag_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2056,7 +2056,7 @@ export def "projects-tags update" [
 #
 # POST /projects/{projectId}/tagsandregions/suggestions
 # operationId: SuggestTagsAndRegions
-export def "projects-tagsandregions-suggestions create-suggest-tags-and-regions" [
+export def "suggest-tags-and-regions" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2096,7 +2096,7 @@ export def "projects-tagsandregions-suggestions create-suggest-tags-and-regions"
 #
 # POST /projects/{projectId}/train
 # operationId: TrainProject
-export def "projects-train create" [
+export def "train-project" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

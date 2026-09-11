@@ -120,7 +120,7 @@ def time-in-force-completer [] { ["0" "1" "2" "3" "7"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-accounts" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -143,7 +143,7 @@ export def commands []: nothing -> table {
 # Brokerage Accounts
 #
 # GET /accounts
-export def "accounts get" [
+export def "get-accounts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -178,7 +178,7 @@ export def "accounts get" [
 # Return margin impact info
 #
 # POST /accounts/{account}/order_impact
-export def "accounts-order-impact create" [
+export def "post-accounts-account-order-impact" [
   account: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -228,7 +228,7 @@ export def "accounts-order-impact create" [
 # Open Orders
 #
 # GET /accounts/{account}/orders
-export def "accounts-orders list" [
+export def "get-accounts-account-orders" [
   account: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -263,7 +263,7 @@ export def "accounts-orders list" [
 # Place Order
 #
 # POST /accounts/{account}/orders
-export def "accounts-orders create" [
+export def "post-accounts-account-orders" [
   account: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -320,7 +320,7 @@ export def "accounts-orders create" [
 # Cancel Order
 #
 # DELETE /accounts/{account}/orders/{CustomerOrderId}
-export def "accounts-orders delete" [
+export def "delete-accounts-account-orders-customer-order-id" [
   account: string
   customer_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -357,7 +357,7 @@ export def "accounts-orders delete" [
 # Return specific order info
 #
 # GET /accounts/{account}/orders/{CustomerOrderId}
-export def "accounts-orders get" [
+export def "get-accounts-account-orders-customer-order-id" [
   account: string
   customer_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -394,7 +394,7 @@ export def "accounts-orders get" [
 # Modify Order
 #
 # PUT /accounts/{account}/orders/{CustomerOrderId}
-export def "accounts-orders update" [
+export def "put-accounts-account-orders-customer-order-id" [
   account: string
   customer_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -448,7 +448,7 @@ export def "accounts-orders update" [
 # Account Positions
 #
 # GET /accounts/{account}/positions
-export def "accounts-positions get" [
+export def "get-accounts-account-positions" [
   account: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -483,7 +483,7 @@ export def "accounts-positions get" [
 # Account Values Summary
 #
 # GET /accounts/{account}/summary
-export def "accounts-summary get" [
+export def "get-accounts-account-summary" [
   account: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -518,7 +518,7 @@ export def "accounts-summary get" [
 # Returns trades in account
 #
 # GET /accounts/{account}/trades
-export def "accounts-trades get" [
+export def "get-accounts-account-trades" [
   account: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -553,7 +553,7 @@ export def "accounts-trades get" [
 # Exchange Components
 #
 # GET /marketdata/exchange_components
-export def "marketdata-exchange-components get" [
+export def "get-marketdata-exchange-components" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -586,7 +586,7 @@ export def "marketdata-exchange-components get" [
 # Market Data Snapshot
 #
 # GET /marketdata/snapshot
-export def "marketdata-snapshot get" [
+export def "get-marketdata-snapshot" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -619,7 +619,7 @@ export def "marketdata-snapshot get" [
 # Obtain a access token
 #
 # POST /oauth/access_token
-export def "oauth-access-token create" [
+export def "post-oauth-access-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -662,7 +662,7 @@ export def "oauth-access-token create" [
 # Obtain a live session token
 #
 # POST /oauth/live_session_token
-export def "oauth-live-session-token create" [
+export def "post-oauth-live-session-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -705,7 +705,7 @@ export def "oauth-live-session-token create" [
 # Obtain a request token
 #
 # POST /oauth/request_token
-export def "oauth-request-token create" [
+export def "post-oauth-request-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -747,7 +747,7 @@ export def "oauth-request-token create" [
 # Get security definition
 #
 # GET /secdef
-export def "secdef get" [
+export def "get-secdef" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -135,7 +135,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "apps-licensing-product-sku-user create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "licensing-license-assignments-insert" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -159,7 +159,7 @@ export def commands []: nothing -> table {
 #
 # POST /apps/licensing/v1/product/{productId}/sku/{skuId}/user
 # operationId: licensing.licenseAssignments.insert
-export def "apps-licensing-product-sku-user create" [
+export def "licensing-license-assignments-insert" [
   product_id: string
   sku_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -213,7 +213,7 @@ export def "apps-licensing-product-sku-user create" [
 #
 # DELETE /apps/licensing/v1/product/{productId}/sku/{skuId}/user/{userId}
 # operationId: licensing.licenseAssignments.delete
-export def "apps-licensing-product-sku-user delete" [
+export def "licensing-license-assignments-delete" [
   product_id: string
   sku_id: string
   user_id: string
@@ -265,7 +265,7 @@ export def "apps-licensing-product-sku-user delete" [
 #
 # GET /apps/licensing/v1/product/{productId}/sku/{skuId}/user/{userId}
 # operationId: licensing.licenseAssignments.get
-export def "apps-licensing-product-sku-user get" [
+export def "licensing-license-assignments-get" [
   product_id: string
   sku_id: string
   user_id: string
@@ -317,7 +317,7 @@ export def "apps-licensing-product-sku-user get" [
 #
 # PATCH /apps/licensing/v1/product/{productId}/sku/{skuId}/user/{userId}
 # operationId: licensing.licenseAssignments.patch
-export def "apps-licensing-product-sku-user update-by-product-id-sku-id-user-id" [
+export def "licensing-license-assignments-patch" [
   product_id: string
   sku_id: string
   user_id: string
@@ -380,7 +380,7 @@ export def "apps-licensing-product-sku-user update-by-product-id-sku-id-user-id"
 #
 # PUT /apps/licensing/v1/product/{productId}/sku/{skuId}/user/{userId}
 # operationId: licensing.licenseAssignments.update
-export def "apps-licensing-product-sku-user update-by-product-id-sku-id-user-id-1" [
+export def "licensing-license-assignments-update" [
   product_id: string
   sku_id: string
   user_id: string
@@ -443,7 +443,7 @@ export def "apps-licensing-product-sku-user update-by-product-id-sku-id-user-id-
 #
 # GET /apps/licensing/v1/product/{productId}/sku/{skuId}/users
 # operationId: licensing.licenseAssignments.listForProductAndSku
-export def "apps-licensing-product-sku-users list-for-and" [
+export def "licensing-license-assignments-list-for-product-and-sku" [
   product_id: string
   sku_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -496,7 +496,7 @@ export def "apps-licensing-product-sku-users list-for-and" [
 #
 # GET /apps/licensing/v1/product/{productId}/users
 # operationId: licensing.licenseAssignments.listForProduct
-export def "apps-licensing-product-users list" [
+export def "licensing-license-assignments-list-for-product" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

@@ -123,7 +123,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "games-v1management-achievements-reset list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "games-management-achievements-reset-all" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -147,7 +147,7 @@ export def commands []: nothing -> table {
 #
 # POST /games/v1management/achievements/reset
 # operationId: gamesManagement.achievements.resetAll
-export def "games-v1management-achievements-reset list" [
+export def "games-management-achievements-reset-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -193,7 +193,7 @@ export def "games-v1management-achievements-reset list" [
 #
 # POST /games/v1management/achievements/resetAllForAllPlayers
 # operationId: gamesManagement.achievements.resetAllForAllPlayers
-export def "games-v1management-achievements-reset-all-for-all-players reset" [
+export def "games-management-achievements-reset-all-for-all-players" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -239,7 +239,7 @@ export def "games-v1management-achievements-reset-all-for-all-players reset" [
 #
 # POST /games/v1management/achievements/resetMultipleForAllPlayers
 # operationId: gamesManagement.achievements.resetMultipleForAllPlayers
-export def "games-v1management-achievements-reset-multiple-for-all-players reset" [
+export def "games-management-achievements-reset-multiple-for-all-players" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -290,7 +290,7 @@ export def "games-v1management-achievements-reset-multiple-for-all-players reset
 #
 # POST /games/v1management/achievements/{achievementId}/reset
 # operationId: gamesManagement.achievements.reset
-export def "games-v1management-achievements-reset reset" [
+export def "games-management-achievements-reset" [
   achievement_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -338,7 +338,7 @@ export def "games-v1management-achievements-reset reset" [
 #
 # POST /games/v1management/achievements/{achievementId}/resetForAllPlayers
 # operationId: gamesManagement.achievements.resetForAllPlayers
-export def "games-v1management-achievements-reset-for-all-players reset" [
+export def "games-management-achievements-reset-for-all-players" [
   achievement_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -386,7 +386,7 @@ export def "games-v1management-achievements-reset-for-all-players reset" [
 #
 # GET /games/v1management/applications/{applicationId}/players/hidden
 # operationId: gamesManagement.applications.listHidden
-export def "games-v1management-applications-players-hidden list" [
+export def "games-management-applications-list-hidden" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -436,7 +436,7 @@ export def "games-v1management-applications-players-hidden list" [
 #
 # DELETE /games/v1management/applications/{applicationId}/players/hidden/{playerId}
 # operationId: gamesManagement.players.unhide
-export def "games-v1management-applications-players-hidden delete-unhide" [
+export def "games-management-players-unhide" [
   application_id: string
   player_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -486,7 +486,7 @@ export def "games-v1management-applications-players-hidden delete-unhide" [
 #
 # POST /games/v1management/applications/{applicationId}/players/hidden/{playerId}
 # operationId: gamesManagement.players.hide
-export def "games-v1management-applications-players-hidden create-hide" [
+export def "games-management-players-hide" [
   application_id: string
   player_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -536,7 +536,7 @@ export def "games-v1management-applications-players-hidden create-hide" [
 #
 # POST /games/v1management/events/reset
 # operationId: gamesManagement.events.resetAll
-export def "games-v1management-events-reset list" [
+export def "games-management-events-reset-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -582,7 +582,7 @@ export def "games-v1management-events-reset list" [
 #
 # POST /games/v1management/events/resetAllForAllPlayers
 # operationId: gamesManagement.events.resetAllForAllPlayers
-export def "games-v1management-events-reset-all-for-all-players reset" [
+export def "games-management-events-reset-all-for-all-players" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -628,7 +628,7 @@ export def "games-v1management-events-reset-all-for-all-players reset" [
 #
 # POST /games/v1management/events/resetMultipleForAllPlayers
 # operationId: gamesManagement.events.resetMultipleForAllPlayers
-export def "games-v1management-events-reset-multiple-for-all-players reset" [
+export def "games-management-events-reset-multiple-for-all-players" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -679,7 +679,7 @@ export def "games-v1management-events-reset-multiple-for-all-players reset" [
 #
 # POST /games/v1management/events/{eventId}/reset
 # operationId: gamesManagement.events.reset
-export def "games-v1management-events-reset reset" [
+export def "games-management-events-reset" [
   event_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -727,7 +727,7 @@ export def "games-v1management-events-reset reset" [
 #
 # POST /games/v1management/events/{eventId}/resetForAllPlayers
 # operationId: gamesManagement.events.resetForAllPlayers
-export def "games-v1management-events-reset-for-all-players reset" [
+export def "games-management-events-reset-for-all-players" [
   event_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -775,7 +775,7 @@ export def "games-v1management-events-reset-for-all-players reset" [
 #
 # POST /games/v1management/leaderboards/{leaderboardId}/scores/reset
 # operationId: gamesManagement.scores.reset
-export def "games-v1management-leaderboards-scores-reset reset" [
+export def "games-management-scores-reset" [
   leaderboard_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -823,7 +823,7 @@ export def "games-v1management-leaderboards-scores-reset reset" [
 #
 # POST /games/v1management/leaderboards/{leaderboardId}/scores/resetForAllPlayers
 # operationId: gamesManagement.scores.resetForAllPlayers
-export def "games-v1management-leaderboards-scores-reset-for-all-players reset" [
+export def "games-management-scores-reset-for-all-players" [
   leaderboard_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -871,7 +871,7 @@ export def "games-v1management-leaderboards-scores-reset-for-all-players reset" 
 #
 # POST /games/v1management/scores/reset
 # operationId: gamesManagement.scores.resetAll
-export def "games-v1management-scores-reset list" [
+export def "games-management-scores-reset-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -917,7 +917,7 @@ export def "games-v1management-scores-reset list" [
 #
 # POST /games/v1management/scores/resetAllForAllPlayers
 # operationId: gamesManagement.scores.resetAllForAllPlayers
-export def "games-v1management-scores-reset-all-for-all-players reset" [
+export def "games-management-scores-reset-all-for-all-players" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -963,7 +963,7 @@ export def "games-v1management-scores-reset-all-for-all-players reset" [
 #
 # POST /games/v1management/scores/resetMultipleForAllPlayers
 # operationId: gamesManagement.scores.resetMultipleForAllPlayers
-export def "games-v1management-scores-reset-multiple-for-all-players reset" [
+export def "games-management-scores-reset-multiple-for-all-players" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)

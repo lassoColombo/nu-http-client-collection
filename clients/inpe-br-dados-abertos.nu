@@ -97,7 +97,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "auxiliar-estados get-resource" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-estados-auxiliar-resource" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -121,7 +121,7 @@ export def commands []: nothing -> table {
 #
 # GET /auxiliar/estados
 # operationId: get_estados_auxiliar_resource
-export def "auxiliar-estados get-resource" [
+export def "get-estados-auxiliar-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -157,7 +157,7 @@ export def "auxiliar-estados get-resource" [
 #
 # GET /auxiliar/municipios
 # operationId: get_municipios_auxiliar_resource
-export def "auxiliar-municipios get-resource" [
+export def "get-municipios-auxiliar-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -194,7 +194,7 @@ export def "auxiliar-municipios get-resource" [
 #
 # GET /auxiliar/paises
 # operationId: get_paises_auxiliar_resource
-export def "auxiliar-paises get-resource" [
+export def "get-paises-auxiliar-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -228,7 +228,7 @@ export def "auxiliar-paises get-resource" [
 #
 # GET /auxiliar/satelites
 # operationId: get_satelite_auxiliar_resource
-export def "auxiliar-satelites get-resource" [
+export def "get-satelite-auxiliar-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -262,7 +262,7 @@ export def "auxiliar-satelites get-resource" [
 #
 # GET /focos/
 # operationId: get_focos_resource
-export def "focos get-resource" [
+export def "get-focos-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -304,7 +304,7 @@ export def "focos get-resource" [
 #
 # GET /focos/count
 # operationId: get_focos_count_resource
-export def "focos-count get-resource" [
+export def "get-focos-count-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -154,7 +154,7 @@ def new-status-completer-1 [] { ["ACTIVE" "INACTIVE" "PENDING_ACTIVATION" "PENDI
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accept-certificate-transfer update" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accept-certificate-transfer" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -178,7 +178,7 @@ export def commands []: nothing -> table {
 #
 # PATCH /accept-certificate-transfer/{certificateId}
 # operationId: AcceptCertificateTransfer
-export def "accept-certificate-transfer update" [
+export def "accept-certificate-transfer" [
   certificate_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -225,7 +225,7 @@ export def "accept-certificate-transfer update" [
 #
 # PUT /billing-groups/addThingToBillingGroup
 # operationId: AddThingToBillingGroup
-export def "billing-groups-add-thing-to-billing-group create" [
+export def "add-thing-to-billing-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -275,7 +275,7 @@ export def "billing-groups-add-thing-to-billing-group create" [
 #
 # PUT /thing-groups/addThingToThingGroup
 # operationId: AddThingToThingGroup
-export def "thing-groups-add-thing-to-thing-group create" [
+export def "add-thing-to-thing-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -326,7 +326,7 @@ export def "thing-groups-add-thing-to-thing-group create" [
 #
 # POST /jobs/{jobId}/targets
 # operationId: AssociateTargetsWithJob
-export def "jobs-targets create-associate" [
+export def "associate-targets-with-job" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -378,7 +378,7 @@ export def "jobs-targets create-associate" [
 #
 # PUT /target-policies/{policyName}
 # operationId: AttachPolicy
-export def "target-policies attach-policy" [
+export def "attach-policy" [
   policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -427,7 +427,7 @@ export def "target-policies attach-policy" [
 #
 # POST /target-policies/{policyName}
 # operationId: DetachPolicy
-export def "target-policies create-detach-policy" [
+export def "detach-policy" [
   policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -478,7 +478,7 @@ export def "target-policies create-detach-policy" [
 # DEPRECATED
 # operationId: AttachPrincipalPolicy
 @deprecated
-export def "principal-policies attach-policy" [
+export def "attach-principal-policy" [
   policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -526,7 +526,7 @@ export def "principal-policies attach-policy" [
 # DEPRECATED
 # operationId: DetachPrincipalPolicy
 @deprecated
-export def "principal-policies delete-detach-policy" [
+export def "detach-principal-policy" [
   policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -572,7 +572,7 @@ export def "principal-policies delete-detach-policy" [
 #
 # PUT /security-profiles/{securityProfileName}/targets
 # operationId: AttachSecurityProfile
-export def "security-profiles-targets attach" [
+export def "attach-security-profile" [
   security_profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -619,7 +619,7 @@ export def "security-profiles-targets attach" [
 #
 # DELETE /security-profiles/{securityProfileName}/targets
 # operationId: DetachSecurityProfile
-export def "security-profiles-targets delete-detach" [
+export def "detach-security-profile" [
   security_profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -666,7 +666,7 @@ export def "security-profiles-targets delete-detach" [
 #
 # PUT /things/{thingName}/principals
 # operationId: AttachThingPrincipal
-export def "things-principals attach" [
+export def "attach-thing-principal" [
   thing_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -712,7 +712,7 @@ export def "things-principals attach" [
 #
 # DELETE /things/{thingName}/principals
 # operationId: DetachThingPrincipal
-export def "things-principals delete-detach" [
+export def "detach-thing-principal" [
   thing_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -758,7 +758,7 @@ export def "things-principals delete-detach" [
 #
 # PUT /audit/mitigationactions/tasks/{taskId}/cancel
 # operationId: CancelAuditMitigationActionsTask
-export def "audit-mitigationactions-tasks-cancel cancel-mitigation-actions" [
+export def "cancel-audit-mitigation-actions-task" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -803,7 +803,7 @@ export def "audit-mitigationactions-tasks-cancel cancel-mitigation-actions" [
 #
 # PUT /audit/tasks/{taskId}/cancel
 # operationId: CancelAuditTask
-export def "audit-tasks-cancel cancel" [
+export def "cancel-audit-task" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -848,7 +848,7 @@ export def "audit-tasks-cancel cancel" [
 #
 # PATCH /cancel-certificate-transfer/{certificateId}
 # operationId: CancelCertificateTransfer
-export def "cancel-certificate-transfer cancel" [
+export def "cancel-certificate-transfer" [
   certificate_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -893,7 +893,7 @@ export def "cancel-certificate-transfer cancel" [
 #
 # PUT /detect/mitigationactions/tasks/{taskId}/cancel
 # operationId: CancelDetectMitigationActionsTask
-export def "detect-mitigationactions-tasks-cancel cancel-mitigation-actions" [
+export def "cancel-detect-mitigation-actions-task" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -938,7 +938,7 @@ export def "detect-mitigationactions-tasks-cancel cancel-mitigation-actions" [
 #
 # PUT /jobs/{jobId}/cancel
 # operationId: CancelJob
-export def "jobs-cancel cancel" [
+export def "cancel-job" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -990,7 +990,7 @@ export def "jobs-cancel cancel" [
 #
 # PUT /things/{thingName}/jobs/{jobId}/cancel
 # operationId: CancelJobExecution
-export def "things-jobs-cancel cancel-execution" [
+export def "cancel-job-execution" [
   thing_name: string
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1044,7 +1044,7 @@ export def "things-jobs-cancel cancel-execution" [
 #
 # DELETE /default-authorizer
 # operationId: ClearDefaultAuthorizer
-export def "default-authorizer delete-clear" [
+export def "clear-default-authorizer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1087,7 +1087,7 @@ export def "default-authorizer delete-clear" [
 #
 # GET /default-authorizer
 # operationId: DescribeDefaultAuthorizer
-export def "default-authorizer get" [
+export def "describe-default-authorizer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1130,7 +1130,7 @@ export def "default-authorizer get" [
 #
 # POST /default-authorizer
 # operationId: SetDefaultAuthorizer
-export def "default-authorizer update" [
+export def "set-default-authorizer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1177,7 +1177,7 @@ export def "default-authorizer update" [
 #
 # GET /confirmdestination/{confirmationToken}
 # operationId: ConfirmTopicRuleDestination
-export def "confirmdestination confirm-topic-rule-destination" [
+export def "confirm-topic-rule-destination" [
   confirmation_token: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1223,7 +1223,7 @@ export def "confirmdestination confirm-topic-rule-destination" [
 # POST /audit/suppressions/create
 # operationId: CreateAuditSuppression
 # --resourceIdentifier shape: {deviceCertificateId?: any, caCertificateId?: any, cognitoIdentityPoolId?: any, clientId?: any, policyVersionIdentifier?: any, account?: any, iamRoleArn?: any, roleAliasArn?: any, issuerCertificateIdentifier?: any, deviceCertificateArn?: any}
-export def "audit-suppressions-create create" [
+export def "create-audit-suppression" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1276,7 +1276,7 @@ export def "audit-suppressions-create create" [
 # POST /authorizer/{authorizerName}
 # operationId: CreateAuthorizer
 # --tags item shape: {Key: any, Value?: any}
-export def "authorizer create" [
+export def "create-authorizer" [
   authorizer_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1331,7 +1331,7 @@ export def "authorizer create" [
 #
 # DELETE /authorizer/{authorizerName}
 # operationId: DeleteAuthorizer
-export def "authorizer delete" [
+export def "delete-authorizer" [
   authorizer_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1376,7 +1376,7 @@ export def "authorizer delete" [
 #
 # GET /authorizer/{authorizerName}
 # operationId: DescribeAuthorizer
-export def "authorizer get" [
+export def "describe-authorizer" [
   authorizer_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1421,7 +1421,7 @@ export def "authorizer get" [
 #
 # PUT /authorizer/{authorizerName}
 # operationId: UpdateAuthorizer
-export def "authorizer update" [
+export def "update-authorizer" [
   authorizer_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1476,7 +1476,7 @@ export def "authorizer update" [
 # operationId: CreateBillingGroup
 # --billingGroupProperties shape: {billingGroupDescription?: any}
 # --tags item shape: {Key: any, Value?: any}
-export def "billing-groups create" [
+export def "create-billing-group" [
   billing_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1526,7 +1526,7 @@ export def "billing-groups create" [
 #
 # DELETE /billing-groups/{billingGroupName}
 # operationId: DeleteBillingGroup
-export def "billing-groups delete" [
+export def "delete-billing-group" [
   billing_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1573,7 +1573,7 @@ export def "billing-groups delete" [
 #
 # GET /billing-groups/{billingGroupName}
 # operationId: DescribeBillingGroup
-export def "billing-groups get" [
+export def "describe-billing-group" [
   billing_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1619,7 +1619,7 @@ export def "billing-groups get" [
 # PATCH /billing-groups/{billingGroupName}
 # operationId: UpdateBillingGroup
 # --billingGroupProperties shape: {billingGroupDescription?: any}
-export def "billing-groups update" [
+export def "update-billing-group" [
   billing_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1669,7 +1669,7 @@ export def "billing-groups update" [
 #
 # POST /certificates
 # operationId: CreateCertificateFromCsr
-export def "certificates create-from-csr" [
+export def "create-certificate-from-csr" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1718,7 +1718,7 @@ export def "certificates create-from-csr" [
 #
 # GET /certificates
 # operationId: ListCertificates
-export def "certificates list" [
+export def "list-certificates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1766,7 +1766,7 @@ export def "certificates list" [
 # POST /custom-metric/{metricName}
 # operationId: CreateCustomMetric
 # --tags item shape: {Key: any, Value?: any}
-export def "custom-metric create" [
+export def "create-custom-metric" [
   metric_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1818,7 +1818,7 @@ export def "custom-metric create" [
 #
 # DELETE /custom-metric/{metricName}
 # operationId: DeleteCustomMetric
-export def "custom-metric delete" [
+export def "delete-custom-metric" [
   metric_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1863,7 +1863,7 @@ export def "custom-metric delete" [
 #
 # GET /custom-metric/{metricName}
 # operationId: DescribeCustomMetric
-export def "custom-metric get" [
+export def "describe-custom-metric" [
   metric_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1908,7 +1908,7 @@ export def "custom-metric get" [
 #
 # PATCH /custom-metric/{metricName}
 # operationId: UpdateCustomMetric
-export def "custom-metric update" [
+export def "update-custom-metric" [
   metric_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1958,7 +1958,7 @@ export def "custom-metric update" [
 # POST /dimensions/{name}
 # operationId: CreateDimension
 # --tags item shape: {Key: any, Value?: any}
-export def "dimensions create" [
+export def "create-dimension" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2010,7 +2010,7 @@ export def "dimensions create" [
 #
 # DELETE /dimensions/{name}
 # operationId: DeleteDimension
-export def "dimensions delete" [
+export def "delete-dimension" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2055,7 +2055,7 @@ export def "dimensions delete" [
 #
 # GET /dimensions/{name}
 # operationId: DescribeDimension
-export def "dimensions get" [
+export def "describe-dimension" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2100,7 +2100,7 @@ export def "dimensions get" [
 #
 # PATCH /dimensions/{name}
 # operationId: UpdateDimension
-export def "dimensions update" [
+export def "update-dimension" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2151,7 +2151,7 @@ export def "dimensions update" [
 # operationId: CreateDomainConfiguration
 # --authorizerConfig shape: {defaultAuthorizerName?: any, allowAuthorizerOverride?: any}
 # --tags item shape: {Key: any, Value?: any}
-export def "domain-configurations create" [
+export def "create-domain-configuration" [
   domain_configuration_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2205,7 +2205,7 @@ export def "domain-configurations create" [
 #
 # DELETE /domainConfigurations/{domainConfigurationName}
 # operationId: DeleteDomainConfiguration
-export def "domain-configurations delete" [
+export def "delete-domain-configuration" [
   domain_configuration_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2250,7 +2250,7 @@ export def "domain-configurations delete" [
 #
 # GET /domainConfigurations/{domainConfigurationName}
 # operationId: DescribeDomainConfiguration
-export def "domain-configurations get" [
+export def "describe-domain-configuration" [
   domain_configuration_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2296,7 +2296,7 @@ export def "domain-configurations get" [
 # PUT /domainConfigurations/{domainConfigurationName}
 # operationId: UpdateDomainConfiguration
 # --authorizerConfig shape: {defaultAuthorizerName?: any, allowAuthorizerOverride?: any}
-export def "domain-configurations update" [
+export def "update-domain-configuration" [
   domain_configuration_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2349,7 +2349,7 @@ export def "domain-configurations update" [
 # operationId: CreateDynamicThingGroup
 # --thingGroupProperties shape: {thingGroupDescription?: any, attributePayload?: any}
 # --tags item shape: {Key: any, Value?: any}
-export def "dynamic-thing-groups create" [
+export def "create-dynamic-thing-group" [
   thing_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2402,7 +2402,7 @@ export def "dynamic-thing-groups create" [
 #
 # DELETE /dynamic-thing-groups/{thingGroupName}
 # operationId: DeleteDynamicThingGroup
-export def "dynamic-thing-groups delete" [
+export def "delete-dynamic-thing-group" [
   thing_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2450,7 +2450,7 @@ export def "dynamic-thing-groups delete" [
 # PATCH /dynamic-thing-groups/{thingGroupName}
 # operationId: UpdateDynamicThingGroup
 # --thingGroupProperties shape: {thingGroupDescription?: any, attributePayload?: any}
-export def "dynamic-thing-groups update" [
+export def "update-dynamic-thing-group" [
   thing_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2505,7 +2505,7 @@ export def "dynamic-thing-groups update" [
 # operationId: CreateFleetMetric
 # --aggregationType shape: {name?: any, values?: any}
 # --tags item shape: {Key: any, Value?: any}
-export def "fleet-metric create" [
+export def "create-fleet-metric" [
   metric_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2562,7 +2562,7 @@ export def "fleet-metric create" [
 #
 # DELETE /fleet-metric/{metricName}
 # operationId: DeleteFleetMetric
-export def "fleet-metric delete" [
+export def "delete-fleet-metric" [
   metric_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2609,7 +2609,7 @@ export def "fleet-metric delete" [
 #
 # GET /fleet-metric/{metricName}
 # operationId: DescribeFleetMetric
-export def "fleet-metric get" [
+export def "describe-fleet-metric" [
   metric_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2655,7 +2655,7 @@ export def "fleet-metric get" [
 # PATCH /fleet-metric/{metricName}
 # operationId: UpdateFleetMetric
 # --aggregationType shape: {name?: any, values?: any}
-export def "fleet-metric update" [
+export def "update-fleet-metric" [
   metric_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2719,7 +2719,7 @@ export def "fleet-metric update" [
 # --tags item shape: {Key: any, Value?: any}
 # --jobExecutionsRetryConfig shape: {criteriaList?: any}
 # --schedulingConfig shape: {startTime?: any, endTime?: any, endBehavior?: any, maintenanceWindows?: any}
-export def "jobs create" [
+export def "create-job" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2782,7 +2782,7 @@ export def "jobs create" [
 #
 # DELETE /jobs/{jobId}
 # operationId: DeleteJob
-export def "jobs delete" [
+export def "delete-job" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2830,7 +2830,7 @@ export def "jobs delete" [
 #
 # GET /jobs/{jobId}
 # operationId: DescribeJob
-export def "jobs get" [
+export def "describe-job" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2880,7 +2880,7 @@ export def "jobs get" [
 # --abortConfig shape: {criteriaList?: any}
 # --timeoutConfig shape: {inProgressTimeoutInMinutes?: any}
 # --jobExecutionsRetryConfig shape: {criteriaList?: any}
-export def "jobs update" [
+export def "update-job" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2943,7 +2943,7 @@ export def "jobs update" [
 # --tags item shape: {Key: any, Value?: any}
 # --jobExecutionsRetryConfig shape: {criteriaList?: any}
 # --maintenanceWindows item shape: {startTime: any, durationInMinutes: any}
-export def "job-templates create" [
+export def "create-job-template" [
   job_template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3002,7 +3002,7 @@ export def "job-templates create" [
 #
 # DELETE /job-templates/{jobTemplateId}
 # operationId: DeleteJobTemplate
-export def "job-templates delete" [
+export def "delete-job-template" [
   job_template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3047,7 +3047,7 @@ export def "job-templates delete" [
 #
 # GET /job-templates/{jobTemplateId}
 # operationId: DescribeJobTemplate
-export def "job-templates get" [
+export def "describe-job-template" [
   job_template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3092,7 +3092,7 @@ export def "job-templates get" [
 #
 # POST /keys-and-certificate
 # operationId: CreateKeysAndCertificate
-export def "keys-and-certificate create" [
+export def "create-keys-and-certificate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3139,7 +3139,7 @@ export def "keys-and-certificate create" [
 # operationId: CreateMitigationAction
 # --actionParams shape: {updateDeviceCertificateParams?: any, updateCACertificateParams?: any, addThingsToThingGroupParams?: any, replaceDefaultPolicyVersionParams?: any, enableIoTLoggingParams?: any, publishFindingToSnsParams?: any}
 # --tags item shape: {Key: any, Value?: any}
-export def "mitigationactions-actions create-mitigation" [
+export def "create-mitigation-action" [
   action_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3190,7 +3190,7 @@ export def "mitigationactions-actions create-mitigation" [
 #
 # DELETE /mitigationactions/actions/{actionName}
 # operationId: DeleteMitigationAction
-export def "mitigationactions-actions delete-mitigation" [
+export def "delete-mitigation-action" [
   action_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3235,7 +3235,7 @@ export def "mitigationactions-actions delete-mitigation" [
 #
 # GET /mitigationactions/actions/{actionName}
 # operationId: DescribeMitigationAction
-export def "mitigationactions-actions get-mitigation" [
+export def "describe-mitigation-action" [
   action_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3281,7 +3281,7 @@ export def "mitigationactions-actions get-mitigation" [
 # PATCH /mitigationactions/actions/{actionName}
 # operationId: UpdateMitigationAction
 # --actionParams shape: {updateDeviceCertificateParams?: any, updateCACertificateParams?: any, addThingsToThingGroupParams?: any, replaceDefaultPolicyVersionParams?: any, enableIoTLoggingParams?: any, publishFindingToSnsParams?: any}
-export def "mitigationactions-actions update-mitigation" [
+export def "update-mitigation-action" [
   action_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3337,7 +3337,7 @@ export def "mitigationactions-actions update-mitigation" [
 # --awsJobTimeoutConfig shape: {inProgressTimeoutInMinutes?: any}
 # --files item shape: {fileName?: any, fileType?: any, fileVersion?: any, fileLocation?: any, codeSigning?: any, attributes?: any}
 # --tags item shape: {Key: any, Value?: any}
-export def "ota-updates create" [
+export def "create-ota-update" [
   ota_update_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3397,7 +3397,7 @@ export def "ota-updates create" [
 #
 # DELETE /otaUpdates/{otaUpdateId}
 # operationId: DeleteOTAUpdate
-export def "ota-updates delete" [
+export def "delete-ota-update" [
   ota_update_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3445,7 +3445,7 @@ export def "ota-updates delete" [
 #
 # GET /otaUpdates/{otaUpdateId}
 # operationId: GetOTAUpdate
-export def "ota-updates get" [
+export def "get-ota-update" [
   ota_update_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3491,7 +3491,7 @@ export def "ota-updates get" [
 # POST /policies/{policyName}
 # operationId: CreatePolicy
 # --tags item shape: {Key: any, Value?: any}
-export def "policies create-policy" [
+export def "create-policy" [
   policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3541,7 +3541,7 @@ export def "policies create-policy" [
 #
 # DELETE /policies/{policyName}
 # operationId: DeletePolicy
-export def "policies delete-policy" [
+export def "delete-policy" [
   policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3586,7 +3586,7 @@ export def "policies delete-policy" [
 #
 # GET /policies/{policyName}
 # operationId: GetPolicy
-export def "policies get-policy" [
+export def "get-policy" [
   policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3631,7 +3631,7 @@ export def "policies get-policy" [
 #
 # POST /policies/{policyName}/version
 # operationId: CreatePolicyVersion
-export def "policies-version create-policy" [
+export def "create-policy-version" [
   policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3682,7 +3682,7 @@ export def "policies-version create-policy" [
 #
 # GET /policies/{policyName}/version
 # operationId: ListPolicyVersions
-export def "policies-version list-policy" [
+export def "list-policy-versions" [
   policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3727,7 +3727,7 @@ export def "policies-version list-policy" [
 #
 # POST /provisioning-templates/{templateName}/provisioning-claim
 # operationId: CreateProvisioningClaim
-export def "provisioning-templates-provisioning-claim create" [
+export def "create-provisioning-claim" [
   template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3774,7 +3774,7 @@ export def "provisioning-templates-provisioning-claim create" [
 # operationId: CreateProvisioningTemplate
 # --preProvisioningHook shape: {payloadVersion?: any, targetArn?: any}
 # --tags item shape: {Key: any, Value?: any}
-export def "provisioning-templates create" [
+export def "create-provisioning-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3828,7 +3828,7 @@ export def "provisioning-templates create" [
 #
 # GET /provisioning-templates
 # operationId: ListProvisioningTemplates
-export def "provisioning-templates list" [
+export def "list-provisioning-templates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3874,7 +3874,7 @@ export def "provisioning-templates list" [
 #
 # POST /provisioning-templates/{templateName}/versions
 # operationId: CreateProvisioningTemplateVersion
-export def "provisioning-templates-versions create" [
+export def "create-provisioning-template-version" [
   template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3925,7 +3925,7 @@ export def "provisioning-templates-versions create" [
 #
 # GET /provisioning-templates/{templateName}/versions
 # operationId: ListProvisioningTemplateVersions
-export def "provisioning-templates-versions list" [
+export def "list-provisioning-template-versions" [
   template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3974,7 +3974,7 @@ export def "provisioning-templates-versions list" [
 # POST /role-aliases/{roleAlias}
 # operationId: CreateRoleAlias
 # --tags item shape: {Key: any, Value?: any}
-export def "role-aliases create-alias" [
+export def "create-role-alias" [
   role_alias: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4025,7 +4025,7 @@ export def "role-aliases create-alias" [
 #
 # DELETE /role-aliases/{roleAlias}
 # operationId: DeleteRoleAlias
-export def "role-aliases delete-alias" [
+export def "delete-role-alias" [
   role_alias: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4070,7 +4070,7 @@ export def "role-aliases delete-alias" [
 #
 # GET /role-aliases/{roleAlias}
 # operationId: DescribeRoleAlias
-export def "role-aliases get-alias" [
+export def "describe-role-alias" [
   role_alias: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4115,7 +4115,7 @@ export def "role-aliases get-alias" [
 #
 # PUT /role-aliases/{roleAlias}
 # operationId: UpdateRoleAlias
-export def "role-aliases update-alias" [
+export def "update-role-alias" [
   role_alias: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4166,7 +4166,7 @@ export def "role-aliases update-alias" [
 # POST /audit/scheduledaudits/{scheduledAuditName}
 # operationId: CreateScheduledAudit
 # --tags item shape: {Key: any, Value?: any}
-export def "audit-scheduledaudits create-scheduled" [
+export def "create-scheduled-audit" [
   scheduled_audit_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4219,7 +4219,7 @@ export def "audit-scheduledaudits create-scheduled" [
 #
 # DELETE /audit/scheduledaudits/{scheduledAuditName}
 # operationId: DeleteScheduledAudit
-export def "audit-scheduledaudits delete-scheduled" [
+export def "delete-scheduled-audit" [
   scheduled_audit_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4264,7 +4264,7 @@ export def "audit-scheduledaudits delete-scheduled" [
 #
 # GET /audit/scheduledaudits/{scheduledAuditName}
 # operationId: DescribeScheduledAudit
-export def "audit-scheduledaudits get-scheduled" [
+export def "describe-scheduled-audit" [
   scheduled_audit_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4309,7 +4309,7 @@ export def "audit-scheduledaudits get-scheduled" [
 #
 # PATCH /audit/scheduledaudits/{scheduledAuditName}
 # operationId: UpdateScheduledAudit
-export def "audit-scheduledaudits update-scheduled" [
+export def "update-scheduled-audit" [
   scheduled_audit_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4364,7 +4364,7 @@ export def "audit-scheduledaudits update-scheduled" [
 # --behaviors item shape: {name: any, metric?: any, metricDimension?: any, criteria?: any, suppressAlerts?: any}
 # --additionalMetricsToRetainV2 item shape: {metric: any, metricDimension?: any}
 # --tags item shape: {Key: any, Value?: any}
-export def "security-profiles create" [
+export def "create-security-profile" [
   security_profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4418,7 +4418,7 @@ export def "security-profiles create" [
 #
 # DELETE /security-profiles/{securityProfileName}
 # operationId: DeleteSecurityProfile
-export def "security-profiles delete" [
+export def "delete-security-profile" [
   security_profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4465,7 +4465,7 @@ export def "security-profiles delete" [
 #
 # GET /security-profiles/{securityProfileName}
 # operationId: DescribeSecurityProfile
-export def "security-profiles get" [
+export def "describe-security-profile" [
   security_profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4512,7 +4512,7 @@ export def "security-profiles get" [
 # operationId: UpdateSecurityProfile
 # --behaviors item shape: {name: any, metric?: any, metricDimension?: any, criteria?: any, suppressAlerts?: any}
 # --additionalMetricsToRetainV2 item shape: {metric: any, metricDimension?: any}
-export def "security-profiles update" [
+export def "update-security-profile" [
   security_profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4572,7 +4572,7 @@ export def "security-profiles update" [
 # operationId: CreateStream
 # --files item shape: {fileId?: any, s3Location?: any}
 # --tags item shape: {Key: any, Value?: any}
-export def "streams create" [
+export def "create-stream" [
   stream_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4624,7 +4624,7 @@ export def "streams create" [
 #
 # DELETE /streams/{streamId}
 # operationId: DeleteStream
-export def "streams delete" [
+export def "delete-stream" [
   stream_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4669,7 +4669,7 @@ export def "streams delete" [
 #
 # GET /streams/{streamId}
 # operationId: DescribeStream
-export def "streams get" [
+export def "describe-stream" [
   stream_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4715,7 +4715,7 @@ export def "streams get" [
 # PUT /streams/{streamId}
 # operationId: UpdateStream
 # --files item shape: {fileId?: any, s3Location?: any}
-export def "streams update" [
+export def "update-stream" [
   stream_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4767,7 +4767,7 @@ export def "streams update" [
 # POST /things/{thingName}
 # operationId: CreateThing
 # --attributePayload shape: {attributes?: any, merge?: any}
-export def "things create-by-thing-name" [
+export def "create-thing" [
   thing_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4818,7 +4818,7 @@ export def "things create-by-thing-name" [
 #
 # DELETE /things/{thingName}
 # operationId: DeleteThing
-export def "things delete" [
+export def "delete-thing" [
   thing_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4865,7 +4865,7 @@ export def "things delete" [
 #
 # GET /things/{thingName}
 # operationId: DescribeThing
-export def "things get" [
+export def "describe-thing" [
   thing_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4911,7 +4911,7 @@ export def "things get" [
 # PATCH /things/{thingName}
 # operationId: UpdateThing
 # --attributePayload shape: {attributes?: any, merge?: any}
-export def "things update" [
+export def "update-thing" [
   thing_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4965,7 +4965,7 @@ export def "things update" [
 # operationId: CreateThingGroup
 # --thingGroupProperties shape: {thingGroupDescription?: any, attributePayload?: any}
 # --tags item shape: {Key: any, Value?: any}
-export def "thing-groups create" [
+export def "create-thing-group" [
   thing_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5016,7 +5016,7 @@ export def "thing-groups create" [
 #
 # DELETE /thing-groups/{thingGroupName}
 # operationId: DeleteThingGroup
-export def "thing-groups delete" [
+export def "delete-thing-group" [
   thing_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5063,7 +5063,7 @@ export def "thing-groups delete" [
 #
 # GET /thing-groups/{thingGroupName}
 # operationId: DescribeThingGroup
-export def "thing-groups get" [
+export def "describe-thing-group" [
   thing_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5109,7 +5109,7 @@ export def "thing-groups get" [
 # PATCH /thing-groups/{thingGroupName}
 # operationId: UpdateThingGroup
 # --thingGroupProperties shape: {thingGroupDescription?: any, attributePayload?: any}
-export def "thing-groups update" [
+export def "update-thing-group" [
   thing_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5161,7 +5161,7 @@ export def "thing-groups update" [
 # operationId: CreateThingType
 # --thingTypeProperties shape: {thingTypeDescription?: any, searchableAttributes?: any}
 # --tags item shape: {Key: any, Value?: any}
-export def "thing-types create" [
+export def "create-thing-type" [
   thing_type_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5211,7 +5211,7 @@ export def "thing-types create" [
 #
 # DELETE /thing-types/{thingTypeName}
 # operationId: DeleteThingType
-export def "thing-types delete" [
+export def "delete-thing-type" [
   thing_type_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5256,7 +5256,7 @@ export def "thing-types delete" [
 #
 # GET /thing-types/{thingTypeName}
 # operationId: DescribeThingType
-export def "thing-types get" [
+export def "describe-thing-type" [
   thing_type_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5302,7 +5302,7 @@ export def "thing-types get" [
 # POST /rules/{ruleName}
 # operationId: CreateTopicRule
 # --topicRulePayload shape: {sql?: any, description?: any, actions?: any, ruleDisabled?: any, awsIotSqlVersion?: any, errorAction?: any}
-export def "rules create-topic" [
+export def "create-topic-rule" [
   rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5352,7 +5352,7 @@ export def "rules create-topic" [
 #
 # DELETE /rules/{ruleName}
 # operationId: DeleteTopicRule
-export def "rules delete-topic" [
+export def "delete-topic-rule" [
   rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5397,7 +5397,7 @@ export def "rules delete-topic" [
 #
 # GET /rules/{ruleName}
 # operationId: GetTopicRule
-export def "rules get-topic" [
+export def "get-topic-rule" [
   rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5443,7 +5443,7 @@ export def "rules get-topic" [
 # PATCH /rules/{ruleName}
 # operationId: ReplaceTopicRule
 # --topicRulePayload shape: {sql?: any, description?: any, actions?: any, ruleDisabled?: any, awsIotSqlVersion?: any, errorAction?: any}
-export def "rules update-topic" [
+export def "replace-topic-rule" [
   rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5493,7 +5493,7 @@ export def "rules update-topic" [
 # POST /destinations
 # operationId: CreateTopicRuleDestination
 # --destinationConfiguration shape: {httpUrlConfiguration?: any, vpcConfiguration?: any}
-export def "destinations create-topic-rule" [
+export def "create-topic-rule-destination" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5540,7 +5540,7 @@ export def "destinations create-topic-rule" [
 #
 # GET /destinations
 # operationId: ListTopicRuleDestinations
-export def "destinations list-topic-rule" [
+export def "list-topic-rule-destinations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5586,7 +5586,7 @@ export def "destinations list-topic-rule" [
 #
 # PATCH /destinations
 # operationId: UpdateTopicRuleDestination
-export def "destinations update-topic-rule" [
+export def "update-topic-rule-destination" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5634,7 +5634,7 @@ export def "destinations update-topic-rule" [
 #
 # DELETE /audit/configuration
 # operationId: DeleteAccountAuditConfiguration
-export def "audit-configuration delete-account" [
+export def "delete-account-audit-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5679,7 +5679,7 @@ export def "audit-configuration delete-account" [
 #
 # GET /audit/configuration
 # operationId: DescribeAccountAuditConfiguration
-export def "audit-configuration get-account" [
+export def "describe-account-audit-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5722,7 +5722,7 @@ export def "audit-configuration get-account" [
 #
 # PATCH /audit/configuration
 # operationId: UpdateAccountAuditConfiguration
-export def "audit-configuration update-account" [
+export def "update-account-audit-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5772,7 +5772,7 @@ export def "audit-configuration update-account" [
 # POST /audit/suppressions/delete
 # operationId: DeleteAuditSuppression
 # --resourceIdentifier shape: {deviceCertificateId?: any, caCertificateId?: any, cognitoIdentityPoolId?: any, clientId?: any, policyVersionIdentifier?: any, account?: any, iamRoleArn?: any, roleAliasArn?: any, issuerCertificateIdentifier?: any, deviceCertificateArn?: any}
-export def "audit-suppressions-delete delete" [
+export def "delete-audit-suppression" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5820,7 +5820,7 @@ export def "audit-suppressions-delete delete" [
 #
 # DELETE /cacertificate/{caCertificateId}
 # operationId: DeleteCACertificate
-export def "cacertificate delete-ca-certificate" [
+export def "delete-ca-certificate" [
   ca_certificate_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5865,7 +5865,7 @@ export def "cacertificate delete-ca-certificate" [
 #
 # GET /cacertificate/{caCertificateId}
 # operationId: DescribeCACertificate
-export def "cacertificate get-ca-certificate" [
+export def "describe-ca-certificate" [
   ca_certificate_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5911,7 +5911,7 @@ export def "cacertificate get-ca-certificate" [
 # PUT /cacertificate/{caCertificateId}
 # operationId: UpdateCACertificate
 # --registrationConfig shape: {templateBody?: any, roleArn?: any, templateName?: any}
-export def "cacertificate update-ca-certificate" [
+export def "update-ca-certificate" [
   ca_certificate_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5964,7 +5964,7 @@ export def "cacertificate update-ca-certificate" [
 #
 # DELETE /certificates/{certificateId}
 # operationId: DeleteCertificate
-export def "certificates delete" [
+export def "delete-certificate" [
   certificate_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6011,7 +6011,7 @@ export def "certificates delete" [
 #
 # GET /certificates/{certificateId}
 # operationId: DescribeCertificate
-export def "certificates get" [
+export def "describe-certificate" [
   certificate_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6056,7 +6056,7 @@ export def "certificates get" [
 #
 # DELETE /things/{thingName}/jobs/{jobId}/executionNumber/{executionNumber}
 # operationId: DeleteJobExecution
-export def "things-jobs-execution-number delete" [
+export def "delete-job-execution" [
   thing_name: string
   job_id: string
   execution_number: int
@@ -6108,7 +6108,7 @@ export def "things-jobs-execution-number delete" [
 #
 # DELETE /policies/{policyName}/version/{policyVersionId}
 # operationId: DeletePolicyVersion
-export def "policies-version delete-policy" [
+export def "delete-policy-version" [
   policy_name: string
   policy_version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6155,7 +6155,7 @@ export def "policies-version delete-policy" [
 #
 # GET /policies/{policyName}/version/{policyVersionId}
 # operationId: GetPolicyVersion
-export def "policies-version get-policy" [
+export def "get-policy-version" [
   policy_name: string
   policy_version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6202,7 +6202,7 @@ export def "policies-version get-policy" [
 #
 # PATCH /policies/{policyName}/version/{policyVersionId}
 # operationId: SetDefaultPolicyVersion
-export def "policies-version update-default-policy" [
+export def "set-default-policy-version" [
   policy_name: string
   policy_version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6249,7 +6249,7 @@ export def "policies-version update-default-policy" [
 #
 # DELETE /provisioning-templates/{templateName}
 # operationId: DeleteProvisioningTemplate
-export def "provisioning-templates delete" [
+export def "delete-provisioning-template" [
   template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6294,7 +6294,7 @@ export def "provisioning-templates delete" [
 #
 # GET /provisioning-templates/{templateName}
 # operationId: DescribeProvisioningTemplate
-export def "provisioning-templates get" [
+export def "describe-provisioning-template" [
   template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6340,7 +6340,7 @@ export def "provisioning-templates get" [
 # PATCH /provisioning-templates/{templateName}
 # operationId: UpdateProvisioningTemplate
 # --preProvisioningHook shape: {payloadVersion?: any, targetArn?: any}
-export def "provisioning-templates update" [
+export def "update-provisioning-template" [
   template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6394,7 +6394,7 @@ export def "provisioning-templates update" [
 #
 # DELETE /provisioning-templates/{templateName}/versions/{versionId}
 # operationId: DeleteProvisioningTemplateVersion
-export def "provisioning-templates-versions delete" [
+export def "delete-provisioning-template-version" [
   template_name: string
   version_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6441,7 +6441,7 @@ export def "provisioning-templates-versions delete" [
 #
 # GET /provisioning-templates/{templateName}/versions/{versionId}
 # operationId: DescribeProvisioningTemplateVersion
-export def "provisioning-templates-versions get" [
+export def "describe-provisioning-template-version" [
   template_name: string
   version_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6488,7 +6488,7 @@ export def "provisioning-templates-versions get" [
 #
 # DELETE /registrationcode
 # operationId: DeleteRegistrationCode
-export def "registrationcode delete-registration-code" [
+export def "delete-registration-code" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6531,7 +6531,7 @@ export def "registrationcode delete-registration-code" [
 #
 # GET /registrationcode
 # operationId: GetRegistrationCode
-export def "registrationcode get-registration-code" [
+export def "get-registration-code" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6574,7 +6574,7 @@ export def "registrationcode get-registration-code" [
 #
 # DELETE /destinations/{arn}
 # operationId: DeleteTopicRuleDestination
-export def "destinations delete-topic-rule" [
+export def "delete-topic-rule-destination" [
   arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6619,7 +6619,7 @@ export def "destinations delete-topic-rule" [
 #
 # GET /destinations/{arn}
 # operationId: GetTopicRuleDestination
-export def "destinations get-topic-rule" [
+export def "get-topic-rule-destination" [
   arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6664,7 +6664,7 @@ export def "destinations get-topic-rule" [
 #
 # DELETE /v2LoggingLevel
 # operationId: DeleteV2LoggingLevel
-export def "v2-logging-level delete" [
+export def "delete-v2-logging-level" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6710,7 +6710,7 @@ export def "v2-logging-level delete" [
 #
 # POST /thing-types/{thingTypeName}/deprecate
 # operationId: DeprecateThingType
-export def "thing-types-deprecate create" [
+export def "deprecate-thing-type" [
   thing_type_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6759,7 +6759,7 @@ export def "thing-types-deprecate create" [
 #
 # GET /audit/findings/{findingId}
 # operationId: DescribeAuditFinding
-export def "audit-findings get" [
+export def "describe-audit-finding" [
   finding_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6804,7 +6804,7 @@ export def "audit-findings get" [
 #
 # GET /audit/mitigationactions/tasks/{taskId}
 # operationId: DescribeAuditMitigationActionsTask
-export def "audit-mitigationactions-tasks get-mitigation-actions" [
+export def "describe-audit-mitigation-actions-task" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6850,7 +6850,7 @@ export def "audit-mitigationactions-tasks get-mitigation-actions" [
 # POST /audit/mitigationactions/tasks/{taskId}
 # operationId: StartAuditMitigationActionsTask
 # --target shape: {auditTaskId?: any, findingIds?: any, auditCheckToReasonCodeFilter?: any}
-export def "audit-mitigationactions-tasks start-mitigation-actions" [
+export def "start-audit-mitigation-actions-task" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6902,7 +6902,7 @@ export def "audit-mitigationactions-tasks start-mitigation-actions" [
 # POST /audit/suppressions/describe
 # operationId: DescribeAuditSuppression
 # --resourceIdentifier shape: {deviceCertificateId?: any, caCertificateId?: any, cognitoIdentityPoolId?: any, clientId?: any, policyVersionIdentifier?: any, account?: any, iamRoleArn?: any, roleAliasArn?: any, issuerCertificateIdentifier?: any, deviceCertificateArn?: any}
-export def "audit-suppressions-describe get" [
+export def "describe-audit-suppression" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6950,7 +6950,7 @@ export def "audit-suppressions-describe get" [
 #
 # GET /audit/tasks/{taskId}
 # operationId: DescribeAuditTask
-export def "audit-tasks get" [
+export def "describe-audit-task" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6995,7 +6995,7 @@ export def "audit-tasks get" [
 #
 # GET /detect/mitigationactions/tasks/{taskId}
 # operationId: DescribeDetectMitigationActionsTask
-export def "detect-mitigationactions-tasks get-mitigation-actions" [
+export def "describe-detect-mitigation-actions-task" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7042,7 +7042,7 @@ export def "detect-mitigationactions-tasks get-mitigation-actions" [
 # operationId: StartDetectMitigationActionsTask
 # --target shape: {violationIds?: any, securityProfileName?: any, behaviorName?: any}
 # --violationEventOccurrenceRange shape: {startTime?: any, endTime?: any}
-export def "detect-mitigationactions-tasks start-mitigation-actions" [
+export def "start-detect-mitigation-actions-task" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7096,7 +7096,7 @@ export def "detect-mitigationactions-tasks start-mitigation-actions" [
 #
 # GET /endpoint
 # operationId: DescribeEndpoint
-export def "endpoint get" [
+export def "describe-endpoint" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7141,7 +7141,7 @@ export def "endpoint get" [
 #
 # GET /event-configurations
 # operationId: DescribeEventConfigurations
-export def "event-configurations get" [
+export def "describe-event-configurations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7184,7 +7184,7 @@ export def "event-configurations get" [
 #
 # PATCH /event-configurations
 # operationId: UpdateEventConfigurations
-export def "event-configurations update" [
+export def "update-event-configurations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7231,7 +7231,7 @@ export def "event-configurations update" [
 #
 # GET /indices/{indexName}
 # operationId: DescribeIndex
-export def "indices get-index" [
+export def "describe-index" [
   index_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7276,7 +7276,7 @@ export def "indices get-index" [
 #
 # GET /things/{thingName}/jobs/{jobId}
 # operationId: DescribeJobExecution
-export def "things-jobs get-execution" [
+export def "describe-job-execution" [
   thing_name: string
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7325,7 +7325,7 @@ export def "things-jobs get-execution" [
 #
 # GET /managed-job-templates/{templateName}
 # operationId: DescribeManagedJobTemplate
-export def "managed-job-templates get" [
+export def "describe-managed-job-template" [
   template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7372,7 +7372,7 @@ export def "managed-job-templates get" [
 #
 # GET /thing-registration-tasks/{taskId}
 # operationId: DescribeThingRegistrationTask
-export def "thing-registration-tasks get" [
+export def "describe-thing-registration-task" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7417,7 +7417,7 @@ export def "thing-registration-tasks get" [
 #
 # POST /rules/{ruleName}/disable
 # operationId: DisableTopicRule
-export def "rules-disable disable-topic" [
+export def "disable-topic-rule" [
   rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7462,7 +7462,7 @@ export def "rules-disable disable-topic" [
 #
 # POST /rules/{ruleName}/enable
 # operationId: EnableTopicRule
-export def "rules-enable enable-topic" [
+export def "enable-topic-rule" [
   rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7507,7 +7507,7 @@ export def "rules-enable enable-topic" [
 #
 # GET /behavior-model-training/summaries
 # operationId: GetBehaviorModelTrainingSummaries
-export def "behavior-model-training-summaries get" [
+export def "get-behavior-model-training-summaries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7555,7 +7555,7 @@ export def "behavior-model-training-summaries get" [
 # POST /indices/buckets
 # operationId: GetBucketsAggregation
 # --bucketsAggregationType shape: {termsAggregation?: any}
-export def "indices-buckets get-aggregation" [
+export def "get-buckets-aggregation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7606,7 +7606,7 @@ export def "indices-buckets get-aggregation" [
 #
 # POST /indices/cardinality
 # operationId: GetCardinality
-export def "indices-cardinality get" [
+export def "get-cardinality" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7656,7 +7656,7 @@ export def "indices-cardinality get" [
 #
 # POST /effective-policies
 # operationId: GetEffectivePolicies
-export def "effective-policies get" [
+export def "get-effective-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7706,7 +7706,7 @@ export def "effective-policies get" [
 #
 # GET /indexing/config
 # operationId: GetIndexingConfiguration
-export def "indexing-config get-configuration" [
+export def "get-indexing-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7751,7 +7751,7 @@ export def "indexing-config get-configuration" [
 # operationId: UpdateIndexingConfiguration
 # --thingIndexingConfiguration shape: {thingIndexingMode?: any, thingConnectivityIndexingMode?: any, deviceDefenderIndexingMode?: any, namedShadowIndexingMode?: any, managedFields?: any, customFields?: any, filter?: any}
 # --thingGroupIndexingConfiguration shape: {thingGroupIndexingMode?: any, managedFields?: any, customFields?: any}
-export def "indexing-config update-configuration" [
+export def "update-indexing-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7799,7 +7799,7 @@ export def "indexing-config update-configuration" [
 #
 # GET /jobs/{jobId}/job-document
 # operationId: GetJobDocument
-export def "jobs-job-document get" [
+export def "get-job-document" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7844,7 +7844,7 @@ export def "jobs-job-document get" [
 #
 # GET /loggingOptions
 # operationId: GetLoggingOptions
-export def "logging-options get" [
+export def "get-logging-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7888,7 +7888,7 @@ export def "logging-options get" [
 # POST /loggingOptions
 # operationId: SetLoggingOptions
 # --loggingOptionsPayload shape: {roleArn?: any, logLevel?: any}
-export def "logging-options update" [
+export def "set-logging-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7935,7 +7935,7 @@ export def "logging-options update" [
 #
 # POST /indices/percentiles
 # operationId: GetPercentiles
-export def "indices-percentiles get" [
+export def "get-percentiles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7986,7 +7986,7 @@ export def "indices-percentiles get" [
 #
 # POST /indices/statistics
 # operationId: GetStatistics
-export def "indices-statistics get" [
+export def "get-statistics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8036,7 +8036,7 @@ export def "indices-statistics get" [
 #
 # GET /v2LoggingOptions
 # operationId: GetV2LoggingOptions
-export def "v2-logging-options get" [
+export def "get-v2-logging-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8079,7 +8079,7 @@ export def "v2-logging-options get" [
 #
 # POST /v2LoggingOptions
 # operationId: SetV2LoggingOptions
-export def "v2-logging-options update" [
+export def "set-v2-logging-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8128,7 +8128,7 @@ export def "v2-logging-options update" [
 #
 # GET /active-violations
 # operationId: ListActiveViolations
-export def "active-violations list" [
+export def "list-active-violations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8179,7 +8179,7 @@ export def "active-violations list" [
 #
 # POST /attached-policies/{target}
 # operationId: ListAttachedPolicies
-export def "attached-policies list" [
+export def "list-attached-policies" [
   target: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8229,7 +8229,7 @@ export def "attached-policies list" [
 # POST /audit/findings
 # operationId: ListAuditFindings
 # --resourceIdentifier shape: {deviceCertificateId?: any, caCertificateId?: any, cognitoIdentityPoolId?: any, clientId?: any, policyVersionIdentifier?: any, account?: any, iamRoleArn?: any, roleAliasArn?: any, issuerCertificateIdentifier?: any, deviceCertificateArn?: any}
-export def "audit-findings list" [
+export def "list-audit-findings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8286,7 +8286,7 @@ export def "audit-findings list" [
 #
 # GET /audit/mitigationactions/executions
 # operationId: ListAuditMitigationActionsExecutions
-export def "audit-mitigationactions-executions list-mitigation-actions" [
+export def "list-audit-mitigation-actions-executions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8335,7 +8335,7 @@ export def "audit-mitigationactions-executions list-mitigation-actions" [
 #
 # GET /audit/mitigationactions/tasks
 # operationId: ListAuditMitigationActionsTasks
-export def "audit-mitigationactions-tasks list-mitigation-actions" [
+export def "list-audit-mitigation-actions-tasks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8387,7 +8387,7 @@ export def "audit-mitigationactions-tasks list-mitigation-actions" [
 # POST /audit/suppressions/list
 # operationId: ListAuditSuppressions
 # --resourceIdentifier shape: {deviceCertificateId?: any, caCertificateId?: any, cognitoIdentityPoolId?: any, clientId?: any, policyVersionIdentifier?: any, account?: any, iamRoleArn?: any, roleAliasArn?: any, issuerCertificateIdentifier?: any, deviceCertificateArn?: any}
-export def "audit-suppressions-list list" [
+export def "list-audit-suppressions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8441,7 +8441,7 @@ export def "audit-suppressions-list list" [
 #
 # GET /audit/tasks
 # operationId: ListAuditTasks
-export def "audit-tasks list" [
+export def "list-audit-tasks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8491,7 +8491,7 @@ export def "audit-tasks list" [
 #
 # GET /authorizers/
 # operationId: ListAuthorizers
-export def "authorizers list" [
+export def "list-authorizers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8539,7 +8539,7 @@ export def "authorizers list" [
 #
 # GET /billing-groups
 # operationId: ListBillingGroups
-export def "billing-groups list" [
+export def "list-billing-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8586,7 +8586,7 @@ export def "billing-groups list" [
 #
 # GET /cacertificates
 # operationId: ListCACertificates
-export def "cacertificates list-ca-certificates" [
+export def "list-ca-certificates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8634,7 +8634,7 @@ export def "cacertificates list-ca-certificates" [
 #
 # GET /certificates-by-ca/{caCertificateId}
 # operationId: ListCertificatesByCA
-export def "certificates-by-ca list" [
+export def "list-certificates-by-ca" [
   ca_certificate_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8683,7 +8683,7 @@ export def "certificates-by-ca list" [
 #
 # GET /custom-metrics
 # operationId: ListCustomMetrics
-export def "custom-metrics list" [
+export def "list-custom-metrics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8729,7 +8729,7 @@ export def "custom-metrics list" [
 #
 # GET /detect/mitigationactions/executions
 # operationId: ListDetectMitigationActionsExecutions
-export def "detect-mitigationactions-executions list-mitigation-actions" [
+export def "list-detect-mitigation-actions-executions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8780,7 +8780,7 @@ export def "detect-mitigationactions-executions list-mitigation-actions" [
 #
 # GET /detect/mitigationactions/tasks
 # operationId: ListDetectMitigationActionsTasks
-export def "detect-mitigationactions-tasks list-mitigation-actions" [
+export def "list-detect-mitigation-actions-tasks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8828,7 +8828,7 @@ export def "detect-mitigationactions-tasks list-mitigation-actions" [
 #
 # GET /dimensions
 # operationId: ListDimensions
-export def "dimensions list" [
+export def "list-dimensions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8874,7 +8874,7 @@ export def "dimensions list" [
 #
 # GET /domainConfigurations
 # operationId: ListDomainConfigurations
-export def "domain-configurations list" [
+export def "list-domain-configurations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8921,7 +8921,7 @@ export def "domain-configurations list" [
 #
 # GET /fleet-metrics
 # operationId: ListFleetMetrics
-export def "fleet-metrics list" [
+export def "list-fleet-metrics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8967,7 +8967,7 @@ export def "fleet-metrics list" [
 #
 # GET /indices
 # operationId: ListIndices
-export def "indices list" [
+export def "list-indices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9013,7 +9013,7 @@ export def "indices list" [
 #
 # GET /jobs/{jobId}/things
 # operationId: ListJobExecutionsForJob
-export def "jobs-things list-executions" [
+export def "list-job-executions-for-job" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9062,7 +9062,7 @@ export def "jobs-things list-executions" [
 #
 # GET /things/{thingName}/jobs
 # operationId: ListJobExecutionsForThing
-export def "things-jobs list-executions" [
+export def "list-job-executions-for-thing" [
   thing_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9113,7 +9113,7 @@ export def "things-jobs list-executions" [
 #
 # GET /job-templates
 # operationId: ListJobTemplates
-export def "job-templates list" [
+export def "list-job-templates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9159,7 +9159,7 @@ export def "job-templates list" [
 #
 # GET /jobs
 # operationId: ListJobs
-export def "jobs list" [
+export def "list-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9210,7 +9210,7 @@ export def "jobs list" [
 #
 # GET /managed-job-templates
 # operationId: ListManagedJobTemplates
-export def "managed-job-templates list" [
+export def "list-managed-job-templates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9257,7 +9257,7 @@ export def "managed-job-templates list" [
 #
 # GET /metric-values
 # operationId: ListMetricValues
-export def "metric-values list" [
+export def "list-metric-values" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9309,7 +9309,7 @@ export def "metric-values list" [
 #
 # GET /mitigationactions/actions
 # operationId: ListMitigationActions
-export def "mitigationactions-actions list-mitigation" [
+export def "list-mitigation-actions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9356,7 +9356,7 @@ export def "mitigationactions-actions list-mitigation" [
 #
 # GET /otaUpdates
 # operationId: ListOTAUpdates
-export def "ota-updates list" [
+export def "list-ota-updates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9403,7 +9403,7 @@ export def "ota-updates list" [
 #
 # GET /certificates-out-going
 # operationId: ListOutgoingCertificates
-export def "certificates-out-going list-outgoing" [
+export def "list-outgoing-certificates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9450,7 +9450,7 @@ export def "certificates-out-going list-outgoing" [
 #
 # GET /policies
 # operationId: ListPolicies
-export def "policies list" [
+export def "list-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9499,7 +9499,7 @@ export def "policies list" [
 # DEPRECATED
 # operationId: ListPolicyPrincipals
 @deprecated
-export def "policy-principals list" [
+export def "list-policy-principals" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9549,7 +9549,7 @@ export def "policy-principals list" [
 # DEPRECATED
 # operationId: ListPrincipalPolicies
 @deprecated
-export def "principal-policies list" [
+export def "list-principal-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9597,7 +9597,7 @@ export def "principal-policies list" [
 #
 # GET /principals/things
 # operationId: ListPrincipalThings
-export def "principals-things list" [
+export def "list-principal-things" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9644,7 +9644,7 @@ export def "principals-things list" [
 #
 # GET /audit/relatedResources
 # operationId: ListRelatedResourcesForAuditFinding
-export def "audit-related-resources list-for-finding" [
+export def "list-related-resources-for-audit-finding" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9691,7 +9691,7 @@ export def "audit-related-resources list-for-finding" [
 #
 # GET /role-aliases
 # operationId: ListRoleAliases
-export def "role-aliases list" [
+export def "list-role-aliases" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9738,7 +9738,7 @@ export def "role-aliases list" [
 #
 # GET /audit/scheduledaudits
 # operationId: ListScheduledAudits
-export def "audit-scheduledaudits list-scheduled" [
+export def "list-scheduled-audits" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9784,7 +9784,7 @@ export def "audit-scheduledaudits list-scheduled" [
 #
 # GET /security-profiles
 # operationId: ListSecurityProfiles
-export def "security-profiles list" [
+export def "list-security-profiles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9832,7 +9832,7 @@ export def "security-profiles list" [
 #
 # GET /security-profiles-for-target
 # operationId: ListSecurityProfilesForTarget
-export def "security-profiles-for-target list" [
+export def "list-security-profiles-for-target" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9880,7 +9880,7 @@ export def "security-profiles-for-target list" [
 #
 # GET /streams
 # operationId: ListStreams
-export def "streams list" [
+export def "list-streams" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9927,7 +9927,7 @@ export def "streams list" [
 #
 # GET /tags
 # operationId: ListTagsForResource
-export def "tags list-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9973,7 +9973,7 @@ export def "tags list-for-resource" [
 #
 # POST /policy-targets/{policyName}
 # operationId: ListTargetsForPolicy
-export def "policy-targets list" [
+export def "list-targets-for-policy" [
   policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10021,7 +10021,7 @@ export def "policy-targets list" [
 #
 # GET /security-profiles/{securityProfileName}/targets
 # operationId: ListTargetsForSecurityProfile
-export def "security-profiles-targets list" [
+export def "list-targets-for-security-profile" [
   security_profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10069,7 +10069,7 @@ export def "security-profiles-targets list" [
 #
 # GET /thing-groups
 # operationId: ListThingGroups
-export def "thing-groups list" [
+export def "list-thing-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10118,7 +10118,7 @@ export def "thing-groups list" [
 #
 # GET /things/{thingName}/thing-groups
 # operationId: ListThingGroupsForThing
-export def "things-thing-groups list" [
+export def "list-thing-groups-for-thing" [
   thing_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10166,7 +10166,7 @@ export def "things-thing-groups list" [
 #
 # GET /things/{thingName}/principals
 # operationId: ListThingPrincipals
-export def "things-principals list" [
+export def "list-thing-principals" [
   thing_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10214,7 +10214,7 @@ export def "things-principals list" [
 #
 # GET /thing-registration-tasks/{taskId}/reports
 # operationId: ListThingRegistrationTaskReports
-export def "thing-registration-tasks-reports list" [
+export def "list-thing-registration-task-reports" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10263,7 +10263,7 @@ export def "thing-registration-tasks-reports list" [
 #
 # GET /thing-registration-tasks
 # operationId: ListThingRegistrationTasks
-export def "thing-registration-tasks list" [
+export def "list-thing-registration-tasks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10310,7 +10310,7 @@ export def "thing-registration-tasks list" [
 #
 # POST /thing-registration-tasks
 # operationId: StartThingRegistrationTask
-export def "thing-registration-tasks start" [
+export def "start-thing-registration-task" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10360,7 +10360,7 @@ export def "thing-registration-tasks start" [
 #
 # GET /thing-types
 # operationId: ListThingTypes
-export def "thing-types list" [
+export def "list-thing-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10407,7 +10407,7 @@ export def "thing-types list" [
 #
 # GET /things
 # operationId: ListThings
-export def "things list" [
+export def "list-things" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10457,7 +10457,7 @@ export def "things list" [
 #
 # POST /things
 # operationId: RegisterThing
-export def "things create" [
+export def "register-thing" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10505,7 +10505,7 @@ export def "things create" [
 #
 # GET /billing-groups/{billingGroupName}/things
 # operationId: ListThingsInBillingGroup
-export def "billing-groups-things list" [
+export def "list-things-in-billing-group" [
   billing_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10553,7 +10553,7 @@ export def "billing-groups-things list" [
 #
 # GET /thing-groups/{thingGroupName}/things
 # operationId: ListThingsInThingGroup
-export def "thing-groups-things list" [
+export def "list-things-in-thing-group" [
   thing_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10602,7 +10602,7 @@ export def "thing-groups-things list" [
 #
 # GET /rules
 # operationId: ListTopicRules
-export def "rules list-topic" [
+export def "list-topic-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10650,7 +10650,7 @@ export def "rules list-topic" [
 #
 # GET /v2LoggingLevel
 # operationId: ListV2LoggingLevels
-export def "v2-logging-level list" [
+export def "list-v2-logging-levels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10698,7 +10698,7 @@ export def "v2-logging-level list" [
 # POST /v2LoggingLevel
 # operationId: SetV2LoggingLevel
 # --logTarget shape: {targetType?: any, targetName?: any}
-export def "v2-logging-level update" [
+export def "set-v2-logging-level" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10746,7 +10746,7 @@ export def "v2-logging-level update" [
 #
 # GET /violation-events
 # operationId: ListViolationEvents
-export def "violation-events list" [
+export def "list-violation-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10799,7 +10799,7 @@ export def "violation-events list" [
 #
 # POST /violations/verification-state/{violationId}
 # operationId: PutVerificationStateOnViolation
-export def "violations-verification-state update" [
+export def "put-verification-state-on-violation" [
   violation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10851,7 +10851,7 @@ export def "violations-verification-state update" [
 # operationId: RegisterCACertificate
 # --registrationConfig shape: {templateBody?: any, roleArn?: any, templateName?: any}
 # --tags item shape: {Key: any, Value?: any}
-export def "cacertificate create-ca-certificate" [
+export def "register-ca-certificate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10905,7 +10905,7 @@ export def "cacertificate create-ca-certificate" [
 #
 # POST /certificate/register
 # operationId: RegisterCertificate
-export def "certificate-register create" [
+export def "register-certificate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10956,7 +10956,7 @@ export def "certificate-register create" [
 #
 # POST /certificate/register-no-ca
 # operationId: RegisterCertificateWithoutCA
-export def "certificate-register-no-ca create-without" [
+export def "register-certificate-without-ca" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11004,7 +11004,7 @@ export def "certificate-register-no-ca create-without" [
 #
 # PATCH /reject-certificate-transfer/{certificateId}
 # operationId: RejectCertificateTransfer
-export def "reject-certificate-transfer reject" [
+export def "reject-certificate-transfer" [
   certificate_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11053,7 +11053,7 @@ export def "reject-certificate-transfer reject" [
 #
 # PUT /billing-groups/removeThingFromBillingGroup
 # operationId: RemoveThingFromBillingGroup
-export def "billing-groups-remove-thing-from-billing-group delete" [
+export def "remove-thing-from-billing-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11103,7 +11103,7 @@ export def "billing-groups-remove-thing-from-billing-group delete" [
 #
 # PUT /thing-groups/removeThingFromThingGroup
 # operationId: RemoveThingFromThingGroup
-export def "thing-groups-remove-thing-from-thing-group delete" [
+export def "remove-thing-from-thing-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11153,7 +11153,7 @@ export def "thing-groups-remove-thing-from-thing-group delete" [
 #
 # POST /indices/search
 # operationId: SearchIndex
-export def "indices-search list-index" [
+export def "search-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11204,7 +11204,7 @@ export def "indices-search list-index" [
 #
 # POST /audit/tasks
 # operationId: StartOnDemandAuditTask
-export def "audit-tasks start-on-demand" [
+export def "start-on-demand-audit-task" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11251,7 +11251,7 @@ export def "audit-tasks start-on-demand" [
 #
 # PUT /thing-registration-tasks/{taskId}/cancel
 # operationId: StopThingRegistrationTask
-export def "thing-registration-tasks-cancel stop" [
+export def "stop-thing-registration-task" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11297,7 +11297,7 @@ export def "thing-registration-tasks-cancel stop" [
 # POST /tags
 # operationId: TagResource
 # --tags item shape: {Key: any, Value?: any}
-export def "tags tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11346,7 +11346,7 @@ export def "tags tag-resource" [
 # POST /test-authorization
 # operationId: TestAuthorization
 # --authInfos item shape: {actionType?: any, resources: any}
-export def "test-authorization test" [
+export def "test-authorization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11402,7 +11402,7 @@ export def "test-authorization test" [
 # --httpContext shape: {headers?: any, queryString?: any}
 # --mqttContext shape: {username?: any, password?: any, clientId?: any}
 # --tlsContext shape: {serverName?: any}
-export def "authorizer-test test-invoke" [
+export def "test-invoke-authorizer" [
   authorizer_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11455,7 +11455,7 @@ export def "authorizer-test test-invoke" [
 #
 # PATCH /transfer-certificate/{certificateId}
 # operationId: TransferCertificate
-export def "transfer-certificate update" [
+export def "transfer-certificate" [
   certificate_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11506,7 +11506,7 @@ export def "transfer-certificate update" [
 #
 # POST /untag
 # operationId: UntagResource
-export def "untag untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11555,7 +11555,7 @@ export def "untag untag-resource" [
 # PATCH /audit/suppressions/update
 # operationId: UpdateAuditSuppression
 # --resourceIdentifier shape: {deviceCertificateId?: any, caCertificateId?: any, cognitoIdentityPoolId?: any, clientId?: any, policyVersionIdentifier?: any, account?: any, iamRoleArn?: any, roleAliasArn?: any, issuerCertificateIdentifier?: any, deviceCertificateArn?: any}
-export def "audit-suppressions-update update" [
+export def "update-audit-suppression" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11606,7 +11606,7 @@ export def "audit-suppressions-update update" [
 #
 # PUT /certificates/{certificateId}
 # operationId: UpdateCertificate
-export def "certificates update" [
+export def "update-certificate" [
   certificate_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11653,7 +11653,7 @@ export def "certificates update" [
 #
 # PUT /thing-groups/updateThingGroupsForThing
 # operationId: UpdateThingGroupsForThing
-export def "thing-groups-update-thing-groups-for-thing update" [
+export def "update-thing-groups-for-thing" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11704,7 +11704,7 @@ export def "thing-groups-update-thing-groups-for-thing update" [
 # POST /security-profile-behaviors/validate
 # operationId: ValidateSecurityProfileBehaviors
 # --behaviors item shape: {name: any, metric?: any, metricDimension?: any, criteria?: any, suppressAlerts?: any}
-export def "security-profile-behaviors-validate validate" [
+export def "validate-security-profile-behaviors" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -110,7 +110,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-sql-virtual-clusters list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "virtual-clusters-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -134,7 +134,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Sql/virtualClusters
 # operationId: VirtualClusters_List
-export def "subscriptions-providers-microsoft-sql-virtual-clusters list" [
+export def "virtual-clusters-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -172,7 +172,7 @@ export def "subscriptions-providers-microsoft-sql-virtual-clusters list" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/virtualClusters
 # operationId: VirtualClusters_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-clusters list" [
+export def "virtual-clusters-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -212,7 +212,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-cluste
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/virtualClusters/{virtualClusterName}
 # operationId: VirtualClusters_Delete
-export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-clusters delete" [
+export def "virtual-clusters-delete" [
   subscription_id: string
   resource_group_name: string
   virtual_cluster_name: string
@@ -254,7 +254,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-cluste
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/virtualClusters/{virtualClusterName}
 # operationId: VirtualClusters_Get
-export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-clusters get" [
+export def "virtual-clusters-get" [
   subscription_id: string
   resource_group_name: string
   virtual_cluster_name: string
@@ -297,7 +297,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-cluste
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/virtualClusters/{virtualClusterName}
 # operationId: VirtualClusters_Update
 # --properties shape: {family?: string}
-export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-clusters update" [
+export def "virtual-clusters-update" [
   subscription_id: string
   resource_group_name: string
   virtual_cluster_name: string

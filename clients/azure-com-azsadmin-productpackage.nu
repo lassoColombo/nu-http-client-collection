@@ -110,7 +110,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-deployment-admin-locations-global-product-packages list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "product-packages-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -134,7 +134,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Deployment.Admin/locations/global/productPackages
 # operationId: ProductPackages_List
-export def "subscriptions-providers-microsoft-deployment-admin-locations-global-product-packages list" [
+export def "product-packages-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -172,7 +172,7 @@ export def "subscriptions-providers-microsoft-deployment-admin-locations-global-
 #
 # DELETE /subscriptions/{subscriptionId}/providers/Microsoft.Deployment.Admin/locations/global/productPackages/{productId}
 # operationId: ProductPackages_Delete
-export def "subscriptions-providers-microsoft-deployment-admin-locations-global-product-packages delete" [
+export def "product-packages-delete" [
   subscription_id: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -212,7 +212,7 @@ export def "subscriptions-providers-microsoft-deployment-admin-locations-global-
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Deployment.Admin/locations/global/productPackages/{productId}
 # operationId: ProductPackages_Get
-export def "subscriptions-providers-microsoft-deployment-admin-locations-global-product-packages get" [
+export def "product-packages-get" [
   subscription_id: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -252,7 +252,7 @@ export def "subscriptions-providers-microsoft-deployment-admin-locations-global-
 #
 # PUT /subscriptions/{subscriptionId}/providers/Microsoft.Deployment.Admin/locations/global/productPackages/{productId}
 # operationId: ProductPackages_Create
-export def "subscriptions-providers-microsoft-deployment-admin-locations-global-product-packages create" [
+export def "product-packages-create" [
   subscription_id: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL

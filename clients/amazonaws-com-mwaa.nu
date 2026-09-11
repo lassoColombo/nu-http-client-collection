@@ -124,7 +124,7 @@ def webserver-access-mode-completer [] { ["PRIVATE_ONLY" "PUBLIC_ONLY"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "clitoken create-cli-token" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-cli-token" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -148,7 +148,7 @@ export def commands []: nothing -> table {
 #
 # POST /clitoken/{Name}
 # operationId: CreateCliToken
-export def "clitoken create-cli-token" [
+export def "create-cli-token" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -195,7 +195,7 @@ export def "clitoken create-cli-token" [
 # operationId: CreateEnvironment
 # --LoggingConfiguration shape: {DagProcessingLogs?: any, SchedulerLogs?: any, TaskLogs?: any, WebserverLogs?: any, WorkerLogs?: any}
 # --NetworkConfiguration shape: {SecurityGroupIds?: any, SubnetIds?: any}
-export def "environments create" [
+export def "create-environment" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -264,7 +264,7 @@ export def "environments create" [
 #
 # DELETE /environments/{Name}
 # operationId: DeleteEnvironment
-export def "environments delete" [
+export def "delete-environment" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -309,7 +309,7 @@ export def "environments delete" [
 #
 # GET /environments/{Name}
 # operationId: GetEnvironment
-export def "environments get" [
+export def "get-environment" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -356,7 +356,7 @@ export def "environments get" [
 # operationId: UpdateEnvironment
 # --LoggingConfiguration shape: {DagProcessingLogs?: any, SchedulerLogs?: any, TaskLogs?: any, WebserverLogs?: any, WorkerLogs?: any}
 # --NetworkConfiguration shape: {SecurityGroupIds?: any}
-export def "environments update" [
+export def "update-environment" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -423,7 +423,7 @@ export def "environments update" [
 #
 # POST /webtoken/{Name}
 # operationId: CreateWebLoginToken
-export def "webtoken create-web-login-token" [
+export def "create-web-login-token" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -468,7 +468,7 @@ export def "webtoken create-web-login-token" [
 #
 # GET /environments
 # operationId: ListEnvironments
-export def "environments list" [
+export def "list-environments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -514,7 +514,7 @@ export def "environments list" [
 #
 # GET /tags/{ResourceArn}
 # operationId: ListTagsForResource
-export def "tags list-for-resource" [
+export def "list-tags-for-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -559,7 +559,7 @@ export def "tags list-for-resource" [
 #
 # POST /tags/{ResourceArn}
 # operationId: TagResource
-export def "tags tag-resource" [
+export def "tag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -609,7 +609,7 @@ export def "tags tag-resource" [
 # POST /metrics/environments/{EnvironmentName}
 # operationId: PublishMetrics
 # --MetricData item shape: {Dimensions?: any, MetricName: any, StatisticValues?: any, Timestamp: any, Unit?: any, Value?: any}
-export def "metrics-environments publish" [
+export def "publish-metrics" [
   environment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -658,7 +658,7 @@ export def "metrics-environments publish" [
 #
 # DELETE /tags/{ResourceArn}
 # operationId: UntagResource
-export def "tags untag-resource" [
+export def "untag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

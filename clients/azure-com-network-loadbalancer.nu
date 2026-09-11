@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-network-load-balancers list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "load-balancers-list-all" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/loadBalancers
 # operationId: LoadBalancers_ListAll
-export def "subscriptions-providers-microsoft-network-load-balancers list" [
+export def "load-balancers-list-all" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -178,7 +178,7 @@ export def "subscriptions-providers-microsoft-network-load-balancers list" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/loadBalancers
 # operationId: LoadBalancers_List
-export def "subscriptions-resource-groups-providers-microsoft-network-load-balancers list" [
+export def "load-balancers-list" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -218,7 +218,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-load-balan
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/loadBalancers/{loadBalancerName}
 # operationId: LoadBalancers_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-load-balancers delete" [
+export def "load-balancers-delete" [
   subscription_id: string
   resource_group_name: string
   load_balancer_name: string
@@ -260,7 +260,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-load-balan
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/loadBalancers/{loadBalancerName}
 # operationId: LoadBalancers_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-load-balancers get" [
+export def "load-balancers-get" [
   subscription_id: string
   resource_group_name: string
   load_balancer_name: string
@@ -303,7 +303,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-load-balan
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/loadBalancers/{loadBalancerName}
 # operationId: LoadBalancers_UpdateTags
-export def "subscriptions-resource-groups-providers-microsoft-network-load-balancers update-tags" [
+export def "load-balancers-update-tags" [
   subscription_id: string
   resource_group_name: string
   load_balancer_name: string
@@ -351,7 +351,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-load-balan
 # operationId: LoadBalancers_CreateOrUpdate
 # --properties shape: {backendAddressPools?: list, frontendIPConfigurations?: list, inboundNatPools?: list, inboundNatRules?: list, loadBalancingRules?: list, outboundRules?: list, probes?: list, resourceGuid?: string}
 # --sku shape: {name?: "Basic"|"Standard"}
-export def "subscriptions-resource-groups-providers-microsoft-network-load-balancers create-or-update" [
+export def "load-balancers-create-or-update" [
   subscription_id: string
   resource_group_name: string
   load_balancer_name: string
@@ -402,7 +402,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-load-balan
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/loadBalancers/{loadBalancerName}/backendAddressPools
 # operationId: LoadBalancerBackendAddressPools_List
-export def "subscriptions-resource-groups-providers-microsoft-network-load-balancers-backend-address-pools list" [
+export def "load-balancer-backend-address-pools-list" [
   subscription_id: string
   resource_group_name: string
   load_balancer_name: string
@@ -444,7 +444,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-load-balan
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/loadBalancers/{loadBalancerName}/backendAddressPools/{backendAddressPoolName}
 # operationId: LoadBalancerBackendAddressPools_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-load-balancers-backend-address-pools get" [
+export def "load-balancer-backend-address-pools-get" [
   subscription_id: string
   resource_group_name: string
   load_balancer_name: string
@@ -488,7 +488,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-load-balan
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/loadBalancers/{loadBalancerName}/frontendIPConfigurations
 # operationId: LoadBalancerFrontendIPConfigurations_List
-export def "subscriptions-resource-groups-providers-microsoft-network-load-balancers-frontend-ip-configurations list" [
+export def "load-balancer-frontend-ip-configurations-list" [
   subscription_id: string
   resource_group_name: string
   load_balancer_name: string
@@ -530,7 +530,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-load-balan
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/loadBalancers/{loadBalancerName}/frontendIPConfigurations/{frontendIPConfigurationName}
 # operationId: LoadBalancerFrontendIPConfigurations_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-load-balancers-frontend-ip-configurations get" [
+export def "load-balancer-frontend-ip-configurations-get" [
   subscription_id: string
   resource_group_name: string
   load_balancer_name: string
@@ -574,7 +574,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-load-balan
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/loadBalancers/{loadBalancerName}/inboundNatRules
 # operationId: InboundNatRules_List
-export def "subscriptions-resource-groups-providers-microsoft-network-load-balancers-inbound-nat-rules list" [
+export def "inbound-nat-rules-list" [
   subscription_id: string
   resource_group_name: string
   load_balancer_name: string
@@ -616,7 +616,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-load-balan
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/loadBalancers/{loadBalancerName}/inboundNatRules/{inboundNatRuleName}
 # operationId: InboundNatRules_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-load-balancers-inbound-nat-rules delete" [
+export def "inbound-nat-rules-delete" [
   subscription_id: string
   resource_group_name: string
   load_balancer_name: string
@@ -660,7 +660,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-load-balan
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/loadBalancers/{loadBalancerName}/inboundNatRules/{inboundNatRuleName}
 # operationId: InboundNatRules_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-load-balancers-inbound-nat-rules get" [
+export def "inbound-nat-rules-get" [
   subscription_id: string
   resource_group_name: string
   load_balancer_name: string
@@ -706,7 +706,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-load-balan
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/loadBalancers/{loadBalancerName}/inboundNatRules/{inboundNatRuleName}
 # operationId: InboundNatRules_CreateOrUpdate
 # --properties shape: {backendPort?: int, enableFloatingIP?: bool, enableTcpReset?: bool, frontendIPConfiguration?: any, frontendPort?: int, idleTimeoutInMinutes?: int, protocol?: "Udp"|"Tcp"|"All"}
-export def "subscriptions-resource-groups-providers-microsoft-network-load-balancers-inbound-nat-rules create-or-update" [
+export def "inbound-nat-rules-create-or-update" [
   subscription_id: string
   resource_group_name: string
   load_balancer_name: string
@@ -757,7 +757,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-load-balan
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/loadBalancers/{loadBalancerName}/loadBalancingRules
 # operationId: LoadBalancerLoadBalancingRules_List
-export def "subscriptions-resource-groups-providers-microsoft-network-load-balancers-load-balancing-rules list" [
+export def "load-balancer-load-balancing-rules-list" [
   subscription_id: string
   resource_group_name: string
   load_balancer_name: string
@@ -799,7 +799,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-load-balan
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/loadBalancers/{loadBalancerName}/loadBalancingRules/{loadBalancingRuleName}
 # operationId: LoadBalancerLoadBalancingRules_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-load-balancers-load-balancing-rules get" [
+export def "load-balancer-load-balancing-rules-get" [
   subscription_id: string
   resource_group_name: string
   load_balancer_name: string
@@ -843,7 +843,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-load-balan
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/loadBalancers/{loadBalancerName}/networkInterfaces
 # operationId: LoadBalancerNetworkInterfaces_List
-export def "subscriptions-resource-groups-providers-microsoft-network-load-balancers-network-interfaces list" [
+export def "load-balancer-network-interfaces-list" [
   subscription_id: string
   resource_group_name: string
   load_balancer_name: string
@@ -885,7 +885,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-load-balan
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/loadBalancers/{loadBalancerName}/outboundRules
 # operationId: LoadBalancerOutboundRules_List
-export def "subscriptions-resource-groups-providers-microsoft-network-load-balancers-outbound-rules list" [
+export def "load-balancer-outbound-rules-list" [
   subscription_id: string
   resource_group_name: string
   load_balancer_name: string
@@ -927,7 +927,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-load-balan
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/loadBalancers/{loadBalancerName}/outboundRules/{outboundRuleName}
 # operationId: LoadBalancerOutboundRules_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-load-balancers-outbound-rules get" [
+export def "load-balancer-outbound-rules-get" [
   subscription_id: string
   resource_group_name: string
   load_balancer_name: string
@@ -971,7 +971,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-load-balan
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/loadBalancers/{loadBalancerName}/probes
 # operationId: LoadBalancerProbes_List
-export def "subscriptions-resource-groups-providers-microsoft-network-load-balancers-probes list" [
+export def "load-balancer-probes-list" [
   subscription_id: string
   resource_group_name: string
   load_balancer_name: string
@@ -1013,7 +1013,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-load-balan
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/loadBalancers/{loadBalancerName}/probes/{probeName}
 # operationId: LoadBalancerProbes_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-load-balancers-probes get" [
+export def "load-balancer-probes-get" [
   subscription_id: string
   resource_group_name: string
   load_balancer_name: string

@@ -135,7 +135,7 @@ def change-status-completer [] { ["added" "changeStatusUnspecified" "deleted" "n
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "tagmanager-accounts list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "tagmanager-accounts-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -159,7 +159,7 @@ export def commands []: nothing -> table {
 #
 # GET /tagmanager/v2/accounts
 # operationId: tagmanager.accounts.list
-export def "tagmanager-accounts list" [
+export def "tagmanager-accounts-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -207,7 +207,7 @@ export def "tagmanager-accounts list" [
 #
 # GET /tagmanager/v2/accounts/containers:lookup
 # operationId: tagmanager.accounts.containers.lookup
-export def "tagmanager-accounts-containers-lookup get" [
+export def "tagmanager-accounts-containers-lookup" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -254,7 +254,7 @@ export def "tagmanager-accounts-containers-lookup get" [
 #
 # GET /tagmanager/v2/{parent}/built_in_variables
 # operationId: tagmanager.accounts.containers.workspaces.built_in_variables.list
-export def "tagmanager-built-in-variables list" [
+export def "tagmanager-accounts-containers-workspaces-built-in-variables-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -303,7 +303,7 @@ export def "tagmanager-built-in-variables list" [
 #
 # POST /tagmanager/v2/{parent}/built_in_variables
 # operationId: tagmanager.accounts.containers.workspaces.built_in_variables.create
-export def "tagmanager-built-in-variables create" [
+export def "tagmanager-accounts-containers-workspaces-built-in-variables-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -352,7 +352,7 @@ export def "tagmanager-built-in-variables create" [
 #
 # GET /tagmanager/v2/{parent}/clients
 # operationId: tagmanager.accounts.containers.workspaces.clients.list
-export def "tagmanager-clients list" [
+export def "tagmanager-accounts-containers-workspaces-clients-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -402,7 +402,7 @@ export def "tagmanager-clients list" [
 # POST /tagmanager/v2/{parent}/clients
 # operationId: tagmanager.accounts.containers.workspaces.clients.create
 # --parameter item shape: {key?: string, list?: list, map?: list, type?: "typeUnspecified"|"template"|"integer"|"boolean"|"list"|"map"|"triggerReference"|"tagReference", value?: string}
-export def "tagmanager-clients create" [
+export def "tagmanager-accounts-containers-workspaces-clients-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -466,7 +466,7 @@ export def "tagmanager-clients create" [
 #
 # GET /tagmanager/v2/{parent}/containers
 # operationId: tagmanager.accounts.containers.list
-export def "tagmanager-containers list" [
+export def "tagmanager-accounts-containers-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -516,7 +516,7 @@ export def "tagmanager-containers list" [
 # POST /tagmanager/v2/{parent}/containers
 # operationId: tagmanager.accounts.containers.create
 # --features shape: {supportBuiltInVariables?: bool, supportClients?: bool, supportEnvironments?: bool, supportFolders?: bool, supportGtagConfigs?: bool, supportTags?: bool, supportTemplates?: bool, supportTriggers?: bool, supportUserPermissions?: bool, supportVariables?: bool, supportVersions?: bool, supportWorkspaces?: bool, supportZones?: bool}
-export def "tagmanager-containers create" [
+export def "tagmanager-accounts-containers-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -580,7 +580,7 @@ export def "tagmanager-containers create" [
 #
 # GET /tagmanager/v2/{parent}/destinations
 # operationId: tagmanager.accounts.containers.destinations.list
-export def "tagmanager-destinations list" [
+export def "tagmanager-accounts-containers-destinations-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -628,7 +628,7 @@ export def "tagmanager-destinations list" [
 #
 # POST /tagmanager/v2/{parent}/destinations:link
 # operationId: tagmanager.accounts.containers.destinations.link
-export def "tagmanager-destinations-link create" [
+export def "tagmanager-accounts-containers-destinations-link" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -678,7 +678,7 @@ export def "tagmanager-destinations-link create" [
 #
 # GET /tagmanager/v2/{parent}/environments
 # operationId: tagmanager.accounts.containers.environments.list
-export def "tagmanager-environments list" [
+export def "tagmanager-accounts-containers-environments-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -727,7 +727,7 @@ export def "tagmanager-environments list" [
 #
 # POST /tagmanager/v2/{parent}/environments
 # operationId: tagmanager.accounts.containers.environments.create
-export def "tagmanager-environments create" [
+export def "tagmanager-accounts-containers-environments-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -793,7 +793,7 @@ export def "tagmanager-environments create" [
 #
 # GET /tagmanager/v2/{parent}/folders
 # operationId: tagmanager.accounts.containers.workspaces.folders.list
-export def "tagmanager-folders list" [
+export def "tagmanager-accounts-containers-workspaces-folders-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -842,7 +842,7 @@ export def "tagmanager-folders list" [
 #
 # POST /tagmanager/v2/{parent}/folders
 # operationId: tagmanager.accounts.containers.workspaces.folders.create
-export def "tagmanager-folders create" [
+export def "tagmanager-accounts-containers-workspaces-folders-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -902,7 +902,7 @@ export def "tagmanager-folders create" [
 #
 # GET /tagmanager/v2/{parent}/gtag_config
 # operationId: tagmanager.accounts.containers.workspaces.gtag_config.list
-export def "tagmanager-gtag-config list" [
+export def "tagmanager-accounts-containers-workspaces-gtag-config-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -952,7 +952,7 @@ export def "tagmanager-gtag-config list" [
 # POST /tagmanager/v2/{parent}/gtag_config
 # operationId: tagmanager.accounts.containers.workspaces.gtag_config.create
 # --parameter item shape: {key?: string, list?: list, map?: list, type?: "typeUnspecified"|"template"|"integer"|"boolean"|"list"|"map"|"triggerReference"|"tagReference", value?: string}
-export def "tagmanager-gtag-config create" [
+export def "tagmanager-accounts-containers-workspaces-gtag-config-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1012,7 +1012,7 @@ export def "tagmanager-gtag-config create" [
 #
 # GET /tagmanager/v2/{parent}/tags
 # operationId: tagmanager.accounts.containers.workspaces.tags.list
-export def "tagmanager-tags list" [
+export def "tagmanager-accounts-containers-workspaces-tags-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1067,7 +1067,7 @@ export def "tagmanager-tags list" [
 # --priority shape: {key?: string, list?: list, map?: list, type?: "typeUnspecified"|"template"|"integer"|"boolean"|"list"|"map"|"triggerReference"|"tagReference", value?: string}
 # --setupTag item shape: {stopOnSetupFailure?: bool, tagName?: string}
 # --teardownTag item shape: {stopTeardownOnFailure?: bool, tagName?: string}
-export def "tagmanager-tags create" [
+export def "tagmanager-accounts-containers-workspaces-tags-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1145,7 +1145,7 @@ export def "tagmanager-tags create" [
 #
 # GET /tagmanager/v2/{parent}/templates
 # operationId: tagmanager.accounts.containers.workspaces.templates.list
-export def "tagmanager-templates list" [
+export def "tagmanager-accounts-containers-workspaces-templates-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1195,7 +1195,7 @@ export def "tagmanager-templates list" [
 # POST /tagmanager/v2/{parent}/templates
 # operationId: tagmanager.accounts.containers.workspaces.templates.create
 # --galleryReference shape: {host?: string, isModified?: bool, owner?: string, repository?: string, signature?: string, version?: string}
-export def "tagmanager-templates create" [
+export def "tagmanager-accounts-containers-workspaces-templates-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1256,7 +1256,7 @@ export def "tagmanager-templates create" [
 #
 # GET /tagmanager/v2/{parent}/triggers
 # operationId: tagmanager.accounts.containers.workspaces.triggers.list
-export def "tagmanager-triggers list" [
+export def "tagmanager-accounts-containers-workspaces-triggers-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1326,7 +1326,7 @@ export def "tagmanager-triggers list" [
 # --visiblePercentageMin shape: {key?: string, list?: list, map?: list, type?: "typeUnspecified"|"template"|"integer"|"boolean"|"list"|"map"|"triggerReference"|"tagReference", value?: string}
 # --waitForTags shape: {key?: string, list?: list, map?: list, type?: "typeUnspecified"|"template"|"integer"|"boolean"|"list"|"map"|"triggerReference"|"tagReference", value?: string}
 # --waitForTagsTimeout shape: {key?: string, list?: list, map?: list, type?: "typeUnspecified"|"template"|"integer"|"boolean"|"list"|"map"|"triggerReference"|"tagReference", value?: string}
-export def "tagmanager-triggers create" [
+export def "tagmanager-accounts-containers-workspaces-triggers-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1409,7 +1409,7 @@ export def "tagmanager-triggers create" [
 #
 # GET /tagmanager/v2/{parent}/user_permissions
 # operationId: tagmanager.accounts.user_permissions.list
-export def "tagmanager-user-permissions list" [
+export def "tagmanager-accounts-user-permissions-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1460,7 +1460,7 @@ export def "tagmanager-user-permissions list" [
 # operationId: tagmanager.accounts.user_permissions.create
 # --accountAccess shape: {permission?: "accountPermissionUnspecified"|"noAccess"|"user"|"admin"}
 # --containerAccess item shape: {containerId?: string, permission?: "containerPermissionUnspecified"|"noAccess"|"read"|"edit"|"approve"|"publish"}
-export def "tagmanager-user-permissions create" [
+export def "tagmanager-accounts-user-permissions-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1516,7 +1516,7 @@ export def "tagmanager-user-permissions create" [
 #
 # GET /tagmanager/v2/{parent}/variables
 # operationId: tagmanager.accounts.containers.workspaces.variables.list
-export def "tagmanager-variables list" [
+export def "tagmanager-accounts-containers-workspaces-variables-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1567,7 +1567,7 @@ export def "tagmanager-variables list" [
 # operationId: tagmanager.accounts.containers.workspaces.variables.create
 # --formatValue shape: {caseConversionType?: "none"|"lowercase"|"uppercase", convertFalseToValue?: record, convertNullToValue?: record, convertTrueToValue?: record, convertUndefinedToValue?: record}
 # --parameter item shape: {key?: string, list?: list, map?: list, type?: "typeUnspecified"|"template"|"integer"|"boolean"|"list"|"map"|"triggerReference"|"tagReference", value?: string}
-export def "tagmanager-variables create" [
+export def "tagmanager-accounts-containers-workspaces-variables-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1635,7 +1635,7 @@ export def "tagmanager-variables create" [
 #
 # GET /tagmanager/v2/{parent}/version_headers
 # operationId: tagmanager.accounts.containers.version_headers.list
-export def "tagmanager-version-headers list" [
+export def "tagmanager-accounts-containers-version-headers-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1685,7 +1685,7 @@ export def "tagmanager-version-headers list" [
 #
 # GET /tagmanager/v2/{parent}/version_headers:latest
 # operationId: tagmanager.accounts.containers.version_headers.latest
-export def "tagmanager-version-headers-latest get" [
+export def "tagmanager-accounts-containers-version-headers-latest" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1733,7 +1733,7 @@ export def "tagmanager-version-headers-latest get" [
 #
 # GET /tagmanager/v2/{parent}/versions:live
 # operationId: tagmanager.accounts.containers.versions.live
-export def "tagmanager-versions-live get" [
+export def "tagmanager-accounts-containers-versions-live" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1781,7 +1781,7 @@ export def "tagmanager-versions-live get" [
 #
 # GET /tagmanager/v2/{parent}/workspaces
 # operationId: tagmanager.accounts.containers.workspaces.list
-export def "tagmanager-workspaces list" [
+export def "tagmanager-accounts-containers-workspaces-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1830,7 +1830,7 @@ export def "tagmanager-workspaces list" [
 #
 # POST /tagmanager/v2/{parent}/workspaces
 # operationId: tagmanager.accounts.containers.workspaces.create
-export def "tagmanager-workspaces create" [
+export def "tagmanager-accounts-containers-workspaces-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1889,7 +1889,7 @@ export def "tagmanager-workspaces create" [
 #
 # GET /tagmanager/v2/{parent}/zones
 # operationId: tagmanager.accounts.containers.workspaces.zones.list
-export def "tagmanager-zones list" [
+export def "tagmanager-accounts-containers-workspaces-zones-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1941,7 +1941,7 @@ export def "tagmanager-zones list" [
 # --boundary shape: {condition?: list, customEvaluationTriggerId?: list<string>}
 # --childContainer item shape: {nickname?: string, publicId?: string}
 # --typeRestriction shape: {enable?: bool, whitelistedTypeId?: list<string>}
-export def "tagmanager-zones create" [
+export def "tagmanager-accounts-containers-workspaces-zones-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2004,7 +2004,7 @@ export def "tagmanager-zones create" [
 #
 # DELETE /tagmanager/v2/{path}
 # operationId: tagmanager.accounts.user_permissions.delete
-export def "tagmanager delete" [
+export def "tagmanager-accounts-user-permissions-delete" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2053,7 +2053,7 @@ export def "tagmanager delete" [
 #
 # GET /tagmanager/v2/{path}
 # operationId: tagmanager.accounts.user_permissions.get
-export def "tagmanager get" [
+export def "tagmanager-accounts-user-permissions-get" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2104,7 +2104,7 @@ export def "tagmanager get" [
 # operationId: tagmanager.accounts.user_permissions.update
 # --accountAccess shape: {permission?: "accountPermissionUnspecified"|"noAccess"|"user"|"admin"}
 # --containerAccess item shape: {containerId?: string, permission?: "containerPermissionUnspecified"|"noAccess"|"read"|"edit"|"approve"|"publish"}
-export def "tagmanager update" [
+export def "tagmanager-accounts-user-permissions-update" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2161,7 +2161,7 @@ export def "tagmanager update" [
 #
 # POST /tagmanager/v2/{path}/built_in_variables:revert
 # operationId: tagmanager.accounts.containers.workspaces.built_in_variables.revert
-export def "tagmanager-built-in-variables-revert create" [
+export def "tagmanager-accounts-containers-workspaces-built-in-variables-revert" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2210,7 +2210,7 @@ export def "tagmanager-built-in-variables-revert create" [
 #
 # GET /tagmanager/v2/{path}/status
 # operationId: tagmanager.accounts.containers.workspaces.getStatus
-export def "tagmanager-status get" [
+export def "tagmanager-accounts-containers-workspaces-get-status" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2258,7 +2258,7 @@ export def "tagmanager-status get" [
 #
 # POST /tagmanager/v2/{path}:combine
 # operationId: tagmanager.accounts.containers.combine
-export def "tagmanager create-combine" [
+export def "tagmanager-accounts-containers-combine" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2309,7 +2309,7 @@ export def "tagmanager create-combine" [
 #
 # POST /tagmanager/v2/{path}:create_version
 # operationId: tagmanager.accounts.containers.workspaces.create_version
-export def "tagmanager create-version" [
+export def "tagmanager-accounts-containers-workspaces-create-version" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2362,7 +2362,7 @@ export def "tagmanager create-version" [
 #
 # POST /tagmanager/v2/{path}:entities
 # operationId: tagmanager.accounts.containers.workspaces.folders.entities
-export def "tagmanager create-entities" [
+export def "tagmanager-accounts-containers-workspaces-folders-entities" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2411,7 +2411,7 @@ export def "tagmanager create-entities" [
 #
 # POST /tagmanager/v2/{path}:move_entities_to_folder
 # operationId: tagmanager.accounts.containers.workspaces.folders.move_entities_to_folder
-export def "tagmanager move-entities-to-folder" [
+export def "tagmanager-accounts-containers-workspaces-folders-move-entities-to-folder" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2474,7 +2474,7 @@ export def "tagmanager move-entities-to-folder" [
 #
 # POST /tagmanager/v2/{path}:move_tag_id
 # operationId: tagmanager.accounts.containers.move_tag_id
-export def "tagmanager move-tag" [
+export def "tagmanager-accounts-containers-move-tag-id" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2528,7 +2528,7 @@ export def "tagmanager move-tag" [
 #
 # POST /tagmanager/v2/{path}:publish
 # operationId: tagmanager.accounts.containers.versions.publish
-export def "tagmanager publish" [
+export def "tagmanager-accounts-containers-versions-publish" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2577,7 +2577,7 @@ export def "tagmanager publish" [
 #
 # POST /tagmanager/v2/{path}:quick_preview
 # operationId: tagmanager.accounts.containers.workspaces.quick_preview
-export def "tagmanager create-quick-preview" [
+export def "tagmanager-accounts-containers-workspaces-quick-preview" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2625,7 +2625,7 @@ export def "tagmanager create-quick-preview" [
 #
 # POST /tagmanager/v2/{path}:reauthorize
 # operationId: tagmanager.accounts.containers.environments.reauthorize
-export def "tagmanager create-reauthorize" [
+export def "tagmanager-accounts-containers-environments-reauthorize" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2696,7 +2696,7 @@ export def "tagmanager create-reauthorize" [
 # --tag shape: {accountId?: string, blockingRuleId?: list<string>, blockingTriggerId?: list<string>, consentSettings?: record, containerId?: string, fingerprint?: string, firingRuleId?: list<string>, firingTriggerId?: list<string>, liveOnly?: bool, monitoringMetadata?: record, monitoringMetadataTagNameKey?: string, name?: string, notes?: string, parameter?: list, parentFolderId?: string, path?: string, paused?: bool, priority?: record, scheduleEndMs?: string, scheduleStartMs?: string, setupTag?: list, ... (6 more fields)}
 # --trigger shape: {accountId?: string, autoEventFilter?: list, checkValidation?: record, containerId?: string, continuousTimeMinMilliseconds?: record, customEventFilter?: list, eventName?: record, filter?: list, fingerprint?: string, horizontalScrollPercentageList?: record, interval?: record, intervalSeconds?: record, limit?: record, maxTimerLengthSeconds?: record, name?: string, notes?: string, parameter?: list, parentFolderId?: string, path?: string, selector?: record, tagManagerUrl?: string, ... (11 more fields)}
 # --variable shape: {accountId?: string, containerId?: string, disablingTriggerId?: list<string>, enablingTriggerId?: list<string>, fingerprint?: string, formatValue?: record, name?: string, notes?: string, parameter?: list, parentFolderId?: string, path?: string, scheduleEndMs?: string, scheduleStartMs?: string, tagManagerUrl?: string, type?: string, variableId?: string, workspaceId?: string}
-export def "tagmanager create-resolve-conflict" [
+export def "tagmanager-accounts-containers-workspaces-resolve-conflict" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2754,7 +2754,7 @@ export def "tagmanager create-resolve-conflict" [
 #
 # POST /tagmanager/v2/{path}:revert
 # operationId: tagmanager.accounts.containers.workspaces.zones.revert
-export def "tagmanager create-revert" [
+export def "tagmanager-accounts-containers-workspaces-zones-revert" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2803,7 +2803,7 @@ export def "tagmanager create-revert" [
 #
 # POST /tagmanager/v2/{path}:set_latest
 # operationId: tagmanager.accounts.containers.versions.set_latest
-export def "tagmanager update-latest" [
+export def "tagmanager-accounts-containers-versions-set-latest" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2851,7 +2851,7 @@ export def "tagmanager update-latest" [
 #
 # GET /tagmanager/v2/{path}:snippet
 # operationId: tagmanager.accounts.containers.snippet
-export def "tagmanager get-snippet" [
+export def "tagmanager-accounts-containers-snippet" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2899,7 +2899,7 @@ export def "tagmanager get-snippet" [
 #
 # POST /tagmanager/v2/{path}:sync
 # operationId: tagmanager.accounts.containers.workspaces.sync
-export def "tagmanager sync" [
+export def "tagmanager-accounts-containers-workspaces-sync" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2947,7 +2947,7 @@ export def "tagmanager sync" [
 #
 # POST /tagmanager/v2/{path}:undelete
 # operationId: tagmanager.accounts.containers.versions.undelete
-export def "tagmanager create-undelete" [
+export def "tagmanager-accounts-containers-versions-undelete" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

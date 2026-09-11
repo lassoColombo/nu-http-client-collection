@@ -129,7 +129,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-api-management-service-authorization-servers list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "authorization-server-list-by-service" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -153,7 +153,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/authorizationServers
 # operationId: AuthorizationServer_ListByService
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-authorization-servers list" [
+export def "authorization-server-list-by-service" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -198,7 +198,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/authorizationServers/{authsid}
 # operationId: AuthorizationServer_Delete
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-authorization-servers delete" [
+export def "authorization-server-delete" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -245,7 +245,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/authorizationServers/{authsid}
 # operationId: AuthorizationServer_Get
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-authorization-servers get" [
+export def "authorization-server-get" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -289,7 +289,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # HEAD /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/authorizationServers/{authsid}
 # operationId: AuthorizationServer_GetEntityTag
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-authorization-servers get-entity-tag" [
+export def "authorization-server-get-entity-tag" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -334,7 +334,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/authorizationServers/{authsid}
 # operationId: AuthorizationServer_Update
 # --properties shape: {authorizationEndpoint?: string, clientId?: string, clientRegistrationEndpoint?: string, clientSecret?: string, displayName?: string, grantTypes?: list<string>, authorizationMethods?: list<string>, bearerTokenSendingMethods?: list<string>, clientAuthenticationMethod?: list<string>, defaultScope?: string, description?: string, resourceOwnerPassword?: string, resourceOwnerUsername?: string, supportState?: bool, tokenBodyParameters?: list, tokenEndpoint?: string}
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-authorization-servers update" [
+export def "authorization-server-update" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -386,7 +386,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/authorizationServers/{authsid}
 # operationId: AuthorizationServer_CreateOrUpdate
 # --properties shape: {authorizationEndpoint: string, clientId: string, clientRegistrationEndpoint: string, clientSecret?: string, displayName: string, grantTypes: list<string>, authorizationMethods?: list<string>, bearerTokenSendingMethods?: list<string>, clientAuthenticationMethod?: list<string>, defaultScope?: string, description?: string, resourceOwnerPassword?: string, resourceOwnerUsername?: string, supportState?: bool, tokenBodyParameters?: list, tokenEndpoint?: string}
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-authorization-servers create-or-update" [
+export def "authorization-server-create-or-update" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -437,7 +437,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/authorizationServers/{authsid}/listSecrets
 # operationId: AuthorizationServer_ListSecrets
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-authorization-servers-list-secrets list" [
+export def "authorization-server-list-secrets" [
   subscription_id: string
   resource_group_name: string
   service_name: string

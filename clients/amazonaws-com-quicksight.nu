@@ -130,7 +130,7 @@ def user-role-completer [] { ["ADMIN" "AUTHOR" "READER" "RESTRICTED_AUTHOR" "RES
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts-data-sets-ingestions cancel" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cancel-ingestion" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -154,7 +154,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /accounts/{AwsAccountId}/data-sets/{DataSetId}/ingestions/{IngestionId}
 # operationId: CancelIngestion
-export def "accounts-data-sets-ingestions cancel" [
+export def "cancel-ingestion" [
   aws_account_id: string
   data_set_id: string
   ingestion_id: string
@@ -203,7 +203,7 @@ export def "accounts-data-sets-ingestions cancel" [
 #
 # PUT /accounts/{AwsAccountId}/data-sets/{DataSetId}/ingestions/{IngestionId}
 # operationId: CreateIngestion
-export def "accounts-data-sets-ingestions create" [
+export def "create-ingestion" [
   aws_account_id: string
   data_set_id: string
   ingestion_id: string
@@ -256,7 +256,7 @@ export def "accounts-data-sets-ingestions create" [
 #
 # GET /accounts/{AwsAccountId}/data-sets/{DataSetId}/ingestions/{IngestionId}
 # operationId: DescribeIngestion
-export def "accounts-data-sets-ingestions get" [
+export def "describe-ingestion" [
   aws_account_id: string
   data_set_id: string
   ingestion_id: string
@@ -307,7 +307,7 @@ export def "accounts-data-sets-ingestions get" [
 # operationId: CreateAccountCustomization
 # --AccountCustomization shape: {DefaultTheme?: any, DefaultEmailCustomizationTemplate?: any}
 # --Tags item shape: {Key: any, Value: any}
-export def "accounts-customizations create" [
+export def "create-account-customization" [
   aws_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -359,7 +359,7 @@ export def "accounts-customizations create" [
 #
 # DELETE /accounts/{AwsAccountId}/customizations
 # operationId: DeleteAccountCustomization
-export def "accounts-customizations delete" [
+export def "delete-account-customization" [
   aws_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -406,7 +406,7 @@ export def "accounts-customizations delete" [
 #
 # GET /accounts/{AwsAccountId}/customizations
 # operationId: DescribeAccountCustomization
-export def "accounts-customizations get" [
+export def "describe-account-customization" [
   aws_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -455,7 +455,7 @@ export def "accounts-customizations get" [
 # PUT /accounts/{AwsAccountId}/customizations
 # operationId: UpdateAccountCustomization
 # --AccountCustomization shape: {DefaultTheme?: any, DefaultEmailCustomizationTemplate?: any}
-export def "accounts-customizations update" [
+export def "update-account-customization" [
   aws_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -506,7 +506,7 @@ export def "accounts-customizations update" [
 #
 # POST /account/{AwsAccountId}
 # operationId: CreateAccountSubscription
-export def "account create-subscription" [
+export def "create-account-subscription" [
   aws_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -568,7 +568,7 @@ export def "account create-subscription" [
 #
 # DELETE /account/{AwsAccountId}
 # operationId: DeleteAccountSubscription
-export def "account delete-subscription" [
+export def "delete-account-subscription" [
   aws_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -613,7 +613,7 @@ export def "account delete-subscription" [
 #
 # GET /account/{AwsAccountId}
 # operationId: DescribeAccountSubscription
-export def "account get-subscription" [
+export def "describe-account-subscription" [
   aws_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -663,7 +663,7 @@ export def "account get-subscription" [
 # --SourceEntity shape: {SourceTemplate?: any}
 # --Tags item shape: {Key: any, Value: any}
 # --Definition shape: {DataSetIdentifierDeclarations?: any, Sheets?: any, CalculatedFields?: any, ParameterDeclarations?: any, FilterGroups?: any, ColumnConfigurations?: any, AnalysisDefaults?: record}
-export def "accounts-analyses create-analysis" [
+export def "create-analysis" [
   aws_account_id: string
   analysis_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -720,7 +720,7 @@ export def "accounts-analyses create-analysis" [
 #
 # DELETE /accounts/{AwsAccountId}/analyses/{AnalysisId}
 # operationId: DeleteAnalysis
-export def "accounts-analyses delete-analysis" [
+export def "delete-analysis" [
   aws_account_id: string
   analysis_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -770,7 +770,7 @@ export def "accounts-analyses delete-analysis" [
 #
 # GET /accounts/{AwsAccountId}/analyses/{AnalysisId}
 # operationId: DescribeAnalysis
-export def "accounts-analyses get-analysis" [
+export def "describe-analysis" [
   aws_account_id: string
   analysis_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -820,7 +820,7 @@ export def "accounts-analyses get-analysis" [
 # --Parameters shape: {StringParameters?: any, IntegerParameters?: any, DecimalParameters?: any, DateTimeParameters?: any}
 # --SourceEntity shape: {SourceTemplate?: any}
 # --Definition shape: {DataSetIdentifierDeclarations?: any, Sheets?: any, CalculatedFields?: any, ParameterDeclarations?: any, FilterGroups?: any, ColumnConfigurations?: any, AnalysisDefaults?: record}
-export def "accounts-analyses update-analysis" [
+export def "update-analysis" [
   aws_account_id: string
   analysis_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -881,7 +881,7 @@ export def "accounts-analyses update-analysis" [
 # --Tags item shape: {Key: any, Value: any}
 # --DashboardPublishOptions shape: {AdHocFilteringOption?: any, ExportToCSVOption?: any, SheetControlsOption?: any, VisualPublishOptions?: any, SheetLayoutElementMaximizationOption?: any, VisualMenuOption?: any, VisualAxisSortOption?: any, ExportWithHiddenFieldsOption?: any, DataPointDrillUpDownOption?: any, DataPointMenuLabelOption?: any, DataPointTooltipOption?: any}
 # --Definition shape: {DataSetIdentifierDeclarations?: any, Sheets?: any, CalculatedFields?: any, ParameterDeclarations?: any, FilterGroups?: any, ColumnConfigurations?: any, AnalysisDefaults?: record}
-export def "accounts-dashboards create" [
+export def "create-dashboard" [
   aws_account_id: string
   dashboard_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -940,7 +940,7 @@ export def "accounts-dashboards create" [
 #
 # DELETE /accounts/{AwsAccountId}/dashboards/{DashboardId}
 # operationId: DeleteDashboard
-export def "accounts-dashboards delete" [
+export def "delete-dashboard" [
   aws_account_id: string
   dashboard_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -989,7 +989,7 @@ export def "accounts-dashboards delete" [
 #
 # GET /accounts/{AwsAccountId}/dashboards/{DashboardId}
 # operationId: DescribeDashboard
-export def "accounts-dashboards get" [
+export def "describe-dashboard" [
   aws_account_id: string
   dashboard_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1043,7 +1043,7 @@ export def "accounts-dashboards get" [
 # --Parameters shape: {StringParameters?: any, IntegerParameters?: any, DecimalParameters?: any, DateTimeParameters?: any}
 # --DashboardPublishOptions shape: {AdHocFilteringOption?: any, ExportToCSVOption?: any, SheetControlsOption?: any, VisualPublishOptions?: any, SheetLayoutElementMaximizationOption?: any, VisualMenuOption?: any, VisualAxisSortOption?: any, ExportWithHiddenFieldsOption?: any, DataPointDrillUpDownOption?: any, DataPointMenuLabelOption?: any, DataPointTooltipOption?: any}
 # --Definition shape: {DataSetIdentifierDeclarations?: any, Sheets?: any, CalculatedFields?: any, ParameterDeclarations?: any, FilterGroups?: any, ColumnConfigurations?: any, AnalysisDefaults?: record}
-export def "accounts-dashboards update" [
+export def "update-dashboard" [
   aws_account_id: string
   dashboard_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1107,7 +1107,7 @@ export def "accounts-dashboards update" [
 # --ColumnLevelPermissionRules item shape: {Principals?: any, ColumnNames?: any}
 # --Tags item shape: {Key: any, Value: any}
 # --DataSetUsageConfiguration shape: {DisableUseAsDirectQuerySource?: any, DisableUseAsImportedSource?: any}
-export def "accounts-data-sets create" [
+export def "create-data-set" [
   aws_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1168,7 +1168,7 @@ export def "accounts-data-sets create" [
 #
 # GET /accounts/{AwsAccountId}/data-sets
 # operationId: ListDataSets
-export def "accounts-data-sets list" [
+export def "list-data-sets" [
   aws_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1224,7 +1224,7 @@ export def "accounts-data-sets list" [
 # --VpcConnectionProperties shape: {VpcConnectionArn?: any}
 # --SslProperties shape: {DisableSsl?: any}
 # --Tags item shape: {Key: any, Value: any}
-export def "accounts-data-sources create" [
+export def "create-data-source" [
   aws_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1281,7 +1281,7 @@ export def "accounts-data-sources create" [
 #
 # GET /accounts/{AwsAccountId}/data-sources
 # operationId: ListDataSources
-export def "accounts-data-sources list" [
+export def "list-data-sources" [
   aws_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1333,7 +1333,7 @@ export def "accounts-data-sources list" [
 # operationId: CreateFolder
 # --Permissions item shape: {Principal: any, Actions: any}
 # --Tags item shape: {Key: any, Value: any}
-export def "accounts-folders create" [
+export def "create-folder" [
   aws_account_id: string
   folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1388,7 +1388,7 @@ export def "accounts-folders create" [
 #
 # DELETE /accounts/{AwsAccountId}/folders/{FolderId}
 # operationId: DeleteFolder
-export def "accounts-folders delete" [
+export def "delete-folder" [
   aws_account_id: string
   folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1435,7 +1435,7 @@ export def "accounts-folders delete" [
 #
 # GET /accounts/{AwsAccountId}/folders/{FolderId}
 # operationId: DescribeFolder
-export def "accounts-folders get" [
+export def "describe-folder" [
   aws_account_id: string
   folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1482,7 +1482,7 @@ export def "accounts-folders get" [
 #
 # PUT /accounts/{AwsAccountId}/folders/{FolderId}
 # operationId: UpdateFolder
-export def "accounts-folders update" [
+export def "update-folder" [
   aws_account_id: string
   folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1533,7 +1533,7 @@ export def "accounts-folders update" [
 #
 # PUT /accounts/{AwsAccountId}/folders/{FolderId}/members/{MemberType}/{MemberId}
 # operationId: CreateFolderMembership
-export def "accounts-folders-members create-membership" [
+export def "create-folder-membership" [
   aws_account_id: string
   folder_id: string
   member_type: string
@@ -1584,7 +1584,7 @@ export def "accounts-folders-members create-membership" [
 #
 # DELETE /accounts/{AwsAccountId}/folders/{FolderId}/members/{MemberType}/{MemberId}
 # operationId: DeleteFolderMembership
-export def "accounts-folders-members delete-membership" [
+export def "delete-folder-membership" [
   aws_account_id: string
   folder_id: string
   member_type: string
@@ -1635,7 +1635,7 @@ export def "accounts-folders-members delete-membership" [
 #
 # POST /accounts/{AwsAccountId}/namespaces/{Namespace}/groups
 # operationId: CreateGroup
-export def "accounts-namespaces-groups create" [
+export def "create-group" [
   aws_account_id: string
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1687,7 +1687,7 @@ export def "accounts-namespaces-groups create" [
 #
 # GET /accounts/{AwsAccountId}/namespaces/{Namespace}/groups
 # operationId: ListGroups
-export def "accounts-namespaces-groups list" [
+export def "list-groups" [
   aws_account_id: string
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1737,7 +1737,7 @@ export def "accounts-namespaces-groups list" [
 #
 # PUT /accounts/{AwsAccountId}/namespaces/{Namespace}/groups/{GroupName}/members/{MemberName}
 # operationId: CreateGroupMembership
-export def "accounts-namespaces-groups-members create-membership" [
+export def "create-group-membership" [
   aws_account_id: string
   namespace: string
   group_name: string
@@ -1788,7 +1788,7 @@ export def "accounts-namespaces-groups-members create-membership" [
 #
 # DELETE /accounts/{AwsAccountId}/namespaces/{Namespace}/groups/{GroupName}/members/{MemberName}
 # operationId: DeleteGroupMembership
-export def "accounts-namespaces-groups-members delete-membership" [
+export def "delete-group-membership" [
   aws_account_id: string
   namespace: string
   group_name: string
@@ -1839,7 +1839,7 @@ export def "accounts-namespaces-groups-members delete-membership" [
 #
 # GET /accounts/{AwsAccountId}/namespaces/{Namespace}/groups/{GroupName}/members/{MemberName}
 # operationId: DescribeGroupMembership
-export def "accounts-namespaces-groups-members get-membership" [
+export def "describe-group-membership" [
   aws_account_id: string
   namespace: string
   group_name: string
@@ -1890,7 +1890,7 @@ export def "accounts-namespaces-groups-members get-membership" [
 #
 # POST /accounts/{AwsAccountId}/namespaces/{Namespace}/iam-policy-assignments/
 # operationId: CreateIAMPolicyAssignment
-export def "accounts-namespaces-iam-policy-assignments create" [
+export def "create-iam-policy-assignment" [
   aws_account_id: string
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1945,7 +1945,7 @@ export def "accounts-namespaces-iam-policy-assignments create" [
 # POST /accounts/{AwsAccountId}
 # operationId: CreateNamespace
 # --Tags item shape: {Key: any, Value: any}
-export def "accounts create-namespace" [
+export def "create-namespace" [
   aws_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1997,7 +1997,7 @@ export def "accounts create-namespace" [
 # POST /accounts/{AwsAccountId}/data-sets/{DataSetId}/refresh-schedules
 # operationId: CreateRefreshSchedule
 # --Schedule shape: {ScheduleId?: any, ScheduleFrequency?: any, StartAfterDateTime?: any, RefreshType?: any, Arn?: any}
-export def "accounts-data-sets-refresh-schedules create" [
+export def "create-refresh-schedule" [
   aws_account_id: string
   data_set_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2048,7 +2048,7 @@ export def "accounts-data-sets-refresh-schedules create" [
 #
 # GET /accounts/{AwsAccountId}/data-sets/{DataSetId}/refresh-schedules
 # operationId: ListRefreshSchedules
-export def "accounts-data-sets-refresh-schedules list" [
+export def "list-refresh-schedules" [
   aws_account_id: string
   data_set_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2096,7 +2096,7 @@ export def "accounts-data-sets-refresh-schedules list" [
 # PUT /accounts/{AwsAccountId}/data-sets/{DataSetId}/refresh-schedules
 # operationId: UpdateRefreshSchedule
 # --Schedule shape: {ScheduleId?: any, ScheduleFrequency?: any, StartAfterDateTime?: any, RefreshType?: any, Arn?: any}
-export def "accounts-data-sets-refresh-schedules update" [
+export def "update-refresh-schedule" [
   aws_account_id: string
   data_set_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2151,7 +2151,7 @@ export def "accounts-data-sets-refresh-schedules update" [
 # --SourceEntity shape: {SourceAnalysis?: any, SourceTemplate?: any}
 # --Tags item shape: {Key: any, Value: any}
 # --Definition shape: {DataSetConfigurations?: any, Sheets?: any, CalculatedFields?: any, ParameterDeclarations?: any, FilterGroups?: any, ColumnConfigurations?: any, AnalysisDefaults?: record}
-export def "accounts-templates create" [
+export def "create-template" [
   aws_account_id: string
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2207,7 +2207,7 @@ export def "accounts-templates create" [
 #
 # DELETE /accounts/{AwsAccountId}/templates/{TemplateId}
 # operationId: DeleteTemplate
-export def "accounts-templates delete" [
+export def "delete-template" [
   aws_account_id: string
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2256,7 +2256,7 @@ export def "accounts-templates delete" [
 #
 # GET /accounts/{AwsAccountId}/templates/{TemplateId}
 # operationId: DescribeTemplate
-export def "accounts-templates get" [
+export def "describe-template" [
   aws_account_id: string
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2308,7 +2308,7 @@ export def "accounts-templates get" [
 # operationId: UpdateTemplate
 # --SourceEntity shape: {SourceAnalysis?: any, SourceTemplate?: any}
 # --Definition shape: {DataSetConfigurations?: any, Sheets?: any, CalculatedFields?: any, ParameterDeclarations?: any, FilterGroups?: any, ColumnConfigurations?: any, AnalysisDefaults?: record}
-export def "accounts-templates update" [
+export def "update-template" [
   aws_account_id: string
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2362,7 +2362,7 @@ export def "accounts-templates update" [
 #
 # POST /accounts/{AwsAccountId}/templates/{TemplateId}/aliases/{AliasName}
 # operationId: CreateTemplateAlias
-export def "accounts-templates-aliases create-alias" [
+export def "create-template-alias" [
   aws_account_id: string
   template_id: string
   alias_name: string
@@ -2415,7 +2415,7 @@ export def "accounts-templates-aliases create-alias" [
 #
 # DELETE /accounts/{AwsAccountId}/templates/{TemplateId}/aliases/{AliasName}
 # operationId: DeleteTemplateAlias
-export def "accounts-templates-aliases delete-alias" [
+export def "delete-template-alias" [
   aws_account_id: string
   template_id: string
   alias_name: string
@@ -2464,7 +2464,7 @@ export def "accounts-templates-aliases delete-alias" [
 #
 # GET /accounts/{AwsAccountId}/templates/{TemplateId}/aliases/{AliasName}
 # operationId: DescribeTemplateAlias
-export def "accounts-templates-aliases get-alias" [
+export def "describe-template-alias" [
   aws_account_id: string
   template_id: string
   alias_name: string
@@ -2513,7 +2513,7 @@ export def "accounts-templates-aliases get-alias" [
 #
 # PUT /accounts/{AwsAccountId}/templates/{TemplateId}/aliases/{AliasName}
 # operationId: UpdateTemplateAlias
-export def "accounts-templates-aliases update-alias" [
+export def "update-template-alias" [
   aws_account_id: string
   template_id: string
   alias_name: string
@@ -2569,7 +2569,7 @@ export def "accounts-templates-aliases update-alias" [
 # --Configuration shape: {DataColorPalette?: any, UIColorPalette?: any, Sheet?: any, Typography?: record}
 # --Permissions item shape: {Principal: any, Actions: any}
 # --Tags item shape: {Key: any, Value: any}
-export def "accounts-themes create" [
+export def "create-theme" [
   aws_account_id: string
   theme_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2625,7 +2625,7 @@ export def "accounts-themes create" [
 #
 # DELETE /accounts/{AwsAccountId}/themes/{ThemeId}
 # operationId: DeleteTheme
-export def "accounts-themes delete" [
+export def "delete-theme" [
   aws_account_id: string
   theme_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2674,7 +2674,7 @@ export def "accounts-themes delete" [
 #
 # GET /accounts/{AwsAccountId}/themes/{ThemeId}
 # operationId: DescribeTheme
-export def "accounts-themes get" [
+export def "describe-theme" [
   aws_account_id: string
   theme_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2725,7 +2725,7 @@ export def "accounts-themes get" [
 # PUT /accounts/{AwsAccountId}/themes/{ThemeId}
 # operationId: UpdateTheme
 # --Configuration shape: {DataColorPalette?: any, UIColorPalette?: any, Sheet?: any, Typography?: record}
-export def "accounts-themes update" [
+export def "update-theme" [
   aws_account_id: string
   theme_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2779,7 +2779,7 @@ export def "accounts-themes update" [
 #
 # POST /accounts/{AwsAccountId}/themes/{ThemeId}/aliases/{AliasName}
 # operationId: CreateThemeAlias
-export def "accounts-themes-aliases create-alias" [
+export def "create-theme-alias" [
   aws_account_id: string
   theme_id: string
   alias_name: string
@@ -2832,7 +2832,7 @@ export def "accounts-themes-aliases create-alias" [
 #
 # DELETE /accounts/{AwsAccountId}/themes/{ThemeId}/aliases/{AliasName}
 # operationId: DeleteThemeAlias
-export def "accounts-themes-aliases delete-alias" [
+export def "delete-theme-alias" [
   aws_account_id: string
   theme_id: string
   alias_name: string
@@ -2881,7 +2881,7 @@ export def "accounts-themes-aliases delete-alias" [
 #
 # GET /accounts/{AwsAccountId}/themes/{ThemeId}/aliases/{AliasName}
 # operationId: DescribeThemeAlias
-export def "accounts-themes-aliases get-alias" [
+export def "describe-theme-alias" [
   aws_account_id: string
   theme_id: string
   alias_name: string
@@ -2930,7 +2930,7 @@ export def "accounts-themes-aliases get-alias" [
 #
 # PUT /accounts/{AwsAccountId}/themes/{ThemeId}/aliases/{AliasName}
 # operationId: UpdateThemeAlias
-export def "accounts-themes-aliases update-alias" [
+export def "update-theme-alias" [
   aws_account_id: string
   theme_id: string
   alias_name: string
@@ -2983,7 +2983,7 @@ export def "accounts-themes-aliases update-alias" [
 #
 # DELETE /accounts/{AwsAccountId}/data-sets/{DataSetId}
 # operationId: DeleteDataSet
-export def "accounts-data-sets delete" [
+export def "delete-data-set" [
   aws_account_id: string
   data_set_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3030,7 +3030,7 @@ export def "accounts-data-sets delete" [
 #
 # GET /accounts/{AwsAccountId}/data-sets/{DataSetId}
 # operationId: DescribeDataSet
-export def "accounts-data-sets get" [
+export def "describe-data-set" [
   aws_account_id: string
   data_set_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3082,7 +3082,7 @@ export def "accounts-data-sets get" [
 # --RowLevelPermissionTagConfiguration shape: {Status?: any, TagRules?: any, TagRuleConfigurations?: any}
 # --ColumnLevelPermissionRules item shape: {Principals?: any, ColumnNames?: any}
 # --DataSetUsageConfiguration shape: {DisableUseAsDirectQuerySource?: any, DisableUseAsImportedSource?: any}
-export def "accounts-data-sets update" [
+export def "update-data-set" [
   aws_account_id: string
   data_set_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3142,7 +3142,7 @@ export def "accounts-data-sets update" [
 #
 # DELETE /accounts/{AwsAccountId}/data-sets/{DataSetId}/refresh-properties
 # operationId: DeleteDataSetRefreshProperties
-export def "accounts-data-sets-refresh-properties delete" [
+export def "delete-data-set-refresh-properties" [
   aws_account_id: string
   data_set_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3189,7 +3189,7 @@ export def "accounts-data-sets-refresh-properties delete" [
 #
 # GET /accounts/{AwsAccountId}/data-sets/{DataSetId}/refresh-properties
 # operationId: DescribeDataSetRefreshProperties
-export def "accounts-data-sets-refresh-properties get" [
+export def "describe-data-set-refresh-properties" [
   aws_account_id: string
   data_set_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3237,7 +3237,7 @@ export def "accounts-data-sets-refresh-properties get" [
 # PUT /accounts/{AwsAccountId}/data-sets/{DataSetId}/refresh-properties
 # operationId: PutDataSetRefreshProperties
 # --DataSetRefreshProperties shape: {RefreshConfiguration?: any}
-export def "accounts-data-sets-refresh-properties update" [
+export def "put-data-set-refresh-properties" [
   aws_account_id: string
   data_set_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3288,7 +3288,7 @@ export def "accounts-data-sets-refresh-properties update" [
 #
 # DELETE /accounts/{AwsAccountId}/data-sources/{DataSourceId}
 # operationId: DeleteDataSource
-export def "accounts-data-sources delete" [
+export def "delete-data-source" [
   aws_account_id: string
   data_source_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3335,7 +3335,7 @@ export def "accounts-data-sources delete" [
 #
 # GET /accounts/{AwsAccountId}/data-sources/{DataSourceId}
 # operationId: DescribeDataSource
-export def "accounts-data-sources get" [
+export def "describe-data-source" [
   aws_account_id: string
   data_source_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3386,7 +3386,7 @@ export def "accounts-data-sources get" [
 # --Credentials shape: {CredentialPair?: any, CopySourceArn?: any, SecretArn?: any}
 # --VpcConnectionProperties shape: {VpcConnectionArn?: any}
 # --SslProperties shape: {DisableSsl?: any}
-export def "accounts-data-sources update" [
+export def "update-data-source" [
   aws_account_id: string
   data_source_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3441,7 +3441,7 @@ export def "accounts-data-sources update" [
 #
 # DELETE /accounts/{AwsAccountId}/namespaces/{Namespace}/groups/{GroupName}
 # operationId: DeleteGroup
-export def "accounts-namespaces-groups delete" [
+export def "delete-group" [
   aws_account_id: string
   namespace: string
   group_name: string
@@ -3490,7 +3490,7 @@ export def "accounts-namespaces-groups delete" [
 #
 # GET /accounts/{AwsAccountId}/namespaces/{Namespace}/groups/{GroupName}
 # operationId: DescribeGroup
-export def "accounts-namespaces-groups get" [
+export def "describe-group" [
   aws_account_id: string
   namespace: string
   group_name: string
@@ -3539,7 +3539,7 @@ export def "accounts-namespaces-groups get" [
 #
 # PUT /accounts/{AwsAccountId}/namespaces/{Namespace}/groups/{GroupName}
 # operationId: UpdateGroup
-export def "accounts-namespaces-groups update" [
+export def "update-group" [
   aws_account_id: string
   namespace: string
   group_name: string
@@ -3592,7 +3592,7 @@ export def "accounts-namespaces-groups update" [
 #
 # DELETE /accounts/{AwsAccountId}/namespace/{Namespace}/iam-policy-assignments/{AssignmentName}
 # operationId: DeleteIAMPolicyAssignment
-export def "accounts-namespace-iam-policy-assignments delete" [
+export def "delete-iam-policy-assignment" [
   aws_account_id: string
   namespace: string
   assignment_name: string
@@ -3641,7 +3641,7 @@ export def "accounts-namespace-iam-policy-assignments delete" [
 #
 # DELETE /accounts/{AwsAccountId}/namespaces/{Namespace}
 # operationId: DeleteNamespace
-export def "accounts-namespaces delete" [
+export def "delete-namespace" [
   aws_account_id: string
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3688,7 +3688,7 @@ export def "accounts-namespaces delete" [
 #
 # GET /accounts/{AwsAccountId}/namespaces/{Namespace}
 # operationId: DescribeNamespace
-export def "accounts-namespaces get" [
+export def "describe-namespace" [
   aws_account_id: string
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3735,7 +3735,7 @@ export def "accounts-namespaces get" [
 #
 # DELETE /accounts/{AwsAccountId}/data-sets/{DataSetId}/refresh-schedules/{ScheduleId}
 # operationId: DeleteRefreshSchedule
-export def "accounts-data-sets-refresh-schedules delete" [
+export def "delete-refresh-schedule" [
   aws_account_id: string
   data_set_id: string
   schedule_id: string
@@ -3784,7 +3784,7 @@ export def "accounts-data-sets-refresh-schedules delete" [
 #
 # GET /accounts/{AwsAccountId}/data-sets/{DataSetId}/refresh-schedules/{ScheduleId}
 # operationId: DescribeRefreshSchedule
-export def "accounts-data-sets-refresh-schedules get" [
+export def "describe-refresh-schedule" [
   aws_account_id: string
   data_set_id: string
   schedule_id: string
@@ -3833,7 +3833,7 @@ export def "accounts-data-sets-refresh-schedules get" [
 #
 # DELETE /accounts/{AwsAccountId}/namespaces/{Namespace}/users/{UserName}
 # operationId: DeleteUser
-export def "accounts-namespaces-users delete" [
+export def "delete-user" [
   aws_account_id: string
   namespace: string
   user_name: string
@@ -3882,7 +3882,7 @@ export def "accounts-namespaces-users delete" [
 #
 # GET /accounts/{AwsAccountId}/namespaces/{Namespace}/users/{UserName}
 # operationId: DescribeUser
-export def "accounts-namespaces-users get" [
+export def "describe-user" [
   aws_account_id: string
   namespace: string
   user_name: string
@@ -3931,7 +3931,7 @@ export def "accounts-namespaces-users get" [
 #
 # PUT /accounts/{AwsAccountId}/namespaces/{Namespace}/users/{UserName}
 # operationId: UpdateUser
-export def "accounts-namespaces-users update" [
+export def "update-user" [
   aws_account_id: string
   namespace: string
   user_name: string
@@ -3990,7 +3990,7 @@ export def "accounts-namespaces-users update" [
 #
 # DELETE /accounts/{AwsAccountId}/namespaces/{Namespace}/user-principals/{PrincipalId}
 # operationId: DeleteUserByPrincipalId
-export def "accounts-namespaces-user-principals delete" [
+export def "delete-user-by-principal-id" [
   aws_account_id: string
   namespace: string
   principal_id: string
@@ -4039,7 +4039,7 @@ export def "accounts-namespaces-user-principals delete" [
 #
 # GET /accounts/{AwsAccountId}/settings
 # operationId: DescribeAccountSettings
-export def "accounts-settings get" [
+export def "describe-account-settings" [
   aws_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4084,7 +4084,7 @@ export def "accounts-settings get" [
 #
 # PUT /accounts/{AwsAccountId}/settings
 # operationId: UpdateAccountSettings
-export def "accounts-settings update" [
+export def "update-account-settings" [
   aws_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4135,7 +4135,7 @@ export def "accounts-settings update" [
 #
 # GET /accounts/{AwsAccountId}/analyses/{AnalysisId}/definition
 # operationId: DescribeAnalysisDefinition
-export def "accounts-analyses-definition get-analysis" [
+export def "describe-analysis-definition" [
   aws_account_id: string
   analysis_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4182,7 +4182,7 @@ export def "accounts-analyses-definition get-analysis" [
 #
 # GET /accounts/{AwsAccountId}/analyses/{AnalysisId}/permissions
 # operationId: DescribeAnalysisPermissions
-export def "accounts-analyses-permissions get-analysis" [
+export def "describe-analysis-permissions" [
   aws_account_id: string
   analysis_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4231,7 +4231,7 @@ export def "accounts-analyses-permissions get-analysis" [
 # operationId: UpdateAnalysisPermissions
 # --GrantPermissions item shape: {Principal: any, Actions: any}
 # --RevokePermissions item shape: {Principal: any, Actions: any}
-export def "accounts-analyses-permissions update-analysis" [
+export def "update-analysis-permissions" [
   aws_account_id: string
   analysis_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4283,7 +4283,7 @@ export def "accounts-analyses-permissions update-analysis" [
 #
 # GET /accounts/{AwsAccountId}/dashboards/{DashboardId}/definition
 # operationId: DescribeDashboardDefinition
-export def "accounts-dashboards-definition get" [
+export def "describe-dashboard-definition" [
   aws_account_id: string
   dashboard_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4333,7 +4333,7 @@ export def "accounts-dashboards-definition get" [
 #
 # GET /accounts/{AwsAccountId}/dashboards/{DashboardId}/permissions
 # operationId: DescribeDashboardPermissions
-export def "accounts-dashboards-permissions get" [
+export def "describe-dashboard-permissions" [
   aws_account_id: string
   dashboard_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4384,7 +4384,7 @@ export def "accounts-dashboards-permissions get" [
 # --RevokePermissions item shape: {Principal: any, Actions: any}
 # --GrantLinkPermissions item shape: {Principal: any, Actions: any}
 # --RevokeLinkPermissions item shape: {Principal: any, Actions: any}
-export def "accounts-dashboards-permissions update" [
+export def "update-dashboard-permissions" [
   aws_account_id: string
   dashboard_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4438,7 +4438,7 @@ export def "accounts-dashboards-permissions update" [
 #
 # GET /accounts/{AwsAccountId}/data-sets/{DataSetId}/permissions
 # operationId: DescribeDataSetPermissions
-export def "accounts-data-sets-permissions get" [
+export def "describe-data-set-permissions" [
   aws_account_id: string
   data_set_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4487,7 +4487,7 @@ export def "accounts-data-sets-permissions get" [
 # operationId: UpdateDataSetPermissions
 # --GrantPermissions item shape: {Principal: any, Actions: any}
 # --RevokePermissions item shape: {Principal: any, Actions: any}
-export def "accounts-data-sets-permissions update" [
+export def "update-data-set-permissions" [
   aws_account_id: string
   data_set_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4539,7 +4539,7 @@ export def "accounts-data-sets-permissions update" [
 #
 # GET /accounts/{AwsAccountId}/data-sources/{DataSourceId}/permissions
 # operationId: DescribeDataSourcePermissions
-export def "accounts-data-sources-permissions get" [
+export def "describe-data-source-permissions" [
   aws_account_id: string
   data_source_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4588,7 +4588,7 @@ export def "accounts-data-sources-permissions get" [
 # operationId: UpdateDataSourcePermissions
 # --GrantPermissions item shape: {Principal: any, Actions: any}
 # --RevokePermissions item shape: {Principal: any, Actions: any}
-export def "accounts-data-sources-permissions update" [
+export def "update-data-source-permissions" [
   aws_account_id: string
   data_source_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4640,7 +4640,7 @@ export def "accounts-data-sources-permissions update" [
 #
 # GET /accounts/{AwsAccountId}/folders/{FolderId}/permissions
 # operationId: DescribeFolderPermissions
-export def "accounts-folders-permissions get" [
+export def "describe-folder-permissions" [
   aws_account_id: string
   folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4689,7 +4689,7 @@ export def "accounts-folders-permissions get" [
 # operationId: UpdateFolderPermissions
 # --GrantPermissions item shape: {Principal: any, Actions: any}
 # --RevokePermissions item shape: {Principal: any, Actions: any}
-export def "accounts-folders-permissions update" [
+export def "update-folder-permissions" [
   aws_account_id: string
   folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4741,7 +4741,7 @@ export def "accounts-folders-permissions update" [
 #
 # GET /accounts/{AwsAccountId}/folders/{FolderId}/resolved-permissions
 # operationId: DescribeFolderResolvedPermissions
-export def "accounts-folders-resolved-permissions get" [
+export def "describe-folder-resolved-permissions" [
   aws_account_id: string
   folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4788,7 +4788,7 @@ export def "accounts-folders-resolved-permissions get" [
 #
 # GET /accounts/{AwsAccountId}/namespaces/{Namespace}/iam-policy-assignments/{AssignmentName}
 # operationId: DescribeIAMPolicyAssignment
-export def "accounts-namespaces-iam-policy-assignments get" [
+export def "describe-iam-policy-assignment" [
   aws_account_id: string
   namespace: string
   assignment_name: string
@@ -4837,7 +4837,7 @@ export def "accounts-namespaces-iam-policy-assignments get" [
 #
 # PUT /accounts/{AwsAccountId}/namespaces/{Namespace}/iam-policy-assignments/{AssignmentName}
 # operationId: UpdateIAMPolicyAssignment
-export def "accounts-namespaces-iam-policy-assignments update" [
+export def "update-iam-policy-assignment" [
   aws_account_id: string
   namespace: string
   assignment_name: string
@@ -4892,7 +4892,7 @@ export def "accounts-namespaces-iam-policy-assignments update" [
 #
 # GET /accounts/{AwsAccountId}/ip-restriction
 # operationId: DescribeIpRestriction
-export def "accounts-ip-restriction get" [
+export def "describe-ip-restriction" [
   aws_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4937,7 +4937,7 @@ export def "accounts-ip-restriction get" [
 #
 # POST /accounts/{AwsAccountId}/ip-restriction
 # operationId: UpdateIpRestriction
-export def "accounts-ip-restriction update" [
+export def "update-ip-restriction" [
   aws_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4987,7 +4987,7 @@ export def "accounts-ip-restriction update" [
 #
 # GET /accounts/{AwsAccountId}/templates/{TemplateId}/definition
 # operationId: DescribeTemplateDefinition
-export def "accounts-templates-definition get" [
+export def "describe-template-definition" [
   aws_account_id: string
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5037,7 +5037,7 @@ export def "accounts-templates-definition get" [
 #
 # GET /accounts/{AwsAccountId}/templates/{TemplateId}/permissions
 # operationId: DescribeTemplatePermissions
-export def "accounts-templates-permissions get" [
+export def "describe-template-permissions" [
   aws_account_id: string
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5086,7 +5086,7 @@ export def "accounts-templates-permissions get" [
 # operationId: UpdateTemplatePermissions
 # --GrantPermissions item shape: {Principal: any, Actions: any}
 # --RevokePermissions item shape: {Principal: any, Actions: any}
-export def "accounts-templates-permissions update" [
+export def "update-template-permissions" [
   aws_account_id: string
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5138,7 +5138,7 @@ export def "accounts-templates-permissions update" [
 #
 # GET /accounts/{AwsAccountId}/themes/{ThemeId}/permissions
 # operationId: DescribeThemePermissions
-export def "accounts-themes-permissions get" [
+export def "describe-theme-permissions" [
   aws_account_id: string
   theme_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5187,7 +5187,7 @@ export def "accounts-themes-permissions get" [
 # operationId: UpdateThemePermissions
 # --GrantPermissions item shape: {Principal: any, Actions: any}
 # --RevokePermissions item shape: {Principal: any, Actions: any}
-export def "accounts-themes-permissions update" [
+export def "update-theme-permissions" [
   aws_account_id: string
   theme_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5241,7 +5241,7 @@ export def "accounts-themes-permissions update" [
 # operationId: GenerateEmbedUrlForAnonymousUser
 # --SessionTags item shape: {Key: any, Value: any}
 # --ExperienceConfiguration shape: {Dashboard?: any, DashboardVisual?: any, QSearchBar?: any}
-export def "accounts-embed-url-anonymous-user generate" [
+export def "generate-embed-url-for-anonymous-user" [
   aws_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5296,7 +5296,7 @@ export def "accounts-embed-url-anonymous-user generate" [
 # POST /accounts/{AwsAccountId}/embed-url/registered-user
 # operationId: GenerateEmbedUrlForRegisteredUser
 # --ExperienceConfiguration shape: {Dashboard?: any, QuickSightConsole?: any, QSearchBar?: any, DashboardVisual?: any}
-export def "accounts-embed-url-registered-user generate" [
+export def "generate-embed-url-for-registered-user" [
   aws_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5348,7 +5348,7 @@ export def "accounts-embed-url-registered-user generate" [
 #
 # GET /accounts/{AwsAccountId}/dashboards/{DashboardId}/embed-url
 # operationId: GetDashboardEmbedUrl
-export def "accounts-dashboards-embed-url get" [
+export def "get-dashboard-embed-url" [
   aws_account_id: string
   dashboard_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5404,7 +5404,7 @@ export def "accounts-dashboards-embed-url get" [
 #
 # GET /accounts/{AwsAccountId}/session-embed-url
 # operationId: GetSessionEmbedUrl
-export def "accounts-session-embed-url get" [
+export def "get-session-embed-url" [
   aws_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5453,7 +5453,7 @@ export def "accounts-session-embed-url get" [
 #
 # GET /accounts/{AwsAccountId}/analyses
 # operationId: ListAnalyses
-export def "accounts-analyses list" [
+export def "list-analyses" [
   aws_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5503,7 +5503,7 @@ export def "accounts-analyses list" [
 #
 # GET /accounts/{AwsAccountId}/dashboards/{DashboardId}/versions
 # operationId: ListDashboardVersions
-export def "accounts-dashboards-versions list" [
+export def "list-dashboard-versions" [
   aws_account_id: string
   dashboard_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5555,7 +5555,7 @@ export def "accounts-dashboards-versions list" [
 #
 # GET /accounts/{AwsAccountId}/dashboards
 # operationId: ListDashboards
-export def "accounts-dashboards list" [
+export def "list-dashboards" [
   aws_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5605,7 +5605,7 @@ export def "accounts-dashboards list" [
 #
 # GET /accounts/{AwsAccountId}/folders/{FolderId}/members
 # operationId: ListFolderMembers
-export def "accounts-folders-members list" [
+export def "list-folder-members" [
   aws_account_id: string
   folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5655,7 +5655,7 @@ export def "accounts-folders-members list" [
 #
 # GET /accounts/{AwsAccountId}/folders
 # operationId: ListFolders
-export def "accounts-folders list" [
+export def "list-folders" [
   aws_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5703,7 +5703,7 @@ export def "accounts-folders list" [
 #
 # GET /accounts/{AwsAccountId}/namespaces/{Namespace}/groups/{GroupName}/members
 # operationId: ListGroupMemberships
-export def "accounts-namespaces-groups-members list-memberships" [
+export def "list-group-memberships" [
   aws_account_id: string
   namespace: string
   group_name: string
@@ -5755,7 +5755,7 @@ export def "accounts-namespaces-groups-members list-memberships" [
 #
 # GET /accounts/{AwsAccountId}/namespaces/{Namespace}/iam-policy-assignments
 # operationId: ListIAMPolicyAssignments
-export def "accounts-namespaces-iam-policy-assignments list" [
+export def "list-iam-policy-assignments" [
   aws_account_id: string
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5805,7 +5805,7 @@ export def "accounts-namespaces-iam-policy-assignments list" [
 #
 # GET /accounts/{AwsAccountId}/namespaces/{Namespace}/users/{UserName}/iam-policy-assignments
 # operationId: ListIAMPolicyAssignmentsForUser
-export def "accounts-namespaces-users-iam-policy-assignments list" [
+export def "list-iam-policy-assignments-for-user" [
   aws_account_id: string
   namespace: string
   user_name: string
@@ -5857,7 +5857,7 @@ export def "accounts-namespaces-users-iam-policy-assignments list" [
 #
 # GET /accounts/{AwsAccountId}/data-sets/{DataSetId}/ingestions
 # operationId: ListIngestions
-export def "accounts-data-sets-ingestions list" [
+export def "list-ingestions" [
   aws_account_id: string
   data_set_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5909,7 +5909,7 @@ export def "accounts-data-sets-ingestions list" [
 #
 # GET /accounts/{AwsAccountId}/namespaces
 # operationId: ListNamespaces
-export def "accounts-namespaces list" [
+export def "list-namespaces" [
   aws_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5959,7 +5959,7 @@ export def "accounts-namespaces list" [
 #
 # GET /resources/{ResourceArn}/tags
 # operationId: ListTagsForResource
-export def "resources-tags list" [
+export def "list-tags-for-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6005,7 +6005,7 @@ export def "resources-tags list" [
 # POST /resources/{ResourceArn}/tags
 # operationId: TagResource
 # --Tags item shape: {Key: any, Value: any}
-export def "resources-tags tag" [
+export def "tag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6054,7 +6054,7 @@ export def "resources-tags tag" [
 #
 # GET /accounts/{AwsAccountId}/templates/{TemplateId}/aliases
 # operationId: ListTemplateAliases
-export def "accounts-templates-aliases list" [
+export def "list-template-aliases" [
   aws_account_id: string
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6106,7 +6106,7 @@ export def "accounts-templates-aliases list" [
 #
 # GET /accounts/{AwsAccountId}/templates/{TemplateId}/versions
 # operationId: ListTemplateVersions
-export def "accounts-templates-versions list" [
+export def "list-template-versions" [
   aws_account_id: string
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6158,7 +6158,7 @@ export def "accounts-templates-versions list" [
 #
 # GET /accounts/{AwsAccountId}/templates
 # operationId: ListTemplates
-export def "accounts-templates list" [
+export def "list-templates" [
   aws_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6208,7 +6208,7 @@ export def "accounts-templates list" [
 #
 # GET /accounts/{AwsAccountId}/themes/{ThemeId}/aliases
 # operationId: ListThemeAliases
-export def "accounts-themes-aliases list" [
+export def "list-theme-aliases" [
   aws_account_id: string
   theme_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6258,7 +6258,7 @@ export def "accounts-themes-aliases list" [
 #
 # GET /accounts/{AwsAccountId}/themes/{ThemeId}/versions
 # operationId: ListThemeVersions
-export def "accounts-themes-versions list" [
+export def "list-theme-versions" [
   aws_account_id: string
   theme_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6310,7 +6310,7 @@ export def "accounts-themes-versions list" [
 #
 # GET /accounts/{AwsAccountId}/themes
 # operationId: ListThemes
-export def "accounts-themes list" [
+export def "list-themes" [
   aws_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6361,7 +6361,7 @@ export def "accounts-themes list" [
 #
 # GET /accounts/{AwsAccountId}/namespaces/{Namespace}/users/{UserName}/groups
 # operationId: ListUserGroups
-export def "accounts-namespaces-users-groups list" [
+export def "list-user-groups" [
   aws_account_id: string
   namespace: string
   user_name: string
@@ -6413,7 +6413,7 @@ export def "accounts-namespaces-users-groups list" [
 #
 # GET /accounts/{AwsAccountId}/namespaces/{Namespace}/users
 # operationId: ListUsers
-export def "accounts-namespaces-users list" [
+export def "list-users" [
   aws_account_id: string
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6463,7 +6463,7 @@ export def "accounts-namespaces-users list" [
 #
 # POST /accounts/{AwsAccountId}/namespaces/{Namespace}/users
 # operationId: RegisterUser
-export def "accounts-namespaces-users create" [
+export def "register-user" [
   aws_account_id: string
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6523,7 +6523,7 @@ export def "accounts-namespaces-users create" [
 #
 # POST /accounts/{AwsAccountId}/restore/analyses/{AnalysisId}
 # operationId: RestoreAnalysis
-export def "accounts-restore-analyses create-analysis" [
+export def "restore-analysis" [
   aws_account_id: string
   analysis_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6571,7 +6571,7 @@ export def "accounts-restore-analyses create-analysis" [
 # POST /accounts/{AwsAccountId}/search/analyses
 # operationId: SearchAnalyses
 # --Filters item shape: {Operator?: any, Name?: any, Value?: any}
-export def "accounts-search-analyses list" [
+export def "search-analyses" [
   aws_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6626,7 +6626,7 @@ export def "accounts-search-analyses list" [
 # POST /accounts/{AwsAccountId}/search/dashboards
 # operationId: SearchDashboards
 # --Filters item shape: {Operator: any, Name?: any, Value?: any}
-export def "accounts-search-dashboards list" [
+export def "search-dashboards" [
   aws_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6681,7 +6681,7 @@ export def "accounts-search-dashboards list" [
 # POST /accounts/{AwsAccountId}/search/data-sets
 # operationId: SearchDataSets
 # --Filters item shape: {Operator: any, Name: any, Value: any}
-export def "accounts-search-data-sets list" [
+export def "search-data-sets" [
   aws_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6736,7 +6736,7 @@ export def "accounts-search-data-sets list" [
 # POST /accounts/{AwsAccountId}/search/data-sources
 # operationId: SearchDataSources
 # --Filters item shape: {Operator: any, Name: any, Value: any}
-export def "accounts-search-data-sources list" [
+export def "search-data-sources" [
   aws_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6791,7 +6791,7 @@ export def "accounts-search-data-sources list" [
 # POST /accounts/{AwsAccountId}/search/folders
 # operationId: SearchFolders
 # --Filters item shape: {Operator?: any, Name?: any, Value?: any}
-export def "accounts-search-folders list" [
+export def "search-folders" [
   aws_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6843,7 +6843,7 @@ export def "accounts-search-folders list" [
 # POST /accounts/{AwsAccountId}/namespaces/{Namespace}/groups-search
 # operationId: SearchGroups
 # --Filters item shape: {Operator: any, Name: any, Value: any}
-export def "accounts-namespaces-groups-search list" [
+export def "search-groups" [
   aws_account_id: string
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6897,7 +6897,7 @@ export def "accounts-namespaces-groups-search list" [
 #
 # DELETE /resources/{ResourceArn}/tags
 # operationId: UntagResource
-export def "resources-tags untag" [
+export def "untag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6944,7 +6944,7 @@ export def "resources-tags untag" [
 #
 # PUT /accounts/{AwsAccountId}/dashboards/{DashboardId}/versions/{VersionNumber}
 # operationId: UpdateDashboardPublishedVersion
-export def "accounts-dashboards-versions update-published" [
+export def "update-dashboard-published-version" [
   aws_account_id: string
   dashboard_id: string
   version_number: int
@@ -6993,7 +6993,7 @@ export def "accounts-dashboards-versions update-published" [
 #
 # PUT /accounts/{AwsAccountId}/public-sharing-settings
 # operationId: UpdatePublicSharingSettings
-export def "accounts-public-sharing-settings update" [
+export def "update-public-sharing-settings" [
   aws_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

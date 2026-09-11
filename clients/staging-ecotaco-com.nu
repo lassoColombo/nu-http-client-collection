@@ -109,7 +109,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "eco-ta-co-api-root get-version" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "retrieve-the-version-api" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -133,7 +133,7 @@ export def commands []: nothing -> table {
 #
 # GET /
 # operationId: Retrieve the version API
-export def "eco-ta-co-api-root get-version" [
+export def "retrieve-the-version-api" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -167,7 +167,7 @@ export def "eco-ta-co-api-root get-version" [
 #
 # GET /accounts
 # operationId: Get current user
-export def "accounts get-user" [
+export def "get-current-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -205,7 +205,7 @@ export def "accounts get-user" [
 #
 # POST /accounts
 # operationId: Create a new account with an application key
-export def "accounts create-new-with-application-key" [
+export def "create-a-new-account-with-an-application-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -243,7 +243,7 @@ export def "accounts create-new-with-application-key" [
 #
 # PUT /accounts
 # operationId: Update User
-export def "accounts update-user" [
+export def "update-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -281,7 +281,7 @@ export def "accounts update-user" [
 #
 # POST /accounts/password
 # operationId: Forget password with email
-export def "accounts-password create-forget-with-email" [
+export def "forget-password-with-email" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -319,7 +319,7 @@ export def "accounts-password create-forget-with-email" [
 #
 # GET /accounts/payment_methods
 # operationId: Payment Methods
-export def "accounts-payment-methods get" [
+export def "payment-methods" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -357,7 +357,7 @@ export def "accounts-payment-methods get" [
 #
 # POST /accounts/settings
 # operationId: Settings
-export def "accounts-settings create" [
+export def "settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -395,7 +395,7 @@ export def "accounts-settings create" [
 #
 # POST /accounts/sign_in
 # operationId: Login with email, password and application key
-export def "accounts-sign-in create-login-with-email-password-and-application-key" [
+export def "login-with-email-password-and-application-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -433,7 +433,7 @@ export def "accounts-sign-in create-login-with-email-password-and-application-ke
 #
 # PUT /accounts/update_password
 # operationId: Update Password
-export def "accounts-update-password update" [
+export def "update-password" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -471,7 +471,7 @@ export def "accounts-update-password update" [
 #
 # POST /addresses/places_autocomplete
 # operationId: Get autocomplete places
-export def "addresses-places-autocomplete get" [
+export def "get-autocomplete-places" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -509,7 +509,7 @@ export def "addresses-places-autocomplete get" [
 #
 # POST /addresses/places_details
 # operationId: Get autocomplete places details
-export def "addresses-places-details get-autocomplete" [
+export def "get-autocomplete-places-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -547,7 +547,7 @@ export def "addresses-places-details get-autocomplete" [
 #
 # GET /catchement_areas
 # operationId: List all catchement areas
-export def "catchement-areas list" [
+export def "list-all-catchement-areas" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -585,7 +585,7 @@ export def "catchement-areas list" [
 #
 # GET /catchement_areas/{id}
 # operationId: Get a Catchement Area
-export def "catchement-areas get" [
+export def "get-a-catchement-area" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -625,7 +625,7 @@ export def "catchement-areas get" [
 #
 # GET /credit_cards
 # operationId: List all CreditCards for the current User
-export def "credit-cards list-for-get-user" [
+export def "list-all-credit-cards-for-the-current-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -663,7 +663,7 @@ export def "credit-cards list-for-get-user" [
 #
 # GET /credit_cards/{id}
 # operationId: Get a CreditCard
-export def "credit-cards get" [
+export def "get-a-credit-card" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -699,7 +699,7 @@ export def "credit-cards get" [
 #
 # GET /products
 # operationId: List all products
-export def "products list" [
+export def "list-all-products" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -737,7 +737,7 @@ export def "products list" [
 #
 # GET /products/{id}
 # operationId: Get a Product
-export def "products get" [
+export def "get-a-product" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -777,7 +777,7 @@ export def "products get" [
 #
 # GET /promotional_codes
 # operationId: Get all promotional codes for user
-export def "promotional-codes get-list-for-user" [
+export def "get-all-promotional-codes-for-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -815,7 +815,7 @@ export def "promotional-codes get-list-for-user" [
 #
 # POST /promotional_codes
 # operationId: Add a promotional code
-export def "promotional-codes create" [
+export def "add-a-promotional-code" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -852,7 +852,7 @@ export def "promotional-codes create" [
 #
 # GET /rides/{id}
 # operationId: Get a ride
-export def "rides get" [
+export def "get-a-ride" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -892,7 +892,7 @@ export def "rides get" [
 #
 # GET /rides/{id}/cancel
 # operationId: Cancel a Ride
-export def "rides-cancel cancel" [
+export def "cancel-a-ride" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -932,7 +932,7 @@ export def "rides-cancel cancel" [
 #
 # GET /rides/{id}/cancel_fees
 # operationId: Cancel fee of a Ride
-export def "rides-cancel-fees cancel" [
+export def "cancel-fee-of-a-ride" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -972,7 +972,7 @@ export def "rides-cancel-fees cancel" [
 #
 # GET /rides/{id}/estimate
 # operationId: Estimate a ride
-export def "rides-estimate get" [
+export def "estimate-a-ride" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1012,7 +1012,7 @@ export def "rides-estimate get" [
 #
 # POST /rides/{id}/reserve
 # operationId: Reserve a ride
-export def "rides-reserve create" [
+export def "reserve-a-ride" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1052,7 +1052,7 @@ export def "rides-reserve create" [
 #
 # GET /rides?page={page}&per_page={per_page}
 # operationId: Get all user rides
-export def "rides-pagepageper-pageper-page get-list-user-rides" [
+export def "get-all-user-rides" [
   page: float
   per_page: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -1094,7 +1094,7 @@ export def "rides-pagepageper-pageper-page get-list-user-rides" [
 #
 # POST /rides?page={page}&per_page={per_page}
 # operationId: Create a ride
-export def "rides-pagepageper-pageper-page create-ride" [
+export def "create-a-ride" [
   page: any
   per_page: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -1136,7 +1136,7 @@ export def "rides-pagepageper-pageper-page create-ride" [
 #
 # GET /{version}
 # operationId: Retrieve the Entry Point on Version
-export def "eco-ta-co-api-root get-entry-point" [
+export def "retrieve-the-entry-point-on-version" [
   version: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

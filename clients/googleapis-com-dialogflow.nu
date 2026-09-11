@@ -139,7 +139,7 @@ def data-format-completer [] { ["BLOB" "DATA_FORMAT_UNSPECIFIED" "JSON"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v3beta1-test-cases-calculate-coverage get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "dialogflow-projects-locations-agents-test-cases-calculate-coverage" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -163,7 +163,7 @@ export def commands []: nothing -> table {
 #
 # GET /v3beta1/{agent}/testCases:calculateCoverage
 # operationId: dialogflow.projects.locations.agents.testCases.calculateCoverage
-export def "v3beta1-test-cases-calculate-coverage get" [
+export def "dialogflow-projects-locations-agents-test-cases-calculate-coverage" [
   agent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -212,7 +212,7 @@ export def "v3beta1-test-cases-calculate-coverage get" [
 #
 # POST /v3beta1/{baseVersion}:compareVersions
 # operationId: dialogflow.projects.locations.agents.flows.versions.compareVersions
-export def "v3beta1 create-compare-versions" [
+export def "dialogflow-projects-locations-agents-flows-versions-compare-versions" [
   base_version: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -265,7 +265,7 @@ export def "v3beta1 create-compare-versions" [
 #
 # POST /v3beta1/{environment}:deployFlow
 # operationId: dialogflow.projects.locations.agents.environments.deployFlow
-export def "v3beta1 create-deploy-flow" [
+export def "dialogflow-projects-locations-agents-environments-deploy-flow" [
   environment: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -317,7 +317,7 @@ export def "v3beta1 create-deploy-flow" [
 #
 # POST /v3beta1/{environment}:runContinuousTest
 # operationId: dialogflow.projects.locations.agents.environments.runContinuousTest
-export def "v3beta1 test-run-continuous" [
+export def "dialogflow-projects-locations-agents-environments-run-continuous-test" [
   environment: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -369,7 +369,7 @@ export def "v3beta1 test-run-continuous" [
 #
 # DELETE /v3beta1/{name}
 # operationId: dialogflow.projects.locations.securitySettings.delete
-export def "v3beta1 delete" [
+export def "dialogflow-projects-locations-security-settings-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -418,7 +418,7 @@ export def "v3beta1 delete" [
 #
 # GET /v3beta1/{name}
 # operationId: dialogflow.projects.operations.get
-export def "v3beta1 get" [
+export def "dialogflow-projects-operations-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -469,7 +469,7 @@ export def "v3beta1 get" [
 # operationId: dialogflow.projects.locations.securitySettings.patch
 # --audioExportSettings shape: {audioExportPattern?: string, audioFormat?: "AUDIO_FORMAT_UNSPECIFIED"|"MULAW"|"MP3"|"OGG", enableAudioRedaction?: bool, gcsBucket?: string}
 # --insightsExportSettings shape: {enableInsightsExport?: bool}
-export def "v3beta1 update" [
+export def "dialogflow-projects-locations-security-settings-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -531,7 +531,7 @@ export def "v3beta1 update" [
 #
 # GET /v3beta1/{name}/locations
 # operationId: dialogflow.projects.locations.list
-export def "v3beta1-locations list" [
+export def "dialogflow-projects-locations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -582,7 +582,7 @@ export def "v3beta1-locations list" [
 #
 # GET /v3beta1/{name}/operations
 # operationId: dialogflow.projects.operations.list
-export def "v3beta1-operations list" [
+export def "dialogflow-projects-operations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -633,7 +633,7 @@ export def "v3beta1-operations list" [
 #
 # POST /v3beta1/{name}:cancel
 # operationId: dialogflow.projects.operations.cancel
-export def "v3beta1 cancel" [
+export def "dialogflow-projects-operations-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -681,7 +681,7 @@ export def "v3beta1 cancel" [
 #
 # POST /v3beta1/{name}:export
 # operationId: dialogflow.projects.locations.agents.flows.export
-export def "v3beta1 export" [
+export def "dialogflow-projects-locations-agents-flows-export" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -734,7 +734,7 @@ export def "v3beta1 export" [
 #
 # POST /v3beta1/{name}:load
 # operationId: dialogflow.projects.locations.agents.flows.versions.load
-export def "v3beta1 create-load" [
+export def "dialogflow-projects-locations-agents-flows-versions-load" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -786,7 +786,7 @@ export def "v3beta1 create-load" [
 #
 # GET /v3beta1/{name}:lookupEnvironmentHistory
 # operationId: dialogflow.projects.locations.agents.environments.lookupEnvironmentHistory
-export def "v3beta1 get-lookup-environment-history" [
+export def "dialogflow-projects-locations-agents-environments-lookup-environment-history" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -836,7 +836,7 @@ export def "v3beta1 get-lookup-environment-history" [
 #
 # POST /v3beta1/{name}:restore
 # operationId: dialogflow.projects.locations.agents.restore
-export def "v3beta1 create-restore" [
+export def "dialogflow-projects-locations-agents-restore" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -890,7 +890,7 @@ export def "v3beta1 create-restore" [
 #
 # POST /v3beta1/{name}:run
 # operationId: dialogflow.projects.locations.agents.testCases.run
-export def "v3beta1 create-run" [
+export def "dialogflow-projects-locations-agents-test-cases-run" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -942,7 +942,7 @@ export def "v3beta1 create-run" [
 #
 # POST /v3beta1/{name}:start
 # operationId: dialogflow.projects.locations.agents.environments.experiments.start
-export def "v3beta1 start" [
+export def "dialogflow-projects-locations-agents-environments-experiments-start" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -994,7 +994,7 @@ export def "v3beta1 start" [
 #
 # POST /v3beta1/{name}:stop
 # operationId: dialogflow.projects.locations.agents.environments.experiments.stop
-export def "v3beta1 stop" [
+export def "dialogflow-projects-locations-agents-environments-experiments-stop" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1046,7 +1046,7 @@ export def "v3beta1 stop" [
 #
 # POST /v3beta1/{name}:train
 # operationId: dialogflow.projects.locations.agents.flows.train
-export def "v3beta1 create-train" [
+export def "dialogflow-projects-locations-agents-flows-train" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1098,7 +1098,7 @@ export def "v3beta1 create-train" [
 #
 # POST /v3beta1/{name}:validate
 # operationId: dialogflow.projects.locations.agents.flows.validate
-export def "v3beta1 validate" [
+export def "dialogflow-projects-locations-agents-flows-validate" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1150,7 +1150,7 @@ export def "v3beta1 validate" [
 #
 # GET /v3beta1/{parent}/agents
 # operationId: dialogflow.projects.locations.agents.list
-export def "v3beta1-agents list" [
+export def "dialogflow-projects-locations-agents-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1203,7 +1203,7 @@ export def "v3beta1-agents list" [
 # --advancedSettings shape: {audioExportGcsDestination?: record, loggingSettings?: record}
 # --speechToTextSettings shape: {enableSpeechAdaptation?: bool}
 # --textToSpeechSettings shape: {synthesizeSpeechConfigs?: record}
-export def "v3beta1-agents create" [
+export def "dialogflow-projects-locations-agents-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1269,7 +1269,7 @@ export def "v3beta1-agents create" [
 #
 # GET /v3beta1/{parent}/changelogs
 # operationId: dialogflow.projects.locations.agents.changelogs.list
-export def "v3beta1-changelogs list" [
+export def "dialogflow-projects-locations-agents-changelogs-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1320,7 +1320,7 @@ export def "v3beta1-changelogs list" [
 #
 # GET /v3beta1/{parent}/continuousTestResults
 # operationId: dialogflow.projects.locations.agents.environments.continuousTestResults.list
-export def "v3beta1-continuous-test-results list" [
+export def "dialogflow-projects-locations-agents-environments-continuous-test-results-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1370,7 +1370,7 @@ export def "v3beta1-continuous-test-results list" [
 #
 # GET /v3beta1/{parent}/deployments
 # operationId: dialogflow.projects.locations.agents.environments.deployments.list
-export def "v3beta1-deployments list" [
+export def "dialogflow-projects-locations-agents-environments-deployments-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1420,7 +1420,7 @@ export def "v3beta1-deployments list" [
 #
 # GET /v3beta1/{parent}/entityTypes
 # operationId: dialogflow.projects.locations.agents.sessions.entityTypes.list
-export def "v3beta1-entity-types list" [
+export def "dialogflow-projects-locations-agents-sessions-entity-types-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1471,7 +1471,7 @@ export def "v3beta1-entity-types list" [
 # POST /v3beta1/{parent}/entityTypes
 # operationId: dialogflow.projects.locations.agents.sessions.entityTypes.create
 # --entities item shape: {synonyms?: list<string>, value?: string}
-export def "v3beta1-entity-types create" [
+export def "dialogflow-projects-locations-agents-sessions-entity-types-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1526,7 +1526,7 @@ export def "v3beta1-entity-types create" [
 #
 # GET /v3beta1/{parent}/environments
 # operationId: dialogflow.projects.locations.agents.environments.list
-export def "v3beta1-environments list" [
+export def "dialogflow-projects-locations-agents-environments-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1579,7 +1579,7 @@ export def "v3beta1-environments list" [
 # --testCasesConfig shape: {enableContinuousRun?: bool, enablePredeploymentRun?: bool, testCases?: list<string>}
 # --versionConfigs item shape: {version?: string}
 # --webhookConfig shape: {webhookOverrides?: list}
-export def "v3beta1-environments create" [
+export def "dialogflow-projects-locations-agents-environments-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1636,7 +1636,7 @@ export def "v3beta1-environments create" [
 #
 # GET /v3beta1/{parent}/experiments
 # operationId: dialogflow.projects.locations.agents.environments.experiments.list
-export def "v3beta1-experiments list" [
+export def "dialogflow-projects-locations-agents-environments-experiments-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1691,7 +1691,7 @@ export def "v3beta1-experiments list" [
 # --rolloutConfig shape: {failureCondition?: string, rolloutCondition?: string, rolloutSteps?: list}
 # --rolloutState shape: {startTime?: string, step?: string, stepIndex?: int}
 # --variantsHistory item shape: {updateTime?: string, versionVariants?: record}
-export def "v3beta1-experiments create" [
+export def "dialogflow-projects-locations-agents-environments-experiments-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1757,7 +1757,7 @@ export def "v3beta1-experiments create" [
 #
 # GET /v3beta1/{parent}/flows
 # operationId: dialogflow.projects.locations.agents.flows.list
-export def "v3beta1-flows list" [
+export def "dialogflow-projects-locations-agents-flows-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1811,7 +1811,7 @@ export def "v3beta1-flows list" [
 # --eventHandlers item shape: {event?: string, targetFlow?: string, targetPage?: string, triggerFulfillment?: record}
 # --nluSettings shape: {classificationThreshold?: float, modelTrainingMode?: "MODEL_TRAINING_MODE_UNSPECIFIED"|"MODEL_TRAINING_MODE_AUTOMATIC"|"MODEL_TRAINING_MODE_MANUAL", modelType?: "MODEL_TYPE_UNSPECIFIED"|"MODEL_TYPE_STANDARD"|"MODEL_TYPE_ADVANCED"}
 # --transitionRoutes item shape: {condition?: string, intent?: string, targetFlow?: string, targetPage?: string, triggerFulfillment?: record}
-export def "v3beta1-flows create" [
+export def "dialogflow-projects-locations-agents-flows-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1870,7 +1870,7 @@ export def "v3beta1-flows create" [
 #
 # POST /v3beta1/{parent}/flows:import
 # operationId: dialogflow.projects.locations.agents.flows.import
-export def "v3beta1-flows-import import" [
+export def "dialogflow-projects-locations-agents-flows-import" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1924,7 +1924,7 @@ export def "v3beta1-flows-import import" [
 #
 # GET /v3beta1/{parent}/intents
 # operationId: dialogflow.projects.locations.agents.intents.list
-export def "v3beta1-intents list" [
+export def "dialogflow-projects-locations-agents-intents-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1978,7 +1978,7 @@ export def "v3beta1-intents list" [
 # operationId: dialogflow.projects.locations.agents.intents.create
 # --parameters item shape: {entityType?: string, id?: string, isList?: bool, redact?: bool}
 # --trainingPhrases item shape: {id?: string, parts?: list, repeatCount?: int}
-export def "v3beta1-intents create" [
+export def "dialogflow-projects-locations-agents-intents-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2038,7 +2038,7 @@ export def "v3beta1-intents create" [
 #
 # GET /v3beta1/{parent}/pages
 # operationId: dialogflow.projects.locations.agents.flows.pages.list
-export def "v3beta1-pages list" [
+export def "dialogflow-projects-locations-agents-flows-pages-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2093,7 +2093,7 @@ export def "v3beta1-pages list" [
 # --eventHandlers item shape: {event?: string, targetFlow?: string, targetPage?: string, triggerFulfillment?: record}
 # --form shape: {parameters?: list}
 # --transitionRoutes item shape: {condition?: string, intent?: string, targetFlow?: string, targetPage?: string, triggerFulfillment?: record}
-export def "v3beta1-pages create" [
+export def "dialogflow-projects-locations-agents-flows-pages-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2152,7 +2152,7 @@ export def "v3beta1-pages create" [
 #
 # GET /v3beta1/{parent}/results
 # operationId: dialogflow.projects.locations.agents.testCases.results.list
-export def "v3beta1-results list" [
+export def "dialogflow-projects-locations-agents-test-cases-results-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2203,7 +2203,7 @@ export def "v3beta1-results list" [
 #
 # GET /v3beta1/{parent}/securitySettings
 # operationId: dialogflow.projects.locations.securitySettings.list
-export def "v3beta1-security-settings list" [
+export def "dialogflow-projects-locations-security-settings-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2255,7 +2255,7 @@ export def "v3beta1-security-settings list" [
 # operationId: dialogflow.projects.locations.securitySettings.create
 # --audioExportSettings shape: {audioExportPattern?: string, audioFormat?: "AUDIO_FORMAT_UNSPECIFIED"|"MULAW"|"MP3"|"OGG", enableAudioRedaction?: bool, gcsBucket?: string}
 # --insightsExportSettings shape: {enableInsightsExport?: bool}
-export def "v3beta1-security-settings create" [
+export def "dialogflow-projects-locations-security-settings-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2316,7 +2316,7 @@ export def "v3beta1-security-settings create" [
 #
 # GET /v3beta1/{parent}/testCases
 # operationId: dialogflow.projects.locations.agents.testCases.list
-export def "v3beta1-test-cases list" [
+export def "dialogflow-projects-locations-agents-test-cases-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2370,7 +2370,7 @@ export def "v3beta1-test-cases list" [
 # --lastTestResult shape: {conversationTurns?: list, environment?: string, name?: string, testResult?: "TEST_RESULT_UNSPECIFIED"|"PASSED"|"FAILED", testTime?: string}
 # --testCaseConversationTurns item shape: {userInput?: record, virtualAgentOutput?: record}
 # --testConfig shape: {flow?: string, page?: string, trackingParameters?: list<string>}
-export def "v3beta1-test-cases create" [
+export def "dialogflow-projects-locations-agents-test-cases-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2428,7 +2428,7 @@ export def "v3beta1-test-cases create" [
 #
 # POST /v3beta1/{parent}/testCases:batchDelete
 # operationId: dialogflow.projects.locations.agents.testCases.batchDelete
-export def "v3beta1-test-cases-batch-delete delete" [
+export def "dialogflow-projects-locations-agents-test-cases-batch-delete" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2480,7 +2480,7 @@ export def "v3beta1-test-cases-batch-delete delete" [
 #
 # POST /v3beta1/{parent}/testCases:batchRun
 # operationId: dialogflow.projects.locations.agents.testCases.batchRun
-export def "v3beta1-test-cases-batch-run create" [
+export def "dialogflow-projects-locations-agents-test-cases-batch-run" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2533,7 +2533,7 @@ export def "v3beta1-test-cases-batch-run create" [
 #
 # POST /v3beta1/{parent}/testCases:export
 # operationId: dialogflow.projects.locations.agents.testCases.export
-export def "v3beta1-test-cases-export export" [
+export def "dialogflow-projects-locations-agents-test-cases-export" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2587,7 +2587,7 @@ export def "v3beta1-test-cases-export export" [
 #
 # POST /v3beta1/{parent}/testCases:import
 # operationId: dialogflow.projects.locations.agents.testCases.import
-export def "v3beta1-test-cases-import import" [
+export def "dialogflow-projects-locations-agents-test-cases-import" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2640,7 +2640,7 @@ export def "v3beta1-test-cases-import import" [
 #
 # GET /v3beta1/{parent}/transitionRouteGroups
 # operationId: dialogflow.projects.locations.agents.flows.transitionRouteGroups.list
-export def "v3beta1-transition-route-groups list" [
+export def "dialogflow-projects-locations-agents-flows-transition-route-groups-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2692,7 +2692,7 @@ export def "v3beta1-transition-route-groups list" [
 # POST /v3beta1/{parent}/transitionRouteGroups
 # operationId: dialogflow.projects.locations.agents.flows.transitionRouteGroups.create
 # --transitionRoutes item shape: {condition?: string, intent?: string, targetFlow?: string, targetPage?: string, triggerFulfillment?: record}
-export def "v3beta1-transition-route-groups create" [
+export def "dialogflow-projects-locations-agents-flows-transition-route-groups-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2747,7 +2747,7 @@ export def "v3beta1-transition-route-groups create" [
 #
 # GET /v3beta1/{parent}/versions
 # operationId: dialogflow.projects.locations.agents.flows.versions.list
-export def "v3beta1-versions list" [
+export def "dialogflow-projects-locations-agents-flows-versions-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2798,7 +2798,7 @@ export def "v3beta1-versions list" [
 # POST /v3beta1/{parent}/versions
 # operationId: dialogflow.projects.locations.agents.flows.versions.create
 # --nluSettings shape: {classificationThreshold?: float, modelTrainingMode?: "MODEL_TRAINING_MODE_UNSPECIFIED"|"MODEL_TRAINING_MODE_AUTOMATIC"|"MODEL_TRAINING_MODE_MANUAL", modelType?: "MODEL_TYPE_UNSPECIFIED"|"MODEL_TYPE_STANDARD"|"MODEL_TYPE_ADVANCED"}
-export def "v3beta1-versions create" [
+export def "dialogflow-projects-locations-agents-flows-versions-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2853,7 +2853,7 @@ export def "v3beta1-versions create" [
 #
 # GET /v3beta1/{parent}/webhooks
 # operationId: dialogflow.projects.locations.agents.webhooks.list
-export def "v3beta1-webhooks list" [
+export def "dialogflow-projects-locations-agents-webhooks-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2905,7 +2905,7 @@ export def "v3beta1-webhooks list" [
 # operationId: dialogflow.projects.locations.agents.webhooks.create
 # --genericWebService shape: {allowedCaCerts?: list<string>, password?: string, requestHeaders?: record, uri?: string, username?: string}
 # --serviceDirectory shape: {genericWebService?: record, service?: string}
-export def "v3beta1-webhooks create" [
+export def "dialogflow-projects-locations-agents-webhooks-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2965,7 +2965,7 @@ export def "v3beta1-webhooks create" [
 # --outputAudioConfig shape: {audioEncoding?: "OUTPUT_AUDIO_ENCODING_UNSPECIFIED"|"OUTPUT_AUDIO_ENCODING_LINEAR_16"|"OUTPUT_AUDIO_ENCODING_MP3"|"OUTPUT_AUDIO_ENCODING_MP3_64_KBPS"|"OUTPUT_AUDIO_ENCODING_OGG_OPUS"|"OUTPUT_AUDIO_ENCODING_MULAW", sampleRateHertz?: int, synthesizeSpeechConfig?: record}
 # --queryInput shape: {audio?: record, dtmf?: record, event?: record, intent?: record, languageCode?: string, text?: record}
 # --queryParams shape: {analyzeQueryTextSentiment?: bool, channel?: string, currentPage?: string, disableWebhook?: bool, flowVersions?: list<string>, geoLocation?: record, parameters?: record, payload?: record, sessionEntityTypes?: list, timeZone?: string, webhookHeaders?: record}
-export def "v3beta1 create-detect-intent" [
+export def "dialogflow-projects-locations-agents-sessions-detect-intent" [
   session: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3022,7 +3022,7 @@ export def "v3beta1 create-detect-intent" [
 # --match shape: {confidence?: float, event?: string, intent?: record, matchType?: "MATCH_TYPE_UNSPECIFIED"|"INTENT"|"DIRECT_INTENT"|"PARAMETER_FILLING"|"NO_MATCH"|"NO_INPUT"|"EVENT", parameters?: record, resolvedInput?: string}
 # --matchIntentRequest shape: {persistParameterChanges?: bool, queryInput?: record, queryParams?: record}
 # --outputAudioConfig shape: {audioEncoding?: "OUTPUT_AUDIO_ENCODING_UNSPECIFIED"|"OUTPUT_AUDIO_ENCODING_LINEAR_16"|"OUTPUT_AUDIO_ENCODING_MP3"|"OUTPUT_AUDIO_ENCODING_MP3_64_KBPS"|"OUTPUT_AUDIO_ENCODING_OGG_OPUS"|"OUTPUT_AUDIO_ENCODING_MULAW", sampleRateHertz?: int, synthesizeSpeechConfig?: record}
-export def "v3beta1 create-fulfill-intent" [
+export def "dialogflow-projects-locations-agents-sessions-fulfill-intent" [
   session: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3078,7 +3078,7 @@ export def "v3beta1 create-fulfill-intent" [
 # operationId: dialogflow.projects.locations.agents.sessions.matchIntent
 # --queryInput shape: {audio?: record, dtmf?: record, event?: record, intent?: record, languageCode?: string, text?: record}
 # --queryParams shape: {analyzeQueryTextSentiment?: bool, channel?: string, currentPage?: string, disableWebhook?: bool, flowVersions?: list<string>, geoLocation?: record, parameters?: record, payload?: record, sessionEntityTypes?: list, timeZone?: string, webhookHeaders?: record}
-export def "v3beta1 create-match-intent" [
+export def "dialogflow-projects-locations-agents-sessions-match-intent" [
   session: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

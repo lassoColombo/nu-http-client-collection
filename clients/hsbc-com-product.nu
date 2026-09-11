@@ -97,7 +97,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "open-banking-v2-2-business-current-accounts get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-open-banking-v2-2-business-current-accounts" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -120,7 +120,7 @@ export def commands []: nothing -> table {
 # This API will return data about all BCA products and is prepared to the Open Banking standards as defined by the Open Banking Implementation Entity (OBIE) in data dictionary version 2.2. It is regulated by the UK Competition and Markets Authority (CMA). Data is only available for the United Kingdom.
 #
 # GET /open-banking/v2.2/business-current-accounts
-export def "open-banking-v2-2-business-current-accounts get" [
+export def "get-open-banking-v2-2-business-current-accounts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -153,7 +153,7 @@ export def "open-banking-v2-2-business-current-accounts get" [
 # This API will return data about all commercial credit cards products and is prepared to the Open Banking standards as defined by the Open Banking Implementation Entity (OBIE) in data dictionary version 2.2. It is regulated by the UK Competition and Markets Authority (CMA). Data is only available for the United Kingdom.
 #
 # GET /open-banking/v2.2/commercial-credit-cards
-export def "open-banking-v2-2-commercial-credit-cards get" [
+export def "get-open-banking-v2-2-commercial-credit-cards" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -186,7 +186,7 @@ export def "open-banking-v2-2-commercial-credit-cards get" [
 # This API will return data about all PCA products and is prepared to the Open Banking standards as defined by the Open Banking Implementation Entity (OBIE) in data dictionary version 2.2. It is regulated by the UK Competition and Markets Authority (CMA). Data is only available for the United Kingdom.
 #
 # GET /open-banking/v2.2/personal-current-accounts
-export def "open-banking-v2-2-personal-current-accounts get" [
+export def "get-open-banking-v2-2-personal-current-accounts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -219,7 +219,7 @@ export def "open-banking-v2-2-personal-current-accounts get" [
 # This API will return data about all SME lending products and is prepared to the Open Banking standards as defined by the Open Banking Implementation Entity (OBIE) in data dictionary version 2.2. It is regulated by the UK Competition and Markets Authority (CMA). Data is only available for the United Kingdom.
 #
 # GET /open-banking/v2.2/unsecured-sme-loans
-export def "open-banking-v2-2-unsecured-sme-loans get" [
+export def "get-open-banking-v2-2-unsecured-sme-loans" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -252,7 +252,7 @@ export def "open-banking-v2-2-unsecured-sme-loans get" [
 # This extended API will return data about all BCA products for the specified segment. It is based-on the Open Banking standards as defined by the Open Banking Implementation Entity (OBIE) in data dictionary version 2.2. The extended functionality may not fully adhere to the non-functional requirements of the regulator. Data is only available for the United Kingdom.
 #
 # GET /x-open-banking/v2.2/business-current-accounts/segment/{segment}
-export def "x-open-banking-v2-2-business-current-accounts-segment get" [
+export def "get-x-open-banking-v2-2-business-current-accounts-segment-segment" [
   segment: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -287,7 +287,7 @@ export def "x-open-banking-v2-2-business-current-accounts-segment get" [
 # This extended API will return data about all commercial credit cards products for the specified segment. It is based-on the Open Banking standards as defined by the Open Banking Implementation Entity (OBIE) in data dictionary version 2.2. The extended functionality may not fully adhere to the non-functional requirements of the regulator. Data is only available for the United Kingdom.
 #
 # GET /x-open-banking/v2.2/commercial-credit-cards/segment/{segment}
-export def "x-open-banking-v2-2-commercial-credit-cards-segment get" [
+export def "get-x-open-banking-v2-2-commercial-credit-cards-segment-segment" [
   segment: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -322,7 +322,7 @@ export def "x-open-banking-v2-2-commercial-credit-cards-segment get" [
 # This extended API will return data about all PCA products for the specified segment. It is based-on the Open Banking standards as defined by the Open Banking Implementation Entity (OBIE) in data dictionary version 2.2. The extended functionality may not fully adhere to the non-functional requirements of the regulator. Data is only available for the United Kingdom.
 #
 # GET /x-open-banking/v2.2/personal-current-accounts/segment/{segment}
-export def "x-open-banking-v2-2-personal-current-accounts-segment get" [
+export def "get-x-open-banking-v2-2-personal-current-accounts-segment-segment" [
   segment: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -357,7 +357,7 @@ export def "x-open-banking-v2-2-personal-current-accounts-segment get" [
 # This extended API will return data about all SME lending products for the specified segment. It is based-on the Open Banking standards as defined by the Open Banking Implementation Entity (OBIE) in data dictionary version 2.2. The extended functionality may not fully adhere to the non-functional requirements of the regulator. Data is only available for the United Kingdom.
 #
 # GET /x-open-banking/v2.2/unsecured-sme-loans/segment/{segment}
-export def "x-open-banking-v2-2-unsecured-sme-loans-segment get" [
+export def "get-x-open-banking-v2-2-unsecured-sme-loans-segment-segment" [
   segment: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

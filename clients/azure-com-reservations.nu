@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-capacity-calculate-price create-reservation-order" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "reservation-order-calculate" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -142,7 +142,7 @@ export def commands []: nothing -> table {
 # operationId: ReservationOrder_Calculate
 # --properties shape: {appliedScopeType?: "Single"|"Shared", appliedScopes?: list<string>, billingPlan?: "Upfront"|"Monthly", billingScopeId?: string, displayName?: string, quantity?: int, renew?: bool, reservedResourceProperties?: record, reservedResourceType?: "VirtualMachines"|"SqlDatabases"|"SuseLinux"|"CosmosDb"|"RedHat"|"SqlDataWarehouse"|"VMwareCloudSimple"|"RedHatOsa", term?: "P1Y"|"P3Y"}
 # --sku shape: {name?: string}
-export def "providers-microsoft-capacity-calculate-price create-reservation-order" [
+export def "reservation-order-calculate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,7 +184,7 @@ export def "providers-microsoft-capacity-calculate-price create-reservation-orde
 #
 # GET /providers/Microsoft.Capacity/operations
 # operationId: Operation_List
-export def "providers-microsoft-capacity-operations list" [
+export def "operation-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -220,7 +220,7 @@ export def "providers-microsoft-capacity-operations list" [
 #
 # GET /providers/Microsoft.Capacity/reservationOrders
 # operationId: ReservationOrder_List
-export def "providers-microsoft-capacity-reservation-orders list" [
+export def "reservation-order-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -256,7 +256,7 @@ export def "providers-microsoft-capacity-reservation-orders list" [
 #
 # GET /providers/Microsoft.Capacity/reservationOrders/{reservationOrderId}
 # operationId: ReservationOrder_Get
-export def "providers-microsoft-capacity-reservation-orders get" [
+export def "reservation-order-get" [
   reservation_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -297,7 +297,7 @@ export def "providers-microsoft-capacity-reservation-orders get" [
 # operationId: ReservationOrder_Purchase
 # --properties shape: {appliedScopeType?: "Single"|"Shared", appliedScopes?: list<string>, billingPlan?: "Upfront"|"Monthly", billingScopeId?: string, displayName?: string, quantity?: int, renew?: bool, reservedResourceProperties?: record, reservedResourceType?: "VirtualMachines"|"SqlDatabases"|"SuseLinux"|"CosmosDb"|"RedHat"|"SqlDataWarehouse"|"VMwareCloudSimple"|"RedHatOsa", term?: "P1Y"|"P3Y"}
 # --sku shape: {name?: string}
-export def "providers-microsoft-capacity-reservation-orders update-purchase" [
+export def "reservation-order-purchase" [
   reservation_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -342,7 +342,7 @@ export def "providers-microsoft-capacity-reservation-orders update-purchase" [
 # POST /providers/Microsoft.Capacity/reservationOrders/{reservationOrderId}/merge
 # operationId: Reservation_Merge
 # --properties shape: {sources?: list<string>}
-export def "providers-microsoft-capacity-reservation-orders-merge create" [
+export def "reservation-merge" [
   reservation_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -384,7 +384,7 @@ export def "providers-microsoft-capacity-reservation-orders-merge create" [
 #
 # GET /providers/Microsoft.Capacity/reservationOrders/{reservationOrderId}/reservations
 # operationId: Reservation_List
-export def "providers-microsoft-capacity-reservation-orders-reservations list" [
+export def "reservation-list" [
   reservation_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -422,7 +422,7 @@ export def "providers-microsoft-capacity-reservation-orders-reservations list" [
 #
 # GET /providers/Microsoft.Capacity/reservationOrders/{reservationOrderId}/reservations/{reservationId}
 # operationId: Reservation_Get
-export def "providers-microsoft-capacity-reservation-orders-reservations get" [
+export def "reservation-get" [
   reservation_order_id: string
   reservation_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -464,7 +464,7 @@ export def "providers-microsoft-capacity-reservation-orders-reservations get" [
 # PATCH /providers/Microsoft.Capacity/reservationOrders/{reservationOrderId}/reservations/{reservationId}
 # operationId: Reservation_Update
 # --properties shape: {appliedScopeType?: "Single"|"Shared", appliedScopes?: list<string>, instanceFlexibility?: "On"|"Off", name?: string, renew?: bool, renewProperties?: record}
-export def "providers-microsoft-capacity-reservation-orders-reservations update" [
+export def "reservation-update" [
   reservation_order_id: string
   reservation_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -508,7 +508,7 @@ export def "providers-microsoft-capacity-reservation-orders-reservations update"
 #
 # POST /providers/Microsoft.Capacity/reservationOrders/{reservationOrderId}/reservations/{reservationId}/availableScopes
 # operationId: Reservation_AvailableScopes
-export def "providers-microsoft-capacity-reservation-orders-reservations-available-scopes create" [
+export def "reservation-available-scopes" [
   reservation_order_id: string
   reservation_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -552,7 +552,7 @@ export def "providers-microsoft-capacity-reservation-orders-reservations-availab
 #
 # GET /providers/Microsoft.Capacity/reservationOrders/{reservationOrderId}/reservations/{reservationId}/revisions
 # operationId: Reservation_ListRevisions
-export def "providers-microsoft-capacity-reservation-orders-reservations-revisions list" [
+export def "reservation-list-revisions" [
   reservation_order_id: string
   reservation_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -593,7 +593,7 @@ export def "providers-microsoft-capacity-reservation-orders-reservations-revisio
 # POST /providers/Microsoft.Capacity/reservationOrders/{reservationOrderId}/split
 # operationId: Reservation_Split
 # --properties shape: {quantities?: list<int>, reservationId?: string}
-export def "providers-microsoft-capacity-reservation-orders-split create" [
+export def "reservation-split" [
   reservation_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -635,7 +635,7 @@ export def "providers-microsoft-capacity-reservation-orders-split create" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Capacity/appliedReservations
 # operationId: GetAppliedReservationList
-export def "subscriptions-providers-microsoft-capacity-applied-reservations get-list" [
+export def "get-applied-reservation-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -673,7 +673,7 @@ export def "subscriptions-providers-microsoft-capacity-applied-reservations get-
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Capacity/catalogs
 # operationId: GetCatalog
-export def "subscriptions-providers-microsoft-capacity-catalogs get" [
+export def "get-catalog" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

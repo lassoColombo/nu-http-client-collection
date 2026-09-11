@@ -121,7 +121,7 @@ def x-amz-target-completer-19 [] { ["CloudHsmFrontendService.RemoveTagsFromResou
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-tags-to-resource" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "add-tags-to-resource" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -145,7 +145,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AddTagsToResource
-export def "api create-tags-to-resource" [
+export def "add-tags-to-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -194,7 +194,7 @@ export def "api create-tags-to-resource" [
 #
 # POST /
 # operationId: CreateHapg
-export def "api create-hapg" [
+export def "create-hapg" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -242,7 +242,7 @@ export def "api create-hapg" [
 #
 # POST /
 # operationId: CreateHsm
-export def "api create-hsm" [
+export def "create-hsm" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -297,7 +297,7 @@ export def "api create-hsm" [
 #
 # POST /
 # operationId: CreateLunaClient
-export def "api create-luna-client" [
+export def "create-luna-client" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -346,7 +346,7 @@ export def "api create-luna-client" [
 #
 # POST /
 # operationId: DeleteHapg
-export def "api delete-hapg" [
+export def "delete-hapg" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -394,7 +394,7 @@ export def "api delete-hapg" [
 #
 # POST /
 # operationId: DeleteHsm
-export def "api delete-hsm" [
+export def "delete-hsm" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -442,7 +442,7 @@ export def "api delete-hsm" [
 #
 # POST /
 # operationId: DeleteLunaClient
-export def "api delete-luna-client" [
+export def "delete-luna-client" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -490,7 +490,7 @@ export def "api delete-luna-client" [
 #
 # POST /
 # operationId: DescribeHapg
-export def "api get-hapg" [
+export def "describe-hapg" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -538,7 +538,7 @@ export def "api get-hapg" [
 #
 # POST /
 # operationId: DescribeHsm
-export def "api get-hsm" [
+export def "describe-hsm" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -587,7 +587,7 @@ export def "api get-hsm" [
 #
 # POST /
 # operationId: DescribeLunaClient
-export def "api get-luna-client" [
+export def "describe-luna-client" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -636,7 +636,7 @@ export def "api get-luna-client" [
 #
 # POST /
 # operationId: GetConfig
-export def "api get-config" [
+export def "get-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -686,7 +686,7 @@ export def "api get-config" [
 #
 # POST /
 # operationId: ListAvailableZones
-export def "api list-available-zones" [
+export def "list-available-zones" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -734,7 +734,7 @@ export def "api list-available-zones" [
 #
 # POST /
 # operationId: ListHapgs
-export def "api list-hapgs" [
+export def "list-hapgs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -782,7 +782,7 @@ export def "api list-hapgs" [
 #
 # POST /
 # operationId: ListHsms
-export def "api list-hsms" [
+export def "list-hsms" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -830,7 +830,7 @@ export def "api list-hsms" [
 #
 # POST /
 # operationId: ListLunaClients
-export def "api list-luna-clients" [
+export def "list-luna-clients" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -878,7 +878,7 @@ export def "api list-luna-clients" [
 #
 # POST /
 # operationId: ListTagsForResource
-export def "api list-tags-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -926,7 +926,7 @@ export def "api list-tags-for-resource" [
 #
 # POST /
 # operationId: ModifyHapg
-export def "api create-modify-hapg" [
+export def "modify-hapg" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -976,7 +976,7 @@ export def "api create-modify-hapg" [
 #
 # POST /
 # operationId: ModifyHsm
-export def "api create-modify-hsm" [
+export def "modify-hsm" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1029,7 +1029,7 @@ export def "api create-modify-hsm" [
 #
 # POST /
 # operationId: ModifyLunaClient
-export def "api create-modify-luna-client" [
+export def "modify-luna-client" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1078,7 +1078,7 @@ export def "api create-modify-luna-client" [
 #
 # POST /
 # operationId: RemoveTagsFromResource
-export def "api delete-tags-from-resource" [
+export def "remove-tags-from-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

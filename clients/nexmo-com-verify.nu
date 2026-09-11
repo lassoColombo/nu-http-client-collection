@@ -110,7 +110,7 @@ def lg-completer-1 [] { ["ar-xa" "cs-cz" "cy-cy" "cy-gb" "da-dk" "de-de" "el-gr"
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "check verify" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "verify-check" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -135,7 +135,7 @@ export def commands []: nothing -> table {
 # POST /check/{format}
 # operationId: verifyCheck
 @deprecated --flag ip-address
-export def "check verify" [
+export def "verify-check" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -181,7 +181,7 @@ export def "check verify" [
 #
 # POST /control/{format}
 # operationId: verifyControl
-export def "control verify" [
+export def "verify-control" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -226,7 +226,7 @@ export def "control verify" [
 #
 # POST /network-unblock
 # operationId: networkUnblock
-export def "network-unblock create" [
+export def "network-unblock" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -265,7 +265,7 @@ export def "network-unblock create" [
 #
 # POST /psd2/{format}
 # operationId: verifyRequestWithPSD2
-export def "psd2 verify-request" [
+export def "verify-request-with-psd2" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -316,7 +316,7 @@ export def "psd2 verify-request" [
 #
 # GET /search/{format}
 # operationId: verifySearch
-export def "search verify" [
+export def "verify-search" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -358,7 +358,7 @@ export def "search verify" [
 #
 # POST /{format}
 # operationId: verifyRequest
-export def "requests verify" [
+export def "verify-request" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

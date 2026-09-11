@@ -103,7 +103,7 @@ def operation-completer [] { ["DECREASE_DATA_RETENTION" "INCREASE_DATA_RETENTION
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-signaling-channel create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-signaling-channel" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -129,7 +129,7 @@ export def commands []: nothing -> table {
 # operationId: CreateSignalingChannel
 # --SingleMasterConfiguration shape: {MessageTtlSeconds?: any}
 # --Tags item shape: {Key: any, Value: any}
-export def "create-signaling-channel create" [
+export def "create-signaling-channel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -179,7 +179,7 @@ export def "create-signaling-channel create" [
 #
 # POST /createStream
 # operationId: CreateStream
-export def "create-stream create" [
+export def "create-stream" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -231,7 +231,7 @@ export def "create-stream create" [
 #
 # POST /deleteSignalingChannel
 # operationId: DeleteSignalingChannel
-export def "delete-signaling-channel delete" [
+export def "delete-signaling-channel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -279,7 +279,7 @@ export def "delete-signaling-channel delete" [
 #
 # POST /deleteStream
 # operationId: DeleteStream
-export def "delete-stream delete" [
+export def "delete-stream" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -327,7 +327,7 @@ export def "delete-stream delete" [
 #
 # POST /describeEdgeConfiguration
 # operationId: DescribeEdgeConfiguration
-export def "describe-edge-configuration get" [
+export def "describe-edge-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -375,7 +375,7 @@ export def "describe-edge-configuration get" [
 #
 # POST /describeImageGenerationConfiguration
 # operationId: DescribeImageGenerationConfiguration
-export def "describe-image-generation-configuration get" [
+export def "describe-image-generation-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -423,7 +423,7 @@ export def "describe-image-generation-configuration get" [
 #
 # POST /describeMappedResourceConfiguration
 # operationId: DescribeMappedResourceConfiguration
-export def "describe-mapped-resource-configuration get" [
+export def "describe-mapped-resource-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -476,7 +476,7 @@ export def "describe-mapped-resource-configuration get" [
 #
 # POST /describeMediaStorageConfiguration
 # operationId: DescribeMediaStorageConfiguration
-export def "describe-media-storage-configuration get" [
+export def "describe-media-storage-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -524,7 +524,7 @@ export def "describe-media-storage-configuration get" [
 #
 # POST /describeNotificationConfiguration
 # operationId: DescribeNotificationConfiguration
-export def "describe-notification-configuration get" [
+export def "describe-notification-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -572,7 +572,7 @@ export def "describe-notification-configuration get" [
 #
 # POST /describeSignalingChannel
 # operationId: DescribeSignalingChannel
-export def "describe-signaling-channel get" [
+export def "describe-signaling-channel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -620,7 +620,7 @@ export def "describe-signaling-channel get" [
 #
 # POST /describeStream
 # operationId: DescribeStream
-export def "describe-stream get" [
+export def "describe-stream" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -668,7 +668,7 @@ export def "describe-stream get" [
 #
 # POST /getDataEndpoint
 # operationId: GetDataEndpoint
-export def "get-data-endpoint get" [
+export def "get-data-endpoint" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -718,7 +718,7 @@ export def "get-data-endpoint get" [
 # POST /getSignalingChannelEndpoint
 # operationId: GetSignalingChannelEndpoint
 # --SingleMasterChannelEndpointConfiguration shape: {Protocols?: any, Role?: any}
-export def "get-signaling-channel-endpoint get" [
+export def "get-signaling-channel-endpoint" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -767,7 +767,7 @@ export def "get-signaling-channel-endpoint get" [
 # POST /listSignalingChannels
 # operationId: ListSignalingChannels
 # --ChannelNameCondition shape: {ComparisonOperator?: any, ComparisonValue?: any}
-export def "list-signaling-channels list" [
+export def "list-signaling-channels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -820,7 +820,7 @@ export def "list-signaling-channels list" [
 # POST /listStreams
 # operationId: ListStreams
 # --StreamNameCondition shape: {ComparisonOperator?: any, ComparisonValue?: any}
-export def "list-streams list" [
+export def "list-streams" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -872,7 +872,7 @@ export def "list-streams list" [
 #
 # POST /ListTagsForResource
 # operationId: ListTagsForResource
-export def "list-tags-for-resource list" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -920,7 +920,7 @@ export def "list-tags-for-resource list" [
 #
 # POST /listTagsForStream
 # operationId: ListTagsForStream
-export def "list-tags-for-stream list" [
+export def "list-tags-for-stream" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -970,7 +970,7 @@ export def "list-tags-for-stream list" [
 # POST /startEdgeConfigurationUpdate
 # operationId: StartEdgeConfigurationUpdate
 # --EdgeConfig shape: {HubDeviceArn?: any, RecorderConfig?: any, UploaderConfig?: any, DeletionConfig?: any}
-export def "start-edge-configuration-update start" [
+export def "start-edge-configuration-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1020,7 +1020,7 @@ export def "start-edge-configuration-update start" [
 # POST /TagResource
 # operationId: TagResource
 # --Tags item shape: {Key: any, Value: any}
-export def "tag-resource tag" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1068,7 +1068,7 @@ export def "tag-resource tag" [
 #
 # POST /tagStream
 # operationId: TagStream
-export def "tag-stream tag" [
+export def "tag-stream" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1117,7 +1117,7 @@ export def "tag-stream tag" [
 #
 # POST /UntagResource
 # operationId: UntagResource
-export def "untag-resource untag" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1165,7 +1165,7 @@ export def "untag-resource untag" [
 #
 # POST /untagStream
 # operationId: UntagStream
-export def "untag-stream untag" [
+export def "untag-stream" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1214,7 +1214,7 @@ export def "untag-stream untag" [
 #
 # POST /updateDataRetention
 # operationId: UpdateDataRetention
-export def "update-data-retention update" [
+export def "update-data-retention" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1266,7 +1266,7 @@ export def "update-data-retention update" [
 # POST /updateImageGenerationConfiguration
 # operationId: UpdateImageGenerationConfiguration
 # --ImageGenerationConfiguration shape: {Status?: any, ImageSelectorType?: any, DestinationConfig?: any, SamplingInterval?: any, Format?: any, FormatConfig?: any, WidthPixels?: any, HeightPixels?: any}
-export def "update-image-generation-configuration update" [
+export def "update-image-generation-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1316,7 +1316,7 @@ export def "update-image-generation-configuration update" [
 # POST /updateMediaStorageConfiguration
 # operationId: UpdateMediaStorageConfiguration
 # --MediaStorageConfiguration shape: {StreamARN?: any, Status?: any}
-export def "update-media-storage-configuration update" [
+export def "update-media-storage-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1365,7 +1365,7 @@ export def "update-media-storage-configuration update" [
 # POST /updateNotificationConfiguration
 # operationId: UpdateNotificationConfiguration
 # --NotificationConfiguration shape: {Status?: any, DestinationConfig?: any}
-export def "update-notification-configuration update" [
+export def "update-notification-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1415,7 +1415,7 @@ export def "update-notification-configuration update" [
 # POST /updateSignalingChannel
 # operationId: UpdateSignalingChannel
 # --SingleMasterConfiguration shape: {MessageTtlSeconds?: any}
-export def "update-signaling-channel update" [
+export def "update-signaling-channel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1464,7 +1464,7 @@ export def "update-signaling-channel update" [
 #
 # POST /updateStream
 # operationId: UpdateStream
-export def "update-stream update" [
+export def "update-stream" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

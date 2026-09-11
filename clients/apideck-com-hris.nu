@@ -124,7 +124,7 @@ def units-completer [] { ["days" "hours" "other"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "hris-companies list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "companies-all" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -148,7 +148,7 @@ export def commands []: nothing -> table {
 #
 # GET /hris/companies
 # operationId: companiesAll
-export def "hris-companies list" [
+export def "companies-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -196,7 +196,7 @@ export def "hris-companies list" [
 # --emails item shape: {email: string, id?: string, type?: "primary"|"secondary"|"work"|"personal"|"billing"|"other"}
 # --phone_numbers item shape: {area_code?: string, country_code?: string, extension?: string, id?: string, number: string, type?: "primary"|"secondary"|"home"|"work"|"office"|"mobile"|"assistant"|"fax"|"direct-dial-in"|"personal"|"other"}
 # --websites item shape: {id?: string, type?: "primary"|"secondary"|"work"|"personal"|"other", url: string}
-export def "hris-companies create" [
+export def "companies-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -250,7 +250,7 @@ export def "hris-companies create" [
 #
 # DELETE /hris/companies/{id}
 # operationId: companiesDelete
-export def "hris-companies delete" [
+export def "companies-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -293,7 +293,7 @@ export def "hris-companies delete" [
 #
 # GET /hris/companies/{id}
 # operationId: companiesOne
-export def "hris-companies get-one" [
+export def "companies-one" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -341,7 +341,7 @@ export def "hris-companies get-one" [
 # --emails item shape: {email: string, id?: string, type?: "primary"|"secondary"|"work"|"personal"|"billing"|"other"}
 # --phone_numbers item shape: {area_code?: string, country_code?: string, extension?: string, id?: string, number: string, type?: "primary"|"secondary"|"home"|"work"|"office"|"mobile"|"assistant"|"fax"|"direct-dial-in"|"personal"|"other"}
 # --websites item shape: {id?: string, type?: "primary"|"secondary"|"work"|"personal"|"other", url: string}
-export def "hris-companies update" [
+export def "companies-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -397,7 +397,7 @@ export def "hris-companies update" [
 #
 # GET /hris/departments
 # operationId: departmentsAll
-export def "hris-departments list" [
+export def "departments-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -441,7 +441,7 @@ export def "hris-departments list" [
 #
 # POST /hris/departments
 # operationId: departmentsAdd
-export def "hris-departments create" [
+export def "departments-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -488,7 +488,7 @@ export def "hris-departments create" [
 #
 # DELETE /hris/departments/{id}
 # operationId: departmentsDelete
-export def "hris-departments delete" [
+export def "departments-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -531,7 +531,7 @@ export def "hris-departments delete" [
 #
 # GET /hris/departments/{id}
 # operationId: departmentsOne
-export def "hris-departments get-one" [
+export def "departments-one" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -575,7 +575,7 @@ export def "hris-departments get-one" [
 #
 # PATCH /hris/departments/{id}
 # operationId: departmentsUpdate
-export def "hris-departments update" [
+export def "departments-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -624,7 +624,7 @@ export def "hris-departments update" [
 #
 # GET /hris/employees
 # operationId: employeesAll
-export def "hris-employees list" [
+export def "employees-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -682,7 +682,7 @@ export def "hris-employees list" [
 # --social_links item shape: {id?: string, type?: string, url: string}
 # --team shape: {id?: string, name?: string}
 @deprecated --flag department
-export def "hris-employees create" [
+export def "employees-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -782,7 +782,7 @@ export def "hris-employees create" [
 #
 # DELETE /hris/employees/{id}
 # operationId: employeesDelete
-export def "hris-employees delete" [
+export def "employees-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -825,7 +825,7 @@ export def "hris-employees delete" [
 #
 # GET /hris/employees/{id}
 # operationId: employeesOne
-export def "hris-employees get-one" [
+export def "employees-one" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -881,7 +881,7 @@ export def "hris-employees get-one" [
 # --social_links item shape: {id?: string, type?: string, url: string}
 # --team shape: {id?: string, name?: string}
 @deprecated --flag department
-export def "hris-employees update" [
+export def "employees-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -983,7 +983,7 @@ export def "hris-employees update" [
 #
 # GET /hris/jobs/employees/{employee_id}
 # operationId: jobsAll
-export def "hris-jobs-employees list" [
+export def "jobs-all" [
   employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1027,7 +1027,7 @@ export def "hris-jobs-employees list" [
 #
 # GET /hris/jobs/employees/{employee_id}/jobs/{job_id}
 # operationId: jobsOne
-export def "hris-jobs-employees-jobs get-one" [
+export def "jobs-one" [
   employee_id: string
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1073,7 +1073,7 @@ export def "hris-jobs-employees-jobs get-one" [
 #
 # GET /hris/payrolls
 # operationId: payrollsAll
-export def "hris-payrolls list" [
+export def "payrolls-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1116,7 +1116,7 @@ export def "hris-payrolls list" [
 #
 # GET /hris/payrolls/employees/{employee_id}
 # operationId: employeePayrollsAll
-export def "hris-payrolls-employees list" [
+export def "employee-payrolls-all" [
   employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1161,7 +1161,7 @@ export def "hris-payrolls-employees list" [
 #
 # GET /hris/payrolls/employees/{employee_id}/payrolls/{payroll_id}
 # operationId: employeePayrollsOne
-export def "hris-payrolls-employees-payrolls get-one" [
+export def "employee-payrolls-one" [
   employee_id: string
   payroll_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1207,7 +1207,7 @@ export def "hris-payrolls-employees-payrolls get-one" [
 #
 # GET /hris/payrolls/{payroll_id}
 # operationId: payrollsOne
-export def "hris-payrolls get-one" [
+export def "payrolls-one" [
   payroll_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1251,7 +1251,7 @@ export def "hris-payrolls get-one" [
 #
 # GET /hris/schedules/employees/{employee_id}
 # operationId: employeeSchedulesAll
-export def "hris-schedules-employees list" [
+export def "employee-schedules-all" [
   employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1295,7 +1295,7 @@ export def "hris-schedules-employees list" [
 #
 # GET /hris/time-off-requests
 # operationId: timeOffRequestsAll
-export def "hris-time-off-requests list" [
+export def "time-off-requests-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1341,7 +1341,7 @@ export def "hris-time-off-requests list" [
 # POST /hris/time-off-requests
 # operationId: timeOffRequestsAdd
 # --notes shape: {employee?: string, manager?: string}
-export def "hris-time-off-requests create" [
+export def "time-off-requests-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1397,7 +1397,7 @@ export def "hris-time-off-requests create" [
 #
 # DELETE /hris/time-off-requests/{id}
 # operationId: timeOffRequestsDelete
-export def "hris-time-off-requests delete" [
+export def "time-off-requests-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1440,7 +1440,7 @@ export def "hris-time-off-requests delete" [
 #
 # GET /hris/time-off-requests/{id}
 # operationId: timeOffRequestsOne
-export def "hris-time-off-requests get-one" [
+export def "time-off-requests-one" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1485,7 +1485,7 @@ export def "hris-time-off-requests get-one" [
 # PATCH /hris/time-off-requests/{id}
 # operationId: timeOffRequestsUpdate
 # --notes shape: {employee?: string, manager?: string}
-export def "hris-time-off-requests update" [
+export def "time-off-requests-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

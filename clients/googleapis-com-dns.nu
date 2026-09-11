@@ -140,7 +140,7 @@ def behavior-completer [] { ["BEHAVIOR_UNSPECIFIED" "BYPASS_RESPONSE_POLICY"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "dns-projects-locations get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "dns-projects-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -164,7 +164,7 @@ export def commands []: nothing -> table {
 #
 # GET /dns/v2/projects/{project}/locations/{location}
 # operationId: dns.projects.get
-export def "dns-projects-locations get" [
+export def "dns-projects-get" [
   project: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -215,7 +215,7 @@ export def "dns-projects-locations get" [
 #
 # GET /dns/v2/projects/{project}/locations/{location}/managedZones
 # operationId: dns.managedZones.list
-export def "dns-projects-locations-managed-zones list" [
+export def "dns-managed-zones-list" [
   project: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -275,7 +275,7 @@ export def "dns-projects-locations-managed-zones list" [
 # --privateVisibilityConfig shape: {gkeClusters?: list, kind?: string, networks?: list}
 # --reverseLookupConfig shape: {kind?: string}
 # --serviceDirectoryConfig shape: {kind?: string, namespace?: record}
-export def "dns-projects-locations-managed-zones create" [
+export def "dns-managed-zones-create" [
   project: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -346,7 +346,7 @@ export def "dns-projects-locations-managed-zones create" [
 #
 # DELETE /dns/v2/projects/{project}/locations/{location}/managedZones/{managedZone}
 # operationId: dns.managedZones.delete
-export def "dns-projects-locations-managed-zones delete" [
+export def "dns-managed-zones-delete" [
   project: string
   location: string
   managed_zone: string
@@ -399,7 +399,7 @@ export def "dns-projects-locations-managed-zones delete" [
 #
 # GET /dns/v2/projects/{project}/locations/{location}/managedZones/{managedZone}
 # operationId: dns.managedZones.get
-export def "dns-projects-locations-managed-zones get" [
+export def "dns-managed-zones-get" [
   project: string
   location: string
   managed_zone: string
@@ -459,7 +459,7 @@ export def "dns-projects-locations-managed-zones get" [
 # --privateVisibilityConfig shape: {gkeClusters?: list, kind?: string, networks?: list}
 # --reverseLookupConfig shape: {kind?: string}
 # --serviceDirectoryConfig shape: {kind?: string, namespace?: record}
-export def "dns-projects-locations-managed-zones update-by-project-location-managed-zone" [
+export def "dns-managed-zones-patch" [
   project: string
   location: string
   managed_zone: string
@@ -539,7 +539,7 @@ export def "dns-projects-locations-managed-zones update-by-project-location-mana
 # --privateVisibilityConfig shape: {gkeClusters?: list, kind?: string, networks?: list}
 # --reverseLookupConfig shape: {kind?: string}
 # --serviceDirectoryConfig shape: {kind?: string, namespace?: record}
-export def "dns-projects-locations-managed-zones update-by-project-location-managed-zone-1" [
+export def "dns-managed-zones-update" [
   project: string
   location: string
   managed_zone: string
@@ -612,7 +612,7 @@ export def "dns-projects-locations-managed-zones update-by-project-location-mana
 #
 # GET /dns/v2/projects/{project}/locations/{location}/managedZones/{managedZone}/changes
 # operationId: dns.changes.list
-export def "dns-projects-locations-managed-zones-changes list" [
+export def "dns-changes-list" [
   project: string
   location: string
   managed_zone: string
@@ -670,7 +670,7 @@ export def "dns-projects-locations-managed-zones-changes list" [
 # operationId: dns.changes.create
 # --additions item shape: {kind?: string, name?: string, routingPolicy?: record, rrdatas?: list<string>, signatureRrdatas?: list<string>, ttl?: int, type?: string}
 # --deletions item shape: {kind?: string, name?: string, routingPolicy?: record, rrdatas?: list<string>, signatureRrdatas?: list<string>, ttl?: int, type?: string}
-export def "dns-projects-locations-managed-zones-changes create" [
+export def "dns-changes-create" [
   project: string
   location: string
   managed_zone: string
@@ -733,7 +733,7 @@ export def "dns-projects-locations-managed-zones-changes create" [
 #
 # GET /dns/v2/projects/{project}/locations/{location}/managedZones/{managedZone}/changes/{changeId}
 # operationId: dns.changes.get
-export def "dns-projects-locations-managed-zones-changes get" [
+export def "dns-changes-get" [
   project: string
   location: string
   managed_zone: string
@@ -788,7 +788,7 @@ export def "dns-projects-locations-managed-zones-changes get" [
 #
 # GET /dns/v2/projects/{project}/locations/{location}/managedZones/{managedZone}/dnsKeys
 # operationId: dns.dnsKeys.list
-export def "dns-projects-locations-managed-zones-dns-keys list" [
+export def "dns-dns-keys-list" [
   project: string
   location: string
   managed_zone: string
@@ -843,7 +843,7 @@ export def "dns-projects-locations-managed-zones-dns-keys list" [
 #
 # GET /dns/v2/projects/{project}/locations/{location}/managedZones/{managedZone}/dnsKeys/{dnsKeyId}
 # operationId: dns.dnsKeys.get
-export def "dns-projects-locations-managed-zones-dns-keys get" [
+export def "dns-dns-keys-get" [
   project: string
   location: string
   managed_zone: string
@@ -899,7 +899,7 @@ export def "dns-projects-locations-managed-zones-dns-keys get" [
 #
 # GET /dns/v2/projects/{project}/locations/{location}/managedZones/{managedZone}/operations
 # operationId: dns.managedZoneOperations.list
-export def "dns-projects-locations-managed-zones-operations list" [
+export def "dns-managed-zone-operations-list" [
   project: string
   location: string
   managed_zone: string
@@ -954,7 +954,7 @@ export def "dns-projects-locations-managed-zones-operations list" [
 #
 # GET /dns/v2/projects/{project}/locations/{location}/managedZones/{managedZone}/operations/{operation}
 # operationId: dns.managedZoneOperations.get
-export def "dns-projects-locations-managed-zones-operations get" [
+export def "dns-managed-zone-operations-get" [
   project: string
   location: string
   managed_zone: string
@@ -1009,7 +1009,7 @@ export def "dns-projects-locations-managed-zones-operations get" [
 #
 # GET /dns/v2/projects/{project}/locations/{location}/managedZones/{managedZone}/rrsets
 # operationId: dns.resourceRecordSets.list
-export def "dns-projects-locations-managed-zones-rrsets list" [
+export def "dns-resource-record-sets-list" [
   project: string
   location: string
   managed_zone: string
@@ -1066,7 +1066,7 @@ export def "dns-projects-locations-managed-zones-rrsets list" [
 # POST /dns/v2/projects/{project}/locations/{location}/managedZones/{managedZone}/rrsets
 # operationId: dns.resourceRecordSets.create
 # --routingPolicy shape: {geo?: record, kind?: string, primaryBackup?: record, wrr?: record}
-export def "dns-projects-locations-managed-zones-rrsets create" [
+export def "dns-resource-record-sets-create" [
   project: string
   location: string
   managed_zone: string
@@ -1129,7 +1129,7 @@ export def "dns-projects-locations-managed-zones-rrsets create" [
 #
 # DELETE /dns/v2/projects/{project}/locations/{location}/managedZones/{managedZone}/rrsets/{name}/{type}
 # operationId: dns.resourceRecordSets.delete
-export def "dns-projects-locations-managed-zones-rrsets delete" [
+export def "dns-resource-record-sets-delete" [
   project: string
   location: string
   managed_zone: string
@@ -1186,7 +1186,7 @@ export def "dns-projects-locations-managed-zones-rrsets delete" [
 #
 # GET /dns/v2/projects/{project}/locations/{location}/managedZones/{managedZone}/rrsets/{name}/{type}
 # operationId: dns.resourceRecordSets.get
-export def "dns-projects-locations-managed-zones-rrsets get" [
+export def "dns-resource-record-sets-get" [
   project: string
   location: string
   managed_zone: string
@@ -1244,7 +1244,7 @@ export def "dns-projects-locations-managed-zones-rrsets get" [
 # PATCH /dns/v2/projects/{project}/locations/{location}/managedZones/{managedZone}/rrsets/{name}/{type}
 # operationId: dns.resourceRecordSets.patch
 # --routingPolicy shape: {geo?: record, kind?: string, primaryBackup?: record, wrr?: record}
-export def "dns-projects-locations-managed-zones-rrsets update" [
+export def "dns-resource-record-sets-patch" [
   project: string
   location: string
   managed_zone: string
@@ -1311,7 +1311,7 @@ export def "dns-projects-locations-managed-zones-rrsets update" [
 #
 # GET /dns/v2/projects/{project}/locations/{location}/policies
 # operationId: dns.policies.list
-export def "dns-projects-locations-policies list" [
+export def "dns-policies-list" [
   project: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1365,7 +1365,7 @@ export def "dns-projects-locations-policies list" [
 # operationId: dns.policies.create
 # --alternativeNameServerConfig shape: {kind?: string, targetNameServers?: list}
 # --networks item shape: {kind?: string, networkUrl?: string}
-export def "dns-projects-locations-policies create" [
+export def "dns-policies-create" [
   project: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1427,7 +1427,7 @@ export def "dns-projects-locations-policies create" [
 #
 # DELETE /dns/v2/projects/{project}/locations/{location}/policies/{policy}
 # operationId: dns.policies.delete
-export def "dns-projects-locations-policies delete" [
+export def "dns-policies-delete" [
   project: string
   location: string
   policy: string
@@ -1480,7 +1480,7 @@ export def "dns-projects-locations-policies delete" [
 #
 # GET /dns/v2/projects/{project}/locations/{location}/policies/{policy}
 # operationId: dns.policies.get
-export def "dns-projects-locations-policies get" [
+export def "dns-policies-get" [
   project: string
   location: string
   policy: string
@@ -1535,7 +1535,7 @@ export def "dns-projects-locations-policies get" [
 # operationId: dns.policies.patch
 # --alternativeNameServerConfig shape: {kind?: string, targetNameServers?: list}
 # --networks item shape: {kind?: string, networkUrl?: string}
-export def "dns-projects-locations-policies update-by-project-location-policy" [
+export def "dns-policies-patch" [
   project: string
   location: string
   policy: string
@@ -1601,7 +1601,7 @@ export def "dns-projects-locations-policies update-by-project-location-policy" [
 # operationId: dns.policies.update
 # --alternativeNameServerConfig shape: {kind?: string, targetNameServers?: list}
 # --networks item shape: {kind?: string, networkUrl?: string}
-export def "dns-projects-locations-policies update-by-project-location-policy-1" [
+export def "dns-policies-update" [
   project: string
   location: string
   policy: string
@@ -1665,7 +1665,7 @@ export def "dns-projects-locations-policies update-by-project-location-policy-1"
 #
 # GET /dns/v2/projects/{project}/locations/{location}/responsePolicies
 # operationId: dns.responsePolicies.list
-export def "dns-projects-locations-response-policies list" [
+export def "dns-response-policies-list" [
   project: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1719,7 +1719,7 @@ export def "dns-projects-locations-response-policies list" [
 # operationId: dns.responsePolicies.create
 # --gkeClusters item shape: {gkeClusterName?: string, kind?: string}
 # --networks item shape: {kind?: string, networkUrl?: string}
-export def "dns-projects-locations-response-policies create" [
+export def "dns-response-policies-create" [
   project: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1780,7 +1780,7 @@ export def "dns-projects-locations-response-policies create" [
 #
 # DELETE /dns/v2/projects/{project}/locations/{location}/responsePolicies/{responsePolicy}
 # operationId: dns.responsePolicies.delete
-export def "dns-projects-locations-response-policies delete" [
+export def "dns-response-policies-delete" [
   project: string
   location: string
   response_policy: string
@@ -1833,7 +1833,7 @@ export def "dns-projects-locations-response-policies delete" [
 #
 # GET /dns/v2/projects/{project}/locations/{location}/responsePolicies/{responsePolicy}
 # operationId: dns.responsePolicies.get
-export def "dns-projects-locations-response-policies get" [
+export def "dns-response-policies-get" [
   project: string
   location: string
   response_policy: string
@@ -1888,7 +1888,7 @@ export def "dns-projects-locations-response-policies get" [
 # operationId: dns.responsePolicies.patch
 # --gkeClusters item shape: {gkeClusterName?: string, kind?: string}
 # --networks item shape: {kind?: string, networkUrl?: string}
-export def "dns-projects-locations-response-policies update-by-project-location-response-policy" [
+export def "dns-response-policies-patch" [
   project: string
   location: string
   response_policy: string
@@ -1953,7 +1953,7 @@ export def "dns-projects-locations-response-policies update-by-project-location-
 # operationId: dns.responsePolicies.update
 # --gkeClusters item shape: {gkeClusterName?: string, kind?: string}
 # --networks item shape: {kind?: string, networkUrl?: string}
-export def "dns-projects-locations-response-policies update-by-project-location-response-policy-1" [
+export def "dns-response-policies-update" [
   project: string
   location: string
   response_policy: string
@@ -2016,7 +2016,7 @@ export def "dns-projects-locations-response-policies update-by-project-location-
 #
 # GET /dns/v2/projects/{project}/locations/{location}/responsePolicies/{responsePolicy}/rules
 # operationId: dns.responsePolicyRules.list
-export def "dns-projects-locations-response-policies-rules list" [
+export def "dns-response-policy-rules-list" [
   project: string
   location: string
   response_policy: string
@@ -2071,7 +2071,7 @@ export def "dns-projects-locations-response-policies-rules list" [
 # POST /dns/v2/projects/{project}/locations/{location}/responsePolicies/{responsePolicy}/rules
 # operationId: dns.responsePolicyRules.create
 # --localData shape: {localDatas?: list}
-export def "dns-projects-locations-response-policies-rules create" [
+export def "dns-response-policy-rules-create" [
   project: string
   location: string
   response_policy: string
@@ -2132,7 +2132,7 @@ export def "dns-projects-locations-response-policies-rules create" [
 #
 # DELETE /dns/v2/projects/{project}/locations/{location}/responsePolicies/{responsePolicy}/rules/{responsePolicyRule}
 # operationId: dns.responsePolicyRules.delete
-export def "dns-projects-locations-response-policies-rules delete" [
+export def "dns-response-policy-rules-delete" [
   project: string
   location: string
   response_policy: string
@@ -2187,7 +2187,7 @@ export def "dns-projects-locations-response-policies-rules delete" [
 #
 # GET /dns/v2/projects/{project}/locations/{location}/responsePolicies/{responsePolicy}/rules/{responsePolicyRule}
 # operationId: dns.responsePolicyRules.get
-export def "dns-projects-locations-response-policies-rules get" [
+export def "dns-response-policy-rules-get" [
   project: string
   location: string
   response_policy: string
@@ -2243,7 +2243,7 @@ export def "dns-projects-locations-response-policies-rules get" [
 # PATCH /dns/v2/projects/{project}/locations/{location}/responsePolicies/{responsePolicy}/rules/{responsePolicyRule}
 # operationId: dns.responsePolicyRules.patch
 # --localData shape: {localDatas?: list}
-export def "dns-projects-locations-response-policies-rules update-by-project-location-response-policy-response-policy-rule" [
+export def "dns-response-policy-rules-patch" [
   project: string
   location: string
   response_policy: string
@@ -2307,7 +2307,7 @@ export def "dns-projects-locations-response-policies-rules update-by-project-loc
 # PUT /dns/v2/projects/{project}/locations/{location}/responsePolicies/{responsePolicy}/rules/{responsePolicyRule}
 # operationId: dns.responsePolicyRules.update
 # --localData shape: {localDatas?: list}
-export def "dns-projects-locations-response-policies-rules update-by-project-location-response-policy-response-policy-rule-1" [
+export def "dns-response-policy-rules-update" [
   project: string
   location: string
   response_policy: string
@@ -2371,7 +2371,7 @@ export def "dns-projects-locations-response-policies-rules update-by-project-loc
 # POST /dns/v2/{resource}:getIamPolicy
 # operationId: dns.managedZones.getIamPolicy
 # --options shape: {requestedPolicyVersion?: int}
-export def "dns get-iam-policy" [
+export def "dns-managed-zones-get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2424,7 +2424,7 @@ export def "dns get-iam-policy" [
 # POST /dns/v2/{resource}:setIamPolicy
 # operationId: dns.managedZones.setIamPolicy
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
-export def "dns update-iam-policy" [
+export def "dns-managed-zones-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2477,7 +2477,7 @@ export def "dns update-iam-policy" [
 #
 # POST /dns/v2/{resource}:testIamPermissions
 # operationId: dns.managedZones.testIamPermissions
-export def "dns test-iam-permissions" [
+export def "dns-managed-zones-test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

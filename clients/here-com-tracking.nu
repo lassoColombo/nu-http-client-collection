@@ -143,7 +143,7 @@ def mode-completer [] { ["flight" "normal" "sleep" "transport" "unknown"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "aliases get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-aliases-v2" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -166,7 +166,7 @@ export def commands []: nothing -> table {
 # Gets all aliases
 #
 # GET /aliases/v2
-export def "aliases get" [
+export def "get-aliases-v2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -209,7 +209,7 @@ export def "aliases get" [
 # Gets service health
 #
 # GET /aliases/v2/health
-export def "aliases-health get" [
+export def "get-aliases-v2-health" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -242,7 +242,7 @@ export def "aliases-health get" [
 # Gets the tracking ID associated with an alias
 #
 # GET /aliases/v2/trackingId
-export def "aliases-tracking-id get" [
+export def "get-aliases-v2-tracking-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -282,7 +282,7 @@ export def "aliases-tracking-id get" [
 # Gets service version
 #
 # GET /aliases/v2/version
-export def "aliases-version get" [
+export def "get-aliases-v2-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -315,7 +315,7 @@ export def "aliases-version get" [
 # Deletes all aliases of a device
 #
 # DELETE /aliases/v2/{trackingId}
-export def "aliases delete-by-tracking-id" [
+export def "delete-aliases-v2-tracking-id" [
   tracking_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -356,7 +356,7 @@ export def "aliases delete-by-tracking-id" [
 # Gets all aliases of a device
 #
 # GET /aliases/v2/{trackingId}
-export def "aliases get-by-tracking-id" [
+export def "get-aliases-v2-tracking-id-1" [
   tracking_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -399,7 +399,7 @@ export def "aliases get-by-tracking-id" [
 # Creates multiple aliases for a device
 #
 # PUT /aliases/v2/{trackingId}/batch
-export def "aliases-batch update" [
+export def "put-aliases-v2-tracking-id-batch" [
   tracking_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -443,7 +443,7 @@ export def "aliases-batch update" [
 # Deletes all aliases of a specified type for a device
 #
 # DELETE /aliases/v2/{trackingId}/{type}
-export def "aliases delete-by-tracking-id-type" [
+export def "delete-aliases-v2-tracking-id-type" [
   tracking_id: string
   type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -486,7 +486,7 @@ export def "aliases delete-by-tracking-id-type" [
 # Gets all aliases of a specified type for a device
 #
 # GET /aliases/v2/{trackingId}/{type}
-export def "aliases get-by-tracking-id-type" [
+export def "get-aliases-v2-tracking-id-type" [
   tracking_id: string
   type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -530,7 +530,7 @@ export def "aliases get-by-tracking-id-type" [
 # Deletes an alias
 #
 # DELETE /aliases/v2/{trackingId}/{type}/{externalId}
-export def "aliases delete-by-tracking-id-type-external-id" [
+export def "delete-aliases-v2-tracking-id-type-external-id" [
   tracking_id: string
   type: string
   external_id: string
@@ -574,7 +574,7 @@ export def "aliases delete-by-tracking-id-type-external-id" [
 # Creates an alias
 #
 # PUT /aliases/v2/{trackingId}/{type}/{externalId}
-export def "aliases update" [
+export def "put-aliases-v2-tracking-id-type-external-id" [
   tracking_id: string
   type: string
   external_id: string
@@ -620,7 +620,7 @@ export def "aliases update" [
 # PUT /associations/v3/devices/batchUpdate
 # --newRules shape: {geofenceIds: list<string>, ruleIds: list<string>}
 # --oldRules shape: {geofenceIds: list<string>, ruleIds: list<string>}
-export def "associations-devices-batch-update update" [
+export def "put-associations-v3-devices-batch-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -664,7 +664,7 @@ export def "associations-devices-batch-update update" [
 # Associates rules with a device
 #
 # POST /associations/v3/devices/{trackingId}/batchCreate
-export def "associations-devices-batch-create create" [
+export def "post-associations-v3-devices-tracking-id-batch-create" [
   tracking_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -709,7 +709,7 @@ export def "associations-devices-batch-create create" [
 # Disassociates rules from a device
 #
 # POST /associations/v3/devices/{trackingId}/batchDelete
-export def "associations-devices-batch-delete create" [
+export def "post-associations-v3-devices-tracking-id-batch-delete" [
   tracking_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -754,7 +754,7 @@ export def "associations-devices-batch-delete create" [
 # Gets all devices associated with a geofence
 #
 # GET /associations/v3/geofences/{geofenceId}
-export def "associations-geofences get-by-geofence-id" [
+export def "get-associations-v3-geofences-geofence-id" [
   geofence_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -795,7 +795,7 @@ export def "associations-geofences get-by-geofence-id" [
 # Gets service health
 #
 # GET /associations/v3/health
-export def "associations-health get" [
+export def "get-associations-v3-health" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -828,7 +828,7 @@ export def "associations-health get" [
 # Gets all devices associated with a rule
 #
 # GET /associations/v3/rules/{ruleId}
-export def "associations-rules get-by-rule-id" [
+export def "get-associations-v3-rules-rule-id" [
   rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -869,7 +869,7 @@ export def "associations-rules get-by-rule-id" [
 # Gets all devices associated with a sensor rule
 #
 # GET /associations/v3/sensors/{sensorRuleId}
-export def "associations-sensors get-by-sensor-rule-id" [
+export def "get-associations-v3-sensors-sensor-rule-id" [
   sensor_rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -910,7 +910,7 @@ export def "associations-sensors get-by-sensor-rule-id" [
 # Gets service version
 #
 # GET /associations/v3/version
-export def "associations-version get" [
+export def "get-associations-v3-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -943,7 +943,7 @@ export def "associations-version get" [
 # Gets geofences associated with a device
 #
 # GET /associations/v3/{trackingId}/geofences
-export def "associations-geofences get-by-tracking-id" [
+export def "get-associations-v3-tracking-id-geofences" [
   tracking_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -987,7 +987,7 @@ export def "associations-geofences get-by-tracking-id" [
 # Disassociates a device and a geofence
 #
 # DELETE /associations/v3/{trackingId}/geofences/{geofenceId}
-export def "associations-geofences delete" [
+export def "delete-associations-v3-tracking-id-geofences-geofence-id" [
   tracking_id: string
   geofence_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1029,7 +1029,7 @@ export def "associations-geofences delete" [
 # Associates a device to a geofence
 #
 # PUT /associations/v3/{trackingId}/geofences/{geofenceId}
-export def "associations-geofences update" [
+export def "put-associations-v3-tracking-id-geofences-geofence-id" [
   tracking_id: string
   geofence_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1071,7 +1071,7 @@ export def "associations-geofences update" [
 # Gets rules associated with a device
 #
 # GET /associations/v3/{trackingId}/rules
-export def "associations-rules get-by-tracking-id" [
+export def "get-associations-v3-tracking-id-rules" [
   tracking_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1113,7 +1113,7 @@ export def "associations-rules get-by-tracking-id" [
 # Disassociates a device and a rule
 #
 # DELETE /associations/v3/{trackingId}/rules/{ruleId}
-export def "associations-rules delete" [
+export def "delete-associations-v3-tracking-id-rules-rule-id" [
   tracking_id: string
   rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1155,7 +1155,7 @@ export def "associations-rules delete" [
 # Associates a device to a rule
 #
 # PUT /associations/v3/{trackingId}/rules/{ruleId}
-export def "associations-rules update" [
+export def "put-associations-v3-tracking-id-rules-rule-id" [
   tracking_id: string
   rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1197,7 +1197,7 @@ export def "associations-rules update" [
 # Gets sensor rules associated with a device
 #
 # GET /associations/v3/{trackingId}/sensors
-export def "associations-sensors get-by-tracking-id" [
+export def "get-associations-v3-tracking-id-sensors" [
   tracking_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1239,7 +1239,7 @@ export def "associations-sensors get-by-tracking-id" [
 # Disassociates a device and a sensor rule
 #
 # DELETE /associations/v3/{trackingId}/sensors/{sensorRuleId}
-export def "associations-sensors delete" [
+export def "delete-associations-v3-tracking-id-sensors-sensor-rule-id" [
   tracking_id: string
   sensor_rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1281,7 +1281,7 @@ export def "associations-sensors delete" [
 # Associates a device with a sensor rule
 #
 # PUT /associations/v3/{trackingId}/sensors/{sensorRuleId}
-export def "associations-sensors update" [
+export def "put-associations-v3-tracking-id-sensors-sensor-rule-id" [
   tracking_id: string
   sensor_rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1323,7 +1323,7 @@ export def "associations-sensors update" [
 # Gets the bulk upload job IDs for a project
 #
 # GET /bulkjobs/v4/deviceUploads
-export def "bulkjobs-device-uploads get" [
+export def "get-bulkjobs-v4-device-uploads" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1365,7 +1365,7 @@ export def "bulkjobs-device-uploads get" [
 # Starts bulk upload
 #
 # POST /bulkjobs/v4/deviceUploads
-export def "bulkjobs-device-uploads create" [
+export def "post-bulkjobs-v4-device-uploads" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1408,7 +1408,7 @@ export def "bulkjobs-device-uploads create" [
 # Updates bulk upload job status
 #
 # PATCH /bulkjobs/v4/deviceUploads/{jobId}
-export def "bulkjobs-device-uploads update" [
+export def "patch-bulkjobs-v4-device-uploads-job-id" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1452,7 +1452,7 @@ export def "bulkjobs-device-uploads update" [
 # Gets bulk upload results
 #
 # GET /bulkjobs/v4/deviceUploads/{jobId}/results
-export def "bulkjobs-device-uploads-results get" [
+export def "get-bulkjobs-v4-device-uploads-job-id-results" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1494,7 +1494,7 @@ export def "bulkjobs-device-uploads-results get" [
 # Gets bulk upload status
 #
 # GET /bulkjobs/v4/deviceUploads/{jobId}/status
-export def "bulkjobs-device-uploads-status get" [
+export def "get-bulkjobs-v4-device-uploads-job-id-status" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1534,7 +1534,7 @@ export def "bulkjobs-device-uploads-status get" [
 # Gets service health
 #
 # GET /bulkjobs/v4/health
-export def "bulkjobs-health get" [
+export def "get-bulkjobs-v4-health" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1567,7 +1567,7 @@ export def "bulkjobs-health get" [
 # Gets service version
 #
 # GET /bulkjobs/v4/version
-export def "bulkjobs-version get" [
+export def "get-bulkjobs-v4-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1600,7 +1600,7 @@ export def "bulkjobs-version get" [
 # Receives external device update reports
 #
 # POST /c2c/v4/callback
-export def "c2c-callback create" [
+export def "post-c2c-v4-callback" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1639,7 +1639,7 @@ export def "c2c-callback create" [
 # Gets a list of connectors
 #
 # GET /c2c/v4/connectors
-export def "c2c-connectors list" [
+export def "get-c2c-v4-connectors" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1679,7 +1679,7 @@ export def "c2c-connectors list" [
 # Creates a connector
 #
 # POST /c2c/v4/connectors
-export def "c2c-connectors create" [
+export def "post-c2c-v4-connectors" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1726,7 +1726,7 @@ export def "c2c-connectors create" [
 # Gets connector identifiers for an external device
 #
 # GET /c2c/v4/connectors/ext-devices/{externalDeviceId}
-export def "c2c-connectors-ext-devices get-by-external-device-id" [
+export def "get-c2c-v4-connectors-ext-devices-external-device-id" [
   external_device_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1766,7 +1766,7 @@ export def "c2c-connectors-ext-devices get-by-external-device-id" [
 # Deletes a connector
 #
 # DELETE /c2c/v4/connectors/{connectorId}
-export def "c2c-connectors delete" [
+export def "delete-c2c-v4-connectors-connector-id" [
   connector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1803,7 +1803,7 @@ export def "c2c-connectors delete" [
 # Gets a connector info
 #
 # GET /c2c/v4/connectors/{connectorId}
-export def "c2c-connectors get" [
+export def "get-c2c-v4-connectors-connector-id" [
   connector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1838,7 +1838,7 @@ export def "c2c-connectors get" [
 # Updates a connector info
 #
 # PUT /c2c/v4/connectors/{connectorId}
-export def "c2c-connectors update" [
+export def "put-c2c-v4-connectors-connector-id" [
   connector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1882,7 +1882,7 @@ export def "c2c-connectors update" [
 # Gets all external devices under a connector
 #
 # GET /c2c/v4/connectors/{connectorId}/ext-devices
-export def "c2c-connectors-ext-devices get-by-connector-id" [
+export def "get-c2c-v4-connectors-connector-id-ext-devices" [
   connector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1923,7 +1923,7 @@ export def "c2c-connectors-ext-devices get-by-connector-id" [
 # Adds external devices to a connector
 #
 # POST /c2c/v4/connectors/{connectorId}/ext-devices
-export def "c2c-connectors-ext-devices create" [
+export def "post-c2c-v4-connectors-connector-id-ext-devices" [
   connector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1965,7 +1965,7 @@ export def "c2c-connectors-ext-devices create" [
 # Removes a batch of external devices from a connector
 #
 # DELETE /c2c/v4/connectors/{connectorId}/ext-devices-batch
-export def "c2c-connectors-ext-devices-batch delete" [
+export def "delete-c2c-v4-connectors-connector-id-ext-devices-batch" [
   connector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2007,7 +2007,7 @@ export def "c2c-connectors-ext-devices-batch delete" [
 # Removes an external device from a connector
 #
 # DELETE /c2c/v4/connectors/{connectorId}/ext-devices/{externalDeviceId}
-export def "c2c-connectors-ext-devices delete" [
+export def "delete-c2c-v4-connectors-connector-id-ext-devices-external-device-id" [
   connector_id: string
   external_device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2047,7 +2047,7 @@ export def "c2c-connectors-ext-devices delete" [
 # Gets a list of drivers
 #
 # GET /c2c/v4/drivers
-export def "c2c-drivers get" [
+export def "get-c2c-v4-drivers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2086,7 +2086,7 @@ export def "c2c-drivers get" [
 # Validate and verify external cloud credentials for driver
 #
 # POST /c2c/v4/drivers/{driverId}/verify
-export def "c2c-drivers-verify create" [
+export def "post-c2c-v4-drivers-driver-id-verify" [
   driver_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2125,7 +2125,7 @@ export def "c2c-drivers-verify create" [
 # Gets service health
 #
 # GET /c2c/v4/health
-export def "c2c-health get" [
+export def "get-c2c-v4-health" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2158,7 +2158,7 @@ export def "c2c-health get" [
 # Gets service version
 #
 # GET /c2c/v4/version
-export def "c2c-version get" [
+export def "get-c2c-v4-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2193,7 +2193,7 @@ export def "c2c-version get" [
 # GET /device-associations/v2/health
 # DEPRECATED
 @deprecated
-export def "device-associations-health get" [
+export def "get-device-associations-v2-health" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2228,7 +2228,7 @@ export def "device-associations-health get" [
 # GET /device-associations/v2/version
 # DEPRECATED
 @deprecated
-export def "device-associations-version get" [
+export def "get-device-associations-v2-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2263,7 +2263,7 @@ export def "device-associations-version get" [
 # GET /device-associations/v2/{trackingId}/geofences
 # DEPRECATED
 @deprecated
-export def "device-associations-geofences get" [
+export def "get-device-associations-v2-tracking-id-geofences" [
   tracking_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2306,7 +2306,7 @@ export def "device-associations-geofences get" [
 # Gets event history
 #
 # GET /events/v3
-export def "events list" [
+export def "get-events-v3" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2353,7 +2353,7 @@ export def "events list" [
 # Gets service health
 #
 # GET /events/v3/health
-export def "events-health get" [
+export def "get-events-v3-health" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2386,7 +2386,7 @@ export def "events-health get" [
 # Gets the event statuses
 #
 # GET /events/v3/statuses
-export def "events-statuses get" [
+export def "get-events-v3-statuses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2435,7 +2435,7 @@ export def "events-statuses get" [
 # Gets the number of devices and shipments in each event state
 #
 # GET /events/v3/statuses/deviceCounts
-export def "events-statuses-device-counts get" [
+export def "get-events-v3-statuses-device-counts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2482,7 +2482,7 @@ export def "events-statuses-device-counts get" [
 # Gets service version
 #
 # GET /events/v3/version
-export def "events-version get" [
+export def "get-events-v3-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2515,7 +2515,7 @@ export def "events-version get" [
 # Gets event history for a device or a shipment
 #
 # GET /events/v3/{trackingId}
-export def "events get" [
+export def "get-events-v3-tracking-id" [
   tracking_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2565,7 +2565,7 @@ export def "events get" [
 # GET /geofence-associations/v2/health
 # DEPRECATED
 @deprecated
-export def "geofence-associations-health get" [
+export def "get-geofence-associations-v2-health" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2600,7 +2600,7 @@ export def "geofence-associations-health get" [
 # GET /geofence-associations/v2/version
 # DEPRECATED
 @deprecated
-export def "geofence-associations-version get" [
+export def "get-geofence-associations-v2-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2635,7 +2635,7 @@ export def "geofence-associations-version get" [
 # GET /geofence-associations/v2/{geofenceId}/devices
 # DEPRECATED
 @deprecated
-export def "geofence-associations-devices get" [
+export def "get-geofence-associations-v2-geofence-id-devices" [
   geofence_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2678,7 +2678,7 @@ export def "geofence-associations-devices get" [
 # DELETE /geofence-associations/v2/{geofenceId}/{trackingId}
 # DEPRECATED
 @deprecated
-export def "geofence-associations delete" [
+export def "delete-geofence-associations-v2-geofence-id-tracking-id" [
   geofence_id: string
   tracking_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2722,7 +2722,7 @@ export def "geofence-associations delete" [
 # PUT /geofence-associations/v2/{geofenceId}/{trackingId}
 # DEPRECATED
 @deprecated
-export def "geofence-associations update" [
+export def "put-geofence-associations-v2-geofence-id-tracking-id" [
   geofence_id: string
   tracking_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2764,7 +2764,7 @@ export def "geofence-associations update" [
 # Deletes all geofences
 #
 # DELETE /geofences/v2
-export def "geofences delete" [
+export def "delete-geofences-v2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2803,7 +2803,7 @@ export def "geofences delete" [
 # Gets all geofences
 #
 # GET /geofences/v2
-export def "geofences list" [
+export def "get-geofences-v2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2849,7 +2849,7 @@ export def "geofences list" [
 #
 # POST /geofences/v2
 # --definition shape: {center: record, floor?: record, radius: float}
-export def "geofences create" [
+export def "post-geofences-v2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2894,7 +2894,7 @@ export def "geofences create" [
 # Gets service health
 #
 # GET /geofences/v2/health
-export def "geofences-health get" [
+export def "get-geofences-v2-health" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2928,7 +2928,7 @@ export def "geofences-health get" [
 #
 # POST /geofences/v2/trainingTest
 # --wlan item shape: {band?: "2.4"|"3.65"|"5", mac: string, powrx: int, timestamp?: string}
-export def "geofences-training-test create" [
+export def "post-geofences-v2-training-test" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2971,7 +2971,7 @@ export def "geofences-training-test create" [
 # Gets service version
 #
 # GET /geofences/v2/version
-export def "geofences-version get" [
+export def "get-geofences-v2-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3004,7 +3004,7 @@ export def "geofences-version get" [
 # Deletes a geofence
 #
 # DELETE /geofences/v2/{geofenceId}
-export def "geofences delete-by-geofence-id" [
+export def "delete-geofences-v2-geofence-id" [
   geofence_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3042,7 +3042,7 @@ export def "geofences delete-by-geofence-id" [
 # Gets a single geofence
 #
 # GET /geofences/v2/{geofenceId}
-export def "geofences get" [
+export def "get-geofences-v2-geofence-id" [
   geofence_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3084,7 +3084,7 @@ export def "geofences get" [
 #
 # PUT /geofences/v2/{geofenceId}
 # --definition shape: {center: record, floor?: record, radius: float}
-export def "geofences update" [
+export def "put-geofences-v2-geofence-id" [
   geofence_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3131,7 +3131,7 @@ export def "geofences update" [
 #
 # POST /geofences/v2/{geofenceId}/poiTraining
 # --wlan item shape: {band?: "2.4"|"3.65"|"5", mac: string, powrx: int, timestamp?: string}
-export def "geofences-poi-training create" [
+export def "post-geofences-v2-geofence-id-poi-training" [
   geofence_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3176,7 +3176,7 @@ export def "geofences-poi-training create" [
 # Gets service health
 #
 # GET /labels/v4/health
-export def "labels-health get" [
+export def "get-labels-v4-health" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3209,7 +3209,7 @@ export def "labels-health get" [
 # Gets service version
 #
 # GET /labels/v4/version
-export def "labels-version get" [
+export def "get-labels-v4-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3242,7 +3242,7 @@ export def "labels-version get" [
 # Gets all labels of a resource type
 #
 # GET /labels/v4/{resourceType}
-export def "labels list" [
+export def "get-labels-v4-resource-type" [
   resource_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3286,7 +3286,7 @@ export def "labels list" [
 # Gets all label keys of a resource type
 #
 # GET /labels/v4/{resourceType}/keys
-export def "labels-keys get" [
+export def "get-labels-v4-resource-type-keys" [
   resource_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3326,7 +3326,7 @@ export def "labels-keys get" [
 # Gets all values of a label
 #
 # GET /labels/v4/{resourceType}/keys/{key}/values
-export def "labels-keys-values get" [
+export def "get-labels-v4-resource-type-keys-key-values" [
   resource_type: string
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3368,7 +3368,7 @@ export def "labels-keys-values get" [
 # Deletes all labels of a resource
 #
 # DELETE /labels/v4/{resourceType}/{resourceId}
-export def "labels delete-by-resource-type-resource-id" [
+export def "delete-labels-v4-resource-type-resource-id" [
   resource_type: string
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3410,7 +3410,7 @@ export def "labels delete-by-resource-type-resource-id" [
 # Gets all labels of a resource
 #
 # GET /labels/v4/{resourceType}/{resourceId}
-export def "labels get" [
+export def "get-labels-v4-resource-type-resource-id" [
   resource_type: string
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3453,7 +3453,7 @@ export def "labels get" [
 # Creates a set of labels for a resource
 #
 # PUT /labels/v4/{resourceType}/{resourceId}/batch
-export def "labels-batch update" [
+export def "put-labels-v4-resource-type-resource-id-batch" [
   resource_type: string
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3499,7 +3499,7 @@ export def "labels-batch update" [
 # Deletes all labels of a resource by a label key
 #
 # DELETE /labels/v4/{resourceType}/{resourceId}/{key}
-export def "labels delete-by-resource-type-resource-id-key" [
+export def "delete-labels-v4-resource-type-resource-id-key" [
   resource_type: string
   resource_id: string
   key: string
@@ -3543,7 +3543,7 @@ export def "labels delete-by-resource-type-resource-id-key" [
 # Deletes a label of a resource
 #
 # DELETE /labels/v4/{resourceType}/{resourceId}/{key}/{value}
-export def "labels delete-by-resource-type-resource-id-key-value" [
+export def "delete-labels-v4-resource-type-resource-id-key-value" [
   resource_type: string
   resource_id: string
   key: string
@@ -3589,7 +3589,7 @@ export def "labels delete-by-resource-type-resource-id-key-value" [
 # Creates a label for a resource
 #
 # PUT /labels/v4/{resourceType}/{resourceId}/{key}/{value}
-export def "labels update" [
+export def "put-labels-v4-resource-type-resource-id-key-value" [
   resource_type: string
   resource_id: string
   key: string
@@ -3635,7 +3635,7 @@ export def "labels update" [
 # Creates a new data upload
 #
 # POST /largedata/v4
-export def "largedata create" [
+export def "post-largedata-v4" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3676,7 +3676,7 @@ export def "largedata create" [
 # Gets metadata listing for all large data for a device
 #
 # GET /largedata/v4/devices/{trackingId}/metadata
-export def "largedata-devices-metadata get" [
+export def "get-largedata-v4-devices-tracking-id-metadata" [
   tracking_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3717,7 +3717,7 @@ export def "largedata-devices-metadata get" [
 # Gets service health
 #
 # GET /largedata/v4/health
-export def "largedata-health get" [
+export def "get-largedata-v4-health" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3750,7 +3750,7 @@ export def "largedata-health get" [
 # Gets service version
 #
 # GET /largedata/v4/version
-export def "largedata-version get" [
+export def "get-largedata-v4-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3783,7 +3783,7 @@ export def "largedata-version get" [
 # Deletes large data
 #
 # DELETE /largedata/v4/{dataId}
-export def "largedata delete" [
+export def "delete-largedata-v4-data-id" [
   data_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3821,7 +3821,7 @@ export def "largedata delete" [
 # Completes data upload
 #
 # POST /largedata/v4/{dataId}
-export def "largedata create-by-data-id" [
+export def "post-largedata-v4-data-id" [
   data_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3861,7 +3861,7 @@ export def "largedata create-by-data-id" [
 # Gets large data object
 #
 # GET /largedata/v4/{dataId}/data
-export def "largedata-data get" [
+export def "get-largedata-v4-data-id-data" [
   data_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3902,7 +3902,7 @@ export def "largedata-data get" [
 # Gets metadata for a large data object
 #
 # GET /largedata/v4/{dataId}/metadata
-export def "largedata-metadata get" [
+export def "get-largedata-v4-data-id-metadata" [
   data_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3940,7 +3940,7 @@ export def "largedata-metadata get" [
 # Gets parts information listing for a large data object
 #
 # GET /largedata/v4/{dataId}/parts
-export def "largedata-parts get" [
+export def "get-largedata-v4-data-id-parts" [
   data_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3981,7 +3981,7 @@ export def "largedata-parts get" [
 # Uploads a part of a large data
 #
 # PUT /largedata/v4/{dataId}/parts/{partNumber}
-export def "largedata-parts update" [
+export def "put-largedata-v4-data-id-parts-part-number" [
   data_id: string
   part_number: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4027,7 +4027,7 @@ export def "largedata-parts update" [
 # Deletes all locations
 #
 # DELETE /locations/v4
-export def "locations delete" [
+export def "delete-locations-v4" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4066,7 +4066,7 @@ export def "locations delete" [
 # Gets all locations
 #
 # GET /locations/v4
-export def "locations list" [
+export def "get-locations-v4" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4118,7 +4118,7 @@ export def "locations list" [
 # POST /locations/v4
 # --address shape: {city?: string, country?: string, postalCode?: string, state?: string, street?: string}
 # --location shape: {lat: float, lng: float}
-export def "locations create" [
+export def "post-locations-v4" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4165,7 +4165,7 @@ export def "locations create" [
 # Gets service health
 #
 # GET /locations/v4/health
-export def "locations-health get" [
+export def "get-locations-v4-health" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4198,7 +4198,7 @@ export def "locations-health get" [
 # Gets service version
 #
 # GET /locations/v4/version
-export def "locations-version get" [
+export def "get-locations-v4-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4231,7 +4231,7 @@ export def "locations-version get" [
 # Deletes a location
 #
 # DELETE /locations/v4/{locationId}
-export def "locations delete-by-location-id" [
+export def "delete-locations-v4-location-id" [
   location_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4266,7 +4266,7 @@ export def "locations delete-by-location-id" [
 # Gets a location details
 #
 # GET /locations/v4/{locationId}
-export def "locations get" [
+export def "get-locations-v4-location-id" [
   location_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4303,7 +4303,7 @@ export def "locations get" [
 # PUT /locations/v4/{locationId}
 # --address shape: {city?: string, country?: string, postalCode?: string, state?: string, street?: string}
 # --location shape: {lat: float, lng: float}
-export def "locations update" [
+export def "put-locations-v4-location-id" [
   location_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4347,7 +4347,7 @@ export def "locations update" [
 # Gets a batch of metadata of multiple devices or shipments
 #
 # POST /metadata/v2/devices/batch
-export def "metadata-devices-batch create" [
+export def "post-metadata-v2-devices-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4390,7 +4390,7 @@ export def "metadata-devices-batch create" [
 # Deletes all metadata of a device or a shipment
 #
 # DELETE /metadata/v2/devices/{trackingId}
-export def "metadata-devices delete" [
+export def "delete-metadata-v2-devices-tracking-id" [
   tracking_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4430,7 +4430,7 @@ export def "metadata-devices delete" [
 # Gets metadata of a device or a shipment
 #
 # GET /metadata/v2/devices/{trackingId}
-export def "metadata-devices get" [
+export def "get-metadata-v2-devices-tracking-id" [
   tracking_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4470,7 +4470,7 @@ export def "metadata-devices get" [
 # Creates or updates metadata of a device or a shipment
 #
 # PUT /metadata/v2/devices/{trackingId}
-export def "metadata-devices update" [
+export def "put-metadata-v2-devices-tracking-id" [
   tracking_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4514,7 +4514,7 @@ export def "metadata-devices update" [
 # Gets a batch of metadata of multiple geofences
 #
 # POST /metadata/v2/geofences/batch
-export def "metadata-geofences-batch create" [
+export def "post-metadata-v2-geofences-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4557,7 +4557,7 @@ export def "metadata-geofences-batch create" [
 # Deletes all metadata of a geofence
 #
 # DELETE /metadata/v2/geofences/{geofenceId}
-export def "metadata-geofences delete" [
+export def "delete-metadata-v2-geofences-geofence-id" [
   geofence_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4595,7 +4595,7 @@ export def "metadata-geofences delete" [
 # Gets metadata of a geofence
 #
 # GET /metadata/v2/geofences/{geofenceId}
-export def "metadata-geofences get" [
+export def "get-metadata-v2-geofences-geofence-id" [
   geofence_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4633,7 +4633,7 @@ export def "metadata-geofences get" [
 # Creates or updates metadata of a geofence
 #
 # PUT /metadata/v2/geofences/{geofenceId}
-export def "metadata-geofences update" [
+export def "put-metadata-v2-geofences-geofence-id" [
   geofence_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4675,7 +4675,7 @@ export def "metadata-geofences update" [
 # Gets service health
 #
 # GET /metadata/v2/health
-export def "metadata-health get" [
+export def "get-metadata-v2-health" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4708,7 +4708,7 @@ export def "metadata-health get" [
 # Gets a batch of metadata for multiple sensor rules
 #
 # POST /metadata/v2/sensorRules/batch
-export def "metadata-sensor-rules-batch create" [
+export def "post-metadata-v2-sensor-rules-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4751,7 +4751,7 @@ export def "metadata-sensor-rules-batch create" [
 # Deletes all metadata of a sensor rule
 #
 # DELETE /metadata/v2/sensorRules/{sensorRuleId}
-export def "metadata-sensor-rules delete" [
+export def "delete-metadata-v2-sensor-rules-sensor-rule-id" [
   sensor_rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4789,7 +4789,7 @@ export def "metadata-sensor-rules delete" [
 # Gets metadata of a sensor rule
 #
 # GET /metadata/v2/sensorRules/{sensorRuleId}
-export def "metadata-sensor-rules get" [
+export def "get-metadata-v2-sensor-rules-sensor-rule-id" [
   sensor_rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4827,7 +4827,7 @@ export def "metadata-sensor-rules get" [
 # Creates or updates metadata of a sensor rule
 #
 # PUT /metadata/v2/sensorRules/{sensorRuleId}
-export def "metadata-sensor-rules update" [
+export def "put-metadata-v2-sensor-rules-sensor-rule-id" [
   sensor_rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4869,7 +4869,7 @@ export def "metadata-sensor-rules update" [
 # Gets service version
 #
 # GET /metadata/v2/version
-export def "metadata-version get" [
+export def "get-metadata-v2-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4902,7 +4902,7 @@ export def "metadata-version get" [
 # Gets service health
 #
 # GET /notifications/v3/health
-export def "notifications-health get" [
+export def "get-notifications-v3-health" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4935,7 +4935,7 @@ export def "notifications-health get" [
 # Unregisters from notifications
 #
 # DELETE /notifications/v3/registration/{channelId}
-export def "notifications-registration delete" [
+export def "delete-notifications-v3-registration-channel-id" [
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4973,7 +4973,7 @@ export def "notifications-registration delete" [
 # Gets a single notification channel information
 #
 # GET /notifications/v3/registration/{channelId}
-export def "notifications-registration get" [
+export def "get-notifications-v3-registration-channel-id" [
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5011,7 +5011,7 @@ export def "notifications-registration get" [
 # Updates a notification channel
 #
 # PUT /notifications/v3/registration/{channelId}
-export def "notifications-registration update" [
+export def "put-notifications-v3-registration-channel-id" [
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5058,7 +5058,7 @@ export def "notifications-registration update" [
 # Unregisters from all notifications
 #
 # DELETE /notifications/v3/registrations
-export def "notifications-registrations delete" [
+export def "delete-notifications-v3-registrations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5097,7 +5097,7 @@ export def "notifications-registrations delete" [
 # Gets all registered notification channels
 #
 # GET /notifications/v3/registrations
-export def "notifications-registrations get" [
+export def "get-notifications-v3-registrations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5140,7 +5140,7 @@ export def "notifications-registrations get" [
 # Registers for notifications
 #
 # POST /notifications/v3/registrations
-export def "notifications-registrations create" [
+export def "post-notifications-v3-registrations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5188,7 +5188,7 @@ export def "notifications-registrations create" [
 # Gets service version
 #
 # GET /notifications/v3/version
-export def "notifications-version get" [
+export def "get-notifications-v3-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5221,7 +5221,7 @@ export def "notifications-version get" [
 # Deactivates a device.
 #
 # DELETE /registry/v2/devices/{deviceOrExternalId}
-export def "registry-devices delete" [
+export def "delete-registry-v2-devices-device-or-external-id" [
   device_or_external_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5261,7 +5261,7 @@ export def "registry-devices delete" [
 # Gets the trackingId for a device
 #
 # GET /registry/v2/devices/{deviceOrExternalId}
-export def "registry-devices get-by-device-or-external-id" [
+export def "get-registry-v2-devices-device-or-external-id" [
   device_or_external_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5301,7 +5301,7 @@ export def "registry-devices get-by-device-or-external-id" [
 # Claims a device
 #
 # PUT /registry/v2/devices/{deviceOrExternalId}
-export def "registry-devices update" [
+export def "put-registry-v2-devices-device-or-external-id" [
   device_or_external_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5346,7 +5346,7 @@ export def "registry-devices update" [
 # Gets service health
 #
 # GET /registry/v2/health
-export def "registry-health get" [
+export def "get-registry-v2-health" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5379,7 +5379,7 @@ export def "registry-health get" [
 # Gets a list user projects along with the license information
 #
 # GET /registry/v2/licenses
-export def "registry-licenses get" [
+export def "get-registry-v2-licenses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5420,7 +5420,7 @@ export def "registry-licenses get" [
 # Gets service version
 #
 # GET /registry/v2/version
-export def "registry-version get" [
+export def "get-registry-v2-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5453,7 +5453,7 @@ export def "registry-version get" [
 # Lists all the devices provisioned by a user
 #
 # GET /registry/v2/{appId}/devices
-export def "registry-devices get-by-app-id" [
+export def "get-registry-v2-app-id-devices" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5495,7 +5495,7 @@ export def "registry-devices get-by-app-id" [
 #
 # POST /registry/v2/{appId}/devices
 # --devices item shape: {id?: string}
-export def "registry-devices create" [
+export def "post-registry-v2-app-id-devices" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5540,7 +5540,7 @@ export def "registry-devices create" [
 # Gets a number of device licenses provisioned by a user
 #
 # GET /registry/v2/{appId}/licenseCount
-export def "registry-license-count get" [
+export def "get-registry-v2-app-id-license-count" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5578,7 +5578,7 @@ export def "registry-license-count get" [
 # Creates a license for a single physical device
 #
 # POST /registry/v2/{appId}/one-device
-export def "registry-one-device create" [
+export def "post-registry-v2-app-id-one-device" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5618,7 +5618,7 @@ export def "registry-one-device create" [
 # Gets the multiple device license request job results
 #
 # GET /registry/v2/{jobId}/results
-export def "registry-results get" [
+export def "get-registry-v2-job-id-results" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5659,7 +5659,7 @@ export def "registry-results get" [
 # Gets the multiple device license request job status
 #
 # GET /registry/v2/{jobId}/status
-export def "registry-status get" [
+export def "get-registry-v2-job-id-status" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5697,7 +5697,7 @@ export def "registry-status get" [
 # Unclaims a device
 #
 # DELETE /registry/v2/{trackingId}
-export def "registry delete" [
+export def "delete-registry-v2-tracking-id" [
   tracking_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5737,7 +5737,7 @@ export def "registry delete" [
 # Gets the deviceId
 #
 # GET /registry/v2/{trackingId}
-export def "registry get" [
+export def "get-registry-v2-tracking-id" [
   tracking_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5777,7 +5777,7 @@ export def "registry get" [
 # Gets all resources of a resource type
 #
 # POST /registry/v4/resources/{resourceType}/find
-export def "registry-resources-find create" [
+export def "post-registry-v4-resources-resource-type-find" [
   resource_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5823,7 +5823,7 @@ export def "registry-resources-find create" [
 # Starts report creation
 #
 # POST /reports/v4
-export def "reports create" [
+export def "post-reports-v4" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5867,7 +5867,7 @@ export def "reports create" [
 # Gets service health
 #
 # GET /reports/v4/health
-export def "reports-health get" [
+export def "get-reports-v4-health" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5900,7 +5900,7 @@ export def "reports-health get" [
 # Gets service version
 #
 # GET /reports/v4/version
-export def "reports-version get" [
+export def "get-reports-v4-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5933,7 +5933,7 @@ export def "reports-version get" [
 # Gets reports
 #
 # GET /reports/v4/{reportId}
-export def "reports get" [
+export def "get-reports-v4-report-id" [
   report_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5982,7 +5982,7 @@ export def "reports get" [
 # Deletes all rules
 #
 # DELETE /rules/v4
-export def "rules delete" [
+export def "delete-rules-v4" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6021,7 +6021,7 @@ export def "rules delete" [
 # Gets all rules
 #
 # GET /rules/v4
-export def "rules list" [
+export def "get-rules-v4" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6062,7 +6062,7 @@ export def "rules list" [
 #
 # POST /rules/v4
 # --threshold shape: {durationS: int}
-export def "rules create" [
+export def "post-rules-v4" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6108,7 +6108,7 @@ export def "rules create" [
 # Gets service health
 #
 # GET /rules/v4/health
-export def "rules-health get" [
+export def "get-rules-v4-health" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6141,7 +6141,7 @@ export def "rules-health get" [
 # Gets service version
 #
 # GET /rules/v4/version
-export def "rules-version get" [
+export def "get-rules-v4-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6174,7 +6174,7 @@ export def "rules-version get" [
 # Deletes a rule
 #
 # DELETE /rules/v4/{ruleId}
-export def "rules delete-by-rule-id" [
+export def "delete-rules-v4-rule-id" [
   rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6212,7 +6212,7 @@ export def "rules delete-by-rule-id" [
 # Gets a single rule
 #
 # GET /rules/v4/{ruleId}
-export def "rules get" [
+export def "get-rules-v4-rule-id" [
   rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6251,7 +6251,7 @@ export def "rules get" [
 #
 # PUT /rules/v4/{ruleId}
 # --threshold shape: {durationS: int}
-export def "rules update" [
+export def "put-rules-v4-rule-id" [
   rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6297,7 +6297,7 @@ export def "rules update" [
 # Deletes all sensor rules
 #
 # DELETE /sensors/v3
-export def "sensors delete" [
+export def "delete-sensors-v3" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6336,7 +6336,7 @@ export def "sensors delete" [
 # Gets all sensor rules
 #
 # GET /sensors/v3
-export def "sensors list" [
+export def "get-sensors-v3" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6378,7 +6378,7 @@ export def "sensors list" [
 # POST /sensors/v3
 # --range shape: {begin: float, end: float}
 # --threshold shape: {value: float}
-export def "sensors create" [
+export def "post-sensors-v3" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6424,7 +6424,7 @@ export def "sensors create" [
 # Gets service health
 #
 # GET /sensors/v3/health
-export def "sensors-health get" [
+export def "get-sensors-v3-health" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6457,7 +6457,7 @@ export def "sensors-health get" [
 # Gets service version
 #
 # GET /sensors/v3/version
-export def "sensors-version get" [
+export def "get-sensors-v3-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6490,7 +6490,7 @@ export def "sensors-version get" [
 # Deletes a sensor rule
 #
 # DELETE /sensors/v3/{sensorRuleId}
-export def "sensors delete-by-sensor-rule-id" [
+export def "delete-sensors-v3-sensor-rule-id" [
   sensor_rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6528,7 +6528,7 @@ export def "sensors delete-by-sensor-rule-id" [
 # Gets a single sensor rule
 #
 # GET /sensors/v3/{sensorRuleId}
-export def "sensors get" [
+export def "get-sensors-v3-sensor-rule-id" [
   sensor_rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6568,7 +6568,7 @@ export def "sensors get" [
 # PUT /sensors/v3/{sensorRuleId}
 # --range shape: {begin: float, end: float}
 # --threshold shape: {value: float}
-export def "sensors update" [
+export def "put-sensors-v3-sensor-rule-id" [
   sensor_rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6614,7 +6614,7 @@ export def "sensors update" [
 # Gets a batch of device shadows
 #
 # POST /shadows/v2/batch
-export def "shadows-batch create" [
+export def "post-shadows-v2-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6657,7 +6657,7 @@ export def "shadows-batch create" [
 # Gets service health
 #
 # GET /shadows/v2/health
-export def "shadows-health get" [
+export def "get-shadows-v2-health" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6690,7 +6690,7 @@ export def "shadows-health get" [
 # Gets service version
 #
 # GET /shadows/v2/version
-export def "shadows-version get" [
+export def "get-shadows-v2-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6723,7 +6723,7 @@ export def "shadows-version get" [
 # Clears a device shadow
 #
 # DELETE /shadows/v2/{trackingId}
-export def "shadows delete" [
+export def "delete-shadows-v2-tracking-id" [
   tracking_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6765,7 +6765,7 @@ export def "shadows delete" [
 # Gets a device shadow
 #
 # GET /shadows/v2/{trackingId}
-export def "shadows get-by-tracking-id" [
+export def "get-shadows-v2-tracking-id" [
   tracking_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6806,7 +6806,7 @@ export def "shadows get-by-tracking-id" [
 #
 # PUT /shadows/v2/{trackingId}
 # --desired shape: {payload?: record, system?: record}
-export def "shadows update" [
+export def "put-shadows-v2-tracking-id" [
   tracking_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6851,7 +6851,7 @@ export def "shadows update" [
 # Gets reported or desired state object of a device
 #
 # GET /shadows/v2/{trackingId}/{state}
-export def "shadows get-by-tracking-id-state" [
+export def "get-shadows-v2-tracking-id-state" [
   tracking_id: string
   state: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6893,7 +6893,7 @@ export def "shadows get-by-tracking-id-state" [
 # Gets a value of a shadow property
 #
 # GET /shadows/v2/{trackingId}/{state}/{selector}
-export def "shadows get-by-tracking-id-state-selector" [
+export def "get-shadows-v2-tracking-id-state-selector" [
   tracking_id: string
   state: string
   selector: string
@@ -6938,7 +6938,7 @@ export def "shadows get-by-tracking-id-state-selector" [
 # Gets all shadows
 #
 # GET /shadows/v4
-export def "shadows get" [
+export def "get-shadows-v4" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6981,7 +6981,7 @@ export def "shadows get" [
 # Starts shipment report generation
 #
 # POST /shipment-reports/v4
-export def "shipment-reports create" [
+export def "post-shipment-reports-v4" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7027,7 +7027,7 @@ export def "shipment-reports create" [
 # Gets service health
 #
 # GET /shipment-reports/v4/health
-export def "shipment-reports-health get" [
+export def "get-shipment-reports-v4-health" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7060,7 +7060,7 @@ export def "shipment-reports-health get" [
 # Gets service version
 #
 # GET /shipment-reports/v4/version
-export def "shipment-reports-version get" [
+export def "get-shipment-reports-v4-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7093,7 +7093,7 @@ export def "shipment-reports-version get" [
 # Gets status of generation of the shipment report
 #
 # GET /shipment-reports/v4/{shipmentReportId}/status
-export def "shipment-reports-status get" [
+export def "get-shipment-reports-v4-shipment-report-id-status" [
   shipment_report_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7128,7 +7128,7 @@ export def "shipment-reports-status get" [
 # Gets summary of the shipment report
 #
 # GET /shipment-reports/v4/{shipmentReportId}/summary
-export def "shipment-reports-summary get" [
+export def "get-shipment-reports-v4-shipment-report-id-summary" [
   shipment_report_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7163,7 +7163,7 @@ export def "shipment-reports-summary get" [
 # Gets metrics of the shipment report
 #
 # GET /shipment-reports/v4/{shipmentReportId}/{metric}
-export def "shipment-reports get" [
+export def "get-shipment-reports-v4-shipment-report-id-metric" [
   shipment_report_id: string
   metric: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7204,7 +7204,7 @@ export def "shipment-reports get" [
 # Deletes all shipments
 #
 # DELETE /shipments/v4
-export def "shipments delete" [
+export def "delete-shipments-v4" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7243,7 +7243,7 @@ export def "shipments delete" [
 # Gets all shipments
 #
 # GET /shipments/v4
-export def "shipments get" [
+export def "get-shipments-v4" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7296,7 +7296,7 @@ export def "shipments get" [
 #
 # POST /shipments/v4
 # --segments item shape: {description?: string, destination: string, name?: string, origin: string, providedEta?: string, providedEtd?: string, trackingId?: string, transportMode: "car"|"truck"|"sea"|"air"|"undefined"}
-export def "shipments create" [
+export def "post-shipments-v4" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7347,7 +7347,7 @@ export def "shipments create" [
 # Gets service health
 #
 # GET /shipments/v4/health
-export def "shipments-health get" [
+export def "get-shipments-v4-health" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7380,7 +7380,7 @@ export def "shipments-health get" [
 # Deletes all shipment plans
 #
 # DELETE /shipments/v4/plans
-export def "shipments-plans delete" [
+export def "delete-shipments-v4-plans" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7419,7 +7419,7 @@ export def "shipments-plans delete" [
 # Lists all shipment plans
 #
 # GET /shipments/v4/plans
-export def "shipments-plans get" [
+export def "get-shipments-v4-plans" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7468,7 +7468,7 @@ export def "shipments-plans get" [
 # POST /shipments/v4/plans
 # --segments item shape: {description?: string, destination: string, durationS?: int, name?: string, origin: string, trackingId?: string, transportMode: "car"|"truck"|"sea"|"air"|"undefined"}
 # --options shape: {calculateDurationsFrom?: "actuals"|"providedEstimate"|"calculatedEstimate", copyTrackingIds?: bool}
-export def "shipments-plans create" [
+export def "post-shipments-v4-plans" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7517,7 +7517,7 @@ export def "shipments-plans create" [
 # Deletes a shipment plan
 #
 # DELETE /shipments/v4/plans/{shipmentPlanId}
-export def "shipments-plans delete-by-shipment-plan-id" [
+export def "delete-shipments-v4-plans-shipment-plan-id" [
   shipment_plan_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7552,7 +7552,7 @@ export def "shipments-plans delete-by-shipment-plan-id" [
 # Gets a shipment plan details
 #
 # GET /shipments/v4/plans/{shipmentPlanId}
-export def "shipments-plans get-by-shipment-plan-id" [
+export def "get-shipments-v4-plans-shipment-plan-id" [
   shipment_plan_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7587,7 +7587,7 @@ export def "shipments-plans get-by-shipment-plan-id" [
 # Updates a shipment plan details
 #
 # PATCH /shipments/v4/plans/{shipmentPlanId}
-export def "shipments-plans update-by-shipment-plan-id" [
+export def "patch-shipments-v4-plans-shipment-plan-id" [
   shipment_plan_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7630,7 +7630,7 @@ export def "shipments-plans update-by-shipment-plan-id" [
 # Gets a segment plan details
 #
 # GET /shipments/v4/plans/{shipmentPlanId}/{segmentPlanId}
-export def "shipments-plans get-by-shipment-plan-id-segment-plan-id" [
+export def "get-shipments-v4-plans-shipment-plan-id-segment-plan-id" [
   shipment_plan_id: string
   segment_plan_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7667,7 +7667,7 @@ export def "shipments-plans get-by-shipment-plan-id-segment-plan-id" [
 # Updates a segment plan details
 #
 # PATCH /shipments/v4/plans/{shipmentPlanId}/{segmentPlanId}
-export def "shipments-plans update-by-shipment-plan-id-segment-plan-id" [
+export def "patch-shipments-v4-plans-shipment-plan-id-segment-plan-id" [
   shipment_plan_id: string
   segment_plan_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7712,7 +7712,7 @@ export def "shipments-plans update-by-shipment-plan-id-segment-plan-id" [
 # Gets service version
 #
 # GET /shipments/v4/version
-export def "shipments-version get" [
+export def "get-shipments-v4-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7745,7 +7745,7 @@ export def "shipments-version get" [
 # Deletes a shipment
 #
 # DELETE /shipments/v4/{shipmentId}
-export def "shipments delete-by-shipment-id" [
+export def "delete-shipments-v4-shipment-id" [
   shipment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7780,7 +7780,7 @@ export def "shipments delete-by-shipment-id" [
 # Gets a shipment details
 #
 # GET /shipments/v4/{shipmentId}
-export def "shipments get-by-shipment-id" [
+export def "get-shipments-v4-shipment-id" [
   shipment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7816,7 +7816,7 @@ export def "shipments get-by-shipment-id" [
 #
 # PATCH /shipments/v4/{shipmentId}
 # --segments item shape: {description?: string, destination: string, name?: string, origin: string, providedEta?: string, providedEtd?: string, trackingId?: string, transportMode: "car"|"truck"|"sea"|"air"|"undefined"}
-export def "shipments update-by-shipment-id" [
+export def "patch-shipments-v4-shipment-id" [
   shipment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7863,7 +7863,7 @@ export def "shipments update-by-shipment-id" [
 # Gets a segment details
 #
 # GET /shipments/v4/{shipmentId}/{segmentId}
-export def "shipments get-by-shipment-id-segment-id" [
+export def "get-shipments-v4-shipment-id-segment-id" [
   shipment_id: string
   segment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7900,7 +7900,7 @@ export def "shipments get-by-shipment-id-segment-id" [
 # Updates a segment details
 #
 # PATCH /shipments/v4/{shipmentId}/{segmentId}
-export def "shipments update-by-shipment-id-segment-id" [
+export def "patch-shipments-v4-shipment-id-segment-id" [
   shipment_id: string
   segment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7947,7 +7947,7 @@ export def "shipments update-by-shipment-id-segment-id" [
 # Gets segments assigned to a device
 #
 # GET /shipments/v4/{trackingId}/segments
-export def "shipments-segments get" [
+export def "get-shipments-v4-tracking-id-segments" [
   tracking_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7986,7 +7986,7 @@ export def "shipments-segments get" [
 # Gets service health
 #
 # GET /traces/v2/health
-export def "traces-health get" [
+export def "get-traces-v2-health" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8019,7 +8019,7 @@ export def "traces-health get" [
 # Gets service version
 #
 # GET /traces/v2/version
-export def "traces-version get" [
+export def "get-traces-v2-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8052,7 +8052,7 @@ export def "traces-version get" [
 # Deletes all the device traces and events
 #
 # DELETE /traces/v2/{trackingId}
-export def "traces delete" [
+export def "delete-traces-v2-tracking-id" [
   tracking_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8092,7 +8092,7 @@ export def "traces delete" [
 # Gets traces within a specified time range
 #
 # GET /traces/v2/{trackingId}
-export def "traces get" [
+export def "get-traces-v2-tracking-id" [
   tracking_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8141,7 +8141,7 @@ export def "traces get" [
 # GET /transitions/v2/devices/{trackingId}
 # DEPRECATED
 @deprecated
-export def "transitions-devices get" [
+export def "get-transitions-v2-devices-tracking-id" [
   tracking_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8187,7 +8187,7 @@ export def "transitions-devices get" [
 # GET /transitions/v2/health
 # DEPRECATED
 @deprecated
-export def "transitions-health get" [
+export def "get-transitions-v2-health" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8222,7 +8222,7 @@ export def "transitions-health get" [
 # GET /transitions/v2/version
 # DEPRECATED
 @deprecated
-export def "transitions-version get" [
+export def "get-transitions-v2-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8255,7 +8255,7 @@ export def "transitions-version get" [
 # Gets all devices claimed by a project
 #
 # GET /users/v2/devices
-export def "users-devices get" [
+export def "get-users-v2-devices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8295,7 +8295,7 @@ export def "users-devices get" [
 # Gets service health
 #
 # GET /users/v2/health
-export def "users-health get" [
+export def "get-users-v2-health" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8328,7 +8328,7 @@ export def "users-health get" [
 # Gets a user access token
 #
 # POST /users/v2/login
-export def "users-login create" [
+export def "post-users-v2-login" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8370,7 +8370,7 @@ export def "users-login create" [
 # Gets a renewed user access token
 #
 # POST /users/v2/refresh
-export def "users-refresh create" [
+export def "post-users-v2-refresh" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8411,7 +8411,7 @@ export def "users-refresh create" [
 # Gets a project-scoped user access token
 #
 # POST /users/v2/tokenExchange
-export def "users-token-exchange create" [
+export def "post-users-v2-token-exchange" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8452,7 +8452,7 @@ export def "users-token-exchange create" [
 # Gets service version
 #
 # GET /users/v2/version
-export def "users-version get" [
+export def "get-users-v2-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8485,7 +8485,7 @@ export def "users-version get" [
 # Ingests data and receives a shadow
 #
 # POST /v2/
-export def "ingestion create" [
+export def "post-v2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8528,7 +8528,7 @@ export def "ingestion create" [
 # Gets service health
 #
 # GET /v2/health
-export def "health get" [
+export def "get-v2-health" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8561,7 +8561,7 @@ export def "health get" [
 # Gets the current timestamp
 #
 # GET /v2/timestamp
-export def "timestamp get" [
+export def "get-v2-timestamp" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8597,7 +8597,7 @@ export def "timestamp get" [
 # Requests a token for a registered device
 #
 # POST /v2/token
-export def "token create" [
+export def "post-v2-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8634,7 +8634,7 @@ export def "token create" [
 # Gets service version
 #
 # GET /v2/version
-export def "version get" [
+export def "get-v2-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8668,7 +8668,7 @@ export def "version get" [
 #
 # POST /v3/
 # --data item shape: {payload?: record, position?: record, scan?: record, system?: record, timestamp: int}
-export def "ingestion create-1" [
+export def "post-v3" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8714,7 +8714,7 @@ export def "ingestion create-1" [
 #
 # POST /v3/batch
 # --data item shape: {payload?: record, position?: record, scan?: record, system?: record, timestamp: int, id?: string}
-export def "batch create" [
+export def "post-v3-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8756,7 +8756,7 @@ export def "batch create" [
 # Gets service health
 #
 # GET /v3/health
-export def "health get-1" [
+export def "get-v3-health" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8789,7 +8789,7 @@ export def "health get-1" [
 # Gets service version
 #
 # GET /v3/version
-export def "version get-1" [
+export def "get-v3-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "2020-11-20-projects-datasets create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-dataset" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -141,7 +141,7 @@ export def commands []: nothing -> table {
 # POST /2020-11-20/projects/{projectName}/datasets
 # operationId: CreateDataset
 # --DatasetSource shape: {GroundTruthManifest?: any}
-export def "2020-11-20-projects-datasets create" [
+export def "create-dataset" [
   project_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -194,7 +194,7 @@ export def "2020-11-20-projects-datasets create" [
 # operationId: CreateModel
 # --OutputConfig shape: {S3Location?: any}
 # --Tags item shape: {Key: any, Value: any}
-export def "2020-11-20-projects-models create" [
+export def "create-model" [
   project_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -247,7 +247,7 @@ export def "2020-11-20-projects-models create" [
 #
 # GET /2020-11-20/projects/{projectName}/models
 # operationId: ListModels
-export def "2020-11-20-projects-models list" [
+export def "list-models" [
   project_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -297,7 +297,7 @@ export def "2020-11-20-projects-models list" [
 #
 # POST /2020-11-20/projects
 # operationId: CreateProject
-export def "2020-11-20-projects create" [
+export def "create-project" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -345,7 +345,7 @@ export def "2020-11-20-projects create" [
 #
 # GET /2020-11-20/projects
 # operationId: ListProjects
-export def "2020-11-20-projects list" [
+export def "list-projects" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -393,7 +393,7 @@ export def "2020-11-20-projects list" [
 #
 # DELETE /2020-11-20/projects/{projectName}/datasets/{datasetType}
 # operationId: DeleteDataset
-export def "2020-11-20-projects-datasets delete" [
+export def "delete-dataset" [
   project_name: string
   dataset_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -441,7 +441,7 @@ export def "2020-11-20-projects-datasets delete" [
 #
 # GET /2020-11-20/projects/{projectName}/datasets/{datasetType}
 # operationId: DescribeDataset
-export def "2020-11-20-projects-datasets get" [
+export def "describe-dataset" [
   project_name: string
   dataset_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -488,7 +488,7 @@ export def "2020-11-20-projects-datasets get" [
 #
 # DELETE /2020-11-20/projects/{projectName}/models/{modelVersion}
 # operationId: DeleteModel
-export def "2020-11-20-projects-models delete" [
+export def "delete-model" [
   project_name: string
   model_version: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -536,7 +536,7 @@ export def "2020-11-20-projects-models delete" [
 #
 # GET /2020-11-20/projects/{projectName}/models/{modelVersion}
 # operationId: DescribeModel
-export def "2020-11-20-projects-models get" [
+export def "describe-model" [
   project_name: string
   model_version: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -583,7 +583,7 @@ export def "2020-11-20-projects-models get" [
 #
 # DELETE /2020-11-20/projects/{projectName}
 # operationId: DeleteProject
-export def "2020-11-20-projects delete" [
+export def "delete-project" [
   project_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -629,7 +629,7 @@ export def "2020-11-20-projects delete" [
 #
 # GET /2020-11-20/projects/{projectName}
 # operationId: DescribeProject
-export def "2020-11-20-projects get" [
+export def "describe-project" [
   project_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -674,7 +674,7 @@ export def "2020-11-20-projects get" [
 #
 # GET /2020-11-20/projects/{projectName}/modelpackagingjobs/{jobName}
 # operationId: DescribeModelPackagingJob
-export def "2020-11-20-projects-modelpackagingjobs get-model-packaging-job" [
+export def "describe-model-packaging-job" [
   project_name: string
   job_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -721,7 +721,7 @@ export def "2020-11-20-projects-modelpackagingjobs get-model-packaging-job" [
 #
 # POST /2020-11-20/projects/{projectName}/models/{modelVersion}/detect
 # operationId: DetectAnomalies
-export def "2020-11-20-projects-models-detect create-anomalies" [
+export def "detect-anomalies" [
   project_name: string
   model_version: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -775,7 +775,7 @@ export def "2020-11-20-projects-models-detect create-anomalies" [
 #
 # GET /2020-11-20/projects/{projectName}/datasets/{datasetType}/entries
 # operationId: ListDatasetEntries
-export def "2020-11-20-projects-datasets-entries list" [
+export def "list-dataset-entries" [
   project_name: string
   dataset_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -832,7 +832,7 @@ export def "2020-11-20-projects-datasets-entries list" [
 #
 # PATCH /2020-11-20/projects/{projectName}/datasets/{datasetType}/entries
 # operationId: UpdateDatasetEntries
-export def "2020-11-20-projects-datasets-entries update" [
+export def "update-dataset-entries" [
   project_name: string
   dataset_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -884,7 +884,7 @@ export def "2020-11-20-projects-datasets-entries update" [
 #
 # GET /2020-11-20/projects/{projectName}/modelpackagingjobs
 # operationId: ListModelPackagingJobs
-export def "2020-11-20-projects-modelpackagingjobs list-model-packaging-jobs" [
+export def "list-model-packaging-jobs" [
   project_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -935,7 +935,7 @@ export def "2020-11-20-projects-modelpackagingjobs list-model-packaging-jobs" [
 # POST /2020-11-20/projects/{projectName}/modelpackagingjobs
 # operationId: StartModelPackagingJob
 # --Configuration shape: {Greengrass?: any}
-export def "2020-11-20-projects-modelpackagingjobs start-model-packaging-job" [
+export def "start-model-packaging-job" [
   project_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -988,7 +988,7 @@ export def "2020-11-20-projects-modelpackagingjobs start-model-packaging-job" [
 #
 # GET /2020-11-20/tags/{resourceArn}
 # operationId: ListTagsForResource
-export def "2020-11-20-tags list-for-resource" [
+export def "list-tags-for-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1034,7 +1034,7 @@ export def "2020-11-20-tags list-for-resource" [
 # POST /2020-11-20/tags/{resourceArn}
 # operationId: TagResource
 # --Tags item shape: {Key: any, Value: any}
-export def "2020-11-20-tags tag-resource" [
+export def "tag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1083,7 +1083,7 @@ export def "2020-11-20-tags tag-resource" [
 #
 # POST /2020-11-20/projects/{projectName}/models/{modelVersion}/start
 # operationId: StartModel
-export def "2020-11-20-projects-models-start start" [
+export def "start-model" [
   project_name: string
   model_version: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1136,7 +1136,7 @@ export def "2020-11-20-projects-models-start start" [
 #
 # POST /2020-11-20/projects/{projectName}/models/{modelVersion}/stop
 # operationId: StopModel
-export def "2020-11-20-projects-models-stop stop" [
+export def "stop-model" [
   project_name: string
   model_version: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1184,7 +1184,7 @@ export def "2020-11-20-projects-models-stop stop" [
 #
 # DELETE /2020-11-20/tags/{resourceArn}
 # operationId: UntagResource
-export def "2020-11-20-tags untag-resource" [
+export def "untag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

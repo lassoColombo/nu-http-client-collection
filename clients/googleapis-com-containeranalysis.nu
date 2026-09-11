@@ -130,7 +130,7 @@ def kind-completer [] { ["ATTESTATION" "BUILD" "DEPLOYMENT" "DISCOVERY" "IMAGE" 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta1 delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "containeranalysis-projects-occurrences-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -154,7 +154,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1beta1/{name}
 # operationId: containeranalysis.projects.occurrences.delete
-export def "v1beta1 delete" [
+export def "containeranalysis-projects-occurrences-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -202,7 +202,7 @@ export def "v1beta1 delete" [
 #
 # GET /v1beta1/{name}
 # operationId: containeranalysis.projects.occurrences.get
-export def "v1beta1 get" [
+export def "containeranalysis-projects-occurrences-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -265,7 +265,7 @@ export def "v1beta1 get" [
 # --spdxPackage shape: {comment?: string, filename?: string, id?: string, licenseConcluded?: record, sourceInfo?: string}
 # --spdxRelationship shape: {comment?: string, source?: string, target?: string}
 # --vulnerability shape: {cvssScore?: float, cvssV2?: record, cvssV3?: record, cvssVersion?: "CVSS_VERSION_UNSPECIFIED"|"CVSS_VERSION_2"|"CVSS_VERSION_3", effectiveSeverity?: "SEVERITY_UNSPECIFIED"|"MINIMAL"|"LOW"|"MEDIUM"|"HIGH"|"CRITICAL", longDescription?: string, packageIssue?: list, relatedUrls?: list, severity?: "SEVERITY_UNSPECIFIED"|"MINIMAL"|"LOW"|"MEDIUM"|"HIGH"|"CRITICAL", shortDescription?: string, type?: string, vexAssessment?: record}
-export def "v1beta1 update" [
+export def "containeranalysis-projects-occurrences-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -338,7 +338,7 @@ export def "v1beta1 update" [
 #
 # GET /v1beta1/{name}/notes
 # operationId: containeranalysis.projects.occurrences.getNotes
-export def "v1beta1-notes get" [
+export def "containeranalysis-projects-occurrences-get-notes" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -386,7 +386,7 @@ export def "v1beta1-notes get" [
 #
 # GET /v1beta1/{name}/occurrences
 # operationId: containeranalysis.projects.notes.occurrences.list
-export def "v1beta1-occurrences list-by-name" [
+export def "containeranalysis-projects-notes-occurrences-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -437,7 +437,7 @@ export def "v1beta1-occurrences list-by-name" [
 #
 # GET /v1beta1/{parent}/notes
 # operationId: containeranalysis.projects.notes.list
-export def "v1beta1-notes list" [
+export def "containeranalysis-projects-notes-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -503,7 +503,7 @@ export def "v1beta1-notes list" [
 # --spdxRelationship shape: {type?: "RELATIONSHIP_TYPE_UNSPECIFIED"|"DESCRIBES"|"DESCRIBED_BY"|"CONTAINS"|"CONTAINED_BY"|"DEPENDS_ON"|"DEPENDENCY_OF"|"DEPENDENCY_MANIFEST_OF"|"BUILD_DEPENDENCY_OF"|"DEV_DEPENDENCY_OF"|"OPTIONAL_DEPENDENCY_OF"|"PROVIDED_DEPENDENCY_OF"|"TEST_DEPENDENCY_OF"|"RUNTIME_DEPENDENCY_OF"|"EXAMPLE_OF"|"GENERATES"|"GENERATED_FROM"|"ANCESTOR_OF"|"DESCENDANT_OF"|"VARIANT_OF"|"DISTRIBUTION_ARTIFACT"|"PATCH_FOR"|"PATCH_APPLIED"|"COPY_OF"|"FILE_ADDED"|"FILE_DELETED"|"FILE_MODIFIED"|"EXPANDED_FROM_ARCHIVE"|"DYNAMIC_LINK"|"STATIC_LINK"|"DATA_FILE_OF"|"TEST_CASE_OF"|"BUILD_TOOL_OF"|"DEV_TOOL_OF"|"TEST_OF"|"TEST_TOOL_OF"|"DOCUMENTATION_OF"|"OPTIONAL_COMPONENT_OF"|"METAFILE_OF"|"PACKAGE_OF"|"AMENDS"|"PREREQUISITE_FOR"|"HAS_PREREQUISITE"|"OTHER"}
 # --vulnerability shape: {cvssScore?: float, cvssV2?: record, cvssV3?: record, cvssVersion?: "CVSS_VERSION_UNSPECIFIED"|"CVSS_VERSION_2"|"CVSS_VERSION_3", cwe?: list<string>, details?: list, severity?: "SEVERITY_UNSPECIFIED"|"MINIMAL"|"LOW"|"MEDIUM"|"HIGH"|"CRITICAL", sourceUpdateTime?: string, windowsDetails?: list}
 # --vulnerabilityAssessment shape: {assessment?: record, languageCode?: string, longDescription?: string, product?: record, publisher?: record, shortDescription?: string, title?: string}
-export def "v1beta1-notes create" [
+export def "containeranalysis-projects-notes-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -578,7 +578,7 @@ export def "v1beta1-notes create" [
 #
 # POST /v1beta1/{parent}/notes:batchCreate
 # operationId: containeranalysis.projects.notes.batchCreate
-export def "v1beta1-notes-batch-create create" [
+export def "containeranalysis-projects-notes-batch-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -630,7 +630,7 @@ export def "v1beta1-notes-batch-create create" [
 #
 # GET /v1beta1/{parent}/occurrences
 # operationId: containeranalysis.projects.occurrences.list
-export def "v1beta1-occurrences list-by-parent" [
+export def "containeranalysis-projects-occurrences-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -696,7 +696,7 @@ export def "v1beta1-occurrences list-by-parent" [
 # --spdxPackage shape: {comment?: string, filename?: string, id?: string, licenseConcluded?: record, sourceInfo?: string}
 # --spdxRelationship shape: {comment?: string, source?: string, target?: string}
 # --vulnerability shape: {cvssScore?: float, cvssV2?: record, cvssV3?: record, cvssVersion?: "CVSS_VERSION_UNSPECIFIED"|"CVSS_VERSION_2"|"CVSS_VERSION_3", effectiveSeverity?: "SEVERITY_UNSPECIFIED"|"MINIMAL"|"LOW"|"MEDIUM"|"HIGH"|"CRITICAL", longDescription?: string, packageIssue?: list, relatedUrls?: list, severity?: "SEVERITY_UNSPECIFIED"|"MINIMAL"|"LOW"|"MEDIUM"|"HIGH"|"CRITICAL", shortDescription?: string, type?: string, vexAssessment?: record}
-export def "v1beta1-occurrences create" [
+export def "containeranalysis-projects-occurrences-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -769,7 +769,7 @@ export def "v1beta1-occurrences create" [
 # POST /v1beta1/{parent}/occurrences:batchCreate
 # operationId: containeranalysis.projects.occurrences.batchCreate
 # --occurrences item shape: {attestation?: record, build?: record, createTime?: string, deployment?: record, derivedImage?: record, discovered?: record, envelope?: record, installation?: record, intoto?: record, kind?: "NOTE_KIND_UNSPECIFIED"|"VULNERABILITY"|"BUILD"|"IMAGE"|"PACKAGE"|"DEPLOYMENT"|"DISCOVERY"|"ATTESTATION"|"INTOTO"|"SBOM"|"SPDX_PACKAGE"|"SPDX_FILE"|"SPDX_RELATIONSHIP"|"VULNERABILITY_ASSESSMENT"|"SBOM_REFERENCE", name?: string, noteName?: string, remediation?: string, resource?: record, sbom?: record, ... (6 more fields)}
-export def "v1beta1-occurrences-batch-create create" [
+export def "containeranalysis-projects-occurrences-batch-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -821,7 +821,7 @@ export def "v1beta1-occurrences-batch-create create" [
 #
 # GET /v1beta1/{parent}/occurrences:vulnerabilitySummary
 # operationId: containeranalysis.projects.occurrences.getVulnerabilitySummary
-export def "v1beta1-occurrences-vulnerability-summary get" [
+export def "containeranalysis-projects-occurrences-get-vulnerability-summary" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -871,7 +871,7 @@ export def "v1beta1-occurrences-vulnerability-summary get" [
 # POST /v1beta1/{resource}:getIamPolicy
 # operationId: containeranalysis.projects.occurrences.getIamPolicy
 # --options shape: {requestedPolicyVersion?: int}
-export def "v1beta1 get-iam-policy" [
+export def "containeranalysis-projects-occurrences-get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -924,7 +924,7 @@ export def "v1beta1 get-iam-policy" [
 # POST /v1beta1/{resource}:setIamPolicy
 # operationId: containeranalysis.projects.occurrences.setIamPolicy
 # --policy shape: {bindings?: list, etag?: string, version?: int}
-export def "v1beta1 update-iam-policy" [
+export def "containeranalysis-projects-occurrences-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -976,7 +976,7 @@ export def "v1beta1 update-iam-policy" [
 #
 # POST /v1beta1/{resource}:testIamPermissions
 # operationId: containeranalysis.projects.occurrences.testIamPermissions
-export def "v1beta1 test-iam-permissions" [
+export def "containeranalysis-projects-occurrences-test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

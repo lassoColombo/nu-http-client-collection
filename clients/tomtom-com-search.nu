@@ -107,7 +107,7 @@ def view-completer [] { ["IL" "IN" "MA" "PK" "Unified"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "search-additional-data-ext get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-search-version-number-additional-data-ext" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -130,7 +130,7 @@ export def commands []: nothing -> table {
 # Additional Data
 #
 # GET /search/{versionNumber}/additionalData.{ext}
-export def "search-additional-data-ext get" [
+export def "get-search-version-number-additional-data-ext" [
   version_number: int
   ext: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -172,7 +172,7 @@ export def "search-additional-data-ext get" [
 # GET /search/{versionNumber}/cS/{category}.{ext}
 # DEPRECATED
 @deprecated
-export def "search-c-s get" [
+export def "get-search-version-number-c-s-category-ext" [
   version_number: int
   category: string
   ext: string
@@ -224,7 +224,7 @@ export def "search-c-s get" [
 # Category Search
 #
 # GET /search/{versionNumber}/categorySearch/{query}.{ext}
-export def "search-category-search get" [
+export def "get-search-version-number-category-search-query-ext" [
   version_number: int
   query: string
   ext: string
@@ -277,7 +277,7 @@ export def "search-category-search get" [
 #
 # GET /search/{versionNumber}/geocode/{query}.{ext}
 @deprecated --flag store-result
-export def "search-geocode get" [
+export def "get-search-version-number-geocode-query-ext" [
   version_number: int
   query: string
   ext: string
@@ -330,7 +330,7 @@ export def "search-geocode get" [
 # Geometry Filter
 #
 # GET /search/{versionNumber}/geometryFilter.{ext}
-export def "search-geometry-filter-ext get" [
+export def "get-search-version-number-geometry-filter-ext" [
   version_number: int
   ext: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -372,7 +372,7 @@ export def "search-geometry-filter-ext get" [
 # POST /search/{versionNumber}/geometryFilter.{ext}
 # --geometryList item shape: {position?: string, radius?: int, type?: string, vertices?: list<string>}
 # --poiList item shape: {address?: record, poi?: record, position?: record}
-export def "search-geometry-filter-ext create" [
+export def "post-search-version-number-geometry-filter-ext" [
   version_number: int
   ext: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -414,7 +414,7 @@ export def "search-geometry-filter-ext create" [
 # Geometry Search
 #
 # GET /search/{versionNumber}/geometrySearch/{query}.{ext}
-export def "search-geometry-search get" [
+export def "get-search-version-number-geometry-search-query-ext" [
   version_number: int
   query: string
   ext: string
@@ -460,7 +460,7 @@ export def "search-geometry-search get" [
 #
 # POST /search/{versionNumber}/geometrySearch/{query}.{ext}
 # --geometryList item shape: {position?: string, radius?: int, type?: string, vertices?: list<string>}
-export def "search-geometry-search create" [
+export def "post-search-version-number-geometry-search-query-ext" [
   version_number: int
   query: string
   ext: string
@@ -510,7 +510,7 @@ export def "search-geometry-search create" [
 # GET /search/{versionNumber}/nearbySearch/.{ext}
 @deprecated --flag top-left
 @deprecated --flag btm-right
-export def "search-nearby-search-ext get" [
+export def "get-search-version-number-nearby-search-ext" [
   version_number: int
   ext: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -562,7 +562,7 @@ export def "search-nearby-search-ext get" [
 # Points of Interest Search
 #
 # GET /search/{versionNumber}/poiSearch/{query}.{ext}
-export def "search-poi-search get" [
+export def "get-search-version-number-poi-search-query-ext" [
   version_number: int
   query: string
   ext: string
@@ -615,7 +615,7 @@ export def "search-poi-search get" [
 #
 # GET /search/{versionNumber}/reverseGeocode/crossStreet/{position}.{ext}
 @deprecated --flag spatial-keys
-export def "search-reverse-geocode-cross-street get" [
+export def "get-search-version-number-reverse-geocode-cross-street-position-ext" [
   version_number: int
   position: string
   ext: string
@@ -661,7 +661,7 @@ export def "search-reverse-geocode-cross-street get" [
 #
 # GET /search/{versionNumber}/reverseGeocode/{position}.{ext}
 @deprecated --flag spatial-keys
-export def "search-reverse-geocode get" [
+export def "get-search-version-number-reverse-geocode-position-ext" [
   version_number: int
   position: string
   ext: string
@@ -711,7 +711,7 @@ export def "search-reverse-geocode get" [
 # GET /search/{versionNumber}/routedFilter/{position}/{heading}.{ext}
 # DEPRECATED
 @deprecated
-export def "search-routed-filter get" [
+export def "get-search-version-number-routed-filter-position-heading-ext" [
   version_number: int
   position: string
   heading: float
@@ -758,7 +758,7 @@ export def "search-routed-filter get" [
 # DEPRECATED
 # --poiList item shape: {address?: record, poi?: record, position?: record}
 @deprecated
-export def "search-routed-filter create" [
+export def "post-search-version-number-routed-filter-position-heading-ext" [
   version_number: int
   position: string
   heading: float
@@ -807,7 +807,7 @@ export def "search-routed-filter create" [
 # GET /search/{versionNumber}/routedSearch/{query}/{position}/{heading}.{ext}
 # DEPRECATED
 @deprecated
-export def "search-routed-search get" [
+export def "get-search-version-number-routed-search-query-position-heading-ext" [
   version_number: int
   query: string
   position: string
@@ -860,7 +860,7 @@ export def "search-routed-search get" [
 # GET /search/{versionNumber}/s/{query}.{ext}
 # DEPRECATED
 @deprecated
-export def "search-s get" [
+export def "get-search-version-number-s-query-ext" [
   version_number: int
   query: string
   ext: string
@@ -912,7 +912,7 @@ export def "search-s get" [
 # Fuzzy Search
 #
 # GET /search/{versionNumber}/search/{query}.{ext}
-export def "search-search get" [
+export def "get-search-version-number-search-query-ext" [
   version_number: int
   query: string
   ext: string
@@ -968,7 +968,7 @@ export def "search-search get" [
 #
 # POST /search/{versionNumber}/searchAlongRoute/{query}.{ext}
 # --route shape: {points?: list}
-export def "search-search-along-route create" [
+export def "post-search-version-number-search-along-route-query-ext" [
   version_number: int
   query: string
   ext: string
@@ -1014,7 +1014,7 @@ export def "search-search-along-route create" [
 # Structured Geocode
 #
 # GET /search/{versionNumber}/structuredGeocode.{ext}
-export def "search-structured-geocode-ext get" [
+export def "get-search-version-number-structured-geocode-ext" [
   version_number: int
   ext: string
   --base-url(-b): string@base-url-completer # API base URL

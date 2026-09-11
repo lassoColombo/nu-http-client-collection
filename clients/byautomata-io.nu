@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["x-api-key"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "contentpro-search get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-contentpro-search" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -127,7 +127,7 @@ export def commands []: nothing -> table {
 # Send search terms to receive the most relevant articles and companies.
 #
 # GET /contentpro-search
-export def "contentpro-search get" [
+export def "get-contentpro-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -162,7 +162,7 @@ export def "contentpro-search get" [
 # The /contentpro-similar-text endpoint accepts and arbitrary piece of text and returns similar articles and blogs written by companies.
 #
 # POST /contentpro-similar-text
-export def "contentpro-similar-text create" [
+export def "post-contentpro-similar-text" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -199,7 +199,7 @@ export def "contentpro-similar-text create" [
 # Send search terms to receive the most relevant companies along with text snippets.
 #
 # GET /search
-export def "search get" [
+export def "get-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -235,7 +235,7 @@ export def "search get" [
 # Send a company website to receive a list of companies related to them.
 #
 # GET /similar
-export def "similar get" [
+export def "get-similar" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-api-management-service-reports-by-api list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "reports-list-by-api" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -122,7 +122,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/reports/byApi
 # operationId: Reports_ListByApi
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-reports-by-api list" [
+export def "reports-list-by-api" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -168,7 +168,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/reports/byGeo
 # operationId: Reports_ListByGeo
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-reports-by-geo list" [
+export def "reports-list-by-geo" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -213,7 +213,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/reports/byOperation
 # operationId: Reports_ListByOperation
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-reports-by-operation list" [
+export def "reports-list-by-operation" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -259,7 +259,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/reports/byProduct
 # operationId: Reports_ListByProduct
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-reports-by-product list" [
+export def "reports-list-by-product" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -305,7 +305,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/reports/byRequest
 # operationId: Reports_ListByRequest
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-reports-by-request list" [
+export def "reports-list-by-request" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -350,7 +350,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/reports/bySubscription
 # operationId: Reports_ListBySubscription
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-reports-by-subscription list" [
+export def "reports-list-by-subscription" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -396,7 +396,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/reports/byTime
 # operationId: Reports_ListByTime
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-reports-by-time list" [
+export def "reports-list-by-time" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -443,7 +443,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/reports/byUser
 # operationId: Reports_ListByUser
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-reports-by-user list" [
+export def "reports-list-by-user" [
   subscription_id: string
   resource_group_name: string
   service_name: string

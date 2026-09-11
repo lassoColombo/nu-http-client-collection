@@ -110,7 +110,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resourcegroups-providers-microsoft-subscriptions-admin-offers-offer-delegations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "offer-delegations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -134,7 +134,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Subscriptions.Admin/offers/{offer}/offerDelegations
 # operationId: OfferDelegations_List
-export def "subscriptions-resourcegroups-providers-microsoft-subscriptions-admin-offers-offer-delegations list" [
+export def "offer-delegations-list" [
   subscription_id: string
   resource_group_name: string
   offer: string
@@ -176,7 +176,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-subscriptions-admin
 #
 # DELETE /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Subscriptions.Admin/offers/{offer}/offerDelegations/{offerDelegationName}
 # operationId: OfferDelegations_Delete
-export def "subscriptions-resourcegroups-providers-microsoft-subscriptions-admin-offers-offer-delegations delete" [
+export def "offer-delegations-delete" [
   subscription_id: string
   resource_group_name: string
   offer: string
@@ -220,7 +220,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-subscriptions-admin
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Subscriptions.Admin/offers/{offer}/offerDelegations/{offerDelegationName}
 # operationId: OfferDelegations_Get
-export def "subscriptions-resourcegroups-providers-microsoft-subscriptions-admin-offers-offer-delegations get" [
+export def "offer-delegations-get" [
   subscription_id: string
   resource_group_name: string
   offer: string
@@ -265,7 +265,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-subscriptions-admin
 # PUT /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Subscriptions.Admin/offers/{offer}/offerDelegations/{offerDelegationName}
 # operationId: OfferDelegations_CreateOrUpdate
 # --properties shape: {subscriptionId?: string}
-export def "subscriptions-resourcegroups-providers-microsoft-subscriptions-admin-offers-offer-delegations create-or-update" [
+export def "offer-delegations-create-or-update" [
   subscription_id: string
   resource_group_name: string
   offer: string

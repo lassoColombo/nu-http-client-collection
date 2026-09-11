@@ -130,7 +130,7 @@ def state-completer [] { ["ABORTED" "COMPLETED" "FAILED" "STARTED" "UNKNOWN"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "datalineage-projects-locations-processes-runs-lineage-events-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -154,7 +154,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1/{name}
 # operationId: datalineage.projects.locations.processes.runs.lineageEvents.delete
-export def "projects delete" [
+export def "datalineage-projects-locations-processes-runs-lineage-events-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -203,7 +203,7 @@ export def "projects delete" [
 #
 # GET /v1/{name}
 # operationId: datalineage.projects.locations.processes.runs.lineageEvents.get
-export def "projects get" [
+export def "datalineage-projects-locations-processes-runs-lineage-events-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -251,7 +251,7 @@ export def "projects get" [
 #
 # PATCH /v1/{name}
 # operationId: datalineage.projects.locations.processes.runs.patch
-export def "projects update" [
+export def "datalineage-projects-locations-processes-runs-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -310,7 +310,7 @@ export def "projects update" [
 #
 # GET /v1/{name}/operations
 # operationId: datalineage.projects.locations.operations.list
-export def "operations list" [
+export def "datalineage-projects-locations-operations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -361,7 +361,7 @@ export def "operations list" [
 #
 # POST /v1/{name}:cancel
 # operationId: datalineage.projects.locations.operations.cancel
-export def "projects cancel" [
+export def "datalineage-projects-locations-operations-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -413,7 +413,7 @@ export def "projects cancel" [
 #
 # GET /v1/{parent}/lineageEvents
 # operationId: datalineage.projects.locations.processes.runs.lineageEvents.list
-export def "lineage-events list" [
+export def "datalineage-projects-locations-processes-runs-lineage-events-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -464,7 +464,7 @@ export def "lineage-events list" [
 # POST /v1/{parent}/lineageEvents
 # operationId: datalineage.projects.locations.processes.runs.lineageEvents.create
 # --links item shape: {source?: record, target?: record}
-export def "lineage-events create" [
+export def "datalineage-projects-locations-processes-runs-lineage-events-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -520,7 +520,7 @@ export def "lineage-events create" [
 #
 # GET /v1/{parent}/processes
 # operationId: datalineage.projects.locations.processes.list
-export def "processes list" [
+export def "datalineage-projects-locations-processes-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -571,7 +571,7 @@ export def "processes list" [
 # POST /v1/{parent}/processes
 # operationId: datalineage.projects.locations.processes.create
 # --origin shape: {name?: string, sourceType?: "SOURCE_TYPE_UNSPECIFIED"|"CUSTOM"|"BIGQUERY"|"DATA_FUSION"|"COMPOSER"|"LOOKER_STUDIO"|"DATAPROC"}
-export def "processes create" [
+export def "datalineage-projects-locations-processes-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -627,7 +627,7 @@ export def "processes create" [
 #
 # GET /v1/{parent}/runs
 # operationId: datalineage.projects.locations.processes.runs.list
-export def "runs list" [
+export def "datalineage-projects-locations-processes-runs-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -677,7 +677,7 @@ export def "runs list" [
 #
 # POST /v1/{parent}/runs
 # operationId: datalineage.projects.locations.processes.runs.create
-export def "runs create" [
+export def "datalineage-projects-locations-processes-runs-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -735,7 +735,7 @@ export def "runs create" [
 #
 # POST /v1/{parent}:batchSearchLinkProcesses
 # operationId: datalineage.projects.locations.batchSearchLinkProcesses
-export def "projects list-batch-link-processes" [
+export def "datalineage-projects-locations-batch-search-link-processes" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -791,7 +791,7 @@ export def "projects list-batch-link-processes" [
 # operationId: datalineage.projects.locations.searchLinks
 # --source shape: {fullyQualifiedName?: string}
 # --target shape: {fullyQualifiedName?: string}
-export def "projects list-links" [
+export def "datalineage-projects-locations-search-links" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

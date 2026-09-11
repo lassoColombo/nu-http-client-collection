@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "en-core-web-sm get-root" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "read-root-v1-en-core-web-sm-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -128,7 +128,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/en_core_web_sm/
 # operationId: read_root_v1_en_core_web_sm__get
-export def "en-core-web-sm get-root" [
+export def "read-root-v1-en-core-web-sm-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -162,7 +162,7 @@ export def "en-core-web-sm get-root" [
 #
 # POST /v1/en_core_web_sm/dependencies
 # operationId: read_dependencies_v1_en_core_web_sm_dependencies_post
-export def "en-core-web-sm-dependencies get-create" [
+export def "read-dependencies-v1-en-core-web-sm-dependencies-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -200,7 +200,7 @@ export def "en-core-web-sm-dependencies get-create" [
 #
 # POST /v1/en_core_web_sm/entities
 # operationId: read_entities_v1_en_core_web_sm_entities_post
-export def "en-core-web-sm-entities get-create" [
+export def "read-entities-v1-en-core-web-sm-entities-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -238,7 +238,7 @@ export def "en-core-web-sm-entities get-create" [
 #
 # POST /v1/en_core_web_sm/sentence-dependencies
 # operationId: read_sentence_dependencies_v1_en_core_web_sm_sentence_dependencies_post
-export def "en-core-web-sm-sentence-dependencies get-create" [
+export def "read-sentence-dependencies-v1-en-core-web-sm-sentence-dependencies-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -276,7 +276,7 @@ export def "en-core-web-sm-sentence-dependencies get-create" [
 #
 # GET /v1/en_core_web_sm/version
 # operationId: read_version_v1_en_core_web_sm_version_get
-export def "en-core-web-sm-version get" [
+export def "read-version-v1-en-core-web-sm-version-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

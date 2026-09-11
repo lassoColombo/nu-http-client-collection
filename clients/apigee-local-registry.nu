@@ -123,7 +123,7 @@ def accept-completer [] { ["*/*" "application/json"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects-locations-apis list-registry" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "registry-list-apis" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -147,7 +147,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/projects/{project}/locations/{location}/apis
 # operationId: Registry_ListApis
-export def "projects-locations-apis list-registry" [
+export def "registry-list-apis" [
   project: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -189,7 +189,7 @@ export def "projects-locations-apis list-registry" [
 #
 # POST /v1/projects/{project}/locations/{location}/apis
 # operationId: Registry_CreateApi
-export def "projects-locations-apis create-registry" [
+export def "registry-create-api" [
   project: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -240,7 +240,7 @@ export def "projects-locations-apis create-registry" [
 #
 # DELETE /v1/projects/{project}/locations/{location}/apis/{api}
 # operationId: Registry_DeleteApi
-export def "projects-locations-apis delete-registry" [
+export def "registry-delete-api" [
   project: string
   location: string
   api: string
@@ -282,7 +282,7 @@ export def "projects-locations-apis delete-registry" [
 #
 # GET /v1/projects/{project}/locations/{location}/apis/{api}
 # operationId: Registry_GetApi
-export def "projects-locations-apis get-registry" [
+export def "registry-get-api" [
   project: string
   location: string
   api: string
@@ -322,7 +322,7 @@ export def "projects-locations-apis get-registry" [
 #
 # PATCH /v1/projects/{project}/locations/{location}/apis/{api}
 # operationId: Registry_UpdateApi
-export def "projects-locations-apis update-registry" [
+export def "registry-update-api" [
   project: string
   location: string
   api: string
@@ -376,7 +376,7 @@ export def "projects-locations-apis update-registry" [
 #
 # GET /v1/projects/{project}/locations/{location}/apis/{api}/deployments
 # operationId: Registry_ListApiDeployments
-export def "projects-locations-apis-deployments list-registry" [
+export def "registry-list-api-deployments" [
   project: string
   location: string
   api: string
@@ -420,7 +420,7 @@ export def "projects-locations-apis-deployments list-registry" [
 #
 # POST /v1/projects/{project}/locations/{location}/apis/{api}/deployments
 # operationId: Registry_CreateApiDeployment
-export def "projects-locations-apis-deployments create-registry" [
+export def "registry-create-api-deployment" [
   project: string
   location: string
   api: string
@@ -475,7 +475,7 @@ export def "projects-locations-apis-deployments create-registry" [
 #
 # DELETE /v1/projects/{project}/locations/{location}/apis/{api}/deployments/{deployment}
 # operationId: Registry_DeleteApiDeployment
-export def "projects-locations-apis-deployments delete-registry" [
+export def "registry-delete-api-deployment" [
   project: string
   location: string
   api: string
@@ -519,7 +519,7 @@ export def "projects-locations-apis-deployments delete-registry" [
 #
 # GET /v1/projects/{project}/locations/{location}/apis/{api}/deployments/{deployment}
 # operationId: Registry_GetApiDeployment
-export def "projects-locations-apis-deployments get-registry" [
+export def "registry-get-api-deployment" [
   project: string
   location: string
   api: string
@@ -561,7 +561,7 @@ export def "projects-locations-apis-deployments get-registry" [
 #
 # PATCH /v1/projects/{project}/locations/{location}/apis/{api}/deployments/{deployment}
 # operationId: Registry_UpdateApiDeployment
-export def "projects-locations-apis-deployments update-registry" [
+export def "registry-update-api-deployment" [
   project: string
   location: string
   api: string
@@ -619,7 +619,7 @@ export def "projects-locations-apis-deployments update-registry" [
 #
 # DELETE /v1/projects/{project}/locations/{location}/apis/{api}/deployments/{deployment}:deleteRevision
 # operationId: Registry_DeleteApiDeploymentRevision
-export def "projects-locations-apis-deployments delete-registry-revision" [
+export def "registry-delete-api-deployment-revision" [
   project: string
   location: string
   api: string
@@ -661,7 +661,7 @@ export def "projects-locations-apis-deployments delete-registry-revision" [
 #
 # GET /v1/projects/{project}/locations/{location}/apis/{api}/deployments/{deployment}:listRevisions
 # operationId: Registry_ListApiDeploymentRevisions
-export def "projects-locations-apis-deployments list-registry-revisions" [
+export def "registry-list-api-deployment-revisions" [
   project: string
   location: string
   api: string
@@ -706,7 +706,7 @@ export def "projects-locations-apis-deployments list-registry-revisions" [
 #
 # POST /v1/projects/{project}/locations/{location}/apis/{api}/deployments/{deployment}:rollback
 # operationId: Registry_RollbackApiDeployment
-export def "projects-locations-apis-deployments create-registry-rollback" [
+export def "registry-rollback-api-deployment" [
   project: string
   location: string
   api: string
@@ -753,7 +753,7 @@ export def "projects-locations-apis-deployments create-registry-rollback" [
 #
 # POST /v1/projects/{project}/locations/{location}/apis/{api}/deployments/{deployment}:tagRevision
 # operationId: Registry_TagApiDeploymentRevision
-export def "projects-locations-apis-deployments tag-registry-revision" [
+export def "registry-tag-api-deployment-revision" [
   project: string
   location: string
   api: string
@@ -800,7 +800,7 @@ export def "projects-locations-apis-deployments tag-registry-revision" [
 #
 # GET /v1/projects/{project}/locations/{location}/apis/{api}/versions
 # operationId: Registry_ListApiVersions
-export def "projects-locations-apis-versions list-registry" [
+export def "registry-list-api-versions" [
   project: string
   location: string
   api: string
@@ -844,7 +844,7 @@ export def "projects-locations-apis-versions list-registry" [
 #
 # POST /v1/projects/{project}/locations/{location}/apis/{api}/versions
 # operationId: Registry_CreateApiVersion
-export def "projects-locations-apis-versions create-registry" [
+export def "registry-create-api-version" [
   project: string
   location: string
   api: string
@@ -895,7 +895,7 @@ export def "projects-locations-apis-versions create-registry" [
 #
 # DELETE /v1/projects/{project}/locations/{location}/apis/{api}/versions/{version}
 # operationId: Registry_DeleteApiVersion
-export def "projects-locations-apis-versions delete-registry" [
+export def "registry-delete-api-version" [
   project: string
   location: string
   api: string
@@ -939,7 +939,7 @@ export def "projects-locations-apis-versions delete-registry" [
 #
 # GET /v1/projects/{project}/locations/{location}/apis/{api}/versions/{version}
 # operationId: Registry_GetApiVersion
-export def "projects-locations-apis-versions get-registry" [
+export def "registry-get-api-version" [
   project: string
   location: string
   api: string
@@ -981,7 +981,7 @@ export def "projects-locations-apis-versions get-registry" [
 #
 # PATCH /v1/projects/{project}/locations/{location}/apis/{api}/versions/{version}
 # operationId: Registry_UpdateApiVersion
-export def "projects-locations-apis-versions update-registry" [
+export def "registry-update-api-version" [
   project: string
   location: string
   api: string
@@ -1035,7 +1035,7 @@ export def "projects-locations-apis-versions update-registry" [
 #
 # GET /v1/projects/{project}/locations/{location}/apis/{api}/versions/{version}/specs
 # operationId: Registry_ListApiSpecs
-export def "projects-locations-apis-versions-specs list-registry" [
+export def "registry-list-api-specs" [
   project: string
   location: string
   api: string
@@ -1081,7 +1081,7 @@ export def "projects-locations-apis-versions-specs list-registry" [
 #
 # POST /v1/projects/{project}/locations/{location}/apis/{api}/versions/{version}/specs
 # operationId: Registry_CreateApiSpec
-export def "projects-locations-apis-versions-specs create-registry" [
+export def "registry-create-api-spec" [
   project: string
   location: string
   api: string
@@ -1136,7 +1136,7 @@ export def "projects-locations-apis-versions-specs create-registry" [
 #
 # DELETE /v1/projects/{project}/locations/{location}/apis/{api}/versions/{version}/specs/{spec}
 # operationId: Registry_DeleteApiSpec
-export def "projects-locations-apis-versions-specs delete-registry" [
+export def "registry-delete-api-spec" [
   project: string
   location: string
   api: string
@@ -1182,7 +1182,7 @@ export def "projects-locations-apis-versions-specs delete-registry" [
 #
 # GET /v1/projects/{project}/locations/{location}/apis/{api}/versions/{version}/specs/{spec}
 # operationId: Registry_GetApiSpec
-export def "projects-locations-apis-versions-specs get-registry" [
+export def "registry-get-api-spec" [
   project: string
   location: string
   api: string
@@ -1226,7 +1226,7 @@ export def "projects-locations-apis-versions-specs get-registry" [
 #
 # PATCH /v1/projects/{project}/locations/{location}/apis/{api}/versions/{version}/specs/{spec}
 # operationId: Registry_UpdateApiSpec
-export def "projects-locations-apis-versions-specs update-registry" [
+export def "registry-update-api-spec" [
   project: string
   location: string
   api: string
@@ -1284,7 +1284,7 @@ export def "projects-locations-apis-versions-specs update-registry" [
 #
 # DELETE /v1/projects/{project}/locations/{location}/apis/{api}/versions/{version}/specs/{spec}:deleteRevision
 # operationId: Registry_DeleteApiSpecRevision
-export def "projects-locations-apis-versions-specs delete-registry-revision" [
+export def "registry-delete-api-spec-revision" [
   project: string
   location: string
   api: string
@@ -1328,7 +1328,7 @@ export def "projects-locations-apis-versions-specs delete-registry-revision" [
 #
 # GET /v1/projects/{project}/locations/{location}/apis/{api}/versions/{version}/specs/{spec}:getContents
 # operationId: Registry_GetApiSpecContents
-export def "projects-locations-apis-versions-specs get-registry-contents" [
+export def "registry-get-api-spec-contents" [
   project: string
   location: string
   api: string
@@ -1373,7 +1373,7 @@ export def "projects-locations-apis-versions-specs get-registry-contents" [
 #
 # GET /v1/projects/{project}/locations/{location}/apis/{api}/versions/{version}/specs/{spec}:listRevisions
 # operationId: Registry_ListApiSpecRevisions
-export def "projects-locations-apis-versions-specs list-registry-revisions" [
+export def "registry-list-api-spec-revisions" [
   project: string
   location: string
   api: string
@@ -1420,7 +1420,7 @@ export def "projects-locations-apis-versions-specs list-registry-revisions" [
 #
 # POST /v1/projects/{project}/locations/{location}/apis/{api}/versions/{version}/specs/{spec}:rollback
 # operationId: Registry_RollbackApiSpec
-export def "projects-locations-apis-versions-specs create-registry-rollback" [
+export def "registry-rollback-api-spec" [
   project: string
   location: string
   api: string
@@ -1469,7 +1469,7 @@ export def "projects-locations-apis-versions-specs create-registry-rollback" [
 #
 # POST /v1/projects/{project}/locations/{location}/apis/{api}/versions/{version}/specs/{spec}:tagRevision
 # operationId: Registry_TagApiSpecRevision
-export def "projects-locations-apis-versions-specs tag-registry-revision" [
+export def "registry-tag-api-spec-revision" [
   project: string
   location: string
   api: string
@@ -1518,7 +1518,7 @@ export def "projects-locations-apis-versions-specs tag-registry-revision" [
 #
 # GET /v1/projects/{project}/locations/{location}/artifacts
 # operationId: Registry_ListArtifacts
-export def "projects-locations-artifacts list-registry" [
+export def "registry-list-artifacts" [
   project: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1560,7 +1560,7 @@ export def "projects-locations-artifacts list-registry" [
 #
 # POST /v1/projects/{project}/locations/{location}/artifacts
 # operationId: Registry_CreateArtifact
-export def "projects-locations-artifacts create-registry" [
+export def "registry-create-artifact" [
   project: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1606,7 +1606,7 @@ export def "projects-locations-artifacts create-registry" [
 #
 # DELETE /v1/projects/{project}/locations/{location}/artifacts/{artifact}
 # operationId: Registry_DeleteArtifact
-export def "projects-locations-artifacts delete-registry" [
+export def "registry-delete-artifact" [
   project: string
   location: string
   artifact: string
@@ -1646,7 +1646,7 @@ export def "projects-locations-artifacts delete-registry" [
 #
 # GET /v1/projects/{project}/locations/{location}/artifacts/{artifact}
 # operationId: Registry_GetArtifact
-export def "projects-locations-artifacts get-registry" [
+export def "registry-get-artifact" [
   project: string
   location: string
   artifact: string
@@ -1686,7 +1686,7 @@ export def "projects-locations-artifacts get-registry" [
 #
 # PUT /v1/projects/{project}/locations/{location}/artifacts/{artifact}
 # operationId: Registry_ReplaceArtifact
-export def "projects-locations-artifacts update-registry" [
+export def "registry-replace-artifact" [
   project: string
   location: string
   artifact: string
@@ -1732,7 +1732,7 @@ export def "projects-locations-artifacts update-registry" [
 #
 # GET /v1/projects/{project}/locations/{location}/artifacts/{artifact}:getContents
 # operationId: Registry_GetArtifactContents
-export def "projects-locations-artifacts get-registry-contents" [
+export def "registry-get-artifact-contents" [
   project: string
   location: string
   artifact: string

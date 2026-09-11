@@ -107,7 +107,7 @@ def cancellation-reason-completer [] { ["CANCELLATION_REASON_ACCIDENTAL_PURCHASE
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "partners get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "paymentsresellersubscription-partners-subscriptions-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -131,7 +131,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/{name}
 # operationId: paymentsresellersubscription.partners.subscriptions.get
-export def "partners get" [
+export def "paymentsresellersubscription-partners-subscriptions-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -179,7 +179,7 @@ export def "partners get" [
 #
 # POST /v1/{name}:cancel
 # operationId: paymentsresellersubscription.partners.subscriptions.cancel
-export def "partners cancel" [
+export def "paymentsresellersubscription-partners-subscriptions-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -232,7 +232,7 @@ export def "partners cancel" [
 #
 # POST /v1/{name}:entitle
 # operationId: paymentsresellersubscription.partners.subscriptions.entitle
-export def "partners create-entitle" [
+export def "paymentsresellersubscription-partners-subscriptions-entitle" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -285,7 +285,7 @@ export def "partners create-entitle" [
 # POST /v1/{name}:extend
 # operationId: paymentsresellersubscription.partners.subscriptions.extend
 # --extension shape: {duration?: record, partnerUserToken?: string}
-export def "partners create-extend" [
+export def "paymentsresellersubscription-partners-subscriptions-extend" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -338,7 +338,7 @@ export def "partners create-extend" [
 #
 # POST /v1/{name}:undoCancel
 # operationId: paymentsresellersubscription.partners.subscriptions.undoCancel
-export def "partners cancel-undo" [
+export def "paymentsresellersubscription-partners-subscriptions-undo-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -390,7 +390,7 @@ export def "partners cancel-undo" [
 #
 # GET /v1/{parent}/products
 # operationId: paymentsresellersubscription.partners.products.list
-export def "products list" [
+export def "paymentsresellersubscription-partners-products-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -441,7 +441,7 @@ export def "products list" [
 #
 # GET /v1/{parent}/promotions
 # operationId: paymentsresellersubscription.partners.promotions.list
-export def "promotions list" [
+export def "paymentsresellersubscription-partners-promotions-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -492,7 +492,7 @@ export def "promotions list" [
 #
 # POST /v1/{parent}/promotions:findEligible
 # operationId: paymentsresellersubscription.partners.promotions.findEligible
-export def "promotions-find-eligible find" [
+export def "paymentsresellersubscription-partners-promotions-find-eligible" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -551,7 +551,7 @@ export def "promotions-find-eligible find" [
 # --promotionSpecs item shape: {freeTrialDuration?: record, introductoryPricingDetails?: record, promotion?: string}
 # --serviceLocation shape: {postalCode?: string, regionCode?: string}
 # --upgradeDowngradeDetails shape: {billingCycleSpec?: "BILLING_CYCLE_SPEC_UNSPECIFIED"|"BILLING_CYCLE_SPEC_ALIGN_WITH_PREVIOUS_SUBSCRIPTION"|"BILLING_CYCLE_SPEC_START_IMMEDIATELY", previousSubscriptionId?: string}
-export def "subscriptions create" [
+export def "paymentsresellersubscription-partners-subscriptions-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -617,7 +617,7 @@ export def "subscriptions create" [
 # --promotionSpecs item shape: {freeTrialDuration?: record, introductoryPricingDetails?: record, promotion?: string}
 # --serviceLocation shape: {postalCode?: string, regionCode?: string}
 # --upgradeDowngradeDetails shape: {billingCycleSpec?: "BILLING_CYCLE_SPEC_UNSPECIFIED"|"BILLING_CYCLE_SPEC_ALIGN_WITH_PREVIOUS_SUBSCRIPTION"|"BILLING_CYCLE_SPEC_START_IMMEDIATELY", previousSubscriptionId?: string}
-export def "subscriptions-provision create" [
+export def "paymentsresellersubscription-partners-subscriptions-provision" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

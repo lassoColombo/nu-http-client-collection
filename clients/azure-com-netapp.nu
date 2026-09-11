@@ -124,7 +124,7 @@ def type-completer [] { ["Microsoft.NetApp/netAppAccounts" "Microsoft.NetApp/net
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-net-app-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -148,7 +148,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.NetApp/operations
 # operationId: Operations_List
-export def "providers-microsoft-net-app-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,7 +184,7 @@ export def "providers-microsoft-net-app-operations list" [
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.NetApp/locations/{location}/checkFilePathAvailability
 # operationId: CheckFilePathAvailability
-export def "subscriptions-providers-microsoft-net-app-locations-check-file-path-availability check" [
+export def "check-file-path-availability" [
   subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -230,7 +230,7 @@ export def "subscriptions-providers-microsoft-net-app-locations-check-file-path-
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.NetApp/locations/{location}/checkNameAvailability
 # operationId: CheckNameAvailability
-export def "subscriptions-providers-microsoft-net-app-locations-check-name-availability check" [
+export def "check-name-availability" [
   subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -276,7 +276,7 @@ export def "subscriptions-providers-microsoft-net-app-locations-check-name-avail
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NetApp/netAppAccounts
 # operationId: Accounts_List
-export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-accounts list" [
+export def "accounts-list" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -316,7 +316,7 @@ export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-ac
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NetApp/netAppAccounts/{accountName}
 # operationId: Accounts_Delete
-export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-accounts delete" [
+export def "accounts-delete" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -358,7 +358,7 @@ export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-ac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NetApp/netAppAccounts/{accountName}
 # operationId: Accounts_Get
-export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-accounts get" [
+export def "accounts-get" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -401,7 +401,7 @@ export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-ac
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NetApp/netAppAccounts/{accountName}
 # operationId: Accounts_Update
 # --properties shape: {activeDirectories?: list}
-export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-accounts update" [
+export def "accounts-update" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -450,7 +450,7 @@ export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-ac
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NetApp/netAppAccounts/{accountName}
 # operationId: Accounts_CreateOrUpdate
 # --properties shape: {activeDirectories?: list}
-export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-accounts create-or-update" [
+export def "accounts-create-or-update" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -498,7 +498,7 @@ export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-ac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NetApp/netAppAccounts/{accountName}/capacityPools
 # operationId: Pools_List
-export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-accounts-capacity-pools list" [
+export def "pools-list" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -540,7 +540,7 @@ export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-ac
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NetApp/netAppAccounts/{accountName}/capacityPools/{poolName}
 # operationId: Pools_Delete
-export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-accounts-capacity-pools delete" [
+export def "pools-delete" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -584,7 +584,7 @@ export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-ac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NetApp/netAppAccounts/{accountName}/capacityPools/{poolName}
 # operationId: Pools_Get
-export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-accounts-capacity-pools get" [
+export def "pools-get" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -629,7 +629,7 @@ export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-ac
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NetApp/netAppAccounts/{accountName}/capacityPools/{poolName}
 # operationId: Pools_Update
 # --properties shape: {serviceLevel?: "Standard"|"Premium"|"Ultra", size?: int}
-export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-accounts-capacity-pools update" [
+export def "pools-update" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -680,7 +680,7 @@ export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-ac
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NetApp/netAppAccounts/{accountName}/capacityPools/{poolName}
 # operationId: Pools_CreateOrUpdate
 # --properties shape: {serviceLevel: "Standard"|"Premium"|"Ultra", size: int}
-export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-accounts-capacity-pools create-or-update" [
+export def "pools-create-or-update" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -730,7 +730,7 @@ export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-ac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NetApp/netAppAccounts/{accountName}/capacityPools/{poolName}/volumes
 # operationId: Volumes_List
-export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-accounts-capacity-pools-volumes list" [
+export def "volumes-list" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -774,7 +774,7 @@ export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-ac
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NetApp/netAppAccounts/{accountName}/capacityPools/{poolName}/volumes/{volumeName}
 # operationId: Volumes_Delete
-export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-accounts-capacity-pools-volumes delete" [
+export def "volumes-delete" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -820,7 +820,7 @@ export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-ac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NetApp/netAppAccounts/{accountName}/capacityPools/{poolName}/volumes/{volumeName}
 # operationId: Volumes_Get
-export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-accounts-capacity-pools-volumes get" [
+export def "volumes-get" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -867,7 +867,7 @@ export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-ac
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NetApp/netAppAccounts/{accountName}/capacityPools/{poolName}/volumes/{volumeName}
 # operationId: Volumes_Update
 # --properties shape: {exportPolicy?: any, serviceLevel?: "Standard"|"Premium"|"Ultra", usageThreshold?: int}
-export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-accounts-capacity-pools-volumes update" [
+export def "volumes-update" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -920,7 +920,7 @@ export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-ac
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NetApp/netAppAccounts/{accountName}/capacityPools/{poolName}/volumes/{volumeName}
 # operationId: Volumes_CreateOrUpdate
 # --properties shape: {creationToken: string, exportPolicy?: any, mountTargets?: any, protocolTypes?: list<string>, serviceLevel?: "Standard"|"Premium"|"Ultra", snapshotId?: string, subnetId: string, usageThreshold: int}
-export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-accounts-capacity-pools-volumes create-or-update" [
+export def "volumes-create-or-update" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -972,7 +972,7 @@ export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-ac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NetApp/netAppAccounts/{accountName}/capacityPools/{poolName}/volumes/{volumeName}/mountTargets
 # operationId: MountTargets_List
-export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-accounts-capacity-pools-volumes-mount-targets list" [
+export def "mount-targets-list" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1018,7 +1018,7 @@ export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-ac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NetApp/netAppAccounts/{accountName}/capacityPools/{poolName}/volumes/{volumeName}/snapshots
 # operationId: Snapshots_List
-export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-accounts-capacity-pools-volumes-snapshots list" [
+export def "snapshots-list" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1064,7 +1064,7 @@ export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-ac
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NetApp/netAppAccounts/{accountName}/capacityPools/{poolName}/volumes/{volumeName}/snapshots/{snapshotName}
 # operationId: Snapshots_Delete
-export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-accounts-capacity-pools-volumes-snapshots delete" [
+export def "snapshots-delete" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1112,7 +1112,7 @@ export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-ac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NetApp/netAppAccounts/{accountName}/capacityPools/{poolName}/volumes/{volumeName}/snapshots/{snapshotName}
 # operationId: Snapshots_Get
-export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-accounts-capacity-pools-volumes-snapshots get" [
+export def "snapshots-get" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1160,7 +1160,7 @@ export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-ac
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NetApp/netAppAccounts/{accountName}/capacityPools/{poolName}/volumes/{volumeName}/snapshots/{snapshotName}
 # operationId: Snapshots_Update
-export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-accounts-capacity-pools-volumes-snapshots update" [
+export def "snapshots-update" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1213,7 +1213,7 @@ export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-ac
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NetApp/netAppAccounts/{accountName}/capacityPools/{poolName}/volumes/{volumeName}/snapshots/{snapshotName}
 # operationId: Snapshots_Create
 # --properties shape: {fileSystemId?: string}
-export def "subscriptions-resource-groups-providers-microsoft-net-app-net-app-accounts-capacity-pools-volumes-snapshots create" [
+export def "snapshots-create" [
   subscription_id: string
   resource_group_name: string
   account_name: string

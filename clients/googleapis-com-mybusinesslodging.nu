@@ -106,7 +106,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "locations get-lodging" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "mybusinesslodging-locations-get-lodging" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -130,7 +130,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/{name}
 # operationId: mybusinesslodging.locations.getLodging
-export def "locations get-lodging" [
+export def "mybusinesslodging-locations-get-lodging" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -201,7 +201,7 @@ export def "locations get-lodging" [
 # --sustainability shape: {energyEfficiency?: record, sustainabilityCertifications?: record, sustainableSourcing?: record, wasteReduction?: record, waterConservation?: record}
 # --transportation shape: {airportShuttle?: bool, airportShuttleException?: "EXCEPTION_UNSPECIFIED"|"UNDER_CONSTRUCTION"|"DEPENDENT_ON_SEASON"|"DEPENDENT_ON_DAY_OF_WEEK", carRentalOnProperty?: bool, carRentalOnPropertyException?: "EXCEPTION_UNSPECIFIED"|"UNDER_CONSTRUCTION"|"DEPENDENT_ON_SEASON"|"DEPENDENT_ON_DAY_OF_WEEK", freeAirportShuttle?: bool, freeAirportShuttleException?: "EXCEPTION_UNSPECIFIED"|"UNDER_CONSTRUCTION"|"DEPENDENT_ON_SEASON"|"DEPENDENT_ON_DAY_OF_WEEK", freePrivateCarService?: bool, ... (7 more fields)}
 # --wellness shape: {doctorOnCall?: bool, doctorOnCallException?: "EXCEPTION_UNSPECIFIED"|"UNDER_CONSTRUCTION"|"DEPENDENT_ON_SEASON"|"DEPENDENT_ON_DAY_OF_WEEK", ellipticalMachine?: bool, ellipticalMachineException?: "EXCEPTION_UNSPECIFIED"|"UNDER_CONSTRUCTION"|"DEPENDENT_ON_SEASON"|"DEPENDENT_ON_DAY_OF_WEEK", fitnessCenter?: bool, fitnessCenterException?: "EXCEPTION_UNSPECIFIED"|"UNDER_CONSTRUCTION"|"DEPENDENT_ON_SEASON"|"DEPENDENT_ON_DAY_OF_WEEK", freeFitnessCenter?: bool, ... (15 more fields)}
-export def "locations update-lodging" [
+export def "mybusinesslodging-locations-update-lodging" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -276,7 +276,7 @@ export def "locations update-lodging" [
 #
 # GET /v1/{name}:getGoogleUpdated
 # operationId: mybusinesslodging.locations.lodging.getGoogleUpdated
-export def "locations get-google-updated" [
+export def "mybusinesslodging-locations-lodging-get-google-updated" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

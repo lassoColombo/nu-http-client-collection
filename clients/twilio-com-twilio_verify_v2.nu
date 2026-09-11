@@ -123,7 +123,7 @@ def version-completer [] { ["v1" "v2"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "attempts list-verification" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-verification-attempt" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -147,7 +147,7 @@ export def commands []: nothing -> table {
 #
 # GET /v2/Attempts
 # operationId: ListVerificationAttempt
-export def "attempts list-verification" [
+export def "list-verification-attempt" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -193,7 +193,7 @@ export def "attempts list-verification" [
 #
 # GET /v2/Attempts/Summary
 # operationId: FetchVerificationAttemptsSummary
-export def "attempts-summary get-verification" [
+export def "fetch-verification-attempts-summary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -234,7 +234,7 @@ export def "attempts-summary get-verification" [
 #
 # GET /v2/Attempts/{Sid}
 # operationId: FetchVerificationAttempt
-export def "attempts get-verification" [
+export def "fetch-verification-attempt" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -270,7 +270,7 @@ export def "attempts get-verification" [
 #
 # GET /v2/Forms/{FormType}
 # operationId: FetchForm
-export def "forms get" [
+export def "fetch-form" [
   form_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -306,7 +306,7 @@ export def "forms get" [
 #
 # POST /v2/SafeList/Numbers
 # operationId: CreateSafelist
-export def "safe-list-numbers create-safelist" [
+export def "create-safelist" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -345,7 +345,7 @@ export def "safe-list-numbers create-safelist" [
 #
 # DELETE /v2/SafeList/Numbers/{PhoneNumber}
 # operationId: DeleteSafelist
-export def "safe-list-numbers delete-safelist" [
+export def "delete-safelist" [
   phone_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -381,7 +381,7 @@ export def "safe-list-numbers delete-safelist" [
 #
 # GET /v2/SafeList/Numbers/{PhoneNumber}
 # operationId: FetchSafelist
-export def "safe-list-numbers get-safelist" [
+export def "fetch-safelist" [
   phone_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -417,7 +417,7 @@ export def "safe-list-numbers get-safelist" [
 #
 # GET /v2/Services
 # operationId: ListService
-export def "services list" [
+export def "list-service" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -455,7 +455,7 @@ export def "services list" [
 #
 # POST /v2/Services
 # operationId: CreateService
-export def "services create" [
+export def "create-service" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -510,7 +510,7 @@ export def "services create" [
 #
 # POST /v2/Services/{ServiceSid}/AccessTokens
 # operationId: CreateAccessToken
-export def "services-access-tokens create" [
+export def "create-access-token" [
   service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -554,7 +554,7 @@ export def "services-access-tokens create" [
 #
 # GET /v2/Services/{ServiceSid}/AccessTokens/{Sid}
 # operationId: FetchAccessToken
-export def "services-access-tokens get" [
+export def "fetch-access-token" [
   service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -592,7 +592,7 @@ export def "services-access-tokens get" [
 #
 # GET /v2/Services/{ServiceSid}/Entities
 # operationId: ListEntity
-export def "services-entities list-entity" [
+export def "list-entity" [
   service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -632,7 +632,7 @@ export def "services-entities list-entity" [
 #
 # POST /v2/Services/{ServiceSid}/Entities
 # operationId: CreateEntity
-export def "services-entities create-entity" [
+export def "create-entity" [
   service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -673,7 +673,7 @@ export def "services-entities create-entity" [
 #
 # DELETE /v2/Services/{ServiceSid}/Entities/{Identity}
 # operationId: DeleteEntity
-export def "services-entities delete-entity" [
+export def "delete-entity" [
   service_sid: string
   identity: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -711,7 +711,7 @@ export def "services-entities delete-entity" [
 #
 # GET /v2/Services/{ServiceSid}/Entities/{Identity}
 # operationId: FetchEntity
-export def "services-entities get-entity" [
+export def "fetch-entity" [
   service_sid: string
   identity: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -749,7 +749,7 @@ export def "services-entities get-entity" [
 #
 # GET /v2/Services/{ServiceSid}/Entities/{Identity}/Challenges
 # operationId: ListChallenge
-export def "services-entities-challenges list" [
+export def "list-challenge" [
   service_sid: string
   identity: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -794,7 +794,7 @@ export def "services-entities-challenges list" [
 #
 # POST /v2/Services/{ServiceSid}/Entities/{Identity}/Challenges
 # operationId: CreateChallenge
-export def "services-entities-challenges create" [
+export def "create-challenge" [
   service_sid: string
   identity: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -842,7 +842,7 @@ export def "services-entities-challenges create" [
 #
 # POST /v2/Services/{ServiceSid}/Entities/{Identity}/Challenges/{ChallengeSid}/Notifications
 # operationId: CreateNotification
-export def "services-entities-challenges-notifications create" [
+export def "create-notification" [
   service_sid: string
   identity: string
   challenge_sid: string
@@ -887,7 +887,7 @@ export def "services-entities-challenges-notifications create" [
 #
 # GET /v2/Services/{ServiceSid}/Entities/{Identity}/Challenges/{Sid}
 # operationId: FetchChallenge
-export def "services-entities-challenges get" [
+export def "fetch-challenge" [
   service_sid: string
   identity: string
   sid: string
@@ -927,7 +927,7 @@ export def "services-entities-challenges get" [
 #
 # POST /v2/Services/{ServiceSid}/Entities/{Identity}/Challenges/{Sid}
 # operationId: UpdateChallenge
-export def "services-entities-challenges update" [
+export def "update-challenge" [
   service_sid: string
   identity: string
   sid: string
@@ -973,7 +973,7 @@ export def "services-entities-challenges update" [
 #
 # GET /v2/Services/{ServiceSid}/Entities/{Identity}/Factors
 # operationId: ListFactor
-export def "services-entities-factors list" [
+export def "list-factor" [
   service_sid: string
   identity: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1015,7 +1015,7 @@ export def "services-entities-factors list" [
 #
 # POST /v2/Services/{ServiceSid}/Entities/{Identity}/Factors
 # operationId: CreateNewFactor
-export def "services-entities-factors create-new" [
+export def "create-new-factor" [
   service_sid: string
   identity: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1071,7 +1071,7 @@ export def "services-entities-factors create-new" [
 #
 # DELETE /v2/Services/{ServiceSid}/Entities/{Identity}/Factors/{Sid}
 # operationId: DeleteFactor
-export def "services-entities-factors delete" [
+export def "delete-factor" [
   service_sid: string
   identity: string
   sid: string
@@ -1111,7 +1111,7 @@ export def "services-entities-factors delete" [
 #
 # GET /v2/Services/{ServiceSid}/Entities/{Identity}/Factors/{Sid}
 # operationId: FetchFactor
-export def "services-entities-factors get" [
+export def "fetch-factor" [
   service_sid: string
   identity: string
   sid: string
@@ -1151,7 +1151,7 @@ export def "services-entities-factors get" [
 #
 # POST /v2/Services/{ServiceSid}/Entities/{Identity}/Factors/{Sid}
 # operationId: UpdateFactor
-export def "services-entities-factors update" [
+export def "update-factor" [
   service_sid: string
   identity: string
   sid: string
@@ -1204,7 +1204,7 @@ export def "services-entities-factors update" [
 #
 # GET /v2/Services/{ServiceSid}/MessagingConfigurations
 # operationId: ListMessagingConfiguration
-export def "services-messaging-configurations list" [
+export def "list-messaging-configuration" [
   service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1244,7 +1244,7 @@ export def "services-messaging-configurations list" [
 #
 # POST /v2/Services/{ServiceSid}/MessagingConfigurations
 # operationId: CreateMessagingConfiguration
-export def "services-messaging-configurations create" [
+export def "create-messaging-configuration" [
   service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1286,7 +1286,7 @@ export def "services-messaging-configurations create" [
 #
 # DELETE /v2/Services/{ServiceSid}/MessagingConfigurations/{Country}
 # operationId: DeleteMessagingConfiguration
-export def "services-messaging-configurations delete" [
+export def "delete-messaging-configuration" [
   service_sid: string
   country: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1324,7 +1324,7 @@ export def "services-messaging-configurations delete" [
 #
 # GET /v2/Services/{ServiceSid}/MessagingConfigurations/{Country}
 # operationId: FetchMessagingConfiguration
-export def "services-messaging-configurations get" [
+export def "fetch-messaging-configuration" [
   service_sid: string
   country: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1362,7 +1362,7 @@ export def "services-messaging-configurations get" [
 #
 # POST /v2/Services/{ServiceSid}/MessagingConfigurations/{Country}
 # operationId: UpdateMessagingConfiguration
-export def "services-messaging-configurations update" [
+export def "update-messaging-configuration" [
   service_sid: string
   country: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1405,7 +1405,7 @@ export def "services-messaging-configurations update" [
 #
 # GET /v2/Services/{ServiceSid}/RateLimits
 # operationId: ListRateLimit
-export def "services-rate-limits list" [
+export def "list-rate-limit" [
   service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1445,7 +1445,7 @@ export def "services-rate-limits list" [
 #
 # POST /v2/Services/{ServiceSid}/RateLimits
 # operationId: CreateRateLimit
-export def "services-rate-limits create" [
+export def "create-rate-limit" [
   service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1487,7 +1487,7 @@ export def "services-rate-limits create" [
 #
 # GET /v2/Services/{ServiceSid}/RateLimits/{RateLimitSid}/Buckets
 # operationId: ListBucket
-export def "services-rate-limits-buckets list" [
+export def "list-bucket" [
   service_sid: string
   rate_limit_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1529,7 +1529,7 @@ export def "services-rate-limits-buckets list" [
 #
 # POST /v2/Services/{ServiceSid}/RateLimits/{RateLimitSid}/Buckets
 # operationId: CreateBucket
-export def "services-rate-limits-buckets create" [
+export def "create-bucket" [
   service_sid: string
   rate_limit_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1573,7 +1573,7 @@ export def "services-rate-limits-buckets create" [
 #
 # DELETE /v2/Services/{ServiceSid}/RateLimits/{RateLimitSid}/Buckets/{Sid}
 # operationId: DeleteBucket
-export def "services-rate-limits-buckets delete" [
+export def "delete-bucket" [
   service_sid: string
   rate_limit_sid: string
   sid: string
@@ -1613,7 +1613,7 @@ export def "services-rate-limits-buckets delete" [
 #
 # GET /v2/Services/{ServiceSid}/RateLimits/{RateLimitSid}/Buckets/{Sid}
 # operationId: FetchBucket
-export def "services-rate-limits-buckets get" [
+export def "fetch-bucket" [
   service_sid: string
   rate_limit_sid: string
   sid: string
@@ -1653,7 +1653,7 @@ export def "services-rate-limits-buckets get" [
 #
 # POST /v2/Services/{ServiceSid}/RateLimits/{RateLimitSid}/Buckets/{Sid}
 # operationId: UpdateBucket
-export def "services-rate-limits-buckets update" [
+export def "update-bucket" [
   service_sid: string
   rate_limit_sid: string
   sid: string
@@ -1699,7 +1699,7 @@ export def "services-rate-limits-buckets update" [
 #
 # DELETE /v2/Services/{ServiceSid}/RateLimits/{Sid}
 # operationId: DeleteRateLimit
-export def "services-rate-limits delete" [
+export def "delete-rate-limit" [
   service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1737,7 +1737,7 @@ export def "services-rate-limits delete" [
 #
 # GET /v2/Services/{ServiceSid}/RateLimits/{Sid}
 # operationId: FetchRateLimit
-export def "services-rate-limits get" [
+export def "fetch-rate-limit" [
   service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1775,7 +1775,7 @@ export def "services-rate-limits get" [
 #
 # POST /v2/Services/{ServiceSid}/RateLimits/{Sid}
 # operationId: UpdateRateLimit
-export def "services-rate-limits update" [
+export def "update-rate-limit" [
   service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1818,7 +1818,7 @@ export def "services-rate-limits update" [
 #
 # POST /v2/Services/{ServiceSid}/VerificationCheck
 # operationId: CreateVerificationCheck
-export def "services-verification-check create" [
+export def "create-verification-check" [
   service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1863,7 +1863,7 @@ export def "services-verification-check create" [
 #
 # POST /v2/Services/{ServiceSid}/Verifications
 # operationId: CreateVerification
-export def "services-verifications create" [
+export def "create-verification" [
   service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1918,7 +1918,7 @@ export def "services-verifications create" [
 #
 # GET /v2/Services/{ServiceSid}/Verifications/{Sid}
 # operationId: FetchVerification
-export def "services-verifications get" [
+export def "fetch-verification" [
   service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1956,7 +1956,7 @@ export def "services-verifications get" [
 #
 # POST /v2/Services/{ServiceSid}/Verifications/{Sid}
 # operationId: UpdateVerification
-export def "services-verifications update" [
+export def "update-verification" [
   service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1999,7 +1999,7 @@ export def "services-verifications update" [
 #
 # GET /v2/Services/{ServiceSid}/Webhooks
 # operationId: ListWebhook
-export def "services-webhooks list" [
+export def "list-webhook" [
   service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2039,7 +2039,7 @@ export def "services-webhooks list" [
 #
 # POST /v2/Services/{ServiceSid}/Webhooks
 # operationId: CreateWebhook
-export def "services-webhooks create" [
+export def "create-webhook" [
   service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2084,7 +2084,7 @@ export def "services-webhooks create" [
 #
 # DELETE /v2/Services/{ServiceSid}/Webhooks/{Sid}
 # operationId: DeleteWebhook
-export def "services-webhooks delete" [
+export def "delete-webhook" [
   service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2122,7 +2122,7 @@ export def "services-webhooks delete" [
 #
 # GET /v2/Services/{ServiceSid}/Webhooks/{Sid}
 # operationId: FetchWebhook
-export def "services-webhooks get" [
+export def "fetch-webhook" [
   service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2159,7 +2159,7 @@ export def "services-webhooks get" [
 # POST /v2/Services/{ServiceSid}/Webhooks/{Sid}
 #
 # operationId: UpdateWebhook
-export def "services-webhooks update" [
+export def "update-webhook" [
   service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2206,7 +2206,7 @@ export def "services-webhooks update" [
 #
 # DELETE /v2/Services/{Sid}
 # operationId: DeleteService
-export def "services delete" [
+export def "delete-service" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2242,7 +2242,7 @@ export def "services delete" [
 #
 # GET /v2/Services/{Sid}
 # operationId: FetchService
-export def "services get" [
+export def "fetch-service" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2278,7 +2278,7 @@ export def "services get" [
 #
 # POST /v2/Services/{Sid}
 # operationId: UpdateService
-export def "services update" [
+export def "update-service" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2335,7 +2335,7 @@ export def "services update" [
 #
 # GET /v2/Templates
 # operationId: ListVerificationTemplate
-export def "templates list-verification" [
+export def "list-verification-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

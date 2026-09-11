@@ -106,7 +106,7 @@ def mode-completer [] { ["Handwritten" "Printed"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "read-core-async-batch-analyze get-file" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "batch-read-file" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -130,7 +130,7 @@ export def commands []: nothing -> table {
 #
 # POST /read/core/asyncBatchAnalyze
 # operationId: BatchReadFile
-export def "read-core-async-batch-analyze get-file" [
+export def "batch-read-file" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -168,7 +168,7 @@ export def "read-core-async-batch-analyze get-file" [
 #
 # GET /read/operations/{operationId}
 # operationId: GetReadOperationResult
-export def "read-operations get-result" [
+export def "get-read-operation-result" [
   operation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -204,7 +204,7 @@ export def "read-operations get-result" [
 #
 # POST /recognizeText
 # operationId: RecognizeText
-export def "recognize-text create" [
+export def "recognize-text" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -244,7 +244,7 @@ export def "recognize-text create" [
 #
 # GET /textOperations/{operationId}
 # operationId: GetTextOperationResult
-export def "text-operations get-result" [
+export def "get-text-operation-result" [
   operation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

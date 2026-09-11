@@ -140,7 +140,7 @@ def accept-completer [] { ["application/json" "application/xml"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "feeds update-bulk-inventory" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "update-bulk-inventory" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -164,7 +164,7 @@ export def commands []: nothing -> table {
 #
 # POST /v3/feeds
 # operationId: updateBulkInventory
-export def "feeds update-bulk-inventory" [
+export def "update-bulk-inventory" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -214,7 +214,7 @@ export def "feeds update-bulk-inventory" [
 #
 # GET /v3/fulfillment/inventory
 # operationId: getWFSInventory
-export def "fulfillment-inventory get-wfs" [
+export def "get-wfs-inventory" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -260,7 +260,7 @@ export def "fulfillment-inventory get-wfs" [
 #
 # GET /v3/inventories
 # operationId: getMultiNodeInventoryForAllSkuAndAllShipNodes
-export def "inventories get-multi-node-inventory-for-list-sku-and-ship-nodes" [
+export def "get-multi-node-inventory-for-all-sku-and-all-ship-nodes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -303,7 +303,7 @@ export def "inventories get-multi-node-inventory-for-list-sku-and-ship-nodes" [
 #
 # GET /v3/inventories/{sku}
 # operationId: getMultiNodeInventoryForSkuAndAllShipnodes
-export def "inventories get-multi-node-inventory-for-and-list-shipnodes" [
+export def "get-multi-node-inventory-for-sku-and-all-shipnodes" [
   sku: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -348,7 +348,7 @@ export def "inventories get-multi-node-inventory-for-and-list-shipnodes" [
 # PUT /v3/inventories/{sku}
 # operationId: updateMultiNodeInventory
 # --inventories shape: {nodes: list}
-export def "inventories update-multi-node-inventory" [
+export def "update-multi-node-inventory" [
   sku: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -394,7 +394,7 @@ export def "inventories update-multi-node-inventory" [
 #
 # GET /v3/inventory
 # operationId: getInventory
-export def "inventory get" [
+export def "get-inventory" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -439,7 +439,7 @@ export def "inventory get" [
 # PUT /v3/inventory
 # operationId: updateInventoryForAnItem
 # --quantity shape: {amount: float, unit: "EACH"}
-export def "inventory update-for-item" [
+export def "update-inventory-for-an-item" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

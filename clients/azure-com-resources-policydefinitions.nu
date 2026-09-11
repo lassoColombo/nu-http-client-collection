@@ -110,7 +110,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-authorization-policy-definitions list-built" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "policy-definitions-list-built-in" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -134,7 +134,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.Authorization/policyDefinitions
 # operationId: PolicyDefinitions_ListBuiltIn
-export def "providers-microsoft-authorization-policy-definitions list-built" [
+export def "policy-definitions-list-built-in" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -170,7 +170,7 @@ export def "providers-microsoft-authorization-policy-definitions list-built" [
 #
 # GET /providers/Microsoft.Authorization/policyDefinitions/{policyDefinitionName}
 # operationId: PolicyDefinitions_GetBuiltIn
-export def "providers-microsoft-authorization-policy-definitions get-built" [
+export def "policy-definitions-get-built-in" [
   policy_definition_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -208,7 +208,7 @@ export def "providers-microsoft-authorization-policy-definitions get-built" [
 #
 # GET /providers/Microsoft.Management/managementgroups/{managementGroupId}/providers/Microsoft.Authorization/policyDefinitions
 # operationId: PolicyDefinitions_ListByManagementGroup
-export def "providers-microsoft-management-managementgroups-providers-microsoft-authorization-policy-definitions list-by-group" [
+export def "policy-definitions-list-by-management-group" [
   management_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -246,7 +246,7 @@ export def "providers-microsoft-management-managementgroups-providers-microsoft-
 #
 # DELETE /providers/Microsoft.Management/managementgroups/{managementGroupId}/providers/Microsoft.Authorization/policyDefinitions/{policyDefinitionName}
 # operationId: PolicyDefinitions_DeleteAtManagementGroup
-export def "providers-microsoft-management-managementgroups-providers-microsoft-authorization-policy-definitions delete-at-group" [
+export def "policy-definitions-delete-at-management-group" [
   management_group_id: string
   policy_definition_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -286,7 +286,7 @@ export def "providers-microsoft-management-managementgroups-providers-microsoft-
 #
 # GET /providers/Microsoft.Management/managementgroups/{managementGroupId}/providers/Microsoft.Authorization/policyDefinitions/{policyDefinitionName}
 # operationId: PolicyDefinitions_GetAtManagementGroup
-export def "providers-microsoft-management-managementgroups-providers-microsoft-authorization-policy-definitions get-at-group" [
+export def "policy-definitions-get-at-management-group" [
   management_group_id: string
   policy_definition_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -327,7 +327,7 @@ export def "providers-microsoft-management-managementgroups-providers-microsoft-
 # PUT /providers/Microsoft.Management/managementgroups/{managementGroupId}/providers/Microsoft.Authorization/policyDefinitions/{policyDefinitionName}
 # operationId: PolicyDefinitions_CreateOrUpdateAtManagementGroup
 # --properties shape: {description?: string, displayName?: string, metadata?: record, mode?: string, parameters?: record, policyRule?: record, policyType?: "NotSpecified"|"BuiltIn"|"Custom"}
-export def "providers-microsoft-management-managementgroups-providers-microsoft-authorization-policy-definitions create-or-update-at-group" [
+export def "policy-definitions-create-or-update-at-management-group" [
   management_group_id: string
   policy_definition_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -371,7 +371,7 @@ export def "providers-microsoft-management-managementgroups-providers-microsoft-
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Authorization/policyDefinitions
 # operationId: PolicyDefinitions_List
-export def "subscriptions-providers-microsoft-authorization-policy-definitions list" [
+export def "policy-definitions-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -409,7 +409,7 @@ export def "subscriptions-providers-microsoft-authorization-policy-definitions l
 #
 # DELETE /subscriptions/{subscriptionId}/providers/Microsoft.Authorization/policyDefinitions/{policyDefinitionName}
 # operationId: PolicyDefinitions_Delete
-export def "subscriptions-providers-microsoft-authorization-policy-definitions delete" [
+export def "policy-definitions-delete" [
   subscription_id: string
   policy_definition_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -449,7 +449,7 @@ export def "subscriptions-providers-microsoft-authorization-policy-definitions d
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Authorization/policyDefinitions/{policyDefinitionName}
 # operationId: PolicyDefinitions_Get
-export def "subscriptions-providers-microsoft-authorization-policy-definitions get" [
+export def "policy-definitions-get" [
   subscription_id: string
   policy_definition_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -490,7 +490,7 @@ export def "subscriptions-providers-microsoft-authorization-policy-definitions g
 # PUT /subscriptions/{subscriptionId}/providers/Microsoft.Authorization/policyDefinitions/{policyDefinitionName}
 # operationId: PolicyDefinitions_CreateOrUpdate
 # --properties shape: {description?: string, displayName?: string, metadata?: record, mode?: string, parameters?: record, policyRule?: record, policyType?: "NotSpecified"|"BuiltIn"|"Custom"}
-export def "subscriptions-providers-microsoft-authorization-policy-definitions create-or-update" [
+export def "policy-definitions-create-or-update" [
   subscription_id: string
   policy_definition_name: string
   --base-url(-b): string@base-url-completer # API base URL

@@ -110,7 +110,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "bot-alias-user-session delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "delete-session" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -134,7 +134,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /bot/{botName}/alias/{botAlias}/user/{userId}/session
 # operationId: DeleteSession
-export def "bot-alias-user-session delete" [
+export def "delete-session" [
   bot_name: string
   bot_alias: string
   user_id: string
@@ -186,7 +186,7 @@ export def "bot-alias-user-session delete" [
 # --dialogAction shape: {type?: any, intentName?: any, slots?: any, slotToElicit?: any, fulfillmentState?: any, message?: any, messageFormat?: any}
 # --recentIntentSummaryView item shape: {intentName?: any, checkpointLabel?: any, slots?: any, confirmationStatus?: any, dialogActionType: any, fulfillmentState?: any, slotToElicit?: any}
 # --activeContexts item shape: {name: any, timeToLive: any, parameters: any}
-export def "bot-alias-user-session update" [
+export def "put-session" [
   bot_name: string
   bot_alias: string
   user_id: string
@@ -243,7 +243,7 @@ export def "bot-alias-user-session update" [
 #
 # GET /bot/{botName}/alias/{botAlias}/user/{userId}/session/
 # operationId: GetSession
-export def "bot-alias-user-session get" [
+export def "get-session" [
   bot_name: string
   bot_alias: string
   user_id: string
@@ -294,7 +294,7 @@ export def "bot-alias-user-session get" [
 #
 # POST /bot/{botName}/alias/{botAlias}/user/{userId}/content
 # operationId: PostContent
-export def "bot-alias-user-content create" [
+export def "post-content" [
   bot_name: string
   bot_alias: string
   user_id: string
@@ -355,7 +355,7 @@ export def "bot-alias-user-content create" [
 # POST /bot/{botName}/alias/{botAlias}/user/{userId}/text
 # operationId: PostText
 # --activeContexts item shape: {name: any, timeToLive: any, parameters: any}
-export def "bot-alias-user-text create" [
+export def "post-text" [
   bot_name: string
   bot_alias: string
   user_id: string

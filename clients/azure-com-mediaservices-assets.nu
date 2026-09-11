@@ -124,7 +124,7 @@ def permissions-completer [] { ["Read" "ReadWrite" "ReadWriteDelete"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-media-media-services-assets list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "assets-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -148,7 +148,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaServices/{accountName}/assets
 # operationId: Assets_List
-export def "subscriptions-resource-groups-providers-microsoft-media-media-services-assets list" [
+export def "assets-list" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -193,7 +193,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-media-servic
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaServices/{accountName}/assets/{assetName}
 # operationId: Assets_Delete
-export def "subscriptions-resource-groups-providers-microsoft-media-media-services-assets delete" [
+export def "assets-delete" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -237,7 +237,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-media-servic
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaServices/{accountName}/assets/{assetName}
 # operationId: Assets_Get
-export def "subscriptions-resource-groups-providers-microsoft-media-media-services-assets get" [
+export def "assets-get" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -282,7 +282,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-media-servic
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaServices/{accountName}/assets/{assetName}
 # operationId: Assets_Update
 # --properties shape: {alternateId?: string, container?: string, description?: string, storageAccountName?: string}
-export def "subscriptions-resource-groups-providers-microsoft-media-media-services-assets update" [
+export def "assets-update" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -331,7 +331,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-media-servic
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaServices/{accountName}/assets/{assetName}
 # operationId: Assets_CreateOrUpdate
 # --properties shape: {alternateId?: string, container?: string, description?: string, storageAccountName?: string}
-export def "subscriptions-resource-groups-providers-microsoft-media-media-services-assets create-or-update" [
+export def "assets-create-or-update" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -379,7 +379,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-media-servic
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaServices/{accountName}/assets/{assetName}/getEncryptionKey
 # operationId: Assets_GetEncryptionKey
-export def "subscriptions-resource-groups-providers-microsoft-media-media-services-assets-get-encryption-key get" [
+export def "assets-get-encryption-key" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -423,7 +423,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-media-servic
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaServices/{accountName}/assets/{assetName}/listContainerSas
 # operationId: Assets_ListContainerSas
-export def "subscriptions-resource-groups-providers-microsoft-media-media-services-assets-list-container-sas list" [
+export def "assets-list-container-sas" [
   subscription_id: string
   resource_group_name: string
   account_name: string

@@ -153,7 +153,7 @@ def role-name-completer [] { ["collaborator" "viewer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account get-private" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "private-account" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -177,7 +177,7 @@ export def commands []: nothing -> table {
 #
 # GET /account
 # operationId: private_account
-export def "account get-private" [
+export def "private-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -211,7 +211,7 @@ export def "account get-private" [
 #
 # GET /account/articles
 # operationId: private_articles_list
-export def "account-articles list-private" [
+export def "private-articles-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -253,7 +253,7 @@ export def "account-articles list-private" [
 # --custom_fields_list item shape: {name: string, value: any}
 # --funding_list item shape: {id?: int, title?: string}
 # --timeline shape: {firstOnline?: string, publisherAcceptance?: string, publisherPublication?: string}
-export def "account-articles create-private" [
+export def "private-article-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -312,7 +312,7 @@ export def "account-articles create-private" [
 #
 # GET /account/articles/export
 # operationId: account_article_report
-export def "account-articles-export get-report" [
+export def "account-article-report" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -348,7 +348,7 @@ export def "account-articles-export get-report" [
 #
 # POST /account/articles/export
 # operationId: account_article_report_generate
-export def "account-articles-export generate-report" [
+export def "account-article-report-generate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -382,7 +382,7 @@ export def "account-articles-export generate-report" [
 #
 # POST /account/articles/search
 # operationId: private_articles_search
-export def "account-articles-search list-private" [
+export def "private-articles-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -426,7 +426,7 @@ export def "account-articles-search list-private" [
 #
 # DELETE /account/articles/{article_id}
 # operationId: private_article_delete
-export def "account-articles delete-private" [
+export def "private-article-delete" [
   article_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -462,7 +462,7 @@ export def "account-articles delete-private" [
 #
 # GET /account/articles/{article_id}
 # operationId: private_article_details
-export def "account-articles get-private-details" [
+export def "private-article-details" [
   article_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -501,7 +501,7 @@ export def "account-articles get-private-details" [
 # --custom_fields_list item shape: {name: string, value: any}
 # --funding_list item shape: {id?: int, title?: string}
 # --timeline shape: {firstOnline?: string, publisherAcceptance?: string, publisherPublication?: string}
-export def "account-articles update-private" [
+export def "private-article-update" [
   article_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -562,7 +562,7 @@ export def "account-articles update-private" [
 #
 # GET /account/articles/{article_id}/authors
 # operationId: private_article_authors_list
-export def "account-articles-authors list-private" [
+export def "private-article-authors-list" [
   article_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -598,7 +598,7 @@ export def "account-articles-authors list-private" [
 #
 # POST /account/articles/{article_id}/authors
 # operationId: private_article_authors_add
-export def "account-articles-authors create-private" [
+export def "private-article-authors-add" [
   article_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -638,7 +638,7 @@ export def "account-articles-authors create-private" [
 #
 # PUT /account/articles/{article_id}/authors
 # operationId: private_article_authors_replace
-export def "account-articles-authors update-private" [
+export def "private-article-authors-replace" [
   article_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -678,7 +678,7 @@ export def "account-articles-authors update-private" [
 #
 # DELETE /account/articles/{article_id}/authors/{author_id}
 # operationId: private_article_author_delete
-export def "account-articles-authors delete-private" [
+export def "private-article-author-delete" [
   article_id: int
   author_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -716,7 +716,7 @@ export def "account-articles-authors delete-private" [
 #
 # GET /account/articles/{article_id}/categories
 # operationId: private_article_categories_list
-export def "account-articles-categories list-private" [
+export def "private-article-categories-list" [
   article_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -752,7 +752,7 @@ export def "account-articles-categories list-private" [
 #
 # POST /account/articles/{article_id}/categories
 # operationId: private_article_categories_add
-export def "account-articles-categories create-private" [
+export def "private-article-categories-add" [
   article_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -792,7 +792,7 @@ export def "account-articles-categories create-private" [
 #
 # PUT /account/articles/{article_id}/categories
 # operationId: private_article_categories_replace
-export def "account-articles-categories update-private" [
+export def "private-article-categories-replace" [
   article_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -832,7 +832,7 @@ export def "account-articles-categories update-private" [
 #
 # DELETE /account/articles/{article_id}/categories/{category_id}
 # operationId: private_article_category_delete
-export def "account-articles-categories delete-private" [
+export def "private-article-category-delete" [
   article_id: int
   category_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -870,7 +870,7 @@ export def "account-articles-categories delete-private" [
 #
 # DELETE /account/articles/{article_id}/confidentiality
 # operationId: private_article_confidentiality_delete
-export def "account-articles-confidentiality delete-private" [
+export def "private-article-confidentiality-delete" [
   article_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -906,7 +906,7 @@ export def "account-articles-confidentiality delete-private" [
 #
 # GET /account/articles/{article_id}/confidentiality
 # operationId: private_article_confidentiality_details
-export def "account-articles-confidentiality get-private-details" [
+export def "private-article-confidentiality-details" [
   article_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -942,7 +942,7 @@ export def "account-articles-confidentiality get-private-details" [
 #
 # PUT /account/articles/{article_id}/confidentiality
 # operationId: private_article_confidentiality_update
-export def "account-articles-confidentiality update-private" [
+export def "private-article-confidentiality-update" [
   article_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -982,7 +982,7 @@ export def "account-articles-confidentiality update-private" [
 #
 # DELETE /account/articles/{article_id}/embargo
 # operationId: private_article_embargo_delete
-export def "account-articles-embargo delete-private" [
+export def "private-article-embargo-delete" [
   article_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1018,7 +1018,7 @@ export def "account-articles-embargo delete-private" [
 #
 # GET /account/articles/{article_id}/embargo
 # operationId: private_article_embargo_details
-export def "account-articles-embargo get-private-details" [
+export def "private-article-embargo-details" [
   article_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1054,7 +1054,7 @@ export def "account-articles-embargo get-private-details" [
 #
 # PUT /account/articles/{article_id}/embargo
 # operationId: private_article_embargo_update
-export def "account-articles-embargo update-private" [
+export def "private-article-embargo-update" [
   article_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1099,7 +1099,7 @@ export def "account-articles-embargo update-private" [
 #
 # GET /account/articles/{article_id}/files
 # operationId: private_article_files_list
-export def "account-articles-files list-private" [
+export def "private-article-files-list" [
   article_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1135,7 +1135,7 @@ export def "account-articles-files list-private" [
 #
 # POST /account/articles/{article_id}/files
 # operationId: private_article_upload_initiate
-export def "account-articles-files upload-private-initiate" [
+export def "private-article-upload-initiate" [
   article_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1178,7 +1178,7 @@ export def "account-articles-files upload-private-initiate" [
 #
 # DELETE /account/articles/{article_id}/files/{file_id}
 # operationId: private_article_file_delete
-export def "account-articles-files delete-private" [
+export def "private-article-file-delete" [
   article_id: int
   file_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1216,7 +1216,7 @@ export def "account-articles-files delete-private" [
 #
 # GET /account/articles/{article_id}/files/{file_id}
 # operationId: private_article_file
-export def "account-articles-files get-private" [
+export def "private-article-file" [
   article_id: int
   file_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1254,7 +1254,7 @@ export def "account-articles-files get-private" [
 #
 # POST /account/articles/{article_id}/files/{file_id}
 # operationId: private_article_upload_complete
-export def "account-articles-files upload-private-complete" [
+export def "private-article-upload-complete" [
   article_id: int
   file_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1292,7 +1292,7 @@ export def "account-articles-files upload-private-complete" [
 #
 # GET /account/articles/{article_id}/private_links
 # operationId: private_article_private_link
-export def "account-articles-private-links get" [
+export def "private-article-private-link" [
   article_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1328,7 +1328,7 @@ export def "account-articles-private-links get" [
 #
 # POST /account/articles/{article_id}/private_links
 # operationId: private_article_private_link_create
-export def "account-articles-private-links create" [
+export def "private-article-private-link-create" [
   article_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1369,7 +1369,7 @@ export def "account-articles-private-links create" [
 #
 # DELETE /account/articles/{article_id}/private_links/{link_id}
 # operationId: private_article_private_link_delete
-export def "account-articles-private-links delete" [
+export def "private-article-private-link-delete" [
   article_id: int
   link_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1407,7 +1407,7 @@ export def "account-articles-private-links delete" [
 #
 # PUT /account/articles/{article_id}/private_links/{link_id}
 # operationId: private_article_private_link_update
-export def "account-articles-private-links update" [
+export def "private-article-private-link-update" [
   article_id: int
   link_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1450,7 +1450,7 @@ export def "account-articles-private-links update" [
 #
 # POST /account/articles/{article_id}/publish
 # operationId: private_article_publish
-export def "account-articles-publish publish-private" [
+export def "private-article-publish" [
   article_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1486,7 +1486,7 @@ export def "account-articles-publish publish-private" [
 #
 # POST /account/articles/{article_id}/reserve_doi
 # operationId: private_article_reserve_doi
-export def "account-articles-reserve-doi create-private" [
+export def "private-article-reserve-doi" [
   article_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1522,7 +1522,7 @@ export def "account-articles-reserve-doi create-private" [
 #
 # POST /account/articles/{article_id}/reserve_handle
 # operationId: private_article_reserve_handle
-export def "account-articles-reserve-handle create-private" [
+export def "private-article-reserve-handle" [
   article_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1558,7 +1558,7 @@ export def "account-articles-reserve-handle create-private" [
 #
 # POST /account/articles/{article_id}/resource
 # operationId: private_article_resource
-export def "account-articles-resource create-private" [
+export def "private-article-resource" [
   article_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1606,7 +1606,7 @@ export def "account-articles-resource create-private" [
 # --custom_fields_list item shape: {name: string, value: any}
 # --funding_list item shape: {id?: int, title?: string}
 # --timeline shape: {firstOnline?: string, publisherAcceptance?: string, publisherPublication?: string}
-export def "account-articles-versions update" [
+export def "article-version-update" [
   article_id: int
   version_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1669,7 +1669,7 @@ export def "account-articles-versions update" [
 #
 # PUT /account/articles/{article_id}/versions/{version_id}/update_thumb
 # operationId: article_version_update_thumb
-export def "account-articles-versions-update-thumb version" [
+export def "article-version-update-thumb" [
   article_id: int
   version_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1711,7 +1711,7 @@ export def "account-articles-versions-update-thumb version" [
 #
 # POST /account/authors/search
 # operationId: private_authors_search
-export def "account-authors-search list-private" [
+export def "private-authors-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1760,7 +1760,7 @@ export def "account-authors-search list-private" [
 #
 # GET /account/authors/{author_id}
 # operationId: private_author_details
-export def "account-authors get-private-details" [
+export def "private-author-details" [
   author_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1796,7 +1796,7 @@ export def "account-authors get-private-details" [
 #
 # GET /account/categories
 # operationId: private_categories_list
-export def "account-categories list-private" [
+export def "private-categories-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1830,7 +1830,7 @@ export def "account-categories list-private" [
 #
 # GET /account/collections
 # operationId: private_collections_list
-export def "account-collections list-private" [
+export def "private-collections-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1874,7 +1874,7 @@ export def "account-collections list-private" [
 # --custom_fields_list item shape: {name: string, value: any}
 # --funding_list item shape: {id?: int, title?: string}
 # --timeline shape: {firstOnline?: string, publisherAcceptance?: string, publisherPublication?: string}
-export def "account-collections create-private" [
+export def "private-collection-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1933,7 +1933,7 @@ export def "account-collections create-private" [
 #
 # POST /account/collections/search
 # operationId: private_collections_search
-export def "account-collections-search list-private" [
+export def "private-collections-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1975,7 +1975,7 @@ export def "account-collections-search list-private" [
 #
 # DELETE /account/collections/{collection_id}
 # operationId: private_collection_delete
-export def "account-collections delete-private" [
+export def "private-collection-delete" [
   collection_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2011,7 +2011,7 @@ export def "account-collections delete-private" [
 #
 # GET /account/collections/{collection_id}
 # operationId: private_collection_details
-export def "account-collections get-private-details" [
+export def "private-collection-details" [
   collection_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2050,7 +2050,7 @@ export def "account-collections get-private-details" [
 # --custom_fields_list item shape: {name: string, value: any}
 # --funding_list item shape: {id?: int, title?: string}
 # --timeline shape: {firstOnline?: string, publisherAcceptance?: string, publisherPublication?: string}
-export def "account-collections update-private" [
+export def "private-collection-update" [
   collection_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2111,7 +2111,7 @@ export def "account-collections update-private" [
 #
 # GET /account/collections/{collection_id}/articles
 # operationId: private_collection_articles_list
-export def "account-collections-articles list-private" [
+export def "private-collection-articles-list" [
   collection_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2152,7 +2152,7 @@ export def "account-collections-articles list-private" [
 #
 # POST /account/collections/{collection_id}/articles
 # operationId: private_collection_articles_add
-export def "account-collections-articles create-private" [
+export def "private-collection-articles-add" [
   collection_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2192,7 +2192,7 @@ export def "account-collections-articles create-private" [
 #
 # PUT /account/collections/{collection_id}/articles
 # operationId: private_collection_articles_replace
-export def "account-collections-articles update-private" [
+export def "private-collection-articles-replace" [
   collection_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2232,7 +2232,7 @@ export def "account-collections-articles update-private" [
 #
 # DELETE /account/collections/{collection_id}/articles/{article_id}
 # operationId: private_collection_article_delete
-export def "account-collections-articles delete-private" [
+export def "private-collection-article-delete" [
   collection_id: int
   article_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2270,7 +2270,7 @@ export def "account-collections-articles delete-private" [
 #
 # GET /account/collections/{collection_id}/authors
 # operationId: private_collection_authors_list
-export def "account-collections-authors list-private" [
+export def "private-collection-authors-list" [
   collection_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2306,7 +2306,7 @@ export def "account-collections-authors list-private" [
 #
 # POST /account/collections/{collection_id}/authors
 # operationId: private_collection_authors_add
-export def "account-collections-authors create-private" [
+export def "private-collection-authors-add" [
   collection_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2346,7 +2346,7 @@ export def "account-collections-authors create-private" [
 #
 # PUT /account/collections/{collection_id}/authors
 # operationId: private_collection_authors_replace
-export def "account-collections-authors update-private" [
+export def "private-collection-authors-replace" [
   collection_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2386,7 +2386,7 @@ export def "account-collections-authors update-private" [
 #
 # DELETE /account/collections/{collection_id}/authors/{author_id}
 # operationId: private_collection_author_delete
-export def "account-collections-authors delete-private" [
+export def "private-collection-author-delete" [
   collection_id: int
   author_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2424,7 +2424,7 @@ export def "account-collections-authors delete-private" [
 #
 # GET /account/collections/{collection_id}/categories
 # operationId: private_collection_categories_list
-export def "account-collections-categories list-private" [
+export def "private-collection-categories-list" [
   collection_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2460,7 +2460,7 @@ export def "account-collections-categories list-private" [
 #
 # POST /account/collections/{collection_id}/categories
 # operationId: private_collection_categories_add
-export def "account-collections-categories create-private" [
+export def "private-collection-categories-add" [
   collection_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2500,7 +2500,7 @@ export def "account-collections-categories create-private" [
 #
 # PUT /account/collections/{collection_id}/categories
 # operationId: private_collection_categories_replace
-export def "account-collections-categories update-private" [
+export def "private-collection-categories-replace" [
   collection_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2540,7 +2540,7 @@ export def "account-collections-categories update-private" [
 #
 # DELETE /account/collections/{collection_id}/categories/{category_id}
 # operationId: private_collection_category_delete
-export def "account-collections-categories delete-private" [
+export def "private-collection-category-delete" [
   collection_id: int
   category_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2578,7 +2578,7 @@ export def "account-collections-categories delete-private" [
 #
 # GET /account/collections/{collection_id}/private_links
 # operationId: private_collection_private_links_list
-export def "account-collections-private-links list" [
+export def "private-collection-private-links-list" [
   collection_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2614,7 +2614,7 @@ export def "account-collections-private-links list" [
 #
 # POST /account/collections/{collection_id}/private_links
 # operationId: private_collection_private_link_create
-export def "account-collections-private-links create" [
+export def "private-collection-private-link-create" [
   collection_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2655,7 +2655,7 @@ export def "account-collections-private-links create" [
 #
 # DELETE /account/collections/{collection_id}/private_links/{link_id}
 # operationId: private_collection_private_link_delete
-export def "account-collections-private-links delete" [
+export def "private-collection-private-link-delete" [
   collection_id: int
   link_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2693,7 +2693,7 @@ export def "account-collections-private-links delete" [
 #
 # PUT /account/collections/{collection_id}/private_links/{link_id}
 # operationId: private_collection_private_link_update
-export def "account-collections-private-links update" [
+export def "private-collection-private-link-update" [
   collection_id: int
   link_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2736,7 +2736,7 @@ export def "account-collections-private-links update" [
 #
 # POST /account/collections/{collection_id}/publish
 # operationId: private_collection_publish
-export def "account-collections-publish publish-private" [
+export def "private-collection-publish" [
   collection_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2772,7 +2772,7 @@ export def "account-collections-publish publish-private" [
 #
 # POST /account/collections/{collection_id}/reserve_doi
 # operationId: private_collection_reserve_doi
-export def "account-collections-reserve-doi create-private" [
+export def "private-collection-reserve-doi" [
   collection_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2808,7 +2808,7 @@ export def "account-collections-reserve-doi create-private" [
 #
 # POST /account/collections/{collection_id}/reserve_handle
 # operationId: private_collection_reserve_handle
-export def "account-collections-reserve-handle create-private" [
+export def "private-collection-reserve-handle" [
   collection_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2844,7 +2844,7 @@ export def "account-collections-reserve-handle create-private" [
 #
 # POST /account/collections/{collection_id}/resource
 # operationId: private_collection_resource
-export def "account-collections-resource create-private" [
+export def "private-collection-resource" [
   collection_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2889,7 +2889,7 @@ export def "account-collections-resource create-private" [
 #
 # POST /account/funding/search
 # operationId: private_funding_search
-export def "account-funding-search list-private" [
+export def "private-funding-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2927,7 +2927,7 @@ export def "account-funding-search list-private" [
 #
 # GET /account/institution
 # operationId: private_institution_details
-export def "account-institution get-private-details" [
+export def "private-institution-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2961,7 +2961,7 @@ export def "account-institution get-private-details" [
 #
 # GET /account/institution/accounts
 # operationId: private_institution_accounts_list
-export def "account-institution-accounts list-private" [
+export def "private-institution-accounts-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3005,7 +3005,7 @@ export def "account-institution-accounts list-private" [
 #
 # POST /account/institution/accounts
 # operationId: private_institution_accounts_create
-export def "account-institution-accounts create-private" [
+export def "private-institution-accounts-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3050,7 +3050,7 @@ export def "account-institution-accounts create-private" [
 #
 # POST /account/institution/accounts/search
 # operationId: private_institution_accounts_search
-export def "account-institution-accounts-search list-private" [
+export def "private-institution-accounts-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3095,7 +3095,7 @@ export def "account-institution-accounts-search list-private" [
 #
 # PUT /account/institution/accounts/{account_id}
 # operationId: private_institution_accounts_update
-export def "account-institution-accounts update-private" [
+export def "private-institution-accounts-update" [
   account_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3136,7 +3136,7 @@ export def "account-institution-accounts update-private" [
 #
 # GET /account/institution/articles
 # operationId: private_institution_articles
-export def "account-institution-articles get-private" [
+export def "private-institution-articles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3182,7 +3182,7 @@ export def "account-institution-articles get-private" [
 #
 # GET /account/institution/custom_fields
 # operationId: custom_fields_list
-export def "account-institution-custom-fields list" [
+export def "custom-fields-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3218,7 +3218,7 @@ export def "account-institution-custom-fields list" [
 #
 # POST /account/institution/custom_fields/{custom_field_id}/items/upload
 # operationId: custom_fields_upload
-export def "account-institution-custom-fields-items-upload upload" [
+export def "custom-fields-upload" [
   custom_field_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3260,7 +3260,7 @@ export def "account-institution-custom-fields-items-upload upload" [
 #
 # GET /account/institution/embargo_options
 # operationId: private_institution_embargo_options_details
-export def "account-institution-embargo-options get-private-details" [
+export def "private-institution-embargo-options-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3294,7 +3294,7 @@ export def "account-institution-embargo-options get-private-details" [
 #
 # GET /account/institution/groups
 # operationId: private_institution_groups_list
-export def "account-institution-groups list-private" [
+export def "private-institution-groups-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3328,7 +3328,7 @@ export def "account-institution-groups list-private" [
 #
 # GET /account/institution/groups/{group_id}/embargo_options
 # operationId: private_group_embargo_options_details
-export def "account-institution-groups-embargo-options get-private-details" [
+export def "private-group-embargo-options-details" [
   group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3364,7 +3364,7 @@ export def "account-institution-groups-embargo-options get-private-details" [
 #
 # GET /account/institution/review/{curation_id}
 # operationId: account_institution_curation
-export def "account-institution-review get" [
+export def "account-institution-curation" [
   curation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3400,7 +3400,7 @@ export def "account-institution-review get" [
 #
 # GET /account/institution/review/{curation_id}/comments
 # operationId: account_institution_curation_comments
-export def "account-institution-review-comments get" [
+export def "account-institution-curation-comments" [
   curation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3438,7 +3438,7 @@ export def "account-institution-review-comments get" [
 # POST Institution Curation Review Comment
 #
 # POST /account/institution/review/{curation_id}/comments
-export def "account-institution-review-comments create" [
+export def "post-account-institution-review-curation-id-comments" [
   curation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3478,7 +3478,7 @@ export def "account-institution-review-comments create" [
 #
 # GET /account/institution/reviews
 # operationId: account_institution_curations
-export def "account-institution-reviews get-curations" [
+export def "account-institution-curations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3518,7 +3518,7 @@ export def "account-institution-reviews get-curations" [
 #
 # GET /account/institution/roles
 # operationId: private_institution_roles_list
-export def "account-institution-roles list-private" [
+export def "private-institution-roles-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3552,7 +3552,7 @@ export def "account-institution-roles list-private" [
 #
 # GET /account/institution/roles/{account_id}
 # operationId: private_institution_account_group_roles
-export def "account-institution-roles get-private-group" [
+export def "private-institution-account-group-roles" [
   account_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3588,7 +3588,7 @@ export def "account-institution-roles get-private-group" [
 #
 # POST /account/institution/roles/{account_id}
 # operationId: private_institution_account_group_roles_create
-export def "account-institution-roles create-private-group" [
+export def "private-institution-account-group-roles-create" [
   account_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3628,7 +3628,7 @@ export def "account-institution-roles create-private-group" [
 #
 # DELETE /account/institution/roles/{account_id}/{group_id}/{role_id}
 # operationId: private_institution_account_group_role_delete
-export def "account-institution-roles delete-private" [
+export def "private-institution-account-group-role-delete" [
   account_id: int
   group_id: int
   role_id: int
@@ -3668,7 +3668,7 @@ export def "account-institution-roles delete-private" [
 #
 # GET /account/institution/users/{account_id}
 # operationId: private_account_institution_user
-export def "account-institution-users get-private" [
+export def "private-account-institution-user" [
   account_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3704,7 +3704,7 @@ export def "account-institution-users get-private" [
 #
 # GET /account/licenses
 # operationId: private_licenses_list
-export def "account-licenses list-private" [
+export def "private-licenses-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3738,7 +3738,7 @@ export def "account-licenses list-private" [
 #
 # GET /account/projects
 # operationId: private_projects_list
-export def "account-projects list-private" [
+export def "private-projects-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3783,7 +3783,7 @@ export def "account-projects list-private" [
 # operationId: private_project_create
 # --custom_fields_list item shape: {name: string, value: any}
 # --funding_list item shape: {id?: int, title?: string}
-export def "account-projects create-private" [
+export def "private-project-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3827,7 +3827,7 @@ export def "account-projects create-private" [
 #
 # POST /account/projects/search
 # operationId: private_projects_search
-export def "account-projects-search list-private" [
+export def "private-projects-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3875,7 +3875,7 @@ export def "account-projects-search list-private" [
 #
 # DELETE /account/projects/{project_id}
 # operationId: private_project_delete
-export def "account-projects delete-private" [
+export def "private-project-delete" [
   project_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3911,7 +3911,7 @@ export def "account-projects delete-private" [
 #
 # GET /account/projects/{project_id}
 # operationId: private_project_details
-export def "account-projects get-private-details" [
+export def "private-project-details" [
   project_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3949,7 +3949,7 @@ export def "account-projects get-private-details" [
 # operationId: private_project_update
 # --custom_fields_list item shape: {name: string, value: any}
 # --funding_list item shape: {id?: int, title?: string}
-export def "account-projects update-private" [
+export def "private-project-update" [
   project_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3994,7 +3994,7 @@ export def "account-projects update-private" [
 #
 # GET /account/projects/{project_id}/articles
 # operationId: private_project_articles_list
-export def "account-projects-articles list-private" [
+export def "private-project-articles-list" [
   project_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4038,7 +4038,7 @@ export def "account-projects-articles list-private" [
 # --custom_fields_list item shape: {name: string, value: any}
 # --funding_list item shape: {id?: int, title?: string}
 # --timeline shape: {firstOnline?: string, publisherAcceptance?: string, publisherPublication?: string}
-export def "account-projects-articles create-private" [
+export def "private-project-articles-create" [
   project_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4101,7 +4101,7 @@ export def "account-projects-articles create-private" [
 #
 # DELETE /account/projects/{project_id}/articles/{article_id}
 # operationId: private_project_article_delete
-export def "account-projects-articles delete-private" [
+export def "private-project-article-delete" [
   project_id: int
   article_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4139,7 +4139,7 @@ export def "account-projects-articles delete-private" [
 #
 # GET /account/projects/{project_id}/articles/{article_id}
 # operationId: private_project_article_details
-export def "account-projects-articles get-private-details" [
+export def "private-project-article-details" [
   project_id: int
   article_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4177,7 +4177,7 @@ export def "account-projects-articles get-private-details" [
 #
 # GET /account/projects/{project_id}/articles/{article_id}/files
 # operationId: private_project_article_files
-export def "account-projects-articles-files list" [
+export def "private-project-article-files" [
   project_id: int
   article_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4215,7 +4215,7 @@ export def "account-projects-articles-files list" [
 #
 # GET /account/projects/{project_id}/articles/{article_id}/files/{file_id}
 # operationId: private_project_article_file
-export def "account-projects-articles-files get-private" [
+export def "private-project-article-file" [
   project_id: int
   article_id: int
   file_id: int
@@ -4255,7 +4255,7 @@ export def "account-projects-articles-files get-private" [
 #
 # GET /account/projects/{project_id}/collaborators
 # operationId: private_project_collaborators_list
-export def "account-projects-collaborators list-private" [
+export def "private-project-collaborators-list" [
   project_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4291,7 +4291,7 @@ export def "account-projects-collaborators list-private" [
 #
 # POST /account/projects/{project_id}/collaborators
 # operationId: private_project_collaborators_invite
-export def "account-projects-collaborators create-private-invite" [
+export def "private-project-collaborators-invite" [
   project_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4334,7 +4334,7 @@ export def "account-projects-collaborators create-private-invite" [
 #
 # DELETE /account/projects/{project_id}/collaborators/{user_id}
 # operationId: private_project_collaborator__Delete
-export def "account-projects-collaborators delete-private" [
+export def "private-project-collaborator-delete" [
   project_id: int
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4372,7 +4372,7 @@ export def "account-projects-collaborators delete-private" [
 #
 # POST /account/projects/{project_id}/leave
 # operationId: private_project_leave
-export def "account-projects-leave create-private" [
+export def "private-project-leave" [
   project_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4408,7 +4408,7 @@ export def "account-projects-leave create-private" [
 #
 # GET /account/projects/{project_id}/notes
 # operationId: private_project_notes_list
-export def "account-projects-notes list-private" [
+export def "private-project-notes-list" [
   project_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4449,7 +4449,7 @@ export def "account-projects-notes list-private" [
 #
 # POST /account/projects/{project_id}/notes
 # operationId: private_project_notes_create
-export def "account-projects-notes create-private" [
+export def "private-project-notes-create" [
   project_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4489,7 +4489,7 @@ export def "account-projects-notes create-private" [
 #
 # DELETE /account/projects/{project_id}/notes/{note_id}
 # operationId: private_project_note_delete
-export def "account-projects-notes delete-private" [
+export def "private-project-note-delete" [
   project_id: int
   note_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4527,7 +4527,7 @@ export def "account-projects-notes delete-private" [
 #
 # GET /account/projects/{project_id}/notes/{note_id}
 # operationId: private_project_note
-export def "account-projects-notes get-private" [
+export def "private-project-note" [
   project_id: int
   note_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4565,7 +4565,7 @@ export def "account-projects-notes get-private" [
 #
 # PUT /account/projects/{project_id}/notes/{note_id}
 # operationId: private_project_note_update
-export def "account-projects-notes update-private" [
+export def "private-project-note-update" [
   project_id: int
   note_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4607,7 +4607,7 @@ export def "account-projects-notes update-private" [
 #
 # POST /account/projects/{project_id}/publish
 # operationId: private_project_publish
-export def "account-projects-publish publish-private" [
+export def "private-project-publish" [
   project_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4643,7 +4643,7 @@ export def "account-projects-publish publish-private" [
 #
 # GET /articles
 # operationId: articles_list
-export def "articles list" [
+export def "articles-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4695,7 +4695,7 @@ export def "articles list" [
 #
 # POST /articles/search
 # operationId: articles_search
-export def "articles-search list" [
+export def "articles-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4751,7 +4751,7 @@ export def "articles-search list" [
 #
 # GET /articles/{article_id}
 # operationId: article_details
-export def "articles get-details" [
+export def "article-details" [
   article_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4787,7 +4787,7 @@ export def "articles get-details" [
 #
 # GET /articles/{article_id}/files
 # operationId: article_files
-export def "articles-files get" [
+export def "article-files" [
   article_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4823,7 +4823,7 @@ export def "articles-files get" [
 #
 # GET /articles/{article_id}/files/{file_id}
 # operationId: article_file_details
-export def "articles-files get-details" [
+export def "article-file-details" [
   article_id: int
   file_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4861,7 +4861,7 @@ export def "articles-files get-details" [
 #
 # GET /articles/{article_id}/versions
 # operationId: article_versions
-export def "articles-versions get" [
+export def "article-versions" [
   article_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4897,7 +4897,7 @@ export def "articles-versions get" [
 #
 # GET /articles/{article_id}/versions/{v_number}
 # operationId: article_version_details
-export def "articles-versions version-details" [
+export def "article-version-details" [
   article_id: int
   v_number: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4935,7 +4935,7 @@ export def "articles-versions version-details" [
 #
 # GET /articles/{article_id}/versions/{v_number}/confidentiality
 # operationId: article_version_confidentiality
-export def "articles-versions-confidentiality version" [
+export def "article-version-confidentiality" [
   article_id: int
   v_number: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4973,7 +4973,7 @@ export def "articles-versions-confidentiality version" [
 #
 # GET /articles/{article_id}/versions/{v_number}/embargo
 # operationId: article_version_embargo
-export def "articles-versions-embargo version" [
+export def "article-version-embargo" [
   article_id: int
   v_number: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5011,7 +5011,7 @@ export def "articles-versions-embargo version" [
 #
 # GET /categories
 # operationId: categories_list
-export def "categories list" [
+export def "categories-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5045,7 +5045,7 @@ export def "categories list" [
 #
 # GET /collections
 # operationId: collections_list
-export def "collections list" [
+export def "collections-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5096,7 +5096,7 @@ export def "collections list" [
 #
 # POST /collections/search
 # operationId: collections_search
-export def "collections-search list" [
+export def "collections-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5150,7 +5150,7 @@ export def "collections-search list" [
 #
 # GET /collections/{collection_id}
 # operationId: collection_details
-export def "collections get-details" [
+export def "collection-details" [
   collection_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5186,7 +5186,7 @@ export def "collections get-details" [
 #
 # GET /collections/{collection_id}/articles
 # operationId: collection_articles
-export def "collections-articles get" [
+export def "collection-articles" [
   collection_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5227,7 +5227,7 @@ export def "collections-articles get" [
 #
 # GET /collections/{collection_id}/versions
 # operationId: collection_versions
-export def "collections-versions get" [
+export def "collection-versions" [
   collection_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5263,7 +5263,7 @@ export def "collections-versions get" [
 #
 # GET /collections/{collection_id}/versions/{version_id}
 # operationId: collection_version_details
-export def "collections-versions version-details" [
+export def "collection-version-details" [
   collection_id: int
   version_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5301,7 +5301,7 @@ export def "collections-versions version-details" [
 #
 # GET /file/download/{file_id}
 # operationId: file_download
-export def "file-download download" [
+export def "file-download" [
   file_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5337,7 +5337,7 @@ export def "file-download download" [
 #
 # POST /institution/hrfeed/upload
 # operationId: institution_hrfeed_upload
-export def "institution-hrfeed-upload upload" [
+export def "institution-hrfeed-upload" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5377,7 +5377,7 @@ export def "institution-hrfeed-upload upload" [
 #
 # GET /institutions/{institution_string_id}/articles/filter-by
 # operationId: institution_articles
-export def "institutions-articles-filter-by get" [
+export def "institution-articles" [
   institution_string_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5416,7 +5416,7 @@ export def "institutions-articles-filter-by get" [
 #
 # GET /item_types
 # operationId: item_types_list
-export def "item-types list" [
+export def "item-types-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5452,7 +5452,7 @@ export def "item-types list" [
 #
 # GET /licenses
 # operationId: licenses_list
-export def "licenses list" [
+export def "licenses-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5486,7 +5486,7 @@ export def "licenses list" [
 #
 # GET /projects
 # operationId: projects_list
-export def "projects list" [
+export def "projects-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5533,7 +5533,7 @@ export def "projects list" [
 #
 # POST /projects/search
 # operationId: projects_search
-export def "projects-search list" [
+export def "projects-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5584,7 +5584,7 @@ export def "projects-search list" [
 #
 # GET /projects/{project_id}
 # operationId: project_details
-export def "projects get-details" [
+export def "project-details" [
   project_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5620,7 +5620,7 @@ export def "projects get-details" [
 #
 # GET /projects/{project_id}/articles
 # operationId: project_articles
-export def "projects-articles get" [
+export def "project-articles" [
   project_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

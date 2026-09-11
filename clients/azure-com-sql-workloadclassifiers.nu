@@ -110,7 +110,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-workload-groups-workload-classifiers list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "workload-classifiers-list-by-workload-group" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -134,7 +134,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/workloadGroups/{workloadGroupName}/workloadClassifiers
 # operationId: WorkloadClassifiers_ListByWorkloadGroup
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-workload-groups-workload-classifiers list" [
+export def "workload-classifiers-list-by-workload-group" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -180,7 +180,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/workloadGroups/{workloadGroupName}/workloadClassifiers/{workloadClassifierName}
 # operationId: WorkloadClassifiers_Delete
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-workload-groups-workload-classifiers delete" [
+export def "workload-classifiers-delete" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -228,7 +228,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/workloadGroups/{workloadGroupName}/workloadClassifiers/{workloadClassifierName}
 # operationId: WorkloadClassifiers_Get
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-workload-groups-workload-classifiers get" [
+export def "workload-classifiers-get" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -277,7 +277,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/workloadGroups/{workloadGroupName}/workloadClassifiers/{workloadClassifierName}
 # operationId: WorkloadClassifiers_CreateOrUpdate
 # --properties shape: {context?: string, endTime?: string, importance?: string, label?: string, memberName: string, startTime?: string}
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-workload-groups-workload-classifiers create-or-update" [
+export def "workload-classifiers-create-or-update" [
   subscription_id: string
   resource_group_name: string
   server_name: string

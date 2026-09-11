@@ -131,7 +131,7 @@ def launch-stage-completer [] { ["ALPHA" "BETA" "DEPRECATED" "EARLY_ACCESS" "GA"
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "run-projects-locations-services-revisions-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -155,7 +155,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v2/{name}
 # operationId: run.projects.locations.services.revisions.delete
-export def "projects delete" [
+export def "run-projects-locations-services-revisions-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -205,7 +205,7 @@ export def "projects delete" [
 #
 # GET /v2/{name}
 # operationId: run.projects.locations.services.revisions.get
-export def "projects get" [
+export def "run-projects-locations-services-revisions-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -259,7 +259,7 @@ export def "projects get" [
 # --terminalCondition shape: {executionReason?: "EXECUTION_REASON_UNDEFINED"|"JOB_STATUS_SERVICE_POLLING_ERROR"|"NON_ZERO_EXIT_CODE"|"CANCELLED"|"CANCELLING", lastTransitionTime?: string, message?: string, ... (5 more fields)}
 # --traffic item shape: {percent?: int, revision?: string, tag?: string, type?: "TRAFFIC_TARGET_ALLOCATION_TYPE_UNSPECIFIED"|"TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST"|"TRAFFIC_TARGET_ALLOCATION_TYPE_REVISION"}
 # --trafficStatuses item shape: {percent?: int, revision?: string, tag?: string, type?: "TRAFFIC_TARGET_ALLOCATION_TYPE_UNSPECIFIED"|"TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST"|"TRAFFIC_TARGET_ALLOCATION_TYPE_REVISION", uri?: string}
-export def "projects update" [
+export def "run-projects-locations-services-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -324,7 +324,7 @@ export def "projects update" [
 #
 # GET /v2/{name}/operations
 # operationId: run.projects.locations.operations.list
-export def "operations list" [
+export def "run-projects-locations-operations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -375,7 +375,7 @@ export def "operations list" [
 #
 # POST /v2/{name}:run
 # operationId: run.projects.locations.jobs.run
-export def "projects create-run" [
+export def "run-projects-locations-jobs-run" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -428,7 +428,7 @@ export def "projects create-run" [
 #
 # POST /v2/{name}:wait
 # operationId: run.projects.locations.operations.wait
-export def "projects wait" [
+export def "run-projects-locations-operations-wait" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -480,7 +480,7 @@ export def "projects wait" [
 #
 # GET /v2/{parent}/executions
 # operationId: run.projects.locations.jobs.executions.list
-export def "executions list" [
+export def "run-projects-locations-jobs-executions-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -531,7 +531,7 @@ export def "executions list" [
 #
 # GET /v2/{parent}/jobs
 # operationId: run.projects.locations.jobs.list
-export def "jobs list" [
+export def "run-projects-locations-jobs-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -587,7 +587,7 @@ export def "jobs list" [
 # --latestCreatedExecution shape: {completionTime?: string, createTime?: string, name?: string}
 # --template shape: {annotations?: record, labels?: record, parallelism?: int, taskCount?: int, template?: record}
 # --terminalCondition shape: {executionReason?: "EXECUTION_REASON_UNDEFINED"|"JOB_STATUS_SERVICE_POLLING_ERROR"|"NON_ZERO_EXIT_CODE"|"CANCELLED"|"CANCELLING", lastTransitionTime?: string, message?: string, ... (5 more fields)}
-export def "jobs create" [
+export def "run-projects-locations-jobs-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -650,7 +650,7 @@ export def "jobs create" [
 #
 # GET /v2/{parent}/revisions
 # operationId: run.projects.locations.services.revisions.list
-export def "revisions list" [
+export def "run-projects-locations-services-revisions-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -701,7 +701,7 @@ export def "revisions list" [
 #
 # GET /v2/{parent}/services
 # operationId: run.projects.locations.services.list
-export def "services list" [
+export def "run-projects-locations-services-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -758,7 +758,7 @@ export def "services list" [
 # --terminalCondition shape: {executionReason?: "EXECUTION_REASON_UNDEFINED"|"JOB_STATUS_SERVICE_POLLING_ERROR"|"NON_ZERO_EXIT_CODE"|"CANCELLED"|"CANCELLING", lastTransitionTime?: string, message?: string, ... (5 more fields)}
 # --traffic item shape: {percent?: int, revision?: string, tag?: string, type?: "TRAFFIC_TARGET_ALLOCATION_TYPE_UNSPECIFIED"|"TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST"|"TRAFFIC_TARGET_ALLOCATION_TYPE_REVISION"}
 # --trafficStatuses item shape: {percent?: int, revision?: string, tag?: string, type?: "TRAFFIC_TARGET_ALLOCATION_TYPE_UNSPECIFIED"|"TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST"|"TRAFFIC_TARGET_ALLOCATION_TYPE_REVISION", uri?: string}
-export def "services create" [
+export def "run-projects-locations-services-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -823,7 +823,7 @@ export def "services create" [
 #
 # GET /v2/{parent}/tasks
 # operationId: run.projects.locations.jobs.executions.tasks.list
-export def "tasks list" [
+export def "run-projects-locations-jobs-executions-tasks-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -874,7 +874,7 @@ export def "tasks list" [
 #
 # GET /v2/{resource}:getIamPolicy
 # operationId: run.projects.locations.services.getIamPolicy
-export def "projects get-iam-policy" [
+export def "run-projects-locations-services-get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -924,7 +924,7 @@ export def "projects get-iam-policy" [
 # POST /v2/{resource}:setIamPolicy
 # operationId: run.projects.locations.services.setIamPolicy
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
-export def "projects update-iam-policy" [
+export def "run-projects-locations-services-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -977,7 +977,7 @@ export def "projects update-iam-policy" [
 #
 # POST /v2/{resource}:testIamPermissions
 # operationId: run.projects.locations.services.testIamPermissions
-export def "projects test-iam-permissions" [
+export def "run-projects-locations-services-test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

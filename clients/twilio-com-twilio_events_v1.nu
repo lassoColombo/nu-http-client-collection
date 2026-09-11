@@ -113,7 +113,7 @@ def sink-type-completer [] { ["kinesis" "segment" "webhook"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "schemas get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "fetch-schema" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -137,7 +137,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/Schemas/{Id}
 # operationId: FetchSchema
-export def "schemas get" [
+export def "fetch-schema" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -173,7 +173,7 @@ export def "schemas get" [
 #
 # GET /v1/Schemas/{Id}/Versions
 # operationId: ListSchemaVersion
-export def "schemas-versions list" [
+export def "list-schema-version" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -213,7 +213,7 @@ export def "schemas-versions list" [
 #
 # GET /v1/Schemas/{Id}/Versions/{SchemaVersion}
 # operationId: FetchSchemaVersion
-export def "schemas-versions get" [
+export def "fetch-schema-version" [
   id: string
   schema_version: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -251,7 +251,7 @@ export def "schemas-versions get" [
 #
 # GET /v1/Sinks
 # operationId: ListSink
-export def "sinks list" [
+export def "list-sink" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -291,7 +291,7 @@ export def "sinks list" [
 #
 # POST /v1/Sinks
 # operationId: CreateSink
-export def "sinks create" [
+export def "create-sink" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -332,7 +332,7 @@ export def "sinks create" [
 #
 # DELETE /v1/Sinks/{Sid}
 # operationId: DeleteSink
-export def "sinks delete" [
+export def "delete-sink" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -368,7 +368,7 @@ export def "sinks delete" [
 #
 # GET /v1/Sinks/{Sid}
 # operationId: FetchSink
-export def "sinks get" [
+export def "fetch-sink" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -404,7 +404,7 @@ export def "sinks get" [
 #
 # POST /v1/Sinks/{Sid}
 # operationId: UpdateSink
-export def "sinks update" [
+export def "update-sink" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -445,7 +445,7 @@ export def "sinks update" [
 #
 # POST /v1/Sinks/{Sid}/Test
 # operationId: CreateSinkTest
-export def "sinks-test create" [
+export def "create-sink-test" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -481,7 +481,7 @@ export def "sinks-test create" [
 #
 # POST /v1/Sinks/{Sid}/Validate
 # operationId: CreateSinkValidate
-export def "sinks-validate create" [
+export def "create-sink-validate" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -522,7 +522,7 @@ export def "sinks-validate create" [
 #
 # GET /v1/Subscriptions
 # operationId: ListSubscription
-export def "subscriptions list" [
+export def "list-subscription" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -561,7 +561,7 @@ export def "subscriptions list" [
 #
 # POST /v1/Subscriptions
 # operationId: CreateSubscription
-export def "subscriptions create" [
+export def "create-subscription" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -602,7 +602,7 @@ export def "subscriptions create" [
 #
 # DELETE /v1/Subscriptions/{Sid}
 # operationId: DeleteSubscription
-export def "subscriptions delete" [
+export def "delete-subscription" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -638,7 +638,7 @@ export def "subscriptions delete" [
 #
 # GET /v1/Subscriptions/{Sid}
 # operationId: FetchSubscription
-export def "subscriptions get" [
+export def "fetch-subscription" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -674,7 +674,7 @@ export def "subscriptions get" [
 #
 # POST /v1/Subscriptions/{Sid}
 # operationId: UpdateSubscription
-export def "subscriptions update" [
+export def "update-subscription" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -716,7 +716,7 @@ export def "subscriptions update" [
 #
 # GET /v1/Subscriptions/{SubscriptionSid}/SubscribedEvents
 # operationId: ListSubscribedEvent
-export def "subscriptions-subscribed-events list" [
+export def "list-subscribed-event" [
   subscription_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -756,7 +756,7 @@ export def "subscriptions-subscribed-events list" [
 #
 # POST /v1/Subscriptions/{SubscriptionSid}/SubscribedEvents
 # operationId: CreateSubscribedEvent
-export def "subscriptions-subscribed-events create" [
+export def "create-subscribed-event" [
   subscription_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -798,7 +798,7 @@ export def "subscriptions-subscribed-events create" [
 #
 # DELETE /v1/Subscriptions/{SubscriptionSid}/SubscribedEvents/{Type}
 # operationId: DeleteSubscribedEvent
-export def "subscriptions-subscribed-events delete" [
+export def "delete-subscribed-event" [
   subscription_sid: string
   type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -836,7 +836,7 @@ export def "subscriptions-subscribed-events delete" [
 #
 # GET /v1/Subscriptions/{SubscriptionSid}/SubscribedEvents/{Type}
 # operationId: FetchSubscribedEvent
-export def "subscriptions-subscribed-events get" [
+export def "fetch-subscribed-event" [
   subscription_sid: string
   type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -874,7 +874,7 @@ export def "subscriptions-subscribed-events get" [
 #
 # POST /v1/Subscriptions/{SubscriptionSid}/SubscribedEvents/{Type}
 # operationId: UpdateSubscribedEvent
-export def "subscriptions-subscribed-events update" [
+export def "update-subscribed-event" [
   subscription_sid: string
   type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -917,7 +917,7 @@ export def "subscriptions-subscribed-events update" [
 #
 # GET /v1/Types
 # operationId: ListEventType
-export def "types list-event" [
+export def "list-event-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -956,7 +956,7 @@ export def "types list-event" [
 #
 # GET /v1/Types/{Type}
 # operationId: FetchEventType
-export def "types get-event" [
+export def "fetch-event-type" [
   type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

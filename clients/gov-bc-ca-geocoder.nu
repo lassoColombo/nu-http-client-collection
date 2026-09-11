@@ -104,7 +104,7 @@ def street-direction-completer [] { ["E" "N" "NE" "NO" "NW" "O" "S" "SE" "SO" "S
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "addresses-output-format get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-addresses-output-format" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -127,7 +127,7 @@ export def commands []: nothing -> table {
 # Geocode an address
 #
 # GET /addresses.{outputFormat}
-export def "addresses-output-format get" [
+export def "get-addresses-output-format" [
   output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -194,7 +194,7 @@ export def "addresses-output-format get" [
 # Find intersections near to a geographic point
 #
 # GET /intersections/near.{outputFormat}
-export def "intersections-near-output-format get" [
+export def "get-intersections-near-output-format" [
   output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -236,7 +236,7 @@ export def "intersections-near-output-format get" [
 # Find nearest intersection to a geographic point
 #
 # GET /intersections/nearest.{outputFormat}
-export def "intersections-nearest-output-format get" [
+export def "get-intersections-nearest-output-format" [
   output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -277,7 +277,7 @@ export def "intersections-nearest-output-format get" [
 # Find intersections in a geographic area
 #
 # GET /intersections/within.{outputFormat}
-export def "intersections-within-output-format get" [
+export def "get-intersections-within-output-format" [
   output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -318,7 +318,7 @@ export def "intersections-within-output-format get" [
 # Get an intersection by its unique ID
 #
 # GET /intersections/{intersectionID}.{outputFormat}
-export def "intersections get" [
+export def "get-intersections-intersection-id-output-format" [
   intersection_id: string
   output_format: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -357,7 +357,7 @@ export def "intersections get" [
 # Geocode an address and identify site occupants
 #
 # GET /occupants/addresses.{outputFormat}
-export def "occupants-addresses-output-format get" [
+export def "get-occupants-addresses-output-format" [
   output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -425,7 +425,7 @@ export def "occupants-addresses-output-format get" [
 # Find occupants of sites near to a geographic point
 #
 # GET /occupants/near.{outputFormat}
-export def "occupants-near-output-format get" [
+export def "get-occupants-near-output-format" [
   output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -469,7 +469,7 @@ export def "occupants-near-output-format get" [
 # Find occupants of the site nearest to a geographic point
 #
 # GET /occupants/nearest.{outputFormat}
-export def "occupants-nearest-output-format get" [
+export def "get-occupants-nearest-output-format" [
   output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -512,7 +512,7 @@ export def "occupants-nearest-output-format get" [
 # Find occupants of sites in a geographic area
 #
 # GET /occupants/within.{outputFormat}
-export def "occupants-within-output-format get" [
+export def "get-occupants-within-output-format" [
   output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -555,7 +555,7 @@ export def "occupants-within-output-format get" [
 # Get an occupant (of a site) by its unique ID
 #
 # GET /occupants/{occupantID}.{outputFormat}
-export def "occupants get" [
+export def "get-occupants-occupant-id-output-format" [
   occupant_id: string
   output_format: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -597,7 +597,7 @@ export def "occupants get" [
 # Get a comma-separated string of all pids for a given site
 #
 # GET /parcels/pids/{siteID}.{outputFormat}
-export def "parcels-pids get" [
+export def "get-parcels-pids-site-id-output-format" [
   site_id: string
   output_format: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -634,7 +634,7 @@ export def "parcels-pids get" [
 # Find sites near to a geographic point
 #
 # GET /sites/near.{outputFormat}
-export def "sites-near-output-format get" [
+export def "get-sites-near-output-format" [
   output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -679,7 +679,7 @@ export def "sites-near-output-format get" [
 # Find the site nearest to a geographic point
 #
 # GET /sites/nearest.{outputFormat}
-export def "sites-nearest-output-format get" [
+export def "get-sites-nearest-output-format" [
   output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -723,7 +723,7 @@ export def "sites-nearest-output-format get" [
 # Find sites in a geographic area
 #
 # GET /sites/within.{outputFormat}
-export def "sites-within-output-format get" [
+export def "get-sites-within-output-format" [
   output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -767,7 +767,7 @@ export def "sites-within-output-format get" [
 # Get a site by its unique ID
 #
 # GET /sites/{siteID}.{outputFormat}
-export def "sites get" [
+export def "get-sites-site-id-output-format" [
   site_id: string
   output_format: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -809,7 +809,7 @@ export def "sites get" [
 # Represents all subsites of a given site
 #
 # GET /sites/{siteID}/subsites.{outputFormat}
-export def "sites-subsites-output-format get" [
+export def "get-sites-site-id-subsites-output-format" [
   site_id: string
   output_format: string
   --base-url(-b): string@base-url-completer # API base URL

@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-d-bfor-maria-db-servers-query-texts list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "query-texts-list-by-server" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -122,7 +122,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforMariaDB/servers/{serverName}/queryTexts
 # operationId: QueryTexts_ListByServer
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-maria-db-servers-query-texts list" [
+export def "query-texts-list-by-server" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -165,7 +165,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-maria-db-se
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforMariaDB/servers/{serverName}/queryTexts/{queryId}
 # operationId: QueryTexts_Get
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-maria-db-servers-query-texts get" [
+export def "query-texts-get" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -210,7 +210,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-maria-db-se
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforMariaDB/servers/{serverName}/topQueryStatistics
 # operationId: TopQueryStatistics_ListByServer
 # --properties shape: {aggregationFunction: string, aggregationWindow: string, numberOfTopQueries: int, observationEndTime: string, observationStartTime: string, observedMetric: string}
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-maria-db-servers-top-query-statistics list" [
+export def "top-query-statistics-list-by-server" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -252,7 +252,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-maria-db-se
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforMariaDB/servers/{serverName}/topQueryStatistics/{queryStatisticId}
 # operationId: TopQueryStatistics_Get
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-maria-db-servers-top-query-statistics get" [
+export def "top-query-statistics-get" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -297,7 +297,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-maria-db-se
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforMariaDB/servers/{serverName}/waitStatistics
 # operationId: WaitStatistics_ListByServer
 # --properties shape: {aggregationWindow: string, observationEndTime: string, observationStartTime: string}
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-maria-db-servers-wait-statistics list" [
+export def "wait-statistics-list-by-server" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -339,7 +339,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-maria-db-se
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforMariaDB/servers/{serverName}/waitStatistics/{waitStatisticsId}
 # operationId: WaitStatistics_Get
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-maria-db-servers-wait-statistics get" [
+export def "wait-statistics-get" [
   subscription_id: string
   resource_group_name: string
   server_name: string

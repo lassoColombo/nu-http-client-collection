@@ -123,7 +123,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-api-management-service-tags list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "tag-list-by-service" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -147,7 +147,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/tags
 # operationId: Tag_ListByService
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-tags list" [
+export def "tag-list-by-service" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -193,7 +193,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/tags/{tagId}
 # operationId: Tag_Delete
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-tags delete" [
+export def "tag-delete" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -240,7 +240,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/tags/{tagId}
 # operationId: Tag_Get
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-tags get" [
+export def "tag-get" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -284,7 +284,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # HEAD /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/tags/{tagId}
 # operationId: Tag_GetEntityState
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-tags get-entity-state" [
+export def "tag-get-entity-state" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -329,7 +329,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/tags/{tagId}
 # operationId: Tag_Update
 # --properties shape: {displayName: string}
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-tags update" [
+export def "tag-update" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -381,7 +381,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/tags/{tagId}
 # operationId: Tag_CreateOrUpdate
 # --properties shape: {displayName: string}
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-tags create-or-update" [
+export def "tag-create-or-update" [
   subscription_id: string
   resource_group_name: string
   service_name: string

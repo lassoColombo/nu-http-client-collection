@@ -99,7 +99,7 @@ def auth-scheme-completer [] { ["ocp-apim-subscription-key" "query-key"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "play-by-play get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "play-by-play" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -123,7 +123,7 @@ export def commands []: nothing -> table {
 #
 # GET /{format}/PlayByPlay/{gameid}
 # operationId: PlayByPlay
-export def "play-by-play get" [
+export def "play-by-play" [
   format: string
   gameid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -161,7 +161,7 @@ export def "play-by-play get" [
 #
 # GET /{format}/PlayByPlayDelta/{date}/{minutes}
 # operationId: PlayByPlayDelta
-export def "play-by-play-delta get" [
+export def "play-by-play-delta" [
   format: string
   date: string
   minutes: string

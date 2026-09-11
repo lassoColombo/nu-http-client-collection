@@ -107,7 +107,7 @@ def auth-scheme-completer [] { ["x-api-key" "query-api_key" "bearer" "cookie-ses
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "check get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "check" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -131,7 +131,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/v1/check/
 # operationId: check
-export def "check get" [
+export def "check" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -165,7 +165,7 @@ export def "check get" [
 #
 # GET /api/v1/configuration-link/
 # operationId: get_configuration_link
-export def "configuration-link get" [
+export def "get-configuration-link" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -199,7 +199,7 @@ export def "configuration-link get" [
 #
 # GET /api/v1/exposed/
 # operationId: list_exposed_actions
-export def "exposed list-actions" [
+export def "list-exposed-actions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -233,7 +233,7 @@ export def "exposed list-actions" [
 #
 # POST /api/v1/exposed/{exposed_app_action_id}/execute/
 # operationId: execute_app_action_endpoint
-export def "exposed-execute create-endpoint" [
+export def "execute-app-action-endpoint" [
   exposed_app_action_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

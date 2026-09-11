@@ -117,7 +117,7 @@ def accept-completer [] { ["application/json" "application/xml"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "send create-merchant-transfer" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-merchant-transfer" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -142,7 +142,7 @@ export def commands []: nothing -> table {
 # POST /send/
 # operationId: createMerchantTransfer
 # --merchant_transfer shape: {additional_message?: string, convenience_amount?: string, convenience_indicator?: string, digital_account_reference_number?: string, interchange_rate_designator?: string, mastercard_assigned_id?: string, participant: record, participation_id?: string, payment_origination_country?: string, payment_type: string, processor_id?: string, qr_data?: string, recipient: record, recipient_account_uri: string, reconciliation_data?: record, routing_transit_number?: string, sender: record, ... (5 more fields)}
-export def "send create-merchant-transfer" [
+export def "create-merchant-transfer" [
   partner_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -183,7 +183,7 @@ export def "send create-merchant-transfer" [
 #
 # GET /send/
 # operationId: getMerchantTransferByRef
-export def "send get-merchant-transfer-by-ref" [
+export def "get-merchant-transfer-by-ref" [
   partner_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -223,7 +223,7 @@ export def "send get-merchant-transfer-by-ref" [
 # POST /send/
 # operationId: createMerchantPayment
 # --merchant_payment_transfer shape: {additional_message?: string, amount: string, authentication_value?: string, channel?: string, convenience_amount?: string, convenience_indicator?: string, currency: string, device_id?: string, digital_account_reference_number?: string, funding_source: string, funding_transaction_reference?: record, interchange_rate_designator?: string, location?: string, mastercard_assigned_id?: string, participant?: record, participation_id?: string, payment_origination_country?: string, payment_type: string, ... (11 more fields)}
-export def "send create-merchant-payment" [
+export def "create-merchant-payment" [
   partner_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -265,7 +265,7 @@ export def "send create-merchant-payment" [
 # POST /send/
 # operationId: createMerchantRefund
 # --merchant_refund_transfer shape: {additional_message?: string, amount: string, authentication_value?: string, channel?: string, currency: string, device_id?: string, digital_account_reference_number?: string, funding_source: string, interchange_rate_designator?: string, location?: string, mastercard_assigned_id?: string, participant?: record, participation_id?: string, payment_origination_country?: string, payment_transaction_reference?: record, payment_type: string, processor_id?: string, recipient?: record, ... (7 more fields)}
-export def "send create-merchant-refund" [
+export def "create-merchant-refund" [
   partner_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -306,7 +306,7 @@ export def "send create-merchant-refund" [
 #
 # GET /send/
 # operationId: getMerchantTransferById
-export def "send get-merchant-transfer" [
+export def "get-merchant-transfer-by-id" [
   partner_id: string
   transfer_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -345,7 +345,7 @@ export def "send get-merchant-transfer" [
 #
 # POST /send/v1/partners/{partner-id}/transfers/{transfer-id}/transactions/{transaction-id}/reversals
 # operationId: createFundingReversal
-export def "send-partners-transfers-transactions-reversals create-funding" [
+export def "create-funding-reversal" [
   partner_id: string
   transfer_id: string
   transaction_id: string
@@ -389,7 +389,7 @@ export def "send-partners-transfers-transactions-reversals create-funding" [
 #
 # POST /send/v1/partners/{partnerId}/events/generate/payment
 # operationId: sendNotificationPaymentRetry
-export def "send-partners-events-generate-payment send-notification-retry" [
+export def "send-notification-payment-retry" [
   partner_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -429,7 +429,7 @@ export def "send-partners-events-generate-payment send-notification-retry" [
 #
 # POST /send/v1/partners/{partnerId}/events/generate/refund
 # operationId: sendNotificationRefundRetry
-export def "send-partners-events-generate-refund send-notification-retry" [
+export def "send-notification-refund-retry" [
   partner_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -470,7 +470,7 @@ export def "send-partners-events-generate-refund send-notification-retry" [
 # POST /send/v1/partners/{partnerId}/notification-registries
 # operationId: createTransferNotificationRegistration
 # --accountregistration shape: {account_uri: string, notification_partner_id: string}
-export def "send-partners-notification-registries create-transfer-registration" [
+export def "create-transfer-notification-registration" [
   partner_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -511,7 +511,7 @@ export def "send-partners-notification-registries create-transfer-registration" 
 #
 # DELETE /send/v1/partners/{partnerId}/notification-registries/{account-reg-ref}
 # operationId: deleteTransferNotificationRegistration
-export def "send-partners-notification-registries delete-transfer-registration" [
+export def "delete-transfer-notification-registration" [
   partner_id: string
   account_reg_ref: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -550,7 +550,7 @@ export def "send-partners-notification-registries delete-transfer-registration" 
 #
 # GET /send/v1/partners/{partnerId}/notification-registries/{account-reg-ref}
 # operationId: NotificationRegistrationAPIReadBy
-export def "send-partners-notification-registries get-registration" [
+export def "notification-registration-api-read-by" [
   partner_id: string
   account_reg_ref: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -590,7 +590,7 @@ export def "send-partners-notification-registries get-registration" [
 # PUT /send/v1/partners/{partnerId}/notification-registries/{account-reg-ref}
 # operationId: NotificationRegistrationAPIUpdate
 # --accountregistration shape: {account_uri: string, notification_partner_id: string}
-export def "send-partners-notification-registries update-registration" [
+export def "notification-registration-api-update" [
   partner_id: string
   account_reg_ref: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -633,7 +633,7 @@ export def "send-partners-notification-registries update-registration" [
 #
 # POST /send/v1/partners/{partnerId}/transfers/funding
 # operationId: createFunding
-export def "send-partners-transfers-funding create" [
+export def "create-funding" [
   partner_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -674,7 +674,7 @@ export def "send-partners-transfers-funding create" [
 # POST /send/v1/{partnerId}/digital-account
 # operationId: createDigitalAccntRefNum
 # --digital_account shape: {account_type: string, account_uri: string, reference: string}
-export def "send-digital-account create-accnt-ref-num" [
+export def "create-digital-accnt-ref-num" [
   partner_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -716,7 +716,7 @@ export def "send-digital-account create-accnt-ref-num" [
 # POST /send/v1/{partnerId}/digital-account/search
 # operationId: retrieveDigitalAccntRefNumList
 # --digital_account shape: {account_type: string, account_uri: string, reference: string}
-export def "send-digital-account-search get-accnt-ref-num-list" [
+export def "retrieve-digital-accnt-ref-num-list" [
   partner_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

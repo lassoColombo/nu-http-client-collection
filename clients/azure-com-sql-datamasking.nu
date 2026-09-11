@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-data-masking-policies get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "data-masking-policies-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -128,7 +128,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/dataMaskingPolicies/{dataMaskingPolicyName}
 # operationId: DataMaskingPolicies_Get
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-data-masking-policies get" [
+export def "data-masking-policies-get" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -175,7 +175,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/dataMaskingPolicies/{dataMaskingPolicyName}
 # operationId: DataMaskingPolicies_CreateOrUpdate
 # --properties shape: {dataMaskingState: "Disabled"|"Enabled", exemptPrincipals?: string}
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-data-masking-policies create-or-update" [
+export def "data-masking-policies-create-or-update" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -225,7 +225,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/dataMaskingPolicies/{dataMaskingPolicyName}/rules
 # operationId: DataMaskingRules_ListByDatabase
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-data-masking-policies-rules list" [
+export def "data-masking-rules-list-by-database" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -272,7 +272,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/dataMaskingPolicies/{dataMaskingPolicyName}/rules/{dataMaskingRuleName}
 # operationId: DataMaskingRules_CreateOrUpdate
 # --properties shape: {aliasName?: string, columnName: string, maskingFunction: "Default"|"CCN"|"Email"|"Number"|"SSN"|"Text", numberFrom?: string, numberTo?: string, prefixSize?: string, replacementString?: string, ruleState?: "Disabled"|"Enabled", schemaName: string, suffixSize?: string, tableName: string}
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-data-masking-policies-rules create-or-update" [
+export def "data-masking-rules-create-or-update" [
   subscription_id: string
   resource_group_name: string
   server_name: string

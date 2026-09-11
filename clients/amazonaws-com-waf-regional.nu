@@ -181,7 +181,7 @@ def x-amz-target-completer-80 [] { ["AWSWAF_Regional_20161128.UpdateXssMatchSet"
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-associate-web-acl" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associate-web-acl" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -205,7 +205,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AssociateWebACL
-export def "api create-associate-web-acl" [
+export def "associate-web-acl" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -254,7 +254,7 @@ export def "api create-associate-web-acl" [
 #
 # POST /
 # operationId: CreateByteMatchSet
-export def "api create-byte-match-update" [
+export def "create-byte-match-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -303,7 +303,7 @@ export def "api create-byte-match-update" [
 #
 # POST /
 # operationId: CreateGeoMatchSet
-export def "api create-geo-match-update" [
+export def "create-geo-match-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -352,7 +352,7 @@ export def "api create-geo-match-update" [
 #
 # POST /
 # operationId: CreateIPSet
-export def "api create-ip-update" [
+export def "create-ip-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -401,7 +401,7 @@ export def "api create-ip-update" [
 #
 # POST /
 # operationId: CreateRateBasedRule
-export def "api create-rate-based-rule" [
+export def "create-rate-based-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -454,7 +454,7 @@ export def "api create-rate-based-rule" [
 #
 # POST /
 # operationId: CreateRegexMatchSet
-export def "api create-regex-match-update" [
+export def "create-regex-match-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -503,7 +503,7 @@ export def "api create-regex-match-update" [
 #
 # POST /
 # operationId: CreateRegexPatternSet
-export def "api create-regex-pattern-update" [
+export def "create-regex-pattern-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -552,7 +552,7 @@ export def "api create-regex-pattern-update" [
 #
 # POST /
 # operationId: CreateRule
-export def "api create-rule" [
+export def "create-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -603,7 +603,7 @@ export def "api create-rule" [
 #
 # POST /
 # operationId: CreateRuleGroup
-export def "api create-rule-group" [
+export def "create-rule-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -654,7 +654,7 @@ export def "api create-rule-group" [
 #
 # POST /
 # operationId: CreateSizeConstraintSet
-export def "api create-size-constraint-update" [
+export def "create-size-constraint-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -703,7 +703,7 @@ export def "api create-size-constraint-update" [
 #
 # POST /
 # operationId: CreateSqlInjectionMatchSet
-export def "api create-sql-injection-match-update" [
+export def "create-sql-injection-match-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -752,7 +752,7 @@ export def "api create-sql-injection-match-update" [
 #
 # POST /
 # operationId: CreateWebACL
-export def "api create-web-acl" [
+export def "create-web-acl" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -804,7 +804,7 @@ export def "api create-web-acl" [
 #
 # POST /
 # operationId: CreateWebACLMigrationStack
-export def "api create-web-acl-migration-stack" [
+export def "create-web-acl-migration-stack" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -854,7 +854,7 @@ export def "api create-web-acl-migration-stack" [
 #
 # POST /
 # operationId: CreateXssMatchSet
-export def "api create-xss-match-update" [
+export def "create-xss-match-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -903,7 +903,7 @@ export def "api create-xss-match-update" [
 #
 # POST /
 # operationId: DeleteByteMatchSet
-export def "api delete-byte-match-update" [
+export def "delete-byte-match-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -952,7 +952,7 @@ export def "api delete-byte-match-update" [
 #
 # POST /
 # operationId: DeleteGeoMatchSet
-export def "api delete-geo-match-update" [
+export def "delete-geo-match-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1001,7 +1001,7 @@ export def "api delete-geo-match-update" [
 #
 # POST /
 # operationId: DeleteIPSet
-export def "api delete-ip-update" [
+export def "delete-ip-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1050,7 +1050,7 @@ export def "api delete-ip-update" [
 #
 # POST /
 # operationId: DeleteLoggingConfiguration
-export def "api delete-logging-configuration" [
+export def "delete-logging-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1098,7 +1098,7 @@ export def "api delete-logging-configuration" [
 #
 # POST /
 # operationId: DeletePermissionPolicy
-export def "api delete-permission-policy" [
+export def "delete-permission-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1146,7 +1146,7 @@ export def "api delete-permission-policy" [
 #
 # POST /
 # operationId: DeleteRateBasedRule
-export def "api delete-rate-based-rule" [
+export def "delete-rate-based-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1195,7 +1195,7 @@ export def "api delete-rate-based-rule" [
 #
 # POST /
 # operationId: DeleteRegexMatchSet
-export def "api delete-regex-match-update" [
+export def "delete-regex-match-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1244,7 +1244,7 @@ export def "api delete-regex-match-update" [
 #
 # POST /
 # operationId: DeleteRegexPatternSet
-export def "api delete-regex-pattern-update" [
+export def "delete-regex-pattern-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1293,7 +1293,7 @@ export def "api delete-regex-pattern-update" [
 #
 # POST /
 # operationId: DeleteRule
-export def "api delete-rule" [
+export def "delete-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1342,7 +1342,7 @@ export def "api delete-rule" [
 #
 # POST /
 # operationId: DeleteRuleGroup
-export def "api delete-rule-group" [
+export def "delete-rule-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1391,7 +1391,7 @@ export def "api delete-rule-group" [
 #
 # POST /
 # operationId: DeleteSizeConstraintSet
-export def "api delete-size-constraint-update" [
+export def "delete-size-constraint-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1440,7 +1440,7 @@ export def "api delete-size-constraint-update" [
 #
 # POST /
 # operationId: DeleteSqlInjectionMatchSet
-export def "api delete-sql-injection-match-update" [
+export def "delete-sql-injection-match-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1489,7 +1489,7 @@ export def "api delete-sql-injection-match-update" [
 #
 # POST /
 # operationId: DeleteWebACL
-export def "api delete-web-acl" [
+export def "delete-web-acl" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1538,7 +1538,7 @@ export def "api delete-web-acl" [
 #
 # POST /
 # operationId: DeleteXssMatchSet
-export def "api delete-xss-match-update" [
+export def "delete-xss-match-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1587,7 +1587,7 @@ export def "api delete-xss-match-update" [
 #
 # POST /
 # operationId: DisassociateWebACL
-export def "api create-disassociate-web-acl" [
+export def "disassociate-web-acl" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1635,7 +1635,7 @@ export def "api create-disassociate-web-acl" [
 #
 # POST /
 # operationId: GetByteMatchSet
-export def "api get-byte-match-update" [
+export def "get-byte-match-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1683,7 +1683,7 @@ export def "api get-byte-match-update" [
 #
 # POST /
 # operationId: GetChangeToken
-export def "api get-change-token" [
+export def "get-change-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1731,7 +1731,7 @@ export def "api get-change-token" [
 #
 # POST /
 # operationId: GetChangeTokenStatus
-export def "api get-change-token-status" [
+export def "get-change-token-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1779,7 +1779,7 @@ export def "api get-change-token-status" [
 #
 # POST /
 # operationId: GetGeoMatchSet
-export def "api get-geo-match-update" [
+export def "get-geo-match-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1827,7 +1827,7 @@ export def "api get-geo-match-update" [
 #
 # POST /
 # operationId: GetIPSet
-export def "api get-ip-update" [
+export def "get-ip-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1875,7 +1875,7 @@ export def "api get-ip-update" [
 #
 # POST /
 # operationId: GetLoggingConfiguration
-export def "api get-logging-configuration" [
+export def "get-logging-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1923,7 +1923,7 @@ export def "api get-logging-configuration" [
 #
 # POST /
 # operationId: GetPermissionPolicy
-export def "api get-permission-policy" [
+export def "get-permission-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1971,7 +1971,7 @@ export def "api get-permission-policy" [
 #
 # POST /
 # operationId: GetRateBasedRule
-export def "api get-rate-based-rule" [
+export def "get-rate-based-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2019,7 +2019,7 @@ export def "api get-rate-based-rule" [
 #
 # POST /
 # operationId: GetRateBasedRuleManagedKeys
-export def "api get-rate-based-rule-managed-keys" [
+export def "get-rate-based-rule-managed-keys" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2068,7 +2068,7 @@ export def "api get-rate-based-rule-managed-keys" [
 #
 # POST /
 # operationId: GetRegexMatchSet
-export def "api get-regex-match-update" [
+export def "get-regex-match-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2116,7 +2116,7 @@ export def "api get-regex-match-update" [
 #
 # POST /
 # operationId: GetRegexPatternSet
-export def "api get-regex-pattern-update" [
+export def "get-regex-pattern-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2164,7 +2164,7 @@ export def "api get-regex-pattern-update" [
 #
 # POST /
 # operationId: GetRule
-export def "api get-rule" [
+export def "get-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2212,7 +2212,7 @@ export def "api get-rule" [
 #
 # POST /
 # operationId: GetRuleGroup
-export def "api get-rule-group" [
+export def "get-rule-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2260,7 +2260,7 @@ export def "api get-rule-group" [
 #
 # POST /
 # operationId: GetSampledRequests
-export def "api get-sampled-requests" [
+export def "get-sampled-requests" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2311,7 +2311,7 @@ export def "api get-sampled-requests" [
 #
 # POST /
 # operationId: GetSizeConstraintSet
-export def "api get-size-constraint-update" [
+export def "get-size-constraint-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2359,7 +2359,7 @@ export def "api get-size-constraint-update" [
 #
 # POST /
 # operationId: GetSqlInjectionMatchSet
-export def "api get-sql-injection-match-update" [
+export def "get-sql-injection-match-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2407,7 +2407,7 @@ export def "api get-sql-injection-match-update" [
 #
 # POST /
 # operationId: GetWebACL
-export def "api get-web-acl" [
+export def "get-web-acl" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2455,7 +2455,7 @@ export def "api get-web-acl" [
 #
 # POST /
 # operationId: GetWebACLForResource
-export def "api get-web-acl-for-resource" [
+export def "get-web-acl-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2503,7 +2503,7 @@ export def "api get-web-acl-for-resource" [
 #
 # POST /
 # operationId: GetXssMatchSet
-export def "api get-xss-match-update" [
+export def "get-xss-match-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2551,7 +2551,7 @@ export def "api get-xss-match-update" [
 #
 # POST /
 # operationId: ListActivatedRulesInRuleGroup
-export def "api list-activated-rules-in-rule-group" [
+export def "list-activated-rules-in-rule-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2601,7 +2601,7 @@ export def "api list-activated-rules-in-rule-group" [
 #
 # POST /
 # operationId: ListByteMatchSets
-export def "api list-byte-match-sets" [
+export def "list-byte-match-sets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2650,7 +2650,7 @@ export def "api list-byte-match-sets" [
 #
 # POST /
 # operationId: ListGeoMatchSets
-export def "api list-geo-match-sets" [
+export def "list-geo-match-sets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2699,7 +2699,7 @@ export def "api list-geo-match-sets" [
 #
 # POST /
 # operationId: ListIPSets
-export def "api list-ip-sets" [
+export def "list-ip-sets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2748,7 +2748,7 @@ export def "api list-ip-sets" [
 #
 # POST /
 # operationId: ListLoggingConfigurations
-export def "api list-logging-configurations" [
+export def "list-logging-configurations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2797,7 +2797,7 @@ export def "api list-logging-configurations" [
 #
 # POST /
 # operationId: ListRateBasedRules
-export def "api list-rate-based-rules" [
+export def "list-rate-based-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2846,7 +2846,7 @@ export def "api list-rate-based-rules" [
 #
 # POST /
 # operationId: ListRegexMatchSets
-export def "api list-regex-match-sets" [
+export def "list-regex-match-sets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2895,7 +2895,7 @@ export def "api list-regex-match-sets" [
 #
 # POST /
 # operationId: ListRegexPatternSets
-export def "api list-regex-pattern-sets" [
+export def "list-regex-pattern-sets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2944,7 +2944,7 @@ export def "api list-regex-pattern-sets" [
 #
 # POST /
 # operationId: ListResourcesForWebACL
-export def "api list-resources-for-web-acl" [
+export def "list-resources-for-web-acl" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2993,7 +2993,7 @@ export def "api list-resources-for-web-acl" [
 #
 # POST /
 # operationId: ListRuleGroups
-export def "api list-rule-groups" [
+export def "list-rule-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3042,7 +3042,7 @@ export def "api list-rule-groups" [
 #
 # POST /
 # operationId: ListRules
-export def "api list-rules" [
+export def "list-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3091,7 +3091,7 @@ export def "api list-rules" [
 #
 # POST /
 # operationId: ListSizeConstraintSets
-export def "api list-size-constraint-sets" [
+export def "list-size-constraint-sets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3140,7 +3140,7 @@ export def "api list-size-constraint-sets" [
 #
 # POST /
 # operationId: ListSqlInjectionMatchSets
-export def "api list-sql-injection-match-sets" [
+export def "list-sql-injection-match-sets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3189,7 +3189,7 @@ export def "api list-sql-injection-match-sets" [
 #
 # POST /
 # operationId: ListSubscribedRuleGroups
-export def "api list-subscribed-rule-groups" [
+export def "list-subscribed-rule-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3238,7 +3238,7 @@ export def "api list-subscribed-rule-groups" [
 #
 # POST /
 # operationId: ListTagsForResource
-export def "api list-tags-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3288,7 +3288,7 @@ export def "api list-tags-for-resource" [
 #
 # POST /
 # operationId: ListWebACLs
-export def "api list-web-ac-ls" [
+export def "list-web-ac-ls" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3337,7 +3337,7 @@ export def "api list-web-ac-ls" [
 #
 # POST /
 # operationId: ListXssMatchSets
-export def "api list-xss-match-sets" [
+export def "list-xss-match-sets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3386,7 +3386,7 @@ export def "api list-xss-match-sets" [
 #
 # POST /
 # operationId: PutLoggingConfiguration
-export def "api update-logging-configuration" [
+export def "put-logging-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3434,7 +3434,7 @@ export def "api update-logging-configuration" [
 #
 # POST /
 # operationId: PutPermissionPolicy
-export def "api update-permission-policy" [
+export def "put-permission-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3483,7 +3483,7 @@ export def "api update-permission-policy" [
 #
 # POST /
 # operationId: TagResource
-export def "api tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3532,7 +3532,7 @@ export def "api tag-resource" [
 #
 # POST /
 # operationId: UntagResource
-export def "api untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3581,7 +3581,7 @@ export def "api untag-resource" [
 #
 # POST /
 # operationId: UpdateByteMatchSet
-export def "api update-byte-match" [
+export def "update-byte-match-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3631,7 +3631,7 @@ export def "api update-byte-match" [
 #
 # POST /
 # operationId: UpdateGeoMatchSet
-export def "api update-geo-match" [
+export def "update-geo-match-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3681,7 +3681,7 @@ export def "api update-geo-match" [
 #
 # POST /
 # operationId: UpdateIPSet
-export def "api update-ip" [
+export def "update-ip-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3731,7 +3731,7 @@ export def "api update-ip" [
 #
 # POST /
 # operationId: UpdateRateBasedRule
-export def "api update-rate-based-rule" [
+export def "update-rate-based-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3782,7 +3782,7 @@ export def "api update-rate-based-rule" [
 #
 # POST /
 # operationId: UpdateRegexMatchSet
-export def "api update-regex-match" [
+export def "update-regex-match-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3832,7 +3832,7 @@ export def "api update-regex-match" [
 #
 # POST /
 # operationId: UpdateRegexPatternSet
-export def "api update-regex-pattern" [
+export def "update-regex-pattern-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3882,7 +3882,7 @@ export def "api update-regex-pattern" [
 #
 # POST /
 # operationId: UpdateRule
-export def "api update-rule" [
+export def "update-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3932,7 +3932,7 @@ export def "api update-rule" [
 #
 # POST /
 # operationId: UpdateRuleGroup
-export def "api update-rule-group" [
+export def "update-rule-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3982,7 +3982,7 @@ export def "api update-rule-group" [
 #
 # POST /
 # operationId: UpdateSizeConstraintSet
-export def "api update-size-constraint" [
+export def "update-size-constraint-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4032,7 +4032,7 @@ export def "api update-size-constraint" [
 #
 # POST /
 # operationId: UpdateSqlInjectionMatchSet
-export def "api update-sql-injection-match" [
+export def "update-sql-injection-match-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4082,7 +4082,7 @@ export def "api update-sql-injection-match" [
 #
 # POST /
 # operationId: UpdateWebACL
-export def "api update-web-acl" [
+export def "update-web-acl" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4133,7 +4133,7 @@ export def "api update-web-acl" [
 #
 # POST /
 # operationId: UpdateXssMatchSet
-export def "api update-xss-match" [
+export def "update-xss-match-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

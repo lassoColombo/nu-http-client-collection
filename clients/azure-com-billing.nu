@@ -124,7 +124,7 @@ def auto-renew-completer [] { ["false" "true"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-billing-billing-accounts list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "billing-accounts-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -148,7 +148,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.Billing/billingAccounts
 # operationId: BillingAccounts_List
-export def "providers-microsoft-billing-billing-accounts list" [
+export def "billing-accounts-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -185,7 +185,7 @@ export def "providers-microsoft-billing-billing-accounts list" [
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}
 # operationId: BillingAccounts_Get
-export def "providers-microsoft-billing-billing-accounts get" [
+export def "billing-accounts-get" [
   billing_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -225,7 +225,7 @@ export def "providers-microsoft-billing-billing-accounts get" [
 # PATCH /providers/Microsoft.Billing/billingAccounts/{billingAccountName}
 # operationId: BillingAccounts_Update
 # --properties shape: {address?: any, billingProfiles?: list, departments?: list, enrollmentAccounts?: list, enrollmentDetails?: any}
-export def "providers-microsoft-billing-billing-accounts update" [
+export def "billing-accounts-update" [
   billing_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -267,7 +267,7 @@ export def "providers-microsoft-billing-billing-accounts update" [
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/agreements
 # operationId: Agreements_ListByBillingAccount
-export def "providers-microsoft-billing-billing-accounts-agreements list" [
+export def "agreements-list-by-billing-account" [
   billing_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -306,7 +306,7 @@ export def "providers-microsoft-billing-billing-accounts-agreements list" [
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/agreements/{agreementName}
 # operationId: Agreements_Get
-export def "providers-microsoft-billing-billing-accounts-agreements get" [
+export def "agreements-get" [
   billing_account_name: string
   agreement_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -347,7 +347,7 @@ export def "providers-microsoft-billing-billing-accounts-agreements get" [
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingPermissions
 # operationId: BillingPermissions_ListByBillingAccount
-export def "providers-microsoft-billing-billing-accounts-billing-permissions list" [
+export def "billing-permissions-list-by-billing-account" [
   billing_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -385,7 +385,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-permissions lis
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles
 # operationId: BillingProfiles_ListByBillingAccount
-export def "providers-microsoft-billing-billing-accounts-billing-profiles list" [
+export def "billing-profiles-list-by-billing-account" [
   billing_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -424,7 +424,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles list" 
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}
 # operationId: BillingProfiles_Get
-export def "providers-microsoft-billing-billing-accounts-billing-profiles get" [
+export def "billing-profiles-get" [
   billing_account_name: string
   billing_profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -466,7 +466,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles get" [
 # PATCH /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}
 # operationId: BillingProfiles_Update
 # --properties shape: {address?: any, displayName?: string, enabledAzurePlans?: list, invoiceEmailOptIn?: bool, invoiceSections?: list, poNumber?: string}
-export def "providers-microsoft-billing-billing-accounts-billing-profiles update" [
+export def "billing-profiles-update" [
   billing_account_name: string
   billing_profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -512,7 +512,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles update
 # operationId: BillingProfiles_Create
 # --address shape: {addressLine1?: string, addressLine2?: string, addressLine3?: string, city?: string, companyName?: string, country?: string, firstName?: string, lastName?: string, postalCode?: string, region?: string}
 # --enabledAzurePlans item shape: {skuId?: string}
-export def "providers-microsoft-billing-billing-accounts-billing-profiles create" [
+export def "billing-profiles-create" [
   billing_account_name: string
   billing_profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -560,7 +560,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles create
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/availableBalance/default
 # operationId: AvailableBalances_GetByBillingProfile
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-available-balance-default get" [
+export def "available-balances-get-by-billing-profile" [
   billing_account_name: string
   billing_profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -600,7 +600,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-availa
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/billingPermissions
 # operationId: BillingPermissions_ListByBillingProfile
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-billing-permissions list" [
+export def "billing-permissions-list-by-billing-profile" [
   billing_account_name: string
   billing_profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -640,7 +640,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-billin
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/billingRoleAssignments
 # operationId: BillingRoleAssignments_ListByBillingProfile
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-billing-role-assignments list" [
+export def "billing-role-assignments-list-by-billing-profile" [
   billing_account_name: string
   billing_profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -680,7 +680,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-billin
 #
 # DELETE /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/billingRoleAssignments/{billingRoleAssignmentName}
 # operationId: BillingRoleAssignments_DeleteByBillingProfile
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-billing-role-assignments delete" [
+export def "billing-role-assignments-delete-by-billing-profile" [
   billing_account_name: string
   billing_profile_name: string
   billing_role_assignment_name: string
@@ -722,7 +722,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-billin
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/billingRoleAssignments/{billingRoleAssignmentName}
 # operationId: BillingRoleAssignments_GetByBillingProfile
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-billing-role-assignments get" [
+export def "billing-role-assignments-get-by-billing-profile" [
   billing_account_name: string
   billing_profile_name: string
   billing_role_assignment_name: string
@@ -764,7 +764,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-billin
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/billingRoleDefinitions
 # operationId: BillingRoleDefinitions_ListByBillingProfile
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-billing-role-definitions list" [
+export def "billing-role-definitions-list-by-billing-profile" [
   billing_account_name: string
   billing_profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -804,7 +804,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-billin
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/billingRoleDefinitions/{billingRoleDefinitionName}
 # operationId: BillingRoleDefinitions_GetByBillingProfile
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-billing-role-definitions get" [
+export def "billing-role-definitions-get-by-billing-profile" [
   billing_account_name: string
   billing_profile_name: string
   billing_role_definition_name: string
@@ -847,7 +847,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-billin
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/billingSubscriptions
 # Docs: https://docs.microsoft.com/en-us/rest/api/billing/
 # operationId: BillingSubscriptions_ListByBillingProfile
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-billing-subscriptions list" [
+export def "billing-subscriptions-list-by-billing-profile" [
   billing_account_name: string
   billing_profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -887,7 +887,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-billin
 #
 # POST /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/createBillingRoleAssignment
 # operationId: BillingRoleAssignments_AddByBillingProfile
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-create-billing-role-assignment create" [
+export def "billing-role-assignments-add-by-billing-profile" [
   billing_account_name: string
   billing_profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -932,7 +932,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-create
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/customers
 # operationId: Customers_ListByBillingProfile
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-customers list" [
+export def "customers-list-by-billing-profile" [
   billing_account_name: string
   billing_profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -975,7 +975,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-custom
 # POST /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/customers/{customerName}/initiateTransfer
 # operationId: PartnerTransfers_Initiate
 # --properties shape: {recipientEmailId?: string, resellerId?: string}
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-customers-initiate-transfer create-partner" [
+export def "partner-transfers-initiate" [
   billing_account_name: string
   billing_profile_name: string
   customer_name: string
@@ -1019,7 +1019,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-custom
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/customers/{customerName}/transfers
 # operationId: PartnerTransfers_List
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-customers-transfers list-partner" [
+export def "partner-transfers-list" [
   billing_account_name: string
   billing_profile_name: string
   customer_name: string
@@ -1059,7 +1059,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-custom
 #
 # DELETE /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/customers/{customerName}/transfers/{transferName}
 # operationId: PartnerTransfers_Cancel
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-customers-transfers cancel-partner" [
+export def "partner-transfers-cancel" [
   billing_account_name: string
   billing_profile_name: string
   customer_name: string
@@ -1101,7 +1101,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-custom
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/customers/{customerName}/transfers/{transferName}
 # operationId: PartnerTransfers_Get
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-customers-transfers get-partner" [
+export def "partner-transfers-get" [
   billing_account_name: string
   billing_profile_name: string
   customer_name: string
@@ -1144,7 +1144,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-custom
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/instructions
 # Docs: https://docs.microsoft.com/en-us/rest/api/billing/
 # operationId: Instructions_ListByBillingProfile
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-instructions list" [
+export def "instructions-list-by-billing-profile" [
   billing_account_name: string
   billing_profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1184,7 +1184,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-instru
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/instructions/{instructionName}
 # operationId: Instructions_Get
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-instructions get" [
+export def "instructions-get" [
   billing_account_name: string
   billing_profile_name: string
   instruction_name: string
@@ -1227,7 +1227,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-instru
 # PUT /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/instructions/{instructionName}
 # operationId: Instructions_Put
 # --properties shape: {amount: float, endDate: string, startDate: string}
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-instructions update" [
+export def "instructions-put" [
   billing_account_name: string
   billing_profile_name: string
   instruction_name: string
@@ -1273,7 +1273,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-instru
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/invoiceSections
 # operationId: InvoiceSections_ListByBillingProfile
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoice-sections list" [
+export def "invoice-sections-list-by-billing-profile" [
   billing_account_name: string
   billing_profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1313,7 +1313,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/invoiceSections/{invoiceSectionName}
 # operationId: InvoiceSections_Get
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoice-sections get" [
+export def "invoice-sections-get" [
   billing_account_name: string
   billing_profile_name: string
   invoice_section_name: string
@@ -1356,7 +1356,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 # PATCH /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/invoiceSections/{invoiceSectionName}
 # operationId: InvoiceSections_Update
 # --properties shape: {displayName?: string}
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoice-sections update" [
+export def "invoice-sections-update" [
   billing_account_name: string
   billing_profile_name: string
   invoice_section_name: string
@@ -1402,7 +1402,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 #
 # PUT /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/invoiceSections/{invoiceSectionName}
 # operationId: InvoiceSections_Create
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoice-sections create" [
+export def "invoice-sections-create" [
   billing_account_name: string
   billing_profile_name: string
   invoice_section_name: string
@@ -1448,7 +1448,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/invoiceSections/{invoiceSectionName}/billingPermissions
 # operationId: BillingPermissions_ListByInvoiceSections
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoice-sections-billing-permissions list" [
+export def "billing-permissions-list-by-invoice-sections" [
   billing_account_name: string
   billing_profile_name: string
   invoice_section_name: string
@@ -1490,7 +1490,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/invoiceSections/{invoiceSectionName}/billingRoleAssignments
 # operationId: BillingRoleAssignments_ListByInvoiceSection
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoice-sections-billing-role-assignments list" [
+export def "billing-role-assignments-list-by-invoice-section" [
   billing_account_name: string
   billing_profile_name: string
   invoice_section_name: string
@@ -1532,7 +1532,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 #
 # DELETE /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/invoiceSections/{invoiceSectionName}/billingRoleAssignments/{billingRoleAssignmentName}
 # operationId: BillingRoleAssignments_DeleteByInvoiceSection
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoice-sections-billing-role-assignments delete" [
+export def "billing-role-assignments-delete-by-invoice-section" [
   billing_account_name: string
   billing_profile_name: string
   invoice_section_name: string
@@ -1576,7 +1576,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/invoiceSections/{invoiceSectionName}/billingRoleAssignments/{billingRoleAssignmentName}
 # operationId: BillingRoleAssignments_GetByInvoiceSection
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoice-sections-billing-role-assignments get" [
+export def "billing-role-assignments-get-by-invoice-section" [
   billing_account_name: string
   billing_profile_name: string
   invoice_section_name: string
@@ -1620,7 +1620,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/invoiceSections/{invoiceSectionName}/billingRoleDefinitions
 # operationId: BillingRoleDefinitions_ListByInvoiceSection
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoice-sections-billing-role-definitions list" [
+export def "billing-role-definitions-list-by-invoice-section" [
   billing_account_name: string
   billing_profile_name: string
   invoice_section_name: string
@@ -1662,7 +1662,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/invoiceSections/{invoiceSectionName}/billingRoleDefinitions/{billingRoleDefinitionName}
 # operationId: BillingRoleDefinitions_GetByInvoiceSection
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoice-sections-billing-role-definitions get" [
+export def "billing-role-definitions-get-by-invoice-section" [
   billing_account_name: string
   billing_profile_name: string
   invoice_section_name: string
@@ -1707,7 +1707,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/invoiceSections/{invoiceSectionName}/billingSubscriptions
 # Docs: https://docs.microsoft.com/en-us/rest/api/billing/
 # operationId: BillingSubscriptions_ListByInvoiceSection
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoice-sections-billing-subscriptions list" [
+export def "billing-subscriptions-list-by-invoice-section" [
   billing_account_name: string
   billing_profile_name: string
   invoice_section_name: string
@@ -1750,7 +1750,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/invoiceSections/{invoiceSectionName}/billingSubscriptions/{billingSubscriptionName}
 # Docs: https://docs.microsoft.com/en-us/rest/api/billing/
 # operationId: BillingSubscriptions_Get
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoice-sections-billing-subscriptions get" [
+export def "billing-subscriptions-get" [
   billing_account_name: string
   billing_profile_name: string
   invoice_section_name: string
@@ -1794,7 +1794,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 #
 # POST /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/invoiceSections/{invoiceSectionName}/billingSubscriptions/{billingSubscriptionName}/transfer
 # operationId: BillingSubscriptions_Transfer
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoice-sections-billing-subscriptions-transfer create" [
+export def "billing-subscriptions-transfer" [
   billing_account_name: string
   billing_profile_name: string
   invoice_section_name: string
@@ -1841,7 +1841,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 #
 # POST /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/invoiceSections/{invoiceSectionName}/billingSubscriptions/{billingSubscriptionName}/validateTransferEligibility
 # operationId: BillingSubscriptions_ValidateTransfer
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoice-sections-billing-subscriptions-validate-transfer-eligibility validate" [
+export def "billing-subscriptions-validate-transfer" [
   billing_account_name: string
   billing_profile_name: string
   invoice_section_name: string
@@ -1888,7 +1888,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 #
 # POST /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/invoiceSections/{invoiceSectionName}/createBillingRoleAssignment
 # operationId: BillingRoleAssignments_AddByInvoiceSection
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoice-sections-create-billing-role-assignment create" [
+export def "billing-role-assignments-add-by-invoice-section" [
   billing_account_name: string
   billing_profile_name: string
   invoice_section_name: string
@@ -1935,7 +1935,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 #
 # POST /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/invoiceSections/{invoiceSectionName}/elevate
 # operationId: InvoiceSections_ElevateToBillingProfile
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoice-sections-elevate create" [
+export def "invoice-sections-elevate-to-billing-profile" [
   billing_account_name: string
   billing_profile_name: string
   invoice_section_name: string
@@ -1976,7 +1976,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 # POST /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/invoiceSections/{invoiceSectionName}/initiateTransfer
 # operationId: Transfers_Initiate
 # --properties shape: {recipientEmailId?: string, resellerId?: string}
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoice-sections-initiate-transfer create" [
+export def "transfers-initiate" [
   billing_account_name: string
   billing_profile_name: string
   invoice_section_name: string
@@ -2021,7 +2021,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/invoiceSections/{invoiceSectionName}/products
 # Docs: https://docs.microsoft.com/en-us/rest/api/billing/
 # operationId: Products_ListByInvoiceSection
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoice-sections-products list" [
+export def "products-list-by-invoice-section" [
   billing_account_name: string
   billing_profile_name: string
   invoice_section_name: string
@@ -2065,7 +2065,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/invoiceSections/{invoiceSectionName}/products/{productName}
 # Docs: https://docs.microsoft.com/en-us/rest/api/billing/
 # operationId: Products_Get
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoice-sections-products get" [
+export def "products-get" [
   billing_account_name: string
   billing_profile_name: string
   invoice_section_name: string
@@ -2109,7 +2109,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 #
 # POST /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/invoiceSections/{invoiceSectionName}/products/{productName}/transfer
 # operationId: Products_Transfer
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoice-sections-products-transfer create" [
+export def "products-transfer" [
   billing_account_name: string
   billing_profile_name: string
   invoice_section_name: string
@@ -2158,7 +2158,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 #
 # POST /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/invoiceSections/{invoiceSectionName}/products/{productName}/updateAutoRenew
 # operationId: Products_UpdateAutoRenewByInvoiceSection
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoice-sections-products-update-auto-renew update" [
+export def "products-update-auto-renew-by-invoice-section" [
   billing_account_name: string
   billing_profile_name: string
   invoice_section_name: string
@@ -2206,7 +2206,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 #
 # POST /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/invoiceSections/{invoiceSectionName}/products/{productName}/validateTransferEligibility
 # operationId: Products_ValidateTransfer
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoice-sections-products-validate-transfer-eligibility validate" [
+export def "products-validate-transfer" [
   billing_account_name: string
   billing_profile_name: string
   invoice_section_name: string
@@ -2254,7 +2254,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/invoiceSections/{invoiceSectionName}/transactions
 # Docs: https://docs.microsoft.com/en-us/rest/api/billing/
 # operationId: Transactions_ListByInvoiceSection
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoice-sections-transactions list" [
+export def "transactions-list-by-invoice-section" [
   billing_account_name: string
   billing_profile_name: string
   invoice_section_name: string
@@ -2299,7 +2299,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/invoiceSections/{invoiceSectionName}/transfers
 # operationId: Transfers_List
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoice-sections-transfers list" [
+export def "transfers-list" [
   billing_account_name: string
   billing_profile_name: string
   invoice_section_name: string
@@ -2339,7 +2339,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 #
 # DELETE /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/invoiceSections/{invoiceSectionName}/transfers/{transferName}
 # operationId: Transfers_Cancel
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoice-sections-transfers cancel" [
+export def "transfers-cancel" [
   billing_account_name: string
   billing_profile_name: string
   invoice_section_name: string
@@ -2381,7 +2381,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/invoiceSections/{invoiceSectionName}/transfers/{transferName}
 # operationId: Transfers_Get
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoice-sections-transfers get" [
+export def "transfers-get" [
   billing_account_name: string
   billing_profile_name: string
   invoice_section_name: string
@@ -2423,7 +2423,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/invoices
 # operationId: Invoices_ListByBillingProfile
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoices list" [
+export def "invoices-list-by-billing-profile" [
   billing_account_name: string
   billing_profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2465,7 +2465,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/invoices/{invoiceName}
 # operationId: Invoices_Get
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoices get" [
+export def "invoices-get" [
   billing_account_name: string
   billing_profile_name: string
   invoice_name: string
@@ -2507,7 +2507,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 #
 # POST /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/invoices/{invoiceName}/pricesheet/default/download
 # operationId: PriceSheet_Download
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoices-pricesheet-default-download download-price-sheet" [
+export def "price-sheet-download" [
   billing_account_name: string
   billing_profile_name: string
   invoice_name: string
@@ -2550,7 +2550,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/paymentMethods
 # Docs: https://docs.microsoft.com/en-us/rest/api/billing/
 # operationId: PaymentMethods_ListByBillingProfile
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-payment-methods list" [
+export def "payment-methods-list-by-billing-profile" [
   billing_account_name: string
   billing_profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2591,7 +2591,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-paymen
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/policies/default
 # Docs: https://docs.microsoft.com/en-us/rest/api/billing/
 # operationId: Policies_GetByBillingProfile
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-policies-default get" [
+export def "policies-get-by-billing-profile" [
   billing_account_name: string
   billing_profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2632,7 +2632,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-polici
 # PUT /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/policies/default
 # operationId: Policies_Update
 # --properties shape: {marketplacePurchases?: "AllAllowed"|"OnlyFreeAllowed"|"NotAllowed", reservationPurchases?: "Allowed"|"NotAllowed", viewCharges?: "Allowed"|"NotAllowed"}
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-policies-default update" [
+export def "policies-update" [
   billing_account_name: string
   billing_profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2676,7 +2676,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-polici
 #
 # POST /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/pricesheet/default/download
 # operationId: PriceSheet_DownloadByBillingProfile
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-pricesheet-default-download download-price-sheet" [
+export def "price-sheet-download-by-billing-profile" [
   billing_account_name: string
   billing_profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2717,7 +2717,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-prices
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/transactions
 # Docs: https://docs.microsoft.com/en-us/rest/api/billing/
 # operationId: Transactions_ListByBillingProfile
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-transactions list" [
+export def "transactions-list-by-billing-profile" [
   billing_account_name: string
   billing_profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2761,7 +2761,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-transa
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingProfiles/{billingProfileName}/transactions/{transactionName}
 # Docs: https://docs.microsoft.com/en-us/rest/api/billing/
 # operationId: Transactions_Get
-export def "providers-microsoft-billing-billing-accounts-billing-profiles-transactions get" [
+export def "transactions-get" [
   billing_account_name: string
   billing_profile_name: string
   transaction_name: string
@@ -2805,7 +2805,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-transa
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingRoleAssignments
 # operationId: BillingRoleAssignments_ListByBillingAccount
-export def "providers-microsoft-billing-billing-accounts-billing-role-assignments list" [
+export def "billing-role-assignments-list-by-billing-account" [
   billing_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2843,7 +2843,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-role-assignment
 #
 # DELETE /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingRoleAssignments/{billingRoleAssignmentName}
 # operationId: BillingRoleAssignments_DeleteByBillingAccount
-export def "providers-microsoft-billing-billing-accounts-billing-role-assignments delete" [
+export def "billing-role-assignments-delete-by-billing-account" [
   billing_account_name: string
   billing_role_assignment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2883,7 +2883,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-role-assignment
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingRoleAssignments/{billingRoleAssignmentName}
 # operationId: BillingRoleAssignments_GetByBillingAccount
-export def "providers-microsoft-billing-billing-accounts-billing-role-assignments get" [
+export def "billing-role-assignments-get-by-billing-account" [
   billing_account_name: string
   billing_role_assignment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2923,7 +2923,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-role-assignment
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingRoleDefinitions
 # operationId: BillingRoleDefinitions_ListByBillingAccount
-export def "providers-microsoft-billing-billing-accounts-billing-role-definitions list" [
+export def "billing-role-definitions-list-by-billing-account" [
   billing_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2961,7 +2961,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-role-definition
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingRoleDefinitions/{billingRoleDefinitionName}
 # operationId: BillingRoleDefinitions_GetByBillingAccount
-export def "providers-microsoft-billing-billing-accounts-billing-role-definitions get" [
+export def "billing-role-definitions-get-by-billing-account" [
   billing_account_name: string
   billing_role_definition_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3002,7 +3002,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-role-definition
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingSubscriptions
 # Docs: https://docs.microsoft.com/en-us/rest/api/billing/
 # operationId: BillingSubscriptions_ListByBillingAccount
-export def "providers-microsoft-billing-billing-accounts-billing-subscriptions list" [
+export def "billing-subscriptions-list-by-billing-account" [
   billing_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3041,7 +3041,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-subscriptions l
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingSubscriptions/{billingSubscriptionName}/invoices
 # Docs: https://docs.microsoft.com/en-us/rest/api/billing/
 # operationId: Invoices_ListByBillingSubscription
-export def "providers-microsoft-billing-billing-accounts-billing-subscriptions-invoices list" [
+export def "invoices-list-by-billing-subscription" [
   billing_account_name: string
   billing_subscription_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3084,7 +3084,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-subscriptions-i
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/billingSubscriptions/{billingSubscriptionName}/invoices/{invoiceName}
 # Docs: https://docs.microsoft.com/en-us/rest/api/billing/
 # operationId: Invoices_GetById
-export def "providers-microsoft-billing-billing-accounts-billing-subscriptions-invoices get" [
+export def "invoices-get-by-id" [
   billing_account_name: string
   billing_subscription_name: string
   invoice_name: string
@@ -3126,7 +3126,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-subscriptions-i
 #
 # POST /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/createBillingRoleAssignment
 # operationId: BillingRoleAssignments_AddByBillingAccount
-export def "providers-microsoft-billing-billing-accounts-create-billing-role-assignment create" [
+export def "billing-role-assignments-add-by-billing-account" [
   billing_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3169,7 +3169,7 @@ export def "providers-microsoft-billing-billing-accounts-create-billing-role-ass
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/customers
 # operationId: Customers_ListByBillingAccount
-export def "providers-microsoft-billing-billing-accounts-customers list" [
+export def "customers-list-by-billing-account" [
   billing_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3209,7 +3209,7 @@ export def "providers-microsoft-billing-billing-accounts-customers list" [
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/customers/{customerName}
 # operationId: Customers_Get
-export def "providers-microsoft-billing-billing-accounts-customers get" [
+export def "customers-get" [
   billing_account_name: string
   customer_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3250,7 +3250,7 @@ export def "providers-microsoft-billing-billing-accounts-customers get" [
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/customers/{customerName}/billingPermissions
 # operationId: BillingPermissions_ListByCustomer
-export def "providers-microsoft-billing-billing-accounts-customers-billing-permissions list" [
+export def "billing-permissions-list-by-customer" [
   billing_account_name: string
   customer_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3291,7 +3291,7 @@ export def "providers-microsoft-billing-billing-accounts-customers-billing-permi
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/customers/{customerName}/billingSubscriptions
 # Docs: https://docs.microsoft.com/en-us/rest/api/consumption/
 # operationId: BillingSubscriptions_ListByCustomer
-export def "providers-microsoft-billing-billing-accounts-customers-billing-subscriptions list" [
+export def "billing-subscriptions-list-by-customer" [
   billing_account_name: string
   customer_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3332,7 +3332,7 @@ export def "providers-microsoft-billing-billing-accounts-customers-billing-subsc
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/customers/{customerName}/billingSubscriptions/{billingSubscriptionName}
 # Docs: https://docs.microsoft.com/en-us/rest/api/consumption/
 # operationId: BillingSubscriptions_GetByCustomer
-export def "providers-microsoft-billing-billing-accounts-customers-billing-subscriptions get" [
+export def "billing-subscriptions-get-by-customer" [
   billing_account_name: string
   customer_name: string
   billing_subscription_name: string
@@ -3375,7 +3375,7 @@ export def "providers-microsoft-billing-billing-accounts-customers-billing-subsc
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/customers/{customerName}/policies/default
 # Docs: https://docs.microsoft.com/en-us/rest/api/billing/
 # operationId: Policies_GetByCustomer
-export def "providers-microsoft-billing-billing-accounts-customers-policies-default get" [
+export def "policies-get-by-customer" [
   billing_account_name: string
   customer_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3416,7 +3416,7 @@ export def "providers-microsoft-billing-billing-accounts-customers-policies-defa
 # PUT /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/customers/{customerName}/policies/default
 # operationId: Policies_UpdateCustomer
 # --properties shape: {viewCharges?: "Allowed"|"NotAllowed"}
-export def "providers-microsoft-billing-billing-accounts-customers-policies-default update" [
+export def "policies-update-customer" [
   billing_account_name: string
   customer_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3461,7 +3461,7 @@ export def "providers-microsoft-billing-billing-accounts-customers-policies-defa
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/customers/{customerName}/products
 # Docs: https://docs.microsoft.com/en-us/rest/api/billing/
 # operationId: Products_ListByCustomer
-export def "providers-microsoft-billing-billing-accounts-customers-products list" [
+export def "products-list-by-customer" [
   billing_account_name: string
   customer_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3503,7 +3503,7 @@ export def "providers-microsoft-billing-billing-accounts-customers-products list
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/customers/{customerName}/products/{productName}
 # Docs: https://docs.microsoft.com/en-us/rest/api/billing/
 # operationId: Products_GetByCustomer
-export def "providers-microsoft-billing-billing-accounts-customers-products get" [
+export def "products-get-by-customer" [
   billing_account_name: string
   customer_name: string
   product_name: string
@@ -3546,7 +3546,7 @@ export def "providers-microsoft-billing-billing-accounts-customers-products get"
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/customers/{customerName}/transactions
 # Docs: https://docs.microsoft.com/en-us/rest/api/consumption/
 # operationId: Transactions_ListByCustomer
-export def "providers-microsoft-billing-billing-accounts-customers-transactions list" [
+export def "transactions-list-by-customer" [
   billing_account_name: string
   customer_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3589,7 +3589,7 @@ export def "providers-microsoft-billing-billing-accounts-customers-transactions 
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/departments
 # operationId: Departments_ListByBillingAccountName
-export def "providers-microsoft-billing-billing-accounts-departments list-by-name" [
+export def "departments-list-by-billing-account-name" [
   billing_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3629,7 +3629,7 @@ export def "providers-microsoft-billing-billing-accounts-departments list-by-nam
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/departments/{departmentName}
 # operationId: Departments_Get
-export def "providers-microsoft-billing-billing-accounts-departments get" [
+export def "departments-get" [
   billing_account_name: string
   department_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3671,7 +3671,7 @@ export def "providers-microsoft-billing-billing-accounts-departments get" [
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/enrollmentAccounts
 # operationId: EnrollmentAccounts_ListByBillingAccountName
-export def "providers-microsoft-billing-billing-accounts-enrollment-accounts list-by-name" [
+export def "enrollment-accounts-list-by-billing-account-name" [
   billing_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3711,7 +3711,7 @@ export def "providers-microsoft-billing-billing-accounts-enrollment-accounts lis
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/enrollmentAccounts/{enrollmentAccountName}
 # operationId: EnrollmentAccounts_GetByEnrollmentAccountId
-export def "providers-microsoft-billing-billing-accounts-enrollment-accounts get" [
+export def "enrollment-accounts-get-by-enrollment-account-id" [
   billing_account_name: string
   enrollment_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3753,7 +3753,7 @@ export def "providers-microsoft-billing-billing-accounts-enrollment-accounts get
 #
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/invoices
 # operationId: Invoices_ListByBillingAccount
-export def "providers-microsoft-billing-billing-accounts-invoices list" [
+export def "invoices-list-by-billing-account" [
   billing_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3793,7 +3793,7 @@ export def "providers-microsoft-billing-billing-accounts-invoices list" [
 #
 # POST /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/listInvoiceSectionsWithCreateSubscriptionPermission
 # operationId: BillingAccounts_ListInvoiceSectionsByCreateSubscriptionPermission
-export def "providers-microsoft-billing-billing-accounts-list-invoice-sections-with-create-subscription-permission list" [
+export def "billing-accounts-list-invoice-sections-by-create-subscription-permission" [
   billing_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3832,7 +3832,7 @@ export def "providers-microsoft-billing-billing-accounts-list-invoice-sections-w
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/paymentMethods
 # Docs: https://docs.microsoft.com/en-us/rest/api/billing/2019-10-01-preview/paymentmethods
 # operationId: PaymentMethods_ListByBillingAccount
-export def "providers-microsoft-billing-billing-accounts-payment-methods list" [
+export def "payment-methods-list-by-billing-account" [
   billing_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3871,7 +3871,7 @@ export def "providers-microsoft-billing-billing-accounts-payment-methods list" [
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/products
 # Docs: https://docs.microsoft.com/en-us/rest/api/billing/
 # operationId: Products_ListByBillingAccount
-export def "providers-microsoft-billing-billing-accounts-products list" [
+export def "products-list-by-billing-account" [
   billing_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3911,7 +3911,7 @@ export def "providers-microsoft-billing-billing-accounts-products list" [
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountName}/transactions
 # Docs: https://docs.microsoft.com/en-us/rest/api/billing/
 # operationId: Transactions_ListByBillingAccount
-export def "providers-microsoft-billing-billing-accounts-transactions list" [
+export def "transactions-list-by-billing-account" [
   billing_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3952,7 +3952,7 @@ export def "providers-microsoft-billing-billing-accounts-transactions list" [
 #
 # GET /providers/Microsoft.Billing/operations
 # operationId: Operations_List
-export def "providers-microsoft-billing-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3988,7 +3988,7 @@ export def "providers-microsoft-billing-operations list" [
 #
 # GET /providers/Microsoft.Billing/transfers
 # operationId: RecipientTransfers_List
-export def "providers-microsoft-billing-transfers list-recipient" [
+export def "recipient-transfers-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4022,7 +4022,7 @@ export def "providers-microsoft-billing-transfers list-recipient" [
 #
 # GET /providers/Microsoft.Billing/transfers/{transferName}
 # operationId: RecipientTransfers_Get
-export def "providers-microsoft-billing-transfers get-recipient" [
+export def "recipient-transfers-get" [
   transfer_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4059,7 +4059,7 @@ export def "providers-microsoft-billing-transfers get-recipient" [
 # POST /providers/Microsoft.Billing/transfers/{transferName}/acceptTransfer
 # operationId: RecipientTransfers_Accept
 # --properties shape: {productDetails?: list}
-export def "providers-microsoft-billing-transfers-accept-transfer create-recipient" [
+export def "recipient-transfers-accept" [
   transfer_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4099,7 +4099,7 @@ export def "providers-microsoft-billing-transfers-accept-transfer create-recipie
 #
 # POST /providers/Microsoft.Billing/transfers/{transferName}/declineTransfer
 # operationId: RecipientTransfers_Decline
-export def "providers-microsoft-billing-transfers-decline-transfer create-recipient" [
+export def "recipient-transfers-decline" [
   transfer_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4136,7 +4136,7 @@ export def "providers-microsoft-billing-transfers-decline-transfer create-recipi
 # POST /providers/Microsoft.Billing/transfers/{transferName}/validateTransfer
 # operationId: RecipientTransfers_Validate
 # --properties shape: {productDetails?: list}
-export def "providers-microsoft-billing-transfers-validate-transfer validate-recipient" [
+export def "recipient-transfers-validate" [
   transfer_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4176,7 +4176,7 @@ export def "providers-microsoft-billing-transfers-validate-transfer validate-rec
 #
 # POST /providers/Microsoft.Billing/validateAddress
 # operationId: Address_Validate
-export def "providers-microsoft-billing-validate-address validate" [
+export def "address-validate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4225,7 +4225,7 @@ export def "providers-microsoft-billing-validate-address validate" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Billing/billingAccounts/default/lineOfCredit/default
 # operationId: LineOfCredits_Get
-export def "subscriptions-providers-microsoft-billing-billing-accounts-default-line-of-credit-default get" [
+export def "line-of-credits-get" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4264,7 +4264,7 @@ export def "subscriptions-providers-microsoft-billing-billing-accounts-default-l
 # PUT /subscriptions/{subscriptionId}/providers/Microsoft.Billing/billingAccounts/default/lineOfCredit/default
 # operationId: LineOfCredits_Update
 # --properties shape: {creditLimit?: any, remainingBalance?: any, status?: "Approved"|"Rejected"}
-export def "subscriptions-providers-microsoft-billing-billing-accounts-default-line-of-credit-default update" [
+export def "line-of-credits-update" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4307,7 +4307,7 @@ export def "subscriptions-providers-microsoft-billing-billing-accounts-default-l
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Billing/billingProperty/default
 # Docs: https://docs.microsoft.com/en-us/rest/api/billing/
 # operationId: BillingProperty_Get
-export def "subscriptions-providers-microsoft-billing-billing-property-default get" [
+export def "billing-property-get" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

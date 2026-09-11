@@ -165,7 +165,7 @@ def x-amz-target-completer-64 [] { ["WorkspacesService.UpdateWorkspaceImagePermi
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-associate-connection-alias" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associate-connection-alias" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -189,7 +189,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AssociateConnectionAlias
-export def "api create-associate-connection-alias" [
+export def "associate-connection-alias" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -238,7 +238,7 @@ export def "api create-associate-connection-alias" [
 #
 # POST /
 # operationId: AssociateIpGroups
-export def "api create-associate-ip-groups" [
+export def "associate-ip-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -287,7 +287,7 @@ export def "api create-associate-ip-groups" [
 #
 # POST /
 # operationId: AuthorizeIpRules
-export def "api create-authorize-ip-rules" [
+export def "authorize-ip-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -336,7 +336,7 @@ export def "api create-authorize-ip-rules" [
 #
 # POST /
 # operationId: CopyWorkspaceImage
-export def "api copy-workspace-image" [
+export def "copy-workspace-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -388,7 +388,7 @@ export def "api copy-workspace-image" [
 #
 # POST /
 # operationId: CreateConnectClientAddIn
-export def "api create-connect-client" [
+export def "create-connect-client-add-in" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -438,7 +438,7 @@ export def "api create-connect-client" [
 #
 # POST /
 # operationId: CreateConnectionAlias
-export def "api create-connection-alias" [
+export def "create-connection-alias" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -487,7 +487,7 @@ export def "api create-connection-alias" [
 #
 # POST /
 # operationId: CreateIpGroup
-export def "api create-ip-group" [
+export def "create-ip-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -538,7 +538,7 @@ export def "api create-ip-group" [
 #
 # POST /
 # operationId: CreateStandbyWorkspaces
-export def "api create-standby-workspaces" [
+export def "create-standby-workspaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -587,7 +587,7 @@ export def "api create-standby-workspaces" [
 #
 # POST /
 # operationId: CreateTags
-export def "api create-tags" [
+export def "create-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -636,7 +636,7 @@ export def "api create-tags" [
 #
 # POST /
 # operationId: CreateUpdatedWorkspaceImage
-export def "api create-updated-workspace-image" [
+export def "create-updated-workspace-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -690,7 +690,7 @@ export def "api create-updated-workspace-image" [
 # --ComputeType shape: {Name?: any}
 # --UserStorage shape: {Capacity?: any}
 # --RootStorage shape: {Capacity?: any}
-export def "api create-workspace-bundle" [
+export def "create-workspace-bundle" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -744,7 +744,7 @@ export def "api create-workspace-bundle" [
 #
 # POST /
 # operationId: CreateWorkspaceImage
-export def "api create-workspace-image" [
+export def "create-workspace-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -795,7 +795,7 @@ export def "api create-workspace-image" [
 #
 # POST /
 # operationId: CreateWorkspaces
-export def "api create-workspaces" [
+export def "create-workspaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -843,7 +843,7 @@ export def "api create-workspaces" [
 #
 # POST /
 # operationId: DeleteClientBranding
-export def "api delete-client-branding" [
+export def "delete-client-branding" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -892,7 +892,7 @@ export def "api delete-client-branding" [
 #
 # POST /
 # operationId: DeleteConnectClientAddIn
-export def "api delete-connect-client-create" [
+export def "delete-connect-client-add-in" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -941,7 +941,7 @@ export def "api delete-connect-client-create" [
 #
 # POST /
 # operationId: DeleteConnectionAlias
-export def "api delete-connection-alias" [
+export def "delete-connection-alias" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -989,7 +989,7 @@ export def "api delete-connection-alias" [
 #
 # POST /
 # operationId: DeleteIpGroup
-export def "api delete-ip-group" [
+export def "delete-ip-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1037,7 +1037,7 @@ export def "api delete-ip-group" [
 #
 # POST /
 # operationId: DeleteTags
-export def "api delete-tags" [
+export def "delete-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1086,7 +1086,7 @@ export def "api delete-tags" [
 #
 # POST /
 # operationId: DeleteWorkspaceBundle
-export def "api delete-workspace-bundle" [
+export def "delete-workspace-bundle" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1134,7 +1134,7 @@ export def "api delete-workspace-bundle" [
 #
 # POST /
 # operationId: DeleteWorkspaceImage
-export def "api delete-workspace-image" [
+export def "delete-workspace-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1182,7 +1182,7 @@ export def "api delete-workspace-image" [
 #
 # POST /
 # operationId: DeregisterWorkspaceDirectory
-export def "api create-deregister-workspace-directory" [
+export def "deregister-workspace-directory" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1230,7 +1230,7 @@ export def "api create-deregister-workspace-directory" [
 #
 # POST /
 # operationId: DescribeAccount
-export def "api get-account" [
+export def "describe-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1278,7 +1278,7 @@ export def "api get-account" [
 #
 # POST /
 # operationId: DescribeAccountModifications
-export def "api get-account-modifications" [
+export def "describe-account-modifications" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1326,7 +1326,7 @@ export def "api get-account-modifications" [
 #
 # POST /
 # operationId: DescribeClientBranding
-export def "api get-client-branding" [
+export def "describe-client-branding" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1374,7 +1374,7 @@ export def "api get-client-branding" [
 #
 # POST /
 # operationId: DescribeClientProperties
-export def "api get-client-properties" [
+export def "describe-client-properties" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1422,7 +1422,7 @@ export def "api get-client-properties" [
 #
 # POST /
 # operationId: DescribeConnectClientAddIns
-export def "api get-connect-client-create-ins" [
+export def "describe-connect-client-add-ins" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1472,7 +1472,7 @@ export def "api get-connect-client-create-ins" [
 #
 # POST /
 # operationId: DescribeConnectionAliasPermissions
-export def "api get-connection-alias-permissions" [
+export def "describe-connection-alias-permissions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1522,7 +1522,7 @@ export def "api get-connection-alias-permissions" [
 #
 # POST /
 # operationId: DescribeConnectionAliases
-export def "api get-connection-aliases" [
+export def "describe-connection-aliases" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1573,7 +1573,7 @@ export def "api get-connection-aliases" [
 #
 # POST /
 # operationId: DescribeIpGroups
-export def "api get-ip-groups" [
+export def "describe-ip-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1623,7 +1623,7 @@ export def "api get-ip-groups" [
 #
 # POST /
 # operationId: DescribeTags
-export def "api get-tags" [
+export def "describe-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1671,7 +1671,7 @@ export def "api get-tags" [
 #
 # POST /
 # operationId: DescribeWorkspaceBundles
-export def "api get-workspace-bundles" [
+export def "describe-workspace-bundles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1723,7 +1723,7 @@ export def "api get-workspace-bundles" [
 #
 # POST /
 # operationId: DescribeWorkspaceDirectories
-export def "api get-workspace-directories" [
+export def "describe-workspace-directories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1775,7 +1775,7 @@ export def "api get-workspace-directories" [
 #
 # POST /
 # operationId: DescribeWorkspaceImagePermissions
-export def "api get-workspace-image-permissions" [
+export def "describe-workspace-image-permissions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1825,7 +1825,7 @@ export def "api get-workspace-image-permissions" [
 #
 # POST /
 # operationId: DescribeWorkspaceImages
-export def "api get-workspace-images" [
+export def "describe-workspace-images" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1876,7 +1876,7 @@ export def "api get-workspace-images" [
 #
 # POST /
 # operationId: DescribeWorkspaceSnapshots
-export def "api get-workspace-snapshots" [
+export def "describe-workspace-snapshots" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1924,7 +1924,7 @@ export def "api get-workspace-snapshots" [
 #
 # POST /
 # operationId: DescribeWorkspaces
-export def "api get-workspaces" [
+export def "describe-workspaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1980,7 +1980,7 @@ export def "api get-workspaces" [
 #
 # POST /
 # operationId: DescribeWorkspacesConnectionStatus
-export def "api get-workspaces-connection-status" [
+export def "describe-workspaces-connection-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2029,7 +2029,7 @@ export def "api get-workspaces-connection-status" [
 #
 # POST /
 # operationId: DisassociateConnectionAlias
-export def "api create-disassociate-connection-alias" [
+export def "disassociate-connection-alias" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2077,7 +2077,7 @@ export def "api create-disassociate-connection-alias" [
 #
 # POST /
 # operationId: DisassociateIpGroups
-export def "api create-disassociate-ip-groups" [
+export def "disassociate-ip-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2126,7 +2126,7 @@ export def "api create-disassociate-ip-groups" [
 #
 # POST /
 # operationId: ImportClientBranding
-export def "api import-client-branding" [
+export def "import-client-branding" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2180,7 +2180,7 @@ export def "api import-client-branding" [
 #
 # POST /
 # operationId: ImportWorkspaceImage
-export def "api import-workspace-image" [
+export def "import-workspace-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2233,7 +2233,7 @@ export def "api import-workspace-image" [
 #
 # POST /
 # operationId: ListAvailableManagementCidrRanges
-export def "api list-available-management-cidr-ranges" [
+export def "list-available-management-cidr-ranges" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2283,7 +2283,7 @@ export def "api list-available-management-cidr-ranges" [
 #
 # POST /
 # operationId: MigrateWorkspace
-export def "api create-migrate-workspace" [
+export def "migrate-workspace" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2332,7 +2332,7 @@ export def "api create-migrate-workspace" [
 #
 # POST /
 # operationId: ModifyAccount
-export def "api create-modify-account" [
+export def "modify-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2381,7 +2381,7 @@ export def "api create-modify-account" [
 #
 # POST /
 # operationId: ModifyCertificateBasedAuthProperties
-export def "api create-modify-certificate-based-auth-properties" [
+export def "modify-certificate-based-auth-properties" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2431,7 +2431,7 @@ export def "api create-modify-certificate-based-auth-properties" [
 #
 # POST /
 # operationId: ModifyClientProperties
-export def "api create-modify-client-properties" [
+export def "modify-client-properties" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2480,7 +2480,7 @@ export def "api create-modify-client-properties" [
 #
 # POST /
 # operationId: ModifySamlProperties
-export def "api create-modify-saml-properties" [
+export def "modify-saml-properties" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2530,7 +2530,7 @@ export def "api create-modify-saml-properties" [
 #
 # POST /
 # operationId: ModifySelfservicePermissions
-export def "api create-modify-selfservice-permissions" [
+export def "modify-selfservice-permissions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2579,7 +2579,7 @@ export def "api create-modify-selfservice-permissions" [
 #
 # POST /
 # operationId: ModifyWorkspaceAccessProperties
-export def "api create-modify-workspace-access-properties" [
+export def "modify-workspace-access-properties" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2628,7 +2628,7 @@ export def "api create-modify-workspace-access-properties" [
 #
 # POST /
 # operationId: ModifyWorkspaceCreationProperties
-export def "api create-modify-workspace-creation-properties" [
+export def "modify-workspace-creation-properties" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2677,7 +2677,7 @@ export def "api create-modify-workspace-creation-properties" [
 #
 # POST /
 # operationId: ModifyWorkspaceProperties
-export def "api create-modify-workspace-properties" [
+export def "modify-workspace-properties" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2726,7 +2726,7 @@ export def "api create-modify-workspace-properties" [
 #
 # POST /
 # operationId: ModifyWorkspaceState
-export def "api create-modify-workspace-state" [
+export def "modify-workspace-state" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2775,7 +2775,7 @@ export def "api create-modify-workspace-state" [
 #
 # POST /
 # operationId: RebootWorkspaces
-export def "api create-reboot-workspaces" [
+export def "reboot-workspaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2823,7 +2823,7 @@ export def "api create-reboot-workspaces" [
 #
 # POST /
 # operationId: RebuildWorkspaces
-export def "api create-rebuild-workspaces" [
+export def "rebuild-workspaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2871,7 +2871,7 @@ export def "api create-rebuild-workspaces" [
 #
 # POST /
 # operationId: RegisterWorkspaceDirectory
-export def "api create-workspace-directory" [
+export def "register-workspace-directory" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2924,7 +2924,7 @@ export def "api create-workspace-directory" [
 #
 # POST /
 # operationId: RestoreWorkspace
-export def "api create-restore-workspace" [
+export def "restore-workspace" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2972,7 +2972,7 @@ export def "api create-restore-workspace" [
 #
 # POST /
 # operationId: RevokeIpRules
-export def "api delete-ip-rules" [
+export def "revoke-ip-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3021,7 +3021,7 @@ export def "api delete-ip-rules" [
 #
 # POST /
 # operationId: StartWorkspaces
-export def "api start-workspaces" [
+export def "start-workspaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3069,7 +3069,7 @@ export def "api start-workspaces" [
 #
 # POST /
 # operationId: StopWorkspaces
-export def "api stop-workspaces" [
+export def "stop-workspaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3117,7 +3117,7 @@ export def "api stop-workspaces" [
 #
 # POST /
 # operationId: TerminateWorkspaces
-export def "api create-terminate-workspaces" [
+export def "terminate-workspaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3165,7 +3165,7 @@ export def "api create-terminate-workspaces" [
 #
 # POST /
 # operationId: UpdateConnectClientAddIn
-export def "api update-connect-client-create" [
+export def "update-connect-client-add-in" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3216,7 +3216,7 @@ export def "api update-connect-client-create" [
 #
 # POST /
 # operationId: UpdateConnectionAliasPermission
-export def "api update-connection-alias-permission" [
+export def "update-connection-alias-permission" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3265,7 +3265,7 @@ export def "api update-connection-alias-permission" [
 #
 # POST /
 # operationId: UpdateRulesOfIpGroup
-export def "api update-rules-of-ip-group" [
+export def "update-rules-of-ip-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3314,7 +3314,7 @@ export def "api update-rules-of-ip-group" [
 #
 # POST /
 # operationId: UpdateWorkspaceBundle
-export def "api update-workspace-bundle" [
+export def "update-workspace-bundle" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3363,7 +3363,7 @@ export def "api update-workspace-bundle" [
 #
 # POST /
 # operationId: UpdateWorkspaceImagePermission
-export def "api update-workspace-image-permission" [
+export def "update-workspace-image-permission" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

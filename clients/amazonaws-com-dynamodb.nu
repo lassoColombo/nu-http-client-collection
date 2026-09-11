@@ -154,7 +154,7 @@ def x-amz-target-completer-52 [] { ["DynamoDB_20120810.UpdateTimeToLive"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-batch-execute-statement" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "batch-execute-statement" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -178,7 +178,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: BatchExecuteStatement
-export def "api create-batch-execute-statement" [
+export def "batch-execute-statement" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -227,7 +227,7 @@ export def "api create-batch-execute-statement" [
 #
 # POST /
 # operationId: BatchGetItem
-export def "api get-batch-item" [
+export def "batch-get-item" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -278,7 +278,7 @@ export def "api get-batch-item" [
 #
 # POST /
 # operationId: BatchWriteItem
-export def "api create-batch-write-item" [
+export def "batch-write-item" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -328,7 +328,7 @@ export def "api create-batch-write-item" [
 #
 # POST /
 # operationId: CreateBackup
-export def "api create-backup" [
+export def "create-backup" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -377,7 +377,7 @@ export def "api create-backup" [
 #
 # POST /
 # operationId: CreateGlobalTable
-export def "api create-global-table" [
+export def "create-global-table" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -426,7 +426,7 @@ export def "api create-global-table" [
 #
 # POST /
 # operationId: CreateTable
-export def "api create-table" [
+export def "create-table" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -485,7 +485,7 @@ export def "api create-table" [
 #
 # POST /
 # operationId: DeleteBackup
-export def "api delete-backup" [
+export def "delete-backup" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -533,7 +533,7 @@ export def "api delete-backup" [
 #
 # POST /
 # operationId: DeleteItem
-export def "api delete-item" [
+export def "delete-item" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -590,7 +590,7 @@ export def "api delete-item" [
 #
 # POST /
 # operationId: DeleteTable
-export def "api delete-table" [
+export def "delete-table" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -638,7 +638,7 @@ export def "api delete-table" [
 #
 # POST /
 # operationId: DescribeBackup
-export def "api get-backup" [
+export def "describe-backup" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -686,7 +686,7 @@ export def "api get-backup" [
 #
 # POST /
 # operationId: DescribeContinuousBackups
-export def "api get-continuous-backups" [
+export def "describe-continuous-backups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -734,7 +734,7 @@ export def "api get-continuous-backups" [
 #
 # POST /
 # operationId: DescribeContributorInsights
-export def "api get-contributor-insights" [
+export def "describe-contributor-insights" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -783,7 +783,7 @@ export def "api get-contributor-insights" [
 #
 # POST /
 # operationId: DescribeEndpoints
-export def "api get-endpoints" [
+export def "describe-endpoints" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -831,7 +831,7 @@ export def "api get-endpoints" [
 #
 # POST /
 # operationId: DescribeExport
-export def "api get-export" [
+export def "describe-export" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -879,7 +879,7 @@ export def "api get-export" [
 #
 # POST /
 # operationId: DescribeGlobalTable
-export def "api get-global-table" [
+export def "describe-global-table" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -927,7 +927,7 @@ export def "api get-global-table" [
 #
 # POST /
 # operationId: DescribeGlobalTableSettings
-export def "api get-global-table-settings" [
+export def "describe-global-table-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -975,7 +975,7 @@ export def "api get-global-table-settings" [
 #
 # POST /
 # operationId: DescribeImport
-export def "api get-import" [
+export def "describe-import" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1023,7 +1023,7 @@ export def "api get-import" [
 #
 # POST /
 # operationId: DescribeKinesisStreamingDestination
-export def "api get-kinesis-streaming-destination" [
+export def "describe-kinesis-streaming-destination" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1071,7 +1071,7 @@ export def "api get-kinesis-streaming-destination" [
 #
 # POST /
 # operationId: DescribeLimits
-export def "api get-limits" [
+export def "describe-limits" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1119,7 +1119,7 @@ export def "api get-limits" [
 #
 # POST /
 # operationId: DescribeTable
-export def "api get-table" [
+export def "describe-table" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1167,7 +1167,7 @@ export def "api get-table" [
 #
 # POST /
 # operationId: DescribeTableReplicaAutoScaling
-export def "api get-table-replica-auto-scaling" [
+export def "describe-table-replica-auto-scaling" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1215,7 +1215,7 @@ export def "api get-table-replica-auto-scaling" [
 #
 # POST /
 # operationId: DescribeTimeToLive
-export def "api get-time-to-live" [
+export def "describe-time-to-live" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1263,7 +1263,7 @@ export def "api get-time-to-live" [
 #
 # POST /
 # operationId: DisableKinesisStreamingDestination
-export def "api disable-kinesis-streaming-destination" [
+export def "disable-kinesis-streaming-destination" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1312,7 +1312,7 @@ export def "api disable-kinesis-streaming-destination" [
 #
 # POST /
 # operationId: EnableKinesisStreamingDestination
-export def "api enable-kinesis-streaming-destination" [
+export def "enable-kinesis-streaming-destination" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1361,7 +1361,7 @@ export def "api enable-kinesis-streaming-destination" [
 #
 # POST /
 # operationId: ExecuteStatement
-export def "api create-execute-statement" [
+export def "execute-statement" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1414,7 +1414,7 @@ export def "api create-execute-statement" [
 #
 # POST /
 # operationId: ExecuteTransaction
-export def "api create-execute-transaction" [
+export def "execute-transaction" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1464,7 +1464,7 @@ export def "api create-execute-transaction" [
 #
 # POST /
 # operationId: ExportTableToPointInTime
-export def "api export-table-to-point-in-time" [
+export def "export-table-to-point-in-time" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1520,7 +1520,7 @@ export def "api export-table-to-point-in-time" [
 #
 # POST /
 # operationId: GetItem
-export def "api get-item" [
+export def "get-item" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1574,7 +1574,7 @@ export def "api get-item" [
 #
 # POST /
 # operationId: ImportTable
-export def "api import-table" [
+export def "import-table" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1627,7 +1627,7 @@ export def "api import-table" [
 #
 # POST /
 # operationId: ListBackups
-export def "api list-backups" [
+export def "list-backups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1680,7 +1680,7 @@ export def "api list-backups" [
 #
 # POST /
 # operationId: ListContributorInsights
-export def "api list-contributor-insights" [
+export def "list-contributor-insights" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1733,7 +1733,7 @@ export def "api list-contributor-insights" [
 #
 # POST /
 # operationId: ListExports
-export def "api list-exports" [
+export def "list-exports" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1786,7 +1786,7 @@ export def "api list-exports" [
 #
 # POST /
 # operationId: ListGlobalTables
-export def "api list-global-tables" [
+export def "list-global-tables" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1836,7 +1836,7 @@ export def "api list-global-tables" [
 #
 # POST /
 # operationId: ListImports
-export def "api list-imports" [
+export def "list-imports" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1889,7 +1889,7 @@ export def "api list-imports" [
 #
 # POST /
 # operationId: ListTables
-export def "api list-tables" [
+export def "list-tables" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1941,7 +1941,7 @@ export def "api list-tables" [
 #
 # POST /
 # operationId: ListTagsOfResource
-export def "api list-tags-of-resource" [
+export def "list-tags-of-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1990,7 +1990,7 @@ export def "api list-tags-of-resource" [
 #
 # POST /
 # operationId: PutItem
-export def "api update-item" [
+export def "put-item" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2047,7 +2047,7 @@ export def "api update-item" [
 #
 # POST /
 # operationId: Query
-export def "api list" [
+export def "query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2114,7 +2114,7 @@ export def "api list" [
 #
 # POST /
 # operationId: RestoreTableFromBackup
-export def "api create-restore-table-from-backup" [
+export def "restore-table-from-backup" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2168,7 +2168,7 @@ export def "api create-restore-table-from-backup" [
 #
 # POST /
 # operationId: RestoreTableToPointInTime
-export def "api create-restore-table-to-point-in-time" [
+export def "restore-table-to-point-in-time" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2225,7 +2225,7 @@ export def "api create-restore-table-to-point-in-time" [
 #
 # POST /
 # operationId: Scan
-export def "api create-scan" [
+export def "scan" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2291,7 +2291,7 @@ export def "api create-scan" [
 #
 # POST /
 # operationId: TagResource
-export def "api tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2340,7 +2340,7 @@ export def "api tag-resource" [
 #
 # POST /
 # operationId: TransactGetItems
-export def "api get-transact-items" [
+export def "transact-get-items" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2389,7 +2389,7 @@ export def "api get-transact-items" [
 #
 # POST /
 # operationId: TransactWriteItems
-export def "api create-transact-write-items" [
+export def "transact-write-items" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2440,7 +2440,7 @@ export def "api create-transact-write-items" [
 #
 # POST /
 # operationId: UntagResource
-export def "api untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2489,7 +2489,7 @@ export def "api untag-resource" [
 #
 # POST /
 # operationId: UpdateContinuousBackups
-export def "api update-continuous-backups" [
+export def "update-continuous-backups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2538,7 +2538,7 @@ export def "api update-continuous-backups" [
 #
 # POST /
 # operationId: UpdateContributorInsights
-export def "api update-contributor-insights" [
+export def "update-contributor-insights" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2588,7 +2588,7 @@ export def "api update-contributor-insights" [
 #
 # POST /
 # operationId: UpdateGlobalTable
-export def "api update-global-table" [
+export def "update-global-table" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2637,7 +2637,7 @@ export def "api update-global-table" [
 #
 # POST /
 # operationId: UpdateGlobalTableSettings
-export def "api update-global-table-settings" [
+export def "update-global-table-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2690,7 +2690,7 @@ export def "api update-global-table-settings" [
 #
 # POST /
 # operationId: UpdateItem
-export def "api update-item-1" [
+export def "update-item" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2749,7 +2749,7 @@ export def "api update-item-1" [
 #
 # POST /
 # operationId: UpdateTable
-export def "api update-table" [
+export def "update-table" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2807,7 +2807,7 @@ export def "api update-table" [
 # POST /
 # operationId: UpdateTableReplicaAutoScaling
 # --ProvisionedWriteCapacityAutoScalingUpdate shape: {MinimumUnits?: any, MaximumUnits?: any, AutoScalingDisabled?: any, AutoScalingRoleArn?: any, ScalingPolicyUpdate?: any}
-export def "api update-table-replica-auto-scaling" [
+export def "update-table-replica-auto-scaling" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2858,7 +2858,7 @@ export def "api update-table-replica-auto-scaling" [
 #
 # POST /
 # operationId: UpdateTimeToLive
-export def "api update-time-to-live" [
+export def "update-time-to-live" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

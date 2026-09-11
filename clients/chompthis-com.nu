@@ -102,7 +102,7 @@ def limit-completer-1 [] { ["1" "2" "3"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "food-branded-barcode-php get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-food-branded-barcode-php" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -125,7 +125,7 @@ export def commands []: nothing -> table {
 # Get a branded food item using a barcode
 #
 # GET /food/branded/barcode.php
-export def "food-branded-barcode-php get" [
+export def "get-food-branded-barcode-php" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -160,7 +160,7 @@ export def "food-branded-barcode-php get" [
 # Get a branded food item by name
 #
 # GET /food/branded/name.php
-export def "food-branded-name-php get" [
+export def "get-food-branded-name-php" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -197,7 +197,7 @@ export def "food-branded-name-php get" [
 # Get data for branded food items using various search parameters
 #
 # GET /food/branded/search.php
-export def "food-branded-search-php get" [
+export def "get-food-branded-search-php" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -245,7 +245,7 @@ export def "food-branded-search-php get" [
 # Get raw/generic food ingredient item(s)
 #
 # GET /food/ingredient/search.php
-export def "food-ingredient-search-php get" [
+export def "get-food-ingredient-search-php" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

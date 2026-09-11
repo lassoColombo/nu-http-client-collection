@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["query-apikey"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "lists-json top-directory-level" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "lists-directory-top-level-lists" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -121,7 +121,7 @@ export def commands []: nothing -> table {
 # GET /lists.json
 #
 # operationId: ListsDirectoryTopLevelLists
-export def "lists-json top-directory-level" [
+export def "lists-directory-top-level-lists" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -154,7 +154,7 @@ export def "lists-json top-directory-level" [
 # GET /lists/dvds.json
 #
 # operationId: DVDListsDirectoryTopLevelLists
-export def "lists-dvds-json top-directory-level" [
+export def "dvd-lists-directory-top-level-lists" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -187,7 +187,7 @@ export def "lists-dvds-json top-directory-level" [
 # GET /lists/dvds/current_releases.json
 #
 # operationId: CurrentReleaseDVDsDVDLists
-export def "lists-dvds-current-releases-json get-dv-ds" [
+export def "current-release-dv-ds-dvd-lists" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -224,7 +224,7 @@ export def "lists-dvds-current-releases-json get-dv-ds" [
 # GET /lists/dvds/new_releases.json
 #
 # operationId: NewReleaseDVDsDVDLists
-export def "lists-dvds-new-releases-json get-dv-ds" [
+export def "new-release-dv-ds-dvd-lists" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -261,7 +261,7 @@ export def "lists-dvds-new-releases-json get-dv-ds" [
 # GET /lists/dvds/top_rentals.json
 #
 # operationId: TopRentalsDVDLists
-export def "lists-dvds-top-rentals-json top" [
+export def "top-rentals-dvd-lists" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -297,7 +297,7 @@ export def "lists-dvds-top-rentals-json top" [
 # GET /lists/dvds/upcoming.json
 #
 # operationId: UpcomingDVDsDVDLists
-export def "lists-dvds-upcoming-json get-dv-ds" [
+export def "upcoming-dv-ds-dvd-lists" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -334,7 +334,7 @@ export def "lists-dvds-upcoming-json get-dv-ds" [
 # GET /lists/movies.json
 #
 # operationId: MovieListsDirectoryTopLevelLists
-export def "lists-movies-json top-directory-level" [
+export def "movie-lists-directory-top-level-lists" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -367,7 +367,7 @@ export def "lists-movies-json top-directory-level" [
 # GET /lists/movies/box_office.json
 #
 # operationId: BoxOfficeMovieLists
-export def "lists-movies-box-office-json get" [
+export def "box-office-movie-lists" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -403,7 +403,7 @@ export def "lists-movies-box-office-json get" [
 # GET /lists/movies/in_theaters.json
 #
 # operationId: InTheatersMovieLists
-export def "lists-movies-in-theaters-json get" [
+export def "in-theaters-movie-lists" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -440,7 +440,7 @@ export def "lists-movies-in-theaters-json get" [
 # GET /lists/movies/opening.json
 #
 # operationId: OpeningMoviesMovieLists
-export def "lists-movies-opening-json get" [
+export def "opening-movies-movie-lists" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -476,7 +476,7 @@ export def "lists-movies-opening-json get" [
 # GET /lists/movies/upcoming.json
 #
 # operationId: UpcomingMoviesMovieLists
-export def "lists-movies-upcoming-json get" [
+export def "upcoming-movies-movie-lists" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -513,7 +513,7 @@ export def "lists-movies-upcoming-json get" [
 # GET /movie_alias.json
 #
 # operationId: MoviesAliasDetailedInfo
-export def "movie-alias-json get-detailed" [
+export def "movies-alias-detailed-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -549,7 +549,7 @@ export def "movie-alias-json get-detailed" [
 # GET /movies.json
 #
 # operationId: MoviesSearchSearch
-export def "movies-json list" [
+export def "movies-search-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -586,7 +586,7 @@ export def "movies-json list" [
 # GET /movies/{id}.json
 #
 # operationId: MoviesInfoDetailedInfo
-export def "movies get-detailed" [
+export def "movies-info-detailed-info" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -621,7 +621,7 @@ export def "movies get-detailed" [
 # GET /movies/{id}/cast.json
 #
 # operationId: CastInfoDetailedInfo
-export def "movies-cast-json get-detailed" [
+export def "cast-info-detailed-info" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -656,7 +656,7 @@ export def "movies-cast-json get-detailed" [
 # GET /movies/{id}/clips.json
 #
 # operationId: MovieClipsDetailedInfo
-export def "movies-clips-json get-detailed" [
+export def "movie-clips-detailed-info" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -691,7 +691,7 @@ export def "movies-clips-json get-detailed" [
 # GET /movies/{id}/reviews.json
 #
 # operationId: MoviesReviewsDetailedInfo
-export def "movies-reviews-json get-detailed" [
+export def "movies-reviews-detailed-info" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -731,7 +731,7 @@ export def "movies-reviews-json get-detailed" [
 # GET /movies/{id}/similar.json
 #
 # operationId: MoviesSimilarDetailedInfo
-export def "movies-similar-json get-detailed" [
+export def "movies-similar-detailed-info" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

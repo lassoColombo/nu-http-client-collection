@@ -97,7 +97,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "mobilesdk-stage-track-get-track get-trips-trip-details" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "trips-trip-details" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -121,7 +121,7 @@ export def commands []: nothing -> table {
 #
 # GET /mobilesdk/stage/track/get_track/v1
 # operationId: tripsTripDetails
-export def "mobilesdk-stage-track-get-track get-trips-trip-details" [
+export def "trips-trip-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -157,7 +157,7 @@ export def "mobilesdk-stage-track-get-track get-trips-trip-details" [
 #
 # GET /statistics/v1/Scorings/consolidated
 # operationId: /v1/scorings/consolidated
-export def "statistics-scorings-consolidated get" [
+export def "v1-scorings-consolidated" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -199,7 +199,7 @@ export def "statistics-scorings-consolidated get" [
 #
 # GET /statistics/v1/Scorings/consolidated/daily
 # operationId: /v1/scorings/consolidated/daily
-export def "statistics-scorings-consolidated-daily get" [
+export def "v1-scorings-consolidated-daily" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -241,7 +241,7 @@ export def "statistics-scorings-consolidated-daily get" [
 #
 # GET /statistics/v1/Scorings/individual/
 # operationId: userSafeScoringAccumulatedValueV1/scorings/individual
-export def "statistics-scorings-individual get-user-safe-accumulated-value" [
+export def "user-safe-scoring-accumulated-value-v1-scorings-individual" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -278,7 +278,7 @@ export def "statistics-scorings-individual get-user-safe-accumulated-value" [
 #
 # GET /statistics/v1/Scorings/individual/daily
 # operationId: userSafeScoringDailyValue/v1/scorings/individual/daily
-export def "statistics-scorings-individual-daily get-user-safe-value" [
+export def "user-safe-scoring-daily-value-v1-scorings-individual-daily" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -316,7 +316,7 @@ export def "statistics-scorings-individual-daily get-user-safe-value" [
 #
 # GET /statistics/v1/Statistics/consolidated
 # operationId: /v1/statistics/consolidated
-export def "statistics-statistics-consolidated get" [
+export def "v1-statistics-consolidated" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -358,7 +358,7 @@ export def "statistics-statistics-consolidated get" [
 #
 # GET /statistics/v1/Statistics/consolidated/daily
 # operationId: /v1/statistics/consolidated/daily
-export def "statistics-statistics-consolidated-daily get" [
+export def "v1-statistics-consolidated-daily" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -400,7 +400,7 @@ export def "statistics-statistics-consolidated-daily get" [
 #
 # GET /statistics/v1/Statistics/individual/
 # operationId: userStatisticsAccumulatedValue/v1/statistics/individual
-export def "statistics-statistics-individual get-user-accumulated-value" [
+export def "user-statistics-accumulated-value-v1-statistics-individual" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -437,7 +437,7 @@ export def "statistics-statistics-individual get-user-accumulated-value" [
 #
 # GET /statistics/v1/Statistics/individual/daily/
 # operationId: userStatisticeDailyValueV1/statistics/individual/daily
-export def "statistics-statistics-individual-daily get-user-statistice-value" [
+export def "user-statistice-daily-value-v1-statistics-individual-daily" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -114,7 +114,7 @@ def capacity-type-completer [] { ["ON_DEMAND" "SPOT"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "clusters-encryption-config-associate create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associate-encryption-config" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -139,7 +139,7 @@ export def commands []: nothing -> table {
 # POST /clusters/{name}/encryption-config/associate
 # operationId: AssociateEncryptionConfig
 # --encryptionConfig item shape: {resources?: any, provider?: any}
-export def "clusters-encryption-config-associate create" [
+export def "associate-encryption-config" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -190,7 +190,7 @@ export def "clusters-encryption-config-associate create" [
 # POST /clusters/{name}/identity-provider-configs/associate
 # operationId: AssociateIdentityProviderConfig
 # --oidc shape: {identityProviderConfigName?: any, issuerUrl?: any, clientId?: any, usernameClaim?: any, usernamePrefix?: any, groupsClaim?: any, groupsPrefix?: any, requiredClaims?: any}
-export def "clusters-identity-provider-configs-associate create" [
+export def "associate-identity-provider-config" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -241,7 +241,7 @@ export def "clusters-identity-provider-configs-associate create" [
 #
 # POST /clusters/{name}/addons
 # operationId: CreateAddon
-export def "clusters-addons create" [
+export def "create-addon" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -296,7 +296,7 @@ export def "clusters-addons create" [
 #
 # GET /clusters/{name}/addons
 # operationId: ListAddons
-export def "clusters-addons list" [
+export def "list-addons" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -349,7 +349,7 @@ export def "clusters-addons list" [
 # --logging shape: {clusterLogging?: any}
 # --encryptionConfig item shape: {resources?: any, provider?: any}
 # --outpostConfig shape: {outpostArns?: any, controlPlaneInstanceType?: any, controlPlanePlacement?: any}
-export def "clusters create" [
+export def "create-cluster" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -405,7 +405,7 @@ export def "clusters create" [
 #
 # GET /clusters
 # operationId: ListClusters
-export def "clusters list" [
+export def "list-clusters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -453,7 +453,7 @@ export def "clusters list" [
 # POST /clusters/{name}/fargate-profiles
 # operationId: CreateFargateProfile
 # --selectors item shape: {namespace?: any, labels?: any}
-export def "clusters-fargate-profiles create" [
+export def "create-fargate-profile" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -507,7 +507,7 @@ export def "clusters-fargate-profiles create" [
 #
 # GET /clusters/{name}/fargate-profiles
 # operationId: ListFargateProfiles
-export def "clusters-fargate-profiles list" [
+export def "list-fargate-profiles" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -560,7 +560,7 @@ export def "clusters-fargate-profiles list" [
 # --taints item shape: {key?: any, value?: any, effect?: any}
 # --launchTemplate shape: {name?: any, version?: any, id?: any}
 # --updateConfig shape: {maxUnavailable?: any, maxUnavailablePercentage?: any}
-export def "clusters-node-groups create-nodegroup" [
+export def "create-nodegroup" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -625,7 +625,7 @@ export def "clusters-node-groups create-nodegroup" [
 #
 # GET /clusters/{name}/node-groups
 # operationId: ListNodegroups
-export def "clusters-node-groups list-nodegroups" [
+export def "list-nodegroups" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -673,7 +673,7 @@ export def "clusters-node-groups list-nodegroups" [
 #
 # DELETE /clusters/{name}/addons/{addonName}
 # operationId: DeleteAddon
-export def "clusters-addons delete" [
+export def "delete-addon" [
   name: string
   addon_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -722,7 +722,7 @@ export def "clusters-addons delete" [
 #
 # GET /clusters/{name}/addons/{addonName}
 # operationId: DescribeAddon
-export def "clusters-addons get" [
+export def "describe-addon" [
   name: string
   addon_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -769,7 +769,7 @@ export def "clusters-addons get" [
 #
 # DELETE /clusters/{name}
 # operationId: DeleteCluster
-export def "clusters delete" [
+export def "delete-cluster" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -814,7 +814,7 @@ export def "clusters delete" [
 #
 # GET /clusters/{name}
 # operationId: DescribeCluster
-export def "clusters get" [
+export def "describe-cluster" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -859,7 +859,7 @@ export def "clusters get" [
 #
 # DELETE /clusters/{name}/fargate-profiles/{fargateProfileName}
 # operationId: DeleteFargateProfile
-export def "clusters-fargate-profiles delete" [
+export def "delete-fargate-profile" [
   name: string
   fargate_profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -906,7 +906,7 @@ export def "clusters-fargate-profiles delete" [
 #
 # GET /clusters/{name}/fargate-profiles/{fargateProfileName}
 # operationId: DescribeFargateProfile
-export def "clusters-fargate-profiles get" [
+export def "describe-fargate-profile" [
   name: string
   fargate_profile_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -953,7 +953,7 @@ export def "clusters-fargate-profiles get" [
 #
 # DELETE /clusters/{name}/node-groups/{nodegroupName}
 # operationId: DeleteNodegroup
-export def "clusters-node-groups delete-nodegroup" [
+export def "delete-nodegroup" [
   name: string
   nodegroup_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1000,7 +1000,7 @@ export def "clusters-node-groups delete-nodegroup" [
 #
 # GET /clusters/{name}/node-groups/{nodegroupName}
 # operationId: DescribeNodegroup
-export def "clusters-node-groups get-nodegroup" [
+export def "describe-nodegroup" [
   name: string
   nodegroup_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1047,7 +1047,7 @@ export def "clusters-node-groups get-nodegroup" [
 #
 # DELETE /cluster-registrations/{name}
 # operationId: DeregisterCluster
-export def "cluster-registrations delete-deregister" [
+export def "deregister-cluster" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1092,7 +1092,7 @@ export def "cluster-registrations delete-deregister" [
 #
 # GET /addons/configuration-schemas
 # operationId: DescribeAddonConfiguration
-export def "addons-configuration-schemas get" [
+export def "describe-addon-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1138,7 +1138,7 @@ export def "addons-configuration-schemas get" [
 #
 # GET /addons/supported-versions
 # operationId: DescribeAddonVersions
-export def "addons-supported-versions get" [
+export def "describe-addon-versions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1190,7 +1190,7 @@ export def "addons-supported-versions get" [
 # POST /clusters/{name}/identity-provider-configs/describe
 # operationId: DescribeIdentityProviderConfig
 # --identityProviderConfig shape: {type?: any, name?: any}
-export def "clusters-identity-provider-configs-describe get" [
+export def "describe-identity-provider-config" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1239,7 +1239,7 @@ export def "clusters-identity-provider-configs-describe get" [
 #
 # GET /clusters/{name}/updates/{updateId}
 # operationId: DescribeUpdate
-export def "clusters-updates get" [
+export def "describe-update" [
   name: string
   update_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1290,7 +1290,7 @@ export def "clusters-updates get" [
 # POST /clusters/{name}/identity-provider-configs/disassociate
 # operationId: DisassociateIdentityProviderConfig
 # --identityProviderConfig shape: {type?: any, name?: any}
-export def "clusters-identity-provider-configs-disassociate create" [
+export def "disassociate-identity-provider-config" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1340,7 +1340,7 @@ export def "clusters-identity-provider-configs-disassociate create" [
 #
 # GET /clusters/{name}/identity-provider-configs
 # operationId: ListIdentityProviderConfigs
-export def "clusters-identity-provider-configs list" [
+export def "list-identity-provider-configs" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1388,7 +1388,7 @@ export def "clusters-identity-provider-configs list" [
 #
 # GET /tags/{resourceArn}
 # operationId: ListTagsForResource
-export def "tags list-for-resource" [
+export def "list-tags-for-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1433,7 +1433,7 @@ export def "tags list-for-resource" [
 #
 # POST /tags/{resourceArn}
 # operationId: TagResource
-export def "tags tag-resource" [
+export def "tag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1482,7 +1482,7 @@ export def "tags tag-resource" [
 #
 # GET /clusters/{name}/updates
 # operationId: ListUpdates
-export def "clusters-updates list" [
+export def "list-updates" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1532,7 +1532,7 @@ export def "clusters-updates list" [
 #
 # POST /clusters/{name}/updates
 # operationId: UpdateClusterVersion
-export def "clusters-updates version" [
+export def "update-cluster-version" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1583,7 +1583,7 @@ export def "clusters-updates version" [
 # POST /cluster-registrations
 # operationId: RegisterCluster
 # --connectorConfig shape: {roleArn?: any, provider?: any}
-export def "cluster-registrations create" [
+export def "register-cluster" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1633,7 +1633,7 @@ export def "cluster-registrations create" [
 #
 # DELETE /tags/{resourceArn}
 # operationId: UntagResource
-export def "tags untag-resource" [
+export def "untag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1680,7 +1680,7 @@ export def "tags untag-resource" [
 #
 # POST /clusters/{name}/addons/{addonName}/update
 # operationId: UpdateAddon
-export def "clusters-addons-update update" [
+export def "update-addon" [
   name: string
   addon_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1737,7 +1737,7 @@ export def "clusters-addons-update update" [
 # operationId: UpdateClusterConfig
 # --resourcesVpcConfig shape: {subnetIds?: any, securityGroupIds?: any, endpointPublicAccess?: any, endpointPrivateAccess?: any, publicAccessCidrs?: any}
 # --logging shape: {clusterLogging?: any}
-export def "clusters-update-config update" [
+export def "update-cluster-config" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1792,7 +1792,7 @@ export def "clusters-update-config update" [
 # --taints shape: {addOrUpdateTaints?: any, removeTaints?: any}
 # --scalingConfig shape: {minSize?: any, maxSize?: any, desiredSize?: any}
 # --updateConfig shape: {maxUnavailable?: any, maxUnavailablePercentage?: any}
-export def "clusters-node-groups-update-config update-nodegroup" [
+export def "update-nodegroup-config" [
   name: string
   nodegroup_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1848,7 +1848,7 @@ export def "clusters-node-groups-update-config update-nodegroup" [
 # POST /clusters/{name}/node-groups/{nodegroupName}/update-version
 # operationId: UpdateNodegroupVersion
 # --launchTemplate shape: {name?: any, version?: any, id?: any}
-export def "clusters-node-groups-update-version update-nodegroup" [
+export def "update-nodegroup-version" [
   name: string
   nodegroup_name: string
   --base-url(-b): string@base-url-completer # API base URL

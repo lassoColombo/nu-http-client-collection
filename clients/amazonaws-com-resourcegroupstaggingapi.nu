@@ -108,7 +108,7 @@ def x-amz-target-completer-7 [] { ["ResourceGroupsTaggingAPI_20170126.UntagResou
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api get-report-creation" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "describe-report-creation" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -132,7 +132,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: DescribeReportCreation
-export def "api get-report-creation" [
+export def "describe-report-creation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -180,7 +180,7 @@ export def "api get-report-creation" [
 #
 # POST /
 # operationId: GetComplianceSummary
-export def "api get-compliance-summary" [
+export def "get-compliance-summary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -237,7 +237,7 @@ export def "api get-compliance-summary" [
 #
 # POST /
 # operationId: GetResources
-export def "api get-resources" [
+export def "get-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -295,7 +295,7 @@ export def "api get-resources" [
 #
 # POST /
 # operationId: GetTagKeys
-export def "api get-tag-keys" [
+export def "get-tag-keys" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -345,7 +345,7 @@ export def "api get-tag-keys" [
 #
 # POST /
 # operationId: GetTagValues
-export def "api get-tag-values" [
+export def "get-tag-values" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -396,7 +396,7 @@ export def "api get-tag-values" [
 #
 # POST /
 # operationId: StartReportCreation
-export def "api start-report-creation" [
+export def "start-report-creation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -444,7 +444,7 @@ export def "api start-report-creation" [
 #
 # POST /
 # operationId: TagResources
-export def "api tag-resources" [
+export def "tag-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -493,7 +493,7 @@ export def "api tag-resources" [
 #
 # POST /
 # operationId: UntagResources
-export def "api untag-resources" [
+export def "untag-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

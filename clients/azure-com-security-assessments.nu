@@ -112,7 +112,7 @@ def expand-completer [] { ["links" "metadata"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-security-assessments delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "assessments-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -136,7 +136,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /{resourceId}/providers/Microsoft.Security/assessments/{assessmentName}
 # operationId: Assessments_Delete
-export def "providers-microsoft-security-assessments delete" [
+export def "assessments-delete" [
   resource_id: string
   assessment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -176,7 +176,7 @@ export def "providers-microsoft-security-assessments delete" [
 #
 # GET /{resourceId}/providers/Microsoft.Security/assessments/{assessmentName}
 # operationId: Assessments_Get
-export def "providers-microsoft-security-assessments get" [
+export def "assessments-get" [
   resource_id: string
   assessment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -218,7 +218,7 @@ export def "providers-microsoft-security-assessments get" [
 # PUT /{resourceId}/providers/Microsoft.Security/assessments/{assessmentName}
 # operationId: Assessments_CreateOrUpdate
 # --properties shape: {additionalData?: record, metadata?: record, partnersData?: record, resourceDetails: record, status: record}
-export def "providers-microsoft-security-assessments create-or-update" [
+export def "assessments-create-or-update" [
   resource_id: string
   assessment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -262,7 +262,7 @@ export def "providers-microsoft-security-assessments create-or-update" [
 #
 # GET /{scope}/providers/Microsoft.Security/assessments
 # operationId: Assessments_List
-export def "providers-microsoft-security-assessments list" [
+export def "assessments-list" [
   scope: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

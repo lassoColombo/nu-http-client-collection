@@ -161,7 +161,7 @@ def track-sharing-completer [] { ["private" "public"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "connect get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-connect" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -184,7 +184,7 @@ export def commands []: nothing -> table {
 # The OAuth2 authorization endpoint. Your app redirects a user to this endpoint, allowing them to delegate access to their account.
 #
 # GET /connect
-export def "connect get" [
+export def "get-connect" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-authheader: string # Auth token for AuthHeader (Authorization)
   --token-clientid: string # Auth token for ClientId (client_id)
@@ -223,7 +223,7 @@ export def "connect get" [
 # Unlikes a playlist.
 #
 # DELETE /likes/playlists/{playlist_id}
-export def "likes-playlists delete" [
+export def "delete-likes-playlists-playlist-id" [
   playlist_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -258,7 +258,7 @@ export def "likes-playlists delete" [
 # Likes a playlist.
 #
 # POST /likes/playlists/{playlist_id}
-export def "likes-playlists create" [
+export def "post-likes-playlists-playlist-id" [
   playlist_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -293,7 +293,7 @@ export def "likes-playlists create" [
 # Unlikes a track.
 #
 # DELETE /likes/tracks/{track_id}
-export def "likes-tracks delete" [
+export def "delete-likes-tracks-track-id" [
   track_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -328,7 +328,7 @@ export def "likes-tracks delete" [
 # Likes a track.
 #
 # POST /likes/tracks/{track_id}
-export def "likes-tracks create" [
+export def "post-likes-tracks-track-id" [
   track_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -363,7 +363,7 @@ export def "likes-tracks create" [
 # Returns the authenticated user’s information.
 #
 # GET /me
-export def "me get" [
+export def "get-me" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -396,7 +396,7 @@ export def "me get" [
 # Returns the authenticated user's activities.
 #
 # GET /me/activities
-export def "me-activities get" [
+export def "get-me-activities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -432,7 +432,7 @@ export def "me-activities get" [
 # Recent the authenticated user's activities.
 #
 # GET /me/activities/all/own
-export def "me-activities-all-own get" [
+export def "get-me-activities-all-own" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -468,7 +468,7 @@ export def "me-activities-all-own get" [
 # Returns the authenticated user's recent track related activities.
 #
 # GET /me/activities/tracks
-export def "me-activities-tracks get" [
+export def "get-me-activities-tracks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -505,7 +505,7 @@ export def "me-activities-tracks get" [
 #
 # GET /me/connections
 @deprecated --flag offset
-export def "me-connections list" [
+export def "get-me-connections" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -541,7 +541,7 @@ export def "me-connections list" [
 # Returns the authenticated user's connected social account.
 #
 # GET /me/connections/{connection_id}
-export def "me-connections get" [
+export def "get-me-connections-connection-id" [
   connection_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -578,7 +578,7 @@ export def "me-connections get" [
 # GET /me/favorites/ids
 # DEPRECATED
 @deprecated
-export def "me-favorites-ids get" [
+export def "get-me-favorites-ids" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -613,7 +613,7 @@ export def "me-favorites-ids get" [
 # Returns a list of users who are following the authenticated user.
 #
 # GET /me/followers
-export def "me-followers list" [
+export def "get-me-followers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -650,7 +650,7 @@ export def "me-followers list" [
 # GET /me/followers/{follower_id}
 # DEPRECATED
 @deprecated
-export def "me-followers get" [
+export def "get-me-followers-follower-id" [
   follower_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -686,7 +686,7 @@ export def "me-followers get" [
 #
 # GET /me/followings
 @deprecated --flag offset
-export def "me-followings list" [
+export def "get-me-followings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -723,7 +723,7 @@ export def "me-followings list" [
 #
 # GET /me/followings/tracks
 @deprecated --flag offset
-export def "me-followings-tracks get" [
+export def "get-me-followings-tracks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -760,7 +760,7 @@ export def "me-followings-tracks get" [
 # Deletes a user who is followed by the authenticated user.
 #
 # DELETE /me/followings/{user_id}
-export def "me-followings delete" [
+export def "delete-me-followings-user-id" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -797,7 +797,7 @@ export def "me-followings delete" [
 # GET /me/followings/{user_id}
 # DEPRECATED
 @deprecated
-export def "me-followings get" [
+export def "get-me-followings-user-id" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -832,7 +832,7 @@ export def "me-followings get" [
 # Follows a user.
 #
 # PUT /me/followings/{user_id}
-export def "me-followings update" [
+export def "put-me-followings-user-id" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -867,7 +867,7 @@ export def "me-followings update" [
 # Returns a list of favorited or liked tracks of the authenticated user.
 #
 # GET /me/likes/tracks
-export def "me-likes-tracks get" [
+export def "get-me-likes-tracks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -903,7 +903,7 @@ export def "me-likes-tracks get" [
 # Returns user’s playlists (sets).
 #
 # GET /me/playlists
-export def "me-playlists list" [
+export def "get-me-playlists" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -940,7 +940,7 @@ export def "me-playlists list" [
 # GET /me/playlists/{playlist_id}
 # DEPRECATED
 @deprecated
-export def "me-playlists get" [
+export def "get-me-playlists-playlist-id" [
   playlist_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -975,7 +975,7 @@ export def "me-playlists get" [
 # Returns a list of user's tracks.
 #
 # GET /me/tracks
-export def "me-tracks list" [
+export def "get-me-tracks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1013,7 +1013,7 @@ export def "me-tracks list" [
 # GET /me/tracks/{track_id}
 # DEPRECATED
 @deprecated
-export def "me-tracks get" [
+export def "get-me-tracks-track-id" [
   track_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1048,7 +1048,7 @@ export def "me-tracks get" [
 # This endpoint accepts POST requests and is used to provision access tokens once a user has authorized your application.
 #
 # POST /oauth2/token
-export def "oauth2-token create" [
+export def "post-oauth2-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1094,7 +1094,7 @@ export def "oauth2-token create" [
 #
 # GET /playlists
 @deprecated --flag offset
-export def "playlists list" [
+export def "get-playlists" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-authheader: string # Auth token for AuthHeader (Authorization)
   --token-clientid: string # Auth token for ClientId (client_id)
@@ -1134,7 +1134,7 @@ export def "playlists list" [
 #
 # POST /playlists
 # --playlist shape: {description?: string, sharing?: "public"|"private", title?: string, tracks?: list}
-export def "playlists create" [
+export def "post-playlists" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1171,7 +1171,7 @@ export def "playlists create" [
 # Deletes a playlist.
 #
 # DELETE /playlists/{playlist_id}
-export def "playlists delete" [
+export def "delete-playlists-playlist-id" [
   playlist_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-authheader: string # Auth token for AuthHeader (Authorization)
@@ -1206,7 +1206,7 @@ export def "playlists delete" [
 # Returns a playlist.
 #
 # GET /playlists/{playlist_id}
-export def "playlists get" [
+export def "get-playlists-playlist-id" [
   playlist_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-authheader: string # Auth token for AuthHeader (Authorization)
@@ -1245,7 +1245,7 @@ export def "playlists get" [
 #
 # PUT /playlists/{playlist_id}
 # --playlist shape: {description?: string, sharing?: "public"|"private", title?: string, tracks?: list}
-export def "playlists update" [
+export def "put-playlists-playlist-id" [
   playlist_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1284,7 +1284,7 @@ export def "playlists update" [
 # Returns a collection of playlist's reposters.
 #
 # GET /playlists/{playlist_id}/reposters
-export def "playlists-reposters get" [
+export def "get-playlists-playlist-id-reposters" [
   playlist_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1321,7 +1321,7 @@ export def "playlists-reposters get" [
 # Returns tracks under a playlist.
 #
 # GET /playlists/{playlist_id}/tracks
-export def "playlists-tracks get" [
+export def "get-playlists-playlist-id-tracks" [
   playlist_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-authheader: string # Auth token for AuthHeader (Authorization)
@@ -1360,7 +1360,7 @@ export def "playlists-tracks get" [
 # Removes a repost on a playlist as the authenticated user
 #
 # DELETE /reposts/playlists/{playlist_id}
-export def "reposts-playlists delete" [
+export def "delete-reposts-playlists-playlist-id" [
   playlist_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1395,7 +1395,7 @@ export def "reposts-playlists delete" [
 # Reposts a playlist as the authenticated user
 #
 # POST /reposts/playlists/{playlist_id}
-export def "reposts-playlists create" [
+export def "post-reposts-playlists-playlist-id" [
   playlist_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1430,7 +1430,7 @@ export def "reposts-playlists create" [
 # Removes a repost on a track as the authenticated user
 #
 # DELETE /reposts/tracks/{track_id}
-export def "reposts-tracks delete" [
+export def "delete-reposts-tracks-track-id" [
   track_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1465,7 +1465,7 @@ export def "reposts-tracks delete" [
 # Reposts a track as the authenticated user
 #
 # POST /reposts/tracks/{track_id}
-export def "reposts-tracks create" [
+export def "post-reposts-tracks-track-id" [
   track_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1500,7 +1500,7 @@ export def "reposts-tracks create" [
 # Resolves soundcloud.com URLs to Resource URLs to use with the API.
 #
 # GET /resolve
-export def "resolve get" [
+export def "get-resolve" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-authheader: string # Auth token for AuthHeader (Authorization)
   --token-clientid: string # Auth token for ClientId (client_id)
@@ -1536,7 +1536,7 @@ export def "resolve get" [
 #
 # GET /tracks
 @deprecated --flag offset
-export def "tracks list" [
+export def "get-tracks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-authheader: string # Auth token for AuthHeader (Authorization)
   --token-clientid: string # Auth token for ClientId (client_id)
@@ -1581,7 +1581,7 @@ export def "tracks list" [
 # Uploads a new track.
 #
 # POST /tracks
-export def "tracks create" [
+export def "post-tracks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-authheader: string # Auth token for AuthHeader (Authorization)
   --token-clientid: string # Auth token for ClientId (client_id)
@@ -1637,7 +1637,7 @@ export def "tracks create" [
 # Deletes a track.
 #
 # DELETE /tracks/{track_id}
-export def "tracks delete" [
+export def "delete-tracks-track-id" [
   track_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1672,7 +1672,7 @@ export def "tracks delete" [
 # Returns a track.
 #
 # GET /tracks/{track_id}
-export def "tracks get" [
+export def "get-tracks-track-id" [
   track_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1710,7 +1710,7 @@ export def "tracks get" [
 #
 # PUT /tracks/{track_id}
 # --track shape: {commentable?: bool, description?: string, downloadable?: bool, embeddable_by?: "all"|"me"|"none", genre?: string, isrc?: string, label_name?: string, license?: "no-rights-reserved"|"all-rights-reserved"|"cc-by"|"cc-by-nc"|"cc-by-nd"|"cc-by-sa"|"cc-by-nc-nd"|"cc-by-nc-sa", permalink?: string, purchase_url?: string, release?: string, release_date?: string, sharing?: "public"|"private", streamable?: bool, tag_list?: string, title?: string}
-export def "tracks update" [
+export def "put-tracks-track-id" [
   track_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1750,7 +1750,7 @@ export def "tracks update" [
 #
 # GET /tracks/{track_id}/comments
 @deprecated --flag offset
-export def "tracks-comments get" [
+export def "get-tracks-track-id-comments" [
   track_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1790,7 +1790,7 @@ export def "tracks-comments get" [
 #
 # POST /tracks/{track_id}/comments
 # --comment shape: {body: string, timestamp?: any}
-export def "tracks-comments create" [
+export def "post-tracks-track-id-comments" [
   track_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-authheader: string # Auth token for AuthHeader (Authorization)
@@ -1830,7 +1830,7 @@ export def "tracks-comments create" [
 #
 # GET /tracks/{track_id}/favoriters
 @deprecated --flag offset
-export def "tracks-favoriters get" [
+export def "get-tracks-track-id-favoriters" [
   track_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1869,7 +1869,7 @@ export def "tracks-favoriters get" [
 #
 # GET /tracks/{track_id}/related
 @deprecated --flag offset
-export def "tracks-related get" [
+export def "get-tracks-track-id-related" [
   track_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1909,7 +1909,7 @@ export def "tracks-related get" [
 # Returns a collection of track's reposters.
 #
 # GET /tracks/{track_id}/reposters
-export def "tracks-reposters get" [
+export def "get-tracks-track-id-reposters" [
   track_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1946,7 +1946,7 @@ export def "tracks-reposters get" [
 # Returns a track's streamable URLs
 #
 # GET /tracks/{track_id}/streams
-export def "tracks-streams get" [
+export def "get-tracks-track-id-streams" [
   track_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1984,7 +1984,7 @@ export def "tracks-streams get" [
 #
 # GET /users
 @deprecated --flag offset
-export def "users list" [
+export def "get-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-authheader: string # Auth token for AuthHeader (Authorization)
   --token-clientid: string # Auth token for ClientId (client_id)
@@ -2023,7 +2023,7 @@ export def "users list" [
 # Returns a user.
 #
 # GET /users/{user_id}
-export def "users get" [
+export def "get-users-user-id" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-authheader: string # Auth token for AuthHeader (Authorization)
@@ -2059,7 +2059,7 @@ export def "users get" [
 #
 # GET /users/{user_id}/comments
 @deprecated --flag offset
-export def "users-comments get" [
+export def "get-users-user-id-comments" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-authheader: string # Auth token for AuthHeader (Authorization)
@@ -2099,7 +2099,7 @@ export def "users-comments get" [
 # GET /users/{user_id}/favorites
 # DEPRECATED
 @deprecated
-export def "users-favorites get" [
+export def "get-users-user-id-favorites" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-authheader: string # Auth token for AuthHeader (Authorization)
@@ -2137,7 +2137,7 @@ export def "users-favorites get" [
 # Returns a list of user’s followers.
 #
 # GET /users/{user_id}/followers
-export def "users-followers get" [
+export def "get-users-user-id-followers" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-authheader: string # Auth token for AuthHeader (Authorization)
@@ -2174,7 +2174,7 @@ export def "users-followers get" [
 # Returns a list of user’s followings.
 #
 # GET /users/{user_id}/followings
-export def "users-followings list" [
+export def "get-users-user-id-followings" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-authheader: string # Auth token for AuthHeader (Authorization)
@@ -2213,7 +2213,7 @@ export def "users-followings list" [
 # GET /users/{user_id}/followings/{following_id}
 # DEPRECATED
 @deprecated
-export def "users-followings get" [
+export def "get-users-user-id-followings-following-id" [
   user_id: int
   following_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2250,7 +2250,7 @@ export def "users-followings get" [
 # Returns a list of user's liked tracks.
 #
 # GET /users/{user_id}/likes/tracks
-export def "users-likes-tracks get" [
+export def "get-users-user-id-likes-tracks" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-authheader: string # Auth token for AuthHeader (Authorization)
@@ -2289,7 +2289,7 @@ export def "users-likes-tracks get" [
 # Returns a list of user's playlists.
 #
 # GET /users/{user_id}/playlists
-export def "users-playlists get" [
+export def "get-users-user-id-playlists" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-authheader: string # Auth token for AuthHeader (Authorization)
@@ -2328,7 +2328,7 @@ export def "users-playlists get" [
 # Returns a list of user's tracks.
 #
 # GET /users/{user_id}/tracks
-export def "users-tracks get" [
+export def "get-users-user-id-tracks" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-authheader: string # Auth token for AuthHeader (Authorization)
@@ -2367,7 +2367,7 @@ export def "users-tracks get" [
 # Returns list of user's links added to their profile (website, facebook, instagram).
 #
 # GET /users/{user_id}/web-profiles
-export def "users-web-profiles get" [
+export def "get-users-user-id-web-profiles" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-authheader: string # Auth token for AuthHeader (Authorization)

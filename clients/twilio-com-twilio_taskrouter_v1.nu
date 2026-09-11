@@ -122,7 +122,7 @@ def wait-method-completer [] { ["DELETE" "GET" "HEAD" "PATCH" "POST" "PUT"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "workspaces list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-workspace" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -145,7 +145,7 @@ export def commands []: nothing -> table {
 # GET /v1/Workspaces
 #
 # operationId: ListWorkspace
-export def "workspaces list" [
+export def "list-workspace" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -183,7 +183,7 @@ export def "workspaces list" [
 # POST /v1/Workspaces
 #
 # operationId: CreateWorkspace
-export def "workspaces create" [
+export def "create-workspace" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -226,7 +226,7 @@ export def "workspaces create" [
 # DELETE /v1/Workspaces/{Sid}
 #
 # operationId: DeleteWorkspace
-export def "workspaces delete" [
+export def "delete-workspace" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -261,7 +261,7 @@ export def "workspaces delete" [
 # GET /v1/Workspaces/{Sid}
 #
 # operationId: FetchWorkspace
-export def "workspaces get" [
+export def "fetch-workspace" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -296,7 +296,7 @@ export def "workspaces get" [
 # POST /v1/Workspaces/{Sid}
 #
 # operationId: UpdateWorkspace
-export def "workspaces update" [
+export def "update-workspace" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -342,7 +342,7 @@ export def "workspaces update" [
 # GET /v1/Workspaces/{WorkspaceSid}/Activities
 #
 # operationId: ListActivity
-export def "workspaces-activities list-activity" [
+export def "list-activity" [
   workspace_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -383,7 +383,7 @@ export def "workspaces-activities list-activity" [
 # POST /v1/Workspaces/{WorkspaceSid}/Activities
 #
 # operationId: CreateActivity
-export def "workspaces-activities create-activity" [
+export def "create-activity" [
   workspace_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -424,7 +424,7 @@ export def "workspaces-activities create-activity" [
 # DELETE /v1/Workspaces/{WorkspaceSid}/Activities/{Sid}
 #
 # operationId: DeleteActivity
-export def "workspaces-activities delete-activity" [
+export def "delete-activity" [
   workspace_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -461,7 +461,7 @@ export def "workspaces-activities delete-activity" [
 # GET /v1/Workspaces/{WorkspaceSid}/Activities/{Sid}
 #
 # operationId: FetchActivity
-export def "workspaces-activities get-activity" [
+export def "fetch-activity" [
   workspace_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -498,7 +498,7 @@ export def "workspaces-activities get-activity" [
 # POST /v1/Workspaces/{WorkspaceSid}/Activities/{Sid}
 #
 # operationId: UpdateActivity
-export def "workspaces-activities update-activity" [
+export def "update-activity" [
   workspace_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -540,7 +540,7 @@ export def "workspaces-activities update-activity" [
 # GET /v1/Workspaces/{WorkspaceSid}/CumulativeStatistics
 #
 # operationId: FetchWorkspaceCumulativeStatistics
-export def "workspaces-cumulative-statistics get" [
+export def "fetch-workspace-cumulative-statistics" [
   workspace_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -581,7 +581,7 @@ export def "workspaces-cumulative-statistics get" [
 # GET /v1/Workspaces/{WorkspaceSid}/Events
 #
 # operationId: ListEvent
-export def "workspaces-events list" [
+export def "list-event" [
   workspace_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -631,7 +631,7 @@ export def "workspaces-events list" [
 # GET /v1/Workspaces/{WorkspaceSid}/Events/{Sid}
 #
 # operationId: FetchEvent
-export def "workspaces-events get" [
+export def "fetch-event" [
   workspace_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -668,7 +668,7 @@ export def "workspaces-events get" [
 # GET /v1/Workspaces/{WorkspaceSid}/RealTimeStatistics
 #
 # operationId: FetchWorkspaceRealTimeStatistics
-export def "workspaces-real-time-statistics get" [
+export def "fetch-workspace-real-time-statistics" [
   workspace_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -705,7 +705,7 @@ export def "workspaces-real-time-statistics get" [
 # GET /v1/Workspaces/{WorkspaceSid}/Statistics
 #
 # operationId: FetchWorkspaceStatistics
-export def "workspaces-statistics get" [
+export def "fetch-workspace-statistics" [
   workspace_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -746,7 +746,7 @@ export def "workspaces-statistics get" [
 # GET /v1/Workspaces/{WorkspaceSid}/TaskChannels
 #
 # operationId: ListTaskChannel
-export def "workspaces-task-channels list" [
+export def "list-task-channel" [
   workspace_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -785,7 +785,7 @@ export def "workspaces-task-channels list" [
 # POST /v1/Workspaces/{WorkspaceSid}/TaskChannels
 #
 # operationId: CreateTaskChannel
-export def "workspaces-task-channels create" [
+export def "create-task-channel" [
   workspace_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -827,7 +827,7 @@ export def "workspaces-task-channels create" [
 # DELETE /v1/Workspaces/{WorkspaceSid}/TaskChannels/{Sid}
 #
 # operationId: DeleteTaskChannel
-export def "workspaces-task-channels delete" [
+export def "delete-task-channel" [
   workspace_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -864,7 +864,7 @@ export def "workspaces-task-channels delete" [
 # GET /v1/Workspaces/{WorkspaceSid}/TaskChannels/{Sid}
 #
 # operationId: FetchTaskChannel
-export def "workspaces-task-channels get" [
+export def "fetch-task-channel" [
   workspace_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -901,7 +901,7 @@ export def "workspaces-task-channels get" [
 # POST /v1/Workspaces/{WorkspaceSid}/TaskChannels/{Sid}
 #
 # operationId: UpdateTaskChannel
-export def "workspaces-task-channels update" [
+export def "update-task-channel" [
   workspace_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -944,7 +944,7 @@ export def "workspaces-task-channels update" [
 # GET /v1/Workspaces/{WorkspaceSid}/TaskQueues
 #
 # operationId: ListTaskQueue
-export def "workspaces-task-queues list" [
+export def "list-task-queue" [
   workspace_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -987,7 +987,7 @@ export def "workspaces-task-queues list" [
 # POST /v1/Workspaces/{WorkspaceSid}/TaskQueues
 #
 # operationId: CreateTaskQueue
-export def "workspaces-task-queues create" [
+export def "create-task-queue" [
   workspace_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1032,7 +1032,7 @@ export def "workspaces-task-queues create" [
 # GET /v1/Workspaces/{WorkspaceSid}/TaskQueues/Statistics
 #
 # operationId: ListTaskQueuesStatistics
-export def "workspaces-task-queues-statistics list" [
+export def "list-task-queues-statistics" [
   workspace_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1077,7 +1077,7 @@ export def "workspaces-task-queues-statistics list" [
 # DELETE /v1/Workspaces/{WorkspaceSid}/TaskQueues/{Sid}
 #
 # operationId: DeleteTaskQueue
-export def "workspaces-task-queues delete" [
+export def "delete-task-queue" [
   workspace_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1114,7 +1114,7 @@ export def "workspaces-task-queues delete" [
 # GET /v1/Workspaces/{WorkspaceSid}/TaskQueues/{Sid}
 #
 # operationId: FetchTaskQueue
-export def "workspaces-task-queues get" [
+export def "fetch-task-queue" [
   workspace_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1151,7 +1151,7 @@ export def "workspaces-task-queues get" [
 # POST /v1/Workspaces/{WorkspaceSid}/TaskQueues/{Sid}
 #
 # operationId: UpdateTaskQueue
-export def "workspaces-task-queues update" [
+export def "update-task-queue" [
   workspace_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1198,7 +1198,7 @@ export def "workspaces-task-queues update" [
 # GET /v1/Workspaces/{WorkspaceSid}/TaskQueues/{TaskQueueSid}/CumulativeStatistics
 #
 # operationId: FetchTaskQueueCumulativeStatistics
-export def "workspaces-task-queues-cumulative-statistics get" [
+export def "fetch-task-queue-cumulative-statistics" [
   workspace_sid: string
   task_queue_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1241,7 +1241,7 @@ export def "workspaces-task-queues-cumulative-statistics get" [
 # GET /v1/Workspaces/{WorkspaceSid}/TaskQueues/{TaskQueueSid}/RealTimeStatistics
 #
 # operationId: FetchTaskQueueRealTimeStatistics
-export def "workspaces-task-queues-real-time-statistics get" [
+export def "fetch-task-queue-real-time-statistics" [
   workspace_sid: string
   task_queue_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1280,7 +1280,7 @@ export def "workspaces-task-queues-real-time-statistics get" [
 # GET /v1/Workspaces/{WorkspaceSid}/TaskQueues/{TaskQueueSid}/Statistics
 #
 # operationId: FetchTaskQueueStatistics
-export def "workspaces-task-queues-statistics get" [
+export def "fetch-task-queue-statistics" [
   workspace_sid: string
   task_queue_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1323,7 +1323,7 @@ export def "workspaces-task-queues-statistics get" [
 # GET /v1/Workspaces/{WorkspaceSid}/Tasks
 #
 # operationId: ListTask
-export def "workspaces-tasks list" [
+export def "list-task" [
   workspace_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1371,7 +1371,7 @@ export def "workspaces-tasks list" [
 # POST /v1/Workspaces/{WorkspaceSid}/Tasks
 #
 # operationId: CreateTask
-export def "workspaces-tasks create" [
+export def "create-task" [
   workspace_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1415,7 +1415,7 @@ export def "workspaces-tasks create" [
 # DELETE /v1/Workspaces/{WorkspaceSid}/Tasks/{Sid}
 #
 # operationId: DeleteTask
-export def "workspaces-tasks delete" [
+export def "delete-task" [
   workspace_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1455,7 +1455,7 @@ export def "workspaces-tasks delete" [
 # GET /v1/Workspaces/{WorkspaceSid}/Tasks/{Sid}
 #
 # operationId: FetchTask
-export def "workspaces-tasks get" [
+export def "fetch-task" [
   workspace_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1492,7 +1492,7 @@ export def "workspaces-tasks get" [
 # POST /v1/Workspaces/{WorkspaceSid}/Tasks/{Sid}
 #
 # operationId: UpdateTask
-export def "workspaces-tasks update" [
+export def "update-task" [
   workspace_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1541,7 +1541,7 @@ export def "workspaces-tasks update" [
 # GET /v1/Workspaces/{WorkspaceSid}/Tasks/{TaskSid}/Reservations
 #
 # operationId: ListTaskReservation
-export def "workspaces-tasks-reservations list" [
+export def "list-task-reservation" [
   workspace_sid: string
   task_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1584,7 +1584,7 @@ export def "workspaces-tasks-reservations list" [
 # GET /v1/Workspaces/{WorkspaceSid}/Tasks/{TaskSid}/Reservations/{Sid}
 #
 # operationId: FetchTaskReservation
-export def "workspaces-tasks-reservations get" [
+export def "fetch-task-reservation" [
   workspace_sid: string
   task_sid: string
   sid: string
@@ -1623,7 +1623,7 @@ export def "workspaces-tasks-reservations get" [
 # POST /v1/Workspaces/{WorkspaceSid}/Tasks/{TaskSid}/Reservations/{Sid}
 #
 # operationId: UpdateTaskReservation
-export def "workspaces-tasks-reservations update" [
+export def "update-task-reservation" [
   workspace_sid: string
   task_sid: string
   sid: string
@@ -1722,7 +1722,7 @@ export def "workspaces-tasks-reservations update" [
 # GET /v1/Workspaces/{WorkspaceSid}/Workers
 #
 # operationId: ListWorker
-export def "workspaces-workers list" [
+export def "list-worker" [
   workspace_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1769,7 +1769,7 @@ export def "workspaces-workers list" [
 # POST /v1/Workspaces/{WorkspaceSid}/Workers
 #
 # operationId: CreateWorker
-export def "workspaces-workers create" [
+export def "create-worker" [
   workspace_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1811,7 +1811,7 @@ export def "workspaces-workers create" [
 # GET /v1/Workspaces/{WorkspaceSid}/Workers/CumulativeStatistics
 #
 # operationId: FetchWorkersCumulativeStatistics
-export def "workspaces-workers-cumulative-statistics get" [
+export def "fetch-workers-cumulative-statistics" [
   workspace_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1851,7 +1851,7 @@ export def "workspaces-workers-cumulative-statistics get" [
 # GET /v1/Workspaces/{WorkspaceSid}/Workers/RealTimeStatistics
 #
 # operationId: FetchWorkersRealTimeStatistics
-export def "workspaces-workers-real-time-statistics get" [
+export def "fetch-workers-real-time-statistics" [
   workspace_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1888,7 +1888,7 @@ export def "workspaces-workers-real-time-statistics get" [
 # GET /v1/Workspaces/{WorkspaceSid}/Workers/Statistics
 #
 # operationId: FetchWorkerStatistics
-export def "workspaces-workers-statistics get" [
+export def "fetch-worker-statistics" [
   workspace_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1931,7 +1931,7 @@ export def "workspaces-workers-statistics get" [
 # DELETE /v1/Workspaces/{WorkspaceSid}/Workers/{Sid}
 #
 # operationId: DeleteWorker
-export def "workspaces-workers delete" [
+export def "delete-worker" [
   workspace_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1971,7 +1971,7 @@ export def "workspaces-workers delete" [
 # GET /v1/Workspaces/{WorkspaceSid}/Workers/{Sid}
 #
 # operationId: FetchWorker
-export def "workspaces-workers get" [
+export def "fetch-worker" [
   workspace_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2008,7 +2008,7 @@ export def "workspaces-workers get" [
 # POST /v1/Workspaces/{WorkspaceSid}/Workers/{Sid}
 #
 # operationId: UpdateWorker
-export def "workspaces-workers update" [
+export def "update-worker" [
   workspace_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2056,7 +2056,7 @@ export def "workspaces-workers update" [
 # GET /v1/Workspaces/{WorkspaceSid}/Workers/{WorkerSid}/Channels
 #
 # operationId: ListWorkerChannel
-export def "workspaces-workers-channels list" [
+export def "list-worker-channel" [
   workspace_sid: string
   worker_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2097,7 +2097,7 @@ export def "workspaces-workers-channels list" [
 # GET /v1/Workspaces/{WorkspaceSid}/Workers/{WorkerSid}/Channels/{Sid}
 #
 # operationId: FetchWorkerChannel
-export def "workspaces-workers-channels get" [
+export def "fetch-worker-channel" [
   workspace_sid: string
   worker_sid: string
   sid: string
@@ -2136,7 +2136,7 @@ export def "workspaces-workers-channels get" [
 # POST /v1/Workspaces/{WorkspaceSid}/Workers/{WorkerSid}/Channels/{Sid}
 #
 # operationId: UpdateWorkerChannel
-export def "workspaces-workers-channels update" [
+export def "update-worker-channel" [
   workspace_sid: string
   worker_sid: string
   sid: string
@@ -2181,7 +2181,7 @@ export def "workspaces-workers-channels update" [
 # GET /v1/Workspaces/{WorkspaceSid}/Workers/{WorkerSid}/Reservations
 #
 # operationId: ListWorkerReservation
-export def "workspaces-workers-reservations list" [
+export def "list-worker-reservation" [
   workspace_sid: string
   worker_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2223,7 +2223,7 @@ export def "workspaces-workers-reservations list" [
 # GET /v1/Workspaces/{WorkspaceSid}/Workers/{WorkerSid}/Reservations/{Sid}
 #
 # operationId: FetchWorkerReservation
-export def "workspaces-workers-reservations get" [
+export def "fetch-worker-reservation" [
   workspace_sid: string
   worker_sid: string
   sid: string
@@ -2262,7 +2262,7 @@ export def "workspaces-workers-reservations get" [
 # POST /v1/Workspaces/{WorkspaceSid}/Workers/{WorkerSid}/Reservations/{Sid}
 #
 # operationId: UpdateWorkerReservation
-export def "workspaces-workers-reservations update" [
+export def "update-worker-reservation" [
   workspace_sid: string
   worker_sid: string
   sid: string
@@ -2359,7 +2359,7 @@ export def "workspaces-workers-reservations update" [
 # GET /v1/Workspaces/{WorkspaceSid}/Workers/{WorkerSid}/Statistics
 #
 # operationId: FetchWorkerInstanceStatistics
-export def "workspaces-workers-statistics get-instance" [
+export def "fetch-worker-instance-statistics" [
   workspace_sid: string
   worker_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2401,7 +2401,7 @@ export def "workspaces-workers-statistics get-instance" [
 # GET /v1/Workspaces/{WorkspaceSid}/Workflows
 #
 # operationId: ListWorkflow
-export def "workspaces-workflows list" [
+export def "list-workflow" [
   workspace_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2441,7 +2441,7 @@ export def "workspaces-workflows list" [
 # POST /v1/Workspaces/{WorkspaceSid}/Workflows
 #
 # operationId: CreateWorkflow
-export def "workspaces-workflows create" [
+export def "create-workflow" [
   workspace_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2485,7 +2485,7 @@ export def "workspaces-workflows create" [
 # DELETE /v1/Workspaces/{WorkspaceSid}/Workflows/{Sid}
 #
 # operationId: DeleteWorkflow
-export def "workspaces-workflows delete" [
+export def "delete-workflow" [
   workspace_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2522,7 +2522,7 @@ export def "workspaces-workflows delete" [
 # GET /v1/Workspaces/{WorkspaceSid}/Workflows/{Sid}
 #
 # operationId: FetchWorkflow
-export def "workspaces-workflows get" [
+export def "fetch-workflow" [
   workspace_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2559,7 +2559,7 @@ export def "workspaces-workflows get" [
 # POST /v1/Workspaces/{WorkspaceSid}/Workflows/{Sid}
 #
 # operationId: UpdateWorkflow
-export def "workspaces-workflows update" [
+export def "update-workflow" [
   workspace_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2606,7 +2606,7 @@ export def "workspaces-workflows update" [
 # GET /v1/Workspaces/{WorkspaceSid}/Workflows/{WorkflowSid}/CumulativeStatistics
 #
 # operationId: FetchWorkflowCumulativeStatistics
-export def "workspaces-workflows-cumulative-statistics get" [
+export def "fetch-workflow-cumulative-statistics" [
   workspace_sid: string
   workflow_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2649,7 +2649,7 @@ export def "workspaces-workflows-cumulative-statistics get" [
 # GET /v1/Workspaces/{WorkspaceSid}/Workflows/{WorkflowSid}/RealTimeStatistics
 #
 # operationId: FetchWorkflowRealTimeStatistics
-export def "workspaces-workflows-real-time-statistics get" [
+export def "fetch-workflow-real-time-statistics" [
   workspace_sid: string
   workflow_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2688,7 +2688,7 @@ export def "workspaces-workflows-real-time-statistics get" [
 # GET /v1/Workspaces/{WorkspaceSid}/Workflows/{WorkflowSid}/Statistics
 #
 # operationId: FetchWorkflowStatistics
-export def "workspaces-workflows-statistics get" [
+export def "fetch-workflow-statistics" [
   workspace_sid: string
   workflow_sid: string
   --base-url(-b): string@base-url-completer # API base URL

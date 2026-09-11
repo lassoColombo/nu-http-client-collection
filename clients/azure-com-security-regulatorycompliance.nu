@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-security-regulatory-compliance-standards list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "regulatory-compliance-standards-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -122,7 +122,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Security/regulatoryComplianceStandards
 # operationId: RegulatoryComplianceStandards_List
-export def "subscriptions-providers-microsoft-security-regulatory-compliance-standards list" [
+export def "regulatory-compliance-standards-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -161,7 +161,7 @@ export def "subscriptions-providers-microsoft-security-regulatory-compliance-sta
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Security/regulatoryComplianceStandards/{regulatoryComplianceStandardName}
 # operationId: RegulatoryComplianceStandards_Get
-export def "subscriptions-providers-microsoft-security-regulatory-compliance-standards get" [
+export def "regulatory-compliance-standards-get" [
   subscription_id: string
   regulatory_compliance_standard_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -201,7 +201,7 @@ export def "subscriptions-providers-microsoft-security-regulatory-compliance-sta
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Security/regulatoryComplianceStandards/{regulatoryComplianceStandardName}/regulatoryComplianceControls
 # operationId: RegulatoryComplianceControls_List
-export def "subscriptions-providers-microsoft-security-regulatory-compliance-standards-regulatory-compliance-controls list" [
+export def "regulatory-compliance-controls-list" [
   subscription_id: string
   regulatory_compliance_standard_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -242,7 +242,7 @@ export def "subscriptions-providers-microsoft-security-regulatory-compliance-sta
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Security/regulatoryComplianceStandards/{regulatoryComplianceStandardName}/regulatoryComplianceControls/{regulatoryComplianceControlName}
 # operationId: RegulatoryComplianceControls_Get
-export def "subscriptions-providers-microsoft-security-regulatory-compliance-standards-regulatory-compliance-controls get" [
+export def "regulatory-compliance-controls-get" [
   subscription_id: string
   regulatory_compliance_standard_name: string
   regulatory_compliance_control_name: string
@@ -284,7 +284,7 @@ export def "subscriptions-providers-microsoft-security-regulatory-compliance-sta
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Security/regulatoryComplianceStandards/{regulatoryComplianceStandardName}/regulatoryComplianceControls/{regulatoryComplianceControlName}/regulatoryComplianceAssessments
 # operationId: RegulatoryComplianceAssessments_List
-export def "subscriptions-providers-microsoft-security-regulatory-compliance-standards-regulatory-compliance-controls-regulatory-compliance-assessments list" [
+export def "regulatory-compliance-assessments-list" [
   subscription_id: string
   regulatory_compliance_standard_name: string
   regulatory_compliance_control_name: string
@@ -327,7 +327,7 @@ export def "subscriptions-providers-microsoft-security-regulatory-compliance-sta
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Security/regulatoryComplianceStandards/{regulatoryComplianceStandardName}/regulatoryComplianceControls/{regulatoryComplianceControlName}/regulatoryComplianceAssessments/{regulatoryComplianceAssessmentName}
 # operationId: RegulatoryComplianceAssessments_Get
-export def "subscriptions-providers-microsoft-security-regulatory-compliance-standards-regulatory-compliance-controls-regulatory-compliance-assessments get" [
+export def "regulatory-compliance-assessments-get" [
   subscription_id: string
   regulatory_compliance_standard_name: string
   regulatory_compliance_control_name: string

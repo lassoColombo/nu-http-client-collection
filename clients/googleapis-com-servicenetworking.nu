@@ -123,7 +123,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "servicenetworking-operations-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -147,7 +147,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1beta/{name}
 # operationId: servicenetworking.operations.get
-export def "v1beta get" [
+export def "servicenetworking-operations-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -195,7 +195,7 @@ export def "v1beta get" [
 #
 # PATCH /v1beta/{name}/connections
 # operationId: servicenetworking.services.updateConnections
-export def "v1beta-connections update" [
+export def "servicenetworking-services-update-connections" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -252,7 +252,7 @@ export def "v1beta-connections update" [
 #
 # GET /v1beta/{parent}/connections
 # operationId: servicenetworking.services.connections.list
-export def "v1beta-connections list" [
+export def "servicenetworking-services-connections-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -301,7 +301,7 @@ export def "v1beta-connections list" [
 #
 # POST /v1beta/{parent}/connections
 # operationId: servicenetworking.services.connections.create
-export def "v1beta-connections create" [
+export def "servicenetworking-services-connections-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -356,7 +356,7 @@ export def "v1beta-connections create" [
 #
 # POST /v1beta/{parent}:addSubnetwork
 # operationId: servicenetworking.services.addSubnetwork
-export def "v1beta create-subnetwork" [
+export def "servicenetworking-services-add-subnetwork" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -415,7 +415,7 @@ export def "v1beta create-subnetwork" [
 #
 # POST /v1beta/{parent}:searchRange
 # operationId: servicenetworking.services.searchRange
-export def "v1beta list-range" [
+export def "servicenetworking-services-search-range" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

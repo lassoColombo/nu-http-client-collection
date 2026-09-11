@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["apikey"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api get-status-of-service" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-the-status-of-the-api-service" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -128,7 +128,7 @@ export def commands []: nothing -> table {
 #
 # GET /
 # operationId: Get the status of the API service
-export def "api get-status-of-service" [
+export def "get-the-status-of-the-api-service" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -162,7 +162,7 @@ export def "api get-status-of-service" [
 #
 # GET /v1/crawl/{query}
 # operationId: Crawl
-export def "crawl get" [
+export def "crawl" [
   query: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -198,7 +198,7 @@ export def "crawl get" [
 #
 # GET /v1/images/{query}
 # operationId: Images
-export def "images get" [
+export def "images" [
   query: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -234,7 +234,7 @@ export def "images get" [
 #
 # GET /v1/news/{query}
 # operationId: News
-export def "news get" [
+export def "news" [
   query: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -270,7 +270,7 @@ export def "news get" [
 #
 # GET /v1/search/{query}
 # operationId: Search
-export def "search list" [
+export def "search" [
   query: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -306,7 +306,7 @@ export def "search list" [
 #
 # POST /v1/serp/
 # operationId: serp
-export def "serp create" [
+export def "serp" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -204,7 +204,7 @@ def x-amz-target-completer-103 [] { ["GameLift.ValidateMatchmakingRuleSet"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-accept-match" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accept-match" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -228,7 +228,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AcceptMatch
-export def "api create-accept-match" [
+export def "accept-match" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -278,7 +278,7 @@ export def "api create-accept-match" [
 #
 # POST /
 # operationId: ClaimGameServer
-export def "api create-claim-game-server" [
+export def "claim-game-server" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -328,7 +328,7 @@ export def "api create-claim-game-server" [
 #
 # POST /
 # operationId: CreateAlias
-export def "api create-alias" [
+export def "create-alias" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -379,7 +379,7 @@ export def "api create-alias" [
 #
 # POST /
 # operationId: CreateBuild
-export def "api create-build" [
+export def "create-build" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -432,7 +432,7 @@ export def "api create-build" [
 #
 # POST /
 # operationId: CreateFleet
-export def "api create-fleet" [
+export def "create-fleet" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -501,7 +501,7 @@ export def "api create-fleet" [
 #
 # POST /
 # operationId: CreateFleetLocations
-export def "api create-fleet-locations" [
+export def "create-fleet-locations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -550,7 +550,7 @@ export def "api create-fleet-locations" [
 #
 # POST /
 # operationId: CreateGameServerGroup
-export def "api create-game-server-group" [
+export def "create-game-server-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -608,7 +608,7 @@ export def "api create-game-server-group" [
 #
 # POST /
 # operationId: CreateGameSession
-export def "api create-game-session" [
+export def "create-game-session" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -665,7 +665,7 @@ export def "api create-game-session" [
 #
 # POST /
 # operationId: CreateGameSessionQueue
-export def "api create-game-session-queue" [
+export def "create-game-session-queue" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -721,7 +721,7 @@ export def "api create-game-session-queue" [
 #
 # POST /
 # operationId: CreateLocation
-export def "api create-location" [
+export def "create-location" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -770,7 +770,7 @@ export def "api create-location" [
 #
 # POST /
 # operationId: CreateMatchmakingConfiguration
-export def "api create-matchmaking-configuration" [
+export def "create-matchmaking-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -832,7 +832,7 @@ export def "api create-matchmaking-configuration" [
 #
 # POST /
 # operationId: CreateMatchmakingRuleSet
-export def "api create-matchmaking-rule-update" [
+export def "create-matchmaking-rule-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -882,7 +882,7 @@ export def "api create-matchmaking-rule-update" [
 #
 # POST /
 # operationId: CreatePlayerSession
-export def "api create-player-session" [
+export def "create-player-session" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -932,7 +932,7 @@ export def "api create-player-session" [
 #
 # POST /
 # operationId: CreatePlayerSessions
-export def "api create-player-sessions" [
+export def "create-player-sessions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -982,7 +982,7 @@ export def "api create-player-sessions" [
 #
 # POST /
 # operationId: CreateScript
-export def "api create-script" [
+export def "create-script" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1034,7 +1034,7 @@ export def "api create-script" [
 #
 # POST /
 # operationId: CreateVpcPeeringAuthorization
-export def "api create-vpc-peering-authorization" [
+export def "create-vpc-peering-authorization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1083,7 +1083,7 @@ export def "api create-vpc-peering-authorization" [
 #
 # POST /
 # operationId: CreateVpcPeeringConnection
-export def "api create-vpc-peering-connection" [
+export def "create-vpc-peering-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1133,7 +1133,7 @@ export def "api create-vpc-peering-connection" [
 #
 # POST /
 # operationId: DeleteAlias
-export def "api delete-alias" [
+export def "delete-alias" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1181,7 +1181,7 @@ export def "api delete-alias" [
 #
 # POST /
 # operationId: DeleteBuild
-export def "api delete-build" [
+export def "delete-build" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1229,7 +1229,7 @@ export def "api delete-build" [
 #
 # POST /
 # operationId: DeleteFleet
-export def "api delete-fleet" [
+export def "delete-fleet" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1277,7 +1277,7 @@ export def "api delete-fleet" [
 #
 # POST /
 # operationId: DeleteFleetLocations
-export def "api delete-fleet-locations" [
+export def "delete-fleet-locations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1326,7 +1326,7 @@ export def "api delete-fleet-locations" [
 #
 # POST /
 # operationId: DeleteGameServerGroup
-export def "api delete-game-server-group" [
+export def "delete-game-server-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1375,7 +1375,7 @@ export def "api delete-game-server-group" [
 #
 # POST /
 # operationId: DeleteGameSessionQueue
-export def "api delete-game-session-queue" [
+export def "delete-game-session-queue" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1423,7 +1423,7 @@ export def "api delete-game-session-queue" [
 #
 # POST /
 # operationId: DeleteLocation
-export def "api delete-location" [
+export def "delete-location" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1471,7 +1471,7 @@ export def "api delete-location" [
 #
 # POST /
 # operationId: DeleteMatchmakingConfiguration
-export def "api delete-matchmaking-configuration" [
+export def "delete-matchmaking-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1519,7 +1519,7 @@ export def "api delete-matchmaking-configuration" [
 #
 # POST /
 # operationId: DeleteMatchmakingRuleSet
-export def "api delete-matchmaking-rule-update" [
+export def "delete-matchmaking-rule-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1567,7 +1567,7 @@ export def "api delete-matchmaking-rule-update" [
 #
 # POST /
 # operationId: DeleteScalingPolicy
-export def "api delete-scaling-policy" [
+export def "delete-scaling-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1616,7 +1616,7 @@ export def "api delete-scaling-policy" [
 #
 # POST /
 # operationId: DeleteScript
-export def "api delete-script" [
+export def "delete-script" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1664,7 +1664,7 @@ export def "api delete-script" [
 #
 # POST /
 # operationId: DeleteVpcPeeringAuthorization
-export def "api delete-vpc-peering-authorization" [
+export def "delete-vpc-peering-authorization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1713,7 +1713,7 @@ export def "api delete-vpc-peering-authorization" [
 #
 # POST /
 # operationId: DeleteVpcPeeringConnection
-export def "api delete-vpc-peering-connection" [
+export def "delete-vpc-peering-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1762,7 +1762,7 @@ export def "api delete-vpc-peering-connection" [
 #
 # POST /
 # operationId: DeregisterCompute
-export def "api create-deregister-compute" [
+export def "deregister-compute" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1811,7 +1811,7 @@ export def "api create-deregister-compute" [
 #
 # POST /
 # operationId: DeregisterGameServer
-export def "api create-deregister-game-server" [
+export def "deregister-game-server" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1860,7 +1860,7 @@ export def "api create-deregister-game-server" [
 #
 # POST /
 # operationId: DescribeAlias
-export def "api get-alias" [
+export def "describe-alias" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1908,7 +1908,7 @@ export def "api get-alias" [
 #
 # POST /
 # operationId: DescribeBuild
-export def "api get-build" [
+export def "describe-build" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1956,7 +1956,7 @@ export def "api get-build" [
 #
 # POST /
 # operationId: DescribeCompute
-export def "api get-compute" [
+export def "describe-compute" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2005,7 +2005,7 @@ export def "api get-compute" [
 #
 # POST /
 # operationId: DescribeEC2InstanceLimits
-export def "api get-ec2-instance-limits" [
+export def "describe-ec2-instance-limits" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2054,7 +2054,7 @@ export def "api get-ec2-instance-limits" [
 #
 # POST /
 # operationId: DescribeFleetAttributes
-export def "api get-fleet-attributes" [
+export def "describe-fleet-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2107,7 +2107,7 @@ export def "api get-fleet-attributes" [
 #
 # POST /
 # operationId: DescribeFleetCapacity
-export def "api get-fleet-capacity" [
+export def "describe-fleet-capacity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2160,7 +2160,7 @@ export def "api get-fleet-capacity" [
 #
 # POST /
 # operationId: DescribeFleetEvents
-export def "api get-fleet-events" [
+export def "describe-fleet-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2215,7 +2215,7 @@ export def "api get-fleet-events" [
 #
 # POST /
 # operationId: DescribeFleetLocationAttributes
-export def "api get-fleet-location-attributes" [
+export def "describe-fleet-location-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2269,7 +2269,7 @@ export def "api get-fleet-location-attributes" [
 #
 # POST /
 # operationId: DescribeFleetLocationCapacity
-export def "api get-fleet-location-capacity" [
+export def "describe-fleet-location-capacity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2318,7 +2318,7 @@ export def "api get-fleet-location-capacity" [
 #
 # POST /
 # operationId: DescribeFleetLocationUtilization
-export def "api get-fleet-location-utilization" [
+export def "describe-fleet-location-utilization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2367,7 +2367,7 @@ export def "api get-fleet-location-utilization" [
 #
 # POST /
 # operationId: DescribeFleetPortSettings
-export def "api get-fleet-port-settings" [
+export def "describe-fleet-port-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2416,7 +2416,7 @@ export def "api get-fleet-port-settings" [
 #
 # POST /
 # operationId: DescribeFleetUtilization
-export def "api get-fleet-utilization" [
+export def "describe-fleet-utilization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2469,7 +2469,7 @@ export def "api get-fleet-utilization" [
 #
 # POST /
 # operationId: DescribeGameServer
-export def "api get-game-server" [
+export def "describe-game-server" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2518,7 +2518,7 @@ export def "api get-game-server" [
 #
 # POST /
 # operationId: DescribeGameServerGroup
-export def "api get-game-server-group" [
+export def "describe-game-server-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2566,7 +2566,7 @@ export def "api get-game-server-group" [
 #
 # POST /
 # operationId: DescribeGameServerInstances
-export def "api get-game-server-instances" [
+export def "describe-game-server-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2620,7 +2620,7 @@ export def "api get-game-server-instances" [
 #
 # POST /
 # operationId: DescribeGameSessionDetails
-export def "api get-game-session-details" [
+export def "describe-game-session-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2677,7 +2677,7 @@ export def "api get-game-session-details" [
 #
 # POST /
 # operationId: DescribeGameSessionPlacement
-export def "api get-game-session-placement" [
+export def "describe-game-session-placement" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2725,7 +2725,7 @@ export def "api get-game-session-placement" [
 #
 # POST /
 # operationId: DescribeGameSessionQueues
-export def "api get-game-session-queues" [
+export def "describe-game-session-queues" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2778,7 +2778,7 @@ export def "api get-game-session-queues" [
 #
 # POST /
 # operationId: DescribeGameSessions
-export def "api get-game-sessions" [
+export def "describe-game-sessions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2835,7 +2835,7 @@ export def "api get-game-sessions" [
 #
 # POST /
 # operationId: DescribeInstances
-export def "api get-instances" [
+export def "describe-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2890,7 +2890,7 @@ export def "api get-instances" [
 #
 # POST /
 # operationId: DescribeMatchmaking
-export def "api get-matchmaking" [
+export def "describe-matchmaking" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2938,7 +2938,7 @@ export def "api get-matchmaking" [
 #
 # POST /
 # operationId: DescribeMatchmakingConfigurations
-export def "api get-matchmaking-configurations" [
+export def "describe-matchmaking-configurations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2992,7 +2992,7 @@ export def "api get-matchmaking-configurations" [
 #
 # POST /
 # operationId: DescribeMatchmakingRuleSets
-export def "api get-matchmaking-rule-sets" [
+export def "describe-matchmaking-rule-sets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3045,7 +3045,7 @@ export def "api get-matchmaking-rule-sets" [
 #
 # POST /
 # operationId: DescribePlayerSessions
-export def "api get-player-sessions" [
+export def "describe-player-sessions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3101,7 +3101,7 @@ export def "api get-player-sessions" [
 #
 # POST /
 # operationId: DescribeRuntimeConfiguration
-export def "api get-runtime-configuration" [
+export def "describe-runtime-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3149,7 +3149,7 @@ export def "api get-runtime-configuration" [
 #
 # POST /
 # operationId: DescribeScalingPolicies
-export def "api get-scaling-policies" [
+export def "describe-scaling-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3204,7 +3204,7 @@ export def "api get-scaling-policies" [
 #
 # POST /
 # operationId: DescribeScript
-export def "api get-script" [
+export def "describe-script" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3252,7 +3252,7 @@ export def "api get-script" [
 #
 # POST /
 # operationId: DescribeVpcPeeringAuthorizations
-export def "api get-vpc-peering-authorizations" [
+export def "describe-vpc-peering-authorizations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3300,7 +3300,7 @@ export def "api get-vpc-peering-authorizations" [
 #
 # POST /
 # operationId: DescribeVpcPeeringConnections
-export def "api get-vpc-peering-connections" [
+export def "describe-vpc-peering-connections" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3348,7 +3348,7 @@ export def "api get-vpc-peering-connections" [
 #
 # POST /
 # operationId: GetComputeAccess
-export def "api get-compute-access" [
+export def "get-compute-access" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3397,7 +3397,7 @@ export def "api get-compute-access" [
 #
 # POST /
 # operationId: GetComputeAuthToken
-export def "api get-compute-auth-token" [
+export def "get-compute-auth-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3446,7 +3446,7 @@ export def "api get-compute-auth-token" [
 #
 # POST /
 # operationId: GetGameSessionLogUrl
-export def "api get-game-session-log-url" [
+export def "get-game-session-log-url" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3494,7 +3494,7 @@ export def "api get-game-session-log-url" [
 #
 # POST /
 # operationId: GetInstanceAccess
-export def "api get-instance-access" [
+export def "get-instance-access" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3543,7 +3543,7 @@ export def "api get-instance-access" [
 #
 # POST /
 # operationId: ListAliases
-export def "api list-aliases" [
+export def "list-aliases" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3597,7 +3597,7 @@ export def "api list-aliases" [
 #
 # POST /
 # operationId: ListBuilds
-export def "api list-builds" [
+export def "list-builds" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3650,7 +3650,7 @@ export def "api list-builds" [
 #
 # POST /
 # operationId: ListCompute
-export def "api list-compute" [
+export def "list-compute" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3704,7 +3704,7 @@ export def "api list-compute" [
 #
 # POST /
 # operationId: ListFleets
-export def "api list-fleets" [
+export def "list-fleets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3758,7 +3758,7 @@ export def "api list-fleets" [
 #
 # POST /
 # operationId: ListGameServerGroups
-export def "api list-game-server-groups" [
+export def "list-game-server-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3810,7 +3810,7 @@ export def "api list-game-server-groups" [
 #
 # POST /
 # operationId: ListGameServers
-export def "api list-game-servers" [
+export def "list-game-servers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3864,7 +3864,7 @@ export def "api list-game-servers" [
 #
 # POST /
 # operationId: ListLocations
-export def "api list-locations" [
+export def "list-locations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3917,7 +3917,7 @@ export def "api list-locations" [
 #
 # POST /
 # operationId: ListScripts
-export def "api list-scripts" [
+export def "list-scripts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3969,7 +3969,7 @@ export def "api list-scripts" [
 #
 # POST /
 # operationId: ListTagsForResource
-export def "api list-tags-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4017,7 +4017,7 @@ export def "api list-tags-for-resource" [
 #
 # POST /
 # operationId: PutScalingPolicy
-export def "api update-scaling-policy" [
+export def "put-scaling-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4074,7 +4074,7 @@ export def "api update-scaling-policy" [
 #
 # POST /
 # operationId: RegisterCompute
-export def "api create-compute" [
+export def "register-compute" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4127,7 +4127,7 @@ export def "api create-compute" [
 #
 # POST /
 # operationId: RegisterGameServer
-export def "api create-game-server" [
+export def "register-game-server" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4179,7 +4179,7 @@ export def "api create-game-server" [
 #
 # POST /
 # operationId: RequestUploadCredentials
-export def "api request-upload-credentials" [
+export def "request-upload-credentials" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4227,7 +4227,7 @@ export def "api request-upload-credentials" [
 #
 # POST /
 # operationId: ResolveAlias
-export def "api create-resolve-alias" [
+export def "resolve-alias" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4275,7 +4275,7 @@ export def "api create-resolve-alias" [
 #
 # POST /
 # operationId: ResumeGameServerGroup
-export def "api create-resume-game-server-group" [
+export def "resume-game-server-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4324,7 +4324,7 @@ export def "api create-resume-game-server-group" [
 #
 # POST /
 # operationId: SearchGameSessions
-export def "api list-game-sessions" [
+export def "search-game-sessions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4381,7 +4381,7 @@ export def "api list-game-sessions" [
 #
 # POST /
 # operationId: StartFleetActions
-export def "api start-fleet-actions" [
+export def "start-fleet-actions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4431,7 +4431,7 @@ export def "api start-fleet-actions" [
 #
 # POST /
 # operationId: StartGameSessionPlacement
-export def "api start-game-session-placement" [
+export def "start-game-session-placement" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4486,7 +4486,7 @@ export def "api start-game-session-placement" [
 #
 # POST /
 # operationId: StartMatchBackfill
-export def "api start-match-backfill" [
+export def "start-match-backfill" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4537,7 +4537,7 @@ export def "api start-match-backfill" [
 #
 # POST /
 # operationId: StartMatchmaking
-export def "api start-matchmaking" [
+export def "start-matchmaking" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4587,7 +4587,7 @@ export def "api start-matchmaking" [
 #
 # POST /
 # operationId: StopFleetActions
-export def "api stop-fleet-actions" [
+export def "stop-fleet-actions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4637,7 +4637,7 @@ export def "api stop-fleet-actions" [
 #
 # POST /
 # operationId: StopGameSessionPlacement
-export def "api stop-game-session-placement" [
+export def "stop-game-session-placement" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4685,7 +4685,7 @@ export def "api stop-game-session-placement" [
 #
 # POST /
 # operationId: StopMatchmaking
-export def "api stop-matchmaking" [
+export def "stop-matchmaking" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4733,7 +4733,7 @@ export def "api stop-matchmaking" [
 #
 # POST /
 # operationId: SuspendGameServerGroup
-export def "api create-suspend-game-server-group" [
+export def "suspend-game-server-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4782,7 +4782,7 @@ export def "api create-suspend-game-server-group" [
 #
 # POST /
 # operationId: TagResource
-export def "api tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4831,7 +4831,7 @@ export def "api tag-resource" [
 #
 # POST /
 # operationId: UntagResource
-export def "api untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4880,7 +4880,7 @@ export def "api untag-resource" [
 #
 # POST /
 # operationId: UpdateAlias
-export def "api update-alias" [
+export def "update-alias" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4931,7 +4931,7 @@ export def "api update-alias" [
 #
 # POST /
 # operationId: UpdateBuild
-export def "api update-build" [
+export def "update-build" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4981,7 +4981,7 @@ export def "api update-build" [
 #
 # POST /
 # operationId: UpdateFleetAttributes
-export def "api update-fleet-attributes" [
+export def "update-fleet-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5035,7 +5035,7 @@ export def "api update-fleet-attributes" [
 #
 # POST /
 # operationId: UpdateFleetCapacity
-export def "api update-fleet-capacity" [
+export def "update-fleet-capacity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5087,7 +5087,7 @@ export def "api update-fleet-capacity" [
 #
 # POST /
 # operationId: UpdateFleetPortSettings
-export def "api update-fleet-port-settings" [
+export def "update-fleet-port-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5137,7 +5137,7 @@ export def "api update-fleet-port-settings" [
 #
 # POST /
 # operationId: UpdateGameServer
-export def "api update-game-server" [
+export def "update-game-server" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5189,7 +5189,7 @@ export def "api update-game-server" [
 #
 # POST /
 # operationId: UpdateGameServerGroup
-export def "api update-game-server-group" [
+export def "update-game-server-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5241,7 +5241,7 @@ export def "api update-game-server-group" [
 #
 # POST /
 # operationId: UpdateGameSession
-export def "api update-game-session" [
+export def "update-game-session" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5293,7 +5293,7 @@ export def "api update-game-session" [
 #
 # POST /
 # operationId: UpdateGameSessionQueue
-export def "api update-game-session-queue" [
+export def "update-game-session-queue" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5348,7 +5348,7 @@ export def "api update-game-session-queue" [
 #
 # POST /
 # operationId: UpdateMatchmakingConfiguration
-export def "api update-matchmaking-configuration" [
+export def "update-matchmaking-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5409,7 +5409,7 @@ export def "api update-matchmaking-configuration" [
 #
 # POST /
 # operationId: UpdateRuntimeConfiguration
-export def "api update-runtime-configuration" [
+export def "update-runtime-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5458,7 +5458,7 @@ export def "api update-runtime-configuration" [
 #
 # POST /
 # operationId: UpdateScript
-export def "api update-script" [
+export def "update-script" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5510,7 +5510,7 @@ export def "api update-script" [
 #
 # POST /
 # operationId: ValidateMatchmakingRuleSet
-export def "api validate-matchmaking-rule-update" [
+export def "validate-matchmaking-rule-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

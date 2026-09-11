@@ -129,7 +129,7 @@ def type-completer-1 [] { ["default" "important" "info" "inverse" "success" "war
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "audits list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-audits" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -153,7 +153,7 @@ export def commands []: nothing -> table {
 #
 # GET /audits
 # operationId: getAudits
-export def "audits list" [
+export def "get-audits" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -192,7 +192,7 @@ export def "audits list" [
 #
 # GET /audits/metadata
 # operationId: getFieldsAudits
-export def "audits-metadata get-fields" [
+export def "get-fields-audits" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -227,7 +227,7 @@ export def "audits-metadata get-fields" [
 #
 # DELETE /audits/{id}
 # operationId: deleteAuditById
-export def "audits delete" [
+export def "delete-audit-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -264,7 +264,7 @@ export def "audits delete" [
 #
 # GET /audits/{id}
 # operationId: getAuditById
-export def "audits get" [
+export def "get-audit-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -303,7 +303,7 @@ export def "audits get" [
 #
 # GET /extensions
 # operationId: getExtensions
-export def "extensions get" [
+export def "get-extensions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -348,7 +348,7 @@ export def "extensions get" [
 #
 # GET /extensions/metadata
 # operationId: getFieldsExtensions
-export def "extensions-metadata get-fields" [
+export def "get-fields-extensions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -383,7 +383,7 @@ export def "extensions-metadata get-fields" [
 #
 # POST /extensions/{id}/ignore
 # operationId: ignoreExtensionUpdate
-export def "extensions-ignore update" [
+export def "ignore-extension-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -420,7 +420,7 @@ export def "extensions-ignore update" [
 #
 # POST /extensions/{id}/unignore
 # operationId: unignoreExtensionUpdate
-export def "extensions-unignore update" [
+export def "unignore-extension-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -457,7 +457,7 @@ export def "extensions-unignore update" [
 #
 # POST /extensions/{id}/update
 # operationId: updateExtension
-export def "extensions-update update" [
+export def "update-extension" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -494,7 +494,7 @@ export def "extensions-update update" [
 #
 # GET /feedbacks
 # operationId: getFeedbacks
-export def "feedbacks get" [
+export def "get-feedbacks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -531,7 +531,7 @@ export def "feedbacks get" [
 #
 # POST /feedbacks
 # operationId: createFeedbacks
-export def "feedbacks create" [
+export def "create-feedbacks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -570,7 +570,7 @@ export def "feedbacks create" [
 #
 # GET /feedbacks/metadata
 # operationId: getFieldsFeedbacks
-export def "feedbacks-metadata get-fields" [
+export def "get-fields-feedbacks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -604,7 +604,7 @@ export def "feedbacks-metadata get-fields" [
 # Get a list of logs
 #
 # GET /logs
-export def "logs get" [
+export def "get-logs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -648,7 +648,7 @@ export def "logs get" [
 #
 # GET /logs/export
 # operationId: getExportLogs
-export def "logs-export get" [
+export def "get-export-logs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -692,7 +692,7 @@ export def "logs-export get" [
 #
 # GET /logs/metadata
 # operationId: getFieldsLogs
-export def "logs-metadata get-fields" [
+export def "get-fields-logs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -727,7 +727,7 @@ export def "logs-metadata get-fields" [
 #
 # GET /logs/types
 # operationId: getTypesLogs
-export def "logs-types get" [
+export def "get-types-logs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -762,7 +762,7 @@ export def "logs-types get" [
 #
 # DELETE /logs/{id}
 # operationId: deleteLogById
-export def "logs delete" [
+export def "delete-log-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -796,7 +796,7 @@ export def "logs delete" [
 }
 
 # POST /packages
-export def "packages create" [
+export def "post-packages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -829,7 +829,7 @@ export def "packages create" [
 # Returns a PDF report for a specific site
 #
 # GET /reports/sites/{id}
-export def "reports-sites get" [
+export def "get-reports-sites-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -870,7 +870,7 @@ export def "reports-sites get" [
 # Find sites by ID
 #
 # GET /reports/tags/{id}
-export def "reports-tags get" [
+export def "get-reports-tags-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -912,7 +912,7 @@ export def "reports-tags get" [
 #
 # GET /sites
 # operationId: getSites
-export def "sites list" [
+export def "get-sites" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -963,7 +963,7 @@ export def "sites list" [
 #
 # POST /sites
 # operationId: createSite
-export def "sites create" [
+export def "create-site" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1012,7 +1012,7 @@ export def "sites create" [
 # Get the list of fields
 #
 # GET /sites/metadata
-export def "sites-metadata get" [
+export def "get-sites-metadata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1046,7 +1046,7 @@ export def "sites-metadata get" [
 # Delete a specific Site
 #
 # DELETE /sites/{id}
-export def "sites delete" [
+export def "delete-sites-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1083,7 +1083,7 @@ export def "sites delete" [
 #
 # GET /sites/{id}
 # operationId: getSiteById
-export def "sites get" [
+export def "get-site-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1121,7 +1121,7 @@ export def "sites get" [
 # Update a site
 #
 # PUT /sites/{id}
-export def "sites update" [
+export def "put-sites-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1173,7 +1173,7 @@ export def "sites update" [
 #
 # GET /sites/{id}/audits
 # operationId: getSiteAudits
-export def "sites-audits get" [
+export def "get-site-audits" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1215,7 +1215,7 @@ export def "sites-audits get" [
 #
 # POST /sites/{id}/audits
 # operationId: createAudits
-export def "sites-audits create" [
+export def "create-audits" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1252,7 +1252,7 @@ export def "sites-audits create" [
 #
 # POST /sites/{id}/backupnow
 # operationId: addSiteToBackupQueue
-export def "sites-backupnow create-to-backup-queue" [
+export def "add-site-to-backup-queue" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1289,7 +1289,7 @@ export def "sites-backupnow create-to-backup-queue" [
 #
 # GET /sites/{id}/backupprofiles
 # operationId: getBackupProfiles
-export def "sites-backupprofiles get-backup-profiles" [
+export def "get-backup-profiles" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1326,7 +1326,7 @@ export def "sites-backupprofiles get-backup-profiles" [
 #
 # GET /sites/{id}/backups
 # operationId: getListBackups
-export def "sites-backups get-list" [
+export def "get-list-backups" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1363,7 +1363,7 @@ export def "sites-backups get-list" [
 #
 # POST /sites/{id}/backupstart
 # operationId: startSiteBackup
-export def "sites-backupstart start-backup" [
+export def "start-site-backup" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1400,7 +1400,7 @@ export def "sites-backupstart start-backup" [
 #
 # POST /sites/{id}/backupstep
 # operationId: stepSiteBackup
-export def "sites-backupstep create-step-backup" [
+export def "step-site-backup" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1436,7 +1436,7 @@ export def "sites-backupstep create-step-backup" [
 # Get extensions for a site
 #
 # GET /sites/{id}/extensions
-export def "sites-extensions get" [
+export def "get-sites-id-extensions" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1478,7 +1478,7 @@ export def "sites-extensions get" [
 #
 # POST /sites/{id}/extensions
 # operationId: installExtension
-export def "sites-extensions create-install" [
+export def "install-extension" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1516,7 +1516,7 @@ export def "sites-extensions create-install" [
 # Return logs for a specific website
 #
 # GET /sites/{id}/logs
-export def "sites-logs get" [
+export def "get-sites-id-logs" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1562,7 +1562,7 @@ export def "sites-logs get" [
 #
 # POST /sites/{id}/logs
 # operationId: CreateLog
-export def "sites-logs create" [
+export def "create-log" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1605,7 +1605,7 @@ export def "sites-logs create" [
 #
 # DELETE /sites/{id}/monitor
 # operationId: deleteMonitor
-export def "sites-monitor delete" [
+export def "delete-monitor" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1642,7 +1642,7 @@ export def "sites-monitor delete" [
 #
 # POST /sites/{id}/monitor
 # operationId: postMonitor
-export def "sites-monitor create" [
+export def "post-monitor" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1679,7 +1679,7 @@ export def "sites-monitor create" [
 #
 # GET /sites/{id}/scanner
 # operationId: scanner
-export def "sites-scanner get" [
+export def "scanner" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1716,7 +1716,7 @@ export def "sites-scanner get" [
 #
 # GET /sites/{id}/seo
 # operationId: seoAnalyze
-export def "sites-seo get-analyze" [
+export def "seo-analyze" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1752,7 +1752,7 @@ export def "sites-seo get-analyze" [
 # Return tags for a specific website
 #
 # GET /sites/{id}/tags
-export def "sites-tags get" [
+export def "get-sites-id-tags" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1796,7 +1796,7 @@ export def "sites-tags get" [
 #
 # POST /sites/{id}/tags
 # operationId: postTags
-export def "sites-tags create" [
+export def "post-tags" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1840,7 +1840,7 @@ export def "sites-tags create" [
 #
 # POST /sites/{id}/updatejoomla
 # operationId: updateJoomla
-export def "sites-update-joomla update" [
+export def "update-joomla" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1877,7 +1877,7 @@ export def "sites-update-joomla update" [
 #
 # GET /sites/{id}/uptime
 # operationId: getUptime
-export def "sites-uptime get" [
+export def "get-uptime" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1914,7 +1914,7 @@ export def "sites-uptime get" [
 #
 # GET /sites/{id}/validate
 # operationId: validateSite
-export def "sites-validate validate" [
+export def "validate-site" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1951,7 +1951,7 @@ export def "sites-validate validate" [
 #
 # GET /sites/{id}/validatedebug
 # operationId: validateDebugSite
-export def "sites-validatedebug validate-debug" [
+export def "validate-debug-site" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1988,7 +1988,7 @@ export def "sites-validatedebug validate-debug" [
 #
 # GET /ssousers
 # operationId: getSsoUsers
-export def "ssousers list" [
+export def "get-sso-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2023,7 +2023,7 @@ export def "ssousers list" [
 #
 # POST /ssousers
 # operationId: CreateSsoUsers
-export def "ssousers create-sso-users" [
+export def "create-sso-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2070,7 +2070,7 @@ export def "ssousers create-sso-users" [
 #
 # DELETE /ssousers/{id}
 # operationId: deleteSsoUserById
-export def "ssousers delete-sso-user" [
+export def "delete-sso-user-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2107,7 +2107,7 @@ export def "ssousers delete-sso-user" [
 #
 # GET /ssousers/{id}
 # operationId: getSsoUsersById
-export def "ssousers get-sso-users" [
+export def "get-sso-users-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2146,7 +2146,7 @@ export def "ssousers get-sso-users" [
 #
 # PUT /ssousers/{id}
 # operationId: UpdateSsoUsers
-export def "ssousers update-sso-users" [
+export def "update-sso-users" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2194,7 +2194,7 @@ export def "ssousers update-sso-users" [
 # Get a list of tags
 #
 # GET /tags
-export def "tags list" [
+export def "get-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2236,7 +2236,7 @@ export def "tags list" [
 #
 # POST /tags
 # operationId: CreateTags
-export def "tags create" [
+export def "create-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2277,7 +2277,7 @@ export def "tags create" [
 # Get the list of fields
 #
 # GET /tags/metadata
-export def "tags-metadata get" [
+export def "get-tags-metadata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2311,7 +2311,7 @@ export def "tags-metadata get" [
 # Delete a specific tag
 #
 # DELETE /tags/{id}
-export def "tags delete" [
+export def "delete-tags-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2348,7 +2348,7 @@ export def "tags delete" [
 #
 # GET /tags/{id}
 # operationId: getTagById
-export def "tags get" [
+export def "get-tag-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2387,7 +2387,7 @@ export def "tags get" [
 #
 # PUT /tags/{id}
 # operationId: UpdateTag
-export def "tags update" [
+export def "update-tag" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2431,7 +2431,7 @@ export def "tags update" [
 #
 # GET /tags/{id}/sites
 # operationId: getSitesByTags
-export def "tags-sites get" [
+export def "get-sites-by-tags" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

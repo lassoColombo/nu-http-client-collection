@@ -111,7 +111,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account-reports-search list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "localservices-account-reports-search" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -135,7 +135,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/accountReports:search
 # operationId: localservices.accountReports.search
-export def "account-reports-search list" [
+export def "localservices-account-reports-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -190,7 +190,7 @@ export def "account-reports-search list" [
 #
 # GET /v1/detailedLeadReports:search
 # operationId: localservices.detailedLeadReports.search
-export def "detailed-lead-reports-search list" [
+export def "localservices-detailed-lead-reports-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)

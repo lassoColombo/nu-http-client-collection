@@ -124,7 +124,7 @@ def type-completer [] { ["searchServices"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-search-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -148,7 +148,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.Search/operations
 # operationId: Operations_List
-export def "providers-microsoft-search-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -185,7 +185,7 @@ export def "providers-microsoft-search-operations list" [
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Search/checkNameAvailability
 # Docs: https://aka.ms/search-manage
 # operationId: Services_CheckNameAvailability
-export def "subscriptions-providers-microsoft-search-check-name-availability check-services" [
+export def "services-check-name-availability" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -232,7 +232,7 @@ export def "subscriptions-providers-microsoft-search-check-name-availability che
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Search/searchServices
 # Docs: https://aka.ms/search-manage
 # operationId: Services_ListBySubscription
-export def "subscriptions-providers-microsoft-search-search-services list" [
+export def "services-list-by-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -274,7 +274,7 @@ export def "subscriptions-providers-microsoft-search-search-services list" [
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Search/searchServices
 # Docs: https://aka.ms/search-manage
 # operationId: Services_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-search-search-services list" [
+export def "services-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -318,7 +318,7 @@ export def "subscriptions-resource-groups-providers-microsoft-search-search-serv
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Search/searchServices/{searchServiceName}
 # Docs: https://aka.ms/search-manage
 # operationId: Services_Delete
-export def "subscriptions-resource-groups-providers-microsoft-search-search-services delete" [
+export def "services-delete" [
   subscription_id: string
   resource_group_name: string
   search_service_name: string
@@ -364,7 +364,7 @@ export def "subscriptions-resource-groups-providers-microsoft-search-search-serv
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Search/searchServices/{searchServiceName}
 # Docs: https://aka.ms/search-manage
 # operationId: Services_Get
-export def "subscriptions-resource-groups-providers-microsoft-search-search-services get" [
+export def "services-get" [
   subscription_id: string
   resource_group_name: string
   search_service_name: string
@@ -413,7 +413,7 @@ export def "subscriptions-resource-groups-providers-microsoft-search-search-serv
 # --properties shape: {hostingMode?: "default"|"highDensity", partitionCount?: int, replicaCount?: int}
 # --sku shape: {name?: "free"|"basic"|"standard"|"standard2"|"standard3"|"storage_optimized_l1"|"storage_optimized_l2"}
 # --identity shape: {type: "None"|"SystemAssigned"}
-export def "subscriptions-resource-groups-providers-microsoft-search-search-services update" [
+export def "services-update" [
   subscription_id: string
   resource_group_name: string
   search_service_name: string
@@ -470,7 +470,7 @@ export def "subscriptions-resource-groups-providers-microsoft-search-search-serv
 # --properties shape: {hostingMode?: "default"|"highDensity", partitionCount?: int, replicaCount?: int}
 # --sku shape: {name?: "free"|"basic"|"standard"|"standard2"|"standard3"|"storage_optimized_l1"|"storage_optimized_l2"}
 # --identity shape: {type: "None"|"SystemAssigned"}
-export def "subscriptions-resource-groups-providers-microsoft-search-search-services create-or-update" [
+export def "services-create-or-update" [
   subscription_id: string
   resource_group_name: string
   search_service_name: string
@@ -524,7 +524,7 @@ export def "subscriptions-resource-groups-providers-microsoft-search-search-serv
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Search/searchServices/{searchServiceName}/createQueryKey/{name}
 # Docs: https://aka.ms/search-manage
 # operationId: QueryKeys_Create
-export def "subscriptions-resource-groups-providers-microsoft-search-search-services-create-query-key list" [
+export def "query-keys-create" [
   subscription_id: string
   resource_group_name: string
   search_service_name: string
@@ -572,7 +572,7 @@ export def "subscriptions-resource-groups-providers-microsoft-search-search-serv
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Search/searchServices/{searchServiceName}/deleteQueryKey/{key}
 # Docs: https://aka.ms/search-manage
 # operationId: QueryKeys_Delete
-export def "subscriptions-resource-groups-providers-microsoft-search-search-services-delete-query-key list" [
+export def "query-keys-delete" [
   subscription_id: string
   resource_group_name: string
   search_service_name: string
@@ -620,7 +620,7 @@ export def "subscriptions-resource-groups-providers-microsoft-search-search-serv
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Search/searchServices/{searchServiceName}/listAdminKeys
 # Docs: https://aka.ms/search-manage
 # operationId: AdminKeys_Get
-export def "subscriptions-resource-groups-providers-microsoft-search-search-services-list-admin-keys get" [
+export def "admin-keys-get" [
   subscription_id: string
   resource_group_name: string
   search_service_name: string
@@ -666,7 +666,7 @@ export def "subscriptions-resource-groups-providers-microsoft-search-search-serv
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Search/searchServices/{searchServiceName}/listQueryKeys
 # Docs: https://aka.ms/search-manage
 # operationId: QueryKeys_ListBySearchService
-export def "subscriptions-resource-groups-providers-microsoft-search-search-services-list-query-keys list" [
+export def "query-keys-list-by-search-service" [
   subscription_id: string
   resource_group_name: string
   search_service_name: string
@@ -712,7 +712,7 @@ export def "subscriptions-resource-groups-providers-microsoft-search-search-serv
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Search/searchServices/{searchServiceName}/regenerateAdminKey/{keyKind}
 # Docs: https://aka.ms/search-manage
 # operationId: AdminKeys_Regenerate
-export def "subscriptions-resource-groups-providers-microsoft-search-search-services-regenerate-admin-key create" [
+export def "admin-keys-regenerate" [
   subscription_id: string
   resource_group_name: string
   search_service_name: string

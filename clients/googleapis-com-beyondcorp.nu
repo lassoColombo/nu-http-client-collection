@@ -131,7 +131,7 @@ def host-type-completer [] { ["GCP_REGIONAL_MIG" "HOST_TYPE_UNSPECIFIED"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects create-report-status" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "beyondcorp-projects-locations-app-connectors-report-status" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -156,7 +156,7 @@ export def commands []: nothing -> table {
 # POST /v1/{appConnector}:reportStatus
 # operationId: beyondcorp.projects.locations.appConnectors.reportStatus
 # --resourceInfo shape: {id?: string, resource?: record, status?: "HEALTH_STATUS_UNSPECIFIED"|"HEALTHY"|"UNHEALTHY"|"UNRESPONSIVE"|"DEGRADED", sub?: list, time?: string}
-export def "projects create-report-status" [
+export def "beyondcorp-projects-locations-app-connectors-report-status" [
   app_connector: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -210,7 +210,7 @@ export def "projects create-report-status" [
 #
 # GET /v1/{appConnector}:resolveInstanceConfig
 # operationId: beyondcorp.projects.locations.appConnectors.resolveInstanceConfig
-export def "projects get-resolve-instance-config" [
+export def "beyondcorp-projects-locations-app-connectors-resolve-instance-config" [
   app_connector: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -258,7 +258,7 @@ export def "projects get-resolve-instance-config" [
 #
 # DELETE /v1/{name}
 # operationId: beyondcorp.projects.locations.operations.delete
-export def "projects delete" [
+export def "beyondcorp-projects-locations-operations-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -308,7 +308,7 @@ export def "projects delete" [
 #
 # GET /v1/{name}
 # operationId: beyondcorp.projects.locations.operations.get
-export def "projects get" [
+export def "beyondcorp-projects-locations-operations-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -358,7 +358,7 @@ export def "projects get" [
 # operationId: beyondcorp.projects.locations.appConnectors.patch
 # --principalInfo shape: {serviceAccount?: record}
 # --resourceInfo shape: {id?: string, resource?: record, status?: "HEALTH_STATUS_UNSPECIFIED"|"HEALTHY"|"UNHEALTHY"|"UNRESPONSIVE"|"DEGRADED", sub?: list, time?: string}
-export def "projects update" [
+export def "beyondcorp-projects-locations-app-connectors-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -417,7 +417,7 @@ export def "projects update" [
 #
 # GET /v1/{name}/locations
 # operationId: beyondcorp.projects.locations.list
-export def "locations list" [
+export def "beyondcorp-projects-locations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -468,7 +468,7 @@ export def "locations list" [
 #
 # GET /v1/{name}/operations
 # operationId: beyondcorp.projects.locations.operations.list
-export def "operations list" [
+export def "beyondcorp-projects-locations-operations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -519,7 +519,7 @@ export def "operations list" [
 #
 # POST /v1/{name}:cancel
 # operationId: beyondcorp.projects.locations.operations.cancel
-export def "projects cancel" [
+export def "beyondcorp-projects-locations-operations-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -571,7 +571,7 @@ export def "projects cancel" [
 #
 # GET /v1/{parent}/appConnections
 # operationId: beyondcorp.projects.locations.appConnections.list
-export def "app-connections list" [
+export def "beyondcorp-projects-locations-app-connections-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -625,7 +625,7 @@ export def "app-connections list" [
 # operationId: beyondcorp.projects.locations.appConnections.create
 # --applicationEndpoint shape: {host?: string, port?: int}
 # --gateway shape: {appGateway?: string, type?: "TYPE_UNSPECIFIED"|"GCP_REGIONAL_MIG"}
-export def "app-connections create" [
+export def "beyondcorp-projects-locations-app-connections-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -686,7 +686,7 @@ export def "app-connections create" [
 #
 # GET /v1/{parent}/appConnections:resolve
 # operationId: beyondcorp.projects.locations.appConnections.resolve
-export def "app-connections-resolve get" [
+export def "beyondcorp-projects-locations-app-connections-resolve" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -737,7 +737,7 @@ export def "app-connections-resolve get" [
 #
 # GET /v1/{parent}/appConnectors
 # operationId: beyondcorp.projects.locations.appConnectors.list
-export def "app-connectors list" [
+export def "beyondcorp-projects-locations-app-connectors-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -791,7 +791,7 @@ export def "app-connectors list" [
 # operationId: beyondcorp.projects.locations.appConnectors.create
 # --principalInfo shape: {serviceAccount?: record}
 # --resourceInfo shape: {id?: string, resource?: record, status?: "HEALTH_STATUS_UNSPECIFIED"|"HEALTHY"|"UNHEALTHY"|"UNRESPONSIVE"|"DEGRADED", sub?: list, time?: string}
-export def "app-connectors create" [
+export def "beyondcorp-projects-locations-app-connectors-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -850,7 +850,7 @@ export def "app-connectors create" [
 #
 # GET /v1/{parent}/appGateways
 # operationId: beyondcorp.projects.locations.appGateways.list
-export def "app-gateways list" [
+export def "beyondcorp-projects-locations-app-gateways-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -903,7 +903,7 @@ export def "app-gateways list" [
 # POST /v1/{parent}/appGateways
 # operationId: beyondcorp.projects.locations.appGateways.create
 # --allocatedConnections item shape: {ingressPort?: int, pscUri?: string}
-export def "app-gateways create" [
+export def "beyondcorp-projects-locations-app-gateways-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -962,7 +962,7 @@ export def "app-gateways create" [
 #
 # GET /v1/{resource}:getIamPolicy
 # operationId: beyondcorp.projects.locations.clientGateways.getIamPolicy
-export def "projects get-iam-policy" [
+export def "beyondcorp-projects-locations-client-gateways-get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1012,7 +1012,7 @@ export def "projects get-iam-policy" [
 # POST /v1/{resource}:setIamPolicy
 # operationId: beyondcorp.projects.locations.clientGateways.setIamPolicy
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
-export def "projects update-iam-policy" [
+export def "beyondcorp-projects-locations-client-gateways-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1065,7 +1065,7 @@ export def "projects update-iam-policy" [
 #
 # POST /v1/{resource}:testIamPermissions
 # operationId: beyondcorp.projects.locations.clientGateways.testIamPermissions
-export def "projects test-iam-permissions" [
+export def "beyondcorp-projects-locations-client-gateways-test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

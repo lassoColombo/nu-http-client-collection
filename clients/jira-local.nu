@@ -115,7 +115,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "2-application-properties get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-api-2-application-properties" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -138,7 +138,7 @@ export def commands []: nothing -> table {
 # Returns an application property.
 #
 # GET /api/2/application-properties
-export def "2-application-properties get" [
+export def "get-api-2-application-properties" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -176,7 +176,7 @@ export def "2-application-properties get" [
 #
 # GET /api/2/application-properties/advanced-settings
 # operationId: getAdvancedSettings
-export def "2-application-properties-advanced-settings get" [
+export def "get-advanced-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -210,7 +210,7 @@ export def "2-application-properties-advanced-settings get" [
 #
 # PUT /api/2/application-properties/{id}
 # operationId: setPropertyViaRestfulTable
-export def "2-application-properties update-property-via-restful-table" [
+export def "set-property-via-restful-table" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -246,7 +246,7 @@ export def "2-application-properties update-property-via-restful-table" [
 #
 # GET /api/2/applicationrole
 # operationId: getAll
-export def "2-applicationrole get-list" [
+export def "get-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -280,7 +280,7 @@ export def "2-applicationrole get-list" [
 #
 # PUT /api/2/applicationrole
 # operationId: putBulk
-export def "2-applicationrole update-bulk" [
+export def "put-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -317,7 +317,7 @@ export def "2-applicationrole update-bulk" [
 #
 # GET /api/2/applicationrole/{key}
 # operationId: get
-export def "2-applicationrole get" [
+export def "get" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -353,7 +353,7 @@ export def "2-applicationrole get" [
 #
 # PUT /api/2/applicationrole/{key}
 # operationId: put
-export def "2-applicationrole update" [
+export def "put" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -392,7 +392,7 @@ export def "2-applicationrole update" [
 #
 # GET /api/2/attachment/meta
 # operationId: getAttachmentMeta
-export def "2-attachment-meta get" [
+export def "get-attachment-meta" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -426,7 +426,7 @@ export def "2-attachment-meta get" [
 #
 # DELETE /api/2/attachment/{id}
 # operationId: removeAttachment
-export def "2-attachment delete" [
+export def "remove-attachment" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -462,7 +462,7 @@ export def "2-attachment delete" [
 #
 # GET /api/2/attachment/{id}
 # operationId: getAttachment
-export def "2-attachment get" [
+export def "get-attachment" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -498,7 +498,7 @@ export def "2-attachment get" [
 #
 # GET /api/2/attachment/{id}/expand/human
 # operationId: expandForHumans
-export def "2-attachment-expand-human get" [
+export def "expand-for-humans" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -534,7 +534,7 @@ export def "2-attachment-expand-human get" [
 #
 # GET /api/2/attachment/{id}/expand/raw
 # operationId: expandForMachines
-export def "2-attachment-expand-raw get-for-machines" [
+export def "expand-for-machines" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -570,7 +570,7 @@ export def "2-attachment-expand-raw get-for-machines" [
 #
 # GET /api/2/auditing/record
 # operationId: getRecords
-export def "2-auditing-record get" [
+export def "get-records" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -612,7 +612,7 @@ export def "2-auditing-record get" [
 #
 # POST /api/2/auditing/record
 # operationId: addRecord
-export def "2-auditing-record create" [
+export def "add-record" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -646,7 +646,7 @@ export def "2-auditing-record create" [
 #
 # GET /api/2/avatar/{type}/system
 # operationId: getAllSystemAvatars
-export def "2-avatar-system get-list" [
+export def "get-all-system-avatars" [
   type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -682,7 +682,7 @@ export def "2-avatar-system get-list" [
 #
 # POST /api/2/avatar/{type}/temporary
 # operationId: storeTemporaryAvatar
-export def "2-avatar-temporary create-store" [
+export def "store-temporary-avatar" [
   type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -720,7 +720,7 @@ export def "2-avatar-temporary create-store" [
 # Updates the cropping instructions of the temporary avatar.
 #
 # POST /api/2/avatar/{type}/temporaryCrop
-export def "2-avatar-temporary-crop create" [
+export def "post-api-2-avatar-type-temporary-crop" [
   type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -755,7 +755,7 @@ export def "2-avatar-temporary-crop create" [
 # POST /api/2/cluster/zdu/approve
 #
 # operationId: approveUpgrade
-export def "2-cluster-zdu-approve approve-upgrade" [
+export def "approve-upgrade" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -788,7 +788,7 @@ export def "2-cluster-zdu-approve approve-upgrade" [
 # POST /api/2/cluster/zdu/cancel
 #
 # operationId: cancelUpgrade
-export def "2-cluster-zdu-cancel cancel-upgrade" [
+export def "cancel-upgrade" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -821,7 +821,7 @@ export def "2-cluster-zdu-cancel cancel-upgrade" [
 # POST /api/2/cluster/zdu/retryUpgrade
 #
 # operationId: acknowledgeErrors
-export def "2-cluster-zdu-retry-upgrade create-acknowledge-errors" [
+export def "acknowledge-errors" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -854,7 +854,7 @@ export def "2-cluster-zdu-retry-upgrade create-acknowledge-errors" [
 # POST /api/2/cluster/zdu/start
 #
 # operationId: setReadyToUpgrade
-export def "2-cluster-zdu-start update-ready-to-upgrade" [
+export def "set-ready-to-upgrade" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -887,7 +887,7 @@ export def "2-cluster-zdu-start update-ready-to-upgrade" [
 # GET /api/2/cluster/zdu/state
 #
 # operationId: getState
-export def "2-cluster-zdu-state get" [
+export def "get-state" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -920,7 +920,7 @@ export def "2-cluster-zdu-state get" [
 # Returns the keys of all properties for the comment identified by the key or by the id.
 #
 # GET /api/2/comment/{commentId}/properties
-export def "2-comment-properties list" [
+export def "get-api-2-comment-comment-id-properties" [
   comment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -955,7 +955,7 @@ export def "2-comment-properties list" [
 # Removes the property from the comment identified by the key or by the id. Ths user removing the property is required to have permissions to administer the comment.
 #
 # DELETE /api/2/comment/{commentId}/properties/{propertyKey}
-export def "2-comment-properties delete" [
+export def "delete-api-2-comment-comment-id-properties-property-key" [
   comment_id: string
   property_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -992,7 +992,7 @@ export def "2-comment-properties delete" [
 # Returns the value of the property with a given key from the comment identified by the key or by the id. The user who retrieves the property is required to have permissions to read the comment.
 #
 # GET /api/2/comment/{commentId}/properties/{propertyKey}
-export def "2-comment-properties get" [
+export def "get-api-2-comment-comment-id-properties-property-key" [
   comment_id: string
   property_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1029,7 +1029,7 @@ export def "2-comment-properties get" [
 # Sets the value of the specified comment's property. You can use this resource to store a custom data against the comment identified by the key or by the id. The user who stores the data is required to have permissions to administer the comment.
 #
 # PUT /api/2/comment/{commentId}/properties/{propertyKey}
-export def "2-comment-properties update" [
+export def "put-api-2-comment-comment-id-properties-property-key" [
   comment_id: string
   property_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1067,7 +1067,7 @@ export def "2-comment-properties update" [
 #
 # POST /api/2/component
 # operationId: createComponent
-export def "2-component create" [
+export def "create-component" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1100,7 +1100,7 @@ export def "2-component create" [
 # Delete a project component.
 #
 # DELETE /api/2/component/{id}
-export def "2-component delete" [
+export def "delete-api-2-component-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1138,7 +1138,7 @@ export def "2-component delete" [
 #
 # GET /api/2/component/{id}
 # operationId: getComponent
-export def "2-component get" [
+export def "get-component" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1174,7 +1174,7 @@ export def "2-component get" [
 #
 # PUT /api/2/component/{id}
 # operationId: updateComponent
-export def "2-component update" [
+export def "update-component" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1210,7 +1210,7 @@ export def "2-component update" [
 #
 # GET /api/2/component/{id}/relatedIssueCounts
 # operationId: getComponentRelatedIssues
-export def "2-component-related-issue-counts get" [
+export def "get-component-related-issues" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1246,7 +1246,7 @@ export def "2-component-related-issue-counts get" [
 #
 # GET /api/2/configuration
 # operationId: getConfiguration
-export def "2-configuration get" [
+export def "get-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1280,7 +1280,7 @@ export def "2-configuration get" [
 #
 # GET /api/2/customFieldOption/{id}
 # operationId: getCustomFieldOption
-export def "2-custom-field-option get" [
+export def "get-custom-field-option" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1316,7 +1316,7 @@ export def "2-custom-field-option get" [
 #
 # GET /api/2/dashboard
 # operationId: list
-export def "2-dashboard list" [
+export def "list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1353,7 +1353,7 @@ export def "2-dashboard list" [
 # Returns the keys of all properties for the dashboard item identified by the id.
 #
 # GET /api/2/dashboard/{dashboardId}/items/{itemId}/properties
-export def "2-dashboard-items-properties list" [
+export def "get-api-2-dashboard-dashboard-id-items-item-id-properties" [
   dashboard_id: string
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1390,7 +1390,7 @@ export def "2-dashboard-items-properties list" [
 # Removes the property from the dashboard item identified by the key or by the id. Ths user removing the property is required to have permissions to administer the dashboard item.
 #
 # DELETE /api/2/dashboard/{dashboardId}/items/{itemId}/properties/{propertyKey}
-export def "2-dashboard-items-properties delete" [
+export def "delete-api-2-dashboard-dashboard-id-items-item-id-properties-property-key" [
   dashboard_id: string
   item_id: string
   property_key: string
@@ -1429,7 +1429,7 @@ export def "2-dashboard-items-properties delete" [
 # Returns the value of the property with a given key from the dashboard item identified by the id. The user who retrieves the property is required to have permissions to read the dashboard item.
 #
 # GET /api/2/dashboard/{dashboardId}/items/{itemId}/properties/{propertyKey}
-export def "2-dashboard-items-properties get" [
+export def "get-api-2-dashboard-dashboard-id-items-item-id-properties-property-key" [
   dashboard_id: string
   item_id: string
   property_key: string
@@ -1468,7 +1468,7 @@ export def "2-dashboard-items-properties get" [
 # Sets the value of the specified dashboard item's property. You can use this resource to store a custom data against the dashboard item identified by the id. The user who stores the data is required to have permissions to administer the dashboard item.
 #
 # PUT /api/2/dashboard/{dashboardId}/items/{itemId}/properties/{propertyKey}
-export def "2-dashboard-items-properties update" [
+export def "put-api-2-dashboard-dashboard-id-items-item-id-properties-property-key" [
   dashboard_id: string
   item_id: string
   property_key: string
@@ -1508,7 +1508,7 @@ export def "2-dashboard-items-properties update" [
 #
 # GET /api/2/dashboard/{id}
 # operationId: getDashboard
-export def "2-dashboard get" [
+export def "get-dashboard" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1544,7 +1544,7 @@ export def "2-dashboard get" [
 #
 # GET /api/2/field
 # operationId: getFields
-export def "2-field get" [
+export def "get-fields" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1578,7 +1578,7 @@ export def "2-field get" [
 #
 # POST /api/2/field
 # operationId: createCustomField
-export def "2-field create-custom" [
+export def "create-custom-field" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1612,7 +1612,7 @@ export def "2-field create-custom" [
 #
 # POST /api/2/filter
 # operationId: createFilter
-export def "2-filter create" [
+export def "create-filter" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1648,7 +1648,7 @@ export def "2-filter create" [
 #
 # GET /api/2/filter/defaultShareScope
 # operationId: getDefaultShareScope
-export def "2-filter-default-share-scope get" [
+export def "get-default-share-scope" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1682,7 +1682,7 @@ export def "2-filter-default-share-scope get" [
 #
 # PUT /api/2/filter/defaultShareScope
 # operationId: setDefaultShareScope
-export def "2-filter-default-share-scope update" [
+export def "set-default-share-scope" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1716,7 +1716,7 @@ export def "2-filter-default-share-scope update" [
 #
 # GET /api/2/filter/favourite
 # operationId: getFavouriteFilters
-export def "2-filter-favourite get" [
+export def "get-favourite-filters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1753,7 +1753,7 @@ export def "2-filter-favourite get" [
 #
 # DELETE /api/2/filter/{id}
 # operationId: deleteFilter
-export def "2-filter delete" [
+export def "delete-filter" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1789,7 +1789,7 @@ export def "2-filter delete" [
 #
 # GET /api/2/filter/{id}
 # operationId: getFilter
-export def "2-filter get" [
+export def "get-filter" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1828,7 +1828,7 @@ export def "2-filter get" [
 #
 # PUT /api/2/filter/{id}
 # operationId: editFilter
-export def "2-filter update-edit" [
+export def "edit-filter" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1865,7 +1865,7 @@ export def "2-filter update-edit" [
 # Resets the columns for the given filter such that the filter no longer has its own column config.
 #
 # DELETE /api/2/filter/{id}/columns
-export def "2-filter-columns delete" [
+export def "delete-api-2-filter-id-columns" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1900,7 +1900,7 @@ export def "2-filter-columns delete" [
 # Returns the default columns for the given filter. Currently logged in user will be used as the user making such request.
 #
 # GET /api/2/filter/{id}/columns
-export def "2-filter-columns get" [
+export def "get-api-2-filter-id-columns" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1935,7 +1935,7 @@ export def "2-filter-columns get" [
 # Sets the default columns for the given filter.
 #
 # PUT /api/2/filter/{id}/columns
-export def "2-filter-columns update" [
+export def "put-api-2-filter-id-columns" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1971,7 +1971,7 @@ export def "2-filter-columns update" [
 #
 # GET /api/2/filter/{id}/permission
 # operationId: getSharePermissions
-export def "2-filter-permission list" [
+export def "get-share-permissions" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2007,7 +2007,7 @@ export def "2-filter-permission list" [
 #
 # POST /api/2/filter/{id}/permission
 # operationId: addSharePermission
-export def "2-filter-permission create-share" [
+export def "add-share-permission" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2043,7 +2043,7 @@ export def "2-filter-permission create-share" [
 #
 # DELETE /api/2/filter/{id}/permission/{permission-id}
 # operationId: deleteSharePermission
-export def "2-filter-permission delete-share" [
+export def "delete-share-permission" [
   id: int
   permission_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2081,7 +2081,7 @@ export def "2-filter-permission delete-share" [
 #
 # GET /api/2/filter/{id}/permission/{permissionId}
 # operationId: getSharePermission
-export def "2-filter-permission get-share" [
+export def "get-share-permission" [
   id: int
   permission_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2119,7 +2119,7 @@ export def "2-filter-permission get-share" [
 #
 # DELETE /api/2/group
 # operationId: removeGroup
-export def "2-group delete" [
+export def "remove-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2156,7 +2156,7 @@ export def "2-group delete" [
 #
 # GET /api/2/group
 # operationId: getGroup
-export def "2-group get" [
+export def "get-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2193,7 +2193,7 @@ export def "2-group get" [
 #
 # POST /api/2/group
 # operationId: createGroup
-export def "2-group create" [
+export def "create-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2227,7 +2227,7 @@ export def "2-group create" [
 #
 # GET /api/2/group/member
 # operationId: getUsersFromGroup
-export def "2-group-member get-users" [
+export def "get-users-from-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2266,7 +2266,7 @@ export def "2-group-member get-users" [
 #
 # DELETE /api/2/group/user
 # operationId: removeUserFromGroup
-export def "2-group-user delete" [
+export def "remove-user-from-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2303,7 +2303,7 @@ export def "2-group-user delete" [
 #
 # POST /api/2/group/user
 # operationId: addUserToGroup
-export def "2-group-user create" [
+export def "add-user-to-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2339,7 +2339,7 @@ export def "2-group-user create" [
 #
 # GET /api/2/groups/picker
 # operationId: findGroups
-export def "2-groups-picker find" [
+export def "find-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2378,7 +2378,7 @@ export def "2-groups-picker find" [
 #
 # GET /api/2/groupuserpicker
 # operationId: findUsersAndGroups
-export def "2-groupuserpicker find-users-and-groups" [
+export def "find-users-and-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2419,7 +2419,7 @@ export def "2-groupuserpicker find-users-and-groups" [
 #
 # GET /api/2/index/summary
 # operationId: getIndexSummary
-export def "2-index-summary get" [
+export def "get-index-summary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2453,7 +2453,7 @@ export def "2-index-summary get" [
 #
 # POST /api/2/issue
 # operationId: createIssue
-export def "2-issue create" [
+export def "create-issue" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2487,7 +2487,7 @@ export def "2-issue create" [
 #
 # POST /api/2/issue/bulk
 # operationId: createIssues
-export def "2-issue-bulk create" [
+export def "create-issues" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2521,7 +2521,7 @@ export def "2-issue-bulk create" [
 #
 # GET /api/2/issue/createmeta
 # operationId: getCreateIssueMeta
-export def "2-issue-createmeta get-create-meta" [
+export def "get-create-issue-meta" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2560,7 +2560,7 @@ export def "2-issue-createmeta get-create-meta" [
 #
 # GET /api/2/issue/picker
 # operationId: getIssuePickerResource
-export def "2-issue-picker get-resource" [
+export def "get-issue-picker-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2601,7 +2601,7 @@ export def "2-issue-picker get-resource" [
 #
 # DELETE /api/2/issue/{issueIdOrKey}
 # operationId: deleteIssue
-export def "2-issue delete" [
+export def "delete-issue" [
   issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2639,7 +2639,7 @@ export def "2-issue delete" [
 #
 # GET /api/2/issue/{issueIdOrKey}
 # operationId: getIssue
-export def "2-issue get" [
+export def "get-issue" [
   issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2679,7 +2679,7 @@ export def "2-issue get" [
 #
 # PUT /api/2/issue/{issueIdOrKey}
 # operationId: editIssue
-export def "2-issue update-edit" [
+export def "edit-issue" [
   issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2717,7 +2717,7 @@ export def "2-issue update-edit" [
 #
 # PUT /api/2/issue/{issueIdOrKey}/assignee
 # operationId: assign
-export def "2-issue-assignee assign" [
+export def "assign" [
   issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2753,7 +2753,7 @@ export def "2-issue-assignee assign" [
 #
 # POST /api/2/issue/{issueIdOrKey}/attachments
 # operationId: addAttachment
-export def "2-issue-attachments create" [
+export def "add-attachment" [
   issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2789,7 +2789,7 @@ export def "2-issue-attachments create" [
 #
 # GET /api/2/issue/{issueIdOrKey}/comment
 # operationId: getComments
-export def "2-issue-comment list" [
+export def "get-comments" [
   issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2830,7 +2830,7 @@ export def "2-issue-comment list" [
 #
 # POST /api/2/issue/{issueIdOrKey}/comment
 # operationId: addComment
-export def "2-issue-comment create" [
+export def "add-comment" [
   issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2868,7 +2868,7 @@ export def "2-issue-comment create" [
 #
 # DELETE /api/2/issue/{issueIdOrKey}/comment/{id}
 # operationId: deleteComment
-export def "2-issue-comment delete" [
+export def "delete-comment" [
   issue_id_or_key: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2906,7 +2906,7 @@ export def "2-issue-comment delete" [
 #
 # GET /api/2/issue/{issueIdOrKey}/comment/{id}
 # operationId: getComment
-export def "2-issue-comment get" [
+export def "get-comment" [
   issue_id_or_key: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2946,7 +2946,7 @@ export def "2-issue-comment get" [
 #
 # PUT /api/2/issue/{issueIdOrKey}/comment/{id}
 # operationId: updateComment
-export def "2-issue-comment update" [
+export def "update-comment" [
   issue_id_or_key: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2986,7 +2986,7 @@ export def "2-issue-comment update" [
 #
 # GET /api/2/issue/{issueIdOrKey}/editmeta
 # operationId: getEditIssueMeta
-export def "2-issue-editmeta get-edit-meta" [
+export def "get-edit-issue-meta" [
   issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3022,7 +3022,7 @@ export def "2-issue-editmeta get-edit-meta" [
 #
 # POST /api/2/issue/{issueIdOrKey}/notify
 # operationId: notify
-export def "2-issue-notify notify" [
+export def "notify" [
   issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3057,7 +3057,7 @@ export def "2-issue-notify notify" [
 # Returns the keys of all properties for the issue identified by the key or by the id.
 #
 # GET /api/2/issue/{issueIdOrKey}/properties
-export def "2-issue-properties list" [
+export def "get-api-2-issue-issue-id-or-key-properties" [
   issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3092,7 +3092,7 @@ export def "2-issue-properties list" [
 # Removes the property from the issue identified by the key or by the id. Ths user removing the property is required to have permissions to edit the issue.
 #
 # DELETE /api/2/issue/{issueIdOrKey}/properties/{propertyKey}
-export def "2-issue-properties delete" [
+export def "delete-api-2-issue-issue-id-or-key-properties-property-key" [
   issue_id_or_key: string
   property_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3129,7 +3129,7 @@ export def "2-issue-properties delete" [
 # Returns the value of the property with a given key from the issue identified by the key or by the id. The user who retrieves the property is required to have permissions to read the issue.
 #
 # GET /api/2/issue/{issueIdOrKey}/properties/{propertyKey}
-export def "2-issue-properties get" [
+export def "get-api-2-issue-issue-id-or-key-properties-property-key" [
   issue_id_or_key: string
   property_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3166,7 +3166,7 @@ export def "2-issue-properties get" [
 # Sets the value of the specified issue's property. You can use this resource to store a custom data against the issue identified by the key or by the id. The user who stores the data is required to have permissions to edit the issue.
 #
 # PUT /api/2/issue/{issueIdOrKey}/properties/{propertyKey}
-export def "2-issue-properties update" [
+export def "put-api-2-issue-issue-id-or-key-properties-property-key" [
   issue_id_or_key: string
   property_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3204,7 +3204,7 @@ export def "2-issue-properties update" [
 #
 # DELETE /api/2/issue/{issueIdOrKey}/remotelink
 # operationId: deleteRemoteIssueLinkByGlobalId
-export def "2-issue-remotelink delete-remote-link-by-global" [
+export def "delete-remote-issue-link-by-global-id" [
   issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3242,7 +3242,7 @@ export def "2-issue-remotelink delete-remote-link-by-global" [
 #
 # GET /api/2/issue/{issueIdOrKey}/remotelink
 # operationId: getRemoteIssueLinks
-export def "2-issue-remotelink get-remote-links" [
+export def "get-remote-issue-links" [
   issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3280,7 +3280,7 @@ export def "2-issue-remotelink get-remote-links" [
 #
 # POST /api/2/issue/{issueIdOrKey}/remotelink
 # operationId: createOrUpdateRemoteIssueLink
-export def "2-issue-remotelink create-or-update-remote-link" [
+export def "create-or-update-remote-issue-link" [
   issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3316,7 +3316,7 @@ export def "2-issue-remotelink create-or-update-remote-link" [
 #
 # DELETE /api/2/issue/{issueIdOrKey}/remotelink/{linkId}
 # operationId: deleteRemoteIssueLinkById
-export def "2-issue-remotelink delete-remote-link" [
+export def "delete-remote-issue-link-by-id" [
   issue_id_or_key: string
   link_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3354,7 +3354,7 @@ export def "2-issue-remotelink delete-remote-link" [
 #
 # GET /api/2/issue/{issueIdOrKey}/remotelink/{linkId}
 # operationId: getRemoteIssueLinkById
-export def "2-issue-remotelink get-remote-link" [
+export def "get-remote-issue-link-by-id" [
   issue_id_or_key: string
   link_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3392,7 +3392,7 @@ export def "2-issue-remotelink get-remote-link" [
 #
 # PUT /api/2/issue/{issueIdOrKey}/remotelink/{linkId}
 # operationId: updateRemoteIssueLink
-export def "2-issue-remotelink update-remote-link" [
+export def "update-remote-issue-link" [
   issue_id_or_key: string
   link_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3430,7 +3430,7 @@ export def "2-issue-remotelink update-remote-link" [
 #
 # GET /api/2/issue/{issueIdOrKey}/subtask
 # operationId: getSubTasks
-export def "2-issue-subtask get-sub-tasks" [
+export def "get-sub-tasks" [
   issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3465,7 +3465,7 @@ export def "2-issue-subtask get-sub-tasks" [
 # GET /api/2/issue/{issueIdOrKey}/subtask/move
 #
 # operationId: canMoveSubTask
-export def "2-issue-subtask-move move-can-sub-task" [
+export def "can-move-sub-task" [
   issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3501,7 +3501,7 @@ export def "2-issue-subtask-move move-can-sub-task" [
 #
 # POST /api/2/issue/{issueIdOrKey}/subtask/move
 # operationId: moveSubTasks
-export def "2-issue-subtask-move move-sub-tasks" [
+export def "move-sub-tasks" [
   issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3537,7 +3537,7 @@ export def "2-issue-subtask-move move-sub-tasks" [
 #
 # GET /api/2/issue/{issueIdOrKey}/transitions
 # operationId: getTransitions
-export def "2-issue-transitions get" [
+export def "get-transitions" [
   issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3575,7 +3575,7 @@ export def "2-issue-transitions get" [
 #
 # POST /api/2/issue/{issueIdOrKey}/transitions
 # operationId: doTransition
-export def "2-issue-transitions create-do" [
+export def "do-transition" [
   issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3611,7 +3611,7 @@ export def "2-issue-transitions create-do" [
 #
 # DELETE /api/2/issue/{issueIdOrKey}/votes
 # operationId: removeVote
-export def "2-issue-votes delete" [
+export def "remove-vote" [
   issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3647,7 +3647,7 @@ export def "2-issue-votes delete" [
 #
 # GET /api/2/issue/{issueIdOrKey}/votes
 # operationId: getVotes
-export def "2-issue-votes get" [
+export def "get-votes" [
   issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3683,7 +3683,7 @@ export def "2-issue-votes get" [
 #
 # POST /api/2/issue/{issueIdOrKey}/votes
 # operationId: addVote
-export def "2-issue-votes create" [
+export def "add-vote" [
   issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3719,7 +3719,7 @@ export def "2-issue-votes create" [
 #
 # DELETE /api/2/issue/{issueIdOrKey}/watchers
 # operationId: removeWatcher
-export def "2-issue-watchers delete" [
+export def "remove-watcher" [
   issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3757,7 +3757,7 @@ export def "2-issue-watchers delete" [
 #
 # GET /api/2/issue/{issueIdOrKey}/watchers
 # operationId: getIssueWatchers
-export def "2-issue-watchers get" [
+export def "get-issue-watchers" [
   issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3793,7 +3793,7 @@ export def "2-issue-watchers get" [
 #
 # POST /api/2/issue/{issueIdOrKey}/watchers
 # operationId: addWatcher
-export def "2-issue-watchers create" [
+export def "add-watcher" [
   issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3829,7 +3829,7 @@ export def "2-issue-watchers create" [
 #
 # GET /api/2/issue/{issueIdOrKey}/worklog
 # operationId: getIssueWorklog
-export def "2-issue-worklog list" [
+export def "get-issue-worklog" [
   issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3865,7 +3865,7 @@ export def "2-issue-worklog list" [
 #
 # POST /api/2/issue/{issueIdOrKey}/worklog
 # operationId: addWorklog
-export def "2-issue-worklog create" [
+export def "add-worklog" [
   issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3905,7 +3905,7 @@ export def "2-issue-worklog create" [
 #
 # DELETE /api/2/issue/{issueIdOrKey}/worklog/{id}
 # operationId: deleteWorklog
-export def "2-issue-worklog delete" [
+export def "delete-worklog" [
   issue_id_or_key: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3947,7 +3947,7 @@ export def "2-issue-worklog delete" [
 #
 # GET /api/2/issue/{issueIdOrKey}/worklog/{id}
 # operationId: getWorklog
-export def "2-issue-worklog get" [
+export def "get-worklog" [
   issue_id_or_key: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3985,7 +3985,7 @@ export def "2-issue-worklog get" [
 #
 # PUT /api/2/issue/{issueIdOrKey}/worklog/{id}
 # operationId: updateWorklog
-export def "2-issue-worklog update" [
+export def "update-worklog" [
   issue_id_or_key: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4026,7 +4026,7 @@ export def "2-issue-worklog update" [
 #
 # POST /api/2/issueLink
 # operationId: linkIssues
-export def "2-issue-link create" [
+export def "link-issues" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4060,7 +4060,7 @@ export def "2-issue-link create" [
 #
 # DELETE /api/2/issueLink/{linkId}
 # operationId: deleteIssueLink
-export def "2-issue-link delete" [
+export def "delete-issue-link" [
   link_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4096,7 +4096,7 @@ export def "2-issue-link delete" [
 #
 # GET /api/2/issueLink/{linkId}
 # operationId: getIssueLink
-export def "2-issue-link get" [
+export def "get-issue-link" [
   link_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4132,7 +4132,7 @@ export def "2-issue-link get" [
 #
 # GET /api/2/issueLinkType
 # operationId: getIssueLinkTypes
-export def "2-issue-link-type list" [
+export def "get-issue-link-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4166,7 +4166,7 @@ export def "2-issue-link-type list" [
 #
 # POST /api/2/issueLinkType
 # operationId: createIssueLinkType
-export def "2-issue-link-type create" [
+export def "create-issue-link-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4200,7 +4200,7 @@ export def "2-issue-link-type create" [
 #
 # DELETE /api/2/issueLinkType/{issueLinkTypeId}
 # operationId: deleteIssueLinkType
-export def "2-issue-link-type delete" [
+export def "delete-issue-link-type" [
   issue_link_type_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4236,7 +4236,7 @@ export def "2-issue-link-type delete" [
 #
 # GET /api/2/issueLinkType/{issueLinkTypeId}
 # operationId: getIssueLinkType
-export def "2-issue-link-type get" [
+export def "get-issue-link-type" [
   issue_link_type_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4272,7 +4272,7 @@ export def "2-issue-link-type get" [
 #
 # PUT /api/2/issueLinkType/{issueLinkTypeId}
 # operationId: updateIssueLinkType
-export def "2-issue-link-type update" [
+export def "update-issue-link-type" [
   issue_link_type_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4308,7 +4308,7 @@ export def "2-issue-link-type update" [
 #
 # GET /api/2/issuesecurityschemes
 # operationId: getIssueSecuritySchemes
-export def "2-issuesecurityschemes get-issue-security-schemes" [
+export def "get-issue-security-schemes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4341,7 +4341,7 @@ export def "2-issuesecurityschemes get-issue-security-schemes" [
 # Returns the issue security scheme along with that are defined.
 #
 # GET /api/2/issuesecurityschemes/{id}
-export def "2-issuesecurityschemes get" [
+export def "get-api-2-issuesecurityschemes-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4377,7 +4377,7 @@ export def "2-issuesecurityschemes get" [
 #
 # GET /api/2/issuetype
 # operationId: getIssueAllTypes
-export def "2-issuetype get-issue-list-types" [
+export def "get-issue-all-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4411,7 +4411,7 @@ export def "2-issuetype get-issue-list-types" [
 #
 # POST /api/2/issuetype
 # operationId: createIssueType
-export def "2-issuetype create-issue-type" [
+export def "create-issue-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4444,7 +4444,7 @@ export def "2-issuetype create-issue-type" [
 # Deletes the specified issue type. If the issue type has any associated issues, these issues will be migrated to the alternative issue type specified in the parameter. You can determine the alternative issue types by calling the /rest/api/2/issuetype/{id}/alternatives resource.
 #
 # DELETE /api/2/issuetype/{id}
-export def "2-issuetype delete" [
+export def "delete-api-2-issuetype-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4481,7 +4481,7 @@ export def "2-issuetype delete" [
 # Returns a full representation of the issue type that has the given id.
 #
 # GET /api/2/issuetype/{id}
-export def "2-issuetype get" [
+export def "get-api-2-issuetype-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4517,7 +4517,7 @@ export def "2-issuetype get" [
 #
 # PUT /api/2/issuetype/{id}
 # operationId: updateIssueType
-export def "2-issuetype update-issue-type" [
+export def "update-issue-type" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4553,7 +4553,7 @@ export def "2-issuetype update-issue-type" [
 #
 # GET /api/2/issuetype/{id}/alternatives
 # operationId: getAlternativeIssueTypes
-export def "2-issuetype-alternatives get-issue-types" [
+export def "get-alternative-issue-types" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4588,7 +4588,7 @@ export def "2-issuetype-alternatives get-issue-types" [
 # Converts temporary avatar into a real avatar
 #
 # POST /api/2/issuetype/{id}/avatar
-export def "2-issuetype-avatar create" [
+export def "post-api-2-issuetype-id-avatar" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4623,7 +4623,7 @@ export def "2-issuetype-avatar create" [
 # Creates temporary avatar using multipart. The response is sent back as JSON stored in a textarea. This is because the client uses remote iframing to submit avatars using multipart. So we must send them a valid HTML page back from which the client parses the JSON from. Creating a temporary avatar is part of a 3-step process in uploading a new avatar for an issue type: upload, crop, confirm. This endpoint allows you to use a multipart upload instead of sending the image directly as the request body. You *must* use "avatar" as the name of the upload parameter: curl -c cookiejar.txt -X POST -u admin:admin -H "X-Atlassian-Token: no-check" \ -F "avatar=@mynewavatar.png;type=image/png" \ 'http://localhost:8090/jira/rest/api/2/issuetype/1/avatar/temporary'
 #
 # POST /api/2/issuetype/{id}/avatar/temporary
-export def "2-issuetype-avatar-temporary create" [
+export def "post-api-2-issuetype-id-avatar-temporary" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4659,7 +4659,7 @@ export def "2-issuetype-avatar-temporary create" [
 #
 # GET /api/2/issuetype/{issueTypeId}/properties
 # operationId: getPropertyKeys
-export def "2-issuetype-properties get-property-keys" [
+export def "get-property-keys" [
   issue_type_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4694,7 +4694,7 @@ export def "2-issuetype-properties get-property-keys" [
 # Removes the property from the issue type identified by the id. Ths user removing the property is required to have permissions to edit the issue type.
 #
 # DELETE /api/2/issuetype/{issueTypeId}/properties/{propertyKey}
-export def "2-issuetype-properties delete" [
+export def "delete-api-2-issuetype-issue-type-id-properties-property-key" [
   issue_type_id: string
   property_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4731,7 +4731,7 @@ export def "2-issuetype-properties delete" [
 # Returns the value of the property with a given key from the issue type identified by the id. The user who retrieves the property is required to have permissions to view the issue type.
 #
 # GET /api/2/issuetype/{issueTypeId}/properties/{propertyKey}
-export def "2-issuetype-properties get" [
+export def "get-api-2-issuetype-issue-type-id-properties-property-key" [
   issue_type_id: string
   property_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4768,7 +4768,7 @@ export def "2-issuetype-properties get" [
 # Sets the value of the specified issue type's property. You can use this resource to store a custom data against an issue type identified by the id. The user who stores the data is required to have permissions to edit an issue type.
 #
 # PUT /api/2/issuetype/{issueTypeId}/properties/{propertyKey}
-export def "2-issuetype-properties update" [
+export def "put-api-2-issuetype-issue-type-id-properties-property-key" [
   issue_type_id: string
   property_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4806,7 +4806,7 @@ export def "2-issuetype-properties update" [
 #
 # GET /api/2/jql/autocompletedata
 # operationId: getAutoComplete
-export def "2-jql-autocompletedata get-auto-complete" [
+export def "get-auto-complete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4840,7 +4840,7 @@ export def "2-jql-autocompletedata get-auto-complete" [
 #
 # GET /api/2/jql/autocompletedata/suggestions
 # operationId: getFieldAutoCompleteForQueryString
-export def "2-jql-autocompletedata-suggestions get-field-auto-complete-for-list-string" [
+export def "get-field-auto-complete-for-query-string" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4878,7 +4878,7 @@ export def "2-jql-autocompletedata-suggestions get-field-auto-complete-for-list-
 # POST /api/2/licenseValidator
 #
 # operationId: validate
-export def "2-license-validator validate" [
+export def "validate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4911,7 +4911,7 @@ export def "2-license-validator validate" [
 # GET /api/2/monitoring/jmx/areMetricsExposed
 #
 # operationId: areMetricsExposed
-export def "2-monitoring-jmx-are-metrics-exposed get" [
+export def "are-metrics-exposed" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4944,7 +4944,7 @@ export def "2-monitoring-jmx-are-metrics-exposed get" [
 # GET /api/2/monitoring/jmx/getAvailableMetrics
 #
 # operationId: getAvailableMetrics
-export def "2-monitoring-jmx-get-available-metrics get" [
+export def "get-available-metrics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4977,7 +4977,7 @@ export def "2-monitoring-jmx-get-available-metrics get" [
 # GET /api/2/monitoring/jmx/startExposing
 #
 # operationId: start
-export def "2-monitoring-jmx-start-exposing start" [
+export def "start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5010,7 +5010,7 @@ export def "2-monitoring-jmx-start-exposing start" [
 # GET /api/2/monitoring/jmx/stopExposing
 #
 # operationId: stop
-export def "2-monitoring-jmx-stop-exposing stop" [
+export def "stop" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5044,7 +5044,7 @@ export def "2-monitoring-jmx-stop-exposing stop" [
 #
 # GET /api/2/mypermissions
 # operationId: getPermissions
-export def "2-mypermissions get-permissions" [
+export def "get-permissions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5083,7 +5083,7 @@ export def "2-mypermissions get-permissions" [
 #
 # DELETE /api/2/mypreferences
 # operationId: removePreference
-export def "2-mypreferences delete-preference" [
+export def "remove-preference" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5119,7 +5119,7 @@ export def "2-mypreferences delete-preference" [
 #
 # GET /api/2/mypreferences
 # operationId: getPreference
-export def "2-mypreferences get-preference" [
+export def "get-preference" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5155,7 +5155,7 @@ export def "2-mypreferences get-preference" [
 #
 # PUT /api/2/mypreferences
 # operationId: setPreference
-export def "2-mypreferences update-preference" [
+export def "set-preference" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5190,7 +5190,7 @@ export def "2-mypreferences update-preference" [
 # Returns currently logged user. This resource cannot be accessed anonymously.
 #
 # GET /api/2/myself
-export def "2-myself get" [
+export def "get-api-2-myself" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5223,7 +5223,7 @@ export def "2-myself get" [
 # Modify currently logged user. The "value" fields present will override the existing value. Fields skipped in request will not be changed. Only email and display name can be change that way. Requires user password.
 #
 # PUT /api/2/myself
-export def "2-myself update" [
+export def "put-api-2-myself" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5257,7 +5257,7 @@ export def "2-myself update" [
 #
 # PUT /api/2/myself/password
 # operationId: changeMyPassword
-export def "2-myself-password update-change-my" [
+export def "change-my-password" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5291,7 +5291,7 @@ export def "2-myself-password update-change-my" [
 #
 # GET /api/2/notificationscheme
 # operationId: getNotificationSchemes
-export def "2-notificationscheme get-notification-schemes" [
+export def "get-notification-schemes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5328,7 +5328,7 @@ export def "2-notificationscheme get-notification-schemes" [
 # Returns a full representation of the notification scheme for the given id. This resource will return a notification scheme containing a list of events and recipient configured to receive notifications for these events. Consumer should allow events without recipients to appear in response. User accessing the data is required to have permissions to administer at least one project associated with the requested notification scheme. Notification recipients can be: current assignee - the value of the notificationType is CurrentAssignee issue reporter - the value of the notificationType is Reporter current user - the value of the notificationType is CurrentUser project lead - the value of the notificationType is ProjectLead component lead - the value of the notificationType is ComponentLead all watchers - the value of the notification type is AllWatchers configured user - the value of the notification type is User. Parameter will contain key of the user. Information about the user will be provided if user expand parameter is used. configured group - the value of the notification type is Group. Parameter will contain name of the group. Information about the group will be provided if group expand parameter is used. configured email address - the value of the notification type is EmailAddress, additionally information about the email will be provided. users or users in groups in the configured custom fields - the value of the notification type is UserCustomField or GroupCustomField. Parameter will contain id of the custom field. Information about the field will be provided if field expand parameter is used. configured project role - the value of the notification type is ProjectRole. Parameter will contain project role id. Information about the project role will be provided if projectRole expand parameter is used. Please see the example for reference. The events can be JIRA system events or events configured by administrator. In case of the system events, data about theirs ids, names and descriptions is provided. In case of custom events, the template event is included as well.
 #
 # GET /api/2/notificationscheme/{id}
-export def "2-notificationscheme get" [
+export def "get-api-2-notificationscheme-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5366,7 +5366,7 @@ export def "2-notificationscheme get" [
 #
 # GET /api/2/password/policy
 # operationId: getPasswordPolicy
-export def "2-password-policy get" [
+export def "get-password-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5402,7 +5402,7 @@ export def "2-password-policy get" [
 #
 # POST /api/2/password/policy/createUser
 # operationId: policyCheckCreateUser
-export def "2-password-policy-create-user check" [
+export def "policy-check-create-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5436,7 +5436,7 @@ export def "2-password-policy-create-user check" [
 #
 # POST /api/2/password/policy/updateUser
 # operationId: policyCheckUpdateUser
-export def "2-password-policy-update-user check" [
+export def "policy-check-update-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5470,7 +5470,7 @@ export def "2-password-policy-update-user check" [
 #
 # GET /api/2/permissions
 # operationId: getAllPermissions
-export def "2-permissions get-list" [
+export def "get-all-permissions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5504,7 +5504,7 @@ export def "2-permissions get-list" [
 #
 # GET /api/2/permissionscheme
 # operationId: getPermissionSchemes
-export def "2-permissionscheme get-permission-schemes" [
+export def "get-permission-schemes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5540,7 +5540,7 @@ export def "2-permissionscheme get-permission-schemes" [
 #
 # POST /api/2/permissionscheme
 # operationId: createPermissionScheme
-export def "2-permissionscheme create-permission-scheme" [
+export def "create-permission-scheme" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5575,7 +5575,7 @@ export def "2-permissionscheme create-permission-scheme" [
 # GET /api/2/permissionscheme/{permissionSchemeId}/attribute/{attributeKey}
 #
 # operationId: getSchemeAttribute
-export def "2-permissionscheme-attribute get-scheme" [
+export def "get-scheme-attribute" [
   permission_scheme_id: int
   attribute_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5613,7 +5613,7 @@ export def "2-permissionscheme-attribute get-scheme" [
 #
 # PUT /api/2/permissionscheme/{permissionSchemeId}/attribute/{key}
 # operationId: setSchemeAttribute
-export def "2-permissionscheme-attribute update-scheme" [
+export def "set-scheme-attribute" [
   permission_scheme_id: int
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5651,7 +5651,7 @@ export def "2-permissionscheme-attribute update-scheme" [
 #
 # DELETE /api/2/permissionscheme/{schemeId}
 # operationId: deletePermissionScheme
-export def "2-permissionscheme delete-permission-scheme" [
+export def "delete-permission-scheme" [
   scheme_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5687,7 +5687,7 @@ export def "2-permissionscheme delete-permission-scheme" [
 #
 # GET /api/2/permissionscheme/{schemeId}
 # operationId: getPermissionScheme
-export def "2-permissionscheme get-permission-scheme" [
+export def "get-permission-scheme" [
   scheme_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5725,7 +5725,7 @@ export def "2-permissionscheme get-permission-scheme" [
 #
 # PUT /api/2/permissionscheme/{schemeId}
 # operationId: updatePermissionScheme
-export def "2-permissionscheme update-permission-scheme" [
+export def "update-permission-scheme" [
   scheme_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5763,7 +5763,7 @@ export def "2-permissionscheme update-permission-scheme" [
 #
 # GET /api/2/permissionscheme/{schemeId}/permission
 # operationId: getPermissionSchemeGrants
-export def "2-permissionscheme-permission get-scheme-grants" [
+export def "get-permission-scheme-grants" [
   scheme_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5801,7 +5801,7 @@ export def "2-permissionscheme-permission get-scheme-grants" [
 #
 # POST /api/2/permissionscheme/{schemeId}/permission
 # operationId: createPermissionGrant
-export def "2-permissionscheme-permission create-grant" [
+export def "create-permission-grant" [
   scheme_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5839,7 +5839,7 @@ export def "2-permissionscheme-permission create-grant" [
 #
 # DELETE /api/2/permissionscheme/{schemeId}/permission/{permissionId}
 # operationId: deletePermissionSchemeEntity
-export def "2-permissionscheme-permission delete-scheme-entity" [
+export def "delete-permission-scheme-entity" [
   scheme_id: int
   permission_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5877,7 +5877,7 @@ export def "2-permissionscheme-permission delete-scheme-entity" [
 #
 # GET /api/2/permissionscheme/{schemeId}/permission/{permissionId}
 # operationId: getPermissionSchemeGrant
-export def "2-permissionscheme-permission get-scheme-grant" [
+export def "get-permission-scheme-grant" [
   scheme_id: int
   permission_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5917,7 +5917,7 @@ export def "2-permissionscheme-permission get-scheme-grant" [
 #
 # GET /api/2/priority
 # operationId: getPriorities
-export def "2-priority get-priorities" [
+export def "get-priorities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5951,7 +5951,7 @@ export def "2-priority get-priorities" [
 #
 # GET /api/2/priority/{id}
 # operationId: getPriority
-export def "2-priority get" [
+export def "get-priority" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5987,7 +5987,7 @@ export def "2-priority get" [
 #
 # GET /api/2/project
 # operationId: getAllProjects
-export def "2-project get-list" [
+export def "get-all-projects" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6024,7 +6024,7 @@ export def "2-project get-list" [
 #
 # POST /api/2/project
 # operationId: createProject
-export def "2-project create" [
+export def "create-project" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6058,7 +6058,7 @@ export def "2-project create" [
 #
 # GET /api/2/project/type
 # operationId: getAllProjectTypes
-export def "2-project-type get-list" [
+export def "get-all-project-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6092,7 +6092,7 @@ export def "2-project-type get-list" [
 #
 # GET /api/2/project/type/{projectTypeKey}
 # operationId: getProjectTypeByKey
-export def "2-project-type get-by-key" [
+export def "get-project-type-by-key" [
   project_type_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6128,7 +6128,7 @@ export def "2-project-type get-by-key" [
 #
 # GET /api/2/project/type/{projectTypeKey}/accessible
 # operationId: getAccessibleProjectTypeByKey
-export def "2-project-type-accessible get-by-key" [
+export def "get-accessible-project-type-by-key" [
   project_type_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6164,7 +6164,7 @@ export def "2-project-type-accessible get-by-key" [
 #
 # DELETE /api/2/project/{projectIdOrKey}
 # operationId: deleteProject
-export def "2-project delete" [
+export def "delete-project" [
   project_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6199,7 +6199,7 @@ export def "2-project delete" [
 # Contains a full representation of a project in JSON format. All project keys associated with the project will only be returned if expand=projectKeys.
 #
 # GET /api/2/project/{projectIdOrKey}
-export def "2-project get" [
+export def "get-api-2-project-project-id-or-key" [
   project_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6237,7 +6237,7 @@ export def "2-project get" [
 #
 # PUT /api/2/project/{projectIdOrKey}
 # operationId: updateProject
-export def "2-project update" [
+export def "update-project" [
   project_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6274,7 +6274,7 @@ export def "2-project update" [
 # Converts temporary avatar into a real avatar
 #
 # POST /api/2/project/{projectIdOrKey}/avatar
-export def "2-project-avatar create" [
+export def "post-api-2-project-project-id-or-key-avatar" [
   project_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6307,7 +6307,7 @@ export def "2-project-avatar create" [
 }
 
 # PUT /api/2/project/{projectIdOrKey}/avatar
-export def "2-project-avatar update" [
+export def "put-api-2-project-project-id-or-key-avatar" [
   project_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6342,7 +6342,7 @@ export def "2-project-avatar update" [
 # Creates temporary avatar using multipart. The response is sent back as JSON stored in a textarea. This is because the client uses remote iframing to submit avatars using multipart. So we must send them a valid HTML page back from which the client parses the JSON.
 #
 # POST /api/2/project/{projectIdOrKey}/avatar/temporary
-export def "2-project-avatar-temporary create" [
+export def "post-api-2-project-project-id-or-key-avatar-temporary" [
   project_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6377,7 +6377,7 @@ export def "2-project-avatar-temporary create" [
 # Deletes avatar
 #
 # DELETE /api/2/project/{projectIdOrKey}/avatar/{id}
-export def "2-project-avatar delete" [
+export def "delete-api-2-project-project-id-or-key-avatar-id" [
   project_id_or_key: string
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6414,7 +6414,7 @@ export def "2-project-avatar delete" [
 # Returns all avatars which are visible for the currently logged in user. The avatars are grouped into system and custom.
 #
 # GET /api/2/project/{projectIdOrKey}/avatars
-export def "2-project-avatars get" [
+export def "get-api-2-project-project-id-or-key-avatars" [
   project_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6450,7 +6450,7 @@ export def "2-project-avatars get" [
 #
 # GET /api/2/project/{projectIdOrKey}/components
 # operationId: getProjectComponents
-export def "2-project-components get" [
+export def "get-project-components" [
   project_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6485,7 +6485,7 @@ export def "2-project-components get" [
 # Returns the keys of all properties for the project identified by the key or by the id.
 #
 # GET /api/2/project/{projectIdOrKey}/properties
-export def "2-project-properties list" [
+export def "get-api-2-project-project-id-or-key-properties" [
   project_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6520,7 +6520,7 @@ export def "2-project-properties list" [
 # Removes the property from the project identified by the key or by the id. Ths user removing the property is required to have permissions to administer the project.
 #
 # DELETE /api/2/project/{projectIdOrKey}/properties/{propertyKey}
-export def "2-project-properties delete" [
+export def "delete-api-2-project-project-id-or-key-properties-property-key" [
   project_id_or_key: string
   property_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6557,7 +6557,7 @@ export def "2-project-properties delete" [
 # Returns the value of the property with a given key from the project identified by the key or by the id. The user who retrieves the property is required to have permissions to read the project.
 #
 # GET /api/2/project/{projectIdOrKey}/properties/{propertyKey}
-export def "2-project-properties get" [
+export def "get-api-2-project-project-id-or-key-properties-property-key" [
   project_id_or_key: string
   property_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6594,7 +6594,7 @@ export def "2-project-properties get" [
 # Sets the value of the specified project's property. You can use this resource to store a custom data against the project identified by the key or by the id. The user who stores the data is required to have permissions to administer the project.
 #
 # PUT /api/2/project/{projectIdOrKey}/properties/{propertyKey}
-export def "2-project-properties update" [
+export def "put-api-2-project-project-id-or-key-properties-property-key" [
   project_id_or_key: string
   property_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6631,7 +6631,7 @@ export def "2-project-properties update" [
 # Returns all roles in the given project Id or key, with links to full details on each role.
 #
 # GET /api/2/project/{projectIdOrKey}/role
-export def "2-project-role list" [
+export def "get-api-2-project-project-id-or-key-role" [
   project_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6667,7 +6667,7 @@ export def "2-project-role list" [
 #
 # DELETE /api/2/project/{projectIdOrKey}/role/{id}
 # operationId: deleteActor
-export def "2-project-role delete-actor" [
+export def "delete-actor" [
   project_id_or_key: string
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6708,7 +6708,7 @@ export def "2-project-role delete-actor" [
 #
 # GET /api/2/project/{projectIdOrKey}/role/{id}
 # operationId: getProjectRole
-export def "2-project-role get" [
+export def "get-project-role" [
   project_id_or_key: string
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6746,7 +6746,7 @@ export def "2-project-role get" [
 #
 # POST /api/2/project/{projectIdOrKey}/role/{id}
 # operationId: addActorUsers
-export def "2-project-role create-actor-users" [
+export def "add-actor-users" [
   project_id_or_key: string
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6784,7 +6784,7 @@ export def "2-project-role create-actor-users" [
 #
 # PUT /api/2/project/{projectIdOrKey}/role/{id}
 # operationId: setActors
-export def "2-project-role update-actors" [
+export def "set-actors" [
   project_id_or_key: string
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6822,7 +6822,7 @@ export def "2-project-role update-actors" [
 #
 # GET /api/2/project/{projectIdOrKey}/statuses
 # operationId: getAllStatuses
-export def "2-project-statuses get-list" [
+export def "get-all-statuses" [
   project_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6858,7 +6858,7 @@ export def "2-project-statuses get-list" [
 #
 # PUT /api/2/project/{projectIdOrKey}/type/{newProjectTypeKey}
 # operationId: updateProjectType
-export def "2-project-type update" [
+export def "update-project-type" [
   project_id_or_key: string
   new_project_type_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6896,7 +6896,7 @@ export def "2-project-type update" [
 #
 # GET /api/2/project/{projectIdOrKey}/version
 # operationId: getProjectVersionsPaginated
-export def "2-project-version get-paginated" [
+export def "get-project-versions-paginated" [
   project_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6937,7 +6937,7 @@ export def "2-project-version get-paginated" [
 #
 # GET /api/2/project/{projectIdOrKey}/versions
 # operationId: getProjectVersions
-export def "2-project-versions get" [
+export def "get-project-versions" [
   project_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6974,7 +6974,7 @@ export def "2-project-versions get" [
 # Returns the issue security scheme for project.
 #
 # GET /api/2/project/{projectKeyOrId}/issuesecuritylevelscheme
-export def "2-project-issuesecuritylevelscheme get" [
+export def "get-api-2-project-project-key-or-id-issuesecuritylevelscheme" [
   project_key_or_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7009,7 +7009,7 @@ export def "2-project-issuesecuritylevelscheme get" [
 # Gets a notification scheme associated with the project. Follow the documentation of /notificationscheme/{id} resource for all details about returned value.
 #
 # GET /api/2/project/{projectKeyOrId}/notificationscheme
-export def "2-project-notificationscheme get" [
+export def "get-api-2-project-project-key-or-id-notificationscheme" [
   project_key_or_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7047,7 +7047,7 @@ export def "2-project-notificationscheme get" [
 #
 # GET /api/2/project/{projectKeyOrId}/permissionscheme
 # operationId: getAssignedPermissionScheme
-export def "2-project-permissionscheme get-assigned-permission-scheme" [
+export def "get-assigned-permission-scheme" [
   project_key_or_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7085,7 +7085,7 @@ export def "2-project-permissionscheme get-assigned-permission-scheme" [
 #
 # PUT /api/2/project/{projectKeyOrId}/permissionscheme
 # operationId: assignPermissionScheme
-export def "2-project-permissionscheme assign-permission-scheme" [
+export def "assign-permission-scheme" [
   project_key_or_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7123,7 +7123,7 @@ export def "2-project-permissionscheme assign-permission-scheme" [
 #
 # GET /api/2/project/{projectKeyOrId}/securitylevel
 # operationId: getSecurityLevelsForProject
-export def "2-project-securitylevel get-security-levels" [
+export def "get-security-levels-for-project" [
   project_key_or_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7159,7 +7159,7 @@ export def "2-project-securitylevel get-security-levels" [
 #
 # GET /api/2/projectCategory
 # operationId: getAllProjectCategories
-export def "2-project-category get-list-categories" [
+export def "get-all-project-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7193,7 +7193,7 @@ export def "2-project-category get-list-categories" [
 #
 # POST /api/2/projectCategory
 # operationId: createProjectCategory
-export def "2-project-category create" [
+export def "create-project-category" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7227,7 +7227,7 @@ export def "2-project-category create" [
 #
 # DELETE /api/2/projectCategory/{id}
 # operationId: removeProjectCategory
-export def "2-project-category delete" [
+export def "remove-project-category" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7263,7 +7263,7 @@ export def "2-project-category delete" [
 #
 # GET /api/2/projectCategory/{id}
 # operationId: getProjectCategoryById
-export def "2-project-category get" [
+export def "get-project-category-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7299,7 +7299,7 @@ export def "2-project-category get" [
 #
 # PUT /api/2/projectCategory/{id}
 # operationId: updateProjectCategory
-export def "2-project-category update" [
+export def "update-project-category" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7334,7 +7334,7 @@ export def "2-project-category update" [
 # Validates a project key.
 #
 # GET /api/2/projectvalidate/key
-export def "2-projectvalidate-key get" [
+export def "get-api-2-projectvalidate-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7370,7 +7370,7 @@ export def "2-projectvalidate-key get" [
 #
 # GET /api/2/reindex
 # operationId: getReindexInfo
-export def "2-reindex get" [
+export def "get-reindex-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7406,7 +7406,7 @@ export def "2-reindex get" [
 #
 # POST /api/2/reindex
 # operationId: reindex
-export def "2-reindex create" [
+export def "reindex" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7445,7 +7445,7 @@ export def "2-reindex create" [
 #
 # POST /api/2/reindex/issue
 # operationId: reindexIssues
-export def "2-reindex-issue create" [
+export def "reindex-issues" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7484,7 +7484,7 @@ export def "2-reindex-issue create" [
 #
 # GET /api/2/reindex/progress
 # operationId: getReindexProgress
-export def "2-reindex-progress get" [
+export def "get-reindex-progress" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7520,7 +7520,7 @@ export def "2-reindex-progress get" [
 #
 # POST /api/2/reindex/request
 # operationId: processRequests
-export def "2-reindex-request create-process" [
+export def "process-requests" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7554,7 +7554,7 @@ export def "2-reindex-request create-process" [
 #
 # GET /api/2/reindex/request/bulk
 # operationId: getProgressBulk
-export def "2-reindex-request-bulk get-progress" [
+export def "get-progress-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7590,7 +7590,7 @@ export def "2-reindex-request-bulk get-progress" [
 #
 # GET /api/2/reindex/request/{requestId}
 # operationId: getProgress
-export def "2-reindex-request get-progress" [
+export def "get-progress" [
   request_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7626,7 +7626,7 @@ export def "2-reindex-request get-progress" [
 #
 # GET /api/2/resolution
 # operationId: getResolutions
-export def "2-resolution list" [
+export def "get-resolutions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7660,7 +7660,7 @@ export def "2-resolution list" [
 #
 # GET /api/2/resolution/{id}
 # operationId: getResolution
-export def "2-resolution get" [
+export def "get-resolution" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7695,7 +7695,7 @@ export def "2-resolution get" [
 # Get all the ProjectRoles available in JIRA. Currently this list is global.
 #
 # GET /api/2/role
-export def "2-role get" [
+export def "get-api-2-role" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7729,7 +7729,7 @@ export def "2-role get" [
 #
 # POST /api/2/role
 # operationId: createProjectRole
-export def "2-role create-project" [
+export def "create-project-role" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7763,7 +7763,7 @@ export def "2-role create-project" [
 #
 # DELETE /api/2/role/{id}
 # operationId: deleteProjectRole
-export def "2-role delete-project" [
+export def "delete-project-role" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7801,7 +7801,7 @@ export def "2-role delete-project" [
 #
 # GET /api/2/role/{id}
 # operationId: getProjectRolesById
-export def "2-role get-project" [
+export def "get-project-roles-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7837,7 +7837,7 @@ export def "2-role get-project" [
 #
 # POST /api/2/role/{id}
 # operationId: partialUpdateProjectRole
-export def "2-role update-project" [
+export def "partial-update-project-role" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7873,7 +7873,7 @@ export def "2-role update-project" [
 #
 # PUT /api/2/role/{id}
 # operationId: fullyUpdateProjectRole
-export def "2-role update-fully-project" [
+export def "fully-update-project-role" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7909,7 +7909,7 @@ export def "2-role update-fully-project" [
 #
 # DELETE /api/2/role/{id}/actors
 # operationId: deleteProjectRoleActorsFromRole
-export def "2-role-actors delete-project" [
+export def "delete-project-role-actors-from-role" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7948,7 +7948,7 @@ export def "2-role-actors delete-project" [
 #
 # GET /api/2/role/{id}/actors
 # operationId: getProjectRoleActorsForRole
-export def "2-role-actors get-project" [
+export def "get-project-role-actors-for-role" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7984,7 +7984,7 @@ export def "2-role-actors get-project" [
 #
 # POST /api/2/role/{id}/actors
 # operationId: addProjectRoleActorsToRole
-export def "2-role-actors create-project" [
+export def "add-project-role-actors-to-role" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8020,7 +8020,7 @@ export def "2-role-actors create-project" [
 #
 # POST /api/2/screens/addToDefault/{fieldId}
 # operationId: addFieldToDefaultScreen
-export def "2-screens-add-to-default create-field" [
+export def "add-field-to-default-screen" [
   field_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8056,7 +8056,7 @@ export def "2-screens-add-to-default create-field" [
 #
 # GET /api/2/screens/{screenId}/availableFields
 # operationId: getFieldsToAdd
-export def "2-screens-available-fields get-to-create" [
+export def "get-fields-to-add" [
   screen_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8092,7 +8092,7 @@ export def "2-screens-available-fields get-to-create" [
 #
 # GET /api/2/screens/{screenId}/tabs
 # operationId: getAllTabs
-export def "2-screens-tabs get-list" [
+export def "get-all-tabs" [
   screen_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8130,7 +8130,7 @@ export def "2-screens-tabs get-list" [
 #
 # POST /api/2/screens/{screenId}/tabs
 # operationId: addTab
-export def "2-screens-tabs create" [
+export def "add-tab" [
   screen_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8166,7 +8166,7 @@ export def "2-screens-tabs create" [
 #
 # DELETE /api/2/screens/{screenId}/tabs/{tabId}
 # operationId: deleteTab
-export def "2-screens-tabs delete" [
+export def "delete-tab" [
   screen_id: int
   tab_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -8204,7 +8204,7 @@ export def "2-screens-tabs delete" [
 #
 # PUT /api/2/screens/{screenId}/tabs/{tabId}
 # operationId: renameTab
-export def "2-screens-tabs rename" [
+export def "rename-tab" [
   screen_id: int
   tab_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -8242,7 +8242,7 @@ export def "2-screens-tabs rename" [
 #
 # GET /api/2/screens/{screenId}/tabs/{tabId}/fields
 # operationId: getAllFields
-export def "2-screens-tabs-fields get-list" [
+export def "get-all-fields" [
   screen_id: int
   tab_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -8282,7 +8282,7 @@ export def "2-screens-tabs-fields get-list" [
 #
 # POST /api/2/screens/{screenId}/tabs/{tabId}/fields
 # operationId: addField
-export def "2-screens-tabs-fields create" [
+export def "add-field" [
   screen_id: int
   tab_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -8320,7 +8320,7 @@ export def "2-screens-tabs-fields create" [
 #
 # DELETE /api/2/screens/{screenId}/tabs/{tabId}/fields/{id}
 # operationId: removeField
-export def "2-screens-tabs-fields delete" [
+export def "remove-field" [
   screen_id: int
   tab_id: int
   id: string
@@ -8360,7 +8360,7 @@ export def "2-screens-tabs-fields delete" [
 #
 # POST /api/2/screens/{screenId}/tabs/{tabId}/fields/{id}/move
 # operationId: moveField
-export def "2-screens-tabs-fields-move move" [
+export def "move-field" [
   screen_id: int
   tab_id: int
   id: string
@@ -8400,7 +8400,7 @@ export def "2-screens-tabs-fields-move move" [
 #
 # POST /api/2/screens/{screenId}/tabs/{tabId}/move/{pos}
 # operationId: moveTab
-export def "2-screens-tabs-move move" [
+export def "move-tab" [
   screen_id: int
   tab_id: int
   pos: int
@@ -8440,7 +8440,7 @@ export def "2-screens-tabs-move move" [
 #
 # GET /api/2/search
 # operationId: search
-export def "2-search list" [
+export def "search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8481,7 +8481,7 @@ export def "2-search list" [
 #
 # POST /api/2/search
 # operationId: searchUsingSearchRequest
-export def "2-search request-using" [
+export def "search-using-search-request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8515,7 +8515,7 @@ export def "2-search request-using" [
 #
 # GET /api/2/securitylevel/{id}
 # operationId: getIssuesecuritylevel
-export def "2-securitylevel get-issuesecuritylevel" [
+export def "get-issuesecuritylevel" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8551,7 +8551,7 @@ export def "2-securitylevel get-issuesecuritylevel" [
 #
 # GET /api/2/serverInfo
 # operationId: getServerInfo
-export def "2-server-info get" [
+export def "get-server-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8587,7 +8587,7 @@ export def "2-server-info get" [
 #
 # PUT /api/2/settings/baseUrl
 # operationId: setBaseURL
-export def "2-settings-base-url update" [
+export def "set-base-url" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8621,7 +8621,7 @@ export def "2-settings-base-url update" [
 #
 # GET /api/2/settings/columns
 # operationId: getIssueNavigatorDefaultColumns
-export def "2-settings-columns get-issue-navigator-default" [
+export def "get-issue-navigator-default-columns" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8655,7 +8655,7 @@ export def "2-settings-columns get-issue-navigator-default" [
 #
 # PUT /api/2/settings/columns
 # operationId: setIssueNavigatorDefaultColumns
-export def "2-settings-columns update-issue-navigator-default" [
+export def "set-issue-navigator-default-columns" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8689,7 +8689,7 @@ export def "2-settings-columns update-issue-navigator-default" [
 #
 # GET /api/2/status
 # operationId: getStatuses
-export def "2-status get-statuses" [
+export def "get-statuses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8723,7 +8723,7 @@ export def "2-status get-statuses" [
 #
 # GET /api/2/status/{idOrName}
 # operationId: getStatus
-export def "2-status get" [
+export def "get-status" [
   id_or_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8759,7 +8759,7 @@ export def "2-status get" [
 #
 # GET /api/2/statuscategory
 # operationId: getStatusCategories
-export def "2-statuscategory get-status-categories" [
+export def "get-status-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8793,7 +8793,7 @@ export def "2-statuscategory get-status-categories" [
 #
 # GET /api/2/statuscategory/{idOrKey}
 # operationId: getStatusCategory
-export def "2-statuscategory get-status-category" [
+export def "get-status-category" [
   id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8828,7 +8828,7 @@ export def "2-statuscategory get-status-category" [
 # GET /api/2/universal_avatar/type/{type}/owner/{owningObjectId}
 #
 # operationId: getAvatars
-export def "2-universal-avatar-type-owner get" [
+export def "get-avatars" [
   type: string
   owning_object_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8863,7 +8863,7 @@ export def "2-universal-avatar-type-owner get" [
 }
 
 # POST /api/2/universal_avatar/type/{type}/owner/{owningObjectId}/avatar
-export def "2-universal-avatar-type-owner-avatar create" [
+export def "post-api-2-universal-avatar-type-type-owner-owning-object-id-avatar" [
   type: string
   owning_object_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8900,7 +8900,7 @@ export def "2-universal-avatar-type-owner-avatar create" [
 # Deletes avatar
 #
 # DELETE /api/2/universal_avatar/type/{type}/owner/{owningObjectId}/avatar/{id}
-export def "2-universal-avatar-type-owner-avatar delete" [
+export def "delete-api-2-universal-avatar-type-type-owner-owning-object-id-avatar-id" [
   type: string
   owning_object_id: string
   id: int
@@ -8937,7 +8937,7 @@ export def "2-universal-avatar-type-owner-avatar delete" [
 }
 
 # POST /api/2/universal_avatar/type/{type}/owner/{owningObjectId}/temp
-export def "2-universal-avatar-type-owner-temp create" [
+export def "post-api-2-universal-avatar-type-type-owner-owning-object-id-temp" [
   type: string
   owning_object_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8975,7 +8975,7 @@ export def "2-universal-avatar-type-owner-temp create" [
 #
 # GET /api/2/upgrade
 # operationId: getUpgradeResult
-export def "2-upgrade get-result" [
+export def "get-upgrade-result" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9009,7 +9009,7 @@ export def "2-upgrade get-result" [
 #
 # POST /api/2/upgrade
 # operationId: runUpgradesNow
-export def "2-upgrade create-run-now" [
+export def "run-upgrades-now" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9043,7 +9043,7 @@ export def "2-upgrade create-run-now" [
 #
 # DELETE /api/2/user
 # operationId: removeUser
-export def "2-user delete" [
+export def "remove-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9079,7 +9079,7 @@ export def "2-user delete" [
 # Returns a user. This resource cannot be accessed anonymously.
 #
 # GET /api/2/user
-export def "2-user get" [
+export def "get-api-2-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9116,7 +9116,7 @@ export def "2-user get" [
 #
 # POST /api/2/user
 # operationId: createUser
-export def "2-user create" [
+export def "create-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9149,7 +9149,7 @@ export def "2-user create" [
 # Modify user. The "value" fields present will override the existing value. Fields skipped in request will not be changed.
 #
 # PUT /api/2/user
-export def "2-user update" [
+export def "put-api-2-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9186,7 +9186,7 @@ export def "2-user update" [
 #
 # DELETE /api/2/user/application
 # operationId: removeUserFromApplication
-export def "2-user-application delete" [
+export def "remove-user-from-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9223,7 +9223,7 @@ export def "2-user-application delete" [
 #
 # POST /api/2/user/application
 # operationId: addUserToApplication
-export def "2-user-application create" [
+export def "add-user-to-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9260,7 +9260,7 @@ export def "2-user-application create" [
 #
 # GET /api/2/user/assignable/multiProjectSearch
 # operationId: findBulkAssignableUsers
-export def "2-user-assignable-multi-project-search find-bulk" [
+export def "find-bulk-assignable-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9299,7 +9299,7 @@ export def "2-user-assignable-multi-project-search find-bulk" [
 #
 # GET /api/2/user/assignable/search
 # operationId: findAssignableUsers
-export def "2-user-assignable-search find" [
+export def "find-assignable-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9339,7 +9339,7 @@ export def "2-user-assignable-search find" [
 # Converts temporary avatar into a real avatar
 #
 # POST /api/2/user/avatar
-export def "2-user-avatar create" [
+export def "post-api-2-user-avatar" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9372,7 +9372,7 @@ export def "2-user-avatar create" [
 }
 
 # PUT /api/2/user/avatar
-export def "2-user-avatar update" [
+export def "put-api-2-user-avatar" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9407,7 +9407,7 @@ export def "2-user-avatar update" [
 # Creates temporary avatar using multipart. The response is sent back as JSON stored in a textarea. This is because the client uses remote iframing to submit avatars using multipart. So we must send them a valid HTML page back from which the client parses the JSON from. Creating a temporary avatar is part of a 3-step process in uploading a new avatar for a user: upload, crop, confirm. This endpoint allows you to use a multipart upload instead of sending the image directly as the request body. You *must* use "avatar" as the name of the upload parameter: curl -c cookiejar.txt -X POST -u admin:admin -H "X-Atlassian-Token: no-check" \ -F "avatar=@mynewavatar.png;type=image/png" \ 'http://localhost:8090/jira/rest/api/2/user/avatar/temporary?username=admin'
 #
 # POST /api/2/user/avatar/temporary
-export def "2-user-avatar-temporary create" [
+export def "post-api-2-user-avatar-temporary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9442,7 +9442,7 @@ export def "2-user-avatar-temporary create" [
 # Deletes avatar
 #
 # DELETE /api/2/user/avatar/{id}
-export def "2-user-avatar delete" [
+export def "delete-api-2-user-avatar-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9479,7 +9479,7 @@ export def "2-user-avatar delete" [
 # Returns all avatars which are visible for the currently logged in user.
 #
 # GET /api/2/user/avatars
-export def "2-user-avatars get" [
+export def "get-api-2-user-avatars" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9514,7 +9514,7 @@ export def "2-user-avatars get" [
 # Reset the default columns for the given user to the system default. Admin permission will be required to get columns for a user other than the currently logged in user.
 #
 # DELETE /api/2/user/columns
-export def "2-user-columns delete" [
+export def "delete-api-2-user-columns" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9549,7 +9549,7 @@ export def "2-user-columns delete" [
 # Returns the default columns for the given user. Admin permission will be required to get columns for a user other than the currently logged in user.
 #
 # GET /api/2/user/columns
-export def "2-user-columns get" [
+export def "get-api-2-user-columns" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9584,7 +9584,7 @@ export def "2-user-columns get" [
 # Sets the default columns for the given user. Admin permission will be required to get columns for a user other than the currently logged in user.
 #
 # PUT /api/2/user/columns
-export def "2-user-columns update" [
+export def "put-api-2-user-columns" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9618,7 +9618,7 @@ export def "2-user-columns update" [
 #
 # PUT /api/2/user/password
 # operationId: changeUserPassword
-export def "2-user-password update-change" [
+export def "change-user-password" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9655,7 +9655,7 @@ export def "2-user-password update-change" [
 #
 # GET /api/2/user/permission/search
 # operationId: findUsersWithAllPermissions
-export def "2-user-permission-search find-with-list" [
+export def "find-users-with-all-permissions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9696,7 +9696,7 @@ export def "2-user-permission-search find-with-list" [
 #
 # GET /api/2/user/picker
 # operationId: findUsersForPicker
-export def "2-user-picker find" [
+export def "find-users-for-picker" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9734,7 +9734,7 @@ export def "2-user-picker find" [
 # Returns the keys of all properties for the user identified by the key or by the id.
 #
 # GET /api/2/user/properties/
-export def "2-user-properties list" [
+export def "get-api-2-user-properties" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9770,7 +9770,7 @@ export def "2-user-properties list" [
 # Removes the property from the user identified by the key or by the id. Ths user removing the property is required to have permissions to administer the user.
 #
 # DELETE /api/2/user/properties/{propertyKey}
-export def "2-user-properties delete" [
+export def "delete-api-2-user-properties-property-key" [
   property_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9808,7 +9808,7 @@ export def "2-user-properties delete" [
 # Returns the value of the property with a given key from the user identified by the key or by the id. The user who retrieves the property is required to have permissions to read the user.
 #
 # GET /api/2/user/properties/{propertyKey}
-export def "2-user-properties get" [
+export def "get-api-2-user-properties-property-key" [
   property_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9846,7 +9846,7 @@ export def "2-user-properties get" [
 # Sets the value of the specified user's property. You can use this resource to store a custom data against the user identified by the key or by the id. The user who stores the data is required to have permissions to administer the user.
 #
 # PUT /api/2/user/properties/{propertyKey}
-export def "2-user-properties update" [
+export def "put-api-2-user-properties-property-key" [
   property_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9885,7 +9885,7 @@ export def "2-user-properties update" [
 #
 # GET /api/2/user/search
 # operationId: findUsers
-export def "2-user-search find" [
+export def "find-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9925,7 +9925,7 @@ export def "2-user-search find" [
 #
 # GET /api/2/user/viewissue/search
 # operationId: findUsersWithBrowsePermission
-export def "2-user-viewissue-search find-with-browse-permission" [
+export def "find-users-with-browse-permission" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9965,7 +9965,7 @@ export def "2-user-viewissue-search find-with-browse-permission" [
 #
 # POST /api/2/version
 # operationId: createVersion
-export def "2-version create" [
+export def "create-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9999,7 +9999,7 @@ export def "2-version create" [
 #
 # GET /api/2/version/remotelink
 # operationId: getRemoteVersionLinks
-export def "2-version-remotelink list" [
+export def "get-remote-version-links" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10034,7 +10034,7 @@ export def "2-version-remotelink list" [
 # Delete a project version.
 #
 # DELETE /api/2/version/{id}
-export def "2-version delete" [
+export def "delete-api-2-version-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10073,7 +10073,7 @@ export def "2-version delete" [
 #
 # GET /api/2/version/{id}
 # operationId: getVersion
-export def "2-version get" [
+export def "get-version" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10111,7 +10111,7 @@ export def "2-version get" [
 #
 # PUT /api/2/version/{id}
 # operationId: updateVersion
-export def "2-version update" [
+export def "update-version" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10147,7 +10147,7 @@ export def "2-version update" [
 #
 # PUT /api/2/version/{id}/mergeto/{moveIssuesTo}
 # operationId: merge
-export def "2-version-mergeto update-merge" [
+export def "merge" [
   id: string
   move_issues_to: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10185,7 +10185,7 @@ export def "2-version-mergeto update-merge" [
 #
 # POST /api/2/version/{id}/move
 # operationId: moveVersion
-export def "2-version-move move" [
+export def "move-version" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10221,7 +10221,7 @@ export def "2-version-move move" [
 #
 # GET /api/2/version/{id}/relatedIssueCounts
 # operationId: getVersionRelatedIssues
-export def "2-version-related-issue-counts get" [
+export def "get-version-related-issues" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10256,7 +10256,7 @@ export def "2-version-related-issue-counts get" [
 # Delete a project version.
 #
 # POST /api/2/version/{id}/removeAndSwap
-export def "2-version-remove-and-swap create" [
+export def "post-api-2-version-id-remove-and-swap" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10292,7 +10292,7 @@ export def "2-version-remove-and-swap create" [
 #
 # GET /api/2/version/{id}/unresolvedIssueCount
 # operationId: getVersionUnresolvedIssues
-export def "2-version-unresolved-issue-count get" [
+export def "get-version-unresolved-issues" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10328,7 +10328,7 @@ export def "2-version-unresolved-issue-count get" [
 #
 # DELETE /api/2/version/{versionId}/remotelink
 # operationId: deleteRemoteVersionLinksByVersionId
-export def "2-version-remotelink delete-remote-links" [
+export def "delete-remote-version-links-by-version-id" [
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10364,7 +10364,7 @@ export def "2-version-remotelink delete-remote-links" [
 #
 # GET /api/2/version/{versionId}/remotelink
 # operationId: getRemoteVersionLinksByVersionId
-export def "2-version-remotelink get-remote-links" [
+export def "get-remote-version-links-by-version-id" [
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10399,7 +10399,7 @@ export def "2-version-remotelink get-remote-links" [
 # Create a remote version link via POST. The link's global ID will be taken from the JSON payload if provided; otherwise, it will be generated.
 #
 # POST /api/2/version/{versionId}/remotelink
-export def "2-version-remotelink create-by-version-id" [
+export def "post-api-2-version-version-id-remotelink" [
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10435,7 +10435,7 @@ export def "2-version-remotelink create-by-version-id" [
 #
 # DELETE /api/2/version/{versionId}/remotelink/{globalId}
 # operationId: deleteRemoteVersionLink
-export def "2-version-remotelink delete-remote-link" [
+export def "delete-remote-version-link" [
   version_id: string
   global_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10473,7 +10473,7 @@ export def "2-version-remotelink delete-remote-link" [
 #
 # GET /api/2/version/{versionId}/remotelink/{globalId}
 # operationId: getRemoteVersionLink
-export def "2-version-remotelink get-remote-link" [
+export def "get-remote-version-link" [
   version_id: string
   global_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10510,7 +10510,7 @@ export def "2-version-remotelink get-remote-link" [
 # Create a remote version link via POST. The link's global ID will be taken from the JSON payload if provided; otherwise, it will be generated.
 #
 # POST /api/2/version/{versionId}/remotelink/{globalId}
-export def "2-version-remotelink create-by-version-id-global-id" [
+export def "post-api-2-version-version-id-remotelink-global-id" [
   version_id: string
   global_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10548,7 +10548,7 @@ export def "2-version-remotelink create-by-version-id-global-id" [
 #
 # GET /api/2/workflow
 # operationId: getAllWorkflows
-export def "2-workflow get-list" [
+export def "get-all-workflows" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10583,7 +10583,7 @@ export def "2-workflow get-list" [
 # Delete a property from the passed transition on the passed workflow. It is not an error to delete a property that does not exist.
 #
 # DELETE /api/2/workflow/api/2/transitions/{id}/properties
-export def "2-workflow-2-transitions-properties delete" [
+export def "delete-api-2-workflow-api-2-transitions-id-properties" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10623,7 +10623,7 @@ export def "2-workflow-2-transitions-properties delete" [
 #
 # GET /api/2/workflow/api/2/transitions/{id}/properties
 # operationId: getProperties
-export def "2-workflow-2-transitions-properties get" [
+export def "get-properties" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10664,7 +10664,7 @@ export def "2-workflow-2-transitions-properties get" [
 #
 # POST /api/2/workflow/api/2/transitions/{id}/properties
 # operationId: createProperty
-export def "2-workflow-2-transitions-properties create-property" [
+export def "create-property" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10704,7 +10704,7 @@ export def "2-workflow-2-transitions-properties create-property" [
 #
 # PUT /api/2/workflow/api/2/transitions/{id}/properties
 # operationId: updateProperty
-export def "2-workflow-2-transitions-properties update-property" [
+export def "update-property" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10744,7 +10744,7 @@ export def "2-workflow-2-transitions-properties update-property" [
 #
 # POST /api/2/workflowscheme
 # operationId: createScheme
-export def "2-workflowscheme create-scheme" [
+export def "create-scheme" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10778,7 +10778,7 @@ export def "2-workflowscheme create-scheme" [
 #
 # DELETE /api/2/workflowscheme/{id}
 # operationId: deleteScheme
-export def "2-workflowscheme delete-scheme" [
+export def "delete-scheme" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10814,7 +10814,7 @@ export def "2-workflowscheme delete-scheme" [
 #
 # GET /api/2/workflowscheme/{id}
 # operationId: getById
-export def "2-workflowscheme get" [
+export def "get-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10852,7 +10852,7 @@ export def "2-workflowscheme get" [
 #
 # PUT /api/2/workflowscheme/{id}
 # operationId: update
-export def "2-workflowscheme update" [
+export def "update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10888,7 +10888,7 @@ export def "2-workflowscheme update" [
 #
 # POST /api/2/workflowscheme/{id}/createdraft
 # operationId: createDraftForParent
-export def "2-workflowscheme-create-draft create-for-parent" [
+export def "create-draft-for-parent" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10924,7 +10924,7 @@ export def "2-workflowscheme-create-draft create-for-parent" [
 #
 # DELETE /api/2/workflowscheme/{id}/default
 # operationId: deleteDefault
-export def "2-workflowscheme-default delete" [
+export def "delete-default" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10962,7 +10962,7 @@ export def "2-workflowscheme-default delete" [
 #
 # GET /api/2/workflowscheme/{id}/default
 # operationId: getDefault
-export def "2-workflowscheme-default get" [
+export def "get-default" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11000,7 +11000,7 @@ export def "2-workflowscheme-default get" [
 #
 # PUT /api/2/workflowscheme/{id}/default
 # operationId: updateDefault
-export def "2-workflowscheme-default update" [
+export def "update-default" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11036,7 +11036,7 @@ export def "2-workflowscheme-default update" [
 #
 # DELETE /api/2/workflowscheme/{id}/draft
 # operationId: deleteDraftById
-export def "2-workflowscheme-draft delete" [
+export def "delete-draft-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11072,7 +11072,7 @@ export def "2-workflowscheme-draft delete" [
 #
 # GET /api/2/workflowscheme/{id}/draft
 # operationId: getDraftById
-export def "2-workflowscheme-draft get" [
+export def "get-draft-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11108,7 +11108,7 @@ export def "2-workflowscheme-draft get" [
 #
 # PUT /api/2/workflowscheme/{id}/draft
 # operationId: updateDraft
-export def "2-workflowscheme-draft update" [
+export def "update-draft" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11144,7 +11144,7 @@ export def "2-workflowscheme-draft update" [
 #
 # DELETE /api/2/workflowscheme/{id}/draft/default
 # operationId: deleteDraftDefault
-export def "2-workflowscheme-draft-default delete" [
+export def "delete-draft-default" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11180,7 +11180,7 @@ export def "2-workflowscheme-draft-default delete" [
 #
 # GET /api/2/workflowscheme/{id}/draft/default
 # operationId: getDraftDefault
-export def "2-workflowscheme-draft-default get" [
+export def "get-draft-default" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11216,7 +11216,7 @@ export def "2-workflowscheme-draft-default get" [
 #
 # PUT /api/2/workflowscheme/{id}/draft/default
 # operationId: updateDraftDefault
-export def "2-workflowscheme-draft-default update" [
+export def "update-draft-default" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11252,7 +11252,7 @@ export def "2-workflowscheme-draft-default update" [
 #
 # DELETE /api/2/workflowscheme/{id}/draft/issuetype/{issueType}
 # operationId: deleteDraftIssueType
-export def "2-workflowscheme-draft-issuetype delete-issue-type" [
+export def "delete-draft-issue-type" [
   id: int
   issue_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11290,7 +11290,7 @@ export def "2-workflowscheme-draft-issuetype delete-issue-type" [
 #
 # GET /api/2/workflowscheme/{id}/draft/issuetype/{issueType}
 # operationId: getDraftIssueType
-export def "2-workflowscheme-draft-issuetype get-issue-type" [
+export def "get-draft-issue-type" [
   id: int
   issue_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11328,7 +11328,7 @@ export def "2-workflowscheme-draft-issuetype get-issue-type" [
 #
 # PUT /api/2/workflowscheme/{id}/draft/issuetype/{issueType}
 # operationId: setDraftIssueType
-export def "2-workflowscheme-draft-issuetype update-issue-type" [
+export def "set-draft-issue-type" [
   id: int
   issue_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11366,7 +11366,7 @@ export def "2-workflowscheme-draft-issuetype update-issue-type" [
 #
 # DELETE /api/2/workflowscheme/{id}/draft/workflow
 # operationId: deleteDraftWorkflowMapping
-export def "2-workflowscheme-draft-workflow delete-mapping" [
+export def "delete-draft-workflow-mapping" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11404,7 +11404,7 @@ export def "2-workflowscheme-draft-workflow delete-mapping" [
 #
 # GET /api/2/workflowscheme/{id}/draft/workflow
 # operationId: getDraftWorkflow
-export def "2-workflowscheme-draft-workflow get" [
+export def "get-draft-workflow" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11442,7 +11442,7 @@ export def "2-workflowscheme-draft-workflow get" [
 #
 # PUT /api/2/workflowscheme/{id}/draft/workflow
 # operationId: updateDraftWorkflowMapping
-export def "2-workflowscheme-draft-workflow update-mapping" [
+export def "update-draft-workflow-mapping" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11479,7 +11479,7 @@ export def "2-workflowscheme-draft-workflow update-mapping" [
 # Remove the specified issue type mapping from the scheme.
 #
 # DELETE /api/2/workflowscheme/{id}/issuetype/{issueType}
-export def "2-workflowscheme-issuetype delete" [
+export def "delete-api-2-workflowscheme-id-issuetype-issue-type" [
   id: int
   issue_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11518,7 +11518,7 @@ export def "2-workflowscheme-issuetype delete" [
 # Returns the issue type mapping for the passed workflow scheme.
 #
 # GET /api/2/workflowscheme/{id}/issuetype/{issueType}
-export def "2-workflowscheme-issuetype get" [
+export def "get-api-2-workflowscheme-id-issuetype-issue-type" [
   id: int
   issue_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11558,7 +11558,7 @@ export def "2-workflowscheme-issuetype get" [
 #
 # PUT /api/2/workflowscheme/{id}/issuetype/{issueType}
 # operationId: setIssueType
-export def "2-workflowscheme-issuetype update-issue-type" [
+export def "set-issue-type" [
   id: int
   issue_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11596,7 +11596,7 @@ export def "2-workflowscheme-issuetype update-issue-type" [
 #
 # DELETE /api/2/workflowscheme/{id}/workflow
 # operationId: deleteWorkflowMapping
-export def "2-workflowscheme-workflow delete-mapping" [
+export def "delete-workflow-mapping" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11635,7 +11635,7 @@ export def "2-workflowscheme-workflow delete-mapping" [
 #
 # GET /api/2/workflowscheme/{id}/workflow
 # operationId: getWorkflow
-export def "2-workflowscheme-workflow get" [
+export def "get-workflow" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11674,7 +11674,7 @@ export def "2-workflowscheme-workflow get" [
 #
 # PUT /api/2/workflowscheme/{id}/workflow
 # operationId: updateWorkflowMapping
-export def "2-workflowscheme-workflow update-mapping" [
+export def "update-workflow-mapping" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11712,7 +11712,7 @@ export def "2-workflowscheme-workflow update-mapping" [
 #
 # GET /api/2/worklog/deleted
 # operationId: getIdsOfWorklogsDeletedSince
-export def "2-worklog-deleted get-of-since" [
+export def "get-ids-of-worklogs-deleted-since" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11748,7 +11748,7 @@ export def "2-worklog-deleted get-of-since" [
 #
 # POST /api/2/worklog/list
 # operationId: getWorklogsForIds
-export def "2-worklog-list get" [
+export def "get-worklogs-for-ids" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11782,7 +11782,7 @@ export def "2-worklog-list get" [
 #
 # GET /api/2/worklog/updated
 # operationId: getIdsOfWorklogsModifiedSince
-export def "2-worklog-updated get-of-modified-since" [
+export def "get-ids-of-worklogs-modified-since" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11818,7 +11818,7 @@ export def "2-worklog-updated get-of-modified-since" [
 #
 # DELETE /auth/1/session
 # operationId: logout
-export def "auth-1-session delete-logout" [
+export def "logout" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11852,7 +11852,7 @@ export def "auth-1-session delete-logout" [
 #
 # GET /auth/1/session
 # operationId: currentUser
-export def "auth-1-session get-user" [
+export def "current-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11886,7 +11886,7 @@ export def "auth-1-session get-user" [
 #
 # POST /auth/1/session
 # operationId: login
-export def "auth-1-session create-login" [
+export def "login" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11920,7 +11920,7 @@ export def "auth-1-session create-login" [
 #
 # DELETE /auth/1/websudo
 # operationId: release
-export def "auth-1-websudo delete-release" [
+export def "release" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

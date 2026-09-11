@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-insights-alertrules list-alert-rules" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "alert-rules-list-by-subscription" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/microsoft.insights/alertrules
 # operationId: AlertRules_ListBySubscription
-export def "subscriptions-providers-microsoft-insights-alertrules list-alert-rules" [
+export def "alert-rules-list-by-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -178,7 +178,7 @@ export def "subscriptions-providers-microsoft-insights-alertrules list-alert-rul
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/microsoft.insights/alertrules
 # operationId: AlertRules_ListByResourceGroup
-export def "subscriptions-resourcegroups-providers-microsoft-insights-alertrules list-alert-rules-by-resource-group" [
+export def "alert-rules-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -218,7 +218,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-insights-alertrules
 #
 # DELETE /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/microsoft.insights/alertrules/{ruleName}
 # operationId: AlertRules_Delete
-export def "subscriptions-resourcegroups-providers-microsoft-insights-alertrules delete-alert-rules" [
+export def "alert-rules-delete" [
   subscription_id: string
   resource_group_name: string
   rule_name: string
@@ -260,7 +260,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-insights-alertrules
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/microsoft.insights/alertrules/{ruleName}
 # operationId: AlertRules_Get
-export def "subscriptions-resourcegroups-providers-microsoft-insights-alertrules get-alert-rules" [
+export def "alert-rules-get" [
   subscription_id: string
   resource_group_name: string
   rule_name: string
@@ -303,7 +303,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-insights-alertrules
 # PATCH /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/microsoft.insights/alertrules/{ruleName}
 # operationId: AlertRules_Update
 # --properties shape: {actions?: list, condition: record, description?: string, isEnabled: bool, name: string}
-export def "subscriptions-resourcegroups-providers-microsoft-insights-alertrules update-alert-rules" [
+export def "alert-rules-update" [
   subscription_id: string
   resource_group_name: string
   rule_name: string
@@ -351,7 +351,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-insights-alertrules
 # PUT /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/microsoft.insights/alertrules/{ruleName}
 # operationId: AlertRules_CreateOrUpdate
 # --properties shape: {actions?: list, condition: record, description?: string, isEnabled: bool, name: string}
-export def "subscriptions-resourcegroups-providers-microsoft-insights-alertrules create-alert-rules-or-update" [
+export def "alert-rules-create-or-update" [
   subscription_id: string
   resource_group_name: string
   rule_name: string

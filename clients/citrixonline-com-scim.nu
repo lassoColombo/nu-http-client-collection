@@ -121,7 +121,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "groups list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-groups" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -145,7 +145,7 @@ export def commands []: nothing -> table {
 #
 # GET /Groups
 # operationId: getGroups
-export def "groups list" [
+export def "get-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -185,7 +185,7 @@ export def "groups list" [
 # POST /Groups
 # operationId: createGroup
 # --members item shape: {type: "group"|"user", value: string}
-export def "groups create" [
+export def "create-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -227,7 +227,7 @@ export def "groups create" [
 #
 # DELETE /Groups/{groupKey}
 # operationId: deleteGroup
-export def "groups delete" [
+export def "delete-group" [
   group_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -266,7 +266,7 @@ export def "groups delete" [
 #
 # GET /Groups/{groupKey}
 # operationId: getGroup
-export def "groups get" [
+export def "get-group" [
   group_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -306,7 +306,7 @@ export def "groups get" [
 # PATCH /Groups/{groupKey}
 # operationId: updateGroup
 # --members item shape: {type: "group"|"user", value: string}
-export def "groups update-by-group-key" [
+export def "update-group" [
   group_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -351,7 +351,7 @@ export def "groups update-by-group-key" [
 # PUT /Groups/{groupKey}
 # operationId: replaceGroup
 # --members item shape: {type: "group"|"user", value: string}
-export def "groups update-by-group-key-1" [
+export def "replace-group" [
   group_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -395,7 +395,7 @@ export def "groups update-by-group-key-1" [
 #
 # GET /Schemas/Users
 # operationId: getUserSchema
-export def "schemas-users get" [
+export def "get-user-schema" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -432,7 +432,7 @@ export def "schemas-users get" [
 #
 # GET /ServiceProviderConfigs
 # operationId: getServiceProviderConfigs
-export def "service-provider-configs get" [
+export def "get-service-provider-configs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -469,7 +469,7 @@ export def "service-provider-configs get" [
 #
 # GET /Users
 # operationId: getUsers
-export def "users list" [
+export def "get-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -509,7 +509,7 @@ export def "users list" [
 # POST /Users
 # operationId: createUsers
 # --name shape: {familyName: string, givenName: string}
-export def "users create" [
+export def "create-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -555,7 +555,7 @@ export def "users create" [
 #
 # GET /Users/me
 # operationId: getMe
-export def "users-me get" [
+export def "get-me" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -593,7 +593,7 @@ export def "users-me get" [
 # PATCH /Users/me
 # operationId: updateMe
 # --name shape: {familyName: string, givenName: string}
-export def "users-me update" [
+export def "update-me" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -640,7 +640,7 @@ export def "users-me update" [
 # PUT /Users/me
 # operationId: replaceMe
 # --name shape: {familyName: string, givenName: string}
-export def "users-me update-1" [
+export def "replace-me" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -686,7 +686,7 @@ export def "users-me update-1" [
 #
 # DELETE /Users/{userKey}
 # operationId: deleteUser
-export def "users delete" [
+export def "delete-user" [
   user_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -725,7 +725,7 @@ export def "users delete" [
 #
 # GET /Users/{userKey}
 # operationId: getUser
-export def "users get" [
+export def "get-user" [
   user_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -765,7 +765,7 @@ export def "users get" [
 # PATCH /Users/{userKey}
 # operationId: updateUser
 # --name shape: {familyName: string, givenName: string}
-export def "users update-by-user-key" [
+export def "update-user" [
   user_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -814,7 +814,7 @@ export def "users update-by-user-key" [
 # PUT /Users/{userKey}
 # operationId: replaceUser
 # --name shape: {familyName: string, givenName: string}
-export def "users update-by-user-key-1" [
+export def "replace-user" [
   user_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

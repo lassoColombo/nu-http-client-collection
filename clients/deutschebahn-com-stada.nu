@@ -97,7 +97,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "stations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-stations" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -120,7 +120,7 @@ export def commands []: nothing -> table {
 # This operation provides the master data for german railway stations.
 #
 # GET /stations
-export def "stations list" [
+export def "get-stations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -162,7 +162,7 @@ export def "stations list" [
 # This operation provides the master data for a german railway station selected by its station-id.
 #
 # GET /stations/{id}
-export def "stations get" [
+export def "get-stations-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -197,7 +197,7 @@ export def "stations get" [
 # This operation provides the master data for 3-S-Zentralen.
 #
 # GET /szentralen
-export def "szentralen list" [
+export def "get-szentralen" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -233,7 +233,7 @@ export def "szentralen list" [
 # This operation provides the master data for 3-S-Zentralen select by its id.
 #
 # GET /szentralen/{id}
-export def "szentralen get" [
+export def "get-szentralen-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

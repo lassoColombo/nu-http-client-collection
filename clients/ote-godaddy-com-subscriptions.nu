@@ -113,7 +113,7 @@ def accept-completer [] { ["application/javascript" "application/json" "applicat
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -137,7 +137,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/subscriptions
 # operationId: list
-export def "subscriptions list" [
+export def "list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -182,7 +182,7 @@ export def "subscriptions list" [
 #
 # GET /v1/subscriptions/productGroups
 # operationId: productGroups
-export def "subscriptions-product-groups get" [
+export def "product-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -221,7 +221,7 @@ export def "subscriptions-product-groups get" [
 #
 # DELETE /v1/subscriptions/{subscriptionId}
 # operationId: cancel
-export def "subscriptions cancel" [
+export def "cancel" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -260,7 +260,7 @@ export def "subscriptions cancel" [
 #
 # GET /v1/subscriptions/{subscriptionId}
 # operationId: get
-export def "subscriptions get" [
+export def "get" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -301,7 +301,7 @@ export def "subscriptions get" [
 #
 # PATCH /v1/subscriptions/{subscriptionId}
 # operationId: update
-export def "subscriptions update" [
+export def "update" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

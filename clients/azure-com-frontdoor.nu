@@ -121,7 +121,7 @@ def protocol-type-completer [] { ["ServerNameIndication"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-network-check-front-door-name-availability check" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "check-front-door-name-availability" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -145,7 +145,7 @@ export def commands []: nothing -> table {
 #
 # POST /providers/Microsoft.Network/checkFrontDoorNameAvailability
 # operationId: CheckFrontDoorNameAvailability
-export def "providers-microsoft-network-check-front-door-name-availability check" [
+export def "check-front-door-name-availability" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -186,7 +186,7 @@ export def "providers-microsoft-network-check-front-door-name-availability check
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Network/checkFrontDoorNameAvailability
 # operationId: CheckFrontDoorNameAvailabilityWithSubscription
-export def "subscriptions-providers-microsoft-network-check-front-door-name-availability check" [
+export def "check-front-door-name-availability-with-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -229,7 +229,7 @@ export def "subscriptions-providers-microsoft-network-check-front-door-name-avai
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/frontDoors
 # operationId: FrontDoors_List
-export def "subscriptions-providers-microsoft-network-front-doors list" [
+export def "front-doors-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -267,7 +267,7 @@ export def "subscriptions-providers-microsoft-network-front-doors list" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/frontDoors
 # operationId: FrontDoors_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-network-front-doors list" [
+export def "front-doors-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -307,7 +307,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-front-door
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/frontDoors/{frontDoorName}
 # operationId: FrontDoors_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-front-doors delete" [
+export def "front-doors-delete" [
   subscription_id: string
   resource_group_name: string
   front_door_name: string
@@ -349,7 +349,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-front-door
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/frontDoors/{frontDoorName}
 # operationId: FrontDoors_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-front-doors get" [
+export def "front-doors-get" [
   subscription_id: string
   resource_group_name: string
   front_door_name: string
@@ -392,7 +392,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-front-door
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/frontDoors/{frontDoorName}
 # operationId: FrontDoors_CreateOrUpdate
 # --properties shape: {backendPools?: list, backendPoolsSettings?: record, enabledState?: "Enabled"|"Disabled", friendlyName?: string, frontendEndpoints?: list, healthProbeSettings?: list, loadBalancingSettings?: list, routingRules?: list}
-export def "subscriptions-resource-groups-providers-microsoft-network-front-doors create-or-update" [
+export def "front-doors-create-or-update" [
   subscription_id: string
   resource_group_name: string
   front_door_name: string
@@ -440,7 +440,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-front-door
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/frontDoors/{frontDoorName}/frontendEndpoints
 # operationId: FrontendEndpoints_ListByFrontDoor
-export def "subscriptions-resource-groups-providers-microsoft-network-front-doors-frontend-endpoints list" [
+export def "frontend-endpoints-list-by-front-door" [
   subscription_id: string
   resource_group_name: string
   front_door_name: string
@@ -482,7 +482,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-front-door
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/frontDoors/{frontDoorName}/frontendEndpoints/{frontendEndpointName}
 # operationId: FrontendEndpoints_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-front-doors-frontend-endpoints get" [
+export def "frontend-endpoints-get" [
   subscription_id: string
   resource_group_name: string
   front_door_name: string
@@ -526,7 +526,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-front-door
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/frontDoors/{frontDoorName}/frontendEndpoints/{frontendEndpointName}/disableHttps
 # operationId: FrontendEndpoints_DisableHttps
-export def "subscriptions-resource-groups-providers-microsoft-network-front-doors-frontend-endpoints-disable-https disable" [
+export def "frontend-endpoints-disable-https" [
   subscription_id: string
   resource_group_name: string
   front_door_name: string
@@ -572,7 +572,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-front-door
 # operationId: FrontendEndpoints_EnableHttps
 # --frontDoorCertificateSourceParameters shape: {certificateType?: "Dedicated"}
 # --keyVaultCertificateSourceParameters shape: {secretName?: string, secretVersion?: string, vault?: record}
-export def "subscriptions-resource-groups-providers-microsoft-network-front-doors-frontend-endpoints-enable-https enable" [
+export def "frontend-endpoints-enable-https" [
   subscription_id: string
   resource_group_name: string
   front_door_name: string
@@ -624,7 +624,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-front-door
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/frontDoors/{frontDoorName}/purge
 # operationId: Endpoints_PurgeContent
-export def "subscriptions-resource-groups-providers-microsoft-network-front-doors-purge create-endpoints-content" [
+export def "endpoints-purge-content" [
   subscription_id: string
   resource_group_name: string
   front_door_name: string
@@ -670,7 +670,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-front-door
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/frontDoors/{frontDoorName}/validateCustomDomain
 # operationId: FrontDoors_ValidateCustomDomain
-export def "subscriptions-resource-groups-providers-microsoft-network-front-doors-validate-custom-domain validate" [
+export def "front-doors-validate-custom-domain" [
   subscription_id: string
   resource_group_name: string
   front_door_name: string

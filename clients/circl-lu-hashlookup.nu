@@ -103,7 +103,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "bulk-md5 create-bulkmd5" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-bulkmd5" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -127,7 +127,7 @@ export def commands []: nothing -> table {
 #
 # POST /bulk/md5
 # operationId: post_bulkmd5
-export def "bulk-md5 create-bulkmd5" [
+export def "post-bulkmd5" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -161,7 +161,7 @@ export def "bulk-md5 create-bulkmd5" [
 #
 # POST /bulk/sha1
 # operationId: post_bulksha1
-export def "bulk-sha1 create-bulksha1" [
+export def "post-bulksha1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -195,7 +195,7 @@ export def "bulk-sha1 create-bulksha1" [
 #
 # GET /children/{sha1}/{count}/{cursor}
 # operationId: get_children
-export def "children get" [
+export def "get-children" [
   sha1: string
   count: int
   cursor: string
@@ -235,7 +235,7 @@ export def "children get" [
 #
 # GET /info
 # operationId: get_info
-export def "info get" [
+export def "get-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -269,7 +269,7 @@ export def "info get" [
 #
 # GET /lookup/md5/{md5}
 # operationId: get_lookup_md5
-export def "lookup-md5 get" [
+export def "get-lookup-md5" [
   md5: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -305,7 +305,7 @@ export def "lookup-md5 get" [
 #
 # GET /lookup/sha1/{sha1}
 # operationId: get_lookup_sha1
-export def "lookup-sha1 get" [
+export def "get-lookup-sha1" [
   sha1: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -341,7 +341,7 @@ export def "lookup-sha1 get" [
 #
 # GET /lookup/sha256/{sha256}
 # operationId: get_lookup_sha256
-export def "lookup-sha256 get" [
+export def "get-lookup-sha256" [
   sha256: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -377,7 +377,7 @@ export def "lookup-sha256 get" [
 #
 # GET /parents/{sha1}/{count}/{cursor}
 # operationId: get_parents
-export def "parents get" [
+export def "get-parents" [
   sha1: string
   count: int
   cursor: string
@@ -417,7 +417,7 @@ export def "parents get" [
 #
 # GET /session/create/{name}
 # operationId: get_session_create
-export def "session-create get" [
+export def "get-session-create" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -453,7 +453,7 @@ export def "session-create get" [
 #
 # GET /session/get/{name}
 # operationId: get_session_matches
-export def "session-get get-matches" [
+export def "get-session-matches" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -489,7 +489,7 @@ export def "session-get get-matches" [
 #
 # GET /stats/top
 # operationId: get_stattop
-export def "stats-top get-stattop" [
+export def "get-stattop" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

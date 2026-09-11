@@ -128,7 +128,7 @@ def kind-completer-1 [] { ["EventGrid" "EventHub" "IotHub"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-kusto-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -152,7 +152,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.Kusto/operations
 # operationId: Operations_List
-export def "providers-microsoft-kusto-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -188,7 +188,7 @@ export def "providers-microsoft-kusto-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Kusto/clusters
 # operationId: Clusters_List
-export def "subscriptions-providers-microsoft-kusto-clusters list" [
+export def "clusters-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -226,7 +226,7 @@ export def "subscriptions-providers-microsoft-kusto-clusters list" [
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Kusto/locations/{location}/checkNameAvailability
 # operationId: Clusters_CheckNameAvailability
-export def "subscriptions-providers-microsoft-kusto-locations-check-name-availability check-clusters" [
+export def "clusters-check-name-availability" [
   subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -271,7 +271,7 @@ export def "subscriptions-providers-microsoft-kusto-locations-check-name-availab
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Kusto/skus
 # operationId: Clusters_ListSkus
-export def "subscriptions-providers-microsoft-kusto-skus list-clusters" [
+export def "clusters-list-skus" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -309,7 +309,7 @@ export def "subscriptions-providers-microsoft-kusto-skus list-clusters" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Kusto/clusters
 # operationId: Clusters_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters list" [
+export def "clusters-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -349,7 +349,7 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters lis
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Kusto/clusters/{clusterName}
 # operationId: Clusters_Delete
-export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters delete" [
+export def "clusters-delete" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -391,7 +391,7 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters del
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Kusto/clusters/{clusterName}
 # operationId: Clusters_Get
-export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters get" [
+export def "clusters-get" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -436,7 +436,7 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters get
 # --identity shape: {type: "None"|"SystemAssigned", userAssignedIdentities?: record}
 # --properties shape: {enableDiskEncryption?: bool, enableStreamingIngest?: bool, keyVaultProperties?: any, optimizedAutoscale?: record, trustedExternalTenants?: list, virtualNetworkConfiguration?: record}
 # --sku shape: {capacity?: int, name: "Standard_DS13_v2+1TB_PS"|"Standard_DS13_v2+2TB_PS"|"Standard_DS14_v2+3TB_PS"|"Standard_DS14_v2+4TB_PS"|"Standard_D13_v2"|"Standard_D14_v2"|"Standard_L8s"|"Standard_L16s"|"Standard_D11_v2"|"Standard_D12_v2"|"Standard_L4s"|"Dev(No SLA)_Standard_D11_v2", tier: "Basic"|"Standard"}
-export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters update" [
+export def "clusters-update" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -489,7 +489,7 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters upd
 # --identity shape: {type: "None"|"SystemAssigned", userAssignedIdentities?: record}
 # --properties shape: {enableDiskEncryption?: bool, enableStreamingIngest?: bool, keyVaultProperties?: any, optimizedAutoscale?: record, trustedExternalTenants?: list, virtualNetworkConfiguration?: record}
 # --sku shape: {capacity?: int, name: "Standard_DS13_v2+1TB_PS"|"Standard_DS13_v2+2TB_PS"|"Standard_DS14_v2+3TB_PS"|"Standard_DS14_v2+4TB_PS"|"Standard_D13_v2"|"Standard_D14_v2"|"Standard_L8s"|"Standard_L16s"|"Standard_D11_v2"|"Standard_D12_v2"|"Standard_L4s"|"Dev(No SLA)_Standard_D11_v2", tier: "Basic"|"Standard"}
-export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters create-or-update" [
+export def "clusters-create-or-update" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -540,7 +540,7 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters cre
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Kusto/clusters/{clusterName}/attachedDatabaseConfigurations
 # operationId: AttachedDatabaseConfigurations_ListByCluster
-export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-attached-database-configurations list" [
+export def "attached-database-configurations-list-by-cluster" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -582,7 +582,7 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-att
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Kusto/clusters/{clusterName}/attachedDatabaseConfigurations/{attachedDatabaseConfigurationName}
 # operationId: AttachedDatabaseConfigurations_Delete
-export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-attached-database-configurations delete" [
+export def "attached-database-configurations-delete" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -626,7 +626,7 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-att
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Kusto/clusters/{clusterName}/attachedDatabaseConfigurations/{attachedDatabaseConfigurationName}
 # operationId: AttachedDatabaseConfigurations_Get
-export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-attached-database-configurations get" [
+export def "attached-database-configurations-get" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -671,7 +671,7 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-att
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Kusto/clusters/{clusterName}/attachedDatabaseConfigurations/{attachedDatabaseConfigurationName}
 # operationId: AttachedDatabaseConfigurations_CreateOrUpdate
 # --properties shape: {clusterResourceId: string, databaseName: string, defaultPrincipalsModificationKind: "Union"|"Replace"|"None"}
-export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-attached-database-configurations create-or-update" [
+export def "attached-database-configurations-create-or-update" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -720,7 +720,7 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-att
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Kusto/clusters/{clusterName}/checkNameAvailability
 # operationId: Databases_CheckNameAvailability
-export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-check-name-availability check-databases" [
+export def "databases-check-name-availability" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -767,7 +767,7 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-che
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Kusto/clusters/{clusterName}/databases
 # operationId: Databases_ListByCluster
-export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-databases list" [
+export def "databases-list-by-cluster" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -809,7 +809,7 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-dat
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Kusto/clusters/{clusterName}/databases/{databaseName}
 # operationId: Databases_Delete
-export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-databases delete" [
+export def "databases-delete" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -853,7 +853,7 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-dat
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Kusto/clusters/{clusterName}/databases/{databaseName}
 # operationId: Databases_Get
-export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-databases get" [
+export def "databases-get" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -898,7 +898,7 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-dat
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Kusto/clusters/{clusterName}/databases/{databaseName}
 # Discriminator (request): kind
 # operationId: Databases_Update
-export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-databases update" [
+export def "databases-update" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -948,7 +948,7 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-dat
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Kusto/clusters/{clusterName}/databases/{databaseName}
 # Discriminator (request): kind
 # operationId: Databases_CreateOrUpdate
-export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-databases create-or-update" [
+export def "databases-create-or-update" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -998,7 +998,7 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-dat
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Kusto/clusters/{clusterName}/databases/{databaseName}/addPrincipals
 # operationId: Databases_AddPrincipals
 # --value item shape: {appId?: string, email?: string, fqn?: string, name: string, role: "Admin"|"Ingestor"|"Monitor"|"User"|"UnrestrictedViewers"|"Viewer", type: "App"|"Group"|"User"}
-export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-databases-add-principals create" [
+export def "databases-add-principals" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -1046,7 +1046,7 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-dat
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Kusto/clusters/{clusterName}/databases/{databaseName}/checkNameAvailability
 # operationId: DataConnections_CheckNameAvailability
-export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-databases-check-name-availability check-data-connections" [
+export def "data-connections-check-name-availability" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -1096,7 +1096,7 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-dat
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Kusto/clusters/{clusterName}/databases/{databaseName}/dataConnectionValidation
 # operationId: DataConnections_dataConnectionValidation
 # --properties shape: {kind: "EventHub"|"EventGrid"|"IotHub", location?: string}
-export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-databases-data-connection-validation create" [
+export def "data-connections-data-connection-validation" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -1145,7 +1145,7 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-dat
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Kusto/clusters/{clusterName}/databases/{databaseName}/dataConnections
 # operationId: DataConnections_ListByDatabase
-export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-databases-data-connections list" [
+export def "data-connections-list-by-database" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -1189,7 +1189,7 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-dat
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Kusto/clusters/{clusterName}/databases/{databaseName}/dataConnections/{dataConnectionName}
 # operationId: DataConnections_Delete
-export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-databases-data-connections delete" [
+export def "data-connections-delete" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -1235,7 +1235,7 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-dat
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Kusto/clusters/{clusterName}/databases/{databaseName}/dataConnections/{dataConnectionName}
 # operationId: DataConnections_Get
-export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-databases-data-connections get" [
+export def "data-connections-get" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -1282,7 +1282,7 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-dat
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Kusto/clusters/{clusterName}/databases/{databaseName}/dataConnections/{dataConnectionName}
 # Discriminator (request): kind
 # operationId: DataConnections_Update
-export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-databases-data-connections update" [
+export def "data-connections-update" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -1334,7 +1334,7 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-dat
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Kusto/clusters/{clusterName}/databases/{databaseName}/dataConnections/{dataConnectionName}
 # Discriminator (request): kind
 # operationId: DataConnections_CreateOrUpdate
-export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-databases-data-connections create-or-update" [
+export def "data-connections-create-or-update" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -1385,7 +1385,7 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-dat
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Kusto/clusters/{clusterName}/databases/{databaseName}/listPrincipals
 # operationId: Databases_ListPrincipals
-export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-databases-list-principals list" [
+export def "databases-list-principals" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -1430,7 +1430,7 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-dat
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Kusto/clusters/{clusterName}/databases/{databaseName}/removePrincipals
 # operationId: Databases_RemovePrincipals
 # --value item shape: {appId?: string, email?: string, fqn?: string, name: string, role: "Admin"|"Ingestor"|"Monitor"|"User"|"UnrestrictedViewers"|"Viewer", type: "App"|"Group"|"User"}
-export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-databases-remove-principals delete" [
+export def "databases-remove-principals" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -1478,7 +1478,7 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-dat
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Kusto/clusters/{clusterName}/detachFollowerDatabases
 # operationId: Clusters_DetachFollowerDatabases
-export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-detach-follower-databases create" [
+export def "clusters-detach-follower-databases" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -1525,7 +1525,7 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-det
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Kusto/clusters/{clusterName}/listFollowerDatabases
 # operationId: Clusters_ListFollowerDatabases
-export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-list-follower-databases list" [
+export def "clusters-list-follower-databases" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -1567,7 +1567,7 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-lis
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Kusto/clusters/{clusterName}/skus
 # operationId: Clusters_ListSkusByResource
-export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-skus list" [
+export def "clusters-list-skus-by-resource" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -1609,7 +1609,7 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-sku
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Kusto/clusters/{clusterName}/start
 # operationId: Clusters_Start
-export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-start start" [
+export def "clusters-start" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -1651,7 +1651,7 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-sta
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Kusto/clusters/{clusterName}/stop
 # operationId: Clusters_Stop
-export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-stop stop" [
+export def "clusters-stop" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string

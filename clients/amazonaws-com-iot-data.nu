@@ -112,7 +112,7 @@ def x-amz-mqtt5-payload-format-indicator-completer [] { ["UNSPECIFIED_BYTES" "UT
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "things-shadow delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "delete-thing-shadow" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -136,7 +136,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /things/{thingName}/shadow
 # operationId: DeleteThingShadow
-export def "things-shadow delete" [
+export def "delete-thing-shadow" [
   thing_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -183,7 +183,7 @@ export def "things-shadow delete" [
 #
 # GET /things/{thingName}/shadow
 # operationId: GetThingShadow
-export def "things-shadow get" [
+export def "get-thing-shadow" [
   thing_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -230,7 +230,7 @@ export def "things-shadow get" [
 #
 # POST /things/{thingName}/shadow
 # operationId: UpdateThingShadow
-export def "things-shadow update" [
+export def "update-thing-shadow" [
   thing_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -281,7 +281,7 @@ export def "things-shadow update" [
 #
 # GET /retainedMessage/{topic}
 # operationId: GetRetainedMessage
-export def "retained-message get" [
+export def "get-retained-message" [
   topic: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -326,7 +326,7 @@ export def "retained-message get" [
 #
 # GET /api/things/shadow/ListNamedShadowsForThing/{thingName}
 # operationId: ListNamedShadowsForThing
-export def "things-shadow-list-named-shadows-for-thing list" [
+export def "list-named-shadows-for-thing" [
   thing_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -374,7 +374,7 @@ export def "things-shadow-list-named-shadows-for-thing list" [
 #
 # GET /retainedMessage
 # operationId: ListRetainedMessages
-export def "retained-message list" [
+export def "list-retained-messages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -420,7 +420,7 @@ export def "retained-message list" [
 #
 # POST /topics/{topic}
 # operationId: Publish
-export def "topics publish" [
+export def "publish" [
   topic: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

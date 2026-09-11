@@ -110,7 +110,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-managed-services-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -134,7 +134,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.ManagedServices/operations
 # operationId: Operations_List
-export def "providers-microsoft-managed-services-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -170,7 +170,7 @@ export def "providers-microsoft-managed-services-operations list" [
 #
 # GET /{scope}/providers/Microsoft.ManagedServices/registrationAssignments
 # operationId: RegistrationAssignments_List
-export def "providers-microsoft-managed-services-registration-assignments list" [
+export def "registration-assignments-list" [
   scope: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -209,7 +209,7 @@ export def "providers-microsoft-managed-services-registration-assignments list" 
 #
 # DELETE /{scope}/providers/Microsoft.ManagedServices/registrationAssignments/{registrationAssignmentId}
 # operationId: RegistrationAssignments_Delete
-export def "providers-microsoft-managed-services-registration-assignments delete" [
+export def "registration-assignments-delete" [
   scope: string
   registration_assignment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -249,7 +249,7 @@ export def "providers-microsoft-managed-services-registration-assignments delete
 #
 # GET /{scope}/providers/Microsoft.ManagedServices/registrationAssignments/{registrationAssignmentId}
 # operationId: RegistrationAssignments_Get
-export def "providers-microsoft-managed-services-registration-assignments get" [
+export def "registration-assignments-get" [
   scope: string
   registration_assignment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -291,7 +291,7 @@ export def "providers-microsoft-managed-services-registration-assignments get" [
 # PUT /{scope}/providers/Microsoft.ManagedServices/registrationAssignments/{registrationAssignmentId}
 # operationId: RegistrationAssignments_CreateOrUpdate
 # --properties shape: {registrationDefinitionId: string}
-export def "providers-microsoft-managed-services-registration-assignments create-or-update" [
+export def "registration-assignments-create-or-update" [
   scope: string
   registration_assignment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -335,7 +335,7 @@ export def "providers-microsoft-managed-services-registration-assignments create
 #
 # GET /{scope}/providers/Microsoft.ManagedServices/registrationDefinitions
 # operationId: RegistrationDefinitions_List
-export def "providers-microsoft-managed-services-registration-definitions list" [
+export def "registration-definitions-list" [
   scope: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -373,7 +373,7 @@ export def "providers-microsoft-managed-services-registration-definitions list" 
 #
 # DELETE /{scope}/providers/Microsoft.ManagedServices/registrationDefinitions/{registrationDefinitionId}
 # operationId: RegistrationDefinitions_Delete
-export def "providers-microsoft-managed-services-registration-definitions delete" [
+export def "registration-definitions-delete" [
   scope: string
   registration_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -413,7 +413,7 @@ export def "providers-microsoft-managed-services-registration-definitions delete
 #
 # GET /{scope}/providers/Microsoft.ManagedServices/registrationDefinitions/{registrationDefinitionId}
 # operationId: RegistrationDefinitions_Get
-export def "providers-microsoft-managed-services-registration-definitions get" [
+export def "registration-definitions-get" [
   scope: string
   registration_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -455,7 +455,7 @@ export def "providers-microsoft-managed-services-registration-definitions get" [
 # operationId: RegistrationDefinitions_CreateOrUpdate
 # --plan shape: {name: string, product: string, publisher: string, version: string}
 # --properties shape: {authorizations: list, description?: string, managedByTenantId: string, registrationDefinitionName?: string}
-export def "providers-microsoft-managed-services-registration-definitions create-or-update" [
+export def "registration-definitions-create-or-update" [
   scope: string
   registration_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL

@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["x-fungenerators-api-secret"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "pirate-generate-insult get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-pirate-generate-insult" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -121,7 +121,7 @@ export def commands []: nothing -> table {
 # Generate random pirate insults.
 #
 # GET /pirate/generate/insult
-export def "pirate-generate-insult get" [
+export def "get-pirate-generate-insult" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -156,7 +156,7 @@ export def "pirate-generate-insult get" [
 # Generate pirate lorem ipsum.
 #
 # GET /pirate/generate/lorem-ipsum
-export def "pirate-generate-lorem-ipsum get" [
+export def "get-pirate-generate-lorem-ipsum" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -192,7 +192,7 @@ export def "pirate-generate-lorem-ipsum get" [
 # Generate random pirate names.
 #
 # GET /pirate/generate/name
-export def "pirate-generate-name get" [
+export def "get-pirate-generate-name" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -228,7 +228,7 @@ export def "pirate-generate-name get" [
 # Translate from English to pirate.
 #
 # GET /pirate/translate
-export def "pirate-translate get" [
+export def "get-pirate-translate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

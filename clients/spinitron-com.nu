@@ -107,7 +107,7 @@ def accept-completer [] { ["application/json" "application/xml"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "personas list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-personas" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -130,7 +130,7 @@ export def commands []: nothing -> table {
 # Get Personas
 #
 # GET /personas
-export def "personas list" [
+export def "get-personas" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -170,7 +170,7 @@ export def "personas list" [
 # Get Persona by id
 #
 # GET /personas/{id}
-export def "personas get" [
+export def "get-personas-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -209,7 +209,7 @@ export def "personas get" [
 # Returns playlists optionally filtered by {start} and/or {end} datetimes
 #
 # GET /playlists
-export def "playlists list" [
+export def "get-playlists" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -252,7 +252,7 @@ export def "playlists list" [
 # Get a Playlist by id
 #
 # GET /playlists/{id}
-export def "playlists get" [
+export def "get-playlists-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -291,7 +291,7 @@ export def "playlists get" [
 # Returns scheduled shows optionally filtered by {start} and/or {end} datetimes
 #
 # GET /shows
-export def "shows list" [
+export def "get-shows" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -332,7 +332,7 @@ export def "shows list" [
 # Get a Show by id
 #
 # GET /shows/{id}
-export def "shows get" [
+export def "get-shows-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -371,7 +371,7 @@ export def "shows get" [
 # Returns spins optionally filtered by {start} and/or {end} datetimes
 #
 # GET /spins
-export def "spins list" [
+export def "get-spins" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -414,7 +414,7 @@ export def "spins list" [
 # Log a Spin
 #
 # POST /spins
-export def "spins create" [
+export def "post-spins" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -462,7 +462,7 @@ export def "spins create" [
 # Get a Spin by id
 #
 # GET /spins/{id}
-export def "spins get" [
+export def "get-spins-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

@@ -146,7 +146,7 @@ def accept-completer [] { ["application/json" "application/ld+json" "text/html"]
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "alert-log get-collection" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api-alert-log-get-collection" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -170,7 +170,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/alert-log
 # operationId: api_alert-log_get_collection
-export def "alert-log get-collection" [
+export def "api-alert-log-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -218,7 +218,7 @@ export def "alert-log get-collection" [
 #
 # GET /api/alert-log-status-code
 # operationId: api_alert-log-status-code_get_collection
-export def "alert-log-status-code get-collection" [
+export def "api-alert-log-status-code-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -256,7 +256,7 @@ export def "alert-log-status-code get-collection" [
 #
 # GET /api/alert-log-status-code/{id}
 # operationId: api_alert-log-status-code_id_get
-export def "alert-log-status-code get" [
+export def "api-alert-log-status-code-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -293,7 +293,7 @@ export def "alert-log-status-code get" [
 #
 # GET /api/alert-log/{id}
 # operationId: api_alert-log_id_get
-export def "alert-log get" [
+export def "api-alert-log-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -330,7 +330,7 @@ export def "alert-log get" [
 #
 # GET /api/alert-service
 # operationId: api_alert-service_get_collection
-export def "alert-service get-collection" [
+export def "api-alert-service-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -372,7 +372,7 @@ export def "alert-service get-collection" [
 #
 # POST /api/alert-service
 # operationId: api_alert-service_post
-export def "alert-service create" [
+export def "api-alert-service-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -491,7 +491,7 @@ export def "alert-service create" [
 #
 # GET /api/alert-service-transport-code
 # operationId: api_alert-service-transport-code_get_collection
-export def "alert-service-transport-code get-collection" [
+export def "api-alert-service-transport-code-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -529,7 +529,7 @@ export def "alert-service-transport-code get-collection" [
 #
 # GET /api/alert-service-transport-code/{id}
 # operationId: api_alert-service-transport-code_id_get
-export def "alert-service-transport-code get" [
+export def "api-alert-service-transport-code-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -566,7 +566,7 @@ export def "alert-service-transport-code get" [
 #
 # DELETE /api/alert-service/{id}
 # operationId: api_alert-service_id_delete
-export def "alert-service delete" [
+export def "api-alert-service-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -602,7 +602,7 @@ export def "alert-service delete" [
 #
 # GET /api/alert-service/{id}
 # operationId: api_alert-service_id_get
-export def "alert-service get" [
+export def "api-alert-service-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -639,7 +639,7 @@ export def "alert-service get" [
 #
 # PUT /api/alert-service/{id}
 # operationId: api_alert-service_id_put
-export def "alert-service update" [
+export def "api-alert-service-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -758,7 +758,7 @@ export def "alert-service update" [
 #
 # GET /api/credits-consumption
 # operationId: api_credits-consumption_get_collection
-export def "credits-consumption get-collection" [
+export def "api-credits-consumption-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -796,7 +796,7 @@ export def "credits-consumption get-collection" [
 #
 # GET /api/credits-consumption/{id}
 # operationId: api_credits-consumption_id_get
-export def "credits-consumption get" [
+export def "api-credits-consumption-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -833,7 +833,7 @@ export def "credits-consumption get" [
 #
 # GET /api/http-method-code
 # operationId: api_http-method-code_get_collection
-export def "http-method-code get-collection" [
+export def "api-http-method-code-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -871,7 +871,7 @@ export def "http-method-code get-collection" [
 #
 # GET /api/http-method-code/{id}
 # operationId: api_http-method-code_id_get
-export def "http-method-code get" [
+export def "api-http-method-code-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -908,7 +908,7 @@ export def "http-method-code get" [
 #
 # GET /api/media-object
 # operationId: api_media-object_get_collection
-export def "media-object get-collection" [
+export def "api-media-object-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -950,7 +950,7 @@ export def "media-object get-collection" [
 #
 # POST /api/media-object
 # operationId: api_media-object_post
-export def "media-object create" [
+export def "api-media-object-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -994,7 +994,7 @@ export def "media-object create" [
 #
 # DELETE /api/media-object/{id}
 # operationId: api_media-object_id_delete
-export def "media-object delete" [
+export def "api-media-object-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1030,7 +1030,7 @@ export def "media-object delete" [
 #
 # GET /api/media-object/{id}
 # operationId: api_media-object_id_get
-export def "media-object get" [
+export def "api-media-object-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1067,7 +1067,7 @@ export def "media-object get" [
 #
 # GET /api/monitor
 # operationId: api_monitor_get_collection
-export def "monitor get-collection" [
+export def "api-monitor-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1109,7 +1109,7 @@ export def "monitor get-collection" [
 #
 # POST /api/monitor
 # operationId: api_monitor_post
-export def "monitor create" [
+export def "api-monitor-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1173,7 +1173,7 @@ export def "monitor create" [
 #
 # GET /api/monitor-status-code
 # operationId: api_monitor-status-code_get_collection
-export def "monitor-status-code get-collection" [
+export def "api-monitor-status-code-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1211,7 +1211,7 @@ export def "monitor-status-code get-collection" [
 #
 # GET /api/monitor-status-code/{id}
 # operationId: api_monitor-status-code_id_get
-export def "monitor-status-code get" [
+export def "api-monitor-status-code-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1248,7 +1248,7 @@ export def "monitor-status-code get" [
 #
 # GET /api/monitor-status-log
 # operationId: api_monitor-status-log_get_collection
-export def "monitor-status-log get-collection" [
+export def "api-monitor-status-log-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1294,7 +1294,7 @@ export def "monitor-status-log get-collection" [
 #
 # GET /api/monitor-status-log/{id}
 # operationId: api_monitor-status-log_id_get
-export def "monitor-status-log get" [
+export def "api-monitor-status-log-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1331,7 +1331,7 @@ export def "monitor-status-log get" [
 #
 # GET /api/monitor-type-code
 # operationId: api_monitor-type-code_get_collection
-export def "monitor-type-code get-collection" [
+export def "api-monitor-type-code-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1369,7 +1369,7 @@ export def "monitor-type-code get-collection" [
 #
 # GET /api/monitor-type-code/{id}
 # operationId: api_monitor-type-code_id_get
-export def "monitor-type-code get" [
+export def "api-monitor-type-code-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1406,7 +1406,7 @@ export def "monitor-type-code get" [
 #
 # DELETE /api/monitor/{id}
 # operationId: api_monitor_id_delete
-export def "monitor delete" [
+export def "api-monitor-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1442,7 +1442,7 @@ export def "monitor delete" [
 #
 # GET /api/monitor/{id}
 # operationId: api_monitor_id_get
-export def "monitor get" [
+export def "api-monitor-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1479,7 +1479,7 @@ export def "monitor get" [
 #
 # PUT /api/monitor/{id}
 # operationId: api_monitor_id_put
-export def "monitor update" [
+export def "api-monitor-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1543,7 +1543,7 @@ export def "monitor update" [
 #
 # GET /api/partition
 # operationId: api_partition_get_collection
-export def "partition get-collection" [
+export def "api-partition-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1583,7 +1583,7 @@ export def "partition get-collection" [
 #
 # POST /api/partition
 # operationId: api_partition_post
-export def "partition create" [
+export def "api-partition-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1624,7 +1624,7 @@ export def "partition create" [
 #
 # DELETE /api/partition/{id}
 # operationId: api_partition_id_delete
-export def "partition delete" [
+export def "api-partition-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1660,7 +1660,7 @@ export def "partition delete" [
 #
 # GET /api/partition/{id}
 # operationId: api_partition_id_get
-export def "partition get" [
+export def "api-partition-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1697,7 +1697,7 @@ export def "partition get" [
 #
 # PUT /api/partition/{id}
 # operationId: api_partition_id_put
-export def "partition update" [
+export def "api-partition-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1740,7 +1740,7 @@ export def "partition update" [
 #
 # GET /api/ping
 # operationId: api_ping_get_collection
-export def "ping get-collection" [
+export def "api-ping-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1784,7 +1784,7 @@ export def "ping get-collection" [
 #
 # POST /api/ping
 # operationId: api_ping_post
-export def "ping create" [
+export def "api-ping-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1827,7 +1827,7 @@ export def "ping create" [
 #
 # GET /api/ping-method-code
 # operationId: api_ping-method-code_get_collection
-export def "ping-method-code get-collection" [
+export def "api-ping-method-code-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1865,7 +1865,7 @@ export def "ping-method-code get-collection" [
 #
 # GET /api/ping-method-code/{id}
 # operationId: api_ping-method-code_id_get
-export def "ping-method-code get" [
+export def "api-ping-method-code-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1902,7 +1902,7 @@ export def "ping-method-code get" [
 #
 # GET /api/ping/{id}
 # operationId: api_ping_id_get
-export def "ping get" [
+export def "api-ping-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1939,7 +1939,7 @@ export def "ping get" [
 #
 # GET /api/team-invitation
 # operationId: api_team-invitation_get_collection
-export def "team-invitation get-collection" [
+export def "api-team-invitation-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1983,7 +1983,7 @@ export def "team-invitation get-collection" [
 #
 # POST /api/team-invitation
 # operationId: api_team-invitation_post
-export def "team-invitation create" [
+export def "api-team-invitation-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2027,7 +2027,7 @@ export def "team-invitation create" [
 #
 # DELETE /api/team-invitation/{id}
 # operationId: api_team-invitation_id_delete
-export def "team-invitation delete" [
+export def "api-team-invitation-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2063,7 +2063,7 @@ export def "team-invitation delete" [
 #
 # GET /api/team-invitation/{id}
 # operationId: api_team-invitation_id_get
-export def "team-invitation get" [
+export def "api-team-invitation-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2100,7 +2100,7 @@ export def "team-invitation get" [
 #
 # GET /api/team-member
 # operationId: api_team-member_get_collection
-export def "team-member get-collection" [
+export def "api-team-member-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2144,7 +2144,7 @@ export def "team-member get-collection" [
 #
 # GET /api/team-member-role-code
 # operationId: api_team-member-role-code_get_collection
-export def "team-member-role-code get-collection" [
+export def "api-team-member-role-code-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2182,7 +2182,7 @@ export def "team-member-role-code get-collection" [
 #
 # GET /api/team-member-role-code/{id}
 # operationId: api_team-member-role-code_id_get
-export def "team-member-role-code get" [
+export def "api-team-member-role-code-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2219,7 +2219,7 @@ export def "team-member-role-code get" [
 #
 # DELETE /api/team-member/{id}
 # operationId: api_team-member_id_delete
-export def "team-member delete" [
+export def "api-team-member-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2255,7 +2255,7 @@ export def "team-member delete" [
 #
 # GET /api/team-member/{id}
 # operationId: api_team-member_id_get
-export def "team-member get" [
+export def "api-team-member-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2292,7 +2292,7 @@ export def "team-member get" [
 #
 # PUT /api/team-member/{id}
 # operationId: api_team-member_id_put
-export def "team-member update" [
+export def "api-team-member-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2334,7 +2334,7 @@ export def "team-member update" [
 #
 # GET /api/timezone-code
 # operationId: api_timezone-code_get_collection
-export def "timezone-code get-collection" [
+export def "api-timezone-code-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2372,7 +2372,7 @@ export def "timezone-code get-collection" [
 #
 # GET /api/timezone-code/{id}
 # operationId: api_timezone-code_id_get
-export def "timezone-code get" [
+export def "api-timezone-code-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2409,7 +2409,7 @@ export def "timezone-code get" [
 #
 # GET /api/transport-alerta
 # operationId: api_transport-alerta_get_collection
-export def "transport-alerta get-collection" [
+export def "api-transport-alerta-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2451,7 +2451,7 @@ export def "transport-alerta get-collection" [
 #
 # POST /api/transport-alerta
 # operationId: api_transport-alerta_post
-export def "transport-alerta create" [
+export def "api-transport-alerta-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2505,7 +2505,7 @@ export def "transport-alerta create" [
 #
 # DELETE /api/transport-alerta/{id}
 # operationId: api_transport-alerta_id_delete
-export def "transport-alerta delete" [
+export def "api-transport-alerta-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2541,7 +2541,7 @@ export def "transport-alerta delete" [
 #
 # GET /api/transport-alerta/{id}
 # operationId: api_transport-alerta_id_get
-export def "transport-alerta get" [
+export def "api-transport-alerta-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2578,7 +2578,7 @@ export def "transport-alerta get" [
 #
 # PUT /api/transport-alerta/{id}
 # operationId: api_transport-alerta_id_put
-export def "transport-alerta update" [
+export def "api-transport-alerta-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2633,7 +2633,7 @@ export def "transport-alerta update" [
 #
 # GET /api/transport-all-my-sms
 # operationId: api_transport-all-my-sms_get_collection
-export def "transport-all-my-sms get-collection" [
+export def "api-transport-all-my-sms-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2675,7 +2675,7 @@ export def "transport-all-my-sms get-collection" [
 #
 # POST /api/transport-all-my-sms
 # operationId: api_transport-all-my-sms_post
-export def "transport-all-my-sms create" [
+export def "api-transport-all-my-sms-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2719,7 +2719,7 @@ export def "transport-all-my-sms create" [
 #
 # DELETE /api/transport-all-my-sms/{id}
 # operationId: api_transport-all-my-sms_id_delete
-export def "transport-all-my-sms delete" [
+export def "api-transport-all-my-sms-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2755,7 +2755,7 @@ export def "transport-all-my-sms delete" [
 #
 # GET /api/transport-all-my-sms/{id}
 # operationId: api_transport-all-my-sms_id_get
-export def "transport-all-my-sms get" [
+export def "api-transport-all-my-sms-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2792,7 +2792,7 @@ export def "transport-all-my-sms get" [
 #
 # PUT /api/transport-all-my-sms/{id}
 # operationId: api_transport-all-my-sms_id_put
-export def "transport-all-my-sms update" [
+export def "api-transport-all-my-sms-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2837,7 +2837,7 @@ export def "transport-all-my-sms update" [
 #
 # GET /api/transport-amazon-sns
 # operationId: api_transport-amazon-sns_get_collection
-export def "transport-amazon-sns get-collection" [
+export def "api-transport-amazon-sns-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2879,7 +2879,7 @@ export def "transport-amazon-sns get-collection" [
 #
 # POST /api/transport-amazon-sns
 # operationId: api_transport-amazon-sns_post
-export def "transport-amazon-sns create" [
+export def "api-transport-amazon-sns-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2923,7 +2923,7 @@ export def "transport-amazon-sns create" [
 #
 # DELETE /api/transport-amazon-sns/{id}
 # operationId: api_transport-amazon-sns_id_delete
-export def "transport-amazon-sns delete" [
+export def "api-transport-amazon-sns-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2959,7 +2959,7 @@ export def "transport-amazon-sns delete" [
 #
 # GET /api/transport-amazon-sns/{id}
 # operationId: api_transport-amazon-sns_id_get
-export def "transport-amazon-sns get" [
+export def "api-transport-amazon-sns-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2996,7 +2996,7 @@ export def "transport-amazon-sns get" [
 #
 # PUT /api/transport-amazon-sns/{id}
 # operationId: api_transport-amazon-sns_id_put
-export def "transport-amazon-sns update" [
+export def "api-transport-amazon-sns-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3041,7 +3041,7 @@ export def "transport-amazon-sns update" [
 #
 # GET /api/transport-bandwidth
 # operationId: api_transport-bandwidth_get_collection
-export def "transport-bandwidth get-collection" [
+export def "api-transport-bandwidth-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3083,7 +3083,7 @@ export def "transport-bandwidth get-collection" [
 #
 # POST /api/transport-bandwidth
 # operationId: api_transport-bandwidth_post
-export def "transport-bandwidth create" [
+export def "api-transport-bandwidth-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3129,7 +3129,7 @@ export def "transport-bandwidth create" [
 #
 # DELETE /api/transport-bandwidth/{id}
 # operationId: api_transport-bandwidth_id_delete
-export def "transport-bandwidth delete" [
+export def "api-transport-bandwidth-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3165,7 +3165,7 @@ export def "transport-bandwidth delete" [
 #
 # GET /api/transport-bandwidth/{id}
 # operationId: api_transport-bandwidth_id_get
-export def "transport-bandwidth get" [
+export def "api-transport-bandwidth-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3202,7 +3202,7 @@ export def "transport-bandwidth get" [
 #
 # PUT /api/transport-bandwidth/{id}
 # operationId: api_transport-bandwidth_id_put
-export def "transport-bandwidth update" [
+export def "api-transport-bandwidth-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3249,7 +3249,7 @@ export def "transport-bandwidth update" [
 #
 # GET /api/transport-chatwork
 # operationId: api_transport-chatwork_get_collection
-export def "transport-chatwork get-collection" [
+export def "api-transport-chatwork-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3291,7 +3291,7 @@ export def "transport-chatwork get-collection" [
 #
 # POST /api/transport-chatwork
 # operationId: api_transport-chatwork_post
-export def "transport-chatwork create" [
+export def "api-transport-chatwork-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3334,7 +3334,7 @@ export def "transport-chatwork create" [
 #
 # DELETE /api/transport-chatwork/{id}
 # operationId: api_transport-chatwork_id_delete
-export def "transport-chatwork delete" [
+export def "api-transport-chatwork-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3370,7 +3370,7 @@ export def "transport-chatwork delete" [
 #
 # GET /api/transport-chatwork/{id}
 # operationId: api_transport-chatwork_id_get
-export def "transport-chatwork get" [
+export def "api-transport-chatwork-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3407,7 +3407,7 @@ export def "transport-chatwork get" [
 #
 # PUT /api/transport-chatwork/{id}
 # operationId: api_transport-chatwork_id_put
-export def "transport-chatwork update" [
+export def "api-transport-chatwork-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3451,7 +3451,7 @@ export def "transport-chatwork update" [
 #
 # GET /api/transport-click-send
 # operationId: api_transport-click-send_get_collection
-export def "transport-click-send get-collection" [
+export def "api-transport-click-send-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3493,7 +3493,7 @@ export def "transport-click-send get-collection" [
 #
 # POST /api/transport-click-send
 # operationId: api_transport-click-send_post
-export def "transport-click-send create" [
+export def "api-transport-click-send-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3540,7 +3540,7 @@ export def "transport-click-send create" [
 #
 # DELETE /api/transport-click-send/{id}
 # operationId: api_transport-click-send_id_delete
-export def "transport-click-send delete" [
+export def "api-transport-click-send-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3576,7 +3576,7 @@ export def "transport-click-send delete" [
 #
 # GET /api/transport-click-send/{id}
 # operationId: api_transport-click-send_id_get
-export def "transport-click-send get" [
+export def "api-transport-click-send-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3613,7 +3613,7 @@ export def "transport-click-send get" [
 #
 # PUT /api/transport-click-send/{id}
 # operationId: api_transport-click-send_id_put
-export def "transport-click-send update" [
+export def "api-transport-click-send-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3661,7 +3661,7 @@ export def "transport-click-send update" [
 #
 # GET /api/transport-clickatell
 # operationId: api_transport-clickatell_get_collection
-export def "transport-clickatell get-collection" [
+export def "api-transport-clickatell-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3703,7 +3703,7 @@ export def "transport-clickatell get-collection" [
 #
 # POST /api/transport-clickatell
 # operationId: api_transport-clickatell_post
-export def "transport-clickatell create" [
+export def "api-transport-clickatell-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3746,7 +3746,7 @@ export def "transport-clickatell create" [
 #
 # DELETE /api/transport-clickatell/{id}
 # operationId: api_transport-clickatell_id_delete
-export def "transport-clickatell delete" [
+export def "api-transport-clickatell-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3782,7 +3782,7 @@ export def "transport-clickatell delete" [
 #
 # GET /api/transport-clickatell/{id}
 # operationId: api_transport-clickatell_id_get
-export def "transport-clickatell get" [
+export def "api-transport-clickatell-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3819,7 +3819,7 @@ export def "transport-clickatell get" [
 #
 # PUT /api/transport-clickatell/{id}
 # operationId: api_transport-clickatell_id_put
-export def "transport-clickatell update" [
+export def "api-transport-clickatell-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3863,7 +3863,7 @@ export def "transport-clickatell update" [
 #
 # GET /api/transport-contact-everyone
 # operationId: api_transport-contact-everyone_get_collection
-export def "transport-contact-everyone get-collection" [
+export def "api-transport-contact-everyone-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3905,7 +3905,7 @@ export def "transport-contact-everyone get-collection" [
 #
 # POST /api/transport-contact-everyone
 # operationId: api_transport-contact-everyone_post
-export def "transport-contact-everyone create" [
+export def "api-transport-contact-everyone-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3949,7 +3949,7 @@ export def "transport-contact-everyone create" [
 #
 # DELETE /api/transport-contact-everyone/{id}
 # operationId: api_transport-contact-everyone_id_delete
-export def "transport-contact-everyone delete" [
+export def "api-transport-contact-everyone-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3985,7 +3985,7 @@ export def "transport-contact-everyone delete" [
 #
 # GET /api/transport-contact-everyone/{id}
 # operationId: api_transport-contact-everyone_id_get
-export def "transport-contact-everyone get" [
+export def "api-transport-contact-everyone-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4022,7 +4022,7 @@ export def "transport-contact-everyone get" [
 #
 # PUT /api/transport-contact-everyone/{id}
 # operationId: api_transport-contact-everyone_id_put
-export def "transport-contact-everyone update" [
+export def "api-transport-contact-everyone-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4067,7 +4067,7 @@ export def "transport-contact-everyone update" [
 #
 # GET /api/transport-discord
 # operationId: api_transport-discord_get_collection
-export def "transport-discord get-collection" [
+export def "api-transport-discord-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4109,7 +4109,7 @@ export def "transport-discord get-collection" [
 #
 # POST /api/transport-discord
 # operationId: api_transport-discord_post
-export def "transport-discord create" [
+export def "api-transport-discord-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4152,7 +4152,7 @@ export def "transport-discord create" [
 #
 # DELETE /api/transport-discord/{id}
 # operationId: api_transport-discord_id_delete
-export def "transport-discord delete" [
+export def "api-transport-discord-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4188,7 +4188,7 @@ export def "transport-discord delete" [
 #
 # GET /api/transport-discord/{id}
 # operationId: api_transport-discord_id_get
-export def "transport-discord get" [
+export def "api-transport-discord-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4225,7 +4225,7 @@ export def "transport-discord get" [
 #
 # PUT /api/transport-discord/{id}
 # operationId: api_transport-discord_id_put
-export def "transport-discord update" [
+export def "api-transport-discord-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4269,7 +4269,7 @@ export def "transport-discord update" [
 #
 # GET /api/transport-email
 # operationId: api_transport-email_get_collection
-export def "transport-email get-collection" [
+export def "api-transport-email-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4311,7 +4311,7 @@ export def "transport-email get-collection" [
 #
 # POST /api/transport-email
 # operationId: api_transport-email_post
-export def "transport-email create" [
+export def "api-transport-email-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4358,7 +4358,7 @@ export def "transport-email create" [
 #
 # DELETE /api/transport-email/{id}
 # operationId: api_transport-email_id_delete
-export def "transport-email delete" [
+export def "api-transport-email-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4394,7 +4394,7 @@ export def "transport-email delete" [
 #
 # GET /api/transport-email/{id}
 # operationId: api_transport-email_id_get
-export def "transport-email get" [
+export def "api-transport-email-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4431,7 +4431,7 @@ export def "transport-email get" [
 #
 # PUT /api/transport-email/{id}
 # operationId: api_transport-email_id_put
-export def "transport-email update" [
+export def "api-transport-email-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4479,7 +4479,7 @@ export def "transport-email update" [
 #
 # GET /api/transport-engagespot
 # operationId: api_transport-engagespot_get_collection
-export def "transport-engagespot get-collection" [
+export def "api-transport-engagespot-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4521,7 +4521,7 @@ export def "transport-engagespot get-collection" [
 #
 # POST /api/transport-engagespot
 # operationId: api_transport-engagespot_post
-export def "transport-engagespot create" [
+export def "api-transport-engagespot-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4564,7 +4564,7 @@ export def "transport-engagespot create" [
 #
 # DELETE /api/transport-engagespot/{id}
 # operationId: api_transport-engagespot_id_delete
-export def "transport-engagespot delete" [
+export def "api-transport-engagespot-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4600,7 +4600,7 @@ export def "transport-engagespot delete" [
 #
 # GET /api/transport-engagespot/{id}
 # operationId: api_transport-engagespot_id_get
-export def "transport-engagespot get" [
+export def "api-transport-engagespot-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4637,7 +4637,7 @@ export def "transport-engagespot get" [
 #
 # PUT /api/transport-engagespot/{id}
 # operationId: api_transport-engagespot_id_put
-export def "transport-engagespot update" [
+export def "api-transport-engagespot-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4681,7 +4681,7 @@ export def "transport-engagespot update" [
 #
 # GET /api/transport-esendex
 # operationId: api_transport-esendex_get_collection
-export def "transport-esendex get-collection" [
+export def "api-transport-esendex-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4723,7 +4723,7 @@ export def "transport-esendex get-collection" [
 #
 # POST /api/transport-esendex
 # operationId: api_transport-esendex_post
-export def "transport-esendex create" [
+export def "api-transport-esendex-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4768,7 +4768,7 @@ export def "transport-esendex create" [
 #
 # DELETE /api/transport-esendex/{id}
 # operationId: api_transport-esendex_id_delete
-export def "transport-esendex delete" [
+export def "api-transport-esendex-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4804,7 +4804,7 @@ export def "transport-esendex delete" [
 #
 # GET /api/transport-esendex/{id}
 # operationId: api_transport-esendex_id_get
-export def "transport-esendex get" [
+export def "api-transport-esendex-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4841,7 +4841,7 @@ export def "transport-esendex get" [
 #
 # PUT /api/transport-esendex/{id}
 # operationId: api_transport-esendex_id_put
-export def "transport-esendex update" [
+export def "api-transport-esendex-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4887,7 +4887,7 @@ export def "transport-esendex update" [
 #
 # GET /api/transport-expo
 # operationId: api_transport-expo_get_collection
-export def "transport-expo get-collection" [
+export def "api-transport-expo-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4929,7 +4929,7 @@ export def "transport-expo get-collection" [
 #
 # POST /api/transport-expo
 # operationId: api_transport-expo_post
-export def "transport-expo create" [
+export def "api-transport-expo-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4971,7 +4971,7 @@ export def "transport-expo create" [
 #
 # DELETE /api/transport-expo/{id}
 # operationId: api_transport-expo_id_delete
-export def "transport-expo delete" [
+export def "api-transport-expo-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5007,7 +5007,7 @@ export def "transport-expo delete" [
 #
 # GET /api/transport-expo/{id}
 # operationId: api_transport-expo_id_get
-export def "transport-expo get" [
+export def "api-transport-expo-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5044,7 +5044,7 @@ export def "transport-expo get" [
 #
 # PUT /api/transport-expo/{id}
 # operationId: api_transport-expo_id_put
-export def "transport-expo update" [
+export def "api-transport-expo-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5087,7 +5087,7 @@ export def "transport-expo update" [
 #
 # GET /api/transport-firebase
 # operationId: api_transport-firebase_get_collection
-export def "transport-firebase get-collection" [
+export def "api-transport-firebase-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5129,7 +5129,7 @@ export def "transport-firebase get-collection" [
 #
 # POST /api/transport-firebase
 # operationId: api_transport-firebase_post
-export def "transport-firebase create" [
+export def "api-transport-firebase-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5172,7 +5172,7 @@ export def "transport-firebase create" [
 #
 # DELETE /api/transport-firebase/{id}
 # operationId: api_transport-firebase_id_delete
-export def "transport-firebase delete" [
+export def "api-transport-firebase-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5208,7 +5208,7 @@ export def "transport-firebase delete" [
 #
 # GET /api/transport-firebase/{id}
 # operationId: api_transport-firebase_id_get
-export def "transport-firebase get" [
+export def "api-transport-firebase-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5245,7 +5245,7 @@ export def "transport-firebase get" [
 #
 # PUT /api/transport-firebase/{id}
 # operationId: api_transport-firebase_id_put
-export def "transport-firebase update" [
+export def "api-transport-firebase-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5289,7 +5289,7 @@ export def "transport-firebase update" [
 #
 # GET /api/transport-forty-six-elks
 # operationId: api_transport-forty-six-elks_get_collection
-export def "transport-forty-six-elks get-collection" [
+export def "api-transport-forty-six-elks-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5331,7 +5331,7 @@ export def "transport-forty-six-elks get-collection" [
 #
 # POST /api/transport-forty-six-elks
 # operationId: api_transport-forty-six-elks_post
-export def "transport-forty-six-elks create" [
+export def "api-transport-forty-six-elks-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5375,7 +5375,7 @@ export def "transport-forty-six-elks create" [
 #
 # DELETE /api/transport-forty-six-elks/{id}
 # operationId: api_transport-forty-six-elks_id_delete
-export def "transport-forty-six-elks delete" [
+export def "api-transport-forty-six-elks-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5411,7 +5411,7 @@ export def "transport-forty-six-elks delete" [
 #
 # GET /api/transport-forty-six-elks/{id}
 # operationId: api_transport-forty-six-elks_id_get
-export def "transport-forty-six-elks get" [
+export def "api-transport-forty-six-elks-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5448,7 +5448,7 @@ export def "transport-forty-six-elks get" [
 #
 # PUT /api/transport-forty-six-elks/{id}
 # operationId: api_transport-forty-six-elks_id_put
-export def "transport-forty-six-elks update" [
+export def "api-transport-forty-six-elks-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5493,7 +5493,7 @@ export def "transport-forty-six-elks update" [
 #
 # GET /api/transport-free-mobile
 # operationId: api_transport-free-mobile_get_collection
-export def "transport-free-mobile get-collection" [
+export def "api-transport-free-mobile-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5535,7 +5535,7 @@ export def "transport-free-mobile get-collection" [
 #
 # POST /api/transport-free-mobile
 # operationId: api_transport-free-mobile_post
-export def "transport-free-mobile create" [
+export def "api-transport-free-mobile-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5579,7 +5579,7 @@ export def "transport-free-mobile create" [
 #
 # DELETE /api/transport-free-mobile/{id}
 # operationId: api_transport-free-mobile_id_delete
-export def "transport-free-mobile delete" [
+export def "api-transport-free-mobile-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5615,7 +5615,7 @@ export def "transport-free-mobile delete" [
 #
 # GET /api/transport-free-mobile/{id}
 # operationId: api_transport-free-mobile_id_get
-export def "transport-free-mobile get" [
+export def "api-transport-free-mobile-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5652,7 +5652,7 @@ export def "transport-free-mobile get" [
 #
 # PUT /api/transport-free-mobile/{id}
 # operationId: api_transport-free-mobile_id_put
-export def "transport-free-mobile update" [
+export def "api-transport-free-mobile-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5697,7 +5697,7 @@ export def "transport-free-mobile update" [
 #
 # GET /api/transport-freshdesk
 # operationId: api_transport-freshdesk_get_collection
-export def "transport-freshdesk get-collection" [
+export def "api-transport-freshdesk-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5739,7 +5739,7 @@ export def "transport-freshdesk get-collection" [
 #
 # POST /api/transport-freshdesk
 # operationId: api_transport-freshdesk_post
-export def "transport-freshdesk create" [
+export def "api-transport-freshdesk-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5785,7 +5785,7 @@ export def "transport-freshdesk create" [
 #
 # DELETE /api/transport-freshdesk/{id}
 # operationId: api_transport-freshdesk_id_delete
-export def "transport-freshdesk delete" [
+export def "api-transport-freshdesk-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5821,7 +5821,7 @@ export def "transport-freshdesk delete" [
 #
 # GET /api/transport-freshdesk/{id}
 # operationId: api_transport-freshdesk_id_get
-export def "transport-freshdesk get" [
+export def "api-transport-freshdesk-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5858,7 +5858,7 @@ export def "transport-freshdesk get" [
 #
 # PUT /api/transport-freshdesk/{id}
 # operationId: api_transport-freshdesk_id_put
-export def "transport-freshdesk update" [
+export def "api-transport-freshdesk-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5905,7 +5905,7 @@ export def "transport-freshdesk update" [
 #
 # GET /api/transport-gateway-api
 # operationId: api_transport-gateway-api_get_collection
-export def "transport-gateway-api get-collection" [
+export def "api-transport-gateway-api-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5947,7 +5947,7 @@ export def "transport-gateway-api get-collection" [
 #
 # POST /api/transport-gateway-api
 # operationId: api_transport-gateway-api_post
-export def "transport-gateway-api create" [
+export def "api-transport-gateway-api-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5990,7 +5990,7 @@ export def "transport-gateway-api create" [
 #
 # DELETE /api/transport-gateway-api/{id}
 # operationId: api_transport-gateway-api_id_delete
-export def "transport-gateway-api delete" [
+export def "api-transport-gateway-api-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6026,7 +6026,7 @@ export def "transport-gateway-api delete" [
 #
 # GET /api/transport-gateway-api/{id}
 # operationId: api_transport-gateway-api_id_get
-export def "transport-gateway-api get" [
+export def "api-transport-gateway-api-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6063,7 +6063,7 @@ export def "transport-gateway-api get" [
 #
 # PUT /api/transport-gateway-api/{id}
 # operationId: api_transport-gateway-api_id_put
-export def "transport-gateway-api update" [
+export def "api-transport-gateway-api-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6107,7 +6107,7 @@ export def "transport-gateway-api update" [
 #
 # GET /api/transport-gitter
 # operationId: api_transport-gitter_get_collection
-export def "transport-gitter get-collection" [
+export def "api-transport-gitter-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6149,7 +6149,7 @@ export def "transport-gitter get-collection" [
 #
 # POST /api/transport-gitter
 # operationId: api_transport-gitter_post
-export def "transport-gitter create" [
+export def "api-transport-gitter-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6192,7 +6192,7 @@ export def "transport-gitter create" [
 #
 # DELETE /api/transport-gitter/{id}
 # operationId: api_transport-gitter_id_delete
-export def "transport-gitter delete" [
+export def "api-transport-gitter-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6228,7 +6228,7 @@ export def "transport-gitter delete" [
 #
 # GET /api/transport-gitter/{id}
 # operationId: api_transport-gitter_id_get
-export def "transport-gitter get" [
+export def "api-transport-gitter-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6265,7 +6265,7 @@ export def "transport-gitter get" [
 #
 # PUT /api/transport-gitter/{id}
 # operationId: api_transport-gitter_id_put
-export def "transport-gitter update" [
+export def "api-transport-gitter-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6309,7 +6309,7 @@ export def "transport-gitter update" [
 #
 # GET /api/transport-google-chat
 # operationId: api_transport-google-chat_get_collection
-export def "transport-google-chat get-collection" [
+export def "api-transport-google-chat-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6351,7 +6351,7 @@ export def "transport-google-chat get-collection" [
 #
 # POST /api/transport-google-chat
 # operationId: api_transport-google-chat_post
-export def "transport-google-chat create" [
+export def "api-transport-google-chat-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6396,7 +6396,7 @@ export def "transport-google-chat create" [
 #
 # DELETE /api/transport-google-chat/{id}
 # operationId: api_transport-google-chat_id_delete
-export def "transport-google-chat delete" [
+export def "api-transport-google-chat-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6432,7 +6432,7 @@ export def "transport-google-chat delete" [
 #
 # GET /api/transport-google-chat/{id}
 # operationId: api_transport-google-chat_id_get
-export def "transport-google-chat get" [
+export def "api-transport-google-chat-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6469,7 +6469,7 @@ export def "transport-google-chat get" [
 #
 # PUT /api/transport-google-chat/{id}
 # operationId: api_transport-google-chat_id_put
-export def "transport-google-chat update" [
+export def "api-transport-google-chat-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6515,7 +6515,7 @@ export def "transport-google-chat update" [
 #
 # GET /api/transport-gotify
 # operationId: api_transport-gotify_get_collection
-export def "transport-gotify get-collection" [
+export def "api-transport-gotify-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6557,7 +6557,7 @@ export def "transport-gotify get-collection" [
 #
 # POST /api/transport-gotify
 # operationId: api_transport-gotify_post
-export def "transport-gotify create" [
+export def "api-transport-gotify-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6601,7 +6601,7 @@ export def "transport-gotify create" [
 #
 # DELETE /api/transport-gotify/{id}
 # operationId: api_transport-gotify_id_delete
-export def "transport-gotify delete" [
+export def "api-transport-gotify-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6637,7 +6637,7 @@ export def "transport-gotify delete" [
 #
 # GET /api/transport-gotify/{id}
 # operationId: api_transport-gotify_id_get
-export def "transport-gotify get" [
+export def "api-transport-gotify-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6674,7 +6674,7 @@ export def "transport-gotify get" [
 #
 # PUT /api/transport-gotify/{id}
 # operationId: api_transport-gotify_id_put
-export def "transport-gotify update" [
+export def "api-transport-gotify-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6719,7 +6719,7 @@ export def "transport-gotify update" [
 #
 # GET /api/transport-help-scout
 # operationId: api_transport-help-scout_get_collection
-export def "transport-help-scout get-collection" [
+export def "api-transport-help-scout-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6761,7 +6761,7 @@ export def "transport-help-scout get-collection" [
 #
 # POST /api/transport-help-scout
 # operationId: api_transport-help-scout_post
-export def "transport-help-scout create" [
+export def "api-transport-help-scout-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6805,7 +6805,7 @@ export def "transport-help-scout create" [
 #
 # DELETE /api/transport-help-scout/{id}
 # operationId: api_transport-help-scout_id_delete
-export def "transport-help-scout delete" [
+export def "api-transport-help-scout-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6841,7 +6841,7 @@ export def "transport-help-scout delete" [
 #
 # GET /api/transport-help-scout/{id}
 # operationId: api_transport-help-scout_id_get
-export def "transport-help-scout get" [
+export def "api-transport-help-scout-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6878,7 +6878,7 @@ export def "transport-help-scout get" [
 #
 # PUT /api/transport-help-scout/{id}
 # operationId: api_transport-help-scout_id_put
-export def "transport-help-scout update" [
+export def "api-transport-help-scout-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6923,7 +6923,7 @@ export def "transport-help-scout update" [
 #
 # GET /api/transport-infobip
 # operationId: api_transport-infobip_get_collection
-export def "transport-infobip get-collection" [
+export def "api-transport-infobip-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6965,7 +6965,7 @@ export def "transport-infobip get-collection" [
 #
 # POST /api/transport-infobip
 # operationId: api_transport-infobip_post
-export def "transport-infobip create" [
+export def "api-transport-infobip-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7009,7 +7009,7 @@ export def "transport-infobip create" [
 #
 # DELETE /api/transport-infobip/{id}
 # operationId: api_transport-infobip_id_delete
-export def "transport-infobip delete" [
+export def "api-transport-infobip-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7045,7 +7045,7 @@ export def "transport-infobip delete" [
 #
 # GET /api/transport-infobip/{id}
 # operationId: api_transport-infobip_id_get
-export def "transport-infobip get" [
+export def "api-transport-infobip-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7082,7 +7082,7 @@ export def "transport-infobip get" [
 #
 # PUT /api/transport-infobip/{id}
 # operationId: api_transport-infobip_id_put
-export def "transport-infobip update" [
+export def "api-transport-infobip-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7127,7 +7127,7 @@ export def "transport-infobip update" [
 #
 # GET /api/transport-iqsms
 # operationId: api_transport-iqsms_get_collection
-export def "transport-iqsms get-collection" [
+export def "api-transport-iqsms-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7169,7 +7169,7 @@ export def "transport-iqsms get-collection" [
 #
 # POST /api/transport-iqsms
 # operationId: api_transport-iqsms_post
-export def "transport-iqsms create" [
+export def "api-transport-iqsms-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7213,7 +7213,7 @@ export def "transport-iqsms create" [
 #
 # DELETE /api/transport-iqsms/{id}
 # operationId: api_transport-iqsms_id_delete
-export def "transport-iqsms delete" [
+export def "api-transport-iqsms-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7249,7 +7249,7 @@ export def "transport-iqsms delete" [
 #
 # GET /api/transport-iqsms/{id}
 # operationId: api_transport-iqsms_id_get
-export def "transport-iqsms get" [
+export def "api-transport-iqsms-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7286,7 +7286,7 @@ export def "transport-iqsms get" [
 #
 # PUT /api/transport-iqsms/{id}
 # operationId: api_transport-iqsms_id_put
-export def "transport-iqsms update" [
+export def "api-transport-iqsms-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7331,7 +7331,7 @@ export def "transport-iqsms update" [
 #
 # GET /api/transport-kaz-info-teh
 # operationId: api_transport-kaz-info-teh_get_collection
-export def "transport-kaz-info-teh get-collection" [
+export def "api-transport-kaz-info-teh-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7373,7 +7373,7 @@ export def "transport-kaz-info-teh get-collection" [
 #
 # POST /api/transport-kaz-info-teh
 # operationId: api_transport-kaz-info-teh_post
-export def "transport-kaz-info-teh create" [
+export def "api-transport-kaz-info-teh-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7417,7 +7417,7 @@ export def "transport-kaz-info-teh create" [
 #
 # DELETE /api/transport-kaz-info-teh/{id}
 # operationId: api_transport-kaz-info-teh_id_delete
-export def "transport-kaz-info-teh delete" [
+export def "api-transport-kaz-info-teh-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7453,7 +7453,7 @@ export def "transport-kaz-info-teh delete" [
 #
 # GET /api/transport-kaz-info-teh/{id}
 # operationId: api_transport-kaz-info-teh_id_get
-export def "transport-kaz-info-teh get" [
+export def "api-transport-kaz-info-teh-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7490,7 +7490,7 @@ export def "transport-kaz-info-teh get" [
 #
 # PUT /api/transport-kaz-info-teh/{id}
 # operationId: api_transport-kaz-info-teh_id_put
-export def "transport-kaz-info-teh update" [
+export def "api-transport-kaz-info-teh-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7535,7 +7535,7 @@ export def "transport-kaz-info-teh update" [
 #
 # GET /api/transport-light-sms
 # operationId: api_transport-light-sms_get_collection
-export def "transport-light-sms get-collection" [
+export def "api-transport-light-sms-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7577,7 +7577,7 @@ export def "transport-light-sms get-collection" [
 #
 # POST /api/transport-light-sms
 # operationId: api_transport-light-sms_post
-export def "transport-light-sms create" [
+export def "api-transport-light-sms-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7621,7 +7621,7 @@ export def "transport-light-sms create" [
 #
 # DELETE /api/transport-light-sms/{id}
 # operationId: api_transport-light-sms_id_delete
-export def "transport-light-sms delete" [
+export def "api-transport-light-sms-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7657,7 +7657,7 @@ export def "transport-light-sms delete" [
 #
 # GET /api/transport-light-sms/{id}
 # operationId: api_transport-light-sms_id_get
-export def "transport-light-sms get" [
+export def "api-transport-light-sms-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7694,7 +7694,7 @@ export def "transport-light-sms get" [
 #
 # PUT /api/transport-light-sms/{id}
 # operationId: api_transport-light-sms_id_put
-export def "transport-light-sms update" [
+export def "api-transport-light-sms-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7739,7 +7739,7 @@ export def "transport-light-sms update" [
 #
 # GET /api/transport-line-notify
 # operationId: api_transport-line-notify_get_collection
-export def "transport-line-notify get-collection" [
+export def "api-transport-line-notify-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7781,7 +7781,7 @@ export def "transport-line-notify get-collection" [
 #
 # POST /api/transport-line-notify
 # operationId: api_transport-line-notify_post
-export def "transport-line-notify create" [
+export def "api-transport-line-notify-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7825,7 +7825,7 @@ export def "transport-line-notify create" [
 #
 # DELETE /api/transport-line-notify/{id}
 # operationId: api_transport-line-notify_id_delete
-export def "transport-line-notify delete" [
+export def "api-transport-line-notify-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7861,7 +7861,7 @@ export def "transport-line-notify delete" [
 #
 # GET /api/transport-line-notify/{id}
 # operationId: api_transport-line-notify_id_get
-export def "transport-line-notify get" [
+export def "api-transport-line-notify-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7898,7 +7898,7 @@ export def "transport-line-notify get" [
 #
 # PUT /api/transport-line-notify/{id}
 # operationId: api_transport-line-notify_id_put
-export def "transport-line-notify update" [
+export def "api-transport-line-notify-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7943,7 +7943,7 @@ export def "transport-line-notify update" [
 #
 # GET /api/transport-linked-in
 # operationId: api_transport-linked-in_get_collection
-export def "transport-linked-in get-collection" [
+export def "api-transport-linked-in-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7985,7 +7985,7 @@ export def "transport-linked-in get-collection" [
 #
 # POST /api/transport-linked-in
 # operationId: api_transport-linked-in_post
-export def "transport-linked-in create" [
+export def "api-transport-linked-in-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8028,7 +8028,7 @@ export def "transport-linked-in create" [
 #
 # DELETE /api/transport-linked-in/{id}
 # operationId: api_transport-linked-in_id_delete
-export def "transport-linked-in delete" [
+export def "api-transport-linked-in-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8064,7 +8064,7 @@ export def "transport-linked-in delete" [
 #
 # GET /api/transport-linked-in/{id}
 # operationId: api_transport-linked-in_id_get
-export def "transport-linked-in get" [
+export def "api-transport-linked-in-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8101,7 +8101,7 @@ export def "transport-linked-in get" [
 #
 # PUT /api/transport-linked-in/{id}
 # operationId: api_transport-linked-in_id_put
-export def "transport-linked-in update" [
+export def "api-transport-linked-in-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8145,7 +8145,7 @@ export def "transport-linked-in update" [
 #
 # GET /api/transport-mailjet
 # operationId: api_transport-mailjet_get_collection
-export def "transport-mailjet get-collection" [
+export def "api-transport-mailjet-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8187,7 +8187,7 @@ export def "transport-mailjet get-collection" [
 #
 # POST /api/transport-mailjet
 # operationId: api_transport-mailjet_post
-export def "transport-mailjet create" [
+export def "api-transport-mailjet-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8230,7 +8230,7 @@ export def "transport-mailjet create" [
 #
 # DELETE /api/transport-mailjet/{id}
 # operationId: api_transport-mailjet_id_delete
-export def "transport-mailjet delete" [
+export def "api-transport-mailjet-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8266,7 +8266,7 @@ export def "transport-mailjet delete" [
 #
 # GET /api/transport-mailjet/{id}
 # operationId: api_transport-mailjet_id_get
-export def "transport-mailjet get" [
+export def "api-transport-mailjet-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8303,7 +8303,7 @@ export def "transport-mailjet get" [
 #
 # PUT /api/transport-mailjet/{id}
 # operationId: api_transport-mailjet_id_put
-export def "transport-mailjet update" [
+export def "api-transport-mailjet-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8347,7 +8347,7 @@ export def "transport-mailjet update" [
 #
 # GET /api/transport-mastodon
 # operationId: api_transport-mastodon_get_collection
-export def "transport-mastodon get-collection" [
+export def "api-transport-mastodon-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8389,7 +8389,7 @@ export def "transport-mastodon get-collection" [
 #
 # POST /api/transport-mastodon
 # operationId: api_transport-mastodon_post
-export def "transport-mastodon create" [
+export def "api-transport-mastodon-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8432,7 +8432,7 @@ export def "transport-mastodon create" [
 #
 # DELETE /api/transport-mastodon/{id}
 # operationId: api_transport-mastodon_id_delete
-export def "transport-mastodon delete" [
+export def "api-transport-mastodon-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8468,7 +8468,7 @@ export def "transport-mastodon delete" [
 #
 # GET /api/transport-mastodon/{id}
 # operationId: api_transport-mastodon_id_get
-export def "transport-mastodon get" [
+export def "api-transport-mastodon-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8505,7 +8505,7 @@ export def "transport-mastodon get" [
 #
 # PUT /api/transport-mastodon/{id}
 # operationId: api_transport-mastodon_id_put
-export def "transport-mastodon update" [
+export def "api-transport-mastodon-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8549,7 +8549,7 @@ export def "transport-mastodon update" [
 #
 # GET /api/transport-mattermost
 # operationId: api_transport-mattermost_get_collection
-export def "transport-mattermost get-collection" [
+export def "api-transport-mattermost-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8591,7 +8591,7 @@ export def "transport-mattermost get-collection" [
 #
 # POST /api/transport-mattermost
 # operationId: api_transport-mattermost_post
-export def "transport-mattermost create" [
+export def "api-transport-mattermost-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8636,7 +8636,7 @@ export def "transport-mattermost create" [
 #
 # DELETE /api/transport-mattermost/{id}
 # operationId: api_transport-mattermost_id_delete
-export def "transport-mattermost delete" [
+export def "api-transport-mattermost-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8672,7 +8672,7 @@ export def "transport-mattermost delete" [
 #
 # GET /api/transport-mattermost/{id}
 # operationId: api_transport-mattermost_id_get
-export def "transport-mattermost get" [
+export def "api-transport-mattermost-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8709,7 +8709,7 @@ export def "transport-mattermost get" [
 #
 # PUT /api/transport-mattermost/{id}
 # operationId: api_transport-mattermost_id_put
-export def "transport-mattermost update" [
+export def "api-transport-mattermost-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8755,7 +8755,7 @@ export def "transport-mattermost update" [
 #
 # GET /api/transport-mercure
 # operationId: api_transport-mercure_get_collection
-export def "transport-mercure get-collection" [
+export def "api-transport-mercure-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8797,7 +8797,7 @@ export def "transport-mercure get-collection" [
 #
 # POST /api/transport-mercure
 # operationId: api_transport-mercure_post
-export def "transport-mercure create" [
+export def "api-transport-mercure-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8841,7 +8841,7 @@ export def "transport-mercure create" [
 #
 # DELETE /api/transport-mercure/{id}
 # operationId: api_transport-mercure_id_delete
-export def "transport-mercure delete" [
+export def "api-transport-mercure-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8877,7 +8877,7 @@ export def "transport-mercure delete" [
 #
 # GET /api/transport-mercure/{id}
 # operationId: api_transport-mercure_id_get
-export def "transport-mercure get" [
+export def "api-transport-mercure-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8914,7 +8914,7 @@ export def "transport-mercure get" [
 #
 # PUT /api/transport-mercure/{id}
 # operationId: api_transport-mercure_id_put
-export def "transport-mercure update" [
+export def "api-transport-mercure-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8959,7 +8959,7 @@ export def "transport-mercure update" [
 #
 # GET /api/transport-message-bird
 # operationId: api_transport-message-bird_get_collection
-export def "transport-message-bird get-collection" [
+export def "api-transport-message-bird-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9001,7 +9001,7 @@ export def "transport-message-bird get-collection" [
 #
 # POST /api/transport-message-bird
 # operationId: api_transport-message-bird_post
-export def "transport-message-bird create" [
+export def "api-transport-message-bird-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9044,7 +9044,7 @@ export def "transport-message-bird create" [
 #
 # DELETE /api/transport-message-bird/{id}
 # operationId: api_transport-message-bird_id_delete
-export def "transport-message-bird delete" [
+export def "api-transport-message-bird-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9080,7 +9080,7 @@ export def "transport-message-bird delete" [
 #
 # GET /api/transport-message-bird/{id}
 # operationId: api_transport-message-bird_id_get
-export def "transport-message-bird get" [
+export def "api-transport-message-bird-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9117,7 +9117,7 @@ export def "transport-message-bird get" [
 #
 # PUT /api/transport-message-bird/{id}
 # operationId: api_transport-message-bird_id_put
-export def "transport-message-bird update" [
+export def "api-transport-message-bird-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9161,7 +9161,7 @@ export def "transport-message-bird update" [
 #
 # GET /api/transport-message-media
 # operationId: api_transport-message-media_get_collection
-export def "transport-message-media get-collection" [
+export def "api-transport-message-media-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9203,7 +9203,7 @@ export def "transport-message-media get-collection" [
 #
 # POST /api/transport-message-media
 # operationId: api_transport-message-media_post
-export def "transport-message-media create" [
+export def "api-transport-message-media-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9247,7 +9247,7 @@ export def "transport-message-media create" [
 #
 # DELETE /api/transport-message-media/{id}
 # operationId: api_transport-message-media_id_delete
-export def "transport-message-media delete" [
+export def "api-transport-message-media-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9283,7 +9283,7 @@ export def "transport-message-media delete" [
 #
 # GET /api/transport-message-media/{id}
 # operationId: api_transport-message-media_id_get
-export def "transport-message-media get" [
+export def "api-transport-message-media-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9320,7 +9320,7 @@ export def "transport-message-media get" [
 #
 # PUT /api/transport-message-media/{id}
 # operationId: api_transport-message-media_id_put
-export def "transport-message-media update" [
+export def "api-transport-message-media-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9365,7 +9365,7 @@ export def "transport-message-media update" [
 #
 # GET /api/transport-microsoft-teams
 # operationId: api_transport-microsoft-teams_get_collection
-export def "transport-microsoft-teams get-collection" [
+export def "api-transport-microsoft-teams-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9407,7 +9407,7 @@ export def "transport-microsoft-teams get-collection" [
 #
 # POST /api/transport-microsoft-teams
 # operationId: api_transport-microsoft-teams_post
-export def "transport-microsoft-teams create" [
+export def "api-transport-microsoft-teams-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9449,7 +9449,7 @@ export def "transport-microsoft-teams create" [
 #
 # DELETE /api/transport-microsoft-teams/{id}
 # operationId: api_transport-microsoft-teams_id_delete
-export def "transport-microsoft-teams delete" [
+export def "api-transport-microsoft-teams-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9485,7 +9485,7 @@ export def "transport-microsoft-teams delete" [
 #
 # GET /api/transport-microsoft-teams/{id}
 # operationId: api_transport-microsoft-teams_id_get
-export def "transport-microsoft-teams get" [
+export def "api-transport-microsoft-teams-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9522,7 +9522,7 @@ export def "transport-microsoft-teams get" [
 #
 # PUT /api/transport-microsoft-teams/{id}
 # operationId: api_transport-microsoft-teams_id_put
-export def "transport-microsoft-teams update" [
+export def "api-transport-microsoft-teams-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9565,7 +9565,7 @@ export def "transport-microsoft-teams update" [
 #
 # GET /api/transport-mobyt
 # operationId: api_transport-mobyt_get_collection
-export def "transport-mobyt get-collection" [
+export def "api-transport-mobyt-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9607,7 +9607,7 @@ export def "transport-mobyt get-collection" [
 #
 # POST /api/transport-mobyt
 # operationId: api_transport-mobyt_post
-export def "transport-mobyt create" [
+export def "api-transport-mobyt-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9652,7 +9652,7 @@ export def "transport-mobyt create" [
 #
 # DELETE /api/transport-mobyt/{id}
 # operationId: api_transport-mobyt_id_delete
-export def "transport-mobyt delete" [
+export def "api-transport-mobyt-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9688,7 +9688,7 @@ export def "transport-mobyt delete" [
 #
 # GET /api/transport-mobyt/{id}
 # operationId: api_transport-mobyt_id_get
-export def "transport-mobyt get" [
+export def "api-transport-mobyt-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9725,7 +9725,7 @@ export def "transport-mobyt get" [
 #
 # PUT /api/transport-mobyt/{id}
 # operationId: api_transport-mobyt_id_put
-export def "transport-mobyt update" [
+export def "api-transport-mobyt-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9771,7 +9771,7 @@ export def "transport-mobyt update" [
 #
 # GET /api/transport-octopush
 # operationId: api_transport-octopush_get_collection
-export def "transport-octopush get-collection" [
+export def "api-transport-octopush-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9813,7 +9813,7 @@ export def "transport-octopush get-collection" [
 #
 # POST /api/transport-octopush
 # operationId: api_transport-octopush_post
-export def "transport-octopush create" [
+export def "api-transport-octopush-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9858,7 +9858,7 @@ export def "transport-octopush create" [
 #
 # DELETE /api/transport-octopush/{id}
 # operationId: api_transport-octopush_id_delete
-export def "transport-octopush delete" [
+export def "api-transport-octopush-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9894,7 +9894,7 @@ export def "transport-octopush delete" [
 #
 # GET /api/transport-octopush/{id}
 # operationId: api_transport-octopush_id_get
-export def "transport-octopush get" [
+export def "api-transport-octopush-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9931,7 +9931,7 @@ export def "transport-octopush get" [
 #
 # PUT /api/transport-octopush/{id}
 # operationId: api_transport-octopush_id_put
-export def "transport-octopush update" [
+export def "api-transport-octopush-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9977,7 +9977,7 @@ export def "transport-octopush update" [
 #
 # GET /api/transport-one-signal
 # operationId: api_transport-one-signal_get_collection
-export def "transport-one-signal get-collection" [
+export def "api-transport-one-signal-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10019,7 +10019,7 @@ export def "transport-one-signal get-collection" [
 #
 # POST /api/transport-one-signal
 # operationId: api_transport-one-signal_post
-export def "transport-one-signal create" [
+export def "api-transport-one-signal-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10063,7 +10063,7 @@ export def "transport-one-signal create" [
 #
 # DELETE /api/transport-one-signal/{id}
 # operationId: api_transport-one-signal_id_delete
-export def "transport-one-signal delete" [
+export def "api-transport-one-signal-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10099,7 +10099,7 @@ export def "transport-one-signal delete" [
 #
 # GET /api/transport-one-signal/{id}
 # operationId: api_transport-one-signal_id_get
-export def "transport-one-signal get" [
+export def "api-transport-one-signal-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10136,7 +10136,7 @@ export def "transport-one-signal get" [
 #
 # PUT /api/transport-one-signal/{id}
 # operationId: api_transport-one-signal_id_put
-export def "transport-one-signal update" [
+export def "api-transport-one-signal-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10181,7 +10181,7 @@ export def "transport-one-signal update" [
 #
 # GET /api/transport-opsgenie
 # operationId: api_transport-opsgenie_get_collection
-export def "transport-opsgenie get-collection" [
+export def "api-transport-opsgenie-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10223,7 +10223,7 @@ export def "transport-opsgenie get-collection" [
 #
 # POST /api/transport-opsgenie
 # operationId: api_transport-opsgenie_post
-export def "transport-opsgenie create" [
+export def "api-transport-opsgenie-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10270,7 +10270,7 @@ export def "transport-opsgenie create" [
 #
 # DELETE /api/transport-opsgenie/{id}
 # operationId: api_transport-opsgenie_id_delete
-export def "transport-opsgenie delete" [
+export def "api-transport-opsgenie-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10306,7 +10306,7 @@ export def "transport-opsgenie delete" [
 #
 # GET /api/transport-opsgenie/{id}
 # operationId: api_transport-opsgenie_id_get
-export def "transport-opsgenie get" [
+export def "api-transport-opsgenie-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10343,7 +10343,7 @@ export def "transport-opsgenie get" [
 #
 # PUT /api/transport-opsgenie/{id}
 # operationId: api_transport-opsgenie_id_put
-export def "transport-opsgenie update" [
+export def "api-transport-opsgenie-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10391,7 +10391,7 @@ export def "transport-opsgenie update" [
 #
 # GET /api/transport-orange-sms
 # operationId: api_transport-orange-sms_get_collection
-export def "transport-orange-sms get-collection" [
+export def "api-transport-orange-sms-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10433,7 +10433,7 @@ export def "transport-orange-sms get-collection" [
 #
 # POST /api/transport-orange-sms
 # operationId: api_transport-orange-sms_post
-export def "transport-orange-sms create" [
+export def "api-transport-orange-sms-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10478,7 +10478,7 @@ export def "transport-orange-sms create" [
 #
 # DELETE /api/transport-orange-sms/{id}
 # operationId: api_transport-orange-sms_id_delete
-export def "transport-orange-sms delete" [
+export def "api-transport-orange-sms-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10514,7 +10514,7 @@ export def "transport-orange-sms delete" [
 #
 # GET /api/transport-orange-sms/{id}
 # operationId: api_transport-orange-sms_id_get
-export def "transport-orange-sms get" [
+export def "api-transport-orange-sms-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10551,7 +10551,7 @@ export def "transport-orange-sms get" [
 #
 # PUT /api/transport-orange-sms/{id}
 # operationId: api_transport-orange-sms_id_put
-export def "transport-orange-sms update" [
+export def "api-transport-orange-sms-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10597,7 +10597,7 @@ export def "transport-orange-sms update" [
 #
 # GET /api/transport-ovh-cloud
 # operationId: api_transport-ovh-cloud_get_collection
-export def "transport-ovh-cloud get-collection" [
+export def "api-transport-ovh-cloud-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10639,7 +10639,7 @@ export def "transport-ovh-cloud get-collection" [
 #
 # POST /api/transport-ovh-cloud
 # operationId: api_transport-ovh-cloud_post
-export def "transport-ovh-cloud create" [
+export def "api-transport-ovh-cloud-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10685,7 +10685,7 @@ export def "transport-ovh-cloud create" [
 #
 # DELETE /api/transport-ovh-cloud/{id}
 # operationId: api_transport-ovh-cloud_id_delete
-export def "transport-ovh-cloud delete" [
+export def "api-transport-ovh-cloud-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10721,7 +10721,7 @@ export def "transport-ovh-cloud delete" [
 #
 # GET /api/transport-ovh-cloud/{id}
 # operationId: api_transport-ovh-cloud_id_get
-export def "transport-ovh-cloud get" [
+export def "api-transport-ovh-cloud-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10758,7 +10758,7 @@ export def "transport-ovh-cloud get" [
 #
 # PUT /api/transport-ovh-cloud/{id}
 # operationId: api_transport-ovh-cloud_id_put
-export def "transport-ovh-cloud update" [
+export def "api-transport-ovh-cloud-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10805,7 +10805,7 @@ export def "transport-ovh-cloud update" [
 #
 # GET /api/transport-pager-duty
 # operationId: api_transport-pager-duty_get_collection
-export def "transport-pager-duty get-collection" [
+export def "api-transport-pager-duty-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10847,7 +10847,7 @@ export def "transport-pager-duty get-collection" [
 #
 # POST /api/transport-pager-duty
 # operationId: api_transport-pager-duty_post
-export def "transport-pager-duty create" [
+export def "api-transport-pager-duty-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10897,7 +10897,7 @@ export def "transport-pager-duty create" [
 #
 # DELETE /api/transport-pager-duty/{id}
 # operationId: api_transport-pager-duty_id_delete
-export def "transport-pager-duty delete" [
+export def "api-transport-pager-duty-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10933,7 +10933,7 @@ export def "transport-pager-duty delete" [
 #
 # GET /api/transport-pager-duty/{id}
 # operationId: api_transport-pager-duty_id_get
-export def "transport-pager-duty get" [
+export def "api-transport-pager-duty-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10970,7 +10970,7 @@ export def "transport-pager-duty get" [
 #
 # PUT /api/transport-pager-duty/{id}
 # operationId: api_transport-pager-duty_id_put
-export def "transport-pager-duty update" [
+export def "api-transport-pager-duty-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11021,7 +11021,7 @@ export def "transport-pager-duty update" [
 #
 # GET /api/transport-pager-tree
 # operationId: api_transport-pager-tree_get_collection
-export def "transport-pager-tree get-collection" [
+export def "api-transport-pager-tree-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11063,7 +11063,7 @@ export def "transport-pager-tree get-collection" [
 #
 # POST /api/transport-pager-tree
 # operationId: api_transport-pager-tree_post
-export def "transport-pager-tree create" [
+export def "api-transport-pager-tree-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11109,7 +11109,7 @@ export def "transport-pager-tree create" [
 #
 # DELETE /api/transport-pager-tree/{id}
 # operationId: api_transport-pager-tree_id_delete
-export def "transport-pager-tree delete" [
+export def "api-transport-pager-tree-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11145,7 +11145,7 @@ export def "transport-pager-tree delete" [
 #
 # GET /api/transport-pager-tree/{id}
 # operationId: api_transport-pager-tree_id_get
-export def "transport-pager-tree get" [
+export def "api-transport-pager-tree-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11182,7 +11182,7 @@ export def "transport-pager-tree get" [
 #
 # PUT /api/transport-pager-tree/{id}
 # operationId: api_transport-pager-tree_id_put
-export def "transport-pager-tree update" [
+export def "api-transport-pager-tree-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11229,7 +11229,7 @@ export def "transport-pager-tree update" [
 #
 # GET /api/transport-plivo
 # operationId: api_transport-plivo_get_collection
-export def "transport-plivo get-collection" [
+export def "api-transport-plivo-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11271,7 +11271,7 @@ export def "transport-plivo get-collection" [
 #
 # POST /api/transport-plivo
 # operationId: api_transport-plivo_post
-export def "transport-plivo create" [
+export def "api-transport-plivo-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11315,7 +11315,7 @@ export def "transport-plivo create" [
 #
 # DELETE /api/transport-plivo/{id}
 # operationId: api_transport-plivo_id_delete
-export def "transport-plivo delete" [
+export def "api-transport-plivo-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11351,7 +11351,7 @@ export def "transport-plivo delete" [
 #
 # GET /api/transport-plivo/{id}
 # operationId: api_transport-plivo_id_get
-export def "transport-plivo get" [
+export def "api-transport-plivo-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11388,7 +11388,7 @@ export def "transport-plivo get" [
 #
 # PUT /api/transport-plivo/{id}
 # operationId: api_transport-plivo_id_put
-export def "transport-plivo update" [
+export def "api-transport-plivo-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11433,7 +11433,7 @@ export def "transport-plivo update" [
 #
 # GET /api/transport-pushbullet
 # operationId: api_transport-pushbullet_get_collection
-export def "transport-pushbullet get-collection" [
+export def "api-transport-pushbullet-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11475,7 +11475,7 @@ export def "transport-pushbullet get-collection" [
 #
 # POST /api/transport-pushbullet
 # operationId: api_transport-pushbullet_post
-export def "transport-pushbullet create" [
+export def "api-transport-pushbullet-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11518,7 +11518,7 @@ export def "transport-pushbullet create" [
 #
 # DELETE /api/transport-pushbullet/{id}
 # operationId: api_transport-pushbullet_id_delete
-export def "transport-pushbullet delete" [
+export def "api-transport-pushbullet-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11554,7 +11554,7 @@ export def "transport-pushbullet delete" [
 #
 # GET /api/transport-pushbullet/{id}
 # operationId: api_transport-pushbullet_id_get
-export def "transport-pushbullet get" [
+export def "api-transport-pushbullet-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11591,7 +11591,7 @@ export def "transport-pushbullet get" [
 #
 # PUT /api/transport-pushbullet/{id}
 # operationId: api_transport-pushbullet_id_put
-export def "transport-pushbullet update" [
+export def "api-transport-pushbullet-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11635,7 +11635,7 @@ export def "transport-pushbullet update" [
 #
 # GET /api/transport-pushover
 # operationId: api_transport-pushover_get_collection
-export def "transport-pushover get-collection" [
+export def "api-transport-pushover-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11677,7 +11677,7 @@ export def "transport-pushover get-collection" [
 #
 # POST /api/transport-pushover
 # operationId: api_transport-pushover_post
-export def "transport-pushover create" [
+export def "api-transport-pushover-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11720,7 +11720,7 @@ export def "transport-pushover create" [
 #
 # DELETE /api/transport-pushover/{id}
 # operationId: api_transport-pushover_id_delete
-export def "transport-pushover delete" [
+export def "api-transport-pushover-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11756,7 +11756,7 @@ export def "transport-pushover delete" [
 #
 # GET /api/transport-pushover/{id}
 # operationId: api_transport-pushover_id_get
-export def "transport-pushover get" [
+export def "api-transport-pushover-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11793,7 +11793,7 @@ export def "transport-pushover get" [
 #
 # PUT /api/transport-pushover/{id}
 # operationId: api_transport-pushover_id_put
-export def "transport-pushover update" [
+export def "api-transport-pushover-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11837,7 +11837,7 @@ export def "transport-pushover update" [
 #
 # GET /api/transport-pushy
 # operationId: api_transport-pushy_get_collection
-export def "transport-pushy get-collection" [
+export def "api-transport-pushy-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11879,7 +11879,7 @@ export def "transport-pushy get-collection" [
 #
 # POST /api/transport-pushy
 # operationId: api_transport-pushy_post
-export def "transport-pushy create" [
+export def "api-transport-pushy-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11922,7 +11922,7 @@ export def "transport-pushy create" [
 #
 # DELETE /api/transport-pushy/{id}
 # operationId: api_transport-pushy_id_delete
-export def "transport-pushy delete" [
+export def "api-transport-pushy-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11958,7 +11958,7 @@ export def "transport-pushy delete" [
 #
 # GET /api/transport-pushy/{id}
 # operationId: api_transport-pushy_id_get
-export def "transport-pushy get" [
+export def "api-transport-pushy-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11995,7 +11995,7 @@ export def "transport-pushy get" [
 #
 # PUT /api/transport-pushy/{id}
 # operationId: api_transport-pushy_id_put
-export def "transport-pushy update" [
+export def "api-transport-pushy-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12039,7 +12039,7 @@ export def "transport-pushy update" [
 #
 # GET /api/transport-ring-central
 # operationId: api_transport-ring-central_get_collection
-export def "transport-ring-central get-collection" [
+export def "api-transport-ring-central-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12081,7 +12081,7 @@ export def "transport-ring-central get-collection" [
 #
 # POST /api/transport-ring-central
 # operationId: api_transport-ring-central_post
-export def "transport-ring-central create" [
+export def "api-transport-ring-central-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12124,7 +12124,7 @@ export def "transport-ring-central create" [
 #
 # DELETE /api/transport-ring-central/{id}
 # operationId: api_transport-ring-central_id_delete
-export def "transport-ring-central delete" [
+export def "api-transport-ring-central-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12160,7 +12160,7 @@ export def "transport-ring-central delete" [
 #
 # GET /api/transport-ring-central/{id}
 # operationId: api_transport-ring-central_id_get
-export def "transport-ring-central get" [
+export def "api-transport-ring-central-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12197,7 +12197,7 @@ export def "transport-ring-central get" [
 #
 # PUT /api/transport-ring-central/{id}
 # operationId: api_transport-ring-central_id_put
-export def "transport-ring-central update" [
+export def "api-transport-ring-central-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12241,7 +12241,7 @@ export def "transport-ring-central update" [
 #
 # GET /api/transport-rocket-chat
 # operationId: api_transport-rocket-chat_get_collection
-export def "transport-rocket-chat get-collection" [
+export def "api-transport-rocket-chat-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12283,7 +12283,7 @@ export def "transport-rocket-chat get-collection" [
 #
 # POST /api/transport-rocket-chat
 # operationId: api_transport-rocket-chat_post
-export def "transport-rocket-chat create" [
+export def "api-transport-rocket-chat-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12326,7 +12326,7 @@ export def "transport-rocket-chat create" [
 #
 # DELETE /api/transport-rocket-chat/{id}
 # operationId: api_transport-rocket-chat_id_delete
-export def "transport-rocket-chat delete" [
+export def "api-transport-rocket-chat-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12362,7 +12362,7 @@ export def "transport-rocket-chat delete" [
 #
 # GET /api/transport-rocket-chat/{id}
 # operationId: api_transport-rocket-chat_id_get
-export def "transport-rocket-chat get" [
+export def "api-transport-rocket-chat-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12399,7 +12399,7 @@ export def "transport-rocket-chat get" [
 #
 # PUT /api/transport-rocket-chat/{id}
 # operationId: api_transport-rocket-chat_id_put
-export def "transport-rocket-chat update" [
+export def "api-transport-rocket-chat-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12443,7 +12443,7 @@ export def "transport-rocket-chat update" [
 #
 # GET /api/transport-sendberry
 # operationId: api_transport-sendberry_get_collection
-export def "transport-sendberry get-collection" [
+export def "api-transport-sendberry-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12485,7 +12485,7 @@ export def "transport-sendberry get-collection" [
 #
 # POST /api/transport-sendberry
 # operationId: api_transport-sendberry_post
-export def "transport-sendberry create" [
+export def "api-transport-sendberry-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12530,7 +12530,7 @@ export def "transport-sendberry create" [
 #
 # DELETE /api/transport-sendberry/{id}
 # operationId: api_transport-sendberry_id_delete
-export def "transport-sendberry delete" [
+export def "api-transport-sendberry-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12566,7 +12566,7 @@ export def "transport-sendberry delete" [
 #
 # GET /api/transport-sendberry/{id}
 # operationId: api_transport-sendberry_id_get
-export def "transport-sendberry get" [
+export def "api-transport-sendberry-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12603,7 +12603,7 @@ export def "transport-sendberry get" [
 #
 # PUT /api/transport-sendberry/{id}
 # operationId: api_transport-sendberry_id_put
-export def "transport-sendberry update" [
+export def "api-transport-sendberry-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12649,7 +12649,7 @@ export def "transport-sendberry update" [
 #
 # GET /api/transport-sendinblue
 # operationId: api_transport-sendinblue_get_collection
-export def "transport-sendinblue get-collection" [
+export def "api-transport-sendinblue-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12691,7 +12691,7 @@ export def "transport-sendinblue get-collection" [
 #
 # POST /api/transport-sendinblue
 # operationId: api_transport-sendinblue_post
-export def "transport-sendinblue create" [
+export def "api-transport-sendinblue-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12734,7 +12734,7 @@ export def "transport-sendinblue create" [
 #
 # DELETE /api/transport-sendinblue/{id}
 # operationId: api_transport-sendinblue_id_delete
-export def "transport-sendinblue delete" [
+export def "api-transport-sendinblue-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12770,7 +12770,7 @@ export def "transport-sendinblue delete" [
 #
 # GET /api/transport-sendinblue/{id}
 # operationId: api_transport-sendinblue_id_get
-export def "transport-sendinblue get" [
+export def "api-transport-sendinblue-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12807,7 +12807,7 @@ export def "transport-sendinblue get" [
 #
 # PUT /api/transport-sendinblue/{id}
 # operationId: api_transport-sendinblue_id_put
-export def "transport-sendinblue update" [
+export def "api-transport-sendinblue-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12851,7 +12851,7 @@ export def "transport-sendinblue update" [
 #
 # GET /api/transport-simple-textin
 # operationId: api_transport-simple-textin_get_collection
-export def "transport-simple-textin get-collection" [
+export def "api-transport-simple-textin-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12893,7 +12893,7 @@ export def "transport-simple-textin get-collection" [
 #
 # POST /api/transport-simple-textin
 # operationId: api_transport-simple-textin_post
-export def "transport-simple-textin create" [
+export def "api-transport-simple-textin-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12936,7 +12936,7 @@ export def "transport-simple-textin create" [
 #
 # DELETE /api/transport-simple-textin/{id}
 # operationId: api_transport-simple-textin_id_delete
-export def "transport-simple-textin delete" [
+export def "api-transport-simple-textin-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12972,7 +12972,7 @@ export def "transport-simple-textin delete" [
 #
 # GET /api/transport-simple-textin/{id}
 # operationId: api_transport-simple-textin_id_get
-export def "transport-simple-textin get" [
+export def "api-transport-simple-textin-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13009,7 +13009,7 @@ export def "transport-simple-textin get" [
 #
 # PUT /api/transport-simple-textin/{id}
 # operationId: api_transport-simple-textin_id_put
-export def "transport-simple-textin update" [
+export def "api-transport-simple-textin-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13053,7 +13053,7 @@ export def "transport-simple-textin update" [
 #
 # GET /api/transport-sinch
 # operationId: api_transport-sinch_get_collection
-export def "transport-sinch get-collection" [
+export def "api-transport-sinch-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13095,7 +13095,7 @@ export def "transport-sinch get-collection" [
 #
 # POST /api/transport-sinch
 # operationId: api_transport-sinch_post
-export def "transport-sinch create" [
+export def "api-transport-sinch-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13139,7 +13139,7 @@ export def "transport-sinch create" [
 #
 # DELETE /api/transport-sinch/{id}
 # operationId: api_transport-sinch_id_delete
-export def "transport-sinch delete" [
+export def "api-transport-sinch-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13175,7 +13175,7 @@ export def "transport-sinch delete" [
 #
 # GET /api/transport-sinch/{id}
 # operationId: api_transport-sinch_id_get
-export def "transport-sinch get" [
+export def "api-transport-sinch-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13212,7 +13212,7 @@ export def "transport-sinch get" [
 #
 # PUT /api/transport-sinch/{id}
 # operationId: api_transport-sinch_id_put
-export def "transport-sinch update" [
+export def "api-transport-sinch-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13257,7 +13257,7 @@ export def "transport-sinch update" [
 #
 # GET /api/transport-slack
 # operationId: api_transport-slack_get_collection
-export def "transport-slack get-collection" [
+export def "api-transport-slack-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13299,7 +13299,7 @@ export def "transport-slack get-collection" [
 #
 # POST /api/transport-slack
 # operationId: api_transport-slack_post
-export def "transport-slack create" [
+export def "api-transport-slack-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13342,7 +13342,7 @@ export def "transport-slack create" [
 #
 # DELETE /api/transport-slack/{id}
 # operationId: api_transport-slack_id_delete
-export def "transport-slack delete" [
+export def "api-transport-slack-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13378,7 +13378,7 @@ export def "transport-slack delete" [
 #
 # GET /api/transport-slack/{id}
 # operationId: api_transport-slack_id_get
-export def "transport-slack get" [
+export def "api-transport-slack-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13415,7 +13415,7 @@ export def "transport-slack get" [
 #
 # PUT /api/transport-slack/{id}
 # operationId: api_transport-slack_id_put
-export def "transport-slack update" [
+export def "api-transport-slack-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13459,7 +13459,7 @@ export def "transport-slack update" [
 #
 # GET /api/transport-sms-biuras
 # operationId: api_transport-sms-biuras_get_collection
-export def "transport-sms-biuras get-collection" [
+export def "api-transport-sms-biuras-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13501,7 +13501,7 @@ export def "transport-sms-biuras get-collection" [
 #
 # POST /api/transport-sms-biuras
 # operationId: api_transport-sms-biuras_post
-export def "transport-sms-biuras create" [
+export def "api-transport-sms-biuras-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13545,7 +13545,7 @@ export def "transport-sms-biuras create" [
 #
 # DELETE /api/transport-sms-biuras/{id}
 # operationId: api_transport-sms-biuras_id_delete
-export def "transport-sms-biuras delete" [
+export def "api-transport-sms-biuras-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13581,7 +13581,7 @@ export def "transport-sms-biuras delete" [
 #
 # GET /api/transport-sms-biuras/{id}
 # operationId: api_transport-sms-biuras_id_get
-export def "transport-sms-biuras get" [
+export def "api-transport-sms-biuras-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13618,7 +13618,7 @@ export def "transport-sms-biuras get" [
 #
 # PUT /api/transport-sms-biuras/{id}
 # operationId: api_transport-sms-biuras_id_put
-export def "transport-sms-biuras update" [
+export def "api-transport-sms-biuras-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13663,7 +13663,7 @@ export def "transport-sms-biuras update" [
 #
 # GET /api/transport-sms-factor
 # operationId: api_transport-sms-factor_get_collection
-export def "transport-sms-factor get-collection" [
+export def "api-transport-sms-factor-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13705,7 +13705,7 @@ export def "transport-sms-factor get-collection" [
 #
 # POST /api/transport-sms-factor
 # operationId: api_transport-sms-factor_post
-export def "transport-sms-factor create" [
+export def "api-transport-sms-factor-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13749,7 +13749,7 @@ export def "transport-sms-factor create" [
 #
 # DELETE /api/transport-sms-factor/{id}
 # operationId: api_transport-sms-factor_id_delete
-export def "transport-sms-factor delete" [
+export def "api-transport-sms-factor-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13785,7 +13785,7 @@ export def "transport-sms-factor delete" [
 #
 # GET /api/transport-sms-factor/{id}
 # operationId: api_transport-sms-factor_id_get
-export def "transport-sms-factor get" [
+export def "api-transport-sms-factor-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13822,7 +13822,7 @@ export def "transport-sms-factor get" [
 #
 # PUT /api/transport-sms-factor/{id}
 # operationId: api_transport-sms-factor_id_put
-export def "transport-sms-factor update" [
+export def "api-transport-sms-factor-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13867,7 +13867,7 @@ export def "transport-sms-factor update" [
 #
 # GET /api/transport-sms77
 # operationId: api_transport-sms77_get_collection
-export def "transport-sms77 get-collection" [
+export def "api-transport-sms77-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13909,7 +13909,7 @@ export def "transport-sms77 get-collection" [
 #
 # POST /api/transport-sms77
 # operationId: api_transport-sms77_post
-export def "transport-sms77 create" [
+export def "api-transport-sms77-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13952,7 +13952,7 @@ export def "transport-sms77 create" [
 #
 # DELETE /api/transport-sms77/{id}
 # operationId: api_transport-sms77_id_delete
-export def "transport-sms77 delete" [
+export def "api-transport-sms77-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13988,7 +13988,7 @@ export def "transport-sms77 delete" [
 #
 # GET /api/transport-sms77/{id}
 # operationId: api_transport-sms77_id_get
-export def "transport-sms77 get" [
+export def "api-transport-sms77-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14025,7 +14025,7 @@ export def "transport-sms77 get" [
 #
 # PUT /api/transport-sms77/{id}
 # operationId: api_transport-sms77_id_put
-export def "transport-sms77 update" [
+export def "api-transport-sms77-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14069,7 +14069,7 @@ export def "transport-sms77 update" [
 #
 # GET /api/transport-smsapi
 # operationId: api_transport-smsapi_get_collection
-export def "transport-smsapi get-collection" [
+export def "api-transport-smsapi-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14111,7 +14111,7 @@ export def "transport-smsapi get-collection" [
 #
 # POST /api/transport-smsapi
 # operationId: api_transport-smsapi_post
-export def "transport-smsapi create" [
+export def "api-transport-smsapi-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14154,7 +14154,7 @@ export def "transport-smsapi create" [
 #
 # DELETE /api/transport-smsapi/{id}
 # operationId: api_transport-smsapi_id_delete
-export def "transport-smsapi delete" [
+export def "api-transport-smsapi-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14190,7 +14190,7 @@ export def "transport-smsapi delete" [
 #
 # GET /api/transport-smsapi/{id}
 # operationId: api_transport-smsapi_id_get
-export def "transport-smsapi get" [
+export def "api-transport-smsapi-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14227,7 +14227,7 @@ export def "transport-smsapi get" [
 #
 # PUT /api/transport-smsapi/{id}
 # operationId: api_transport-smsapi_id_put
-export def "transport-smsapi update" [
+export def "api-transport-smsapi-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14271,7 +14271,7 @@ export def "transport-smsapi update" [
 #
 # GET /api/transport-smsc
 # operationId: api_transport-smsc_get_collection
-export def "transport-smsc get-collection" [
+export def "api-transport-smsc-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14313,7 +14313,7 @@ export def "transport-smsc get-collection" [
 #
 # POST /api/transport-smsc
 # operationId: api_transport-smsc_post
-export def "transport-smsc create" [
+export def "api-transport-smsc-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14357,7 +14357,7 @@ export def "transport-smsc create" [
 #
 # DELETE /api/transport-smsc/{id}
 # operationId: api_transport-smsc_id_delete
-export def "transport-smsc delete" [
+export def "api-transport-smsc-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14393,7 +14393,7 @@ export def "transport-smsc delete" [
 #
 # GET /api/transport-smsc/{id}
 # operationId: api_transport-smsc_id_get
-export def "transport-smsc get" [
+export def "api-transport-smsc-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14430,7 +14430,7 @@ export def "transport-smsc get" [
 #
 # PUT /api/transport-smsc/{id}
 # operationId: api_transport-smsc_id_put
-export def "transport-smsc update" [
+export def "api-transport-smsc-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14475,7 +14475,7 @@ export def "transport-smsc update" [
 #
 # GET /api/transport-smsmode
 # operationId: api_transport-smsmode_get_collection
-export def "transport-smsmode get-collection" [
+export def "api-transport-smsmode-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14517,7 +14517,7 @@ export def "transport-smsmode get-collection" [
 #
 # POST /api/transport-smsmode
 # operationId: api_transport-smsmode_post
-export def "transport-smsmode create" [
+export def "api-transport-smsmode-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14560,7 +14560,7 @@ export def "transport-smsmode create" [
 #
 # DELETE /api/transport-smsmode/{id}
 # operationId: api_transport-smsmode_id_delete
-export def "transport-smsmode delete" [
+export def "api-transport-smsmode-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14596,7 +14596,7 @@ export def "transport-smsmode delete" [
 #
 # GET /api/transport-smsmode/{id}
 # operationId: api_transport-smsmode_id_get
-export def "transport-smsmode get" [
+export def "api-transport-smsmode-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14633,7 +14633,7 @@ export def "transport-smsmode get" [
 #
 # PUT /api/transport-smsmode/{id}
 # operationId: api_transport-smsmode_id_put
-export def "transport-smsmode update" [
+export def "api-transport-smsmode-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14677,7 +14677,7 @@ export def "transport-smsmode update" [
 #
 # GET /api/transport-spot-hit
 # operationId: api_transport-spot-hit_get_collection
-export def "transport-spot-hit get-collection" [
+export def "api-transport-spot-hit-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14719,7 +14719,7 @@ export def "transport-spot-hit get-collection" [
 #
 # POST /api/transport-spot-hit
 # operationId: api_transport-spot-hit_post
-export def "transport-spot-hit create" [
+export def "api-transport-spot-hit-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14762,7 +14762,7 @@ export def "transport-spot-hit create" [
 #
 # DELETE /api/transport-spot-hit/{id}
 # operationId: api_transport-spot-hit_id_delete
-export def "transport-spot-hit delete" [
+export def "api-transport-spot-hit-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14798,7 +14798,7 @@ export def "transport-spot-hit delete" [
 #
 # GET /api/transport-spot-hit/{id}
 # operationId: api_transport-spot-hit_id_get
-export def "transport-spot-hit get" [
+export def "api-transport-spot-hit-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14835,7 +14835,7 @@ export def "transport-spot-hit get" [
 #
 # PUT /api/transport-spot-hit/{id}
 # operationId: api_transport-spot-hit_id_put
-export def "transport-spot-hit update" [
+export def "api-transport-spot-hit-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14879,7 +14879,7 @@ export def "transport-spot-hit update" [
 #
 # GET /api/transport-telegram
 # operationId: api_transport-telegram_get_collection
-export def "transport-telegram get-collection" [
+export def "api-transport-telegram-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14921,7 +14921,7 @@ export def "transport-telegram get-collection" [
 #
 # POST /api/transport-telegram
 # operationId: api_transport-telegram_post
-export def "transport-telegram create" [
+export def "api-transport-telegram-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14964,7 +14964,7 @@ export def "transport-telegram create" [
 #
 # DELETE /api/transport-telegram/{id}
 # operationId: api_transport-telegram_id_delete
-export def "transport-telegram delete" [
+export def "api-transport-telegram-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15000,7 +15000,7 @@ export def "transport-telegram delete" [
 #
 # GET /api/transport-telegram/{id}
 # operationId: api_transport-telegram_id_get
-export def "transport-telegram get" [
+export def "api-transport-telegram-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15037,7 +15037,7 @@ export def "transport-telegram get" [
 #
 # PUT /api/transport-telegram/{id}
 # operationId: api_transport-telegram_id_put
-export def "transport-telegram update" [
+export def "api-transport-telegram-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15081,7 +15081,7 @@ export def "transport-telegram update" [
 #
 # GET /api/transport-telnyx
 # operationId: api_transport-telnyx_get_collection
-export def "transport-telnyx get-collection" [
+export def "api-transport-telnyx-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15123,7 +15123,7 @@ export def "transport-telnyx get-collection" [
 #
 # POST /api/transport-telnyx
 # operationId: api_transport-telnyx_post
-export def "transport-telnyx create" [
+export def "api-transport-telnyx-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15167,7 +15167,7 @@ export def "transport-telnyx create" [
 #
 # DELETE /api/transport-telnyx/{id}
 # operationId: api_transport-telnyx_id_delete
-export def "transport-telnyx delete" [
+export def "api-transport-telnyx-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15203,7 +15203,7 @@ export def "transport-telnyx delete" [
 #
 # GET /api/transport-telnyx/{id}
 # operationId: api_transport-telnyx_id_get
-export def "transport-telnyx get" [
+export def "api-transport-telnyx-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15240,7 +15240,7 @@ export def "transport-telnyx get" [
 #
 # PUT /api/transport-telnyx/{id}
 # operationId: api_transport-telnyx_id_put
-export def "transport-telnyx update" [
+export def "api-transport-telnyx-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15285,7 +15285,7 @@ export def "transport-telnyx update" [
 #
 # GET /api/transport-termii
 # operationId: api_transport-termii_get_collection
-export def "transport-termii get-collection" [
+export def "api-transport-termii-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15327,7 +15327,7 @@ export def "transport-termii get-collection" [
 #
 # POST /api/transport-termii
 # operationId: api_transport-termii_post
-export def "transport-termii create" [
+export def "api-transport-termii-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15371,7 +15371,7 @@ export def "transport-termii create" [
 #
 # DELETE /api/transport-termii/{id}
 # operationId: api_transport-termii_id_delete
-export def "transport-termii delete" [
+export def "api-transport-termii-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15407,7 +15407,7 @@ export def "transport-termii delete" [
 #
 # GET /api/transport-termii/{id}
 # operationId: api_transport-termii_id_get
-export def "transport-termii get" [
+export def "api-transport-termii-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15444,7 +15444,7 @@ export def "transport-termii get" [
 #
 # PUT /api/transport-termii/{id}
 # operationId: api_transport-termii_id_put
-export def "transport-termii update" [
+export def "api-transport-termii-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15489,7 +15489,7 @@ export def "transport-termii update" [
 #
 # GET /api/transport-trello
 # operationId: api_transport-trello_get_collection
-export def "transport-trello get-collection" [
+export def "api-transport-trello-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15531,7 +15531,7 @@ export def "transport-trello get-collection" [
 #
 # POST /api/transport-trello
 # operationId: api_transport-trello_post
-export def "transport-trello create" [
+export def "api-transport-trello-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15575,7 +15575,7 @@ export def "transport-trello create" [
 #
 # DELETE /api/transport-trello/{id}
 # operationId: api_transport-trello_id_delete
-export def "transport-trello delete" [
+export def "api-transport-trello-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15611,7 +15611,7 @@ export def "transport-trello delete" [
 #
 # GET /api/transport-trello/{id}
 # operationId: api_transport-trello_id_get
-export def "transport-trello get" [
+export def "api-transport-trello-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15648,7 +15648,7 @@ export def "transport-trello get" [
 #
 # PUT /api/transport-trello/{id}
 # operationId: api_transport-trello_id_put
-export def "transport-trello update" [
+export def "api-transport-trello-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15693,7 +15693,7 @@ export def "transport-trello update" [
 #
 # GET /api/transport-turbo-sms
 # operationId: api_transport-turbo-sms_get_collection
-export def "transport-turbo-sms get-collection" [
+export def "api-transport-turbo-sms-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15735,7 +15735,7 @@ export def "transport-turbo-sms get-collection" [
 #
 # POST /api/transport-turbo-sms
 # operationId: api_transport-turbo-sms_post
-export def "transport-turbo-sms create" [
+export def "api-transport-turbo-sms-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15778,7 +15778,7 @@ export def "transport-turbo-sms create" [
 #
 # DELETE /api/transport-turbo-sms/{id}
 # operationId: api_transport-turbo-sms_id_delete
-export def "transport-turbo-sms delete" [
+export def "api-transport-turbo-sms-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15814,7 +15814,7 @@ export def "transport-turbo-sms delete" [
 #
 # GET /api/transport-turbo-sms/{id}
 # operationId: api_transport-turbo-sms_id_get
-export def "transport-turbo-sms get" [
+export def "api-transport-turbo-sms-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15851,7 +15851,7 @@ export def "transport-turbo-sms get" [
 #
 # PUT /api/transport-turbo-sms/{id}
 # operationId: api_transport-turbo-sms_id_put
-export def "transport-turbo-sms update" [
+export def "api-transport-turbo-sms-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15895,7 +15895,7 @@ export def "transport-turbo-sms update" [
 #
 # GET /api/transport-twilio
 # operationId: api_transport-twilio_get_collection
-export def "transport-twilio get-collection" [
+export def "api-transport-twilio-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15937,7 +15937,7 @@ export def "transport-twilio get-collection" [
 #
 # POST /api/transport-twilio
 # operationId: api_transport-twilio_post
-export def "transport-twilio create" [
+export def "api-transport-twilio-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15981,7 +15981,7 @@ export def "transport-twilio create" [
 #
 # DELETE /api/transport-twilio/{id}
 # operationId: api_transport-twilio_id_delete
-export def "transport-twilio delete" [
+export def "api-transport-twilio-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16017,7 +16017,7 @@ export def "transport-twilio delete" [
 #
 # GET /api/transport-twilio/{id}
 # operationId: api_transport-twilio_id_get
-export def "transport-twilio get" [
+export def "api-transport-twilio-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16054,7 +16054,7 @@ export def "transport-twilio get" [
 #
 # PUT /api/transport-twilio/{id}
 # operationId: api_transport-twilio_id_put
-export def "transport-twilio update" [
+export def "api-transport-twilio-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16099,7 +16099,7 @@ export def "transport-twilio update" [
 #
 # GET /api/transport-twitter
 # operationId: api_transport-twitter_get_collection
-export def "transport-twitter get-collection" [
+export def "api-transport-twitter-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -16141,7 +16141,7 @@ export def "transport-twitter get-collection" [
 #
 # POST /api/transport-twitter
 # operationId: api_transport-twitter_post
-export def "transport-twitter create" [
+export def "api-transport-twitter-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -16183,7 +16183,7 @@ export def "transport-twitter create" [
 #
 # DELETE /api/transport-twitter/{id}
 # operationId: api_transport-twitter_id_delete
-export def "transport-twitter delete" [
+export def "api-transport-twitter-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16219,7 +16219,7 @@ export def "transport-twitter delete" [
 #
 # GET /api/transport-twitter/{id}
 # operationId: api_transport-twitter_id_get
-export def "transport-twitter get" [
+export def "api-transport-twitter-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16256,7 +16256,7 @@ export def "transport-twitter get" [
 #
 # PUT /api/transport-twitter/{id}
 # operationId: api_transport-twitter_id_put
-export def "transport-twitter update" [
+export def "api-transport-twitter-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16299,7 +16299,7 @@ export def "transport-twitter update" [
 #
 # GET /api/transport-vonage
 # operationId: api_transport-vonage_get_collection
-export def "transport-vonage get-collection" [
+export def "api-transport-vonage-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -16341,7 +16341,7 @@ export def "transport-vonage get-collection" [
 #
 # POST /api/transport-vonage
 # operationId: api_transport-vonage_post
-export def "transport-vonage create" [
+export def "api-transport-vonage-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -16385,7 +16385,7 @@ export def "transport-vonage create" [
 #
 # DELETE /api/transport-vonage/{id}
 # operationId: api_transport-vonage_id_delete
-export def "transport-vonage delete" [
+export def "api-transport-vonage-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16421,7 +16421,7 @@ export def "transport-vonage delete" [
 #
 # GET /api/transport-vonage/{id}
 # operationId: api_transport-vonage_id_get
-export def "transport-vonage get" [
+export def "api-transport-vonage-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16458,7 +16458,7 @@ export def "transport-vonage get" [
 #
 # PUT /api/transport-vonage/{id}
 # operationId: api_transport-vonage_id_put
-export def "transport-vonage update" [
+export def "api-transport-vonage-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16503,7 +16503,7 @@ export def "transport-vonage update" [
 #
 # GET /api/transport-webhook
 # operationId: api_transport-webhook_get_collection
-export def "transport-webhook get-collection" [
+export def "api-transport-webhook-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -16545,7 +16545,7 @@ export def "transport-webhook get-collection" [
 #
 # POST /api/transport-webhook
 # operationId: api_transport-webhook_post
-export def "transport-webhook create" [
+export def "api-transport-webhook-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -16590,7 +16590,7 @@ export def "transport-webhook create" [
 #
 # DELETE /api/transport-webhook/{id}
 # operationId: api_transport-webhook_id_delete
-export def "transport-webhook delete" [
+export def "api-transport-webhook-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16626,7 +16626,7 @@ export def "transport-webhook delete" [
 #
 # GET /api/transport-webhook/{id}
 # operationId: api_transport-webhook_id_get
-export def "transport-webhook get" [
+export def "api-transport-webhook-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16663,7 +16663,7 @@ export def "transport-webhook get" [
 #
 # PUT /api/transport-webhook/{id}
 # operationId: api_transport-webhook_id_put
-export def "transport-webhook update" [
+export def "api-transport-webhook-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16709,7 +16709,7 @@ export def "transport-webhook update" [
 #
 # GET /api/transport-yunpian
 # operationId: api_transport-yunpian_get_collection
-export def "transport-yunpian get-collection" [
+export def "api-transport-yunpian-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -16751,7 +16751,7 @@ export def "transport-yunpian get-collection" [
 #
 # POST /api/transport-yunpian
 # operationId: api_transport-yunpian_post
-export def "transport-yunpian create" [
+export def "api-transport-yunpian-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -16793,7 +16793,7 @@ export def "transport-yunpian create" [
 #
 # DELETE /api/transport-yunpian/{id}
 # operationId: api_transport-yunpian_id_delete
-export def "transport-yunpian delete" [
+export def "api-transport-yunpian-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16829,7 +16829,7 @@ export def "transport-yunpian delete" [
 #
 # GET /api/transport-yunpian/{id}
 # operationId: api_transport-yunpian_id_get
-export def "transport-yunpian get" [
+export def "api-transport-yunpian-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16866,7 +16866,7 @@ export def "transport-yunpian get" [
 #
 # PUT /api/transport-yunpian/{id}
 # operationId: api_transport-yunpian_id_put
-export def "transport-yunpian update" [
+export def "api-transport-yunpian-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16909,7 +16909,7 @@ export def "transport-yunpian update" [
 #
 # GET /api/transport-zendesk
 # operationId: api_transport-zendesk_get_collection
-export def "transport-zendesk get-collection" [
+export def "api-transport-zendesk-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -16951,7 +16951,7 @@ export def "transport-zendesk get-collection" [
 #
 # POST /api/transport-zendesk
 # operationId: api_transport-zendesk_post
-export def "transport-zendesk create" [
+export def "api-transport-zendesk-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -16995,7 +16995,7 @@ export def "transport-zendesk create" [
 #
 # DELETE /api/transport-zendesk/{id}
 # operationId: api_transport-zendesk_id_delete
-export def "transport-zendesk delete" [
+export def "api-transport-zendesk-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17031,7 +17031,7 @@ export def "transport-zendesk delete" [
 #
 # GET /api/transport-zendesk/{id}
 # operationId: api_transport-zendesk_id_get
-export def "transport-zendesk get" [
+export def "api-transport-zendesk-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17068,7 +17068,7 @@ export def "transport-zendesk get" [
 #
 # PUT /api/transport-zendesk/{id}
 # operationId: api_transport-zendesk_id_put
-export def "transport-zendesk update" [
+export def "api-transport-zendesk-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17113,7 +17113,7 @@ export def "transport-zendesk update" [
 #
 # GET /api/transport-zulip
 # operationId: api_transport-zulip_get_collection
-export def "transport-zulip get-collection" [
+export def "api-transport-zulip-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -17155,7 +17155,7 @@ export def "transport-zulip get-collection" [
 #
 # POST /api/transport-zulip
 # operationId: api_transport-zulip_post
-export def "transport-zulip create" [
+export def "api-transport-zulip-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -17200,7 +17200,7 @@ export def "transport-zulip create" [
 #
 # DELETE /api/transport-zulip/{id}
 # operationId: api_transport-zulip_id_delete
-export def "transport-zulip delete" [
+export def "api-transport-zulip-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17236,7 +17236,7 @@ export def "transport-zulip delete" [
 #
 # GET /api/transport-zulip/{id}
 # operationId: api_transport-zulip_id_get
-export def "transport-zulip get" [
+export def "api-transport-zulip-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17273,7 +17273,7 @@ export def "transport-zulip get" [
 #
 # PUT /api/transport-zulip/{id}
 # operationId: api_transport-zulip_id_put
-export def "transport-zulip update" [
+export def "api-transport-zulip-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17319,7 +17319,7 @@ export def "transport-zulip update" [
 #
 # GET /api/user-account
 # operationId: api_user-account_get_collection
-export def "user-account get-collection" [
+export def "api-user-account-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -17357,7 +17357,7 @@ export def "user-account get-collection" [
 #
 # GET /api/user-account-level-code
 # operationId: api_user-account-level-code_get_collection
-export def "user-account-level-code get-collection" [
+export def "api-user-account-level-code-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -17395,7 +17395,7 @@ export def "user-account-level-code get-collection" [
 #
 # GET /api/user-account-level-code/{id}
 # operationId: api_user-account-level-code_id_get
-export def "user-account-level-code get" [
+export def "api-user-account-level-code-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17432,7 +17432,7 @@ export def "user-account-level-code get" [
 #
 # GET /api/user-account/{id}
 # operationId: api_user-account_id_get
-export def "user-account get" [
+export def "api-user-account-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17469,7 +17469,7 @@ export def "user-account get" [
 #
 # PUT /api/user-account/{id}
 # operationId: api_user-account_id_put
-export def "user-account update" [
+export def "api-user-account-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

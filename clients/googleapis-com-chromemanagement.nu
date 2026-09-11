@@ -112,7 +112,7 @@ def app-type-completer [] { ["ANDROID_APP" "APP" "APP_TYPE_UNSPECIFIED" "EXTENSI
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "apps-count-chrome-app-requests get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "chromemanagement-customers-apps-count-chrome-app-requests" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -136,7 +136,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/{customer}/apps:countChromeAppRequests
 # operationId: chromemanagement.customers.apps.countChromeAppRequests
-export def "apps-count-chrome-app-requests get" [
+export def "chromemanagement-customers-apps-count-chrome-app-requests" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -188,7 +188,7 @@ export def "apps-count-chrome-app-requests get" [
 #
 # GET /v1/{customer}/reports:countChromeBrowsersNeedingAttention
 # operationId: chromemanagement.customers.reports.countChromeBrowsersNeedingAttention
-export def "reports-count-chrome-browsers-needing-attention get" [
+export def "chromemanagement-customers-reports-count-chrome-browsers-needing-attention" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -237,7 +237,7 @@ export def "reports-count-chrome-browsers-needing-attention get" [
 #
 # GET /v1/{customer}/reports:countChromeDevicesReachingAutoExpirationDate
 # operationId: chromemanagement.customers.reports.countChromeDevicesReachingAutoExpirationDate
-export def "reports-count-chrome-devices-reaching-auto-expiration-date get" [
+export def "chromemanagement-customers-reports-count-chrome-devices-reaching-auto-expiration-date" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -288,7 +288,7 @@ export def "reports-count-chrome-devices-reaching-auto-expiration-date get" [
 #
 # GET /v1/{customer}/reports:countChromeDevicesThatNeedAttention
 # operationId: chromemanagement.customers.reports.countChromeDevicesThatNeedAttention
-export def "reports-count-chrome-devices-that-need-attention get" [
+export def "chromemanagement-customers-reports-count-chrome-devices-that-need-attention" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -338,7 +338,7 @@ export def "reports-count-chrome-devices-that-need-attention get" [
 #
 # GET /v1/{customer}/reports:countChromeHardwareFleetDevices
 # operationId: chromemanagement.customers.reports.countChromeHardwareFleetDevices
-export def "reports-count-chrome-hardware-fleet-devices get" [
+export def "chromemanagement-customers-reports-count-chrome-hardware-fleet-devices" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -388,7 +388,7 @@ export def "reports-count-chrome-hardware-fleet-devices get" [
 #
 # GET /v1/{customer}/reports:countChromeVersions
 # operationId: chromemanagement.customers.reports.countChromeVersions
-export def "reports-count-chrome-versions get" [
+export def "chromemanagement-customers-reports-count-chrome-versions" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -440,7 +440,7 @@ export def "reports-count-chrome-versions get" [
 #
 # GET /v1/{customer}/reports:countInstalledApps
 # operationId: chromemanagement.customers.reports.countInstalledApps
-export def "reports-count-installed-apps get" [
+export def "chromemanagement-customers-reports-count-installed-apps" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -493,7 +493,7 @@ export def "reports-count-installed-apps get" [
 #
 # GET /v1/{customer}/reports:findInstalledAppDevices
 # operationId: chromemanagement.customers.reports.findInstalledAppDevices
-export def "reports-find-installed-app-devices find" [
+export def "chromemanagement-customers-reports-find-installed-app-devices" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -548,7 +548,7 @@ export def "reports-find-installed-app-devices find" [
 #
 # GET /v1/{name}
 # operationId: chromemanagement.customers.telemetry.users.get
-export def "customers get" [
+export def "chromemanagement-customers-telemetry-users-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -597,7 +597,7 @@ export def "customers get" [
 #
 # GET /v1/{parent}/telemetry/devices
 # operationId: chromemanagement.customers.telemetry.devices.list
-export def "telemetry-devices list" [
+export def "chromemanagement-customers-telemetry-devices-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -649,7 +649,7 @@ export def "telemetry-devices list" [
 #
 # GET /v1/{parent}/telemetry/events
 # operationId: chromemanagement.customers.telemetry.events.list
-export def "telemetry-events list" [
+export def "chromemanagement-customers-telemetry-events-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -701,7 +701,7 @@ export def "telemetry-events list" [
 #
 # GET /v1/{parent}/telemetry/users
 # operationId: chromemanagement.customers.telemetry.users.list
-export def "telemetry-users list" [
+export def "chromemanagement-customers-telemetry-users-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

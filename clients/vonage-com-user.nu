@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts-users list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "user-ctrl-get-users" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -122,7 +122,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/accounts/{account_id}/users
 # operationId: UserCtrl.getUsers
-export def "accounts-users list" [
+export def "user-ctrl-get-users" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -165,7 +165,7 @@ export def "accounts-users list" [
 #
 # GET /api/accounts/{account_id}/users/{user_id}
 # operationId: UserCtrl.getUserByID
-export def "accounts-users get" [
+export def "user-ctrl-get-user-by-id" [
   account_id: string
   user_id: float
   --base-url(-b): string@base-url-completer # API base URL

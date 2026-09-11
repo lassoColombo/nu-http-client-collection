@@ -113,7 +113,7 @@ def status-completer-1 [] { ["CLOSED" "OPEN" "REOPENED"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "order get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-order-order-id" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -136,7 +136,7 @@ export def commands []: nothing -> table {
 # Returns all details of a order
 #
 # GET /order/{orderId}
-export def "order get" [
+export def "get-order-order-id" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -176,7 +176,7 @@ export def "order get" [
 # POST /order/{orderId}/shipment/cancel
 # --courier shape: {name: string, taxID?: string}
 # --items item shape: {quantity: int, skuSellerId: string}
-export def "order-shipment-cancel create" [
+export def "post-order-order-id-shipment-cancel" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -227,7 +227,7 @@ export def "order-shipment-cancel create" [
 # POST /order/{orderId}/shipment/delivered
 # --courier shape: {name: string, taxID?: string}
 # --invoice shape: {accessKey: string, cnpj?: string, issuedAt?: string, linkDanfe?: string, linkXml?: string, number: string, serie: string}
-export def "order-shipment-delivered create" [
+export def "post-order-order-id-shipment-delivered" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -278,7 +278,7 @@ export def "order-shipment-delivered create" [
 # POST /order/{orderId}/shipment/exchange
 # --courier shape: {name: string, taxID?: string}
 # --items item shape: {quantity: int, skuSellerId: string}
-export def "order-shipment-exchange create" [
+export def "post-order-order-id-shipment-exchange" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -329,7 +329,7 @@ export def "order-shipment-exchange create" [
 # POST /order/{orderId}/shipment/return
 # --courier shape: {name: string, taxID?: string}
 # --items item shape: {quantity: int, skuSellerId: string}
-export def "order-shipment-return create" [
+export def "post-order-order-id-shipment-return" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -380,7 +380,7 @@ export def "order-shipment-return create" [
 # POST /order/{orderId}/shipment/sent
 # --courier shape: {name: string, taxID?: string}
 # --invoice shape: {accessKey: string, cnpj?: string, issuedAt?: string, linkDanfe?: string, linkXml?: string, number: string, serie: string}
-export def "order-shipment-sent create" [
+export def "post-order-order-id-shipment-sent" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -429,7 +429,7 @@ export def "order-shipment-sent create" [
 # Returns orders details
 #
 # GET /orders
-export def "orders get" [
+export def "get-orders" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -468,7 +468,7 @@ export def "orders get" [
 # Returns list of shipments
 #
 # GET /orders/shipments/delivered
-export def "orders-shipments-delivered get" [
+export def "get-orders-shipments-delivered" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -509,7 +509,7 @@ export def "orders-shipments-delivered get" [
 #
 # POST /orders/shipments/delivered
 # --shipments item shape: {courier?: any, cte?: string, invoice?: any, items?: list, number?: string, occurredAt?: string, order?: string, sellerShipmentId?: string, status?: string, trackingUrl?: string}
-export def "orders-shipments-delivered create" [
+export def "post-orders-shipments-delivered" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -549,7 +549,7 @@ export def "orders-shipments-delivered create" [
 # Returns a list of shipments shipped
 #
 # GET /orders/shipments/shipped
-export def "orders-shipments-shipped get" [
+export def "get-orders-shipments-shipped" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -590,7 +590,7 @@ export def "orders-shipments-shipped get" [
 #
 # POST /orders/shipments/shipped
 # --shipments item shape: {courier?: any, cte?: string, invoice?: any, items?: list, number?: string, occurredAt?: string, order?: string, sellerShipmentId?: string, status?: string, trackingUrl?: string}
-export def "orders-shipments-shipped create" [
+export def "post-orders-shipments-shipped" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -627,7 +627,7 @@ export def "orders-shipments-shipped create" [
 # Return list of approved orders
 #
 # GET /orders/status/approved
-export def "orders-status-approved get" [
+export def "get-orders-status-approved" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -666,7 +666,7 @@ export def "orders-status-approved get" [
 # Returns lists of canceled orders
 #
 # GET /orders/status/canceled
-export def "orders-status-canceled get" [
+export def "get-orders-status-canceled" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -705,7 +705,7 @@ export def "orders-status-canceled get" [
 # Returns a list of orders successfully delivered associated with this seller.
 #
 # GET /orders/status/delivered
-export def "orders-status-delivered get" [
+export def "get-orders-status-delivered" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -744,7 +744,7 @@ export def "orders-status-delivered get" [
 # Returns a list of orders flagged as new.
 #
 # GET /orders/status/new
-export def "orders-status-new get" [
+export def "get-orders-status-new" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -783,7 +783,7 @@ export def "orders-status-new get" [
 # Returns a list of partially deliverd orders
 #
 # GET /orders/status/partiallyDelivered
-export def "orders-status-partially-delivered get" [
+export def "get-orders-status-partially-delivered" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -822,7 +822,7 @@ export def "orders-status-partially-delivered get" [
 # Returns a list of orders partially fullfiled
 #
 # GET /orders/status/partiallySent
-export def "orders-status-partially-sent get" [
+export def "get-orders-status-partially-sent" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -861,7 +861,7 @@ export def "orders-status-partially-sent get" [
 # Returns a list with orders fully sent
 #
 # GET /orders/status/sent
-export def "orders-status-sent get" [
+export def "get-orders-status-sent" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -904,7 +904,7 @@ export def "orders-status-sent get" [
 # --dimensions shape: {height: int, length: int, weight: int, width: int}
 # --giftWrap shape: {available: bool, messageSupport?: bool, value: int}
 # --price shape: {default: int, offer: int}
-export def "product create" [
+export def "post-product" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -958,7 +958,7 @@ export def "product create" [
 # Returns details of a single product using the seller `skuSellerId`
 #
 # GET /product/{skuSellerId}
-export def "product get" [
+export def "get-product-sku-seller-id" [
   sku_seller_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1000,7 +1000,7 @@ export def "product get" [
 # --dimensions shape: {height: int, length: int, weight: int, width: int}
 # --giftWrap shape: {available: bool, messageSupport?: bool, value: int}
 # --price shape: {default: int, offer: int}
-export def "product update" [
+export def "put-product-sku-seller-id" [
   sku_seller_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1056,7 +1056,7 @@ export def "product update" [
 # Allows seller to update prices of a single SKU
 #
 # PUT /product/{skuSellerId}/prices
-export def "product-prices update" [
+export def "put-product-sku-seller-id-prices" [
   sku_seller_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1099,7 +1099,7 @@ export def "product-prices update" [
 # Enable/disable a single product in the Marketplace
 #
 # PUT /product/{skuSellerId}/status
-export def "product-status update" [
+export def "put-product-sku-seller-id-status" [
   sku_seller_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1141,7 +1141,7 @@ export def "product-status update" [
 # Update a single product stock
 #
 # PUT /product/{skuSellerId}/stock
-export def "product-stock update" [
+export def "put-product-sku-seller-id-stock" [
   sku_seller_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1184,7 +1184,7 @@ export def "product-stock update" [
 # Returns a list of products loaded into BrandLovers Marketplace
 #
 # GET /products
-export def "products get" [
+export def "get-products" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1223,7 +1223,7 @@ export def "products get" [
 # Allows new products from the seller to be loaded into the marketplace
 #
 # POST /products
-export def "products create" [
+export def "post-products" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1263,7 +1263,7 @@ export def "products create" [
 # Allows bulk update of product prices.
 #
 # PUT /products/prices
-export def "products-prices update" [
+export def "put-products-prices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1303,7 +1303,7 @@ export def "products-prices update" [
 # Returns seller products status in the marketplace
 #
 # GET /products/status
-export def "products-status get" [
+export def "get-products-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1342,7 +1342,7 @@ export def "products-status get" [
 # Bulk enable/disable products in the marketplace
 #
 # PUT /products/status
-export def "products-status update" [
+export def "put-products-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1382,7 +1382,7 @@ export def "products-status update" [
 # Returns products that are successfully listed for sale.
 #
 # GET /products/status/selling
-export def "products-status-selling get" [
+export def "get-products-status-selling" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1421,7 +1421,7 @@ export def "products-status-selling get" [
 # Bulk product stock update
 #
 # PUT /products/stocks
-export def "products-stocks update" [
+export def "put-products-stocks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1463,7 +1463,7 @@ export def "products-stocks update" [
 # POST /ticket
 # --customer shape: {name?: string, phoneNumber?: string}
 # --message shape: {body: string, visibility: string}
-export def "ticket create" [
+export def "post-ticket" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1509,7 +1509,7 @@ export def "ticket create" [
 # Add new message to trouble ticket
 #
 # POST /ticket/{ticketId}/message
-export def "ticket-message create" [
+export def "post-ticket-ticket-id-message" [
   ticket_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1552,7 +1552,7 @@ export def "ticket-message create" [
 # Get trouble ticket messages
 #
 # GET /ticket/{ticketId}/messages
-export def "ticket-messages get" [
+export def "get-ticket-ticket-id-messages" [
   ticket_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1593,7 +1593,7 @@ export def "ticket-messages get" [
 # Update trouble ticket status
 #
 # PUT /ticket/{ticketId}/status
-export def "ticket-status update" [
+export def "put-ticket-ticket-id-status" [
   ticket_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1635,7 +1635,7 @@ export def "ticket-status update" [
 # Get customers trouble tickets
 #
 # GET /tickets
-export def "tickets get" [
+export def "get-tickets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -144,7 +144,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "customer-service-metric-task list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-customer-service-metric-tasks" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -168,7 +168,7 @@ export def commands []: nothing -> table {
 #
 # GET /customer_service_metric_task
 # operationId: getCustomerServiceMetricTasks
-export def "customer-service-metric-task list" [
+export def "get-customer-service-metric-tasks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -209,7 +209,7 @@ export def "customer-service-metric-task list" [
 # POST /customer_service_metric_task
 # operationId: createCustomerServiceMetricTask
 # --filterCriteria shape: {customerServiceMetricType?: string, evaluationMarketplaceId?: string, listingCategories?: list<string>, shippingRegions?: list<string>}
-export def "customer-service-metric-task create" [
+export def "create-customer-service-metric-task" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -252,7 +252,7 @@ export def "customer-service-metric-task create" [
 #
 # GET /customer_service_metric_task/{task_id}
 # operationId: getCustomerServiceMetricTask
-export def "customer-service-metric-task get" [
+export def "get-customer-service-metric-task" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -288,7 +288,7 @@ export def "customer-service-metric-task get" [
 #
 # GET /inventory_task
 # operationId: getInventoryTasks
-export def "inventory-task list" [
+export def "get-inventory-tasks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -330,7 +330,7 @@ export def "inventory-task list" [
 # POST /inventory_task
 # operationId: createInventoryTask
 # --filterCriteria shape: {listingFormat?: string}
-export def "inventory-task create" [
+export def "create-inventory-task" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -370,7 +370,7 @@ export def "inventory-task create" [
 #
 # GET /inventory_task/{task_id}
 # operationId: getInventoryTask
-export def "inventory-task get" [
+export def "get-inventory-task" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -406,7 +406,7 @@ export def "inventory-task get" [
 #
 # GET /order_task
 # operationId: getOrderTasks
-export def "order-task list" [
+export def "get-order-tasks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -448,7 +448,7 @@ export def "order-task list" [
 # POST /order_task
 # operationId: createOrderTask
 # --filterCriteria shape: {creationDateRange?: record, modifiedDateRange?: record, orderStatus?: string}
-export def "order-task create" [
+export def "create-order-task" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -488,7 +488,7 @@ export def "order-task create" [
 #
 # GET /order_task/{task_id}
 # operationId: getOrderTask
-export def "order-task get" [
+export def "get-order-task" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -524,7 +524,7 @@ export def "order-task get" [
 #
 # GET /schedule
 # operationId: getSchedules
-export def "schedule list" [
+export def "get-schedules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -562,7 +562,7 @@ export def "schedule list" [
 #
 # POST /schedule
 # operationId: createSchedule
-export def "schedule create" [
+export def "create-schedule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -608,7 +608,7 @@ export def "schedule create" [
 #
 # DELETE /schedule/{schedule_id}
 # operationId: deleteSchedule
-export def "schedule delete" [
+export def "delete-schedule" [
   schedule_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -644,7 +644,7 @@ export def "schedule delete" [
 #
 # GET /schedule/{schedule_id}
 # operationId: getSchedule
-export def "schedule get" [
+export def "get-schedule" [
   schedule_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -680,7 +680,7 @@ export def "schedule get" [
 #
 # PUT /schedule/{schedule_id}
 # operationId: updateSchedule
-export def "schedule update" [
+export def "update-schedule" [
   schedule_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -726,7 +726,7 @@ export def "schedule update" [
 #
 # GET /schedule/{schedule_id}/download_result_file
 # operationId: getLatestResultFile
-export def "schedule-download-result-file get-latest" [
+export def "get-latest-result-file" [
   schedule_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -762,7 +762,7 @@ export def "schedule-download-result-file get-latest" [
 #
 # GET /schedule_template
 # operationId: getScheduleTemplates
-export def "schedule-template list" [
+export def "get-schedule-templates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -800,7 +800,7 @@ export def "schedule-template list" [
 #
 # GET /schedule_template/{schedule_template_id}
 # operationId: getScheduleTemplate
-export def "schedule-template get" [
+export def "get-schedule-template" [
   schedule_template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -836,7 +836,7 @@ export def "schedule-template get" [
 #
 # GET /task
 # operationId: getTasks
-export def "task list" [
+export def "get-tasks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -877,7 +877,7 @@ export def "task list" [
 #
 # POST /task
 # operationId: createTask
-export def "task create" [
+export def "create-task" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -919,7 +919,7 @@ export def "task create" [
 #
 # GET /task/{task_id}
 # operationId: getTask
-export def "task get" [
+export def "get-task" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -955,7 +955,7 @@ export def "task get" [
 #
 # GET /task/{task_id}/download_input_file
 # operationId: getInputFile
-export def "task-download-input-file get" [
+export def "get-input-file" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -991,7 +991,7 @@ export def "task-download-input-file get" [
 #
 # GET /task/{task_id}/download_result_file
 # operationId: getResultFile
-export def "task-download-result-file get" [
+export def "get-result-file" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1027,7 +1027,7 @@ export def "task-download-result-file get" [
 #
 # POST /task/{task_id}/upload_file
 # operationId: uploadFile
-export def "task-upload-file upload" [
+export def "upload-file" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

@@ -97,7 +97,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "tanzania-regions get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "tanzania-regions" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -121,7 +121,7 @@ export def commands []: nothing -> table {
 #
 # GET /{country}
 # operationId: Tanzania-regions
-export def "tanzania-regions get" [
+export def "tanzania-regions" [
   country: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -157,7 +157,7 @@ export def "tanzania-regions get" [
 #
 # GET /{country}/{region}
 # operationId: Districts-in-a-region
-export def "districts-in-region get" [
+export def "districts-in-a-region" [
   country: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -195,7 +195,7 @@ export def "districts-in-region get" [
 #
 # GET /{country}/{region}/{district}
 # operationId: Wards-in-a-district
-export def "wards-in-a-district get" [
+export def "wards-in-a-district" [
   country: string
   region: string
   district: string
@@ -235,7 +235,7 @@ export def "wards-in-a-district get" [
 #
 # GET /{country}/{region}/{district}/{ward}
 # operationId: streets-in-a-ward
-export def "streets-in-a-ward get" [
+export def "streets-in-a-ward" [
   country: string
   region: string
   district: string
@@ -277,7 +277,7 @@ export def "streets-in-a-ward get" [
 #
 # GET /{country}/{region}/{district}/{ward}/{street}
 # operationId: neighborhood-in-a-street-
-export def "neighborhood-in-a-street get" [
+export def "neighborhood-in-a-street" [
   country: string
   region: string
   district: string

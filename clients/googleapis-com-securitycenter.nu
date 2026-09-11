@@ -118,7 +118,7 @@ def service-enablement-state-completer [] { ["DISABLED" "ENABLED" "ENABLEMENT_ST
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta2 get-container-threat-detection-settings" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "securitycenter-projects-locations-clusters-get-container-threat-detection-settings" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -142,7 +142,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1beta2/{name}
 # operationId: securitycenter.projects.locations.clusters.getContainerThreatDetectionSettings
-export def "v1beta2 get-container-threat-detection-settings" [
+export def "securitycenter-projects-locations-clusters-get-container-threat-detection-settings" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -190,7 +190,7 @@ export def "v1beta2 get-container-threat-detection-settings" [
 #
 # PATCH /v1beta2/{name}
 # operationId: securitycenter.projects.locations.clusters.updateContainerThreatDetectionSettings
-export def "v1beta2 update-container-threat-detection-settings" [
+export def "securitycenter-projects-locations-clusters-update-container-threat-detection-settings" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -245,7 +245,7 @@ export def "v1beta2 update-container-threat-detection-settings" [
 #
 # GET /v1beta2/{name}:calculate
 # operationId: securitycenter.projects.webSecurityScannerSettings.calculate
-export def "v1beta2 get-calculate" [
+export def "securitycenter-projects-web-security-scanner-settings-calculate" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

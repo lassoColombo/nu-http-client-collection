@@ -124,7 +124,7 @@ def api-version-completer [] { ["2016-11-01"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-import-export-locations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "locations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -148,7 +148,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.ImportExport/locations
 # operationId: Locations_List
-export def "providers-microsoft-import-export-locations list" [
+export def "locations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -187,7 +187,7 @@ export def "providers-microsoft-import-export-locations list" [
 #
 # GET /providers/Microsoft.ImportExport/locations/{locationName}
 # operationId: Locations_Get
-export def "providers-microsoft-import-export-locations get" [
+export def "locations-get" [
   location_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -228,7 +228,7 @@ export def "providers-microsoft-import-export-locations get" [
 #
 # GET /providers/Microsoft.ImportExport/operations
 # operationId: Operations_List
-export def "providers-microsoft-import-export-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -267,7 +267,7 @@ export def "providers-microsoft-import-export-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.ImportExport/jobs
 # operationId: Jobs_ListBySubscription
-export def "subscriptions-providers-microsoft-import-export-jobs list" [
+export def "jobs-list-by-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -310,7 +310,7 @@ export def "subscriptions-providers-microsoft-import-export-jobs list" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ImportExport/jobs
 # operationId: Jobs_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-import-export-jobs list" [
+export def "jobs-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -355,7 +355,7 @@ export def "subscriptions-resource-groups-providers-microsoft-import-export-jobs
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ImportExport/jobs/{jobName}
 # operationId: Jobs_Delete
-export def "subscriptions-resource-groups-providers-microsoft-import-export-jobs delete" [
+export def "jobs-delete" [
   subscription_id: string
   resource_group_name: string
   job_name: string
@@ -400,7 +400,7 @@ export def "subscriptions-resource-groups-providers-microsoft-import-export-jobs
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ImportExport/jobs/{jobName}
 # operationId: Jobs_Get
-export def "subscriptions-resource-groups-providers-microsoft-import-export-jobs get" [
+export def "jobs-get" [
   subscription_id: string
   resource_group_name: string
   job_name: string
@@ -446,7 +446,7 @@ export def "subscriptions-resource-groups-providers-microsoft-import-export-jobs
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ImportExport/jobs/{jobName}
 # operationId: Jobs_Update
 # --properties shape: {backupDriveManifest?: bool, cancelRequested?: bool, deliveryPackage?: any, driveList?: list, logLevel?: string, returnAddress?: any, returnShipping?: any, state?: string}
-export def "subscriptions-resource-groups-providers-microsoft-import-export-jobs update" [
+export def "jobs-update" [
   subscription_id: string
   resource_group_name: string
   job_name: string
@@ -497,7 +497,7 @@ export def "subscriptions-resource-groups-providers-microsoft-import-export-jobs
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ImportExport/jobs/{jobName}
 # operationId: Jobs_Create
 # --properties shape: {backupDriveManifest?: bool, cancelRequested?: bool, deliveryPackage?: any, diagnosticsPath?: string, driveList?: list, export?: any, incompleteBlobListUri?: string, jobType?: string, logLevel?: string, percentComplete?: int, provisioningState?: string, returnAddress?: any, returnPackage?: any, returnShipping?: any, shippingInformation?: any, state?: string, storageAccountId?: string}
-export def "subscriptions-resource-groups-providers-microsoft-import-export-jobs create" [
+export def "jobs-create" [
   subscription_id: string
   resource_group_name: string
   job_name: string
@@ -549,7 +549,7 @@ export def "subscriptions-resource-groups-providers-microsoft-import-export-jobs
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ImportExport/jobs/{jobName}/listBitLockerKeys
 # operationId: BitLockerKeys_List
-export def "subscriptions-resource-groups-providers-microsoft-import-export-jobs-list-bit-locker-keys list" [
+export def "bit-locker-keys-list" [
   subscription_id: string
   resource_group_name: string
   job_name: string

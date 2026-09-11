@@ -101,7 +101,7 @@ def coord-units-completer [] { ["KM" "RE"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "gcr-flux-dlr get-calculate" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "app-api-endpoints-gcr-calculate-dlr-flux" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -125,7 +125,7 @@ export def commands []: nothing -> table {
 #
 # GET /gcr/flux_dlr
 # operationId: app.api.endpoints.GCR.calculate_dlr_flux
-export def "gcr-flux-dlr get-calculate" [
+export def "app-api-endpoints-gcr-calculate-dlr-flux" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -165,7 +165,7 @@ export def "gcr-flux-dlr get-calculate" [
 #
 # GET /trapped/flux_mean
 # operationId: app.api.endpoints.TrappedRadiation.calculate_flux_mean
-export def "trapped-flux-mean get-calculate" [
+export def "app-api-endpoints-trapped-radiation-calculate-flux-mean" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -212,7 +212,7 @@ export def "trapped-flux-mean get-calculate" [
 #
 # GET /trapped/flux_percentile
 # operationId: app.api.endpoints.TrappedRadiation.calculate_flux_percentile
-export def "trapped-flux-percentile get-calculate" [
+export def "app-api-endpoints-trapped-radiation-calculate-flux-percentile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

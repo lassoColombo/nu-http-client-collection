@@ -122,7 +122,7 @@ def accept-completer-1 [] { ["image/png" "image/svg+xml"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account-encrypt create-value" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "encrypt-value" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # POST /account/encrypt
 # operationId: encryptValue
-export def "account-encrypt create-value" [
+export def "encrypt-value" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -185,7 +185,7 @@ export def "account-encrypt create-value" [
 # GET /buildjobs/{jobId}/artifacts
 # Docs: https://www.appveyor.com/docs/api/samples/download-artifacts-advanced-ps/
 # operationId: getBuildArtifacts
-export def "buildjobs-artifacts list" [
+export def "get-build-artifacts" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -223,7 +223,7 @@ export def "buildjobs-artifacts list" [
 # GET /buildjobs/{jobId}/artifacts/{artifactFileName}
 # Docs: https://www.appveyor.com/docs/api/samples/download-artifacts-advanced-ps/
 # operationId: getBuildArtifact
-export def "buildjobs-artifacts get-build" [
+export def "get-build-artifact" [
   job_id: string
   artifact_file_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -262,7 +262,7 @@ export def "buildjobs-artifacts get-build" [
 # GET /buildjobs/{jobId}/log
 # Docs: https://www.appveyor.com/docs/api/projects-builds/#download-build-log
 # operationId: getBuildLog
-export def "buildjobs-log get-build" [
+export def "get-build-log" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -299,7 +299,7 @@ export def "buildjobs-log get-build" [
 # POST /builds
 # Docs: https://www.appveyor.com/docs/api/projects-builds/#start-build-of-branch-most-recent-commit
 # operationId: startBuild
-export def "builds start" [
+export def "start-build" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -344,7 +344,7 @@ export def "builds start" [
 # PUT /builds
 # Docs: https://www.appveyor.com/docs/api/projects-builds/#re-run-build
 # operationId: reRunBuild
-export def "builds build-re-run" [
+export def "re-run-build" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -385,7 +385,7 @@ export def "builds build-re-run" [
 # DELETE /builds/{accountName}/{projectSlug}/{buildVersion}
 # Docs: https://www.appveyor.com/docs/api/projects-builds/#cancel-build
 # operationId: cancelBuild
-export def "builds cancel" [
+export def "cancel-build" [
   account_name: string
   project_slug: string
   build_version: string
@@ -427,7 +427,7 @@ export def "builds cancel" [
 # GET /collaborators
 # Docs: https://www.appveyor.com/docs/api/team/#get-collaborators
 # operationId: getCollaborators
-export def "collaborators list" [
+export def "get-collaborators" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -463,7 +463,7 @@ export def "collaborators list" [
 # PUT /collaborators
 # Docs: https://www.appveyor.com/docs/api/team/#update-collaborator
 # operationId: updateCollaborator
-export def "collaborators update" [
+export def "update-collaborator" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -504,7 +504,7 @@ export def "collaborators update" [
 # DELETE /collaborators/{userId}
 # Docs: https://www.appveyor.com/docs/api/team/#delete-collaborator
 # operationId: deleteCollaborator
-export def "collaborators delete" [
+export def "delete-collaborator" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -542,7 +542,7 @@ export def "collaborators delete" [
 # GET /collaborators/{userId}
 # Docs: https://www.appveyor.com/docs/api/team/#get-collaborator
 # operationId: getCollaborator
-export def "collaborators get" [
+export def "get-collaborator" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -580,7 +580,7 @@ export def "collaborators get" [
 # POST /deployments
 # Docs: https://www.appveyor.com/docs/api/environments-deployments/#start-deployment
 # operationId: startDeployment
-export def "deployments start" [
+export def "start-deployment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -625,7 +625,7 @@ export def "deployments start" [
 # PUT /deployments/stop
 # Docs: https://www.appveyor.com/docs/api/environments-deployments/#cancel-deployment
 # operationId: cancelDeployment
-export def "deployments-stop cancel" [
+export def "cancel-deployment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -665,7 +665,7 @@ export def "deployments-stop cancel" [
 # GET /deployments/{deploymentId}
 # Docs: https://www.appveyor.com/docs/api/environments-deployments/#get-deployment
 # operationId: getDeployment
-export def "deployments get" [
+export def "get-deployment" [
   deployment_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -703,7 +703,7 @@ export def "deployments get" [
 # GET /environments
 # Docs: https://www.appveyor.com/docs/api/environments-deployments/#get-environments
 # operationId: getEnvironments
-export def "environments get" [
+export def "get-environments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -740,7 +740,7 @@ export def "environments get" [
 # Docs: https://www.appveyor.com/docs/api/environments-deployments/#add-environment
 # operationId: addEnvironment
 # --settings shape: {environmentVariables?: list, notifications?: list, providerSettings?: list}
-export def "environments create" [
+export def "add-environment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -784,7 +784,7 @@ export def "environments create" [
 # operationId: updateEnvironment
 # --projects item shape: {isSelected: bool, name: string, projectId: int}
 # --settings shape: {environmentVariables?: list, notifications?: list, providerSettings?: list}
-export def "environments update" [
+export def "update-environment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -827,7 +827,7 @@ export def "environments update" [
 # DELETE /environments/{deploymentEnvironmentId}
 # Docs: https://www.appveyor.com/docs/api/environments-deployments/#delete-environment
 # operationId: deleteEnvironment
-export def "environments delete" [
+export def "delete-environment" [
   deployment_environment_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -865,7 +865,7 @@ export def "environments delete" [
 # GET /environments/{deploymentEnvironmentId}/deployments
 # Docs: https://www.appveyor.com/docs/api/environments-deployments/#get-environment-deployments
 # operationId: getEnvironmentDeployments
-export def "environments-deployments get" [
+export def "get-environment-deployments" [
   deployment_environment_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -903,7 +903,7 @@ export def "environments-deployments get" [
 # GET /environments/{deploymentEnvironmentId}/settings
 # Docs: https://www.appveyor.com/docs/api/environments-deployments/#get-environment-settings
 # operationId: getEnvironmentSettings
-export def "environments-settings get" [
+export def "get-environment-settings" [
   deployment_environment_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -941,7 +941,7 @@ export def "environments-settings get" [
 # GET /projects
 # Docs: https://www.appveyor.com/docs/api/projects-builds/#get-projects
 # operationId: getProjects
-export def "projects get" [
+export def "get-projects" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -977,7 +977,7 @@ export def "projects get" [
 # POST /projects
 # Docs: https://www.appveyor.com/docs/api/projects-builds/#add-project
 # operationId: addProject
-export def "projects create" [
+export def "add-project" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1022,7 +1022,7 @@ export def "projects create" [
 # Docs: https://www.appveyor.com/docs/api/projects-builds/#update-project
 # operationId: updateProject
 # --configuration shape: {afterBuildScripts?: list, afterDeployScripts?: list, afterTestScripts?: list, artifacts?: list, assemblyFileVersionFormat?: string, assemblyInfoFile?: string, assemblyInformationalVersionFormat?: string, assemblyVersionFormat?: string, beforeBuildScripts?: list, beforeDeployScripts?: list, beforePackageScripts?: list, beforeTestScripts?: list, branchesMode?: "exclude"|"include", buildCloud?: list, buildMode?: "msbuild"|"none"|"script", buildScripts?: list, cacheEntries?: list, cloneDepth?: int, ... (69 more fields)}
-export def "projects update" [
+export def "update-project" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1074,7 +1074,7 @@ export def "projects update" [
 # GET /projects/status/{badgeRepoProvider}/{repoAccountName}/{repoSlug}
 # Docs: https://www.appveyor.com/docs/status-badges/
 # operationId: getPublicProjectStatusBadge
-export def "projects-status get-public-badge" [
+export def "get-public-project-status-badge" [
   badge_repo_provider: any
   repo_account_name: any
   repo_slug: any
@@ -1123,7 +1123,7 @@ export def "projects-status get-public-badge" [
 # GET /projects/status/{statusBadgeId}
 # Docs: https://www.appveyor.com/docs/status-badges/
 # operationId: getProjectStatusBadge
-export def "projects-status get-badge" [
+export def "get-project-status-badge" [
   status_badge_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1167,7 +1167,7 @@ export def "projects-status get-badge" [
 # GET /projects/status/{statusBadgeId}/branch/{buildBranch}
 # Docs: https://www.appveyor.com/docs/status-badges/
 # operationId: getProjectBranchStatusBadge
-export def "projects-status-branch get-badge" [
+export def "get-project-branch-status-badge" [
   status_badge_id: any
   build_branch: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -1213,7 +1213,7 @@ export def "projects-status-branch get-badge" [
 # DELETE /projects/{accountName}/{projectSlug}
 # Docs: https://www.appveyor.com/docs/api/projects-builds/#delete-project
 # operationId: deleteProject
-export def "projects delete" [
+export def "delete-project" [
   account_name: string
   project_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1253,7 +1253,7 @@ export def "projects delete" [
 # GET /projects/{accountName}/{projectSlug}
 # Docs: https://www.appveyor.com/docs/api/projects-builds/#get-project-last-build
 # operationId: getProjectLastBuild
-export def "projects get-last-build" [
+export def "get-project-last-build" [
   account_name: string
   project_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1293,7 +1293,7 @@ export def "projects get-last-build" [
 # GET /projects/{accountName}/{projectSlug}/artifacts/{artifactFileName}
 # Docs: https://www.appveyor.com/docs/packaging-artifacts/#permalink-to-the-last-successful-build-artifact
 # operationId: getProjectArtifact
-export def "projects-artifacts get" [
+export def "get-project-artifact" [
   account_name: string
   project_slug: string
   artifact_file_name: string
@@ -1340,7 +1340,7 @@ export def "projects-artifacts get" [
 # GET /projects/{accountName}/{projectSlug}/branch/{buildBranch}
 # Docs: https://www.appveyor.com/docs/api/projects-builds/#get-project-last-branch-build
 # operationId: getProjectLastBuildBranch
-export def "projects-branch get-last-build" [
+export def "get-project-last-build-branch" [
   account_name: string
   project_slug: string
   build_branch: string
@@ -1382,7 +1382,7 @@ export def "projects-branch get-last-build" [
 # GET /projects/{accountName}/{projectSlug}/build/{buildVersion}
 # Docs: https://www.appveyor.com/docs/api/projects-builds/#get-project-build-by-version
 # operationId: getProjectBuildByVersion
-export def "projects-build get-by-version" [
+export def "get-project-build-by-version" [
   account_name: string
   project_slug: string
   build_version: string
@@ -1424,7 +1424,7 @@ export def "projects-build get-by-version" [
 # DELETE /projects/{accountName}/{projectSlug}/buildcache
 # Docs: https://www.appveyor.com/docs/api/projects-builds/#delete-project-build-cache
 # operationId: deleteProjectBuildCache
-export def "projects-buildcache delete-build-cache" [
+export def "delete-project-build-cache" [
   account_name: string
   project_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1464,7 +1464,7 @@ export def "projects-buildcache delete-build-cache" [
 # GET /projects/{accountName}/{projectSlug}/deployments
 # Docs: https://www.appveyor.com/docs/api/projects-builds/#get-project-deployments
 # operationId: getProjectDeployments
-export def "projects-deployments get" [
+export def "get-project-deployments" [
   account_name: string
   project_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1506,7 +1506,7 @@ export def "projects-deployments get" [
 # GET /projects/{accountName}/{projectSlug}/history
 # Docs: https://www.appveyor.com/docs/api/projects-builds/#get-project-history
 # operationId: getProjectHistory
-export def "projects-history get" [
+export def "get-project-history" [
   account_name: any
   project_slug: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -1550,7 +1550,7 @@ export def "projects-history get" [
 # GET /projects/{accountName}/{projectSlug}/settings
 # Docs: https://www.appveyor.com/docs/api/projects-builds/#get-project-settings
 # operationId: getProjectSettings
-export def "projects-settings get" [
+export def "get-project-settings" [
   account_name: string
   project_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1590,7 +1590,7 @@ export def "projects-settings get" [
 # PUT /projects/{accountName}/{projectSlug}/settings/build-number
 # Docs: https://www.appveyor.com/docs/api/projects-builds/#update-project-build-number
 # operationId: updateProjectBuildNumber
-export def "projects-settings-build-number update" [
+export def "update-project-build-number" [
   account_name: string
   project_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1634,7 +1634,7 @@ export def "projects-settings-build-number update" [
 # GET /projects/{accountName}/{projectSlug}/settings/environment-variables
 # Docs: https://www.appveyor.com/docs/api/projects-builds/#get-project-environment-variables
 # operationId: getProjectEnvironmentVariables
-export def "projects-settings-environment-variables get" [
+export def "get-project-environment-variables" [
   account_name: string
   project_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1674,7 +1674,7 @@ export def "projects-settings-environment-variables get" [
 # PUT /projects/{accountName}/{projectSlug}/settings/environment-variables
 # Docs: https://www.appveyor.com/docs/api/projects-builds/#update-project-environment-variables
 # operationId: updateProjectEnvironmentVariables
-export def "projects-settings-environment-variables update" [
+export def "update-project-environment-variables" [
   account_name: string
   project_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1718,7 +1718,7 @@ export def "projects-settings-environment-variables update" [
 # GET /projects/{accountName}/{projectSlug}/settings/yaml
 # Docs: https://www.appveyor.com/docs/api/projects-builds/#get-project-settings-in-yaml
 # operationId: getProjectSettingsYaml
-export def "projects-settings-yaml get" [
+export def "get-project-settings-yaml" [
   account_name: string
   project_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1757,7 +1757,7 @@ export def "projects-settings-yaml get" [
 # PUT /projects/{accountName}/{projectSlug}/settings/yaml
 # Docs: https://www.appveyor.com/docs/api/projects-builds/#update-project-settings-in-yaml
 # operationId: updateProjectSettingsYaml
-export def "projects-settings-yaml update" [
+export def "update-project-settings-yaml" [
   account_name: string
   project_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1801,7 +1801,7 @@ export def "projects-settings-yaml update" [
 # GET /roles
 # Docs: https://www.appveyor.com/docs/api/team/#get-roles
 # operationId: getRoles
-export def "roles list" [
+export def "get-roles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1837,7 +1837,7 @@ export def "roles list" [
 # POST /roles
 # Docs: https://www.appveyor.com/docs/api/team/#add-role
 # operationId: addRole
-export def "roles create" [
+export def "add-role" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1878,7 +1878,7 @@ export def "roles create" [
 # Docs: https://www.appveyor.com/docs/api/team/#update-role
 # operationId: updateRole
 # --groups item shape: {name: "Account"|"BuildEnvironment"|"Deny"|"Environments"|"Projects"|"Roles"|"User"|"Users", permissions: list}
-export def "roles update" [
+export def "update-role" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1918,7 +1918,7 @@ export def "roles update" [
 # DELETE /roles/{roleId}
 # Docs: https://www.appveyor.com/docs/api/team/#delete-role
 # operationId: deleteRole
-export def "roles delete" [
+export def "delete-role" [
   role_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1956,7 +1956,7 @@ export def "roles delete" [
 # GET /roles/{roleId}
 # Docs: https://www.appveyor.com/docs/api/team/#get-role
 # operationId: getRole
-export def "roles get" [
+export def "get-role" [
   role_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1993,7 +1993,7 @@ export def "roles get" [
 #
 # PUT /user/join-account
 # operationId: joinAccount
-export def "user-join-account update" [
+export def "join-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2033,7 +2033,7 @@ export def "user-join-account update" [
 # GET /users
 # Docs: https://www.appveyor.com/docs/api/team/#get-users
 # operationId: getUsers
-export def "users list" [
+export def "get-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2069,7 +2069,7 @@ export def "users list" [
 # PUT /users
 # Docs: https://www.appveyor.com/docs/api/team/#update-user
 # operationId: updateUser
-export def "users update" [
+export def "update-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2113,7 +2113,7 @@ export def "users update" [
 #
 # GET /users/invitations
 # operationId: getUserInvitations
-export def "users-invitations get" [
+export def "get-user-invitations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2148,7 +2148,7 @@ export def "users-invitations get" [
 #
 # POST /users/invitations
 # operationId: inviteUser
-export def "users-invitations create-invite" [
+export def "invite-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2188,7 +2188,7 @@ export def "users-invitations create-invite" [
 #
 # DELETE /users/invitations/{userInvitationId}
 # operationId: cancelUserInvitation
-export def "users-invitations cancel" [
+export def "cancel-user-invitation" [
   user_invitation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2226,7 +2226,7 @@ export def "users-invitations cancel" [
 # DELETE /users/{userId}
 # Docs: https://www.appveyor.com/docs/api/team/#delete-user
 # operationId: deleteUser
-export def "users delete" [
+export def "delete-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2264,7 +2264,7 @@ export def "users delete" [
 # GET /users/{userId}
 # Docs: https://www.appveyor.com/docs/api/team/#get-user
 # operationId: getUser
-export def "users get" [
+export def "get-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

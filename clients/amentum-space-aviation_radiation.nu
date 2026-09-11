@@ -100,7 +100,7 @@ def particle-completer-1 [] { ["alpha" "e+" "e-" "gamma" "mu+" "mu-" "neutron" "
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cari7-ambient-dose get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "app-api-cari7-endpoints-cari7-ambient-dose" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -124,7 +124,7 @@ export def commands []: nothing -> table {
 #
 # GET /cari7/ambient_dose
 # operationId: app.api_cari7.endpoints.CARI7.ambient_dose
-export def "cari7-ambient-dose get" [
+export def "app-api-cari7-endpoints-cari7-ambient-dose" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -167,7 +167,7 @@ export def "cari7-ambient-dose get" [
 #
 # GET /cari7/effective_dose
 # operationId: app.api_cari7.endpoints.CARI7.effective_dose
-export def "cari7-effective-dose get" [
+export def "app-api-cari7-endpoints-cari7-effective-dose" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -210,7 +210,7 @@ export def "cari7-effective-dose get" [
 #
 # GET /parma/ambient_dose
 # operationId: app.api_parma.endpoints.PARMA.ambient_dose
-export def "parma-ambient-dose get" [
+export def "app-api-parma-endpoints-parma-ambient-dose" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -253,7 +253,7 @@ export def "parma-ambient-dose get" [
 #
 # GET /parma/differential_intensity
 # operationId: app.api_parma.endpoints.PARMA.differential_intensity
-export def "parma-differential-intensity get" [
+export def "app-api-parma-endpoints-parma-differential-intensity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -297,7 +297,7 @@ export def "parma-differential-intensity get" [
 #
 # GET /parma/effective_dose
 # operationId: app.api_parma.endpoints.PARMA.effective_dose
-export def "parma-effective-dose get" [
+export def "app-api-parma-endpoints-parma-effective-dose" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -340,7 +340,7 @@ export def "parma-effective-dose get" [
 #
 # GET /route/ambient_dose
 # operationId: app.api_icaro.endpoints.ICARO.ambient_dose
-export def "route-ambient-dose get" [
+export def "app-api-icaro-endpoints-icaro-ambient-dose" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -388,7 +388,7 @@ export def "route-ambient-dose get" [
 #
 # GET /route/effective_dose
 # operationId: app.api_icaro.endpoints.ICARO.effective_dose
-export def "route-effective-dose get" [
+export def "app-api-icaro-endpoints-icaro-effective-dose" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

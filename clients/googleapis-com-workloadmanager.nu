@@ -123,7 +123,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "insights-write-insight create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "workloadmanager-projects-locations-insights-write-insight" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -148,7 +148,7 @@ export def commands []: nothing -> table {
 # POST /v1/{location}/insights:writeInsight
 # operationId: workloadmanager.projects.locations.insights.writeInsight
 # --insight shape: {sapDiscovery?: record, sapValidation?: record}
-export def "insights-write-insight create" [
+export def "workloadmanager-projects-locations-insights-write-insight" [
   location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -201,7 +201,7 @@ export def "insights-write-insight create" [
 #
 # DELETE /v1/{name}
 # operationId: workloadmanager.projects.locations.operations.delete
-export def "projects delete" [
+export def "workloadmanager-projects-locations-operations-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -249,7 +249,7 @@ export def "projects delete" [
 #
 # GET /v1/{name}
 # operationId: workloadmanager.projects.locations.operations.get
-export def "projects get" [
+export def "workloadmanager-projects-locations-operations-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -298,7 +298,7 @@ export def "projects get" [
 # POST /v1/{name}/executions:run
 # operationId: workloadmanager.projects.locations.evaluations.executions.run
 # --execution shape: {labels?: record, name?: string, runType?: "TYPE_UNSPECIFIED"|"ONE_TIME"|"SCHEDULED"}
-export def "executions-run create" [
+export def "workloadmanager-projects-locations-evaluations-executions-run" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -352,7 +352,7 @@ export def "executions-run create" [
 #
 # GET /v1/{name}/locations
 # operationId: workloadmanager.projects.locations.list
-export def "locations list" [
+export def "workloadmanager-projects-locations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -403,7 +403,7 @@ export def "locations list" [
 #
 # GET /v1/{name}/operations
 # operationId: workloadmanager.projects.locations.operations.list
-export def "operations list" [
+export def "workloadmanager-projects-locations-operations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -454,7 +454,7 @@ export def "operations list" [
 #
 # POST /v1/{name}:cancel
 # operationId: workloadmanager.projects.locations.operations.cancel
-export def "projects cancel" [
+export def "workloadmanager-projects-locations-operations-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -506,7 +506,7 @@ export def "projects cancel" [
 #
 # GET /v1/{parent}/evaluations
 # operationId: workloadmanager.projects.locations.evaluations.list
-export def "evaluations list" [
+export def "workloadmanager-projects-locations-evaluations-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -560,7 +560,7 @@ export def "evaluations list" [
 # operationId: workloadmanager.projects.locations.evaluations.create
 # --resourceFilter shape: {gceInstanceFilter?: record, inclusionLabels?: record, resourceIdPatterns?: list<string>, scopes?: list<string>}
 # --resourceStatus shape: {rulesNewerVersions?: list<string>, state?: "STATE_UNSPECIFIED"|"CREATING"|"ACTIVE"|"DELETING"}
-export def "evaluations create" [
+export def "workloadmanager-projects-locations-evaluations-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -620,7 +620,7 @@ export def "evaluations create" [
 #
 # GET /v1/{parent}/executions
 # operationId: workloadmanager.projects.locations.evaluations.executions.list
-export def "executions list" [
+export def "workloadmanager-projects-locations-evaluations-executions-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -672,7 +672,7 @@ export def "executions list" [
 #
 # GET /v1/{parent}/results
 # operationId: workloadmanager.projects.locations.evaluations.executions.results.list
-export def "results list" [
+export def "workloadmanager-projects-locations-evaluations-executions-results-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -723,7 +723,7 @@ export def "results list" [
 #
 # GET /v1/{parent}/rules
 # operationId: workloadmanager.projects.locations.rules.list
-export def "rules list" [
+export def "workloadmanager-projects-locations-rules-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -774,7 +774,7 @@ export def "rules list" [
 #
 # GET /v1/{parent}/scannedResources
 # operationId: workloadmanager.projects.locations.evaluations.executions.scannedResources.list
-export def "scanned-resources list" [
+export def "workloadmanager-projects-locations-evaluations-executions-scanned-resources-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

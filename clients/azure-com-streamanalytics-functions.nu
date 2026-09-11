@@ -122,7 +122,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resourcegroups-providers-microsoft-stream-analytics-streamingjobs-functions list-by-streaming-job" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "functions-list-by-streaming-job" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.StreamAnalytics/streamingjobs/{jobName}/functions
 # operationId: Functions_ListByStreamingJob
-export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-streamingjobs-functions list-by-streaming-job" [
+export def "functions-list-by-streaming-job" [
   subscription_id: string
   resource_group_name: string
   job_name: string
@@ -189,7 +189,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-st
 #
 # DELETE /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.StreamAnalytics/streamingjobs/{jobName}/functions/{functionName}
 # operationId: Functions_Delete
-export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-streamingjobs-functions delete" [
+export def "functions-delete" [
   subscription_id: string
   resource_group_name: string
   job_name: string
@@ -233,7 +233,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-st
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.StreamAnalytics/streamingjobs/{jobName}/functions/{functionName}
 # operationId: Functions_Get
-export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-streamingjobs-functions get" [
+export def "functions-get" [
   subscription_id: string
   resource_group_name: string
   job_name: string
@@ -278,7 +278,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-st
 # PATCH /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.StreamAnalytics/streamingjobs/{jobName}/functions/{functionName}
 # operationId: Functions_Update
 # --properties shape: {type: string}
-export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-streamingjobs-functions update" [
+export def "functions-update" [
   subscription_id: string
   resource_group_name: string
   job_name: string
@@ -331,7 +331,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-st
 # PUT /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.StreamAnalytics/streamingjobs/{jobName}/functions/{functionName}
 # operationId: Functions_CreateOrReplace
 # --properties shape: {type: string}
-export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-streamingjobs-functions create-or-update" [
+export def "functions-create-or-replace" [
   subscription_id: string
   resource_group_name: string
   job_name: string
@@ -385,7 +385,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-st
 # POST /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.StreamAnalytics/streamingjobs/{jobName}/functions/{functionName}/RetrieveDefaultDefinition
 # Discriminator (request): bindingType
 # operationId: Functions_RetrieveDefaultDefinition
-export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-streamingjobs-functions-retrieve-default-definition get" [
+export def "functions-retrieve-default-definition" [
   subscription_id: string
   resource_group_name: string
   job_name: string
@@ -434,7 +434,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-st
 # POST /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.StreamAnalytics/streamingjobs/{jobName}/functions/{functionName}/test
 # operationId: Functions_Test
 # --properties shape: {type: string}
-export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-streamingjobs-functions-test test" [
+export def "functions-test" [
   subscription_id: string
   resource_group_name: string
   job_name: string

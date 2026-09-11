@@ -156,7 +156,7 @@ def x-amz-target-completer-55 [] { ["AWSEvents.UpdateEndpoint"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-activate-event-source" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "activate-event-source" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -180,7 +180,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: ActivateEventSource
-export def "api create-activate-event-source" [
+export def "activate-event-source" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -228,7 +228,7 @@ export def "api create-activate-event-source" [
 #
 # POST /
 # operationId: CancelReplay
-export def "api cancel-replay" [
+export def "cancel-replay" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -276,7 +276,7 @@ export def "api cancel-replay" [
 #
 # POST /
 # operationId: CreateApiDestination
-export def "api create-destination" [
+export def "create-api-destination" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -329,7 +329,7 @@ export def "api create-destination" [
 #
 # POST /
 # operationId: CreateArchive
-export def "api create-archive" [
+export def "create-archive" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -381,7 +381,7 @@ export def "api create-archive" [
 #
 # POST /
 # operationId: CreateConnection
-export def "api create-connection" [
+export def "create-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -432,7 +432,7 @@ export def "api create-connection" [
 #
 # POST /
 # operationId: CreateEndpoint
-export def "api create-endpoint" [
+export def "create-endpoint" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -485,7 +485,7 @@ export def "api create-endpoint" [
 #
 # POST /
 # operationId: CreateEventBus
-export def "api create-event-bus" [
+export def "create-event-bus" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -535,7 +535,7 @@ export def "api create-event-bus" [
 #
 # POST /
 # operationId: CreatePartnerEventSource
-export def "api create-partner-event-source" [
+export def "create-partner-event-source" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -584,7 +584,7 @@ export def "api create-partner-event-source" [
 #
 # POST /
 # operationId: DeactivateEventSource
-export def "api create-deactivate-event-source" [
+export def "deactivate-event-source" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -632,7 +632,7 @@ export def "api create-deactivate-event-source" [
 #
 # POST /
 # operationId: DeauthorizeConnection
-export def "api create-deauthorize-connection" [
+export def "deauthorize-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -680,7 +680,7 @@ export def "api create-deauthorize-connection" [
 #
 # POST /
 # operationId: DeleteApiDestination
-export def "api delete-destination" [
+export def "delete-api-destination" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -728,7 +728,7 @@ export def "api delete-destination" [
 #
 # POST /
 # operationId: DeleteArchive
-export def "api delete-archive" [
+export def "delete-archive" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -776,7 +776,7 @@ export def "api delete-archive" [
 #
 # POST /
 # operationId: DeleteConnection
-export def "api delete-connection" [
+export def "delete-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -824,7 +824,7 @@ export def "api delete-connection" [
 #
 # POST /
 # operationId: DeleteEndpoint
-export def "api delete-endpoint" [
+export def "delete-endpoint" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -872,7 +872,7 @@ export def "api delete-endpoint" [
 #
 # POST /
 # operationId: DeleteEventBus
-export def "api delete-event-bus" [
+export def "delete-event-bus" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -920,7 +920,7 @@ export def "api delete-event-bus" [
 #
 # POST /
 # operationId: DeletePartnerEventSource
-export def "api delete-partner-event-source" [
+export def "delete-partner-event-source" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -969,7 +969,7 @@ export def "api delete-partner-event-source" [
 #
 # POST /
 # operationId: DeleteRule
-export def "api delete-rule" [
+export def "delete-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1019,7 +1019,7 @@ export def "api delete-rule" [
 #
 # POST /
 # operationId: DescribeApiDestination
-export def "api get-destination" [
+export def "describe-api-destination" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1067,7 +1067,7 @@ export def "api get-destination" [
 #
 # POST /
 # operationId: DescribeArchive
-export def "api get-archive" [
+export def "describe-archive" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1115,7 +1115,7 @@ export def "api get-archive" [
 #
 # POST /
 # operationId: DescribeConnection
-export def "api get-connection" [
+export def "describe-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1163,7 +1163,7 @@ export def "api get-connection" [
 #
 # POST /
 # operationId: DescribeEndpoint
-export def "api get-endpoint" [
+export def "describe-endpoint" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1212,7 +1212,7 @@ export def "api get-endpoint" [
 #
 # POST /
 # operationId: DescribeEventBus
-export def "api get-event-bus" [
+export def "describe-event-bus" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1260,7 +1260,7 @@ export def "api get-event-bus" [
 #
 # POST /
 # operationId: DescribeEventSource
-export def "api get-event-source" [
+export def "describe-event-source" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1308,7 +1308,7 @@ export def "api get-event-source" [
 #
 # POST /
 # operationId: DescribePartnerEventSource
-export def "api get-partner-event-source" [
+export def "describe-partner-event-source" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1356,7 +1356,7 @@ export def "api get-partner-event-source" [
 #
 # POST /
 # operationId: DescribeReplay
-export def "api get-replay" [
+export def "describe-replay" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1404,7 +1404,7 @@ export def "api get-replay" [
 #
 # POST /
 # operationId: DescribeRule
-export def "api get-rule" [
+export def "describe-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1453,7 +1453,7 @@ export def "api get-rule" [
 #
 # POST /
 # operationId: DisableRule
-export def "api disable-rule" [
+export def "disable-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1502,7 +1502,7 @@ export def "api disable-rule" [
 #
 # POST /
 # operationId: EnableRule
-export def "api enable-rule" [
+export def "enable-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1551,7 +1551,7 @@ export def "api enable-rule" [
 #
 # POST /
 # operationId: ListApiDestinations
-export def "api list-destinations" [
+export def "list-api-destinations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1602,7 +1602,7 @@ export def "api list-destinations" [
 #
 # POST /
 # operationId: ListArchives
-export def "api list-archives" [
+export def "list-archives" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1654,7 +1654,7 @@ export def "api list-archives" [
 #
 # POST /
 # operationId: ListConnections
-export def "api list-connections" [
+export def "list-connections" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1705,7 +1705,7 @@ export def "api list-connections" [
 #
 # POST /
 # operationId: ListEndpoints
-export def "api list-endpoints" [
+export def "list-endpoints" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1756,7 +1756,7 @@ export def "api list-endpoints" [
 #
 # POST /
 # operationId: ListEventBuses
-export def "api list-event-buses" [
+export def "list-event-buses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1806,7 +1806,7 @@ export def "api list-event-buses" [
 #
 # POST /
 # operationId: ListEventSources
-export def "api list-event-sources" [
+export def "list-event-sources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1856,7 +1856,7 @@ export def "api list-event-sources" [
 #
 # POST /
 # operationId: ListPartnerEventSourceAccounts
-export def "api list-partner-event-source-accounts" [
+export def "list-partner-event-source-accounts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1906,7 +1906,7 @@ export def "api list-partner-event-source-accounts" [
 #
 # POST /
 # operationId: ListPartnerEventSources
-export def "api list-partner-event-sources" [
+export def "list-partner-event-sources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1956,7 +1956,7 @@ export def "api list-partner-event-sources" [
 #
 # POST /
 # operationId: ListReplays
-export def "api list-replays" [
+export def "list-replays" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2008,7 +2008,7 @@ export def "api list-replays" [
 #
 # POST /
 # operationId: ListRuleNamesByTarget
-export def "api list-rule-names-by-target" [
+export def "list-rule-names-by-target" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2059,7 +2059,7 @@ export def "api list-rule-names-by-target" [
 #
 # POST /
 # operationId: ListRules
-export def "api list-rules" [
+export def "list-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2110,7 +2110,7 @@ export def "api list-rules" [
 #
 # POST /
 # operationId: ListTagsForResource
-export def "api list-tags-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2158,7 +2158,7 @@ export def "api list-tags-for-resource" [
 #
 # POST /
 # operationId: ListTargetsByRule
-export def "api list-targets-by-rule" [
+export def "list-targets-by-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2209,7 +2209,7 @@ export def "api list-targets-by-rule" [
 #
 # POST /
 # operationId: PutEvents
-export def "api update-events" [
+export def "put-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2258,7 +2258,7 @@ export def "api update-events" [
 #
 # POST /
 # operationId: PutPartnerEvents
-export def "api update-partner-events" [
+export def "put-partner-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2306,7 +2306,7 @@ export def "api update-partner-events" [
 #
 # POST /
 # operationId: PutPermission
-export def "api update-permission" [
+export def "put-permission" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2359,7 +2359,7 @@ export def "api update-permission" [
 #
 # POST /
 # operationId: PutRule
-export def "api update-rule" [
+export def "put-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2414,7 +2414,7 @@ export def "api update-rule" [
 #
 # POST /
 # operationId: PutTargets
-export def "api update-targets" [
+export def "put-targets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2464,7 +2464,7 @@ export def "api update-targets" [
 #
 # POST /
 # operationId: RemovePermission
-export def "api delete-permission" [
+export def "remove-permission" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2514,7 +2514,7 @@ export def "api delete-permission" [
 #
 # POST /
 # operationId: RemoveTargets
-export def "api delete-targets" [
+export def "remove-targets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2565,7 +2565,7 @@ export def "api delete-targets" [
 #
 # POST /
 # operationId: StartReplay
-export def "api start-replay" [
+export def "start-replay" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2618,7 +2618,7 @@ export def "api start-replay" [
 #
 # POST /
 # operationId: TagResource
-export def "api tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2667,7 +2667,7 @@ export def "api tag-resource" [
 #
 # POST /
 # operationId: TestEventPattern
-export def "api test-event-pattern" [
+export def "test-event-pattern" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2716,7 +2716,7 @@ export def "api test-event-pattern" [
 #
 # POST /
 # operationId: UntagResource
-export def "api untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2765,7 +2765,7 @@ export def "api untag-resource" [
 #
 # POST /
 # operationId: UpdateApiDestination
-export def "api update-destination" [
+export def "update-api-destination" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2818,7 +2818,7 @@ export def "api update-destination" [
 #
 # POST /
 # operationId: UpdateArchive
-export def "api update-archive" [
+export def "update-archive" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2869,7 +2869,7 @@ export def "api update-archive" [
 #
 # POST /
 # operationId: UpdateConnection
-export def "api update-connection" [
+export def "update-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2920,7 +2920,7 @@ export def "api update-connection" [
 #
 # POST /
 # operationId: UpdateEndpoint
-export def "api update-endpoint" [
+export def "update-endpoint" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

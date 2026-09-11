@@ -126,7 +126,7 @@ def vat-completer [] { ["0%" "1%" "10%" "11%" "12%" "13%" "14%" "15%" "16%" "17%
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "bank-accounts list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-bank-account" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -150,7 +150,7 @@ export def commands []: nothing -> table {
 #
 # GET /bank-accounts
 # operationId: ListBankAccount
-export def "bank-accounts list" [
+export def "list-bank-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -187,7 +187,7 @@ export def "bank-accounts list" [
 #
 # POST /bank-accounts
 # operationId: CreateBankAccount
-export def "bank-accounts create" [
+export def "create-bank-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -230,7 +230,7 @@ export def "bank-accounts create" [
 #
 # DELETE /bank-accounts/{id}
 # operationId: DeleteBankAccount
-export def "bank-accounts delete" [
+export def "delete-bank-account" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -266,7 +266,7 @@ export def "bank-accounts delete" [
 #
 # GET /bank-accounts/{id}
 # operationId: GetBankAccount
-export def "bank-accounts get" [
+export def "get-bank-account" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -302,7 +302,7 @@ export def "bank-accounts get" [
 #
 # PUT /bank-accounts/{id}
 # operationId: UpdateBankAccount
-export def "bank-accounts update" [
+export def "update-bank-account" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -347,7 +347,7 @@ export def "bank-accounts update" [
 #
 # GET /currencies
 # operationId: GetConversionRate
-export def "currencies get-conversion-rate" [
+export def "get-conversion-rate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -384,7 +384,7 @@ export def "currencies get-conversion-rate" [
 #
 # GET /document-blocks
 # operationId: ListDocumentBlock
-export def "document-blocks list" [
+export def "list-document-block" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -421,7 +421,7 @@ export def "document-blocks list" [
 #
 # GET /documents
 # operationId: ListDocument
-export def "documents list" [
+export def "list-document" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -469,7 +469,7 @@ export def "documents list" [
 # POST /documents
 # operationId: CreateDocument
 # --settings shape: {mediated_service?: bool, online_payment?: ""|"Barion"|"SimplePay"|"no", place_id?: int, round?: "five"|"none"|"one"|"ten", without_financial_fulfillment?: bool}
-export def "documents create" [
+export def "create-document" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -522,7 +522,7 @@ export def "documents create" [
 #
 # GET /documents/{id}
 # operationId: GetDocument
-export def "documents get" [
+export def "get-document" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -558,7 +558,7 @@ export def "documents get" [
 #
 # POST /documents/{id}/cancel
 # operationId: CancelDocument
-export def "documents-cancel cancel" [
+export def "cancel-document" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -594,7 +594,7 @@ export def "documents-cancel cancel" [
 #
 # POST /documents/{id}/create-from-proforma
 # operationId: CreateDocumentFromProforma
-export def "documents-create-from-proforma create" [
+export def "create-document-from-proforma" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -630,7 +630,7 @@ export def "documents-create-from-proforma create" [
 #
 # GET /documents/{id}/download
 # operationId: DownloadDocument
-export def "documents-download download" [
+export def "download-document" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -667,7 +667,7 @@ export def "documents-download download" [
 #
 # GET /documents/{id}/online-szamla
 # operationId: GetOnlineSzamlaStatus
-export def "documents-online-szamla get-status" [
+export def "get-online-szamla-status" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -703,7 +703,7 @@ export def "documents-online-szamla get-status" [
 #
 # DELETE /documents/{id}/payments
 # operationId: DeletePayment
-export def "documents-payments delete" [
+export def "delete-payment" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -739,7 +739,7 @@ export def "documents-payments delete" [
 #
 # GET /documents/{id}/payments
 # operationId: GetPayment
-export def "documents-payments get" [
+export def "get-payment" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -775,7 +775,7 @@ export def "documents-payments get" [
 #
 # PUT /documents/{id}/payments
 # operationId: UpdatePayment
-export def "documents-payments update" [
+export def "update-payment" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -815,7 +815,7 @@ export def "documents-payments update" [
 #
 # GET /documents/{id}/public-url
 # operationId: GetPublicUrl
-export def "documents-public-url get" [
+export def "get-public-url" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -851,7 +851,7 @@ export def "documents-public-url get" [
 #
 # POST /documents/{id}/send
 # operationId: SendDocument
-export def "documents-send send" [
+export def "send-document" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -891,7 +891,7 @@ export def "documents-send send" [
 #
 # GET /organization
 # operationId: GetOrganizationData
-export def "organization get-data" [
+export def "get-organization-data" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -925,7 +925,7 @@ export def "organization get-data" [
 #
 # GET /partners
 # operationId: ListPartner
-export def "partners list" [
+export def "list-partner" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -963,7 +963,7 @@ export def "partners list" [
 # POST /partners
 # operationId: CreatePartner
 # --address shape: {address: string, city: string, ... (2 more fields)}
-export def "partners create" [
+export def "create-partner" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1009,7 +1009,7 @@ export def "partners create" [
 #
 # DELETE /partners/{id}
 # operationId: DeletePartner
-export def "partners delete" [
+export def "delete-partner" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1045,7 +1045,7 @@ export def "partners delete" [
 #
 # GET /partners/{id}
 # operationId: GetPartner
-export def "partners get" [
+export def "get-partner" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1082,7 +1082,7 @@ export def "partners get" [
 # PUT /partners/{id}
 # operationId: UpdatePartner
 # --address shape: {address: string, city: string, ... (2 more fields)}
-export def "partners update" [
+export def "update-partner" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1130,7 +1130,7 @@ export def "partners update" [
 #
 # GET /products
 # operationId: ListProduct
-export def "products list" [
+export def "list-product" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1167,7 +1167,7 @@ export def "products list" [
 #
 # POST /products
 # operationId: CreateProduct
-export def "products create" [
+export def "create-product" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1212,7 +1212,7 @@ export def "products create" [
 #
 # DELETE /products/{id}
 # operationId: DeleteProduct
-export def "products delete" [
+export def "delete-product" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1248,7 +1248,7 @@ export def "products delete" [
 #
 # GET /products/{id}
 # operationId: GetProduct
-export def "products get" [
+export def "get-product" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1284,7 +1284,7 @@ export def "products get" [
 #
 # PUT /products/{id}
 # operationId: UpdateProduct
-export def "products update" [
+export def "update-product" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1331,7 +1331,7 @@ export def "products update" [
 #
 # GET /utils/convert-legacy-id/{id}
 # operationId: GetId
-export def "utils-convert-legacy-id get" [
+export def "get-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

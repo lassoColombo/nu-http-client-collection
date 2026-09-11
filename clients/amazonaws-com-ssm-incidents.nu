@@ -114,7 +114,7 @@ def status-completer [] { ["OPEN" "RESOLVED"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-replication-set create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-replication-set" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -138,7 +138,7 @@ export def commands []: nothing -> table {
 #
 # POST /createReplicationSet
 # operationId: CreateReplicationSet
-export def "create-replication-set create" [
+export def "create-replication-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -191,7 +191,7 @@ export def "create-replication-set create" [
 # --chatChannel shape: {chatbotSns?: any, empty?: any}
 # --incidentTemplate shape: {dedupeString?: any, impact?: any, incidentTags?: any, notificationTargets?: any, summary?: any, title?: any}
 # --integrations item shape: {pagerDutyConfiguration?: any}
-export def "create-response-plan create" [
+export def "create-response-plan" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -247,7 +247,7 @@ export def "create-response-plan create" [
 # POST /createTimelineEvent
 # operationId: CreateTimelineEvent
 # --eventReferences item shape: {relatedItemId?: any, resource?: any}
-export def "create-timeline-event create" [
+export def "create-timeline-event" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -299,7 +299,7 @@ export def "create-timeline-event create" [
 #
 # POST /deleteIncidentRecord
 # operationId: DeleteIncidentRecord
-export def "delete-incident-record delete" [
+export def "delete-incident-record" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -346,7 +346,7 @@ export def "delete-incident-record delete" [
 #
 # POST /deleteReplicationSet
 # operationId: DeleteReplicationSet
-export def "delete-replication-set delete" [
+export def "delete-replication-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -391,7 +391,7 @@ export def "delete-replication-set delete" [
 #
 # POST /deleteResourcePolicy
 # operationId: DeleteResourcePolicy
-export def "delete-resource-policy delete" [
+export def "delete-resource-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -439,7 +439,7 @@ export def "delete-resource-policy delete" [
 #
 # POST /deleteResponsePlan
 # operationId: DeleteResponsePlan
-export def "delete-response-plan delete" [
+export def "delete-response-plan" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -486,7 +486,7 @@ export def "delete-response-plan delete" [
 #
 # POST /deleteTimelineEvent
 # operationId: DeleteTimelineEvent
-export def "delete-timeline-event delete" [
+export def "delete-timeline-event" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -534,7 +534,7 @@ export def "delete-timeline-event delete" [
 #
 # GET /getIncidentRecord
 # operationId: GetIncidentRecord
-export def "get-incident-record get" [
+export def "get-incident-record" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -579,7 +579,7 @@ export def "get-incident-record get" [
 #
 # GET /getReplicationSet
 # operationId: GetReplicationSet
-export def "get-replication-set get" [
+export def "get-replication-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -624,7 +624,7 @@ export def "get-replication-set get" [
 #
 # POST /getResourcePolicies
 # operationId: GetResourcePolicies
-export def "get-resource-policies get" [
+export def "get-resource-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -676,7 +676,7 @@ export def "get-resource-policies get" [
 #
 # GET /getResponsePlan
 # operationId: GetResponsePlan
-export def "get-response-plan get" [
+export def "get-response-plan" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -721,7 +721,7 @@ export def "get-response-plan get" [
 #
 # GET /getTimelineEvent
 # operationId: GetTimelineEvent
-export def "get-timeline-event get" [
+export def "get-timeline-event" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -768,7 +768,7 @@ export def "get-timeline-event get" [
 # POST /listIncidentRecords
 # operationId: ListIncidentRecords
 # --filters item shape: {condition: any, key: any}
-export def "list-incident-records list" [
+export def "list-incident-records" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -820,7 +820,7 @@ export def "list-incident-records list" [
 #
 # POST /listRelatedItems
 # operationId: ListRelatedItems
-export def "list-related-items list" [
+export def "list-related-items" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -872,7 +872,7 @@ export def "list-related-items list" [
 #
 # POST /listReplicationSets
 # operationId: ListReplicationSets
-export def "list-replication-sets list" [
+export def "list-replication-sets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -923,7 +923,7 @@ export def "list-replication-sets list" [
 #
 # POST /listResponsePlans
 # operationId: ListResponsePlans
-export def "list-response-plans list" [
+export def "list-response-plans" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -974,7 +974,7 @@ export def "list-response-plans list" [
 #
 # GET /tags/{resourceArn}
 # operationId: ListTagsForResource
-export def "tags list-for-resource" [
+export def "list-tags-for-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1019,7 +1019,7 @@ export def "tags list-for-resource" [
 #
 # POST /tags/{resourceArn}
 # operationId: TagResource
-export def "tags tag-resource" [
+export def "tag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1069,7 +1069,7 @@ export def "tags tag-resource" [
 # POST /listTimelineEvents
 # operationId: ListTimelineEvents
 # --filters item shape: {condition: any, key: any}
-export def "list-timeline-events list" [
+export def "list-timeline-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1124,7 +1124,7 @@ export def "list-timeline-events list" [
 #
 # POST /putResourcePolicy
 # operationId: PutResourcePolicy
-export def "put-resource-policy update" [
+export def "put-resource-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1174,7 +1174,7 @@ export def "put-resource-policy update" [
 # operationId: StartIncident
 # --relatedItems item shape: {generatedId?: any, identifier: any, title?: any}
 # --triggerDetails shape: {rawData?: any, source?: any, timestamp?: any, triggerArn?: any}
-export def "start-incident start" [
+export def "start-incident" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1226,7 +1226,7 @@ export def "start-incident start" [
 #
 # DELETE /tags/{resourceArn}
 # operationId: UntagResource
-export def "tags untag-resource" [
+export def "untag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1273,7 +1273,7 @@ export def "tags untag-resource" [
 #
 # POST /updateDeletionProtection
 # operationId: UpdateDeletionProtection
-export def "update-deletion-protection update" [
+export def "update-deletion-protection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1324,7 +1324,7 @@ export def "update-deletion-protection update" [
 # operationId: UpdateIncidentRecord
 # --chatChannel shape: {chatbotSns?: any, empty?: any}
 # --notificationTargets item shape: {snsTopicArn?: any}
-export def "update-incident-record update" [
+export def "update-incident-record" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1379,7 +1379,7 @@ export def "update-incident-record update" [
 # POST /updateRelatedItems
 # operationId: UpdateRelatedItems
 # --relatedItemsUpdate shape: {itemToAdd?: any, itemToRemove?: any}
-export def "update-related-items update" [
+export def "update-related-items" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1429,7 +1429,7 @@ export def "update-related-items update" [
 # POST /updateReplicationSet
 # operationId: UpdateReplicationSet
 # --actions item shape: {addRegionAction?: any, deleteRegionAction?: any}
-export def "update-replication-set update" [
+export def "update-replication-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1482,7 +1482,7 @@ export def "update-replication-set update" [
 # --chatChannel shape: {chatbotSns?: any, empty?: any}
 # --incidentTemplateNotificationTargets item shape: {snsTopicArn?: any}
 # --integrations item shape: {pagerDutyConfiguration?: any}
-export def "update-response-plan update" [
+export def "update-response-plan" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1542,7 +1542,7 @@ export def "update-response-plan update" [
 # POST /updateTimelineEvent
 # operationId: UpdateTimelineEvent
 # --eventReferences item shape: {relatedItemId?: any, resource?: any}
-export def "update-timeline-event update" [
+export def "update-timeline-event" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

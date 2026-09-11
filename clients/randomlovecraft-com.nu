@@ -97,7 +97,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "books get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-books" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -121,7 +121,7 @@ export def commands []: nothing -> table {
 #
 # GET /books
 # operationId: get-books
-export def "books get" [
+export def "get-books" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -155,7 +155,7 @@ export def "books get" [
 #
 # GET /books/{id}/sentences
 # operationId: get-sentences-from-book
-export def "books-sentences get" [
+export def "get-sentences-from-book" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -193,7 +193,7 @@ export def "books-sentences get" [
 #
 # GET /sentences
 # operationId: get-sentences
-export def "sentences get" [
+export def "get-sentences" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -229,7 +229,7 @@ export def "sentences get" [
 #
 # GET /sentences/{id}
 # operationId: get-specific-sentence
-export def "sentences get-specific" [
+export def "get-specific-sentence" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

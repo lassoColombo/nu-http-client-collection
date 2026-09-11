@@ -130,7 +130,7 @@ def metrics-granularity-completer [] { ["DAILY" "UNSPECIFIED_GRANULARITY" "WEEKL
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "processes list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "script-processes-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -154,7 +154,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/processes
 # operationId: script.processes.list
-export def "processes list" [
+export def "script-processes-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -211,7 +211,7 @@ export def "processes list" [
 #
 # GET /v1/processes:listScriptProcesses
 # operationId: script.processes.listScriptProcesses
-export def "processes-list-script-processes list" [
+export def "script-processes-list-script-processes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -267,7 +267,7 @@ export def "processes-list-script-processes list" [
 #
 # POST /v1/projects
 # operationId: script.projects.create
-export def "projects create" [
+export def "script-projects-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -318,7 +318,7 @@ export def "projects create" [
 #
 # GET /v1/projects/{scriptId}
 # operationId: script.projects.get
-export def "projects get" [
+export def "script-projects-get" [
   script_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -366,7 +366,7 @@ export def "projects get" [
 #
 # GET /v1/projects/{scriptId}/content
 # operationId: script.projects.getContent
-export def "projects-content get" [
+export def "script-projects-get-content" [
   script_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -416,7 +416,7 @@ export def "projects-content get" [
 # PUT /v1/projects/{scriptId}/content
 # operationId: script.projects.updateContent
 # --files item shape: {createTime?: string, functionSet?: record, lastModifyUser?: record, name?: string, source?: string, type?: "ENUM_TYPE_UNSPECIFIED"|"SERVER_JS"|"HTML"|"JSON", updateTime?: string}
-export def "projects-content update" [
+export def "script-projects-update-content" [
   script_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -469,7 +469,7 @@ export def "projects-content update" [
 #
 # GET /v1/projects/{scriptId}/deployments
 # operationId: script.projects.deployments.list
-export def "projects-deployments list" [
+export def "script-projects-deployments-list" [
   script_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -519,7 +519,7 @@ export def "projects-deployments list" [
 #
 # POST /v1/projects/{scriptId}/deployments
 # operationId: script.projects.deployments.create
-export def "projects-deployments create" [
+export def "script-projects-deployments-create" [
   script_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -574,7 +574,7 @@ export def "projects-deployments create" [
 #
 # DELETE /v1/projects/{scriptId}/deployments/{deploymentId}
 # operationId: script.projects.deployments.delete
-export def "projects-deployments delete" [
+export def "script-projects-deployments-delete" [
   script_id: string
   deployment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -624,7 +624,7 @@ export def "projects-deployments delete" [
 #
 # GET /v1/projects/{scriptId}/deployments/{deploymentId}
 # operationId: script.projects.deployments.get
-export def "projects-deployments get" [
+export def "script-projects-deployments-get" [
   script_id: string
   deployment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -675,7 +675,7 @@ export def "projects-deployments get" [
 # PUT /v1/projects/{scriptId}/deployments/{deploymentId}
 # operationId: script.projects.deployments.update
 # --deploymentConfig shape: {description?: string, manifestFileName?: string, scriptId?: string, versionNumber?: int}
-export def "projects-deployments update" [
+export def "script-projects-deployments-update" [
   script_id: string
   deployment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -729,7 +729,7 @@ export def "projects-deployments update" [
 #
 # GET /v1/projects/{scriptId}/metrics
 # operationId: script.projects.getMetrics
-export def "projects-metrics get" [
+export def "script-projects-get-metrics" [
   script_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -779,7 +779,7 @@ export def "projects-metrics get" [
 #
 # GET /v1/projects/{scriptId}/versions
 # operationId: script.projects.versions.list
-export def "projects-versions list" [
+export def "script-projects-versions-list" [
   script_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -829,7 +829,7 @@ export def "projects-versions list" [
 #
 # POST /v1/projects/{scriptId}/versions
 # operationId: script.projects.versions.create
-export def "projects-versions create" [
+export def "script-projects-versions-create" [
   script_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -884,7 +884,7 @@ export def "projects-versions create" [
 #
 # GET /v1/projects/{scriptId}/versions/{versionNumber}
 # operationId: script.projects.versions.get
-export def "projects-versions get" [
+export def "script-projects-versions-get" [
   script_id: string
   version_number: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -934,7 +934,7 @@ export def "projects-versions get" [
 #
 # POST /v1/scripts/{scriptId}:run
 # operationId: script.scripts.run
-export def "scripts create-run" [
+export def "script-scripts-run" [
   script_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

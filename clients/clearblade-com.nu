@@ -115,7 +115,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "admin-allapps get-dev-assets" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "dev-get-assets" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -139,7 +139,7 @@ export def commands []: nothing -> table {
 #
 # GET /admin/allapps
 # operationId: DevGetAssets
-export def "admin-allapps get-dev-assets" [
+export def "dev-get-assets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -176,7 +176,7 @@ export def "admin-allapps get-dev-assets" [
 #
 # GET /admin/allcollections
 # operationId: DevGetCollections
-export def "admin-allcollections get-dev-collections" [
+export def "dev-get-collections" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -215,7 +215,7 @@ export def "admin-allcollections get-dev-collections" [
 #
 # GET /admin/allsystems
 # operationId: GetSystems
-export def "admin-allsystems get-systems" [
+export def "get-systems" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -252,7 +252,7 @@ export def "admin-allsystems get-systems" [
 #
 # GET /admin/audit
 # operationId: GetAudit
-export def "admin-audit get" [
+export def "get-audit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -291,7 +291,7 @@ export def "admin-audit get" [
 #
 # GET /admin/audit/count
 # operationId: GetCounts
-export def "admin-audit-count get" [
+export def "get-counts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -328,7 +328,7 @@ export def "admin-audit-count get" [
 #
 # GET /admin/audit/{systemKey}
 # operationId: GetAuditDev
-export def "admin-audit get-dev" [
+export def "get-audit-dev" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -369,7 +369,7 @@ export def "admin-audit get-dev" [
 #
 # GET /admin/audit/{systemKey}/count
 # operationId: GetCountsDev
-export def "admin-audit-count get-dev" [
+export def "get-counts-dev" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -408,7 +408,7 @@ export def "admin-audit-count get-dev" [
 #
 # POST /admin/auth
 # operationId: AuthDev
-export def "admin-auth create-dev" [
+export def "auth-dev" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -447,7 +447,7 @@ export def "admin-auth create-dev" [
 #
 # POST /admin/checkauth
 # operationId: VerifyAuth
-export def "admin-checkauth verify-auth" [
+export def "verify-auth" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -484,7 +484,7 @@ export def "admin-checkauth verify-auth" [
 #
 # DELETE /admin/collectionmanagement
 # operationId: DevDeleteCollection
-export def "admin-collectionmanagement delete-dev-collection" [
+export def "dev-delete-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -523,7 +523,7 @@ export def "admin-collectionmanagement delete-dev-collection" [
 #
 # POST /admin/collectionmanagement
 # operationId: DevCreateCollection
-export def "admin-collectionmanagement create-dev-collection" [
+export def "dev-create-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -567,7 +567,7 @@ export def "admin-collectionmanagement create-dev-collection" [
 # PUT /admin/collectionmanagement
 # operationId: DevUpdateCollection
 # --addColumn shape: {id: string, name: string, type: string}
-export def "admin-collectionmanagement update-dev-collection" [
+export def "dev-update-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -609,7 +609,7 @@ export def "admin-collectionmanagement update-dev-collection" [
 #
 # GET /admin/count/developers
 # operationId: GetAdminDevCount
-export def "admin-count-developers get-dev" [
+export def "get-admin-dev-count" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -646,7 +646,7 @@ export def "admin-count-developers get-dev" [
 #
 # GET /admin/count/systems
 # operationId: GetSystemCount
-export def "admin-count-systems get" [
+export def "get-system-count" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -683,7 +683,7 @@ export def "admin-count-systems get" [
 #
 # GET /admin/database/status
 # operationId: GetDatabaseStatus
-export def "admin-database-status get" [
+export def "get-database-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -717,7 +717,7 @@ export def "admin-database-status get" [
 #
 # PUT /admin/developers/{systemKey}
 # operationId: AdminOwnerChange
-export def "admin-developers update-owner-change" [
+export def "admin-owner-change" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -761,7 +761,7 @@ export def "admin-developers update-owner-change" [
 #
 # DELETE /admin/devices/keys/{systemKey}/{deviceName}
 # operationId: DeleteDeviceKeys
-export def "admin-devices-keys delete" [
+export def "delete-device-keys" [
   system_key: string
   device_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -802,7 +802,7 @@ export def "admin-devices-keys delete" [
 #
 # POST /admin/devices/keys/{systemKey}/{deviceName}
 # operationId: CreateRotatingKeys
-export def "admin-devices-keys create-rotating" [
+export def "create-rotating-keys" [
   system_key: string
   device_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -847,7 +847,7 @@ export def "admin-devices-keys create-rotating" [
 #
 # DELETE /admin/devices/{systemKey}
 # operationId: DeleteDevicesAdmin
-export def "admin-devices delete" [
+export def "delete-devices-admin" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -888,7 +888,7 @@ export def "admin-devices delete" [
 #
 # GET /admin/devices/{systemKey}
 # operationId: GetSystemDevices
-export def "admin-devices list" [
+export def "get-system-devices" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -931,7 +931,7 @@ export def "admin-devices list" [
 # operationId: UpdateDevicesAdmin
 # --$set shape: {[columnName]?: any}
 # --query item shape: {EQ?: list, GT?: list, GTE?: list, LT?: list, LTE?: list, NEQ?: list, RE?: list}
-export def "admin-devices update" [
+export def "update-devices-admin" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -975,7 +975,7 @@ export def "admin-devices update" [
 #
 # DELETE /admin/devices/{systemKey}/{name}
 # operationId: DeleteSystemDevice
-export def "admin-devices delete-system" [
+export def "delete-system-device" [
   system_key: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1016,7 +1016,7 @@ export def "admin-devices delete-system" [
 #
 # GET /admin/devices/{systemKey}/{name}
 # operationId: GetSystemDevice
-export def "admin-devices get-system" [
+export def "get-system-device" [
   system_key: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1057,7 +1057,7 @@ export def "admin-devices get-system" [
 #
 # POST /admin/devices/{systemKey}/{name}
 # operationId: CreateSystemDevice
-export def "admin-devices create-system" [
+export def "create-system-device" [
   system_key: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1112,7 +1112,7 @@ export def "admin-devices create-system" [
 #
 # PUT /admin/devices/{systemKey}/{name}
 # operationId: UpdateSystemDevice
-export def "admin-devices update-system" [
+export def "update-system-device" [
   system_key: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1166,7 +1166,7 @@ export def "admin-devices update-system" [
 #
 # GET /admin/edges/template/{systemKey}
 # operationId: GetEdgeTemplate
-export def "admin-edges-template get" [
+export def "get-edge-template" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1206,7 +1206,7 @@ export def "admin-edges-template get" [
 # PUT /admin/edges/template/{systemKey}/{edgeName}
 # operationId: UpdateEdgeTemplate
 # --def_module shape: {module?: "trigger"|"service"|"library"}
-export def "admin-edges-template update" [
+export def "update-edge-template" [
   system_key: string
   edge_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1252,7 +1252,7 @@ export def "admin-edges-template update" [
 #
 # GET /admin/edges/{systemKey}
 # operationId: GetEdges
-export def "admin-edges list" [
+export def "get-edges" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1291,7 +1291,7 @@ export def "admin-edges list" [
 #
 # GET /admin/edges/{systemKey}/control
 # operationId: GetAdapterEdges
-export def "admin-edges-control get-adapter" [
+export def "get-adapter-edges" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1330,7 +1330,7 @@ export def "admin-edges-control get-adapter" [
 #
 # DELETE /admin/edges/{systemKey}/{edgeName}
 # operationId: DeleteEdge
-export def "admin-edges delete" [
+export def "delete-edge" [
   system_key: string
   edge_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1371,7 +1371,7 @@ export def "admin-edges delete" [
 #
 # GET /admin/edges/{systemKey}/{edgeName}
 # operationId: GetEdge
-export def "admin-edges get" [
+export def "get-edge" [
   system_key: string
   edge_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1412,7 +1412,7 @@ export def "admin-edges get" [
 #
 # POST /admin/edges/{systemKey}/{edgeName}
 # operationId: CreateEdge
-export def "admin-edges create" [
+export def "create-edge" [
   system_key: string
   edge_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1466,7 +1466,7 @@ export def "admin-edges create" [
 #
 # PUT /admin/edges/{systemKey}/{edgeName}
 # operationId: UpdateEdge
-export def "admin-edges update" [
+export def "update-edge" [
   system_key: string
   edge_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1520,7 +1520,7 @@ export def "admin-edges update" [
 #
 # POST /admin/logout
 # operationId: DevLogout
-export def "admin-logout create-dev" [
+export def "dev-logout" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1557,7 +1557,7 @@ export def "admin-logout create-dev" [
 #
 # GET /admin/pkey
 # operationId: GetLicenseKey
-export def "admin-pkey get-license-key" [
+export def "get-license-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1594,7 +1594,7 @@ export def "admin-pkey get-license-key" [
 #
 # GET /admin/platform/developer
 # operationId: GetDev
-export def "admin-platform-developer get-dev" [
+export def "get-dev" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1633,7 +1633,7 @@ export def "admin-platform-developer get-dev" [
 #
 # POST /admin/platform/developer
 # operationId: DisableDev
-export def "admin-platform-developer disable-dev" [
+export def "disable-dev" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1676,7 +1676,7 @@ export def "admin-platform-developer disable-dev" [
 #
 # GET /admin/platform/developers
 # operationId: GetDevs
-export def "admin-platform-developers get-devs" [
+export def "get-devs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1718,7 +1718,7 @@ export def "admin-platform-developers get-devs" [
 #
 # GET /admin/platform/systems
 # operationId: GetSystemUpdates
-export def "admin-platform-systems get-updates" [
+export def "get-system-updates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1757,7 +1757,7 @@ export def "admin-platform-systems get-updates" [
 #
 # GET /admin/platform/systems/{systemKey}
 # operationId: GetSystemUpdatesDev
-export def "admin-platform-systems get-updates-dev" [
+export def "get-system-updates-dev" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1798,7 +1798,7 @@ export def "admin-platform-systems get-updates-dev" [
 #
 # GET /admin/platform/{systemKey}
 # operationId: GetSystemStatus
-export def "admin-platform get-system-status" [
+export def "get-system-status" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1837,7 +1837,7 @@ export def "admin-platform get-system-status" [
 #
 # GET /admin/portals/{systemKey}
 # operationId: GetPortalInfo
-export def "admin-portals get" [
+export def "get-portal-info" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1876,7 +1876,7 @@ export def "admin-portals get" [
 #
 # PUT /admin/putpass
 # operationId: ChangeDevPassword
-export def "admin-putpass update-change-dev-password" [
+export def "change-dev-password" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1918,7 +1918,7 @@ export def "admin-putpass update-change-dev-password" [
 #
 # POST /admin/reg
 # operationId: RegDev
-export def "admin-reg create-dev" [
+export def "reg-dev" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1960,7 +1960,7 @@ export def "admin-reg create-dev" [
 #
 # PUT /admin/regensystemsecret
 # operationId: RegenSecret
-export def "admin-regensystemsecret update-regen-secret" [
+export def "regen-secret" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2001,7 +2001,7 @@ export def "admin-regensystemsecret update-regen-secret" [
 #
 # POST /admin/resetpassword
 # operationId: ResetPassword
-export def "admin-resetpassword reset-password" [
+export def "reset-password" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2043,7 +2043,7 @@ export def "admin-resetpassword reset-password" [
 #
 # DELETE /admin/settings/email-service
 # operationId: DeleteEmailSettings
-export def "admin-settings-email-service delete" [
+export def "delete-email-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2080,7 +2080,7 @@ export def "admin-settings-email-service delete" [
 #
 # GET /admin/settings/email-service
 # operationId: EmailSettings
-export def "admin-settings-email-service get" [
+export def "email-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2117,7 +2117,7 @@ export def "admin-settings-email-service get" [
 #
 # POST /admin/settings/email-service
 # operationId: CreateEmailCommunication
-export def "admin-settings-email-service create-communication" [
+export def "create-email-communication" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2168,7 +2168,7 @@ export def "admin-settings-email-service create-communication" [
 #
 # PUT /admin/settings/email-service
 # operationId: UpdateEmailSettings
-export def "admin-settings-email-service update" [
+export def "update-email-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2219,7 +2219,7 @@ export def "admin-settings-email-service update" [
 #
 # POST /admin/settings/email-service/test
 # operationId: TestEmail
-export def "admin-settings-email-service-test test" [
+export def "test-email" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2260,7 +2260,7 @@ export def "admin-settings-email-service-test test" [
 #
 # GET /admin/settings/security
 # operationId: ViewSecurity
-export def "admin-settings-security get-view" [
+export def "view-security" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2298,7 +2298,7 @@ export def "admin-settings-security get-view" [
 # PUT /admin/settings/security
 # operationId: UpdateSecurity
 # --two_factor_auth shape: {enabled?: bool}
-export def "admin-settings-security update" [
+export def "update-security" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2340,7 +2340,7 @@ export def "admin-settings-security update" [
 #
 # DELETE /admin/settings/sms-service
 # operationId: DeleteSMSSettings
-export def "admin-settings-sms-service delete" [
+export def "delete-sms-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2377,7 +2377,7 @@ export def "admin-settings-sms-service delete" [
 #
 # GET /admin/settings/sms-service
 # operationId: SMSSettings
-export def "admin-settings-sms-service get" [
+export def "sms-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2414,7 +2414,7 @@ export def "admin-settings-sms-service get" [
 #
 # POST /admin/settings/sms-service
 # operationId: CreateSMSCommunication
-export def "admin-settings-sms-service create-communication" [
+export def "create-sms-communication" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2461,7 +2461,7 @@ export def "admin-settings-sms-service create-communication" [
 #
 # PUT /admin/settings/sms-service
 # operationId: UpdateSMSSettings
-export def "admin-settings-sms-service update" [
+export def "update-sms-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2508,7 +2508,7 @@ export def "admin-settings-sms-service update" [
 #
 # POST /admin/settings/sms-service/test
 # operationId: TestSMS
-export def "admin-settings-sms-service-test test" [
+export def "test-sms" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2549,7 +2549,7 @@ export def "admin-settings-sms-service-test test" [
 #
 # GET /admin/systems/{devEmail}
 # operationId: GetSystemsForDev
-export def "admin-systems get-for-dev" [
+export def "get-systems-for-dev" [
   dev_email: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2588,7 +2588,7 @@ export def "admin-systems get-for-dev" [
 #
 # GET /admin/triggers/definitions
 # operationId: GetTriggers
-export def "admin-triggers-definitions get" [
+export def "get-triggers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2625,7 +2625,7 @@ export def "admin-triggers-definitions get" [
 #
 # GET /admin/triggers/handlers/{systemKey}
 # operationId: GetTriggerHandlers
-export def "admin-triggers-handlers list" [
+export def "get-trigger-handlers" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2664,7 +2664,7 @@ export def "admin-triggers-handlers list" [
 #
 # DELETE /admin/triggers/handlers/{systemKey}/{name}
 # operationId: DeleteTriggerHandler
-export def "admin-triggers-handlers delete" [
+export def "delete-trigger-handler" [
   system_key: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2705,7 +2705,7 @@ export def "admin-triggers-handlers delete" [
 #
 # GET /admin/triggers/handlers/{systemKey}/{name}
 # operationId: GetTriggerHandler
-export def "admin-triggers-handlers get" [
+export def "get-trigger-handler" [
   system_key: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2747,7 +2747,7 @@ export def "admin-triggers-handlers get" [
 # POST /admin/triggers/handlers/{systemKey}/{name}
 # operationId: CreateTrigger
 # --key_value_pairs shape: {topic?: string}
-export def "admin-triggers-handlers create" [
+export def "create-trigger" [
   system_key: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2797,7 +2797,7 @@ export def "admin-triggers-handlers create" [
 # PUT /admin/triggers/handlers/{systemKey}/{name}
 # operationId: UpdateTriggerHandler
 # --key_value_pairs shape: {topic?: string}
-export def "admin-triggers-handlers update" [
+export def "update-trigger-handler" [
   system_key: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2846,7 +2846,7 @@ export def "admin-triggers-handlers update" [
 #
 # GET /admin/triggers/timers/{systemKey}
 # operationId: GetTimerHandlers
-export def "admin-triggers-timers get-handlers" [
+export def "get-timer-handlers" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2885,7 +2885,7 @@ export def "admin-triggers-timers get-handlers" [
 #
 # DELETE /admin/triggers/timers/{systemKey}/{name}
 # operationId: DeleteTimerHandler
-export def "admin-triggers-timers delete-handler" [
+export def "delete-timer-handler" [
   system_key: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2926,7 +2926,7 @@ export def "admin-triggers-timers delete-handler" [
 #
 # GET /admin/triggers/timers/{systemKey}/{name}
 # operationId: GetTimerHandler
-export def "admin-triggers-timers get-handler" [
+export def "get-timer-handler" [
   system_key: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2967,7 +2967,7 @@ export def "admin-triggers-timers get-handler" [
 #
 # POST /admin/triggers/timers/{systemKey}/{name}
 # operationId: create_timer_handler
-export def "admin-triggers-timers create-handler" [
+export def "create-timer-handler" [
   system_key: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3017,7 +3017,7 @@ export def "admin-triggers-timers create-handler" [
 #
 # PUT /admin/triggers/timers/{systemKey}/{name}
 # operationId: UpdateTimerHandler
-export def "admin-triggers-timers update-handler" [
+export def "update-timer-handler" [
   system_key: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3067,7 +3067,7 @@ export def "admin-triggers-timers update-handler" [
 #
 # DELETE /admin/user/{systemKey}
 # operationId: DeleteUser
-export def "admin-user delete" [
+export def "delete-user" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3108,7 +3108,7 @@ export def "admin-user delete" [
 #
 # GET /admin/user/{systemKey}
 # operationId: GetUserList
-export def "admin-user get-list" [
+export def "get-user-list" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3149,7 +3149,7 @@ export def "admin-user get-list" [
 #
 # POST /admin/user/{systemKey}
 # operationId: AddUser
-export def "admin-user create" [
+export def "add-user" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3194,7 +3194,7 @@ export def "admin-user create" [
 # PUT /admin/user/{systemKey}
 # operationId: UserChangeUserInfo
 # --changes shape: {roles: any}
-export def "admin-user get-change" [
+export def "user-change-user-info" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3238,7 +3238,7 @@ export def "admin-user get-change" [
 #
 # GET /admin/user/{systemKey}/columns
 # operationId: GetUserColumnData
-export def "admin-user-columns get-data" [
+export def "get-user-column-data" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3277,7 +3277,7 @@ export def "admin-user-columns get-data" [
 #
 # POST /admin/user/{systemKey}/columns
 # operationId: AddColumn
-export def "admin-user-columns create" [
+export def "add-column" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3321,7 +3321,7 @@ export def "admin-user-columns create" [
 #
 # DELETE /admin/user/{systemKey}/roles
 # operationId: DeleteRoles
-export def "admin-user-roles delete" [
+export def "delete-roles" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3362,7 +3362,7 @@ export def "admin-user-roles delete" [
 #
 # GET /admin/user/{systemKey}/roles
 # operationId: GetRoles
-export def "admin-user-roles get" [
+export def "get-roles" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3403,7 +3403,7 @@ export def "admin-user-roles get" [
 #
 # POST /admin/user/{systemKey}/roles
 # operationId: AddRole
-export def "admin-user-roles create" [
+export def "add-role" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3451,7 +3451,7 @@ export def "admin-user-roles create" [
 # PUT /admin/user/{systemKey}/roles
 # operationId: SettingsChanges
 # --changes shape: {allcollections?: any, allservices?: record, collections?: any, deployments?: record, description?: string, devices?: record, edges?: any, msgHistory?: record, portals?: any, roles?: record, services?: any, topics?: any, triggers?: record, users?: record}
-export def "admin-user-roles changes-settings" [
+export def "settings-changes" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3495,7 +3495,7 @@ export def "admin-user-roles changes-settings" [
 #
 # GET /admin/user/{systemKey}/roles/count
 # operationId: GetRolesCount
-export def "admin-user-roles-count get" [
+export def "get-roles-count" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3536,7 +3536,7 @@ export def "admin-user-roles-count get" [
 #
 # GET /admin/userinfo
 # operationId: GetDevInfo
-export def "admin-userinfo get-dev" [
+export def "get-dev-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3573,7 +3573,7 @@ export def "admin-userinfo get-dev" [
 #
 # PUT /admin/userinfo
 # operationId: UpdateDev2FA
-export def "admin-userinfo update-dev2-fa" [
+export def "update-dev2-fa" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3616,7 +3616,7 @@ export def "admin-userinfo update-dev2-fa" [
 #
 # GET /admin/v/4/service_caches/{systemKey}
 # operationId: GetSharedCache
-export def "admin-v-4-service-caches get-shared" [
+export def "get-shared-cache" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3655,7 +3655,7 @@ export def "admin-v-4-service-caches get-shared" [
 #
 # DELETE /admin/v/4/service_caches/{systemKey}/{cacheName}
 # operationId: DeleteSharedCache
-export def "admin-v-4-service-caches delete-shared" [
+export def "delete-shared-cache" [
   system_key: string
   cache_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3696,7 +3696,7 @@ export def "admin-v-4-service-caches delete-shared" [
 #
 # POST /admin/v/4/service_caches/{systemKey}/{cacheName}
 # operationId: addSharedCache
-export def "admin-v-4-service-caches create-shared" [
+export def "add-shared-cache" [
   system_key: string
   cache_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3743,7 +3743,7 @@ export def "admin-v-4-service-caches create-shared" [
 #
 # PUT /admin/v/4/service_caches/{systemKey}/{cacheName}
 # operationId: UpdateSharedCache
-export def "admin-v-4-service-caches update-shared" [
+export def "update-shared-cache" [
   system_key: string
   cache_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3789,7 +3789,7 @@ export def "admin-v-4-service-caches update-shared" [
 #
 # DELETE /admin/v/4/session/{systemKey}/device
 # operationId: DeleteDeviceSession
-export def "admin-v-4-session-device delete" [
+export def "delete-device-session" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3830,7 +3830,7 @@ export def "admin-v-4-session-device delete" [
 #
 # GET /admin/v/4/session/{systemKey}/device
 # operationId: GetDeviceSession
-export def "admin-v-4-session-device get" [
+export def "get-device-session" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3871,7 +3871,7 @@ export def "admin-v-4-session-device get" [
 #
 # GET /admin/v/4/session/{systemKey}/device/count
 # operationId: GetDeviceSessionCount
-export def "admin-v-4-session-device-count get" [
+export def "get-device-session-count" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3912,7 +3912,7 @@ export def "admin-v-4-session-device-count get" [
 #
 # DELETE /admin/v/4/session/{systemKey}/user
 # operationId: DeleteUserSession
-export def "admin-v-4-session-user delete" [
+export def "delete-user-session" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3953,7 +3953,7 @@ export def "admin-v-4-session-user delete" [
 #
 # GET /admin/v/4/session/{systemKey}/user
 # operationId: GetUserSession
-export def "admin-v-4-session-user get" [
+export def "get-user-session" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3994,7 +3994,7 @@ export def "admin-v-4-session-user get" [
 #
 # GET /admin/v/4/session/{systemKey}/user/count
 # operationId: GetUserSessionCount
-export def "admin-v-4-session-user-count get" [
+export def "get-user-session-count" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4035,7 +4035,7 @@ export def "admin-v-4-session-user-count get" [
 #
 # DELETE /admin/v/4/systemmanagement
 # operationId: DeleteSystem
-export def "admin-v-4-systemmanagement delete-system" [
+export def "delete-system" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4074,7 +4074,7 @@ export def "admin-v-4-systemmanagement delete-system" [
 #
 # GET /admin/v/4/systemmanagement
 # operationId: GetSystemInfo
-export def "admin-v-4-systemmanagement get-system" [
+export def "get-system-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4113,7 +4113,7 @@ export def "admin-v-4-systemmanagement get-system" [
 #
 # POST /admin/v/4/systemmanagement
 # operationId: CreateSystem
-export def "admin-v-4-systemmanagement create-system" [
+export def "create-system" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4155,7 +4155,7 @@ export def "admin-v-4-systemmanagement create-system" [
 #
 # PUT /admin/v/4/systemmanagement
 # operationId: UpdateSystem
-export def "admin-v-4-systemmanagement update-system" [
+export def "update-system" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4207,7 +4207,7 @@ export def "admin-v-4-systemmanagement update-system" [
 #
 # GET /admin/v/4/webhook/{systemKey}
 # operationId: GetWebhooks
-export def "admin-v-4-webhook get" [
+export def "get-webhooks" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4246,7 +4246,7 @@ export def "admin-v-4-webhook get" [
 #
 # DELETE /admin/v/4/webhook/{systemKey}/{name}
 # operationId: DeleteWebhook
-export def "admin-v-4-webhook delete" [
+export def "delete-webhook" [
   system_key: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4287,7 +4287,7 @@ export def "admin-v-4-webhook delete" [
 #
 # POST /admin/v/4/webhook/{systemKey}/{name}
 # operationId: CreateWebhook
-export def "admin-v-4-webhook create" [
+export def "create-webhook" [
   system_key: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4335,7 +4335,7 @@ export def "admin-v-4-webhook create" [
 #
 # PUT /admin/v/4/webhook/{systemKey}/{name}
 # operationId: UpdateWebhook
-export def "admin-v-4-webhook update" [
+export def "update-webhook" [
   system_key: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4381,7 +4381,7 @@ export def "admin-v-4-webhook update" [
 #
 # POST /admin/validate
 # operationId: SendValidation
-export def "admin-validate send-validation" [
+export def "send-validation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4422,7 +4422,7 @@ export def "admin-validate send-validation" [
 #
 # GET /admin/{systemKey}/sync/alledges/status
 # operationId: AllEdgeSyncStatus
-export def "admin-sync-alledges-status list-edge" [
+export def "all-edge-sync-status" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4461,7 +4461,7 @@ export def "admin-sync-alledges-status list-edge" [
 #
 # GET /admin/{systemKey}/sync/deployment/status/{deploymentName}
 # operationId: GetSyncStatus
-export def "admin-sync-deployment-status get" [
+export def "get-sync-status" [
   system_key: string
   deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4502,7 +4502,7 @@ export def "admin-sync-deployment-status get" [
 #
 # GET /admin/{systemKey}/sync/edge/status/{edgeName}
 # operationId: EdgeSyncStatus
-export def "admin-sync-edge-status sync" [
+export def "edge-sync-status" [
   system_key: string
   edge_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4543,7 +4543,7 @@ export def "admin-sync-edge-status sync" [
 #
 # POST /admin/{systemKey}/sync/retry
 # operationId: RetrySync
-export def "admin-sync-retry sync" [
+export def "retry-sync" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4590,7 +4590,7 @@ export def "admin-sync-retry sync" [
 #
 # GET /api/about
 # operationId: APIInfo
-export def "about get" [
+export def "api-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4624,7 +4624,7 @@ export def "about get" [
 #
 # GET /api/v/1/code/{systemKey}/{serviceName}
 # operationId: GetService
-export def "v-1-code get-service" [
+export def "get-service" [
   system_key: string
   service_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4665,7 +4665,7 @@ export def "v-1-code get-service" [
 #
 # POST /api/v/1/code/{systemKey}/{serviceName}
 # operationId: ExecuteService
-export def "v-1-code create-execute-service" [
+export def "execute-service" [
   system_key: string
   service_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4710,7 +4710,7 @@ export def "v-1-code create-execute-service" [
 #
 # DELETE /api/v/1/collection/{systemKey}/{collectionName}
 # operationId: DeleteCollectionData
-export def "v-1-collection delete-data" [
+export def "delete-collection-data" [
   system_key: string
   collection_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4753,7 +4753,7 @@ export def "v-1-collection delete-data" [
 #
 # GET /api/v/1/collection/{systemKey}/{collectionName}
 # operationId: GetCollectionData
-export def "v-1-collection get-data" [
+export def "get-collection-data" [
   system_key: string
   collection_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4796,7 +4796,7 @@ export def "v-1-collection get-data" [
 #
 # POST /api/v/1/collection/{systemKey}/{collectionName}
 # operationId: CreateCollectionData
-export def "v-1-collection create-data" [
+export def "create-collection-data" [
   system_key: string
   collection_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4843,7 +4843,7 @@ export def "v-1-collection create-data" [
 # operationId: UpdateCollectionData
 # --$set shape: {columnName?: any}
 # --query shape: {FILTERS?: list}
-export def "v-1-collection update-data" [
+export def "update-collection-data" [
   system_key: string
   collection_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4889,7 +4889,7 @@ export def "v-1-collection update-data" [
 #
 # DELETE /api/v/1/data/{collectionID}
 # operationId: DeleteCollectionDataAlt
-export def "v-1-data delete-collection-alt" [
+export def "delete-collection-data-alt" [
   collection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4930,7 +4930,7 @@ export def "v-1-data delete-collection-alt" [
 #
 # GET /api/v/1/data/{collectionID}
 # operationId: GetCollectionDataAlt
-export def "v-1-data get-collection-alt" [
+export def "get-collection-data-alt" [
   collection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4971,7 +4971,7 @@ export def "v-1-data get-collection-alt" [
 #
 # POST /api/v/1/data/{collectionID}
 # operationId: CreateCollectionDataAlt
-export def "v-1-data create-collection-alt" [
+export def "create-collection-data-alt" [
   collection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5016,7 +5016,7 @@ export def "v-1-data create-collection-alt" [
 # operationId: UpdateCollectionDataAlt
 # --$set shape: {columnName?: any}
 # --query shape: {FILTERS?: list}
-export def "v-1-data update-collection-alt" [
+export def "update-collection-data-alt" [
   collection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5060,7 +5060,7 @@ export def "v-1-data update-collection-alt" [
 #
 # GET /api/v/1/data/{collectionID}/columns
 # operationId: GetColumns
-export def "v-1-data-columns get" [
+export def "get-columns" [
   collection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5101,7 +5101,7 @@ export def "v-1-data-columns get" [
 #
 # DELETE /api/v/1/message/{systemKey}
 # operationId: DeleteMessageHistory
-export def "v-1-message delete-history" [
+export def "delete-message-history" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5146,7 +5146,7 @@ export def "v-1-message delete-history" [
 #
 # GET /api/v/1/message/{systemKey}
 # operationId: GetMessageHistory
-export def "v-1-message get-history" [
+export def "get-message-history" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5191,7 +5191,7 @@ export def "v-1-message get-history" [
 #
 # POST /api/v/1/message/{systemKey}/publish
 # operationId: PublishMessage
-export def "v-1-message-publish publish" [
+export def "publish-message" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5236,7 +5236,7 @@ export def "v-1-message-publish publish" [
 #
 # GET /api/v/1/user
 # operationId: GetUsers
-export def "v-1-user get" [
+export def "get-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5275,7 +5275,7 @@ export def "v-1-user get" [
 #
 # POST /api/v/1/user/anon
 # operationId: AuthAnon
-export def "v-1-user-anon create-auth" [
+export def "auth-anon" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5313,7 +5313,7 @@ export def "v-1-user-anon create-auth" [
 #
 # POST /api/v/1/user/auth
 # operationId: AuthUser
-export def "v-1-user-auth create" [
+export def "auth-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5356,7 +5356,7 @@ export def "v-1-user-auth create" [
 #
 # POST /api/v/1/user/checkauth
 # operationId: UserCheckAuth
-export def "v-1-user-checkauth check-auth" [
+export def "user-check-auth" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5394,7 +5394,7 @@ export def "v-1-user-checkauth check-auth" [
 #
 # DELETE /api/v/1/user/info
 # operationId: DeleteUserAsUser
-export def "v-1-user-info delete" [
+export def "delete-user-as-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5437,7 +5437,7 @@ export def "v-1-user-info delete" [
 #
 # GET /api/v/1/user/info
 # operationId: GetUserInfo
-export def "v-1-user-info get" [
+export def "get-user-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5474,7 +5474,7 @@ export def "v-1-user-info get" [
 #
 # PUT /api/v/1/user/info
 # operationId: UpdateUserInfo
-export def "v-1-user-info update" [
+export def "update-user-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5515,7 +5515,7 @@ export def "v-1-user-info update" [
 #
 # POST /api/v/1/user/logout
 # operationId: UserLogout
-export def "v-1-user-logout create" [
+export def "user-logout" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5552,7 +5552,7 @@ export def "v-1-user-logout create" [
 #
 # PUT /api/v/1/user/pass
 # operationId: UpdateUserPass
-export def "v-1-user-pass update" [
+export def "update-user-pass" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5594,7 +5594,7 @@ export def "v-1-user-pass update" [
 #
 # POST /api/v/1/user/reg
 # operationId: RegUser
-export def "v-1-user-reg create" [
+export def "reg-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5638,7 +5638,7 @@ export def "v-1-user-reg create" [
 #
 # DELETE /api/v/2/devices/{SystemKey}
 # operationId: DeleteDevices
-export def "v-2-devices delete" [
+export def "delete-devices" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5679,7 +5679,7 @@ export def "v-2-devices delete" [
 #
 # GET /api/v/2/devices/{SystemKey}
 # operationId: GetDevices
-export def "v-2-devices get" [
+export def "get-devices" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5722,7 +5722,7 @@ export def "v-2-devices get" [
 # operationId: UpdateDevices
 # --$set shape: {[columnName]?: any}
 # --query item shape: {EQ?: list, GT?: list, GTE?: list, LT?: list, LTE?: list, NEQ?: list, RE?: list}
-export def "v-2-devices update" [
+export def "update-devices" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5766,7 +5766,7 @@ export def "v-2-devices update" [
 #
 # POST /api/v/2/devices/{SystemKey}/auth
 # operationId: AuthDevice
-export def "v-2-devices-auth create" [
+export def "auth-device" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5807,7 +5807,7 @@ export def "v-2-devices-auth create" [
 #
 # POST /api/v/2/devices/{systemKey}/{name}
 # operationId: AddDevice
-export def "v-2-devices create" [
+export def "add-device" [
   system_key: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5859,7 +5859,7 @@ export def "v-2-devices create" [
 #
 # PUT /api/v/2/devices/{systemKey}/{name}
 # operationId: UpdateDeviceInfo
-export def "v-2-devices update-get" [
+export def "update-device-info" [
   system_key: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5905,7 +5905,7 @@ export def "v-2-devices update-get" [
 #
 # GET /api/v/2/edges/{systemKey}
 # operationId: GetAllEdges
-export def "v-2-edges get-list" [
+export def "get-all-edges" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5946,7 +5946,7 @@ export def "v-2-edges get-list" [
 #
 # GET /api/v/3/allcollections/{systemKey}
 # operationId: GetCollections
-export def "v-3-allcollections get-collections" [
+export def "get-collections" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5985,7 +5985,7 @@ export def "v-3-allcollections get-collections" [
 #
 # GET /api/v/3/code/codemeta/{systemKey}
 # operationId: ReturnServiceSettings
-export def "v-3-code-codemeta get-return-service-settings" [
+export def "return-service-settings" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6024,7 +6024,7 @@ export def "v-3-code-codemeta get-return-service-settings" [
 #
 # DELETE /api/v/3/code/{systemKey}/timer/{name}
 # operationId: DeleteTimerByName
-export def "v-3-code-timer delete" [
+export def "delete-timer-by-name" [
   system_key: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6065,7 +6065,7 @@ export def "v-3-code-timer delete" [
 #
 # GET /api/v/3/code/{systemKey}/timer/{name}
 # operationId: GetTimerByName
-export def "v-3-code-timer get" [
+export def "get-timer-by-name" [
   system_key: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6106,7 +6106,7 @@ export def "v-3-code-timer get" [
 #
 # POST /api/v/3/code/{systemKey}/timer/{name}
 # operationId: CreateNewTimer
-export def "v-3-code-timer create-new" [
+export def "create-new-timer" [
   system_key: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6156,7 +6156,7 @@ export def "v-3-code-timer create-new" [
 #
 # PUT /api/v/3/code/{systemKey}/timer/{name}
 # operationId: UpdateTimerByName
-export def "v-3-code-timer update" [
+export def "update-timer-by-name" [
   system_key: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6206,7 +6206,7 @@ export def "v-3-code-timer update" [
 #
 # GET /api/v/3/code/{systemKey}/timers
 # operationId: GetAllTimers
-export def "v-3-code-timers get-list" [
+export def "get-all-timers" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6245,7 +6245,7 @@ export def "v-3-code-timers get-list" [
 #
 # DELETE /api/v/3/code/{systemKey}/trigger/{name}
 # operationId: DeleteTriggerByName
-export def "v-3-code-trigger delete" [
+export def "delete-trigger-by-name" [
   system_key: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6286,7 +6286,7 @@ export def "v-3-code-trigger delete" [
 #
 # GET /api/v/3/code/{systemKey}/trigger/{name}
 # operationId: GetTriggerByName
-export def "v-3-code-trigger get" [
+export def "get-trigger-by-name" [
   system_key: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6328,7 +6328,7 @@ export def "v-3-code-trigger get" [
 # POST /api/v/3/code/{systemKey}/trigger/{name}
 # operationId: CreateNewTrigger
 # --key_value_pairs shape: {topic?: string}
-export def "v-3-code-trigger create-new" [
+export def "create-new-trigger" [
   system_key: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6378,7 +6378,7 @@ export def "v-3-code-trigger create-new" [
 # PUT /api/v/3/code/{systemKey}/trigger/{name}
 # operationId: UpdateTriggerByName
 # --key_value_pairs shape: {topic?: string}
-export def "v-3-code-trigger update" [
+export def "update-trigger-by-name" [
   system_key: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6427,7 +6427,7 @@ export def "v-3-code-trigger update" [
 #
 # GET /api/v/3/code/{systemKey}/triggers
 # operationId: GetAllTrigger
-export def "v-3-code-triggers get-list" [
+export def "get-all-trigger" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6466,7 +6466,7 @@ export def "v-3-code-triggers get-list" [
 #
 # DELETE /api/v/3/collectionmanagement
 # operationId: DeleteCollection
-export def "v-3-collectionmanagement delete-collection" [
+export def "delete-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6506,7 +6506,7 @@ export def "v-3-collectionmanagement delete-collection" [
 #
 # POST /api/v/3/collectionmanagement
 # operationId: CreateCollection
-export def "v-3-collectionmanagement create-collection" [
+export def "create-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6551,7 +6551,7 @@ export def "v-3-collectionmanagement create-collection" [
 # PUT /api/v/3/collectionmanagement
 # operationId: UpdateCollection
 # --addColumn shape: {id: string, name: string, type: string}
-export def "v-3-collectionmanagement update-collection" [
+export def "update-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6594,7 +6594,7 @@ export def "v-3-collectionmanagement update-collection" [
 #
 # GET /api/v/3/devices/{systemKey}/columns
 # operationId: GetDeviceTableSchema
-export def "v-3-devices-columns get-table-schema" [
+export def "get-device-table-schema" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6633,7 +6633,7 @@ export def "v-3-devices-columns get-table-schema" [
 #
 # GET /api/v/3/devices/{systemKey}/count
 # operationId: GetDeviceCount
-export def "v-3-devices-count get" [
+export def "get-device-count" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6672,7 +6672,7 @@ export def "v-3-devices-count get" [
 #
 # GET /api/v/3/edges/{systemKey}/columns
 # operationId: GetEdgeTableSchema
-export def "v-3-edges-columns get-table-schema" [
+export def "get-edge-table-schema" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6711,7 +6711,7 @@ export def "v-3-edges-columns get-table-schema" [
 #
 # GET /api/v/3/edges/{systemKey}/count
 # operationId: GetEdgeCount
-export def "v-3-edges-count get" [
+export def "get-edge-count" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6750,7 +6750,7 @@ export def "v-3-edges-count get" [
 #
 # DELETE /api/v/3/edges/{systemKey}/{name}
 # operationId: DeleteEdgeByName
-export def "v-3-edges delete" [
+export def "delete-edge-by-name" [
   system_key: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6791,7 +6791,7 @@ export def "v-3-edges delete" [
 #
 # GET /api/v/3/edges/{systemKey}/{name}
 # operationId: GetEdgeDataByName
-export def "v-3-edges get-data" [
+export def "get-edge-data-by-name" [
   system_key: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6832,7 +6832,7 @@ export def "v-3-edges get-data" [
 #
 # POST /api/v/3/edges/{systemKey}/{name}
 # operationId: CreateNewEdge
-export def "v-3-edges create-new" [
+export def "create-new-edge" [
   system_key: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6886,7 +6886,7 @@ export def "v-3-edges create-new" [
 #
 # PUT /api/v/3/edges/{systemKey}/{name}
 # operationId: UpdateEdgeByName
-export def "v-3-edges update" [
+export def "update-edge-by-name" [
   system_key: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6940,7 +6940,7 @@ export def "v-3-edges update" [
 #
 # GET /api/v/3/{systemKey}/deployments
 # operationId: GetAllDeployments
-export def "v-3-deployments get-list" [
+export def "get-all-deployments" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6982,7 +6982,7 @@ export def "v-3-deployments get-list" [
 # POST /api/v/3/{systemKey}/deployments
 # operationId: CreateDeployment
 # --assets item shape: {asset_class?: string, asset_id?: string, sync_to_edge?: bool, sync_to_platform?: bool}
-export def "v-3-deployments create" [
+export def "create-deployment" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7027,7 +7027,7 @@ export def "v-3-deployments create" [
 #
 # DELETE /api/v/3/{systemKey}/deployments/{deploymentName}
 # operationId: DeleteDeployment
-export def "v-3-deployments delete" [
+export def "delete-deployment" [
   system_key: string
   deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7068,7 +7068,7 @@ export def "v-3-deployments delete" [
 #
 # GET /api/v/3/{systemKey}/deployments/{deploymentName}
 # operationId: GetADeployment
-export def "v-3-deployments get" [
+export def "get-a-deployment" [
   system_key: string
   deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7111,7 +7111,7 @@ export def "v-3-deployments get" [
 # operationId: UpdateDeployment
 # --assets shape: {add?: list, remove?: list}
 # --edges shape: {adds?: list<string>, removes?: list<string>}
-export def "v-3-deployments update" [
+export def "update-deployment" [
   system_key: string
   deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7157,7 +7157,7 @@ export def "v-3-deployments update" [
 #
 # GET /api/v/4/bucket_sets/{systemKey}
 # operationId: GetBucketsData
-export def "v-4-bucket-sets get-data" [
+export def "get-buckets-data" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7196,7 +7196,7 @@ export def "v-4-bucket-sets get-data" [
 #
 # GET /api/v/4/bucket_sets/{systemKey}/{deploymentName}
 # operationId: GetSingleBucketData
-export def "v-4-bucket-sets get-single-data" [
+export def "get-single-bucket-data" [
   system_key: string
   deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7237,7 +7237,7 @@ export def "v-4-bucket-sets get-single-data" [
 #
 # POST /api/v/4/bucket_sets/{systemKey}/{deploymentName}/file/copy
 # operationId: CopyBucketFile
-export def "v-4-bucket-sets-file-copy copy" [
+export def "copy-bucket-file" [
   system_key: string
   deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7285,7 +7285,7 @@ export def "v-4-bucket-sets-file-copy copy" [
 #
 # POST /api/v/4/bucket_sets/{systemKey}/{deploymentName}/file/create
 # operationId: CreateBucketFile
-export def "v-4-bucket-sets-file-create create" [
+export def "create-bucket-file" [
   system_key: string
   deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7332,7 +7332,7 @@ export def "v-4-bucket-sets-file-create create" [
 #
 # POST /api/v/4/bucket_sets/{systemKey}/{deploymentName}/file/delete
 # operationId: DeleteBucketFile
-export def "v-4-bucket-sets-file-delete delete" [
+export def "delete-bucket-file" [
   system_key: string
   deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7378,7 +7378,7 @@ export def "v-4-bucket-sets-file-delete delete" [
 #
 # GET /api/v/4/bucket_sets/{systemKey}/{deploymentName}/file/meta
 # operationId: GetBoxFilesMeta
-export def "v-4-bucket-sets-file-meta get-box" [
+export def "get-box-files-meta" [
   system_key: string
   deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7422,7 +7422,7 @@ export def "v-4-bucket-sets-file-meta get-box" [
 #
 # POST /api/v/4/bucket_sets/{systemKey}/{deploymentName}/file/move
 # operationId: MoveBucketFile
-export def "v-4-bucket-sets-file-move move" [
+export def "move-bucket-file" [
   system_key: string
   deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7470,7 +7470,7 @@ export def "v-4-bucket-sets-file-move move" [
 #
 # GET /api/v/4/bucket_sets/{systemKey}/{deploymentName}/files
 # operationId: GetBoxFiles
-export def "v-4-bucket-sets-files get-box" [
+export def "get-box-files" [
   system_key: string
   deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7513,7 +7513,7 @@ export def "v-4-bucket-sets-files get-box" [
 #
 # DELETE /api/v/4/data/{systemKey}/{collectionName}/index
 # operationId: DeleteNonUniqueIndex
-export def "v-4-data-index delete-non-unique" [
+export def "delete-non-unique-index" [
   system_key: string
   collection_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7556,7 +7556,7 @@ export def "v-4-data-index delete-non-unique" [
 #
 # POST /api/v/4/data/{systemKey}/{collectionName}/index
 # operationId: CreateNonUniqueIndex
-export def "v-4-data-index create-non-unique" [
+export def "create-non-unique-index" [
   system_key: string
   collection_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7599,7 +7599,7 @@ export def "v-4-data-index create-non-unique" [
 #
 # GET /api/v/4/data/{systemKey}/{collectionName}/listindexes
 # operationId: GetIndexes
-export def "v-4-data-list-indexes get" [
+export def "get-indexes" [
   system_key: string
   collection_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7640,7 +7640,7 @@ export def "v-4-data-list-indexes get" [
 #
 # DELETE /api/v/4/data/{systemKey}/{collectionName}/uniqueindex
 # operationId: DeleteUniqueIndex
-export def "v-4-data-uniqueindex delete-unique-index" [
+export def "delete-unique-index" [
   system_key: string
   collection_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7683,7 +7683,7 @@ export def "v-4-data-uniqueindex delete-unique-index" [
 #
 # POST /api/v/4/data/{systemKey}/{collectionName}/uniqueindex
 # operationId: CreateUniqueIndex
-export def "v-4-data-uniqueindex create-unique-index" [
+export def "create-unique-index" [
   system_key: string
   collection_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7726,7 +7726,7 @@ export def "v-4-data-uniqueindex create-unique-index" [
 #
 # PUT /api/v/4/data/{systemKey}/{collectionName}/upsert
 # operationId: UpdateUpsert
-export def "v-4-data-upsert update" [
+export def "update-upsert" [
   system_key: string
   collection_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7769,7 +7769,7 @@ export def "v-4-data-upsert update" [
 #
 # GET /api/v/4/devices/{systemKey}/connectioncount
 # operationId: ConnectedDeviceCount
-export def "v-4-devices-connectioncount get-connected-count" [
+export def "connected-device-count" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7808,7 +7808,7 @@ export def "v-4-devices-connectioncount get-connected-count" [
 #
 # GET /api/v/4/devices/{systemKey}/connections
 # operationId: GetConnectedDeviceList
-export def "v-4-devices-connections get-connected-list" [
+export def "get-connected-device-list" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7847,7 +7847,7 @@ export def "v-4-devices-connections get-connected-list" [
 #
 # GET /api/v/4/devices/{systemKey}/connections/{name}
 # operationId: GetConnectedDeviceInfo
-export def "v-4-devices-connections get-connected" [
+export def "get-connected-device-info" [
   system_key: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7888,7 +7888,7 @@ export def "v-4-devices-connections get-connected" [
 #
 # GET /api/v/4/external-db/{systemKey}
 # operationId: GetAllExternalDB
-export def "v-4-external-db get-list" [
+export def "get-all-external-db" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7928,7 +7928,7 @@ export def "v-4-external-db get-list" [
 # POST /api/v/4/external-db/{systemKey}
 # operationId: CreateExternalDB
 # --credentials shape: {address?: string, dbname?: string, password?: string, port?: string, user?: string}
-export def "v-4-external-db create" [
+export def "create-external-db" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7973,7 +7973,7 @@ export def "v-4-external-db create" [
 #
 # DELETE /api/v/4/external-db/{systemKey}/{name}
 # operationId: DeleteExternalDB
-export def "v-4-external-db delete" [
+export def "delete-external-db" [
   system_key: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8014,7 +8014,7 @@ export def "v-4-external-db delete" [
 #
 # GET /api/v/4/external-db/{systemKey}/{name}
 # operationId: GetExternalDB
-export def "v-4-external-db get" [
+export def "get-external-db" [
   system_key: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8055,7 +8055,7 @@ export def "v-4-external-db get" [
 #
 # PUT /api/v/4/external-db/{systemKey}/{name}
 # operationId: UpdateDatabaseCredentials
-export def "v-4-external-db update-database-credentials" [
+export def "update-database-credentials" [
   system_key: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8104,7 +8104,7 @@ export def "v-4-external-db update-database-credentials" [
 #
 # POST /api/v/4/external-db/{systemKey}/{name}/data
 # operationId: PerformDBOperation
-export def "v-4-external-db-data create-perform-operation" [
+export def "perform-db-operation" [
   system_key: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8149,7 +8149,7 @@ export def "v-4-external-db-data create-perform-operation" [
 #
 # GET /api/v/4/message/{systemKey}/topics
 # operationId: GetTopics
-export def "v-4-message-topics get" [
+export def "get-topics" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8190,7 +8190,7 @@ export def "v-4-message-topics get" [
 #
 # GET /api/v/4/message/{systemKey}/topics/count
 # operationId: GetTopicCount
-export def "v-4-message-topics-count get" [
+export def "get-topic-count" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8230,7 +8230,7 @@ export def "v-4-message-topics-count get" [
 # PUT /api/v/4/user/manage
 # operationId: ChangeUserInfo
 # --changes shape: {password?: string, roles?: any}
-export def "v-4-user-manage get-change" [
+export def "change-user-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8272,7 +8272,7 @@ export def "v-4-user-manage get-change" [
 #
 # GET /api/v/4/webhook/execute/{systemKey}/{webhookName}
 # operationId: PayloadWebhookQuery
-export def "v-4-webhook-execute list-payload" [
+export def "payload-webhook-query" [
   system_key: string
   webhook_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8312,7 +8312,7 @@ export def "v-4-webhook-execute list-payload" [
 #
 # POST /api/v/4/webhook/execute/{systemKey}/{webhookName}
 # operationId: ExecuteWebhook
-export def "v-4-webhook-execute create" [
+export def "execute-webhook" [
   system_key: string
   webhook_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8357,7 +8357,7 @@ export def "v-4-webhook-execute create" [
 #
 # GET /api/v/4/{SystemKey}/adapters
 # operationId: GetAdapters
-export def "v-4-adapters get" [
+export def "get-adapters" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8396,7 +8396,7 @@ export def "v-4-adapters get" [
 #
 # POST /api/v/4/{SystemKey}/adapters
 # operationId: addAdapter
-export def "v-4-adapters create" [
+export def "add-adapter" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8447,7 +8447,7 @@ export def "v-4-adapters create" [
 #
 # DELETE /api/v/4/{SystemKey}/adapters/{AdapterName}
 # operationId: DeleteAdapter
-export def "v-4-adapters delete" [
+export def "delete-adapter" [
   system_key: string
   adapter_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8488,7 +8488,7 @@ export def "v-4-adapters delete" [
 #
 # PUT /api/v/4/{SystemKey}/adapters/{AdapterName}
 # operationId: MapAdapterCommand
-export def "v-4-adapters update-map-command" [
+export def "map-adapter-command" [
   system_key: string
   adapter_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8543,7 +8543,7 @@ export def "v-4-adapters update-map-command" [
 #
 # PUT /api/v/4/{SystemKey}/adapters/{AdapterName}/control
 # operationId: AddEdgeCommand
-export def "v-4-adapters-control create-edge-command" [
+export def "add-edge-command" [
   system_key: string
   adapter_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8589,7 +8589,7 @@ export def "v-4-adapters-control create-edge-command" [
 #
 # GET /api/v/4/{SystemKey}/adapters/{AdapterName}/files
 # operationId: AdapterConfig
-export def "v-4-adapters-files get-config" [
+export def "adapter-config" [
   system_key: string
   adapter_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8630,7 +8630,7 @@ export def "v-4-adapters-files get-config" [
 #
 # POST /api/v/4/{SystemKey}/adapters/{AdapterName}/files
 # operationId: updateFileInfo
-export def "v-4-adapters-files update-get" [
+export def "update-file-info" [
   system_key: string
   adapter_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8678,7 +8678,7 @@ export def "v-4-adapters-files update-get" [
 #
 # DELETE /api/v/4/{SystemKey}/adapters/{AdapterName}/files/{fileName}
 # operationId: DeleteFile
-export def "v-4-adapters-files delete" [
+export def "delete-file" [
   system_key: string
   adapter_name: string
   file_name: string
@@ -8721,7 +8721,7 @@ export def "v-4-adapters-files delete" [
 #
 # GET /api/v/4/{SystemKey}/adapters/{AdapterName}/files/{fileName}
 # operationId: FileDownload
-export def "v-4-adapters-files download" [
+export def "file-download" [
   system_key: string
   adapter_name: string
   file_name: string
@@ -8764,7 +8764,7 @@ export def "v-4-adapters-files download" [
 #
 # PUT /api/v/4/{SystemKey}/adapters/{AdapterName}/files/{fileName}
 # operationId: updateExistingFileContent
-export def "v-4-adapters-files update-existing-content" [
+export def "update-existing-file-content" [
   system_key: string
   adapter_name: string
   file_name: string
@@ -8811,7 +8811,7 @@ export def "v-4-adapters-files update-existing-content" [
 #
 # GET /api/v/4/{systemKey}/code/failed
 # operationId: GetFailedServiceQuery
-export def "v-4-code-failed get-service-list" [
+export def "get-failed-service-query" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8852,7 +8852,7 @@ export def "v-4-code-failed get-service-list" [
 #
 # GET /codeadmin/failed
 # operationId: GetFailedServices
-export def "codeadmin-failed get-services" [
+export def "get-failed-services" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8889,7 +8889,7 @@ export def "codeadmin-failed get-services" [
 #
 # DELETE /codeadmin/failed/{systemKey}
 # operationId: DeleteFailedService
-export def "codeadmin-failed delete-service" [
+export def "delete-failed-service" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8932,7 +8932,7 @@ export def "codeadmin-failed delete-service" [
 #
 # GET /codeadmin/failed/{systemKey}
 # operationId: GetSystemFailedServices
-export def "codeadmin-failed get-system-services" [
+export def "get-system-failed-services" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8971,7 +8971,7 @@ export def "codeadmin-failed get-system-services" [
 #
 # POST /codeadmin/failed/{systemKey}
 # operationId: RetryFailedService
-export def "codeadmin-failed create-retry-service" [
+export def "retry-failed-service" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9014,7 +9014,7 @@ export def "codeadmin-failed create-retry-service" [
 #
 # GET /codeadmin/v/2/history/library/{systemKey}/{libName}
 # operationId: LibraryHistory
-export def "codeadmin-v-2-history-library get" [
+export def "library-history" [
   system_key: string
   lib_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9055,7 +9055,7 @@ export def "codeadmin-v-2-history-library get" [
 #
 # GET /codeadmin/v/2/history/library/{systemKey}/{libName}/{libVersion}
 # operationId: GetOldLibraryVersion
-export def "codeadmin-v-2-history-library get-old-version" [
+export def "get-old-library-version" [
   system_key: string
   lib_name: string
   lib_version: string
@@ -9098,7 +9098,7 @@ export def "codeadmin-v-2-history-library get-old-version" [
 #
 # GET /codeadmin/v/2/library/{systemKey}
 # operationId: GetLibraries
-export def "codeadmin-v-2-library get-libraries" [
+export def "get-libraries" [
   system_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9137,7 +9137,7 @@ export def "codeadmin-v-2-library get-libraries" [
 #
 # DELETE /codeadmin/v/2/library/{systemKey}/{libName}
 # operationId: DeleteLibrary
-export def "codeadmin-v-2-library delete" [
+export def "delete-library" [
   system_key: string
   lib_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9178,7 +9178,7 @@ export def "codeadmin-v-2-library delete" [
 #
 # GET /codeadmin/v/2/library/{systemKey}/{libName}
 # operationId: GetLibrary
-export def "codeadmin-v-2-library get" [
+export def "get-library" [
   system_key: string
   lib_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9219,7 +9219,7 @@ export def "codeadmin-v-2-library get" [
 #
 # POST /codeadmin/v/2/library/{systemKey}/{libName}
 # operationId: CreateLibrary
-export def "codeadmin-v-2-library create" [
+export def "create-library" [
   system_key: string
   lib_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9266,7 +9266,7 @@ export def "codeadmin-v-2-library create" [
 #
 # PUT /codeadmin/v/2/library/{systemKey}/{libName}
 # operationId: UpdateLibrary
-export def "codeadmin-v-2-library update" [
+export def "update-library" [
   system_key: string
   lib_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9313,7 +9313,7 @@ export def "codeadmin-v-2-library update" [
 #
 # GET /codeadmin/v/2/logs/{systemKey}/{serviceName}
 # operationId: GetLogs
-export def "codeadmin-v-2-logs get" [
+export def "get-logs" [
   system_key: string
   service_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9354,7 +9354,7 @@ export def "codeadmin-v-2-logs get" [
 #
 # DELETE /codeadmin/v/2/{systemKey}/{serviceName}
 # operationId: DeleteService
-export def "codeadmin-v-2 delete-service" [
+export def "delete-service" [
   system_key: string
   service_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9395,7 +9395,7 @@ export def "codeadmin-v-2 delete-service" [
 #
 # POST /codeadmin/v/2/{systemKey}/{serviceName}
 # operationId: AddService
-export def "codeadmin-v-2 create-service" [
+export def "add-service" [
   system_key: string
   service_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9445,7 +9445,7 @@ export def "codeadmin-v-2 create-service" [
 #
 # PUT /codeadmin/v/2/{systemKey}/{serviceName}
 # operationId: UpdateService
-export def "codeadmin-v-2 update-service" [
+export def "update-service" [
   system_key: string
   service_name: string
   --base-url(-b): string@base-url-completer # API base URL

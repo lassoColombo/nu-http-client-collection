@@ -112,7 +112,7 @@ def format-completer [] { ["pdf"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "hvcer-certificate create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "hvcer" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -138,7 +138,7 @@ export def commands []: nothing -> table {
 # operationId: hvcer
 # --certificateParameters shape: {DOB: string, FullName: string, ROLL: string, YOP: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "hvcer-certificate create" [
+export def "hvcer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -181,7 +181,7 @@ export def "hvcer-certificate create" [
 # operationId: svcer
 # --certificateParameters shape: {DOB: string, FullName: string, ROLL: string, YOP: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "svcer-certificate create" [
+export def "svcer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)

@@ -123,7 +123,7 @@ def voice-id-completer [] { ["Aditi" "Adriano" "Amy" "Andres" "Aria" "Arlet" "Ar
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "lexicons delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "delete-lexicon" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -147,7 +147,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1/lexicons/{LexiconName}
 # operationId: DeleteLexicon
-export def "lexicons delete" [
+export def "delete-lexicon" [
   lexicon_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -192,7 +192,7 @@ export def "lexicons delete" [
 #
 # GET /v1/lexicons/{LexiconName}
 # operationId: GetLexicon
-export def "lexicons get" [
+export def "get-lexicon" [
   lexicon_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -237,7 +237,7 @@ export def "lexicons get" [
 #
 # PUT /v1/lexicons/{LexiconName}
 # operationId: PutLexicon
-export def "lexicons update" [
+export def "put-lexicon" [
   lexicon_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -286,7 +286,7 @@ export def "lexicons update" [
 #
 # GET /v1/voices
 # operationId: DescribeVoices
-export def "voices get" [
+export def "describe-voices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -334,7 +334,7 @@ export def "voices get" [
 #
 # GET /v1/synthesisTasks/{TaskId}
 # operationId: GetSpeechSynthesisTask
-export def "synthesis-tasks get-speech" [
+export def "get-speech-synthesis-task" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -379,7 +379,7 @@ export def "synthesis-tasks get-speech" [
 #
 # GET /v1/lexicons
 # operationId: ListLexicons
-export def "lexicons list" [
+export def "list-lexicons" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -424,7 +424,7 @@ export def "lexicons list" [
 #
 # GET /v1/synthesisTasks
 # operationId: ListSpeechSynthesisTasks
-export def "synthesis-tasks list-speech" [
+export def "list-speech-synthesis-tasks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -471,7 +471,7 @@ export def "synthesis-tasks list-speech" [
 #
 # POST /v1/synthesisTasks
 # operationId: StartSpeechSynthesisTask
-export def "synthesis-tasks start-speech" [
+export def "start-speech-synthesis-task" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -529,7 +529,7 @@ export def "synthesis-tasks start-speech" [
 #
 # POST /v1/speech
 # operationId: SynthesizeSpeech
-export def "speech create-synthesize" [
+export def "synthesize-speech" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

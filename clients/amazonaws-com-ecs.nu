@@ -156,7 +156,7 @@ def x-amz-target-completer-55 [] { ["AmazonEC2ContainerServiceV20141113.UpdateTa
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-capacity-provider" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-capacity-provider" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -180,7 +180,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CreateCapacityProvider
-export def "api create-capacity-provider" [
+export def "create-capacity-provider" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -230,7 +230,7 @@ export def "api create-capacity-provider" [
 #
 # POST /
 # operationId: CreateCluster
-export def "api create" [
+export def "create-cluster" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -284,7 +284,7 @@ export def "api create" [
 #
 # POST /
 # operationId: CreateService
-export def "api create-service" [
+export def "create-service" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -354,7 +354,7 @@ export def "api create-service" [
 #
 # POST /
 # operationId: CreateTaskSet
-export def "api create-task-update" [
+export def "create-task-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -414,7 +414,7 @@ export def "api create-task-update" [
 #
 # POST /
 # operationId: DeleteAccountSetting
-export def "api delete-account-setting" [
+export def "delete-account-setting" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -463,7 +463,7 @@ export def "api delete-account-setting" [
 #
 # POST /
 # operationId: DeleteAttributes
-export def "api delete-attributes" [
+export def "delete-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -512,7 +512,7 @@ export def "api delete-attributes" [
 #
 # POST /
 # operationId: DeleteCapacityProvider
-export def "api delete-capacity-provider" [
+export def "delete-capacity-provider" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -560,7 +560,7 @@ export def "api delete-capacity-provider" [
 #
 # POST /
 # operationId: DeleteCluster
-export def "api delete" [
+export def "delete-cluster" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -608,7 +608,7 @@ export def "api delete" [
 #
 # POST /
 # operationId: DeleteService
-export def "api delete-service" [
+export def "delete-service" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -658,7 +658,7 @@ export def "api delete-service" [
 #
 # POST /
 # operationId: DeleteTaskDefinitions
-export def "api delete-task-definitions" [
+export def "delete-task-definitions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -706,7 +706,7 @@ export def "api delete-task-definitions" [
 #
 # POST /
 # operationId: DeleteTaskSet
-export def "api delete-task-update" [
+export def "delete-task-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -757,7 +757,7 @@ export def "api delete-task-update" [
 #
 # POST /
 # operationId: DeregisterContainerInstance
-export def "api create-deregister-container-instance" [
+export def "deregister-container-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -807,7 +807,7 @@ export def "api create-deregister-container-instance" [
 #
 # POST /
 # operationId: DeregisterTaskDefinition
-export def "api create-deregister-task-definition" [
+export def "deregister-task-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -855,7 +855,7 @@ export def "api create-deregister-task-definition" [
 #
 # POST /
 # operationId: DescribeCapacityProviders
-export def "api get-capacity-providers" [
+export def "describe-capacity-providers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -906,7 +906,7 @@ export def "api get-capacity-providers" [
 #
 # POST /
 # operationId: DescribeClusters
-export def "api get-clusters" [
+export def "describe-clusters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -955,7 +955,7 @@ export def "api get-clusters" [
 #
 # POST /
 # operationId: DescribeContainerInstances
-export def "api get-container-instances" [
+export def "describe-container-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1005,7 +1005,7 @@ export def "api get-container-instances" [
 #
 # POST /
 # operationId: DescribeServices
-export def "api get-services" [
+export def "describe-services" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1055,7 +1055,7 @@ export def "api get-services" [
 #
 # POST /
 # operationId: DescribeTaskDefinition
-export def "api get-task-definition" [
+export def "describe-task-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1104,7 +1104,7 @@ export def "api get-task-definition" [
 #
 # POST /
 # operationId: DescribeTaskSets
-export def "api get-task-sets" [
+export def "describe-task-sets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1155,7 +1155,7 @@ export def "api get-task-sets" [
 #
 # POST /
 # operationId: DescribeTasks
-export def "api get-tasks" [
+export def "describe-tasks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1205,7 +1205,7 @@ export def "api get-tasks" [
 #
 # POST /
 # operationId: DiscoverPollEndpoint
-export def "api create-discover-poll-endpoint" [
+export def "discover-poll-endpoint" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1254,7 +1254,7 @@ export def "api create-discover-poll-endpoint" [
 #
 # POST /
 # operationId: ExecuteCommand
-export def "api create-execute-command" [
+export def "execute-command" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1306,7 +1306,7 @@ export def "api create-execute-command" [
 #
 # POST /
 # operationId: GetTaskProtection
-export def "api get-task-protection" [
+export def "get-task-protection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1355,7 +1355,7 @@ export def "api get-task-protection" [
 #
 # POST /
 # operationId: ListAccountSettings
-export def "api list-account-settings" [
+export def "list-account-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1411,7 +1411,7 @@ export def "api list-account-settings" [
 #
 # POST /
 # operationId: ListAttributes
-export def "api list-attributes" [
+export def "list-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1467,7 +1467,7 @@ export def "api list-attributes" [
 #
 # POST /
 # operationId: ListClusters
-export def "api list-clusters" [
+export def "list-clusters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1519,7 +1519,7 @@ export def "api list-clusters" [
 #
 # POST /
 # operationId: ListContainerInstances
-export def "api list-container-instances" [
+export def "list-container-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1574,7 +1574,7 @@ export def "api list-container-instances" [
 #
 # POST /
 # operationId: ListServices
-export def "api list-services" [
+export def "list-services" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1629,7 +1629,7 @@ export def "api list-services" [
 #
 # POST /
 # operationId: ListServicesByNamespace
-export def "api list-services-by-namespace" [
+export def "list-services-by-namespace" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1682,7 +1682,7 @@ export def "api list-services-by-namespace" [
 #
 # POST /
 # operationId: ListTagsForResource
-export def "api list-tags-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1730,7 +1730,7 @@ export def "api list-tags-for-resource" [
 #
 # POST /
 # operationId: ListTaskDefinitionFamilies
-export def "api list-task-definition-families" [
+export def "list-task-definition-families" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1784,7 +1784,7 @@ export def "api list-task-definition-families" [
 #
 # POST /
 # operationId: ListTaskDefinitions
-export def "api list-task-definitions" [
+export def "list-task-definitions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1839,7 +1839,7 @@ export def "api list-task-definitions" [
 #
 # POST /
 # operationId: ListTasks
-export def "api list-tasks" [
+export def "list-tasks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1898,7 +1898,7 @@ export def "api list-tasks" [
 #
 # POST /
 # operationId: PutAccountSetting
-export def "api update-account-setting" [
+export def "put-account-setting" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1948,7 +1948,7 @@ export def "api update-account-setting" [
 #
 # POST /
 # operationId: PutAccountSettingDefault
-export def "api update-account-setting-default" [
+export def "put-account-setting-default" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1997,7 +1997,7 @@ export def "api update-account-setting-default" [
 #
 # POST /
 # operationId: PutAttributes
-export def "api update-attributes" [
+export def "put-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2046,7 +2046,7 @@ export def "api update-attributes" [
 #
 # POST /
 # operationId: PutClusterCapacityProviders
-export def "api update-capacity-providers" [
+export def "put-cluster-capacity-providers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2096,7 +2096,7 @@ export def "api update-capacity-providers" [
 #
 # POST /
 # operationId: RegisterContainerInstance
-export def "api create-container-instance" [
+export def "register-container-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2152,7 +2152,7 @@ export def "api create-container-instance" [
 #
 # POST /
 # operationId: RegisterTaskDefinition
-export def "api create-task-definition" [
+export def "register-task-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2216,7 +2216,7 @@ export def "api create-task-definition" [
 #
 # POST /
 # operationId: RunTask
-export def "api create-run-task" [
+export def "run-task" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2280,7 +2280,7 @@ export def "api create-run-task" [
 #
 # POST /
 # operationId: StartTask
-export def "api start-task" [
+export def "start-task" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2339,7 +2339,7 @@ export def "api start-task" [
 #
 # POST /
 # operationId: StopTask
-export def "api stop-task" [
+export def "stop-task" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2389,7 +2389,7 @@ export def "api stop-task" [
 #
 # POST /
 # operationId: SubmitAttachmentStateChanges
-export def "api submit-attachment-state-changes" [
+export def "submit-attachment-state-changes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2438,7 +2438,7 @@ export def "api submit-attachment-state-changes" [
 #
 # POST /
 # operationId: SubmitContainerStateChange
-export def "api submit-container-state-change" [
+export def "submit-container-state-change" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2493,7 +2493,7 @@ export def "api submit-container-state-change" [
 #
 # POST /
 # operationId: SubmitTaskStateChange
-export def "api submit-task-state-change" [
+export def "submit-task-state-change" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2550,7 +2550,7 @@ export def "api submit-task-state-change" [
 #
 # POST /
 # operationId: TagResource
-export def "api tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2599,7 +2599,7 @@ export def "api tag-resource" [
 #
 # POST /
 # operationId: UntagResource
-export def "api untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2648,7 +2648,7 @@ export def "api untag-resource" [
 #
 # POST /
 # operationId: UpdateCapacityProvider
-export def "api update-capacity-provider" [
+export def "update-capacity-provider" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2697,7 +2697,7 @@ export def "api update-capacity-provider" [
 #
 # POST /
 # operationId: UpdateCluster
-export def "api update" [
+export def "update-cluster" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2748,7 +2748,7 @@ export def "api update" [
 #
 # POST /
 # operationId: UpdateClusterSettings
-export def "api update-settings" [
+export def "update-cluster-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2797,7 +2797,7 @@ export def "api update-settings" [
 #
 # POST /
 # operationId: UpdateContainerAgent
-export def "api update-container-agent" [
+export def "update-container-agent" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2846,7 +2846,7 @@ export def "api update-container-agent" [
 #
 # POST /
 # operationId: UpdateContainerInstancesState
-export def "api update-container-instances-state" [
+export def "update-container-instances-state" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2896,7 +2896,7 @@ export def "api update-container-instances-state" [
 #
 # POST /
 # operationId: UpdateService
-export def "api update-service" [
+export def "update-service" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2961,7 +2961,7 @@ export def "api update-service" [
 #
 # POST /
 # operationId: UpdateServicePrimaryTaskSet
-export def "api update-service-primary-task" [
+export def "update-service-primary-task-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3011,7 +3011,7 @@ export def "api update-service-primary-task" [
 #
 # POST /
 # operationId: UpdateTaskProtection
-export def "api update-task-protection" [
+export def "update-task-protection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3062,7 +3062,7 @@ export def "api update-task-protection" [
 #
 # POST /
 # operationId: UpdateTaskSet
-export def "api update-task" [
+export def "update-task-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

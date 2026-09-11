@@ -135,7 +135,7 @@ def feed-type-completer-1 [] { ["CONTENT_PRODUCT" "SUPPLIER_FULL_ITEM" "item"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "feeds get-v2get-item-status" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v2get-feed-item-status" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -159,7 +159,7 @@ export def commands []: nothing -> table {
 #
 # GET /v2/feeds
 # operationId: v2getFeedItemStatus
-export def "feeds get-v2get-item-status" [
+export def "v2get-feed-item-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -206,7 +206,7 @@ export def "feeds get-v2get-item-status" [
 #
 # POST /v2/feeds
 # operationId: v2doPostMultiPart
-export def "feeds create-v2do-multi-part" [
+export def "v2do-post-multi-part" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -256,7 +256,7 @@ export def "feeds create-v2do-multi-part" [
 #
 # GET /v2/feeds/{feedId}
 # operationId: v2getAllItemsStatus
-export def "feeds list-v2get-items-status" [
+export def "v2get-all-items-status" [
   feed_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -304,7 +304,7 @@ export def "feeds list-v2get-items-status" [
 #
 # GET /v3/feeds
 # operationId: v3getFeedItemStatus
-export def "feeds get-v3get-item-status" [
+export def "v3get-feed-item-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -351,7 +351,7 @@ export def "feeds get-v3get-item-status" [
 #
 # POST /v3/feeds
 # operationId: v3doPostMultiPart
-export def "feeds create-v3do-multi-part" [
+export def "v3do-post-multi-part" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -401,7 +401,7 @@ export def "feeds create-v3do-multi-part" [
 #
 # GET /v3/feeds/{feedId}
 # operationId: v3getAllItemsStatus
-export def "feeds list-v3get-items-status" [
+export def "v3get-all-items-status" [
   feed_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

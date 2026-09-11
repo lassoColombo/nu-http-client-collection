@@ -112,7 +112,7 @@ def sort-order-completer [] { ["Ascending" "Descending"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "human-loops delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "delete-human-loop" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -136,7 +136,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /human-loops/{HumanLoopName}
 # operationId: DeleteHumanLoop
-export def "human-loops delete" [
+export def "delete-human-loop" [
   human_loop_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -181,7 +181,7 @@ export def "human-loops delete" [
 #
 # GET /human-loops/{HumanLoopName}
 # operationId: DescribeHumanLoop
-export def "human-loops get" [
+export def "describe-human-loop" [
   human_loop_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -226,7 +226,7 @@ export def "human-loops get" [
 #
 # GET /human-loops
 # operationId: ListHumanLoops
-export def "human-loops list" [
+export def "list-human-loops" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -278,7 +278,7 @@ export def "human-loops list" [
 # operationId: StartHumanLoop
 # --HumanLoopInput shape: {InputContent?: any}
 # --DataAttributes shape: {ContentClassifiers?: any}
-export def "human-loops start" [
+export def "start-human-loop" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -328,7 +328,7 @@ export def "human-loops start" [
 #
 # POST /human-loops/stop
 # operationId: StopHumanLoop
-export def "human-loops-stop stop" [
+export def "stop-human-loop" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

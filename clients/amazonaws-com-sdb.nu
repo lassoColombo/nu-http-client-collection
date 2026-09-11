@@ -116,7 +116,7 @@ def action-completer-9 [] { ["Select"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api get-batch-delete-attributes" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-batch-delete-attributes" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # GET /
 # operationId: GET_BatchDeleteAttributes
-export def "api get-batch-delete-attributes" [
+export def "get-batch-delete-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -186,7 +186,7 @@ export def "api get-batch-delete-attributes" [
 #
 # POST /
 # operationId: POST_BatchDeleteAttributes
-export def "api create-batch-delete-attributes" [
+export def "post-batch-delete-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -234,7 +234,7 @@ export def "api create-batch-delete-attributes" [
 #
 # GET /
 # operationId: GET_BatchPutAttributes
-export def "api get-batch-update-attributes" [
+export def "get-batch-put-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -280,7 +280,7 @@ export def "api get-batch-update-attributes" [
 #
 # POST /
 # operationId: POST_BatchPutAttributes
-export def "api create-batch-update-attributes" [
+export def "post-batch-put-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -328,7 +328,7 @@ export def "api create-batch-update-attributes" [
 #
 # GET /
 # operationId: GET_CreateDomain
-export def "api get-create-domain" [
+export def "get-create-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -373,7 +373,7 @@ export def "api get-create-domain" [
 #
 # POST /
 # operationId: POST_CreateDomain
-export def "api create-domain" [
+export def "post-create-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -421,7 +421,7 @@ export def "api create-domain" [
 #
 # GET /
 # operationId: GET_DeleteAttributes
-export def "api get-delete-attributes" [
+export def "get-delete-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -469,7 +469,7 @@ export def "api get-delete-attributes" [
 #
 # POST /
 # operationId: POST_DeleteAttributes
-export def "api create-delete-attributes" [
+export def "post-delete-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -517,7 +517,7 @@ export def "api create-delete-attributes" [
 #
 # GET /
 # operationId: GET_DeleteDomain
-export def "api get-delete-domain" [
+export def "get-delete-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -562,7 +562,7 @@ export def "api get-delete-domain" [
 #
 # POST /
 # operationId: POST_DeleteDomain
-export def "api create-delete-domain" [
+export def "post-delete-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -610,7 +610,7 @@ export def "api create-delete-domain" [
 #
 # GET /
 # operationId: GET_DomainMetadata
-export def "api get-domain-metadata" [
+export def "get-domain-metadata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -655,7 +655,7 @@ export def "api get-domain-metadata" [
 #
 # POST /
 # operationId: POST_DomainMetadata
-export def "api create-domain-metadata" [
+export def "post-domain-metadata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -703,7 +703,7 @@ export def "api create-domain-metadata" [
 #
 # GET /
 # operationId: GET_GetAttributes
-export def "api get-attributes" [
+export def "get-get-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -751,7 +751,7 @@ export def "api get-attributes" [
 #
 # POST /
 # operationId: POST_GetAttributes
-export def "api create-get-attributes" [
+export def "post-get-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -799,7 +799,7 @@ export def "api create-get-attributes" [
 #
 # GET /
 # operationId: GET_ListDomains
-export def "api get-list-domains" [
+export def "get-list-domains" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -845,7 +845,7 @@ export def "api get-list-domains" [
 #
 # POST /
 # operationId: POST_ListDomains
-export def "api create-list-domains" [
+export def "post-list-domains" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -895,7 +895,7 @@ export def "api create-list-domains" [
 #
 # GET /
 # operationId: GET_PutAttributes
-export def "api get-update-attributes" [
+export def "get-put-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -943,7 +943,7 @@ export def "api get-update-attributes" [
 #
 # POST /
 # operationId: POST_PutAttributes
-export def "api create-update-attributes" [
+export def "post-put-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -991,7 +991,7 @@ export def "api create-update-attributes" [
 #
 # GET /
 # operationId: GET_Select
-export def "api get-select" [
+export def "get-select" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1038,7 +1038,7 @@ export def "api get-select" [
 #
 # POST /
 # operationId: POST_Select
-export def "api create-select" [
+export def "post-select" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

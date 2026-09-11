@@ -97,7 +97,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "components get-image" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "image-components-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -121,7 +121,7 @@ export def commands []: nothing -> table {
 #
 # GET /{finorvin}/components
 # operationId: imageComponentsGET
-export def "components get-image" [
+export def "image-components-get" [
   finorvin: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -157,7 +157,7 @@ export def "components get-image" [
 #
 # GET /{finorvin}/components/engine
 # operationId: imageComponentsEngineGET
-export def "components-engine get-image" [
+export def "image-components-engine-get" [
   finorvin: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -193,7 +193,7 @@ export def "components-engine get-image" [
 #
 # GET /{finorvin}/components/equipments
 # operationId: imageComponentsEquipmentsGET
-export def "components-equipments get-image" [
+export def "image-components-equipments-get" [
   finorvin: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -229,7 +229,7 @@ export def "components-equipments get-image" [
 #
 # GET /{finorvin}/components/paint
 # operationId: imageComponentsPaintGET
-export def "components-paint get-image" [
+export def "image-components-paint-get" [
   finorvin: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -265,7 +265,7 @@ export def "components-paint get-image" [
 #
 # GET /{finorvin}/components/rim
 # operationId: imageComponentsRimGET
-export def "components-rim get-image" [
+export def "image-components-rim-get" [
   finorvin: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -301,7 +301,7 @@ export def "components-rim get-image" [
 #
 # GET /{finorvin}/components/trim
 # operationId: imageComponentsTrimGET
-export def "components-trim get-image" [
+export def "image-components-trim-get" [
   finorvin: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -337,7 +337,7 @@ export def "components-trim get-image" [
 #
 # GET /{finorvin}/components/upholstery
 # operationId: imageComponentsUpholsteryGET
-export def "components-upholstery get-image" [
+export def "image-components-upholstery-get" [
   finorvin: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -373,7 +373,7 @@ export def "components-upholstery get-image" [
 #
 # GET /{finorvin}/vehicle
 # operationId: imageVehicleGET
-export def "vehicle get-image" [
+export def "image-vehicle-get" [
   finorvin: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

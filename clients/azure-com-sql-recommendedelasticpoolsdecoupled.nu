@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-sql-servers-recommended-elastic-pools list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "recommended-elastic-pools-list-by-server" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -122,7 +122,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/recommendedElasticPools
 # operationId: RecommendedElasticPools_ListByServer
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-recommended-elastic-pools list" [
+export def "recommended-elastic-pools-list-by-server" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -164,7 +164,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-recomm
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/recommendedElasticPools/{recommendedElasticPoolName}
 # operationId: RecommendedElasticPools_Get
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-recommended-elastic-pools get" [
+export def "recommended-elastic-pools-get" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -208,7 +208,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-recomm
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/recommendedElasticPools/{recommendedElasticPoolName}/metrics
 # operationId: RecommendedElasticPools_ListMetrics
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-recommended-elastic-pools-metrics list" [
+export def "recommended-elastic-pools-list-metrics" [
   subscription_id: string
   resource_group_name: string
   server_name: string

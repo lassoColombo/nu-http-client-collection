@@ -117,7 +117,7 @@ def type-completer [] { ["business" "individual"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "regulatory-compliance-bundles list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-bundle" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -141,7 +141,7 @@ export def commands []: nothing -> table {
 #
 # GET /v2/RegulatoryCompliance/Bundles
 # operationId: ListBundle
-export def "regulatory-compliance-bundles list" [
+export def "list-bundle" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -190,7 +190,7 @@ export def "regulatory-compliance-bundles list" [
 #
 # POST /v2/RegulatoryCompliance/Bundles
 # operationId: CreateBundle
-export def "regulatory-compliance-bundles create" [
+export def "create-bundle" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -235,7 +235,7 @@ export def "regulatory-compliance-bundles create" [
 #
 # GET /v2/RegulatoryCompliance/Bundles/{BundleSid}/Copies
 # operationId: ListBundleCopy
-export def "regulatory-compliance-bundles-copies list-copy" [
+export def "list-bundle-copy" [
   bundle_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -275,7 +275,7 @@ export def "regulatory-compliance-bundles-copies list-copy" [
 #
 # POST /v2/RegulatoryCompliance/Bundles/{BundleSid}/Copies
 # operationId: CreateBundleCopy
-export def "regulatory-compliance-bundles-copies create-copy" [
+export def "create-bundle-copy" [
   bundle_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -316,7 +316,7 @@ export def "regulatory-compliance-bundles-copies create-copy" [
 #
 # GET /v2/RegulatoryCompliance/Bundles/{BundleSid}/Evaluations
 # operationId: ListEvaluation
-export def "regulatory-compliance-bundles-evaluations list" [
+export def "list-evaluation" [
   bundle_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -356,7 +356,7 @@ export def "regulatory-compliance-bundles-evaluations list" [
 #
 # POST /v2/RegulatoryCompliance/Bundles/{BundleSid}/Evaluations
 # operationId: CreateEvaluation
-export def "regulatory-compliance-bundles-evaluations create" [
+export def "create-evaluation" [
   bundle_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -392,7 +392,7 @@ export def "regulatory-compliance-bundles-evaluations create" [
 #
 # GET /v2/RegulatoryCompliance/Bundles/{BundleSid}/Evaluations/{Sid}
 # operationId: FetchEvaluation
-export def "regulatory-compliance-bundles-evaluations get" [
+export def "fetch-evaluation" [
   bundle_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -430,7 +430,7 @@ export def "regulatory-compliance-bundles-evaluations get" [
 #
 # GET /v2/RegulatoryCompliance/Bundles/{BundleSid}/ItemAssignments
 # operationId: ListItemAssignment
-export def "regulatory-compliance-bundles-item-assignments list" [
+export def "list-item-assignment" [
   bundle_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -470,7 +470,7 @@ export def "regulatory-compliance-bundles-item-assignments list" [
 #
 # POST /v2/RegulatoryCompliance/Bundles/{BundleSid}/ItemAssignments
 # operationId: CreateItemAssignment
-export def "regulatory-compliance-bundles-item-assignments create" [
+export def "create-item-assignment" [
   bundle_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -511,7 +511,7 @@ export def "regulatory-compliance-bundles-item-assignments create" [
 #
 # DELETE /v2/RegulatoryCompliance/Bundles/{BundleSid}/ItemAssignments/{Sid}
 # operationId: DeleteItemAssignment
-export def "regulatory-compliance-bundles-item-assignments delete" [
+export def "delete-item-assignment" [
   bundle_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -549,7 +549,7 @@ export def "regulatory-compliance-bundles-item-assignments delete" [
 #
 # GET /v2/RegulatoryCompliance/Bundles/{BundleSid}/ItemAssignments/{Sid}
 # operationId: FetchItemAssignment
-export def "regulatory-compliance-bundles-item-assignments get" [
+export def "fetch-item-assignment" [
   bundle_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -587,7 +587,7 @@ export def "regulatory-compliance-bundles-item-assignments get" [
 #
 # POST /v2/RegulatoryCompliance/Bundles/{BundleSid}/ReplaceItems
 # operationId: CreateReplaceItems
-export def "regulatory-compliance-bundles-replace-items create" [
+export def "create-replace-items" [
   bundle_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -628,7 +628,7 @@ export def "regulatory-compliance-bundles-replace-items create" [
 #
 # DELETE /v2/RegulatoryCompliance/Bundles/{Sid}
 # operationId: DeleteBundle
-export def "regulatory-compliance-bundles delete" [
+export def "delete-bundle" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -664,7 +664,7 @@ export def "regulatory-compliance-bundles delete" [
 #
 # GET /v2/RegulatoryCompliance/Bundles/{Sid}
 # operationId: FetchBundle
-export def "regulatory-compliance-bundles get" [
+export def "fetch-bundle" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -700,7 +700,7 @@ export def "regulatory-compliance-bundles get" [
 #
 # POST /v2/RegulatoryCompliance/Bundles/{Sid}
 # operationId: UpdateBundle
-export def "regulatory-compliance-bundles update" [
+export def "update-bundle" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -744,7 +744,7 @@ export def "regulatory-compliance-bundles update" [
 #
 # GET /v2/RegulatoryCompliance/EndUserTypes
 # operationId: ListEndUserType
-export def "regulatory-compliance-end-user-types list" [
+export def "list-end-user-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -782,7 +782,7 @@ export def "regulatory-compliance-end-user-types list" [
 #
 # GET /v2/RegulatoryCompliance/EndUserTypes/{Sid}
 # operationId: FetchEndUserType
-export def "regulatory-compliance-end-user-types get" [
+export def "fetch-end-user-type" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -818,7 +818,7 @@ export def "regulatory-compliance-end-user-types get" [
 #
 # GET /v2/RegulatoryCompliance/EndUsers
 # operationId: ListEndUser
-export def "regulatory-compliance-end-users list" [
+export def "list-end-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -856,7 +856,7 @@ export def "regulatory-compliance-end-users list" [
 #
 # POST /v2/RegulatoryCompliance/EndUsers
 # operationId: CreateEndUser
-export def "regulatory-compliance-end-users create" [
+export def "create-end-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -897,7 +897,7 @@ export def "regulatory-compliance-end-users create" [
 #
 # DELETE /v2/RegulatoryCompliance/EndUsers/{Sid}
 # operationId: DeleteEndUser
-export def "regulatory-compliance-end-users delete" [
+export def "delete-end-user" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -933,7 +933,7 @@ export def "regulatory-compliance-end-users delete" [
 #
 # GET /v2/RegulatoryCompliance/EndUsers/{Sid}
 # operationId: FetchEndUser
-export def "regulatory-compliance-end-users get" [
+export def "fetch-end-user" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -969,7 +969,7 @@ export def "regulatory-compliance-end-users get" [
 #
 # POST /v2/RegulatoryCompliance/EndUsers/{Sid}
 # operationId: UpdateEndUser
-export def "regulatory-compliance-end-users update" [
+export def "update-end-user" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1011,7 +1011,7 @@ export def "regulatory-compliance-end-users update" [
 #
 # GET /v2/RegulatoryCompliance/Regulations
 # operationId: ListRegulation
-export def "regulatory-compliance-regulations list" [
+export def "list-regulation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1052,7 +1052,7 @@ export def "regulatory-compliance-regulations list" [
 #
 # GET /v2/RegulatoryCompliance/Regulations/{Sid}
 # operationId: FetchRegulation
-export def "regulatory-compliance-regulations get" [
+export def "fetch-regulation" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1088,7 +1088,7 @@ export def "regulatory-compliance-regulations get" [
 #
 # GET /v2/RegulatoryCompliance/SupportingDocumentTypes
 # operationId: ListSupportingDocumentType
-export def "regulatory-compliance-supporting-document-types list" [
+export def "list-supporting-document-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1126,7 +1126,7 @@ export def "regulatory-compliance-supporting-document-types list" [
 #
 # GET /v2/RegulatoryCompliance/SupportingDocumentTypes/{Sid}
 # operationId: FetchSupportingDocumentType
-export def "regulatory-compliance-supporting-document-types get" [
+export def "fetch-supporting-document-type" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1162,7 +1162,7 @@ export def "regulatory-compliance-supporting-document-types get" [
 #
 # GET /v2/RegulatoryCompliance/SupportingDocuments
 # operationId: ListSupportingDocument
-export def "regulatory-compliance-supporting-documents list" [
+export def "list-supporting-document" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1200,7 +1200,7 @@ export def "regulatory-compliance-supporting-documents list" [
 #
 # POST /v2/RegulatoryCompliance/SupportingDocuments
 # operationId: CreateSupportingDocument
-export def "regulatory-compliance-supporting-documents create" [
+export def "create-supporting-document" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1241,7 +1241,7 @@ export def "regulatory-compliance-supporting-documents create" [
 #
 # DELETE /v2/RegulatoryCompliance/SupportingDocuments/{Sid}
 # operationId: DeleteSupportingDocument
-export def "regulatory-compliance-supporting-documents delete" [
+export def "delete-supporting-document" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1277,7 +1277,7 @@ export def "regulatory-compliance-supporting-documents delete" [
 #
 # GET /v2/RegulatoryCompliance/SupportingDocuments/{Sid}
 # operationId: FetchSupportingDocument
-export def "regulatory-compliance-supporting-documents get" [
+export def "fetch-supporting-document" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1313,7 +1313,7 @@ export def "regulatory-compliance-supporting-documents get" [
 #
 # POST /v2/RegulatoryCompliance/SupportingDocuments/{Sid}
 # operationId: UpdateSupportingDocument
-export def "regulatory-compliance-supporting-documents update" [
+export def "update-supporting-document" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

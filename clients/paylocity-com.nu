@@ -122,7 +122,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "companies-codes get-list-company-and-descriptions-by-resource" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-all-company-codes-and-descriptions-by-resource" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # GET /v2/companies/{companyId}/codes/{codeResource}
 # operationId: Get All Company Codes and Descriptions by Resource
-export def "companies-codes get-list-company-and-descriptions-by-resource" [
+export def "get-all-company-codes-and-descriptions-by-resource" [
   company_id: string
   code_resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -184,7 +184,7 @@ export def "companies-codes get-list-company-and-descriptions-by-resource" [
 #
 # GET /v2/companies/{companyId}/customfields/{category}
 # operationId: Get All Custom Fields by category
-export def "companies-customfields get-list-custom-fields" [
+export def "get-all-custom-fields-by-category" [
   company_id: string
   category: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -244,7 +244,7 @@ export def "companies-customfields get-list-custom-fields" [
 # --webTime shape: {badgeNumber?: string, chargeRate?: float, isTimeLaborEnabled?: bool}
 # --workAddress shape: {address1?: string, address2?: string, city?: string, country?: string, county?: string, emailAddress?: string, location?: string, mailStop?: string, mobilePhone?: string, pager?: string, phone?: string, phoneExtension?: string, postalCode?: string, state?: string}
 # --workEligibility shape: {alienOrAdmissionDocumentNumber?: string, attestedDate?: string, countryOfIssuance?: string, foreignPassportNumber?: string, i94AdmissionNumber?: string, i9DateVerified?: string, i9Notes?: string, isI9Verified?: bool, isSsnVerified?: bool, ssnDateVerified?: string, ssnNotes?: string, visaType?: string, workAuthorization?: string, workUntil?: string}
-export def "companies-employees create" [
+export def "add-employee" [
   company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -327,7 +327,7 @@ export def "companies-employees create" [
 #
 # GET /v2/companies/{companyId}/employees/
 # operationId: Get all employees
-export def "companies-employees get-list" [
+export def "get-all-employees" [
   company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -367,7 +367,7 @@ export def "companies-employees get-list" [
 #
 # GET /v2/companies/{companyId}/employees/{employeeId}
 # operationId: Get employee
-export def "companies-employees get" [
+export def "get-employee" [
   company_id: string
   employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -427,7 +427,7 @@ export def "companies-employees get" [
 # --webTime shape: {badgeNumber?: string, chargeRate?: float, isTimeLaborEnabled?: bool}
 # --workAddress shape: {address1?: string, address2?: string, city?: string, country?: string, county?: string, emailAddress?: string, location?: string, mailStop?: string, mobilePhone?: string, pager?: string, phone?: string, phoneExtension?: string, postalCode?: string, state?: string}
 # --workEligibility shape: {alienOrAdmissionDocumentNumber?: string, attestedDate?: string, countryOfIssuance?: string, foreignPassportNumber?: string, i94AdmissionNumber?: string, i9DateVerified?: string, i9Notes?: string, isI9Verified?: bool, isSsnVerified?: bool, ssnDateVerified?: string, ssnNotes?: string, visaType?: string, workAuthorization?: string, workUntil?: string}
-export def "companies-employees update" [
+export def "update-employee" [
   company_id: string
   employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -512,7 +512,7 @@ export def "companies-employees update" [
 #
 # PUT /v2/companies/{companyId}/employees/{employeeId}/additionalRates
 # operationId: Add or update additional rates
-export def "companies-employees-additional-rates create-or-update" [
+export def "add-or-update-additional-rates" [
   company_id: string
   employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -565,7 +565,7 @@ export def "companies-employees-additional-rates create-or-update" [
 #
 # PUT /v2/companies/{companyId}/employees/{employeeId}/benefitSetup
 # operationId: Update or add employee benefit setup
-export def "companies-employees-benefit-setup update-or-create" [
+export def "update-or-add-employee-benefit-setup" [
   company_id: string
   employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -612,7 +612,7 @@ export def "companies-employees-benefit-setup update-or-create" [
 #
 # GET /v2/companies/{companyId}/employees/{employeeId}/directDeposit
 # operationId: Get All Direct Deposit
-export def "companies-employees-direct-deposit get-list" [
+export def "get-all-direct-deposit" [
   company_id: string
   employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -650,7 +650,7 @@ export def "companies-employees-direct-deposit get-list" [
 #
 # GET /v2/companies/{companyId}/employees/{employeeId}/earnings
 # operationId: Get All Earnings
-export def "companies-employees-earnings get-list" [
+export def "get-all-earnings" [
   company_id: string
   employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -688,7 +688,7 @@ export def "companies-employees-earnings get-list" [
 #
 # PUT /v2/companies/{companyId}/employees/{employeeId}/earnings
 # operationId: Add or update an employee earning
-export def "companies-employees-earnings create-or-update" [
+export def "add-or-update-an-employee-earning" [
   company_id: string
   employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -751,7 +751,7 @@ export def "companies-employees-earnings create-or-update" [
 #
 # GET /v2/companies/{companyId}/employees/{employeeId}/earnings/{earningCode}
 # operationId: Get Earnings by Earning Code
-export def "companies-employees-earnings get-by-code" [
+export def "get-earnings-by-earning-code" [
   company_id: string
   employee_id: string
   earning_code: string
@@ -791,7 +791,7 @@ export def "companies-employees-earnings get-by-code" [
 #
 # DELETE /v2/companies/{companyId}/employees/{employeeId}/earnings/{earningCode}/{startDate}
 # operationId: Delete Earning by Earning Code and Start Date
-export def "companies-employees-earnings delete-by-code-and-start-date" [
+export def "delete-earning-by-earning-code-and-start-date" [
   company_id: string
   employee_id: string
   earning_code: string
@@ -833,7 +833,7 @@ export def "companies-employees-earnings delete-by-code-and-start-date" [
 #
 # GET /v2/companies/{companyId}/employees/{employeeId}/earnings/{earningCode}/{startDate}
 # operationId: Get Earning by Earning Code and Start Date
-export def "companies-employees-earnings get-by-code-and-start-date" [
+export def "get-earning-by-earning-code-and-start-date" [
   company_id: string
   employee_id: string
   earning_code: string
@@ -875,7 +875,7 @@ export def "companies-employees-earnings get-by-code-and-start-date" [
 #
 # PUT /v2/companies/{companyId}/employees/{employeeId}/emergencyContacts
 # operationId: Add or update emergency contacts
-export def "companies-employees-emergency-contacts create-or-update" [
+export def "add-or-update-emergency-contacts" [
   company_id: string
   employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -936,7 +936,7 @@ export def "companies-employees-emergency-contacts create-or-update" [
 #
 # GET /v2/companies/{companyId}/employees/{employeeId}/localTaxes
 # operationId: Get all local taxes
-export def "companies-employees-local-taxes get-list" [
+export def "get-all-local-taxes" [
   company_id: string
   employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -974,7 +974,7 @@ export def "companies-employees-local-taxes get-list" [
 #
 # POST /v2/companies/{companyId}/employees/{employeeId}/localTaxes
 # operationId: Add local tax
-export def "companies-employees-local-taxes create-tax" [
+export def "add-local-tax" [
   company_id: string
   employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1021,7 +1021,7 @@ export def "companies-employees-local-taxes create-tax" [
 #
 # DELETE /v2/companies/{companyId}/employees/{employeeId}/localTaxes/{taxCode}
 # operationId: Delete local tax by tax code
-export def "companies-employees-local-taxes delete-tax-by-tax-code" [
+export def "delete-local-tax-by-tax-code" [
   company_id: string
   employee_id: string
   tax_code: string
@@ -1061,7 +1061,7 @@ export def "companies-employees-local-taxes delete-tax-by-tax-code" [
 #
 # GET /v2/companies/{companyId}/employees/{employeeId}/localTaxes/{taxCode}
 # operationId: Get local tax by tax code
-export def "companies-employees-local-taxes get-tax-by-tax-code" [
+export def "get-local-tax-by-tax-code" [
   company_id: string
   employee_id: string
   tax_code: string
@@ -1101,7 +1101,7 @@ export def "companies-employees-local-taxes get-tax-by-tax-code" [
 #
 # PUT /v2/companies/{companyId}/employees/{employeeId}/nonprimaryStateTax
 # operationId: Add or update non-primary state tax
-export def "companies-employees-nonprimary-state-tax create-or-update-non-primary" [
+export def "add-or-update-non-primary-state-tax" [
   company_id: string
   employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1156,7 +1156,7 @@ export def "companies-employees-nonprimary-state-tax create-or-update-non-primar
 #
 # GET /v2/companies/{companyId}/employees/{employeeId}/paystatement/details/{year}
 # operationId: Gets employee pay statement detail data based on the specified year
-export def "companies-employees-paystatement-details get-gets-pay-statement-data-based-on-specified" [
+export def "gets-employee-pay-statement-detail-data-based-on-the-specified-year" [
   company_id: string
   employee_id: string
   year: string
@@ -1201,7 +1201,7 @@ export def "companies-employees-paystatement-details get-gets-pay-statement-data
 #
 # GET /v2/companies/{companyId}/employees/{employeeId}/paystatement/details/{year}/{checkDate}
 # operationId: Gets employee pay statement detail data based on the specified year and check date
-export def "companies-employees-paystatement-details check-gets-pay-statement-data-based-on-specified-and-date" [
+export def "gets-employee-pay-statement-detail-data-based-on-the-specified-year-and-check-date" [
   company_id: string
   employee_id: string
   year: string
@@ -1248,7 +1248,7 @@ export def "companies-employees-paystatement-details check-gets-pay-statement-da
 #
 # GET /v2/companies/{companyId}/employees/{employeeId}/paystatement/summary/{year}
 # operationId: Gets employee pay statement summary data based on the specified year
-export def "companies-employees-paystatement-summary get-gets-pay-statement-data-based-on-specified" [
+export def "gets-employee-pay-statement-summary-data-based-on-the-specified-year" [
   company_id: string
   employee_id: string
   year: string
@@ -1293,7 +1293,7 @@ export def "companies-employees-paystatement-summary get-gets-pay-statement-data
 #
 # GET /v2/companies/{companyId}/employees/{employeeId}/paystatement/summary/{year}/{checkDate}
 # operationId: Gets employee pay statement summary data based on the specified year and check date
-export def "companies-employees-paystatement-summary check-gets-pay-statement-data-based-on-specified-and-date" [
+export def "gets-employee-pay-statement-summary-data-based-on-the-specified-year-and-check-date" [
   company_id: string
   employee_id: string
   year: string
@@ -1340,7 +1340,7 @@ export def "companies-employees-paystatement-summary check-gets-pay-statement-da
 #
 # PUT /v2/companies/{companyId}/employees/{employeeId}/primaryStateTax
 # operationId: Add or update primary state tax
-export def "companies-employees-primary-state-tax create-or-update" [
+export def "add-or-update-primary-state-tax" [
   company_id: string
   employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1394,7 +1394,7 @@ export def "companies-employees-primary-state-tax create-or-update" [
 #
 # GET /v2/companies/{companyId}/employees/{employeeId}/sensitivedata
 # operationId: Get sensitive data
-export def "companies-employees-sensitivedata get-sensitive-data" [
+export def "get-sensitive-data" [
   company_id: string
   employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1436,7 +1436,7 @@ export def "companies-employees-sensitivedata get-sensitive-data" [
 # --ethnicity shape: {ethnicRacialIdentities?: list, ethnicity?: string}
 # --gender shape: {displayPronouns?: bool, genderIdentityDescription?: string, identifyAsLegalGender?: string, legalGender?: string, pronouns?: string, sexualOrientation?: string}
 # --veteran shape: {isVeteran?: string, veteran?: string}
-export def "companies-employees-sensitivedata create-or-update-sensitive-data" [
+export def "add-or-update-sensitive-data" [
   company_id: string
   employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1481,7 +1481,7 @@ export def "companies-employees-sensitivedata create-or-update-sensitive-data" [
 #
 # GET /v2/companies/{companyId}/openapi
 # operationId: Get company-specific Open API documentation
-export def "companies-openapi get-company-specific-open-documentation" [
+export def "get-company-specific-open-api-documentation" [
   company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1520,7 +1520,7 @@ export def "companies-openapi get-company-specific-open-documentation" [
 #
 # POST /v2/credentials/secrets
 # operationId: Add Client Secret
-export def "credentials-secrets create-client" [
+export def "add-client-secret" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1577,7 +1577,7 @@ export def "credentials-secrets create-client" [
 # --webTime shape: {badgeNumber?: string, chargeRate?: float, isTimeLaborEnabled?: bool}
 # --workAddress item shape: {address1?: string, address2?: string, city?: string, country?: string, county?: string, emailAddress?: string, mobilePhone?: string, pager?: string, phone?: string, phoneExtension?: string, postalCode?: string, state?: string}
 # --workEligibility item shape: {alienOrAdmissionDocumentNumber?: string, attestedDate?: string, countryOfIssuance?: string, foreignPassportNumber?: string, i94AdmissionNumber?: string, i9DateVerified?: string, i9Notes?: string, isI9Verified?: bool, isSsnVerified?: bool, ssnDateVerified?: string, ssnNotes?: string, visaType?: string, workAuthorization?: string, workUntil?: string}
-export def "weblinkstaging-companies-employees-newemployees create-new-to-web-link" [
+export def "add-new-employee-to-web-link" [
   company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

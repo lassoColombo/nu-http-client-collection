@@ -115,7 +115,7 @@ def voice-method-completer [] { ["DELETE" "GET" "HEAD" "PATCH" "POST" "PUT"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "archives-calls delete-archived" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "delete-archived-call" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -139,7 +139,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1/Archives/{Date}/Calls/{Sid}
 # operationId: DeleteArchivedCall
-export def "archives-calls delete-archived" [
+export def "delete-archived-call" [
   date: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -176,7 +176,7 @@ export def "archives-calls delete-archived" [
 # GET /v1/ByocTrunks
 #
 # operationId: ListByocTrunk
-export def "byoc-trunks list" [
+export def "list-byoc-trunk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -213,7 +213,7 @@ export def "byoc-trunks list" [
 # POST /v1/ByocTrunks
 #
 # operationId: CreateByocTrunk
-export def "byoc-trunks create" [
+export def "create-byoc-trunk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -260,7 +260,7 @@ export def "byoc-trunks create" [
 # DELETE /v1/ByocTrunks/{Sid}
 #
 # operationId: DeleteByocTrunk
-export def "byoc-trunks delete" [
+export def "delete-byoc-trunk" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -295,7 +295,7 @@ export def "byoc-trunks delete" [
 # GET /v1/ByocTrunks/{Sid}
 #
 # operationId: FetchByocTrunk
-export def "byoc-trunks get" [
+export def "fetch-byoc-trunk" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -330,7 +330,7 @@ export def "byoc-trunks get" [
 # POST /v1/ByocTrunks/{Sid}
 #
 # operationId: UpdateByocTrunk
-export def "byoc-trunks update" [
+export def "update-byoc-trunk" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -379,7 +379,7 @@ export def "byoc-trunks update" [
 # GET /v1/ConnectionPolicies
 #
 # operationId: ListConnectionPolicy
-export def "connection-policies list-policy" [
+export def "list-connection-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -416,7 +416,7 @@ export def "connection-policies list-policy" [
 # POST /v1/ConnectionPolicies
 #
 # operationId: CreateConnectionPolicy
-export def "connection-policies create-policy" [
+export def "create-connection-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -454,7 +454,7 @@ export def "connection-policies create-policy" [
 # GET /v1/ConnectionPolicies/{ConnectionPolicySid}/Targets
 #
 # operationId: ListConnectionPolicyTarget
-export def "connection-policies-targets list-policy" [
+export def "list-connection-policy-target" [
   connection_policy_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -493,7 +493,7 @@ export def "connection-policies-targets list-policy" [
 # POST /v1/ConnectionPolicies/{ConnectionPolicySid}/Targets
 #
 # operationId: CreateConnectionPolicyTarget
-export def "connection-policies-targets create-policy" [
+export def "create-connection-policy-target" [
   connection_policy_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -537,7 +537,7 @@ export def "connection-policies-targets create-policy" [
 # DELETE /v1/ConnectionPolicies/{ConnectionPolicySid}/Targets/{Sid}
 #
 # operationId: DeleteConnectionPolicyTarget
-export def "connection-policies-targets delete-policy" [
+export def "delete-connection-policy-target" [
   connection_policy_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -574,7 +574,7 @@ export def "connection-policies-targets delete-policy" [
 # GET /v1/ConnectionPolicies/{ConnectionPolicySid}/Targets/{Sid}
 #
 # operationId: FetchConnectionPolicyTarget
-export def "connection-policies-targets get-policy" [
+export def "fetch-connection-policy-target" [
   connection_policy_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -611,7 +611,7 @@ export def "connection-policies-targets get-policy" [
 # POST /v1/ConnectionPolicies/{ConnectionPolicySid}/Targets/{Sid}
 #
 # operationId: UpdateConnectionPolicyTarget
-export def "connection-policies-targets update-policy" [
+export def "update-connection-policy-target" [
   connection_policy_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -657,7 +657,7 @@ export def "connection-policies-targets update-policy" [
 # DELETE /v1/ConnectionPolicies/{Sid}
 #
 # operationId: DeleteConnectionPolicy
-export def "connection-policies delete-policy" [
+export def "delete-connection-policy" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -692,7 +692,7 @@ export def "connection-policies delete-policy" [
 # GET /v1/ConnectionPolicies/{Sid}
 #
 # operationId: FetchConnectionPolicy
-export def "connection-policies get-policy" [
+export def "fetch-connection-policy" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -727,7 +727,7 @@ export def "connection-policies get-policy" [
 # POST /v1/ConnectionPolicies/{Sid}
 #
 # operationId: UpdateConnectionPolicy
-export def "connection-policies update-policy" [
+export def "update-connection-policy" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -768,7 +768,7 @@ export def "connection-policies update-policy" [
 #
 # POST /v1/DialingPermissions/BulkCountryUpdates
 # operationId: CreateDialingPermissionsCountryBulkUpdate
-export def "dialing-permissions-bulk-country-updates create" [
+export def "create-dialing-permissions-country-bulk-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -807,7 +807,7 @@ export def "dialing-permissions-bulk-country-updates create" [
 #
 # GET /v1/DialingPermissions/Countries
 # operationId: ListDialingPermissionsCountry
-export def "dialing-permissions-countries list-country" [
+export def "list-dialing-permissions-country" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -851,7 +851,7 @@ export def "dialing-permissions-countries list-country" [
 #
 # GET /v1/DialingPermissions/Countries/{IsoCode}
 # operationId: FetchDialingPermissionsCountry
-export def "dialing-permissions-countries get-country" [
+export def "fetch-dialing-permissions-country" [
   iso_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -887,7 +887,7 @@ export def "dialing-permissions-countries get-country" [
 #
 # GET /v1/DialingPermissions/Countries/{IsoCode}/HighRiskSpecialPrefixes
 # operationId: ListDialingPermissionsHrsPrefixes
-export def "dialing-permissions-countries-high-risk-special-prefixes list-hrs" [
+export def "list-dialing-permissions-hrs-prefixes" [
   iso_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -926,7 +926,7 @@ export def "dialing-permissions-countries-high-risk-special-prefixes list-hrs" [
 # GET /v1/IpRecords
 #
 # operationId: ListIpRecord
-export def "ip-records list" [
+export def "list-ip-record" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -963,7 +963,7 @@ export def "ip-records list" [
 # POST /v1/IpRecords
 #
 # operationId: CreateIpRecord
-export def "ip-records create" [
+export def "create-ip-record" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1003,7 +1003,7 @@ export def "ip-records create" [
 # DELETE /v1/IpRecords/{Sid}
 #
 # operationId: DeleteIpRecord
-export def "ip-records delete" [
+export def "delete-ip-record" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1038,7 +1038,7 @@ export def "ip-records delete" [
 # GET /v1/IpRecords/{Sid}
 #
 # operationId: FetchIpRecord
-export def "ip-records get" [
+export def "fetch-ip-record" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1073,7 +1073,7 @@ export def "ip-records get" [
 # POST /v1/IpRecords/{Sid}
 #
 # operationId: UpdateIpRecord
-export def "ip-records update" [
+export def "update-ip-record" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1114,7 +1114,7 @@ export def "ip-records update" [
 #
 # GET /v1/Settings
 # operationId: FetchDialingPermissionsSettings
-export def "settings get-dialing-permissions" [
+export def "fetch-dialing-permissions-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1148,7 +1148,7 @@ export def "settings get-dialing-permissions" [
 #
 # POST /v1/Settings
 # operationId: UpdateDialingPermissionsSettings
-export def "settings update-dialing-permissions" [
+export def "update-dialing-permissions-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1186,7 +1186,7 @@ export def "settings update-dialing-permissions" [
 # GET /v1/SourceIpMappings
 #
 # operationId: ListSourceIpMapping
-export def "source-ip-mappings list" [
+export def "list-source-ip-mapping" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1223,7 +1223,7 @@ export def "source-ip-mappings list" [
 # POST /v1/SourceIpMappings
 #
 # operationId: CreateSourceIpMapping
-export def "source-ip-mappings create" [
+export def "create-source-ip-mapping" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1262,7 +1262,7 @@ export def "source-ip-mappings create" [
 # DELETE /v1/SourceIpMappings/{Sid}
 #
 # operationId: DeleteSourceIpMapping
-export def "source-ip-mappings delete" [
+export def "delete-source-ip-mapping" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1297,7 +1297,7 @@ export def "source-ip-mappings delete" [
 # GET /v1/SourceIpMappings/{Sid}
 #
 # operationId: FetchSourceIpMapping
-export def "source-ip-mappings get" [
+export def "fetch-source-ip-mapping" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1332,7 +1332,7 @@ export def "source-ip-mappings get" [
 # POST /v1/SourceIpMappings/{Sid}
 #
 # operationId: UpdateSourceIpMapping
-export def "source-ip-mappings update" [
+export def "update-source-ip-mapping" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

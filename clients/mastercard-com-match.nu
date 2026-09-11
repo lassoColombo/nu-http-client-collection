@@ -103,7 +103,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "fraud-merchant-add-merchant create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-fraud-merchant-v3-add-merchant" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -127,7 +127,7 @@ export def commands []: nothing -> table {
 #
 # POST /fraud/merchant/v3/add-merchant
 # --AddMerchantRequest shape: {AcquirerId: string, Merchant?: any}
-export def "fraud-merchant-add-merchant create" [
+export def "post-fraud-merchant-v3-add-merchant" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -165,7 +165,7 @@ export def "fraud-merchant-add-merchant create" [
 #
 # POST /fraud/merchant/v3/common/contact-details
 # --ContactRequest shape: {AcquirerId: string}
-export def "fraud-merchant-common-contact-details create" [
+export def "post-fraud-merchant-v3-common-contact-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -203,7 +203,7 @@ export def "fraud-merchant-common-contact-details create" [
 #
 # POST /fraud/merchant/v3/retro/retro-inquiry-details
 # --RetroInquiryRequest shape: {InquiryReferenceNumber?: string}
-export def "fraud-merchant-retro-retro-inquiry-details create" [
+export def "post-fraud-merchant-v3-retro-retro-inquiry-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -243,7 +243,7 @@ export def "fraud-merchant-retro-retro-inquiry-details create" [
 #
 # POST /fraud/merchant/v3/retro/retro-list
 # --RetroRequest shape: {AcquirerId?: string}
-export def "fraud-merchant-retro-retro-list create" [
+export def "post-fraud-merchant-v3-retro-retro-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -281,7 +281,7 @@ export def "fraud-merchant-retro-retro-list create" [
 #
 # POST /fraud/merchant/v3/termination-inquiry
 # --TerminationInquiryRequest shape: {AcquirerId: string, Merchant?: any, TransactionReferenceNumber?: string}
-export def "fraud-merchant-termination-inquiry create" [
+export def "post-fraud-merchant-v3-termination-inquiry" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -321,7 +321,7 @@ export def "fraud-merchant-termination-inquiry create" [
 # Returns information about Merchants, URLs and up to five principal owners, that have been terminated by an acquiring bank from a previous inquiry. The Inquiry History Results resource displays the inquiry with the option to view either; Possible Merchant Matches or Possible Inquiry Matches.
 #
 # GET /fraud/merchant/v3/termination-inquiry/{IRN}
-export def "fraud-merchant-termination-inquiry get" [
+export def "get-fraud-merchant-v3-termination-inquiry-irn" [
   irn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

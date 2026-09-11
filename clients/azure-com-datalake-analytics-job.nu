@@ -117,7 +117,7 @@ def type-completer [] { ["Hive" "Scope" "USql"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "build-job build" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "job-build" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -142,7 +142,7 @@ export def commands []: nothing -> table {
 # POST /buildJob
 # operationId: Job_Build
 # --properties shape: {runtimeVersion?: string, script: string, type: string}
-export def "build-job build" [
+export def "job-build" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,7 +184,7 @@ export def "build-job build" [
 #
 # GET /jobs
 # operationId: Job_List
-export def "jobs list" [
+export def "job-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -226,7 +226,7 @@ export def "jobs list" [
 #
 # GET /jobs/{jobIdentity}
 # operationId: Job_Get
-export def "jobs get" [
+export def "job-get" [
   job_identity: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -264,7 +264,7 @@ export def "jobs get" [
 #
 # PATCH /jobs/{jobIdentity}
 # operationId: Job_Update
-export def "jobs update" [
+export def "job-update" [
   job_identity: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -311,7 +311,7 @@ export def "jobs update" [
 # operationId: Job_Create
 # --related shape: {pipelineId?: string, pipelineName?: string, pipelineUri?: string, recurrenceId: string, recurrenceName?: string, runId?: string}
 # --properties shape: {runtimeVersion?: string, script: string, type: string}
-export def "jobs create" [
+export def "job-create" [
   job_identity: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -360,7 +360,7 @@ export def "jobs create" [
 #
 # POST /jobs/{jobIdentity}/CancelJob
 # operationId: Job_Cancel
-export def "jobs-cancel-job cancel" [
+export def "job-cancel" [
   job_identity: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -398,7 +398,7 @@ export def "jobs-cancel-job cancel" [
 #
 # GET /jobs/{jobIdentity}/GetDebugDataPath
 # operationId: Job_GetDebugDataPath
-export def "jobs-get-debug-data-path get" [
+export def "job-get-debug-data-path" [
   job_identity: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -436,7 +436,7 @@ export def "jobs-get-debug-data-path get" [
 #
 # GET /jobs/{jobIdentity}/GetStatistics
 # operationId: Job_GetStatistics
-export def "jobs-get-statistics get" [
+export def "job-get-statistics" [
   job_identity: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -474,7 +474,7 @@ export def "jobs-get-statistics get" [
 #
 # POST /jobs/{jobIdentity}/YieldJob
 # operationId: Job_Yield
-export def "jobs-yield-job create" [
+export def "job-yield" [
   job_identity: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -512,7 +512,7 @@ export def "jobs-yield-job create" [
 #
 # GET /pipelines
 # operationId: Pipeline_List
-export def "pipelines list" [
+export def "pipeline-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -550,7 +550,7 @@ export def "pipelines list" [
 #
 # GET /pipelines/{pipelineIdentity}
 # operationId: Pipeline_Get
-export def "pipelines get" [
+export def "pipeline-get" [
   pipeline_identity: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -590,7 +590,7 @@ export def "pipelines get" [
 #
 # GET /recurrences
 # operationId: Recurrence_List
-export def "recurrences list" [
+export def "recurrence-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -628,7 +628,7 @@ export def "recurrences list" [
 #
 # GET /recurrences/{recurrenceIdentity}
 # operationId: Recurrence_Get
-export def "recurrences get" [
+export def "recurrence-get" [
   recurrence_identity: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

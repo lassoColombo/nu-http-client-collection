@@ -122,7 +122,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-media-media-services-transforms list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "transforms-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaServices/{accountName}/transforms
 # operationId: Transforms_List
-export def "subscriptions-resource-groups-providers-microsoft-media-media-services-transforms list" [
+export def "transforms-list" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -190,7 +190,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-media-servic
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaServices/{accountName}/transforms/{transformName}
 # operationId: Transforms_Delete
-export def "subscriptions-resource-groups-providers-microsoft-media-media-services-transforms delete" [
+export def "transforms-delete" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -234,7 +234,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-media-servic
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaServices/{accountName}/transforms/{transformName}
 # operationId: Transforms_Get
-export def "subscriptions-resource-groups-providers-microsoft-media-media-services-transforms get" [
+export def "transforms-get" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -279,7 +279,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-media-servic
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaServices/{accountName}/transforms/{transformName}
 # operationId: Transforms_Update
 # --properties shape: {description?: string, outputs: list}
-export def "subscriptions-resource-groups-providers-microsoft-media-media-services-transforms update" [
+export def "transforms-update" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -328,7 +328,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-media-servic
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaServices/{accountName}/transforms/{transformName}
 # operationId: Transforms_CreateOrUpdate
 # --properties shape: {description?: string, outputs: list}
-export def "subscriptions-resource-groups-providers-microsoft-media-media-services-transforms create-or-update" [
+export def "transforms-create-or-update" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -376,7 +376,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-media-servic
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaServices/{accountName}/transforms/{transformName}/jobs
 # operationId: Jobs_List
-export def "subscriptions-resource-groups-providers-microsoft-media-media-services-transforms-jobs list" [
+export def "jobs-list" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -422,7 +422,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-media-servic
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaServices/{accountName}/transforms/{transformName}/jobs/{jobName}
 # operationId: Jobs_Delete
-export def "subscriptions-resource-groups-providers-microsoft-media-media-services-transforms-jobs delete" [
+export def "jobs-delete" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -468,7 +468,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-media-servic
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaServices/{accountName}/transforms/{transformName}/jobs/{jobName}
 # operationId: Jobs_Get
-export def "subscriptions-resource-groups-providers-microsoft-media-media-services-transforms-jobs get" [
+export def "jobs-get" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -515,7 +515,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-media-servic
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaServices/{accountName}/transforms/{transformName}/jobs/{jobName}
 # operationId: Jobs_Update
 # --properties shape: {correlationData?: record, description?: string, input: record, outputs: list, priority?: "Low"|"Normal"|"High"}
-export def "subscriptions-resource-groups-providers-microsoft-media-media-services-transforms-jobs update" [
+export def "jobs-update" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -566,7 +566,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-media-servic
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaServices/{accountName}/transforms/{transformName}/jobs/{jobName}
 # operationId: Jobs_Create
 # --properties shape: {correlationData?: record, description?: string, input: record, outputs: list, priority?: "Low"|"Normal"|"High"}
-export def "subscriptions-resource-groups-providers-microsoft-media-media-services-transforms-jobs create" [
+export def "jobs-create" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -616,7 +616,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-media-servic
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaServices/{accountName}/transforms/{transformName}/jobs/{jobName}/cancelJob
 # operationId: Jobs_CancelJob
-export def "subscriptions-resource-groups-providers-microsoft-media-media-services-transforms-jobs-cancel-job cancel" [
+export def "jobs-cancel-job" [
   subscription_id: string
   resource_group_name: string
   account_name: string

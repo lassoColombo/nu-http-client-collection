@@ -130,7 +130,7 @@ def enforcement-mode-completer [] { ["ENFORCED" "OFF" "UNENFORCED"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects create-exchange-attest-assertion" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "firebaseappcheck-projects-apps-exchange-app-attest-assertion" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -154,7 +154,7 @@ export def commands []: nothing -> table {
 #
 # POST /v1/{app}:exchangeAppAttestAssertion
 # operationId: firebaseappcheck.projects.apps.exchangeAppAttestAssertion
-export def "projects create-exchange-attest-assertion" [
+export def "firebaseappcheck-projects-apps-exchange-app-attest-assertion" [
   app: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -208,7 +208,7 @@ export def "projects create-exchange-attest-assertion" [
 #
 # POST /v1/{app}:exchangeAppAttestAttestation
 # operationId: firebaseappcheck.projects.apps.exchangeAppAttestAttestation
-export def "projects create-exchange-attest-attestation" [
+export def "firebaseappcheck-projects-apps-exchange-app-attest-attestation" [
   app: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -262,7 +262,7 @@ export def "projects create-exchange-attest-attestation" [
 #
 # POST /v1/{app}:exchangeCustomToken
 # operationId: firebaseappcheck.projects.apps.exchangeCustomToken
-export def "projects create-exchange-custom-token" [
+export def "firebaseappcheck-projects-apps-exchange-custom-token" [
   app: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -314,7 +314,7 @@ export def "projects create-exchange-custom-token" [
 #
 # POST /v1/{app}:exchangeDebugToken
 # operationId: firebaseappcheck.projects.apps.exchangeDebugToken
-export def "projects create-exchange-debug-token" [
+export def "firebaseappcheck-projects-apps-exchange-debug-token" [
   app: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -366,7 +366,7 @@ export def "projects create-exchange-debug-token" [
 #
 # POST /v1/{app}:exchangeDeviceCheckToken
 # operationId: firebaseappcheck.projects.apps.exchangeDeviceCheckToken
-export def "projects check-exchange-device-token" [
+export def "firebaseappcheck-projects-apps-exchange-device-check-token" [
   app: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -418,7 +418,7 @@ export def "projects check-exchange-device-token" [
 #
 # POST /v1/{app}:exchangePlayIntegrityToken
 # operationId: firebaseappcheck.projects.apps.exchangePlayIntegrityToken
-export def "projects create-exchange-play-integrity-token" [
+export def "firebaseappcheck-projects-apps-exchange-play-integrity-token" [
   app: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -470,7 +470,7 @@ export def "projects create-exchange-play-integrity-token" [
 #
 # POST /v1/{app}:exchangeRecaptchaEnterpriseToken
 # operationId: firebaseappcheck.projects.apps.exchangeRecaptchaEnterpriseToken
-export def "projects create-exchange-recaptcha-enterprise-token" [
+export def "firebaseappcheck-projects-apps-exchange-recaptcha-enterprise-token" [
   app: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -522,7 +522,7 @@ export def "projects create-exchange-recaptcha-enterprise-token" [
 #
 # POST /v1/{app}:exchangeRecaptchaV3Token
 # operationId: firebaseappcheck.projects.apps.exchangeRecaptchaV3Token
-export def "projects create-exchange-recaptcha-token" [
+export def "firebaseappcheck-projects-apps-exchange-recaptcha-v3-token" [
   app: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -574,7 +574,7 @@ export def "projects create-exchange-recaptcha-token" [
 #
 # POST /v1/{app}:exchangeSafetyNetToken
 # operationId: firebaseappcheck.projects.apps.exchangeSafetyNetToken
-export def "projects create-exchange-safety-net-token" [
+export def "firebaseappcheck-projects-apps-exchange-safety-net-token" [
   app: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -626,7 +626,7 @@ export def "projects create-exchange-safety-net-token" [
 #
 # POST /v1/{app}:generateAppAttestChallenge
 # operationId: firebaseappcheck.projects.apps.generateAppAttestChallenge
-export def "projects generate-attest-challenge" [
+export def "firebaseappcheck-projects-apps-generate-app-attest-challenge" [
   app: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -678,7 +678,7 @@ export def "projects generate-attest-challenge" [
 #
 # POST /v1/{app}:generatePlayIntegrityChallenge
 # operationId: firebaseappcheck.projects.apps.generatePlayIntegrityChallenge
-export def "projects generate-play-integrity-challenge" [
+export def "firebaseappcheck-projects-apps-generate-play-integrity-challenge" [
   app: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -730,7 +730,7 @@ export def "projects generate-play-integrity-challenge" [
 #
 # DELETE /v1/{name}
 # operationId: firebaseappcheck.projects.apps.debugTokens.delete
-export def "projects delete" [
+export def "firebaseappcheck-projects-apps-debug-tokens-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -778,7 +778,7 @@ export def "projects delete" [
 #
 # GET /v1/{name}
 # operationId: firebaseappcheck.projects.services.get
-export def "projects get" [
+export def "firebaseappcheck-projects-services-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -826,7 +826,7 @@ export def "projects get" [
 #
 # PATCH /v1/{name}
 # operationId: firebaseappcheck.projects.services.patch
-export def "projects update" [
+export def "firebaseappcheck-projects-services-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -880,7 +880,7 @@ export def "projects update" [
 #
 # GET /v1/{parent}/apps/-/appAttestConfig:batchGet
 # operationId: firebaseappcheck.projects.apps.appAttestConfig.batchGet
-export def "apps-app-attest-config-batch-get get" [
+export def "firebaseappcheck-projects-apps-app-attest-config-batch-get" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -929,7 +929,7 @@ export def "apps-app-attest-config-batch-get get" [
 #
 # GET /v1/{parent}/apps/-/deviceCheckConfig:batchGet
 # operationId: firebaseappcheck.projects.apps.deviceCheckConfig.batchGet
-export def "apps-device-check-config-batch-get get" [
+export def "firebaseappcheck-projects-apps-device-check-config-batch-get" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -978,7 +978,7 @@ export def "apps-device-check-config-batch-get get" [
 #
 # GET /v1/{parent}/apps/-/playIntegrityConfig:batchGet
 # operationId: firebaseappcheck.projects.apps.playIntegrityConfig.batchGet
-export def "apps-play-integrity-config-batch-get get" [
+export def "firebaseappcheck-projects-apps-play-integrity-config-batch-get" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1027,7 +1027,7 @@ export def "apps-play-integrity-config-batch-get get" [
 #
 # GET /v1/{parent}/apps/-/recaptchaEnterpriseConfig:batchGet
 # operationId: firebaseappcheck.projects.apps.recaptchaEnterpriseConfig.batchGet
-export def "apps-recaptcha-enterprise-config-batch-get get" [
+export def "firebaseappcheck-projects-apps-recaptcha-enterprise-config-batch-get" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1076,7 +1076,7 @@ export def "apps-recaptcha-enterprise-config-batch-get get" [
 #
 # GET /v1/{parent}/apps/-/recaptchaV3Config:batchGet
 # operationId: firebaseappcheck.projects.apps.recaptchaV3Config.batchGet
-export def "apps-recaptcha-v3-config-batch-get get" [
+export def "firebaseappcheck-projects-apps-recaptcha-v3-config-batch-get" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1125,7 +1125,7 @@ export def "apps-recaptcha-v3-config-batch-get get" [
 #
 # GET /v1/{parent}/apps/-/safetyNetConfig:batchGet
 # operationId: firebaseappcheck.projects.apps.safetyNetConfig.batchGet
-export def "apps-safety-net-config-batch-get get" [
+export def "firebaseappcheck-projects-apps-safety-net-config-batch-get" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1174,7 +1174,7 @@ export def "apps-safety-net-config-batch-get get" [
 #
 # GET /v1/{parent}/debugTokens
 # operationId: firebaseappcheck.projects.apps.debugTokens.list
-export def "debug-tokens list" [
+export def "firebaseappcheck-projects-apps-debug-tokens-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1224,7 +1224,7 @@ export def "debug-tokens list" [
 #
 # POST /v1/{parent}/debugTokens
 # operationId: firebaseappcheck.projects.apps.debugTokens.create
-export def "debug-tokens create" [
+export def "firebaseappcheck-projects-apps-debug-tokens-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1278,7 +1278,7 @@ export def "debug-tokens create" [
 #
 # GET /v1/{parent}/services
 # operationId: firebaseappcheck.projects.services.list
-export def "services list" [
+export def "firebaseappcheck-projects-services-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1329,7 +1329,7 @@ export def "services list" [
 # POST /v1/{parent}/services:batchUpdate
 # operationId: firebaseappcheck.projects.services.batchUpdate
 # --requests item shape: {service?: record, updateMask?: string}
-export def "services-batch-update update" [
+export def "firebaseappcheck-projects-services-batch-update" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

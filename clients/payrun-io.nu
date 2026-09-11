@@ -121,7 +121,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "employer delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "delete-employer" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -145,7 +145,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /Employer/{EmployerId}
 # operationId: DeleteEmployer
-export def "employer delete" [
+export def "delete-employer" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -185,7 +185,7 @@ export def "employer delete" [
 #
 # GET /Employer/{EmployerId}
 # operationId: GetEmployer
-export def "employer get" [
+export def "get-employer" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -226,7 +226,7 @@ export def "employer get" [
 # PATCH /Employer/{EmployerId}
 # operationId: PatchEmployer
 # --Employer shape: {Address?: record, ApprenticeshipLevyAllowance?: float, AutoEnrolment?: record, BacsServiceUserNumber?: string, BankAccount?: record, CalculateApprenticeshipLevy?: bool, ClaimEmploymentAllowance?: bool, ClaimSmallEmployerRelief?: bool, EffectiveDate?: string, HmrcSettings?: record, MetaData?: record, Name?: string, NextRevisionDate?: string, Region?: "NotSet"|"England"|"Scotland"|"Wales", Revision?: int, ... (2 more fields)}
-export def "employer update-by-employer-id" [
+export def "patch-employer" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -271,7 +271,7 @@ export def "employer update-by-employer-id" [
 # PUT /Employer/{EmployerId}
 # operationId: PutEmployer
 # --Employer shape: {Address?: record, ApprenticeshipLevyAllowance?: float, AutoEnrolment?: record, BacsServiceUserNumber?: string, BankAccount?: record, CalculateApprenticeshipLevy?: bool, ClaimEmploymentAllowance?: bool, ClaimSmallEmployerRelief?: bool, EffectiveDate?: string, HmrcSettings?: record, MetaData?: record, Name?: string, NextRevisionDate?: string, Region?: "NotSet"|"England"|"Scotland"|"Wales", Revision?: int, ... (2 more fields)}
-export def "employer update-by-employer-id-1" [
+export def "put-employer" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -315,7 +315,7 @@ export def "employer update-by-employer-id-1" [
 #
 # DELETE /Employer/{EmployerId}/CisLineType/{CisLineTypeId}
 # operationId: DeleteCisLineType
-export def "employer-cis-line-type delete" [
+export def "delete-cis-line-type" [
   employer_id: string
   cis_line_type_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -357,7 +357,7 @@ export def "employer-cis-line-type delete" [
 #
 # GET /Employer/{EmployerId}/CisLineType/{CisLineTypeId}
 # operationId: GetCisLineTypeFromEmployer
-export def "employer-cis-line-type get" [
+export def "get-cis-line-type-from-employer" [
   employer_id: string
   cis_line_type_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -400,7 +400,7 @@ export def "employer-cis-line-type get" [
 # PUT /Employer/{EmployerId}/CisLineType/{CisLineTypeId}
 # operationId: PutCisLineTypeIntoEmployer
 # --CisLineType shape: {Description?: string, LineType?: string, NominalCode?: record, TaxTreatment?: "Taxable"|"NonTaxable"|"Notional"|"Materials"}
-export def "employer-cis-line-type update-into" [
+export def "put-cis-line-type-into-employer" [
   employer_id: string
   cis_line_type_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -446,7 +446,7 @@ export def "employer-cis-line-type update-into" [
 #
 # DELETE /Employer/{EmployerId}/CisLineType/{CisLineTypeId}/Tag/{TagId}
 # operationId: DeleteCisLineTypeTag
-export def "employer-cis-line-type-tag delete" [
+export def "delete-cis-line-type-tag" [
   employer_id: string
   cis_line_type_id: string
   tag_id: string
@@ -490,7 +490,7 @@ export def "employer-cis-line-type-tag delete" [
 #
 # GET /Employer/{EmployerId}/CisLineType/{CisLineTypeId}/Tag/{TagId}
 # operationId: GetTagFromCisLineType
-export def "employer-cis-line-type-tag get" [
+export def "get-tag-from-cis-line-type" [
   employer_id: string
   cis_line_type_id: string
   tag_id: string
@@ -534,7 +534,7 @@ export def "employer-cis-line-type-tag get" [
 #
 # PUT /Employer/{EmployerId}/CisLineType/{CisLineTypeId}/Tag/{TagId}
 # operationId: PutCisLineTypeTag
-export def "employer-cis-line-type-tag update" [
+export def "put-cis-line-type-tag" [
   employer_id: string
   cis_line_type_id: string
   tag_id: string
@@ -578,7 +578,7 @@ export def "employer-cis-line-type-tag update" [
 #
 # GET /Employer/{EmployerId}/CisLineType/{CisLineTypeId}/Tags
 # operationId: GetTagsFromCisLineType
-export def "employer-cis-line-type-tags get" [
+export def "get-tags-from-cis-line-type" [
   employer_id: string
   cis_line_type_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -620,7 +620,7 @@ export def "employer-cis-line-type-tags get" [
 #
 # GET /Employer/{EmployerId}/CisLineTypes
 # operationId: GetCisLineTypesFromEmployer
-export def "employer-cis-line-types get" [
+export def "get-cis-line-types-from-employer" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -661,7 +661,7 @@ export def "employer-cis-line-types get" [
 # POST /Employer/{EmployerId}/CisLineTypes
 # operationId: PostCisLineTypeIntoEmployer
 # --CisLineType shape: {Description?: string, LineType?: string, NominalCode?: record, TaxTreatment?: "Taxable"|"NonTaxable"|"Notional"|"Materials"}
-export def "employer-cis-line-types create-into" [
+export def "post-cis-line-type-into-employer" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -705,7 +705,7 @@ export def "employer-cis-line-types create-into" [
 #
 # GET /Employer/{EmployerId}/CisLineTypes/Tag/{TagId}
 # operationId: GetCisLineTypesWithTag
-export def "employer-cis-line-types-tag get" [
+export def "get-cis-line-types-with-tag" [
   employer_id: string
   tag_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -747,7 +747,7 @@ export def "employer-cis-line-types-tag get" [
 #
 # GET /Employer/{EmployerId}/CisLineTypes/Tags
 # operationId: GetAllCisLineTypeTags
-export def "employer-cis-line-types-tags get-list" [
+export def "get-all-cis-line-type-tags" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -787,7 +787,7 @@ export def "employer-cis-line-types-tags get-list" [
 #
 # DELETE /Employer/{EmployerId}/CisTransaction/{CisTransactionId}
 # operationId: DeleteCisTransaction
-export def "employer-cis-transaction delete" [
+export def "delete-cis-transaction" [
   employer_id: string
   cis_transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -829,7 +829,7 @@ export def "employer-cis-transaction delete" [
 #
 # GET /Employer/{EmployerId}/CisTransaction/{CisTransactionId}
 # operationId: GetCisTransactionFromEmployer
-export def "employer-cis-transaction get" [
+export def "get-cis-transaction-from-employer" [
   employer_id: string
   cis_transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -871,7 +871,7 @@ export def "employer-cis-transaction get" [
 #
 # GET /Employer/{EmployerId}/CisTransactions
 # operationId: GetCisTransactionsFromEmployer
-export def "employer-cis-transactions get" [
+export def "get-cis-transactions-from-employer" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -911,7 +911,7 @@ export def "employer-cis-transactions get" [
 #
 # DELETE /Employer/{EmployerId}/DpsMessage/{DpsMessageId}
 # operationId: DeleteDpsMessage
-export def "employer-dps-message delete" [
+export def "delete-dps-message" [
   employer_id: string
   dps_message_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -953,7 +953,7 @@ export def "employer-dps-message delete" [
 #
 # GET /Employer/{EmployerId}/DpsMessage/{DpsMessageId}
 # operationId: GetDpsMessageFromEmployer
-export def "employer-dps-message get" [
+export def "get-dps-message-from-employer" [
   employer_id: string
   dps_message_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -995,7 +995,7 @@ export def "employer-dps-message get" [
 #
 # PATCH /Employer/{EmployerId}/DpsMessage/{DpsMessageId}
 # operationId: PatchDpsMessage
-export def "employer-dps-message update-by-employer-id-dps-message-id" [
+export def "patch-dps-message" [
   employer_id: string
   dps_message_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1037,7 +1037,7 @@ export def "employer-dps-message update-by-employer-id-dps-message-id" [
 #
 # PUT /Employer/{EmployerId}/DpsMessage/{DpsMessageId}
 # operationId: PutDpsMessage
-export def "employer-dps-message update-by-employer-id-dps-message-id-1" [
+export def "put-dps-message" [
   employer_id: string
   dps_message_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1079,7 +1079,7 @@ export def "employer-dps-message update-by-employer-id-dps-message-id-1" [
 #
 # GET /Employer/{EmployerId}/DpsMessages
 # operationId: GetDpsMessagesFromEmployer
-export def "employer-dps-messages get" [
+export def "get-dps-messages-from-employer" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1119,7 +1119,7 @@ export def "employer-dps-messages get" [
 #
 # POST /Employer/{EmployerId}/DpsMessages
 # operationId: PostDpsMessage
-export def "employer-dps-messages create" [
+export def "post-dps-message" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1159,7 +1159,7 @@ export def "employer-dps-messages create" [
 #
 # DELETE /Employer/{EmployerId}/Employee/{EmployeeId}
 # operationId: DeleteEmployee
-export def "employer-employee delete" [
+export def "delete-employee" [
   employer_id: string
   employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1201,7 +1201,7 @@ export def "employer-employee delete" [
 #
 # GET /Employer/{EmployerId}/Employee/{EmployeeId}
 # operationId: GetEmployeeFromEmployer
-export def "employer-employee get" [
+export def "get-employee-from-employer" [
   employer_id: string
   employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1244,7 +1244,7 @@ export def "employer-employee get" [
 # PATCH /Employer/{EmployerId}/Employee/{EmployeeId}
 # operationId: PatchEmployee
 # --Employee shape: {AEAssessmentOverride?: "None"|"OptOut"|"OptIn"|"VoluntaryJoiner"|"ContractualPension"|"CeasedMembership"|"Leaver"|"Excluded", AEAssessmentOverrideDate?: string, AEExclusionReasonCode?: "OtherNotKnown"|"NotAWorker"|"NotUKWorker"|"TemporaryUKWorker"|"OutsideAgeRange"|"SingleEmployeeDirector"|"CeasedMembershipWithin12Months"|"CeasedMembershipBeyond12Months"|"WorkerWULSWithin12Month"|"WorkerWULSBeyond12Month"|"WorkerInNoticePeriod"|"WorkerTaxProtection", AEPostponementDate?: string, Address?: record, ... (41 more fields)}
-export def "employer-employee update" [
+export def "patch-employee" [
   employer_id: string
   employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1291,7 +1291,7 @@ export def "employer-employee update" [
 # PUT /Employer/{EmployerId}/Employee/{EmployeeId}
 # operationId: PutEmployeeIntoEmployer
 # --Employee shape: {AEAssessmentOverride?: "None"|"OptOut"|"OptIn"|"VoluntaryJoiner"|"ContractualPension"|"CeasedMembership"|"Leaver"|"Excluded", AEAssessmentOverrideDate?: string, AEExclusionReasonCode?: "OtherNotKnown"|"NotAWorker"|"NotUKWorker"|"TemporaryUKWorker"|"OutsideAgeRange"|"SingleEmployeeDirector"|"CeasedMembershipWithin12Months"|"CeasedMembershipBeyond12Months"|"WorkerWULSWithin12Month"|"WorkerWULSBeyond12Month"|"WorkerInNoticePeriod"|"WorkerTaxProtection", AEPostponementDate?: string, Address?: record, ... (41 more fields)}
-export def "employer-employee update-into" [
+export def "put-employee-into-employer" [
   employer_id: string
   employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1337,7 +1337,7 @@ export def "employer-employee update-into" [
 #
 # DELETE /Employer/{EmployerId}/Employee/{EmployeeId}/AEAssessment/{AEAssessmentId}
 # operationId: DeleteAEAssessment
-export def "employer-employee-ae-assessment delete" [
+export def "delete-ae-assessment" [
   employer_id: string
   employee_id: string
   ae_assessment_id: string
@@ -1381,7 +1381,7 @@ export def "employer-employee-ae-assessment delete" [
 #
 # GET /Employer/{EmployerId}/Employee/{EmployeeId}/AEAssessment/{AEAssessmentId}
 # operationId: GetAEAssessmentFromEmployee
-export def "employer-employee-ae-assessment get" [
+export def "get-ae-assessment-from-employee" [
   employer_id: string
   employee_id: string
   ae_assessment_id: string
@@ -1426,7 +1426,7 @@ export def "employer-employee-ae-assessment get" [
 # PUT /Employer/{EmployerId}/Employee/{EmployeeId}/AEAssessment/{AEAssessmentId}
 # operationId: PutNewAEAssessment
 # --AEAssessment shape: {Age?: int, AssessmentCode?: "Excluded"|"EligibleJobHolder"|"NonEligibleJobHolder"|"EntitledWorker", AssessmentDate?: string, AssessmentEvent?: "NonEnrolmentEvent"|"AutomaticEnrolment"|"OptIn"|"VoluntaryJoiner"|"ContractualEnrolment", AssessmentOverride?: "None"|"OptOut"|"OptIn"|"VoluntaryJoiner"|"ContractualPension"|"CeasedMembership"|"Leaver"|"Excluded", AssessmentResult?: "Inconclusive"|"NoChange"|"Enrol"|"Exit", IsMemberOfAlternativePensionScheme?: bool, OptOutWindowEndDate?: string, ... (6 more fields)}
-export def "employer-employee-ae-assessment update-new" [
+export def "put-new-ae-assessment" [
   employer_id: string
   employee_id: string
   ae_assessment_id: string
@@ -1474,7 +1474,7 @@ export def "employer-employee-ae-assessment update-new" [
 #
 # GET /Employer/{EmployerId}/Employee/{EmployeeId}/AEAssessments
 # operationId: GetAEAssessmentsFromEmployee
-export def "employer-employee-ae-assessments get" [
+export def "get-ae-assessments-from-employee" [
   employer_id: string
   employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1517,7 +1517,7 @@ export def "employer-employee-ae-assessments get" [
 # POST /Employer/{EmployerId}/Employee/{EmployeeId}/AEAssessments
 # operationId: PostNewAEAssessment
 # --AEAssessment shape: {Age?: int, AssessmentCode?: "Excluded"|"EligibleJobHolder"|"NonEligibleJobHolder"|"EntitledWorker", AssessmentDate?: string, AssessmentEvent?: "NonEnrolmentEvent"|"AutomaticEnrolment"|"OptIn"|"VoluntaryJoiner"|"ContractualEnrolment", AssessmentOverride?: "None"|"OptOut"|"OptIn"|"VoluntaryJoiner"|"ContractualPension"|"CeasedMembership"|"Leaver"|"Excluded", AssessmentResult?: "Inconclusive"|"NoChange"|"Enrol"|"Exit", IsMemberOfAlternativePensionScheme?: bool, OptOutWindowEndDate?: string, ... (6 more fields)}
-export def "employer-employee-ae-assessments create-new" [
+export def "post-new-ae-assessment" [
   employer_id: string
   employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1563,7 +1563,7 @@ export def "employer-employee-ae-assessments create-new" [
 #
 # GET /Employer/{EmployerId}/Employee/{EmployeeId}/Commentaries
 # operationId: GetCommentariesFromEmployee
-export def "employer-employee-commentaries get" [
+export def "get-commentaries-from-employee" [
   employer_id: string
   employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1605,7 +1605,7 @@ export def "employer-employee-commentaries get" [
 #
 # GET /Employer/{EmployerId}/Employee/{EmployeeId}/Commentary/{CommentaryId}
 # operationId: GetCommentaryFromEmployee
-export def "employer-employee-commentary get" [
+export def "get-commentary-from-employee" [
   employer_id: string
   employee_id: string
   commentary_id: string
@@ -1649,7 +1649,7 @@ export def "employer-employee-commentary get" [
 #
 # GET /Employer/{EmployerId}/Employee/{EmployeeId}/JournalLines
 # operationId: GetJournalLinesFromEmployee
-export def "employer-employee-journal-lines get" [
+export def "get-journal-lines-from-employee" [
   employer_id: string
   employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1691,7 +1691,7 @@ export def "employer-employee-journal-lines get" [
 #
 # DELETE /Employer/{EmployerId}/Employee/{EmployeeId}/PayInstruction/{PayInstructionId}
 # operationId: DeletePayInstruction
-export def "employer-employee-pay-instruction delete" [
+export def "delete-pay-instruction" [
   employer_id: string
   employee_id: string
   pay_instruction_id: string
@@ -1735,7 +1735,7 @@ export def "employer-employee-pay-instruction delete" [
 #
 # GET /Employer/{EmployerId}/Employee/{EmployeeId}/PayInstruction/{PayInstructionId}
 # operationId: GetPayInstructionFromEmployee
-export def "employer-employee-pay-instruction get" [
+export def "get-pay-instruction-from-employee" [
   employer_id: string
   employee_id: string
   pay_instruction_id: string
@@ -1780,7 +1780,7 @@ export def "employer-employee-pay-instruction get" [
 # PATCH /Employer/{EmployerId}/Employee/{EmployeeId}/PayInstruction/{PayInstructionId}
 # operationId: PatchPayInstruction
 # --PayInstruction shape: {Description?: string, EndDate?: string, PayLineTag?: string, StartDate?: string}
-export def "employer-employee-pay-instruction update-by-employer-id-employee-id-pay-instruction-id" [
+export def "patch-pay-instruction" [
   employer_id: string
   employee_id: string
   pay_instruction_id: string
@@ -1829,7 +1829,7 @@ export def "employer-employee-pay-instruction update-by-employer-id-employee-id-
 # PUT /Employer/{EmployerId}/Employee/{EmployeeId}/PayInstruction/{PayInstructionId}
 # operationId: PutPayInstruction
 # --PayInstruction shape: {Description?: string, EndDate?: string, PayLineTag?: string, StartDate?: string}
-export def "employer-employee-pay-instruction update-by-employer-id-employee-id-pay-instruction-id-1" [
+export def "put-pay-instruction" [
   employer_id: string
   employee_id: string
   pay_instruction_id: string
@@ -1877,7 +1877,7 @@ export def "employer-employee-pay-instruction update-by-employer-id-employee-id-
 #
 # DELETE /Employer/{EmployerId}/Employee/{EmployeeId}/PayInstruction/{PayInstructionId}/Tag/{TagId}
 # operationId: DeletePayInstructionTag
-export def "employer-employee-pay-instruction-tag delete" [
+export def "delete-pay-instruction-tag" [
   employer_id: string
   employee_id: string
   pay_instruction_id: string
@@ -1923,7 +1923,7 @@ export def "employer-employee-pay-instruction-tag delete" [
 #
 # GET /Employer/{EmployerId}/Employee/{EmployeeId}/PayInstruction/{PayInstructionId}/Tag/{TagId}
 # operationId: GetTagFromPayInstruction
-export def "employer-employee-pay-instruction-tag get" [
+export def "get-tag-from-pay-instruction" [
   employer_id: string
   employee_id: string
   pay_instruction_id: string
@@ -1969,7 +1969,7 @@ export def "employer-employee-pay-instruction-tag get" [
 #
 # PUT /Employer/{EmployerId}/Employee/{EmployeeId}/PayInstruction/{PayInstructionId}/Tag/{TagId}
 # operationId: PutPayInstructionTag
-export def "employer-employee-pay-instruction-tag update" [
+export def "put-pay-instruction-tag" [
   employer_id: string
   employee_id: string
   pay_instruction_id: string
@@ -2015,7 +2015,7 @@ export def "employer-employee-pay-instruction-tag update" [
 #
 # GET /Employer/{EmployerId}/Employee/{EmployeeId}/PayInstruction/{PayInstructionId}/Tags
 # operationId: GetTagsFromPayInstruction
-export def "employer-employee-pay-instruction-tags get" [
+export def "get-tags-from-pay-instruction" [
   employer_id: string
   employee_id: string
   pay_instruction_id: string
@@ -2059,7 +2059,7 @@ export def "employer-employee-pay-instruction-tags get" [
 #
 # GET /Employer/{EmployerId}/Employee/{EmployeeId}/PayInstructions
 # operationId: GetPayInstructionsFromEmployee
-export def "employer-employee-pay-instructions get" [
+export def "get-pay-instructions-from-employee" [
   employer_id: string
   employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2102,7 +2102,7 @@ export def "employer-employee-pay-instructions get" [
 # POST /Employer/{EmployerId}/Employee/{EmployeeId}/PayInstructions
 # operationId: PostPayInstruction
 # --PayInstruction shape: {Description?: string, EndDate?: string, PayLineTag?: string, StartDate?: string}
-export def "employer-employee-pay-instructions create" [
+export def "post-pay-instruction" [
   employer_id: string
   employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2148,7 +2148,7 @@ export def "employer-employee-pay-instructions create" [
 #
 # GET /Employer/{EmployerId}/Employee/{EmployeeId}/PayInstructions/Tag/{TagId}
 # operationId: GetPayInstructionsWithTag
-export def "employer-employee-pay-instructions-tag get" [
+export def "get-pay-instructions-with-tag" [
   employer_id: string
   employee_id: string
   tag_id: string
@@ -2192,7 +2192,7 @@ export def "employer-employee-pay-instructions-tag get" [
 #
 # GET /Employer/{EmployerId}/Employee/{EmployeeId}/PayInstructions/Tags
 # operationId: GetAllPayInstructionTags
-export def "employer-employee-pay-instructions-tags get-list" [
+export def "get-all-pay-instruction-tags" [
   employer_id: string
   employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2234,7 +2234,7 @@ export def "employer-employee-pay-instructions-tags get-list" [
 #
 # GET /Employer/{EmployerId}/Employee/{EmployeeId}/PayLine/{PayLineId}
 # operationId: GetPayLineFromEmployee
-export def "employer-employee-pay-line get" [
+export def "get-pay-line-from-employee" [
   employer_id: string
   employee_id: string
   pay_line_id: string
@@ -2278,7 +2278,7 @@ export def "employer-employee-pay-line get" [
 #
 # DELETE /Employer/{EmployerId}/Employee/{EmployeeId}/PayLine/{PayLineId}/Tag/{TagId}
 # operationId: DeletePayLineTag
-export def "employer-employee-pay-line-tag delete" [
+export def "delete-pay-line-tag" [
   employer_id: string
   employee_id: string
   pay_line_id: string
@@ -2324,7 +2324,7 @@ export def "employer-employee-pay-line-tag delete" [
 #
 # GET /Employer/{EmployerId}/Employee/{EmployeeId}/PayLine/{PayLineId}/Tag/{TagId}
 # operationId: GetTagFromPayLine
-export def "employer-employee-pay-line-tag get" [
+export def "get-tag-from-pay-line" [
   employer_id: string
   employee_id: string
   pay_line_id: string
@@ -2370,7 +2370,7 @@ export def "employer-employee-pay-line-tag get" [
 #
 # PUT /Employer/{EmployerId}/Employee/{EmployeeId}/PayLine/{PayLineId}/Tag/{TagId}
 # operationId: PutPayLineTag
-export def "employer-employee-pay-line-tag update" [
+export def "put-pay-line-tag" [
   employer_id: string
   employee_id: string
   pay_line_id: string
@@ -2416,7 +2416,7 @@ export def "employer-employee-pay-line-tag update" [
 #
 # GET /Employer/{EmployerId}/Employee/{EmployeeId}/PayLine/{PayLineId}/Tags
 # operationId: GetTagsFromPayLine
-export def "employer-employee-pay-line-tags get" [
+export def "get-tags-from-pay-line" [
   employer_id: string
   employee_id: string
   pay_line_id: string
@@ -2460,7 +2460,7 @@ export def "employer-employee-pay-line-tags get" [
 #
 # GET /Employer/{EmployerId}/Employee/{EmployeeId}/PayLines
 # operationId: GetPayLinesFromEmployee
-export def "employer-employee-pay-lines get" [
+export def "get-pay-lines-from-employee" [
   employer_id: string
   employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2502,7 +2502,7 @@ export def "employer-employee-pay-lines get" [
 #
 # GET /Employer/{EmployerId}/Employee/{EmployeeId}/PayLines/Tag/{TagId}
 # operationId: GetPayLinesWithTag
-export def "employer-employee-pay-lines-tag get" [
+export def "get-pay-lines-with-tag" [
   employer_id: string
   employee_id: string
   tag_id: string
@@ -2546,7 +2546,7 @@ export def "employer-employee-pay-lines-tag get" [
 #
 # GET /Employer/{EmployerId}/Employee/{EmployeeId}/PayLines/Tags
 # operationId: GetAllPayLineTags
-export def "employer-employee-pay-lines-tags get-list" [
+export def "get-all-pay-line-tags" [
   employer_id: string
   employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2588,7 +2588,7 @@ export def "employer-employee-pay-lines-tags get-list" [
 #
 # GET /Employer/{EmployerId}/Employee/{EmployeeId}/PayRuns
 # operationId: GetPayRunsFromEmployee
-export def "employer-employee-pay-runs get" [
+export def "get-pay-runs-from-employee" [
   employer_id: string
   employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2630,7 +2630,7 @@ export def "employer-employee-pay-runs get" [
 #
 # DELETE /Employer/{EmployerId}/Employee/{EmployeeId}/Revision/{RevisionNumber}
 # operationId: DeleteEmployeeRevisionByNumber
-export def "employer-employee-revision delete-by-number" [
+export def "delete-employee-revision-by-number" [
   employer_id: string
   employee_id: string
   revision_number: string
@@ -2674,7 +2674,7 @@ export def "employer-employee-revision delete-by-number" [
 #
 # GET /Employer/{EmployerId}/Employee/{EmployeeId}/Revision/{RevisionNumber}
 # operationId: GetEmployeeRevisionByNumber
-export def "employer-employee-revision get-by-number" [
+export def "get-employee-revision-by-number" [
   employer_id: string
   employee_id: string
   revision_number: string
@@ -2718,7 +2718,7 @@ export def "employer-employee-revision get-by-number" [
 #
 # GET /Employer/{EmployerId}/Employee/{EmployeeId}/Revision/{RevisionNumber}/Summary
 # operationId: GetEmployeeRevisionSummaryByNumber
-export def "employer-employee-revision-summary get-by-number" [
+export def "get-employee-revision-summary-by-number" [
   employer_id: string
   employee_id: string
   revision_number: string
@@ -2762,7 +2762,7 @@ export def "employer-employee-revision-summary get-by-number" [
 #
 # GET /Employer/{EmployerId}/Employee/{EmployeeId}/Revisions
 # operationId: GetEmployeeRevisions
-export def "employer-employee-revisions get" [
+export def "get-employee-revisions" [
   employer_id: string
   employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2804,7 +2804,7 @@ export def "employer-employee-revisions get" [
 #
 # GET /Employer/{EmployerId}/Employee/{EmployeeId}/Revisions/Summary
 # operationId: GetEmployeeRevisionSummaries
-export def "employer-employee-revisions-summary get-summaries" [
+export def "get-employee-revision-summaries" [
   employer_id: string
   employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2846,7 +2846,7 @@ export def "employer-employee-revisions-summary get-summaries" [
 #
 # DELETE /Employer/{EmployerId}/Employee/{EmployeeId}/Secret/{SecretId}
 # operationId: DeleteEmployeeSecret
-export def "employer-employee-secret delete" [
+export def "delete-employee-secret" [
   employer_id: string
   employee_id: string
   secret_id: string
@@ -2890,7 +2890,7 @@ export def "employer-employee-secret delete" [
 #
 # GET /Employer/{EmployerId}/Employee/{EmployeeId}/Secret/{SecretId}
 # operationId: GetEmployeeSecret
-export def "employer-employee-secret get" [
+export def "get-employee-secret" [
   employer_id: string
   employee_id: string
   secret_id: string
@@ -2934,7 +2934,7 @@ export def "employer-employee-secret get" [
 #
 # PUT /Employer/{EmployerId}/Employee/{EmployeeId}/Secret/{SecretId}
 # operationId: PutEmployeeSecret
-export def "employer-employee-secret update" [
+export def "put-employee-secret" [
   employer_id: string
   employee_id: string
   secret_id: string
@@ -2978,7 +2978,7 @@ export def "employer-employee-secret update" [
 #
 # GET /Employer/{EmployerId}/Employee/{EmployeeId}/Secrets
 # operationId: GetEmployeeSecrets
-export def "employer-employee-secrets get" [
+export def "get-employee-secrets" [
   employer_id: string
   employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3020,7 +3020,7 @@ export def "employer-employee-secrets get" [
 #
 # POST /Employer/{EmployerId}/Employee/{EmployeeId}/Secrets
 # operationId: PostEmployeeSecret
-export def "employer-employee-secrets create" [
+export def "post-employee-secret" [
   employer_id: string
   employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3062,7 +3062,7 @@ export def "employer-employee-secrets create" [
 #
 # GET /Employer/{EmployerId}/Employee/{EmployeeId}/Summary
 # operationId: GetEmployeeSummaryFromEmployer
-export def "employer-employee-summary get" [
+export def "get-employee-summary-from-employer" [
   employer_id: string
   employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3104,7 +3104,7 @@ export def "employer-employee-summary get" [
 #
 # DELETE /Employer/{EmployerId}/Employee/{EmployeeId}/Tag/{TagId}
 # operationId: DeleteEmployeeTag
-export def "employer-employee-tag delete" [
+export def "delete-employee-tag" [
   employer_id: string
   employee_id: string
   tag_id: string
@@ -3148,7 +3148,7 @@ export def "employer-employee-tag delete" [
 #
 # GET /Employer/{EmployerId}/Employee/{EmployeeId}/Tag/{TagId}
 # operationId: GetTagFromEmployee
-export def "employer-employee-tag get" [
+export def "get-tag-from-employee" [
   employer_id: string
   employee_id: string
   tag_id: string
@@ -3192,7 +3192,7 @@ export def "employer-employee-tag get" [
 #
 # PUT /Employer/{EmployerId}/Employee/{EmployeeId}/Tag/{TagId}
 # operationId: PutEmployeeTag
-export def "employer-employee-tag update" [
+export def "put-employee-tag" [
   employer_id: string
   employee_id: string
   tag_id: string
@@ -3236,7 +3236,7 @@ export def "employer-employee-tag update" [
 #
 # GET /Employer/{EmployerId}/Employee/{EmployeeId}/Tag/{TagId}/{EffectiveDate}
 # operationId: GetTagFromEmployeeRevision
-export def "employer-employee-tag get-from-revision" [
+export def "get-tag-from-employee-revision" [
   employer_id: string
   employee_id: string
   tag_id: string
@@ -3282,7 +3282,7 @@ export def "employer-employee-tag get-from-revision" [
 #
 # GET /Employer/{EmployerId}/Employee/{EmployeeId}/Tags
 # operationId: GetTagsFromEmployee
-export def "employer-employee-tags get" [
+export def "get-tags-from-employee" [
   employer_id: string
   employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3324,7 +3324,7 @@ export def "employer-employee-tags get" [
 #
 # GET /Employer/{EmployerId}/Employee/{EmployeeId}/Tags/{EffectiveDate}
 # operationId: GetTagsFromEmployeeRevision
-export def "employer-employee-tags get-from-revision" [
+export def "get-tags-from-employee-revision" [
   employer_id: string
   employee_id: string
   effective_date: string
@@ -3368,7 +3368,7 @@ export def "employer-employee-tags get-from-revision" [
 #
 # DELETE /Employer/{EmployerId}/Employee/{EmployeeId}/{EffectiveDate}
 # operationId: DeleteEmployeeRevision
-export def "employer-employee delete-revision" [
+export def "delete-employee-revision" [
   employer_id: string
   employee_id: string
   effective_date: string
@@ -3412,7 +3412,7 @@ export def "employer-employee delete-revision" [
 #
 # GET /Employer/{EmployerId}/Employee/{EmployeeId}/{EffectiveDate}
 # operationId: GetEmployeeByEffectiveDate
-export def "employer-employee get-by-effective-date" [
+export def "get-employee-by-effective-date" [
   employer_id: string
   employee_id: string
   effective_date: string
@@ -3456,7 +3456,7 @@ export def "employer-employee get-by-effective-date" [
 #
 # GET /Employer/{EmployerId}/Employee/{EmployeeId}/{EffectiveDate}/Summary
 # operationId: GetEmployeeSummaryByEffectiveDate
-export def "employer-employee-summary get-by-effective-date" [
+export def "get-employee-summary-by-effective-date" [
   employer_id: string
   employee_id: string
   effective_date: string
@@ -3500,7 +3500,7 @@ export def "employer-employee-summary get-by-effective-date" [
 #
 # GET /Employer/{EmployerId}/Employees
 # operationId: GetEmployeesFromEmployer
-export def "employer-employees get" [
+export def "get-employees-from-employer" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3541,7 +3541,7 @@ export def "employer-employees get" [
 # POST /Employer/{EmployerId}/Employees
 # operationId: PostEmployeeIntoEmployer
 # --Employee shape: {AEAssessmentOverride?: "None"|"OptOut"|"OptIn"|"VoluntaryJoiner"|"ContractualPension"|"CeasedMembership"|"Leaver"|"Excluded", AEAssessmentOverrideDate?: string, AEExclusionReasonCode?: "OtherNotKnown"|"NotAWorker"|"NotUKWorker"|"TemporaryUKWorker"|"OutsideAgeRange"|"SingleEmployeeDirector"|"CeasedMembershipWithin12Months"|"CeasedMembershipBeyond12Months"|"WorkerWULSWithin12Month"|"WorkerWULSBeyond12Month"|"WorkerInNoticePeriod"|"WorkerTaxProtection", AEPostponementDate?: string, Address?: record, ... (41 more fields)}
-export def "employer-employees create-into" [
+export def "post-employee-into-employer" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3585,7 +3585,7 @@ export def "employer-employees create-into" [
 #
 # GET /Employer/{EmployerId}/Employees/Summary
 # operationId: GetEmployeeSummariesFromEmployer
-export def "employer-employees-summary get-summaries" [
+export def "get-employee-summaries-from-employer" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3625,7 +3625,7 @@ export def "employer-employees-summary get-summaries" [
 #
 # GET /Employer/{EmployerId}/Employees/Tag/{TagId}
 # operationId: GetEmployeesWithTag
-export def "employer-employees-tag get" [
+export def "get-employees-with-tag" [
   employer_id: string
   tag_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3667,7 +3667,7 @@ export def "employer-employees-tag get" [
 #
 # GET /Employer/{EmployerId}/Employees/Tags
 # operationId: GetAllEmployeeTags
-export def "employer-employees-tags get-list" [
+export def "get-all-employee-tags" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3707,7 +3707,7 @@ export def "employer-employees-tags get-list" [
 #
 # GET /Employer/{EmployerId}/Employees/{EffectiveDate}
 # operationId: GetEmployeesByEffectiveDate
-export def "employer-employees get-by-effective-date" [
+export def "get-employees-by-effective-date" [
   employer_id: string
   effective_date: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3749,7 +3749,7 @@ export def "employer-employees get-by-effective-date" [
 #
 # GET /Employer/{EmployerId}/Employees/{EffectiveDate}/Summary
 # operationId: GetEmployeeSummariesByEffectiveDate
-export def "employer-employees-summary get-summaries-by-effective-date" [
+export def "get-employee-summaries-by-effective-date" [
   employer_id: string
   effective_date: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3791,7 +3791,7 @@ export def "employer-employees-summary get-summaries-by-effective-date" [
 #
 # DELETE /Employer/{EmployerId}/HolidayScheme/{HolidaySchemeId}
 # operationId: DeleteHolidayScheme
-export def "employer-holiday-scheme delete" [
+export def "delete-holiday-scheme" [
   employer_id: string
   holiday_scheme_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3833,7 +3833,7 @@ export def "employer-holiday-scheme delete" [
 #
 # GET /Employer/{EmployerId}/HolidayScheme/{HolidaySchemeId}
 # operationId: GetHolidaySchemeFromEmployer
-export def "employer-holiday-scheme get" [
+export def "get-holiday-scheme-from-employer" [
   employer_id: string
   holiday_scheme_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3876,7 +3876,7 @@ export def "employer-holiday-scheme get" [
 # PATCH /Employer/{EmployerId}/HolidayScheme/{HolidaySchemeId}
 # operationId: PatchHolidayScheme
 # --HolidayScheme shape: {AccrualPayCodes?: record, AllowExceedAnnualEntitlement?: bool, AllowNegativeBalance?: bool, AnnualEntitlementWeeks?: float, BankHolidayInclusive?: bool, Code?: string, EffectiveDate?: string, MaxCarryOverDays?: float, NextRevisionDate?: string, OffsetPayment?: bool, Revision?: int, SchemeCeasedDate?: string, SchemeKey?: string, SchemeName?: string, YearStartDay?: int, YearStartMonth?: int}
-export def "employer-holiday-scheme update" [
+export def "patch-holiday-scheme" [
   employer_id: string
   holiday_scheme_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3923,7 +3923,7 @@ export def "employer-holiday-scheme update" [
 # PUT /Employer/{EmployerId}/HolidayScheme/{HolidaySchemeId}
 # operationId: PutHolidaySchemeIntoEmployer
 # --HolidayScheme shape: {AccrualPayCodes?: record, AllowExceedAnnualEntitlement?: bool, AllowNegativeBalance?: bool, AnnualEntitlementWeeks?: float, BankHolidayInclusive?: bool, Code?: string, EffectiveDate?: string, MaxCarryOverDays?: float, NextRevisionDate?: string, OffsetPayment?: bool, Revision?: int, SchemeCeasedDate?: string, SchemeKey?: string, SchemeName?: string, YearStartDay?: int, YearStartMonth?: int}
-export def "employer-holiday-scheme update-into" [
+export def "put-holiday-scheme-into-employer" [
   employer_id: string
   holiday_scheme_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3969,7 +3969,7 @@ export def "employer-holiday-scheme update-into" [
 #
 # DELETE /Employer/{EmployerId}/HolidayScheme/{HolidaySchemeId}/Revision/{RevisionNumber}
 # operationId: DeleteHolidaySchemeRevisionByNumber
-export def "employer-holiday-scheme-revision delete-by-number" [
+export def "delete-holiday-scheme-revision-by-number" [
   employer_id: string
   holiday_scheme_id: string
   revision_number: string
@@ -4013,7 +4013,7 @@ export def "employer-holiday-scheme-revision delete-by-number" [
 #
 # GET /Employer/{EmployerId}/HolidayScheme/{HolidaySchemeId}/Revision/{RevisionNumber}
 # operationId: GetHolidaySchemeRevisionByNumber
-export def "employer-holiday-scheme-revision get-by-number" [
+export def "get-holiday-scheme-revision-by-number" [
   employer_id: string
   holiday_scheme_id: string
   revision_number: string
@@ -4057,7 +4057,7 @@ export def "employer-holiday-scheme-revision get-by-number" [
 #
 # GET /Employer/{EmployerId}/HolidayScheme/{HolidaySchemeId}/Revisions
 # operationId: GetHolidaySchemeRevisions
-export def "employer-holiday-scheme-revisions get" [
+export def "get-holiday-scheme-revisions" [
   employer_id: string
   holiday_scheme_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4099,7 +4099,7 @@ export def "employer-holiday-scheme-revisions get" [
 #
 # DELETE /Employer/{EmployerId}/HolidayScheme/{HolidaySchemeId}/Tag/{TagId}
 # operationId: DeleteHolidaySchemeTag
-export def "employer-holiday-scheme-tag delete" [
+export def "delete-holiday-scheme-tag" [
   employer_id: string
   holiday_scheme_id: string
   tag_id: string
@@ -4143,7 +4143,7 @@ export def "employer-holiday-scheme-tag delete" [
 #
 # GET /Employer/{EmployerId}/HolidayScheme/{HolidaySchemeId}/Tag/{TagId}
 # operationId: GetTagFromHolidayScheme
-export def "employer-holiday-scheme-tag get" [
+export def "get-tag-from-holiday-scheme" [
   employer_id: string
   holiday_scheme_id: string
   tag_id: string
@@ -4187,7 +4187,7 @@ export def "employer-holiday-scheme-tag get" [
 #
 # PUT /Employer/{EmployerId}/HolidayScheme/{HolidaySchemeId}/Tag/{TagId}
 # operationId: PutHolidaySchemeTag
-export def "employer-holiday-scheme-tag update" [
+export def "put-holiday-scheme-tag" [
   employer_id: string
   holiday_scheme_id: string
   tag_id: string
@@ -4231,7 +4231,7 @@ export def "employer-holiday-scheme-tag update" [
 #
 # GET /Employer/{EmployerId}/HolidayScheme/{HolidaySchemeId}/Tag/{TagId}/{EffectiveDate}
 # operationId: GetTagFromHolidaySchemeRevision
-export def "employer-holiday-scheme-tag get-from-revision" [
+export def "get-tag-from-holiday-scheme-revision" [
   employer_id: string
   holiday_scheme_id: string
   tag_id: string
@@ -4277,7 +4277,7 @@ export def "employer-holiday-scheme-tag get-from-revision" [
 #
 # GET /Employer/{EmployerId}/HolidayScheme/{HolidaySchemeId}/Tags
 # operationId: GetTagsFromHolidayScheme
-export def "employer-holiday-scheme-tags get" [
+export def "get-tags-from-holiday-scheme" [
   employer_id: string
   holiday_scheme_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4319,7 +4319,7 @@ export def "employer-holiday-scheme-tags get" [
 #
 # GET /Employer/{EmployerId}/HolidayScheme/{HolidaySchemeId}/Tags/{EffectiveDate}
 # operationId: GetTagsFromHolidaySchemeRevision
-export def "employer-holiday-scheme-tags get-from-revision" [
+export def "get-tags-from-holiday-scheme-revision" [
   employer_id: string
   holiday_scheme_id: string
   effective_date: string
@@ -4363,7 +4363,7 @@ export def "employer-holiday-scheme-tags get-from-revision" [
 #
 # DELETE /Employer/{EmployerId}/HolidayScheme/{HolidaySchemeId}/{EffectiveDate}
 # operationId: DeleteHolidaySchemeRevision
-export def "employer-holiday-scheme delete-revision" [
+export def "delete-holiday-scheme-revision" [
   employer_id: string
   holiday_scheme_id: string
   effective_date: string
@@ -4407,7 +4407,7 @@ export def "employer-holiday-scheme delete-revision" [
 #
 # GET /Employer/{EmployerId}/HolidayScheme/{HolidaySchemeId}/{EffectiveDate}
 # operationId: GetHolidaySchemeByEffectiveDate
-export def "employer-holiday-scheme get-by-effective-date" [
+export def "get-holiday-scheme-by-effective-date" [
   employer_id: string
   holiday_scheme_id: string
   effective_date: string
@@ -4451,7 +4451,7 @@ export def "employer-holiday-scheme get-by-effective-date" [
 #
 # GET /Employer/{EmployerId}/HolidaySchemes
 # operationId: GetHolidaySchemesFromEmployer
-export def "employer-holiday-schemes get" [
+export def "get-holiday-schemes-from-employer" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4492,7 +4492,7 @@ export def "employer-holiday-schemes get" [
 # POST /Employer/{EmployerId}/HolidaySchemes
 # operationId: PostHolidaySchemeIntoEmployer
 # --HolidayScheme shape: {AccrualPayCodes?: record, AllowExceedAnnualEntitlement?: bool, AllowNegativeBalance?: bool, AnnualEntitlementWeeks?: float, BankHolidayInclusive?: bool, Code?: string, EffectiveDate?: string, MaxCarryOverDays?: float, NextRevisionDate?: string, OffsetPayment?: bool, Revision?: int, SchemeCeasedDate?: string, SchemeKey?: string, SchemeName?: string, YearStartDay?: int, YearStartMonth?: int}
-export def "employer-holiday-schemes create-into" [
+export def "post-holiday-scheme-into-employer" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4536,7 +4536,7 @@ export def "employer-holiday-schemes create-into" [
 #
 # GET /Employer/{EmployerId}/HolidaySchemes/Tag/{TagId}
 # operationId: GetHolidaySchemesWithTag
-export def "employer-holiday-schemes-tag get" [
+export def "get-holiday-schemes-with-tag" [
   employer_id: string
   tag_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4578,7 +4578,7 @@ export def "employer-holiday-schemes-tag get" [
 #
 # GET /Employer/{EmployerId}/HolidaySchemes/Tags
 # operationId: GetAllHolidaySchemeTags
-export def "employer-holiday-schemes-tags get-list" [
+export def "get-all-holiday-scheme-tags" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4618,7 +4618,7 @@ export def "employer-holiday-schemes-tags get-list" [
 #
 # GET /Employer/{EmployerId}/HolidaySchemes/{EffectiveDate}
 # operationId: GetHolidaySchemesByEffectiveDate
-export def "employer-holiday-schemes get-by-effective-date" [
+export def "get-holiday-schemes-by-effective-date" [
   employer_id: string
   effective_date: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4660,7 +4660,7 @@ export def "employer-holiday-schemes get-by-effective-date" [
 #
 # DELETE /Employer/{EmployerId}/JournalInstruction/{JournalInstructionId}
 # operationId: DeleteJournalInstruction
-export def "employer-journal-instruction delete" [
+export def "delete-journal-instruction" [
   employer_id: string
   journal_instruction_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4702,7 +4702,7 @@ export def "employer-journal-instruction delete" [
 #
 # GET /Employer/{EmployerId}/JournalInstruction/{JournalInstructionId}
 # operationId: GetJournalInstructionFromEmployer
-export def "employer-journal-instruction get" [
+export def "get-journal-instruction-from-employer" [
   employer_id: string
   journal_instruction_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4744,7 +4744,7 @@ export def "employer-journal-instruction get" [
 #
 # PUT /Employer/{EmployerId}/JournalInstruction/{JournalInstructionId}
 # operationId: PutJournalInstruction
-export def "employer-journal-instruction update" [
+export def "put-journal-instruction" [
   employer_id: string
   journal_instruction_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4786,7 +4786,7 @@ export def "employer-journal-instruction update" [
 #
 # GET /Employer/{EmployerId}/JournalInstructions
 # operationId: GetJournalInstructionsFromEmployer
-export def "employer-journal-instructions get" [
+export def "get-journal-instructions-from-employer" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4826,7 +4826,7 @@ export def "employer-journal-instructions get" [
 #
 # POST /Employer/{EmployerId}/JournalInstructions
 # operationId: PostJournalInstruction
-export def "employer-journal-instructions create" [
+export def "post-journal-instruction" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4866,7 +4866,7 @@ export def "employer-journal-instructions create" [
 #
 # GET /Employer/{EmployerId}/JournalLine/{JournalLineId}
 # operationId: GetJournalLineFromEmployer
-export def "employer-journal-line get" [
+export def "get-journal-line-from-employer" [
   employer_id: string
   journal_line_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4908,7 +4908,7 @@ export def "employer-journal-line get" [
 #
 # DELETE /Employer/{EmployerId}/JournalLine/{JournalLineId}/Tag/{TagId}
 # operationId: DeleteJournalLineTag
-export def "employer-journal-line-tag delete" [
+export def "delete-journal-line-tag" [
   employer_id: string
   journal_line_id: string
   tag_id: string
@@ -4952,7 +4952,7 @@ export def "employer-journal-line-tag delete" [
 #
 # GET /Employer/{EmployerId}/JournalLine/{JournalLineId}/Tag/{TagId}
 # operationId: GetTagFromJournalLine
-export def "employer-journal-line-tag get" [
+export def "get-tag-from-journal-line" [
   employer_id: string
   journal_line_id: string
   tag_id: string
@@ -4996,7 +4996,7 @@ export def "employer-journal-line-tag get" [
 #
 # PUT /Employer/{EmployerId}/JournalLine/{JournalLineId}/Tag/{TagId}
 # operationId: PutJournalLineTag
-export def "employer-journal-line-tag update" [
+export def "put-journal-line-tag" [
   employer_id: string
   journal_line_id: string
   tag_id: string
@@ -5040,7 +5040,7 @@ export def "employer-journal-line-tag update" [
 #
 # GET /Employer/{EmployerId}/JournalLine/{JournalLineId}/Tags
 # operationId: GetTagsFromJournalLine
-export def "employer-journal-line-tags get" [
+export def "get-tags-from-journal-line" [
   employer_id: string
   journal_line_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5082,7 +5082,7 @@ export def "employer-journal-line-tags get" [
 #
 # GET /Employer/{EmployerId}/JournalLines
 # operationId: GetJournalLinesFromEmployer
-export def "employer-journal-lines get" [
+export def "get-journal-lines-from-employer" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5122,7 +5122,7 @@ export def "employer-journal-lines get" [
 #
 # GET /Employer/{EmployerId}/JournalLines/Tag/{TagId}
 # operationId: GetAllJournalLinesWithTag
-export def "employer-journal-lines-tag get-list" [
+export def "get-all-journal-lines-with-tag" [
   employer_id: string
   tag_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5164,7 +5164,7 @@ export def "employer-journal-lines-tag get-list" [
 #
 # GET /Employer/{EmployerId}/JournalLines/Tags
 # operationId: GetAllJournalLineTags
-export def "employer-journal-lines-tags get-list" [
+export def "get-all-journal-line-tags" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5204,7 +5204,7 @@ export def "employer-journal-lines-tags get-list" [
 #
 # DELETE /Employer/{EmployerId}/NominalCode/{NominalCodeId}
 # operationId: DeleteNominalCode
-export def "employer-nominal-code delete" [
+export def "delete-nominal-code" [
   employer_id: string
   nominal_code_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5246,7 +5246,7 @@ export def "employer-nominal-code delete" [
 #
 # GET /Employer/{EmployerId}/NominalCode/{NominalCodeId}
 # operationId: GetNominalCodeFromEmployer
-export def "employer-nominal-code get" [
+export def "get-nominal-code-from-employer" [
   employer_id: string
   nominal_code_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5289,7 +5289,7 @@ export def "employer-nominal-code get" [
 # PUT /Employer/{EmployerId}/NominalCode/{NominalCodeId}
 # operationId: PutNominalCode
 # --NominalCode shape: {Description?: string, Key?: string}
-export def "employer-nominal-code update" [
+export def "put-nominal-code" [
   employer_id: string
   nominal_code_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5335,7 +5335,7 @@ export def "employer-nominal-code update" [
 #
 # GET /Employer/{EmployerId}/NominalCode/{NominalCodeId}/PayCodes
 # operationId: GetPayCodesFromNominalCode
-export def "employer-nominal-code-pay-codes get" [
+export def "get-pay-codes-from-nominal-code" [
   employer_id: string
   nominal_code_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5377,7 +5377,7 @@ export def "employer-nominal-code-pay-codes get" [
 #
 # GET /Employer/{EmployerId}/NominalCodes
 # operationId: GetNominalCodesFromEmployer
-export def "employer-nominal-codes get" [
+export def "get-nominal-codes-from-employer" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5418,7 +5418,7 @@ export def "employer-nominal-codes get" [
 # POST /Employer/{EmployerId}/NominalCodes
 # operationId: PostNominalCode
 # --NominalCode shape: {Description?: string, Key?: string}
-export def "employer-nominal-codes create" [
+export def "post-nominal-code" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5462,7 +5462,7 @@ export def "employer-nominal-codes create" [
 #
 # DELETE /Employer/{EmployerId}/PayCode/{PayCodeId}
 # operationId: DeletePayCode
-export def "employer-pay-code delete" [
+export def "delete-pay-code" [
   employer_id: string
   pay_code_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5504,7 +5504,7 @@ export def "employer-pay-code delete" [
 #
 # GET /Employer/{EmployerId}/PayCode/{PayCodeId}
 # operationId: GetPayCodeFromEmployer
-export def "employer-pay-code get" [
+export def "get-pay-code-from-employer" [
   employer_id: string
   pay_code_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5547,7 +5547,7 @@ export def "employer-pay-code get" [
 # PATCH /Employer/{EmployerId}/PayCode/{PayCodeId}
 # operationId: PatchPayCode
 # --PayCode shape: {Benefit?: bool, Code?: string, Description?: string, EffectiveDate?: string, MetaData?: record, NextRevisionDate?: string, Niable?: bool, NominalCode?: record, NonArrestable?: bool, Notional?: bool, Readonly?: bool, Region?: "NotSet"|"England"|"Scotland"|"Wales", Revision?: int, Taxable?: bool, Territory?: "UnitedKingdom", Type?: "NotSet"|"Payment"|"Deduction"}
-export def "employer-pay-code update-by-employer-id-pay-code-id" [
+export def "patch-pay-code" [
   employer_id: string
   pay_code_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5594,7 +5594,7 @@ export def "employer-pay-code update-by-employer-id-pay-code-id" [
 # PUT /Employer/{EmployerId}/PayCode/{PayCodeId}
 # operationId: PutPayCode
 # --PayCode shape: {Benefit?: bool, Code?: string, Description?: string, EffectiveDate?: string, MetaData?: record, NextRevisionDate?: string, Niable?: bool, NominalCode?: record, NonArrestable?: bool, Notional?: bool, Readonly?: bool, Region?: "NotSet"|"England"|"Scotland"|"Wales", Revision?: int, Taxable?: bool, Territory?: "UnitedKingdom", Type?: "NotSet"|"Payment"|"Deduction"}
-export def "employer-pay-code update-by-employer-id-pay-code-id-1" [
+export def "put-pay-code" [
   employer_id: string
   pay_code_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5640,7 +5640,7 @@ export def "employer-pay-code update-by-employer-id-pay-code-id-1" [
 #
 # DELETE /Employer/{EmployerId}/PayCode/{PayCodeId}/Revision/{RevisionNumber}
 # operationId: DeletePayCodeRevisionByNumber
-export def "employer-pay-code-revision delete-by-number" [
+export def "delete-pay-code-revision-by-number" [
   employer_id: string
   pay_code_id: string
   revision_number: string
@@ -5684,7 +5684,7 @@ export def "employer-pay-code-revision delete-by-number" [
 #
 # GET /Employer/{EmployerId}/PayCode/{PayCodeId}/Revision/{RevisionNumber}
 # operationId: GetPayCodeRevisionByNumber
-export def "employer-pay-code-revision get-by-number" [
+export def "get-pay-code-revision-by-number" [
   employer_id: string
   pay_code_id: string
   revision_number: string
@@ -5728,7 +5728,7 @@ export def "employer-pay-code-revision get-by-number" [
 #
 # GET /Employer/{EmployerId}/PayCode/{PayCodeId}/Revisions
 # operationId: GetPayCodeRevisions
-export def "employer-pay-code-revisions get" [
+export def "get-pay-code-revisions" [
   employer_id: string
   pay_code_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5770,7 +5770,7 @@ export def "employer-pay-code-revisions get" [
 #
 # DELETE /Employer/{EmployerId}/PayCode/{PayCodeId}/Tag/{TagId}
 # operationId: DeletePayCodeTag
-export def "employer-pay-code-tag delete" [
+export def "delete-pay-code-tag" [
   employer_id: string
   pay_code_id: string
   tag_id: string
@@ -5814,7 +5814,7 @@ export def "employer-pay-code-tag delete" [
 #
 # GET /Employer/{EmployerId}/PayCode/{PayCodeId}/Tag/{TagId}
 # operationId: GetTagFromPayCode
-export def "employer-pay-code-tag get" [
+export def "get-tag-from-pay-code" [
   employer_id: string
   pay_code_id: string
   tag_id: string
@@ -5858,7 +5858,7 @@ export def "employer-pay-code-tag get" [
 #
 # PUT /Employer/{EmployerId}/PayCode/{PayCodeId}/Tag/{TagId}
 # operationId: PutPayCodeTag
-export def "employer-pay-code-tag update" [
+export def "put-pay-code-tag" [
   employer_id: string
   pay_code_id: string
   tag_id: string
@@ -5902,7 +5902,7 @@ export def "employer-pay-code-tag update" [
 #
 # GET /Employer/{EmployerId}/PayCode/{PayCodeId}/Tags
 # operationId: GetTagsFromPayCode
-export def "employer-pay-code-tags get" [
+export def "get-tags-from-pay-code" [
   employer_id: string
   pay_code_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5944,7 +5944,7 @@ export def "employer-pay-code-tags get" [
 #
 # DELETE /Employer/{EmployerId}/PayCode/{PayCodeId}/{EffectiveDate}
 # operationId: DeletePayCodeRevision
-export def "employer-pay-code delete-revision" [
+export def "delete-pay-code-revision" [
   employer_id: string
   pay_code_id: string
   effective_date: string
@@ -5988,7 +5988,7 @@ export def "employer-pay-code delete-revision" [
 #
 # GET /Employer/{EmployerId}/PayCode/{PayCodeId}/{EffectiveDate}
 # operationId: GetPayCodeByEffectiveDate
-export def "employer-pay-code get-by-effective-date" [
+export def "get-pay-code-by-effective-date" [
   employer_id: string
   pay_code_id: string
   effective_date: string
@@ -6032,7 +6032,7 @@ export def "employer-pay-code get-by-effective-date" [
 #
 # GET /Employer/{EmployerId}/PayCodes
 # operationId: GetPayCodesFromEmployer
-export def "employer-pay-codes get" [
+export def "get-pay-codes-from-employer" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6073,7 +6073,7 @@ export def "employer-pay-codes get" [
 # POST /Employer/{EmployerId}/PayCodes
 # operationId: PostPayCode
 # --PayCode shape: {Benefit?: bool, Code?: string, Description?: string, EffectiveDate?: string, MetaData?: record, NextRevisionDate?: string, Niable?: bool, NominalCode?: record, NonArrestable?: bool, Notional?: bool, Readonly?: bool, Region?: "NotSet"|"England"|"Scotland"|"Wales", Revision?: int, Taxable?: bool, Territory?: "UnitedKingdom", Type?: "NotSet"|"Payment"|"Deduction"}
-export def "employer-pay-codes create" [
+export def "post-pay-code" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6117,7 +6117,7 @@ export def "employer-pay-codes create" [
 #
 # GET /Employer/{EmployerId}/PayCodes/Tag/{TagId}
 # operationId: GetPayCodesWithTag
-export def "employer-pay-codes-tag get" [
+export def "get-pay-codes-with-tag" [
   employer_id: string
   tag_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6159,7 +6159,7 @@ export def "employer-pay-codes-tag get" [
 #
 # GET /Employer/{EmployerId}/PayCodes/Tags
 # operationId: GetAllPayCodeTags
-export def "employer-pay-codes-tags get-list" [
+export def "get-all-pay-code-tags" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6199,7 +6199,7 @@ export def "employer-pay-codes-tags get-list" [
 #
 # GET /Employer/{EmployerId}/PayCodes/{EffectiveDate}
 # operationId: GetPayCodesByEffectiveDate
-export def "employer-pay-codes get-by-effective-date" [
+export def "get-pay-codes-by-effective-date" [
   employer_id: string
   effective_date: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6241,7 +6241,7 @@ export def "employer-pay-codes get-by-effective-date" [
 #
 # DELETE /Employer/{EmployerId}/PaySchedule/{PayScheduleId}
 # operationId: DeletePaySchedule
-export def "employer-pay-schedule delete" [
+export def "delete-pay-schedule" [
   employer_id: string
   pay_schedule_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6283,7 +6283,7 @@ export def "employer-pay-schedule delete" [
 #
 # GET /Employer/{EmployerId}/PaySchedule/{PayScheduleId}
 # operationId: GetPayScheduleFromEmployer
-export def "employer-pay-schedule get" [
+export def "get-pay-schedule-from-employer" [
   employer_id: string
   pay_schedule_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6326,7 +6326,7 @@ export def "employer-pay-schedule get" [
 # PUT /Employer/{EmployerId}/PaySchedule/{PayScheduleId}
 # operationId: PutPaySchedule
 # --PaySchedule shape: {MetaData?: record, Name?: string, PayFrequency?: "Weekly"|"Monthly"|"TwoWeekly"|"FourWeekly"|"Yearly"}
-export def "employer-pay-schedule update" [
+export def "put-pay-schedule" [
   employer_id: string
   pay_schedule_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6372,7 +6372,7 @@ export def "employer-pay-schedule update" [
 #
 # GET /Employer/{EmployerId}/PaySchedule/{PayScheduleId}/Employees
 # operationId: GetEmployeesFromPaySchedule
-export def "employer-pay-schedule-employees get" [
+export def "get-employees-from-pay-schedule" [
   employer_id: string
   pay_schedule_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6414,7 +6414,7 @@ export def "employer-pay-schedule-employees get" [
 #
 # GET /Employer/{EmployerId}/PaySchedule/{PayScheduleId}/Employees/{EffectiveDate}
 # operationId: GetEmployeesFromPayScheduleOnEffectiveDate
-export def "employer-pay-schedule-employees get-from-on-effective-date" [
+export def "get-employees-from-pay-schedule-on-effective-date" [
   employer_id: string
   pay_schedule_id: string
   effective_date: string
@@ -6458,7 +6458,7 @@ export def "employer-pay-schedule-employees get-from-on-effective-date" [
 #
 # DELETE /Employer/{EmployerId}/PaySchedule/{PayScheduleId}/PayRun/{PayRunId}
 # operationId: DeletePayRun
-export def "employer-pay-schedule-pay-run delete" [
+export def "delete-pay-run" [
   employer_id: string
   pay_schedule_id: string
   pay_run_id: string
@@ -6502,7 +6502,7 @@ export def "employer-pay-schedule-pay-run delete" [
 #
 # GET /Employer/{EmployerId}/PaySchedule/{PayScheduleId}/PayRun/{PayRunId}
 # operationId: GetPayRunFromPaySchedule
-export def "employer-pay-schedule-pay-run get" [
+export def "get-pay-run-from-pay-schedule" [
   employer_id: string
   pay_schedule_id: string
   pay_run_id: string
@@ -6546,7 +6546,7 @@ export def "employer-pay-schedule-pay-run get" [
 #
 # GET /Employer/{EmployerId}/PaySchedule/{PayScheduleId}/PayRun/{PayRunId}/AEAssessments
 # operationId: GetAEAssessmentsFromPayRun
-export def "employer-pay-schedule-pay-run-ae-assessments get" [
+export def "get-ae-assessments-from-pay-run" [
   employer_id: string
   pay_schedule_id: string
   pay_run_id: string
@@ -6590,7 +6590,7 @@ export def "employer-pay-schedule-pay-run-ae-assessments get" [
 #
 # GET /Employer/{EmployerId}/PaySchedule/{PayScheduleId}/PayRun/{PayRunId}/Commentaries
 # operationId: GetCommentariesFromPayRun
-export def "employer-pay-schedule-pay-run-commentaries get" [
+export def "get-commentaries-from-pay-run" [
   employer_id: string
   pay_schedule_id: string
   pay_run_id: string
@@ -6634,7 +6634,7 @@ export def "employer-pay-schedule-pay-run-commentaries get" [
 #
 # DELETE /Employer/{EmployerId}/PaySchedule/{PayScheduleId}/PayRun/{PayRunId}/Employee/{EmployeeId}
 # operationId: DeletePayRunEmployee
-export def "employer-pay-schedule-pay-run-employee delete" [
+export def "delete-pay-run-employee" [
   employer_id: string
   pay_schedule_id: string
   pay_run_id: string
@@ -6680,7 +6680,7 @@ export def "employer-pay-schedule-pay-run-employee delete" [
 #
 # GET /Employer/{EmployerId}/PaySchedule/{PayScheduleId}/PayRun/{PayRunId}/Employee/{EmployeeId}/Commentary
 # operationId: GetCommentaryFromPayRunByEmployee
-export def "employer-pay-schedule-pay-run-employee-commentary get-from" [
+export def "get-commentary-from-pay-run-by-employee" [
   employer_id: string
   pay_schedule_id: string
   pay_run_id: string
@@ -6726,7 +6726,7 @@ export def "employer-pay-schedule-pay-run-employee-commentary get-from" [
 #
 # GET /Employer/{EmployerId}/PaySchedule/{PayScheduleId}/PayRun/{PayRunId}/Employees
 # operationId: GetEmployeesFromPayRun
-export def "employer-pay-schedule-pay-run-employees get" [
+export def "get-employees-from-pay-run" [
   employer_id: string
   pay_schedule_id: string
   pay_run_id: string
@@ -6770,7 +6770,7 @@ export def "employer-pay-schedule-pay-run-employees get" [
 #
 # GET /Employer/{EmployerId}/PaySchedule/{PayScheduleId}/PayRun/{PayRunId}/JournalLines
 # operationId: GetJournalLinesFromPayRun
-export def "employer-pay-schedule-pay-run-journal-lines get" [
+export def "get-journal-lines-from-pay-run" [
   employer_id: string
   pay_schedule_id: string
   pay_run_id: string
@@ -6814,7 +6814,7 @@ export def "employer-pay-schedule-pay-run-journal-lines get" [
 #
 # GET /Employer/{EmployerId}/PaySchedule/{PayScheduleId}/PayRun/{PayRunId}/PayLines
 # operationId: GetPayLinesFromPayRun
-export def "employer-pay-schedule-pay-run-pay-lines get" [
+export def "get-pay-lines-from-pay-run" [
   employer_id: string
   pay_schedule_id: string
   pay_run_id: string
@@ -6858,7 +6858,7 @@ export def "employer-pay-schedule-pay-run-pay-lines get" [
 #
 # GET /Employer/{EmployerId}/PaySchedule/{PayScheduleId}/PayRun/{PayRunId}/ReportLines
 # operationId: GetReportLinesFromPayRun
-export def "employer-pay-schedule-pay-run-report-lines get" [
+export def "get-report-lines-from-pay-run" [
   employer_id: string
   pay_schedule_id: string
   pay_run_id: string
@@ -6902,7 +6902,7 @@ export def "employer-pay-schedule-pay-run-report-lines get" [
 #
 # DELETE /Employer/{EmployerId}/PaySchedule/{PayScheduleId}/PayRun/{PayRunId}/Tag/{TagId}
 # operationId: DeletePayRunTag
-export def "employer-pay-schedule-pay-run-tag delete" [
+export def "delete-pay-run-tag" [
   employer_id: string
   pay_schedule_id: string
   pay_run_id: string
@@ -6948,7 +6948,7 @@ export def "employer-pay-schedule-pay-run-tag delete" [
 #
 # GET /Employer/{EmployerId}/PaySchedule/{PayScheduleId}/PayRun/{PayRunId}/Tag/{TagId}
 # operationId: GetTagFromPayRun
-export def "employer-pay-schedule-pay-run-tag get" [
+export def "get-tag-from-pay-run" [
   employer_id: string
   pay_schedule_id: string
   pay_run_id: string
@@ -6994,7 +6994,7 @@ export def "employer-pay-schedule-pay-run-tag get" [
 #
 # PUT /Employer/{EmployerId}/PaySchedule/{PayScheduleId}/PayRun/{PayRunId}/Tag/{TagId}
 # operationId: PutPayRunTag
-export def "employer-pay-schedule-pay-run-tag update" [
+export def "put-pay-run-tag" [
   employer_id: string
   pay_schedule_id: string
   pay_run_id: string
@@ -7040,7 +7040,7 @@ export def "employer-pay-schedule-pay-run-tag update" [
 #
 # GET /Employer/{EmployerId}/PaySchedule/{PayScheduleId}/PayRun/{PayRunId}/Tags
 # operationId: GetTagsFromPayRun
-export def "employer-pay-schedule-pay-run-tags get" [
+export def "get-tags-from-pay-run" [
   employer_id: string
   pay_schedule_id: string
   pay_run_id: string
@@ -7084,7 +7084,7 @@ export def "employer-pay-schedule-pay-run-tags get" [
 #
 # GET /Employer/{EmployerId}/PaySchedule/{PayScheduleId}/PayRuns
 # operationId: GetPayRunsFromPaySchedule
-export def "employer-pay-schedule-pay-runs get" [
+export def "get-pay-runs-from-pay-schedule" [
   employer_id: string
   pay_schedule_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7126,7 +7126,7 @@ export def "employer-pay-schedule-pay-runs get" [
 #
 # GET /Employer/{EmployerId}/PaySchedule/{PayScheduleId}/PayRuns/Tag/{TagId}
 # operationId: GetPayRunsWithTag
-export def "employer-pay-schedule-pay-runs-tag get" [
+export def "get-pay-runs-with-tag" [
   employer_id: string
   pay_schedule_id: string
   tag_id: string
@@ -7170,7 +7170,7 @@ export def "employer-pay-schedule-pay-runs-tag get" [
 #
 # GET /Employer/{EmployerId}/PaySchedule/{PayScheduleId}/PayRuns/Tags
 # operationId: GetAllPayRunTags
-export def "employer-pay-schedule-pay-runs-tags get-list" [
+export def "get-all-pay-run-tags" [
   employer_id: string
   pay_schedule_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7212,7 +7212,7 @@ export def "employer-pay-schedule-pay-runs-tags get-list" [
 #
 # DELETE /Employer/{EmployerId}/PaySchedule/{PayScheduleId}/Tag/{TagId}
 # operationId: DeletePayScheduleTag
-export def "employer-pay-schedule-tag delete" [
+export def "delete-pay-schedule-tag" [
   employer_id: string
   pay_schedule_id: string
   tag_id: string
@@ -7256,7 +7256,7 @@ export def "employer-pay-schedule-tag delete" [
 #
 # GET /Employer/{EmployerId}/PaySchedule/{PayScheduleId}/Tag/{TagId}
 # operationId: GetTagFromPaySchedule
-export def "employer-pay-schedule-tag get" [
+export def "get-tag-from-pay-schedule" [
   employer_id: string
   pay_schedule_id: string
   tag_id: string
@@ -7300,7 +7300,7 @@ export def "employer-pay-schedule-tag get" [
 #
 # PUT /Employer/{EmployerId}/PaySchedule/{PayScheduleId}/Tag/{TagId}
 # operationId: PutPayScheduleTag
-export def "employer-pay-schedule-tag update" [
+export def "put-pay-schedule-tag" [
   employer_id: string
   pay_schedule_id: string
   tag_id: string
@@ -7344,7 +7344,7 @@ export def "employer-pay-schedule-tag update" [
 #
 # GET /Employer/{EmployerId}/PaySchedule/{PayScheduleId}/Tags
 # operationId: GetTagsFromPaySchedule
-export def "employer-pay-schedule-tags get" [
+export def "get-tags-from-pay-schedule" [
   employer_id: string
   pay_schedule_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7386,7 +7386,7 @@ export def "employer-pay-schedule-tags get" [
 #
 # GET /Employer/{EmployerId}/PaySchedules
 # operationId: GetPaySchedulesFromEmployer
-export def "employer-pay-schedules get" [
+export def "get-pay-schedules-from-employer" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7427,7 +7427,7 @@ export def "employer-pay-schedules get" [
 # POST /Employer/{EmployerId}/PaySchedules
 # operationId: PostPaySchedule
 # --PaySchedule shape: {MetaData?: record, Name?: string, PayFrequency?: "Weekly"|"Monthly"|"TwoWeekly"|"FourWeekly"|"Yearly"}
-export def "employer-pay-schedules create" [
+export def "post-pay-schedule" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7471,7 +7471,7 @@ export def "employer-pay-schedules create" [
 #
 # GET /Employer/{EmployerId}/PaySchedules/Tag/{TagId}
 # operationId: GetPaySchedulesWithTag
-export def "employer-pay-schedules-tag get" [
+export def "get-pay-schedules-with-tag" [
   employer_id: string
   tag_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7513,7 +7513,7 @@ export def "employer-pay-schedules-tag get" [
 #
 # GET /Employer/{EmployerId}/PaySchedules/Tags
 # operationId: GetAllPayScheduleTags
-export def "employer-pay-schedules-tags get-list" [
+export def "get-all-pay-schedule-tags" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7553,7 +7553,7 @@ export def "employer-pay-schedules-tags get-list" [
 #
 # DELETE /Employer/{EmployerId}/Pension/{PensionId}
 # operationId: DeletePension
-export def "employer-pension delete" [
+export def "delete-pension" [
   employer_id: string
   pension_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7595,7 +7595,7 @@ export def "employer-pension delete" [
 #
 # GET /Employer/{EmployerId}/Pension/{PensionId}
 # operationId: GetPensionFromEmployer
-export def "employer-pension get" [
+export def "get-pension-from-employer" [
   employer_id: string
   pension_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7638,7 +7638,7 @@ export def "employer-pension get" [
 # PATCH /Employer/{EmployerId}/Pension/{PensionId}
 # operationId: PatchPension
 # --Pension shape: {AECompatible?: bool, Certification?: "NotSet"|"Set1"|"Set2"|"Set3", Code?: string, ContributionDeductionDay?: int, EffectiveDate?: string, EmployeeContributionCash?: float, EmployeeContributionPercent?: float, EmployerContributionCash?: float, EmployerContributionPercent?: float, EmployerNiSaving?: bool, EmployerNiSavingPercentage?: float, Group?: string, LowerThreshold?: float, MetaData?: record, NextRevisionDate?: string, PensionablePayCodes?: record, ... (13 more fields)}
-export def "employer-pension update" [
+export def "patch-pension" [
   employer_id: string
   pension_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7685,7 +7685,7 @@ export def "employer-pension update" [
 # PUT /Employer/{EmployerId}/Pension/{PensionId}
 # operationId: PutPensionIntoEmployer
 # --Pension shape: {AECompatible?: bool, Certification?: "NotSet"|"Set1"|"Set2"|"Set3", Code?: string, ContributionDeductionDay?: int, EffectiveDate?: string, EmployeeContributionCash?: float, EmployeeContributionPercent?: float, EmployerContributionCash?: float, EmployerContributionPercent?: float, EmployerNiSaving?: bool, EmployerNiSavingPercentage?: float, Group?: string, LowerThreshold?: float, MetaData?: record, NextRevisionDate?: string, PensionablePayCodes?: record, ... (13 more fields)}
-export def "employer-pension update-into" [
+export def "put-pension-into-employer" [
   employer_id: string
   pension_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7731,7 +7731,7 @@ export def "employer-pension update-into" [
 #
 # DELETE /Employer/{EmployerId}/Pension/{PensionId}/Revision/{RevisionNumber}
 # operationId: DeletePensionRevisionByNumber
-export def "employer-pension-revision delete-by-number" [
+export def "delete-pension-revision-by-number" [
   employer_id: string
   pension_id: string
   revision_number: string
@@ -7775,7 +7775,7 @@ export def "employer-pension-revision delete-by-number" [
 #
 # GET /Employer/{EmployerId}/Pension/{PensionId}/Revision/{RevisionNumber}
 # operationId: GetPensionRevisionByNumber
-export def "employer-pension-revision get-by-number" [
+export def "get-pension-revision-by-number" [
   employer_id: string
   pension_id: string
   revision_number: string
@@ -7819,7 +7819,7 @@ export def "employer-pension-revision get-by-number" [
 #
 # GET /Employer/{EmployerId}/Pension/{PensionId}/Revisions
 # operationId: GetPensionRevisions
-export def "employer-pension-revisions get" [
+export def "get-pension-revisions" [
   employer_id: string
   pension_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7861,7 +7861,7 @@ export def "employer-pension-revisions get" [
 #
 # DELETE /Employer/{EmployerId}/Pension/{PensionId}/{EffectiveDate}
 # operationId: DeletePensionRevision
-export def "employer-pension delete-revision" [
+export def "delete-pension-revision" [
   employer_id: string
   pension_id: string
   effective_date: string
@@ -7905,7 +7905,7 @@ export def "employer-pension delete-revision" [
 #
 # GET /Employer/{EmployerId}/Pension/{PensionId}/{EffectiveDate}
 # operationId: GetPensionByEffectiveDate
-export def "employer-pension get-by-effective-date" [
+export def "get-pension-by-effective-date" [
   employer_id: string
   pension_id: string
   effective_date: string
@@ -7949,7 +7949,7 @@ export def "employer-pension get-by-effective-date" [
 #
 # GET /Employer/{EmployerId}/Pensions
 # operationId: GetPensionsFromEmployer
-export def "employer-pensions get" [
+export def "get-pensions-from-employer" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7990,7 +7990,7 @@ export def "employer-pensions get" [
 # POST /Employer/{EmployerId}/Pensions
 # operationId: PostPensionIntoEmployer
 # --Pension shape: {AECompatible?: bool, Certification?: "NotSet"|"Set1"|"Set2"|"Set3", Code?: string, ContributionDeductionDay?: int, EffectiveDate?: string, EmployeeContributionCash?: float, EmployeeContributionPercent?: float, EmployerContributionCash?: float, EmployerContributionPercent?: float, EmployerNiSaving?: bool, EmployerNiSavingPercentage?: float, Group?: string, LowerThreshold?: float, MetaData?: record, NextRevisionDate?: string, PensionablePayCodes?: record, ... (13 more fields)}
-export def "employer-pensions create-into" [
+export def "post-pension-into-employer" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8034,7 +8034,7 @@ export def "employer-pensions create-into" [
 #
 # GET /Employer/{EmployerId}/Pensions/{EffectiveDate}
 # operationId: GetPensionsByEffectiveDate
-export def "employer-pensions get-by-effective-date" [
+export def "get-pensions-by-effective-date" [
   employer_id: string
   effective_date: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8076,7 +8076,7 @@ export def "employer-pensions get-by-effective-date" [
 #
 # GET /Employer/{EmployerId}/ReportLine/{ReportLineId}
 # operationId: GetReportLineFromEmployer
-export def "employer-report-line get" [
+export def "get-report-line-from-employer" [
   employer_id: string
   report_line_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8118,7 +8118,7 @@ export def "employer-report-line get" [
 #
 # GET /Employer/{EmployerId}/ReportLines
 # operationId: GetReportLinesFromEmployer
-export def "employer-report-lines get" [
+export def "get-report-lines-from-employer" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8158,7 +8158,7 @@ export def "employer-report-lines get" [
 #
 # DELETE /Employer/{EmployerId}/ReportingInstruction/{ReportingInstructionId}
 # operationId: DeleteReportingInstruction
-export def "employer-reporting-instruction delete" [
+export def "delete-reporting-instruction" [
   employer_id: string
   reporting_instruction_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8200,7 +8200,7 @@ export def "employer-reporting-instruction delete" [
 #
 # GET /Employer/{EmployerId}/ReportingInstruction/{ReportingInstructionId}
 # operationId: GetReportingInstructionFromEmployer
-export def "employer-reporting-instruction get" [
+export def "get-reporting-instruction-from-employer" [
   employer_id: string
   reporting_instruction_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8243,7 +8243,7 @@ export def "employer-reporting-instruction get" [
 # PUT /Employer/{EmployerId}/ReportingInstruction/{ReportingInstructionId}
 # operationId: PutReportingInstruction
 # --ReportingInstruction shape: {EndDate?: string, StartDate?: string, TaxMonth?: int, TaxYear?: int, Value?: float}
-export def "employer-reporting-instruction update" [
+export def "put-reporting-instruction" [
   employer_id: string
   reporting_instruction_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8289,7 +8289,7 @@ export def "employer-reporting-instruction update" [
 #
 # GET /Employer/{EmployerId}/ReportingInstructions
 # operationId: GetReportingInstructionsFromEmployer
-export def "employer-reporting-instructions get" [
+export def "get-reporting-instructions-from-employer" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8330,7 +8330,7 @@ export def "employer-reporting-instructions get" [
 # POST /Employer/{EmployerId}/ReportingInstructions
 # operationId: PostReportingInstruction
 # --ReportingInstruction shape: {EndDate?: string, StartDate?: string, TaxMonth?: int, TaxYear?: int, Value?: float}
-export def "employer-reporting-instructions create" [
+export def "post-reporting-instruction" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8374,7 +8374,7 @@ export def "employer-reporting-instructions create" [
 #
 # DELETE /Employer/{EmployerId}/Revision/{RevisionNumber}
 # operationId: DeleteEmployerRevisionByNumber
-export def "employer-revision delete-by-number" [
+export def "delete-employer-revision-by-number" [
   employer_id: string
   revision_number: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8416,7 +8416,7 @@ export def "employer-revision delete-by-number" [
 #
 # GET /Employer/{EmployerId}/Revision/{RevisionNumber}
 # operationId: GetEmployerRevisionByNumber
-export def "employer-revision get-by-number" [
+export def "get-employer-revision-by-number" [
   employer_id: string
   revision_number: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8458,7 +8458,7 @@ export def "employer-revision get-by-number" [
 #
 # GET /Employer/{EmployerId}/Revision/{RevisionNumber}/Summary
 # operationId: GetEmployerRevisionSummaryByNumber
-export def "employer-revision-summary get-by-number" [
+export def "get-employer-revision-summary-by-number" [
   employer_id: string
   revision_number: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8500,7 +8500,7 @@ export def "employer-revision-summary get-by-number" [
 #
 # GET /Employer/{EmployerId}/Revisions
 # operationId: GetEmployerRevisions
-export def "employer-revisions get" [
+export def "get-employer-revisions" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8540,7 +8540,7 @@ export def "employer-revisions get" [
 #
 # GET /Employer/{EmployerId}/Revisions/Summary
 # operationId: GetEmployerRevisionSummaries
-export def "employer-revisions-summary get-summaries" [
+export def "get-employer-revision-summaries" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8580,7 +8580,7 @@ export def "employer-revisions-summary get-summaries" [
 #
 # DELETE /Employer/{EmployerId}/RtiTransaction/{RtiTransactionId}
 # operationId: DeleteRtiTransaction
-export def "employer-rti-transaction delete" [
+export def "delete-rti-transaction" [
   employer_id: string
   rti_transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8622,7 +8622,7 @@ export def "employer-rti-transaction delete" [
 #
 # GET /Employer/{EmployerId}/RtiTransaction/{RtiTransactionId}
 # operationId: GetRtiTransactionFromEmployer
-export def "employer-rti-transaction get" [
+export def "get-rti-transaction-from-employer" [
   employer_id: string
   rti_transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8664,7 +8664,7 @@ export def "employer-rti-transaction get" [
 #
 # GET /Employer/{EmployerId}/RtiTransaction/{RtiTransactionId}/Summary
 # operationId: GetRtiTransactionSummaryFromEmployer
-export def "employer-rti-transaction-summary get" [
+export def "get-rti-transaction-summary-from-employer" [
   employer_id: string
   rti_transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8706,7 +8706,7 @@ export def "employer-rti-transaction-summary get" [
 #
 # DELETE /Employer/{EmployerId}/RtiTransaction/{RtiTransactionId}/Tag/{TagId}
 # operationId: DeleteRtiTransactionTag
-export def "employer-rti-transaction-tag delete" [
+export def "delete-rti-transaction-tag" [
   employer_id: string
   rti_transaction_id: string
   tag_id: string
@@ -8750,7 +8750,7 @@ export def "employer-rti-transaction-tag delete" [
 #
 # GET /Employer/{EmployerId}/RtiTransaction/{RtiTransactionId}/Tag/{TagId}
 # operationId: GetTagFromRtiTransaction
-export def "employer-rti-transaction-tag get" [
+export def "get-tag-from-rti-transaction" [
   employer_id: string
   rti_transaction_id: string
   tag_id: string
@@ -8794,7 +8794,7 @@ export def "employer-rti-transaction-tag get" [
 #
 # PUT /Employer/{EmployerId}/RtiTransaction/{RtiTransactionId}/Tag/{TagId}
 # operationId: PutRtiTransactionTag
-export def "employer-rti-transaction-tag update" [
+export def "put-rti-transaction-tag" [
   employer_id: string
   rti_transaction_id: string
   tag_id: string
@@ -8838,7 +8838,7 @@ export def "employer-rti-transaction-tag update" [
 #
 # GET /Employer/{EmployerId}/RtiTransaction/{RtiTransactionId}/Tags
 # operationId: GetTagsFromRtiTransaction
-export def "employer-rti-transaction-tags get" [
+export def "get-tags-from-rti-transaction" [
   employer_id: string
   rti_transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8880,7 +8880,7 @@ export def "employer-rti-transaction-tags get" [
 #
 # GET /Employer/{EmployerId}/RtiTransactions
 # operationId: GetRtiTransactionsFromEmployer
-export def "employer-rti-transactions get" [
+export def "get-rti-transactions-from-employer" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8920,7 +8920,7 @@ export def "employer-rti-transactions get" [
 #
 # GET /Employer/{EmployerId}/RtiTransactions/Summary
 # operationId: GetRtiTransactionSummariesFromEmployer
-export def "employer-rti-transactions-summary get-summaries" [
+export def "get-rti-transaction-summaries-from-employer" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8960,7 +8960,7 @@ export def "employer-rti-transactions-summary get-summaries" [
 #
 # GET /Employer/{EmployerId}/RtiTransactions/Tag/{TagId}
 # operationId: GetRtiTransactionsWithTag
-export def "employer-rti-transactions-tag get" [
+export def "get-rti-transactions-with-tag" [
   employer_id: string
   tag_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9002,7 +9002,7 @@ export def "employer-rti-transactions-tag get" [
 #
 # GET /Employer/{EmployerId}/RtiTransactions/Tags
 # operationId: GetAllRtiTransactionTags
-export def "employer-rti-transactions-tags get-list" [
+export def "get-all-rti-transaction-tags" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9042,7 +9042,7 @@ export def "employer-rti-transactions-tags get-list" [
 #
 # DELETE /Employer/{EmployerId}/Secret/{SecretId}
 # operationId: DeleteEmployerSecret
-export def "employer-secret delete" [
+export def "delete-employer-secret" [
   employer_id: string
   secret_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9084,7 +9084,7 @@ export def "employer-secret delete" [
 #
 # GET /Employer/{EmployerId}/Secret/{SecretId}
 # operationId: GetEmployerSecret
-export def "employer-secret get" [
+export def "get-employer-secret" [
   employer_id: string
   secret_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9126,7 +9126,7 @@ export def "employer-secret get" [
 #
 # PUT /Employer/{EmployerId}/Secret/{SecretId}
 # operationId: PutEmployerSecret
-export def "employer-secret update" [
+export def "put-employer-secret" [
   employer_id: string
   secret_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9168,7 +9168,7 @@ export def "employer-secret update" [
 #
 # GET /Employer/{EmployerId}/Secrets
 # operationId: GetEmployerSecrets
-export def "employer-secrets get" [
+export def "get-employer-secrets" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9208,7 +9208,7 @@ export def "employer-secrets get" [
 #
 # POST /Employer/{EmployerId}/Secrets
 # operationId: PostEmployerSecret
-export def "employer-secrets create" [
+export def "post-employer-secret" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9248,7 +9248,7 @@ export def "employer-secrets create" [
 #
 # DELETE /Employer/{EmployerId}/SubContractor/{SubContractorId}
 # operationId: DeleteSubContractor
-export def "employer-sub-contractor delete" [
+export def "delete-sub-contractor" [
   employer_id: string
   sub_contractor_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9290,7 +9290,7 @@ export def "employer-sub-contractor delete" [
 #
 # GET /Employer/{EmployerId}/SubContractor/{SubContractorId}
 # operationId: GetSubContractorFromEmployer
-export def "employer-sub-contractor get" [
+export def "get-sub-contractor-from-employer" [
   employer_id: string
   sub_contractor_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9333,7 +9333,7 @@ export def "employer-sub-contractor get" [
 # PATCH /Employer/{EmployerId}/SubContractor/{SubContractorId}
 # operationId: PatchSubContractor
 # --SubContractor shape: {Address?: record, BankAccount?: record, BusinessType?: "SoleTrader"|"Company"|"Partnership"|"Trust", CompanyName?: string, CompanyRegistrationNumber?: string, Deactivated?: bool, EffectiveDate?: string, FirstName?: string, Initials?: string, LastName?: string, MetaData?: record, MiddleName?: string, NextRevisionDate?: string, NiNumber?: string, PartnershipName?: string, PartnershipUniqueTaxReference?: string, PayFrequency?: "Monthly"|"Weekly", ... (14 more fields)}
-export def "employer-sub-contractor update" [
+export def "patch-sub-contractor" [
   employer_id: string
   sub_contractor_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9380,7 +9380,7 @@ export def "employer-sub-contractor update" [
 # PUT /Employer/{EmployerId}/SubContractor/{SubContractorId}
 # operationId: PutSubContractorIntoEmployer
 # --SubContractor shape: {Address?: record, BankAccount?: record, BusinessType?: "SoleTrader"|"Company"|"Partnership"|"Trust", CompanyName?: string, CompanyRegistrationNumber?: string, Deactivated?: bool, EffectiveDate?: string, FirstName?: string, Initials?: string, LastName?: string, MetaData?: record, MiddleName?: string, NextRevisionDate?: string, NiNumber?: string, PartnershipName?: string, PartnershipUniqueTaxReference?: string, PayFrequency?: "Monthly"|"Weekly", ... (14 more fields)}
-export def "employer-sub-contractor update-into" [
+export def "put-sub-contractor-into-employer" [
   employer_id: string
   sub_contractor_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9426,7 +9426,7 @@ export def "employer-sub-contractor update-into" [
 #
 # DELETE /Employer/{EmployerId}/SubContractor/{SubContractorId}/CisInstruction/{CisInstructionId}
 # operationId: DeleteCisInstruction
-export def "employer-sub-contractor-cis-instruction delete" [
+export def "delete-cis-instruction" [
   employer_id: string
   sub_contractor_id: string
   cis_instruction_id: string
@@ -9470,7 +9470,7 @@ export def "employer-sub-contractor-cis-instruction delete" [
 #
 # GET /Employer/{EmployerId}/SubContractor/{SubContractorId}/CisInstruction/{CisInstructionId}
 # operationId: GetCisInstructionFromSubContractor
-export def "employer-sub-contractor-cis-instruction get" [
+export def "get-cis-instruction-from-sub-contractor" [
   employer_id: string
   sub_contractor_id: string
   cis_instruction_id: string
@@ -9514,7 +9514,7 @@ export def "employer-sub-contractor-cis-instruction get" [
 #
 # PATCH /Employer/{EmployerId}/SubContractor/{SubContractorId}/CisInstruction/{CisInstructionId}
 # operationId: PatchCisInstruction
-export def "employer-sub-contractor-cis-instruction update" [
+export def "patch-cis-instruction" [
   employer_id: string
   sub_contractor_id: string
   cis_instruction_id: string
@@ -9559,7 +9559,7 @@ export def "employer-sub-contractor-cis-instruction update" [
 # PUT /Employer/{EmployerId}/SubContractor/{SubContractorId}/CisInstruction/{CisInstructionId}
 # operationId: PutCisInstructionIntoSubContractor
 # --CisInstruction shape: {CisLineTag?: string, CisLineType?: string, Description?: string, PayFrequency?: "Monthly"|"Weekly", PeriodEnd?: int, PeriodStart?: int, TaxYearEnd?: int, TaxYearStart?: int, UOM?: "NotSet"|"Minute"|"Hour"|"Day"|"Week"|"Month"|"Year"|"Unit", Units?: float, VAT?: float, Value?: float}
-export def "employer-sub-contractor-cis-instruction update-into" [
+export def "put-cis-instruction-into-sub-contractor" [
   employer_id: string
   sub_contractor_id: string
   cis_instruction_id: string
@@ -9607,7 +9607,7 @@ export def "employer-sub-contractor-cis-instruction update-into" [
 #
 # DELETE /Employer/{EmployerId}/SubContractor/{SubContractorId}/CisInstruction/{CisInstructionId}/Tag/{TagId}
 # operationId: DeleteCisInstructionTag
-export def "employer-sub-contractor-cis-instruction-tag delete" [
+export def "delete-cis-instruction-tag" [
   employer_id: string
   sub_contractor_id: string
   cis_instruction_id: string
@@ -9653,7 +9653,7 @@ export def "employer-sub-contractor-cis-instruction-tag delete" [
 #
 # GET /Employer/{EmployerId}/SubContractor/{SubContractorId}/CisInstruction/{CisInstructionId}/Tag/{TagId}
 # operationId: GetTagFromCisInstruction
-export def "employer-sub-contractor-cis-instruction-tag get" [
+export def "get-tag-from-cis-instruction" [
   employer_id: string
   sub_contractor_id: string
   cis_instruction_id: string
@@ -9699,7 +9699,7 @@ export def "employer-sub-contractor-cis-instruction-tag get" [
 #
 # PUT /Employer/{EmployerId}/SubContractor/{SubContractorId}/CisInstruction/{CisInstructionId}/Tag/{TagId}
 # operationId: PutCisInstructionTag
-export def "employer-sub-contractor-cis-instruction-tag update" [
+export def "put-cis-instruction-tag" [
   employer_id: string
   sub_contractor_id: string
   cis_instruction_id: string
@@ -9745,7 +9745,7 @@ export def "employer-sub-contractor-cis-instruction-tag update" [
 #
 # GET /Employer/{EmployerId}/SubContractor/{SubContractorId}/CisInstruction/{CisInstructionId}/Tags
 # operationId: GetTagsFromCisInstruction
-export def "employer-sub-contractor-cis-instruction-tags get" [
+export def "get-tags-from-cis-instruction" [
   employer_id: string
   sub_contractor_id: string
   cis_instruction_id: string
@@ -9789,7 +9789,7 @@ export def "employer-sub-contractor-cis-instruction-tags get" [
 #
 # GET /Employer/{EmployerId}/SubContractor/{SubContractorId}/CisInstructions
 # operationId: GetCisInstructionsFromSubContractor
-export def "employer-sub-contractor-cis-instructions get" [
+export def "get-cis-instructions-from-sub-contractor" [
   employer_id: string
   sub_contractor_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9832,7 +9832,7 @@ export def "employer-sub-contractor-cis-instructions get" [
 # POST /Employer/{EmployerId}/SubContractor/{SubContractorId}/CisInstructions
 # operationId: PostCisInstructionIntoSubContractor
 # --CisInstruction shape: {CisLineTag?: string, CisLineType?: string, Description?: string, PayFrequency?: "Monthly"|"Weekly", PeriodEnd?: int, PeriodStart?: int, TaxYearEnd?: int, TaxYearStart?: int, UOM?: "NotSet"|"Minute"|"Hour"|"Day"|"Week"|"Month"|"Year"|"Unit", Units?: float, VAT?: float, Value?: float}
-export def "employer-sub-contractor-cis-instructions create-into" [
+export def "post-cis-instruction-into-sub-contractor" [
   employer_id: string
   sub_contractor_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9878,7 +9878,7 @@ export def "employer-sub-contractor-cis-instructions create-into" [
 #
 # GET /Employer/{EmployerId}/SubContractor/{SubContractorId}/CisInstructions/Tag/{TagId}
 # operationId: GetCisInstructionsWithTag
-export def "employer-sub-contractor-cis-instructions-tag get" [
+export def "get-cis-instructions-with-tag" [
   employer_id: string
   sub_contractor_id: string
   tag_id: string
@@ -9922,7 +9922,7 @@ export def "employer-sub-contractor-cis-instructions-tag get" [
 #
 # GET /Employer/{EmployerId}/SubContractor/{SubContractorId}/CisInstructions/Tags
 # operationId: GetAllCisInstructionTags
-export def "employer-sub-contractor-cis-instructions-tags get-list" [
+export def "get-all-cis-instruction-tags" [
   employer_id: string
   sub_contractor_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9964,7 +9964,7 @@ export def "employer-sub-contractor-cis-instructions-tags get-list" [
 #
 # DELETE /Employer/{EmployerId}/SubContractor/{SubContractorId}/CisLine/{CisLineId}
 # operationId: DeleteCisLine
-export def "employer-sub-contractor-cis-line delete" [
+export def "delete-cis-line" [
   employer_id: string
   sub_contractor_id: string
   cis_line_id: string
@@ -10008,7 +10008,7 @@ export def "employer-sub-contractor-cis-line delete" [
 #
 # GET /Employer/{EmployerId}/SubContractor/{SubContractorId}/CisLine/{CisLineId}
 # operationId: GetCisLineFromSubContractor
-export def "employer-sub-contractor-cis-line get" [
+export def "get-cis-line-from-sub-contractor" [
   employer_id: string
   sub_contractor_id: string
   cis_line_id: string
@@ -10052,7 +10052,7 @@ export def "employer-sub-contractor-cis-line get" [
 #
 # DELETE /Employer/{EmployerId}/SubContractor/{SubContractorId}/CisLine/{CisLineId}/Tag/{TagId}
 # operationId: DeleteCisLineTag
-export def "employer-sub-contractor-cis-line-tag delete" [
+export def "delete-cis-line-tag" [
   employer_id: string
   sub_contractor_id: string
   cis_line_id: string
@@ -10098,7 +10098,7 @@ export def "employer-sub-contractor-cis-line-tag delete" [
 #
 # GET /Employer/{EmployerId}/SubContractor/{SubContractorId}/CisLine/{CisLineId}/Tag/{TagId}
 # operationId: GetTagFromCisLine
-export def "employer-sub-contractor-cis-line-tag get" [
+export def "get-tag-from-cis-line" [
   employer_id: string
   sub_contractor_id: string
   cis_line_id: string
@@ -10144,7 +10144,7 @@ export def "employer-sub-contractor-cis-line-tag get" [
 #
 # PUT /Employer/{EmployerId}/SubContractor/{SubContractorId}/CisLine/{CisLineId}/Tag/{TagId}
 # operationId: PutCisLineTag
-export def "employer-sub-contractor-cis-line-tag update" [
+export def "put-cis-line-tag" [
   employer_id: string
   sub_contractor_id: string
   cis_line_id: string
@@ -10190,7 +10190,7 @@ export def "employer-sub-contractor-cis-line-tag update" [
 #
 # GET /Employer/{EmployerId}/SubContractor/{SubContractorId}/CisLine/{CisLineId}/Tags
 # operationId: GetTagsFromCisLine
-export def "employer-sub-contractor-cis-line-tags get" [
+export def "get-tags-from-cis-line" [
   employer_id: string
   sub_contractor_id: string
   cis_line_id: string
@@ -10234,7 +10234,7 @@ export def "employer-sub-contractor-cis-line-tags get" [
 #
 # GET /Employer/{EmployerId}/SubContractor/{SubContractorId}/CisLines
 # operationId: GetCisLinesFromSubContractor
-export def "employer-sub-contractor-cis-lines get" [
+export def "get-cis-lines-from-sub-contractor" [
   employer_id: string
   sub_contractor_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10276,7 +10276,7 @@ export def "employer-sub-contractor-cis-lines get" [
 #
 # GET /Employer/{EmployerId}/SubContractor/{SubContractorId}/CisLines/Tag/{TagId}
 # operationId: GetCisLinesWithTag
-export def "employer-sub-contractor-cis-lines-tag get" [
+export def "get-cis-lines-with-tag" [
   employer_id: string
   sub_contractor_id: string
   tag_id: string
@@ -10320,7 +10320,7 @@ export def "employer-sub-contractor-cis-lines-tag get" [
 #
 # GET /Employer/{EmployerId}/SubContractor/{SubContractorId}/CisLines/Tags
 # operationId: GetAllCisLineTags
-export def "employer-sub-contractor-cis-lines-tags get-list" [
+export def "get-all-cis-line-tags" [
   employer_id: string
   sub_contractor_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10362,7 +10362,7 @@ export def "employer-sub-contractor-cis-lines-tags get-list" [
 #
 # GET /Employer/{EmployerId}/SubContractor/{SubContractorId}/JournalLines
 # operationId: GetJournalLinesFromSubContractor
-export def "employer-sub-contractor-journal-lines get" [
+export def "get-journal-lines-from-sub-contractor" [
   employer_id: string
   sub_contractor_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10404,7 +10404,7 @@ export def "employer-sub-contractor-journal-lines get" [
 #
 # DELETE /Employer/{EmployerId}/SubContractor/{SubContractorId}/Revision/{RevisionNumber}
 # operationId: DeleteSubContractorRevisionByNumber
-export def "employer-sub-contractor-revision delete-by-number" [
+export def "delete-sub-contractor-revision-by-number" [
   employer_id: string
   sub_contractor_id: string
   revision_number: string
@@ -10448,7 +10448,7 @@ export def "employer-sub-contractor-revision delete-by-number" [
 #
 # GET /Employer/{EmployerId}/SubContractor/{SubContractorId}/Revision/{RevisionNumber}
 # operationId: GetSubContractorRevisionByNumber
-export def "employer-sub-contractor-revision get-by-number" [
+export def "get-sub-contractor-revision-by-number" [
   employer_id: string
   sub_contractor_id: string
   revision_number: string
@@ -10492,7 +10492,7 @@ export def "employer-sub-contractor-revision get-by-number" [
 #
 # GET /Employer/{EmployerId}/SubContractor/{SubContractorId}/Revisions
 # operationId: GetSubContractorRevisions
-export def "employer-sub-contractor-revisions get" [
+export def "get-sub-contractor-revisions" [
   employer_id: string
   sub_contractor_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10534,7 +10534,7 @@ export def "employer-sub-contractor-revisions get" [
 #
 # DELETE /Employer/{EmployerId}/SubContractor/{SubContractorId}/Tag/{TagId}
 # operationId: DeleteSubContractorTag
-export def "employer-sub-contractor-tag delete" [
+export def "delete-sub-contractor-tag" [
   employer_id: string
   sub_contractor_id: string
   tag_id: string
@@ -10578,7 +10578,7 @@ export def "employer-sub-contractor-tag delete" [
 #
 # GET /Employer/{EmployerId}/SubContractor/{SubContractorId}/Tag/{TagId}
 # operationId: GetTagFromSubContractor
-export def "employer-sub-contractor-tag get" [
+export def "get-tag-from-sub-contractor" [
   employer_id: string
   sub_contractor_id: string
   tag_id: string
@@ -10622,7 +10622,7 @@ export def "employer-sub-contractor-tag get" [
 #
 # PUT /Employer/{EmployerId}/SubContractor/{SubContractorId}/Tag/{TagId}
 # operationId: PutSubContractorTag
-export def "employer-sub-contractor-tag update" [
+export def "put-sub-contractor-tag" [
   employer_id: string
   sub_contractor_id: string
   tag_id: string
@@ -10666,7 +10666,7 @@ export def "employer-sub-contractor-tag update" [
 #
 # GET /Employer/{EmployerId}/SubContractor/{SubContractorId}/Tag/{TagId}/{EffectiveDate}
 # operationId: GetTagFromSubContractorRevision
-export def "employer-sub-contractor-tag get-from-revision" [
+export def "get-tag-from-sub-contractor-revision" [
   employer_id: string
   sub_contractor_id: string
   tag_id: string
@@ -10712,7 +10712,7 @@ export def "employer-sub-contractor-tag get-from-revision" [
 #
 # GET /Employer/{EmployerId}/SubContractor/{SubContractorId}/Tags
 # operationId: GetTagsFromSubContractor
-export def "employer-sub-contractor-tags get" [
+export def "get-tags-from-sub-contractor" [
   employer_id: string
   sub_contractor_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10754,7 +10754,7 @@ export def "employer-sub-contractor-tags get" [
 #
 # GET /Employer/{EmployerId}/SubContractor/{SubContractorId}/Tags/{EffectiveDate}
 # operationId: GetTagsFromSubContractorRevision
-export def "employer-sub-contractor-tags get-from-revision" [
+export def "get-tags-from-sub-contractor-revision" [
   employer_id: string
   sub_contractor_id: string
   effective_date: string
@@ -10798,7 +10798,7 @@ export def "employer-sub-contractor-tags get-from-revision" [
 #
 # DELETE /Employer/{EmployerId}/SubContractor/{SubContractorId}/{EffectiveDate}
 # operationId: DeleteSubContractorRevision
-export def "employer-sub-contractor delete-revision" [
+export def "delete-sub-contractor-revision" [
   employer_id: string
   sub_contractor_id: string
   effective_date: string
@@ -10842,7 +10842,7 @@ export def "employer-sub-contractor delete-revision" [
 #
 # GET /Employer/{EmployerId}/SubContractor/{SubContractorId}/{EffectiveDate}
 # operationId: GetSubContractorByEffectiveDate
-export def "employer-sub-contractor get-by-effective-date" [
+export def "get-sub-contractor-by-effective-date" [
   employer_id: string
   sub_contractor_id: string
   effective_date: string
@@ -10886,7 +10886,7 @@ export def "employer-sub-contractor get-by-effective-date" [
 #
 # GET /Employer/{EmployerId}/SubContractors
 # operationId: GetSubContractorsFromEmployer
-export def "employer-sub-contractors get" [
+export def "get-sub-contractors-from-employer" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10927,7 +10927,7 @@ export def "employer-sub-contractors get" [
 # POST /Employer/{EmployerId}/SubContractors
 # operationId: PostSubContractorIntoEmployer
 # --SubContractor shape: {Address?: record, BankAccount?: record, BusinessType?: "SoleTrader"|"Company"|"Partnership"|"Trust", CompanyName?: string, CompanyRegistrationNumber?: string, Deactivated?: bool, EffectiveDate?: string, FirstName?: string, Initials?: string, LastName?: string, MetaData?: record, MiddleName?: string, NextRevisionDate?: string, NiNumber?: string, PartnershipName?: string, PartnershipUniqueTaxReference?: string, PayFrequency?: "Monthly"|"Weekly", ... (14 more fields)}
-export def "employer-sub-contractors create-into" [
+export def "post-sub-contractor-into-employer" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10971,7 +10971,7 @@ export def "employer-sub-contractors create-into" [
 #
 # GET /Employer/{EmployerId}/SubContractors/Tag/{TagId}
 # operationId: GetSubContractorsWithTag
-export def "employer-sub-contractors-tag get" [
+export def "get-sub-contractors-with-tag" [
   employer_id: string
   tag_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11013,7 +11013,7 @@ export def "employer-sub-contractors-tag get" [
 #
 # GET /Employer/{EmployerId}/SubContractors/Tags
 # operationId: GetAllSubContractorTags
-export def "employer-sub-contractors-tags get-list" [
+export def "get-all-sub-contractor-tags" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11053,7 +11053,7 @@ export def "employer-sub-contractors-tags get-list" [
 #
 # GET /Employer/{EmployerId}/SubContractors/{EffectiveDate}
 # operationId: GetSubContractorsByEffectiveDate
-export def "employer-sub-contractors get-by-effective-date" [
+export def "get-sub-contractors-by-effective-date" [
   employer_id: string
   effective_date: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11095,7 +11095,7 @@ export def "employer-sub-contractors get-by-effective-date" [
 #
 # GET /Employer/{EmployerId}/Summary
 # operationId: GetEmployerSummary
-export def "employer-summary get" [
+export def "get-employer-summary" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11135,7 +11135,7 @@ export def "employer-summary get" [
 #
 # DELETE /Employer/{EmployerId}/Tag/{TagId}
 # operationId: DeleteEmployerTag
-export def "employer-tag delete" [
+export def "delete-employer-tag" [
   employer_id: string
   tag_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11177,7 +11177,7 @@ export def "employer-tag delete" [
 #
 # GET /Employer/{EmployerId}/Tag/{TagId}
 # operationId: GetTagFromEmployer
-export def "employer-tag get" [
+export def "get-tag-from-employer" [
   employer_id: string
   tag_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11219,7 +11219,7 @@ export def "employer-tag get" [
 #
 # PUT /Employer/{EmployerId}/Tag/{TagId}
 # operationId: PutEmployerTag
-export def "employer-tag update" [
+export def "put-employer-tag" [
   employer_id: string
   tag_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11261,7 +11261,7 @@ export def "employer-tag update" [
 #
 # GET /Employer/{EmployerId}/Tag/{TagId}/{EffectiveDate}
 # operationId: GetTagFromEmployerRevision
-export def "employer-tag get-from-revision" [
+export def "get-tag-from-employer-revision" [
   employer_id: string
   tag_id: string
   effective_date: string
@@ -11305,7 +11305,7 @@ export def "employer-tag get-from-revision" [
 #
 # GET /Employer/{EmployerId}/Tags
 # operationId: GetTagsFromEmployer
-export def "employer-tags get" [
+export def "get-tags-from-employer" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11345,7 +11345,7 @@ export def "employer-tags get" [
 #
 # GET /Employer/{EmployerId}/Tags/{EffectiveDate}
 # operationId: GetTagsFromEmployerRevision
-export def "employer-tags get-from-revision" [
+export def "get-tags-from-employer-revision" [
   employer_id: string
   effective_date: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11387,7 +11387,7 @@ export def "employer-tags get-from-revision" [
 #
 # DELETE /Employer/{EmployerId}/ThirdPartyTransaction/{ThirdPartyTransactionId}
 # operationId: DeleteThirdPartyTransaction
-export def "employer-third-party-transaction delete" [
+export def "delete-third-party-transaction" [
   employer_id: string
   third_party_transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11429,7 +11429,7 @@ export def "employer-third-party-transaction delete" [
 #
 # GET /Employer/{EmployerId}/ThirdPartyTransaction/{ThirdPartyTransactionId}
 # operationId: GetThirdPartyTransaction
-export def "employer-third-party-transaction get" [
+export def "get-third-party-transaction" [
   employer_id: string
   third_party_transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11471,7 +11471,7 @@ export def "employer-third-party-transaction get" [
 #
 # DELETE /Employer/{EmployerId}/ThirdPartyTransaction/{ThirdPartyTransactionId}/Tag/{TagId}
 # operationId: DeleteThirdPartyTransactionTag
-export def "employer-third-party-transaction-tag delete" [
+export def "delete-third-party-transaction-tag" [
   employer_id: string
   third_party_transaction_id: string
   tag_id: string
@@ -11515,7 +11515,7 @@ export def "employer-third-party-transaction-tag delete" [
 #
 # GET /Employer/{EmployerId}/ThirdPartyTransaction/{ThirdPartyTransactionId}/Tag/{TagId}
 # operationId: GetTagFromThirdPartyTransaction
-export def "employer-third-party-transaction-tag get" [
+export def "get-tag-from-third-party-transaction" [
   employer_id: string
   third_party_transaction_id: string
   tag_id: string
@@ -11559,7 +11559,7 @@ export def "employer-third-party-transaction-tag get" [
 #
 # PUT /Employer/{EmployerId}/ThirdPartyTransaction/{ThirdPartyTransactionId}/Tag/{TagId}
 # operationId: PutThirdPartyTransactionTag
-export def "employer-third-party-transaction-tag update" [
+export def "put-third-party-transaction-tag" [
   employer_id: string
   third_party_transaction_id: string
   tag_id: string
@@ -11603,7 +11603,7 @@ export def "employer-third-party-transaction-tag update" [
 #
 # GET /Employer/{EmployerId}/ThirdPartyTransaction/{ThirdPartyTransactionId}/Tags
 # operationId: GetTagsFromThirdPartyTransaction
-export def "employer-third-party-transaction-tags get" [
+export def "get-tags-from-third-party-transaction" [
   employer_id: string
   third_party_transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11645,7 +11645,7 @@ export def "employer-third-party-transaction-tags get" [
 #
 # GET /Employer/{EmployerId}/ThirdPartyTransactions
 # operationId: GetThirdPartyTransactions
-export def "employer-third-party-transactions get" [
+export def "get-third-party-transactions" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11685,7 +11685,7 @@ export def "employer-third-party-transactions get" [
 #
 # GET /Employer/{EmployerId}/ThirdPartyTransactions/Tag/{TagId}
 # operationId: GetAllThirdPartyTransactionsWithTag
-export def "employer-third-party-transactions-tag get-list" [
+export def "get-all-third-party-transactions-with-tag" [
   employer_id: string
   tag_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11727,7 +11727,7 @@ export def "employer-third-party-transactions-tag get-list" [
 #
 # GET /Employer/{EmployerId}/ThirdPartyTransactions/Tags
 # operationId: GetAllThirdPartyTransactionTags
-export def "employer-third-party-transactions-tags get-list" [
+export def "get-all-third-party-transaction-tags" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11767,7 +11767,7 @@ export def "employer-third-party-transactions-tags get-list" [
 #
 # DELETE /Employer/{EmployerId}/{EffectiveDate}
 # operationId: DeleteEmployerRevision
-export def "employer delete-revision" [
+export def "delete-employer-revision" [
   employer_id: string
   effective_date: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11809,7 +11809,7 @@ export def "employer delete-revision" [
 #
 # GET /Employer/{EmployerId}/{EffectiveDate}
 # operationId: GetEmployerByEffectiveDate
-export def "employer get-by-effective-date" [
+export def "get-employer-by-effective-date" [
   employer_id: string
   effective_date: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11851,7 +11851,7 @@ export def "employer get-by-effective-date" [
 #
 # GET /Employer/{EmployerId}/{EffectiveDate}/Summary
 # operationId: GetEmployerSummaryByEffectiveDate
-export def "employer-summary get-by-effective-date" [
+export def "get-employer-summary-by-effective-date" [
   employer_id: string
   effective_date: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11893,7 +11893,7 @@ export def "employer-summary get-by-effective-date" [
 #
 # GET /Employers
 # operationId: GetEmployers
-export def "employers get" [
+export def "get-employers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11932,7 +11932,7 @@ export def "employers get" [
 # POST /Employers
 # operationId: PostEmployer
 # --Employer shape: {Address?: record, ApprenticeshipLevyAllowance?: float, AutoEnrolment?: record, BacsServiceUserNumber?: string, BankAccount?: record, CalculateApprenticeshipLevy?: bool, ClaimEmploymentAllowance?: bool, ClaimSmallEmployerRelief?: bool, EffectiveDate?: string, HmrcSettings?: record, MetaData?: record, Name?: string, NextRevisionDate?: string, Region?: "NotSet"|"England"|"Scotland"|"Wales", Revision?: int, ... (2 more fields)}
-export def "employers create" [
+export def "post-employer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11974,7 +11974,7 @@ export def "employers create" [
 #
 # GET /Employers/Summary
 # operationId: GetEmployerSummaries
-export def "employers-summary get-summaries" [
+export def "get-employer-summaries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12012,7 +12012,7 @@ export def "employers-summary get-summaries" [
 #
 # GET /Employers/Tag/{TagId}
 # operationId: GetEmployersWithTag
-export def "employers-tag get" [
+export def "get-employers-with-tag" [
   tag_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12052,7 +12052,7 @@ export def "employers-tag get" [
 #
 # GET /Employers/Tags
 # operationId: GetAllEmployerTags
-export def "employers-tags get-list" [
+export def "get-all-employer-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12090,7 +12090,7 @@ export def "employers-tags get-list" [
 #
 # GET /Employers/{EffectiveDate}
 # operationId: GetEmployersByEffectiveDate
-export def "employers get-by-effective-date" [
+export def "get-employers-by-effective-date" [
   effective_date: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12130,7 +12130,7 @@ export def "employers get-by-effective-date" [
 #
 # GET /Employers/{EffectiveDate}/Summary
 # operationId: GetEmployerSummariesByEffectiveDate
-export def "employers-summary get-summaries-by-effective-date" [
+export def "get-employer-summaries-by-effective-date" [
   effective_date: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12170,7 +12170,7 @@ export def "employers-summary get-summaries-by-effective-date" [
 #
 # GET /Healthcheck
 # operationId: GetHealthCheck
-export def "healthcheck get-health-check" [
+export def "get-health-check" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12204,7 +12204,7 @@ export def "healthcheck get-health-check" [
 #
 # GET /Jobs/Batch
 # operationId: GetBatchJobs
-export def "jobs-batch get" [
+export def "get-batch-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12243,7 +12243,7 @@ export def "jobs-batch get" [
 # POST /Jobs/Batch
 # operationId: PostNewBatchJob
 # --BatchJobInstruction shape: {HoldingDate?: string, Instructions?: record, ValidateOnly?: bool}
-export def "jobs-batch create-new" [
+export def "post-new-batch-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12285,7 +12285,7 @@ export def "jobs-batch create-new" [
 #
 # DELETE /Jobs/Batch/{JobId}
 # operationId: DeleteBatchJob
-export def "jobs-batch delete" [
+export def "delete-batch-job" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12325,7 +12325,7 @@ export def "jobs-batch delete" [
 #
 # GET /Jobs/Batch/{JobId}/Info
 # operationId: GetBatchJobInfo
-export def "jobs-batch-info get" [
+export def "get-batch-job-info" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12365,7 +12365,7 @@ export def "jobs-batch-info get" [
 #
 # GET /Jobs/Batch/{JobId}/Progress
 # operationId: GetBatchJobProgress
-export def "jobs-batch-progress get" [
+export def "get-batch-job-progress" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12405,7 +12405,7 @@ export def "jobs-batch-progress get" [
 #
 # GET /Jobs/Batch/{JobId}/Status
 # operationId: GetBatchJobStatus
-export def "jobs-batch-status get" [
+export def "get-batch-job-status" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12445,7 +12445,7 @@ export def "jobs-batch-status get" [
 #
 # GET /Jobs/Cis
 # operationId: GetCisJobs
-export def "jobs-cis get" [
+export def "get-cis-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12484,7 +12484,7 @@ export def "jobs-cis get" [
 # POST /Jobs/Cis
 # operationId: PostNewCisJob
 # --CisJobInstructionBase shape: {Employer?: record, HoldingDate?: string, SubContractors?: record}
-export def "jobs-cis create-new" [
+export def "post-new-cis-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12526,7 +12526,7 @@ export def "jobs-cis create-new" [
 #
 # DELETE /Jobs/Cis/{JobId}
 # operationId: DeleteCisJob
-export def "jobs-cis delete" [
+export def "delete-cis-job" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12566,7 +12566,7 @@ export def "jobs-cis delete" [
 #
 # GET /Jobs/Cis/{JobId}/Info
 # operationId: GetCisJobInfo
-export def "jobs-cis-info get" [
+export def "get-cis-job-info" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12606,7 +12606,7 @@ export def "jobs-cis-info get" [
 #
 # GET /Jobs/Cis/{JobId}/Progress
 # operationId: GetCisJobProgress
-export def "jobs-cis-progress get" [
+export def "get-cis-job-progress" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12646,7 +12646,7 @@ export def "jobs-cis-progress get" [
 #
 # GET /Jobs/Cis/{JobId}/Status
 # operationId: GetCisJobStatus
-export def "jobs-cis-status get" [
+export def "get-cis-job-status" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12686,7 +12686,7 @@ export def "jobs-cis-status get" [
 #
 # GET /Jobs/Dps
 # operationId: GetDpsJobs
-export def "jobs-dps get" [
+export def "get-dps-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12725,7 +12725,7 @@ export def "jobs-dps get" [
 # POST /Jobs/Dps
 # operationId: PostNewDpsJob
 # --DpsJobInstruction shape: {Apply?: bool, Employer?: record, FromDate?: string, HoldingDate?: string, MessageTypes?: record, MessagesToProcess?: record, Retrieve?: bool}
-export def "jobs-dps create-new" [
+export def "post-new-dps-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12767,7 +12767,7 @@ export def "jobs-dps create-new" [
 #
 # DELETE /Jobs/Dps/{JobId}
 # operationId: DeleteDpsJob
-export def "jobs-dps delete" [
+export def "delete-dps-job" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12807,7 +12807,7 @@ export def "jobs-dps delete" [
 #
 # GET /Jobs/Dps/{JobId}/Info
 # operationId: GetDpsJobInfo
-export def "jobs-dps-info get" [
+export def "get-dps-job-info" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12847,7 +12847,7 @@ export def "jobs-dps-info get" [
 #
 # GET /Jobs/Dps/{JobId}/Progress
 # operationId: GetDpsJobProgress
-export def "jobs-dps-progress get" [
+export def "get-dps-job-progress" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12887,7 +12887,7 @@ export def "jobs-dps-progress get" [
 #
 # GET /Jobs/Dps/{JobId}/Status
 # operationId: GetDpsJobStatus
-export def "jobs-dps-status get" [
+export def "get-dps-job-status" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12927,7 +12927,7 @@ export def "jobs-dps-status get" [
 #
 # GET /Jobs/Employer/{EmployerId}
 # operationId: GetEmployerJobs
-export def "jobs-employer get" [
+export def "get-employer-jobs" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12967,7 +12967,7 @@ export def "jobs-employer get" [
 #
 # GET /Jobs/PayRuns
 # operationId: GetPayRunJobs
-export def "jobs-pay-runs get" [
+export def "get-pay-run-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13006,7 +13006,7 @@ export def "jobs-pay-runs get" [
 # POST /Jobs/PayRuns
 # operationId: PostNewPayRunJob
 # --PayRunJobInstruction shape: {Employees?: record, EndDate?: string, HoldingDate?: string, IsSupplementary?: bool, PaySchedule?: record, PaymentDate?: string, StartDate?: string}
-export def "jobs-pay-runs create-new" [
+export def "post-new-pay-run-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13048,7 +13048,7 @@ export def "jobs-pay-runs create-new" [
 #
 # DELETE /Jobs/PayRuns/{JobId}
 # operationId: DeletePayRunJob
-export def "jobs-pay-runs delete" [
+export def "delete-pay-run-job" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13088,7 +13088,7 @@ export def "jobs-pay-runs delete" [
 #
 # GET /Jobs/PayRuns/{JobId}/Info
 # operationId: GetPayRunJobInfo
-export def "jobs-pay-runs-info get" [
+export def "get-pay-run-job-info" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13128,7 +13128,7 @@ export def "jobs-pay-runs-info get" [
 #
 # GET /Jobs/PayRuns/{JobId}/Progress
 # operationId: GetPayRunJobProgress
-export def "jobs-pay-runs-progress get" [
+export def "get-pay-run-job-progress" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13168,7 +13168,7 @@ export def "jobs-pay-runs-progress get" [
 #
 # GET /Jobs/PayRuns/{JobId}/Status
 # operationId: GetPayRunJobStatus
-export def "jobs-pay-runs-status get" [
+export def "get-pay-run-job-status" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13208,7 +13208,7 @@ export def "jobs-pay-runs-status get" [
 #
 # GET /Jobs/Rti
 # operationId: GetRtiJobs
-export def "jobs-rti get" [
+export def "get-rti-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13247,7 +13247,7 @@ export def "jobs-rti get" [
 # POST /Jobs/Rti
 # operationId: PostNewRtiJob
 # --RtiJobInstruction shape: {EarlierTaxYear?: int, Employer?: record, FinalSubmissionForYear?: bool, Generate?: bool, HoldingDate?: string, LateReason?: "A"|"B"|"C"|"D"|"F"|"G"|"H", NoPaymentForPeriodFrom?: string, NoPaymentForPeriodTo?: string, PaySchedule?: record, PaymentDate?: string, PeriodOfInactivityFrom?: string, PeriodOfInactivityTo?: string, RtiTransaction?: record, RtiType?: string, SchemeCeased?: string, TaxMonth?: int, TaxYear?: int, Timestamp?: string, Transmit?: bool}
-export def "jobs-rti create-new" [
+export def "post-new-rti-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13289,7 +13289,7 @@ export def "jobs-rti create-new" [
 #
 # DELETE /Jobs/Rti/{JobId}
 # operationId: DeleteRtiJob
-export def "jobs-rti delete" [
+export def "delete-rti-job" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13329,7 +13329,7 @@ export def "jobs-rti delete" [
 #
 # GET /Jobs/Rti/{JobId}/Info
 # operationId: GetRtiJobInfo
-export def "jobs-rti-info get" [
+export def "get-rti-job-info" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13369,7 +13369,7 @@ export def "jobs-rti-info get" [
 #
 # GET /Jobs/Rti/{JobId}/Progress
 # operationId: GetRtiJobProgress
-export def "jobs-rti-progress get" [
+export def "get-rti-job-progress" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13409,7 +13409,7 @@ export def "jobs-rti-progress get" [
 #
 # GET /Jobs/Rti/{JobId}/Status
 # operationId: GetRtiJobStatus
-export def "jobs-rti-status get" [
+export def "get-rti-job-status" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13449,7 +13449,7 @@ export def "jobs-rti-status get" [
 #
 # GET /Jobs/ThirdParty
 # operationId: GetThirdPartyJobs
-export def "jobs-third-party get" [
+export def "get-third-party-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13488,7 +13488,7 @@ export def "jobs-third-party get" [
 # POST /Jobs/ThirdParty
 # operationId: PostNewThirdPartyJob
 # --ThirdPartyJobInstruction shape: {EmployerHref?: string, HoldingDate?: string, InstructionType?: string, MetaData?: record, PayLoad?: string}
-export def "jobs-third-party create-new" [
+export def "post-new-third-party-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13530,7 +13530,7 @@ export def "jobs-third-party create-new" [
 #
 # DELETE /Jobs/ThirdParty/{JobId}
 # operationId: DeleteThirdPartyJob
-export def "jobs-third-party delete" [
+export def "delete-third-party-job" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13570,7 +13570,7 @@ export def "jobs-third-party delete" [
 #
 # GET /Jobs/ThirdParty/{JobId}/Info
 # operationId: GetThirdPartyJobInfo
-export def "jobs-third-party-info get" [
+export def "get-third-party-job-info" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13610,7 +13610,7 @@ export def "jobs-third-party-info get" [
 #
 # GET /Jobs/ThirdParty/{JobId}/Progress
 # operationId: GetThirdPartyJobProgress
-export def "jobs-third-party-progress get" [
+export def "get-third-party-job-progress" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13650,7 +13650,7 @@ export def "jobs-third-party-progress get" [
 #
 # GET /Jobs/ThirdParty/{JobId}/Status
 # operationId: GetThirdPartyJobStatus
-export def "jobs-third-party-status get" [
+export def "get-third-party-job-status" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13690,7 +13690,7 @@ export def "jobs-third-party-status get" [
 #
 # DELETE /JournalInstruction/{JournalInstructionId}
 # operationId: DeleteJournalInstructionTemplate
-export def "journal-instruction delete-template" [
+export def "delete-journal-instruction-template" [
   journal_instruction_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13730,7 +13730,7 @@ export def "journal-instruction delete-template" [
 #
 # GET /JournalInstruction/{JournalInstructionId}
 # operationId: GetJournalInstructionTemplate
-export def "journal-instruction get-template" [
+export def "get-journal-instruction-template" [
   journal_instruction_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13770,7 +13770,7 @@ export def "journal-instruction get-template" [
 #
 # PUT /JournalInstruction/{JournalInstructionId}
 # operationId: PutJournalInstructionTemplate
-export def "journal-instruction update-template" [
+export def "put-journal-instruction-template" [
   journal_instruction_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13810,7 +13810,7 @@ export def "journal-instruction update-template" [
 #
 # GET /JournalInstructions
 # operationId: GetJournalInstructionTemplates
-export def "journal-instructions get-templates" [
+export def "get-journal-instruction-templates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13848,7 +13848,7 @@ export def "journal-instructions get-templates" [
 #
 # POST /JournalInstructions
 # operationId: PostJournalInstructionTemplate
-export def "journal-instructions create-template" [
+export def "post-journal-instruction-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13886,7 +13886,7 @@ export def "journal-instructions create-template" [
 #
 # DELETE /Permission/{PermissionId}
 # operationId: DeletePermission
-export def "permission delete" [
+export def "delete-permission" [
   permission_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13926,7 +13926,7 @@ export def "permission delete" [
 #
 # GET /Permission/{PermissionId}
 # operationId: GetPermission
-export def "permission get" [
+export def "get-permission" [
   permission_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13966,7 +13966,7 @@ export def "permission get" [
 #
 # PATCH /Permission/{PermissionId}
 # operationId: PatchPermission
-export def "permission update-by-permission-id" [
+export def "patch-permission" [
   permission_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14006,7 +14006,7 @@ export def "permission update-by-permission-id" [
 #
 # PUT /Permission/{PermissionId}
 # operationId: PutPermission
-export def "permission update-by-permission-id-1" [
+export def "put-permission" [
   permission_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14046,7 +14046,7 @@ export def "permission update-by-permission-id-1" [
 #
 # DELETE /Permission/{PermissionId}/Tag/{TagId}
 # operationId: DeletePermissionTag
-export def "permission-tag delete" [
+export def "delete-permission-tag" [
   permission_id: string
   tag_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -14088,7 +14088,7 @@ export def "permission-tag delete" [
 #
 # GET /Permission/{PermissionId}/Tag/{TagId}
 # operationId: GetTagFromPermission
-export def "permission-tag get" [
+export def "get-tag-from-permission" [
   permission_id: string
   tag_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -14130,7 +14130,7 @@ export def "permission-tag get" [
 #
 # PUT /Permission/{PermissionId}/Tag/{TagId}
 # operationId: PutPermissionTag
-export def "permission-tag update" [
+export def "put-permission-tag" [
   permission_id: string
   tag_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -14172,7 +14172,7 @@ export def "permission-tag update" [
 #
 # GET /Permission/{PermissionId}/Tags
 # operationId: GetTagsFromPermission
-export def "permission-tags get" [
+export def "get-tags-from-permission" [
   permission_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14212,7 +14212,7 @@ export def "permission-tags get" [
 #
 # GET /Permissions
 # operationId: GetPermissions
-export def "permissions get" [
+export def "get-permissions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14250,7 +14250,7 @@ export def "permissions get" [
 #
 # POST /Permissions
 # operationId: PostPermission
-export def "permissions create" [
+export def "post-permission" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14288,7 +14288,7 @@ export def "permissions create" [
 #
 # GET /Permissions/Tag/{TagId}
 # operationId: GetAllPermissionsWithTag
-export def "permissions-tag get-list" [
+export def "get-all-permissions-with-tag" [
   tag_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14328,7 +14328,7 @@ export def "permissions-tag get-list" [
 #
 # GET /Permissions/Tags
 # operationId: GetAllPermissionTags
-export def "permissions-tags get-list" [
+export def "get-all-permission-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14367,7 +14367,7 @@ export def "permissions-tags get-list" [
 # POST /Query
 # operationId: GetQueryResponse
 # --Query shape: {Encoding?: string, ExcludeNullOrEmptyElements?: bool, Groups?: record, RootNodeName?: string, SuppressMetricAttributes?: bool, Variables?: record}
-export def "query get-response" [
+export def "get-query-response" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14409,7 +14409,7 @@ export def "query get-response" [
 #
 # GET /ReferenceData/JournalExpressionDataTable
 # operationId: GetJournalExpressionSchema
-export def "reference-data-journal-expression-data-table get-schema" [
+export def "get-journal-expression-schema" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14447,7 +14447,7 @@ export def "reference-data-journal-expression-data-table get-schema" [
 #
 # GET /Report/ACTPAYINS/run
 # operationId: GetActivePayInstructionsReportOutput
-export def "report-actpayins-run get-active-pay-instructions-output" [
+export def "get-active-pay-instructions-report-output" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14492,7 +14492,7 @@ export def "report-actpayins-run get-active-pay-instructions-output" [
 #
 # GET /Report/AOELIABILITY/run
 # operationId: GetAoeLiabilityReportOuput
-export def "report-aoeliability-run get-aoe-liability-ouput" [
+export def "get-aoe-liability-report-ouput" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14536,7 +14536,7 @@ export def "report-aoeliability-run get-aoe-liability-ouput" [
 #
 # GET /Report/DPSMSG/run
 # operationId: GetDpsMessageReportOutput
-export def "report-dpsmsg-run get-dps-message-output" [
+export def "get-dps-message-report-output" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14582,7 +14582,7 @@ export def "report-dpsmsg-run get-dps-message-output" [
 #
 # GET /Report/EMPSUM/run
 # operationId: GetEmployerSummaryReportOuput
-export def "report-empsum-run get-employer-summary-ouput" [
+export def "get-employer-summary-report-ouput" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14623,7 +14623,7 @@ export def "report-empsum-run get-employer-summary-ouput" [
 #
 # GET /Report/GRO2NET/run
 # operationId: GetGrossToNetReportOutput
-export def "report-gro2-net-run get-gross-to-output" [
+export def "get-gross-to-net-report-output" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14668,7 +14668,7 @@ export def "report-gro2-net-run get-gross-to-output" [
 #
 # GET /Report/HOLBAL/run
 # operationId: GetHolidayBalanceReportOutput
-export def "report-holbal-run get-holiday-balance-output" [
+export def "get-holiday-balance-report-output" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14712,7 +14712,7 @@ export def "report-holbal-run get-holiday-balance-output" [
 #
 # GET /Report/JOURNAL/run
 # operationId: GetJournalReportOuput
-export def "report-journal-run get-ouput" [
+export def "get-journal-report-ouput" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14756,7 +14756,7 @@ export def "report-journal-run get-ouput" [
 #
 # GET /Report/LASTPAYDATE/run
 # operationId: GetLastPayDateReportOuput
-export def "report-lastpaydate-run get-last-pay-date-ouput" [
+export def "get-last-pay-date-report-ouput" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14797,7 +14797,7 @@ export def "report-lastpaydate-run get-last-pay-date-ouput" [
 #
 # GET /Report/NETPAY/run
 # operationId: GetNetPayReportOutput
-export def "report-netpay-run get-net-pay-output" [
+export def "get-net-pay-report-output" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14842,7 +14842,7 @@ export def "report-netpay-run get-net-pay-output" [
 #
 # GET /Report/NEXTPERIOD/run
 # operationId: GetNextPayPeriodDatesReportOutput
-export def "report-nextperiod-run get-next-pay-period-dates-output" [
+export def "get-next-pay-period-dates-report-output" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14883,7 +14883,7 @@ export def "report-nextperiod-run get-next-pay-period-dates-output" [
 #
 # GET /Report/P11SUM/run
 # operationId: GetP11SummaryReportOutput
-export def "report-p11-sum-run get-summary-output" [
+export def "get-p11-summary-report-output" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14927,7 +14927,7 @@ export def "report-p11-sum-run get-summary-output" [
 #
 # GET /Report/P32/run
 # operationId: GetP32NetReportOutput
-export def "report-p32-run get-net-output" [
+export def "get-p32-net-report-output" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14968,7 +14968,7 @@ export def "report-p32-run get-net-output" [
 #
 # GET /Report/P32SUM/run
 # operationId: GetP32SummaryNetReportOutput
-export def "report-p32-sum-run get-summary-net-output" [
+export def "get-p32-summary-net-report-output" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15009,7 +15009,7 @@ export def "report-p32-sum-run get-summary-net-output" [
 #
 # GET /Report/P45/run
 # operationId: GetP45ReportOutput
-export def "report-p45-run get-output" [
+export def "get-p45-report-output" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15051,7 +15051,7 @@ export def "report-p45-run get-output" [
 #
 # GET /Report/P60/run
 # operationId: GetP60ReportOutput
-export def "report-p60-run get-output" [
+export def "get-p60-report-output" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15096,7 +15096,7 @@ export def "report-p60-run get-output" [
 #
 # GET /Report/PAPDIS/run
 # operationId: GetPapdisReportOuput
-export def "report-papdis-run get-ouput" [
+export def "get-papdis-report-ouput" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15142,7 +15142,7 @@ export def "report-papdis-run get-ouput" [
 #
 # GET /Report/PASS/run
 # operationId: GetPassReportOuput
-export def "report-pass-run get-ouput" [
+export def "get-pass-report-ouput" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15189,7 +15189,7 @@ export def "report-pass-run get-ouput" [
 #
 # GET /Report/PAYDASHBOARD/run
 # operationId: GetPayDashboardPayslipReportOuput
-export def "report-paydashboard-run get-pay-dashboard-payslip-ouput" [
+export def "get-pay-dashboard-payslip-report-ouput" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15237,7 +15237,7 @@ export def "report-paydashboard-run get-pay-dashboard-payslip-ouput" [
 #
 # GET /Report/PAYSLIP3/run
 # operationId: GetPayslip3ReportOutput
-export def "report-payslip3-run get-output" [
+export def "get-payslip3-report-output" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15284,7 +15284,7 @@ export def "report-payslip3-run get-output" [
 #
 # GET /Report/PENLIABILITY/run
 # operationId: GetPensionLiabilityReportOutput
-export def "report-penliability-run get-pension-liability-output" [
+export def "get-pension-liability-report-output" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15326,7 +15326,7 @@ export def "report-penliability-run get-pension-liability-output" [
 #
 # DELETE /Report/{ReportDefinitionId}
 # operationId: DeleteReportDefinition
-export def "report delete-definition" [
+export def "delete-report-definition" [
   report_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15366,7 +15366,7 @@ export def "report delete-definition" [
 #
 # GET /Report/{ReportDefinitionId}
 # operationId: GetReportDefinitionFromApplication
-export def "report get-definition-from-application" [
+export def "get-report-definition-from-application" [
   report_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15407,7 +15407,7 @@ export def "report get-definition-from-application" [
 # PUT /Report/{ReportDefinitionId}
 # operationId: PutReportDefinition
 # --ReportDefinition shape: {Active?: bool, Readonly?: bool, ReportQuery?: record, SupportedTransforms?: string, Title?: string, Version?: string}
-export def "report update-definition" [
+export def "put-report-definition" [
   report_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15451,7 +15451,7 @@ export def "report update-definition" [
 #
 # GET /Report/{ReportDefinitionId}/run
 # operationId: GetReportOutput
-export def "report-run get-output" [
+export def "get-report-output" [
   report_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15491,7 +15491,7 @@ export def "report-run get-output" [
 #
 # GET /Reports
 # operationId: GetReportDefinitionsFromApplication
-export def "reports get-definitions-from-application" [
+export def "get-report-definitions-from-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15530,7 +15530,7 @@ export def "reports get-definitions-from-application" [
 # POST /Reports
 # operationId: PostReportDefinition
 # --ReportDefinition shape: {Active?: bool, Readonly?: bool, ReportQuery?: record, SupportedTransforms?: string, Title?: string, Version?: string}
-export def "reports create-definition" [
+export def "post-report-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15572,7 +15572,7 @@ export def "reports create-definition" [
 #
 # GET /Schemas
 # operationId: GetSchemas
-export def "schemas list" [
+export def "get-schemas" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15610,7 +15610,7 @@ export def "schemas list" [
 #
 # GET /Schemas/{DtoDataType}
 # operationId: GetSchema
-export def "schemas get" [
+export def "get-schema" [
   dto_data_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15650,7 +15650,7 @@ export def "schemas get" [
 #
 # DELETE /Secret/{SecretId}
 # operationId: DeleteApplicationSecret
-export def "secret delete-application" [
+export def "delete-application-secret" [
   secret_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15690,7 +15690,7 @@ export def "secret delete-application" [
 #
 # GET /Secret/{SecretId}
 # operationId: GetApplicationSecret
-export def "secret get-application" [
+export def "get-application-secret" [
   secret_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15730,7 +15730,7 @@ export def "secret get-application" [
 #
 # PUT /Secret/{SecretId}
 # operationId: PutApplicationSecret
-export def "secret update-application" [
+export def "put-application-secret" [
   secret_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15770,7 +15770,7 @@ export def "secret update-application" [
 #
 # GET /Secrets
 # operationId: GetApplicationSecrets
-export def "secrets get-application" [
+export def "get-application-secrets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15808,7 +15808,7 @@ export def "secrets get-application" [
 #
 # POST /Secrets
 # operationId: PostApplicationSecret
-export def "secrets create-application" [
+export def "post-application-secret" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15846,7 +15846,7 @@ export def "secrets create-application" [
 #
 # GET /Template/{DtoDataType}
 # operationId: GetTemplateModel
-export def "template get-model" [
+export def "get-template-model" [
   dto_data_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15886,7 +15886,7 @@ export def "template get-model" [
 #
 # GET /Templates
 # operationId: GetTemplates
-export def "templates get" [
+export def "get-templates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15924,7 +15924,7 @@ export def "templates get" [
 #
 # DELETE /Transform/{TransformDefinitionId}
 # operationId: DeleteTransformDefinition
-export def "transform delete-definition" [
+export def "delete-transform-definition" [
   transform_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15964,7 +15964,7 @@ export def "transform delete-definition" [
 #
 # GET /Transform/{TransformDefinitionId}
 # operationId: GetTransformDefinitionFromApplication
-export def "transform get-definition-from-application" [
+export def "get-transform-definition-from-application" [
   transform_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16005,7 +16005,7 @@ export def "transform get-definition-from-application" [
 # PUT /Transform/{TransformDefinitionId}
 # operationId: PutTransformDefinition
 # --TransformDefinition shape: {Active?: bool, ContentType?: string, Definition?: string, DefinitionType?: string, Readonly?: bool, SupportedReports?: string, TaxYear?: int, Title?: string, Version?: string}
-export def "transform update-definition" [
+export def "put-transform-definition" [
   transform_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16049,7 +16049,7 @@ export def "transform update-definition" [
 #
 # GET /Transforms
 # operationId: GetTransformDefinitionsFromApplication
-export def "transforms get-definitions-from-application" [
+export def "get-transform-definitions-from-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -16088,7 +16088,7 @@ export def "transforms get-definitions-from-application" [
 # POST /Transforms
 # operationId: PostTransformDefinition
 # --TransformDefinition shape: {Active?: bool, ContentType?: string, Definition?: string, DefinitionType?: string, Readonly?: bool, SupportedReports?: string, TaxYear?: int, Title?: string, Version?: string}
-export def "transforms create-definition" [
+export def "post-transform-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -16130,7 +16130,7 @@ export def "transforms create-definition" [
 #
 # DELETE /User/{UserId}
 # operationId: DeleteUser
-export def "user delete" [
+export def "delete-user" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16170,7 +16170,7 @@ export def "user delete" [
 #
 # GET /User/{UserId}
 # operationId: GetUser
-export def "user get" [
+export def "get-user" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16210,7 +16210,7 @@ export def "user get" [
 #
 # PATCH /User/{UserId}
 # operationId: PatchUser
-export def "user update-by-user-id" [
+export def "patch-user" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16250,7 +16250,7 @@ export def "user update-by-user-id" [
 #
 # PUT /User/{UserId}
 # operationId: PutUser
-export def "user update-by-user-id-1" [
+export def "put-user" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16290,7 +16290,7 @@ export def "user update-by-user-id-1" [
 #
 # GET /User/{UserId}/Permissions
 # operationId: GetUserPermissions
-export def "user-permissions get" [
+export def "get-user-permissions" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16330,7 +16330,7 @@ export def "user-permissions get" [
 #
 # DELETE /User/{UserId}/Tag/{TagId}
 # operationId: DeleteUserTag
-export def "user-tag delete" [
+export def "delete-user-tag" [
   user_id: string
   tag_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16372,7 +16372,7 @@ export def "user-tag delete" [
 #
 # GET /User/{UserId}/Tag/{TagId}
 # operationId: GetTagFromUser
-export def "user-tag get" [
+export def "get-tag-from-user" [
   user_id: string
   tag_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16414,7 +16414,7 @@ export def "user-tag get" [
 #
 # PUT /User/{UserId}/Tag/{TagId}
 # operationId: PutUserTag
-export def "user-tag update" [
+export def "put-user-tag" [
   user_id: string
   tag_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16456,7 +16456,7 @@ export def "user-tag update" [
 #
 # GET /User/{UserId}/Tags
 # operationId: GetTagsFromUser
-export def "user-tags get" [
+export def "get-tags-from-user" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16496,7 +16496,7 @@ export def "user-tags get" [
 #
 # GET /Users
 # operationId: GetUsers
-export def "users get" [
+export def "get-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -16534,7 +16534,7 @@ export def "users get" [
 #
 # POST /Users
 # operationId: PostUser
-export def "users create" [
+export def "post-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -16572,7 +16572,7 @@ export def "users create" [
 #
 # GET /Users/Tag/{TagId}
 # operationId: GetAllUsersWithTag
-export def "users-tag get-list" [
+export def "get-all-users-with-tag" [
   tag_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16612,7 +16612,7 @@ export def "users-tag get-list" [
 #
 # GET /Users/Tags
 # operationId: GetAllUserTags
-export def "users-tags get-list" [
+export def "get-all-user-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

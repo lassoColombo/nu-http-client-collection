@@ -106,7 +106,7 @@ def x-amz-target-completer-5 [] { ["AnyScaleScalingPlannerFrontendService.Update
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-scaling-plan" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-scaling-plan" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -130,7 +130,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CreateScalingPlan
-export def "api create-scaling-plan" [
+export def "create-scaling-plan" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -180,7 +180,7 @@ export def "api create-scaling-plan" [
 #
 # POST /
 # operationId: DeleteScalingPlan
-export def "api delete-scaling-plan" [
+export def "delete-scaling-plan" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -229,7 +229,7 @@ export def "api delete-scaling-plan" [
 #
 # POST /
 # operationId: DescribeScalingPlanResources
-export def "api get-scaling-plan-resources" [
+export def "describe-scaling-plan-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -280,7 +280,7 @@ export def "api get-scaling-plan-resources" [
 #
 # POST /
 # operationId: DescribeScalingPlans
-export def "api get-scaling-plans" [
+export def "describe-scaling-plans" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -332,7 +332,7 @@ export def "api get-scaling-plans" [
 #
 # POST /
 # operationId: GetScalingPlanResourceForecastData
-export def "api get-scaling-plan-resource-forecast-data" [
+export def "get-scaling-plan-resource-forecast-data" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -387,7 +387,7 @@ export def "api get-scaling-plan-resource-forecast-data" [
 #
 # POST /
 # operationId: UpdateScalingPlan
-export def "api update-scaling-plan" [
+export def "update-scaling-plan" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

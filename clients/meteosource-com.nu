@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["x-api-key"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "air-quality get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "air-quality-air-quality-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -122,7 +122,7 @@ export def commands []: nothing -> table {
 #
 # GET /air_quality
 # operationId: air_quality_air_quality_get
-export def "air-quality get" [
+export def "air-quality-air-quality-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -162,7 +162,7 @@ export def "air-quality get" [
 #
 # GET /find_places
 # operationId: find_places_find_places_get
-export def "find-places get" [
+export def "find-places-find-places-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -200,7 +200,7 @@ export def "find-places get" [
 #
 # GET /find_places_prefix
 # operationId: find_places_prefix_find_places_prefix_get
-export def "find-places-prefix get" [
+export def "find-places-prefix-find-places-prefix-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -238,7 +238,7 @@ export def "find-places-prefix get" [
 #
 # GET /map
 # operationId: map_map_get
-export def "map get" [
+export def "map-map-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -283,7 +283,7 @@ export def "map get" [
 #
 # GET /nearest_place
 # operationId: nearest_place_nearest_place_get
-export def "nearest-place get" [
+export def "nearest-place-nearest-place-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -322,7 +322,7 @@ export def "nearest-place get" [
 #
 # GET /point
 # operationId: point_point_get
-export def "point get" [
+export def "point-point-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -365,7 +365,7 @@ export def "point get" [
 #
 # GET /time_machine
 # operationId: time_machine_time_machine_get
-export def "time-machine get" [
+export def "time-machine-time-machine-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

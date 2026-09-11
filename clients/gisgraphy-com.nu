@@ -104,7 +104,7 @@ def accept-completer-1 [] { ["application/json" "application/php" "application/p
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "addressparser-parse get-addressparsing" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "addressparsing" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -128,7 +128,7 @@ export def commands []: nothing -> table {
 #
 # GET /addressparser/parse
 # operationId: addressparsing
-export def "addressparser-parse get-addressparsing" [
+export def "addressparsing" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -171,7 +171,7 @@ export def "addressparser-parse get-addressparsing" [
 #
 # GET /fulltext/search
 # operationId: fulltxtsearch
-export def "fulltext-search get-fulltxtsearch" [
+export def "fulltxtsearch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -222,7 +222,7 @@ export def "fulltext-search get-fulltxtsearch" [
 #
 # GET /geocoding/geocode
 # operationId: geocode
-export def "geocoding-geocode get" [
+export def "geocode" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -266,7 +266,7 @@ export def "geocoding-geocode get" [
 #
 # GET /geoloc/search
 # operationId: geoloc
-export def "geoloc-search get" [
+export def "geoloc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -312,7 +312,7 @@ export def "geoloc-search get" [
 #
 # GET /reversegeocoding/reversegeocode
 # operationId: reversegeocode
-export def "reversegeocoding-reversegeocode get" [
+export def "reversegeocode" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -355,7 +355,7 @@ export def "reversegeocoding-reversegeocode get" [
 #
 # GET /street/find
 # operationId: streetsearch
-export def "street-find get-streetsearch" [
+export def "streetsearch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

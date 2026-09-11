@@ -111,7 +111,7 @@ def state-completer [] { ["DELETED" "DISABLED" "ENABLED"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "amazonclouddirectory-2017-01-11-object-facets create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "add-facet-to-object" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -138,7 +138,7 @@ export def commands []: nothing -> table {
 # --SchemaFacet shape: {SchemaArn?: any, FacetName?: any}
 # --ObjectAttributeList item shape: {Key: any, Value: any}
 # --ObjectReference shape: {Selector?: any}
-export def "amazonclouddirectory-2017-01-11-object-facets create" [
+export def "add-facet-to-object" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -188,7 +188,7 @@ export def "amazonclouddirectory-2017-01-11-object-facets create" [
 #
 # PUT /amazonclouddirectory/2017-01-11/schema/apply
 # operationId: ApplySchema
-export def "amazonclouddirectory-2017-01-11-schema-apply update" [
+export def "apply-schema" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -238,7 +238,7 @@ export def "amazonclouddirectory-2017-01-11-schema-apply update" [
 # operationId: AttachObject
 # --ParentReference shape: {Selector?: any}
 # --ChildReference shape: {Selector?: any}
-export def "amazonclouddirectory-2017-01-11-object-attach attach" [
+export def "attach-object" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -290,7 +290,7 @@ export def "amazonclouddirectory-2017-01-11-object-attach attach" [
 # operationId: AttachPolicy
 # --PolicyReference shape: {Selector?: any}
 # --ObjectReference shape: {Selector?: any}
-export def "amazonclouddirectory-2017-01-11-policy-attach attach" [
+export def "attach-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -341,7 +341,7 @@ export def "amazonclouddirectory-2017-01-11-policy-attach attach" [
 # operationId: AttachToIndex
 # --IndexReference shape: {Selector?: any}
 # --TargetReference shape: {Selector?: any}
-export def "amazonclouddirectory-2017-01-11-index-attach attach" [
+export def "attach-to-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -394,7 +394,7 @@ export def "amazonclouddirectory-2017-01-11-index-attach attach" [
 # --TargetObjectReference shape: {Selector?: any}
 # --TypedLinkFacet shape: {SchemaArn?: any, TypedLinkName?: any}
 # --Attributes item shape: {AttributeName: any, Value: any}
-export def "amazonclouddirectory-2017-01-11-typedlink-attach attach-typed-link" [
+export def "attach-typed-link" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -446,7 +446,7 @@ export def "amazonclouddirectory-2017-01-11-typedlink-attach attach-typed-link" 
 # POST /amazonclouddirectory/2017-01-11/batchread
 # operationId: BatchRead
 # --Operations item shape: {ListObjectAttributes?: any, ListObjectChildren?: any, ListAttachedIndices?: any, ListObjectParentPaths?: any, GetObjectInformation?: any, GetObjectAttributes?: any, ListObjectParents?: any, ListObjectPolicies?: any, ListPolicyAttachments?: any, LookupPolicy?: any, ListIndex?: any, ListOutgoingTypedLinks?: any, ListIncomingTypedLinks?: any, GetLinkAttributes?: any}
-export def "amazonclouddirectory-2017-01-11-batchread get-batch" [
+export def "batch-read" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -496,7 +496,7 @@ export def "amazonclouddirectory-2017-01-11-batchread get-batch" [
 # PUT /amazonclouddirectory/2017-01-11/batchwrite
 # operationId: BatchWrite
 # --Operations item shape: {CreateObject?: any, AttachObject?: any, DetachObject?: any, UpdateObjectAttributes?: any, DeleteObject?: any, AddFacetToObject?: any, RemoveFacetFromObject?: any, AttachPolicy?: any, DetachPolicy?: any, CreateIndex?: any, AttachToIndex?: any, DetachFromIndex?: any, AttachTypedLink?: any, DetachTypedLink?: any, UpdateLinkAttributes?: any}
-export def "amazonclouddirectory-2017-01-11-batchwrite update-batch-write" [
+export def "batch-write" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -544,7 +544,7 @@ export def "amazonclouddirectory-2017-01-11-batchwrite update-batch-write" [
 #
 # PUT /amazonclouddirectory/2017-01-11/directory/create
 # operationId: CreateDirectory
-export def "amazonclouddirectory-2017-01-11-directory-create create" [
+export def "create-directory" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -593,7 +593,7 @@ export def "amazonclouddirectory-2017-01-11-directory-create create" [
 # PUT /amazonclouddirectory/2017-01-11/facet/create
 # operationId: CreateFacet
 # --Attributes item shape: {Name: any, AttributeDefinition?: any, AttributeReference?: any, RequiredBehavior?: any}
-export def "amazonclouddirectory-2017-01-11-facet-create create" [
+export def "create-facet" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -646,7 +646,7 @@ export def "amazonclouddirectory-2017-01-11-facet-create create" [
 # operationId: CreateIndex
 # --OrderedIndexedAttributeList item shape: {SchemaArn: any, FacetName: any, Name: any}
 # --ParentReference shape: {Selector?: any}
-export def "amazonclouddirectory-2017-01-11-index create" [
+export def "create-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -700,7 +700,7 @@ export def "amazonclouddirectory-2017-01-11-index create" [
 # --SchemaFacets item shape: {SchemaArn?: any, FacetName?: any}
 # --ObjectAttributeList item shape: {Key: any, Value: any}
 # --ParentReference shape: {Selector?: any}
-export def "amazonclouddirectory-2017-01-11-object create" [
+export def "create-object" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -751,7 +751,7 @@ export def "amazonclouddirectory-2017-01-11-object create" [
 #
 # PUT /amazonclouddirectory/2017-01-11/schema/create
 # operationId: CreateSchema
-export def "amazonclouddirectory-2017-01-11-schema-create create" [
+export def "create-schema" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -799,7 +799,7 @@ export def "amazonclouddirectory-2017-01-11-schema-create create" [
 # PUT /amazonclouddirectory/2017-01-11/typedlink/facet/create
 # operationId: CreateTypedLinkFacet
 # --Facet shape: {Name?: any, Attributes?: any, IdentityAttributeOrder?: any}
-export def "amazonclouddirectory-2017-01-11-typedlink-facet-create create-typed-link" [
+export def "create-typed-link-facet" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -847,7 +847,7 @@ export def "amazonclouddirectory-2017-01-11-typedlink-facet-create create-typed-
 #
 # PUT /amazonclouddirectory/2017-01-11/directory
 # operationId: DeleteDirectory
-export def "amazonclouddirectory-2017-01-11-directory delete" [
+export def "delete-directory" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -891,7 +891,7 @@ export def "amazonclouddirectory-2017-01-11-directory delete" [
 #
 # PUT /amazonclouddirectory/2017-01-11/facet/delete
 # operationId: DeleteFacet
-export def "amazonclouddirectory-2017-01-11-facet-delete delete" [
+export def "delete-facet" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -940,7 +940,7 @@ export def "amazonclouddirectory-2017-01-11-facet-delete delete" [
 # PUT /amazonclouddirectory/2017-01-11/object/delete
 # operationId: DeleteObject
 # --ObjectReference shape: {Selector?: any}
-export def "amazonclouddirectory-2017-01-11-object-delete delete" [
+export def "delete-object" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -988,7 +988,7 @@ export def "amazonclouddirectory-2017-01-11-object-delete delete" [
 #
 # PUT /amazonclouddirectory/2017-01-11/schema
 # operationId: DeleteSchema
-export def "amazonclouddirectory-2017-01-11-schema delete" [
+export def "delete-schema" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1032,7 +1032,7 @@ export def "amazonclouddirectory-2017-01-11-schema delete" [
 #
 # PUT /amazonclouddirectory/2017-01-11/typedlink/facet/delete
 # operationId: DeleteTypedLinkFacet
-export def "amazonclouddirectory-2017-01-11-typedlink-facet-delete delete-typed-link" [
+export def "delete-typed-link-facet" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1082,7 +1082,7 @@ export def "amazonclouddirectory-2017-01-11-typedlink-facet-delete delete-typed-
 # operationId: DetachFromIndex
 # --IndexReference shape: {Selector?: any}
 # --TargetReference shape: {Selector?: any}
-export def "amazonclouddirectory-2017-01-11-index-detach update" [
+export def "detach-from-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1132,7 +1132,7 @@ export def "amazonclouddirectory-2017-01-11-index-detach update" [
 # PUT /amazonclouddirectory/2017-01-11/object/detach
 # operationId: DetachObject
 # --ParentReference shape: {Selector?: any}
-export def "amazonclouddirectory-2017-01-11-object-detach update" [
+export def "detach-object" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1183,7 +1183,7 @@ export def "amazonclouddirectory-2017-01-11-object-detach update" [
 # operationId: DetachPolicy
 # --PolicyReference shape: {Selector?: any}
 # --ObjectReference shape: {Selector?: any}
-export def "amazonclouddirectory-2017-01-11-policy-detach update" [
+export def "detach-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1233,7 +1233,7 @@ export def "amazonclouddirectory-2017-01-11-policy-detach update" [
 # PUT /amazonclouddirectory/2017-01-11/typedlink/detach
 # operationId: DetachTypedLink
 # --TypedLinkSpecifier shape: {TypedLinkFacet?: any, SourceObjectReference?: any, TargetObjectReference?: any, IdentityAttributeValues?: any}
-export def "amazonclouddirectory-2017-01-11-typedlink-detach update-typed-link" [
+export def "detach-typed-link" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1281,7 +1281,7 @@ export def "amazonclouddirectory-2017-01-11-typedlink-detach update-typed-link" 
 #
 # PUT /amazonclouddirectory/2017-01-11/directory/disable
 # operationId: DisableDirectory
-export def "amazonclouddirectory-2017-01-11-directory-disable disable" [
+export def "disable-directory" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1325,7 +1325,7 @@ export def "amazonclouddirectory-2017-01-11-directory-disable disable" [
 #
 # PUT /amazonclouddirectory/2017-01-11/directory/enable
 # operationId: EnableDirectory
-export def "amazonclouddirectory-2017-01-11-directory-enable enable" [
+export def "enable-directory" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1369,7 +1369,7 @@ export def "amazonclouddirectory-2017-01-11-directory-enable enable" [
 #
 # POST /amazonclouddirectory/2017-01-11/schema/getappliedschema
 # operationId: GetAppliedSchemaVersion
-export def "amazonclouddirectory-2017-01-11-schema-get-appliedschema version-applied" [
+export def "get-applied-schema-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1416,7 +1416,7 @@ export def "amazonclouddirectory-2017-01-11-schema-get-appliedschema version-app
 #
 # POST /amazonclouddirectory/2017-01-11/directory/get
 # operationId: GetDirectory
-export def "amazonclouddirectory-2017-01-11-directory-get get" [
+export def "get-directory" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1460,7 +1460,7 @@ export def "amazonclouddirectory-2017-01-11-directory-get get" [
 #
 # POST /amazonclouddirectory/2017-01-11/facet
 # operationId: GetFacet
-export def "amazonclouddirectory-2017-01-11-facet get" [
+export def "get-facet" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1509,7 +1509,7 @@ export def "amazonclouddirectory-2017-01-11-facet get" [
 # PUT /amazonclouddirectory/2017-01-11/facet
 # operationId: UpdateFacet
 # --AttributeUpdates item shape: {Attribute?: any, Action?: any}
-export def "amazonclouddirectory-2017-01-11-facet update" [
+export def "update-facet" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1560,7 +1560,7 @@ export def "amazonclouddirectory-2017-01-11-facet update" [
 # POST /amazonclouddirectory/2017-01-11/typedlink/attributes/get
 # operationId: GetLinkAttributes
 # --TypedLinkSpecifier shape: {TypedLinkFacet?: any, SourceObjectReference?: any, TargetObjectReference?: any, IdentityAttributeValues?: any}
-export def "amazonclouddirectory-2017-01-11-typedlink-attributes-get get-link" [
+export def "get-link-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1612,7 +1612,7 @@ export def "amazonclouddirectory-2017-01-11-typedlink-attributes-get get-link" [
 # operationId: GetObjectAttributes
 # --ObjectReference shape: {Selector?: any}
 # --SchemaFacet shape: {SchemaArn?: any, FacetName?: any}
-export def "amazonclouddirectory-2017-01-11-object-attributes-get get" [
+export def "get-object-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1664,7 +1664,7 @@ export def "amazonclouddirectory-2017-01-11-object-attributes-get get" [
 # POST /amazonclouddirectory/2017-01-11/object/information
 # operationId: GetObjectInformation
 # --ObjectReference shape: {Selector?: any}
-export def "amazonclouddirectory-2017-01-11-object-information get" [
+export def "get-object-information" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1713,7 +1713,7 @@ export def "amazonclouddirectory-2017-01-11-object-information get" [
 #
 # POST /amazonclouddirectory/2017-01-11/schema/json
 # operationId: GetSchemaAsJson
-export def "amazonclouddirectory-2017-01-11-schema-json get" [
+export def "get-schema-as-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1757,7 +1757,7 @@ export def "amazonclouddirectory-2017-01-11-schema-json get" [
 #
 # PUT /amazonclouddirectory/2017-01-11/schema/json
 # operationId: PutSchemaFromJson
-export def "amazonclouddirectory-2017-01-11-schema-json update" [
+export def "put-schema-from-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1805,7 +1805,7 @@ export def "amazonclouddirectory-2017-01-11-schema-json update" [
 #
 # POST /amazonclouddirectory/2017-01-11/typedlink/facet/get
 # operationId: GetTypedLinkFacetInformation
-export def "amazonclouddirectory-2017-01-11-typedlink-facet-get get-typed-link-information" [
+export def "get-typed-link-facet-information" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1853,7 +1853,7 @@ export def "amazonclouddirectory-2017-01-11-typedlink-facet-get get-typed-link-i
 #
 # POST /amazonclouddirectory/2017-01-11/schema/applied
 # operationId: ListAppliedSchemaArns
-export def "amazonclouddirectory-2017-01-11-schema-applied list-arns" [
+export def "list-applied-schema-arns" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1907,7 +1907,7 @@ export def "amazonclouddirectory-2017-01-11-schema-applied list-arns" [
 # POST /amazonclouddirectory/2017-01-11/object/indices
 # operationId: ListAttachedIndices
 # --TargetReference shape: {Selector?: any}
-export def "amazonclouddirectory-2017-01-11-object-indices list-attached" [
+export def "list-attached-indices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1961,7 +1961,7 @@ export def "amazonclouddirectory-2017-01-11-object-indices list-attached" [
 #
 # POST /amazonclouddirectory/2017-01-11/schema/development
 # operationId: ListDevelopmentSchemaArns
-export def "amazonclouddirectory-2017-01-11-schema-development list-arns" [
+export def "list-development-schema-arns" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2012,7 +2012,7 @@ export def "amazonclouddirectory-2017-01-11-schema-development list-arns" [
 #
 # POST /amazonclouddirectory/2017-01-11/directory/list
 # operationId: ListDirectories
-export def "amazonclouddirectory-2017-01-11-directory-list list-directories" [
+export def "list-directories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2064,7 +2064,7 @@ export def "amazonclouddirectory-2017-01-11-directory-list list-directories" [
 #
 # POST /amazonclouddirectory/2017-01-11/facet/attributes
 # operationId: ListFacetAttributes
-export def "amazonclouddirectory-2017-01-11-facet-attributes list" [
+export def "list-facet-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2117,7 +2117,7 @@ export def "amazonclouddirectory-2017-01-11-facet-attributes list" [
 #
 # POST /amazonclouddirectory/2017-01-11/facet/list
 # operationId: ListFacetNames
-export def "amazonclouddirectory-2017-01-11-facet-list list-names" [
+export def "list-facet-names" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2172,7 +2172,7 @@ export def "amazonclouddirectory-2017-01-11-facet-list list-names" [
 # --ObjectReference shape: {Selector?: any}
 # --FilterAttributeRanges item shape: {AttributeName?: any, Range: any}
 # --FilterTypedLink shape: {SchemaArn?: any, TypedLinkName?: any}
-export def "amazonclouddirectory-2017-01-11-typedlink-incoming list-typed-links" [
+export def "list-incoming-typed-links" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2227,7 +2227,7 @@ export def "amazonclouddirectory-2017-01-11-typedlink-incoming list-typed-links"
 # operationId: ListIndex
 # --RangesOnIndexedValues item shape: {AttributeKey?: any, Range?: any}
 # --IndexReference shape: {Selector?: any}
-export def "amazonclouddirectory-2017-01-11-index-targets list" [
+export def "list-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2282,7 +2282,7 @@ export def "amazonclouddirectory-2017-01-11-index-targets list" [
 #
 # POST /amazonclouddirectory/2017-01-11/schema/managed
 # operationId: ListManagedSchemaArns
-export def "amazonclouddirectory-2017-01-11-schema-managed list-arns" [
+export def "list-managed-schema-arns" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2336,7 +2336,7 @@ export def "amazonclouddirectory-2017-01-11-schema-managed list-arns" [
 # operationId: ListObjectAttributes
 # --ObjectReference shape: {Selector?: any}
 # --FacetFilter shape: {SchemaArn?: any, FacetName?: any}
-export def "amazonclouddirectory-2017-01-11-object-attributes list" [
+export def "list-object-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2392,7 +2392,7 @@ export def "amazonclouddirectory-2017-01-11-object-attributes list" [
 # POST /amazonclouddirectory/2017-01-11/object/children
 # operationId: ListObjectChildren
 # --ObjectReference shape: {Selector?: any}
-export def "amazonclouddirectory-2017-01-11-object-children list" [
+export def "list-object-children" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2447,7 +2447,7 @@ export def "amazonclouddirectory-2017-01-11-object-children list" [
 # POST /amazonclouddirectory/2017-01-11/object/parentpaths
 # operationId: ListObjectParentPaths
 # --ObjectReference shape: {Selector?: any}
-export def "amazonclouddirectory-2017-01-11-object-parentpaths list-parent-paths" [
+export def "list-object-parent-paths" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2501,7 +2501,7 @@ export def "amazonclouddirectory-2017-01-11-object-parentpaths list-parent-paths
 # POST /amazonclouddirectory/2017-01-11/object/parent
 # operationId: ListObjectParents
 # --ObjectReference shape: {Selector?: any}
-export def "amazonclouddirectory-2017-01-11-object-parent list" [
+export def "list-object-parents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2557,7 +2557,7 @@ export def "amazonclouddirectory-2017-01-11-object-parent list" [
 # POST /amazonclouddirectory/2017-01-11/object/policy
 # operationId: ListObjectPolicies
 # --ObjectReference shape: {Selector?: any}
-export def "amazonclouddirectory-2017-01-11-object-policy list-policies" [
+export def "list-object-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2614,7 +2614,7 @@ export def "amazonclouddirectory-2017-01-11-object-policy list-policies" [
 # --ObjectReference shape: {Selector?: any}
 # --FilterAttributeRanges item shape: {AttributeName?: any, Range: any}
 # --FilterTypedLink shape: {SchemaArn?: any, TypedLinkName?: any}
-export def "amazonclouddirectory-2017-01-11-typedlink-outgoing list-typed-links" [
+export def "list-outgoing-typed-links" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2668,7 +2668,7 @@ export def "amazonclouddirectory-2017-01-11-typedlink-outgoing list-typed-links"
 # POST /amazonclouddirectory/2017-01-11/policy/attachment
 # operationId: ListPolicyAttachments
 # --PolicyReference shape: {Selector?: any}
-export def "amazonclouddirectory-2017-01-11-policy-attachment list" [
+export def "list-policy-attachments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2722,7 +2722,7 @@ export def "amazonclouddirectory-2017-01-11-policy-attachment list" [
 #
 # POST /amazonclouddirectory/2017-01-11/schema/published
 # operationId: ListPublishedSchemaArns
-export def "amazonclouddirectory-2017-01-11-schema-published list-arns" [
+export def "list-published-schema-arns" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2774,7 +2774,7 @@ export def "amazonclouddirectory-2017-01-11-schema-published list-arns" [
 #
 # POST /amazonclouddirectory/2017-01-11/tags
 # operationId: ListTagsForResource
-export def "amazonclouddirectory-2017-01-11-tags list-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2826,7 +2826,7 @@ export def "amazonclouddirectory-2017-01-11-tags list-for-resource" [
 #
 # POST /amazonclouddirectory/2017-01-11/typedlink/facet/attributes
 # operationId: ListTypedLinkFacetAttributes
-export def "amazonclouddirectory-2017-01-11-typedlink-facet-attributes list-typed-link" [
+export def "list-typed-link-facet-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2879,7 +2879,7 @@ export def "amazonclouddirectory-2017-01-11-typedlink-facet-attributes list-type
 #
 # POST /amazonclouddirectory/2017-01-11/typedlink/facet/list
 # operationId: ListTypedLinkFacetNames
-export def "amazonclouddirectory-2017-01-11-typedlink-facet-list list-typed-link-names" [
+export def "list-typed-link-facet-names" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2932,7 +2932,7 @@ export def "amazonclouddirectory-2017-01-11-typedlink-facet-list list-typed-link
 # POST /amazonclouddirectory/2017-01-11/policy/lookup
 # operationId: LookupPolicy
 # --ObjectReference shape: {Selector?: any}
-export def "amazonclouddirectory-2017-01-11-policy-lookup create" [
+export def "lookup-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2985,7 +2985,7 @@ export def "amazonclouddirectory-2017-01-11-policy-lookup create" [
 #
 # PUT /amazonclouddirectory/2017-01-11/schema/publish
 # operationId: PublishSchema
-export def "amazonclouddirectory-2017-01-11-schema-publish publish" [
+export def "publish-schema" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3037,7 +3037,7 @@ export def "amazonclouddirectory-2017-01-11-schema-publish publish" [
 # operationId: RemoveFacetFromObject
 # --SchemaFacet shape: {SchemaArn?: any, FacetName?: any}
 # --ObjectReference shape: {Selector?: any}
-export def "amazonclouddirectory-2017-01-11-object-facets-delete delete" [
+export def "remove-facet-from-object" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3087,7 +3087,7 @@ export def "amazonclouddirectory-2017-01-11-object-facets-delete delete" [
 # PUT /amazonclouddirectory/2017-01-11/tags/add
 # operationId: TagResource
 # --Tags item shape: {Key?: any, Value?: any}
-export def "amazonclouddirectory-2017-01-11-tags-add tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3135,7 +3135,7 @@ export def "amazonclouddirectory-2017-01-11-tags-add tag-resource" [
 #
 # PUT /amazonclouddirectory/2017-01-11/tags/remove
 # operationId: UntagResource
-export def "amazonclouddirectory-2017-01-11-tags-remove untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3185,7 +3185,7 @@ export def "amazonclouddirectory-2017-01-11-tags-remove untag-resource" [
 # operationId: UpdateLinkAttributes
 # --TypedLinkSpecifier shape: {TypedLinkFacet?: any, SourceObjectReference?: any, TargetObjectReference?: any, IdentityAttributeValues?: any}
 # --AttributeUpdates item shape: {AttributeKey?: any, AttributeAction?: any}
-export def "amazonclouddirectory-2017-01-11-typedlink-attributes-update update-link" [
+export def "update-link-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3236,7 +3236,7 @@ export def "amazonclouddirectory-2017-01-11-typedlink-attributes-update update-l
 # operationId: UpdateObjectAttributes
 # --ObjectReference shape: {Selector?: any}
 # --AttributeUpdates item shape: {ObjectAttributeKey?: any, ObjectAttributeAction?: any}
-export def "amazonclouddirectory-2017-01-11-object-update update-attributes" [
+export def "update-object-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3285,7 +3285,7 @@ export def "amazonclouddirectory-2017-01-11-object-update update-attributes" [
 #
 # PUT /amazonclouddirectory/2017-01-11/schema/update
 # operationId: UpdateSchema
-export def "amazonclouddirectory-2017-01-11-schema-update update" [
+export def "update-schema" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3334,7 +3334,7 @@ export def "amazonclouddirectory-2017-01-11-schema-update update" [
 # PUT /amazonclouddirectory/2017-01-11/typedlink/facet
 # operationId: UpdateTypedLinkFacet
 # --AttributeUpdates item shape: {Attribute: any, Action: any}
-export def "amazonclouddirectory-2017-01-11-typedlink-facet update-typed-link" [
+export def "update-typed-link-facet" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3384,7 +3384,7 @@ export def "amazonclouddirectory-2017-01-11-typedlink-facet update-typed-link" [
 #
 # PUT /amazonclouddirectory/2017-01-11/schema/upgradeapplied
 # operationId: UpgradeAppliedSchema
-export def "amazonclouddirectory-2017-01-11-schema-upgradeapplied update-upgrade-applied" [
+export def "upgrade-applied-schema" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3433,7 +3433,7 @@ export def "amazonclouddirectory-2017-01-11-schema-upgradeapplied update-upgrade
 #
 # PUT /amazonclouddirectory/2017-01-11/schema/upgradepublished
 # operationId: UpgradePublishedSchema
-export def "amazonclouddirectory-2017-01-11-schema-upgradepublished update-upgrade-published" [
+export def "upgrade-published-schema" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

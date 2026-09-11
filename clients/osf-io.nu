@@ -125,7 +125,7 @@ def accept-completer-2 [] { ["application/json" "links" "meta"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "base get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "base-read" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -149,7 +149,7 @@ export def commands []: nothing -> table {
 #
 # GET /
 # operationId: base_read
-export def "base get" [
+export def "base-read" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -183,7 +183,7 @@ export def "base get" [
 #
 # GET /actions/
 # operationId: logs_actions
-export def "actions logs" [
+export def "logs-actions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -217,7 +217,7 @@ export def "actions logs" [
 #
 # GET /addons/
 # operationId: addons_list
-export def "addons list" [
+export def "addons-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -252,7 +252,7 @@ export def "addons list" [
 #
 # GET /citations/styles/
 # operationId: citations_styles_list
-export def "citations-styles list" [
+export def "citations-styles-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -287,7 +287,7 @@ export def "citations-styles list" [
 #
 # GET /citations/styles/{style_id}/
 # operationId: citations_styles_read
-export def "citations-styles get" [
+export def "citations-styles-read" [
   style_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -324,7 +324,7 @@ export def "citations-styles get" [
 #
 # GET /collections/
 # operationId: collections_list
-export def "collections list" [
+export def "collections-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -359,7 +359,7 @@ export def "collections list" [
 #
 # POST /collections/
 # operationId: collections_create
-export def "collections create" [
+export def "collections-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -397,7 +397,7 @@ export def "collections create" [
 #
 # DELETE /collections/{collection_id}/
 # operationId: collections_delete
-export def "collections delete" [
+export def "collections-delete" [
   collection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -433,7 +433,7 @@ export def "collections delete" [
 #
 # GET /collections/{collection_id}/
 # operationId: collections_detail
-export def "collections get-detail" [
+export def "collections-detail" [
   collection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -470,7 +470,7 @@ export def "collections get-detail" [
 #
 # GET /collections/{collection_id}/collected_metadata/
 # operationId: collections_metadata_registrations_list
-export def "collections-collected-metadata list-registrations" [
+export def "collections-metadata-registrations-list" [
   collection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -506,7 +506,7 @@ export def "collections-collected-metadata list-registrations" [
 #
 # POST /collections/{collection_id}/collected_metadata/
 # operationId: collections_add_metadata
-export def "collections-collected-metadata create" [
+export def "collections-add-metadata" [
   collection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -546,7 +546,7 @@ export def "collections-collected-metadata create" [
 #
 # DELETE /collections/{collection_id}/collected_metadata/{cgm_id}
 # operationId: collections_metadata_delete
-export def "collections-collected-metadata delete" [
+export def "collections-metadata-delete" [
   collection_id: string
   cgm_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -584,7 +584,7 @@ export def "collections-collected-metadata delete" [
 #
 # GET /collections/{collection_id}/collected_metadata/{cgm_id}
 # operationId: collections_metadata_registrations_detail
-export def "collections-collected-metadata get-registrations-detail" [
+export def "collections-metadata-registrations-detail" [
   collection_id: string
   cgm_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -623,7 +623,7 @@ export def "collections-collected-metadata get-registrations-detail" [
 #
 # POST /collections/{collection_id}/collected_metadata/{cgm_id}
 # operationId: collections_metadata_detail
-export def "collections-collected-metadata create-detail" [
+export def "collections-metadata-detail" [
   collection_id: string
   cgm_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -665,7 +665,7 @@ export def "collections-collected-metadata create-detail" [
 #
 # GET /collections/{collection_id}/collected_metadata/{cgm_id}/relationships/subjects/
 # operationId: collections_metadata_subjects_relationships
-export def "collections-collected-metadata-relationships-subjects get" [
+export def "collections-metadata-subjects-relationships" [
   collection_id: string
   cgm_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -703,7 +703,7 @@ export def "collections-collected-metadata-relationships-subjects get" [
 #
 # POST /collections/{collection_id}/collected_metadata/{cgm_id}/relationships/subjects/
 # operationId: collections_metadata_subjects_relationships_update
-export def "collections-collected-metadata-relationships-subjects update" [
+export def "collections-metadata-subjects-relationships-update" [
   collection_id: string
   cgm_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -745,7 +745,7 @@ export def "collections-collected-metadata-relationships-subjects update" [
 #
 # GET /collections/{collection_id}/collected_metadata/{cgm_id}/subjects/
 # operationId: collections_collected_metadata
-export def "collections-collected-metadata-subjects get" [
+export def "collections-collected-metadata" [
   collection_id: string
   cgm_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -783,7 +783,7 @@ export def "collections-collected-metadata-subjects get" [
 #
 # GET /collections/{collection_id}/linked_nodes
 # operationId: collections_linked_nodes_list
-export def "collections-linked-nodes list" [
+export def "collections-linked-nodes-list" [
   collection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -819,7 +819,7 @@ export def "collections-linked-nodes list" [
 #
 # DELETE /collections/{collection_id}/linked_nodes/relationships/
 # operationId: collections_linked_nodes_relationships_delete
-export def "collections-linked-nodes-relationships delete" [
+export def "collections-linked-nodes-relationships-delete" [
   collection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -859,7 +859,7 @@ export def "collections-linked-nodes-relationships delete" [
 #
 # GET /collections/{collection_id}/linked_nodes/relationships/
 # operationId: collections_linked_nodes_relationships_create
-export def "collections-linked-nodes-relationships create-by-collection-id" [
+export def "collections-linked-nodes-relationships-create" [
   collection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -895,7 +895,7 @@ export def "collections-linked-nodes-relationships create-by-collection-id" [
 #
 # POST /collections/{collection_id}/linked_nodes/relationships/
 # operationId: collections_linked_nodes_relationships
-export def "collections-linked-nodes-relationships create-by-collection-id-1" [
+export def "collections-linked-nodes-relationships" [
   collection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -935,7 +935,7 @@ export def "collections-linked-nodes-relationships create-by-collection-id-1" [
 #
 # GET /collections/{collection_id}/linked_preprints/
 # operationId: collections_linked_preprints_list
-export def "collections-linked-preprints list" [
+export def "collections-linked-preprints-list" [
   collection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -972,7 +972,7 @@ export def "collections-linked-preprints list" [
 #
 # GET /collections/{collection_id}/linked_registrations/
 # operationId: collections_linked_registrations_list
-export def "collections-linked-registrations list" [
+export def "collections-linked-registrations-list" [
   collection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1009,7 +1009,7 @@ export def "collections-linked-registrations list" [
 #
 # DELETE /collections/{collection_id}/linked_registrations/relationships/
 # operationId: collections_linked_registrations_relationships_delete
-export def "collections-linked-registrations-relationships delete" [
+export def "collections-linked-registrations-relationships-delete" [
   collection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1049,7 +1049,7 @@ export def "collections-linked-registrations-relationships delete" [
 #
 # GET /collections/{collection_id}/linked_registrations/relationships/
 # operationId: collections_linked_registrations_relationships_create
-export def "collections-linked-registrations-relationships create-by-collection-id" [
+export def "collections-linked-registrations-relationships-create" [
   collection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1085,7 +1085,7 @@ export def "collections-linked-registrations-relationships create-by-collection-
 #
 # POST /collections/{collection_id}/linked_registrations/relationships/
 # operationId: collections_linked_registrations_relationships
-export def "collections-linked-registrations-relationships create-by-collection-id-1" [
+export def "collections-linked-registrations-relationships" [
   collection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1125,7 +1125,7 @@ export def "collections-linked-registrations-relationships create-by-collection-
 #
 # DELETE /comments/{comment_id}/
 # operationId: comments_delete
-export def "comments delete" [
+export def "comments-delete" [
   comment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1161,7 +1161,7 @@ export def "comments delete" [
 #
 # GET /comments/{comment_id}/
 # operationId: comments_read
-export def "comments get" [
+export def "comments-read" [
   comment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1198,7 +1198,7 @@ export def "comments get" [
 #
 # PUT /comments/{comment_id}/
 # operationId: comments_put
-export def "comments update" [
+export def "comments-put" [
   comment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1238,7 +1238,7 @@ export def "comments update" [
 #
 # GET /draft_registrations/
 # operationId: draft_registrations_read
-export def "draft-registrations list" [
+export def "draft-registrations-read" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1274,7 +1274,7 @@ export def "draft-registrations list" [
 # POST /draft_registrations/
 # operationId: draft_registrations_create
 # --attributes shape: {category?: string, description?: string, node_license?: record, registration_metadata?: record, registration_responses?: record, tags?: list<string>, title?: string}
-export def "draft-registrations create" [
+export def "draft-registrations-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1312,7 +1312,7 @@ export def "draft-registrations create" [
 # Delete a draft registration
 #
 # DELETE /draft_registrations/{draft_id}/
-export def "draft-registrations delete" [
+export def "delete-draft-registrations-draft-id" [
   draft_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1347,7 +1347,7 @@ export def "draft-registrations delete" [
 # Retrieve a Draft Registration
 #
 # GET /draft_registrations/{draft_id}/
-export def "draft-registrations get" [
+export def "get-draft-registrations-draft-id" [
   draft_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1383,7 +1383,7 @@ export def "draft-registrations get" [
 # Update a Draft Registration
 #
 # PATCH /draft_registrations/{draft_id}/
-export def "draft-registrations update" [
+export def "patch-draft-registrations-draft-id" [
   draft_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1423,7 +1423,7 @@ export def "draft-registrations update" [
 #
 # GET /draft_registrations/{draft_id}/contributors/
 # operationId: draft_registration_contributors_list
-export def "draft-registrations-contributors list" [
+export def "draft-registration-contributors-list" [
   draft_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1461,7 +1461,7 @@ export def "draft-registrations-contributors list" [
 # operationId: draft_registration_contributors_create
 # --attributes shape: {bibliographic?: bool, index?: int, permission?: "read"|"write"|"admin"}
 # --relationships shape: {user: string}
-export def "draft-registrations-contributors create" [
+export def "draft-registration-contributors-create" [
   draft_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1501,7 +1501,7 @@ export def "draft-registrations-contributors create" [
 # Retreive a Contributor from a Draft Registration
 #
 # GET /draft_registrations/{draft_id}/contributors/{user_id}/
-export def "draft-registrations-contributors get" [
+export def "get-draft-registrations-draft-id-contributors-user-id" [
   draft_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1538,7 +1538,7 @@ export def "draft-registrations-contributors get" [
 # Retrieve Institutions afilliated with a Draft Registration
 #
 # GET /draft_registrations/{draft_id}/institutions/
-export def "draft-registrations-institutions get" [
+export def "get-draft-registrations-draft-id-institutions" [
   draft_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1575,7 +1575,7 @@ export def "draft-registrations-institutions get" [
 #
 # GET /draft_registrations/{draft_id}/subjects/
 # operationId: nodes_draft_registrations_subjects
-export def "draft-registrations-subjects get-nodes" [
+export def "nodes-draft-registrations-subjects" [
   draft_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1612,7 +1612,7 @@ export def "draft-registrations-subjects get-nodes" [
 #
 # GET /files/{file_id}/
 # operationId: files_detail
-export def "files get-detail" [
+export def "files-detail" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1649,7 +1649,7 @@ export def "files get-detail" [
 #
 # PATCH /files/{file_id}/
 # operationId: files_patch
-export def "files update" [
+export def "files-patch" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1689,7 +1689,7 @@ export def "files update" [
 #
 # GET /files/{file_id}/versions/
 # operationId: files_versions
-export def "files-versions get" [
+export def "files-versions" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1726,7 +1726,7 @@ export def "files-versions get" [
 #
 # GET /files/{file_id}/versions/{version_id}/
 # operationId: files_version_detail
-export def "files-versions version-detail" [
+export def "files-version-detail" [
   file_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1765,7 +1765,7 @@ export def "files-versions version-detail" [
 #
 # GET /institutions/
 # operationId: institutions_list
-export def "institutions list" [
+export def "institutions-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1800,7 +1800,7 @@ export def "institutions list" [
 #
 # GET /institutions/{institution_id}/
 # operationId: institutions_detail
-export def "institutions get-detail" [
+export def "institutions-detail" [
   institution_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1837,7 +1837,7 @@ export def "institutions get-detail" [
 #
 # GET /institutions/{institution_id}/nodes/
 # operationId: institutions_node_list
-export def "institutions-nodes list" [
+export def "institutions-node-list" [
   institution_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1874,7 +1874,7 @@ export def "institutions-nodes list" [
 #
 # GET /institutions/{institution_id}/registrations/
 # operationId: institutions_registration_list
-export def "institutions-registrations list" [
+export def "institutions-registration-list" [
   institution_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1910,7 +1910,7 @@ export def "institutions-registrations list" [
 #
 # GET /institutions/{institution_id}/users/
 # operationId: institutions_users_list
-export def "institutions-users list" [
+export def "institutions-users-list" [
   institution_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1947,7 +1947,7 @@ export def "institutions-users list" [
 #
 # GET /license/{license_id}/
 # operationId: licenses_read
-export def "license get" [
+export def "licenses-read" [
   license_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1984,7 +1984,7 @@ export def "license get" [
 #
 # GET /licenses/
 # operationId: license_list
-export def "licenses list" [
+export def "license-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2019,7 +2019,7 @@ export def "licenses list" [
 #
 # GET /logs/{log_id}/
 # operationId: logs_read
-export def "logs get" [
+export def "logs-read" [
   log_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2055,7 +2055,7 @@ export def "logs get" [
 #
 # GET /nodes/
 # operationId: nodes_list
-export def "nodes list" [
+export def "nodes-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2091,7 +2091,7 @@ export def "nodes list" [
 # POST /nodes/
 # operationId: nodes_create
 # --attributes shape: {category: "analysis"|"communication"|"data"|"hypothesis"|"instrumentation"|"methods and measures"|"procedure"|"project"|"software"|"other", description?: string, node_license?: string, public?: bool, tags?: list<string>, template_from?: string, title: string}
-export def "nodes create" [
+export def "nodes-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2131,7 +2131,7 @@ export def "nodes create" [
 #
 # DELETE /nodes/{node_id}/
 # operationId: nodes_delete
-export def "nodes delete" [
+export def "nodes-delete" [
   node_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2167,7 +2167,7 @@ export def "nodes delete" [
 #
 # GET /nodes/{node_id}/
 # operationId: nodes_read
-export def "nodes get" [
+export def "nodes-read" [
   node_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2204,7 +2204,7 @@ export def "nodes get" [
 #
 # PATCH /nodes/{node_id}/
 # operationId: nodes_partial_update
-export def "nodes update" [
+export def "nodes-partial-update" [
   node_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2244,7 +2244,7 @@ export def "nodes update" [
 #
 # GET /nodes/{node_id}/addons/
 # operationId: nodes_addons_list
-export def "nodes-addons list" [
+export def "nodes-addons-list" [
   node_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2281,7 +2281,7 @@ export def "nodes-addons list" [
 #
 # GET /nodes/{node_id}/addons/{provider}/
 # operationId: nodes_addon_read
-export def "nodes-addons get" [
+export def "nodes-addon-read" [
   node_id: string
   provider: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2320,7 +2320,7 @@ export def "nodes-addons get" [
 #
 # PATCH /nodes/{node_id}/addons/{provider}/
 # operationId: nodes_node_addon_update
-export def "nodes-addons update" [
+export def "nodes-node-addon-update" [
   node_id: string
   provider: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2362,7 +2362,7 @@ export def "nodes-addons update" [
 #
 # GET /nodes/{node_id}/addons/{provider}/folders/
 # operationId: nodes_addons_folders_list
-export def "nodes-addons-folders list" [
+export def "nodes-addons-folders-list" [
   node_id: string
   provider: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2401,7 +2401,7 @@ export def "nodes-addons-folders list" [
 #
 # GET /nodes/{node_id}/children/
 # operationId: nodes_children_list
-export def "nodes-children list" [
+export def "nodes-children-list" [
   node_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2439,7 +2439,7 @@ export def "nodes-children list" [
 # POST /nodes/{node_id}/children/
 # operationId: nodes_children_create
 # --attributes shape: {category: "analysis"|"communication"|"data"|"hypothesis"|"instrumentation"|"methods and measures"|"procedure"|"project"|"software"|"other", description?: string, node_license?: string, public?: bool, tags?: list<string>, template_from?: string, title: string}
-export def "nodes-children create" [
+export def "nodes-children-create" [
   node_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2481,7 +2481,7 @@ export def "nodes-children create" [
 #
 # GET /nodes/{node_id}/citation/
 # operationId: nodes_citation_list
-export def "nodes-citation list" [
+export def "nodes-citation-list" [
   node_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2518,7 +2518,7 @@ export def "nodes-citation list" [
 #
 # GET /nodes/{node_id}/citation/{style_id}/
 # operationId: nodes_citation_read
-export def "nodes-citation get" [
+export def "nodes-citation-read" [
   node_id: string
   style_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2557,7 +2557,7 @@ export def "nodes-citation get" [
 #
 # GET /nodes/{node_id}/comments/
 # operationId: nodes_comments_list
-export def "nodes-comments list" [
+export def "nodes-comments-list" [
   node_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2595,7 +2595,7 @@ export def "nodes-comments list" [
 # POST /nodes/{node_id}/comments/
 # operationId: nodes_comment_create
 # --attributes shape: {content?: string}
-export def "nodes-comments create" [
+export def "nodes-comment-create" [
   node_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2636,7 +2636,7 @@ export def "nodes-comments create" [
 #
 # GET /nodes/{node_id}/contributors/
 # operationId: nodes_contributors_list
-export def "nodes-contributors list" [
+export def "nodes-contributors-list" [
   node_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2675,7 +2675,7 @@ export def "nodes-contributors list" [
 # operationId: nodes_contributors_create
 # --attributes shape: {bibliographic?: bool, index?: int, permission?: "read"|"write"|"admin"}
 # --relationships shape: {user: string}
-export def "nodes-contributors create" [
+export def "nodes-contributors-create" [
   node_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2716,7 +2716,7 @@ export def "nodes-contributors create" [
 #
 # DELETE /nodes/{node_id}/contributors/{user_id}/
 # operationId: nodes_contributors_delete
-export def "nodes-contributors delete" [
+export def "nodes-contributors-delete" [
   node_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2754,7 +2754,7 @@ export def "nodes-contributors delete" [
 #
 # GET /nodes/{node_id}/contributors/{user_id}/
 # operationId: nodes_contributors_read
-export def "nodes-contributors get" [
+export def "nodes-contributors-read" [
   node_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2795,7 +2795,7 @@ export def "nodes-contributors get" [
 # operationId: nodes_contributors_partial_update
 # --attributes shape: {bibliographic?: bool, index?: int, permission?: "read"|"write"|"admin"}
 # --relationships shape: {user: string}
-export def "nodes-contributors update" [
+export def "nodes-contributors-partial-update" [
   node_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2838,7 +2838,7 @@ export def "nodes-contributors update" [
 #
 # GET /nodes/{node_id}/draft_registrations/
 # operationId: nodes_draft_registrations_list
-export def "nodes-draft-registrations list" [
+export def "nodes-draft-registrations-list" [
   node_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2876,7 +2876,7 @@ export def "nodes-draft-registrations list" [
 # POST /nodes/{node_id}/draft_registrations/
 # operationId: nodes_draft_registrations_create
 # --attributes shape: {category?: string, description?: string, node_license?: record, registration_metadata?: record, registration_responses?: record, tags?: list<string>, title?: string}
-export def "nodes-draft-registrations create" [
+export def "nodes-draft-registrations-create" [
   node_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2916,7 +2916,7 @@ export def "nodes-draft-registrations create" [
 #
 # DELETE /nodes/{node_id}/draft_registrations/{draft_id}/
 # operationId: nodes_draft_registrations_delete
-export def "nodes-draft-registrations delete" [
+export def "nodes-draft-registrations-delete" [
   node_id: string
   draft_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2954,7 +2954,7 @@ export def "nodes-draft-registrations delete" [
 #
 # GET /nodes/{node_id}/draft_registrations/{draft_id}/
 # operationId: nodes_draft_registrations_read
-export def "nodes-draft-registrations get" [
+export def "nodes-draft-registrations-read" [
   node_id: string
   draft_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2994,7 +2994,7 @@ export def "nodes-draft-registrations get" [
 # PATCH /nodes/{node_id}/draft_registrations/{draft_id}/
 # operationId: nodes_draft_registrations_partial_update
 # --attributes shape: {category?: string, description?: string, node_license?: record, registration_metadata?: record, registration_responses?: record, tags?: list<string>, title?: string}
-export def "nodes-draft-registrations update" [
+export def "nodes-draft-registrations-partial-update" [
   node_id: string
   draft_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3036,7 +3036,7 @@ export def "nodes-draft-registrations update" [
 #
 # GET /nodes/{node_id}/files/
 # operationId: nodes_providers_list
-export def "nodes-files list-providers" [
+export def "nodes-providers-list" [
   node_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3073,7 +3073,7 @@ export def "nodes-files list-providers" [
 #
 # GET /nodes/{node_id}/files/providers/{provider}/
 # operationId: nodes_providers_read
-export def "nodes-files-providers get" [
+export def "nodes-providers-read" [
   node_id: string
   provider: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3112,7 +3112,7 @@ export def "nodes-files-providers get" [
 #
 # GET /nodes/{node_id}/files/{provider}/
 # operationId: nodes_files_list
-export def "nodes-files list" [
+export def "nodes-files-list" [
   node_id: string
   provider: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3151,7 +3151,7 @@ export def "nodes-files list" [
 #
 # GET /nodes/{node_id}/files/{provider}/{path}/
 # operationId: nodes_files_read
-export def "nodes-files get" [
+export def "nodes-files-read" [
   node_id: string
   provider: string
   path: string
@@ -3192,7 +3192,7 @@ export def "nodes-files get" [
 #
 # GET /nodes/{node_id}/forks/
 # operationId: nodes_forks_list
-export def "nodes-forks list" [
+export def "nodes-forks-list" [
   node_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3230,7 +3230,7 @@ export def "nodes-forks list" [
 # POST /nodes/{node_id}/forks/
 # operationId: nodes_forks_create
 # --attributes shape: {category: "analysis"|"communication"|"data"|"hypothesis"|"instrumentation"|"methods and measures"|"procedure"|"project"|"software"|"other", description?: string, node_license?: string, public?: bool, tags?: list<string>, template_from?: string, title: string}
-export def "nodes-forks create" [
+export def "nodes-forks-create" [
   node_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3272,7 +3272,7 @@ export def "nodes-forks create" [
 #
 # GET /nodes/{node_id}/identifiers/
 # operationId: nodes_identifiers_list
-export def "nodes-identifiers list" [
+export def "nodes-identifiers-list" [
   node_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3309,7 +3309,7 @@ export def "nodes-identifiers list" [
 #
 # GET /nodes/{node_id}/institutions/
 # operationId: nodes_institutions_list
-export def "nodes-institutions list" [
+export def "nodes-institutions-list" [
   node_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3346,7 +3346,7 @@ export def "nodes-institutions list" [
 #
 # GET /nodes/{node_id}/linked_nodes/
 # operationId: nodes_linked_nodes_list
-export def "nodes-linked-nodes list" [
+export def "nodes-linked-nodes-list" [
   node_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3383,7 +3383,7 @@ export def "nodes-linked-nodes list" [
 #
 # GET /nodes/{node_id}/logs/
 # operationId: nodes_logs_list
-export def "nodes-logs list" [
+export def "nodes-logs-list" [
   node_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3420,7 +3420,7 @@ export def "nodes-logs list" [
 #
 # GET /nodes/{node_id}/preprints/
 # operationId: nodes_preprints_list
-export def "nodes-preprints list" [
+export def "nodes-preprints-list" [
   node_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3457,7 +3457,7 @@ export def "nodes-preprints list" [
 #
 # GET /nodes/{node_id}/registrations/
 # operationId: nodes_registrations_list
-export def "nodes-registrations list" [
+export def "nodes-registrations-list" [
   node_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3494,7 +3494,7 @@ export def "nodes-registrations list" [
 #
 # GET /nodes/{node_id}/view_only_links/
 # operationId: nodes_view_only_links_list
-export def "nodes-view-only-links list" [
+export def "nodes-view-only-links-list" [
   node_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3531,7 +3531,7 @@ export def "nodes-view-only-links list" [
 #
 # GET /nodes/{node_id}/view_only_links/{link_id}/
 # operationId: nodes_view_only_links_read
-export def "nodes-view-only-links get" [
+export def "nodes-view-only-links-read" [
   node_id: string
   link_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3570,7 +3570,7 @@ export def "nodes-view-only-links get" [
 #
 # GET /nodes/{node_id}/wikis/
 # operationId: nodes_wikis_list
-export def "nodes-wikis list" [
+export def "nodes-wikis-list" [
   node_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3607,7 +3607,7 @@ export def "nodes-wikis list" [
 #
 # GET /preprint_providers/
 # operationId: preprint_provider_list
-export def "preprint-providers list" [
+export def "preprint-provider-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3642,7 +3642,7 @@ export def "preprint-providers list" [
 #
 # GET /preprint_providers/{preprint_provider_id}/
 # operationId: preprint_provider_detail
-export def "preprint-providers get-detail" [
+export def "preprint-provider-detail" [
   preprint_provider_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3679,7 +3679,7 @@ export def "preprint-providers get-detail" [
 #
 # GET /preprint_providers/{preprint_provider_id}/licenses/
 # operationId: preprint_provider_licenses_list
-export def "preprint-providers-licenses list" [
+export def "preprint-provider-licenses-list" [
   preprint_provider_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3716,7 +3716,7 @@ export def "preprint-providers-licenses list" [
 #
 # GET /preprint_providers/{preprint_provider_id}/preprints/
 # operationId: preprint_providers_preprints_list
-export def "preprint-providers-preprints list" [
+export def "preprint-providers-preprints-list" [
   preprint_provider_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3753,7 +3753,7 @@ export def "preprint-providers-preprints list" [
 #
 # GET /preprint_providers/{preprint_provider_id}/taxonomies/
 # operationId: preprint_provider_taxonomies_list
-export def "preprint-providers-taxonomies list" [
+export def "preprint-provider-taxonomies-list" [
   preprint_provider_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3790,7 +3790,7 @@ export def "preprint-providers-taxonomies list" [
 #
 # GET /preprints/
 # operationId: preprints_list
-export def "preprints list" [
+export def "preprints-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3827,7 +3827,7 @@ export def "preprints list" [
 # operationId: preprints_create
 # --attributes shape: {doi?: string, license_record?: string, subjects?: list<string>}
 # --relationships shape: {bibliographic_contributors?: string, license?: string, node: string, primary_file: string, provider: string}
-export def "preprints create" [
+export def "preprints-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3867,7 +3867,7 @@ export def "preprints create" [
 #
 # GET /preprints/{preprint_id}/
 # operationId: preprints_read
-export def "preprints get" [
+export def "preprints-read" [
   preprint_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3904,7 +3904,7 @@ export def "preprints get" [
 #
 # PATCH /preprints/{preprint_id}/
 # operationId: preprints_partial_update
-export def "preprints update" [
+export def "preprints-partial-update" [
   preprint_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3944,7 +3944,7 @@ export def "preprints update" [
 #
 # GET /preprints/{preprint_id}/bibliographic_contributors/
 # operationId: preprints_bibliographic_contributors_list
-export def "preprints-bibliographic-contributors list" [
+export def "preprints-bibliographic-contributors-list" [
   preprint_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3981,7 +3981,7 @@ export def "preprints-bibliographic-contributors list" [
 #
 # GET /preprints/{preprint_id}/citation/
 # operationId: preprints_citation_list
-export def "preprints-citation list" [
+export def "preprints-citation-list" [
   preprint_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4018,7 +4018,7 @@ export def "preprints-citation list" [
 #
 # GET /preprints/{preprint_id}/citation/{style_id}/
 # operationId: preprints_citation_read
-export def "preprints-citation get" [
+export def "preprints-citation-read" [
   preprint_id: string
   style_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4057,7 +4057,7 @@ export def "preprints-citation get" [
 #
 # GET /preprints/{preprint_id}/contributors/
 # operationId: preprints_contributors_list
-export def "preprints-contributors list" [
+export def "preprints-contributors-list" [
   preprint_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4096,7 +4096,7 @@ export def "preprints-contributors list" [
 # operationId: preprints_contributors_create
 # --attributes shape: {bibliographic?: bool, index?: int, permission?: "read"|"write"|"admin"}
 # --relationships shape: {user: string}
-export def "preprints-contributors create" [
+export def "preprints-contributors-create" [
   preprint_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4136,7 +4136,7 @@ export def "preprints-contributors create" [
 #
 # GET /preprints/{preprint_id}/contributors/{user_id}/
 # operationId: preprints_contributor_read
-export def "preprints-contributors get" [
+export def "preprints-contributor-read" [
   preprint_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4174,7 +4174,7 @@ export def "preprints-contributors get" [
 #
 # GET /registrations/
 # operationId: registrations_list
-export def "registrations list" [
+export def "registrations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4209,7 +4209,7 @@ export def "registrations list" [
 #
 # GET /registrations/{registration_id}/
 # operationId: registrations_read
-export def "registrations get" [
+export def "registrations-read" [
   registration_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4246,7 +4246,7 @@ export def "registrations get" [
 # PATCH /registrations/{registration_id}/
 # operationId: registrations_partial_update
 # --attributes shape: {public?: bool}
-export def "registrations update" [
+export def "registrations-partial-update" [
   registration_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4286,7 +4286,7 @@ export def "registrations update" [
 #
 # GET /registrations/{registration_id}/children/
 # operationId: registrations_children_list
-export def "registrations-children list" [
+export def "registrations-children-list" [
   registration_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4323,7 +4323,7 @@ export def "registrations-children list" [
 #
 # GET /registrations/{registration_id}/citations/
 # operationId: registrations_citations_list
-export def "registrations-citations list" [
+export def "registrations-citations-list" [
   registration_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4360,7 +4360,7 @@ export def "registrations-citations list" [
 #
 # GET /registrations/{registration_id}/citations/{citation_id}/
 # operationId: registrations_citation_read
-export def "registrations-citations get" [
+export def "registrations-citation-read" [
   registration_id: string
   citation_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4399,7 +4399,7 @@ export def "registrations-citations get" [
 #
 # GET /registrations/{registration_id}/comments/
 # operationId: registrations_comments_list
-export def "registrations-comments list" [
+export def "registrations-comments-list" [
   registration_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4436,7 +4436,7 @@ export def "registrations-comments list" [
 #
 # GET /registrations/{registration_id}/contributors/
 # operationId: registrations_contributors_list
-export def "registrations-contributors list" [
+export def "registrations-contributors-list" [
   registration_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4473,7 +4473,7 @@ export def "registrations-contributors list" [
 #
 # GET /registrations/{registration_id}/contributors/{user_id}/
 # operationId: registrations_contributors_read
-export def "registrations-contributors get" [
+export def "registrations-contributors-read" [
   registration_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4512,7 +4512,7 @@ export def "registrations-contributors get" [
 #
 # GET /registrations/{registration_id}/files/
 # operationId: registrations_providers_list
-export def "registrations-files list-providers" [
+export def "registrations-providers-list" [
   registration_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4549,7 +4549,7 @@ export def "registrations-files list-providers" [
 #
 # GET /registrations/{registration_id}/files/{provider}/
 # operationId: registrations_files_list
-export def "registrations-files list" [
+export def "registrations-files-list" [
   registration_id: string
   provider: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4588,7 +4588,7 @@ export def "registrations-files list" [
 #
 # GET /registrations/{registration_id}/files/{provider}/{path}/
 # operationId: registrations_files_read
-export def "registrations-files get" [
+export def "registrations-files-read" [
   registration_id: string
   provider: string
   path: string
@@ -4629,7 +4629,7 @@ export def "registrations-files get" [
 #
 # GET /registrations/{registration_id}/forks/
 # operationId: registrations_forks_list
-export def "registrations-forks list" [
+export def "registrations-forks-list" [
   registration_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4667,7 +4667,7 @@ export def "registrations-forks list" [
 # POST /registrations/{registration_id}/forks/
 # operationId: registrations_forks_create
 # --attributes shape: {public?: bool}
-export def "registrations-forks create" [
+export def "registrations-forks-create" [
   registration_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4707,7 +4707,7 @@ export def "registrations-forks create" [
 #
 # GET /registrations/{registration_id}/identifiers/
 # operationId: registrations_identifiers_list
-export def "registrations-identifiers list" [
+export def "registrations-identifiers-list" [
   registration_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4744,7 +4744,7 @@ export def "registrations-identifiers list" [
 #
 # GET /registrations/{registration_id}/institutions/
 # operationId: registrations_institutions_list
-export def "registrations-institutions list" [
+export def "registrations-institutions-list" [
   registration_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4781,7 +4781,7 @@ export def "registrations-institutions list" [
 #
 # GET /registrations/{registration_id}/linked_nodes/
 # operationId: registrations_linked_nodes_list
-export def "registrations-linked-nodes list" [
+export def "registrations-linked-nodes-list" [
   registration_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4818,7 +4818,7 @@ export def "registrations-linked-nodes list" [
 #
 # GET /registrations/{registration_id}/logs/
 # operationId: registrations_logs_list
-export def "registrations-logs list" [
+export def "registrations-logs-list" [
   registration_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4855,7 +4855,7 @@ export def "registrations-logs list" [
 #
 # GET /registrations/{registration_id}/view_only_links/
 # operationId: registrations_view_only_links_list
-export def "registrations-view-only-links list" [
+export def "registrations-view-only-links-list" [
   registration_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4892,7 +4892,7 @@ export def "registrations-view-only-links list" [
 #
 # GET /registrations/{registration_id}/view_only_links/{link_id}/
 # operationId: registrations_view_only_links_read
-export def "registrations-view-only-links get" [
+export def "registrations-view-only-links-read" [
   registration_id: string
   link_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4931,7 +4931,7 @@ export def "registrations-view-only-links get" [
 #
 # GET /registrations/{registration_id}/wikis/
 # operationId: registrations_wikis_list
-export def "registrations-wikis list" [
+export def "registrations-wikis-list" [
   registration_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4968,7 +4968,7 @@ export def "registrations-wikis list" [
 #
 # GET /schema_responses/
 # operationId: schema_responses_list
-export def "schema-responses list" [
+export def "schema-responses-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5006,7 +5006,7 @@ export def "schema-responses list" [
 # --attributes shape: {date_created?: int, date_modified?: int, date_submitted?: int, is_original_response?: bool, is_pending_current_user_approval?: bool, reviews_state?: "initial"|"in_progress"|"approved"|"pending_moderation", revision_justification?: string, revision_responses?: record}
 # --links shape: {self?: string}
 # --relationships shape: {actions?: string, initiated_by?: string, registration?: string, registration_schema?: string}
-export def "schema-responses create-ppost" [
+export def "schema-response-ppost" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5048,7 +5048,7 @@ export def "schema-responses create-ppost" [
 #
 # DELETE /schema_responses/{schema_response_id}
 # operationId: schema_response_delete
-export def "schema-responses delete" [
+export def "schema-response-delete" [
   schema_response_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5084,7 +5084,7 @@ export def "schema-responses delete" [
 #
 # GET /schema_responses/{schema_response_id}
 # operationId: schema_responses_read
-export def "schema-responses get" [
+export def "schema-responses-read" [
   schema_response_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5124,7 +5124,7 @@ export def "schema-responses get" [
 # --attributes shape: {date_created?: int, date_modified?: int, date_submitted?: int, is_original_response?: bool, is_pending_current_user_approval?: bool, reviews_state?: "initial"|"in_progress"|"approved"|"pending_moderation", revision_justification?: string, revision_responses?: record}
 # --links shape: {self?: string}
 # --relationships shape: {actions?: string, initiated_by?: string, registration?: string, registration_schema?: string}
-export def "schema-responses update" [
+export def "schema-response-patch" [
   schema_response_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5168,7 +5168,7 @@ export def "schema-responses update" [
 #
 # GET /schema_responses/{schema_response_id}/actions/
 # operationId: schema_response_action_read
-export def "schema-responses-actions list" [
+export def "schema-response-action-read" [
   schema_response_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5204,7 +5204,7 @@ export def "schema-responses-actions list" [
 # Create a new Schema Response Action
 #
 # POST /schema_responses/{schema_response_id}/actions/
-export def "schema-responses-actions create" [
+export def "post-schema-responses-schema-response-id-actions" [
   schema_response_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5239,7 +5239,7 @@ export def "schema-responses-actions create" [
 # A Schema Response Action from a Schema Response
 #
 # GET /schema_responses/{schema_response_id}/actions/{schema_response_action_id}
-export def "schema-responses-actions get" [
+export def "get-schema-responses-schema-response-id-actions-schema-response-action-id" [
   schema_response_id: string
   schema_response_action_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5278,7 +5278,7 @@ export def "schema-responses-actions get" [
 #
 # GET /schema_responses/{schema_response_id}/schema_blocks/
 # operationId: schema_response_blocks_read
-export def "schema-responses-schema-blocks list" [
+export def "schema-response-blocks-read" [
   schema_response_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5314,7 +5314,7 @@ export def "schema-responses-schema-blocks list" [
 # Retrieve a Registration Schema Block
 #
 # GET /schema_responses/{schema_response_id}/schema_blocks/{schema_response_block_id}
-export def "schema-responses-schema-blocks get" [
+export def "get-schema-responses-schema-response-id-schema-blocks-schema-response-block-id" [
   schema_response_id: string
   schema_response_block_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5353,7 +5353,7 @@ export def "schema-responses-schema-blocks get" [
 #
 # GET /schemas/registrations/
 # operationId: registration_schemas_list
-export def "schemas-registrations list" [
+export def "registration-schemas-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5388,7 +5388,7 @@ export def "schemas-registrations list" [
 #
 # GET /schemas/registrations/{registration_schema_id}
 # operationId: registration_schema_read
-export def "schemas-registrations get" [
+export def "registration-schema-read" [
   registration_schema_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5425,7 +5425,7 @@ export def "schemas-registrations get" [
 #
 # GET /taxonomies/
 # operationId: taxonomies_list
-export def "taxonomies list" [
+export def "taxonomies-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5460,7 +5460,7 @@ export def "taxonomies list" [
 #
 # GET /taxonomies/{taxonomy_id}/
 # operationId: taxonomies_read
-export def "taxonomies get" [
+export def "taxonomies-read" [
   taxonomy_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5497,7 +5497,7 @@ export def "taxonomies get" [
 #
 # GET /users/
 # operationId: users_list
-export def "users list" [
+export def "users-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5532,7 +5532,7 @@ export def "users list" [
 #
 # GET /users/{user_id}/
 # operationId: users_read
-export def "users get" [
+export def "users-read" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5570,7 +5570,7 @@ export def "users get" [
 # PATCH /users/{user_id}/
 # operationId: users_partial_update
 # --attributes shape: {family_name?: string, full_name: string, given_name?: string, locale?: string, middle_names?: string, suffix?: string, timezone?: string}
-export def "users update" [
+export def "users-partial-update" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5610,7 +5610,7 @@ export def "users update" [
 #
 # GET /users/{user_id}/addons/
 # operationId: users_addons_list
-export def "users-addons list" [
+export def "users-addons-list" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5647,7 +5647,7 @@ export def "users-addons list" [
 #
 # GET /users/{user_id}/addons/{provider}/
 # operationId: users_addons_read
-export def "users-addons get" [
+export def "users-addons-read" [
   user_id: string
   provider: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5686,7 +5686,7 @@ export def "users-addons get" [
 #
 # GET /users/{user_id}/addons/{provider}/accounts/
 # operationId: Users_addon_accounts_list
-export def "users-addons-accounts list" [
+export def "users-addon-accounts-list" [
   user_id: string
   provider: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5725,7 +5725,7 @@ export def "users-addons-accounts list" [
 #
 # GET /users/{user_id}/addons/{provider}/accounts/{account_id}/
 # operationId: Users_addon_accounts_read
-export def "users-addons-accounts get" [
+export def "users-addon-accounts-read" [
   user_id: string
   provider: string
   account_id: string
@@ -5766,7 +5766,7 @@ export def "users-addons-accounts get" [
 #
 # GET /users/{user_id}/institutions/
 # operationId: users_institutions_list
-export def "users-institutions list" [
+export def "users-institutions-list" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5803,7 +5803,7 @@ export def "users-institutions list" [
 #
 # GET /users/{user_id}/nodes/
 # operationId: users_nodes_list
-export def "users-nodes list" [
+export def "users-nodes-list" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5840,7 +5840,7 @@ export def "users-nodes list" [
 #
 # GET /users/{user_id}/preprints/
 # operationId: users_preprints_list
-export def "users-preprints list" [
+export def "users-preprints-list" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5877,7 +5877,7 @@ export def "users-preprints list" [
 #
 # GET /users/{user_id}/registrations/
 # operationId: users_registrations_list
-export def "users-registrations list" [
+export def "users-registrations-list" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5913,7 +5913,7 @@ export def "users-registrations list" [
 #
 # GET /view_only_links/{link_id}/
 # operationId: view_only_links_read
-export def "view-only-links get" [
+export def "view-only-links-read" [
   link_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5950,7 +5950,7 @@ export def "view-only-links get" [
 #
 # GET /view_only_links/{link_id}/nodes/
 # operationId: view_only_links_node_list
-export def "view-only-links-nodes list" [
+export def "view-only-links-node-list" [
   link_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5987,7 +5987,7 @@ export def "view-only-links-nodes list" [
 #
 # GET /wikis/{wiki_id}/
 # operationId: wiki_read
-export def "wikis get" [
+export def "wiki-read" [
   wiki_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6024,7 +6024,7 @@ export def "wikis get" [
 #
 # GET /wikis/{wiki_id}/content/
 # operationId: wiki_content
-export def "wikis-content get" [
+export def "wiki-content" [
   wiki_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

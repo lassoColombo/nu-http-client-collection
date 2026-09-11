@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-d-bfor-my-sql-locations-recommended-action-sessions-azure-async-operation get-based-status" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "location-based-recommended-action-sessions-operation-status-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -128,7 +128,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.DBforMySQL/locations/{locationName}/recommendedActionSessionsAzureAsyncOperation/{operationId}
 # operationId: LocationBasedRecommendedActionSessionsOperationStatus_Get
-export def "subscriptions-providers-microsoft-d-bfor-my-sql-locations-recommended-action-sessions-azure-async-operation get-based-status" [
+export def "location-based-recommended-action-sessions-operation-status-get" [
   subscription_id: string
   location_name: string
   operation_id: string
@@ -170,7 +170,7 @@ export def "subscriptions-providers-microsoft-d-bfor-my-sql-locations-recommende
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.DBforMySQL/locations/{locationName}/recommendedActionSessionsOperationResults/{operationId}
 # operationId: LocationBasedRecommendedActionSessionsResult_List
-export def "subscriptions-providers-microsoft-d-bfor-my-sql-locations-recommended-action-sessions-operation-results list-based" [
+export def "location-based-recommended-action-sessions-result-list" [
   subscription_id: string
   location_name: string
   operation_id: string
@@ -212,7 +212,7 @@ export def "subscriptions-providers-microsoft-d-bfor-my-sql-locations-recommende
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforMySQL/servers/{serverName}/advisors
 # operationId: Advisors_ListByServer
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers-advisors list" [
+export def "advisors-list-by-server" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -254,7 +254,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-serv
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforMySQL/servers/{serverName}/advisors/{advisorName}
 # operationId: Advisors_Get
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers-advisors get" [
+export def "advisors-get" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -298,7 +298,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-serv
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforMySQL/servers/{serverName}/advisors/{advisorName}/createRecommendedActionSession
 # operationId: CreateRecommendedActionSession
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers-advisors-create-recommended-action-session create" [
+export def "create-recommended-action-session" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -343,7 +343,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-serv
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforMySQL/servers/{serverName}/advisors/{advisorName}/recommendedActions
 # operationId: RecommendedActions_ListByServer
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers-advisors-recommended-actions list" [
+export def "recommended-actions-list-by-server" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -388,7 +388,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-serv
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforMySQL/servers/{serverName}/advisors/{advisorName}/recommendedActions/{recommendedActionName}
 # operationId: RecommendedActions_Get
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers-advisors-recommended-actions get" [
+export def "recommended-actions-get" [
   subscription_id: string
   resource_group_name: string
   server_name: string

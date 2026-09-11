@@ -135,7 +135,7 @@ def region-completer [] { ["1001 (SouthAfricaNorth)" "1002 (SouthAfricaWest)" "1
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "agent-telemetry create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-api-v1-agent-telemetry" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -156,7 +156,7 @@ export def commands []: nothing -> table {
 }
 
 # POST /api/v1/AgentTelemetry
-export def "agent-telemetry create" [
+export def "post-api-v1-agent-telemetry" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -191,7 +191,7 @@ export def "agent-telemetry create" [
 }
 
 # POST /api/v1/AgentTelemetry/standalone
-export def "agent-telemetry-standalone create" [
+export def "post-api-v1-agent-telemetry-standalone" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -226,7 +226,7 @@ export def "agent-telemetry-standalone create" [
 }
 
 # GET /api/v1/Agents/{family}
-export def "agents get" [
+export def "get-api-v1-agents-family" [
   family: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -260,7 +260,7 @@ export def "agents get" [
 }
 
 # GET /api/v1/Environments
-export def "environments get" [
+export def "get-api-v1-environments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -308,7 +308,7 @@ export def "environments get" [
 # --seed shape: {cloneUrl?: string, gitConfig?: record, recurseClone?: bool, repository?: record, seedMoniker?: string, seedType?: string}
 @deprecated --flag location
 @deprecated --flag platform
-export def "environments create" [
+export def "post-api-v1-environments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -376,7 +376,7 @@ export def "environments create" [
 }
 
 # DELETE /api/v1/Environments/{environmentId}
-export def "environments delete" [
+export def "delete-api-v1-environments-environment-id" [
   environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -411,7 +411,7 @@ export def "environments delete" [
 # GET /api/v1/Environments/{environmentId}
 #
 # operationId: GetEnvironmentRoute
-export def "environments get-route" [
+export def "get-environment-route" [
   environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -451,7 +451,7 @@ export def "environments get-route" [
 # PATCH /api/v1/Environments/{environmentId}
 #
 # --failoverDetails shape: {failoverEnabled?: bool, ... (1 more fields)}
-export def "environments update" [
+export def "patch-api-v1-environments-environment-id" [
   environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -497,7 +497,7 @@ export def "environments update" [
 #
 # operationId: UpdateEnvironmentRoute
 # --payload shape: {sessionId?: string, sessionPath?: string}
-export def "environments-callback update-route" [
+export def "update-environment-route" [
   environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -536,7 +536,7 @@ export def "environments-callback update-route" [
 }
 
 # GET /api/v1/Environments/{environmentId}/archive
-export def "environments-archive get" [
+export def "get-api-v1-environments-environment-id-archive" [
   environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -570,7 +570,7 @@ export def "environments-archive get" [
 }
 
 # POST /api/v1/Environments/{environmentId}/archive
-export def "environments-archive create" [
+export def "post-api-v1-environments-environment-id-archive" [
   environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -604,7 +604,7 @@ export def "environments-archive create" [
 }
 
 # POST /api/v1/Environments/{environmentId}/export
-export def "environments-export create" [
+export def "post-api-v1-environments-environment-id-export" [
   environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -638,7 +638,7 @@ export def "environments-export create" [
 }
 
 # PATCH /api/v1/Environments/{environmentId}/folder
-export def "environments-folder update" [
+export def "patch-api-v1-environments-environment-id-folder" [
   environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -676,7 +676,7 @@ export def "environments-folder update" [
 }
 
 # GET /api/v1/Environments/{environmentId}/heartbeattoken
-export def "environments-heartbeattoken get" [
+export def "get-api-v1-environments-environment-id-heartbeattoken" [
   environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -710,7 +710,7 @@ export def "environments-heartbeattoken get" [
 }
 
 # POST /api/v1/Environments/{environmentId}/notify
-export def "environments-notify create" [
+export def "post-api-v1-environments-environment-id-notify" [
   environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -751,7 +751,7 @@ export def "environments-notify create" [
 }
 
 # DELETE /api/v1/Environments/{environmentId}/ports/{port}
-export def "environments-ports delete" [
+export def "delete-api-v1-environments-environment-id-ports-port" [
   environment_id: string
   port: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -786,7 +786,7 @@ export def "environments-ports delete" [
 }
 
 # PUT /api/v1/Environments/{environmentId}/ports/{port}
-export def "environments-ports update" [
+export def "put-api-v1-environments-environment-id-ports-port" [
   environment_id: string
   port: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -826,7 +826,7 @@ export def "environments-ports update" [
 }
 
 # PATCH /api/v1/Environments/{environmentId}/restore
-export def "environments-restore update" [
+export def "patch-api-v1-environments-environment-id-restore" [
   environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -861,7 +861,7 @@ export def "environments-restore update" [
 # PUT /api/v1/Environments/{environmentId}/secrets
 #
 # --secrets item shape: {name?: string, type?: "1 (EnvironmentVariable)"|"2 (ContainerRegistry)", value?: string}
-export def "environments-secrets update" [
+export def "put-api-v1-environments-environment-id-secrets" [
   environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -899,7 +899,7 @@ export def "environments-secrets update" [
 }
 
 # POST /api/v1/Environments/{environmentId}/shutdown
-export def "environments-shutdown create" [
+export def "post-api-v1-environments-environment-id-shutdown" [
   environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -933,7 +933,7 @@ export def "environments-shutdown create" [
 }
 
 # POST /api/v1/Environments/{environmentId}/start
-export def "environments-start create" [
+export def "post-api-v1-environments-environment-id-start" [
   environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -969,7 +969,7 @@ export def "environments-start create" [
 }
 
 # GET /api/v1/Environments/{environmentId}/state
-export def "environments-state get" [
+export def "get-api-v1-environments-environment-id-state" [
   environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1002,7 +1002,7 @@ export def "environments-state get" [
 }
 
 # GET /api/v1/Environments/{environmentId}/updates
-export def "environments-updates get" [
+export def "get-api-v1-environments-environment-id-updates" [
   environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1036,7 +1036,7 @@ export def "environments-updates get" [
 }
 
 # POST /api/v1/GenevaActions/Billing/resend
-export def "geneva-actions-billing-resend create" [
+export def "post-api-v1-geneva-actions-billing-resend" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1073,7 +1073,7 @@ export def "geneva-actions-billing-resend create" [
 }
 
 # GET /api/v1/GenevaActions/Billing/{environmentId}
-export def "geneva-actions-billing get" [
+export def "get-api-v1-geneva-actions-billing-environment-id" [
   environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1110,7 +1110,7 @@ export def "geneva-actions-billing get" [
 }
 
 # GET /api/v1/GenevaActions/Billing/{environmentId}/state-changes
-export def "geneva-actions-billing-state-changes get" [
+export def "get-api-v1-geneva-actions-billing-environment-id-state-changes" [
   environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1144,7 +1144,7 @@ export def "geneva-actions-billing-state-changes get" [
 }
 
 # POST /api/v1/GenevaActions/Billing/{environmentId}/state-changes
-export def "geneva-actions-billing-state-changes create" [
+export def "post-api-v1-geneva-actions-billing-environment-id-state-changes" [
   environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1184,7 +1184,7 @@ export def "geneva-actions-billing-state-changes create" [
 }
 
 # POST /api/v1/GenevaActions/Configuration/{target}
-export def "geneva-actions-configuration create" [
+export def "post-api-v1-geneva-actions-configuration-target" [
   target: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1224,7 +1224,7 @@ export def "geneva-actions-configuration create" [
 }
 
 # DELETE /api/v1/GenevaActions/Configuration/{target}/{key}
-export def "geneva-actions-configuration delete" [
+export def "delete-api-v1-geneva-actions-configuration-target-key" [
   target: string
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1259,7 +1259,7 @@ export def "geneva-actions-configuration delete" [
 }
 
 # GET /api/v1/GenevaActions/Configuration/{target}/{key}
-export def "geneva-actions-configuration get" [
+export def "get-api-v1-geneva-actions-configuration-target-key" [
   target: string
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1295,7 +1295,7 @@ export def "geneva-actions-configuration get" [
 }
 
 # DELETE /api/v1/GenevaActions/Environments/{environmentId}
-export def "geneva-actions-environments delete" [
+export def "delete-api-v1-geneva-actions-environments-environment-id" [
   environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1330,7 +1330,7 @@ export def "geneva-actions-environments delete" [
 }
 
 # GET /api/v1/GenevaActions/Environments/{environmentId}
-export def "geneva-actions-environments get" [
+export def "get-api-v1-geneva-actions-environments-environment-id" [
   environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1364,7 +1364,7 @@ export def "geneva-actions-environments get" [
 }
 
 # PUT /api/v1/GenevaActions/Environments/{environmentId}/archive
-export def "geneva-actions-environments-archive update" [
+export def "put-api-v1-geneva-actions-environments-environment-id-archive" [
   environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1398,7 +1398,7 @@ export def "geneva-actions-environments-archive update" [
 }
 
 # GET /api/v1/GenevaActions/Environments/{environmentId}/archived_storage_sas/{targetBlob}
-export def "geneva-actions-environments-archived-storage-sas get" [
+export def "get-api-v1-geneva-actions-environments-environment-id-archived-storage-sas-target-blob" [
   environment_id: string
   target_blob: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1434,7 +1434,7 @@ export def "geneva-actions-environments-archived-storage-sas get" [
 }
 
 # PUT /api/v1/GenevaActions/Environments/{environmentId}/shutdown
-export def "geneva-actions-environments-shutdown update" [
+export def "put-api-v1-geneva-actions-environments-environment-id-shutdown" [
   environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1468,7 +1468,7 @@ export def "geneva-actions-environments-shutdown update" [
 }
 
 # POST /api/v1/GenevaActions/Environments/{environmentId}/upload/running/vm/logs
-export def "geneva-actions-environments-upload-running-vm-logs create" [
+export def "post-api-v1-geneva-actions-environments-environment-id-upload-running-vm-logs" [
   environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1502,7 +1502,7 @@ export def "geneva-actions-environments-upload-running-vm-logs create" [
 }
 
 # POST /api/v1/GenevaActions/Pools/change-resource-deletion-setting
-export def "geneva-actions-pools-change-resource-deletion-setting create" [
+export def "post-api-v1-geneva-actions-pools-change-resource-deletion-setting" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1542,7 +1542,7 @@ export def "geneva-actions-pools-change-resource-deletion-setting create" [
 }
 
 # POST /api/v1/GenevaActions/Pools/{poolCode}/rotate-pool
-export def "geneva-actions-pools-rotate-pool create" [
+export def "post-api-v1-geneva-actions-pools-pool-code-rotate-pool" [
   pool_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1575,7 +1575,7 @@ export def "geneva-actions-pools-rotate-pool create" [
 }
 
 # POST /api/v1/GenevaActions/Pools/{target}
-export def "geneva-actions-pools create" [
+export def "post-api-v1-geneva-actions-pools-target" [
   target: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1621,7 +1621,7 @@ export def "geneva-actions-pools create" [
 # POST /api/v1/GenevaActions/Prebuilds/pools/createorupdatesettings
 #
 # --pools item shape: {poolType?: "0 (None)"|"1 (Blob)"|"2 (CodespacePool)"|"3 (StoragePool)"|"4 (CodespaceAndStoragePool)", skuName?: string, targetCount?: int}
-export def "geneva-actions-prebuilds-pools-create-orupdatesettings create" [
+export def "post-api-v1-geneva-actions-prebuilds-pools-createorupdatesettings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1662,7 +1662,7 @@ export def "geneva-actions-prebuilds-pools-create-orupdatesettings create" [
 # POST /api/v1/GenevaActions/Prebuilds/pools/delete
 #
 # --pools item shape: {poolType?: "0 (None)"|"1 (Blob)"|"2 (CodespacePool)"|"3 (StoragePool)"|"4 (CodespaceAndStoragePool)", skuName?: string, targetCount?: int}
-export def "geneva-actions-prebuilds-pools-delete create" [
+export def "post-api-v1-geneva-actions-prebuilds-pools-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1701,7 +1701,7 @@ export def "geneva-actions-prebuilds-pools-delete create" [
 }
 
 # POST /api/v1/GenevaActions/Privacy/refresh-profile-telemetry-properties
-export def "geneva-actions-privacy-refresh-profile-telemetry-properties create" [
+export def "post-api-v1-geneva-actions-privacy-refresh-profile-telemetry-properties" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1739,7 +1739,7 @@ export def "geneva-actions-privacy-refresh-profile-telemetry-properties create" 
 }
 
 # POST /api/v1/GenevaActions/Resources/{resourceId}/under-investigation
-export def "geneva-actions-resources-under-investigation create" [
+export def "post-api-v1-geneva-actions-resources-resource-id-under-investigation" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1773,7 +1773,7 @@ export def "geneva-actions-resources-under-investigation create" [
 }
 
 # DELETE /api/v1/GenevaActions/VnetPoolDefinitions
-export def "geneva-actions-vnet-pool-definitions delete" [
+export def "delete-api-v1-geneva-actions-vnet-pool-definitions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1814,7 +1814,7 @@ export def "geneva-actions-vnet-pool-definitions delete" [
 }
 
 # POST /api/v1/GenevaActions/VnetPoolDefinitions
-export def "geneva-actions-vnet-pool-definitions create" [
+export def "post-api-v1-geneva-actions-vnet-pool-definitions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1857,7 +1857,7 @@ export def "geneva-actions-vnet-pool-definitions create" [
 # POST /api/v1/HeartBeat
 #
 # --collectedDataList item shape: {environmentId?: string, name?: string, parentActivityId?: string, timestamp?: string}
-export def "heart-beat create" [
+export def "post-api-v1-heart-beat" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1896,7 +1896,7 @@ export def "heart-beat create" [
 }
 
 # GET /api/v1/Locations
-export def "locations list" [
+export def "get-api-v1-locations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1928,7 +1928,7 @@ export def "locations list" [
 }
 
 # GET /api/v1/Locations/{location}
-export def "locations get" [
+export def "get-api-v1-locations-location" [
   location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1967,7 +1967,7 @@ export def "locations get" [
 #
 # --environmentOptions shape: {correlationId?: string}
 # --secrets item shape: {name?: string, type?: "1 (EnvironmentVariable)"|"2 (ContainerRegistry)", value?: string}
-export def "prebuilds-pools-instances create" [
+export def "post-api-v1-prebuilds-pools-pool-id-instances" [
   pool_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2008,7 +2008,7 @@ export def "prebuilds-pools-instances create" [
 #
 # --environmentOptions shape: {correlationId?: string}
 # --secrets item shape: {name?: string, type?: "1 (EnvironmentVariable)"|"2 (ContainerRegistry)", value?: string}
-export def "prebuilds-pools-instances update" [
+export def "put-api-v1-prebuilds-pools-pool-id-instances" [
   pool_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2048,7 +2048,7 @@ export def "prebuilds-pools-instances update" [
 # GET /api/v1/Prebuilds/template/{environmentId}
 #
 # operationId: GetTemplateInfoRoute
-export def "prebuilds-template get-route" [
+export def "get-template-info-route" [
   environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2084,7 +2084,7 @@ export def "prebuilds-template get-route" [
 # GET /api/v1/Prebuilds/templates/repo/{repoId}/branch/{branchName}/hash/{prebuildHash}/location/{location}/skus
 #
 # operationId: GetPrebuildReadinessRoute
-export def "prebuilds-templates-repo-branch-hash-location-skus get-readiness-route" [
+export def "get-prebuild-readiness-route" [
   repo_id: string
   branch_name: string
   prebuild_hash: string
@@ -2126,7 +2126,7 @@ export def "prebuilds-templates-repo-branch-hash-location-skus get-readiness-rou
 }
 
 # GET /api/v1/Sas
-export def "sas get" [
+export def "get-api-v1-sas" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2158,7 +2158,7 @@ export def "sas get" [
 }
 
 # GET /api/v1/Secrets
-export def "secrets get" [
+export def "get-api-v1-secrets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2194,7 +2194,7 @@ export def "secrets get" [
 # POST /api/v1/Secrets
 #
 # --filters item shape: {type?: "1 (GitRepo)"|"2 (CodespaceName)", value?: string}
-export def "secrets create" [
+export def "post-api-v1-secrets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2237,7 +2237,7 @@ export def "secrets create" [
 }
 
 # DELETE /api/v1/Secrets/{secretId}
-export def "secrets delete" [
+export def "delete-api-v1-secrets-secret-id" [
   secret_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2275,7 +2275,7 @@ export def "secrets delete" [
 # PUT /api/v1/Secrets/{secretId}
 #
 # --filters item shape: {type?: "1 (GitRepo)"|"2 (CodespaceName)", value?: string}
-export def "secrets update" [
+export def "put-api-v1-secrets-secret-id" [
   secret_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2319,7 +2319,7 @@ export def "secrets update" [
 }
 
 # DELETE /api/v1/Tenant/{tenantId}
-export def "tenant delete" [
+export def "delete-api-v1-tenant-tenant-id" [
   tenant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2352,7 +2352,7 @@ export def "tenant delete" [
 }
 
 # GET /api/v1/Tenant/{tenantId}
-export def "tenant get" [
+export def "get-api-v1-tenant-tenant-id" [
   tenant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2386,7 +2386,7 @@ export def "tenant get" [
 }
 
 # PUT /api/v1/Tenant/{tenantId}
-export def "tenant update" [
+export def "put-api-v1-tenant-tenant-id" [
   tenant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2419,7 +2419,7 @@ export def "tenant update" [
 }
 
 # POST /api/v1/Tokens/plans/{planName}/deleteAllCodespaces
-export def "tokens-plans-delete-all-codespaces create" [
+export def "post-api-v1-tokens-plans-plan-name-delete-all-codespaces" [
   plan_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2457,7 +2457,7 @@ export def "tokens-plans-delete-all-codespaces create" [
 }
 
 # POST /api/v1/Tokens/plans/{planName}/readAllCodespaces
-export def "tokens-plans-read-all-codespaces create" [
+export def "post-api-v1-tokens-plans-plan-name-read-all-codespaces" [
   plan_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2495,7 +2495,7 @@ export def "tokens-plans-read-all-codespaces create" [
 }
 
 # POST /api/v1/Tokens/plans/{planName}/writeCodespaces
-export def "tokens-plans-write-codespaces create" [
+export def "post-api-v1-tokens-plans-plan-name-write-codespaces" [
   plan_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2535,7 +2535,7 @@ export def "tokens-plans-write-codespaces create" [
 # POST /api/v1/Tokens/plans/{planName}/writeDelegates
 #
 # --identity shape: {displayName?: string, id?: string, username?: string}
-export def "tokens-plans-write-delegates create" [
+export def "post-api-v1-tokens-plans-plan-name-write-delegates" [
   plan_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2582,7 +2582,7 @@ export def "tokens-plans-write-delegates create" [
 #
 # --identity shape: {principalId?: string, tenantId?: string, type?: string}
 # --properties shape: {defaultCodespaceSku?: string, defaultEnvironmentSku?: string, encryption?: record, userId?: string, vnetProperties?: record}
-export def "tokens-subscriptions-resource-groups-providers-plans update" [
+export def "put-api-v1-tokens-subscriptions-subscription-id-resource-groups-resource-group-providers-provider-namespace-plans-resource-name" [
   subscription_id: string
   resource_group: string
   provider_namespace: string
@@ -2635,7 +2635,7 @@ export def "tokens-subscriptions-resource-groups-providers-plans update" [
 }
 
 # POST /api/v1/Tokens/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/{providerNamespace}/plans/{resourceName}/deleteAllCodespaces
-export def "tokens-subscriptions-resource-groups-providers-plans-delete-all-codespaces create" [
+export def "post-api-v1-tokens-subscriptions-subscription-id-resource-groups-resource-group-providers-provider-namespace-plans-resource-name-delete-all-codespaces" [
   subscription_id: string
   resource_group: string
   provider_namespace: string
@@ -2676,7 +2676,7 @@ export def "tokens-subscriptions-resource-groups-providers-plans-delete-all-code
 }
 
 # POST /api/v1/Tokens/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/{providerNamespace}/plans/{resourceName}/deleteAllEnvironments
-export def "tokens-subscriptions-resource-groups-providers-plans-delete-all-environments create" [
+export def "post-api-v1-tokens-subscriptions-subscription-id-resource-groups-resource-group-providers-provider-namespace-plans-resource-name-delete-all-environments" [
   subscription_id: string
   resource_group: string
   provider_namespace: string
@@ -2717,7 +2717,7 @@ export def "tokens-subscriptions-resource-groups-providers-plans-delete-all-envi
 }
 
 # POST /api/v1/Tokens/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/{providerNamespace}/plans/{resourceName}/readAllCodespaces
-export def "tokens-subscriptions-resource-groups-providers-plans-read-all-codespaces create" [
+export def "post-api-v1-tokens-subscriptions-subscription-id-resource-groups-resource-group-providers-provider-namespace-plans-resource-name-read-all-codespaces" [
   subscription_id: string
   resource_group: string
   provider_namespace: string
@@ -2758,7 +2758,7 @@ export def "tokens-subscriptions-resource-groups-providers-plans-read-all-codesp
 }
 
 # POST /api/v1/Tokens/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/{providerNamespace}/plans/{resourceName}/readAllEnvironments
-export def "tokens-subscriptions-resource-groups-providers-plans-read-all-environments create" [
+export def "post-api-v1-tokens-subscriptions-subscription-id-resource-groups-resource-group-providers-provider-namespace-plans-resource-name-read-all-environments" [
   subscription_id: string
   resource_group: string
   provider_namespace: string
@@ -2799,7 +2799,7 @@ export def "tokens-subscriptions-resource-groups-providers-plans-read-all-enviro
 }
 
 # POST /api/v1/Tokens/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/{providerNamespace}/plans/{resourceName}/writeCodespaces
-export def "tokens-subscriptions-resource-groups-providers-plans-write-codespaces create" [
+export def "post-api-v1-tokens-subscriptions-subscription-id-resource-groups-resource-group-providers-provider-namespace-plans-resource-name-write-codespaces" [
   subscription_id: string
   resource_group: string
   provider_namespace: string
@@ -2842,7 +2842,7 @@ export def "tokens-subscriptions-resource-groups-providers-plans-write-codespace
 # POST /api/v1/Tokens/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/{providerNamespace}/plans/{resourceName}/writeDelegates
 #
 # --identity shape: {displayName?: string, id?: string, username?: string}
-export def "tokens-subscriptions-resource-groups-providers-plans-write-delegates create" [
+export def "post-api-v1-tokens-subscriptions-subscription-id-resource-groups-resource-group-providers-provider-namespace-plans-resource-name-write-delegates" [
   subscription_id: string
   resource_group: string
   provider_namespace: string
@@ -2889,7 +2889,7 @@ export def "tokens-subscriptions-resource-groups-providers-plans-write-delegates
 }
 
 # POST /api/v1/Tokens/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/{providerNamespace}/plans/{resourceName}/writeEnvironments
-export def "tokens-subscriptions-resource-groups-providers-plans-write-environments create" [
+export def "post-api-v1-tokens-subscriptions-subscription-id-resource-groups-resource-group-providers-provider-namespace-plans-resource-name-write-environments" [
   subscription_id: string
   resource_group: string
   provider_namespace: string
@@ -2930,7 +2930,7 @@ export def "tokens-subscriptions-resource-groups-providers-plans-write-environme
 }
 
 # GET /api/v1/Tunnel/{environmentId}/portInfo
-export def "tunnel-port-info get" [
+export def "get-api-v1-tunnel-environment-id-port-info" [
   environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2966,7 +2966,7 @@ export def "tunnel-port-info get" [
 }
 
 # DELETE /api/v1/UserSubscriptions
-export def "user-subscriptions delete" [
+export def "delete-api-v1-user-subscriptions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2999,7 +2999,7 @@ export def "user-subscriptions delete" [
 }
 
 # POST /api/v1/UserSubscriptions
-export def "user-subscriptions create" [
+export def "post-api-v1-user-subscriptions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3032,7 +3032,7 @@ export def "user-subscriptions create" [
 }
 
 # GET /api/v1/pools/default
-export def "pools-default get" [
+export def "get-api-v1-pools-default" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3068,7 +3068,7 @@ export def "pools-default get" [
 # PUT /api/v1/subscriptions/{subscriptionId}/providers/GitHub.Network/{resourceType}/SubscriptionLifeCycleNotification
 #
 # --properties shape: {accountOwner?: record, additionalProperties?: record, locationPlacementId?: string, managedByTenants?: list, quotaId?: string, registeredFeatures?: list, tenantId?: string}
-export def "subscriptions-providers-git-hub-network-subscription-life-cycle-notification update" [
+export def "put-api-v1-subscriptions-subscription-id-providers-git-hub-network-resource-type-subscription-life-cycle-notification" [
   subscription_id: string
   resource_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3111,7 +3111,7 @@ export def "subscriptions-providers-git-hub-network-subscription-life-cycle-noti
 # POST /api/v1/subscriptions/{subscriptionId}/providers/GitHub.Network/{resourceType}/resourceReadBegin
 #
 # --value item shape: {id?: string, location?: string, name?: string, properties?: record, provisioningState?: string, tags?: record, type?: string}
-export def "subscriptions-providers-git-hub-network-resource-read-begin create" [
+export def "post-api-v1-subscriptions-subscription-id-providers-git-hub-network-resource-type-resource-read-begin" [
   subscription_id: string
   resource_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3152,7 +3152,7 @@ export def "subscriptions-providers-git-hub-network-resource-read-begin create" 
 # PUT /api/v1/subscriptions/{subscriptionId}/providers/Microsoft.Codespaces/plans/SubscriptionLifeCycleNotification
 #
 # --properties shape: {accountOwner?: record, additionalProperties?: record, locationPlacementId?: string, managedByTenants?: list, quotaId?: string, registeredFeatures?: list, tenantId?: string}
-export def "subscriptions-providers-microsoft-codespaces-plans-subscription-life-cycle-notification update" [
+export def "put-api-v1-subscriptions-subscription-id-providers-microsoft-codespaces-plans-subscription-life-cycle-notification" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3193,7 +3193,7 @@ export def "subscriptions-providers-microsoft-codespaces-plans-subscription-life
 # POST /api/v1/subscriptions/{subscriptionId}/providers/Microsoft.Codespaces/plans/resourceReadBegin
 #
 # --value item shape: {id?: string, identity?: record, location?: string, name?: string, properties?: record, provisioningState?: string, tags?: record, type?: string}
-export def "subscriptions-providers-microsoft-codespaces-plans-resource-read-begin create" [
+export def "post-api-v1-subscriptions-subscription-id-providers-microsoft-codespaces-plans-resource-read-begin" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3232,7 +3232,7 @@ export def "subscriptions-providers-microsoft-codespaces-plans-resource-read-beg
 # PUT /api/v1/subscriptions/{subscriptionId}/providers/Microsoft.VSOnline/plans/SubscriptionLifeCycleNotification
 #
 # --properties shape: {accountOwner?: record, additionalProperties?: record, locationPlacementId?: string, managedByTenants?: list, quotaId?: string, registeredFeatures?: list, tenantId?: string}
-export def "subscriptions-providers-microsoft-vs-online-plans-subscription-life-cycle-notification update" [
+export def "put-api-v1-subscriptions-subscription-id-providers-microsoft-vs-online-plans-subscription-life-cycle-notification" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3273,7 +3273,7 @@ export def "subscriptions-providers-microsoft-vs-online-plans-subscription-life-
 # POST /api/v1/subscriptions/{subscriptionId}/providers/Microsoft.VSOnline/plans/resourceReadBegin
 #
 # --value item shape: {id?: string, identity?: record, location?: string, name?: string, properties?: record, provisioningState?: string, tags?: record, type?: string}
-export def "subscriptions-providers-microsoft-vs-online-plans-resource-read-begin create" [
+export def "post-api-v1-subscriptions-subscription-id-providers-microsoft-vs-online-plans-resource-read-begin" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3312,7 +3312,7 @@ export def "subscriptions-providers-microsoft-vs-online-plans-resource-read-begi
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/GitHub.Network/{resourceType}/resourceReadBegin
 #
 # --value item shape: {id?: string, location?: string, name?: string, properties?: record, provisioningState?: string, tags?: record, type?: string}
-export def "subscriptions-resource-groups-providers-git-hub-network-resource-read-begin create-by-subscription-id-resource-group-resource-type" [
+export def "post-api-v1-subscriptions-subscription-id-resource-groups-resource-group-providers-git-hub-network-resource-type-resource-read-begin" [
   subscription_id: string
   resource_group: string
   resource_type: string
@@ -3355,7 +3355,7 @@ export def "subscriptions-resource-groups-providers-git-hub-network-resource-rea
 # DELETE /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/GitHub.Network/{resourceType}/{resourceName}
 #
 # --properties shape: {subnetId?: string}
-export def "subscriptions-resource-groups-providers-git-hub-network delete" [
+export def "delete-api-v1-subscriptions-subscription-id-resource-groups-resource-group-providers-git-hub-network-resource-type-resource-name" [
   subscription_id: string
   resource_group: string
   resource_type: string
@@ -3406,7 +3406,7 @@ export def "subscriptions-resource-groups-providers-git-hub-network delete" [
 # PATCH /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/GitHub.Network/{resourceType}/{resourceName}
 #
 # --properties shape: {subnetId?: string}
-export def "subscriptions-resource-groups-providers-git-hub-network update-by-subscription-id-resource-group-resource-type-resource-name" [
+export def "patch-api-v1-subscriptions-subscription-id-resource-groups-resource-group-providers-git-hub-network-resource-type-resource-name" [
   subscription_id: string
   resource_group: string
   resource_type: string
@@ -3457,7 +3457,7 @@ export def "subscriptions-resource-groups-providers-git-hub-network update-by-su
 # PUT /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/GitHub.Network/{resourceType}/{resourceName}
 #
 # --properties shape: {subnetId?: string}
-export def "subscriptions-resource-groups-providers-git-hub-network update-by-subscription-id-resource-group-resource-type-resource-name-1" [
+export def "put-api-v1-subscriptions-subscription-id-resource-groups-resource-group-providers-git-hub-network-resource-type-resource-name" [
   subscription_id: string
   resource_group: string
   resource_type: string
@@ -3506,7 +3506,7 @@ export def "subscriptions-resource-groups-providers-git-hub-network update-by-su
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/GitHub.Network/{resourceType}/{resourceName}/resourceCreationCompleted
-export def "subscriptions-resource-groups-providers-git-hub-network-resource-creation-completed create" [
+export def "post-api-v1-subscriptions-subscription-id-resource-groups-resource-group-providers-git-hub-network-resource-type-resource-name-resource-creation-completed" [
   subscription_id: string
   resource_group: string
   resource_type: string
@@ -3547,7 +3547,7 @@ export def "subscriptions-resource-groups-providers-git-hub-network-resource-cre
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/GitHub.Network/{resourceType}/{resourceName}/resourceCreationValidate
 #
 # --properties shape: {subnetId?: string}
-export def "subscriptions-resource-groups-providers-git-hub-network-resource-creation-validate create" [
+export def "post-api-v1-subscriptions-subscription-id-resource-groups-resource-group-providers-git-hub-network-resource-type-resource-name-resource-creation-validate" [
   subscription_id: string
   resource_group: string
   resource_type: string
@@ -3596,7 +3596,7 @@ export def "subscriptions-resource-groups-providers-git-hub-network-resource-cre
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/GitHub.Network/{resourceType}/{resourceName}/resourceDeletionCompleted
-export def "subscriptions-resource-groups-providers-git-hub-network-resource-deletion-completed create" [
+export def "post-api-v1-subscriptions-subscription-id-resource-groups-resource-group-providers-git-hub-network-resource-type-resource-name-resource-deletion-completed" [
   subscription_id: string
   resource_group: string
   resource_type: string
@@ -3637,7 +3637,7 @@ export def "subscriptions-resource-groups-providers-git-hub-network-resource-del
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/GitHub.Network/{resourceType}/{resourceName}/resourceDeletionValidate
 #
 # --properties shape: {subnetId?: string}
-export def "subscriptions-resource-groups-providers-git-hub-network-resource-deletion-validate create" [
+export def "post-api-v1-subscriptions-subscription-id-resource-groups-resource-group-providers-git-hub-network-resource-type-resource-name-resource-deletion-validate" [
   subscription_id: string
   resource_group: string
   resource_type: string
@@ -3686,7 +3686,7 @@ export def "subscriptions-resource-groups-providers-git-hub-network-resource-del
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/GitHub.Network/{resourceType}/{resourceName}/resourcePatchCompleted
-export def "subscriptions-resource-groups-providers-git-hub-network-resource-patch-completed create" [
+export def "post-api-v1-subscriptions-subscription-id-resource-groups-resource-group-providers-git-hub-network-resource-type-resource-name-resource-patch-completed" [
   subscription_id: string
   resource_group: string
   resource_type: string
@@ -3727,7 +3727,7 @@ export def "subscriptions-resource-groups-providers-git-hub-network-resource-pat
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/GitHub.Network/{resourceType}/{resourceName}/resourcePatchValidate
 #
 # --properties shape: {subnetId?: string}
-export def "subscriptions-resource-groups-providers-git-hub-network-resource-patch-validate create" [
+export def "post-api-v1-subscriptions-subscription-id-resource-groups-resource-group-providers-git-hub-network-resource-type-resource-name-resource-patch-validate" [
   subscription_id: string
   resource_group: string
   resource_type: string
@@ -3778,7 +3778,7 @@ export def "subscriptions-resource-groups-providers-git-hub-network-resource-pat
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/GitHub.Network/{resourceType}/{resourceName}/resourceReadBegin
 #
 # --properties shape: {subnetId?: string}
-export def "subscriptions-resource-groups-providers-git-hub-network-resource-read-begin create-by-subscription-id-resource-group-resource-type-resource-name" [
+export def "post-api-v1-subscriptions-subscription-id-resource-groups-resource-group-providers-git-hub-network-resource-type-resource-name-resource-read-begin" [
   subscription_id: string
   resource_group: string
   resource_type: string
@@ -3829,7 +3829,7 @@ export def "subscriptions-resource-groups-providers-git-hub-network-resource-rea
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Codespaces/plans/resourceReadBegin
 #
 # --value item shape: {id?: string, identity?: record, location?: string, name?: string, properties?: record, provisioningState?: string, tags?: record, type?: string}
-export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-resource-read-begin create-by-subscription-id-resource-group" [
+export def "post-api-v1-subscriptions-subscription-id-resource-groups-resource-group-providers-microsoft-codespaces-plans-resource-read-begin" [
   subscription_id: string
   resource_group: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3871,7 +3871,7 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-r
 #
 # --identity shape: {principalId?: string, tenantId?: string, type?: string}
 # --properties shape: {defaultCodespaceSku?: string, defaultEnvironmentSku?: string, encryption?: record, userId?: string, vnetProperties?: record}
-export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans update" [
+export def "put-api-v1-subscriptions-subscription-id-resource-groups-resource-group-providers-microsoft-codespaces-plans-resource-name" [
   subscription_id: string
   resource_group: string
   resource_name: string
@@ -3922,7 +3922,7 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans u
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Codespaces/plans/{resourceName}/deleteAllCodespaces
-export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-delete-all-codespaces create" [
+export def "post-api-v1-subscriptions-subscription-id-resource-groups-resource-group-providers-microsoft-codespaces-plans-resource-name-delete-all-codespaces" [
   subscription_id: string
   resource_group: string
   resource_name: string
@@ -3961,7 +3961,7 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-d
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Codespaces/plans/{resourceName}/deleteAllEnvironments
-export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-delete-all-environments create" [
+export def "post-api-v1-subscriptions-subscription-id-resource-groups-resource-group-providers-microsoft-codespaces-plans-resource-name-delete-all-environments" [
   subscription_id: string
   resource_group: string
   resource_name: string
@@ -4000,7 +4000,7 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-d
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Codespaces/plans/{resourceName}/readAllCodespaces
-export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-read-all-codespaces create" [
+export def "post-api-v1-subscriptions-subscription-id-resource-groups-resource-group-providers-microsoft-codespaces-plans-resource-name-read-all-codespaces" [
   subscription_id: string
   resource_group: string
   resource_name: string
@@ -4039,7 +4039,7 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-r
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Codespaces/plans/{resourceName}/readAllEnvironments
-export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-read-all-environments create" [
+export def "post-api-v1-subscriptions-subscription-id-resource-groups-resource-group-providers-microsoft-codespaces-plans-resource-name-read-all-environments" [
   subscription_id: string
   resource_group: string
   resource_name: string
@@ -4078,7 +4078,7 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-r
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Codespaces/plans/{resourceName}/readDelegates
-export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-read-delegates create" [
+export def "post-api-v1-subscriptions-subscription-id-resource-groups-resource-group-providers-microsoft-codespaces-plans-resource-name-read-delegates" [
   subscription_id: string
   resource_group: string
   resource_name: string
@@ -4115,7 +4115,7 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-r
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Codespaces/plans/{resourceName}/resourceCreationCompleted
-export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-resource-creation-completed create" [
+export def "post-api-v1-subscriptions-subscription-id-resource-groups-resource-group-providers-microsoft-codespaces-plans-resource-name-resource-creation-completed" [
   subscription_id: string
   resource_group: string
   resource_name: string
@@ -4155,7 +4155,7 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-r
 #
 # --identity shape: {principalId?: string, tenantId?: string, type?: string}
 # --properties shape: {defaultCodespaceSku?: string, defaultEnvironmentSku?: string, encryption?: record, userId?: string, vnetProperties?: record}
-export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-resource-creation-validate create" [
+export def "post-api-v1-subscriptions-subscription-id-resource-groups-resource-group-providers-microsoft-codespaces-plans-resource-name-resource-creation-validate" [
   subscription_id: string
   resource_group: string
   resource_name: string
@@ -4203,7 +4203,7 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-r
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Codespaces/plans/{resourceName}/resourceDeletionValidate
-export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-resource-deletion-validate create" [
+export def "post-api-v1-subscriptions-subscription-id-resource-groups-resource-group-providers-microsoft-codespaces-plans-resource-name-resource-deletion-validate" [
   subscription_id: string
   resource_group: string
   resource_name: string
@@ -4243,7 +4243,7 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-r
 #
 # --identity shape: {principalId?: string, tenantId?: string, type?: string}
 # --properties shape: {defaultCodespaceSku?: string, defaultEnvironmentSku?: string, encryption?: record, userId?: string, vnetProperties?: record}
-export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-resource-patch-completed create" [
+export def "post-api-v1-subscriptions-subscription-id-resource-groups-resource-group-providers-microsoft-codespaces-plans-resource-name-resource-patch-completed" [
   subscription_id: string
   resource_group: string
   resource_name: string
@@ -4291,7 +4291,7 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-r
 #
 # --identity shape: {principalId?: string, tenantId?: string, type?: string}
 # --properties shape: {defaultCodespaceSku?: string, defaultEnvironmentSku?: string, encryption?: record, userId?: string, vnetProperties?: record}
-export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-resource-patch-validate create" [
+export def "post-api-v1-subscriptions-subscription-id-resource-groups-resource-group-providers-microsoft-codespaces-plans-resource-name-resource-patch-validate" [
   subscription_id: string
   resource_group: string
   resource_name: string
@@ -4336,7 +4336,7 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-r
 #
 # --identity shape: {principalId?: string, tenantId?: string, type?: string}
 # --properties shape: {defaultCodespaceSku?: string, defaultEnvironmentSku?: string, encryption?: record, userId?: string, vnetProperties?: record}
-export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-resource-read-begin create-by-subscription-id-resource-group-resource-name" [
+export def "post-api-v1-subscriptions-subscription-id-resource-groups-resource-group-providers-microsoft-codespaces-plans-resource-name-resource-read-begin" [
   subscription_id: string
   resource_group: string
   resource_name: string
@@ -4384,7 +4384,7 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-r
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Codespaces/plans/{resourceName}/writeCodespaces
-export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-write-codespaces create" [
+export def "post-api-v1-subscriptions-subscription-id-resource-groups-resource-group-providers-microsoft-codespaces-plans-resource-name-write-codespaces" [
   subscription_id: string
   resource_group: string
   resource_name: string
@@ -4425,7 +4425,7 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-w
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Codespaces/plans/{resourceName}/writeDelegates
 #
 # --identity shape: {displayName?: string, id?: string, username?: string}
-export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-write-delegates create" [
+export def "post-api-v1-subscriptions-subscription-id-resource-groups-resource-group-providers-microsoft-codespaces-plans-resource-name-write-delegates" [
   subscription_id: string
   resource_group: string
   resource_name: string
@@ -4470,7 +4470,7 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-w
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Codespaces/plans/{resourceName}/writeEnvironments
-export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-write-environments create" [
+export def "post-api-v1-subscriptions-subscription-id-resource-groups-resource-group-providers-microsoft-codespaces-plans-resource-name-write-environments" [
   subscription_id: string
   resource_group: string
   resource_name: string
@@ -4511,7 +4511,7 @@ export def "subscriptions-resource-groups-providers-microsoft-codespaces-plans-w
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.VSOnline/plans/resourceReadBegin
 #
 # --value item shape: {id?: string, identity?: record, location?: string, name?: string, properties?: record, provisioningState?: string, tags?: record, type?: string}
-export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-resource-read-begin create-by-subscription-id-resource-group" [
+export def "post-api-v1-subscriptions-subscription-id-resource-groups-resource-group-providers-microsoft-vs-online-plans-resource-read-begin" [
   subscription_id: string
   resource_group: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4553,7 +4553,7 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-re
 #
 # --identity shape: {principalId?: string, tenantId?: string, type?: string}
 # --properties shape: {defaultCodespaceSku?: string, defaultEnvironmentSku?: string, encryption?: record, userId?: string, vnetProperties?: record}
-export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans update" [
+export def "put-api-v1-subscriptions-subscription-id-resource-groups-resource-group-providers-microsoft-vs-online-plans-resource-name" [
   subscription_id: string
   resource_group: string
   resource_name: string
@@ -4604,7 +4604,7 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans up
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.VSOnline/plans/{resourceName}/deleteAllCodespaces
-export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-delete-all-codespaces create" [
+export def "post-api-v1-subscriptions-subscription-id-resource-groups-resource-group-providers-microsoft-vs-online-plans-resource-name-delete-all-codespaces" [
   subscription_id: string
   resource_group: string
   resource_name: string
@@ -4643,7 +4643,7 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-de
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.VSOnline/plans/{resourceName}/deleteAllEnvironments
-export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-delete-all-environments create" [
+export def "post-api-v1-subscriptions-subscription-id-resource-groups-resource-group-providers-microsoft-vs-online-plans-resource-name-delete-all-environments" [
   subscription_id: string
   resource_group: string
   resource_name: string
@@ -4682,7 +4682,7 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-de
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.VSOnline/plans/{resourceName}/readAllCodespaces
-export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-read-all-codespaces create" [
+export def "post-api-v1-subscriptions-subscription-id-resource-groups-resource-group-providers-microsoft-vs-online-plans-resource-name-read-all-codespaces" [
   subscription_id: string
   resource_group: string
   resource_name: string
@@ -4721,7 +4721,7 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-re
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.VSOnline/plans/{resourceName}/readAllEnvironments
-export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-read-all-environments create" [
+export def "post-api-v1-subscriptions-subscription-id-resource-groups-resource-group-providers-microsoft-vs-online-plans-resource-name-read-all-environments" [
   subscription_id: string
   resource_group: string
   resource_name: string
@@ -4760,7 +4760,7 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-re
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.VSOnline/plans/{resourceName}/readDelegates
-export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-read-delegates create" [
+export def "post-api-v1-subscriptions-subscription-id-resource-groups-resource-group-providers-microsoft-vs-online-plans-resource-name-read-delegates" [
   subscription_id: string
   resource_group: string
   resource_name: string
@@ -4797,7 +4797,7 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-re
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.VSOnline/plans/{resourceName}/resourceCreationCompleted
-export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-resource-creation-completed create" [
+export def "post-api-v1-subscriptions-subscription-id-resource-groups-resource-group-providers-microsoft-vs-online-plans-resource-name-resource-creation-completed" [
   subscription_id: string
   resource_group: string
   resource_name: string
@@ -4837,7 +4837,7 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-re
 #
 # --identity shape: {principalId?: string, tenantId?: string, type?: string}
 # --properties shape: {defaultCodespaceSku?: string, defaultEnvironmentSku?: string, encryption?: record, userId?: string, vnetProperties?: record}
-export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-resource-creation-validate create" [
+export def "post-api-v1-subscriptions-subscription-id-resource-groups-resource-group-providers-microsoft-vs-online-plans-resource-name-resource-creation-validate" [
   subscription_id: string
   resource_group: string
   resource_name: string
@@ -4885,7 +4885,7 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-re
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.VSOnline/plans/{resourceName}/resourceDeletionValidate
-export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-resource-deletion-validate create" [
+export def "post-api-v1-subscriptions-subscription-id-resource-groups-resource-group-providers-microsoft-vs-online-plans-resource-name-resource-deletion-validate" [
   subscription_id: string
   resource_group: string
   resource_name: string
@@ -4925,7 +4925,7 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-re
 #
 # --identity shape: {principalId?: string, tenantId?: string, type?: string}
 # --properties shape: {defaultCodespaceSku?: string, defaultEnvironmentSku?: string, encryption?: record, userId?: string, vnetProperties?: record}
-export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-resource-patch-completed create" [
+export def "post-api-v1-subscriptions-subscription-id-resource-groups-resource-group-providers-microsoft-vs-online-plans-resource-name-resource-patch-completed" [
   subscription_id: string
   resource_group: string
   resource_name: string
@@ -4973,7 +4973,7 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-re
 #
 # --identity shape: {principalId?: string, tenantId?: string, type?: string}
 # --properties shape: {defaultCodespaceSku?: string, defaultEnvironmentSku?: string, encryption?: record, userId?: string, vnetProperties?: record}
-export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-resource-patch-validate create" [
+export def "post-api-v1-subscriptions-subscription-id-resource-groups-resource-group-providers-microsoft-vs-online-plans-resource-name-resource-patch-validate" [
   subscription_id: string
   resource_group: string
   resource_name: string
@@ -5018,7 +5018,7 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-re
 #
 # --identity shape: {principalId?: string, tenantId?: string, type?: string}
 # --properties shape: {defaultCodespaceSku?: string, defaultEnvironmentSku?: string, encryption?: record, userId?: string, vnetProperties?: record}
-export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-resource-read-begin create-by-subscription-id-resource-group-resource-name" [
+export def "post-api-v1-subscriptions-subscription-id-resource-groups-resource-group-providers-microsoft-vs-online-plans-resource-name-resource-read-begin" [
   subscription_id: string
   resource_group: string
   resource_name: string
@@ -5066,7 +5066,7 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-re
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.VSOnline/plans/{resourceName}/writeCodespaces
-export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-write-codespaces create" [
+export def "post-api-v1-subscriptions-subscription-id-resource-groups-resource-group-providers-microsoft-vs-online-plans-resource-name-write-codespaces" [
   subscription_id: string
   resource_group: string
   resource_name: string
@@ -5107,7 +5107,7 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-wr
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.VSOnline/plans/{resourceName}/writeDelegates
 #
 # --identity shape: {displayName?: string, id?: string, username?: string}
-export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-write-delegates create" [
+export def "post-api-v1-subscriptions-subscription-id-resource-groups-resource-group-providers-microsoft-vs-online-plans-resource-name-write-delegates" [
   subscription_id: string
   resource_group: string
   resource_name: string
@@ -5152,7 +5152,7 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-wr
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.VSOnline/plans/{resourceName}/writeEnvironments
-export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-write-environments create" [
+export def "post-api-v1-subscriptions-subscription-id-resource-groups-resource-group-providers-microsoft-vs-online-plans-resource-name-write-environments" [
   subscription_id: string
   resource_group: string
   resource_name: string
@@ -5191,7 +5191,7 @@ export def "subscriptions-resource-groups-providers-microsoft-vs-online-plans-wr
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/{resourceGroup}/providers/Microsoft.Codespaces/plans/{resourceName}/deleteDelegates
-export def "subscriptions-providers-microsoft-codespaces-plans-delete-delegates create" [
+export def "post-api-v1-subscriptions-subscription-id-resource-group-providers-microsoft-codespaces-plans-resource-name-delete-delegates" [
   subscription_id: string
   resource_group: string
   resource_name: string
@@ -5228,7 +5228,7 @@ export def "subscriptions-providers-microsoft-codespaces-plans-delete-delegates 
 }
 
 # POST /api/v1/subscriptions/{subscriptionId}/{resourceGroup}/providers/Microsoft.VSOnline/plans/{resourceName}/deleteDelegates
-export def "subscriptions-providers-microsoft-vs-online-plans-delete-delegates create" [
+export def "post-api-v1-subscriptions-subscription-id-resource-group-providers-microsoft-vs-online-plans-resource-name-delete-delegates" [
   subscription_id: string
   resource_group: string
   resource_name: string
@@ -5265,7 +5265,7 @@ export def "subscriptions-providers-microsoft-vs-online-plans-delete-delegates c
 }
 
 # DELETE /api/v1/tenant/{tenantId}/Pool/{poolName}
-export def "tenant-pool delete" [
+export def "delete-api-v1-tenant-tenant-id-pool-pool-name" [
   tenant_id: string
   pool_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5300,7 +5300,7 @@ export def "tenant-pool delete" [
 }
 
 # GET /api/v1/tenant/{tenantId}/Pool/{poolName}
-export def "tenant-pool get" [
+export def "get-api-v1-tenant-tenant-id-pool-pool-name" [
   tenant_id: string
   pool_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5340,7 +5340,7 @@ export def "tenant-pool get" [
 # --domainUserCredentials shape: {domain: string, organizationalUnit?: string, passwordSecretIdentifier: string, userName: string}
 # --hotPoolSettings shape: {size?: int}
 # --vmSpecs shape: {diskType: "0 (StandardHDD)"|"1 (StandardSSD)"|"2 (PremiumSSD)", imageResourceId: string, size: string, subnetResourceId: string}
-export def "tenant-pool update-by-tenant-id-pool-name" [
+export def "patch-api-v1-tenant-tenant-id-pool-pool-name" [
   tenant_id: string
   pool_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5389,7 +5389,7 @@ export def "tenant-pool update-by-tenant-id-pool-name" [
 # --domainUserCredentials shape: {domain: string, organizationalUnit?: string, passwordSecretIdentifier: string, userName: string}
 # --hotPoolSettings shape: {size?: int}
 # --vmSpecs shape: {diskType: "0 (StandardHDD)"|"1 (StandardSSD)"|"2 (PremiumSSD)", imageResourceId: string, size: string, subnetResourceId: string}
-export def "tenant-pool update-by-tenant-id-pool-name-1" [
+export def "put-api-v1-tenant-tenant-id-pool-pool-name" [
   tenant_id: string
   pool_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5434,7 +5434,7 @@ export def "tenant-pool update-by-tenant-id-pool-name-1" [
 }
 
 # DELETE /api/v1/tenant/{tenantId}/PoolGroup/{poolGroupName}
-export def "tenant-pool-group delete" [
+export def "delete-api-v1-tenant-tenant-id-pool-group-pool-group-name" [
   tenant_id: string
   pool_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5469,7 +5469,7 @@ export def "tenant-pool-group delete" [
 }
 
 # GET /api/v1/tenant/{tenantId}/PoolGroup/{poolGroupName}
-export def "tenant-pool-group get" [
+export def "get-api-v1-tenant-tenant-id-pool-group-pool-group-name" [
   tenant_id: string
   pool_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5505,7 +5505,7 @@ export def "tenant-pool-group get" [
 }
 
 # PATCH /api/v1/tenant/{tenantId}/PoolGroup/{poolGroupName}
-export def "tenant-pool-group update-by-tenant-id-pool-group-name" [
+export def "patch-api-v1-tenant-tenant-id-pool-group-pool-group-name" [
   tenant_id: string
   pool_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5545,7 +5545,7 @@ export def "tenant-pool-group update-by-tenant-id-pool-group-name" [
 }
 
 # PUT /api/v1/tenant/{tenantId}/PoolGroup/{poolGroupName}
-export def "tenant-pool-group update-by-tenant-id-pool-group-name-1" [
+export def "put-api-v1-tenant-tenant-id-pool-group-pool-group-name" [
   tenant_id: string
   pool_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5586,7 +5586,7 @@ export def "tenant-pool-group update-by-tenant-id-pool-group-name-1" [
 }
 
 # GET /api/v1/tenant/{tenantId}/pool/{poolName}/Vm
-export def "tenant-pool-vm list" [
+export def "get-api-v1-tenant-tenant-id-pool-pool-name-vm" [
   tenant_id: string
   pool_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5622,7 +5622,7 @@ export def "tenant-pool-vm list" [
 }
 
 # DELETE /api/v1/tenant/{tenantId}/pool/{poolName}/Vm/{vmName}
-export def "tenant-pool-vm delete" [
+export def "delete-api-v1-tenant-tenant-id-pool-pool-name-vm-vm-name" [
   tenant_id: string
   pool_name: string
   vm_name: string
@@ -5659,7 +5659,7 @@ export def "tenant-pool-vm delete" [
 }
 
 # GET /api/v1/tenant/{tenantId}/pool/{poolName}/Vm/{vmName}
-export def "tenant-pool-vm get" [
+export def "get-api-v1-tenant-tenant-id-pool-pool-name-vm-vm-name" [
   tenant_id: string
   pool_name: string
   vm_name: string
@@ -5699,7 +5699,7 @@ export def "tenant-pool-vm get" [
 # PUT /api/v1/tenant/{tenantId}/pool/{poolName}/Vm/{vmName}
 #
 # --user shape: {userPrincipalName: string}
-export def "tenant-pool-vm update" [
+export def "put-api-v1-tenant-tenant-id-pool-pool-name-vm-vm-name" [
   tenant_id: string
   pool_name: string
   vm_name: string
@@ -5741,7 +5741,7 @@ export def "tenant-pool-vm update" [
 }
 
 # POST /api/v1/tenant/{tenantId}/pool/{poolName}/Vm/{vmName}/start
-export def "tenant-pool-vm-start create" [
+export def "post-api-v1-tenant-tenant-id-pool-pool-name-vm-vm-name-start" [
   tenant_id: string
   pool_name: string
   vm_name: string
@@ -5778,7 +5778,7 @@ export def "tenant-pool-vm-start create" [
 }
 
 # POST /api/v1/tenant/{tenantId}/pool/{poolName}/Vm/{vmName}/stop
-export def "tenant-pool-vm-stop create" [
+export def "post-api-v1-tenant-tenant-id-pool-pool-name-vm-vm-name-stop" [
   tenant_id: string
   pool_name: string
   vm_name: string
@@ -5815,7 +5815,7 @@ export def "tenant-pool-vm-stop create" [
 }
 
 # POST /api/v2/prebuilds/delete
-export def "prebuilds-delete create" [
+export def "post-api-v2-prebuilds-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5853,7 +5853,7 @@ export def "prebuilds-delete create" [
 }
 
 # DELETE /api/v2/prebuilds/repository/{repoId}/branch/{branchName}
-export def "prebuilds-repository-branch delete" [
+export def "delete-api-v2-prebuilds-repository-repo-id-branch-branch-name" [
   repo_id: int
   branch_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5892,7 +5892,7 @@ export def "prebuilds-repository-branch delete" [
 # --experimentalFeatures shape: {enableDynamicHttpsDetection?: bool, queueResourceAllocation?: bool, usePrebuildFastPathIfAvailable?: bool, usePrebuiltImages?: bool, useStorageV2?: bool}
 # --seed shape: {cloneUrl?: string, gitConfig?: record, recurseClone?: bool, repository?: record, seedMoniker?: string, seedType?: string}
 # --templateInfo shape: {container?: record, prebuildConfigurationId?: string, templateSizeInGB?: float, totalTimeSavingsInSeconds?: string, workFlowRunId?: string}
-export def "prebuilds-templates create" [
+export def "post-api-v2-prebuilds-templates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5937,7 +5937,7 @@ export def "prebuilds-templates create" [
 # GET /api/v2/prebuilds/templates/skus/repo/{repoId}/branch/{branchName}/hash/{prebuildHash}/location/{location}/devcontainerpath/{devContainerPath}
 #
 # operationId: GetPrebuildReadinessSkusRoute
-export def "prebuilds-templates-skus-repo-branch-hash-location-devcontainerpath get-readiness-route" [
+export def "get-prebuild-readiness-skus-route" [
   repo_id: string
   branch_name: string
   prebuild_hash: string
@@ -5982,7 +5982,7 @@ export def "prebuilds-templates-skus-repo-branch-hash-location-devcontainerpath 
 }
 
 # POST /api/v2/prebuilds/templates/updatemaxversions
-export def "prebuilds-templates-update-maxversions create" [
+export def "post-api-v2-prebuilds-templates-updatemaxversions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6020,7 +6020,7 @@ export def "prebuilds-templates-update-maxversions create" [
 }
 
 # POST /api/v2/prebuilds/templates/{templateId}/updatestatus
-export def "prebuilds-templates-update-status create" [
+export def "post-api-v2-prebuilds-templates-template-id-updatestatus" [
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6057,7 +6057,7 @@ export def "prebuilds-templates-update-status create" [
 }
 
 # GET /health
-export def "health get" [
+export def "get-health" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6088,7 +6088,7 @@ export def "health get" [
 }
 
 # GET /internal/Netmon/correlation
-export def "internal-netmon-correlation get" [
+export def "get-internal-netmon-correlation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6122,7 +6122,7 @@ export def "internal-netmon-correlation get" [
 }
 
 # GET /tunnelauth
-export def "tunnelauth get" [
+export def "get-tunnelauth" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6159,7 +6159,7 @@ export def "tunnelauth get" [
 }
 
 # POST /tunnelauth
-export def "tunnelauth create" [
+export def "post-tunnelauth" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6196,7 +6196,7 @@ export def "tunnelauth create" [
 }
 
 # GET /warmup
-export def "warmup get" [
+export def "get-warmup" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

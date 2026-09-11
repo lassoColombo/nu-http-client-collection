@@ -132,7 +132,7 @@ def version-completer [] { ["RECAPTCHA_ENTERPRISE" "RECAPTCHA_VERSION_UNSPECIFIE
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts-mfa-enrollment-finalize finalize" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "identitytoolkit-accounts-mfa-enrollment-finalize" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -158,7 +158,7 @@ export def commands []: nothing -> table {
 # operationId: identitytoolkit.accounts.mfaEnrollment.finalize
 # --phoneVerificationInfo shape: {androidVerificationProof?: string, code?: string, phoneNumber?: string, sessionInfo?: string}
 # --totpVerificationInfo shape: {sessionInfo?: string, verificationCode?: string}
-export def "accounts-mfa-enrollment-finalize finalize" [
+export def "identitytoolkit-accounts-mfa-enrollment-finalize" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -213,7 +213,7 @@ export def "accounts-mfa-enrollment-finalize finalize" [
 # POST /v2/accounts/mfaEnrollment:start
 # operationId: identitytoolkit.accounts.mfaEnrollment.start
 # --phoneEnrollmentInfo shape: {autoRetrievalInfo?: record, iosReceipt?: string, iosSecret?: string, phoneNumber?: string, playIntegrityToken?: string, recaptchaToken?: string, safetyNetToken?: string}
-export def "accounts-mfa-enrollment-start start" [
+export def "identitytoolkit-accounts-mfa-enrollment-start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -266,7 +266,7 @@ export def "accounts-mfa-enrollment-start start" [
 #
 # POST /v2/accounts/mfaEnrollment:withdraw
 # operationId: identitytoolkit.accounts.mfaEnrollment.withdraw
-export def "accounts-mfa-enrollment-withdraw create" [
+export def "identitytoolkit-accounts-mfa-enrollment-withdraw" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -320,7 +320,7 @@ export def "accounts-mfa-enrollment-withdraw create" [
 # operationId: identitytoolkit.accounts.mfaSignIn.finalize
 # --phoneVerificationInfo shape: {androidVerificationProof?: string, code?: string, phoneNumber?: string, sessionInfo?: string}
 # --totpVerificationInfo shape: {verificationCode?: string}
-export def "accounts-mfa-sign-in-finalize finalize" [
+export def "identitytoolkit-accounts-mfa-sign-in-finalize" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -375,7 +375,7 @@ export def "accounts-mfa-sign-in-finalize finalize" [
 # POST /v2/accounts/mfaSignIn:start
 # operationId: identitytoolkit.accounts.mfaSignIn.start
 # --phoneSignInInfo shape: {autoRetrievalInfo?: record, iosReceipt?: string, iosSecret?: string, phoneNumber?: string, playIntegrityToken?: string, recaptchaToken?: string, safetyNetToken?: string}
-export def "accounts-mfa-sign-in-start start" [
+export def "identitytoolkit-accounts-mfa-sign-in-start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -429,7 +429,7 @@ export def "accounts-mfa-sign-in-start start" [
 # POST /v2/accounts/passkeyEnrollment:finalize
 # operationId: identitytoolkit.accounts.passkeyEnrollment.finalize
 # --authenticatorRegistrationResponse shape: {authenticatorAttestationResponse?: record, credentialId?: string, credentialType?: string}
-export def "accounts-passkey-enrollment-finalize finalize" [
+export def "identitytoolkit-accounts-passkey-enrollment-finalize" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -481,7 +481,7 @@ export def "accounts-passkey-enrollment-finalize finalize" [
 #
 # POST /v2/accounts/passkeyEnrollment:start
 # operationId: identitytoolkit.accounts.passkeyEnrollment.start
-export def "accounts-passkey-enrollment-start start" [
+export def "identitytoolkit-accounts-passkey-enrollment-start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -533,7 +533,7 @@ export def "accounts-passkey-enrollment-start start" [
 # POST /v2/accounts/passkeySignIn:finalize
 # operationId: identitytoolkit.accounts.passkeySignIn.finalize
 # --authenticatorAuthenticationResponse shape: {authenticatorAssertionResponse?: record, credentialId?: string, credentialType?: string}
-export def "accounts-passkey-sign-in-finalize finalize" [
+export def "identitytoolkit-accounts-passkey-sign-in-finalize" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -585,7 +585,7 @@ export def "accounts-passkey-sign-in-finalize finalize" [
 #
 # POST /v2/accounts/passkeySignIn:start
 # operationId: identitytoolkit.accounts.passkeySignIn.start
-export def "accounts-passkey-sign-in-start start" [
+export def "identitytoolkit-accounts-passkey-sign-in-start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -636,7 +636,7 @@ export def "accounts-passkey-sign-in-start start" [
 #
 # POST /v2/accounts:revokeToken
 # operationId: identitytoolkit.accounts.revokeToken
-export def "accounts-revoke-token delete" [
+export def "identitytoolkit-accounts-revoke-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -691,7 +691,7 @@ export def "accounts-revoke-token delete" [
 #
 # GET /v2/defaultSupportedIdps
 # operationId: identitytoolkit.defaultSupportedIdps.list
-export def "default-supported-idps list" [
+export def "identitytoolkit-default-supported-idps-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -739,7 +739,7 @@ export def "default-supported-idps list" [
 #
 # GET /v2/recaptchaConfig
 # operationId: identitytoolkit.getRecaptchaConfig
-export def "recaptcha-config get" [
+export def "identitytoolkit-get-recaptcha-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -788,7 +788,7 @@ export def "recaptcha-config get" [
 #
 # DELETE /v2/{name}
 # operationId: identitytoolkit.projects.tenants.oauthIdpConfigs.delete
-export def "projects delete" [
+export def "identitytoolkit-projects-tenants-oauth-idp-configs-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -836,7 +836,7 @@ export def "projects delete" [
 #
 # GET /v2/{name}
 # operationId: identitytoolkit.projects.tenants.oauthIdpConfigs.get
-export def "projects get" [
+export def "identitytoolkit-projects-tenants-oauth-idp-configs-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -885,7 +885,7 @@ export def "projects get" [
 # PATCH /v2/{name}
 # operationId: identitytoolkit.projects.tenants.oauthIdpConfigs.patch
 # --responseType shape: {code?: bool, idToken?: bool, token?: bool}
-export def "projects update" [
+export def "identitytoolkit-projects-tenants-oauth-idp-configs-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -944,7 +944,7 @@ export def "projects update" [
 #
 # GET /v2/{parent}/defaultSupportedIdpConfigs
 # operationId: identitytoolkit.projects.tenants.defaultSupportedIdpConfigs.list
-export def "default-supported-idp-configs list" [
+export def "identitytoolkit-projects-tenants-default-supported-idp-configs-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -995,7 +995,7 @@ export def "default-supported-idp-configs list" [
 # POST /v2/{parent}/defaultSupportedIdpConfigs
 # operationId: identitytoolkit.projects.tenants.defaultSupportedIdpConfigs.create
 # --appleSignInConfig shape: {bundleIds?: list<string>, codeFlowConfig?: record}
-export def "default-supported-idp-configs create" [
+export def "identitytoolkit-projects-tenants-default-supported-idp-configs-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1052,7 +1052,7 @@ export def "default-supported-idp-configs create" [
 #
 # GET /v2/{parent}/inboundSamlConfigs
 # operationId: identitytoolkit.projects.tenants.inboundSamlConfigs.list
-export def "inbound-saml-configs list" [
+export def "identitytoolkit-projects-tenants-inbound-saml-configs-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1104,7 +1104,7 @@ export def "inbound-saml-configs list" [
 # operationId: identitytoolkit.projects.tenants.inboundSamlConfigs.create
 # --idpConfig shape: {idpCertificates?: list, idpEntityId?: string, signRequest?: bool, ssoUrl?: string}
 # --spConfig shape: {callbackUri?: string, spEntityId?: string}
-export def "inbound-saml-configs create" [
+export def "identitytoolkit-projects-tenants-inbound-saml-configs-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1161,7 +1161,7 @@ export def "inbound-saml-configs create" [
 #
 # GET /v2/{parent}/oauthIdpConfigs
 # operationId: identitytoolkit.projects.tenants.oauthIdpConfigs.list
-export def "oauth-idp-configs list" [
+export def "identitytoolkit-projects-tenants-oauth-idp-configs-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1212,7 +1212,7 @@ export def "oauth-idp-configs list" [
 # POST /v2/{parent}/oauthIdpConfigs
 # operationId: identitytoolkit.projects.tenants.oauthIdpConfigs.create
 # --responseType shape: {code?: bool, idToken?: bool, token?: bool}
-export def "oauth-idp-configs create" [
+export def "identitytoolkit-projects-tenants-oauth-idp-configs-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1271,7 +1271,7 @@ export def "oauth-idp-configs create" [
 #
 # GET /v2/{parent}/tenants
 # operationId: identitytoolkit.projects.tenants.list
-export def "tenants list" [
+export def "identitytoolkit-projects-tenants-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1328,7 +1328,7 @@ export def "tenants list" [
 # --monitoring shape: {requestLogging?: record}
 # --recaptchaConfig shape: {emailPasswordEnforcementState?: "RECAPTCHA_PROVIDER_ENFORCEMENT_STATE_UNSPECIFIED"|"OFF"|"AUDIT"|"ENFORCE", managedRules?: list, useAccountDefender?: bool}
 # --smsRegionConfig shape: {allowByDefault?: record, allowlistOnly?: record}
-export def "tenants create" [
+export def "identitytoolkit-projects-tenants-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1394,7 +1394,7 @@ export def "tenants create" [
 #
 # POST /v2/{project}/identityPlatform:initializeAuth
 # operationId: identitytoolkit.projects.identityPlatform.initializeAuth
-export def "identity-platform-initialize-auth create" [
+export def "identitytoolkit-projects-identity-platform-initialize-auth" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1447,7 +1447,7 @@ export def "identity-platform-initialize-auth create" [
 # POST /v2/{resource}:getIamPolicy
 # operationId: identitytoolkit.projects.tenants.getIamPolicy
 # --options shape: {requestedPolicyVersion?: int}
-export def "projects get-iam-policy" [
+export def "identitytoolkit-projects-tenants-get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1500,7 +1500,7 @@ export def "projects get-iam-policy" [
 # POST /v2/{resource}:setIamPolicy
 # operationId: identitytoolkit.projects.tenants.setIamPolicy
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
-export def "projects update-iam-policy" [
+export def "identitytoolkit-projects-tenants-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1553,7 +1553,7 @@ export def "projects update-iam-policy" [
 #
 # POST /v2/{resource}:testIamPermissions
 # operationId: identitytoolkit.projects.tenants.testIamPermissions
-export def "projects test-iam-permissions" [
+export def "identitytoolkit-projects-tenants-test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

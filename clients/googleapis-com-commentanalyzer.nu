@@ -112,7 +112,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1alpha1-comments-analyze create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "commentanalyzer-comments-analyze" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -138,7 +138,7 @@ export def commands []: nothing -> table {
 # operationId: commentanalyzer.comments.analyze
 # --comment shape: {text?: string, type?: "TEXT_TYPE_UNSPECIFIED"|"PLAIN_TEXT"|"HTML"}
 # --context shape: {articleAndParentComment?: record, entries?: list}
-export def "v1alpha1-comments-analyze create" [
+export def "commentanalyzer-comments-analyze" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -199,7 +199,7 @@ export def "v1alpha1-comments-analyze create" [
 # operationId: commentanalyzer.comments.suggestscore
 # --comment shape: {text?: string, type?: "TEXT_TYPE_UNSPECIFIED"|"PLAIN_TEXT"|"HTML"}
 # --context shape: {articleAndParentComment?: record, entries?: list}
-export def "v1alpha1-comments-suggestscore create" [
+export def "commentanalyzer-comments-suggestscore" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)

@@ -110,7 +110,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-compute-admin-locations-artifact-types-vm-extension list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "vm-extensions-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -134,7 +134,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Compute.Admin/locations/{location}/artifactTypes/VMExtension
 # operationId: VMExtensions_List
-export def "subscriptions-providers-microsoft-compute-admin-locations-artifact-types-vm-extension list" [
+export def "vm-extensions-list" [
   subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -174,7 +174,7 @@ export def "subscriptions-providers-microsoft-compute-admin-locations-artifact-t
 #
 # DELETE /subscriptions/{subscriptionId}/providers/Microsoft.Compute.Admin/locations/{location}/artifactTypes/VMExtension/publishers/{publisher}/types/{type}/versions/{version}
 # operationId: VMExtensions_Delete
-export def "subscriptions-providers-microsoft-compute-admin-locations-artifact-types-vm-extension-publishers-types-versions delete" [
+export def "vm-extensions-delete" [
   subscription_id: string
   location: string
   publisher: string
@@ -220,7 +220,7 @@ export def "subscriptions-providers-microsoft-compute-admin-locations-artifact-t
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Compute.Admin/locations/{location}/artifactTypes/VMExtension/publishers/{publisher}/types/{type}/versions/{version}
 # operationId: VMExtensions_Get
-export def "subscriptions-providers-microsoft-compute-admin-locations-artifact-types-vm-extension-publishers-types-versions get" [
+export def "vm-extensions-get" [
   subscription_id: string
   location: string
   publisher: string
@@ -267,7 +267,7 @@ export def "subscriptions-providers-microsoft-compute-admin-locations-artifact-t
 # PUT /subscriptions/{subscriptionId}/providers/Microsoft.Compute.Admin/locations/{location}/artifactTypes/VMExtension/publishers/{publisher}/types/{type}/versions/{version}
 # operationId: VMExtensions_Create
 # --properties shape: {computeRole?: string, isSystemExtension?: bool, provisioningState?: "Creating"|"Failed"|"Succeeded"|"Canceled", sourceBlob?: record, supportMultipleExtensions?: bool, vmOsType?: "Unknown"|"Windows"|"Linux", vmScaleSetEnabled?: bool}
-export def "subscriptions-providers-microsoft-compute-admin-locations-artifact-types-vm-extension-publishers-types-versions create" [
+export def "vm-extensions-create" [
   subscription_id: string
   location: string
   publisher: string

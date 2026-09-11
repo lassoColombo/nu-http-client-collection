@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["token"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "dictionaries-countries get-dict" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-countries-dict" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/v1/dictionaries/countries
 # operationId: getCountriesDict
-export def "dictionaries-countries get-dict" [
+export def "get-countries-dict" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -176,7 +176,7 @@ export def "dictionaries-countries get-dict" [
 #
 # GET /api/v1/dictionaries/currencies
 # operationId: getCurrenciesDict
-export def "dictionaries-currencies get-dict" [
+export def "get-currencies-dict" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -210,7 +210,7 @@ export def "dictionaries-currencies get-dict" [
 #
 # GET /api/v1/dictionaries/product_types
 # operationId: getProductTypesDict
-export def "dictionaries-product-types get-dict" [
+export def "get-product-types-dict" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -244,7 +244,7 @@ export def "dictionaries-product-types get-dict" [
 #
 # GET /api/v1/geoip
 # operationId: locateMyIP
-export def "geoip get-locate-my-ip" [
+export def "locate-my-ip" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -278,7 +278,7 @@ export def "geoip get-locate-my-ip" [
 #
 # GET /api/v1/geoip/{ip}
 # operationId: locateGivenIP
-export def "geoip get-locate-given" [
+export def "locate-given-ip" [
   ip: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -314,7 +314,7 @@ export def "geoip get-locate-given" [
 #
 # GET /api/v1/reports/domestic/summary
 # operationId: getDomesticSummaryReport
-export def "reports-domestic-summary get" [
+export def "get-domestic-summary-report" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -355,7 +355,7 @@ export def "reports-domestic-summary get" [
 #
 # GET /api/v1/reports/eu/vies
 # operationId: getEuViesReport
-export def "reports-eu-vies get" [
+export def "get-eu-vies-report" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -400,7 +400,7 @@ export def "reports-eu-vies get" [
 #
 # GET /api/v1/settlement/detailed_refunds
 # operationId: getDetailedRefunds
-export def "settlement-detailed-refunds get" [
+export def "get-detailed-refunds" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -441,7 +441,7 @@ export def "settlement-detailed-refunds get" [
 #
 # GET /api/v1/settlement/refunds
 # operationId: getRefunds
-export def "settlement-refunds get" [
+export def "get-refunds" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -480,7 +480,7 @@ export def "settlement-refunds get" [
 #
 # GET /api/v1/settlement/summary/{quarter}
 # operationId: getSettlementSummary
-export def "settlement-summary get" [
+export def "get-settlement-summary" [
   quarter: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -521,7 +521,7 @@ export def "settlement-summary get" [
 #
 # GET /api/v1/settlement/{quarter}
 # operationId: getSettlement
-export def "settlement get" [
+export def "get-settlement" [
   quarter: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -567,7 +567,7 @@ export def "settlement get" [
 #
 # GET /api/v1/stats/settlement/by_country
 # operationId: getSettlementStatsByCountry
-export def "stats-settlement-by-country get" [
+export def "get-settlement-stats-by-country" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -604,7 +604,7 @@ export def "stats-settlement-by-country get" [
 #
 # GET /api/v1/stats/settlement/by_taxation_type
 # operationId: getSettlementStatsByTaxationType
-export def "stats-settlement-by-taxation-type get" [
+export def "get-settlement-stats-by-taxation-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -641,7 +641,7 @@ export def "stats-settlement-by-taxation-type get" [
 #
 # GET /api/v1/stats/settlement/daily
 # operationId: getDailySettlementStats
-export def "stats-settlement-daily get" [
+export def "get-daily-settlement-stats" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -679,7 +679,7 @@ export def "stats-settlement-daily get" [
 #
 # GET /api/v1/stats/transactions
 # operationId: getTransactionsStats
-export def "stats-transactions get" [
+export def "get-transactions-stats" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -717,7 +717,7 @@ export def "stats-transactions get" [
 #
 # GET /api/v1/stats/transactions/by_country
 # operationId: getTransactionsStatsByCountry
-export def "stats-transactions-by-country get" [
+export def "get-transactions-stats-by-country" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -755,7 +755,7 @@ export def "stats-transactions-by-country get" [
 #
 # GET /api/v1/tax/calculate
 # operationId: calculateSimpleTax
-export def "tax-calculate get-simple" [
+export def "calculate-simple-tax" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -806,7 +806,7 @@ export def "tax-calculate get-simple" [
 # POST /api/v1/tax/calculate
 # operationId: calculateTax
 # --transaction shape: {additional_currencies?: record, billing_country_code?: string, buyer_credit_card_prefix?: string, buyer_email?: string, buyer_ip?: string, buyer_name?: string, buyer_tax_number?: string, comments?: string, currency_code: string, custom_data?: string, custom_fields?: list, custom_id?: string, customer_id?: string, description?: string, evidence?: record, force_country_code?: string, invoice_address?: record, invoice_date?: string, invoice_number?: string, invoice_place?: string, note?: string, ... (10 more fields)}
-export def "tax-calculate create" [
+export def "calculate-tax" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -844,7 +844,7 @@ export def "tax-calculate create" [
 #
 # GET /api/v1/tax/location/calculate
 # operationId: calculateTaxLocation
-export def "tax-location-calculate get" [
+export def "calculate-tax-location" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -881,7 +881,7 @@ export def "tax-location-calculate get" [
 #
 # GET /api/v1/tax/vat_numbers/{tax_number}/validate
 # operationId: validateTaxNumber
-export def "tax-vat-numbers-validate validate" [
+export def "validate-tax-number" [
   tax_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -919,7 +919,7 @@ export def "tax-vat-numbers-validate validate" [
 #
 # GET /api/v1/transactions
 # operationId: listTransactions
-export def "transactions list" [
+export def "list-transactions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -972,7 +972,7 @@ export def "transactions list" [
 # POST /api/v1/transactions
 # operationId: createTransaction
 # --transaction shape: {additional_currencies?: record, billing_country_code?: string, buyer_credit_card_prefix?: string, buyer_email?: string, buyer_ip?: string, buyer_name?: string, buyer_tax_number?: string, comments?: string, currency_code: string, custom_data?: string, custom_fields?: list, custom_id?: string, customer_id?: string, description?: string, evidence?: record, force_country_code?: string, invoice_address?: record, invoice_date?: string, invoice_number?: string, invoice_place?: string, note?: string, ... (10 more fields)}
-export def "transactions create" [
+export def "create-transaction" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1011,7 +1011,7 @@ export def "transactions create" [
 #
 # DELETE /api/v1/transactions/{key}
 # operationId: cancelTransaction
-export def "transactions cancel" [
+export def "cancel-transaction" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1047,7 +1047,7 @@ export def "transactions cancel" [
 #
 # GET /api/v1/transactions/{key}
 # operationId: getTransaction
-export def "transactions get" [
+export def "get-transaction" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1084,7 +1084,7 @@ export def "transactions get" [
 # PUT /api/v1/transactions/{key}
 # operationId: updateTransaction
 # --transaction shape: {additional_currencies?: record, amount?: float, billing_country_code?: string, buyer_credit_card_prefix?: string, buyer_email?: string, buyer_ip?: string, buyer_name?: string, buyer_tax_number?: string, buyer_tax_number_valid?: bool, comments?: string, confirm_timestamp?: string, countries?: record, create_timestamp?: string, currency_code: string, custom_data?: string, custom_fields?: list, custom_id?: string, customer_id?: string, deducted_tax_amount?: float, description?: string, ... (33 more fields)}
-export def "transactions update" [
+export def "update-transaction" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1125,7 +1125,7 @@ export def "transactions update" [
 # POST /api/v1/transactions/{key}/confirm
 # operationId: confirmTransaction
 # --transaction shape: {additional_currencies?: record, billing_country_code?: string, buyer_credit_card_prefix?: string, buyer_email?: string, buyer_ip?: string, buyer_name?: string, buyer_tax_number?: string, comments?: string, currency_code?: string, custom_data?: string, custom_fields?: list, custom_id?: string, customer_id?: string, description?: string, evidence?: record, force_country_code?: string, invoice_address?: record, invoice_date?: string, invoice_number?: string, invoice_place?: string, note?: string, ... (10 more fields)}
-export def "transactions-confirm confirm" [
+export def "confirm-transaction" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1165,7 +1165,7 @@ export def "transactions-confirm confirm" [
 #
 # POST /api/v1/transactions/{key}/invoice/refunds/{refund_note_number}/send_email
 # operationId: emailRefund
-export def "transactions-invoice-refunds-send-email create" [
+export def "email-refund" [
   key: string
   refund_note_number: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1207,7 +1207,7 @@ export def "transactions-invoice-refunds-send-email create" [
 #
 # POST /api/v1/transactions/{key}/invoice/send_email
 # operationId: emailInvoice
-export def "transactions-invoice-send-email create" [
+export def "email-invoice" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1247,7 +1247,7 @@ export def "transactions-invoice-send-email create" [
 #
 # GET /api/v1/transactions/{key}/payments
 # operationId: listPayments
-export def "transactions-payments list" [
+export def "list-payments" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1286,7 +1286,7 @@ export def "transactions-payments list" [
 #
 # POST /api/v1/transactions/{key}/payments
 # operationId: createPayment
-export def "transactions-payments create" [
+export def "create-payment" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1328,7 +1328,7 @@ export def "transactions-payments create" [
 #
 # POST /api/v1/transactions/{key}/payments/capture
 # operationId: capturePayment
-export def "transactions-payments-capture create" [
+export def "capture-payment" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1364,7 +1364,7 @@ export def "transactions-payments-capture create" [
 #
 # GET /api/v1/transactions/{key}/refunds
 # operationId: listRefunds
-export def "transactions-refunds list" [
+export def "list-refunds" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1400,7 +1400,7 @@ export def "transactions-refunds list" [
 #
 # POST /api/v1/transactions/{key}/refunds
 # operationId: createRefund
-export def "transactions-refunds create" [
+export def "create-refund" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1445,7 +1445,7 @@ export def "transactions-refunds create" [
 # POST /api/v1/transactions/{key}/unconfirm
 # operationId: unconfirmTransaction
 # --transaction shape: {additional_currencies?: record, billing_country_code?: string, buyer_credit_card_prefix?: string, buyer_email?: string, buyer_ip?: string, buyer_name?: string, buyer_tax_number?: string, comments?: string, currency_code?: string, custom_data?: string, custom_fields?: list, custom_id?: string, customer_id?: string, description?: string, evidence?: record, force_country_code?: string, invoice_address?: record, invoice_date?: string, invoice_number?: string, invoice_place?: string, note?: string, ... (10 more fields)}
-export def "transactions-unconfirm create" [
+export def "unconfirm-transaction" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1485,7 +1485,7 @@ export def "transactions-unconfirm create" [
 #
 # POST /api/v1/verification/sms
 # operationId: createSMSToken
-export def "verification-sms create-token" [
+export def "create-sms-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1524,7 +1524,7 @@ export def "verification-sms create-token" [
 #
 # GET /api/v1/verification/sms/{token}
 # operationId: verifySMSToken
-export def "verification-sms verify" [
+export def "verify-sms-token" [
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

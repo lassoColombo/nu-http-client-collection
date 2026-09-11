@@ -119,7 +119,7 @@ def x-amz-target-completer-18 [] { ["DataPipeline.ValidatePipelineDefinition"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-activate-pipeline" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "activate-pipeline" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -143,7 +143,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: ActivatePipeline
-export def "api create-activate-pipeline" [
+export def "activate-pipeline" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -193,7 +193,7 @@ export def "api create-activate-pipeline" [
 #
 # POST /
 # operationId: AddTags
-export def "api create-tags" [
+export def "add-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -242,7 +242,7 @@ export def "api create-tags" [
 #
 # POST /
 # operationId: CreatePipeline
-export def "api create-pipeline" [
+export def "create-pipeline" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -293,7 +293,7 @@ export def "api create-pipeline" [
 #
 # POST /
 # operationId: DeactivatePipeline
-export def "api create-deactivate-pipeline" [
+export def "deactivate-pipeline" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -342,7 +342,7 @@ export def "api create-deactivate-pipeline" [
 #
 # POST /
 # operationId: DeletePipeline
-export def "api delete-pipeline" [
+export def "delete-pipeline" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -390,7 +390,7 @@ export def "api delete-pipeline" [
 #
 # POST /
 # operationId: DescribeObjects
-export def "api get-objects" [
+export def "describe-objects" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -443,7 +443,7 @@ export def "api get-objects" [
 #
 # POST /
 # operationId: DescribePipelines
-export def "api get-pipelines" [
+export def "describe-pipelines" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -491,7 +491,7 @@ export def "api get-pipelines" [
 #
 # POST /
 # operationId: EvaluateExpression
-export def "api create-evaluate-expression" [
+export def "evaluate-expression" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -541,7 +541,7 @@ export def "api create-evaluate-expression" [
 #
 # POST /
 # operationId: GetPipelineDefinition
-export def "api get-pipeline-definition" [
+export def "get-pipeline-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -590,7 +590,7 @@ export def "api get-pipeline-definition" [
 #
 # POST /
 # operationId: ListPipelines
-export def "api list-pipelines" [
+export def "list-pipelines" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -640,7 +640,7 @@ export def "api list-pipelines" [
 #
 # POST /
 # operationId: PollForTask
-export def "api create-poll-for-task" [
+export def "poll-for-task" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -690,7 +690,7 @@ export def "api create-poll-for-task" [
 #
 # POST /
 # operationId: PutPipelineDefinition
-export def "api update-pipeline-definition" [
+export def "put-pipeline-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -741,7 +741,7 @@ export def "api update-pipeline-definition" [
 #
 # POST /
 # operationId: QueryObjects
-export def "api list-objects" [
+export def "query-objects" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -796,7 +796,7 @@ export def "api list-objects" [
 #
 # POST /
 # operationId: RemoveTags
-export def "api delete-tags" [
+export def "remove-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -845,7 +845,7 @@ export def "api delete-tags" [
 #
 # POST /
 # operationId: ReportTaskProgress
-export def "api create-report-task-progress" [
+export def "report-task-progress" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -894,7 +894,7 @@ export def "api create-report-task-progress" [
 #
 # POST /
 # operationId: ReportTaskRunnerHeartbeat
-export def "api create-report-task-runner-heartbeat" [
+export def "report-task-runner-heartbeat" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -944,7 +944,7 @@ export def "api create-report-task-runner-heartbeat" [
 #
 # POST /
 # operationId: SetStatus
-export def "api update-status" [
+export def "set-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -994,7 +994,7 @@ export def "api update-status" [
 #
 # POST /
 # operationId: SetTaskStatus
-export def "api update-task-status" [
+export def "set-task-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1046,7 +1046,7 @@ export def "api update-task-status" [
 #
 # POST /
 # operationId: ValidatePipelineDefinition
-export def "api validate-pipeline-definition" [
+export def "validate-pipeline-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

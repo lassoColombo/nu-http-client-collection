@@ -118,7 +118,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "devices-query list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "homegraph-devices-query" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -143,7 +143,7 @@ export def commands []: nothing -> table {
 # POST /v1/devices:query
 # operationId: homegraph.devices.query
 # --inputs item shape: {payload?: record}
-export def "devices-query list" [
+export def "homegraph-devices-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -196,7 +196,7 @@ export def "devices-query list" [
 # POST /v1/devices:reportStateAndNotification
 # operationId: homegraph.devices.reportStateAndNotification
 # --payload shape: {devices?: record}
-export def "devices-report-state-and-notification create" [
+export def "homegraph-devices-report-state-and-notification" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -250,7 +250,7 @@ export def "devices-report-state-and-notification create" [
 #
 # POST /v1/devices:requestSync
 # operationId: homegraph.devices.requestSync
-export def "devices-request-sync request" [
+export def "homegraph-devices-request-sync" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -301,7 +301,7 @@ export def "devices-request-sync request" [
 #
 # POST /v1/devices:sync
 # operationId: homegraph.devices.sync
-export def "devices-sync sync" [
+export def "homegraph-devices-sync" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -352,7 +352,7 @@ export def "devices-sync sync" [
 #
 # DELETE /v1/{agentUserId}
 # operationId: homegraph.agentUsers.delete
-export def "agent-users delete" [
+export def "homegraph-agent-users-delete" [
   agent_user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

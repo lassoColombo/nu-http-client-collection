@@ -125,7 +125,7 @@ def granularity-completer [] { ["all" "day" "hour"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "e-sim-profiles list-esim" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-esim-profile" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -149,7 +149,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/ESimProfiles
 # operationId: ListEsimProfile
-export def "e-sim-profiles list-esim" [
+export def "list-esim-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -190,7 +190,7 @@ export def "e-sim-profiles list-esim" [
 #
 # POST /v1/ESimProfiles
 # operationId: CreateEsimProfile
-export def "e-sim-profiles create-esim" [
+export def "create-esim-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -232,7 +232,7 @@ export def "e-sim-profiles create-esim" [
 #
 # GET /v1/ESimProfiles/{Sid}
 # operationId: FetchEsimProfile
-export def "e-sim-profiles get-esim" [
+export def "fetch-esim-profile" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -268,7 +268,7 @@ export def "e-sim-profiles get-esim" [
 #
 # GET /v1/Fleets
 # operationId: ListFleet
-export def "fleets list" [
+export def "list-fleet" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -307,7 +307,7 @@ export def "fleets list" [
 #
 # POST /v1/Fleets
 # operationId: CreateFleet
-export def "fleets create" [
+export def "create-fleet" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -354,7 +354,7 @@ export def "fleets create" [
 #
 # GET /v1/Fleets/{Sid}
 # operationId: FetchFleet
-export def "fleets get" [
+export def "fetch-fleet" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -390,7 +390,7 @@ export def "fleets get" [
 #
 # POST /v1/Fleets/{Sid}
 # operationId: UpdateFleet
-export def "fleets update" [
+export def "update-fleet" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -437,7 +437,7 @@ export def "fleets update" [
 #
 # GET /v1/IpCommands
 # operationId: ListIpCommand
-export def "ip-commands list" [
+export def "list-ip-command" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -479,7 +479,7 @@ export def "ip-commands list" [
 #
 # POST /v1/IpCommands
 # operationId: CreateIpCommand
-export def "ip-commands create" [
+export def "create-ip-command" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -523,7 +523,7 @@ export def "ip-commands create" [
 #
 # GET /v1/IpCommands/{Sid}
 # operationId: FetchIpCommand
-export def "ip-commands get" [
+export def "fetch-ip-command" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -559,7 +559,7 @@ export def "ip-commands get" [
 #
 # GET /v1/NetworkAccessProfiles
 # operationId: ListNetworkAccessProfile
-export def "network-access-profiles list" [
+export def "list-network-access-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -597,7 +597,7 @@ export def "network-access-profiles list" [
 #
 # POST /v1/NetworkAccessProfiles
 # operationId: CreateNetworkAccessProfile
-export def "network-access-profiles create" [
+export def "create-network-access-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -637,7 +637,7 @@ export def "network-access-profiles create" [
 #
 # GET /v1/NetworkAccessProfiles/{NetworkAccessProfileSid}/Networks
 # operationId: ListNetworkAccessProfileNetwork
-export def "network-access-profiles-networks list" [
+export def "list-network-access-profile-network" [
   network_access_profile_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -677,7 +677,7 @@ export def "network-access-profiles-networks list" [
 #
 # POST /v1/NetworkAccessProfiles/{NetworkAccessProfileSid}/Networks
 # operationId: CreateNetworkAccessProfileNetwork
-export def "network-access-profiles-networks create" [
+export def "create-network-access-profile-network" [
   network_access_profile_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -718,7 +718,7 @@ export def "network-access-profiles-networks create" [
 #
 # DELETE /v1/NetworkAccessProfiles/{NetworkAccessProfileSid}/Networks/{Sid}
 # operationId: DeleteNetworkAccessProfileNetwork
-export def "network-access-profiles-networks delete" [
+export def "delete-network-access-profile-network" [
   network_access_profile_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -756,7 +756,7 @@ export def "network-access-profiles-networks delete" [
 #
 # GET /v1/NetworkAccessProfiles/{NetworkAccessProfileSid}/Networks/{Sid}
 # operationId: FetchNetworkAccessProfileNetwork
-export def "network-access-profiles-networks get" [
+export def "fetch-network-access-profile-network" [
   network_access_profile_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -794,7 +794,7 @@ export def "network-access-profiles-networks get" [
 #
 # GET /v1/NetworkAccessProfiles/{Sid}
 # operationId: FetchNetworkAccessProfile
-export def "network-access-profiles get" [
+export def "fetch-network-access-profile" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -830,7 +830,7 @@ export def "network-access-profiles get" [
 #
 # POST /v1/NetworkAccessProfiles/{Sid}
 # operationId: UpdateNetworkAccessProfile
-export def "network-access-profiles update" [
+export def "update-network-access-profile" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -871,7 +871,7 @@ export def "network-access-profiles update" [
 #
 # GET /v1/Networks
 # operationId: ListNetwork
-export def "networks list" [
+export def "list-network" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -912,7 +912,7 @@ export def "networks list" [
 #
 # GET /v1/Networks/{Sid}
 # operationId: FetchNetwork
-export def "networks get" [
+export def "fetch-network" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -948,7 +948,7 @@ export def "networks get" [
 #
 # GET /v1/SettingsUpdates
 # operationId: ListSettingsUpdate
-export def "settings-updates list" [
+export def "list-settings-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -988,7 +988,7 @@ export def "settings-updates list" [
 #
 # GET /v1/Sims
 # operationId: ListSim
-export def "sims list" [
+export def "list-sim" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1029,7 +1029,7 @@ export def "sims list" [
 #
 # POST /v1/Sims
 # operationId: CreateSim
-export def "sims create" [
+export def "create-sim" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1069,7 +1069,7 @@ export def "sims create" [
 #
 # GET /v1/Sims/{Sid}
 # operationId: FetchSim
-export def "sims get" [
+export def "fetch-sim" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1105,7 +1105,7 @@ export def "sims get" [
 #
 # POST /v1/Sims/{Sid}
 # operationId: UpdateSim
-export def "sims update" [
+export def "update-sim" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1151,7 +1151,7 @@ export def "sims update" [
 #
 # GET /v1/Sims/{SimSid}/BillingPeriods
 # operationId: ListBillingPeriod
-export def "sims-billing-periods list" [
+export def "list-billing-period" [
   sim_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1191,7 +1191,7 @@ export def "sims-billing-periods list" [
 #
 # GET /v1/Sims/{SimSid}/IpAddresses
 # operationId: ListSimIpAddress
-export def "sims-ip-addresses list-address" [
+export def "list-sim-ip-address" [
   sim_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1231,7 +1231,7 @@ export def "sims-ip-addresses list-address" [
 #
 # GET /v1/SmsCommands
 # operationId: ListSmsCommand
-export def "sms-commands list" [
+export def "list-sms-command" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1272,7 +1272,7 @@ export def "sms-commands list" [
 #
 # POST /v1/SmsCommands
 # operationId: CreateSmsCommand
-export def "sms-commands create" [
+export def "create-sms-command" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1314,7 +1314,7 @@ export def "sms-commands create" [
 #
 # GET /v1/SmsCommands/{Sid}
 # operationId: FetchSmsCommand
-export def "sms-commands get" [
+export def "fetch-sms-command" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1350,7 +1350,7 @@ export def "sms-commands get" [
 #
 # GET /v1/UsageRecords
 # operationId: ListUsageRecord
-export def "usage-records list" [
+export def "list-usage-record" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

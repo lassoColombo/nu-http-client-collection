@@ -103,7 +103,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "campaigns-data-series get-analytics" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "campaign-analytics" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -127,7 +127,7 @@ export def commands []: nothing -> table {
 #
 # GET /campaigns/data_series
 # operationId: campaignAnalytics
-export def "campaigns-data-series get-analytics" [
+export def "campaign-analytics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -165,7 +165,7 @@ export def "campaigns-data-series get-analytics" [
 #
 # GET /campaigns/details
 # operationId: campaignDetails
-export def "campaigns-details get" [
+export def "campaign-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -201,7 +201,7 @@ export def "campaigns-details get" [
 #
 # GET /campaigns/list
 # operationId: campaignList
-export def "campaigns-list list" [
+export def "campaign-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -240,7 +240,7 @@ export def "campaigns-list list" [
 #
 # GET /canvas/data_series
 # operationId: canvasDataSeriesAnalytics
-export def "canvas-data-series get-analytics" [
+export def "canvas-data-series-analytics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -282,7 +282,7 @@ export def "canvas-data-series get-analytics" [
 #
 # GET /canvas/data_summary
 # operationId: canvasDataAnalyticsSummary
-export def "canvas-data-summary get-analytics" [
+export def "canvas-data-analytics-summary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -324,7 +324,7 @@ export def "canvas-data-summary get-analytics" [
 #
 # GET /canvas/details
 # operationId: canvasDetails
-export def "canvas-details get" [
+export def "canvas-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -360,7 +360,7 @@ export def "canvas-details get" [
 #
 # GET /canvas/list
 # operationId: canvasList
-export def "canvas-list list" [
+export def "canvas-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -402,7 +402,7 @@ export def "canvas-list list" [
 # --audience shape: {AND?: list}
 # --recipients item shape: {canvas_entry_properties?: record, external_user_id?: string, trigger_properties?: string, user_alias?: string}
 # --schedule shape: {at_optimal_time?: bool, in_local_time?: bool, time?: string}
-export def "canvas-trigger-schedule-create create-triggered-canvases" [
+export def "schedule-api-triggered-canvases" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -445,7 +445,7 @@ export def "canvas-trigger-schedule-create create-triggered-canvases" [
 #
 # GET /content_blocks/info
 # operationId: seeContentBlockInformation
-export def "content-blocks-info get-see-information" [
+export def "see-content-block-information" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -482,7 +482,7 @@ export def "content-blocks-info get-see-information" [
 #
 # GET /content_blocks/list
 # operationId: listAvailableContentBlocks
-export def "content-blocks-list list-available" [
+export def "list-available-content-blocks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -521,7 +521,7 @@ export def "content-blocks-list list-available" [
 #
 # GET /email/hard_bounces
 # operationId: queryHardBouncedEmails
-export def "email-hard-bounces list-bounced" [
+export def "query-hard-bounced-emails" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -561,7 +561,7 @@ export def "email-hard-bounces list-bounced" [
 #
 # GET /email/unsubscribes
 # operationId: queryListOfUnsubscribedEmailAddresses
-export def "email-unsubscribes list-of-unsubscribed-addresses" [
+export def "query-list-of-unsubscribed-email-addresses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -602,7 +602,7 @@ export def "email-unsubscribes list-of-unsubscribed-addresses" [
 #
 # GET /events/data_series
 # operationId: customEventsAnalytics
-export def "events-data-series get-custom-analytics" [
+export def "custom-events-analytics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -643,7 +643,7 @@ export def "events-data-series get-custom-analytics" [
 #
 # GET /events/list
 # operationId: customEventsList
-export def "events-list list-custom" [
+export def "custom-events-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -679,7 +679,7 @@ export def "events-list list-custom" [
 #
 # GET /feed/data_series
 # operationId: newsFeedCardAnalytics
-export def "feed-data-series get-news-card-analytics" [
+export def "news-feed-card-analytics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -718,7 +718,7 @@ export def "feed-data-series get-news-card-analytics" [
 #
 # GET /feed/details
 # operationId: newsFeedCardsDetails
-export def "feed-details get-news-cards" [
+export def "news-feed-cards-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -754,7 +754,7 @@ export def "feed-details get-news-cards" [
 #
 # GET /feed/list
 # operationId: newsFeedCardsList
-export def "feed-list list-news-cards" [
+export def "news-feed-cards-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -792,7 +792,7 @@ export def "feed-list list-news-cards" [
 #
 # GET /kpi/dau/data_series
 # operationId: dailyActiveUsersByDate
-export def "kpi-dau-data-series get-daily-active-users-by-date" [
+export def "daily-active-users-by-date" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -830,7 +830,7 @@ export def "kpi-dau-data-series get-daily-active-users-by-date" [
 #
 # GET /kpi/mau/data_series
 # operationId: monthlyActiveUsersForLast30Days
-export def "kpi-mau-data-series get-monthly-active-users-for-last30-days" [
+export def "monthly-active-users-for-last30-days" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -868,7 +868,7 @@ export def "kpi-mau-data-series get-monthly-active-users-for-last30-days" [
 #
 # GET /kpi/new_users/data_series
 # operationId: dailyNewUsersByDate
-export def "kpi-new-users-data-series get-daily-by-date" [
+export def "daily-new-users-by-date" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -906,7 +906,7 @@ export def "kpi-new-users-data-series get-daily-by-date" [
 #
 # GET /kpi/uninstalls/data_series
 # operationId: kpIsForDailyAppUninstallsByDate
-export def "kpi-uninstalls-data-series get-kp-is-for-daily-app-by-date" [
+export def "kp-is-for-daily-app-uninstalls-by-date" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -944,7 +944,7 @@ export def "kpi-uninstalls-data-series get-kp-is-for-daily-app-by-date" [
 #
 # GET /messages/scheduled_broadcasts
 # operationId: getUpcomingScheduledCampaignsAndCanvases
-export def "messages-scheduled-broadcasts get-upcoming-campaigns-and-canvases" [
+export def "get-upcoming-scheduled-campaigns-and-canvases" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -980,7 +980,7 @@ export def "messages-scheduled-broadcasts get-upcoming-campaigns-and-canvases" [
 #
 # GET /segments/data_series
 # operationId: segmentAnalytics
-export def "segments-data-series get-analytics" [
+export def "segment-analytics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1018,7 +1018,7 @@ export def "segments-data-series get-analytics" [
 #
 # GET /segments/details
 # operationId: segmentDetails
-export def "segments-details get" [
+export def "segment-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1054,7 +1054,7 @@ export def "segments-details get" [
 #
 # GET /segments/list
 # operationId: segmentList
-export def "segments-list list" [
+export def "segment-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1091,7 +1091,7 @@ export def "segments-list list" [
 #
 # GET /sends/data_series
 # operationId: sendAnalytics
-export def "sends-data-series send-analytics" [
+export def "send-analytics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1130,7 +1130,7 @@ export def "sends-data-series send-analytics" [
 #
 # GET /sessions/data_series
 # operationId: appSessionsByTime
-export def "sessions-data-series get-app-by-time" [
+export def "app-sessions-by-time" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1170,7 +1170,7 @@ export def "sessions-data-series get-app-by-time" [
 #
 # GET /subscription/status/get
 # operationId: listUser'sSubscriptionGroupStatusSms
-export def "subscription-status-get list-users-group-sms" [
+export def "list-users-subscription-group-status-sms" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1208,7 +1208,7 @@ export def "subscription-status-get list-users-group-sms" [
 #
 # GET /subscription/user/status
 # operationId: listUser'sSubscriptionGroupSms
-export def "subscription-user-status list-users-group-sms" [
+export def "list-users-subscription-group-sms" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1247,7 +1247,7 @@ export def "subscription-user-status list-users-group-sms" [
 #
 # GET /templates/email/info
 # operationId: seeEmailTemplateInformation
-export def "templates-email-info get-see-information" [
+export def "see-email-template-information" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1283,7 +1283,7 @@ export def "templates-email-info get-see-information" [
 #
 # GET /templates/email/list
 # operationId: listAvailableEmailTemplates
-export def "templates-email-list list-available" [
+export def "list-available-email-templates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

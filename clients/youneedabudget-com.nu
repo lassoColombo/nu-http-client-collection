@@ -124,7 +124,7 @@ def type-completer [] { ["unapproved" "uncategorized"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "budgets list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-budgets" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -148,7 +148,7 @@ export def commands []: nothing -> table {
 #
 # GET /budgets
 # operationId: getBudgets
-export def "budgets list" [
+export def "get-budgets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,7 +184,7 @@ export def "budgets list" [
 #
 # GET /budgets/{budget_id}
 # operationId: getBudgetById
-export def "budgets get" [
+export def "get-budget-by-id" [
   budget_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -222,7 +222,7 @@ export def "budgets get" [
 #
 # GET /budgets/{budget_id}/accounts
 # operationId: getAccounts
-export def "budgets-accounts list" [
+export def "get-accounts" [
   budget_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -261,7 +261,7 @@ export def "budgets-accounts list" [
 # POST /budgets/{budget_id}/accounts
 # operationId: createAccount
 # --account shape: {balance: int, name: string, type: "checking"|"savings"|"cash"|"creditCard"|"lineOfCredit"|"otherAsset"|"otherLiability"|"mortgage"|"autoLoan"|"studentLoan"|"personalLoan"|"medicalDebt"|"otherDebt"}
-export def "budgets-accounts create" [
+export def "create-account" [
   budget_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -301,7 +301,7 @@ export def "budgets-accounts create" [
 #
 # GET /budgets/{budget_id}/accounts/{account_id}
 # operationId: getAccountById
-export def "budgets-accounts get" [
+export def "get-account-by-id" [
   budget_id: string
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -339,7 +339,7 @@ export def "budgets-accounts get" [
 #
 # GET /budgets/{budget_id}/accounts/{account_id}/transactions
 # operationId: getTransactionsByAccount
-export def "budgets-accounts-transactions get" [
+export def "get-transactions-by-account" [
   budget_id: string
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -381,7 +381,7 @@ export def "budgets-accounts-transactions get" [
 #
 # GET /budgets/{budget_id}/categories
 # operationId: getCategories
-export def "budgets-categories list" [
+export def "get-categories" [
   budget_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -419,7 +419,7 @@ export def "budgets-categories list" [
 #
 # GET /budgets/{budget_id}/categories/{category_id}
 # operationId: getCategoryById
-export def "budgets-categories get" [
+export def "get-category-by-id" [
   budget_id: string
   category_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -457,7 +457,7 @@ export def "budgets-categories get" [
 #
 # GET /budgets/{budget_id}/categories/{category_id}/transactions
 # operationId: getTransactionsByCategory
-export def "budgets-categories-transactions get" [
+export def "get-transactions-by-category" [
   budget_id: string
   category_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -499,7 +499,7 @@ export def "budgets-categories-transactions get" [
 #
 # GET /budgets/{budget_id}/months
 # operationId: getBudgetMonths
-export def "budgets-months list" [
+export def "get-budget-months" [
   budget_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -537,7 +537,7 @@ export def "budgets-months list" [
 #
 # GET /budgets/{budget_id}/months/{month}
 # operationId: getBudgetMonth
-export def "budgets-months get" [
+export def "get-budget-month" [
   budget_id: string
   month: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -575,7 +575,7 @@ export def "budgets-months get" [
 #
 # GET /budgets/{budget_id}/months/{month}/categories/{category_id}
 # operationId: getMonthCategoryById
-export def "budgets-months-categories get" [
+export def "get-month-category-by-id" [
   budget_id: string
   month: string
   category_id: string
@@ -616,7 +616,7 @@ export def "budgets-months-categories get" [
 # PATCH /budgets/{budget_id}/months/{month}/categories/{category_id}
 # operationId: updateMonthCategory
 # --category shape: {budgeted: int}
-export def "budgets-months-categories update" [
+export def "update-month-category" [
   budget_id: string
   month: string
   category_id: string
@@ -660,7 +660,7 @@ export def "budgets-months-categories update" [
 #
 # GET /budgets/{budget_id}/payee_locations
 # operationId: getPayeeLocations
-export def "budgets-payee-locations list" [
+export def "get-payee-locations" [
   budget_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -696,7 +696,7 @@ export def "budgets-payee-locations list" [
 #
 # GET /budgets/{budget_id}/payee_locations/{payee_location_id}
 # operationId: getPayeeLocationById
-export def "budgets-payee-locations get" [
+export def "get-payee-location-by-id" [
   budget_id: string
   payee_location_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -734,7 +734,7 @@ export def "budgets-payee-locations get" [
 #
 # GET /budgets/{budget_id}/payees
 # operationId: getPayees
-export def "budgets-payees list" [
+export def "get-payees" [
   budget_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -772,7 +772,7 @@ export def "budgets-payees list" [
 #
 # GET /budgets/{budget_id}/payees/{payee_id}
 # operationId: getPayeeById
-export def "budgets-payees get" [
+export def "get-payee-by-id" [
   budget_id: string
   payee_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -810,7 +810,7 @@ export def "budgets-payees get" [
 #
 # GET /budgets/{budget_id}/payees/{payee_id}/payee_locations
 # operationId: getPayeeLocationsByPayee
-export def "budgets-payees-payee-locations get" [
+export def "get-payee-locations-by-payee" [
   budget_id: string
   payee_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -848,7 +848,7 @@ export def "budgets-payees-payee-locations get" [
 #
 # GET /budgets/{budget_id}/payees/{payee_id}/transactions
 # operationId: getTransactionsByPayee
-export def "budgets-payees-transactions get" [
+export def "get-transactions-by-payee" [
   budget_id: string
   payee_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -890,7 +890,7 @@ export def "budgets-payees-transactions get" [
 #
 # GET /budgets/{budget_id}/scheduled_transactions
 # operationId: getScheduledTransactions
-export def "budgets-scheduled-transactions list" [
+export def "get-scheduled-transactions" [
   budget_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -928,7 +928,7 @@ export def "budgets-scheduled-transactions list" [
 #
 # GET /budgets/{budget_id}/scheduled_transactions/{scheduled_transaction_id}
 # operationId: getScheduledTransactionById
-export def "budgets-scheduled-transactions get" [
+export def "get-scheduled-transaction-by-id" [
   budget_id: string
   scheduled_transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -966,7 +966,7 @@ export def "budgets-scheduled-transactions get" [
 #
 # GET /budgets/{budget_id}/settings
 # operationId: getBudgetSettingsById
-export def "budgets-settings get" [
+export def "get-budget-settings-by-id" [
   budget_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1002,7 +1002,7 @@ export def "budgets-settings get" [
 #
 # GET /budgets/{budget_id}/transactions
 # operationId: getTransactions
-export def "budgets-transactions list" [
+export def "get-transactions" [
   budget_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1043,7 +1043,7 @@ export def "budgets-transactions list" [
 # PATCH /budgets/{budget_id}/transactions
 # operationId: updateTransactions
 # --transactions item shape: {id?: string, account_id?: string, amount?: int, approved?: bool, category_id?: string, cleared?: "cleared"|"uncleared"|"reconciled", date?: string, flag_color?: "red"|"orange"|"yellow"|"green"|"blue"|"purple"|"", import_id?: string, memo?: string, payee_id?: string, payee_name?: string, subtransactions?: list}
-export def "budgets-transactions update-by-budget-id" [
+export def "update-transactions" [
   budget_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1084,7 +1084,7 @@ export def "budgets-transactions update-by-budget-id" [
 # POST /budgets/{budget_id}/transactions
 # operationId: createTransaction
 # --transactions item shape: {account_id: string, amount: int, approved?: bool, category_id?: string, cleared?: "cleared"|"uncleared"|"reconciled", date: string, flag_color?: "red"|"orange"|"yellow"|"green"|"blue"|"purple"|"", import_id?: string, memo?: string, payee_id?: string, payee_name?: string, subtransactions?: list}
-export def "budgets-transactions create" [
+export def "create-transaction" [
   budget_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1126,7 +1126,7 @@ export def "budgets-transactions create" [
 # POST /budgets/{budget_id}/transactions/bulk
 # operationId: bulkCreateTransactions
 # --transactions item shape: {account_id: string, amount: int, approved?: bool, category_id?: string, cleared?: "cleared"|"uncleared"|"reconciled", date: string, flag_color?: "red"|"orange"|"yellow"|"green"|"blue"|"purple"|"", import_id?: string, memo?: string, payee_id?: string, payee_name?: string, subtransactions?: list}
-export def "budgets-transactions-bulk create" [
+export def "bulk-create-transactions" [
   budget_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1166,7 +1166,7 @@ export def "budgets-transactions-bulk create" [
 #
 # POST /budgets/{budget_id}/transactions/import
 # operationId: importTransactions
-export def "budgets-transactions-import import" [
+export def "import-transactions" [
   budget_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1202,7 +1202,7 @@ export def "budgets-transactions-import import" [
 #
 # DELETE /budgets/{budget_id}/transactions/{transaction_id}
 # operationId: deleteTransaction
-export def "budgets-transactions delete" [
+export def "delete-transaction" [
   budget_id: string
   transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1240,7 +1240,7 @@ export def "budgets-transactions delete" [
 #
 # GET /budgets/{budget_id}/transactions/{transaction_id}
 # operationId: getTransactionById
-export def "budgets-transactions get" [
+export def "get-transaction-by-id" [
   budget_id: string
   transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1278,7 +1278,7 @@ export def "budgets-transactions get" [
 #
 # PUT /budgets/{budget_id}/transactions/{transaction_id}
 # operationId: updateTransaction
-export def "budgets-transactions update-by-budget-id-transaction-id" [
+export def "update-transaction" [
   budget_id: string
   transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1320,7 +1320,7 @@ export def "budgets-transactions update-by-budget-id-transaction-id" [
 #
 # GET /user
 # operationId: getUser
-export def "user get" [
+export def "get-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

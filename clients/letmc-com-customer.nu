@@ -121,7 +121,7 @@ def accept-completer-1 [] { ["application/json" "text/json"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "customer-branch-branches get-controller" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "branch-controller-get-branches" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -145,7 +145,7 @@ export def commands []: nothing -> table {
 #
 # GET /v2/customer/{shortName}/branch/branches
 # operationId: BranchController_GetBranches
-export def "customer-branch-branches get-controller" [
+export def "branch-controller-get-branches" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -184,7 +184,7 @@ export def "customer-branch-branches get-controller" [
 # Get a specific branch given its unique Object ID (OID)
 #
 # GET /v2/customer/{shortName}/branch/branches/{branchID}
-export def "customer-branch-branches get" [
+export def "get-v2-customer-short-name-branch-branches-branch-id" [
   short_name: string
   branch_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -223,7 +223,7 @@ export def "customer-branch-branches get" [
 #
 # GET /v2/customer/{shortName}/landlord/accounting
 # operationId: LandlordController_GetAccounts
-export def "customer-landlord-accounting get-controller-accounts" [
+export def "landlord-controller-get-accounts" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -262,7 +262,7 @@ export def "customer-landlord-accounting get-controller-accounts" [
 #
 # GET /v2/customer/{shortName}/landlord/document
 # operationId: LandlordController_GetDocument
-export def "customer-landlord-document get-controller" [
+export def "landlord-controller-get-document" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -302,7 +302,7 @@ export def "customer-landlord-document get-controller" [
 #
 # GET /v2/customer/{shortName}/landlord/inventory
 # operationId: LandlordController_GetInvetoryReport
-export def "customer-landlord-inventory get-controller-invetory-report" [
+export def "landlord-controller-get-invetory-report" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -342,7 +342,7 @@ export def "customer-landlord-inventory get-controller-invetory-report" [
 #
 # GET /v2/customer/{shortName}/landlord/invoice
 # operationId: LandlordController_GetInvoice
-export def "customer-landlord-invoice get-controller" [
+export def "landlord-controller-get-invoice" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -382,7 +382,7 @@ export def "customer-landlord-invoice get-controller" [
 #
 # GET /v2/customer/{shortName}/landlord/landlordcrmentries
 # operationId: LandlordController_GetLandlordCrmEntries
-export def "customer-landlord-landlordcrmentries get-controller-crm-entries" [
+export def "landlord-controller-get-landlord-crm-entries" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -421,7 +421,7 @@ export def "customer-landlord-landlordcrmentries get-controller-crm-entries" [
 #
 # GET /v2/customer/{shortName}/landlord/maintenance
 # operationId: LandlordController_GetMaintenanceJobs
-export def "customer-landlord-maintenance get-controller-jobs" [
+export def "landlord-controller-get-maintenance-jobs" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -460,7 +460,7 @@ export def "customer-landlord-maintenance get-controller-jobs" [
 #
 # GET /v2/customer/{shortName}/landlord/profitloss
 # operationId: LandlordController_GetProfitLossReport
-export def "customer-landlord-profitloss get-controller-profit-loss-report" [
+export def "landlord-controller-get-profit-loss-report" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -499,7 +499,7 @@ export def "customer-landlord-profitloss get-controller-profit-loss-report" [
 #
 # GET /v2/customer/{shortName}/landlord/rentarrears
 # operationId: LandlordController_GetRentArrears
-export def "customer-landlord-rentarrears get-controller-rent-arrears" [
+export def "landlord-controller-get-rent-arrears" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -538,7 +538,7 @@ export def "customer-landlord-rentarrears get-controller-rent-arrears" [
 #
 # GET /v2/customer/{shortName}/landlord/sas
 # operationId: LandlordController_GetSASReport
-export def "customer-landlord-sas get-controller-report" [
+export def "landlord-controller-get-sas-report" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -578,7 +578,7 @@ export def "customer-landlord-sas get-controller-report" [
 #
 # GET /v2/customer/{shortName}/landlord/settings
 # operationId: LandlordController_GetSettings
-export def "customer-landlord-settings get-controller" [
+export def "landlord-controller-get-settings" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -617,7 +617,7 @@ export def "customer-landlord-settings get-controller" [
 #
 # GET /v2/customer/{shortName}/landlord/summary
 # operationId: LandlordController_GetSummaryDetails
-export def "customer-landlord-summary get-controller-details" [
+export def "landlord-controller-get-summary-details" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -656,7 +656,7 @@ export def "customer-landlord-summary get-controller-details" [
 #
 # GET /v2/customer/{shortName}/landlord/tenancy
 # operationId: LandlordController_GetTenancy
-export def "customer-landlord-tenancy get-controller" [
+export def "landlord-controller-get-tenancy" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -696,7 +696,7 @@ export def "customer-landlord-tenancy get-controller" [
 #
 # POST /v2/customer/{shortName}/landlord/tenancy/maintenance/preference
 # operationId: LandlordController_CreateMaintenancePreference
-export def "customer-landlord-tenancy-maintenance-preference create-controller" [
+export def "landlord-controller-create-maintenance-preference" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -738,7 +738,7 @@ export def "customer-landlord-tenancy-maintenance-preference create-controller" 
 #
 # GET /v2/customer/{shortName}/landlord/tenancyagreement
 # operationId: LandlordController_GetTenancyAgreementReport
-export def "customer-landlord-tenancyagreement get-controller-tenancy-agreement-report" [
+export def "landlord-controller-get-tenancy-agreement-report" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -778,7 +778,7 @@ export def "customer-landlord-tenancyagreement get-controller-tenancy-agreement-
 #
 # GET /v2/customer/{shortName}/photo/download
 # operationId: PhotoController_GetPhotoDownload
-export def "customer-photo-download get-controller" [
+export def "photo-controller-get-photo-download" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -820,7 +820,7 @@ export def "customer-photo-download get-controller" [
 #
 # GET /v2/customer/{shortName}/property/{propertyID}/photos
 # operationId: PropertyController_GetPropertiesPhotos
-export def "customer-property-photos get-controller-properties" [
+export def "property-controller-get-properties-photos" [
   short_name: string
   property_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -863,7 +863,7 @@ export def "customer-property-photos get-controller-properties" [
 #
 # DELETE /v2/customer/{shortName}/session
 # operationId: SessionController_Logout
-export def "customer-session delete-controller-logout" [
+export def "session-controller-logout" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -901,7 +901,7 @@ export def "customer-session delete-controller-logout" [
 #
 # GET /v2/customer/{shortName}/session
 # operationId: SessionController_GetSessionInfo
-export def "customer-session get-controller" [
+export def "session-controller-get-session-info" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -940,7 +940,7 @@ export def "customer-session get-controller" [
 #
 # POST /v2/customer/{shortName}/session
 # operationId: SessionController_Login
-export def "customer-session create-controller-login" [
+export def "session-controller-login" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -980,7 +980,7 @@ export def "customer-session create-controller-login" [
 #
 # POST /v2/customer/{shortName}/session/createlandlordlogin
 # operationId: SessionController_CreateLandlordLogin
-export def "customer-session-create-landlordlogin create-controller-landlord-login" [
+export def "session-controller-create-landlord-login" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1024,7 +1024,7 @@ export def "customer-session-create-landlordlogin create-controller-landlord-log
 #
 # PUT /v2/customer/{shortName}/session/password
 # operationId: SessionController_ChangePassword
-export def "customer-session-password update-controller-change" [
+export def "session-controller-change-password" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1064,7 +1064,7 @@ export def "customer-session-password update-controller-change" [
 #
 # POST /v2/customer/{shortName}/session/resetpassword
 # operationId: SessionController_ResetPassword
-export def "customer-session-resetpassword reset-controller-password" [
+export def "session-controller-reset-password" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

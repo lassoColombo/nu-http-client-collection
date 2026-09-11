@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "companies-connections-connection-info-bank-feed-accounts get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-bank-feeds" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # GET /companies/{companyId}/connections/{connectionId}/connectionInfo/bankFeedAccounts
 # operationId: get-bank-feeds
-export def "companies-connections-connection-info-bank-feed-accounts get" [
+export def "get-bank-feeds" [
   company_id: string
   connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -178,7 +178,7 @@ export def "companies-connections-connection-info-bank-feed-accounts get" [
 #
 # PUT /companies/{companyId}/connections/{connectionId}/connectionInfo/bankFeedAccounts
 # operationId: create-bank-feed
-export def "companies-connections-connection-info-bank-feed-accounts create" [
+export def "create-bank-feed" [
   company_id: string
   connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -220,7 +220,7 @@ export def "companies-connections-connection-info-bank-feed-accounts create" [
 #
 # PATCH /companies/{companyId}/connections/{connectionId}/connectionInfo/bankFeedAccounts/{accountId}
 # operationId: update-bank-feed
-export def "companies-connections-connection-info-bank-feed-accounts update" [
+export def "update-bank-feed" [
   company_id: string
   connection_id: string
   account_id: string
@@ -273,7 +273,7 @@ export def "companies-connections-connection-info-bank-feed-accounts update" [
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/bankAccounts/{accountId}/bankTransactions
 # operationId: list-bank-account-transactions
-export def "companies-connections-data-bank-accounts-bank-transactions list" [
+export def "list-bank-account-transactions" [
   company_id: string
   connection_id: string
   account_id: string
@@ -318,7 +318,7 @@ export def "companies-connections-data-bank-accounts-bank-transactions list" [
 #
 # GET /companies/{companyId}/connections/{connectionId}/options/bankAccounts/{accountId}/bankTransactions
 # operationId: get-create-bank-account-model
-export def "companies-connections-options-bank-accounts-bank-transactions get-create-model" [
+export def "get-create-bank-account-model" [
   company_id: string
   connection_id: string
   account_id: string
@@ -359,7 +359,7 @@ export def "companies-connections-options-bank-accounts-bank-transactions get-cr
 # POST /companies/{companyId}/connections/{connectionId}/push/bankAccounts/{accountId}/bankTransactions
 # operationId: create-bank-transactions
 # --transactions item shape: {amount: float, balance: float, clearedOnDate?: string, counterparty?: string, description?: string, id?: string, reconciled: bool, reference?: string, transactionType: "Unknown"|"Credit"|"Debit"|"Int"|"Div"|"Fee"|"SerChg"|"Dep"|"Atm"|"Pos"|"Xfer"|"Check"|"Payment"|"Cash"|"DirectDep"|"DirectDebit"|"RepeatPmt"|"Other"}
-export def "companies-connections-push-bank-accounts-bank-transactions create" [
+export def "create-bank-transactions" [
   company_id: string
   connection_id: string
   account_id: string

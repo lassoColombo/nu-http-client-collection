@@ -115,7 +115,7 @@ def priority-completer [] { ["high" "low"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "credentials list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-credential" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -138,7 +138,7 @@ export def commands []: nothing -> table {
 # GET /v1/Credentials
 #
 # operationId: ListCredential
-export def "credentials list" [
+export def "list-credential" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -175,7 +175,7 @@ export def "credentials list" [
 # POST /v1/Credentials
 #
 # operationId: CreateCredential
-export def "credentials create" [
+export def "create-credential" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -219,7 +219,7 @@ export def "credentials create" [
 # DELETE /v1/Credentials/{Sid}
 #
 # operationId: DeleteCredential
-export def "credentials delete" [
+export def "delete-credential" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -254,7 +254,7 @@ export def "credentials delete" [
 # GET /v1/Credentials/{Sid}
 #
 # operationId: FetchCredential
-export def "credentials get" [
+export def "fetch-credential" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -289,7 +289,7 @@ export def "credentials get" [
 # POST /v1/Credentials/{Sid}
 #
 # operationId: UpdateCredential
-export def "credentials update" [
+export def "update-credential" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -334,7 +334,7 @@ export def "credentials update" [
 # GET /v1/Services
 #
 # operationId: ListService
-export def "services list" [
+export def "list-service" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -372,7 +372,7 @@ export def "services list" [
 # POST /v1/Services
 #
 # operationId: CreateService
-export def "services create" [
+export def "create-service" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -423,7 +423,7 @@ export def "services create" [
 # GET /v1/Services/{ServiceSid}/Bindings
 #
 # operationId: ListBinding
-export def "services-bindings list" [
+export def "list-binding" [
   service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -466,7 +466,7 @@ export def "services-bindings list" [
 # POST /v1/Services/{ServiceSid}/Bindings
 #
 # operationId: CreateBinding
-export def "services-bindings create" [
+export def "create-binding" [
   service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -512,7 +512,7 @@ export def "services-bindings create" [
 # DELETE /v1/Services/{ServiceSid}/Bindings/{Sid}
 #
 # operationId: DeleteBinding
-export def "services-bindings delete" [
+export def "delete-binding" [
   service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -549,7 +549,7 @@ export def "services-bindings delete" [
 # GET /v1/Services/{ServiceSid}/Bindings/{Sid}
 #
 # operationId: FetchBinding
-export def "services-bindings get" [
+export def "fetch-binding" [
   service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -586,7 +586,7 @@ export def "services-bindings get" [
 # POST /v1/Services/{ServiceSid}/Notifications
 #
 # operationId: CreateNotification
-export def "services-notifications create" [
+export def "create-notification" [
   service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -643,7 +643,7 @@ export def "services-notifications create" [
 # DELETE /v1/Services/{Sid}
 #
 # operationId: DeleteService
-export def "services delete" [
+export def "delete-service" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -678,7 +678,7 @@ export def "services delete" [
 # GET /v1/Services/{Sid}
 #
 # operationId: FetchService
-export def "services get" [
+export def "fetch-service" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -713,7 +713,7 @@ export def "services get" [
 # POST /v1/Services/{Sid}
 #
 # operationId: UpdateService
-export def "services update" [
+export def "update-service" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

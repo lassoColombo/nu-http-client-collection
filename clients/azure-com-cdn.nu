@@ -127,7 +127,7 @@ def protocol-type-completer [] { ["IPBased" "ServerNameIndication"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-cdn-check-name-availability check" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "check-name-availability" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -151,7 +151,7 @@ export def commands []: nothing -> table {
 #
 # POST /providers/Microsoft.Cdn/checkNameAvailability
 # operationId: CheckNameAvailability
-export def "providers-microsoft-cdn-check-name-availability check" [
+export def "check-name-availability" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -192,7 +192,7 @@ export def "providers-microsoft-cdn-check-name-availability check" [
 #
 # GET /providers/Microsoft.Cdn/edgenodes
 # operationId: EdgeNodes_List
-export def "providers-microsoft-cdn-edgenodes list-edge-nodes" [
+export def "edge-nodes-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -228,7 +228,7 @@ export def "providers-microsoft-cdn-edgenodes list-edge-nodes" [
 #
 # GET /providers/Microsoft.Cdn/operations
 # operationId: Operations_List
-export def "providers-microsoft-cdn-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -264,7 +264,7 @@ export def "providers-microsoft-cdn-operations list" [
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Cdn/checkNameAvailability
 # operationId: CheckNameAvailabilityWithSubscription
-export def "subscriptions-providers-microsoft-cdn-check-name-availability check" [
+export def "check-name-availability-with-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -307,7 +307,7 @@ export def "subscriptions-providers-microsoft-cdn-check-name-availability check"
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Cdn/checkResourceUsage
 # operationId: ResourceUsage_List
-export def "subscriptions-providers-microsoft-cdn-check-resource-usage list" [
+export def "resource-usage-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -345,7 +345,7 @@ export def "subscriptions-providers-microsoft-cdn-check-resource-usage list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Cdn/profiles
 # operationId: Profiles_List
-export def "subscriptions-providers-microsoft-cdn-profiles list" [
+export def "profiles-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -383,7 +383,7 @@ export def "subscriptions-providers-microsoft-cdn-profiles list" [
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Cdn/validateProbe
 # operationId: ValidateProbe
-export def "subscriptions-providers-microsoft-cdn-validate-probe validate" [
+export def "validate-probe" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -425,7 +425,7 @@ export def "subscriptions-providers-microsoft-cdn-validate-probe validate" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/profiles
 # operationId: Profiles_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles list" [
+export def "profiles-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -465,7 +465,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles list"
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/profiles/{profileName}
 # operationId: Profiles_Delete
-export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles delete" [
+export def "profiles-delete" [
   subscription_id: string
   resource_group_name: string
   profile_name: string
@@ -507,7 +507,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles delet
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/profiles/{profileName}
 # operationId: Profiles_Get
-export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles get" [
+export def "profiles-get" [
   subscription_id: string
   resource_group_name: string
   profile_name: string
@@ -549,7 +549,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles get" 
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/profiles/{profileName}
 # operationId: Profiles_Update
-export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles update" [
+export def "profiles-update" [
   subscription_id: string
   resource_group_name: string
   profile_name: string
@@ -596,7 +596,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles updat
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/profiles/{profileName}
 # operationId: Profiles_Create
 # --sku shape: {name?: "Standard_Verizon"|"Premium_Verizon"|"Custom_Verizon"|"Standard_Akamai"|"Standard_ChinaCdn"|"Standard_Microsoft"|"Premium_ChinaCdn"}
-export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles create" [
+export def "profiles-create" [
   subscription_id: string
   resource_group_name: string
   profile_name: string
@@ -645,7 +645,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles creat
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/profiles/{profileName}/checkResourceUsage
 # operationId: Profiles_ListResourceUsage
-export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-check-resource-usage list" [
+export def "profiles-list-resource-usage" [
   subscription_id: string
   resource_group_name: string
   profile_name: string
@@ -687,7 +687,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-check
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/profiles/{profileName}/endpoints
 # operationId: Endpoints_ListByProfile
-export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpoints list" [
+export def "endpoints-list-by-profile" [
   subscription_id: string
   resource_group_name: string
   profile_name: string
@@ -729,7 +729,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/profiles/{profileName}/endpoints/{endpointName}
 # operationId: Endpoints_Delete
-export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpoints delete" [
+export def "endpoints-delete" [
   subscription_id: string
   resource_group_name: string
   profile_name: string
@@ -773,7 +773,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/profiles/{profileName}/endpoints/{endpointName}
 # operationId: Endpoints_Get
-export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpoints get" [
+export def "endpoints-get" [
   subscription_id: string
   resource_group_name: string
   profile_name: string
@@ -818,7 +818,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/profiles/{profileName}/endpoints/{endpointName}
 # operationId: Endpoints_Update
 # --properties shape: {contentTypesToCompress?: list<string>, deliveryPolicy?: record, geoFilters?: list, isCompressionEnabled?: bool, isHttpAllowed?: bool, isHttpsAllowed?: bool, optimizationType?: "GeneralWebDelivery"|"GeneralMediaStreaming"|"VideoOnDemandMediaStreaming"|"LargeFileDownload"|"DynamicSiteAcceleration", originHostHeader?: string, originPath?: string, probePath?: string, queryStringCachingBehavior?: "IgnoreQueryString"|"BypassCaching"|"UseQueryString"|"NotSet", webApplicationFirewallPolicyLink?: record}
-export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpoints update" [
+export def "endpoints-update" [
   subscription_id: string
   resource_group_name: string
   profile_name: string
@@ -868,7 +868,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/profiles/{profileName}/endpoints/{endpointName}
 # operationId: Endpoints_Create
 # --properties shape: {origins: list, contentTypesToCompress?: list<string>, deliveryPolicy?: record, geoFilters?: list, isCompressionEnabled?: bool, isHttpAllowed?: bool, isHttpsAllowed?: bool, optimizationType?: "GeneralWebDelivery"|"GeneralMediaStreaming"|"VideoOnDemandMediaStreaming"|"LargeFileDownload"|"DynamicSiteAcceleration", originHostHeader?: string, originPath?: string, probePath?: string, queryStringCachingBehavior?: "IgnoreQueryString"|"BypassCaching"|"UseQueryString"|"NotSet", ... (1 more fields)}
-export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpoints create" [
+export def "endpoints-create" [
   subscription_id: string
   resource_group_name: string
   profile_name: string
@@ -918,7 +918,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/profiles/{profileName}/endpoints/{endpointName}/checkResourceUsage
 # operationId: Endpoints_ListResourceUsage
-export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpoints-check-resource-usage list" [
+export def "endpoints-list-resource-usage" [
   subscription_id: string
   resource_group_name: string
   profile_name: string
@@ -962,7 +962,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/profiles/{profileName}/endpoints/{endpointName}/customDomains
 # operationId: CustomDomains_ListByEndpoint
-export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpoints-custom-domains list" [
+export def "custom-domains-list-by-endpoint" [
   subscription_id: string
   resource_group_name: string
   profile_name: string
@@ -1006,7 +1006,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/profiles/{profileName}/endpoints/{endpointName}/customDomains/{customDomainName}
 # operationId: CustomDomains_Delete
-export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpoints-custom-domains delete" [
+export def "custom-domains-delete" [
   subscription_id: string
   resource_group_name: string
   profile_name: string
@@ -1052,7 +1052,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/profiles/{profileName}/endpoints/{endpointName}/customDomains/{customDomainName}
 # operationId: CustomDomains_Get
-export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpoints-custom-domains get" [
+export def "custom-domains-get" [
   subscription_id: string
   resource_group_name: string
   profile_name: string
@@ -1099,7 +1099,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/profiles/{profileName}/endpoints/{endpointName}/customDomains/{customDomainName}
 # operationId: CustomDomains_Create
 # --properties shape: {hostName: string}
-export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpoints-custom-domains create" [
+export def "custom-domains-create" [
   subscription_id: string
   resource_group_name: string
   profile_name: string
@@ -1149,7 +1149,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/profiles/{profileName}/endpoints/{endpointName}/customDomains/{customDomainName}/disableCustomHttps
 # operationId: CustomDomains_DisableCustomHttps
-export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpoints-custom-domains-disable-custom-https disable" [
+export def "custom-domains-disable-custom-https" [
   subscription_id: string
   resource_group_name: string
   profile_name: string
@@ -1196,7 +1196,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/profiles/{profileName}/endpoints/{endpointName}/customDomains/{customDomainName}/enableCustomHttps
 # Discriminator (request): certificateSource
 # operationId: CustomDomains_EnableCustomHttps
-export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpoints-custom-domains-enable-custom-https enable" [
+export def "custom-domains-enable-custom-https" [
   subscription_id: string
   resource_group_name: string
   profile_name: string
@@ -1248,7 +1248,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/profiles/{profileName}/endpoints/{endpointName}/load
 # operationId: Endpoints_LoadContent
-export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpoints-load create-content" [
+export def "endpoints-load-content" [
   subscription_id: string
   resource_group_name: string
   profile_name: string
@@ -1296,7 +1296,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/profiles/{profileName}/endpoints/{endpointName}/origins
 # operationId: Origins_ListByEndpoint
-export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpoints-origins list" [
+export def "origins-list-by-endpoint" [
   subscription_id: string
   resource_group_name: string
   profile_name: string
@@ -1340,7 +1340,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/profiles/{profileName}/endpoints/{endpointName}/origins/{originName}
 # operationId: Origins_Get
-export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpoints-origins get" [
+export def "origins-get" [
   subscription_id: string
   resource_group_name: string
   profile_name: string
@@ -1387,7 +1387,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/profiles/{profileName}/endpoints/{endpointName}/origins/{originName}
 # operationId: Origins_Update
 # --properties shape: {hostName?: string, httpPort?: int, httpsPort?: int}
-export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpoints-origins update" [
+export def "origins-update" [
   subscription_id: string
   resource_group_name: string
   profile_name: string
@@ -1437,7 +1437,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/profiles/{profileName}/endpoints/{endpointName}/purge
 # operationId: Endpoints_PurgeContent
-export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpoints-purge create-content" [
+export def "endpoints-purge-content" [
   subscription_id: string
   resource_group_name: string
   profile_name: string
@@ -1485,7 +1485,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/profiles/{profileName}/endpoints/{endpointName}/start
 # operationId: Endpoints_Start
-export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpoints-start start" [
+export def "endpoints-start" [
   subscription_id: string
   resource_group_name: string
   profile_name: string
@@ -1529,7 +1529,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/profiles/{profileName}/endpoints/{endpointName}/stop
 # operationId: Endpoints_Stop
-export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpoints-stop stop" [
+export def "endpoints-stop" [
   subscription_id: string
   resource_group_name: string
   profile_name: string
@@ -1573,7 +1573,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/profiles/{profileName}/endpoints/{endpointName}/validateCustomDomain
 # operationId: Endpoints_ValidateCustomDomain
-export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpoints-validate-custom-domain validate" [
+export def "endpoints-validate-custom-domain" [
   subscription_id: string
   resource_group_name: string
   profile_name: string
@@ -1621,7 +1621,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-endpo
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/profiles/{profileName}/generateSsoUri
 # operationId: Profiles_GenerateSsoUri
-export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-generate-sso-uri generate" [
+export def "profiles-generate-sso-uri" [
   subscription_id: string
   resource_group_name: string
   profile_name: string
@@ -1663,7 +1663,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-gener
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/profiles/{profileName}/getSupportedOptimizationTypes
 # operationId: Profiles_ListSupportedOptimizationTypes
-export def "subscriptions-resource-groups-providers-microsoft-cdn-profiles-get-supported-optimization-types list" [
+export def "profiles-list-supported-optimization-types" [
   subscription_id: string
   resource_group_name: string
   profile_name: string

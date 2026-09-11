@@ -129,7 +129,7 @@ def accept-completer [] { ["application/json" "application/xml" "text/xml"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "classify-iterations-image create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "classify-image" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -153,7 +153,7 @@ export def commands []: nothing -> table {
 #
 # POST /{projectId}/classify/iterations/{publishedName}/image
 # operationId: ClassifyImage
-export def "classify-iterations-image create" [
+export def "classify-image" [
   project_id: string
   published_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -200,7 +200,7 @@ export def "classify-iterations-image create" [
 #
 # POST /{projectId}/classify/iterations/{publishedName}/image/nostore
 # operationId: ClassifyImageWithNoStore
-export def "classify-iterations-image-nostore create-with-no-store" [
+export def "classify-image-with-no-store" [
   project_id: string
   published_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -247,7 +247,7 @@ export def "classify-iterations-image-nostore create-with-no-store" [
 #
 # POST /{projectId}/classify/iterations/{publishedName}/url
 # operationId: ClassifyImageUrl
-export def "classify-iterations-url create-image" [
+export def "classify-image-url" [
   project_id: string
   published_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -292,7 +292,7 @@ export def "classify-iterations-url create-image" [
 #
 # POST /{projectId}/classify/iterations/{publishedName}/url/nostore
 # operationId: ClassifyImageUrlWithNoStore
-export def "classify-iterations-url-nostore create-image-with-no-store" [
+export def "classify-image-url-with-no-store" [
   project_id: string
   published_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -337,7 +337,7 @@ export def "classify-iterations-url-nostore create-image-with-no-store" [
 #
 # POST /{projectId}/detect/iterations/{publishedName}/image
 # operationId: DetectImage
-export def "detect-iterations-image create" [
+export def "detect-image" [
   project_id: string
   published_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -384,7 +384,7 @@ export def "detect-iterations-image create" [
 #
 # POST /{projectId}/detect/iterations/{publishedName}/image/nostore
 # operationId: DetectImageWithNoStore
-export def "detect-iterations-image-nostore create-with-no-store" [
+export def "detect-image-with-no-store" [
   project_id: string
   published_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -431,7 +431,7 @@ export def "detect-iterations-image-nostore create-with-no-store" [
 #
 # POST /{projectId}/detect/iterations/{publishedName}/url
 # operationId: DetectImageUrl
-export def "detect-iterations-url create-image" [
+export def "detect-image-url" [
   project_id: string
   published_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -476,7 +476,7 @@ export def "detect-iterations-url create-image" [
 #
 # POST /{projectId}/detect/iterations/{publishedName}/url/nostore
 # operationId: DetectImageUrlWithNoStore
-export def "detect-iterations-url-nostore create-image-with-no-store" [
+export def "detect-image-url-with-no-store" [
   project_id: string
   published_name: string
   --base-url(-b): string@base-url-completer # API base URL

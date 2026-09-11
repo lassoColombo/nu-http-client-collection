@@ -123,7 +123,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "notes list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "keep-notes-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -147,7 +147,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/notes
 # operationId: keep.notes.list
-export def "notes list" [
+export def "keep-notes-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -199,7 +199,7 @@ export def "notes list" [
 # --attachments item shape: {mimeType?: list<string>, name?: string}
 # --body shape: {list?: record, text?: record}
 # --permissions item shape: {email?: string, family?: record, group?: record, role?: "ROLE_UNSPECIFIED"|"OWNER"|"WRITER", user?: record}
-export def "notes create" [
+export def "keep-notes-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -250,7 +250,7 @@ export def "notes create" [
 #
 # DELETE /v1/{name}
 # operationId: keep.notes.delete
-export def "notes delete" [
+export def "keep-notes-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -298,7 +298,7 @@ export def "notes delete" [
 #
 # GET /v1/{name}
 # operationId: keep.notes.get
-export def "notes get" [
+export def "keep-notes-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -348,7 +348,7 @@ export def "notes get" [
 # POST /v1/{parent}/permissions:batchCreate
 # operationId: keep.notes.permissions.batchCreate
 # --requests item shape: {parent?: string, permission?: record}
-export def "permissions-batch-create create" [
+export def "keep-notes-permissions-batch-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -400,7 +400,7 @@ export def "permissions-batch-create create" [
 #
 # POST /v1/{parent}/permissions:batchDelete
 # operationId: keep.notes.permissions.batchDelete
-export def "permissions-batch-delete delete" [
+export def "keep-notes-permissions-batch-delete" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

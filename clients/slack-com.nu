@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "admin-apps-approve approve" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "admin-apps-approve" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -129,7 +129,7 @@ export def commands []: nothing -> table {
 # POST /admin.apps.approve
 # Docs: https://api.slack.com/methods/admin.apps.approve — API method documentation
 # operationId: admin_apps_approve
-export def "admin-apps-approve approve" [
+export def "admin-apps-approve" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -174,7 +174,7 @@ export def "admin-apps-approve approve" [
 # GET /admin.apps.approved.list
 # Docs: https://api.slack.com/methods/admin.apps.approved.list — API method documentation
 # operationId: admin_apps_approved_list
-export def "admin-apps-approved-list list" [
+export def "admin-apps-approved-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -215,7 +215,7 @@ export def "admin-apps-approved-list list" [
 # GET /admin.apps.requests.list
 # Docs: https://api.slack.com/methods/admin.apps.requests.list — API method documentation
 # operationId: admin_apps_requests_list
-export def "admin-apps-requests-list list" [
+export def "admin-apps-requests-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -255,7 +255,7 @@ export def "admin-apps-requests-list list" [
 # POST /admin.apps.restrict
 # Docs: https://api.slack.com/methods/admin.apps.restrict — API method documentation
 # operationId: admin_apps_restrict
-export def "admin-apps-restrict create" [
+export def "admin-apps-restrict" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -300,7 +300,7 @@ export def "admin-apps-restrict create" [
 # GET /admin.apps.restricted.list
 # Docs: https://api.slack.com/methods/admin.apps.restricted.list — API method documentation
 # operationId: admin_apps_restricted_list
-export def "admin-apps-restricted-list list" [
+export def "admin-apps-restricted-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -341,7 +341,7 @@ export def "admin-apps-restricted-list list" [
 # POST /admin.conversations.archive
 # Docs: https://api.slack.com/methods/admin.conversations.archive — API method documentation
 # operationId: admin_conversations_archive
-export def "admin-conversations-archive archive" [
+export def "admin-conversations-archive" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -384,7 +384,7 @@ export def "admin-conversations-archive archive" [
 # POST /admin.conversations.convertToPrivate
 # Docs: https://api.slack.com/methods/admin.conversations.convertToPrivate — API method documentation
 # operationId: admin_conversations_convertToPrivate
-export def "admin-conversations-convert-to-private create" [
+export def "admin-conversations-convert-to-private" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -427,7 +427,7 @@ export def "admin-conversations-convert-to-private create" [
 # POST /admin.conversations.create
 # Docs: https://api.slack.com/methods/admin.conversations.create — API method documentation
 # operationId: admin_conversations_create
-export def "admin-conversations-create create" [
+export def "admin-conversations-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -474,7 +474,7 @@ export def "admin-conversations-create create" [
 # POST /admin.conversations.delete
 # Docs: https://api.slack.com/methods/admin.conversations.delete — API method documentation
 # operationId: admin_conversations_delete
-export def "admin-conversations-delete delete" [
+export def "admin-conversations-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -517,7 +517,7 @@ export def "admin-conversations-delete delete" [
 # POST /admin.conversations.disconnectShared
 # Docs: https://api.slack.com/methods/admin.conversations.disconnectShared — API method documentation
 # operationId: admin_conversations_disconnectShared
-export def "admin-conversations-disconnect-shared create" [
+export def "admin-conversations-disconnect-shared" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -561,7 +561,7 @@ export def "admin-conversations-disconnect-shared create" [
 # GET /admin.conversations.ekm.listOriginalConnectedChannelInfo
 # Docs: https://api.slack.com/methods/admin.conversations.ekm.listOriginalConnectedChannelInfo — API method documentation
 # operationId: admin_conversations_ekm_listOriginalConnectedChannelInfo
-export def "admin-conversations-ekm-list-original-connected-channel-info list" [
+export def "admin-conversations-ekm-list-original-connected-channel-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -602,7 +602,7 @@ export def "admin-conversations-ekm-list-original-connected-channel-info list" [
 # GET /admin.conversations.getConversationPrefs
 # Docs: https://api.slack.com/methods/admin.conversations.getConversationPrefs — API method documentation
 # operationId: admin_conversations_getConversationPrefs
-export def "admin-conversations-get-conversation-prefs get" [
+export def "admin-conversations-get-conversation-prefs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -642,7 +642,7 @@ export def "admin-conversations-get-conversation-prefs get" [
 # GET /admin.conversations.getTeams
 # Docs: https://api.slack.com/methods/admin.conversations.getTeams — API method documentation
 # operationId: admin_conversations_getTeams
-export def "admin-conversations-get-teams get" [
+export def "admin-conversations-get-teams" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -684,7 +684,7 @@ export def "admin-conversations-get-teams get" [
 # POST /admin.conversations.invite
 # Docs: https://api.slack.com/methods/admin.conversations.invite — API method documentation
 # operationId: admin_conversations_invite
-export def "admin-conversations-invite create" [
+export def "admin-conversations-invite" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -728,7 +728,7 @@ export def "admin-conversations-invite create" [
 # POST /admin.conversations.rename
 # Docs: https://api.slack.com/methods/admin.conversations.rename — API method documentation
 # operationId: admin_conversations_rename
-export def "admin-conversations-rename rename" [
+export def "admin-conversations-rename" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -772,7 +772,7 @@ export def "admin-conversations-rename rename" [
 # POST /admin.conversations.restrictAccess.addGroup
 # Docs: https://api.slack.com/methods/admin.conversations.restrictAccess.addGroup — API method documentation
 # operationId: admin_conversations_restrictAccess_addGroup
-export def "admin-conversations-restrict-access-add-group create" [
+export def "admin-conversations-restrict-access-add-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -815,7 +815,7 @@ export def "admin-conversations-restrict-access-add-group create" [
 # GET /admin.conversations.restrictAccess.listGroups
 # Docs: https://api.slack.com/methods/admin.conversations.restrictAccess.listGroups — API method documentation
 # operationId: admin_conversations_restrictAccess_listGroups
-export def "admin-conversations-restrict-access-list-groups list" [
+export def "admin-conversations-restrict-access-list-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -854,7 +854,7 @@ export def "admin-conversations-restrict-access-list-groups list" [
 # POST /admin.conversations.restrictAccess.removeGroup
 # Docs: https://api.slack.com/methods/admin.conversations.restrictAccess.removeGroup — API method documentation
 # operationId: admin_conversations_restrictAccess_removeGroup
-export def "admin-conversations-restrict-access-remove-group delete" [
+export def "admin-conversations-restrict-access-remove-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -897,7 +897,7 @@ export def "admin-conversations-restrict-access-remove-group delete" [
 # GET /admin.conversations.search
 # Docs: https://api.slack.com/methods/admin.conversations.search — API method documentation
 # operationId: admin_conversations_search
-export def "admin-conversations-search list" [
+export def "admin-conversations-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -943,7 +943,7 @@ export def "admin-conversations-search list" [
 # POST /admin.conversations.setConversationPrefs
 # Docs: https://api.slack.com/methods/admin.conversations.setConversationPrefs — API method documentation
 # operationId: admin_conversations_setConversationPrefs
-export def "admin-conversations-set-conversation-prefs update" [
+export def "admin-conversations-set-conversation-prefs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -987,7 +987,7 @@ export def "admin-conversations-set-conversation-prefs update" [
 # POST /admin.conversations.setTeams
 # Docs: https://api.slack.com/methods/admin.conversations.setTeams — API method documentation
 # operationId: admin_conversations_setTeams
-export def "admin-conversations-set-teams update" [
+export def "admin-conversations-set-teams" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1033,7 +1033,7 @@ export def "admin-conversations-set-teams update" [
 # POST /admin.conversations.unarchive
 # Docs: https://api.slack.com/methods/admin.conversations.unarchive — API method documentation
 # operationId: admin_conversations_unarchive
-export def "admin-conversations-unarchive unarchive" [
+export def "admin-conversations-unarchive" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1076,7 +1076,7 @@ export def "admin-conversations-unarchive unarchive" [
 # POST /admin.emoji.add
 # Docs: https://api.slack.com/methods/admin.emoji.add — API method documentation
 # operationId: admin_emoji_add
-export def "admin-emoji-add create" [
+export def "admin-emoji-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1118,7 +1118,7 @@ export def "admin-emoji-add create" [
 # POST /admin.emoji.addAlias
 # Docs: https://api.slack.com/methods/admin.emoji.addAlias — API method documentation
 # operationId: admin_emoji_addAlias
-export def "admin-emoji-add-alias create" [
+export def "admin-emoji-add-alias" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1160,7 +1160,7 @@ export def "admin-emoji-add-alias create" [
 # GET /admin.emoji.list
 # Docs: https://api.slack.com/methods/admin.emoji.list — API method documentation
 # operationId: admin_emoji_list
-export def "admin-emoji-list list" [
+export def "admin-emoji-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1199,7 +1199,7 @@ export def "admin-emoji-list list" [
 # POST /admin.emoji.remove
 # Docs: https://api.slack.com/methods/admin.emoji.remove — API method documentation
 # operationId: admin_emoji_remove
-export def "admin-emoji-remove delete" [
+export def "admin-emoji-remove" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1240,7 +1240,7 @@ export def "admin-emoji-remove delete" [
 # POST /admin.emoji.rename
 # Docs: https://api.slack.com/methods/admin.emoji.rename — API method documentation
 # operationId: admin_emoji_rename
-export def "admin-emoji-rename rename" [
+export def "admin-emoji-rename" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1282,7 +1282,7 @@ export def "admin-emoji-rename rename" [
 # POST /admin.inviteRequests.approve
 # Docs: https://api.slack.com/methods/admin.inviteRequests.approve — API method documentation
 # operationId: admin_inviteRequests_approve
-export def "admin-invite-requests-approve approve" [
+export def "admin-invite-requests-approve" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1326,7 +1326,7 @@ export def "admin-invite-requests-approve approve" [
 # GET /admin.inviteRequests.approved.list
 # Docs: https://api.slack.com/methods/admin.inviteRequests.approved.list — API method documentation
 # operationId: admin_inviteRequests_approved_list
-export def "admin-invite-requests-approved-list list" [
+export def "admin-invite-requests-approved-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1368,7 +1368,7 @@ export def "admin-invite-requests-approved-list list" [
 # GET /admin.inviteRequests.denied.list
 # Docs: https://api.slack.com/methods/admin.inviteRequests.denied.list — API method documentation
 # operationId: admin_inviteRequests_denied_list
-export def "admin-invite-requests-denied-list list" [
+export def "admin-invite-requests-denied-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1410,7 +1410,7 @@ export def "admin-invite-requests-denied-list list" [
 # POST /admin.inviteRequests.deny
 # Docs: https://api.slack.com/methods/admin.inviteRequests.deny — API method documentation
 # operationId: admin_inviteRequests_deny
-export def "admin-invite-requests-deny create" [
+export def "admin-invite-requests-deny" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1454,7 +1454,7 @@ export def "admin-invite-requests-deny create" [
 # GET /admin.inviteRequests.list
 # Docs: https://api.slack.com/methods/admin.inviteRequests.list — API method documentation
 # operationId: admin_inviteRequests_list
-export def "admin-invite-requests-list list" [
+export def "admin-invite-requests-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1496,7 +1496,7 @@ export def "admin-invite-requests-list list" [
 # GET /admin.teams.admins.list
 # Docs: https://api.slack.com/methods/admin.teams.admins.list — API method documentation
 # operationId: admin_teams_admins_list
-export def "admin-teams-admins-list list" [
+export def "admin-teams-admins-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1536,7 +1536,7 @@ export def "admin-teams-admins-list list" [
 # POST /admin.teams.create
 # Docs: https://api.slack.com/methods/admin.teams.create — API method documentation
 # operationId: admin_teams_create
-export def "admin-teams-create create" [
+export def "admin-teams-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1582,7 +1582,7 @@ export def "admin-teams-create create" [
 # GET /admin.teams.list
 # Docs: https://api.slack.com/methods/admin.teams.list — API method documentation
 # operationId: admin_teams_list
-export def "admin-teams-list list" [
+export def "admin-teams-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1623,7 +1623,7 @@ export def "admin-teams-list list" [
 # GET /admin.teams.owners.list
 # Docs: https://api.slack.com/methods/admin.teams.owners.list — API method documentation
 # operationId: admin_teams_owners_list
-export def "admin-teams-owners-list list" [
+export def "admin-teams-owners-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1663,7 +1663,7 @@ export def "admin-teams-owners-list list" [
 # GET /admin.teams.settings.info
 # Docs: https://api.slack.com/methods/admin.teams.settings.info — API method documentation
 # operationId: admin_teams_settings_info
-export def "admin-teams-settings-info get" [
+export def "admin-teams-settings-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1703,7 +1703,7 @@ export def "admin-teams-settings-info get" [
 # POST /admin.teams.settings.setDefaultChannels
 # Docs: https://api.slack.com/methods/admin.teams.settings.setDefaultChannels — API method documentation
 # operationId: admin_teams_settings_setDefaultChannels
-export def "admin-teams-settings-set-default-channels update" [
+export def "admin-teams-settings-set-default-channels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1745,7 +1745,7 @@ export def "admin-teams-settings-set-default-channels update" [
 # POST /admin.teams.settings.setDescription
 # Docs: https://api.slack.com/methods/admin.teams.settings.setDescription — API method documentation
 # operationId: admin_teams_settings_setDescription
-export def "admin-teams-settings-set-description update" [
+export def "admin-teams-settings-set-description" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1789,7 +1789,7 @@ export def "admin-teams-settings-set-description update" [
 # POST /admin.teams.settings.setDiscoverability
 # Docs: https://api.slack.com/methods/admin.teams.settings.setDiscoverability — API method documentation
 # operationId: admin_teams_settings_setDiscoverability
-export def "admin-teams-settings-set-discoverability update" [
+export def "admin-teams-settings-set-discoverability" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1833,7 +1833,7 @@ export def "admin-teams-settings-set-discoverability update" [
 # POST /admin.teams.settings.setIcon
 # Docs: https://api.slack.com/methods/admin.teams.settings.setIcon — API method documentation
 # operationId: admin_teams_settings_setIcon
-export def "admin-teams-settings-set-icon update" [
+export def "admin-teams-settings-set-icon" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1875,7 +1875,7 @@ export def "admin-teams-settings-set-icon update" [
 # POST /admin.teams.settings.setName
 # Docs: https://api.slack.com/methods/admin.teams.settings.setName — API method documentation
 # operationId: admin_teams_settings_setName
-export def "admin-teams-settings-set-name update" [
+export def "admin-teams-settings-set-name" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1919,7 +1919,7 @@ export def "admin-teams-settings-set-name update" [
 # POST /admin.usergroups.addChannels
 # Docs: https://api.slack.com/methods/admin.usergroups.addChannels — API method documentation
 # operationId: admin_usergroups_addChannels
-export def "admin-usergroups-add-channels create" [
+export def "admin-usergroups-add-channels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1964,7 +1964,7 @@ export def "admin-usergroups-add-channels create" [
 # POST /admin.usergroups.addTeams
 # Docs: https://api.slack.com/methods/admin.usergroups.addTeams — API method documentation
 # operationId: admin_usergroups_addTeams
-export def "admin-usergroups-add-teams create" [
+export def "admin-usergroups-add-teams" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2009,7 +2009,7 @@ export def "admin-usergroups-add-teams create" [
 # GET /admin.usergroups.listChannels
 # Docs: https://api.slack.com/methods/admin.usergroups.listChannels — API method documentation
 # operationId: admin_usergroups_listChannels
-export def "admin-usergroups-list-channels list" [
+export def "admin-usergroups-list-channels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2051,7 +2051,7 @@ export def "admin-usergroups-list-channels list" [
 # POST /admin.usergroups.removeChannels
 # Docs: https://api.slack.com/methods/admin.usergroups.removeChannels — API method documentation
 # operationId: admin_usergroups_removeChannels
-export def "admin-usergroups-remove-channels delete" [
+export def "admin-usergroups-remove-channels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2095,7 +2095,7 @@ export def "admin-usergroups-remove-channels delete" [
 # POST /admin.users.assign
 # Docs: https://api.slack.com/methods/admin.users.assign — API method documentation
 # operationId: admin_users_assign
-export def "admin-users-assign assign" [
+export def "admin-users-assign" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2142,7 +2142,7 @@ export def "admin-users-assign assign" [
 # POST /admin.users.invite
 # Docs: https://api.slack.com/methods/admin.users.invite — API method documentation
 # operationId: admin_users_invite
-export def "admin-users-invite create" [
+export def "admin-users-invite" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2193,7 +2193,7 @@ export def "admin-users-invite create" [
 # GET /admin.users.list
 # Docs: https://api.slack.com/methods/admin.users.list — API method documentation
 # operationId: admin_users_list
-export def "admin-users-list list" [
+export def "admin-users-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2235,7 +2235,7 @@ export def "admin-users-list list" [
 # POST /admin.users.remove
 # Docs: https://api.slack.com/methods/admin.users.remove — API method documentation
 # operationId: admin_users_remove
-export def "admin-users-remove delete" [
+export def "admin-users-remove" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2279,7 +2279,7 @@ export def "admin-users-remove delete" [
 # POST /admin.users.session.invalidate
 # Docs: https://api.slack.com/methods/admin.users.session.invalidate — API method documentation
 # operationId: admin_users_session_invalidate
-export def "admin-users-session-invalidate create" [
+export def "admin-users-session-invalidate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2323,7 +2323,7 @@ export def "admin-users-session-invalidate create" [
 # POST /admin.users.session.reset
 # Docs: https://api.slack.com/methods/admin.users.session.reset — API method documentation
 # operationId: admin_users_session_reset
-export def "admin-users-session-reset reset" [
+export def "admin-users-session-reset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2368,7 +2368,7 @@ export def "admin-users-session-reset reset" [
 # POST /admin.users.setAdmin
 # Docs: https://api.slack.com/methods/admin.users.setAdmin — API method documentation
 # operationId: admin_users_setAdmin
-export def "admin-users-set-admin update" [
+export def "admin-users-set-admin" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2412,7 +2412,7 @@ export def "admin-users-set-admin update" [
 # POST /admin.users.setExpiration
 # Docs: https://api.slack.com/methods/admin.users.setExpiration — API method documentation
 # operationId: admin_users_setExpiration
-export def "admin-users-set-expiration update" [
+export def "admin-users-set-expiration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2457,7 +2457,7 @@ export def "admin-users-set-expiration update" [
 # POST /admin.users.setOwner
 # Docs: https://api.slack.com/methods/admin.users.setOwner — API method documentation
 # operationId: admin_users_setOwner
-export def "admin-users-set-owner update" [
+export def "admin-users-set-owner" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2501,7 +2501,7 @@ export def "admin-users-set-owner update" [
 # POST /admin.users.setRegular
 # Docs: https://api.slack.com/methods/admin.users.setRegular — API method documentation
 # operationId: admin_users_setRegular
-export def "admin-users-set-regular update" [
+export def "admin-users-set-regular" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2545,7 +2545,7 @@ export def "admin-users-set-regular update" [
 # GET /api.test
 # Docs: https://api.slack.com/methods/api.test — API method documentation
 # operationId: api_test
-export def "api-test test" [
+export def "api-test" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2583,7 +2583,7 @@ export def "api-test test" [
 # GET /apps.event.authorizations.list
 # Docs: https://api.slack.com/methods/apps.event.authorizations.list — API method documentation
 # operationId: apps_event_authorizations_list
-export def "apps-event-authorizations-list list" [
+export def "apps-event-authorizations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2625,7 +2625,7 @@ export def "apps-event-authorizations-list list" [
 # GET /apps.permissions.info
 # Docs: https://api.slack.com/methods/apps.permissions.info — API method documentation
 # operationId: apps_permissions_info
-export def "apps-permissions-info get" [
+export def "apps-permissions-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2662,7 +2662,7 @@ export def "apps-permissions-info get" [
 # GET /apps.permissions.request
 # Docs: https://api.slack.com/methods/apps.permissions.request — API method documentation
 # operationId: apps_permissions_request
-export def "apps-permissions-request request" [
+export def "apps-permissions-request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2701,7 +2701,7 @@ export def "apps-permissions-request request" [
 # GET /apps.permissions.resources.list
 # Docs: https://api.slack.com/methods/apps.permissions.resources.list — API method documentation
 # operationId: apps_permissions_resources_list
-export def "apps-permissions-resources-list list" [
+export def "apps-permissions-resources-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2740,7 +2740,7 @@ export def "apps-permissions-resources-list list" [
 # GET /apps.permissions.scopes.list
 # Docs: https://api.slack.com/methods/apps.permissions.scopes.list — API method documentation
 # operationId: apps_permissions_scopes_list
-export def "apps-permissions-scopes-list list" [
+export def "apps-permissions-scopes-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2777,7 +2777,7 @@ export def "apps-permissions-scopes-list list" [
 # GET /apps.permissions.users.list
 # Docs: https://api.slack.com/methods/apps.permissions.users.list — API method documentation
 # operationId: apps_permissions_users_list
-export def "apps-permissions-users-list list" [
+export def "apps-permissions-users-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2816,7 +2816,7 @@ export def "apps-permissions-users-list list" [
 # GET /apps.permissions.users.request
 # Docs: https://api.slack.com/methods/apps.permissions.users.request — API method documentation
 # operationId: apps_permissions_users_request
-export def "apps-permissions-users-request request" [
+export def "apps-permissions-users-request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2856,7 +2856,7 @@ export def "apps-permissions-users-request request" [
 # GET /apps.uninstall
 # Docs: https://api.slack.com/methods/apps.uninstall — API method documentation
 # operationId: apps_uninstall
-export def "apps-uninstall get" [
+export def "apps-uninstall" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2895,7 +2895,7 @@ export def "apps-uninstall get" [
 # GET /auth.revoke
 # Docs: https://api.slack.com/methods/auth.revoke — API method documentation
 # operationId: auth_revoke
-export def "auth-revoke delete" [
+export def "auth-revoke" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2933,7 +2933,7 @@ export def "auth-revoke delete" [
 # GET /auth.test
 # Docs: https://api.slack.com/methods/auth.test — API method documentation
 # operationId: auth_test
-export def "auth-test test" [
+export def "auth-test" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2971,7 +2971,7 @@ export def "auth-test test" [
 # GET /bots.info
 # Docs: https://api.slack.com/methods/bots.info — API method documentation
 # operationId: bots_info
-export def "bots-info get" [
+export def "bots-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3009,7 +3009,7 @@ export def "bots-info get" [
 # POST /calls.add
 # Docs: https://api.slack.com/methods/calls.add — API method documentation
 # operationId: calls_add
-export def "calls-add create" [
+export def "calls-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3059,7 +3059,7 @@ export def "calls-add create" [
 # POST /calls.end
 # Docs: https://api.slack.com/methods/calls.end — API method documentation
 # operationId: calls_end
-export def "calls-end create" [
+export def "calls-end" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3103,7 +3103,7 @@ export def "calls-end create" [
 # GET /calls.info
 # Docs: https://api.slack.com/methods/calls.info — API method documentation
 # operationId: calls_info
-export def "calls-info get" [
+export def "calls-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3143,7 +3143,7 @@ export def "calls-info get" [
 # POST /calls.participants.add
 # Docs: https://api.slack.com/methods/calls.participants.add — API method documentation
 # operationId: calls_participants_add
-export def "calls-participants-add create" [
+export def "calls-participants-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3187,7 +3187,7 @@ export def "calls-participants-add create" [
 # POST /calls.participants.remove
 # Docs: https://api.slack.com/methods/calls.participants.remove — API method documentation
 # operationId: calls_participants_remove
-export def "calls-participants-remove delete" [
+export def "calls-participants-remove" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3231,7 +3231,7 @@ export def "calls-participants-remove delete" [
 # POST /calls.update
 # Docs: https://api.slack.com/methods/calls.update — API method documentation
 # operationId: calls_update
-export def "calls-update update" [
+export def "calls-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3277,7 +3277,7 @@ export def "calls-update update" [
 # POST /chat.delete
 # Docs: https://api.slack.com/methods/chat.delete — API method documentation
 # operationId: chat_delete
-export def "chat-delete delete" [
+export def "chat-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3322,7 +3322,7 @@ export def "chat-delete delete" [
 # POST /chat.deleteScheduledMessage
 # Docs: https://api.slack.com/methods/chat.deleteScheduledMessage — API method documentation
 # operationId: chat_deleteScheduledMessage
-export def "chat-delete-scheduled-message delete" [
+export def "chat-delete-scheduled-message" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3367,7 +3367,7 @@ export def "chat-delete-scheduled-message delete" [
 # GET /chat.getPermalink
 # Docs: https://api.slack.com/methods/chat.getPermalink — API method documentation
 # operationId: chat_getPermalink
-export def "chat-get-permalink get" [
+export def "chat-get-permalink" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3406,7 +3406,7 @@ export def "chat-get-permalink get" [
 # POST /chat.meMessage
 # Docs: https://api.slack.com/methods/chat.meMessage — API method documentation
 # operationId: chat_meMessage
-export def "chat-me-message create" [
+export def "chat-me-message" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3450,7 +3450,7 @@ export def "chat-me-message create" [
 # POST /chat.postEphemeral
 # Docs: https://api.slack.com/methods/chat.postEphemeral — API method documentation
 # operationId: chat_postEphemeral
-export def "chat-post-ephemeral create" [
+export def "chat-post-ephemeral" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3504,7 +3504,7 @@ export def "chat-post-ephemeral create" [
 # POST /chat.postMessage
 # Docs: https://api.slack.com/methods/chat.postMessage — API method documentation
 # operationId: chat_postMessage
-export def "chat-post-message create" [
+export def "chat-post-message" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3561,7 +3561,7 @@ export def "chat-post-message create" [
 # POST /chat.scheduleMessage
 # Docs: https://api.slack.com/methods/chat.scheduleMessage — API method documentation
 # operationId: chat_scheduleMessage
-export def "chat-schedule-message create" [
+export def "chat-schedule-message" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3615,7 +3615,7 @@ export def "chat-schedule-message create" [
 # GET /chat.scheduledMessages.list
 # Docs: https://api.slack.com/methods/chat.scheduledMessages.list — API method documentation
 # operationId: chat_scheduledMessages_list
-export def "chat-scheduled-messages-list list" [
+export def "chat-scheduled-messages-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3659,7 +3659,7 @@ export def "chat-scheduled-messages-list list" [
 # POST /chat.unfurl
 # Docs: https://api.slack.com/methods/chat.unfurl — API method documentation
 # operationId: chat_unfurl
-export def "chat-unfurl create" [
+export def "chat-unfurl" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3707,7 +3707,7 @@ export def "chat-unfurl create" [
 # POST /chat.update
 # Docs: https://api.slack.com/methods/chat.update — API method documentation
 # operationId: chat_update
-export def "chat-update update" [
+export def "chat-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3757,7 +3757,7 @@ export def "chat-update update" [
 # POST /conversations.archive
 # Docs: https://api.slack.com/methods/conversations.archive — API method documentation
 # operationId: conversations_archive
-export def "conversations-archive archive" [
+export def "conversations-archive" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3800,7 +3800,7 @@ export def "conversations-archive archive" [
 # POST /conversations.close
 # Docs: https://api.slack.com/methods/conversations.close — API method documentation
 # operationId: conversations_close
-export def "conversations-close close" [
+export def "conversations-close" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3843,7 +3843,7 @@ export def "conversations-close close" [
 # POST /conversations.create
 # Docs: https://api.slack.com/methods/conversations.create — API method documentation
 # operationId: conversations_create
-export def "conversations-create create" [
+export def "conversations-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3887,7 +3887,7 @@ export def "conversations-create create" [
 # GET /conversations.history
 # Docs: https://api.slack.com/methods/conversations.history — API method documentation
 # operationId: conversations_history
-export def "conversations-history get" [
+export def "conversations-history" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3930,7 +3930,7 @@ export def "conversations-history get" [
 # GET /conversations.info
 # Docs: https://api.slack.com/methods/conversations.info — API method documentation
 # operationId: conversations_info
-export def "conversations-info get" [
+export def "conversations-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3970,7 +3970,7 @@ export def "conversations-info get" [
 # POST /conversations.invite
 # Docs: https://api.slack.com/methods/conversations.invite — API method documentation
 # operationId: conversations_invite
-export def "conversations-invite create" [
+export def "conversations-invite" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4014,7 +4014,7 @@ export def "conversations-invite create" [
 # POST /conversations.join
 # Docs: https://api.slack.com/methods/conversations.join — API method documentation
 # operationId: conversations_join
-export def "conversations-join create" [
+export def "conversations-join" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4057,7 +4057,7 @@ export def "conversations-join create" [
 # POST /conversations.kick
 # Docs: https://api.slack.com/methods/conversations.kick — API method documentation
 # operationId: conversations_kick
-export def "conversations-kick create" [
+export def "conversations-kick" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4101,7 +4101,7 @@ export def "conversations-kick create" [
 # POST /conversations.leave
 # Docs: https://api.slack.com/methods/conversations.leave — API method documentation
 # operationId: conversations_leave
-export def "conversations-leave create" [
+export def "conversations-leave" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4144,7 +4144,7 @@ export def "conversations-leave create" [
 # GET /conversations.list
 # Docs: https://api.slack.com/methods/conversations.list — API method documentation
 # operationId: conversations_list
-export def "conversations-list list" [
+export def "conversations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4185,7 +4185,7 @@ export def "conversations-list list" [
 # POST /conversations.mark
 # Docs: https://api.slack.com/methods/conversations.mark — API method documentation
 # operationId: conversations_mark
-export def "conversations-mark create" [
+export def "conversations-mark" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4229,7 +4229,7 @@ export def "conversations-mark create" [
 # GET /conversations.members
 # Docs: https://api.slack.com/methods/conversations.members — API method documentation
 # operationId: conversations_members
-export def "conversations-members get" [
+export def "conversations-members" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4269,7 +4269,7 @@ export def "conversations-members get" [
 # POST /conversations.open
 # Docs: https://api.slack.com/methods/conversations.open — API method documentation
 # operationId: conversations_open
-export def "conversations-open open" [
+export def "conversations-open" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4314,7 +4314,7 @@ export def "conversations-open open" [
 # POST /conversations.rename
 # Docs: https://api.slack.com/methods/conversations.rename — API method documentation
 # operationId: conversations_rename
-export def "conversations-rename rename" [
+export def "conversations-rename" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4358,7 +4358,7 @@ export def "conversations-rename rename" [
 # GET /conversations.replies
 # Docs: https://api.slack.com/methods/conversations.replies — API method documentation
 # operationId: conversations_replies
-export def "conversations-replies get" [
+export def "conversations-replies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4402,7 +4402,7 @@ export def "conversations-replies get" [
 # POST /conversations.setPurpose
 # Docs: https://api.slack.com/methods/conversations.setPurpose — API method documentation
 # operationId: conversations_setPurpose
-export def "conversations-set-purpose update" [
+export def "conversations-set-purpose" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4446,7 +4446,7 @@ export def "conversations-set-purpose update" [
 # POST /conversations.setTopic
 # Docs: https://api.slack.com/methods/conversations.setTopic — API method documentation
 # operationId: conversations_setTopic
-export def "conversations-set-topic update" [
+export def "conversations-set-topic" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4490,7 +4490,7 @@ export def "conversations-set-topic update" [
 # POST /conversations.unarchive
 # Docs: https://api.slack.com/methods/conversations.unarchive — API method documentation
 # operationId: conversations_unarchive
-export def "conversations-unarchive unarchive" [
+export def "conversations-unarchive" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4533,7 +4533,7 @@ export def "conversations-unarchive unarchive" [
 # GET /dialog.open
 # Docs: https://api.slack.com/methods/dialog.open — API method documentation
 # operationId: dialog_open
-export def "dialog-open open" [
+export def "dialog-open" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4574,7 +4574,7 @@ export def "dialog-open open" [
 # POST /dnd.endDnd
 # Docs: https://api.slack.com/methods/dnd.endDnd — API method documentation
 # operationId: dnd_endDnd
-export def "dnd-end-dnd create" [
+export def "dnd-end-dnd" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4612,7 +4612,7 @@ export def "dnd-end-dnd create" [
 # POST /dnd.endSnooze
 # Docs: https://api.slack.com/methods/dnd.endSnooze — API method documentation
 # operationId: dnd_endSnooze
-export def "dnd-end-snooze create" [
+export def "dnd-end-snooze" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4650,7 +4650,7 @@ export def "dnd-end-snooze create" [
 # GET /dnd.info
 # Docs: https://api.slack.com/methods/dnd.info — API method documentation
 # operationId: dnd_info
-export def "dnd-info get" [
+export def "dnd-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4688,7 +4688,7 @@ export def "dnd-info get" [
 # POST /dnd.setSnooze
 # Docs: https://api.slack.com/methods/dnd.setSnooze — API method documentation
 # operationId: dnd_setSnooze
-export def "dnd-set-snooze update" [
+export def "dnd-set-snooze" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4729,7 +4729,7 @@ export def "dnd-set-snooze update" [
 # GET /dnd.teamInfo
 # Docs: https://api.slack.com/methods/dnd.teamInfo — API method documentation
 # operationId: dnd_teamInfo
-export def "dnd-team-info get" [
+export def "dnd-team-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4767,7 +4767,7 @@ export def "dnd-team-info get" [
 # GET /emoji.list
 # Docs: https://api.slack.com/methods/emoji.list — API method documentation
 # operationId: emoji_list
-export def "emoji-list list" [
+export def "emoji-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4804,7 +4804,7 @@ export def "emoji-list list" [
 # POST /files.comments.delete
 # Docs: https://api.slack.com/methods/files.comments.delete — API method documentation
 # operationId: files_comments_delete
-export def "files-comments-delete delete" [
+export def "files-comments-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4848,7 +4848,7 @@ export def "files-comments-delete delete" [
 # POST /files.delete
 # Docs: https://api.slack.com/methods/files.delete — API method documentation
 # operationId: files_delete
-export def "files-delete delete" [
+export def "files-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4891,7 +4891,7 @@ export def "files-delete delete" [
 # GET /files.info
 # Docs: https://api.slack.com/methods/files.info — API method documentation
 # operationId: files_info
-export def "files-info get" [
+export def "files-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4933,7 +4933,7 @@ export def "files-info get" [
 # GET /files.list
 # Docs: https://api.slack.com/methods/files.list — API method documentation
 # operationId: files_list
-export def "files-list list" [
+export def "files-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4978,7 +4978,7 @@ export def "files-list list" [
 # POST /files.remote.add
 # Docs: https://api.slack.com/methods/files.remote.add — API method documentation
 # operationId: files_remote_add
-export def "files-remote-add create" [
+export def "files-remote-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5024,7 +5024,7 @@ export def "files-remote-add create" [
 # GET /files.remote.info
 # Docs: https://api.slack.com/methods/files.remote.info — API method documentation
 # operationId: files_remote_info
-export def "files-remote-info get" [
+export def "files-remote-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5063,7 +5063,7 @@ export def "files-remote-info get" [
 # GET /files.remote.list
 # Docs: https://api.slack.com/methods/files.remote.list — API method documentation
 # operationId: files_remote_list
-export def "files-remote-list list" [
+export def "files-remote-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5105,7 +5105,7 @@ export def "files-remote-list list" [
 # POST /files.remote.remove
 # Docs: https://api.slack.com/methods/files.remote.remove — API method documentation
 # operationId: files_remote_remove
-export def "files-remote-remove delete" [
+export def "files-remote-remove" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5147,7 +5147,7 @@ export def "files-remote-remove delete" [
 # GET /files.remote.share
 # Docs: https://api.slack.com/methods/files.remote.share — API method documentation
 # operationId: files_remote_share
-export def "files-remote-share get" [
+export def "files-remote-share" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5187,7 +5187,7 @@ export def "files-remote-share get" [
 # POST /files.remote.update
 # Docs: https://api.slack.com/methods/files.remote.update — API method documentation
 # operationId: files_remote_update
-export def "files-remote-update update" [
+export def "files-remote-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5234,7 +5234,7 @@ export def "files-remote-update update" [
 # POST /files.revokePublicURL
 # Docs: https://api.slack.com/methods/files.revokePublicURL — API method documentation
 # operationId: files_revokePublicURL
-export def "files-revoke-public-url delete" [
+export def "files-revoke-public-url" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5277,7 +5277,7 @@ export def "files-revoke-public-url delete" [
 # POST /files.sharedPublicURL
 # Docs: https://api.slack.com/methods/files.sharedPublicURL — API method documentation
 # operationId: files_sharedPublicURL
-export def "files-shared-public-url create" [
+export def "files-shared-public-url" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5320,7 +5320,7 @@ export def "files-shared-public-url create" [
 # POST /files.upload
 # Docs: https://api.slack.com/methods/files.upload — API method documentation
 # operationId: files_upload
-export def "files-upload upload" [
+export def "files-upload" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5368,7 +5368,7 @@ export def "files-upload upload" [
 # GET /migration.exchange
 # Docs: https://api.slack.com/methods/migration.exchange — API method documentation
 # operationId: migration_exchange
-export def "migration-exchange get" [
+export def "migration-exchange" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5408,7 +5408,7 @@ export def "migration-exchange get" [
 # GET /oauth.access
 # Docs: https://api.slack.com/methods/oauth.access — API method documentation
 # operationId: oauth_access
-export def "oauth-access get" [
+export def "oauth-access" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5449,7 +5449,7 @@ export def "oauth-access get" [
 # GET /oauth.token
 # Docs: https://api.slack.com/methods/oauth.token — API method documentation
 # operationId: oauth_token
-export def "oauth-token get" [
+export def "oauth-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5490,7 +5490,7 @@ export def "oauth-token get" [
 # GET /oauth.v2.access
 # Docs: https://api.slack.com/methods/oauth.v2.access — API method documentation
 # operationId: oauth_v2_access
-export def "oauth-v2-access get" [
+export def "oauth-v2-access" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5530,7 +5530,7 @@ export def "oauth-v2-access get" [
 # POST /pins.add
 # Docs: https://api.slack.com/methods/pins.add — API method documentation
 # operationId: pins_add
-export def "pins-add create" [
+export def "pins-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5574,7 +5574,7 @@ export def "pins-add create" [
 # GET /pins.list
 # Docs: https://api.slack.com/methods/pins.list — API method documentation
 # operationId: pins_list
-export def "pins-list list" [
+export def "pins-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5612,7 +5612,7 @@ export def "pins-list list" [
 # POST /pins.remove
 # Docs: https://api.slack.com/methods/pins.remove — API method documentation
 # operationId: pins_remove
-export def "pins-remove delete" [
+export def "pins-remove" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5656,7 +5656,7 @@ export def "pins-remove delete" [
 # POST /reactions.add
 # Docs: https://api.slack.com/methods/reactions.add — API method documentation
 # operationId: reactions_add
-export def "reactions-add create" [
+export def "reactions-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5701,7 +5701,7 @@ export def "reactions-add create" [
 # GET /reactions.get
 # Docs: https://api.slack.com/methods/reactions.get — API method documentation
 # operationId: reactions_get
-export def "reactions-get get" [
+export def "reactions-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5743,7 +5743,7 @@ export def "reactions-get get" [
 # GET /reactions.list
 # Docs: https://api.slack.com/methods/reactions.list — API method documentation
 # operationId: reactions_list
-export def "reactions-list list" [
+export def "reactions-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5786,7 +5786,7 @@ export def "reactions-list list" [
 # POST /reactions.remove
 # Docs: https://api.slack.com/methods/reactions.remove — API method documentation
 # operationId: reactions_remove
-export def "reactions-remove delete" [
+export def "reactions-remove" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5833,7 +5833,7 @@ export def "reactions-remove delete" [
 # POST /reminders.add
 # Docs: https://api.slack.com/methods/reminders.add — API method documentation
 # operationId: reminders_add
-export def "reminders-add create" [
+export def "reminders-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5878,7 +5878,7 @@ export def "reminders-add create" [
 # POST /reminders.complete
 # Docs: https://api.slack.com/methods/reminders.complete — API method documentation
 # operationId: reminders_complete
-export def "reminders-complete complete" [
+export def "reminders-complete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5921,7 +5921,7 @@ export def "reminders-complete complete" [
 # POST /reminders.delete
 # Docs: https://api.slack.com/methods/reminders.delete — API method documentation
 # operationId: reminders_delete
-export def "reminders-delete delete" [
+export def "reminders-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5964,7 +5964,7 @@ export def "reminders-delete delete" [
 # GET /reminders.info
 # Docs: https://api.slack.com/methods/reminders.info — API method documentation
 # operationId: reminders_info
-export def "reminders-info get" [
+export def "reminders-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6002,7 +6002,7 @@ export def "reminders-info get" [
 # GET /reminders.list
 # Docs: https://api.slack.com/methods/reminders.list — API method documentation
 # operationId: reminders_list
-export def "reminders-list list" [
+export def "reminders-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6039,7 +6039,7 @@ export def "reminders-list list" [
 # GET /rtm.connect
 # Docs: https://api.slack.com/methods/rtm.connect — API method documentation
 # operationId: rtm_connect
-export def "rtm-connect get" [
+export def "rtm-connect" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6078,7 +6078,7 @@ export def "rtm-connect get" [
 # GET /search.messages
 # Docs: https://api.slack.com/methods/search.messages — API method documentation
 # operationId: search_messages
-export def "search-messages list" [
+export def "search-messages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6121,7 +6121,7 @@ export def "search-messages list" [
 # POST /stars.add
 # Docs: https://api.slack.com/methods/stars.add — API method documentation
 # operationId: stars_add
-export def "stars-add create" [
+export def "stars-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6167,7 +6167,7 @@ export def "stars-add create" [
 # GET /stars.list
 # Docs: https://api.slack.com/methods/stars.list — API method documentation
 # operationId: stars_list
-export def "stars-list list" [
+export def "stars-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6208,7 +6208,7 @@ export def "stars-list list" [
 # POST /stars.remove
 # Docs: https://api.slack.com/methods/stars.remove — API method documentation
 # operationId: stars_remove
-export def "stars-remove delete" [
+export def "stars-remove" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6254,7 +6254,7 @@ export def "stars-remove delete" [
 # GET /team.accessLogs
 # Docs: https://api.slack.com/methods/team.accessLogs — API method documentation
 # operationId: team_accessLogs
-export def "team-access-logs logs" [
+export def "team-access-logs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6294,7 +6294,7 @@ export def "team-access-logs logs" [
 # GET /team.billableInfo
 # Docs: https://api.slack.com/methods/team.billableInfo — API method documentation
 # operationId: team_billableInfo
-export def "team-billable-info get" [
+export def "team-billable-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6332,7 +6332,7 @@ export def "team-billable-info get" [
 # GET /team.info
 # Docs: https://api.slack.com/methods/team.info — API method documentation
 # operationId: team_info
-export def "team-info get" [
+export def "team-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6370,7 +6370,7 @@ export def "team-info get" [
 # GET /team.integrationLogs
 # Docs: https://api.slack.com/methods/team.integrationLogs — API method documentation
 # operationId: team_integrationLogs
-export def "team-integration-logs logs" [
+export def "team-integration-logs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6413,7 +6413,7 @@ export def "team-integration-logs logs" [
 # GET /team.profile.get
 # Docs: https://api.slack.com/methods/team.profile.get — API method documentation
 # operationId: team_profile_get
-export def "team-profile-get get" [
+export def "team-profile-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6451,7 +6451,7 @@ export def "team-profile-get get" [
 # POST /usergroups.create
 # Docs: https://api.slack.com/methods/usergroups.create — API method documentation
 # operationId: usergroups_create
-export def "usergroups-create create" [
+export def "usergroups-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6498,7 +6498,7 @@ export def "usergroups-create create" [
 # POST /usergroups.disable
 # Docs: https://api.slack.com/methods/usergroups.disable — API method documentation
 # operationId: usergroups_disable
-export def "usergroups-disable disable" [
+export def "usergroups-disable" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6542,7 +6542,7 @@ export def "usergroups-disable disable" [
 # POST /usergroups.enable
 # Docs: https://api.slack.com/methods/usergroups.enable — API method documentation
 # operationId: usergroups_enable
-export def "usergroups-enable enable" [
+export def "usergroups-enable" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6586,7 +6586,7 @@ export def "usergroups-enable enable" [
 # GET /usergroups.list
 # Docs: https://api.slack.com/methods/usergroups.list — API method documentation
 # operationId: usergroups_list
-export def "usergroups-list list" [
+export def "usergroups-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6626,7 +6626,7 @@ export def "usergroups-list list" [
 # POST /usergroups.update
 # Docs: https://api.slack.com/methods/usergroups.update — API method documentation
 # operationId: usergroups_update
-export def "usergroups-update update" [
+export def "usergroups-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6674,7 +6674,7 @@ export def "usergroups-update update" [
 # GET /usergroups.users.list
 # Docs: https://api.slack.com/methods/usergroups.users.list — API method documentation
 # operationId: usergroups_users_list
-export def "usergroups-users-list list" [
+export def "usergroups-users-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6713,7 +6713,7 @@ export def "usergroups-users-list list" [
 # POST /usergroups.users.update
 # Docs: https://api.slack.com/methods/usergroups.users.update — API method documentation
 # operationId: usergroups_users_update
-export def "usergroups-users-update update" [
+export def "usergroups-users-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6758,7 +6758,7 @@ export def "usergroups-users-update update" [
 # GET /users.conversations
 # Docs: https://api.slack.com/methods/users.conversations — API method documentation
 # operationId: users_conversations
-export def "users-conversations get" [
+export def "users-conversations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6800,7 +6800,7 @@ export def "users-conversations get" [
 # POST /users.deletePhoto
 # Docs: https://api.slack.com/methods/users.deletePhoto — API method documentation
 # operationId: users_deletePhoto
-export def "users-delete-photo delete" [
+export def "users-delete-photo" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6840,7 +6840,7 @@ export def "users-delete-photo delete" [
 # GET /users.getPresence
 # Docs: https://api.slack.com/methods/users.getPresence — API method documentation
 # operationId: users_getPresence
-export def "users-get-presence get" [
+export def "users-get-presence" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6878,7 +6878,7 @@ export def "users-get-presence get" [
 # GET /users.identity
 # Docs: https://api.slack.com/methods/users.identity — API method documentation
 # operationId: users_identity
-export def "users-identity get" [
+export def "users-identity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6915,7 +6915,7 @@ export def "users-identity get" [
 # GET /users.info
 # Docs: https://api.slack.com/methods/users.info — API method documentation
 # operationId: users_info
-export def "users-info get" [
+export def "users-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6954,7 +6954,7 @@ export def "users-info get" [
 # GET /users.list
 # Docs: https://api.slack.com/methods/users.list — API method documentation
 # operationId: users_list
-export def "users-list list" [
+export def "users-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6994,7 +6994,7 @@ export def "users-list list" [
 # GET /users.lookupByEmail
 # Docs: https://api.slack.com/methods/users.lookupByEmail — API method documentation
 # operationId: users_lookupByEmail
-export def "users-lookup-by-email get" [
+export def "users-lookup-by-email" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7032,7 +7032,7 @@ export def "users-lookup-by-email get" [
 # GET /users.profile.get
 # Docs: https://api.slack.com/methods/users.profile.get — API method documentation
 # operationId: users_profile_get
-export def "users-profile-get get" [
+export def "users-profile-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7071,7 +7071,7 @@ export def "users-profile-get get" [
 # POST /users.profile.set
 # Docs: https://api.slack.com/methods/users.profile.set — API method documentation
 # operationId: users_profile_set
-export def "users-profile-set update" [
+export def "users-profile-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7117,7 +7117,7 @@ export def "users-profile-set update" [
 # POST /users.setActive
 # Docs: https://api.slack.com/methods/users.setActive — API method documentation
 # operationId: users_setActive
-export def "users-set-active update" [
+export def "users-set-active" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7155,7 +7155,7 @@ export def "users-set-active update" [
 # POST /users.setPhoto
 # Docs: https://api.slack.com/methods/users.setPhoto — API method documentation
 # operationId: users_setPhoto
-export def "users-set-photo update" [
+export def "users-set-photo" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7199,7 +7199,7 @@ export def "users-set-photo update" [
 # POST /users.setPresence
 # Docs: https://api.slack.com/methods/users.setPresence — API method documentation
 # operationId: users_setPresence
-export def "users-set-presence update" [
+export def "users-set-presence" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7242,7 +7242,7 @@ export def "users-set-presence update" [
 # GET /views.open
 # Docs: https://api.slack.com/methods/views.open — API method documentation
 # operationId: views_open
-export def "views-open open" [
+export def "views-open" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7283,7 +7283,7 @@ export def "views-open open" [
 # GET /views.publish
 # Docs: https://api.slack.com/methods/views.publish — API method documentation
 # operationId: views_publish
-export def "views-publish publish" [
+export def "views-publish" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7325,7 +7325,7 @@ export def "views-publish publish" [
 # GET /views.push
 # Docs: https://api.slack.com/methods/views.push — API method documentation
 # operationId: views_push
-export def "views-push push" [
+export def "views-push" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7366,7 +7366,7 @@ export def "views-push push" [
 # GET /views.update
 # Docs: https://api.slack.com/methods/views.update — API method documentation
 # operationId: views_update
-export def "views-update update" [
+export def "views-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7409,7 +7409,7 @@ export def "views-update update" [
 # GET /workflows.stepCompleted
 # Docs: https://api.slack.com/methods/workflows.stepCompleted — API method documentation
 # operationId: workflows_stepCompleted
-export def "workflows-step-completed get" [
+export def "workflows-step-completed" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7450,7 +7450,7 @@ export def "workflows-step-completed get" [
 # GET /workflows.stepFailed
 # Docs: https://api.slack.com/methods/workflows.stepFailed — API method documentation
 # operationId: workflows_stepFailed
-export def "workflows-step-failed get" [
+export def "workflows-step-failed" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7491,7 +7491,7 @@ export def "workflows-step-failed get" [
 # GET /workflows.updateStep
 # Docs: https://api.slack.com/methods/workflows.updateStep — API method documentation
 # operationId: workflows_updateStep
-export def "workflows-update-step update" [
+export def "workflows-update-step" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

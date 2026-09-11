@@ -114,7 +114,7 @@ def connector-provisioning-type-completer [] { ["LAMBDA"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-connector-profile create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-connector-profile" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -139,7 +139,7 @@ export def commands []: nothing -> table {
 # POST /create-connector-profile
 # operationId: CreateConnectorProfile
 # --connectorProfileConfig shape: {connectorProfileProperties?: any, connectorProfileCredentials?: any}
-export def "create-connector-profile create" [
+export def "create-connector-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -197,7 +197,7 @@ export def "create-connector-profile create" [
 # --destinationFlowConfigList item shape: {connectorType: any, apiVersion?: any, connectorProfileName?: any, destinationConnectorProperties: any}
 # --tasks item shape: {sourceFields: any, connectorOperator?: any, destinationField?: any, taskType: any, taskProperties?: any}
 # --metadataCatalogConfig shape: {glueDataCatalog?: any}
-export def "create-flow create" [
+export def "create-flow" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -253,7 +253,7 @@ export def "create-flow create" [
 #
 # POST /delete-connector-profile
 # operationId: DeleteConnectorProfile
-export def "delete-connector-profile delete" [
+export def "delete-connector-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -301,7 +301,7 @@ export def "delete-connector-profile delete" [
 #
 # POST /delete-flow
 # operationId: DeleteFlow
-export def "delete-flow delete" [
+export def "delete-flow" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -349,7 +349,7 @@ export def "delete-flow delete" [
 #
 # POST /describe-connector
 # operationId: DescribeConnector
-export def "describe-connector get" [
+export def "describe-connector" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -397,7 +397,7 @@ export def "describe-connector get" [
 #
 # POST /describe-connector-entity
 # operationId: DescribeConnectorEntity
-export def "describe-connector-entity get" [
+export def "describe-connector-entity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -447,7 +447,7 @@ export def "describe-connector-entity get" [
 #
 # POST /describe-connector-profiles
 # operationId: DescribeConnectorProfiles
-export def "describe-connector-profiles get" [
+export def "describe-connector-profiles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -501,7 +501,7 @@ export def "describe-connector-profiles get" [
 #
 # POST /describe-connectors
 # operationId: DescribeConnectors
-export def "describe-connectors get" [
+export def "describe-connectors" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -553,7 +553,7 @@ export def "describe-connectors get" [
 #
 # POST /describe-flow
 # operationId: DescribeFlow
-export def "describe-flow get" [
+export def "describe-flow" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -600,7 +600,7 @@ export def "describe-flow get" [
 #
 # POST /describe-flow-execution-records
 # operationId: DescribeFlowExecutionRecords
-export def "describe-flow-execution-records get" [
+export def "describe-flow-execution-records" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -652,7 +652,7 @@ export def "describe-flow-execution-records get" [
 #
 # POST /list-connector-entities
 # operationId: ListConnectorEntities
-export def "list-connector-entities list" [
+export def "list-connector-entities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -704,7 +704,7 @@ export def "list-connector-entities list" [
 #
 # POST /list-connectors
 # operationId: ListConnectors
-export def "list-connectors list" [
+export def "list-connectors" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -755,7 +755,7 @@ export def "list-connectors list" [
 #
 # POST /list-flows
 # operationId: ListFlows
-export def "list-flows list" [
+export def "list-flows" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -806,7 +806,7 @@ export def "list-flows list" [
 #
 # GET /tags/{resourceArn}
 # operationId: ListTagsForResource
-export def "tags list-for-resource" [
+export def "list-tags-for-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -851,7 +851,7 @@ export def "tags list-for-resource" [
 #
 # POST /tags/{resourceArn}
 # operationId: TagResource
-export def "tags tag-resource" [
+export def "tag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -901,7 +901,7 @@ export def "tags tag-resource" [
 # POST /register-connector
 # operationId: RegisterConnector
 # --connectorProvisioningConfig shape: {lambda?: any}
-export def "register-connector create" [
+export def "register-connector" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -952,7 +952,7 @@ export def "register-connector create" [
 #
 # POST /start-flow
 # operationId: StartFlow
-export def "start-flow start" [
+export def "start-flow" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1000,7 +1000,7 @@ export def "start-flow start" [
 #
 # POST /stop-flow
 # operationId: StopFlow
-export def "stop-flow stop" [
+export def "stop-flow" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1047,7 +1047,7 @@ export def "stop-flow stop" [
 #
 # POST /unregister-connector
 # operationId: UnregisterConnector
-export def "unregister-connector delete" [
+export def "unregister-connector" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1095,7 +1095,7 @@ export def "unregister-connector delete" [
 #
 # DELETE /tags/{resourceArn}
 # operationId: UntagResource
-export def "tags untag-resource" [
+export def "untag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1143,7 +1143,7 @@ export def "tags untag-resource" [
 # POST /update-connector-profile
 # operationId: UpdateConnectorProfile
 # --connectorProfileConfig shape: {connectorProfileProperties?: any, connectorProfileCredentials?: any}
-export def "update-connector-profile update" [
+export def "update-connector-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1194,7 +1194,7 @@ export def "update-connector-profile update" [
 # POST /update-connector-registration
 # operationId: UpdateConnectorRegistration
 # --connectorProvisioningConfig shape: {lambda?: any}
-export def "update-connector-registration update" [
+export def "update-connector-registration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1249,7 +1249,7 @@ export def "update-connector-registration update" [
 # --destinationFlowConfigList item shape: {connectorType: any, apiVersion?: any, connectorProfileName?: any, destinationConnectorProperties: any}
 # --tasks item shape: {sourceFields: any, connectorOperator?: any, destinationField?: any, taskType: any, taskProperties?: any}
 # --metadataCatalogConfig shape: {glueDataCatalog?: any}
-export def "update-flow update" [
+export def "update-flow" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

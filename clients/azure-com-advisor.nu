@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-advisor-metadata list-recommendation" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "recommendation-metadata-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.Advisor/metadata
 # operationId: RecommendationMetadata_List
-export def "providers-microsoft-advisor-metadata list-recommendation" [
+export def "recommendation-metadata-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -176,7 +176,7 @@ export def "providers-microsoft-advisor-metadata list-recommendation" [
 #
 # GET /providers/Microsoft.Advisor/metadata/{name}
 # operationId: RecommendationMetadata_Get
-export def "providers-microsoft-advisor-metadata get-recommendation" [
+export def "recommendation-metadata-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -214,7 +214,7 @@ export def "providers-microsoft-advisor-metadata get-recommendation" [
 #
 # GET /providers/Microsoft.Advisor/operations
 # operationId: Operations_List
-export def "providers-microsoft-advisor-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -250,7 +250,7 @@ export def "providers-microsoft-advisor-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Advisor/configurations
 # operationId: Configurations_ListBySubscription
-export def "subscriptions-providers-microsoft-advisor-configurations list" [
+export def "configurations-list-by-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -289,7 +289,7 @@ export def "subscriptions-providers-microsoft-advisor-configurations list" [
 # PUT /subscriptions/{subscriptionId}/providers/Microsoft.Advisor/configurations
 # operationId: Configurations_CreateInSubscription
 # --properties shape: {exclude?: bool, low_cpu_threshold?: string}
-export def "subscriptions-providers-microsoft-advisor-configurations create" [
+export def "configurations-create-in-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -334,7 +334,7 @@ export def "subscriptions-providers-microsoft-advisor-configurations create" [
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Advisor/generateRecommendations
 # operationId: Recommendations_Generate
-export def "subscriptions-providers-microsoft-advisor-generate-recommendations generate" [
+export def "recommendations-generate" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -372,7 +372,7 @@ export def "subscriptions-providers-microsoft-advisor-generate-recommendations g
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Advisor/generateRecommendations/{operationId}
 # operationId: Recommendations_GetGenerateStatus
-export def "subscriptions-providers-microsoft-advisor-generate-recommendations get-status" [
+export def "recommendations-get-generate-status" [
   subscription_id: string
   operation_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -412,7 +412,7 @@ export def "subscriptions-providers-microsoft-advisor-generate-recommendations g
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Advisor/recommendations
 # operationId: Recommendations_List
-export def "subscriptions-providers-microsoft-advisor-recommendations list" [
+export def "recommendations-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -453,7 +453,7 @@ export def "subscriptions-providers-microsoft-advisor-recommendations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Advisor/suppressions
 # operationId: Suppressions_List
-export def "subscriptions-providers-microsoft-advisor-suppressions list" [
+export def "suppressions-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -493,7 +493,7 @@ export def "subscriptions-providers-microsoft-advisor-suppressions list" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Advisor/configurations
 # operationId: Configurations_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-advisor-configurations list" [
+export def "configurations-list-by-resource-group" [
   subscription_id: string
   resource_group: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -534,7 +534,7 @@ export def "subscriptions-resource-groups-providers-microsoft-advisor-configurat
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Advisor/configurations
 # operationId: Configurations_CreateInResourceGroup
 # --properties shape: {exclude?: bool, low_cpu_threshold?: string}
-export def "subscriptions-resource-groups-providers-microsoft-advisor-configurations create" [
+export def "configurations-create-in-resource-group" [
   subscription_id: string
   resource_group: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -581,7 +581,7 @@ export def "subscriptions-resource-groups-providers-microsoft-advisor-configurat
 #
 # GET /{resourceUri}/providers/Microsoft.Advisor/recommendations/{recommendationId}
 # operationId: Recommendations_Get
-export def "providers-microsoft-advisor-recommendations get" [
+export def "recommendations-get" [
   resource_uri: string
   recommendation_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -621,7 +621,7 @@ export def "providers-microsoft-advisor-recommendations get" [
 #
 # DELETE /{resourceUri}/providers/Microsoft.Advisor/recommendations/{recommendationId}/suppressions/{name}
 # operationId: Suppressions_Delete
-export def "providers-microsoft-advisor-recommendations-suppressions delete" [
+export def "suppressions-delete" [
   resource_uri: string
   recommendation_id: string
   name: string
@@ -663,7 +663,7 @@ export def "providers-microsoft-advisor-recommendations-suppressions delete" [
 #
 # GET /{resourceUri}/providers/Microsoft.Advisor/recommendations/{recommendationId}/suppressions/{name}
 # operationId: Suppressions_Get
-export def "providers-microsoft-advisor-recommendations-suppressions get" [
+export def "suppressions-get" [
   resource_uri: string
   recommendation_id: string
   name: string
@@ -706,7 +706,7 @@ export def "providers-microsoft-advisor-recommendations-suppressions get" [
 # PUT /{resourceUri}/providers/Microsoft.Advisor/recommendations/{recommendationId}/suppressions/{name}
 # operationId: Suppressions_Create
 # --properties shape: {suppressionId?: string, ttl?: string}
-export def "providers-microsoft-advisor-recommendations-suppressions create" [
+export def "suppressions-create" [
   resource_uri: string
   recommendation_id: string
   name: string

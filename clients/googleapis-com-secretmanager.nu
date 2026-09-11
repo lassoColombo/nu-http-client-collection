@@ -129,7 +129,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta1 delete-by-name" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "secretmanager-projects-secrets-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -153,7 +153,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1beta1/{name}
 # operationId: secretmanager.projects.secrets.delete
-export def "v1beta1 delete-by-name" [
+export def "secretmanager-projects-secrets-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -201,7 +201,7 @@ export def "v1beta1 delete-by-name" [
 #
 # GET /v1beta1/{name}
 # operationId: secretmanager.projects.secrets.versions.get
-export def "v1beta1 get" [
+export def "secretmanager-projects-secrets-versions-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -250,7 +250,7 @@ export def "v1beta1 get" [
 # PATCH /v1beta1/{name}
 # operationId: secretmanager.projects.secrets.patch
 # --replication shape: {automatic?: record, userManaged?: record}
-export def "v1beta1 update" [
+export def "secretmanager-projects-secrets-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -304,7 +304,7 @@ export def "v1beta1 update" [
 #
 # GET /v1beta1/{name}/locations
 # operationId: secretmanager.projects.locations.list
-export def "v1beta1-locations list" [
+export def "secretmanager-projects-locations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -355,7 +355,7 @@ export def "v1beta1-locations list" [
 #
 # GET /v1beta1/{name}:access
 # operationId: secretmanager.projects.secrets.versions.access
-export def "v1beta1 get-access" [
+export def "secretmanager-projects-secrets-versions-access" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -403,7 +403,7 @@ export def "v1beta1 get-access" [
 #
 # POST /v1beta1/{name}:destroy
 # operationId: secretmanager.projects.secrets.versions.destroy
-export def "v1beta1 delete-by-name-1" [
+export def "secretmanager-projects-secrets-versions-destroy" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -455,7 +455,7 @@ export def "v1beta1 delete-by-name-1" [
 #
 # POST /v1beta1/{name}:disable
 # operationId: secretmanager.projects.secrets.versions.disable
-export def "v1beta1 disable" [
+export def "secretmanager-projects-secrets-versions-disable" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -507,7 +507,7 @@ export def "v1beta1 disable" [
 #
 # POST /v1beta1/{name}:enable
 # operationId: secretmanager.projects.secrets.versions.enable
-export def "v1beta1 enable" [
+export def "secretmanager-projects-secrets-versions-enable" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -559,7 +559,7 @@ export def "v1beta1 enable" [
 #
 # GET /v1beta1/{parent}/secrets
 # operationId: secretmanager.projects.secrets.list
-export def "v1beta1-secrets list" [
+export def "secretmanager-projects-secrets-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -610,7 +610,7 @@ export def "v1beta1-secrets list" [
 # POST /v1beta1/{parent}/secrets
 # operationId: secretmanager.projects.secrets.create
 # --replication shape: {automatic?: record, userManaged?: record}
-export def "v1beta1-secrets create" [
+export def "secretmanager-projects-secrets-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -664,7 +664,7 @@ export def "v1beta1-secrets create" [
 #
 # GET /v1beta1/{parent}/versions
 # operationId: secretmanager.projects.secrets.versions.list
-export def "v1beta1-versions list" [
+export def "secretmanager-projects-secrets-versions-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -715,7 +715,7 @@ export def "v1beta1-versions list" [
 # POST /v1beta1/{parent}:addVersion
 # operationId: secretmanager.projects.secrets.addVersion
 # --payload shape: {data?: string}
-export def "v1beta1 create-version" [
+export def "secretmanager-projects-secrets-add-version" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -767,7 +767,7 @@ export def "v1beta1 create-version" [
 #
 # GET /v1beta1/{resource}:getIamPolicy
 # operationId: secretmanager.projects.secrets.getIamPolicy
-export def "v1beta1 get-iam-policy" [
+export def "secretmanager-projects-secrets-get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -817,7 +817,7 @@ export def "v1beta1 get-iam-policy" [
 # POST /v1beta1/{resource}:setIamPolicy
 # operationId: secretmanager.projects.secrets.setIamPolicy
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
-export def "v1beta1 update-iam-policy" [
+export def "secretmanager-projects-secrets-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -870,7 +870,7 @@ export def "v1beta1 update-iam-policy" [
 #
 # POST /v1beta1/{resource}:testIamPermissions
 # operationId: secretmanager.projects.secrets.testIamPermissions
-export def "v1beta1 test-iam-permissions" [
+export def "secretmanager-projects-secrets-test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

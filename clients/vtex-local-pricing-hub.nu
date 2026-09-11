@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "pricing-hub-prices create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-api-pricing-hub-prices" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # POST /api/pricing-hub/prices
 # --items item shape: {brandId: string, categoriesIds: list<string>, index: int, priceTableIds: list<string>, quantity: int, sellerId: string, skuId: string}
-export def "pricing-hub-prices create" [
+export def "post-api-pricing-hub-prices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -194,7 +194,7 @@ export def "pricing-hub-prices create" [
 #
 # PUT /config
 # operationId: ConfigExternalPriceSource
-export def "config update-external-price-source" [
+export def "config-external-price-source" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)

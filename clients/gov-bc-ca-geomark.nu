@@ -111,7 +111,7 @@ def srid-completer [] { ["26907" "26908" "26909" "26910" "26911" "3005" "3857" "
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "geomarks-copy create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-geomarks-copy" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -134,7 +134,7 @@ export def commands []: nothing -> table {
 # Create a new geomark by copying the geometries from one or more existing geomarks from the current server.
 #
 # POST /geomarks/copy
-export def "geomarks-copy create" [
+export def "post-geomarks-copy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -179,7 +179,7 @@ export def "geomarks-copy create" [
 # Create a new geomark
 #
 # POST /geomarks/new
-export def "geomarks-new create" [
+export def "post-geomarks-new" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -230,7 +230,7 @@ export def "geomarks-new create" [
 # Get information about a particular geomark
 #
 # GET /geomarks/{geomarkId}.{fileFormatExtension}
-export def "geomarks get" [
+export def "get-geomarks-geomark-id-file-format-extension" [
   geomark_id: string
   file_format_extension: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -269,7 +269,7 @@ export def "geomarks get" [
 # Gets the bounding box of the geomark
 #
 # GET /geomarks/{geomarkId}/boundingBox.{fileFormatExtension}
-export def "geomarks-bounding-box-file-format-extension get" [
+export def "get-geomarks-geomark-id-bounding-box-file-format-extension" [
   geomark_id: string
   file_format_extension: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -308,7 +308,7 @@ export def "geomarks-bounding-box-file-format-extension get" [
 # Get the feature and attribution of the geomark
 #
 # GET /geomarks/{geomarkId}/feature.{fileFormatExtension}
-export def "geomarks-feature-file-format-extension get" [
+export def "get-geomarks-geomark-id-feature-file-format-extension" [
   geomark_id: string
   file_format_extension: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -347,7 +347,7 @@ export def "geomarks-feature-file-format-extension get" [
 # Get the individual geometries within a multi-part geometry
 #
 # GET /geomarks/{geomarkId}/parts.{fileFormatExtension}
-export def "geomarks-parts-file-format-extension get" [
+export def "get-geomarks-geomark-id-parts-file-format-extension" [
   geomark_id: string
   file_format_extension: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -386,7 +386,7 @@ export def "geomarks-parts-file-format-extension get" [
 # Gets a single spatial point representative of the geomark.
 #
 # GET /geomarks/{geomarkId}/point.{fileFormatExtension}
-export def "geomarks-point-file-format-extension get" [
+export def "get-geomarks-geomark-id-point-file-format-extension" [
   geomark_id: string
   file_format_extension: string
   --base-url(-b): string@base-url-completer # API base URL

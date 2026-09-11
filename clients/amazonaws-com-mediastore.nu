@@ -121,7 +121,7 @@ def x-amz-target-completer-20 [] { ["MediaStore_20170901.UntagResource"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-container" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-container" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -145,7 +145,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CreateContainer
-export def "api create-container" [
+export def "create-container" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -194,7 +194,7 @@ export def "api create-container" [
 #
 # POST /
 # operationId: DeleteContainer
-export def "api delete-container" [
+export def "delete-container" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -242,7 +242,7 @@ export def "api delete-container" [
 #
 # POST /
 # operationId: DeleteContainerPolicy
-export def "api delete-container-policy" [
+export def "delete-container-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -290,7 +290,7 @@ export def "api delete-container-policy" [
 #
 # POST /
 # operationId: DeleteCorsPolicy
-export def "api delete-cors-policy" [
+export def "delete-cors-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -338,7 +338,7 @@ export def "api delete-cors-policy" [
 #
 # POST /
 # operationId: DeleteLifecyclePolicy
-export def "api delete-lifecycle-policy" [
+export def "delete-lifecycle-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -386,7 +386,7 @@ export def "api delete-lifecycle-policy" [
 #
 # POST /
 # operationId: DeleteMetricPolicy
-export def "api delete-metric-policy" [
+export def "delete-metric-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -434,7 +434,7 @@ export def "api delete-metric-policy" [
 #
 # POST /
 # operationId: DescribeContainer
-export def "api get-container" [
+export def "describe-container" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -482,7 +482,7 @@ export def "api get-container" [
 #
 # POST /
 # operationId: GetContainerPolicy
-export def "api get-container-policy" [
+export def "get-container-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -530,7 +530,7 @@ export def "api get-container-policy" [
 #
 # POST /
 # operationId: GetCorsPolicy
-export def "api get-cors-policy" [
+export def "get-cors-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -578,7 +578,7 @@ export def "api get-cors-policy" [
 #
 # POST /
 # operationId: GetLifecyclePolicy
-export def "api get-lifecycle-policy" [
+export def "get-lifecycle-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -626,7 +626,7 @@ export def "api get-lifecycle-policy" [
 #
 # POST /
 # operationId: GetMetricPolicy
-export def "api get-metric-policy" [
+export def "get-metric-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -674,7 +674,7 @@ export def "api get-metric-policy" [
 #
 # POST /
 # operationId: ListContainers
-export def "api list-containers" [
+export def "list-containers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -726,7 +726,7 @@ export def "api list-containers" [
 #
 # POST /
 # operationId: ListTagsForResource
-export def "api list-tags-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -774,7 +774,7 @@ export def "api list-tags-for-resource" [
 #
 # POST /
 # operationId: PutContainerPolicy
-export def "api update-container-policy" [
+export def "put-container-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -823,7 +823,7 @@ export def "api update-container-policy" [
 #
 # POST /
 # operationId: PutCorsPolicy
-export def "api update-cors-policy" [
+export def "put-cors-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -872,7 +872,7 @@ export def "api update-cors-policy" [
 #
 # POST /
 # operationId: PutLifecyclePolicy
-export def "api update-lifecycle-policy" [
+export def "put-lifecycle-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -921,7 +921,7 @@ export def "api update-lifecycle-policy" [
 #
 # POST /
 # operationId: PutMetricPolicy
-export def "api update-metric-policy" [
+export def "put-metric-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -970,7 +970,7 @@ export def "api update-metric-policy" [
 #
 # POST /
 # operationId: StartAccessLogging
-export def "api start-access-logging" [
+export def "start-access-logging" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1018,7 +1018,7 @@ export def "api start-access-logging" [
 #
 # POST /
 # operationId: StopAccessLogging
-export def "api stop-access-logging" [
+export def "stop-access-logging" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1066,7 +1066,7 @@ export def "api stop-access-logging" [
 #
 # POST /
 # operationId: TagResource
-export def "api tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1115,7 +1115,7 @@ export def "api tag-resource" [
 #
 # POST /
 # operationId: UntagResource
-export def "api untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

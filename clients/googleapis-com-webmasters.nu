@@ -128,7 +128,7 @@ def alt-completer [] { ["json"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "sites list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "webmasters-sites-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -152,7 +152,7 @@ export def commands []: nothing -> table {
 #
 # GET /sites
 # operationId: webmasters.sites.list
-export def "sites list" [
+export def "webmasters-sites-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -194,7 +194,7 @@ export def "sites list" [
 #
 # DELETE /sites/{siteUrl}
 # operationId: webmasters.sites.delete
-export def "sites delete" [
+export def "webmasters-sites-delete" [
   site_url: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -238,7 +238,7 @@ export def "sites delete" [
 #
 # GET /sites/{siteUrl}
 # operationId: webmasters.sites.get
-export def "sites get" [
+export def "webmasters-sites-get" [
   site_url: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -282,7 +282,7 @@ export def "sites get" [
 #
 # PUT /sites/{siteUrl}
 # operationId: webmasters.sites.add
-export def "sites create" [
+export def "webmasters-sites-add" [
   site_url: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -327,7 +327,7 @@ export def "sites create" [
 # POST /sites/{siteUrl}/searchAnalytics/query
 # operationId: webmasters.searchanalytics.query
 # --dimensionFilterGroups item shape: {filters?: list, groupType?: string}
-export def "sites-search-analytics-query list" [
+export def "webmasters-searchanalytics-query" [
   site_url: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -383,7 +383,7 @@ export def "sites-search-analytics-query list" [
 #
 # GET /sites/{siteUrl}/sitemaps
 # operationId: webmasters.sitemaps.list
-export def "sites-sitemaps list" [
+export def "webmasters-sitemaps-list" [
   site_url: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -428,7 +428,7 @@ export def "sites-sitemaps list" [
 #
 # DELETE /sites/{siteUrl}/sitemaps/{feedpath}
 # operationId: webmasters.sitemaps.delete
-export def "sites-sitemaps delete" [
+export def "webmasters-sitemaps-delete" [
   site_url: string
   feedpath: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -474,7 +474,7 @@ export def "sites-sitemaps delete" [
 #
 # GET /sites/{siteUrl}/sitemaps/{feedpath}
 # operationId: webmasters.sitemaps.get
-export def "sites-sitemaps get" [
+export def "webmasters-sitemaps-get" [
   site_url: string
   feedpath: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -520,7 +520,7 @@ export def "sites-sitemaps get" [
 #
 # PUT /sites/{siteUrl}/sitemaps/{feedpath}
 # operationId: webmasters.sitemaps.submit
-export def "sites-sitemaps submit" [
+export def "webmasters-sitemaps-submit" [
   site_url: string
   feedpath: string
   --base-url(-b): string@base-url-completer # API base URL

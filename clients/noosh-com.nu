@@ -153,7 +153,7 @@ def accept-completer [] { ["*/*" "application/json" "application/x-json-smile" "
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "1-1-workgroups-projects-file-tags get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-file-tags" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -177,7 +177,7 @@ export def commands []: nothing -> table {
 #
 # GET /1.1/workgroups/{workgroup_id}/projects/{project_id}/fileTags
 # operationId: getFileTags
-export def "1-1-workgroups-projects-file-tags get" [
+export def "get-file-tags" [
   workgroup_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -216,7 +216,7 @@ export def "1-1-workgroups-projects-file-tags get" [
 #
 # GET /1.1/workgroups/{workgroup_id}/projects/{project_id}/files
 # operationId: getFiles
-export def "1-1-workgroups-projects-files list" [
+export def "get-files" [
   workgroup_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -255,7 +255,7 @@ export def "1-1-workgroups-projects-files list" [
 #
 # POST /1.1/workgroups/{workgroup_id}/projects/{project_id}/files
 # operationId: uploadFile
-export def "1-1-workgroups-projects-files upload" [
+export def "upload-file" [
   workgroup_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -300,7 +300,7 @@ export def "1-1-workgroups-projects-files upload" [
 #
 # GET /1.1/workgroups/{workgroup_id}/projects/{project_id}/files/{file_id}
 # operationId: getFile
-export def "1-1-workgroups-projects-files get" [
+export def "get-file" [
   workgroup_id: string
   project_id: string
   file_id: string
@@ -341,7 +341,7 @@ export def "1-1-workgroups-projects-files get" [
 #
 # GET /1.1/workgroups/{workgroup_id}/projects/{project_id}/specs/{spec_id}
 # operationId: getSpec
-export def "1-1-workgroups-projects-specs get" [
+export def "get-spec" [
   workgroup_id: string
   project_id: string
   spec_id: string
@@ -386,7 +386,7 @@ export def "1-1-workgroups-projects-specs get" [
 # --header_custom_fields shape: {property_attributes?: list, property_id?: int, property_name?: string}
 # --second_level_custom_fields item shape: {property_attributes?: list, property_id?: int, property_name?: string}
 # --versions item shape: {description?: string, qty?: int}
-export def "1-1-workgroups-projects-specs update" [
+export def "put-spec" [
   workgroup_id: string
   project_id: string
   spec_id: string
@@ -443,7 +443,7 @@ export def "1-1-workgroups-projects-specs update" [
 #
 # POST /1.1/workgroups/{workgroup_id}/projects/{project_id}/teammembers
 # operationId: postTeamMemberOfProject
-export def "1-1-workgroups-projects-teammembers create-team-member" [
+export def "post-team-member-of-project" [
   workgroup_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -488,7 +488,7 @@ export def "1-1-workgroups-projects-teammembers create-team-member" [
 #
 # GET /1.1/workgroups/{workgroup_id}/specTypes/{spec_type_id}/specTypeFields
 # operationId: getSpecTypeFields
-export def "1-1-workgroups-spec-types-spec-type-fields get" [
+export def "get-spec-type-fields" [
   workgroup_id: string
   spec_type_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -527,7 +527,7 @@ export def "1-1-workgroups-spec-types-spec-type-fields get" [
 #
 # GET /v1/countries
 # operationId: getCountryList
-export def "countries get-country-list" [
+export def "get-country-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -562,7 +562,7 @@ export def "countries get-country-list" [
 #
 # GET /v1/workgroups
 # operationId: getWorkgroupList
-export def "workgroups get-list" [
+export def "get-workgroup-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -600,7 +600,7 @@ export def "workgroups get-list" [
 #
 # GET /v1/workgroups/{workgroup_id}/automaticInvitations
 # operationId: getAutomaticInvitationList
-export def "workgroups-automatic-invitations get-list" [
+export def "get-automatic-invitation-list" [
   workgroup_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -637,7 +637,7 @@ export def "workgroups-automatic-invitations get-list" [
 #
 # GET /v1/workgroups/{workgroup_id}/billingRecipients
 # operationId: getBillingRecipients
-export def "workgroups-billing-recipients get" [
+export def "get-billing-recipients" [
   workgroup_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -674,7 +674,7 @@ export def "workgroups-billing-recipients get" [
 #
 # GET /v1/workgroups/{workgroup_id}/buyOrders
 # operationId: getBuyOrderListOfWorkgroup
-export def "workgroups-buy-orders get-list" [
+export def "get-buy-order-list-of-workgroup" [
   workgroup_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -711,7 +711,7 @@ export def "workgroups-buy-orders get-list" [
 #
 # GET /v1/workgroups/{workgroup_id}/buyOrders/{order_id}
 # operationId: getBuyOrderOfWorkgroup
-export def "workgroups-buy-orders get" [
+export def "get-buy-order-of-workgroup" [
   workgroup_id: string
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -750,7 +750,7 @@ export def "workgroups-buy-orders get" [
 #
 # GET /v1/workgroups/{workgroup_id}/clientWorkgroups
 # operationId: getClientWorkgroupList
-export def "workgroups-client-workgroups get-list" [
+export def "get-client-workgroup-list" [
   workgroup_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -787,7 +787,7 @@ export def "workgroups-client-workgroups get-list" [
 #
 # GET /v1/workgroups/{workgroup_id}/clientWorkgroups/{client_workgroup_id}
 # operationId: getSpecificClientWorkgroup
-export def "workgroups-client-workgroups get-specific" [
+export def "get-specific-client-workgroup" [
   workgroup_id: string
   client_workgroup_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -826,7 +826,7 @@ export def "workgroups-client-workgroups get-specific" [
 #
 # GET /v1/workgroups/{workgroup_id}/clientWorkgroups/{client_workgroup_id}/projectCategory
 # operationId: getProjectCategoryListOfClient
-export def "workgroups-client-workgroups-project-category get-list" [
+export def "get-project-category-list-of-client" [
   workgroup_id: string
   client_workgroup_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -865,7 +865,7 @@ export def "workgroups-client-workgroups-project-category get-list" [
 #
 # GET /v1/workgroups/{workgroup_id}/clientWorkgroups/{client_workgroup_id}/projectHomeUserFields
 # operationId: getProjectHomeUserFieldListOfClient
-export def "workgroups-client-workgroups-project-home-user-fields get-list" [
+export def "get-project-home-user-field-list-of-client" [
   workgroup_id: string
   client_workgroup_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -904,7 +904,7 @@ export def "workgroups-client-workgroups-project-home-user-fields get-list" [
 #
 # GET /v1/workgroups/{workgroup_id}/clientWorkgroups/{client_workgroup_id}/projectStatus
 # operationId: getProjectStatusOfClient
-export def "workgroups-client-workgroups-project-status get" [
+export def "get-project-status-of-client" [
   workgroup_id: string
   client_workgroup_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -943,7 +943,7 @@ export def "workgroups-client-workgroups-project-status get" [
 #
 # GET /v1/workgroups/{workgroup_id}/contacts
 # operationId: getContactList
-export def "workgroups-contacts get-list" [
+export def "get-contact-list" [
   workgroup_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -980,7 +980,7 @@ export def "workgroups-contacts get-list" [
 #
 # GET /v1/workgroups/{workgroup_id}/contacts/{user_id}
 # operationId: getContactUserInfo
-export def "workgroups-contacts get" [
+export def "get-contact-user-info" [
   workgroup_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1019,7 +1019,7 @@ export def "workgroups-contacts get" [
 #
 # GET /v1/workgroups/{workgroup_id}/customTaskStatus
 # operationId: getWgTaskStatusListOfWorkgroup
-export def "workgroups-custom-task-status get-wg-list" [
+export def "get-wg-task-status-list-of-workgroup" [
   workgroup_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1056,7 +1056,7 @@ export def "workgroups-custom-task-status get-wg-list" [
 #
 # GET /v1/workgroups/{workgroup_id}/customTaskTypes
 # operationId: getCustomTaskTypesOfWg
-export def "workgroups-custom-task-types get-of-wg" [
+export def "get-custom-task-types-of-wg" [
   workgroup_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1093,7 +1093,7 @@ export def "workgroups-custom-task-types get-of-wg" [
 #
 # GET /v1/workgroups/{workgroup_id}/deactivationReasons
 # operationId: getDeactivationReasonList
-export def "workgroups-deactivation-reasons get-list" [
+export def "get-deactivation-reason-list" [
   workgroup_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1130,7 +1130,7 @@ export def "workgroups-deactivation-reasons get-list" [
 #
 # GET /v1/workgroups/{workgroup_id}/defaultTaskPriority
 # operationId: TaskPriorityList
-export def "workgroups-default-task-priority list" [
+export def "task-priority-list" [
   workgroup_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1167,7 +1167,7 @@ export def "workgroups-default-task-priority list" [
 #
 # GET /v1/workgroups/{workgroup_id}/defaultTaskStatus
 # operationId: getDefaultTaskStatusList
-export def "workgroups-default-task-status get-list" [
+export def "get-default-task-status-list" [
   workgroup_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1204,7 +1204,7 @@ export def "workgroups-default-task-status get-list" [
 #
 # GET /v1/workgroups/{workgroup_id}/detail
 # operationId: getWorkgroupDetail
-export def "workgroups-detail get" [
+export def "get-workgroup-detail" [
   workgroup_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1242,7 +1242,7 @@ export def "workgroups-detail get" [
 # PUT /v1/workgroups/{workgroup_id}/detail
 # operationId: putWorkgroup
 # --custom_fields item shape: {date_value?: string, number_value?: any, param_name?: string, string_value?: string}
-export def "workgroups-detail update" [
+export def "put-workgroup" [
   workgroup_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1292,7 +1292,7 @@ export def "workgroups-detail update" [
 #
 # GET /v1/workgroups/{workgroup_id}/exchangeRate
 # operationId: getExchangeRateList
-export def "workgroups-exchange-rate get-list" [
+export def "get-exchange-rate-list" [
   workgroup_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1330,7 +1330,7 @@ export def "workgroups-exchange-rate get-list" [
 # POST /v1/workgroups/{workgroup_id}/exchangeRate
 # operationId: postExchangeRate
 # --exchange_rates item shape: {activate_date?: string, buClientWorkgroupId?: int, currency?: string, rate?: any, target?: string}
-export def "workgroups-exchange-rate create" [
+export def "post-exchange-rate" [
   workgroup_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1371,7 +1371,7 @@ export def "workgroups-exchange-rate create" [
 #
 # GET /v1/workgroups/{workgroup_id}/myTimeCards
 # operationId: getMyTimeCardList
-export def "workgroups-my-time-cards get-list" [
+export def "get-my-time-card-list" [
   workgroup_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1408,7 +1408,7 @@ export def "workgroups-my-time-cards get-list" [
 #
 # GET /v1/workgroups/{workgroup_id}/myTimeCards/{timeCard_id}
 # operationId: getMyTimeCard
-export def "workgroups-my-time-cards get" [
+export def "get-my-time-card" [
   workgroup_id: string
   time_card_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1447,7 +1447,7 @@ export def "workgroups-my-time-cards get" [
 #
 # GET /v1/workgroups/{workgroup_id}/productTypes
 # operationId: getProductTypeListOfWorkgroup
-export def "workgroups-product-types get-list" [
+export def "get-product-type-list-of-workgroup" [
   workgroup_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1484,7 +1484,7 @@ export def "workgroups-product-types get-list" [
 #
 # GET /v1/workgroups/{workgroup_id}/productTypesOfSpecTypes
 # operationId: getSpecProductTypeListOfWorkgroup
-export def "workgroups-product-types-of-spec-types get-list" [
+export def "get-spec-product-type-list-of-workgroup" [
   workgroup_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1522,7 +1522,7 @@ export def "workgroups-product-types-of-spec-types get-list" [
 # POST /v1/workgroups/{workgroup_id}/productTypesOfSpecTypes
 # operationId: postSpecProductTypeListOfWorkgroup
 # --spec_prdType_list item shape: {prdType_labels?: list<string>, spec_type_id?: int}
-export def "workgroups-product-types-of-spec-types create-list" [
+export def "post-spec-product-type-list-of-workgroup" [
   workgroup_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1564,7 +1564,7 @@ export def "workgroups-product-types-of-spec-types create-list" [
 #
 # POST /v1/workgroups/{workgroup_id}/profileImage
 # operationId: uploadProfileImage
-export def "workgroups-profile-image upload" [
+export def "upload-profile-image" [
   workgroup_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1605,7 +1605,7 @@ export def "workgroups-profile-image upload" [
 #
 # GET /v1/workgroups/{workgroup_id}/projectCategory
 # operationId: getProjectCategoryList
-export def "workgroups-project-category get-list" [
+export def "get-project-category-list" [
   workgroup_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1642,7 +1642,7 @@ export def "workgroups-project-category get-list" [
 #
 # GET /v1/workgroups/{workgroup_id}/projectHomeUserFields
 # operationId: getProjectHomeUserFieldsList
-export def "workgroups-project-home-user-fields get-list" [
+export def "get-project-home-user-fields-list" [
   workgroup_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1679,7 +1679,7 @@ export def "workgroups-project-home-user-fields get-list" [
 #
 # GET /v1/workgroups/{workgroup_id}/projectStatus
 # operationId: getProjectStatus
-export def "workgroups-project-status get" [
+export def "get-project-status" [
   workgroup_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1716,7 +1716,7 @@ export def "workgroups-project-status get" [
 #
 # GET /v1/workgroups/{workgroup_id}/projects
 # operationId: getProjectList
-export def "workgroups-projects get-list" [
+export def "get-project-list" [
   workgroup_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1754,7 +1754,7 @@ export def "workgroups-projects get-list" [
 # POST /v1/workgroups/{workgroup_id}/projects
 # operationId: postProject
 # --custom_fields item shape: {date_value?: string, number_value?: any, param_name?: string, string_value?: string}
-export def "workgroups-projects create" [
+export def "post-project" [
   workgroup_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1810,7 +1810,7 @@ export def "workgroups-projects create" [
 #
 # DELETE /v1/workgroups/{workgroup_id}/projects/{project_id}
 # operationId: deleteProject
-export def "workgroups-projects delete" [
+export def "delete-project" [
   workgroup_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1849,7 +1849,7 @@ export def "workgroups-projects delete" [
 #
 # GET /v1/workgroups/{workgroup_id}/projects/{project_id}
 # operationId: getProject
-export def "workgroups-projects get" [
+export def "get-project" [
   workgroup_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1889,7 +1889,7 @@ export def "workgroups-projects get" [
 # PATCH /v1/workgroups/{workgroup_id}/projects/{project_id}
 # operationId: patchProject
 # --custom_fields item shape: {date_value?: string, number_value?: any, param_name?: string, string_value?: string}
-export def "workgroups-projects update-by-workgroup-id-project-id" [
+export def "patch-project" [
   workgroup_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1945,7 +1945,7 @@ export def "workgroups-projects update-by-workgroup-id-project-id" [
 # PUT /v1/workgroups/{workgroup_id}/projects/{project_id}
 # operationId: putProject
 # --custom_fields item shape: {date_value?: string, number_value?: any, param_name?: string, string_value?: string}
-export def "workgroups-projects update-by-workgroup-id-project-id-1" [
+export def "put-project" [
   workgroup_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2003,7 +2003,7 @@ export def "workgroups-projects update-by-workgroup-id-project-id-1" [
 #
 # GET /v1/workgroups/{workgroup_id}/projects/{project_id}/buyOrders
 # operationId: getBuyOrderList
-export def "workgroups-projects-buy-orders get-list" [
+export def "get-buy-order-list" [
   workgroup_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2044,7 +2044,7 @@ export def "workgroups-projects-buy-orders get-list" [
 # operationId: postBuyOrder
 # --custom_fields item shape: {date_value?: string, number_value?: any, param_name?: string, string_value?: string}
 # --order_items item shape: {completion_date?: string, custom_fields?: list, ex_tax_value_calculated?: any, notes?: string, per?: int, price?: any, quantity?: any, shipping?: any, spec_id?: int, spec_reference_id?: int, tax?: string}
-export def "workgroups-projects-buy-orders create" [
+export def "post-buy-order" [
   workgroup_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2102,7 +2102,7 @@ export def "workgroups-projects-buy-orders create" [
 #
 # GET /v1/workgroups/{workgroup_id}/projects/{project_id}/buyOrders/{order_id}
 # operationId: getBuyOrder
-export def "workgroups-projects-buy-orders get" [
+export def "get-buy-order" [
   workgroup_id: string
   project_id: string
   order_id: string
@@ -2144,7 +2144,7 @@ export def "workgroups-projects-buy-orders get" [
 # PUT /v1/workgroups/{workgroup_id}/projects/{project_id}/buyOrders/{order_id}
 # operationId: putBuyOrder
 # --custom_fields item shape: {date_value?: string, number_value?: any, param_name?: string, string_value?: string}
-export def "workgroups-projects-buy-orders update" [
+export def "put-buy-order" [
   workgroup_id: string
   project_id: string
   order_id: string
@@ -2201,7 +2201,7 @@ export def "workgroups-projects-buy-orders update" [
 #
 # POST /v1/workgroups/{workgroup_id}/projects/{project_id}/children
 # operationId: attachProject
-export def "workgroups-projects-children attach" [
+export def "attach-project" [
   workgroup_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2244,7 +2244,7 @@ export def "workgroups-projects-children attach" [
 #
 # GET /v1/workgroups/{workgroup_id}/projects/{project_id}/estimates
 # operationId: getEstimateList
-export def "workgroups-projects-estimates get-list" [
+export def "get-estimate-list" [
   workgroup_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2284,7 +2284,7 @@ export def "workgroups-projects-estimates get-list" [
 # POST /v1/workgroups/{workgroup_id}/projects/{project_id}/estimates
 # operationId: postEstimate
 # --estimate_items item shape: {paper_items?: list, quantity_1_price?: any, quantity_1_shipping?: any, quantity_1_tax?: any, quantity_2_price?: any, quantity_2_shipping?: any, quantity_2_tax?: any, quantity_3_price?: any, quantity_3_shipping?: any, quantity_3_tax?: any, quantity_4_price?: any, quantity_4_shipping?: any, quantity_4_tax?: any, quantity_5_price?: any, quantity_5_shipping?: any, quantity_5_tax?: any, rfe_item_id?: int}
-export def "workgroups-projects-estimates create" [
+export def "post-estimate" [
   workgroup_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2333,7 +2333,7 @@ export def "workgroups-projects-estimates create" [
 #
 # GET /v1/workgroups/{workgroup_id}/projects/{project_id}/estimates/{estimate_id}
 # operationId: getEstimate
-export def "workgroups-projects-estimates get" [
+export def "get-estimate" [
   workgroup_id: string
   project_id: string
   estimate_id: string
@@ -2374,7 +2374,7 @@ export def "workgroups-projects-estimates get" [
 #
 # GET /v1/workgroups/{workgroup_id}/projects/{project_id}/invoices/orders/{order_id}
 # operationId: getInvoices
-export def "workgroups-projects-invoices-orders get" [
+export def "get-invoices" [
   workgroup_id: string
   project_id: string
   order_id: string
@@ -2415,7 +2415,7 @@ export def "workgroups-projects-invoices-orders get" [
 #
 # GET /v1/workgroups/{workgroup_id}/projects/{project_id}/invoices/{invoice_id}
 # operationId: getInvoice
-export def "workgroups-projects-invoices get" [
+export def "get-invoice" [
   workgroup_id: string
   project_id: string
   invoice_id: string
@@ -2456,7 +2456,7 @@ export def "workgroups-projects-invoices get" [
 #
 # GET /v1/workgroups/{workgroup_id}/projects/{project_id}/invoices/{invoice_id}/files
 # operationId: getInvoiceFiles
-export def "workgroups-projects-invoices-files get" [
+export def "get-invoice-files" [
   workgroup_id: string
   project_id: string
   invoice_id: string
@@ -2497,7 +2497,7 @@ export def "workgroups-projects-invoices-files get" [
 #
 # GET /v1/workgroups/{workgroup_id}/projects/{project_id}/memberroles/{user_id}
 # operationId: getMemberRoles
-export def "workgroups-projects-memberroles get-member-roles" [
+export def "get-member-roles" [
   workgroup_id: string
   project_id: string
   user_id: string
@@ -2538,7 +2538,7 @@ export def "workgroups-projects-memberroles get-member-roles" [
 #
 # GET /v1/workgroups/{workgroup_id}/projects/{project_id}/orders/{order_id}
 # operationId: getOrder
-export def "workgroups-projects-orders get" [
+export def "get-order" [
   workgroup_id: string
   project_id: string
   order_id: string
@@ -2579,7 +2579,7 @@ export def "workgroups-projects-orders get" [
 #
 # GET /v1/workgroups/{workgroup_id}/projects/{project_id}/quotes
 # operationId: getQuoteList
-export def "workgroups-projects-quotes get-list" [
+export def "get-quote-list" [
   workgroup_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2620,7 +2620,7 @@ export def "workgroups-projects-quotes get-list" [
 #
 # GET /v1/workgroups/{workgroup_id}/projects/{project_id}/quotes/{quote_id}
 # operationId: getQuote
-export def "workgroups-projects-quotes get" [
+export def "get-quote" [
   workgroup_id: string
   project_id: string
   quote_id: string
@@ -2661,7 +2661,7 @@ export def "workgroups-projects-quotes get" [
 #
 # PUT /v1/workgroups/{workgroup_id}/projects/{project_id}/quotes/{quote_id}
 # operationId: putQuote
-export def "workgroups-projects-quotes update" [
+export def "put-quote" [
   workgroup_id: string
   project_id: string
   quote_id: string
@@ -2709,7 +2709,7 @@ export def "workgroups-projects-quotes update" [
 #
 # GET /v1/workgroups/{workgroup_id}/projects/{project_id}/rfes
 # operationId: getRfeList
-export def "workgroups-projects-rfes get-list" [
+export def "get-rfe-list" [
   workgroup_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2749,7 +2749,7 @@ export def "workgroups-projects-rfes get-list" [
 # POST /v1/workgroups/{workgroup_id}/projects/{project_id}/rfes
 # operationId: postRfe
 # --specs item shape: {quantity_1?: int, quantity_2?: int, quantity_3?: int, quantity_4?: int, quantity_5?: int, spec_id?: int}
-export def "workgroups-projects-rfes create" [
+export def "post-rfe" [
   workgroup_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2799,7 +2799,7 @@ export def "workgroups-projects-rfes create" [
 #
 # GET /v1/workgroups/{workgroup_id}/projects/{project_id}/rfes/{rfe_id}
 # operationId: getRfe
-export def "workgroups-projects-rfes get" [
+export def "get-rfe" [
   workgroup_id: string
   project_id: string
   rfe_id: string
@@ -2840,7 +2840,7 @@ export def "workgroups-projects-rfes get" [
 #
 # GET /v1/workgroups/{workgroup_id}/projects/{project_id}/rfqs
 # operationId: getRfqList
-export def "workgroups-projects-rfqs get-list" [
+export def "get-rfq-list" [
   workgroup_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2879,7 +2879,7 @@ export def "workgroups-projects-rfqs get-list" [
 #
 # GET /v1/workgroups/{workgroup_id}/projects/{project_id}/rfqs/{rfq_id}
 # operationId: getRfq
-export def "workgroups-projects-rfqs get" [
+export def "get-rfq" [
   workgroup_id: string
   project_id: string
   rfq_id: string
@@ -2920,7 +2920,7 @@ export def "workgroups-projects-rfqs get" [
 #
 # GET /v1/workgroups/{workgroup_id}/projects/{project_id}/sellOrders
 # operationId: getSellOrderList
-export def "workgroups-projects-sell-orders get-list" [
+export def "get-sell-order-list" [
   workgroup_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2959,7 +2959,7 @@ export def "workgroups-projects-sell-orders get-list" [
 #
 # GET /v1/workgroups/{workgroup_id}/projects/{project_id}/sellOrders/{order_id}
 # operationId: getSellOrder
-export def "workgroups-projects-sell-orders get" [
+export def "get-sell-order" [
   workgroup_id: string
   project_id: string
   order_id: string
@@ -3001,7 +3001,7 @@ export def "workgroups-projects-sell-orders get" [
 # PUT /v1/workgroups/{workgroup_id}/projects/{project_id}/sellOrders/{order_id}
 # operationId: putSellOrder
 # --custom_fields item shape: {date_value?: string, number_value?: any, param_name?: string, string_value?: string}
-export def "workgroups-projects-sell-orders update" [
+export def "put-sell-order" [
   workgroup_id: string
   project_id: string
   order_id: string
@@ -3058,7 +3058,7 @@ export def "workgroups-projects-sell-orders update" [
 #
 # GET /v1/workgroups/{workgroup_id}/projects/{project_id}/shipments
 # operationId: getShipmentList
-export def "workgroups-projects-shipments get-list" [
+export def "get-shipment-list" [
   workgroup_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3099,7 +3099,7 @@ export def "workgroups-projects-shipments get-list" [
 # operationId: postShipment
 # --shipment_custom_fields item shape: {date_value?: string, number_value?: any, param_name?: string, string_value?: string}
 # --shipment_request_custom_fields item shape: {date_value?: string, number_value?: any, param_name?: string, string_value?: string}
-export def "workgroups-projects-shipments create" [
+export def "post-shipment" [
   workgroup_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3170,7 +3170,7 @@ export def "workgroups-projects-shipments create" [
 #
 # GET /v1/workgroups/{workgroup_id}/projects/{project_id}/shipments/{shipment_id}
 # operationId: getShipment
-export def "workgroups-projects-shipments get" [
+export def "get-shipment" [
   workgroup_id: string
   project_id: string
   shipment_id: string
@@ -3211,7 +3211,7 @@ export def "workgroups-projects-shipments get" [
 #
 # PUT /v1/workgroups/{workgroup_id}/projects/{project_id}/shipments/{shipment_id}/locations/{location_id}
 # operationId: putShipmentLocation
-export def "workgroups-projects-shipments-locations update" [
+export def "put-shipment-location" [
   workgroup_id: string
   project_id: string
   shipment_id: string
@@ -3265,7 +3265,7 @@ export def "workgroups-projects-shipments-locations update" [
 #
 # GET /v1/workgroups/{workgroup_id}/projects/{project_id}/specs
 # operationId: getSpecList
-export def "workgroups-projects-specs get-list" [
+export def "get-spec-list" [
   workgroup_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3305,7 +3305,7 @@ export def "workgroups-projects-specs get-list" [
 # POST /v1/workgroups/{workgroup_id}/projects/{project_id}/specs
 # operationId: postSpec
 # --versions item shape: {description?: string, qty?: int}
-export def "workgroups-projects-specs create" [
+export def "post-spec" [
   workgroup_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3358,7 +3358,7 @@ export def "workgroups-projects-specs create" [
 # List a specific spec of project Level
 #
 # GET /v1/workgroups/{workgroup_id}/projects/{project_id}/specs/{spec_id}
-export def "workgroups-projects-specs get" [
+export def "get-v1-workgroups-workgroup-id-projects-project-id-specs-spec-id" [
   workgroup_id: string
   project_id: string
   spec_id: string
@@ -3399,7 +3399,7 @@ export def "workgroups-projects-specs get" [
 #
 # PUT /v1/workgroups/{workgroup_id}/projects/{project_id}/specs/{spec_id}
 # --inks_and_paper item shape: {custom_fields?: list, paper_id?: int}
-export def "workgroups-projects-specs update" [
+export def "put-v1-workgroups-workgroup-id-projects-project-id-specs-spec-id" [
   workgroup_id: string
   project_id: string
   spec_id: string
@@ -3452,7 +3452,7 @@ export def "workgroups-projects-specs update" [
 #
 # GET /v1/workgroups/{workgroup_id}/projects/{project_id}/tasks
 # operationId: getTaskListOfProject
-export def "workgroups-projects-tasks get-list" [
+export def "get-task-list-of-project" [
   workgroup_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3491,7 +3491,7 @@ export def "workgroups-projects-tasks get-list" [
 #
 # POST /v1/workgroups/{workgroup_id}/projects/{project_id}/tasks
 # operationId: postTaskForProject
-export def "workgroups-projects-tasks create" [
+export def "post-task-for-project" [
   workgroup_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3552,7 +3552,7 @@ export def "workgroups-projects-tasks create" [
 #
 # GET /v1/workgroups/{workgroup_id}/projects/{project_id}/tasks/{task_id}
 # operationId: getTaskOfProject
-export def "workgroups-projects-tasks get" [
+export def "get-task-of-project" [
   workgroup_id: string
   project_id: string
   task_id: string
@@ -3593,7 +3593,7 @@ export def "workgroups-projects-tasks get" [
 #
 # GET /v1/workgroups/{workgroup_id}/projects/{project_id}/teamMembersOfClientProject
 # operationId: getTeamMemberListOfClientProject
-export def "workgroups-projects-team-members-of-client-project get-list" [
+export def "get-team-member-list-of-client-project" [
   workgroup_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3632,7 +3632,7 @@ export def "workgroups-projects-team-members-of-client-project get-list" [
 #
 # GET /v1/workgroups/{workgroup_id}/projects/{project_id}/teammembers
 # operationId: getTeamMemberListOfProject
-export def "workgroups-projects-teammembers get-team-member-list" [
+export def "get-team-member-list-of-project" [
   workgroup_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3670,7 +3670,7 @@ export def "workgroups-projects-teammembers get-team-member-list" [
 # Deprecated, please use 1.1 Version
 #
 # POST /v1/workgroups/{workgroup_id}/projects/{project_id}/teammembers
-export def "workgroups-projects-teammembers create" [
+export def "post-v1-workgroups-workgroup-id-projects-project-id-teammembers" [
   workgroup_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3714,7 +3714,7 @@ export def "workgroups-projects-teammembers create" [
 #
 # DELETE /v1/workgroups/{workgroup_id}/projects/{project_id}/teammembers/{teammember_id}
 # operationId: deleteTeamMemberOfProject
-export def "workgroups-projects-teammembers delete-team-member" [
+export def "delete-team-member-of-project" [
   workgroup_id: string
   project_id: string
   teammember_id: string
@@ -3755,7 +3755,7 @@ export def "workgroups-projects-teammembers delete-team-member" [
 #
 # GET /v1/workgroups/{workgroup_id}/quoteStates
 # operationId: getQuoteStateList
-export def "workgroups-quote-states get-list" [
+export def "get-quote-state-list" [
   workgroup_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3791,7 +3791,7 @@ export def "workgroups-quote-states get-list" [
 # List the quotes of workgroup level
 #
 # GET /v1/workgroups/{workgroup_id}/quotes
-export def "workgroups-quotes get" [
+export def "get-v1-workgroups-workgroup-id-quotes" [
   workgroup_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3830,7 +3830,7 @@ export def "workgroups-quotes get" [
 #
 # GET /v1/workgroups/{workgroup_id}/receivedTimeCards
 # operationId: getReceivedTimeCardList
-export def "workgroups-received-time-cards get-list" [
+export def "get-received-time-card-list" [
   workgroup_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3867,7 +3867,7 @@ export def "workgroups-received-time-cards get-list" [
 #
 # GET /v1/workgroups/{workgroup_id}/receivedTimeCards/{timeCard_id}
 # operationId: getReceivedTimeCard
-export def "workgroups-received-time-cards get" [
+export def "get-received-time-card" [
   workgroup_id: string
   time_card_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3906,7 +3906,7 @@ export def "workgroups-received-time-cards get" [
 #
 # GET /v1/workgroups/{workgroup_id}/sellOrders
 # operationId: getSellOrderListOfWorkgroup
-export def "workgroups-sell-orders get-list" [
+export def "get-sell-order-list-of-workgroup" [
   workgroup_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3943,7 +3943,7 @@ export def "workgroups-sell-orders get-list" [
 #
 # GET /v1/workgroups/{workgroup_id}/sellOrders/{order_id}
 # operationId: getSellOrderOfWorkgroup
-export def "workgroups-sell-orders get" [
+export def "get-sell-order-of-workgroup" [
   workgroup_id: string
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3982,7 +3982,7 @@ export def "workgroups-sell-orders get" [
 #
 # GET /v1/workgroups/{workgroup_id}/specTemplates
 # operationId: getSpecTemplateList
-export def "workgroups-spec-templates get-list" [
+export def "get-spec-template-list" [
   workgroup_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4019,7 +4019,7 @@ export def "workgroups-spec-templates get-list" [
 #
 # GET /v1/workgroups/{workgroup_id}/specTemplates/{spec_template_id}
 # operationId: getSpecTemplate
-export def "workgroups-spec-templates get" [
+export def "get-spec-template" [
   workgroup_id: string
   spec_template_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4057,7 +4057,7 @@ export def "workgroups-spec-templates get" [
 # Get Spec Type Fields
 #
 # GET /v1/workgroups/{workgroup_id}/specTypes/{spec_type_id}/specTypeFields
-export def "workgroups-spec-types-spec-type-fields get" [
+export def "get-v1-workgroups-workgroup-id-spec-types-spec-type-id-spec-type-fields" [
   workgroup_id: string
   spec_type_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4096,7 +4096,7 @@ export def "workgroups-spec-types-spec-type-fields get" [
 #
 # GET /v1/workgroups/{workgroup_id}/supplierWorkgroups
 # operationId: getSupplierWorkgroupList
-export def "workgroups-supplier-workgroups get-list" [
+export def "get-supplier-workgroup-list" [
   workgroup_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4133,7 +4133,7 @@ export def "workgroups-supplier-workgroups get-list" [
 #
 # GET /v1/workgroups/{workgroup_id}/supplierWorkgroups/{bu_supplier_workgroup_id}
 # operationId: getSupplierWorkgroupDetail
-export def "workgroups-supplier-workgroups get-detail" [
+export def "get-supplier-workgroup-detail" [
   workgroup_id: string
   bu_supplier_workgroup_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4172,7 +4172,7 @@ export def "workgroups-supplier-workgroups get-detail" [
 #
 # GET /v1/workgroups/{workgroup_id}/taskTypes
 # operationId: getTaskTypesOfWorkgroup
-export def "workgroups-task-types get" [
+export def "get-task-types-of-workgroup" [
   workgroup_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4209,7 +4209,7 @@ export def "workgroups-task-types get" [
 #
 # GET /v1/workgroups/{workgroup_id}/tasks
 # operationId: getTaskListOfWorkgroup
-export def "workgroups-tasks get-list" [
+export def "get-task-list-of-workgroup" [
   workgroup_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4246,7 +4246,7 @@ export def "workgroups-tasks get-list" [
 #
 # GET /v1/workgroups/{workgroup_id}/tasks/{task_id}
 # operationId: getTaskOfWorkgroup
-export def "workgroups-tasks get" [
+export def "get-task-of-workgroup" [
   workgroup_id: string
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4285,7 +4285,7 @@ export def "workgroups-tasks get" [
 #
 # GET /v1/workgroups/{workgroup_id}/teamTemplates
 # operationId: getTeamTemplateList
-export def "workgroups-team-templates get-list" [
+export def "get-team-template-list" [
   workgroup_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4322,7 +4322,7 @@ export def "workgroups-team-templates get-list" [
 #
 # GET /v1/workgroups/{workgroup_id}/teamTemplates/{team_template_id}
 # operationId: getTeamTemplateDetail
-export def "workgroups-team-templates get-detail" [
+export def "get-team-template-detail" [
   workgroup_id: string
   team_template_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4361,7 +4361,7 @@ export def "workgroups-team-templates get-detail" [
 #
 # GET /v1/workgroups/{workgroup_id}/workgroupMembers
 # operationId: getWorkgroupMemberList
-export def "workgroups-workgroup-members get-list" [
+export def "get-workgroup-member-list" [
   workgroup_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4398,7 +4398,7 @@ export def "workgroups-workgroup-members get-list" [
 #
 # GET /v1/workgroups/{workgroup_id}/workgroupMembers/{user_id}
 # operationId: getWorkgroupMemberInfo
-export def "workgroups-workgroup-members get" [
+export def "get-workgroup-member-info" [
   workgroup_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL

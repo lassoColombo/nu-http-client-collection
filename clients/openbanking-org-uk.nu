@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "atms get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-atms" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -127,7 +127,7 @@ export def commands []: nothing -> table {
 # Gets a list of all `ATM` objects.
 #
 # GET /atms
-export def "atms get" [
+export def "get-atms" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -164,7 +164,7 @@ export def "atms get" [
 # Gets header information on the current set of `ATM` data
 #
 # HEAD /atms
-export def "atms head" [
+export def "head-atms" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -201,7 +201,7 @@ export def "atms head" [
 # Gets a list of all `Branch` objects.
 #
 # GET /branches
-export def "branches get" [
+export def "get-branches" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -238,7 +238,7 @@ export def "branches get" [
 # Gets header information on the current set of `Branch` data
 #
 # HEAD /branches
-export def "branches head" [
+export def "head-branches" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -275,7 +275,7 @@ export def "branches head" [
 # Gets a list of all `Branch Current Account` objects.
 #
 # GET /business-current-accounts
-export def "business-current-accounts get" [
+export def "get-business-current-accounts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -312,7 +312,7 @@ export def "business-current-accounts get" [
 # Gets header information on the current set of `Business Current Account` data
 #
 # HEAD /business-current-accounts
-export def "business-current-accounts head" [
+export def "head-business-current-accounts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -349,7 +349,7 @@ export def "business-current-accounts head" [
 # Gets a list of all `Commerical Credit Card` objects.
 #
 # GET /commercial-credit-cards
-export def "commercial-credit-cards get" [
+export def "get-commercial-credit-cards" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -386,7 +386,7 @@ export def "commercial-credit-cards get" [
 # Gets header information on the current set of `Commerical Credit Card` data
 #
 # HEAD /commercial-credit-cards
-export def "commercial-credit-cards head" [
+export def "head-commercial-credit-cards" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -423,7 +423,7 @@ export def "commercial-credit-cards head" [
 # Gets a list of all `Personal Current Account` objects.
 #
 # GET /personal-current-accounts
-export def "personal-current-accounts get" [
+export def "get-personal-current-accounts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -460,7 +460,7 @@ export def "personal-current-accounts get" [
 # Gets header information on the current set of `Personal Current Account` data
 #
 # HEAD /personal-current-accounts
-export def "personal-current-accounts head" [
+export def "head-personal-current-accounts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -497,7 +497,7 @@ export def "personal-current-accounts head" [
 # Gets a list of all `Unsercured SME Lending` objects.
 #
 # GET /unsecured-sme-loans
-export def "unsecured-sme-loans get" [
+export def "get-unsecured-sme-loans" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -534,7 +534,7 @@ export def "unsecured-sme-loans get" [
 # Gets header information on the current set of `Unsercured SME Lending` data
 #
 # HEAD /unsecured-sme-loans
-export def "unsecured-sme-loans head" [
+export def "head-unsecured-sme-loans" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

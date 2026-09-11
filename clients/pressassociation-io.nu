@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["apikey"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "asset list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-assets" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -122,7 +122,7 @@ export def commands []: nothing -> table {
 #
 # GET /asset
 # operationId: listAssets
-export def "asset list" [
+export def "list-assets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -160,7 +160,7 @@ export def "asset list" [
 #
 # GET /asset/{assetId}
 # operationId: getAsset
-export def "asset get" [
+export def "get-asset" [
   asset_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -198,7 +198,7 @@ export def "asset get" [
 #
 # GET /asset/{assetId}/contributor
 # operationId: getAssetContributors
-export def "asset-contributor get" [
+export def "get-asset-contributors" [
   asset_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -236,7 +236,7 @@ export def "asset-contributor get" [
 #
 # GET /catalogue
 # operationId: listCatalogues
-export def "catalogue list" [
+export def "list-catalogues" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -270,7 +270,7 @@ export def "catalogue list" [
 #
 # GET /catalogue/{catalogueId}
 # operationId: getCatalogue
-export def "catalogue get" [
+export def "get-catalogue" [
   catalogue_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -306,7 +306,7 @@ export def "catalogue get" [
 #
 # GET /catalogue/{catalogueId}/asset
 # operationId: getCatalogueAsset
-export def "catalogue-asset get" [
+export def "get-catalogue-asset" [
   catalogue_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -349,7 +349,7 @@ export def "catalogue-asset get" [
 #
 # GET /catalogue/{catalogueId}/asset/{assetId}
 # operationId: getCatalogueAssetDetail
-export def "catalogue-asset get-detail" [
+export def "get-catalogue-asset-detail" [
   catalogue_id: string
   asset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -387,7 +387,7 @@ export def "catalogue-asset get-detail" [
 #
 # GET /channel
 # operationId: listChannels
-export def "channel list" [
+export def "list-channels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -429,7 +429,7 @@ export def "channel list" [
 #
 # GET /channel/{channelId}
 # operationId: getChannel
-export def "channel get" [
+export def "get-channel" [
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -467,7 +467,7 @@ export def "channel get" [
 #
 # GET /contributor
 # operationId: listContributor
-export def "contributor list" [
+export def "list-contributor" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -505,7 +505,7 @@ export def "contributor list" [
 #
 # GET /contributor/{contributorId}
 # operationId: getContributor
-export def "contributor get" [
+export def "get-contributor" [
   contributor_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -543,7 +543,7 @@ export def "contributor get" [
 #
 # GET /feature
 # operationId: listFeatures
-export def "feature list" [
+export def "list-features" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -582,7 +582,7 @@ export def "feature list" [
 #
 # GET /feature-type
 # operationId: listFeatureTypes
-export def "feature-type list" [
+export def "list-feature-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -616,7 +616,7 @@ export def "feature-type list" [
 #
 # GET /feature/{featureId}
 # operationId: getFeature
-export def "feature get" [
+export def "get-feature" [
   feature_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -652,7 +652,7 @@ export def "feature get" [
 #
 # GET /platform
 # operationId: listPlatforms
-export def "platform list" [
+export def "list-platforms" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -688,7 +688,7 @@ export def "platform list" [
 #
 # GET /platform/{platformId}
 # operationId: getPlatform
-export def "platform get" [
+export def "get-platform" [
   platform_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -724,7 +724,7 @@ export def "platform get" [
 #
 # GET /platform/{platformId}/region
 # operationId: listPlatformRegions
-export def "platform-region list" [
+export def "list-platform-regions" [
   platform_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -762,7 +762,7 @@ export def "platform-region list" [
 #
 # GET /schedule
 # operationId: listSchedule
-export def "schedule list" [
+export def "list-schedule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

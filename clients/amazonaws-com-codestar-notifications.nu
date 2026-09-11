@@ -102,7 +102,7 @@ def status-completer [] { ["DISABLED" "ENABLED"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-notification-rule create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-notification-rule" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -127,7 +127,7 @@ export def commands []: nothing -> table {
 # POST /createNotificationRule
 # operationId: CreateNotificationRule
 # --Targets item shape: {TargetType?: any, TargetAddress?: any}
-export def "create-notification-rule create" [
+export def "create-notification-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -181,7 +181,7 @@ export def "create-notification-rule create" [
 #
 # POST /deleteNotificationRule
 # operationId: DeleteNotificationRule
-export def "delete-notification-rule delete" [
+export def "delete-notification-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -228,7 +228,7 @@ export def "delete-notification-rule delete" [
 #
 # POST /deleteTarget
 # operationId: DeleteTarget
-export def "delete-target delete" [
+export def "delete-target" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -276,7 +276,7 @@ export def "delete-target delete" [
 #
 # POST /describeNotificationRule
 # operationId: DescribeNotificationRule
-export def "describe-notification-rule get" [
+export def "describe-notification-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -324,7 +324,7 @@ export def "describe-notification-rule get" [
 # POST /listEventTypes
 # operationId: ListEventTypes
 # --Filters item shape: {Name: any, Value: any}
-export def "list-event-types list" [
+export def "list-event-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -377,7 +377,7 @@ export def "list-event-types list" [
 # POST /listNotificationRules
 # operationId: ListNotificationRules
 # --Filters item shape: {Name: any, Value: any}
-export def "list-notification-rules list" [
+export def "list-notification-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -429,7 +429,7 @@ export def "list-notification-rules list" [
 #
 # POST /listTagsForResource
 # operationId: ListTagsForResource
-export def "list-tags-for-resource list" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -477,7 +477,7 @@ export def "list-tags-for-resource list" [
 # POST /listTargets
 # operationId: ListTargets
 # --Filters item shape: {Name: any, Value: any}
-export def "list-targets list" [
+export def "list-targets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -530,7 +530,7 @@ export def "list-targets list" [
 # POST /subscribe
 # operationId: Subscribe
 # --Target shape: {TargetType?: any, TargetAddress?: any}
-export def "subscribe create" [
+export def "subscribe" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -579,7 +579,7 @@ export def "subscribe create" [
 #
 # POST /tagResource
 # operationId: TagResource
-export def "tag-resource tag" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -627,7 +627,7 @@ export def "tag-resource tag" [
 #
 # POST /unsubscribe
 # operationId: Unsubscribe
-export def "unsubscribe create" [
+export def "unsubscribe" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -675,7 +675,7 @@ export def "unsubscribe create" [
 #
 # POST /untagResource/{resourceArn}
 # operationId: UntagResource
-export def "untag-resource untag" [
+export def "untag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -723,7 +723,7 @@ export def "untag-resource untag" [
 # POST /updateNotificationRule
 # operationId: UpdateNotificationRule
 # --Targets item shape: {TargetType?: any, TargetAddress?: any}
-export def "update-notification-rule update" [
+export def "update-notification-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

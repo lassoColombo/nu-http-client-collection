@@ -120,7 +120,7 @@ def resource-id-type-completer [] { ["LONG_ID" "SHORT_ID"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "2015-02-01-access-points create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-access-point" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -147,7 +147,7 @@ export def commands []: nothing -> table {
 # --Tags item shape: {Key: any, Value: any}
 # --PosixUser shape: {Uid?: any, Gid?: any, SecondaryGids?: any}
 # --RootDirectory shape: {Path?: any, CreationInfo?: any}
-export def "2015-02-01-access-points create" [
+export def "create-access-point" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -198,7 +198,7 @@ export def "2015-02-01-access-points create" [
 #
 # GET /2015-02-01/access-points
 # operationId: DescribeAccessPoints
-export def "2015-02-01-access-points get" [
+export def "describe-access-points" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -247,7 +247,7 @@ export def "2015-02-01-access-points get" [
 # POST /2015-02-01/file-systems
 # operationId: CreateFileSystem
 # --Tags item shape: {Key: any, Value: any}
-export def "2015-02-01-file-systems create" [
+export def "create-file-system" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -302,7 +302,7 @@ export def "2015-02-01-file-systems create" [
 #
 # GET /2015-02-01/file-systems
 # operationId: DescribeFileSystems
-export def "2015-02-01-file-systems get" [
+export def "describe-file-systems" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -350,7 +350,7 @@ export def "2015-02-01-file-systems get" [
 #
 # POST /2015-02-01/mount-targets
 # operationId: CreateMountTarget
-export def "2015-02-01-mount-targets create" [
+export def "create-mount-target" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -400,7 +400,7 @@ export def "2015-02-01-mount-targets create" [
 #
 # GET /2015-02-01/mount-targets
 # operationId: DescribeMountTargets
-export def "2015-02-01-mount-targets get" [
+export def "describe-mount-targets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -450,7 +450,7 @@ export def "2015-02-01-mount-targets get" [
 # POST /2015-02-01/file-systems/{SourceFileSystemId}/replication-configuration
 # operationId: CreateReplicationConfiguration
 # --Destinations item shape: {Region?: any, AvailabilityZoneName?: any, KmsKeyId?: any}
-export def "2015-02-01-file-systems-replication-configuration create" [
+export def "create-replication-configuration" [
   source_file_system_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -499,7 +499,7 @@ export def "2015-02-01-file-systems-replication-configuration create" [
 #
 # DELETE /2015-02-01/file-systems/{SourceFileSystemId}/replication-configuration
 # operationId: DeleteReplicationConfiguration
-export def "2015-02-01-file-systems-replication-configuration delete" [
+export def "delete-replication-configuration" [
   source_file_system_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -547,7 +547,7 @@ export def "2015-02-01-file-systems-replication-configuration delete" [
 # operationId: CreateTags
 # --Tags item shape: {Key: any, Value: any}
 @deprecated
-export def "2015-02-01-create-tags create" [
+export def "create-tags" [
   file_system_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -596,7 +596,7 @@ export def "2015-02-01-create-tags create" [
 #
 # DELETE /2015-02-01/access-points/{AccessPointId}
 # operationId: DeleteAccessPoint
-export def "2015-02-01-access-points delete" [
+export def "delete-access-point" [
   access_point_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -641,7 +641,7 @@ export def "2015-02-01-access-points delete" [
 #
 # DELETE /2015-02-01/file-systems/{FileSystemId}
 # operationId: DeleteFileSystem
-export def "2015-02-01-file-systems delete" [
+export def "delete-file-system" [
   file_system_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -686,7 +686,7 @@ export def "2015-02-01-file-systems delete" [
 #
 # PUT /2015-02-01/file-systems/{FileSystemId}
 # operationId: UpdateFileSystem
-export def "2015-02-01-file-systems update" [
+export def "update-file-system" [
   file_system_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -736,7 +736,7 @@ export def "2015-02-01-file-systems update" [
 #
 # DELETE /2015-02-01/file-systems/{FileSystemId}/policy
 # operationId: DeleteFileSystemPolicy
-export def "2015-02-01-file-systems-policy delete" [
+export def "delete-file-system-policy" [
   file_system_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -781,7 +781,7 @@ export def "2015-02-01-file-systems-policy delete" [
 #
 # GET /2015-02-01/file-systems/{FileSystemId}/policy
 # operationId: DescribeFileSystemPolicy
-export def "2015-02-01-file-systems-policy get" [
+export def "describe-file-system-policy" [
   file_system_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -826,7 +826,7 @@ export def "2015-02-01-file-systems-policy get" [
 #
 # PUT /2015-02-01/file-systems/{FileSystemId}/policy
 # operationId: PutFileSystemPolicy
-export def "2015-02-01-file-systems-policy update" [
+export def "put-file-system-policy" [
   file_system_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -876,7 +876,7 @@ export def "2015-02-01-file-systems-policy update" [
 #
 # DELETE /2015-02-01/mount-targets/{MountTargetId}
 # operationId: DeleteMountTarget
-export def "2015-02-01-mount-targets delete" [
+export def "delete-mount-target" [
   mount_target_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -923,7 +923,7 @@ export def "2015-02-01-mount-targets delete" [
 # DEPRECATED
 # operationId: DeleteTags
 @deprecated
-export def "2015-02-01-delete-tags delete" [
+export def "delete-tags" [
   file_system_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -972,7 +972,7 @@ export def "2015-02-01-delete-tags delete" [
 #
 # GET /2015-02-01/account-preferences
 # operationId: DescribeAccountPreferences
-export def "2015-02-01-account-preferences get" [
+export def "describe-account-preferences" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1015,7 +1015,7 @@ export def "2015-02-01-account-preferences get" [
 #
 # PUT /2015-02-01/account-preferences
 # operationId: PutAccountPreferences
-export def "2015-02-01-account-preferences update" [
+export def "put-account-preferences" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1062,7 +1062,7 @@ export def "2015-02-01-account-preferences update" [
 #
 # GET /2015-02-01/file-systems/{FileSystemId}/backup-policy
 # operationId: DescribeBackupPolicy
-export def "2015-02-01-file-systems-backup-policy get" [
+export def "describe-backup-policy" [
   file_system_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1108,7 +1108,7 @@ export def "2015-02-01-file-systems-backup-policy get" [
 # PUT /2015-02-01/file-systems/{FileSystemId}/backup-policy
 # operationId: PutBackupPolicy
 # --BackupPolicy shape: {Status?: any}
-export def "2015-02-01-file-systems-backup-policy update" [
+export def "put-backup-policy" [
   file_system_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1157,7 +1157,7 @@ export def "2015-02-01-file-systems-backup-policy update" [
 #
 # GET /2015-02-01/file-systems/{FileSystemId}/lifecycle-configuration
 # operationId: DescribeLifecycleConfiguration
-export def "2015-02-01-file-systems-lifecycle-configuration get" [
+export def "describe-lifecycle-configuration" [
   file_system_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1203,7 +1203,7 @@ export def "2015-02-01-file-systems-lifecycle-configuration get" [
 # PUT /2015-02-01/file-systems/{FileSystemId}/lifecycle-configuration
 # operationId: PutLifecycleConfiguration
 # --LifecyclePolicies item shape: {TransitionToIA?: any, TransitionToPrimaryStorageClass?: any}
-export def "2015-02-01-file-systems-lifecycle-configuration update" [
+export def "put-lifecycle-configuration" [
   file_system_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1252,7 +1252,7 @@ export def "2015-02-01-file-systems-lifecycle-configuration update" [
 #
 # GET /2015-02-01/mount-targets/{MountTargetId}/security-groups
 # operationId: DescribeMountTargetSecurityGroups
-export def "2015-02-01-mount-targets-security-groups get" [
+export def "describe-mount-target-security-groups" [
   mount_target_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1297,7 +1297,7 @@ export def "2015-02-01-mount-targets-security-groups get" [
 #
 # PUT /2015-02-01/mount-targets/{MountTargetId}/security-groups
 # operationId: ModifyMountTargetSecurityGroups
-export def "2015-02-01-mount-targets-security-groups update-modify" [
+export def "modify-mount-target-security-groups" [
   mount_target_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1346,7 +1346,7 @@ export def "2015-02-01-mount-targets-security-groups update-modify" [
 #
 # GET /2015-02-01/file-systems/replication-configurations
 # operationId: DescribeReplicationConfigurations
-export def "2015-02-01-file-systems-replication-configurations get" [
+export def "describe-replication-configurations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1395,7 +1395,7 @@ export def "2015-02-01-file-systems-replication-configurations get" [
 # DEPRECATED
 # operationId: DescribeTags
 @deprecated
-export def "2015-02-01-tags get" [
+export def "describe-tags" [
   file_system_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1443,7 +1443,7 @@ export def "2015-02-01-tags get" [
 #
 # GET /2015-02-01/resource-tags/{ResourceId}
 # operationId: ListTagsForResource
-export def "2015-02-01-resource-tags list" [
+export def "list-tags-for-resource" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1492,7 +1492,7 @@ export def "2015-02-01-resource-tags list" [
 # POST /2015-02-01/resource-tags/{ResourceId}
 # operationId: TagResource
 # --Tags item shape: {Key: any, Value: any}
-export def "2015-02-01-resource-tags tag" [
+export def "tag-resource" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1541,7 +1541,7 @@ export def "2015-02-01-resource-tags tag" [
 #
 # DELETE /2015-02-01/resource-tags/{ResourceId}
 # operationId: UntagResource
-export def "2015-02-01-resource-tags untag" [
+export def "untag-resource" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

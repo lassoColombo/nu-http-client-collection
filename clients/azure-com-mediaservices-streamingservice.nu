@@ -122,7 +122,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-media-mediaservices-live-events list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "live-events-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaservices/{accountName}/liveEvents
 # operationId: LiveEvents_List
-export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-live-events list" [
+export def "live-events-list" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -188,7 +188,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-mediaservice
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaservices/{accountName}/liveEvents/{liveEventName}
 # operationId: LiveEvents_Delete
-export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-live-events delete" [
+export def "live-events-delete" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -232,7 +232,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-mediaservice
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaservices/{accountName}/liveEvents/{liveEventName}
 # operationId: LiveEvents_Get
-export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-live-events get" [
+export def "live-events-get" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -277,7 +277,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-mediaservice
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaservices/{accountName}/liveEvents/{liveEventName}
 # operationId: LiveEvents_Update
 # --properties shape: {crossSiteAccessPolicies?: any, description?: string, encoding?: any, input: any, preview?: any, streamOptions?: list<string>, transcriptions?: list, vanityUrl?: bool}
-export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-live-events update" [
+export def "live-events-update" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -328,7 +328,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-mediaservice
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaservices/{accountName}/liveEvents/{liveEventName}
 # operationId: LiveEvents_Create
 # --properties shape: {crossSiteAccessPolicies?: any, description?: string, encoding?: any, input: any, preview?: any, streamOptions?: list<string>, transcriptions?: list, vanityUrl?: bool}
-export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-live-events create" [
+export def "live-events-create" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -379,7 +379,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-mediaservice
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaservices/{accountName}/liveEvents/{liveEventName}/liveOutputs
 # operationId: LiveOutputs_List
-export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-live-events-live-outputs list" [
+export def "live-outputs-list" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -423,7 +423,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-mediaservice
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaservices/{accountName}/liveEvents/{liveEventName}/liveOutputs/{liveOutputName}
 # operationId: LiveOutputs_Delete
-export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-live-events-live-outputs delete" [
+export def "live-outputs-delete" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -469,7 +469,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-mediaservice
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaservices/{accountName}/liveEvents/{liveEventName}/liveOutputs/{liveOutputName}
 # operationId: LiveOutputs_Get
-export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-live-events-live-outputs get" [
+export def "live-outputs-get" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -516,7 +516,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-mediaservice
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaservices/{accountName}/liveEvents/{liveEventName}/liveOutputs/{liveOutputName}
 # operationId: LiveOutputs_Create
 # --properties shape: {archiveWindowLength: string, assetName: string, description?: string, hls?: any, manifestName?: string, outputSnapTime?: int}
-export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-live-events-live-outputs create" [
+export def "live-outputs-create" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -566,7 +566,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-mediaservice
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaservices/{accountName}/liveEvents/{liveEventName}/reset
 # operationId: LiveEvents_Reset
-export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-live-events-reset reset" [
+export def "live-events-reset" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -610,7 +610,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-mediaservice
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaservices/{accountName}/liveEvents/{liveEventName}/start
 # operationId: LiveEvents_Start
-export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-live-events-start start" [
+export def "live-events-start" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -654,7 +654,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-mediaservice
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaservices/{accountName}/liveEvents/{liveEventName}/stop
 # operationId: LiveEvents_Stop
-export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-live-events-stop stop" [
+export def "live-events-stop" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -702,7 +702,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-mediaservice
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaservices/{accountName}/streamingEndpoints
 # operationId: StreamingEndpoints_List
-export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-streaming-endpoints list" [
+export def "streaming-endpoints-list" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -744,7 +744,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-mediaservice
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaservices/{accountName}/streamingEndpoints/{streamingEndpointName}
 # operationId: StreamingEndpoints_Delete
-export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-streaming-endpoints delete" [
+export def "streaming-endpoints-delete" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -788,7 +788,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-mediaservice
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaservices/{accountName}/streamingEndpoints/{streamingEndpointName}
 # operationId: StreamingEndpoints_Get
-export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-streaming-endpoints get" [
+export def "streaming-endpoints-get" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -833,7 +833,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-mediaservice
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaservices/{accountName}/streamingEndpoints/{streamingEndpointName}
 # operationId: StreamingEndpoints_Update
 # --properties shape: {accessControl?: any, availabilitySetName?: string, cdnEnabled?: bool, cdnProfile?: string, cdnProvider?: string, crossSiteAccessPolicies?: any, customHostNames?: list<string>, description?: string, maxCacheAge?: int, scaleUnits: int}
-export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-streaming-endpoints update" [
+export def "streaming-endpoints-update" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -884,7 +884,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-mediaservice
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaservices/{accountName}/streamingEndpoints/{streamingEndpointName}
 # operationId: StreamingEndpoints_Create
 # --properties shape: {accessControl?: any, availabilitySetName?: string, cdnEnabled?: bool, cdnProfile?: string, cdnProvider?: string, crossSiteAccessPolicies?: any, customHostNames?: list<string>, description?: string, maxCacheAge?: int, scaleUnits: int}
-export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-streaming-endpoints create" [
+export def "streaming-endpoints-create" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -935,7 +935,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-mediaservice
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaservices/{accountName}/streamingEndpoints/{streamingEndpointName}/scale
 # operationId: StreamingEndpoints_Scale
-export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-streaming-endpoints-scale create" [
+export def "streaming-endpoints-scale" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -983,7 +983,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-mediaservice
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaservices/{accountName}/streamingEndpoints/{streamingEndpointName}/start
 # operationId: StreamingEndpoints_Start
-export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-streaming-endpoints-start start" [
+export def "streaming-endpoints-start" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1027,7 +1027,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-mediaservice
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaservices/{accountName}/streamingEndpoints/{streamingEndpointName}/stop
 # operationId: StreamingEndpoints_Stop
-export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-streaming-endpoints-stop stop" [
+export def "streaming-endpoints-stop" [
   subscription_id: string
   resource_group_name: string
   account_name: string

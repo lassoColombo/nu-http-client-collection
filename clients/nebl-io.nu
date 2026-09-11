@@ -105,7 +105,7 @@ def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "json-rpc create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "json-rpc" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -129,7 +129,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: json_rpc
-export def "json-rpc create" [
+export def "json-rpc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -170,7 +170,7 @@ export def "json-rpc create" [
 #
 # GET /ins/addr/{address}
 # operationId: getAddress
-export def "ins-addr get" [
+export def "get-address" [
   address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -206,7 +206,7 @@ export def "ins-addr get" [
 #
 # GET /ins/addr/{address}/balance
 # operationId: getAddressBalance
-export def "ins-addr-balance get" [
+export def "get-address-balance" [
   address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -242,7 +242,7 @@ export def "ins-addr-balance get" [
 #
 # GET /ins/addr/{address}/totalReceived
 # operationId: getAddressTotalReceived
-export def "ins-addr-total-received get" [
+export def "get-address-total-received" [
   address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -278,7 +278,7 @@ export def "ins-addr-total-received get" [
 #
 # GET /ins/addr/{address}/totalSent
 # operationId: getAddressTotalSent
-export def "ins-addr-total-sent get" [
+export def "get-address-total-sent" [
   address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -314,7 +314,7 @@ export def "ins-addr-total-sent get" [
 #
 # GET /ins/addr/{address}/unconfirmedBalance
 # operationId: getAddressUnconfirmedBalance
-export def "ins-addr-unconfirmed-balance get" [
+export def "get-address-unconfirmed-balance" [
   address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -350,7 +350,7 @@ export def "ins-addr-unconfirmed-balance get" [
 #
 # GET /ins/addr/{address}/utxo
 # operationId: getAddressUtxos
-export def "ins-addr-utxo get" [
+export def "get-address-utxos" [
   address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -386,7 +386,7 @@ export def "ins-addr-utxo get" [
 #
 # GET /ins/block-index/{blockindex}
 # operationId: getBlockIndex
-export def "ins-block-index get" [
+export def "get-block-index" [
   blockindex: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -422,7 +422,7 @@ export def "ins-block-index get" [
 #
 # GET /ins/block/{blockhash}
 # operationId: getBlock
-export def "ins-block get" [
+export def "get-block" [
   blockhash: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -458,7 +458,7 @@ export def "ins-block get" [
 #
 # GET /ins/rawtx/{txid}
 # operationId: getRawTx
-export def "ins-rawtx get-raw-tx" [
+export def "get-raw-tx" [
   txid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -494,7 +494,7 @@ export def "ins-rawtx get-raw-tx" [
 #
 # GET /ins/status
 # operationId: getStatus
-export def "ins-status get" [
+export def "get-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -530,7 +530,7 @@ export def "ins-status get" [
 #
 # GET /ins/sync
 # operationId: getSync
-export def "ins-sync get" [
+export def "get-sync" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -564,7 +564,7 @@ export def "ins-sync get" [
 #
 # POST /ins/tx/send
 # operationId: sendTx
-export def "ins-tx-send send" [
+export def "send-tx" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -602,7 +602,7 @@ export def "ins-tx-send send" [
 #
 # GET /ins/tx/{txid}
 # operationId: getTx
-export def "ins-tx get" [
+export def "get-tx" [
   txid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -638,7 +638,7 @@ export def "ins-tx get" [
 #
 # GET /ins/txs
 # operationId: getTxs
-export def "ins-txs get" [
+export def "get-txs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -676,7 +676,7 @@ export def "ins-txs get" [
 #
 # GET /ntp1/addressinfo/{address}
 # operationId: getAddressInfo
-export def "ntp1-addressinfo get" [
+export def "get-address-info" [
   address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -712,7 +712,7 @@ export def "ntp1-addressinfo get" [
 #
 # POST /ntp1/broadcast
 # operationId: broadcastTx
-export def "ntp1-broadcast create-tx" [
+export def "broadcast-tx" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -752,7 +752,7 @@ export def "ntp1-broadcast create-tx" [
 # operationId: burnToken
 # --burn item shape: {amount?: float, tokenId?: string}
 # --transfer item shape: {address?: string, amount?: float, tokenId?: string}
-export def "ntp1-burntoken create-burn-token" [
+export def "burn-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -796,7 +796,7 @@ export def "ntp1-burntoken create-burn-token" [
 # --flags shape: {splitChange?: bool}
 # --metadata shape: {description?: string, encryptions?: list, issuer?: string, rules?: record, tokenName?: string, urls?: list, userData?: record}
 # --transfer item shape: {address?: string, amount?: float}
-export def "ntp1-issue create-token" [
+export def "issue-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -844,7 +844,7 @@ export def "ntp1-issue create-token" [
 # --flags shape: {splitChange?: bool}
 # --metadata shape: {description?: string, encryptions?: list, issuer?: string, rules?: record, tokenName?: string, urls?: list, userData?: record}
 # --to item shape: {address?: string, amount?: float, tokenId?: string}
-export def "ntp1-sendtoken send-token" [
+export def "send-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -887,7 +887,7 @@ export def "ntp1-sendtoken send-token" [
 #
 # GET /ntp1/stakeholders/{tokenid}
 # operationId: getTokenHolders
-export def "ntp1-stakeholders get-token-holders" [
+export def "get-token-holders" [
   tokenid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -923,7 +923,7 @@ export def "ntp1-stakeholders get-token-holders" [
 #
 # GET /ntp1/tokenid/{tokensymbol}
 # operationId: getTokenId
-export def "ntp1-tokenid get-token" [
+export def "get-token-id" [
   tokensymbol: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -959,7 +959,7 @@ export def "ntp1-tokenid get-token" [
 #
 # GET /ntp1/tokenmetadata/{tokenid}
 # operationId: getTokenMetadata
-export def "ntp1-tokenmetadata list" [
+export def "get-token-metadata" [
   tokenid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -997,7 +997,7 @@ export def "ntp1-tokenmetadata list" [
 #
 # GET /ntp1/tokenmetadata/{tokenid}/{utxo}
 # operationId: getTokenMetadataOfUtxo
-export def "ntp1-tokenmetadata get-token-metadata" [
+export def "get-token-metadata-of-utxo" [
   tokenid: string
   utxo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1037,7 +1037,7 @@ export def "ntp1-tokenmetadata get-token-metadata" [
 #
 # GET /ntp1/transactioninfo/{txid}
 # operationId: getTransactionInfo
-export def "ntp1-transactioninfo get-transaction" [
+export def "get-transaction-info" [
   txid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1073,7 +1073,7 @@ export def "ntp1-transactioninfo get-transaction" [
 #
 # GET /testnet/faucet
 # operationId: testnet_getFaucet
-export def "testnet-faucet get" [
+export def "testnet-get-faucet" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1110,7 +1110,7 @@ export def "testnet-faucet get" [
 #
 # GET /testnet/ins/addr/{address}
 # operationId: testnet_getAddress
-export def "testnet-ins-addr get" [
+export def "testnet-get-address" [
   address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1146,7 +1146,7 @@ export def "testnet-ins-addr get" [
 #
 # GET /testnet/ins/addr/{address}/balance
 # operationId: testnet_getAddressBalance
-export def "testnet-ins-addr-balance get" [
+export def "testnet-get-address-balance" [
   address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1182,7 +1182,7 @@ export def "testnet-ins-addr-balance get" [
 #
 # GET /testnet/ins/addr/{address}/totalReceived
 # operationId: testnet_getAddressTotalReceived
-export def "testnet-ins-addr-total-received get" [
+export def "testnet-get-address-total-received" [
   address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1218,7 +1218,7 @@ export def "testnet-ins-addr-total-received get" [
 #
 # GET /testnet/ins/addr/{address}/totalSent
 # operationId: testnet_getAddressTotalSent
-export def "testnet-ins-addr-total-sent get" [
+export def "testnet-get-address-total-sent" [
   address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1254,7 +1254,7 @@ export def "testnet-ins-addr-total-sent get" [
 #
 # GET /testnet/ins/addr/{address}/unconfirmedBalance
 # operationId: testnet_getAddressUnconfirmedBalance
-export def "testnet-ins-addr-unconfirmed-balance get" [
+export def "testnet-get-address-unconfirmed-balance" [
   address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1290,7 +1290,7 @@ export def "testnet-ins-addr-unconfirmed-balance get" [
 #
 # GET /testnet/ins/addr/{address}/utxo
 # operationId: testnet_getAddressUtxos
-export def "testnet-ins-addr-utxo get" [
+export def "testnet-get-address-utxos" [
   address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1326,7 +1326,7 @@ export def "testnet-ins-addr-utxo get" [
 #
 # GET /testnet/ins/block-index/{blockindex}
 # operationId: testnet_getBlockIndex
-export def "testnet-ins-block-index get" [
+export def "testnet-get-block-index" [
   blockindex: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1362,7 +1362,7 @@ export def "testnet-ins-block-index get" [
 #
 # GET /testnet/ins/block/{blockhash}
 # operationId: testnet_getBlock
-export def "testnet-ins-block get" [
+export def "testnet-get-block" [
   blockhash: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1398,7 +1398,7 @@ export def "testnet-ins-block get" [
 #
 # GET /testnet/ins/rawtx/{txid}
 # operationId: testnet_getRawTx
-export def "testnet-ins-rawtx get-raw-tx" [
+export def "testnet-get-raw-tx" [
   txid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1434,7 +1434,7 @@ export def "testnet-ins-rawtx get-raw-tx" [
 #
 # GET /testnet/ins/status
 # operationId: testnet_getStatus
-export def "testnet-ins-status get" [
+export def "testnet-get-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1470,7 +1470,7 @@ export def "testnet-ins-status get" [
 #
 # GET /testnet/ins/sync
 # operationId: testnet_getSync
-export def "testnet-ins-sync get" [
+export def "testnet-get-sync" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1504,7 +1504,7 @@ export def "testnet-ins-sync get" [
 #
 # POST /testnet/ins/tx/send
 # operationId: testnet_sendTx
-export def "testnet-ins-tx-send send" [
+export def "testnet-send-tx" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1542,7 +1542,7 @@ export def "testnet-ins-tx-send send" [
 #
 # GET /testnet/ins/tx/{txid}
 # operationId: testnet_getTx
-export def "testnet-ins-tx get" [
+export def "testnet-get-tx" [
   txid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1578,7 +1578,7 @@ export def "testnet-ins-tx get" [
 #
 # GET /testnet/ins/txs
 # operationId: testnet_getTxs
-export def "testnet-ins-txs get" [
+export def "testnet-get-txs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1616,7 +1616,7 @@ export def "testnet-ins-txs get" [
 #
 # GET /testnet/ntp1/addressinfo/{address}
 # operationId: testnet_getAddressInfo
-export def "testnet-ntp1-addressinfo get" [
+export def "testnet-get-address-info" [
   address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1652,7 +1652,7 @@ export def "testnet-ntp1-addressinfo get" [
 #
 # POST /testnet/ntp1/broadcast
 # operationId: testnet_broadcastTx
-export def "testnet-ntp1-broadcast create-tx" [
+export def "testnet-broadcast-tx" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1692,7 +1692,7 @@ export def "testnet-ntp1-broadcast create-tx" [
 # operationId: testnet_burnToken
 # --burn item shape: {amount?: float, tokenId?: string}
 # --transfer item shape: {address?: string, amount?: float, tokenId?: string}
-export def "testnet-ntp1-burntoken create-burn-token" [
+export def "testnet-burn-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1736,7 +1736,7 @@ export def "testnet-ntp1-burntoken create-burn-token" [
 # --flags shape: {splitChange?: bool}
 # --metadata shape: {description?: string, encryptions?: list, issuer?: string, rules?: record, tokenName?: string, urls?: list, userData?: record}
 # --transfer item shape: {address?: string, amount?: float}
-export def "testnet-ntp1-issue create-token" [
+export def "testnet-issue-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1784,7 +1784,7 @@ export def "testnet-ntp1-issue create-token" [
 # --flags shape: {splitChange?: bool}
 # --metadata shape: {description?: string, encryptions?: list, issuer?: string, rules?: record, tokenName?: string, urls?: list, userData?: record}
 # --to item shape: {address?: string, amount?: float, tokenId?: string}
-export def "testnet-ntp1-sendtoken send-token" [
+export def "testnet-send-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1827,7 +1827,7 @@ export def "testnet-ntp1-sendtoken send-token" [
 #
 # GET /testnet/ntp1/stakeholders/{tokenid}
 # operationId: testnet_getTokenHolders
-export def "testnet-ntp1-stakeholders get-token-holders" [
+export def "testnet-get-token-holders" [
   tokenid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1863,7 +1863,7 @@ export def "testnet-ntp1-stakeholders get-token-holders" [
 #
 # GET /testnet/ntp1/tokenid/{tokensymbol}
 # operationId: testnet_getTokenId
-export def "testnet-ntp1-tokenid get-token" [
+export def "testnet-get-token-id" [
   tokensymbol: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1899,7 +1899,7 @@ export def "testnet-ntp1-tokenid get-token" [
 #
 # GET /testnet/ntp1/tokenmetadata/{tokenid}
 # operationId: testnet_getTokenMetadata
-export def "testnet-ntp1-tokenmetadata list" [
+export def "testnet-get-token-metadata" [
   tokenid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1937,7 +1937,7 @@ export def "testnet-ntp1-tokenmetadata list" [
 #
 # GET /testnet/ntp1/tokenmetadata/{tokenid}/{utxo}
 # operationId: testnet_getTokenMetadataOfUtxo
-export def "testnet-ntp1-tokenmetadata get-token-metadata" [
+export def "testnet-get-token-metadata-of-utxo" [
   tokenid: string
   utxo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1977,7 +1977,7 @@ export def "testnet-ntp1-tokenmetadata get-token-metadata" [
 #
 # GET /testnet/ntp1/transactioninfo/{txid}
 # operationId: testnet_getTransactionInfo
-export def "testnet-ntp1-transactioninfo get-transaction" [
+export def "testnet-get-transaction-info" [
   txid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

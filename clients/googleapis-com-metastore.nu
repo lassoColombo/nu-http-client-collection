@@ -134,7 +134,7 @@ def restore-type-completer [] { ["FULL" "METADATA_ONLY" "RESTORE_TYPE_UNSPECIFIE
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "metastore-projects-locations-services-backups-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -158,7 +158,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1beta/{name}
 # operationId: metastore.projects.locations.services.backups.delete
-export def "v1beta delete" [
+export def "metastore-projects-locations-services-backups-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -207,7 +207,7 @@ export def "v1beta delete" [
 #
 # GET /v1beta/{name}
 # operationId: metastore.projects.locations.services.metadataImports.get
-export def "v1beta get" [
+export def "metastore-projects-locations-services-metadata-imports-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -256,7 +256,7 @@ export def "v1beta get" [
 # PATCH /v1beta/{name}
 # operationId: metastore.projects.locations.services.metadataImports.patch
 # --databaseDump shape: {databaseType?: "DATABASE_TYPE_UNSPECIFIED"|"MYSQL", gcsUri?: string, sourceDatabase?: string, type?: "TYPE_UNSPECIFIED"|"MYSQL"|"AVRO"}
-export def "v1beta update" [
+export def "metastore-projects-locations-services-metadata-imports-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -312,7 +312,7 @@ export def "v1beta update" [
 #
 # GET /v1beta/{name}/locations
 # operationId: metastore.projects.locations.list
-export def "v1beta-locations list" [
+export def "metastore-projects-locations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -363,7 +363,7 @@ export def "v1beta-locations list" [
 #
 # GET /v1beta/{name}/operations
 # operationId: metastore.projects.locations.operations.list
-export def "v1beta-operations list" [
+export def "metastore-projects-locations-operations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -414,7 +414,7 @@ export def "v1beta-operations list" [
 #
 # POST /v1beta/{name}:cancel
 # operationId: metastore.projects.locations.operations.cancel
-export def "v1beta cancel" [
+export def "metastore-projects-locations-operations-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -466,7 +466,7 @@ export def "v1beta cancel" [
 #
 # GET /v1beta/{parent}/backups
 # operationId: metastore.projects.locations.services.backups.list
-export def "v1beta-backups list" [
+export def "metastore-projects-locations-services-backups-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -519,7 +519,7 @@ export def "v1beta-backups list" [
 # POST /v1beta/{parent}/backups
 # operationId: metastore.projects.locations.services.backups.create
 # --serviceRevision shape: {databaseType?: "DATABASE_TYPE_UNSPECIFIED"|"MYSQL"|"SPANNER", encryptionConfig?: record, hiveMetastoreConfig?: record, labels?: record, maintenanceWindow?: record, metadataIntegration?: record, metadataManagementActivity?: record, name?: string, network?: string, networkConfig?: record, port?: int, releaseChannel?: "RELEASE_CHANNEL_UNSPECIFIED"|"CANARY"|"STABLE", scalingConfig?: record, telemetryConfig?: record, tier?: "TIER_UNSPECIFIED"|"DEVELOPER"|"ENTERPRISE"}
-export def "v1beta-backups create" [
+export def "metastore-projects-locations-services-backups-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -575,7 +575,7 @@ export def "v1beta-backups create" [
 #
 # GET /v1beta/{parent}/federations
 # operationId: metastore.projects.locations.federations.list
-export def "v1beta-federations list" [
+export def "metastore-projects-locations-federations-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -627,7 +627,7 @@ export def "v1beta-federations list" [
 #
 # POST /v1beta/{parent}/federations
 # operationId: metastore.projects.locations.federations.create
-export def "v1beta-federations create" [
+export def "metastore-projects-locations-federations-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -684,7 +684,7 @@ export def "v1beta-federations create" [
 #
 # GET /v1beta/{parent}/metadataImports
 # operationId: metastore.projects.locations.services.metadataImports.list
-export def "v1beta-metadata-imports list" [
+export def "metastore-projects-locations-services-metadata-imports-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -737,7 +737,7 @@ export def "v1beta-metadata-imports list" [
 # POST /v1beta/{parent}/metadataImports
 # operationId: metastore.projects.locations.services.metadataImports.create
 # --databaseDump shape: {databaseType?: "DATABASE_TYPE_UNSPECIFIED"|"MYSQL", gcsUri?: string, sourceDatabase?: string, type?: "TYPE_UNSPECIFIED"|"MYSQL"|"AVRO"}
-export def "v1beta-metadata-imports create" [
+export def "metastore-projects-locations-services-metadata-imports-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -793,7 +793,7 @@ export def "v1beta-metadata-imports create" [
 #
 # GET /v1beta/{parent}/services
 # operationId: metastore.projects.locations.services.list
-export def "v1beta-services list" [
+export def "metastore-projects-locations-services-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -852,7 +852,7 @@ export def "v1beta-services list" [
 # --networkConfig shape: {consumers?: list, customRoutesEnabled?: bool}
 # --scalingConfig shape: {instanceSize?: "INSTANCE_SIZE_UNSPECIFIED"|"EXTRA_SMALL"|"SMALL"|"MEDIUM"|"LARGE"|"EXTRA_LARGE", scalingFactor?: float}
 # --telemetryConfig shape: {logFormat?: "LOG_FORMAT_UNSPECIFIED"|"LEGACY"|"JSON"}
-export def "v1beta-services create" [
+export def "metastore-projects-locations-services-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -920,7 +920,7 @@ export def "v1beta-services create" [
 #
 # GET /v1beta/{resource}:getIamPolicy
 # operationId: metastore.projects.locations.services.databases.tables.getIamPolicy
-export def "v1beta get-iam-policy" [
+export def "metastore-projects-locations-services-databases-tables-get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -969,7 +969,7 @@ export def "v1beta get-iam-policy" [
 #
 # POST /v1beta/{resource}:removeIamPolicy
 # operationId: metastore.projects.locations.services.removeIamPolicy
-export def "v1beta delete-iam-policy" [
+export def "metastore-projects-locations-services-remove-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1022,7 +1022,7 @@ export def "v1beta delete-iam-policy" [
 # POST /v1beta/{resource}:setIamPolicy
 # operationId: metastore.projects.locations.services.databases.tables.setIamPolicy
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
-export def "v1beta update-iam-policy" [
+export def "metastore-projects-locations-services-databases-tables-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1075,7 +1075,7 @@ export def "v1beta update-iam-policy" [
 #
 # POST /v1beta/{resource}:testIamPermissions
 # operationId: metastore.projects.locations.services.databases.tables.testIamPermissions
-export def "v1beta test-iam-permissions" [
+export def "metastore-projects-locations-services-databases-tables-test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1127,7 +1127,7 @@ export def "v1beta test-iam-permissions" [
 #
 # POST /v1beta/{service}:alterLocation
 # operationId: metastore.projects.locations.services.alterLocation
-export def "v1beta create-alter-location" [
+export def "metastore-projects-locations-services-alter-location" [
   service: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1180,7 +1180,7 @@ export def "v1beta create-alter-location" [
 #
 # POST /v1beta/{service}:exportMetadata
 # operationId: metastore.projects.locations.services.exportMetadata
-export def "v1beta export-metadata" [
+export def "metastore-projects-locations-services-export-metadata" [
   service: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1234,7 +1234,7 @@ export def "v1beta export-metadata" [
 #
 # POST /v1beta/{service}:moveTableToDatabase
 # operationId: metastore.projects.locations.services.moveTableToDatabase
-export def "v1beta move-table-to-database" [
+export def "metastore-projects-locations-services-move-table-to-database" [
   service: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1288,7 +1288,7 @@ export def "v1beta move-table-to-database" [
 #
 # POST /v1beta/{service}:queryMetadata
 # operationId: metastore.projects.locations.services.queryMetadata
-export def "v1beta list-metadata" [
+export def "metastore-projects-locations-services-query-metadata" [
   service: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1340,7 +1340,7 @@ export def "v1beta list-metadata" [
 #
 # POST /v1beta/{service}:restore
 # operationId: metastore.projects.locations.services.restore
-export def "v1beta create-restore" [
+export def "metastore-projects-locations-services-restore" [
   service: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

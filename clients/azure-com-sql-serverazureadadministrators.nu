@@ -110,7 +110,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-sql-servers-administrators list-azure-ad" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "server-azure-ad-administrators-list-by-server" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -134,7 +134,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/administrators
 # operationId: ServerAzureADAdministrators_ListByServer
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-administrators list-azure-ad" [
+export def "server-azure-ad-administrators-list-by-server" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -176,7 +176,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-admini
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/administrators/{administratorName}
 # operationId: ServerAzureADAdministrators_Delete
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-administrators delete-azure-ad" [
+export def "server-azure-ad-administrators-delete" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -220,7 +220,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-admini
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/administrators/{administratorName}
 # operationId: ServerAzureADAdministrators_Get
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-administrators get-azure-ad" [
+export def "server-azure-ad-administrators-get" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -265,7 +265,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-admini
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/administrators/{administratorName}
 # operationId: ServerAzureADAdministrators_CreateOrUpdate
 # --properties shape: {administratorType: "ActiveDirectory", login: string, sid: string, tenantId?: string}
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-administrators create-azure-ad-or-update" [
+export def "server-azure-ad-administrators-create-or-update" [
   subscription_id: string
   resource_group_name: string
   server_name: string

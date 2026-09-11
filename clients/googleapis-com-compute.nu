@@ -224,7 +224,7 @@ def nat-policy-completer [] { ["NO_NAT"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "locations-global-firewall-policies list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "compute-firewall-policies-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -248,7 +248,7 @@ export def commands []: nothing -> table {
 #
 # GET /locations/global/firewallPolicies
 # operationId: compute.firewallPolicies.list
-export def "locations-global-firewall-policies list" [
+export def "compute-firewall-policies-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -303,7 +303,7 @@ export def "locations-global-firewall-policies list" [
 # operationId: compute.firewallPolicies.insert
 # --associations item shape: {attachmentTarget?: string, displayName?: string, firewallPolicyId?: string, name?: string, shortName?: string}
 # --rules item shape: {action?: string, description?: string, direction?: "EGRESS"|"INGRESS", disabled?: bool, enableLogging?: bool, kind?: string, match?: record, priority?: int, ruleName?: string, ruleTupleCount?: int, targetResources?: list<string>, targetSecureTags?: list, targetServiceAccounts?: list<string>}
-export def "locations-global-firewall-policies create" [
+export def "compute-firewall-policies-insert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -370,7 +370,7 @@ export def "locations-global-firewall-policies create" [
 #
 # GET /locations/global/firewallPolicies/listAssociations
 # operationId: compute.firewallPolicies.listAssociations
-export def "locations-global-firewall-policies-list-associations list" [
+export def "compute-firewall-policies-list-associations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -418,7 +418,7 @@ export def "locations-global-firewall-policies-list-associations list" [
 #
 # DELETE /locations/global/firewallPolicies/{firewallPolicy}
 # operationId: compute.firewallPolicies.delete
-export def "locations-global-firewall-policies delete" [
+export def "compute-firewall-policies-delete" [
   firewall_policy: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -468,7 +468,7 @@ export def "locations-global-firewall-policies delete" [
 #
 # GET /locations/global/firewallPolicies/{firewallPolicy}
 # operationId: compute.firewallPolicies.get
-export def "locations-global-firewall-policies get" [
+export def "compute-firewall-policies-get" [
   firewall_policy: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -519,7 +519,7 @@ export def "locations-global-firewall-policies get" [
 # operationId: compute.firewallPolicies.patch
 # --associations item shape: {attachmentTarget?: string, displayName?: string, firewallPolicyId?: string, name?: string, shortName?: string}
 # --rules item shape: {action?: string, description?: string, direction?: "EGRESS"|"INGRESS", disabled?: bool, enableLogging?: bool, kind?: string, match?: record, priority?: int, ruleName?: string, ruleTupleCount?: int, targetResources?: list<string>, targetSecureTags?: list, targetServiceAccounts?: list<string>}
-export def "locations-global-firewall-policies update" [
+export def "compute-firewall-policies-patch" [
   firewall_policy: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -587,7 +587,7 @@ export def "locations-global-firewall-policies update" [
 #
 # POST /locations/global/firewallPolicies/{firewallPolicy}/addAssociation
 # operationId: compute.firewallPolicies.addAssociation
-export def "locations-global-firewall-policies-add-association create" [
+export def "compute-firewall-policies-add-association" [
   firewall_policy: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -648,7 +648,7 @@ export def "locations-global-firewall-policies-add-association create" [
 # operationId: compute.firewallPolicies.addRule
 # --match shape: {destAddressGroups?: list<string>, destFqdns?: list<string>, destIpRanges?: list<string>, destRegionCodes?: list<string>, destThreatIntelligences?: list<string>, layer4Configs?: list, srcAddressGroups?: list<string>, srcFqdns?: list<string>, srcIpRanges?: list<string>, srcRegionCodes?: list<string>, srcSecureTags?: list, srcThreatIntelligences?: list<string>}
 # --targetSecureTags item shape: {name?: string, state?: "EFFECTIVE"|"INEFFECTIVE"}
-export def "locations-global-firewall-policies-add-rule create" [
+export def "compute-firewall-policies-add-rule" [
   firewall_policy: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -714,7 +714,7 @@ export def "locations-global-firewall-policies-add-rule create" [
 #
 # POST /locations/global/firewallPolicies/{firewallPolicy}/cloneRules
 # operationId: compute.firewallPolicies.cloneRules
-export def "locations-global-firewall-policies-clone-rules clone" [
+export def "compute-firewall-policies-clone-rules" [
   firewall_policy: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -765,7 +765,7 @@ export def "locations-global-firewall-policies-clone-rules clone" [
 #
 # GET /locations/global/firewallPolicies/{firewallPolicy}/getAssociation
 # operationId: compute.firewallPolicies.getAssociation
-export def "locations-global-firewall-policies-get-association get" [
+export def "compute-firewall-policies-get-association" [
   firewall_policy: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -815,7 +815,7 @@ export def "locations-global-firewall-policies-get-association get" [
 #
 # GET /locations/global/firewallPolicies/{firewallPolicy}/getRule
 # operationId: compute.firewallPolicies.getRule
-export def "locations-global-firewall-policies-get-rule get" [
+export def "compute-firewall-policies-get-rule" [
   firewall_policy: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -865,7 +865,7 @@ export def "locations-global-firewall-policies-get-rule get" [
 #
 # POST /locations/global/firewallPolicies/{firewallPolicy}/move
 # operationId: compute.firewallPolicies.move
-export def "locations-global-firewall-policies-move move" [
+export def "compute-firewall-policies-move" [
   firewall_policy: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -918,7 +918,7 @@ export def "locations-global-firewall-policies-move move" [
 # operationId: compute.firewallPolicies.patchRule
 # --match shape: {destAddressGroups?: list<string>, destFqdns?: list<string>, destIpRanges?: list<string>, destRegionCodes?: list<string>, destThreatIntelligences?: list<string>, layer4Configs?: list, srcAddressGroups?: list<string>, srcFqdns?: list<string>, srcIpRanges?: list<string>, srcRegionCodes?: list<string>, srcSecureTags?: list, srcThreatIntelligences?: list<string>}
 # --targetSecureTags item shape: {name?: string, state?: "EFFECTIVE"|"INEFFECTIVE"}
-export def "locations-global-firewall-policies-patch-rule update" [
+export def "compute-firewall-policies-patch-rule" [
   firewall_policy: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -985,7 +985,7 @@ export def "locations-global-firewall-policies-patch-rule update" [
 #
 # POST /locations/global/firewallPolicies/{firewallPolicy}/removeAssociation
 # operationId: compute.firewallPolicies.removeAssociation
-export def "locations-global-firewall-policies-remove-association delete" [
+export def "compute-firewall-policies-remove-association" [
   firewall_policy: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1036,7 +1036,7 @@ export def "locations-global-firewall-policies-remove-association delete" [
 #
 # POST /locations/global/firewallPolicies/{firewallPolicy}/removeRule
 # operationId: compute.firewallPolicies.removeRule
-export def "locations-global-firewall-policies-remove-rule delete" [
+export def "compute-firewall-policies-remove-rule" [
   firewall_policy: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1087,7 +1087,7 @@ export def "locations-global-firewall-policies-remove-rule delete" [
 #
 # GET /locations/global/firewallPolicies/{resource}/getIamPolicy
 # operationId: compute.firewallPolicies.getIamPolicy
-export def "locations-global-firewall-policies-get-iam-policy get" [
+export def "compute-firewall-policies-get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1139,7 +1139,7 @@ export def "locations-global-firewall-policies-get-iam-policy get" [
 # operationId: compute.firewallPolicies.setIamPolicy
 # --bindings item shape: {bindingId?: string, condition?: record, members?: list<string>, role?: string}
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, rules?: list, version?: int}
-export def "locations-global-firewall-policies-set-iam-policy update" [
+export def "compute-firewall-policies-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1194,7 +1194,7 @@ export def "locations-global-firewall-policies-set-iam-policy update" [
 #
 # POST /locations/global/firewallPolicies/{resource}/testIamPermissions
 # operationId: compute.firewallPolicies.testIamPermissions
-export def "locations-global-firewall-policies-test-iam-permissions test" [
+export def "compute-firewall-policies-test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1247,7 +1247,7 @@ export def "locations-global-firewall-policies-test-iam-permissions test" [
 #
 # GET /locations/global/operations
 # operationId: compute.globalOrganizationOperations.list
-export def "locations-global-operations list" [
+export def "compute-global-organization-operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1300,7 +1300,7 @@ export def "locations-global-operations list" [
 #
 # DELETE /locations/global/operations/{operation}
 # operationId: compute.globalOrganizationOperations.delete
-export def "locations-global-operations delete" [
+export def "compute-global-organization-operations-delete" [
   operation: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1350,7 +1350,7 @@ export def "locations-global-operations delete" [
 #
 # GET /locations/global/operations/{operation}
 # operationId: compute.globalOrganizationOperations.get
-export def "locations-global-operations get" [
+export def "compute-global-organization-operations-get" [
   operation: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1400,7 +1400,7 @@ export def "locations-global-operations get" [
 #
 # GET /projects/{project}
 # operationId: compute.projects.get
-export def "projects get" [
+export def "compute-projects-get" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1449,7 +1449,7 @@ export def "projects get" [
 #
 # GET /projects/{project}/aggregated/acceleratorTypes
 # operationId: compute.acceleratorTypes.aggregatedList
-export def "projects-aggregated-accelerator-types list" [
+export def "compute-accelerator-types-aggregated-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1504,7 +1504,7 @@ export def "projects-aggregated-accelerator-types list" [
 #
 # GET /projects/{project}/aggregated/addresses
 # operationId: compute.addresses.aggregatedList
-export def "projects-aggregated-addresses list" [
+export def "compute-addresses-aggregated-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1559,7 +1559,7 @@ export def "projects-aggregated-addresses list" [
 #
 # GET /projects/{project}/aggregated/autoscalers
 # operationId: compute.autoscalers.aggregatedList
-export def "projects-aggregated-autoscalers list" [
+export def "compute-autoscalers-aggregated-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1614,7 +1614,7 @@ export def "projects-aggregated-autoscalers list" [
 #
 # GET /projects/{project}/aggregated/backendServices
 # operationId: compute.backendServices.aggregatedList
-export def "projects-aggregated-backend-services list" [
+export def "compute-backend-services-aggregated-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1669,7 +1669,7 @@ export def "projects-aggregated-backend-services list" [
 #
 # GET /projects/{project}/aggregated/commitments
 # operationId: compute.regionCommitments.aggregatedList
-export def "projects-aggregated-commitments list" [
+export def "compute-region-commitments-aggregated-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1724,7 +1724,7 @@ export def "projects-aggregated-commitments list" [
 #
 # GET /projects/{project}/aggregated/diskTypes
 # operationId: compute.diskTypes.aggregatedList
-export def "projects-aggregated-disk-types list" [
+export def "compute-disk-types-aggregated-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1779,7 +1779,7 @@ export def "projects-aggregated-disk-types list" [
 #
 # GET /projects/{project}/aggregated/disks
 # operationId: compute.disks.aggregatedList
-export def "projects-aggregated-disks list" [
+export def "compute-disks-aggregated-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1834,7 +1834,7 @@ export def "projects-aggregated-disks list" [
 #
 # GET /projects/{project}/aggregated/forwardingRules
 # operationId: compute.forwardingRules.aggregatedList
-export def "projects-aggregated-forwarding-rules list" [
+export def "compute-forwarding-rules-aggregated-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1889,7 +1889,7 @@ export def "projects-aggregated-forwarding-rules list" [
 #
 # GET /projects/{project}/aggregated/healthChecks
 # operationId: compute.healthChecks.aggregatedList
-export def "projects-aggregated-health-checks list" [
+export def "compute-health-checks-aggregated-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1944,7 +1944,7 @@ export def "projects-aggregated-health-checks list" [
 #
 # GET /projects/{project}/aggregated/instanceGroupManagers
 # operationId: compute.instanceGroupManagers.aggregatedList
-export def "projects-aggregated-instance-group-managers list" [
+export def "compute-instance-group-managers-aggregated-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1999,7 +1999,7 @@ export def "projects-aggregated-instance-group-managers list" [
 #
 # GET /projects/{project}/aggregated/instanceGroups
 # operationId: compute.instanceGroups.aggregatedList
-export def "projects-aggregated-instance-groups list" [
+export def "compute-instance-groups-aggregated-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2054,7 +2054,7 @@ export def "projects-aggregated-instance-groups list" [
 #
 # GET /projects/{project}/aggregated/instanceTemplates
 # operationId: compute.instanceTemplates.aggregatedList
-export def "projects-aggregated-instance-templates list" [
+export def "compute-instance-templates-aggregated-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2109,7 +2109,7 @@ export def "projects-aggregated-instance-templates list" [
 #
 # GET /projects/{project}/aggregated/instances
 # operationId: compute.instances.aggregatedList
-export def "projects-aggregated-instances list" [
+export def "compute-instances-aggregated-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2164,7 +2164,7 @@ export def "projects-aggregated-instances list" [
 #
 # GET /projects/{project}/aggregated/interconnectAttachments
 # operationId: compute.interconnectAttachments.aggregatedList
-export def "projects-aggregated-interconnect-attachments list" [
+export def "compute-interconnect-attachments-aggregated-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2219,7 +2219,7 @@ export def "projects-aggregated-interconnect-attachments list" [
 #
 # GET /projects/{project}/aggregated/machineTypes
 # operationId: compute.machineTypes.aggregatedList
-export def "projects-aggregated-machine-types list" [
+export def "compute-machine-types-aggregated-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2274,7 +2274,7 @@ export def "projects-aggregated-machine-types list" [
 #
 # GET /projects/{project}/aggregated/networkAttachments
 # operationId: compute.networkAttachments.aggregatedList
-export def "projects-aggregated-network-attachments list" [
+export def "compute-network-attachments-aggregated-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2329,7 +2329,7 @@ export def "projects-aggregated-network-attachments list" [
 #
 # GET /projects/{project}/aggregated/networkEdgeSecurityServices
 # operationId: compute.networkEdgeSecurityServices.aggregatedList
-export def "projects-aggregated-network-edge-security-services list" [
+export def "compute-network-edge-security-services-aggregated-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2384,7 +2384,7 @@ export def "projects-aggregated-network-edge-security-services list" [
 #
 # GET /projects/{project}/aggregated/networkEndpointGroups
 # operationId: compute.networkEndpointGroups.aggregatedList
-export def "projects-aggregated-network-endpoint-groups list" [
+export def "compute-network-endpoint-groups-aggregated-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2439,7 +2439,7 @@ export def "projects-aggregated-network-endpoint-groups list" [
 #
 # GET /projects/{project}/aggregated/nodeGroups
 # operationId: compute.nodeGroups.aggregatedList
-export def "projects-aggregated-node-groups list" [
+export def "compute-node-groups-aggregated-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2494,7 +2494,7 @@ export def "projects-aggregated-node-groups list" [
 #
 # GET /projects/{project}/aggregated/nodeTemplates
 # operationId: compute.nodeTemplates.aggregatedList
-export def "projects-aggregated-node-templates list" [
+export def "compute-node-templates-aggregated-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2549,7 +2549,7 @@ export def "projects-aggregated-node-templates list" [
 #
 # GET /projects/{project}/aggregated/nodeTypes
 # operationId: compute.nodeTypes.aggregatedList
-export def "projects-aggregated-node-types list" [
+export def "compute-node-types-aggregated-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2604,7 +2604,7 @@ export def "projects-aggregated-node-types list" [
 #
 # GET /projects/{project}/aggregated/operations
 # operationId: compute.globalOperations.aggregatedList
-export def "projects-aggregated-operations list" [
+export def "compute-global-operations-aggregated-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2659,7 +2659,7 @@ export def "projects-aggregated-operations list" [
 #
 # GET /projects/{project}/aggregated/packetMirrorings
 # operationId: compute.packetMirrorings.aggregatedList
-export def "projects-aggregated-packet-mirrorings list" [
+export def "compute-packet-mirrorings-aggregated-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2714,7 +2714,7 @@ export def "projects-aggregated-packet-mirrorings list" [
 #
 # GET /projects/{project}/aggregated/publicDelegatedPrefixes
 # operationId: compute.publicDelegatedPrefixes.aggregatedList
-export def "projects-aggregated-public-delegated-prefixes list" [
+export def "compute-public-delegated-prefixes-aggregated-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2769,7 +2769,7 @@ export def "projects-aggregated-public-delegated-prefixes list" [
 #
 # GET /projects/{project}/aggregated/reservations
 # operationId: compute.reservations.aggregatedList
-export def "projects-aggregated-reservations list" [
+export def "compute-reservations-aggregated-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2824,7 +2824,7 @@ export def "projects-aggregated-reservations list" [
 #
 # GET /projects/{project}/aggregated/resourcePolicies
 # operationId: compute.resourcePolicies.aggregatedList
-export def "projects-aggregated-resource-policies list" [
+export def "compute-resource-policies-aggregated-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2879,7 +2879,7 @@ export def "projects-aggregated-resource-policies list" [
 #
 # GET /projects/{project}/aggregated/routers
 # operationId: compute.routers.aggregatedList
-export def "projects-aggregated-routers list" [
+export def "compute-routers-aggregated-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2934,7 +2934,7 @@ export def "projects-aggregated-routers list" [
 #
 # GET /projects/{project}/aggregated/securityPolicies
 # operationId: compute.securityPolicies.aggregatedList
-export def "projects-aggregated-security-policies list" [
+export def "compute-security-policies-aggregated-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2989,7 +2989,7 @@ export def "projects-aggregated-security-policies list" [
 #
 # GET /projects/{project}/aggregated/serviceAttachments
 # operationId: compute.serviceAttachments.aggregatedList
-export def "projects-aggregated-service-attachments list" [
+export def "compute-service-attachments-aggregated-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3044,7 +3044,7 @@ export def "projects-aggregated-service-attachments list" [
 #
 # GET /projects/{project}/aggregated/sslCertificates
 # operationId: compute.sslCertificates.aggregatedList
-export def "projects-aggregated-ssl-certificates list" [
+export def "compute-ssl-certificates-aggregated-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3099,7 +3099,7 @@ export def "projects-aggregated-ssl-certificates list" [
 #
 # GET /projects/{project}/aggregated/sslPolicies
 # operationId: compute.sslPolicies.aggregatedList
-export def "projects-aggregated-ssl-policies list" [
+export def "compute-ssl-policies-aggregated-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3154,7 +3154,7 @@ export def "projects-aggregated-ssl-policies list" [
 #
 # GET /projects/{project}/aggregated/subnetworks
 # operationId: compute.subnetworks.aggregatedList
-export def "projects-aggregated-subnetworks list" [
+export def "compute-subnetworks-aggregated-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3209,7 +3209,7 @@ export def "projects-aggregated-subnetworks list" [
 #
 # GET /projects/{project}/aggregated/subnetworks/listUsable
 # operationId: compute.subnetworks.listUsable
-export def "projects-aggregated-subnetworks-list-usable list" [
+export def "compute-subnetworks-list-usable" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3263,7 +3263,7 @@ export def "projects-aggregated-subnetworks-list-usable list" [
 #
 # GET /projects/{project}/aggregated/targetHttpProxies
 # operationId: compute.targetHttpProxies.aggregatedList
-export def "projects-aggregated-target-http-proxies list" [
+export def "compute-target-http-proxies-aggregated-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3318,7 +3318,7 @@ export def "projects-aggregated-target-http-proxies list" [
 #
 # GET /projects/{project}/aggregated/targetHttpsProxies
 # operationId: compute.targetHttpsProxies.aggregatedList
-export def "projects-aggregated-target-https-proxies list" [
+export def "compute-target-https-proxies-aggregated-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3373,7 +3373,7 @@ export def "projects-aggregated-target-https-proxies list" [
 #
 # GET /projects/{project}/aggregated/targetInstances
 # operationId: compute.targetInstances.aggregatedList
-export def "projects-aggregated-target-instances list" [
+export def "compute-target-instances-aggregated-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3428,7 +3428,7 @@ export def "projects-aggregated-target-instances list" [
 #
 # GET /projects/{project}/aggregated/targetPools
 # operationId: compute.targetPools.aggregatedList
-export def "projects-aggregated-target-pools list" [
+export def "compute-target-pools-aggregated-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3483,7 +3483,7 @@ export def "projects-aggregated-target-pools list" [
 #
 # GET /projects/{project}/aggregated/targetTcpProxies
 # operationId: compute.targetTcpProxies.aggregatedList
-export def "projects-aggregated-target-tcp-proxies list" [
+export def "compute-target-tcp-proxies-aggregated-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3538,7 +3538,7 @@ export def "projects-aggregated-target-tcp-proxies list" [
 #
 # GET /projects/{project}/aggregated/targetVpnGateways
 # operationId: compute.targetVpnGateways.aggregatedList
-export def "projects-aggregated-target-vpn-gateways list" [
+export def "compute-target-vpn-gateways-aggregated-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3593,7 +3593,7 @@ export def "projects-aggregated-target-vpn-gateways list" [
 #
 # GET /projects/{project}/aggregated/urlMaps
 # operationId: compute.urlMaps.aggregatedList
-export def "projects-aggregated-url-maps list" [
+export def "compute-url-maps-aggregated-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3648,7 +3648,7 @@ export def "projects-aggregated-url-maps list" [
 #
 # GET /projects/{project}/aggregated/vpnGateways
 # operationId: compute.vpnGateways.aggregatedList
-export def "projects-aggregated-vpn-gateways list" [
+export def "compute-vpn-gateways-aggregated-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3703,7 +3703,7 @@ export def "projects-aggregated-vpn-gateways list" [
 #
 # GET /projects/{project}/aggregated/vpnTunnels
 # operationId: compute.vpnTunnels.aggregatedList
-export def "projects-aggregated-vpn-tunnels list" [
+export def "compute-vpn-tunnels-aggregated-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3758,7 +3758,7 @@ export def "projects-aggregated-vpn-tunnels list" [
 #
 # POST /projects/{project}/disableXpnHost
 # operationId: compute.projects.disableXpnHost
-export def "projects-disable-xpn-host disable" [
+export def "compute-projects-disable-xpn-host" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3809,7 +3809,7 @@ export def "projects-disable-xpn-host disable" [
 # POST /projects/{project}/disableXpnResource
 # operationId: compute.projects.disableXpnResource
 # --xpnResource shape: {id?: string, type?: "PROJECT"|"XPN_RESOURCE_TYPE_UNSPECIFIED"}
-export def "projects-disable-xpn-resource disable" [
+export def "compute-projects-disable-xpn-resource" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3863,7 +3863,7 @@ export def "projects-disable-xpn-resource disable" [
 #
 # POST /projects/{project}/enableXpnHost
 # operationId: compute.projects.enableXpnHost
-export def "projects-enable-xpn-host enable" [
+export def "compute-projects-enable-xpn-host" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3914,7 +3914,7 @@ export def "projects-enable-xpn-host enable" [
 # POST /projects/{project}/enableXpnResource
 # operationId: compute.projects.enableXpnResource
 # --xpnResource shape: {id?: string, type?: "PROJECT"|"XPN_RESOURCE_TYPE_UNSPECIFIED"}
-export def "projects-enable-xpn-resource enable" [
+export def "compute-projects-enable-xpn-resource" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3968,7 +3968,7 @@ export def "projects-enable-xpn-resource enable" [
 #
 # GET /projects/{project}/getXpnHost
 # operationId: compute.projects.getXpnHost
-export def "projects-get-xpn-host get" [
+export def "compute-projects-get-xpn-host" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4017,7 +4017,7 @@ export def "projects-get-xpn-host get" [
 #
 # GET /projects/{project}/getXpnResources
 # operationId: compute.projects.getXpnResources
-export def "projects-get-xpn-resources get" [
+export def "compute-projects-get-xpn-resources" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4071,7 +4071,7 @@ export def "projects-get-xpn-resources get" [
 #
 # GET /projects/{project}/global/addresses
 # operationId: compute.globalAddresses.list
-export def "projects-global-addresses list" [
+export def "compute-global-addresses-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4125,7 +4125,7 @@ export def "projects-global-addresses list" [
 #
 # POST /projects/{project}/global/addresses
 # operationId: compute.globalAddresses.insert
-export def "projects-global-addresses create" [
+export def "compute-global-addresses-insert" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4196,7 +4196,7 @@ export def "projects-global-addresses create" [
 #
 # DELETE /projects/{project}/global/addresses/{address}
 # operationId: compute.globalAddresses.delete
-export def "projects-global-addresses delete" [
+export def "compute-global-addresses-delete" [
   project: string
   address: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4248,7 +4248,7 @@ export def "projects-global-addresses delete" [
 #
 # GET /projects/{project}/global/addresses/{address}
 # operationId: compute.globalAddresses.get
-export def "projects-global-addresses get" [
+export def "compute-global-addresses-get" [
   project: string
   address: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4299,7 +4299,7 @@ export def "projects-global-addresses get" [
 #
 # POST /projects/{project}/global/addresses/{resource}/setLabels
 # operationId: compute.globalAddresses.setLabels
-export def "projects-global-addresses-set-labels update" [
+export def "compute-global-addresses-set-labels" [
   project: string
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4355,7 +4355,7 @@ export def "projects-global-addresses-set-labels update" [
 #
 # GET /projects/{project}/global/backendBuckets
 # operationId: compute.backendBuckets.list
-export def "projects-global-backend-buckets list" [
+export def "compute-backend-buckets-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4410,7 +4410,7 @@ export def "projects-global-backend-buckets list" [
 # POST /projects/{project}/global/backendBuckets
 # operationId: compute.backendBuckets.insert
 # --cdnPolicy shape: {bypassCacheOnRequestHeaders?: list, cacheKeyPolicy?: record, cacheMode?: "CACHE_ALL_STATIC"|"FORCE_CACHE_ALL"|"INVALID_CACHE_MODE"|"USE_ORIGIN_HEADERS", clientTtl?: int, defaultTtl?: int, maxTtl?: int, negativeCaching?: bool, negativeCachingPolicy?: list, requestCoalescing?: bool, serveWhileStale?: int, signedUrlCacheMaxAgeSec?: string, signedUrlKeyNames?: list<string>}
-export def "projects-global-backend-buckets create" [
+export def "compute-backend-buckets-insert" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4475,7 +4475,7 @@ export def "projects-global-backend-buckets create" [
 #
 # DELETE /projects/{project}/global/backendBuckets/{backendBucket}
 # operationId: compute.backendBuckets.delete
-export def "projects-global-backend-buckets delete" [
+export def "compute-backend-buckets-delete" [
   project: string
   backend_bucket: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4527,7 +4527,7 @@ export def "projects-global-backend-buckets delete" [
 #
 # GET /projects/{project}/global/backendBuckets/{backendBucket}
 # operationId: compute.backendBuckets.get
-export def "projects-global-backend-buckets get" [
+export def "compute-backend-buckets-get" [
   project: string
   backend_bucket: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4579,7 +4579,7 @@ export def "projects-global-backend-buckets get" [
 # PATCH /projects/{project}/global/backendBuckets/{backendBucket}
 # operationId: compute.backendBuckets.patch
 # --cdnPolicy shape: {bypassCacheOnRequestHeaders?: list, cacheKeyPolicy?: record, cacheMode?: "CACHE_ALL_STATIC"|"FORCE_CACHE_ALL"|"INVALID_CACHE_MODE"|"USE_ORIGIN_HEADERS", clientTtl?: int, defaultTtl?: int, maxTtl?: int, negativeCaching?: bool, negativeCachingPolicy?: list, requestCoalescing?: bool, serveWhileStale?: int, signedUrlCacheMaxAgeSec?: string, signedUrlKeyNames?: list<string>}
-export def "projects-global-backend-buckets update-by-project-backend-bucket" [
+export def "compute-backend-buckets-patch" [
   project: string
   backend_bucket: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4647,7 +4647,7 @@ export def "projects-global-backend-buckets update-by-project-backend-bucket" [
 # PUT /projects/{project}/global/backendBuckets/{backendBucket}
 # operationId: compute.backendBuckets.update
 # --cdnPolicy shape: {bypassCacheOnRequestHeaders?: list, cacheKeyPolicy?: record, cacheMode?: "CACHE_ALL_STATIC"|"FORCE_CACHE_ALL"|"INVALID_CACHE_MODE"|"USE_ORIGIN_HEADERS", clientTtl?: int, defaultTtl?: int, maxTtl?: int, negativeCaching?: bool, negativeCachingPolicy?: list, requestCoalescing?: bool, serveWhileStale?: int, signedUrlCacheMaxAgeSec?: string, signedUrlKeyNames?: list<string>}
-export def "projects-global-backend-buckets update-by-project-backend-bucket-1" [
+export def "compute-backend-buckets-update" [
   project: string
   backend_bucket: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4714,7 +4714,7 @@ export def "projects-global-backend-buckets update-by-project-backend-bucket-1" 
 #
 # POST /projects/{project}/global/backendBuckets/{backendBucket}/addSignedUrlKey
 # operationId: compute.backendBuckets.addSignedUrlKey
-export def "projects-global-backend-buckets-add-signed-url-key create" [
+export def "compute-backend-buckets-add-signed-url-key" [
   project: string
   backend_bucket: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4771,7 +4771,7 @@ export def "projects-global-backend-buckets-add-signed-url-key create" [
 #
 # POST /projects/{project}/global/backendBuckets/{backendBucket}/deleteSignedUrlKey
 # operationId: compute.backendBuckets.deleteSignedUrlKey
-export def "projects-global-backend-buckets-delete-signed-url-key delete" [
+export def "compute-backend-buckets-delete-signed-url-key" [
   project: string
   backend_bucket: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4824,7 +4824,7 @@ export def "projects-global-backend-buckets-delete-signed-url-key delete" [
 #
 # POST /projects/{project}/global/backendBuckets/{backendBucket}/setEdgeSecurityPolicy
 # operationId: compute.backendBuckets.setEdgeSecurityPolicy
-export def "projects-global-backend-buckets-set-edge-security-policy update" [
+export def "compute-backend-buckets-set-edge-security-policy" [
   project: string
   backend_bucket: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4880,7 +4880,7 @@ export def "projects-global-backend-buckets-set-edge-security-policy update" [
 #
 # GET /projects/{project}/global/backendServices
 # operationId: compute.backendServices.list
-export def "projects-global-backend-services list" [
+export def "compute-backend-services-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4948,7 +4948,7 @@ export def "projects-global-backend-services list" [
 # --outlierDetection shape: {baseEjectionTime?: record, consecutiveErrors?: int, consecutiveGatewayFailure?: int, enforcingConsecutiveErrors?: int, enforcingConsecutiveGatewayFailure?: int, enforcingSuccessRate?: int, interval?: record, maxEjectionPercent?: int, successRateMinimumHosts?: int, successRateRequestVolume?: int, successRateStdevFactor?: int}
 # --securitySettings shape: {clientTlsPolicy?: string, subjectAltNames?: list<string>}
 # --subsetting shape: {policy?: "CONSISTENT_HASH_SUBSETTING"|"NONE"}
-export def "projects-global-backend-services create" [
+export def "compute-backend-services-insert" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5040,7 +5040,7 @@ export def "projects-global-backend-services create" [
 #
 # DELETE /projects/{project}/global/backendServices/{backendService}
 # operationId: compute.backendServices.delete
-export def "projects-global-backend-services delete" [
+export def "compute-backend-services-delete" [
   project: string
   backend_service: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5092,7 +5092,7 @@ export def "projects-global-backend-services delete" [
 #
 # GET /projects/{project}/global/backendServices/{backendService}
 # operationId: compute.backendServices.get
-export def "projects-global-backend-services get" [
+export def "compute-backend-services-get" [
   project: string
   backend_service: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5157,7 +5157,7 @@ export def "projects-global-backend-services get" [
 # --outlierDetection shape: {baseEjectionTime?: record, consecutiveErrors?: int, consecutiveGatewayFailure?: int, enforcingConsecutiveErrors?: int, enforcingConsecutiveGatewayFailure?: int, enforcingSuccessRate?: int, interval?: record, maxEjectionPercent?: int, successRateMinimumHosts?: int, successRateRequestVolume?: int, successRateStdevFactor?: int}
 # --securitySettings shape: {clientTlsPolicy?: string, subjectAltNames?: list<string>}
 # --subsetting shape: {policy?: "CONSISTENT_HASH_SUBSETTING"|"NONE"}
-export def "projects-global-backend-services update-by-project-backend-service" [
+export def "compute-backend-services-patch" [
   project: string
   backend_service: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5265,7 +5265,7 @@ export def "projects-global-backend-services update-by-project-backend-service" 
 # --outlierDetection shape: {baseEjectionTime?: record, consecutiveErrors?: int, consecutiveGatewayFailure?: int, enforcingConsecutiveErrors?: int, enforcingConsecutiveGatewayFailure?: int, enforcingSuccessRate?: int, interval?: record, maxEjectionPercent?: int, successRateMinimumHosts?: int, successRateRequestVolume?: int, successRateStdevFactor?: int}
 # --securitySettings shape: {clientTlsPolicy?: string, subjectAltNames?: list<string>}
 # --subsetting shape: {policy?: "CONSISTENT_HASH_SUBSETTING"|"NONE"}
-export def "projects-global-backend-services update-by-project-backend-service-1" [
+export def "compute-backend-services-update" [
   project: string
   backend_service: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5359,7 +5359,7 @@ export def "projects-global-backend-services update-by-project-backend-service-1
 #
 # POST /projects/{project}/global/backendServices/{backendService}/addSignedUrlKey
 # operationId: compute.backendServices.addSignedUrlKey
-export def "projects-global-backend-services-add-signed-url-key create" [
+export def "compute-backend-services-add-signed-url-key" [
   project: string
   backend_service: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5416,7 +5416,7 @@ export def "projects-global-backend-services-add-signed-url-key create" [
 #
 # POST /projects/{project}/global/backendServices/{backendService}/deleteSignedUrlKey
 # operationId: compute.backendServices.deleteSignedUrlKey
-export def "projects-global-backend-services-delete-signed-url-key delete" [
+export def "compute-backend-services-delete-signed-url-key" [
   project: string
   backend_service: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5469,7 +5469,7 @@ export def "projects-global-backend-services-delete-signed-url-key delete" [
 #
 # POST /projects/{project}/global/backendServices/{backendService}/getHealth
 # operationId: compute.backendServices.getHealth
-export def "projects-global-backend-services-get-health get" [
+export def "compute-backend-services-get-health" [
   project: string
   backend_service: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5524,7 +5524,7 @@ export def "projects-global-backend-services-get-health get" [
 #
 # POST /projects/{project}/global/backendServices/{backendService}/setEdgeSecurityPolicy
 # operationId: compute.backendServices.setEdgeSecurityPolicy
-export def "projects-global-backend-services-set-edge-security-policy update" [
+export def "compute-backend-services-set-edge-security-policy" [
   project: string
   backend_service: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5580,7 +5580,7 @@ export def "projects-global-backend-services-set-edge-security-policy update" [
 #
 # POST /projects/{project}/global/backendServices/{backendService}/setSecurityPolicy
 # operationId: compute.backendServices.setSecurityPolicy
-export def "projects-global-backend-services-set-security-policy update" [
+export def "compute-backend-services-set-security-policy" [
   project: string
   backend_service: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5636,7 +5636,7 @@ export def "projects-global-backend-services-set-security-policy update" [
 #
 # GET /projects/{project}/global/backendServices/{resource}/getIamPolicy
 # operationId: compute.backendServices.getIamPolicy
-export def "projects-global-backend-services-get-iam-policy get" [
+export def "compute-backend-services-get-iam-policy" [
   project: string
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5690,7 +5690,7 @@ export def "projects-global-backend-services-get-iam-policy get" [
 # operationId: compute.backendServices.setIamPolicy
 # --bindings item shape: {bindingId?: string, condition?: record, members?: list<string>, role?: string}
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, rules?: list, version?: int}
-export def "projects-global-backend-services-set-iam-policy update" [
+export def "compute-backend-services-set-iam-policy" [
   project: string
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5747,7 +5747,7 @@ export def "projects-global-backend-services-set-iam-policy update" [
 #
 # GET /projects/{project}/global/externalVpnGateways
 # operationId: compute.externalVpnGateways.list
-export def "projects-global-external-vpn-gateways list" [
+export def "compute-external-vpn-gateways-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5802,7 +5802,7 @@ export def "projects-global-external-vpn-gateways list" [
 # POST /projects/{project}/global/externalVpnGateways
 # operationId: compute.externalVpnGateways.insert
 # --interfaces item shape: {id?: int, ipAddress?: string}
-export def "projects-global-external-vpn-gateways create" [
+export def "compute-external-vpn-gateways-insert" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5865,7 +5865,7 @@ export def "projects-global-external-vpn-gateways create" [
 #
 # DELETE /projects/{project}/global/externalVpnGateways/{externalVpnGateway}
 # operationId: compute.externalVpnGateways.delete
-export def "projects-global-external-vpn-gateways delete" [
+export def "compute-external-vpn-gateways-delete" [
   project: string
   external_vpn_gateway: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5917,7 +5917,7 @@ export def "projects-global-external-vpn-gateways delete" [
 #
 # GET /projects/{project}/global/externalVpnGateways/{externalVpnGateway}
 # operationId: compute.externalVpnGateways.get
-export def "projects-global-external-vpn-gateways get" [
+export def "compute-external-vpn-gateways-get" [
   project: string
   external_vpn_gateway: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5968,7 +5968,7 @@ export def "projects-global-external-vpn-gateways get" [
 #
 # POST /projects/{project}/global/externalVpnGateways/{resource}/setLabels
 # operationId: compute.externalVpnGateways.setLabels
-export def "projects-global-external-vpn-gateways-set-labels update" [
+export def "compute-external-vpn-gateways-set-labels" [
   project: string
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6024,7 +6024,7 @@ export def "projects-global-external-vpn-gateways-set-labels update" [
 #
 # POST /projects/{project}/global/externalVpnGateways/{resource}/testIamPermissions
 # operationId: compute.externalVpnGateways.testIamPermissions
-export def "projects-global-external-vpn-gateways-test-iam-permissions test" [
+export def "compute-external-vpn-gateways-test-iam-permissions" [
   project: string
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6079,7 +6079,7 @@ export def "projects-global-external-vpn-gateways-test-iam-permissions test" [
 #
 # GET /projects/{project}/global/firewallPolicies
 # operationId: compute.networkFirewallPolicies.list
-export def "projects-global-firewall-policies list" [
+export def "compute-network-firewall-policies-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -6135,7 +6135,7 @@ export def "projects-global-firewall-policies list" [
 # operationId: compute.networkFirewallPolicies.insert
 # --associations item shape: {attachmentTarget?: string, displayName?: string, firewallPolicyId?: string, name?: string, shortName?: string}
 # --rules item shape: {action?: string, description?: string, direction?: "EGRESS"|"INGRESS", disabled?: bool, enableLogging?: bool, kind?: string, match?: record, priority?: int, ruleName?: string, ruleTupleCount?: int, targetResources?: list<string>, targetSecureTags?: list, targetServiceAccounts?: list<string>}
-export def "projects-global-firewall-policies create" [
+export def "compute-network-firewall-policies-insert" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -6203,7 +6203,7 @@ export def "projects-global-firewall-policies create" [
 #
 # DELETE /projects/{project}/global/firewallPolicies/{firewallPolicy}
 # operationId: compute.networkFirewallPolicies.delete
-export def "projects-global-firewall-policies delete" [
+export def "compute-network-firewall-policies-delete" [
   project: string
   firewall_policy: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6255,7 +6255,7 @@ export def "projects-global-firewall-policies delete" [
 #
 # GET /projects/{project}/global/firewallPolicies/{firewallPolicy}
 # operationId: compute.networkFirewallPolicies.get
-export def "projects-global-firewall-policies get" [
+export def "compute-network-firewall-policies-get" [
   project: string
   firewall_policy: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6308,7 +6308,7 @@ export def "projects-global-firewall-policies get" [
 # operationId: compute.networkFirewallPolicies.patch
 # --associations item shape: {attachmentTarget?: string, displayName?: string, firewallPolicyId?: string, name?: string, shortName?: string}
 # --rules item shape: {action?: string, description?: string, direction?: "EGRESS"|"INGRESS", disabled?: bool, enableLogging?: bool, kind?: string, match?: record, priority?: int, ruleName?: string, ruleTupleCount?: int, targetResources?: list<string>, targetSecureTags?: list, targetServiceAccounts?: list<string>}
-export def "projects-global-firewall-policies update" [
+export def "compute-network-firewall-policies-patch" [
   project: string
   firewall_policy: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6378,7 +6378,7 @@ export def "projects-global-firewall-policies update" [
 #
 # POST /projects/{project}/global/firewallPolicies/{firewallPolicy}/addAssociation
 # operationId: compute.networkFirewallPolicies.addAssociation
-export def "projects-global-firewall-policies-add-association create" [
+export def "compute-network-firewall-policies-add-association" [
   project: string
   firewall_policy: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6441,7 +6441,7 @@ export def "projects-global-firewall-policies-add-association create" [
 # operationId: compute.networkFirewallPolicies.addRule
 # --match shape: {destAddressGroups?: list<string>, destFqdns?: list<string>, destIpRanges?: list<string>, destRegionCodes?: list<string>, destThreatIntelligences?: list<string>, layer4Configs?: list, srcAddressGroups?: list<string>, srcFqdns?: list<string>, srcIpRanges?: list<string>, srcRegionCodes?: list<string>, srcSecureTags?: list, srcThreatIntelligences?: list<string>}
 # --targetSecureTags item shape: {name?: string, state?: "EFFECTIVE"|"INEFFECTIVE"}
-export def "projects-global-firewall-policies-add-rule create" [
+export def "compute-network-firewall-policies-add-rule" [
   project: string
   firewall_policy: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6511,7 +6511,7 @@ export def "projects-global-firewall-policies-add-rule create" [
 #
 # POST /projects/{project}/global/firewallPolicies/{firewallPolicy}/cloneRules
 # operationId: compute.networkFirewallPolicies.cloneRules
-export def "projects-global-firewall-policies-clone-rules clone" [
+export def "compute-network-firewall-policies-clone-rules" [
   project: string
   firewall_policy: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6564,7 +6564,7 @@ export def "projects-global-firewall-policies-clone-rules clone" [
 #
 # GET /projects/{project}/global/firewallPolicies/{firewallPolicy}/getAssociation
 # operationId: compute.networkFirewallPolicies.getAssociation
-export def "projects-global-firewall-policies-get-association get" [
+export def "compute-network-firewall-policies-get-association" [
   project: string
   firewall_policy: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6616,7 +6616,7 @@ export def "projects-global-firewall-policies-get-association get" [
 #
 # GET /projects/{project}/global/firewallPolicies/{firewallPolicy}/getRule
 # operationId: compute.networkFirewallPolicies.getRule
-export def "projects-global-firewall-policies-get-rule get" [
+export def "compute-network-firewall-policies-get-rule" [
   project: string
   firewall_policy: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6670,7 +6670,7 @@ export def "projects-global-firewall-policies-get-rule get" [
 # operationId: compute.networkFirewallPolicies.patchRule
 # --match shape: {destAddressGroups?: list<string>, destFqdns?: list<string>, destIpRanges?: list<string>, destRegionCodes?: list<string>, destThreatIntelligences?: list<string>, layer4Configs?: list, srcAddressGroups?: list<string>, srcFqdns?: list<string>, srcIpRanges?: list<string>, srcRegionCodes?: list<string>, srcSecureTags?: list, srcThreatIntelligences?: list<string>}
 # --targetSecureTags item shape: {name?: string, state?: "EFFECTIVE"|"INEFFECTIVE"}
-export def "projects-global-firewall-policies-patch-rule update" [
+export def "compute-network-firewall-policies-patch-rule" [
   project: string
   firewall_policy: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6739,7 +6739,7 @@ export def "projects-global-firewall-policies-patch-rule update" [
 #
 # POST /projects/{project}/global/firewallPolicies/{firewallPolicy}/removeAssociation
 # operationId: compute.networkFirewallPolicies.removeAssociation
-export def "projects-global-firewall-policies-remove-association delete" [
+export def "compute-network-firewall-policies-remove-association" [
   project: string
   firewall_policy: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6792,7 +6792,7 @@ export def "projects-global-firewall-policies-remove-association delete" [
 #
 # POST /projects/{project}/global/firewallPolicies/{firewallPolicy}/removeRule
 # operationId: compute.networkFirewallPolicies.removeRule
-export def "projects-global-firewall-policies-remove-rule delete" [
+export def "compute-network-firewall-policies-remove-rule" [
   project: string
   firewall_policy: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6845,7 +6845,7 @@ export def "projects-global-firewall-policies-remove-rule delete" [
 #
 # GET /projects/{project}/global/firewallPolicies/{resource}/getIamPolicy
 # operationId: compute.networkFirewallPolicies.getIamPolicy
-export def "projects-global-firewall-policies-get-iam-policy get" [
+export def "compute-network-firewall-policies-get-iam-policy" [
   project: string
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6899,7 +6899,7 @@ export def "projects-global-firewall-policies-get-iam-policy get" [
 # operationId: compute.networkFirewallPolicies.setIamPolicy
 # --bindings item shape: {bindingId?: string, condition?: record, members?: list<string>, role?: string}
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, rules?: list, version?: int}
-export def "projects-global-firewall-policies-set-iam-policy update" [
+export def "compute-network-firewall-policies-set-iam-policy" [
   project: string
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6956,7 +6956,7 @@ export def "projects-global-firewall-policies-set-iam-policy update" [
 #
 # POST /projects/{project}/global/firewallPolicies/{resource}/testIamPermissions
 # operationId: compute.networkFirewallPolicies.testIamPermissions
-export def "projects-global-firewall-policies-test-iam-permissions test" [
+export def "compute-network-firewall-policies-test-iam-permissions" [
   project: string
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7011,7 +7011,7 @@ export def "projects-global-firewall-policies-test-iam-permissions test" [
 #
 # GET /projects/{project}/global/firewalls
 # operationId: compute.firewalls.list
-export def "projects-global-firewalls list" [
+export def "compute-firewalls-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -7068,7 +7068,7 @@ export def "projects-global-firewalls list" [
 # --allowed item shape: {IPProtocol?: string, ports?: list<string>}
 # --denied item shape: {IPProtocol?: string, ports?: list<string>}
 # --logConfig shape: {enable?: bool, metadata?: "EXCLUDE_ALL_METADATA"|"INCLUDE_ALL_METADATA"}
-export def "projects-global-firewalls create" [
+export def "compute-firewalls-insert" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -7140,7 +7140,7 @@ export def "projects-global-firewalls create" [
 #
 # DELETE /projects/{project}/global/firewalls/{firewall}
 # operationId: compute.firewalls.delete
-export def "projects-global-firewalls delete" [
+export def "compute-firewalls-delete" [
   project: string
   firewall: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7192,7 +7192,7 @@ export def "projects-global-firewalls delete" [
 #
 # GET /projects/{project}/global/firewalls/{firewall}
 # operationId: compute.firewalls.get
-export def "projects-global-firewalls get" [
+export def "compute-firewalls-get" [
   project: string
   firewall: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7246,7 +7246,7 @@ export def "projects-global-firewalls get" [
 # --allowed item shape: {IPProtocol?: string, ports?: list<string>}
 # --denied item shape: {IPProtocol?: string, ports?: list<string>}
 # --logConfig shape: {enable?: bool, metadata?: "EXCLUDE_ALL_METADATA"|"INCLUDE_ALL_METADATA"}
-export def "projects-global-firewalls update-by-project-firewall" [
+export def "compute-firewalls-patch" [
   project: string
   firewall: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7323,7 +7323,7 @@ export def "projects-global-firewalls update-by-project-firewall" [
 # --allowed item shape: {IPProtocol?: string, ports?: list<string>}
 # --denied item shape: {IPProtocol?: string, ports?: list<string>}
 # --logConfig shape: {enable?: bool, metadata?: "EXCLUDE_ALL_METADATA"|"INCLUDE_ALL_METADATA"}
-export def "projects-global-firewalls update-by-project-firewall-1" [
+export def "compute-firewalls-update" [
   project: string
   firewall: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7397,7 +7397,7 @@ export def "projects-global-firewalls update-by-project-firewall-1" [
 #
 # GET /projects/{project}/global/forwardingRules
 # operationId: compute.globalForwardingRules.list
-export def "projects-global-forwarding-rules list" [
+export def "compute-global-forwarding-rules-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -7453,7 +7453,7 @@ export def "projects-global-forwarding-rules list" [
 # operationId: compute.globalForwardingRules.insert
 # --metadataFilters item shape: {filterLabels?: list, filterMatchCriteria?: "MATCH_ALL"|"MATCH_ANY"|"NOT_SET"}
 # --serviceDirectoryRegistrations item shape: {namespace?: string, service?: string, serviceDirectoryRegion?: string}
-export def "projects-global-forwarding-rules create" [
+export def "compute-global-forwarding-rules-insert" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -7540,7 +7540,7 @@ export def "projects-global-forwarding-rules create" [
 #
 # DELETE /projects/{project}/global/forwardingRules/{forwardingRule}
 # operationId: compute.globalForwardingRules.delete
-export def "projects-global-forwarding-rules delete" [
+export def "compute-global-forwarding-rules-delete" [
   project: string
   forwarding_rule: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7592,7 +7592,7 @@ export def "projects-global-forwarding-rules delete" [
 #
 # GET /projects/{project}/global/forwardingRules/{forwardingRule}
 # operationId: compute.globalForwardingRules.get
-export def "projects-global-forwarding-rules get" [
+export def "compute-global-forwarding-rules-get" [
   project: string
   forwarding_rule: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7645,7 +7645,7 @@ export def "projects-global-forwarding-rules get" [
 # operationId: compute.globalForwardingRules.patch
 # --metadataFilters item shape: {filterLabels?: list, filterMatchCriteria?: "MATCH_ALL"|"MATCH_ANY"|"NOT_SET"}
 # --serviceDirectoryRegistrations item shape: {namespace?: string, service?: string, serviceDirectoryRegion?: string}
-export def "projects-global-forwarding-rules update" [
+export def "compute-global-forwarding-rules-patch" [
   project: string
   forwarding_rule: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7734,7 +7734,7 @@ export def "projects-global-forwarding-rules update" [
 #
 # POST /projects/{project}/global/forwardingRules/{forwardingRule}/setTarget
 # operationId: compute.globalForwardingRules.setTarget
-export def "projects-global-forwarding-rules-set-target update" [
+export def "compute-global-forwarding-rules-set-target" [
   project: string
   forwarding_rule: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7790,7 +7790,7 @@ export def "projects-global-forwarding-rules-set-target update" [
 #
 # POST /projects/{project}/global/forwardingRules/{resource}/setLabels
 # operationId: compute.globalForwardingRules.setLabels
-export def "projects-global-forwarding-rules-set-labels update" [
+export def "compute-global-forwarding-rules-set-labels" [
   project: string
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7846,7 +7846,7 @@ export def "projects-global-forwarding-rules-set-labels update" [
 #
 # GET /projects/{project}/global/healthChecks
 # operationId: compute.healthChecks.list
-export def "projects-global-health-checks list" [
+export def "compute-health-checks-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -7907,7 +7907,7 @@ export def "projects-global-health-checks list" [
 # --logConfig shape: {enable?: bool}
 # --sslHealthCheck shape: {port?: int, portName?: string, portSpecification?: "USE_FIXED_PORT"|"USE_NAMED_PORT"|"USE_SERVING_PORT", proxyHeader?: "NONE"|"PROXY_V1", request?: string, response?: string}
 # --tcpHealthCheck shape: {port?: int, portName?: string, portSpecification?: "USE_FIXED_PORT"|"USE_NAMED_PORT"|"USE_SERVING_PORT", proxyHeader?: "NONE"|"PROXY_V1", request?: string, response?: string}
-export def "projects-global-health-checks create" [
+export def "compute-health-checks-insert" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -7979,7 +7979,7 @@ export def "projects-global-health-checks create" [
 #
 # DELETE /projects/{project}/global/healthChecks/{healthCheck}
 # operationId: compute.healthChecks.delete
-export def "projects-global-health-checks delete" [
+export def "compute-health-checks-delete" [
   project: string
   health_check: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8031,7 +8031,7 @@ export def "projects-global-health-checks delete" [
 #
 # GET /projects/{project}/global/healthChecks/{healthCheck}
 # operationId: compute.healthChecks.get
-export def "projects-global-health-checks get" [
+export def "compute-health-checks-get" [
   project: string
   health_check: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8089,7 +8089,7 @@ export def "projects-global-health-checks get" [
 # --logConfig shape: {enable?: bool}
 # --sslHealthCheck shape: {port?: int, portName?: string, portSpecification?: "USE_FIXED_PORT"|"USE_NAMED_PORT"|"USE_SERVING_PORT", proxyHeader?: "NONE"|"PROXY_V1", request?: string, response?: string}
 # --tcpHealthCheck shape: {port?: int, portName?: string, portSpecification?: "USE_FIXED_PORT"|"USE_NAMED_PORT"|"USE_SERVING_PORT", proxyHeader?: "NONE"|"PROXY_V1", request?: string, response?: string}
-export def "projects-global-health-checks update-by-project-health-check" [
+export def "compute-health-checks-patch" [
   project: string
   health_check: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8170,7 +8170,7 @@ export def "projects-global-health-checks update-by-project-health-check" [
 # --logConfig shape: {enable?: bool}
 # --sslHealthCheck shape: {port?: int, portName?: string, portSpecification?: "USE_FIXED_PORT"|"USE_NAMED_PORT"|"USE_SERVING_PORT", proxyHeader?: "NONE"|"PROXY_V1", request?: string, response?: string}
 # --tcpHealthCheck shape: {port?: int, portName?: string, portSpecification?: "USE_FIXED_PORT"|"USE_NAMED_PORT"|"USE_SERVING_PORT", proxyHeader?: "NONE"|"PROXY_V1", request?: string, response?: string}
-export def "projects-global-health-checks update-by-project-health-check-1" [
+export def "compute-health-checks-update" [
   project: string
   health_check: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8244,7 +8244,7 @@ export def "projects-global-health-checks update-by-project-health-check-1" [
 #
 # GET /projects/{project}/global/httpHealthChecks
 # operationId: compute.httpHealthChecks.list
-export def "projects-global-http-health-checks list" [
+export def "compute-http-health-checks-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -8298,7 +8298,7 @@ export def "projects-global-http-health-checks list" [
 #
 # POST /projects/{project}/global/httpHealthChecks
 # operationId: compute.httpHealthChecks.insert
-export def "projects-global-http-health-checks create" [
+export def "compute-http-health-checks-insert" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -8364,7 +8364,7 @@ export def "projects-global-http-health-checks create" [
 #
 # DELETE /projects/{project}/global/httpHealthChecks/{httpHealthCheck}
 # operationId: compute.httpHealthChecks.delete
-export def "projects-global-http-health-checks delete" [
+export def "compute-http-health-checks-delete" [
   project: string
   http_health_check: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8416,7 +8416,7 @@ export def "projects-global-http-health-checks delete" [
 #
 # GET /projects/{project}/global/httpHealthChecks/{httpHealthCheck}
 # operationId: compute.httpHealthChecks.get
-export def "projects-global-http-health-checks get" [
+export def "compute-http-health-checks-get" [
   project: string
   http_health_check: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8467,7 +8467,7 @@ export def "projects-global-http-health-checks get" [
 #
 # PATCH /projects/{project}/global/httpHealthChecks/{httpHealthCheck}
 # operationId: compute.httpHealthChecks.patch
-export def "projects-global-http-health-checks update-by-project-http-health-check" [
+export def "compute-http-health-checks-patch" [
   project: string
   http_health_check: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8535,7 +8535,7 @@ export def "projects-global-http-health-checks update-by-project-http-health-che
 #
 # PUT /projects/{project}/global/httpHealthChecks/{httpHealthCheck}
 # operationId: compute.httpHealthChecks.update
-export def "projects-global-http-health-checks update-by-project-http-health-check-1" [
+export def "compute-http-health-checks-update" [
   project: string
   http_health_check: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8603,7 +8603,7 @@ export def "projects-global-http-health-checks update-by-project-http-health-che
 #
 # GET /projects/{project}/global/httpsHealthChecks
 # operationId: compute.httpsHealthChecks.list
-export def "projects-global-https-health-checks list" [
+export def "compute-https-health-checks-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -8657,7 +8657,7 @@ export def "projects-global-https-health-checks list" [
 #
 # POST /projects/{project}/global/httpsHealthChecks
 # operationId: compute.httpsHealthChecks.insert
-export def "projects-global-https-health-checks create" [
+export def "compute-https-health-checks-insert" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -8723,7 +8723,7 @@ export def "projects-global-https-health-checks create" [
 #
 # DELETE /projects/{project}/global/httpsHealthChecks/{httpsHealthCheck}
 # operationId: compute.httpsHealthChecks.delete
-export def "projects-global-https-health-checks delete" [
+export def "compute-https-health-checks-delete" [
   project: string
   https_health_check: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8775,7 +8775,7 @@ export def "projects-global-https-health-checks delete" [
 #
 # GET /projects/{project}/global/httpsHealthChecks/{httpsHealthCheck}
 # operationId: compute.httpsHealthChecks.get
-export def "projects-global-https-health-checks get" [
+export def "compute-https-health-checks-get" [
   project: string
   https_health_check: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8826,7 +8826,7 @@ export def "projects-global-https-health-checks get" [
 #
 # PATCH /projects/{project}/global/httpsHealthChecks/{httpsHealthCheck}
 # operationId: compute.httpsHealthChecks.patch
-export def "projects-global-https-health-checks update-by-project-https-health-check" [
+export def "compute-https-health-checks-patch" [
   project: string
   https_health_check: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8894,7 +8894,7 @@ export def "projects-global-https-health-checks update-by-project-https-health-c
 #
 # PUT /projects/{project}/global/httpsHealthChecks/{httpsHealthCheck}
 # operationId: compute.httpsHealthChecks.update
-export def "projects-global-https-health-checks update-by-project-https-health-check-1" [
+export def "compute-https-health-checks-update" [
   project: string
   https_health_check: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8962,7 +8962,7 @@ export def "projects-global-https-health-checks update-by-project-https-health-c
 #
 # GET /projects/{project}/global/images
 # operationId: compute.images.list
-export def "projects-global-images list" [
+export def "compute-images-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -9024,7 +9024,7 @@ export def "projects-global-images list" [
 # --sourceDiskEncryptionKey shape: {kmsKeyName?: string, kmsKeyServiceAccount?: string, rawKey?: string, rsaEncryptedKey?: string, sha256?: string}
 # --sourceImageEncryptionKey shape: {kmsKeyName?: string, kmsKeyServiceAccount?: string, rawKey?: string, rsaEncryptedKey?: string, sha256?: string}
 # --sourceSnapshotEncryptionKey shape: {kmsKeyName?: string, kmsKeyServiceAccount?: string, rawKey?: string, rsaEncryptedKey?: string, sha256?: string}
-export def "projects-global-images create" [
+export def "compute-images-insert" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -9110,7 +9110,7 @@ export def "projects-global-images create" [
 #
 # GET /projects/{project}/global/images/family/{family}
 # operationId: compute.images.getFromFamily
-export def "projects-global-images-family get" [
+export def "compute-images-get-from-family" [
   project: string
   family: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9161,7 +9161,7 @@ export def "projects-global-images-family get" [
 #
 # DELETE /projects/{project}/global/images/{image}
 # operationId: compute.images.delete
-export def "projects-global-images delete" [
+export def "compute-images-delete" [
   project: string
   image: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9213,7 +9213,7 @@ export def "projects-global-images delete" [
 #
 # GET /projects/{project}/global/images/{image}
 # operationId: compute.images.get
-export def "projects-global-images get" [
+export def "compute-images-get" [
   project: string
   image: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9272,7 +9272,7 @@ export def "projects-global-images get" [
 # --sourceDiskEncryptionKey shape: {kmsKeyName?: string, kmsKeyServiceAccount?: string, rawKey?: string, rsaEncryptedKey?: string, sha256?: string}
 # --sourceImageEncryptionKey shape: {kmsKeyName?: string, kmsKeyServiceAccount?: string, rawKey?: string, rsaEncryptedKey?: string, sha256?: string}
 # --sourceSnapshotEncryptionKey shape: {kmsKeyName?: string, kmsKeyServiceAccount?: string, rawKey?: string, rsaEncryptedKey?: string, sha256?: string}
-export def "projects-global-images update" [
+export def "compute-images-patch" [
   project: string
   image: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9359,7 +9359,7 @@ export def "projects-global-images update" [
 #
 # POST /projects/{project}/global/images/{image}/deprecate
 # operationId: compute.images.deprecate
-export def "projects-global-images-deprecate create" [
+export def "compute-images-deprecate" [
   project: string
   image: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9419,7 +9419,7 @@ export def "projects-global-images-deprecate create" [
 #
 # GET /projects/{project}/global/images/{resource}/getIamPolicy
 # operationId: compute.images.getIamPolicy
-export def "projects-global-images-get-iam-policy get" [
+export def "compute-images-get-iam-policy" [
   project: string
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9473,7 +9473,7 @@ export def "projects-global-images-get-iam-policy get" [
 # operationId: compute.images.setIamPolicy
 # --bindings item shape: {bindingId?: string, condition?: record, members?: list<string>, role?: string}
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, rules?: list, version?: int}
-export def "projects-global-images-set-iam-policy update" [
+export def "compute-images-set-iam-policy" [
   project: string
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9530,7 +9530,7 @@ export def "projects-global-images-set-iam-policy update" [
 #
 # POST /projects/{project}/global/images/{resource}/setLabels
 # operationId: compute.images.setLabels
-export def "projects-global-images-set-labels update" [
+export def "compute-images-set-labels" [
   project: string
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9586,7 +9586,7 @@ export def "projects-global-images-set-labels update" [
 #
 # POST /projects/{project}/global/images/{resource}/testIamPermissions
 # operationId: compute.images.testIamPermissions
-export def "projects-global-images-test-iam-permissions test" [
+export def "compute-images-test-iam-permissions" [
   project: string
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9641,7 +9641,7 @@ export def "projects-global-images-test-iam-permissions test" [
 #
 # GET /projects/{project}/global/instanceTemplates
 # operationId: compute.instanceTemplates.list
-export def "projects-global-instance-templates list" [
+export def "compute-instance-templates-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -9697,7 +9697,7 @@ export def "projects-global-instance-templates list" [
 # operationId: compute.instanceTemplates.insert
 # --properties shape: {advancedMachineFeatures?: record, canIpForward?: bool, confidentialInstanceConfig?: record, description?: string, disks?: list, guestAccelerators?: list, keyRevocationActionType?: "KEY_REVOCATION_ACTION_TYPE_UNSPECIFIED"|"NONE"|"STOP", labels?: record, machineType?: string, metadata?: record, minCpuPlatform?: string, networkInterfaces?: list, networkPerformanceConfig?: record, ... (8 more fields)}
 # --sourceInstanceParams shape: {diskConfigs?: list}
-export def "projects-global-instance-templates create" [
+export def "compute-instance-templates-insert" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -9760,7 +9760,7 @@ export def "projects-global-instance-templates create" [
 #
 # DELETE /projects/{project}/global/instanceTemplates/{instanceTemplate}
 # operationId: compute.instanceTemplates.delete
-export def "projects-global-instance-templates delete" [
+export def "compute-instance-templates-delete" [
   project: string
   instance_template: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9812,7 +9812,7 @@ export def "projects-global-instance-templates delete" [
 #
 # GET /projects/{project}/global/instanceTemplates/{instanceTemplate}
 # operationId: compute.instanceTemplates.get
-export def "projects-global-instance-templates get" [
+export def "compute-instance-templates-get" [
   project: string
   instance_template: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9863,7 +9863,7 @@ export def "projects-global-instance-templates get" [
 #
 # GET /projects/{project}/global/instanceTemplates/{resource}/getIamPolicy
 # operationId: compute.instanceTemplates.getIamPolicy
-export def "projects-global-instance-templates-get-iam-policy get" [
+export def "compute-instance-templates-get-iam-policy" [
   project: string
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9917,7 +9917,7 @@ export def "projects-global-instance-templates-get-iam-policy get" [
 # operationId: compute.instanceTemplates.setIamPolicy
 # --bindings item shape: {bindingId?: string, condition?: record, members?: list<string>, role?: string}
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, rules?: list, version?: int}
-export def "projects-global-instance-templates-set-iam-policy update" [
+export def "compute-instance-templates-set-iam-policy" [
   project: string
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9974,7 +9974,7 @@ export def "projects-global-instance-templates-set-iam-policy update" [
 #
 # POST /projects/{project}/global/instanceTemplates/{resource}/testIamPermissions
 # operationId: compute.instanceTemplates.testIamPermissions
-export def "projects-global-instance-templates-test-iam-permissions test" [
+export def "compute-instance-templates-test-iam-permissions" [
   project: string
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10029,7 +10029,7 @@ export def "projects-global-instance-templates-test-iam-permissions test" [
 #
 # GET /projects/{project}/global/interconnectLocations
 # operationId: compute.interconnectLocations.list
-export def "projects-global-interconnect-locations list" [
+export def "compute-interconnect-locations-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -10083,7 +10083,7 @@ export def "projects-global-interconnect-locations list" [
 #
 # GET /projects/{project}/global/interconnectLocations/{interconnectLocation}
 # operationId: compute.interconnectLocations.get
-export def "projects-global-interconnect-locations get" [
+export def "compute-interconnect-locations-get" [
   project: string
   interconnect_location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10134,7 +10134,7 @@ export def "projects-global-interconnect-locations get" [
 #
 # GET /projects/{project}/global/interconnects
 # operationId: compute.interconnects.list
-export def "projects-global-interconnects list" [
+export def "compute-interconnects-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -10190,7 +10190,7 @@ export def "projects-global-interconnects list" [
 # operationId: compute.interconnects.insert
 # --circuitInfos item shape: {customerDemarcId?: string, googleCircuitId?: string, googleDemarcId?: string}
 # --expectedOutages item shape: {affectedCircuits?: list<string>, description?: string, endTime?: string, issueType?: "IT_OUTAGE"|"IT_PARTIAL_OUTAGE"|"OUTAGE"|"PARTIAL_OUTAGE", name?: string, source?: "GOOGLE"|"NSRC_GOOGLE", startTime?: string, state?: "ACTIVE"|"CANCELLED"|"COMPLETED"|"NS_ACTIVE"|"NS_CANCELED"}
-export def "projects-global-interconnects create" [
+export def "compute-interconnects-insert" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -10266,7 +10266,7 @@ export def "projects-global-interconnects create" [
 #
 # DELETE /projects/{project}/global/interconnects/{interconnect}
 # operationId: compute.interconnects.delete
-export def "projects-global-interconnects delete" [
+export def "compute-interconnects-delete" [
   project: string
   interconnect: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10318,7 +10318,7 @@ export def "projects-global-interconnects delete" [
 #
 # GET /projects/{project}/global/interconnects/{interconnect}
 # operationId: compute.interconnects.get
-export def "projects-global-interconnects get" [
+export def "compute-interconnects-get" [
   project: string
   interconnect: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10371,7 +10371,7 @@ export def "projects-global-interconnects get" [
 # operationId: compute.interconnects.patch
 # --circuitInfos item shape: {customerDemarcId?: string, googleCircuitId?: string, googleDemarcId?: string}
 # --expectedOutages item shape: {affectedCircuits?: list<string>, description?: string, endTime?: string, issueType?: "IT_OUTAGE"|"IT_PARTIAL_OUTAGE"|"OUTAGE"|"PARTIAL_OUTAGE", name?: string, source?: "GOOGLE"|"NSRC_GOOGLE", startTime?: string, state?: "ACTIVE"|"CANCELLED"|"COMPLETED"|"NS_ACTIVE"|"NS_CANCELED"}
-export def "projects-global-interconnects update" [
+export def "compute-interconnects-patch" [
   project: string
   interconnect: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10449,7 +10449,7 @@ export def "projects-global-interconnects update" [
 #
 # GET /projects/{project}/global/interconnects/{interconnect}/getDiagnostics
 # operationId: compute.interconnects.getDiagnostics
-export def "projects-global-interconnects-get-diagnostics get" [
+export def "compute-interconnects-get-diagnostics" [
   project: string
   interconnect: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10500,7 +10500,7 @@ export def "projects-global-interconnects-get-diagnostics get" [
 #
 # POST /projects/{project}/global/interconnects/{resource}/setLabels
 # operationId: compute.interconnects.setLabels
-export def "projects-global-interconnects-set-labels update" [
+export def "compute-interconnects-set-labels" [
   project: string
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10556,7 +10556,7 @@ export def "projects-global-interconnects-set-labels update" [
 #
 # GET /projects/{project}/global/licenseCodes/{licenseCode}
 # operationId: compute.licenseCodes.get
-export def "projects-global-license-codes get" [
+export def "compute-license-codes-get" [
   project: string
   license_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10607,7 +10607,7 @@ export def "projects-global-license-codes get" [
 #
 # POST /projects/{project}/global/licenseCodes/{resource}/testIamPermissions
 # operationId: compute.licenseCodes.testIamPermissions
-export def "projects-global-license-codes-test-iam-permissions test" [
+export def "compute-license-codes-test-iam-permissions" [
   project: string
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10662,7 +10662,7 @@ export def "projects-global-license-codes-test-iam-permissions test" [
 #
 # GET /projects/{project}/global/licenses
 # operationId: compute.licenses.list
-export def "projects-global-licenses list" [
+export def "compute-licenses-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -10717,7 +10717,7 @@ export def "projects-global-licenses list" [
 # POST /projects/{project}/global/licenses
 # operationId: compute.licenses.insert
 # --resourceRequirements shape: {minGuestCpuCount?: int, minMemoryMb?: int}
-export def "projects-global-licenses create" [
+export def "compute-licenses-insert" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -10780,7 +10780,7 @@ export def "projects-global-licenses create" [
 #
 # DELETE /projects/{project}/global/licenses/{license}
 # operationId: compute.licenses.delete
-export def "projects-global-licenses delete" [
+export def "compute-licenses-delete" [
   project: string
   license: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10832,7 +10832,7 @@ export def "projects-global-licenses delete" [
 #
 # GET /projects/{project}/global/licenses/{license}
 # operationId: compute.licenses.get
-export def "projects-global-licenses get" [
+export def "compute-licenses-get" [
   project: string
   license: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10883,7 +10883,7 @@ export def "projects-global-licenses get" [
 #
 # GET /projects/{project}/global/licenses/{resource}/getIamPolicy
 # operationId: compute.licenses.getIamPolicy
-export def "projects-global-licenses-get-iam-policy get" [
+export def "compute-licenses-get-iam-policy" [
   project: string
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10937,7 +10937,7 @@ export def "projects-global-licenses-get-iam-policy get" [
 # operationId: compute.licenses.setIamPolicy
 # --bindings item shape: {bindingId?: string, condition?: record, members?: list<string>, role?: string}
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, rules?: list, version?: int}
-export def "projects-global-licenses-set-iam-policy update" [
+export def "compute-licenses-set-iam-policy" [
   project: string
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10994,7 +10994,7 @@ export def "projects-global-licenses-set-iam-policy update" [
 #
 # POST /projects/{project}/global/licenses/{resource}/testIamPermissions
 # operationId: compute.licenses.testIamPermissions
-export def "projects-global-licenses-test-iam-permissions test" [
+export def "compute-licenses-test-iam-permissions" [
   project: string
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11049,7 +11049,7 @@ export def "projects-global-licenses-test-iam-permissions test" [
 #
 # GET /projects/{project}/global/machineImages
 # operationId: compute.machineImages.list
-export def "projects-global-machine-images list" [
+export def "compute-machine-images-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -11108,7 +11108,7 @@ export def "projects-global-machine-images list" [
 # --savedDisks item shape: {architecture?: "ARCHITECTURE_UNSPECIFIED"|"ARM64"|"X86_64", kind?: string, sourceDisk?: string, storageBytes?: string, storageBytesStatus?: "UPDATING"|"UP_TO_DATE"}
 # --sourceDiskEncryptionKeys item shape: {diskEncryptionKey?: record, sourceDisk?: string}
 # --sourceInstanceProperties shape: {canIpForward?: bool, deletionProtection?: bool, description?: string, disks?: list, guestAccelerators?: list, keyRevocationActionType?: "KEY_REVOCATION_ACTION_TYPE_UNSPECIFIED"|"NONE"|"STOP", labels?: record, machineType?: string, metadata?: record, minCpuPlatform?: string, networkInterfaces?: list, scheduling?: record, serviceAccounts?: list, tags?: record}
-export def "projects-global-machine-images create" [
+export def "compute-machine-images-insert" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -11179,7 +11179,7 @@ export def "projects-global-machine-images create" [
 #
 # DELETE /projects/{project}/global/machineImages/{machineImage}
 # operationId: compute.machineImages.delete
-export def "projects-global-machine-images delete" [
+export def "compute-machine-images-delete" [
   project: string
   machine_image: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11231,7 +11231,7 @@ export def "projects-global-machine-images delete" [
 #
 # GET /projects/{project}/global/machineImages/{machineImage}
 # operationId: compute.machineImages.get
-export def "projects-global-machine-images get" [
+export def "compute-machine-images-get" [
   project: string
   machine_image: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11282,7 +11282,7 @@ export def "projects-global-machine-images get" [
 #
 # GET /projects/{project}/global/machineImages/{resource}/getIamPolicy
 # operationId: compute.machineImages.getIamPolicy
-export def "projects-global-machine-images-get-iam-policy get" [
+export def "compute-machine-images-get-iam-policy" [
   project: string
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11336,7 +11336,7 @@ export def "projects-global-machine-images-get-iam-policy get" [
 # operationId: compute.machineImages.setIamPolicy
 # --bindings item shape: {bindingId?: string, condition?: record, members?: list<string>, role?: string}
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, rules?: list, version?: int}
-export def "projects-global-machine-images-set-iam-policy update" [
+export def "compute-machine-images-set-iam-policy" [
   project: string
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11393,7 +11393,7 @@ export def "projects-global-machine-images-set-iam-policy update" [
 #
 # POST /projects/{project}/global/machineImages/{resource}/testIamPermissions
 # operationId: compute.machineImages.testIamPermissions
-export def "projects-global-machine-images-test-iam-permissions test" [
+export def "compute-machine-images-test-iam-permissions" [
   project: string
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11448,7 +11448,7 @@ export def "projects-global-machine-images-test-iam-permissions test" [
 #
 # GET /projects/{project}/global/networkEndpointGroups
 # operationId: compute.globalNetworkEndpointGroups.list
-export def "projects-global-network-endpoint-groups list" [
+export def "compute-global-network-endpoint-groups-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -11506,7 +11506,7 @@ export def "projects-global-network-endpoint-groups list" [
 # --cloudFunction shape: {function?: string, urlMask?: string}
 # --cloudRun shape: {service?: string, tag?: string, urlMask?: string}
 # --pscData shape: {consumerPscAddress?: string, pscConnectionId?: string, pscConnectionStatus?: "ACCEPTED"|"CLOSED"|"NEEDS_ATTENTION"|"PENDING"|"REJECTED"|"STATUS_UNSPECIFIED"}
-export def "projects-global-network-endpoint-groups create" [
+export def "compute-global-network-endpoint-groups-insert" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -11578,7 +11578,7 @@ export def "projects-global-network-endpoint-groups create" [
 #
 # DELETE /projects/{project}/global/networkEndpointGroups/{networkEndpointGroup}
 # operationId: compute.globalNetworkEndpointGroups.delete
-export def "projects-global-network-endpoint-groups delete" [
+export def "compute-global-network-endpoint-groups-delete" [
   project: string
   network_endpoint_group: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11630,7 +11630,7 @@ export def "projects-global-network-endpoint-groups delete" [
 #
 # GET /projects/{project}/global/networkEndpointGroups/{networkEndpointGroup}
 # operationId: compute.globalNetworkEndpointGroups.get
-export def "projects-global-network-endpoint-groups get" [
+export def "compute-global-network-endpoint-groups-get" [
   project: string
   network_endpoint_group: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11682,7 +11682,7 @@ export def "projects-global-network-endpoint-groups get" [
 # POST /projects/{project}/global/networkEndpointGroups/{networkEndpointGroup}/attachNetworkEndpoints
 # operationId: compute.globalNetworkEndpointGroups.attachNetworkEndpoints
 # --networkEndpoints item shape: {annotations?: record, fqdn?: string, instance?: string, ipAddress?: string, port?: int}
-export def "projects-global-network-endpoint-groups-attach-network-endpoints attach" [
+export def "compute-global-network-endpoint-groups-attach-network-endpoints" [
   project: string
   network_endpoint_group: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11739,7 +11739,7 @@ export def "projects-global-network-endpoint-groups-attach-network-endpoints att
 # POST /projects/{project}/global/networkEndpointGroups/{networkEndpointGroup}/detachNetworkEndpoints
 # operationId: compute.globalNetworkEndpointGroups.detachNetworkEndpoints
 # --networkEndpoints item shape: {annotations?: record, fqdn?: string, instance?: string, ipAddress?: string, port?: int}
-export def "projects-global-network-endpoint-groups-detach-network-endpoints create" [
+export def "compute-global-network-endpoint-groups-detach-network-endpoints" [
   project: string
   network_endpoint_group: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11795,7 +11795,7 @@ export def "projects-global-network-endpoint-groups-detach-network-endpoints cre
 #
 # POST /projects/{project}/global/networkEndpointGroups/{networkEndpointGroup}/listNetworkEndpoints
 # operationId: compute.globalNetworkEndpointGroups.listNetworkEndpoints
-export def "projects-global-network-endpoint-groups-list-network-endpoints list" [
+export def "compute-global-network-endpoint-groups-list-network-endpoints" [
   project: string
   network_endpoint_group: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11851,7 +11851,7 @@ export def "projects-global-network-endpoint-groups-list-network-endpoints list"
 #
 # GET /projects/{project}/global/networks
 # operationId: compute.networks.list
-export def "projects-global-networks list" [
+export def "compute-networks-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -11907,7 +11907,7 @@ export def "projects-global-networks list" [
 # operationId: compute.networks.insert
 # --peerings item shape: {autoCreateRoutes?: bool, exchangeSubnetRoutes?: bool, exportCustomRoutes?: bool, exportSubnetRoutesWithPublicIp?: bool, importCustomRoutes?: bool, importSubnetRoutesWithPublicIp?: bool, name?: string, network?: string, peerMtu?: int, stackType?: "IPV4_IPV6"|"IPV4_ONLY", state?: "ACTIVE"|"INACTIVE", stateDetails?: string}
 # --routingConfig shape: {routingMode?: "GLOBAL"|"REGIONAL"}
-export def "projects-global-networks create" [
+export def "compute-networks-insert" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -11978,7 +11978,7 @@ export def "projects-global-networks create" [
 #
 # DELETE /projects/{project}/global/networks/{network}
 # operationId: compute.networks.delete
-export def "projects-global-networks delete" [
+export def "compute-networks-delete" [
   project: string
   network: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12030,7 +12030,7 @@ export def "projects-global-networks delete" [
 #
 # GET /projects/{project}/global/networks/{network}
 # operationId: compute.networks.get
-export def "projects-global-networks get" [
+export def "compute-networks-get" [
   project: string
   network: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12083,7 +12083,7 @@ export def "projects-global-networks get" [
 # operationId: compute.networks.patch
 # --peerings item shape: {autoCreateRoutes?: bool, exchangeSubnetRoutes?: bool, exportCustomRoutes?: bool, exportSubnetRoutesWithPublicIp?: bool, importCustomRoutes?: bool, importSubnetRoutesWithPublicIp?: bool, name?: string, network?: string, peerMtu?: int, stackType?: "IPV4_IPV6"|"IPV4_ONLY", state?: "ACTIVE"|"INACTIVE", stateDetails?: string}
 # --routingConfig shape: {routingMode?: "GLOBAL"|"REGIONAL"}
-export def "projects-global-networks update" [
+export def "compute-networks-patch" [
   project: string
   network: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12157,7 +12157,7 @@ export def "projects-global-networks update" [
 # POST /projects/{project}/global/networks/{network}/addPeering
 # operationId: compute.networks.addPeering
 # --networkPeering shape: {autoCreateRoutes?: bool, exchangeSubnetRoutes?: bool, exportCustomRoutes?: bool, exportSubnetRoutesWithPublicIp?: bool, importCustomRoutes?: bool, importSubnetRoutesWithPublicIp?: bool, name?: string, network?: string, peerMtu?: int, stackType?: "IPV4_IPV6"|"IPV4_ONLY", state?: "ACTIVE"|"INACTIVE", stateDetails?: string}
-export def "projects-global-networks-add-peering create" [
+export def "compute-networks-add-peering" [
   project: string
   network: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12216,7 +12216,7 @@ export def "projects-global-networks-add-peering create" [
 #
 # GET /projects/{project}/global/networks/{network}/getEffectiveFirewalls
 # operationId: compute.networks.getEffectiveFirewalls
-export def "projects-global-networks-get-effective-firewalls get" [
+export def "compute-networks-get-effective-firewalls" [
   project: string
   network: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12267,7 +12267,7 @@ export def "projects-global-networks-get-effective-firewalls get" [
 #
 # GET /projects/{project}/global/networks/{network}/listPeeringRoutes
 # operationId: compute.networks.listPeeringRoutes
-export def "projects-global-networks-list-peering-routes list" [
+export def "compute-networks-list-peering-routes" [
   project: string
   network: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12326,7 +12326,7 @@ export def "projects-global-networks-list-peering-routes list" [
 #
 # POST /projects/{project}/global/networks/{network}/removePeering
 # operationId: compute.networks.removePeering
-export def "projects-global-networks-remove-peering delete" [
+export def "compute-networks-remove-peering" [
   project: string
   network: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12382,7 +12382,7 @@ export def "projects-global-networks-remove-peering delete" [
 #
 # POST /projects/{project}/global/networks/{network}/switchToCustomMode
 # operationId: compute.networks.switchToCustomMode
-export def "projects-global-networks-switch-to-custom-mode create" [
+export def "compute-networks-switch-to-custom-mode" [
   project: string
   network: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12435,7 +12435,7 @@ export def "projects-global-networks-switch-to-custom-mode create" [
 # PATCH /projects/{project}/global/networks/{network}/updatePeering
 # operationId: compute.networks.updatePeering
 # --networkPeering shape: {autoCreateRoutes?: bool, exchangeSubnetRoutes?: bool, exportCustomRoutes?: bool, exportSubnetRoutesWithPublicIp?: bool, importCustomRoutes?: bool, importSubnetRoutesWithPublicIp?: bool, name?: string, network?: string, peerMtu?: int, stackType?: "IPV4_IPV6"|"IPV4_ONLY", state?: "ACTIVE"|"INACTIVE", stateDetails?: string}
-export def "projects-global-networks-update-peering update" [
+export def "compute-networks-update-peering" [
   project: string
   network: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12491,7 +12491,7 @@ export def "projects-global-networks-update-peering update" [
 #
 # GET /projects/{project}/global/operations
 # operationId: compute.globalOperations.list
-export def "projects-global-operations list" [
+export def "compute-global-operations-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -12545,7 +12545,7 @@ export def "projects-global-operations list" [
 #
 # DELETE /projects/{project}/global/operations/{operation}
 # operationId: compute.globalOperations.delete
-export def "projects-global-operations delete" [
+export def "compute-global-operations-delete" [
   project: string
   operation: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12596,7 +12596,7 @@ export def "projects-global-operations delete" [
 #
 # GET /projects/{project}/global/operations/{operation}
 # operationId: compute.globalOperations.get
-export def "projects-global-operations get" [
+export def "compute-global-operations-get" [
   project: string
   operation: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12647,7 +12647,7 @@ export def "projects-global-operations get" [
 #
 # POST /projects/{project}/global/operations/{operation}/wait
 # operationId: compute.globalOperations.wait
-export def "projects-global-operations-wait wait" [
+export def "compute-global-operations-wait" [
   project: string
   operation: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12698,7 +12698,7 @@ export def "projects-global-operations-wait wait" [
 #
 # GET /projects/{project}/global/publicAdvertisedPrefixes
 # operationId: compute.publicAdvertisedPrefixes.list
-export def "projects-global-public-advertised-prefixes list" [
+export def "compute-public-advertised-prefixes-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -12753,7 +12753,7 @@ export def "projects-global-public-advertised-prefixes list" [
 # POST /projects/{project}/global/publicAdvertisedPrefixes
 # operationId: compute.publicAdvertisedPrefixes.insert
 # --publicDelegatedPrefixs item shape: {ipRange?: string, name?: string, project?: string, region?: string, status?: string}
-export def "projects-global-public-advertised-prefixes create" [
+export def "compute-public-advertised-prefixes-insert" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -12818,7 +12818,7 @@ export def "projects-global-public-advertised-prefixes create" [
 #
 # DELETE /projects/{project}/global/publicAdvertisedPrefixes/{publicAdvertisedPrefix}
 # operationId: compute.publicAdvertisedPrefixes.delete
-export def "projects-global-public-advertised-prefixes delete" [
+export def "compute-public-advertised-prefixes-delete" [
   project: string
   public_advertised_prefix: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12870,7 +12870,7 @@ export def "projects-global-public-advertised-prefixes delete" [
 #
 # GET /projects/{project}/global/publicAdvertisedPrefixes/{publicAdvertisedPrefix}
 # operationId: compute.publicAdvertisedPrefixes.get
-export def "projects-global-public-advertised-prefixes get" [
+export def "compute-public-advertised-prefixes-get" [
   project: string
   public_advertised_prefix: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12922,7 +12922,7 @@ export def "projects-global-public-advertised-prefixes get" [
 # PATCH /projects/{project}/global/publicAdvertisedPrefixes/{publicAdvertisedPrefix}
 # operationId: compute.publicAdvertisedPrefixes.patch
 # --publicDelegatedPrefixs item shape: {ipRange?: string, name?: string, project?: string, region?: string, status?: string}
-export def "projects-global-public-advertised-prefixes update" [
+export def "compute-public-advertised-prefixes-patch" [
   project: string
   public_advertised_prefix: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12989,7 +12989,7 @@ export def "projects-global-public-advertised-prefixes update" [
 #
 # GET /projects/{project}/global/publicDelegatedPrefixes
 # operationId: compute.globalPublicDelegatedPrefixes.list
-export def "projects-global-public-delegated-prefixes list" [
+export def "compute-global-public-delegated-prefixes-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -13044,7 +13044,7 @@ export def "projects-global-public-delegated-prefixes list" [
 # POST /projects/{project}/global/publicDelegatedPrefixes
 # operationId: compute.globalPublicDelegatedPrefixes.insert
 # --publicDelegatedSubPrefixs item shape: {delegateeProject?: string, description?: string, ipCidrRange?: string, isAddress?: bool, name?: string, region?: string, status?: "ACTIVE"|"INACTIVE"}
-export def "projects-global-public-delegated-prefixes create" [
+export def "compute-global-public-delegated-prefixes-insert" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -13110,7 +13110,7 @@ export def "projects-global-public-delegated-prefixes create" [
 #
 # DELETE /projects/{project}/global/publicDelegatedPrefixes/{publicDelegatedPrefix}
 # operationId: compute.globalPublicDelegatedPrefixes.delete
-export def "projects-global-public-delegated-prefixes delete" [
+export def "compute-global-public-delegated-prefixes-delete" [
   project: string
   public_delegated_prefix: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13162,7 +13162,7 @@ export def "projects-global-public-delegated-prefixes delete" [
 #
 # GET /projects/{project}/global/publicDelegatedPrefixes/{publicDelegatedPrefix}
 # operationId: compute.globalPublicDelegatedPrefixes.get
-export def "projects-global-public-delegated-prefixes get" [
+export def "compute-global-public-delegated-prefixes-get" [
   project: string
   public_delegated_prefix: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13214,7 +13214,7 @@ export def "projects-global-public-delegated-prefixes get" [
 # PATCH /projects/{project}/global/publicDelegatedPrefixes/{publicDelegatedPrefix}
 # operationId: compute.globalPublicDelegatedPrefixes.patch
 # --publicDelegatedSubPrefixs item shape: {delegateeProject?: string, description?: string, ipCidrRange?: string, isAddress?: bool, name?: string, region?: string, status?: "ACTIVE"|"INACTIVE"}
-export def "projects-global-public-delegated-prefixes update" [
+export def "compute-global-public-delegated-prefixes-patch" [
   project: string
   public_delegated_prefix: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13282,7 +13282,7 @@ export def "projects-global-public-delegated-prefixes update" [
 #
 # GET /projects/{project}/global/routes
 # operationId: compute.routes.list
-export def "projects-global-routes list" [
+export def "compute-routes-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -13338,7 +13338,7 @@ export def "projects-global-routes list" [
 # operationId: compute.routes.insert
 # --asPaths item shape: {asLists?: list<int>, pathSegmentType?: "AS_CONFED_SEQUENCE"|"AS_CONFED_SET"|"AS_SEQUENCE"|"AS_SET"}
 # --warnings item shape: {code?: "CLEANUP_FAILED"|"DEPRECATED_RESOURCE_USED"|"DEPRECATED_TYPE_USED"|"DISK_SIZE_LARGER_THAN_IMAGE_SIZE"|"EXPERIMENTAL_TYPE_USED"|"EXTERNAL_API_WARNING"|"FIELD_VALUE_OVERRIDEN"|"INJECTED_KERNELS_DEPRECATED"|"INVALID_HEALTH_CHECK_FOR_DYNAMIC_WIEGHTED_LB"|"LARGE_DEPLOYMENT_WARNING"|"MISSING_TYPE_DEPENDENCY"|"NEXT_HOP_ADDRESS_NOT_ASSIGNED"|"NEXT_HOP_CANNOT_IP_FORWARD"|"NEXT_HOP_INSTANCE_HAS_NO_IPV6_INTERFACE"|"NEXT_HOP_INSTANCE_NOT_FOUND"|"NEXT_HOP_INSTANCE_NOT_ON_NETWORK"|"NEXT_HOP_NOT_RUNNING"|"NOT_CRITICAL_ERROR"|"NO_RESULTS_ON_PAGE"|"PARTIAL_SUCCESS"|"REQUIRED_TOS_AGREEMENT"|"RESOURCE_IN_USE_BY_OTHER_RESOURCE_WARNING"|"RESOURCE_NOT_DELETED"|"SCHEMA_VALIDATION_IGNORED"|"SINGLE_INSTANCE_PROPERTY_TEMPLATE"|"UNDECLARED_PROPERTIES"|"UNREACHABLE", ... (2 more fields)}
-export def "projects-global-routes create" [
+export def "compute-routes-insert" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -13412,7 +13412,7 @@ export def "projects-global-routes create" [
 #
 # DELETE /projects/{project}/global/routes/{route}
 # operationId: compute.routes.delete
-export def "projects-global-routes delete" [
+export def "compute-routes-delete" [
   project: string
   route: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13464,7 +13464,7 @@ export def "projects-global-routes delete" [
 #
 # GET /projects/{project}/global/routes/{route}
 # operationId: compute.routes.get
-export def "projects-global-routes get" [
+export def "compute-routes-get" [
   project: string
   route: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13515,7 +13515,7 @@ export def "projects-global-routes get" [
 #
 # GET /projects/{project}/global/securityPolicies
 # operationId: compute.securityPolicies.list
-export def "projects-global-security-policies list" [
+export def "compute-security-policies-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -13574,7 +13574,7 @@ export def "projects-global-security-policies list" [
 # --ddosProtectionConfig shape: {ddosProtection?: "ADVANCED"|"STANDARD"}
 # --recaptchaOptionsConfig shape: {redirectSiteKey?: string}
 # --rules item shape: {action?: string, description?: string, headerAction?: record, kind?: string, match?: record, preconfiguredWafConfig?: record, preview?: bool, priority?: int, rateLimitOptions?: record, redirectOptions?: record}
-export def "projects-global-security-policies create" [
+export def "compute-security-policies-insert" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -13642,7 +13642,7 @@ export def "projects-global-security-policies create" [
 #
 # GET /projects/{project}/global/securityPolicies/listPreconfiguredExpressionSets
 # operationId: compute.securityPolicies.listPreconfiguredExpressionSets
-export def "projects-global-security-policies-list-preconfigured-expression-sets list" [
+export def "compute-security-policies-list-preconfigured-expression-sets" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -13696,7 +13696,7 @@ export def "projects-global-security-policies-list-preconfigured-expression-sets
 #
 # POST /projects/{project}/global/securityPolicies/{resource}/setLabels
 # operationId: compute.securityPolicies.setLabels
-export def "projects-global-security-policies-set-labels update" [
+export def "compute-security-policies-set-labels" [
   project: string
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13752,7 +13752,7 @@ export def "projects-global-security-policies-set-labels update" [
 #
 # DELETE /projects/{project}/global/securityPolicies/{securityPolicy}
 # operationId: compute.securityPolicies.delete
-export def "projects-global-security-policies delete" [
+export def "compute-security-policies-delete" [
   project: string
   security_policy: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13804,7 +13804,7 @@ export def "projects-global-security-policies delete" [
 #
 # GET /projects/{project}/global/securityPolicies/{securityPolicy}
 # operationId: compute.securityPolicies.get
-export def "projects-global-security-policies get" [
+export def "compute-security-policies-get" [
   project: string
   security_policy: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13860,7 +13860,7 @@ export def "projects-global-security-policies get" [
 # --ddosProtectionConfig shape: {ddosProtection?: "ADVANCED"|"STANDARD"}
 # --recaptchaOptionsConfig shape: {redirectSiteKey?: string}
 # --rules item shape: {action?: string, description?: string, headerAction?: record, kind?: string, match?: record, preconfiguredWafConfig?: record, preview?: bool, priority?: int, rateLimitOptions?: record, redirectOptions?: record}
-export def "projects-global-security-policies update" [
+export def "compute-security-policies-patch" [
   project: string
   security_policy: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13934,7 +13934,7 @@ export def "projects-global-security-policies update" [
 # --preconfiguredWafConfig shape: {exclusions?: list}
 # --rateLimitOptions shape: {banDurationSec?: int, banThreshold?: record, conformAction?: string, enforceOnKey?: "ALL"|"HTTP_COOKIE"|"HTTP_HEADER"|"HTTP_PATH"|"IP"|"REGION_CODE"|"SNI"|"XFF_IP", enforceOnKeyConfigs?: list, enforceOnKeyName?: string, exceedAction?: string, exceedRedirectOptions?: record, rateLimitThreshold?: record}
 # --redirectOptions shape: {target?: string, type?: "EXTERNAL_302"|"GOOGLE_RECAPTCHA"}
-export def "projects-global-security-policies-add-rule create" [
+export def "compute-security-policies-add-rule" [
   project: string
   security_policy: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13999,7 +13999,7 @@ export def "projects-global-security-policies-add-rule create" [
 #
 # GET /projects/{project}/global/securityPolicies/{securityPolicy}/getRule
 # operationId: compute.securityPolicies.getRule
-export def "projects-global-security-policies-get-rule get" [
+export def "compute-security-policies-get-rule" [
   project: string
   security_policy: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -14056,7 +14056,7 @@ export def "projects-global-security-policies-get-rule get" [
 # --preconfiguredWafConfig shape: {exclusions?: list}
 # --rateLimitOptions shape: {banDurationSec?: int, banThreshold?: record, conformAction?: string, enforceOnKey?: "ALL"|"HTTP_COOKIE"|"HTTP_HEADER"|"HTTP_PATH"|"IP"|"REGION_CODE"|"SNI"|"XFF_IP", enforceOnKeyConfigs?: list, enforceOnKeyName?: string, exceedAction?: string, exceedRedirectOptions?: record, rateLimitThreshold?: record}
 # --redirectOptions shape: {target?: string, type?: "EXTERNAL_302"|"GOOGLE_RECAPTCHA"}
-export def "projects-global-security-policies-patch-rule update" [
+export def "compute-security-policies-patch-rule" [
   project: string
   security_policy: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -14122,7 +14122,7 @@ export def "projects-global-security-policies-patch-rule update" [
 #
 # POST /projects/{project}/global/securityPolicies/{securityPolicy}/removeRule
 # operationId: compute.securityPolicies.removeRule
-export def "projects-global-security-policies-remove-rule delete" [
+export def "compute-security-policies-remove-rule" [
   project: string
   security_policy: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -14174,7 +14174,7 @@ export def "projects-global-security-policies-remove-rule delete" [
 #
 # GET /projects/{project}/global/snapshots
 # operationId: compute.snapshots.list
-export def "projects-global-snapshots list" [
+export def "compute-snapshots-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -14230,7 +14230,7 @@ export def "projects-global-snapshots list" [
 # operationId: compute.snapshots.insert
 # --snapshotEncryptionKey shape: {kmsKeyName?: string, kmsKeyServiceAccount?: string, rawKey?: string, rsaEncryptedKey?: string, sha256?: string}
 # --sourceDiskEncryptionKey shape: {kmsKeyName?: string, kmsKeyServiceAccount?: string, rawKey?: string, rsaEncryptedKey?: string, sha256?: string}
-export def "projects-global-snapshots create" [
+export def "compute-snapshots-insert" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -14312,7 +14312,7 @@ export def "projects-global-snapshots create" [
 #
 # GET /projects/{project}/global/snapshots/{resource}/getIamPolicy
 # operationId: compute.snapshots.getIamPolicy
-export def "projects-global-snapshots-get-iam-policy get" [
+export def "compute-snapshots-get-iam-policy" [
   project: string
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -14366,7 +14366,7 @@ export def "projects-global-snapshots-get-iam-policy get" [
 # operationId: compute.snapshots.setIamPolicy
 # --bindings item shape: {bindingId?: string, condition?: record, members?: list<string>, role?: string}
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, rules?: list, version?: int}
-export def "projects-global-snapshots-set-iam-policy update" [
+export def "compute-snapshots-set-iam-policy" [
   project: string
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -14423,7 +14423,7 @@ export def "projects-global-snapshots-set-iam-policy update" [
 #
 # POST /projects/{project}/global/snapshots/{resource}/setLabels
 # operationId: compute.snapshots.setLabels
-export def "projects-global-snapshots-set-labels update" [
+export def "compute-snapshots-set-labels" [
   project: string
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -14479,7 +14479,7 @@ export def "projects-global-snapshots-set-labels update" [
 #
 # POST /projects/{project}/global/snapshots/{resource}/testIamPermissions
 # operationId: compute.snapshots.testIamPermissions
-export def "projects-global-snapshots-test-iam-permissions test" [
+export def "compute-snapshots-test-iam-permissions" [
   project: string
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -14534,7 +14534,7 @@ export def "projects-global-snapshots-test-iam-permissions test" [
 #
 # DELETE /projects/{project}/global/snapshots/{snapshot}
 # operationId: compute.snapshots.delete
-export def "projects-global-snapshots delete" [
+export def "compute-snapshots-delete" [
   project: string
   snapshot: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -14586,7 +14586,7 @@ export def "projects-global-snapshots delete" [
 #
 # GET /projects/{project}/global/snapshots/{snapshot}
 # operationId: compute.snapshots.get
-export def "projects-global-snapshots get" [
+export def "compute-snapshots-get" [
   project: string
   snapshot: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -14637,7 +14637,7 @@ export def "projects-global-snapshots get" [
 #
 # GET /projects/{project}/global/sslCertificates
 # operationId: compute.sslCertificates.list
-export def "projects-global-ssl-certificates list" [
+export def "compute-ssl-certificates-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -14693,7 +14693,7 @@ export def "projects-global-ssl-certificates list" [
 # operationId: compute.sslCertificates.insert
 # --managed shape: {domainStatus?: record, domains?: list<string>, status?: "ACTIVE"|"MANAGED_CERTIFICATE_STATUS_UNSPECIFIED"|"PROVISIONING"|"PROVISIONING_FAILED"|"PROVISIONING_FAILED_PERMANENTLY"|"RENEWAL_FAILED"}
 # --selfManaged shape: {certificate?: string, privateKey?: string}
-export def "projects-global-ssl-certificates create" [
+export def "compute-ssl-certificates-insert" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -14760,7 +14760,7 @@ export def "projects-global-ssl-certificates create" [
 #
 # DELETE /projects/{project}/global/sslCertificates/{sslCertificate}
 # operationId: compute.sslCertificates.delete
-export def "projects-global-ssl-certificates delete" [
+export def "compute-ssl-certificates-delete" [
   project: string
   ssl_certificate: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -14812,7 +14812,7 @@ export def "projects-global-ssl-certificates delete" [
 #
 # GET /projects/{project}/global/sslCertificates/{sslCertificate}
 # operationId: compute.sslCertificates.get
-export def "projects-global-ssl-certificates get" [
+export def "compute-ssl-certificates-get" [
   project: string
   ssl_certificate: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -14863,7 +14863,7 @@ export def "projects-global-ssl-certificates get" [
 #
 # GET /projects/{project}/global/sslPolicies
 # operationId: compute.sslPolicies.list
-export def "projects-global-ssl-policies list" [
+export def "compute-ssl-policies-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -14918,7 +14918,7 @@ export def "projects-global-ssl-policies list" [
 # POST /projects/{project}/global/sslPolicies
 # operationId: compute.sslPolicies.insert
 # --warnings item shape: {code?: "CLEANUP_FAILED"|"DEPRECATED_RESOURCE_USED"|"DEPRECATED_TYPE_USED"|"DISK_SIZE_LARGER_THAN_IMAGE_SIZE"|"EXPERIMENTAL_TYPE_USED"|"EXTERNAL_API_WARNING"|"FIELD_VALUE_OVERRIDEN"|"INJECTED_KERNELS_DEPRECATED"|"INVALID_HEALTH_CHECK_FOR_DYNAMIC_WIEGHTED_LB"|"LARGE_DEPLOYMENT_WARNING"|"MISSING_TYPE_DEPENDENCY"|"NEXT_HOP_ADDRESS_NOT_ASSIGNED"|"NEXT_HOP_CANNOT_IP_FORWARD"|"NEXT_HOP_INSTANCE_HAS_NO_IPV6_INTERFACE"|"NEXT_HOP_INSTANCE_NOT_FOUND"|"NEXT_HOP_INSTANCE_NOT_ON_NETWORK"|"NEXT_HOP_NOT_RUNNING"|"NOT_CRITICAL_ERROR"|"NO_RESULTS_ON_PAGE"|"PARTIAL_SUCCESS"|"REQUIRED_TOS_AGREEMENT"|"RESOURCE_IN_USE_BY_OTHER_RESOURCE_WARNING"|"RESOURCE_NOT_DELETED"|"SCHEMA_VALIDATION_IGNORED"|"SINGLE_INSTANCE_PROPERTY_TEMPLATE"|"UNDECLARED_PROPERTIES"|"UNREACHABLE", ... (2 more fields)}
-export def "projects-global-ssl-policies create" [
+export def "compute-ssl-policies-insert" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -14984,7 +14984,7 @@ export def "projects-global-ssl-policies create" [
 #
 # GET /projects/{project}/global/sslPolicies/listAvailableFeatures
 # operationId: compute.sslPolicies.listAvailableFeatures
-export def "projects-global-ssl-policies-list-available-features list" [
+export def "compute-ssl-policies-list-available-features" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -15038,7 +15038,7 @@ export def "projects-global-ssl-policies-list-available-features list" [
 #
 # DELETE /projects/{project}/global/sslPolicies/{sslPolicy}
 # operationId: compute.sslPolicies.delete
-export def "projects-global-ssl-policies delete" [
+export def "compute-ssl-policies-delete" [
   project: string
   ssl_policy: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -15090,7 +15090,7 @@ export def "projects-global-ssl-policies delete" [
 #
 # GET /projects/{project}/global/sslPolicies/{sslPolicy}
 # operationId: compute.sslPolicies.get
-export def "projects-global-ssl-policies get" [
+export def "compute-ssl-policies-get" [
   project: string
   ssl_policy: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -15142,7 +15142,7 @@ export def "projects-global-ssl-policies get" [
 # PATCH /projects/{project}/global/sslPolicies/{sslPolicy}
 # operationId: compute.sslPolicies.patch
 # --warnings item shape: {code?: "CLEANUP_FAILED"|"DEPRECATED_RESOURCE_USED"|"DEPRECATED_TYPE_USED"|"DISK_SIZE_LARGER_THAN_IMAGE_SIZE"|"EXPERIMENTAL_TYPE_USED"|"EXTERNAL_API_WARNING"|"FIELD_VALUE_OVERRIDEN"|"INJECTED_KERNELS_DEPRECATED"|"INVALID_HEALTH_CHECK_FOR_DYNAMIC_WIEGHTED_LB"|"LARGE_DEPLOYMENT_WARNING"|"MISSING_TYPE_DEPENDENCY"|"NEXT_HOP_ADDRESS_NOT_ASSIGNED"|"NEXT_HOP_CANNOT_IP_FORWARD"|"NEXT_HOP_INSTANCE_HAS_NO_IPV6_INTERFACE"|"NEXT_HOP_INSTANCE_NOT_FOUND"|"NEXT_HOP_INSTANCE_NOT_ON_NETWORK"|"NEXT_HOP_NOT_RUNNING"|"NOT_CRITICAL_ERROR"|"NO_RESULTS_ON_PAGE"|"PARTIAL_SUCCESS"|"REQUIRED_TOS_AGREEMENT"|"RESOURCE_IN_USE_BY_OTHER_RESOURCE_WARNING"|"RESOURCE_NOT_DELETED"|"SCHEMA_VALIDATION_IGNORED"|"SINGLE_INSTANCE_PROPERTY_TEMPLATE"|"UNDECLARED_PROPERTIES"|"UNREACHABLE", ... (2 more fields)}
-export def "projects-global-ssl-policies update" [
+export def "compute-ssl-policies-patch" [
   project: string
   ssl_policy: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -15210,7 +15210,7 @@ export def "projects-global-ssl-policies update" [
 #
 # GET /projects/{project}/global/targetGrpcProxies
 # operationId: compute.targetGrpcProxies.list
-export def "projects-global-target-grpc-proxies list" [
+export def "compute-target-grpc-proxies-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -15264,7 +15264,7 @@ export def "projects-global-target-grpc-proxies list" [
 #
 # POST /projects/{project}/global/targetGrpcProxies
 # operationId: compute.targetGrpcProxies.insert
-export def "projects-global-target-grpc-proxies create" [
+export def "compute-target-grpc-proxies-insert" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -15327,7 +15327,7 @@ export def "projects-global-target-grpc-proxies create" [
 #
 # DELETE /projects/{project}/global/targetGrpcProxies/{targetGrpcProxy}
 # operationId: compute.targetGrpcProxies.delete
-export def "projects-global-target-grpc-proxies delete" [
+export def "compute-target-grpc-proxies-delete" [
   project: string
   target_grpc_proxy: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -15379,7 +15379,7 @@ export def "projects-global-target-grpc-proxies delete" [
 #
 # GET /projects/{project}/global/targetGrpcProxies/{targetGrpcProxy}
 # operationId: compute.targetGrpcProxies.get
-export def "projects-global-target-grpc-proxies get" [
+export def "compute-target-grpc-proxies-get" [
   project: string
   target_grpc_proxy: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -15430,7 +15430,7 @@ export def "projects-global-target-grpc-proxies get" [
 #
 # PATCH /projects/{project}/global/targetGrpcProxies/{targetGrpcProxy}
 # operationId: compute.targetGrpcProxies.patch
-export def "projects-global-target-grpc-proxies update" [
+export def "compute-target-grpc-proxies-patch" [
   project: string
   target_grpc_proxy: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -15495,7 +15495,7 @@ export def "projects-global-target-grpc-proxies update" [
 #
 # GET /projects/{project}/global/targetHttpProxies
 # operationId: compute.targetHttpProxies.list
-export def "projects-global-target-http-proxies list" [
+export def "compute-target-http-proxies-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -15549,7 +15549,7 @@ export def "projects-global-target-http-proxies list" [
 #
 # POST /projects/{project}/global/targetHttpProxies
 # operationId: compute.targetHttpProxies.insert
-export def "projects-global-target-http-proxies create" [
+export def "compute-target-http-proxies-insert" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -15612,7 +15612,7 @@ export def "projects-global-target-http-proxies create" [
 #
 # DELETE /projects/{project}/global/targetHttpProxies/{targetHttpProxy}
 # operationId: compute.targetHttpProxies.delete
-export def "projects-global-target-http-proxies delete" [
+export def "compute-target-http-proxies-delete" [
   project: string
   target_http_proxy: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -15664,7 +15664,7 @@ export def "projects-global-target-http-proxies delete" [
 #
 # GET /projects/{project}/global/targetHttpProxies/{targetHttpProxy}
 # operationId: compute.targetHttpProxies.get
-export def "projects-global-target-http-proxies get" [
+export def "compute-target-http-proxies-get" [
   project: string
   target_http_proxy: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -15715,7 +15715,7 @@ export def "projects-global-target-http-proxies get" [
 #
 # PATCH /projects/{project}/global/targetHttpProxies/{targetHttpProxy}
 # operationId: compute.targetHttpProxies.patch
-export def "projects-global-target-http-proxies update" [
+export def "compute-target-http-proxies-patch" [
   project: string
   target_http_proxy: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -15780,7 +15780,7 @@ export def "projects-global-target-http-proxies update" [
 #
 # GET /projects/{project}/global/targetHttpsProxies
 # operationId: compute.targetHttpsProxies.list
-export def "projects-global-target-https-proxies list" [
+export def "compute-target-https-proxies-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -15834,7 +15834,7 @@ export def "projects-global-target-https-proxies list" [
 #
 # POST /projects/{project}/global/targetHttpsProxies
 # operationId: compute.targetHttpsProxies.insert
-export def "projects-global-target-https-proxies create" [
+export def "compute-target-https-proxies-insert" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -15903,7 +15903,7 @@ export def "projects-global-target-https-proxies create" [
 #
 # DELETE /projects/{project}/global/targetHttpsProxies/{targetHttpsProxy}
 # operationId: compute.targetHttpsProxies.delete
-export def "projects-global-target-https-proxies delete" [
+export def "compute-target-https-proxies-delete" [
   project: string
   target_https_proxy: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -15955,7 +15955,7 @@ export def "projects-global-target-https-proxies delete" [
 #
 # GET /projects/{project}/global/targetHttpsProxies/{targetHttpsProxy}
 # operationId: compute.targetHttpsProxies.get
-export def "projects-global-target-https-proxies get" [
+export def "compute-target-https-proxies-get" [
   project: string
   target_https_proxy: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16006,7 +16006,7 @@ export def "projects-global-target-https-proxies get" [
 #
 # PATCH /projects/{project}/global/targetHttpsProxies/{targetHttpsProxy}
 # operationId: compute.targetHttpsProxies.patch
-export def "projects-global-target-https-proxies update" [
+export def "compute-target-https-proxies-patch" [
   project: string
   target_https_proxy: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16077,7 +16077,7 @@ export def "projects-global-target-https-proxies update" [
 #
 # POST /projects/{project}/global/targetHttpsProxies/{targetHttpsProxy}/setCertificateMap
 # operationId: compute.targetHttpsProxies.setCertificateMap
-export def "projects-global-target-https-proxies-set-certificate-map update" [
+export def "compute-target-https-proxies-set-certificate-map" [
   project: string
   target_https_proxy: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16133,7 +16133,7 @@ export def "projects-global-target-https-proxies-set-certificate-map update" [
 #
 # POST /projects/{project}/global/targetHttpsProxies/{targetHttpsProxy}/setQuicOverride
 # operationId: compute.targetHttpsProxies.setQuicOverride
-export def "projects-global-target-https-proxies-set-quic-override update" [
+export def "compute-target-https-proxies-set-quic-override" [
   project: string
   target_https_proxy: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16189,7 +16189,7 @@ export def "projects-global-target-https-proxies-set-quic-override update" [
 #
 # POST /projects/{project}/global/targetHttpsProxies/{targetHttpsProxy}/setSslPolicy
 # operationId: compute.targetHttpsProxies.setSslPolicy
-export def "projects-global-target-https-proxies-set-ssl-policy update" [
+export def "compute-target-https-proxies-set-ssl-policy" [
   project: string
   target_https_proxy: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16245,7 +16245,7 @@ export def "projects-global-target-https-proxies-set-ssl-policy update" [
 #
 # GET /projects/{project}/global/targetSslProxies
 # operationId: compute.targetSslProxies.list
-export def "projects-global-target-ssl-proxies list" [
+export def "compute-target-ssl-proxies-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -16299,7 +16299,7 @@ export def "projects-global-target-ssl-proxies list" [
 #
 # POST /projects/{project}/global/targetSslProxies
 # operationId: compute.targetSslProxies.insert
-export def "projects-global-target-ssl-proxies create" [
+export def "compute-target-ssl-proxies-insert" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -16363,7 +16363,7 @@ export def "projects-global-target-ssl-proxies create" [
 #
 # DELETE /projects/{project}/global/targetSslProxies/{targetSslProxy}
 # operationId: compute.targetSslProxies.delete
-export def "projects-global-target-ssl-proxies delete" [
+export def "compute-target-ssl-proxies-delete" [
   project: string
   target_ssl_proxy: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16415,7 +16415,7 @@ export def "projects-global-target-ssl-proxies delete" [
 #
 # GET /projects/{project}/global/targetSslProxies/{targetSslProxy}
 # operationId: compute.targetSslProxies.get
-export def "projects-global-target-ssl-proxies get" [
+export def "compute-target-ssl-proxies-get" [
   project: string
   target_ssl_proxy: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16466,7 +16466,7 @@ export def "projects-global-target-ssl-proxies get" [
 #
 # POST /projects/{project}/global/targetSslProxies/{targetSslProxy}/setBackendService
 # operationId: compute.targetSslProxies.setBackendService
-export def "projects-global-target-ssl-proxies-set-backend-service update" [
+export def "compute-target-ssl-proxies-set-backend-service" [
   project: string
   target_ssl_proxy: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16522,7 +16522,7 @@ export def "projects-global-target-ssl-proxies-set-backend-service update" [
 #
 # POST /projects/{project}/global/targetSslProxies/{targetSslProxy}/setCertificateMap
 # operationId: compute.targetSslProxies.setCertificateMap
-export def "projects-global-target-ssl-proxies-set-certificate-map update" [
+export def "compute-target-ssl-proxies-set-certificate-map" [
   project: string
   target_ssl_proxy: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16578,7 +16578,7 @@ export def "projects-global-target-ssl-proxies-set-certificate-map update" [
 #
 # POST /projects/{project}/global/targetSslProxies/{targetSslProxy}/setProxyHeader
 # operationId: compute.targetSslProxies.setProxyHeader
-export def "projects-global-target-ssl-proxies-set-proxy-header update" [
+export def "compute-target-ssl-proxies-set-proxy-header" [
   project: string
   target_ssl_proxy: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16634,7 +16634,7 @@ export def "projects-global-target-ssl-proxies-set-proxy-header update" [
 #
 # POST /projects/{project}/global/targetSslProxies/{targetSslProxy}/setSslCertificates
 # operationId: compute.targetSslProxies.setSslCertificates
-export def "projects-global-target-ssl-proxies-set-ssl-certificates update" [
+export def "compute-target-ssl-proxies-set-ssl-certificates" [
   project: string
   target_ssl_proxy: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16690,7 +16690,7 @@ export def "projects-global-target-ssl-proxies-set-ssl-certificates update" [
 #
 # POST /projects/{project}/global/targetSslProxies/{targetSslProxy}/setSslPolicy
 # operationId: compute.targetSslProxies.setSslPolicy
-export def "projects-global-target-ssl-proxies-set-ssl-policy update" [
+export def "compute-target-ssl-proxies-set-ssl-policy" [
   project: string
   target_ssl_proxy: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16746,7 +16746,7 @@ export def "projects-global-target-ssl-proxies-set-ssl-policy update" [
 #
 # GET /projects/{project}/global/targetTcpProxies
 # operationId: compute.targetTcpProxies.list
-export def "projects-global-target-tcp-proxies list" [
+export def "compute-target-tcp-proxies-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -16800,7 +16800,7 @@ export def "projects-global-target-tcp-proxies list" [
 #
 # POST /projects/{project}/global/targetTcpProxies
 # operationId: compute.targetTcpProxies.insert
-export def "projects-global-target-tcp-proxies create" [
+export def "compute-target-tcp-proxies-insert" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -16863,7 +16863,7 @@ export def "projects-global-target-tcp-proxies create" [
 #
 # DELETE /projects/{project}/global/targetTcpProxies/{targetTcpProxy}
 # operationId: compute.targetTcpProxies.delete
-export def "projects-global-target-tcp-proxies delete" [
+export def "compute-target-tcp-proxies-delete" [
   project: string
   target_tcp_proxy: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16915,7 +16915,7 @@ export def "projects-global-target-tcp-proxies delete" [
 #
 # GET /projects/{project}/global/targetTcpProxies/{targetTcpProxy}
 # operationId: compute.targetTcpProxies.get
-export def "projects-global-target-tcp-proxies get" [
+export def "compute-target-tcp-proxies-get" [
   project: string
   target_tcp_proxy: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16966,7 +16966,7 @@ export def "projects-global-target-tcp-proxies get" [
 #
 # POST /projects/{project}/global/targetTcpProxies/{targetTcpProxy}/setBackendService
 # operationId: compute.targetTcpProxies.setBackendService
-export def "projects-global-target-tcp-proxies-set-backend-service update" [
+export def "compute-target-tcp-proxies-set-backend-service" [
   project: string
   target_tcp_proxy: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -17022,7 +17022,7 @@ export def "projects-global-target-tcp-proxies-set-backend-service update" [
 #
 # POST /projects/{project}/global/targetTcpProxies/{targetTcpProxy}/setProxyHeader
 # operationId: compute.targetTcpProxies.setProxyHeader
-export def "projects-global-target-tcp-proxies-set-proxy-header update" [
+export def "compute-target-tcp-proxies-set-proxy-header" [
   project: string
   target_tcp_proxy: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -17078,7 +17078,7 @@ export def "projects-global-target-tcp-proxies-set-proxy-header update" [
 #
 # GET /projects/{project}/global/urlMaps
 # operationId: compute.urlMaps.list
-export def "projects-global-url-maps list" [
+export def "compute-url-maps-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -17138,7 +17138,7 @@ export def "projects-global-url-maps list" [
 # --hostRules item shape: {description?: string, hosts?: list<string>, pathMatcher?: string}
 # --pathMatchers item shape: {defaultRouteAction?: record, defaultService?: string, defaultUrlRedirect?: record, description?: string, headerAction?: record, name?: string, pathRules?: list, routeRules?: list}
 # --tests item shape: {description?: string, expectedOutputUrl?: string, expectedRedirectResponseCode?: int, headers?: list, host?: string, path?: string, service?: string}
-export def "projects-global-url-maps create" [
+export def "compute-url-maps-insert" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -17206,7 +17206,7 @@ export def "projects-global-url-maps create" [
 #
 # DELETE /projects/{project}/global/urlMaps/{urlMap}
 # operationId: compute.urlMaps.delete
-export def "projects-global-url-maps delete" [
+export def "compute-url-maps-delete" [
   project: string
   url_map: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -17258,7 +17258,7 @@ export def "projects-global-url-maps delete" [
 #
 # GET /projects/{project}/global/urlMaps/{urlMap}
 # operationId: compute.urlMaps.get
-export def "projects-global-url-maps get" [
+export def "compute-url-maps-get" [
   project: string
   url_map: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -17315,7 +17315,7 @@ export def "projects-global-url-maps get" [
 # --hostRules item shape: {description?: string, hosts?: list<string>, pathMatcher?: string}
 # --pathMatchers item shape: {defaultRouteAction?: record, defaultService?: string, defaultUrlRedirect?: record, description?: string, headerAction?: record, name?: string, pathRules?: list, routeRules?: list}
 # --tests item shape: {description?: string, expectedOutputUrl?: string, expectedRedirectResponseCode?: int, headers?: list, host?: string, path?: string, service?: string}
-export def "projects-global-url-maps update-by-project-url-map" [
+export def "compute-url-maps-patch" [
   project: string
   url_map: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -17391,7 +17391,7 @@ export def "projects-global-url-maps update-by-project-url-map" [
 # --hostRules item shape: {description?: string, hosts?: list<string>, pathMatcher?: string}
 # --pathMatchers item shape: {defaultRouteAction?: record, defaultService?: string, defaultUrlRedirect?: record, description?: string, headerAction?: record, name?: string, pathRules?: list, routeRules?: list}
 # --tests item shape: {description?: string, expectedOutputUrl?: string, expectedRedirectResponseCode?: int, headers?: list, host?: string, path?: string, service?: string}
-export def "projects-global-url-maps update-by-project-url-map-1" [
+export def "compute-url-maps-update" [
   project: string
   url_map: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -17461,7 +17461,7 @@ export def "projects-global-url-maps update-by-project-url-map-1" [
 #
 # POST /projects/{project}/global/urlMaps/{urlMap}/invalidateCache
 # operationId: compute.urlMaps.invalidateCache
-export def "projects-global-url-maps-invalidate-cache create" [
+export def "compute-url-maps-invalidate-cache" [
   project: string
   url_map: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -17519,7 +17519,7 @@ export def "projects-global-url-maps-invalidate-cache create" [
 # POST /projects/{project}/global/urlMaps/{urlMap}/validate
 # operationId: compute.urlMaps.validate
 # --resource shape: {creationTimestamp?: string, defaultRouteAction?: record, defaultService?: string, defaultUrlRedirect?: record, description?: string, fingerprint?: string, headerAction?: record, hostRules?: list, id?: string, kind?: string, name?: string, pathMatchers?: list, region?: string, selfLink?: string, tests?: list}
-export def "projects-global-url-maps-validate validate" [
+export def "compute-url-maps-validate" [
   project: string
   url_map: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -17575,7 +17575,7 @@ export def "projects-global-url-maps-validate validate" [
 #
 # POST /projects/{project}/listXpnHosts
 # operationId: compute.projects.listXpnHosts
-export def "projects-list-xpn-hosts list" [
+export def "compute-projects-list-xpn-hosts" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -17633,7 +17633,7 @@ export def "projects-list-xpn-hosts list" [
 #
 # POST /projects/{project}/moveDisk
 # operationId: compute.projects.moveDisk
-export def "projects-move-disk move" [
+export def "compute-projects-move-disk" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -17688,7 +17688,7 @@ export def "projects-move-disk move" [
 #
 # POST /projects/{project}/moveInstance
 # operationId: compute.projects.moveInstance
-export def "projects-move-instance move" [
+export def "compute-projects-move-instance" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -17743,7 +17743,7 @@ export def "projects-move-instance move" [
 #
 # GET /projects/{project}/regions
 # operationId: compute.regions.list
-export def "projects-regions list" [
+export def "compute-regions-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -17797,7 +17797,7 @@ export def "projects-regions list" [
 #
 # GET /projects/{project}/regions/{region}
 # operationId: compute.regions.get
-export def "projects-regions get" [
+export def "compute-regions-get" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -17848,7 +17848,7 @@ export def "projects-regions get" [
 #
 # GET /projects/{project}/regions/{region}/addresses
 # operationId: compute.addresses.list
-export def "projects-regions-addresses list" [
+export def "compute-addresses-list" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -17904,7 +17904,7 @@ export def "projects-regions-addresses list" [
 #
 # POST /projects/{project}/regions/{region}/addresses
 # operationId: compute.addresses.insert
-export def "projects-regions-addresses create" [
+export def "compute-addresses-insert" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -17977,7 +17977,7 @@ export def "projects-regions-addresses create" [
 #
 # DELETE /projects/{project}/regions/{region}/addresses/{address}
 # operationId: compute.addresses.delete
-export def "projects-regions-addresses delete" [
+export def "compute-addresses-delete" [
   project: string
   region: string
   address: string
@@ -18031,7 +18031,7 @@ export def "projects-regions-addresses delete" [
 #
 # GET /projects/{project}/regions/{region}/addresses/{address}
 # operationId: compute.addresses.get
-export def "projects-regions-addresses get" [
+export def "compute-addresses-get" [
   project: string
   region: string
   address: string
@@ -18084,7 +18084,7 @@ export def "projects-regions-addresses get" [
 #
 # POST /projects/{project}/regions/{region}/addresses/{resource}/setLabels
 # operationId: compute.addresses.setLabels
-export def "projects-regions-addresses-set-labels update" [
+export def "compute-addresses-set-labels" [
   project: string
   region: string
   resource: string
@@ -18143,7 +18143,7 @@ export def "projects-regions-addresses-set-labels update" [
 #
 # GET /projects/{project}/regions/{region}/autoscalers
 # operationId: compute.regionAutoscalers.list
-export def "projects-regions-autoscalers list" [
+export def "compute-region-autoscalers-list" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -18201,7 +18201,7 @@ export def "projects-regions-autoscalers list" [
 # operationId: compute.regionAutoscalers.patch
 # --autoscalingPolicy shape: {coolDownPeriodSec?: int, cpuUtilization?: record, customMetricUtilizations?: list, loadBalancingUtilization?: record, maxNumReplicas?: int, minNumReplicas?: int, mode?: "OFF"|"ON"|"ONLY_SCALE_OUT"|"ONLY_UP", scaleInControl?: record, scalingSchedules?: record}
 # --statusDetails item shape: {message?: string, ... (1 more fields)}
-export def "projects-regions-autoscalers update-by-project-region" [
+export def "compute-region-autoscalers-patch" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -18273,7 +18273,7 @@ export def "projects-regions-autoscalers update-by-project-region" [
 # operationId: compute.regionAutoscalers.insert
 # --autoscalingPolicy shape: {coolDownPeriodSec?: int, cpuUtilization?: record, customMetricUtilizations?: list, loadBalancingUtilization?: record, maxNumReplicas?: int, minNumReplicas?: int, mode?: "OFF"|"ON"|"ONLY_SCALE_OUT"|"ONLY_UP", scaleInControl?: record, scalingSchedules?: record}
 # --statusDetails item shape: {message?: string, ... (1 more fields)}
-export def "projects-regions-autoscalers create" [
+export def "compute-region-autoscalers-insert" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -18344,7 +18344,7 @@ export def "projects-regions-autoscalers create" [
 # operationId: compute.regionAutoscalers.update
 # --autoscalingPolicy shape: {coolDownPeriodSec?: int, cpuUtilization?: record, customMetricUtilizations?: list, loadBalancingUtilization?: record, maxNumReplicas?: int, minNumReplicas?: int, mode?: "OFF"|"ON"|"ONLY_SCALE_OUT"|"ONLY_UP", scaleInControl?: record, scalingSchedules?: record}
 # --statusDetails item shape: {message?: string, ... (1 more fields)}
-export def "projects-regions-autoscalers update-by-project-region-1" [
+export def "compute-region-autoscalers-update" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -18414,7 +18414,7 @@ export def "projects-regions-autoscalers update-by-project-region-1" [
 #
 # DELETE /projects/{project}/regions/{region}/autoscalers/{autoscaler}
 # operationId: compute.regionAutoscalers.delete
-export def "projects-regions-autoscalers delete" [
+export def "compute-region-autoscalers-delete" [
   project: string
   region: string
   autoscaler: string
@@ -18468,7 +18468,7 @@ export def "projects-regions-autoscalers delete" [
 #
 # GET /projects/{project}/regions/{region}/autoscalers/{autoscaler}
 # operationId: compute.regionAutoscalers.get
-export def "projects-regions-autoscalers get" [
+export def "compute-region-autoscalers-get" [
   project: string
   region: string
   autoscaler: string
@@ -18521,7 +18521,7 @@ export def "projects-regions-autoscalers get" [
 #
 # GET /projects/{project}/regions/{region}/backendServices
 # operationId: compute.regionBackendServices.list
-export def "projects-regions-backend-services list" [
+export def "compute-region-backend-services-list" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -18591,7 +18591,7 @@ export def "projects-regions-backend-services list" [
 # --outlierDetection shape: {baseEjectionTime?: record, consecutiveErrors?: int, consecutiveGatewayFailure?: int, enforcingConsecutiveErrors?: int, enforcingConsecutiveGatewayFailure?: int, enforcingSuccessRate?: int, interval?: record, maxEjectionPercent?: int, successRateMinimumHosts?: int, successRateRequestVolume?: int, successRateStdevFactor?: int}
 # --securitySettings shape: {clientTlsPolicy?: string, subjectAltNames?: list<string>}
 # --subsetting shape: {policy?: "CONSISTENT_HASH_SUBSETTING"|"NONE"}
-export def "projects-regions-backend-services create" [
+export def "compute-region-backend-services-insert" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -18685,7 +18685,7 @@ export def "projects-regions-backend-services create" [
 #
 # DELETE /projects/{project}/regions/{region}/backendServices/{backendService}
 # operationId: compute.regionBackendServices.delete
-export def "projects-regions-backend-services delete" [
+export def "compute-region-backend-services-delete" [
   project: string
   region: string
   backend_service: string
@@ -18739,7 +18739,7 @@ export def "projects-regions-backend-services delete" [
 #
 # GET /projects/{project}/regions/{region}/backendServices/{backendService}
 # operationId: compute.regionBackendServices.get
-export def "projects-regions-backend-services get" [
+export def "compute-region-backend-services-get" [
   project: string
   region: string
   backend_service: string
@@ -18806,7 +18806,7 @@ export def "projects-regions-backend-services get" [
 # --outlierDetection shape: {baseEjectionTime?: record, consecutiveErrors?: int, consecutiveGatewayFailure?: int, enforcingConsecutiveErrors?: int, enforcingConsecutiveGatewayFailure?: int, enforcingSuccessRate?: int, interval?: record, maxEjectionPercent?: int, successRateMinimumHosts?: int, successRateRequestVolume?: int, successRateStdevFactor?: int}
 # --securitySettings shape: {clientTlsPolicy?: string, subjectAltNames?: list<string>}
 # --subsetting shape: {policy?: "CONSISTENT_HASH_SUBSETTING"|"NONE"}
-export def "projects-regions-backend-services update-by-project-region-backend-service" [
+export def "compute-region-backend-services-patch" [
   project: string
   region: string
   backend_service: string
@@ -18916,7 +18916,7 @@ export def "projects-regions-backend-services update-by-project-region-backend-s
 # --outlierDetection shape: {baseEjectionTime?: record, consecutiveErrors?: int, consecutiveGatewayFailure?: int, enforcingConsecutiveErrors?: int, enforcingConsecutiveGatewayFailure?: int, enforcingSuccessRate?: int, interval?: record, maxEjectionPercent?: int, successRateMinimumHosts?: int, successRateRequestVolume?: int, successRateStdevFactor?: int}
 # --securitySettings shape: {clientTlsPolicy?: string, subjectAltNames?: list<string>}
 # --subsetting shape: {policy?: "CONSISTENT_HASH_SUBSETTING"|"NONE"}
-export def "projects-regions-backend-services update-by-project-region-backend-service-1" [
+export def "compute-region-backend-services-update" [
   project: string
   region: string
   backend_service: string
@@ -19012,7 +19012,7 @@ export def "projects-regions-backend-services update-by-project-region-backend-s
 #
 # POST /projects/{project}/regions/{region}/backendServices/{backendService}/getHealth
 # operationId: compute.regionBackendServices.getHealth
-export def "projects-regions-backend-services-get-health get" [
+export def "compute-region-backend-services-get-health" [
   project: string
   region: string
   backend_service: string
@@ -19069,7 +19069,7 @@ export def "projects-regions-backend-services-get-health get" [
 #
 # GET /projects/{project}/regions/{region}/backendServices/{resource}/getIamPolicy
 # operationId: compute.regionBackendServices.getIamPolicy
-export def "projects-regions-backend-services-get-iam-policy get" [
+export def "compute-region-backend-services-get-iam-policy" [
   project: string
   region: string
   resource: string
@@ -19125,7 +19125,7 @@ export def "projects-regions-backend-services-get-iam-policy get" [
 # operationId: compute.regionBackendServices.setIamPolicy
 # --bindings item shape: {bindingId?: string, condition?: record, members?: list<string>, role?: string}
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, rules?: list, version?: int}
-export def "projects-regions-backend-services-set-iam-policy update" [
+export def "compute-region-backend-services-set-iam-policy" [
   project: string
   region: string
   resource: string
@@ -19184,7 +19184,7 @@ export def "projects-regions-backend-services-set-iam-policy update" [
 #
 # GET /projects/{project}/regions/{region}/commitments
 # operationId: compute.regionCommitments.list
-export def "projects-regions-commitments list" [
+export def "compute-region-commitments-list" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -19243,7 +19243,7 @@ export def "projects-regions-commitments list" [
 # --licenseResource shape: {amount?: string, coresPerLicense?: string, license?: string}
 # --reservations item shape: {commitment?: string, creationTimestamp?: string, description?: string, id?: string, kind?: string, name?: string, resourcePolicies?: record, resourceStatus?: record, satisfiesPzs?: bool, selfLink?: string, shareSettings?: record, specificReservation?: record, specificReservationRequired?: bool, status?: "CREATING"|"DELETING"|"INVALID"|"READY"|"UPDATING", zone?: string}
 # --resources item shape: {acceleratorType?: string, amount?: string, type?: "ACCELERATOR"|"LOCAL_SSD"|"MEMORY"|"UNSPECIFIED"|"VCPU"}
-export def "projects-regions-commitments create" [
+export def "compute-region-commitments-insert" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -19318,7 +19318,7 @@ export def "projects-regions-commitments create" [
 #
 # GET /projects/{project}/regions/{region}/commitments/{commitment}
 # operationId: compute.regionCommitments.get
-export def "projects-regions-commitments get" [
+export def "compute-region-commitments-get" [
   project: string
   region: string
   commitment: string
@@ -19374,7 +19374,7 @@ export def "projects-regions-commitments get" [
 # --licenseResource shape: {amount?: string, coresPerLicense?: string, license?: string}
 # --reservations item shape: {commitment?: string, creationTimestamp?: string, description?: string, id?: string, kind?: string, name?: string, resourcePolicies?: record, resourceStatus?: record, satisfiesPzs?: bool, selfLink?: string, shareSettings?: record, specificReservation?: record, specificReservationRequired?: bool, status?: "CREATING"|"DELETING"|"INVALID"|"READY"|"UPDATING", zone?: string}
 # --resources item shape: {acceleratorType?: string, amount?: string, type?: "ACCELERATOR"|"LOCAL_SSD"|"MEMORY"|"UNSPECIFIED"|"VCPU"}
-export def "projects-regions-commitments update" [
+export def "compute-region-commitments-update" [
   project: string
   region: string
   commitment: string
@@ -19453,7 +19453,7 @@ export def "projects-regions-commitments update" [
 #
 # GET /projects/{project}/regions/{region}/diskTypes
 # operationId: compute.regionDiskTypes.list
-export def "projects-regions-disk-types list" [
+export def "compute-region-disk-types-list" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -19509,7 +19509,7 @@ export def "projects-regions-disk-types list" [
 #
 # GET /projects/{project}/regions/{region}/diskTypes/{diskType}
 # operationId: compute.regionDiskTypes.get
-export def "projects-regions-disk-types get" [
+export def "compute-region-disk-types-get" [
   project: string
   region: string
   disk_type: string
@@ -19562,7 +19562,7 @@ export def "projects-regions-disk-types get" [
 #
 # GET /projects/{project}/regions/{region}/disks
 # operationId: compute.regionDisks.list
-export def "projects-regions-disks list" [
+export def "compute-region-disks-list" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -19623,7 +19623,7 @@ export def "projects-regions-disks list" [
 # --params shape: {resourceManagerTags?: record}
 # --sourceImageEncryptionKey shape: {kmsKeyName?: string, kmsKeyServiceAccount?: string, rawKey?: string, rsaEncryptedKey?: string, sha256?: string}
 # --sourceSnapshotEncryptionKey shape: {kmsKeyName?: string, kmsKeyServiceAccount?: string, rawKey?: string, rsaEncryptedKey?: string, sha256?: string}
-export def "projects-regions-disks create" [
+export def "compute-region-disks-insert" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -19717,7 +19717,7 @@ export def "projects-regions-disks create" [
 #
 # DELETE /projects/{project}/regions/{region}/disks/{disk}
 # operationId: compute.regionDisks.delete
-export def "projects-regions-disks delete" [
+export def "compute-region-disks-delete" [
   project: string
   region: string
   disk: string
@@ -19771,7 +19771,7 @@ export def "projects-regions-disks delete" [
 #
 # GET /projects/{project}/regions/{region}/disks/{disk}
 # operationId: compute.regionDisks.get
-export def "projects-regions-disks get" [
+export def "compute-region-disks-get" [
   project: string
   region: string
   disk: string
@@ -19829,7 +19829,7 @@ export def "projects-regions-disks get" [
 # --params shape: {resourceManagerTags?: record}
 # --sourceImageEncryptionKey shape: {kmsKeyName?: string, kmsKeyServiceAccount?: string, rawKey?: string, rsaEncryptedKey?: string, sha256?: string}
 # --sourceSnapshotEncryptionKey shape: {kmsKeyName?: string, kmsKeyServiceAccount?: string, rawKey?: string, rsaEncryptedKey?: string, sha256?: string}
-export def "projects-regions-disks update" [
+export def "compute-region-disks-update" [
   project: string
   region: string
   disk: string
@@ -19926,7 +19926,7 @@ export def "projects-regions-disks update" [
 #
 # POST /projects/{project}/regions/{region}/disks/{disk}/addResourcePolicies
 # operationId: compute.regionDisks.addResourcePolicies
-export def "projects-regions-disks-add-resource-policies create" [
+export def "compute-region-disks-add-resource-policies" [
   project: string
   region: string
   disk: string
@@ -19986,7 +19986,7 @@ export def "projects-regions-disks-add-resource-policies create" [
 # operationId: compute.regionDisks.createSnapshot
 # --snapshotEncryptionKey shape: {kmsKeyName?: string, kmsKeyServiceAccount?: string, rawKey?: string, rsaEncryptedKey?: string, sha256?: string}
 # --sourceDiskEncryptionKey shape: {kmsKeyName?: string, kmsKeyServiceAccount?: string, rawKey?: string, rsaEncryptedKey?: string, sha256?: string}
-export def "projects-regions-disks-create-snapshot create" [
+export def "compute-region-disks-create-snapshot" [
   project: string
   region: string
   disk: string
@@ -20072,7 +20072,7 @@ export def "projects-regions-disks-create-snapshot create" [
 #
 # POST /projects/{project}/regions/{region}/disks/{disk}/removeResourcePolicies
 # operationId: compute.regionDisks.removeResourcePolicies
-export def "projects-regions-disks-remove-resource-policies delete" [
+export def "compute-region-disks-remove-resource-policies" [
   project: string
   region: string
   disk: string
@@ -20130,7 +20130,7 @@ export def "projects-regions-disks-remove-resource-policies delete" [
 #
 # POST /projects/{project}/regions/{region}/disks/{disk}/resize
 # operationId: compute.regionDisks.resize
-export def "projects-regions-disks-resize resize" [
+export def "compute-region-disks-resize" [
   project: string
   region: string
   disk: string
@@ -20188,7 +20188,7 @@ export def "projects-regions-disks-resize resize" [
 #
 # GET /projects/{project}/regions/{region}/disks/{resource}/getIamPolicy
 # operationId: compute.regionDisks.getIamPolicy
-export def "projects-regions-disks-get-iam-policy get" [
+export def "compute-region-disks-get-iam-policy" [
   project: string
   region: string
   resource: string
@@ -20244,7 +20244,7 @@ export def "projects-regions-disks-get-iam-policy get" [
 # operationId: compute.regionDisks.setIamPolicy
 # --bindings item shape: {bindingId?: string, condition?: record, members?: list<string>, role?: string}
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, rules?: list, version?: int}
-export def "projects-regions-disks-set-iam-policy update" [
+export def "compute-region-disks-set-iam-policy" [
   project: string
   region: string
   resource: string
@@ -20303,7 +20303,7 @@ export def "projects-regions-disks-set-iam-policy update" [
 #
 # POST /projects/{project}/regions/{region}/disks/{resource}/setLabels
 # operationId: compute.regionDisks.setLabels
-export def "projects-regions-disks-set-labels update" [
+export def "compute-region-disks-set-labels" [
   project: string
   region: string
   resource: string
@@ -20362,7 +20362,7 @@ export def "projects-regions-disks-set-labels update" [
 #
 # POST /projects/{project}/regions/{region}/disks/{resource}/testIamPermissions
 # operationId: compute.regionDisks.testIamPermissions
-export def "projects-regions-disks-test-iam-permissions test" [
+export def "compute-region-disks-test-iam-permissions" [
   project: string
   region: string
   resource: string
@@ -20419,7 +20419,7 @@ export def "projects-regions-disks-test-iam-permissions test" [
 #
 # GET /projects/{project}/regions/{region}/firewallPolicies
 # operationId: compute.regionNetworkFirewallPolicies.list
-export def "projects-regions-firewall-policies list" [
+export def "compute-region-network-firewall-policies-list" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -20477,7 +20477,7 @@ export def "projects-regions-firewall-policies list" [
 # operationId: compute.regionNetworkFirewallPolicies.insert
 # --associations item shape: {attachmentTarget?: string, displayName?: string, firewallPolicyId?: string, name?: string, shortName?: string}
 # --rules item shape: {action?: string, description?: string, direction?: "EGRESS"|"INGRESS", disabled?: bool, enableLogging?: bool, kind?: string, match?: record, priority?: int, ruleName?: string, ruleTupleCount?: int, targetResources?: list<string>, targetSecureTags?: list, targetServiceAccounts?: list<string>}
-export def "projects-regions-firewall-policies create" [
+export def "compute-region-network-firewall-policies-insert" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -20547,7 +20547,7 @@ export def "projects-regions-firewall-policies create" [
 #
 # GET /projects/{project}/regions/{region}/firewallPolicies/getEffectiveFirewalls
 # operationId: compute.regionNetworkFirewallPolicies.getEffectiveFirewalls
-export def "projects-regions-firewall-policies-get-effective-firewalls get" [
+export def "compute-region-network-firewall-policies-get-effective-firewalls" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -20599,7 +20599,7 @@ export def "projects-regions-firewall-policies-get-effective-firewalls get" [
 #
 # DELETE /projects/{project}/regions/{region}/firewallPolicies/{firewallPolicy}
 # operationId: compute.regionNetworkFirewallPolicies.delete
-export def "projects-regions-firewall-policies delete" [
+export def "compute-region-network-firewall-policies-delete" [
   project: string
   region: string
   firewall_policy: string
@@ -20653,7 +20653,7 @@ export def "projects-regions-firewall-policies delete" [
 #
 # GET /projects/{project}/regions/{region}/firewallPolicies/{firewallPolicy}
 # operationId: compute.regionNetworkFirewallPolicies.get
-export def "projects-regions-firewall-policies get" [
+export def "compute-region-network-firewall-policies-get" [
   project: string
   region: string
   firewall_policy: string
@@ -20708,7 +20708,7 @@ export def "projects-regions-firewall-policies get" [
 # operationId: compute.regionNetworkFirewallPolicies.patch
 # --associations item shape: {attachmentTarget?: string, displayName?: string, firewallPolicyId?: string, name?: string, shortName?: string}
 # --rules item shape: {action?: string, description?: string, direction?: "EGRESS"|"INGRESS", disabled?: bool, enableLogging?: bool, kind?: string, match?: record, priority?: int, ruleName?: string, ruleTupleCount?: int, targetResources?: list<string>, targetSecureTags?: list, targetServiceAccounts?: list<string>}
-export def "projects-regions-firewall-policies update" [
+export def "compute-region-network-firewall-policies-patch" [
   project: string
   region: string
   firewall_policy: string
@@ -20780,7 +20780,7 @@ export def "projects-regions-firewall-policies update" [
 #
 # POST /projects/{project}/regions/{region}/firewallPolicies/{firewallPolicy}/addAssociation
 # operationId: compute.regionNetworkFirewallPolicies.addAssociation
-export def "projects-regions-firewall-policies-add-association create" [
+export def "compute-region-network-firewall-policies-add-association" [
   project: string
   region: string
   firewall_policy: string
@@ -20845,7 +20845,7 @@ export def "projects-regions-firewall-policies-add-association create" [
 # operationId: compute.regionNetworkFirewallPolicies.addRule
 # --match shape: {destAddressGroups?: list<string>, destFqdns?: list<string>, destIpRanges?: list<string>, destRegionCodes?: list<string>, destThreatIntelligences?: list<string>, layer4Configs?: list, srcAddressGroups?: list<string>, srcFqdns?: list<string>, srcIpRanges?: list<string>, srcRegionCodes?: list<string>, srcSecureTags?: list, srcThreatIntelligences?: list<string>}
 # --targetSecureTags item shape: {name?: string, state?: "EFFECTIVE"|"INEFFECTIVE"}
-export def "projects-regions-firewall-policies-add-rule create" [
+export def "compute-region-network-firewall-policies-add-rule" [
   project: string
   region: string
   firewall_policy: string
@@ -20917,7 +20917,7 @@ export def "projects-regions-firewall-policies-add-rule create" [
 #
 # POST /projects/{project}/regions/{region}/firewallPolicies/{firewallPolicy}/cloneRules
 # operationId: compute.regionNetworkFirewallPolicies.cloneRules
-export def "projects-regions-firewall-policies-clone-rules clone" [
+export def "compute-region-network-firewall-policies-clone-rules" [
   project: string
   region: string
   firewall_policy: string
@@ -20972,7 +20972,7 @@ export def "projects-regions-firewall-policies-clone-rules clone" [
 #
 # GET /projects/{project}/regions/{region}/firewallPolicies/{firewallPolicy}/getAssociation
 # operationId: compute.regionNetworkFirewallPolicies.getAssociation
-export def "projects-regions-firewall-policies-get-association get" [
+export def "compute-region-network-firewall-policies-get-association" [
   project: string
   region: string
   firewall_policy: string
@@ -21026,7 +21026,7 @@ export def "projects-regions-firewall-policies-get-association get" [
 #
 # GET /projects/{project}/regions/{region}/firewallPolicies/{firewallPolicy}/getRule
 # operationId: compute.regionNetworkFirewallPolicies.getRule
-export def "projects-regions-firewall-policies-get-rule get" [
+export def "compute-region-network-firewall-policies-get-rule" [
   project: string
   region: string
   firewall_policy: string
@@ -21082,7 +21082,7 @@ export def "projects-regions-firewall-policies-get-rule get" [
 # operationId: compute.regionNetworkFirewallPolicies.patchRule
 # --match shape: {destAddressGroups?: list<string>, destFqdns?: list<string>, destIpRanges?: list<string>, destRegionCodes?: list<string>, destThreatIntelligences?: list<string>, layer4Configs?: list, srcAddressGroups?: list<string>, srcFqdns?: list<string>, srcIpRanges?: list<string>, srcRegionCodes?: list<string>, srcSecureTags?: list, srcThreatIntelligences?: list<string>}
 # --targetSecureTags item shape: {name?: string, state?: "EFFECTIVE"|"INEFFECTIVE"}
-export def "projects-regions-firewall-policies-patch-rule update" [
+export def "compute-region-network-firewall-policies-patch-rule" [
   project: string
   region: string
   firewall_policy: string
@@ -21153,7 +21153,7 @@ export def "projects-regions-firewall-policies-patch-rule update" [
 #
 # POST /projects/{project}/regions/{region}/firewallPolicies/{firewallPolicy}/removeAssociation
 # operationId: compute.regionNetworkFirewallPolicies.removeAssociation
-export def "projects-regions-firewall-policies-remove-association delete" [
+export def "compute-region-network-firewall-policies-remove-association" [
   project: string
   region: string
   firewall_policy: string
@@ -21208,7 +21208,7 @@ export def "projects-regions-firewall-policies-remove-association delete" [
 #
 # POST /projects/{project}/regions/{region}/firewallPolicies/{firewallPolicy}/removeRule
 # operationId: compute.regionNetworkFirewallPolicies.removeRule
-export def "projects-regions-firewall-policies-remove-rule delete" [
+export def "compute-region-network-firewall-policies-remove-rule" [
   project: string
   region: string
   firewall_policy: string
@@ -21263,7 +21263,7 @@ export def "projects-regions-firewall-policies-remove-rule delete" [
 #
 # GET /projects/{project}/regions/{region}/firewallPolicies/{resource}/getIamPolicy
 # operationId: compute.regionNetworkFirewallPolicies.getIamPolicy
-export def "projects-regions-firewall-policies-get-iam-policy get" [
+export def "compute-region-network-firewall-policies-get-iam-policy" [
   project: string
   region: string
   resource: string
@@ -21319,7 +21319,7 @@ export def "projects-regions-firewall-policies-get-iam-policy get" [
 # operationId: compute.regionNetworkFirewallPolicies.setIamPolicy
 # --bindings item shape: {bindingId?: string, condition?: record, members?: list<string>, role?: string}
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, rules?: list, version?: int}
-export def "projects-regions-firewall-policies-set-iam-policy update" [
+export def "compute-region-network-firewall-policies-set-iam-policy" [
   project: string
   region: string
   resource: string
@@ -21378,7 +21378,7 @@ export def "projects-regions-firewall-policies-set-iam-policy update" [
 #
 # POST /projects/{project}/regions/{region}/firewallPolicies/{resource}/testIamPermissions
 # operationId: compute.regionNetworkFirewallPolicies.testIamPermissions
-export def "projects-regions-firewall-policies-test-iam-permissions test" [
+export def "compute-region-network-firewall-policies-test-iam-permissions" [
   project: string
   region: string
   resource: string
@@ -21435,7 +21435,7 @@ export def "projects-regions-firewall-policies-test-iam-permissions test" [
 #
 # GET /projects/{project}/regions/{region}/forwardingRules
 # operationId: compute.forwardingRules.list
-export def "projects-regions-forwarding-rules list" [
+export def "compute-forwarding-rules-list" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -21493,7 +21493,7 @@ export def "projects-regions-forwarding-rules list" [
 # operationId: compute.forwardingRules.insert
 # --metadataFilters item shape: {filterLabels?: list, filterMatchCriteria?: "MATCH_ALL"|"MATCH_ANY"|"NOT_SET"}
 # --serviceDirectoryRegistrations item shape: {namespace?: string, service?: string, serviceDirectoryRegion?: string}
-export def "projects-regions-forwarding-rules create" [
+export def "compute-forwarding-rules-insert" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -21582,7 +21582,7 @@ export def "projects-regions-forwarding-rules create" [
 #
 # DELETE /projects/{project}/regions/{region}/forwardingRules/{forwardingRule}
 # operationId: compute.forwardingRules.delete
-export def "projects-regions-forwarding-rules delete" [
+export def "compute-forwarding-rules-delete" [
   project: string
   region: string
   forwarding_rule: string
@@ -21636,7 +21636,7 @@ export def "projects-regions-forwarding-rules delete" [
 #
 # GET /projects/{project}/regions/{region}/forwardingRules/{forwardingRule}
 # operationId: compute.forwardingRules.get
-export def "projects-regions-forwarding-rules get" [
+export def "compute-forwarding-rules-get" [
   project: string
   region: string
   forwarding_rule: string
@@ -21691,7 +21691,7 @@ export def "projects-regions-forwarding-rules get" [
 # operationId: compute.forwardingRules.patch
 # --metadataFilters item shape: {filterLabels?: list, filterMatchCriteria?: "MATCH_ALL"|"MATCH_ANY"|"NOT_SET"}
 # --serviceDirectoryRegistrations item shape: {namespace?: string, service?: string, serviceDirectoryRegion?: string}
-export def "projects-regions-forwarding-rules update" [
+export def "compute-forwarding-rules-patch" [
   project: string
   region: string
   forwarding_rule: string
@@ -21782,7 +21782,7 @@ export def "projects-regions-forwarding-rules update" [
 #
 # POST /projects/{project}/regions/{region}/forwardingRules/{forwardingRule}/setTarget
 # operationId: compute.forwardingRules.setTarget
-export def "projects-regions-forwarding-rules-set-target update" [
+export def "compute-forwarding-rules-set-target" [
   project: string
   region: string
   forwarding_rule: string
@@ -21840,7 +21840,7 @@ export def "projects-regions-forwarding-rules-set-target update" [
 #
 # POST /projects/{project}/regions/{region}/forwardingRules/{resource}/setLabels
 # operationId: compute.forwardingRules.setLabels
-export def "projects-regions-forwarding-rules-set-labels update" [
+export def "compute-forwarding-rules-set-labels" [
   project: string
   region: string
   resource: string
@@ -21899,7 +21899,7 @@ export def "projects-regions-forwarding-rules-set-labels update" [
 #
 # GET /projects/{project}/regions/{region}/healthCheckServices
 # operationId: compute.regionHealthCheckServices.list
-export def "projects-regions-health-check-services list" [
+export def "compute-region-health-check-services-list" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -21955,7 +21955,7 @@ export def "projects-regions-health-check-services list" [
 #
 # POST /projects/{project}/regions/{region}/healthCheckServices
 # operationId: compute.regionHealthCheckServices.insert
-export def "projects-regions-health-check-services create" [
+export def "compute-region-health-check-services-insert" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -22022,7 +22022,7 @@ export def "projects-regions-health-check-services create" [
 #
 # DELETE /projects/{project}/regions/{region}/healthCheckServices/{healthCheckService}
 # operationId: compute.regionHealthCheckServices.delete
-export def "projects-regions-health-check-services delete" [
+export def "compute-region-health-check-services-delete" [
   project: string
   region: string
   health_check_service: string
@@ -22076,7 +22076,7 @@ export def "projects-regions-health-check-services delete" [
 #
 # GET /projects/{project}/regions/{region}/healthCheckServices/{healthCheckService}
 # operationId: compute.regionHealthCheckServices.get
-export def "projects-regions-health-check-services get" [
+export def "compute-region-health-check-services-get" [
   project: string
   region: string
   health_check_service: string
@@ -22129,7 +22129,7 @@ export def "projects-regions-health-check-services get" [
 #
 # PATCH /projects/{project}/regions/{region}/healthCheckServices/{healthCheckService}
 # operationId: compute.regionHealthCheckServices.patch
-export def "projects-regions-health-check-services update" [
+export def "compute-region-health-check-services-patch" [
   project: string
   region: string
   health_check_service: string
@@ -22198,7 +22198,7 @@ export def "projects-regions-health-check-services update" [
 #
 # GET /projects/{project}/regions/{region}/healthChecks
 # operationId: compute.regionHealthChecks.list
-export def "projects-regions-health-checks list" [
+export def "compute-region-health-checks-list" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -22261,7 +22261,7 @@ export def "projects-regions-health-checks list" [
 # --logConfig shape: {enable?: bool}
 # --sslHealthCheck shape: {port?: int, portName?: string, portSpecification?: "USE_FIXED_PORT"|"USE_NAMED_PORT"|"USE_SERVING_PORT", proxyHeader?: "NONE"|"PROXY_V1", request?: string, response?: string}
 # --tcpHealthCheck shape: {port?: int, portName?: string, portSpecification?: "USE_FIXED_PORT"|"USE_NAMED_PORT"|"USE_SERVING_PORT", proxyHeader?: "NONE"|"PROXY_V1", request?: string, response?: string}
-export def "projects-regions-health-checks create" [
+export def "compute-region-health-checks-insert" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -22335,7 +22335,7 @@ export def "projects-regions-health-checks create" [
 #
 # DELETE /projects/{project}/regions/{region}/healthChecks/{healthCheck}
 # operationId: compute.regionHealthChecks.delete
-export def "projects-regions-health-checks delete" [
+export def "compute-region-health-checks-delete" [
   project: string
   region: string
   health_check: string
@@ -22389,7 +22389,7 @@ export def "projects-regions-health-checks delete" [
 #
 # GET /projects/{project}/regions/{region}/healthChecks/{healthCheck}
 # operationId: compute.regionHealthChecks.get
-export def "projects-regions-health-checks get" [
+export def "compute-region-health-checks-get" [
   project: string
   region: string
   health_check: string
@@ -22449,7 +22449,7 @@ export def "projects-regions-health-checks get" [
 # --logConfig shape: {enable?: bool}
 # --sslHealthCheck shape: {port?: int, portName?: string, portSpecification?: "USE_FIXED_PORT"|"USE_NAMED_PORT"|"USE_SERVING_PORT", proxyHeader?: "NONE"|"PROXY_V1", request?: string, response?: string}
 # --tcpHealthCheck shape: {port?: int, portName?: string, portSpecification?: "USE_FIXED_PORT"|"USE_NAMED_PORT"|"USE_SERVING_PORT", proxyHeader?: "NONE"|"PROXY_V1", request?: string, response?: string}
-export def "projects-regions-health-checks update-by-project-region-health-check" [
+export def "compute-region-health-checks-patch" [
   project: string
   region: string
   health_check: string
@@ -22532,7 +22532,7 @@ export def "projects-regions-health-checks update-by-project-region-health-check
 # --logConfig shape: {enable?: bool}
 # --sslHealthCheck shape: {port?: int, portName?: string, portSpecification?: "USE_FIXED_PORT"|"USE_NAMED_PORT"|"USE_SERVING_PORT", proxyHeader?: "NONE"|"PROXY_V1", request?: string, response?: string}
 # --tcpHealthCheck shape: {port?: int, portName?: string, portSpecification?: "USE_FIXED_PORT"|"USE_NAMED_PORT"|"USE_SERVING_PORT", proxyHeader?: "NONE"|"PROXY_V1", request?: string, response?: string}
-export def "projects-regions-health-checks update-by-project-region-health-check-1" [
+export def "compute-region-health-checks-update" [
   project: string
   region: string
   health_check: string
@@ -22608,7 +22608,7 @@ export def "projects-regions-health-checks update-by-project-region-health-check
 #
 # GET /projects/{project}/regions/{region}/instanceGroupManagers
 # operationId: compute.regionInstanceGroupManagers.list
-export def "projects-regions-instance-group-managers list" [
+export def "compute-region-instance-group-managers-list" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -22672,7 +22672,7 @@ export def "projects-regions-instance-group-managers list" [
 # --status shape: {autoscaler?: string, isStable?: bool, stateful?: record, versionTarget?: record}
 # --updatePolicy shape: {instanceRedistributionType?: "NONE"|"PROACTIVE", maxSurge?: record, maxUnavailable?: record, minimalAction?: "NONE"|"REFRESH"|"REPLACE"|"RESTART", mostDisruptiveAllowedAction?: "NONE"|"REFRESH"|"REPLACE"|"RESTART", replacementMethod?: "RECREATE"|"SUBSTITUTE", type?: "OPPORTUNISTIC"|"PROACTIVE"}
 # --versions item shape: {instanceTemplate?: string, name?: string, targetSize?: record}
-export def "projects-regions-instance-group-managers create" [
+export def "compute-region-instance-group-managers-insert" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -22750,7 +22750,7 @@ export def "projects-regions-instance-group-managers create" [
 #
 # DELETE /projects/{project}/regions/{region}/instanceGroupManagers/{instanceGroupManager}
 # operationId: compute.regionInstanceGroupManagers.delete
-export def "projects-regions-instance-group-managers delete" [
+export def "compute-region-instance-group-managers-delete" [
   project: string
   region: string
   instance_group_manager: string
@@ -22804,7 +22804,7 @@ export def "projects-regions-instance-group-managers delete" [
 #
 # GET /projects/{project}/regions/{region}/instanceGroupManagers/{instanceGroupManager}
 # operationId: compute.regionInstanceGroupManagers.get
-export def "projects-regions-instance-group-managers get" [
+export def "compute-region-instance-group-managers-get" [
   project: string
   region: string
   instance_group_manager: string
@@ -22865,7 +22865,7 @@ export def "projects-regions-instance-group-managers get" [
 # --status shape: {autoscaler?: string, isStable?: bool, stateful?: record, versionTarget?: record}
 # --updatePolicy shape: {instanceRedistributionType?: "NONE"|"PROACTIVE", maxSurge?: record, maxUnavailable?: record, minimalAction?: "NONE"|"REFRESH"|"REPLACE"|"RESTART", mostDisruptiveAllowedAction?: "NONE"|"REFRESH"|"REPLACE"|"RESTART", replacementMethod?: "RECREATE"|"SUBSTITUTE", type?: "OPPORTUNISTIC"|"PROACTIVE"}
 # --versions item shape: {instanceTemplate?: string, name?: string, targetSize?: record}
-export def "projects-regions-instance-group-managers update" [
+export def "compute-region-instance-group-managers-patch" [
   project: string
   region: string
   instance_group_manager: string
@@ -22945,7 +22945,7 @@ export def "projects-regions-instance-group-managers update" [
 #
 # POST /projects/{project}/regions/{region}/instanceGroupManagers/{instanceGroupManager}/abandonInstances
 # operationId: compute.regionInstanceGroupManagers.abandonInstances
-export def "projects-regions-instance-group-managers-abandon-instances create" [
+export def "compute-region-instance-group-managers-abandon-instances" [
   project: string
   region: string
   instance_group_manager: string
@@ -23003,7 +23003,7 @@ export def "projects-regions-instance-group-managers-abandon-instances create" [
 #
 # POST /projects/{project}/regions/{region}/instanceGroupManagers/{instanceGroupManager}/applyUpdatesToInstances
 # operationId: compute.regionInstanceGroupManagers.applyUpdatesToInstances
-export def "projects-regions-instance-group-managers-apply-updates-to-instances create" [
+export def "compute-region-instance-group-managers-apply-updates-to-instances" [
   project: string
   region: string
   instance_group_manager: string
@@ -23064,7 +23064,7 @@ export def "projects-regions-instance-group-managers-apply-updates-to-instances 
 # POST /projects/{project}/regions/{region}/instanceGroupManagers/{instanceGroupManager}/createInstances
 # operationId: compute.regionInstanceGroupManagers.createInstances
 # --instances item shape: {fingerprint?: string, name?: string, preservedState?: record, status?: "APPLYING"|"DELETING"|"EFFECTIVE"|"NONE"|"UNAPPLIED"|"UNAPPLIED_DELETION"}
-export def "projects-regions-instance-group-managers-create-instances create" [
+export def "compute-region-instance-group-managers-create-instances" [
   project: string
   region: string
   instance_group_manager: string
@@ -23122,7 +23122,7 @@ export def "projects-regions-instance-group-managers-create-instances create" [
 #
 # POST /projects/{project}/regions/{region}/instanceGroupManagers/{instanceGroupManager}/deleteInstances
 # operationId: compute.regionInstanceGroupManagers.deleteInstances
-export def "projects-regions-instance-group-managers-delete-instances delete" [
+export def "compute-region-instance-group-managers-delete-instances" [
   project: string
   region: string
   instance_group_manager: string
@@ -23181,7 +23181,7 @@ export def "projects-regions-instance-group-managers-delete-instances delete" [
 #
 # POST /projects/{project}/regions/{region}/instanceGroupManagers/{instanceGroupManager}/deletePerInstanceConfigs
 # operationId: compute.regionInstanceGroupManagers.deletePerInstanceConfigs
-export def "projects-regions-instance-group-managers-delete-per-instance-configs delete" [
+export def "compute-region-instance-group-managers-delete-per-instance-configs" [
   project: string
   region: string
   instance_group_manager: string
@@ -23238,7 +23238,7 @@ export def "projects-regions-instance-group-managers-delete-per-instance-configs
 #
 # GET /projects/{project}/regions/{region}/instanceGroupManagers/{instanceGroupManager}/listErrors
 # operationId: compute.regionInstanceGroupManagers.listErrors
-export def "projects-regions-instance-group-managers-list-errors list" [
+export def "compute-region-instance-group-managers-list-errors" [
   project: string
   region: string
   instance_group_manager: string
@@ -23296,7 +23296,7 @@ export def "projects-regions-instance-group-managers-list-errors list" [
 #
 # POST /projects/{project}/regions/{region}/instanceGroupManagers/{instanceGroupManager}/listManagedInstances
 # operationId: compute.regionInstanceGroupManagers.listManagedInstances
-export def "projects-regions-instance-group-managers-list-managed-instances list" [
+export def "compute-region-instance-group-managers-list-managed-instances" [
   project: string
   region: string
   instance_group_manager: string
@@ -23354,7 +23354,7 @@ export def "projects-regions-instance-group-managers-list-managed-instances list
 #
 # POST /projects/{project}/regions/{region}/instanceGroupManagers/{instanceGroupManager}/listPerInstanceConfigs
 # operationId: compute.regionInstanceGroupManagers.listPerInstanceConfigs
-export def "projects-regions-instance-group-managers-list-per-instance-configs list" [
+export def "compute-region-instance-group-managers-list-per-instance-configs" [
   project: string
   region: string
   instance_group_manager: string
@@ -23413,7 +23413,7 @@ export def "projects-regions-instance-group-managers-list-per-instance-configs l
 # POST /projects/{project}/regions/{region}/instanceGroupManagers/{instanceGroupManager}/patchPerInstanceConfigs
 # operationId: compute.regionInstanceGroupManagers.patchPerInstanceConfigs
 # --perInstanceConfigs item shape: {fingerprint?: string, name?: string, preservedState?: record, status?: "APPLYING"|"DELETING"|"EFFECTIVE"|"NONE"|"UNAPPLIED"|"UNAPPLIED_DELETION"}
-export def "projects-regions-instance-group-managers-patch-per-instance-configs update" [
+export def "compute-region-instance-group-managers-patch-per-instance-configs" [
   project: string
   region: string
   instance_group_manager: string
@@ -23471,7 +23471,7 @@ export def "projects-regions-instance-group-managers-patch-per-instance-configs 
 #
 # POST /projects/{project}/regions/{region}/instanceGroupManagers/{instanceGroupManager}/recreateInstances
 # operationId: compute.regionInstanceGroupManagers.recreateInstances
-export def "projects-regions-instance-group-managers-recreate-instances create" [
+export def "compute-region-instance-group-managers-recreate-instances" [
   project: string
   region: string
   instance_group_manager: string
@@ -23529,7 +23529,7 @@ export def "projects-regions-instance-group-managers-recreate-instances create" 
 #
 # POST /projects/{project}/regions/{region}/instanceGroupManagers/{instanceGroupManager}/resize
 # operationId: compute.regionInstanceGroupManagers.resize
-export def "projects-regions-instance-group-managers-resize resize" [
+export def "compute-region-instance-group-managers-resize" [
   project: string
   region: string
   instance_group_manager: string
@@ -23584,7 +23584,7 @@ export def "projects-regions-instance-group-managers-resize resize" [
 #
 # POST /projects/{project}/regions/{region}/instanceGroupManagers/{instanceGroupManager}/setInstanceTemplate
 # operationId: compute.regionInstanceGroupManagers.setInstanceTemplate
-export def "projects-regions-instance-group-managers-set-instance-template update" [
+export def "compute-region-instance-group-managers-set-instance-template" [
   project: string
   region: string
   instance_group_manager: string
@@ -23642,7 +23642,7 @@ export def "projects-regions-instance-group-managers-set-instance-template updat
 #
 # POST /projects/{project}/regions/{region}/instanceGroupManagers/{instanceGroupManager}/setTargetPools
 # operationId: compute.regionInstanceGroupManagers.setTargetPools
-export def "projects-regions-instance-group-managers-set-target-pools update" [
+export def "compute-region-instance-group-managers-set-target-pools" [
   project: string
   region: string
   instance_group_manager: string
@@ -23702,7 +23702,7 @@ export def "projects-regions-instance-group-managers-set-target-pools update" [
 # POST /projects/{project}/regions/{region}/instanceGroupManagers/{instanceGroupManager}/updatePerInstanceConfigs
 # operationId: compute.regionInstanceGroupManagers.updatePerInstanceConfigs
 # --perInstanceConfigs item shape: {fingerprint?: string, name?: string, preservedState?: record, status?: "APPLYING"|"DELETING"|"EFFECTIVE"|"NONE"|"UNAPPLIED"|"UNAPPLIED_DELETION"}
-export def "projects-regions-instance-group-managers-update-per-instance-configs update" [
+export def "compute-region-instance-group-managers-update-per-instance-configs" [
   project: string
   region: string
   instance_group_manager: string
@@ -23760,7 +23760,7 @@ export def "projects-regions-instance-group-managers-update-per-instance-configs
 #
 # GET /projects/{project}/regions/{region}/instanceGroups
 # operationId: compute.regionInstanceGroups.list
-export def "projects-regions-instance-groups list" [
+export def "compute-region-instance-groups-list" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -23816,7 +23816,7 @@ export def "projects-regions-instance-groups list" [
 #
 # GET /projects/{project}/regions/{region}/instanceGroups/{instanceGroup}
 # operationId: compute.regionInstanceGroups.get
-export def "projects-regions-instance-groups get" [
+export def "compute-region-instance-groups-get" [
   project: string
   region: string
   instance_group: string
@@ -23869,7 +23869,7 @@ export def "projects-regions-instance-groups get" [
 #
 # POST /projects/{project}/regions/{region}/instanceGroups/{instanceGroup}/listInstances
 # operationId: compute.regionInstanceGroups.listInstances
-export def "projects-regions-instance-groups-list-instances list" [
+export def "compute-region-instance-groups-list-instances" [
   project: string
   region: string
   instance_group: string
@@ -23933,7 +23933,7 @@ export def "projects-regions-instance-groups-list-instances list" [
 # POST /projects/{project}/regions/{region}/instanceGroups/{instanceGroup}/setNamedPorts
 # operationId: compute.regionInstanceGroups.setNamedPorts
 # --namedPorts item shape: {name?: string, port?: int}
-export def "projects-regions-instance-groups-set-named-ports update" [
+export def "compute-region-instance-groups-set-named-ports" [
   project: string
   region: string
   instance_group: string
@@ -23994,7 +23994,7 @@ export def "projects-regions-instance-groups-set-named-ports update" [
 # operationId: compute.regionInstances.bulkInsert
 # --instanceProperties shape: {advancedMachineFeatures?: record, canIpForward?: bool, confidentialInstanceConfig?: record, description?: string, disks?: list, guestAccelerators?: list, keyRevocationActionType?: "KEY_REVOCATION_ACTION_TYPE_UNSPECIFIED"|"NONE"|"STOP", labels?: record, machineType?: string, metadata?: record, minCpuPlatform?: string, networkInterfaces?: list, networkPerformanceConfig?: record, ... (8 more fields)}
 # --locationPolicy shape: {locations?: record, targetShape?: "ANY"|"ANY_SINGLE_ZONE"|"BALANCED"}
-export def "projects-regions-instances-bulk-insert create" [
+export def "compute-region-instances-bulk-insert" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -24056,7 +24056,7 @@ export def "projects-regions-instances-bulk-insert create" [
 #
 # GET /projects/{project}/regions/{region}/interconnectAttachments
 # operationId: compute.interconnectAttachments.list
-export def "projects-regions-interconnect-attachments list" [
+export def "compute-interconnect-attachments-list" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -24114,7 +24114,7 @@ export def "projects-regions-interconnect-attachments list" [
 # operationId: compute.interconnectAttachments.insert
 # --partnerMetadata shape: {interconnectName?: string, partnerName?: string, portalUrl?: string}
 # --privateInterconnectInfo shape: {tag8021q?: int}
-export def "projects-regions-interconnect-attachments create" [
+export def "compute-interconnect-attachments-insert" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -24205,7 +24205,7 @@ export def "projects-regions-interconnect-attachments create" [
 #
 # DELETE /projects/{project}/regions/{region}/interconnectAttachments/{interconnectAttachment}
 # operationId: compute.interconnectAttachments.delete
-export def "projects-regions-interconnect-attachments delete" [
+export def "compute-interconnect-attachments-delete" [
   project: string
   region: string
   interconnect_attachment: string
@@ -24259,7 +24259,7 @@ export def "projects-regions-interconnect-attachments delete" [
 #
 # GET /projects/{project}/regions/{region}/interconnectAttachments/{interconnectAttachment}
 # operationId: compute.interconnectAttachments.get
-export def "projects-regions-interconnect-attachments get" [
+export def "compute-interconnect-attachments-get" [
   project: string
   region: string
   interconnect_attachment: string
@@ -24314,7 +24314,7 @@ export def "projects-regions-interconnect-attachments get" [
 # operationId: compute.interconnectAttachments.patch
 # --partnerMetadata shape: {interconnectName?: string, partnerName?: string, portalUrl?: string}
 # --privateInterconnectInfo shape: {tag8021q?: int}
-export def "projects-regions-interconnect-attachments update" [
+export def "compute-interconnect-attachments-patch" [
   project: string
   region: string
   interconnect_attachment: string
@@ -24406,7 +24406,7 @@ export def "projects-regions-interconnect-attachments update" [
 #
 # POST /projects/{project}/regions/{region}/interconnectAttachments/{resource}/setLabels
 # operationId: compute.interconnectAttachments.setLabels
-export def "projects-regions-interconnect-attachments-set-labels update" [
+export def "compute-interconnect-attachments-set-labels" [
   project: string
   region: string
   resource: string
@@ -24465,7 +24465,7 @@ export def "projects-regions-interconnect-attachments-set-labels update" [
 #
 # GET /projects/{project}/regions/{region}/networkAttachments
 # operationId: compute.networkAttachments.list
-export def "projects-regions-network-attachments list" [
+export def "compute-network-attachments-list" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -24522,7 +24522,7 @@ export def "projects-regions-network-attachments list" [
 # POST /projects/{project}/regions/{region}/networkAttachments
 # operationId: compute.networkAttachments.insert
 # --connectionEndpoints item shape: {ipAddress?: string, projectIdOrNum?: string, secondaryIpCidrRanges?: list<string>, status?: "ACCEPTED"|"CLOSED"|"NEEDS_ATTENTION"|"PENDING"|"REJECTED"|"STATUS_UNSPECIFIED", subnetwork?: string}
-export def "projects-regions-network-attachments create" [
+export def "compute-network-attachments-insert" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -24592,7 +24592,7 @@ export def "projects-regions-network-attachments create" [
 #
 # DELETE /projects/{project}/regions/{region}/networkAttachments/{networkAttachment}
 # operationId: compute.networkAttachments.delete
-export def "projects-regions-network-attachments delete" [
+export def "compute-network-attachments-delete" [
   project: string
   region: string
   network_attachment: string
@@ -24646,7 +24646,7 @@ export def "projects-regions-network-attachments delete" [
 #
 # GET /projects/{project}/regions/{region}/networkAttachments/{networkAttachment}
 # operationId: compute.networkAttachments.get
-export def "projects-regions-network-attachments get" [
+export def "compute-network-attachments-get" [
   project: string
   region: string
   network_attachment: string
@@ -24699,7 +24699,7 @@ export def "projects-regions-network-attachments get" [
 #
 # GET /projects/{project}/regions/{region}/networkAttachments/{resource}/getIamPolicy
 # operationId: compute.networkAttachments.getIamPolicy
-export def "projects-regions-network-attachments-get-iam-policy get" [
+export def "compute-network-attachments-get-iam-policy" [
   project: string
   region: string
   resource: string
@@ -24755,7 +24755,7 @@ export def "projects-regions-network-attachments-get-iam-policy get" [
 # operationId: compute.networkAttachments.setIamPolicy
 # --bindings item shape: {bindingId?: string, condition?: record, members?: list<string>, role?: string}
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, rules?: list, version?: int}
-export def "projects-regions-network-attachments-set-iam-policy update" [
+export def "compute-network-attachments-set-iam-policy" [
   project: string
   region: string
   resource: string
@@ -24814,7 +24814,7 @@ export def "projects-regions-network-attachments-set-iam-policy update" [
 #
 # POST /projects/{project}/regions/{region}/networkAttachments/{resource}/testIamPermissions
 # operationId: compute.networkAttachments.testIamPermissions
-export def "projects-regions-network-attachments-test-iam-permissions test" [
+export def "compute-network-attachments-test-iam-permissions" [
   project: string
   region: string
   resource: string
@@ -24871,7 +24871,7 @@ export def "projects-regions-network-attachments-test-iam-permissions test" [
 #
 # POST /projects/{project}/regions/{region}/networkEdgeSecurityServices
 # operationId: compute.networkEdgeSecurityServices.insert
-export def "projects-regions-network-edge-security-services create" [
+export def "compute-network-edge-security-services-insert" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -24937,7 +24937,7 @@ export def "projects-regions-network-edge-security-services create" [
 #
 # DELETE /projects/{project}/regions/{region}/networkEdgeSecurityServices/{networkEdgeSecurityService}
 # operationId: compute.networkEdgeSecurityServices.delete
-export def "projects-regions-network-edge-security-services delete" [
+export def "compute-network-edge-security-services-delete" [
   project: string
   region: string
   network_edge_security_service: string
@@ -24991,7 +24991,7 @@ export def "projects-regions-network-edge-security-services delete" [
 #
 # GET /projects/{project}/regions/{region}/networkEdgeSecurityServices/{networkEdgeSecurityService}
 # operationId: compute.networkEdgeSecurityServices.get
-export def "projects-regions-network-edge-security-services get" [
+export def "compute-network-edge-security-services-get" [
   project: string
   region: string
   network_edge_security_service: string
@@ -25044,7 +25044,7 @@ export def "projects-regions-network-edge-security-services get" [
 #
 # PATCH /projects/{project}/regions/{region}/networkEdgeSecurityServices/{networkEdgeSecurityService}
 # operationId: compute.networkEdgeSecurityServices.patch
-export def "projects-regions-network-edge-security-services update" [
+export def "compute-network-edge-security-services-patch" [
   project: string
   region: string
   network_edge_security_service: string
@@ -25113,7 +25113,7 @@ export def "projects-regions-network-edge-security-services update" [
 #
 # GET /projects/{project}/regions/{region}/networkEndpointGroups
 # operationId: compute.regionNetworkEndpointGroups.list
-export def "projects-regions-network-endpoint-groups list" [
+export def "compute-region-network-endpoint-groups-list" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -25173,7 +25173,7 @@ export def "projects-regions-network-endpoint-groups list" [
 # --cloudFunction shape: {function?: string, urlMask?: string}
 # --cloudRun shape: {service?: string, tag?: string, urlMask?: string}
 # --pscData shape: {consumerPscAddress?: string, pscConnectionId?: string, pscConnectionStatus?: "ACCEPTED"|"CLOSED"|"NEEDS_ATTENTION"|"PENDING"|"REJECTED"|"STATUS_UNSPECIFIED"}
-export def "projects-regions-network-endpoint-groups create" [
+export def "compute-region-network-endpoint-groups-insert" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -25247,7 +25247,7 @@ export def "projects-regions-network-endpoint-groups create" [
 #
 # DELETE /projects/{project}/regions/{region}/networkEndpointGroups/{networkEndpointGroup}
 # operationId: compute.regionNetworkEndpointGroups.delete
-export def "projects-regions-network-endpoint-groups delete" [
+export def "compute-region-network-endpoint-groups-delete" [
   project: string
   region: string
   network_endpoint_group: string
@@ -25301,7 +25301,7 @@ export def "projects-regions-network-endpoint-groups delete" [
 #
 # GET /projects/{project}/regions/{region}/networkEndpointGroups/{networkEndpointGroup}
 # operationId: compute.regionNetworkEndpointGroups.get
-export def "projects-regions-network-endpoint-groups get" [
+export def "compute-region-network-endpoint-groups-get" [
   project: string
   region: string
   network_endpoint_group: string
@@ -25354,7 +25354,7 @@ export def "projects-regions-network-endpoint-groups get" [
 #
 # GET /projects/{project}/regions/{region}/nodeTemplates
 # operationId: compute.nodeTemplates.list
-export def "projects-regions-node-templates list" [
+export def "compute-node-templates-list" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -25414,7 +25414,7 @@ export def "projects-regions-node-templates list" [
 # --disks item shape: {diskCount?: int, diskSizeGb?: int, diskType?: string}
 # --nodeTypeFlexibility shape: {cpus?: string, localSsd?: string, memory?: string}
 # --serverBinding shape: {type?: "RESTART_NODE_ON_ANY_SERVER"|"RESTART_NODE_ON_MINIMAL_SERVERS"|"SERVER_BINDING_TYPE_UNSPECIFIED"}
-export def "projects-regions-node-templates create" [
+export def "compute-node-templates-insert" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -25485,7 +25485,7 @@ export def "projects-regions-node-templates create" [
 #
 # DELETE /projects/{project}/regions/{region}/nodeTemplates/{nodeTemplate}
 # operationId: compute.nodeTemplates.delete
-export def "projects-regions-node-templates delete" [
+export def "compute-node-templates-delete" [
   project: string
   region: string
   node_template: string
@@ -25539,7 +25539,7 @@ export def "projects-regions-node-templates delete" [
 #
 # GET /projects/{project}/regions/{region}/nodeTemplates/{nodeTemplate}
 # operationId: compute.nodeTemplates.get
-export def "projects-regions-node-templates get" [
+export def "compute-node-templates-get" [
   project: string
   region: string
   node_template: string
@@ -25592,7 +25592,7 @@ export def "projects-regions-node-templates get" [
 #
 # GET /projects/{project}/regions/{region}/nodeTemplates/{resource}/getIamPolicy
 # operationId: compute.nodeTemplates.getIamPolicy
-export def "projects-regions-node-templates-get-iam-policy get" [
+export def "compute-node-templates-get-iam-policy" [
   project: string
   region: string
   resource: string
@@ -25648,7 +25648,7 @@ export def "projects-regions-node-templates-get-iam-policy get" [
 # operationId: compute.nodeTemplates.setIamPolicy
 # --bindings item shape: {bindingId?: string, condition?: record, members?: list<string>, role?: string}
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, rules?: list, version?: int}
-export def "projects-regions-node-templates-set-iam-policy update" [
+export def "compute-node-templates-set-iam-policy" [
   project: string
   region: string
   resource: string
@@ -25707,7 +25707,7 @@ export def "projects-regions-node-templates-set-iam-policy update" [
 #
 # POST /projects/{project}/regions/{region}/nodeTemplates/{resource}/testIamPermissions
 # operationId: compute.nodeTemplates.testIamPermissions
-export def "projects-regions-node-templates-test-iam-permissions test" [
+export def "compute-node-templates-test-iam-permissions" [
   project: string
   region: string
   resource: string
@@ -25764,7 +25764,7 @@ export def "projects-regions-node-templates-test-iam-permissions test" [
 #
 # GET /projects/{project}/regions/{region}/notificationEndpoints
 # operationId: compute.regionNotificationEndpoints.list
-export def "projects-regions-notification-endpoints list" [
+export def "compute-region-notification-endpoints-list" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -25821,7 +25821,7 @@ export def "projects-regions-notification-endpoints list" [
 # POST /projects/{project}/regions/{region}/notificationEndpoints
 # operationId: compute.regionNotificationEndpoints.insert
 # --grpcSettings shape: {authority?: string, endpoint?: string, payloadName?: string, resendInterval?: record, retryDurationSec?: int}
-export def "projects-regions-notification-endpoints create" [
+export def "compute-region-notification-endpoints-insert" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -25884,7 +25884,7 @@ export def "projects-regions-notification-endpoints create" [
 #
 # DELETE /projects/{project}/regions/{region}/notificationEndpoints/{notificationEndpoint}
 # operationId: compute.regionNotificationEndpoints.delete
-export def "projects-regions-notification-endpoints delete" [
+export def "compute-region-notification-endpoints-delete" [
   project: string
   region: string
   notification_endpoint: string
@@ -25938,7 +25938,7 @@ export def "projects-regions-notification-endpoints delete" [
 #
 # GET /projects/{project}/regions/{region}/notificationEndpoints/{notificationEndpoint}
 # operationId: compute.regionNotificationEndpoints.get
-export def "projects-regions-notification-endpoints get" [
+export def "compute-region-notification-endpoints-get" [
   project: string
   region: string
   notification_endpoint: string
@@ -25991,7 +25991,7 @@ export def "projects-regions-notification-endpoints get" [
 #
 # GET /projects/{project}/regions/{region}/operations
 # operationId: compute.regionOperations.list
-export def "projects-regions-operations list" [
+export def "compute-region-operations-list" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -26047,7 +26047,7 @@ export def "projects-regions-operations list" [
 #
 # DELETE /projects/{project}/regions/{region}/operations/{operation}
 # operationId: compute.regionOperations.delete
-export def "projects-regions-operations delete" [
+export def "compute-region-operations-delete" [
   project: string
   region: string
   operation: string
@@ -26100,7 +26100,7 @@ export def "projects-regions-operations delete" [
 #
 # GET /projects/{project}/regions/{region}/operations/{operation}
 # operationId: compute.regionOperations.get
-export def "projects-regions-operations get" [
+export def "compute-region-operations-get" [
   project: string
   region: string
   operation: string
@@ -26153,7 +26153,7 @@ export def "projects-regions-operations get" [
 #
 # POST /projects/{project}/regions/{region}/operations/{operation}/wait
 # operationId: compute.regionOperations.wait
-export def "projects-regions-operations-wait wait" [
+export def "compute-region-operations-wait" [
   project: string
   region: string
   operation: string
@@ -26206,7 +26206,7 @@ export def "projects-regions-operations-wait wait" [
 #
 # GET /projects/{project}/regions/{region}/packetMirrorings
 # operationId: compute.packetMirrorings.list
-export def "projects-regions-packet-mirrorings list" [
+export def "compute-packet-mirrorings-list" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -26266,7 +26266,7 @@ export def "projects-regions-packet-mirrorings list" [
 # --filter shape: {IPProtocols?: list<string>, cidrRanges?: list<string>, direction?: "BOTH"|"EGRESS"|"INGRESS"}
 # --mirroredResources shape: {instances?: list, subnetworks?: list, tags?: list<string>}
 # --network shape: {canonicalUrl?: string, url?: string}
-export def "projects-regions-packet-mirrorings create" [
+export def "compute-packet-mirrorings-insert" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -26334,7 +26334,7 @@ export def "projects-regions-packet-mirrorings create" [
 #
 # DELETE /projects/{project}/regions/{region}/packetMirrorings/{packetMirroring}
 # operationId: compute.packetMirrorings.delete
-export def "projects-regions-packet-mirrorings delete" [
+export def "compute-packet-mirrorings-delete" [
   project: string
   region: string
   packet_mirroring: string
@@ -26388,7 +26388,7 @@ export def "projects-regions-packet-mirrorings delete" [
 #
 # GET /projects/{project}/regions/{region}/packetMirrorings/{packetMirroring}
 # operationId: compute.packetMirrorings.get
-export def "projects-regions-packet-mirrorings get" [
+export def "compute-packet-mirrorings-get" [
   project: string
   region: string
   packet_mirroring: string
@@ -26445,7 +26445,7 @@ export def "projects-regions-packet-mirrorings get" [
 # --filter shape: {IPProtocols?: list<string>, cidrRanges?: list<string>, direction?: "BOTH"|"EGRESS"|"INGRESS"}
 # --mirroredResources shape: {instances?: list, subnetworks?: list, tags?: list<string>}
 # --network shape: {canonicalUrl?: string, url?: string}
-export def "projects-regions-packet-mirrorings update" [
+export def "compute-packet-mirrorings-patch" [
   project: string
   region: string
   packet_mirroring: string
@@ -26515,7 +26515,7 @@ export def "projects-regions-packet-mirrorings update" [
 #
 # POST /projects/{project}/regions/{region}/packetMirrorings/{resource}/testIamPermissions
 # operationId: compute.packetMirrorings.testIamPermissions
-export def "projects-regions-packet-mirrorings-test-iam-permissions test" [
+export def "compute-packet-mirrorings-test-iam-permissions" [
   project: string
   region: string
   resource: string
@@ -26572,7 +26572,7 @@ export def "projects-regions-packet-mirrorings-test-iam-permissions test" [
 #
 # GET /projects/{project}/regions/{region}/publicDelegatedPrefixes
 # operationId: compute.publicDelegatedPrefixes.list
-export def "projects-regions-public-delegated-prefixes list" [
+export def "compute-public-delegated-prefixes-list" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -26629,7 +26629,7 @@ export def "projects-regions-public-delegated-prefixes list" [
 # POST /projects/{project}/regions/{region}/publicDelegatedPrefixes
 # operationId: compute.publicDelegatedPrefixes.insert
 # --publicDelegatedSubPrefixs item shape: {delegateeProject?: string, description?: string, ipCidrRange?: string, isAddress?: bool, name?: string, region?: string, status?: "ACTIVE"|"INACTIVE"}
-export def "projects-regions-public-delegated-prefixes create" [
+export def "compute-public-delegated-prefixes-insert" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -26697,7 +26697,7 @@ export def "projects-regions-public-delegated-prefixes create" [
 #
 # DELETE /projects/{project}/regions/{region}/publicDelegatedPrefixes/{publicDelegatedPrefix}
 # operationId: compute.publicDelegatedPrefixes.delete
-export def "projects-regions-public-delegated-prefixes delete" [
+export def "compute-public-delegated-prefixes-delete" [
   project: string
   region: string
   public_delegated_prefix: string
@@ -26751,7 +26751,7 @@ export def "projects-regions-public-delegated-prefixes delete" [
 #
 # GET /projects/{project}/regions/{region}/publicDelegatedPrefixes/{publicDelegatedPrefix}
 # operationId: compute.publicDelegatedPrefixes.get
-export def "projects-regions-public-delegated-prefixes get" [
+export def "compute-public-delegated-prefixes-get" [
   project: string
   region: string
   public_delegated_prefix: string
@@ -26805,7 +26805,7 @@ export def "projects-regions-public-delegated-prefixes get" [
 # PATCH /projects/{project}/regions/{region}/publicDelegatedPrefixes/{publicDelegatedPrefix}
 # operationId: compute.publicDelegatedPrefixes.patch
 # --publicDelegatedSubPrefixs item shape: {delegateeProject?: string, description?: string, ipCidrRange?: string, isAddress?: bool, name?: string, region?: string, status?: "ACTIVE"|"INACTIVE"}
-export def "projects-regions-public-delegated-prefixes update" [
+export def "compute-public-delegated-prefixes-patch" [
   project: string
   region: string
   public_delegated_prefix: string
@@ -26875,7 +26875,7 @@ export def "projects-regions-public-delegated-prefixes update" [
 #
 # GET /projects/{project}/regions/{region}/resourcePolicies
 # operationId: compute.resourcePolicies.list
-export def "projects-regions-resource-policies list" [
+export def "compute-resource-policies-list" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -26935,7 +26935,7 @@ export def "projects-regions-resource-policies list" [
 # --instanceSchedulePolicy shape: {expirationTime?: string, startTime?: string, timeZone?: string, vmStartSchedule?: record, vmStopSchedule?: record}
 # --resourceStatus shape: {instanceSchedulePolicy?: record}
 # --snapshotSchedulePolicy shape: {retentionPolicy?: record, schedule?: record, snapshotProperties?: record}
-export def "projects-regions-resource-policies create" [
+export def "compute-resource-policies-insert" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -27002,7 +27002,7 @@ export def "projects-regions-resource-policies create" [
 #
 # DELETE /projects/{project}/regions/{region}/resourcePolicies/{resourcePolicy}
 # operationId: compute.resourcePolicies.delete
-export def "projects-regions-resource-policies delete" [
+export def "compute-resource-policies-delete" [
   project: string
   region: string
   resource_policy: string
@@ -27056,7 +27056,7 @@ export def "projects-regions-resource-policies delete" [
 #
 # GET /projects/{project}/regions/{region}/resourcePolicies/{resourcePolicy}
 # operationId: compute.resourcePolicies.get
-export def "projects-regions-resource-policies get" [
+export def "compute-resource-policies-get" [
   project: string
   region: string
   resource_policy: string
@@ -27109,7 +27109,7 @@ export def "projects-regions-resource-policies get" [
 #
 # GET /projects/{project}/regions/{region}/resourcePolicies/{resource}/getIamPolicy
 # operationId: compute.resourcePolicies.getIamPolicy
-export def "projects-regions-resource-policies-get-iam-policy get" [
+export def "compute-resource-policies-get-iam-policy" [
   project: string
   region: string
   resource: string
@@ -27165,7 +27165,7 @@ export def "projects-regions-resource-policies-get-iam-policy get" [
 # operationId: compute.resourcePolicies.setIamPolicy
 # --bindings item shape: {bindingId?: string, condition?: record, members?: list<string>, role?: string}
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, rules?: list, version?: int}
-export def "projects-regions-resource-policies-set-iam-policy update" [
+export def "compute-resource-policies-set-iam-policy" [
   project: string
   region: string
   resource: string
@@ -27224,7 +27224,7 @@ export def "projects-regions-resource-policies-set-iam-policy update" [
 #
 # POST /projects/{project}/regions/{region}/resourcePolicies/{resource}/testIamPermissions
 # operationId: compute.resourcePolicies.testIamPermissions
-export def "projects-regions-resource-policies-test-iam-permissions test" [
+export def "compute-resource-policies-test-iam-permissions" [
   project: string
   region: string
   resource: string
@@ -27281,7 +27281,7 @@ export def "projects-regions-resource-policies-test-iam-permissions test" [
 #
 # GET /projects/{project}/regions/{region}/routers
 # operationId: compute.routers.list
-export def "projects-regions-routers list" [
+export def "compute-routers-list" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -27342,7 +27342,7 @@ export def "projects-regions-routers list" [
 # --interfaces item shape: {ipRange?: string, linkedInterconnectAttachment?: string, linkedVpnTunnel?: string, managementType?: "MANAGED_BY_ATTACHMENT"|"MANAGED_BY_USER", name?: string, privateIpAddress?: string, redundantInterface?: string, subnetwork?: string}
 # --md5AuthenticationKeys item shape: {key?: string, name?: string}
 # --nats item shape: {drainNatIps?: list<string>, enableDynamicPortAllocation?: bool, enableEndpointIndependentMapping?: bool, endpointTypes?: list<string>, icmpIdleTimeoutSec?: int, logConfig?: record, maxPortsPerVm?: int, minPortsPerVm?: int, name?: string, natIpAllocateOption?: "AUTO_ONLY"|"MANUAL_ONLY", natIps?: list<string>, rules?: list, sourceSubnetworkIpRangesToNat?: "ALL_SUBNETWORKS_ALL_IP_RANGES"|"ALL_SUBNETWORKS_ALL_PRIMARY_IP_RANGES"|"LIST_OF_SUBNETWORKS", subnetworks?: list, ... (4 more fields)}
-export def "projects-regions-routers create" [
+export def "compute-routers-insert" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -27411,7 +27411,7 @@ export def "projects-regions-routers create" [
 #
 # DELETE /projects/{project}/regions/{region}/routers/{router}
 # operationId: compute.routers.delete
-export def "projects-regions-routers delete" [
+export def "compute-routers-delete" [
   project: string
   region: string
   router: string
@@ -27465,7 +27465,7 @@ export def "projects-regions-routers delete" [
 #
 # GET /projects/{project}/regions/{region}/routers/{router}
 # operationId: compute.routers.get
-export def "projects-regions-routers get" [
+export def "compute-routers-get" [
   project: string
   region: string
   router: string
@@ -27523,7 +27523,7 @@ export def "projects-regions-routers get" [
 # --interfaces item shape: {ipRange?: string, linkedInterconnectAttachment?: string, linkedVpnTunnel?: string, managementType?: "MANAGED_BY_ATTACHMENT"|"MANAGED_BY_USER", name?: string, privateIpAddress?: string, redundantInterface?: string, subnetwork?: string}
 # --md5AuthenticationKeys item shape: {key?: string, name?: string}
 # --nats item shape: {drainNatIps?: list<string>, enableDynamicPortAllocation?: bool, enableEndpointIndependentMapping?: bool, endpointTypes?: list<string>, icmpIdleTimeoutSec?: int, logConfig?: record, maxPortsPerVm?: int, minPortsPerVm?: int, name?: string, natIpAllocateOption?: "AUTO_ONLY"|"MANUAL_ONLY", natIps?: list<string>, rules?: list, sourceSubnetworkIpRangesToNat?: "ALL_SUBNETWORKS_ALL_IP_RANGES"|"ALL_SUBNETWORKS_ALL_PRIMARY_IP_RANGES"|"LIST_OF_SUBNETWORKS", subnetworks?: list, ... (4 more fields)}
-export def "projects-regions-routers update-by-project-region-router" [
+export def "compute-routers-patch" [
   project: string
   region: string
   router: string
@@ -27599,7 +27599,7 @@ export def "projects-regions-routers update-by-project-region-router" [
 # --interfaces item shape: {ipRange?: string, linkedInterconnectAttachment?: string, linkedVpnTunnel?: string, managementType?: "MANAGED_BY_ATTACHMENT"|"MANAGED_BY_USER", name?: string, privateIpAddress?: string, redundantInterface?: string, subnetwork?: string}
 # --md5AuthenticationKeys item shape: {key?: string, name?: string}
 # --nats item shape: {drainNatIps?: list<string>, enableDynamicPortAllocation?: bool, enableEndpointIndependentMapping?: bool, endpointTypes?: list<string>, icmpIdleTimeoutSec?: int, logConfig?: record, maxPortsPerVm?: int, minPortsPerVm?: int, name?: string, natIpAllocateOption?: "AUTO_ONLY"|"MANUAL_ONLY", natIps?: list<string>, rules?: list, sourceSubnetworkIpRangesToNat?: "ALL_SUBNETWORKS_ALL_IP_RANGES"|"ALL_SUBNETWORKS_ALL_PRIMARY_IP_RANGES"|"LIST_OF_SUBNETWORKS", subnetworks?: list, ... (4 more fields)}
-export def "projects-regions-routers update-by-project-region-router-1" [
+export def "compute-routers-update" [
   project: string
   region: string
   router: string
@@ -27670,7 +27670,7 @@ export def "projects-regions-routers update-by-project-region-router-1" [
 #
 # GET /projects/{project}/regions/{region}/routers/{router}/getNatMappingInfo
 # operationId: compute.routers.getNatMappingInfo
-export def "projects-regions-routers-get-nat-mapping-info get" [
+export def "compute-routers-get-nat-mapping-info" [
   project: string
   region: string
   router: string
@@ -27729,7 +27729,7 @@ export def "projects-regions-routers-get-nat-mapping-info get" [
 #
 # GET /projects/{project}/regions/{region}/routers/{router}/getRouterStatus
 # operationId: compute.routers.getRouterStatus
-export def "projects-regions-routers-get-router-status get" [
+export def "compute-routers-get-router-status" [
   project: string
   region: string
   router: string
@@ -27787,7 +27787,7 @@ export def "projects-regions-routers-get-router-status get" [
 # --interfaces item shape: {ipRange?: string, linkedInterconnectAttachment?: string, linkedVpnTunnel?: string, managementType?: "MANAGED_BY_ATTACHMENT"|"MANAGED_BY_USER", name?: string, privateIpAddress?: string, redundantInterface?: string, subnetwork?: string}
 # --md5AuthenticationKeys item shape: {key?: string, name?: string}
 # --nats item shape: {drainNatIps?: list<string>, enableDynamicPortAllocation?: bool, enableEndpointIndependentMapping?: bool, endpointTypes?: list<string>, icmpIdleTimeoutSec?: int, logConfig?: record, maxPortsPerVm?: int, minPortsPerVm?: int, name?: string, natIpAllocateOption?: "AUTO_ONLY"|"MANUAL_ONLY", natIps?: list<string>, rules?: list, sourceSubnetworkIpRangesToNat?: "ALL_SUBNETWORKS_ALL_IP_RANGES"|"ALL_SUBNETWORKS_ALL_PRIMARY_IP_RANGES"|"LIST_OF_SUBNETWORKS", subnetworks?: list, ... (4 more fields)}
-export def "projects-regions-routers-preview create" [
+export def "compute-routers-preview" [
   project: string
   region: string
   router: string
@@ -27857,7 +27857,7 @@ export def "projects-regions-routers-preview create" [
 #
 # GET /projects/{project}/regions/{region}/securityPolicies
 # operationId: compute.regionSecurityPolicies.list
-export def "projects-regions-security-policies list" [
+export def "compute-region-security-policies-list" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -27918,7 +27918,7 @@ export def "projects-regions-security-policies list" [
 # --ddosProtectionConfig shape: {ddosProtection?: "ADVANCED"|"STANDARD"}
 # --recaptchaOptionsConfig shape: {redirectSiteKey?: string}
 # --rules item shape: {action?: string, description?: string, headerAction?: record, kind?: string, match?: record, preconfiguredWafConfig?: record, preview?: bool, priority?: int, rateLimitOptions?: record, redirectOptions?: record}
-export def "projects-regions-security-policies create" [
+export def "compute-region-security-policies-insert" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -27988,7 +27988,7 @@ export def "projects-regions-security-policies create" [
 #
 # DELETE /projects/{project}/regions/{region}/securityPolicies/{securityPolicy}
 # operationId: compute.regionSecurityPolicies.delete
-export def "projects-regions-security-policies delete" [
+export def "compute-region-security-policies-delete" [
   project: string
   region: string
   security_policy: string
@@ -28042,7 +28042,7 @@ export def "projects-regions-security-policies delete" [
 #
 # GET /projects/{project}/regions/{region}/securityPolicies/{securityPolicy}
 # operationId: compute.regionSecurityPolicies.get
-export def "projects-regions-security-policies get" [
+export def "compute-region-security-policies-get" [
   project: string
   region: string
   security_policy: string
@@ -28100,7 +28100,7 @@ export def "projects-regions-security-policies get" [
 # --ddosProtectionConfig shape: {ddosProtection?: "ADVANCED"|"STANDARD"}
 # --recaptchaOptionsConfig shape: {redirectSiteKey?: string}
 # --rules item shape: {action?: string, description?: string, headerAction?: record, kind?: string, match?: record, preconfiguredWafConfig?: record, preview?: bool, priority?: int, rateLimitOptions?: record, redirectOptions?: record}
-export def "projects-regions-security-policies update" [
+export def "compute-region-security-policies-patch" [
   project: string
   region: string
   security_policy: string
@@ -28171,7 +28171,7 @@ export def "projects-regions-security-policies update" [
 #
 # GET /projects/{project}/regions/{region}/serviceAttachments
 # operationId: compute.serviceAttachments.list
-export def "projects-regions-service-attachments list" [
+export def "compute-service-attachments-list" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -28230,7 +28230,7 @@ export def "projects-regions-service-attachments list" [
 # --connectedEndpoints item shape: {endpoint?: string, pscConnectionId?: string, status?: "ACCEPTED"|"CLOSED"|"NEEDS_ATTENTION"|"PENDING"|"REJECTED"|"STATUS_UNSPECIFIED"}
 # --consumerAcceptLists item shape: {connectionLimit?: int, networkUrl?: string, projectIdOrNum?: string}
 # --pscServiceAttachmentId shape: {high?: string, low?: string}
-export def "projects-regions-service-attachments create" [
+export def "compute-service-attachments-insert" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -28303,7 +28303,7 @@ export def "projects-regions-service-attachments create" [
 #
 # GET /projects/{project}/regions/{region}/serviceAttachments/{resource}/getIamPolicy
 # operationId: compute.serviceAttachments.getIamPolicy
-export def "projects-regions-service-attachments-get-iam-policy get" [
+export def "compute-service-attachments-get-iam-policy" [
   project: string
   region: string
   resource: string
@@ -28359,7 +28359,7 @@ export def "projects-regions-service-attachments-get-iam-policy get" [
 # operationId: compute.serviceAttachments.setIamPolicy
 # --bindings item shape: {bindingId?: string, condition?: record, members?: list<string>, role?: string}
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, rules?: list, version?: int}
-export def "projects-regions-service-attachments-set-iam-policy update" [
+export def "compute-service-attachments-set-iam-policy" [
   project: string
   region: string
   resource: string
@@ -28418,7 +28418,7 @@ export def "projects-regions-service-attachments-set-iam-policy update" [
 #
 # POST /projects/{project}/regions/{region}/serviceAttachments/{resource}/testIamPermissions
 # operationId: compute.serviceAttachments.testIamPermissions
-export def "projects-regions-service-attachments-test-iam-permissions test" [
+export def "compute-service-attachments-test-iam-permissions" [
   project: string
   region: string
   resource: string
@@ -28475,7 +28475,7 @@ export def "projects-regions-service-attachments-test-iam-permissions test" [
 #
 # DELETE /projects/{project}/regions/{region}/serviceAttachments/{serviceAttachment}
 # operationId: compute.serviceAttachments.delete
-export def "projects-regions-service-attachments delete" [
+export def "compute-service-attachments-delete" [
   project: string
   region: string
   service_attachment: string
@@ -28529,7 +28529,7 @@ export def "projects-regions-service-attachments delete" [
 #
 # GET /projects/{project}/regions/{region}/serviceAttachments/{serviceAttachment}
 # operationId: compute.serviceAttachments.get
-export def "projects-regions-service-attachments get" [
+export def "compute-service-attachments-get" [
   project: string
   region: string
   service_attachment: string
@@ -28585,7 +28585,7 @@ export def "projects-regions-service-attachments get" [
 # --connectedEndpoints item shape: {endpoint?: string, pscConnectionId?: string, status?: "ACCEPTED"|"CLOSED"|"NEEDS_ATTENTION"|"PENDING"|"REJECTED"|"STATUS_UNSPECIFIED"}
 # --consumerAcceptLists item shape: {connectionLimit?: int, networkUrl?: string, projectIdOrNum?: string}
 # --pscServiceAttachmentId shape: {high?: string, low?: string}
-export def "projects-regions-service-attachments update" [
+export def "compute-service-attachments-patch" [
   project: string
   region: string
   service_attachment: string
@@ -28660,7 +28660,7 @@ export def "projects-regions-service-attachments update" [
 #
 # GET /projects/{project}/regions/{region}/sslCertificates
 # operationId: compute.regionSslCertificates.list
-export def "projects-regions-ssl-certificates list" [
+export def "compute-region-ssl-certificates-list" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -28718,7 +28718,7 @@ export def "projects-regions-ssl-certificates list" [
 # operationId: compute.regionSslCertificates.insert
 # --managed shape: {domainStatus?: record, domains?: list<string>, status?: "ACTIVE"|"MANAGED_CERTIFICATE_STATUS_UNSPECIFIED"|"PROVISIONING"|"PROVISIONING_FAILED"|"PROVISIONING_FAILED_PERMANENTLY"|"RENEWAL_FAILED"}
 # --selfManaged shape: {certificate?: string, privateKey?: string}
-export def "projects-regions-ssl-certificates create" [
+export def "compute-region-ssl-certificates-insert" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -28787,7 +28787,7 @@ export def "projects-regions-ssl-certificates create" [
 #
 # DELETE /projects/{project}/regions/{region}/sslCertificates/{sslCertificate}
 # operationId: compute.regionSslCertificates.delete
-export def "projects-regions-ssl-certificates delete" [
+export def "compute-region-ssl-certificates-delete" [
   project: string
   region: string
   ssl_certificate: string
@@ -28841,7 +28841,7 @@ export def "projects-regions-ssl-certificates delete" [
 #
 # GET /projects/{project}/regions/{region}/sslCertificates/{sslCertificate}
 # operationId: compute.regionSslCertificates.get
-export def "projects-regions-ssl-certificates get" [
+export def "compute-region-ssl-certificates-get" [
   project: string
   region: string
   ssl_certificate: string
@@ -28894,7 +28894,7 @@ export def "projects-regions-ssl-certificates get" [
 #
 # GET /projects/{project}/regions/{region}/sslPolicies
 # operationId: compute.regionSslPolicies.list
-export def "projects-regions-ssl-policies list" [
+export def "compute-region-ssl-policies-list" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -28951,7 +28951,7 @@ export def "projects-regions-ssl-policies list" [
 # POST /projects/{project}/regions/{region}/sslPolicies
 # operationId: compute.regionSslPolicies.insert
 # --warnings item shape: {code?: "CLEANUP_FAILED"|"DEPRECATED_RESOURCE_USED"|"DEPRECATED_TYPE_USED"|"DISK_SIZE_LARGER_THAN_IMAGE_SIZE"|"EXPERIMENTAL_TYPE_USED"|"EXTERNAL_API_WARNING"|"FIELD_VALUE_OVERRIDEN"|"INJECTED_KERNELS_DEPRECATED"|"INVALID_HEALTH_CHECK_FOR_DYNAMIC_WIEGHTED_LB"|"LARGE_DEPLOYMENT_WARNING"|"MISSING_TYPE_DEPENDENCY"|"NEXT_HOP_ADDRESS_NOT_ASSIGNED"|"NEXT_HOP_CANNOT_IP_FORWARD"|"NEXT_HOP_INSTANCE_HAS_NO_IPV6_INTERFACE"|"NEXT_HOP_INSTANCE_NOT_FOUND"|"NEXT_HOP_INSTANCE_NOT_ON_NETWORK"|"NEXT_HOP_NOT_RUNNING"|"NOT_CRITICAL_ERROR"|"NO_RESULTS_ON_PAGE"|"PARTIAL_SUCCESS"|"REQUIRED_TOS_AGREEMENT"|"RESOURCE_IN_USE_BY_OTHER_RESOURCE_WARNING"|"RESOURCE_NOT_DELETED"|"SCHEMA_VALIDATION_IGNORED"|"SINGLE_INSTANCE_PROPERTY_TEMPLATE"|"UNDECLARED_PROPERTIES"|"UNREACHABLE", ... (2 more fields)}
-export def "projects-regions-ssl-policies create" [
+export def "compute-region-ssl-policies-insert" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -29019,7 +29019,7 @@ export def "projects-regions-ssl-policies create" [
 #
 # GET /projects/{project}/regions/{region}/sslPolicies/listAvailableFeatures
 # operationId: compute.regionSslPolicies.listAvailableFeatures
-export def "projects-regions-ssl-policies-list-available-features list" [
+export def "compute-region-ssl-policies-list-available-features" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -29075,7 +29075,7 @@ export def "projects-regions-ssl-policies-list-available-features list" [
 #
 # DELETE /projects/{project}/regions/{region}/sslPolicies/{sslPolicy}
 # operationId: compute.regionSslPolicies.delete
-export def "projects-regions-ssl-policies delete" [
+export def "compute-region-ssl-policies-delete" [
   project: string
   region: string
   ssl_policy: string
@@ -29129,7 +29129,7 @@ export def "projects-regions-ssl-policies delete" [
 #
 # GET /projects/{project}/regions/{region}/sslPolicies/{sslPolicy}
 # operationId: compute.regionSslPolicies.get
-export def "projects-regions-ssl-policies get" [
+export def "compute-region-ssl-policies-get" [
   project: string
   region: string
   ssl_policy: string
@@ -29183,7 +29183,7 @@ export def "projects-regions-ssl-policies get" [
 # PATCH /projects/{project}/regions/{region}/sslPolicies/{sslPolicy}
 # operationId: compute.regionSslPolicies.patch
 # --warnings item shape: {code?: "CLEANUP_FAILED"|"DEPRECATED_RESOURCE_USED"|"DEPRECATED_TYPE_USED"|"DISK_SIZE_LARGER_THAN_IMAGE_SIZE"|"EXPERIMENTAL_TYPE_USED"|"EXTERNAL_API_WARNING"|"FIELD_VALUE_OVERRIDEN"|"INJECTED_KERNELS_DEPRECATED"|"INVALID_HEALTH_CHECK_FOR_DYNAMIC_WIEGHTED_LB"|"LARGE_DEPLOYMENT_WARNING"|"MISSING_TYPE_DEPENDENCY"|"NEXT_HOP_ADDRESS_NOT_ASSIGNED"|"NEXT_HOP_CANNOT_IP_FORWARD"|"NEXT_HOP_INSTANCE_HAS_NO_IPV6_INTERFACE"|"NEXT_HOP_INSTANCE_NOT_FOUND"|"NEXT_HOP_INSTANCE_NOT_ON_NETWORK"|"NEXT_HOP_NOT_RUNNING"|"NOT_CRITICAL_ERROR"|"NO_RESULTS_ON_PAGE"|"PARTIAL_SUCCESS"|"REQUIRED_TOS_AGREEMENT"|"RESOURCE_IN_USE_BY_OTHER_RESOURCE_WARNING"|"RESOURCE_NOT_DELETED"|"SCHEMA_VALIDATION_IGNORED"|"SINGLE_INSTANCE_PROPERTY_TEMPLATE"|"UNDECLARED_PROPERTIES"|"UNREACHABLE", ... (2 more fields)}
-export def "projects-regions-ssl-policies update" [
+export def "compute-region-ssl-policies-patch" [
   project: string
   region: string
   ssl_policy: string
@@ -29253,7 +29253,7 @@ export def "projects-regions-ssl-policies update" [
 #
 # GET /projects/{project}/regions/{region}/subnetworks
 # operationId: compute.subnetworks.list
-export def "projects-regions-subnetworks list" [
+export def "compute-subnetworks-list" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -29311,7 +29311,7 @@ export def "projects-regions-subnetworks list" [
 # operationId: compute.subnetworks.insert
 # --logConfig shape: {aggregationInterval?: "INTERVAL_10_MIN"|"INTERVAL_15_MIN"|"INTERVAL_1_MIN"|"INTERVAL_30_SEC"|"INTERVAL_5_MIN"|"INTERVAL_5_SEC", enable?: bool, filterExpr?: string, flowSampling?: float, metadata?: "CUSTOM_METADATA"|"EXCLUDE_ALL_METADATA"|"INCLUDE_ALL_METADATA", metadataFields?: list<string>}
 # --secondaryIpRanges item shape: {ipCidrRange?: string, rangeName?: string}
-export def "projects-regions-subnetworks create" [
+export def "compute-subnetworks-insert" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -29390,7 +29390,7 @@ export def "projects-regions-subnetworks create" [
 #
 # GET /projects/{project}/regions/{region}/subnetworks/{resource}/getIamPolicy
 # operationId: compute.subnetworks.getIamPolicy
-export def "projects-regions-subnetworks-get-iam-policy get" [
+export def "compute-subnetworks-get-iam-policy" [
   project: string
   region: string
   resource: string
@@ -29446,7 +29446,7 @@ export def "projects-regions-subnetworks-get-iam-policy get" [
 # operationId: compute.subnetworks.setIamPolicy
 # --bindings item shape: {bindingId?: string, condition?: record, members?: list<string>, role?: string}
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, rules?: list, version?: int}
-export def "projects-regions-subnetworks-set-iam-policy update" [
+export def "compute-subnetworks-set-iam-policy" [
   project: string
   region: string
   resource: string
@@ -29505,7 +29505,7 @@ export def "projects-regions-subnetworks-set-iam-policy update" [
 #
 # POST /projects/{project}/regions/{region}/subnetworks/{resource}/testIamPermissions
 # operationId: compute.subnetworks.testIamPermissions
-export def "projects-regions-subnetworks-test-iam-permissions test" [
+export def "compute-subnetworks-test-iam-permissions" [
   project: string
   region: string
   resource: string
@@ -29562,7 +29562,7 @@ export def "projects-regions-subnetworks-test-iam-permissions test" [
 #
 # DELETE /projects/{project}/regions/{region}/subnetworks/{subnetwork}
 # operationId: compute.subnetworks.delete
-export def "projects-regions-subnetworks delete" [
+export def "compute-subnetworks-delete" [
   project: string
   region: string
   subnetwork: string
@@ -29616,7 +29616,7 @@ export def "projects-regions-subnetworks delete" [
 #
 # GET /projects/{project}/regions/{region}/subnetworks/{subnetwork}
 # operationId: compute.subnetworks.get
-export def "projects-regions-subnetworks get" [
+export def "compute-subnetworks-get" [
   project: string
   region: string
   subnetwork: string
@@ -29671,7 +29671,7 @@ export def "projects-regions-subnetworks get" [
 # operationId: compute.subnetworks.patch
 # --logConfig shape: {aggregationInterval?: "INTERVAL_10_MIN"|"INTERVAL_15_MIN"|"INTERVAL_1_MIN"|"INTERVAL_30_SEC"|"INTERVAL_5_MIN"|"INTERVAL_5_SEC", enable?: bool, filterExpr?: string, flowSampling?: float, metadata?: "CUSTOM_METADATA"|"EXCLUDE_ALL_METADATA"|"INCLUDE_ALL_METADATA", metadataFields?: list<string>}
 # --secondaryIpRanges item shape: {ipCidrRange?: string, rangeName?: string}
-export def "projects-regions-subnetworks update" [
+export def "compute-subnetworks-patch" [
   project: string
   region: string
   subnetwork: string
@@ -29753,7 +29753,7 @@ export def "projects-regions-subnetworks update" [
 #
 # POST /projects/{project}/regions/{region}/subnetworks/{subnetwork}/expandIpCidrRange
 # operationId: compute.subnetworks.expandIpCidrRange
-export def "projects-regions-subnetworks-expand-ip-cidr-range create" [
+export def "compute-subnetworks-expand-ip-cidr-range" [
   project: string
   region: string
   subnetwork: string
@@ -29811,7 +29811,7 @@ export def "projects-regions-subnetworks-expand-ip-cidr-range create" [
 #
 # POST /projects/{project}/regions/{region}/subnetworks/{subnetwork}/setPrivateIpGoogleAccess
 # operationId: compute.subnetworks.setPrivateIpGoogleAccess
-export def "projects-regions-subnetworks-set-private-ip-google-access update" [
+export def "compute-subnetworks-set-private-ip-google-access" [
   project: string
   region: string
   subnetwork: string
@@ -29869,7 +29869,7 @@ export def "projects-regions-subnetworks-set-private-ip-google-access update" [
 #
 # GET /projects/{project}/regions/{region}/targetHttpProxies
 # operationId: compute.regionTargetHttpProxies.list
-export def "projects-regions-target-http-proxies list" [
+export def "compute-region-target-http-proxies-list" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -29925,7 +29925,7 @@ export def "projects-regions-target-http-proxies list" [
 #
 # POST /projects/{project}/regions/{region}/targetHttpProxies
 # operationId: compute.regionTargetHttpProxies.insert
-export def "projects-regions-target-http-proxies create" [
+export def "compute-region-target-http-proxies-insert" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -29990,7 +29990,7 @@ export def "projects-regions-target-http-proxies create" [
 #
 # DELETE /projects/{project}/regions/{region}/targetHttpProxies/{targetHttpProxy}
 # operationId: compute.regionTargetHttpProxies.delete
-export def "projects-regions-target-http-proxies delete" [
+export def "compute-region-target-http-proxies-delete" [
   project: string
   region: string
   target_http_proxy: string
@@ -30044,7 +30044,7 @@ export def "projects-regions-target-http-proxies delete" [
 #
 # GET /projects/{project}/regions/{region}/targetHttpProxies/{targetHttpProxy}
 # operationId: compute.regionTargetHttpProxies.get
-export def "projects-regions-target-http-proxies get" [
+export def "compute-region-target-http-proxies-get" [
   project: string
   region: string
   target_http_proxy: string
@@ -30097,7 +30097,7 @@ export def "projects-regions-target-http-proxies get" [
 #
 # POST /projects/{project}/regions/{region}/targetHttpProxies/{targetHttpProxy}/setUrlMap
 # operationId: compute.regionTargetHttpProxies.setUrlMap
-export def "projects-regions-target-http-proxies-set-url-map update" [
+export def "compute-region-target-http-proxies-set-url-map" [
   project: string
   region: string
   target_http_proxy: string
@@ -30155,7 +30155,7 @@ export def "projects-regions-target-http-proxies-set-url-map update" [
 #
 # GET /projects/{project}/regions/{region}/targetHttpsProxies
 # operationId: compute.regionTargetHttpsProxies.list
-export def "projects-regions-target-https-proxies list" [
+export def "compute-region-target-https-proxies-list" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -30211,7 +30211,7 @@ export def "projects-regions-target-https-proxies list" [
 #
 # POST /projects/{project}/regions/{region}/targetHttpsProxies
 # operationId: compute.regionTargetHttpsProxies.insert
-export def "projects-regions-target-https-proxies create" [
+export def "compute-region-target-https-proxies-insert" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -30282,7 +30282,7 @@ export def "projects-regions-target-https-proxies create" [
 #
 # DELETE /projects/{project}/regions/{region}/targetHttpsProxies/{targetHttpsProxy}
 # operationId: compute.regionTargetHttpsProxies.delete
-export def "projects-regions-target-https-proxies delete" [
+export def "compute-region-target-https-proxies-delete" [
   project: string
   region: string
   target_https_proxy: string
@@ -30336,7 +30336,7 @@ export def "projects-regions-target-https-proxies delete" [
 #
 # GET /projects/{project}/regions/{region}/targetHttpsProxies/{targetHttpsProxy}
 # operationId: compute.regionTargetHttpsProxies.get
-export def "projects-regions-target-https-proxies get" [
+export def "compute-region-target-https-proxies-get" [
   project: string
   region: string
   target_https_proxy: string
@@ -30389,7 +30389,7 @@ export def "projects-regions-target-https-proxies get" [
 #
 # PATCH /projects/{project}/regions/{region}/targetHttpsProxies/{targetHttpsProxy}
 # operationId: compute.regionTargetHttpsProxies.patch
-export def "projects-regions-target-https-proxies update" [
+export def "compute-region-target-https-proxies-patch" [
   project: string
   region: string
   target_https_proxy: string
@@ -30462,7 +30462,7 @@ export def "projects-regions-target-https-proxies update" [
 #
 # POST /projects/{project}/regions/{region}/targetHttpsProxies/{targetHttpsProxy}/setSslCertificates
 # operationId: compute.regionTargetHttpsProxies.setSslCertificates
-export def "projects-regions-target-https-proxies-set-ssl-certificates update" [
+export def "compute-region-target-https-proxies-set-ssl-certificates" [
   project: string
   region: string
   target_https_proxy: string
@@ -30520,7 +30520,7 @@ export def "projects-regions-target-https-proxies-set-ssl-certificates update" [
 #
 # POST /projects/{project}/regions/{region}/targetHttpsProxies/{targetHttpsProxy}/setUrlMap
 # operationId: compute.regionTargetHttpsProxies.setUrlMap
-export def "projects-regions-target-https-proxies-set-url-map update" [
+export def "compute-region-target-https-proxies-set-url-map" [
   project: string
   region: string
   target_https_proxy: string
@@ -30578,7 +30578,7 @@ export def "projects-regions-target-https-proxies-set-url-map update" [
 #
 # GET /projects/{project}/regions/{region}/targetPools
 # operationId: compute.targetPools.list
-export def "projects-regions-target-pools list" [
+export def "compute-target-pools-list" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -30634,7 +30634,7 @@ export def "projects-regions-target-pools list" [
 #
 # POST /projects/{project}/regions/{region}/targetPools
 # operationId: compute.targetPools.insert
-export def "projects-regions-target-pools create" [
+export def "compute-target-pools-insert" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -30701,7 +30701,7 @@ export def "projects-regions-target-pools create" [
 #
 # DELETE /projects/{project}/regions/{region}/targetPools/{targetPool}
 # operationId: compute.targetPools.delete
-export def "projects-regions-target-pools delete" [
+export def "compute-target-pools-delete" [
   project: string
   region: string
   target_pool: string
@@ -30755,7 +30755,7 @@ export def "projects-regions-target-pools delete" [
 #
 # GET /projects/{project}/regions/{region}/targetPools/{targetPool}
 # operationId: compute.targetPools.get
-export def "projects-regions-target-pools get" [
+export def "compute-target-pools-get" [
   project: string
   region: string
   target_pool: string
@@ -30809,7 +30809,7 @@ export def "projects-regions-target-pools get" [
 # POST /projects/{project}/regions/{region}/targetPools/{targetPool}/addHealthCheck
 # operationId: compute.targetPools.addHealthCheck
 # --healthChecks item shape: {healthCheck?: string}
-export def "projects-regions-target-pools-add-health-check create" [
+export def "compute-target-pools-add-health-check" [
   project: string
   region: string
   target_pool: string
@@ -30868,7 +30868,7 @@ export def "projects-regions-target-pools-add-health-check create" [
 # POST /projects/{project}/regions/{region}/targetPools/{targetPool}/addInstance
 # operationId: compute.targetPools.addInstance
 # --instances item shape: {instance?: string}
-export def "projects-regions-target-pools-add-instance create" [
+export def "compute-target-pools-add-instance" [
   project: string
   region: string
   target_pool: string
@@ -30926,7 +30926,7 @@ export def "projects-regions-target-pools-add-instance create" [
 #
 # POST /projects/{project}/regions/{region}/targetPools/{targetPool}/getHealth
 # operationId: compute.targetPools.getHealth
-export def "projects-regions-target-pools-get-health get" [
+export def "compute-target-pools-get-health" [
   project: string
   region: string
   target_pool: string
@@ -30984,7 +30984,7 @@ export def "projects-regions-target-pools-get-health get" [
 # POST /projects/{project}/regions/{region}/targetPools/{targetPool}/removeHealthCheck
 # operationId: compute.targetPools.removeHealthCheck
 # --healthChecks item shape: {healthCheck?: string}
-export def "projects-regions-target-pools-remove-health-check delete" [
+export def "compute-target-pools-remove-health-check" [
   project: string
   region: string
   target_pool: string
@@ -31043,7 +31043,7 @@ export def "projects-regions-target-pools-remove-health-check delete" [
 # POST /projects/{project}/regions/{region}/targetPools/{targetPool}/removeInstance
 # operationId: compute.targetPools.removeInstance
 # --instances item shape: {instance?: string}
-export def "projects-regions-target-pools-remove-instance delete" [
+export def "compute-target-pools-remove-instance" [
   project: string
   region: string
   target_pool: string
@@ -31101,7 +31101,7 @@ export def "projects-regions-target-pools-remove-instance delete" [
 #
 # POST /projects/{project}/regions/{region}/targetPools/{targetPool}/setBackup
 # operationId: compute.targetPools.setBackup
-export def "projects-regions-target-pools-set-backup update" [
+export def "compute-target-pools-set-backup" [
   project: string
   region: string
   target_pool: string
@@ -31160,7 +31160,7 @@ export def "projects-regions-target-pools-set-backup update" [
 #
 # GET /projects/{project}/regions/{region}/targetTcpProxies
 # operationId: compute.regionTargetTcpProxies.list
-export def "projects-regions-target-tcp-proxies list" [
+export def "compute-region-target-tcp-proxies-list" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -31216,7 +31216,7 @@ export def "projects-regions-target-tcp-proxies list" [
 #
 # POST /projects/{project}/regions/{region}/targetTcpProxies
 # operationId: compute.regionTargetTcpProxies.insert
-export def "projects-regions-target-tcp-proxies create" [
+export def "compute-region-target-tcp-proxies-insert" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -31281,7 +31281,7 @@ export def "projects-regions-target-tcp-proxies create" [
 #
 # DELETE /projects/{project}/regions/{region}/targetTcpProxies/{targetTcpProxy}
 # operationId: compute.regionTargetTcpProxies.delete
-export def "projects-regions-target-tcp-proxies delete" [
+export def "compute-region-target-tcp-proxies-delete" [
   project: string
   region: string
   target_tcp_proxy: string
@@ -31335,7 +31335,7 @@ export def "projects-regions-target-tcp-proxies delete" [
 #
 # GET /projects/{project}/regions/{region}/targetTcpProxies/{targetTcpProxy}
 # operationId: compute.regionTargetTcpProxies.get
-export def "projects-regions-target-tcp-proxies get" [
+export def "compute-region-target-tcp-proxies-get" [
   project: string
   region: string
   target_tcp_proxy: string
@@ -31388,7 +31388,7 @@ export def "projects-regions-target-tcp-proxies get" [
 #
 # GET /projects/{project}/regions/{region}/targetVpnGateways
 # operationId: compute.targetVpnGateways.list
-export def "projects-regions-target-vpn-gateways list" [
+export def "compute-target-vpn-gateways-list" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -31444,7 +31444,7 @@ export def "projects-regions-target-vpn-gateways list" [
 #
 # POST /projects/{project}/regions/{region}/targetVpnGateways
 # operationId: compute.targetVpnGateways.insert
-export def "projects-regions-target-vpn-gateways create" [
+export def "compute-target-vpn-gateways-insert" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -31510,7 +31510,7 @@ export def "projects-regions-target-vpn-gateways create" [
 #
 # POST /projects/{project}/regions/{region}/targetVpnGateways/{resource}/setLabels
 # operationId: compute.targetVpnGateways.setLabels
-export def "projects-regions-target-vpn-gateways-set-labels update" [
+export def "compute-target-vpn-gateways-set-labels" [
   project: string
   region: string
   resource: string
@@ -31569,7 +31569,7 @@ export def "projects-regions-target-vpn-gateways-set-labels update" [
 #
 # DELETE /projects/{project}/regions/{region}/targetVpnGateways/{targetVpnGateway}
 # operationId: compute.targetVpnGateways.delete
-export def "projects-regions-target-vpn-gateways delete" [
+export def "compute-target-vpn-gateways-delete" [
   project: string
   region: string
   target_vpn_gateway: string
@@ -31623,7 +31623,7 @@ export def "projects-regions-target-vpn-gateways delete" [
 #
 # GET /projects/{project}/regions/{region}/targetVpnGateways/{targetVpnGateway}
 # operationId: compute.targetVpnGateways.get
-export def "projects-regions-target-vpn-gateways get" [
+export def "compute-target-vpn-gateways-get" [
   project: string
   region: string
   target_vpn_gateway: string
@@ -31676,7 +31676,7 @@ export def "projects-regions-target-vpn-gateways get" [
 #
 # GET /projects/{project}/regions/{region}/urlMaps
 # operationId: compute.regionUrlMaps.list
-export def "projects-regions-url-maps list" [
+export def "compute-region-url-maps-list" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -31738,7 +31738,7 @@ export def "projects-regions-url-maps list" [
 # --hostRules item shape: {description?: string, hosts?: list<string>, pathMatcher?: string}
 # --pathMatchers item shape: {defaultRouteAction?: record, defaultService?: string, defaultUrlRedirect?: record, description?: string, headerAction?: record, name?: string, pathRules?: list, routeRules?: list}
 # --tests item shape: {description?: string, expectedOutputUrl?: string, expectedRedirectResponseCode?: int, headers?: list, host?: string, path?: string, service?: string}
-export def "projects-regions-url-maps create" [
+export def "compute-region-url-maps-insert" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -31808,7 +31808,7 @@ export def "projects-regions-url-maps create" [
 #
 # DELETE /projects/{project}/regions/{region}/urlMaps/{urlMap}
 # operationId: compute.regionUrlMaps.delete
-export def "projects-regions-url-maps delete" [
+export def "compute-region-url-maps-delete" [
   project: string
   region: string
   url_map: string
@@ -31862,7 +31862,7 @@ export def "projects-regions-url-maps delete" [
 #
 # GET /projects/{project}/regions/{region}/urlMaps/{urlMap}
 # operationId: compute.regionUrlMaps.get
-export def "projects-regions-url-maps get" [
+export def "compute-region-url-maps-get" [
   project: string
   region: string
   url_map: string
@@ -31921,7 +31921,7 @@ export def "projects-regions-url-maps get" [
 # --hostRules item shape: {description?: string, hosts?: list<string>, pathMatcher?: string}
 # --pathMatchers item shape: {defaultRouteAction?: record, defaultService?: string, defaultUrlRedirect?: record, description?: string, headerAction?: record, name?: string, pathRules?: list, routeRules?: list}
 # --tests item shape: {description?: string, expectedOutputUrl?: string, expectedRedirectResponseCode?: int, headers?: list, host?: string, path?: string, service?: string}
-export def "projects-regions-url-maps update-by-project-region-url-map" [
+export def "compute-region-url-maps-patch" [
   project: string
   region: string
   url_map: string
@@ -31999,7 +31999,7 @@ export def "projects-regions-url-maps update-by-project-region-url-map" [
 # --hostRules item shape: {description?: string, hosts?: list<string>, pathMatcher?: string}
 # --pathMatchers item shape: {defaultRouteAction?: record, defaultService?: string, defaultUrlRedirect?: record, description?: string, headerAction?: record, name?: string, pathRules?: list, routeRules?: list}
 # --tests item shape: {description?: string, expectedOutputUrl?: string, expectedRedirectResponseCode?: int, headers?: list, host?: string, path?: string, service?: string}
-export def "projects-regions-url-maps update-by-project-region-url-map-1" [
+export def "compute-region-url-maps-update" [
   project: string
   region: string
   url_map: string
@@ -32072,7 +32072,7 @@ export def "projects-regions-url-maps update-by-project-region-url-map-1" [
 # POST /projects/{project}/regions/{region}/urlMaps/{urlMap}/validate
 # operationId: compute.regionUrlMaps.validate
 # --resource shape: {creationTimestamp?: string, defaultRouteAction?: record, defaultService?: string, defaultUrlRedirect?: record, description?: string, fingerprint?: string, headerAction?: record, hostRules?: list, id?: string, kind?: string, name?: string, pathMatchers?: list, region?: string, selfLink?: string, tests?: list}
-export def "projects-regions-url-maps-validate validate" [
+export def "compute-region-url-maps-validate" [
   project: string
   region: string
   url_map: string
@@ -32129,7 +32129,7 @@ export def "projects-regions-url-maps-validate validate" [
 #
 # GET /projects/{project}/regions/{region}/vpnGateways
 # operationId: compute.vpnGateways.list
-export def "projects-regions-vpn-gateways list" [
+export def "compute-vpn-gateways-list" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -32186,7 +32186,7 @@ export def "projects-regions-vpn-gateways list" [
 # POST /projects/{project}/regions/{region}/vpnGateways
 # operationId: compute.vpnGateways.insert
 # --vpnInterfaces item shape: {id?: int, interconnectAttachment?: string, ipAddress?: string}
-export def "projects-regions-vpn-gateways create" [
+export def "compute-vpn-gateways-insert" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -32253,7 +32253,7 @@ export def "projects-regions-vpn-gateways create" [
 #
 # POST /projects/{project}/regions/{region}/vpnGateways/{resource}/setLabels
 # operationId: compute.vpnGateways.setLabels
-export def "projects-regions-vpn-gateways-set-labels update" [
+export def "compute-vpn-gateways-set-labels" [
   project: string
   region: string
   resource: string
@@ -32312,7 +32312,7 @@ export def "projects-regions-vpn-gateways-set-labels update" [
 #
 # POST /projects/{project}/regions/{region}/vpnGateways/{resource}/testIamPermissions
 # operationId: compute.vpnGateways.testIamPermissions
-export def "projects-regions-vpn-gateways-test-iam-permissions test" [
+export def "compute-vpn-gateways-test-iam-permissions" [
   project: string
   region: string
   resource: string
@@ -32369,7 +32369,7 @@ export def "projects-regions-vpn-gateways-test-iam-permissions test" [
 #
 # DELETE /projects/{project}/regions/{region}/vpnGateways/{vpnGateway}
 # operationId: compute.vpnGateways.delete
-export def "projects-regions-vpn-gateways delete" [
+export def "compute-vpn-gateways-delete" [
   project: string
   region: string
   vpn_gateway: string
@@ -32423,7 +32423,7 @@ export def "projects-regions-vpn-gateways delete" [
 #
 # GET /projects/{project}/regions/{region}/vpnGateways/{vpnGateway}
 # operationId: compute.vpnGateways.get
-export def "projects-regions-vpn-gateways get" [
+export def "compute-vpn-gateways-get" [
   project: string
   region: string
   vpn_gateway: string
@@ -32476,7 +32476,7 @@ export def "projects-regions-vpn-gateways get" [
 #
 # GET /projects/{project}/regions/{region}/vpnGateways/{vpnGateway}/getStatus
 # operationId: compute.vpnGateways.getStatus
-export def "projects-regions-vpn-gateways-get-status get" [
+export def "compute-vpn-gateways-get-status" [
   project: string
   region: string
   vpn_gateway: string
@@ -32529,7 +32529,7 @@ export def "projects-regions-vpn-gateways-get-status get" [
 #
 # GET /projects/{project}/regions/{region}/vpnTunnels
 # operationId: compute.vpnTunnels.list
-export def "projects-regions-vpn-tunnels list" [
+export def "compute-vpn-tunnels-list" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -32585,7 +32585,7 @@ export def "projects-regions-vpn-tunnels list" [
 #
 # POST /projects/{project}/regions/{region}/vpnTunnels
 # operationId: compute.vpnTunnels.insert
-export def "projects-regions-vpn-tunnels create" [
+export def "compute-vpn-tunnels-insert" [
   project: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -32662,7 +32662,7 @@ export def "projects-regions-vpn-tunnels create" [
 #
 # POST /projects/{project}/regions/{region}/vpnTunnels/{resource}/setLabels
 # operationId: compute.vpnTunnels.setLabels
-export def "projects-regions-vpn-tunnels-set-labels update" [
+export def "compute-vpn-tunnels-set-labels" [
   project: string
   region: string
   resource: string
@@ -32721,7 +32721,7 @@ export def "projects-regions-vpn-tunnels-set-labels update" [
 #
 # DELETE /projects/{project}/regions/{region}/vpnTunnels/{vpnTunnel}
 # operationId: compute.vpnTunnels.delete
-export def "projects-regions-vpn-tunnels delete" [
+export def "compute-vpn-tunnels-delete" [
   project: string
   region: string
   vpn_tunnel: string
@@ -32775,7 +32775,7 @@ export def "projects-regions-vpn-tunnels delete" [
 #
 # GET /projects/{project}/regions/{region}/vpnTunnels/{vpnTunnel}
 # operationId: compute.vpnTunnels.get
-export def "projects-regions-vpn-tunnels get" [
+export def "compute-vpn-tunnels-get" [
   project: string
   region: string
   vpn_tunnel: string
@@ -32829,7 +32829,7 @@ export def "projects-regions-vpn-tunnels get" [
 # POST /projects/{project}/setCommonInstanceMetadata
 # operationId: compute.projects.setCommonInstanceMetadata
 # --items item shape: {key?: string, value?: string}
-export def "projects-set-common-instance-metadata update" [
+export def "compute-projects-set-common-instance-metadata" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -32885,7 +32885,7 @@ export def "projects-set-common-instance-metadata update" [
 #
 # POST /projects/{project}/setDefaultNetworkTier
 # operationId: compute.projects.setDefaultNetworkTier
-export def "projects-set-default-network-tier update" [
+export def "compute-projects-set-default-network-tier" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -32939,7 +32939,7 @@ export def "projects-set-default-network-tier update" [
 #
 # POST /projects/{project}/setUsageExportBucket
 # operationId: compute.projects.setUsageExportBucket
-export def "projects-set-usage-export-bucket update" [
+export def "compute-projects-set-usage-export-bucket" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -32994,7 +32994,7 @@ export def "projects-set-usage-export-bucket update" [
 #
 # POST /projects/{project}/targetHttpProxies/{targetHttpProxy}/setUrlMap
 # operationId: compute.targetHttpProxies.setUrlMap
-export def "projects-target-http-proxies-set-url-map update" [
+export def "compute-target-http-proxies-set-url-map" [
   project: string
   target_http_proxy: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -33050,7 +33050,7 @@ export def "projects-target-http-proxies-set-url-map update" [
 #
 # POST /projects/{project}/targetHttpsProxies/{targetHttpsProxy}/setSslCertificates
 # operationId: compute.targetHttpsProxies.setSslCertificates
-export def "projects-target-https-proxies-set-ssl-certificates update" [
+export def "compute-target-https-proxies-set-ssl-certificates" [
   project: string
   target_https_proxy: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -33106,7 +33106,7 @@ export def "projects-target-https-proxies-set-ssl-certificates update" [
 #
 # POST /projects/{project}/targetHttpsProxies/{targetHttpsProxy}/setUrlMap
 # operationId: compute.targetHttpsProxies.setUrlMap
-export def "projects-target-https-proxies-set-url-map update" [
+export def "compute-target-https-proxies-set-url-map" [
   project: string
   target_https_proxy: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -33162,7 +33162,7 @@ export def "projects-target-https-proxies-set-url-map update" [
 #
 # GET /projects/{project}/zones
 # operationId: compute.zones.list
-export def "projects-zones list" [
+export def "compute-zones-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -33216,7 +33216,7 @@ export def "projects-zones list" [
 #
 # GET /projects/{project}/zones/{zone}
 # operationId: compute.zones.get
-export def "projects-zones get" [
+export def "compute-zones-get" [
   project: string
   zone: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -33267,7 +33267,7 @@ export def "projects-zones get" [
 #
 # GET /projects/{project}/zones/{zone}/acceleratorTypes
 # operationId: compute.acceleratorTypes.list
-export def "projects-zones-accelerator-types list" [
+export def "compute-accelerator-types-list" [
   project: string
   zone: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -33323,7 +33323,7 @@ export def "projects-zones-accelerator-types list" [
 #
 # GET /projects/{project}/zones/{zone}/acceleratorTypes/{acceleratorType}
 # operationId: compute.acceleratorTypes.get
-export def "projects-zones-accelerator-types get" [
+export def "compute-accelerator-types-get" [
   project: string
   zone: string
   accelerator_type: string
@@ -33376,7 +33376,7 @@ export def "projects-zones-accelerator-types get" [
 #
 # GET /projects/{project}/zones/{zone}/autoscalers
 # operationId: compute.autoscalers.list
-export def "projects-zones-autoscalers list" [
+export def "compute-autoscalers-list" [
   project: string
   zone: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -33434,7 +33434,7 @@ export def "projects-zones-autoscalers list" [
 # operationId: compute.autoscalers.patch
 # --autoscalingPolicy shape: {coolDownPeriodSec?: int, cpuUtilization?: record, customMetricUtilizations?: list, loadBalancingUtilization?: record, maxNumReplicas?: int, minNumReplicas?: int, mode?: "OFF"|"ON"|"ONLY_SCALE_OUT"|"ONLY_UP", scaleInControl?: record, scalingSchedules?: record}
 # --statusDetails item shape: {message?: string, ... (1 more fields)}
-export def "projects-zones-autoscalers update-by-project-zone" [
+export def "compute-autoscalers-patch" [
   project: string
   zone: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -33506,7 +33506,7 @@ export def "projects-zones-autoscalers update-by-project-zone" [
 # operationId: compute.autoscalers.insert
 # --autoscalingPolicy shape: {coolDownPeriodSec?: int, cpuUtilization?: record, customMetricUtilizations?: list, loadBalancingUtilization?: record, maxNumReplicas?: int, minNumReplicas?: int, mode?: "OFF"|"ON"|"ONLY_SCALE_OUT"|"ONLY_UP", scaleInControl?: record, scalingSchedules?: record}
 # --statusDetails item shape: {message?: string, ... (1 more fields)}
-export def "projects-zones-autoscalers create" [
+export def "compute-autoscalers-insert" [
   project: string
   zone: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -33577,7 +33577,7 @@ export def "projects-zones-autoscalers create" [
 # operationId: compute.autoscalers.update
 # --autoscalingPolicy shape: {coolDownPeriodSec?: int, cpuUtilization?: record, customMetricUtilizations?: list, loadBalancingUtilization?: record, maxNumReplicas?: int, minNumReplicas?: int, mode?: "OFF"|"ON"|"ONLY_SCALE_OUT"|"ONLY_UP", scaleInControl?: record, scalingSchedules?: record}
 # --statusDetails item shape: {message?: string, ... (1 more fields)}
-export def "projects-zones-autoscalers update-by-project-zone-1" [
+export def "compute-autoscalers-update" [
   project: string
   zone: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -33647,7 +33647,7 @@ export def "projects-zones-autoscalers update-by-project-zone-1" [
 #
 # DELETE /projects/{project}/zones/{zone}/autoscalers/{autoscaler}
 # operationId: compute.autoscalers.delete
-export def "projects-zones-autoscalers delete" [
+export def "compute-autoscalers-delete" [
   project: string
   zone: string
   autoscaler: string
@@ -33701,7 +33701,7 @@ export def "projects-zones-autoscalers delete" [
 #
 # GET /projects/{project}/zones/{zone}/autoscalers/{autoscaler}
 # operationId: compute.autoscalers.get
-export def "projects-zones-autoscalers get" [
+export def "compute-autoscalers-get" [
   project: string
   zone: string
   autoscaler: string
@@ -33754,7 +33754,7 @@ export def "projects-zones-autoscalers get" [
 #
 # GET /projects/{project}/zones/{zone}/diskTypes
 # operationId: compute.diskTypes.list
-export def "projects-zones-disk-types list" [
+export def "compute-disk-types-list" [
   project: string
   zone: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -33810,7 +33810,7 @@ export def "projects-zones-disk-types list" [
 #
 # GET /projects/{project}/zones/{zone}/diskTypes/{diskType}
 # operationId: compute.diskTypes.get
-export def "projects-zones-disk-types get" [
+export def "compute-disk-types-get" [
   project: string
   zone: string
   disk_type: string
@@ -33863,7 +33863,7 @@ export def "projects-zones-disk-types get" [
 #
 # GET /projects/{project}/zones/{zone}/disks
 # operationId: compute.disks.list
-export def "projects-zones-disks list" [
+export def "compute-disks-list" [
   project: string
   zone: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -33924,7 +33924,7 @@ export def "projects-zones-disks list" [
 # --params shape: {resourceManagerTags?: record}
 # --sourceImageEncryptionKey shape: {kmsKeyName?: string, kmsKeyServiceAccount?: string, rawKey?: string, rsaEncryptedKey?: string, sha256?: string}
 # --sourceSnapshotEncryptionKey shape: {kmsKeyName?: string, kmsKeyServiceAccount?: string, rawKey?: string, rsaEncryptedKey?: string, sha256?: string}
-export def "projects-zones-disks create" [
+export def "compute-disks-insert" [
   project: string
   zone: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -34018,7 +34018,7 @@ export def "projects-zones-disks create" [
 #
 # DELETE /projects/{project}/zones/{zone}/disks/{disk}
 # operationId: compute.disks.delete
-export def "projects-zones-disks delete" [
+export def "compute-disks-delete" [
   project: string
   zone: string
   disk: string
@@ -34072,7 +34072,7 @@ export def "projects-zones-disks delete" [
 #
 # GET /projects/{project}/zones/{zone}/disks/{disk}
 # operationId: compute.disks.get
-export def "projects-zones-disks get" [
+export def "compute-disks-get" [
   project: string
   zone: string
   disk: string
@@ -34130,7 +34130,7 @@ export def "projects-zones-disks get" [
 # --params shape: {resourceManagerTags?: record}
 # --sourceImageEncryptionKey shape: {kmsKeyName?: string, kmsKeyServiceAccount?: string, rawKey?: string, rsaEncryptedKey?: string, sha256?: string}
 # --sourceSnapshotEncryptionKey shape: {kmsKeyName?: string, kmsKeyServiceAccount?: string, rawKey?: string, rsaEncryptedKey?: string, sha256?: string}
-export def "projects-zones-disks update" [
+export def "compute-disks-update" [
   project: string
   zone: string
   disk: string
@@ -34227,7 +34227,7 @@ export def "projects-zones-disks update" [
 #
 # POST /projects/{project}/zones/{zone}/disks/{disk}/addResourcePolicies
 # operationId: compute.disks.addResourcePolicies
-export def "projects-zones-disks-add-resource-policies create" [
+export def "compute-disks-add-resource-policies" [
   project: string
   zone: string
   disk: string
@@ -34287,7 +34287,7 @@ export def "projects-zones-disks-add-resource-policies create" [
 # operationId: compute.disks.createSnapshot
 # --snapshotEncryptionKey shape: {kmsKeyName?: string, kmsKeyServiceAccount?: string, rawKey?: string, rsaEncryptedKey?: string, sha256?: string}
 # --sourceDiskEncryptionKey shape: {kmsKeyName?: string, kmsKeyServiceAccount?: string, rawKey?: string, rsaEncryptedKey?: string, sha256?: string}
-export def "projects-zones-disks-create-snapshot create" [
+export def "compute-disks-create-snapshot" [
   project: string
   zone: string
   disk: string
@@ -34374,7 +34374,7 @@ export def "projects-zones-disks-create-snapshot create" [
 #
 # POST /projects/{project}/zones/{zone}/disks/{disk}/removeResourcePolicies
 # operationId: compute.disks.removeResourcePolicies
-export def "projects-zones-disks-remove-resource-policies delete" [
+export def "compute-disks-remove-resource-policies" [
   project: string
   zone: string
   disk: string
@@ -34432,7 +34432,7 @@ export def "projects-zones-disks-remove-resource-policies delete" [
 #
 # POST /projects/{project}/zones/{zone}/disks/{disk}/resize
 # operationId: compute.disks.resize
-export def "projects-zones-disks-resize resize" [
+export def "compute-disks-resize" [
   project: string
   zone: string
   disk: string
@@ -34490,7 +34490,7 @@ export def "projects-zones-disks-resize resize" [
 #
 # GET /projects/{project}/zones/{zone}/disks/{resource}/getIamPolicy
 # operationId: compute.disks.getIamPolicy
-export def "projects-zones-disks-get-iam-policy get" [
+export def "compute-disks-get-iam-policy" [
   project: string
   zone: string
   resource: string
@@ -34546,7 +34546,7 @@ export def "projects-zones-disks-get-iam-policy get" [
 # operationId: compute.disks.setIamPolicy
 # --bindings item shape: {bindingId?: string, condition?: record, members?: list<string>, role?: string}
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, rules?: list, version?: int}
-export def "projects-zones-disks-set-iam-policy update" [
+export def "compute-disks-set-iam-policy" [
   project: string
   zone: string
   resource: string
@@ -34605,7 +34605,7 @@ export def "projects-zones-disks-set-iam-policy update" [
 #
 # POST /projects/{project}/zones/{zone}/disks/{resource}/setLabels
 # operationId: compute.disks.setLabels
-export def "projects-zones-disks-set-labels update" [
+export def "compute-disks-set-labels" [
   project: string
   zone: string
   resource: string
@@ -34664,7 +34664,7 @@ export def "projects-zones-disks-set-labels update" [
 #
 # POST /projects/{project}/zones/{zone}/disks/{resource}/testIamPermissions
 # operationId: compute.disks.testIamPermissions
-export def "projects-zones-disks-test-iam-permissions test" [
+export def "compute-disks-test-iam-permissions" [
   project: string
   zone: string
   resource: string
@@ -34721,7 +34721,7 @@ export def "projects-zones-disks-test-iam-permissions test" [
 #
 # GET /projects/{project}/zones/{zone}/imageFamilyViews/{family}
 # operationId: compute.imageFamilyViews.get
-export def "projects-zones-image-family-views get" [
+export def "compute-image-family-views-get" [
   project: string
   zone: string
   family: string
@@ -34774,7 +34774,7 @@ export def "projects-zones-image-family-views get" [
 #
 # GET /projects/{project}/zones/{zone}/instanceGroupManagers
 # operationId: compute.instanceGroupManagers.list
-export def "projects-zones-instance-group-managers list" [
+export def "compute-instance-group-managers-list" [
   project: string
   zone: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -34838,7 +34838,7 @@ export def "projects-zones-instance-group-managers list" [
 # --status shape: {autoscaler?: string, isStable?: bool, stateful?: record, versionTarget?: record}
 # --updatePolicy shape: {instanceRedistributionType?: "NONE"|"PROACTIVE", maxSurge?: record, maxUnavailable?: record, minimalAction?: "NONE"|"REFRESH"|"REPLACE"|"RESTART", mostDisruptiveAllowedAction?: "NONE"|"REFRESH"|"REPLACE"|"RESTART", replacementMethod?: "RECREATE"|"SUBSTITUTE", type?: "OPPORTUNISTIC"|"PROACTIVE"}
 # --versions item shape: {instanceTemplate?: string, name?: string, targetSize?: record}
-export def "projects-zones-instance-group-managers create" [
+export def "compute-instance-group-managers-insert" [
   project: string
   zone: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -34916,7 +34916,7 @@ export def "projects-zones-instance-group-managers create" [
 #
 # DELETE /projects/{project}/zones/{zone}/instanceGroupManagers/{instanceGroupManager}
 # operationId: compute.instanceGroupManagers.delete
-export def "projects-zones-instance-group-managers delete" [
+export def "compute-instance-group-managers-delete" [
   project: string
   zone: string
   instance_group_manager: string
@@ -34970,7 +34970,7 @@ export def "projects-zones-instance-group-managers delete" [
 #
 # GET /projects/{project}/zones/{zone}/instanceGroupManagers/{instanceGroupManager}
 # operationId: compute.instanceGroupManagers.get
-export def "projects-zones-instance-group-managers get" [
+export def "compute-instance-group-managers-get" [
   project: string
   zone: string
   instance_group_manager: string
@@ -35031,7 +35031,7 @@ export def "projects-zones-instance-group-managers get" [
 # --status shape: {autoscaler?: string, isStable?: bool, stateful?: record, versionTarget?: record}
 # --updatePolicy shape: {instanceRedistributionType?: "NONE"|"PROACTIVE", maxSurge?: record, maxUnavailable?: record, minimalAction?: "NONE"|"REFRESH"|"REPLACE"|"RESTART", mostDisruptiveAllowedAction?: "NONE"|"REFRESH"|"REPLACE"|"RESTART", replacementMethod?: "RECREATE"|"SUBSTITUTE", type?: "OPPORTUNISTIC"|"PROACTIVE"}
 # --versions item shape: {instanceTemplate?: string, name?: string, targetSize?: record}
-export def "projects-zones-instance-group-managers update" [
+export def "compute-instance-group-managers-patch" [
   project: string
   zone: string
   instance_group_manager: string
@@ -35111,7 +35111,7 @@ export def "projects-zones-instance-group-managers update" [
 #
 # POST /projects/{project}/zones/{zone}/instanceGroupManagers/{instanceGroupManager}/abandonInstances
 # operationId: compute.instanceGroupManagers.abandonInstances
-export def "projects-zones-instance-group-managers-abandon-instances create" [
+export def "compute-instance-group-managers-abandon-instances" [
   project: string
   zone: string
   instance_group_manager: string
@@ -35169,7 +35169,7 @@ export def "projects-zones-instance-group-managers-abandon-instances create" [
 #
 # POST /projects/{project}/zones/{zone}/instanceGroupManagers/{instanceGroupManager}/applyUpdatesToInstances
 # operationId: compute.instanceGroupManagers.applyUpdatesToInstances
-export def "projects-zones-instance-group-managers-apply-updates-to-instances create" [
+export def "compute-instance-group-managers-apply-updates-to-instances" [
   project: string
   zone: string
   instance_group_manager: string
@@ -35230,7 +35230,7 @@ export def "projects-zones-instance-group-managers-apply-updates-to-instances cr
 # POST /projects/{project}/zones/{zone}/instanceGroupManagers/{instanceGroupManager}/createInstances
 # operationId: compute.instanceGroupManagers.createInstances
 # --instances item shape: {fingerprint?: string, name?: string, preservedState?: record, status?: "APPLYING"|"DELETING"|"EFFECTIVE"|"NONE"|"UNAPPLIED"|"UNAPPLIED_DELETION"}
-export def "projects-zones-instance-group-managers-create-instances create" [
+export def "compute-instance-group-managers-create-instances" [
   project: string
   zone: string
   instance_group_manager: string
@@ -35288,7 +35288,7 @@ export def "projects-zones-instance-group-managers-create-instances create" [
 #
 # POST /projects/{project}/zones/{zone}/instanceGroupManagers/{instanceGroupManager}/deleteInstances
 # operationId: compute.instanceGroupManagers.deleteInstances
-export def "projects-zones-instance-group-managers-delete-instances delete" [
+export def "compute-instance-group-managers-delete-instances" [
   project: string
   zone: string
   instance_group_manager: string
@@ -35347,7 +35347,7 @@ export def "projects-zones-instance-group-managers-delete-instances delete" [
 #
 # POST /projects/{project}/zones/{zone}/instanceGroupManagers/{instanceGroupManager}/deletePerInstanceConfigs
 # operationId: compute.instanceGroupManagers.deletePerInstanceConfigs
-export def "projects-zones-instance-group-managers-delete-per-instance-configs delete" [
+export def "compute-instance-group-managers-delete-per-instance-configs" [
   project: string
   zone: string
   instance_group_manager: string
@@ -35404,7 +35404,7 @@ export def "projects-zones-instance-group-managers-delete-per-instance-configs d
 #
 # GET /projects/{project}/zones/{zone}/instanceGroupManagers/{instanceGroupManager}/listErrors
 # operationId: compute.instanceGroupManagers.listErrors
-export def "projects-zones-instance-group-managers-list-errors list" [
+export def "compute-instance-group-managers-list-errors" [
   project: string
   zone: string
   instance_group_manager: string
@@ -35462,7 +35462,7 @@ export def "projects-zones-instance-group-managers-list-errors list" [
 #
 # POST /projects/{project}/zones/{zone}/instanceGroupManagers/{instanceGroupManager}/listManagedInstances
 # operationId: compute.instanceGroupManagers.listManagedInstances
-export def "projects-zones-instance-group-managers-list-managed-instances list" [
+export def "compute-instance-group-managers-list-managed-instances" [
   project: string
   zone: string
   instance_group_manager: string
@@ -35520,7 +35520,7 @@ export def "projects-zones-instance-group-managers-list-managed-instances list" 
 #
 # POST /projects/{project}/zones/{zone}/instanceGroupManagers/{instanceGroupManager}/listPerInstanceConfigs
 # operationId: compute.instanceGroupManagers.listPerInstanceConfigs
-export def "projects-zones-instance-group-managers-list-per-instance-configs list" [
+export def "compute-instance-group-managers-list-per-instance-configs" [
   project: string
   zone: string
   instance_group_manager: string
@@ -35579,7 +35579,7 @@ export def "projects-zones-instance-group-managers-list-per-instance-configs lis
 # POST /projects/{project}/zones/{zone}/instanceGroupManagers/{instanceGroupManager}/patchPerInstanceConfigs
 # operationId: compute.instanceGroupManagers.patchPerInstanceConfigs
 # --perInstanceConfigs item shape: {fingerprint?: string, name?: string, preservedState?: record, status?: "APPLYING"|"DELETING"|"EFFECTIVE"|"NONE"|"UNAPPLIED"|"UNAPPLIED_DELETION"}
-export def "projects-zones-instance-group-managers-patch-per-instance-configs update" [
+export def "compute-instance-group-managers-patch-per-instance-configs" [
   project: string
   zone: string
   instance_group_manager: string
@@ -35637,7 +35637,7 @@ export def "projects-zones-instance-group-managers-patch-per-instance-configs up
 #
 # POST /projects/{project}/zones/{zone}/instanceGroupManagers/{instanceGroupManager}/recreateInstances
 # operationId: compute.instanceGroupManagers.recreateInstances
-export def "projects-zones-instance-group-managers-recreate-instances create" [
+export def "compute-instance-group-managers-recreate-instances" [
   project: string
   zone: string
   instance_group_manager: string
@@ -35695,7 +35695,7 @@ export def "projects-zones-instance-group-managers-recreate-instances create" [
 #
 # POST /projects/{project}/zones/{zone}/instanceGroupManagers/{instanceGroupManager}/resize
 # operationId: compute.instanceGroupManagers.resize
-export def "projects-zones-instance-group-managers-resize resize" [
+export def "compute-instance-group-managers-resize" [
   project: string
   zone: string
   instance_group_manager: string
@@ -35750,7 +35750,7 @@ export def "projects-zones-instance-group-managers-resize resize" [
 #
 # POST /projects/{project}/zones/{zone}/instanceGroupManagers/{instanceGroupManager}/setInstanceTemplate
 # operationId: compute.instanceGroupManagers.setInstanceTemplate
-export def "projects-zones-instance-group-managers-set-instance-template update" [
+export def "compute-instance-group-managers-set-instance-template" [
   project: string
   zone: string
   instance_group_manager: string
@@ -35808,7 +35808,7 @@ export def "projects-zones-instance-group-managers-set-instance-template update"
 #
 # POST /projects/{project}/zones/{zone}/instanceGroupManagers/{instanceGroupManager}/setTargetPools
 # operationId: compute.instanceGroupManagers.setTargetPools
-export def "projects-zones-instance-group-managers-set-target-pools update" [
+export def "compute-instance-group-managers-set-target-pools" [
   project: string
   zone: string
   instance_group_manager: string
@@ -35868,7 +35868,7 @@ export def "projects-zones-instance-group-managers-set-target-pools update" [
 # POST /projects/{project}/zones/{zone}/instanceGroupManagers/{instanceGroupManager}/updatePerInstanceConfigs
 # operationId: compute.instanceGroupManagers.updatePerInstanceConfigs
 # --perInstanceConfigs item shape: {fingerprint?: string, name?: string, preservedState?: record, status?: "APPLYING"|"DELETING"|"EFFECTIVE"|"NONE"|"UNAPPLIED"|"UNAPPLIED_DELETION"}
-export def "projects-zones-instance-group-managers-update-per-instance-configs update" [
+export def "compute-instance-group-managers-update-per-instance-configs" [
   project: string
   zone: string
   instance_group_manager: string
@@ -35926,7 +35926,7 @@ export def "projects-zones-instance-group-managers-update-per-instance-configs u
 #
 # GET /projects/{project}/zones/{zone}/instanceGroups
 # operationId: compute.instanceGroups.list
-export def "projects-zones-instance-groups list" [
+export def "compute-instance-groups-list" [
   project: string
   zone: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -35983,7 +35983,7 @@ export def "projects-zones-instance-groups list" [
 # POST /projects/{project}/zones/{zone}/instanceGroups
 # operationId: compute.instanceGroups.insert
 # --namedPorts item shape: {name?: string, port?: int}
-export def "projects-zones-instance-groups create" [
+export def "compute-instance-groups-insert" [
   project: string
   zone: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -36051,7 +36051,7 @@ export def "projects-zones-instance-groups create" [
 #
 # DELETE /projects/{project}/zones/{zone}/instanceGroups/{instanceGroup}
 # operationId: compute.instanceGroups.delete
-export def "projects-zones-instance-groups delete" [
+export def "compute-instance-groups-delete" [
   project: string
   zone: string
   instance_group: string
@@ -36105,7 +36105,7 @@ export def "projects-zones-instance-groups delete" [
 #
 # GET /projects/{project}/zones/{zone}/instanceGroups/{instanceGroup}
 # operationId: compute.instanceGroups.get
-export def "projects-zones-instance-groups get" [
+export def "compute-instance-groups-get" [
   project: string
   zone: string
   instance_group: string
@@ -36159,7 +36159,7 @@ export def "projects-zones-instance-groups get" [
 # POST /projects/{project}/zones/{zone}/instanceGroups/{instanceGroup}/addInstances
 # operationId: compute.instanceGroups.addInstances
 # --instances item shape: {instance?: string}
-export def "projects-zones-instance-groups-add-instances create" [
+export def "compute-instance-groups-add-instances" [
   project: string
   zone: string
   instance_group: string
@@ -36217,7 +36217,7 @@ export def "projects-zones-instance-groups-add-instances create" [
 #
 # POST /projects/{project}/zones/{zone}/instanceGroups/{instanceGroup}/listInstances
 # operationId: compute.instanceGroups.listInstances
-export def "projects-zones-instance-groups-list-instances list" [
+export def "compute-instance-groups-list-instances" [
   project: string
   zone: string
   instance_group: string
@@ -36280,7 +36280,7 @@ export def "projects-zones-instance-groups-list-instances list" [
 # POST /projects/{project}/zones/{zone}/instanceGroups/{instanceGroup}/removeInstances
 # operationId: compute.instanceGroups.removeInstances
 # --instances item shape: {instance?: string}
-export def "projects-zones-instance-groups-remove-instances delete" [
+export def "compute-instance-groups-remove-instances" [
   project: string
   zone: string
   instance_group: string
@@ -36339,7 +36339,7 @@ export def "projects-zones-instance-groups-remove-instances delete" [
 # POST /projects/{project}/zones/{zone}/instanceGroups/{instanceGroup}/setNamedPorts
 # operationId: compute.instanceGroups.setNamedPorts
 # --namedPorts item shape: {name?: string, port?: int}
-export def "projects-zones-instance-groups-set-named-ports update" [
+export def "compute-instance-groups-set-named-ports" [
   project: string
   zone: string
   instance_group: string
@@ -36398,7 +36398,7 @@ export def "projects-zones-instance-groups-set-named-ports update" [
 #
 # GET /projects/{project}/zones/{zone}/instances
 # operationId: compute.instances.list
-export def "projects-zones-instances list" [
+export def "compute-instances-list" [
   project: string
   zone: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -36471,7 +36471,7 @@ export def "projects-zones-instances list" [
 # --shieldedInstanceIntegrityPolicy shape: {updateAutoLearnPolicy?: bool}
 # --sourceMachineImageEncryptionKey shape: {kmsKeyName?: string, kmsKeyServiceAccount?: string, rawKey?: string, rsaEncryptedKey?: string, sha256?: string}
 # --tags shape: {fingerprint?: string, items?: list<string>}
-export def "projects-zones-instances create" [
+export def "compute-instances-insert" [
   project: string
   zone: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -36574,7 +36574,7 @@ export def "projects-zones-instances create" [
 # operationId: compute.instances.bulkInsert
 # --instanceProperties shape: {advancedMachineFeatures?: record, canIpForward?: bool, confidentialInstanceConfig?: record, description?: string, disks?: list, guestAccelerators?: list, keyRevocationActionType?: "KEY_REVOCATION_ACTION_TYPE_UNSPECIFIED"|"NONE"|"STOP", labels?: record, machineType?: string, metadata?: record, minCpuPlatform?: string, networkInterfaces?: list, networkPerformanceConfig?: record, ... (8 more fields)}
 # --locationPolicy shape: {locations?: record, targetShape?: "ANY"|"ANY_SINGLE_ZONE"|"BALANCED"}
-export def "projects-zones-instances-bulk-insert create" [
+export def "compute-instances-bulk-insert" [
   project: string
   zone: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -36636,7 +36636,7 @@ export def "projects-zones-instances-bulk-insert create" [
 #
 # DELETE /projects/{project}/zones/{zone}/instances/{instance}
 # operationId: compute.instances.delete
-export def "projects-zones-instances delete" [
+export def "compute-instances-delete" [
   project: string
   zone: string
   instance: string
@@ -36690,7 +36690,7 @@ export def "projects-zones-instances delete" [
 #
 # GET /projects/{project}/zones/{zone}/instances/{instance}
 # operationId: compute.instances.get
-export def "projects-zones-instances get" [
+export def "compute-instances-get" [
   project: string
   zone: string
   instance: string
@@ -36760,7 +36760,7 @@ export def "projects-zones-instances get" [
 # --shieldedInstanceIntegrityPolicy shape: {updateAutoLearnPolicy?: bool}
 # --sourceMachineImageEncryptionKey shape: {kmsKeyName?: string, kmsKeyServiceAccount?: string, rawKey?: string, rsaEncryptedKey?: string, sha256?: string}
 # --tags shape: {fingerprint?: string, items?: list<string>}
-export def "projects-zones-instances update" [
+export def "compute-instances-update" [
   project: string
   zone: string
   instance: string
@@ -36863,7 +36863,7 @@ export def "projects-zones-instances update" [
 #
 # POST /projects/{project}/zones/{zone}/instances/{instance}/addAccessConfig
 # operationId: compute.instances.addAccessConfig
-export def "projects-zones-instances-add-access-config create" [
+export def "compute-instances-add-access-config" [
   project: string
   zone: string
   instance: string
@@ -36930,7 +36930,7 @@ export def "projects-zones-instances-add-access-config create" [
 #
 # POST /projects/{project}/zones/{zone}/instances/{instance}/addResourcePolicies
 # operationId: compute.instances.addResourcePolicies
-export def "projects-zones-instances-add-resource-policies create" [
+export def "compute-instances-add-resource-policies" [
   project: string
   zone: string
   instance: string
@@ -36992,7 +36992,7 @@ export def "projects-zones-instances-add-resource-policies create" [
 # --guestOsFeatures item shape: {type?: "FEATURE_TYPE_UNSPECIFIED"|"GVNIC"|"MULTI_IP_SUBNET"|"SECURE_BOOT"|"SEV_CAPABLE"|"SEV_LIVE_MIGRATABLE"|"SEV_SNP_CAPABLE"|"UEFI_COMPATIBLE"|"VIRTIO_SCSI_MULTIQUEUE"|"WINDOWS"}
 # --initializeParams shape: {architecture?: "ARCHITECTURE_UNSPECIFIED"|"ARM64"|"X86_64", description?: string, diskName?: string, diskSizeGb?: string, diskType?: string, labels?: record, licenses?: list<string>, onUpdateAction?: "RECREATE_DISK"|"RECREATE_DISK_IF_SOURCE_CHANGED"|"USE_EXISTING_DISK", provisionedIops?: string, replicaZones?: list<string>, resourceManagerTags?: record, resourcePolicies?: list<string>, sourceImage?: string, sourceImageEncryptionKey?: record, sourceSnapshot?: string, ... (1 more fields)}
 # --shieldedInstanceInitialState shape: {dbs?: list, dbxs?: list, keks?: list, pk?: record}
-export def "projects-zones-instances-attach-disk attach" [
+export def "compute-instances-attach-disk" [
   project: string
   zone: string
   instance: string
@@ -37067,7 +37067,7 @@ export def "projects-zones-instances-attach-disk attach" [
 #
 # POST /projects/{project}/zones/{zone}/instances/{instance}/deleteAccessConfig
 # operationId: compute.instances.deleteAccessConfig
-export def "projects-zones-instances-delete-access-config delete" [
+export def "compute-instances-delete-access-config" [
   project: string
   zone: string
   instance: string
@@ -37123,7 +37123,7 @@ export def "projects-zones-instances-delete-access-config delete" [
 #
 # POST /projects/{project}/zones/{zone}/instances/{instance}/detachDisk
 # operationId: compute.instances.detachDisk
-export def "projects-zones-instances-detach-disk create" [
+export def "compute-instances-detach-disk" [
   project: string
   zone: string
   instance: string
@@ -37178,7 +37178,7 @@ export def "projects-zones-instances-detach-disk create" [
 #
 # GET /projects/{project}/zones/{zone}/instances/{instance}/getEffectiveFirewalls
 # operationId: compute.instances.getEffectiveFirewalls
-export def "projects-zones-instances-get-effective-firewalls get" [
+export def "compute-instances-get-effective-firewalls" [
   project: string
   zone: string
   instance: string
@@ -37232,7 +37232,7 @@ export def "projects-zones-instances-get-effective-firewalls get" [
 #
 # GET /projects/{project}/zones/{zone}/instances/{instance}/getGuestAttributes
 # operationId: compute.instances.getGuestAttributes
-export def "projects-zones-instances-get-guest-attributes get" [
+export def "compute-instances-get-guest-attributes" [
   project: string
   zone: string
   instance: string
@@ -37287,7 +37287,7 @@ export def "projects-zones-instances-get-guest-attributes get" [
 #
 # GET /projects/{project}/zones/{zone}/instances/{instance}/getShieldedInstanceIdentity
 # operationId: compute.instances.getShieldedInstanceIdentity
-export def "projects-zones-instances-get-shielded-instance-identity get" [
+export def "compute-instances-get-shielded-instance-identity" [
   project: string
   zone: string
   instance: string
@@ -37340,7 +37340,7 @@ export def "projects-zones-instances-get-shielded-instance-identity get" [
 #
 # GET /projects/{project}/zones/{zone}/instances/{instance}/referrers
 # operationId: compute.instances.listReferrers
-export def "projects-zones-instances-referrers list" [
+export def "compute-instances-list-referrers" [
   project: string
   zone: string
   instance: string
@@ -37398,7 +37398,7 @@ export def "projects-zones-instances-referrers list" [
 #
 # POST /projects/{project}/zones/{zone}/instances/{instance}/removeResourcePolicies
 # operationId: compute.instances.removeResourcePolicies
-export def "projects-zones-instances-remove-resource-policies delete" [
+export def "compute-instances-remove-resource-policies" [
   project: string
   zone: string
   instance: string
@@ -37456,7 +37456,7 @@ export def "projects-zones-instances-remove-resource-policies delete" [
 #
 # POST /projects/{project}/zones/{zone}/instances/{instance}/reset
 # operationId: compute.instances.reset
-export def "projects-zones-instances-reset reset" [
+export def "compute-instances-reset" [
   project: string
   zone: string
   instance: string
@@ -37510,7 +37510,7 @@ export def "projects-zones-instances-reset reset" [
 #
 # POST /projects/{project}/zones/{zone}/instances/{instance}/resume
 # operationId: compute.instances.resume
-export def "projects-zones-instances-resume create" [
+export def "compute-instances-resume" [
   project: string
   zone: string
   instance: string
@@ -37564,7 +37564,7 @@ export def "projects-zones-instances-resume create" [
 #
 # GET /projects/{project}/zones/{zone}/instances/{instance}/screenshot
 # operationId: compute.instances.getScreenshot
-export def "projects-zones-instances-screenshot get" [
+export def "compute-instances-get-screenshot" [
   project: string
   zone: string
   instance: string
@@ -37617,7 +37617,7 @@ export def "projects-zones-instances-screenshot get" [
 #
 # POST /projects/{project}/zones/{zone}/instances/{instance}/sendDiagnosticInterrupt
 # operationId: compute.instances.sendDiagnosticInterrupt
-export def "projects-zones-instances-send-diagnostic-interrupt send" [
+export def "compute-instances-send-diagnostic-interrupt" [
   project: string
   zone: string
   instance: string
@@ -37670,7 +37670,7 @@ export def "projects-zones-instances-send-diagnostic-interrupt send" [
 #
 # GET /projects/{project}/zones/{zone}/instances/{instance}/serialPort
 # operationId: compute.instances.getSerialPortOutput
-export def "projects-zones-instances-serial-port get-output" [
+export def "compute-instances-get-serial-port-output" [
   project: string
   zone: string
   instance: string
@@ -37725,7 +37725,7 @@ export def "projects-zones-instances-serial-port get-output" [
 #
 # POST /projects/{project}/zones/{zone}/instances/{instance}/setDiskAutoDelete
 # operationId: compute.instances.setDiskAutoDelete
-export def "projects-zones-instances-set-disk-auto-delete update" [
+export def "compute-instances-set-disk-auto-delete" [
   project: string
   zone: string
   instance: string
@@ -37781,7 +37781,7 @@ export def "projects-zones-instances-set-disk-auto-delete update" [
 #
 # POST /projects/{project}/zones/{zone}/instances/{instance}/setLabels
 # operationId: compute.instances.setLabels
-export def "projects-zones-instances-set-labels update" [
+export def "compute-instances-set-labels" [
   project: string
   zone: string
   instance: string
@@ -37841,7 +37841,7 @@ export def "projects-zones-instances-set-labels update" [
 # POST /projects/{project}/zones/{zone}/instances/{instance}/setMachineResources
 # operationId: compute.instances.setMachineResources
 # --guestAccelerators item shape: {acceleratorCount?: int, acceleratorType?: string}
-export def "projects-zones-instances-set-machine-resources update" [
+export def "compute-instances-set-machine-resources" [
   project: string
   zone: string
   instance: string
@@ -37899,7 +37899,7 @@ export def "projects-zones-instances-set-machine-resources update" [
 #
 # POST /projects/{project}/zones/{zone}/instances/{instance}/setMachineType
 # operationId: compute.instances.setMachineType
-export def "projects-zones-instances-set-machine-type update" [
+export def "compute-instances-set-machine-type" [
   project: string
   zone: string
   instance: string
@@ -37958,7 +37958,7 @@ export def "projects-zones-instances-set-machine-type update" [
 # POST /projects/{project}/zones/{zone}/instances/{instance}/setMetadata
 # operationId: compute.instances.setMetadata
 # --items item shape: {key?: string, value?: string}
-export def "projects-zones-instances-set-metadata update" [
+export def "compute-instances-set-metadata" [
   project: string
   zone: string
   instance: string
@@ -38018,7 +38018,7 @@ export def "projects-zones-instances-set-metadata update" [
 #
 # POST /projects/{project}/zones/{zone}/instances/{instance}/setMinCpuPlatform
 # operationId: compute.instances.setMinCpuPlatform
-export def "projects-zones-instances-set-min-cpu-platform update" [
+export def "compute-instances-set-min-cpu-platform" [
   project: string
   zone: string
   instance: string
@@ -38076,7 +38076,7 @@ export def "projects-zones-instances-set-min-cpu-platform update" [
 #
 # POST /projects/{project}/zones/{zone}/instances/{instance}/setName
 # operationId: compute.instances.setName
-export def "projects-zones-instances-set-name update" [
+export def "compute-instances-set-name" [
   project: string
   zone: string
   instance: string
@@ -38136,7 +38136,7 @@ export def "projects-zones-instances-set-name update" [
 # POST /projects/{project}/zones/{zone}/instances/{instance}/setScheduling
 # operationId: compute.instances.setScheduling
 # --nodeAffinities item shape: {key?: string, operator?: "IN"|"NOT_IN"|"OPERATOR_UNSPECIFIED", values?: list<string>}
-export def "projects-zones-instances-set-scheduling update" [
+export def "compute-instances-set-scheduling" [
   project: string
   zone: string
   instance: string
@@ -38201,7 +38201,7 @@ export def "projects-zones-instances-set-scheduling update" [
 #
 # POST /projects/{project}/zones/{zone}/instances/{instance}/setServiceAccount
 # operationId: compute.instances.setServiceAccount
-export def "projects-zones-instances-set-service-account update" [
+export def "compute-instances-set-service-account" [
   project: string
   zone: string
   instance: string
@@ -38260,7 +38260,7 @@ export def "projects-zones-instances-set-service-account update" [
 #
 # PATCH /projects/{project}/zones/{zone}/instances/{instance}/setShieldedInstanceIntegrityPolicy
 # operationId: compute.instances.setShieldedInstanceIntegrityPolicy
-export def "projects-zones-instances-set-shielded-instance-integrity-policy update" [
+export def "compute-instances-set-shielded-instance-integrity-policy" [
   project: string
   zone: string
   instance: string
@@ -38318,7 +38318,7 @@ export def "projects-zones-instances-set-shielded-instance-integrity-policy upda
 #
 # POST /projects/{project}/zones/{zone}/instances/{instance}/setTags
 # operationId: compute.instances.setTags
-export def "projects-zones-instances-set-tags update" [
+export def "compute-instances-set-tags" [
   project: string
   zone: string
   instance: string
@@ -38377,7 +38377,7 @@ export def "projects-zones-instances-set-tags update" [
 #
 # POST /projects/{project}/zones/{zone}/instances/{instance}/simulateMaintenanceEvent
 # operationId: compute.instances.simulateMaintenanceEvent
-export def "projects-zones-instances-simulate-maintenance-event create" [
+export def "compute-instances-simulate-maintenance-event" [
   project: string
   zone: string
   instance: string
@@ -38430,7 +38430,7 @@ export def "projects-zones-instances-simulate-maintenance-event create" [
 #
 # POST /projects/{project}/zones/{zone}/instances/{instance}/start
 # operationId: compute.instances.start
-export def "projects-zones-instances-start start" [
+export def "compute-instances-start" [
   project: string
   zone: string
   instance: string
@@ -38485,7 +38485,7 @@ export def "projects-zones-instances-start start" [
 # POST /projects/{project}/zones/{zone}/instances/{instance}/startWithEncryptionKey
 # operationId: compute.instances.startWithEncryptionKey
 # --disks item shape: {diskEncryptionKey?: record, source?: string}
-export def "projects-zones-instances-start-with-encryption-key start" [
+export def "compute-instances-start-with-encryption-key" [
   project: string
   zone: string
   instance: string
@@ -38543,7 +38543,7 @@ export def "projects-zones-instances-start-with-encryption-key start" [
 #
 # POST /projects/{project}/zones/{zone}/instances/{instance}/stop
 # operationId: compute.instances.stop
-export def "projects-zones-instances-stop stop" [
+export def "compute-instances-stop" [
   project: string
   zone: string
   instance: string
@@ -38598,7 +38598,7 @@ export def "projects-zones-instances-stop stop" [
 #
 # POST /projects/{project}/zones/{zone}/instances/{instance}/suspend
 # operationId: compute.instances.suspend
-export def "projects-zones-instances-suspend create" [
+export def "compute-instances-suspend" [
   project: string
   zone: string
   instance: string
@@ -38653,7 +38653,7 @@ export def "projects-zones-instances-suspend create" [
 #
 # POST /projects/{project}/zones/{zone}/instances/{instance}/updateAccessConfig
 # operationId: compute.instances.updateAccessConfig
-export def "projects-zones-instances-update-access-config update" [
+export def "compute-instances-update-access-config" [
   project: string
   zone: string
   instance: string
@@ -38720,7 +38720,7 @@ export def "projects-zones-instances-update-access-config update" [
 #
 # PATCH /projects/{project}/zones/{zone}/instances/{instance}/updateDisplayDevice
 # operationId: compute.instances.updateDisplayDevice
-export def "projects-zones-instances-update-display-device update" [
+export def "compute-instances-update-display-device" [
   project: string
   zone: string
   instance: string
@@ -38781,7 +38781,7 @@ export def "projects-zones-instances-update-display-device update" [
 # --accessConfigs item shape: {externalIpv6?: string, externalIpv6PrefixLength?: int, kind?: string, name?: string, natIP?: string, networkTier?: "FIXED_STANDARD"|"PREMIUM"|"STANDARD"|"STANDARD_OVERRIDES_FIXED_STANDARD", publicPtrDomainName?: string, setPublicPtr?: bool, type?: "DIRECT_IPV6"|"ONE_TO_ONE_NAT"}
 # --aliasIpRanges item shape: {ipCidrRange?: string, subnetworkRangeName?: string}
 # --ipv6AccessConfigs item shape: {externalIpv6?: string, externalIpv6PrefixLength?: int, kind?: string, name?: string, natIP?: string, networkTier?: "FIXED_STANDARD"|"PREMIUM"|"STANDARD"|"STANDARD_OVERRIDES_FIXED_STANDARD", publicPtrDomainName?: string, setPublicPtr?: bool, type?: "DIRECT_IPV6"|"ONE_TO_ONE_NAT"}
-export def "projects-zones-instances-update-network-interface update" [
+export def "compute-instances-update-network-interface" [
   project: string
   zone: string
   instance: string
@@ -38855,7 +38855,7 @@ export def "projects-zones-instances-update-network-interface update" [
 #
 # PATCH /projects/{project}/zones/{zone}/instances/{instance}/updateShieldedInstanceConfig
 # operationId: compute.instances.updateShieldedInstanceConfig
-export def "projects-zones-instances-update-shielded-instance-config update" [
+export def "compute-instances-update-shielded-instance-config" [
   project: string
   zone: string
   instance: string
@@ -38915,7 +38915,7 @@ export def "projects-zones-instances-update-shielded-instance-config update" [
 #
 # GET /projects/{project}/zones/{zone}/instances/{resource}/getIamPolicy
 # operationId: compute.instances.getIamPolicy
-export def "projects-zones-instances-get-iam-policy get" [
+export def "compute-instances-get-iam-policy" [
   project: string
   zone: string
   resource: string
@@ -38969,7 +38969,7 @@ export def "projects-zones-instances-get-iam-policy get" [
 #
 # POST /projects/{project}/zones/{zone}/instances/{resource}/setDeletionProtection
 # operationId: compute.instances.setDeletionProtection
-export def "projects-zones-instances-set-deletion-protection update" [
+export def "compute-instances-set-deletion-protection" [
   project: string
   zone: string
   resource: string
@@ -39026,7 +39026,7 @@ export def "projects-zones-instances-set-deletion-protection update" [
 # operationId: compute.instances.setIamPolicy
 # --bindings item shape: {bindingId?: string, condition?: record, members?: list<string>, role?: string}
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, rules?: list, version?: int}
-export def "projects-zones-instances-set-iam-policy update" [
+export def "compute-instances-set-iam-policy" [
   project: string
   zone: string
   resource: string
@@ -39085,7 +39085,7 @@ export def "projects-zones-instances-set-iam-policy update" [
 #
 # POST /projects/{project}/zones/{zone}/instances/{resource}/testIamPermissions
 # operationId: compute.instances.testIamPermissions
-export def "projects-zones-instances-test-iam-permissions test" [
+export def "compute-instances-test-iam-permissions" [
   project: string
   zone: string
   resource: string
@@ -39142,7 +39142,7 @@ export def "projects-zones-instances-test-iam-permissions test" [
 #
 # GET /projects/{project}/zones/{zone}/machineTypes
 # operationId: compute.machineTypes.list
-export def "projects-zones-machine-types list" [
+export def "compute-machine-types-list" [
   project: string
   zone: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -39198,7 +39198,7 @@ export def "projects-zones-machine-types list" [
 #
 # GET /projects/{project}/zones/{zone}/machineTypes/{machineType}
 # operationId: compute.machineTypes.get
-export def "projects-zones-machine-types get" [
+export def "compute-machine-types-get" [
   project: string
   zone: string
   machine_type: string
@@ -39251,7 +39251,7 @@ export def "projects-zones-machine-types get" [
 #
 # GET /projects/{project}/zones/{zone}/networkEndpointGroups
 # operationId: compute.networkEndpointGroups.list
-export def "projects-zones-network-endpoint-groups list" [
+export def "compute-network-endpoint-groups-list" [
   project: string
   zone: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -39311,7 +39311,7 @@ export def "projects-zones-network-endpoint-groups list" [
 # --cloudFunction shape: {function?: string, urlMask?: string}
 # --cloudRun shape: {service?: string, tag?: string, urlMask?: string}
 # --pscData shape: {consumerPscAddress?: string, pscConnectionId?: string, pscConnectionStatus?: "ACCEPTED"|"CLOSED"|"NEEDS_ATTENTION"|"PENDING"|"REJECTED"|"STATUS_UNSPECIFIED"}
-export def "projects-zones-network-endpoint-groups create" [
+export def "compute-network-endpoint-groups-insert" [
   project: string
   zone: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -39385,7 +39385,7 @@ export def "projects-zones-network-endpoint-groups create" [
 #
 # DELETE /projects/{project}/zones/{zone}/networkEndpointGroups/{networkEndpointGroup}
 # operationId: compute.networkEndpointGroups.delete
-export def "projects-zones-network-endpoint-groups delete" [
+export def "compute-network-endpoint-groups-delete" [
   project: string
   zone: string
   network_endpoint_group: string
@@ -39439,7 +39439,7 @@ export def "projects-zones-network-endpoint-groups delete" [
 #
 # GET /projects/{project}/zones/{zone}/networkEndpointGroups/{networkEndpointGroup}
 # operationId: compute.networkEndpointGroups.get
-export def "projects-zones-network-endpoint-groups get" [
+export def "compute-network-endpoint-groups-get" [
   project: string
   zone: string
   network_endpoint_group: string
@@ -39493,7 +39493,7 @@ export def "projects-zones-network-endpoint-groups get" [
 # POST /projects/{project}/zones/{zone}/networkEndpointGroups/{networkEndpointGroup}/attachNetworkEndpoints
 # operationId: compute.networkEndpointGroups.attachNetworkEndpoints
 # --networkEndpoints item shape: {annotations?: record, fqdn?: string, instance?: string, ipAddress?: string, port?: int}
-export def "projects-zones-network-endpoint-groups-attach-network-endpoints attach" [
+export def "compute-network-endpoint-groups-attach-network-endpoints" [
   project: string
   zone: string
   network_endpoint_group: string
@@ -39552,7 +39552,7 @@ export def "projects-zones-network-endpoint-groups-attach-network-endpoints atta
 # POST /projects/{project}/zones/{zone}/networkEndpointGroups/{networkEndpointGroup}/detachNetworkEndpoints
 # operationId: compute.networkEndpointGroups.detachNetworkEndpoints
 # --networkEndpoints item shape: {annotations?: record, fqdn?: string, instance?: string, ipAddress?: string, port?: int}
-export def "projects-zones-network-endpoint-groups-detach-network-endpoints create" [
+export def "compute-network-endpoint-groups-detach-network-endpoints" [
   project: string
   zone: string
   network_endpoint_group: string
@@ -39610,7 +39610,7 @@ export def "projects-zones-network-endpoint-groups-detach-network-endpoints crea
 #
 # POST /projects/{project}/zones/{zone}/networkEndpointGroups/{networkEndpointGroup}/listNetworkEndpoints
 # operationId: compute.networkEndpointGroups.listNetworkEndpoints
-export def "projects-zones-network-endpoint-groups-list-network-endpoints list" [
+export def "compute-network-endpoint-groups-list-network-endpoints" [
   project: string
   zone: string
   network_endpoint_group: string
@@ -39672,7 +39672,7 @@ export def "projects-zones-network-endpoint-groups-list-network-endpoints list" 
 #
 # POST /projects/{project}/zones/{zone}/networkEndpointGroups/{resource}/testIamPermissions
 # operationId: compute.networkEndpointGroups.testIamPermissions
-export def "projects-zones-network-endpoint-groups-test-iam-permissions test" [
+export def "compute-network-endpoint-groups-test-iam-permissions" [
   project: string
   zone: string
   resource: string
@@ -39729,7 +39729,7 @@ export def "projects-zones-network-endpoint-groups-test-iam-permissions test" [
 #
 # GET /projects/{project}/zones/{zone}/nodeGroups
 # operationId: compute.nodeGroups.list
-export def "projects-zones-node-groups list" [
+export def "compute-node-groups-list" [
   project: string
   zone: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -39788,7 +39788,7 @@ export def "projects-zones-node-groups list" [
 # --autoscalingPolicy shape: {maxNodes?: int, minNodes?: int, mode?: "MODE_UNSPECIFIED"|"OFF"|"ON"|"ONLY_SCALE_OUT"}
 # --maintenanceWindow shape: {maintenanceDuration?: record, startTime?: string}
 # --shareSettings shape: {projectMap?: record, shareType?: "LOCAL"|"ORGANIZATION"|"SHARE_TYPE_UNSPECIFIED"|"SPECIFIC_PROJECTS"}
-export def "projects-zones-node-groups create" [
+export def "compute-node-groups-insert" [
   project: string
   zone: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -39860,7 +39860,7 @@ export def "projects-zones-node-groups create" [
 #
 # DELETE /projects/{project}/zones/{zone}/nodeGroups/{nodeGroup}
 # operationId: compute.nodeGroups.delete
-export def "projects-zones-node-groups delete" [
+export def "compute-node-groups-delete" [
   project: string
   zone: string
   node_group: string
@@ -39914,7 +39914,7 @@ export def "projects-zones-node-groups delete" [
 #
 # GET /projects/{project}/zones/{zone}/nodeGroups/{nodeGroup}
 # operationId: compute.nodeGroups.get
-export def "projects-zones-node-groups get" [
+export def "compute-node-groups-get" [
   project: string
   zone: string
   node_group: string
@@ -39970,7 +39970,7 @@ export def "projects-zones-node-groups get" [
 # --autoscalingPolicy shape: {maxNodes?: int, minNodes?: int, mode?: "MODE_UNSPECIFIED"|"OFF"|"ON"|"ONLY_SCALE_OUT"}
 # --maintenanceWindow shape: {maintenanceDuration?: record, startTime?: string}
 # --shareSettings shape: {projectMap?: record, shareType?: "LOCAL"|"ORGANIZATION"|"SHARE_TYPE_UNSPECIFIED"|"SPECIFIC_PROJECTS"}
-export def "projects-zones-node-groups update" [
+export def "compute-node-groups-patch" [
   project: string
   zone: string
   node_group: string
@@ -40043,7 +40043,7 @@ export def "projects-zones-node-groups update" [
 #
 # POST /projects/{project}/zones/{zone}/nodeGroups/{nodeGroup}/addNodes
 # operationId: compute.nodeGroups.addNodes
-export def "projects-zones-node-groups-add-nodes create" [
+export def "compute-node-groups-add-nodes" [
   project: string
   zone: string
   node_group: string
@@ -40101,7 +40101,7 @@ export def "projects-zones-node-groups-add-nodes create" [
 #
 # POST /projects/{project}/zones/{zone}/nodeGroups/{nodeGroup}/deleteNodes
 # operationId: compute.nodeGroups.deleteNodes
-export def "projects-zones-node-groups-delete-nodes delete" [
+export def "compute-node-groups-delete-nodes" [
   project: string
   zone: string
   node_group: string
@@ -40159,7 +40159,7 @@ export def "projects-zones-node-groups-delete-nodes delete" [
 #
 # POST /projects/{project}/zones/{zone}/nodeGroups/{nodeGroup}/listNodes
 # operationId: compute.nodeGroups.listNodes
-export def "projects-zones-node-groups-list-nodes list" [
+export def "compute-node-groups-list-nodes" [
   project: string
   zone: string
   node_group: string
@@ -40217,7 +40217,7 @@ export def "projects-zones-node-groups-list-nodes list" [
 #
 # POST /projects/{project}/zones/{zone}/nodeGroups/{nodeGroup}/setNodeTemplate
 # operationId: compute.nodeGroups.setNodeTemplate
-export def "projects-zones-node-groups-set-node-template update" [
+export def "compute-node-groups-set-node-template" [
   project: string
   zone: string
   node_group: string
@@ -40275,7 +40275,7 @@ export def "projects-zones-node-groups-set-node-template update" [
 #
 # POST /projects/{project}/zones/{zone}/nodeGroups/{nodeGroup}/simulateMaintenanceEvent
 # operationId: compute.nodeGroups.simulateMaintenanceEvent
-export def "projects-zones-node-groups-simulate-maintenance-event create" [
+export def "compute-node-groups-simulate-maintenance-event" [
   project: string
   zone: string
   node_group: string
@@ -40333,7 +40333,7 @@ export def "projects-zones-node-groups-simulate-maintenance-event create" [
 #
 # GET /projects/{project}/zones/{zone}/nodeGroups/{resource}/getIamPolicy
 # operationId: compute.nodeGroups.getIamPolicy
-export def "projects-zones-node-groups-get-iam-policy get" [
+export def "compute-node-groups-get-iam-policy" [
   project: string
   zone: string
   resource: string
@@ -40389,7 +40389,7 @@ export def "projects-zones-node-groups-get-iam-policy get" [
 # operationId: compute.nodeGroups.setIamPolicy
 # --bindings item shape: {bindingId?: string, condition?: record, members?: list<string>, role?: string}
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, rules?: list, version?: int}
-export def "projects-zones-node-groups-set-iam-policy update" [
+export def "compute-node-groups-set-iam-policy" [
   project: string
   zone: string
   resource: string
@@ -40448,7 +40448,7 @@ export def "projects-zones-node-groups-set-iam-policy update" [
 #
 # POST /projects/{project}/zones/{zone}/nodeGroups/{resource}/testIamPermissions
 # operationId: compute.nodeGroups.testIamPermissions
-export def "projects-zones-node-groups-test-iam-permissions test" [
+export def "compute-node-groups-test-iam-permissions" [
   project: string
   zone: string
   resource: string
@@ -40505,7 +40505,7 @@ export def "projects-zones-node-groups-test-iam-permissions test" [
 #
 # GET /projects/{project}/zones/{zone}/nodeTypes
 # operationId: compute.nodeTypes.list
-export def "projects-zones-node-types list" [
+export def "compute-node-types-list" [
   project: string
   zone: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -40561,7 +40561,7 @@ export def "projects-zones-node-types list" [
 #
 # GET /projects/{project}/zones/{zone}/nodeTypes/{nodeType}
 # operationId: compute.nodeTypes.get
-export def "projects-zones-node-types get" [
+export def "compute-node-types-get" [
   project: string
   zone: string
   node_type: string
@@ -40614,7 +40614,7 @@ export def "projects-zones-node-types get" [
 #
 # GET /projects/{project}/zones/{zone}/operations
 # operationId: compute.zoneOperations.list
-export def "projects-zones-operations list" [
+export def "compute-zone-operations-list" [
   project: string
   zone: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -40670,7 +40670,7 @@ export def "projects-zones-operations list" [
 #
 # DELETE /projects/{project}/zones/{zone}/operations/{operation}
 # operationId: compute.zoneOperations.delete
-export def "projects-zones-operations delete" [
+export def "compute-zone-operations-delete" [
   project: string
   zone: string
   operation: string
@@ -40723,7 +40723,7 @@ export def "projects-zones-operations delete" [
 #
 # GET /projects/{project}/zones/{zone}/operations/{operation}
 # operationId: compute.zoneOperations.get
-export def "projects-zones-operations get" [
+export def "compute-zone-operations-get" [
   project: string
   zone: string
   operation: string
@@ -40776,7 +40776,7 @@ export def "projects-zones-operations get" [
 #
 # POST /projects/{project}/zones/{zone}/operations/{operation}/wait
 # operationId: compute.zoneOperations.wait
-export def "projects-zones-operations-wait wait" [
+export def "compute-zone-operations-wait" [
   project: string
   zone: string
   operation: string
@@ -40829,7 +40829,7 @@ export def "projects-zones-operations-wait wait" [
 #
 # GET /projects/{project}/zones/{zone}/reservations
 # operationId: compute.reservations.list
-export def "projects-zones-reservations list" [
+export def "compute-reservations-list" [
   project: string
   zone: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -40888,7 +40888,7 @@ export def "projects-zones-reservations list" [
 # --resourceStatus shape: {specificSkuAllocation?: record}
 # --shareSettings shape: {projectMap?: record, shareType?: "LOCAL"|"ORGANIZATION"|"SHARE_TYPE_UNSPECIFIED"|"SPECIFIC_PROJECTS"}
 # --specificReservation shape: {assuredCount?: string, count?: string, inUseCount?: string, instanceProperties?: record, sourceInstanceTemplate?: string}
-export def "projects-zones-reservations create" [
+export def "compute-reservations-insert" [
   project: string
   zone: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -40958,7 +40958,7 @@ export def "projects-zones-reservations create" [
 #
 # DELETE /projects/{project}/zones/{zone}/reservations/{reservation}
 # operationId: compute.reservations.delete
-export def "projects-zones-reservations delete" [
+export def "compute-reservations-delete" [
   project: string
   zone: string
   reservation: string
@@ -41012,7 +41012,7 @@ export def "projects-zones-reservations delete" [
 #
 # GET /projects/{project}/zones/{zone}/reservations/{reservation}
 # operationId: compute.reservations.get
-export def "projects-zones-reservations get" [
+export def "compute-reservations-get" [
   project: string
   zone: string
   reservation: string
@@ -41068,7 +41068,7 @@ export def "projects-zones-reservations get" [
 # --resourceStatus shape: {specificSkuAllocation?: record}
 # --shareSettings shape: {projectMap?: record, shareType?: "LOCAL"|"ORGANIZATION"|"SHARE_TYPE_UNSPECIFIED"|"SPECIFIC_PROJECTS"}
 # --specificReservation shape: {assuredCount?: string, count?: string, inUseCount?: string, instanceProperties?: record, sourceInstanceTemplate?: string}
-export def "projects-zones-reservations update" [
+export def "compute-reservations-update" [
   project: string
   zone: string
   reservation: string
@@ -41142,7 +41142,7 @@ export def "projects-zones-reservations update" [
 #
 # POST /projects/{project}/zones/{zone}/reservations/{reservation}/resize
 # operationId: compute.reservations.resize
-export def "projects-zones-reservations-resize resize" [
+export def "compute-reservations-resize" [
   project: string
   zone: string
   reservation: string
@@ -41200,7 +41200,7 @@ export def "projects-zones-reservations-resize resize" [
 #
 # GET /projects/{project}/zones/{zone}/reservations/{resource}/getIamPolicy
 # operationId: compute.reservations.getIamPolicy
-export def "projects-zones-reservations-get-iam-policy get" [
+export def "compute-reservations-get-iam-policy" [
   project: string
   zone: string
   resource: string
@@ -41256,7 +41256,7 @@ export def "projects-zones-reservations-get-iam-policy get" [
 # operationId: compute.reservations.setIamPolicy
 # --bindings item shape: {bindingId?: string, condition?: record, members?: list<string>, role?: string}
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, rules?: list, version?: int}
-export def "projects-zones-reservations-set-iam-policy update" [
+export def "compute-reservations-set-iam-policy" [
   project: string
   zone: string
   resource: string
@@ -41315,7 +41315,7 @@ export def "projects-zones-reservations-set-iam-policy update" [
 #
 # POST /projects/{project}/zones/{zone}/reservations/{resource}/testIamPermissions
 # operationId: compute.reservations.testIamPermissions
-export def "projects-zones-reservations-test-iam-permissions test" [
+export def "compute-reservations-test-iam-permissions" [
   project: string
   zone: string
   resource: string
@@ -41372,7 +41372,7 @@ export def "projects-zones-reservations-test-iam-permissions test" [
 #
 # GET /projects/{project}/zones/{zone}/targetInstances
 # operationId: compute.targetInstances.list
-export def "projects-zones-target-instances list" [
+export def "compute-target-instances-list" [
   project: string
   zone: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -41428,7 +41428,7 @@ export def "projects-zones-target-instances list" [
 #
 # POST /projects/{project}/zones/{zone}/targetInstances
 # operationId: compute.targetInstances.insert
-export def "projects-zones-target-instances create" [
+export def "compute-target-instances-insert" [
   project: string
   zone: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -41493,7 +41493,7 @@ export def "projects-zones-target-instances create" [
 #
 # DELETE /projects/{project}/zones/{zone}/targetInstances/{targetInstance}
 # operationId: compute.targetInstances.delete
-export def "projects-zones-target-instances delete" [
+export def "compute-target-instances-delete" [
   project: string
   zone: string
   target_instance: string
@@ -41547,7 +41547,7 @@ export def "projects-zones-target-instances delete" [
 #
 # GET /projects/{project}/zones/{zone}/targetInstances/{targetInstance}
 # operationId: compute.targetInstances.get
-export def "projects-zones-target-instances get" [
+export def "compute-target-instances-get" [
   project: string
   zone: string
   target_instance: string

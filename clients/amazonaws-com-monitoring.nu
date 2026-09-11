@@ -152,7 +152,7 @@ def action-completer-37 [] { ["UntagResource"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api get-delete-alarms" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-delete-alarms" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -176,7 +176,7 @@ export def commands []: nothing -> table {
 #
 # GET /
 # operationId: GET_DeleteAlarms
-export def "api get-delete-alarms" [
+export def "get-delete-alarms" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -223,7 +223,7 @@ export def "api get-delete-alarms" [
 #
 # POST /
 # operationId: POST_DeleteAlarms
-export def "api create-delete-alarms" [
+export def "post-delete-alarms" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -273,7 +273,7 @@ export def "api create-delete-alarms" [
 #
 # GET /
 # operationId: GET_DeleteAnomalyDetector
-export def "api get-delete-anomaly-detector" [
+export def "get-delete-anomaly-detector" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -325,7 +325,7 @@ export def "api get-delete-anomaly-detector" [
 #
 # POST /
 # operationId: POST_DeleteAnomalyDetector
-export def "api create-delete-anomaly-detector" [
+export def "post-delete-anomaly-detector" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -375,7 +375,7 @@ export def "api create-delete-anomaly-detector" [
 #
 # GET /
 # operationId: GET_DeleteDashboards
-export def "api get-delete-dashboards" [
+export def "get-delete-dashboards" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -422,7 +422,7 @@ export def "api get-delete-dashboards" [
 #
 # POST /
 # operationId: POST_DeleteDashboards
-export def "api create-delete-dashboards" [
+export def "post-delete-dashboards" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -472,7 +472,7 @@ export def "api create-delete-dashboards" [
 #
 # GET /
 # operationId: GET_DeleteInsightRules
-export def "api get-delete-insight-rules" [
+export def "get-delete-insight-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -519,7 +519,7 @@ export def "api get-delete-insight-rules" [
 #
 # POST /
 # operationId: POST_DeleteInsightRules
-export def "api create-delete-insight-rules" [
+export def "post-delete-insight-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -569,7 +569,7 @@ export def "api create-delete-insight-rules" [
 #
 # GET /
 # operationId: GET_DeleteMetricStream
-export def "api get-delete-metric-stream" [
+export def "get-delete-metric-stream" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -616,7 +616,7 @@ export def "api get-delete-metric-stream" [
 #
 # POST /
 # operationId: POST_DeleteMetricStream
-export def "api create-delete-metric-stream" [
+export def "post-delete-metric-stream" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -666,7 +666,7 @@ export def "api create-delete-metric-stream" [
 #
 # GET /
 # operationId: GET_DescribeAlarmHistory
-export def "api get-alarm-history" [
+export def "get-describe-alarm-history" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -720,7 +720,7 @@ export def "api get-alarm-history" [
 #
 # POST /
 # operationId: POST_DescribeAlarmHistory
-export def "api create-get-alarm-history" [
+export def "post-describe-alarm-history" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -772,7 +772,7 @@ export def "api create-get-alarm-history" [
 #
 # GET /
 # operationId: GET_DescribeAlarms
-export def "api get-alarms" [
+export def "get-describe-alarms" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -827,7 +827,7 @@ export def "api get-alarms" [
 #
 # POST /
 # operationId: POST_DescribeAlarms
-export def "api create-get-alarms" [
+export def "post-describe-alarms" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -879,7 +879,7 @@ export def "api create-get-alarms" [
 #
 # GET /
 # operationId: GET_DescribeAlarmsForMetric
-export def "api get-alarms-for-metric" [
+export def "get-describe-alarms-for-metric" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -932,7 +932,7 @@ export def "api get-alarms-for-metric" [
 #
 # POST /
 # operationId: POST_DescribeAlarmsForMetric
-export def "api create-get-alarms-for-metric" [
+export def "post-describe-alarms-for-metric" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -982,7 +982,7 @@ export def "api create-get-alarms-for-metric" [
 #
 # GET /
 # operationId: GET_DescribeAnomalyDetectors
-export def "api get-anomaly-detectors" [
+export def "get-describe-anomaly-detectors" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1034,7 +1034,7 @@ export def "api get-anomaly-detectors" [
 #
 # POST /
 # operationId: POST_DescribeAnomalyDetectors
-export def "api create-get-anomaly-detectors" [
+export def "post-describe-anomaly-detectors" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1086,7 +1086,7 @@ export def "api create-get-anomaly-detectors" [
 #
 # GET /
 # operationId: GET_DescribeInsightRules
-export def "api get-insight-rules" [
+export def "get-describe-insight-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1134,7 +1134,7 @@ export def "api get-insight-rules" [
 #
 # POST /
 # operationId: POST_DescribeInsightRules
-export def "api create-get-insight-rules" [
+export def "post-describe-insight-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1186,7 +1186,7 @@ export def "api create-get-insight-rules" [
 #
 # GET /
 # operationId: GET_DisableAlarmActions
-export def "api get-disable-alarm-actions" [
+export def "get-disable-alarm-actions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1233,7 +1233,7 @@ export def "api get-disable-alarm-actions" [
 #
 # POST /
 # operationId: POST_DisableAlarmActions
-export def "api create-disable-alarm-actions" [
+export def "post-disable-alarm-actions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1283,7 +1283,7 @@ export def "api create-disable-alarm-actions" [
 #
 # GET /
 # operationId: GET_DisableInsightRules
-export def "api get-disable-insight-rules" [
+export def "get-disable-insight-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1330,7 +1330,7 @@ export def "api get-disable-insight-rules" [
 #
 # POST /
 # operationId: POST_DisableInsightRules
-export def "api create-disable-insight-rules" [
+export def "post-disable-insight-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1380,7 +1380,7 @@ export def "api create-disable-insight-rules" [
 #
 # GET /
 # operationId: GET_EnableAlarmActions
-export def "api get-enable-alarm-actions" [
+export def "get-enable-alarm-actions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1427,7 +1427,7 @@ export def "api get-enable-alarm-actions" [
 #
 # POST /
 # operationId: POST_EnableAlarmActions
-export def "api create-enable-alarm-actions" [
+export def "post-enable-alarm-actions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1477,7 +1477,7 @@ export def "api create-enable-alarm-actions" [
 #
 # GET /
 # operationId: GET_EnableInsightRules
-export def "api get-enable-insight-rules" [
+export def "get-enable-insight-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1524,7 +1524,7 @@ export def "api get-enable-insight-rules" [
 #
 # POST /
 # operationId: POST_EnableInsightRules
-export def "api create-enable-insight-rules" [
+export def "post-enable-insight-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1574,7 +1574,7 @@ export def "api create-enable-insight-rules" [
 #
 # GET /
 # operationId: GET_GetDashboard
-export def "api get-dashboard" [
+export def "get-get-dashboard" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1621,7 +1621,7 @@ export def "api get-dashboard" [
 #
 # POST /
 # operationId: POST_GetDashboard
-export def "api create-get-dashboard" [
+export def "post-get-dashboard" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1671,7 +1671,7 @@ export def "api create-get-dashboard" [
 #
 # GET /
 # operationId: GET_GetInsightRuleReport
-export def "api get-insight-rule-report" [
+export def "get-get-insight-rule-report" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1724,7 +1724,7 @@ export def "api get-insight-rule-report" [
 #
 # POST /
 # operationId: POST_GetInsightRuleReport
-export def "api create-get-insight-rule-report" [
+export def "post-get-insight-rule-report" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1774,7 +1774,7 @@ export def "api create-get-insight-rule-report" [
 #
 # GET /
 # operationId: GET_GetMetricData
-export def "api get-metric-data" [
+export def "get-get-metric-data" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1827,7 +1827,7 @@ export def "api get-metric-data" [
 #
 # POST /
 # operationId: POST_GetMetricData
-export def "api create-get-metric-data" [
+export def "post-get-metric-data" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1879,7 +1879,7 @@ export def "api create-get-metric-data" [
 #
 # GET /
 # operationId: GET_GetMetricStatistics
-export def "api get-metric-statistics" [
+export def "get-get-metric-statistics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1934,7 +1934,7 @@ export def "api get-metric-statistics" [
 #
 # POST /
 # operationId: POST_GetMetricStatistics
-export def "api create-get-metric-statistics" [
+export def "post-get-metric-statistics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1984,7 +1984,7 @@ export def "api create-get-metric-statistics" [
 #
 # GET /
 # operationId: GET_GetMetricStream
-export def "api get-metric-stream" [
+export def "get-get-metric-stream" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2031,7 +2031,7 @@ export def "api get-metric-stream" [
 #
 # POST /
 # operationId: POST_GetMetricStream
-export def "api create-get-metric-stream" [
+export def "post-get-metric-stream" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2081,7 +2081,7 @@ export def "api create-get-metric-stream" [
 #
 # GET /
 # operationId: GET_GetMetricWidgetImage
-export def "api get-metric-widget-image" [
+export def "get-get-metric-widget-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2129,7 +2129,7 @@ export def "api get-metric-widget-image" [
 #
 # POST /
 # operationId: POST_GetMetricWidgetImage
-export def "api create-get-metric-widget-image" [
+export def "post-get-metric-widget-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2179,7 +2179,7 @@ export def "api create-get-metric-widget-image" [
 #
 # GET /
 # operationId: GET_ListDashboards
-export def "api get-list-dashboards" [
+export def "get-list-dashboards" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2227,7 +2227,7 @@ export def "api get-list-dashboards" [
 #
 # POST /
 # operationId: POST_ListDashboards
-export def "api create-list-dashboards" [
+export def "post-list-dashboards" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2278,7 +2278,7 @@ export def "api create-list-dashboards" [
 #
 # GET /
 # operationId: GET_ListManagedInsightRules
-export def "api get-list-managed-insight-rules" [
+export def "get-list-managed-insight-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2327,7 +2327,7 @@ export def "api get-list-managed-insight-rules" [
 #
 # POST /
 # operationId: POST_ListManagedInsightRules
-export def "api create-list-managed-insight-rules" [
+export def "post-list-managed-insight-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2379,7 +2379,7 @@ export def "api create-list-managed-insight-rules" [
 #
 # GET /
 # operationId: GET_ListMetricStreams
-export def "api get-list-metric-streams" [
+export def "get-list-metric-streams" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2427,7 +2427,7 @@ export def "api get-list-metric-streams" [
 #
 # POST /
 # operationId: POST_ListMetricStreams
-export def "api create-list-metric-streams" [
+export def "post-list-metric-streams" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2479,7 +2479,7 @@ export def "api create-list-metric-streams" [
 #
 # GET /
 # operationId: GET_ListMetrics
-export def "api get-list-metrics" [
+export def "get-list-metrics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2532,7 +2532,7 @@ export def "api get-list-metrics" [
 #
 # POST /
 # operationId: POST_ListMetrics
-export def "api create-list-metrics" [
+export def "post-list-metrics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2583,7 +2583,7 @@ export def "api create-list-metrics" [
 #
 # GET /
 # operationId: GET_ListTagsForResource
-export def "api get-list-tags-for-resource" [
+export def "get-list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2630,7 +2630,7 @@ export def "api get-list-tags-for-resource" [
 #
 # POST /
 # operationId: POST_ListTagsForResource
-export def "api create-list-tags-for-resource" [
+export def "post-list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2680,7 +2680,7 @@ export def "api create-list-tags-for-resource" [
 #
 # GET /
 # operationId: GET_PutAnomalyDetector
-export def "api get-update-anomaly-detector" [
+export def "get-put-anomaly-detector" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2733,7 +2733,7 @@ export def "api get-update-anomaly-detector" [
 #
 # POST /
 # operationId: POST_PutAnomalyDetector
-export def "api create-update-anomaly-detector" [
+export def "post-put-anomaly-detector" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2783,7 +2783,7 @@ export def "api create-update-anomaly-detector" [
 #
 # GET /
 # operationId: GET_PutCompositeAlarm
-export def "api get-update-composite-alarm" [
+export def "get-put-composite-alarm" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2840,7 +2840,7 @@ export def "api get-update-composite-alarm" [
 #
 # POST /
 # operationId: POST_PutCompositeAlarm
-export def "api create-update-composite-alarm" [
+export def "post-put-composite-alarm" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2890,7 +2890,7 @@ export def "api create-update-composite-alarm" [
 #
 # GET /
 # operationId: GET_PutDashboard
-export def "api get-update-dashboard" [
+export def "get-put-dashboard" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2938,7 +2938,7 @@ export def "api get-update-dashboard" [
 #
 # POST /
 # operationId: POST_PutDashboard
-export def "api create-update-dashboard" [
+export def "post-put-dashboard" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2988,7 +2988,7 @@ export def "api create-update-dashboard" [
 #
 # GET /
 # operationId: GET_PutInsightRule
-export def "api get-update-insight-rule" [
+export def "get-put-insight-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3038,7 +3038,7 @@ export def "api get-update-insight-rule" [
 #
 # POST /
 # operationId: POST_PutInsightRule
-export def "api create-update-insight-rule" [
+export def "post-put-insight-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3088,7 +3088,7 @@ export def "api create-update-insight-rule" [
 #
 # GET /
 # operationId: GET_PutManagedInsightRules
-export def "api get-update-managed-insight-rules" [
+export def "get-put-managed-insight-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3135,7 +3135,7 @@ export def "api get-update-managed-insight-rules" [
 #
 # POST /
 # operationId: POST_PutManagedInsightRules
-export def "api create-update-managed-insight-rules" [
+export def "post-put-managed-insight-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3185,7 +3185,7 @@ export def "api create-update-managed-insight-rules" [
 #
 # GET /
 # operationId: GET_PutMetricAlarm
-export def "api get-update-metric-alarm" [
+export def "get-put-metric-alarm" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3253,7 +3253,7 @@ export def "api get-update-metric-alarm" [
 #
 # POST /
 # operationId: POST_PutMetricAlarm
-export def "api create-update-metric-alarm" [
+export def "post-put-metric-alarm" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3303,7 +3303,7 @@ export def "api create-update-metric-alarm" [
 #
 # GET /
 # operationId: GET_PutMetricData
-export def "api get-update-metric-data" [
+export def "get-put-metric-data" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3351,7 +3351,7 @@ export def "api get-update-metric-data" [
 #
 # POST /
 # operationId: POST_PutMetricData
-export def "api create-update-metric-data" [
+export def "post-put-metric-data" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3401,7 +3401,7 @@ export def "api create-update-metric-data" [
 #
 # GET /
 # operationId: GET_PutMetricStream
-export def "api get-update-metric-stream" [
+export def "get-put-metric-stream" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3456,7 +3456,7 @@ export def "api get-update-metric-stream" [
 #
 # POST /
 # operationId: POST_PutMetricStream
-export def "api create-update-metric-stream" [
+export def "post-put-metric-stream" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3506,7 +3506,7 @@ export def "api create-update-metric-stream" [
 #
 # GET /
 # operationId: GET_SetAlarmState
-export def "api get-update-alarm-state" [
+export def "get-set-alarm-state" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3556,7 +3556,7 @@ export def "api get-update-alarm-state" [
 #
 # POST /
 # operationId: POST_SetAlarmState
-export def "api create-update-alarm-state" [
+export def "post-set-alarm-state" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3606,7 +3606,7 @@ export def "api create-update-alarm-state" [
 #
 # GET /
 # operationId: GET_StartMetricStreams
-export def "api get-start-metric-streams" [
+export def "get-start-metric-streams" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3653,7 +3653,7 @@ export def "api get-start-metric-streams" [
 #
 # POST /
 # operationId: POST_StartMetricStreams
-export def "api create-start-metric-streams" [
+export def "post-start-metric-streams" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3703,7 +3703,7 @@ export def "api create-start-metric-streams" [
 #
 # GET /
 # operationId: GET_StopMetricStreams
-export def "api get-stop-metric-streams" [
+export def "get-stop-metric-streams" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3750,7 +3750,7 @@ export def "api get-stop-metric-streams" [
 #
 # POST /
 # operationId: POST_StopMetricStreams
-export def "api create-stop-metric-streams" [
+export def "post-stop-metric-streams" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3800,7 +3800,7 @@ export def "api create-stop-metric-streams" [
 #
 # GET /
 # operationId: GET_TagResource
-export def "api get-tag-resource" [
+export def "get-tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3848,7 +3848,7 @@ export def "api get-tag-resource" [
 #
 # POST /
 # operationId: POST_TagResource
-export def "api create-tag-resource" [
+export def "post-tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3898,7 +3898,7 @@ export def "api create-tag-resource" [
 #
 # GET /
 # operationId: GET_UntagResource
-export def "api get-untag-resource" [
+export def "get-untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3946,7 +3946,7 @@ export def "api get-untag-resource" [
 #
 # POST /
 # operationId: POST_UntagResource
-export def "api create-untag-resource" [
+export def "post-untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

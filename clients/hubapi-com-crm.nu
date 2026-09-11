@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["query-hapikey" "none"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "crm-extensions-cards-sample-response get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-crm-v3-extensions-cards-sample-response-get-cards-sample-response" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # GET /crm/v3/extensions/cards/sample-response
 # operationId: get-/crm/v3/extensions/cards/sample-response_getCardsSampleResponse
-export def "crm-extensions-cards-sample-response get" [
+export def "get-crm-v3-extensions-cards-sample-response-get-cards-sample-response" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -174,7 +174,7 @@ export def "crm-extensions-cards-sample-response get" [
 #
 # GET /crm/v3/extensions/cards/{appId}
 # operationId: get-/crm/v3/extensions/cards/{appId}_getAll
-export def "crm-extensions-cards get-app-list" [
+export def "get-crm-v3-extensions-cards-get-all" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -213,7 +213,7 @@ export def "crm-extensions-cards get-app-list" [
 # --actions shape: {baseUrls: list<string>}
 # --display shape: {properties: list}
 # --fetch shape: {objectTypes: list, targetUrl: string}
-export def "crm-extensions-cards create-app" [
+export def "post-crm-v3-extensions-cards-create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -256,7 +256,7 @@ export def "crm-extensions-cards create-app" [
 #
 # DELETE /crm/v3/extensions/cards/{appId}/{cardId}
 # operationId: delete-/crm/v3/extensions/cards/{appId}/{cardId}_archive
-export def "crm-extensions-cards delete-app-archive" [
+export def "delete-crm-v3-extensions-cards-archive" [
   app_id: int
   card_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -294,7 +294,7 @@ export def "crm-extensions-cards delete-app-archive" [
 #
 # GET /crm/v3/extensions/cards/{appId}/{cardId}
 # operationId: get-/crm/v3/extensions/cards/{appId}/{cardId}_getById
-export def "crm-extensions-cards get-app" [
+export def "get-crm-v3-extensions-cards-get-by-id" [
   app_id: int
   card_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -335,7 +335,7 @@ export def "crm-extensions-cards get-app" [
 # --actions shape: {baseUrls: list<string>}
 # --display shape: {properties: list}
 # --fetch shape: {objectTypes: list, targetUrl?: string}
-export def "crm-extensions-cards update-app" [
+export def "patch-crm-v3-extensions-cards-update" [
   app_id: int
   card_id: string
   --base-url(-b): string@base-url-completer # API base URL

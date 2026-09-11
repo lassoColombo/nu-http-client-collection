@@ -118,7 +118,7 @@ def federation-mode-completer [] { ["FEDERATED" "LOCAL"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "environment create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-environment" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -144,7 +144,7 @@ export def commands []: nothing -> table {
 # operationId: CreateEnvironment
 # --federationParameters shape: {samlMetadataDocument?: any, samlMetadataURL?: any, applicationCallBackURL?: any, federationURN?: any, federationProviderName?: any, attributeMap?: any}
 # --superuserParameters shape: {emailAddress?: any, firstName?: any, lastName?: any}
-export def "environment create" [
+export def "create-environment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -198,7 +198,7 @@ export def "environment create" [
 #
 # GET /environment
 # operationId: ListEnvironments
-export def "environment list" [
+export def "list-environments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -244,7 +244,7 @@ export def "environment list" [
 #
 # DELETE /environment/{environmentId}
 # operationId: DeleteEnvironment
-export def "environment delete" [
+export def "delete-environment" [
   environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -289,7 +289,7 @@ export def "environment delete" [
 #
 # GET /environment/{environmentId}
 # operationId: GetEnvironment
-export def "environment get" [
+export def "get-environment" [
   environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -335,7 +335,7 @@ export def "environment get" [
 # PUT /environment/{environmentId}
 # operationId: UpdateEnvironment
 # --federationParameters shape: {samlMetadataDocument?: any, samlMetadataURL?: any, applicationCallBackURL?: any, federationURN?: any, federationProviderName?: any, attributeMap?: any}
-export def "environment update" [
+export def "update-environment" [
   environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -387,7 +387,7 @@ export def "environment update" [
 #
 # GET /tags/{resourceArn}
 # operationId: ListTagsForResource
-export def "tags list-for-resource" [
+export def "list-tags-for-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -432,7 +432,7 @@ export def "tags list-for-resource" [
 #
 # POST /tags/{resourceArn}
 # operationId: TagResource
-export def "tags tag-resource" [
+export def "tag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -481,7 +481,7 @@ export def "tags tag-resource" [
 #
 # DELETE /tags/{resourceArn}
 # operationId: UntagResource
-export def "tags untag-resource" [
+export def "untag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

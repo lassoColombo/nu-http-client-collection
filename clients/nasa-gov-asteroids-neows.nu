@@ -100,7 +100,7 @@ def accept-completer [] { ["application/json" "application/xml"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-api" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -123,7 +123,7 @@ export def commands []: nothing -> table {
 # Returns the swagger specification for the API.
 #
 # GET /api
-export def "api get" [
+export def "get-api" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -156,7 +156,7 @@ export def "api get" [
 # Returns information about a specific technology project.
 #
 # GET /api/projects/{id}{.format}
-export def "projects get" [
+export def "get-api-projects-id-format" [
   id: int
   format: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -196,7 +196,7 @@ export def "projects get" [
 # Returns a list of available technology project IDs.
 #
 # GET /api/projects{.format}
-export def "projects-format get" [
+export def "get-api-projects-format" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

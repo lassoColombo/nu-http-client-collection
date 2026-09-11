@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "invitation update-accept" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accept-invitation" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # PUT /invitation
 # operationId: AcceptInvitation
-export def "invitation update-accept" [
+export def "accept-invitation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -187,7 +187,7 @@ export def "invitation update-accept" [
 #
 # POST /graph/datasources/get
 # operationId: BatchGetGraphMemberDatasources
-export def "graph-datasources-get get-batch-member" [
+export def "batch-get-graph-member-datasources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -235,7 +235,7 @@ export def "graph-datasources-get get-batch-member" [
 #
 # POST /membership/datasources/get
 # operationId: BatchGetMembershipDatasources
-export def "membership-datasources-get get-batch" [
+export def "batch-get-membership-datasources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -282,7 +282,7 @@ export def "membership-datasources-get get-batch" [
 #
 # POST /graph
 # operationId: CreateGraph
-export def "graph create" [
+export def "create-graph" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -330,7 +330,7 @@ export def "graph create" [
 # POST /graph/members
 # operationId: CreateMembers
 # --Accounts item shape: {AccountId: any, EmailAddress: any}
-export def "graph-members create" [
+export def "create-members" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -380,7 +380,7 @@ export def "graph-members create" [
 #
 # POST /graph/removal
 # operationId: DeleteGraph
-export def "graph-removal delete" [
+export def "delete-graph" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -427,7 +427,7 @@ export def "graph-removal delete" [
 #
 # POST /graph/members/removal
 # operationId: DeleteMembers
-export def "graph-members-removal delete" [
+export def "delete-members" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -475,7 +475,7 @@ export def "graph-members-removal delete" [
 #
 # POST /orgs/describeOrganizationConfiguration
 # operationId: DescribeOrganizationConfiguration
-export def "orgs-describe-organization-configuration get" [
+export def "describe-organization-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -522,7 +522,7 @@ export def "orgs-describe-organization-configuration get" [
 #
 # POST /orgs/disableAdminAccount
 # operationId: DisableOrganizationAdminAccount
-export def "orgs-disable-admin-account disable-organization" [
+export def "disable-organization-admin-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -565,7 +565,7 @@ export def "orgs-disable-admin-account disable-organization" [
 #
 # POST /membership/removal
 # operationId: DisassociateMembership
-export def "membership-removal create-disassociate" [
+export def "disassociate-membership" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -612,7 +612,7 @@ export def "membership-removal create-disassociate" [
 #
 # POST /orgs/enableAdminAccount
 # operationId: EnableOrganizationAdminAccount
-export def "orgs-enable-admin-account enable-organization" [
+export def "enable-organization-admin-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -659,7 +659,7 @@ export def "orgs-enable-admin-account enable-organization" [
 #
 # POST /graph/members/get
 # operationId: GetMembers
-export def "graph-members-get get" [
+export def "get-members" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -707,7 +707,7 @@ export def "graph-members-get get" [
 #
 # POST /graph/datasources/list
 # operationId: ListDatasourcePackages
-export def "graph-datasources-list list-packages" [
+export def "list-datasource-packages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -759,7 +759,7 @@ export def "graph-datasources-list list-packages" [
 #
 # POST /graphs/list
 # operationId: ListGraphs
-export def "graphs-list list" [
+export def "list-graphs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -810,7 +810,7 @@ export def "graphs-list list" [
 #
 # POST /invitations/list
 # operationId: ListInvitations
-export def "invitations-list list" [
+export def "list-invitations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -861,7 +861,7 @@ export def "invitations-list list" [
 #
 # POST /graph/members/list
 # operationId: ListMembers
-export def "graph-members-list list" [
+export def "list-members" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -913,7 +913,7 @@ export def "graph-members-list list" [
 #
 # POST /orgs/adminAccountslist
 # operationId: ListOrganizationAdminAccounts
-export def "orgs-admin-accountslist list-organization-accounts" [
+export def "list-organization-admin-accounts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -964,7 +964,7 @@ export def "orgs-admin-accountslist list-organization-accounts" [
 #
 # GET /tags/{ResourceArn}
 # operationId: ListTagsForResource
-export def "tags list-for-resource" [
+export def "list-tags-for-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1009,7 +1009,7 @@ export def "tags list-for-resource" [
 #
 # POST /tags/{ResourceArn}
 # operationId: TagResource
-export def "tags tag-resource" [
+export def "tag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1058,7 +1058,7 @@ export def "tags tag-resource" [
 #
 # POST /invitation/removal
 # operationId: RejectInvitation
-export def "invitation-removal reject" [
+export def "reject-invitation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1105,7 +1105,7 @@ export def "invitation-removal reject" [
 #
 # POST /graph/member/monitoringstate
 # operationId: StartMonitoringMember
-export def "graph-member-monitoringstate start-monitoring" [
+export def "start-monitoring-member" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1153,7 +1153,7 @@ export def "graph-member-monitoringstate start-monitoring" [
 #
 # DELETE /tags/{ResourceArn}
 # operationId: UntagResource
-export def "tags untag-resource" [
+export def "untag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1200,7 +1200,7 @@ export def "tags untag-resource" [
 #
 # POST /graph/datasources/update
 # operationId: UpdateDatasourcePackages
-export def "graph-datasources-update update-packages" [
+export def "update-datasource-packages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1248,7 +1248,7 @@ export def "graph-datasources-update update-packages" [
 #
 # POST /orgs/updateOrganizationConfiguration
 # operationId: UpdateOrganizationConfiguration
-export def "orgs-update-organization-configuration update" [
+export def "update-organization-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

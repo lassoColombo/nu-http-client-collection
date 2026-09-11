@@ -125,7 +125,7 @@ def keytype-completer [] { ["csk" "ksk" "zsk"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "servers list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-servers" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -149,7 +149,7 @@ export def commands []: nothing -> table {
 #
 # GET /servers
 # operationId: listServers
-export def "servers list" [
+export def "list-servers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -183,7 +183,7 @@ export def "servers list" [
 #
 # GET /servers/{server_id}
 # operationId: listServer
-export def "servers list-1" [
+export def "list-server" [
   server_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -219,7 +219,7 @@ export def "servers list-1" [
 #
 # PUT /servers/{server_id}/cache/flush
 # operationId: cacheFlushByName
-export def "servers-cache-flush update-by-name" [
+export def "cache-flush-by-name" [
   server_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -257,7 +257,7 @@ export def "servers-cache-flush update-by-name" [
 #
 # GET /servers/{server_id}/config
 # operationId: getConfig
-export def "servers-config list" [
+export def "get-config" [
   server_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -293,7 +293,7 @@ export def "servers-config list" [
 #
 # GET /servers/{server_id}/config/{config_setting_name}
 # operationId: getConfigSetting
-export def "servers-config get" [
+export def "get-config-setting" [
   server_id: string
   config_setting_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -331,7 +331,7 @@ export def "servers-config get" [
 #
 # GET /servers/{server_id}/search-data
 # operationId: searchData
-export def "servers-search-data list" [
+export def "search-data" [
   server_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -371,7 +371,7 @@ export def "servers-search-data list" [
 #
 # GET /servers/{server_id}/statistics
 # operationId: getStats
-export def "servers-statistics get-stats" [
+export def "get-stats" [
   server_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -410,7 +410,7 @@ export def "servers-statistics get-stats" [
 #
 # GET /servers/{server_id}/tsigkeys
 # operationId: listTSIGKeys
-export def "servers-tsigkeys list-tsig-keys" [
+export def "list-tsig-keys" [
   server_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -446,7 +446,7 @@ export def "servers-tsigkeys list-tsig-keys" [
 #
 # POST /servers/{server_id}/tsigkeys
 # operationId: createTSIGKey
-export def "servers-tsigkeys create-tsig-key" [
+export def "create-tsig-key" [
   server_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -488,7 +488,7 @@ export def "servers-tsigkeys create-tsig-key" [
 #
 # DELETE /servers/{server_id}/tsigkeys/{tsigkey_id}
 # operationId: deleteTSIGKey
-export def "servers-tsigkeys delete-tsig-key" [
+export def "delete-tsig-key" [
   server_id: string
   tsigkey_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -526,7 +526,7 @@ export def "servers-tsigkeys delete-tsig-key" [
 #
 # GET /servers/{server_id}/tsigkeys/{tsigkey_id}
 # operationId: getTSIGKey
-export def "servers-tsigkeys get-tsig-key" [
+export def "get-tsig-key" [
   server_id: string
   tsigkey_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -564,7 +564,7 @@ export def "servers-tsigkeys get-tsig-key" [
 #
 # PUT /servers/{server_id}/tsigkeys/{tsigkey_id}
 # operationId: putTSIGKey
-export def "servers-tsigkeys update-tsig-key" [
+export def "put-tsig-key" [
   server_id: string
   tsigkey_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -608,7 +608,7 @@ export def "servers-tsigkeys update-tsig-key" [
 #
 # GET /servers/{server_id}/zones
 # operationId: listZones
-export def "servers-zones list" [
+export def "list-zones" [
   server_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -648,7 +648,7 @@ export def "servers-zones list" [
 # POST /servers/{server_id}/zones
 # operationId: createZone
 # --rrsets item shape: {changetype: string, comments?: list, name: string, records: list, ttl: int, type: string}
-export def "servers-zones create" [
+export def "create-zone" [
   server_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -711,7 +711,7 @@ export def "servers-zones create" [
 #
 # DELETE /servers/{server_id}/zones/{zone_id}
 # operationId: deleteZone
-export def "servers-zones delete" [
+export def "delete-zone" [
   server_id: string
   zone_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -749,7 +749,7 @@ export def "servers-zones delete" [
 #
 # GET /servers/{server_id}/zones/{zone_id}
 # operationId: listZone
-export def "servers-zones list-1" [
+export def "list-zone" [
   server_id: string
   zone_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -790,7 +790,7 @@ export def "servers-zones list-1" [
 # PATCH /servers/{server_id}/zones/{zone_id}
 # operationId: patchZone
 # --rrsets item shape: {changetype: string, comments?: list, name: string, records: list, ttl: int, type: string}
-export def "servers-zones update-by-server-id-zone-id" [
+export def "patch-zone" [
   server_id: string
   zone_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -854,7 +854,7 @@ export def "servers-zones update-by-server-id-zone-id" [
 # PUT /servers/{server_id}/zones/{zone_id}
 # operationId: putZone
 # --rrsets item shape: {changetype: string, comments?: list, name: string, records: list, ttl: int, type: string}
-export def "servers-zones update-by-server-id-zone-id-1" [
+export def "put-zone" [
   server_id: string
   zone_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -917,7 +917,7 @@ export def "servers-zones update-by-server-id-zone-id-1" [
 #
 # PUT /servers/{server_id}/zones/{zone_id}/axfr-retrieve
 # operationId: axfrRetrieveZone
-export def "servers-zones-axfr-retrieve get" [
+export def "axfr-retrieve-zone" [
   server_id: string
   zone_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -955,7 +955,7 @@ export def "servers-zones-axfr-retrieve get" [
 #
 # GET /servers/{server_id}/zones/{zone_id}/cryptokeys
 # operationId: listCryptokeys
-export def "servers-zones-cryptokeys list" [
+export def "list-cryptokeys" [
   server_id: string
   zone_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -993,7 +993,7 @@ export def "servers-zones-cryptokeys list" [
 #
 # POST /servers/{server_id}/zones/{zone_id}/cryptokeys
 # operationId: createCryptokey
-export def "servers-zones-cryptokeys create" [
+export def "create-cryptokey" [
   server_id: string
   zone_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1044,7 +1044,7 @@ export def "servers-zones-cryptokeys create" [
 #
 # DELETE /servers/{server_id}/zones/{zone_id}/cryptokeys/{cryptokey_id}
 # operationId: deleteCryptokey
-export def "servers-zones-cryptokeys delete" [
+export def "delete-cryptokey" [
   server_id: string
   zone_id: string
   cryptokey_id: string
@@ -1084,7 +1084,7 @@ export def "servers-zones-cryptokeys delete" [
 #
 # GET /servers/{server_id}/zones/{zone_id}/cryptokeys/{cryptokey_id}
 # operationId: getCryptokey
-export def "servers-zones-cryptokeys get" [
+export def "get-cryptokey" [
   server_id: string
   zone_id: string
   cryptokey_id: string
@@ -1124,7 +1124,7 @@ export def "servers-zones-cryptokeys get" [
 #
 # PUT /servers/{server_id}/zones/{zone_id}/cryptokeys/{cryptokey_id}
 # operationId: modifyCryptokey
-export def "servers-zones-cryptokeys update-modify" [
+export def "modify-cryptokey" [
   server_id: string
   zone_id: string
   cryptokey_id: string
@@ -1177,7 +1177,7 @@ export def "servers-zones-cryptokeys update-modify" [
 #
 # GET /servers/{server_id}/zones/{zone_id}/export
 # operationId: axfrExportZone
-export def "servers-zones-export export-axfr" [
+export def "axfr-export-zone" [
   server_id: string
   zone_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1215,7 +1215,7 @@ export def "servers-zones-export export-axfr" [
 #
 # GET /servers/{server_id}/zones/{zone_id}/metadata
 # operationId: listMetadata
-export def "servers-zones-metadata list" [
+export def "list-metadata" [
   server_id: string
   zone_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1253,7 +1253,7 @@ export def "servers-zones-metadata list" [
 #
 # POST /servers/{server_id}/zones/{zone_id}/metadata
 # operationId: createMetadata
-export def "servers-zones-metadata create" [
+export def "create-metadata" [
   server_id: string
   zone_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1296,7 +1296,7 @@ export def "servers-zones-metadata create" [
 #
 # DELETE /servers/{server_id}/zones/{zone_id}/metadata/{metadata_kind}
 # operationId: deleteMetadata
-export def "servers-zones-metadata delete" [
+export def "delete-metadata" [
   server_id: string
   zone_id: string
   metadata_kind: string
@@ -1336,7 +1336,7 @@ export def "servers-zones-metadata delete" [
 #
 # GET /servers/{server_id}/zones/{zone_id}/metadata/{metadata_kind}
 # operationId: getMetadata
-export def "servers-zones-metadata get" [
+export def "get-metadata" [
   server_id: string
   zone_id: string
   metadata_kind: string
@@ -1376,7 +1376,7 @@ export def "servers-zones-metadata get" [
 #
 # PUT /servers/{server_id}/zones/{zone_id}/metadata/{metadata_kind}
 # operationId: modifyMetadata
-export def "servers-zones-metadata update-modify" [
+export def "modify-metadata" [
   server_id: string
   zone_id: string
   metadata_kind: string
@@ -1421,7 +1421,7 @@ export def "servers-zones-metadata update-modify" [
 #
 # PUT /servers/{server_id}/zones/{zone_id}/notify
 # operationId: notifyZone
-export def "servers-zones-notify notify" [
+export def "notify-zone" [
   server_id: string
   zone_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1459,7 +1459,7 @@ export def "servers-zones-notify notify" [
 #
 # PUT /servers/{server_id}/zones/{zone_id}/rectify
 # operationId: rectifyZone
-export def "servers-zones-rectify update" [
+export def "rectify-zone" [
   server_id: string
   zone_id: string
   --base-url(-b): string@base-url-completer # API base URL

@@ -111,7 +111,7 @@ def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "exports-jobs delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "delete-job" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -134,7 +134,7 @@ export def commands []: nothing -> table {
 # DELETE /v1/Exports/Jobs/{JobSid}
 #
 # operationId: DeleteJob
-export def "exports-jobs delete" [
+export def "delete-job" [
   job_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -169,7 +169,7 @@ export def "exports-jobs delete" [
 # GET /v1/Exports/Jobs/{JobSid}
 #
 # operationId: FetchJob
-export def "exports-jobs get" [
+export def "fetch-job" [
   job_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -205,7 +205,7 @@ export def "exports-jobs get" [
 #
 # GET /v1/Exports/{ResourceType}
 # operationId: FetchExport
-export def "exports get" [
+export def "fetch-export" [
   resource_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -241,7 +241,7 @@ export def "exports get" [
 #
 # GET /v1/Exports/{ResourceType}/Configuration
 # operationId: FetchExportConfiguration
-export def "exports-configuration get" [
+export def "fetch-export-configuration" [
   resource_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -277,7 +277,7 @@ export def "exports-configuration get" [
 #
 # POST /v1/Exports/{ResourceType}/Configuration
 # operationId: UpdateExportConfiguration
-export def "exports-configuration update" [
+export def "update-export-configuration" [
   resource_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -320,7 +320,7 @@ export def "exports-configuration update" [
 #
 # GET /v1/Exports/{ResourceType}/Days
 # operationId: ListDay
-export def "exports-days list" [
+export def "list-day" [
   resource_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -360,7 +360,7 @@ export def "exports-days list" [
 #
 # GET /v1/Exports/{ResourceType}/Days/{Day}
 # operationId: FetchDay
-export def "exports-days get" [
+export def "fetch-day" [
   resource_type: string
   day: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -397,7 +397,7 @@ export def "exports-days get" [
 # GET /v1/Exports/{ResourceType}/Jobs
 #
 # operationId: ListExportCustomJob
-export def "exports-jobs list-custom" [
+export def "list-export-custom-job" [
   resource_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -436,7 +436,7 @@ export def "exports-jobs list-custom" [
 # POST /v1/Exports/{ResourceType}/Jobs
 #
 # operationId: CreateExportCustomJob
-export def "exports-jobs create-custom" [
+export def "create-export-custom-job" [
   resource_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

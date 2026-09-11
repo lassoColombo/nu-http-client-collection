@@ -115,7 +115,7 @@ def mode-completer [] { ["live" "test"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "payment-links list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-payment-links" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -139,7 +139,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/payment-links
 # operationId: getPaymentLinks
-export def "payment-links list" [
+export def "get-payment-links" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,7 +184,7 @@ export def "payment-links list" [
 # --invoiceInformation shape: {invoiceId?: string, invoiceText?: string}
 # --shipping shape: {addressAddition?: string, city?: string, company?: string, country?: string, firstName?: string, lastName?: string, state?: string, street?: string, zip?: string}
 # --shoppingCart item shape: {deliveryDateEnd?: string, deliveryDateStart?: string, description?: string, number: string, price: int, quantity: int, type: "goods"|"shipment"|"handling"|"voucher", vatRate?: int}
-export def "payment-links create" [
+export def "create-payment-link" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -244,7 +244,7 @@ export def "payment-links create" [
 #
 # GET /v1/payment-links/{linkId}
 # operationId: getPaymentLink
-export def "payment-links get" [
+export def "get-payment-link" [
   link_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -284,7 +284,7 @@ export def "payment-links get" [
 # --invoiceInformation shape: {invoiceId?: string, invoiceText?: string}
 # --shipping shape: {addressAddition?: string, city?: string, company?: string, country?: string, firstName?: string, lastName?: string, state?: string, street?: string, zip?: string}
 # --shoppingCart item shape: {deliveryDateEnd?: string, deliveryDateStart?: string, description?: string, number: string, price: int, quantity: int, type: "goods"|"shipment"|"handling"|"voucher", vatRate?: int}
-export def "payment-links update" [
+export def "update-payment-link" [
   link_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

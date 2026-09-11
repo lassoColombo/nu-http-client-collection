@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms-queueservices get-queue-services" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "queue-services-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -122,7 +122,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Storage.Admin/farms/{farmId}/queueservices/{serviceType}
 # operationId: QueueServices_Get
-export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms-queueservices get-queue-services" [
+export def "queue-services-get" [
   subscription_id: string
   resource_group_name: string
   farm_id: string
@@ -166,7 +166,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Storage.Admin/farms/{farmId}/queueservices/{serviceType}/metricdefinitions
 # operationId: QueueServices_ListMetricDefinitions
-export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms-queueservices-metricdefinitions list-queue-services-metric-definitions" [
+export def "queue-services-list-metric-definitions" [
   subscription_id: string
   resource_group_name: string
   farm_id: string
@@ -210,7 +210,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Storage.Admin/farms/{farmId}/queueservices/{serviceType}/metrics
 # operationId: QueueServices_ListMetrics
-export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms-queueservices-metrics list-queue-services" [
+export def "queue-services-list-metrics" [
   subscription_id: string
   resource_group_name: string
   farm_id: string

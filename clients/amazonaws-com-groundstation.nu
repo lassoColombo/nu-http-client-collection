@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "contact cancel" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cancel-contact" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /contact/{contactId}
 # operationId: CancelContact
-export def "contact cancel" [
+export def "cancel-contact" [
   contact_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -185,7 +185,7 @@ export def "contact cancel" [
 #
 # GET /contact/{contactId}
 # operationId: DescribeContact
-export def "contact get" [
+export def "describe-contact" [
   contact_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -231,7 +231,7 @@ export def "contact get" [
 # POST /config
 # operationId: CreateConfig
 # --configData shape: {antennaDownlinkConfig?: any, antennaDownlinkDemodDecodeConfig?: any, antennaUplinkConfig?: any, dataflowEndpointConfig?: any, s3RecordingConfig?: any, trackingConfig?: any, uplinkEchoConfig?: any}
-export def "config create" [
+export def "create-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -280,7 +280,7 @@ export def "config create" [
 #
 # GET /config
 # operationId: ListConfigs
-export def "config list" [
+export def "list-configs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -327,7 +327,7 @@ export def "config list" [
 # POST /dataflowEndpointGroup
 # operationId: CreateDataflowEndpointGroup
 # --endpointDetails item shape: {awsGroundStationAgentEndpoint?: any, endpoint?: any, healthReasons?: any, healthStatus?: any, securityDetails?: any}
-export def "dataflow-endpoint-group create" [
+export def "create-dataflow-endpoint-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -377,7 +377,7 @@ export def "dataflow-endpoint-group create" [
 #
 # GET /dataflowEndpointGroup
 # operationId: ListDataflowEndpointGroups
-export def "dataflow-endpoint-group list" [
+export def "list-dataflow-endpoint-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -424,7 +424,7 @@ export def "dataflow-endpoint-group list" [
 # POST /ephemeris
 # operationId: CreateEphemeris
 # --ephemeris shape: {oem?: record, tle?: record}
-export def "ephemeris create" [
+export def "create-ephemeris" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -479,7 +479,7 @@ export def "ephemeris create" [
 # POST /missionprofile
 # operationId: CreateMissionProfile
 # --streamsKmsKey shape: {kmsAliasArn?: any, kmsKeyArn?: any}
-export def "missionprofile create-mission-profile" [
+export def "create-mission-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -534,7 +534,7 @@ export def "missionprofile create-mission-profile" [
 #
 # GET /missionprofile
 # operationId: ListMissionProfiles
-export def "missionprofile list-mission-profiles" [
+export def "list-mission-profiles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -580,7 +580,7 @@ export def "missionprofile list-mission-profiles" [
 #
 # DELETE /config/{configType}/{configId}
 # operationId: DeleteConfig
-export def "config delete" [
+export def "delete-config" [
   config_type: string
   config_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -627,7 +627,7 @@ export def "config delete" [
 #
 # GET /config/{configType}/{configId}
 # operationId: GetConfig
-export def "config get" [
+export def "get-config" [
   config_type: string
   config_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -675,7 +675,7 @@ export def "config get" [
 # PUT /config/{configType}/{configId}
 # operationId: UpdateConfig
 # --configData shape: {antennaDownlinkConfig?: any, antennaDownlinkDemodDecodeConfig?: any, antennaUplinkConfig?: any, dataflowEndpointConfig?: any, s3RecordingConfig?: any, trackingConfig?: any, uplinkEchoConfig?: any}
-export def "config update" [
+export def "update-config" [
   config_type: string
   config_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -727,7 +727,7 @@ export def "config update" [
 #
 # DELETE /dataflowEndpointGroup/{dataflowEndpointGroupId}
 # operationId: DeleteDataflowEndpointGroup
-export def "dataflow-endpoint-group delete" [
+export def "delete-dataflow-endpoint-group" [
   dataflow_endpoint_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -772,7 +772,7 @@ export def "dataflow-endpoint-group delete" [
 #
 # GET /dataflowEndpointGroup/{dataflowEndpointGroupId}
 # operationId: GetDataflowEndpointGroup
-export def "dataflow-endpoint-group get" [
+export def "get-dataflow-endpoint-group" [
   dataflow_endpoint_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -817,7 +817,7 @@ export def "dataflow-endpoint-group get" [
 #
 # DELETE /ephemeris/{ephemerisId}
 # operationId: DeleteEphemeris
-export def "ephemeris delete" [
+export def "delete-ephemeris" [
   ephemeris_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -862,7 +862,7 @@ export def "ephemeris delete" [
 #
 # GET /ephemeris/{ephemerisId}
 # operationId: DescribeEphemeris
-export def "ephemeris get" [
+export def "describe-ephemeris" [
   ephemeris_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -907,7 +907,7 @@ export def "ephemeris get" [
 #
 # PUT /ephemeris/{ephemerisId}
 # operationId: UpdateEphemeris
-export def "ephemeris update" [
+export def "update-ephemeris" [
   ephemeris_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -958,7 +958,7 @@ export def "ephemeris update" [
 #
 # DELETE /missionprofile/{missionProfileId}
 # operationId: DeleteMissionProfile
-export def "missionprofile delete-mission-profile" [
+export def "delete-mission-profile" [
   mission_profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1003,7 +1003,7 @@ export def "missionprofile delete-mission-profile" [
 #
 # GET /missionprofile/{missionProfileId}
 # operationId: GetMissionProfile
-export def "missionprofile get-mission-profile" [
+export def "get-mission-profile" [
   mission_profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1049,7 +1049,7 @@ export def "missionprofile get-mission-profile" [
 # PUT /missionprofile/{missionProfileId}
 # operationId: UpdateMissionProfile
 # --streamsKmsKey shape: {kmsAliasArn?: any, kmsKeyArn?: any}
-export def "missionprofile update-mission-profile" [
+export def "update-mission-profile" [
   mission_profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1105,7 +1105,7 @@ export def "missionprofile update-mission-profile" [
 #
 # GET /agent/{agentId}/configuration
 # operationId: GetAgentConfiguration
-export def "agent-configuration get" [
+export def "get-agent-configuration" [
   agent_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1150,7 +1150,7 @@ export def "agent-configuration get" [
 #
 # POST /minute-usage
 # operationId: GetMinuteUsage
-export def "minute-usage get" [
+export def "get-minute-usage" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1198,7 +1198,7 @@ export def "minute-usage get" [
 #
 # GET /satellite/{satelliteId}
 # operationId: GetSatellite
-export def "satellite get" [
+export def "get-satellite" [
   satellite_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1243,7 +1243,7 @@ export def "satellite get" [
 #
 # POST /contacts
 # operationId: ListContacts
-export def "contacts list" [
+export def "list-contacts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1300,7 +1300,7 @@ export def "contacts list" [
 #
 # POST /ephemerides
 # operationId: ListEphemerides
-export def "ephemerides list" [
+export def "list-ephemerides" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1353,7 +1353,7 @@ export def "ephemerides list" [
 #
 # GET /groundstation
 # operationId: ListGroundStations
-export def "groundstation list-ground-stations" [
+export def "list-ground-stations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1400,7 +1400,7 @@ export def "groundstation list-ground-stations" [
 #
 # GET /satellite
 # operationId: ListSatellites
-export def "satellite list" [
+export def "list-satellites" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1446,7 +1446,7 @@ export def "satellite list" [
 #
 # GET /tags/{resourceArn}
 # operationId: ListTagsForResource
-export def "tags list-for-resource" [
+export def "list-tags-for-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1491,7 +1491,7 @@ export def "tags list-for-resource" [
 #
 # POST /tags/{resourceArn}
 # operationId: TagResource
-export def "tags tag-resource" [
+export def "tag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1542,7 +1542,7 @@ export def "tags tag-resource" [
 # operationId: RegisterAgent
 # --agentDetails shape: {agentCpuCores?: any, agentVersion?: any, componentVersions?: any, instanceId?: any, instanceType?: any, reservedCpuCores?: any}
 # --discoveryData shape: {capabilityArns?: any, privateIpAddresses?: any, publicIpAddresses?: any}
-export def "agent create" [
+export def "register-agent" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1590,7 +1590,7 @@ export def "agent create" [
 #
 # POST /contact
 # operationId: ReserveContact
-export def "contact create-reserve" [
+export def "reserve-contact" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1642,7 +1642,7 @@ export def "contact create-reserve" [
 #
 # DELETE /tags/{resourceArn}
 # operationId: UntagResource
-export def "tags untag-resource" [
+export def "untag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1691,7 +1691,7 @@ export def "tags untag-resource" [
 # operationId: UpdateAgentStatus
 # --aggregateStatus shape: {signatureMap?: any, status?: any}
 # --componentStatuses item shape: {bytesReceived?: any, bytesSent?: any, capabilityArn: any, componentType: any, dataflowId: any, packetsDropped?: any, status: any}
-export def "agent update-status" [
+export def "update-agent-status" [
   agent_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

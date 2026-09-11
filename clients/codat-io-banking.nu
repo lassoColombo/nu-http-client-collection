@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "companies-connections-data-banking-account-balances list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-account-balances" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -122,7 +122,7 @@ export def commands []: nothing -> table {
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/banking-accountBalances
 # operationId: list-account-balances
-export def "companies-connections-data-banking-account-balances list" [
+export def "list-account-balances" [
   company_id: string
   connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -165,7 +165,7 @@ export def "companies-connections-data-banking-account-balances list" [
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/banking-accounts
 # operationId: list-accounts
-export def "companies-connections-data-banking-accounts list" [
+export def "list-accounts" [
   company_id: string
   connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -210,7 +210,7 @@ export def "companies-connections-data-banking-accounts list" [
 # DEPRECATED
 # operationId: get-account
 @deprecated
-export def "companies-connections-data-banking-accounts get" [
+export def "get-account" [
   company_id: string
   connection_id: string
   account_id: string
@@ -250,7 +250,7 @@ export def "companies-connections-data-banking-accounts get" [
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/banking-transactionCategories
 # operationId: list-transaction-categories
-export def "companies-connections-data-banking-transaction-categories list" [
+export def "list-transaction-categories" [
   company_id: any
   connection_id: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -295,7 +295,7 @@ export def "companies-connections-data-banking-transaction-categories list" [
 # DEPRECATED
 # operationId: get-transaction-category
 @deprecated
-export def "companies-connections-data-banking-transaction-categories get-category" [
+export def "get-transaction-category" [
   company_id: string
   connection_id: string
   transaction_category_id: string
@@ -335,7 +335,7 @@ export def "companies-connections-data-banking-transaction-categories get-catego
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/banking-transactions
 # operationId: list-transactions
-export def "companies-connections-data-banking-transactions list" [
+export def "list-transactions" [
   company_id: any
   connection_id: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -380,7 +380,7 @@ export def "companies-connections-data-banking-transactions list" [
 # DEPRECATED
 # operationId: get-transaction
 @deprecated
-export def "companies-connections-data-banking-transactions get" [
+export def "get-transaction" [
   company_id: string
   connection_id: string
   transaction_id: string
@@ -420,7 +420,7 @@ export def "companies-connections-data-banking-transactions get" [
 #
 # GET /companies/{companyId}/data/banking-transactions
 # operationId: list-bank-transactions
-export def "companies-data-banking-transactions list-bank" [
+export def "list-bank-transactions" [
   company_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

@@ -110,7 +110,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "availability list-get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "query-get-availability" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -134,7 +134,7 @@ export def commands []: nothing -> table {
 #
 # GET /availability
 # operationId: Query_GetAvailability
-export def "availability list-get" [
+export def "query-get-availability" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -176,7 +176,7 @@ export def "availability list-get" [
 # POST /eventSchema
 # operationId: Query_GetEventSchema
 # --searchSpan shape: {from: string, to: string}
-export def "event-schema list-get" [
+export def "query-get-event-schema" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -221,7 +221,7 @@ export def "event-schema list-get" [
 #
 # GET /timeseries/hierarchies
 # operationId: TimeSeriesHierarchies_Get
-export def "timeseries-hierarchies get-time-series" [
+export def "time-series-hierarchies-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -265,7 +265,7 @@ export def "timeseries-hierarchies get-time-series" [
 # --delete shape: {hierarchyIds?: list<string>, names?: list<string>}
 # --get shape: {hierarchyIds?: list<string>, names?: list<string>}
 # --put item shape: {id?: string, name: string, source: record}
-export def "timeseries-hierarchies-batch create-time-series-execute-batch" [
+export def "time-series-hierarchies-execute-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -311,7 +311,7 @@ export def "timeseries-hierarchies-batch create-time-series-execute-batch" [
 #
 # GET /timeseries/instances
 # operationId: TimeSeriesInstances_Get
-export def "timeseries-instances get-time-series" [
+export def "time-series-instances-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -356,7 +356,7 @@ export def "timeseries-instances get-time-series" [
 # --get shape: {names?: list<string>, timeSeriesIds?: list}
 # --put item shape: {description?: string, hierarchyIds?: list<string>, instanceFields?: record, name?: string, timeSeriesId: list, typeId: string}
 # --update item shape: {description?: string, hierarchyIds?: list<string>, instanceFields?: record, name?: string, timeSeriesId: list, typeId: string}
-export def "timeseries-instances-batch create-time-series-execute-batch" [
+export def "time-series-instances-execute-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -405,7 +405,7 @@ export def "timeseries-instances-batch create-time-series-execute-batch" [
 # operationId: TimeSeriesInstances_Search
 # --hierarchies shape: {expand?: record, pageSize?: int, sort?: record}
 # --instances shape: {highlights?: bool, pageSize?: int, recursive?: bool, sort?: record}
-export def "timeseries-instances-search list-time-series" [
+export def "time-series-instances-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -453,7 +453,7 @@ export def "timeseries-instances-search list-time-series" [
 #
 # POST /timeseries/instances/suggest
 # operationId: TimeSeriesInstances_Suggest
-export def "timeseries-instances-suggest create-time-series" [
+export def "time-series-instances-suggest" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -498,7 +498,7 @@ export def "timeseries-instances-suggest create-time-series" [
 #
 # GET /timeseries/modelSettings
 # operationId: ModelSettings_Get
-export def "timeseries-model-settings get" [
+export def "model-settings-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -538,7 +538,7 @@ export def "timeseries-model-settings get" [
 #
 # PATCH /timeseries/modelSettings
 # operationId: ModelSettings_Update
-export def "timeseries-model-settings update" [
+export def "model-settings-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -586,7 +586,7 @@ export def "timeseries-model-settings update" [
 # --aggregateSeries shape: {filter?: record, inlineVariables?: record, interval: string, projectedVariables?: list<string>, searchSpan: record, timeSeriesId: list}
 # --getEvents shape: {filter?: record, projectedProperties?: list, searchSpan: record, take?: int, timeSeriesId: list}
 # --getSeries shape: {filter?: record, inlineVariables?: record, projectedVariables?: list<string>, searchSpan: record, take?: int, timeSeriesId: list}
-export def "timeseries-query list-execute" [
+export def "query-execute" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -634,7 +634,7 @@ export def "timeseries-query list-execute" [
 #
 # GET /timeseries/types
 # operationId: TimeSeriesTypes_Get
-export def "timeseries-types get-time-series" [
+export def "time-series-types-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -678,7 +678,7 @@ export def "timeseries-types get-time-series" [
 # --delete shape: {names?: list<string>, typeIds?: list<string>}
 # --get shape: {names?: list<string>, typeIds?: list<string>}
 # --put item shape: {description?: string, id?: string, name: string, variables: any}
-export def "timeseries-types-batch create-time-series-execute-batch" [
+export def "time-series-types-execute-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

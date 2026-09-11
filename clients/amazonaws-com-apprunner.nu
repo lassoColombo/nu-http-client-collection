@@ -135,7 +135,7 @@ def x-amz-target-completer-34 [] { ["AppRunner.UpdateVpcIngressConnection"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-associate-custom-domain" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associate-custom-domain" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -159,7 +159,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AssociateCustomDomain
-export def "api create-associate-custom-domain" [
+export def "associate-custom-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -209,7 +209,7 @@ export def "api create-associate-custom-domain" [
 #
 # POST /
 # operationId: CreateAutoScalingConfiguration
-export def "api create-auto-scaling-configuration" [
+export def "create-auto-scaling-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -261,7 +261,7 @@ export def "api create-auto-scaling-configuration" [
 #
 # POST /
 # operationId: CreateConnection
-export def "api create-connection" [
+export def "create-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -311,7 +311,7 @@ export def "api create-connection" [
 #
 # POST /
 # operationId: CreateObservabilityConfiguration
-export def "api create-observability-configuration" [
+export def "create-observability-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -361,7 +361,7 @@ export def "api create-observability-configuration" [
 #
 # POST /
 # operationId: CreateService
-export def "api create-service" [
+export def "create-service" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -417,7 +417,7 @@ export def "api create-service" [
 #
 # POST /
 # operationId: CreateVpcConnector
-export def "api create-vpc-connector" [
+export def "create-vpc-connector" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -468,7 +468,7 @@ export def "api create-vpc-connector" [
 #
 # POST /
 # operationId: CreateVpcIngressConnection
-export def "api create-vpc-ingress-connection" [
+export def "create-vpc-ingress-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -519,7 +519,7 @@ export def "api create-vpc-ingress-connection" [
 #
 # POST /
 # operationId: DeleteAutoScalingConfiguration
-export def "api delete-auto-scaling-configuration" [
+export def "delete-auto-scaling-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -567,7 +567,7 @@ export def "api delete-auto-scaling-configuration" [
 #
 # POST /
 # operationId: DeleteConnection
-export def "api delete-connection" [
+export def "delete-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -615,7 +615,7 @@ export def "api delete-connection" [
 #
 # POST /
 # operationId: DeleteObservabilityConfiguration
-export def "api delete-observability-configuration" [
+export def "delete-observability-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -663,7 +663,7 @@ export def "api delete-observability-configuration" [
 #
 # POST /
 # operationId: DeleteService
-export def "api delete-service" [
+export def "delete-service" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -711,7 +711,7 @@ export def "api delete-service" [
 #
 # POST /
 # operationId: DeleteVpcConnector
-export def "api delete-vpc-connector" [
+export def "delete-vpc-connector" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -759,7 +759,7 @@ export def "api delete-vpc-connector" [
 #
 # POST /
 # operationId: DeleteVpcIngressConnection
-export def "api delete-vpc-ingress-connection" [
+export def "delete-vpc-ingress-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -807,7 +807,7 @@ export def "api delete-vpc-ingress-connection" [
 #
 # POST /
 # operationId: DescribeAutoScalingConfiguration
-export def "api get-auto-scaling-configuration" [
+export def "describe-auto-scaling-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -855,7 +855,7 @@ export def "api get-auto-scaling-configuration" [
 #
 # POST /
 # operationId: DescribeCustomDomains
-export def "api get-custom-domains" [
+export def "describe-custom-domains" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -908,7 +908,7 @@ export def "api get-custom-domains" [
 #
 # POST /
 # operationId: DescribeObservabilityConfiguration
-export def "api get-observability-configuration" [
+export def "describe-observability-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -956,7 +956,7 @@ export def "api get-observability-configuration" [
 #
 # POST /
 # operationId: DescribeService
-export def "api get-service" [
+export def "describe-service" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1004,7 +1004,7 @@ export def "api get-service" [
 #
 # POST /
 # operationId: DescribeVpcConnector
-export def "api get-vpc-connector" [
+export def "describe-vpc-connector" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1052,7 +1052,7 @@ export def "api get-vpc-connector" [
 #
 # POST /
 # operationId: DescribeVpcIngressConnection
-export def "api get-vpc-ingress-connection" [
+export def "describe-vpc-ingress-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1100,7 +1100,7 @@ export def "api get-vpc-ingress-connection" [
 #
 # POST /
 # operationId: DisassociateCustomDomain
-export def "api create-disassociate-custom-domain" [
+export def "disassociate-custom-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1149,7 +1149,7 @@ export def "api create-disassociate-custom-domain" [
 #
 # POST /
 # operationId: ListAutoScalingConfigurations
-export def "api list-auto-scaling-configurations" [
+export def "list-auto-scaling-configurations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1203,7 +1203,7 @@ export def "api list-auto-scaling-configurations" [
 #
 # POST /
 # operationId: ListConnections
-export def "api list-connections" [
+export def "list-connections" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1256,7 +1256,7 @@ export def "api list-connections" [
 #
 # POST /
 # operationId: ListObservabilityConfigurations
-export def "api list-observability-configurations" [
+export def "list-observability-configurations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1310,7 +1310,7 @@ export def "api list-observability-configurations" [
 #
 # POST /
 # operationId: ListOperations
-export def "api list-operations" [
+export def "list-operations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1363,7 +1363,7 @@ export def "api list-operations" [
 #
 # POST /
 # operationId: ListServices
-export def "api list-services" [
+export def "list-services" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1415,7 +1415,7 @@ export def "api list-services" [
 #
 # POST /
 # operationId: ListTagsForResource
-export def "api list-tags-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1463,7 +1463,7 @@ export def "api list-tags-for-resource" [
 #
 # POST /
 # operationId: ListVpcConnectors
-export def "api list-vpc-connectors" [
+export def "list-vpc-connectors" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1515,7 +1515,7 @@ export def "api list-vpc-connectors" [
 #
 # POST /
 # operationId: ListVpcIngressConnections
-export def "api list-vpc-ingress-connections" [
+export def "list-vpc-ingress-connections" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1568,7 +1568,7 @@ export def "api list-vpc-ingress-connections" [
 #
 # POST /
 # operationId: PauseService
-export def "api pause-service" [
+export def "pause-service" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1616,7 +1616,7 @@ export def "api pause-service" [
 #
 # POST /
 # operationId: ResumeService
-export def "api create-resume-service" [
+export def "resume-service" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1664,7 +1664,7 @@ export def "api create-resume-service" [
 #
 # POST /
 # operationId: StartDeployment
-export def "api start-deployment" [
+export def "start-deployment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1712,7 +1712,7 @@ export def "api start-deployment" [
 #
 # POST /
 # operationId: TagResource
-export def "api tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1761,7 +1761,7 @@ export def "api tag-resource" [
 #
 # POST /
 # operationId: UntagResource
-export def "api untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1810,7 +1810,7 @@ export def "api untag-resource" [
 #
 # POST /
 # operationId: UpdateService
-export def "api update-service" [
+export def "update-service" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1864,7 +1864,7 @@ export def "api update-service" [
 #
 # POST /
 # operationId: UpdateVpcIngressConnection
-export def "api update-vpc-ingress-connection" [
+export def "update-vpc-ingress-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

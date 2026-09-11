@@ -119,7 +119,7 @@ def x-amz-target-completer-18 [] { ["ServiceQuotasV20190624.UntagResource"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-associate-service-quota-template" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associate-service-quota-template" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -143,7 +143,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AssociateServiceQuotaTemplate
-export def "api create-associate-service-quota-template" [
+export def "associate-service-quota-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -191,7 +191,7 @@ export def "api create-associate-service-quota-template" [
 #
 # POST /
 # operationId: DeleteServiceQuotaIncreaseRequestFromTemplate
-export def "api delete-service-quota-increase-request-from-template" [
+export def "delete-service-quota-increase-request-from-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -241,7 +241,7 @@ export def "api delete-service-quota-increase-request-from-template" [
 #
 # POST /
 # operationId: DisassociateServiceQuotaTemplate
-export def "api create-disassociate-service-quota-template" [
+export def "disassociate-service-quota-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -289,7 +289,7 @@ export def "api create-disassociate-service-quota-template" [
 #
 # POST /
 # operationId: GetAWSDefaultServiceQuota
-export def "api get-aws-default-service-quota" [
+export def "get-aws-default-service-quota" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -338,7 +338,7 @@ export def "api get-aws-default-service-quota" [
 #
 # POST /
 # operationId: GetAssociationForServiceQuotaTemplate
-export def "api get-association-for-service-quota-template" [
+export def "get-association-for-service-quota-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -386,7 +386,7 @@ export def "api get-association-for-service-quota-template" [
 #
 # POST /
 # operationId: GetRequestedServiceQuotaChange
-export def "api get-requested-service-quota-change" [
+export def "get-requested-service-quota-change" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -434,7 +434,7 @@ export def "api get-requested-service-quota-change" [
 #
 # POST /
 # operationId: GetServiceQuota
-export def "api get-service-quota" [
+export def "get-service-quota" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -483,7 +483,7 @@ export def "api get-service-quota" [
 #
 # POST /
 # operationId: GetServiceQuotaIncreaseRequestFromTemplate
-export def "api get-service-quota-increase-request-from-template" [
+export def "get-service-quota-increase-request-from-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -533,7 +533,7 @@ export def "api get-service-quota-increase-request-from-template" [
 #
 # POST /
 # operationId: ListAWSDefaultServiceQuotas
-export def "api list-aws-default-service-quotas" [
+export def "list-aws-default-service-quotas" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -586,7 +586,7 @@ export def "api list-aws-default-service-quotas" [
 #
 # POST /
 # operationId: ListRequestedServiceQuotaChangeHistory
-export def "api list-requested-service-quota-change-history" [
+export def "list-requested-service-quota-change-history" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -640,7 +640,7 @@ export def "api list-requested-service-quota-change-history" [
 #
 # POST /
 # operationId: ListRequestedServiceQuotaChangeHistoryByQuota
-export def "api list-requested-service-quota-change-history-by-quota" [
+export def "list-requested-service-quota-change-history-by-quota" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -695,7 +695,7 @@ export def "api list-requested-service-quota-change-history-by-quota" [
 #
 # POST /
 # operationId: ListServiceQuotaIncreaseRequestsInTemplate
-export def "api list-service-quota-increase-requests-in-template" [
+export def "list-service-quota-increase-requests-in-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -749,7 +749,7 @@ export def "api list-service-quota-increase-requests-in-template" [
 #
 # POST /
 # operationId: ListServiceQuotas
-export def "api list-service-quotas" [
+export def "list-service-quotas" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -802,7 +802,7 @@ export def "api list-service-quotas" [
 #
 # POST /
 # operationId: ListServices
-export def "api list-services" [
+export def "list-services" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -854,7 +854,7 @@ export def "api list-services" [
 #
 # POST /
 # operationId: ListTagsForResource
-export def "api list-tags-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -902,7 +902,7 @@ export def "api list-tags-for-resource" [
 #
 # POST /
 # operationId: PutServiceQuotaIncreaseRequestIntoTemplate
-export def "api update-service-quota-increase-request-into-template" [
+export def "put-service-quota-increase-request-into-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -953,7 +953,7 @@ export def "api update-service-quota-increase-request-into-template" [
 #
 # POST /
 # operationId: RequestServiceQuotaIncrease
-export def "api request-service-quota-increase" [
+export def "request-service-quota-increase" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1003,7 +1003,7 @@ export def "api request-service-quota-increase" [
 #
 # POST /
 # operationId: TagResource
-export def "api tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1052,7 +1052,7 @@ export def "api tag-resource" [
 #
 # POST /
 # operationId: UntagResource
-export def "api untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -132,7 +132,7 @@ def user-agent-completer [] { ["CHROME_ANDROID" "CHROME_LINUX" "SAFARI_IPHONE" "
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "websecurityscanner-projects-scan-configs-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -156,7 +156,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1beta/{name}
 # operationId: websecurityscanner.projects.scanConfigs.delete
-export def "v1beta delete" [
+export def "websecurityscanner-projects-scan-configs-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -204,7 +204,7 @@ export def "v1beta delete" [
 #
 # GET /v1beta/{name}
 # operationId: websecurityscanner.projects.scanConfigs.scanRuns.findings.get
-export def "v1beta get" [
+export def "websecurityscanner-projects-scan-configs-scan-runs-findings-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -255,7 +255,7 @@ export def "v1beta get" [
 # --authentication shape: {customAccount?: record, googleAccount?: record, iapCredential?: record}
 # --latestRun shape: {endTime?: string, errorTrace?: record, executionState?: "EXECUTION_STATE_UNSPECIFIED"|"QUEUED"|"SCANNING"|"FINISHED", hasVulnerabilities?: bool, name?: string, progressPercent?: int, resultState?: "RESULT_STATE_UNSPECIFIED"|"SUCCESS"|"ERROR"|"KILLED", startTime?: string, urlsCrawledCount?: string, urlsTestedCount?: string, warningTraces?: list}
 # --schedule shape: {intervalDurationDays?: int, scheduleTime?: string}
-export def "v1beta update" [
+export def "websecurityscanner-projects-scan-configs-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -322,7 +322,7 @@ export def "v1beta update" [
 #
 # POST /v1beta/{name}:start
 # operationId: websecurityscanner.projects.scanConfigs.start
-export def "v1beta start" [
+export def "websecurityscanner-projects-scan-configs-start" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -374,7 +374,7 @@ export def "v1beta start" [
 #
 # POST /v1beta/{name}:stop
 # operationId: websecurityscanner.projects.scanConfigs.scanRuns.stop
-export def "v1beta stop" [
+export def "websecurityscanner-projects-scan-configs-scan-runs-stop" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -426,7 +426,7 @@ export def "v1beta stop" [
 #
 # GET /v1beta/{parent}/crawledUrls
 # operationId: websecurityscanner.projects.scanConfigs.scanRuns.crawledUrls.list
-export def "v1beta-crawled-urls list" [
+export def "websecurityscanner-projects-scan-configs-scan-runs-crawled-urls-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -476,7 +476,7 @@ export def "v1beta-crawled-urls list" [
 #
 # GET /v1beta/{parent}/findingTypeStats
 # operationId: websecurityscanner.projects.scanConfigs.scanRuns.findingTypeStats.list
-export def "v1beta-finding-type-stats list" [
+export def "websecurityscanner-projects-scan-configs-scan-runs-finding-type-stats-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -524,7 +524,7 @@ export def "v1beta-finding-type-stats list" [
 #
 # GET /v1beta/{parent}/findings
 # operationId: websecurityscanner.projects.scanConfigs.scanRuns.findings.list
-export def "v1beta-findings list" [
+export def "websecurityscanner-projects-scan-configs-scan-runs-findings-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -575,7 +575,7 @@ export def "v1beta-findings list" [
 #
 # GET /v1beta/{parent}/scanConfigs
 # operationId: websecurityscanner.projects.scanConfigs.list
-export def "v1beta-scan-configs list" [
+export def "websecurityscanner-projects-scan-configs-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -628,7 +628,7 @@ export def "v1beta-scan-configs list" [
 # --authentication shape: {customAccount?: record, googleAccount?: record, iapCredential?: record}
 # --latestRun shape: {endTime?: string, errorTrace?: record, executionState?: "EXECUTION_STATE_UNSPECIFIED"|"QUEUED"|"SCANNING"|"FINISHED", hasVulnerabilities?: bool, name?: string, progressPercent?: int, resultState?: "RESULT_STATE_UNSPECIFIED"|"SUCCESS"|"ERROR"|"KILLED", startTime?: string, urlsCrawledCount?: string, urlsTestedCount?: string, warningTraces?: list}
 # --schedule shape: {intervalDurationDays?: int, scheduleTime?: string}
-export def "v1beta-scan-configs create" [
+export def "websecurityscanner-projects-scan-configs-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -694,7 +694,7 @@ export def "v1beta-scan-configs create" [
 #
 # GET /v1beta/{parent}/scanRuns
 # operationId: websecurityscanner.projects.scanConfigs.scanRuns.list
-export def "v1beta-scan-runs list" [
+export def "websecurityscanner-projects-scan-configs-scan-runs-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

@@ -132,7 +132,7 @@ def sort-order-completer [] { ["ascending" "descending"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "access-tokens list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-v2-access-tokens" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -155,7 +155,7 @@ export def commands []: nothing -> table {
 # Get a list of personal access tokens
 #
 # GET /v2/access-tokens
-export def "access-tokens list" [
+export def "get-v2-access-tokens" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -191,7 +191,7 @@ export def "access-tokens list" [
 # Create a personal access token
 #
 # POST /v2/access-tokens
-export def "access-tokens create" [
+export def "post-v2-access-tokens" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -229,7 +229,7 @@ export def "access-tokens create" [
 # Delete a personal access token
 #
 # DELETE /v2/access-tokens/{uuid}
-export def "access-tokens delete" [
+export def "delete-v2-access-tokens-uuid" [
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -264,7 +264,7 @@ export def "access-tokens delete" [
 # Get a personal access token
 #
 # GET /v2/access-tokens/{uuid}
-export def "access-tokens get" [
+export def "get-v2-access-tokens-uuid" [
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -299,7 +299,7 @@ export def "access-tokens get" [
 # Update a personal access token
 #
 # PATCH /v2/access-tokens/{uuid}
-export def "access-tokens update" [
+export def "patch-v2-access-tokens-uuid" [
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -340,7 +340,7 @@ export def "access-tokens update" [
 #
 # GET /v2/auditlogs/{account}
 # operationId: AuditLogs_GetAuditLogs
-export def "auditlogs logs-audit-get-audit" [
+export def "audit-logs-get-audit-logs" [
   account: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -384,7 +384,7 @@ export def "auditlogs logs-audit-get-audit" [
 #
 # GET /v2/auditlogs/{account}/actions
 # operationId: AuditLogs_GetAuditActions
-export def "auditlogs-actions logs-audit-get-audit" [
+export def "audit-logs-get-audit-actions" [
   account: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -422,7 +422,7 @@ export def "auditlogs-actions logs-audit-get-audit" [
 # operationId: PostNamespacesDeleteImages
 # --ignore_warnings item shape: {digest: string, repository: string, tags?: list<string>, warning: "is_active"|"current_tag"}
 # --manifests item shape: {digest: string, repository: string}
-export def "namespaces-delete-images create" [
+export def "post-namespaces-delete-images" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -465,7 +465,7 @@ export def "namespaces-delete-images create" [
 #
 # GET /v2/namespaces/{namespace}/repositories/{repository}/images
 # operationId: GetNamespacesRepositoriesImages
-export def "namespaces-repositories-images get" [
+export def "get-namespaces-repositories-images" [
   namespace: string
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -510,7 +510,7 @@ export def "namespaces-repositories-images get" [
 #
 # GET /v2/namespaces/{namespace}/repositories/{repository}/images-summary
 # operationId: GetNamespacesRepositoriesImagesSummary
-export def "namespaces-repositories-images-summary get" [
+export def "get-namespaces-repositories-images-summary" [
   namespace: string
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -550,7 +550,7 @@ export def "namespaces-repositories-images-summary get" [
 #
 # GET /v2/namespaces/{namespace}/repositories/{repository}/images/{digest}/tags
 # operationId: GetNamespacesRepositoriesImagesTags
-export def "namespaces-repositories-images-tags get" [
+export def "get-namespaces-repositories-images-tags" [
   namespace: string
   repository: string
   digest: string
@@ -592,7 +592,7 @@ export def "namespaces-repositories-images-tags get" [
 # List repository tags
 #
 # GET /v2/namespaces/{namespace}/repositories/{repository}/tags
-export def "namespaces-repositories-tags list" [
+export def "get-v2-namespaces-namespace-repositories-repository-tags" [
   namespace: any
   repository: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -632,7 +632,7 @@ export def "namespaces-repositories-tags list" [
 # Check repository tags
 #
 # HEAD /v2/namespaces/{namespace}/repositories/{repository}/tags
-export def "namespaces-repositories-tags head-by-namespace-repository" [
+export def "head-v2-namespaces-namespace-repositories-repository-tags" [
   namespace: string
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -669,7 +669,7 @@ export def "namespaces-repositories-tags head-by-namespace-repository" [
 # Read repository tag
 #
 # GET /v2/namespaces/{namespace}/repositories/{repository}/tags/{tag}
-export def "namespaces-repositories-tags get" [
+export def "get-v2-namespaces-namespace-repositories-repository-tags-tag" [
   namespace: string
   repository: string
   tag: string
@@ -708,7 +708,7 @@ export def "namespaces-repositories-tags get" [
 # Check repository tag
 #
 # HEAD /v2/namespaces/{namespace}/repositories/{repository}/tags/{tag}
-export def "namespaces-repositories-tags head-by-namespace-repository-tag" [
+export def "head-v2-namespaces-namespace-repositories-repository-tags-tag" [
   namespace: string
   repository: string
   tag: string
@@ -747,7 +747,7 @@ export def "namespaces-repositories-tags head-by-namespace-repository-tag" [
 # Get organization settings
 #
 # GET /v2/orgs/{name}/settings
-export def "orgs-settings get" [
+export def "get-v2-orgs-name-settings" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -782,7 +782,7 @@ export def "orgs-settings get" [
 # Update organization settings
 #
 # PUT /v2/orgs/{name}/settings
-export def "orgs-settings update" [
+export def "put-v2-orgs-name-settings" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -821,7 +821,7 @@ export def "orgs-settings update" [
 # List resource types
 #
 # GET /v2/scim/2.0/ResourceTypes
-export def "scim-2-0-resource-types list" [
+export def "get-v2-scim-2-0-resource-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -854,7 +854,7 @@ export def "scim-2-0-resource-types list" [
 # Get a resource type
 #
 # GET /v2/scim/2.0/ResourceTypes/{name}
-export def "scim-2-0-resource-types get" [
+export def "get-v2-scim-2-0-resource-types-name" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -889,7 +889,7 @@ export def "scim-2-0-resource-types get" [
 # List schemas
 #
 # GET /v2/scim/2.0/Schemas
-export def "scim-2-0-schemas list" [
+export def "get-v2-scim-2-0-schemas" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -922,7 +922,7 @@ export def "scim-2-0-schemas list" [
 # Get a schema
 #
 # GET /v2/scim/2.0/Schemas/{id}
-export def "scim-2-0-schemas get" [
+export def "get-v2-scim-2-0-schemas-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -957,7 +957,7 @@ export def "scim-2-0-schemas get" [
 # Get service provider config
 #
 # GET /v2/scim/2.0/ServiceProviderConfig
-export def "scim-2-0-service-provider-config get" [
+export def "get-v2-scim-2-0-service-provider-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -990,7 +990,7 @@ export def "scim-2-0-service-provider-config get" [
 # List users
 #
 # GET /v2/scim/2.0/Users
-export def "scim-2-0-users list" [
+export def "get-v2-scim-2-0-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1030,7 +1030,7 @@ export def "scim-2-0-users list" [
 # Create user
 #
 # POST /v2/scim/2.0/Users
-export def "scim-2-0-users create" [
+export def "post-v2-scim-2-0-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1067,7 +1067,7 @@ export def "scim-2-0-users create" [
 # Get a user
 #
 # GET /v2/scim/2.0/Users/{id}
-export def "scim-2-0-users get" [
+export def "get-v2-scim-2-0-users-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1102,7 +1102,7 @@ export def "scim-2-0-users get" [
 # Update a user
 #
 # PUT /v2/scim/2.0/Users/{id}
-export def "scim-2-0-users update" [
+export def "put-v2-scim-2-0-users-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1142,7 +1142,7 @@ export def "scim-2-0-users update" [
 #
 # POST /v2/users/2fa-login
 # operationId: PostUsers2FALogin
-export def "users-2fa-login create-users2-fa" [
+export def "post-users2-fa-login" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1181,7 +1181,7 @@ export def "users-2fa-login create-users2-fa" [
 #
 # POST /v2/users/login
 # operationId: PostUsersLogin
-export def "users-login create" [
+export def "post-users-login" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

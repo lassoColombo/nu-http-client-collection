@@ -109,7 +109,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account get-details" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-details" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -133,7 +133,7 @@ export def commands []: nothing -> table {
 #
 # GET /account
 # operationId: getDetails
-export def "account get-details" [
+export def "get-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -178,7 +178,7 @@ export def "account get-details" [
 #
 # GET /account/balance
 # operationId: getBalance
-export def "account-balance get" [
+export def "get-balance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -223,7 +223,7 @@ export def "account-balance get" [
 #
 # POST /account/flags
 # operationId: setAccountFlags
-export def "account-flags update" [
+export def "set-account-flags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -270,7 +270,7 @@ export def "account-flags update" [
 #
 # GET /account/payments
 # operationId: getPayments
-export def "account-payments get" [
+export def "get-payments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -321,7 +321,7 @@ export def "account-payments get" [
 #
 # GET /account/plusCard
 # operationId: getPlusCardDetails
-export def "account-plus-card get-details" [
+export def "get-plus-card-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -364,7 +364,7 @@ export def "account-plus-card get-details" [
 #
 # POST /account/plusCard/lostStolen
 # operationId: setLostStolen
-export def "account-plus-card-lost-stolen update" [
+export def "set-lost-stolen" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -403,7 +403,7 @@ export def "account-plus-card-lost-stolen update" [
 #
 # POST /account/plusCard/phone/{oldPhoneNumber}
 # operationId: setPhoneNumber
-export def "account-plus-card-phone update-number" [
+export def "set-phone-number" [
   old_phone_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -448,7 +448,7 @@ export def "account-plus-card-phone update-number" [
 #
 # POST /account/plusCard/pin
 # operationId: setPin
-export def "account-plus-card-pin update" [
+export def "set-pin" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -491,7 +491,7 @@ export def "account-plus-card-pin update" [
 #
 # PUT /account/plusCard/pin
 # operationId: updatePin
-export def "account-plus-card-pin update-1" [
+export def "update-pin" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

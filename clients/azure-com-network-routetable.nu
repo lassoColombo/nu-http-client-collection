@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-network-route-tables list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "route-tables-list-all" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/routeTables
 # operationId: RouteTables_ListAll
-export def "subscriptions-providers-microsoft-network-route-tables list" [
+export def "route-tables-list-all" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -178,7 +178,7 @@ export def "subscriptions-providers-microsoft-network-route-tables list" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/routeTables
 # operationId: RouteTables_List
-export def "subscriptions-resource-groups-providers-microsoft-network-route-tables list" [
+export def "route-tables-list" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -218,7 +218,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-route-tabl
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/routeTables/{routeTableName}
 # operationId: RouteTables_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-route-tables delete" [
+export def "route-tables-delete" [
   subscription_id: string
   resource_group_name: string
   route_table_name: string
@@ -260,7 +260,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-route-tabl
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/routeTables/{routeTableName}
 # operationId: RouteTables_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-route-tables get" [
+export def "route-tables-get" [
   subscription_id: string
   resource_group_name: string
   route_table_name: string
@@ -303,7 +303,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-route-tabl
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/routeTables/{routeTableName}
 # operationId: RouteTables_UpdateTags
-export def "subscriptions-resource-groups-providers-microsoft-network-route-tables update-tags" [
+export def "route-tables-update-tags" [
   subscription_id: string
   resource_group_name: string
   route_table_name: string
@@ -350,7 +350,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-route-tabl
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/routeTables/{routeTableName}
 # operationId: RouteTables_CreateOrUpdate
 # --properties shape: {disableBgpRoutePropagation?: bool, routes?: list}
-export def "subscriptions-resource-groups-providers-microsoft-network-route-tables create-or-update" [
+export def "route-tables-create-or-update" [
   subscription_id: string
   resource_group_name: string
   route_table_name: string
@@ -400,7 +400,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-route-tabl
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/routeTables/{routeTableName}/routes
 # operationId: Routes_List
-export def "subscriptions-resource-groups-providers-microsoft-network-route-tables-routes list" [
+export def "routes-list" [
   subscription_id: string
   resource_group_name: string
   route_table_name: string
@@ -442,7 +442,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-route-tabl
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/routeTables/{routeTableName}/routes/{routeName}
 # operationId: Routes_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-route-tables-routes delete" [
+export def "routes-delete" [
   subscription_id: string
   resource_group_name: string
   route_table_name: string
@@ -486,7 +486,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-route-tabl
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/routeTables/{routeTableName}/routes/{routeName}
 # operationId: Routes_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-route-tables-routes get" [
+export def "routes-get" [
   subscription_id: string
   resource_group_name: string
   route_table_name: string
@@ -531,7 +531,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-route-tabl
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/routeTables/{routeTableName}/routes/{routeName}
 # operationId: Routes_CreateOrUpdate
 # --properties shape: {addressPrefix?: string, nextHopIpAddress?: string, nextHopType: "VirtualNetworkGateway"|"VnetLocal"|"Internet"|"VirtualAppliance"|"None"}
-export def "subscriptions-resource-groups-providers-microsoft-network-route-tables-routes create-or-update" [
+export def "routes-create-or-update" [
   subscription_id: string
   resource_group_name: string
   route_table_name: string

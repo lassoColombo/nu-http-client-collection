@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-api-management-service-issues list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "issue-list-by-service" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -122,7 +122,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/issues
 # operationId: Issue_ListByService
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-issues list" [
+export def "issue-list-by-service" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -167,7 +167,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/issues/{issueId}
 # operationId: Issue_Get
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-issues get" [
+export def "issue-get" [
   subscription_id: string
   resource_group_name: string
   service_name: string

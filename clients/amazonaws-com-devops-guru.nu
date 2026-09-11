@@ -121,7 +121,7 @@ def action-completer [] { ["ADD" "REMOVE"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "channels create-notification" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "add-notification-channel" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 # PUT /channels
 # operationId: AddNotificationChannel
 # --Config shape: {Sns?: any, Filters?: any}
-export def "channels create-notification" [
+export def "add-notification-channel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -193,7 +193,7 @@ export def "channels create-notification" [
 #
 # POST /channels
 # operationId: ListNotificationChannels
-export def "channels list-notification" [
+export def "list-notification-channels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -242,7 +242,7 @@ export def "channels list-notification" [
 #
 # DELETE /insights/{Id}
 # operationId: DeleteInsight
-export def "insights delete" [
+export def "delete-insight" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -287,7 +287,7 @@ export def "insights delete" [
 #
 # GET /insights/{Id}
 # operationId: DescribeInsight
-export def "insights get" [
+export def "describe-insight" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -334,7 +334,7 @@ export def "insights get" [
 #
 # GET /accounts/health
 # operationId: DescribeAccountHealth
-export def "accounts-health get" [
+export def "describe-account-health" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -377,7 +377,7 @@ export def "accounts-health get" [
 #
 # POST /accounts/overview
 # operationId: DescribeAccountOverview
-export def "accounts-overview get" [
+export def "describe-account-overview" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -425,7 +425,7 @@ export def "accounts-overview get" [
 #
 # GET /anomalies/{Id}
 # operationId: DescribeAnomaly
-export def "anomalies get-anomaly" [
+export def "describe-anomaly" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -472,7 +472,7 @@ export def "anomalies get-anomaly" [
 #
 # POST /event-sources
 # operationId: DescribeEventSourcesConfig
-export def "event-sources get-config" [
+export def "describe-event-sources-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -516,7 +516,7 @@ export def "event-sources get-config" [
 # PUT /event-sources
 # operationId: UpdateEventSourcesConfig
 # --EventSources shape: {AmazonCodeGuruProfiler?: any}
-export def "event-sources update-config" [
+export def "update-event-sources-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -563,7 +563,7 @@ export def "event-sources update-config" [
 #
 # POST /feedback
 # operationId: DescribeFeedback
-export def "feedback get" [
+export def "describe-feedback" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -611,7 +611,7 @@ export def "feedback get" [
 # PUT /feedback
 # operationId: PutFeedback
 # --InsightFeedback shape: {Id?: any, Feedback?: any}
-export def "feedback update" [
+export def "put-feedback" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -658,7 +658,7 @@ export def "feedback update" [
 #
 # POST /organization/health
 # operationId: DescribeOrganizationHealth
-export def "organization-health get" [
+export def "describe-organization-health" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -706,7 +706,7 @@ export def "organization-health get" [
 #
 # POST /organization/overview
 # operationId: DescribeOrganizationOverview
-export def "organization-overview get" [
+export def "describe-organization-overview" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -756,7 +756,7 @@ export def "organization-overview get" [
 #
 # POST /organization/health/resource-collection
 # operationId: DescribeOrganizationResourceCollectionHealth
-export def "organization-health-resource-collection get" [
+export def "describe-organization-resource-collection-health" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -809,7 +809,7 @@ export def "organization-health-resource-collection get" [
 #
 # GET /accounts/health/resource-collection/{ResourceCollectionType}
 # operationId: DescribeResourceCollectionHealth
-export def "accounts-health-resource-collection get" [
+export def "describe-resource-collection-health" [
   resource_collection_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -856,7 +856,7 @@ export def "accounts-health-resource-collection get" [
 #
 # GET /service-integrations
 # operationId: DescribeServiceIntegration
-export def "service-integrations get" [
+export def "describe-service-integration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -900,7 +900,7 @@ export def "service-integrations get" [
 # PUT /service-integrations
 # operationId: UpdateServiceIntegration
 # --ServiceIntegration shape: {OpsCenter?: record, LogsAnomalyDetection?: any}
-export def "service-integrations update" [
+export def "update-service-integration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -947,7 +947,7 @@ export def "service-integrations update" [
 #
 # GET /cost-estimation
 # operationId: GetCostEstimation
-export def "cost-estimation get" [
+export def "get-cost-estimation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -993,7 +993,7 @@ export def "cost-estimation get" [
 # PUT /cost-estimation
 # operationId: StartCostEstimation
 # --ResourceCollection shape: {CloudFormation?: any, Tags?: any}
-export def "cost-estimation start" [
+export def "start-cost-estimation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1041,7 +1041,7 @@ export def "cost-estimation start" [
 #
 # GET /resource-collections/{ResourceCollectionType}
 # operationId: GetResourceCollection
-export def "resource-collections get" [
+export def "get-resource-collection" [
   resource_collection_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1090,7 +1090,7 @@ export def "resource-collections get" [
 # operationId: ListAnomaliesForInsight
 # --StartTimeRange shape: {FromTime?: any, ToTime?: any}
 # --Filters shape: {ServiceCollection?: record}
-export def "anomalies-insight list" [
+export def "list-anomalies-for-insight" [
   insight_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1146,7 +1146,7 @@ export def "anomalies-insight list" [
 #
 # POST /list-log-anomalies
 # operationId: ListAnomalousLogGroups
-export def "list-log-anomalies list-anomalous-groups" [
+export def "list-anomalous-log-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1199,7 +1199,7 @@ export def "list-log-anomalies list-anomalous-groups" [
 # POST /events
 # operationId: ListEvents
 # --Filters shape: {InsightId?: any, EventTimeRange?: any, EventClass?: any, EventSource?: any, DataSource?: any, ResourceCollection?: record}
-export def "events list" [
+export def "list-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1253,7 +1253,7 @@ export def "events list" [
 # POST /insights
 # operationId: ListInsights
 # --StatusFilter shape: {Ongoing?: any, Closed?: any, Any?: any}
-export def "insights list" [
+export def "list-insights" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1306,7 +1306,7 @@ export def "insights list" [
 # POST /monitoredResources
 # operationId: ListMonitoredResources
 # --Filters shape: {ResourcePermission?: any, ResourceTypeFilters?: any}
-export def "monitored-resources list" [
+export def "list-monitored-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1359,7 +1359,7 @@ export def "monitored-resources list" [
 # POST /organization/insights
 # operationId: ListOrganizationInsights
 # --StatusFilter shape: {Ongoing?: any, Closed?: any, Any?: any}
-export def "organization-insights list" [
+export def "list-organization-insights" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1413,7 +1413,7 @@ export def "organization-insights list" [
 #
 # POST /recommendations
 # operationId: ListRecommendations
-export def "recommendations list" [
+export def "list-recommendations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1465,7 +1465,7 @@ export def "recommendations list" [
 #
 # DELETE /channels/{Id}
 # operationId: RemoveNotificationChannel
-export def "channels delete-notification" [
+export def "remove-notification-channel" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1512,7 +1512,7 @@ export def "channels delete-notification" [
 # operationId: SearchInsights
 # --StartTimeRange shape: {FromTime?: any, ToTime?: any}
 # --Filters shape: {Severities?: any, Statuses?: any, ResourceCollection?: record, ServiceCollection?: any}
-export def "insights-search list" [
+export def "search-insights" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1568,7 +1568,7 @@ export def "insights-search list" [
 # operationId: SearchOrganizationInsights
 # --StartTimeRange shape: {FromTime?: any, ToTime?: any}
 # --Filters shape: {Severities?: any, Statuses?: any, ResourceCollection?: record, ServiceCollection?: record}
-export def "organization-insights-search list" [
+export def "search-organization-insights" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1624,7 +1624,7 @@ export def "organization-insights-search list" [
 # PUT /resource-collections
 # operationId: UpdateResourceCollection
 # --ResourceCollection shape: {CloudFormation?: any, Tags?: any}
-export def "resource-collections update" [
+export def "update-resource-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

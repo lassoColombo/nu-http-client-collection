@@ -139,7 +139,7 @@ def auth-scheme-completer [] { ["basic" "none" "basic-credentials"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cqactions-html create-cq-actions" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-cq-actions" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -162,7 +162,7 @@ export def commands []: nothing -> table {
 # POST /.cqactions.html
 #
 # operationId: postCqActions
-export def "cqactions-html create-cq-actions" [
+export def "post-cq-actions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -198,7 +198,7 @@ export def "cqactions-html create-cq-actions" [
 # POST /apps/system/config/com.adobe.granite.auth.saml.SamlAuthenticationHandler.config
 #
 # operationId: postConfigAdobeGraniteSamlAuthenticationHandler
-export def "apps-system-config-com-adobe-granite-auth-saml-saml-authentication-handler-config create" [
+export def "post-config-adobe-granite-saml-authentication-handler" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -280,7 +280,7 @@ export def "apps-system-config-com-adobe-granite-auth-saml-saml-authentication-h
 # POST /apps/system/config/com.shinesolutions.aem.passwordreset.Activator
 #
 # operationId: postConfigAemPasswordReset
-export def "apps-system-config-com-shinesolutions-aem-passwordreset-activator create-password-reset" [
+export def "post-config-aem-password-reset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -316,7 +316,7 @@ export def "apps-system-config-com-shinesolutions-aem-passwordreset-activator cr
 # POST /apps/system/config/com.shinesolutions.healthcheck.hc.impl.ActiveBundleHealthCheck
 #
 # operationId: postConfigAemHealthCheckServlet
-export def "apps-system-config-com-shinesolutions-healthcheck-hc-impl-active-bundle-health-check create-aem-servlet" [
+export def "post-config-aem-health-check-servlet" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -352,7 +352,7 @@ export def "apps-system-config-com-shinesolutions-healthcheck-hc-impl-active-bun
 # POST /apps/system/config/org.apache.felix.http
 #
 # operationId: postConfigApacheFelixJettyBasedHttpService
-export def "apps-system-config-org-apache-felix-http create-jetty-based-service" [
+export def "post-config-apache-felix-jetty-based-http-service" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -406,7 +406,7 @@ export def "apps-system-config-org-apache-felix-http create-jetty-based-service"
 # POST /apps/system/config/org.apache.http.proxyconfigurator.config
 #
 # operationId: postConfigApacheHttpComponentsProxyConfiguration
-export def "apps-system-config-org-apache-http-proxyconfigurator-config create-components-proxy-configuration" [
+export def "post-config-apache-http-components-proxy-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -452,7 +452,7 @@ export def "apps-system-config-org-apache-http-proxyconfigurator-config create-c
 # POST /apps/system/config/org.apache.sling.jcr.davex.impl.servlets.SlingDavExServlet
 #
 # operationId: postConfigApacheSlingDavExServlet
-export def "apps-system-config-org-apache-sling-jcr-davex-impl-servlets-sling-dav-ex-servlet create" [
+export def "post-config-apache-sling-dav-ex-servlet" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -490,7 +490,7 @@ export def "apps-system-config-org-apache-sling-jcr-davex-impl-servlets-sling-da
 # POST /apps/system/config/org.apache.sling.security.impl.ReferrerFilter
 #
 # operationId: postConfigApacheSlingReferrerFilter
-export def "apps-system-config-org-apache-sling-security-impl-referrer-filter create" [
+export def "post-config-apache-sling-referrer-filter" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -532,7 +532,7 @@ export def "apps-system-config-org-apache-sling-security-impl-referrer-filter cr
 # POST /apps/system/config/org.apache.sling.servlets.get.DefaultGetServlet
 #
 # operationId: postConfigApacheSlingGetServlet
-export def "apps-system-config-org-apache-sling-servlets-get-default-get-servlet create" [
+export def "post-config-apache-sling-get-servlet" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -574,7 +574,7 @@ export def "apps-system-config-org-apache-sling-servlets-get-default-get-servlet
 # POST /apps/system/config/{configNodeName}
 #
 # operationId: postConfigProperty
-export def "apps-system-config create-property" [
+export def "post-config-property" [
   config_node_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -609,7 +609,7 @@ export def "apps-system-config create-property" [
 # GET /bin/querybuilder.json
 #
 # operationId: getQuery
-export def "bin-querybuilder-json get-list" [
+export def "get-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -647,7 +647,7 @@ export def "bin-querybuilder-json get-list" [
 # POST /bin/querybuilder.json
 #
 # operationId: postQuery
-export def "bin-querybuilder-json create-list" [
+export def "post-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -685,7 +685,7 @@ export def "bin-querybuilder-json create-list" [
 # POST /crx/explorer/ui/setpassword.jsp
 #
 # operationId: postSetPassword
-export def "crx-explorer-ui-setpassword-jsp create-update-password" [
+export def "post-set-password" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -722,7 +722,7 @@ export def "crx-explorer-ui-setpassword-jsp create-update-password" [
 # GET /crx/packmgr/installstatus.jsp
 #
 # operationId: getInstallStatus
-export def "crx-packmgr-installstatus-jsp get-install-status" [
+export def "get-install-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -755,7 +755,7 @@ export def "crx-packmgr-installstatus-jsp get-install-status" [
 # POST /crx/packmgr/service.jsp
 #
 # operationId: postPackageService
-export def "crx-packmgr-service-jsp create-package" [
+export def "post-package-service" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -790,7 +790,7 @@ export def "crx-packmgr-service-jsp create-package" [
 # POST /crx/packmgr/service/.json/{path}
 #
 # operationId: postPackageServiceJson
-export def "crx-packmgr-service-json create-package" [
+export def "post-package-service-json" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -839,7 +839,7 @@ export def "crx-packmgr-service-json create-package" [
 # GET /crx/packmgr/service/script.html
 #
 # operationId: getPackageManagerServlet
-export def "crx-packmgr-service-script-html get-package-manager-servlet" [
+export def "get-package-manager-servlet" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -872,7 +872,7 @@ export def "crx-packmgr-service-script-html get-package-manager-servlet" [
 # POST /crx/packmgr/update.jsp
 #
 # operationId: postPackageUpdate
-export def "crx-packmgr-update-jsp create-package" [
+export def "post-package-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -912,7 +912,7 @@ export def "crx-packmgr-update-jsp create-package" [
 # GET /crx/server/crx.default/jcr:root/.1.json
 #
 # operationId: getCrxdeStatus
-export def "crx-server-crx-default-jcr-root-1-json get-crxde-status" [
+export def "get-crxde-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -945,7 +945,7 @@ export def "crx-server-crx-default-jcr-root-1-json get-crxde-status" [
 # GET /etc/packages/{group}/{name}-{version}.zip
 #
 # operationId: getPackage
-export def "etc-packages get" [
+export def "get-package" [
   group: string
   name: string
   version: string
@@ -984,7 +984,7 @@ export def "etc-packages get" [
 # GET /etc/packages/{group}/{name}-{version}.zip/jcr:content/vlt:definition/filter.tidy.2.json
 #
 # operationId: getPackageFilter
-export def "etc-packages-jcr-content-vlt-definition-filter-tidy-2-json get" [
+export def "get-package-filter" [
   group: string
   name: string
   version: string
@@ -1023,7 +1023,7 @@ export def "etc-packages-jcr-content-vlt-definition-filter-tidy-2-json get" [
 # GET /etc/replication/agents.{runmode}.-1.json
 #
 # operationId: getAgents
-export def "etc-replication-agents-runmode-1-json get" [
+export def "get-agents" [
   runmode: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1058,7 +1058,7 @@ export def "etc-replication-agents-runmode-1-json get" [
 # DELETE /etc/replication/agents.{runmode}/{name}
 #
 # operationId: deleteAgent
-export def "etc-replication-agents-runmode delete" [
+export def "delete-agent" [
   runmode: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1095,7 +1095,7 @@ export def "etc-replication-agents-runmode delete" [
 # GET /etc/replication/agents.{runmode}/{name}
 #
 # operationId: getAgent
-export def "etc-replication-agents-runmode get" [
+export def "get-agent" [
   runmode: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1132,7 +1132,7 @@ export def "etc-replication-agents-runmode get" [
 # POST /etc/replication/agents.{runmode}/{name}
 #
 # operationId: postAgent
-export def "etc-replication-agents-runmode create" [
+export def "post-agent" [
   runmode: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1220,7 +1220,7 @@ export def "etc-replication-agents-runmode create" [
 # POST /etc/truststore
 #
 # operationId: postTruststorePKCS12
-export def "etc-truststore create-pkcs12" [
+export def "post-truststore-pkcs12" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1259,7 +1259,7 @@ export def "etc-truststore create-pkcs12" [
 # GET /etc/truststore/truststore.p12
 #
 # operationId: getTruststore
-export def "etc-truststore-truststore-p12 get" [
+export def "get-truststore" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1292,7 +1292,7 @@ export def "etc-truststore-truststore-p12 get" [
 # GET /libs/granite/core/content/login.html
 #
 # operationId: getLoginPage
-export def "libs-granite-core-content-login-html get-page" [
+export def "get-login-page" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1325,7 +1325,7 @@ export def "libs-granite-core-content-login-html get-page" [
 # POST /libs/granite/security/post/authorizables
 #
 # operationId: postAuthorizables
-export def "libs-granite-security-post-authorizables create" [
+export def "post-authorizables" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1365,7 +1365,7 @@ export def "libs-granite-security-post-authorizables create" [
 # POST /libs/granite/security/post/sslSetup.html
 #
 # operationId: sslSetup
-export def "libs-granite-security-post-ssl-setup-html create" [
+export def "ssl-setup" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1412,7 +1412,7 @@ export def "libs-granite-security-post-ssl-setup-html create" [
 # POST /libs/granite/security/post/truststore
 #
 # operationId: postTruststore
-export def "libs-granite-security-post-truststore create" [
+export def "post-truststore" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1457,7 +1457,7 @@ export def "libs-granite-security-post-truststore create" [
 # GET /libs/granite/security/truststore.json
 #
 # operationId: getTruststoreInfo
-export def "libs-granite-security-truststore-json get" [
+export def "get-truststore-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1490,7 +1490,7 @@ export def "libs-granite-security-truststore-json get" [
 # POST /libs/replication/treeactivation.html
 #
 # operationId: postTreeActivation
-export def "libs-replication-treeactivation-html create-tree-activation" [
+export def "post-tree-activation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1528,7 +1528,7 @@ export def "libs-replication-treeactivation-html create-tree-activation" [
 # POST /system/console/bundles/{name}
 #
 # operationId: postBundle
-export def "system-console-bundles create" [
+export def "post-bundle" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1565,7 +1565,7 @@ export def "system-console-bundles create" [
 # GET /system/console/bundles/{name}.json
 #
 # operationId: getBundleInfo
-export def "system-console-bundles get" [
+export def "get-bundle-info" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1600,7 +1600,7 @@ export def "system-console-bundles get" [
 # GET /system/console/configMgr
 #
 # operationId: getConfigMgr
-export def "system-console-config-mgr get" [
+export def "get-config-mgr" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1633,7 +1633,7 @@ export def "system-console-config-mgr get" [
 # POST /system/console/configMgr/com.adobe.granite.auth.saml.SamlAuthenticationHandler
 #
 # operationId: postSamlConfiguration
-export def "system-console-config-mgr-com-adobe-granite-auth-saml-saml-authentication-handler create-configuration" [
+export def "post-saml-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1697,7 +1697,7 @@ export def "system-console-config-mgr-com-adobe-granite-auth-saml-saml-authentic
 # POST /system/console/jmx/com.adobe.granite:type=Repository/op/{action}
 #
 # operationId: postJmxRepository
-export def "system-console-jmx-com-adobe-granite-type-repository-op create-repository" [
+export def "post-jmx-repository" [
   action: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1732,7 +1732,7 @@ export def "system-console-jmx-com-adobe-granite-type-repository-op create-repos
 # GET /system/console/status-productinfo.json
 #
 # operationId: getAemProductInfo
-export def "system-console-status-productinfo-json get-aem-product" [
+export def "get-aem-product-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1765,7 +1765,7 @@ export def "system-console-status-productinfo-json get-aem-product" [
 # GET /system/health
 #
 # operationId: getAemHealthCheck
-export def "system-health get-aem-check" [
+export def "get-aem-health-check" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1801,7 +1801,7 @@ export def "system-health get-aem-check" [
 # POST /{intermediatePath}/{authorizableId}.ks.html
 #
 # operationId: postAuthorizableKeystore
-export def "sling create-authorizable-keystore" [
+export def "post-authorizable-keystore" [
   intermediate_path: string
   authorizable_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1856,7 +1856,7 @@ export def "sling create-authorizable-keystore" [
 # GET /{intermediatePath}/{authorizableId}.ks.json
 #
 # operationId: getAuthorizableKeystore
-export def "sling get-authorizable-keystore" [
+export def "get-authorizable-keystore" [
   intermediate_path: string
   authorizable_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1893,7 +1893,7 @@ export def "sling get-authorizable-keystore" [
 # GET /{intermediatePath}/{authorizableId}/keystore/store.p12
 #
 # operationId: getKeystore
-export def "keystore-store-p12 get" [
+export def "get-keystore" [
   intermediate_path: string
   authorizable_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1930,7 +1930,7 @@ export def "keystore-store-p12 get" [
 # POST /{path}/
 #
 # operationId: postPath
-export def "sling create" [
+export def "post-path" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1968,7 +1968,7 @@ export def "sling create" [
 # DELETE /{path}/{name}
 #
 # operationId: deleteNode
-export def "sling delete-node" [
+export def "delete-node" [
   path: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2005,7 +2005,7 @@ export def "sling delete-node" [
 # GET /{path}/{name}
 #
 # operationId: getNode
-export def "sling get-node" [
+export def "get-node" [
   path: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2042,7 +2042,7 @@ export def "sling get-node" [
 # POST /{path}/{name}
 #
 # operationId: postNode
-export def "sling create-node" [
+export def "post-node" [
   path: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2088,7 +2088,7 @@ export def "sling create-node" [
 # POST /{path}/{name}.rw.html
 #
 # operationId: postNodeRw
-export def "sling create-node-rw" [
+export def "post-node-rw" [
   path: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL

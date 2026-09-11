@@ -125,7 +125,7 @@ def granularity-completer [] { ["all" "daily" "hourly"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "commands list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-command" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -149,7 +149,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/Commands
 # operationId: ListCommand
-export def "commands list" [
+export def "list-command" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -191,7 +191,7 @@ export def "commands list" [
 #
 # POST /v1/Commands
 # operationId: CreateCommand
-export def "commands create" [
+export def "create-command" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -236,7 +236,7 @@ export def "commands create" [
 #
 # DELETE /v1/Commands/{Sid}
 # operationId: DeleteCommand
-export def "commands delete" [
+export def "delete-command" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -272,7 +272,7 @@ export def "commands delete" [
 #
 # GET /v1/Commands/{Sid}
 # operationId: FetchCommand
-export def "commands get" [
+export def "fetch-command" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -307,7 +307,7 @@ export def "commands get" [
 # GET /v1/RatePlans
 #
 # operationId: ListRatePlan
-export def "rate-plans list" [
+export def "list-rate-plan" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -344,7 +344,7 @@ export def "rate-plans list" [
 # POST /v1/RatePlans
 #
 # operationId: CreateRatePlan
-export def "rate-plans create" [
+export def "create-rate-plan" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -392,7 +392,7 @@ export def "rate-plans create" [
 # DELETE /v1/RatePlans/{Sid}
 #
 # operationId: DeleteRatePlan
-export def "rate-plans delete" [
+export def "delete-rate-plan" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -427,7 +427,7 @@ export def "rate-plans delete" [
 # GET /v1/RatePlans/{Sid}
 #
 # operationId: FetchRatePlan
-export def "rate-plans get" [
+export def "fetch-rate-plan" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -462,7 +462,7 @@ export def "rate-plans get" [
 # POST /v1/RatePlans/{Sid}
 #
 # operationId: UpdateRatePlan
-export def "rate-plans update" [
+export def "update-rate-plan" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -504,7 +504,7 @@ export def "rate-plans update" [
 #
 # GET /v1/Sims
 # operationId: ListSim
-export def "sims list" [
+export def "list-sim" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -547,7 +547,7 @@ export def "sims list" [
 #
 # DELETE /v1/Sims/{Sid}
 # operationId: DeleteSim
-export def "sims delete" [
+export def "delete-sim" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -583,7 +583,7 @@ export def "sims delete" [
 #
 # GET /v1/Sims/{Sid}
 # operationId: FetchSim
-export def "sims get" [
+export def "fetch-sim" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -619,7 +619,7 @@ export def "sims get" [
 #
 # POST /v1/Sims/{Sid}
 # operationId: UpdateSim
-export def "sims update" [
+export def "update-sim" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -676,7 +676,7 @@ export def "sims update" [
 # GET /v1/Sims/{SimSid}/DataSessions
 #
 # operationId: ListDataSession
-export def "sims-data-sessions list" [
+export def "list-data-session" [
   sim_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -715,7 +715,7 @@ export def "sims-data-sessions list" [
 # GET /v1/Sims/{SimSid}/UsageRecords
 #
 # operationId: ListUsageRecord
-export def "sims-usage-records list" [
+export def "list-usage-record" [
   sim_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -757,7 +757,7 @@ export def "sims-usage-records list" [
 # GET /v1/UsageRecords
 #
 # operationId: ListAccountUsageRecord
-export def "usage-records list-account" [
+export def "list-account-usage-record" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

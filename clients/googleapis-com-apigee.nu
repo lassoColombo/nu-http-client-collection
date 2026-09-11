@@ -151,7 +151,7 @@ def protocol-completer [] { ["GRPC" "HTTP" "PROTOCOL_UNSPECIFIED"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "organizations create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "apigee-organizations-create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -177,7 +177,7 @@ export def commands []: nothing -> table {
 # operationId: apigee.organizations.create
 # --addonsConfig shape: {advancedApiOpsConfig?: record, apiSecurityConfig?: record, connectorsPlatformConfig?: record, integrationConfig?: record, monetizationConfig?: record}
 # --properties shape: {property?: list}
-export def "organizations create" [
+export def "apigee-organizations-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -244,7 +244,7 @@ export def "organizations create" [
 # POST /v1/{instance}:reportStatus
 # operationId: apigee.organizations.instances.reportStatus
 # --resources item shape: {resource?: string, revisions?: list, totalReplicas?: int, uid?: string}
-export def "organizations create-report-status" [
+export def "apigee-organizations-instances-report-status" [
   instance: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -298,7 +298,7 @@ export def "organizations create-report-status" [
 #
 # DELETE /v1/{name}
 # operationId: apigee.organizations.sites.apicategories.delete
-export def "organizations delete" [
+export def "apigee-organizations-sites-apicategories-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -347,7 +347,7 @@ export def "organizations delete" [
 #
 # GET /v1/{name}
 # operationId: apigee.organizations.sites.apicategories.get
-export def "organizations get" [
+export def "apigee-organizations-sites-apicategories-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -409,7 +409,7 @@ export def "organizations get" [
 #
 # PATCH /v1/{name}
 # operationId: apigee.organizations.sites.apicategories.patch
-export def "organizations update-by-name" [
+export def "apigee-organizations-sites-apicategories-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -465,7 +465,7 @@ export def "organizations update-by-name" [
 #
 # POST /v1/{name}
 # operationId: apigee.organizations.sharedflows.revisions.updateSharedFlowRevision
-export def "organizations update-shared-flow-revision" [
+export def "apigee-organizations-sharedflows-revisions-update-shared-flow-revision" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -522,7 +522,7 @@ export def "organizations update-shared-flow-revision" [
 # operationId: apigee.organizations.reports.update
 # --metrics item shape: {function?: string, name?: string}
 # --properties item shape: {property?: string, value?: list}
-export def "organizations update-by-name-1" [
+export def "apigee-organizations-reports-update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -593,7 +593,7 @@ export def "organizations update-by-name-1" [
 # POST /v1/{name}/attributes
 # operationId: apigee.organizations.developers.apps.attributes
 # --attribute item shape: {name?: string, value?: string}
-export def "attributes create-by-name" [
+export def "apigee-organizations-developers-apps-attributes" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -645,7 +645,7 @@ export def "attributes create-by-name" [
 #
 # GET /v1/{name}/certificate
 # operationId: apigee.organizations.environments.keystores.aliases.getCertificate
-export def "certificate get" [
+export def "apigee-organizations-environments-keystores-aliases-get-certificate" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -693,7 +693,7 @@ export def "certificate get" [
 #
 # GET /v1/{name}/csr
 # operationId: apigee.organizations.environments.keystores.aliases.csr
-export def "csr get" [
+export def "apigee-organizations-environments-keystores-aliases-csr" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -741,7 +741,7 @@ export def "csr get" [
 #
 # DELETE /v1/{name}/data
 # operationId: apigee.organizations.environments.apis.revisions.debugsessions.deleteData
-export def "data delete" [
+export def "apigee-organizations-environments-apis-revisions-debugsessions-delete-data" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -789,7 +789,7 @@ export def "data delete" [
 #
 # DELETE /v1/{name}/deployments
 # operationId: apigee.organizations.environments.sharedflows.revisions.undeploy
-export def "deployments delete-undeploy" [
+export def "apigee-organizations-environments-sharedflows-revisions-undeploy" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -838,7 +838,7 @@ export def "deployments delete-undeploy" [
 #
 # GET /v1/{name}/deployments
 # operationId: apigee.organizations.environments.sharedflows.revisions.getDeployments
-export def "deployments get" [
+export def "apigee-organizations-environments-sharedflows-revisions-get-deployments" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -886,7 +886,7 @@ export def "deployments get" [
 #
 # POST /v1/{name}/deployments
 # operationId: apigee.organizations.environments.sharedflows.revisions.deploy
-export def "deployments create-deploy" [
+export def "apigee-organizations-environments-sharedflows-revisions-deploy" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -936,7 +936,7 @@ export def "deployments create-deploy" [
 #
 # POST /v1/{name}/deployments:generateDeployChangeReport
 # operationId: apigee.organizations.environments.apis.revisions.deployments.generateDeployChangeReport
-export def "deployments-generate-deploy-change-report generate" [
+export def "apigee-organizations-environments-apis-revisions-deployments-generate-deploy-change-report" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -985,7 +985,7 @@ export def "deployments-generate-deploy-change-report generate" [
 #
 # POST /v1/{name}/deployments:generateUndeployChangeReport
 # operationId: apigee.organizations.environments.apis.revisions.deployments.generateUndeployChangeReport
-export def "deployments-generate-undeploy-change-report generate" [
+export def "apigee-organizations-environments-apis-revisions-deployments-generate-undeploy-change-report" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1033,7 +1033,7 @@ export def "deployments-generate-undeploy-change-report generate" [
 #
 # GET /v1/{name}/operations
 # operationId: apigee.organizations.operations.list
-export def "operations list" [
+export def "apigee-organizations-operations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1084,7 +1084,7 @@ export def "operations list" [
 #
 # POST /v1/{name}:activate
 # operationId: apigee.organizations.instances.natAddresses.activate
-export def "organizations create-activate" [
+export def "apigee-organizations-instances-nat-addresses-activate" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1137,7 +1137,7 @@ export def "organizations create-activate" [
 # POST /v1/{name}:adjust
 # operationId: apigee.organizations.developers.balance.adjust
 # --adjustment shape: {currencyCode?: string, nanos?: int, units?: string}
-export def "organizations create-adjust" [
+export def "apigee-organizations-developers-balance-adjust" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1190,7 +1190,7 @@ export def "organizations create-adjust" [
 # POST /v1/{name}:credit
 # operationId: apigee.organizations.developers.balance.credit
 # --transactionAmount shape: {currencyCode?: string, nanos?: int, units?: string}
-export def "organizations create-credit" [
+export def "apigee-organizations-developers-balance-credit" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1243,7 +1243,7 @@ export def "organizations create-credit" [
 #
 # POST /v1/{name}:expire
 # operationId: apigee.organizations.developers.subscriptions.expire
-export def "organizations create-expire" [
+export def "apigee-organizations-developers-subscriptions-expire" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1295,7 +1295,7 @@ export def "organizations create-expire" [
 #
 # POST /v1/{name}:generateDownloadUrl
 # operationId: apigee.organizations.environments.archiveDeployments.generateDownloadUrl
-export def "organizations generate-download-url" [
+export def "apigee-organizations-environments-archive-deployments-generate-download-url" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1347,7 +1347,7 @@ export def "organizations generate-download-url" [
 #
 # GET /v1/{name}:getProjectMapping
 # operationId: apigee.organizations.getProjectMapping
-export def "organizations get-project-mapping" [
+export def "apigee-organizations-get-project-mapping" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1395,7 +1395,7 @@ export def "organizations get-project-mapping" [
 #
 # POST /v1/{name}:getSyncAuthorization
 # operationId: apigee.organizations.getSyncAuthorization
-export def "organizations get-sync-authorization" [
+export def "apigee-organizations-get-sync-authorization" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1447,7 +1447,7 @@ export def "organizations get-sync-authorization" [
 #
 # GET /v1/{name}:listRevisions
 # operationId: apigee.organizations.securityProfiles.listRevisions
-export def "organizations list-revisions" [
+export def "apigee-organizations-security-profiles-list-revisions" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1497,7 +1497,7 @@ export def "organizations list-revisions" [
 #
 # POST /v1/{name}:setSyncAuthorization
 # operationId: apigee.organizations.setSyncAuthorization
-export def "organizations update-sync-authorization" [
+export def "apigee-organizations-set-sync-authorization" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1552,7 +1552,7 @@ export def "organizations update-sync-authorization" [
 # operationId: apigee.organizations.environments.securityStats.queryTabularStats
 # --metrics item shape: {aggregation?: "AGGREGATION_FUNCTION_UNSPECIFIED"|"AVG"|"SUM"|"MIN"|"MAX"|"COUNT_DISTINCT", name?: string, order?: "ORDER_UNSPECIFIED"|"ASCENDING"|"DESCENDING"}
 # --timeRange shape: {endTime?: string, startTime?: string}
-export def "security-stats-query-tabular-stats list" [
+export def "apigee-organizations-environments-security-stats-query-tabular-stats" [
   orgenv: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1611,7 +1611,7 @@ export def "security-stats-query-tabular-stats list" [
 # operationId: apigee.organizations.environments.securityStats.queryTimeSeriesStats
 # --metrics item shape: {aggregation?: "AGGREGATION_FUNCTION_UNSPECIFIED"|"AVG"|"SUM"|"MIN"|"MAX"|"COUNT_DISTINCT", name?: string, order?: "ORDER_UNSPECIFIED"|"ASCENDING"|"DESCENDING"}
 # --timeRange shape: {endTime?: string, startTime?: string}
-export def "security-stats-query-time-series-stats list" [
+export def "apigee-organizations-environments-security-stats-query-time-series-stats" [
   orgenv: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1671,7 +1671,7 @@ export def "security-stats-query-time-series-stats list" [
 # POST /v1/{org}:setAddons
 # operationId: apigee.organizations.setAddons
 # --addonsConfig shape: {advancedApiOpsConfig?: record, apiSecurityConfig?: record, connectorsPlatformConfig?: record, integrationConfig?: record, monetizationConfig?: record}
-export def "organizations update-addons" [
+export def "apigee-organizations-set-addons" [
   org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1723,7 +1723,7 @@ export def "organizations update-addons" [
 #
 # GET /v1/{parent}
 # operationId: apigee.organizations.list
-export def "organizations list" [
+export def "apigee-organizations-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1771,7 +1771,7 @@ export def "organizations list" [
 #
 # POST /v1/{parent}/aliases
 # operationId: apigee.organizations.environments.keystores.aliases.create
-export def "aliases create" [
+export def "apigee-organizations-environments-keystores-aliases-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1830,7 +1830,7 @@ export def "aliases create" [
 #
 # GET /v1/{parent}/analytics/datastores
 # operationId: apigee.organizations.analytics.datastores.list
-export def "analytics-datastores list" [
+export def "apigee-organizations-analytics-datastores-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1880,7 +1880,7 @@ export def "analytics-datastores list" [
 # POST /v1/{parent}/analytics/datastores
 # operationId: apigee.organizations.analytics.datastores.create
 # --datastoreConfig shape: {bucketName?: string, datasetName?: string, path?: string, projectId?: string, tablePrefix?: string}
-export def "analytics-datastores create" [
+export def "apigee-organizations-analytics-datastores-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1935,7 +1935,7 @@ export def "analytics-datastores create" [
 # POST /v1/{parent}/analytics/datastores:test
 # operationId: apigee.organizations.analytics.datastores.test
 # --datastoreConfig shape: {bucketName?: string, datasetName?: string, path?: string, projectId?: string, tablePrefix?: string}
-export def "analytics-datastores-test test" [
+export def "apigee-organizations-analytics-datastores-test" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1989,7 +1989,7 @@ export def "analytics-datastores-test test" [
 #
 # GET /v1/{parent}/analytics/exports
 # operationId: apigee.organizations.environments.analytics.exports.list
-export def "analytics-exports list" [
+export def "apigee-organizations-environments-analytics-exports-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2038,7 +2038,7 @@ export def "analytics-exports list" [
 # POST /v1/{parent}/analytics/exports
 # operationId: apigee.organizations.environments.analytics.exports.create
 # --dateRange shape: {end?: string, start?: string}
-export def "analytics-exports create" [
+export def "apigee-organizations-environments-analytics-exports-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2095,7 +2095,7 @@ export def "analytics-exports create" [
 #
 # GET /v1/{parent}/apicategories
 # operationId: apigee.organizations.sites.apicategories.list
-export def "apicategories list" [
+export def "apigee-organizations-sites-apicategories-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2143,7 +2143,7 @@ export def "apicategories list" [
 #
 # POST /v1/{parent}/apicategories
 # operationId: apigee.organizations.sites.apicategories.create
-export def "apicategories create" [
+export def "apigee-organizations-sites-apicategories-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2198,7 +2198,7 @@ export def "apicategories create" [
 #
 # GET /v1/{parent}/apiproducts
 # operationId: apigee.organizations.apiproducts.list
-export def "apiproducts list" [
+export def "apigee-organizations-apiproducts-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2254,7 +2254,7 @@ export def "apiproducts list" [
 # --attributes item shape: {name?: string, value?: string}
 # --graphqlOperationGroup shape: {operationConfigType?: string, operationConfigs?: list}
 # --operationGroup shape: {operationConfigType?: string, operationConfigs?: list}
-export def "apiproducts create" [
+export def "apigee-organizations-apiproducts-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2322,7 +2322,7 @@ export def "apiproducts create" [
 #
 # GET /v1/{parent}/apis
 # operationId: apigee.organizations.apis.list
-export def "apis list" [
+export def "apigee-organizations-apis-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2372,7 +2372,7 @@ export def "apis list" [
 #
 # POST /v1/{parent}/apis
 # operationId: apigee.organizations.apis.create
-export def "apis create" [
+export def "apigee-organizations-apis-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2429,7 +2429,7 @@ export def "apis create" [
 #
 # GET /v1/{parent}/apps
 # operationId: apigee.organizations.developers.apps.list
-export def "apps list" [
+export def "apigee-organizations-developers-apps-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2487,7 +2487,7 @@ export def "apps list" [
 # operationId: apigee.organizations.developers.apps.create
 # --attributes item shape: {name?: string, value?: string}
 # --credentials item shape: {apiProducts?: list, attributes?: list, consumerKey?: string, consumerSecret?: string, expiresAt?: string, issuedAt?: string, scopes?: list<string>, status?: string}
-export def "apps create" [
+export def "apigee-organizations-developers-apps-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2548,7 +2548,7 @@ export def "apps create" [
 #
 # GET /v1/{parent}/archiveDeployments
 # operationId: apigee.organizations.environments.archiveDeployments.list
-export def "archive-deployments list" [
+export def "apigee-organizations-environments-archive-deployments-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2599,7 +2599,7 @@ export def "archive-deployments list" [
 #
 # POST /v1/{parent}/archiveDeployments
 # operationId: apigee.organizations.environments.archiveDeployments.create
-export def "archive-deployments create" [
+export def "apigee-organizations-environments-archive-deployments-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2653,7 +2653,7 @@ export def "archive-deployments create" [
 #
 # POST /v1/{parent}/archiveDeployments:generateUploadUrl
 # operationId: apigee.organizations.environments.archiveDeployments.generateUploadUrl
-export def "archive-deployments-generate-upload-url generate" [
+export def "apigee-organizations-environments-archive-deployments-generate-upload-url" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2705,7 +2705,7 @@ export def "archive-deployments-generate-upload-url generate" [
 #
 # GET /v1/{parent}/attachments
 # operationId: apigee.organizations.instances.attachments.list
-export def "attachments list" [
+export def "apigee-organizations-instances-attachments-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2755,7 +2755,7 @@ export def "attachments list" [
 #
 # POST /v1/{parent}/attachments
 # operationId: apigee.organizations.instances.attachments.create
-export def "attachments create" [
+export def "apigee-organizations-instances-attachments-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2807,7 +2807,7 @@ export def "attachments create" [
 #
 # GET /v1/{parent}/attributes
 # operationId: apigee.organizations.developers.attributes.list
-export def "attributes list" [
+export def "apigee-organizations-developers-attributes-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2856,7 +2856,7 @@ export def "attributes list" [
 # POST /v1/{parent}/attributes
 # operationId: apigee.organizations.developers.attributes
 # --attribute item shape: {name?: string, value?: string}
-export def "attributes create-by-parent" [
+export def "apigee-organizations-developers-attributes" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2909,7 +2909,7 @@ export def "attributes create-by-parent" [
 # POST /v1/{parent}/canaryevaluations
 # operationId: apigee.organizations.instances.canaryevaluations.create
 # --metricLabels shape: {env?: string, instance_id?: string, location?: string}
-export def "canaryevaluations create" [
+export def "apigee-organizations-instances-canaryevaluations-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2965,7 +2965,7 @@ export def "canaryevaluations create" [
 #
 # GET /v1/{parent}/datacollectors
 # operationId: apigee.organizations.datacollectors.list
-export def "datacollectors list" [
+export def "apigee-organizations-datacollectors-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3015,7 +3015,7 @@ export def "datacollectors list" [
 #
 # POST /v1/{parent}/datacollectors
 # operationId: apigee.organizations.datacollectors.create
-export def "datacollectors create" [
+export def "apigee-organizations-datacollectors-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3070,7 +3070,7 @@ export def "datacollectors create" [
 #
 # GET /v1/{parent}/debugsessions
 # operationId: apigee.organizations.environments.apis.revisions.debugsessions.list
-export def "debugsessions list" [
+export def "apigee-organizations-environments-apis-revisions-debugsessions-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3120,7 +3120,7 @@ export def "debugsessions list" [
 #
 # POST /v1/{parent}/debugsessions
 # operationId: apigee.organizations.environments.apis.revisions.debugsessions.create
-export def "debugsessions create" [
+export def "apigee-organizations-environments-apis-revisions-debugsessions-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3178,7 +3178,7 @@ export def "debugsessions create" [
 #
 # GET /v1/{parent}/deployments
 # operationId: apigee.organizations.sharedflows.revisions.deployments.list
-export def "deployments list" [
+export def "apigee-organizations-sharedflows-revisions-deployments-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3227,7 +3227,7 @@ export def "deployments list" [
 #
 # GET /v1/{parent}/developers
 # operationId: apigee.organizations.developers.list
-export def "developers list" [
+export def "apigee-organizations-developers-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3282,7 +3282,7 @@ export def "developers list" [
 # POST /v1/{parent}/developers
 # operationId: apigee.organizations.developers.create
 # --attributes item shape: {name?: string, value?: string}
-export def "developers create" [
+export def "apigee-organizations-developers-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3343,7 +3343,7 @@ export def "developers create" [
 #
 # GET /v1/{parent}/endpointAttachments
 # operationId: apigee.organizations.endpointAttachments.list
-export def "endpoint-attachments list" [
+export def "apigee-organizations-endpoint-attachments-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3393,7 +3393,7 @@ export def "endpoint-attachments list" [
 #
 # POST /v1/{parent}/endpointAttachments
 # operationId: apigee.organizations.endpointAttachments.create
-export def "endpoint-attachments create" [
+export def "apigee-organizations-endpoint-attachments-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3448,7 +3448,7 @@ export def "endpoint-attachments create" [
 #
 # GET /v1/{parent}/entries
 # operationId: apigee.organizations.keyvaluemaps.entries.list
-export def "entries list" [
+export def "apigee-organizations-keyvaluemaps-entries-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3498,7 +3498,7 @@ export def "entries list" [
 #
 # POST /v1/{parent}/entries
 # operationId: apigee.organizations.keyvaluemaps.entries.create
-export def "entries create" [
+export def "apigee-organizations-keyvaluemaps-entries-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3551,7 +3551,7 @@ export def "entries create" [
 #
 # GET /v1/{parent}/envgroups
 # operationId: apigee.organizations.envgroups.list
-export def "envgroups list" [
+export def "apigee-organizations-envgroups-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3601,7 +3601,7 @@ export def "envgroups list" [
 #
 # POST /v1/{parent}/envgroups
 # operationId: apigee.organizations.envgroups.create
-export def "envgroups create" [
+export def "apigee-organizations-envgroups-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3655,7 +3655,7 @@ export def "envgroups create" [
 #
 # POST /v1/{parent}/environments
 # operationId: apigee.organizations.securityProfiles.environments.create
-export def "environments create" [
+export def "apigee-organizations-security-profiles-environments-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3709,7 +3709,7 @@ export def "environments create" [
 #
 # GET /v1/{parent}/hostQueries
 # operationId: apigee.organizations.hostQueries.list
-export def "host-queries list" [
+export def "apigee-organizations-host-queries-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3765,7 +3765,7 @@ export def "host-queries list" [
 # POST /v1/{parent}/hostQueries
 # operationId: apigee.organizations.hostQueries.create
 # --metrics item shape: {alias?: string, function?: string, name?: string, operator?: string, value?: string}
-export def "host-queries create" [
+export def "apigee-organizations-host-queries-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3827,7 +3827,7 @@ export def "host-queries create" [
 #
 # GET /v1/{parent}/hostSecurityReports
 # operationId: apigee.organizations.hostSecurityReports.list
-export def "host-security-reports list" [
+export def "apigee-organizations-host-security-reports-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3884,7 +3884,7 @@ export def "host-security-reports list" [
 # POST /v1/{parent}/hostSecurityReports
 # operationId: apigee.organizations.hostSecurityReports.create
 # --metrics item shape: {aggregationFunction?: string, alias?: string, name?: string, operator?: string, value?: string}
-export def "host-security-reports create" [
+export def "apigee-organizations-host-security-reports-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3946,7 +3946,7 @@ export def "host-security-reports create" [
 #
 # GET /v1/{parent}/instances
 # operationId: apigee.organizations.instances.list
-export def "instances list" [
+export def "apigee-organizations-instances-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3996,7 +3996,7 @@ export def "instances list" [
 #
 # POST /v1/{parent}/instances
 # operationId: apigee.organizations.instances.create
-export def "instances create" [
+export def "apigee-organizations-instances-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4056,7 +4056,7 @@ export def "instances create" [
 # POST /v1/{parent}/keys
 # operationId: apigee.organizations.developers.apps.keys.create
 # --attributes item shape: {name?: string, value?: string}
-export def "keys create" [
+export def "apigee-organizations-developers-apps-keys-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4117,7 +4117,7 @@ export def "keys create" [
 # POST /v1/{parent}/keys/create
 # operationId: apigee.organizations.developers.apps.keys.create.create
 # --attributes item shape: {name?: string, value?: string}
-export def "keys-create create" [
+export def "apigee-organizations-developers-apps-keys-create-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4177,7 +4177,7 @@ export def "keys-create create" [
 #
 # POST /v1/{parent}/keystores
 # operationId: apigee.organizations.environments.keystores.create
-export def "keystores create" [
+export def "apigee-organizations-environments-keystores-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4230,7 +4230,7 @@ export def "keystores create" [
 #
 # POST /v1/{parent}/keyvaluemaps
 # operationId: apigee.organizations.keyvaluemaps.create
-export def "keyvaluemaps create" [
+export def "apigee-organizations-keyvaluemaps-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4283,7 +4283,7 @@ export def "keyvaluemaps create" [
 #
 # GET /v1/{parent}/natAddresses
 # operationId: apigee.organizations.instances.natAddresses.list
-export def "nat-addresses list" [
+export def "apigee-organizations-instances-nat-addresses-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4333,7 +4333,7 @@ export def "nat-addresses list" [
 #
 # POST /v1/{parent}/natAddresses
 # operationId: apigee.organizations.instances.natAddresses.create
-export def "nat-addresses create" [
+export def "apigee-organizations-instances-nat-addresses-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4385,7 +4385,7 @@ export def "nat-addresses create" [
 #
 # GET /v1/{parent}/overrides
 # operationId: apigee.organizations.environments.traceConfig.overrides.list
-export def "overrides list" [
+export def "apigee-organizations-environments-trace-config-overrides-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4436,7 +4436,7 @@ export def "overrides list" [
 # POST /v1/{parent}/overrides
 # operationId: apigee.organizations.environments.traceConfig.overrides.create
 # --samplingConfig shape: {sampler?: "SAMPLER_UNSPECIFIED"|"OFF"|"PROBABILITY", samplingRate?: float}
-export def "overrides create" [
+export def "apigee-organizations-environments-trace-config-overrides-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4490,7 +4490,7 @@ export def "overrides create" [
 #
 # GET /v1/{parent}/queries
 # operationId: apigee.organizations.environments.queries.list
-export def "queries list" [
+export def "apigee-organizations-environments-queries-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4545,7 +4545,7 @@ export def "queries list" [
 # POST /v1/{parent}/queries
 # operationId: apigee.organizations.environments.queries.create
 # --metrics item shape: {alias?: string, function?: string, name?: string, operator?: string, value?: string}
-export def "queries create" [
+export def "apigee-organizations-environments-queries-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4607,7 +4607,7 @@ export def "queries create" [
 #
 # GET /v1/{parent}/rateplans
 # operationId: apigee.organizations.apiproducts.rateplans.list
-export def "rateplans list" [
+export def "apigee-organizations-apiproducts-rateplans-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4664,7 +4664,7 @@ export def "rateplans list" [
 # --fixedRecurringFee shape: {currencyCode?: string, nanos?: int, units?: string}
 # --revenueShareRates item shape: {end?: string, sharePercentage?: float, start?: string}
 # --setupFee shape: {currencyCode?: string, nanos?: int, units?: string}
-export def "rateplans create" [
+export def "apigee-organizations-apiproducts-rateplans-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4731,7 +4731,7 @@ export def "rateplans create" [
 #
 # POST /v1/{parent}/references
 # operationId: apigee.organizations.environments.references.create
-export def "references create" [
+export def "apigee-organizations-environments-references-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4786,7 +4786,7 @@ export def "references create" [
 #
 # GET /v1/{parent}/reports
 # operationId: apigee.organizations.reports.list
-export def "reports list" [
+export def "apigee-organizations-reports-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4837,7 +4837,7 @@ export def "reports list" [
 # operationId: apigee.organizations.reports.create
 # --metrics item shape: {function?: string, name?: string}
 # --properties item shape: {property?: string, value?: list}
-export def "reports create" [
+export def "apigee-organizations-reports-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4905,7 +4905,7 @@ export def "reports create" [
 #
 # GET /v1/{parent}/resourcefiles
 # operationId: apigee.organizations.environments.resourcefiles.list
-export def "resourcefiles list" [
+export def "apigee-organizations-environments-resourcefiles-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4954,7 +4954,7 @@ export def "resourcefiles list" [
 #
 # POST /v1/{parent}/resourcefiles
 # operationId: apigee.organizations.environments.resourcefiles.create
-export def "resourcefiles create" [
+export def "apigee-organizations-environments-resourcefiles-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5010,7 +5010,7 @@ export def "resourcefiles create" [
 #
 # GET /v1/{parent}/resourcefiles/{type}
 # operationId: apigee.organizations.environments.resourcefiles.listEnvironmentResources
-export def "resourcefiles list-environment-resources" [
+export def "apigee-organizations-environments-resourcefiles-list-environment-resources" [
   parent: string
   type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5060,7 +5060,7 @@ export def "resourcefiles list-environment-resources" [
 #
 # DELETE /v1/{parent}/resourcefiles/{type}/{name}
 # operationId: apigee.organizations.environments.resourcefiles.delete
-export def "resourcefiles delete" [
+export def "apigee-organizations-environments-resourcefiles-delete" [
   parent: string
   type: string
   name: string
@@ -5112,7 +5112,7 @@ export def "resourcefiles delete" [
 #
 # GET /v1/{parent}/resourcefiles/{type}/{name}
 # operationId: apigee.organizations.environments.resourcefiles.get
-export def "resourcefiles get" [
+export def "apigee-organizations-environments-resourcefiles-get" [
   parent: string
   type: string
   name: string
@@ -5164,7 +5164,7 @@ export def "resourcefiles get" [
 #
 # PUT /v1/{parent}/resourcefiles/{type}/{name}
 # operationId: apigee.organizations.environments.resourcefiles.update
-export def "resourcefiles update" [
+export def "apigee-organizations-environments-resourcefiles-update" [
   parent: string
   type: string
   name: string
@@ -5222,7 +5222,7 @@ export def "resourcefiles update" [
 #
 # GET /v1/{parent}/securityIncidents
 # operationId: apigee.organizations.environments.securityIncidents.list
-export def "security-incidents list" [
+export def "apigee-organizations-environments-security-incidents-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5273,7 +5273,7 @@ export def "security-incidents list" [
 #
 # GET /v1/{parent}/securityProfiles
 # operationId: apigee.organizations.securityProfiles.list
-export def "security-profiles list" [
+export def "apigee-organizations-security-profiles-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5323,7 +5323,7 @@ export def "security-profiles list" [
 #
 # GET /v1/{parent}/securityReports
 # operationId: apigee.organizations.environments.securityReports.list
-export def "security-reports list" [
+export def "apigee-organizations-environments-security-reports-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5379,7 +5379,7 @@ export def "security-reports list" [
 # POST /v1/{parent}/securityReports
 # operationId: apigee.organizations.environments.securityReports.create
 # --metrics item shape: {aggregationFunction?: string, alias?: string, name?: string, operator?: string, value?: string}
-export def "security-reports create" [
+export def "apigee-organizations-environments-security-reports-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5441,7 +5441,7 @@ export def "security-reports create" [
 #
 # GET /v1/{parent}/sharedflows
 # operationId: apigee.organizations.sharedflows.list
-export def "sharedflows list" [
+export def "apigee-organizations-sharedflows-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5491,7 +5491,7 @@ export def "sharedflows list" [
 #
 # POST /v1/{parent}/sharedflows
 # operationId: apigee.organizations.sharedflows.create
-export def "sharedflows create" [
+export def "apigee-organizations-sharedflows-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5547,7 +5547,7 @@ export def "sharedflows create" [
 #
 # GET /v1/{parent}/subscriptions
 # operationId: apigee.organizations.developers.subscriptions.list
-export def "subscriptions list" [
+export def "apigee-organizations-developers-subscriptions-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5597,7 +5597,7 @@ export def "subscriptions list" [
 #
 # POST /v1/{parent}/subscriptions
 # operationId: apigee.organizations.developers.subscriptions.create
-export def "subscriptions create" [
+export def "apigee-organizations-developers-subscriptions-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5652,7 +5652,7 @@ export def "subscriptions create" [
 # POST /v1/{parent}/targetservers
 # operationId: apigee.organizations.environments.targetservers.create
 # --sSLInfo shape: {ciphers?: list<string>, clientAuthEnabled?: bool, commonName?: record, enabled?: bool, ignoreValidationErrors?: bool, keyAlias?: string, keyStore?: string, protocols?: list<string>, trustStore?: string}
-export def "targetservers create" [
+export def "apigee-organizations-environments-targetservers-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5711,7 +5711,7 @@ export def "targetservers create" [
 #
 # POST /v1/{parent}:subscribe
 # operationId: apigee.organizations.environments.subscribe
-export def "organizations subscribe" [
+export def "apigee-organizations-environments-subscribe" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5759,7 +5759,7 @@ export def "organizations subscribe" [
 #
 # POST /v1/{parent}:unsubscribe
 # operationId: apigee.organizations.environments.unsubscribe
-export def "organizations unsubscribe" [
+export def "apigee-organizations-environments-unsubscribe" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5813,7 +5813,7 @@ export def "organizations unsubscribe" [
 # operationId: apigee.organizations.securityProfiles.environments.computeEnvironmentScores
 # --filters item shape: {scorePath?: string}
 # --timeRange shape: {endTime?: string, startTime?: string}
-export def "organizations create-compute-environment-scores" [
+export def "apigee-organizations-security-profiles-environments-compute-environment-scores" [
   profile_environment: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5868,7 +5868,7 @@ export def "organizations create-compute-environment-scores" [
 #
 # POST /v1/{project}:provisionOrganization
 # operationId: apigee.projects.provisionOrganization
-export def "projects create-provision-organization" [
+export def "apigee-projects-provision-organization" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5922,7 +5922,7 @@ export def "projects create-provision-organization" [
 #
 # GET /v1/{resource}:getIamPolicy
 # operationId: apigee.organizations.environments.getIamPolicy
-export def "organizations get-iam-policy" [
+export def "apigee-organizations-environments-get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5972,7 +5972,7 @@ export def "organizations get-iam-policy" [
 # POST /v1/{resource}:setIamPolicy
 # operationId: apigee.organizations.environments.setIamPolicy
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
-export def "organizations update-iam-policy" [
+export def "apigee-organizations-environments-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -6025,7 +6025,7 @@ export def "organizations update-iam-policy" [
 #
 # POST /v1/{resource}:testIamPermissions
 # operationId: apigee.organizations.environments.testIamPermissions
-export def "organizations test-iam-permissions" [
+export def "apigee-organizations-environments-test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

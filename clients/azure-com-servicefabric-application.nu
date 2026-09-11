@@ -118,7 +118,7 @@ def api-version-completer [] { ["2019-03-01-preview"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-service-fabric-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -142,7 +142,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.ServiceFabric/operations
 # operationId: Operations_List
-export def "providers-microsoft-service-fabric-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -178,7 +178,7 @@ export def "providers-microsoft-service-fabric-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabric/clusters/{clusterName}/applicationTypes
 # operationId: ApplicationTypes_List
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters-application-types list" [
+export def "application-types-list" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -220,7 +220,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clu
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabric/clusters/{clusterName}/applicationTypes/{applicationTypeName}
 # operationId: ApplicationTypes_Delete
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters-application-types delete" [
+export def "application-types-delete" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -264,7 +264,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clu
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabric/clusters/{clusterName}/applicationTypes/{applicationTypeName}
 # operationId: ApplicationTypes_Get
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters-application-types get" [
+export def "application-types-get" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -308,7 +308,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clu
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabric/clusters/{clusterName}/applicationTypes/{applicationTypeName}
 # operationId: ApplicationTypes_Create
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters-application-types create" [
+export def "application-types-create" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -358,7 +358,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clu
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabric/clusters/{clusterName}/applicationTypes/{applicationTypeName}/versions
 # operationId: ApplicationTypeVersions_List
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters-application-types-versions list" [
+export def "application-type-versions-list" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -402,7 +402,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clu
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabric/clusters/{clusterName}/applicationTypes/{applicationTypeName}/versions/{version}
 # operationId: ApplicationTypeVersions_Delete
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters-application-types-versions delete" [
+export def "application-type-versions-delete" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -448,7 +448,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clu
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabric/clusters/{clusterName}/applicationTypes/{applicationTypeName}/versions/{version}
 # operationId: ApplicationTypeVersions_Get
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters-application-types-versions get" [
+export def "application-type-versions-get" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -495,7 +495,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clu
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabric/clusters/{clusterName}/applicationTypes/{applicationTypeName}/versions/{version}
 # operationId: ApplicationTypeVersions_Create
 # --properties shape: {appPackageUrl: string, defaultParameterList?: record}
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters-application-types-versions create" [
+export def "application-type-versions-create" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -547,7 +547,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clu
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabric/clusters/{clusterName}/applications
 # operationId: Applications_List
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters-applications list" [
+export def "applications-list" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -589,7 +589,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clu
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabric/clusters/{clusterName}/applications/{applicationName}
 # operationId: Applications_Delete
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters-applications delete" [
+export def "applications-delete" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -633,7 +633,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clu
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabric/clusters/{clusterName}/applications/{applicationName}
 # operationId: Applications_Get
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters-applications get" [
+export def "applications-get" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -678,7 +678,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clu
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabric/clusters/{clusterName}/applications/{applicationName}
 # operationId: Applications_Update
 # --properties shape: {maximumNodes?: int, metrics?: list, minimumNodes?: int, parameters?: record, removeApplicationCapacity?: bool, typeVersion?: string, upgradePolicy?: any}
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters-applications update" [
+export def "applications-update" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -729,7 +729,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clu
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabric/clusters/{clusterName}/applications/{applicationName}
 # operationId: Applications_Create
 # --properties shape: {typeName?: string, maximumNodes?: int, metrics?: list, minimumNodes?: int, parameters?: record, removeApplicationCapacity?: bool, typeVersion?: string, upgradePolicy?: any}
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters-applications create" [
+export def "applications-create" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -779,7 +779,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clu
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabric/clusters/{clusterName}/applications/{applicationName}/services
 # operationId: Services_List
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters-applications-services list" [
+export def "services-list" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -823,7 +823,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clu
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabric/clusters/{clusterName}/applications/{applicationName}/services/{serviceName}
 # operationId: Services_Delete
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters-applications-services delete" [
+export def "services-delete" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -869,7 +869,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clu
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabric/clusters/{clusterName}/applications/{applicationName}/services/{serviceName}
 # operationId: Services_Get
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters-applications-services get" [
+export def "services-get" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -916,7 +916,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clu
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabric/clusters/{clusterName}/applications/{applicationName}/services/{serviceName}
 # operationId: Services_Update
 # --properties shape: {serviceKind: "Invalid"|"Stateless"|"Stateful", correlationScheme?: list, defaultMoveCost?: "Zero"|"Low"|"Medium"|"High", placementConstraints?: string, serviceLoadMetrics?: list, servicePlacementPolicies?: list}
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters-applications-services update" [
+export def "services-update" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -969,7 +969,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clu
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabric/clusters/{clusterName}/applications/{applicationName}/services/{serviceName}
 # operationId: Services_Create
 # --properties shape: {partitionDescription?: record, serviceKind: "Invalid"|"Stateless"|"Stateful", servicePackageActivationMode?: "SharedProcess"|"ExclusiveProcess", serviceTypeName?: string, correlationScheme?: list, defaultMoveCost?: "Zero"|"Low"|"Medium"|"High", placementConstraints?: string, serviceLoadMetrics?: list, servicePlacementPolicies?: list}
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters-applications-services create" [
+export def "services-create" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string

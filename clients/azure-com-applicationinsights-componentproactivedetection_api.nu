@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-insights-components-proactive-detection-configs list-configurations" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "proactive-detection-configurations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -128,7 +128,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/components/{resourceName}/ProactiveDetectionConfigs
 # operationId: ProactiveDetectionConfigurations_List
-export def "subscriptions-resource-groups-providers-microsoft-insights-components-proactive-detection-configs list-configurations" [
+export def "proactive-detection-configurations-list" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -170,7 +170,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/components/{resourceName}/ProactiveDetectionConfigs/{ConfigurationId}
 # operationId: ProactiveDetectionConfigurations_Get
-export def "subscriptions-resource-groups-providers-microsoft-insights-components-proactive-detection-configs get-configurations" [
+export def "proactive-detection-configurations-get" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -215,7 +215,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/components/{resourceName}/ProactiveDetectionConfigs/{ConfigurationId}
 # operationId: ProactiveDetectionConfigurations_Update
 # --properties shape: {CustomEmails?: list<string>, Enabled?: bool, RuleDefinitions?: record, SendEmailsToSubscriptionOwners?: bool}
-export def "subscriptions-resource-groups-providers-microsoft-insights-components-proactive-detection-configs update-configurations" [
+export def "proactive-detection-configurations-update" [
   subscription_id: string
   resource_group_name: string
   resource_name: string

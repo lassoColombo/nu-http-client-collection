@@ -110,7 +110,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-guest-configuration-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -134,7 +134,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.GuestConfiguration/operations
 # operationId: Operations_List
-export def "providers-microsoft-guest-configuration-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -170,7 +170,7 @@ export def "providers-microsoft-guest-configuration-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}/providers/Microsoft.GuestConfiguration/guestConfigurationAssignments
 # operationId: GuestConfigurationAssignments_List
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machines-providers-microsoft-guest-configuration-guest-configuration-assignments list" [
+export def "guest-configuration-assignments-list" [
   subscription_id: string
   resource_group_name: string
   vm_name: string
@@ -212,7 +212,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}/providers/Microsoft.GuestConfiguration/guestConfigurationAssignments/{guestConfigurationAssignmentName}
 # operationId: GuestConfigurationAssignments_Delete
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machines-providers-microsoft-guest-configuration-guest-configuration-assignments delete" [
+export def "guest-configuration-assignments-delete" [
   subscription_id: string
   resource_group_name: string
   vm_name: string
@@ -256,7 +256,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}/providers/Microsoft.GuestConfiguration/guestConfigurationAssignments/{guestConfigurationAssignmentName}
 # operationId: GuestConfigurationAssignments_Get
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machines-providers-microsoft-guest-configuration-guest-configuration-assignments get" [
+export def "guest-configuration-assignments-get" [
   subscription_id: string
   resource_group_name: string
   vm_name: string
@@ -301,7 +301,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}/providers/Microsoft.GuestConfiguration/guestConfigurationAssignments/{guestConfigurationAssignmentName}
 # operationId: GuestConfigurationAssignments_CreateOrUpdate
 # --properties shape: {context?: string, guestConfiguration?: any}
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machines-providers-microsoft-guest-configuration-guest-configuration-assignments create-or-update" [
+export def "guest-configuration-assignments-create-or-update" [
   subscription_id: string
   resource_group_name: string
   vm_name: string
@@ -349,7 +349,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}/providers/Microsoft.GuestConfiguration/guestConfigurationAssignments/{guestConfigurationAssignmentName}/reports
 # operationId: GuestConfigurationAssignmentReports_List
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machines-providers-microsoft-guest-configuration-guest-configuration-assignments-reports list" [
+export def "guest-configuration-assignment-reports-list" [
   subscription_id: string
   resource_group_name: string
   vm_name: string
@@ -393,7 +393,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}/providers/Microsoft.GuestConfiguration/guestConfigurationAssignments/{guestConfigurationAssignmentName}/reports/{reportId}
 # operationId: GuestConfigurationAssignmentReports_Get
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machines-providers-microsoft-guest-configuration-guest-configuration-assignments-reports get" [
+export def "guest-configuration-assignment-reports-get" [
   subscription_id: string
   resource_group_name: string
   vm_name: string

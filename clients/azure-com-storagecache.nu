@@ -122,7 +122,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-storage-cache-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.StorageCache/operations
 # operationId: Operations_List
-export def "providers-microsoft-storage-cache-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -182,7 +182,7 @@ export def "providers-microsoft-storage-cache-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.StorageCache/caches
 # operationId: Caches_List
-export def "subscriptions-providers-microsoft-storage-cache-caches list" [
+export def "caches-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -220,7 +220,7 @@ export def "subscriptions-providers-microsoft-storage-cache-caches list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.StorageCache/skus
 # operationId: Skus_List
-export def "subscriptions-providers-microsoft-storage-cache-skus list" [
+export def "skus-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -258,7 +258,7 @@ export def "subscriptions-providers-microsoft-storage-cache-skus list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.StorageCache/usageModels
 # operationId: UsageModels_List
-export def "subscriptions-providers-microsoft-storage-cache-usage-models list" [
+export def "usage-models-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -296,7 +296,7 @@ export def "subscriptions-providers-microsoft-storage-cache-usage-models list" [
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.StorageCache/caches
 # operationId: Caches_ListByResourceGroup
-export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-caches list-by-resource-group" [
+export def "caches-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -336,7 +336,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-cache
 #
 # DELETE /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.StorageCache/caches/{cacheName}
 # operationId: Caches_Delete
-export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-caches delete" [
+export def "caches-delete" [
   subscription_id: string
   resource_group_name: string
   cache_name: string
@@ -378,7 +378,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-cache
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.StorageCache/caches/{cacheName}
 # operationId: Caches_Get
-export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-caches get" [
+export def "caches-get" [
   subscription_id: string
   resource_group_name: string
   cache_name: string
@@ -422,7 +422,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-cache
 # operationId: Caches_Update
 # --properties shape: {cacheSizeGB?: int, health?: any, provisioningState?: "Succeeded"|"Failed"|"Cancelled"|"Creating"|"Deleting"|"Updating", subnet?: string, upgradeStatus?: record}
 # --sku shape: {name?: string}
-export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-caches update" [
+export def "caches-update" [
   subscription_id: string
   resource_group_name: string
   cache_name: string
@@ -475,7 +475,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-cache
 # operationId: Caches_CreateOrUpdate
 # --properties shape: {cacheSizeGB?: int, health?: any, provisioningState?: "Succeeded"|"Failed"|"Cancelled"|"Creating"|"Deleting"|"Updating", subnet?: string, upgradeStatus?: record}
 # --sku shape: {name?: string}
-export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-caches create-or-update" [
+export def "caches-create-or-update" [
   subscription_id: string
   resource_group_name: string
   cache_name: string
@@ -526,7 +526,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-cache
 #
 # POST /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.StorageCache/caches/{cacheName}/flush
 # operationId: Caches_Flush
-export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-caches-flush create" [
+export def "caches-flush" [
   subscription_id: string
   resource_group_name: string
   cache_name: string
@@ -568,7 +568,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-cache
 #
 # POST /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.StorageCache/caches/{cacheName}/start
 # operationId: Caches_Start
-export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-caches-start start" [
+export def "caches-start" [
   subscription_id: string
   resource_group_name: string
   cache_name: string
@@ -610,7 +610,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-cache
 #
 # POST /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.StorageCache/caches/{cacheName}/stop
 # operationId: Caches_Stop
-export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-caches-stop stop" [
+export def "caches-stop" [
   subscription_id: string
   resource_group_name: string
   cache_name: string
@@ -652,7 +652,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-cache
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.StorageCache/caches/{cacheName}/storageTargets
 # operationId: StorageTargets_ListByCache
-export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-caches-storage-targets list" [
+export def "storage-targets-list-by-cache" [
   subscription_id: string
   resource_group_name: string
   cache_name: string
@@ -694,7 +694,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-cache
 #
 # DELETE /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.StorageCache/caches/{cacheName}/storageTargets/{storageTargetName}
 # operationId: StorageTargets_Delete
-export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-caches-storage-targets delete" [
+export def "storage-targets-delete" [
   subscription_id: string
   resource_group_name: string
   cache_name: string
@@ -738,7 +738,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-cache
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.StorageCache/caches/{cacheName}/storageTargets/{storageTargetName}
 # operationId: StorageTargets_Get
-export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-caches-storage-targets get" [
+export def "storage-targets-get" [
   subscription_id: string
   resource_group_name: string
   cache_name: string
@@ -784,7 +784,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-cache
 # Discriminator (request): targetType
 # operationId: StorageTargets_CreateOrUpdate
 # --properties shape: {clfs?: record, junctions?: list, nfs3?: record, provisioningState?: "Succeeded"|"Failed"|"Cancelled"|"Creating"|"Deleting"|"Updating", targetType?: "nfs3"|"clfs"|"unknown", unknown?: record}
-export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-caches-storage-targets create-or-update" [
+export def "storage-targets-create-or-update" [
   subscription_id: string
   resource_group_name: string
   cache_name: string
@@ -833,7 +833,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-cache
 #
 # POST /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.StorageCache/caches/{cacheName}/upgrade
 # operationId: Caches_UpgradeFirmware
-export def "subscriptions-resourcegroups-providers-microsoft-storage-cache-caches-upgrade create-firmware" [
+export def "caches-upgrade-firmware" [
   subscription_id: string
   resource_group_name: string
   cache_name: string

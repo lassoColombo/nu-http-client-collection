@@ -113,7 +113,7 @@ def type-completer [] { ["BASIC" "STANDARD"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "batch-get-channel get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "batch-get-channel" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -137,7 +137,7 @@ export def commands []: nothing -> table {
 #
 # POST /BatchGetChannel
 # operationId: BatchGetChannel
-export def "batch-get-channel get" [
+export def "batch-get-channel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,7 +184,7 @@ export def "batch-get-channel get" [
 #
 # POST /BatchGetStreamKey
 # operationId: BatchGetStreamKey
-export def "batch-get-stream-key get" [
+export def "batch-get-stream-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -231,7 +231,7 @@ export def "batch-get-stream-key get" [
 #
 # POST /CreateChannel
 # operationId: CreateChannel
-export def "create-channel create" [
+export def "create-channel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -286,7 +286,7 @@ export def "create-channel create" [
 # operationId: CreateRecordingConfiguration
 # --destinationConfiguration shape: {s3?: any}
 # --thumbnailConfiguration shape: {recordingMode?: any, targetIntervalSeconds?: any}
-export def "create-recording-configuration create" [
+export def "create-recording-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -337,7 +337,7 @@ export def "create-recording-configuration create" [
 #
 # POST /CreateStreamKey
 # operationId: CreateStreamKey
-export def "create-stream-key create" [
+export def "create-stream-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -385,7 +385,7 @@ export def "create-stream-key create" [
 #
 # POST /DeleteChannel
 # operationId: DeleteChannel
-export def "delete-channel delete" [
+export def "delete-channel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -432,7 +432,7 @@ export def "delete-channel delete" [
 #
 # POST /DeletePlaybackKeyPair
 # operationId: DeletePlaybackKeyPair
-export def "delete-playback-key-pair delete" [
+export def "delete-playback-key-pair" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -479,7 +479,7 @@ export def "delete-playback-key-pair delete" [
 #
 # POST /DeleteRecordingConfiguration
 # operationId: DeleteRecordingConfiguration
-export def "delete-recording-configuration delete" [
+export def "delete-recording-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -526,7 +526,7 @@ export def "delete-recording-configuration delete" [
 #
 # POST /DeleteStreamKey
 # operationId: DeleteStreamKey
-export def "delete-stream-key delete" [
+export def "delete-stream-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -573,7 +573,7 @@ export def "delete-stream-key delete" [
 #
 # POST /GetChannel
 # operationId: GetChannel
-export def "get-channel get" [
+export def "get-channel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -620,7 +620,7 @@ export def "get-channel get" [
 #
 # POST /GetPlaybackKeyPair
 # operationId: GetPlaybackKeyPair
-export def "get-playback-key-pair get" [
+export def "get-playback-key-pair" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -667,7 +667,7 @@ export def "get-playback-key-pair get" [
 #
 # POST /GetRecordingConfiguration
 # operationId: GetRecordingConfiguration
-export def "get-recording-configuration get" [
+export def "get-recording-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -714,7 +714,7 @@ export def "get-recording-configuration get" [
 #
 # POST /GetStream
 # operationId: GetStream
-export def "get-stream get" [
+export def "get-stream" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -761,7 +761,7 @@ export def "get-stream get" [
 #
 # POST /GetStreamKey
 # operationId: GetStreamKey
-export def "get-stream-key get" [
+export def "get-stream-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -808,7 +808,7 @@ export def "get-stream-key get" [
 #
 # POST /GetStreamSession
 # operationId: GetStreamSession
-export def "get-stream-session get" [
+export def "get-stream-session" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -856,7 +856,7 @@ export def "get-stream-session get" [
 #
 # POST /ImportPlaybackKeyPair
 # operationId: ImportPlaybackKeyPair
-export def "import-playback-key-pair import" [
+export def "import-playback-key-pair" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -905,7 +905,7 @@ export def "import-playback-key-pair import" [
 #
 # POST /ListChannels
 # operationId: ListChannels
-export def "list-channels list" [
+export def "list-channels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -958,7 +958,7 @@ export def "list-channels list" [
 #
 # POST /ListPlaybackKeyPairs
 # operationId: ListPlaybackKeyPairs
-export def "list-playback-key-pairs list" [
+export def "list-playback-key-pairs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1009,7 +1009,7 @@ export def "list-playback-key-pairs list" [
 #
 # POST /ListRecordingConfigurations
 # operationId: ListRecordingConfigurations
-export def "list-recording-configurations list" [
+export def "list-recording-configurations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1060,7 +1060,7 @@ export def "list-recording-configurations list" [
 #
 # POST /ListStreamKeys
 # operationId: ListStreamKeys
-export def "list-stream-keys list" [
+export def "list-stream-keys" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1112,7 +1112,7 @@ export def "list-stream-keys list" [
 #
 # POST /ListStreamSessions
 # operationId: ListStreamSessions
-export def "list-stream-sessions list" [
+export def "list-stream-sessions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1165,7 +1165,7 @@ export def "list-stream-sessions list" [
 # POST /ListStreams
 # operationId: ListStreams
 # --filterBy shape: {health?: any}
-export def "list-streams list" [
+export def "list-streams" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1217,7 +1217,7 @@ export def "list-streams list" [
 #
 # GET /tags/{resourceArn}
 # operationId: ListTagsForResource
-export def "tags list-for-resource" [
+export def "list-tags-for-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1262,7 +1262,7 @@ export def "tags list-for-resource" [
 #
 # POST /tags/{resourceArn}
 # operationId: TagResource
-export def "tags tag-resource" [
+export def "tag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1311,7 +1311,7 @@ export def "tags tag-resource" [
 #
 # POST /PutMetadata
 # operationId: PutMetadata
-export def "put-metadata update" [
+export def "put-metadata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1359,7 +1359,7 @@ export def "put-metadata update" [
 #
 # POST /StopStream
 # operationId: StopStream
-export def "stop-stream stop" [
+export def "stop-stream" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1406,7 +1406,7 @@ export def "stop-stream stop" [
 #
 # DELETE /tags/{resourceArn}
 # operationId: UntagResource
-export def "tags untag-resource" [
+export def "untag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1453,7 +1453,7 @@ export def "tags untag-resource" [
 #
 # POST /UpdateChannel
 # operationId: UpdateChannel
-export def "update-channel update" [
+export def "update-channel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

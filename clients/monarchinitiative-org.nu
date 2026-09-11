@@ -125,7 +125,7 @@ def per-page-completer [] { ["10" "2" "20" "30" "40" "50"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "association-between get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-associations-between" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -149,7 +149,7 @@ export def commands []: nothing -> table {
 #
 # GET /association/between/{subject}/{object}
 # operationId: get_associations_between
-export def "association-between get" [
+export def "get-associations-between" [
   subject: string
   object: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -194,7 +194,7 @@ export def "association-between get" [
 #
 # GET /association/find/{subject_category}
 # operationId: get_association_by_subject_category_search
-export def "association-find get-by-list" [
+export def "get-association-by-subject-category-search" [
   subject_category: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -240,7 +240,7 @@ export def "association-find get-by-list" [
 #
 # GET /association/find/{subject_category}/{object_category}
 # operationId: get_association_by_subject_and_object_category_search
-export def "association-find get-by-and-list" [
+export def "get-association-by-subject-and-object-category-search" [
   subject_category: string
   object_category: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -290,7 +290,7 @@ export def "association-find get-by-and-list" [
 #
 # GET /association/from/{subject}
 # operationId: get_associations_from
-export def "association-from get" [
+export def "get-associations-from" [
   subject: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -335,7 +335,7 @@ export def "association-from get" [
 #
 # GET /association/to/{object}
 # operationId: get_associations_to
-export def "association-to get" [
+export def "get-associations-to" [
   object: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -378,7 +378,7 @@ export def "association-to get" [
 #
 # GET /association/type/{association_type}
 # operationId: get_association_by_subject_and_assoc_type
-export def "association-type get-by-subject-and-assoc" [
+export def "get-association-by-subject-and-assoc-type" [
   association_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -423,7 +423,7 @@ export def "association-type get-by-subject-and-assoc" [
 #
 # GET /association/{id}
 # operationId: get_association_object
-export def "association get-object" [
+export def "get-association-object" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -459,7 +459,7 @@ export def "association get-object" [
 #
 # GET /bioentity/anatomy/{id}/genes
 # operationId: get_anatomy_gene_associations
-export def "bioentity-anatomy-genes get-associations" [
+export def "get-anatomy-gene-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -514,7 +514,7 @@ export def "bioentity-anatomy-genes get-associations" [
 # DEPRECATED
 # operationId: get_anatomy_gene_by_taxon_associations
 @deprecated
-export def "bioentity-anatomy-genes get-by-taxon-associations" [
+export def "get-anatomy-gene-by-taxon-associations" [
   id: string
   taxid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -569,7 +569,7 @@ export def "bioentity-anatomy-genes get-by-taxon-associations" [
 #
 # GET /bioentity/case/{id}/diseases
 # operationId: get_case_disease_associations
-export def "bioentity-case-diseases get-associations" [
+export def "get-case-disease-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -617,7 +617,7 @@ export def "bioentity-case-diseases get-associations" [
 #
 # GET /bioentity/case/{id}/genotypes
 # operationId: get_case_genotype_associations
-export def "bioentity-case-genotypes get-associations" [
+export def "get-case-genotype-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -665,7 +665,7 @@ export def "bioentity-case-genotypes get-associations" [
 #
 # GET /bioentity/case/{id}/models
 # operationId: get_case_model_associations
-export def "bioentity-case-models get-associations" [
+export def "get-case-model-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -713,7 +713,7 @@ export def "bioentity-case-models get-associations" [
 #
 # GET /bioentity/case/{id}/phenotypes
 # operationId: get_case_phenotype_associations
-export def "bioentity-case-phenotypes get-associations" [
+export def "get-case-phenotype-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -761,7 +761,7 @@ export def "bioentity-case-phenotypes get-associations" [
 #
 # GET /bioentity/case/{id}/variants
 # operationId: get_case_variant_associations
-export def "bioentity-case-variants get-associations" [
+export def "get-case-variant-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -809,7 +809,7 @@ export def "bioentity-case-variants get-associations" [
 #
 # GET /bioentity/disease/{id}/cases
 # operationId: get_disease_case_associations
-export def "bioentity-disease-cases get-associations" [
+export def "get-disease-case-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -857,7 +857,7 @@ export def "bioentity-disease-cases get-associations" [
 #
 # GET /bioentity/disease/{id}/genes
 # operationId: get_disease_gene_associations
-export def "bioentity-disease-genes get-associations" [
+export def "get-disease-gene-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -911,7 +911,7 @@ export def "bioentity-disease-genes get-associations" [
 #
 # GET /bioentity/disease/{id}/genotypes
 # operationId: get_disease_genotype_associations
-export def "bioentity-disease-genotypes get-associations" [
+export def "get-disease-genotype-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -964,7 +964,7 @@ export def "bioentity-disease-genotypes get-associations" [
 #
 # GET /bioentity/disease/{id}/models
 # operationId: get_disease_model_associations
-export def "bioentity-disease-models list" [
+export def "get-disease-model-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1019,7 +1019,7 @@ export def "bioentity-disease-models list" [
 # DEPRECATED
 # operationId: get_disease_model_taxon_associations
 @deprecated
-export def "bioentity-disease-models get-associations" [
+export def "get-disease-model-taxon-associations" [
   id: string
   taxon: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1069,7 +1069,7 @@ export def "bioentity-disease-models get-associations" [
 #
 # GET /bioentity/disease/{id}/pathways
 # operationId: get_disease_pathway_associations
-export def "bioentity-disease-pathways get-associations" [
+export def "get-disease-pathway-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1122,7 +1122,7 @@ export def "bioentity-disease-pathways get-associations" [
 #
 # GET /bioentity/disease/{id}/phenotypes
 # operationId: get_disease_phenotype_associations
-export def "bioentity-disease-phenotypes get-associations" [
+export def "get-disease-phenotype-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1175,7 +1175,7 @@ export def "bioentity-disease-phenotypes get-associations" [
 #
 # GET /bioentity/disease/{id}/publications
 # operationId: get_disease_publication_associations
-export def "bioentity-disease-publications get-associations" [
+export def "get-disease-publication-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1228,7 +1228,7 @@ export def "bioentity-disease-publications get-associations" [
 #
 # GET /bioentity/disease/{id}/treatment
 # operationId: get_disease_substance_associations
-export def "bioentity-disease-treatment get-substance-associations" [
+export def "get-disease-substance-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1276,7 +1276,7 @@ export def "bioentity-disease-treatment get-substance-associations" [
 #
 # GET /bioentity/disease/{id}/variants
 # operationId: get_disease_variant_associations
-export def "bioentity-disease-variants get-associations" [
+export def "get-disease-variant-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1329,7 +1329,7 @@ export def "bioentity-disease-variants get-associations" [
 #
 # GET /bioentity/function/{id}
 # operationId: get_function_associations
-export def "bioentity-function get-associations" [
+export def "get-function-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1369,7 +1369,7 @@ export def "bioentity-function get-associations" [
 #
 # GET /bioentity/function/{id}/genes
 # operationId: get_function_gene_associations
-export def "bioentity-function-genes get-associations" [
+export def "get-function-gene-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1423,7 +1423,7 @@ export def "bioentity-function-genes get-associations" [
 #
 # GET /bioentity/function/{id}/publications
 # operationId: get_function_publication_associations
-export def "bioentity-function-publications get-associations" [
+export def "get-function-publication-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1463,7 +1463,7 @@ export def "bioentity-function-publications get-associations" [
 #
 # GET /bioentity/function/{id}/taxons
 # operationId: get_function_taxon_associations
-export def "bioentity-function-taxons get-associations" [
+export def "get-function-taxon-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1503,7 +1503,7 @@ export def "bioentity-function-taxons get-associations" [
 #
 # GET /bioentity/gene/{id}/anatomy
 # operationId: get_gene_anatomy_associations
-export def "bioentity-gene-anatomy get-associations" [
+export def "get-gene-anatomy-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1556,7 +1556,7 @@ export def "bioentity-gene-anatomy get-associations" [
 #
 # GET /bioentity/gene/{id}/cases
 # operationId: get_gene_case_associations
-export def "bioentity-gene-cases get-associations" [
+export def "get-gene-case-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1604,7 +1604,7 @@ export def "bioentity-gene-cases get-associations" [
 #
 # GET /bioentity/gene/{id}/diseases
 # operationId: get_gene_disease_associations
-export def "bioentity-gene-diseases get-associations" [
+export def "get-gene-disease-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1658,7 +1658,7 @@ export def "bioentity-gene-diseases get-associations" [
 #
 # GET /bioentity/gene/{id}/expression/anatomy
 # operationId: get_gene_expression_associations
-export def "bioentity-gene-expression-anatomy get-associations" [
+export def "get-gene-expression-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1711,7 +1711,7 @@ export def "bioentity-gene-expression-anatomy get-associations" [
 #
 # GET /bioentity/gene/{id}/function
 # operationId: get_gene_function_associations
-export def "bioentity-gene-function get-associations" [
+export def "get-gene-function-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1759,7 +1759,7 @@ export def "bioentity-gene-function get-associations" [
 #
 # GET /bioentity/gene/{id}/genotypes
 # operationId: get_gene_genotype_associations
-export def "bioentity-gene-genotypes get-associations" [
+export def "get-gene-genotype-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1812,7 +1812,7 @@ export def "bioentity-gene-genotypes get-associations" [
 #
 # GET /bioentity/gene/{id}/homologs
 # operationId: get_gene_homolog_associations
-export def "bioentity-gene-homologs get-associations" [
+export def "get-gene-homolog-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1863,7 +1863,7 @@ export def "bioentity-gene-homologs get-associations" [
 #
 # GET /bioentity/gene/{id}/interactions
 # operationId: get_gene_interactions
-export def "bioentity-gene-interactions get" [
+export def "get-gene-interactions" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1916,7 +1916,7 @@ export def "bioentity-gene-interactions get" [
 #
 # GET /bioentity/gene/{id}/models
 # operationId: get_gene_model_associations
-export def "bioentity-gene-models get-associations" [
+export def "get-gene-model-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1969,7 +1969,7 @@ export def "bioentity-gene-models get-associations" [
 #
 # GET /bioentity/gene/{id}/ortholog/diseases
 # operationId: get_gene_ortholog_disease_associations
-export def "bioentity-gene-ortholog-diseases get-associations" [
+export def "get-gene-ortholog-disease-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2022,7 +2022,7 @@ export def "bioentity-gene-ortholog-diseases get-associations" [
 #
 # GET /bioentity/gene/{id}/ortholog/phenotypes
 # operationId: get_gene_ortholog_phenotype_associations
-export def "bioentity-gene-ortholog-phenotypes get-associations" [
+export def "get-gene-ortholog-phenotype-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2075,7 +2075,7 @@ export def "bioentity-gene-ortholog-phenotypes get-associations" [
 #
 # GET /bioentity/gene/{id}/pathways
 # operationId: get_gene_pathway_associations
-export def "bioentity-gene-pathways get-associations" [
+export def "get-gene-pathway-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2128,7 +2128,7 @@ export def "bioentity-gene-pathways get-associations" [
 #
 # GET /bioentity/gene/{id}/phenotypes
 # operationId: get_gene_phenotype_associations
-export def "bioentity-gene-phenotypes get-associations" [
+export def "get-gene-phenotype-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2181,7 +2181,7 @@ export def "bioentity-gene-phenotypes get-associations" [
 #
 # GET /bioentity/gene/{id}/publications
 # operationId: get_gene_publication_associations
-export def "bioentity-gene-publications get-associations" [
+export def "get-gene-publication-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2234,7 +2234,7 @@ export def "bioentity-gene-publications get-associations" [
 #
 # GET /bioentity/gene/{id}/variants
 # operationId: get_gene_variant_associations
-export def "bioentity-gene-variants get-associations" [
+export def "get-gene-variant-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2287,7 +2287,7 @@ export def "bioentity-gene-variants get-associations" [
 #
 # GET /bioentity/genotype/{id}/cases
 # operationId: get_genotype_case_associations
-export def "bioentity-genotype-cases get-associations" [
+export def "get-genotype-case-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2335,7 +2335,7 @@ export def "bioentity-genotype-cases get-associations" [
 #
 # GET /bioentity/genotype/{id}/diseases
 # operationId: get_genotype_disease_associations
-export def "bioentity-genotype-diseases get-associations" [
+export def "get-genotype-disease-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2388,7 +2388,7 @@ export def "bioentity-genotype-diseases get-associations" [
 #
 # GET /bioentity/genotype/{id}/genes
 # operationId: get_genotype_gene_associations
-export def "bioentity-genotype-genes get-associations" [
+export def "get-genotype-gene-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2441,7 +2441,7 @@ export def "bioentity-genotype-genes get-associations" [
 #
 # GET /bioentity/genotype/{id}/genotypes
 # operationId: get_genotype_genotype_associations
-export def "bioentity-genotype-genotypes get-associations" [
+export def "get-genotype-genotype-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2494,7 +2494,7 @@ export def "bioentity-genotype-genotypes get-associations" [
 #
 # GET /bioentity/genotype/{id}/models
 # operationId: get_genotype_model_associations
-export def "bioentity-genotype-models get-associations" [
+export def "get-genotype-model-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2547,7 +2547,7 @@ export def "bioentity-genotype-models get-associations" [
 #
 # GET /bioentity/genotype/{id}/phenotypes
 # operationId: get_genotype_phenotype_associations
-export def "bioentity-genotype-phenotypes get-associations" [
+export def "get-genotype-phenotype-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2600,7 +2600,7 @@ export def "bioentity-genotype-phenotypes get-associations" [
 #
 # GET /bioentity/genotype/{id}/publications
 # operationId: get_genotype_publication_associations
-export def "bioentity-genotype-publications get-associations" [
+export def "get-genotype-publication-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2653,7 +2653,7 @@ export def "bioentity-genotype-publications get-associations" [
 #
 # GET /bioentity/genotype/{id}/variants
 # operationId: get_genotype_variant_associations
-export def "bioentity-genotype-variants get-associations" [
+export def "get-genotype-variant-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2708,7 +2708,7 @@ export def "bioentity-genotype-variants get-associations" [
 # DEPRECATED
 # operationId: get_goterm_gene_associations
 @deprecated
-export def "bioentity-goterm-genes get-associations" [
+export def "get-goterm-gene-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2757,7 +2757,7 @@ export def "bioentity-goterm-genes get-associations" [
 #
 # GET /bioentity/model/{id}/cases
 # operationId: get_model_case_associations
-export def "bioentity-model-cases get-associations" [
+export def "get-model-case-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2805,7 +2805,7 @@ export def "bioentity-model-cases get-associations" [
 #
 # GET /bioentity/model/{id}/diseases
 # operationId: get_model_disease_associations
-export def "bioentity-model-diseases get-associations" [
+export def "get-model-disease-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2858,7 +2858,7 @@ export def "bioentity-model-diseases get-associations" [
 #
 # GET /bioentity/model/{id}/genes
 # operationId: get_model_gene_associations
-export def "bioentity-model-genes get-associations" [
+export def "get-model-gene-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2911,7 +2911,7 @@ export def "bioentity-model-genes get-associations" [
 #
 # GET /bioentity/model/{id}/genotypes
 # operationId: get_model_genotype_associations
-export def "bioentity-model-genotypes get-associations" [
+export def "get-model-genotype-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2964,7 +2964,7 @@ export def "bioentity-model-genotypes get-associations" [
 #
 # GET /bioentity/model/{id}/phenotypes
 # operationId: get_model_phenotype_associations
-export def "bioentity-model-phenotypes get-associations" [
+export def "get-model-phenotype-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3017,7 +3017,7 @@ export def "bioentity-model-phenotypes get-associations" [
 #
 # GET /bioentity/model/{id}/publications
 # operationId: get_model_publication_associations
-export def "bioentity-model-publications get-associations" [
+export def "get-model-publication-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3070,7 +3070,7 @@ export def "bioentity-model-publications get-associations" [
 #
 # GET /bioentity/model/{id}/variants
 # operationId: get_model_variant_associations
-export def "bioentity-model-variants get-associations" [
+export def "get-model-variant-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3123,7 +3123,7 @@ export def "bioentity-model-variants get-associations" [
 #
 # GET /bioentity/pathway/{id}/diseases
 # operationId: get_pathway_disease_associations
-export def "bioentity-pathway-diseases get-associations" [
+export def "get-pathway-disease-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3176,7 +3176,7 @@ export def "bioentity-pathway-diseases get-associations" [
 #
 # GET /bioentity/pathway/{id}/genes
 # operationId: get_pathway_gene_associations
-export def "bioentity-pathway-genes get-associations" [
+export def "get-pathway-gene-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3229,7 +3229,7 @@ export def "bioentity-pathway-genes get-associations" [
 #
 # GET /bioentity/pathway/{id}/phenotypes
 # operationId: get_pathway_phenotype_associations
-export def "bioentity-pathway-phenotypes get-associations" [
+export def "get-pathway-phenotype-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3282,7 +3282,7 @@ export def "bioentity-pathway-phenotypes get-associations" [
 #
 # GET /bioentity/phenotype/{id}/anatomy
 # operationId: get_phenotype_anatomy_associations
-export def "bioentity-phenotype-anatomy get-associations" [
+export def "get-phenotype-anatomy-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3330,7 +3330,7 @@ export def "bioentity-phenotype-anatomy get-associations" [
 #
 # GET /bioentity/phenotype/{id}/cases
 # operationId: get_phenotype_case_associations
-export def "bioentity-phenotype-cases get-associations" [
+export def "get-phenotype-case-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3378,7 +3378,7 @@ export def "bioentity-phenotype-cases get-associations" [
 #
 # GET /bioentity/phenotype/{id}/diseases
 # operationId: get_phenotype_disease_associations
-export def "bioentity-phenotype-diseases get-associations" [
+export def "get-phenotype-disease-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3433,7 +3433,7 @@ export def "bioentity-phenotype-diseases get-associations" [
 # DEPRECATED
 # operationId: get_phenotype_gene_by_taxon_associations
 @deprecated
-export def "bioentity-phenotype-gene-ids get-by-taxon-associations" [
+export def "get-phenotype-gene-by-taxon-associations" [
   id: string
   taxid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3483,7 +3483,7 @@ export def "bioentity-phenotype-gene-ids get-by-taxon-associations" [
 #
 # GET /bioentity/phenotype/{id}/genes
 # operationId: get_phenotype_gene_associations
-export def "bioentity-phenotype-genes get-associations" [
+export def "get-phenotype-gene-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3536,7 +3536,7 @@ export def "bioentity-phenotype-genes get-associations" [
 #
 # GET /bioentity/phenotype/{id}/genotypes
 # operationId: get_phenotype_genotype_associations
-export def "bioentity-phenotype-genotypes get-associations" [
+export def "get-phenotype-genotype-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3589,7 +3589,7 @@ export def "bioentity-phenotype-genotypes get-associations" [
 #
 # GET /bioentity/phenotype/{id}/pathways
 # operationId: get_phenotype_pathway_associations
-export def "bioentity-phenotype-pathways get-associations" [
+export def "get-phenotype-pathway-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3642,7 +3642,7 @@ export def "bioentity-phenotype-pathways get-associations" [
 #
 # GET /bioentity/phenotype/{id}/publications
 # operationId: get_phenotype_publication_associations
-export def "bioentity-phenotype-publications get-associations" [
+export def "get-phenotype-publication-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3695,7 +3695,7 @@ export def "bioentity-phenotype-publications get-associations" [
 #
 # GET /bioentity/phenotype/{id}/variants
 # operationId: get_phenotype_variant_associations
-export def "bioentity-phenotype-variants get-associations" [
+export def "get-phenotype-variant-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3748,7 +3748,7 @@ export def "bioentity-phenotype-variants get-associations" [
 #
 # GET /bioentity/publication/{id}/diseases
 # operationId: get_publication_disease_associations
-export def "bioentity-publication-diseases get-associations" [
+export def "get-publication-disease-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3801,7 +3801,7 @@ export def "bioentity-publication-diseases get-associations" [
 #
 # GET /bioentity/publication/{id}/genes
 # operationId: get_publication_gene_associations
-export def "bioentity-publication-genes get-associations" [
+export def "get-publication-gene-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3854,7 +3854,7 @@ export def "bioentity-publication-genes get-associations" [
 #
 # GET /bioentity/publication/{id}/genotypes
 # operationId: get_publication_genotype_associations
-export def "bioentity-publication-genotypes get-associations" [
+export def "get-publication-genotype-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3907,7 +3907,7 @@ export def "bioentity-publication-genotypes get-associations" [
 #
 # GET /bioentity/publication/{id}/models
 # operationId: get_publication_model_associations
-export def "bioentity-publication-models get-associations" [
+export def "get-publication-model-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3960,7 +3960,7 @@ export def "bioentity-publication-models get-associations" [
 #
 # GET /bioentity/publication/{id}/phenotypes
 # operationId: get_publication_phenotype_associations
-export def "bioentity-publication-phenotypes get-associations" [
+export def "get-publication-phenotype-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4013,7 +4013,7 @@ export def "bioentity-publication-phenotypes get-associations" [
 #
 # GET /bioentity/publication/{id}/variants
 # operationId: get_publication_variant_associations
-export def "bioentity-publication-variants get-associations" [
+export def "get-publication-variant-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4066,7 +4066,7 @@ export def "bioentity-publication-variants get-associations" [
 #
 # GET /bioentity/substance/{id}/participant_in
 # operationId: get_substance_participant_in_associations
-export def "bioentity-substance-participant-in get-associations" [
+export def "get-substance-participant-in-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4114,7 +4114,7 @@ export def "bioentity-substance-participant-in get-associations" [
 #
 # GET /bioentity/substance/{id}/roles
 # operationId: get_substance_role_associations
-export def "bioentity-substance-roles get-associations" [
+export def "get-substance-role-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4162,7 +4162,7 @@ export def "bioentity-substance-roles get-associations" [
 #
 # GET /bioentity/substance/{id}/treats
 # operationId: get_substance_treats_associations
-export def "bioentity-substance-treats get-associations" [
+export def "get-substance-treats-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4210,7 +4210,7 @@ export def "bioentity-substance-treats get-associations" [
 #
 # GET /bioentity/variant/{id}/cases
 # operationId: get_variant_case_associations
-export def "bioentity-variant-cases get-associations" [
+export def "get-variant-case-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4258,7 +4258,7 @@ export def "bioentity-variant-cases get-associations" [
 #
 # GET /bioentity/variant/{id}/diseases
 # operationId: get_variant_disease_associations
-export def "bioentity-variant-diseases get-associations" [
+export def "get-variant-disease-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4311,7 +4311,7 @@ export def "bioentity-variant-diseases get-associations" [
 #
 # GET /bioentity/variant/{id}/genes
 # operationId: get_variant_gene_associations
-export def "bioentity-variant-genes get-associations" [
+export def "get-variant-gene-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4364,7 +4364,7 @@ export def "bioentity-variant-genes get-associations" [
 #
 # GET /bioentity/variant/{id}/genotypes
 # operationId: get_variant_genotype_associations
-export def "bioentity-variant-genotypes get-associations" [
+export def "get-variant-genotype-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4417,7 +4417,7 @@ export def "bioentity-variant-genotypes get-associations" [
 #
 # GET /bioentity/variant/{id}/models
 # operationId: get_variant_model_associations
-export def "bioentity-variant-models get-associations" [
+export def "get-variant-model-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4465,7 +4465,7 @@ export def "bioentity-variant-models get-associations" [
 #
 # GET /bioentity/variant/{id}/phenotypes
 # operationId: get_variant_phenotype_associations
-export def "bioentity-variant-phenotypes get-associations" [
+export def "get-variant-phenotype-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4518,7 +4518,7 @@ export def "bioentity-variant-phenotypes get-associations" [
 #
 # GET /bioentity/variant/{id}/publications
 # operationId: get_variant_publication_associations
-export def "bioentity-variant-publications get-associations" [
+export def "get-variant-publication-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4571,7 +4571,7 @@ export def "bioentity-variant-publications get-associations" [
 #
 # GET /bioentity/{id}
 # operationId: get_generic_object
-export def "bioentity list" [
+export def "get-generic-object" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4619,7 +4619,7 @@ export def "bioentity list" [
 #
 # GET /bioentity/{id}/associations
 # operationId: get_generic_associations
-export def "bioentity-associations get-generic" [
+export def "get-generic-associations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4672,7 +4672,7 @@ export def "bioentity-associations get-generic" [
 #
 # GET /bioentity/{type}/{id}
 # operationId: get_generic_object_by_type
-export def "bioentity get-generic-object" [
+export def "get-generic-object-by-type" [
   type: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4724,7 +4724,7 @@ export def "bioentity get-generic-object" [
 #
 # GET /bioentityset/associations
 # operationId: get_entity_set_associations
-export def "bioentityset-associations get-entity-update" [
+export def "get-entity-set-associations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4763,7 +4763,7 @@ export def "bioentityset-associations get-entity-update" [
 #
 # GET /bioentityset/descriptor/counts
 # operationId: get_entity_set_summary
-export def "bioentityset-descriptor-counts get-entity-update-summary" [
+export def "get-entity-set-summary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4802,7 +4802,7 @@ export def "bioentityset-descriptor-counts get-entity-update-summary" [
 #
 # GET /bioentityset/graph
 # operationId: get_entity_set_graph_resource
-export def "bioentityset-graph get-entity-update-resource" [
+export def "get-entity-set-graph-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4841,7 +4841,7 @@ export def "bioentityset-graph get-entity-update-resource" [
 #
 # GET /bioentityset/homologs/
 # operationId: get_entity_set_homologs
-export def "bioentityset-homologs get-entity-update" [
+export def "get-entity-set-homologs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4877,7 +4877,7 @@ export def "bioentityset-homologs get-entity-update" [
 #
 # GET /bioentityset/overrepresentation
 # operationId: get_over_representation
-export def "bioentityset-overrepresentation get-over-representation" [
+export def "get-over-representation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4919,7 +4919,7 @@ export def "bioentityset-overrepresentation get-over-representation" [
 #
 # GET /bioentityset/slimmer/anatomy
 # operationId: get_entity_set_anatomy_slimmer
-export def "bioentityset-slimmer-anatomy get-entity-update" [
+export def "get-entity-set-anatomy-slimmer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4959,7 +4959,7 @@ export def "bioentityset-slimmer-anatomy get-entity-update" [
 #
 # GET /bioentityset/slimmer/function
 # operationId: get_entity_set_function_slimmer
-export def "bioentityset-slimmer-function get-entity-update" [
+export def "get-entity-set-function-slimmer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5000,7 +5000,7 @@ export def "bioentityset-slimmer-function get-entity-update" [
 #
 # GET /bioentityset/slimmer/phenotype
 # operationId: get_entity_set_phenotype_slimmer
-export def "bioentityset-slimmer-phenotype get-entity-update" [
+export def "get-entity-set-phenotype-slimmer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5040,7 +5040,7 @@ export def "bioentityset-slimmer-phenotype get-entity-update" [
 #
 # GET /cam/activity
 # operationId: get_activity_collection
-export def "cam-activity get-collection" [
+export def "get-activity-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5077,7 +5077,7 @@ export def "cam-activity get-collection" [
 #
 # GET /cam/instance/{id}
 # operationId: get_instance_object
-export def "cam-instance get-object" [
+export def "get-instance-object" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5116,7 +5116,7 @@ export def "cam-instance get-object" [
 #
 # GET /cam/instances
 # operationId: get_model_instances
-export def "cam-instances get-model" [
+export def "get-model-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5150,7 +5150,7 @@ export def "cam-instances get-model" [
 #
 # GET /cam/model
 # operationId: get_model_collection
-export def "cam-model get-collection" [
+export def "get-model-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5184,7 +5184,7 @@ export def "cam-model get-collection" [
 #
 # GET /cam/model/contributors
 # operationId: get_model_contributors
-export def "cam-model-contributors get" [
+export def "get-model-contributors" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5218,7 +5218,7 @@ export def "cam-model-contributors get" [
 #
 # GET /cam/model/properties
 # operationId: get_model_properties
-export def "cam-model-properties get" [
+export def "get-model-properties" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5255,7 +5255,7 @@ export def "cam-model-properties get" [
 #
 # GET /cam/model/property_values
 # operationId: get_model_property_values
-export def "cam-model-property-values get" [
+export def "get-model-property-values" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5292,7 +5292,7 @@ export def "cam-model-property-values get" [
 #
 # GET /cam/model/query
 # operationId: get_model_query
-export def "cam-model-query get" [
+export def "get-model-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5329,7 +5329,7 @@ export def "cam-model-query get" [
 #
 # GET /cam/model/{id}
 # operationId: get_model_object
-export def "cam-model get-object" [
+export def "get-model-object" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5365,7 +5365,7 @@ export def "cam-model get-object" [
 #
 # GET /cam/physical_interaction
 # operationId: get_physical_interaction
-export def "cam-physical-interaction get" [
+export def "get-physical-interaction" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5402,7 +5402,7 @@ export def "cam-physical-interaction get" [
 #
 # GET /evidence/graph/{id}
 # operationId: get_evidence_graph_object
-export def "evidence-graph get-object" [
+export def "get-evidence-graph-object" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5438,7 +5438,7 @@ export def "evidence-graph get-object" [
 #
 # GET /evidence/graph/{id}/table
 # operationId: get_evidence_graph_table
-export def "evidence-graph-table get" [
+export def "get-evidence-graph-table" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5476,7 +5476,7 @@ export def "evidence-graph-table get" [
 #
 # GET /genome/features/within/{build}/{reference}/{begin}/{end}
 # operationId: get_features_within_resource
-export def "genome-features-within get-resource" [
+export def "get-features-within-resource" [
   build: string
   reference: string
   begin: string
@@ -5518,7 +5518,7 @@ export def "genome-features-within get-resource" [
 #
 # GET /graph/edges/from/{id}
 # operationId: get_edge_resource
-export def "graph-edges-from get-resource" [
+export def "get-edge-resource" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5560,7 +5560,7 @@ export def "graph-edges-from get-resource" [
 #
 # GET /graph/node/{id}
 # operationId: get_node_resource
-export def "graph-node get-resource" [
+export def "get-node-resource" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5596,7 +5596,7 @@ export def "graph-node get-resource" [
 #
 # GET /identifier/mapper/{source}/{target}/
 # operationId: get_identifier_mapper
-export def "identifier-mapper get" [
+export def "get-identifier-mapper" [
   source: string
   target: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5634,7 +5634,7 @@ export def "identifier-mapper get" [
 #
 # GET /identifier/prefixes/
 # operationId: get_prefix_collection
-export def "identifier-prefixes get-prefix-collection" [
+export def "get-prefix-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5668,7 +5668,7 @@ export def "identifier-prefixes get-prefix-collection" [
 #
 # GET /identifier/prefixes/contract/{uri}
 # operationId: get_prefix_contract
-export def "identifier-prefixes-contract get-prefix" [
+export def "get-prefix-contract" [
   uri: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5704,7 +5704,7 @@ export def "identifier-prefixes-contract get-prefix" [
 #
 # GET /identifier/prefixes/expand/{id}
 # operationId: get_prefix_expand
-export def "identifier-prefixes-expand get-prefix" [
+export def "get-prefix-expand" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5740,7 +5740,7 @@ export def "identifier-prefixes-expand get-prefix" [
 #
 # GET /individual/pedigree/{id}
 # operationId: get_pedigree
-export def "individual-pedigree get" [
+export def "get-pedigree" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5776,7 +5776,7 @@ export def "individual-pedigree get" [
 #
 # GET /individual/{id}
 # operationId: get_individual
-export def "individual get" [
+export def "get-individual" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5812,7 +5812,7 @@ export def "individual get" [
 #
 # GET /mart/case/{object_category}/{taxon}
 # operationId: get_mart_case_associations_resource
-export def "mart-case get-associations-resource" [
+export def "get-mart-case-associations-resource" [
   object_category: string
   taxon: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5852,7 +5852,7 @@ export def "mart-case get-associations-resource" [
 #
 # GET /mart/disease/{object_category}/{taxon}
 # operationId: get_mart_disease_associations_resource
-export def "mart-disease get-associations-resource" [
+export def "get-mart-disease-associations-resource" [
   object_category: string
   taxon: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5892,7 +5892,7 @@ export def "mart-disease get-associations-resource" [
 #
 # GET /mart/gene/{object_category}/{taxon}
 # operationId: get_mart_gene_associations_resource
-export def "mart-gene get-associations-resource" [
+export def "get-mart-gene-associations-resource" [
   object_category: string
   taxon: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5932,7 +5932,7 @@ export def "mart-gene get-associations-resource" [
 #
 # GET /mart/ortholog/{taxon1}/{taxon2}
 # operationId: get_mart_ortholog_associations_resource
-export def "mart-ortholog get-associations-resource" [
+export def "get-mart-ortholog-associations-resource" [
   taxon1: string
   taxon2: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5970,7 +5970,7 @@ export def "mart-ortholog get-associations-resource" [
 #
 # GET /mart/paralog/{taxon1}/{taxon2}
 # operationId: get_mart_paralog_associations_resource
-export def "mart-paralog get-associations-resource" [
+export def "get-mart-paralog-associations-resource" [
   taxon1: string
   taxon2: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6008,7 +6008,7 @@ export def "mart-paralog get-associations-resource" [
 #
 # GET /metadata/datasets
 # operationId: get_metadata_for_datasets
-export def "metadata-datasets get" [
+export def "get-metadata-for-datasets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6042,7 +6042,7 @@ export def "metadata-datasets get" [
 #
 # POST /mme/disease
 # operationId: post_disease_mme
-export def "mme-disease create" [
+export def "post-disease-mme" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6080,7 +6080,7 @@ export def "mme-disease create" [
 #
 # POST /mme/fly
 # operationId: post_fly_mme
-export def "mme-fly create" [
+export def "post-fly-mme" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6118,7 +6118,7 @@ export def "mme-fly create" [
 #
 # POST /mme/mouse
 # operationId: post_mouse_mme
-export def "mme-mouse create" [
+export def "post-mouse-mme" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6156,7 +6156,7 @@ export def "mme-mouse create" [
 #
 # POST /mme/nematode
 # operationId: post_nematode_mme
-export def "mme-nematode create" [
+export def "post-nematode-mme" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6194,7 +6194,7 @@ export def "mme-nematode create" [
 #
 # POST /mme/zebrafish
 # operationId: post_zebrafish_mme
-export def "mme-zebrafish create" [
+export def "post-zebrafish-mme" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6232,7 +6232,7 @@ export def "mme-zebrafish create" [
 #
 # GET /nlp/annotate/
 # operationId: get_annotate
-export def "nlp-annotate get" [
+export def "get-annotate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6275,7 +6275,7 @@ export def "nlp-annotate get" [
 #
 # POST /nlp/annotate/
 # operationId: post_annotate
-export def "nlp-annotate create" [
+export def "post-annotate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6318,7 +6318,7 @@ export def "nlp-annotate create" [
 #
 # GET /nlp/annotate/entities
 # operationId: get_annotate_entities
-export def "nlp-annotate-entities get" [
+export def "get-annotate-entities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6361,7 +6361,7 @@ export def "nlp-annotate-entities get" [
 #
 # POST /nlp/annotate/entities
 # operationId: post_annotate_entities
-export def "nlp-annotate-entities create" [
+export def "post-annotate-entities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6404,7 +6404,7 @@ export def "nlp-annotate-entities create" [
 #
 # GET /ontol/identifier/
 # operationId: get_ontol_identifier_resource
-export def "ontol-identifier get-resource" [
+export def "get-ontol-identifier-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6440,7 +6440,7 @@ export def "ontol-identifier get-resource" [
 #
 # POST /ontol/identifier/
 # operationId: post_ontol_identifier_resource
-export def "ontol-identifier create-resource" [
+export def "post-ontol-identifier-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6476,7 +6476,7 @@ export def "ontol-identifier create-resource" [
 #
 # GET /ontol/information_content/{subject_category}/{object_category}/{subject_taxon}
 # operationId: get_information_content_resource
-export def "ontol-information-content get-resource" [
+export def "get-information-content-resource" [
   subject_category: string
   object_category: string
   subject_taxon: string
@@ -6518,7 +6518,7 @@ export def "ontol-information-content get-resource" [
 #
 # GET /ontol/labeler/
 # operationId: get_ontol_labeler_resource
-export def "ontol-labeler get-resource" [
+export def "get-ontol-labeler-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6554,7 +6554,7 @@ export def "ontol-labeler get-resource" [
 #
 # GET /ontol/subgraph/{ontology}/{node}
 # operationId: get_extract_ontology_subgraph_resource
-export def "ontol-subgraph get-extract-resource" [
+export def "get-extract-ontology-subgraph-resource" [
   ontology: string
   node: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6598,7 +6598,7 @@ export def "ontol-subgraph get-extract-resource" [
 #
 # POST /ontol/subgraph/{ontology}/{node}
 # operationId: post_extract_ontology_subgraph_resource
-export def "ontol-subgraph create-extract-resource" [
+export def "post-extract-ontology-subgraph-resource" [
   ontology: string
   node: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6642,7 +6642,7 @@ export def "ontol-subgraph create-extract-resource" [
 #
 # GET /ontology/shared/{subject}/{object}
 # operationId: get_ontology_terms_shared_ancestor
-export def "ontology-shared get-terms-ancestor" [
+export def "get-ontology-terms-shared-ancestor" [
   subject: string
   object: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6680,7 +6680,7 @@ export def "ontology-shared get-terms-ancestor" [
 #
 # GET /ontology/subset/{id}
 # operationId: get_ontology_subset
-export def "ontology-subset get" [
+export def "get-ontology-subset" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6716,7 +6716,7 @@ export def "ontology-subset get" [
 #
 # GET /ontology/term/{id}
 # operationId: get_ontology_term
-export def "ontology-term get" [
+export def "get-ontology-term" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6752,7 +6752,7 @@ export def "ontology-term get" [
 #
 # GET /ontology/term/{id}/graph
 # operationId: get_ontology_term_graph
-export def "ontology-term-graph get" [
+export def "get-ontology-term-graph" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6790,7 +6790,7 @@ export def "ontology-term-graph get" [
 #
 # GET /ontology/term/{id}/subgraph
 # operationId: get_ontology_term_subgraph
-export def "ontology-term-subgraph get" [
+export def "get-ontology-term-subgraph" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6832,7 +6832,7 @@ export def "ontology-term-subgraph get" [
 #
 # GET /ontology/term/{id}/subsets
 # operationId: get_ontology_term_subsets
-export def "ontology-term-subsets get" [
+export def "get-ontology-term-subsets" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6868,7 +6868,7 @@ export def "ontology-term-subsets get" [
 #
 # GET /owl/ontology/dlquery/{query}
 # operationId: get_dl_query
-export def "owl-ontology-dlquery get-dl" [
+export def "get-dl-query" [
   query: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6904,7 +6904,7 @@ export def "owl-ontology-dlquery get-dl" [
 #
 # GET /owl/ontology/sparql/{query}
 # operationId: get_sparql_query
-export def "owl-ontology-sparql get" [
+export def "get-sparql-query" [
   query: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6940,7 +6940,7 @@ export def "owl-ontology-sparql get" [
 #
 # GET /pair/sim/jaccard/{id1}/{id2}
 # operationId: get_pair_sim_jaccard_resource
-export def "pair-sim-jaccard get-resource" [
+export def "get-pair-sim-jaccard-resource" [
   id1: string
   id2: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6980,7 +6980,7 @@ export def "pair-sim-jaccard get-resource" [
 #
 # GET /relation/usage/
 # operationId: get_relation_usage_resource
-export def "relation-usage get-resource" [
+export def "get-relation-usage-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7017,7 +7017,7 @@ export def "relation-usage get-resource" [
 #
 # GET /relation/usage/between/{subject_category}/{object_category}
 # operationId: get_relation_usage_between_resource
-export def "relation-usage-between get-resource" [
+export def "get-relation-usage-between-resource" [
   subject_category: string
   object_category: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7058,7 +7058,7 @@ export def "relation-usage-between get-resource" [
 #
 # GET /relation/usage/pivot
 # operationId: get_relation_usage_pivot_resource
-export def "relation-usage-pivot get-resource" [
+export def "get-relation-usage-pivot-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7095,7 +7095,7 @@ export def "relation-usage-pivot get-resource" [
 #
 # GET /relation/usage/pivot/label
 # operationId: get_relation_usage_pivot_label_resource
-export def "relation-usage-pivot-label get-resource" [
+export def "get-relation-usage-pivot-label-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7132,7 +7132,7 @@ export def "relation-usage-pivot-label get-resource" [
 #
 # GET /search/entity/autocomplete/{term}
 # operationId: get_autocomplete
-export def "search-entity-autocomplete get" [
+export def "get-autocomplete" [
   term: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7182,7 +7182,7 @@ export def "search-entity-autocomplete get" [
 #
 # GET /search/entity/hpo-pl/{term}
 # operationId: get_search_hpo_entities
-export def "search-entity-hpo-pl get-entities" [
+export def "get-search-hpo-entities" [
   term: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7226,7 +7226,7 @@ export def "search-entity-hpo-pl get-entities" [
 #
 # GET /search/entity/{term}
 # operationId: get_search_entities
-export def "search-entity get-entities" [
+export def "get-search-entities" [
   term: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7276,7 +7276,7 @@ export def "search-entity get-entities" [
 #
 # GET /sim/compare
 # operationId: get_sim_compare
-export def "sim-compare get" [
+export def "get-sim-compare" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7315,7 +7315,7 @@ export def "sim-compare get" [
 #
 # POST /sim/compare
 # operationId: post_sim_compare
-export def "sim-compare create" [
+export def "post-sim-compare" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7354,7 +7354,7 @@ export def "sim-compare create" [
 #
 # GET /sim/score
 # operationId: get_annotation_score
-export def "sim-score get-annotation" [
+export def "get-annotation-score" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7392,7 +7392,7 @@ export def "sim-score get-annotation" [
 # POST /sim/score
 # operationId: post_annotation_score
 # --features item shape: {id?: string, isPresent?: bool, label?: string, type?: string}
-export def "sim-score create-annotation" [
+export def "post-annotation-score" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7431,7 +7431,7 @@ export def "sim-score create-annotation" [
 #
 # GET /sim/search
 # operationId: get_sim_search
-export def "sim-search get" [
+export def "get-sim-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7471,7 +7471,7 @@ export def "sim-search get" [
 #
 # GET /variation/set/
 # operationId: get_variant_sets_collection
-export def "variation-set get-variant-collection" [
+export def "get-variant-sets-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7508,7 +7508,7 @@ export def "variation-set get-variant-collection" [
 #
 # POST /variation/set/
 # operationId: post_variant_sets_collection
-export def "variation-set create-variant-collection" [
+export def "post-variant-sets-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7551,7 +7551,7 @@ export def "variation-set create-variant-collection" [
 #
 # GET /variation/set/analyze/{id}
 # operationId: get_variant_analyze
-export def "variation-set-analyze get-variant" [
+export def "get-variant-analyze" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7587,7 +7587,7 @@ export def "variation-set-analyze get-variant" [
 #
 # GET /variation/set/archive/{year}/{month}/{day}
 # operationId: get_variant_sets_archive_collection
-export def "variation-set-archive get-variant-collection" [
+export def "get-variant-sets-archive-collection" [
   year: int
   month: int
   day: int
@@ -7630,7 +7630,7 @@ export def "variation-set-archive get-variant-collection" [
 #
 # DELETE /variation/set/{id}
 # operationId: delete_variant_set_item
-export def "variation-set delete-variant-item" [
+export def "delete-variant-set-item" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7666,7 +7666,7 @@ export def "variation-set delete-variant-item" [
 #
 # GET /variation/set/{id}
 # operationId: get_variant_set_item
-export def "variation-set get-variant-item" [
+export def "get-variant-set-item" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7702,7 +7702,7 @@ export def "variation-set get-variant-item" [
 #
 # PUT /variation/set/{id}
 # operationId: put_variant_set_item
-export def "variation-set update-variant-item" [
+export def "put-variant-set-item" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

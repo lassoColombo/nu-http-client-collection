@@ -117,7 +117,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v2beta get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "lifesciences-projects-locations-operations-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -141,7 +141,7 @@ export def commands []: nothing -> table {
 #
 # GET /v2beta/{name}
 # operationId: lifesciences.projects.locations.operations.get
-export def "v2beta get" [
+export def "lifesciences-projects-locations-operations-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -189,7 +189,7 @@ export def "v2beta get" [
 #
 # GET /v2beta/{name}/locations
 # operationId: lifesciences.projects.locations.list
-export def "v2beta-locations list" [
+export def "lifesciences-projects-locations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -240,7 +240,7 @@ export def "v2beta-locations list" [
 #
 # GET /v2beta/{name}/operations
 # operationId: lifesciences.projects.locations.operations.list
-export def "v2beta-operations list" [
+export def "lifesciences-projects-locations-operations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -291,7 +291,7 @@ export def "v2beta-operations list" [
 #
 # POST /v2beta/{name}:cancel
 # operationId: lifesciences.projects.locations.operations.cancel
-export def "v2beta cancel" [
+export def "lifesciences-projects-locations-operations-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -344,7 +344,7 @@ export def "v2beta cancel" [
 # POST /v2beta/{parent}/pipelines:run
 # operationId: lifesciences.projects.locations.pipelines.run
 # --pipeline shape: {actions?: list, encryptedEnvironment?: record, environment?: record, resources?: record, timeout?: string}
-export def "v2beta-pipelines-run create" [
+export def "lifesciences-projects-locations-pipelines-run" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

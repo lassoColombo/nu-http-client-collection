@@ -147,7 +147,7 @@ def accept-completer [] { ["application/vnd.openxmlformats-officedocument.presen
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "story list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "story-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -171,7 +171,7 @@ export def commands []: nothing -> table {
 #
 # GET /
 # operationId: story_get
-export def "story list" [
+export def "story-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -208,7 +208,7 @@ export def "story list" [
 #
 # POST /
 # operationId: story_post
-export def "story create" [
+export def "story-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -248,7 +248,7 @@ export def "story create" [
 #
 # POST /cache
 # operationId: cache_post
-export def "cache create" [
+export def "cache-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -288,7 +288,7 @@ export def "cache create" [
 #
 # GET /cache/{nonce}
 # operationId: cache_nonce_get
-export def "cache get" [
+export def "cache-nonce-get" [
   nonce: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -324,7 +324,7 @@ export def "cache get" [
 #
 # POST /collaborators
 # operationId: collaborators_post
-export def "collaborators create" [
+export def "collaborators-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -364,7 +364,7 @@ export def "collaborators create" [
 #
 # GET /environment/
 # operationId: get_environment
-export def "environment get" [
+export def "get-environment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -398,7 +398,7 @@ export def "environment get" [
 #
 # POST /file
 # operationId: story_post_file
-export def "file create-story" [
+export def "story-post-file" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -440,7 +440,7 @@ export def "file create-story" [
 #
 # POST /file/json
 # operationId: story_post_file_json
-export def "file-json create-story" [
+export def "story-post-file-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -483,7 +483,7 @@ export def "file-json create-story" [
 #
 # GET /no_tags_spec
 # operationId: spec_no_tags
-export def "no-tags-spec get" [
+export def "spec-no-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -517,7 +517,7 @@ export def "no-tags-spec get" [
 #
 # GET /outline-schema/{schema_version}/story-outline.json
 # operationId: story_outline_schema
-export def "outline-schema-story-outline-json get" [
+export def "story-outline-schema" [
   schema_version: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -553,7 +553,7 @@ export def "outline-schema-story-outline-json get" [
 #
 # GET /permission_types
 # operationId: story_permission_types_get
-export def "permission-types get-story" [
+export def "story-permission-types-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -587,7 +587,7 @@ export def "permission-types get-story" [
 #
 # DELETE /sessions/{session_id}
 # operationId: session_id_delete
-export def "sessions delete" [
+export def "session-id-delete" [
   session_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -623,7 +623,7 @@ export def "sessions delete" [
 #
 # GET /sessions/{session_id}
 # operationId: session_id_get
-export def "sessions get" [
+export def "session-id-get" [
   session_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -661,7 +661,7 @@ export def "sessions get" [
 #
 # GET /sessions/{session_id}/views
 # operationId: sessions_id_views_get
-export def "sessions-views get" [
+export def "sessions-id-views-get" [
   session_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -697,7 +697,7 @@ export def "sessions-views get" [
 #
 # POST /sessions/{session_id}/views
 # operationId: sessions_id_views_post
-export def "sessions-views create" [
+export def "sessions-id-views-post" [
   session_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -741,7 +741,7 @@ export def "sessions-views create" [
 #
 # DELETE /views/{view_id}
 # operationId: views_id_delete
-export def "views delete" [
+export def "views-id-delete" [
   view_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -777,7 +777,7 @@ export def "views delete" [
 #
 # GET /views/{view_id}
 # operationId: views_id_get
-export def "views get" [
+export def "views-id-get" [
   view_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -813,7 +813,7 @@ export def "views get" [
 #
 # DELETE /{id}
 # operationId: story_id_delete
-export def "story delete" [
+export def "story-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -849,7 +849,7 @@ export def "story delete" [
 #
 # GET /{id}
 # operationId: story_id_get
-export def "story get" [
+export def "story-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -893,7 +893,7 @@ export def "story get" [
 # --collaborators item shape: {created_at?: string, created_by?: string, id?: string, updated_at?: string, updated_by?: string, active?: bool, email?: string, lead_id?: int, name?: string, permission_type?: any, permission_type_id?: string, story_id?: string, user_id?: string}
 # --ooxml_documents item shape: {created_at?: string, created_by?: string, id?: string, updated_at?: string, updated_by?: string, delete_target_on_story_delete?: bool, ooxml_automation_id?: string, story_id?: string}
 # --outline_history item shape: {created_at?: string, created_by?: string, id?: string, updated_at?: string, updated_by?: string, collaborator_user_id?: string, outline?: string, revision_number?: int, story_id?: string}
-export def "story update" [
+export def "story-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -946,7 +946,7 @@ export def "story update" [
 #
 # GET /{id}/analytics
 # operationId: story_id_analytics
-export def "analytics get-story" [
+export def "story-id-analytics" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -982,7 +982,7 @@ export def "analytics get-story" [
 #
 # GET /{id}/collaborators
 # operationId: story_id_collaborators_get
-export def "collaborators get-story" [
+export def "story-id-collaborators-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1018,7 +1018,7 @@ export def "collaborators get-story" [
 #
 # POST /{id}/collaborators
 # operationId: story_id_collaborators_post
-export def "collaborators create-story" [
+export def "story-id-collaborators-post" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1060,7 +1060,7 @@ export def "collaborators create-story" [
 #
 # GET /{id}/collaborators/authorize/{story_collaborator_userid}/{permissiontype}
 # operationId: story_id_collaborators_userid_permissiontype_get
-export def "collaborators-authorize get" [
+export def "story-id-collaborators-userid-permissiontype-get" [
   id: string
   story_collaborator_userid: string
   permissiontype: string
@@ -1100,7 +1100,7 @@ export def "collaborators-authorize get" [
 #
 # POST /{id}/collaborators/inactive
 # operationId: story_id_collaborators_inactive_post
-export def "collaborators-inactive create-story" [
+export def "story-id-collaborators-inactive-post" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1142,7 +1142,7 @@ export def "collaborators-inactive create-story" [
 #
 # DELETE /{id}/collaborators/{story_collaborator_userid}
 # operationId: story_id_collaborators_userid_delete
-export def "collaborators delete" [
+export def "story-id-collaborators-userid-delete" [
   id: string
   story_collaborator_userid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1180,7 +1180,7 @@ export def "collaborators delete" [
 #
 # GET /{id}/collaborators/{story_collaborator_userid}
 # operationId: story_id_collaborators_userid_get
-export def "collaborators get" [
+export def "story-id-collaborators-userid-get" [
   id: string
   story_collaborator_userid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1218,7 +1218,7 @@ export def "collaborators get" [
 #
 # PUT /{id}/collaborators/{story_collaborator_userid}
 # operationId: story_id_collaborators_userid_put
-export def "collaborators update" [
+export def "story-id-collaborators-userid-put" [
   id: string
   story_collaborator_userid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1272,7 +1272,7 @@ export def "collaborators update" [
 #
 # GET /{id}/events
 # operationId: story_id_events_get
-export def "events get-story" [
+export def "story-id-events-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1308,7 +1308,7 @@ export def "events get-story" [
 #
 # POST /{id}/events
 # operationId: story_id_events_post
-export def "events create-story" [
+export def "story-id-events-post" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1350,7 +1350,7 @@ export def "events create-story" [
 #
 # POST /{id}/file
 # operationId: story_id_file_post
-export def "file create-story-by-id" [
+export def "story-id-file-post" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1396,7 +1396,7 @@ export def "file create-story-by-id" [
 #
 # DELETE /{id}/file/{ooxml_automation_id}
 # operationId: story_id_file_ooxmlautomationid_delete
-export def "file delete-story-ooxmlautomationid" [
+export def "story-id-file-ooxmlautomationid-delete" [
   id: string
   ooxml_automation_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1434,7 +1434,7 @@ export def "file delete-story-ooxmlautomationid" [
 #
 # GET /{id}/file/{ooxml_automation_id}
 # operationId: story_id_file_ooxmlautomationid_get
-export def "file get-story-ooxmlautomationid" [
+export def "story-id-file-ooxmlautomationid-get" [
   id: string
   ooxml_automation_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1473,7 +1473,7 @@ export def "file get-story-ooxmlautomationid" [
 #
 # GET /{id}/messages
 # operationId: story_id_messages_get
-export def "messages get-story" [
+export def "story-id-messages-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1509,7 +1509,7 @@ export def "messages get-story" [
 #
 # POST /{id}/messages
 # operationId: story_id_messages_post
-export def "messages create-story" [
+export def "story-id-messages-post" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1549,7 +1549,7 @@ export def "messages create-story" [
 #
 # GET /{id}/outline
 # operationId: story_id_outline_get
-export def "outline get-story" [
+export def "story-id-outline-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1585,7 +1585,7 @@ export def "outline get-story" [
 #
 # POST /{id}/outline
 # operationId: story_id_outline_post
-export def "outline create-story" [
+export def "story-id-outline-post" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1625,7 +1625,7 @@ export def "outline create-story" [
 #
 # GET /{id}/public/
 # operationId: story_id_public
-export def "public get-story" [
+export def "story-id-public" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1661,7 +1661,7 @@ export def "public get-story" [
 #
 # GET /{id}/reveal
 # operationId: story_id_reveal
-export def "reveal get-story" [
+export def "story-id-reveal" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1697,7 +1697,7 @@ export def "reveal get-story" [
 #
 # GET /{id}/sessions
 # operationId: story_id_sessions_get
-export def "sessions get-story" [
+export def "story-id-sessions-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1735,7 +1735,7 @@ export def "sessions get-story" [
 #
 # POST /{id}/sessions
 # operationId: story_id_session_post
-export def "sessions create-story" [
+export def "story-id-session-post" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1776,7 +1776,7 @@ export def "sessions create-story" [
 #
 # GET /{id}/status
 # operationId: story_id_status_get
-export def "status get-story" [
+export def "story-id-status-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

@@ -126,7 +126,7 @@ def account-status-completer [] { ["not_paying" "paying" "prospect"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-accounts" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -149,7 +149,7 @@ export def commands []: nothing -> table {
 # Query accounts
 #
 # GET /accounts
-export def "accounts list" [
+export def "get-accounts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -187,7 +187,7 @@ export def "accounts list" [
 # Delete an Account
 #
 # DELETE /accounts/{id}
-export def "accounts delete" [
+export def "delete-accounts-id" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -222,7 +222,7 @@ export def "accounts delete" [
 # Get an Account
 #
 # GET /accounts/{id}
-export def "accounts get" [
+export def "get-accounts-id" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -257,7 +257,7 @@ export def "accounts get" [
 # Update an Account
 #
 # PUT /accounts/{id}
-export def "accounts update" [
+export def "put-accounts-id" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -298,7 +298,7 @@ export def "accounts update" [
 # Delete custom Account tags
 #
 # DELETE /accounts/{id}/tags
-export def "accounts-tags delete" [
+export def "delete-accounts-id-tags" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -333,7 +333,7 @@ export def "accounts-tags delete" [
 # Get custom Account tags
 #
 # GET /accounts/{id}/tags
-export def "accounts-tags get" [
+export def "get-accounts-id-tags" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -368,7 +368,7 @@ export def "accounts-tags get" [
 # Overwrite current custom Account tags with the given tags
 #
 # POST /accounts/{id}/tags
-export def "accounts-tags create" [
+export def "post-accounts-id-tags" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -407,7 +407,7 @@ export def "accounts-tags create" [
 # fetch Comment records
 #
 # GET /comments
-export def "comments get" [
+export def "get-comments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -442,7 +442,7 @@ export def "comments get" [
 # Query features
 #
 # GET /features
-export def "features list" [
+export def "get-features" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -484,7 +484,7 @@ export def "features list" [
 # Get a Feature by ID
 #
 # GET /features/{id}
-export def "features get" [
+export def "get-features-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -519,7 +519,7 @@ export def "features get" [
 # Delete custom Feature tags
 #
 # DELETE /features/{id}/tags
-export def "features-tags delete" [
+export def "delete-features-id-tags" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -554,7 +554,7 @@ export def "features-tags delete" [
 # Get custom Feature tags
 #
 # GET /features/{id}/tags
-export def "features-tags get" [
+export def "get-features-id-tags" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -589,7 +589,7 @@ export def "features-tags get" [
 # Overwrite current custom Feature tags with the given tags
 #
 # POST /features/{id}/tags
-export def "features-tags create" [
+export def "post-features-id-tags" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -628,7 +628,7 @@ export def "features-tags create" [
 # Health check for API
 #
 # GET /health-check/ping
-export def "health-check-ping get" [
+export def "get-health-check-ping" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -661,7 +661,7 @@ export def "health-check-ping get" [
 # Subscribe to webhooks
 #
 # POST /hooks
-export def "hooks create" [
+export def "post-hooks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -699,7 +699,7 @@ export def "hooks create" [
 # Unsubscribe from webhooks
 #
 # POST /hooks/unsubscribe
-export def "hooks-unsubscribe create" [
+export def "post-hooks-unsubscribe" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -736,7 +736,7 @@ export def "hooks-unsubscribe create" [
 # Search features
 #
 # GET /search
-export def "search get" [
+export def "get-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -775,7 +775,7 @@ export def "search get" [
 # fetch User records
 #
 # GET /users
-export def "users list" [
+export def "get-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -817,7 +817,7 @@ export def "users list" [
 # POST /users
 # --account shape: {created_at?: string, id?: string, is_paying?: bool, monthly_value?: float, name?: string, status?: string, tags?: any}
 # --user shape: {allowed_products?: list<string>, created_at?: string, email?: string, full_name?: string, id?: string, roles?: "endUser", tags?: any}
-export def "users create" [
+export def "post-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -856,7 +856,7 @@ export def "users create" [
 # Invite an EndUser (customer)
 #
 # POST /users/invite_end_user
-export def "users-invite-end-user create" [
+export def "post-users-invite-end-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -900,7 +900,7 @@ export def "users-invite-end-user create" [
 # Invite a VendorUser (Team member)
 #
 # POST /users/invite_vendor_user
-export def "users-invite-vendor-user create" [
+export def "post-users-invite-vendor-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -941,7 +941,7 @@ export def "users-invite-vendor-user create" [
 # Find a User with a query
 #
 # GET /users/search
-export def "users-search get" [
+export def "get-users-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -978,7 +978,7 @@ export def "users-search get" [
 # Delete a User
 #
 # DELETE /users/{id}
-export def "users delete" [
+export def "delete-users-id" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1013,7 +1013,7 @@ export def "users delete" [
 # Get a User record
 #
 # GET /users/{id}
-export def "users get" [
+export def "get-users-id" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1048,7 +1048,7 @@ export def "users get" [
 # Update a User
 #
 # PUT /users/{id}
-export def "users update" [
+export def "put-users-id" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1090,7 +1090,7 @@ export def "users update" [
 # Delete custom User tags
 #
 # DELETE /users/{id}/tags
-export def "users-tags delete" [
+export def "delete-users-id-tags" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1125,7 +1125,7 @@ export def "users-tags delete" [
 # Get custom User tags
 #
 # GET /users/{id}/tags
-export def "users-tags get" [
+export def "get-users-id-tags" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1160,7 +1160,7 @@ export def "users-tags get" [
 # Overwrite current custom User tags with the given tags
 #
 # POST /users/{id}/tags
-export def "users-tags create" [
+export def "post-users-id-tags" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1199,7 +1199,7 @@ export def "users-tags create" [
 # Create or update a team member by their external_id
 #
 # POST /vendor_users
-export def "vendor-users create" [
+export def "post-vendor-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1238,7 +1238,7 @@ export def "vendor-users create" [
 }
 
 # GET /votes
-export def "votes get" [
+export def "get-votes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1279,7 +1279,7 @@ export def "votes get" [
 #
 # POST /votes
 # --votes item shape: {feature_id?: string, quantity?: int}
-export def "votes create" [
+export def "post-votes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -100,7 +100,7 @@ def sort-completer [] { ["discount:desc" "name:asc" "name:desc" "orders:desc" "p
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "autocomplete-suggestions get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-autocomplete-suggestions" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -123,7 +123,7 @@ export def commands []: nothing -> table {
 # Get list of suggested terms and attributes similar to the search term
 #
 # GET /autocomplete_suggestions
-export def "autocomplete-suggestions get" [
+export def "get-autocomplete-suggestions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -159,7 +159,7 @@ export def "autocomplete-suggestions get" [
 # Get list of banners registered for query
 #
 # GET /banners/{facets}
-export def "banners get" [
+export def "get-banners-facets" [
   facets: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -197,7 +197,7 @@ export def "banners get" [
 # Get attempt of correction of a misspelled term
 #
 # GET /correction_search
-export def "correction-search get" [
+export def "get-correction-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -233,7 +233,7 @@ export def "correction-search get" [
 # Get list of the possible facets for a given query
 #
 # GET /facets/{facets}
-export def "facets get" [
+export def "get-facets-facets" [
   facets: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -272,7 +272,7 @@ export def "facets get" [
 # Get list of products for a query
 #
 # GET /product_search/{facets}
-export def "product-search get" [
+export def "get-product-search-facets" [
   facets: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -315,7 +315,7 @@ export def "product-search get" [
 # Get list of suggested terms similar to the search term
 #
 # GET /search_suggestions
-export def "search-suggestions get" [
+export def "get-search-suggestions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -351,7 +351,7 @@ export def "search-suggestions get" [
 # Get list of the 10 most searched terms
 #
 # GET /top_searches
-export def "top-searches get" [
+export def "get-top-searches" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

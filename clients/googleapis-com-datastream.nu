@@ -130,7 +130,7 @@ def state-completer [] { ["DRAINING" "FAILED" "FAILED_PERMANENTLY" "MAINTENANCE"
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "datastream-projects-locations-streams-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -154,7 +154,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1/{name}
 # operationId: datastream.projects.locations.streams.delete
-export def "projects delete" [
+export def "datastream-projects-locations-streams-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -203,7 +203,7 @@ export def "projects delete" [
 #
 # GET /v1/{name}
 # operationId: datastream.projects.locations.streams.objects.get
-export def "projects get" [
+export def "datastream-projects-locations-streams-objects-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -255,7 +255,7 @@ export def "projects get" [
 # --destinationConfig shape: {bigqueryDestinationConfig?: record, destinationConnectionProfile?: string, gcsDestinationConfig?: record}
 # --errors item shape: {details?: record, errorTime?: string, errorUuid?: string, message?: string, reason?: string}
 # --sourceConfig shape: {mysqlSourceConfig?: record, oracleSourceConfig?: record, postgresqlSourceConfig?: record, sourceConnectionProfile?: string}
-export def "projects update" [
+export def "datastream-projects-locations-streams-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -318,7 +318,7 @@ export def "projects update" [
 #
 # GET /v1/{name}/locations
 # operationId: datastream.projects.locations.list
-export def "locations list" [
+export def "datastream-projects-locations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -369,7 +369,7 @@ export def "locations list" [
 #
 # GET /v1/{name}/operations
 # operationId: datastream.projects.locations.operations.list
-export def "operations list" [
+export def "datastream-projects-locations-operations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -420,7 +420,7 @@ export def "operations list" [
 #
 # POST /v1/{name}:cancel
 # operationId: datastream.projects.locations.operations.cancel
-export def "projects cancel" [
+export def "datastream-projects-locations-operations-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -472,7 +472,7 @@ export def "projects cancel" [
 #
 # GET /v1/{name}:fetchStaticIps
 # operationId: datastream.projects.locations.fetchStaticIps
-export def "projects get-static-ips" [
+export def "datastream-projects-locations-fetch-static-ips" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -522,7 +522,7 @@ export def "projects get-static-ips" [
 #
 # POST /v1/{object}:startBackfillJob
 # operationId: datastream.projects.locations.streams.objects.startBackfillJob
-export def "projects start-backfill-job" [
+export def "datastream-projects-locations-streams-objects-start-backfill-job" [
   object: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -574,7 +574,7 @@ export def "projects start-backfill-job" [
 #
 # POST /v1/{object}:stopBackfillJob
 # operationId: datastream.projects.locations.streams.objects.stopBackfillJob
-export def "projects stop-backfill-job" [
+export def "datastream-projects-locations-streams-objects-stop-backfill-job" [
   object: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -626,7 +626,7 @@ export def "projects stop-backfill-job" [
 #
 # GET /v1/{parent}/connectionProfiles
 # operationId: datastream.projects.locations.connectionProfiles.list
-export def "connection-profiles list" [
+export def "datastream-projects-locations-connection-profiles-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -684,7 +684,7 @@ export def "connection-profiles list" [
 # --oracleProfile shape: {connectionAttributes?: record, databaseService?: string, hostname?: string, password?: string, port?: int, username?: string}
 # --postgresqlProfile shape: {database?: string, hostname?: string, password?: string, port?: int, username?: string}
 # --privateConnectivity shape: {privateConnection?: string}
-export def "connection-profiles create" [
+export def "datastream-projects-locations-connection-profiles-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -753,7 +753,7 @@ export def "connection-profiles create" [
 # --mysqlRdbms shape: {mysqlDatabases?: list}
 # --oracleRdbms shape: {oracleSchemas?: list}
 # --postgresqlRdbms shape: {postgresqlSchemas?: list}
-export def "connection-profiles-discover create" [
+export def "datastream-projects-locations-connection-profiles-discover" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -811,7 +811,7 @@ export def "connection-profiles-discover create" [
 #
 # GET /v1/{parent}/objects
 # operationId: datastream.projects.locations.streams.objects.list
-export def "objects list" [
+export def "datastream-projects-locations-streams-objects-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -862,7 +862,7 @@ export def "objects list" [
 # POST /v1/{parent}/objects:lookup
 # operationId: datastream.projects.locations.streams.objects.lookup
 # --sourceObjectIdentifier shape: {mysqlIdentifier?: record, oracleIdentifier?: record, postgresqlIdentifier?: record}
-export def "objects-lookup create" [
+export def "datastream-projects-locations-streams-objects-lookup" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -914,7 +914,7 @@ export def "objects-lookup create" [
 #
 # GET /v1/{parent}/privateConnections
 # operationId: datastream.projects.locations.privateConnections.list
-export def "private-connections list" [
+export def "datastream-projects-locations-private-connections-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -968,7 +968,7 @@ export def "private-connections list" [
 # operationId: datastream.projects.locations.privateConnections.create
 # --error shape: {details?: record, errorTime?: string, errorUuid?: string, message?: string, reason?: string}
 # --vpcPeeringConfig shape: {subnet?: string, vpc?: string}
-export def "private-connections create" [
+export def "datastream-projects-locations-private-connections-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1026,7 +1026,7 @@ export def "private-connections create" [
 #
 # GET /v1/{parent}/routes
 # operationId: datastream.projects.locations.privateConnections.routes.list
-export def "routes list" [
+export def "datastream-projects-locations-private-connections-routes-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1078,7 +1078,7 @@ export def "routes list" [
 #
 # POST /v1/{parent}/routes
 # operationId: datastream.projects.locations.privateConnections.routes.create
-export def "routes create" [
+export def "datastream-projects-locations-private-connections-routes-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1135,7 +1135,7 @@ export def "routes create" [
 #
 # GET /v1/{parent}/streams
 # operationId: datastream.projects.locations.streams.list
-export def "streams list" [
+export def "datastream-projects-locations-streams-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1191,7 +1191,7 @@ export def "streams list" [
 # --destinationConfig shape: {bigqueryDestinationConfig?: record, destinationConnectionProfile?: string, gcsDestinationConfig?: record}
 # --errors item shape: {details?: record, errorTime?: string, errorUuid?: string, message?: string, reason?: string}
 # --sourceConfig shape: {mysqlSourceConfig?: record, oracleSourceConfig?: record, postgresqlSourceConfig?: record, sourceConnectionProfile?: string}
-export def "streams create" [
+export def "datastream-projects-locations-streams-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

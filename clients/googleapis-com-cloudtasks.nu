@@ -132,7 +132,7 @@ def type-completer [] { ["PULL" "PUSH" "TYPE_UNSPECIFIED"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v2beta3 delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cloudtasks-projects-locations-queues-tasks-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -156,7 +156,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v2beta3/{name}
 # operationId: cloudtasks.projects.locations.queues.tasks.delete
-export def "v2beta3 delete" [
+export def "cloudtasks-projects-locations-queues-tasks-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -204,7 +204,7 @@ export def "v2beta3 delete" [
 #
 # GET /v2beta3/{name}
 # operationId: cloudtasks.projects.locations.queues.tasks.get
-export def "v2beta3 get" [
+export def "cloudtasks-projects-locations-queues-tasks-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -258,7 +258,7 @@ export def "v2beta3 get" [
 # --rateLimits shape: {maxBurstSize?: int, maxConcurrentDispatches?: int, maxDispatchesPerSecond?: float}
 # --retryConfig shape: {maxAttempts?: int, maxBackoff?: string, maxDoublings?: int, maxRetryDuration?: string, minBackoff?: string}
 # --stackdriverLoggingConfig shape: {samplingRatio?: float}
-export def "v2beta3 update" [
+export def "cloudtasks-projects-locations-queues-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -322,7 +322,7 @@ export def "v2beta3 update" [
 #
 # GET /v2beta3/{name}/locations
 # operationId: cloudtasks.projects.locations.list
-export def "v2beta3-locations list" [
+export def "cloudtasks-projects-locations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -373,7 +373,7 @@ export def "v2beta3-locations list" [
 #
 # POST /v2beta3/{name}:pause
 # operationId: cloudtasks.projects.locations.queues.pause
-export def "v2beta3 pause" [
+export def "cloudtasks-projects-locations-queues-pause" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -425,7 +425,7 @@ export def "v2beta3 pause" [
 #
 # POST /v2beta3/{name}:purge
 # operationId: cloudtasks.projects.locations.queues.purge
-export def "v2beta3 create-purge" [
+export def "cloudtasks-projects-locations-queues-purge" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -477,7 +477,7 @@ export def "v2beta3 create-purge" [
 #
 # POST /v2beta3/{name}:resume
 # operationId: cloudtasks.projects.locations.queues.resume
-export def "v2beta3 create-resume" [
+export def "cloudtasks-projects-locations-queues-resume" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -529,7 +529,7 @@ export def "v2beta3 create-resume" [
 #
 # POST /v2beta3/{name}:run
 # operationId: cloudtasks.projects.locations.queues.tasks.run
-export def "v2beta3 create-run" [
+export def "cloudtasks-projects-locations-queues-tasks-run" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -581,7 +581,7 @@ export def "v2beta3 create-run" [
 #
 # GET /v2beta3/{parent}/queues
 # operationId: cloudtasks.projects.locations.queues.list
-export def "v2beta3-queues list" [
+export def "cloudtasks-projects-locations-queues-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -638,7 +638,7 @@ export def "v2beta3-queues list" [
 # --rateLimits shape: {maxBurstSize?: int, maxConcurrentDispatches?: int, maxDispatchesPerSecond?: float}
 # --retryConfig shape: {maxAttempts?: int, maxBackoff?: string, maxDoublings?: int, maxRetryDuration?: string, minBackoff?: string}
 # --stackdriverLoggingConfig shape: {samplingRatio?: float}
-export def "v2beta3-queues create" [
+export def "cloudtasks-projects-locations-queues-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -701,7 +701,7 @@ export def "v2beta3-queues create" [
 #
 # GET /v2beta3/{parent}/tasks
 # operationId: cloudtasks.projects.locations.queues.tasks.list
-export def "v2beta3-tasks list" [
+export def "cloudtasks-projects-locations-queues-tasks-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -753,7 +753,7 @@ export def "v2beta3-tasks list" [
 # POST /v2beta3/{parent}/tasks
 # operationId: cloudtasks.projects.locations.queues.tasks.create
 # --task shape: {appEngineHttpRequest?: record, createTime?: string, dispatchCount?: int, dispatchDeadline?: string, firstAttempt?: record, httpRequest?: record, lastAttempt?: record, name?: string, pullMessage?: record, responseCount?: int, scheduleTime?: string, view?: "VIEW_UNSPECIFIED"|"BASIC"|"FULL"}
-export def "v2beta3-tasks create" [
+export def "cloudtasks-projects-locations-queues-tasks-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -807,7 +807,7 @@ export def "v2beta3-tasks create" [
 # POST /v2beta3/{queue}/tasks/{taskId}:buffer
 # operationId: cloudtasks.projects.locations.queues.tasks.buffer
 # --body shape: {contentType?: string, data?: string, extensions?: list}
-export def "v2beta3-tasks create-buffer" [
+export def "cloudtasks-projects-locations-queues-tasks-buffer" [
   queue: string
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -862,7 +862,7 @@ export def "v2beta3-tasks create-buffer" [
 # POST /v2beta3/{resource}:getIamPolicy
 # operationId: cloudtasks.projects.locations.queues.getIamPolicy
 # --options shape: {requestedPolicyVersion?: int}
-export def "v2beta3 get-iam-policy" [
+export def "cloudtasks-projects-locations-queues-get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -915,7 +915,7 @@ export def "v2beta3 get-iam-policy" [
 # POST /v2beta3/{resource}:setIamPolicy
 # operationId: cloudtasks.projects.locations.queues.setIamPolicy
 # --policy shape: {bindings?: list, etag?: string, version?: int}
-export def "v2beta3 update-iam-policy" [
+export def "cloudtasks-projects-locations-queues-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -967,7 +967,7 @@ export def "v2beta3 update-iam-policy" [
 #
 # POST /v2beta3/{resource}:testIamPermissions
 # operationId: cloudtasks.projects.locations.queues.testIamPermissions
-export def "v2beta3 test-iam-permissions" [
+export def "cloudtasks-projects-locations-queues-test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

@@ -113,7 +113,7 @@ def identity-provider-type-completer [] { ["SAML"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associate-domain create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associate-domain" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -139,7 +139,7 @@ export def commands []: nothing -> table {
 # DEPRECATED
 # operationId: AssociateDomain
 @deprecated
-export def "associate-domain create" [
+export def "associate-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -191,7 +191,7 @@ export def "associate-domain create" [
 # DEPRECATED
 # operationId: AssociateWebsiteAuthorizationProvider
 @deprecated
-export def "associate-website-authorization-provider create" [
+export def "associate-website-authorization-provider" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -242,7 +242,7 @@ export def "associate-website-authorization-provider create" [
 # DEPRECATED
 # operationId: AssociateWebsiteCertificateAuthority
 @deprecated
-export def "associate-website-certificate-authority create" [
+export def "associate-website-certificate-authority" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -293,7 +293,7 @@ export def "associate-website-certificate-authority create" [
 # DEPRECATED
 # operationId: CreateFleet
 @deprecated
-export def "create-fleet create" [
+export def "create-fleet" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -345,7 +345,7 @@ export def "create-fleet create" [
 # DEPRECATED
 # operationId: DeleteFleet
 @deprecated
-export def "delete-fleet delete" [
+export def "delete-fleet" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -394,7 +394,7 @@ export def "delete-fleet delete" [
 # DEPRECATED
 # operationId: DescribeAuditStreamConfiguration
 @deprecated
-export def "describe-audit-stream-configuration get" [
+export def "describe-audit-stream-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -443,7 +443,7 @@ export def "describe-audit-stream-configuration get" [
 # DEPRECATED
 # operationId: DescribeCompanyNetworkConfiguration
 @deprecated
-export def "describe-company-network-configuration get" [
+export def "describe-company-network-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -492,7 +492,7 @@ export def "describe-company-network-configuration get" [
 # DEPRECATED
 # operationId: DescribeDevice
 @deprecated
-export def "describe-device get" [
+export def "describe-device" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -542,7 +542,7 @@ export def "describe-device get" [
 # DEPRECATED
 # operationId: DescribeDevicePolicyConfiguration
 @deprecated
-export def "describe-device-policy-configuration get" [
+export def "describe-device-policy-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -591,7 +591,7 @@ export def "describe-device-policy-configuration get" [
 # DEPRECATED
 # operationId: DescribeDomain
 @deprecated
-export def "describe-domain get" [
+export def "describe-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -641,7 +641,7 @@ export def "describe-domain get" [
 # DEPRECATED
 # operationId: DescribeFleetMetadata
 @deprecated
-export def "describe-fleet-metadata get" [
+export def "describe-fleet-metadata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -690,7 +690,7 @@ export def "describe-fleet-metadata get" [
 # DEPRECATED
 # operationId: DescribeIdentityProviderConfiguration
 @deprecated
-export def "describe-identity-provider-configuration get" [
+export def "describe-identity-provider-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -739,7 +739,7 @@ export def "describe-identity-provider-configuration get" [
 # DEPRECATED
 # operationId: DescribeWebsiteCertificateAuthority
 @deprecated
-export def "describe-website-certificate-authority get" [
+export def "describe-website-certificate-authority" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -789,7 +789,7 @@ export def "describe-website-certificate-authority get" [
 # DEPRECATED
 # operationId: DisassociateDomain
 @deprecated
-export def "disassociate-domain create" [
+export def "disassociate-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -839,7 +839,7 @@ export def "disassociate-domain create" [
 # DEPRECATED
 # operationId: DisassociateWebsiteAuthorizationProvider
 @deprecated
-export def "disassociate-website-authorization-provider create" [
+export def "disassociate-website-authorization-provider" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -889,7 +889,7 @@ export def "disassociate-website-authorization-provider create" [
 # DEPRECATED
 # operationId: DisassociateWebsiteCertificateAuthority
 @deprecated
-export def "disassociate-website-certificate-authority create" [
+export def "disassociate-website-certificate-authority" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -939,7 +939,7 @@ export def "disassociate-website-certificate-authority create" [
 # DEPRECATED
 # operationId: ListDevices
 @deprecated
-export def "list-devices list" [
+export def "list-devices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -993,7 +993,7 @@ export def "list-devices list" [
 # DEPRECATED
 # operationId: ListDomains
 @deprecated
-export def "list-domains list" [
+export def "list-domains" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1047,7 +1047,7 @@ export def "list-domains list" [
 # DEPRECATED
 # operationId: ListFleets
 @deprecated
-export def "list-fleets list" [
+export def "list-fleets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1100,7 +1100,7 @@ export def "list-fleets list" [
 # DEPRECATED
 # operationId: ListTagsForResource
 @deprecated
-export def "tags list-for-resource" [
+export def "list-tags-for-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1147,7 +1147,7 @@ export def "tags list-for-resource" [
 # DEPRECATED
 # operationId: TagResource
 @deprecated
-export def "tags tag-resource" [
+export def "tag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1198,7 +1198,7 @@ export def "tags tag-resource" [
 # DEPRECATED
 # operationId: ListWebsiteAuthorizationProviders
 @deprecated
-export def "list-website-authorization-providers list" [
+export def "list-website-authorization-providers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1252,7 +1252,7 @@ export def "list-website-authorization-providers list" [
 # DEPRECATED
 # operationId: ListWebsiteCertificateAuthorities
 @deprecated
-export def "list-website-certificate-authorities list" [
+export def "list-website-certificate-authorities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1306,7 +1306,7 @@ export def "list-website-certificate-authorities list" [
 # DEPRECATED
 # operationId: RestoreDomainAccess
 @deprecated
-export def "restore-domain-access create" [
+export def "restore-domain-access" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1356,7 +1356,7 @@ export def "restore-domain-access create" [
 # DEPRECATED
 # operationId: RevokeDomainAccess
 @deprecated
-export def "revoke-domain-access delete" [
+export def "revoke-domain-access" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1406,7 +1406,7 @@ export def "revoke-domain-access delete" [
 # DEPRECATED
 # operationId: SignOutUser
 @deprecated
-export def "sign-out-user create" [
+export def "sign-out-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1456,7 +1456,7 @@ export def "sign-out-user create" [
 # DEPRECATED
 # operationId: UntagResource
 @deprecated
-export def "tags untag-resource" [
+export def "untag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1505,7 +1505,7 @@ export def "tags untag-resource" [
 # DEPRECATED
 # operationId: UpdateAuditStreamConfiguration
 @deprecated
-export def "update-audit-stream-configuration update" [
+export def "update-audit-stream-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1555,7 +1555,7 @@ export def "update-audit-stream-configuration update" [
 # DEPRECATED
 # operationId: UpdateCompanyNetworkConfiguration
 @deprecated
-export def "update-company-network-configuration update" [
+export def "update-company-network-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1607,7 +1607,7 @@ export def "update-company-network-configuration update" [
 # DEPRECATED
 # operationId: UpdateDevicePolicyConfiguration
 @deprecated
-export def "update-device-policy-configuration update" [
+export def "update-device-policy-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1657,7 +1657,7 @@ export def "update-device-policy-configuration update" [
 # DEPRECATED
 # operationId: UpdateDomainMetadata
 @deprecated
-export def "update-domain-metadata update" [
+export def "update-domain-metadata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1708,7 +1708,7 @@ export def "update-domain-metadata update" [
 # DEPRECATED
 # operationId: UpdateFleetMetadata
 @deprecated
-export def "update-fleet-metadata update" [
+export def "update-fleet-metadata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1759,7 +1759,7 @@ export def "update-fleet-metadata update" [
 # DEPRECATED
 # operationId: UpdateIdentityProviderConfiguration
 @deprecated
-export def "update-identity-provider-configuration update" [
+export def "update-identity-provider-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

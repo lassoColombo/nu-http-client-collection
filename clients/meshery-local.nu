@@ -138,7 +138,7 @@ def auth-scheme-completer [] { ["cookie-token"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "application get-file-request" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "id-get-application-file-request" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -162,7 +162,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/application/
 # operationId: idGetApplicationFileRequest
-export def "application get-file-request" [
+export def "id-get-application-file-request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -196,7 +196,7 @@ export def "application get-file-request" [
 #
 # POST /api/application/
 # operationId: idPostApplicationFileRequest
-export def "application create-file-request" [
+export def "id-post-application-file-request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -230,7 +230,7 @@ export def "application create-file-request" [
 #
 # DELETE /api/application/deploy
 # operationId: idDeleteApplicationFile
-export def "application-deploy delete-file" [
+export def "id-delete-application-file" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -264,7 +264,7 @@ export def "application-deploy delete-file" [
 #
 # POST /api/application/deploy
 # operationId: idPostDeployApplicationFile
-export def "application-deploy create-file" [
+export def "id-post-deploy-application-file" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -304,7 +304,7 @@ export def "application-deploy create-file" [
 #
 # DELETE /api/application/{id}
 # operationId: idDeleteMesheryApplicationFile
-export def "application delete-meshery-file" [
+export def "id-delete-meshery-application-file" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -340,7 +340,7 @@ export def "application delete-meshery-file" [
 #
 # GET /api/application/{id}
 # operationId: idGetMesheryApplication
-export def "application get-meshery" [
+export def "id-get-meshery-application" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -376,7 +376,7 @@ export def "application get-meshery" [
 #
 # GET /api/filter
 # operationId: idGetFilterFile
-export def "filter get-file" [
+export def "id-get-filter-file" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -410,7 +410,7 @@ export def "filter get-file" [
 #
 # POST /api/filter
 # operationId: idPostFilterFile
-export def "filter create-file" [
+export def "id-post-filter-file" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -444,7 +444,7 @@ export def "filter create-file" [
 #
 # GET /api/filter/file/{id}
 # operationId: idGetFilterFiles
-export def "filter-file get" [
+export def "id-get-filter-files" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -480,7 +480,7 @@ export def "filter-file get" [
 #
 # DELETE /api/filter/{id}
 # operationId: idDeleteMesheryFilter
-export def "filter delete-meshery" [
+export def "id-delete-meshery-filter" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -516,7 +516,7 @@ export def "filter delete-meshery" [
 #
 # GET /api/filter/{id}
 # operationId: idGetMesheryFilter
-export def "filter get-meshery" [
+export def "id-get-meshery-filter" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -552,7 +552,7 @@ export def "filter get-meshery" [
 #
 # GET /api/oam/{type}
 # operationId: idGETOAMMesheryPattern
-export def "oam get-getoam-meshery-pattern" [
+export def "id-getoam-meshery-pattern" [
   type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -588,7 +588,7 @@ export def "oam get-getoam-meshery-pattern" [
 #
 # POST /api/oam/{type}
 # operationId: idPOSTOAMMesheryPattern
-export def "oam create-postoam-meshery-pattern" [
+export def "id-postoam-meshery-pattern" [
   type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -624,7 +624,7 @@ export def "oam create-postoam-meshery-pattern" [
 #
 # GET /api/pattern
 # operationId: idGetPatternFiles
-export def "pattern get-files" [
+export def "id-get-pattern-files" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -658,7 +658,7 @@ export def "pattern get-files" [
 #
 # POST /api/pattern
 # operationId: idPostPatternFile
-export def "pattern create-file" [
+export def "id-post-pattern-file" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -692,7 +692,7 @@ export def "pattern create-file" [
 #
 # DELETE /api/pattern/deploy
 # operationId: idDeleteDeployPattern
-export def "pattern-deploy delete" [
+export def "id-delete-deploy-pattern" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -726,7 +726,7 @@ export def "pattern-deploy delete" [
 #
 # POST /api/pattern/deploy
 # operationId: idPostDeployPattern
-export def "pattern-deploy create" [
+export def "id-post-deploy-pattern" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -766,7 +766,7 @@ export def "pattern-deploy create" [
 #
 # DELETE /api/pattern/{id}
 # operationId: idDeleteMesheryPattern
-export def "pattern delete-meshery" [
+export def "id-delete-meshery-pattern" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -802,7 +802,7 @@ export def "pattern delete-meshery" [
 #
 # GET /api/pattern/{id}
 # operationId: idGetMesheryPattern
-export def "pattern get-meshery" [
+export def "id-get-meshery-pattern" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -839,7 +839,7 @@ export def "pattern get-meshery" [
 # GET /api/perf/profile
 # operationId: idRunPerfTest
 # --clients item shape: {body?: string, connections?: int, content_type?: string, cookies?: record, endpoint_urls?: list<string>, headers?: record, internal?: bool, load_generator?: string, protocol?: int, rps?: int}
-export def "perf-profile test-run" [
+export def "id-run-perf-test" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -873,7 +873,7 @@ export def "perf-profile test-run" [
 #
 # GET /api/perf/profile/result
 # operationId: idGetAllPerfResults
-export def "perf-profile-result get-list" [
+export def "id-get-all-perf-results" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -907,7 +907,7 @@ export def "perf-profile-result get-list" [
 #
 # GET /api/perf/profile/result/{id}
 # operationId: idGetSinglePerfResult
-export def "perf-profile-result get-single" [
+export def "id-get-single-perf-result" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -943,7 +943,7 @@ export def "perf-profile-result get-single" [
 #
 # GET /api/provider
 # operationId: idChoiceProvider
-export def "provider get-choice" [
+export def "id-choice-provider" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -979,7 +979,7 @@ export def "provider get-choice" [
 #
 # GET /api/provider/capabilities
 # operationId: idGetProviderCapabilities
-export def "provider-capabilities get" [
+export def "id-get-provider-capabilities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1013,7 +1013,7 @@ export def "provider-capabilities get" [
 #
 # GET /api/provider/extension
 # operationId: idReactComponents
-export def "provider-extension get-react-components" [
+export def "id-react-components" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1047,7 +1047,7 @@ export def "provider-extension get-react-components" [
 #
 # GET /api/providers
 # operationId: idGetProvidersList
-export def "providers get-list" [
+export def "id-get-providers-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1081,7 +1081,7 @@ export def "providers get-list" [
 #
 # DELETE /api/system/adapter/manage
 # operationId: idDeleteAdapterConfig
-export def "system-adapter-manage delete-config" [
+export def "id-delete-adapter-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1117,7 +1117,7 @@ export def "system-adapter-manage delete-config" [
 #
 # POST /api/system/adapter/manage
 # operationId: idPostAdapterConfig
-export def "system-adapter-manage create-config" [
+export def "id-post-adapter-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1155,7 +1155,7 @@ export def "system-adapter-manage create-config" [
 #
 # POST /api/system/adapter/operation
 # operationId: idPostAdapterOperation
-export def "system-adapter-operation create" [
+export def "id-post-adapter-operation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1195,7 +1195,7 @@ export def "system-adapter-operation create" [
 #
 # GET /api/system/adapters
 # operationId: idGetSystemAdapters
-export def "system-adapters get" [
+export def "id-get-system-adapters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1231,7 +1231,7 @@ export def "system-adapters get" [
 #
 # DELETE /api/system/kubernetes
 # operationId: idDeleteK8SConfig
-export def "system-kubernetes delete-k8-s-config" [
+export def "id-delete-k8s-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1265,7 +1265,7 @@ export def "system-kubernetes delete-k8-s-config" [
 #
 # POST /api/system/kubernetes
 # operationId: idPostK8SConfig
-export def "system-kubernetes create-k8-s-config" [
+export def "id-post-k8s-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1299,7 +1299,7 @@ export def "system-kubernetes create-k8-s-config" [
 #
 # POST /api/system/kubernetes/contexts
 # operationId: idPostK8SContexts
-export def "system-kubernetes-contexts create-k8-s" [
+export def "id-post-k8s-contexts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1333,7 +1333,7 @@ export def "system-kubernetes-contexts create-k8-s" [
 #
 # GET /api/system/kubernetes/ping
 # operationId: idGetKubernetesPing
-export def "system-kubernetes-ping get" [
+export def "id-get-kubernetes-ping" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1367,7 +1367,7 @@ export def "system-kubernetes-ping get" [
 #
 # GET /api/system/meshsync/grafana
 # operationId: idMeshSyncGrafana
-export def "system-meshsync-grafana sync-mesh" [
+export def "id-mesh-sync-grafana" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1401,7 +1401,7 @@ export def "system-meshsync-grafana sync-mesh" [
 #
 # GET /api/system/meshsync/prometheus
 # operationId: idMeshSyncPrometheus
-export def "system-meshsync-prometheus sync-mesh" [
+export def "id-mesh-sync-prometheus" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1435,7 +1435,7 @@ export def "system-meshsync-prometheus sync-mesh" [
 #
 # GET /api/system/sync
 # operationId: idSystemSync
-export def "system-sync sync" [
+export def "id-system-sync" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1469,7 +1469,7 @@ export def "system-sync sync" [
 #
 # GET /api/system/version
 # operationId: idGetSystemVersion
-export def "system-version get" [
+export def "id-get-system-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1503,7 +1503,7 @@ export def "system-version get" [
 #
 # POST /api/telemetry/metrics/board_import
 # operationId: idPostPrometheusBoardImport
-export def "telemetry-metrics-board-import create-prometheus" [
+export def "id-post-prometheus-board-import" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1537,7 +1537,7 @@ export def "telemetry-metrics-board-import create-prometheus" [
 #
 # POST /api/telemetry/metrics/boards
 # operationId: idPostPrometheusBoard
-export def "telemetry-metrics-boards create-prometheus" [
+export def "id-post-prometheus-board" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1575,7 +1575,7 @@ export def "telemetry-metrics-boards create-prometheus" [
 #
 # DELETE /api/telemetry/metrics/config
 # operationId: idDeletePrometheusConfig
-export def "telemetry-metrics-config delete-prometheus" [
+export def "id-delete-prometheus-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1609,7 +1609,7 @@ export def "telemetry-metrics-config delete-prometheus" [
 #
 # GET /api/telemetry/metrics/config
 # operationId: idGetPrometheusConfig
-export def "telemetry-metrics-config get-prometheus" [
+export def "id-get-prometheus-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1643,7 +1643,7 @@ export def "telemetry-metrics-config get-prometheus" [
 #
 # POST /api/telemetry/metrics/config
 # operationId: idPostPrometheusConfig
-export def "telemetry-metrics-config create-prometheus" [
+export def "id-post-prometheus-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1681,7 +1681,7 @@ export def "telemetry-metrics-config create-prometheus" [
 #
 # GET /api/telemetry/metrics/grafana/boards
 # operationId: idGetGrafanaBoards
-export def "telemetry-metrics-grafana-boards get" [
+export def "id-get-grafana-boards" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1717,7 +1717,7 @@ export def "telemetry-metrics-grafana-boards get" [
 #
 # POST /api/telemetry/metrics/grafana/boards
 # operationId: idPostGrafanaBoards
-export def "telemetry-metrics-grafana-boards create" [
+export def "id-post-grafana-boards" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1751,7 +1751,7 @@ export def "telemetry-metrics-grafana-boards create" [
 #
 # DELETE /api/telemetry/metrics/grafana/config
 # operationId: idDeleteGrafanaConfig
-export def "telemetry-metrics-grafana-config delete" [
+export def "id-delete-grafana-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1785,7 +1785,7 @@ export def "telemetry-metrics-grafana-config delete" [
 #
 # GET /api/telemetry/metrics/grafana/config
 # operationId: idGetGrafanaConfig
-export def "telemetry-metrics-grafana-config get" [
+export def "id-get-grafana-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1819,7 +1819,7 @@ export def "telemetry-metrics-grafana-config get" [
 #
 # POST /api/telemetry/metrics/grafana/config
 # operationId: idPostGrafanaConfig
-export def "telemetry-metrics-grafana-config create" [
+export def "id-post-grafana-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1858,7 +1858,7 @@ export def "telemetry-metrics-grafana-config create" [
 #
 # GET /api/telemetry/metrics/grafana/ping
 # operationId: idGetGrafanaPing
-export def "telemetry-metrics-grafana-ping get" [
+export def "id-get-grafana-ping" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1892,7 +1892,7 @@ export def "telemetry-metrics-grafana-ping get" [
 #
 # GET /api/telemetry/metrics/grafana/query
 # operationId: idGetGrafanaQuery
-export def "telemetry-metrics-grafana-query get" [
+export def "id-get-grafana-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1926,7 +1926,7 @@ export def "telemetry-metrics-grafana-query get" [
 #
 # GET /api/telemetry/metrics/grafana/scan
 # operationId: idGetGrafana
-export def "telemetry-metrics-grafana-scan get" [
+export def "id-get-grafana" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1960,7 +1960,7 @@ export def "telemetry-metrics-grafana-scan get" [
 #
 # GET /api/telemetry/metrics/ping
 # operationId: idGetPrometheusPing
-export def "telemetry-metrics-ping get-prometheus" [
+export def "id-get-prometheus-ping" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1994,7 +1994,7 @@ export def "telemetry-metrics-ping get-prometheus" [
 #
 # GET /api/telemetry/metrics/query
 # operationId: idGetPrometheusQuery
-export def "telemetry-metrics-query get-prometheus" [
+export def "id-get-prometheus-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2028,7 +2028,7 @@ export def "telemetry-metrics-query get-prometheus" [
 #
 # GET /api/telemetry/metrics/static-board
 # operationId: idGetPrometheusStaticBoard
-export def "telemetry-metrics-static-board get-prometheus" [
+export def "id-get-prometheus-static-board" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2062,7 +2062,7 @@ export def "telemetry-metrics-static-board get-prometheus" [
 #
 # GET /api/user/login
 # operationId: idGetUserLogin
-export def "user-login get" [
+export def "id-get-user-login" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2096,7 +2096,7 @@ export def "user-login get" [
 #
 # GET /api/user/logout
 # operationId: idGetUserLogout
-export def "user-logout get" [
+export def "id-get-user-logout" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2130,7 +2130,7 @@ export def "user-logout get" [
 #
 # GET /api/user/performance/profiles
 # operationId: idGetPerformanceProfiles
-export def "user-performance-profiles get" [
+export def "id-get-performance-profiles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2164,7 +2164,7 @@ export def "user-performance-profiles get" [
 #
 # POST /api/user/performance/profiles
 # operationId: idSavePerformanceProfile
-export def "user-performance-profiles create-save" [
+export def "id-save-performance-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2208,7 +2208,7 @@ export def "user-performance-profiles create-save" [
 #
 # GET /api/user/performance/profiles/results
 # operationId: idGetAllPerformanceResults
-export def "user-performance-profiles-results get-list" [
+export def "id-get-all-performance-results" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2242,7 +2242,7 @@ export def "user-performance-profiles-results get-list" [
 #
 # DELETE /api/user/performance/profiles/{id}
 # operationId: idDeletePerformanceProfile
-export def "user-performance-profiles delete" [
+export def "id-delete-performance-profile" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2278,7 +2278,7 @@ export def "user-performance-profiles delete" [
 #
 # GET /api/user/performance/profiles/{id}
 # operationId: idGetSinglePerformanceProfile
-export def "user-performance-profiles get-single" [
+export def "id-get-single-performance-profile" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2314,7 +2314,7 @@ export def "user-performance-profiles get-single" [
 #
 # GET /api/user/performance/profiles/{id}/results
 # operationId: idGETProfileResults
-export def "user-performance-profiles-results get" [
+export def "id-get-profile-results" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2350,7 +2350,7 @@ export def "user-performance-profiles-results get" [
 #
 # GET /api/user/performance/profiles/{id}/run
 # operationId: idRunPerformanceTest
-export def "user-performance-profiles-run test" [
+export def "id-run-performance-test" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2386,7 +2386,7 @@ export def "user-performance-profiles-run test" [
 #
 # GET /api/user/prefs
 # operationId: idGetUserTestPrefs
-export def "user-prefs get-test" [
+export def "id-get-user-test-prefs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2420,7 +2420,7 @@ export def "user-prefs get-test" [
 #
 # POST /api/user/prefs
 # operationId: idPostUserTestPrefs
-export def "user-prefs create-test" [
+export def "id-post-user-test-prefs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2454,7 +2454,7 @@ export def "user-prefs create-test" [
 #
 # DELETE /api/user/prefs/perf
 # operationId: idDeleteLoadPreferences
-export def "user-prefs-perf delete-load-preferences" [
+export def "id-delete-load-preferences" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2490,7 +2490,7 @@ export def "user-prefs-perf delete-load-preferences" [
 #
 # GET /api/user/prefs/perf
 # operationId: idGetLoadPreferences
-export def "user-prefs-perf get-load-preferences" [
+export def "id-get-load-preferences" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2527,7 +2527,7 @@ export def "user-prefs-perf get-load-preferences" [
 # POST /api/user/prefs/perf
 # operationId: idPostLoadPreferences
 # --clients item shape: {body?: string, connections?: int, content_type?: string, cookies?: record, endpoint_urls?: list<string>, headers?: record, internal?: bool, load_generator?: string, protocol?: int, rps?: int}
-export def "user-prefs-perf create-load-preferences" [
+export def "id-post-load-preferences" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2570,7 +2570,7 @@ export def "user-prefs-perf create-load-preferences" [
 #
 # GET /api/user/schedules
 # operationId: idGetSchedules
-export def "user-schedules get" [
+export def "id-get-schedules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2604,7 +2604,7 @@ export def "user-schedules get" [
 #
 # POST /api/user/schedules
 # operationId: idPostSchedules
-export def "user-schedules create" [
+export def "id-post-schedules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2638,7 +2638,7 @@ export def "user-schedules create" [
 #
 # DELETE /api/user/schedules/{id}
 # operationId: idDeleteSchedules
-export def "user-schedules delete" [
+export def "id-delete-schedules" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2674,7 +2674,7 @@ export def "user-schedules delete" [
 #
 # GET /api/user/schedules/{id}
 # operationId: idGetSingleSchedule
-export def "user-schedules get-single" [
+export def "id-get-single-schedule" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2710,7 +2710,7 @@ export def "user-schedules get-single" [
 #
 # GET /api/user/token
 # operationId: idGetTokenProvider
-export def "user-token get-provider" [
+export def "id-get-token-provider" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2744,7 +2744,7 @@ export def "user-token get-provider" [
 #
 # POST /api/user/token
 # operationId: idPostTokenProvider
-export def "user-token create-provider" [
+export def "id-post-token-provider" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2778,7 +2778,7 @@ export def "user-token create-provider" [
 #
 # GET /provider
 # operationId: idProvider
-export def "provider get" [
+export def "id-provider" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

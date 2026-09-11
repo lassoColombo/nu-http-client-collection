@@ -118,7 +118,7 @@ def type-completer [] { ["JSONSchemaDraft4" "OpenApi3"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "discoverers create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-discoverer" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -142,7 +142,7 @@ export def commands []: nothing -> table {
 #
 # POST /v1/discoverers
 # operationId: CreateDiscoverer
-export def "discoverers create" [
+export def "create-discoverer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -192,7 +192,7 @@ export def "discoverers create" [
 #
 # GET /v1/discoverers
 # operationId: ListDiscoverers
-export def "discoverers list" [
+export def "list-discoverers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -242,7 +242,7 @@ export def "discoverers list" [
 #
 # POST /v1/registries/name/{registryName}
 # operationId: CreateRegistry
-export def "registries-name create-registry" [
+export def "create-registry" [
   registry_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -292,7 +292,7 @@ export def "registries-name create-registry" [
 #
 # DELETE /v1/registries/name/{registryName}
 # operationId: DeleteRegistry
-export def "registries-name delete-registry" [
+export def "delete-registry" [
   registry_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -337,7 +337,7 @@ export def "registries-name delete-registry" [
 #
 # GET /v1/registries/name/{registryName}
 # operationId: DescribeRegistry
-export def "registries-name get-registry" [
+export def "describe-registry" [
   registry_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -382,7 +382,7 @@ export def "registries-name get-registry" [
 #
 # PUT /v1/registries/name/{registryName}
 # operationId: UpdateRegistry
-export def "registries-name update-registry" [
+export def "update-registry" [
   registry_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -431,7 +431,7 @@ export def "registries-name update-registry" [
 #
 # POST /v1/registries/name/{registryName}/schemas/name/{schemaName}
 # operationId: CreateSchema
-export def "registries-name-schemas-name create" [
+export def "create-schema" [
   registry_name: string
   schema_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -485,7 +485,7 @@ export def "registries-name-schemas-name create" [
 #
 # DELETE /v1/registries/name/{registryName}/schemas/name/{schemaName}
 # operationId: DeleteSchema
-export def "registries-name-schemas-name delete" [
+export def "delete-schema" [
   registry_name: string
   schema_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -532,7 +532,7 @@ export def "registries-name-schemas-name delete" [
 #
 # GET /v1/registries/name/{registryName}/schemas/name/{schemaName}
 # operationId: DescribeSchema
-export def "registries-name-schemas-name get" [
+export def "describe-schema" [
   registry_name: string
   schema_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -581,7 +581,7 @@ export def "registries-name-schemas-name get" [
 #
 # PUT /v1/registries/name/{registryName}/schemas/name/{schemaName}
 # operationId: UpdateSchema
-export def "registries-name-schemas-name update" [
+export def "update-schema" [
   registry_name: string
   schema_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -635,7 +635,7 @@ export def "registries-name-schemas-name update" [
 #
 # DELETE /v1/discoverers/id/{discovererId}
 # operationId: DeleteDiscoverer
-export def "discoverers-id delete" [
+export def "delete-discoverer" [
   discoverer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -680,7 +680,7 @@ export def "discoverers-id delete" [
 #
 # GET /v1/discoverers/id/{discovererId}
 # operationId: DescribeDiscoverer
-export def "discoverers-id get" [
+export def "describe-discoverer" [
   discoverer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -725,7 +725,7 @@ export def "discoverers-id get" [
 #
 # PUT /v1/discoverers/id/{discovererId}
 # operationId: UpdateDiscoverer
-export def "discoverers-id update" [
+export def "update-discoverer" [
   discoverer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -775,7 +775,7 @@ export def "discoverers-id update" [
 #
 # DELETE /v1/policy
 # operationId: DeleteResourcePolicy
-export def "policy delete-resource" [
+export def "delete-resource-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -820,7 +820,7 @@ export def "policy delete-resource" [
 #
 # GET /v1/policy
 # operationId: GetResourcePolicy
-export def "policy get-resource" [
+export def "get-resource-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -865,7 +865,7 @@ export def "policy get-resource" [
 #
 # PUT /v1/policy
 # operationId: PutResourcePolicy
-export def "policy update-resource" [
+export def "put-resource-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -915,7 +915,7 @@ export def "policy update-resource" [
 #
 # DELETE /v1/registries/name/{registryName}/schemas/name/{schemaName}/version/{schemaVersion}
 # operationId: DeleteSchemaVersion
-export def "registries-name-schemas-name-version delete" [
+export def "delete-schema-version" [
   registry_name: string
   schema_name: string
   schema_version: string
@@ -964,7 +964,7 @@ export def "registries-name-schemas-name-version delete" [
 #
 # GET /v1/registries/name/{registryName}/schemas/name/{schemaName}/language/{language}
 # operationId: DescribeCodeBinding
-export def "registries-name-schemas-name-language get-code-binding" [
+export def "describe-code-binding" [
   registry_name: string
   schema_name: string
   language: string
@@ -1015,7 +1015,7 @@ export def "registries-name-schemas-name-language get-code-binding" [
 #
 # POST /v1/registries/name/{registryName}/schemas/name/{schemaName}/language/{language}
 # operationId: PutCodeBinding
-export def "registries-name-schemas-name-language update-code-binding" [
+export def "put-code-binding" [
   registry_name: string
   schema_name: string
   language: string
@@ -1065,7 +1065,7 @@ export def "registries-name-schemas-name-language update-code-binding" [
 # GET /v1/registries/name/{registryName}/schemas/name/{schemaName}/export
 #
 # operationId: ExportSchema
-export def "registries-name-schemas-name-export export" [
+export def "export-schema" [
   registry_name: string
   schema_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1115,7 +1115,7 @@ export def "registries-name-schemas-name-export export" [
 #
 # GET /v1/registries/name/{registryName}/schemas/name/{schemaName}/language/{language}/source
 # operationId: GetCodeBindingSource
-export def "registries-name-schemas-name-language-source get-code-binding" [
+export def "get-code-binding-source" [
   registry_name: string
   schema_name: string
   language: string
@@ -1166,7 +1166,7 @@ export def "registries-name-schemas-name-language-source get-code-binding" [
 #
 # POST /v1/discover
 # operationId: GetDiscoveredSchema
-export def "discover get-discovered-schema" [
+export def "get-discovered-schema" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1214,7 +1214,7 @@ export def "discover get-discovered-schema" [
 #
 # GET /v1/registries
 # operationId: ListRegistries
-export def "registries list" [
+export def "list-registries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1264,7 +1264,7 @@ export def "registries list" [
 #
 # GET /v1/registries/name/{registryName}/schemas/name/{schemaName}/versions
 # operationId: ListSchemaVersions
-export def "registries-name-schemas-name-versions list" [
+export def "list-schema-versions" [
   registry_name: string
   schema_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1316,7 +1316,7 @@ export def "registries-name-schemas-name-versions list" [
 #
 # GET /v1/registries/name/{registryName}/schemas
 # operationId: ListSchemas
-export def "registries-name-schemas list" [
+export def "list-schemas" [
   registry_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1367,7 +1367,7 @@ export def "registries-name-schemas list" [
 #
 # GET /tags/{resource-arn}
 # operationId: ListTagsForResource
-export def "tags list" [
+export def "list-tags-for-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1412,7 +1412,7 @@ export def "tags list" [
 #
 # POST /tags/{resource-arn}
 # operationId: TagResource
-export def "tags tag" [
+export def "tag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1461,7 +1461,7 @@ export def "tags tag" [
 #
 # GET /v1/registries/name/{registryName}/schemas/search
 # operationId: SearchSchemas
-export def "registries-name-schemas-search list" [
+export def "search-schemas" [
   registry_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1512,7 +1512,7 @@ export def "registries-name-schemas-search list" [
 #
 # POST /v1/discoverers/id/{discovererId}/start
 # operationId: StartDiscoverer
-export def "discoverers-id-start start" [
+export def "start-discoverer" [
   discoverer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1557,7 +1557,7 @@ export def "discoverers-id-start start" [
 #
 # POST /v1/discoverers/id/{discovererId}/stop
 # operationId: StopDiscoverer
-export def "discoverers-id-stop stop" [
+export def "stop-discoverer" [
   discoverer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1602,7 +1602,7 @@ export def "discoverers-id-stop stop" [
 #
 # DELETE /tags/{resource-arn}
 # operationId: UntagResource
-export def "tags untag" [
+export def "untag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

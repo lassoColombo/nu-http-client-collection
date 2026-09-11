@@ -127,7 +127,7 @@ def position-filtering-completer [] { ["AccuracyBased" "DistanceBased" "TimeBase
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "tracking-trackers-consumers create-associate" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associate-tracker-consumer" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -151,7 +151,7 @@ export def commands []: nothing -> table {
 #
 # POST /tracking/v0/trackers/{TrackerName}/consumers
 # operationId: AssociateTrackerConsumer
-export def "tracking-trackers-consumers create-associate" [
+export def "associate-tracker-consumer" [
   tracker_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -200,7 +200,7 @@ export def "tracking-trackers-consumers create-associate" [
 #
 # POST /tracking/v0/trackers/{TrackerName}/delete-positions
 # operationId: BatchDeleteDevicePositionHistory
-export def "tracking-trackers-delete-positions delete-batch-device-history" [
+export def "batch-delete-device-position-history" [
   tracker_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -249,7 +249,7 @@ export def "tracking-trackers-delete-positions delete-batch-device-history" [
 #
 # POST /geofencing/v0/collections/{CollectionName}/delete-geofences
 # operationId: BatchDeleteGeofence
-export def "geofencing-collections-delete-geofences delete-batch" [
+export def "batch-delete-geofence" [
   collection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -299,7 +299,7 @@ export def "geofencing-collections-delete-geofences delete-batch" [
 # POST /geofencing/v0/collections/{CollectionName}/positions
 # operationId: BatchEvaluateGeofences
 # --DevicePositionUpdates item shape: {Accuracy?: any, DeviceId: any, Position: any, PositionProperties?: any, SampleTime: any}
-export def "geofencing-collections-positions create-batch-evaluate-geofences" [
+export def "batch-evaluate-geofences" [
   collection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -348,7 +348,7 @@ export def "geofencing-collections-positions create-batch-evaluate-geofences" [
 #
 # POST /tracking/v0/trackers/{TrackerName}/get-positions
 # operationId: BatchGetDevicePosition
-export def "tracking-trackers-get-positions get-batch-device" [
+export def "batch-get-device-position" [
   tracker_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -398,7 +398,7 @@ export def "tracking-trackers-get-positions get-batch-device" [
 # POST /geofencing/v0/collections/{CollectionName}/put-geofences
 # operationId: BatchPutGeofence
 # --Entries item shape: {GeofenceId: any, Geometry: any}
-export def "geofencing-collections-put-geofences update-batch" [
+export def "batch-put-geofence" [
   collection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -448,7 +448,7 @@ export def "geofencing-collections-put-geofences update-batch" [
 # POST /tracking/v0/trackers/{TrackerName}/positions
 # operationId: BatchUpdateDevicePosition
 # --Updates item shape: {Accuracy?: any, DeviceId: any, Position: any, PositionProperties?: any, SampleTime: any}
-export def "tracking-trackers-positions update-batch-device" [
+export def "batch-update-device-position" [
   tracker_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -499,7 +499,7 @@ export def "tracking-trackers-positions update-batch-device" [
 # operationId: CalculateRoute
 # --CarModeOptions shape: {AvoidFerries?: any, AvoidTolls?: any}
 # --TruckModeOptions shape: {AvoidFerries?: any, AvoidTolls?: any, Dimensions?: any, Weight?: any}
-export def "routes-calculators-calculate-route create" [
+export def "calculate-route" [
   calculator_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -559,7 +559,7 @@ export def "routes-calculators-calculate-route create" [
 # operationId: CalculateRouteMatrix
 # --CarModeOptions shape: {AvoidFerries?: any, AvoidTolls?: any}
 # --TruckModeOptions shape: {AvoidFerries?: any, AvoidTolls?: any, Dimensions?: any, Weight?: any}
-export def "routes-calculators-calculate-route-matrix create" [
+export def "calculate-route-matrix" [
   calculator_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -615,7 +615,7 @@ export def "routes-calculators-calculate-route-matrix create" [
 #
 # POST /geofencing/v0/collections
 # operationId: CreateGeofenceCollection
-export def "geofencing-collections create-geofence" [
+export def "create-geofence-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -668,7 +668,7 @@ export def "geofencing-collections create-geofence" [
 # POST /metadata/v0/keys
 # operationId: CreateKey
 # --Restrictions shape: {AllowActions?: any, AllowReferers?: any, AllowResources?: any}
-export def "metadata-keys create" [
+export def "create-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -721,7 +721,7 @@ export def "metadata-keys create" [
 # POST /maps/v0/maps
 # operationId: CreateMap
 # --Configuration shape: {Style?: any}
-export def "maps-maps create" [
+export def "create-map" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -773,7 +773,7 @@ export def "maps-maps create" [
 # POST /places/v0/indexes
 # operationId: CreatePlaceIndex
 # --DataSourceConfiguration shape: {IntendedUse?: any}
-export def "places-indexes create-index" [
+export def "create-place-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -825,7 +825,7 @@ export def "places-indexes create-index" [
 #
 # POST /routes/v0/calculators
 # operationId: CreateRouteCalculator
-export def "routes-calculators create" [
+export def "create-route-calculator" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -876,7 +876,7 @@ export def "routes-calculators create" [
 #
 # POST /tracking/v0/trackers
 # operationId: CreateTracker
-export def "tracking-trackers create" [
+export def "create-tracker" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -929,7 +929,7 @@ export def "tracking-trackers create" [
 #
 # DELETE /geofencing/v0/collections/{CollectionName}
 # operationId: DeleteGeofenceCollection
-export def "geofencing-collections delete-geofence" [
+export def "delete-geofence-collection" [
   collection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -974,7 +974,7 @@ export def "geofencing-collections delete-geofence" [
 #
 # GET /geofencing/v0/collections/{CollectionName}
 # operationId: DescribeGeofenceCollection
-export def "geofencing-collections get-geofence" [
+export def "describe-geofence-collection" [
   collection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1019,7 +1019,7 @@ export def "geofencing-collections get-geofence" [
 #
 # PATCH /geofencing/v0/collections/{CollectionName}
 # operationId: UpdateGeofenceCollection
-export def "geofencing-collections update-geofence" [
+export def "update-geofence-collection" [
   collection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1070,7 +1070,7 @@ export def "geofencing-collections update-geofence" [
 #
 # DELETE /metadata/v0/keys/{KeyName}
 # operationId: DeleteKey
-export def "metadata-keys delete" [
+export def "delete-key" [
   key_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1115,7 +1115,7 @@ export def "metadata-keys delete" [
 #
 # GET /metadata/v0/keys/{KeyName}
 # operationId: DescribeKey
-export def "metadata-keys get" [
+export def "describe-key" [
   key_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1161,7 +1161,7 @@ export def "metadata-keys get" [
 # PATCH /metadata/v0/keys/{KeyName}
 # operationId: UpdateKey
 # --Restrictions shape: {AllowActions?: any, AllowReferers?: any, AllowResources?: any}
-export def "metadata-keys update" [
+export def "update-key" [
   key_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1214,7 +1214,7 @@ export def "metadata-keys update" [
 #
 # DELETE /maps/v0/maps/{MapName}
 # operationId: DeleteMap
-export def "maps-maps delete" [
+export def "delete-map" [
   map_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1259,7 +1259,7 @@ export def "maps-maps delete" [
 #
 # GET /maps/v0/maps/{MapName}
 # operationId: DescribeMap
-export def "maps-maps get" [
+export def "describe-map" [
   map_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1304,7 +1304,7 @@ export def "maps-maps get" [
 #
 # PATCH /maps/v0/maps/{MapName}
 # operationId: UpdateMap
-export def "maps-maps update" [
+export def "update-map" [
   map_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1354,7 +1354,7 @@ export def "maps-maps update" [
 #
 # DELETE /places/v0/indexes/{IndexName}
 # operationId: DeletePlaceIndex
-export def "places-indexes delete-index" [
+export def "delete-place-index" [
   index_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1399,7 +1399,7 @@ export def "places-indexes delete-index" [
 #
 # GET /places/v0/indexes/{IndexName}
 # operationId: DescribePlaceIndex
-export def "places-indexes get-index" [
+export def "describe-place-index" [
   index_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1445,7 +1445,7 @@ export def "places-indexes get-index" [
 # PATCH /places/v0/indexes/{IndexName}
 # operationId: UpdatePlaceIndex
 # --DataSourceConfiguration shape: {IntendedUse?: any}
-export def "places-indexes update-index" [
+export def "update-place-index" [
   index_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1496,7 +1496,7 @@ export def "places-indexes update-index" [
 #
 # DELETE /routes/v0/calculators/{CalculatorName}
 # operationId: DeleteRouteCalculator
-export def "routes-calculators delete" [
+export def "delete-route-calculator" [
   calculator_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1541,7 +1541,7 @@ export def "routes-calculators delete" [
 #
 # GET /routes/v0/calculators/{CalculatorName}
 # operationId: DescribeRouteCalculator
-export def "routes-calculators get" [
+export def "describe-route-calculator" [
   calculator_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1586,7 +1586,7 @@ export def "routes-calculators get" [
 #
 # PATCH /routes/v0/calculators/{CalculatorName}
 # operationId: UpdateRouteCalculator
-export def "routes-calculators update" [
+export def "update-route-calculator" [
   calculator_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1636,7 +1636,7 @@ export def "routes-calculators update" [
 #
 # DELETE /tracking/v0/trackers/{TrackerName}
 # operationId: DeleteTracker
-export def "tracking-trackers delete" [
+export def "delete-tracker" [
   tracker_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1681,7 +1681,7 @@ export def "tracking-trackers delete" [
 #
 # GET /tracking/v0/trackers/{TrackerName}
 # operationId: DescribeTracker
-export def "tracking-trackers get" [
+export def "describe-tracker" [
   tracker_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1726,7 +1726,7 @@ export def "tracking-trackers get" [
 #
 # PATCH /tracking/v0/trackers/{TrackerName}
 # operationId: UpdateTracker
-export def "tracking-trackers update" [
+export def "update-tracker" [
   tracker_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1778,7 +1778,7 @@ export def "tracking-trackers update" [
 #
 # DELETE /tracking/v0/trackers/{TrackerName}/consumers/{ConsumerArn}
 # operationId: DisassociateTrackerConsumer
-export def "tracking-trackers-consumers delete-disassociate" [
+export def "disassociate-tracker-consumer" [
   tracker_name: string
   consumer_arn: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1825,7 +1825,7 @@ export def "tracking-trackers-consumers delete-disassociate" [
 #
 # GET /tracking/v0/trackers/{TrackerName}/devices/{DeviceId}/positions/latest
 # operationId: GetDevicePosition
-export def "tracking-trackers-devices-positions-latest get" [
+export def "get-device-position" [
   tracker_name: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1872,7 +1872,7 @@ export def "tracking-trackers-devices-positions-latest get" [
 #
 # POST /tracking/v0/trackers/{TrackerName}/devices/{DeviceId}/list-positions
 # operationId: GetDevicePositionHistory
-export def "tracking-trackers-devices-list-positions get-history" [
+export def "get-device-position-history" [
   tracker_name: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1929,7 +1929,7 @@ export def "tracking-trackers-devices-list-positions get-history" [
 #
 # GET /geofencing/v0/collections/{CollectionName}/geofences/{GeofenceId}
 # operationId: GetGeofence
-export def "geofencing-collections-geofences get" [
+export def "get-geofence" [
   collection_name: string
   geofence_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1977,7 +1977,7 @@ export def "geofencing-collections-geofences get" [
 # PUT /geofencing/v0/collections/{CollectionName}/geofences/{GeofenceId}
 # operationId: PutGeofence
 # --Geometry shape: {Circle?: any, Polygon?: any}
-export def "geofencing-collections-geofences update" [
+export def "put-geofence" [
   collection_name: string
   geofence_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2028,7 +2028,7 @@ export def "geofencing-collections-geofences update" [
 #
 # GET /maps/v0/maps/{MapName}/glyphs/{FontStack}/{FontUnicodeRange}
 # operationId: GetMapGlyphs
-export def "maps-maps-glyphs get" [
+export def "get-map-glyphs" [
   map_name: string
   font_stack: string
   font_unicode_range: string
@@ -2079,7 +2079,7 @@ export def "maps-maps-glyphs get" [
 #
 # GET /maps/v0/maps/{MapName}/sprites/{FileName}
 # operationId: GetMapSprites
-export def "maps-maps-sprites get" [
+export def "get-map-sprites" [
   map_name: string
   file_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2128,7 +2128,7 @@ export def "maps-maps-sprites get" [
 #
 # GET /maps/v0/maps/{MapName}/style-descriptor
 # operationId: GetMapStyleDescriptor
-export def "maps-maps-style-descriptor get" [
+export def "get-map-style-descriptor" [
   map_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2175,7 +2175,7 @@ export def "maps-maps-style-descriptor get" [
 #
 # GET /maps/v0/maps/{MapName}/tiles/{Z}/{X}/{Y}
 # operationId: GetMapTile
-export def "maps-maps-tiles get" [
+export def "get-map-tile" [
   map_name: string
   z: string
   x: string
@@ -2228,7 +2228,7 @@ export def "maps-maps-tiles get" [
 #
 # GET /places/v0/indexes/{IndexName}/places/{PlaceId}
 # operationId: GetPlace
-export def "places-indexes-places get" [
+export def "get-place" [
   index_name: string
   place_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2277,7 +2277,7 @@ export def "places-indexes-places get" [
 #
 # POST /tracking/v0/trackers/{TrackerName}/list-positions
 # operationId: ListDevicePositions
-export def "tracking-trackers-list-positions list-device" [
+export def "list-device-positions" [
   tracker_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2330,7 +2330,7 @@ export def "tracking-trackers-list-positions list-device" [
 #
 # POST /geofencing/v0/list-collections
 # operationId: ListGeofenceCollections
-export def "geofencing-list-collections list-geofence" [
+export def "list-geofence-collections" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2381,7 +2381,7 @@ export def "geofencing-list-collections list-geofence" [
 #
 # POST /geofencing/v0/collections/{CollectionName}/list-geofences
 # operationId: ListGeofences
-export def "geofencing-collections-list-geofences list" [
+export def "list-geofences" [
   collection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2435,7 +2435,7 @@ export def "geofencing-collections-list-geofences list" [
 # POST /metadata/v0/list-keys
 # operationId: ListKeys
 # --Filter shape: {KeyStatus?: any}
-export def "metadata-list-keys list" [
+export def "list-keys" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2487,7 +2487,7 @@ export def "metadata-list-keys list" [
 #
 # POST /maps/v0/list-maps
 # operationId: ListMaps
-export def "maps-list-maps list" [
+export def "list-maps" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2538,7 +2538,7 @@ export def "maps-list-maps list" [
 #
 # POST /places/v0/list-indexes
 # operationId: ListPlaceIndexes
-export def "places-list-indexes list" [
+export def "list-place-indexes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2589,7 +2589,7 @@ export def "places-list-indexes list" [
 #
 # POST /routes/v0/list-calculators
 # operationId: ListRouteCalculators
-export def "routes-list-calculators list" [
+export def "list-route-calculators" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2640,7 +2640,7 @@ export def "routes-list-calculators list" [
 #
 # GET /tags/{ResourceArn}
 # operationId: ListTagsForResource
-export def "tags list-for-resource" [
+export def "list-tags-for-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2685,7 +2685,7 @@ export def "tags list-for-resource" [
 #
 # POST /tags/{ResourceArn}
 # operationId: TagResource
-export def "tags tag-resource" [
+export def "tag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2734,7 +2734,7 @@ export def "tags tag-resource" [
 #
 # POST /tracking/v0/trackers/{TrackerName}/list-consumers
 # operationId: ListTrackerConsumers
-export def "tracking-trackers-list-consumers list" [
+export def "list-tracker-consumers" [
   tracker_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2787,7 +2787,7 @@ export def "tracking-trackers-list-consumers list" [
 #
 # POST /tracking/v0/list-trackers
 # operationId: ListTrackers
-export def "tracking-list-trackers list" [
+export def "list-trackers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2838,7 +2838,7 @@ export def "tracking-list-trackers list" [
 #
 # POST /places/v0/indexes/{IndexName}/search/position
 # operationId: SearchPlaceIndexForPosition
-export def "places-indexes-search-position list-index" [
+export def "search-place-index-for-position" [
   index_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2889,7 +2889,7 @@ export def "places-indexes-search-position list-index" [
 #
 # POST /places/v0/indexes/{IndexName}/search/suggestions
 # operationId: SearchPlaceIndexForSuggestions
-export def "places-indexes-search-suggestions list-index" [
+export def "search-place-index-for-suggestions" [
   index_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2943,7 +2943,7 @@ export def "places-indexes-search-suggestions list-index" [
 #
 # POST /places/v0/indexes/{IndexName}/search/text
 # operationId: SearchPlaceIndexForText
-export def "places-indexes-search-text list-index" [
+export def "search-place-index-for-text" [
   index_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2997,7 +2997,7 @@ export def "places-indexes-search-text list-index" [
 #
 # DELETE /tags/{ResourceArn}
 # operationId: UntagResource
-export def "tags untag-resource" [
+export def "untag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

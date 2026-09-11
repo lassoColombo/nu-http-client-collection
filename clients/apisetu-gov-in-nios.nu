@@ -112,7 +112,7 @@ def format-completer [] { ["pdf"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "hscer-certificate create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "hscer" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -138,7 +138,7 @@ export def commands []: nothing -> table {
 # operationId: hscer
 # --certificateParameters shape: {FullName: string, RROLL: string, YEAR: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "hscer-certificate create" [
+export def "hscer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -181,7 +181,7 @@ export def "hscer-certificate create" [
 # operationId: hsmgr
 # --certificateParameters shape: {FullName: string, RROLL: string, YEAR: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "hsmgr-certificate create" [
+export def "hsmgr" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -224,7 +224,7 @@ export def "hsmgr-certificate create" [
 # operationId: hvcer
 # --certificateParameters shape: {FullName: string, RROLL: string, YEAR: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "hvcer-certificate create" [
+export def "hvcer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -267,7 +267,7 @@ export def "hvcer-certificate create" [
 # operationId: sscer
 # --certificateParameters shape: {FullName: string, RROLL: string, YEAR: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "sscer-certificate create" [
+export def "sscer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -310,7 +310,7 @@ export def "sscer-certificate create" [
 # operationId: ssmgr
 # --certificateParameters shape: {FullName: string, RROLL: string, YEAR: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "ssmgr-certificate create" [
+export def "ssmgr" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -353,7 +353,7 @@ export def "ssmgr-certificate create" [
 # operationId: svcer
 # --certificateParameters shape: {FullName: string, RROLL: string, YEAR: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "svcer-certificate create" [
+export def "svcer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)

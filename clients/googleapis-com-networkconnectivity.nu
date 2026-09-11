@@ -131,7 +131,7 @@ def usage-completer [] { ["EXTERNAL_TO_VPC" "FOR_VPC" "USAGE_UNSPECIFIED"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "networkconnectivity-projects-locations-spokes-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -155,7 +155,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1/{name}
 # operationId: networkconnectivity.projects.locations.spokes.delete
-export def "projects delete" [
+export def "networkconnectivity-projects-locations-spokes-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -204,7 +204,7 @@ export def "projects delete" [
 #
 # GET /v1/{name}
 # operationId: networkconnectivity.projects.locations.spokes.get
-export def "projects get" [
+export def "networkconnectivity-projects-locations-spokes-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -255,7 +255,7 @@ export def "projects get" [
 # --linkedInterconnectAttachments shape: {siteToSiteDataTransfer?: bool, uris?: list<string>}
 # --linkedRouterApplianceInstances shape: {instances?: list, siteToSiteDataTransfer?: bool}
 # --linkedVpnTunnels shape: {siteToSiteDataTransfer?: bool, uris?: list<string>}
-export def "projects update" [
+export def "networkconnectivity-projects-locations-spokes-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -315,7 +315,7 @@ export def "projects update" [
 #
 # GET /v1/{name}/locations
 # operationId: networkconnectivity.projects.locations.list
-export def "locations list" [
+export def "networkconnectivity-projects-locations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -366,7 +366,7 @@ export def "locations list" [
 #
 # GET /v1/{name}/operations
 # operationId: networkconnectivity.projects.locations.operations.list
-export def "operations list" [
+export def "networkconnectivity-projects-locations-operations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -417,7 +417,7 @@ export def "operations list" [
 #
 # POST /v1/{name}:cancel
 # operationId: networkconnectivity.projects.locations.operations.cancel
-export def "projects cancel" [
+export def "networkconnectivity-projects-locations-operations-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -469,7 +469,7 @@ export def "projects cancel" [
 #
 # GET /v1/{parent}/hubs
 # operationId: networkconnectivity.projects.locations.global.hubs.list
-export def "hubs list" [
+export def "networkconnectivity-projects-locations-global-hubs-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -522,7 +522,7 @@ export def "hubs list" [
 # POST /v1/{parent}/hubs
 # operationId: networkconnectivity.projects.locations.global.hubs.create
 # --routingVpcs item shape: {uri?: string}
-export def "hubs create" [
+export def "networkconnectivity-projects-locations-global-hubs-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -579,7 +579,7 @@ export def "hubs create" [
 #
 # GET /v1/{parent}/internalRanges
 # operationId: networkconnectivity.projects.locations.internalRanges.list
-export def "internal-ranges list" [
+export def "networkconnectivity-projects-locations-internal-ranges-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -631,7 +631,7 @@ export def "internal-ranges list" [
 #
 # POST /v1/{parent}/internalRanges
 # operationId: networkconnectivity.projects.locations.internalRanges.create
-export def "internal-ranges create" [
+export def "networkconnectivity-projects-locations-internal-ranges-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -696,7 +696,7 @@ export def "internal-ranges create" [
 #
 # GET /v1/{parent}/spokes
 # operationId: networkconnectivity.projects.locations.spokes.list
-export def "spokes list" [
+export def "networkconnectivity-projects-locations-spokes-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -751,7 +751,7 @@ export def "spokes list" [
 # --linkedInterconnectAttachments shape: {siteToSiteDataTransfer?: bool, uris?: list<string>}
 # --linkedRouterApplianceInstances shape: {instances?: list, siteToSiteDataTransfer?: bool}
 # --linkedVpnTunnels shape: {siteToSiteDataTransfer?: bool, uris?: list<string>}
-export def "spokes create" [
+export def "networkconnectivity-projects-locations-spokes-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -811,7 +811,7 @@ export def "spokes create" [
 #
 # GET /v1/{resource}:getIamPolicy
 # operationId: networkconnectivity.projects.locations.spokes.getIamPolicy
-export def "projects get-iam-policy" [
+export def "networkconnectivity-projects-locations-spokes-get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -861,7 +861,7 @@ export def "projects get-iam-policy" [
 # POST /v1/{resource}:setIamPolicy
 # operationId: networkconnectivity.projects.locations.spokes.setIamPolicy
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
-export def "projects update-iam-policy" [
+export def "networkconnectivity-projects-locations-spokes-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -914,7 +914,7 @@ export def "projects update-iam-policy" [
 #
 # POST /v1/{resource}:testIamPermissions
 # operationId: networkconnectivity.projects.locations.spokes.testIamPermissions
-export def "projects test-iam-permissions" [
+export def "networkconnectivity-projects-locations-spokes-test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

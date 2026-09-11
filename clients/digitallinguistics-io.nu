@@ -122,7 +122,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "languages list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-languages" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # GET /languages
 # operationId: getLanguages
-export def "languages list" [
+export def "get-languages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -188,7 +188,7 @@ export def "languages list" [
 #
 # POST /languages
 # operationId: addLanguage
-export def "languages create" [
+export def "add-language" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -226,7 +226,7 @@ export def "languages create" [
 #
 # PUT /languages
 # operationId: upsertLanguage
-export def "languages update" [
+export def "upsert-language" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -267,7 +267,7 @@ export def "languages update" [
 #
 # DELETE /languages/{languageID}
 # operationId: deleteLanguage
-export def "languages delete" [
+export def "delete-language" [
   language_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -306,7 +306,7 @@ export def "languages delete" [
 #
 # GET /languages/{languageID}
 # operationId: getLanguage
-export def "languages get" [
+export def "get-language" [
   language_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -347,7 +347,7 @@ export def "languages get" [
 #
 # PATCH /languages/{languageID}
 # operationId: updateLanguage
-export def "languages update-by-language-id" [
+export def "update-language" [
   language_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -390,7 +390,7 @@ export def "languages update-by-language-id" [
 #
 # GET /languages/{languageID}/lexemes
 # operationId: getLexemesByLanguage
-export def "languages-lexemes list" [
+export def "get-lexemes-by-language" [
   language_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -434,7 +434,7 @@ export def "languages-lexemes list" [
 #
 # POST /languages/{languageID}/lexemes
 # operationId: addLexemeByLanguage
-export def "languages-lexemes create" [
+export def "add-lexeme-by-language" [
   language_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -470,7 +470,7 @@ export def "languages-lexemes create" [
 #
 # PUT /languages/{languageID}/lexemes
 # operationId: upsertLexemeByLanguage
-export def "languages-lexemes update-by-language-id" [
+export def "upsert-lexeme-by-language" [
   language_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -509,7 +509,7 @@ export def "languages-lexemes update-by-language-id" [
 #
 # DELETE /languages/{languageID}/lexemes/{lexemeID}
 # operationId: deleteLexemeByLanguage
-export def "languages-lexemes delete" [
+export def "delete-lexeme-by-language" [
   language_id: string
   lexeme_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -550,7 +550,7 @@ export def "languages-lexemes delete" [
 #
 # GET /languages/{languageID}/lexemes/{lexemeID}
 # operationId: getLexemeByLanguage
-export def "languages-lexemes get" [
+export def "get-lexeme-by-language" [
   language_id: string
   lexeme_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -593,7 +593,7 @@ export def "languages-lexemes get" [
 #
 # PATCH /languages/{languageID}/lexemes/{lexemeID}
 # operationId: updateLexemeByLanguage
-export def "languages-lexemes update-by-language-id-lexeme-id" [
+export def "update-lexeme-by-language" [
   language_id: string
   lexeme_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -634,7 +634,7 @@ export def "languages-lexemes update-by-language-id-lexeme-id" [
 #
 # GET /lexemes
 # operationId: getLexemes
-export def "lexemes list" [
+export def "get-lexemes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -677,7 +677,7 @@ export def "lexemes list" [
 #
 # POST /lexemes
 # operationId: addLexeme
-export def "lexemes create" [
+export def "add-lexeme" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -713,7 +713,7 @@ export def "lexemes create" [
 #
 # PUT /lexemes
 # operationId: upsertLexeme
-export def "lexemes update" [
+export def "upsert-lexeme" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -752,7 +752,7 @@ export def "lexemes update" [
 #
 # DELETE /lexemes/{lexemeID}
 # operationId: deleteLexeme
-export def "lexemes delete" [
+export def "delete-lexeme" [
   lexeme_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -791,7 +791,7 @@ export def "lexemes delete" [
 #
 # GET /lexemes/{lexemeID}
 # operationId: getLexeme
-export def "lexemes get" [
+export def "get-lexeme" [
   lexeme_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -832,7 +832,7 @@ export def "lexemes get" [
 #
 # PATCH /lexemes/{lexemeID}
 # operationId: updateLexeme
-export def "lexemes update-by-lexeme-id" [
+export def "update-lexeme" [
   lexeme_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

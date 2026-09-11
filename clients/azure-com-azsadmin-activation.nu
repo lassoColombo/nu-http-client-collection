@@ -112,7 +112,7 @@ def provisioning-state-completer [] { ["Downloading" "Running" "Starting" "Stopp
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resourcegroups-providers-microsoft-azure-bridge-admin-activations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "activations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -136,7 +136,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroup}/providers/Microsoft.AzureBridge.Admin/activations
 # operationId: Activations_List
-export def "subscriptions-resourcegroups-providers-microsoft-azure-bridge-admin-activations list" [
+export def "activations-list" [
   subscription_id: string
   resource_group: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -176,7 +176,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-azure-bridge-admin-
 #
 # DELETE /subscriptions/{subscriptionId}/resourcegroups/{resourceGroup}/providers/Microsoft.AzureBridge.Admin/activations/{activationName}
 # operationId: Activations_Delete
-export def "subscriptions-resourcegroups-providers-microsoft-azure-bridge-admin-activations delete" [
+export def "activations-delete" [
   subscription_id: string
   resource_group: string
   activation_name: string
@@ -218,7 +218,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-azure-bridge-admin-
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroup}/providers/Microsoft.AzureBridge.Admin/activations/{activationName}
 # operationId: Activations_Get
-export def "subscriptions-resourcegroups-providers-microsoft-azure-bridge-admin-activations get" [
+export def "activations-get" [
   subscription_id: string
   resource_group: string
   activation_name: string
@@ -260,7 +260,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-azure-bridge-admin-
 #
 # PUT /subscriptions/{subscriptionId}/resourcegroups/{resourceGroup}/providers/Microsoft.AzureBridge.Admin/activations/{activationName}
 # operationId: Activations_CreateOrUpdate
-export def "subscriptions-resourcegroups-providers-microsoft-azure-bridge-admin-activations create-or-update" [
+export def "activations-create-or-update" [
   subscription_id: string
   resource_group: string
   activation_name: string

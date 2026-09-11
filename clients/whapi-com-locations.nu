@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["apikey"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "address-lookup get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "address-lookup" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -122,7 +122,7 @@ export def commands []: nothing -> table {
 #
 # GET /address/lookup/
 # operationId: addressLookup
-export def "address-lookup get" [
+export def "address-lookup" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -159,7 +159,7 @@ export def "address-lookup get" [
 #
 # GET /countries/
 # operationId: getCountries
-export def "countries get" [
+export def "get-countries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -193,7 +193,7 @@ export def "countries get" [
 #
 # GET /countries/{countryCode}
 # operationId: getCountry
-export def "countries get-country" [
+export def "get-country" [
   country_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -229,7 +229,7 @@ export def "countries get-country" [
 #
 # GET /currencies/
 # operationId: getCurrencies
-export def "currencies get" [
+export def "get-currencies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -263,7 +263,7 @@ export def "currencies get" [
 #
 # GET /currencies/{currencyCode}
 # operationId: getCurrency
-export def "currencies get-currency" [
+export def "get-currency" [
   currency_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

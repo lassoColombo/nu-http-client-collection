@@ -147,7 +147,7 @@ def label-filter-action-completer [] { ["exclude" "include"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "gmail-users-drafts list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "gmail-users-drafts-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -171,7 +171,7 @@ export def commands []: nothing -> table {
 #
 # GET /gmail/v1/users/{userId}/drafts
 # operationId: gmail.users.drafts.list
-export def "gmail-users-drafts list" [
+export def "gmail-users-drafts-list" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -223,7 +223,7 @@ export def "gmail-users-drafts list" [
 #
 # POST /gmail/v1/users/{userId}/drafts
 # operationId: gmail.users.drafts.create
-export def "gmail-users-drafts create" [
+export def "gmail-users-drafts-create" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -275,7 +275,7 @@ export def "gmail-users-drafts create" [
 #
 # POST /gmail/v1/users/{userId}/drafts/send
 # operationId: gmail.users.drafts.send
-export def "gmail-users-drafts-send send" [
+export def "gmail-users-drafts-send" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -327,7 +327,7 @@ export def "gmail-users-drafts-send send" [
 #
 # DELETE /gmail/v1/users/{userId}/drafts/{id}
 # operationId: gmail.users.drafts.delete
-export def "gmail-users-drafts delete" [
+export def "gmail-users-drafts-delete" [
   user_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -377,7 +377,7 @@ export def "gmail-users-drafts delete" [
 #
 # GET /gmail/v1/users/{userId}/drafts/{id}
 # operationId: gmail.users.drafts.get
-export def "gmail-users-drafts get" [
+export def "gmail-users-drafts-get" [
   user_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -428,7 +428,7 @@ export def "gmail-users-drafts get" [
 #
 # PUT /gmail/v1/users/{userId}/drafts/{id}
 # operationId: gmail.users.drafts.update
-export def "gmail-users-drafts update" [
+export def "gmail-users-drafts-update" [
   user_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -482,7 +482,7 @@ export def "gmail-users-drafts update" [
 #
 # GET /gmail/v1/users/{userId}/history
 # operationId: gmail.users.history.list
-export def "gmail-users-history list" [
+export def "gmail-users-history-list" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -535,7 +535,7 @@ export def "gmail-users-history list" [
 #
 # GET /gmail/v1/users/{userId}/labels
 # operationId: gmail.users.labels.list
-export def "gmail-users-labels list" [
+export def "gmail-users-labels-list" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -584,7 +584,7 @@ export def "gmail-users-labels list" [
 # POST /gmail/v1/users/{userId}/labels
 # operationId: gmail.users.labels.create
 # --color shape: {backgroundColor?: string, textColor?: string}
-export def "gmail-users-labels create" [
+export def "gmail-users-labels-create" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -645,7 +645,7 @@ export def "gmail-users-labels create" [
 #
 # DELETE /gmail/v1/users/{userId}/labels/{id}
 # operationId: gmail.users.labels.delete
-export def "gmail-users-labels delete" [
+export def "gmail-users-labels-delete" [
   user_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -695,7 +695,7 @@ export def "gmail-users-labels delete" [
 #
 # GET /gmail/v1/users/{userId}/labels/{id}
 # operationId: gmail.users.labels.get
-export def "gmail-users-labels get" [
+export def "gmail-users-labels-get" [
   user_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -746,7 +746,7 @@ export def "gmail-users-labels get" [
 # PATCH /gmail/v1/users/{userId}/labels/{id}
 # operationId: gmail.users.labels.patch
 # --color shape: {backgroundColor?: string, textColor?: string}
-export def "gmail-users-labels update-by-user-id" [
+export def "gmail-users-labels-patch" [
   user_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -810,7 +810,7 @@ export def "gmail-users-labels update-by-user-id" [
 # PUT /gmail/v1/users/{userId}/labels/{id}
 # operationId: gmail.users.labels.update
 # --color shape: {backgroundColor?: string, textColor?: string}
-export def "gmail-users-labels update-by-user-id-1" [
+export def "gmail-users-labels-update" [
   user_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -873,7 +873,7 @@ export def "gmail-users-labels update-by-user-id-1" [
 #
 # GET /gmail/v1/users/{userId}/messages
 # operationId: gmail.users.messages.list
-export def "gmail-users-messages list" [
+export def "gmail-users-messages-list" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -926,7 +926,7 @@ export def "gmail-users-messages list" [
 #
 # POST /gmail/v1/users/{userId}/messages
 # operationId: gmail.users.messages.insert
-export def "gmail-users-messages create" [
+export def "gmail-users-messages-insert" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -980,7 +980,7 @@ export def "gmail-users-messages create" [
 #
 # POST /gmail/v1/users/{userId}/messages/batchDelete
 # operationId: gmail.users.messages.batchDelete
-export def "gmail-users-messages-batch-delete delete" [
+export def "gmail-users-messages-batch-delete" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1032,7 +1032,7 @@ export def "gmail-users-messages-batch-delete delete" [
 #
 # POST /gmail/v1/users/{userId}/messages/batchModify
 # operationId: gmail.users.messages.batchModify
-export def "gmail-users-messages-batch-modify create" [
+export def "gmail-users-messages-batch-modify" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1086,7 +1086,7 @@ export def "gmail-users-messages-batch-modify create" [
 #
 # POST /gmail/v1/users/{userId}/messages/import
 # operationId: gmail.users.messages.import
-export def "gmail-users-messages-import import" [
+export def "gmail-users-messages-import" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1142,7 +1142,7 @@ export def "gmail-users-messages-import import" [
 #
 # POST /gmail/v1/users/{userId}/messages/send
 # operationId: gmail.users.messages.send
-export def "gmail-users-messages-send send" [
+export def "gmail-users-messages-send" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1194,7 +1194,7 @@ export def "gmail-users-messages-send send" [
 #
 # DELETE /gmail/v1/users/{userId}/messages/{id}
 # operationId: gmail.users.messages.delete
-export def "gmail-users-messages delete" [
+export def "gmail-users-messages-delete" [
   user_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1244,7 +1244,7 @@ export def "gmail-users-messages delete" [
 #
 # GET /gmail/v1/users/{userId}/messages/{id}
 # operationId: gmail.users.messages.get
-export def "gmail-users-messages get" [
+export def "gmail-users-messages-get" [
   user_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1296,7 +1296,7 @@ export def "gmail-users-messages get" [
 #
 # POST /gmail/v1/users/{userId}/messages/{id}/modify
 # operationId: gmail.users.messages.modify
-export def "gmail-users-messages-modify create" [
+export def "gmail-users-messages-modify" [
   user_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1351,7 +1351,7 @@ export def "gmail-users-messages-modify create" [
 #
 # POST /gmail/v1/users/{userId}/messages/{id}/trash
 # operationId: gmail.users.messages.trash
-export def "gmail-users-messages-trash create" [
+export def "gmail-users-messages-trash" [
   user_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1401,7 +1401,7 @@ export def "gmail-users-messages-trash create" [
 #
 # POST /gmail/v1/users/{userId}/messages/{id}/untrash
 # operationId: gmail.users.messages.untrash
-export def "gmail-users-messages-untrash create" [
+export def "gmail-users-messages-untrash" [
   user_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1451,7 +1451,7 @@ export def "gmail-users-messages-untrash create" [
 #
 # GET /gmail/v1/users/{userId}/messages/{messageId}/attachments/{id}
 # operationId: gmail.users.messages.attachments.get
-export def "gmail-users-messages-attachments get" [
+export def "gmail-users-messages-attachments-get" [
   user_id: string
   message_id: string
   id: string
@@ -1503,7 +1503,7 @@ export def "gmail-users-messages-attachments get" [
 #
 # GET /gmail/v1/users/{userId}/profile
 # operationId: gmail.users.getProfile
-export def "gmail-users-profile get" [
+export def "gmail-users-get-profile" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1551,7 +1551,7 @@ export def "gmail-users-profile get" [
 #
 # GET /gmail/v1/users/{userId}/settings/autoForwarding
 # operationId: gmail.users.settings.getAutoForwarding
-export def "gmail-users-settings-auto-forwarding get" [
+export def "gmail-users-settings-get-auto-forwarding" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1599,7 +1599,7 @@ export def "gmail-users-settings-auto-forwarding get" [
 #
 # PUT /gmail/v1/users/{userId}/settings/autoForwarding
 # operationId: gmail.users.settings.updateAutoForwarding
-export def "gmail-users-settings-auto-forwarding update" [
+export def "gmail-users-settings-update-auto-forwarding" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1653,7 +1653,7 @@ export def "gmail-users-settings-auto-forwarding update" [
 #
 # GET /gmail/v1/users/{userId}/settings/cse/identities
 # operationId: gmail.users.settings.cse.identities.list
-export def "gmail-users-settings-cse-identities list" [
+export def "gmail-users-settings-cse-identities-list" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1703,7 +1703,7 @@ export def "gmail-users-settings-cse-identities list" [
 #
 # POST /gmail/v1/users/{userId}/settings/cse/identities
 # operationId: gmail.users.settings.cse.identities.create
-export def "gmail-users-settings-cse-identities create" [
+export def "gmail-users-settings-cse-identities-create" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1756,7 +1756,7 @@ export def "gmail-users-settings-cse-identities create" [
 #
 # DELETE /gmail/v1/users/{userId}/settings/cse/identities/{cseEmailAddress}
 # operationId: gmail.users.settings.cse.identities.delete
-export def "gmail-users-settings-cse-identities delete" [
+export def "gmail-users-settings-cse-identities-delete" [
   user_id: string
   cse_email_address: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1806,7 +1806,7 @@ export def "gmail-users-settings-cse-identities delete" [
 #
 # GET /gmail/v1/users/{userId}/settings/cse/identities/{cseEmailAddress}
 # operationId: gmail.users.settings.cse.identities.get
-export def "gmail-users-settings-cse-identities get" [
+export def "gmail-users-settings-cse-identities-get" [
   user_id: string
   cse_email_address: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1856,7 +1856,7 @@ export def "gmail-users-settings-cse-identities get" [
 #
 # PATCH /gmail/v1/users/{userId}/settings/cse/identities/{emailAddress}
 # operationId: gmail.users.settings.cse.identities.patch
-export def "gmail-users-settings-cse-identities update" [
+export def "gmail-users-settings-cse-identities-patch" [
   user_id: string
   email_address: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1911,7 +1911,7 @@ export def "gmail-users-settings-cse-identities update" [
 #
 # GET /gmail/v1/users/{userId}/settings/cse/keypairs
 # operationId: gmail.users.settings.cse.keypairs.list
-export def "gmail-users-settings-cse-keypairs list" [
+export def "gmail-users-settings-cse-keypairs-list" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1962,7 +1962,7 @@ export def "gmail-users-settings-cse-keypairs list" [
 # POST /gmail/v1/users/{userId}/settings/cse/keypairs
 # operationId: gmail.users.settings.cse.keypairs.create
 # --privateKeyMetadata item shape: {kaclsKeyMetadata?: record}
-export def "gmail-users-settings-cse-keypairs create" [
+export def "gmail-users-settings-cse-keypairs-create" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2015,7 +2015,7 @@ export def "gmail-users-settings-cse-keypairs create" [
 #
 # GET /gmail/v1/users/{userId}/settings/cse/keypairs/{keyPairId}
 # operationId: gmail.users.settings.cse.keypairs.get
-export def "gmail-users-settings-cse-keypairs get" [
+export def "gmail-users-settings-cse-keypairs-get" [
   user_id: string
   key_pair_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2065,7 +2065,7 @@ export def "gmail-users-settings-cse-keypairs get" [
 #
 # POST /gmail/v1/users/{userId}/settings/cse/keypairs/{keyPairId}:disable
 # operationId: gmail.users.settings.cse.keypairs.disable
-export def "gmail-users-settings-cse-keypairs disable" [
+export def "gmail-users-settings-cse-keypairs-disable" [
   user_id: string
   key_pair_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2119,7 +2119,7 @@ export def "gmail-users-settings-cse-keypairs disable" [
 #
 # POST /gmail/v1/users/{userId}/settings/cse/keypairs/{keyPairId}:enable
 # operationId: gmail.users.settings.cse.keypairs.enable
-export def "gmail-users-settings-cse-keypairs enable" [
+export def "gmail-users-settings-cse-keypairs-enable" [
   user_id: string
   key_pair_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2173,7 +2173,7 @@ export def "gmail-users-settings-cse-keypairs enable" [
 #
 # POST /gmail/v1/users/{userId}/settings/cse/keypairs/{keyPairId}:obliterate
 # operationId: gmail.users.settings.cse.keypairs.obliterate
-export def "gmail-users-settings-cse-keypairs create-obliterate" [
+export def "gmail-users-settings-cse-keypairs-obliterate" [
   user_id: string
   key_pair_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2227,7 +2227,7 @@ export def "gmail-users-settings-cse-keypairs create-obliterate" [
 #
 # GET /gmail/v1/users/{userId}/settings/delegates
 # operationId: gmail.users.settings.delegates.list
-export def "gmail-users-settings-delegates list" [
+export def "gmail-users-settings-delegates-list" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2275,7 +2275,7 @@ export def "gmail-users-settings-delegates list" [
 #
 # POST /gmail/v1/users/{userId}/settings/delegates
 # operationId: gmail.users.settings.delegates.create
-export def "gmail-users-settings-delegates create" [
+export def "gmail-users-settings-delegates-create" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2328,7 +2328,7 @@ export def "gmail-users-settings-delegates create" [
 #
 # DELETE /gmail/v1/users/{userId}/settings/delegates/{delegateEmail}
 # operationId: gmail.users.settings.delegates.delete
-export def "gmail-users-settings-delegates delete" [
+export def "gmail-users-settings-delegates-delete" [
   user_id: string
   delegate_email: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2378,7 +2378,7 @@ export def "gmail-users-settings-delegates delete" [
 #
 # GET /gmail/v1/users/{userId}/settings/delegates/{delegateEmail}
 # operationId: gmail.users.settings.delegates.get
-export def "gmail-users-settings-delegates get" [
+export def "gmail-users-settings-delegates-get" [
   user_id: string
   delegate_email: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2428,7 +2428,7 @@ export def "gmail-users-settings-delegates get" [
 #
 # GET /gmail/v1/users/{userId}/settings/filters
 # operationId: gmail.users.settings.filters.list
-export def "gmail-users-settings-filters list" [
+export def "gmail-users-settings-filters-list" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2478,7 +2478,7 @@ export def "gmail-users-settings-filters list" [
 # operationId: gmail.users.settings.filters.create
 # --action shape: {addLabelIds?: list<string>, forward?: string, removeLabelIds?: list<string>}
 # --criteria shape: {excludeChats?: bool, from?: string, hasAttachment?: bool, negatedQuery?: string, query?: string, size?: int, sizeComparison?: "unspecified"|"smaller"|"larger", subject?: string, to?: string}
-export def "gmail-users-settings-filters create" [
+export def "gmail-users-settings-filters-create" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2532,7 +2532,7 @@ export def "gmail-users-settings-filters create" [
 #
 # DELETE /gmail/v1/users/{userId}/settings/filters/{id}
 # operationId: gmail.users.settings.filters.delete
-export def "gmail-users-settings-filters delete" [
+export def "gmail-users-settings-filters-delete" [
   user_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2582,7 +2582,7 @@ export def "gmail-users-settings-filters delete" [
 #
 # GET /gmail/v1/users/{userId}/settings/filters/{id}
 # operationId: gmail.users.settings.filters.get
-export def "gmail-users-settings-filters get" [
+export def "gmail-users-settings-filters-get" [
   user_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2632,7 +2632,7 @@ export def "gmail-users-settings-filters get" [
 #
 # GET /gmail/v1/users/{userId}/settings/forwardingAddresses
 # operationId: gmail.users.settings.forwardingAddresses.list
-export def "gmail-users-settings-forwarding-addresses list" [
+export def "gmail-users-settings-forwarding-addresses-list" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2680,7 +2680,7 @@ export def "gmail-users-settings-forwarding-addresses list" [
 #
 # POST /gmail/v1/users/{userId}/settings/forwardingAddresses
 # operationId: gmail.users.settings.forwardingAddresses.create
-export def "gmail-users-settings-forwarding-addresses create" [
+export def "gmail-users-settings-forwarding-addresses-create" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2733,7 +2733,7 @@ export def "gmail-users-settings-forwarding-addresses create" [
 #
 # DELETE /gmail/v1/users/{userId}/settings/forwardingAddresses/{forwardingEmail}
 # operationId: gmail.users.settings.forwardingAddresses.delete
-export def "gmail-users-settings-forwarding-addresses delete" [
+export def "gmail-users-settings-forwarding-addresses-delete" [
   user_id: string
   forwarding_email: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2783,7 +2783,7 @@ export def "gmail-users-settings-forwarding-addresses delete" [
 #
 # GET /gmail/v1/users/{userId}/settings/forwardingAddresses/{forwardingEmail}
 # operationId: gmail.users.settings.forwardingAddresses.get
-export def "gmail-users-settings-forwarding-addresses get" [
+export def "gmail-users-settings-forwarding-addresses-get" [
   user_id: string
   forwarding_email: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2833,7 +2833,7 @@ export def "gmail-users-settings-forwarding-addresses get" [
 #
 # GET /gmail/v1/users/{userId}/settings/imap
 # operationId: gmail.users.settings.getImap
-export def "gmail-users-settings-imap get" [
+export def "gmail-users-settings-get-imap" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2881,7 +2881,7 @@ export def "gmail-users-settings-imap get" [
 #
 # PUT /gmail/v1/users/{userId}/settings/imap
 # operationId: gmail.users.settings.updateImap
-export def "gmail-users-settings-imap update" [
+export def "gmail-users-settings-update-imap" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2936,7 +2936,7 @@ export def "gmail-users-settings-imap update" [
 #
 # GET /gmail/v1/users/{userId}/settings/language
 # operationId: gmail.users.settings.getLanguage
-export def "gmail-users-settings-language get" [
+export def "gmail-users-settings-get-language" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2984,7 +2984,7 @@ export def "gmail-users-settings-language get" [
 #
 # PUT /gmail/v1/users/{userId}/settings/language
 # operationId: gmail.users.settings.updateLanguage
-export def "gmail-users-settings-language update" [
+export def "gmail-users-settings-update-language" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3036,7 +3036,7 @@ export def "gmail-users-settings-language update" [
 #
 # GET /gmail/v1/users/{userId}/settings/pop
 # operationId: gmail.users.settings.getPop
-export def "gmail-users-settings-pop get" [
+export def "gmail-users-settings-get-pop" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3084,7 +3084,7 @@ export def "gmail-users-settings-pop get" [
 #
 # PUT /gmail/v1/users/{userId}/settings/pop
 # operationId: gmail.users.settings.updatePop
-export def "gmail-users-settings-pop update" [
+export def "gmail-users-settings-update-pop" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3137,7 +3137,7 @@ export def "gmail-users-settings-pop update" [
 #
 # GET /gmail/v1/users/{userId}/settings/sendAs
 # operationId: gmail.users.settings.sendAs.list
-export def "gmail-users-settings-send-as list" [
+export def "gmail-users-settings-send-as-list" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3186,7 +3186,7 @@ export def "gmail-users-settings-send-as list" [
 # POST /gmail/v1/users/{userId}/settings/sendAs
 # operationId: gmail.users.settings.sendAs.create
 # --smtpMsa shape: {host?: string, password?: string, port?: int, securityMode?: "securityModeUnspecified"|"none"|"ssl"|"starttls", username?: string}
-export def "gmail-users-settings-send-as create" [
+export def "gmail-users-settings-send-as-create" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3246,7 +3246,7 @@ export def "gmail-users-settings-send-as create" [
 #
 # DELETE /gmail/v1/users/{userId}/settings/sendAs/{sendAsEmail}
 # operationId: gmail.users.settings.sendAs.delete
-export def "gmail-users-settings-send-as delete" [
+export def "gmail-users-settings-send-as-delete" [
   user_id: string
   send_as_email: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3296,7 +3296,7 @@ export def "gmail-users-settings-send-as delete" [
 #
 # GET /gmail/v1/users/{userId}/settings/sendAs/{sendAsEmail}
 # operationId: gmail.users.settings.sendAs.get
-export def "gmail-users-settings-send-as get" [
+export def "gmail-users-settings-send-as-get" [
   user_id: string
   send_as_email: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3347,7 +3347,7 @@ export def "gmail-users-settings-send-as get" [
 # PATCH /gmail/v1/users/{userId}/settings/sendAs/{sendAsEmail}
 # operationId: gmail.users.settings.sendAs.patch
 # --smtpMsa shape: {host?: string, password?: string, port?: int, securityMode?: "securityModeUnspecified"|"none"|"ssl"|"starttls", username?: string}
-export def "gmail-users-settings-send-as update-by-user-id-send-as-email" [
+export def "gmail-users-settings-send-as-patch" [
   user_id: string
   send_as_email: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3410,7 +3410,7 @@ export def "gmail-users-settings-send-as update-by-user-id-send-as-email" [
 # PUT /gmail/v1/users/{userId}/settings/sendAs/{sendAsEmail}
 # operationId: gmail.users.settings.sendAs.update
 # --smtpMsa shape: {host?: string, password?: string, port?: int, securityMode?: "securityModeUnspecified"|"none"|"ssl"|"starttls", username?: string}
-export def "gmail-users-settings-send-as update-by-user-id-send-as-email-1" [
+export def "gmail-users-settings-send-as-update" [
   user_id: string
   send_as_email: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3472,7 +3472,7 @@ export def "gmail-users-settings-send-as update-by-user-id-send-as-email-1" [
 #
 # GET /gmail/v1/users/{userId}/settings/sendAs/{sendAsEmail}/smimeInfo
 # operationId: gmail.users.settings.sendAs.smimeInfo.list
-export def "gmail-users-settings-send-as-smime-info list" [
+export def "gmail-users-settings-send-as-smime-info-list" [
   user_id: string
   send_as_email: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3522,7 +3522,7 @@ export def "gmail-users-settings-send-as-smime-info list" [
 #
 # POST /gmail/v1/users/{userId}/settings/sendAs/{sendAsEmail}/smimeInfo
 # operationId: gmail.users.settings.sendAs.smimeInfo.insert
-export def "gmail-users-settings-send-as-smime-info create" [
+export def "gmail-users-settings-send-as-smime-info-insert" [
   user_id: string
   send_as_email: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3582,7 +3582,7 @@ export def "gmail-users-settings-send-as-smime-info create" [
 #
 # DELETE /gmail/v1/users/{userId}/settings/sendAs/{sendAsEmail}/smimeInfo/{id}
 # operationId: gmail.users.settings.sendAs.smimeInfo.delete
-export def "gmail-users-settings-send-as-smime-info delete" [
+export def "gmail-users-settings-send-as-smime-info-delete" [
   user_id: string
   send_as_email: string
   id: string
@@ -3634,7 +3634,7 @@ export def "gmail-users-settings-send-as-smime-info delete" [
 #
 # GET /gmail/v1/users/{userId}/settings/sendAs/{sendAsEmail}/smimeInfo/{id}
 # operationId: gmail.users.settings.sendAs.smimeInfo.get
-export def "gmail-users-settings-send-as-smime-info get" [
+export def "gmail-users-settings-send-as-smime-info-get" [
   user_id: string
   send_as_email: string
   id: string
@@ -3686,7 +3686,7 @@ export def "gmail-users-settings-send-as-smime-info get" [
 #
 # POST /gmail/v1/users/{userId}/settings/sendAs/{sendAsEmail}/smimeInfo/{id}/setDefault
 # operationId: gmail.users.settings.sendAs.smimeInfo.setDefault
-export def "gmail-users-settings-send-as-smime-info-set-default update" [
+export def "gmail-users-settings-send-as-smime-info-set-default" [
   user_id: string
   send_as_email: string
   id: string
@@ -3738,7 +3738,7 @@ export def "gmail-users-settings-send-as-smime-info-set-default update" [
 #
 # POST /gmail/v1/users/{userId}/settings/sendAs/{sendAsEmail}/verify
 # operationId: gmail.users.settings.sendAs.verify
-export def "gmail-users-settings-send-as-verify verify" [
+export def "gmail-users-settings-send-as-verify" [
   user_id: string
   send_as_email: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3788,7 +3788,7 @@ export def "gmail-users-settings-send-as-verify verify" [
 #
 # GET /gmail/v1/users/{userId}/settings/vacation
 # operationId: gmail.users.settings.getVacation
-export def "gmail-users-settings-vacation get" [
+export def "gmail-users-settings-get-vacation" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3836,7 +3836,7 @@ export def "gmail-users-settings-vacation get" [
 #
 # PUT /gmail/v1/users/{userId}/settings/vacation
 # operationId: gmail.users.settings.updateVacation
-export def "gmail-users-settings-vacation update" [
+export def "gmail-users-settings-update-vacation" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3895,7 +3895,7 @@ export def "gmail-users-settings-vacation update" [
 #
 # POST /gmail/v1/users/{userId}/stop
 # operationId: gmail.users.stop
-export def "gmail-users-stop stop" [
+export def "gmail-users-stop" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3943,7 +3943,7 @@ export def "gmail-users-stop stop" [
 #
 # GET /gmail/v1/users/{userId}/threads
 # operationId: gmail.users.threads.list
-export def "gmail-users-threads list" [
+export def "gmail-users-threads-list" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3996,7 +3996,7 @@ export def "gmail-users-threads list" [
 #
 # DELETE /gmail/v1/users/{userId}/threads/{id}
 # operationId: gmail.users.threads.delete
-export def "gmail-users-threads delete" [
+export def "gmail-users-threads-delete" [
   user_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4046,7 +4046,7 @@ export def "gmail-users-threads delete" [
 #
 # GET /gmail/v1/users/{userId}/threads/{id}
 # operationId: gmail.users.threads.get
-export def "gmail-users-threads get" [
+export def "gmail-users-threads-get" [
   user_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4098,7 +4098,7 @@ export def "gmail-users-threads get" [
 #
 # POST /gmail/v1/users/{userId}/threads/{id}/modify
 # operationId: gmail.users.threads.modify
-export def "gmail-users-threads-modify create" [
+export def "gmail-users-threads-modify" [
   user_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4153,7 +4153,7 @@ export def "gmail-users-threads-modify create" [
 #
 # POST /gmail/v1/users/{userId}/threads/{id}/trash
 # operationId: gmail.users.threads.trash
-export def "gmail-users-threads-trash create" [
+export def "gmail-users-threads-trash" [
   user_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4203,7 +4203,7 @@ export def "gmail-users-threads-trash create" [
 #
 # POST /gmail/v1/users/{userId}/threads/{id}/untrash
 # operationId: gmail.users.threads.untrash
-export def "gmail-users-threads-untrash create" [
+export def "gmail-users-threads-untrash" [
   user_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4253,7 +4253,7 @@ export def "gmail-users-threads-untrash create" [
 #
 # POST /gmail/v1/users/{userId}/watch
 # operationId: gmail.users.watch
-export def "gmail-users-watch watch" [
+export def "gmail-users-watch" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

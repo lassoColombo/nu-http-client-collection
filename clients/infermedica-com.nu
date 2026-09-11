@@ -106,7 +106,7 @@ def sex-completer [] { ["female" "male"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "concepts list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-concepts" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -129,7 +129,7 @@ export def commands []: nothing -> table {
 # GET /concepts
 #
 # operationId: getConcepts
-export def "concepts list" [
+export def "get-concepts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -165,7 +165,7 @@ export def "concepts list" [
 # GET /concepts/{id}
 #
 # operationId: getConcept
-export def "concepts get" [
+export def "get-concept" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -201,7 +201,7 @@ export def "concepts get" [
 #
 # GET /conditions
 # operationId: getAllConditions
-export def "conditions get-list" [
+export def "get-all-conditions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -239,7 +239,7 @@ export def "conditions get-list" [
 #
 # GET /conditions/{id}
 # operationId: getCondition
-export def "conditions get" [
+export def "get-condition" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -280,7 +280,7 @@ export def "conditions get" [
 # POST /diagnosis
 # operationId: computeDiagnosis
 # --evidence item shape: {choice_id: "present"|"absent"|"unknown", id: string, observed_at?: string, source?: "initial"|"suggest"|"predefined"|"red_flags"}
-export def "diagnosis create-compute" [
+export def "compute-diagnosis" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -322,7 +322,7 @@ export def "diagnosis create-compute" [
 # POST /explain
 # operationId: computeExplanation
 # --evidence item shape: {choice_id: "present"|"absent"|"unknown", id: string, observed_at?: string, source?: "initial"|"suggest"|"predefined"|"red_flags"}
-export def "explain create-compute-explanation" [
+export def "compute-explanation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -364,7 +364,7 @@ export def "explain create-compute-explanation" [
 #
 # GET /info
 # operationId: getDatabaseInfo
-export def "info get-database" [
+export def "get-database-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -401,7 +401,7 @@ export def "info get-database" [
 #
 # GET /lab_tests
 # operationId: getAllLabTests
-export def "lab-tests get-list" [
+export def "get-all-lab-tests" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -438,7 +438,7 @@ export def "lab-tests get-list" [
 #
 # GET /lab_tests/{id}
 # operationId: getLabTest
-export def "lab-tests get" [
+export def "get-lab-test" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -477,7 +477,7 @@ export def "lab-tests get" [
 #
 # GET /lookup
 # operationId: getMatchingObservation
-export def "lookup get-matching-observation" [
+export def "get-matching-observation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -516,7 +516,7 @@ export def "lookup get-matching-observation" [
 #
 # POST /parse
 # operationId: getMentions
-export def "parse get-mentions" [
+export def "get-mentions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -559,7 +559,7 @@ export def "parse get-mentions" [
 # POST /rationale
 # operationId: computeRationale
 # --evidence item shape: {choice_id: "present"|"absent"|"unknown", id: string, observed_at?: string, source?: "initial"|"suggest"|"predefined"|"red_flags"}
-export def "rationale create-compute" [
+export def "compute-rationale" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -601,7 +601,7 @@ export def "rationale create-compute" [
 # POST /red_flags
 # operationId: computeRedFlags
 # --evidence item shape: {choice_id: "present"|"absent"|"unknown", id: string, observed_at?: string, source?: "initial"|"suggest"|"predefined"|"red_flags"}
-export def "red-flags create-compute" [
+export def "compute-red-flags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -644,7 +644,7 @@ export def "red-flags create-compute" [
 #
 # GET /risk_factors
 # operationId: getAllRiskFactors
-export def "risk-factors get-list" [
+export def "get-all-risk-factors" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -682,7 +682,7 @@ export def "risk-factors get-list" [
 #
 # GET /risk_factors/{id}
 # operationId: getRiskFactor
-export def "risk-factors get" [
+export def "get-risk-factor" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -722,7 +722,7 @@ export def "risk-factors get" [
 #
 # GET /search
 # operationId: getMatchingObservations
-export def "search get-matching-observations" [
+export def "get-matching-observations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -764,7 +764,7 @@ export def "search get-matching-observations" [
 # POST /suggest
 # operationId: getSuggestions
 # --evidence item shape: {choice_id: "present"|"absent"|"unknown", id: string, observed_at?: string, source?: "initial"|"suggest"|"predefined"|"red_flags"}
-export def "suggest get-suggestions" [
+export def "get-suggestions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -807,7 +807,7 @@ export def "suggest get-suggestions" [
 #
 # GET /symptoms
 # operationId: getAllSymptoms
-export def "symptoms get-list" [
+export def "get-all-symptoms" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -845,7 +845,7 @@ export def "symptoms get-list" [
 #
 # GET /symptoms/{id}
 # operationId: getSymptom
-export def "symptoms get" [
+export def "get-symptom" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -886,7 +886,7 @@ export def "symptoms get" [
 # POST /triage
 # operationId: computeTriage
 # --evidence item shape: {choice_id: "present"|"absent"|"unknown", id: string, observed_at?: string, source?: "initial"|"suggest"|"predefined"|"red_flags"}
-export def "triage create-compute" [
+export def "compute-triage" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

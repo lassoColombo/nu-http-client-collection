@@ -124,7 +124,7 @@ def period-completer [] { ["event" "months" "weeks" "years"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "delete-accounts-id" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -147,7 +147,7 @@ export def commands []: nothing -> table {
 # Delete account
 #
 # DELETE /accounts/{id}
-export def "accounts delete" [
+export def "delete-accounts-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -182,7 +182,7 @@ export def "accounts delete" [
 # Get account
 #
 # GET /accounts/{id}
-export def "accounts get" [
+export def "get-accounts-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -217,7 +217,7 @@ export def "accounts get" [
 # Update account
 #
 # PUT /accounts/{id}
-export def "accounts update" [
+export def "put-accounts-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -259,7 +259,7 @@ export def "accounts update" [
 # List transactions in account
 #
 # GET /accounts/{id}/transactions
-export def "accounts-transactions get" [
+export def "get-accounts-id-transactions" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -303,7 +303,7 @@ export def "accounts-transactions get" [
 # Delete attachment
 #
 # DELETE /attachments/{id}
-export def "attachments delete" [
+export def "delete-attachments-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -338,7 +338,7 @@ export def "attachments delete" [
 # Get attachment
 #
 # GET /attachments/{id}
-export def "attachments get" [
+export def "get-attachments-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -373,7 +373,7 @@ export def "attachments get" [
 # Update attachment
 #
 # PUT /attachments/{id}
-export def "attachments update" [
+export def "put-attachments-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -412,7 +412,7 @@ export def "attachments update" [
 # Delete category
 #
 # DELETE /categories/{id}
-export def "categories delete" [
+export def "delete-categories-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -447,7 +447,7 @@ export def "categories delete" [
 # Get category
 #
 # GET /categories/{id}
-export def "categories get" [
+export def "get-categories-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -482,7 +482,7 @@ export def "categories get" [
 # Update category
 #
 # PUT /categories/{id}
-export def "categories update" [
+export def "put-categories-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -527,7 +527,7 @@ export def "categories update" [
 # Create category rule in category
 #
 # POST /categories/{id}/category_rules
-export def "categories-category-rules create" [
+export def "post-categories-id-category-rules" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -568,7 +568,7 @@ export def "categories-category-rules create" [
 # List transactions in categories
 #
 # GET /categories/{id}/transactions
-export def "categories-transactions get" [
+export def "get-categories-id-transactions" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -612,7 +612,7 @@ export def "categories-transactions get" [
 # List currencies
 #
 # GET /currencies
-export def "currencies list" [
+export def "get-currencies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -645,7 +645,7 @@ export def "currencies list" [
 # Get currency
 #
 # GET /currencies/{id}
-export def "currencies get" [
+export def "get-currencies-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -680,7 +680,7 @@ export def "currencies get" [
 # Delete event
 #
 # DELETE /events/{id}
-export def "events delete" [
+export def "delete-events-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -717,7 +717,7 @@ export def "events delete" [
 # Get event
 #
 # GET /events/{id}
-export def "events get" [
+export def "get-events-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -752,7 +752,7 @@ export def "events get" [
 # Update event
 #
 # PUT /events/{id}
-export def "events update" [
+export def "put-events-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -795,7 +795,7 @@ export def "events update" [
 # Delete institution
 #
 # DELETE /institutions/{id}
-export def "institutions delete" [
+export def "delete-institutions-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -832,7 +832,7 @@ export def "institutions delete" [
 # Get institution
 #
 # GET /institutions/{id}
-export def "institutions get" [
+export def "get-institutions-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -867,7 +867,7 @@ export def "institutions get" [
 # Update institution
 #
 # PUT /institutions/{id}
-export def "institutions update" [
+export def "put-institutions-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -907,7 +907,7 @@ export def "institutions update" [
 # List accounts in institution
 #
 # GET /institutions/{id}/accounts
-export def "institutions-accounts get" [
+export def "get-institutions-id-accounts" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -942,7 +942,7 @@ export def "institutions-accounts get" [
 # Get the authorised user
 #
 # GET /me
-export def "me get" [
+export def "get-me" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -975,7 +975,7 @@ export def "me get" [
 # List events in scenario.
 #
 # GET /scenarios/{id}/events
-export def "scenarios-events get" [
+export def "get-scenarios-id-events" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1013,7 +1013,7 @@ export def "scenarios-events get" [
 # Create event in scenario
 #
 # POST /scenarios/{id}/events
-export def "scenarios-events create" [
+export def "post-scenarios-id-events" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1057,7 +1057,7 @@ export def "scenarios-events create" [
 # List time zones
 #
 # GET /time_zones
-export def "time-zones get" [
+export def "get-time-zones" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1090,7 +1090,7 @@ export def "time-zones get" [
 # Get transaction account
 #
 # GET /transaction_accounts/{id}
-export def "transaction-accounts get" [
+export def "get-transaction-accounts-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1125,7 +1125,7 @@ export def "transaction-accounts get" [
 # Update transaction account
 #
 # PUT /transaction_accounts/{id}
-export def "transaction-accounts update" [
+export def "put-transaction-accounts-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1166,7 +1166,7 @@ export def "transaction-accounts update" [
 # List transactions in transaction account
 #
 # GET /transaction_accounts/{id}/transactions
-export def "transaction-accounts-transactions get" [
+export def "get-transaction-accounts-id-transactions" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1210,7 +1210,7 @@ export def "transaction-accounts-transactions get" [
 # Create a transaction in transaction account
 #
 # POST /transaction_accounts/{id}/transactions
-export def "transaction-accounts-transactions create" [
+export def "post-transaction-accounts-id-transactions" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1258,7 +1258,7 @@ export def "transaction-accounts-transactions create" [
 # Delete transaction
 #
 # DELETE /transactions/{id}
-export def "transactions delete" [
+export def "delete-transactions-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1293,7 +1293,7 @@ export def "transactions delete" [
 # Get a transaction
 #
 # GET /transactions/{id}
-export def "transactions get" [
+export def "get-transactions-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1328,7 +1328,7 @@ export def "transactions get" [
 # Update a transaction
 #
 # PUT /transactions/{id}
-export def "transactions update" [
+export def "put-transactions-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1376,7 +1376,7 @@ export def "transactions update" [
 # List attachments in transaction
 #
 # GET /transactions/{id}/attachments
-export def "transactions-attachments get" [
+export def "get-transactions-id-attachments" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1411,7 +1411,7 @@ export def "transactions-attachments get" [
 # Assigns attachment to transaction
 #
 # POST /transactions/{id}/attachments
-export def "transactions-attachments create" [
+export def "post-transactions-id-attachments" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1450,7 +1450,7 @@ export def "transactions-attachments create" [
 # Unassigns attachment in transaction
 #
 # DELETE /transactions/{transaction_id}/attachments/{attachment_id}
-export def "transactions-attachments delete" [
+export def "delete-transactions-transaction-id-attachments-attachment-id" [
   transaction_id: int
   attachment_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1487,7 +1487,7 @@ export def "transactions-attachments delete" [
 # Get user
 #
 # GET /users/{id}
-export def "users get" [
+export def "get-users-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1522,7 +1522,7 @@ export def "users get" [
 # Update user
 #
 # PUT /users/{id}
-export def "users update" [
+export def "put-users-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1567,7 +1567,7 @@ export def "users update" [
 # List accounts in user
 #
 # GET /users/{id}/accounts
-export def "users-accounts get" [
+export def "get-users-id-accounts" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1602,7 +1602,7 @@ export def "users-accounts get" [
 # Create an account in user
 #
 # POST /users/{id}/accounts
-export def "users-accounts create" [
+export def "post-users-id-accounts" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1645,7 +1645,7 @@ export def "users-accounts create" [
 #
 # PUT /users/{id}/accounts
 # --accounts item shape: {created_at?: string, currency_code?: string, current_balance?: float, current_balance_date?: string, current_balance_exchange_rate?: float, current_balance_in_base_currency?: float, id?: int, is_net_worth?: bool, primary_scenario?: record, primary_transaction_account?: record, safe_balance?: float, safe_balance_in_base_currency?: float, scenarios?: list, title?: string, transaction_accounts?: list, ... (2 more fields)}
-export def "users-accounts update" [
+export def "put-users-id-accounts" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1684,7 +1684,7 @@ export def "users-accounts update" [
 # Lists attachments in user
 #
 # GET /users/{id}/attachments
-export def "users-attachments get" [
+export def "get-users-id-attachments" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1721,7 +1721,7 @@ export def "users-attachments get" [
 # Create attachment in user
 #
 # POST /users/{id}/attachments
-export def "users-attachments create" [
+export def "post-users-id-attachments" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1762,7 +1762,7 @@ export def "users-attachments create" [
 # List budget for user
 #
 # GET /users/{id}/budget
-export def "users-budget get" [
+export def "get-users-id-budget" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1799,7 +1799,7 @@ export def "users-budget get" [
 # Get budget summary for user
 #
 # GET /users/{id}/budget_summary
-export def "users-budget-summary get" [
+export def "get-users-id-budget-summary" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1839,7 +1839,7 @@ export def "users-budget-summary get" [
 # List categories in user
 #
 # GET /users/{id}/categories
-export def "users-categories get" [
+export def "get-users-id-categories" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1874,7 +1874,7 @@ export def "users-categories get" [
 # Create category in user
 #
 # POST /users/{id}/categories
-export def "users-categories create" [
+export def "post-users-id-categories" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1919,7 +1919,7 @@ export def "users-categories create" [
 # List category rules in user
 #
 # GET /users/{id}/category_rules
-export def "users-category-rules get" [
+export def "get-users-id-category-rules" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1954,7 +1954,7 @@ export def "users-category-rules get" [
 # List events in user.
 #
 # GET /users/{id}/events
-export def "users-events get" [
+export def "get-users-id-events" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1992,7 +1992,7 @@ export def "users-events get" [
 # Delete forecast cache for user
 #
 # DELETE /users/{id}/forecast_cache
-export def "users-forecast-cache delete" [
+export def "delete-users-id-forecast-cache" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2027,7 +2027,7 @@ export def "users-forecast-cache delete" [
 # List institutions in user
 #
 # GET /users/{id}/institutions
-export def "users-institutions get" [
+export def "get-users-id-institutions" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2062,7 +2062,7 @@ export def "users-institutions get" [
 # Create institution in user
 #
 # POST /users/{id}/institutions
-export def "users-institutions create" [
+export def "post-users-id-institutions" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2102,7 +2102,7 @@ export def "users-institutions create" [
 # List labels in user
 #
 # GET /users/{id}/labels
-export def "users-labels get" [
+export def "get-users-id-labels" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2137,7 +2137,7 @@ export def "users-labels get" [
 # List saved searches in user
 #
 # GET /users/{id}/saved_searches
-export def "users-saved-searches get" [
+export def "get-users-id-saved-searches" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2172,7 +2172,7 @@ export def "users-saved-searches get" [
 # List transaction accounts in user
 #
 # GET /users/{id}/transaction_accounts
-export def "users-transaction-accounts get" [
+export def "get-users-id-transaction-accounts" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2207,7 +2207,7 @@ export def "users-transaction-accounts get" [
 # List transactions in user
 #
 # GET /users/{id}/transactions
-export def "users-transactions get" [
+export def "get-users-id-transactions" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2251,7 +2251,7 @@ export def "users-transactions get" [
 # Get trend analysis for user
 #
 # GET /users/{id}/trend_analysis
-export def "users-trend-analysis get" [
+export def "get-users-id-trend-analysis" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

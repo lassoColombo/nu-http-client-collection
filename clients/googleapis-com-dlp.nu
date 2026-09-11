@@ -130,7 +130,7 @@ def type-completer [] { ["DLP_JOB_TYPE_UNSPECIFIED" "INSPECT_JOB" "RISK_ANALYSIS
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "info-types list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "dlp-info-types-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -154,7 +154,7 @@ export def commands []: nothing -> table {
 #
 # GET /v2/infoTypes
 # operationId: dlp.infoTypes.list
-export def "info-types list" [
+export def "dlp-info-types-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -204,7 +204,7 @@ export def "info-types list" [
 #
 # DELETE /v2/{name}
 # operationId: dlp.projects.storedInfoTypes.delete
-export def "projects delete" [
+export def "dlp-projects-stored-info-types-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -252,7 +252,7 @@ export def "projects delete" [
 #
 # GET /v2/{name}
 # operationId: dlp.projects.storedInfoTypes.get
-export def "projects get" [
+export def "dlp-projects-stored-info-types-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -301,7 +301,7 @@ export def "projects get" [
 # PATCH /v2/{name}
 # operationId: dlp.projects.storedInfoTypes.patch
 # --config shape: {description?: string, dictionary?: record, displayName?: string, largeCustomDictionary?: record, regex?: record}
-export def "projects update" [
+export def "dlp-projects-stored-info-types-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -354,7 +354,7 @@ export def "projects update" [
 #
 # POST /v2/{name}:activate
 # operationId: dlp.projects.locations.jobTriggers.activate
-export def "projects create-activate" [
+export def "dlp-projects-locations-job-triggers-activate" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -406,7 +406,7 @@ export def "projects create-activate" [
 #
 # POST /v2/{name}:cancel
 # operationId: dlp.projects.locations.dlpJobs.cancel
-export def "projects cancel" [
+export def "dlp-projects-locations-dlp-jobs-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -458,7 +458,7 @@ export def "projects cancel" [
 #
 # POST /v2/{name}:finish
 # operationId: dlp.projects.locations.dlpJobs.finish
-export def "projects create-finish" [
+export def "dlp-projects-locations-dlp-jobs-finish" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -511,7 +511,7 @@ export def "projects create-finish" [
 # POST /v2/{name}:hybridInspect
 # operationId: dlp.projects.locations.jobTriggers.hybridInspect
 # --hybridItem shape: {findingDetails?: record, item?: record}
-export def "projects get-hybrid" [
+export def "dlp-projects-locations-job-triggers-hybrid-inspect" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -566,7 +566,7 @@ export def "projects get-hybrid" [
 # --deidentifyConfig shape: {imageTransformations?: record, infoTypeTransformations?: record, recordTransformations?: record, transformationErrorHandling?: record}
 # --inspectConfig shape: {contentOptions?: list<string>, customInfoTypes?: list, excludeInfoTypes?: bool, includeQuote?: bool, infoTypes?: list, limits?: record, minLikelihood?: "LIKELIHOOD_UNSPECIFIED"|"VERY_UNLIKELY"|"UNLIKELY"|"POSSIBLE"|"LIKELY"|"VERY_LIKELY", ruleSet?: list}
 # --item shape: {byteItem?: record, table?: record, value?: string}
-export def "content-deidentify create" [
+export def "dlp-projects-locations-content-deidentify" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -625,7 +625,7 @@ export def "content-deidentify create" [
 # operationId: dlp.projects.locations.content.inspect
 # --inspectConfig shape: {contentOptions?: list<string>, customInfoTypes?: list, excludeInfoTypes?: bool, includeQuote?: bool, infoTypes?: list, limits?: record, minLikelihood?: "LIKELIHOOD_UNSPECIFIED"|"VERY_UNLIKELY"|"UNLIKELY"|"POSSIBLE"|"LIKELY"|"VERY_LIKELY", ruleSet?: list}
 # --item shape: {byteItem?: record, table?: record, value?: string}
-export def "content-inspect get" [
+export def "dlp-projects-locations-content-inspect" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -683,7 +683,7 @@ export def "content-inspect get" [
 # --inspectConfig shape: {contentOptions?: list<string>, customInfoTypes?: list, excludeInfoTypes?: bool, includeQuote?: bool, infoTypes?: list, limits?: record, minLikelihood?: "LIKELIHOOD_UNSPECIFIED"|"VERY_UNLIKELY"|"UNLIKELY"|"POSSIBLE"|"LIKELY"|"VERY_LIKELY", ruleSet?: list}
 # --item shape: {byteItem?: record, table?: record, value?: string}
 # --reidentifyConfig shape: {imageTransformations?: record, infoTypeTransformations?: record, recordTransformations?: record, transformationErrorHandling?: record}
-export def "content-reidentify create" [
+export def "dlp-projects-locations-content-reidentify" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -740,7 +740,7 @@ export def "content-reidentify create" [
 #
 # GET /v2/{parent}/deidentifyTemplates
 # operationId: dlp.projects.locations.deidentifyTemplates.list
-export def "deidentify-templates list" [
+export def "dlp-projects-locations-deidentify-templates-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -793,7 +793,7 @@ export def "deidentify-templates list" [
 # POST /v2/{parent}/deidentifyTemplates
 # operationId: dlp.projects.locations.deidentifyTemplates.create
 # --deidentifyTemplate shape: {deidentifyConfig?: record, description?: string, displayName?: string}
-export def "deidentify-templates create" [
+export def "dlp-projects-locations-deidentify-templates-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -847,7 +847,7 @@ export def "deidentify-templates create" [
 #
 # GET /v2/{parent}/dlpJobs
 # operationId: dlp.projects.locations.dlpJobs.list
-export def "dlp-jobs list" [
+export def "dlp-projects-locations-dlp-jobs-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -903,7 +903,7 @@ export def "dlp-jobs list" [
 # operationId: dlp.projects.locations.dlpJobs.create
 # --inspectJob shape: {actions?: list, inspectConfig?: record, inspectTemplateName?: string, storageConfig?: record}
 # --riskJob shape: {actions?: list, privacyMetric?: record, sourceTable?: record}
-export def "dlp-jobs create" [
+export def "dlp-projects-locations-dlp-jobs-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -961,7 +961,7 @@ export def "dlp-jobs create" [
 # --byteItem shape: {data?: string, type?: "BYTES_TYPE_UNSPECIFIED"|"IMAGE"|"IMAGE_JPEG"|"IMAGE_BMP"|"IMAGE_PNG"|"IMAGE_SVG"|"TEXT_UTF8"|"WORD_DOCUMENT"|"PDF"|"POWERPOINT_DOCUMENT"|"EXCEL_DOCUMENT"|"AVRO"|"CSV"|"TSV"}
 # --imageRedactionConfigs item shape: {infoType?: record, redactAllText?: bool, redactionColor?: record}
 # --inspectConfig shape: {contentOptions?: list<string>, customInfoTypes?: list, excludeInfoTypes?: bool, includeQuote?: bool, infoTypes?: list, limits?: record, minLikelihood?: "LIKELIHOOD_UNSPECIFIED"|"VERY_UNLIKELY"|"UNLIKELY"|"POSSIBLE"|"LIKELY"|"VERY_LIKELY", ruleSet?: list}
-export def "image-redact create" [
+export def "dlp-projects-locations-image-redact" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1017,7 +1017,7 @@ export def "image-redact create" [
 #
 # GET /v2/{parent}/infoTypes
 # operationId: dlp.locations.infoTypes.list
-export def "info-types list-1" [
+export def "dlp-locations-info-types-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1068,7 +1068,7 @@ export def "info-types list-1" [
 #
 # GET /v2/{parent}/inspectTemplates
 # operationId: dlp.projects.locations.inspectTemplates.list
-export def "inspect-templates list" [
+export def "dlp-projects-locations-inspect-templates-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1121,7 +1121,7 @@ export def "inspect-templates list" [
 # POST /v2/{parent}/inspectTemplates
 # operationId: dlp.projects.locations.inspectTemplates.create
 # --inspectTemplate shape: {description?: string, displayName?: string, inspectConfig?: record}
-export def "inspect-templates create" [
+export def "dlp-projects-locations-inspect-templates-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1175,7 +1175,7 @@ export def "inspect-templates create" [
 #
 # GET /v2/{parent}/jobTriggers
 # operationId: dlp.projects.locations.jobTriggers.list
-export def "job-triggers list" [
+export def "dlp-projects-locations-job-triggers-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1230,7 +1230,7 @@ export def "job-triggers list" [
 # POST /v2/{parent}/jobTriggers
 # operationId: dlp.projects.locations.jobTriggers.create
 # --jobTrigger shape: {description?: string, displayName?: string, inspectJob?: record, name?: string, status?: "STATUS_UNSPECIFIED"|"HEALTHY"|"PAUSED"|"CANCELLED", triggers?: list}
-export def "job-triggers create" [
+export def "dlp-projects-locations-job-triggers-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1284,7 +1284,7 @@ export def "job-triggers create" [
 #
 # GET /v2/{parent}/storedInfoTypes
 # operationId: dlp.projects.storedInfoTypes.list
-export def "stored-info-types list" [
+export def "dlp-projects-stored-info-types-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1337,7 +1337,7 @@ export def "stored-info-types list" [
 # POST /v2/{parent}/storedInfoTypes
 # operationId: dlp.projects.storedInfoTypes.create
 # --config shape: {description?: string, dictionary?: record, displayName?: string, largeCustomDictionary?: record, regex?: record}
-export def "stored-info-types create" [
+export def "dlp-projects-stored-info-types-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

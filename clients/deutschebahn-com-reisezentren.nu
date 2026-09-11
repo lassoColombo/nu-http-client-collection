@@ -97,7 +97,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "reisezentren list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-reisezentren" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -120,7 +120,7 @@ export def commands []: nothing -> table {
 # Get all station infos
 #
 # GET /reisezentren
-export def "reisezentren list" [
+export def "get-reisezentren" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -155,7 +155,7 @@ export def "reisezentren list" [
 # Get information about a station near a location
 #
 # GET /reisezentren/loc/{lat}/{lon}
-export def "reisezentren-loc list" [
+export def "get-reisezentren-loc-lat-lon" [
   lat: float
   lon: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -192,7 +192,7 @@ export def "reisezentren-loc list" [
 # Get stations in a given radius
 #
 # GET /reisezentren/loc/{lat}/{lon}/{dist}
-export def "reisezentren-loc get" [
+export def "get-reisezentren-loc-lat-lon-dist" [
   lat: float
   lon: float
   dist: float
@@ -231,7 +231,7 @@ export def "reisezentren-loc get" [
 # Get information about a specific station
 #
 # GET /reisezentren/{id}
-export def "reisezentren get" [
+export def "get-reisezentren-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

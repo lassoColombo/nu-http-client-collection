@@ -125,7 +125,7 @@ def status-code-class-completer [] { ["0" "100" "200" "300" "400" "500"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "app list-applications-get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-applications-api-v1-app-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -149,7 +149,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/v1/app/
 # operationId: list_applications_api_v1_app__get
-export def "app list-applications-get" [
+export def "list-applications-api-v1-app-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -190,7 +190,7 @@ export def "app list-applications-get" [
 #
 # POST /api/v1/app/
 # operationId: create_application_api_v1_app__post
-export def "app create-application" [
+export def "create-application-api-v1-app-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -236,7 +236,7 @@ export def "app create-application" [
 #
 # DELETE /api/v1/app/{app_id}/
 # operationId: delete_application_api_v1_app__app_id___delete
-export def "app delete-application" [
+export def "delete-application-api-v1-app-app-id-delete" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -275,7 +275,7 @@ export def "app delete-application" [
 #
 # GET /api/v1/app/{app_id}/
 # operationId: get_application_api_v1_app__app_id___get
-export def "app get-application" [
+export def "get-application-api-v1-app-app-id-get" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -314,7 +314,7 @@ export def "app get-application" [
 #
 # PUT /api/v1/app/{app_id}/
 # operationId: update_application_api_v1_app__app_id___put
-export def "app update-application" [
+export def "update-application-api-v1-app-app-id-put" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -360,7 +360,7 @@ export def "app update-application" [
 #
 # GET /api/v1/app/{app_id}/attempt/endpoint/{endpoint_id}/
 # operationId: list_attempts_by_endpoint_api_v1_app__app_id__attempt_endpoint__endpoint_id___get
-export def "app-attempt-endpoint list-by-get" [
+export def "list-attempts-by-endpoint-api-v1-app-app-id-attempt-endpoint-endpoint-id-get" [
   app_id: string
   endpoint_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -410,7 +410,7 @@ export def "app-attempt-endpoint list-by-get" [
 #
 # GET /api/v1/app/{app_id}/attempt/msg/{msg_id}/
 # operationId: list_attempts_by_msg_api_v1_app__app_id__attempt_msg__msg_id___get
-export def "app-attempt-msg list-by-get" [
+export def "list-attempts-by-msg-api-v1-app-app-id-attempt-msg-msg-id-get" [
   app_id: string
   msg_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -461,7 +461,7 @@ export def "app-attempt-msg list-by-get" [
 #
 # GET /api/v1/app/{app_id}/endpoint/
 # operationId: list_endpoints_api_v1_app__app_id__endpoint__get
-export def "app-endpoint list-get" [
+export def "list-endpoints-api-v1-app-app-id-endpoint-get" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -504,7 +504,7 @@ export def "app-endpoint list-get" [
 #
 # POST /api/v1/app/{app_id}/endpoint/
 # operationId: create_endpoint_api_v1_app__app_id__endpoint__post
-export def "app-endpoint create" [
+export def "create-endpoint-api-v1-app-app-id-endpoint-post" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -556,7 +556,7 @@ export def "app-endpoint create" [
 #
 # DELETE /api/v1/app/{app_id}/endpoint/{endpoint_id}/
 # operationId: delete_endpoint_api_v1_app__app_id__endpoint__endpoint_id___delete
-export def "app-endpoint delete" [
+export def "delete-endpoint-api-v1-app-app-id-endpoint-endpoint-id-delete" [
   app_id: string
   endpoint_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -597,7 +597,7 @@ export def "app-endpoint delete" [
 #
 # GET /api/v1/app/{app_id}/endpoint/{endpoint_id}/
 # operationId: get_endpoint_api_v1_app__app_id__endpoint__endpoint_id___get
-export def "app-endpoint get" [
+export def "get-endpoint-api-v1-app-app-id-endpoint-endpoint-id-get" [
   app_id: string
   endpoint_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -638,7 +638,7 @@ export def "app-endpoint get" [
 #
 # PUT /api/v1/app/{app_id}/endpoint/{endpoint_id}/
 # operationId: update_endpoint_api_v1_app__app_id__endpoint__endpoint_id___put
-export def "app-endpoint update" [
+export def "update-endpoint-api-v1-app-app-id-endpoint-endpoint-id-put" [
   app_id: string
   endpoint_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -691,7 +691,7 @@ export def "app-endpoint update" [
 #
 # GET /api/v1/app/{app_id}/endpoint/{endpoint_id}/headers/
 # operationId: get_endpoint_headers_api_v1_app__app_id__endpoint__endpoint_id__headers__get
-export def "app-endpoint-headers get" [
+export def "get-endpoint-headers-api-v1-app-app-id-endpoint-endpoint-id-headers-get" [
   app_id: string
   endpoint_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -732,7 +732,7 @@ export def "app-endpoint-headers get" [
 #
 # PATCH /api/v1/app/{app_id}/endpoint/{endpoint_id}/headers/
 # operationId: patch_endpoint_headers_api_v1_app__app_id__endpoint__endpoint_id__headers__patch
-export def "app-endpoint-headers update-by-app-id-endpoint-id" [
+export def "patch-endpoint-headers-api-v1-app-app-id-endpoint-endpoint-id-headers-patch" [
   app_id: string
   endpoint_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -777,7 +777,7 @@ export def "app-endpoint-headers update-by-app-id-endpoint-id" [
 #
 # PUT /api/v1/app/{app_id}/endpoint/{endpoint_id}/headers/
 # operationId: update_endpoint_headers_api_v1_app__app_id__endpoint__endpoint_id__headers__put
-export def "app-endpoint-headers update-by-app-id-endpoint-id-1" [
+export def "update-endpoint-headers-api-v1-app-app-id-endpoint-endpoint-id-headers-put" [
   app_id: string
   endpoint_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -822,7 +822,7 @@ export def "app-endpoint-headers update-by-app-id-endpoint-id-1" [
 #
 # GET /api/v1/app/{app_id}/endpoint/{endpoint_id}/msg/
 # operationId: list_attempted_messages_api_v1_app__app_id__endpoint__endpoint_id__msg__get
-export def "app-endpoint-msg list-attempted-messages-get" [
+export def "list-attempted-messages-api-v1-app-app-id-endpoint-endpoint-id-msg-get" [
   app_id: string
   endpoint_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -870,7 +870,7 @@ export def "app-endpoint-msg list-attempted-messages-get" [
 #
 # POST /api/v1/app/{app_id}/endpoint/{endpoint_id}/recover/
 # operationId: recover_failed_webhooks_api_v1_app__app_id__endpoint__endpoint_id__recover__post
-export def "app-endpoint-recover create-failed-webhooks" [
+export def "recover-failed-webhooks-api-v1-app-app-id-endpoint-endpoint-id-recover-post" [
   app_id: string
   endpoint_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -916,7 +916,7 @@ export def "app-endpoint-recover create-failed-webhooks" [
 #
 # POST /api/v1/app/{app_id}/endpoint/{endpoint_id}/replay-missing/
 # operationId: replay_missing_webhooks_api_v1_app__app_id__endpoint__endpoint_id__replay_missing__post
-export def "app-endpoint-replay-missing create-webhooks" [
+export def "replay-missing-webhooks-api-v1-app-app-id-endpoint-endpoint-id-replay-missing-post" [
   app_id: string
   endpoint_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -962,7 +962,7 @@ export def "app-endpoint-replay-missing create-webhooks" [
 #
 # GET /api/v1/app/{app_id}/endpoint/{endpoint_id}/secret/
 # operationId: get_endpoint_secret_api_v1_app__app_id__endpoint__endpoint_id__secret__get
-export def "app-endpoint-secret get" [
+export def "get-endpoint-secret-api-v1-app-app-id-endpoint-endpoint-id-secret-get" [
   app_id: string
   endpoint_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1003,7 +1003,7 @@ export def "app-endpoint-secret get" [
 #
 # POST /api/v1/app/{app_id}/endpoint/{endpoint_id}/secret/rotate/
 # operationId: rotate_endpoint_secret_api_v1_app__app_id__endpoint__endpoint_id__secret_rotate__post
-export def "app-endpoint-secret-rotate create" [
+export def "rotate-endpoint-secret-api-v1-app-app-id-endpoint-endpoint-id-secret-rotate-post" [
   app_id: string
   endpoint_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1048,7 +1048,7 @@ export def "app-endpoint-secret-rotate create" [
 #
 # GET /api/v1/app/{app_id}/endpoint/{endpoint_id}/stats/
 # operationId: get_endpoint_stats_api_v1_app__app_id__endpoint__endpoint_id__stats__get
-export def "app-endpoint-stats get" [
+export def "get-endpoint-stats-api-v1-app-app-id-endpoint-endpoint-id-stats-get" [
   app_id: string
   endpoint_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1092,7 +1092,7 @@ export def "app-endpoint-stats get" [
 #
 # GET /api/v1/app/{app_id}/endpoint/{endpoint_id}/transformation/
 # operationId: get_endpoint_transformation_api_v1_app__app_id__endpoint__endpoint_id__transformation__get
-export def "app-endpoint-transformation get" [
+export def "get-endpoint-transformation-api-v1-app-app-id-endpoint-endpoint-id-transformation-get" [
   app_id: string
   endpoint_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1133,7 +1133,7 @@ export def "app-endpoint-transformation get" [
 #
 # PATCH /api/v1/app/{app_id}/endpoint/{endpoint_id}/transformation/
 # operationId: set_endpoint_transformation_api_v1_app__app_id__endpoint__endpoint_id__transformation__patch
-export def "app-endpoint-transformation update" [
+export def "set-endpoint-transformation-api-v1-app-app-id-endpoint-endpoint-id-transformation-patch" [
   app_id: string
   endpoint_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1179,7 +1179,7 @@ export def "app-endpoint-transformation update" [
 #
 # GET /api/v1/app/{app_id}/integration/
 # operationId: list_integrations_api_v1_app__app_id__integration__get
-export def "app-integration list-get" [
+export def "list-integrations-api-v1-app-app-id-integration-get" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1221,7 +1221,7 @@ export def "app-integration list-get" [
 #
 # POST /api/v1/app/{app_id}/integration/
 # operationId: create_integration_api_v1_app__app_id__integration__post
-export def "app-integration create" [
+export def "create-integration-api-v1-app-app-id-integration-post" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1264,7 +1264,7 @@ export def "app-integration create" [
 #
 # DELETE /api/v1/app/{app_id}/integration/{integ_id}/
 # operationId: delete_integration_api_v1_app__app_id__integration__integ_id___delete
-export def "app-integration delete" [
+export def "delete-integration-api-v1-app-app-id-integration-integ-id-delete" [
   app_id: string
   integ_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1305,7 +1305,7 @@ export def "app-integration delete" [
 #
 # GET /api/v1/app/{app_id}/integration/{integ_id}/
 # operationId: get_integration_api_v1_app__app_id__integration__integ_id___get
-export def "app-integration get" [
+export def "get-integration-api-v1-app-app-id-integration-integ-id-get" [
   app_id: string
   integ_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1346,7 +1346,7 @@ export def "app-integration get" [
 #
 # PUT /api/v1/app/{app_id}/integration/{integ_id}/
 # operationId: update_integration_api_v1_app__app_id__integration__integ_id___put
-export def "app-integration update" [
+export def "update-integration-api-v1-app-app-id-integration-integ-id-put" [
   app_id: string
   integ_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1391,7 +1391,7 @@ export def "app-integration update" [
 #
 # GET /api/v1/app/{app_id}/integration/{integ_id}/key/
 # operationId: get_integration_key_api_v1_app__app_id__integration__integ_id__key__get
-export def "app-integration-key get" [
+export def "get-integration-key-api-v1-app-app-id-integration-integ-id-key-get" [
   app_id: string
   integ_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1432,7 +1432,7 @@ export def "app-integration-key get" [
 #
 # POST /api/v1/app/{app_id}/integration/{integ_id}/key/rotate/
 # operationId: rotate_integration_key_api_v1_app__app_id__integration__integ_id__key_rotate__post
-export def "app-integration-key-rotate create" [
+export def "rotate-integration-key-api-v1-app-app-id-integration-integ-id-key-rotate-post" [
   app_id: string
   integ_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1473,7 +1473,7 @@ export def "app-integration-key-rotate create" [
 #
 # GET /api/v1/app/{app_id}/msg/
 # operationId: list_messages_api_v1_app__app_id__msg__get
-export def "app-msg list-messages-get" [
+export def "list-messages-api-v1-app-app-id-msg-get" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1520,7 +1520,7 @@ export def "app-msg list-messages-get" [
 # POST /api/v1/app/{app_id}/msg/
 # operationId: create_message_api_v1_app__app_id__msg__post
 # --application shape: {metadata?: record, name: string, rateLimit?: int, uid?: string}
-export def "app-msg create-message" [
+export def "create-message-api-v1-app-app-id-msg-post" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1570,7 +1570,7 @@ export def "app-msg create-message" [
 #
 # GET /api/v1/app/{app_id}/msg/{msg_id}/
 # operationId: get_message_api_v1_app__app_id__msg__msg_id___get
-export def "app-msg get-message" [
+export def "get-message-api-v1-app-app-id-msg-msg-id-get" [
   app_id: string
   msg_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1613,7 +1613,7 @@ export def "app-msg get-message" [
 # DEPRECATED
 # operationId: list_attempts_api_v1_app__app_id__msg__msg_id__attempt__get
 @deprecated
-export def "app-msg-attempt list-get" [
+export def "list-attempts-api-v1-app-app-id-msg-msg-id-attempt-get" [
   app_id: string
   msg_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1663,7 +1663,7 @@ export def "app-msg-attempt list-get" [
 #
 # GET /api/v1/app/{app_id}/msg/{msg_id}/attempt/{attempt_id}/
 # operationId: get_attempt_api_v1_app__app_id__msg__msg_id__attempt__attempt_id___get
-export def "app-msg-attempt get" [
+export def "get-attempt-api-v1-app-app-id-msg-msg-id-attempt-attempt-id-get" [
   app_id: string
   msg_id: string
   attempt_id: string
@@ -1706,7 +1706,7 @@ export def "app-msg-attempt get" [
 #
 # DELETE /api/v1/app/{app_id}/msg/{msg_id}/attempt/{attempt_id}/content/
 # operationId: expunge_attempt_content_api_v1_app__app_id__msg__msg_id__attempt__attempt_id__content__delete
-export def "app-msg-attempt-content delete-expunge" [
+export def "expunge-attempt-content-api-v1-app-app-id-msg-msg-id-attempt-attempt-id-content-delete" [
   app_id: string
   msg_id: string
   attempt_id: string
@@ -1749,7 +1749,7 @@ export def "app-msg-attempt-content delete-expunge" [
 #
 # DELETE /api/v1/app/{app_id}/msg/{msg_id}/content/
 # operationId: expunge_message_payload_api_v1_app__app_id__msg__msg_id__content__delete
-export def "app-msg-content delete-expunge-message-payload" [
+export def "expunge-message-payload-api-v1-app-app-id-msg-msg-id-content-delete" [
   app_id: string
   msg_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1790,7 +1790,7 @@ export def "app-msg-content delete-expunge-message-payload" [
 #
 # GET /api/v1/app/{app_id}/msg/{msg_id}/endpoint/
 # operationId: list_attempted_destinations_api_v1_app__app_id__msg__msg_id__endpoint__get
-export def "app-msg-endpoint list-attempted-destinations-get" [
+export def "list-attempted-destinations-api-v1-app-app-id-msg-msg-id-endpoint-get" [
   app_id: string
   msg_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1836,7 +1836,7 @@ export def "app-msg-endpoint list-attempted-destinations-get" [
 # DEPRECATED
 # operationId: list_attempts_for_endpoint_api_v1_app__app_id__msg__msg_id__endpoint__endpoint_id__attempt__get
 @deprecated
-export def "app-msg-endpoint-attempt list-for-get" [
+export def "list-attempts-for-endpoint-api-v1-app-app-id-msg-msg-id-endpoint-endpoint-id-attempt-get" [
   app_id: string
   msg_id: string
   endpoint_id: string
@@ -1887,7 +1887,7 @@ export def "app-msg-endpoint-attempt list-for-get" [
 #
 # POST /api/v1/app/{app_id}/msg/{msg_id}/endpoint/{endpoint_id}/resend/
 # operationId: resend_webhook_api_v1_app__app_id__msg__msg_id__endpoint__endpoint_id__resend__post
-export def "app-msg-endpoint-resend create-webhook" [
+export def "resend-webhook-api-v1-app-app-id-msg-msg-id-endpoint-endpoint-id-resend-post" [
   app_id: string
   msg_id: string
   endpoint_id: string
@@ -1930,7 +1930,7 @@ export def "app-msg-endpoint-resend create-webhook" [
 #
 # POST /api/v1/auth/app-portal-access/{app_id}/
 # operationId: get_app_portal_access_api_v1_auth_app_portal_access__app_id___post
-export def "auth-app-portal-access get-create" [
+export def "get-app-portal-access-api-v1-auth-app-portal-access-app-id-post" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1973,7 +1973,7 @@ export def "auth-app-portal-access get-create" [
 #
 # POST /api/v1/auth/app/{app_id}/expire-all/
 # operationId: expire_all_api_v1_auth_app__app_id__expire_all__post
-export def "auth-app-expire-all create" [
+export def "expire-all-api-v1-auth-app-app-id-expire-all-post" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2018,7 +2018,7 @@ export def "auth-app-expire-all create" [
 # DEPRECATED
 # operationId: get_dashboard_access_api_v1_auth_dashboard_access__app_id___post
 @deprecated
-export def "auth-dashboard-access get-create" [
+export def "get-dashboard-access-api-v1-auth-dashboard-access-app-id-post" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2057,7 +2057,7 @@ export def "auth-dashboard-access get-create" [
 #
 # POST /api/v1/auth/logout/
 # operationId: logout_api_v1_auth_logout__post
-export def "auth-logout create" [
+export def "logout-api-v1-auth-logout-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2094,7 +2094,7 @@ export def "auth-logout create" [
 #
 # GET /api/v1/background-task/
 # operationId: list_background_tasks_api_v1_background_task__get
-export def "background-task list-get" [
+export def "list-background-tasks-api-v1-background-task-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2135,7 +2135,7 @@ export def "background-task list-get" [
 #
 # GET /api/v1/background-task/{task_id}/
 # operationId: get_background_task_api_v1_background_task__task_id___get
-export def "background-task get" [
+export def "get-background-task-api-v1-background-task-task-id-get" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2174,7 +2174,7 @@ export def "background-task get" [
 #
 # GET /api/v1/event-type/
 # operationId: list_event_types_api_v1_event_type__get
-export def "event-type list-get" [
+export def "list-event-types-api-v1-event-type-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2216,7 +2216,7 @@ export def "event-type list-get" [
 #
 # POST /api/v1/event-type/
 # operationId: create_event_type_api_v1_event_type__post
-export def "event-type create" [
+export def "create-event-type-api-v1-event-type-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2261,7 +2261,7 @@ export def "event-type create" [
 #
 # DELETE /api/v1/event-type/{event_type_name}/
 # operationId: delete_event_type_api_v1_event_type__event_type_name___delete
-export def "event-type delete" [
+export def "delete-event-type-api-v1-event-type-event-type-name-delete" [
   event_type_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2302,7 +2302,7 @@ export def "event-type delete" [
 #
 # GET /api/v1/event-type/{event_type_name}/
 # operationId: get_event_type_api_v1_event_type__event_type_name___get
-export def "event-type get" [
+export def "get-event-type-api-v1-event-type-event-type-name-get" [
   event_type_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2341,7 +2341,7 @@ export def "event-type get" [
 #
 # PUT /api/v1/event-type/{event_type_name}/
 # operationId: update_event_type_api_v1_event_type__event_type_name___put
-export def "event-type update" [
+export def "update-event-type-api-v1-event-type-event-type-name-put" [
   event_type_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2387,7 +2387,7 @@ export def "event-type update" [
 #
 # GET /api/v1/health/
 # operationId: health_api_v1_health__get
-export def "health get" [
+export def "health-api-v1-health-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

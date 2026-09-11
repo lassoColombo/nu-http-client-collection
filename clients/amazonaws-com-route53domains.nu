@@ -134,7 +134,7 @@ def x-amz-target-completer-33 [] { ["Route53Domains_v20140515.ViewBilling"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-accept-domain-transfer-from-another-aws-account" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accept-domain-transfer-from-another-aws-account" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -158,7 +158,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AcceptDomainTransferFromAnotherAwsAccount
-export def "api create-accept-domain-transfer-from-another-aws-account" [
+export def "accept-domain-transfer-from-another-aws-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -207,7 +207,7 @@ export def "api create-accept-domain-transfer-from-another-aws-account" [
 #
 # POST /
 # operationId: AssociateDelegationSignerToDomain
-export def "api create-associate-delegation-signer-to-domain" [
+export def "associate-delegation-signer-to-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -256,7 +256,7 @@ export def "api create-associate-delegation-signer-to-domain" [
 #
 # POST /
 # operationId: CancelDomainTransferToAnotherAwsAccount
-export def "api cancel-domain-transfer-to-another-aws-account" [
+export def "cancel-domain-transfer-to-another-aws-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -304,7 +304,7 @@ export def "api cancel-domain-transfer-to-another-aws-account" [
 #
 # POST /
 # operationId: CheckDomainAvailability
-export def "api check-domain-availability" [
+export def "check-domain-availability" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -353,7 +353,7 @@ export def "api check-domain-availability" [
 #
 # POST /
 # operationId: CheckDomainTransferability
-export def "api check-domain-transferability" [
+export def "check-domain-transferability" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -402,7 +402,7 @@ export def "api check-domain-transferability" [
 #
 # POST /
 # operationId: DeleteDomain
-export def "api delete-domain" [
+export def "delete-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -450,7 +450,7 @@ export def "api delete-domain" [
 #
 # POST /
 # operationId: DeleteTagsForDomain
-export def "api delete-tags-for-domain" [
+export def "delete-tags-for-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -499,7 +499,7 @@ export def "api delete-tags-for-domain" [
 #
 # POST /
 # operationId: DisableDomainAutoRenew
-export def "api disable-domain-auto-renew" [
+export def "disable-domain-auto-renew" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -547,7 +547,7 @@ export def "api disable-domain-auto-renew" [
 #
 # POST /
 # operationId: DisableDomainTransferLock
-export def "api disable-domain-transfer-lock" [
+export def "disable-domain-transfer-lock" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -595,7 +595,7 @@ export def "api disable-domain-transfer-lock" [
 #
 # POST /
 # operationId: DisassociateDelegationSignerFromDomain
-export def "api create-disassociate-delegation-signer-from-domain" [
+export def "disassociate-delegation-signer-from-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -644,7 +644,7 @@ export def "api create-disassociate-delegation-signer-from-domain" [
 #
 # POST /
 # operationId: EnableDomainAutoRenew
-export def "api enable-domain-auto-renew" [
+export def "enable-domain-auto-renew" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -692,7 +692,7 @@ export def "api enable-domain-auto-renew" [
 #
 # POST /
 # operationId: EnableDomainTransferLock
-export def "api enable-domain-transfer-lock" [
+export def "enable-domain-transfer-lock" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -740,7 +740,7 @@ export def "api enable-domain-transfer-lock" [
 #
 # POST /
 # operationId: GetContactReachabilityStatus
-export def "api get-contact-reachability-status" [
+export def "get-contact-reachability-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -788,7 +788,7 @@ export def "api get-contact-reachability-status" [
 #
 # POST /
 # operationId: GetDomainDetail
-export def "api get-domain-detail" [
+export def "get-domain-detail" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -836,7 +836,7 @@ export def "api get-domain-detail" [
 #
 # POST /
 # operationId: GetDomainSuggestions
-export def "api get-domain-suggestions" [
+export def "get-domain-suggestions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -886,7 +886,7 @@ export def "api get-domain-suggestions" [
 #
 # POST /
 # operationId: GetOperationDetail
-export def "api get-operation-detail" [
+export def "get-operation-detail" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -934,7 +934,7 @@ export def "api get-operation-detail" [
 #
 # POST /
 # operationId: ListDomains
-export def "api list-domains" [
+export def "list-domains" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -988,7 +988,7 @@ export def "api list-domains" [
 #
 # POST /
 # operationId: ListOperations
-export def "api list-operations" [
+export def "list-operations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1045,7 +1045,7 @@ export def "api list-operations" [
 #
 # POST /
 # operationId: ListPrices
-export def "api list-prices" [
+export def "list-prices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1098,7 +1098,7 @@ export def "api list-prices" [
 #
 # POST /
 # operationId: ListTagsForDomain
-export def "api list-tags-for-domain" [
+export def "list-tags-for-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1146,7 +1146,7 @@ export def "api list-tags-for-domain" [
 #
 # POST /
 # operationId: PushDomain
-export def "api push-domain" [
+export def "push-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1195,7 +1195,7 @@ export def "api push-domain" [
 #
 # POST /
 # operationId: RegisterDomain
-export def "api create-domain" [
+export def "register-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1252,7 +1252,7 @@ export def "api create-domain" [
 #
 # POST /
 # operationId: RejectDomainTransferFromAnotherAwsAccount
-export def "api reject-domain-transfer-from-another-aws-account" [
+export def "reject-domain-transfer-from-another-aws-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1300,7 +1300,7 @@ export def "api reject-domain-transfer-from-another-aws-account" [
 #
 # POST /
 # operationId: RenewDomain
-export def "api create-renew-domain" [
+export def "renew-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1350,7 +1350,7 @@ export def "api create-renew-domain" [
 #
 # POST /
 # operationId: ResendContactReachabilityEmail
-export def "api resend-contact-reachability-email" [
+export def "resend-contact-reachability-email" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1398,7 +1398,7 @@ export def "api resend-contact-reachability-email" [
 #
 # POST /
 # operationId: ResendOperationAuthorization
-export def "api resend-operation-authorization" [
+export def "resend-operation-authorization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1446,7 +1446,7 @@ export def "api resend-operation-authorization" [
 #
 # POST /
 # operationId: RetrieveDomainAuthCode
-export def "api get-domain-auth-code" [
+export def "retrieve-domain-auth-code" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1494,7 +1494,7 @@ export def "api get-domain-auth-code" [
 #
 # POST /
 # operationId: TransferDomain
-export def "api create-transfer-domain" [
+export def "transfer-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1553,7 +1553,7 @@ export def "api create-transfer-domain" [
 #
 # POST /
 # operationId: TransferDomainToAnotherAwsAccount
-export def "api create-transfer-domain-to-another-aws-account" [
+export def "transfer-domain-to-another-aws-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1602,7 +1602,7 @@ export def "api create-transfer-domain-to-another-aws-account" [
 #
 # POST /
 # operationId: UpdateDomainContact
-export def "api update-domain-contact" [
+export def "update-domain-contact" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1654,7 +1654,7 @@ export def "api update-domain-contact" [
 #
 # POST /
 # operationId: UpdateDomainContactPrivacy
-export def "api update-domain-contact-privacy" [
+export def "update-domain-contact-privacy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1705,7 +1705,7 @@ export def "api update-domain-contact-privacy" [
 #
 # POST /
 # operationId: UpdateDomainNameservers
-export def "api update-domain-nameservers" [
+export def "update-domain-nameservers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1755,7 +1755,7 @@ export def "api update-domain-nameservers" [
 #
 # POST /
 # operationId: UpdateTagsForDomain
-export def "api update-tags-for-domain" [
+export def "update-tags-for-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1804,7 +1804,7 @@ export def "api update-tags-for-domain" [
 #
 # POST /
 # operationId: ViewBilling
-export def "api create-view-billing" [
+export def "view-billing" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -119,7 +119,7 @@ def action-completer-5 [] { ["UpdateJob"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api get-cancel-job" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-cancel-job" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -143,7 +143,7 @@ export def commands []: nothing -> table {
 #
 # GET /
 # operationId: GET_CancelJob
-export def "api get-cancel-job" [
+export def "get-cancel-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -190,7 +190,7 @@ export def "api get-cancel-job" [
 #
 # POST /
 # operationId: POST_CancelJob
-export def "api create-cancel-job" [
+export def "post-cancel-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -239,7 +239,7 @@ export def "api create-cancel-job" [
 #
 # GET /
 # operationId: GET_CreateJob
-export def "api get-create-job" [
+export def "get-create-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -289,7 +289,7 @@ export def "api get-create-job" [
 #
 # POST /
 # operationId: POST_CreateJob
-export def "api create-job" [
+export def "post-create-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -338,7 +338,7 @@ export def "api create-job" [
 #
 # GET /
 # operationId: GET_GetShippingLabel
-export def "api get-shipping-label" [
+export def "get-get-shipping-label" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -395,7 +395,7 @@ export def "api get-shipping-label" [
 #
 # POST /
 # operationId: POST_GetShippingLabel
-export def "api create-get-shipping-label" [
+export def "post-get-shipping-label" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -444,7 +444,7 @@ export def "api create-get-shipping-label" [
 #
 # GET /
 # operationId: GET_GetStatus
-export def "api get-status" [
+export def "get-get-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -491,7 +491,7 @@ export def "api get-status" [
 #
 # POST /
 # operationId: POST_GetStatus
-export def "api create-get-status" [
+export def "post-get-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -540,7 +540,7 @@ export def "api create-get-status" [
 #
 # GET /
 # operationId: GET_ListJobs
-export def "api get-list-jobs" [
+export def "get-list-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -588,7 +588,7 @@ export def "api get-list-jobs" [
 #
 # POST /
 # operationId: POST_ListJobs
-export def "api create-list-jobs" [
+export def "post-list-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -639,7 +639,7 @@ export def "api create-list-jobs" [
 #
 # GET /
 # operationId: GET_UpdateJob
-export def "api get-update-job" [
+export def "get-update-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -689,7 +689,7 @@ export def "api get-update-job" [
 #
 # POST /
 # operationId: POST_UpdateJob
-export def "api create-update-job" [
+export def "post-update-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

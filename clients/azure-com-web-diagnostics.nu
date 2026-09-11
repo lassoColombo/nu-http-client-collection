@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-detectors list-diagnostics-responses" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "diagnostics-list-hosting-environment-detector-responses" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -128,7 +128,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/detectors
 # operationId: Diagnostics_ListHostingEnvironmentDetectorResponses
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-detectors list-diagnostics-responses" [
+export def "diagnostics-list-hosting-environment-detector-responses" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -170,7 +170,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/detectors/{detectorName}
 # operationId: Diagnostics_GetHostingEnvironmentDetectorResponse
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-detectors get-diagnostics-response" [
+export def "diagnostics-get-hosting-environment-detector-response" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -217,7 +217,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{siteName}/detectors
 # operationId: Diagnostics_ListSiteDetectorResponses
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-detectors list-diagnostics-responses" [
+export def "diagnostics-list-site-detector-responses" [
   subscription_id: string
   resource_group_name: string
   site_name: string
@@ -259,7 +259,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-detector
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{siteName}/detectors/{detectorName}
 # operationId: Diagnostics_GetSiteDetectorResponse
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-detectors get-diagnostics-response" [
+export def "diagnostics-get-site-detector-response" [
   subscription_id: string
   resource_group_name: string
   site_name: string
@@ -306,7 +306,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-detector
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{siteName}/diagnostics
 # operationId: Diagnostics_ListSiteDiagnosticCategories
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-diagnostics list-categories" [
+export def "diagnostics-list-site-diagnostic-categories" [
   subscription_id: string
   resource_group_name: string
   site_name: string
@@ -348,7 +348,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-diagnost
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{siteName}/diagnostics/{diagnosticCategory}
 # operationId: Diagnostics_GetSiteDiagnosticCategory
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-diagnostics get-category" [
+export def "diagnostics-get-site-diagnostic-category" [
   subscription_id: string
   resource_group_name: string
   site_name: string
@@ -392,7 +392,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-diagnost
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{siteName}/diagnostics/{diagnosticCategory}/analyses
 # operationId: Diagnostics_ListSiteAnalyses
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-diagnostics-analyses list" [
+export def "diagnostics-list-site-analyses" [
   subscription_id: string
   resource_group_name: string
   site_name: string
@@ -436,7 +436,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-diagnost
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{siteName}/diagnostics/{diagnosticCategory}/analyses/{analysisName}
 # operationId: Diagnostics_GetSiteAnalysis
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-diagnostics-analyses get-analysis" [
+export def "diagnostics-get-site-analysis" [
   subscription_id: string
   resource_group_name: string
   site_name: string
@@ -482,7 +482,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-diagnost
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{siteName}/diagnostics/{diagnosticCategory}/analyses/{analysisName}/execute
 # operationId: Diagnostics_ExecuteSiteAnalysis
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-diagnostics-analyses-execute create-analysis" [
+export def "diagnostics-execute-site-analysis" [
   subscription_id: string
   resource_group_name: string
   site_name: string
@@ -531,7 +531,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-diagnost
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{siteName}/diagnostics/{diagnosticCategory}/detectors
 # operationId: Diagnostics_ListSiteDetectors
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-diagnostics-detectors list" [
+export def "diagnostics-list-site-detectors" [
   subscription_id: string
   resource_group_name: string
   site_name: string
@@ -575,7 +575,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-diagnost
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{siteName}/diagnostics/{diagnosticCategory}/detectors/{detectorName}
 # operationId: Diagnostics_GetSiteDetector
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-diagnostics-detectors get" [
+export def "diagnostics-get-site-detector" [
   subscription_id: string
   resource_group_name: string
   site_name: string
@@ -621,7 +621,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-diagnost
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{siteName}/diagnostics/{diagnosticCategory}/detectors/{detectorName}/execute
 # operationId: Diagnostics_ExecuteSiteDetector
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-diagnostics-detectors-execute create" [
+export def "diagnostics-execute-site-detector" [
   subscription_id: string
   resource_group_name: string
   site_name: string
@@ -670,7 +670,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-diagnost
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{siteName}/slots/{slot}/detectors
 # operationId: Diagnostics_ListSiteDetectorResponsesSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-detectors list-diagnostics-responses" [
+export def "diagnostics-list-site-detector-responses-slot" [
   subscription_id: string
   resource_group_name: string
   site_name: string
@@ -714,7 +714,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-de
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{siteName}/slots/{slot}/detectors/{detectorName}
 # operationId: Diagnostics_GetSiteDetectorResponseSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-detectors get-diagnostics-response" [
+export def "diagnostics-get-site-detector-response-slot" [
   subscription_id: string
   resource_group_name: string
   site_name: string
@@ -763,7 +763,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-de
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{siteName}/slots/{slot}/diagnostics
 # operationId: Diagnostics_ListSiteDiagnosticCategoriesSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-diagnostics list-categories" [
+export def "diagnostics-list-site-diagnostic-categories-slot" [
   subscription_id: string
   resource_group_name: string
   site_name: string
@@ -807,7 +807,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-di
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{siteName}/slots/{slot}/diagnostics/{diagnosticCategory}
 # operationId: Diagnostics_GetSiteDiagnosticCategorySlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-diagnostics get-category" [
+export def "diagnostics-get-site-diagnostic-category-slot" [
   subscription_id: string
   resource_group_name: string
   site_name: string
@@ -853,7 +853,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-di
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{siteName}/slots/{slot}/diagnostics/{diagnosticCategory}/analyses
 # operationId: Diagnostics_ListSiteAnalysesSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-diagnostics-analyses list" [
+export def "diagnostics-list-site-analyses-slot" [
   subscription_id: string
   resource_group_name: string
   site_name: string
@@ -899,7 +899,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-di
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{siteName}/slots/{slot}/diagnostics/{diagnosticCategory}/analyses/{analysisName}
 # operationId: Diagnostics_GetSiteAnalysisSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-diagnostics-analyses get-analysis" [
+export def "diagnostics-get-site-analysis-slot" [
   subscription_id: string
   resource_group_name: string
   site_name: string
@@ -947,7 +947,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-di
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{siteName}/slots/{slot}/diagnostics/{diagnosticCategory}/analyses/{analysisName}/execute
 # operationId: Diagnostics_ExecuteSiteAnalysisSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-diagnostics-analyses-execute create-analysis" [
+export def "diagnostics-execute-site-analysis-slot" [
   subscription_id: string
   resource_group_name: string
   site_name: string
@@ -998,7 +998,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-di
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{siteName}/slots/{slot}/diagnostics/{diagnosticCategory}/detectors
 # operationId: Diagnostics_ListSiteDetectorsSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-diagnostics-detectors list" [
+export def "diagnostics-list-site-detectors-slot" [
   subscription_id: string
   resource_group_name: string
   site_name: string
@@ -1044,7 +1044,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-di
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{siteName}/slots/{slot}/diagnostics/{diagnosticCategory}/detectors/{detectorName}
 # operationId: Diagnostics_GetSiteDetectorSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-diagnostics-detectors get" [
+export def "diagnostics-get-site-detector-slot" [
   subscription_id: string
   resource_group_name: string
   site_name: string
@@ -1092,7 +1092,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-di
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{siteName}/slots/{slot}/diagnostics/{diagnosticCategory}/detectors/{detectorName}/execute
 # operationId: Diagnostics_ExecuteSiteDetectorSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-diagnostics-detectors-execute create" [
+export def "diagnostics-execute-site-detector-slot" [
   subscription_id: string
   resource_group_name: string
   site_name: string

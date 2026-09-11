@@ -114,7 +114,7 @@ def provider-completer [] { ["email"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account-get-balance get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-account-balance" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -138,7 +138,7 @@ export def commands []: nothing -> table {
 #
 # GET /account/get-balance
 # operationId: getAccountBalance
-export def "account-get-balance get" [
+export def "get-account-balance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -176,7 +176,7 @@ export def "account-get-balance get" [
 #
 # POST /account/register-sender
 # operationId: registerSender
-export def "account-register-sender create" [
+export def "register-sender" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -220,7 +220,7 @@ export def "account-register-sender create" [
 #
 # POST /account/settings
 # operationId: changeAccountSettings
-export def "account-settings create-change" [
+export def "change-account-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -265,7 +265,7 @@ export def "account-settings create-change" [
 # POST /account/top-up
 # Docs: https://help.nexmo.com/hc/en-us/articles/205603248-How-do-I-set-up-automatic-payments-using-PayPal-or-credit-card- — Read more about automatic payments on the Knowledgebase
 # operationId: topUpAccountBalance
-export def "account-top-up top-balance" [
+export def "top-up-account-balance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -308,7 +308,7 @@ export def "account-top-up top-balance" [
 #
 # GET /accounts/{api_key}/secrets
 # operationId: retrieveAPISecrets
-export def "accounts-secrets list" [
+export def "retrieve-api-secrets" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -344,7 +344,7 @@ export def "accounts-secrets list" [
 #
 # POST /accounts/{api_key}/secrets
 # operationId: createAPISecret
-export def "accounts-secrets create" [
+export def "create-api-secret" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -384,7 +384,7 @@ export def "accounts-secrets create" [
 #
 # DELETE /accounts/{api_key}/secrets/{secret_id}
 # operationId: revokeAPISecret
-export def "accounts-secrets delete" [
+export def "revoke-api-secret" [
   api_key: string
   secret_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -422,7 +422,7 @@ export def "accounts-secrets delete" [
 #
 # GET /accounts/{api_key}/secrets/{secret_id}
 # operationId: retrieveAPISecret
-export def "accounts-secrets get" [
+export def "retrieve-api-secret" [
   api_key: string
   secret_id: string
   --base-url(-b): string@base-url-completer # API base URL

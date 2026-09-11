@@ -105,7 +105,7 @@ def house-completer [] { ["All" "Commons" "Lords" "Unassigned"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "bill-types get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-api-v1-bill-types" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -128,7 +128,7 @@ export def commands []: nothing -> table {
 # Returns a list of Bill types.
 #
 # GET /api/v1/BillTypes
-export def "bill-types get" [
+export def "get-api-v1-bill-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -167,7 +167,7 @@ export def "bill-types get" [
 #
 # GET /api/v1/Bills
 # operationId: GetBills
-export def "bills list" [
+export def "get-bills" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -218,7 +218,7 @@ export def "bills list" [
 #
 # GET /api/v1/Bills/{billId}
 # operationId: GetBill
-export def "bills get" [
+export def "get-bill" [
   bill_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -255,7 +255,7 @@ export def "bills get" [
 #
 # GET /api/v1/Bills/{billId}/NewsArticles
 # operationId: GetNewsArticles
-export def "bills-news-articles get" [
+export def "get-news-articles" [
   bill_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -295,7 +295,7 @@ export def "bills-news-articles get" [
 #
 # GET /api/v1/Bills/{billId}/Publications
 # operationId: GetBillPublication
-export def "bills-publications get" [
+export def "get-bill-publication" [
   bill_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -331,7 +331,7 @@ export def "bills-publications get" [
 # Returns all Bill stages.
 #
 # GET /api/v1/Bills/{billId}/Stages
-export def "bills-stages get" [
+export def "get-api-v1-bills-bill-id-stages" [
   bill_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -371,7 +371,7 @@ export def "bills-stages get" [
 #
 # GET /api/v1/Bills/{billId}/Stages/{billStageId}
 # operationId: GetBillStageDetails
-export def "bills-stages get-details" [
+export def "get-bill-stage-details" [
   bill_id: int
   bill_stage_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -410,7 +410,7 @@ export def "bills-stages get-details" [
 #
 # GET /api/v1/Bills/{billId}/Stages/{billStageId}/Amendments
 # operationId: GetAmendments
-export def "bills-stages-amendments list" [
+export def "get-amendments" [
   bill_id: int
   bill_stage_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -455,7 +455,7 @@ export def "bills-stages-amendments list" [
 #
 # GET /api/v1/Bills/{billId}/Stages/{billStageId}/Amendments/{amendmentId}
 # operationId: GetAmendment
-export def "bills-stages-amendments get" [
+export def "get-amendment" [
   bill_id: int
   bill_stage_id: int
   amendment_id: int
@@ -495,7 +495,7 @@ export def "bills-stages-amendments get" [
 # Return a list of Bill stage publications.
 #
 # GET /api/v1/Bills/{billId}/Stages/{stageId}/Publications
-export def "bills-stages-publications get" [
+export def "get-api-v1-bills-bill-id-stages-stage-id-publications" [
   bill_id: int
   stage_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -533,7 +533,7 @@ export def "bills-stages-publications get" [
 # Returns a list of publication types.
 #
 # GET /api/v1/PublicationTypes
-export def "publication-types get" [
+export def "get-api-v1-publication-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -570,7 +570,7 @@ export def "publication-types get" [
 # Return information on a document.
 #
 # GET /api/v1/Publications/{publicationId}/Documents/{documentId}
-export def "publications-documents get" [
+export def "get-api-v1-publications-publication-id-documents-document-id" [
   publication_id: int
   document_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -608,7 +608,7 @@ export def "publications-documents get" [
 # Return a document.
 #
 # GET /api/v1/Publications/{publicationId}/Documents/{documentId}/Download
-export def "publications-documents-download get" [
+export def "get-api-v1-publications-publication-id-documents-document-id-download" [
   publication_id: int
   document_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -645,7 +645,7 @@ export def "publications-documents-download get" [
 # Returns an Rss feed of a certain Bill.
 #
 # GET /api/v1/Rss/Bills/{id}.rss
-export def "rss-bills get" [
+export def "get-api-v1-rss-bills-id-rss" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -680,7 +680,7 @@ export def "rss-bills get" [
 # Returns an Rss feed of all Bills.
 #
 # GET /api/v1/Rss/allbills.rss
-export def "rss-allbills-rss get" [
+export def "get-api-v1-rss-allbills-rss" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -713,7 +713,7 @@ export def "rss-allbills-rss get" [
 # Returns an Rss feed of private Bills.
 #
 # GET /api/v1/Rss/privatebills.rss
-export def "rss-privatebills-rss get" [
+export def "get-api-v1-rss-privatebills-rss" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -746,7 +746,7 @@ export def "rss-privatebills-rss get" [
 # Returns an Rss feed of public Bills.
 #
 # GET /api/v1/Rss/publicbills.rss
-export def "rss-publicbills-rss get" [
+export def "get-api-v1-rss-publicbills-rss" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -780,7 +780,7 @@ export def "rss-publicbills-rss get" [
 #
 # GET /api/v1/Sittings
 # operationId: GetSittings
-export def "sittings get" [
+export def "get-sittings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -820,7 +820,7 @@ export def "sittings get" [
 # Returns a list of Bill stages.
 #
 # GET /api/v1/Stages
-export def "stages get" [
+export def "get-api-v1-stages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

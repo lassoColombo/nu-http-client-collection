@@ -105,7 +105,7 @@ def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "well-known-openid-configuration get-discovery" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "fetch-openid-discovery" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -129,7 +129,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/.well-known/openid-configuration
 # operationId: FetchOpenidDiscovery
-export def "well-known-openid-configuration get-discovery" [
+export def "fetch-openid-discovery" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -163,7 +163,7 @@ export def "well-known-openid-configuration get-discovery" [
 #
 # GET /v1/certs
 # operationId: FetchCerts
-export def "certs get" [
+export def "fetch-certs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -197,7 +197,7 @@ export def "certs get" [
 #
 # POST /v1/device/code
 # operationId: CreateDeviceCode
-export def "device-code create" [
+export def "create-device-code" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -238,7 +238,7 @@ export def "device-code create" [
 #
 # POST /v1/token
 # operationId: CreateToken
-export def "token create" [
+export def "create-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -284,7 +284,7 @@ export def "token create" [
 #
 # GET /v1/userinfo
 # operationId: FetchUserInfo
-export def "userinfo get-user" [
+export def "fetch-user-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

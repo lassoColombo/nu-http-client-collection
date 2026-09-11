@@ -129,7 +129,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1alpha delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "remotebuildexecution-projects-instances-workerpools-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -153,7 +153,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1alpha/{name}
 # operationId: remotebuildexecution.projects.instances.workerpools.delete
-export def "v1alpha delete" [
+export def "remotebuildexecution-projects-instances-workerpools-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -201,7 +201,7 @@ export def "v1alpha delete" [
 #
 # GET /v1alpha/{name}
 # operationId: remotebuildexecution.projects.operations.get
-export def "v1alpha get" [
+export def "remotebuildexecution-projects-operations-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -250,7 +250,7 @@ export def "v1alpha get" [
 # PATCH /v1alpha/{name}
 # operationId: remotebuildexecution.projects.instances.workerpools.patch
 # --workerPool shape: {autoscale?: record, channel?: string, hostOs?: string, name?: string, state?: "STATE_UNSPECIFIED"|"CREATING"|"RUNNING"|"UPDATING"|"DELETING"|"INACTIVE", workerConfig?: record, workerCount?: string}
-export def "v1alpha update" [
+export def "remotebuildexecution-projects-instances-workerpools-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -306,7 +306,7 @@ export def "v1alpha update" [
 #
 # POST /v1alpha/{name}:testNotify
 # operationId: remotebuildexecution.projects.instances.testNotify
-export def "v1alpha test-notify" [
+export def "remotebuildexecution-projects-instances-test-notify" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -358,7 +358,7 @@ export def "v1alpha test-notify" [
 #
 # GET /v1alpha/{parent}/instances
 # operationId: remotebuildexecution.projects.instances.list
-export def "v1alpha-instances list" [
+export def "remotebuildexecution-projects-instances-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -407,7 +407,7 @@ export def "v1alpha-instances list" [
 # POST /v1alpha/{parent}/instances
 # operationId: remotebuildexecution.projects.instances.create
 # --instance shape: {featurePolicy?: record, location?: string, schedulerNotificationConfig?: record}
-export def "v1alpha-instances create" [
+export def "remotebuildexecution-projects-instances-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -461,7 +461,7 @@ export def "v1alpha-instances create" [
 #
 # GET /v1alpha/{parent}/workerpools
 # operationId: remotebuildexecution.projects.instances.workerpools.list
-export def "v1alpha-workerpools list" [
+export def "remotebuildexecution-projects-instances-workerpools-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -511,7 +511,7 @@ export def "v1alpha-workerpools list" [
 # POST /v1alpha/{parent}/workerpools
 # operationId: remotebuildexecution.projects.instances.workerpools.create
 # --workerPool shape: {autoscale?: record, channel?: string, hostOs?: string, name?: string, state?: "STATE_UNSPECIFIED"|"CREATING"|"RUNNING"|"UPDATING"|"DELETING"|"INACTIVE", workerConfig?: record, workerCount?: string}
-export def "v1alpha-workerpools create" [
+export def "remotebuildexecution-projects-instances-workerpools-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

@@ -153,7 +153,7 @@ def status-completer-4 [] { ["Closed" "Draft" "Open" "Unknown" "Void"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "companies-connections-data-account-transactions list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-account-transactions" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -177,7 +177,7 @@ export def commands []: nothing -> table {
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/accountTransactions
 # operationId: list-account-transactions
-export def "companies-connections-data-account-transactions list" [
+export def "list-account-transactions" [
   company_id: string
   connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -220,7 +220,7 @@ export def "companies-connections-data-account-transactions list" [
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/accountTransactions/{accountTransactionId}
 # operationId: get-account-transaction
-export def "companies-connections-data-account-transactions get" [
+export def "get-account-transaction" [
   company_id: string
   connection_id: string
   account_transaction_id: string
@@ -260,7 +260,7 @@ export def "companies-connections-data-account-transactions get" [
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/bankAccounts
 # operationId: list-bank-accounts
-export def "companies-connections-data-bank-accounts list" [
+export def "list-bank-accounts" [
   company_id: any
   connection_id: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -305,7 +305,7 @@ export def "companies-connections-data-bank-accounts list" [
 # DEPRECATED
 # operationId: get-bank-account
 @deprecated
-export def "companies-connections-data-bank-accounts get" [
+export def "get-bank-account" [
   company_id: string
   connection_id: string
   account_id: string
@@ -345,7 +345,7 @@ export def "companies-connections-data-bank-accounts get" [
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/bankAccounts/{accountId}/bankTransactions
 # operationId: list-bank-account-transactions
-export def "companies-connections-data-bank-accounts-bank-transactions list" [
+export def "list-bank-account-transactions" [
   company_id: string
   connection_id: string
   account_id: string
@@ -390,7 +390,7 @@ export def "companies-connections-data-bank-accounts-bank-transactions list" [
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/bills/{billId}/attachments
 # operationId: get-bill-attachments
-export def "companies-connections-data-bills-attachments list" [
+export def "get-bill-attachments" [
   company_id: string
   connection_id: string
   bill_id: string
@@ -430,7 +430,7 @@ export def "companies-connections-data-bills-attachments list" [
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/bills/{billId}/attachments/{attachmentId}
 # operationId: get-bill-attachment
-export def "companies-connections-data-bills-attachments get" [
+export def "get-bill-attachment" [
   company_id: any
   connection_id: any
   bill_id: any
@@ -472,7 +472,7 @@ export def "companies-connections-data-bills-attachments get" [
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/bills/{billId}/attachments/{attachmentId}/download
 # operationId: download-bill-attachment
-export def "companies-connections-data-bills-attachments-download download" [
+export def "download-bill-attachment" [
   company_id: any
   connection_id: any
   bill_id: any
@@ -514,7 +514,7 @@ export def "companies-connections-data-bills-attachments-download download" [
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/customers/{customerId}/attachments
 # operationId: get-customer-attachments
-export def "companies-connections-data-customers-attachments list" [
+export def "get-customer-attachments" [
   company_id: string
   connection_id: string
   customer_id: string
@@ -554,7 +554,7 @@ export def "companies-connections-data-customers-attachments list" [
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/customers/{customerId}/attachments/{attachmentId}
 # operationId: get-customer-attachment
-export def "companies-connections-data-customers-attachments get" [
+export def "get-customer-attachment" [
   company_id: string
   connection_id: string
   customer_id: string
@@ -596,7 +596,7 @@ export def "companies-connections-data-customers-attachments get" [
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/customers/{customerId}/attachments/{attachmentId}/download
 # operationId: download-customer-attachment
-export def "companies-connections-data-customers-attachments-download download" [
+export def "download-customer-attachment" [
   company_id: string
   connection_id: string
   customer_id: string
@@ -638,7 +638,7 @@ export def "companies-connections-data-customers-attachments-download download" 
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/directCosts
 # operationId: get-direct-costs
-export def "companies-connections-data-direct-costs list" [
+export def "get-direct-costs" [
   company_id: any
   connection_id: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -683,7 +683,7 @@ export def "companies-connections-data-direct-costs list" [
 # DEPRECATED
 # operationId: get-direct-cost
 @deprecated
-export def "companies-connections-data-direct-costs get" [
+export def "get-direct-cost" [
   company_id: string
   connection_id: string
   direct_cost_id: string
@@ -723,7 +723,7 @@ export def "companies-connections-data-direct-costs get" [
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/directCosts/{directCostId}/attachments
 # operationId: list-direct-cost-attachments
-export def "companies-connections-data-direct-costs-attachments list" [
+export def "list-direct-cost-attachments" [
   company_id: string
   connection_id: string
   direct_cost_id: string
@@ -763,7 +763,7 @@ export def "companies-connections-data-direct-costs-attachments list" [
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/directCosts/{directCostId}/attachments/{attachmentId}
 # operationId: get-direct-cost-attachment
-export def "companies-connections-data-direct-costs-attachments get" [
+export def "get-direct-cost-attachment" [
   company_id: any
   connection_id: any
   direct_cost_id: any
@@ -805,7 +805,7 @@ export def "companies-connections-data-direct-costs-attachments get" [
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/directCosts/{directCostId}/attachments/{attachmentId}/download
 # operationId: download-direct-cost-attachment
-export def "companies-connections-data-direct-costs-attachments-download download" [
+export def "download-direct-cost-attachment" [
   company_id: any
   connection_id: any
   direct_cost_id: any
@@ -847,7 +847,7 @@ export def "companies-connections-data-direct-costs-attachments-download downloa
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/directIncomes
 # operationId: get-direct-incomes
-export def "companies-connections-data-direct-incomes list" [
+export def "get-direct-incomes" [
   company_id: any
   connection_id: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -892,7 +892,7 @@ export def "companies-connections-data-direct-incomes list" [
 # DEPRECATED
 # operationId: get-direct-income
 @deprecated
-export def "companies-connections-data-direct-incomes get" [
+export def "get-direct-income" [
   company_id: string
   connection_id: string
   direct_income_id: string
@@ -932,7 +932,7 @@ export def "companies-connections-data-direct-incomes get" [
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/directIncomes/{directIncomeId}/attachments
 # operationId: list-direct-income-attachments
-export def "companies-connections-data-direct-incomes-attachments list" [
+export def "list-direct-income-attachments" [
   company_id: string
   connection_id: string
   direct_income_id: string
@@ -972,7 +972,7 @@ export def "companies-connections-data-direct-incomes-attachments list" [
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/directIncomes/{directIncomeId}/attachments/{attachmentId}
 # operationId: get-direct-income-attachment
-export def "companies-connections-data-direct-incomes-attachments get" [
+export def "get-direct-income-attachment" [
   company_id: any
   connection_id: any
   direct_income_id: any
@@ -1016,7 +1016,7 @@ export def "companies-connections-data-direct-incomes-attachments get" [
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/directIncomes/{directIncomeId}/attachments/{attachmentId}/download
 # operationId: download-direct-income-attachment
-export def "companies-connections-data-direct-incomes-attachments-download download" [
+export def "download-direct-income-attachment" [
   company_id: any
   connection_id: any
   direct_income_id: any
@@ -1058,7 +1058,7 @@ export def "companies-connections-data-direct-incomes-attachments-download downl
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/invoices/{invoiceId}/attachments
 # operationId: get-invoice-attachments
-export def "companies-connections-data-invoices-attachments list" [
+export def "get-invoice-attachments" [
   company_id: any
   connection_id: any
   invoice_id: string
@@ -1098,7 +1098,7 @@ export def "companies-connections-data-invoices-attachments list" [
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/invoices/{invoiceId}/attachments/{attachmentId}
 # operationId: get-invoice-attachment
-export def "companies-connections-data-invoices-attachments get" [
+export def "get-invoice-attachment" [
   company_id: any
   connection_id: any
   invoice_id: string
@@ -1140,7 +1140,7 @@ export def "companies-connections-data-invoices-attachments get" [
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/invoices/{invoiceId}/attachments/{attachmentId}/download
 # operationId: download-invoice-attachment
-export def "companies-connections-data-invoices-attachments-download download" [
+export def "download-invoice-attachment" [
   company_id: any
   connection_id: any
   invoice_id: string
@@ -1182,7 +1182,7 @@ export def "companies-connections-data-invoices-attachments-download download" [
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/suppliers/{supplierId}/attachments
 # operationId: list-supplier-attachments
-export def "companies-connections-data-suppliers-attachments list" [
+export def "list-supplier-attachments" [
   company_id: string
   connection_id: string
   supplier_id: string
@@ -1222,7 +1222,7 @@ export def "companies-connections-data-suppliers-attachments list" [
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/suppliers/{supplierId}/attachments/{attachmentId}
 # operationId: get-supplier-attachment
-export def "companies-connections-data-suppliers-attachments get" [
+export def "get-supplier-attachment" [
   company_id: string
   connection_id: string
   supplier_id: string
@@ -1264,7 +1264,7 @@ export def "companies-connections-data-suppliers-attachments get" [
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/suppliers/{supplierId}/attachments/{attachmentId}/download
 # operationId: download-supplier-attachment
-export def "companies-connections-data-suppliers-attachments-download download" [
+export def "download-supplier-attachment" [
   company_id: string
   connection_id: string
   supplier_id: string
@@ -1306,7 +1306,7 @@ export def "companies-connections-data-suppliers-attachments-download download" 
 #
 # GET /companies/{companyId}/connections/{connectionId}/data/transfers
 # operationId: list-transfers
-export def "companies-connections-data-transfers list" [
+export def "list-transfers" [
   company_id: any
   connection_id: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -1351,7 +1351,7 @@ export def "companies-connections-data-transfers list" [
 # DEPRECATED
 # operationId: get-transfer
 @deprecated
-export def "companies-connections-data-transfers get" [
+export def "get-transfer" [
   company_id: string
   connection_id: string
   transfer_id: string
@@ -1391,7 +1391,7 @@ export def "companies-connections-data-transfers get" [
 #
 # GET /companies/{companyId}/connections/{connectionId}/options/bankAccounts
 # operationId: get-create-update-bankAccounts-model
-export def "companies-connections-options-bank-accounts get-create-update-model" [
+export def "get-create-update-bank-accounts-model" [
   company_id: string
   connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1429,7 +1429,7 @@ export def "companies-connections-options-bank-accounts get-create-update-model"
 #
 # GET /companies/{companyId}/connections/{connectionId}/options/bankAccounts/{accountId}/bankTransactions
 # operationId: get-create-bank-account-model
-export def "companies-connections-options-bank-accounts-bank-transactions get-create-model" [
+export def "get-create-bank-account-model" [
   company_id: string
   connection_id: string
   account_id: any
@@ -1469,7 +1469,7 @@ export def "companies-connections-options-bank-accounts-bank-transactions get-cr
 #
 # GET /companies/{companyId}/connections/{connectionId}/options/billCreditNotes
 # operationId: get-create-update-billCreditNotes-model
-export def "companies-connections-options-bill-credit-notes get-create-update-model" [
+export def "get-create-update-bill-credit-notes-model" [
   company_id: string
   connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1507,7 +1507,7 @@ export def "companies-connections-options-bill-credit-notes get-create-update-mo
 #
 # GET /companies/{companyId}/connections/{connectionId}/options/billPayments
 # operationId: get-create-billPayments-model
-export def "companies-connections-options-bill-payments get-create-model" [
+export def "get-create-bill-payments-model" [
   company_id: string
   connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1545,7 +1545,7 @@ export def "companies-connections-options-bill-payments get-create-model" [
 #
 # GET /companies/{companyId}/connections/{connectionId}/options/bills
 # operationId: get-create-update-bills-model
-export def "companies-connections-options-bills get-create-update-model" [
+export def "get-create-update-bills-model" [
   company_id: string
   connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1583,7 +1583,7 @@ export def "companies-connections-options-bills get-create-update-model" [
 #
 # GET /companies/{companyId}/connections/{connectionId}/options/chartOfAccounts
 # operationId: get-create-chartOfAccounts-model
-export def "companies-connections-options-chart-of-accounts get-create-model" [
+export def "get-create-chart-of-accounts-model" [
   company_id: string
   connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1621,7 +1621,7 @@ export def "companies-connections-options-chart-of-accounts get-create-model" [
 #
 # GET /companies/{companyId}/connections/{connectionId}/options/creditNotes
 # operationId: get-create-update-creditNotes-model
-export def "companies-connections-options-credit-notes get-create-update-model" [
+export def "get-create-update-credit-notes-model" [
   company_id: string
   connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1659,7 +1659,7 @@ export def "companies-connections-options-credit-notes get-create-update-model" 
 #
 # GET /companies/{companyId}/connections/{connectionId}/options/customers
 # operationId: get-create-update-customers-model
-export def "companies-connections-options-customers get-create-update-model" [
+export def "get-create-update-customers-model" [
   company_id: string
   connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1697,7 +1697,7 @@ export def "companies-connections-options-customers get-create-update-model" [
 #
 # GET /companies/{companyId}/connections/{connectionId}/options/directCosts
 # operationId: get-create-directCosts-model
-export def "companies-connections-options-direct-costs get-create-model" [
+export def "get-create-direct-costs-model" [
   company_id: string
   connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1735,7 +1735,7 @@ export def "companies-connections-options-direct-costs get-create-model" [
 #
 # GET /companies/{companyId}/connections/{connectionId}/options/directIncomes
 # operationId: get-create-directIncomes-model
-export def "companies-connections-options-direct-incomes get-create-model" [
+export def "get-create-direct-incomes-model" [
   company_id: string
   connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1773,7 +1773,7 @@ export def "companies-connections-options-direct-incomes get-create-model" [
 #
 # GET /companies/{companyId}/connections/{connectionId}/options/invoices
 # operationId: get-create-update-invoices-model
-export def "companies-connections-options-invoices get-create-update-model" [
+export def "get-create-update-invoices-model" [
   company_id: string
   connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1811,7 +1811,7 @@ export def "companies-connections-options-invoices get-create-update-model" [
 #
 # GET /companies/{companyId}/connections/{connectionId}/options/items
 # operationId: get-create-items-model
-export def "companies-connections-options-items get-create-model" [
+export def "get-create-items-model" [
   company_id: string
   connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1849,7 +1849,7 @@ export def "companies-connections-options-items get-create-model" [
 #
 # GET /companies/{companyId}/connections/{connectionId}/options/journalEntries
 # operationId: get-create-journalEntries-model
-export def "companies-connections-options-journal-entries get-create-model" [
+export def "get-create-journal-entries-model" [
   company_id: string
   connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1887,7 +1887,7 @@ export def "companies-connections-options-journal-entries get-create-model" [
 #
 # GET /companies/{companyId}/connections/{connectionId}/options/journals
 # operationId: get-create-journals-model
-export def "companies-connections-options-journals get-create-model" [
+export def "get-create-journals-model" [
   company_id: string
   connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1925,7 +1925,7 @@ export def "companies-connections-options-journals get-create-model" [
 #
 # GET /companies/{companyId}/connections/{connectionId}/options/payments
 # operationId: get-create-payments-model
-export def "companies-connections-options-payments get-create-model" [
+export def "get-create-payments-model" [
   company_id: string
   connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1963,7 +1963,7 @@ export def "companies-connections-options-payments get-create-model" [
 #
 # GET /companies/{companyId}/connections/{connectionId}/options/purchaseOrders
 # operationId: get-create-update-purchaseOrders-model
-export def "companies-connections-options-purchase-orders get-create-update-model" [
+export def "get-create-update-purchase-orders-model" [
   company_id: string
   connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2001,7 +2001,7 @@ export def "companies-connections-options-purchase-orders get-create-update-mode
 #
 # GET /companies/{companyId}/connections/{connectionId}/options/suppliers
 # operationId: get-create-update-suppliers-model
-export def "companies-connections-options-suppliers get-create-update-model" [
+export def "get-create-update-suppliers-model" [
   company_id: string
   connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2039,7 +2039,7 @@ export def "companies-connections-options-suppliers get-create-update-model" [
 #
 # GET /companies/{companyId}/connections/{connectionId}/options/transfers
 # operationId: get-create-transfers-model
-export def "companies-connections-options-transfers get-create-model" [
+export def "get-create-transfers-model" [
   company_id: string
   connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2079,7 +2079,7 @@ export def "companies-connections-options-transfers get-create-model" [
 # operationId: create-account
 # --metadata shape: {isDeleted?: bool}
 # --validDatatypeLinks item shape: {links?: list<string>, property?: string}
-export def "companies-connections-push-accounts create" [
+export def "create-account" [
   company_id: any
   connection_id: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -2136,7 +2136,7 @@ export def "companies-connections-push-accounts create" [
 # POST /companies/{companyId}/connections/{connectionId}/push/bankAccounts
 # operationId: create-bank-account
 # --metadata shape: {isDeleted?: bool}
-export def "companies-connections-push-bank-accounts create" [
+export def "create-bank-account" [
   company_id: any
   connection_id: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -2194,7 +2194,7 @@ export def "companies-connections-push-bank-accounts create" [
 # POST /companies/{companyId}/connections/{connectionId}/push/bankAccounts/{accountId}/bankTransactions
 # operationId: create-bank-transactions
 # --transactions item shape: {amount: float, balance: float, clearedOnDate?: string, counterparty?: string, description?: string, id?: string, reconciled: bool, reference?: string, transactionType: "Unknown"|"Credit"|"Debit"|"Int"|"Div"|"Fee"|"SerChg"|"Dep"|"Atm"|"Pos"|"Xfer"|"Check"|"Payment"|"Cash"|"DirectDep"|"DirectDebit"|"RepeatPmt"|"Other"}
-export def "companies-connections-push-bank-accounts-bank-transactions create" [
+export def "create-bank-transactions" [
   company_id: string
   connection_id: string
   account_id: any
@@ -2243,7 +2243,7 @@ export def "companies-connections-push-bank-accounts-bank-transactions create" [
 # PUT /companies/{companyId}/connections/{connectionId}/push/bankAccounts/{bankAccountId}
 # operationId: update-bank-account
 # --metadata shape: {isDeleted?: bool}
-export def "companies-connections-push-bank-accounts update" [
+export def "update-bank-account" [
   company_id: any
   connection_id: any
   bank_account_id: any
@@ -2308,7 +2308,7 @@ export def "companies-connections-push-bank-accounts update" [
 # --supplementalData shape: {content?: record}
 # --supplierRef shape: {id: string, supplierName?: string}
 # --withholdingTax item shape: {amount: float, name: string}
-export def "companies-connections-push-bill-credit-notes create" [
+export def "create-bill-credit-note" [
   company_id: any
   connection_id: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -2377,7 +2377,7 @@ export def "companies-connections-push-bill-credit-notes create" [
 # --supplementalData shape: {content?: record}
 # --supplierRef shape: {id: string, supplierName?: string}
 # --withholdingTax item shape: {amount: float, name: string}
-export def "companies-connections-push-bill-credit-notes update" [
+export def "update-bill-credit-note" [
   company_id: any
   connection_id: any
   bill_credit_note_id: string
@@ -2449,7 +2449,7 @@ export def "companies-connections-push-bill-credit-notes update" [
 # --paymentMethodRef shape: {id?: string, name?: string}
 # --supplementalData shape: {content?: record}
 # --supplierRef shape: {id: string, supplierName?: string}
-export def "companies-connections-push-bill-payments create" [
+export def "create-bill-payment" [
   company_id: any
   connection_id: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -2505,7 +2505,7 @@ export def "companies-connections-push-bill-payments create" [
 #
 # DELETE /companies/{companyId}/connections/{connectionId}/push/billPayments/{billPaymentId}
 # operationId: delete-billPayment
-export def "companies-connections-push-bill-payments delete" [
+export def "delete-bill-payment" [
   company_id: string
   connection_id: string
   bill_payment_id: string
@@ -2552,7 +2552,7 @@ export def "companies-connections-push-bill-payments delete" [
 # --supplementalData shape: {content?: record}
 # --supplierRef shape: {id: string, supplierName?: string}
 # --withholdingTax item shape: {amount: float, name: string}
-export def "companies-connections-push-bills create" [
+export def "create-bill" [
   company_id: any
   connection_id: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -2614,7 +2614,7 @@ export def "companies-connections-push-bills create" [
 #
 # DELETE /companies/{companyId}/connections/{connectionId}/push/bills/{billId}
 # operationId: delete-bill
-export def "companies-connections-push-bills delete" [
+export def "delete-bill" [
   company_id: string
   connection_id: string
   bill_id: string
@@ -2661,7 +2661,7 @@ export def "companies-connections-push-bills delete" [
 # --supplementalData shape: {content?: record}
 # --supplierRef shape: {id: string, supplierName?: string}
 # --withholdingTax item shape: {amount: float, name: string}
-export def "companies-connections-push-bills update" [
+export def "update-bill" [
   company_id: any
   connection_id: any
   bill_id: any
@@ -2726,7 +2726,7 @@ export def "companies-connections-push-bills update" [
 #
 # POST /companies/{companyId}/connections/{connectionId}/push/bills/{billId}/attachments
 # operationId: upload-bill-attachments
-export def "companies-connections-push-bills-attachments upload" [
+export def "upload-bill-attachments" [
   company_id: string
   connection_id: string
   bill_id: string
@@ -2778,7 +2778,7 @@ export def "companies-connections-push-bills-attachments upload" [
 # --paymentAllocations item shape: {allocation: record, payment: record}
 # --supplementalData shape: {content?: record}
 # --withholdingTax item shape: {amount: float, name: string}
-export def "companies-connections-push-credit-notes create" [
+export def "create-credit-note" [
   company_id: any
   connection_id: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -2849,7 +2849,7 @@ export def "companies-connections-push-credit-notes create" [
 # --paymentAllocations item shape: {allocation: record, payment: record}
 # --supplementalData shape: {content?: record}
 # --withholdingTax item shape: {amount: float, name: string}
-export def "companies-connections-push-credit-notes update" [
+export def "update-credit-note" [
   company_id: any
   connection_id: any
   credit_note_id: string
@@ -2921,7 +2921,7 @@ export def "companies-connections-push-credit-notes update" [
 # --contacts item shape: {address?: record, email?: string, modifiedDate?: string, name?: string, phone?: list, status: "Unknown"|"Active"|"Archived"}
 # --metadata shape: {isDeleted?: bool}
 # --supplementalData shape: {content?: record}
-export def "companies-connections-push-customers create" [
+export def "create-customer" [
   company_id: any
   connection_id: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -2981,7 +2981,7 @@ export def "companies-connections-push-customers create" [
 # --contacts item shape: {address?: record, email?: string, modifiedDate?: string, name?: string, phone?: list, status: "Unknown"|"Active"|"Archived"}
 # --metadata shape: {isDeleted?: bool}
 # --supplementalData shape: {content?: record}
-export def "companies-connections-push-customers update" [
+export def "update-customer" [
   company_id: any
   connection_id: any
   customer_id: string
@@ -3045,7 +3045,7 @@ export def "companies-connections-push-customers update" [
 # --metadata shape: {isDeleted?: bool}
 # --paymentAllocations item shape: {allocation: record, payment: record}
 # --supplementalData shape: {content?: record}
-export def "companies-connections-push-direct-costs create" [
+export def "create-direct-cost" [
   company_id: any
   connection_id: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -3102,7 +3102,7 @@ export def "companies-connections-push-direct-costs create" [
 #
 # POST /companies/{companyId}/connections/{connectionId}/push/directCosts/{directCostId}/attachment
 # operationId: upload-direct-cost-attachment
-export def "companies-connections-push-direct-costs-attachment upload" [
+export def "upload-direct-cost-attachment" [
   company_id: string
   connection_id: string
   direct_cost_id: string
@@ -3153,7 +3153,7 @@ export def "companies-connections-push-direct-costs-attachment upload" [
 # --metadata shape: {isDeleted?: bool}
 # --paymentAllocations item shape: {allocation: record, payment: record}
 # --supplementalData shape: {content?: record}
-export def "companies-connections-push-direct-incomes create" [
+export def "create-direct-income" [
   company_id: any
   connection_id: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -3210,7 +3210,7 @@ export def "companies-connections-push-direct-incomes create" [
 #
 # POST /companies/{companyId}/connections/{connectionId}/push/directIncomes/{directIncomeId}/attachment
 # operationId: upload-direct-income-attachment
-export def "companies-connections-push-direct-incomes-attachment upload" [
+export def "upload-direct-income-attachment" [
   company_id: string
   connection_id: string
   direct_income_id: string
@@ -3262,7 +3262,7 @@ export def "companies-connections-push-direct-incomes-attachment upload" [
 # --paymentAllocations item shape: {allocation: record, payment: record}
 # --supplementalData shape: {content?: record}
 # --withholdingTax item shape: {amount: float, name: string}
-export def "companies-connections-push-invoices create" [
+export def "create-invoice" [
   company_id: any
   connection_id: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -3329,7 +3329,7 @@ export def "companies-connections-push-invoices create" [
 #
 # DELETE /companies/{companyId}/connections/{connectionId}/push/invoices/{invoiceId}
 # operationId: delete-invoice
-export def "companies-connections-push-invoices delete" [
+export def "delete-invoice" [
   company_id: string
   connection_id: string
   invoice_id: string
@@ -3375,7 +3375,7 @@ export def "companies-connections-push-invoices delete" [
 # --paymentAllocations item shape: {allocation: record, payment: record}
 # --supplementalData shape: {content?: record}
 # --withholdingTax item shape: {amount: float, name: string}
-export def "companies-connections-push-invoices update" [
+export def "update-invoice" [
   company_id: any
   connection_id: any
   invoice_id: string
@@ -3445,7 +3445,7 @@ export def "companies-connections-push-invoices update" [
 #
 # POST /companies/{companyId}/connections/{connectionId}/push/invoices/{invoiceId}/attachment
 # operationId: upload-invoice-attachment
-export def "companies-connections-push-invoices-attachment upload" [
+export def "upload-invoice-attachment" [
   company_id: any
   connection_id: any
   invoice_id: string
@@ -3494,7 +3494,7 @@ export def "companies-connections-push-invoices-attachment upload" [
 # --billItem shape: {accountRef?: record, description?: string, taxRateRef?: record, unitPrice?: float}
 # --invoiceItem shape: {accountRef?: record, description?: string, taxRateRef?: record, unitPrice?: float}
 # --metadata shape: {isDeleted?: bool}
-export def "companies-connections-push-items create" [
+export def "create-item" [
   company_id: any
   connection_id: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -3552,7 +3552,7 @@ export def "companies-connections-push-items create" [
 # --metadata shape: {isDeleted?: bool}
 # --recordRef shape: {dataType?: string, id?: string}
 # --supplementalData shape: {content?: record}
-export def "companies-connections-push-journal-entries create-entry" [
+export def "create-journal-entry" [
   company_id: any
   connection_id: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -3605,7 +3605,7 @@ export def "companies-connections-push-journal-entries create-entry" [
 #
 # DELETE /companies/{companyId}/connections/{connectionId}/push/journalEntries/{journalEntryId}
 # operationId: delete-journal-entry
-export def "companies-connections-push-journal-entries delete-entry" [
+export def "delete-journal-entry" [
   company_id: string
   connection_id: string
   journal_entry_id: string
@@ -3646,7 +3646,7 @@ export def "companies-connections-push-journal-entries delete-entry" [
 # POST /companies/{companyId}/connections/{connectionId}/push/journals
 # operationId: push-journal
 # --metadata shape: {isDeleted?: bool}
-export def "companies-connections-push-journals push" [
+export def "push-journal" [
   company_id: any
   connection_id: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -3704,7 +3704,7 @@ export def "companies-connections-push-journals push" [
 # --metadata shape: {isDeleted?: bool}
 # --paymentMethodRef shape: {id?: string, name?: string}
 # --supplementalData shape: {content?: record}
-export def "companies-connections-push-payments create" [
+export def "create-payment" [
   company_id: any
   connection_id: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -3764,7 +3764,7 @@ export def "companies-connections-push-payments create" [
 # --metadata shape: {isDeleted?: bool}
 # --shipTo shape: {address?: record, contact?: record}
 # --supplierRef shape: {id: string, supplierName?: string}
-export def "companies-connections-push-purchase-orders create" [
+export def "create-purchase-order" [
   company_id: any
   connection_id: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -3829,7 +3829,7 @@ export def "companies-connections-push-purchase-orders create" [
 # --metadata shape: {isDeleted?: bool}
 # --shipTo shape: {address?: record, contact?: record}
 # --supplierRef shape: {id: string, supplierName?: string}
-export def "companies-connections-push-purchase-orders update" [
+export def "update-purchase-order" [
   company_id: any
   connection_id: any
   purchase_order_id: string
@@ -3896,7 +3896,7 @@ export def "companies-connections-push-purchase-orders update" [
 # --addresses item shape: {city?: string, country?: string, line1?: string, line2?: string, postalCode?: string, region?: string, type: "Unknown"|"Billing"|"Delivery"}
 # --metadata shape: {isDeleted?: bool}
 # --supplementalData shape: {content?: record}
-export def "companies-connections-push-suppliers create" [
+export def "create-supplier" [
   company_id: any
   connection_id: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -3954,7 +3954,7 @@ export def "companies-connections-push-suppliers create" [
 # --addresses item shape: {city?: string, country?: string, line1?: string, line2?: string, postalCode?: string, region?: string, type: "Unknown"|"Billing"|"Delivery"}
 # --metadata shape: {isDeleted?: bool}
 # --supplementalData shape: {content?: record}
-export def "companies-connections-push-suppliers update" [
+export def "put-supplier" [
   company_id: any
   connection_id: any
   supplier_id: any
@@ -4018,7 +4018,7 @@ export def "companies-connections-push-suppliers update" [
 # --supplementalData shape: {content?: record}
 # --to shape: {accountRef?: record, amount?: float, currency?: string}
 # --trackingCategoryRefs item shape: {id: string, name?: string}
-export def "companies-connections-push-transfers create" [
+export def "create-transfer" [
   company_id: string
   connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4069,7 +4069,7 @@ export def "companies-connections-push-transfers create" [
 #
 # GET /companies/{companyId}/data/accounts
 # operationId: list-accounts
-export def "companies-data-accounts list" [
+export def "list-accounts" [
   company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4112,7 +4112,7 @@ export def "companies-data-accounts list" [
 # DEPRECATED
 # operationId: get-account
 @deprecated
-export def "companies-data-accounts get" [
+export def "get-account" [
   company_id: string
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4152,7 +4152,7 @@ export def "companies-data-accounts get" [
 # DEPRECATED
 # operationId: get-all-bank-account
 @deprecated
-export def "companies-data-bank-accounts get-list" [
+export def "get-all-bank-account" [
   company_id: any
   account_id: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -4192,7 +4192,7 @@ export def "companies-data-bank-accounts get-list" [
 #
 # GET /companies/{companyId}/data/bankAccounts/{accountId}/transactions
 # operationId: list-bank-transactions
-export def "companies-data-bank-accounts-transactions list" [
+export def "list-bank-transactions" [
   company_id: any
   account_id: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -4235,7 +4235,7 @@ export def "companies-data-bank-accounts-transactions list" [
 #
 # GET /companies/{companyId}/data/billCreditNotes
 # operationId: list-bill-credit-notes
-export def "companies-data-bill-credit-notes list" [
+export def "list-bill-credit-notes" [
   company_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4278,7 +4278,7 @@ export def "companies-data-bill-credit-notes list" [
 # DEPRECATED
 # operationId: get-bill-credit-note
 @deprecated
-export def "companies-data-bill-credit-notes get" [
+export def "get-bill-credit-note" [
   company_id: string
   bill_credit_note_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4316,7 +4316,7 @@ export def "companies-data-bill-credit-notes get" [
 #
 # GET /companies/{companyId}/data/billPayments
 # operationId: list-bill-payments
-export def "companies-data-bill-payments list" [
+export def "list-bill-payments" [
   company_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4359,7 +4359,7 @@ export def "companies-data-bill-payments list" [
 # DEPRECATED
 # operationId: get-bill-payments
 @deprecated
-export def "companies-data-bill-payments get" [
+export def "get-bill-payments" [
   company_id: string
   bill_payment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4397,7 +4397,7 @@ export def "companies-data-bill-payments get" [
 #
 # GET /companies/{companyId}/data/bills
 # operationId: list-bills
-export def "companies-data-bills list" [
+export def "list-bills" [
   company_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4438,7 +4438,7 @@ export def "companies-data-bills list" [
 #
 # GET /companies/{companyId}/data/bills/{billId}
 # operationId: get-bill
-export def "companies-data-bills get" [
+export def "get-bill" [
   company_id: string
   bill_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4476,7 +4476,7 @@ export def "companies-data-bills get" [
 #
 # GET /companies/{companyId}/data/creditNotes
 # operationId: list-credit-notes
-export def "companies-data-credit-notes list" [
+export def "list-credit-notes" [
   company_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4519,7 +4519,7 @@ export def "companies-data-credit-notes list" [
 # DEPRECATED
 # operationId: get-credit-note
 @deprecated
-export def "companies-data-credit-notes get" [
+export def "get-credit-note" [
   company_id: string
   credit_note_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4557,7 +4557,7 @@ export def "companies-data-credit-notes get" [
 #
 # GET /companies/{companyId}/data/customers
 # operationId: get-customers
-export def "companies-data-customers list" [
+export def "get-customers" [
   company_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4600,7 +4600,7 @@ export def "companies-data-customers list" [
 # DEPRECATED
 # operationId: get-customer
 @deprecated
-export def "companies-data-customers get" [
+export def "get-customer" [
   company_id: string
   customer_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4638,7 +4638,7 @@ export def "companies-data-customers get" [
 #
 # GET /companies/{companyId}/data/financials/balanceSheet
 # operationId: get-balance-sheet
-export def "companies-data-financials-balance-sheet get" [
+export def "get-balance-sheet" [
   company_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4678,7 +4678,7 @@ export def "companies-data-financials-balance-sheet get" [
 #
 # GET /companies/{companyId}/data/financials/cashFlowStatement
 # operationId: get-cash-flow-statement
-export def "companies-data-financials-cash-flow-statement get" [
+export def "get-cash-flow-statement" [
   company_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4718,7 +4718,7 @@ export def "companies-data-financials-cash-flow-statement get" [
 #
 # GET /companies/{companyId}/data/financials/profitAndLoss
 # operationId: get-profit-and-loss
-export def "companies-data-financials-profit-and-loss get" [
+export def "get-profit-and-loss" [
   company_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4758,7 +4758,7 @@ export def "companies-data-financials-profit-and-loss get" [
 #
 # GET /companies/{companyId}/data/info
 # operationId: get-company-info
-export def "companies-data-info get-company" [
+export def "get-company-info" [
   company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4794,7 +4794,7 @@ export def "companies-data-info get-company" [
 #
 # POST /companies/{companyId}/data/info
 # operationId: post-sync-info
-export def "companies-data-info create-sync" [
+export def "post-sync-info" [
   company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4830,7 +4830,7 @@ export def "companies-data-info create-sync" [
 #
 # GET /companies/{companyId}/data/invoices
 # operationId: list-invoices
-export def "companies-data-invoices list" [
+export def "list-invoices" [
   company_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4873,7 +4873,7 @@ export def "companies-data-invoices list" [
 # DEPRECATED
 # operationId: get-invoice
 @deprecated
-export def "companies-data-invoices get" [
+export def "get-invoice" [
   company_id: any
   invoice_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4911,7 +4911,7 @@ export def "companies-data-invoices get" [
 #
 # GET /companies/{companyId}/data/invoices/{invoiceId}/pdf
 # operationId: Download-invoice-pdf
-export def "companies-data-invoices-pdf download" [
+export def "download-invoice-pdf" [
   company_id: any
   invoice_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4949,7 +4949,7 @@ export def "companies-data-invoices-pdf download" [
 #
 # GET /companies/{companyId}/data/items
 # operationId: list-items
-export def "companies-data-items list" [
+export def "list-items" [
   company_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4992,7 +4992,7 @@ export def "companies-data-items list" [
 # DEPRECATED
 # operationId: get-item
 @deprecated
-export def "companies-data-items get" [
+export def "get-item" [
   company_id: string
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5030,7 +5030,7 @@ export def "companies-data-items get" [
 #
 # GET /companies/{companyId}/data/journalEntries
 # operationId: list-journal-entries
-export def "companies-data-journal-entries list" [
+export def "list-journal-entries" [
   company_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5073,7 +5073,7 @@ export def "companies-data-journal-entries list" [
 # DEPRECATED
 # operationId: get-journal-entry
 @deprecated
-export def "companies-data-journal-entries get-entry" [
+export def "get-journal-entry" [
   company_id: string
   journal_entry_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5111,7 +5111,7 @@ export def "companies-data-journal-entries get-entry" [
 #
 # GET /companies/{companyId}/data/journals
 # operationId: list-journals
-export def "companies-data-journals list" [
+export def "list-journals" [
   company_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5154,7 +5154,7 @@ export def "companies-data-journals list" [
 # DEPRECATED
 # operationId: get-journal
 @deprecated
-export def "companies-data-journals get" [
+export def "get-journal" [
   company_id: string
   journal_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5194,7 +5194,7 @@ export def "companies-data-journals get" [
 # DEPRECATED
 # operationId: list-payment-methods
 @deprecated
-export def "companies-data-payment-methods list" [
+export def "list-payment-methods" [
   company_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5237,7 +5237,7 @@ export def "companies-data-payment-methods list" [
 # DEPRECATED
 # operationId: get-payment-method
 @deprecated
-export def "companies-data-payment-methods get" [
+export def "get-payment-method" [
   company_id: string
   payment_method_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5275,7 +5275,7 @@ export def "companies-data-payment-methods get" [
 #
 # GET /companies/{companyId}/data/payments
 # operationId: list-payments
-export def "companies-data-payments list" [
+export def "list-payments" [
   company_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5318,7 +5318,7 @@ export def "companies-data-payments list" [
 # DEPRECATED
 # operationId: get-payment
 @deprecated
-export def "companies-data-payments get" [
+export def "get-payment" [
   company_id: string
   payment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5356,7 +5356,7 @@ export def "companies-data-payments get" [
 #
 # GET /companies/{companyId}/data/purchaseOrders
 # operationId: list-purchase-orders
-export def "companies-data-purchase-orders list" [
+export def "list-purchase-orders" [
   company_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5399,7 +5399,7 @@ export def "companies-data-purchase-orders list" [
 # DEPRECATED
 # operationId: get-purchase-order
 @deprecated
-export def "companies-data-purchase-orders get" [
+export def "get-purchase-order" [
   company_id: string
   purchase_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5437,7 +5437,7 @@ export def "companies-data-purchase-orders get" [
 #
 # GET /companies/{companyId}/data/salesOrders
 # operationId: list-sales-orders
-export def "companies-data-sales-orders list" [
+export def "list-sales-orders" [
   company_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5480,7 +5480,7 @@ export def "companies-data-sales-orders list" [
 # DEPRECATED
 # operationId: get-sales-order
 @deprecated
-export def "companies-data-sales-orders get" [
+export def "get-sales-order" [
   company_id: string
   sales_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5518,7 +5518,7 @@ export def "companies-data-sales-orders get" [
 #
 # GET /companies/{companyId}/data/suppliers
 # operationId: list-suppliers
-export def "companies-data-suppliers list" [
+export def "list-suppliers" [
   company_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5561,7 +5561,7 @@ export def "companies-data-suppliers list" [
 # DEPRECATED
 # operationId: get-supplier
 @deprecated
-export def "companies-data-suppliers get" [
+export def "get-supplier" [
   company_id: string
   supplier_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5599,7 +5599,7 @@ export def "companies-data-suppliers get" [
 #
 # GET /companies/{companyId}/data/taxRates
 # operationId: list-tax-rates
-export def "companies-data-tax-rates list" [
+export def "list-tax-rates" [
   company_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5642,7 +5642,7 @@ export def "companies-data-tax-rates list" [
 # DEPRECATED
 # operationId: get-tax-rate
 @deprecated
-export def "companies-data-tax-rates get" [
+export def "get-tax-rate" [
   company_id: string
   tax_rate_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5680,7 +5680,7 @@ export def "companies-data-tax-rates get" [
 #
 # GET /companies/{companyId}/data/trackingCategories
 # operationId: list-tracking-categories
-export def "companies-data-tracking-categories list" [
+export def "list-tracking-categories" [
   company_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5723,7 +5723,7 @@ export def "companies-data-tracking-categories list" [
 # DEPRECATED
 # operationId: get-tracking-category
 @deprecated
-export def "companies-data-tracking-categories get-category" [
+export def "get-tracking-category" [
   company_id: string
   tracking_category_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5761,7 +5761,7 @@ export def "companies-data-tracking-categories get-category" [
 #
 # GET /companies/{companyId}/reports/agedCreditor
 # operationId: get-aged-creditors-report
-export def "companies-reports-aged-creditor get" [
+export def "get-aged-creditors-report" [
   company_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5801,7 +5801,7 @@ export def "companies-reports-aged-creditor get" [
 #
 # GET /companies/{companyId}/reports/agedCreditor/available
 # operationId: is-aged-creditors-report-available
-export def "companies-reports-aged-creditor-available get-is" [
+export def "is-aged-creditors-report-available" [
   company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5837,7 +5837,7 @@ export def "companies-reports-aged-creditor-available get-is" [
 #
 # GET /companies/{companyId}/reports/agedDebtor
 # operationId: get-aged-debtors-report
-export def "companies-reports-aged-debtor get" [
+export def "get-aged-debtors-report" [
   company_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5877,7 +5877,7 @@ export def "companies-reports-aged-debtor get" [
 #
 # GET /companies/{companyId}/reports/agedDebtor/available
 # operationId: is-aged-debtor-report-available
-export def "companies-reports-aged-debtor-available get-is" [
+export def "is-aged-debtor-report-available" [
   company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

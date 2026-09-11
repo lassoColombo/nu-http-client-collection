@@ -128,7 +128,7 @@ def x-amz-target-completer-27 [] { ["AmazonML_20141212.UpdateMLModel"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-tags" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "add-tags" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -152,7 +152,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AddTags
-export def "api create-tags" [
+export def "add-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -202,7 +202,7 @@ export def "api create-tags" [
 #
 # POST /
 # operationId: CreateBatchPrediction
-export def "api create-batch-prediction" [
+export def "create-batch-prediction" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -254,7 +254,7 @@ export def "api create-batch-prediction" [
 #
 # POST /
 # operationId: CreateDataSourceFromRDS
-export def "api create-data-source-from-rds" [
+export def "create-data-source-from-rds" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -306,7 +306,7 @@ export def "api create-data-source-from-rds" [
 #
 # POST /
 # operationId: CreateDataSourceFromRedshift
-export def "api create-data-source-from-redshift" [
+export def "create-data-source-from-redshift" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -358,7 +358,7 @@ export def "api create-data-source-from-redshift" [
 #
 # POST /
 # operationId: CreateDataSourceFromS3
-export def "api create-data-source-from-s3" [
+export def "create-data-source-from-s3" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -409,7 +409,7 @@ export def "api create-data-source-from-s3" [
 #
 # POST /
 # operationId: CreateEvaluation
-export def "api create-evaluation" [
+export def "create-evaluation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -460,7 +460,7 @@ export def "api create-evaluation" [
 #
 # POST /
 # operationId: CreateMLModel
-export def "api create-ml-model" [
+export def "create-ml-model" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -514,7 +514,7 @@ export def "api create-ml-model" [
 #
 # POST /
 # operationId: CreateRealtimeEndpoint
-export def "api create-realtime-endpoint" [
+export def "create-realtime-endpoint" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -562,7 +562,7 @@ export def "api create-realtime-endpoint" [
 #
 # POST /
 # operationId: DeleteBatchPrediction
-export def "api delete-batch-prediction" [
+export def "delete-batch-prediction" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -610,7 +610,7 @@ export def "api delete-batch-prediction" [
 #
 # POST /
 # operationId: DeleteDataSource
-export def "api delete-data-source" [
+export def "delete-data-source" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -658,7 +658,7 @@ export def "api delete-data-source" [
 #
 # POST /
 # operationId: DeleteEvaluation
-export def "api delete-evaluation" [
+export def "delete-evaluation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -706,7 +706,7 @@ export def "api delete-evaluation" [
 #
 # POST /
 # operationId: DeleteMLModel
-export def "api delete-ml-model" [
+export def "delete-ml-model" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -754,7 +754,7 @@ export def "api delete-ml-model" [
 #
 # POST /
 # operationId: DeleteRealtimeEndpoint
-export def "api delete-realtime-endpoint" [
+export def "delete-realtime-endpoint" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -802,7 +802,7 @@ export def "api delete-realtime-endpoint" [
 #
 # POST /
 # operationId: DeleteTags
-export def "api delete-tags" [
+export def "delete-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -852,7 +852,7 @@ export def "api delete-tags" [
 #
 # POST /
 # operationId: DescribeBatchPredictions
-export def "api get-batch-predictions" [
+export def "describe-batch-predictions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -913,7 +913,7 @@ export def "api get-batch-predictions" [
 #
 # POST /
 # operationId: DescribeDataSources
-export def "api get-data-sources" [
+export def "describe-data-sources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -974,7 +974,7 @@ export def "api get-data-sources" [
 #
 # POST /
 # operationId: DescribeEvaluations
-export def "api get-evaluations" [
+export def "describe-evaluations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1035,7 +1035,7 @@ export def "api get-evaluations" [
 #
 # POST /
 # operationId: DescribeMLModels
-export def "api get-ml-models" [
+export def "describe-ml-models" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1096,7 +1096,7 @@ export def "api get-ml-models" [
 #
 # POST /
 # operationId: DescribeTags
-export def "api get-tags" [
+export def "describe-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1145,7 +1145,7 @@ export def "api get-tags" [
 #
 # POST /
 # operationId: GetBatchPrediction
-export def "api get-batch-prediction" [
+export def "get-batch-prediction" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1193,7 +1193,7 @@ export def "api get-batch-prediction" [
 #
 # POST /
 # operationId: GetDataSource
-export def "api get-data-source" [
+export def "get-data-source" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1242,7 +1242,7 @@ export def "api get-data-source" [
 #
 # POST /
 # operationId: GetEvaluation
-export def "api get-evaluation" [
+export def "get-evaluation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1290,7 +1290,7 @@ export def "api get-evaluation" [
 #
 # POST /
 # operationId: GetMLModel
-export def "api get-ml-model" [
+export def "get-ml-model" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1339,7 +1339,7 @@ export def "api get-ml-model" [
 #
 # POST /
 # operationId: Predict
-export def "api create-predict" [
+export def "predict" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1389,7 +1389,7 @@ export def "api create-predict" [
 #
 # POST /
 # operationId: UpdateBatchPrediction
-export def "api update-batch-prediction" [
+export def "update-batch-prediction" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1438,7 +1438,7 @@ export def "api update-batch-prediction" [
 #
 # POST /
 # operationId: UpdateDataSource
-export def "api update-data-source" [
+export def "update-data-source" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1487,7 +1487,7 @@ export def "api update-data-source" [
 #
 # POST /
 # operationId: UpdateEvaluation
-export def "api update-evaluation" [
+export def "update-evaluation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1536,7 +1536,7 @@ export def "api update-evaluation" [
 #
 # POST /
 # operationId: UpdateMLModel
-export def "api update-ml-model" [
+export def "update-ml-model" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

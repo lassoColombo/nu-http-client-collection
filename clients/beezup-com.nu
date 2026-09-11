@@ -140,7 +140,7 @@ def format-completer-1 [] { ["csv"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "orders-batches-change-orders list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "change-order-list-v3" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -165,7 +165,7 @@ export def commands []: nothing -> table {
 # POST /orders/v3/batches/changeOrders
 # operationId: ChangeOrderListV3
 # --changeOrders item shape: {changeOrderRequest?: record, order: any}
-export def "orders-batches-change-orders list" [
+export def "change-order-list-v3" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -207,7 +207,7 @@ export def "orders-batches-change-orders list" [
 # POST /orders/v3/batches/changeOrders/{changeOrderType}
 # operationId: ChangeOrderListV2
 # --changeOrders item shape: {changeOrderRequest?: record, order: record}
-export def "orders-batches-change-orders list-by-change-order-type" [
+export def "change-order-list-v2" [
   change_order_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -251,7 +251,7 @@ export def "orders-batches-change-orders list-by-change-order-type" [
 # POST /orders/v3/batches/clearMerchantOrderInfos
 # operationId: ClearMerchantOrderInfoListV3
 # --orders item shape: {accountId: int, beezUPOrderId: string, marketplaceTechnicalCode: string}
-export def "orders-batches-clear-merchant-order-infos list" [
+export def "clear-merchant-order-info-list-v3" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -292,7 +292,7 @@ export def "orders-batches-clear-merchant-order-infos list" [
 # POST /orders/v3/batches/setMerchantOrderInfos
 # operationId: SetMerchantOrderInfoListV3
 # --orders item shape: {accountId: int, beezUPOrderId: string, marketplaceTechnicalCode: string, order_MerchantOrderId: string}
-export def "orders-batches-set-merchant-order-infos list" [
+export def "set-merchant-order-info-list-v3" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -334,7 +334,7 @@ export def "orders-batches-set-merchant-order-infos list" [
 #
 # POST /orders/v3/harvest
 # operationId: HarvestAllV3
-export def "orders-harvest list" [
+export def "harvest-all-v3" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -370,7 +370,7 @@ export def "orders-harvest list" [
 #
 # POST /orders/v3/list/full
 # operationId: GetOrderListFullV3
-export def "orders-list-full get" [
+export def "get-order-list-full-v3" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -425,7 +425,7 @@ export def "orders-list-full get" [
 #
 # POST /orders/v3/list/light
 # operationId: GetOrderListLightV3
-export def "orders-list-light get" [
+export def "get-order-list-light-v3" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -477,7 +477,7 @@ export def "orders-list-light get" [
 #
 # GET /orders/v3/lov/orderManagementReadyMarketplaceBusinessCode
 # operationId: GetOrderManagementReadyMarketplaceBusinessCode
-export def "orders-lov-order-management-ready-marketplace-business-code get" [
+export def "get-order-management-ready-marketplace-business-code" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -516,7 +516,7 @@ export def "orders-lov-order-management-ready-marketplace-business-code get" [
 #
 # GET /orders/v3/status
 # operationId: GetMarketplaceAccountsSynchronizationV3
-export def "orders-status get-marketplace-accounts-synchronization" [
+export def "get-marketplace-accounts-synchronization-v3" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -555,7 +555,7 @@ export def "orders-status get-marketplace-accounts-synchronization" [
 #
 # POST /orders/v3/{marketplaceTechnicalCode}/{accountId}/harvest
 # operationId: HarvestAccount
-export def "orders-harvest create-account" [
+export def "harvest-account" [
   marketplace_technical_code: string
   account_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -596,7 +596,7 @@ export def "orders-harvest create-account" [
 #
 # GET /orders/v3/{marketplaceTechnicalCode}/{accountId}/{beezUPOrderId}
 # operationId: GetOrderV3
-export def "orders get" [
+export def "get-order-v3" [
   marketplace_technical_code: string
   account_id: int
   beez_up_order_id: string
@@ -639,7 +639,7 @@ export def "orders get" [
 #
 # HEAD /orders/v3/{marketplaceTechnicalCode}/{accountId}/{beezUPOrderId}
 # operationId: HeadOrderV3
-export def "orders head" [
+export def "head-order-v3" [
   marketplace_technical_code: string
   account_id: int
   beez_up_order_id: string
@@ -682,7 +682,7 @@ export def "orders head" [
 #
 # POST /orders/v3/{marketplaceTechnicalCode}/{accountId}/{beezUPOrderId}/clearMerchantOrderInfo
 # operationId: ClearMerchantOrderInfoV3
-export def "orders-clear-merchant-order-info get" [
+export def "clear-merchant-order-info-v3" [
   marketplace_technical_code: string
   account_id: int
   beez_up_order_id: string
@@ -724,7 +724,7 @@ export def "orders-clear-merchant-order-info get" [
 #
 # POST /orders/v3/{marketplaceTechnicalCode}/{accountId}/{beezUPOrderId}/harvest
 # operationId: HarvestOrderV3
-export def "orders-harvest create" [
+export def "harvest-order-v3" [
   marketplace_technical_code: string
   account_id: int
   beez_up_order_id: string
@@ -764,7 +764,7 @@ export def "orders-harvest create" [
 #
 # GET /orders/v3/{marketplaceTechnicalCode}/{accountId}/{beezUPOrderId}/history
 # operationId: GetOrderHistoryV3
-export def "orders-history get" [
+export def "get-order-history-v3" [
   marketplace_technical_code: string
   account_id: int
   beez_up_order_id: string
@@ -804,7 +804,7 @@ export def "orders-history get" [
 #
 # GET /orders/v3/{marketplaceTechnicalCode}/{accountId}/{beezUPOrderId}/history/{orderChangeExecutionUUID}
 # operationId: GetOrderChangeReportingV3
-export def "orders-history get-change-reporting" [
+export def "get-order-change-reporting-v3" [
   marketplace_technical_code: string
   account_id: int
   beez_up_order_id: string
@@ -846,7 +846,7 @@ export def "orders-history get-change-reporting" [
 #
 # POST /orders/v3/{marketplaceTechnicalCode}/{accountId}/{beezUPOrderId}/setMerchantOrderInfo
 # operationId: SetMerchantOrderInfoV3
-export def "orders-set-merchant-order-info update" [
+export def "set-merchant-order-info-v3" [
   marketplace_technical_code: string
   account_id: int
   beez_up_order_id: string
@@ -894,7 +894,7 @@ export def "orders-set-merchant-order-info update" [
 #
 # POST /orders/v3/{marketplaceTechnicalCode}/{accountId}/{beezUPOrderId}/{changeOrderType}
 # operationId: ChangeOrderV3
-export def "orders create-change" [
+export def "change-order-v3" [
   marketplace_technical_code: string
   account_id: int
   beez_up_order_id: string
@@ -943,7 +943,7 @@ export def "orders create-change" [
 #
 # GET /v2/public/channels/
 # operationId: GetChannelsIndex
-export def "public-channels get-index" [
+export def "get-channels-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -980,7 +980,7 @@ export def "public-channels get-index" [
 #
 # GET /v2/public/channels/{countryIsoCode}
 # operationId: GetChannels
-export def "public-channels get" [
+export def "get-channels" [
   country_iso_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1020,7 +1020,7 @@ export def "public-channels get" [
 #
 # GET /v2/public/lov/
 # operationId: GetPublicLovIndex
-export def "public-lov get-index" [
+export def "get-public-lov-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1057,7 +1057,7 @@ export def "public-lov get-index" [
 #
 # GET /v2/public/lov/{listName}
 # operationId: GetPublicListOfValues
-export def "public-lov get-list-of-values" [
+export def "get-public-list-of-values" [
   list_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1097,7 +1097,7 @@ export def "public-lov get-list-of-values" [
 #
 # POST /v2/public/security/login
 # operationId: Login
-export def "public-security-login create" [
+export def "login" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1136,7 +1136,7 @@ export def "public-security-login create" [
 #
 # POST /v2/public/security/lostpassword
 # operationId: LostPassword
-export def "public-security-lostpassword create-lost-password" [
+export def "lost-password" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1174,7 +1174,7 @@ export def "public-security-lostpassword create-lost-password" [
 #
 # POST /v2/public/security/register
 # operationId: Register
-export def "public-security-register create" [
+export def "register" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1215,7 +1215,7 @@ export def "public-security-register create" [
 #
 # GET /v2/user/analytics/
 # operationId: AnalyticsIndex
-export def "user-analytics get-index" [
+export def "analytics-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1250,7 +1250,7 @@ export def "user-analytics get-index" [
 # POST /v2/user/analytics/reports/byday
 # operationId: GetStoreReportByDayPerStore
 # --advancedFilters shape: {globalMarginPercent?: int, linkClickToOrderMaxDay?: int, linkClickToOrderType: "OnPurchaseDate"|"OnClickDate", marginType: "Tracker"|"Global", onlyDirectSales: bool, onlyPaymentValidatedOrders: bool, performanceIndicatorFormula: record}
-export def "user-analytics-reports-byday get-store-by-day-per-store" [
+export def "get-store-report-by-day-per-store" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1293,7 +1293,7 @@ export def "user-analytics-reports-byday get-store-by-day-per-store" [
 #
 # GET /v2/user/analytics/tracking/status
 # operationId: GetTrackingStatus
-export def "user-analytics-tracking-status get" [
+export def "get-tracking-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1327,7 +1327,7 @@ export def "user-analytics-tracking-status get" [
 #
 # GET /v2/user/analytics/{storeId}
 # operationId: AnalyticsStoreIndex
-export def "user-analytics get-store-index" [
+export def "analytics-store-index" [
   store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1364,7 +1364,7 @@ export def "user-analytics get-store-index" [
 # POST /v2/user/analytics/{storeId}/optimisations/all/{actionName}
 # operationId: OptimiseAll
 # --analyticsProductColumnFilters shape: {additionalAnalyticsProductColumnFilters?: record, sku?: string, title?: string}
-export def "user-analytics-optimisations-all list-optimise" [
+export def "optimise-all" [
   store_id: string
   action_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1409,7 +1409,7 @@ export def "user-analytics-optimisations-all list-optimise" [
 #
 # POST /v2/user/analytics/{storeId}/optimisations/bycategory/{catalogCategoryId}/{actionName}
 # operationId: OptimiseByCategory
-export def "user-analytics-optimisations-bycategory create-optimise-by-category" [
+export def "optimise-by-category" [
   store_id: string
   catalog_category_id: string
   action_name: string
@@ -1453,7 +1453,7 @@ export def "user-analytics-optimisations-bycategory create-optimise-by-category"
 #
 # POST /v2/user/analytics/{storeId}/optimisations/bychannel/{channelId}/{actionName}
 # operationId: OptimiseByChannel
-export def "user-analytics-optimisations-bychannel create-optimise-by-channel" [
+export def "optimise-by-channel" [
   store_id: string
   channel_id: string
   action_name: string
@@ -1493,7 +1493,7 @@ export def "user-analytics-optimisations-bychannel create-optimise-by-channel" [
 #
 # POST /v2/user/analytics/{storeId}/optimisations/byproduct/{productId}/{actionName}
 # operationId: OptimiseByProduct
-export def "user-analytics-optimisations-byproduct create-optimise-by-product" [
+export def "optimise-by-product" [
   store_id: string
   product_id: string
   action_name: string
@@ -1537,7 +1537,7 @@ export def "user-analytics-optimisations-byproduct create-optimise-by-product" [
 #
 # POST /v2/user/analytics/{storeId}/optimisations/copy
 # operationId: CopyOptimisation
-export def "user-analytics-optimisations-copy copy" [
+export def "copy-optimisation" [
   store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1579,7 +1579,7 @@ export def "user-analytics-optimisations-copy copy" [
 #
 # POST /v2/user/analytics/{storeId}/optimisations/{actionName}
 # operationId: Optimise
-export def "user-analytics-optimisations create-optimise" [
+export def "optimise" [
   store_id: string
   action_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1622,7 +1622,7 @@ export def "user-analytics-optimisations create-optimise" [
 #
 # POST /v2/user/analytics/{storeId}/reports/bycategory
 # operationId: GetStoreReportByCategory
-export def "user-analytics-reports-bycategory get-store-by-category" [
+export def "get-store-report-by-category" [
   store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1663,7 +1663,7 @@ export def "user-analytics-reports-bycategory get-store-by-category" [
 #
 # POST /v2/user/analytics/{storeId}/reports/bychannel
 # operationId: GetStoreReportByChannel
-export def "user-analytics-reports-bychannel get-store-by-channel" [
+export def "get-store-report-by-channel" [
   store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1705,7 +1705,7 @@ export def "user-analytics-reports-bychannel get-store-by-channel" [
 # POST /v2/user/analytics/{storeId}/reports/byday
 # operationId: GetStoreReportByDay
 # --advancedFilters shape: {globalMarginPercent?: int, linkClickToOrderMaxDay?: int, linkClickToOrderType: "OnPurchaseDate"|"OnClickDate", marginType: "Tracker"|"Global", onlyDirectSales: bool, onlyPaymentValidatedOrders: bool, performanceIndicatorFormula: record}
-export def "user-analytics-reports-byday get-store-by-day" [
+export def "get-store-report-by-day" [
   store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1751,7 +1751,7 @@ export def "user-analytics-reports-byday get-store-by-day" [
 # POST /v2/user/analytics/{storeId}/reports/byproduct
 # operationId: GetStoreReportByProduct
 # --analyticsProductColumnFilters shape: {additionalAnalyticsProductColumnFilters?: record, sku?: string, title?: string}
-export def "user-analytics-reports-byproduct get-store-by-product" [
+export def "get-store-report-by-product" [
   store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1795,7 +1795,7 @@ export def "user-analytics-reports-byproduct get-store-by-product" [
 #
 # GET /v2/user/analytics/{storeId}/reports/filters
 # operationId: GetReportFilters
-export def "user-analytics-reports-filters list" [
+export def "get-report-filters" [
   store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1831,7 +1831,7 @@ export def "user-analytics-reports-filters list" [
 #
 # DELETE /v2/user/analytics/{storeId}/reports/filters/{reportFilterId}
 # operationId: DeleteReportFilter
-export def "user-analytics-reports-filters delete" [
+export def "delete-report-filter" [
   store_id: string
   report_filter_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1869,7 +1869,7 @@ export def "user-analytics-reports-filters delete" [
 #
 # GET /v2/user/analytics/{storeId}/reports/filters/{reportFilterId}
 # operationId: GetReportFilter
-export def "user-analytics-reports-filters get" [
+export def "get-report-filter" [
   store_id: string
   report_filter_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1907,7 +1907,7 @@ export def "user-analytics-reports-filters get" [
 #
 # PUT /v2/user/analytics/{storeId}/reports/filters/{reportFilterId}
 # operationId: SaveReportFilter
-export def "user-analytics-reports-filters update-save" [
+export def "save-report-filter" [
   store_id: string
   report_filter_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1950,7 +1950,7 @@ export def "user-analytics-reports-filters update-save" [
 #
 # GET /v2/user/analytics/{storeId}/rules
 # operationId: GetRules
-export def "user-analytics-rules list" [
+export def "get-rules" [
   store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1986,7 +1986,7 @@ export def "user-analytics-rules list" [
 #
 # POST /v2/user/analytics/{storeId}/rules
 # operationId: CreateRule
-export def "user-analytics-rules create" [
+export def "create-rule" [
   store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2030,7 +2030,7 @@ export def "user-analytics-rules create" [
 #
 # GET /v2/user/analytics/{storeId}/rules/executions
 # operationId: GetRulesExecutions
-export def "user-analytics-rules-executions get" [
+export def "get-rules-executions" [
   store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2069,7 +2069,7 @@ export def "user-analytics-rules-executions get" [
 #
 # POST /v2/user/analytics/{storeId}/rules/run
 # operationId: RunRules
-export def "user-analytics-rules-run create-by-store-id" [
+export def "run-rules" [
   store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2105,7 +2105,7 @@ export def "user-analytics-rules-run create-by-store-id" [
 #
 # DELETE /v2/user/analytics/{storeId}/rules/{ruleId}
 # operationId: DeleteRule
-export def "user-analytics-rules delete" [
+export def "delete-rule" [
   store_id: string
   rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2143,7 +2143,7 @@ export def "user-analytics-rules delete" [
 #
 # GET /v2/user/analytics/{storeId}/rules/{ruleId}
 # operationId: GetRule
-export def "user-analytics-rules get" [
+export def "get-rule" [
   store_id: string
   rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2181,7 +2181,7 @@ export def "user-analytics-rules get" [
 #
 # PATCH /v2/user/analytics/{storeId}/rules/{ruleId}
 # operationId: UpdateRule
-export def "user-analytics-rules update" [
+export def "update-rule" [
   store_id: string
   rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2225,7 +2225,7 @@ export def "user-analytics-rules update" [
 #
 # POST /v2/user/analytics/{storeId}/rules/{ruleId}/disable
 # operationId: DisableRule
-export def "user-analytics-rules-disable disable" [
+export def "disable-rule" [
   store_id: string
   rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2263,7 +2263,7 @@ export def "user-analytics-rules-disable disable" [
 #
 # POST /v2/user/analytics/{storeId}/rules/{ruleId}/enable
 # operationId: EnableRule
-export def "user-analytics-rules-enable enable" [
+export def "enable-rule" [
   store_id: string
   rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2301,7 +2301,7 @@ export def "user-analytics-rules-enable enable" [
 #
 # POST /v2/user/analytics/{storeId}/rules/{ruleId}/movedown
 # operationId: MoveDownRule
-export def "user-analytics-rules-movedown move-down" [
+export def "move-down-rule" [
   store_id: string
   rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2339,7 +2339,7 @@ export def "user-analytics-rules-movedown move-down" [
 #
 # POST /v2/user/analytics/{storeId}/rules/{ruleId}/moveup
 # operationId: MoveUpRule
-export def "user-analytics-rules-moveup move-up" [
+export def "move-up-rule" [
   store_id: string
   rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2377,7 +2377,7 @@ export def "user-analytics-rules-moveup move-up" [
 #
 # POST /v2/user/analytics/{storeId}/rules/{ruleId}/run
 # operationId: RunRule
-export def "user-analytics-rules-run create-by-store-id-rule-id" [
+export def "run-rule" [
   store_id: string
   rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2415,7 +2415,7 @@ export def "user-analytics-rules-run create-by-store-id-rule-id" [
 #
 # GET /v2/user/analytics/{storeId}/tracking/clicks
 # operationId: GetStoreTrackedClicks
-export def "user-analytics-tracking-clicks get-store-tracked" [
+export def "get-store-tracked-clicks" [
   store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2453,7 +2453,7 @@ export def "user-analytics-tracking-clicks get-store-tracked" [
 #
 # GET /v2/user/analytics/{storeId}/tracking/externalorders
 # operationId: GetStoreTrackedExternalOrders
-export def "user-analytics-tracking-externalorders get-store-tracked-external-orders" [
+export def "get-store-tracked-external-orders" [
   store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2491,7 +2491,7 @@ export def "user-analytics-tracking-externalorders get-store-tracked-external-or
 #
 # GET /v2/user/analytics/{storeId}/tracking/orders
 # operationId: GetStoreTrackedOrders
-export def "user-analytics-tracking-orders get-store-tracked" [
+export def "get-store-tracked-orders" [
   store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2529,7 +2529,7 @@ export def "user-analytics-tracking-orders get-store-tracked" [
 #
 # GET /v2/user/analytics/{storeId}/tracking/status
 # operationId: GetStoreTrackingStatus
-export def "user-analytics-tracking-status get-store" [
+export def "get-store-tracking-status" [
   store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2565,7 +2565,7 @@ export def "user-analytics-tracking-status get-store" [
 #
 # GET /v2/user/catalogs/
 # operationId: CatalogIndex
-export def "user-catalogs get-index" [
+export def "catalog-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2599,7 +2599,7 @@ export def "user-catalogs get-index" [
 #
 # GET /v2/user/catalogs/beezupColumns
 # operationId: Catalog_GetBeezUPColumns
-export def "user-catalogs-beezup-columns get-beez-up" [
+export def "catalog-get-beez-up-columns" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2633,7 +2633,7 @@ export def "user-catalogs-beezup-columns get-beez-up" [
 #
 # GET /v2/user/catalogs/importations
 # operationId: Importation_GetReportingsAllStores
-export def "user-catalogs-importations get-reportings-list-stores" [
+export def "importation-get-reportings-all-stores" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2667,7 +2667,7 @@ export def "user-catalogs-importations get-reportings-list-stores" [
 #
 # GET /v2/user/catalogs/{storeId}
 # operationId: CatalogStoreIndex
-export def "user-catalogs get-store-index" [
+export def "catalog-store-index" [
   store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2703,7 +2703,7 @@ export def "user-catalogs get-store-index" [
 #
 # DELETE /v2/user/catalogs/{storeId}/autoImport
 # operationId: Auto_DeleteAutoImport
-export def "user-catalogs-auto-import delete" [
+export def "auto-delete-auto-import" [
   store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2739,7 +2739,7 @@ export def "user-catalogs-auto-import delete" [
 #
 # GET /v2/user/catalogs/{storeId}/autoImport
 # operationId: Auto_GetAutoImportConfiguration
-export def "user-catalogs-auto-import get-configuration" [
+export def "auto-get-auto-import-configuration" [
   store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2775,7 +2775,7 @@ export def "user-catalogs-auto-import get-configuration" [
 #
 # POST /v2/user/catalogs/{storeId}/autoImport/activate
 # operationId: Importation_ActivateAutoImport
-export def "user-catalogs-auto-import-activate import-importation" [
+export def "importation-activate-auto-import" [
   store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2811,7 +2811,7 @@ export def "user-catalogs-auto-import-activate import-importation" [
 #
 # POST /v2/user/catalogs/{storeId}/autoImport/pause
 # operationId: Auto_PauseAutoImport
-export def "user-catalogs-auto-import-pause pause" [
+export def "auto-pause-auto-import" [
   store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2847,7 +2847,7 @@ export def "user-catalogs-auto-import-pause pause" [
 #
 # POST /v2/user/catalogs/{storeId}/autoImport/resume
 # operationId: Auto_ResumeAutoImport
-export def "user-catalogs-auto-import-resume import" [
+export def "auto-resume-auto-import" [
   store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2883,7 +2883,7 @@ export def "user-catalogs-auto-import-resume import" [
 #
 # POST /v2/user/catalogs/{storeId}/autoImport/scheduling/interval
 # operationId: Auto_ConfigureAutoImportInterval
-export def "user-catalogs-auto-import-scheduling-interval import-configure" [
+export def "auto-configure-auto-import-interval" [
   store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2923,7 +2923,7 @@ export def "user-catalogs-auto-import-scheduling-interval import-configure" [
 #
 # POST /v2/user/catalogs/{storeId}/autoImport/scheduling/schedules
 # operationId: Auto_ScheduleAutoImport
-export def "user-catalogs-auto-import-scheduling-schedules import" [
+export def "auto-schedule-auto-import" [
   store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2964,7 +2964,7 @@ export def "user-catalogs-auto-import-scheduling-schedules import" [
 #
 # POST /v2/user/catalogs/{storeId}/autoImport/start
 # operationId: Auto_StartAutoImport
-export def "user-catalogs-auto-import-start start" [
+export def "auto-start-auto-import" [
   store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3000,7 +3000,7 @@ export def "user-catalogs-auto-import-start start" [
 #
 # GET /v2/user/catalogs/{storeId}/catalogColumns
 # operationId: Catalog_GetCatalogColumns
-export def "user-catalogs-catalog-columns get" [
+export def "catalog-get-catalog-columns" [
   store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3036,7 +3036,7 @@ export def "user-catalogs-catalog-columns get" [
 #
 # POST /v2/user/catalogs/{storeId}/catalogColumns/{columnId}/rename
 # operationId: Catalog_ChangeCatalogColumnUserName
-export def "user-catalogs-catalog-columns-rename create-change-name" [
+export def "catalog-change-catalog-column-user-name" [
   store_id: string
   column_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3078,7 +3078,7 @@ export def "user-catalogs-catalog-columns-rename create-change-name" [
 #
 # GET /v2/user/catalogs/{storeId}/categories
 # operationId: Catalog_GetCategories
-export def "user-catalogs-categories get" [
+export def "catalog-get-categories" [
   store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3117,7 +3117,7 @@ export def "user-catalogs-categories get" [
 #
 # GET /v2/user/catalogs/{storeId}/customColumns
 # operationId: Catalog_GetCustomColumns
-export def "user-catalogs-custom-columns get" [
+export def "catalog-get-custom-columns" [
   store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3153,7 +3153,7 @@ export def "user-catalogs-custom-columns get" [
 #
 # POST /v2/user/catalogs/{storeId}/customColumns/computeExpression
 # operationId: Catalog_ComputeExpression
-export def "user-catalogs-custom-columns-compute-expression create" [
+export def "catalog-compute-expression" [
   store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3194,7 +3194,7 @@ export def "user-catalogs-custom-columns-compute-expression create" [
 #
 # DELETE /v2/user/catalogs/{storeId}/customColumns/{columnId}
 # operationId: Catalog_DeleteCustomColumn
-export def "user-catalogs-custom-columns delete" [
+export def "catalog-delete-custom-column" [
   store_id: string
   column_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3232,7 +3232,7 @@ export def "user-catalogs-custom-columns delete" [
 #
 # PUT /v2/user/catalogs/{storeId}/customColumns/{columnId}
 # operationId: Catalog_SaveCustomColumn
-export def "user-catalogs-custom-columns update-save" [
+export def "catalog-save-custom-column" [
   store_id: string
   column_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3277,7 +3277,7 @@ export def "user-catalogs-custom-columns update-save" [
 #
 # GET /v2/user/catalogs/{storeId}/customColumns/{columnId}/expression
 # operationId: Catalog_GetCustomColumnExpression
-export def "user-catalogs-custom-columns-expression get" [
+export def "catalog-get-custom-column-expression" [
   store_id: string
   column_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3315,7 +3315,7 @@ export def "user-catalogs-custom-columns-expression get" [
 #
 # PUT /v2/user/catalogs/{storeId}/customColumns/{columnId}/expression
 # operationId: Catalog_ChangeCustomColumnExpression
-export def "user-catalogs-custom-columns-expression update-change" [
+export def "catalog-change-custom-column-expression" [
   store_id: string
   column_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3358,7 +3358,7 @@ export def "user-catalogs-custom-columns-expression update-change" [
 #
 # POST /v2/user/catalogs/{storeId}/customColumns/{columnId}/rename
 # operationId: Catalog_ChangeCustomColumnUserName
-export def "user-catalogs-custom-columns-rename create-change-name" [
+export def "catalog-change-custom-column-user-name" [
   store_id: string
   column_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3400,7 +3400,7 @@ export def "user-catalogs-custom-columns-rename create-change-name" [
 #
 # GET /v2/user/catalogs/{storeId}/importations
 # operationId: Importation_GetReportings
-export def "user-catalogs-importations get-reportings" [
+export def "importation-get-reportings" [
   store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3438,7 +3438,7 @@ export def "user-catalogs-importations get-reportings" [
 # operationId: Importation_StartManualUpdate
 # --duplicateProductSkuConfiguration shape: {compareOptions: "None"|"IgnoreCase"|"IgnoreNonSpace"|"IgnoreSymbols"|"OrdinalIgnoreCase"|"StringSort"|"Ordinal", strategy: "None"|"SkipAllDuplicateProducts"|"KeepFirstDuplicateProductOnly"|"FailImportationIfAnyDuplicateProduct"}
 # --input shape: {files: list, transformFileUrl?: string}
-export def "user-catalogs-importations-start update-manual" [
+export def "importation-start-manual-update" [
   store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3479,7 +3479,7 @@ export def "user-catalogs-importations-start update-manual" [
 #
 # GET /v2/user/catalogs/{storeId}/importations/{executionId}
 # operationId: Importation_GetImportationMonitoring
-export def "user-catalogs-importations get-monitoring" [
+export def "importation-get-importation-monitoring" [
   store_id: string
   execution_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3517,7 +3517,7 @@ export def "user-catalogs-importations get-monitoring" [
 #
 # POST /v2/user/catalogs/{storeId}/importations/{executionId}/cancel
 # operationId: Importation_Cancel
-export def "user-catalogs-importations-cancel cancel" [
+export def "importation-cancel" [
   store_id: string
   execution_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3555,7 +3555,7 @@ export def "user-catalogs-importations-cancel cancel" [
 #
 # GET /v2/user/catalogs/{storeId}/importations/{executionId}/catalogColumns
 # operationId: Importation_GetDetectedCatalogColumns
-export def "user-catalogs-importations-catalog-columns get-detected" [
+export def "importation-get-detected-catalog-columns" [
   store_id: string
   execution_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3594,7 +3594,7 @@ export def "user-catalogs-importations-catalog-columns get-detected" [
 # POST /v2/user/catalogs/{storeId}/importations/{executionId}/catalogColumns/{columnId}
 # operationId: Importation_ConfigureCatalogColumn
 # --catalogColumn shape: {catalogColumnName: string, configuration: record, duplicateProductValueConfiguration?: record, id: string, ignored?: bool, links: record, userColumName: string}
-export def "user-catalogs-importations-catalog-columns create-configure" [
+export def "importation-configure-catalog-column" [
   store_id: string
   execution_id: string
   column_id: string
@@ -3638,7 +3638,7 @@ export def "user-catalogs-importations-catalog-columns create-configure" [
 #
 # POST /v2/user/catalogs/{storeId}/importations/{executionId}/catalogColumns/{columnId}/ignore
 # operationId: Importation_IgnoreColumn
-export def "user-catalogs-importations-catalog-columns-ignore create" [
+export def "importation-ignore-column" [
   store_id: string
   execution_id: string
   column_id: string
@@ -3678,7 +3678,7 @@ export def "user-catalogs-importations-catalog-columns-ignore create" [
 #
 # POST /v2/user/catalogs/{storeId}/importations/{executionId}/catalogColumns/{columnId}/map
 # operationId: Importation_MapCatalogColumn
-export def "user-catalogs-importations-catalog-columns-map create" [
+export def "importation-map-catalog-column" [
   store_id: string
   execution_id: string
   column_id: string
@@ -3722,7 +3722,7 @@ export def "user-catalogs-importations-catalog-columns-map create" [
 #
 # POST /v2/user/catalogs/{storeId}/importations/{executionId}/catalogColumns/{columnId}/reattend
 # operationId: Importation_ReattendColumn
-export def "user-catalogs-importations-catalog-columns-reattend create" [
+export def "importation-reattend-column" [
   store_id: string
   execution_id: string
   column_id: string
@@ -3762,7 +3762,7 @@ export def "user-catalogs-importations-catalog-columns-reattend create" [
 #
 # POST /v2/user/catalogs/{storeId}/importations/{executionId}/catalogColumns/{columnId}/unmap
 # operationId: Importation_UnmapCatalogColumn
-export def "user-catalogs-importations-catalog-columns-unmap create" [
+export def "importation-unmap-catalog-column" [
   store_id: string
   execution_id: string
   column_id: string
@@ -3802,7 +3802,7 @@ export def "user-catalogs-importations-catalog-columns-unmap create" [
 #
 # POST /v2/user/catalogs/{storeId}/importations/{executionId}/commit
 # operationId: Importation_Commit
-export def "user-catalogs-importations-commit commit" [
+export def "importation-commit" [
   store_id: string
   execution_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3840,7 +3840,7 @@ export def "user-catalogs-importations-commit commit" [
 #
 # POST /v2/user/catalogs/{storeId}/importations/{executionId}/commitColumns
 # operationId: Importation_CommitColumns
-export def "user-catalogs-importations-commit-columns commit" [
+export def "importation-commit-columns" [
   store_id: string
   execution_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3878,7 +3878,7 @@ export def "user-catalogs-importations-commit-columns commit" [
 #
 # POST /v2/user/catalogs/{storeId}/importations/{executionId}/configureRemainingCatalogColumns
 # operationId: Importation_ConfigureRemainingCatalogColumns
-export def "user-catalogs-importations-configure-remaining-catalog-columns create" [
+export def "importation-configure-remaining-catalog-columns" [
   store_id: string
   execution_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3916,7 +3916,7 @@ export def "user-catalogs-importations-configure-remaining-catalog-columns creat
 #
 # GET /v2/user/catalogs/{storeId}/importations/{executionId}/customColumns
 # operationId: Importation_GetCustomColumns
-export def "user-catalogs-importations-custom-columns get" [
+export def "importation-get-custom-columns" [
   store_id: string
   execution_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3954,7 +3954,7 @@ export def "user-catalogs-importations-custom-columns get" [
 #
 # DELETE /v2/user/catalogs/{storeId}/importations/{executionId}/customColumns/{columnId}
 # operationId: Importation_DeleteCustomColumn
-export def "user-catalogs-importations-custom-columns delete" [
+export def "importation-delete-custom-column" [
   store_id: string
   execution_id: string
   column_id: string
@@ -3994,7 +3994,7 @@ export def "user-catalogs-importations-custom-columns delete" [
 #
 # PUT /v2/user/catalogs/{storeId}/importations/{executionId}/customColumns/{columnId}
 # operationId: Importation_SaveCustomColumn
-export def "user-catalogs-importations-custom-columns update-save" [
+export def "importation-save-custom-column" [
   store_id: string
   execution_id: string
   column_id: string
@@ -4040,7 +4040,7 @@ export def "user-catalogs-importations-custom-columns update-save" [
 #
 # GET /v2/user/catalogs/{storeId}/importations/{executionId}/customColumns/{columnId}/expression
 # operationId: Importation_GetCustomColumnExpression
-export def "user-catalogs-importations-custom-columns-expression get" [
+export def "importation-get-custom-column-expression" [
   store_id: string
   execution_id: string
   column_id: string
@@ -4080,7 +4080,7 @@ export def "user-catalogs-importations-custom-columns-expression get" [
 #
 # POST /v2/user/catalogs/{storeId}/importations/{executionId}/customColumns/{columnId}/map
 # operationId: Importation_MapCustomColumn
-export def "user-catalogs-importations-custom-columns-map create" [
+export def "importation-map-custom-column" [
   store_id: string
   execution_id: string
   column_id: string
@@ -4124,7 +4124,7 @@ export def "user-catalogs-importations-custom-columns-map create" [
 #
 # POST /v2/user/catalogs/{storeId}/importations/{executionId}/customColumns/{columnId}/unmap
 # operationId: Importation_UnmapCustomColumn
-export def "user-catalogs-importations-custom-columns-unmap create" [
+export def "importation-unmap-custom-column" [
   store_id: string
   execution_id: string
   column_id: string
@@ -4164,7 +4164,7 @@ export def "user-catalogs-importations-custom-columns-unmap create" [
 #
 # GET /v2/user/catalogs/{storeId}/importations/{executionId}/productSamples/{productSampleIndex}
 # operationId: Importation_GetProductSample
-export def "user-catalogs-importations-product-samples get" [
+export def "importation-get-product-sample" [
   store_id: string
   execution_id: string
   product_sample_index: int
@@ -4204,7 +4204,7 @@ export def "user-catalogs-importations-product-samples get" [
 #
 # GET /v2/user/catalogs/{storeId}/importations/{executionId}/productSamples/{productSampleIndex}/customColumns/{columnId}
 # operationId: Importation_GetProductSampleCustomColumnValue
-export def "user-catalogs-importations-product-samples-custom-columns get-value" [
+export def "importation-get-product-sample-custom-column-value" [
   store_id: string
   execution_id: string
   product_sample_index: int
@@ -4247,7 +4247,7 @@ export def "user-catalogs-importations-product-samples-custom-columns get-value"
 # POST /v2/user/catalogs/{storeId}/importations/{executionId}/products/list
 # operationId: Importation_GetProductsReport
 # --errorCodes item shape: {errorCode?: string, userColumnName?: string}
-export def "user-catalogs-importations-products-list get-report" [
+export def "importation-get-products-report" [
   store_id: string
   execution_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4295,7 +4295,7 @@ export def "user-catalogs-importations-products-list get-report" [
 #
 # GET /v2/user/catalogs/{storeId}/importations/{executionId}/report
 # operationId: Importation_GetReport
-export def "user-catalogs-importations-report get" [
+export def "importation-get-report" [
   store_id: string
   execution_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4333,7 +4333,7 @@ export def "user-catalogs-importations-report get" [
 #
 # GET /v2/user/catalogs/{storeId}/importations/{executionId}/technicalProgression
 # operationId: Importation_TechnicalProgression
-export def "user-catalogs-importations-technical-progression get" [
+export def "importation-technical-progression" [
   store_id: string
   execution_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4371,7 +4371,7 @@ export def "user-catalogs-importations-technical-progression get" [
 #
 # GET /v2/user/catalogs/{storeId}/inputConfiguration
 # operationId: Importation_GetManualUpdateLastInputConfig
-export def "user-catalogs-input-configuration get-importation-manual-update-last-config" [
+export def "importation-get-manual-update-last-input-config" [
   store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4407,7 +4407,7 @@ export def "user-catalogs-input-configuration get-importation-manual-update-last
 #
 # GET /v2/user/catalogs/{storeId}/products
 # operationId: Catalog_GetProductBySku
-export def "user-catalogs-products get-by-sku" [
+export def "catalog-get-product-by-sku" [
   store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4445,7 +4445,7 @@ export def "user-catalogs-products get-by-sku" [
 #
 # POST /v2/user/catalogs/{storeId}/products/list
 # operationId: Catalog_GetProducts
-export def "user-catalogs-products-list get" [
+export def "catalog-get-products" [
   store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4496,7 +4496,7 @@ export def "user-catalogs-products-list get" [
 #
 # GET /v2/user/catalogs/{storeId}/products/random
 # operationId: Catalog_GetRandomProducts
-export def "user-catalogs-products-random get" [
+export def "catalog-get-random-products" [
   store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4532,7 +4532,7 @@ export def "user-catalogs-products-random get" [
 #
 # GET /v2/user/catalogs/{storeId}/products/{productId}
 # operationId: Catalog_GetProductByProductId
-export def "user-catalogs-products get" [
+export def "catalog-get-product-by-product-id" [
   store_id: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4570,7 +4570,7 @@ export def "user-catalogs-products get" [
 #
 # GET /v2/user/channelCatalogs/
 # operationId: GetChannelCatalogs
-export def "user-channel-catalogs list" [
+export def "get-channel-catalogs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4606,7 +4606,7 @@ export def "user-channel-catalogs list" [
 #
 # POST /v2/user/channelCatalogs/
 # operationId: AddChannelCatalog
-export def "user-channel-catalogs create" [
+export def "add-channel-catalog" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4645,7 +4645,7 @@ export def "user-channel-catalogs create" [
 #
 # GET /v2/user/channelCatalogs/filterOperators
 # operationId: GetChannelCatalogFilterOperators
-export def "user-channel-catalogs-filter-operators get" [
+export def "get-channel-catalog-filter-operators" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4679,7 +4679,7 @@ export def "user-channel-catalogs-filter-operators get" [
 #
 # POST /v2/user/channelCatalogs/products
 # operationId: GetChannelCatalogProductByChannelCatalog
-export def "user-channel-catalogs-products get" [
+export def "get-channel-catalog-product-by-channel-catalog" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4719,7 +4719,7 @@ export def "user-channel-catalogs-products get" [
 #
 # DELETE /v2/user/channelCatalogs/{channelCatalogId}
 # operationId: DeleteChannelCatalog
-export def "user-channel-catalogs delete" [
+export def "delete-channel-catalog" [
   channel_catalog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4755,7 +4755,7 @@ export def "user-channel-catalogs delete" [
 #
 # GET /v2/user/channelCatalogs/{channelCatalogId}
 # operationId: GetChannelCatalog
-export def "user-channel-catalogs get" [
+export def "get-channel-catalog" [
   channel_catalog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4791,7 +4791,7 @@ export def "user-channel-catalogs get" [
 #
 # GET /v2/user/channelCatalogs/{channelCatalogId}/categories
 # operationId: GetChannelCatalogCategories
-export def "user-channel-catalogs-categories get" [
+export def "get-channel-catalog-categories" [
   channel_catalog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4828,7 +4828,7 @@ export def "user-channel-catalogs-categories get" [
 # POST /v2/user/channelCatalogs/{channelCatalogId}/categories/configure
 # operationId: ConfigureChannelCatalogCategory
 # --channelCatalogCategories item shape: {autoMapNewSubCategories: bool, catalogCategoryPath: list<string>, channelCategoryPath?: list<string>, costValue?: float}
-export def "user-channel-catalogs-categories-configure create-category" [
+export def "configure-channel-catalog-category" [
   channel_catalog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4869,7 +4869,7 @@ export def "user-channel-catalogs-categories-configure create-category" [
 #
 # POST /v2/user/channelCatalogs/{channelCatalogId}/categories/disableMapping
 # operationId: DisableChannelCatalogCategoryMapping
-export def "user-channel-catalogs-categories-disable-mapping disable-category" [
+export def "disable-channel-catalog-category-mapping" [
   channel_catalog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4905,7 +4905,7 @@ export def "user-channel-catalogs-categories-disable-mapping disable-category" [
 #
 # POST /v2/user/channelCatalogs/{channelCatalogId}/categories/reenableMapping
 # operationId: ReenableChannelCatalogCategoryMapping
-export def "user-channel-catalogs-categories-reenable-mapping create-category" [
+export def "reenable-channel-catalog-category-mapping" [
   channel_catalog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4941,7 +4941,7 @@ export def "user-channel-catalogs-categories-reenable-mapping create-category" [
 #
 # PUT /v2/user/channelCatalogs/{channelCatalogId}/columnMappings
 # operationId: ConfigureChannelCatalogColumnMappings
-export def "user-channel-catalogs-column-mappings update-configure" [
+export def "configure-channel-catalog-column-mappings" [
   channel_catalog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4981,7 +4981,7 @@ export def "user-channel-catalogs-column-mappings update-configure" [
 #
 # POST /v2/user/channelCatalogs/{channelCatalogId}/disable
 # operationId: DisableChannelCatalog
-export def "user-channel-catalogs-disable disable" [
+export def "disable-channel-catalog" [
   channel_catalog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5017,7 +5017,7 @@ export def "user-channel-catalogs-disable disable" [
 #
 # POST /v2/user/channelCatalogs/{channelCatalogId}/enable
 # operationId: EnableChannelCatalog
-export def "user-channel-catalogs-enable enable" [
+export def "enable-channel-catalog" [
   channel_catalog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5053,7 +5053,7 @@ export def "user-channel-catalogs-enable enable" [
 #
 # GET /v2/user/channelCatalogs/{channelCatalogId}/exclusionFilters
 # operationId: GetChannelCatalogExclusionFilters
-export def "user-channel-catalogs-exclusion-filters get" [
+export def "get-channel-catalog-exclusion-filters" [
   channel_catalog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5089,7 +5089,7 @@ export def "user-channel-catalogs-exclusion-filters get" [
 #
 # PUT /v2/user/channelCatalogs/{channelCatalogId}/exclusionFilters
 # operationId: ConfigureChannelCatalogExclusionFilters
-export def "user-channel-catalogs-exclusion-filters update-configure" [
+export def "configure-channel-catalog-exclusion-filters" [
   channel_catalog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5129,7 +5129,7 @@ export def "user-channel-catalogs-exclusion-filters update-configure" [
 #
 # GET /v2/user/channelCatalogs/{channelCatalogId}/exportations/cache
 # operationId: GetChannelCatalogExportationCacheInfo
-export def "user-channel-catalogs-exportations-cache get" [
+export def "get-channel-catalog-exportation-cache-info" [
   channel_catalog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5165,7 +5165,7 @@ export def "user-channel-catalogs-exportations-cache get" [
 #
 # POST /v2/user/channelCatalogs/{channelCatalogId}/exportations/cache/clear
 # operationId: ClearChannelCatalogExportationCache
-export def "user-channel-catalogs-exportations-cache-clear create" [
+export def "clear-channel-catalog-exportation-cache" [
   channel_catalog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5201,7 +5201,7 @@ export def "user-channel-catalogs-exportations-cache-clear create" [
 #
 # GET /v2/user/channelCatalogs/{channelCatalogId}/exportations/history
 # operationId: GetChannelCatalogExportationHistory
-export def "user-channel-catalogs-exportations-history get" [
+export def "get-channel-catalog-exportation-history" [
   channel_catalog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5244,7 +5244,7 @@ export def "user-channel-catalogs-exportations-history get" [
 # --channelCategoryFilter shape: {categoryPath?: list<string>}
 # --criteria shape: {disabled?: bool, excluded?: bool, exist?: bool, logic: "funnel"|"cumulative", uncategorized?: bool}
 # --productFilters shape: {additionalProductFilters?: record, catalogEans?: list<string>, catalogMpns?: list<string>, catalogSkus?: list<string>, channelEans?: list<string>, channelMpns?: list<string>, channelSkus?: list<string>, title?: string}
-export def "user-channel-catalogs-products get-list" [
+export def "get-channel-catalog-product-info-list" [
   channel_catalog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5290,7 +5290,7 @@ export def "user-channel-catalogs-products get-list" [
 #
 # GET /v2/user/channelCatalogs/{channelCatalogId}/products/counters
 # operationId: GetChannelCatalogProductsCounters
-export def "user-channel-catalogs-products-counters get" [
+export def "get-channel-catalog-products-counters" [
   channel_catalog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5330,7 +5330,7 @@ export def "user-channel-catalogs-products-counters get" [
 # --channelCategoryFilter shape: {categoryPath?: list<string>}
 # --criteria shape: {disabled?: bool, excluded?: bool, exist?: bool, logic: "funnel"|"cumulative", uncategorized?: bool}
 # --productFilters shape: {additionalProductFilters?: record, catalogEans?: list<string>, catalogMpns?: list<string>, catalogSkus?: list<string>, channelEans?: list<string>, channelMpns?: list<string>, channelSkus?: list<string>, title?: string}
-export def "user-channel-catalogs-products-export get-list" [
+export def "export-channel-catalog-product-info-list" [
   channel_catalog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5378,7 +5378,7 @@ export def "user-channel-catalogs-products-export get-list" [
 #
 # GET /v2/user/channelCatalogs/{channelCatalogId}/products/{productId}
 # operationId: GetChannelCatalogProductInfo
-export def "user-channel-catalogs-products get-by-channel-catalog-id-product-id" [
+export def "get-channel-catalog-product-info" [
   channel_catalog_id: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5416,7 +5416,7 @@ export def "user-channel-catalogs-products get-by-channel-catalog-id-product-id"
 #
 # POST /v2/user/channelCatalogs/{channelCatalogId}/products/{productId}/disable
 # operationId: DisableChannelCatalogProduct
-export def "user-channel-catalogs-products-disable disable" [
+export def "disable-channel-catalog-product" [
   channel_catalog_id: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5454,7 +5454,7 @@ export def "user-channel-catalogs-products-disable disable" [
 #
 # PUT /v2/user/channelCatalogs/{channelCatalogId}/products/{productId}/overrides
 # operationId: OverrideChannelCatalogProductValues
-export def "user-channel-catalogs-products-overrides update-values" [
+export def "override-channel-catalog-product-values" [
   channel_catalog_id: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5496,7 +5496,7 @@ export def "user-channel-catalogs-products-overrides update-values" [
 #
 # GET /v2/user/channelCatalogs/{channelCatalogId}/products/{productId}/overrides/copy
 # operationId: GetChannelCatalogProductValueOverrideCopy
-export def "user-channel-catalogs-products-overrides-copy get-value" [
+export def "get-channel-catalog-product-value-override-copy" [
   channel_catalog_id: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5534,7 +5534,7 @@ export def "user-channel-catalogs-products-overrides-copy get-value" [
 #
 # POST /v2/user/channelCatalogs/{channelCatalogId}/products/{productId}/overrides/copy
 # operationId: ConfigureChannelCatalogProductValueOverrideCopy
-export def "user-channel-catalogs-products-overrides-copy copy-configure-value" [
+export def "configure-channel-catalog-product-value-override-copy" [
   channel_catalog_id: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5572,7 +5572,7 @@ export def "user-channel-catalogs-products-overrides-copy copy-configure-value" 
 #
 # DELETE /v2/user/channelCatalogs/{channelCatalogId}/products/{productId}/overrides/{channelColumnId}
 # operationId: DeleteChannelCatalogProductValueOverride
-export def "user-channel-catalogs-products-overrides delete-value" [
+export def "delete-channel-catalog-product-value-override" [
   channel_catalog_id: string
   product_id: string
   channel_column_id: string
@@ -5612,7 +5612,7 @@ export def "user-channel-catalogs-products-overrides delete-value" [
 #
 # POST /v2/user/channelCatalogs/{channelCatalogId}/products/{productId}/reenable
 # operationId: ReenableChannelCatalogProduct
-export def "user-channel-catalogs-products-reenable create" [
+export def "reenable-channel-catalog-product" [
   channel_catalog_id: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5650,7 +5650,7 @@ export def "user-channel-catalogs-products-reenable create" [
 #
 # PUT /v2/user/channelCatalogs/{channelCatalogId}/settings/cost
 # operationId: ConfigureChannelCatalogCostSettings
-export def "user-channel-catalogs-settings-cost update-configure" [
+export def "configure-channel-catalog-cost-settings" [
   channel_catalog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5691,7 +5691,7 @@ export def "user-channel-catalogs-settings-cost update-configure" [
 #
 # PUT /v2/user/channelCatalogs/{channelCatalogId}/settings/general
 # operationId: ConfigureChannelCatalogGeneralSettings
-export def "user-channel-catalogs-settings-general update-configure" [
+export def "configure-channel-catalog-general-settings" [
   channel_catalog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5733,7 +5733,7 @@ export def "user-channel-catalogs-settings-general update-configure" [
 #
 # GET /v2/user/channels/
 # operationId: GetAvailableChannels
-export def "user-channels get-available" [
+export def "get-available-channels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5769,7 +5769,7 @@ export def "user-channels get-available" [
 #
 # GET /v2/user/channels/{channelId}
 # operationId: GetChannelInfo
-export def "user-channels get" [
+export def "get-channel-info" [
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5805,7 +5805,7 @@ export def "user-channels get" [
 #
 # GET /v2/user/channels/{channelId}/categories
 # operationId: GetChannelCategories
-export def "user-channels-categories get" [
+export def "get-channel-categories" [
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5844,7 +5844,7 @@ export def "user-channels-categories get" [
 #
 # POST /v2/user/channels/{channelId}/columns
 # operationId: GetChannelColumns
-export def "user-channels-columns get" [
+export def "get-channel-columns" [
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5887,7 +5887,7 @@ export def "user-channels-columns get" [
 #
 # GET /v2/user/customer/
 # operationId: GetCustomerIndex
-export def "user-customer get-index" [
+export def "get-customer-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5924,7 +5924,7 @@ export def "user-customer get-index" [
 #
 # GET /v2/user/customer/account
 # operationId: GetUserAccountInfo
-export def "user-customer-account get" [
+export def "get-user-account-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5961,7 +5961,7 @@ export def "user-customer-account get" [
 #
 # POST /v2/user/customer/account/activate
 # operationId: ActivateUserAccount
-export def "user-customer-account-activate create" [
+export def "activate-user-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5999,7 +5999,7 @@ export def "user-customer-account-activate create" [
 #
 # POST /v2/user/customer/account/changeEmail
 # operationId: ChangeEmail
-export def "user-customer-account-change-email create" [
+export def "change-email" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6037,7 +6037,7 @@ export def "user-customer-account-change-email create" [
 #
 # POST /v2/user/customer/account/changePassword
 # operationId: ChangePassword
-export def "user-customer-account-change-password create" [
+export def "change-password" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6076,7 +6076,7 @@ export def "user-customer-account-change-password create" [
 #
 # PUT /v2/user/customer/account/companyInfo
 # operationId: SaveCompanyInfo
-export def "user-customer-account-company-info get-save" [
+export def "save-company-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6120,7 +6120,7 @@ export def "user-customer-account-company-info get-save" [
 #
 # GET /v2/user/customer/account/creditCardInfo
 # operationId: GetCreditCardInfo
-export def "user-customer-account-credit-card-info get" [
+export def "get-credit-card-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6157,7 +6157,7 @@ export def "user-customer-account-credit-card-info get" [
 #
 # PUT /v2/user/customer/account/creditCardInfo
 # operationId: SaveCreditCardInfo
-export def "user-customer-account-credit-card-info get-save" [
+export def "save-credit-card-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6198,7 +6198,7 @@ export def "user-customer-account-credit-card-info get-save" [
 #
 # PUT /v2/user/customer/account/personalInfo
 # operationId: SavePersonalInfo
-export def "user-customer-account-personal-info get-save" [
+export def "save-personal-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6240,7 +6240,7 @@ export def "user-customer-account-personal-info get-save" [
 #
 # GET /v2/user/customer/account/profilePictureInfo
 # operationId: GetProfilePictureInfo
-export def "user-customer-account-profile-picture-info get" [
+export def "get-profile-picture-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6277,7 +6277,7 @@ export def "user-customer-account-profile-picture-info get" [
 #
 # PUT /v2/user/customer/account/profilePictureInfo
 # operationId: SaveProfilePictureInfo
-export def "user-customer-account-profile-picture-info get-save" [
+export def "save-profile-picture-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6316,7 +6316,7 @@ export def "user-customer-account-profile-picture-info get-save" [
 #
 # POST /v2/user/customer/account/resendEmailActivation
 # operationId: ResendEmailActivation
-export def "user-customer-account-resend-email-activation resend" [
+export def "resend-email-activation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6350,7 +6350,7 @@ export def "user-customer-account-resend-email-activation resend" [
 #
 # GET /v2/user/customer/billingPeriods
 # operationId: GetBillingPeriods
-export def "user-customer-billing-periods get" [
+export def "get-billing-periods" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6387,7 +6387,7 @@ export def "user-customer-billing-periods get" [
 #
 # GET /v2/user/customer/contracts
 # operationId: GetContracts
-export def "user-customer-contracts get" [
+export def "get-contracts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6424,7 +6424,7 @@ export def "user-customer-contracts get" [
 #
 # POST /v2/user/customer/contracts
 # operationId: CreateContract
-export def "user-customer-contracts create" [
+export def "create-contract" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6466,7 +6466,7 @@ export def "user-customer-contracts create" [
 #
 # POST /v2/user/customer/contracts/current/disableAutoRenewal
 # operationId: TerminateCurrentContract
-export def "user-customer-contracts-current-disable-auto-renewal get-terminate" [
+export def "terminate-current-contract" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6505,7 +6505,7 @@ export def "user-customer-contracts-current-disable-auto-renewal get-terminate" 
 #
 # POST /v2/user/customer/contracts/current/reenableAutoRenewal
 # operationId: ReactivateCurrentContract
-export def "user-customer-contracts-current-reenable-auto-renewal get-reactivate" [
+export def "reactivate-current-contract" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6539,7 +6539,7 @@ export def "user-customer-contracts-current-reenable-auto-renewal get-reactivate
 #
 # DELETE /v2/user/customer/contracts/next
 # operationId: DeleteNextContract
-export def "user-customer-contracts-next delete" [
+export def "delete-next-contract" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6573,7 +6573,7 @@ export def "user-customer-contracts-next delete" [
 #
 # GET /v2/user/customer/friends/{userId}
 # operationId: GetFriendInfo
-export def "user-customer-friends get" [
+export def "get-friend-info" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6612,7 +6612,7 @@ export def "user-customer-friends get" [
 #
 # GET /v2/user/customer/invoices
 # operationId: GetInvoices
-export def "user-customer-invoices get" [
+export def "get-invoices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6649,7 +6649,7 @@ export def "user-customer-invoices get" [
 #
 # GET /v2/user/customer/offers
 # operationId: GetStandardOffers
-export def "user-customer-offers get-standard" [
+export def "get-standard-offers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6686,7 +6686,7 @@ export def "user-customer-offers get-standard" [
 #
 # POST /v2/user/customer/offers
 # operationId: GetOffer
-export def "user-customer-offers get" [
+export def "get-offer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6728,7 +6728,7 @@ export def "user-customer-offers get" [
 #
 # POST /v2/user/customer/security/logout
 # operationId: Logout
-export def "user-customer-security-logout create" [
+export def "logout" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6762,7 +6762,7 @@ export def "user-customer-security-logout create" [
 #
 # GET /v2/user/customer/stores
 # operationId: GetStores
-export def "user-customer-stores list" [
+export def "get-stores" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6799,7 +6799,7 @@ export def "user-customer-stores list" [
 #
 # POST /v2/user/customer/stores
 # operationId: CreateStore
-export def "user-customer-stores create" [
+export def "create-store" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6841,7 +6841,7 @@ export def "user-customer-stores create" [
 #
 # DELETE /v2/user/customer/stores/{storeId}
 # operationId: DeleteStore
-export def "user-customer-stores delete" [
+export def "delete-store" [
   store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6877,7 +6877,7 @@ export def "user-customer-stores delete" [
 #
 # GET /v2/user/customer/stores/{storeId}
 # operationId: GetStore
-export def "user-customer-stores get" [
+export def "get-store" [
   store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6916,7 +6916,7 @@ export def "user-customer-stores get" [
 #
 # PATCH /v2/user/customer/stores/{storeId}
 # operationId: UpdateStore
-export def "user-customer-stores update" [
+export def "update-store" [
   store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6958,7 +6958,7 @@ export def "user-customer-stores update" [
 #
 # GET /v2/user/customer/stores/{storeId}/alerts
 # operationId: GetStoreAlerts
-export def "user-customer-stores-alerts get" [
+export def "get-store-alerts" [
   store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6997,7 +6997,7 @@ export def "user-customer-stores-alerts get" [
 #
 # POST /v2/user/customer/stores/{storeId}/alerts
 # operationId: SaveStoreAlerts
-export def "user-customer-stores-alerts create-save" [
+export def "save-store-alerts" [
   store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7037,7 +7037,7 @@ export def "user-customer-stores-alerts create-save" [
 #
 # GET /v2/user/customer/stores/{storeId}/rights
 # operationId: GetRights
-export def "user-customer-stores-rights get" [
+export def "get-rights" [
   store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7073,7 +7073,7 @@ export def "user-customer-stores-rights get" [
 #
 # GET /v2/user/customer/stores/{storeId}/shares
 # operationId: GetStoreShares
-export def "user-customer-stores-shares get" [
+export def "get-store-shares" [
   store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7112,7 +7112,7 @@ export def "user-customer-stores-shares get" [
 #
 # POST /v2/user/customer/stores/{storeId}/shares
 # operationId: ShareStore
-export def "user-customer-stores-shares create" [
+export def "share-store" [
   store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7152,7 +7152,7 @@ export def "user-customer-stores-shares create" [
 #
 # DELETE /v2/user/customer/stores/{storeId}/shares/{userId}
 # operationId: DeleteStoreShare
-export def "user-customer-stores-shares delete" [
+export def "delete-store-share" [
   store_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7190,7 +7190,7 @@ export def "user-customer-stores-shares delete" [
 #
 # GET /v2/user/customer/zendeskToken
 # operationId: ZendeskToken
-export def "user-customer-zendesk-token get" [
+export def "zendesk-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7224,7 +7224,7 @@ export def "user-customer-zendesk-token get" [
 #
 # GET /v2/user/legacyTracking/channelCatalogs/
 # operationId: GetLegacyTrackingChannelCatalogs
-export def "user-legacy-tracking-channel-catalogs list" [
+export def "get-legacy-tracking-channel-catalogs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7260,7 +7260,7 @@ export def "user-legacy-tracking-channel-catalogs list" [
 #
 # GET /v2/user/legacyTracking/channelCatalogs/{channelCatalogId}
 # operationId: GetLegacyTrackingChannelCatalog
-export def "user-legacy-tracking-channel-catalogs get" [
+export def "get-legacy-tracking-channel-catalog" [
   channel_catalog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7296,7 +7296,7 @@ export def "user-legacy-tracking-channel-catalogs get" [
 #
 # POST /v2/user/legacyTracking/channelCatalogs/{channelCatalogId}/migrate
 # operationId: MigrateLegacyTrackingChannelCatalog
-export def "user-legacy-tracking-channel-catalogs-migrate create" [
+export def "migrate-legacy-tracking-channel-catalog" [
   channel_catalog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7332,7 +7332,7 @@ export def "user-legacy-tracking-channel-catalogs-migrate create" [
 #
 # GET /v2/user/lov/
 # operationId: GetUserLovIndex
-export def "user-lov get-index" [
+export def "get-user-lov-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7366,7 +7366,7 @@ export def "user-lov get-index" [
 #
 # GET /v2/user/lov/{listName}
 # operationId: GetUserListOfValues
-export def "user-lov get-list-of-values" [
+export def "get-user-list-of-values" [
   list_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7406,7 +7406,7 @@ export def "user-lov get-list-of-values" [
 #
 # GET /v2/user/marketplaces/channelcatalogs/
 # operationId: GetMarketplaceChannelCatalogs
-export def "user-marketplaces-channelcatalogs get-channel-catalogs" [
+export def "get-marketplace-channel-catalogs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7442,7 +7442,7 @@ export def "user-marketplaces-channelcatalogs get-channel-catalogs" [
 #
 # GET /v2/user/marketplaces/channelcatalogs/publications/{marketplaceTechnicalCode}/{accountId}/history
 # operationId: GetPublications
-export def "user-marketplaces-channelcatalogs-publications-history get" [
+export def "get-publications" [
   marketplace_technical_code: string
   account_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -7484,7 +7484,7 @@ export def "user-marketplaces-channelcatalogs-publications-history get" [
 #
 # POST /v2/user/marketplaces/channelcatalogs/publications/{marketplaceTechnicalCode}/{accountId}/publish
 # operationId: PublishCatalogToMarketplace
-export def "user-marketplaces-channelcatalogs-publications-publish publish-catalog" [
+export def "publish-catalog-to-marketplace" [
   marketplace_technical_code: string
   account_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -7528,7 +7528,7 @@ export def "user-marketplaces-channelcatalogs-publications-publish publish-catal
 #
 # GET /v2/user/marketplaces/channelcatalogs/{channelCatalogId}/properties
 # operationId: GetChannelCatalogMarketplaceProperties
-export def "user-marketplaces-channelcatalogs-properties get-channel-catalog" [
+export def "get-channel-catalog-marketplace-properties" [
   channel_catalog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7569,7 +7569,7 @@ export def "user-marketplaces-channelcatalogs-properties get-channel-catalog" [
 #
 # GET /v2/user/marketplaces/channelcatalogs/{channelCatalogId}/settings
 # operationId: GetChannelCatalogMarketplaceSettings
-export def "user-marketplaces-channelcatalogs-settings get-channel-catalog" [
+export def "get-channel-catalog-marketplace-settings" [
   channel_catalog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7606,7 +7606,7 @@ export def "user-marketplaces-channelcatalogs-settings get-channel-catalog" [
 # POST /v2/user/marketplaces/channelcatalogs/{channelCatalogId}/settings
 # operationId: SetChannelCatalogMarketplaceSettings
 # --settings item shape: {discriminatorType: "channelCatalogMarketplaceStringSetting"|"channelCatalogMarketplaceIntegerSetting"|"channelCatalogMarketplaceBooleanSetting"|"channelCatalogMarketplaceNumberSetting", name: string}
-export def "user-marketplaces-channelcatalogs-settings update-channel-catalog" [
+export def "set-channel-catalog-marketplace-settings" [
   channel_catalog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7648,7 +7648,7 @@ export def "user-marketplaces-channelcatalogs-settings update-channel-catalog" [
 # DEPRECATED
 # operationId: GetOrderIndex
 @deprecated
-export def "user-marketplaces-orders get-index" [
+export def "get-order-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7685,7 +7685,7 @@ export def "user-marketplaces-orders get-index" [
 #
 # GET /v2/user/marketplaces/orders/automaticTransitions
 # operationId: GetAutomaticTransitions
-export def "user-marketplaces-orders-automatic-transitions get" [
+export def "get-automatic-transitions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7725,7 +7725,7 @@ export def "user-marketplaces-orders-automatic-transitions get" [
 # POST /v2/user/marketplaces/orders/automaticTransitions
 # operationId: ConfigureAutomaticTransitions
 # --automaticTransitions item shape: {accountId: int, enabled: bool, marketplaceTechnicalCode: string, orderStatusTransitionId: int}
-export def "user-marketplaces-orders-automatic-transitions create-configure" [
+export def "configure-automatic-transitions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7766,7 +7766,7 @@ export def "user-marketplaces-orders-automatic-transitions create-configure" [
 # operationId: ChangeOrderList
 # --changeOrders item shape: {changeOrderRequest?: record, order: any}
 @deprecated
-export def "user-marketplaces-orders-batches-change-orders list" [
+export def "change-order-list" [
   change_order_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7812,7 +7812,7 @@ export def "user-marketplaces-orders-batches-change-orders list" [
 # operationId: ClearMerchantOrderInfoList
 # --orders item shape: {accountId: int, beezUPOrderId: string, marketplaceTechnicalCode: string}
 @deprecated
-export def "user-marketplaces-orders-batches-clear-merchant-order-infos list" [
+export def "clear-merchant-order-info-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7853,7 +7853,7 @@ export def "user-marketplaces-orders-batches-clear-merchant-order-infos list" [
 # operationId: SetMerchantOrderInfoList
 # --orders item shape: {accountId: int, beezUPOrderId: string, marketplaceTechnicalCode: string, order_MerchantOrderId: string}
 @deprecated
-export def "user-marketplaces-orders-batches-set-merchant-order-infos list" [
+export def "set-merchant-order-info-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7893,7 +7893,7 @@ export def "user-marketplaces-orders-batches-set-merchant-order-infos list" [
 #
 # GET /v2/user/marketplaces/orders/exportations
 # operationId: GetOrderExportations
-export def "user-marketplaces-orders-exportations get" [
+export def "get-order-exportations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7935,7 +7935,7 @@ export def "user-marketplaces-orders-exportations get" [
 # POST /v2/user/marketplaces/orders/exportations
 # operationId: ExportOrders
 # --orderListRequestWithoutPagination shape: {accountIds?: list<int>, beezUPOrderStatuses?: list<string>, beginPeriodUtcDate: string, dateSearchType?: "Modification"|"Purchase"|"MarketPlaceModification", endPeriodUtcDate: string, invoiceAvailabilityType?: string, marketplaceBusinessCodes?: list<string>, marketplaceOrderIds?: list<string>, marketplaceTechnicalCodes?: list<string>, orderMerchantInfoSynchronizationStatus?: string, order_Buyer_Name?: string, order_MerchantOrderIds?: list<string>, storeIds?: list<string>}
-export def "user-marketplaces-orders-exportations export" [
+export def "export-orders" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7977,7 +7977,7 @@ export def "user-marketplaces-orders-exportations export" [
 # DEPRECATED
 # operationId: HarvestAll
 @deprecated
-export def "user-marketplaces-orders-harvest list" [
+export def "harvest-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8013,7 +8013,7 @@ export def "user-marketplaces-orders-harvest list" [
 #
 # POST /v2/user/marketplaces/orders/invoices/generate
 # operationId: GenerateBatchOrderInvoice
-export def "user-marketplaces-orders-invoices-generate generate-batch" [
+export def "generate-batch-order-invoice" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8053,7 +8053,7 @@ export def "user-marketplaces-orders-invoices-generate generate-batch" [
 #
 # POST /v2/user/marketplaces/orders/invoices/getPdfInvoice
 # operationId: GetOrderInvoicePdf
-export def "user-marketplaces-orders-invoices-get-pdf-invoice get" [
+export def "get-order-invoice-pdf" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8091,7 +8091,7 @@ export def "user-marketplaces-orders-invoices-get-pdf-invoice get" [
 #
 # GET /v2/user/marketplaces/orders/invoices/settings/design
 # operationId: GetOrderInvoiceDesignSettings
-export def "user-marketplaces-orders-invoices-settings-design get" [
+export def "get-order-invoice-design-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8125,7 +8125,7 @@ export def "user-marketplaces-orders-invoices-settings-design get" [
 #
 # PUT /v2/user/marketplaces/orders/invoices/settings/design
 # operationId: SaveOrderInvoiceDesignSettings
-export def "user-marketplaces-orders-invoices-settings-design update-save" [
+export def "save-order-invoice-design-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8164,7 +8164,7 @@ export def "user-marketplaces-orders-invoices-settings-design update-save" [
 #
 # POST /v2/user/marketplaces/orders/invoices/settings/design/preview
 # operationId: GetOrderInvoiceDesignSettingsPreview
-export def "user-marketplaces-orders-invoices-settings-design-preview get" [
+export def "get-order-invoice-design-settings-preview" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8206,7 +8206,7 @@ export def "user-marketplaces-orders-invoices-settings-design-preview get" [
 #
 # GET /v2/user/marketplaces/orders/invoices/settings/general
 # operationId: GetOrderInvoiceGeneralSettings
-export def "user-marketplaces-orders-invoices-settings-general get" [
+export def "get-order-invoice-general-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8240,7 +8240,7 @@ export def "user-marketplaces-orders-invoices-settings-general get" [
 #
 # PUT /v2/user/marketplaces/orders/invoices/settings/general
 # operationId: SaveOrderInvoiceGeneralSettings
-export def "user-marketplaces-orders-invoices-settings-general update-save" [
+export def "save-order-invoice-general-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8282,7 +8282,7 @@ export def "user-marketplaces-orders-invoices-settings-general update-save" [
 #
 # POST /v2/user/marketplaces/orders/invoices/{marketplaceTechnicalCode}/{accountId}/{beezUPOrderUUID}/generate
 # operationId: GenerateOrderInvoice
-export def "user-marketplaces-orders-invoices-generate generate" [
+export def "generate-order-invoice" [
   marketplace_technical_code: string
   account_id: string
   beez_up_order_uuid: string
@@ -8328,7 +8328,7 @@ export def "user-marketplaces-orders-invoices-generate generate" [
 #
 # POST /v2/user/marketplaces/orders/invoices/{marketplaceTechnicalCode}/{accountId}/{beezUPOrderUUID}/preview
 # operationId: GetOrderInvoicePreview
-export def "user-marketplaces-orders-invoices-preview get" [
+export def "get-order-invoice-preview" [
   marketplace_technical_code: string
   account_id: string
   beez_up_order_uuid: string
@@ -8377,7 +8377,7 @@ export def "user-marketplaces-orders-invoices-preview get" [
 # DEPRECATED
 # operationId: GetOrderListFull
 @deprecated
-export def "user-marketplaces-orders-list-full get" [
+export def "get-order-list-full" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8434,7 +8434,7 @@ export def "user-marketplaces-orders-list-full get" [
 # DEPRECATED
 # operationId: GetOrderListLight
 @deprecated
-export def "user-marketplaces-orders-list-light get" [
+export def "get-order-list-light" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8488,7 +8488,7 @@ export def "user-marketplaces-orders-list-light get" [
 # DEPRECATED
 # operationId: GetMarketplaceAccountsSynchronization
 @deprecated
-export def "user-marketplaces-orders-status get-accounts-synchronization" [
+export def "get-marketplace-accounts-synchronization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8527,7 +8527,7 @@ export def "user-marketplaces-orders-status get-accounts-synchronization" [
 #
 # GET /v2/user/marketplaces/orders/subscriptions/
 # operationId: GetSubscriptionList
-export def "user-marketplaces-orders-subscriptions get-list" [
+export def "get-subscription-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8561,7 +8561,7 @@ export def "user-marketplaces-orders-subscriptions get-list" [
 #
 # DELETE /v2/user/marketplaces/orders/subscriptions/{id}
 # operationId: DeleteSubscription
-export def "user-marketplaces-orders-subscriptions delete" [
+export def "delete-subscription" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8597,7 +8597,7 @@ export def "user-marketplaces-orders-subscriptions delete" [
 #
 # GET /v2/user/marketplaces/orders/subscriptions/{id}
 # operationId: GetSubscription
-export def "user-marketplaces-orders-subscriptions get" [
+export def "get-subscription" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8633,7 +8633,7 @@ export def "user-marketplaces-orders-subscriptions get" [
 #
 # POST /v2/user/marketplaces/orders/subscriptions/{id}
 # operationId: CreateSubscription
-export def "user-marketplaces-orders-subscriptions create" [
+export def "create-subscription" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8677,7 +8677,7 @@ export def "user-marketplaces-orders-subscriptions create" [
 #
 # POST /v2/user/marketplaces/orders/subscriptions/{id}/activate
 # operationId: ActivateSubscription
-export def "user-marketplaces-orders-subscriptions-activate create" [
+export def "activate-subscription" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8718,7 +8718,7 @@ export def "user-marketplaces-orders-subscriptions-activate create" [
 #
 # POST /v2/user/marketplaces/orders/subscriptions/{id}/deactivate
 # operationId: DeactivateSubscription
-export def "user-marketplaces-orders-subscriptions-deactivate create" [
+export def "deactivate-subscription" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8754,7 +8754,7 @@ export def "user-marketplaces-orders-subscriptions-deactivate create" [
 #
 # GET /v2/user/marketplaces/orders/subscriptions/{id}/reporting
 # operationId: GetSubscriptionPushReporting
-export def "user-marketplaces-orders-subscriptions-reporting get-push" [
+export def "get-subscription-push-reporting" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8793,7 +8793,7 @@ export def "user-marketplaces-orders-subscriptions-reporting get-push" [
 #
 # POST /v2/user/marketplaces/orders/subscriptions/{id}/retry
 # operationId: RetryPushOrders
-export def "user-marketplaces-orders-subscriptions-retry push" [
+export def "retry-push-orders" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8831,7 +8831,7 @@ export def "user-marketplaces-orders-subscriptions-retry push" [
 # DEPRECATED
 # operationId: GetOrder
 @deprecated
-export def "user-marketplaces-orders get" [
+export def "get-order" [
   marketplace_technical_code: string
   account_id: int
   beez_up_order_id: string
@@ -8876,7 +8876,7 @@ export def "user-marketplaces-orders get" [
 # DEPRECATED
 # operationId: HeadOrder
 @deprecated
-export def "user-marketplaces-orders head" [
+export def "head-order" [
   marketplace_technical_code: string
   account_id: int
   beez_up_order_id: string
@@ -8921,7 +8921,7 @@ export def "user-marketplaces-orders head" [
 # DEPRECATED
 # operationId: ClearMerchantOrderInfo
 @deprecated
-export def "user-marketplaces-orders-clear-merchant-order-info get" [
+export def "clear-merchant-order-info" [
   marketplace_technical_code: string
   account_id: int
   beez_up_order_id: string
@@ -8963,7 +8963,7 @@ export def "user-marketplaces-orders-clear-merchant-order-info get" [
 # DEPRECATED
 # operationId: HarvestOrder
 @deprecated
-export def "user-marketplaces-orders-harvest create" [
+export def "harvest-order" [
   marketplace_technical_code: string
   account_id: int
   beez_up_order_id: string
@@ -9005,7 +9005,7 @@ export def "user-marketplaces-orders-harvest create" [
 # DEPRECATED
 # operationId: GetOrderHistory
 @deprecated
-export def "user-marketplaces-orders-history get" [
+export def "get-order-history" [
   marketplace_technical_code: string
   account_id: int
   beez_up_order_id: string
@@ -9050,7 +9050,7 @@ export def "user-marketplaces-orders-history get" [
 # DEPRECATED
 # operationId: SetMerchantOrderInfo
 @deprecated
-export def "user-marketplaces-orders-set-merchant-order-info update" [
+export def "set-merchant-order-info" [
   marketplace_technical_code: string
   account_id: int
   beez_up_order_id: string
@@ -9098,7 +9098,7 @@ export def "user-marketplaces-orders-set-merchant-order-info update" [
 # DEPRECATED
 # operationId: ChangeOrder
 @deprecated
-export def "user-marketplaces-orders create-change" [
+export def "change-order" [
   marketplace_technical_code: string
   account_id: int
   beez_up_order_id: string

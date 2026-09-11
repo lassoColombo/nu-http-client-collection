@@ -118,7 +118,7 @@ def accept-completer [] { ["application/json" "application/ld+json" "text/csv" "
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "agent-flush-aggregate-requests create-collection" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-agent-flush-aggregate-request-collection" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -142,7 +142,7 @@ export def commands []: nothing -> table {
 #
 # POST /agent-flush-aggregate-requests
 # operationId: postAgentFlushAggregateRequestCollection
-export def "agent-flush-aggregate-requests create-collection" [
+export def "post-agent-flush-aggregate-request-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -182,7 +182,7 @@ export def "agent-flush-aggregate-requests create-collection" [
 # Creates a AgentFlushRequest resource.
 #
 # POST /agent-flush-requests
-export def "agent-flush-requests create" [
+export def "post-agent-flush-requests" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -223,7 +223,7 @@ export def "agent-flush-requests create" [
 #
 # POST /agent-instance-updates
 # operationId: postInstanceCollection
-export def "agent-instance-updates create-collection" [
+export def "post-instance-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -265,7 +265,7 @@ export def "agent-instance-updates create-collection" [
 #
 # PUT /agent-instance-updates/{id}
 # operationId: putInstanceItem
-export def "agent-instance-updates update-item" [
+export def "put-instance-item" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -309,7 +309,7 @@ export def "agent-instance-updates update-item" [
 #
 # GET /agent-rule-complexes
 # operationId: agent-legacy-complexRuleCollection
-export def "agent-rule-complexes get-legacy-complex-collection" [
+export def "agent-legacy-complex-rule-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -346,7 +346,7 @@ export def "agent-rule-complexes get-legacy-complex-collection" [
 #
 # GET /agent-rule-straights
 # operationId: agent-legacy-straightRuleCollection
-export def "agent-rule-straights get-legacy-collection" [
+export def "agent-legacy-straight-rule-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -383,7 +383,7 @@ export def "agent-rule-straights get-legacy-collection" [
 #
 # GET /agent-rules
 # operationId: agentRuleCollection
-export def "agent-rules get-collection" [
+export def "agent-rule-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -420,7 +420,7 @@ export def "agent-rules get-collection" [
 #
 # GET /aggregate-logs
 # operationId: getAggregateLogCollection
-export def "aggregate-logs get-collection" [
+export def "get-aggregate-log-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -478,7 +478,7 @@ export def "aggregate-logs get-collection" [
 #
 # GET /aggregate-logs/{id}
 # operationId: getAggregateLogItem
-export def "aggregate-logs get-item" [
+export def "get-aggregate-log-item" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -515,7 +515,7 @@ export def "aggregate-logs get-item" [
 #
 # GET /crawl-urls
 # operationId: getCrawlUrlCollection
-export def "crawl-urls get-collection" [
+export def "get-crawl-url-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -552,7 +552,7 @@ export def "crawl-urls get-collection" [
 #
 # GET /crawl-urls/{id}
 # operationId: getCrawlUrlItem
-export def "crawl-urls get-item" [
+export def "get-crawl-url-item" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -589,7 +589,7 @@ export def "crawl-urls get-item" [
 #
 # GET /crawls
 # operationId: getCrawlCollection
-export def "crawls get-collection" [
+export def "get-crawl-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -629,7 +629,7 @@ export def "crawls get-collection" [
 #
 # POST /crawls
 # operationId: postCrawlCollection
-export def "crawls create-collection" [
+export def "post-crawl-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -680,7 +680,7 @@ export def "crawls create-collection" [
 #
 # GET /crawls/{id}
 # operationId: getCrawlItem
-export def "crawls get-item" [
+export def "get-crawl-item" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -718,7 +718,7 @@ export def "crawls get-item" [
 # POST /crawls/{id}/cancel
 # operationId: cancelCrawlItem
 # --author shape: {currentPassword?: any, defaultOrganization?: record, email: string, name: string, newEmail?: string, newEmailToken?: string, newEmailTokenExpiredAt?: string, password?: string, plainPassword?: string, plainPasswordRepeat?: any, projectsFlattened?: list<string>, superAdmin?: bool, updatedAt?: string, userOrganizations?: list, userProjects?: list<string>}
-export def "crawls-cancel cancel-item" [
+export def "cancel-crawl-item" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -762,7 +762,7 @@ export def "crawls-cancel cancel-item" [
 #
 # POST /explain-urls
 # operationId: postExplainUrlCollection
-export def "explain-urls create-collection" [
+export def "post-explain-url-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -802,7 +802,7 @@ export def "explain-urls create-collection" [
 #
 # GET /explain-urls/{id}
 # operationId: getExplainUrlItem
-export def "explain-urls get-item" [
+export def "get-explain-url-item" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -839,7 +839,7 @@ export def "explain-urls get-item" [
 #
 # GET /export-rules
 # operationId: exportRuleCollection
-export def "export-rules export-collection" [
+export def "export-rule-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -878,7 +878,7 @@ export def "export-rules export-collection" [
 #
 # POST /impact-rule-changes
 # operationId: postImpactRuleChangeCollection
-export def "impact-rule-changes create-collection" [
+export def "post-impact-rule-change-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -918,7 +918,7 @@ export def "impact-rule-changes create-collection" [
 #
 # GET /impact-rule-changes/{id}
 # operationId: getImpactRuleChangeItem
-export def "impact-rule-changes get-item" [
+export def "get-impact-rule-change-item" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -955,7 +955,7 @@ export def "impact-rule-changes get-item" [
 #
 # POST /impact-smart-lists
 # operationId: postImpactSmartListCollection
-export def "impact-smart-lists create-collection" [
+export def "post-impact-smart-list-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -996,7 +996,7 @@ export def "impact-smart-lists create-collection" [
 #
 # GET /impact-smart-lists/{id}
 # operationId: getImpactSmartListItem
-export def "impact-smart-lists get-item" [
+export def "get-impact-smart-list-item" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1033,7 +1033,7 @@ export def "impact-smart-lists get-item" [
 #
 # GET /imports
 # operationId: getImportCollection
-export def "imports get-collection" [
+export def "get-import-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1071,7 +1071,7 @@ export def "imports get-collection" [
 #
 # POST /imports
 # operationId: postImportCollection
-export def "imports create-collection" [
+export def "post-import-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1111,7 +1111,7 @@ export def "imports create-collection" [
 #
 # GET /imports/{id}
 # operationId: getImportItem
-export def "imports get-item" [
+export def "get-import-item" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1148,7 +1148,7 @@ export def "imports get-item" [
 #
 # GET /instances
 # operationId: getInstanceCollection
-export def "instances get-collection" [
+export def "get-instance-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1185,7 +1185,7 @@ export def "instances get-collection" [
 #
 # GET /instances/{id}
 # operationId: getInstanceItem
-export def "instances get-item" [
+export def "get-instance-item" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1222,7 +1222,7 @@ export def "instances get-item" [
 #
 # PUT /instances/{id}
 # operationId: loggingInstanceItem
-export def "instances update-logging-item" [
+export def "logging-instance-item" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1266,7 +1266,7 @@ export def "instances update-logging-item" [
 #
 # PUT /instances/{id}/live
 # operationId: liveInstanceItem
-export def "instances-live update-item" [
+export def "live-instance-item" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1310,7 +1310,7 @@ export def "instances-live update-item" [
 #
 # GET /invitations
 # operationId: getInvitationCollection
-export def "invitations get-collection" [
+export def "get-invitation-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1348,7 +1348,7 @@ export def "invitations get-collection" [
 #
 # POST /invitations
 # operationId: postInvitationCollection
-export def "invitations create-collection" [
+export def "post-invitation-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1388,7 +1388,7 @@ export def "invitations create-collection" [
 #
 # POST /invitations/accept/{token}
 # operationId: acceptInvitationItem
-export def "invitations-accept create-item" [
+export def "accept-invitation-item" [
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1429,7 +1429,7 @@ export def "invitations-accept create-item" [
 #
 # DELETE /invitations/{id}
 # operationId: deleteInvitationItem
-export def "invitations delete-item" [
+export def "delete-invitation-item" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1465,7 +1465,7 @@ export def "invitations delete-item" [
 #
 # GET /invitations/{id}
 # operationId: getInvitationItem
-export def "invitations get-item" [
+export def "get-invitation-item" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1502,7 +1502,7 @@ export def "invitations get-item" [
 #
 # GET /logs
 # operationId: getLogCollection
-export def "logs get-collection" [
+export def "get-log-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1560,7 +1560,7 @@ export def "logs get-collection" [
 #
 # GET /logs/{id}
 # operationId: getLogItem
-export def "logs get-item" [
+export def "get-log-item" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1597,7 +1597,7 @@ export def "logs get-item" [
 #
 # POST /markers
 # operationId: postMarkerCollection
-export def "markers create-collection" [
+export def "post-marker-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1641,7 +1641,7 @@ export def "markers create-collection" [
 #
 # DELETE /markers/{id}
 # operationId: deleteMarkerItem
-export def "markers delete-item" [
+export def "delete-marker-item" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1677,7 +1677,7 @@ export def "markers delete-item" [
 #
 # GET /markers/{id}
 # operationId: getMarkerItem
-export def "markers get-item" [
+export def "get-marker-item" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1714,7 +1714,7 @@ export def "markers get-item" [
 #
 # PUT /markers/{id}
 # operationId: putMarkerItem
-export def "markers update-item" [
+export def "put-marker-item" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1762,7 +1762,7 @@ export def "markers update-item" [
 #
 # POST /matching-urls
 # operationId: postMatchingUrlCollection
-export def "matching-urls create-collection" [
+export def "post-matching-url-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1802,7 +1802,7 @@ export def "matching-urls create-collection" [
 #
 # GET /matching-urls/{id}
 # operationId: getMatchingUrlItem
-export def "matching-urls get-item" [
+export def "get-matching-url-item" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1839,7 +1839,7 @@ export def "matching-urls get-item" [
 #
 # GET /notifications
 # operationId: getNotificationCollection
-export def "notifications get-collection" [
+export def "get-notification-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1876,7 +1876,7 @@ export def "notifications get-collection" [
 #
 # GET /notifications/{id}
 # operationId: getNotificationItem
-export def "notifications get-item" [
+export def "get-notification-item" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1913,7 +1913,7 @@ export def "notifications get-item" [
 #
 # POST /organizations
 # operationId: postOrganizationCollection
-export def "organizations create-collection" [
+export def "post-organization-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1952,7 +1952,7 @@ export def "organizations create-collection" [
 #
 # DELETE /organizations/{id}
 # operationId: deleteOrganizationItem
-export def "organizations delete-item" [
+export def "delete-organization-item" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1988,7 +1988,7 @@ export def "organizations delete-item" [
 #
 # GET /organizations/{id}
 # operationId: getOrganizationItem
-export def "organizations get-item" [
+export def "get-organization-item" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2025,7 +2025,7 @@ export def "organizations get-item" [
 #
 # PUT /organizations/{id}
 # operationId: putOrganizationItem
-export def "organizations update-item" [
+export def "put-organization-item" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2065,7 +2065,7 @@ export def "organizations update-item" [
 # Creates a AgentFlushRequest resource.
 #
 # POST /post-logs
-export def "post-logs create" [
+export def "post-post-logs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2106,7 +2106,7 @@ export def "post-logs create" [
 #
 # GET /projects
 # operationId: getProjectCollection
-export def "projects get-collection" [
+export def "get-project-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2141,7 +2141,7 @@ export def "projects get-collection" [
 #
 # POST /projects
 # operationId: postProjectCollection
-export def "projects create-collection" [
+export def "post-project-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2183,7 +2183,7 @@ export def "projects create-collection" [
 #
 # DELETE /projects/{id}
 # operationId: deleteProjectItem
-export def "projects delete-item" [
+export def "delete-project-item" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2219,7 +2219,7 @@ export def "projects delete-item" [
 #
 # GET /projects/{id}
 # operationId: getProjectItem
-export def "projects get-item" [
+export def "get-project-item" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2256,7 +2256,7 @@ export def "projects get-item" [
 #
 # PUT /projects/{id}
 # operationId: putProjectItem
-export def "projects update-item" [
+export def "put-project-item" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2299,7 +2299,7 @@ export def "projects update-item" [
 #
 # GET /publish-histories
 # operationId: getPublishHistoryCollection
-export def "publish-histories get-history-collection" [
+export def "get-publish-history-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2341,7 +2341,7 @@ export def "publish-histories get-history-collection" [
 #
 # GET /publish-histories/{id}
 # operationId: getPublishHistoryItem
-export def "publish-histories get-history-item" [
+export def "get-publish-history-item" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2378,7 +2378,7 @@ export def "publish-histories get-history-item" [
 #
 # GET /rule-changes
 # operationId: getRuleChangeCollection
-export def "rule-changes get-collection" [
+export def "get-rule-change-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2417,7 +2417,7 @@ export def "rule-changes get-collection" [
 # POST /rule-changes
 # operationId: postRuleChangeCollection
 # --markers item shape: {maximumOccurrence?: int, minimumOccurrence?: int, name: string, options?: list<string>, transformers?: list<string>, type: string}
-export def "rule-changes create-collection" [
+export def "post-rule-change-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2464,7 +2464,7 @@ export def "rule-changes create-collection" [
 #
 # DELETE /rule-changes/{id}
 # operationId: deleteRuleChangeItem
-export def "rule-changes delete-item" [
+export def "delete-rule-change-item" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2500,7 +2500,7 @@ export def "rule-changes delete-item" [
 #
 # GET /rule-changes/{id}
 # operationId: getRuleChangeItem
-export def "rule-changes get-item" [
+export def "get-rule-change-item" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2537,7 +2537,7 @@ export def "rule-changes get-item" [
 #
 # GET /rule-set-versions
 # operationId: getRuleSetVersionCollection
-export def "rule-set-versions get-collection" [
+export def "get-rule-set-version-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2576,7 +2576,7 @@ export def "rule-set-versions get-collection" [
 #
 # GET /rule-set-versions/{id}
 # operationId: getRuleSetVersionItem
-export def "rule-set-versions get-item" [
+export def "get-rule-set-version-item" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2613,7 +2613,7 @@ export def "rule-set-versions get-item" [
 #
 # POST /rule-set-versions/{id}/clear
 # operationId: clearRuleSetVersionItem
-export def "rule-set-versions-clear update-item" [
+export def "clear-rule-set-version-item" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2657,7 +2657,7 @@ export def "rule-set-versions-clear update-item" [
 #
 # POST /rule-set-versions/{id}/publish
 # operationId: publishRuleSetVersionItem
-export def "rule-set-versions-publish publish-item" [
+export def "publish-rule-set-version-item" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2701,7 +2701,7 @@ export def "rule-set-versions-publish publish-item" [
 #
 # GET /rule-statistics
 # operationId: getRuleStatisticCollection
-export def "rule-statistics get-collection" [
+export def "get-rule-statistic-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2738,7 +2738,7 @@ export def "rule-statistics get-collection" [
 #
 # GET /rule-statistics/{id}
 # operationId: getRuleStatisticItem
-export def "rule-statistics get-item" [
+export def "get-rule-statistic-item" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2775,7 +2775,7 @@ export def "rule-statistics get-item" [
 #
 # GET /rules
 # operationId: getRuleCollection
-export def "rules get-collection" [
+export def "get-rule-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2815,7 +2815,7 @@ export def "rules get-collection" [
 #
 # GET /rules/{id}
 # operationId: getRuleItem
-export def "rules get-item" [
+export def "get-rule-item" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2852,7 +2852,7 @@ export def "rules get-item" [
 #
 # GET /smart-lists
 # operationId: getSmartListCollection
-export def "smart-lists get-collection" [
+export def "get-smart-list-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2887,7 +2887,7 @@ export def "smart-lists get-collection" [
 #
 # GET /smart-lists/{id}
 # operationId: getSmartListItem
-export def "smart-lists get-item" [
+export def "get-smart-list-item" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2924,7 +2924,7 @@ export def "smart-lists get-item" [
 #
 # POST /user-organizations
 # operationId: postUserOrganizationCollection
-export def "user-organizations create-collection" [
+export def "post-user-organization-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2963,7 +2963,7 @@ export def "user-organizations create-collection" [
 #
 # DELETE /user-organizations/{id}
 # operationId: deleteUserOrganizationItem
-export def "user-organizations delete-item" [
+export def "delete-user-organization-item" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2999,7 +2999,7 @@ export def "user-organizations delete-item" [
 #
 # GET /user-organizations/{id}
 # operationId: getUserOrganizationItem
-export def "user-organizations get-item" [
+export def "get-user-organization-item" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3036,7 +3036,7 @@ export def "user-organizations get-item" [
 #
 # PUT /user-organizations/{id}
 # operationId: putUserOrganizationItem
-export def "user-organizations update-item" [
+export def "put-user-organization-item" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3077,7 +3077,7 @@ export def "user-organizations update-item" [
 #
 # GET /user-project-flatteneds/{id}
 # operationId: getUserProjectFlattenedItem
-export def "user-project-flatteneds get-item" [
+export def "get-user-project-flattened-item" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3114,7 +3114,7 @@ export def "user-project-flatteneds get-item" [
 #
 # POST /user-projects
 # operationId: postUserProjectCollection
-export def "user-projects create-collection" [
+export def "post-user-project-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3155,7 +3155,7 @@ export def "user-projects create-collection" [
 #
 # DELETE /user-projects/{id}
 # operationId: deleteUserProjectItem
-export def "user-projects delete-item" [
+export def "delete-user-project-item" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3191,7 +3191,7 @@ export def "user-projects delete-item" [
 #
 # GET /user-projects/{id}
 # operationId: getUserProjectItem
-export def "user-projects get-item" [
+export def "get-user-project-item" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3228,7 +3228,7 @@ export def "user-projects get-item" [
 #
 # PUT /user-projects/{id}
 # operationId: putUserProjectItem
-export def "user-projects update-item" [
+export def "put-user-project-item" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3269,7 +3269,7 @@ export def "user-projects update-item" [
 #
 # GET /users
 # operationId: getUserCollection
-export def "users get-collection" [
+export def "get-user-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3307,7 +3307,7 @@ export def "users get-collection" [
 #
 # POST /users
 # operationId: postUserCollection
-export def "users create-collection" [
+export def "post-user-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3347,7 +3347,7 @@ export def "users create-collection" [
 #
 # POST /users/forgot-password-request
 # operationId: postForgotPasswordRequestCollection
-export def "users-forgot-password-request create-collection" [
+export def "post-forgot-password-request-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3386,7 +3386,7 @@ export def "users-forgot-password-request create-collection" [
 #
 # PUT /users/forgot-password/{resetToken}
 # operationId: forgot_passwordUserItem
-export def "users-forgot-password update-item" [
+export def "forgot-password-user-item" [
   reset_token: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3428,7 +3428,7 @@ export def "users-forgot-password update-item" [
 #
 # DELETE /users/{id}
 # operationId: deleteUserItem
-export def "users delete-item" [
+export def "delete-user-item" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3464,7 +3464,7 @@ export def "users delete-item" [
 #
 # GET /users/{id}
 # operationId: getUserItem
-export def "users get-item" [
+export def "get-user-item" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3501,7 +3501,7 @@ export def "users get-item" [
 #
 # GET /users/{id}/confirm-new-email/{newEmailToken}
 # operationId: confirm_new_emailUserItem
-export def "users-confirm-new-email confirm-item" [
+export def "confirm-new-email-user-item" [
   id: string
   new_email_token: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3540,7 +3540,7 @@ export def "users-confirm-new-email confirm-item" [
 #
 # PUT /users/{id}/edit-email
 # operationId: edit_emailUserItem
-export def "users-edit-email update-item" [
+export def "edit-email-user-item" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3581,7 +3581,7 @@ export def "users-edit-email update-item" [
 #
 # PUT /users/{id}/edit-info
 # operationId: edit_infoUserItem
-export def "users-edit-info get-item" [
+export def "edit-info-user-item" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3622,7 +3622,7 @@ export def "users-edit-info get-item" [
 #
 # PUT /users/{id}/edit-password
 # operationId: edit_passwordUserItem
-export def "users-edit-password update-item" [
+export def "edit-password-user-item" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

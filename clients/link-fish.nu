@@ -107,7 +107,7 @@ def accept-completer-1 [] { ["image/jpeg" "image/png"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "urls-apps get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-urls-apps" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -130,7 +130,7 @@ export def commands []: nothing -> table {
 # Get mobile apps
 #
 # GET /Urls/apps
-export def "urls-apps get" [
+export def "get-urls-apps" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -168,7 +168,7 @@ export def "urls-apps get" [
 # Extract data (browser)
 #
 # GET /Urls/browser-data
-export def "urls-browser-data get" [
+export def "get-urls-browser-data" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -210,7 +210,7 @@ export def "urls-browser-data get" [
 # Generate screenshot (browser)
 #
 # GET /Urls/browser-screenshot
-export def "urls-browser-screenshot get" [
+export def "get-urls-browser-screenshot" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -249,7 +249,7 @@ export def "urls-browser-screenshot get" [
 # Extract data
 #
 # GET /Urls/data
-export def "urls-data get" [
+export def "get-urls-data" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -289,7 +289,7 @@ export def "urls-data get" [
 # Return data of JSON/XML
 #
 # GET /Urls/data-raw
-export def "urls-data-raw get" [
+export def "get-urls-data-raw" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -325,7 +325,7 @@ export def "urls-data-raw get" [
 # Return tabular data
 #
 # GET /Urls/data-tabular
-export def "urls-data-tabular get" [
+export def "get-urls-data-tabular" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -363,7 +363,7 @@ export def "urls-data-tabular get" [
 # Get geo coordinates
 #
 # GET /Urls/geo-coordinates
-export def "urls-geo-coordinates get" [
+export def "get-urls-geo-coordinates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -400,7 +400,7 @@ export def "urls-geo-coordinates get" [
 # Get social media accounts
 #
 # GET /Urls/social-media
-export def "urls-social-media get" [
+export def "get-urls-social-media" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

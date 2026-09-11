@@ -137,7 +137,7 @@ def origin-completer [] { ["APPLICATION_IP_PROVISIONING" "PIPER_V2" "PIPER_V3" "
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "callback-generate-token generate" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "integrations-callback-generate-token" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -161,7 +161,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/callback:generateToken
 # operationId: integrations.callback.generateToken
-export def "callback-generate-token generate" [
+export def "integrations-callback-generate-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -212,7 +212,7 @@ export def "callback-generate-token generate" [
 #
 # GET /v1/connectorPlatformRegions:enumerate
 # operationId: integrations.connectorPlatformRegions.enumerate
-export def "connector-platform-regions-enumerate get" [
+export def "integrations-connector-platform-regions-enumerate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -258,7 +258,7 @@ export def "connector-platform-regions-enumerate get" [
 #
 # POST /v1/{integrationVersion}:takeoverEditLock
 # operationId: integrations.projects.locations.products.integrations.versions.takeoverEditLock
-export def "projects lock-takeover-edit" [
+export def "integrations-projects-locations-products-integrations-versions-takeover-edit-lock" [
   integration_version: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -310,7 +310,7 @@ export def "projects lock-takeover-edit" [
 #
 # DELETE /v1/{name}
 # operationId: integrations.projects.locations.sfdcInstances.sfdcChannels.delete
-export def "projects delete-by-name" [
+export def "integrations-projects-locations-sfdc-instances-sfdc-channels-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -358,7 +358,7 @@ export def "projects delete-by-name" [
 #
 # GET /v1/{name}
 # operationId: integrations.projects.locations.sfdcInstances.sfdcChannels.get
-export def "projects get" [
+export def "integrations-projects-locations-sfdc-instances-sfdc-channels-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -406,7 +406,7 @@ export def "projects get" [
 #
 # PATCH /v1/{name}
 # operationId: integrations.projects.locations.sfdcInstances.sfdcChannels.patch
-export def "projects update" [
+export def "integrations-projects-locations-sfdc-instances-sfdc-channels-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -466,7 +466,7 @@ export def "projects update" [
 #
 # POST /v1/{name}:cancel
 # operationId: integrations.projects.locations.products.integrations.executions.cancel
-export def "projects cancel" [
+export def "integrations-projects-locations-products-integrations-executions-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -518,7 +518,7 @@ export def "projects cancel" [
 #
 # GET /v1/{name}:download
 # operationId: integrations.projects.locations.products.integrations.versions.download
-export def "projects download" [
+export def "integrations-projects-locations-products-integrations-versions-download" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -569,7 +569,7 @@ export def "projects download" [
 # operationId: integrations.projects.locations.products.integrations.execute
 # --parameterEntries item shape: {dataType?: "DATA_TYPE_UNSPECIFIED"|"STRING_VALUE"|"INT_VALUE"|"DOUBLE_VALUE"|"BOOLEAN_VALUE"|"PROTO_VALUE"|"SERIALIZED_OBJECT_VALUE"|"STRING_ARRAY"|"INT_ARRAY"|"DOUBLE_ARRAY"|"PROTO_ARRAY"|"PROTO_ENUM"|"BOOLEAN_ARRAY"|"PROTO_ENUM_ARRAY"|"BYTES"|"BYTES_ARRAY"|"NON_SERIALIZABLE_OBJECT"|"JSON_VALUE", key?: string, value?: record}
 # --parameters shape: {parameters?: list}
-export def "projects create-execute" [
+export def "integrations-projects-locations-products-integrations-execute" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -627,7 +627,7 @@ export def "projects create-execute" [
 #
 # POST /v1/{name}:lift
 # operationId: integrations.projects.locations.products.integrations.executions.suspensions.lift
-export def "projects create-lift" [
+export def "integrations-projects-locations-products-integrations-executions-suspensions-lift" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -679,7 +679,7 @@ export def "projects create-lift" [
 #
 # POST /v1/{name}:publish
 # operationId: integrations.projects.locations.products.integrations.versions.publish
-export def "projects publish" [
+export def "integrations-projects-locations-products-integrations-versions-publish" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -732,7 +732,7 @@ export def "projects publish" [
 # POST /v1/{name}:resolve
 # operationId: integrations.projects.locations.products.integrations.executions.suspensions.resolve
 # --suspension shape: {approvalConfig?: record, audit?: record, eventExecutionInfoId?: string, integration?: string, name?: string, state?: "RESOLUTION_STATE_UNSPECIFIED"|"PENDING"|"REJECTED"|"LIFTED", suspensionConfig?: record, taskId?: string}
-export def "projects create-resolve" [
+export def "integrations-projects-locations-products-integrations-executions-suspensions-resolve" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -786,7 +786,7 @@ export def "projects create-resolve" [
 # operationId: integrations.projects.locations.products.integrations.schedule
 # --parameterEntries item shape: {dataType?: "DATA_TYPE_UNSPECIFIED"|"STRING_VALUE"|"INT_VALUE"|"DOUBLE_VALUE"|"BOOLEAN_VALUE"|"PROTO_VALUE"|"SERIALIZED_OBJECT_VALUE"|"STRING_ARRAY"|"INT_ARRAY"|"DOUBLE_ARRAY"|"PROTO_ARRAY"|"PROTO_ENUM"|"BOOLEAN_ARRAY"|"PROTO_ENUM_ARRAY"|"BYTES"|"BYTES_ARRAY"|"NON_SERIALIZABLE_OBJECT"|"JSON_VALUE", key?: string, value?: record}
 # --parameters shape: {parameters?: list}
-export def "projects create-schedule" [
+export def "integrations-projects-locations-products-integrations-schedule" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -845,7 +845,7 @@ export def "projects create-schedule" [
 # operationId: integrations.projects.locations.products.integrations.test
 # --integrationVersion shape: {databasePersistencePolicy?: "DATABASE_PERSISTENCE_POLICY_UNSPECIFIED"|"DATABASE_PERSISTENCE_DISABLED", description?: string, errorCatcherConfigs?: list, integrationParameters?: list, integrationParametersInternal?: record, lastModifierEmail?: string, lockHolder?: string, origin?: "UNSPECIFIED"|"UI"|"PIPER_V2"|"PIPER_V3"|"APPLICATION_IP_PROVISIONING", parentTemplateId?: string, runAsServiceAccount?: string, snapshotNumber?: string, taskConfigs?: list, taskConfigsInternal?: list, teardown?: record, ... (3 more fields)}
 # --parameters shape: {parameters?: list}
-export def "projects test" [
+export def "integrations-projects-locations-products-integrations-test" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -903,7 +903,7 @@ export def "projects test" [
 #
 # POST /v1/{name}:unpublish
 # operationId: integrations.projects.locations.products.integrations.versions.unpublish
-export def "projects delete-by-name-1" [
+export def "integrations-projects-locations-products-integrations-versions-unpublish" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -955,7 +955,7 @@ export def "projects delete-by-name-1" [
 #
 # POST /v1/{parent}/appsScriptProjects
 # operationId: integrations.projects.locations.appsScriptProjects.create
-export def "apps-script-projects create" [
+export def "integrations-projects-locations-apps-script-projects-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1008,7 +1008,7 @@ export def "apps-script-projects create" [
 #
 # POST /v1/{parent}/appsScriptProjects:link
 # operationId: integrations.projects.locations.appsScriptProjects.link
-export def "apps-script-projects-link create" [
+export def "integrations-projects-locations-apps-script-projects-link" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1060,7 +1060,7 @@ export def "apps-script-projects-link create" [
 #
 # GET /v1/{parent}/authConfigs
 # operationId: integrations.projects.locations.products.authConfigs.list
-export def "auth-configs list" [
+export def "integrations-projects-locations-products-auth-configs-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1113,7 +1113,7 @@ export def "auth-configs list" [
 # POST /v1/{parent}/authConfigs
 # operationId: integrations.projects.locations.products.authConfigs.create
 # --decryptedCredential shape: {authToken?: record, credentialType?: "CREDENTIAL_TYPE_UNSPECIFIED"|"USERNAME_AND_PASSWORD"|"API_KEY"|"OAUTH2_AUTHORIZATION_CODE"|"OAUTH2_IMPLICIT"|"OAUTH2_CLIENT_CREDENTIALS"|"OAUTH2_RESOURCE_OWNER_CREDENTIALS"|"JWT"|"AUTH_TOKEN"|"SERVICE_ACCOUNT"|"CLIENT_CERTIFICATE_ONLY"|"OIDC_TOKEN", jwt?: record, oauth2AuthorizationCode?: record, oauth2ClientCredentials?: record, oauth2ResourceOwnerCredentials?: record, oidcToken?: record, serviceAccountCredentials?: record, usernameAndPassword?: record}
-export def "auth-configs create" [
+export def "integrations-projects-locations-products-auth-configs-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1182,7 +1182,7 @@ export def "auth-configs create" [
 #
 # GET /v1/{parent}/certificates
 # operationId: integrations.projects.locations.products.certificates.list
-export def "certificates list" [
+export def "integrations-projects-locations-products-certificates-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1235,7 +1235,7 @@ export def "certificates list" [
 # POST /v1/{parent}/certificates
 # operationId: integrations.projects.locations.products.certificates.create
 # --rawCertificate shape: {encryptedPrivateKey?: string, passphrase?: string, sslCertificate?: string}
-export def "certificates create" [
+export def "integrations-projects-locations-products-certificates-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1292,7 +1292,7 @@ export def "certificates create" [
 #
 # GET /v1/{parent}/clientmetadata
 # operationId: integrations.projects.getClientmetadata
-export def "clientmetadata get" [
+export def "integrations-projects-get-clientmetadata" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1340,7 +1340,7 @@ export def "clientmetadata get" [
 #
 # GET /v1/{parent}/clients
 # operationId: integrations.projects.locations.getClients
-export def "clients get" [
+export def "integrations-projects-locations-get-clients" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1388,7 +1388,7 @@ export def "clients get" [
 #
 # POST /v1/{parent}/clients:deprovision
 # operationId: integrations.projects.locations.clients.deprovision
-export def "clients-deprovision create" [
+export def "integrations-projects-locations-clients-deprovision" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1441,7 +1441,7 @@ export def "clients-deprovision create" [
 # POST /v1/{parent}/clients:provision
 # operationId: integrations.projects.locations.clients.provision
 # --cloudKmsConfig shape: {key?: string, keyVersion?: string, kmsLocation?: string, kmsProjectId?: string, kmsRing?: string}
-export def "clients-provision create" [
+export def "integrations-projects-locations-clients-provision" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1496,7 +1496,7 @@ export def "clients-provision create" [
 # POST /v1/{parent}/clients:switch
 # operationId: integrations.projects.locations.clients.switch
 # --cloudKmsConfig shape: {key?: string, keyVersion?: string, kmsLocation?: string, kmsProjectId?: string, kmsRing?: string}
-export def "clients-switch create" [
+export def "integrations-projects-locations-clients-switch" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1548,7 +1548,7 @@ export def "clients-switch create" [
 #
 # POST /v1/{parent}/cloudFunctions
 # operationId: integrations.projects.locations.products.cloudFunctions.create
-export def "cloud-functions create" [
+export def "integrations-projects-locations-products-cloud-functions-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1602,7 +1602,7 @@ export def "cloud-functions create" [
 #
 # GET /v1/{parent}/connections
 # operationId: integrations.projects.locations.connections.list
-export def "connections list" [
+export def "integrations-projects-locations-connections-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1654,7 +1654,7 @@ export def "connections list" [
 #
 # GET /v1/{parent}/executions
 # operationId: integrations.projects.locations.products.integrations.executions.list
-export def "executions list" [
+export def "integrations-projects-locations-products-integrations-executions-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1721,7 +1721,7 @@ export def "executions list" [
 #
 # GET /v1/{parent}/integrations
 # operationId: integrations.projects.locations.products.integrations.list
-export def "integrations list" [
+export def "integrations-projects-locations-products-integrations-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1773,7 +1773,7 @@ export def "integrations list" [
 #
 # GET /v1/{parent}/runtimeActionSchemas
 # operationId: integrations.projects.locations.connections.runtimeActionSchemas.list
-export def "runtime-action-schemas list" [
+export def "integrations-projects-locations-connections-runtime-action-schemas-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1824,7 +1824,7 @@ export def "runtime-action-schemas list" [
 #
 # GET /v1/{parent}/runtimeEntitySchemas
 # operationId: integrations.projects.locations.connections.runtimeEntitySchemas.list
-export def "runtime-entity-schemas list" [
+export def "integrations-projects-locations-connections-runtime-entity-schemas-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1875,7 +1875,7 @@ export def "runtime-entity-schemas list" [
 #
 # GET /v1/{parent}/sfdcChannels
 # operationId: integrations.projects.locations.sfdcInstances.sfdcChannels.list
-export def "sfdc-channels list" [
+export def "integrations-projects-locations-sfdc-instances-sfdc-channels-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1927,7 +1927,7 @@ export def "sfdc-channels list" [
 #
 # POST /v1/{parent}/sfdcChannels
 # operationId: integrations.projects.locations.sfdcInstances.sfdcChannels.create
-export def "sfdc-channels create" [
+export def "integrations-projects-locations-sfdc-instances-sfdc-channels-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1984,7 +1984,7 @@ export def "sfdc-channels create" [
 #
 # GET /v1/{parent}/sfdcInstances
 # operationId: integrations.projects.locations.sfdcInstances.list
-export def "sfdc-instances list" [
+export def "integrations-projects-locations-sfdc-instances-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2036,7 +2036,7 @@ export def "sfdc-instances list" [
 #
 # POST /v1/{parent}/sfdcInstances
 # operationId: integrations.projects.locations.sfdcInstances.create
-export def "sfdc-instances create" [
+export def "integrations-projects-locations-sfdc-instances-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2093,7 +2093,7 @@ export def "sfdc-instances create" [
 #
 # GET /v1/{parent}/suspensions
 # operationId: integrations.projects.locations.products.integrations.executions.suspensions.list
-export def "suspensions list" [
+export def "integrations-projects-locations-products-integrations-executions-suspensions-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2145,7 +2145,7 @@ export def "suspensions list" [
 #
 # GET /v1/{parent}/versions
 # operationId: integrations.projects.locations.products.integrations.versions.list
-export def "versions list" [
+export def "integrations-projects-locations-products-integrations-versions-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2206,7 +2206,7 @@ export def "versions list" [
 # --teardown shape: {teardownTaskConfigs?: list}
 # --triggerConfigs item shape: {alertConfig?: list, cloudSchedulerConfig?: record, description?: string, errorCatcherId?: string, label?: string, nextTasksExecutionPolicy?: "NEXT_TASKS_EXECUTION_POLICY_UNSPECIFIED"|"RUN_ALL_MATCH"|"RUN_FIRST_MATCH", position?: record, properties?: record, startTasks?: list, triggerId?: string, triggerNumber?: string, triggerType?: "TRIGGER_TYPE_UNSPECIFIED"|"CRON"|"API"|"SFDC_CHANNEL"|"CLOUD_PUBSUB_EXTERNAL"|"SFDC_CDC_CHANNEL"|"CLOUD_SCHEDULER"}
 # --triggerConfigsInternal item shape: {alertConfig?: list, cloudSchedulerConfig?: record, description?: string, enabledClients?: list<string>, errorCatcherId?: string, label?: string, nextTasksExecutionPolicy?: "UNSPECIFIED"|"RUN_ALL_MATCH"|"RUN_FIRST_MATCH", pauseWorkflowExecutions?: bool, position?: record, properties?: record, startTasks?: list, triggerCriteria?: record, triggerId?: string, triggerNumber?: string, ... (1 more fields)}
-export def "versions create" [
+export def "integrations-projects-locations-products-integrations-versions-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2275,7 +2275,7 @@ export def "versions create" [
 #
 # POST /v1/{parent}/versions:upload
 # operationId: integrations.projects.locations.products.integrations.versions.upload
-export def "versions-upload upload" [
+export def "integrations-projects-locations-products-integrations-versions-upload" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

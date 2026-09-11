@@ -101,7 +101,7 @@ def action-completer [] { ["APPROVE" "REJECT" "REJECT_BLACKLIST"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "order-feedback create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-v1-order-feedback" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -124,7 +124,7 @@ export def commands []: nothing -> table {
 # Feedback the status of an order transaction.
 #
 # POST /v1/order/feedback
-export def "order-feedback create" [
+export def "post-v1-order-feedback" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -163,7 +163,7 @@ export def "order-feedback create" [
 # Screen order for payment fraud.
 #
 # POST /v1/order/screen
-export def "order-screen create" [
+export def "post-v1-order-screen" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

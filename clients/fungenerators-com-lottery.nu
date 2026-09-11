@@ -100,7 +100,7 @@ def accept-completer [] { ["application/js" "application/json" "application/xml"
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "lottery-countries get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-lottery-countries" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -123,7 +123,7 @@ export def commands []: nothing -> table {
 # Get the complete list of countries supported in the number generation API.
 #
 # GET /lottery/countries
-export def "lottery-countries get" [
+export def "get-lottery-countries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -157,7 +157,7 @@ export def "lottery-countries get" [
 # Generate random draw for a given lottery game.
 #
 # GET /lottery/draw
-export def "lottery-draw get" [
+export def "get-lottery-draw" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -194,7 +194,7 @@ export def "lottery-draw get" [
 # Get the list of supported lottery games supported in the given country.
 #
 # GET /lottery/supported
-export def "lottery-supported get" [
+export def "get-lottery-supported" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

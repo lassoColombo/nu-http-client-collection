@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-sql-servers-backup-long-term-retention-vaults list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "backup-long-term-retention-vaults-list-by-server" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -128,7 +128,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/backupLongTermRetentionVaults
 # operationId: BackupLongTermRetentionVaults_ListByServer
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-backup-long-term-retention-vaults list" [
+export def "backup-long-term-retention-vaults-list-by-server" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -170,7 +170,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-backup
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/backupLongTermRetentionVaults/{backupLongTermRetentionVaultName}
 # operationId: BackupLongTermRetentionVaults_Get
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-backup-long-term-retention-vaults get" [
+export def "backup-long-term-retention-vaults-get" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -215,7 +215,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-backup
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/backupLongTermRetentionVaults/{backupLongTermRetentionVaultName}
 # operationId: BackupLongTermRetentionVaults_CreateOrUpdate
 # --properties shape: {recoveryServicesVaultResourceId: string}
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-backup-long-term-retention-vaults create-or-update" [
+export def "backup-long-term-retention-vaults-create-or-update" [
   subscription_id: string
   resource_group_name: string
   server_name: string

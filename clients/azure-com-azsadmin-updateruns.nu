@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resourcegroups-providers-microsoft-update-admin-update-locations-update-runs list-top-level" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "update-runs-list-top-level" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -128,7 +128,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Update.Admin/updateLocations/{updateLocation}/updateRuns
 # operationId: UpdateRuns_ListTopLevel
-export def "subscriptions-resourcegroups-providers-microsoft-update-admin-update-locations-update-runs list-top-level" [
+export def "update-runs-list-top-level" [
   subscription_id: string
   resource_group_name: string
   update_location: string
@@ -170,7 +170,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-update-admin-update
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Update.Admin/updateLocations/{updateLocation}/updateRuns/{runName}
 # operationId: UpdateRuns_GetTopLevel
-export def "subscriptions-resourcegroups-providers-microsoft-update-admin-update-locations-update-runs get-top-level" [
+export def "update-runs-get-top-level" [
   subscription_id: string
   resource_group_name: string
   update_location: string
@@ -214,7 +214,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-update-admin-update
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Update.Admin/updateLocations/{updateLocation}/updates/{updateName}/updateRuns
 # operationId: UpdateRuns_List
-export def "subscriptions-resourcegroups-providers-microsoft-update-admin-update-locations-updates-update-runs list" [
+export def "update-runs-list" [
   subscription_id: string
   resource_group_name: string
   update_location: string
@@ -258,7 +258,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-update-admin-update
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Update.Admin/updateLocations/{updateLocation}/updates/{updateName}/updateRuns/{runName}
 # operationId: UpdateRuns_Get
-export def "subscriptions-resourcegroups-providers-microsoft-update-admin-update-locations-updates-update-runs get" [
+export def "update-runs-get" [
   subscription_id: string
   resource_group_name: string
   update_location: string
@@ -304,7 +304,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-update-admin-update
 #
 # POST /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Update.Admin/updateLocations/{updateLocation}/updates/{updateName}/updateRuns/{runName}/rerun
 # operationId: UpdateRuns_Rerun
-export def "subscriptions-resourcegroups-providers-microsoft-update-admin-update-locations-updates-update-runs-rerun update" [
+export def "update-runs-rerun" [
   subscription_id: string
   resource_group_name: string
   update_location: string

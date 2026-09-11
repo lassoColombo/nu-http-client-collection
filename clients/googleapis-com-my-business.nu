@@ -137,7 +137,7 @@ def media-format-completer [] { ["MEDIA_FORMAT_UNSPECIFIED" "PHOTO" "VIDEO"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "mybusiness-accounts-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -161,7 +161,7 @@ export def commands []: nothing -> table {
 #
 # GET /v4/accounts
 # operationId: mybusiness.accounts.list
-export def "accounts list" [
+export def "mybusiness-accounts-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -213,7 +213,7 @@ export def "accounts list" [
 # operationId: mybusiness.accounts.create
 # --organizationInfo shape: {phoneNumber?: string, postalAddress?: record, registeredDomain?: string}
 # --state shape: {status?: "ACCOUNT_STATUS_UNSPECIFIED"|"VERIFIED"|"UNVERIFIED"|"VERIFICATION_REQUESTED"}
-export def "accounts create" [
+export def "mybusiness-accounts-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -271,7 +271,7 @@ export def "accounts create" [
 #
 # GET /v4/attributes
 # operationId: mybusiness.attributes.list
-export def "attributes list" [
+export def "mybusiness-attributes-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -323,7 +323,7 @@ export def "attributes list" [
 #
 # GET /v4/categories
 # operationId: mybusiness.categories.list
-export def "categories list" [
+export def "mybusiness-categories-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -375,7 +375,7 @@ export def "categories list" [
 #
 # GET /v4/categories:batchGet
 # operationId: mybusiness.categories.batchGet
-export def "categories-batch-get get" [
+export def "mybusiness-categories-batch-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -425,7 +425,7 @@ export def "categories-batch-get get" [
 #
 # GET /v4/chains:search
 # operationId: mybusiness.chains.search
-export def "chains-search list" [
+export def "mybusiness-chains-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -474,7 +474,7 @@ export def "chains-search list" [
 # POST /v4/googleLocations:search
 # operationId: mybusiness.googleLocations.search
 # --location shape: {adWordsLocationExtensions?: record, additionalCategories?: list, additionalPhones?: list<string>, address?: record, attributes?: list, labels?: list<string>, languageCode?: string, latlng?: record, locationKey?: record, locationName?: string, locationState?: record, metadata?: record, moreHours?: list, name?: string, openInfo?: record, priceLists?: list, primaryCategory?: record, primaryPhone?: string, profile?: record, regularHours?: record, relationshipData?: record, serviceArea?: record, ... (3 more fields)}
-export def "google-locations-search list" [
+export def "mybusiness-google-locations-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -526,7 +526,7 @@ export def "google-locations-search list" [
 #
 # DELETE /v4/{name}
 # operationId: mybusiness.accounts.locations.questions.delete
-export def "accounts delete" [
+export def "mybusiness-accounts-locations-questions-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -574,7 +574,7 @@ export def "accounts delete" [
 #
 # GET /v4/{name}
 # operationId: mybusiness.chains.get
-export def "chains get" [
+export def "mybusiness-chains-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -624,7 +624,7 @@ export def "chains get" [
 # operationId: mybusiness.accounts.locations.questions.patch
 # --author shape: {displayName?: string, profilePhotoUrl?: string, type?: "AUTHOR_TYPE_UNSPECIFIED"|"REGULAR_USER"|"LOCAL_GUIDE"|"MERCHANT"}
 # --topAnswers item shape: {author?: record, createTime?: string, name?: string, text?: string, updateTime?: string, upvoteCount?: int}
-export def "accounts update" [
+export def "mybusiness-accounts-locations-questions-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -684,7 +684,7 @@ export def "accounts update" [
 #
 # PUT /v4/{name}
 # operationId: mybusiness.accounts.updateNotifications
-export def "accounts update-notifications" [
+export def "mybusiness-accounts-update-notifications" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -739,7 +739,7 @@ export def "accounts update-notifications" [
 # POST /v4/{name}/localPosts:reportInsights
 # operationId: mybusiness.accounts.locations.localPosts.reportInsights
 # --basicRequest shape: {metricRequests?: list, timeRange?: record}
-export def "local-posts-report-insights create" [
+export def "mybusiness-accounts-locations-local-posts-report-insights" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -792,7 +792,7 @@ export def "local-posts-report-insights create" [
 #
 # POST /v4/{name}/locations:batchGet
 # operationId: mybusiness.accounts.locations.batchGet
-export def "locations-batch-get get" [
+export def "mybusiness-accounts-locations-batch-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -844,7 +844,7 @@ export def "locations-batch-get get" [
 #
 # POST /v4/{name}/locations:batchGetReviews
 # operationId: mybusiness.accounts.locations.batchGetReviews
-export def "locations-batch-get-reviews get" [
+export def "mybusiness-accounts-locations-batch-get-reviews" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -902,7 +902,7 @@ export def "locations-batch-get-reviews get" [
 # operationId: mybusiness.accounts.locations.reportInsights
 # --basicRequest shape: {metricRequests?: list, timeRange?: record}
 # --drivingDirectionsRequest shape: {languageCode?: string, numDays?: "SEVEN"|"THIRTY"|"NINETY"}
-export def "locations-report-insights create" [
+export def "mybusiness-accounts-locations-report-insights" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -956,7 +956,7 @@ export def "locations-report-insights create" [
 #
 # DELETE /v4/{name}/reply
 # operationId: mybusiness.accounts.locations.reviews.deleteReply
-export def "reply delete" [
+export def "mybusiness-accounts-locations-reviews-delete-reply" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1004,7 +1004,7 @@ export def "reply delete" [
 #
 # PUT /v4/{name}/reply
 # operationId: mybusiness.accounts.locations.reviews.updateReply
-export def "reply update" [
+export def "mybusiness-accounts-locations-reviews-update-reply" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1057,7 +1057,7 @@ export def "reply update" [
 #
 # POST /v4/{name}:accept
 # operationId: mybusiness.accounts.invitations.accept
-export def "accounts create-accept" [
+export def "mybusiness-accounts-invitations-accept" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1109,7 +1109,7 @@ export def "accounts create-accept" [
 #
 # POST /v4/{name}:associate
 # operationId: mybusiness.accounts.locations.associate
-export def "accounts create-associate" [
+export def "mybusiness-accounts-locations-associate" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1161,7 +1161,7 @@ export def "accounts create-associate" [
 #
 # POST /v4/{name}:clearAssociation
 # operationId: mybusiness.accounts.locations.clearAssociation
-export def "accounts create-clear-association" [
+export def "mybusiness-accounts-locations-clear-association" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1213,7 +1213,7 @@ export def "accounts create-clear-association" [
 #
 # POST /v4/{name}:complete
 # operationId: mybusiness.accounts.locations.verifications.complete
-export def "accounts complete" [
+export def "mybusiness-accounts-locations-verifications-complete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1265,7 +1265,7 @@ export def "accounts complete" [
 #
 # POST /v4/{name}:decline
 # operationId: mybusiness.accounts.invitations.decline
-export def "accounts create-decline" [
+export def "mybusiness-accounts-invitations-decline" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1318,7 +1318,7 @@ export def "accounts create-decline" [
 # POST /v4/{name}:fetchVerificationOptions
 # operationId: mybusiness.accounts.locations.fetchVerificationOptions
 # --context shape: {address?: record}
-export def "accounts get-verification-options" [
+export def "mybusiness-accounts-locations-fetch-verification-options" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1371,7 +1371,7 @@ export def "accounts get-verification-options" [
 #
 # POST /v4/{name}:findMatches
 # operationId: mybusiness.accounts.locations.findMatches
-export def "accounts find-matches" [
+export def "mybusiness-accounts-locations-find-matches" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1425,7 +1425,7 @@ export def "accounts find-matches" [
 #
 # POST /v4/{name}:generateAccountNumber
 # operationId: mybusiness.accounts.generateAccountNumber
-export def "accounts generate-number" [
+export def "mybusiness-accounts-generate-account-number" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1477,7 +1477,7 @@ export def "accounts generate-number" [
 #
 # GET /v4/{name}:getGoogleUpdated
 # operationId: mybusiness.accounts.locations.lodging.getGoogleUpdated
-export def "accounts get-google-updated-by-name" [
+export def "mybusiness-accounts-locations-lodging-get-google-updated" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1526,7 +1526,7 @@ export def "accounts get-google-updated-by-name" [
 #
 # GET /v4/{name}:googleUpdated
 # operationId: mybusiness.accounts.locations.getGoogleUpdated
-export def "accounts get-google-updated-by-name-1" [
+export def "mybusiness-accounts-locations-get-google-updated" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1574,7 +1574,7 @@ export def "accounts get-google-updated-by-name-1" [
 #
 # GET /v4/{name}:recommendGoogleLocations
 # operationId: mybusiness.accounts.listRecommendGoogleLocations
-export def "accounts list-recommend-google-locations" [
+export def "mybusiness-accounts-list-recommend-google-locations" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1624,7 +1624,7 @@ export def "accounts list-recommend-google-locations" [
 #
 # POST /v4/{name}:report
 # operationId: mybusiness.googleLocations.report
-export def "google-locations create-report" [
+export def "mybusiness-google-locations-report" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1680,7 +1680,7 @@ export def "google-locations create-report" [
 #
 # POST /v4/{name}:transfer
 # operationId: mybusiness.accounts.locations.transfer
-export def "accounts create-transfer" [
+export def "mybusiness-accounts-locations-transfer" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1736,7 +1736,7 @@ export def "accounts create-transfer" [
 # --context shape: {address?: record}
 # --emailInput shape: {emailAddress?: string}
 # --phoneInput shape: {phoneNumber?: string}
-export def "accounts verify" [
+export def "mybusiness-accounts-locations-verify" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1793,7 +1793,7 @@ export def "accounts verify" [
 #
 # GET /v4/{parent}/admins
 # operationId: mybusiness.accounts.locations.admins.list
-export def "admins list" [
+export def "mybusiness-accounts-locations-admins-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1841,7 +1841,7 @@ export def "admins list" [
 #
 # POST /v4/{parent}/admins
 # operationId: mybusiness.accounts.locations.admins.create
-export def "admins create" [
+export def "mybusiness-accounts-locations-admins-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1896,7 +1896,7 @@ export def "admins create" [
 #
 # GET /v4/{parent}/answers
 # operationId: mybusiness.accounts.locations.questions.answers.list
-export def "answers list" [
+export def "mybusiness-accounts-locations-questions-answers-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1947,7 +1947,7 @@ export def "answers list" [
 #
 # DELETE /v4/{parent}/answers:delete
 # operationId: mybusiness.accounts.locations.questions.answers.delete
-export def "answers-delete delete" [
+export def "mybusiness-accounts-locations-questions-answers-delete" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1996,7 +1996,7 @@ export def "answers-delete delete" [
 # POST /v4/{parent}/answers:upsert
 # operationId: mybusiness.accounts.locations.questions.answers.upsert
 # --answer shape: {author?: record, createTime?: string, name?: string, text?: string, updateTime?: string, upvoteCount?: int}
-export def "answers-upsert update" [
+export def "mybusiness-accounts-locations-questions-answers-upsert" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2048,7 +2048,7 @@ export def "answers-upsert update" [
 #
 # GET /v4/{parent}/insuranceNetworks
 # operationId: mybusiness.accounts.locations.insuranceNetworks.list
-export def "insurance-networks list" [
+export def "mybusiness-accounts-locations-insurance-networks-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2099,7 +2099,7 @@ export def "insurance-networks list" [
 #
 # GET /v4/{parent}/invitations
 # operationId: mybusiness.accounts.invitations.list
-export def "invitations list" [
+export def "mybusiness-accounts-invitations-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2148,7 +2148,7 @@ export def "invitations list" [
 #
 # GET /v4/{parent}/localPosts
 # operationId: mybusiness.accounts.locations.localPosts.list
-export def "local-posts list" [
+export def "mybusiness-accounts-locations-local-posts-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2202,7 +2202,7 @@ export def "local-posts list" [
 # --event shape: {schedule?: record, title?: string}
 # --media item shape: {attribution?: record, createTime?: string, dataRef?: record, description?: string, dimensions?: record, googleUrl?: string, insights?: record, locationAssociation?: record, mediaFormat?: "MEDIA_FORMAT_UNSPECIFIED"|"PHOTO"|"VIDEO", name?: string, sourceUrl?: string, thumbnailUrl?: string}
 # --offer shape: {couponCode?: string, redeemOnlineUrl?: string, termsConditions?: string}
-export def "local-posts create" [
+export def "mybusiness-accounts-locations-local-posts-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2266,7 +2266,7 @@ export def "local-posts create" [
 #
 # GET /v4/{parent}/locations
 # operationId: mybusiness.accounts.locations.list
-export def "locations list" [
+export def "mybusiness-accounts-locations-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2336,7 +2336,7 @@ export def "locations list" [
 # --relationshipData shape: {parentChain?: string}
 # --serviceArea shape: {businessType?: "BUSINESS_TYPE_UNSPECIFIED"|"CUSTOMER_LOCATION_ONLY"|"CUSTOMER_AND_BUSINESS_LOCATION", places?: record, radius?: record}
 # --specialHours shape: {specialHourPeriods?: list}
-export def "locations create" [
+export def "mybusiness-accounts-locations-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2414,7 +2414,7 @@ export def "locations create" [
 #
 # GET /v4/{parent}/media
 # operationId: mybusiness.accounts.locations.media.list
-export def "media list" [
+export def "mybusiness-accounts-locations-media-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2469,7 +2469,7 @@ export def "media list" [
 # --dimensions shape: {heightPixels?: int, widthPixels?: int}
 # --insights shape: {viewCount?: string}
 # --locationAssociation shape: {category?: "CATEGORY_UNSPECIFIED"|"COVER"|"PROFILE"|"LOGO"|"EXTERIOR"|"INTERIOR"|"PRODUCT"|"AT_WORK"|"FOOD_AND_DRINK"|"MENU"|"COMMON_AREA"|"ROOMS"|"TEAMS"|"ADDITIONAL", priceListItemId?: string}
-export def "media create" [
+export def "mybusiness-accounts-locations-media-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2532,7 +2532,7 @@ export def "media create" [
 #
 # GET /v4/{parent}/media/customers
 # operationId: mybusiness.accounts.locations.media.customers.list
-export def "media-customers list" [
+export def "mybusiness-accounts-locations-media-customers-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2582,7 +2582,7 @@ export def "media-customers list" [
 #
 # POST /v4/{parent}/media:startUpload
 # operationId: mybusiness.accounts.locations.media.startUpload
-export def "media-start-upload start" [
+export def "mybusiness-accounts-locations-media-start-upload" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2634,7 +2634,7 @@ export def "media-start-upload start" [
 #
 # GET /v4/{parent}/questions
 # operationId: mybusiness.accounts.locations.questions.list
-export def "questions list" [
+export def "mybusiness-accounts-locations-questions-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2689,7 +2689,7 @@ export def "questions list" [
 # operationId: mybusiness.accounts.locations.questions.create
 # --author shape: {displayName?: string, profilePhotoUrl?: string, type?: "AUTHOR_TYPE_UNSPECIFIED"|"REGULAR_USER"|"LOCAL_GUIDE"|"MERCHANT"}
 # --topAnswers item shape: {author?: record, createTime?: string, name?: string, text?: string, updateTime?: string, upvoteCount?: int}
-export def "questions create" [
+export def "mybusiness-accounts-locations-questions-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2748,7 +2748,7 @@ export def "questions create" [
 #
 # GET /v4/{parent}/reviews
 # operationId: mybusiness.accounts.locations.reviews.list
-export def "reviews list" [
+export def "mybusiness-accounts-locations-reviews-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2799,7 +2799,7 @@ export def "reviews list" [
 #
 # GET /v4/{parent}/verifications
 # operationId: mybusiness.accounts.locations.verifications.list
-export def "verifications list" [
+export def "mybusiness-accounts-locations-verifications-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

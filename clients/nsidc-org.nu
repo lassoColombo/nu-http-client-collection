@@ -100,7 +100,7 @@ def source-completer [] { ["ADE" "NSIDC"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "facets get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "facets" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -124,7 +124,7 @@ export def commands []: nothing -> table {
 #
 # GET /Facets
 # operationId: facets
-export def "facets get" [
+export def "facets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -168,7 +168,7 @@ export def "facets get" [
 #
 # GET /OpenSearch
 # operationId: open search
-export def "open-search open" [
+export def "open-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -212,7 +212,7 @@ export def "open-search open" [
 #
 # GET /OpenSearchDescription
 # operationId: opensearch description
-export def "open-search-description get-opensearch" [
+export def "opensearch-description" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -246,7 +246,7 @@ export def "open-search-description get-opensearch" [
 #
 # GET /suggest
 # operationId: id
-export def "suggest get" [
+export def "id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

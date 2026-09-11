@@ -115,7 +115,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v-custom-prices-rules create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-v-custom-prices-rules" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -138,7 +138,7 @@ export def commands []: nothing -> table {
 # Create price association
 #
 # POST /_v/custom-prices/rules
-export def "v-custom-prices-rules create" [
+export def "post-v-custom-prices-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,7 +184,7 @@ export def "v-custom-prices-rules create" [
 # Disassociate price association by ID
 #
 # DELETE /_v/custom-prices/rules/{priceAssociationId}
-export def "v-custom-prices-rules delete" [
+export def "delete-v-custom-prices-rules-price-association-id" [
   price_association_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -223,7 +223,7 @@ export def "v-custom-prices-rules delete" [
 # Get price association by ID
 #
 # GET /_v/custom-prices/rules/{priceAssociationId}
-export def "v-custom-prices-rules get" [
+export def "get-v-custom-prices-rules-price-association-id" [
   price_association_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -262,7 +262,7 @@ export def "v-custom-prices-rules get" [
 # Update price association by ID
 #
 # PUT /_v/custom-prices/rules/{priceAssociationId}
-export def "v-custom-prices-rules update" [
+export def "put-v-custom-prices-rules-price-association-id" [
   price_association_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -309,7 +309,7 @@ export def "v-custom-prices-rules update" [
 # Get custom prices schema
 #
 # GET /_v/custom-prices/session/schema
-export def "v-custom-prices-session-schema get" [
+export def "get-v-custom-prices-session-schema" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -347,7 +347,7 @@ export def "v-custom-prices-session-schema get" [
 #
 # POST /_v/custom-prices/session/schema
 # --fields item shape: {name: string, type: string}
-export def "v-custom-prices-session-schema create" [
+export def "post-v-custom-prices-session-schema" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -392,7 +392,7 @@ export def "v-custom-prices-session-schema create" [
 #
 # POST /sessions/
 # --public shape: {customSessionKeys: record}
-export def "sessions create" [
+export def "post-sessions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

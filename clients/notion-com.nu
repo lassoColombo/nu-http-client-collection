@@ -115,7 +115,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "blocks delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "delete-a-block" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -139,7 +139,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1/blocks/{id}
 # operationId: deleteABlock
-export def "blocks delete" [
+export def "delete-a-block" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -178,7 +178,7 @@ export def "blocks delete" [
 #
 # GET /v1/blocks/{id}
 # operationId: retrieveABlock
-export def "blocks get" [
+export def "retrieve-a-block" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -218,7 +218,7 @@ export def "blocks get" [
 # PATCH /v1/blocks/{id}
 # operationId: updateABlock
 # --paragraph shape: {rich_text?: list}
-export def "blocks update" [
+export def "update-a-block" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -261,7 +261,7 @@ export def "blocks update" [
 #
 # GET /v1/blocks/{id}/children
 # operationId: retrieveBlockChildren
-export def "blocks-children get" [
+export def "retrieve-block-children" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -303,7 +303,7 @@ export def "blocks-children get" [
 # PATCH /v1/blocks/{id}/children
 # operationId: appendBlockChildren
 # --children item shape: {heading_2?: record, object?: string, paragraph?: record, type?: string}
-export def "blocks-children create" [
+export def "append-block-children" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -346,7 +346,7 @@ export def "blocks-children create" [
 #
 # GET /v1/comments
 # operationId: retrieveComments
-export def "comments get" [
+export def "retrieve-comments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -386,7 +386,7 @@ export def "comments get" [
 #
 # GET /v1/databases/{id}
 # operationId: retrieveADatabase
-export def "databases get" [
+export def "retrieve-a-database" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -427,7 +427,7 @@ export def "databases get" [
 # operationId: updateADatabase
 # --properties shape: {Wine Pairing?: record}
 # --title item shape: {text?: record}
-export def "databases update" [
+export def "update-a-database" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -472,7 +472,7 @@ export def "databases update" [
 # POST /v1/databases/{id}/query
 # operationId: queryADatabase
 # --filter shape: {property?: string, select?: record}
-export def "databases-query list" [
+export def "query-a-database" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -515,7 +515,7 @@ export def "databases-query list" [
 #
 # GET /v1/pages/{id}
 # operationId: retrieveAPage
-export def "pages get" [
+export def "retrieve-a-page" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -556,7 +556,7 @@ export def "pages get" [
 # PATCH /v1/pages/{id}
 # operationId: updatePageProperties
 # --properties shape: {Status?: record}
-export def "pages update-properties" [
+export def "update-page-properties" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -599,7 +599,7 @@ export def "pages update-properties" [
 #
 # GET /v1/pages/{page_id}/properties/{property_id}
 # operationId: retrieveAPagePropertyItem
-export def "pages-properties get-item" [
+export def "retrieve-a-page-property-item" [
   page_id: string
   property_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -637,7 +637,7 @@ export def "pages-properties get-item" [
 #
 # GET /v1/users/{id}
 # operationId: retrieveAUser
-export def "users get" [
+export def "retrieve-a-user" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

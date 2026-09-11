@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "check get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-check" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -127,7 +127,7 @@ export def commands []: nothing -> table {
 # Get Fortnite game status
 #
 # GET /check
-export def "check get" [
+export def "get-check" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -160,7 +160,7 @@ export def "check get" [
 # Get Fortnite News
 #
 # GET /news
-export def "news get" [
+export def "get-news" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -193,7 +193,7 @@ export def "news get" [
 # Get a Bearer token
 #
 # POST /oauth/token
-export def "oauth-token create" [
+export def "post-oauth-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -232,7 +232,7 @@ export def "oauth-token create" [
 # Get Fortnite PVE Info (storm, etc)
 #
 # GET /pve/info
-export def "pve-info get" [
+export def "get-pve-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -265,7 +265,7 @@ export def "pve-info get" [
 # Get PVE Stat by given username
 #
 # GET /pve/user/{username}
-export def "pve-user get" [
+export def "get-pve-user-username" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -300,7 +300,7 @@ export def "pve-user get" [
 # Get user's stats by user id
 #
 # GET /stats/id/{plateform}/{id}
-export def "stats-id get" [
+export def "get-stats-id-plateform-id" [
   plateform: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -337,7 +337,7 @@ export def "stats-id get" [
 # Get user's stats by username
 #
 # GET /stats/{plateform}/{username}
-export def "stats get" [
+export def "get-stats-plateform-username" [
   plateform: string
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -374,7 +374,7 @@ export def "stats get" [
 # Get Fortnite Store
 #
 # GET /store
-export def "store get" [
+export def "get-store" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -407,7 +407,7 @@ export def "store get" [
 # Get a user by username
 #
 # GET /user/{plateform}/{username}
-export def "user get" [
+export def "get-user-plateform-username" [
   plateform: string
   username: string
   --base-url(-b): string@base-url-completer # API base URL

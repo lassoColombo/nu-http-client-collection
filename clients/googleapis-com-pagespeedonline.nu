@@ -112,7 +112,7 @@ def strategy-completer [] { ["DESKTOP" "MOBILE" "STRATEGY_UNSPECIFIED"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "pagespeedonline-run-pagespeed get-runpagespeed" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "pagespeedonline-pagespeedapi-runpagespeed" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -136,7 +136,7 @@ export def commands []: nothing -> table {
 #
 # GET /pagespeedonline/v5/runPagespeed
 # operationId: pagespeedonline.pagespeedapi.runpagespeed
-export def "pagespeedonline-run-pagespeed get-runpagespeed" [
+export def "pagespeedonline-pagespeedapi-runpagespeed" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)

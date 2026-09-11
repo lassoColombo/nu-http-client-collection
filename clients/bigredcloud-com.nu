@@ -115,7 +115,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -139,7 +139,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/accounts
 # operationId: Accounts_Get
-export def "accounts get" [
+export def "accounts-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -173,7 +173,7 @@ export def "accounts get" [
 #
 # GET /v1/analysisCategories
 # operationId: AnalysisCategories_Get
-export def "analysis-categories get" [
+export def "analysis-categories-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -207,7 +207,7 @@ export def "analysis-categories get" [
 #
 # GET /v1/bankAccounts
 # operationId: BankAccounts_Get
-export def "bank-accounts list" [
+export def "bank-accounts-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -241,7 +241,7 @@ export def "bank-accounts list" [
 #
 # POST /v1/bankAccounts
 # operationId: BankAccounts_Post
-export def "bank-accounts create" [
+export def "bank-accounts-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -295,7 +295,7 @@ export def "bank-accounts create" [
 #
 # PUT /v1/bankAccounts/batch
 # operationId: BankAccounts_ProcessBatch
-export def "bank-accounts-batch update-process" [
+export def "bank-accounts-process-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -333,7 +333,7 @@ export def "bank-accounts-batch update-process" [
 #
 # DELETE /v1/bankAccounts/{id}
 # operationId: BankAccounts_Delete
-export def "bank-accounts delete" [
+export def "bank-accounts-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -370,7 +370,7 @@ export def "bank-accounts delete" [
 # Returns information about a single Bank Account.
 #
 # GET /v1/bankAccounts/{id}
-export def "bank-accounts get" [
+export def "get-v1-bank-accounts-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -406,7 +406,7 @@ export def "bank-accounts get" [
 #
 # PUT /v1/bankAccounts/{id}
 # operationId: BankAccounts_Put
-export def "bank-accounts update" [
+export def "bank-accounts-put" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -462,7 +462,7 @@ export def "bank-accounts update" [
 #
 # GET /v1/bookTranTypes
 # operationId: BookTranTypes_Get
-export def "book-tran-types get" [
+export def "book-tran-types-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -496,7 +496,7 @@ export def "book-tran-types get" [
 #
 # GET /v1/cashPayments
 # operationId: CashPayments_Get
-export def "cash-payments list" [
+export def "cash-payments-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -532,7 +532,7 @@ export def "cash-payments list" [
 # operationId: CashPayments_Post
 # --acEntries item shape: {accountCode?: string, analysisCategoryId?: int, description?: string, id?: int, value?: float}
 # --customFields item shape: {description?: string, id?: int, userDefinedFieldId?: int, value?: string}
-export def "cash-payments create" [
+export def "cash-payments-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -587,7 +587,7 @@ export def "cash-payments create" [
 #
 # PUT /v1/cashPayments/batch
 # operationId: CashPayments_ProcessBatch
-export def "cash-payments-batch update-process" [
+export def "cash-payments-process-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -625,7 +625,7 @@ export def "cash-payments-batch update-process" [
 #
 # DELETE /v1/cashPayments/{id}
 # operationId: CashPayments_Delete
-export def "cash-payments delete" [
+export def "cash-payments-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -662,7 +662,7 @@ export def "cash-payments delete" [
 # Returns information about a single Cash Payment.
 #
 # GET /v1/cashPayments/{id}
-export def "cash-payments get" [
+export def "get-v1-cash-payments-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -700,7 +700,7 @@ export def "cash-payments get" [
 # operationId: CashPayments_Put
 # --acEntries item shape: {accountCode?: string, analysisCategoryId?: int, description?: string, id?: int, value?: float}
 # --customFields item shape: {description?: string, id?: int, userDefinedFieldId?: int, value?: string}
-export def "cash-payments update" [
+export def "cash-payments-put" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -757,7 +757,7 @@ export def "cash-payments update" [
 #
 # GET /v1/cashReceipts
 # operationId: CashReceipts_Get
-export def "cash-receipts list" [
+export def "cash-receipts-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -794,7 +794,7 @@ export def "cash-receipts list" [
 # --acEntries item shape: {accountCode?: string, analysisCategoryId?: int, description?: string, id?: int, value?: float}
 # --customFields item shape: {description?: string, id?: int, userDefinedFieldId?: int, value?: string}
 # --vatEntries item shape: {amount?: float, id?: int, percentage?: float, vatRateId?: int}
-export def "cash-receipts create" [
+export def "cash-receipts-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -849,7 +849,7 @@ export def "cash-receipts create" [
 #
 # PUT /v1/cashReceipts/batch
 # operationId: CashReceipts_ProcessBatch
-export def "cash-receipts-batch update-process" [
+export def "cash-receipts-process-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -887,7 +887,7 @@ export def "cash-receipts-batch update-process" [
 #
 # DELETE /v1/cashReceipts/{id}
 # operationId: CashReceipts_Delete
-export def "cash-receipts delete" [
+export def "cash-receipts-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -924,7 +924,7 @@ export def "cash-receipts delete" [
 # Returns information about a single Cash Receipt.
 #
 # GET /v1/cashReceipts/{id}
-export def "cash-receipts get" [
+export def "get-v1-cash-receipts-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -963,7 +963,7 @@ export def "cash-receipts get" [
 # --acEntries item shape: {accountCode?: string, analysisCategoryId?: int, description?: string, id?: int, value?: float}
 # --customFields item shape: {description?: string, id?: int, userDefinedFieldId?: int, value?: string}
 # --vatEntries item shape: {amount?: float, id?: int, percentage?: float, vatRateId?: int}
-export def "cash-receipts update" [
+export def "cash-receipts-put" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1020,7 +1020,7 @@ export def "cash-receipts update" [
 #
 # GET /v1/categoryTypes
 # operationId: CategoryTypes_Get
-export def "category-types get" [
+export def "category-types-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1054,7 +1054,7 @@ export def "category-types get" [
 #
 # GET /v1/companySettings
 # operationId: CompanySettings_Get
-export def "company-settings get" [
+export def "company-settings-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1088,7 +1088,7 @@ export def "company-settings get" [
 #
 # GET /v1/companySetupConfig
 # operationId: CompanySetupConfig_Get
-export def "company-setup-config get" [
+export def "company-setup-config-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1122,7 +1122,7 @@ export def "company-setup-config get" [
 #
 # GET /v1/companySetupConfig/getCompanyOptions
 # operationId: CompanySetupConfig_GetCompanyOptions
-export def "company-setup-config-get-company-options get" [
+export def "company-setup-config-get-company-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1156,7 +1156,7 @@ export def "company-setup-config-get-company-options get" [
 #
 # GET /v1/companySetupConfig/getFinancialYear
 # operationId: CompanySetupConfig_GetFinancialYear
-export def "company-setup-config-get-financial-year get" [
+export def "company-setup-config-get-financial-year" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1190,7 +1190,7 @@ export def "company-setup-config-get-financial-year get" [
 #
 # GET /v1/customers
 # operationId: Customers_Get
-export def "customers list" [
+export def "customers-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1227,7 +1227,7 @@ export def "customers list" [
 # --bank shape: {branch?: string, id?: int, name?: string, sortCode?: string}
 # --openingBalance shape: {currentMonth?: float, oneMonthOld?: float, threeMonthsOld?: float, twoMonthsOld?: float}
 # --openingBalances item shape: {entryDate?: string, id?: int, isChanged?: bool, procDate?: string, reference?: string, timestamp?: string, total?: float, totalVAT?: float, unpaid?: float, vatEntries?: list}
-export def "customers create" [
+export def "customers-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1291,7 +1291,7 @@ export def "customers create" [
 #
 # PUT /v1/customers/batch
 # operationId: Customers_ProcessBatch
-export def "customers-batch update-process" [
+export def "customers-process-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1329,7 +1329,7 @@ export def "customers-batch update-process" [
 #
 # DELETE /v1/customers/{id}
 # operationId: Customers_Delete
-export def "customers delete" [
+export def "customers-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1366,7 +1366,7 @@ export def "customers delete" [
 # Returns information about a single Customer. You may specify that Customer's ledger balance should be calculated.
 #
 # GET /v1/customers/{id}
-export def "customers get" [
+export def "get-v1-customers-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1407,7 +1407,7 @@ export def "customers get" [
 # --bank shape: {branch?: string, id?: int, name?: string, sortCode?: string}
 # --openingBalance shape: {currentMonth?: float, oneMonthOld?: float, threeMonthsOld?: float, twoMonthsOld?: float}
 # --openingBalances item shape: {entryDate?: string, id?: int, isChanged?: bool, procDate?: string, reference?: string, timestamp?: string, total?: float, totalVAT?: float, unpaid?: float, vatEntries?: list}
-export def "customers update" [
+export def "customers-put" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1473,7 +1473,7 @@ export def "customers update" [
 #
 # GET /v1/customers/{itemId}/accountTrans
 # operationId: Customers_GetAccountTrans
-export def "customers-account-trans get" [
+export def "customers-get-account-trans" [
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1509,7 +1509,7 @@ export def "customers-account-trans get" [
 #
 # GET /v1/customers/{itemId}/openingBalance
 # operationId: Customers_GetOpeningBalance
-export def "customers-opening-balance get" [
+export def "customers-get-opening-balance" [
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1545,7 +1545,7 @@ export def "customers-opening-balance get" [
 #
 # GET /v1/customers/{itemId}/openingBalanceList
 # operationId: Customers_GetOpeningBalanceList
-export def "customers-opening-balance-list get" [
+export def "customers-get-opening-balance-list" [
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1581,7 +1581,7 @@ export def "customers-opening-balance-list get" [
 #
 # GET /v1/customers/{itemId}/quotes
 # operationId: Customers_GetQuotes
-export def "customers-quotes get" [
+export def "customers-get-quotes" [
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1617,7 +1617,7 @@ export def "customers-quotes get" [
 #
 # POST /v1/email/sendEmailStatement
 # operationId: Email_SendEmailStatement
-export def "email-send-email-statement send" [
+export def "email-send-email-statement" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1661,7 +1661,7 @@ export def "email-send-email-statement send" [
 #
 # POST /v1/email/sendQuote
 # operationId: Email_SendQuote
-export def "email-send-quote send" [
+export def "email-send-quote" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1702,7 +1702,7 @@ export def "email-send-quote send" [
 #
 # POST /v1/email/sendSalesInvoice
 # operationId: Email_SendSalesInvoice
-export def "email-send-sales-invoice send" [
+export def "email-send-sales-invoice" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1743,7 +1743,7 @@ export def "email-send-sales-invoice send" [
 #
 # GET /v1/ownerTypeGroups
 # operationId: OwnerTypeGroups_Get
-export def "owner-type-groups get" [
+export def "owner-type-groups-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1777,7 +1777,7 @@ export def "owner-type-groups get" [
 #
 # GET /v1/ownerTypes
 # operationId: OwnerTypes_Get
-export def "owner-types get" [
+export def "owner-types-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1811,7 +1811,7 @@ export def "owner-types get" [
 #
 # GET /v1/payments
 # operationId: Payments_Get
-export def "payments list" [
+export def "payments-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1847,7 +1847,7 @@ export def "payments list" [
 # operationId: Payments_Post
 # --acEntries item shape: {accountCode?: string, analysisCategoryId?: int, description?: string, id?: int, value?: float}
 # --customFields item shape: {description?: string, id?: int, userDefinedFieldId?: int, value?: string}
-export def "payments create" [
+export def "payments-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1904,7 +1904,7 @@ export def "payments create" [
 #
 # PUT /v1/payments/batch
 # operationId: Payments_ProcessBatch
-export def "payments-batch update-process" [
+export def "payments-process-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1942,7 +1942,7 @@ export def "payments-batch update-process" [
 #
 # DELETE /v1/payments/{id}
 # operationId: Payments_Delete
-export def "payments delete" [
+export def "payments-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1979,7 +1979,7 @@ export def "payments delete" [
 # Returns information about a single Payments.
 #
 # GET /v1/payments/{id}
-export def "payments get" [
+export def "get-v1-payments-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2017,7 +2017,7 @@ export def "payments get" [
 # operationId: Payments_Put
 # --acEntries item shape: {accountCode?: string, analysisCategoryId?: int, description?: string, id?: int, value?: float}
 # --customFields item shape: {description?: string, id?: int, userDefinedFieldId?: int, value?: string}
-export def "payments update" [
+export def "payments-put" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2076,7 +2076,7 @@ export def "payments update" [
 #
 # GET /v1/productTypes
 # operationId: ProductTypes_Get
-export def "product-types get" [
+export def "product-types-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2110,7 +2110,7 @@ export def "product-types get" [
 #
 # GET /v1/products
 # operationId: Products_Get
-export def "products list" [
+export def "products-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2144,7 +2144,7 @@ export def "products list" [
 #
 # POST /v1/products
 # operationId: Products_Post
-export def "products create" [
+export def "products-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2191,7 +2191,7 @@ export def "products create" [
 #
 # PUT /v1/products/batch
 # operationId: Products_ProcessBatch
-export def "products-batch update-process" [
+export def "products-process-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2229,7 +2229,7 @@ export def "products-batch update-process" [
 #
 # DELETE /v1/products/{id}
 # operationId: Products_Delete
-export def "products delete" [
+export def "products-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2266,7 +2266,7 @@ export def "products delete" [
 # Returns information about a single Product.
 #
 # GET /v1/products/{id}
-export def "products get" [
+export def "get-v1-products-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2302,7 +2302,7 @@ export def "products get" [
 #
 # PUT /v1/products/{id}
 # operationId: Products_Put
-export def "products update" [
+export def "products-put" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2351,7 +2351,7 @@ export def "products update" [
 #
 # GET /v1/purchases
 # operationId: Purchases_Get
-export def "purchases list" [
+export def "purchases-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2388,7 +2388,7 @@ export def "purchases list" [
 # --acEntries item shape: {accountCode?: string, analysisCategoryId?: int, description?: string, id?: int, value?: float}
 # --customFields item shape: {description?: string, id?: int, userDefinedFieldId?: int, value?: string}
 # --vatEntries item shape: {amount?: float, id?: int, percentage?: float, vatRateId?: int}
-export def "purchases create" [
+export def "purchases-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2448,7 +2448,7 @@ export def "purchases create" [
 #
 # PUT /v1/purchases/batch
 # operationId: Purchases_ProcessBatch
-export def "purchases-batch update-process" [
+export def "purchases-process-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2486,7 +2486,7 @@ export def "purchases-batch update-process" [
 #
 # DELETE /v1/purchases/{id}
 # operationId: Purchases_Delete
-export def "purchases delete" [
+export def "purchases-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2523,7 +2523,7 @@ export def "purchases delete" [
 # Returns information about a single Purchases.
 #
 # GET /v1/purchases/{id}
-export def "purchases get" [
+export def "get-v1-purchases-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2562,7 +2562,7 @@ export def "purchases get" [
 # --acEntries item shape: {accountCode?: string, analysisCategoryId?: int, description?: string, id?: int, value?: float}
 # --customFields item shape: {description?: string, id?: int, userDefinedFieldId?: int, value?: string}
 # --vatEntries item shape: {amount?: float, id?: int, percentage?: float, vatRateId?: int}
-export def "purchases update" [
+export def "purchases-put" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2624,7 +2624,7 @@ export def "purchases update" [
 #
 # GET /v1/quotes
 # operationId: Quote_Get
-export def "quotes list" [
+export def "quote-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2660,7 +2660,7 @@ export def "quotes list" [
 # operationId: Quote_Post
 # --customFields item shape: {description?: string, id?: int, userDefinedFieldId?: int, value?: string}
 # --productTrans item shape: {acEntries?: list, amount?: float, companyId?: int, id?: int, percentage?: float, productCode?: string, productId?: int, quantity?: float, tranNotes?: list<string>, unitPrice?: float, vatAmount?: float, vatAnalysisTypeId?: int, vatRateId?: int}
-export def "quotes create" [
+export def "quote-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2723,7 +2723,7 @@ export def "quotes create" [
 #
 # PUT /v1/quotes/batch
 # operationId: Quote_ProcessBatch
-export def "quotes-batch update-process" [
+export def "quote-process-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2761,7 +2761,7 @@ export def "quotes-batch update-process" [
 #
 # PUT /v1/quotes/close/{id}
 # operationId: Quote_Close
-export def "quotes-close close" [
+export def "quote-close" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2799,7 +2799,7 @@ export def "quotes-close close" [
 # operationId: Quote_Post_CreateQuoteWithGeneratingReference
 # --customFields item shape: {description?: string, id?: int, userDefinedFieldId?: int, value?: string}
 # --productTrans item shape: {acEntries?: list, amount?: float, companyId?: int, id?: int, percentage?: float, productCode?: string, productId?: int, quantity?: float, tranNotes?: list<string>, unitPrice?: float, vatAmount?: float, vatAnalysisTypeId?: int, vatRateId?: int}
-export def "quotes-create-quote-with-generating-reference create" [
+export def "quote-post-create-quote-with-generating-reference" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2863,7 +2863,7 @@ export def "quotes-create-quote-with-generating-reference create" [
 # POST /v1/quotes/generateSaleInvoice
 # operationId: Quote_Post_GenerateSaleInvoice
 # --saleInvoice shape: {acCode?: string, bookTranTypeId?: int, customFields?: list, customerId?: int, deliveryTo?: list<string>, details?: string, entryDate?: string, id?: int, loType?: string, netGoods?: float, netServices?: float, note?: string, ourReference?: string, procDate?: string, productTrans?: list, quoteId?: int, reference?: string, saleRepCode?: string, saleRepId?: int, timestamp?: string, total?: float, totalNet?: float, totalVAT?: float, unpaid?: float, vatTypeId?: int, yourReference?: string}
-export def "quotes-generate-sale-invoice create" [
+export def "quote-post-generate-sale-invoice" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2902,7 +2902,7 @@ export def "quotes-generate-sale-invoice create" [
 #
 # PUT /v1/quotes/reopen/{id}
 # operationId: Quote_Reopen
-export def "quotes-reopen update" [
+export def "quote-reopen" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2938,7 +2938,7 @@ export def "quotes-reopen update" [
 #
 # DELETE /v1/quotes/{id}
 # operationId: Quote_Delete
-export def "quotes delete" [
+export def "quote-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2975,7 +2975,7 @@ export def "quotes delete" [
 # Returns information about a single Quote.
 #
 # GET /v1/quotes/{id}
-export def "quotes get" [
+export def "get-v1-quotes-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3013,7 +3013,7 @@ export def "quotes get" [
 # operationId: Quote_Put
 # --customFields item shape: {description?: string, id?: int, userDefinedFieldId?: int, value?: string}
 # --productTrans item shape: {acEntries?: list, amount?: float, companyId?: int, id?: int, percentage?: float, productCode?: string, productId?: int, quantity?: float, tranNotes?: list<string>, unitPrice?: float, vatAmount?: float, vatAnalysisTypeId?: int, vatRateId?: int}
-export def "quotes update" [
+export def "quote-put" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3078,7 +3078,7 @@ export def "quotes update" [
 #
 # GET /v1/sales
 # operationId: Sales_Get
-export def "sales get" [
+export def "sales-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3112,7 +3112,7 @@ export def "sales get" [
 #
 # GET /v1/salesCreditNotes
 # operationId: SalesCreditNotes_Get
-export def "sales-credit-notes list" [
+export def "sales-credit-notes-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3148,7 +3148,7 @@ export def "sales-credit-notes list" [
 # operationId: SalesCreditNotes_Post
 # --customFields item shape: {description?: string, id?: int, userDefinedFieldId?: int, value?: string}
 # --productTrans item shape: {acEntries?: list, amount?: float, amountNet: float, id?: int, percentage?: float, productCode?: string, productId?: int, quantity?: float, tranNotes?: list<string>, unitPrice?: float, vat?: float, vatAnalysisTypeId?: int, vatRateId?: int}
-export def "sales-credit-notes create" [
+export def "sales-credit-notes-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3211,7 +3211,7 @@ export def "sales-credit-notes create" [
 #
 # PUT /v1/salesCreditNotes/batch
 # operationId: SalesCreditNotes_ProcessBatch
-export def "sales-credit-notes-batch update-process" [
+export def "sales-credit-notes-process-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3249,7 +3249,7 @@ export def "sales-credit-notes-batch update-process" [
 #
 # DELETE /v1/salesCreditNotes/{id}
 # operationId: SalesCreditNotes_Delete
-export def "sales-credit-notes delete" [
+export def "sales-credit-notes-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3286,7 +3286,7 @@ export def "sales-credit-notes delete" [
 # Returns information about a single Sales Credit Note.
 #
 # GET /v1/salesCreditNotes/{id}
-export def "sales-credit-notes get" [
+export def "get-v1-sales-credit-notes-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3324,7 +3324,7 @@ export def "sales-credit-notes get" [
 # operationId: SalesCreditNotes_Put
 # --customFields item shape: {description?: string, id?: int, userDefinedFieldId?: int, value?: string}
 # --productTrans item shape: {acEntries?: list, amount?: float, amountNet: float, id?: int, percentage?: float, productCode?: string, productId?: int, quantity?: float, tranNotes?: list<string>, unitPrice?: float, vat?: float, vatAnalysisTypeId?: int, vatRateId?: int}
-export def "sales-credit-notes update" [
+export def "sales-credit-notes-put" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3389,7 +3389,7 @@ export def "sales-credit-notes update" [
 #
 # GET /v1/salesEntries
 # operationId: SalesEntries_Get
-export def "sales-entries list" [
+export def "sales-entries-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3426,7 +3426,7 @@ export def "sales-entries list" [
 # --acEntries item shape: {accountCode?: string, analysisCategoryId?: int, description?: string, id?: int, value?: float}
 # --customFields item shape: {description?: string, id?: int, userDefinedFieldId?: int, value?: string}
 # --vatEntries item shape: {amount?: float, id?: int, percentage?: float, vatRateId?: int}
-export def "sales-entries create" [
+export def "sales-entries-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3484,7 +3484,7 @@ export def "sales-entries create" [
 #
 # PUT /v1/salesEntries/batch
 # operationId: SalesEntries_ProcessBatch
-export def "sales-entries-batch update-process" [
+export def "sales-entries-process-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3522,7 +3522,7 @@ export def "sales-entries-batch update-process" [
 #
 # DELETE /v1/salesEntries/{id}
 # operationId: SalesEntries_Delete
-export def "sales-entries delete" [
+export def "sales-entries-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3559,7 +3559,7 @@ export def "sales-entries delete" [
 # Returns information about a single Sales Entry.
 #
 # GET /v1/salesEntries/{id}
-export def "sales-entries get" [
+export def "get-v1-sales-entries-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3598,7 +3598,7 @@ export def "sales-entries get" [
 # --acEntries item shape: {accountCode?: string, analysisCategoryId?: int, description?: string, id?: int, value?: float}
 # --customFields item shape: {description?: string, id?: int, userDefinedFieldId?: int, value?: string}
 # --vatEntries item shape: {amount?: float, id?: int, percentage?: float, vatRateId?: int}
-export def "sales-entries update" [
+export def "sales-entries-put" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3658,7 +3658,7 @@ export def "sales-entries update" [
 #
 # GET /v1/salesInvoices
 # operationId: SalesInvoices_Get
-export def "sales-invoices list" [
+export def "sales-invoices-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3694,7 +3694,7 @@ export def "sales-invoices list" [
 # operationId: SalesInvoices_Post
 # --customFields item shape: {description?: string, id?: int, userDefinedFieldId?: int, value?: string}
 # --productTrans item shape: {acEntries?: list, amount?: float, amountNet: float, id?: int, percentage?: float, productCode?: string, productId?: int, quantity?: float, tranNotes?: list<string>, unitPrice?: float, vat?: float, vatAnalysisTypeId?: int, vatRateId?: int}
-export def "sales-invoices create" [
+export def "sales-invoices-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3757,7 +3757,7 @@ export def "sales-invoices create" [
 #
 # PUT /v1/salesInvoices/batch
 # operationId: SalesInvoices_ProcessBatch
-export def "sales-invoices-batch update-process" [
+export def "sales-invoices-process-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3797,7 +3797,7 @@ export def "sales-invoices-batch update-process" [
 # operationId: SalesInvoices_Post_CreateSaleInvoiceWithGeneratingReference
 # --customFields item shape: {description?: string, id?: int, userDefinedFieldId?: int, value?: string}
 # --productTrans item shape: {acEntries?: list, amount?: float, amountNet: float, id?: int, percentage?: float, productCode?: string, productId?: int, quantity?: float, tranNotes?: list<string>, unitPrice?: float, vat?: float, vatAnalysisTypeId?: int, vatRateId?: int}
-export def "sales-invoices-create-sale-invoice-with-generating-reference create" [
+export def "sales-invoices-post-create-sale-invoice-with-generating-reference" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3860,7 +3860,7 @@ export def "sales-invoices-create-sale-invoice-with-generating-reference create"
 #
 # DELETE /v1/salesInvoices/{id}
 # operationId: SalesInvoices_Delete
-export def "sales-invoices delete" [
+export def "sales-invoices-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3897,7 +3897,7 @@ export def "sales-invoices delete" [
 # Returns information about a single Sales Invoice.
 #
 # GET /v1/salesInvoices/{id}
-export def "sales-invoices get" [
+export def "get-v1-sales-invoices-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3935,7 +3935,7 @@ export def "sales-invoices get" [
 # operationId: SalesInvoices_Put
 # --customFields item shape: {description?: string, id?: int, userDefinedFieldId?: int, value?: string}
 # --productTrans item shape: {acEntries?: list, amount?: float, amountNet: float, id?: int, percentage?: float, productCode?: string, productId?: int, quantity?: float, tranNotes?: list<string>, unitPrice?: float, vat?: float, vatAnalysisTypeId?: int, vatRateId?: int}
-export def "sales-invoices update" [
+export def "sales-invoices-put" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4000,7 +4000,7 @@ export def "sales-invoices update" [
 #
 # GET /v1/salesReps
 # operationId: SalesRep_Get
-export def "sales-reps list" [
+export def "sales-rep-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4034,7 +4034,7 @@ export def "sales-reps list" [
 #
 # POST /v1/salesReps
 # operationId: SalesRep_Post
-export def "sales-reps create" [
+export def "sales-rep-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4078,7 +4078,7 @@ export def "sales-reps create" [
 #
 # PUT /v1/salesReps/batch
 # operationId: SalesRep_ProcessBatch
-export def "sales-reps-batch update-process" [
+export def "sales-rep-process-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4116,7 +4116,7 @@ export def "sales-reps-batch update-process" [
 #
 # DELETE /v1/salesReps/{id}
 # operationId: SalesRep_Delete
-export def "sales-reps delete" [
+export def "sales-rep-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4153,7 +4153,7 @@ export def "sales-reps delete" [
 # Returns information about a single SaleRep.
 #
 # GET /v1/salesReps/{id}
-export def "sales-reps get" [
+export def "get-v1-sales-reps-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4189,7 +4189,7 @@ export def "sales-reps get" [
 #
 # PUT /v1/salesReps/{id}
 # operationId: SalesRep_Put
-export def "sales-reps update" [
+export def "sales-rep-put" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4235,7 +4235,7 @@ export def "sales-reps update" [
 #
 # GET /v1/suppliers
 # operationId: Suppliers_Get
-export def "suppliers list" [
+export def "suppliers-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4272,7 +4272,7 @@ export def "suppliers list" [
 # --bank shape: {branch?: string, id?: int, name?: string, sortCode?: string}
 # --openingBalance shape: {currentMonth?: float, oneMonthOld?: float, threeMonthsOld?: float, twoMonthsOld?: float}
 # --openingBalances item shape: {entryDate?: string, id?: int, isChanged?: bool, procDate?: string, reference?: string, timestamp?: string, total?: float, totalVAT?: float, unpaid?: float, vatEntries?: list}
-export def "suppliers create" [
+export def "suppliers-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4336,7 +4336,7 @@ export def "suppliers create" [
 #
 # PUT /v1/suppliers/batch
 # operationId: Suppliers_ProcessBatch
-export def "suppliers-batch update-process" [
+export def "suppliers-process-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4374,7 +4374,7 @@ export def "suppliers-batch update-process" [
 #
 # DELETE /v1/suppliers/{id}
 # operationId: Suppliers_Delete
-export def "suppliers delete" [
+export def "suppliers-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4411,7 +4411,7 @@ export def "suppliers delete" [
 # Returns information about a single Supplier. You may specify that Supplier's ledger balance should be calculated.
 #
 # GET /v1/suppliers/{id}
-export def "suppliers get" [
+export def "get-v1-suppliers-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4452,7 +4452,7 @@ export def "suppliers get" [
 # --bank shape: {branch?: string, id?: int, name?: string, sortCode?: string}
 # --openingBalance shape: {currentMonth?: float, oneMonthOld?: float, threeMonthsOld?: float, twoMonthsOld?: float}
 # --openingBalances item shape: {entryDate?: string, id?: int, isChanged?: bool, procDate?: string, reference?: string, timestamp?: string, total?: float, totalVAT?: float, unpaid?: float, vatEntries?: list}
-export def "suppliers update" [
+export def "suppliers-put" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4518,7 +4518,7 @@ export def "suppliers update" [
 #
 # GET /v1/suppliers/{itemId}/accountTrans
 # operationId: Suppliers_GetAccountTrans
-export def "suppliers-account-trans get" [
+export def "suppliers-get-account-trans" [
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4554,7 +4554,7 @@ export def "suppliers-account-trans get" [
 #
 # GET /v1/suppliers/{itemId}/openingBalance
 # operationId: Suppliers_GetOpeningBalance
-export def "suppliers-opening-balance get" [
+export def "suppliers-get-opening-balance" [
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4590,7 +4590,7 @@ export def "suppliers-opening-balance get" [
 #
 # GET /v1/suppliers/{itemId}/openingBalanceList
 # operationId: Suppliers_GetOpeningBalanceList
-export def "suppliers-opening-balance-list get" [
+export def "suppliers-get-opening-balance-list" [
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4626,7 +4626,7 @@ export def "suppliers-opening-balance-list get" [
 #
 # GET /v1/userDefinedFields
 # operationId: UserDefinedFields_Get
-export def "user-defined-fields get" [
+export def "user-defined-fields-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4660,7 +4660,7 @@ export def "user-defined-fields get" [
 #
 # GET /v1/vatAnalysisTypes
 # operationId: VatAnalysisTypes_Get
-export def "vat-analysis-types get" [
+export def "vat-analysis-types-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4694,7 +4694,7 @@ export def "vat-analysis-types get" [
 #
 # GET /v1/vatCategories
 # operationId: VatCategories_Get
-export def "vat-categories get" [
+export def "vat-categories-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4728,7 +4728,7 @@ export def "vat-categories get" [
 #
 # POST /v1/vatCategories/vatRates
 # operationId: VatCategories_ProcessVatRates
-export def "vat-categories-vat-rates create-process" [
+export def "vat-categories-process-vat-rates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4766,7 +4766,7 @@ export def "vat-categories-vat-rates create-process" [
 #
 # GET /v1/vatRates
 # operationId: VatRates_Get
-export def "vat-rates get" [
+export def "vat-rates-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4800,7 +4800,7 @@ export def "vat-rates get" [
 #
 # GET /v1/vatTypes
 # operationId: VatTypes_Get
-export def "vat-types get" [
+export def "vat-types-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -101,7 +101,7 @@ def format-records-as-completer [] { ["JSON" "NONE"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "batch-execute create-statement" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "batch-execute-statement" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -125,7 +125,7 @@ export def commands []: nothing -> table {
 #
 # POST /BatchExecute
 # operationId: BatchExecuteStatement
-export def "batch-execute create-statement" [
+export def "batch-execute-statement" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -178,7 +178,7 @@ export def "batch-execute create-statement" [
 #
 # POST /BeginTransaction
 # operationId: BeginTransaction
-export def "begin-transaction create" [
+export def "begin-transaction" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -228,7 +228,7 @@ export def "begin-transaction create" [
 #
 # POST /CommitTransaction
 # operationId: CommitTransaction
-export def "commit-transaction commit" [
+export def "commit-transaction" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -279,7 +279,7 @@ export def "commit-transaction commit" [
 # DEPRECATED
 # operationId: ExecuteSql
 @deprecated
-export def "execute-sql create" [
+export def "execute-sql" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -332,7 +332,7 @@ export def "execute-sql create" [
 # operationId: ExecuteStatement
 # --parameters item shape: {name?: any, value?: any, typeHint?: any}
 # --resultSetOptions shape: {decimalReturnType?: any, longReturnType?: any}
-export def "execute create-statement" [
+export def "execute-statement" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -389,7 +389,7 @@ export def "execute create-statement" [
 #
 # POST /RollbackTransaction
 # operationId: RollbackTransaction
-export def "rollback-transaction create" [
+export def "rollback-transaction" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

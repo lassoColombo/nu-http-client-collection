@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "exports-activity-json create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-exports-activity-json" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -121,7 +121,7 @@ export def commands []: nothing -> table {
 # Begins an export of your activity history. The activity will be exported to a zip archive containing a single file named activity.csv in the same format as you would be able to export from your account's activity view. It includes the following fields: Date, Email Address, Sender, Subject, Status, Tags, Opens, Clicks, Bounce Detail. If you have configured any custom metadata fields, they will be included in the exported data.
 #
 # POST /exports/activity.json
-export def "exports-activity-json create" [
+export def "post-exports-activity-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -165,7 +165,7 @@ export def "exports-activity-json create" [
 # Returns information about an export job. If the export job's state is 'complete', the returned data will include a URL you can use to fetch the results. Every export job produces a zip archive, but the format of the archive is distinct for each job type. The api calls that initiate exports include more details about the output format for that job type.
 #
 # POST /exports/info.json
-export def "exports-info-json create" [
+export def "post-exports-info-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -203,7 +203,7 @@ export def "exports-info-json create" [
 # Returns a list of your exports.
 #
 # POST /exports/list.json
-export def "exports-list-json create" [
+export def "post-exports-list-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -240,7 +240,7 @@ export def "exports-list-json create" [
 # Begins an export of your rejection blacklist. The blacklist will be exported to a zip archive containing a single file named rejects.csv that includes the following fields: email, reason, detail, created_at, expires_at, last_event_at, expires_at.
 #
 # POST /exports/rejects.json
-export def "exports-rejects-json create" [
+export def "post-exports-rejects-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -278,7 +278,7 @@ export def "exports-rejects-json create" [
 # Begins an export of your rejection whitelist. The whitelist will be exported to a zip archive containing a single file named whitelist.csv that includes the following fields: email, detail, created_at.
 #
 # POST /exports/whitelist.json
-export def "exports-whitelist-json create" [
+export def "post-exports-whitelist-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -316,7 +316,7 @@ export def "exports-whitelist-json create" [
 # Add an inbound domain to your account
 #
 # POST /inbound/add-domain.json
-export def "inbound-add-domain-json create" [
+export def "post-inbound-add-domain-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -354,7 +354,7 @@ export def "inbound-add-domain-json create" [
 # Add a new mailbox route to an inbound domain
 #
 # POST /inbound/add-route.json
-export def "inbound-add-route-json create" [
+export def "post-inbound-add-route-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -394,7 +394,7 @@ export def "inbound-add-route-json create" [
 # Check the MX settings for an inbound domain. The domain must have already been added with the add-domain call
 #
 # POST /inbound/check-domain.json
-export def "inbound-check-domain-json create" [
+export def "post-inbound-check-domain-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -432,7 +432,7 @@ export def "inbound-check-domain-json create" [
 # Delete an inbound domain from the account. All mail will stop routing for this domain immediately.
 #
 # POST /inbound/delete-domain.json
-export def "inbound-delete-domain-json create" [
+export def "post-inbound-delete-domain-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -470,7 +470,7 @@ export def "inbound-delete-domain-json create" [
 # Delete an existing inbound mailbox route
 #
 # POST /inbound/delete-route.json
-export def "inbound-delete-route-json create" [
+export def "post-inbound-delete-route-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -508,7 +508,7 @@ export def "inbound-delete-route-json create" [
 # List the domains that have been configured for inbound delivery
 #
 # POST /inbound/domains.json
-export def "inbound-domains-json create" [
+export def "post-inbound-domains-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -545,7 +545,7 @@ export def "inbound-domains-json create" [
 # List the mailbox routes defined for an inbound domain
 #
 # POST /inbound/routes.json
-export def "inbound-routes-json create" [
+export def "post-inbound-routes-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -583,7 +583,7 @@ export def "inbound-routes-json create" [
 # Take a raw MIME document destined for a domain with inbound domains set up, and send it to the inbound hook exactly as if it had been sent over SMTP
 #
 # POST /inbound/send-raw.json
-export def "inbound-send-raw-json create" [
+export def "post-inbound-send-raw-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -625,7 +625,7 @@ export def "inbound-send-raw-json create" [
 # Update the pattern or webhook of an existing inbound mailbox route. If null is provided for any fields, the values will remain unchanged.
 #
 # POST /inbound/update-route.json
-export def "inbound-update-route-json create" [
+export def "post-inbound-update-route-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -665,7 +665,7 @@ export def "inbound-update-route-json create" [
 # Cancels the warmup process for a dedicated IP.
 #
 # POST /ips/cancel-warmup.json
-export def "ips-cancel-warmup-json create" [
+export def "post-ips-cancel-warmup-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -703,7 +703,7 @@ export def "ips-cancel-warmup-json create" [
 # Tests whether a domain name is valid for use as the custom reverse DNS for a dedicated IP.
 #
 # POST /ips/check-custom-dns.json
-export def "ips-check-custom-dns-json create" [
+export def "post-ips-check-custom-dns-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -742,7 +742,7 @@ export def "ips-check-custom-dns-json create" [
 # Creates a pool and returns it. If a pool already exists with this name, no action will be performed.
 #
 # POST /ips/create-pool.json
-export def "ips-create-pool-json create" [
+export def "post-ips-create-pool-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -780,7 +780,7 @@ export def "ips-create-pool-json create" [
 # Deletes a pool. A pool must be empty before you can delete it, and you cannot delete your default pool.
 #
 # POST /ips/delete-pool.json
-export def "ips-delete-pool-json create" [
+export def "post-ips-delete-pool-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -818,7 +818,7 @@ export def "ips-delete-pool-json create" [
 # Deletes a dedicated IP. This is permanent and cannot be undone.
 #
 # POST /ips/delete.json
-export def "ips-delete-json create" [
+export def "post-ips-delete-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -856,7 +856,7 @@ export def "ips-delete-json create" [
 # Retrieves information about a single dedicated ip.
 #
 # POST /ips/info.json
-export def "ips-info-json create" [
+export def "post-ips-info-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -894,7 +894,7 @@ export def "ips-info-json create" [
 # Lists your dedicated IP pools.
 #
 # POST /ips/list-pools.json
-export def "ips-list-pools-json create" [
+export def "post-ips-list-pools-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -931,7 +931,7 @@ export def "ips-list-pools-json create" [
 # Lists your dedicated IPs.
 #
 # POST /ips/list.json
-export def "ips-list-json create" [
+export def "post-ips-list-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -968,7 +968,7 @@ export def "ips-list-json create" [
 # Describes a single dedicated IP pool.
 #
 # POST /ips/pool-info.json
-export def "ips-pool-info-json create" [
+export def "post-ips-pool-info-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1006,7 +1006,7 @@ export def "ips-pool-info-json create" [
 # Requests an additional dedicated IP for your account. Accounts may have one outstanding request at any time, and provisioning requests are processed within 24 hours.
 #
 # POST /ips/provision.json
-export def "ips-provision-json create" [
+export def "post-ips-provision-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1045,7 +1045,7 @@ export def "ips-provision-json create" [
 # Configures the custom DNS name for a dedicated IP.
 #
 # POST /ips/set-custom-dns.json
-export def "ips-set-custom-dns-json create" [
+export def "post-ips-set-custom-dns-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1084,7 +1084,7 @@ export def "ips-set-custom-dns-json create" [
 # Moves a dedicated IP to a different pool.
 #
 # POST /ips/set-pool.json
-export def "ips-set-pool-json create" [
+export def "post-ips-set-pool-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1124,7 +1124,7 @@ export def "ips-set-pool-json create" [
 # Begins the warmup process for a dedicated IP. During the warmup process, Mandrill will gradually increase the percentage of your mail that is sent over the warming-up IP, over a period of roughly 30 days. The rest of your mail will be sent over shared IPs or other dedicated IPs in the same pool.
 #
 # POST /ips/start-warmup.json
-export def "ips-start-warmup-json create" [
+export def "post-ips-start-warmup-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1162,7 +1162,7 @@ export def "ips-start-warmup-json create" [
 # Cancels a scheduled email.
 #
 # POST /messages/cancel-scheduled.json
-export def "messages-cancel-scheduled-json create" [
+export def "post-messages-cancel-scheduled-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1200,7 +1200,7 @@ export def "messages-cancel-scheduled-json create" [
 # Get the full content of a recently sent message
 #
 # POST /messages/content.json
-export def "messages-content-json create" [
+export def "post-messages-content-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1238,7 +1238,7 @@ export def "messages-content-json create" [
 # Get the information for a single recently sent message
 #
 # POST /messages/info.json
-export def "messages-info-json create" [
+export def "post-messages-info-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1276,7 +1276,7 @@ export def "messages-info-json create" [
 # Queries your scheduled emails by sender or recipient, or both.
 #
 # POST /messages/list-scheduled.json
-export def "messages-list-scheduled-json create" [
+export def "post-messages-list-scheduled-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1314,7 +1314,7 @@ export def "messages-list-scheduled-json create" [
 # Parse the full MIME document for an email message, returning the content of the message broken into its constituent pieces
 #
 # POST /messages/parse.json
-export def "messages-parse-json create" [
+export def "post-messages-parse-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1352,7 +1352,7 @@ export def "messages-parse-json create" [
 # Reschedules a scheduled email.
 #
 # POST /messages/reschedule.json
-export def "messages-reschedule-json create" [
+export def "post-messages-reschedule-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1391,7 +1391,7 @@ export def "messages-reschedule-json create" [
 # Search the content of recently sent messages and return the aggregated hourly stats for matching messages
 #
 # POST /messages/search-time-series.json
-export def "messages-search-time-series-json create" [
+export def "post-messages-search-time-series-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1433,7 +1433,7 @@ export def "messages-search-time-series-json create" [
 # Search the content of recently sent messages and optionally narrow by date range, tags and senders. This method may be called up to 20 times per minute. If you need the data more often, you can use /messages/info.json to get the information for a single message, or webhooks to push activity to your own application for querying.
 #
 # POST /messages/search.json
-export def "messages-search-json create" [
+export def "post-messages-search-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1477,7 +1477,7 @@ export def "messages-search-json create" [
 # Take a raw MIME document for a message, and send it exactly as if it were sent through Mandrill's SMTP servers
 #
 # POST /messages/send-raw.json
-export def "messages-send-raw-json create" [
+export def "post-messages-send-raw-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1524,7 +1524,7 @@ export def "messages-send-raw-json create" [
 # POST /messages/send-template.json
 # --message shape: {attachments?: list, auto_html?: any, auto_text?: any, bcc_address?: string, from_email?: string, from_name?: string, global_merge_vars?: list, google_analytics_campaign?: string, google_analytics_domains?: list<string>, headers?: record, html?: string, images?: list, important?: bool, inline_css?: any, merge?: bool, merge_vars?: list, metadata?: record, preserve_recipients?: any, recipient_metadata?: list, return_path_domain?: any, signing_domain?: any, subaccount?: string, subject?: string, ... (8 more fields)}
 # --template_content item shape: {content?: string, name?: string}
-export def "messages-send-template-json create" [
+export def "post-messages-send-template-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1568,7 +1568,7 @@ export def "messages-send-template-json create" [
 #
 # POST /messages/send.json
 # --message shape: {attachments?: list, auto_html?: any, auto_text?: any, bcc_address?: string, from_email?: string, from_name?: string, global_merge_vars?: list, google_analytics_campaign?: string, google_analytics_domains?: list<string>, headers?: record, html?: string, images?: list, important?: bool, inline_css?: any, merge?: bool, merge_vars?: list, metadata?: record, preserve_recipients?: any, recipient_metadata?: list, return_path_domain?: any, signing_domain?: any, subaccount?: string, subject?: string, ... (8 more fields)}
-export def "messages-send-json create" [
+export def "post-messages-send-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1609,7 +1609,7 @@ export def "messages-send-json create" [
 # Add a new custom metadata field to be indexed for the account.
 #
 # POST /metadata/add.json
-export def "metadata-add-json create" [
+export def "post-metadata-add-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1648,7 +1648,7 @@ export def "metadata-add-json create" [
 # Delete an existing custom metadata field. Deletion isn't instataneous, and /metadata/list will continue to return the field until the asynchronous deletion process is complete.
 #
 # POST /metadata/delete.json
-export def "metadata-delete-json create" [
+export def "post-metadata-delete-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1686,7 +1686,7 @@ export def "metadata-delete-json create" [
 # Get the list of custom metadata fields indexed for the account.
 #
 # POST /metadata/list.json
-export def "metadata-list-json create" [
+export def "post-metadata-list-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1723,7 +1723,7 @@ export def "metadata-list-json create" [
 # Update an existing custom metadata field.
 #
 # POST /metadata/update.json
-export def "metadata-update-json create" [
+export def "post-metadata-update-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1762,7 +1762,7 @@ export def "metadata-update-json create" [
 # Adds an email to your email rejection blacklist. Addresses that you add manually will never expire and there is no reputation penalty for removing them from your blacklist. Attempting to blacklist an address that has been whitelisted will have no effect.
 #
 # POST /rejects/add.json
-export def "rejects-add-json create" [
+export def "post-rejects-add-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1802,7 +1802,7 @@ export def "rejects-add-json create" [
 # Deletes an email rejection. There is no limit to how many rejections you can remove from your blacklist, but keep in mind that each deletion has an affect on your reputation.
 #
 # POST /rejects/delete.json
-export def "rejects-delete-json create" [
+export def "post-rejects-delete-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1841,7 +1841,7 @@ export def "rejects-delete-json create" [
 # Retrieves your email rejection blacklist. You can provide an email address to limit the results. Returns up to 1000 results. By default, entries that have expired are excluded from the results; set include_expired to true to include them.
 #
 # POST /rejects/list.json
-export def "rejects-list-json create" [
+export def "post-rejects-list-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1881,7 +1881,7 @@ export def "rejects-list-json create" [
 # Adds a sender domain to your account. Sender domains are added automatically as you send, but you can use this call to add them ahead of time.
 #
 # POST /senders/add-domain.json
-export def "senders-add-domain-json create" [
+export def "post-senders-add-domain-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1919,7 +1919,7 @@ export def "senders-add-domain-json create" [
 # Checks the SPF and DKIM settings for a domain. If you haven't already added this domain to your account, it will be added automatically.
 #
 # POST /senders/check-domain.json
-export def "senders-check-domain-json create" [
+export def "post-senders-check-domain-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1957,7 +1957,7 @@ export def "senders-check-domain-json create" [
 # Returns the sender domains that have been added to this account.
 #
 # POST /senders/domains.json
-export def "senders-domains-json create" [
+export def "post-senders-domains-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1994,7 +1994,7 @@ export def "senders-domains-json create" [
 # Return more detailed information about a single sender, including aggregates of recent stats
 #
 # POST /senders/info.json
-export def "senders-info-json create" [
+export def "post-senders-info-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2032,7 +2032,7 @@ export def "senders-info-json create" [
 # Return the senders that have tried to use this account.
 #
 # POST /senders/list.json
-export def "senders-list-json create" [
+export def "post-senders-list-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2069,7 +2069,7 @@ export def "senders-list-json create" [
 # Return the recent history (hourly stats for the last 30 days) for a sender
 #
 # POST /senders/time-series.json
-export def "senders-time-series-json create" [
+export def "post-senders-time-series-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2107,7 +2107,7 @@ export def "senders-time-series-json create" [
 # Sends a verification email in order to verify ownership of a domain. Domain verification is an optional step to confirm ownership of a domain. Once a domain has been verified in a Mandrill account, other accounts may not have their messages signed by that domain unless they also verify the domain. This prevents other Mandrill accounts from sending mail signed by your domain.
 #
 # POST /senders/verify-domain.json
-export def "senders-verify-domain-json create" [
+export def "post-senders-verify-domain-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2146,7 +2146,7 @@ export def "senders-verify-domain-json create" [
 # Add a new subaccount
 #
 # POST /subaccounts/add.json
-export def "subaccounts-add-json create" [
+export def "post-subaccounts-add-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2187,7 +2187,7 @@ export def "subaccounts-add-json create" [
 # Delete an existing subaccount. Any email related to the subaccount will be saved, but stats will be removed and any future sending calls to this subaccount will fail.
 #
 # POST /subaccounts/delete.json
-export def "subaccounts-delete-json create" [
+export def "post-subaccounts-delete-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2225,7 +2225,7 @@ export def "subaccounts-delete-json create" [
 # Given the ID of an existing subaccount, return the data about it
 #
 # POST /subaccounts/info.json
-export def "subaccounts-info-json create" [
+export def "post-subaccounts-info-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2263,7 +2263,7 @@ export def "subaccounts-info-json create" [
 # Get the list of subaccounts defined for the account, optionally filtered by a prefix
 #
 # POST /subaccounts/list.json
-export def "subaccounts-list-json create" [
+export def "post-subaccounts-list-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2301,7 +2301,7 @@ export def "subaccounts-list-json create" [
 # Pause a subaccount's sending. Any future emails delivered to this subaccount will be queued for a maximum of 3 days until the subaccount is resumed.
 #
 # POST /subaccounts/pause.json
-export def "subaccounts-pause-json create" [
+export def "post-subaccounts-pause-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2339,7 +2339,7 @@ export def "subaccounts-pause-json create" [
 # Resume a paused subaccount's sending
 #
 # POST /subaccounts/resume.json
-export def "subaccounts-resume-json create" [
+export def "post-subaccounts-resume-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2377,7 +2377,7 @@ export def "subaccounts-resume-json create" [
 # Update an existing subaccount
 #
 # POST /subaccounts/update.json
-export def "subaccounts-update-json create" [
+export def "post-subaccounts-update-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2418,7 +2418,7 @@ export def "subaccounts-update-json create" [
 # Return the recent history (hourly stats for the last 30 days) for all tags
 #
 # POST /tags/all-time-series.json
-export def "tags-all-time-series-json create" [
+export def "post-tags-all-time-series-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2455,7 +2455,7 @@ export def "tags-all-time-series-json create" [
 # Deletes a tag permanently. Deleting a tag removes the tag from any messages that have been sent, and also deletes the tag's stats. There is no way to undo this operation, so use it carefully.
 #
 # POST /tags/delete.json
-export def "tags-delete-json create" [
+export def "post-tags-delete-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2493,7 +2493,7 @@ export def "tags-delete-json create" [
 # Return more detailed information about a single tag, including aggregates of recent stats
 #
 # POST /tags/info.json
-export def "tags-info-json create" [
+export def "post-tags-info-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2531,7 +2531,7 @@ export def "tags-info-json create" [
 # Return all of the user-defined tag information
 #
 # POST /tags/list.json
-export def "tags-list-json create" [
+export def "post-tags-list-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2568,7 +2568,7 @@ export def "tags-list-json create" [
 # Return the recent history (hourly stats for the last 30 days) for a tag
 #
 # POST /tags/time-series.json
-export def "tags-time-series-json create" [
+export def "post-tags-time-series-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2606,7 +2606,7 @@ export def "tags-time-series-json create" [
 # Add a new template
 #
 # POST /templates/add.json
-export def "templates-add-json create" [
+export def "post-templates-add-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2651,7 +2651,7 @@ export def "templates-add-json create" [
 # Delete a template
 #
 # POST /templates/delete.json
-export def "templates-delete-json create" [
+export def "post-templates-delete-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2689,7 +2689,7 @@ export def "templates-delete-json create" [
 # Get the information for an existing template
 #
 # POST /templates/info.json
-export def "templates-info-json create" [
+export def "post-templates-info-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2727,7 +2727,7 @@ export def "templates-info-json create" [
 # Return a list of all the templates available to this user
 #
 # POST /templates/list.json
-export def "templates-list-json create" [
+export def "post-templates-list-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2765,7 +2765,7 @@ export def "templates-list-json create" [
 # Publish the content for the template. Any new messages sent using this template will start using the content that was previously in draft.
 #
 # POST /templates/publish.json
-export def "templates-publish-json create" [
+export def "post-templates-publish-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2805,7 +2805,7 @@ export def "templates-publish-json create" [
 # POST /templates/render.json
 # --merge_vars item shape: {content?: string, name?: string}
 # --template_content item shape: {content?: string, name?: string}
-export def "templates-render-json create" [
+export def "post-templates-render-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2845,7 +2845,7 @@ export def "templates-render-json create" [
 # Return the recent history (hourly stats for the last 30 days) for a template
 #
 # POST /templates/time-series.json
-export def "templates-time-series-json create" [
+export def "post-templates-time-series-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2883,7 +2883,7 @@ export def "templates-time-series-json create" [
 # Update the code for an existing template. If null is provided for any fields, the values will remain unchanged.
 #
 # POST /templates/update.json
-export def "templates-update-json create" [
+export def "post-templates-update-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2928,7 +2928,7 @@ export def "templates-update-json create" [
 # Add a tracking domain to your account
 #
 # POST /urls/add-tracking-domain.json
-export def "urls-add-tracking-domain-json create" [
+export def "post-urls-add-tracking-domain-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2966,7 +2966,7 @@ export def "urls-add-tracking-domain-json create" [
 # Checks the CNAME settings for a tracking domain. The domain must have been added already with the add-tracking-domain call
 #
 # POST /urls/check-tracking-domain.json
-export def "urls-check-tracking-domain-json create" [
+export def "post-urls-check-tracking-domain-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3004,7 +3004,7 @@ export def "urls-check-tracking-domain-json create" [
 # Get the 100 most clicked URLs
 #
 # POST /urls/list.json
-export def "urls-list-json create" [
+export def "post-urls-list-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3041,7 +3041,7 @@ export def "urls-list-json create" [
 # Return the 100 most clicked URLs that match the search query given
 #
 # POST /urls/search.json
-export def "urls-search-json create" [
+export def "post-urls-search-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3079,7 +3079,7 @@ export def "urls-search-json create" [
 # Return the recent history (hourly stats for the last 30 days) for a url
 #
 # POST /urls/time-series.json
-export def "urls-time-series-json create" [
+export def "post-urls-time-series-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3117,7 +3117,7 @@ export def "urls-time-series-json create" [
 # Get the list of tracking domains set up for this account
 #
 # POST /urls/tracking-domains.json
-export def "urls-tracking-domains-json create" [
+export def "post-urls-tracking-domains-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3154,7 +3154,7 @@ export def "urls-tracking-domains-json create" [
 # Return the information about the API-connected user
 #
 # POST /users/info.json
-export def "users-info-json create" [
+export def "post-users-info-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3191,7 +3191,7 @@ export def "users-info-json create" [
 # Validate an API key and respond to a ping
 #
 # POST /users/ping.json
-export def "users-ping-json create" [
+export def "post-users-ping-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3228,7 +3228,7 @@ export def "users-ping-json create" [
 # Validate an API key and respond to a ping (anal JSON parser version)
 #
 # POST /users/ping2.json
-export def "users-ping2-json create" [
+export def "post-users-ping2-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3265,7 +3265,7 @@ export def "users-ping2-json create" [
 # Return the senders that have tried to use this account, both verified and unverified
 #
 # POST /users/senders.json
-export def "users-senders-json create" [
+export def "post-users-senders-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3302,7 +3302,7 @@ export def "users-senders-json create" [
 # Add a new webhook
 #
 # POST /webhooks/add.json
-export def "webhooks-add-json create" [
+export def "post-webhooks-add-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3342,7 +3342,7 @@ export def "webhooks-add-json create" [
 # Delete an existing webhook
 #
 # POST /webhooks/delete.json
-export def "webhooks-delete-json create" [
+export def "post-webhooks-delete-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3380,7 +3380,7 @@ export def "webhooks-delete-json create" [
 # Given the ID of an existing webhook, return the data about it
 #
 # POST /webhooks/info.json
-export def "webhooks-info-json create" [
+export def "post-webhooks-info-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3418,7 +3418,7 @@ export def "webhooks-info-json create" [
 # Get the list of all webhooks defined on the account
 #
 # POST /webhooks/list.json
-export def "webhooks-list-json create" [
+export def "post-webhooks-list-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3455,7 +3455,7 @@ export def "webhooks-list-json create" [
 # Update an existing webhook
 #
 # POST /webhooks/update.json
-export def "webhooks-update-json create" [
+export def "post-webhooks-update-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3496,7 +3496,7 @@ export def "webhooks-update-json create" [
 # Adds an email to your email rejection whitelist. If the address is currently on your blacklist, that blacklist entry will be removed automatically.
 #
 # POST /whitelists/add.json
-export def "whitelists-add-json create" [
+export def "post-whitelists-add-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3534,7 +3534,7 @@ export def "whitelists-add-json create" [
 # Removes an email address from the whitelist.
 #
 # POST /whitelists/delete.json
-export def "whitelists-delete-json create" [
+export def "post-whitelists-delete-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3572,7 +3572,7 @@ export def "whitelists-delete-json create" [
 # Retrieves your email rejection whitelist. You can provide an email address or search prefix to limit the results. Returns up to 1000 results.
 #
 # POST /whitelists/list.json
-export def "whitelists-list-json create" [
+export def "post-whitelists-list-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

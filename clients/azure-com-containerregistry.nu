@@ -144,7 +144,7 @@ def grant-type-completer-1 [] { ["refresh_token"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "acr-catalog get-repository-list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "repository-get-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -168,7 +168,7 @@ export def commands []: nothing -> table {
 #
 # GET /acr/v1/_catalog
 # operationId: Repository_GetList
-export def "acr-catalog get-repository-list" [
+export def "repository-get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-registryauth: string # Auth token for registry_auth (Authorization)
   --token-registryoauth2: string # Auth token for registry_oauth2 (Authorization)
@@ -205,7 +205,7 @@ export def "acr-catalog get-repository-list" [
 #
 # DELETE /acr/v1/{name}
 # operationId: Repository_Delete
-export def "acr delete-repository" [
+export def "repository-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-registryauth: string # Auth token for registry_auth (Authorization)
@@ -241,7 +241,7 @@ export def "acr delete-repository" [
 #
 # GET /acr/v1/{name}
 # operationId: Repository_GetAttributes
-export def "acr get-repository-attributes" [
+export def "repository-get-attributes" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-registryauth: string # Auth token for registry_auth (Authorization)
@@ -277,7 +277,7 @@ export def "acr get-repository-attributes" [
 #
 # PATCH /acr/v1/{name}
 # operationId: Repository_UpdateAttributes
-export def "acr update-repository-attributes" [
+export def "repository-update-attributes" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-registryauth: string # Auth token for registry_auth (Authorization)
@@ -320,7 +320,7 @@ export def "acr update-repository-attributes" [
 #
 # GET /acr/v1/{name}/_manifests
 # operationId: Manifests_GetList
-export def "acr-manifests get-list" [
+export def "manifests-get-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-registryauth: string # Auth token for registry_auth (Authorization)
@@ -360,7 +360,7 @@ export def "acr-manifests get-list" [
 #
 # GET /acr/v1/{name}/_manifests/{reference}
 # operationId: Manifests_GetAttributes
-export def "acr-manifests get-attributes" [
+export def "manifests-get-attributes" [
   name: string
   reference: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -398,7 +398,7 @@ export def "acr-manifests get-attributes" [
 #
 # PATCH /acr/v1/{name}/_manifests/{reference}
 # operationId: Manifests_UpdateAttributes
-export def "acr-manifests update-attributes" [
+export def "manifests-update-attributes" [
   name: string
   reference: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -443,7 +443,7 @@ export def "acr-manifests update-attributes" [
 #
 # GET /acr/v1/{name}/_tags
 # operationId: Tag_GetList
-export def "acr-tags get-list" [
+export def "tag-get-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-registryauth: string # Auth token for registry_auth (Authorization)
@@ -484,7 +484,7 @@ export def "acr-tags get-list" [
 #
 # DELETE /acr/v1/{name}/_tags/{reference}
 # operationId: Tag_Delete
-export def "acr-tags delete" [
+export def "tag-delete" [
   name: string
   reference: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -522,7 +522,7 @@ export def "acr-tags delete" [
 #
 # GET /acr/v1/{name}/_tags/{reference}
 # operationId: Tag_GetAttributes
-export def "acr-tags get-attributes" [
+export def "tag-get-attributes" [
   name: string
   reference: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -560,7 +560,7 @@ export def "acr-tags get-attributes" [
 #
 # PATCH /acr/v1/{name}/_tags/{reference}
 # operationId: Tag_UpdateAttributes
-export def "acr-tags update-attributes" [
+export def "tag-update-attributes" [
   name: string
   reference: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -605,7 +605,7 @@ export def "acr-tags update-attributes" [
 #
 # POST /oauth2/exchange
 # operationId: RefreshTokens_GetFromExchange
-export def "oauth2-exchange refresh-tokens-get" [
+export def "refresh-tokens-get-from-exchange" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -648,7 +648,7 @@ export def "oauth2-exchange refresh-tokens-get" [
 #
 # GET /oauth2/token
 # operationId: AccessTokens_GetFromLogin
-export def "oauth2-token get-access-from-login" [
+export def "access-tokens-get-from-login" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -685,7 +685,7 @@ export def "oauth2-token get-access-from-login" [
 #
 # POST /oauth2/token
 # operationId: AccessTokens_Get
-export def "oauth2-token get-access" [
+export def "access-tokens-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -727,7 +727,7 @@ export def "oauth2-token get-access" [
 #
 # GET /v2/
 # operationId: V2Support_Check
-export def "v2 check-support" [
+export def "v2-support-check" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-registryauth: string # Auth token for registry_auth (Authorization)
   --token-registryoauth2: string # Auth token for registry_oauth2 (Authorization)
@@ -761,7 +761,7 @@ export def "v2 check-support" [
 #
 # POST /v2/{name}/blobs/uploads/
 # operationId: Blob_Mount
-export def "blobs-uploads create-mount" [
+export def "blob-mount" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-registryauth: string # Auth token for registry_auth (Authorization)
@@ -800,7 +800,7 @@ export def "blobs-uploads create-mount" [
 #
 # DELETE /v2/{name}/blobs/{digest}
 # operationId: Blob_Delete
-export def "blobs delete" [
+export def "blob-delete" [
   name: string
   digest: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -838,7 +838,7 @@ export def "blobs delete" [
 #
 # GET /v2/{name}/blobs/{digest}
 # operationId: Blob_Get
-export def "blobs get" [
+export def "blob-get" [
   name: string
   digest: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -876,7 +876,7 @@ export def "blobs get" [
 #
 # HEAD /v2/{name}/blobs/{digest}
 # operationId: Blob_Check
-export def "blobs check" [
+export def "blob-check" [
   name: string
   digest: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -914,7 +914,7 @@ export def "blobs check" [
 #
 # DELETE /v2/{name}/manifests/{reference}
 # operationId: Manifests_Delete
-export def "manifests delete" [
+export def "manifests-delete" [
   name: string
   reference: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -952,7 +952,7 @@ export def "manifests delete" [
 #
 # GET /v2/{name}/manifests/{reference}
 # operationId: Manifests_Get
-export def "manifests get" [
+export def "manifests-get" [
   name: string
   reference: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -993,7 +993,7 @@ export def "manifests get" [
 #
 # PUT /v2/{name}/manifests/{reference}
 # operationId: Manifests_Create
-export def "manifests create" [
+export def "manifests-create" [
   name: string
   reference: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1035,7 +1035,7 @@ export def "manifests create" [
 #
 # DELETE /{nextBlobUuidLink}
 # operationId: Blob_CancelUpload
-export def "layer cancel-blob-upload" [
+export def "blob-cancel-upload" [
   next_blob_uuid_link: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-registryauth: string # Auth token for registry_auth (Authorization)
@@ -1071,7 +1071,7 @@ export def "layer cancel-blob-upload" [
 #
 # GET /{nextBlobUuidLink}
 # operationId: Blob_GetStatus
-export def "layer get-blob-status" [
+export def "blob-get-status" [
   next_blob_uuid_link: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-registryauth: string # Auth token for registry_auth (Authorization)
@@ -1107,7 +1107,7 @@ export def "layer get-blob-status" [
 #
 # PATCH /{nextBlobUuidLink}
 # operationId: Blob_Upload
-export def "layer upload-blob" [
+export def "blob-upload" [
   next_blob_uuid_link: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-registryauth: string # Auth token for registry_auth (Authorization)
@@ -1147,7 +1147,7 @@ export def "layer upload-blob" [
 #
 # PUT /{nextBlobUuidLink}
 # operationId: Blob_EndUpload
-export def "layer upload-blob-end" [
+export def "blob-end-upload" [
   next_blob_uuid_link: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-registryauth: string # Auth token for registry_auth (Authorization)

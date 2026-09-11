@@ -138,7 +138,7 @@ def default-storage-type-completer [] { ["HDD" "SSD" "STORAGE_TYPE_UNSPECIFIED"]
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "bigtableadmin-projects-instances-tables-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -162,7 +162,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v2/{name}
 # operationId: bigtableadmin.projects.instances.tables.delete
-export def "projects delete" [
+export def "bigtableadmin-projects-instances-tables-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -211,7 +211,7 @@ export def "projects delete" [
 #
 # GET /v2/{name}
 # operationId: bigtableadmin.projects.locations.get
-export def "projects get" [
+export def "bigtableadmin-projects-locations-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -262,7 +262,7 @@ export def "projects get" [
 # operationId: bigtableadmin.projects.instances.tables.patch
 # --restoreInfo shape: {backupInfo?: record, sourceType?: "RESTORE_SOURCE_TYPE_UNSPECIFIED"|"BACKUP"}
 # --stats shape: {averageCellsPerColumn?: float, averageColumnsPerRow?: float, logicalDataBytes?: string, rowCount?: string}
-export def "projects update-by-name" [
+export def "bigtableadmin-projects-instances-tables-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -322,7 +322,7 @@ export def "projects update-by-name" [
 # operationId: bigtableadmin.projects.instances.clusters.update
 # --clusterConfig shape: {clusterAutoscalingConfig?: record}
 # --encryptionConfig shape: {kmsKeyName?: string}
-export def "projects update-by-name-1" [
+export def "bigtableadmin-projects-instances-clusters-update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -379,7 +379,7 @@ export def "projects update-by-name-1" [
 #
 # GET /v2/{name}/locations
 # operationId: bigtableadmin.projects.locations.list
-export def "locations list" [
+export def "bigtableadmin-projects-locations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -430,7 +430,7 @@ export def "locations list" [
 #
 # GET /v2/{name}/operations
 # operationId: bigtableadmin.operations.projects.operations.list
-export def "operations list" [
+export def "bigtableadmin-operations-projects-operations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -481,7 +481,7 @@ export def "operations list" [
 #
 # POST /v2/{name}:cancel
 # operationId: bigtableadmin.operations.cancel
-export def "operations cancel" [
+export def "bigtableadmin-operations-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -529,7 +529,7 @@ export def "operations cancel" [
 #
 # POST /v2/{name}:checkConsistency
 # operationId: bigtableadmin.projects.instances.tables.checkConsistency
-export def "projects check-consistency" [
+export def "bigtableadmin-projects-instances-tables-check-consistency" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -581,7 +581,7 @@ export def "projects check-consistency" [
 #
 # POST /v2/{name}:dropRowRange
 # operationId: bigtableadmin.projects.instances.tables.dropRowRange
-export def "projects create-drop-row-range" [
+export def "bigtableadmin-projects-instances-tables-drop-row-range" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -634,7 +634,7 @@ export def "projects create-drop-row-range" [
 #
 # POST /v2/{name}:generateConsistencyToken
 # operationId: bigtableadmin.projects.instances.tables.generateConsistencyToken
-export def "projects generate-consistency-token" [
+export def "bigtableadmin-projects-instances-tables-generate-consistency-token" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -687,7 +687,7 @@ export def "projects generate-consistency-token" [
 # POST /v2/{name}:modifyColumnFamilies
 # operationId: bigtableadmin.projects.instances.tables.modifyColumnFamilies
 # --modifications item shape: {create?: record, drop?: bool, id?: string, update?: record}
-export def "projects create-modify-column-families" [
+export def "bigtableadmin-projects-instances-tables-modify-column-families" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -739,7 +739,7 @@ export def "projects create-modify-column-families" [
 #
 # POST /v2/{name}:undelete
 # operationId: bigtableadmin.projects.instances.tables.undelete
-export def "projects create-undelete" [
+export def "bigtableadmin-projects-instances-tables-undelete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -791,7 +791,7 @@ export def "projects create-undelete" [
 #
 # GET /v2/{parent}/appProfiles
 # operationId: bigtableadmin.projects.instances.appProfiles.list
-export def "app-profiles list" [
+export def "bigtableadmin-projects-instances-app-profiles-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -843,7 +843,7 @@ export def "app-profiles list" [
 # operationId: bigtableadmin.projects.instances.appProfiles.create
 # --multiClusterRoutingUseAny shape: {clusterIds?: list<string>}
 # --singleClusterRouting shape: {allowTransactionalWrites?: bool, clusterId?: string}
-export def "app-profiles create" [
+export def "bigtableadmin-projects-instances-app-profiles-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -901,7 +901,7 @@ export def "app-profiles create" [
 #
 # GET /v2/{parent}/backups
 # operationId: bigtableadmin.projects.instances.clusters.backups.list
-export def "backups list" [
+export def "bigtableadmin-projects-instances-clusters-backups-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -954,7 +954,7 @@ export def "backups list" [
 # POST /v2/{parent}/backups
 # operationId: bigtableadmin.projects.instances.clusters.backups.create
 # --encryptionInfo shape: {encryptionStatus?: record}
-export def "backups create" [
+export def "bigtableadmin-projects-instances-clusters-backups-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1010,7 +1010,7 @@ export def "backups create" [
 #
 # POST /v2/{parent}/backups:copy
 # operationId: bigtableadmin.projects.instances.clusters.backups.copy
-export def "backups-copy copy" [
+export def "bigtableadmin-projects-instances-clusters-backups-copy" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1064,7 +1064,7 @@ export def "backups-copy copy" [
 #
 # GET /v2/{parent}/clusters
 # operationId: bigtableadmin.projects.instances.clusters.list
-export def "clusters list" [
+export def "bigtableadmin-projects-instances-clusters-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1115,7 +1115,7 @@ export def "clusters list" [
 # operationId: bigtableadmin.projects.instances.clusters.create
 # --clusterConfig shape: {clusterAutoscalingConfig?: record}
 # --encryptionConfig shape: {kmsKeyName?: string}
-export def "clusters create" [
+export def "bigtableadmin-projects-instances-clusters-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1173,7 +1173,7 @@ export def "clusters create" [
 #
 # GET /v2/{parent}/hotTablets
 # operationId: bigtableadmin.projects.instances.clusters.hotTablets.list
-export def "hot-tablets list" [
+export def "bigtableadmin-projects-instances-clusters-hot-tablets-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1225,7 +1225,7 @@ export def "hot-tablets list" [
 #
 # GET /v2/{parent}/instances
 # operationId: bigtableadmin.projects.instances.list
-export def "instances list" [
+export def "bigtableadmin-projects-instances-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1275,7 +1275,7 @@ export def "instances list" [
 # POST /v2/{parent}/instances
 # operationId: bigtableadmin.projects.instances.create
 # --instance shape: {displayName?: string, labels?: record, name?: string, type?: "TYPE_UNSPECIFIED"|"PRODUCTION"|"DEVELOPMENT"}
-export def "instances create" [
+export def "bigtableadmin-projects-instances-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1330,7 +1330,7 @@ export def "instances create" [
 #
 # GET /v2/{parent}/tables
 # operationId: bigtableadmin.projects.instances.tables.list
-export def "tables list" [
+export def "bigtableadmin-projects-instances-tables-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1383,7 +1383,7 @@ export def "tables list" [
 # operationId: bigtableadmin.projects.instances.tables.create
 # --initialSplits item shape: {key?: string}
 # --table shape: {columnFamilies?: record, deletionProtection?: bool, granularity?: "TIMESTAMP_GRANULARITY_UNSPECIFIED"|"MILLIS", name?: string, restoreInfo?: record, stats?: record}
-export def "tables create" [
+export def "bigtableadmin-projects-instances-tables-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1437,7 +1437,7 @@ export def "tables create" [
 #
 # POST /v2/{parent}/tables:restore
 # operationId: bigtableadmin.projects.instances.tables.restore
-export def "tables-restore create" [
+export def "bigtableadmin-projects-instances-tables-restore" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1491,7 +1491,7 @@ export def "tables-restore create" [
 # POST /v2/{resource}:getIamPolicy
 # operationId: bigtableadmin.projects.instances.tables.getIamPolicy
 # --options shape: {requestedPolicyVersion?: int}
-export def "projects get-iam-policy" [
+export def "bigtableadmin-projects-instances-tables-get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1544,7 +1544,7 @@ export def "projects get-iam-policy" [
 # POST /v2/{resource}:setIamPolicy
 # operationId: bigtableadmin.projects.instances.tables.setIamPolicy
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
-export def "projects update-iam-policy" [
+export def "bigtableadmin-projects-instances-tables-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1597,7 +1597,7 @@ export def "projects update-iam-policy" [
 #
 # POST /v2/{resource}:testIamPermissions
 # operationId: bigtableadmin.projects.instances.tables.testIamPermissions
-export def "projects test-iam-permissions" [
+export def "bigtableadmin-projects-instances-tables-test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

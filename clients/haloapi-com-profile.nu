@@ -99,7 +99,7 @@ def auth-scheme-completer [] { ["ocp-apim-subscription-key" "query-subscription-
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "h5-profiles-appearance get-halo-5" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "halo-5-player-appearance" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -123,7 +123,7 @@ export def commands []: nothing -> table {
 #
 # GET /h5/profiles/{player}/appearance
 # operationId: Halo-5-Player-Appearance
-export def "h5-profiles-appearance get-halo-5" [
+export def "halo-5-player-appearance" [
   player: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -159,7 +159,7 @@ export def "h5-profiles-appearance get-halo-5" [
 #
 # GET /h5/profiles/{player}/emblem
 # operationId: Halo-5-Player-Emblem-Image
-export def "h5-profiles-emblem get-halo-5-image" [
+export def "halo-5-player-emblem-image" [
   player: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -197,7 +197,7 @@ export def "h5-profiles-emblem get-halo-5-image" [
 #
 # GET /h5/profiles/{player}/spartan
 # operationId: Halo-5-Player-Spartan-Image
-export def "h5-profiles-spartan get-halo-5-image" [
+export def "halo-5-player-spartan-image" [
   player: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

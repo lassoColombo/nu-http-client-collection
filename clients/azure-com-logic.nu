@@ -125,7 +125,7 @@ def track-events-options-completer [] { ["DisableSourceInfoEnrich" "None"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-logic-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -149,7 +149,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.Logic/operations
 # operationId: Operations_List
-export def "providers-microsoft-logic-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -185,7 +185,7 @@ export def "providers-microsoft-logic-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Logic/integrationAccounts
 # operationId: IntegrationAccounts_ListBySubscription
-export def "subscriptions-providers-microsoft-logic-integration-accounts list" [
+export def "integration-accounts-list-by-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -224,7 +224,7 @@ export def "subscriptions-providers-microsoft-logic-integration-accounts list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Logic/integrationServiceEnvironments
 # operationId: IntegrationServiceEnvironments_ListBySubscription
-export def "subscriptions-providers-microsoft-logic-integration-service-environments list" [
+export def "integration-service-environments-list-by-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -263,7 +263,7 @@ export def "subscriptions-providers-microsoft-logic-integration-service-environm
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Logic/workflows
 # operationId: Workflows_ListBySubscription
-export def "subscriptions-providers-microsoft-logic-workflows list" [
+export def "workflows-list-by-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -303,7 +303,7 @@ export def "subscriptions-providers-microsoft-logic-workflows list" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/integrationAccounts
 # operationId: IntegrationAccounts_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-logic-integration-accounts list" [
+export def "integration-accounts-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -344,7 +344,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-integration-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/integrationAccounts/{integrationAccountName}
 # operationId: IntegrationAccounts_Delete
-export def "subscriptions-resource-groups-providers-microsoft-logic-integration-accounts delete" [
+export def "integration-accounts-delete" [
   subscription_id: string
   resource_group_name: string
   integration_account_name: string
@@ -386,7 +386,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-integration-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/integrationAccounts/{integrationAccountName}
 # operationId: IntegrationAccounts_Get
-export def "subscriptions-resource-groups-providers-microsoft-logic-integration-accounts get" [
+export def "integration-accounts-get" [
   subscription_id: string
   resource_group_name: string
   integration_account_name: string
@@ -430,7 +430,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-integration-
 # operationId: IntegrationAccounts_Update
 # --properties shape: {integrationServiceEnvironment?: record, state?: "NotSpecified"|"Completed"|"Enabled"|"Disabled"|"Deleted"|"Suspended"}
 # --sku shape: {name: "NotSpecified"|"Free"|"Basic"|"Standard"}
-export def "subscriptions-resource-groups-providers-microsoft-logic-integration-accounts update" [
+export def "integration-accounts-update" [
   subscription_id: string
   resource_group_name: string
   integration_account_name: string
@@ -481,7 +481,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-integration-
 # operationId: IntegrationAccounts_CreateOrUpdate
 # --properties shape: {integrationServiceEnvironment?: record, state?: "NotSpecified"|"Completed"|"Enabled"|"Disabled"|"Deleted"|"Suspended"}
 # --sku shape: {name: "NotSpecified"|"Free"|"Basic"|"Standard"}
-export def "subscriptions-resource-groups-providers-microsoft-logic-integration-accounts create-or-update" [
+export def "integration-accounts-create-or-update" [
   subscription_id: string
   resource_group_name: string
   integration_account_name: string
@@ -530,7 +530,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-integration-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/integrationAccounts/{integrationAccountName}/agreements
 # operationId: IntegrationAccountAgreements_List
-export def "subscriptions-resource-groups-providers-microsoft-logic-integration-accounts-agreements list" [
+export def "integration-account-agreements-list" [
   subscription_id: string
   resource_group_name: string
   integration_account_name: string
@@ -574,7 +574,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-integration-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/integrationAccounts/{integrationAccountName}/agreements/{agreementName}
 # operationId: IntegrationAccountAgreements_Delete
-export def "subscriptions-resource-groups-providers-microsoft-logic-integration-accounts-agreements delete" [
+export def "integration-account-agreements-delete" [
   subscription_id: string
   resource_group_name: string
   integration_account_name: string
@@ -618,7 +618,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-integration-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/integrationAccounts/{integrationAccountName}/agreements/{agreementName}
 # operationId: IntegrationAccountAgreements_Get
-export def "subscriptions-resource-groups-providers-microsoft-logic-integration-accounts-agreements get" [
+export def "integration-account-agreements-get" [
   subscription_id: string
   resource_group_name: string
   integration_account_name: string
@@ -663,7 +663,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-integration-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/integrationAccounts/{integrationAccountName}/agreements/{agreementName}
 # operationId: IntegrationAccountAgreements_CreateOrUpdate
 # --properties shape: {agreementType: "NotSpecified"|"AS2"|"X12"|"Edifact", content: record, guestIdentity: record, guestPartner: string, hostIdentity: record, hostPartner: string, metadata?: record}
-export def "subscriptions-resource-groups-providers-microsoft-logic-integration-accounts-agreements create-or-update" [
+export def "integration-account-agreements-create-or-update" [
   subscription_id: string
   resource_group_name: string
   integration_account_name: string
@@ -713,7 +713,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-integration-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/integrationAccounts/{integrationAccountName}/agreements/{agreementName}/listContentCallbackUrl
 # operationId: IntegrationAccountAgreements_ListContentCallbackUrl
-export def "subscriptions-resource-groups-providers-microsoft-logic-integration-accounts-agreements-list-content-callback-url list" [
+export def "integration-account-agreements-list-content-callback-url" [
   subscription_id: string
   resource_group_name: string
   integration_account_name: string
@@ -762,7 +762,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-integration-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/integrationAccounts/{integrationAccountName}/assemblies
 # operationId: IntegrationAccountAssemblies_List
-export def "subscriptions-resource-groups-providers-microsoft-logic-integration-accounts-assemblies list" [
+export def "integration-account-assemblies-list" [
   subscription_id: string
   resource_group_name: string
   integration_account_name: string
@@ -804,7 +804,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-integration-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/integrationAccounts/{integrationAccountName}/assemblies/{assemblyArtifactName}
 # operationId: IntegrationAccountAssemblies_Delete
-export def "subscriptions-resource-groups-providers-microsoft-logic-integration-accounts-assemblies delete" [
+export def "integration-account-assemblies-delete" [
   subscription_id: string
   resource_group_name: string
   integration_account_name: string
@@ -848,7 +848,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-integration-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/integrationAccounts/{integrationAccountName}/assemblies/{assemblyArtifactName}
 # operationId: IntegrationAccountAssemblies_Get
-export def "subscriptions-resource-groups-providers-microsoft-logic-integration-accounts-assemblies get" [
+export def "integration-account-assemblies-get" [
   subscription_id: string
   resource_group_name: string
   integration_account_name: string
@@ -893,7 +893,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-integration-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/integrationAccounts/{integrationAccountName}/assemblies/{assemblyArtifactName}
 # operationId: IntegrationAccountAssemblies_CreateOrUpdate
 # --properties shape: {assemblyCulture?: string, assemblyName: string, assemblyPublicKeyToken?: string, assemblyVersion?: string, content?: any, contentLink?: record, contentType?: string}
-export def "subscriptions-resource-groups-providers-microsoft-logic-integration-accounts-assemblies create-or-update" [
+export def "integration-account-assemblies-create-or-update" [
   subscription_id: string
   resource_group_name: string
   integration_account_name: string
@@ -943,7 +943,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-integration-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/integrationAccounts/{integrationAccountName}/assemblies/{assemblyArtifactName}/listContentCallbackUrl
 # operationId: IntegrationAccountAssemblies_ListContentCallbackUrl
-export def "subscriptions-resource-groups-providers-microsoft-logic-integration-accounts-assemblies-list-content-callback-url list" [
+export def "integration-account-assemblies-list-content-callback-url" [
   subscription_id: string
   resource_group_name: string
   integration_account_name: string
@@ -987,7 +987,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-integration-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/integrationAccounts/{integrationAccountName}/batchConfigurations
 # operationId: IntegrationAccountBatchConfigurations_List
-export def "subscriptions-resource-groups-providers-microsoft-logic-integration-accounts-batch-configurations list" [
+export def "integration-account-batch-configurations-list" [
   subscription_id: string
   resource_group_name: string
   integration_account_name: string
@@ -1029,7 +1029,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-integration-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/integrationAccounts/{integrationAccountName}/batchConfigurations/{batchConfigurationName}
 # operationId: IntegrationAccountBatchConfigurations_Delete
-export def "subscriptions-resource-groups-providers-microsoft-logic-integration-accounts-batch-configurations delete" [
+export def "integration-account-batch-configurations-delete" [
   subscription_id: string
   resource_group_name: string
   integration_account_name: string
@@ -1073,7 +1073,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-integration-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/integrationAccounts/{integrationAccountName}/batchConfigurations/{batchConfigurationName}
 # operationId: IntegrationAccountBatchConfigurations_Get
-export def "subscriptions-resource-groups-providers-microsoft-logic-integration-accounts-batch-configurations get" [
+export def "integration-account-batch-configurations-get" [
   subscription_id: string
   resource_group_name: string
   integration_account_name: string
@@ -1118,7 +1118,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-integration-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/integrationAccounts/{integrationAccountName}/batchConfigurations/{batchConfigurationName}
 # operationId: IntegrationAccountBatchConfigurations_CreateOrUpdate
 # --properties shape: {batchGroupName: string, changedTime?: string, createdTime?: string, releaseCriteria: record, metadata?: any}
-export def "subscriptions-resource-groups-providers-microsoft-logic-integration-accounts-batch-configurations create-or-update" [
+export def "integration-account-batch-configurations-create-or-update" [
   subscription_id: string
   resource_group_name: string
   integration_account_name: string
@@ -1168,7 +1168,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-integration-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/integrationAccounts/{integrationAccountName}/certificates
 # operationId: IntegrationAccountCertificates_List
-export def "subscriptions-resource-groups-providers-microsoft-logic-integration-accounts-certificates list" [
+export def "integration-account-certificates-list" [
   subscription_id: string
   resource_group_name: string
   integration_account_name: string
@@ -1211,7 +1211,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-integration-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/integrationAccounts/{integrationAccountName}/certificates/{certificateName}
 # operationId: IntegrationAccountCertificates_Delete
-export def "subscriptions-resource-groups-providers-microsoft-logic-integration-accounts-certificates delete" [
+export def "integration-account-certificates-delete" [
   subscription_id: string
   resource_group_name: string
   integration_account_name: string
@@ -1255,7 +1255,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-integration-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/integrationAccounts/{integrationAccountName}/certificates/{certificateName}
 # operationId: IntegrationAccountCertificates_Get
-export def "subscriptions-resource-groups-providers-microsoft-logic-integration-accounts-certificates get" [
+export def "integration-account-certificates-get" [
   subscription_id: string
   resource_group_name: string
   integration_account_name: string
@@ -1300,7 +1300,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-integration-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/integrationAccounts/{integrationAccountName}/certificates/{certificateName}
 # operationId: IntegrationAccountCertificates_CreateOrUpdate
 # --properties shape: {key?: record, metadata?: record, publicCertificate?: string}
-export def "subscriptions-resource-groups-providers-microsoft-logic-integration-accounts-certificates create-or-update" [
+export def "integration-account-certificates-create-or-update" [
   subscription_id: string
   resource_group_name: string
   integration_account_name: string
@@ -1350,7 +1350,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-integration-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/integrationAccounts/{integrationAccountName}/listCallbackUrl
 # operationId: IntegrationAccounts_ListCallbackUrl
-export def "subscriptions-resource-groups-providers-microsoft-logic-integration-accounts-list-callback-url list" [
+export def "integration-accounts-list-callback-url" [
   subscription_id: string
   resource_group_name: string
   integration_account_name: string
@@ -1398,7 +1398,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-integration-
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/integrationAccounts/{integrationAccountName}/listKeyVaultKeys
 # operationId: IntegrationAccounts_ListKeyVaultKeys
 # --keyVault shape: {id?: string}
-export def "subscriptions-resource-groups-providers-microsoft-logic-integration-accounts-list-key-vault-keys list" [
+export def "integration-accounts-list-key-vault-keys" [
   subscription_id: string
   resource_group_name: string
   integration_account_name: string
@@ -1446,7 +1446,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-integration-
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/integrationAccounts/{integrationAccountName}/logTrackingEvents
 # operationId: IntegrationAccounts_LogTrackingEvents
 # --events item shape: {error?: record, eventLevel: "LogAlways"|"Critical"|"Error"|"Warning"|"Informational"|"Verbose", eventTime: string, ... (1 more fields)}
-export def "subscriptions-resource-groups-providers-microsoft-logic-integration-accounts-log-tracking-events create" [
+export def "integration-accounts-log-tracking-events" [
   subscription_id: string
   resource_group_name: string
   integration_account_name: string
@@ -1494,7 +1494,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-integration-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/integrationAccounts/{integrationAccountName}/maps
 # operationId: IntegrationAccountMaps_List
-export def "subscriptions-resource-groups-providers-microsoft-logic-integration-accounts-maps list" [
+export def "integration-account-maps-list" [
   subscription_id: string
   resource_group_name: string
   integration_account_name: string
@@ -1538,7 +1538,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-integration-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/integrationAccounts/{integrationAccountName}/maps/{mapName}
 # operationId: IntegrationAccountMaps_Delete
-export def "subscriptions-resource-groups-providers-microsoft-logic-integration-accounts-maps delete" [
+export def "integration-account-maps-delete" [
   subscription_id: string
   resource_group_name: string
   integration_account_name: string
@@ -1582,7 +1582,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-integration-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/integrationAccounts/{integrationAccountName}/maps/{mapName}
 # operationId: IntegrationAccountMaps_Get
-export def "subscriptions-resource-groups-providers-microsoft-logic-integration-accounts-maps get" [
+export def "integration-account-maps-get" [
   subscription_id: string
   resource_group_name: string
   integration_account_name: string
@@ -1627,7 +1627,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-integration-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/integrationAccounts/{integrationAccountName}/maps/{mapName}
 # operationId: IntegrationAccountMaps_CreateOrUpdate
 # --properties shape: {content?: string, contentLink?: record, contentType?: string, mapType: "NotSpecified"|"Xslt"|"Xslt20"|"Xslt30"|"Liquid", metadata?: record, parametersSchema?: record}
-export def "subscriptions-resource-groups-providers-microsoft-logic-integration-accounts-maps create-or-update" [
+export def "integration-account-maps-create-or-update" [
   subscription_id: string
   resource_group_name: string
   integration_account_name: string
@@ -1677,7 +1677,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-integration-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/integrationAccounts/{integrationAccountName}/maps/{mapName}/listContentCallbackUrl
 # operationId: IntegrationAccountMaps_ListContentCallbackUrl
-export def "subscriptions-resource-groups-providers-microsoft-logic-integration-accounts-maps-list-content-callback-url list" [
+export def "integration-account-maps-list-content-callback-url" [
   subscription_id: string
   resource_group_name: string
   integration_account_name: string
@@ -1726,7 +1726,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-integration-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/integrationAccounts/{integrationAccountName}/partners
 # operationId: IntegrationAccountPartners_List
-export def "subscriptions-resource-groups-providers-microsoft-logic-integration-accounts-partners list" [
+export def "integration-account-partners-list" [
   subscription_id: string
   resource_group_name: string
   integration_account_name: string
@@ -1770,7 +1770,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-integration-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/integrationAccounts/{integrationAccountName}/partners/{partnerName}
 # operationId: IntegrationAccountPartners_Delete
-export def "subscriptions-resource-groups-providers-microsoft-logic-integration-accounts-partners delete" [
+export def "integration-account-partners-delete" [
   subscription_id: string
   resource_group_name: string
   integration_account_name: string
@@ -1814,7 +1814,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-integration-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/integrationAccounts/{integrationAccountName}/partners/{partnerName}
 # operationId: IntegrationAccountPartners_Get
-export def "subscriptions-resource-groups-providers-microsoft-logic-integration-accounts-partners get" [
+export def "integration-account-partners-get" [
   subscription_id: string
   resource_group_name: string
   integration_account_name: string
@@ -1859,7 +1859,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-integration-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/integrationAccounts/{integrationAccountName}/partners/{partnerName}
 # operationId: IntegrationAccountPartners_CreateOrUpdate
 # --properties shape: {content: record, metadata?: record, partnerType: "NotSpecified"|"B2B"}
-export def "subscriptions-resource-groups-providers-microsoft-logic-integration-accounts-partners create-or-update" [
+export def "integration-account-partners-create-or-update" [
   subscription_id: string
   resource_group_name: string
   integration_account_name: string
@@ -1909,7 +1909,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-integration-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/integrationAccounts/{integrationAccountName}/partners/{partnerName}/listContentCallbackUrl
 # operationId: IntegrationAccountPartners_ListContentCallbackUrl
-export def "subscriptions-resource-groups-providers-microsoft-logic-integration-accounts-partners-list-content-callback-url list" [
+export def "integration-account-partners-list-content-callback-url" [
   subscription_id: string
   resource_group_name: string
   integration_account_name: string
@@ -1958,7 +1958,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-integration-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/integrationAccounts/{integrationAccountName}/regenerateAccessKey
 # operationId: IntegrationAccounts_RegenerateAccessKey
-export def "subscriptions-resource-groups-providers-microsoft-logic-integration-accounts-regenerate-access-key create" [
+export def "integration-accounts-regenerate-access-key" [
   subscription_id: string
   resource_group_name: string
   integration_account_name: string
@@ -2004,7 +2004,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-integration-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/integrationAccounts/{integrationAccountName}/schemas
 # operationId: IntegrationAccountSchemas_List
-export def "subscriptions-resource-groups-providers-microsoft-logic-integration-accounts-schemas list" [
+export def "integration-account-schemas-list" [
   subscription_id: string
   resource_group_name: string
   integration_account_name: string
@@ -2048,7 +2048,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-integration-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/integrationAccounts/{integrationAccountName}/schemas/{schemaName}
 # operationId: IntegrationAccountSchemas_Delete
-export def "subscriptions-resource-groups-providers-microsoft-logic-integration-accounts-schemas delete" [
+export def "integration-account-schemas-delete" [
   subscription_id: string
   resource_group_name: string
   integration_account_name: string
@@ -2092,7 +2092,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-integration-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/integrationAccounts/{integrationAccountName}/schemas/{schemaName}
 # operationId: IntegrationAccountSchemas_Get
-export def "subscriptions-resource-groups-providers-microsoft-logic-integration-accounts-schemas get" [
+export def "integration-account-schemas-get" [
   subscription_id: string
   resource_group_name: string
   integration_account_name: string
@@ -2137,7 +2137,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-integration-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/integrationAccounts/{integrationAccountName}/schemas/{schemaName}
 # operationId: IntegrationAccountSchemas_CreateOrUpdate
 # --properties shape: {content?: string, contentLink?: record, contentType?: string, documentName?: string, fileName?: string, metadata?: record, schemaType: "NotSpecified"|"Xml", targetNamespace?: string}
-export def "subscriptions-resource-groups-providers-microsoft-logic-integration-accounts-schemas create-or-update" [
+export def "integration-account-schemas-create-or-update" [
   subscription_id: string
   resource_group_name: string
   integration_account_name: string
@@ -2187,7 +2187,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-integration-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/integrationAccounts/{integrationAccountName}/schemas/{schemaName}/listContentCallbackUrl
 # operationId: IntegrationAccountSchemas_ListContentCallbackUrl
-export def "subscriptions-resource-groups-providers-microsoft-logic-integration-accounts-schemas-list-content-callback-url list" [
+export def "integration-account-schemas-list-content-callback-url" [
   subscription_id: string
   resource_group_name: string
   integration_account_name: string
@@ -2236,7 +2236,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-integration-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/integrationAccounts/{integrationAccountName}/sessions
 # operationId: IntegrationAccountSessions_List
-export def "subscriptions-resource-groups-providers-microsoft-logic-integration-accounts-sessions list" [
+export def "integration-account-sessions-list" [
   subscription_id: string
   resource_group_name: string
   integration_account_name: string
@@ -2280,7 +2280,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-integration-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/integrationAccounts/{integrationAccountName}/sessions/{sessionName}
 # operationId: IntegrationAccountSessions_Delete
-export def "subscriptions-resource-groups-providers-microsoft-logic-integration-accounts-sessions delete" [
+export def "integration-account-sessions-delete" [
   subscription_id: string
   resource_group_name: string
   integration_account_name: string
@@ -2324,7 +2324,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-integration-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/integrationAccounts/{integrationAccountName}/sessions/{sessionName}
 # operationId: IntegrationAccountSessions_Get
-export def "subscriptions-resource-groups-providers-microsoft-logic-integration-accounts-sessions get" [
+export def "integration-account-sessions-get" [
   subscription_id: string
   resource_group_name: string
   integration_account_name: string
@@ -2369,7 +2369,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-integration-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/integrationAccounts/{integrationAccountName}/sessions/{sessionName}
 # operationId: IntegrationAccountSessions_CreateOrUpdate
 # --properties shape: {content?: record}
-export def "subscriptions-resource-groups-providers-microsoft-logic-integration-accounts-sessions create-or-update" [
+export def "integration-account-sessions-create-or-update" [
   subscription_id: string
   resource_group_name: string
   integration_account_name: string
@@ -2419,7 +2419,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-integration-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/locations/{location}/workflows/{workflowName}/validate
 # operationId: Workflows_ValidateByLocation
-export def "subscriptions-resource-groups-providers-microsoft-logic-locations-workflows-validate validate" [
+export def "workflows-validate-by-location" [
   subscription_id: string
   resource_group_name: string
   location: string
@@ -2463,7 +2463,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-locations-wo
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/workflows
 # operationId: Workflows_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-logic-workflows list" [
+export def "workflows-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2505,7 +2505,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-workflows li
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/workflows/{workflowName}
 # operationId: Workflows_Delete
-export def "subscriptions-resource-groups-providers-microsoft-logic-workflows delete" [
+export def "workflows-delete" [
   subscription_id: string
   resource_group_name: string
   workflow_name: string
@@ -2547,7 +2547,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-workflows de
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/workflows/{workflowName}
 # operationId: Workflows_Get
-export def "subscriptions-resource-groups-providers-microsoft-logic-workflows get" [
+export def "workflows-get" [
   subscription_id: string
   resource_group_name: string
   workflow_name: string
@@ -2590,7 +2590,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-workflows ge
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/workflows/{workflowName}
 # operationId: Workflows_Update
 # --properties shape: {definition?: record, endpointsConfiguration?: record, integrationAccount?: record, integrationServiceEnvironment?: record, parameters?: record, provisioningState?: "NotSpecified"|"Accepted"|"Running"|"Ready"|"Creating"|"Created"|"Deleting"|"Deleted"|"Canceled"|"Failed"|"Succeeded"|"Moving"|"Updating"|"Registering"|"Registered"|"Unregistering"|"Unregistered"|"Completed", sku?: record, state?: "NotSpecified"|"Completed"|"Enabled"|"Disabled"|"Deleted"|"Suspended"}
-export def "subscriptions-resource-groups-providers-microsoft-logic-workflows update" [
+export def "workflows-update" [
   subscription_id: string
   resource_group_name: string
   workflow_name: string
@@ -2639,7 +2639,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-workflows up
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/workflows/{workflowName}
 # operationId: Workflows_CreateOrUpdate
 # --properties shape: {definition?: record, endpointsConfiguration?: record, integrationAccount?: record, integrationServiceEnvironment?: record, parameters?: record, provisioningState?: "NotSpecified"|"Accepted"|"Running"|"Ready"|"Creating"|"Created"|"Deleting"|"Deleted"|"Canceled"|"Failed"|"Succeeded"|"Moving"|"Updating"|"Registering"|"Registered"|"Unregistering"|"Unregistered"|"Completed", sku?: record, state?: "NotSpecified"|"Completed"|"Enabled"|"Disabled"|"Deleted"|"Suspended"}
-export def "subscriptions-resource-groups-providers-microsoft-logic-workflows create-or-update" [
+export def "workflows-create-or-update" [
   subscription_id: string
   resource_group_name: string
   workflow_name: string
@@ -2687,7 +2687,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-workflows cr
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/workflows/{workflowName}/disable
 # operationId: Workflows_Disable
-export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-disable disable" [
+export def "workflows-disable" [
   subscription_id: string
   resource_group_name: string
   workflow_name: string
@@ -2729,7 +2729,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-di
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/workflows/{workflowName}/enable
 # operationId: Workflows_Enable
-export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-enable enable" [
+export def "workflows-enable" [
   subscription_id: string
   resource_group_name: string
   workflow_name: string
@@ -2771,7 +2771,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-en
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/workflows/{workflowName}/generateUpgradedDefinition
 # operationId: Workflows_GenerateUpgradedDefinition
-export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-generate-upgraded-definition generate" [
+export def "workflows-generate-upgraded-definition" [
   subscription_id: string
   resource_group_name: string
   workflow_name: string
@@ -2817,7 +2817,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-ge
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/workflows/{workflowName}/listCallbackUrl
 # operationId: Workflows_ListCallbackUrl
-export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-list-callback-url list" [
+export def "workflows-list-callback-url" [
   subscription_id: string
   resource_group_name: string
   workflow_name: string
@@ -2864,7 +2864,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-li
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/workflows/{workflowName}/listSwagger
 # operationId: Workflows_ListSwagger
-export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-list-swagger list" [
+export def "workflows-list-swagger" [
   subscription_id: string
   resource_group_name: string
   workflow_name: string
@@ -2907,7 +2907,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-li
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/workflows/{workflowName}/move
 # operationId: Workflows_Move
 # --properties shape: {definition?: record, endpointsConfiguration?: record, integrationAccount?: record, integrationServiceEnvironment?: record, parameters?: record, provisioningState?: "NotSpecified"|"Accepted"|"Running"|"Ready"|"Creating"|"Created"|"Deleting"|"Deleted"|"Canceled"|"Failed"|"Succeeded"|"Moving"|"Updating"|"Registering"|"Registered"|"Unregistering"|"Unregistered"|"Completed", sku?: record, state?: "NotSpecified"|"Completed"|"Enabled"|"Disabled"|"Deleted"|"Suspended"}
-export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-move move" [
+export def "workflows-move" [
   subscription_id: string
   resource_group_name: string
   workflow_name: string
@@ -2955,7 +2955,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-mo
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/workflows/{workflowName}/regenerateAccessKey
 # operationId: Workflows_RegenerateAccessKey
-export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-regenerate-access-key create" [
+export def "workflows-regenerate-access-key" [
   subscription_id: string
   resource_group_name: string
   workflow_name: string
@@ -3001,7 +3001,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-re
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/workflows/{workflowName}/runs
 # operationId: WorkflowRuns_List
-export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-runs list" [
+export def "workflow-runs-list" [
   subscription_id: string
   resource_group_name: string
   workflow_name: string
@@ -3045,7 +3045,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-ru
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/workflows/{workflowName}/runs/{runName}
 # operationId: WorkflowRuns_Get
-export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-runs get" [
+export def "workflow-runs-get" [
   subscription_id: string
   resource_group_name: string
   workflow_name: string
@@ -3089,7 +3089,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-ru
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/workflows/{workflowName}/runs/{runName}/actions
 # operationId: WorkflowRunActions_List
-export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-runs-actions list" [
+export def "workflow-run-actions-list" [
   subscription_id: string
   resource_group_name: string
   workflow_name: string
@@ -3135,7 +3135,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-ru
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/workflows/{workflowName}/runs/{runName}/actions/{actionName}
 # operationId: WorkflowRunActions_Get
-export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-runs-actions get" [
+export def "workflow-run-actions-get" [
   subscription_id: string
   resource_group_name: string
   workflow_name: string
@@ -3181,7 +3181,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-ru
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/workflows/{workflowName}/runs/{runName}/actions/{actionName}/listExpressionTraces
 # operationId: WorkflowRunActions_ListExpressionTraces
-export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-runs-actions-list-expression-traces list" [
+export def "workflow-run-actions-list-expression-traces" [
   subscription_id: string
   resource_group_name: string
   workflow_name: string
@@ -3227,7 +3227,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-ru
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/workflows/{workflowName}/runs/{runName}/actions/{actionName}/repetitions
 # operationId: WorkflowRunActionRepetitions_List
-export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-runs-actions-repetitions list" [
+export def "workflow-run-action-repetitions-list" [
   subscription_id: string
   resource_group_name: string
   workflow_name: string
@@ -3273,7 +3273,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-ru
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/workflows/{workflowName}/runs/{runName}/actions/{actionName}/repetitions/{repetitionName}
 # operationId: WorkflowRunActionRepetitions_Get
-export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-runs-actions-repetitions get" [
+export def "workflow-run-action-repetitions-get" [
   subscription_id: string
   resource_group_name: string
   workflow_name: string
@@ -3321,7 +3321,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-ru
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/workflows/{workflowName}/runs/{runName}/actions/{actionName}/repetitions/{repetitionName}/listExpressionTraces
 # operationId: WorkflowRunActionRepetitions_ListExpressionTraces
-export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-runs-actions-repetitions-list-expression-traces list" [
+export def "workflow-run-action-repetitions-list-expression-traces" [
   subscription_id: string
   resource_group_name: string
   workflow_name: string
@@ -3369,7 +3369,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-ru
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/workflows/{workflowName}/runs/{runName}/actions/{actionName}/repetitions/{repetitionName}/requestHistories
 # operationId: WorkflowRunActionRepetitionsRequestHistories_List
-export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-runs-actions-repetitions-request-histories list" [
+export def "workflow-run-action-repetitions-request-histories-list" [
   subscription_id: string
   resource_group_name: string
   workflow_name: string
@@ -3417,7 +3417,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-ru
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/workflows/{workflowName}/runs/{runName}/actions/{actionName}/repetitions/{repetitionName}/requestHistories/{requestHistoryName}
 # operationId: WorkflowRunActionRepetitionsRequestHistories_Get
-export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-runs-actions-repetitions-request-histories get" [
+export def "workflow-run-action-repetitions-request-histories-get" [
   subscription_id: string
   resource_group_name: string
   workflow_name: string
@@ -3467,7 +3467,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-ru
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/workflows/{workflowName}/runs/{runName}/actions/{actionName}/requestHistories
 # operationId: WorkflowRunActionRequestHistories_List
-export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-runs-actions-request-histories list" [
+export def "workflow-run-action-request-histories-list" [
   subscription_id: string
   resource_group_name: string
   workflow_name: string
@@ -3513,7 +3513,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-ru
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/workflows/{workflowName}/runs/{runName}/actions/{actionName}/requestHistories/{requestHistoryName}
 # operationId: WorkflowRunActionRequestHistories_Get
-export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-runs-actions-request-histories get" [
+export def "workflow-run-action-request-histories-get" [
   subscription_id: string
   resource_group_name: string
   workflow_name: string
@@ -3561,7 +3561,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-ru
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/workflows/{workflowName}/runs/{runName}/actions/{actionName}/scopeRepetitions
 # operationId: WorkflowRunActionScopeRepetitions_List
-export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-runs-actions-scope-repetitions list" [
+export def "workflow-run-action-scope-repetitions-list" [
   subscription_id: string
   resource_group_name: string
   workflow_name: string
@@ -3607,7 +3607,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-ru
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/workflows/{workflowName}/runs/{runName}/actions/{actionName}/scopeRepetitions/{repetitionName}
 # operationId: WorkflowRunActionScopeRepetitions_Get
-export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-runs-actions-scope-repetitions get" [
+export def "workflow-run-action-scope-repetitions-get" [
   subscription_id: string
   resource_group_name: string
   workflow_name: string
@@ -3655,7 +3655,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-ru
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/workflows/{workflowName}/runs/{runName}/cancel
 # operationId: WorkflowRuns_Cancel
-export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-runs-cancel cancel" [
+export def "workflow-runs-cancel" [
   subscription_id: string
   resource_group_name: string
   workflow_name: string
@@ -3699,7 +3699,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-ru
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/workflows/{workflowName}/runs/{runName}/operations/{operationId}
 # operationId: WorkflowRunOperations_Get
-export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-runs-operations get" [
+export def "workflow-run-operations-get" [
   subscription_id: string
   resource_group_name: string
   workflow_name: string
@@ -3745,7 +3745,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-ru
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/workflows/{workflowName}/triggers
 # operationId: WorkflowTriggers_List
-export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-triggers list" [
+export def "workflow-triggers-list" [
   subscription_id: string
   resource_group_name: string
   workflow_name: string
@@ -3789,7 +3789,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-tr
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/workflows/{workflowName}/triggers/{triggerName}
 # operationId: WorkflowTriggers_Get
-export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-triggers get" [
+export def "workflow-triggers-get" [
   subscription_id: string
   resource_group_name: string
   workflow_name: string
@@ -3833,7 +3833,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-tr
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/workflows/{workflowName}/triggers/{triggerName}/histories
 # operationId: WorkflowTriggerHistories_List
-export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-triggers-histories list" [
+export def "workflow-trigger-histories-list" [
   subscription_id: string
   resource_group_name: string
   workflow_name: string
@@ -3879,7 +3879,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-tr
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/workflows/{workflowName}/triggers/{triggerName}/histories/{historyName}
 # operationId: WorkflowTriggerHistories_Get
-export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-triggers-histories get" [
+export def "workflow-trigger-histories-get" [
   subscription_id: string
   resource_group_name: string
   workflow_name: string
@@ -3925,7 +3925,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-tr
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/workflows/{workflowName}/triggers/{triggerName}/histories/{historyName}/resubmit
 # operationId: WorkflowTriggerHistories_Resubmit
-export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-triggers-histories-resubmit trigger" [
+export def "workflow-trigger-histories-resubmit" [
   subscription_id: string
   resource_group_name: string
   workflow_name: string
@@ -3971,7 +3971,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-tr
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/workflows/{workflowName}/triggers/{triggerName}/listCallbackUrl
 # operationId: WorkflowTriggers_ListCallbackUrl
-export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-triggers-list-callback-url list" [
+export def "workflow-triggers-list-callback-url" [
   subscription_id: string
   resource_group_name: string
   workflow_name: string
@@ -4015,7 +4015,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-tr
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/workflows/{workflowName}/triggers/{triggerName}/reset
 # operationId: WorkflowTriggers_Reset
-export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-triggers-reset reset" [
+export def "workflow-triggers-reset" [
   subscription_id: string
   resource_group_name: string
   workflow_name: string
@@ -4059,7 +4059,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-tr
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/workflows/{workflowName}/triggers/{triggerName}/run
 # operationId: WorkflowTriggers_Run
-export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-triggers-run create" [
+export def "workflow-triggers-run" [
   subscription_id: string
   resource_group_name: string
   workflow_name: string
@@ -4103,7 +4103,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-tr
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/workflows/{workflowName}/triggers/{triggerName}/schemas/json
 # operationId: WorkflowTriggers_GetSchemaJson
-export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-triggers-schemas-json get" [
+export def "workflow-triggers-get-schema-json" [
   subscription_id: string
   resource_group_name: string
   workflow_name: string
@@ -4148,7 +4148,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-tr
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/workflows/{workflowName}/triggers/{triggerName}/setState
 # operationId: WorkflowTriggers_SetState
 # --source shape: {properties?: record}
-export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-triggers-set-state update" [
+export def "workflow-triggers-set-state" [
   subscription_id: string
   resource_group_name: string
   workflow_name: string
@@ -4197,7 +4197,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-tr
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/workflows/{workflowName}/validate
 # operationId: Workflows_ValidateByResourceGroup
 # --properties shape: {definition?: record, endpointsConfiguration?: record, integrationAccount?: record, integrationServiceEnvironment?: record, parameters?: record, provisioningState?: "NotSpecified"|"Accepted"|"Running"|"Ready"|"Creating"|"Created"|"Deleting"|"Deleted"|"Canceled"|"Failed"|"Succeeded"|"Moving"|"Updating"|"Registering"|"Registered"|"Unregistering"|"Unregistered"|"Completed", sku?: record, state?: "NotSpecified"|"Completed"|"Enabled"|"Disabled"|"Deleted"|"Suspended"}
-export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-validate validate" [
+export def "workflows-validate-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   workflow_name: string
@@ -4245,7 +4245,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-va
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/workflows/{workflowName}/versions
 # operationId: WorkflowVersions_List
-export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-versions list" [
+export def "workflow-versions-list" [
   subscription_id: string
   resource_group_name: string
   workflow_name: string
@@ -4288,7 +4288,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-ve
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/workflows/{workflowName}/versions/{versionId}
 # operationId: WorkflowVersions_Get
-export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-versions get" [
+export def "workflow-versions-get" [
   subscription_id: string
   resource_group_name: string
   workflow_name: string
@@ -4332,7 +4332,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-ve
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Logic/workflows/{workflowName}/versions/{versionId}/triggers/{triggerName}/listCallbackUrl
 # operationId: WorkflowVersionTriggers_ListCallbackUrl
-export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-versions-triggers-list-callback-url version" [
+export def "workflow-version-triggers-list-callback-url" [
   subscription_id: string
   resource_group_name: string
   workflow_name: string
@@ -4383,7 +4383,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-workflows-ve
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Logic/integrationServiceEnvironments
 # operationId: IntegrationServiceEnvironments_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-logic-integration-service-environments list" [
+export def "integration-service-environments-list-by-resource-group" [
   subscription_id: string
   resource_group: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4424,7 +4424,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-integration-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Logic/integrationServiceEnvironments/{integrationServiceEnvironmentName}
 # operationId: IntegrationServiceEnvironments_Delete
-export def "subscriptions-resource-groups-providers-microsoft-logic-integration-service-environments delete" [
+export def "integration-service-environments-delete" [
   subscription_id: string
   resource_group: string
   integration_service_environment_name: string
@@ -4466,7 +4466,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-integration-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Logic/integrationServiceEnvironments/{integrationServiceEnvironmentName}
 # operationId: IntegrationServiceEnvironments_Get
-export def "subscriptions-resource-groups-providers-microsoft-logic-integration-service-environments get" [
+export def "integration-service-environments-get" [
   subscription_id: string
   resource_group: string
   integration_service_environment_name: string
@@ -4510,7 +4510,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-integration-
 # operationId: IntegrationServiceEnvironments_Update
 # --properties shape: {endpointsConfiguration?: record, integrationServiceEnvironmentId?: string, networkConfiguration?: record, provisioningState?: "NotSpecified"|"Accepted"|"Running"|"Ready"|"Creating"|"Created"|"Deleting"|"Deleted"|"Canceled"|"Failed"|"Succeeded"|"Moving"|"Updating"|"Registering"|"Registered"|"Unregistering"|"Unregistered"|"Completed", state?: "NotSpecified"|"Completed"|"Enabled"|"Disabled"|"Deleted"|"Suspended"}
 # --sku shape: {capacity?: int, name?: "NotSpecified"|"Premium"|"Developer"}
-export def "subscriptions-resource-groups-providers-microsoft-logic-integration-service-environments update" [
+export def "integration-service-environments-update" [
   subscription_id: string
   resource_group: string
   integration_service_environment_name: string
@@ -4561,7 +4561,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-integration-
 # operationId: IntegrationServiceEnvironments_CreateOrUpdate
 # --properties shape: {endpointsConfiguration?: record, integrationServiceEnvironmentId?: string, networkConfiguration?: record, provisioningState?: "NotSpecified"|"Accepted"|"Running"|"Ready"|"Creating"|"Created"|"Deleting"|"Deleted"|"Canceled"|"Failed"|"Succeeded"|"Moving"|"Updating"|"Registering"|"Registered"|"Unregistering"|"Unregistered"|"Completed", state?: "NotSpecified"|"Completed"|"Enabled"|"Disabled"|"Deleted"|"Suspended"}
 # --sku shape: {capacity?: int, name?: "NotSpecified"|"Premium"|"Developer"}
-export def "subscriptions-resource-groups-providers-microsoft-logic-integration-service-environments create-or-update" [
+export def "integration-service-environments-create-or-update" [
   subscription_id: string
   resource_group: string
   integration_service_environment_name: string
@@ -4610,7 +4610,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-integration-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Logic/integrationServiceEnvironments/{integrationServiceEnvironmentName}/health/network
 # operationId: IntegrationServiceEnvironmentNetworkHealth_Get
-export def "subscriptions-resource-groups-providers-microsoft-logic-integration-service-environments-health-network get" [
+export def "integration-service-environment-network-health-get" [
   subscription_id: string
   resource_group: string
   integration_service_environment_name: string
@@ -4652,7 +4652,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-integration-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Logic/integrationServiceEnvironments/{integrationServiceEnvironmentName}/managedApis
 # operationId: IntegrationServiceEnvironmentManagedApis_List
-export def "subscriptions-resource-groups-providers-microsoft-logic-integration-service-environments-managed-apis list" [
+export def "integration-service-environment-managed-apis-list" [
   subscription_id: string
   resource_group: string
   integration_service_environment_name: string
@@ -4694,7 +4694,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-integration-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Logic/integrationServiceEnvironments/{integrationServiceEnvironmentName}/managedApis/{apiName}
 # operationId: IntegrationServiceEnvironmentManagedApis_Delete
-export def "subscriptions-resource-groups-providers-microsoft-logic-integration-service-environments-managed-apis delete" [
+export def "integration-service-environment-managed-apis-delete" [
   subscription_id: string
   resource_group: string
   integration_service_environment_name: string
@@ -4738,7 +4738,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-integration-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Logic/integrationServiceEnvironments/{integrationServiceEnvironmentName}/managedApis/{apiName}
 # operationId: IntegrationServiceEnvironmentManagedApis_Get
-export def "subscriptions-resource-groups-providers-microsoft-logic-integration-service-environments-managed-apis get" [
+export def "integration-service-environment-managed-apis-get" [
   subscription_id: string
   resource_group: string
   integration_service_environment_name: string
@@ -4782,7 +4782,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-integration-
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Logic/integrationServiceEnvironments/{integrationServiceEnvironmentName}/managedApis/{apiName}
 # operationId: IntegrationServiceEnvironmentManagedApis_Put
-export def "subscriptions-resource-groups-providers-microsoft-logic-integration-service-environments-managed-apis update" [
+export def "integration-service-environment-managed-apis-put" [
   subscription_id: string
   resource_group: string
   integration_service_environment_name: string
@@ -4826,7 +4826,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-integration-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Logic/integrationServiceEnvironments/{integrationServiceEnvironmentName}/managedApis/{apiName}/apiOperations
 # operationId: IntegrationServiceEnvironmentManagedApiOperations_List
-export def "subscriptions-resource-groups-providers-microsoft-logic-integration-service-environments-managed-apis-api-operations list" [
+export def "integration-service-environment-managed-api-operations-list" [
   subscription_id: string
   resource_group: string
   integration_service_environment_name: string
@@ -4870,7 +4870,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-integration-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Logic/integrationServiceEnvironments/{integrationServiceEnvironmentName}/restart
 # operationId: IntegrationServiceEnvironments_Restart
-export def "subscriptions-resource-groups-providers-microsoft-logic-integration-service-environments-restart restart" [
+export def "integration-service-environments-restart" [
   subscription_id: string
   resource_group: string
   integration_service_environment_name: string
@@ -4912,7 +4912,7 @@ export def "subscriptions-resource-groups-providers-microsoft-logic-integration-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Logic/integrationServiceEnvironments/{integrationServiceEnvironmentName}/skus
 # operationId: IntegrationServiceEnvironmentSkus_List
-export def "subscriptions-resource-groups-providers-microsoft-logic-integration-service-environments-skus list" [
+export def "integration-service-environment-skus-list" [
   subscription_id: string
   resource_group: string
   integration_service_environment_name: string

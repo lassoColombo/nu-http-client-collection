@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-operations-management-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.OperationsManagement/operations
 # operationId: Operations_List
-export def "providers-microsoft-operations-management-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -176,7 +176,7 @@ export def "providers-microsoft-operations-management-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.OperationsManagement/ManagementAssociations
 # operationId: ManagementAssociations_ListBySubscription
-export def "subscriptions-providers-microsoft-operations-management-management-associations list" [
+export def "management-associations-list-by-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -214,7 +214,7 @@ export def "subscriptions-providers-microsoft-operations-management-management-a
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.OperationsManagement/ManagementConfigurations
 # operationId: ManagementConfigurations_ListBySubscription
-export def "subscriptions-providers-microsoft-operations-management-management-configurations list" [
+export def "management-configurations-list-by-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -252,7 +252,7 @@ export def "subscriptions-providers-microsoft-operations-management-management-c
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.OperationsManagement/solutions
 # operationId: Solutions_ListBySubscription
-export def "subscriptions-providers-microsoft-operations-management-solutions list" [
+export def "solutions-list-by-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -290,7 +290,7 @@ export def "subscriptions-providers-microsoft-operations-management-solutions li
 #
 # DELETE /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.OperationsManagement/ManagementConfigurations/{managementConfigurationName}
 # operationId: ManagementConfigurations_Delete
-export def "subscriptions-resourcegroups-providers-microsoft-operations-management-management-configurations delete" [
+export def "management-configurations-delete" [
   subscription_id: string
   resource_group_name: string
   management_configuration_name: string
@@ -332,7 +332,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-operations-manageme
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.OperationsManagement/ManagementConfigurations/{managementConfigurationName}
 # operationId: ManagementConfigurations_Get
-export def "subscriptions-resourcegroups-providers-microsoft-operations-management-management-configurations get" [
+export def "management-configurations-get" [
   subscription_id: string
   resource_group_name: string
   management_configuration_name: string
@@ -375,7 +375,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-operations-manageme
 # PUT /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.OperationsManagement/ManagementConfigurations/{managementConfigurationName}
 # operationId: ManagementConfigurations_CreateOrUpdate
 # --properties shape: {applicationId?: string, parameters: list, parentResourceType: string, template: record}
-export def "subscriptions-resourcegroups-providers-microsoft-operations-management-management-configurations create-or-update" [
+export def "management-configurations-create-or-update" [
   subscription_id: string
   resource_group_name: string
   management_configuration_name: string
@@ -422,7 +422,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-operations-manageme
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.OperationsManagement/solutions
 # operationId: Solutions_ListByResourceGroup
-export def "subscriptions-resourcegroups-providers-microsoft-operations-management-solutions list-by-resource-group" [
+export def "solutions-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -462,7 +462,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-operations-manageme
 #
 # DELETE /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.OperationsManagement/solutions/{solutionName}
 # operationId: Solutions_Delete
-export def "subscriptions-resourcegroups-providers-microsoft-operations-management-solutions delete" [
+export def "solutions-delete" [
   subscription_id: string
   resource_group_name: string
   solution_name: string
@@ -504,7 +504,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-operations-manageme
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.OperationsManagement/solutions/{solutionName}
 # operationId: Solutions_Get
-export def "subscriptions-resourcegroups-providers-microsoft-operations-management-solutions get" [
+export def "solutions-get" [
   subscription_id: string
   resource_group_name: string
   solution_name: string
@@ -546,7 +546,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-operations-manageme
 #
 # PATCH /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.OperationsManagement/solutions/{solutionName}
 # operationId: Solutions_Update
-export def "subscriptions-resourcegroups-providers-microsoft-operations-management-solutions update" [
+export def "solutions-update" [
   subscription_id: string
   resource_group_name: string
   solution_name: string
@@ -594,7 +594,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-operations-manageme
 # operationId: Solutions_CreateOrUpdate
 # --plan shape: {name?: string, product?: string, promotionCode?: string, publisher?: string}
 # --properties shape: {containedResources?: list<string>, referencedResources?: list<string>, workspaceResourceId: string}
-export def "subscriptions-resourcegroups-providers-microsoft-operations-management-solutions create-or-update" [
+export def "solutions-create-or-update" [
   subscription_id: string
   resource_group_name: string
   solution_name: string
@@ -643,7 +643,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-operations-manageme
 #
 # DELETE /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/{providerName}/{resourceType}/{resourceName}/providers/Microsoft.OperationsManagement/ManagementAssociations/{managementAssociationName}
 # operationId: ManagementAssociations_Delete
-export def "subscriptions-resourcegroups-providers-providers-microsoft-operations-management-management-associations delete" [
+export def "management-associations-delete" [
   subscription_id: string
   resource_group_name: string
   provider_name: string
@@ -691,7 +691,7 @@ export def "subscriptions-resourcegroups-providers-providers-microsoft-operation
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/{providerName}/{resourceType}/{resourceName}/providers/Microsoft.OperationsManagement/ManagementAssociations/{managementAssociationName}
 # operationId: ManagementAssociations_Get
-export def "subscriptions-resourcegroups-providers-providers-microsoft-operations-management-management-associations get" [
+export def "management-associations-get" [
   subscription_id: string
   resource_group_name: string
   provider_name: string
@@ -740,7 +740,7 @@ export def "subscriptions-resourcegroups-providers-providers-microsoft-operation
 # PUT /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/{providerName}/{resourceType}/{resourceName}/providers/Microsoft.OperationsManagement/ManagementAssociations/{managementAssociationName}
 # operationId: ManagementAssociations_CreateOrUpdate
 # --properties shape: {applicationId: string}
-export def "subscriptions-resourcegroups-providers-providers-microsoft-operations-management-management-associations create-or-update" [
+export def "management-associations-create-or-update" [
   subscription_id: string
   resource_group_name: string
   provider_name: string

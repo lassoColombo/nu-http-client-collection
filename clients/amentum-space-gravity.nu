@@ -97,7 +97,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "egm2008-geoid-height get-calculate" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "app-api-egm2008-endpoints-egm2008-calculate-height" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -121,7 +121,7 @@ export def commands []: nothing -> table {
 #
 # GET /egm2008/geoid_height
 # operationId: app.api_egm2008.endpoints.EGM2008.calculate_height
-export def "egm2008-geoid-height get-calculate" [
+export def "app-api-egm2008-endpoints-egm2008-calculate-height" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -158,7 +158,7 @@ export def "egm2008-geoid-height get-calculate" [
 #
 # GET /egm2008/gravity_anomaly
 # operationId: app.api_egm2008.endpoints.EGM2008.calculate_anomaly
-export def "egm2008-gravity-anomaly get-calculate" [
+export def "app-api-egm2008-endpoints-egm2008-calculate-anomaly" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

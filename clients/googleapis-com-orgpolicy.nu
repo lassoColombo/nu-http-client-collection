@@ -130,7 +130,7 @@ def action-type-completer [] { ["ACTION_TYPE_UNSPECIFIED" "ALLOW" "DENY"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "orgpolicy-projects-policies-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -154,7 +154,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v2/{name}
 # operationId: orgpolicy.projects.policies.delete
-export def "projects delete" [
+export def "orgpolicy-projects-policies-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -202,7 +202,7 @@ export def "projects delete" [
 #
 # GET /v2/{name}
 # operationId: orgpolicy.projects.policies.get
-export def "projects get" [
+export def "orgpolicy-projects-policies-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -253,7 +253,7 @@ export def "projects get" [
 # --alternate shape: {launch?: string, spec?: record}
 # --dryRunSpec shape: {etag?: string, inheritFromParent?: bool, reset?: bool, rules?: list}
 # --spec shape: {etag?: string, inheritFromParent?: bool, reset?: bool, rules?: list}
-export def "projects update" [
+export def "orgpolicy-projects-policies-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -309,7 +309,7 @@ export def "projects update" [
 #
 # GET /v2/{name}:getEffectivePolicy
 # operationId: orgpolicy.projects.policies.getEffectivePolicy
-export def "projects get-effective-policy" [
+export def "orgpolicy-projects-policies-get-effective-policy" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -357,7 +357,7 @@ export def "projects get-effective-policy" [
 #
 # GET /v2/{parent}/constraints
 # operationId: orgpolicy.projects.constraints.list
-export def "constraints list" [
+export def "orgpolicy-projects-constraints-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -407,7 +407,7 @@ export def "constraints list" [
 #
 # GET /v2/{parent}/customConstraints
 # operationId: orgpolicy.organizations.customConstraints.list
-export def "custom-constraints list" [
+export def "orgpolicy-organizations-custom-constraints-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -457,7 +457,7 @@ export def "custom-constraints list" [
 #
 # POST /v2/{parent}/customConstraints
 # operationId: orgpolicy.organizations.customConstraints.create
-export def "custom-constraints create" [
+export def "orgpolicy-organizations-custom-constraints-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -515,7 +515,7 @@ export def "custom-constraints create" [
 #
 # GET /v2/{parent}/policies
 # operationId: orgpolicy.projects.policies.list
-export def "policies list" [
+export def "orgpolicy-projects-policies-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -568,7 +568,7 @@ export def "policies list" [
 # --alternate shape: {launch?: string, spec?: record}
 # --dryRunSpec shape: {etag?: string, inheritFromParent?: bool, reset?: bool, rules?: list}
 # --spec shape: {etag?: string, inheritFromParent?: bool, reset?: bool, rules?: list}
-export def "policies create" [
+export def "orgpolicy-projects-policies-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

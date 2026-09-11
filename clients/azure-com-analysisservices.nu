@@ -122,7 +122,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-analysis-services-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.AnalysisServices/operations
 # operationId: Operations_List
-export def "providers-microsoft-analysis-services-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -182,7 +182,7 @@ export def "providers-microsoft-analysis-services-operations list" [
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.AnalysisServices/locations/{location}/checkNameAvailability
 # operationId: Servers_CheckNameAvailability
-export def "subscriptions-providers-microsoft-analysis-services-locations-check-name-availability check-servers" [
+export def "servers-check-name-availability" [
   subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -227,7 +227,7 @@ export def "subscriptions-providers-microsoft-analysis-services-locations-check-
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.AnalysisServices/locations/{location}/operationresults/{operationId}
 # operationId: Servers_ListOperationResults
-export def "subscriptions-providers-microsoft-analysis-services-locations-operationresults list-servers-operation-results" [
+export def "servers-list-operation-results" [
   subscription_id: string
   location: string
   operation_id: string
@@ -269,7 +269,7 @@ export def "subscriptions-providers-microsoft-analysis-services-locations-operat
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.AnalysisServices/locations/{location}/operationstatuses/{operationId}
 # operationId: Servers_ListOperationStatuses
-export def "subscriptions-providers-microsoft-analysis-services-locations-operationstatuses list-servers-operation-statuses" [
+export def "servers-list-operation-statuses" [
   subscription_id: string
   location: string
   operation_id: string
@@ -311,7 +311,7 @@ export def "subscriptions-providers-microsoft-analysis-services-locations-operat
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.AnalysisServices/servers
 # operationId: Servers_List
-export def "subscriptions-providers-microsoft-analysis-services-servers list" [
+export def "servers-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -349,7 +349,7 @@ export def "subscriptions-providers-microsoft-analysis-services-servers list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.AnalysisServices/skus
 # operationId: Servers_ListSkusForNew
-export def "subscriptions-providers-microsoft-analysis-services-skus list-servers-for-new" [
+export def "servers-list-skus-for-new" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -387,7 +387,7 @@ export def "subscriptions-providers-microsoft-analysis-services-skus list-server
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AnalysisServices/servers
 # operationId: Servers_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-analysis-services-servers list" [
+export def "servers-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -427,7 +427,7 @@ export def "subscriptions-resource-groups-providers-microsoft-analysis-services-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AnalysisServices/servers/{serverName}
 # operationId: Servers_Delete
-export def "subscriptions-resource-groups-providers-microsoft-analysis-services-servers delete" [
+export def "servers-delete" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -469,7 +469,7 @@ export def "subscriptions-resource-groups-providers-microsoft-analysis-services-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AnalysisServices/servers/{serverName}
 # operationId: Servers_GetDetails
-export def "subscriptions-resource-groups-providers-microsoft-analysis-services-servers get-details" [
+export def "servers-get-details" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -513,7 +513,7 @@ export def "subscriptions-resource-groups-providers-microsoft-analysis-services-
 # operationId: Servers_Update
 # --properties shape: {asAdministrators?: record, backupBlobContainerUri?: string, gatewayDetails?: record, ipV4FirewallSettings?: record, querypoolConnectionMode?: "All"|"ReadOnly"}
 # --sku shape: {capacity?: int, name: string, tier?: "Development"|"Basic"|"Standard"}
-export def "subscriptions-resource-groups-providers-microsoft-analysis-services-servers update" [
+export def "servers-update" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -563,7 +563,7 @@ export def "subscriptions-resource-groups-providers-microsoft-analysis-services-
 # operationId: Servers_Create
 # --properties shape: {asAdministrators?: record, backupBlobContainerUri?: string, gatewayDetails?: record, ipV4FirewallSettings?: record, querypoolConnectionMode?: "All"|"ReadOnly"}
 # --sku shape: {capacity?: int, name: string, tier?: "Development"|"Basic"|"Standard"}
-export def "subscriptions-resource-groups-providers-microsoft-analysis-services-servers create" [
+export def "servers-create" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -612,7 +612,7 @@ export def "subscriptions-resource-groups-providers-microsoft-analysis-services-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AnalysisServices/servers/{serverName}/dissociateGateway
 # operationId: Servers_DissociateGateway
-export def "subscriptions-resource-groups-providers-microsoft-analysis-services-servers-dissociate-gateway create" [
+export def "servers-dissociate-gateway" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -654,7 +654,7 @@ export def "subscriptions-resource-groups-providers-microsoft-analysis-services-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AnalysisServices/servers/{serverName}/listGatewayStatus
 # operationId: Servers_ListGatewayStatus
-export def "subscriptions-resource-groups-providers-microsoft-analysis-services-servers-list-gateway-status list" [
+export def "servers-list-gateway-status" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -696,7 +696,7 @@ export def "subscriptions-resource-groups-providers-microsoft-analysis-services-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AnalysisServices/servers/{serverName}/resume
 # operationId: Servers_Resume
-export def "subscriptions-resource-groups-providers-microsoft-analysis-services-servers-resume create" [
+export def "servers-resume" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -738,7 +738,7 @@ export def "subscriptions-resource-groups-providers-microsoft-analysis-services-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AnalysisServices/servers/{serverName}/skus
 # operationId: Servers_ListSkusForExisting
-export def "subscriptions-resource-groups-providers-microsoft-analysis-services-servers-skus list-for-existing" [
+export def "servers-list-skus-for-existing" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -780,7 +780,7 @@ export def "subscriptions-resource-groups-providers-microsoft-analysis-services-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AnalysisServices/servers/{serverName}/suspend
 # operationId: Servers_Suspend
-export def "subscriptions-resource-groups-providers-microsoft-analysis-services-servers-suspend create" [
+export def "servers-suspend" [
   subscription_id: string
   resource_group_name: string
   server_name: string

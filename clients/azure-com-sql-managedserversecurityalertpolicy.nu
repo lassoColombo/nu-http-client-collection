@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-sql-managed-instances-security-alert-policies list-server" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "managed-server-security-alert-policies-list-by-instance" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -128,7 +128,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/managedInstances/{managedInstanceName}/securityAlertPolicies
 # operationId: ManagedServerSecurityAlertPolicies_ListByInstance
-export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instances-security-alert-policies list-server" [
+export def "managed-server-security-alert-policies-list-by-instance" [
   subscription_id: string
   resource_group_name: string
   managed_instance_name: string
@@ -170,7 +170,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instan
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/managedInstances/{managedInstanceName}/securityAlertPolicies/{securityAlertPolicyName}
 # operationId: ManagedServerSecurityAlertPolicies_Get
-export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instances-security-alert-policies get-server" [
+export def "managed-server-security-alert-policies-get" [
   subscription_id: string
   resource_group_name: string
   managed_instance_name: string
@@ -215,7 +215,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instan
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/managedInstances/{managedInstanceName}/securityAlertPolicies/{securityAlertPolicyName}
 # operationId: ManagedServerSecurityAlertPolicies_CreateOrUpdate
 # --properties shape: {disabledAlerts?: list<string>, emailAccountAdmins?: bool, emailAddresses?: list<string>, retentionDays?: int, state: "New"|"Enabled"|"Disabled", storageAccountAccessKey?: string, storageEndpoint?: string}
-export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instances-security-alert-policies create-server-or-update" [
+export def "managed-server-security-alert-policies-create-or-update" [
   subscription_id: string
   resource_group_name: string
   managed_instance_name: string

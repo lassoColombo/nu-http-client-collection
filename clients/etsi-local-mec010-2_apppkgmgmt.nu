@@ -127,7 +127,7 @@ def operational-state-completer [] { ["DISABLED" "ENABLED"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "app-packages list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "app-packages-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -151,7 +151,7 @@ export def commands []: nothing -> table {
 #
 # GET /app_packages
 # operationId: app_packagesGET
-export def "app-packages list" [
+export def "app-packages-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -192,7 +192,7 @@ export def "app-packages list" [
 # POST /app_packages
 # operationId: app_packagesPOST
 # --checksum shape: {algorithm: string, hash: string}
-export def "app-packages create" [
+export def "app-packages-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -235,7 +235,7 @@ export def "app-packages create" [
 #
 # DELETE /app_packages/{appPkgId}
 # operationId: app_packageDELETE
-export def "app-packages delete" [
+export def "app-package-delete" [
   app_pkg_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -271,7 +271,7 @@ export def "app-packages delete" [
 #
 # GET /app_packages/{appPkgId}
 # operationId: app_packageGET
-export def "app-packages get" [
+export def "app-package-get" [
   app_pkg_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -307,7 +307,7 @@ export def "app-packages get" [
 #
 # PATCH /app_packages/{appPkgId}
 # operationId: app_packagePATCH
-export def "app-packages update" [
+export def "app-package-patch" [
   app_pkg_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -347,7 +347,7 @@ export def "app-packages update" [
 #
 # GET /app_packages/{appPkgId}/appd
 # operationId: appPkgIdGET
-export def "app-packages-appd get-pkg" [
+export def "app-pkg-id-get" [
   app_pkg_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -390,7 +390,7 @@ export def "app-packages-appd get-pkg" [
 #
 # GET /app_packages/{appPkgId}/package_content
 # operationId: appPkgGET
-export def "app-packages-package-content get-pkg" [
+export def "app-pkg-get" [
   app_pkg_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -426,7 +426,7 @@ export def "app-packages-package-content get-pkg" [
 #
 # PUT /app_packages/{appPkgId}/package_content
 # operationId: appPkgPUT
-export def "app-packages-package-content update-pkg" [
+export def "app-pkg-put" [
   app_pkg_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -466,7 +466,7 @@ export def "app-packages-package-content update-pkg" [
 #
 # GET /onboarded_app_packages/{appDId}/appd
 # operationId: appDGET
-export def "onboarded-app-packages-appd get-dget" [
+export def "app-dget" [
   app_d_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -509,7 +509,7 @@ export def "onboarded-app-packages-appd get-dget" [
 #
 # GET /onboarded_app_packages/{appDId}/package_content
 # operationId: appDIdGET
-export def "onboarded-app-packages-package-content get-d" [
+export def "app-d-id-get" [
   app_d_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -545,7 +545,7 @@ export def "onboarded-app-packages-package-content get-d" [
 #
 # PUT /onboarded_app_packages/{appDId}/package_content
 # operationId: appDIdPUT
-export def "onboarded-app-packages-package-content update-d" [
+export def "app-d-id-put" [
   app_d_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -585,7 +585,7 @@ export def "onboarded-app-packages-package-content update-d" [
 #
 # GET /subscriptions
 # operationId: subscriptionsGET
-export def "subscriptions get" [
+export def "subscriptions-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -619,7 +619,7 @@ export def "subscriptions get" [
 #
 # POST /subscriptions
 # operationId: subscriptionsPOST
-export def "subscriptions create" [
+export def "subscriptions-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -659,7 +659,7 @@ export def "subscriptions create" [
 #
 # DELETE /subscriptions/{subscriptionId}
 # operationId: individualSubscriptionDELETE
-export def "subscriptions delete-individual" [
+export def "individual-subscription-delete" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -695,7 +695,7 @@ export def "subscriptions delete-individual" [
 #
 # GET /subscriptions/{subscriptionId}
 # operationId: individualSubscriptionGET
-export def "subscriptions get-individual" [
+export def "individual-subscription-get" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -733,7 +733,7 @@ export def "subscriptions get-individual" [
 # operationId: app_pkg_notificationPOST
 # --_links shape: {subscription: record}
 # --timeStamp shape: {nanoSeconds: int, seconds: int}
-export def "user-defined-notification create-app-pkg" [
+export def "app-pkg-notification-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

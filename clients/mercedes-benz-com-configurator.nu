@@ -103,7 +103,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "markets list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "markets-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -127,7 +127,7 @@ export def commands []: nothing -> table {
 #
 # GET /markets
 # operationId: marketsGET
-export def "markets list" [
+export def "markets-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -165,7 +165,7 @@ export def "markets list" [
 #
 # GET /markets/{marketId}
 # operationId: marketGET
-export def "markets get" [
+export def "market-get" [
   market_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -203,7 +203,7 @@ export def "markets get" [
 #
 # GET /markets/{marketId}/bodies
 # operationId: bodiesGET
-export def "markets-bodies get" [
+export def "bodies-get" [
   market_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -244,7 +244,7 @@ export def "markets-bodies get" [
 #
 # GET /markets/{marketId}/bodies/{bodyId}
 # operationId: bodyGET
-export def "markets-bodies get-body" [
+export def "body-get" [
   market_id: string
   body_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -284,7 +284,7 @@ export def "markets-bodies get-body" [
 #
 # GET /markets/{marketId}/classes
 # operationId: classesGET
-export def "markets-classes get" [
+export def "classes-get" [
   market_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -325,7 +325,7 @@ export def "markets-classes get" [
 #
 # GET /markets/{marketId}/classes/{classId}
 # operationId: classGET
-export def "markets-classes get-class" [
+export def "class-get" [
   market_id: string
   class_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -365,7 +365,7 @@ export def "markets-classes get-class" [
 #
 # GET /markets/{marketId}/models
 # operationId: modelsGET
-export def "markets-models list" [
+export def "models-get" [
   market_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -409,7 +409,7 @@ export def "markets-models list" [
 #
 # GET /markets/{marketId}/models/{modelId}
 # operationId: modelGET
-export def "markets-models get" [
+export def "model-get" [
   market_id: string
   model_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -449,7 +449,7 @@ export def "markets-models get" [
 #
 # GET /markets/{marketId}/models/{modelId}/configurations/initial
 # operationId: modelConfigurationsGET
-export def "markets-models-configurations-initial get" [
+export def "model-configurations-get" [
   market_id: string
   model_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -489,7 +489,7 @@ export def "markets-models-configurations-initial get" [
 #
 # GET /markets/{marketId}/models/{modelId}/configurations/{configurationId}
 # operationId: modelConfigurationGET
-export def "markets-models-configurations get" [
+export def "model-configuration-get" [
   market_id: string
   model_id: string
   configuration_id: string
@@ -531,7 +531,7 @@ export def "markets-models-configurations get" [
 #
 # GET /markets/{marketId}/models/{modelId}/configurations/{configurationId}/alternatives/{componentList}
 # operationId: modelConfigurationAlternativesGET
-export def "markets-models-configurations-alternatives get" [
+export def "model-configuration-alternatives-get" [
   market_id: string
   model_id: string
   configuration_id: string
@@ -575,7 +575,7 @@ export def "markets-models-configurations-alternatives get" [
 #
 # GET /markets/{marketId}/models/{modelId}/configurations/{configurationId}/images/components
 # operationId: imageComponentsGET
-export def "markets-models-configurations-images-components get" [
+export def "image-components-get" [
   market_id: string
   model_id: string
   configuration_id: string
@@ -615,7 +615,7 @@ export def "markets-models-configurations-images-components get" [
 #
 # GET /markets/{marketId}/models/{modelId}/configurations/{configurationId}/images/components/engine
 # operationId: imageComponentsEngineGET
-export def "markets-models-configurations-images-components-engine get" [
+export def "image-components-engine-get" [
   market_id: string
   model_id: string
   configuration_id: string
@@ -655,7 +655,7 @@ export def "markets-models-configurations-images-components-engine get" [
 #
 # GET /markets/{marketId}/models/{modelId}/configurations/{configurationId}/images/components/equipments
 # operationId: imageComponentsEquipmentsGET
-export def "markets-models-configurations-images-components-equipments get" [
+export def "image-components-equipments-get" [
   market_id: string
   model_id: string
   configuration_id: string
@@ -695,7 +695,7 @@ export def "markets-models-configurations-images-components-equipments get" [
 #
 # GET /markets/{marketId}/models/{modelId}/configurations/{configurationId}/images/components/equipments/{componentCode}
 # operationId: imageComponentsEquipmentsByCodeGET
-export def "markets-models-configurations-images-components-equipments get-by-code" [
+export def "image-components-equipments-by-code-get" [
   market_id: string
   model_id: string
   configuration_id: string
@@ -737,7 +737,7 @@ export def "markets-models-configurations-images-components-equipments get-by-co
 #
 # GET /markets/{marketId}/models/{modelId}/configurations/{configurationId}/images/components/paint
 # operationId: imageComponentsPaintGET
-export def "markets-models-configurations-images-components-paint get" [
+export def "image-components-paint-get" [
   market_id: string
   model_id: string
   configuration_id: string
@@ -777,7 +777,7 @@ export def "markets-models-configurations-images-components-paint get" [
 #
 # GET /markets/{marketId}/models/{modelId}/configurations/{configurationId}/images/components/rim
 # operationId: imageComponentsRimGET
-export def "markets-models-configurations-images-components-rim get" [
+export def "image-components-rim-get" [
   market_id: string
   model_id: string
   configuration_id: string
@@ -817,7 +817,7 @@ export def "markets-models-configurations-images-components-rim get" [
 #
 # GET /markets/{marketId}/models/{modelId}/configurations/{configurationId}/images/components/trim
 # operationId: imageComponentsTrimGET
-export def "markets-models-configurations-images-components-trim get" [
+export def "image-components-trim-get" [
   market_id: string
   model_id: string
   configuration_id: string
@@ -857,7 +857,7 @@ export def "markets-models-configurations-images-components-trim get" [
 #
 # GET /markets/{marketId}/models/{modelId}/configurations/{configurationId}/images/components/upholstery
 # operationId: imageComponentsUpholsteryGET
-export def "markets-models-configurations-images-components-upholstery get" [
+export def "image-components-upholstery-get" [
   market_id: string
   model_id: string
   configuration_id: string
@@ -897,7 +897,7 @@ export def "markets-models-configurations-images-components-upholstery get" [
 #
 # GET /markets/{marketId}/models/{modelId}/configurations/{configurationId}/images/vehicle
 # operationId: imageVehicleGET
-export def "markets-models-configurations-images-vehicle get" [
+export def "image-vehicle-get" [
   market_id: string
   model_id: string
   configuration_id: string
@@ -941,7 +941,7 @@ export def "markets-models-configurations-images-vehicle get" [
 #
 # GET /markets/{marketId}/models/{modelId}/configurations/{configurationId}/selectables
 # operationId: modelConfigurationSelectablesGET
-export def "markets-models-configurations-selectables get" [
+export def "model-configuration-selectables-get" [
   market_id: string
   model_id: string
   configuration_id: string
@@ -984,7 +984,7 @@ export def "markets-models-configurations-selectables get" [
 #
 # POST /markets/{marketId}/onlinecode
 # operationId: onlineCodePOST
-export def "markets-onlinecode create-online-code" [
+export def "online-code-post" [
   market_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1025,7 +1025,7 @@ export def "markets-onlinecode create-online-code" [
 #
 # GET /markets/{marketId}/onlinecode/{onlineCode}
 # operationId: onlineCodeGET
-export def "markets-onlinecode get-online-code" [
+export def "online-code-get" [
   market_id: string
   online_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1065,7 +1065,7 @@ export def "markets-onlinecode get-online-code" [
 #
 # GET /markets/{marketId}/productgroups
 # operationId: productGroupsGET
-export def "markets-productgroups get-product-groups" [
+export def "product-groups-get" [
   market_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

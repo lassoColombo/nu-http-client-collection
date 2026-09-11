@@ -129,7 +129,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "policies delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "iam-policies-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -153,7 +153,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v2/{name}
 # operationId: iam.policies.delete
-export def "policies delete" [
+export def "iam-policies-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -202,7 +202,7 @@ export def "policies delete" [
 #
 # GET /v2/{name}
 # operationId: iam.policies.operations.get
-export def "policies get" [
+export def "iam-policies-operations-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -251,7 +251,7 @@ export def "policies get" [
 # PUT /v2/{name}
 # operationId: iam.policies.update
 # --rules item shape: {denyRule?: record, description?: string}
-export def "policies update" [
+export def "iam-policies-update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -308,7 +308,7 @@ export def "policies update" [
 #
 # GET /v2/{parent}
 # operationId: iam.policies.listPolicies
-export def "policies list" [
+export def "iam-policies-list-policies" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -359,7 +359,7 @@ export def "policies list" [
 # POST /v2/{parent}
 # operationId: iam.policies.createPolicy
 # --rules item shape: {denyRule?: record, description?: string}
-export def "policies create-policy" [
+export def "iam-policies-create-policy" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

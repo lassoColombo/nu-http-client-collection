@@ -165,7 +165,7 @@ def field-completer-4 [] { ["body_subtype" "body_type" "drivetrain" "engine" "en
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "car-dealer-inventory-active get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-car-dealer-inventory-active" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -188,7 +188,7 @@ export def commands []: nothing -> table {
 # Get dealers active inventory
 #
 # GET /car/dealer/inventory/active
-export def "car-dealer-inventory-active get" [
+export def "get-car-dealer-inventory-active" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -322,7 +322,7 @@ export def "car-dealer-inventory-active get" [
 #
 # GET /car/recall/{vin}
 # operationId: getRecallHistory
-export def "car-recall get-history" [
+export def "get-recall-history" [
   vin: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -361,7 +361,7 @@ export def "car-recall get-history" [
 #
 # GET /client/configure/get
 # operationId: get
-export def "client-configure-get get" [
+export def "get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -398,7 +398,7 @@ export def "client-configure-get get" [
 #
 # POST /client/configure/set
 # operationId: set
-export def "client-configure-set update" [
+export def "set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -441,7 +441,7 @@ export def "client-configure-set update" [
 #
 # GET /crm_check/car/{vin}
 # operationId: crmCheck
-export def "crm-check-car check" [
+export def "crm-check" [
   vin: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -479,7 +479,7 @@ export def "crm-check-car check" [
 # Dealer by id
 #
 # GET /dealer/car/uk/{id}
-export def "dealer-car-uk get" [
+export def "get-dealer-car-uk-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -518,7 +518,7 @@ export def "dealer-car-uk get" [
 #
 # GET /dealer/car/{id}
 # operationId: getDealer
-export def "dealer-car get" [
+export def "get-dealer" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -556,7 +556,7 @@ export def "dealer-car get" [
 # Dealer by id
 #
 # GET /dealer/heavy-equipment/{id}
-export def "dealer-heavy-equipment get" [
+export def "get-dealer-heavy-equipment-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -594,7 +594,7 @@ export def "dealer-heavy-equipment get" [
 # Dealer by id
 #
 # GET /dealer/motorcycle/{id}
-export def "dealer-motorcycle get" [
+export def "get-dealer-motorcycle-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -632,7 +632,7 @@ export def "dealer-motorcycle get" [
 # Dealer by id
 #
 # GET /dealer/rv/{id}
-export def "dealer-rv get" [
+export def "get-dealer-rv-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -671,7 +671,7 @@ export def "dealer-rv get" [
 #
 # GET /dealers/car
 # operationId: dealerSearch
-export def "dealers-car list" [
+export def "dealer-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -723,7 +723,7 @@ export def "dealers-car list" [
 # Find car dealers around
 #
 # GET /dealers/car/uk
-export def "dealers-car-uk get" [
+export def "get-dealers-car-uk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -775,7 +775,7 @@ export def "dealers-car-uk get" [
 # Find car dealers around
 #
 # GET /dealers/heavy-equipment
-export def "dealers-heavy-equipment get" [
+export def "get-dealers-heavy-equipment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -827,7 +827,7 @@ export def "dealers-heavy-equipment get" [
 # Find car dealers around
 #
 # GET /dealers/motorcycle
-export def "dealers-motorcycle get" [
+export def "get-dealers-motorcycle" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -879,7 +879,7 @@ export def "dealers-motorcycle get" [
 # Find car dealers around
 #
 # GET /dealers/rv
-export def "dealers-rv get" [
+export def "get-dealers-rv" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -932,7 +932,7 @@ export def "dealers-rv get" [
 #
 # GET /decode/car/epi/{vin}/specs
 # operationId: decodeViaEPI
-export def "decode-car-epi-specs get-via" [
+export def "decode-via-epi" [
   vin: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -970,7 +970,7 @@ export def "decode-car-epi-specs get-via" [
 #
 # GET /decode/car/neovin/{vin}/specs
 # operationId: decodeViaNeoVIN
-export def "decode-car-neovin-specs get-via-neo" [
+export def "decode-via-neo-vin" [
   vin: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1010,7 +1010,7 @@ export def "decode-car-neovin-specs get-via-neo" [
 #
 # GET /decode/car/{vin}/specs
 # operationId: decode
-export def "decode-car-specs get" [
+export def "decode" [
   vin: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1047,7 +1047,7 @@ export def "decode-car-specs get" [
 # Get a cars online listing history
 #
 # GET /history/car/uk/{vrm}
-export def "history-car-uk get" [
+export def "get-history-car-uk-vrm" [
   vrm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1088,7 +1088,7 @@ export def "history-car-uk get" [
 #
 # GET /history/car/{vin}
 # operationId: getCarHistory
-export def "history-car get" [
+export def "get-car-history" [
   vin: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1130,7 +1130,7 @@ export def "history-car get" [
 #
 # GET /image/cache/car/{listingID}/{imageID}
 # operationId: getCachedImage
-export def "image-cache-car get-cached" [
+export def "get-cached-image" [
   listing_id: string
   image_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1169,7 +1169,7 @@ export def "image-cache-car get-cached" [
 # Listing by id
 #
 # GET /listing/car/auction/{id}
-export def "listing-car-auction get" [
+export def "get-listing-car-auction-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1208,7 +1208,7 @@ export def "listing-car-auction get" [
 # Long text Listings attributes for Listing with the given id
 #
 # GET /listing/car/auction/{id}/extra
-export def "listing-car-auction-extra get" [
+export def "get-listing-car-auction-id-extra" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1245,7 +1245,7 @@ export def "listing-car-auction-extra get" [
 # Listing media by id
 #
 # GET /listing/car/auction/{id}/media
-export def "listing-car-auction-media get" [
+export def "get-listing-car-auction-id-media" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1283,7 +1283,7 @@ export def "listing-car-auction-media get" [
 # Listing by id
 #
 # GET /listing/car/fsbo/{id}
-export def "listing-car-fsbo get" [
+export def "get-listing-car-fsbo-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1322,7 +1322,7 @@ export def "listing-car-fsbo get" [
 # Long text Listings attributes for Listing with the given id
 #
 # GET /listing/car/fsbo/{id}/extra
-export def "listing-car-fsbo-extra get" [
+export def "get-listing-car-fsbo-id-extra" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1359,7 +1359,7 @@ export def "listing-car-fsbo-extra get" [
 # Listing media by id
 #
 # GET /listing/car/fsbo/{id}/media
-export def "listing-car-fsbo-media get" [
+export def "get-listing-car-fsbo-id-media" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1397,7 +1397,7 @@ export def "listing-car-fsbo-media get" [
 # Listing by id
 #
 # GET /listing/car/uk/{id}
-export def "listing-car-uk get" [
+export def "get-listing-car-uk-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1435,7 +1435,7 @@ export def "listing-car-uk get" [
 # Long text Listings attributes for Listing with the given id
 #
 # GET /listing/car/uk/{id}/extra
-export def "listing-car-uk-extra get" [
+export def "get-listing-car-uk-id-extra" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1472,7 +1472,7 @@ export def "listing-car-uk-extra get" [
 # Listing media by id
 #
 # GET /listing/car/uk/{id}/media
-export def "listing-car-uk-media get" [
+export def "get-listing-car-uk-id-media" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1511,7 +1511,7 @@ export def "listing-car-uk-media get" [
 #
 # GET /listing/car/{id}
 # operationId: getListing
-export def "listing-car get" [
+export def "get-listing" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1550,7 +1550,7 @@ export def "listing-car get" [
 # Long text Listings attributes for Listing with the given id
 #
 # GET /listing/car/{id}/extra
-export def "listing-car-extra get" [
+export def "get-listing-car-id-extra" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1587,7 +1587,7 @@ export def "listing-car-extra get" [
 # Listing media by id
 #
 # GET /listing/car/{id}/media
-export def "listing-car-media get" [
+export def "get-listing-car-id-media" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1625,7 +1625,7 @@ export def "listing-car-media get" [
 # Heavy equipment listing by id
 #
 # GET /listing/heavy-equipment/{id}
-export def "listing-heavy-equipment get" [
+export def "get-listing-heavy-equipment-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1662,7 +1662,7 @@ export def "listing-heavy-equipment get" [
 # Long text Heavy equipment Listings attributes for Listing with the given id
 #
 # GET /listing/heavy-equipment/{id}/extra
-export def "listing-heavy-equipment-extra get" [
+export def "get-listing-heavy-equipment-id-extra" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1699,7 +1699,7 @@ export def "listing-heavy-equipment-extra get" [
 # Listing media by id
 #
 # GET /listing/heavy-equipment/{id}/media
-export def "listing-heavy-equipment-media get" [
+export def "get-listing-heavy-equipment-id-media" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1736,7 +1736,7 @@ export def "listing-heavy-equipment-media get" [
 # Motorcycle listing by id
 #
 # GET /listing/motorcycle/{id}
-export def "listing-motorcycle get" [
+export def "get-listing-motorcycle-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1773,7 +1773,7 @@ export def "listing-motorcycle get" [
 # Long text Motorcycle Listings attributes for Listing with the given id
 #
 # GET /listing/motorcycle/{id}/extra
-export def "listing-motorcycle-extra get" [
+export def "get-listing-motorcycle-id-extra" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1810,7 +1810,7 @@ export def "listing-motorcycle-extra get" [
 # Motorcycle listing media by id
 #
 # GET /listing/motorcycle/{id}/media
-export def "listing-motorcycle-media get" [
+export def "get-listing-motorcycle-id-media" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1847,7 +1847,7 @@ export def "listing-motorcycle-media get" [
 # RV listing by id
 #
 # GET /listing/rv/uk/{id}
-export def "listing-rv-uk get" [
+export def "get-listing-rv-uk-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1884,7 +1884,7 @@ export def "listing-rv-uk get" [
 # Long text RV Listings attributes for Listing with the given id
 #
 # GET /listing/rv/uk/{id}/extra
-export def "listing-rv-uk-extra get" [
+export def "get-listing-rv-uk-id-extra" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1921,7 +1921,7 @@ export def "listing-rv-uk-extra get" [
 # Listing media by id
 #
 # GET /listing/rv/uk/{id}/media
-export def "listing-rv-uk-media get" [
+export def "get-listing-rv-uk-id-media" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1958,7 +1958,7 @@ export def "listing-rv-uk-media get" [
 # RV listing by id
 #
 # GET /listing/rv/{id}
-export def "listing-rv get" [
+export def "get-listing-rv-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1995,7 +1995,7 @@ export def "listing-rv get" [
 # Long text RV Listings attributes for Listing with the given id
 #
 # GET /listing/rv/{id}/extra
-export def "listing-rv-extra get" [
+export def "get-listing-rv-id-extra" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2032,7 +2032,7 @@ export def "listing-rv-extra get" [
 # Listing media by id
 #
 # GET /listing/rv/{id}/media
-export def "listing-rv-media get" [
+export def "get-listing-rv-id-media" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2070,7 +2070,7 @@ export def "listing-rv-media get" [
 #
 # GET /mds/car
 # operationId: getMDS
-export def "mds-car get" [
+export def "get-mds" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2163,7 +2163,7 @@ export def "mds-car get" [
 #
 # GET /popular/cars
 # operationId: getPopularCars
-export def "popular-cars get" [
+export def "get-popular-cars" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2203,7 +2203,7 @@ export def "popular-cars get" [
 #
 # GET /predict/car/price
 # operationId: predictCarPrice
-export def "predict-car-price get" [
+export def "predict-car-price" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2263,7 +2263,7 @@ export def "predict-car-price get" [
 #
 # GET /predict/car/uk/fmv
 # operationId: fareValue
-export def "predict-car-uk-fmv get-fare-value" [
+export def "fare-value" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2307,7 +2307,7 @@ export def "predict-car-uk-fmv get-fare-value" [
 #
 # GET /predict/car/uk/price
 # operationId: predictUkCarPrice
-export def "predict-car-uk-price get" [
+export def "predict-uk-car-price" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2362,7 +2362,7 @@ export def "predict-car-uk-price get" [
 #
 # GET /sales/car
 # operationId: getSalesCount
-export def "sales-car get-count" [
+export def "get-sales-count" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2407,7 +2407,7 @@ export def "sales-car get-count" [
 # Gets active car listings for the given search criteria
 #
 # GET /search/car/active
-export def "search-car-active get" [
+export def "get-search-car-active" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2545,7 +2545,7 @@ export def "search-car-active get" [
 #
 # POST /search/car/active/rank
 # operationId: searchAndRankCar
-export def "search-car-active-rank list-and" [
+export def "search-and-rank-car" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2671,7 +2671,7 @@ export def "search-car-active-rank list-and" [
 #
 # POST /search/car/active/rank/listings
 # operationId: rankCar
-export def "search-car-active-rank-listings create" [
+export def "rank-car" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2712,7 +2712,7 @@ export def "search-car-active-rank-listings create" [
 # Gets active auction car listings for the given search criteria
 #
 # GET /search/car/auction/active
-export def "search-car-auction-active get" [
+export def "get-search-car-auction-active" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2846,7 +2846,7 @@ export def "search-car-auction-active get" [
 #
 # GET /search/car/auto-complete
 # operationId: autoComplete
-export def "search-car-auto-complete complete" [
+export def "auto-complete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2916,7 +2916,7 @@ export def "search-car-auto-complete complete" [
 # Gets active private party car listings for the given search criteria
 #
 # GET /search/car/fsbo/active
-export def "search-car-fsbo-active get" [
+export def "get-search-car-fsbo-active" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3050,7 +3050,7 @@ export def "search-car-fsbo-active get" [
 #
 # GET /search/car/incentive/oem
 # operationId: oemSearch
-export def "search-car-incentive-oem list" [
+export def "oem-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3127,7 +3127,7 @@ export def "search-car-incentive-oem list" [
 # Gets Recent car listings for the given search criteria
 #
 # GET /search/car/recents
-export def "search-car-recents get" [
+export def "get-search-car-recents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3261,7 +3261,7 @@ export def "search-car-recents get" [
 #
 # GET /search/car/uk/active
 # operationId: search
-export def "search-car-uk-active list" [
+export def "search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3393,7 +3393,7 @@ export def "search-car-uk-active list" [
 # Gets Recent UK car listings for the given search criteria
 #
 # GET /search/car/uk/recents
-export def "search-car-uk-recents get" [
+export def "get-search-car-uk-recents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3534,7 +3534,7 @@ export def "search-car-uk-recents get" [
 # Gets active heavy equipment listings for the given search criteria
 #
 # GET /search/heavy-equipment/active
-export def "search-heavy-equipment-active get" [
+export def "get-search-heavy-equipment-active" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3612,7 +3612,7 @@ export def "search-heavy-equipment-active get" [
 # API for auto-completion of inputs
 #
 # GET /search/heavy-equipment/auto-complete
-export def "search-heavy-equipment-auto-complete get" [
+export def "get-search-heavy-equipment-auto-complete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3670,7 +3670,7 @@ export def "search-heavy-equipment-auto-complete get" [
 # Gets active motorcycle listings for the given search criteria
 #
 # GET /search/motorcycle/active
-export def "search-motorcycle-active get" [
+export def "get-search-motorcycle-active" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3746,7 +3746,7 @@ export def "search-motorcycle-active get" [
 # API for auto-completion of inputs
 #
 # GET /search/motorcycle/auto-complete
-export def "search-motorcycle-auto-complete get" [
+export def "get-search-motorcycle-auto-complete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3804,7 +3804,7 @@ export def "search-motorcycle-auto-complete get" [
 # Gets active RV listings for the given search criteria
 #
 # GET /search/rv/active
-export def "search-rv-active get" [
+export def "get-search-rv-active" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3891,7 +3891,7 @@ export def "search-rv-active get" [
 # API for auto-completion of inputs
 #
 # GET /search/rv/auto-complete
-export def "search-rv-auto-complete get" [
+export def "get-search-rv-auto-complete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3949,7 +3949,7 @@ export def "search-rv-auto-complete get" [
 # Gets active RV listings for the given search criteria
 #
 # GET /search/rv/uk/active
-export def "search-rv-uk-active get" [
+export def "get-search-rv-uk-active" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4038,7 +4038,7 @@ export def "search-rv-uk-active get" [
 # API for auto-completion of inputs based on taxonomy
 #
 # GET /specs/car/auto-complete
-export def "specs-car-auto-complete get" [
+export def "get-specs-car-auto-complete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4091,7 +4091,7 @@ export def "specs-car-auto-complete get" [
 #
 # GET /specs/car/terms
 # operationId: getTaxonomyTerms
-export def "specs-car-terms get-taxonomy" [
+export def "get-taxonomy-terms" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4141,7 +4141,7 @@ export def "specs-car-terms get-taxonomy" [
 #
 # GET /stats/car
 # operationId: getDailyStats
-export def "stats-car get-daily" [
+export def "get-daily-stats" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -137,7 +137,7 @@ def mode-completer [] { ["legacy" "posix"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account-operations list-filesystem" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "filesystem-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -161,7 +161,7 @@ export def commands []: nothing -> table {
 #
 # GET /
 # operationId: Filesystem_List
-export def "account-operations list-filesystem" [
+export def "filesystem-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -206,7 +206,7 @@ export def "account-operations list-filesystem" [
 #
 # DELETE /{filesystem}
 # operationId: Filesystem_Delete
-export def "filesystem-operations delete" [
+export def "filesystem-delete" [
   filesystem: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -252,7 +252,7 @@ export def "filesystem-operations delete" [
 #
 # GET /{filesystem}
 # operationId: Path_List
-export def "filesystem-operations list-path" [
+export def "path-list" [
   filesystem: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -301,7 +301,7 @@ export def "filesystem-operations list-path" [
 #
 # HEAD /{filesystem}
 # operationId: Filesystem_GetProperties
-export def "filesystem-operations get-properties" [
+export def "filesystem-get-properties" [
   filesystem: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -345,7 +345,7 @@ export def "filesystem-operations get-properties" [
 #
 # PATCH /{filesystem}
 # operationId: Filesystem_SetProperties
-export def "filesystem-operations update-properties" [
+export def "filesystem-set-properties" [
   filesystem: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -392,7 +392,7 @@ export def "filesystem-operations update-properties" [
 #
 # PUT /{filesystem}
 # operationId: Filesystem_Create
-export def "filesystem-operations create" [
+export def "filesystem-create" [
   filesystem: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -437,7 +437,7 @@ export def "filesystem-operations create" [
 #
 # DELETE /{filesystem}/{path}
 # operationId: Path_Delete
-export def "file-and-directory-operations delete" [
+export def "path-delete" [
   filesystem: string
   path: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -489,7 +489,7 @@ export def "file-and-directory-operations delete" [
 #
 # GET /{filesystem}/{path}
 # operationId: Path_Read
-export def "file-and-directory-operations get" [
+export def "path-read" [
   filesystem: string
   path: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -542,7 +542,7 @@ export def "file-and-directory-operations get" [
 #
 # HEAD /{filesystem}/{path}
 # operationId: Path_GetProperties
-export def "file-and-directory-operations get-properties" [
+export def "path-get-properties" [
   filesystem: string
   path: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -595,7 +595,7 @@ export def "file-and-directory-operations get-properties" [
 #
 # PATCH /{filesystem}/{path}
 # operationId: Path_Update
-export def "file-and-directory-operations update" [
+export def "path-update" [
   filesystem: string
   path: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -666,7 +666,7 @@ export def "file-and-directory-operations update" [
 #
 # POST /{filesystem}/{path}
 # operationId: Path_Lease
-export def "file-and-directory-operations create-lease" [
+export def "path-lease" [
   filesystem: string
   path: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -720,7 +720,7 @@ export def "file-and-directory-operations create-lease" [
 #
 # PUT /{filesystem}/{path}
 # operationId: Path_Create
-export def "file-and-directory-operations create" [
+export def "path-create" [
   filesystem: string
   path: string
   --base-url(-b): string@base-url-completer # API base URL

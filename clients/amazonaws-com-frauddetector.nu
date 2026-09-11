@@ -173,7 +173,7 @@ def x-amz-target-completer-72 [] { ["AWSHawksNestServiceFacade.UpdateVariable"] 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-batch-variable" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "batch-create-variable" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -197,7 +197,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: BatchCreateVariable
-export def "api create-batch-variable" [
+export def "batch-create-variable" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -246,7 +246,7 @@ export def "api create-batch-variable" [
 #
 # POST /
 # operationId: BatchGetVariable
-export def "api get-batch-variable" [
+export def "batch-get-variable" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -294,7 +294,7 @@ export def "api get-batch-variable" [
 #
 # POST /
 # operationId: CancelBatchImportJob
-export def "api cancel-batch-import-job" [
+export def "cancel-batch-import-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -342,7 +342,7 @@ export def "api cancel-batch-import-job" [
 #
 # POST /
 # operationId: CancelBatchPredictionJob
-export def "api cancel-batch-prediction-job" [
+export def "cancel-batch-prediction-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -390,7 +390,7 @@ export def "api cancel-batch-prediction-job" [
 #
 # POST /
 # operationId: CreateBatchImportJob
-export def "api create-batch-import-job" [
+export def "create-batch-import-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -443,7 +443,7 @@ export def "api create-batch-import-job" [
 #
 # POST /
 # operationId: CreateBatchPredictionJob
-export def "api create-batch-prediction-job" [
+export def "create-batch-prediction-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -498,7 +498,7 @@ export def "api create-batch-prediction-job" [
 #
 # POST /
 # operationId: CreateDetectorVersion
-export def "api create-detector-version" [
+export def "create-detector-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -552,7 +552,7 @@ export def "api create-detector-version" [
 #
 # POST /
 # operationId: CreateList
-export def "api create-list" [
+export def "create-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -604,7 +604,7 @@ export def "api create-list" [
 #
 # POST /
 # operationId: CreateModel
-export def "api create-model" [
+export def "create-model" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -656,7 +656,7 @@ export def "api create-model" [
 #
 # POST /
 # operationId: CreateModelVersion
-export def "api create-model-version" [
+export def "create-model-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -710,7 +710,7 @@ export def "api create-model-version" [
 #
 # POST /
 # operationId: CreateRule
-export def "api create-rule" [
+export def "create-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -764,7 +764,7 @@ export def "api create-rule" [
 #
 # POST /
 # operationId: CreateVariable
-export def "api create-variable" [
+export def "create-variable" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -818,7 +818,7 @@ export def "api create-variable" [
 #
 # POST /
 # operationId: DeleteBatchImportJob
-export def "api delete-batch-import-job" [
+export def "delete-batch-import-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -866,7 +866,7 @@ export def "api delete-batch-import-job" [
 #
 # POST /
 # operationId: DeleteBatchPredictionJob
-export def "api delete-batch-prediction-job" [
+export def "delete-batch-prediction-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -914,7 +914,7 @@ export def "api delete-batch-prediction-job" [
 #
 # POST /
 # operationId: DeleteDetector
-export def "api delete-detector" [
+export def "delete-detector" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -962,7 +962,7 @@ export def "api delete-detector" [
 #
 # POST /
 # operationId: DeleteDetectorVersion
-export def "api delete-detector-version" [
+export def "delete-detector-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1011,7 +1011,7 @@ export def "api delete-detector-version" [
 #
 # POST /
 # operationId: DeleteEntityType
-export def "api delete-entity-type" [
+export def "delete-entity-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1059,7 +1059,7 @@ export def "api delete-entity-type" [
 #
 # POST /
 # operationId: DeleteEvent
-export def "api delete-event" [
+export def "delete-event" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1109,7 +1109,7 @@ export def "api delete-event" [
 #
 # POST /
 # operationId: DeleteEventType
-export def "api delete-event-type" [
+export def "delete-event-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1157,7 +1157,7 @@ export def "api delete-event-type" [
 #
 # POST /
 # operationId: DeleteEventsByEventType
-export def "api delete-events-by-event-type" [
+export def "delete-events-by-event-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1205,7 +1205,7 @@ export def "api delete-events-by-event-type" [
 #
 # POST /
 # operationId: DeleteExternalModel
-export def "api delete-external-model" [
+export def "delete-external-model" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1253,7 +1253,7 @@ export def "api delete-external-model" [
 #
 # POST /
 # operationId: DeleteLabel
-export def "api delete-label" [
+export def "delete-label" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1301,7 +1301,7 @@ export def "api delete-label" [
 #
 # POST /
 # operationId: DeleteList
-export def "api delete-list" [
+export def "delete-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1349,7 +1349,7 @@ export def "api delete-list" [
 #
 # POST /
 # operationId: DeleteModel
-export def "api delete-model" [
+export def "delete-model" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1398,7 +1398,7 @@ export def "api delete-model" [
 #
 # POST /
 # operationId: DeleteModelVersion
-export def "api delete-model-version" [
+export def "delete-model-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1448,7 +1448,7 @@ export def "api delete-model-version" [
 #
 # POST /
 # operationId: DeleteOutcome
-export def "api delete-outcome" [
+export def "delete-outcome" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1497,7 +1497,7 @@ export def "api delete-outcome" [
 # POST /
 # operationId: DeleteRule
 # --rule shape: {detectorId: any, ruleId: any, ruleVersion: any}
-export def "api delete-rule" [
+export def "delete-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1545,7 +1545,7 @@ export def "api delete-rule" [
 #
 # POST /
 # operationId: DeleteVariable
-export def "api delete-variable" [
+export def "delete-variable" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1593,7 +1593,7 @@ export def "api delete-variable" [
 #
 # POST /
 # operationId: DescribeDetector
-export def "api get-detector" [
+export def "describe-detector" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1643,7 +1643,7 @@ export def "api get-detector" [
 #
 # POST /
 # operationId: DescribeModelVersions
-export def "api get-model-versions" [
+export def "describe-model-versions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1698,7 +1698,7 @@ export def "api get-model-versions" [
 #
 # POST /
 # operationId: GetBatchImportJobs
-export def "api get-batch-import-jobs" [
+export def "get-batch-import-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1751,7 +1751,7 @@ export def "api get-batch-import-jobs" [
 #
 # POST /
 # operationId: GetBatchPredictionJobs
-export def "api get-batch-prediction-jobs" [
+export def "get-batch-prediction-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1804,7 +1804,7 @@ export def "api get-batch-prediction-jobs" [
 #
 # POST /
 # operationId: GetDeleteEventsByEventTypeStatus
-export def "api get-delete-events-by-event-type-status" [
+export def "get-delete-events-by-event-type-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1852,7 +1852,7 @@ export def "api get-delete-events-by-event-type-status" [
 #
 # POST /
 # operationId: GetDetectorVersion
-export def "api get-detector-version" [
+export def "get-detector-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1901,7 +1901,7 @@ export def "api get-detector-version" [
 #
 # POST /
 # operationId: GetDetectors
-export def "api get-detectors" [
+export def "get-detectors" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1954,7 +1954,7 @@ export def "api get-detectors" [
 #
 # POST /
 # operationId: GetEntityTypes
-export def "api get-entity-types" [
+export def "get-entity-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2007,7 +2007,7 @@ export def "api get-entity-types" [
 #
 # POST /
 # operationId: GetEvent
-export def "api get-event" [
+export def "get-event" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2056,7 +2056,7 @@ export def "api get-event" [
 #
 # POST /
 # operationId: GetEventPrediction
-export def "api get-event-prediction" [
+export def "get-event-prediction" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2111,7 +2111,7 @@ export def "api get-event-prediction" [
 #
 # POST /
 # operationId: GetEventPredictionMetadata
-export def "api get-event-prediction-metadata" [
+export def "get-event-prediction-metadata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2163,7 +2163,7 @@ export def "api get-event-prediction-metadata" [
 #
 # POST /
 # operationId: GetEventTypes
-export def "api get-event-types" [
+export def "get-event-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2216,7 +2216,7 @@ export def "api get-event-types" [
 #
 # POST /
 # operationId: GetExternalModels
-export def "api get-external-models" [
+export def "get-external-models" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2269,7 +2269,7 @@ export def "api get-external-models" [
 #
 # POST /
 # operationId: GetKMSEncryptionKey
-export def "api get-kms-encryption-key" [
+export def "get-kms-encryption-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2313,7 +2313,7 @@ export def "api get-kms-encryption-key" [
 #
 # POST /
 # operationId: GetLabels
-export def "api get-labels" [
+export def "get-labels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2366,7 +2366,7 @@ export def "api get-labels" [
 #
 # POST /
 # operationId: GetListElements
-export def "api get-list-elements" [
+export def "get-list-elements" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2419,7 +2419,7 @@ export def "api get-list-elements" [
 #
 # POST /
 # operationId: GetListsMetadata
-export def "api get-lists-metadata" [
+export def "get-lists-metadata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2472,7 +2472,7 @@ export def "api get-lists-metadata" [
 #
 # POST /
 # operationId: GetModelVersion
-export def "api get-model-version" [
+export def "get-model-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2522,7 +2522,7 @@ export def "api get-model-version" [
 #
 # POST /
 # operationId: GetModels
-export def "api get-models" [
+export def "get-models" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2576,7 +2576,7 @@ export def "api get-models" [
 #
 # POST /
 # operationId: GetOutcomes
-export def "api get-outcomes" [
+export def "get-outcomes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2629,7 +2629,7 @@ export def "api get-outcomes" [
 #
 # POST /
 # operationId: GetRules
-export def "api get-rules" [
+export def "get-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2684,7 +2684,7 @@ export def "api get-rules" [
 #
 # POST /
 # operationId: GetVariables
-export def "api get-variables" [
+export def "get-variables" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2737,7 +2737,7 @@ export def "api get-variables" [
 #
 # POST /
 # operationId: ListEventPredictions
-export def "api list-event-predictions" [
+export def "list-event-predictions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2794,7 +2794,7 @@ export def "api list-event-predictions" [
 #
 # POST /
 # operationId: ListTagsForResource
-export def "api list-tags-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2847,7 +2847,7 @@ export def "api list-tags-for-resource" [
 #
 # POST /
 # operationId: PutDetector
-export def "api update-detector" [
+export def "put-detector" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2898,7 +2898,7 @@ export def "api update-detector" [
 #
 # POST /
 # operationId: PutEntityType
-export def "api update-entity-type" [
+export def "put-entity-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2948,7 +2948,7 @@ export def "api update-entity-type" [
 #
 # POST /
 # operationId: PutEventType
-export def "api update-event-type" [
+export def "put-event-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3002,7 +3002,7 @@ export def "api update-event-type" [
 #
 # POST /
 # operationId: PutExternalModel
-export def "api update-external-model" [
+export def "put-external-model" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3056,7 +3056,7 @@ export def "api update-external-model" [
 #
 # POST /
 # operationId: PutKMSEncryptionKey
-export def "api update-kms-encryption-key" [
+export def "put-kms-encryption-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3104,7 +3104,7 @@ export def "api update-kms-encryption-key" [
 #
 # POST /
 # operationId: PutLabel
-export def "api update-label" [
+export def "put-label" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3154,7 +3154,7 @@ export def "api update-label" [
 #
 # POST /
 # operationId: PutOutcome
-export def "api update-outcome" [
+export def "put-outcome" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3204,7 +3204,7 @@ export def "api update-outcome" [
 #
 # POST /
 # operationId: SendEvent
-export def "api send-event" [
+export def "send-event" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3258,7 +3258,7 @@ export def "api send-event" [
 #
 # POST /
 # operationId: TagResource
-export def "api tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3307,7 +3307,7 @@ export def "api tag-resource" [
 #
 # POST /
 # operationId: UntagResource
-export def "api untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3356,7 +3356,7 @@ export def "api untag-resource" [
 #
 # POST /
 # operationId: UpdateDetectorVersion
-export def "api update-detector-version" [
+export def "update-detector-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3410,7 +3410,7 @@ export def "api update-detector-version" [
 #
 # POST /
 # operationId: UpdateDetectorVersionMetadata
-export def "api update-detector-version-metadata" [
+export def "update-detector-version-metadata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3460,7 +3460,7 @@ export def "api update-detector-version-metadata" [
 #
 # POST /
 # operationId: UpdateDetectorVersionStatus
-export def "api update-detector-version-status" [
+export def "update-detector-version-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3510,7 +3510,7 @@ export def "api update-detector-version-status" [
 #
 # POST /
 # operationId: UpdateEventLabel
-export def "api update-event-label" [
+export def "update-event-label" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3561,7 +3561,7 @@ export def "api update-event-label" [
 #
 # POST /
 # operationId: UpdateList
-export def "api update-list" [
+export def "update-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3613,7 +3613,7 @@ export def "api update-list" [
 #
 # POST /
 # operationId: UpdateModel
-export def "api update-model" [
+export def "update-model" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3663,7 +3663,7 @@ export def "api update-model" [
 #
 # POST /
 # operationId: UpdateModelVersion
-export def "api update-model-version" [
+export def "update-model-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3716,7 +3716,7 @@ export def "api update-model-version" [
 #
 # POST /
 # operationId: UpdateModelVersionStatus
-export def "api update-model-version-status" [
+export def "update-model-version-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3767,7 +3767,7 @@ export def "api update-model-version-status" [
 #
 # POST /
 # operationId: UpdateRuleMetadata
-export def "api update-rule-metadata" [
+export def "update-rule-metadata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3816,7 +3816,7 @@ export def "api update-rule-metadata" [
 #
 # POST /
 # operationId: UpdateRuleVersion
-export def "api update-rule-version" [
+export def "update-rule-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3869,7 +3869,7 @@ export def "api update-rule-version" [
 #
 # POST /
 # operationId: UpdateVariable
-export def "api update-variable" [
+export def "update-variable" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

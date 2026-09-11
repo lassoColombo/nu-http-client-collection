@@ -142,7 +142,7 @@ def descending-completer [] { ["N" "Y"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "rcra-rest-services-get-download get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-rcra-rest-services-get-download" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -165,7 +165,7 @@ export def commands []: nothing -> table {
 # Resource Conservation and Recovery Act (RCRA) Download Data Service
 #
 # GET /rcra_rest_services.get_download
-export def "rcra-rest-services-get-download get" [
+export def "get-rcra-rest-services-get-download" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -204,7 +204,7 @@ export def "rcra-rest-services-get-download get" [
 # Resource Conservation and Recovery Act (RCRA) Download Data Service
 #
 # POST /rcra_rest_services.get_download
-export def "rcra-rest-services-get-download create" [
+export def "post-rcra-rest-services-get-download" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -246,7 +246,7 @@ export def "rcra-rest-services-get-download create" [
 # Resource Conservation and Recovery Act (RCRA) Facility Search Service
 #
 # GET /rcra_rest_services.get_facilities
-export def "rcra-rest-services-get-facilities get" [
+export def "get-rcra-rest-services-get-facilities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -377,7 +377,7 @@ export def "rcra-rest-services-get-facilities get" [
 # Resource Conservation and Recovery Act (RCRA) Facility Search Service
 #
 # POST /rcra_rest_services.get_facilities
-export def "rcra-rest-services-get-facilities create" [
+export def "post-rcra-rest-services-get-facilities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -511,7 +511,7 @@ export def "rcra-rest-services-get-facilities create" [
 # Resource Conservation and Recovery Act (RCRA) Facility Enhanced Search Service
 #
 # GET /rcra_rest_services.get_facility_info
-export def "rcra-rest-services-get-facility-info get" [
+export def "get-rcra-rest-services-get-facility-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -641,7 +641,7 @@ export def "rcra-rest-services-get-facility-info get" [
 # Resource Conservation and Recovery Act (RCRA) Facility Enhanced Search Service
 #
 # POST /rcra_rest_services.get_facility_info
-export def "rcra-rest-services-get-facility-info create" [
+export def "post-rcra-rest-services-get-facility-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -774,7 +774,7 @@ export def "rcra-rest-services-get-facility-info create" [
 # Resource Conservation and Recovery Act (RCRA) GeoJSON Service
 #
 # GET /rcra_rest_services.get_geojson
-export def "rcra-rest-services-get-geojson get" [
+export def "get-rcra-rest-services-get-geojson" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -816,7 +816,7 @@ export def "rcra-rest-services-get-geojson get" [
 # Resource Conservation and Recovery Act (RCRA) GeoJSON Service
 #
 # POST /rcra_rest_services.get_geojson
-export def "rcra-rest-services-get-geojson create" [
+export def "post-rcra-rest-services-get-geojson" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -861,7 +861,7 @@ export def "rcra-rest-services-get-geojson create" [
 # Resource Conservation and Recovery Act (RCRA) Info Clusters Service
 #
 # GET /rcra_rest_services.get_info_clusters
-export def "rcra-rest-services-get-info-clusters get" [
+export def "get-rcra-rest-services-get-info-clusters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -899,7 +899,7 @@ export def "rcra-rest-services-get-info-clusters get" [
 # Resource Conservation and Recovery Act (RCRA) Info Clusters Service
 #
 # POST /rcra_rest_services.get_info_clusters
-export def "rcra-rest-services-get-info-clusters create" [
+export def "post-rcra-rest-services-get-info-clusters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -940,7 +940,7 @@ export def "rcra-rest-services-get-info-clusters create" [
 # Resource Conservation and Recovery Act (RCRA) Map Service
 #
 # GET /rcra_rest_services.get_map
-export def "rcra-rest-services-get-map get" [
+export def "get-rcra-rest-services-get-map" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -984,7 +984,7 @@ export def "rcra-rest-services-get-map get" [
 # Resource Conservation and Recovery Act (RCRA) Map Service
 #
 # POST /rcra_rest_services.get_map
-export def "rcra-rest-services-get-map create" [
+export def "post-rcra-rest-services-get-map" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1031,7 +1031,7 @@ export def "rcra-rest-services-get-map create" [
 # Resource Conservation and Recovery Act (RCRA) Paginated Results Service
 #
 # GET /rcra_rest_services.get_qid
-export def "rcra-rest-services-get-qid get" [
+export def "get-rcra-rest-services-get-qid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1073,7 +1073,7 @@ export def "rcra-rest-services-get-qid get" [
 # Resource Conservation and Recovery Act (RCRA) Paginated Results Service
 #
 # POST /rcra_rest_services.get_qid
-export def "rcra-rest-services-get-qid create" [
+export def "post-rcra-rest-services-get-qid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1118,7 +1118,7 @@ export def "rcra-rest-services-get-qid create" [
 # Resource Conservation and Recovery Act (RCRA) Metadata Service
 #
 # GET /rcra_rest_services.metadata
-export def "rcra-rest-services-metadata get" [
+export def "get-rcra-rest-services-metadata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1155,7 +1155,7 @@ export def "rcra-rest-services-metadata get" [
 # Resource Conservation and Recovery Act (RCRA) Metadata Service
 #
 # POST /rcra_rest_services.metadata
-export def "rcra-rest-services-metadata create" [
+export def "post-rcra-rest-services-metadata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

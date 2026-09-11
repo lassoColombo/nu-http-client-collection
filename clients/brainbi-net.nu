@@ -109,7 +109,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "analyze-pricing copy-betascrape-product" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "beta-scrape-product-copy" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -133,7 +133,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/analyze/pricing
 # operationId: [beta]ScrapeProductCopy
-export def "analyze-pricing copy-betascrape-product" [
+export def "beta-scrape-product-copy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -169,7 +169,7 @@ export def "analyze-pricing copy-betascrape-product" [
 #
 # GET /api/customers
 # operationId: customers
-export def "customers get" [
+export def "customers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -205,7 +205,7 @@ export def "customers get" [
 #
 # POST /api/login
 # operationId: loginAndGetBearerToken
-export def "login get-and-bearer-token" [
+export def "login-and-get-bearer-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -242,7 +242,7 @@ export def "login get-and-bearer-token" [
 #
 # POST /api/logout
 # operationId: logout
-export def "logout create" [
+export def "logout" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -278,7 +278,7 @@ export def "logout create" [
 #
 # GET /api/orders
 # operationId: orders
-export def "orders get" [
+export def "orders" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -314,7 +314,7 @@ export def "orders get" [
 #
 # DELETE /api/orders/1137
 # operationId: orders1
-export def "orders-1137 delete-orders1" [
+export def "orders1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -354,7 +354,7 @@ export def "orders-1137 delete-orders1" [
 #
 # GET /api/products
 # operationId: products
-export def "products get" [
+export def "products" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -390,7 +390,7 @@ export def "products get" [
 #
 # DELETE /api/products/1137
 # operationId: products1
-export def "products-1137 delete-products1" [
+export def "products1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -430,7 +430,7 @@ export def "products-1137 delete-products1" [
 #
 # POST /api/register
 # operationId: register
-export def "register create" [
+export def "register" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -474,7 +474,7 @@ export def "register create" [
 #
 # POST /api/register_woocommerce
 # operationId: registerAndCreateStoreConnectionForWooCommerce
-export def "register-woocommerce create-and-store-connection-for-woo-commerce" [
+export def "register-and-create-store-connection-for-woo-commerce" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -521,7 +521,7 @@ export def "register-woocommerce create-and-store-connection-for-woo-commerce" [
 #
 # GET /api/rule
 # operationId: rules
-export def "rule get" [
+export def "rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -557,7 +557,7 @@ export def "rule get" [
 #
 # GET /api/rule/ruleData/1
 # operationId: ruleData
-export def "rule-rule-data-1 get" [
+export def "rule-data" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -593,7 +593,7 @@ export def "rule-rule-data-1 get" [
 #
 # GET /api/rule/ruleData/1/latest
 # operationId: ruleDataLatest
-export def "rule-rule-data-1-latest get" [
+export def "rule-data-latest" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -629,7 +629,7 @@ export def "rule-rule-data-1-latest get" [
 #
 # GET /api/seo/ranking/latest
 # operationId: seoLatestRankings
-export def "seo-ranking-latest get" [
+export def "seo-latest-rankings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

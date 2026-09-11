@@ -112,7 +112,7 @@ def format-completer [] { ["pdf"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cripc-certificate create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cripc" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -138,7 +138,7 @@ export def commands []: nothing -> table {
 # operationId: cripc
 # --certificateParameters shape: {customer_Id: string, policy_Number: string, policy_StartDate: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "cripc-certificate create" [
+export def "cripc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -181,7 +181,7 @@ export def "cripc-certificate create" [
 # operationId: cvipc
 # --certificateParameters shape: {customer_Id: string, policy_Number: string, policy_StartDate: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "cvipc-certificate create" [
+export def "cvipc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -224,7 +224,7 @@ export def "cvipc-certificate create" [
 # operationId: egipc
 # --certificateParameters shape: {customer_Id: string, policy_Number: string, policy_StartDate: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "egipc-certificate create" [
+export def "egipc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -267,7 +267,7 @@ export def "egipc-certificate create" [
 # operationId: gicer
 # --certificateParameters shape: {customer_Id: string, policy_Number: string, policy_StartDate: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "gicer-certificate create" [
+export def "gicer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -310,7 +310,7 @@ export def "gicer-certificate create" [
 # operationId: hlipc
 # --certificateParameters shape: {customer_Id: string, policy_Number: string, policy_StartDate: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "hlipc-certificate create" [
+export def "hlipc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -353,7 +353,7 @@ export def "hlipc-certificate create" [
 # operationId: hmipc
 # --certificateParameters shape: {customer_Id: string, policy_Number: string, policy_StartDate: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "hmipc-certificate create" [
+export def "hmipc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -396,7 +396,7 @@ export def "hmipc-certificate create" [
 # operationId: miipc
 # --certificateParameters shape: {customer_Id: string, policy_Number: string, policy_StartDate: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "miipc-certificate create" [
+export def "miipc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -439,7 +439,7 @@ export def "miipc-certificate create" [
 # operationId: mripc
 # --certificateParameters shape: {customer_Id: string, policy_Number: string, policy_StartDate: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "mripc-certificate create" [
+export def "mripc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -482,7 +482,7 @@ export def "mripc-certificate create" [
 # operationId: pripc
 # --certificateParameters shape: {customer_Id: string, policy_Number: string, policy_StartDate: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "pripc-certificate create" [
+export def "pripc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -525,7 +525,7 @@ export def "pripc-certificate create" [
 # operationId: twipc
 # --certificateParameters shape: {customer_Id: string, policy_Number: string, policy_StartDate: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "twipc-certificate create" [
+export def "twipc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)

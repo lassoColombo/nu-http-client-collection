@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["ocp-apim-subscription-key"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api get-prediction-resolve2" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "prediction-resolve2" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -128,7 +128,7 @@ export def commands []: nothing -> table {
 #
 # GET /{appId}
 # operationId: Prediction_Resolve2
-export def "api get-prediction-resolve2" [
+export def "prediction-resolve2" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -172,7 +172,7 @@ export def "api get-prediction-resolve2" [
 #
 # POST /{appId}
 # operationId: Prediction_Resolve
-export def "api create-prediction-resolve" [
+export def "prediction-resolve" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

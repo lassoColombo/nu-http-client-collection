@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "us-aerodromes-distance-query create-by" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "aerodromes-by-distance-us-v1-aerodromes-distance-query-post" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -122,7 +122,7 @@ export def commands []: nothing -> table {
 #
 # POST /us/v1/aerodromes/distance-query
 # operationId: aerodromes_by_distance_us_v1_aerodromes_distance_query_post
-export def "us-aerodromes-distance-query create-by" [
+export def "aerodromes-by-distance-us-v1-aerodromes-distance-query-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -165,7 +165,7 @@ export def "us-aerodromes-distance-query create-by" [
 #
 # POST /us/v1/aerodromes/polygon-query
 # operationId: aerodromes_by_poly_us_v1_aerodromes_polygon_query_post
-export def "us-aerodromes-polygon-query create-by-poly" [
+export def "aerodromes-by-poly-us-v1-aerodromes-polygon-query-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -206,7 +206,7 @@ export def "us-aerodromes-polygon-query create-by-poly" [
 #
 # POST /us/v1/aerodromes/route-query
 # operationId: aerodromes_by_route_us_v1_aerodromes_route_query_post
-export def "us-aerodromes-route-query create-by" [
+export def "aerodromes-by-route-us-v1-aerodromes-route-query-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -247,7 +247,7 @@ export def "us-aerodromes-route-query create-by" [
 #
 # POST /us/v1/airspace/distance-query
 # operationId: asp_by_distance_us_v1_airspace_distance_query_post
-export def "us-airspace-distance-query create-asp-by" [
+export def "asp-by-distance-us-v1-airspace-distance-query-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -291,7 +291,7 @@ export def "us-airspace-distance-query create-asp-by" [
 #
 # POST /us/v1/airspace/polygon-query
 # operationId: asp_by_poly_us_v1_airspace_polygon_query_post
-export def "us-airspace-polygon-query create-asp-by-poly" [
+export def "asp-by-poly-us-v1-airspace-polygon-query-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -333,7 +333,7 @@ export def "us-airspace-polygon-query create-asp-by-poly" [
 #
 # POST /us/v1/airspace/route-query
 # operationId: asp_by_route_us_v1_airspace_route_query_post
-export def "us-airspace-route-query create-asp-by" [
+export def "asp-by-route-us-v1-airspace-route-query-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -375,7 +375,7 @@ export def "us-airspace-route-query create-asp-by" [
 #
 # POST /us/v1/obstacles/distance-query
 # operationId: obstacles_by_distance_us_v1_obstacles_distance_query_post
-export def "us-obstacles-distance-query create-by" [
+export def "obstacles-by-distance-us-v1-obstacles-distance-query-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -418,7 +418,7 @@ export def "us-obstacles-distance-query create-by" [
 #
 # POST /us/v1/obstacles/polygon-query
 # operationId: obstacles_by_poly_us_v1_obstacles_polygon_query_post
-export def "us-obstacles-polygon-query create-by-poly" [
+export def "obstacles-by-poly-us-v1-obstacles-polygon-query-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -459,7 +459,7 @@ export def "us-obstacles-polygon-query create-by-poly" [
 #
 # POST /us/v1/obstacles/route-query
 # operationId: obstacles_by_route_us_v1_obstacles_route_query_post
-export def "us-obstacles-route-query create-by" [
+export def "obstacles-by-route-us-v1-obstacles-route-query-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -500,7 +500,7 @@ export def "us-obstacles-route-query create-by" [
 #
 # POST /us/v1/restrictions/distance-query
 # operationId: tfr_by_distance_us_v1_restrictions_distance_query_post
-export def "us-restrictions-distance-query create-tfr-by" [
+export def "tfr-by-distance-us-v1-restrictions-distance-query-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -543,7 +543,7 @@ export def "us-restrictions-distance-query create-tfr-by" [
 #
 # POST /us/v1/restrictions/polygon-query
 # operationId: tfr_by_poly_us_v1_restrictions_polygon_query_post
-export def "us-restrictions-polygon-query create-tfr-by-poly" [
+export def "tfr-by-poly-us-v1-restrictions-polygon-query-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -584,7 +584,7 @@ export def "us-restrictions-polygon-query create-tfr-by-poly" [
 #
 # POST /us/v1/restrictions/route-query
 # operationId: tfr_by_route_us_v1_restrictions_route_query_post
-export def "us-restrictions-route-query create-tfr-by" [
+export def "tfr-by-route-us-v1-restrictions-route-query-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -625,7 +625,7 @@ export def "us-restrictions-route-query create-tfr-by" [
 #
 # POST /us/v1/ssa/distance-query
 # operationId: ssa_by_distance_us_v1_ssa_distance_query_post
-export def "us-ssa-distance-query create-by" [
+export def "ssa-by-distance-us-v1-ssa-distance-query-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -668,7 +668,7 @@ export def "us-ssa-distance-query create-by" [
 #
 # POST /us/v1/ssa/polygon-query
 # operationId: ssa_by_poly_us_v1_ssa_polygon_query_post
-export def "us-ssa-polygon-query create-by-poly" [
+export def "ssa-by-poly-us-v1-ssa-polygon-query-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -709,7 +709,7 @@ export def "us-ssa-polygon-query create-by-poly" [
 #
 # POST /us/v1/ssa/route-query
 # operationId: ssa_by_route_us_v1_ssa_route_query_post
-export def "us-ssa-route-query create-by" [
+export def "ssa-by-route-us-v1-ssa-route-query-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -750,7 +750,7 @@ export def "us-ssa-route-query create-by" [
 #
 # POST /us/v1/uoa/distance-query
 # operationId: uoa_by_distance_us_v1_uoa_distance_query_post
-export def "us-uoa-distance-query create-by" [
+export def "uoa-by-distance-us-v1-uoa-distance-query-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -793,7 +793,7 @@ export def "us-uoa-distance-query create-by" [
 #
 # POST /us/v1/uoa/polygon-query
 # operationId: uoa_by_poly_us_v1_uoa_polygon_query_post
-export def "us-uoa-polygon-query create-by-poly" [
+export def "uoa-by-poly-us-v1-uoa-polygon-query-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -834,7 +834,7 @@ export def "us-uoa-polygon-query create-by-poly" [
 #
 # POST /us/v1/uoa/route-query
 # operationId: uoa_by_route_us_v1_uoa_route_query_post
-export def "us-uoa-route-query create-by" [
+export def "uoa-by-route-us-v1-uoa-route-query-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -875,7 +875,7 @@ export def "us-uoa-route-query create-by" [
 #
 # POST /us/v1/venues/distance-query
 # operationId: ven_by_distance_us_v1_venues_distance_query_post
-export def "us-venues-distance-query create-ven-by" [
+export def "ven-by-distance-us-v1-venues-distance-query-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -918,7 +918,7 @@ export def "us-venues-distance-query create-ven-by" [
 #
 # POST /us/v1/venues/polygon-query
 # operationId: ven_by_poly_us_v1_venues_polygon_query_post
-export def "us-venues-polygon-query create-ven-by-poly" [
+export def "ven-by-poly-us-v1-venues-polygon-query-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -959,7 +959,7 @@ export def "us-venues-polygon-query create-ven-by-poly" [
 #
 # POST /us/v1/venues/route-query
 # operationId: ven_by_route_us_v1_venues_route_query_post
-export def "us-venues-route-query create-ven-by" [
+export def "ven-by-route-us-v1-venues-route-query-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1000,7 +1000,7 @@ export def "us-venues-route-query create-ven-by" [
 #
 # POST /us/v1/wx-forecast/distance-query
 # operationId: wx_by_distance_us_v1_wx_forecast_distance_query_post
-export def "us-wx-forecast-distance-query create-by" [
+export def "wx-by-distance-us-v1-wx-forecast-distance-query-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1045,7 +1045,7 @@ export def "us-wx-forecast-distance-query create-by" [
 #
 # POST /us/v1/wx-forecast/polygon-query
 # operationId: wx_by_poly_us_v1_wx_forecast_polygon_query_post
-export def "us-wx-forecast-polygon-query create-by-poly" [
+export def "wx-by-poly-us-v1-wx-forecast-polygon-query-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1088,7 +1088,7 @@ export def "us-wx-forecast-polygon-query create-by-poly" [
 #
 # POST /us/v1/wx-forecast/route-query
 # operationId: wx_by_route_us_v1_wx_forecast_route_query_post
-export def "us-wx-forecast-route-query create-by" [
+export def "wx-by-route-us-v1-wx-forecast-route-query-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

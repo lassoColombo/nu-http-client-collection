@@ -121,7 +121,7 @@ def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "catalog-pvt-skusellers get-getby-sku" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "getby-sku-id" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -145,7 +145,7 @@ export def commands []: nothing -> table {
 #
 # GET /catalog/pvt/skusellers/{skuId}
 # operationId: GetbySkuId
-export def "catalog-pvt-skusellers get-getby-sku" [
+export def "getby-sku-id" [
   sku_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -185,7 +185,7 @@ export def "catalog-pvt-skusellers get-getby-sku" [
 #
 # POST /sku-binding/pvt/skuseller/activate/{sellerId}/{skuSellerId}
 # operationId: ActivateSKUBinding
-export def "sku-binding-pvt-skuseller-activate create" [
+export def "activate-sku-binding" [
   seller_id: string
   sku_seller_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -227,7 +227,7 @@ export def "sku-binding-pvt-skuseller-activate create" [
 #
 # GET /sku-binding/pvt/skuseller/admin
 # operationId: Getpagedadmin
-export def "sku-binding-pvt-skuseller-admin get-pagedadmin" [
+export def "getpagedadmin" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -270,7 +270,7 @@ export def "sku-binding-pvt-skuseller-admin get-pagedadmin" [
 # Change Notification with Seller ID and Seller SKU ID
 #
 # POST /sku-binding/pvt/skuseller/changenotification/{sellerId}/{sellerSkuId}
-export def "sku-binding-pvt-skuseller-changenotification create" [
+export def "post-sku-binding-pvt-skuseller-changenotification-seller-id-seller-sku-id" [
   seller_id: string
   seller_sku_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -312,7 +312,7 @@ export def "sku-binding-pvt-skuseller-changenotification create" [
 #
 # POST /sku-binding/pvt/skuseller/changenotification/{skuId}
 # operationId: ChangeNotification
-export def "sku-binding-pvt-skuseller-changenotification create-change-notification" [
+export def "change-notification" [
   sku_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -352,7 +352,7 @@ export def "sku-binding-pvt-skuseller-changenotification create-change-notificat
 #
 # POST /sku-binding/pvt/skuseller/inactivate/{sellerId}/{skuSellerId}
 # operationId: DeactivateSKUBinding
-export def "sku-binding-pvt-skuseller-inactivate create-deactivate" [
+export def "deactivate-sku-binding" [
   seller_id: string
   sku_seller_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -394,7 +394,7 @@ export def "sku-binding-pvt-skuseller-inactivate create-deactivate" [
 #
 # POST /sku-binding/pvt/skuseller/insertion
 # operationId: InsertSKUBinding
-export def "sku-binding-pvt-skuseller-insertion create" [
+export def "insert-sku-binding" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -441,7 +441,7 @@ export def "sku-binding-pvt-skuseller-insertion create" [
 #
 # GET /sku-binding/pvt/skuseller/list/bysellerId/{sellerId}
 # operationId: GetallbySellerId
-export def "sku-binding-pvt-skuseller-list-byseller-id get-allby-seller" [
+export def "getallby-seller-id" [
   seller_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -481,7 +481,7 @@ export def "sku-binding-pvt-skuseller-list-byseller-id get-allby-seller" [
 #
 # GET /sku-binding/pvt/skuseller/paged/sellerid/{sellerId}
 # operationId: GetpagedbySellerId
-export def "sku-binding-pvt-skuseller-paged-sellerid get-pagedby-seller" [
+export def "getpagedby-seller-id" [
   seller_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -524,7 +524,7 @@ export def "sku-binding-pvt-skuseller-paged-sellerid get-pagedby-seller" [
 #
 # POST /sku-binding/pvt/skuseller/remove/{sellerId}/{sellerSkuId}
 # operationId: DeleteSKUsellerassociation
-export def "sku-binding-pvt-skuseller-remove delete-sk-usellerassociation" [
+export def "delete-sk-usellerassociation" [
   seller_id: string
   seller_sku_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -566,7 +566,7 @@ export def "sku-binding-pvt-skuseller-remove delete-sk-usellerassociation" [
 #
 # GET /sku-binding/pvt/skuseller/{sellerId}/{sellerSkuId}
 # operationId: GetSKUseller
-export def "sku-binding-pvt-skuseller get-sk-useller" [
+export def "get-sk-useller" [
   seller_id: string
   seller_sku_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -608,7 +608,7 @@ export def "sku-binding-pvt-skuseller get-sk-useller" [
 #
 # PUT /sku-binding/pvt/skuseller/{sellerId}/{sellerSkuId}
 # operationId: Bindtoanothersku
-export def "sku-binding-pvt-skuseller update-bindtoanothersku" [
+export def "bindtoanothersku" [
   seller_id: string
   seller_sku_id: string
   --base-url(-b): string@base-url-completer # API base URL

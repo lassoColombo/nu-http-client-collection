@@ -131,7 +131,7 @@ def view-completer [] { ["NAMESPACE_VIEW_BASIC" "NAMESPACE_VIEW_FULL" "NAMESPACE
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta1 delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "datafusion-projects-locations-operations-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -155,7 +155,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1beta1/{name}
 # operationId: datafusion.projects.locations.operations.delete
-export def "v1beta1 delete" [
+export def "datafusion-projects-locations-operations-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -203,7 +203,7 @@ export def "v1beta1 delete" [
 #
 # GET /v1beta1/{name}
 # operationId: datafusion.projects.locations.operations.get
-export def "v1beta1 get" [
+export def "datafusion-projects-locations-operations-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -256,7 +256,7 @@ export def "v1beta1 get" [
 # --cryptoKeyConfig shape: {keyReference?: string}
 # --eventPublishConfig shape: {enabled?: bool, topic?: string}
 # --networkConfig shape: {ipAllocation?: string, network?: string}
-export def "v1beta1 update" [
+export def "datafusion-projects-locations-instances-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -324,7 +324,7 @@ export def "v1beta1 update" [
 #
 # GET /v1beta1/{name}/locations
 # operationId: datafusion.projects.locations.list
-export def "v1beta1-locations list" [
+export def "datafusion-projects-locations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -376,7 +376,7 @@ export def "v1beta1-locations list" [
 #
 # GET /v1beta1/{name}/operations
 # operationId: datafusion.projects.locations.operations.list
-export def "v1beta1-operations list" [
+export def "datafusion-projects-locations-operations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -427,7 +427,7 @@ export def "v1beta1-operations list" [
 #
 # POST /v1beta1/{name}:cancel
 # operationId: datafusion.projects.locations.operations.cancel
-export def "v1beta1 cancel" [
+export def "datafusion-projects-locations-operations-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -479,7 +479,7 @@ export def "v1beta1 cancel" [
 #
 # POST /v1beta1/{name}:restart
 # operationId: datafusion.projects.locations.instances.restart
-export def "v1beta1 restart" [
+export def "datafusion-projects-locations-instances-restart" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -531,7 +531,7 @@ export def "v1beta1 restart" [
 #
 # POST /v1beta1/{name}:upgrade
 # operationId: datafusion.projects.locations.instances.upgrade
-export def "v1beta1 create-upgrade" [
+export def "datafusion-projects-locations-instances-upgrade" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -583,7 +583,7 @@ export def "v1beta1 create-upgrade" [
 #
 # GET /v1beta1/{parent}/dnsPeerings
 # operationId: datafusion.projects.locations.instances.dnsPeerings.list
-export def "v1beta1-dns-peerings list" [
+export def "datafusion-projects-locations-instances-dns-peerings-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -633,7 +633,7 @@ export def "v1beta1-dns-peerings list" [
 #
 # POST /v1beta1/{parent}/dnsPeerings
 # operationId: datafusion.projects.locations.instances.dnsPeerings.create
-export def "v1beta1-dns-peerings create" [
+export def "datafusion-projects-locations-instances-dns-peerings-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -690,7 +690,7 @@ export def "v1beta1-dns-peerings create" [
 #
 # GET /v1beta1/{parent}/instances
 # operationId: datafusion.projects.locations.instances.list
-export def "v1beta1-instances list" [
+export def "datafusion-projects-locations-instances-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -747,7 +747,7 @@ export def "v1beta1-instances list" [
 # --cryptoKeyConfig shape: {keyReference?: string}
 # --eventPublishConfig shape: {enabled?: bool, topic?: string}
 # --networkConfig shape: {ipAllocation?: string, network?: string}
-export def "v1beta1-instances create" [
+export def "datafusion-projects-locations-instances-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -815,7 +815,7 @@ export def "v1beta1-instances create" [
 #
 # GET /v1beta1/{parent}/namespaces
 # operationId: datafusion.projects.locations.instances.namespaces.list
-export def "v1beta1-namespaces list" [
+export def "datafusion-projects-locations-instances-namespaces-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -866,7 +866,7 @@ export def "v1beta1-namespaces list" [
 #
 # GET /v1beta1/{parent}/versions
 # operationId: datafusion.projects.locations.versions.list
-export def "v1beta1-versions list" [
+export def "datafusion-projects-locations-versions-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -917,7 +917,7 @@ export def "v1beta1-versions list" [
 #
 # GET /v1beta1/{resource}:getIamPolicy
 # operationId: datafusion.projects.locations.instances.namespaces.getIamPolicy
-export def "v1beta1 get-iam-policy" [
+export def "datafusion-projects-locations-instances-namespaces-get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -966,7 +966,7 @@ export def "v1beta1 get-iam-policy" [
 #
 # POST /v1beta1/{resource}:removeIamPolicy
 # operationId: datafusion.projects.locations.removeIamPolicy
-export def "v1beta1 delete-iam-policy" [
+export def "datafusion-projects-locations-remove-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1019,7 +1019,7 @@ export def "v1beta1 delete-iam-policy" [
 # POST /v1beta1/{resource}:setIamPolicy
 # operationId: datafusion.projects.locations.instances.namespaces.setIamPolicy
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
-export def "v1beta1 update-iam-policy" [
+export def "datafusion-projects-locations-instances-namespaces-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1072,7 +1072,7 @@ export def "v1beta1 update-iam-policy" [
 #
 # POST /v1beta1/{resource}:testIamPermissions
 # operationId: datafusion.projects.locations.instances.namespaces.testIamPermissions
-export def "v1beta1 test-iam-permissions" [
+export def "datafusion-projects-locations-instances-namespaces-test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

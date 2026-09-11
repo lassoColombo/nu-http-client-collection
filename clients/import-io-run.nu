@@ -99,7 +99,7 @@ def auth-scheme-completer [] { ["query-_apikey"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "extractor-cancel create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-extractor-extractor-id-cancel" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -122,7 +122,7 @@ export def commands []: nothing -> table {
 # Cancel an existing crawl.
 #
 # POST /extractor/{extractorId}/cancel
-export def "extractor-cancel create" [
+export def "post-extractor-extractor-id-cancel" [
   extractor_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -157,7 +157,7 @@ export def "extractor-cancel create" [
 # Launch a crawl from an extractor that a user owns.
 #
 # POST /extractor/{extractorId}/start
-export def "extractor-start create" [
+export def "post-extractor-extractor-id-start" [
   extractor_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

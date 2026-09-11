@@ -101,7 +101,7 @@ def auth-scheme-completer [] { ["x-api-key" "basic" "basic-credentials"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-notification-configuration create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-create-notification-configuration" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -126,7 +126,7 @@ export def commands []: nothing -> table {
 # POST /createNotificationConfiguration
 # operationId: post-createNotificationConfiguration
 # --configurationDetails shape: {active?: bool, apiVersion?: int, description?: string, eventConfigs?: list, hmacSignatureKey?: string, notificationId?: int, notifyPassword?: string, notifyURL?: string, notifyUsername?: string, sslProtocol?: "TLSv12"|"TLSv13"}
-export def "create-notification-configuration create" [
+export def "post-create-notification-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -164,7 +164,7 @@ export def "create-notification-configuration create" [
 #
 # POST /deleteNotificationConfigurations
 # operationId: post-deleteNotificationConfigurations
-export def "delete-notification-configurations create" [
+export def "post-delete-notification-configurations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -202,7 +202,7 @@ export def "delete-notification-configurations create" [
 #
 # POST /getNotificationConfiguration
 # operationId: post-getNotificationConfiguration
-export def "get-notification-configuration create" [
+export def "post-get-notification-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -240,7 +240,7 @@ export def "get-notification-configuration create" [
 #
 # POST /getNotificationConfigurationList
 # operationId: post-getNotificationConfigurationList
-export def "get-notification-configuration-list create" [
+export def "post-get-notification-configuration-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -278,7 +278,7 @@ export def "get-notification-configuration-list create" [
 #
 # POST /testNotificationConfiguration
 # operationId: post-testNotificationConfiguration
-export def "test-notification-configuration create" [
+export def "post-test-notification-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -318,7 +318,7 @@ export def "test-notification-configuration create" [
 # POST /updateNotificationConfiguration
 # operationId: post-updateNotificationConfiguration
 # --configurationDetails shape: {active?: bool, apiVersion?: int, description?: string, eventConfigs?: list, hmacSignatureKey?: string, notificationId?: int, notifyPassword?: string, notifyURL?: string, notifyUsername?: string, sslProtocol?: "TLSv12"|"TLSv13"}
-export def "update-notification-configuration create" [
+export def "post-update-notification-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

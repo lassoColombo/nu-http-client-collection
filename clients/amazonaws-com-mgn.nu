@@ -119,7 +119,7 @@ def replication-type-completer [] { ["AGENT_BASED" "SNAPSHOT_SHIPPING"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "archive-application archive" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "archive-application" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -143,7 +143,7 @@ export def commands []: nothing -> table {
 #
 # POST /ArchiveApplication
 # operationId: ArchiveApplication
-export def "archive-application archive" [
+export def "archive-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -190,7 +190,7 @@ export def "archive-application archive" [
 #
 # POST /ArchiveWave
 # operationId: ArchiveWave
-export def "archive-wave archive" [
+export def "archive-wave" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -237,7 +237,7 @@ export def "archive-wave archive" [
 #
 # POST /AssociateApplications
 # operationId: AssociateApplications
-export def "associate-applications create" [
+export def "associate-applications" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -285,7 +285,7 @@ export def "associate-applications create" [
 #
 # POST /AssociateSourceServers
 # operationId: AssociateSourceServers
-export def "associate-source-servers create" [
+export def "associate-source-servers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -334,7 +334,7 @@ export def "associate-source-servers create" [
 # POST /ChangeServerLifeCycleState
 # operationId: ChangeServerLifeCycleState
 # --lifeCycle shape: {state?: any}
-export def "change-server-life-cycle-state create" [
+export def "change-server-life-cycle-state" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -382,7 +382,7 @@ export def "change-server-life-cycle-state create" [
 #
 # POST /CreateApplication
 # operationId: CreateApplication
-export def "create-application create" [
+export def "create-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -435,7 +435,7 @@ export def "create-application create" [
 # --licensing shape: {osByol?: any}
 # --postLaunchActions shape: {cloudWatchLogGroupName?: any, deployment?: any, s3LogBucket?: any, s3OutputKeyPrefix?: any, ssmDocuments?: any}
 # --smallVolumeConf shape: {iops?: any, throughput?: any, volumeType?: any}
-export def "create-launch-configuration-template create" [
+export def "create-launch-configuration-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -495,7 +495,7 @@ export def "create-launch-configuration-template create" [
 #
 # POST /CreateReplicationConfigurationTemplate
 # operationId: CreateReplicationConfigurationTemplate
-export def "create-replication-configuration-template create" [
+export def "create-replication-configuration-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -554,7 +554,7 @@ export def "create-replication-configuration-template create" [
 #
 # POST /CreateWave
 # operationId: CreateWave
-export def "create-wave create" [
+export def "create-wave" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -603,7 +603,7 @@ export def "create-wave create" [
 #
 # POST /DeleteApplication
 # operationId: DeleteApplication
-export def "delete-application delete" [
+export def "delete-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -650,7 +650,7 @@ export def "delete-application delete" [
 #
 # POST /DeleteJob
 # operationId: DeleteJob
-export def "delete-job delete" [
+export def "delete-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -697,7 +697,7 @@ export def "delete-job delete" [
 #
 # POST /DeleteLaunchConfigurationTemplate
 # operationId: DeleteLaunchConfigurationTemplate
-export def "delete-launch-configuration-template delete" [
+export def "delete-launch-configuration-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -744,7 +744,7 @@ export def "delete-launch-configuration-template delete" [
 #
 # POST /DeleteReplicationConfigurationTemplate
 # operationId: DeleteReplicationConfigurationTemplate
-export def "delete-replication-configuration-template delete" [
+export def "delete-replication-configuration-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -791,7 +791,7 @@ export def "delete-replication-configuration-template delete" [
 #
 # POST /DeleteSourceServer
 # operationId: DeleteSourceServer
-export def "delete-source-server delete" [
+export def "delete-source-server" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -838,7 +838,7 @@ export def "delete-source-server delete" [
 #
 # POST /DeleteVcenterClient
 # operationId: DeleteVcenterClient
-export def "delete-vcenter-client delete" [
+export def "delete-vcenter-client" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -885,7 +885,7 @@ export def "delete-vcenter-client delete" [
 #
 # POST /DeleteWave
 # operationId: DeleteWave
-export def "delete-wave delete" [
+export def "delete-wave" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -932,7 +932,7 @@ export def "delete-wave delete" [
 #
 # POST /DescribeJobLogItems
 # operationId: DescribeJobLogItems
-export def "describe-job-log-items get" [
+export def "describe-job-log-items" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -985,7 +985,7 @@ export def "describe-job-log-items get" [
 # POST /DescribeJobs
 # operationId: DescribeJobs
 # --filters shape: {fromDate?: any, jobIDs?: any, toDate?: any}
-export def "describe-jobs get" [
+export def "describe-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1037,7 +1037,7 @@ export def "describe-jobs get" [
 #
 # POST /DescribeLaunchConfigurationTemplates
 # operationId: DescribeLaunchConfigurationTemplates
-export def "describe-launch-configuration-templates get" [
+export def "describe-launch-configuration-templates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1089,7 +1089,7 @@ export def "describe-launch-configuration-templates get" [
 #
 # POST /DescribeReplicationConfigurationTemplates
 # operationId: DescribeReplicationConfigurationTemplates
-export def "describe-replication-configuration-templates get" [
+export def "describe-replication-configuration-templates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1142,7 +1142,7 @@ export def "describe-replication-configuration-templates get" [
 # POST /DescribeSourceServers
 # operationId: DescribeSourceServers
 # --filters shape: {applicationIDs?: any, isArchived?: any, lifeCycleStates?: any, replicationTypes?: any, sourceServerIDs?: any}
-export def "describe-source-servers get" [
+export def "describe-source-servers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1194,7 +1194,7 @@ export def "describe-source-servers get" [
 #
 # GET /DescribeVcenterClients
 # operationId: DescribeVcenterClients
-export def "describe-vcenter-clients get" [
+export def "describe-vcenter-clients" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1240,7 +1240,7 @@ export def "describe-vcenter-clients get" [
 #
 # POST /DisassociateApplications
 # operationId: DisassociateApplications
-export def "disassociate-applications create" [
+export def "disassociate-applications" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1288,7 +1288,7 @@ export def "disassociate-applications create" [
 #
 # POST /DisassociateSourceServers
 # operationId: DisassociateSourceServers
-export def "disassociate-source-servers create" [
+export def "disassociate-source-servers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1336,7 +1336,7 @@ export def "disassociate-source-servers create" [
 #
 # POST /DisconnectFromService
 # operationId: DisconnectFromService
-export def "disconnect-from-service create" [
+export def "disconnect-from-service" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1383,7 +1383,7 @@ export def "disconnect-from-service create" [
 #
 # POST /FinalizeCutover
 # operationId: FinalizeCutover
-export def "finalize-cutover finalize" [
+export def "finalize-cutover" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1430,7 +1430,7 @@ export def "finalize-cutover finalize" [
 #
 # POST /GetLaunchConfiguration
 # operationId: GetLaunchConfiguration
-export def "get-launch-configuration get" [
+export def "get-launch-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1477,7 +1477,7 @@ export def "get-launch-configuration get" [
 #
 # POST /GetReplicationConfiguration
 # operationId: GetReplicationConfiguration
-export def "get-replication-configuration get" [
+export def "get-replication-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1524,7 +1524,7 @@ export def "get-replication-configuration get" [
 #
 # POST /InitializeService
 # operationId: InitializeService
-export def "initialize-service create" [
+export def "initialize-service" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1568,7 +1568,7 @@ export def "initialize-service create" [
 # POST /ListApplications
 # operationId: ListApplications
 # --filters shape: {applicationIDs?: any, isArchived?: any, waveIDs?: any}
-export def "list-applications list" [
+export def "list-applications" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1620,7 +1620,7 @@ export def "list-applications list" [
 #
 # POST /ListExportErrors
 # operationId: ListExportErrors
-export def "list-export-errors list" [
+export def "list-export-errors" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1673,7 +1673,7 @@ export def "list-export-errors list" [
 # POST /ListExports
 # operationId: ListExports
 # --filters shape: {exportIDs?: any}
-export def "list-exports list" [
+export def "list-exports" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1725,7 +1725,7 @@ export def "list-exports list" [
 #
 # POST /ListImportErrors
 # operationId: ListImportErrors
-export def "list-import-errors list" [
+export def "list-import-errors" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1778,7 +1778,7 @@ export def "list-import-errors list" [
 # POST /ListImports
 # operationId: ListImports
 # --filters shape: {importIDs?: any}
-export def "list-imports list" [
+export def "list-imports" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1831,7 +1831,7 @@ export def "list-imports list" [
 # POST /ListSourceServerActions
 # operationId: ListSourceServerActions
 # --filters shape: {actionIDs?: any}
-export def "list-source-server-actions list" [
+export def "list-source-server-actions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1884,7 +1884,7 @@ export def "list-source-server-actions list" [
 #
 # GET /tags/{resourceArn}
 # operationId: ListTagsForResource
-export def "tags list-for-resource" [
+export def "list-tags-for-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1929,7 +1929,7 @@ export def "tags list-for-resource" [
 #
 # POST /tags/{resourceArn}
 # operationId: TagResource
-export def "tags tag-resource" [
+export def "tag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1979,7 +1979,7 @@ export def "tags tag-resource" [
 # POST /ListTemplateActions
 # operationId: ListTemplateActions
 # --filters shape: {actionIDs?: any}
-export def "list-template-actions list" [
+export def "list-template-actions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2033,7 +2033,7 @@ export def "list-template-actions list" [
 # POST /ListWaves
 # operationId: ListWaves
 # --filters shape: {isArchived?: any, waveIDs?: any}
-export def "list-waves list" [
+export def "list-waves" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2085,7 +2085,7 @@ export def "list-waves list" [
 #
 # POST /MarkAsArchived
 # operationId: MarkAsArchived
-export def "mark-as-archived create" [
+export def "mark-as-archived" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2132,7 +2132,7 @@ export def "mark-as-archived create" [
 #
 # POST /PutSourceServerAction
 # operationId: PutSourceServerAction
-export def "put-source-server-action update" [
+export def "put-source-server-action" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2191,7 +2191,7 @@ export def "put-source-server-action update" [
 #
 # POST /PutTemplateAction
 # operationId: PutTemplateAction
-export def "put-template-action update" [
+export def "put-template-action" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2251,7 +2251,7 @@ export def "put-template-action update" [
 #
 # POST /RemoveSourceServerAction
 # operationId: RemoveSourceServerAction
-export def "remove-source-server-action delete" [
+export def "remove-source-server-action" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2299,7 +2299,7 @@ export def "remove-source-server-action delete" [
 #
 # POST /RemoveTemplateAction
 # operationId: RemoveTemplateAction
-export def "remove-template-action delete" [
+export def "remove-template-action" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2347,7 +2347,7 @@ export def "remove-template-action delete" [
 #
 # POST /RetryDataReplication
 # operationId: RetryDataReplication
-export def "retry-data-replication create" [
+export def "retry-data-replication" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2394,7 +2394,7 @@ export def "retry-data-replication create" [
 #
 # POST /StartCutover
 # operationId: StartCutover
-export def "start-cutover start" [
+export def "start-cutover" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2442,7 +2442,7 @@ export def "start-cutover start" [
 #
 # POST /StartExport
 # operationId: StartExport
-export def "start-export start" [
+export def "start-export" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2492,7 +2492,7 @@ export def "start-export start" [
 # POST /StartImport
 # operationId: StartImport
 # --s3BucketSource shape: {s3Bucket?: any, s3BucketOwner?: any, s3Key?: any}
-export def "start-import start" [
+export def "start-import" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2540,7 +2540,7 @@ export def "start-import start" [
 #
 # POST /StartReplication
 # operationId: StartReplication
-export def "start-replication start" [
+export def "start-replication" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2587,7 +2587,7 @@ export def "start-replication start" [
 #
 # POST /StartTest
 # operationId: StartTest
-export def "start-test start" [
+export def "start-test" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2635,7 +2635,7 @@ export def "start-test start" [
 #
 # POST /TerminateTargetInstances
 # operationId: TerminateTargetInstances
-export def "terminate-target-instances create" [
+export def "terminate-target-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2683,7 +2683,7 @@ export def "terminate-target-instances create" [
 #
 # POST /UnarchiveApplication
 # operationId: UnarchiveApplication
-export def "unarchive-application unarchive" [
+export def "unarchive-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2730,7 +2730,7 @@ export def "unarchive-application unarchive" [
 #
 # POST /UnarchiveWave
 # operationId: UnarchiveWave
-export def "unarchive-wave unarchive" [
+export def "unarchive-wave" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2777,7 +2777,7 @@ export def "unarchive-wave unarchive" [
 #
 # DELETE /tags/{resourceArn}
 # operationId: UntagResource
-export def "tags untag-resource" [
+export def "untag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2824,7 +2824,7 @@ export def "tags untag-resource" [
 #
 # POST /UpdateApplication
 # operationId: UpdateApplication
-export def "update-application update" [
+export def "update-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2875,7 +2875,7 @@ export def "update-application update" [
 # operationId: UpdateLaunchConfiguration
 # --licensing shape: {osByol?: any}
 # --postLaunchActions shape: {cloudWatchLogGroupName?: any, deployment?: any, s3LogBucket?: any, s3OutputKeyPrefix?: any, ssmDocuments?: any}
-export def "update-launch-configuration update" [
+export def "update-launch-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2936,7 +2936,7 @@ export def "update-launch-configuration update" [
 # --licensing shape: {osByol?: any}
 # --postLaunchActions shape: {cloudWatchLogGroupName?: any, deployment?: any, s3LogBucket?: any, s3OutputKeyPrefix?: any, ssmDocuments?: any}
 # --smallVolumeConf shape: {iops?: any, throughput?: any, volumeType?: any}
-export def "update-launch-configuration-template update" [
+export def "update-launch-configuration-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2997,7 +2997,7 @@ export def "update-launch-configuration-template update" [
 # POST /UpdateReplicationConfiguration
 # operationId: UpdateReplicationConfiguration
 # --replicatedDisks item shape: {deviceName?: any, iops?: any, isBootDisk?: any, stagingDiskType?: any, throughput?: any}
-export def "update-replication-configuration update" [
+export def "update-replication-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3058,7 +3058,7 @@ export def "update-replication-configuration update" [
 #
 # POST /UpdateReplicationConfigurationTemplate
 # operationId: UpdateReplicationConfigurationTemplate
-export def "update-replication-configuration-template update" [
+export def "update-replication-configuration-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3118,7 +3118,7 @@ export def "update-replication-configuration-template update" [
 #
 # POST /UpdateSourceServerReplicationType
 # operationId: UpdateSourceServerReplicationType
-export def "update-source-server-replication-type update" [
+export def "update-source-server-replication-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3166,7 +3166,7 @@ export def "update-source-server-replication-type update" [
 #
 # POST /UpdateWave
 # operationId: UpdateWave
-export def "update-wave update" [
+export def "update-wave" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

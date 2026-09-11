@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-sql-servers-elastic-pools list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "elastic-pools-list-by-server" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/elasticPools
 # operationId: ElasticPools_ListByServer
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-elastic-pools list" [
+export def "elastic-pools-list-by-server" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -183,7 +183,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-elasti
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/elasticPools/{elasticPoolName}
 # operationId: ElasticPools_Delete
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-elastic-pools delete" [
+export def "elastic-pools-delete" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -227,7 +227,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-elasti
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/elasticPools/{elasticPoolName}
 # operationId: ElasticPools_Get
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-elastic-pools get" [
+export def "elastic-pools-get" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -273,7 +273,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-elasti
 # operationId: ElasticPools_Update
 # --properties shape: {licenseType?: "LicenseIncluded"|"BasePrice", maxSizeBytes?: int, perDatabaseSettings?: record, zoneRedundant?: bool}
 # --sku shape: {capacity?: int, family?: string, name: string, size?: string, tier?: string}
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-elastic-pools update" [
+export def "elastic-pools-update" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -325,7 +325,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-elasti
 # operationId: ElasticPools_CreateOrUpdate
 # --properties shape: {licenseType?: "LicenseIncluded"|"BasePrice", maxSizeBytes?: int, perDatabaseSettings?: record, zoneRedundant?: bool}
 # --sku shape: {capacity?: int, family?: string, name: string, size?: string, tier?: string}
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-elastic-pools create-or-update" [
+export def "elastic-pools-create-or-update" [
   subscription_id: string
   resource_group_name: string
   server_name: string

@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-deployment-admin-locations-global-product-packages-secrets list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "product-secrets-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -128,7 +128,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Deployment.Admin/locations/global/productPackages/{productId}/secrets
 # operationId: ProductSecrets_List
-export def "subscriptions-providers-microsoft-deployment-admin-locations-global-product-packages-secrets list" [
+export def "product-secrets-list" [
   subscription_id: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -168,7 +168,7 @@ export def "subscriptions-providers-microsoft-deployment-admin-locations-global-
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Deployment.Admin/locations/global/productSecrets/{productId}/secrets/{secretName}
 # operationId: ProductSecrets_Get
-export def "subscriptions-providers-microsoft-deployment-admin-locations-global-product-secrets-secrets get" [
+export def "product-secrets-get" [
   subscription_id: string
   product_id: string
   secret_name: string
@@ -210,7 +210,7 @@ export def "subscriptions-providers-microsoft-deployment-admin-locations-global-
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Deployment.Admin/locations/global/productSecrets/{productId}/secrets/{secretName}/import
 # operationId: ProductSecrets_Import
-export def "subscriptions-providers-microsoft-deployment-admin-locations-global-product-secrets-secrets-import import" [
+export def "product-secrets-import" [
   subscription_id: string
   product_id: string
   secret_name: string
@@ -260,7 +260,7 @@ export def "subscriptions-providers-microsoft-deployment-admin-locations-global-
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Deployment.Admin/locations/global/productSecrets/{productId}/secrets/{secretName}/validate
 # operationId: ProductSecrets_Validate
-export def "subscriptions-providers-microsoft-deployment-admin-locations-global-product-secrets-secrets-validate validate" [
+export def "product-secrets-validate" [
   subscription_id: string
   product_id: string
   secret_name: string

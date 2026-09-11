@@ -102,7 +102,7 @@ def visibility-completer [] { ["PRIVATE" "PUBLISHED" "VISIBILITY_UNSPECIFIED"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "assets list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "poly-assets-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -126,7 +126,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/assets
 # operationId: poly.assets.list
-export def "assets list" [
+export def "poly-assets-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -180,7 +180,7 @@ export def "assets list" [
 #
 # GET /v1/{name}
 # operationId: poly.assets.get
-export def "assets get" [
+export def "poly-assets-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -228,7 +228,7 @@ export def "assets get" [
 #
 # GET /v1/{name}/assets
 # operationId: poly.users.assets.list
-export def "assets list-1" [
+export def "poly-users-assets-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -281,7 +281,7 @@ export def "assets list-1" [
 #
 # GET /v1/{name}/likedassets
 # operationId: poly.users.likedassets.list
-export def "likedassets list" [
+export def "poly-users-likedassets-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

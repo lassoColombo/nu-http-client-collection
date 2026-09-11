@@ -102,7 +102,7 @@ def latex-compiler-completer [] { ["lualatex" "pdflatex"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "templates-compile create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "compile" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -126,7 +126,7 @@ export def commands []: nothing -> table {
 #
 # POST /templates/{template-token}/compile
 # operationId: compile
-export def "templates-compile create" [
+export def "compile" [
   template_token: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

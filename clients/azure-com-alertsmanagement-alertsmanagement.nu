@@ -136,7 +136,7 @@ def sort-by-completer-1 [] { ["alertsCount" "lastModifiedDateTime" "severity" "s
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-alerts-management-alerts-meta-data get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "alerts-meta-data" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -160,7 +160,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.AlertsManagement/alertsMetaData
 # operationId: Alerts_MetaData
-export def "providers-microsoft-alerts-management-alerts-meta-data get" [
+export def "alerts-meta-data" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -197,7 +197,7 @@ export def "providers-microsoft-alerts-management-alerts-meta-data get" [
 #
 # GET /providers/Microsoft.AlertsManagement/operations
 # operationId: Operations_List
-export def "providers-microsoft-alerts-management-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -233,7 +233,7 @@ export def "providers-microsoft-alerts-management-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.AlertsManagement/actionRules
 # operationId: ActionRules_ListBySubscription
-export def "subscriptions-providers-microsoft-alerts-management-action-rules list" [
+export def "action-rules-list-by-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -281,7 +281,7 @@ export def "subscriptions-providers-microsoft-alerts-management-action-rules lis
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.AlertsManagement/alerts
 # operationId: Alerts_GetAll
-export def "subscriptions-providers-microsoft-alerts-management-alerts get-list" [
+export def "alerts-get-all" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -336,7 +336,7 @@ export def "subscriptions-providers-microsoft-alerts-management-alerts get-list"
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.AlertsManagement/alerts/{alertId}
 # operationId: Alerts_GetById
-export def "subscriptions-providers-microsoft-alerts-management-alerts get" [
+export def "alerts-get-by-id" [
   subscription_id: string
   alert_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -376,7 +376,7 @@ export def "subscriptions-providers-microsoft-alerts-management-alerts get" [
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.AlertsManagement/alerts/{alertId}/changestate
 # operationId: Alerts_ChangeState
-export def "subscriptions-providers-microsoft-alerts-management-alerts-changestate create-change-state" [
+export def "alerts-change-state" [
   subscription_id: string
   alert_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -417,7 +417,7 @@ export def "subscriptions-providers-microsoft-alerts-management-alerts-changesta
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.AlertsManagement/alerts/{alertId}/history
 # operationId: Alerts_GetHistory
-export def "subscriptions-providers-microsoft-alerts-management-alerts-history get" [
+export def "alerts-get-history" [
   subscription_id: string
   alert_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -457,7 +457,7 @@ export def "subscriptions-providers-microsoft-alerts-management-alerts-history g
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.AlertsManagement/alertsSummary
 # operationId: Alerts_GetSummary
-export def "subscriptions-providers-microsoft-alerts-management-alerts-summary get" [
+export def "alerts-get-summary" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -507,7 +507,7 @@ export def "subscriptions-providers-microsoft-alerts-management-alerts-summary g
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.AlertsManagement/smartGroups
 # operationId: SmartGroups_GetAll
-export def "subscriptions-providers-microsoft-alerts-management-smart-groups get-list" [
+export def "smart-groups-get-all" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -556,7 +556,7 @@ export def "subscriptions-providers-microsoft-alerts-management-smart-groups get
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.AlertsManagement/smartGroups/{smartGroupId}
 # operationId: SmartGroups_GetById
-export def "subscriptions-providers-microsoft-alerts-management-smart-groups get" [
+export def "smart-groups-get-by-id" [
   subscription_id: string
   smart_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -596,7 +596,7 @@ export def "subscriptions-providers-microsoft-alerts-management-smart-groups get
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.AlertsManagement/smartGroups/{smartGroupId}/changeState
 # operationId: SmartGroups_ChangeState
-export def "subscriptions-providers-microsoft-alerts-management-smart-groups-change-state create" [
+export def "smart-groups-change-state" [
   subscription_id: string
   smart_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -637,7 +637,7 @@ export def "subscriptions-providers-microsoft-alerts-management-smart-groups-cha
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.AlertsManagement/smartGroups/{smartGroupId}/history
 # operationId: SmartGroups_GetHistory
-export def "subscriptions-providers-microsoft-alerts-management-smart-groups-history get" [
+export def "smart-groups-get-history" [
   subscription_id: string
   smart_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -677,7 +677,7 @@ export def "subscriptions-providers-microsoft-alerts-management-smart-groups-his
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AlertsManagement/actionRules
 # operationId: ActionRules_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-alerts-management-action-rules list" [
+export def "action-rules-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -727,7 +727,7 @@ export def "subscriptions-resource-groups-providers-microsoft-alerts-management-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AlertsManagement/actionRules/{actionRuleName}
 # operationId: ActionRules_Delete
-export def "subscriptions-resource-groups-providers-microsoft-alerts-management-action-rules delete" [
+export def "action-rules-delete" [
   subscription_id: string
   resource_group_name: string
   action_rule_name: string
@@ -769,7 +769,7 @@ export def "subscriptions-resource-groups-providers-microsoft-alerts-management-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AlertsManagement/actionRules/{actionRuleName}
 # operationId: ActionRules_GetByName
-export def "subscriptions-resource-groups-providers-microsoft-alerts-management-action-rules get-by-name" [
+export def "action-rules-get-by-name" [
   subscription_id: string
   resource_group_name: string
   action_rule_name: string
@@ -812,7 +812,7 @@ export def "subscriptions-resource-groups-providers-microsoft-alerts-management-
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AlertsManagement/actionRules/{actionRuleName}
 # operationId: ActionRules_Update
 # --properties shape: {status?: "Enabled"|"Disabled"}
-export def "subscriptions-resource-groups-providers-microsoft-alerts-management-action-rules update" [
+export def "action-rules-update" [
   subscription_id: string
   resource_group_name: string
   action_rule_name: string
@@ -860,7 +860,7 @@ export def "subscriptions-resource-groups-providers-microsoft-alerts-management-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AlertsManagement/actionRules/{actionRuleName}
 # operationId: ActionRules_CreateUpdate
 # --properties shape: {conditions?: record, description?: string, scope?: record, status?: "Enabled"|"Disabled", type: "Suppression"|"ActionGroup"|"Diagnostics"}
-export def "subscriptions-resource-groups-providers-microsoft-alerts-management-action-rules create-update" [
+export def "action-rules-create-update" [
   subscription_id: string
   resource_group_name: string
   action_rule_name: string

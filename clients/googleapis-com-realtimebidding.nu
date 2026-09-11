@@ -118,7 +118,7 @@ def type-completer [] { ["FLEDGE_BIDDING_FUNCTION" "FUNCTION_TYPE_UNSPECIFIED" "
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1alpha create-activate" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "realtimebidding-bidders-bidding-functions-activate" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -142,7 +142,7 @@ export def commands []: nothing -> table {
 #
 # POST /v1alpha/{name}:activate
 # operationId: realtimebidding.bidders.biddingFunctions.activate
-export def "v1alpha create-activate" [
+export def "realtimebidding-bidders-bidding-functions-activate" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -194,7 +194,7 @@ export def "v1alpha create-activate" [
 #
 # POST /v1alpha/{name}:archive
 # operationId: realtimebidding.bidders.biddingFunctions.archive
-export def "v1alpha archive" [
+export def "realtimebidding-bidders-bidding-functions-archive" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -246,7 +246,7 @@ export def "v1alpha archive" [
 #
 # GET /v1alpha/{parent}/biddingFunctions
 # operationId: realtimebidding.bidders.biddingFunctions.list
-export def "v1alpha-bidding-functions list" [
+export def "realtimebidding-bidders-bidding-functions-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -296,7 +296,7 @@ export def "v1alpha-bidding-functions list" [
 #
 # POST /v1alpha/{parent}/biddingFunctions
 # operationId: realtimebidding.bidders.biddingFunctions.create
-export def "v1alpha-bidding-functions create" [
+export def "realtimebidding-bidders-bidding-functions-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

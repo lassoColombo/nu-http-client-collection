@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "experiment-templates create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-experiment-template" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -142,7 +142,7 @@ export def commands []: nothing -> table {
 # operationId: CreateExperimentTemplate
 # --stopConditions item shape: {source: any, value?: any}
 # --logConfiguration shape: {cloudWatchLogsConfiguration?: any, s3Configuration?: any, logSchemaVersion?: any}
-export def "experiment-templates create" [
+export def "create-experiment-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -196,7 +196,7 @@ export def "experiment-templates create" [
 #
 # GET /experimentTemplates
 # operationId: ListExperimentTemplates
-export def "experiment-templates list" [
+export def "list-experiment-templates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -242,7 +242,7 @@ export def "experiment-templates list" [
 #
 # DELETE /experimentTemplates/{id}
 # operationId: DeleteExperimentTemplate
-export def "experiment-templates delete" [
+export def "delete-experiment-template" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -287,7 +287,7 @@ export def "experiment-templates delete" [
 #
 # GET /experimentTemplates/{id}
 # operationId: GetExperimentTemplate
-export def "experiment-templates get" [
+export def "get-experiment-template" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -334,7 +334,7 @@ export def "experiment-templates get" [
 # operationId: UpdateExperimentTemplate
 # --stopConditions item shape: {source: any, value?: any}
 # --logConfiguration shape: {cloudWatchLogsConfiguration?: any, s3Configuration?: any, logSchemaVersion?: any}
-export def "experiment-templates update" [
+export def "update-experiment-template" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -388,7 +388,7 @@ export def "experiment-templates update" [
 #
 # GET /actions/{id}
 # operationId: GetAction
-export def "actions get" [
+export def "get-action" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -433,7 +433,7 @@ export def "actions get" [
 #
 # GET /experiments/{id}
 # operationId: GetExperiment
-export def "experiments get" [
+export def "get-experiment" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -478,7 +478,7 @@ export def "experiments get" [
 #
 # DELETE /experiments/{id}
 # operationId: StopExperiment
-export def "experiments stop" [
+export def "stop-experiment" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -523,7 +523,7 @@ export def "experiments stop" [
 #
 # GET /targetResourceTypes/{resourceType}
 # operationId: GetTargetResourceType
-export def "target-resource-types get" [
+export def "get-target-resource-type" [
   resource_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -568,7 +568,7 @@ export def "target-resource-types get" [
 #
 # GET /actions
 # operationId: ListActions
-export def "actions list" [
+export def "list-actions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -614,7 +614,7 @@ export def "actions list" [
 #
 # GET /experiments
 # operationId: ListExperiments
-export def "experiments list" [
+export def "list-experiments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -660,7 +660,7 @@ export def "experiments list" [
 #
 # POST /experiments
 # operationId: StartExperiment
-export def "experiments start" [
+export def "start-experiment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -709,7 +709,7 @@ export def "experiments start" [
 #
 # GET /tags/{resourceArn}
 # operationId: ListTagsForResource
-export def "tags list-for-resource" [
+export def "list-tags-for-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -754,7 +754,7 @@ export def "tags list-for-resource" [
 #
 # POST /tags/{resourceArn}
 # operationId: TagResource
-export def "tags tag-resource" [
+export def "tag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -803,7 +803,7 @@ export def "tags tag-resource" [
 #
 # DELETE /tags/{resourceArn}
 # operationId: UntagResource
-export def "tags untag-resource" [
+export def "untag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -850,7 +850,7 @@ export def "tags untag-resource" [
 #
 # GET /targetResourceTypes
 # operationId: ListTargetResourceTypes
-export def "target-resource-types list" [
+export def "list-target-resource-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

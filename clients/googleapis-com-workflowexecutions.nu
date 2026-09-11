@@ -119,7 +119,7 @@ def call-log-level-completer [] { ["CALL_LOG_LEVEL_UNSPECIFIED" "LOG_ALL_CALLS" 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "workflowexecutions-projects-locations-workflows-executions-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -143,7 +143,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1beta/{name}
 # operationId: workflowexecutions.projects.locations.workflows.executions.get
-export def "v1beta get" [
+export def "workflowexecutions-projects-locations-workflows-executions-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -192,7 +192,7 @@ export def "v1beta get" [
 #
 # POST /v1beta/{name}:cancel
 # operationId: workflowexecutions.projects.locations.workflows.executions.cancel
-export def "v1beta cancel" [
+export def "workflowexecutions-projects-locations-workflows-executions-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -244,7 +244,7 @@ export def "v1beta cancel" [
 #
 # GET /v1beta/{parent}/executions
 # operationId: workflowexecutions.projects.locations.workflows.executions.list
-export def "v1beta-executions list" [
+export def "workflowexecutions-projects-locations-workflows-executions-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -297,7 +297,7 @@ export def "v1beta-executions list" [
 # operationId: workflowexecutions.projects.locations.workflows.executions.create
 # --error shape: {context?: string, payload?: string, stackTrace?: record}
 # --status shape: {currentSteps?: list}
-export def "v1beta-executions create" [
+export def "workflowexecutions-projects-locations-workflows-executions-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

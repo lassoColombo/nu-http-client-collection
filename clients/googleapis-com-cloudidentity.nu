@@ -135,7 +135,7 @@ def page-size-completer [] { ["BASIC" "FULL"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta1-devices list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cloudidentity-devices-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -159,7 +159,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1beta1/devices
 # operationId: cloudidentity.devices.list
-export def "v1beta1-devices list" [
+export def "cloudidentity-devices-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -212,7 +212,7 @@ export def "v1beta1-devices list" [
 # POST /v1beta1/devices
 # operationId: cloudidentity.devices.create
 # --device shape: {androidSpecificAttributes?: record, assetTag?: string, clientTypes?: list<string>, deviceId?: string, endpointVerificationSpecificAttributes?: record, hostname?: string, lastSyncTime?: string, serialNumber?: string, wifiMacAddresses?: list<string>}
-export def "v1beta1-devices create" [
+export def "cloudidentity-devices-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -263,7 +263,7 @@ export def "v1beta1-devices create" [
 #
 # GET /v1beta1/groups
 # operationId: cloudidentity.groups.list
-export def "v1beta1-groups list" [
+export def "cloudidentity-groups-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -317,7 +317,7 @@ export def "v1beta1-groups list" [
 # --dynamicGroupMetadata shape: {queries?: list, status?: record}
 # --groupKey shape: {id?: string, namespace?: string}
 # --posixGroups item shape: {gid?: string, name?: string, systemId?: string}
-export def "v1beta1-groups create" [
+export def "cloudidentity-groups-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -374,7 +374,7 @@ export def "v1beta1-groups create" [
 #
 # GET /v1beta1/groups:lookup
 # operationId: cloudidentity.groups.lookup
-export def "v1beta1-groups-lookup get" [
+export def "cloudidentity-groups-lookup" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -422,7 +422,7 @@ export def "v1beta1-groups-lookup get" [
 #
 # GET /v1beta1/groups:search
 # operationId: cloudidentity.groups.search
-export def "v1beta1-groups-search list" [
+export def "cloudidentity-groups-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -473,7 +473,7 @@ export def "v1beta1-groups-search list" [
 #
 # GET /v1beta1/inboundSamlSsoProfiles
 # operationId: cloudidentity.inboundSamlSsoProfiles.list
-export def "v1beta1-inbound-saml-sso-profiles list" [
+export def "cloudidentity-inbound-saml-sso-profiles-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -523,7 +523,7 @@ export def "v1beta1-inbound-saml-sso-profiles list" [
 # POST /v1beta1/inboundSamlSsoProfiles
 # operationId: cloudidentity.inboundSamlSsoProfiles.create
 # --idpConfig shape: {changePasswordUri?: string, entityId?: string, logoutRedirectUri?: string, singleSignOnServiceUri?: string}
-export def "v1beta1-inbound-saml-sso-profiles create" [
+export def "cloudidentity-inbound-saml-sso-profiles-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -576,7 +576,7 @@ export def "v1beta1-inbound-saml-sso-profiles create" [
 #
 # GET /v1beta1/inboundSsoAssignments
 # operationId: cloudidentity.inboundSsoAssignments.list
-export def "v1beta1-inbound-sso-assignments list" [
+export def "cloudidentity-inbound-sso-assignments-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -627,7 +627,7 @@ export def "v1beta1-inbound-sso-assignments list" [
 # operationId: cloudidentity.inboundSsoAssignments.create
 # --samlSsoInfo shape: {inboundSamlSsoProfile?: string}
 # --signInBehavior shape: {redirectCondition?: "REDIRECT_CONDITION_UNSPECIFIED"|"NEVER"}
-export def "v1beta1-inbound-sso-assignments create" [
+export def "cloudidentity-inbound-sso-assignments-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -683,7 +683,7 @@ export def "v1beta1-inbound-sso-assignments create" [
 #
 # DELETE /v1beta1/{name}
 # operationId: cloudidentity.inboundSsoAssignments.delete
-export def "v1beta1 delete" [
+export def "cloudidentity-inbound-sso-assignments-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -732,7 +732,7 @@ export def "v1beta1 delete" [
 #
 # GET /v1beta1/{name}
 # operationId: cloudidentity.inboundSsoAssignments.get
-export def "v1beta1 get" [
+export def "cloudidentity-inbound-sso-assignments-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -783,7 +783,7 @@ export def "v1beta1 get" [
 # operationId: cloudidentity.inboundSsoAssignments.patch
 # --samlSsoInfo shape: {inboundSamlSsoProfile?: string}
 # --signInBehavior shape: {redirectCondition?: "REDIRECT_CONDITION_UNSPECIFIED"|"NEVER"}
-export def "v1beta1 update" [
+export def "cloudidentity-inbound-sso-assignments-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -842,7 +842,7 @@ export def "v1beta1 update" [
 #
 # POST /v1beta1/{name}:approve
 # operationId: cloudidentity.devices.deviceUsers.approve
-export def "v1beta1 approve" [
+export def "cloudidentity-devices-device-users-approve" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -894,7 +894,7 @@ export def "v1beta1 approve" [
 #
 # POST /v1beta1/{name}:block
 # operationId: cloudidentity.devices.deviceUsers.block
-export def "v1beta1 create-block" [
+export def "cloudidentity-devices-device-users-block" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -946,7 +946,7 @@ export def "v1beta1 create-block" [
 #
 # POST /v1beta1/{name}:cancel
 # operationId: cloudidentity.customers.userinvitations.cancel
-export def "v1beta1 cancel" [
+export def "cloudidentity-customers-userinvitations-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -998,7 +998,7 @@ export def "v1beta1 cancel" [
 #
 # POST /v1beta1/{name}:cancelWipe
 # operationId: cloudidentity.devices.deviceUsers.cancelWipe
-export def "v1beta1 cancel-wipe" [
+export def "cloudidentity-devices-device-users-cancel-wipe" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1050,7 +1050,7 @@ export def "v1beta1 cancel-wipe" [
 #
 # GET /v1beta1/{name}:isInvitableUser
 # operationId: cloudidentity.customers.userinvitations.isInvitableUser
-export def "v1beta1 get-is-invitable-user" [
+export def "cloudidentity-customers-userinvitations-is-invitable-user" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1100,7 +1100,7 @@ export def "v1beta1 get-is-invitable-user" [
 # operationId: cloudidentity.groups.memberships.modifyMembershipRoles
 # --addRoles item shape: {expiryDetail?: record, name?: string, restrictionEvaluations?: record}
 # --updateRolesParams item shape: {fieldMask?: string, membershipRole?: record}
-export def "v1beta1 create-modify-membership-roles" [
+export def "cloudidentity-groups-memberships-modify-membership-roles" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1154,7 +1154,7 @@ export def "v1beta1 create-modify-membership-roles" [
 #
 # POST /v1beta1/{name}:move
 # operationId: cloudidentity.orgUnits.memberships.move
-export def "v1beta1 move" [
+export def "cloudidentity-org-units-memberships-move" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1207,7 +1207,7 @@ export def "v1beta1 move" [
 #
 # POST /v1beta1/{name}:send
 # operationId: cloudidentity.customers.userinvitations.send
-export def "v1beta1 send" [
+export def "cloudidentity-customers-userinvitations-send" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1259,7 +1259,7 @@ export def "v1beta1 send" [
 #
 # POST /v1beta1/{name}:wipe
 # operationId: cloudidentity.devices.deviceUsers.wipe
-export def "v1beta1 create-wipe" [
+export def "cloudidentity-devices-device-users-wipe" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1311,7 +1311,7 @@ export def "v1beta1 create-wipe" [
 #
 # GET /v1beta1/{parent}/deviceUsers
 # operationId: cloudidentity.devices.deviceUsers.list
-export def "v1beta1-device-users list" [
+export def "cloudidentity-devices-device-users-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1364,7 +1364,7 @@ export def "v1beta1-device-users list" [
 #
 # GET /v1beta1/{parent}/idpCredentials
 # operationId: cloudidentity.inboundSamlSsoProfiles.idpCredentials.list
-export def "v1beta1-idp-credentials list" [
+export def "cloudidentity-inbound-saml-sso-profiles-idp-credentials-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1414,7 +1414,7 @@ export def "v1beta1-idp-credentials list" [
 #
 # POST /v1beta1/{parent}/idpCredentials:add
 # operationId: cloudidentity.inboundSamlSsoProfiles.idpCredentials.add
-export def "v1beta1-idp-credentials-add create" [
+export def "cloudidentity-inbound-saml-sso-profiles-idp-credentials-add" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1466,7 +1466,7 @@ export def "v1beta1-idp-credentials-add create" [
 #
 # GET /v1beta1/{parent}/memberships
 # operationId: cloudidentity.orgUnits.memberships.list
-export def "v1beta1-memberships list" [
+export def "cloudidentity-org-units-memberships-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1521,7 +1521,7 @@ export def "v1beta1-memberships list" [
 # --memberKey shape: {id?: string, namespace?: string}
 # --preferredMemberKey shape: {id?: string, namespace?: string}
 # --roles item shape: {expiryDetail?: record, name?: string, restrictionEvaluations?: record}
-export def "v1beta1-memberships create" [
+export def "cloudidentity-groups-memberships-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1575,7 +1575,7 @@ export def "v1beta1-memberships create" [
 #
 # GET /v1beta1/{parent}/memberships:checkTransitiveMembership
 # operationId: cloudidentity.groups.memberships.checkTransitiveMembership
-export def "v1beta1-memberships-check-transitive-membership check" [
+export def "cloudidentity-groups-memberships-check-transitive-membership" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1624,7 +1624,7 @@ export def "v1beta1-memberships-check-transitive-membership check" [
 #
 # GET /v1beta1/{parent}/memberships:getMembershipGraph
 # operationId: cloudidentity.groups.memberships.getMembershipGraph
-export def "v1beta1-memberships-get-membership-graph get" [
+export def "cloudidentity-groups-memberships-get-membership-graph" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1673,7 +1673,7 @@ export def "v1beta1-memberships-get-membership-graph get" [
 #
 # GET /v1beta1/{parent}/memberships:lookup
 # operationId: cloudidentity.groups.memberships.lookup
-export def "v1beta1-memberships-lookup get" [
+export def "cloudidentity-groups-memberships-lookup" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1723,7 +1723,7 @@ export def "v1beta1-memberships-lookup get" [
 #
 # GET /v1beta1/{parent}/memberships:searchDirectGroups
 # operationId: cloudidentity.groups.memberships.searchDirectGroups
-export def "v1beta1-memberships-search-direct-groups list" [
+export def "cloudidentity-groups-memberships-search-direct-groups" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1775,7 +1775,7 @@ export def "v1beta1-memberships-search-direct-groups list" [
 #
 # GET /v1beta1/{parent}/memberships:searchTransitiveGroups
 # operationId: cloudidentity.groups.memberships.searchTransitiveGroups
-export def "v1beta1-memberships-search-transitive-groups list" [
+export def "cloudidentity-groups-memberships-search-transitive-groups" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1826,7 +1826,7 @@ export def "v1beta1-memberships-search-transitive-groups list" [
 #
 # GET /v1beta1/{parent}/memberships:searchTransitiveMemberships
 # operationId: cloudidentity.groups.memberships.searchTransitiveMemberships
-export def "v1beta1-memberships-search-transitive-memberships list" [
+export def "cloudidentity-groups-memberships-search-transitive-memberships" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1876,7 +1876,7 @@ export def "v1beta1-memberships-search-transitive-memberships list" [
 #
 # GET /v1beta1/{parent}/userinvitations
 # operationId: cloudidentity.customers.userinvitations.list
-export def "v1beta1-userinvitations list" [
+export def "cloudidentity-customers-userinvitations-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1928,7 +1928,7 @@ export def "v1beta1-userinvitations list" [
 #
 # GET /v1beta1/{parent}:lookup
 # operationId: cloudidentity.devices.deviceUsers.lookup
-export def "v1beta1 get-lookup" [
+export def "cloudidentity-devices-device-users-lookup" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

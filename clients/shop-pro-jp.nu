@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "appstore-application-charges-json create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-application-charge" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -141,7 +141,7 @@ export def commands []: nothing -> table {
 # POST /appstore/v1/application_charges.json
 # operationId: postApplicationCharge
 # --application_charge shape: {application_charge_source_id?: string}
-export def "appstore-application-charges-json create" [
+export def "post-application-charge" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -179,7 +179,7 @@ export def "appstore-application-charges-json create" [
 #
 # DELETE /appstore/v1/installation.json
 # operationId: deleteInstallation
-export def "appstore-installation-json delete" [
+export def "delete-installation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -214,7 +214,7 @@ export def "appstore-installation-json delete" [
 # POST /appstore/v1/recurring_application_charges/{recurringApplicationChargeId}/usage_charges.json
 # operationId: createUsageCharge
 # --usage_charge shape: {description: string, point: int}
-export def "appstore-recurring-application-charges-usage-charges-json create" [
+export def "create-usage-charge" [
   recurring_application_charge_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -257,7 +257,7 @@ export def "appstore-recurring-application-charges-usage-charges-json create" [
 #
 # GET /appstore/v1/script_tags.json
 # operationId: getShopScriptTags
-export def "appstore-script-tags-json get-shop" [
+export def "get-shop-script-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -292,7 +292,7 @@ export def "appstore-script-tags-json get-shop" [
 # POST /appstore/v1/script_tags.json
 # operationId: createShopScriptTag
 # --script_tag shape: {display_scope?: "shop"|"thanks_page", integrity?: string, src?: string}
-export def "appstore-script-tags-json create-shop" [
+export def "create-shop-script-tag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -330,7 +330,7 @@ export def "appstore-script-tags-json create-shop" [
 #
 # DELETE /appstore/v1/script_tags/{scriptTagId}.json
 # operationId: deleteScriptTag
-export def "appstore-script-tags delete" [
+export def "delete-script-tag" [
   script_tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -366,7 +366,7 @@ export def "appstore-script-tags delete" [
 #
 # GET /appstore/v1/script_tags/{scriptTagId}.json
 # operationId: getShopScriptTag
-export def "appstore-script-tags get-shop" [
+export def "get-shop-script-tag" [
   script_tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -403,7 +403,7 @@ export def "appstore-script-tags get-shop" [
 # PUT /appstore/v1/script_tags/{scriptTagId}.json
 # operationId: updateShopScriptTag
 # --script_tag shape: {display_scope?: "shop"|"thanks_page", integrity?: string, src?: string}
-export def "appstore-script-tags update-shop" [
+export def "update-shop-script-tag" [
   script_tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -443,7 +443,7 @@ export def "appstore-script-tags update-shop" [
 #
 # GET /v1/inline_script_tags.json
 # operationId: getInlineScriptTags
-export def "inline-script-tags-json get" [
+export def "get-inline-script-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -478,7 +478,7 @@ export def "inline-script-tags-json get" [
 # POST /v1/inline_script_tags.json
 # operationId: createInlineScriptTag
 # --inline_script_tag shape: {display_scope?: "all"|"thanks_page"|"cart", script?: string, trigger_event?: "object_builded"}
-export def "inline-script-tags-json create" [
+export def "create-inline-script-tag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -516,7 +516,7 @@ export def "inline-script-tags-json create" [
 #
 # DELETE /v1/inline_script_tags/{inlineScriptTagId}.json
 # operationId: deleteInlineScriptTag
-export def "inline-script-tags delete" [
+export def "delete-inline-script-tag" [
   inline_script_tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -552,7 +552,7 @@ export def "inline-script-tags delete" [
 #
 # GET /v1/inline_script_tags/{inlineScriptTagId}.json
 # operationId: getInlineScriptTag
-export def "inline-script-tags get" [
+export def "get-inline-script-tag" [
   inline_script_tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -589,7 +589,7 @@ export def "inline-script-tags get" [
 # PUT /v1/inline_script_tags/{inlineScriptTagId}.json
 # operationId: updateInlineScriptTag
 # --inline_script_tag shape: {display_scope?: "all"|"thanks_page"|"cart", script?: string, trigger_event?: "object_builded"}
-export def "inline-script-tags update" [
+export def "update-inline-script-tag" [
   inline_script_tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -629,7 +629,7 @@ export def "inline-script-tags update" [
 #
 # GET /v1/script_tags.json
 # operationId: getScriptTags
-export def "script-tags-json get" [
+export def "get-script-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -664,7 +664,7 @@ export def "script-tags-json get" [
 # POST /v1/script_tags.json
 # operationId: createScriptTag
 # --script_tag shape: {display_scope?: "all"|"shop"|"thanks_page"|"cart", src?: string}
-export def "script-tags-json create" [
+export def "create-script-tag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -701,7 +701,7 @@ export def "script-tags-json create" [
 # スクリプトタグの削除
 #
 # DELETE /v1/script_tags/{scriptTagId}.json
-export def "script-tags delete" [
+export def "delete-v1-script-tags-script-tag-id-json" [
   script_tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -737,7 +737,7 @@ export def "script-tags delete" [
 #
 # GET /v1/script_tags/{scriptTagId}.json
 # operationId: getScriptTag
-export def "script-tags get" [
+export def "get-script-tag" [
   script_tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -774,7 +774,7 @@ export def "script-tags get" [
 # PUT /v1/script_tags/{scriptTagId}.json
 # operationId: updateScriptTag
 # --script_tag shape: {display_scope?: "all"|"shop"|"thanks_page"|"cart", src?: string}
-export def "script-tags update" [
+export def "update-script-tag" [
   script_tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

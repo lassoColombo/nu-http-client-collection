@@ -128,7 +128,7 @@ def scope-completer [] { ["organization" "public" "secret" "user"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "user get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "current-user" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -152,7 +152,7 @@ export def commands []: nothing -> table {
 #
 # GET /user
 # operationId: currentUser
-export def "user get" [
+export def "current-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -187,7 +187,7 @@ export def "user get" [
 #
 # POST /webhooks/feed/:token
 # operationId: createWebhookFeedData
-export def "webhooks-feed-token create-data" [
+export def "create-webhook-feed-data" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -226,7 +226,7 @@ export def "webhooks-feed-token create-data" [
 #
 # POST /webhooks/feed/:token/raw
 # operationId: createRawWebhookFeedData
-export def "webhooks-feed-token-raw create-data" [
+export def "create-raw-webhook-feed-data" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -261,7 +261,7 @@ export def "webhooks-feed-token-raw create-data" [
 #
 # DELETE /{username}/activities
 # operationId: destroyActivities
-export def "activities delete" [
+export def "destroy-activities" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -298,7 +298,7 @@ export def "activities delete" [
 #
 # GET /{username}/activities
 # operationId: allActivities
-export def "activities list" [
+export def "all-activities" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -339,7 +339,7 @@ export def "activities list" [
 #
 # GET /{username}/activities/{type}
 # operationId: getActivity
-export def "activities get-activity" [
+export def "get-activity" [
   username: string
   type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -382,7 +382,7 @@ export def "activities get-activity" [
 #
 # GET /{username}/dashboards
 # operationId: allDashboards
-export def "dashboards list" [
+export def "all-dashboards" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -419,7 +419,7 @@ export def "dashboards list" [
 #
 # POST /{username}/dashboards
 # operationId: createDashboard
-export def "dashboards create" [
+export def "create-dashboard" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -462,7 +462,7 @@ export def "dashboards create" [
 #
 # GET /{username}/dashboards/{dashboard_id}/blocks
 # operationId: allBlocks
-export def "dashboards-blocks list" [
+export def "all-blocks" [
   username: string
   dashboard_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -502,7 +502,7 @@ export def "dashboards-blocks list" [
 # POST /{username}/dashboards/{dashboard_id}/blocks
 # operationId: createBlock
 # --block_feeds item shape: {feed_id?: string, group_id?: string}
-export def "dashboards-blocks create" [
+export def "create-block" [
   username: string
   dashboard_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -555,7 +555,7 @@ export def "dashboards-blocks create" [
 #
 # DELETE /{username}/dashboards/{dashboard_id}/blocks/{id}
 # operationId: destroyBlock
-export def "dashboards-blocks delete" [
+export def "destroy-block" [
   username: string
   dashboard_id: string
   id: string
@@ -596,7 +596,7 @@ export def "dashboards-blocks delete" [
 #
 # GET /{username}/dashboards/{dashboard_id}/blocks/{id}
 # operationId: getBlock
-export def "dashboards-blocks get" [
+export def "get-block" [
   username: string
   dashboard_id: string
   id: string
@@ -638,7 +638,7 @@ export def "dashboards-blocks get" [
 # PATCH /{username}/dashboards/{dashboard_id}/blocks/{id}
 # operationId: updateBlock
 # --block_feeds item shape: {feed_id?: string, group_id?: string}
-export def "dashboards-blocks update-by-username-dashboard-id" [
+export def "update-block" [
   username: string
   dashboard_id: string
   id: string
@@ -694,7 +694,7 @@ export def "dashboards-blocks update-by-username-dashboard-id" [
 # PUT /{username}/dashboards/{dashboard_id}/blocks/{id}
 # operationId: replaceBlock
 # --block_feeds item shape: {feed_id?: string, group_id?: string}
-export def "dashboards-blocks update-by-username-dashboard-id-1" [
+export def "replace-block" [
   username: string
   dashboard_id: string
   id: string
@@ -749,7 +749,7 @@ export def "dashboards-blocks update-by-username-dashboard-id-1" [
 #
 # DELETE /{username}/dashboards/{id}
 # operationId: destroyDashboard
-export def "dashboards delete" [
+export def "destroy-dashboard" [
   username: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -788,7 +788,7 @@ export def "dashboards delete" [
 #
 # GET /{username}/dashboards/{id}
 # operationId: getDashboard
-export def "dashboards get" [
+export def "get-dashboard" [
   username: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -827,7 +827,7 @@ export def "dashboards get" [
 #
 # PATCH /{username}/dashboards/{id}
 # operationId: updateDashboard
-export def "dashboards update-by-username-id" [
+export def "update-dashboard" [
   username: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -872,7 +872,7 @@ export def "dashboards update-by-username-id" [
 #
 # PUT /{username}/dashboards/{id}
 # operationId: replaceDashboard
-export def "dashboards update-by-username-id-1" [
+export def "replace-dashboard" [
   username: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -917,7 +917,7 @@ export def "dashboards update-by-username-id-1" [
 #
 # GET /{username}/feeds
 # operationId: allFeeds
-export def "feeds list" [
+export def "all-feeds" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -954,7 +954,7 @@ export def "feeds list" [
 #
 # POST /{username}/feeds
 # operationId: createFeed
-export def "feeds create" [
+export def "create-feed" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1000,7 +1000,7 @@ export def "feeds create" [
 #
 # DELETE /{username}/feeds/{feed_key}
 # operationId: destroyFeed
-export def "feeds delete" [
+export def "destroy-feed" [
   username: string
   feed_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1039,7 +1039,7 @@ export def "feeds delete" [
 #
 # GET /{username}/feeds/{feed_key}
 # operationId: getFeed
-export def "feeds get" [
+export def "get-feed" [
   username: string
   feed_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1078,7 +1078,7 @@ export def "feeds get" [
 #
 # PATCH /{username}/feeds/{feed_key}
 # operationId: updateFeed
-export def "feeds update-by-username-feed-key" [
+export def "update-feed" [
   username: string
   feed_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1124,7 +1124,7 @@ export def "feeds update-by-username-feed-key" [
 #
 # PUT /{username}/feeds/{feed_key}
 # operationId: replaceFeed
-export def "feeds update-by-username-feed-key-1" [
+export def "replace-feed" [
   username: string
   feed_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1170,7 +1170,7 @@ export def "feeds update-by-username-feed-key-1" [
 #
 # GET /{username}/feeds/{feed_key}/data
 # operationId: allData
-export def "feeds-data list" [
+export def "all-data" [
   username: string
   feed_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1214,7 +1214,7 @@ export def "feeds-data list" [
 #
 # POST /{username}/feeds/{feed_key}/data
 # operationId: createData
-export def "feeds-data create" [
+export def "create-data" [
   username: string
   feed_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1262,7 +1262,7 @@ export def "feeds-data create" [
 #
 # POST /{username}/feeds/{feed_key}/data/batch
 # operationId: batchCreateData
-export def "feeds-data-batch create" [
+export def "batch-create-data" [
   username: string
   feed_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1305,7 +1305,7 @@ export def "feeds-data-batch create" [
 #
 # GET /{username}/feeds/{feed_key}/data/chart
 # operationId: chartData
-export def "feeds-data-chart get" [
+export def "chart-data" [
   username: string
   feed_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1349,7 +1349,7 @@ export def "feeds-data-chart get" [
 #
 # GET /{username}/feeds/{feed_key}/data/first
 # operationId: firstData
-export def "feeds-data-first get" [
+export def "first-data" [
   username: string
   feed_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1390,7 +1390,7 @@ export def "feeds-data-first get" [
 #
 # GET /{username}/feeds/{feed_key}/data/last
 # operationId: lastData
-export def "feeds-data-last get" [
+export def "last-data" [
   username: string
   feed_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1431,7 +1431,7 @@ export def "feeds-data-last get" [
 #
 # GET /{username}/feeds/{feed_key}/data/next
 # operationId: nextData
-export def "feeds-data-next get" [
+export def "next-data" [
   username: string
   feed_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1472,7 +1472,7 @@ export def "feeds-data-next get" [
 #
 # GET /{username}/feeds/{feed_key}/data/previous
 # operationId: previousData
-export def "feeds-data-previous get" [
+export def "previous-data" [
   username: string
   feed_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1513,7 +1513,7 @@ export def "feeds-data-previous get" [
 #
 # GET /{username}/feeds/{feed_key}/data/retain
 # operationId: retainData
-export def "feeds-data-retain get" [
+export def "retain-data" [
   username: string
   feed_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1551,7 +1551,7 @@ export def "feeds-data-retain get" [
 #
 # DELETE /{username}/feeds/{feed_key}/data/{id}
 # operationId: destroyData
-export def "feeds-data delete" [
+export def "destroy-data" [
   username: string
   feed_key: string
   id: string
@@ -1592,7 +1592,7 @@ export def "feeds-data delete" [
 #
 # GET /{username}/feeds/{feed_key}/data/{id}
 # operationId: getData
-export def "feeds-data get" [
+export def "get-data" [
   username: string
   feed_key: string
   id: string
@@ -1635,7 +1635,7 @@ export def "feeds-data get" [
 #
 # PATCH /{username}/feeds/{feed_key}/data/{id}
 # operationId: updateData
-export def "feeds-data update-by-username-feed-key-id" [
+export def "update-data" [
   username: string
   feed_key: string
   id: string
@@ -1685,7 +1685,7 @@ export def "feeds-data update-by-username-feed-key-id" [
 #
 # PUT /{username}/feeds/{feed_key}/data/{id}
 # operationId: replaceData
-export def "feeds-data update-by-username-feed-key-id-1" [
+export def "replace-data" [
   username: string
   feed_key: string
   id: string
@@ -1735,7 +1735,7 @@ export def "feeds-data update-by-username-feed-key-id-1" [
 #
 # GET /{username}/feeds/{feed_key}/details
 # operationId: getFeedDetails
-export def "feeds-details get" [
+export def "get-feed-details" [
   username: string
   feed_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1774,7 +1774,7 @@ export def "feeds-details get" [
 #
 # GET /{username}/groups
 # operationId: allGroups
-export def "groups list" [
+export def "all-groups" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1811,7 +1811,7 @@ export def "groups list" [
 #
 # POST /{username}/groups
 # operationId: createGroup
-export def "groups create" [
+export def "create-group" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1854,7 +1854,7 @@ export def "groups create" [
 #
 # DELETE /{username}/groups/{group_key}
 # operationId: destroyGroup
-export def "groups delete" [
+export def "destroy-group" [
   username: string
   group_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1893,7 +1893,7 @@ export def "groups delete" [
 #
 # GET /{username}/groups/{group_key}
 # operationId: getGroup
-export def "groups get" [
+export def "get-group" [
   username: string
   group_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1932,7 +1932,7 @@ export def "groups get" [
 #
 # PATCH /{username}/groups/{group_key}
 # operationId: updateGroup
-export def "groups update-by-username-group-key" [
+export def "update-group" [
   username: string
   group_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1977,7 +1977,7 @@ export def "groups update-by-username-group-key" [
 #
 # PUT /{username}/groups/{group_key}
 # operationId: replaceGroup
-export def "groups update-by-username-group-key-1" [
+export def "replace-group" [
   username: string
   group_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2022,7 +2022,7 @@ export def "groups update-by-username-group-key-1" [
 #
 # POST /{username}/groups/{group_key}/add
 # operationId: addFeedToGroup
-export def "groups-add create-feed" [
+export def "add-feed-to-group" [
   username: string
   group_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2065,7 +2065,7 @@ export def "groups-add create-feed" [
 # operationId: createGroupData
 # --feeds item shape: {key: string, value: string}
 # --location shape: {ele?: float, lat: float, lon: float}
-export def "groups-data create" [
+export def "create-group-data" [
   username: string
   group_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2110,7 +2110,7 @@ export def "groups-data create" [
 #
 # GET /{username}/groups/{group_key}/feeds
 # operationId: allGroupFeeds
-export def "groups-feeds list" [
+export def "all-group-feeds" [
   username: string
   group_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2149,7 +2149,7 @@ export def "groups-feeds list" [
 #
 # POST /{username}/groups/{group_key}/feeds
 # operationId: createGroupFeed
-export def "groups-feeds create" [
+export def "create-group-feed" [
   username: string
   group_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2195,7 +2195,7 @@ export def "groups-feeds create" [
 #
 # GET /{username}/groups/{group_key}/feeds/{feed_key}/data
 # operationId: allGroupFeedData
-export def "groups-feeds-data list" [
+export def "all-group-feed-data" [
   username: string
   group_key: string
   feed_key: string
@@ -2240,7 +2240,7 @@ export def "groups-feeds-data list" [
 #
 # POST /{username}/groups/{group_key}/feeds/{feed_key}/data
 # operationId: createGroupFeedData
-export def "groups-feeds-data create" [
+export def "create-group-feed-data" [
   username: string
   group_key: string
   feed_key: string
@@ -2290,7 +2290,7 @@ export def "groups-feeds-data create" [
 #
 # POST /{username}/groups/{group_key}/feeds/{feed_key}/data/batch
 # operationId: batchCreateGroupFeedData
-export def "groups-feeds-data-batch create" [
+export def "batch-create-group-feed-data" [
   username: string
   group_key: string
   feed_key: string
@@ -2335,7 +2335,7 @@ export def "groups-feeds-data-batch create" [
 #
 # POST /{username}/groups/{group_key}/remove
 # operationId: removeFeedFromGroup
-export def "groups-remove delete-feed" [
+export def "remove-feed-from-group" [
   username: string
   group_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2376,7 +2376,7 @@ export def "groups-remove delete-feed" [
 #
 # GET /{username}/throttle
 # operationId: getCurrentUserThrottle
-export def "throttle get-user" [
+export def "get-current-user-throttle" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2413,7 +2413,7 @@ export def "throttle get-user" [
 #
 # GET /{username}/tokens
 # operationId: allTokens
-export def "tokens list" [
+export def "all-tokens" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2450,7 +2450,7 @@ export def "tokens list" [
 #
 # POST /{username}/tokens
 # operationId: createToken
-export def "tokens create" [
+export def "create-token" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2491,7 +2491,7 @@ export def "tokens create" [
 #
 # DELETE /{username}/tokens/{id}
 # operationId: destroyToken
-export def "tokens delete" [
+export def "destroy-token" [
   username: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2530,7 +2530,7 @@ export def "tokens delete" [
 #
 # GET /{username}/tokens/{id}
 # operationId: getToken
-export def "tokens get" [
+export def "get-token" [
   username: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2569,7 +2569,7 @@ export def "tokens get" [
 #
 # PATCH /{username}/tokens/{id}
 # operationId: updateToken
-export def "tokens update-by-username-id" [
+export def "update-token" [
   username: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2612,7 +2612,7 @@ export def "tokens update-by-username-id" [
 #
 # PUT /{username}/tokens/{id}
 # operationId: replaceToken
-export def "tokens update-by-username-id-1" [
+export def "replace-token" [
   username: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2655,7 +2655,7 @@ export def "tokens update-by-username-id-1" [
 #
 # GET /{username}/triggers
 # operationId: allTriggers
-export def "triggers list" [
+export def "all-triggers" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2692,7 +2692,7 @@ export def "triggers list" [
 #
 # POST /{username}/triggers
 # operationId: createTrigger
-export def "triggers create" [
+export def "create-trigger" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2733,7 +2733,7 @@ export def "triggers create" [
 #
 # DELETE /{username}/triggers/{id}
 # operationId: destroyTrigger
-export def "triggers delete" [
+export def "destroy-trigger" [
   username: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2772,7 +2772,7 @@ export def "triggers delete" [
 #
 # GET /{username}/triggers/{id}
 # operationId: getTrigger
-export def "triggers get" [
+export def "get-trigger" [
   username: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2811,7 +2811,7 @@ export def "triggers get" [
 #
 # PATCH /{username}/triggers/{id}
 # operationId: updateTrigger
-export def "triggers update-by-username-id" [
+export def "update-trigger" [
   username: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2854,7 +2854,7 @@ export def "triggers update-by-username-id" [
 #
 # PUT /{username}/triggers/{id}
 # operationId: replaceTrigger
-export def "triggers update-by-username-id-1" [
+export def "replace-trigger" [
   username: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2897,7 +2897,7 @@ export def "triggers update-by-username-id-1" [
 #
 # GET /{username}/{type}/{type_id}/acl
 # operationId: allPermissions
-export def "acl list-permissions" [
+export def "all-permissions" [
   username: string
   type: string
   type_id: string
@@ -2938,7 +2938,7 @@ export def "acl list-permissions" [
 #
 # POST /{username}/{type}/{type_id}/acl
 # operationId: createPermission
-export def "acl create-permission" [
+export def "create-permission" [
   username: string
   type: string
   type_id: string
@@ -2985,7 +2985,7 @@ export def "acl create-permission" [
 #
 # DELETE /{username}/{type}/{type_id}/acl/{id}
 # operationId: destroyPermission
-export def "acl delete-permission" [
+export def "destroy-permission" [
   username: string
   type: string
   type_id: string
@@ -3028,7 +3028,7 @@ export def "acl delete-permission" [
 #
 # GET /{username}/{type}/{type_id}/acl/{id}
 # operationId: getPermission
-export def "acl get-permission" [
+export def "get-permission" [
   username: string
   type: string
   type_id: string
@@ -3071,7 +3071,7 @@ export def "acl get-permission" [
 #
 # PATCH /{username}/{type}/{type_id}/acl/{id}
 # operationId: updatePermission
-export def "acl update-permission-by-username-type-id" [
+export def "update-permission" [
   username: string
   type: string
   type_id: string
@@ -3120,7 +3120,7 @@ export def "acl update-permission-by-username-type-id" [
 #
 # PUT /{username}/{type}/{type_id}/acl/{id}
 # operationId: replacePermission
-export def "acl update-permission-by-username-type-id-1" [
+export def "replace-permission" [
   username: string
   type: string
   type_id: string

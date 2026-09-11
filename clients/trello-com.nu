@@ -117,7 +117,7 @@ def auth-scheme-completer [] { ["query-key" "query-token"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "actions delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "delete-actions-by-id-action" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -141,7 +141,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /actions/{idAction}
 # operationId: deleteActionsByIdAction
-export def "actions delete" [
+export def "delete-actions-by-id-action" [
   id_action: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -180,7 +180,7 @@ export def "actions delete" [
 #
 # GET /actions/{idAction}
 # operationId: getActionsByIdAction
-export def "actions get" [
+export def "get-actions-by-id-action" [
   id_action: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -226,7 +226,7 @@ export def "actions get" [
 #
 # PUT /actions/{idAction}
 # operationId: updateActionsByIdAction
-export def "actions update" [
+export def "update-actions-by-id-action" [
   id_action: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -269,7 +269,7 @@ export def "actions update" [
 #
 # GET /actions/{idAction}/board
 # operationId: getActionsBoardByIdAction
-export def "actions-board get" [
+export def "get-actions-board-by-id-action" [
   id_action: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -309,7 +309,7 @@ export def "actions-board get" [
 #
 # GET /actions/{idAction}/board/{field}
 # operationId: getActionsBoardByIdActionByField
-export def "actions-board get-by" [
+export def "get-actions-board-by-id-action-by-field" [
   id_action: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -350,7 +350,7 @@ export def "actions-board get-by" [
 #
 # GET /actions/{idAction}/card
 # operationId: getActionsCardByIdAction
-export def "actions-card get" [
+export def "get-actions-card-by-id-action" [
   id_action: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -390,7 +390,7 @@ export def "actions-card get" [
 #
 # GET /actions/{idAction}/card/{field}
 # operationId: getActionsCardByIdActionByField
-export def "actions-card get-by" [
+export def "get-actions-card-by-id-action-by-field" [
   id_action: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -431,7 +431,7 @@ export def "actions-card get-by" [
 #
 # GET /actions/{idAction}/display
 # operationId: getActionsDisplayByIdAction
-export def "actions-display get" [
+export def "get-actions-display-by-id-action" [
   id_action: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -470,7 +470,7 @@ export def "actions-display get" [
 #
 # GET /actions/{idAction}/entities
 # operationId: getActionsEntitiesByIdAction
-export def "actions-entities get" [
+export def "get-actions-entities-by-id-action" [
   id_action: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -509,7 +509,7 @@ export def "actions-entities get" [
 #
 # GET /actions/{idAction}/list
 # operationId: getActionsListByIdAction
-export def "actions-list get" [
+export def "get-actions-list-by-id-action" [
   id_action: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -549,7 +549,7 @@ export def "actions-list get" [
 #
 # GET /actions/{idAction}/list/{field}
 # operationId: getActionsListByIdActionByField
-export def "actions-list get-by" [
+export def "get-actions-list-by-id-action-by-field" [
   id_action: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -590,7 +590,7 @@ export def "actions-list get-by" [
 #
 # GET /actions/{idAction}/member
 # operationId: getActionsMemberByIdAction
-export def "actions-member get" [
+export def "get-actions-member-by-id-action" [
   id_action: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -630,7 +630,7 @@ export def "actions-member get" [
 #
 # GET /actions/{idAction}/member/{field}
 # operationId: getActionsMemberByIdActionByField
-export def "actions-member get-by" [
+export def "get-actions-member-by-id-action-by-field" [
   id_action: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -671,7 +671,7 @@ export def "actions-member get-by" [
 #
 # GET /actions/{idAction}/memberCreator
 # operationId: getActionsMemberCreatorByIdAction
-export def "actions-member-creator get" [
+export def "get-actions-member-creator-by-id-action" [
   id_action: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -711,7 +711,7 @@ export def "actions-member-creator get" [
 #
 # GET /actions/{idAction}/memberCreator/{field}
 # operationId: getActionsMemberCreatorByIdActionByField
-export def "actions-member-creator get-by" [
+export def "get-actions-member-creator-by-id-action-by-field" [
   id_action: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -752,7 +752,7 @@ export def "actions-member-creator get-by" [
 #
 # GET /actions/{idAction}/organization
 # operationId: getActionsOrganizationByIdAction
-export def "actions-organization get" [
+export def "get-actions-organization-by-id-action" [
   id_action: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -792,7 +792,7 @@ export def "actions-organization get" [
 #
 # GET /actions/{idAction}/organization/{field}
 # operationId: getActionsOrganizationByIdActionByField
-export def "actions-organization get-by" [
+export def "get-actions-organization-by-id-action-by-field" [
   id_action: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -833,7 +833,7 @@ export def "actions-organization get-by" [
 #
 # PUT /actions/{idAction}/text
 # operationId: updateActionsTextByIdAction
-export def "actions-text update" [
+export def "update-actions-text-by-id-action" [
   id_action: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -876,7 +876,7 @@ export def "actions-text update" [
 #
 # GET /actions/{idAction}/{field}
 # operationId: getActionsByIdActionByField
-export def "actions get-by" [
+export def "get-actions-by-id-action-by-field" [
   id_action: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -917,7 +917,7 @@ export def "actions get-by" [
 #
 # GET /batch
 # operationId: getBatch
-export def "batch get" [
+export def "get-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -955,7 +955,7 @@ export def "batch get" [
 #
 # POST /boards
 # operationId: addBoards
-export def "boards create" [
+export def "add-boards" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1026,7 +1026,7 @@ export def "boards create" [
 #
 # GET /boards/{idBoard}
 # operationId: getBoardsByIdBoard
-export def "boards get" [
+export def "get-boards-by-id-board" [
   id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1102,7 +1102,7 @@ export def "boards get" [
 #
 # PUT /boards/{idBoard}
 # operationId: updateBoardsByIdBoard
-export def "boards update" [
+export def "update-boards-by-id-board" [
   id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1175,7 +1175,7 @@ export def "boards update" [
 #
 # GET /boards/{idBoard}/actions
 # operationId: getBoardsActionsByIdBoard
-export def "boards-actions get" [
+export def "get-boards-actions-by-id-board" [
   id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1228,7 +1228,7 @@ export def "boards-actions get" [
 #
 # GET /boards/{idBoard}/boardStars
 # operationId: getBoardsBoardStarsByIdBoard
-export def "boards-board-stars get" [
+export def "get-boards-board-stars-by-id-board" [
   id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1268,7 +1268,7 @@ export def "boards-board-stars get" [
 #
 # POST /boards/{idBoard}/calendarKey/generate
 # operationId: addBoardsCalendarKeyGenerateByIdBoard
-export def "boards-calendar-key-generate create" [
+export def "add-boards-calendar-key-generate-by-id-board" [
   id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1307,7 +1307,7 @@ export def "boards-calendar-key-generate create" [
 #
 # GET /boards/{idBoard}/cards
 # operationId: getBoardsCardsByIdBoard
-export def "boards-cards get" [
+export def "get-boards-cards-by-id-board" [
   id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1359,7 +1359,7 @@ export def "boards-cards get" [
 #
 # GET /boards/{idBoard}/cards/{filter}
 # operationId: getBoardsCardsByIdBoardByFilter
-export def "boards-cards get-by-by-id-board-filter" [
+export def "get-boards-cards-by-id-board-by-filter" [
   id_board: string
   filter: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1400,7 +1400,7 @@ export def "boards-cards get-by-by-id-board-filter" [
 #
 # GET /boards/{idBoard}/cards/{idCard}
 # operationId: getBoardsCardsByIdBoardByIdCard
-export def "boards-cards get-by-by-id-board-id-card" [
+export def "get-boards-cards-by-id-board-by-id-card" [
   id_board: string
   id_card: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1457,7 +1457,7 @@ export def "boards-cards get-by-by-id-board-id-card" [
 #
 # GET /boards/{idBoard}/checklists
 # operationId: getBoardsChecklistsByIdBoard
-export def "boards-checklists get" [
+export def "get-boards-checklists-by-id-board" [
   id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1502,7 +1502,7 @@ export def "boards-checklists get" [
 #
 # POST /boards/{idBoard}/checklists
 # operationId: addBoardsChecklistsByIdBoard
-export def "boards-checklists create" [
+export def "add-boards-checklists-by-id-board" [
   id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1545,7 +1545,7 @@ export def "boards-checklists create" [
 #
 # PUT /boards/{idBoard}/closed
 # operationId: updateBoardsClosedByIdBoard
-export def "boards-closed update" [
+export def "update-boards-closed-by-id-board" [
   id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1588,7 +1588,7 @@ export def "boards-closed update" [
 #
 # GET /boards/{idBoard}/deltas
 # operationId: getBoardsDeltasByIdBoard
-export def "boards-deltas get" [
+export def "get-boards-deltas-by-id-board" [
   id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1629,7 +1629,7 @@ export def "boards-deltas get" [
 #
 # PUT /boards/{idBoard}/desc
 # operationId: updateBoardsDescByIdBoard
-export def "boards-desc update" [
+export def "update-boards-desc-by-id-board" [
   id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1672,7 +1672,7 @@ export def "boards-desc update" [
 #
 # POST /boards/{idBoard}/emailKey/generate
 # operationId: addBoardsEmailKeyGenerateByIdBoard
-export def "boards-email-key-generate create" [
+export def "add-boards-email-key-generate-by-id-board" [
   id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1711,7 +1711,7 @@ export def "boards-email-key-generate create" [
 #
 # PUT /boards/{idBoard}/idOrganization
 # operationId: updateBoardsIdOrganizationByIdBoard
-export def "boards-id-organization update" [
+export def "update-boards-id-organization-by-id-board" [
   id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1754,7 +1754,7 @@ export def "boards-id-organization update" [
 #
 # PUT /boards/{idBoard}/labelNames/blue
 # operationId: updateBoardsLabelNamesBlueByIdBoard
-export def "boards-label-names-blue update" [
+export def "update-boards-label-names-blue-by-id-board" [
   id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1797,7 +1797,7 @@ export def "boards-label-names-blue update" [
 #
 # PUT /boards/{idBoard}/labelNames/green
 # operationId: updateBoardsLabelNamesGreenByIdBoard
-export def "boards-label-names-green update" [
+export def "update-boards-label-names-green-by-id-board" [
   id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1840,7 +1840,7 @@ export def "boards-label-names-green update" [
 #
 # PUT /boards/{idBoard}/labelNames/orange
 # operationId: updateBoardsLabelNamesOrangeByIdBoard
-export def "boards-label-names-orange update" [
+export def "update-boards-label-names-orange-by-id-board" [
   id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1883,7 +1883,7 @@ export def "boards-label-names-orange update" [
 #
 # PUT /boards/{idBoard}/labelNames/purple
 # operationId: updateBoardsLabelNamesPurpleByIdBoard
-export def "boards-label-names-purple update" [
+export def "update-boards-label-names-purple-by-id-board" [
   id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1926,7 +1926,7 @@ export def "boards-label-names-purple update" [
 #
 # PUT /boards/{idBoard}/labelNames/red
 # operationId: updateBoardsLabelNamesRedByIdBoard
-export def "boards-label-names-red update" [
+export def "update-boards-label-names-red-by-id-board" [
   id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1969,7 +1969,7 @@ export def "boards-label-names-red update" [
 #
 # PUT /boards/{idBoard}/labelNames/yellow
 # operationId: updateBoardsLabelNamesYellowByIdBoard
-export def "boards-label-names-yellow update" [
+export def "update-boards-label-names-yellow-by-id-board" [
   id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2012,7 +2012,7 @@ export def "boards-label-names-yellow update" [
 #
 # GET /boards/{idBoard}/labels
 # operationId: getBoardsLabelsByIdBoard
-export def "boards-labels get" [
+export def "get-boards-labels-by-id-board" [
   id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2053,7 +2053,7 @@ export def "boards-labels get" [
 #
 # POST /boards/{idBoard}/labels
 # operationId: addBoardsLabelsByIdBoard
-export def "boards-labels create" [
+export def "add-boards-labels-by-id-board" [
   id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2097,7 +2097,7 @@ export def "boards-labels create" [
 #
 # GET /boards/{idBoard}/labels/{idLabel}
 # operationId: getBoardsLabelsByIdBoardByIdLabel
-export def "boards-labels get-by" [
+export def "get-boards-labels-by-id-board-by-id-label" [
   id_board: string
   id_label: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2139,7 +2139,7 @@ export def "boards-labels get-by" [
 #
 # GET /boards/{idBoard}/lists
 # operationId: getBoardsListsByIdBoard
-export def "boards-lists get" [
+export def "get-boards-lists-by-id-board" [
   id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2182,7 +2182,7 @@ export def "boards-lists get" [
 #
 # POST /boards/{idBoard}/lists
 # operationId: addBoardsListsByIdBoard
-export def "boards-lists create" [
+export def "add-boards-lists-by-id-board" [
   id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2226,7 +2226,7 @@ export def "boards-lists create" [
 #
 # GET /boards/{idBoard}/lists/{filter}
 # operationId: getBoardsListsByIdBoardByFilter
-export def "boards-lists get-by" [
+export def "get-boards-lists-by-id-board-by-filter" [
   id_board: string
   filter: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2267,7 +2267,7 @@ export def "boards-lists get-by" [
 #
 # POST /boards/{idBoard}/markAsViewed
 # operationId: addBoardsMarkAsViewedByIdBoard
-export def "boards-mark-as-viewed create" [
+export def "add-boards-mark-as-viewed-by-id-board" [
   id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2306,7 +2306,7 @@ export def "boards-mark-as-viewed create" [
 #
 # GET /boards/{idBoard}/members
 # operationId: getBoardsMembersByIdBoard
-export def "boards-members get" [
+export def "get-boards-members-by-id-board" [
   id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2348,7 +2348,7 @@ export def "boards-members get" [
 #
 # PUT /boards/{idBoard}/members
 # operationId: updateBoardsMembersByIdBoard
-export def "boards-members update" [
+export def "update-boards-members-by-id-board" [
   id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2393,7 +2393,7 @@ export def "boards-members update" [
 #
 # GET /boards/{idBoard}/members/{filter}
 # operationId: getBoardsMembersByIdBoardByFilter
-export def "boards-members get-by" [
+export def "get-boards-members-by-id-board-by-filter" [
   id_board: string
   filter: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2434,7 +2434,7 @@ export def "boards-members get-by" [
 #
 # DELETE /boards/{idBoard}/members/{idMember}
 # operationId: deleteBoardsMembersByIdBoardByIdMember
-export def "boards-members delete-by" [
+export def "delete-boards-members-by-id-board-by-id-member" [
   id_board: string
   id_member: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2475,7 +2475,7 @@ export def "boards-members delete-by" [
 #
 # PUT /boards/{idBoard}/members/{idMember}
 # operationId: updateBoardsMembersByIdBoardByIdMember
-export def "boards-members update-by" [
+export def "update-boards-members-by-id-board-by-id-member" [
   id_board: string
   id_member: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2522,7 +2522,7 @@ export def "boards-members update-by" [
 #
 # GET /boards/{idBoard}/members/{idMember}/cards
 # operationId: getBoardsMembersCardsByIdBoardByIdMember
-export def "boards-members-cards get-by" [
+export def "get-boards-members-cards-by-id-board-by-id-member" [
   id_board: string
   id_member: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2576,7 +2576,7 @@ export def "boards-members-cards get-by" [
 #
 # GET /boards/{idBoard}/membersInvited
 # operationId: getBoardsMembersInvitedByIdBoard
-export def "boards-members-invited get" [
+export def "get-boards-members-invited-by-id-board" [
   id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2616,7 +2616,7 @@ export def "boards-members-invited get" [
 #
 # GET /boards/{idBoard}/membersInvited/{field}
 # operationId: getBoardsMembersInvitedByIdBoardByField
-export def "boards-members-invited get-by" [
+export def "get-boards-members-invited-by-id-board-by-field" [
   id_board: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2657,7 +2657,7 @@ export def "boards-members-invited get-by" [
 #
 # GET /boards/{idBoard}/memberships
 # operationId: getBoardsMembershipsByIdBoard
-export def "boards-memberships get" [
+export def "get-boards-memberships-by-id-board" [
   id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2699,7 +2699,7 @@ export def "boards-memberships get" [
 #
 # GET /boards/{idBoard}/memberships/{idMembership}
 # operationId: getBoardsMembershipsByIdBoardByIdMembership
-export def "boards-memberships get-by" [
+export def "get-boards-memberships-by-id-board-by-id-membership" [
   id_board: string
   id_membership: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2742,7 +2742,7 @@ export def "boards-memberships get-by" [
 #
 # PUT /boards/{idBoard}/memberships/{idMembership}
 # operationId: updateBoardsMembershipsByIdBoardByIdMembership
-export def "boards-memberships update-by" [
+export def "update-boards-memberships-by-id-board-by-id-membership" [
   id_board: string
   id_membership: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2788,7 +2788,7 @@ export def "boards-memberships update-by" [
 #
 # GET /boards/{idBoard}/myPrefs
 # operationId: getBoardsMyPrefsByIdBoard
-export def "boards-my-prefs get" [
+export def "get-boards-my-prefs-by-id-board" [
   id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2827,7 +2827,7 @@ export def "boards-my-prefs get" [
 #
 # PUT /boards/{idBoard}/myPrefs/emailPosition
 # operationId: updateBoardsMyPrefsEmailPositionByIdBoard
-export def "boards-my-prefs-email-position update" [
+export def "update-boards-my-prefs-email-position-by-id-board" [
   id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2870,7 +2870,7 @@ export def "boards-my-prefs-email-position update" [
 #
 # PUT /boards/{idBoard}/myPrefs/idEmailList
 # operationId: updateBoardsMyPrefsIdEmailListByIdBoard
-export def "boards-my-prefs-id-email-list update" [
+export def "update-boards-my-prefs-id-email-list-by-id-board" [
   id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2913,7 +2913,7 @@ export def "boards-my-prefs-id-email-list update" [
 #
 # PUT /boards/{idBoard}/myPrefs/showListGuide
 # operationId: updateBoardsMyPrefsShowListGuideByIdBoard
-export def "boards-my-prefs-show-list-guide update" [
+export def "update-boards-my-prefs-show-list-guide-by-id-board" [
   id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2956,7 +2956,7 @@ export def "boards-my-prefs-show-list-guide update" [
 #
 # PUT /boards/{idBoard}/myPrefs/showSidebar
 # operationId: updateBoardsMyPrefsShowSidebarByIdBoard
-export def "boards-my-prefs-show-sidebar update" [
+export def "update-boards-my-prefs-show-sidebar-by-id-board" [
   id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2999,7 +2999,7 @@ export def "boards-my-prefs-show-sidebar update" [
 #
 # PUT /boards/{idBoard}/myPrefs/showSidebarActivity
 # operationId: updateBoardsMyPrefsShowSidebarActivityByIdBoard
-export def "boards-my-prefs-show-sidebar-activity update" [
+export def "update-boards-my-prefs-show-sidebar-activity-by-id-board" [
   id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3042,7 +3042,7 @@ export def "boards-my-prefs-show-sidebar-activity update" [
 #
 # PUT /boards/{idBoard}/myPrefs/showSidebarBoardActions
 # operationId: updateBoardsMyPrefsShowSidebarBoardActionsByIdBoard
-export def "boards-my-prefs-show-sidebar-board-actions update" [
+export def "update-boards-my-prefs-show-sidebar-board-actions-by-id-board" [
   id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3085,7 +3085,7 @@ export def "boards-my-prefs-show-sidebar-board-actions update" [
 #
 # PUT /boards/{idBoard}/myPrefs/showSidebarMembers
 # operationId: updateBoardsMyPrefsShowSidebarMembersByIdBoard
-export def "boards-my-prefs-show-sidebar-members update" [
+export def "update-boards-my-prefs-show-sidebar-members-by-id-board" [
   id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3128,7 +3128,7 @@ export def "boards-my-prefs-show-sidebar-members update" [
 #
 # PUT /boards/{idBoard}/name
 # operationId: updateBoardsNameByIdBoard
-export def "boards-name update" [
+export def "update-boards-name-by-id-board" [
   id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3171,7 +3171,7 @@ export def "boards-name update" [
 #
 # GET /boards/{idBoard}/organization
 # operationId: getBoardsOrganizationByIdBoard
-export def "boards-organization get" [
+export def "get-boards-organization-by-id-board" [
   id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3211,7 +3211,7 @@ export def "boards-organization get" [
 #
 # GET /boards/{idBoard}/organization/{field}
 # operationId: getBoardsOrganizationByIdBoardByField
-export def "boards-organization get-by" [
+export def "get-boards-organization-by-id-board-by-field" [
   id_board: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3252,7 +3252,7 @@ export def "boards-organization get-by" [
 #
 # POST /boards/{idBoard}/powerUps
 # operationId: addBoardsPowerUpsByIdBoard
-export def "boards-power-ups create" [
+export def "add-boards-power-ups-by-id-board" [
   id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3295,7 +3295,7 @@ export def "boards-power-ups create" [
 #
 # DELETE /boards/{idBoard}/powerUps/{powerUp}
 # operationId: deleteBoardsPowerUpsByIdBoardByPowerUp
-export def "boards-power-ups delete-by" [
+export def "delete-boards-power-ups-by-id-board-by-power-up" [
   id_board: string
   power_up: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3336,7 +3336,7 @@ export def "boards-power-ups delete-by" [
 #
 # PUT /boards/{idBoard}/prefs/background
 # operationId: updateBoardsPrefsBackgroundByIdBoard
-export def "boards-prefs-background update" [
+export def "update-boards-prefs-background-by-id-board" [
   id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3379,7 +3379,7 @@ export def "boards-prefs-background update" [
 #
 # PUT /boards/{idBoard}/prefs/calendarFeedEnabled
 # operationId: updateBoardsPrefsCalendarFeedEnabledByIdBoard
-export def "boards-prefs-calendar-feed-enabled update" [
+export def "update-boards-prefs-calendar-feed-enabled-by-id-board" [
   id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3422,7 +3422,7 @@ export def "boards-prefs-calendar-feed-enabled update" [
 #
 # PUT /boards/{idBoard}/prefs/cardAging
 # operationId: updateBoardsPrefsCardAgingByIdBoard
-export def "boards-prefs-card-aging update" [
+export def "update-boards-prefs-card-aging-by-id-board" [
   id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3465,7 +3465,7 @@ export def "boards-prefs-card-aging update" [
 #
 # PUT /boards/{idBoard}/prefs/cardCovers
 # operationId: updateBoardsPrefsCardCoversByIdBoard
-export def "boards-prefs-card-covers update" [
+export def "update-boards-prefs-card-covers-by-id-board" [
   id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3508,7 +3508,7 @@ export def "boards-prefs-card-covers update" [
 #
 # PUT /boards/{idBoard}/prefs/comments
 # operationId: updateBoardsPrefsCommentsByIdBoard
-export def "boards-prefs-comments update" [
+export def "update-boards-prefs-comments-by-id-board" [
   id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3551,7 +3551,7 @@ export def "boards-prefs-comments update" [
 #
 # PUT /boards/{idBoard}/prefs/invitations
 # operationId: updateBoardsPrefsInvitationsByIdBoard
-export def "boards-prefs-invitations update" [
+export def "update-boards-prefs-invitations-by-id-board" [
   id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3594,7 +3594,7 @@ export def "boards-prefs-invitations update" [
 #
 # PUT /boards/{idBoard}/prefs/permissionLevel
 # operationId: updateBoardsPrefsPermissionLevelByIdBoard
-export def "boards-prefs-permission-level update" [
+export def "update-boards-prefs-permission-level-by-id-board" [
   id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3637,7 +3637,7 @@ export def "boards-prefs-permission-level update" [
 #
 # PUT /boards/{idBoard}/prefs/selfJoin
 # operationId: updateBoardsPrefsSelfJoinByIdBoard
-export def "boards-prefs-self-join update" [
+export def "update-boards-prefs-self-join-by-id-board" [
   id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3680,7 +3680,7 @@ export def "boards-prefs-self-join update" [
 #
 # PUT /boards/{idBoard}/prefs/voting
 # operationId: updateBoardsPrefsVotingByIdBoard
-export def "boards-prefs-voting update" [
+export def "update-boards-prefs-voting-by-id-board" [
   id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3723,7 +3723,7 @@ export def "boards-prefs-voting update" [
 #
 # PUT /boards/{idBoard}/subscribed
 # operationId: updateBoardsSubscribedByIdBoard
-export def "boards-subscribed update" [
+export def "update-boards-subscribed-by-id-board" [
   id_board: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3766,7 +3766,7 @@ export def "boards-subscribed update" [
 #
 # GET /boards/{idBoard}/{field}
 # operationId: getBoardsByIdBoardByField
-export def "boards get-by" [
+export def "get-boards-by-id-board-by-field" [
   id_board: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3807,7 +3807,7 @@ export def "boards get-by" [
 #
 # POST /cards
 # operationId: addCards
-export def "cards create" [
+export def "add-cards" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3863,7 +3863,7 @@ export def "cards create" [
 #
 # DELETE /cards/{idCard}
 # operationId: deleteCardsByIdCard
-export def "cards delete" [
+export def "delete-cards-by-id-card" [
   id_card: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3902,7 +3902,7 @@ export def "cards delete" [
 #
 # GET /cards/{idCard}
 # operationId: getCardsByIdCard
-export def "cards get" [
+export def "get-cards-by-id-card" [
   id_card: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3964,7 +3964,7 @@ export def "cards get" [
 #
 # PUT /cards/{idCard}
 # operationId: updateCardsByIdCard
-export def "cards update" [
+export def "update-cards-by-id-card" [
   id_card: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4022,7 +4022,7 @@ export def "cards update" [
 #
 # GET /cards/{idCard}/actions
 # operationId: getCardsActionsByIdCard
-export def "cards-actions get" [
+export def "get-cards-actions-by-id-card" [
   id_card: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4075,7 +4075,7 @@ export def "cards-actions get" [
 #
 # POST /cards/{idCard}/actions/comments
 # operationId: addCardsActionsCommentsByIdCard
-export def "cards-actions-comments create" [
+export def "add-cards-actions-comments-by-id-card" [
   id_card: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4118,7 +4118,7 @@ export def "cards-actions-comments create" [
 #
 # DELETE /cards/{idCard}/actions/{idAction}/comments
 # operationId: deleteCardsActionsCommentsByIdCardByIdAction
-export def "cards-actions-comments delete-by" [
+export def "delete-cards-actions-comments-by-id-card-by-id-action" [
   id_card: string
   id_action: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4159,7 +4159,7 @@ export def "cards-actions-comments delete-by" [
 #
 # PUT /cards/{idCard}/actions/{idAction}/comments
 # operationId: updateCardsActionsCommentsByIdCardByIdAction
-export def "cards-actions-comments update-by" [
+export def "update-cards-actions-comments-by-id-card-by-id-action" [
   id_card: string
   id_action: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4204,7 +4204,7 @@ export def "cards-actions-comments update-by" [
 #
 # GET /cards/{idCard}/attachments
 # operationId: getCardsAttachmentsByIdCard
-export def "cards-attachments get" [
+export def "get-cards-attachments-by-id-card" [
   id_card: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4245,7 +4245,7 @@ export def "cards-attachments get" [
 #
 # POST /cards/{idCard}/attachments
 # operationId: addCardsAttachmentsByIdCard
-export def "cards-attachments create" [
+export def "add-cards-attachments-by-id-card" [
   id_card: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4291,7 +4291,7 @@ export def "cards-attachments create" [
 #
 # DELETE /cards/{idCard}/attachments/{idAttachment}
 # operationId: deleteCardsAttachmentsByIdCardByIdAttachment
-export def "cards-attachments delete-by" [
+export def "delete-cards-attachments-by-id-card-by-id-attachment" [
   id_card: string
   id_attachment: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4332,7 +4332,7 @@ export def "cards-attachments delete-by" [
 #
 # GET /cards/{idCard}/attachments/{idAttachment}
 # operationId: getCardsAttachmentsByIdCardByIdAttachment
-export def "cards-attachments get-by" [
+export def "get-cards-attachments-by-id-card-by-id-attachment" [
   id_card: string
   id_attachment: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4374,7 +4374,7 @@ export def "cards-attachments get-by" [
 #
 # GET /cards/{idCard}/board
 # operationId: getCardsBoardByIdCard
-export def "cards-board get" [
+export def "get-cards-board-by-id-card" [
   id_card: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4414,7 +4414,7 @@ export def "cards-board get" [
 #
 # GET /cards/{idCard}/board/{field}
 # operationId: getCardsBoardByIdCardByField
-export def "cards-board get-by" [
+export def "get-cards-board-by-id-card-by-field" [
   id_card: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4455,7 +4455,7 @@ export def "cards-board get-by" [
 #
 # GET /cards/{idCard}/checkItemStates
 # operationId: getCardsCheckItemStatesByIdCard
-export def "cards-check-item-states get" [
+export def "get-cards-check-item-states-by-id-card" [
   id_card: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4495,7 +4495,7 @@ export def "cards-check-item-states get" [
 #
 # PUT /cards/{idCard}/checklist/{idChecklistCurrent}/checkItem/{idCheckItem}
 # operationId: updateCardsChecklistCheckItemByIdCardByIdChecklistCurrentByIdCheckItem
-export def "cards-checklist-check-item update-by-by-get" [
+export def "update-cards-checklist-check-item-by-id-card-by-id-checklist-current-by-id-check-item" [
   id_card: string
   id_checklist_current: string
   id_check_item: string
@@ -4545,7 +4545,7 @@ export def "cards-checklist-check-item update-by-by-get" [
 #
 # POST /cards/{idCard}/checklist/{idChecklist}/checkItem
 # operationId: addCardsChecklistCheckItemByIdCardByIdChecklist
-export def "cards-checklist-check-item create-by" [
+export def "add-cards-checklist-check-item-by-id-card-by-id-checklist" [
   id_card: string
   id_checklist: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4591,7 +4591,7 @@ export def "cards-checklist-check-item create-by" [
 #
 # DELETE /cards/{idCard}/checklist/{idChecklist}/checkItem/{idCheckItem}
 # operationId: deleteCardsChecklistCheckItemByIdCardByIdChecklistByIdCheckItem
-export def "cards-checklist-check-item delete-by-by" [
+export def "delete-cards-checklist-check-item-by-id-card-by-id-checklist-by-id-check-item" [
   id_card: string
   id_checklist: string
   id_check_item: string
@@ -4634,7 +4634,7 @@ export def "cards-checklist-check-item delete-by-by" [
 #
 # POST /cards/{idCard}/checklist/{idChecklist}/checkItem/{idCheckItem}/convertToCard
 # operationId: addCardsChecklistCheckItemConvertToCardByIdCardByIdChecklistByIdCheckItem
-export def "cards-checklist-check-item-convert-to-card create-by-by" [
+export def "add-cards-checklist-check-item-convert-to-card-by-id-card-by-id-checklist-by-id-check-item" [
   id_card: string
   id_checklist: string
   id_check_item: string
@@ -4677,7 +4677,7 @@ export def "cards-checklist-check-item-convert-to-card create-by-by" [
 #
 # PUT /cards/{idCard}/checklist/{idChecklist}/checkItem/{idCheckItem}/name
 # operationId: updateCardsChecklistCheckItemNameByIdCardByIdChecklistByIdCheckItem
-export def "cards-checklist-check-item-name update-by-by" [
+export def "update-cards-checklist-check-item-name-by-id-card-by-id-checklist-by-id-check-item" [
   id_card: string
   id_checklist: string
   id_check_item: string
@@ -4724,7 +4724,7 @@ export def "cards-checklist-check-item-name update-by-by" [
 #
 # PUT /cards/{idCard}/checklist/{idChecklist}/checkItem/{idCheckItem}/pos
 # operationId: updateCardsChecklistCheckItemPosByIdCardByIdChecklistByIdCheckItem
-export def "cards-checklist-check-item-pos update-by-by" [
+export def "update-cards-checklist-check-item-pos-by-id-card-by-id-checklist-by-id-check-item" [
   id_card: string
   id_checklist: string
   id_check_item: string
@@ -4771,7 +4771,7 @@ export def "cards-checklist-check-item-pos update-by-by" [
 #
 # PUT /cards/{idCard}/checklist/{idChecklist}/checkItem/{idCheckItem}/state
 # operationId: updateCardsChecklistCheckItemStateByIdCardByIdChecklistByIdCheckItem
-export def "cards-checklist-check-item-state update-by-by" [
+export def "update-cards-checklist-check-item-state-by-id-card-by-id-checklist-by-id-check-item" [
   id_card: string
   id_checklist: string
   id_check_item: string
@@ -4818,7 +4818,7 @@ export def "cards-checklist-check-item-state update-by-by" [
 #
 # GET /cards/{idCard}/checklists
 # operationId: getCardsChecklistsByIdCard
-export def "cards-checklists get" [
+export def "get-cards-checklists-by-id-card" [
   id_card: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4863,7 +4863,7 @@ export def "cards-checklists get" [
 #
 # POST /cards/{idCard}/checklists
 # operationId: addCardsChecklistsByIdCard
-export def "cards-checklists create" [
+export def "add-cards-checklists-by-id-card" [
   id_card: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4908,7 +4908,7 @@ export def "cards-checklists create" [
 #
 # DELETE /cards/{idCard}/checklists/{idChecklist}
 # operationId: deleteCardsChecklistsByIdCardByIdChecklist
-export def "cards-checklists delete-by" [
+export def "delete-cards-checklists-by-id-card-by-id-checklist" [
   id_card: string
   id_checklist: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4949,7 +4949,7 @@ export def "cards-checklists delete-by" [
 #
 # PUT /cards/{idCard}/closed
 # operationId: updateCardsClosedByIdCard
-export def "cards-closed update" [
+export def "update-cards-closed-by-id-card" [
   id_card: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4992,7 +4992,7 @@ export def "cards-closed update" [
 #
 # PUT /cards/{idCard}/desc
 # operationId: updateCardsDescByIdCard
-export def "cards-desc update" [
+export def "update-cards-desc-by-id-card" [
   id_card: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5035,7 +5035,7 @@ export def "cards-desc update" [
 #
 # PUT /cards/{idCard}/due
 # operationId: updateCardsDueByIdCard
-export def "cards-due update" [
+export def "update-cards-due-by-id-card" [
   id_card: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5078,7 +5078,7 @@ export def "cards-due update" [
 #
 # PUT /cards/{idCard}/idAttachmentCover
 # operationId: updateCardsIdAttachmentCoverByIdCard
-export def "cards-id-attachment-cover update" [
+export def "update-cards-id-attachment-cover-by-id-card" [
   id_card: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5121,7 +5121,7 @@ export def "cards-id-attachment-cover update" [
 #
 # PUT /cards/{idCard}/idBoard
 # operationId: updateCardsIdBoardByIdCard
-export def "cards-id-board update" [
+export def "update-cards-id-board-by-id-card" [
   id_card: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5165,7 +5165,7 @@ export def "cards-id-board update" [
 #
 # POST /cards/{idCard}/idLabels
 # operationId: addCardsIdLabelsByIdCard
-export def "cards-id-labels create" [
+export def "add-cards-id-labels-by-id-card" [
   id_card: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5208,7 +5208,7 @@ export def "cards-id-labels create" [
 #
 # DELETE /cards/{idCard}/idLabels/{idLabel}
 # operationId: deleteCardsIdLabelsByIdCardByIdLabel
-export def "cards-id-labels delete-by" [
+export def "delete-cards-id-labels-by-id-card-by-id-label" [
   id_card: string
   id_label: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5249,7 +5249,7 @@ export def "cards-id-labels delete-by" [
 #
 # PUT /cards/{idCard}/idList
 # operationId: updateCardsIdListByIdCard
-export def "cards-id-list update" [
+export def "update-cards-id-list-by-id-card" [
   id_card: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5292,7 +5292,7 @@ export def "cards-id-list update" [
 #
 # POST /cards/{idCard}/idMembers
 # operationId: addCardsIdMembersByIdCard
-export def "cards-id-members create" [
+export def "add-cards-id-members-by-id-card" [
   id_card: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5335,7 +5335,7 @@ export def "cards-id-members create" [
 #
 # PUT /cards/{idCard}/idMembers
 # operationId: updateCardsIdMembersByIdCard
-export def "cards-id-members update" [
+export def "update-cards-id-members-by-id-card" [
   id_card: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5378,7 +5378,7 @@ export def "cards-id-members update" [
 #
 # DELETE /cards/{idCard}/idMembers/{idMember}
 # operationId: deleteCardsIdMembersByIdCardByIdMember
-export def "cards-id-members delete-by" [
+export def "delete-cards-id-members-by-id-card-by-id-member" [
   id_card: string
   id_member: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5419,7 +5419,7 @@ export def "cards-id-members delete-by" [
 #
 # POST /cards/{idCard}/labels
 # operationId: addCardsLabelsByIdCard
-export def "cards-labels create" [
+export def "add-cards-labels-by-id-card" [
   id_card: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5464,7 +5464,7 @@ export def "cards-labels create" [
 #
 # PUT /cards/{idCard}/labels
 # operationId: updateCardsLabelsByIdCard
-export def "cards-labels update" [
+export def "update-cards-labels-by-id-card" [
   id_card: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5509,7 +5509,7 @@ export def "cards-labels update" [
 #
 # DELETE /cards/{idCard}/labels/{color}
 # operationId: deleteCardsLabelsByIdCardByColor
-export def "cards-labels delete-by" [
+export def "delete-cards-labels-by-id-card-by-color" [
   id_card: string
   color: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5550,7 +5550,7 @@ export def "cards-labels delete-by" [
 #
 # GET /cards/{idCard}/list
 # operationId: getCardsListByIdCard
-export def "cards-list get" [
+export def "get-cards-list-by-id-card" [
   id_card: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5590,7 +5590,7 @@ export def "cards-list get" [
 #
 # GET /cards/{idCard}/list/{field}
 # operationId: getCardsListByIdCardByField
-export def "cards-list get-by" [
+export def "get-cards-list-by-id-card-by-field" [
   id_card: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5631,7 +5631,7 @@ export def "cards-list get-by" [
 #
 # POST /cards/{idCard}/markAssociatedNotificationsRead
 # operationId: addCardsMarkAssociatedNotificationsReadByIdCard
-export def "cards-mark-associated-notifications-read create" [
+export def "add-cards-mark-associated-notifications-read-by-id-card" [
   id_card: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5670,7 +5670,7 @@ export def "cards-mark-associated-notifications-read create" [
 #
 # GET /cards/{idCard}/members
 # operationId: getCardsMembersByIdCard
-export def "cards-members get" [
+export def "get-cards-members-by-id-card" [
   id_card: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5710,7 +5710,7 @@ export def "cards-members get" [
 #
 # GET /cards/{idCard}/membersVoted
 # operationId: getCardsMembersVotedByIdCard
-export def "cards-members-voted get" [
+export def "get-cards-members-voted-by-id-card" [
   id_card: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5750,7 +5750,7 @@ export def "cards-members-voted get" [
 #
 # POST /cards/{idCard}/membersVoted
 # operationId: addCardsMembersVotedByIdCard
-export def "cards-members-voted create" [
+export def "add-cards-members-voted-by-id-card" [
   id_card: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5793,7 +5793,7 @@ export def "cards-members-voted create" [
 #
 # DELETE /cards/{idCard}/membersVoted/{idMember}
 # operationId: deleteCardsMembersVotedByIdCardByIdMember
-export def "cards-members-voted delete-by" [
+export def "delete-cards-members-voted-by-id-card-by-id-member" [
   id_card: string
   id_member: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5834,7 +5834,7 @@ export def "cards-members-voted delete-by" [
 #
 # PUT /cards/{idCard}/name
 # operationId: updateCardsNameByIdCard
-export def "cards-name update" [
+export def "update-cards-name-by-id-card" [
   id_card: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5877,7 +5877,7 @@ export def "cards-name update" [
 #
 # PUT /cards/{idCard}/pos
 # operationId: updateCardsPosByIdCard
-export def "cards-pos update" [
+export def "update-cards-pos-by-id-card" [
   id_card: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5920,7 +5920,7 @@ export def "cards-pos update" [
 #
 # GET /cards/{idCard}/stickers
 # operationId: getCardsStickersByIdCard
-export def "cards-stickers get" [
+export def "get-cards-stickers-by-id-card" [
   id_card: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5960,7 +5960,7 @@ export def "cards-stickers get" [
 #
 # POST /cards/{idCard}/stickers
 # operationId: addCardsStickersByIdCard
-export def "cards-stickers create" [
+export def "add-cards-stickers-by-id-card" [
   id_card: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6007,7 +6007,7 @@ export def "cards-stickers create" [
 #
 # DELETE /cards/{idCard}/stickers/{idSticker}
 # operationId: deleteCardsStickersByIdCardByIdSticker
-export def "cards-stickers delete-by" [
+export def "delete-cards-stickers-by-id-card-by-id-sticker" [
   id_card: string
   id_sticker: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6048,7 +6048,7 @@ export def "cards-stickers delete-by" [
 #
 # GET /cards/{idCard}/stickers/{idSticker}
 # operationId: getCardsStickersByIdCardByIdSticker
-export def "cards-stickers get-by" [
+export def "get-cards-stickers-by-id-card-by-id-sticker" [
   id_card: string
   id_sticker: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6090,7 +6090,7 @@ export def "cards-stickers get-by" [
 #
 # PUT /cards/{idCard}/stickers/{idSticker}
 # operationId: updateCardsStickersByIdCardByIdSticker
-export def "cards-stickers update-by" [
+export def "update-cards-stickers-by-id-card-by-id-sticker" [
   id_card: string
   id_sticker: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6139,7 +6139,7 @@ export def "cards-stickers update-by" [
 #
 # PUT /cards/{idCard}/subscribed
 # operationId: updateCardsSubscribedByIdCard
-export def "cards-subscribed update" [
+export def "update-cards-subscribed-by-id-card" [
   id_card: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6182,7 +6182,7 @@ export def "cards-subscribed update" [
 #
 # GET /cards/{idCard}/{field}
 # operationId: getCardsByIdCardByField
-export def "cards get-by" [
+export def "get-cards-by-id-card-by-field" [
   id_card: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6223,7 +6223,7 @@ export def "cards get-by" [
 #
 # POST /checklists
 # operationId: addChecklists
-export def "checklists create" [
+export def "add-checklists" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6268,7 +6268,7 @@ export def "checklists create" [
 #
 # DELETE /checklists/{idChecklist}
 # operationId: deleteChecklistsByIdChecklist
-export def "checklists delete" [
+export def "delete-checklists-by-id-checklist" [
   id_checklist: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6307,7 +6307,7 @@ export def "checklists delete" [
 #
 # GET /checklists/{idChecklist}
 # operationId: getChecklistsByIdChecklist
-export def "checklists get" [
+export def "get-checklists-by-id-checklist" [
   id_checklist: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6351,7 +6351,7 @@ export def "checklists get" [
 #
 # PUT /checklists/{idChecklist}
 # operationId: updateChecklistsByIdChecklist
-export def "checklists update" [
+export def "update-checklists-by-id-checklist" [
   id_checklist: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6398,7 +6398,7 @@ export def "checklists update" [
 #
 # GET /checklists/{idChecklist}/board
 # operationId: getChecklistsBoardByIdChecklist
-export def "checklists-board get" [
+export def "get-checklists-board-by-id-checklist" [
   id_checklist: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6438,7 +6438,7 @@ export def "checklists-board get" [
 #
 # GET /checklists/{idChecklist}/board/{field}
 # operationId: getChecklistsBoardByIdChecklistByField
-export def "checklists-board get-by" [
+export def "get-checklists-board-by-id-checklist-by-field" [
   id_checklist: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6479,7 +6479,7 @@ export def "checklists-board get-by" [
 #
 # GET /checklists/{idChecklist}/cards
 # operationId: getChecklistsCardsByIdChecklist
-export def "checklists-cards get" [
+export def "get-checklists-cards-by-id-checklist" [
   id_checklist: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6531,7 +6531,7 @@ export def "checklists-cards get" [
 #
 # GET /checklists/{idChecklist}/cards/{filter}
 # operationId: getChecklistsCardsByIdChecklistByFilter
-export def "checklists-cards get-by" [
+export def "get-checklists-cards-by-id-checklist-by-filter" [
   id_checklist: string
   filter: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6572,7 +6572,7 @@ export def "checklists-cards get-by" [
 #
 # GET /checklists/{idChecklist}/checkItems
 # operationId: getChecklistsCheckItemsByIdChecklist
-export def "checklists-check-items get" [
+export def "get-checklists-check-items-by-id-checklist" [
   id_checklist: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6613,7 +6613,7 @@ export def "checklists-check-items get" [
 #
 # POST /checklists/{idChecklist}/checkItems
 # operationId: addChecklistsCheckItemsByIdChecklist
-export def "checklists-check-items create" [
+export def "add-checklists-check-items-by-id-checklist" [
   id_checklist: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6658,7 +6658,7 @@ export def "checklists-check-items create" [
 #
 # DELETE /checklists/{idChecklist}/checkItems/{idCheckItem}
 # operationId: deleteChecklistsCheckItemsByIdChecklistByIdCheckItem
-export def "checklists-check-items delete-by" [
+export def "delete-checklists-check-items-by-id-checklist-by-id-check-item" [
   id_checklist: string
   id_check_item: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6699,7 +6699,7 @@ export def "checklists-check-items delete-by" [
 #
 # GET /checklists/{idChecklist}/checkItems/{idCheckItem}
 # operationId: getChecklistsCheckItemsByIdChecklistByIdCheckItem
-export def "checklists-check-items get-by" [
+export def "get-checklists-check-items-by-id-checklist-by-id-check-item" [
   id_checklist: string
   id_check_item: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6741,7 +6741,7 @@ export def "checklists-check-items get-by" [
 #
 # PUT /checklists/{idChecklist}/idCard
 # operationId: updateChecklistsIdCardByIdChecklist
-export def "checklists-id-card update" [
+export def "update-checklists-id-card-by-id-checklist" [
   id_checklist: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6784,7 +6784,7 @@ export def "checklists-id-card update" [
 #
 # PUT /checklists/{idChecklist}/name
 # operationId: updateChecklistsNameByIdChecklist
-export def "checklists-name update" [
+export def "update-checklists-name-by-id-checklist" [
   id_checklist: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6827,7 +6827,7 @@ export def "checklists-name update" [
 #
 # PUT /checklists/{idChecklist}/pos
 # operationId: updateChecklistsPosByIdChecklist
-export def "checklists-pos update" [
+export def "update-checklists-pos-by-id-checklist" [
   id_checklist: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6870,7 +6870,7 @@ export def "checklists-pos update" [
 #
 # GET /checklists/{idChecklist}/{field}
 # operationId: getChecklistsByIdChecklistByField
-export def "checklists get-by" [
+export def "get-checklists-by-id-checklist-by-field" [
   id_checklist: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6911,7 +6911,7 @@ export def "checklists get-by" [
 #
 # POST /labels
 # operationId: addLabels
-export def "labels create" [
+export def "add-labels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6954,7 +6954,7 @@ export def "labels create" [
 #
 # DELETE /labels/{idLabel}
 # operationId: deleteLabelsByIdLabel
-export def "labels delete" [
+export def "delete-labels-by-id-label" [
   id_label: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6993,7 +6993,7 @@ export def "labels delete" [
 #
 # GET /labels/{idLabel}
 # operationId: getLabelsByIdLabel
-export def "labels get" [
+export def "get-labels-by-id-label" [
   id_label: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7033,7 +7033,7 @@ export def "labels get" [
 #
 # PUT /labels/{idLabel}
 # operationId: updateLabelsByIdLabel
-export def "labels update" [
+export def "update-labels-by-id-label" [
   id_label: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7078,7 +7078,7 @@ export def "labels update" [
 #
 # GET /labels/{idLabel}/board
 # operationId: getLabelsBoardByIdLabel
-export def "labels-board get" [
+export def "get-labels-board-by-id-label" [
   id_label: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7118,7 +7118,7 @@ export def "labels-board get" [
 #
 # GET /labels/{idLabel}/board/{field}
 # operationId: getLabelsBoardByIdLabelByField
-export def "labels-board get-by" [
+export def "get-labels-board-by-id-label-by-field" [
   id_label: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7159,7 +7159,7 @@ export def "labels-board get-by" [
 #
 # PUT /labels/{idLabel}/color
 # operationId: updateLabelsColorByIdLabel
-export def "labels-color update" [
+export def "update-labels-color-by-id-label" [
   id_label: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7202,7 +7202,7 @@ export def "labels-color update" [
 #
 # PUT /labels/{idLabel}/name
 # operationId: updateLabelsNameByIdLabel
-export def "labels-name update" [
+export def "update-labels-name-by-id-label" [
   id_label: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7245,7 +7245,7 @@ export def "labels-name update" [
 #
 # POST /lists
 # operationId: addLists
-export def "lists create" [
+export def "add-lists" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7291,7 +7291,7 @@ export def "lists create" [
 #
 # GET /lists/{idList}
 # operationId: getListsByIdList
-export def "lists get" [
+export def "get-lists-by-id-list" [
   id_list: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7335,7 +7335,7 @@ export def "lists get" [
 #
 # PUT /lists/{idList}
 # operationId: updateListsByIdList
-export def "lists update" [
+export def "update-lists-by-id-list" [
   id_list: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7383,7 +7383,7 @@ export def "lists update" [
 #
 # GET /lists/{idList}/actions
 # operationId: getListsActionsByIdList
-export def "lists-actions get" [
+export def "get-lists-actions-by-id-list" [
   id_list: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7436,7 +7436,7 @@ export def "lists-actions get" [
 #
 # POST /lists/{idList}/archiveAllCards
 # operationId: addListsArchiveAllCardsByIdList
-export def "lists-archive-all-cards create" [
+export def "add-lists-archive-all-cards-by-id-list" [
   id_list: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7475,7 +7475,7 @@ export def "lists-archive-all-cards create" [
 #
 # GET /lists/{idList}/board
 # operationId: getListsBoardByIdList
-export def "lists-board get" [
+export def "get-lists-board-by-id-list" [
   id_list: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7515,7 +7515,7 @@ export def "lists-board get" [
 #
 # GET /lists/{idList}/board/{field}
 # operationId: getListsBoardByIdListByField
-export def "lists-board get-by" [
+export def "get-lists-board-by-id-list-by-field" [
   id_list: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7556,7 +7556,7 @@ export def "lists-board get-by" [
 #
 # GET /lists/{idList}/cards
 # operationId: getListsCardsByIdList
-export def "lists-cards get" [
+export def "get-lists-cards-by-id-list" [
   id_list: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7608,7 +7608,7 @@ export def "lists-cards get" [
 #
 # POST /lists/{idList}/cards
 # operationId: addListsCardsByIdList
-export def "lists-cards create" [
+export def "add-lists-cards-by-id-list" [
   id_list: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7655,7 +7655,7 @@ export def "lists-cards create" [
 #
 # GET /lists/{idList}/cards/{filter}
 # operationId: getListsCardsByIdListByFilter
-export def "lists-cards get-by" [
+export def "get-lists-cards-by-id-list-by-filter" [
   id_list: string
   filter: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7696,7 +7696,7 @@ export def "lists-cards get-by" [
 #
 # PUT /lists/{idList}/closed
 # operationId: updateListsClosedByIdList
-export def "lists-closed update" [
+export def "update-lists-closed-by-id-list" [
   id_list: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7739,7 +7739,7 @@ export def "lists-closed update" [
 #
 # PUT /lists/{idList}/idBoard
 # operationId: updateListsIdBoardByIdList
-export def "lists-id-board update" [
+export def "update-lists-id-board-by-id-list" [
   id_list: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7783,7 +7783,7 @@ export def "lists-id-board update" [
 #
 # POST /lists/{idList}/moveAllCards
 # operationId: addListsMoveAllCardsByIdList
-export def "lists-move-all-cards create" [
+export def "add-lists-move-all-cards-by-id-list" [
   id_list: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7826,7 +7826,7 @@ export def "lists-move-all-cards create" [
 #
 # PUT /lists/{idList}/name
 # operationId: updateListsNameByIdList
-export def "lists-name update" [
+export def "update-lists-name-by-id-list" [
   id_list: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7869,7 +7869,7 @@ export def "lists-name update" [
 #
 # PUT /lists/{idList}/pos
 # operationId: updateListsPosByIdList
-export def "lists-pos update" [
+export def "update-lists-pos-by-id-list" [
   id_list: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7912,7 +7912,7 @@ export def "lists-pos update" [
 #
 # PUT /lists/{idList}/subscribed
 # operationId: updateListsSubscribedByIdList
-export def "lists-subscribed update" [
+export def "update-lists-subscribed-by-id-list" [
   id_list: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7955,7 +7955,7 @@ export def "lists-subscribed update" [
 #
 # GET /lists/{idList}/{field}
 # operationId: getListsByIdListByField
-export def "lists get-by" [
+export def "get-lists-by-id-list-by-field" [
   id_list: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7996,7 +7996,7 @@ export def "lists get-by" [
 #
 # GET /members/{idMember}
 # operationId: getMembersByIdMember
-export def "members get" [
+export def "get-members-by-id-member" [
   id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8087,7 +8087,7 @@ export def "members get" [
 #
 # PUT /members/{idMember}
 # operationId: updateMembersByIdMember
-export def "members update" [
+export def "update-members-by-id-member" [
   id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8137,7 +8137,7 @@ export def "members update" [
 #
 # GET /members/{idMember}/actions
 # operationId: getMembersActionsByIdMember
-export def "members-actions get" [
+export def "get-members-actions-by-id-member" [
   id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8190,7 +8190,7 @@ export def "members-actions get" [
 #
 # POST /members/{idMember}/avatar
 # operationId: addMembersAvatarByIdMember
-export def "members-avatar create" [
+export def "add-members-avatar-by-id-member" [
   id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8233,7 +8233,7 @@ export def "members-avatar create" [
 #
 # PUT /members/{idMember}/avatarSource
 # operationId: updateMembersAvatarSourceByIdMember
-export def "members-avatar-source update" [
+export def "update-members-avatar-source-by-id-member" [
   id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8276,7 +8276,7 @@ export def "members-avatar-source update" [
 #
 # PUT /members/{idMember}/bio
 # operationId: updateMembersBioByIdMember
-export def "members-bio update" [
+export def "update-members-bio-by-id-member" [
   id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8319,7 +8319,7 @@ export def "members-bio update" [
 #
 # GET /members/{idMember}/boardBackgrounds
 # operationId: getMembersBoardBackgroundsByIdMember
-export def "members-board-backgrounds get" [
+export def "get-members-board-backgrounds-by-id-member" [
   id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8359,7 +8359,7 @@ export def "members-board-backgrounds get" [
 #
 # POST /members/{idMember}/boardBackgrounds
 # operationId: addMembersBoardBackgroundsByIdMember
-export def "members-board-backgrounds create" [
+export def "add-members-board-backgrounds-by-id-member" [
   id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8404,7 +8404,7 @@ export def "members-board-backgrounds create" [
 #
 # DELETE /members/{idMember}/boardBackgrounds/{idBoardBackground}
 # operationId: deleteMembersBoardBackgroundsByIdMemberByIdBoardBackground
-export def "members-board-backgrounds delete-by" [
+export def "delete-members-board-backgrounds-by-id-member-by-id-board-background" [
   id_member: string
   id_board_background: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8445,7 +8445,7 @@ export def "members-board-backgrounds delete-by" [
 #
 # GET /members/{idMember}/boardBackgrounds/{idBoardBackground}
 # operationId: getMembersBoardBackgroundsByIdMemberByIdBoardBackground
-export def "members-board-backgrounds get-by" [
+export def "get-members-board-backgrounds-by-id-member-by-id-board-background" [
   id_member: string
   id_board_background: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8487,7 +8487,7 @@ export def "members-board-backgrounds get-by" [
 #
 # PUT /members/{idMember}/boardBackgrounds/{idBoardBackground}
 # operationId: updateMembersBoardBackgroundsByIdMemberByIdBoardBackground
-export def "members-board-backgrounds update-by" [
+export def "update-members-board-backgrounds-by-id-member-by-id-board-background" [
   id_member: string
   id_board_background: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8534,7 +8534,7 @@ export def "members-board-backgrounds update-by" [
 #
 # GET /members/{idMember}/boardStars
 # operationId: getMembersBoardStarsByIdMember
-export def "members-board-stars get" [
+export def "get-members-board-stars-by-id-member" [
   id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8573,7 +8573,7 @@ export def "members-board-stars get" [
 #
 # POST /members/{idMember}/boardStars
 # operationId: addMembersBoardStarsByIdMember
-export def "members-board-stars create" [
+export def "add-members-board-stars-by-id-member" [
   id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8617,7 +8617,7 @@ export def "members-board-stars create" [
 #
 # DELETE /members/{idMember}/boardStars/{idBoardStar}
 # operationId: deleteMembersBoardStarsByIdMemberByIdBoardStar
-export def "members-board-stars delete-by" [
+export def "delete-members-board-stars-by-id-member-by-id-board-star" [
   id_member: string
   id_board_star: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8658,7 +8658,7 @@ export def "members-board-stars delete-by" [
 #
 # GET /members/{idMember}/boardStars/{idBoardStar}
 # operationId: getMembersBoardStarsByIdMemberByIdBoardStar
-export def "members-board-stars get-by" [
+export def "get-members-board-stars-by-id-member-by-id-board-star" [
   id_member: string
   id_board_star: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8699,7 +8699,7 @@ export def "members-board-stars get-by" [
 #
 # PUT /members/{idMember}/boardStars/{idBoardStar}
 # operationId: updateMembersBoardStarsByIdMemberByIdBoardStar
-export def "members-board-stars update-by" [
+export def "update-members-board-stars-by-id-member-by-id-board-star" [
   id_member: string
   id_board_star: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8745,7 +8745,7 @@ export def "members-board-stars update-by" [
 #
 # PUT /members/{idMember}/boardStars/{idBoardStar}/idBoard
 # operationId: updateMembersBoardStarsIdBoardByIdMemberByIdBoardStar
-export def "members-board-stars-id-board update-by" [
+export def "update-members-board-stars-id-board-by-id-member-by-id-board-star" [
   id_member: string
   id_board_star: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8790,7 +8790,7 @@ export def "members-board-stars-id-board update-by" [
 #
 # PUT /members/{idMember}/boardStars/{idBoardStar}/pos
 # operationId: updateMembersBoardStarsPosByIdMemberByIdBoardStar
-export def "members-board-stars-pos update-by" [
+export def "update-members-board-stars-pos-by-id-member-by-id-board-star" [
   id_member: string
   id_board_star: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8835,7 +8835,7 @@ export def "members-board-stars-pos update-by" [
 #
 # GET /members/{idMember}/boards
 # operationId: getMembersBoardsByIdMember
-export def "members-boards get" [
+export def "get-members-boards-by-id-member" [
   id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8886,7 +8886,7 @@ export def "members-boards get" [
 #
 # GET /members/{idMember}/boards/{filter}
 # operationId: getMembersBoardsByIdMemberByFilter
-export def "members-boards get-by" [
+export def "get-members-boards-by-id-member-by-filter" [
   id_member: string
   filter: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8927,7 +8927,7 @@ export def "members-boards get-by" [
 #
 # GET /members/{idMember}/boardsInvited
 # operationId: getMembersBoardsInvitedByIdMember
-export def "members-boards-invited get" [
+export def "get-members-boards-invited-by-id-member" [
   id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8967,7 +8967,7 @@ export def "members-boards-invited get" [
 #
 # GET /members/{idMember}/boardsInvited/{field}
 # operationId: getMembersBoardsInvitedByIdMemberByField
-export def "members-boards-invited get-by" [
+export def "get-members-boards-invited-by-id-member-by-field" [
   id_member: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9008,7 +9008,7 @@ export def "members-boards-invited get-by" [
 #
 # GET /members/{idMember}/cards
 # operationId: getMembersCardsByIdMember
-export def "members-cards get" [
+export def "get-members-cards-by-id-member" [
   id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9060,7 +9060,7 @@ export def "members-cards get" [
 #
 # GET /members/{idMember}/cards/{filter}
 # operationId: getMembersCardsByIdMemberByFilter
-export def "members-cards get-by" [
+export def "get-members-cards-by-id-member-by-filter" [
   id_member: string
   filter: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9101,7 +9101,7 @@ export def "members-cards get-by" [
 #
 # GET /members/{idMember}/customBoardBackgrounds
 # operationId: getMembersCustomBoardBackgroundsByIdMember
-export def "members-custom-board-backgrounds get" [
+export def "get-members-custom-board-backgrounds-by-id-member" [
   id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9141,7 +9141,7 @@ export def "members-custom-board-backgrounds get" [
 #
 # POST /members/{idMember}/customBoardBackgrounds
 # operationId: addMembersCustomBoardBackgroundsByIdMember
-export def "members-custom-board-backgrounds create" [
+export def "add-members-custom-board-backgrounds-by-id-member" [
   id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9186,7 +9186,7 @@ export def "members-custom-board-backgrounds create" [
 #
 # DELETE /members/{idMember}/customBoardBackgrounds/{idBoardBackground}
 # operationId: deleteMembersCustomBoardBackgroundsByIdMemberByIdBoardBackground
-export def "members-custom-board-backgrounds delete-by" [
+export def "delete-members-custom-board-backgrounds-by-id-member-by-id-board-background" [
   id_member: string
   id_board_background: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9227,7 +9227,7 @@ export def "members-custom-board-backgrounds delete-by" [
 #
 # GET /members/{idMember}/customBoardBackgrounds/{idBoardBackground}
 # operationId: getMembersCustomBoardBackgroundsByIdMemberByIdBoardBackground
-export def "members-custom-board-backgrounds get-by" [
+export def "get-members-custom-board-backgrounds-by-id-member-by-id-board-background" [
   id_member: string
   id_board_background: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9269,7 +9269,7 @@ export def "members-custom-board-backgrounds get-by" [
 #
 # PUT /members/{idMember}/customBoardBackgrounds/{idBoardBackground}
 # operationId: updateMembersCustomBoardBackgroundsByIdMemberByIdBoardBackground
-export def "members-custom-board-backgrounds update-by" [
+export def "update-members-custom-board-backgrounds-by-id-member-by-id-board-background" [
   id_member: string
   id_board_background: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9316,7 +9316,7 @@ export def "members-custom-board-backgrounds update-by" [
 #
 # GET /members/{idMember}/customEmoji
 # operationId: getMembersCustomEmojiByIdMember
-export def "members-custom-emoji get" [
+export def "get-members-custom-emoji-by-id-member" [
   id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9356,7 +9356,7 @@ export def "members-custom-emoji get" [
 #
 # POST /members/{idMember}/customEmoji
 # operationId: addMembersCustomEmojiByIdMember
-export def "members-custom-emoji create" [
+export def "add-members-custom-emoji-by-id-member" [
   id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9400,7 +9400,7 @@ export def "members-custom-emoji create" [
 #
 # GET /members/{idMember}/customEmoji/{idCustomEmoji}
 # operationId: getMembersCustomEmojiByIdMemberByIdCustomEmoji
-export def "members-custom-emoji get-by" [
+export def "get-members-custom-emoji-by-id-member-by-id-custom-emoji" [
   id_member: string
   id_custom_emoji: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9442,7 +9442,7 @@ export def "members-custom-emoji get-by" [
 #
 # GET /members/{idMember}/customStickers
 # operationId: getMembersCustomStickersByIdMember
-export def "members-custom-stickers get" [
+export def "get-members-custom-stickers-by-id-member" [
   id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9482,7 +9482,7 @@ export def "members-custom-stickers get" [
 #
 # POST /members/{idMember}/customStickers
 # operationId: addMembersCustomStickersByIdMember
-export def "members-custom-stickers create" [
+export def "add-members-custom-stickers-by-id-member" [
   id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9525,7 +9525,7 @@ export def "members-custom-stickers create" [
 #
 # DELETE /members/{idMember}/customStickers/{idCustomSticker}
 # operationId: deleteMembersCustomStickersByIdMemberByIdCustomSticker
-export def "members-custom-stickers delete-by" [
+export def "delete-members-custom-stickers-by-id-member-by-id-custom-sticker" [
   id_member: string
   id_custom_sticker: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9566,7 +9566,7 @@ export def "members-custom-stickers delete-by" [
 #
 # GET /members/{idMember}/customStickers/{idCustomSticker}
 # operationId: getMembersCustomStickersByIdMemberByIdCustomSticker
-export def "members-custom-stickers get-by" [
+export def "get-members-custom-stickers-by-id-member-by-id-custom-sticker" [
   id_member: string
   id_custom_sticker: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9608,7 +9608,7 @@ export def "members-custom-stickers get-by" [
 #
 # GET /members/{idMember}/deltas
 # operationId: getMembersDeltasByIdMember
-export def "members-deltas get" [
+export def "get-members-deltas-by-id-member" [
   id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9649,7 +9649,7 @@ export def "members-deltas get" [
 #
 # PUT /members/{idMember}/fullName
 # operationId: updateMembersFullNameByIdMember
-export def "members-full-name update" [
+export def "update-members-full-name-by-id-member" [
   id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9692,7 +9692,7 @@ export def "members-full-name update" [
 #
 # PUT /members/{idMember}/initials
 # operationId: updateMembersInitialsByIdMember
-export def "members-initials update" [
+export def "update-members-initials-by-id-member" [
   id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9735,7 +9735,7 @@ export def "members-initials update" [
 #
 # GET /members/{idMember}/notifications
 # operationId: getMembersNotificationsByIdMember
-export def "members-notifications get" [
+export def "get-members-notifications-by-id-member" [
   id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9785,7 +9785,7 @@ export def "members-notifications get" [
 #
 # GET /members/{idMember}/notifications/{filter}
 # operationId: getMembersNotificationsByIdMemberByFilter
-export def "members-notifications get-by" [
+export def "get-members-notifications-by-id-member-by-filter" [
   id_member: string
   filter: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9826,7 +9826,7 @@ export def "members-notifications get-by" [
 #
 # POST /members/{idMember}/oneTimeMessagesDismissed
 # operationId: addMembersOneTimeMessagesDismissedByIdMember
-export def "members-one-time-messages-dismissed create" [
+export def "add-members-one-time-messages-dismissed-by-id-member" [
   id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9869,7 +9869,7 @@ export def "members-one-time-messages-dismissed create" [
 #
 # GET /members/{idMember}/organizations
 # operationId: getMembersOrganizationsByIdMember
-export def "members-organizations get" [
+export def "get-members-organizations-by-id-member" [
   id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9911,7 +9911,7 @@ export def "members-organizations get" [
 #
 # GET /members/{idMember}/organizations/{filter}
 # operationId: getMembersOrganizationsByIdMemberByFilter
-export def "members-organizations get-by" [
+export def "get-members-organizations-by-id-member-by-filter" [
   id_member: string
   filter: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9952,7 +9952,7 @@ export def "members-organizations get-by" [
 #
 # GET /members/{idMember}/organizationsInvited
 # operationId: getMembersOrganizationsInvitedByIdMember
-export def "members-organizations-invited get" [
+export def "get-members-organizations-invited-by-id-member" [
   id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9992,7 +9992,7 @@ export def "members-organizations-invited get" [
 #
 # GET /members/{idMember}/organizationsInvited/{field}
 # operationId: getMembersOrganizationsInvitedByIdMemberByField
-export def "members-organizations-invited get-by" [
+export def "get-members-organizations-invited-by-id-member-by-field" [
   id_member: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10033,7 +10033,7 @@ export def "members-organizations-invited get-by" [
 #
 # PUT /members/{idMember}/prefs/colorBlind
 # operationId: updateMembersPrefsColorBlindByIdMember
-export def "members-prefs-color-blind update" [
+export def "update-members-prefs-color-blind-by-id-member" [
   id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10076,7 +10076,7 @@ export def "members-prefs-color-blind update" [
 #
 # PUT /members/{idMember}/prefs/locale
 # operationId: updateMembersPrefsLocaleByIdMember
-export def "members-prefs-locale update" [
+export def "update-members-prefs-locale-by-id-member" [
   id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10119,7 +10119,7 @@ export def "members-prefs-locale update" [
 #
 # PUT /members/{idMember}/prefs/minutesBetweenSummaries
 # operationId: updateMembersPrefsMinutesBetweenSummariesByIdMember
-export def "members-prefs-minutes-between-summaries update" [
+export def "update-members-prefs-minutes-between-summaries-by-id-member" [
   id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10162,7 +10162,7 @@ export def "members-prefs-minutes-between-summaries update" [
 #
 # GET /members/{idMember}/savedSearches
 # operationId: getMembersSavedSearchesByIdMember
-export def "members-saved-searches get" [
+export def "get-members-saved-searches-by-id-member" [
   id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10201,7 +10201,7 @@ export def "members-saved-searches get" [
 #
 # POST /members/{idMember}/savedSearches
 # operationId: addMembersSavedSearchesByIdMember
-export def "members-saved-searches create" [
+export def "add-members-saved-searches-by-id-member" [
   id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10246,7 +10246,7 @@ export def "members-saved-searches create" [
 #
 # DELETE /members/{idMember}/savedSearches/{idSavedSearch}
 # operationId: deleteMembersSavedSearchesByIdMemberByIdSavedSearch
-export def "members-saved-searches delete-by-by-list" [
+export def "delete-members-saved-searches-by-id-member-by-id-saved-search" [
   id_member: string
   id_saved_search: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10287,7 +10287,7 @@ export def "members-saved-searches delete-by-by-list" [
 #
 # GET /members/{idMember}/savedSearches/{idSavedSearch}
 # operationId: getMembersSavedSearchesByIdMemberByIdSavedSearch
-export def "members-saved-searches get-by-by-list" [
+export def "get-members-saved-searches-by-id-member-by-id-saved-search" [
   id_member: string
   id_saved_search: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10328,7 +10328,7 @@ export def "members-saved-searches get-by-by-list" [
 #
 # PUT /members/{idMember}/savedSearches/{idSavedSearch}
 # operationId: updateMembersSavedSearchesByIdMemberByIdSavedSearch
-export def "members-saved-searches update-by-by-list" [
+export def "update-members-saved-searches-by-id-member-by-id-saved-search" [
   id_member: string
   id_saved_search: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10375,7 +10375,7 @@ export def "members-saved-searches update-by-by-list" [
 #
 # PUT /members/{idMember}/savedSearches/{idSavedSearch}/name
 # operationId: updateMembersSavedSearchesNameByIdMemberByIdSavedSearch
-export def "members-saved-searches-name update-by-by-list" [
+export def "update-members-saved-searches-name-by-id-member-by-id-saved-search" [
   id_member: string
   id_saved_search: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10420,7 +10420,7 @@ export def "members-saved-searches-name update-by-by-list" [
 #
 # PUT /members/{idMember}/savedSearches/{idSavedSearch}/pos
 # operationId: updateMembersSavedSearchesPosByIdMemberByIdSavedSearch
-export def "members-saved-searches-pos update-by-by-list" [
+export def "update-members-saved-searches-pos-by-id-member-by-id-saved-search" [
   id_member: string
   id_saved_search: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10465,7 +10465,7 @@ export def "members-saved-searches-pos update-by-by-list" [
 #
 # PUT /members/{idMember}/savedSearches/{idSavedSearch}/query
 # operationId: updateMembersSavedSearchesQueryByIdMemberByIdSavedSearch
-export def "members-saved-searches-query update-by-by-list" [
+export def "update-members-saved-searches-query-by-id-member-by-id-saved-search" [
   id_member: string
   id_saved_search: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10510,7 +10510,7 @@ export def "members-saved-searches-query update-by-by-list" [
 #
 # GET /members/{idMember}/tokens
 # operationId: getMembersTokensByIdMember
-export def "members-tokens get" [
+export def "get-members-tokens-by-id-member" [
   id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10550,7 +10550,7 @@ export def "members-tokens get" [
 #
 # PUT /members/{idMember}/username
 # operationId: updateMembersUsernameByIdMember
-export def "members-username update" [
+export def "update-members-username-by-id-member" [
   id_member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10593,7 +10593,7 @@ export def "members-username update" [
 #
 # GET /members/{idMember}/{field}
 # operationId: getMembersByIdMemberByField
-export def "members get-by" [
+export def "get-members-by-id-member-by-field" [
   id_member: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10634,7 +10634,7 @@ export def "members get-by" [
 #
 # POST /notifications/all/read
 # operationId: addNotificationsAllRead
-export def "notifications-all-read create" [
+export def "add-notifications-all-read" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10671,7 +10671,7 @@ export def "notifications-all-read create" [
 #
 # GET /notifications/{idNotification}
 # operationId: getNotificationsByIdNotification
-export def "notifications get" [
+export def "get-notifications-by-id-notification" [
   id_notification: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10724,7 +10724,7 @@ export def "notifications get" [
 #
 # PUT /notifications/{idNotification}
 # operationId: updateNotificationsByIdNotification
-export def "notifications update" [
+export def "update-notifications-by-id-notification" [
   id_notification: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10767,7 +10767,7 @@ export def "notifications update" [
 #
 # GET /notifications/{idNotification}/board
 # operationId: getNotificationsBoardByIdNotification
-export def "notifications-board get" [
+export def "get-notifications-board-by-id-notification" [
   id_notification: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10807,7 +10807,7 @@ export def "notifications-board get" [
 #
 # GET /notifications/{idNotification}/board/{field}
 # operationId: getNotificationsBoardByIdNotificationByField
-export def "notifications-board get-by" [
+export def "get-notifications-board-by-id-notification-by-field" [
   id_notification: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10848,7 +10848,7 @@ export def "notifications-board get-by" [
 #
 # GET /notifications/{idNotification}/card
 # operationId: getNotificationsCardByIdNotification
-export def "notifications-card get" [
+export def "get-notifications-card-by-id-notification" [
   id_notification: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10888,7 +10888,7 @@ export def "notifications-card get" [
 #
 # GET /notifications/{idNotification}/card/{field}
 # operationId: getNotificationsCardByIdNotificationByField
-export def "notifications-card get-by" [
+export def "get-notifications-card-by-id-notification-by-field" [
   id_notification: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10929,7 +10929,7 @@ export def "notifications-card get-by" [
 #
 # GET /notifications/{idNotification}/display
 # operationId: getNotificationsDisplayByIdNotification
-export def "notifications-display get" [
+export def "get-notifications-display-by-id-notification" [
   id_notification: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10968,7 +10968,7 @@ export def "notifications-display get" [
 #
 # GET /notifications/{idNotification}/entities
 # operationId: getNotificationsEntitiesByIdNotification
-export def "notifications-entities get" [
+export def "get-notifications-entities-by-id-notification" [
   id_notification: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11007,7 +11007,7 @@ export def "notifications-entities get" [
 #
 # GET /notifications/{idNotification}/list
 # operationId: getNotificationsListByIdNotification
-export def "notifications-list get" [
+export def "get-notifications-list-by-id-notification" [
   id_notification: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11047,7 +11047,7 @@ export def "notifications-list get" [
 #
 # GET /notifications/{idNotification}/list/{field}
 # operationId: getNotificationsListByIdNotificationByField
-export def "notifications-list get-by" [
+export def "get-notifications-list-by-id-notification-by-field" [
   id_notification: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11088,7 +11088,7 @@ export def "notifications-list get-by" [
 #
 # GET /notifications/{idNotification}/member
 # operationId: getNotificationsMemberByIdNotification
-export def "notifications-member get" [
+export def "get-notifications-member-by-id-notification" [
   id_notification: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11128,7 +11128,7 @@ export def "notifications-member get" [
 #
 # GET /notifications/{idNotification}/member/{field}
 # operationId: getNotificationsMemberByIdNotificationByField
-export def "notifications-member get-by" [
+export def "get-notifications-member-by-id-notification-by-field" [
   id_notification: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11169,7 +11169,7 @@ export def "notifications-member get-by" [
 #
 # GET /notifications/{idNotification}/memberCreator
 # operationId: getNotificationsMemberCreatorByIdNotification
-export def "notifications-member-creator get" [
+export def "get-notifications-member-creator-by-id-notification" [
   id_notification: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11209,7 +11209,7 @@ export def "notifications-member-creator get" [
 #
 # GET /notifications/{idNotification}/memberCreator/{field}
 # operationId: getNotificationsMemberCreatorByIdNotificationByField
-export def "notifications-member-creator get-by" [
+export def "get-notifications-member-creator-by-id-notification-by-field" [
   id_notification: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11250,7 +11250,7 @@ export def "notifications-member-creator get-by" [
 #
 # GET /notifications/{idNotification}/organization
 # operationId: getNotificationsOrganizationByIdNotification
-export def "notifications-organization get" [
+export def "get-notifications-organization-by-id-notification" [
   id_notification: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11290,7 +11290,7 @@ export def "notifications-organization get" [
 #
 # GET /notifications/{idNotification}/organization/{field}
 # operationId: getNotificationsOrganizationByIdNotificationByField
-export def "notifications-organization get-by" [
+export def "get-notifications-organization-by-id-notification-by-field" [
   id_notification: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11331,7 +11331,7 @@ export def "notifications-organization get-by" [
 #
 # PUT /notifications/{idNotification}/unread
 # operationId: updateNotificationsUnreadByIdNotification
-export def "notifications-unread update" [
+export def "update-notifications-unread-by-id-notification" [
   id_notification: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11374,7 +11374,7 @@ export def "notifications-unread update" [
 #
 # GET /notifications/{idNotification}/{field}
 # operationId: getNotificationsByIdNotificationByField
-export def "notifications get-by" [
+export def "get-notifications-by-id-notification-by-field" [
   id_notification: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11415,7 +11415,7 @@ export def "notifications get-by" [
 #
 # POST /organizations
 # operationId: addOrganizations
-export def "organizations create" [
+export def "add-organizations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11467,7 +11467,7 @@ export def "organizations create" [
 #
 # DELETE /organizations/{idOrg}
 # operationId: deleteOrganizationsByIdOrg
-export def "organizations delete-by-org" [
+export def "delete-organizations-by-id-org" [
   id_org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11506,7 +11506,7 @@ export def "organizations delete-by-org" [
 #
 # GET /organizations/{idOrg}
 # operationId: getOrganizationsByIdOrg
-export def "organizations list" [
+export def "get-organizations-by-id-org" [
   id_org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11570,7 +11570,7 @@ export def "organizations list" [
 #
 # PUT /organizations/{idOrg}
 # operationId: updateOrganizationsByIdOrg
-export def "organizations update-by-org" [
+export def "update-organizations-by-id-org" [
   id_org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11624,7 +11624,7 @@ export def "organizations update-by-org" [
 #
 # GET /organizations/{idOrg}/actions
 # operationId: getOrganizationsActionsByIdOrg
-export def "organizations-actions get-by-org" [
+export def "get-organizations-actions-by-id-org" [
   id_org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11677,7 +11677,7 @@ export def "organizations-actions get-by-org" [
 #
 # GET /organizations/{idOrg}/boards
 # operationId: getOrganizationsBoardsByIdOrg
-export def "organizations-boards list" [
+export def "get-organizations-boards-by-id-org" [
   id_org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11728,7 +11728,7 @@ export def "organizations-boards list" [
 #
 # GET /organizations/{idOrg}/boards/{filter}
 # operationId: getOrganizationsBoardsByIdOrgByFilter
-export def "organizations-boards get-by-org" [
+export def "get-organizations-boards-by-id-org-by-filter" [
   id_org: string
   filter: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11769,7 +11769,7 @@ export def "organizations-boards get-by-org" [
 #
 # GET /organizations/{idOrg}/deltas
 # operationId: getOrganizationsDeltasByIdOrg
-export def "organizations-deltas get-by-org" [
+export def "get-organizations-deltas-by-id-org" [
   id_org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11810,7 +11810,7 @@ export def "organizations-deltas get-by-org" [
 #
 # PUT /organizations/{idOrg}/desc
 # operationId: updateOrganizationsDescByIdOrg
-export def "organizations-desc update-by-org" [
+export def "update-organizations-desc-by-id-org" [
   id_org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11853,7 +11853,7 @@ export def "organizations-desc update-by-org" [
 #
 # PUT /organizations/{idOrg}/displayName
 # operationId: updateOrganizationsDisplayNameByIdOrg
-export def "organizations-display-name update-by-org" [
+export def "update-organizations-display-name-by-id-org" [
   id_org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11896,7 +11896,7 @@ export def "organizations-display-name update-by-org" [
 #
 # DELETE /organizations/{idOrg}/logo
 # operationId: deleteOrganizationsLogoByIdOrg
-export def "organizations-logo delete-by-org" [
+export def "delete-organizations-logo-by-id-org" [
   id_org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11935,7 +11935,7 @@ export def "organizations-logo delete-by-org" [
 #
 # POST /organizations/{idOrg}/logo
 # operationId: addOrganizationsLogoByIdOrg
-export def "organizations-logo create-by-org" [
+export def "add-organizations-logo-by-id-org" [
   id_org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11978,7 +11978,7 @@ export def "organizations-logo create-by-org" [
 #
 # GET /organizations/{idOrg}/members
 # operationId: getOrganizationsMembersByIdOrg
-export def "organizations-members list" [
+export def "get-organizations-members-by-id-org" [
   id_org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12020,7 +12020,7 @@ export def "organizations-members list" [
 #
 # PUT /organizations/{idOrg}/members
 # operationId: updateOrganizationsMembersByIdOrg
-export def "organizations-members update-by-org-by-id-org" [
+export def "update-organizations-members-by-id-org" [
   id_org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12065,7 +12065,7 @@ export def "organizations-members update-by-org-by-id-org" [
 #
 # GET /organizations/{idOrg}/members/{filter}
 # operationId: getOrganizationsMembersByIdOrgByFilter
-export def "organizations-members get-by-org" [
+export def "get-organizations-members-by-id-org-by-filter" [
   id_org: string
   filter: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12106,7 +12106,7 @@ export def "organizations-members get-by-org" [
 #
 # DELETE /organizations/{idOrg}/members/{idMember}
 # operationId: deleteOrganizationsMembersByIdOrgByIdMember
-export def "organizations-members delete-by-org" [
+export def "delete-organizations-members-by-id-org-by-id-member" [
   id_org: string
   id_member: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12147,7 +12147,7 @@ export def "organizations-members delete-by-org" [
 #
 # PUT /organizations/{idOrg}/members/{idMember}
 # operationId: updateOrganizationsMembersByIdOrgByIdMember
-export def "organizations-members update-by-org-by-id-org-id-member" [
+export def "update-organizations-members-by-id-org-by-id-member" [
   id_org: string
   id_member: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12194,7 +12194,7 @@ export def "organizations-members update-by-org-by-id-org-id-member" [
 #
 # DELETE /organizations/{idOrg}/members/{idMember}/all
 # operationId: deleteOrganizationsMembersAllByIdOrgByIdMember
-export def "organizations-members-all delete-by-org" [
+export def "delete-organizations-members-all-by-id-org-by-id-member" [
   id_org: string
   id_member: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12235,7 +12235,7 @@ export def "organizations-members-all delete-by-org" [
 #
 # GET /organizations/{idOrg}/members/{idMember}/cards
 # operationId: getOrganizationsMembersCardsByIdOrgByIdMember
-export def "organizations-members-cards get-by-org" [
+export def "get-organizations-members-cards-by-id-org-by-id-member" [
   id_org: string
   id_member: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12289,7 +12289,7 @@ export def "organizations-members-cards get-by-org" [
 #
 # PUT /organizations/{idOrg}/members/{idMember}/deactivated
 # operationId: updateOrganizationsMembersDeactivatedByIdOrgByIdMember
-export def "organizations-members-deactivated update-by-org" [
+export def "update-organizations-members-deactivated-by-id-org-by-id-member" [
   id_org: string
   id_member: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12334,7 +12334,7 @@ export def "organizations-members-deactivated update-by-org" [
 #
 # GET /organizations/{idOrg}/membersInvited
 # operationId: getOrganizationsMembersInvitedByIdOrg
-export def "organizations-members-invited list" [
+export def "get-organizations-members-invited-by-id-org" [
   id_org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12374,7 +12374,7 @@ export def "organizations-members-invited list" [
 #
 # GET /organizations/{idOrg}/membersInvited/{field}
 # operationId: getOrganizationsMembersInvitedByIdOrgByField
-export def "organizations-members-invited get-by-org" [
+export def "get-organizations-members-invited-by-id-org-by-field" [
   id_org: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12415,7 +12415,7 @@ export def "organizations-members-invited get-by-org" [
 #
 # GET /organizations/{idOrg}/memberships
 # operationId: getOrganizationsMembershipsByIdOrg
-export def "organizations-memberships list" [
+export def "get-organizations-memberships-by-id-org" [
   id_org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12457,7 +12457,7 @@ export def "organizations-memberships list" [
 #
 # GET /organizations/{idOrg}/memberships/{idMembership}
 # operationId: getOrganizationsMembershipsByIdOrgByIdMembership
-export def "organizations-memberships get-by-org" [
+export def "get-organizations-memberships-by-id-org-by-id-membership" [
   id_org: string
   id_membership: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12500,7 +12500,7 @@ export def "organizations-memberships get-by-org" [
 #
 # PUT /organizations/{idOrg}/memberships/{idMembership}
 # operationId: updateOrganizationsMembershipsByIdOrgByIdMembership
-export def "organizations-memberships update-by-org" [
+export def "update-organizations-memberships-by-id-org-by-id-membership" [
   id_org: string
   id_membership: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12546,7 +12546,7 @@ export def "organizations-memberships update-by-org" [
 #
 # PUT /organizations/{idOrg}/name
 # operationId: updateOrganizationsNameByIdOrg
-export def "organizations-name update-by-org" [
+export def "update-organizations-name-by-id-org" [
   id_org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12589,7 +12589,7 @@ export def "organizations-name update-by-org" [
 #
 # DELETE /organizations/{idOrg}/prefs/associatedDomain
 # operationId: deleteOrganizationsPrefsAssociatedDomainByIdOrg
-export def "organizations-prefs-associated-domain delete-by-org" [
+export def "delete-organizations-prefs-associated-domain-by-id-org" [
   id_org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12628,7 +12628,7 @@ export def "organizations-prefs-associated-domain delete-by-org" [
 #
 # PUT /organizations/{idOrg}/prefs/associatedDomain
 # operationId: updateOrganizationsPrefsAssociatedDomainByIdOrg
-export def "organizations-prefs-associated-domain update-by-org" [
+export def "update-organizations-prefs-associated-domain-by-id-org" [
   id_org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12671,7 +12671,7 @@ export def "organizations-prefs-associated-domain update-by-org" [
 #
 # PUT /organizations/{idOrg}/prefs/boardVisibilityRestrict/org
 # operationId: updateOrganizationsPrefsBoardVisibilityRestrictOrgByIdOrg
-export def "organizations-prefs-board-visibility-restrict-org update" [
+export def "update-organizations-prefs-board-visibility-restrict-org-by-id-org" [
   id_org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12714,7 +12714,7 @@ export def "organizations-prefs-board-visibility-restrict-org update" [
 #
 # PUT /organizations/{idOrg}/prefs/boardVisibilityRestrict/private
 # operationId: updateOrganizationsPrefsBoardVisibilityRestrictPrivateByIdOrg
-export def "organizations-prefs-board-visibility-restrict-private update-by-org" [
+export def "update-organizations-prefs-board-visibility-restrict-private-by-id-org" [
   id_org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12757,7 +12757,7 @@ export def "organizations-prefs-board-visibility-restrict-private update-by-org"
 #
 # PUT /organizations/{idOrg}/prefs/boardVisibilityRestrict/public
 # operationId: updateOrganizationsPrefsBoardVisibilityRestrictPublicByIdOrg
-export def "organizations-prefs-board-visibility-restrict-public update-by-org" [
+export def "update-organizations-prefs-board-visibility-restrict-public-by-id-org" [
   id_org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12800,7 +12800,7 @@ export def "organizations-prefs-board-visibility-restrict-public update-by-org" 
 #
 # PUT /organizations/{idOrg}/prefs/externalMembersDisabled
 # operationId: updateOrganizationsPrefsExternalMembersDisabledByIdOrg
-export def "organizations-prefs-external-members-disabled update-by-org" [
+export def "update-organizations-prefs-external-members-disabled-by-id-org" [
   id_org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12843,7 +12843,7 @@ export def "organizations-prefs-external-members-disabled update-by-org" [
 #
 # PUT /organizations/{idOrg}/prefs/googleAppsVersion
 # operationId: updateOrganizationsPrefsGoogleAppsVersionByIdOrg
-export def "organizations-prefs-google-apps-version update-by-org" [
+export def "update-organizations-prefs-google-apps-version-by-id-org" [
   id_org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12886,7 +12886,7 @@ export def "organizations-prefs-google-apps-version update-by-org" [
 #
 # DELETE /organizations/{idOrg}/prefs/orgInviteRestrict
 # operationId: deleteOrganizationsPrefsOrgInviteRestrictByIdOrg
-export def "organizations-prefs-org-invite-restrict delete" [
+export def "delete-organizations-prefs-org-invite-restrict-by-id-org" [
   id_org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12926,7 +12926,7 @@ export def "organizations-prefs-org-invite-restrict delete" [
 #
 # PUT /organizations/{idOrg}/prefs/orgInviteRestrict
 # operationId: updateOrganizationsPrefsOrgInviteRestrictByIdOrg
-export def "organizations-prefs-org-invite-restrict update" [
+export def "update-organizations-prefs-org-invite-restrict-by-id-org" [
   id_org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12969,7 +12969,7 @@ export def "organizations-prefs-org-invite-restrict update" [
 #
 # PUT /organizations/{idOrg}/prefs/permissionLevel
 # operationId: updateOrganizationsPrefsPermissionLevelByIdOrg
-export def "organizations-prefs-permission-level update-by-org" [
+export def "update-organizations-prefs-permission-level-by-id-org" [
   id_org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13012,7 +13012,7 @@ export def "organizations-prefs-permission-level update-by-org" [
 #
 # PUT /organizations/{idOrg}/website
 # operationId: updateOrganizationsWebsiteByIdOrg
-export def "organizations-website update-by-org" [
+export def "update-organizations-website-by-id-org" [
   id_org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13055,7 +13055,7 @@ export def "organizations-website update-by-org" [
 #
 # GET /organizations/{idOrg}/{field}
 # operationId: getOrganizationsByIdOrgByField
-export def "organizations get-by-org" [
+export def "get-organizations-by-id-org-by-field" [
   id_org: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13096,7 +13096,7 @@ export def "organizations get-by-org" [
 #
 # GET /search
 # operationId: getSearch
-export def "search get" [
+export def "get-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13153,7 +13153,7 @@ export def "search get" [
 #
 # GET /search/members
 # operationId: getSearchMembers
-export def "search-members get" [
+export def "get-search-members" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13195,7 +13195,7 @@ export def "search-members get" [
 #
 # POST /sessions
 # operationId: addSessions
-export def "sessions create" [
+export def "add-sessions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13237,7 +13237,7 @@ export def "sessions create" [
 #
 # GET /sessions/socket
 # operationId: getSessionsSocket
-export def "sessions-socket get" [
+export def "get-sessions-socket" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13274,7 +13274,7 @@ export def "sessions-socket get" [
 #
 # PUT /sessions/{idSession}
 # operationId: updateSessionsByIdSession
-export def "sessions update" [
+export def "update-sessions-by-id-session" [
   id_session: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13318,7 +13318,7 @@ export def "sessions update" [
 #
 # PUT /sessions/{idSession}/status
 # operationId: updateSessionsStatusByIdSession
-export def "sessions-status update" [
+export def "update-sessions-status-by-id-session" [
   id_session: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13361,7 +13361,7 @@ export def "sessions-status update" [
 #
 # DELETE /tokens/{token}
 # operationId: deleteTokensByToken
-export def "tokens delete" [
+export def "delete-tokens-by-token" [
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13400,7 +13400,7 @@ export def "tokens delete" [
 #
 # GET /tokens/{token}
 # operationId: getTokensByToken
-export def "tokens get" [
+export def "get-tokens-by-token" [
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13441,7 +13441,7 @@ export def "tokens get" [
 #
 # GET /tokens/{token}/member
 # operationId: getTokensMemberByToken
-export def "tokens-member get" [
+export def "get-tokens-member-by-token" [
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13481,7 +13481,7 @@ export def "tokens-member get" [
 #
 # GET /tokens/{token}/member/{field}
 # operationId: getTokensMemberByTokenByField
-export def "tokens-member get-by" [
+export def "get-tokens-member-by-token-by-field" [
   token_arg: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13522,7 +13522,7 @@ export def "tokens-member get-by" [
 #
 # GET /tokens/{token}/webhooks
 # operationId: getTokensWebhooksByToken
-export def "tokens-webhooks get" [
+export def "get-tokens-webhooks-by-token" [
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13561,7 +13561,7 @@ export def "tokens-webhooks get" [
 #
 # POST /tokens/{token}/webhooks
 # operationId: addTokensWebhooksByToken
-export def "tokens-webhooks create" [
+export def "add-tokens-webhooks-by-token" [
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13606,7 +13606,7 @@ export def "tokens-webhooks create" [
 #
 # PUT /tokens/{token}/webhooks
 # operationId: updateTokensWebhooksByToken
-export def "tokens-webhooks update" [
+export def "update-tokens-webhooks-by-token" [
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13651,7 +13651,7 @@ export def "tokens-webhooks update" [
 #
 # DELETE /tokens/{token}/webhooks/{idWebhook}
 # operationId: deleteTokensWebhooksByTokenByIdWebhook
-export def "tokens-webhooks delete-by" [
+export def "delete-tokens-webhooks-by-token-by-id-webhook" [
   token_arg: string
   id_webhook: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13692,7 +13692,7 @@ export def "tokens-webhooks delete-by" [
 #
 # GET /tokens/{token}/webhooks/{idWebhook}
 # operationId: getTokensWebhooksByTokenByIdWebhook
-export def "tokens-webhooks get-by" [
+export def "get-tokens-webhooks-by-token-by-id-webhook" [
   token_arg: string
   id_webhook: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13733,7 +13733,7 @@ export def "tokens-webhooks get-by" [
 #
 # GET /tokens/{token}/{field}
 # operationId: getTokensByTokenByField
-export def "tokens get-by" [
+export def "get-tokens-by-token-by-field" [
   token_arg: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13774,7 +13774,7 @@ export def "tokens get-by" [
 #
 # GET /types/{id}
 # operationId: getTypesById
-export def "types get" [
+export def "get-types-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13813,7 +13813,7 @@ export def "types get" [
 #
 # POST /webhooks
 # operationId: addWebhooks
-export def "webhooks create" [
+export def "add-webhooks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13857,7 +13857,7 @@ export def "webhooks create" [
 #
 # PUT /webhooks/
 # operationId: updateWebhooks
-export def "webhooks update" [
+export def "update-webhooks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13901,7 +13901,7 @@ export def "webhooks update" [
 #
 # DELETE /webhooks/{idWebhook}
 # operationId: deleteWebhooksByIdWebhook
-export def "webhooks delete" [
+export def "delete-webhooks-by-id-webhook" [
   id_webhook: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13940,7 +13940,7 @@ export def "webhooks delete" [
 #
 # GET /webhooks/{idWebhook}
 # operationId: getWebhooksByIdWebhook
-export def "webhooks get" [
+export def "get-webhooks-by-id-webhook" [
   id_webhook: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13979,7 +13979,7 @@ export def "webhooks get" [
 #
 # PUT /webhooks/{idWebhook}
 # operationId: updateWebhooksByIdWebhook
-export def "webhooks update-by-id-webhook" [
+export def "update-webhooks-by-id-webhook" [
   id_webhook: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14025,7 +14025,7 @@ export def "webhooks update-by-id-webhook" [
 #
 # PUT /webhooks/{idWebhook}/active
 # operationId: updateWebhooksActiveByIdWebhook
-export def "webhooks-active update" [
+export def "update-webhooks-active-by-id-webhook" [
   id_webhook: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14068,7 +14068,7 @@ export def "webhooks-active update" [
 #
 # PUT /webhooks/{idWebhook}/callbackURL
 # operationId: updateWebhooksCallbackURLByIdWebhook
-export def "webhooks-callback-url update" [
+export def "update-webhooks-callback-url-by-id-webhook" [
   id_webhook: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14111,7 +14111,7 @@ export def "webhooks-callback-url update" [
 #
 # PUT /webhooks/{idWebhook}/description
 # operationId: updateWebhooksDescriptionByIdWebhook
-export def "webhooks-description update" [
+export def "update-webhooks-description-by-id-webhook" [
   id_webhook: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14154,7 +14154,7 @@ export def "webhooks-description update" [
 #
 # PUT /webhooks/{idWebhook}/idModel
 # operationId: updateWebhooksIdModelByIdWebhook
-export def "webhooks-id-model update" [
+export def "update-webhooks-id-model-by-id-webhook" [
   id_webhook: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14197,7 +14197,7 @@ export def "webhooks-id-model update" [
 #
 # GET /webhooks/{idWebhook}/{field}
 # operationId: getWebhooksByIdWebhookByField
-export def "webhooks get-by" [
+export def "get-webhooks-by-id-webhook-by-field" [
   id_webhook: string
   field: string
   --base-url(-b): string@base-url-completer # API base URL

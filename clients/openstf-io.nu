@@ -110,7 +110,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "devices list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-devices" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -134,7 +134,7 @@ export def commands []: nothing -> table {
 #
 # GET /devices
 # operationId: getDevices
-export def "devices list" [
+export def "get-devices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -170,7 +170,7 @@ export def "devices list" [
 #
 # GET /devices/{serial}
 # operationId: getDeviceBySerial
-export def "devices get" [
+export def "get-device-by-serial" [
   serial: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -208,7 +208,7 @@ export def "devices get" [
 #
 # GET /user
 # operationId: getUser
-export def "user get" [
+export def "get-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -242,7 +242,7 @@ export def "user get" [
 #
 # GET /user/accessTokens
 # operationId: getUserAccessTokens
-export def "user-access-tokens get" [
+export def "get-user-access-tokens" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -276,7 +276,7 @@ export def "user-access-tokens get" [
 #
 # GET /user/devices
 # operationId: getUserDevices
-export def "user-devices list" [
+export def "get-user-devices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -312,7 +312,7 @@ export def "user-devices list" [
 #
 # POST /user/devices
 # operationId: addUserDevice
-export def "user-devices create" [
+export def "add-user-device" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -351,7 +351,7 @@ export def "user-devices create" [
 #
 # DELETE /user/devices/{serial}
 # operationId: deleteUserDeviceBySerial
-export def "user-devices delete" [
+export def "delete-user-device-by-serial" [
   serial: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -387,7 +387,7 @@ export def "user-devices delete" [
 #
 # GET /user/devices/{serial}
 # operationId: getUserDeviceBySerial
-export def "user-devices get" [
+export def "get-user-device-by-serial" [
   serial: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -425,7 +425,7 @@ export def "user-devices get" [
 #
 # DELETE /user/devices/{serial}/remoteConnect
 # operationId: remoteDisconnectUserDeviceBySerial
-export def "user-devices-remote-connect delete-disconnect" [
+export def "remote-disconnect-user-device-by-serial" [
   serial: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -461,7 +461,7 @@ export def "user-devices-remote-connect delete-disconnect" [
 #
 # POST /user/devices/{serial}/remoteConnect
 # operationId: remoteConnectUserDeviceBySerial
-export def "user-devices-remote-connect create" [
+export def "remote-connect-user-device-by-serial" [
   serial: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

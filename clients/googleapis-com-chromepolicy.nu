@@ -117,7 +117,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "policies-files-upload-policy-file upload" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "chromepolicy-media-upload" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -141,7 +141,7 @@ export def commands []: nothing -> table {
 #
 # POST /v1/{customer}/policies/files:uploadPolicyFile
 # operationId: chromepolicy.media.upload
-export def "policies-files-upload-policy-file upload" [
+export def "chromepolicy-media-upload" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -194,7 +194,7 @@ export def "policies-files-upload-policy-file upload" [
 # POST /v1/{customer}/policies/groups:batchDelete
 # operationId: chromepolicy.customers.policies.groups.batchDelete
 # --requests item shape: {policySchema?: string, policyTargetKey?: record}
-export def "policies-groups-batch-delete delete" [
+export def "chromepolicy-customers-policies-groups-batch-delete" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -247,7 +247,7 @@ export def "policies-groups-batch-delete delete" [
 # POST /v1/{customer}/policies/groups:batchModify
 # operationId: chromepolicy.customers.policies.groups.batchModify
 # --requests item shape: {policyTargetKey?: record, policyValue?: record, updateMask?: string}
-export def "policies-groups-batch-modify create" [
+export def "chromepolicy-customers-policies-groups-batch-modify" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -300,7 +300,7 @@ export def "policies-groups-batch-modify create" [
 # POST /v1/{customer}/policies/groups:listGroupPriorityOrdering
 # operationId: chromepolicy.customers.policies.groups.listGroupPriorityOrdering
 # --policyTargetKey shape: {additionalTargetKeys?: record, targetResource?: string}
-export def "policies-groups-list-group-priority-ordering list" [
+export def "chromepolicy-customers-policies-groups-list-group-priority-ordering" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -355,7 +355,7 @@ export def "policies-groups-list-group-priority-ordering list" [
 # POST /v1/{customer}/policies/groups:updateGroupPriorityOrdering
 # operationId: chromepolicy.customers.policies.groups.updateGroupPriorityOrdering
 # --policyTargetKey shape: {additionalTargetKeys?: record, targetResource?: string}
-export def "policies-groups-update-group-priority-ordering update" [
+export def "chromepolicy-customers-policies-groups-update-group-priority-ordering" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -411,7 +411,7 @@ export def "policies-groups-update-group-priority-ordering update" [
 # POST /v1/{customer}/policies/networks:defineCertificate
 # operationId: chromepolicy.customers.policies.networks.defineCertificate
 # --settings item shape: {policySchema?: string, value?: record}
-export def "policies-networks-define-certificate create" [
+export def "chromepolicy-customers-policies-networks-define-certificate" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -467,7 +467,7 @@ export def "policies-networks-define-certificate create" [
 # POST /v1/{customer}/policies/networks:defineNetwork
 # operationId: chromepolicy.customers.policies.networks.defineNetwork
 # --settings item shape: {policySchema?: string, value?: record}
-export def "policies-networks-define-network create" [
+export def "chromepolicy-customers-policies-networks-define-network" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -521,7 +521,7 @@ export def "policies-networks-define-network create" [
 #
 # POST /v1/{customer}/policies/networks:removeCertificate
 # operationId: chromepolicy.customers.policies.networks.removeCertificate
-export def "policies-networks-remove-certificate delete" [
+export def "chromepolicy-customers-policies-networks-remove-certificate" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -574,7 +574,7 @@ export def "policies-networks-remove-certificate delete" [
 #
 # POST /v1/{customer}/policies/networks:removeNetwork
 # operationId: chromepolicy.customers.policies.networks.removeNetwork
-export def "policies-networks-remove-network delete" [
+export def "chromepolicy-customers-policies-networks-remove-network" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -628,7 +628,7 @@ export def "policies-networks-remove-network delete" [
 # POST /v1/{customer}/policies/orgunits:batchInherit
 # operationId: chromepolicy.customers.policies.orgunits.batchInherit
 # --requests item shape: {policySchema?: string, policyTargetKey?: record}
-export def "policies-orgunits-batch-inherit create" [
+export def "chromepolicy-customers-policies-orgunits-batch-inherit" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -681,7 +681,7 @@ export def "policies-orgunits-batch-inherit create" [
 # POST /v1/{customer}/policies/orgunits:batchModify
 # operationId: chromepolicy.customers.policies.orgunits.batchModify
 # --requests item shape: {policyTargetKey?: record, policyValue?: record, updateMask?: string}
-export def "policies-orgunits-batch-modify create" [
+export def "chromepolicy-customers-policies-orgunits-batch-modify" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -734,7 +734,7 @@ export def "policies-orgunits-batch-modify create" [
 # POST /v1/{customer}/policies:resolve
 # operationId: chromepolicy.customers.policies.resolve
 # --policyTargetKey shape: {additionalTargetKeys?: record, targetResource?: string}
-export def "policies-resolve create" [
+export def "chromepolicy-customers-policies-resolve" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -789,7 +789,7 @@ export def "policies-resolve create" [
 #
 # GET /v1/{name}
 # operationId: chromepolicy.customers.policySchemas.get
-export def "customers get" [
+export def "chromepolicy-customers-policy-schemas-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -837,7 +837,7 @@ export def "customers get" [
 #
 # GET /v1/{parent}/policySchemas
 # operationId: chromepolicy.customers.policySchemas.list
-export def "policy-schemas list" [
+export def "chromepolicy-customers-policy-schemas-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

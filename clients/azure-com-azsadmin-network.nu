@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-network-admin-locations list-on-prem" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "on-prem-locations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -122,7 +122,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.Network.Admin/locations
 # operationId: OnPremLocations_List
-export def "providers-microsoft-network-admin-locations list-on-prem" [
+export def "on-prem-locations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -158,7 +158,7 @@ export def "providers-microsoft-network-admin-locations list-on-prem" [
 #
 # GET /providers/Microsoft.Network.Admin/locations/{location}/operationResults
 # operationId: LocationsOperationResults_List
-export def "providers-microsoft-network-admin-locations-operation-results list" [
+export def "locations-operation-results-list" [
   location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -196,7 +196,7 @@ export def "providers-microsoft-network-admin-locations-operation-results list" 
 #
 # GET /providers/Microsoft.Network.Admin/locations/{location}/operations
 # operationId: LocationsOperations_List
-export def "providers-microsoft-network-admin-locations-operations list" [
+export def "locations-operations-list" [
   location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -234,7 +234,7 @@ export def "providers-microsoft-network-admin-locations-operations list" [
 #
 # GET /providers/Microsoft.Network.Admin/operations
 # operationId: Operations_List
-export def "providers-microsoft-network-admin-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -270,7 +270,7 @@ export def "providers-microsoft-network-admin-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network.Admin/adminOverview
 # operationId: ResourceProviderState_Get
-export def "subscriptions-providers-microsoft-network-admin-admin-overview get-resource-state" [
+export def "resource-provider-state-get" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

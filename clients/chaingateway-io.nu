@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["none"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "clear-address create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "clear-address" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -122,7 +122,7 @@ export def commands []: nothing -> table {
 #
 # POST /clearAddress
 # operationId: clearAddress
-export def "clear-address create" [
+export def "clear-address" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -165,7 +165,7 @@ export def "clear-address create" [
 #
 # POST /deleteAddress
 # operationId: deleteAddress
-export def "delete-address delete" [
+export def "delete-address" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -207,7 +207,7 @@ export def "delete-address delete" [
 #
 # POST /exportAddress
 # operationId: exportAddress
-export def "export-address export" [
+export def "export-address" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -249,7 +249,7 @@ export def "export-address export" [
 #
 # POST /getBlock
 # operationId: getBlock
-export def "get-block get" [
+export def "get-block" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -290,7 +290,7 @@ export def "get-block get" [
 #
 # POST /getEthereumBalance
 # operationId: getEthereumBalance
-export def "get-ethereum-balance get" [
+export def "get-ethereum-balance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -331,7 +331,7 @@ export def "get-ethereum-balance get" [
 #
 # POST /getExchangeRate
 # operationId: getExchangeRate
-export def "get-exchange-rate get" [
+export def "get-exchange-rate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -372,7 +372,7 @@ export def "get-exchange-rate get" [
 #
 # POST /getGasPrice
 # operationId: getGasPrice
-export def "get-gas-price get" [
+export def "get-gas-price" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -410,7 +410,7 @@ export def "get-gas-price get" [
 #
 # POST /getLastBlockNumber
 # operationId: getLastBlockNumber
-export def "get-last-block-number get" [
+export def "get-last-block-number" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -448,7 +448,7 @@ export def "get-last-block-number get" [
 #
 # POST /getToken
 # operationId: getToken
-export def "get-token get" [
+export def "get-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -489,7 +489,7 @@ export def "get-token get" [
 #
 # POST /getTokenBalance
 # operationId: getTokenBalance
-export def "get-token-balance get" [
+export def "get-token-balance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -531,7 +531,7 @@ export def "get-token-balance get" [
 #
 # POST /getTransactions
 # operationId: getTransactions
-export def "get-transactions get" [
+export def "get-transactions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -573,7 +573,7 @@ export def "get-transactions get" [
 # POST /importAddress
 # operationId: importAddress
 # --content shape: {address: string, crypto: record, id: string, version: int}
-export def "import-address import" [
+export def "import-address" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -616,7 +616,7 @@ export def "import-address import" [
 #
 # POST /listAddresses
 # operationId: listAddresses
-export def "list-addresses list" [
+export def "list-addresses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -654,7 +654,7 @@ export def "list-addresses list" [
 #
 # POST /listFailedIPNs
 # operationId: listFailedIPNs
-export def "list-failed-ip-ns list" [
+export def "list-failed-ip-ns" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -692,7 +692,7 @@ export def "list-failed-ip-ns list" [
 #
 # POST /listSubscribedAddresses
 # operationId: listSubscribedAddresses
-export def "list-subscribed-addresses list" [
+export def "list-subscribed-addresses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -730,7 +730,7 @@ export def "list-subscribed-addresses list" [
 #
 # POST /newAddress
 # operationId: newAddress
-export def "new-address create" [
+export def "new-address" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -771,7 +771,7 @@ export def "new-address create" [
 #
 # POST /resendFailedIPN
 # operationId: resendFailedIPN
-export def "resend-failed-ipn resend" [
+export def "resend-failed-ipn" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -812,7 +812,7 @@ export def "resend-failed-ipn resend" [
 #
 # POST /sendEthereum
 # operationId: sendEthereum
-export def "send-ethereum send" [
+export def "send-ethereum" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -856,7 +856,7 @@ export def "send-ethereum send" [
 #
 # POST /sendToken
 # operationId: sendToken
-export def "send-token send" [
+export def "send-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -902,7 +902,7 @@ export def "send-token send" [
 #
 # POST /subscribeAddress
 # operationId: subscribeAddress
-export def "subscribe-address subscribe" [
+export def "subscribe-address" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -945,7 +945,7 @@ export def "subscribe-address subscribe" [
 #
 # POST /unsubscribeAddress
 # operationId: unsubscribeAddress
-export def "unsubscribe-address unsubscribe" [
+export def "unsubscribe-address" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

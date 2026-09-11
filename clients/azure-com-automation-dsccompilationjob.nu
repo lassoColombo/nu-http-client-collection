@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-compilationjobs list-dsc-compilation-job" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "dsc-compilation-job-list-by-automation-account" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -129,7 +129,7 @@ export def commands []: nothing -> table {
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/compilationjobs
 # Docs: http://aka.ms/azureautomationsdk/compilationjoboperations
 # operationId: DscCompilationJob_ListByAutomationAccount
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-compilationjobs list-dsc-compilation-job" [
+export def "dsc-compilation-job-list-by-automation-account" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -173,7 +173,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/compilationjobs/{compilationJobName}
 # Docs: http://aka.ms/azureautomationsdk/dsccompilationjoboperations
 # operationId: DscCompilationJob_Get
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-compilationjobs get-dsc-compilation-job" [
+export def "dsc-compilation-job-get" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -219,7 +219,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # Docs: http://aka.ms/azureautomationsdk/dscconfigurationcompilejoboperations
 # operationId: DscCompilationJob_Create
 # --properties shape: {configuration: any, incrementNodeConfigurationBuild?: bool, parameters?: record}
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-compilationjobs create-dsc-compilation-job" [
+export def "dsc-compilation-job-create" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -271,7 +271,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/compilationjobs/{jobId}/streams
 # Docs: http://aka.ms/azureautomationsdk/jobstreamoperations
 # operationId: DscCompilationJobStream_ListByJob
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-compilationjobs-streams list-dsc-compilation-job-by-job" [
+export def "dsc-compilation-job-stream-list-by-job" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -316,7 +316,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/compilationjobs/{jobId}/streams/{jobStreamId}
 # Docs: http://aka.ms/azureautomationsdk/jobstreamoperations
 # operationId: DscCompilationJob_GetStream
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-compilationjobs-streams get-dsc-compilation-job" [
+export def "dsc-compilation-job-get-stream" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string

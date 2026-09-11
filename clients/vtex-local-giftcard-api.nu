@@ -115,7 +115,7 @@ def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "giftcards create-gift-card" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-gift-card" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -139,7 +139,7 @@ export def commands []: nothing -> table {
 #
 # POST /giftcards
 # operationId: CreateGiftCard
-export def "giftcards create-gift-card" [
+export def "create-gift-card" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -187,7 +187,7 @@ export def "giftcards create-gift-card" [
 # operationId: GetGiftCardusingJSON
 # --cart shape: {discounts: int, grandTotal: float, items: list, itemsTotal: int, redemptionCode: string, relationName: string, shipping: int, taxes: int}
 # --client shape: {document: string, email: string, id: string}
-export def "giftcards-search get-gift-cardusing-json" [
+export def "get-gift-cardusing-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -233,7 +233,7 @@ export def "giftcards-search get-gift-cardusing-json" [
 #
 # GET /giftcards/{giftCardID}
 # operationId: GetGiftCardbyID
-export def "giftcards get-gift-cardby" [
+export def "get-gift-cardby-id" [
   gift_card_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -273,7 +273,7 @@ export def "giftcards get-gift-cardby" [
 #
 # GET /giftcards/{giftCardID}/transactions
 # operationId: GetGiftCardTransactions
-export def "giftcards-transactions get-gift-card" [
+export def "get-gift-card-transactions" [
   gift_card_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -314,7 +314,7 @@ export def "giftcards-transactions get-gift-card" [
 # POST /giftcards/{giftCardID}/transactions
 # operationId: CreateGiftCardTransaction
 # --orderInfo shape: {cart?: record, clientProfile?: record, orderId?: string, sequence?: int, shipping?: record}
-export def "giftcards-transactions create-gift-card" [
+export def "create-gift-card-transaction" [
   gift_card_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -366,7 +366,7 @@ export def "giftcards-transactions create-gift-card" [
 #
 # GET /giftcards/{giftCardID}/transactions/{transactionID}
 # operationId: GetGiftCardTransactionbyID
-export def "giftcards-transactions get-gift-card-transactionby" [
+export def "get-gift-card-transactionby-id" [
   gift_card_id: string
   transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -408,7 +408,7 @@ export def "giftcards-transactions get-gift-card-transactionby" [
 #
 # GET /giftcards/{giftCardID}/transactions/{transactionID}/authorization
 # operationId: GetTransactionAuthorizations
-export def "giftcards-transactions-authorization get" [
+export def "get-transaction-authorizations" [
   gift_card_id: string
   transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -450,7 +450,7 @@ export def "giftcards-transactions-authorization get" [
 #
 # GET /giftcards/{giftCardID}/transactions/{transactionID}/cancellations
 # operationId: GetTransactionCancellations
-export def "giftcards-transactions-cancellations get" [
+export def "get-transaction-cancellations" [
   gift_card_id: string
   transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -492,7 +492,7 @@ export def "giftcards-transactions-cancellations get" [
 #
 # POST /giftcards/{giftCardID}/transactions/{transactionID}/cancellations
 # operationId: CancelGiftCardTransaction
-export def "giftcards-transactions-cancellations cancel-gift-card" [
+export def "cancel-gift-card-transaction" [
   gift_card_id: string
   transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -541,7 +541,7 @@ export def "giftcards-transactions-cancellations cancel-gift-card" [
 #
 # GET /giftcards/{giftCardID}/transactions/{transactionID}/settlements
 # operationId: GetTransactionSettlements
-export def "giftcards-transactions-settlements get" [
+export def "get-transaction-settlements" [
   gift_card_id: string
   transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -583,7 +583,7 @@ export def "giftcards-transactions-settlements get" [
 #
 # POST /giftcards/{giftCardID}/transactions/{transactionID}/settlements
 # operationId: SettleGiftCardTransaction
-export def "giftcards-transactions-settlements create-settle-gift-card" [
+export def "settle-gift-card-transaction" [
   gift_card_id: string
   transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL

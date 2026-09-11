@@ -194,7 +194,7 @@ def upload-status-completer [] { ["uploadCanceled" "uploadFinished"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v0-1-account-test-export test-gdpr" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "test-gdpr-export-accounts" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -218,7 +218,7 @@ export def commands []: nothing -> table {
 #
 # GET /v0.1/account/test/export
 # operationId: test_gdprExportAccounts
-export def "v0-1-account-test-export test-gdpr" [
+export def "test-gdpr-export-accounts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -252,7 +252,7 @@ export def "v0-1-account-test-export test-gdpr" [
 #
 # GET /v0.1/account/test/export/accounts
 # operationId: test_gdprExportAccount
-export def "v0-1-account-test-export-accounts test-gdpr" [
+export def "test-gdpr-export-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -286,7 +286,7 @@ export def "v0-1-account-test-export-accounts test-gdpr" [
 #
 # GET /v0.1/account/test/export/featureFlags
 # operationId: test_gdprExportFeatureFlag
-export def "v0-1-account-test-export-feature-flags test-gdpr" [
+export def "test-gdpr-export-feature-flag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -320,7 +320,7 @@ export def "v0-1-account-test-export-feature-flags test-gdpr" [
 #
 # GET /v0.1/administeredOrgs
 # operationId: organizations_listAdministered
-export def "v0-1-administered-orgs list-organizations" [
+export def "organizations-list-administered" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -354,7 +354,7 @@ export def "v0-1-administered-orgs list-organizations" [
 #
 # GET /v0.1/api_tokens
 # operationId: userApiTokens_list
-export def "v0-1-api-tokens list-user" [
+export def "user-api-tokens-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -388,7 +388,7 @@ export def "v0-1-api-tokens list-user" [
 #
 # POST /v0.1/api_tokens
 # operationId: userApiTokens_new
-export def "v0-1-api-tokens create-user-new" [
+export def "user-api-tokens-new" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -427,7 +427,7 @@ export def "v0-1-api-tokens create-user-new" [
 #
 # DELETE /v0.1/api_tokens/{api_token_id}
 # operationId: userApiTokens_delete
-export def "v0-1-api-tokens delete-user" [
+export def "user-api-tokens-delete" [
   api_token_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -463,7 +463,7 @@ export def "v0-1-api-tokens delete-user" [
 #
 # GET /v0.1/apps
 # operationId: apps_list
-export def "v0-1-apps list" [
+export def "apps-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -499,7 +499,7 @@ export def "v0-1-apps list" [
 #
 # POST /v0.1/apps
 # operationId: apps_create
-export def "v0-1-apps create" [
+export def "apps-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -542,7 +542,7 @@ export def "v0-1-apps create" [
 #
 # DELETE /v0.1/apps/{owner_name}/{app_name}
 # operationId: apps_delete
-export def "v0-1-apps delete" [
+export def "apps-delete" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -580,7 +580,7 @@ export def "v0-1-apps delete" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}
 # operationId: apps_get
-export def "v0-1-apps get" [
+export def "apps-get" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -618,7 +618,7 @@ export def "v0-1-apps get" [
 #
 # PATCH /v0.1/apps/{owner_name}/{app_name}
 # operationId: apps_update
-export def "v0-1-apps update" [
+export def "apps-update" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -665,7 +665,7 @@ export def "v0-1-apps update" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/analytics/active_device_counts
 # operationId: Analytics_DeviceCounts
-export def "v0-1-apps-analytics-active-device-counts get" [
+export def "analytics-device-counts" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -708,7 +708,7 @@ export def "v0-1-apps-analytics-active-device-counts get" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/analytics/audiences
 # operationId: Analytics_ListAudiences
-export def "v0-1-apps-analytics-audiences list" [
+export def "analytics-list-audiences" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -748,7 +748,7 @@ export def "v0-1-apps-analytics-audiences list" [
 #
 # POST /v0.1/apps/{owner_name}/{app_name}/analytics/audiences/definition/test
 # operationId: Analytics_TestAudience
-export def "v0-1-apps-analytics-audiences-definition-test test" [
+export def "analytics-test-audience" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -793,7 +793,7 @@ export def "v0-1-apps-analytics-audiences-definition-test test" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/analytics/audiences/metadata/custom_properties
 # operationId: Analytics_ListCustomProperties
-export def "v0-1-apps-analytics-audiences-metadata-custom-properties list" [
+export def "analytics-list-custom-properties" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -831,7 +831,7 @@ export def "v0-1-apps-analytics-audiences-metadata-custom-properties list" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/analytics/audiences/metadata/device_properties
 # operationId: Analytics_ListDeviceProperties
-export def "v0-1-apps-analytics-audiences-metadata-device-properties list" [
+export def "analytics-list-device-properties" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -869,7 +869,7 @@ export def "v0-1-apps-analytics-audiences-metadata-device-properties list" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/analytics/audiences/metadata/device_properties/{property_name}/values
 # operationId: Analytics_ListDevicePropertyValues
-export def "v0-1-apps-analytics-audiences-metadata-device-properties-values list" [
+export def "analytics-list-device-property-values" [
   owner_name: string
   app_name: string
   property_name: string
@@ -911,7 +911,7 @@ export def "v0-1-apps-analytics-audiences-metadata-device-properties-values list
 #
 # DELETE /v0.1/apps/{owner_name}/{app_name}/analytics/audiences/{audience_name}
 # operationId: Analytics_DeleteAudience
-export def "v0-1-apps-analytics-audiences delete" [
+export def "analytics-delete-audience" [
   owner_name: string
   app_name: string
   audience_name: string
@@ -951,7 +951,7 @@ export def "v0-1-apps-analytics-audiences delete" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/analytics/audiences/{audience_name}
 # operationId: Analytics_GetAudience
-export def "v0-1-apps-analytics-audiences get" [
+export def "analytics-get-audience" [
   owner_name: string
   app_name: string
   audience_name: string
@@ -991,7 +991,7 @@ export def "v0-1-apps-analytics-audiences get" [
 #
 # HEAD /v0.1/apps/{owner_name}/{app_name}/analytics/audiences/{audience_name}
 # operationId: Analytics_AudienceNameExists
-export def "v0-1-apps-analytics-audiences head-exists" [
+export def "analytics-audience-name-exists" [
   owner_name: string
   app_name: string
   audience_name: string
@@ -1031,7 +1031,7 @@ export def "v0-1-apps-analytics-audiences head-exists" [
 #
 # PUT /v0.1/apps/{owner_name}/{app_name}/analytics/audiences/{audience_name}
 # operationId: Analytics_CreateOrUpdateAudience
-export def "v0-1-apps-analytics-audiences create-or-update" [
+export def "analytics-create-or-update-audience" [
   owner_name: string
   app_name: string
   audience_name: string
@@ -1080,7 +1080,7 @@ export def "v0-1-apps-analytics-audiences create-or-update" [
 # DEPRECATED
 # operationId: Analytics_CrashCounts
 @deprecated
-export def "v0-1-apps-analytics-crash-counts get" [
+export def "analytics-crash-counts" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1123,7 +1123,7 @@ export def "v0-1-apps-analytics-crash-counts get" [
 # POST /v0.1/apps/{owner_name}/{app_name}/analytics/crash_groups
 # operationId: Analytics_CrashGroupsTotals
 # --crash_groups item shape: {app_version?: string, crash_group_id?: string}
-export def "v0-1-apps-analytics-crash-groups create-totals" [
+export def "analytics-crash-groups-totals" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1167,7 +1167,7 @@ export def "v0-1-apps-analytics-crash-groups create-totals" [
 # DEPRECATED
 # operationId: Analytics_CrashGroupCounts
 @deprecated
-export def "v0-1-apps-analytics-crash-groups-crash-counts get" [
+export def "analytics-crash-group-counts" [
   owner_name: string
   app_name: string
   crash_group_id: string
@@ -1213,7 +1213,7 @@ export def "v0-1-apps-analytics-crash-groups-crash-counts get" [
 # DEPRECATED
 # operationId: Analytics_CrashGroupModelCounts
 @deprecated
-export def "v0-1-apps-analytics-crash-groups-models get-counts" [
+export def "analytics-crash-group-model-counts" [
   owner_name: string
   app_name: string
   crash_group_id: string
@@ -1258,7 +1258,7 @@ export def "v0-1-apps-analytics-crash-groups-models get-counts" [
 # DEPRECATED
 # operationId: Analytics_CrashGroupOperatingSystemCounts
 @deprecated
-export def "v0-1-apps-analytics-crash-groups-operating-systems get-counts" [
+export def "analytics-crash-group-operating-system-counts" [
   owner_name: string
   app_name: string
   crash_group_id: string
@@ -1303,7 +1303,7 @@ export def "v0-1-apps-analytics-crash-groups-operating-systems get-counts" [
 # DEPRECATED
 # operationId: Analytics_CrashGroupTotals
 @deprecated
-export def "v0-1-apps-analytics-crash-groups-overall get-totals" [
+export def "analytics-crash-group-totals" [
   owner_name: string
   app_name: string
   crash_group_id: string
@@ -1347,7 +1347,7 @@ export def "v0-1-apps-analytics-crash-groups-overall get-totals" [
 # DEPRECATED
 # operationId: Analytics_CrashFreeDevicePercentages
 @deprecated
-export def "v0-1-apps-analytics-crashfree-device-percentages get-crash-free" [
+export def "analytics-crash-free-device-percentages" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1390,7 +1390,7 @@ export def "v0-1-apps-analytics-crashfree-device-percentages get-crash-free" [
 # POST /v0.1/apps/{owner_name}/{app_name}/analytics/distribution/release_counts
 # operationId: Analytics_DistributionReleaseCounts
 # --releases item shape: {distribution_group?: string, release: string}
-export def "v0-1-apps-analytics-distribution-release-counts create" [
+export def "analytics-distribution-release-counts" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1432,7 +1432,7 @@ export def "v0-1-apps-analytics-distribution-release-counts create" [
 #
 # DELETE /v0.1/apps/{owner_name}/{app_name}/analytics/event_logs/{event_name}
 # operationId: Analytics_EventsDeleteLogs
-export def "v0-1-apps-analytics-event-logs delete" [
+export def "analytics-events-delete-logs" [
   owner_name: string
   app_name: string
   event_name: string
@@ -1472,7 +1472,7 @@ export def "v0-1-apps-analytics-event-logs delete" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/analytics/events
 # operationId: Analytics_Events
-export def "v0-1-apps-analytics-events get" [
+export def "analytics-events" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1519,7 +1519,7 @@ export def "v0-1-apps-analytics-events get" [
 #
 # DELETE /v0.1/apps/{owner_name}/{app_name}/analytics/events/{event_name}
 # operationId: Analytics_EventsDelete
-export def "v0-1-apps-analytics-events delete" [
+export def "analytics-events-delete" [
   owner_name: string
   app_name: string
   event_name: string
@@ -1559,7 +1559,7 @@ export def "v0-1-apps-analytics-events delete" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/analytics/events/{event_name}/count_per_device
 # operationId: Analytics_EventPerDeviceCount
-export def "v0-1-apps-analytics-events-count-per-device get" [
+export def "analytics-event-per-device-count" [
   owner_name: string
   app_name: string
   event_name: string
@@ -1603,7 +1603,7 @@ export def "v0-1-apps-analytics-events-count-per-device get" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/analytics/events/{event_name}/count_per_session
 # operationId: Analytics_EventPerSessionCount
-export def "v0-1-apps-analytics-events-count-per-session get" [
+export def "analytics-event-per-session-count" [
   owner_name: string
   app_name: string
   event_name: string
@@ -1647,7 +1647,7 @@ export def "v0-1-apps-analytics-events-count-per-session get" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/analytics/events/{event_name}/device_count
 # operationId: Analytics_EventDeviceCount
-export def "v0-1-apps-analytics-events-device-count get" [
+export def "analytics-event-device-count" [
   owner_name: string
   app_name: string
   event_name: string
@@ -1691,7 +1691,7 @@ export def "v0-1-apps-analytics-events-device-count get" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/analytics/events/{event_name}/event_count
 # operationId: Analytics_EventCount
-export def "v0-1-apps-analytics-events-event-count get" [
+export def "analytics-event-count" [
   owner_name: string
   app_name: string
   event_name: string
@@ -1735,7 +1735,7 @@ export def "v0-1-apps-analytics-events-event-count get" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/analytics/events/{event_name}/properties
 # operationId: Analytics_EventProperties
-export def "v0-1-apps-analytics-events-properties get" [
+export def "analytics-event-properties" [
   owner_name: string
   app_name: string
   event_name: string
@@ -1775,7 +1775,7 @@ export def "v0-1-apps-analytics-events-properties get" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/analytics/events/{event_name}/properties/{event_property_name}/counts
 # operationId: Analytics_EventPropertyCounts
-export def "v0-1-apps-analytics-events-properties-counts get" [
+export def "analytics-event-property-counts" [
   owner_name: string
   app_name: string
   event_name: string
@@ -1822,7 +1822,7 @@ export def "v0-1-apps-analytics-events-properties-counts get" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/analytics/generic_log_flow
 # operationId: Analytics_GenericLogFlow
-export def "v0-1-apps-analytics-generic-log-flow get" [
+export def "analytics-generic-log-flow" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1862,7 +1862,7 @@ export def "v0-1-apps-analytics-generic-log-flow get" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/analytics/languages
 # operationId: Analytics_LanguageCounts
-export def "v0-1-apps-analytics-languages get-counts" [
+export def "analytics-language-counts" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1905,7 +1905,7 @@ export def "v0-1-apps-analytics-languages get-counts" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/analytics/log_flow
 # operationId: Analytics_LogFlow
-export def "v0-1-apps-analytics-log-flow get" [
+export def "analytics-log-flow" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1945,7 +1945,7 @@ export def "v0-1-apps-analytics-log-flow get" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/analytics/models
 # operationId: Analytics_ModelCounts
-export def "v0-1-apps-analytics-models get-counts" [
+export def "analytics-model-counts" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1988,7 +1988,7 @@ export def "v0-1-apps-analytics-models get-counts" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/analytics/oses
 # operationId: Analytics_OperatingSystemCounts
-export def "v0-1-apps-analytics-oses get-operating-system-counts" [
+export def "analytics-operating-system-counts" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2031,7 +2031,7 @@ export def "v0-1-apps-analytics-oses get-operating-system-counts" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/analytics/places
 # operationId: Analytics_PlaceCounts
-export def "v0-1-apps-analytics-places get-counts" [
+export def "analytics-place-counts" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2074,7 +2074,7 @@ export def "v0-1-apps-analytics-places get-counts" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/analytics/session_counts
 # operationId: Analytics_SessionCounts
-export def "v0-1-apps-analytics-session-counts get" [
+export def "analytics-session-counts" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2116,7 +2116,7 @@ export def "v0-1-apps-analytics-session-counts get" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/analytics/session_durations_distribution
 # operationId: Analytics_SessionDurationsDistribution
-export def "v0-1-apps-analytics-session-durations-distribution get" [
+export def "analytics-session-durations-distribution" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2158,7 +2158,7 @@ export def "v0-1-apps-analytics-session-durations-distribution get" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/analytics/sessions_per_device
 # operationId: Analytics_PerDeviceCounts
-export def "v0-1-apps-analytics-sessions-per-device get-counts" [
+export def "analytics-per-device-counts" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2200,7 +2200,7 @@ export def "v0-1-apps-analytics-sessions-per-device get-counts" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/analytics/versions
 # operationId: Analytics_Versions
-export def "v0-1-apps-analytics-versions get" [
+export def "analytics-versions" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2243,7 +2243,7 @@ export def "v0-1-apps-analytics-versions get" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/api_tokens
 # operationId: appApiTokens_list
-export def "v0-1-apps-api-tokens list" [
+export def "app-api-tokens-list" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2281,7 +2281,7 @@ export def "v0-1-apps-api-tokens list" [
 #
 # POST /v0.1/apps/{owner_name}/{app_name}/api_tokens
 # operationId: appApiTokens_new
-export def "v0-1-apps-api-tokens create-new" [
+export def "app-api-tokens-new" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2324,7 +2324,7 @@ export def "v0-1-apps-api-tokens create-new" [
 #
 # DELETE /v0.1/apps/{owner_name}/{app_name}/api_tokens/{api_token_id}
 # operationId: appApiTokens_delete
-export def "v0-1-apps-api-tokens delete" [
+export def "app-api-tokens-delete" [
   owner_name: string
   app_name: string
   api_token_id: string
@@ -2364,7 +2364,7 @@ export def "v0-1-apps-api-tokens delete" [
 #
 # DELETE /v0.1/apps/{owner_name}/{app_name}/apple_mapping
 # operationId: appleMapping_delete
-export def "v0-1-apps-apple-mapping delete" [
+export def "apple-mapping-delete" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2406,7 +2406,7 @@ export def "v0-1-apps-apple-mapping delete" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/apple_mapping
 # operationId: appleMapping_get
-export def "v0-1-apps-apple-mapping get" [
+export def "apple-mapping-get" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2444,7 +2444,7 @@ export def "v0-1-apps-apple-mapping get" [
 #
 # POST /v0.1/apps/{owner_name}/{app_name}/apple_mapping
 # operationId: appleMapping_create
-export def "v0-1-apps-apple-mapping create" [
+export def "apple-mapping-create" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2491,7 +2491,7 @@ export def "v0-1-apps-apple-mapping create" [
 # DEPRECATED
 # operationId: appleMapping_TestFlightGroups
 @deprecated
-export def "v0-1-apps-apple-test-flight-groups test-mapping" [
+export def "apple-mapping-test-flight-groups" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2529,7 +2529,7 @@ export def "v0-1-apps-apple-test-flight-groups test-mapping" [
 #
 # DELETE /v0.1/apps/{owner_name}/{app_name}/avatar
 # operationId: apps_deleteAvatar
-export def "v0-1-apps-avatar delete" [
+export def "apps-delete-avatar" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2567,7 +2567,7 @@ export def "v0-1-apps-avatar delete" [
 #
 # POST /v0.1/apps/{owner_name}/{app_name}/avatar
 # operationId: apps_updateAvatar
-export def "v0-1-apps-avatar update" [
+export def "apps-update-avatar" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2611,7 +2611,7 @@ export def "v0-1-apps-avatar update" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/azure_subscriptions
 # operationId: azureSubscription_listForApp
-export def "v0-1-apps-azure-subscriptions list" [
+export def "azure-subscription-list-for-app" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2649,7 +2649,7 @@ export def "v0-1-apps-azure-subscriptions list" [
 #
 # POST /v0.1/apps/{owner_name}/{app_name}/azure_subscriptions
 # operationId: azureSubscription_linkForApp
-export def "v0-1-apps-azure-subscriptions create-link" [
+export def "azure-subscription-link-for-app" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2691,7 +2691,7 @@ export def "v0-1-apps-azure-subscriptions create-link" [
 #
 # DELETE /v0.1/apps/{owner_name}/{app_name}/azure_subscriptions/{azure_subscription_id}
 # operationId: azureSubscription_deleteForApp
-export def "v0-1-apps-azure-subscriptions delete" [
+export def "azure-subscription-delete-for-app" [
   owner_name: string
   app_name: string
   azure_subscription_id: string
@@ -2731,7 +2731,7 @@ export def "v0-1-apps-azure-subscriptions delete" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/billing/aggregated
 # operationId: billingAggregatedInformation_getByApp
-export def "v0-1-apps-billing-aggregated get-information" [
+export def "billing-aggregated-information-get-by-app" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2773,7 +2773,7 @@ export def "v0-1-apps-billing-aggregated get-information" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/branches
 # operationId: builds_listBranches
-export def "v0-1-apps-branches list-builds" [
+export def "builds-list-branches" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2811,7 +2811,7 @@ export def "v0-1-apps-branches list-builds" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/branches/{branch}/builds
 # operationId: builds_listByBranch
-export def "v0-1-apps-branches-builds list" [
+export def "builds-list-by-branch" [
   owner_name: string
   app_name: string
   branch: string
@@ -2851,7 +2851,7 @@ export def "v0-1-apps-branches-builds list" [
 #
 # POST /v0.1/apps/{owner_name}/{app_name}/branches/{branch}/builds
 # operationId: builds_create
-export def "v0-1-apps-branches-builds create" [
+export def "builds-create" [
   owner_name: string
   app_name: string
   branch: string
@@ -2896,7 +2896,7 @@ export def "v0-1-apps-branches-builds create" [
 #
 # DELETE /v0.1/apps/{owner_name}/{app_name}/branches/{branch}/config
 # operationId: branchConfigurations_delete
-export def "v0-1-apps-branches-config delete-configurations" [
+export def "branch-configurations-delete" [
   owner_name: string
   app_name: string
   branch: string
@@ -2940,7 +2940,7 @@ export def "v0-1-apps-branches-config delete-configurations" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/branches/{branch}/config
 # operationId: branchConfigurations_get
-export def "v0-1-apps-branches-config get-configurations" [
+export def "branch-configurations-get" [
   owner_name: string
   app_name: string
   branch: string
@@ -2982,7 +2982,7 @@ export def "v0-1-apps-branches-config get-configurations" [
 # operationId: branchConfigurations_create
 # --artifactVersioning shape: {buildNumberFormat?: "buildId"|"timestamp"}
 # --toolsets shape: {android?: any, javascript?: any, xamarin?: any, xcode?: any}
-export def "v0-1-apps-branches-config create-configurations" [
+export def "branch-configurations-create" [
   owner_name: string
   app_name: string
   branch: string
@@ -3034,7 +3034,7 @@ export def "v0-1-apps-branches-config create-configurations" [
 # operationId: branchConfigurations_update
 # --artifactVersioning shape: {buildNumberFormat?: "buildId"|"timestamp"}
 # --toolsets shape: {android?: any, javascript?: any, xamarin?: any, xcode?: any}
-export def "v0-1-apps-branches-config update-configurations" [
+export def "branch-configurations-update" [
   owner_name: string
   app_name: string
   branch: string
@@ -3084,7 +3084,7 @@ export def "v0-1-apps-branches-config update-configurations" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/branches/{branch}/export_config
 # operationId: buildConfigurations_get
-export def "v0-1-apps-branches-export-config build-configurations-get" [
+export def "build-configurations-get" [
   owner_name: string
   app_name: string
   branch: string
@@ -3126,7 +3126,7 @@ export def "v0-1-apps-branches-export-config build-configurations-get" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/branches/{branch}/toolset_projects
 # operationId: builds_listToolsetProjects
-export def "v0-1-apps-branches-toolset-projects list-builds" [
+export def "builds-list-toolset-projects" [
   owner_name: string
   app_name: string
   branch: string
@@ -3170,7 +3170,7 @@ export def "v0-1-apps-branches-toolset-projects list-builds" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/bugtracker
 # operationId: bugtracker_getSettings
-export def "v0-1-apps-bugtracker get-settings" [
+export def "bugtracker-get-settings" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3208,7 +3208,7 @@ export def "v0-1-apps-bugtracker get-settings" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/bugtracker/crashGroup/{crash_group_id}
 # operationId: bugTracker_getRepoIssueFromCrash
-export def "v0-1-apps-bugtracker-crash-group get-bug-tracker-repo-issue" [
+export def "bug-tracker-get-repo-issue-from-crash" [
   owner_name: string
   app_name: string
   crash_group_id: string
@@ -3248,7 +3248,7 @@ export def "v0-1-apps-bugtracker-crash-group get-bug-tracker-repo-issue" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/build_service_status
 # operationId: builds_getStatusByAppId
-export def "v0-1-apps-build-service-status get" [
+export def "builds-get-status-by-app-id" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3286,7 +3286,7 @@ export def "v0-1-apps-build-service-status get" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/builds/{build_id}
 # operationId: builds_get
-export def "v0-1-apps-builds get" [
+export def "builds-get" [
   owner_name: string
   app_name: string
   build_id: int
@@ -3326,7 +3326,7 @@ export def "v0-1-apps-builds get" [
 #
 # PATCH /v0.1/apps/{owner_name}/{app_name}/builds/{build_id}
 # operationId: builds_update
-export def "v0-1-apps-builds update" [
+export def "builds-update" [
   owner_name: string
   app_name: string
   build_id: int
@@ -3371,7 +3371,7 @@ export def "v0-1-apps-builds update" [
 # POST /v0.1/apps/{owner_name}/{app_name}/builds/{build_id}/distribute
 # operationId: builds_distribute
 # --destinations item shape: {id: string, type: "store"|"group"|"tester"}
-export def "v0-1-apps-builds-distribute create" [
+export def "builds-distribute" [
   owner_name: string
   app_name: string
   build_id: int
@@ -3418,7 +3418,7 @@ export def "v0-1-apps-builds-distribute create" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/builds/{build_id}/downloads/{download_type}
 # operationId: builds_getDownloadUri
-export def "v0-1-apps-builds-downloads get-uri" [
+export def "builds-get-download-uri" [
   owner_name: string
   app_name: string
   build_id: int
@@ -3460,7 +3460,7 @@ export def "v0-1-apps-builds-downloads get-uri" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/builds/{build_id}/logs
 # operationId: builds_getLog
-export def "v0-1-apps-builds-logs get" [
+export def "builds-get-log" [
   owner_name: string
   app_name: string
   build_id: int
@@ -3500,7 +3500,7 @@ export def "v0-1-apps-builds-logs get" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/commits/batch
 # operationId: commits_listByShaList
-export def "v0-1-apps-commits-batch list-by-sha" [
+export def "commits-list-by-sha-list" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3542,7 +3542,7 @@ export def "v0-1-apps-commits-batch list-by-sha" [
 # DEPRECATED
 # operationId: crashGroups_list
 @deprecated
-export def "v0-1-apps-crash-groups list" [
+export def "crash-groups-list" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3591,7 +3591,7 @@ export def "v0-1-apps-crash-groups list" [
 # DEPRECATED
 # operationId: crashGroups_get
 @deprecated
-export def "v0-1-apps-crash-groups get" [
+export def "crash-groups-get" [
   owner_name: string
   app_name: string
   crash_group_id: string
@@ -3633,7 +3633,7 @@ export def "v0-1-apps-crash-groups get" [
 # DEPRECATED
 # operationId: crashGroups_update
 @deprecated
-export def "v0-1-apps-crash-groups update" [
+export def "crash-groups-update" [
   owner_name: string
   app_name: string
   crash_group_id: string
@@ -3680,7 +3680,7 @@ export def "v0-1-apps-crash-groups update" [
 # DEPRECATED
 # operationId: crashes_list
 @deprecated
-export def "v0-1-apps-crash-groups-crashes list" [
+export def "crashes-list" [
   owner_name: string
   app_name: string
   crash_group_id: string
@@ -3729,7 +3729,7 @@ export def "v0-1-apps-crash-groups-crashes list" [
 # DEPRECATED
 # operationId: crashes_delete
 @deprecated
-export def "v0-1-apps-crash-groups-crashes delete" [
+export def "crashes-delete" [
   owner_name: string
   app_name: string
   crash_group_id: string
@@ -3775,7 +3775,7 @@ export def "v0-1-apps-crash-groups-crashes delete" [
 # DEPRECATED
 # operationId: crashes_get
 @deprecated
-export def "v0-1-apps-crash-groups-crashes get" [
+export def "crashes-get" [
   owner_name: string
   app_name: string
   crash_group_id: string
@@ -3825,7 +3825,7 @@ export def "v0-1-apps-crash-groups-crashes get" [
 # DEPRECATED
 # operationId: crashes_getNativeCrash
 @deprecated
-export def "v0-1-apps-crash-groups-crashes-native get" [
+export def "crashes-get-native-crash" [
   owner_name: string
   app_name: string
   crash_group_id: string
@@ -3869,7 +3869,7 @@ export def "v0-1-apps-crash-groups-crashes-native get" [
 # DEPRECATED
 # operationId: crashes_getNativeCrashDownload
 @deprecated
-export def "v0-1-apps-crash-groups-crashes-native-download get" [
+export def "crashes-get-native-crash-download" [
   owner_name: string
   app_name: string
   crash_group_id: string
@@ -3913,7 +3913,7 @@ export def "v0-1-apps-crash-groups-crashes-native-download get" [
 # DEPRECATED
 # operationId: crashes_getRawCrashLocation
 @deprecated
-export def "v0-1-apps-crash-groups-crashes-raw-location get" [
+export def "crashes-get-raw-crash-location" [
   owner_name: string
   app_name: string
   crash_group_id: string
@@ -3957,7 +3957,7 @@ export def "v0-1-apps-crash-groups-crashes-raw-location get" [
 # DEPRECATED
 # operationId: crashes_getStacktrace
 @deprecated
-export def "v0-1-apps-crash-groups-crashes-stacktrace get" [
+export def "crashes-get-stacktrace" [
   owner_name: string
   app_name: string
   crash_group_id: string
@@ -4003,7 +4003,7 @@ export def "v0-1-apps-crash-groups-crashes-stacktrace get" [
 # DEPRECATED
 # operationId: crashGroups_getStacktrace
 @deprecated
-export def "v0-1-apps-crash-groups-stacktrace get" [
+export def "crash-groups-get-stacktrace" [
   owner_name: string
   app_name: string
   crash_group_id: string
@@ -4047,7 +4047,7 @@ export def "v0-1-apps-crash-groups-stacktrace get" [
 # DEPRECATED
 # operationId: crashes_listAttachments
 @deprecated
-export def "v0-1-apps-crashes-attachments list" [
+export def "crashes-list-attachments" [
   owner_name: string
   app_name: string
   crash_id: string
@@ -4089,7 +4089,7 @@ export def "v0-1-apps-crashes-attachments list" [
 # DEPRECATED
 # operationId: crashes_getCrashAttachmentLocation
 @deprecated
-export def "v0-1-apps-crashes-attachments-location get" [
+export def "crashes-get-crash-attachment-location" [
   owner_name: string
   app_name: string
   crash_id: string
@@ -4133,7 +4133,7 @@ export def "v0-1-apps-crashes-attachments-location get" [
 # DEPRECATED
 # operationId: crashes_getCrashTextAttachmentContent
 @deprecated
-export def "v0-1-apps-crashes-attachments-text get-content" [
+export def "crashes-get-crash-text-attachment-content" [
   owner_name: string
   app_name: string
   crash_id: string
@@ -4175,7 +4175,7 @@ export def "v0-1-apps-crashes-attachments-text get-content" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/crashes/{crash_id}/session_logs
 # operationId: Crashes_ListSessionLogs
-export def "v0-1-apps-crashes-session-logs list" [
+export def "crashes-list-session-logs" [
   owner_name: string
   app_name: string
   crash_id: string
@@ -4219,7 +4219,7 @@ export def "v0-1-apps-crashes-session-logs list" [
 # DEPRECATED
 # operationId: crashes_getAppCrashesInfo
 @deprecated
-export def "v0-1-apps-crashes-info get" [
+export def "crashes-get-app-crashes-info" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4257,7 +4257,7 @@ export def "v0-1-apps-crashes-info get" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/deployments
 # operationId: codePushDeployments_list
-export def "v0-1-apps-deployments push-code-list" [
+export def "code-push-deployments-list" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4295,7 +4295,7 @@ export def "v0-1-apps-deployments push-code-list" [
 #
 # POST /v0.1/apps/{owner_name}/{app_name}/deployments
 # operationId: codePushDeployments_create
-export def "v0-1-apps-deployments push-code-create" [
+export def "code-push-deployments-create" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4339,7 +4339,7 @@ export def "v0-1-apps-deployments push-code-create" [
 #
 # DELETE /v0.1/apps/{owner_name}/{app_name}/deployments/{deployment_name}
 # operationId: codePushDeployments_delete
-export def "v0-1-apps-deployments push-code-delete" [
+export def "code-push-deployments-delete" [
   owner_name: string
   app_name: string
   deployment_name: string
@@ -4383,7 +4383,7 @@ export def "v0-1-apps-deployments push-code-delete" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/deployments/{deployment_name}
 # operationId: codePushDeployments_get
-export def "v0-1-apps-deployments push-code-get" [
+export def "code-push-deployments-get" [
   owner_name: string
   app_name: string
   deployment_name: string
@@ -4423,7 +4423,7 @@ export def "v0-1-apps-deployments push-code-get" [
 #
 # PATCH /v0.1/apps/{owner_name}/{app_name}/deployments/{deployment_name}
 # operationId: codePushDeployments_update
-export def "v0-1-apps-deployments push-code-update" [
+export def "code-push-deployments-update" [
   owner_name: string
   app_name: string
   deployment_name: string
@@ -4467,7 +4467,7 @@ export def "v0-1-apps-deployments push-code-update" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/deployments/{deployment_name}/metrics
 # operationId: codePushDeploymentMetrics_get
-export def "v0-1-apps-deployments-metrics push-code-get" [
+export def "code-push-deployment-metrics-get" [
   owner_name: string
   app_name: string
   deployment_name: string
@@ -4507,7 +4507,7 @@ export def "v0-1-apps-deployments-metrics push-code-get" [
 #
 # POST /v0.1/apps/{owner_name}/{app_name}/deployments/{deployment_name}/promote_release/{promote_deployment_name}
 # operationId: codePushDeployments_promote
-export def "v0-1-apps-deployments-promote-release push-code" [
+export def "code-push-deployments-promote" [
   owner_name: string
   app_name: string
   deployment_name: string
@@ -4558,7 +4558,7 @@ export def "v0-1-apps-deployments-promote-release push-code" [
 #
 # DELETE /v0.1/apps/{owner_name}/{app_name}/deployments/{deployment_name}/releases
 # operationId: codePushDeploymentReleases_delete
-export def "v0-1-apps-deployments-releases push-code-delete" [
+export def "code-push-deployment-releases-delete" [
   owner_name: string
   app_name: string
   deployment_name: string
@@ -4598,7 +4598,7 @@ export def "v0-1-apps-deployments-releases push-code-delete" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/deployments/{deployment_name}/releases
 # operationId: codePushDeploymentReleases_get
-export def "v0-1-apps-deployments-releases push-code-get" [
+export def "code-push-deployment-releases-get" [
   owner_name: string
   app_name: string
   deployment_name: string
@@ -4639,7 +4639,7 @@ export def "v0-1-apps-deployments-releases push-code-get" [
 # POST /v0.1/apps/{owner_name}/{app_name}/deployments/{deployment_name}/releases
 # operationId: codePushDeploymentReleases_create
 # --release_upload shape: {id: string, token: string, upload_domain: string}
-export def "v0-1-apps-deployments-releases push-code-create" [
+export def "code-push-deployment-releases-create" [
   owner_name: string
   app_name: string
   deployment_name: string
@@ -4690,7 +4690,7 @@ export def "v0-1-apps-deployments-releases push-code-create" [
 #
 # PATCH /v0.1/apps/{owner_name}/{app_name}/deployments/{deployment_name}/releases/{release_label}
 # operationId: deploymentReleases_update
-export def "v0-1-apps-deployments-releases update" [
+export def "deployment-releases-update" [
   owner_name: string
   app_name: string
   deployment_name: string
@@ -4740,7 +4740,7 @@ export def "v0-1-apps-deployments-releases update" [
 #
 # POST /v0.1/apps/{owner_name}/{app_name}/deployments/{deployment_name}/rollback_release
 # operationId: codePushDeploymentRelease_rollback
-export def "v0-1-apps-deployments-rollback-release push-code" [
+export def "code-push-deployment-release-rollback" [
   owner_name: string
   app_name: string
   deployment_name: string
@@ -4784,7 +4784,7 @@ export def "v0-1-apps-deployments-rollback-release push-code" [
 #
 # POST /v0.1/apps/{owner_name}/{app_name}/deployments/{deployment_name}/uploads
 # operationId: codePushDeploymentUpload_create
-export def "v0-1-apps-deployments-uploads push-code-create" [
+export def "code-push-deployment-upload-create" [
   owner_name: string
   app_name: string
   deployment_name: string
@@ -4824,7 +4824,7 @@ export def "v0-1-apps-deployments-uploads push-code-create" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/device_configurations
 # operationId: test_getDeviceConfigurations
-export def "v0-1-apps-device-configurations test-get" [
+export def "test-get-device-configurations" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4864,7 +4864,7 @@ export def "v0-1-apps-device-configurations test-get" [
 #
 # POST /v0.1/apps/{owner_name}/{app_name}/device_selection
 # operationId: test_createDeviceSelection
-export def "v0-1-apps-device-selection test-create" [
+export def "test-create-device-selection" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4906,7 +4906,7 @@ export def "v0-1-apps-device-selection test-create" [
 #
 # PUT /v0.1/apps/{owner_name}/{app_name}/devices/block_logs
 # operationId: App_BlockLogs
-export def "v0-1-apps-devices-block-logs logs-by-owner-name-app-name" [
+export def "app-block-logs" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4944,7 +4944,7 @@ export def "v0-1-apps-devices-block-logs logs-by-owner-name-app-name" [
 #
 # PUT /v0.1/apps/{owner_name}/{app_name}/devices/block_logs/{install_id}
 # operationId: Devices_BlockLogs
-export def "v0-1-apps-devices-block-logs logs-by-owner-name-app-name-install-id" [
+export def "devices-block-logs" [
   owner_name: string
   app_name: string
   install_id: string
@@ -4984,7 +4984,7 @@ export def "v0-1-apps-devices-block-logs logs-by-owner-name-app-name-install-id"
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/diagnostics/symbol_groups
 # operationId: missingSymbolGroups_list
-export def "v0-1-apps-diagnostics-symbol-groups list-missing" [
+export def "missing-symbol-groups-list" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5024,7 +5024,7 @@ export def "v0-1-apps-diagnostics-symbol-groups list-missing" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/diagnostics/symbol_groups/{symbol_group_id}
 # operationId: missingSymbolGroups_get
-export def "v0-1-apps-diagnostics-symbol-groups get-missing" [
+export def "missing-symbol-groups-get" [
   owner_name: string
   app_name: string
   symbol_group_id: string
@@ -5064,7 +5064,7 @@ export def "v0-1-apps-diagnostics-symbol-groups get-missing" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/diagnostics/symbol_groups_info
 # operationId: missingSymbolGroups_info
-export def "v0-1-apps-diagnostics-symbol-groups-info get-missing" [
+export def "missing-symbol-groups-info" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5102,7 +5102,7 @@ export def "v0-1-apps-diagnostics-symbol-groups-info get-missing" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/distribution_groups
 # operationId: distributionGroups_list
-export def "v0-1-apps-distribution-groups list" [
+export def "distribution-groups-list" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5140,7 +5140,7 @@ export def "v0-1-apps-distribution-groups list" [
 #
 # POST /v0.1/apps/{owner_name}/{app_name}/distribution_groups
 # operationId: distributionGroups_create
-export def "v0-1-apps-distribution-groups create" [
+export def "distribution-groups-create" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5183,7 +5183,7 @@ export def "v0-1-apps-distribution-groups create" [
 #
 # DELETE /v0.1/apps/{owner_name}/{app_name}/distribution_groups/{distribution_group_name}
 # operationId: distributionGroups_delete
-export def "v0-1-apps-distribution-groups delete" [
+export def "distribution-groups-delete" [
   owner_name: string
   app_name: string
   distribution_group_name: string
@@ -5223,7 +5223,7 @@ export def "v0-1-apps-distribution-groups delete" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/distribution_groups/{distribution_group_name}
 # operationId: distributionGroups_get
-export def "v0-1-apps-distribution-groups get" [
+export def "distribution-groups-get" [
   owner_name: string
   app_name: string
   distribution_group_name: string
@@ -5263,7 +5263,7 @@ export def "v0-1-apps-distribution-groups get" [
 #
 # PATCH /v0.1/apps/{owner_name}/{app_name}/distribution_groups/{distribution_group_name}
 # operationId: distributionGroups_update
-export def "v0-1-apps-distribution-groups update" [
+export def "distribution-groups-update" [
   owner_name: string
   app_name: string
   distribution_group_name: string
@@ -5308,7 +5308,7 @@ export def "v0-1-apps-distribution-groups update" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/distribution_groups/{distribution_group_name}/devices
 # operationId: devices_list
-export def "v0-1-apps-distribution-groups-devices list" [
+export def "devices-list" [
   owner_name: string
   app_name: string
   distribution_group_name: string
@@ -5350,7 +5350,7 @@ export def "v0-1-apps-distribution-groups-devices list" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/distribution_groups/{distribution_group_name}/devices/download_devices_list
 # operationId: devices_listCsvFormat
-export def "v0-1-apps-distribution-groups-devices-download-devices-list list-csv-format" [
+export def "devices-list-csv-format" [
   owner_name: string
   app_name: string
   distribution_group_name: string
@@ -5393,7 +5393,7 @@ export def "v0-1-apps-distribution-groups-devices-download-devices-list list-csv
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/distribution_groups/{distribution_group_name}/members
 # operationId: distributionGroups_listUsers
-export def "v0-1-apps-distribution-groups-members list-users" [
+export def "distribution-groups-list-users" [
   owner_name: string
   app_name: string
   distribution_group_name: string
@@ -5435,7 +5435,7 @@ export def "v0-1-apps-distribution-groups-members list-users" [
 #
 # POST /v0.1/apps/{owner_name}/{app_name}/distribution_groups/{distribution_group_name}/members
 # operationId: distributionGroups_addUser
-export def "v0-1-apps-distribution-groups-members create-user" [
+export def "distribution-groups-add-user" [
   owner_name: string
   app_name: string
   distribution_group_name: string
@@ -5479,7 +5479,7 @@ export def "v0-1-apps-distribution-groups-members create-user" [
 #
 # POST /v0.1/apps/{owner_name}/{app_name}/distribution_groups/{distribution_group_name}/members/bulk_delete
 # operationId: distributionGroups_removeUser
-export def "v0-1-apps-distribution-groups-members-bulk-delete delete-user" [
+export def "distribution-groups-remove-user" [
   owner_name: string
   app_name: string
   distribution_group_name: string
@@ -5523,7 +5523,7 @@ export def "v0-1-apps-distribution-groups-members-bulk-delete delete-user" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/distribution_groups/{distribution_group_name}/releases
 # operationId: releases_listByDistributionGroup
-export def "v0-1-apps-distribution-groups-releases list" [
+export def "releases-list-by-distribution-group" [
   owner_name: string
   app_name: string
   distribution_group_name: string
@@ -5563,7 +5563,7 @@ export def "v0-1-apps-distribution-groups-releases list" [
 #
 # DELETE /v0.1/apps/{owner_name}/{app_name}/distribution_groups/{distribution_group_name}/releases/{release_id}
 # operationId: releases_deleteWithDistributionGroupId
-export def "v0-1-apps-distribution-groups-releases delete" [
+export def "releases-delete-with-distribution-group-id" [
   owner_name: string
   app_name: string
   distribution_group_name: string
@@ -5605,7 +5605,7 @@ export def "v0-1-apps-distribution-groups-releases delete" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/distribution_groups/{distribution_group_name}/releases/{release_id}
 # operationId: releases_getLatestByDistributionGroup
-export def "v0-1-apps-distribution-groups-releases get-latest" [
+export def "releases-get-latest-by-distribution-group" [
   owner_name: string
   app_name: string
   distribution_group_name: string
@@ -5649,7 +5649,7 @@ export def "v0-1-apps-distribution-groups-releases get-latest" [
 #
 # POST /v0.1/apps/{owner_name}/{app_name}/distribution_groups/{distribution_group_name}/resend_invite
 # operationId: distributionGroups_resendInvite
-export def "v0-1-apps-distribution-groups-resend-invite resend" [
+export def "distribution-groups-resend-invite" [
   owner_name: string
   app_name: string
   distribution_group_name: string
@@ -5693,7 +5693,7 @@ export def "v0-1-apps-distribution-groups-resend-invite resend" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/distribution_stores
 # operationId: stores_list
-export def "v0-1-apps-distribution-stores list" [
+export def "stores-list" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5732,7 +5732,7 @@ export def "v0-1-apps-distribution-stores list" [
 # POST /v0.1/apps/{owner_name}/{app_name}/distribution_stores
 # operationId: stores_create
 # --intune_details shape: {app_category?: any, secret_json?: any, target_audience?: any, tenant_id?: string}
-export def "v0-1-apps-distribution-stores create" [
+export def "stores-create" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5778,7 +5778,7 @@ export def "v0-1-apps-distribution-stores create" [
 #
 # DELETE /v0.1/apps/{owner_name}/{app_name}/distribution_stores/{store_name}
 # operationId: stores_delete
-export def "v0-1-apps-distribution-stores delete" [
+export def "stores-delete" [
   owner_name: string
   app_name: string
   store_name: string
@@ -5822,7 +5822,7 @@ export def "v0-1-apps-distribution-stores delete" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/distribution_stores/{store_name}
 # operationId: stores_get
-export def "v0-1-apps-distribution-stores get" [
+export def "stores-get" [
   owner_name: string
   app_name: string
   store_name: string
@@ -5862,7 +5862,7 @@ export def "v0-1-apps-distribution-stores get" [
 #
 # PATCH /v0.1/apps/{owner_name}/{app_name}/distribution_stores/{store_name}
 # operationId: stores_patch
-export def "v0-1-apps-distribution-stores update" [
+export def "stores-patch" [
   owner_name: string
   app_name: string
   store_name: string
@@ -5906,7 +5906,7 @@ export def "v0-1-apps-distribution-stores update" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/distribution_stores/{store_name}/latest_release
 # operationId: storeReleases_getLatest
-export def "v0-1-apps-distribution-stores-latest-release get" [
+export def "store-releases-get-latest" [
   owner_name: string
   app_name: string
   store_name: string
@@ -5946,7 +5946,7 @@ export def "v0-1-apps-distribution-stores-latest-release get" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/distribution_stores/{store_name}/releases
 # operationId: storeReleases_list
-export def "v0-1-apps-distribution-stores-releases list" [
+export def "store-releases-list" [
   owner_name: string
   app_name: string
   store_name: string
@@ -5986,7 +5986,7 @@ export def "v0-1-apps-distribution-stores-releases list" [
 #
 # DELETE /v0.1/apps/{owner_name}/{app_name}/distribution_stores/{store_name}/releases/{release_id}
 # operationId: storeReleases_delete
-export def "v0-1-apps-distribution-stores-releases delete" [
+export def "store-releases-delete" [
   owner_name: string
   app_name: string
   store_name: string
@@ -6032,7 +6032,7 @@ export def "v0-1-apps-distribution-stores-releases delete" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/distribution_stores/{store_name}/releases/{release_id}
 # operationId: storeReleases_get
-export def "v0-1-apps-distribution-stores-releases get" [
+export def "store-releases-get" [
   owner_name: string
   app_name: string
   store_name: string
@@ -6074,7 +6074,7 @@ export def "v0-1-apps-distribution-stores-releases get" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/distribution_stores/{store_name}/releases/{release_id}/publish_error_details
 # operationId: storeReleases_getPublishError
-export def "v0-1-apps-distribution-stores-releases-publish-error-details get" [
+export def "store-releases-get-publish-error" [
   owner_name: string
   app_name: string
   store_name: string
@@ -6116,7 +6116,7 @@ export def "v0-1-apps-distribution-stores-releases-publish-error-details get" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/distribution_stores/{store_name}/releases/{release_id}/publish_logs
 # operationId: storeReleasePublishLogs_get
-export def "v0-1-apps-distribution-stores-releases-publish-logs get" [
+export def "store-release-publish-logs-get" [
   owner_name: string
   app_name: string
   store_name: string
@@ -6158,7 +6158,7 @@ export def "v0-1-apps-distribution-stores-releases-publish-logs get" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/distribution_stores/{store_name}/releases/{release_id}/realtimestatus
 # operationId: storeReleases_getRealTimeStatusByReleaseId
-export def "v0-1-apps-distribution-stores-releases-realtimestatus get-real-time-status" [
+export def "store-releases-get-real-time-status-by-release-id" [
   owner_name: string
   app_name: string
   store_name: string
@@ -6200,7 +6200,7 @@ export def "v0-1-apps-distribution-stores-releases-realtimestatus get-real-time-
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/errors/availableAppBuilds
 # operationId: Errors_AppBuildsList
-export def "v0-1-apps-errors-available-app-builds list" [
+export def "errors-app-builds-list" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6244,7 +6244,7 @@ export def "v0-1-apps-errors-available-app-builds list" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/errors/available_versions
 # operationId: Errors_AvailableVersions
-export def "v0-1-apps-errors-available-versions get" [
+export def "errors-available-versions" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6290,7 +6290,7 @@ export def "v0-1-apps-errors-available-versions get" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/errors/errorCountsPerDay
 # operationId: Errors_CountsPerDay
-export def "v0-1-apps-errors-error-counts-per-day get" [
+export def "errors-counts-per-day" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6334,7 +6334,7 @@ export def "v0-1-apps-errors-error-counts-per-day get" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/errors/errorGroups
 # operationId: Errors_GroupList
-export def "v0-1-apps-errors-error-groups list" [
+export def "errors-group-list" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6381,7 +6381,7 @@ export def "v0-1-apps-errors-error-groups list" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/errors/errorGroups/search
 # operationId: Errors_ErrorGroupsSearch
-export def "v0-1-apps-errors-error-groups-search list" [
+export def "errors-error-groups-search" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6426,7 +6426,7 @@ export def "v0-1-apps-errors-error-groups-search list" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/errors/errorGroups/{errorGroupId}
 # operationId: Errors_GroupDetails
-export def "v0-1-apps-errors-error-groups get-details" [
+export def "errors-group-details" [
   owner_name: string
   app_name: string
   error_group_id: string
@@ -6466,7 +6466,7 @@ export def "v0-1-apps-errors-error-groups get-details" [
 #
 # PATCH /v0.1/apps/{owner_name}/{app_name}/errors/errorGroups/{errorGroupId}
 # operationId: Errors_UpdateState
-export def "v0-1-apps-errors-error-groups update-state" [
+export def "errors-update-state" [
   owner_name: string
   app_name: string
   error_group_id: string
@@ -6511,7 +6511,7 @@ export def "v0-1-apps-errors-error-groups update-state" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/errors/errorGroups/{errorGroupId}/errorCountsPerDay
 # operationId: Errors_GroupCountsPerDay
-export def "v0-1-apps-errors-error-groups-error-counts-per-day get" [
+export def "errors-group-counts-per-day" [
   owner_name: string
   app_name: string
   error_group_id: string
@@ -6555,7 +6555,7 @@ export def "v0-1-apps-errors-error-groups-error-counts-per-day get" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/errors/errorGroups/{errorGroupId}/errorfreeDevicePercentages
 # operationId: Errors_GroupErrorFreeDevicePercentages
-export def "v0-1-apps-errors-error-groups-errorfree-device-percentages get-free" [
+export def "errors-group-error-free-device-percentages" [
   owner_name: string
   app_name: string
   error_group_id: string
@@ -6598,7 +6598,7 @@ export def "v0-1-apps-errors-error-groups-errorfree-device-percentages get-free"
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/errors/errorGroups/{errorGroupId}/errors
 # operationId: Errors_ListForGroup
-export def "v0-1-apps-errors-error-groups-errors list" [
+export def "errors-list-for-group" [
   owner_name: string
   app_name: string
   error_group_id: string
@@ -6644,7 +6644,7 @@ export def "v0-1-apps-errors-error-groups-errors list" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/errors/errorGroups/{errorGroupId}/errors/latest
 # operationId: Errors_LatestErrorDetails
-export def "v0-1-apps-errors-error-groups-errors-latest get-details" [
+export def "errors-latest-error-details" [
   owner_name: string
   app_name: string
   error_group_id: string
@@ -6684,7 +6684,7 @@ export def "v0-1-apps-errors-error-groups-errors-latest get-details" [
 #
 # DELETE /v0.1/apps/{owner_name}/{app_name}/errors/errorGroups/{errorGroupId}/errors/{errorId}
 # operationId: Errors_DeleteError
-export def "v0-1-apps-errors-error-groups-errors delete" [
+export def "errors-delete-error" [
   owner_name: string
   app_name: string
   error_group_id: string
@@ -6726,7 +6726,7 @@ export def "v0-1-apps-errors-error-groups-errors delete" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/errors/errorGroups/{errorGroupId}/errors/{errorId}
 # operationId: Errors_GetErrorDetails
-export def "v0-1-apps-errors-error-groups-errors get-details" [
+export def "errors-get-error-details" [
   owner_name: string
   app_name: string
   error_group_id: string
@@ -6768,7 +6768,7 @@ export def "v0-1-apps-errors-error-groups-errors get-details" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/errors/errorGroups/{errorGroupId}/errors/{errorId}/download
 # operationId: Errors_ErrorDownload
-export def "v0-1-apps-errors-error-groups-errors-download download" [
+export def "errors-error-download" [
   owner_name: string
   app_name: string
   error_group_id: string
@@ -6812,7 +6812,7 @@ export def "v0-1-apps-errors-error-groups-errors-download download" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/errors/errorGroups/{errorGroupId}/errors/{errorId}/location
 # operationId: Errors_ErrorLocation
-export def "v0-1-apps-errors-error-groups-errors-location get" [
+export def "errors-error-location" [
   owner_name: string
   app_name: string
   error_group_id: string
@@ -6854,7 +6854,7 @@ export def "v0-1-apps-errors-error-groups-errors-location get" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/errors/errorGroups/{errorGroupId}/errors/{errorId}/stacktrace
 # operationId: Errors_ErrorStackTrace
-export def "v0-1-apps-errors-error-groups-errors-stacktrace get-stack-trace" [
+export def "errors-error-stack-trace" [
   owner_name: string
   app_name: string
   error_group_id: string
@@ -6896,7 +6896,7 @@ export def "v0-1-apps-errors-error-groups-errors-stacktrace get-stack-trace" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/errors/errorGroups/{errorGroupId}/models
 # operationId: Errors_GroupModelCounts
-export def "v0-1-apps-errors-error-groups-models get-counts" [
+export def "errors-group-model-counts" [
   owner_name: string
   app_name: string
   error_group_id: string
@@ -6938,7 +6938,7 @@ export def "v0-1-apps-errors-error-groups-models get-counts" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/errors/errorGroups/{errorGroupId}/operatingSystems
 # operationId: Errors_GroupOperatingSystemCounts
-export def "v0-1-apps-errors-error-groups-operating-systems get-counts" [
+export def "errors-group-operating-system-counts" [
   owner_name: string
   app_name: string
   error_group_id: string
@@ -6980,7 +6980,7 @@ export def "v0-1-apps-errors-error-groups-operating-systems get-counts" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/errors/errorGroups/{errorGroupId}/stacktrace
 # operationId: Errors_GroupErrorStackTrace
-export def "v0-1-apps-errors-error-groups-stacktrace get-stack-trace" [
+export def "errors-group-error-stack-trace" [
   owner_name: string
   app_name: string
   error_group_id: string
@@ -7020,7 +7020,7 @@ export def "v0-1-apps-errors-error-groups-stacktrace get-stack-trace" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/errors/errorfreeDevicePercentages
 # operationId: Errors_ErrorFreeDevicePercentages
-export def "v0-1-apps-errors-errorfree-device-percentages get-free" [
+export def "errors-error-free-device-percentages" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7064,7 +7064,7 @@ export def "v0-1-apps-errors-errorfree-device-percentages get-free" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/errors/retention_settings
 # operationId: errors_getRetentionSettings
-export def "v0-1-apps-errors-retention-settings get" [
+export def "errors-get-retention-settings" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7102,7 +7102,7 @@ export def "v0-1-apps-errors-retention-settings get" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/errors/search
 # operationId: Errors_ErrorSearch
-export def "v0-1-apps-errors-search list" [
+export def "errors-error-search" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7147,7 +7147,7 @@ export def "v0-1-apps-errors-search list" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/errors/{errorId}/attachments
 # operationId: Errors_ErrorAttachments
-export def "v0-1-apps-errors-attachments get" [
+export def "errors-error-attachments" [
   owner_name: string
   app_name: string
   error_id: string
@@ -7187,7 +7187,7 @@ export def "v0-1-apps-errors-attachments get" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/errors/{errorId}/attachments/{attachmentId}/location
 # operationId: Errors_ErrorAttachmentLocation
-export def "v0-1-apps-errors-attachments-location get" [
+export def "errors-error-attachment-location" [
   owner_name: string
   app_name: string
   error_id: string
@@ -7229,7 +7229,7 @@ export def "v0-1-apps-errors-attachments-location get" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/errors/{errorId}/attachments/{attachmentId}/text
 # operationId: Errors_ErrorAttachmentText
-export def "v0-1-apps-errors-attachments-text get" [
+export def "errors-error-attachment-text" [
   owner_name: string
   app_name: string
   error_id: string
@@ -7271,7 +7271,7 @@ export def "v0-1-apps-errors-attachments-text get" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/errors/{errorId}/sessionLogs
 # operationId: Errors_ListSessionLogs
-export def "v0-1-apps-errors-session-logs list" [
+export def "errors-list-session-logs" [
   owner_name: string
   app_name: string
   error_id: string
@@ -7313,7 +7313,7 @@ export def "v0-1-apps-errors-session-logs list" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/export_configurations
 # operationId: ExportConfigurations_List
-export def "v0-1-apps-export-configurations list" [
+export def "export-configurations-list" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7352,7 +7352,7 @@ export def "v0-1-apps-export-configurations list" [
 # POST /v0.1/apps/{owner_name}/{app_name}/export_configurations
 # Discriminator (request): type
 # operationId: ExportConfigurations_Create
-export def "v0-1-apps-export-configurations create" [
+export def "export-configurations-create" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7398,7 +7398,7 @@ export def "v0-1-apps-export-configurations create" [
 #
 # DELETE /v0.1/apps/{owner_name}/{app_name}/export_configurations/{export_configuration_id}
 # operationId: ExportConfigurations_Delete
-export def "v0-1-apps-export-configurations delete" [
+export def "export-configurations-delete" [
   owner_name: string
   app_name: string
   export_configuration_id: string
@@ -7438,7 +7438,7 @@ export def "v0-1-apps-export-configurations delete" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/export_configurations/{export_configuration_id}
 # operationId: ExportConfigurations_Get
-export def "v0-1-apps-export-configurations get" [
+export def "export-configurations-get" [
   owner_name: string
   app_name: string
   export_configuration_id: string
@@ -7479,7 +7479,7 @@ export def "v0-1-apps-export-configurations get" [
 # PATCH /v0.1/apps/{owner_name}/{app_name}/export_configurations/{export_configuration_id}
 # Discriminator (request): type
 # operationId: ExportConfigurations_PartialUpdate
-export def "v0-1-apps-export-configurations update" [
+export def "export-configurations-partial-update" [
   owner_name: string
   app_name: string
   export_configuration_id: string
@@ -7527,7 +7527,7 @@ export def "v0-1-apps-export-configurations update" [
 #
 # POST /v0.1/apps/{owner_name}/{app_name}/export_configurations/{export_configuration_id}/disable
 # operationId: ExportConfigurations_Disable
-export def "v0-1-apps-export-configurations-disable export" [
+export def "export-configurations-disable" [
   owner_name: string
   app_name: string
   export_configuration_id: string
@@ -7567,7 +7567,7 @@ export def "v0-1-apps-export-configurations-disable export" [
 #
 # POST /v0.1/apps/{owner_name}/{app_name}/export_configurations/{export_configuration_id}/enable
 # operationId: ExportConfigurations_Enable
-export def "v0-1-apps-export-configurations-enable export" [
+export def "export-configurations-enable" [
   owner_name: string
   app_name: string
   export_configuration_id: string
@@ -7607,7 +7607,7 @@ export def "v0-1-apps-export-configurations-enable export" [
 #
 # POST /v0.1/apps/{owner_name}/{app_name}/file_asset
 # operationId: fileAssets_create
-export def "v0-1-apps-file-asset create" [
+export def "file-assets-create" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7649,7 +7649,7 @@ export def "v0-1-apps-file-asset create" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/invitations
 # operationId: appInvitations_list
-export def "v0-1-apps-invitations list" [
+export def "app-invitations-list" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7687,7 +7687,7 @@ export def "v0-1-apps-invitations list" [
 #
 # POST /v0.1/apps/{owner_name}/{app_name}/invitations
 # operationId: appInvitations_create
-export def "v0-1-apps-invitations create-by-owner-name-app-name" [
+export def "app-invitations-create" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7730,7 +7730,7 @@ export def "v0-1-apps-invitations create-by-owner-name-app-name" [
 #
 # DELETE /v0.1/apps/{owner_name}/{app_name}/invitations/{user_email}
 # operationId: appInvitations_delete
-export def "v0-1-apps-invitations delete" [
+export def "app-invitations-delete" [
   owner_name: string
   app_name: string
   user_email: string
@@ -7770,7 +7770,7 @@ export def "v0-1-apps-invitations delete" [
 #
 # PATCH /v0.1/apps/{owner_name}/{app_name}/invitations/{user_email}
 # operationId: appInvitations_updatePermissions
-export def "v0-1-apps-invitations update-permissions" [
+export def "app-invitations-update-permissions" [
   owner_name: string
   app_name: string
   user_email: string
@@ -7816,7 +7816,7 @@ export def "v0-1-apps-invitations update-permissions" [
 # DEPRECATED
 # operationId: appInvitations_createByEmail
 @deprecated
-export def "v0-1-apps-invitations create-by-owner-name-app-name-user-email" [
+export def "app-invitations-create-by-email" [
   owner_name: string
   app_name: string
   user_email: string
@@ -7860,7 +7860,7 @@ export def "v0-1-apps-invitations create-by-owner-name-app-name-user-email" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/notifications/emailSettings
 # operationId: notifications_getAppEmailSettings
-export def "v0-1-apps-notifications-email-settings get" [
+export def "notifications-get-app-email-settings" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7898,7 +7898,7 @@ export def "v0-1-apps-notifications-email-settings get" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/owner/device_sets
 # operationId: test_listDeviceSetsOfOwner
-export def "v0-1-apps-owner-device-sets test-list" [
+export def "test-list-device-sets-of-owner" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7936,7 +7936,7 @@ export def "v0-1-apps-owner-device-sets test-list" [
 #
 # POST /v0.1/apps/{owner_name}/{app_name}/owner/device_sets
 # operationId: test_createDeviceSetOfOwner
-export def "v0-1-apps-owner-device-sets test-create" [
+export def "test-create-device-set-of-owner" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7979,7 +7979,7 @@ export def "v0-1-apps-owner-device-sets test-create" [
 #
 # DELETE /v0.1/apps/{owner_name}/{app_name}/owner/device_sets/{id}
 # operationId: test_deleteDeviceSetOfOwner
-export def "v0-1-apps-owner-device-sets test-delete" [
+export def "test-delete-device-set-of-owner" [
   owner_name: string
   app_name: string
   id: string
@@ -8019,7 +8019,7 @@ export def "v0-1-apps-owner-device-sets test-delete" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/owner/device_sets/{id}
 # operationId: test_getDeviceSetOfOwner
-export def "v0-1-apps-owner-device-sets test-get" [
+export def "test-get-device-set-of-owner" [
   owner_name: string
   app_name: string
   id: string
@@ -8059,7 +8059,7 @@ export def "v0-1-apps-owner-device-sets test-get" [
 #
 # PUT /v0.1/apps/{owner_name}/{app_name}/owner/device_sets/{id}
 # operationId: test_updateDeviceSetOfOwner
-export def "v0-1-apps-owner-device-sets test-update" [
+export def "test-update-device-set-of-owner" [
   owner_name: string
   app_name: string
   id: string
@@ -8104,7 +8104,7 @@ export def "v0-1-apps-owner-device-sets test-update" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/recent_releases
 # operationId: releases_listLatest
-export def "v0-1-apps-recent-releases list-latest" [
+export def "releases-list-latest" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8142,7 +8142,7 @@ export def "v0-1-apps-recent-releases list-latest" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/releases
 # operationId: releases_list
-export def "v0-1-apps-releases list" [
+export def "releases-list" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8187,7 +8187,7 @@ export def "v0-1-apps-releases list" [
 # DEPRECATED
 # operationId: releases_availableToTester
 @deprecated
-export def "v0-1-apps-releases-filter-by-tester get-available" [
+export def "releases-available-to-tester" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8227,7 +8227,7 @@ export def "v0-1-apps-releases-filter-by-tester get-available" [
 #
 # DELETE /v0.1/apps/{owner_name}/{app_name}/releases/{release_id}
 # operationId: releases_delete
-export def "v0-1-apps-releases delete" [
+export def "releases-delete" [
   owner_name: string
   app_name: string
   release_id: int
@@ -8267,7 +8267,7 @@ export def "v0-1-apps-releases delete" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/releases/{release_id}
 # operationId: releases_getLatestByUser
-export def "v0-1-apps-releases get-latest-by-user" [
+export def "releases-get-latest-by-user" [
   owner_name: string
   app_name: string
   release_id: string
@@ -8310,7 +8310,7 @@ export def "v0-1-apps-releases get-latest-by-user" [
 #
 # PATCH /v0.1/apps/{owner_name}/{app_name}/releases/{release_id}
 # operationId: releases_update
-export def "v0-1-apps-releases update" [
+export def "releases-update" [
   owner_name: string
   app_name: string
   release_id: int
@@ -8355,7 +8355,7 @@ export def "v0-1-apps-releases update" [
 # PUT /v0.1/apps/{owner_name}/{app_name}/releases/{release_id}
 # operationId: releases_updateDetails
 # --build shape: {branch_name?: string, commit_hash?: string, commit_message?: string}
-export def "v0-1-apps-releases update-details" [
+export def "releases-update-details" [
   owner_name: string
   app_name: string
   release_id: int
@@ -8401,7 +8401,7 @@ export def "v0-1-apps-releases update-details" [
 #
 # POST /v0.1/apps/{owner_name}/{app_name}/releases/{release_id}/groups
 # operationId: releases_addDistributionGroup
-export def "v0-1-apps-releases-groups create-distribution" [
+export def "releases-add-distribution-group" [
   owner_name: string
   app_name: string
   release_id: int
@@ -8447,7 +8447,7 @@ export def "v0-1-apps-releases-groups create-distribution" [
 #
 # DELETE /v0.1/apps/{owner_name}/{app_name}/releases/{release_id}/groups/{group_id}
 # operationId: releases_deleteDistributionGroup
-export def "v0-1-apps-releases-groups delete-distribution" [
+export def "releases-delete-distribution-group" [
   owner_name: string
   app_name: string
   release_id: int
@@ -8489,7 +8489,7 @@ export def "v0-1-apps-releases-groups delete-distribution" [
 #
 # PUT /v0.1/apps/{owner_name}/{app_name}/releases/{release_id}/groups/{group_id}
 # operationId: releases_putDistributionGroup
-export def "v0-1-apps-releases-groups update-distribution" [
+export def "releases-put-distribution-group" [
   owner_name: string
   app_name: string
   release_id: int
@@ -8535,7 +8535,7 @@ export def "v0-1-apps-releases-groups update-distribution" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/releases/{release_id}/provisioning_profile
 # operationId: provisioning_profile
-export def "v0-1-apps-releases-provisioning-profile get" [
+export def "provisioning-profile" [
   owner_name: string
   app_name: string
   release_id: int
@@ -8575,7 +8575,7 @@ export def "v0-1-apps-releases-provisioning-profile get" [
 #
 # POST /v0.1/apps/{owner_name}/{app_name}/releases/{release_id}/stores
 # operationId: releases_addStore
-export def "v0-1-apps-releases-stores create" [
+export def "releases-add-store" [
   owner_name: string
   app_name: string
   release_id: int
@@ -8619,7 +8619,7 @@ export def "v0-1-apps-releases-stores create" [
 #
 # DELETE /v0.1/apps/{owner_name}/{app_name}/releases/{release_id}/stores/{store_id}
 # operationId: releases_deleteDistributionStore
-export def "v0-1-apps-releases-stores delete-distribution" [
+export def "releases-delete-distribution-store" [
   owner_name: string
   app_name: string
   release_id: int
@@ -8661,7 +8661,7 @@ export def "v0-1-apps-releases-stores delete-distribution" [
 #
 # POST /v0.1/apps/{owner_name}/{app_name}/releases/{release_id}/testers
 # operationId: releases_addTesters
-export def "v0-1-apps-releases-testers create" [
+export def "releases-add-testers" [
   owner_name: string
   app_name: string
   release_id: int
@@ -8707,7 +8707,7 @@ export def "v0-1-apps-releases-testers create" [
 #
 # DELETE /v0.1/apps/{owner_name}/{app_name}/releases/{release_id}/testers/{tester_id}
 # operationId: releases_deleteDistributionTester
-export def "v0-1-apps-releases-testers delete-distribution" [
+export def "releases-delete-distribution-tester" [
   owner_name: string
   app_name: string
   release_id: int
@@ -8749,7 +8749,7 @@ export def "v0-1-apps-releases-testers delete-distribution" [
 #
 # PUT /v0.1/apps/{owner_name}/{app_name}/releases/{release_id}/testers/{tester_id}
 # operationId: releases_putDistributionTester
-export def "v0-1-apps-releases-testers update-distribution" [
+export def "releases-put-distribution-tester" [
   owner_name: string
   app_name: string
   release_id: int
@@ -8795,7 +8795,7 @@ export def "v0-1-apps-releases-testers update-distribution" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/releases/{release_id}/update_devices/{resign_id}
 # operationId: devices_getReleaseUpdateDevicesStatus
-export def "v0-1-apps-releases-update-devices get-status" [
+export def "devices-get-release-update-devices-status" [
   owner_name: string
   app_name: string
   release_id: string
@@ -8839,7 +8839,7 @@ export def "v0-1-apps-releases-update-devices get-status" [
 #
 # DELETE /v0.1/apps/{owner_name}/{app_name}/repo_config
 # operationId: repositoryConfigurations_delete
-export def "v0-1-apps-repo-config delete-repository-configurations" [
+export def "repository-configurations-delete" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8877,7 +8877,7 @@ export def "v0-1-apps-repo-config delete-repository-configurations" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/repo_config
 # operationId: repositoryConfigurations_list
-export def "v0-1-apps-repo-config list-repository-configurations" [
+export def "repository-configurations-list" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8917,7 +8917,7 @@ export def "v0-1-apps-repo-config list-repository-configurations" [
 #
 # POST /v0.1/apps/{owner_name}/{app_name}/repo_config
 # operationId: repositoryConfigurations_createOrUpdate
-export def "v0-1-apps-repo-config create-repository-configurations-or-update" [
+export def "repository-configurations-create-or-update" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8963,7 +8963,7 @@ export def "v0-1-apps-repo-config create-repository-configurations-or-update" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/source_hosts/{source_host}/repositories
 # operationId: repositories_list
-export def "v0-1-apps-source-hosts-repositories list" [
+export def "repositories-list" [
   owner_name: string
   app_name: string
   source_host: string
@@ -9008,7 +9008,7 @@ export def "v0-1-apps-source-hosts-repositories list" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/store_service_status
 # operationId: storeNotifications_getNotificationByAppId
-export def "v0-1-apps-store-service-status get-notifications-notification" [
+export def "store-notifications-get-notification-by-app-id" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9046,7 +9046,7 @@ export def "v0-1-apps-store-service-status get-notifications-notification" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/subscriptions
 # operationId: test_getSubscriptions
-export def "v0-1-apps-subscriptions test-get" [
+export def "test-get-subscriptions" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9084,7 +9084,7 @@ export def "v0-1-apps-subscriptions test-get" [
 #
 # POST /v0.1/apps/{owner_name}/{app_name}/subscriptions
 # operationId: test_createSubscription
-export def "v0-1-apps-subscriptions test-create" [
+export def "test-create-subscription" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9122,7 +9122,7 @@ export def "v0-1-apps-subscriptions test-create" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/symbol_uploads
 # operationId: symbolUploads_list
-export def "v0-1-apps-symbol-uploads list" [
+export def "symbol-uploads-list" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9164,7 +9164,7 @@ export def "v0-1-apps-symbol-uploads list" [
 #
 # POST /v0.1/apps/{owner_name}/{app_name}/symbol_uploads
 # operationId: symbolUploads_create
-export def "v0-1-apps-symbol-uploads create" [
+export def "symbol-uploads-create" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9210,7 +9210,7 @@ export def "v0-1-apps-symbol-uploads create" [
 #
 # DELETE /v0.1/apps/{owner_name}/{app_name}/symbol_uploads/{symbol_upload_id}
 # operationId: symbolUploads_delete
-export def "v0-1-apps-symbol-uploads delete" [
+export def "symbol-uploads-delete" [
   owner_name: string
   app_name: string
   symbol_upload_id: string
@@ -9250,7 +9250,7 @@ export def "v0-1-apps-symbol-uploads delete" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/symbol_uploads/{symbol_upload_id}
 # operationId: symbolUploads_get
-export def "v0-1-apps-symbol-uploads get" [
+export def "symbol-uploads-get" [
   owner_name: string
   app_name: string
   symbol_upload_id: string
@@ -9290,7 +9290,7 @@ export def "v0-1-apps-symbol-uploads get" [
 #
 # PATCH /v0.1/apps/{owner_name}/{app_name}/symbol_uploads/{symbol_upload_id}
 # operationId: symbolUploads_complete
-export def "v0-1-apps-symbol-uploads complete" [
+export def "symbol-uploads-complete" [
   owner_name: string
   app_name: string
   symbol_upload_id: string
@@ -9334,7 +9334,7 @@ export def "v0-1-apps-symbol-uploads complete" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/symbol_uploads/{symbol_upload_id}/location
 # operationId: symbolUploads_getLocation
-export def "v0-1-apps-symbol-uploads-location get" [
+export def "symbol-uploads-get-location" [
   owner_name: string
   app_name: string
   symbol_upload_id: string
@@ -9374,7 +9374,7 @@ export def "v0-1-apps-symbol-uploads-location get" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/symbols
 # operationId: symbols_list
-export def "v0-1-apps-symbols list" [
+export def "symbols-list" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9412,7 +9412,7 @@ export def "v0-1-apps-symbols list" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/symbols/{symbol_id}
 # operationId: symbols_get
-export def "v0-1-apps-symbols get" [
+export def "symbols-get" [
   owner_name: string
   app_name: string
   symbol_id: string
@@ -9452,7 +9452,7 @@ export def "v0-1-apps-symbols get" [
 #
 # POST /v0.1/apps/{owner_name}/{app_name}/symbols/{symbol_id}/ignore
 # operationId: symbols_ignore
-export def "v0-1-apps-symbols-ignore create" [
+export def "symbols-ignore" [
   owner_name: string
   app_name: string
   symbol_id: string
@@ -9492,7 +9492,7 @@ export def "v0-1-apps-symbols-ignore create" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/symbols/{symbol_id}/location
 # operationId: symbols_getLocation
-export def "v0-1-apps-symbols-location get" [
+export def "symbols-get-location" [
   owner_name: string
   app_name: string
   symbol_id: string
@@ -9532,7 +9532,7 @@ export def "v0-1-apps-symbols-location get" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/symbols/{symbol_id}/status
 # operationId: symbols_getStatus
-export def "v0-1-apps-symbols-status get" [
+export def "symbols-get-status" [
   owner_name: string
   app_name: string
   symbol_id: string
@@ -9572,7 +9572,7 @@ export def "v0-1-apps-symbols-status get" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/teams
 # operationId: apps_getTeams
-export def "v0-1-apps-teams get" [
+export def "apps-get-teams" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9610,7 +9610,7 @@ export def "v0-1-apps-teams get" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/test/export
 # operationId: test_gdprExportApps
-export def "v0-1-apps-test-export test-gdpr" [
+export def "test-gdpr-export-apps" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9648,7 +9648,7 @@ export def "v0-1-apps-test-export test-gdpr" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/test/export/apps
 # operationId: test_gdprExportApp
-export def "v0-1-apps-test-export-apps test-gdpr" [
+export def "test-gdpr-export-app" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9686,7 +9686,7 @@ export def "v0-1-apps-test-export-apps test-gdpr" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/test/export/fileSetFiles
 # operationId: test_gdprExportFileSetFile
-export def "v0-1-apps-test-export-file-set-files test-gdpr" [
+export def "test-gdpr-export-file-set-file" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9724,7 +9724,7 @@ export def "v0-1-apps-test-export-file-set-files test-gdpr" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/test/export/hashFiles
 # operationId: test_gdprExportHashFile
-export def "v0-1-apps-test-export-hash-files test-gdpr" [
+export def "test-gdpr-export-hash-file" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9762,7 +9762,7 @@ export def "v0-1-apps-test-export-hash-files test-gdpr" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/test/export/pipelineTests
 # operationId: test_gdprExportPipelineTest
-export def "v0-1-apps-test-export-pipeline-tests test-gdpr" [
+export def "test-gdpr-export-pipeline-test" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9800,7 +9800,7 @@ export def "v0-1-apps-test-export-pipeline-tests test-gdpr" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/test/export/testRuns
 # operationId: test_gdprExportTestRun
-export def "v0-1-apps-test-export-test-runs test-gdpr" [
+export def "test-gdpr-export-test-run" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9838,7 +9838,7 @@ export def "v0-1-apps-test-export-test-runs test-gdpr" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/test_runs
 # operationId: test_getTestRuns
-export def "v0-1-apps-test-runs list" [
+export def "test-get-test-runs" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9876,7 +9876,7 @@ export def "v0-1-apps-test-runs list" [
 #
 # POST /v0.1/apps/{owner_name}/{app_name}/test_runs
 # operationId: test_createTestRun
-export def "v0-1-apps-test-runs create" [
+export def "test-create-test-run" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9914,7 +9914,7 @@ export def "v0-1-apps-test-runs create" [
 #
 # DELETE /v0.1/apps/{owner_name}/{app_name}/test_runs/{test_run_id}
 # operationId: test_archiveTestRun
-export def "v0-1-apps-test-runs archive" [
+export def "test-archive-test-run" [
   owner_name: string
   app_name: string
   test_run_id: string
@@ -9954,7 +9954,7 @@ export def "v0-1-apps-test-runs archive" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/test_runs/{test_run_id}
 # operationId: test_getTestRun
-export def "v0-1-apps-test-runs get" [
+export def "test-get-test-run" [
   owner_name: string
   app_name: string
   test_run_id: string
@@ -9994,7 +9994,7 @@ export def "v0-1-apps-test-runs get" [
 #
 # POST /v0.1/apps/{owner_name}/{app_name}/test_runs/{test_run_id}/files
 # operationId: test_startUploadingFile
-export def "v0-1-apps-test-runs-files start-uploading" [
+export def "test-start-uploading-file" [
   owner_name: string
   app_name: string
   test_run_id: string
@@ -10034,7 +10034,7 @@ export def "v0-1-apps-test-runs-files start-uploading" [
 #
 # POST /v0.1/apps/{owner_name}/{app_name}/test_runs/{test_run_id}/hashes
 # operationId: test_uploadHash
-export def "v0-1-apps-test-runs-hashes upload-hash" [
+export def "test-upload-hash" [
   owner_name: string
   app_name: string
   test_run_id: string
@@ -10081,7 +10081,7 @@ export def "v0-1-apps-test-runs-hashes upload-hash" [
 #
 # POST /v0.1/apps/{owner_name}/{app_name}/test_runs/{test_run_id}/hashes/batch
 # operationId: test_uploadHashesBatch
-export def "v0-1-apps-test-runs-hashes-batch upload" [
+export def "test-upload-hashes-batch" [
   owner_name: string
   app_name: string
   test_run_id: string
@@ -10125,7 +10125,7 @@ export def "v0-1-apps-test-runs-hashes-batch upload" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/test_runs/{test_run_id}/report
 # operationId: test_getTestReport
-export def "v0-1-apps-test-runs-report get" [
+export def "test-get-test-report" [
   owner_name: string
   app_name: string
   test_run_id: string
@@ -10165,7 +10165,7 @@ export def "v0-1-apps-test-runs-report get" [
 #
 # POST /v0.1/apps/{owner_name}/{app_name}/test_runs/{test_run_id}/start
 # operationId: test_startTestRun
-export def "v0-1-apps-test-runs-start test" [
+export def "test-start-test-run" [
   owner_name: string
   app_name: string
   test_run_id: string
@@ -10214,7 +10214,7 @@ export def "v0-1-apps-test-runs-start test" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/test_runs/{test_run_id}/state
 # operationId: test_getTestRunState
-export def "v0-1-apps-test-runs-state get" [
+export def "test-get-test-run-state" [
   owner_name: string
   app_name: string
   test_run_id: string
@@ -10254,7 +10254,7 @@ export def "v0-1-apps-test-runs-state get" [
 #
 # PUT /v0.1/apps/{owner_name}/{app_name}/test_runs/{test_run_id}/stop
 # operationId: test_stopTestRun
-export def "v0-1-apps-test-runs-stop test" [
+export def "test-stop-test-run" [
   owner_name: string
   app_name: string
   test_run_id: string
@@ -10294,7 +10294,7 @@ export def "v0-1-apps-test-runs-stop test" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/test_series
 # operationId: test_getAllTestSeries
-export def "v0-1-apps-test-series get-list" [
+export def "test-get-all-test-series" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10334,7 +10334,7 @@ export def "v0-1-apps-test-series get-list" [
 #
 # POST /v0.1/apps/{owner_name}/{app_name}/test_series
 # operationId: test_createTestSeries
-export def "v0-1-apps-test-series create" [
+export def "test-create-test-series" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10376,7 +10376,7 @@ export def "v0-1-apps-test-series create" [
 #
 # DELETE /v0.1/apps/{owner_name}/{app_name}/test_series/{test_series_slug}
 # operationId: test_deleteTestSeries
-export def "v0-1-apps-test-series delete" [
+export def "test-delete-test-series" [
   owner_name: string
   app_name: string
   test_series_slug: string
@@ -10416,7 +10416,7 @@ export def "v0-1-apps-test-series delete" [
 #
 # PATCH /v0.1/apps/{owner_name}/{app_name}/test_series/{test_series_slug}
 # operationId: test_patchTestSeries
-export def "v0-1-apps-test-series update" [
+export def "test-patch-test-series" [
   owner_name: string
   app_name: string
   test_series_slug: string
@@ -10460,7 +10460,7 @@ export def "v0-1-apps-test-series update" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/test_series/{test_series_slug}/test_runs
 # operationId: test_getAllTestRunsForSeries
-export def "v0-1-apps-test-series-test-runs get-list" [
+export def "test-get-all-test-runs-for-series" [
   owner_name: string
   app_name: string
   test_series_slug: string
@@ -10500,7 +10500,7 @@ export def "v0-1-apps-test-series-test-runs get-list" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/testers
 # operationId: apps_listTesters
-export def "v0-1-apps-testers list" [
+export def "apps-list-testers" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10538,7 +10538,7 @@ export def "v0-1-apps-testers list" [
 #
 # DELETE /v0.1/apps/{owner_name}/{app_name}/testers/{tester_id}
 # operationId: releases_deleteTesterFromDestinations
-export def "v0-1-apps-testers delete-releases-from-destinations" [
+export def "releases-delete-tester-from-destinations" [
   owner_name: string
   app_name: string
   tester_id: string
@@ -10578,7 +10578,7 @@ export def "v0-1-apps-testers delete-releases-from-destinations" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/toolsets
 # operationId: builds_listToolsets
-export def "v0-1-apps-toolsets list-builds" [
+export def "builds-list-toolsets" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10618,7 +10618,7 @@ export def "v0-1-apps-toolsets list-builds" [
 #
 # POST /v0.1/apps/{owner_name}/{app_name}/transfer/{destination_owner_name}
 # operationId: apps_transferOwnership
-export def "v0-1-apps-transfer create-ownership" [
+export def "apps-transfer-ownership" [
   owner_name: string
   app_name: string
   destination_owner_name: string
@@ -10662,7 +10662,7 @@ export def "v0-1-apps-transfer create-ownership" [
 #
 # POST /v0.1/apps/{owner_name}/{app_name}/transfer_to_org
 # operationId: apps_transferToOrg
-export def "v0-1-apps-transfer-to-org create" [
+export def "apps-transfer-to-org" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10704,7 +10704,7 @@ export def "v0-1-apps-transfer-to-org create" [
 #
 # POST /v0.1/apps/{owner_name}/{app_name}/uploads/releases
 # operationId: releases_createReleaseUpload
-export def "v0-1-apps-uploads-releases create" [
+export def "releases-create-release-upload" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10747,7 +10747,7 @@ export def "v0-1-apps-uploads-releases create" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/uploads/releases/{upload_id}
 # operationId: releases_getReleaseUploadStatus
-export def "v0-1-apps-uploads-releases get-status" [
+export def "releases-get-release-upload-status" [
   owner_name: string
   app_name: string
   upload_id: string
@@ -10787,7 +10787,7 @@ export def "v0-1-apps-uploads-releases get-status" [
 #
 # PATCH /v0.1/apps/{owner_name}/{app_name}/uploads/releases/{upload_id}
 # operationId: releases_updateReleaseUploadStatus
-export def "v0-1-apps-uploads-releases update-status" [
+export def "releases-update-release-upload-status" [
   owner_name: string
   app_name: string
   upload_id: string
@@ -10833,7 +10833,7 @@ export def "v0-1-apps-uploads-releases update-status" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/user/device_sets
 # operationId: test_listDeviceSetsOfUser
-export def "v0-1-apps-user-device-sets test-list" [
+export def "test-list-device-sets-of-user" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10871,7 +10871,7 @@ export def "v0-1-apps-user-device-sets test-list" [
 #
 # POST /v0.1/apps/{owner_name}/{app_name}/user/device_sets
 # operationId: test_createDeviceSetOfUser
-export def "v0-1-apps-user-device-sets test-create" [
+export def "test-create-device-set-of-user" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10914,7 +10914,7 @@ export def "v0-1-apps-user-device-sets test-create" [
 #
 # DELETE /v0.1/apps/{owner_name}/{app_name}/user/device_sets/{id}
 # operationId: test_deleteDeviceSetOfUser
-export def "v0-1-apps-user-device-sets test-delete" [
+export def "test-delete-device-set-of-user" [
   owner_name: string
   app_name: string
   id: string
@@ -10954,7 +10954,7 @@ export def "v0-1-apps-user-device-sets test-delete" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/user/device_sets/{id}
 # operationId: test_getDeviceSetOfUser
-export def "v0-1-apps-user-device-sets test-get" [
+export def "test-get-device-set-of-user" [
   owner_name: string
   app_name: string
   id: string
@@ -10994,7 +10994,7 @@ export def "v0-1-apps-user-device-sets test-get" [
 #
 # PUT /v0.1/apps/{owner_name}/{app_name}/user/device_sets/{id}
 # operationId: test_updateDeviceSetOfUser
-export def "v0-1-apps-user-device-sets test-update" [
+export def "test-update-device-set-of-user" [
   owner_name: string
   app_name: string
   id: string
@@ -11039,7 +11039,7 @@ export def "v0-1-apps-user-device-sets test-update" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/users
 # operationId: users_list
-export def "v0-1-apps-users list" [
+export def "users-list" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11077,7 +11077,7 @@ export def "v0-1-apps-users list" [
 #
 # DELETE /v0.1/apps/{owner_name}/{app_name}/users/{user_email}
 # operationId: apps_removeUser
-export def "v0-1-apps-users delete" [
+export def "apps-remove-user" [
   owner_name: string
   app_name: string
   user_email: string
@@ -11117,7 +11117,7 @@ export def "v0-1-apps-users delete" [
 #
 # PATCH /v0.1/apps/{owner_name}/{app_name}/users/{user_email}
 # operationId: apps_updateUserPermissions
-export def "v0-1-apps-users update-permissions" [
+export def "apps-update-user-permissions" [
   owner_name: string
   app_name: string
   user_email: string
@@ -11163,7 +11163,7 @@ export def "v0-1-apps-users update-permissions" [
 # DEPRECATED
 # operationId: crashes_getAppVersions
 @deprecated
-export def "v0-1-apps-versions get-crashes" [
+export def "crashes-get-app-versions" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11201,7 +11201,7 @@ export def "v0-1-apps-versions get-crashes" [
 #
 # GET /v0.1/apps/{owner_name}/{app_name}/webhooks
 # operationId: webhooks_list
-export def "v0-1-apps-webhooks list" [
+export def "webhooks-list" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11241,7 +11241,7 @@ export def "v0-1-apps-webhooks list" [
 # DEPRECATED
 # operationId: builds_listXamarinSDKBundles
 @deprecated
-export def "v0-1-apps-xamarin-sdk-bundles list-builds" [
+export def "builds-list-xamarin-sdk-bundles" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11281,7 +11281,7 @@ export def "v0-1-apps-xamarin-sdk-bundles list-builds" [
 # DEPRECATED
 # operationId: builds_listXcodeVersions
 @deprecated
-export def "v0-1-apps-xcode-versions list-builds" [
+export def "builds-list-xcode-versions" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11319,7 +11319,7 @@ export def "v0-1-apps-xcode-versions list-builds" [
 #
 # GET /v0.1/azure_subscriptions
 # operationId: azureSubscription_listForUser
-export def "v0-1-azure-subscriptions list-for-user" [
+export def "azure-subscription-list-for-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11353,7 +11353,7 @@ export def "v0-1-azure-subscriptions list-for-user" [
 #
 # GET /v0.1/billing/allAccountsAggregated
 # operationId: billingAggregatedInformation_getAll
-export def "v0-1-billing-all-accounts-aggregated get-information" [
+export def "billing-aggregated-information-get-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11391,7 +11391,7 @@ export def "v0-1-billing-all-accounts-aggregated get-information" [
 #
 # GET /v0.1/invitations/sent
 # operationId: invitations_sent
-export def "v0-1-invitations-sent get" [
+export def "invitations-sent" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11425,7 +11425,7 @@ export def "v0-1-invitations-sent get" [
 #
 # POST /v0.1/legacy/reportStatus/deploy
 # operationId: legacyCodePushAcquisition_updateInstallsStatus
-export def "v0-1-legacy-report-status-deploy push-code-acquisition-update-installs" [
+export def "legacy-code-push-acquisition-update-installs-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11469,7 +11469,7 @@ export def "v0-1-legacy-report-status-deploy push-code-acquisition-update-instal
 #
 # POST /v0.1/legacy/reportStatus/download
 # operationId: legacyCodePushAcquisition_updateDownloadStatus
-export def "v0-1-legacy-report-status-download push-code-acquisition-update" [
+export def "legacy-code-push-acquisition-update-download-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11513,7 +11513,7 @@ export def "v0-1-legacy-report-status-download push-code-acquisition-update" [
 #
 # GET /v0.1/legacy/updateCheck
 # operationId: legacyCodePushAcquisition_updateCheck
-export def "v0-1-legacy-update-check push-code-acquisition" [
+export def "legacy-code-push-acquisition-update-check" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11554,7 +11554,7 @@ export def "v0-1-legacy-update-check push-code-acquisition" [
 #
 # GET /v0.1/orgs
 # operationId: organizations_list
-export def "v0-1-orgs list-organizations" [
+export def "organizations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11588,7 +11588,7 @@ export def "v0-1-orgs list-organizations" [
 #
 # POST /v0.1/orgs
 # operationId: organizations_createOrUpdate
-export def "v0-1-orgs create-organizations-or-update" [
+export def "organizations-create-or-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11627,7 +11627,7 @@ export def "v0-1-orgs create-organizations-or-update" [
 #
 # GET /v0.1/orgs/{orgName}/billing/aggregated
 # operationId: billingAggregatedInformation_getForOrg
-export def "v0-1-orgs-billing-aggregated get-information" [
+export def "billing-aggregated-information-get-for-org" [
   org_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11667,7 +11667,7 @@ export def "v0-1-orgs-billing-aggregated get-information" [
 #
 # DELETE /v0.1/orgs/{org_name}
 # operationId: organizations_delete
-export def "v0-1-orgs delete-organizations" [
+export def "organizations-delete" [
   org_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11703,7 +11703,7 @@ export def "v0-1-orgs delete-organizations" [
 #
 # GET /v0.1/orgs/{org_name}
 # operationId: organizations_get
-export def "v0-1-orgs get-organizations" [
+export def "organizations-get" [
   org_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11739,7 +11739,7 @@ export def "v0-1-orgs get-organizations" [
 #
 # PATCH /v0.1/orgs/{org_name}
 # operationId: organizations_update
-export def "v0-1-orgs update-organizations" [
+export def "organizations-update" [
   org_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11780,7 +11780,7 @@ export def "v0-1-orgs update-organizations" [
 #
 # GET /v0.1/orgs/{org_name}/apps
 # operationId: apps_listForOrg
-export def "v0-1-orgs-apps list" [
+export def "apps-list-for-org" [
   org_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11816,7 +11816,7 @@ export def "v0-1-orgs-apps list" [
 #
 # POST /v0.1/orgs/{org_name}/apps
 # operationId: apps_createForOrg
-export def "v0-1-orgs-apps create" [
+export def "apps-create-for-org" [
   org_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11861,7 +11861,7 @@ export def "v0-1-orgs-apps create" [
 #
 # DELETE /v0.1/orgs/{org_name}/avatar
 # operationId: organization_deleteAvatar
-export def "v0-1-orgs-avatar delete-organization" [
+export def "organization-delete-avatar" [
   org_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11897,7 +11897,7 @@ export def "v0-1-orgs-avatar delete-organization" [
 #
 # POST /v0.1/orgs/{org_name}/avatar
 # operationId: organization_updateAvatar
-export def "v0-1-orgs-avatar update-organization" [
+export def "organization-update-avatar" [
   org_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11939,7 +11939,7 @@ export def "v0-1-orgs-avatar update-organization" [
 #
 # GET /v0.1/orgs/{org_name}/azure_subscriptions
 # operationId: azureSubscription_listForOrg
-export def "v0-1-orgs-azure-subscriptions list" [
+export def "azure-subscription-list-for-org" [
   org_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11975,7 +11975,7 @@ export def "v0-1-orgs-azure-subscriptions list" [
 #
 # GET /v0.1/orgs/{org_name}/distribution_groups
 # operationId: distributionGroups_listForOrg
-export def "v0-1-orgs-distribution-groups list" [
+export def "distribution-groups-list-for-org" [
   org_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12011,7 +12011,7 @@ export def "v0-1-orgs-distribution-groups list" [
 #
 # POST /v0.1/orgs/{org_name}/distribution_groups
 # operationId: distributionGroups_createForOrg
-export def "v0-1-orgs-distribution-groups create" [
+export def "distribution-groups-create-for-org" [
   org_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12052,7 +12052,7 @@ export def "v0-1-orgs-distribution-groups create" [
 #
 # DELETE /v0.1/orgs/{org_name}/distribution_groups/{distribution_group_name}
 # operationId: distributionGroups_deleteForOrg
-export def "v0-1-orgs-distribution-groups delete" [
+export def "distribution-groups-delete-for-org" [
   org_name: string
   distribution_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12090,7 +12090,7 @@ export def "v0-1-orgs-distribution-groups delete" [
 #
 # GET /v0.1/orgs/{org_name}/distribution_groups/{distribution_group_name}
 # operationId: distributionGroups_getForOrg
-export def "v0-1-orgs-distribution-groups get" [
+export def "distribution-groups-get-for-org" [
   org_name: string
   distribution_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12128,7 +12128,7 @@ export def "v0-1-orgs-distribution-groups get" [
 #
 # PATCH /v0.1/orgs/{org_name}/distribution_groups/{distribution_group_name}
 # operationId: distributionGroups_patchForOrg
-export def "v0-1-orgs-distribution-groups update" [
+export def "distribution-groups-patch-for-org" [
   org_name: string
   distribution_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12171,7 +12171,7 @@ export def "v0-1-orgs-distribution-groups update" [
 #
 # GET /v0.1/orgs/{org_name}/distribution_groups/{distribution_group_name}/apps
 # operationId: distributionGroups_getApps
-export def "v0-1-orgs-distribution-groups-apps get" [
+export def "distribution-groups-get-apps" [
   org_name: string
   distribution_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12210,7 +12210,7 @@ export def "v0-1-orgs-distribution-groups-apps get" [
 # POST /v0.1/orgs/{org_name}/distribution_groups/{distribution_group_name}/apps
 # operationId: distributionGroups_addApps
 # --apps item shape: {name: string}
-export def "v0-1-orgs-distribution-groups-apps create" [
+export def "distribution-groups-add-apps" [
   org_name: string
   distribution_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12253,7 +12253,7 @@ export def "v0-1-orgs-distribution-groups-apps create" [
 # POST /v0.1/orgs/{org_name}/distribution_groups/{distribution_group_name}/apps/bulk_delete
 # operationId: distributionGroups_bulkDeleteApps
 # --apps item shape: {name: string}
-export def "v0-1-orgs-distribution-groups-apps-bulk-delete delete" [
+export def "distribution-groups-bulk-delete-apps" [
   org_name: string
   distribution_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12295,7 +12295,7 @@ export def "v0-1-orgs-distribution-groups-apps-bulk-delete delete" [
 #
 # GET /v0.1/orgs/{org_name}/distribution_groups/{distribution_group_name}/members
 # operationId: distributionGroups_listUsersForOrg
-export def "v0-1-orgs-distribution-groups-members list-users" [
+export def "distribution-groups-list-users-for-org" [
   org_name: string
   distribution_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12333,7 +12333,7 @@ export def "v0-1-orgs-distribution-groups-members list-users" [
 #
 # POST /v0.1/orgs/{org_name}/distribution_groups/{distribution_group_name}/members
 # operationId: distributionGroups_addUsersForOrg
-export def "v0-1-orgs-distribution-groups-members create-users" [
+export def "distribution-groups-add-users-for-org" [
   org_name: string
   distribution_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12375,7 +12375,7 @@ export def "v0-1-orgs-distribution-groups-members create-users" [
 #
 # POST /v0.1/orgs/{org_name}/distribution_groups/{distribution_group_name}/members/bulk_delete
 # operationId: distributionGroups_bulkDeleteUsers
-export def "v0-1-orgs-distribution-groups-members-bulk-delete delete-users" [
+export def "distribution-groups-bulk-delete-users" [
   org_name: string
   distribution_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12417,7 +12417,7 @@ export def "v0-1-orgs-distribution-groups-members-bulk-delete delete-users" [
 #
 # POST /v0.1/orgs/{org_name}/distribution_groups/{distribution_group_name}/resend_invite
 # operationId: distributionGroups_resendSharedInvite
-export def "v0-1-orgs-distribution-groups-resend-invite resend-shared" [
+export def "distribution-groups-resend-shared-invite" [
   org_name: string
   distribution_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12459,7 +12459,7 @@ export def "v0-1-orgs-distribution-groups-resend-invite resend-shared" [
 #
 # GET /v0.1/orgs/{org_name}/distribution_groups_details
 # operationId: distributionGroups_detailsForOrg
-export def "v0-1-orgs-distribution-groups-details get" [
+export def "distribution-groups-details-for-org" [
   org_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12497,7 +12497,7 @@ export def "v0-1-orgs-distribution-groups-details get" [
 #
 # DELETE /v0.1/orgs/{org_name}/invitations
 # operationId: orgInvitations_delete
-export def "v0-1-orgs-invitations delete" [
+export def "org-invitations-delete" [
   org_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12537,7 +12537,7 @@ export def "v0-1-orgs-invitations delete" [
 #
 # GET /v0.1/orgs/{org_name}/invitations
 # operationId: orgInvitations_listPending
-export def "v0-1-orgs-invitations list-pending" [
+export def "org-invitations-list-pending" [
   org_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12573,7 +12573,7 @@ export def "v0-1-orgs-invitations list-pending" [
 #
 # POST /v0.1/orgs/{org_name}/invitations
 # operationId: orgInvitations_create
-export def "v0-1-orgs-invitations create" [
+export def "org-invitations-create" [
   org_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12614,7 +12614,7 @@ export def "v0-1-orgs-invitations create" [
 #
 # PATCH /v0.1/orgs/{org_name}/invitations/{email}
 # operationId: orgInvitations_update
-export def "v0-1-orgs-invitations update" [
+export def "org-invitations-update" [
   org_name: string
   email: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12656,7 +12656,7 @@ export def "v0-1-orgs-invitations update" [
 #
 # POST /v0.1/orgs/{org_name}/invitations/{email}/resend
 # operationId: orgInvitations_sendNewInvitation
-export def "v0-1-orgs-invitations-resend send-new" [
+export def "org-invitations-send-new-invitation" [
   org_name: string
   email: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12698,7 +12698,7 @@ export def "v0-1-orgs-invitations-resend send-new" [
 #
 # POST /v0.1/orgs/{org_name}/invitations/{email}/revoke
 # operationId: orgInvitations_
-export def "v0-1-orgs-invitations-revoke create" [
+export def "org-invitations" [
   org_name: string
   email: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12740,7 +12740,7 @@ export def "v0-1-orgs-invitations-revoke create" [
 #
 # GET /v0.1/orgs/{org_name}/teams
 # operationId: teams_listAll
-export def "v0-1-orgs-teams list" [
+export def "teams-list-all" [
   org_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12776,7 +12776,7 @@ export def "v0-1-orgs-teams list" [
 #
 # POST /v0.1/orgs/{org_name}/teams
 # operationId: teams_createTeam
-export def "v0-1-orgs-teams create" [
+export def "teams-create-team" [
   org_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12818,7 +12818,7 @@ export def "v0-1-orgs-teams create" [
 #
 # DELETE /v0.1/orgs/{org_name}/teams/{team_name}
 # operationId: teams_delete
-export def "v0-1-orgs-teams delete" [
+export def "teams-delete" [
   org_name: string
   team_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12856,7 +12856,7 @@ export def "v0-1-orgs-teams delete" [
 #
 # GET /v0.1/orgs/{org_name}/teams/{team_name}
 # operationId: teams_getTeam
-export def "v0-1-orgs-teams get" [
+export def "teams-get-team" [
   org_name: string
   team_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12894,7 +12894,7 @@ export def "v0-1-orgs-teams get" [
 #
 # PATCH /v0.1/orgs/{org_name}/teams/{team_name}
 # operationId: teams_update
-export def "v0-1-orgs-teams update" [
+export def "teams-update" [
   org_name: string
   team_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12936,7 +12936,7 @@ export def "v0-1-orgs-teams update" [
 #
 # GET /v0.1/orgs/{org_name}/teams/{team_name}/apps
 # operationId: teams_listApps
-export def "v0-1-orgs-teams-apps list" [
+export def "teams-list-apps" [
   org_name: string
   team_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12974,7 +12974,7 @@ export def "v0-1-orgs-teams-apps list" [
 #
 # POST /v0.1/orgs/{org_name}/teams/{team_name}/apps
 # operationId: teams_addApp
-export def "v0-1-orgs-teams-apps create" [
+export def "teams-add-app" [
   org_name: string
   team_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13016,7 +13016,7 @@ export def "v0-1-orgs-teams-apps create" [
 #
 # DELETE /v0.1/orgs/{org_name}/teams/{team_name}/apps/{app_name}
 # operationId: teams_removeApp
-export def "v0-1-orgs-teams-apps delete" [
+export def "teams-remove-app" [
   org_name: string
   team_name: string
   app_name: string
@@ -13056,7 +13056,7 @@ export def "v0-1-orgs-teams-apps delete" [
 #
 # PATCH /v0.1/orgs/{org_name}/teams/{team_name}/apps/{app_name}
 # operationId: teams_updatePermissions
-export def "v0-1-orgs-teams-apps update-permissions" [
+export def "teams-update-permissions" [
   org_name: string
   team_name: string
   app_name: string
@@ -13100,7 +13100,7 @@ export def "v0-1-orgs-teams-apps update-permissions" [
 #
 # GET /v0.1/orgs/{org_name}/teams/{team_name}/users
 # operationId: teams_getUsers
-export def "v0-1-orgs-teams-users get" [
+export def "teams-get-users" [
   org_name: string
   team_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13138,7 +13138,7 @@ export def "v0-1-orgs-teams-users get" [
 #
 # POST /v0.1/orgs/{org_name}/teams/{team_name}/users
 # operationId: teams_addUser
-export def "v0-1-orgs-teams-users create" [
+export def "teams-add-user" [
   org_name: string
   team_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13180,7 +13180,7 @@ export def "v0-1-orgs-teams-users create" [
 #
 # DELETE /v0.1/orgs/{org_name}/teams/{team_name}/users/{user_name}
 # operationId: teams_removeUser
-export def "v0-1-orgs-teams-users delete" [
+export def "teams-remove-user" [
   org_name: string
   team_name: string
   user_name: string
@@ -13220,7 +13220,7 @@ export def "v0-1-orgs-teams-users delete" [
 #
 # GET /v0.1/orgs/{org_name}/testers
 # operationId: distributionGroups_listAllTestersForOrg
-export def "v0-1-orgs-testers list-distribution-groups" [
+export def "distribution-groups-list-all-testers-for-org" [
   org_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13256,7 +13256,7 @@ export def "v0-1-orgs-testers list-distribution-groups" [
 #
 # GET /v0.1/orgs/{org_name}/users
 # operationId: users_listForOrg
-export def "v0-1-orgs-users list" [
+export def "users-list-for-org" [
   org_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13292,7 +13292,7 @@ export def "v0-1-orgs-users list" [
 #
 # DELETE /v0.1/orgs/{org_name}/users/{user_name}
 # operationId: users_removeFromOrg
-export def "v0-1-orgs-users delete" [
+export def "users-remove-from-org" [
   org_name: string
   user_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13330,7 +13330,7 @@ export def "v0-1-orgs-users delete" [
 #
 # GET /v0.1/orgs/{org_name}/users/{user_name}
 # operationId: users_getForOrg
-export def "v0-1-orgs-users get" [
+export def "users-get-for-org" [
   org_name: string
   user_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13368,7 +13368,7 @@ export def "v0-1-orgs-users get" [
 #
 # PATCH /v0.1/orgs/{org_name}/users/{user_name}
 # operationId: users_updateOrgRole
-export def "v0-1-orgs-users update-role" [
+export def "users-update-org-role" [
   org_name: string
   user_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13410,7 +13410,7 @@ export def "v0-1-orgs-users update-role" [
 #
 # GET /v0.1/orgs/{org_name}/users/{user_name}/apps
 # operationId: apps_getForOrgUser
-export def "v0-1-orgs-users-apps get" [
+export def "apps-get-for-org-user" [
   org_name: string
   user_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13448,7 +13448,7 @@ export def "v0-1-orgs-users-apps get" [
 #
 # GET /v0.1/public/apps/{app_id}/releases/{release_id}/ios_manifest
 # operationId: releases_getIosManifest
-export def "v0-1-public-apps-releases-ios-manifest get" [
+export def "releases-get-ios-manifest" [
   app_id: string
   release_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -13489,7 +13489,7 @@ export def "v0-1-public-apps-releases-ios-manifest get" [
 # POST /v0.1/public/apps/{owner_name}/{app_name}/install_analytics
 # operationId: distibutionReleases_installAnalytics
 # --releases item shape: {distribution_group_id: string, release_id: int, user_id: string}
-export def "v0-1-public-apps-install-analytics create-distibution-releases" [
+export def "distibution-releases-install-analytics" [
   owner_name: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13531,7 +13531,7 @@ export def "v0-1-public-apps-install-analytics create-distibution-releases" [
 #
 # POST /v0.1/public/codepush/report_status/deploy
 # operationId: codePushAcquisition_updateDeployStatus
-export def "v0-1-public-codepush-report-status-deploy push-code-acquisition-update" [
+export def "code-push-acquisition-update-deploy-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13575,7 +13575,7 @@ export def "v0-1-public-codepush-report-status-deploy push-code-acquisition-upda
 #
 # POST /v0.1/public/codepush/report_status/download
 # operationId: codePushAcquisition_updateDownloadStatus
-export def "v0-1-public-codepush-report-status-download push-code-acquisition-update" [
+export def "code-push-acquisition-update-download-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13619,7 +13619,7 @@ export def "v0-1-public-codepush-report-status-download push-code-acquisition-up
 #
 # GET /v0.1/public/codepush/status
 # operationId: codePushAcquisition_getAcquisitionStatus
-export def "v0-1-public-codepush-status push-code-acquisition-get-acquisition" [
+export def "code-push-acquisition-get-acquisition-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13653,7 +13653,7 @@ export def "v0-1-public-codepush-status push-code-acquisition-get-acquisition" [
 #
 # GET /v0.1/public/codepush/update_check
 # operationId: codePushAcquisition_updateCheck
-export def "v0-1-public-codepush-update-check push-code-acquisition" [
+export def "code-push-acquisition-update-check" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13696,7 +13696,7 @@ export def "v0-1-public-codepush-update-check push-code-acquisition" [
 #
 # POST /v0.1/public/hooks
 # operationId: builds_webhook
-export def "v0-1-public-hooks create-builds-webhook" [
+export def "builds-webhook" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13734,7 +13734,7 @@ export def "v0-1-public-hooks create-builds-webhook" [
 #
 # GET /v0.1/public/sdk/apps/{app_secret}/distribution_groups/{distribution_group_id}/releases/latest
 # operationId: releases_getLatestByPublicDistributionGroup
-export def "v0-1-public-sdk-apps-distribution-groups-releases-latest get" [
+export def "releases-get-latest-by-public-distribution-group" [
   app_secret: string
   distribution_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13776,7 +13776,7 @@ export def "v0-1-public-sdk-apps-distribution-groups-releases-latest get" [
 # DEPRECATED
 # operationId: releases_getLatestPublicRelease
 @deprecated
-export def "v0-1-public-sdk-apps-releases-latest get" [
+export def "releases-get-latest-public-release" [
   app_secret: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13812,7 +13812,7 @@ export def "v0-1-public-sdk-apps-releases-latest get" [
 #
 # GET /v0.1/public/sdk/apps/{app_secret}/releases/{release_hash}/public_distribution_groups
 # operationId: releases_getPublicGroupsForReleaseByHash
-export def "v0-1-public-sdk-apps-releases-public-distribution-groups get-for" [
+export def "releases-get-public-groups-for-release-by-hash" [
   app_secret: string
   release_hash: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13850,7 +13850,7 @@ export def "v0-1-public-sdk-apps-releases-public-distribution-groups get-for" [
 #
 # GET /v0.1/public/sparkle/apps/{app_secret}
 # operationId: releases_getSparkleFeed
-export def "v0-1-public-sparkle-apps get-releases-feed" [
+export def "releases-get-sparkle-feed" [
   app_secret: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13886,7 +13886,7 @@ export def "v0-1-public-sparkle-apps get-releases-feed" [
 #
 # GET /v0.1/sdk/apps/{app_secret}/releases/private/latest
 # operationId: releases_getLatestPrivateRelease
-export def "v0-1-sdk-apps-releases-private-latest get" [
+export def "releases-get-latest-private-release" [
   app_secret: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13924,7 +13924,7 @@ export def "v0-1-sdk-apps-releases-private-latest get" [
 #
 # GET /v0.1/sdk/apps/{app_secret}/releases/{release_hash}
 # operationId: releases_getLatestByHash
-export def "v0-1-sdk-apps-releases get-latest" [
+export def "releases-get-latest-by-hash" [
   app_secret: string
   release_hash: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13964,7 +13964,7 @@ export def "v0-1-sdk-apps-releases get-latest" [
 #
 # GET /v0.1/user
 # operationId: users_get
-export def "v0-1-user get" [
+export def "users-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13998,7 +13998,7 @@ export def "v0-1-user get" [
 #
 # PATCH /v0.1/user
 # operationId: users_update
-export def "v0-1-user update" [
+export def "users-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14036,7 +14036,7 @@ export def "v0-1-user update" [
 #
 # GET /v0.1/user/devices
 # operationId: devices_userDevicesList
-export def "v0-1-user-devices list" [
+export def "devices-user-devices-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14070,7 +14070,7 @@ export def "v0-1-user-devices list" [
 #
 # DELETE /v0.1/user/devices/{device_udid}
 # operationId: devices_removeUserDevice
-export def "v0-1-user-devices delete" [
+export def "devices-remove-user-device" [
   device_udid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14106,7 +14106,7 @@ export def "v0-1-user-devices delete" [
 #
 # GET /v0.1/user/devices/{device_udid}
 # operationId: devices_deviceDetails
-export def "v0-1-user-devices get-details" [
+export def "devices-device-details" [
   device_udid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14141,7 +14141,7 @@ export def "v0-1-user-devices get-details" [
 # POST /v0.1/user/dsr/delete
 #
 # operationId: DataSubjectRight_DeleteRequest
-export def "v0-1-user-dsr-delete request-data-subject-right" [
+export def "data-subject-right-delete-request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14174,7 +14174,7 @@ export def "v0-1-user-dsr-delete request-data-subject-right" [
 # GET /v0.1/user/dsr/delete/{token}
 #
 # operationId: DataSubjectRight_DeleteStatusRequest
-export def "v0-1-user-dsr-delete request-data-subject-right-status" [
+export def "data-subject-right-delete-status-request" [
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14211,7 +14211,7 @@ export def "v0-1-user-dsr-delete request-data-subject-right-status" [
 # POST /v0.1/user/dsr/delete/{token}/cancel
 #
 # operationId: DataSubjectRight_CancelDeleteRequest
-export def "v0-1-user-dsr-delete-cancel request-data-subject-right" [
+export def "data-subject-right-cancel-delete-request" [
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14250,7 +14250,7 @@ export def "v0-1-user-dsr-delete-cancel request-data-subject-right" [
 # POST /v0.1/user/dsr/export
 #
 # operationId: DataSubjectRight_ExportRequest
-export def "v0-1-user-dsr-export request-data-subject-right" [
+export def "data-subject-right-export-request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14283,7 +14283,7 @@ export def "v0-1-user-dsr-export request-data-subject-right" [
 # GET /v0.1/user/dsr/export/{token}
 #
 # operationId: DataSubjectRight_ExportStatusRequest
-export def "v0-1-user-dsr-export request-data-subject-right-status" [
+export def "data-subject-right-export-status-request" [
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14318,7 +14318,7 @@ export def "v0-1-user-dsr-export request-data-subject-right-status" [
 # POST /v0.1/user/dsr/export/{token}/cancel
 #
 # operationId: DataSubjectRight_CancelExportRequest
-export def "v0-1-user-dsr-export-cancel request-data-subject-right" [
+export def "data-subject-right-cancel-export-request" [
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14354,7 +14354,7 @@ export def "v0-1-user-dsr-export-cancel request-data-subject-right" [
 #
 # GET /v0.1/user/export/serviceConnections
 # operationId: sharedconnection_Connections
-export def "v0-1-user-export-service-connections get-sharedconnection" [
+export def "sharedconnection-connections" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14388,7 +14388,7 @@ export def "v0-1-user-export-service-connections get-sharedconnection" [
 #
 # POST /v0.1/user/invitations/apps/{invitation_token}/accept
 # operationId: appInvitations_accept
-export def "v0-1-user-invitations-apps-accept create" [
+export def "app-invitations-accept" [
   invitation_token: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14428,7 +14428,7 @@ export def "v0-1-user-invitations-apps-accept create" [
 #
 # POST /v0.1/user/invitations/apps/{invitation_token}/reject
 # operationId: appInvitations_reject
-export def "v0-1-user-invitations-apps-reject reject" [
+export def "app-invitations-reject" [
   invitation_token: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14468,7 +14468,7 @@ export def "v0-1-user-invitations-apps-reject reject" [
 #
 # POST /v0.1/user/invitations/distribution_groups/accept
 # operationId: distributionGroupInvitations_acceptAll
-export def "v0-1-user-invitations-distribution-groups-accept list" [
+export def "distribution-group-invitations-accept-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14506,7 +14506,7 @@ export def "v0-1-user-invitations-distribution-groups-accept list" [
 #
 # POST /v0.1/user/invitations/orgs/{invitation_token}/accept
 # operationId: orgInvitations_accept
-export def "v0-1-user-invitations-orgs-accept create" [
+export def "org-invitations-accept" [
   invitation_token: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14546,7 +14546,7 @@ export def "v0-1-user-invitations-orgs-accept create" [
 #
 # POST /v0.1/user/invitations/orgs/{invitation_token}/reject
 # operationId: orgInvitations_reject
-export def "v0-1-user-invitations-orgs-reject reject" [
+export def "org-invitations-reject" [
   invitation_token: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14585,7 +14585,7 @@ export def "v0-1-user-invitations-orgs-reject reject" [
 # GET /v0.1/user/metadata/optimizely
 #
 # operationId: Users_getUserMetadata
-export def "v0-1-user-metadata-optimizely get" [
+export def "users-get-user-metadata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14619,7 +14619,7 @@ export def "v0-1-user-metadata-optimizely get" [
 #
 # GET /v0.1/user/notifications/emailSettings
 # operationId: notifications_getUserEmailSettings
-export def "v0-1-user-notifications-email-settings get" [
+export def "notifications-get-user-email-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14653,7 +14653,7 @@ export def "v0-1-user-notifications-email-settings get" [
 #
 # POST /v0.1/users/{user_id}/devices/register
 # operationId: devices_registerUserForDevice
-export def "v0-1-users-devices-register create" [
+export def "devices-register-user-for-device" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

@@ -130,7 +130,7 @@ def purpose-completer [] { ["GCE_FIREWALL" "PURPOSE_UNSPECIFIED"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "effective-tags list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cloudresourcemanager-effective-tags-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -154,7 +154,7 @@ export def commands []: nothing -> table {
 #
 # GET /v3/effectiveTags
 # operationId: cloudresourcemanager.effectiveTags.list
-export def "effective-tags list" [
+export def "cloudresourcemanager-effective-tags-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -203,7 +203,7 @@ export def "effective-tags list" [
 #
 # GET /v3/folders
 # operationId: cloudresourcemanager.folders.list
-export def "folders list" [
+export def "cloudresourcemanager-folders-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -253,7 +253,7 @@ export def "folders list" [
 #
 # POST /v3/folders
 # operationId: cloudresourcemanager.folders.create
-export def "folders create" [
+export def "cloudresourcemanager-folders-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -304,7 +304,7 @@ export def "folders create" [
 #
 # GET /v3/folders:search
 # operationId: cloudresourcemanager.folders.search
-export def "folders-search list" [
+export def "cloudresourcemanager-folders-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -353,7 +353,7 @@ export def "folders-search list" [
 #
 # GET /v3/liens
 # operationId: cloudresourcemanager.liens.list
-export def "liens list" [
+export def "cloudresourcemanager-liens-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -402,7 +402,7 @@ export def "liens list" [
 #
 # POST /v3/liens
 # operationId: cloudresourcemanager.liens.create
-export def "liens create" [
+export def "cloudresourcemanager-liens-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -457,7 +457,7 @@ export def "liens create" [
 #
 # GET /v3/organizations:search
 # operationId: cloudresourcemanager.organizations.search
-export def "organizations-search list" [
+export def "cloudresourcemanager-organizations-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -506,7 +506,7 @@ export def "organizations-search list" [
 #
 # GET /v3/projects
 # operationId: cloudresourcemanager.projects.list
-export def "projects list" [
+export def "cloudresourcemanager-projects-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -556,7 +556,7 @@ export def "projects list" [
 #
 # POST /v3/projects
 # operationId: cloudresourcemanager.projects.create
-export def "projects create" [
+export def "cloudresourcemanager-projects-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -609,7 +609,7 @@ export def "projects create" [
 #
 # GET /v3/projects:search
 # operationId: cloudresourcemanager.projects.search
-export def "projects-search list" [
+export def "cloudresourcemanager-projects-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -658,7 +658,7 @@ export def "projects-search list" [
 #
 # GET /v3/tagBindings
 # operationId: cloudresourcemanager.tagBindings.list
-export def "tag-bindings list" [
+export def "cloudresourcemanager-tag-bindings-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -707,7 +707,7 @@ export def "tag-bindings list" [
 #
 # POST /v3/tagBindings
 # operationId: cloudresourcemanager.tagBindings.create
-export def "tag-bindings create" [
+export def "cloudresourcemanager-tag-bindings-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -760,7 +760,7 @@ export def "tag-bindings create" [
 #
 # GET /v3/tagKeys
 # operationId: cloudresourcemanager.tagKeys.list
-export def "tag-keys list" [
+export def "cloudresourcemanager-tag-keys-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -809,7 +809,7 @@ export def "tag-keys list" [
 #
 # POST /v3/tagKeys
 # operationId: cloudresourcemanager.tagKeys.create
-export def "tag-keys create" [
+export def "cloudresourcemanager-tag-keys-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -866,7 +866,7 @@ export def "tag-keys create" [
 #
 # GET /v3/tagKeys/namespaced
 # operationId: cloudresourcemanager.tagKeys.getNamespaced
-export def "tag-keys-namespaced get" [
+export def "cloudresourcemanager-tag-keys-get-namespaced" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -913,7 +913,7 @@ export def "tag-keys-namespaced get" [
 #
 # GET /v3/tagValues
 # operationId: cloudresourcemanager.tagValues.list
-export def "tag-values list" [
+export def "cloudresourcemanager-tag-values-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -962,7 +962,7 @@ export def "tag-values list" [
 #
 # POST /v3/tagValues
 # operationId: cloudresourcemanager.tagValues.create
-export def "tag-values create" [
+export def "cloudresourcemanager-tag-values-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1017,7 +1017,7 @@ export def "tag-values create" [
 #
 # GET /v3/tagValues/namespaced
 # operationId: cloudresourcemanager.tagValues.getNamespaced
-export def "tag-values-namespaced get" [
+export def "cloudresourcemanager-tag-values-get-namespaced" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1064,7 +1064,7 @@ export def "tag-values-namespaced get" [
 #
 # DELETE /v3/{name}
 # operationId: cloudresourcemanager.tagValues.tagHolds.delete
-export def "tag-values delete" [
+export def "cloudresourcemanager-tag-values-tag-holds-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1113,7 +1113,7 @@ export def "tag-values delete" [
 #
 # GET /v3/{name}
 # operationId: cloudresourcemanager.tagValues.get
-export def "tag-values get" [
+export def "cloudresourcemanager-tag-values-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1161,7 +1161,7 @@ export def "tag-values get" [
 #
 # PATCH /v3/{name}
 # operationId: cloudresourcemanager.tagValues.patch
-export def "tag-values update" [
+export def "cloudresourcemanager-tag-values-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1219,7 +1219,7 @@ export def "tag-values update" [
 #
 # POST /v3/{name}:move
 # operationId: cloudresourcemanager.projects.move
-export def "projects move" [
+export def "cloudresourcemanager-projects-move" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1271,7 +1271,7 @@ export def "projects move" [
 #
 # POST /v3/{name}:undelete
 # operationId: cloudresourcemanager.projects.undelete
-export def "projects create-undelete" [
+export def "cloudresourcemanager-projects-undelete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1323,7 +1323,7 @@ export def "projects create-undelete" [
 #
 # GET /v3/{parent}/tagHolds
 # operationId: cloudresourcemanager.tagValues.tagHolds.list
-export def "tag-holds list" [
+export def "cloudresourcemanager-tag-values-tag-holds-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1374,7 +1374,7 @@ export def "tag-holds list" [
 #
 # POST /v3/{parent}/tagHolds
 # operationId: cloudresourcemanager.tagValues.tagHolds.create
-export def "tag-holds create" [
+export def "cloudresourcemanager-tag-values-tag-holds-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1430,7 +1430,7 @@ export def "tag-holds create" [
 # POST /v3/{resource}:getIamPolicy
 # operationId: cloudresourcemanager.tagValues.getIamPolicy
 # --options shape: {requestedPolicyVersion?: int}
-export def "tag-values get-iam-policy" [
+export def "cloudresourcemanager-tag-values-get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1483,7 +1483,7 @@ export def "tag-values get-iam-policy" [
 # POST /v3/{resource}:setIamPolicy
 # operationId: cloudresourcemanager.tagValues.setIamPolicy
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
-export def "tag-values update-iam-policy" [
+export def "cloudresourcemanager-tag-values-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1536,7 +1536,7 @@ export def "tag-values update-iam-policy" [
 #
 # POST /v3/{resource}:testIamPermissions
 # operationId: cloudresourcemanager.tagValues.testIamPermissions
-export def "tag-values test-iam-permissions" [
+export def "cloudresourcemanager-tag-values-test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

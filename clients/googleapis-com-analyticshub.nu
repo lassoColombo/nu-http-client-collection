@@ -129,7 +129,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "analyticshub-projects-locations-data-exchanges-listings-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -153,7 +153,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1/{name}
 # operationId: analyticshub.projects.locations.dataExchanges.listings.delete
-export def "projects delete" [
+export def "analyticshub-projects-locations-data-exchanges-listings-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -201,7 +201,7 @@ export def "projects delete" [
 #
 # GET /v1/{name}
 # operationId: analyticshub.projects.locations.dataExchanges.listings.get
-export def "projects get" [
+export def "analyticshub-projects-locations-data-exchanges-listings-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -252,7 +252,7 @@ export def "projects get" [
 # --bigqueryDataset shape: {dataset?: string}
 # --dataProvider shape: {name?: string, primaryContact?: string}
 # --publisher shape: {name?: string, primaryContact?: string}
-export def "projects update" [
+export def "analyticshub-projects-locations-data-exchanges-listings-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -315,7 +315,7 @@ export def "projects update" [
 # POST /v1/{name}:subscribe
 # operationId: analyticshub.projects.locations.dataExchanges.listings.subscribe
 # --destinationDataset shape: {datasetReference?: record, description?: string, friendlyName?: string, labels?: record, location?: string}
-export def "projects subscribe" [
+export def "analyticshub-projects-locations-data-exchanges-listings-subscribe" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -367,7 +367,7 @@ export def "projects subscribe" [
 #
 # GET /v1/{organization}/dataExchanges
 # operationId: analyticshub.organizations.locations.dataExchanges.list
-export def "data-exchanges list-by-organization" [
+export def "analyticshub-organizations-locations-data-exchanges-list" [
   organization: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -417,7 +417,7 @@ export def "data-exchanges list-by-organization" [
 #
 # GET /v1/{parent}/dataExchanges
 # operationId: analyticshub.projects.locations.dataExchanges.list
-export def "data-exchanges list-by-parent" [
+export def "analyticshub-projects-locations-data-exchanges-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -467,7 +467,7 @@ export def "data-exchanges list-by-parent" [
 #
 # POST /v1/{parent}/dataExchanges
 # operationId: analyticshub.projects.locations.dataExchanges.create
-export def "data-exchanges create" [
+export def "analyticshub-projects-locations-data-exchanges-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -524,7 +524,7 @@ export def "data-exchanges create" [
 #
 # GET /v1/{parent}/listings
 # operationId: analyticshub.projects.locations.dataExchanges.listings.list
-export def "listings list" [
+export def "analyticshub-projects-locations-data-exchanges-listings-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -577,7 +577,7 @@ export def "listings list" [
 # --bigqueryDataset shape: {dataset?: string}
 # --dataProvider shape: {name?: string, primaryContact?: string}
 # --publisher shape: {name?: string, primaryContact?: string}
-export def "listings create" [
+export def "analyticshub-projects-locations-data-exchanges-listings-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -640,7 +640,7 @@ export def "listings create" [
 # POST /v1/{resource}:getIamPolicy
 # operationId: analyticshub.projects.locations.dataExchanges.listings.getIamPolicy
 # --options shape: {requestedPolicyVersion?: int}
-export def "projects get-iam-policy" [
+export def "analyticshub-projects-locations-data-exchanges-listings-get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -693,7 +693,7 @@ export def "projects get-iam-policy" [
 # POST /v1/{resource}:setIamPolicy
 # operationId: analyticshub.projects.locations.dataExchanges.listings.setIamPolicy
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
-export def "projects update-iam-policy" [
+export def "analyticshub-projects-locations-data-exchanges-listings-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -746,7 +746,7 @@ export def "projects update-iam-policy" [
 #
 # POST /v1/{resource}:testIamPermissions
 # operationId: analyticshub.projects.locations.dataExchanges.listings.testIamPermissions
-export def "projects test-iam-permissions" [
+export def "analyticshub-projects-locations-data-exchanges-listings-test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

@@ -174,7 +174,7 @@ def lish-auth-method-completer [] { ["disabled" "keys_only" "password_keys"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-account" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -198,7 +198,7 @@ export def commands []: nothing -> table {
 #
 # GET /account
 # operationId: getAccount
-export def "account get" [
+export def "get-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -234,7 +234,7 @@ export def "account get" [
 # operationId: updateAccount
 # --active_promotions item shape: {credit_monthly_cap?: string, credit_remaining?: string, description?: string, expire_dt?: string, image_url?: string, service_type?: "all"|"backup"|"blockstorage"|"db_mysql"|"ip_v4"|"linode"|"linode_disk"|"linode_memory"|"longview"|"managed"|"nodebalancer"|"objectstorage"|"transfer_tx", summary?: string, this_month_credit_remaining?: string}
 # --credit_card shape: {expiry?: string, last_four?: string}
-export def "account update" [
+export def "update-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -283,7 +283,7 @@ export def "account update" [
 #
 # POST /account/cancel
 # operationId: cancelAccount
-export def "account-cancel cancel" [
+export def "cancel-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -323,7 +323,7 @@ export def "account-cancel cancel" [
 # DEPRECATED
 # operationId: createCreditCard
 @deprecated
-export def "account-credit-card create" [
+export def "create-credit-card" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -366,7 +366,7 @@ export def "account-credit-card create" [
 # DEPRECATED
 # operationId: getEntityTransfers
 @deprecated
-export def "account-entity-transfers list" [
+export def "get-entity-transfers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -406,7 +406,7 @@ export def "account-entity-transfers list" [
 # operationId: createEntityTransfer
 # --entities shape: {linodes?: list<int>}
 @deprecated
-export def "account-entity-transfers create" [
+export def "create-entity-transfer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -446,7 +446,7 @@ export def "account-entity-transfers create" [
 # DEPRECATED
 # operationId: deleteEntityTransfer
 @deprecated
-export def "account-entity-transfers delete" [
+export def "delete-entity-transfer" [
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -484,7 +484,7 @@ export def "account-entity-transfers delete" [
 # DEPRECATED
 # operationId: getEntityTransfer
 @deprecated
-export def "account-entity-transfers get" [
+export def "get-entity-transfer" [
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -522,7 +522,7 @@ export def "account-entity-transfers get" [
 # DEPRECATED
 # operationId: acceptEntityTransfer
 @deprecated
-export def "account-entity-transfers-accept create" [
+export def "accept-entity-transfer" [
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -558,7 +558,7 @@ export def "account-entity-transfers-accept create" [
 #
 # GET /account/events
 # operationId: getEvents
-export def "account-events list" [
+export def "get-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -595,7 +595,7 @@ export def "account-events list" [
 #
 # GET /account/events/{eventId}
 # operationId: getEvent
-export def "account-events get" [
+export def "get-event" [
   event_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -631,7 +631,7 @@ export def "account-events get" [
 #
 # POST /account/events/{eventId}/read
 # operationId: eventRead
-export def "account-events-read get" [
+export def "event-read" [
   event_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -667,7 +667,7 @@ export def "account-events-read get" [
 #
 # POST /account/events/{eventId}/seen
 # operationId: eventSeen
-export def "account-events-seen create" [
+export def "event-seen" [
   event_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -703,7 +703,7 @@ export def "account-events-seen create" [
 #
 # GET /account/invoices
 # operationId: getInvoices
-export def "account-invoices list" [
+export def "get-invoices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -740,7 +740,7 @@ export def "account-invoices list" [
 #
 # GET /account/invoices/{invoiceId}
 # operationId: getInvoice
-export def "account-invoices get" [
+export def "get-invoice" [
   invoice_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -776,7 +776,7 @@ export def "account-invoices get" [
 #
 # GET /account/invoices/{invoiceId}/items
 # operationId: getInvoiceItems
-export def "account-invoices-items get" [
+export def "get-invoice-items" [
   invoice_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -815,7 +815,7 @@ export def "account-invoices-items get" [
 #
 # GET /account/logins
 # operationId: getAccountLogins
-export def "account-logins list" [
+export def "get-account-logins" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -849,7 +849,7 @@ export def "account-logins list" [
 #
 # GET /account/logins/{loginId}
 # operationId: getAccountLogin
-export def "account-logins get" [
+export def "get-account-login" [
   login_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -885,7 +885,7 @@ export def "account-logins get" [
 #
 # GET /account/maintenance
 # operationId: getMaintenance
-export def "account-maintenance get" [
+export def "get-maintenance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -919,7 +919,7 @@ export def "account-maintenance get" [
 #
 # GET /account/notifications
 # operationId: getNotifications
-export def "account-notifications get" [
+export def "get-notifications" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -953,7 +953,7 @@ export def "account-notifications get" [
 #
 # GET /account/oauth-clients
 # operationId: getClients
-export def "account-oauth-clients list" [
+export def "get-clients" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -990,7 +990,7 @@ export def "account-oauth-clients list" [
 #
 # POST /account/oauth-clients
 # operationId: createClient
-export def "account-oauth-clients create" [
+export def "create-client" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1030,7 +1030,7 @@ export def "account-oauth-clients create" [
 #
 # DELETE /account/oauth-clients/{clientId}
 # operationId: deleteClient
-export def "account-oauth-clients delete" [
+export def "delete-client" [
   client_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1066,7 +1066,7 @@ export def "account-oauth-clients delete" [
 #
 # GET /account/oauth-clients/{clientId}
 # operationId: getClient
-export def "account-oauth-clients get" [
+export def "get-client" [
   client_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1102,7 +1102,7 @@ export def "account-oauth-clients get" [
 #
 # PUT /account/oauth-clients/{clientId}
 # operationId: updateClient
-export def "account-oauth-clients update" [
+export def "update-client" [
   client_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1144,7 +1144,7 @@ export def "account-oauth-clients update" [
 #
 # POST /account/oauth-clients/{clientId}/reset-secret
 # operationId: resetClientSecret
-export def "account-oauth-clients-reset-secret reset" [
+export def "reset-client-secret" [
   client_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1180,7 +1180,7 @@ export def "account-oauth-clients-reset-secret reset" [
 #
 # GET /account/oauth-clients/{clientId}/thumbnail
 # operationId: getClientThumbnail
-export def "account-oauth-clients-thumbnail get" [
+export def "get-client-thumbnail" [
   client_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1216,7 +1216,7 @@ export def "account-oauth-clients-thumbnail get" [
 #
 # PUT /account/oauth-clients/{clientId}/thumbnail
 # operationId: setClientThumbnail
-export def "account-oauth-clients-thumbnail update" [
+export def "set-client-thumbnail" [
   client_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1256,7 +1256,7 @@ export def "account-oauth-clients-thumbnail update" [
 #
 # GET /account/payment-methods
 # operationId: getPaymentMethods
-export def "account-payment-methods list" [
+export def "get-payment-methods" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1294,7 +1294,7 @@ export def "account-payment-methods list" [
 # POST /account/payment-methods
 # operationId: createPaymentMethod
 # --data shape: {card_number: string, cvv: string, expiry_month: int, expiry_year: int}
-export def "account-payment-methods create" [
+export def "create-payment-method" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1334,7 +1334,7 @@ export def "account-payment-methods create" [
 #
 # DELETE /account/payment-methods/{paymentMethodId}
 # operationId: deletePaymentMethod
-export def "account-payment-methods delete" [
+export def "delete-payment-method" [
   payment_method_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1370,7 +1370,7 @@ export def "account-payment-methods delete" [
 #
 # GET /account/payment-methods/{paymentMethodId}
 # operationId: getPaymentMethod
-export def "account-payment-methods get" [
+export def "get-payment-method" [
   payment_method_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1406,7 +1406,7 @@ export def "account-payment-methods get" [
 #
 # POST /account/payment-methods/{paymentMethodId}/make-default
 # operationId: makePaymentMethodDefault
-export def "account-payment-methods-make-default create" [
+export def "make-payment-method-default" [
   payment_method_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1442,7 +1442,7 @@ export def "account-payment-methods-make-default create" [
 #
 # GET /account/payments
 # operationId: getPayments
-export def "account-payments list" [
+export def "get-payments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1479,7 +1479,7 @@ export def "account-payments list" [
 #
 # POST /account/payments
 # operationId: createPayment
-export def "account-payments create" [
+export def "create-payment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1521,7 +1521,7 @@ export def "account-payments create" [
 # DEPRECATED
 # operationId: createPayPalPayment
 @deprecated
-export def "account-payments-paypal create-pay-pal" [
+export def "create-pay-pal-payment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1563,7 +1563,7 @@ export def "account-payments-paypal create-pay-pal" [
 # DEPRECATED
 # operationId: executePayPalPayment
 @deprecated
-export def "account-payments-paypal-execute create-pay-pal" [
+export def "execute-pay-pal-payment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1602,7 +1602,7 @@ export def "account-payments-paypal-execute create-pay-pal" [
 #
 # GET /account/payments/{paymentId}
 # operationId: getPayment
-export def "account-payments get" [
+export def "get-payment" [
   payment_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1638,7 +1638,7 @@ export def "account-payments get" [
 #
 # POST /account/promo-codes
 # operationId: createPromoCredit
-export def "account-promo-codes create-credit" [
+export def "create-promo-credit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1676,7 +1676,7 @@ export def "account-promo-codes create-credit" [
 #
 # GET /account/service-transfers
 # operationId: getServiceTransfers
-export def "account-service-transfers list" [
+export def "get-service-transfers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1714,7 +1714,7 @@ export def "account-service-transfers list" [
 # POST /account/service-transfers
 # operationId: createServiceTransfer
 # --entities shape: {linodes?: list<int>}
-export def "account-service-transfers create" [
+export def "create-service-transfer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1752,7 +1752,7 @@ export def "account-service-transfers create" [
 #
 # DELETE /account/service-transfers/{token}
 # operationId: deleteServiceTransfer
-export def "account-service-transfers delete" [
+export def "delete-service-transfer" [
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1788,7 +1788,7 @@ export def "account-service-transfers delete" [
 #
 # GET /account/service-transfers/{token}
 # operationId: getServiceTransfer
-export def "account-service-transfers get" [
+export def "get-service-transfer" [
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1824,7 +1824,7 @@ export def "account-service-transfers get" [
 #
 # POST /account/service-transfers/{token}/accept
 # operationId: acceptServiceTransfer
-export def "account-service-transfers-accept create" [
+export def "accept-service-transfer" [
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1860,7 +1860,7 @@ export def "account-service-transfers-accept create" [
 #
 # GET /account/settings
 # operationId: getAccountSettings
-export def "account-settings get" [
+export def "get-account-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1894,7 +1894,7 @@ export def "account-settings get" [
 #
 # PUT /account/settings
 # operationId: updateAccountSettings
-export def "account-settings update" [
+export def "update-account-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1933,7 +1933,7 @@ export def "account-settings update" [
 #
 # POST /account/settings/managed-enable
 # operationId: enableAccountManaged
-export def "account-settings-managed-enable enable" [
+export def "enable-account-managed" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1967,7 +1967,7 @@ export def "account-settings-managed-enable enable" [
 #
 # GET /account/transfer
 # operationId: getTransfer
-export def "account-transfer get" [
+export def "get-transfer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2001,7 +2001,7 @@ export def "account-transfer get" [
 #
 # GET /account/users
 # operationId: getUsers
-export def "account-users list" [
+export def "get-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2038,7 +2038,7 @@ export def "account-users list" [
 #
 # POST /account/users
 # operationId: createUser
-export def "account-users create" [
+export def "create-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2078,7 +2078,7 @@ export def "account-users create" [
 #
 # DELETE /account/users/{username}
 # operationId: deleteUser
-export def "account-users delete" [
+export def "delete-user" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2114,7 +2114,7 @@ export def "account-users delete" [
 #
 # GET /account/users/{username}
 # operationId: getUser
-export def "account-users get" [
+export def "get-user" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2150,7 +2150,7 @@ export def "account-users get" [
 #
 # PUT /account/users/{username}
 # operationId: updateUser
-export def "account-users update" [
+export def "update-user" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2192,7 +2192,7 @@ export def "account-users update" [
 #
 # GET /account/users/{username}/grants
 # operationId: getUserGrants
-export def "account-users-grants get" [
+export def "get-user-grants" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2237,7 +2237,7 @@ export def "account-users-grants get" [
 # --nodebalancer item shape: {id?: int, permissions?: "read_only"|"read_write"}
 # --stackscript item shape: {id?: int, permissions?: "read_only"|"read_write"}
 # --volume item shape: {id?: int, permissions?: "read_only"|"read_write"}
-export def "account-users-grants update" [
+export def "update-user-grants" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2285,7 +2285,7 @@ export def "account-users-grants update" [
 #
 # GET /databases/engines
 # operationId: getDatabasesEngines
-export def "databases-engines list" [
+export def "get-databases-engines" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2322,7 +2322,7 @@ export def "databases-engines list" [
 #
 # GET /databases/engines/{engineId}
 # operationId: getDatabasesEngine
-export def "databases-engines get" [
+export def "get-databases-engine" [
   engine_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2361,7 +2361,7 @@ export def "databases-engines get" [
 #
 # GET /databases/instances
 # operationId: getDatabasesInstances
-export def "databases-instances get" [
+export def "get-databases-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2398,7 +2398,7 @@ export def "databases-instances get" [
 #
 # GET /databases/mongodb/instances
 # operationId: getDatabasesMongoDBInstances
-export def "databases-mongodb-instances list" [
+export def "get-databases-mongo-db-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2435,7 +2435,7 @@ export def "databases-mongodb-instances list" [
 #
 # DELETE /databases/mongodb/instances/{instanceId}
 # operationId: deleteDatabasesMongoDBInstance
-export def "databases-mongodb-instances delete-mongo-db" [
+export def "delete-databases-mongo-db-instance" [
   instance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2471,7 +2471,7 @@ export def "databases-mongodb-instances delete-mongo-db" [
 #
 # GET /databases/mongodb/instances/{instanceId}
 # operationId: getDatabasesMongoDBInstance
-export def "databases-mongodb-instances get-mongo-db" [
+export def "get-databases-mongo-db-instance" [
   instance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2507,7 +2507,7 @@ export def "databases-mongodb-instances get-mongo-db" [
 #
 # PUT /databases/mongodb/instances/{instanceId}
 # operationId: putDatabasesMongoDBInstance
-export def "databases-mongodb-instances update-mongo-db" [
+export def "put-databases-mongo-db-instance" [
   instance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2549,7 +2549,7 @@ export def "databases-mongodb-instances update-mongo-db" [
 #
 # GET /databases/mongodb/instances/{instanceId}/backups
 # operationId: getDatabasesMongoDBInstanceBackups
-export def "databases-mongodb-instances-backups list" [
+export def "get-databases-mongo-db-instance-backups" [
   instance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2588,7 +2588,7 @@ export def "databases-mongodb-instances-backups list" [
 #
 # POST /databases/mongodb/instances/{instanceId}/backups
 # operationId: postDatabasesMongoDBInstanceBackup
-export def "databases-mongodb-instances-backups create-mongo-db" [
+export def "post-databases-mongo-db-instance-backup" [
   instance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2629,7 +2629,7 @@ export def "databases-mongodb-instances-backups create-mongo-db" [
 #
 # DELETE /databases/mongodb/instances/{instanceId}/backups/{backupId}
 # operationId: deleteDatabaseMongoDBInstanceBackup
-export def "databases-mongodb-instances-backups delete-mongo-db" [
+export def "delete-database-mongo-db-instance-backup" [
   instance_id: int
   backup_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2667,7 +2667,7 @@ export def "databases-mongodb-instances-backups delete-mongo-db" [
 #
 # GET /databases/mongodb/instances/{instanceId}/backups/{backupId}
 # operationId: getDatabasesMongoDBInstanceBackup
-export def "databases-mongodb-instances-backups get-mongo-db" [
+export def "get-databases-mongo-db-instance-backup" [
   instance_id: int
   backup_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2705,7 +2705,7 @@ export def "databases-mongodb-instances-backups get-mongo-db" [
 #
 # POST /databases/mongodb/instances/{instanceId}/backups/{backupId}/restore
 # operationId: postDatabasesMongoDBInstanceBackupRestore
-export def "databases-mongodb-instances-backups-restore create-mongo-db" [
+export def "post-databases-mongo-db-instance-backup-restore" [
   instance_id: int
   backup_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2743,7 +2743,7 @@ export def "databases-mongodb-instances-backups-restore create-mongo-db" [
 #
 # GET /databases/mongodb/instances/{instanceId}/credentials
 # operationId: getDatabasesMongoDBInstanceCredentials
-export def "databases-mongodb-instances-credentials get-mongo-db" [
+export def "get-databases-mongo-db-instance-credentials" [
   instance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2779,7 +2779,7 @@ export def "databases-mongodb-instances-credentials get-mongo-db" [
 #
 # POST /databases/mongodb/instances/{instanceId}/credentials/reset
 # operationId: postDatabasesMongoDBInstanceCredentialsReset
-export def "databases-mongodb-instances-credentials-reset create-mongo-db" [
+export def "post-databases-mongo-db-instance-credentials-reset" [
   instance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2815,7 +2815,7 @@ export def "databases-mongodb-instances-credentials-reset create-mongo-db" [
 #
 # POST /databases/mongodb/instances/{instanceId}/patch
 # operationId: postDatabasesMongoDBInstancePatch
-export def "databases-mongodb-instances-patch create-mongo-db" [
+export def "post-databases-mongo-db-instance-patch" [
   instance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2851,7 +2851,7 @@ export def "databases-mongodb-instances-patch create-mongo-db" [
 #
 # GET /databases/mongodb/instances/{instanceId}/ssl
 # operationId: getDatabasesMongoDBInstanceSSL
-export def "databases-mongodb-instances-ssl get-mongo-db" [
+export def "get-databases-mongo-db-instance-ssl" [
   instance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2887,7 +2887,7 @@ export def "databases-mongodb-instances-ssl get-mongo-db" [
 #
 # GET /databases/mysql/instances
 # operationId: getDatabasesMySQLInstances
-export def "databases-mysql-instances list" [
+export def "get-databases-my-sql-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2924,7 +2924,7 @@ export def "databases-mysql-instances list" [
 #
 # POST /databases/mysql/instances
 # operationId: postDatabasesMySQLInstances
-export def "databases-mysql-instances create-my-sql" [
+export def "post-databases-my-sql-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2970,7 +2970,7 @@ export def "databases-mysql-instances create-my-sql" [
 #
 # DELETE /databases/mysql/instances/{instanceId}
 # operationId: deleteDatabasesMySQLInstance
-export def "databases-mysql-instances delete-my-sql" [
+export def "delete-databases-my-sql-instance" [
   instance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3006,7 +3006,7 @@ export def "databases-mysql-instances delete-my-sql" [
 #
 # GET /databases/mysql/instances/{instanceId}
 # operationId: getDatabasesMySQLInstance
-export def "databases-mysql-instances get-my-sql" [
+export def "get-databases-my-sql-instance" [
   instance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3042,7 +3042,7 @@ export def "databases-mysql-instances get-my-sql" [
 #
 # PUT /databases/mysql/instances/{instanceId}
 # operationId: putDatabasesMySQLInstance
-export def "databases-mysql-instances update-my-sql" [
+export def "put-databases-my-sql-instance" [
   instance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3084,7 +3084,7 @@ export def "databases-mysql-instances update-my-sql" [
 #
 # GET /databases/mysql/instances/{instanceId}/backups
 # operationId: getDatabasesMySQLInstanceBackups
-export def "databases-mysql-instances-backups list" [
+export def "get-databases-my-sql-instance-backups" [
   instance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3123,7 +3123,7 @@ export def "databases-mysql-instances-backups list" [
 #
 # POST /databases/mysql/instances/{instanceId}/backups
 # operationId: postDatabasesMySQLInstanceBackup
-export def "databases-mysql-instances-backups create-my-sql" [
+export def "post-databases-my-sql-instance-backup" [
   instance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3164,7 +3164,7 @@ export def "databases-mysql-instances-backups create-my-sql" [
 #
 # DELETE /databases/mysql/instances/{instanceId}/backups/{backupId}
 # operationId: deleteDatabaseMySQLInstanceBackup
-export def "databases-mysql-instances-backups delete-my-sql" [
+export def "delete-database-my-sql-instance-backup" [
   instance_id: int
   backup_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3202,7 +3202,7 @@ export def "databases-mysql-instances-backups delete-my-sql" [
 #
 # GET /databases/mysql/instances/{instanceId}/backups/{backupId}
 # operationId: getDatabasesMySQLInstanceBackup
-export def "databases-mysql-instances-backups get-my-sql" [
+export def "get-databases-my-sql-instance-backup" [
   instance_id: int
   backup_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3240,7 +3240,7 @@ export def "databases-mysql-instances-backups get-my-sql" [
 #
 # POST /databases/mysql/instances/{instanceId}/backups/{backupId}/restore
 # operationId: postDatabasesMySQLInstanceBackupRestore
-export def "databases-mysql-instances-backups-restore create-my-sql" [
+export def "post-databases-my-sql-instance-backup-restore" [
   instance_id: int
   backup_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3278,7 +3278,7 @@ export def "databases-mysql-instances-backups-restore create-my-sql" [
 #
 # GET /databases/mysql/instances/{instanceId}/credentials
 # operationId: getDatabasesMySQLInstanceCredentials
-export def "databases-mysql-instances-credentials get-my-sql" [
+export def "get-databases-my-sql-instance-credentials" [
   instance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3314,7 +3314,7 @@ export def "databases-mysql-instances-credentials get-my-sql" [
 #
 # POST /databases/mysql/instances/{instanceId}/credentials/reset
 # operationId: postDatabasesMySQLInstanceCredentialsReset
-export def "databases-mysql-instances-credentials-reset create-my-sql" [
+export def "post-databases-my-sql-instance-credentials-reset" [
   instance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3350,7 +3350,7 @@ export def "databases-mysql-instances-credentials-reset create-my-sql" [
 #
 # POST /databases/mysql/instances/{instanceId}/patch
 # operationId: postDatabasesMySQLInstancePatch
-export def "databases-mysql-instances-patch create-my-sql" [
+export def "post-databases-my-sql-instance-patch" [
   instance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3386,7 +3386,7 @@ export def "databases-mysql-instances-patch create-my-sql" [
 #
 # GET /databases/mysql/instances/{instanceId}/ssl
 # operationId: getDatabasesMySQLInstanceSSL
-export def "databases-mysql-instances-ssl get-my-sql" [
+export def "get-databases-my-sql-instance-ssl" [
   instance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3422,7 +3422,7 @@ export def "databases-mysql-instances-ssl get-my-sql" [
 #
 # GET /databases/postgresql/instances
 # operationId: getDatabasesPostgreSQLInstances
-export def "databases-post-gresql-instances list" [
+export def "get-databases-postgre-sql-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3459,7 +3459,7 @@ export def "databases-post-gresql-instances list" [
 #
 # POST /databases/postgresql/instances
 # operationId: postDatabasesPostgreSQLInstances
-export def "databases-post-gresql-instances create-postgre-sql" [
+export def "post-databases-postgre-sql-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3506,7 +3506,7 @@ export def "databases-post-gresql-instances create-postgre-sql" [
 #
 # DELETE /databases/postgresql/instances/{instanceId}
 # operationId: deleteDatabasesPostgreSQLInstance
-export def "databases-post-gresql-instances delete-postgre-sql" [
+export def "delete-databases-postgre-sql-instance" [
   instance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3542,7 +3542,7 @@ export def "databases-post-gresql-instances delete-postgre-sql" [
 #
 # GET /databases/postgresql/instances/{instanceId}
 # operationId: getDatabasesPostgreSQLInstance
-export def "databases-post-gresql-instances get-postgre-sql" [
+export def "get-databases-postgre-sql-instance" [
   instance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3578,7 +3578,7 @@ export def "databases-post-gresql-instances get-postgre-sql" [
 #
 # PUT /databases/postgresql/instances/{instanceId}
 # operationId: putDatabasesPostgreSQLInstance
-export def "databases-post-gresql-instances update-postgre-sql" [
+export def "put-databases-postgre-sql-instance" [
   instance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3620,7 +3620,7 @@ export def "databases-post-gresql-instances update-postgre-sql" [
 #
 # GET /databases/postgresql/instances/{instanceId}/backups
 # operationId: getDatabasesPostgreSQLInstanceBackups
-export def "databases-post-gresql-instances-backups list" [
+export def "get-databases-postgre-sql-instance-backups" [
   instance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3659,7 +3659,7 @@ export def "databases-post-gresql-instances-backups list" [
 #
 # POST /databases/postgresql/instances/{instanceId}/backups
 # operationId: postDatabasesPostgreSQLInstanceBackup
-export def "databases-post-gresql-instances-backups create-postgre-sql" [
+export def "post-databases-postgre-sql-instance-backup" [
   instance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3700,7 +3700,7 @@ export def "databases-post-gresql-instances-backups create-postgre-sql" [
 #
 # DELETE /databases/postgresql/instances/{instanceId}/backups/{backupId}
 # operationId: deleteDatabasePostgreSQLInstanceBackup
-export def "databases-post-gresql-instances-backups delete-postgre-sql" [
+export def "delete-database-postgre-sql-instance-backup" [
   instance_id: int
   backup_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3738,7 +3738,7 @@ export def "databases-post-gresql-instances-backups delete-postgre-sql" [
 #
 # GET /databases/postgresql/instances/{instanceId}/backups/{backupId}
 # operationId: getDatabasesPostgreSQLInstanceBackup
-export def "databases-post-gresql-instances-backups get-postgre-sql" [
+export def "get-databases-postgre-sql-instance-backup" [
   instance_id: int
   backup_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3776,7 +3776,7 @@ export def "databases-post-gresql-instances-backups get-postgre-sql" [
 #
 # POST /databases/postgresql/instances/{instanceId}/backups/{backupId}/restore
 # operationId: postDatabasesPostgreSQLInstanceBackupRestore
-export def "databases-post-gresql-instances-backups-restore create-postgre-sql" [
+export def "post-databases-postgre-sql-instance-backup-restore" [
   instance_id: int
   backup_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3814,7 +3814,7 @@ export def "databases-post-gresql-instances-backups-restore create-postgre-sql" 
 #
 # GET /databases/postgresql/instances/{instanceId}/credentials
 # operationId: getDatabasesPostgreSQLInstanceCredentials
-export def "databases-post-gresql-instances-credentials get-postgre-sql" [
+export def "get-databases-postgre-sql-instance-credentials" [
   instance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3850,7 +3850,7 @@ export def "databases-post-gresql-instances-credentials get-postgre-sql" [
 #
 # POST /databases/postgresql/instances/{instanceId}/credentials/reset
 # operationId: postDatabasesPostgreSQLInstanceCredentialsReset
-export def "databases-post-gresql-instances-credentials-reset create-postgre-sql" [
+export def "post-databases-postgre-sql-instance-credentials-reset" [
   instance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3886,7 +3886,7 @@ export def "databases-post-gresql-instances-credentials-reset create-postgre-sql
 #
 # POST /databases/postgresql/instances/{instanceId}/patch
 # operationId: postDatabasesPostgreSQLInstancePatch
-export def "databases-post-gresql-instances-patch create-postgre-sql" [
+export def "post-databases-postgre-sql-instance-patch" [
   instance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3922,7 +3922,7 @@ export def "databases-post-gresql-instances-patch create-postgre-sql" [
 #
 # GET /databases/postgresql/instances/{instanceId}/ssl
 # operationId: getDatabasesPostgreSQLInstanceSSL
-export def "databases-post-gresql-instances-ssl get-postgre-sql" [
+export def "get-databases-postgre-sql-instance-ssl" [
   instance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3958,7 +3958,7 @@ export def "databases-post-gresql-instances-ssl get-postgre-sql" [
 #
 # GET /databases/types
 # operationId: getDatabasesTypes
-export def "databases-types list" [
+export def "get-databases-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3995,7 +3995,7 @@ export def "databases-types list" [
 #
 # GET /databases/types/{typeId}
 # operationId: getDatabasesType
-export def "databases-types get" [
+export def "get-databases-type" [
   type_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4034,7 +4034,7 @@ export def "databases-types get" [
 #
 # GET /domains
 # operationId: getDomains
-export def "domains list" [
+export def "get-domains" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4072,7 +4072,7 @@ export def "domains list" [
 # POST /domains
 # operationId: createDomain
 @deprecated --flag group
-export def "domains create" [
+export def "create-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4122,7 +4122,7 @@ export def "domains create" [
 #
 # POST /domains/import
 # operationId: importDomain
-export def "domains-import import" [
+export def "import-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4161,7 +4161,7 @@ export def "domains-import import" [
 #
 # DELETE /domains/{domainId}
 # operationId: deleteDomain
-export def "domains delete" [
+export def "delete-domain" [
   domain_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4197,7 +4197,7 @@ export def "domains delete" [
 #
 # GET /domains/{domainId}
 # operationId: getDomain
-export def "domains get" [
+export def "get-domain" [
   domain_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4234,7 +4234,7 @@ export def "domains get" [
 # PUT /domains/{domainId}
 # operationId: updateDomain
 @deprecated --flag group
-export def "domains update" [
+export def "update-domain" [
   domain_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4286,7 +4286,7 @@ export def "domains update" [
 #
 # POST /domains/{domainId}/clone
 # operationId: cloneDomain
-export def "domains-clone clone" [
+export def "clone-domain" [
   domain_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4326,7 +4326,7 @@ export def "domains-clone clone" [
 #
 # GET /domains/{domainId}/records
 # operationId: getDomainRecords
-export def "domains-records list" [
+export def "get-domain-records" [
   domain_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4365,7 +4365,7 @@ export def "domains-records list" [
 #
 # POST /domains/{domainId}/records
 # operationId: createDomainRecord
-export def "domains-records create" [
+export def "create-domain-record" [
   domain_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4414,7 +4414,7 @@ export def "domains-records create" [
 #
 # DELETE /domains/{domainId}/records/{recordId}
 # operationId: deleteDomainRecord
-export def "domains-records delete" [
+export def "delete-domain-record" [
   domain_id: int
   record_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4452,7 +4452,7 @@ export def "domains-records delete" [
 #
 # GET /domains/{domainId}/records/{recordId}
 # operationId: getDomainRecord
-export def "domains-records get" [
+export def "get-domain-record" [
   domain_id: int
   record_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4490,7 +4490,7 @@ export def "domains-records get" [
 #
 # PUT /domains/{domainId}/records/{recordId}
 # operationId: updateDomainRecord
-export def "domains-records update" [
+export def "update-domain-record" [
   domain_id: int
   record_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4540,7 +4540,7 @@ export def "domains-records update" [
 #
 # GET /domains/{domainId}/zone-file
 # operationId: getDomainZone
-export def "domains-zone-file get" [
+export def "get-domain-zone" [
   domain_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4576,7 +4576,7 @@ export def "domains-zone-file get" [
 #
 # GET /images
 # operationId: getImages
-export def "images list" [
+export def "get-images" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4613,7 +4613,7 @@ export def "images list" [
 #
 # POST /images
 # operationId: createImage
-export def "images create" [
+export def "create-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4652,7 +4652,7 @@ export def "images create" [
 # Image Upload
 #
 # POST /images/upload
-export def "images-upload create" [
+export def "post-images-upload" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4692,7 +4692,7 @@ export def "images-upload create" [
 #
 # DELETE /images/{imageId}
 # operationId: deleteImage
-export def "images delete" [
+export def "delete-image" [
   image_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4728,7 +4728,7 @@ export def "images delete" [
 #
 # GET /images/{imageId}
 # operationId: getImage
-export def "images get" [
+export def "get-image" [
   image_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4764,7 +4764,7 @@ export def "images get" [
 #
 # PUT /images/{imageId}
 # operationId: updateImage
-export def "images update" [
+export def "update-image" [
   image_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4805,7 +4805,7 @@ export def "images update" [
 #
 # GET /linode/instances
 # operationId: getLinodeInstances
-export def "linode-instances list" [
+export def "get-linode-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4844,7 +4844,7 @@ export def "linode-instances list" [
 # operationId: createLinodeInstance
 # --interfaces item shape: {ipam_address?: string, label?: string, purpose?: "public"|"vlan"}
 @deprecated --flag group
-export def "linode-instances create" [
+export def "create-linode-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4898,7 +4898,7 @@ export def "linode-instances create" [
 #
 # DELETE /linode/instances/{linodeId}
 # operationId: deleteLinodeInstance
-export def "linode-instances delete" [
+export def "delete-linode-instance" [
   linode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4934,7 +4934,7 @@ export def "linode-instances delete" [
 #
 # GET /linode/instances/{linodeId}
 # operationId: getLinodeInstance
-export def "linode-instances get" [
+export def "get-linode-instance" [
   linode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4973,7 +4973,7 @@ export def "linode-instances get" [
 # --alerts shape: {cpu?: int, io?: int, network_in?: int, network_out?: int, transfer_quota?: int}
 # --backups shape: {schedule?: record}
 @deprecated --flag group
-export def "linode-instances update" [
+export def "update-linode-instance" [
   linode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5018,7 +5018,7 @@ export def "linode-instances update" [
 #
 # GET /linode/instances/{linodeId}/backups
 # operationId: getBackups
-export def "linode-instances-backups list" [
+export def "get-backups" [
   linode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5054,7 +5054,7 @@ export def "linode-instances-backups list" [
 #
 # POST /linode/instances/{linodeId}/backups
 # operationId: createSnapshot
-export def "linode-instances-backups create-snapshot" [
+export def "create-snapshot" [
   linode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5094,7 +5094,7 @@ export def "linode-instances-backups create-snapshot" [
 #
 # POST /linode/instances/{linodeId}/backups/cancel
 # operationId: cancelBackups
-export def "linode-instances-backups-cancel cancel" [
+export def "cancel-backups" [
   linode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5130,7 +5130,7 @@ export def "linode-instances-backups-cancel cancel" [
 #
 # POST /linode/instances/{linodeId}/backups/enable
 # operationId: enableBackups
-export def "linode-instances-backups-enable enable" [
+export def "enable-backups" [
   linode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5166,7 +5166,7 @@ export def "linode-instances-backups-enable enable" [
 #
 # GET /linode/instances/{linodeId}/backups/{backupId}
 # operationId: getBackup
-export def "linode-instances-backups get" [
+export def "get-backup" [
   linode_id: int
   backup_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5204,7 +5204,7 @@ export def "linode-instances-backups get" [
 #
 # POST /linode/instances/{linodeId}/backups/{backupId}/restore
 # operationId: restoreBackup
-export def "linode-instances-backups-restore create" [
+export def "restore-backup" [
   linode_id: int
   backup_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5247,7 +5247,7 @@ export def "linode-instances-backups-restore create" [
 #
 # POST /linode/instances/{linodeId}/boot
 # operationId: bootLinodeInstance
-export def "linode-instances-boot create" [
+export def "boot-linode-instance" [
   linode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5288,7 +5288,7 @@ export def "linode-instances-boot create" [
 # POST /linode/instances/{linodeId}/clone
 # operationId: cloneLinodeInstance
 @deprecated --flag group
-export def "linode-instances-clone clone" [
+export def "clone-linode-instance" [
   linode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5336,7 +5336,7 @@ export def "linode-instances-clone clone" [
 #
 # GET /linode/instances/{linodeId}/configs
 # operationId: getLinodeConfigs
-export def "linode-instances-configs list" [
+export def "get-linode-configs" [
   linode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5378,7 +5378,7 @@ export def "linode-instances-configs list" [
 # --devices shape: {sda?: record, sdb?: record, sdc?: record, sdd?: record, sde?: record, sdf?: record, sdg?: record, sdh?: record}
 # --helpers shape: {devtmpfs_automount?: bool, distro?: bool, modules_dep?: bool, network?: bool, updatedb_disabled?: bool}
 # --interfaces item shape: {ipam_address?: string, label?: string, purpose?: "public"|"vlan"}
-export def "linode-instances-configs create" [
+export def "add-linode-config" [
   linode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5427,7 +5427,7 @@ export def "linode-instances-configs create" [
 #
 # DELETE /linode/instances/{linodeId}/configs/{configId}
 # operationId: deleteLinodeConfig
-export def "linode-instances-configs delete" [
+export def "delete-linode-config" [
   linode_id: int
   config_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5465,7 +5465,7 @@ export def "linode-instances-configs delete" [
 #
 # GET /linode/instances/{linodeId}/configs/{configId}
 # operationId: getLinodeConfig
-export def "linode-instances-configs get" [
+export def "get-linode-config" [
   linode_id: int
   config_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5506,7 +5506,7 @@ export def "linode-instances-configs get" [
 # --devices shape: {sda?: record, sdb?: record, sdc?: record, sdd?: record, sde?: record, sdf?: record, sdg?: record, sdh?: record}
 # --helpers shape: {devtmpfs_automount?: bool, distro?: bool, modules_dep?: bool, network?: bool, updatedb_disabled?: bool}
 # --interfaces item shape: {ipam_address?: string, label?: string, purpose?: "public"|"vlan"}
-export def "linode-instances-configs update" [
+export def "update-linode-config" [
   linode_id: int
   config_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5557,7 +5557,7 @@ export def "linode-instances-configs update" [
 #
 # GET /linode/instances/{linodeId}/disks
 # operationId: getLinodeDisks
-export def "linode-instances-disks list" [
+export def "get-linode-disks" [
   linode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5596,7 +5596,7 @@ export def "linode-instances-disks list" [
 #
 # POST /linode/instances/{linodeId}/disks
 # operationId: addLinodeDisk
-export def "linode-instances-disks create" [
+export def "add-linode-disk" [
   linode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5644,7 +5644,7 @@ export def "linode-instances-disks create" [
 #
 # DELETE /linode/instances/{linodeId}/disks/{diskId}
 # operationId: deleteDisk
-export def "linode-instances-disks delete" [
+export def "delete-disk" [
   linode_id: int
   disk_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5682,7 +5682,7 @@ export def "linode-instances-disks delete" [
 #
 # GET /linode/instances/{linodeId}/disks/{diskId}
 # operationId: getLinodeDisk
-export def "linode-instances-disks get" [
+export def "get-linode-disk" [
   linode_id: int
   disk_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5720,7 +5720,7 @@ export def "linode-instances-disks get" [
 #
 # PUT /linode/instances/{linodeId}/disks/{diskId}
 # operationId: updateDisk
-export def "linode-instances-disks update" [
+export def "update-disk" [
   linode_id: int
   disk_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5764,7 +5764,7 @@ export def "linode-instances-disks update" [
 #
 # POST /linode/instances/{linodeId}/disks/{diskId}/clone
 # operationId: cloneLinodeDisk
-export def "linode-instances-disks-clone clone" [
+export def "clone-linode-disk" [
   linode_id: int
   disk_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5802,7 +5802,7 @@ export def "linode-instances-disks-clone clone" [
 #
 # POST /linode/instances/{linodeId}/disks/{diskId}/password
 # operationId: resetDiskPassword
-export def "linode-instances-disks-password reset" [
+export def "reset-disk-password" [
   linode_id: int
   disk_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5844,7 +5844,7 @@ export def "linode-instances-disks-password reset" [
 #
 # POST /linode/instances/{linodeId}/disks/{diskId}/resize
 # operationId: resizeDisk
-export def "linode-instances-disks-resize resize" [
+export def "resize-disk" [
   linode_id: int
   disk_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5886,7 +5886,7 @@ export def "linode-instances-disks-resize resize" [
 #
 # GET /linode/instances/{linodeId}/firewalls
 # operationId: getLinodeFirewalls
-export def "linode-instances-firewalls get" [
+export def "get-linode-firewalls" [
   linode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5925,7 +5925,7 @@ export def "linode-instances-firewalls get" [
 #
 # GET /linode/instances/{linodeId}/ips
 # operationId: getLinodeIPs
-export def "linode-instances-ips get-i-ps" [
+export def "get-linode-i-ps" [
   linode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5961,7 +5961,7 @@ export def "linode-instances-ips get-i-ps" [
 #
 # POST /linode/instances/{linodeId}/ips
 # operationId: addLinodeIP
-export def "linode-instances-ips create" [
+export def "add-linode-ip" [
   linode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6002,7 +6002,7 @@ export def "linode-instances-ips create" [
 #
 # DELETE /linode/instances/{linodeId}/ips/{address}
 # operationId: removeLinodeIP
-export def "linode-instances-ips delete" [
+export def "remove-linode-ip" [
   linode_id: int
   address: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6040,7 +6040,7 @@ export def "linode-instances-ips delete" [
 #
 # GET /linode/instances/{linodeId}/ips/{address}
 # operationId: getLinodeIP
-export def "linode-instances-ips get" [
+export def "get-linode-ip" [
   linode_id: int
   address: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6078,7 +6078,7 @@ export def "linode-instances-ips get" [
 #
 # PUT /linode/instances/{linodeId}/ips/{address}
 # operationId: updateLinodeIP
-export def "linode-instances-ips update" [
+export def "update-linode-ip" [
   linode_id: int
   address: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6120,7 +6120,7 @@ export def "linode-instances-ips update" [
 #
 # POST /linode/instances/{linodeId}/migrate
 # operationId: migrateLinodeInstance
-export def "linode-instances-migrate create" [
+export def "migrate-linode-instance" [
   linode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6161,7 +6161,7 @@ export def "linode-instances-migrate create" [
 #
 # POST /linode/instances/{linodeId}/mutate
 # operationId: mutateLinodeInstance
-export def "linode-instances-mutate create" [
+export def "mutate-linode-instance" [
   linode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6201,7 +6201,7 @@ export def "linode-instances-mutate create" [
 #
 # GET /linode/instances/{linodeId}/nodebalancers
 # operationId: getLinodeNodeBalancers
-export def "linode-instances-nodebalancers get-node-balancers" [
+export def "get-linode-node-balancers" [
   linode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6237,7 +6237,7 @@ export def "linode-instances-nodebalancers get-node-balancers" [
 #
 # POST /linode/instances/{linodeId}/password
 # operationId: resetLinodePassword
-export def "linode-instances-password reset" [
+export def "reset-linode-password" [
   linode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6277,7 +6277,7 @@ export def "linode-instances-password reset" [
 #
 # POST /linode/instances/{linodeId}/reboot
 # operationId: rebootLinodeInstance
-export def "linode-instances-reboot create" [
+export def "reboot-linode-instance" [
   linode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6317,7 +6317,7 @@ export def "linode-instances-reboot create" [
 #
 # POST /linode/instances/{linodeId}/rebuild
 # operationId: rebuildLinodeInstance
-export def "linode-instances-rebuild create" [
+export def "rebuild-linode-instance" [
   linode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6364,7 +6364,7 @@ export def "linode-instances-rebuild create" [
 # POST /linode/instances/{linodeId}/rescue
 # operationId: rescueLinodeInstance
 # --devices shape: {sda?: record, sdb?: record, sdc?: record, sdd?: record, sde?: record, sdf?: record, sdg?: record}
-export def "linode-instances-rescue create" [
+export def "rescue-linode-instance" [
   linode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6404,7 +6404,7 @@ export def "linode-instances-rescue create" [
 #
 # POST /linode/instances/{linodeId}/resize
 # operationId: resizeLinodeInstance
-export def "linode-instances-resize resize" [
+export def "resize-linode-instance" [
   linode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6445,7 +6445,7 @@ export def "linode-instances-resize resize" [
 #
 # POST /linode/instances/{linodeId}/shutdown
 # operationId: shutdownLinodeInstance
-export def "linode-instances-shutdown create" [
+export def "shutdown-linode-instance" [
   linode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6481,7 +6481,7 @@ export def "linode-instances-shutdown create" [
 #
 # GET /linode/instances/{linodeId}/stats
 # operationId: getLinodeStats
-export def "linode-instances-stats get-by-linode-id" [
+export def "get-linode-stats" [
   linode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6517,7 +6517,7 @@ export def "linode-instances-stats get-by-linode-id" [
 #
 # GET /linode/instances/{linodeId}/stats/{year}/{month}
 # operationId: getLinodeStatsByYearMonth
-export def "linode-instances-stats get-by-linode-id-year-month" [
+export def "get-linode-stats-by-year-month" [
   linode_id: int
   year: int
   month: int
@@ -6557,7 +6557,7 @@ export def "linode-instances-stats get-by-linode-id-year-month" [
 #
 # GET /linode/instances/{linodeId}/transfer
 # operationId: getLinodeTransfer
-export def "linode-instances-transfer get-by-linode-id" [
+export def "get-linode-transfer" [
   linode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6593,7 +6593,7 @@ export def "linode-instances-transfer get-by-linode-id" [
 #
 # GET /linode/instances/{linodeId}/transfer/{year}/{month}
 # operationId: getLinodeTransferByYearMonth
-export def "linode-instances-transfer get-by-linode-id-year-month" [
+export def "get-linode-transfer-by-year-month" [
   linode_id: int
   year: int
   month: int
@@ -6633,7 +6633,7 @@ export def "linode-instances-transfer get-by-linode-id-year-month" [
 #
 # GET /linode/instances/{linodeId}/volumes
 # operationId: getLinodeVolumes
-export def "linode-instances-volumes get" [
+export def "get-linode-volumes" [
   linode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6672,7 +6672,7 @@ export def "linode-instances-volumes get" [
 #
 # GET /linode/kernels
 # operationId: getKernels
-export def "linode-kernels list" [
+export def "get-kernels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6709,7 +6709,7 @@ export def "linode-kernels list" [
 #
 # GET /linode/kernels/{kernelId}
 # operationId: getKernel
-export def "linode-kernels get" [
+export def "get-kernel" [
   kernel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6745,7 +6745,7 @@ export def "linode-kernels get" [
 #
 # GET /linode/stackscripts
 # operationId: getStackScripts
-export def "linode-stackscripts get-stack-scripts" [
+export def "get-stack-scripts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6782,7 +6782,7 @@ export def "linode-stackscripts get-stack-scripts" [
 #
 # POST /linode/stackscripts
 # operationId: addStackScript
-export def "linode-stackscripts create-stack-script" [
+export def "add-stack-script" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6825,7 +6825,7 @@ export def "linode-stackscripts create-stack-script" [
 #
 # DELETE /linode/stackscripts/{stackscriptId}
 # operationId: deleteStackScript
-export def "linode-stackscripts delete-stack-script" [
+export def "delete-stack-script" [
   stackscript_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6861,7 +6861,7 @@ export def "linode-stackscripts delete-stack-script" [
 #
 # GET /linode/stackscripts/{stackscriptId}
 # operationId: getStackScript
-export def "linode-stackscripts get-stack-script" [
+export def "get-stack-script" [
   stackscript_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6897,7 +6897,7 @@ export def "linode-stackscripts get-stack-script" [
 #
 # PUT /linode/stackscripts/{stackscriptId}
 # operationId: updateStackScript
-export def "linode-stackscripts update-stack-script" [
+export def "update-stack-script" [
   stackscript_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6942,7 +6942,7 @@ export def "linode-stackscripts update-stack-script" [
 #
 # GET /linode/types
 # operationId: getLinodeTypes
-export def "linode-types list" [
+export def "get-linode-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6976,7 +6976,7 @@ export def "linode-types list" [
 #
 # GET /linode/types/{typeId}
 # operationId: getLinodeType
-export def "linode-types get" [
+export def "get-linode-type" [
   type_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7012,7 +7012,7 @@ export def "linode-types get" [
 #
 # GET /lke/clusters
 # operationId: getLKEClusters
-export def "lke-clusters list" [
+export def "get-lke-clusters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7048,7 +7048,7 @@ export def "lke-clusters list" [
 # operationId: createLKECluster
 # --control_plane shape: {high_availability?: bool}
 # --node_pools item shape: {autoscaler?: record, count?: int, disks?: list, tags?: list<string>, type?: string}
-export def "lke-clusters create" [
+export def "create-lke-cluster" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7091,7 +7091,7 @@ export def "lke-clusters create" [
 #
 # DELETE /lke/clusters/{clusterId}
 # operationId: deleteLKECluster
-export def "lke-clusters delete" [
+export def "delete-lke-cluster" [
   cluster_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7127,7 +7127,7 @@ export def "lke-clusters delete" [
 #
 # GET /lke/clusters/{clusterId}
 # operationId: getLKECluster
-export def "lke-clusters get" [
+export def "get-lke-cluster" [
   cluster_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7164,7 +7164,7 @@ export def "lke-clusters get" [
 # PUT /lke/clusters/{clusterId}
 # operationId: putLKECluster
 # --control_plane shape: {high_availability?: bool}
-export def "lke-clusters update" [
+export def "put-lke-cluster" [
   cluster_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7207,7 +7207,7 @@ export def "lke-clusters update" [
 #
 # GET /lke/clusters/{clusterId}/api-endpoints
 # operationId: getLKEClusterAPIEndpoints
-export def "lke-clusters-api-endpoints get" [
+export def "get-lke-cluster-api-endpoints" [
   cluster_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7243,7 +7243,7 @@ export def "lke-clusters-api-endpoints get" [
 #
 # GET /lke/clusters/{clusterId}/dashboard
 # operationId: getLKEClusterDashboard
-export def "lke-clusters-dashboard get" [
+export def "get-lke-cluster-dashboard" [
   cluster_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7279,7 +7279,7 @@ export def "lke-clusters-dashboard get" [
 #
 # DELETE /lke/clusters/{clusterId}/kubeconfig
 # operationId: deleteLKEClusterKubeconfig
-export def "lke-clusters-kubeconfig delete" [
+export def "delete-lke-cluster-kubeconfig" [
   cluster_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7315,7 +7315,7 @@ export def "lke-clusters-kubeconfig delete" [
 #
 # GET /lke/clusters/{clusterId}/kubeconfig
 # operationId: getLKEClusterKubeconfig
-export def "lke-clusters-kubeconfig get" [
+export def "get-lke-cluster-kubeconfig" [
   cluster_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7351,7 +7351,7 @@ export def "lke-clusters-kubeconfig get" [
 #
 # DELETE /lke/clusters/{clusterId}/nodes/{nodeId}
 # operationId: deleteLKEClusterNode
-export def "lke-clusters-nodes delete" [
+export def "delete-lke-cluster-node" [
   cluster_id: int
   node_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7389,7 +7389,7 @@ export def "lke-clusters-nodes delete" [
 #
 # GET /lke/clusters/{clusterId}/nodes/{nodeId}
 # operationId: getLKEClusterNode
-export def "lke-clusters-nodes get" [
+export def "get-lke-cluster-node" [
   cluster_id: int
   node_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7427,7 +7427,7 @@ export def "lke-clusters-nodes get" [
 #
 # POST /lke/clusters/{clusterId}/nodes/{nodeId}/recycle
 # operationId: postLKEClusterNodeRecycle
-export def "lke-clusters-nodes-recycle create" [
+export def "post-lke-cluster-node-recycle" [
   cluster_id: int
   node_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7465,7 +7465,7 @@ export def "lke-clusters-nodes-recycle create" [
 #
 # GET /lke/clusters/{clusterId}/pools
 # operationId: getLKEClusterPools
-export def "lke-clusters-pools get" [
+export def "get-lke-cluster-pools" [
   cluster_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7503,7 +7503,7 @@ export def "lke-clusters-pools get" [
 # operationId: postLKEClusterPools
 # --autoscaler shape: {enabled?: bool, max?: int, min?: int}
 # --disks item shape: {size?: int, type?: "raw"|"ext4"}
-export def "lke-clusters-pools create" [
+export def "post-lke-cluster-pools" [
   cluster_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7547,7 +7547,7 @@ export def "lke-clusters-pools create" [
 #
 # DELETE /lke/clusters/{clusterId}/pools/{poolId}
 # operationId: deleteLKENodePool
-export def "lke-clusters-pools delete-node" [
+export def "delete-lke-node-pool" [
   cluster_id: int
   pool_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -7585,7 +7585,7 @@ export def "lke-clusters-pools delete-node" [
 #
 # GET /lke/clusters/{clusterId}/pools/{poolId}
 # operationId: getLKENodePool
-export def "lke-clusters-pools get-node" [
+export def "get-lke-node-pool" [
   cluster_id: int
   pool_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -7624,7 +7624,7 @@ export def "lke-clusters-pools get-node" [
 # PUT /lke/clusters/{clusterId}/pools/{poolId}
 # operationId: putLKENodePool
 # --autoscaler shape: {enabled?: bool, max?: int, min?: int}
-export def "lke-clusters-pools update-node" [
+export def "put-lke-node-pool" [
   cluster_id: int
   pool_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -7667,7 +7667,7 @@ export def "lke-clusters-pools update-node" [
 #
 # POST /lke/clusters/{clusterId}/pools/{poolId}/recycle
 # operationId: postLKEClusterPoolRecycle
-export def "lke-clusters-pools-recycle create" [
+export def "post-lke-cluster-pool-recycle" [
   cluster_id: int
   pool_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -7705,7 +7705,7 @@ export def "lke-clusters-pools-recycle create" [
 #
 # POST /lke/clusters/{clusterId}/recycle
 # operationId: postLKEClusterRecycle
-export def "lke-clusters-recycle create" [
+export def "post-lke-cluster-recycle" [
   cluster_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7741,7 +7741,7 @@ export def "lke-clusters-recycle create" [
 #
 # POST /lke/clusters/{clusterId}/regenerate
 # operationId: postLKEClusterRegenerate
-export def "lke-clusters-regenerate create" [
+export def "post-lke-cluster-regenerate" [
   cluster_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7782,7 +7782,7 @@ export def "lke-clusters-regenerate create" [
 #
 # DELETE /lke/clusters/{clusterId}/servicetoken
 # operationId: postLKECServiceTokenDelete
-export def "lke-clusters-servicetoken create-lkec-service-token-delete" [
+export def "post-lkec-service-token-delete" [
   cluster_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7818,7 +7818,7 @@ export def "lke-clusters-servicetoken create-lkec-service-token-delete" [
 #
 # GET /lke/versions
 # operationId: getLKEVersions
-export def "lke-versions list" [
+export def "get-lke-versions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7852,7 +7852,7 @@ export def "lke-versions list" [
 #
 # GET /lke/versions/{version}
 # operationId: getLKEVersion
-export def "lke-versions get" [
+export def "get-lke-version" [
   version: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7888,7 +7888,7 @@ export def "lke-versions get" [
 #
 # GET /longview/clients
 # operationId: getLongviewClients
-export def "longview-clients list" [
+export def "get-longview-clients" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7925,7 +7925,7 @@ export def "longview-clients list" [
 #
 # POST /longview/clients
 # operationId: createLongviewClient
-export def "longview-clients create" [
+export def "create-longview-client" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7963,7 +7963,7 @@ export def "longview-clients create" [
 #
 # DELETE /longview/clients/{clientId}
 # operationId: deleteLongviewClient
-export def "longview-clients delete" [
+export def "delete-longview-client" [
   client_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7999,7 +7999,7 @@ export def "longview-clients delete" [
 #
 # GET /longview/clients/{clientId}
 # operationId: getLongviewClient
-export def "longview-clients get" [
+export def "get-longview-client" [
   client_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8035,7 +8035,7 @@ export def "longview-clients get" [
 #
 # PUT /longview/clients/{clientId}
 # operationId: updateLongviewClient
-export def "longview-clients update" [
+export def "update-longview-client" [
   client_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8075,7 +8075,7 @@ export def "longview-clients update" [
 #
 # GET /longview/plan
 # operationId: getLongviewPlan
-export def "longview-plan get" [
+export def "get-longview-plan" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8109,7 +8109,7 @@ export def "longview-plan get" [
 #
 # PUT /longview/plan
 # operationId: updateLongviewPlan
-export def "longview-plan update" [
+export def "update-longview-plan" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8147,7 +8147,7 @@ export def "longview-plan update" [
 #
 # GET /longview/subscriptions
 # operationId: getLongviewSubscriptions
-export def "longview-subscriptions list" [
+export def "get-longview-subscriptions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8184,7 +8184,7 @@ export def "longview-subscriptions list" [
 #
 # GET /longview/subscriptions/{subscriptionId}
 # operationId: getLongviewSubscription
-export def "longview-subscriptions get" [
+export def "get-longview-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8220,7 +8220,7 @@ export def "longview-subscriptions get" [
 #
 # GET /managed/contacts
 # operationId: getManagedContacts
-export def "managed-contacts list" [
+export def "get-managed-contacts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8258,7 +8258,7 @@ export def "managed-contacts list" [
 # POST /managed/contacts
 # operationId: createManagedContact
 # --phone shape: {primary?: string, secondary?: string}
-export def "managed-contacts create" [
+export def "create-managed-contact" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8299,7 +8299,7 @@ export def "managed-contacts create" [
 #
 # DELETE /managed/contacts/{contactId}
 # operationId: deleteManagedContact
-export def "managed-contacts delete" [
+export def "delete-managed-contact" [
   contact_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8335,7 +8335,7 @@ export def "managed-contacts delete" [
 #
 # GET /managed/contacts/{contactId}
 # operationId: getManagedContact
-export def "managed-contacts get" [
+export def "get-managed-contact" [
   contact_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8372,7 +8372,7 @@ export def "managed-contacts get" [
 # PUT /managed/contacts/{contactId}
 # operationId: updateManagedContact
 # --phone shape: {primary?: string, secondary?: string}
-export def "managed-contacts update" [
+export def "update-managed-contact" [
   contact_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8415,7 +8415,7 @@ export def "managed-contacts update" [
 #
 # GET /managed/credentials
 # operationId: getManagedCredentials
-export def "managed-credentials list" [
+export def "get-managed-credentials" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8452,7 +8452,7 @@ export def "managed-credentials list" [
 #
 # POST /managed/credentials
 # operationId: createManagedCredential
-export def "managed-credentials create" [
+export def "create-managed-credential" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8492,7 +8492,7 @@ export def "managed-credentials create" [
 #
 # GET /managed/credentials/sshkey
 # operationId: viewManagedSSHKey
-export def "managed-credentials-sshkey get-view-ssh-key" [
+export def "view-managed-ssh-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8526,7 +8526,7 @@ export def "managed-credentials-sshkey get-view-ssh-key" [
 #
 # GET /managed/credentials/{credentialId}
 # operationId: getManagedCredential
-export def "managed-credentials get" [
+export def "get-managed-credential" [
   credential_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8562,7 +8562,7 @@ export def "managed-credentials get" [
 #
 # PUT /managed/credentials/{credentialId}
 # operationId: updateManagedCredential
-export def "managed-credentials update" [
+export def "update-managed-credential" [
   credential_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8602,7 +8602,7 @@ export def "managed-credentials update" [
 #
 # POST /managed/credentials/{credentialId}/revoke
 # operationId: deleteManagedCredential
-export def "managed-credentials-revoke delete" [
+export def "delete-managed-credential" [
   credential_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8638,7 +8638,7 @@ export def "managed-credentials-revoke delete" [
 #
 # POST /managed/credentials/{credentialId}/update
 # operationId: updateManagedCredentialUsernamePassword
-export def "managed-credentials-update update-username-password" [
+export def "update-managed-credential-username-password" [
   credential_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8679,7 +8679,7 @@ export def "managed-credentials-update update-username-password" [
 #
 # GET /managed/issues
 # operationId: getManagedIssues
-export def "managed-issues list" [
+export def "get-managed-issues" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8716,7 +8716,7 @@ export def "managed-issues list" [
 #
 # GET /managed/issues/{issueId}
 # operationId: getManagedIssue
-export def "managed-issues get" [
+export def "get-managed-issue" [
   issue_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8752,7 +8752,7 @@ export def "managed-issues get" [
 #
 # GET /managed/linode-settings
 # operationId: getManagedLinodeSettings
-export def "managed-linode-settings list" [
+export def "get-managed-linode-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8789,7 +8789,7 @@ export def "managed-linode-settings list" [
 #
 # GET /managed/linode-settings/{linodeId}
 # operationId: getManagedLinodeSetting
-export def "managed-linode-settings get" [
+export def "get-managed-linode-setting" [
   linode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8826,7 +8826,7 @@ export def "managed-linode-settings get" [
 # PUT /managed/linode-settings/{linodeId}
 # operationId: updateManagedLinodeSetting
 # --ssh shape: {access?: bool, ip?: string, port?: int, user?: string}
-export def "managed-linode-settings update" [
+export def "update-managed-linode-setting" [
   linode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8866,7 +8866,7 @@ export def "managed-linode-settings update" [
 #
 # GET /managed/services
 # operationId: getManagedServices
-export def "managed-services list" [
+export def "get-managed-services" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8900,7 +8900,7 @@ export def "managed-services list" [
 #
 # POST /managed/services
 # operationId: createManagedService
-export def "managed-services create" [
+export def "create-managed-service" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8946,7 +8946,7 @@ export def "managed-services create" [
 #
 # DELETE /managed/services/{serviceId}
 # operationId: deleteManagedService
-export def "managed-services delete" [
+export def "delete-managed-service" [
   service_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8982,7 +8982,7 @@ export def "managed-services delete" [
 #
 # GET /managed/services/{serviceId}
 # operationId: getManagedService
-export def "managed-services get" [
+export def "get-managed-service" [
   service_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9018,7 +9018,7 @@ export def "managed-services get" [
 #
 # PUT /managed/services/{serviceId}
 # operationId: updateManagedService
-export def "managed-services update" [
+export def "update-managed-service" [
   service_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9066,7 +9066,7 @@ export def "managed-services update" [
 #
 # POST /managed/services/{serviceId}/disable
 # operationId: disableManagedService
-export def "managed-services-disable disable" [
+export def "disable-managed-service" [
   service_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9102,7 +9102,7 @@ export def "managed-services-disable disable" [
 #
 # POST /managed/services/{serviceId}/enable
 # operationId: enableManagedService
-export def "managed-services-enable enable" [
+export def "enable-managed-service" [
   service_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9138,7 +9138,7 @@ export def "managed-services-enable enable" [
 #
 # GET /managed/stats
 # operationId: getManagedStats
-export def "managed-stats get" [
+export def "get-managed-stats" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9172,7 +9172,7 @@ export def "managed-stats get" [
 #
 # GET /networking/firewalls
 # operationId: getFirewalls
-export def "networking-firewalls list" [
+export def "get-firewalls" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9211,7 +9211,7 @@ export def "networking-firewalls list" [
 # operationId: createFirewalls
 # --devices shape: {linodes?: list<int>}
 # --rules shape: {inbound?: list, inbound_policy?: "ACCEPT"|"DROP", outbound?: list, outbound_policy?: "ACCEPT"|"DROP"}
-export def "networking-firewalls create" [
+export def "create-firewalls" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9252,7 +9252,7 @@ export def "networking-firewalls create" [
 #
 # DELETE /networking/firewalls/{firewallId}
 # operationId: deleteFirewall
-export def "networking-firewalls delete" [
+export def "delete-firewall" [
   firewall_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9288,7 +9288,7 @@ export def "networking-firewalls delete" [
 #
 # GET /networking/firewalls/{firewallId}
 # operationId: getFirewall
-export def "networking-firewalls get" [
+export def "get-firewall" [
   firewall_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9324,7 +9324,7 @@ export def "networking-firewalls get" [
 #
 # PUT /networking/firewalls/{firewallId}
 # operationId: updateFirewall
-export def "networking-firewalls update" [
+export def "update-firewall" [
   firewall_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9366,7 +9366,7 @@ export def "networking-firewalls update" [
 #
 # GET /networking/firewalls/{firewallId}/devices
 # operationId: getFirewallDevices
-export def "networking-firewalls-devices list" [
+export def "get-firewall-devices" [
   firewall_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9405,7 +9405,7 @@ export def "networking-firewalls-devices list" [
 #
 # POST /networking/firewalls/{firewallId}/devices
 # operationId: createFirewallDevice
-export def "networking-firewalls-devices create" [
+export def "create-firewall-device" [
   firewall_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9446,7 +9446,7 @@ export def "networking-firewalls-devices create" [
 #
 # DELETE /networking/firewalls/{firewallId}/devices/{deviceId}
 # operationId: deleteFirewallDevice
-export def "networking-firewalls-devices delete" [
+export def "delete-firewall-device" [
   firewall_id: int
   device_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -9484,7 +9484,7 @@ export def "networking-firewalls-devices delete" [
 #
 # GET /networking/firewalls/{firewallId}/devices/{deviceId}
 # operationId: getFirewallDevice
-export def "networking-firewalls-devices get" [
+export def "get-firewall-device" [
   firewall_id: int
   device_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -9522,7 +9522,7 @@ export def "networking-firewalls-devices get" [
 #
 # GET /networking/firewalls/{firewallId}/rules
 # operationId: getFirewallRules
-export def "networking-firewalls-rules get" [
+export def "get-firewall-rules" [
   firewall_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9560,7 +9560,7 @@ export def "networking-firewalls-rules get" [
 # operationId: updateFirewallRules
 # --inbound item shape: {action?: "ACCEPT"|"DROP", addresses?: record, description?: string, label?: string, ports?: string, protocol?: "TCP"|"UDP"|"ICMP"|"IPENCAP"}
 # --outbound item shape: {action?: "ACCEPT"|"DROP", addresses?: record, description?: string, label?: string, ports?: string, protocol?: "TCP"|"UDP"|"ICMP"|"IPENCAP"}
-export def "networking-firewalls-rules update" [
+export def "update-firewall-rules" [
   firewall_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9603,7 +9603,7 @@ export def "networking-firewalls-rules update" [
 #
 # GET /networking/ips
 # operationId: getIPs
-export def "networking-ips get-i-ps" [
+export def "get-i-ps" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9637,7 +9637,7 @@ export def "networking-ips get-i-ps" [
 #
 # POST /networking/ips
 # operationId: allocateIP
-export def "networking-ips create-allocate" [
+export def "allocate-ip" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9678,7 +9678,7 @@ export def "networking-ips create-allocate" [
 # POST /networking/ips/assign
 # operationId: assignIPs
 # --assignments item shape: {address?: string, linode_id?: int}
-export def "networking-ips-assign assign-i-ps" [
+export def "assign-i-ps" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9717,7 +9717,7 @@ export def "networking-ips-assign assign-i-ps" [
 #
 # POST /networking/ips/share
 # operationId: shareIPs
-export def "networking-ips-share create-i-ps" [
+export def "share-i-ps" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9756,7 +9756,7 @@ export def "networking-ips-share create-i-ps" [
 #
 # GET /networking/ips/{address}
 # operationId: getIP
-export def "networking-ips get" [
+export def "get-ip" [
   address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9792,7 +9792,7 @@ export def "networking-ips get" [
 #
 # PUT /networking/ips/{address}
 # operationId: updateIP
-export def "networking-ips update" [
+export def "update-ip" [
   address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9833,7 +9833,7 @@ export def "networking-ips update" [
 # POST /networking/ipv4/assign
 # operationId: assignIPv4s
 # --assignments item shape: {address?: string, linode_id?: int}
-export def "networking-ipv4-assign assign-i-pv4s" [
+export def "assign-i-pv4s" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9872,7 +9872,7 @@ export def "networking-ipv4-assign assign-i-pv4s" [
 #
 # POST /networking/ipv4/share
 # operationId: shareIPv4s
-export def "networking-ipv4-share create-i-pv4s" [
+export def "share-i-pv4s" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9911,7 +9911,7 @@ export def "networking-ipv4-share create-i-pv4s" [
 #
 # GET /networking/ipv6/pools
 # operationId: getIPv6Pools
-export def "networking-ipv6-pools get-i-pv6" [
+export def "get-i-pv6-pools" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9948,7 +9948,7 @@ export def "networking-ipv6-pools get-i-pv6" [
 #
 # GET /networking/ipv6/ranges
 # operationId: getIPv6Ranges
-export def "networking-ipv6-ranges list" [
+export def "get-i-pv6-ranges" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9985,7 +9985,7 @@ export def "networking-ipv6-ranges list" [
 #
 # POST /networking/ipv6/ranges
 # operationId: postIPv6Range
-export def "networking-ipv6-ranges create-i-pv6" [
+export def "post-i-pv6-range" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10025,7 +10025,7 @@ export def "networking-ipv6-ranges create-i-pv6" [
 #
 # DELETE /networking/ipv6/ranges/{range}
 # operationId: deleteIPv6Range
-export def "networking-ipv6-ranges delete-i-pv6" [
+export def "delete-i-pv6-range" [
   range: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10061,7 +10061,7 @@ export def "networking-ipv6-ranges delete-i-pv6" [
 #
 # GET /networking/ipv6/ranges/{range}
 # operationId: getIPv6Range
-export def "networking-ipv6-ranges get-i-pv6" [
+export def "get-i-pv6-range" [
   range: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10097,7 +10097,7 @@ export def "networking-ipv6-ranges get-i-pv6" [
 #
 # GET /networking/vlans
 # operationId: getVLANs
-export def "networking-vlans get-vla-ns" [
+export def "get-vla-ns" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10134,7 +10134,7 @@ export def "networking-vlans get-vla-ns" [
 #
 # GET /nodebalancers
 # operationId: getNodeBalancers
-export def "nodebalancers get-node-balancers" [
+export def "get-node-balancers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10172,7 +10172,7 @@ export def "nodebalancers get-node-balancers" [
 # POST /nodebalancers
 # operationId: createNodeBalancer
 # --configs item shape: {algorithm?: "roundrobin"|"leastconn"|"source", check?: "none"|"connection"|"http"|"http_body", check_attempts?: int, check_body?: string, check_interval?: int, check_passive?: bool, check_path?: string, check_timeout?: int, cipher_suite?: "recommended"|"legacy", nodes?: list, port?: int, protocol?: "http"|"https"|"tcp", proxy_protocol?: "none"|"v1"|"v2", ssl_cert?: string, ssl_key?: string, stickiness?: "none"|"table"|"http_cookie"}
-export def "nodebalancers create-node-balancer" [
+export def "create-node-balancer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10213,7 +10213,7 @@ export def "nodebalancers create-node-balancer" [
 #
 # DELETE /nodebalancers/{nodeBalancerId}
 # operationId: deleteNodeBalancer
-export def "nodebalancers delete-node-balancer" [
+export def "delete-node-balancer" [
   node_balancer_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10249,7 +10249,7 @@ export def "nodebalancers delete-node-balancer" [
 #
 # GET /nodebalancers/{nodeBalancerId}
 # operationId: getNodeBalancer
-export def "nodebalancers get-node-balancer" [
+export def "get-node-balancer" [
   node_balancer_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10285,7 +10285,7 @@ export def "nodebalancers get-node-balancer" [
 #
 # PUT /nodebalancers/{nodeBalancerId}
 # operationId: updateNodeBalancer
-export def "nodebalancers update-node-balancer" [
+export def "update-node-balancer" [
   node_balancer_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10327,7 +10327,7 @@ export def "nodebalancers update-node-balancer" [
 #
 # GET /nodebalancers/{nodeBalancerId}/configs
 # operationId: getNodeBalancerConfigs
-export def "nodebalancers-configs list" [
+export def "get-node-balancer-configs" [
   node_balancer_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10366,7 +10366,7 @@ export def "nodebalancers-configs list" [
 #
 # POST /nodebalancers/{nodeBalancerId}/configs
 # operationId: createNodeBalancerConfig
-export def "nodebalancers-configs create-node-balancer" [
+export def "create-node-balancer-config" [
   node_balancer_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10420,7 +10420,7 @@ export def "nodebalancers-configs create-node-balancer" [
 #
 # DELETE /nodebalancers/{nodeBalancerId}/configs/{configId}
 # operationId: deleteNodeBalancerConfig
-export def "nodebalancers-configs delete-node-balancer" [
+export def "delete-node-balancer-config" [
   node_balancer_id: int
   config_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -10458,7 +10458,7 @@ export def "nodebalancers-configs delete-node-balancer" [
 #
 # GET /nodebalancers/{nodeBalancerId}/configs/{configId}
 # operationId: getNodeBalancerConfig
-export def "nodebalancers-configs get-node-balancer" [
+export def "get-node-balancer-config" [
   node_balancer_id: int
   config_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -10496,7 +10496,7 @@ export def "nodebalancers-configs get-node-balancer" [
 #
 # PUT /nodebalancers/{nodeBalancerId}/configs/{configId}
 # operationId: updateNodeBalancerConfig
-export def "nodebalancers-configs update-node-balancer" [
+export def "update-node-balancer-config" [
   node_balancer_id: int
   config_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -10552,7 +10552,7 @@ export def "nodebalancers-configs update-node-balancer" [
 #
 # GET /nodebalancers/{nodeBalancerId}/configs/{configId}/nodes
 # operationId: getNodeBalancerConfigNodes
-export def "nodebalancers-configs-nodes list" [
+export def "get-node-balancer-config-nodes" [
   node_balancer_id: int
   config_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -10593,7 +10593,7 @@ export def "nodebalancers-configs-nodes list" [
 #
 # POST /nodebalancers/{nodeBalancerId}/configs/{configId}/nodes
 # operationId: createNodeBalancerNode
-export def "nodebalancers-configs-nodes create-balancer" [
+export def "create-node-balancer-node" [
   node_balancer_id: int
   config_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -10638,7 +10638,7 @@ export def "nodebalancers-configs-nodes create-balancer" [
 #
 # DELETE /nodebalancers/{nodeBalancerId}/configs/{configId}/nodes/{nodeId}
 # operationId: deleteNodeBalancerConfigNode
-export def "nodebalancers-configs-nodes delete-balancer" [
+export def "delete-node-balancer-config-node" [
   node_balancer_id: int
   config_id: int
   node_id: int
@@ -10678,7 +10678,7 @@ export def "nodebalancers-configs-nodes delete-balancer" [
 #
 # GET /nodebalancers/{nodeBalancerId}/configs/{configId}/nodes/{nodeId}
 # operationId: getNodeBalancerNode
-export def "nodebalancers-configs-nodes get-balancer" [
+export def "get-node-balancer-node" [
   node_balancer_id: int
   config_id: int
   node_id: int
@@ -10718,7 +10718,7 @@ export def "nodebalancers-configs-nodes get-balancer" [
 #
 # PUT /nodebalancers/{nodeBalancerId}/configs/{configId}/nodes/{nodeId}
 # operationId: updateNodeBalancerNode
-export def "nodebalancers-configs-nodes update-balancer" [
+export def "update-node-balancer-node" [
   node_balancer_id: int
   config_id: int
   node_id: int
@@ -10766,7 +10766,7 @@ export def "nodebalancers-configs-nodes update-balancer" [
 # POST /nodebalancers/{nodeBalancerId}/configs/{configId}/rebuild
 # operationId: rebuildNodeBalancerConfig
 # --nodes item shape: {address?: string, id?: int, label?: string, mode?: "accept"|"reject"|"drain"|"backup", weight?: int}
-export def "nodebalancers-configs-rebuild create-node-balancer" [
+export def "rebuild-node-balancer-config" [
   node_balancer_id: int
   config_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -10822,7 +10822,7 @@ export def "nodebalancers-configs-rebuild create-node-balancer" [
 # NodeBalancer Statistics View
 #
 # GET /nodebalancers/{nodeBalancerId}/stats
-export def "nodebalancers-stats get" [
+export def "get-nodebalancers-node-balancer-id-stats" [
   node_balancer_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10858,7 +10858,7 @@ export def "nodebalancers-stats get" [
 #
 # GET /object-storage/buckets
 # operationId: getObjectStorageBuckets
-export def "object-storage-buckets get" [
+export def "get-object-storage-buckets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10892,7 +10892,7 @@ export def "object-storage-buckets get" [
 #
 # POST /object-storage/buckets
 # operationId: createObjectStorageBucket
-export def "object-storage-buckets create" [
+export def "create-object-storage-bucket" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10933,7 +10933,7 @@ export def "object-storage-buckets create" [
 #
 # GET /object-storage/buckets/{clusterId}
 # operationId: getObjectStorageBucketinCluster
-export def "object-storage-buckets get-bucketin" [
+export def "get-object-storage-bucketin-cluster" [
   cluster_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10969,7 +10969,7 @@ export def "object-storage-buckets get-bucketin" [
 #
 # DELETE /object-storage/buckets/{clusterId}/{bucket}
 # operationId: deleteObjectStorageBucket
-export def "object-storage-buckets delete" [
+export def "delete-object-storage-bucket" [
   cluster_id: string
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11007,7 +11007,7 @@ export def "object-storage-buckets delete" [
 #
 # GET /object-storage/buckets/{clusterId}/{bucket}
 # operationId: getObjectStorageBucket
-export def "object-storage-buckets get-by-cluster-id-bucket" [
+export def "get-object-storage-bucket" [
   cluster_id: string
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11045,7 +11045,7 @@ export def "object-storage-buckets get-by-cluster-id-bucket" [
 #
 # POST /object-storage/buckets/{clusterId}/{bucket}/access
 # operationId: modifyObjectStorageBucketAccess
-export def "object-storage-buckets-access create-modify" [
+export def "modify-object-storage-bucket-access" [
   cluster_id: string
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11088,7 +11088,7 @@ export def "object-storage-buckets-access create-modify" [
 #
 # PUT /object-storage/buckets/{clusterId}/{bucket}/access
 # operationId: updateObjectStorageBucketAccess
-export def "object-storage-buckets-access update" [
+export def "update-object-storage-bucket-access" [
   cluster_id: string
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11131,7 +11131,7 @@ export def "object-storage-buckets-access update" [
 #
 # GET /object-storage/buckets/{clusterId}/{bucket}/object-acl
 # operationId: viewObjectStorageBucketACL
-export def "object-storage-buckets-object-acl get-view" [
+export def "view-object-storage-bucket-acl" [
   cluster_id: string
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11171,7 +11171,7 @@ export def "object-storage-buckets-object-acl get-view" [
 #
 # PUT /object-storage/buckets/{clusterId}/{bucket}/object-acl
 # operationId: updateObjectStorageBucketACL
-export def "object-storage-buckets-object-acl update" [
+export def "update-object-storage-bucket-acl" [
   cluster_id: string
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11214,7 +11214,7 @@ export def "object-storage-buckets-object-acl update" [
 #
 # GET /object-storage/buckets/{clusterId}/{bucket}/object-list
 # operationId: getObjectStorageBucketContent
-export def "object-storage-buckets-object-list get-content" [
+export def "get-object-storage-bucket-content" [
   cluster_id: string
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11257,7 +11257,7 @@ export def "object-storage-buckets-object-list get-content" [
 #
 # POST /object-storage/buckets/{clusterId}/{bucket}/object-url
 # operationId: createObjectStorageObjectURL
-export def "object-storage-buckets-object-url create" [
+export def "create-object-storage-object-url" [
   cluster_id: string
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11302,7 +11302,7 @@ export def "object-storage-buckets-object-url create" [
 #
 # DELETE /object-storage/buckets/{clusterId}/{bucket}/ssl
 # operationId: deleteObjectStorageSSL
-export def "object-storage-buckets-ssl delete" [
+export def "delete-object-storage-ssl" [
   cluster_id: string
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11340,7 +11340,7 @@ export def "object-storage-buckets-ssl delete" [
 #
 # GET /object-storage/buckets/{clusterId}/{bucket}/ssl
 # operationId: getObjectStorageSSL
-export def "object-storage-buckets-ssl get" [
+export def "get-object-storage-ssl" [
   cluster_id: string
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11378,7 +11378,7 @@ export def "object-storage-buckets-ssl get" [
 #
 # POST /object-storage/buckets/{clusterId}/{bucket}/ssl
 # operationId: createObjectStorageSSL
-export def "object-storage-buckets-ssl create" [
+export def "create-object-storage-ssl" [
   cluster_id: string
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11421,7 +11421,7 @@ export def "object-storage-buckets-ssl create" [
 #
 # POST /object-storage/cancel
 # operationId: cancelObjectStorage
-export def "object-storage-cancel cancel" [
+export def "cancel-object-storage" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11455,7 +11455,7 @@ export def "object-storage-cancel cancel" [
 #
 # GET /object-storage/clusters
 # operationId: getObjectStorageClusters
-export def "object-storage-clusters list" [
+export def "get-object-storage-clusters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11489,7 +11489,7 @@ export def "object-storage-clusters list" [
 #
 # GET /object-storage/clusters/{clusterId}
 # operationId: getObjectStorageCluster
-export def "object-storage-clusters get" [
+export def "get-object-storage-cluster" [
   cluster_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11525,7 +11525,7 @@ export def "object-storage-clusters get" [
 #
 # GET /object-storage/keys
 # operationId: getObjectStorageKeys
-export def "object-storage-keys list" [
+export def "get-object-storage-keys" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11560,7 +11560,7 @@ export def "object-storage-keys list" [
 # POST /object-storage/keys
 # operationId: createObjectStorageKeys
 # --bucket_access item shape: {bucket_name?: string, cluster?: string, permissions?: "read_write"|"read_only"}
-export def "object-storage-keys create" [
+export def "create-object-storage-keys" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11599,7 +11599,7 @@ export def "object-storage-keys create" [
 #
 # DELETE /object-storage/keys/{keyId}
 # operationId: deleteObjectStorageKey
-export def "object-storage-keys delete" [
+export def "delete-object-storage-key" [
   key_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11635,7 +11635,7 @@ export def "object-storage-keys delete" [
 #
 # GET /object-storage/keys/{keyId}
 # operationId: getObjectStorageKey
-export def "object-storage-keys get" [
+export def "get-object-storage-key" [
   key_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11671,7 +11671,7 @@ export def "object-storage-keys get" [
 #
 # PUT /object-storage/keys/{keyId}
 # operationId: updateObjectStorageKey
-export def "object-storage-keys update" [
+export def "update-object-storage-key" [
   key_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11711,7 +11711,7 @@ export def "object-storage-keys update" [
 #
 # GET /object-storage/transfer
 # operationId: getObjectStorageTransfer
-export def "object-storage-transfer get" [
+export def "get-object-storage-transfer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11745,7 +11745,7 @@ export def "object-storage-transfer get" [
 #
 # GET /profile
 # operationId: getProfile
-export def "profile get" [
+export def "get-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11780,7 +11780,7 @@ export def "profile get" [
 # PUT /profile
 # operationId: updateProfile
 @deprecated --flag ip-whitelist-enabled
-export def "profile update" [
+export def "update-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11825,7 +11825,7 @@ export def "profile update" [
 #
 # GET /profile/apps
 # operationId: getProfileApps
-export def "profile-apps list" [
+export def "get-profile-apps" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11862,7 +11862,7 @@ export def "profile-apps list" [
 #
 # DELETE /profile/apps/{appId}
 # operationId: deleteProfileApp
-export def "profile-apps delete" [
+export def "delete-profile-app" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11898,7 +11898,7 @@ export def "profile-apps delete" [
 #
 # GET /profile/apps/{appId}
 # operationId: getProfileApp
-export def "profile-apps get" [
+export def "get-profile-app" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11934,7 +11934,7 @@ export def "profile-apps get" [
 #
 # GET /profile/devices
 # operationId: getDevices
-export def "profile-devices get" [
+export def "get-devices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11968,7 +11968,7 @@ export def "profile-devices get" [
 #
 # DELETE /profile/devices/{deviceId}
 # operationId: revokeTrustedDevice
-export def "profile-devices delete-trusted" [
+export def "revoke-trusted-device" [
   device_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12004,7 +12004,7 @@ export def "profile-devices delete-trusted" [
 #
 # GET /profile/devices/{deviceId}
 # operationId: getTrustedDevice
-export def "profile-devices get-trusted" [
+export def "get-trusted-device" [
   device_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12040,7 +12040,7 @@ export def "profile-devices get-trusted" [
 #
 # GET /profile/grants
 # operationId: getProfileGrants
-export def "profile-grants get" [
+export def "get-profile-grants" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12074,7 +12074,7 @@ export def "profile-grants get" [
 #
 # GET /profile/logins
 # operationId: getProfileLogins
-export def "profile-logins list" [
+export def "get-profile-logins" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12108,7 +12108,7 @@ export def "profile-logins list" [
 #
 # GET /profile/logins/{loginId}
 # operationId: getProfileLogin
-export def "profile-logins get" [
+export def "get-profile-login" [
   login_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12144,7 +12144,7 @@ export def "profile-logins get" [
 #
 # DELETE /profile/phone-number
 # operationId: deleteProfilePhoneNumber
-export def "profile-phone-number delete" [
+export def "delete-profile-phone-number" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12178,7 +12178,7 @@ export def "profile-phone-number delete" [
 #
 # POST /profile/phone-number
 # operationId: postProfilePhoneNumber
-export def "profile-phone-number create" [
+export def "post-profile-phone-number" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12217,7 +12217,7 @@ export def "profile-phone-number create" [
 #
 # POST /profile/phone-number/verify
 # operationId: postProfilePhoneNumberVerify
-export def "profile-phone-number-verify create" [
+export def "post-profile-phone-number-verify" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12255,7 +12255,7 @@ export def "profile-phone-number-verify create" [
 #
 # GET /profile/preferences
 # operationId: getUserPreferences
-export def "profile-preferences get-user" [
+export def "get-user-preferences" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12289,7 +12289,7 @@ export def "profile-preferences get-user" [
 #
 # PUT /profile/preferences
 # operationId: updateUserPreferences
-export def "profile-preferences update-user" [
+export def "update-user-preferences" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12327,7 +12327,7 @@ export def "profile-preferences update-user" [
 #
 # GET /profile/security-questions
 # operationId: getSecurityQuestions
-export def "profile-security-questions get" [
+export def "get-security-questions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12362,7 +12362,7 @@ export def "profile-security-questions get" [
 # POST /profile/security-questions
 # operationId: postSecurityQuestions
 # --security_questions item shape: {question_id?: int, response?: string}
-export def "profile-security-questions create" [
+export def "post-security-questions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12400,7 +12400,7 @@ export def "profile-security-questions create" [
 #
 # GET /profile/sshkeys
 # operationId: getSSHKeys
-export def "profile-sshkeys get-ssh-keys" [
+export def "get-ssh-keys" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12437,7 +12437,7 @@ export def "profile-sshkeys get-ssh-keys" [
 #
 # POST /profile/sshkeys
 # operationId: addSSHKey
-export def "profile-sshkeys create-ssh-key" [
+export def "add-ssh-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12476,7 +12476,7 @@ export def "profile-sshkeys create-ssh-key" [
 #
 # DELETE /profile/sshkeys/{sshKeyId}
 # operationId: deleteSSHKey
-export def "profile-sshkeys delete-ssh-key" [
+export def "delete-ssh-key" [
   ssh_key_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12512,7 +12512,7 @@ export def "profile-sshkeys delete-ssh-key" [
 #
 # GET /profile/sshkeys/{sshKeyId}
 # operationId: getSSHKey
-export def "profile-sshkeys get-ssh-key" [
+export def "get-ssh-key" [
   ssh_key_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12548,7 +12548,7 @@ export def "profile-sshkeys get-ssh-key" [
 #
 # PUT /profile/sshkeys/{sshKeyId}
 # operationId: updateSSHKey
-export def "profile-sshkeys update-ssh-key" [
+export def "update-ssh-key" [
   ssh_key_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12588,7 +12588,7 @@ export def "profile-sshkeys update-ssh-key" [
 #
 # POST /profile/tfa-disable
 # operationId: tfaDisable
-export def "profile-tfa-disable disable" [
+export def "tfa-disable" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12622,7 +12622,7 @@ export def "profile-tfa-disable disable" [
 #
 # POST /profile/tfa-enable
 # operationId: tfaEnable
-export def "profile-tfa-enable enable" [
+export def "tfa-enable" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12656,7 +12656,7 @@ export def "profile-tfa-enable enable" [
 #
 # POST /profile/tfa-enable-confirm
 # operationId: tfaConfirm
-export def "profile-tfa-enable-confirm confirm" [
+export def "tfa-confirm" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12694,7 +12694,7 @@ export def "profile-tfa-enable-confirm confirm" [
 #
 # GET /profile/tokens
 # operationId: getPersonalAccessTokens
-export def "profile-tokens list" [
+export def "get-personal-access-tokens" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12728,7 +12728,7 @@ export def "profile-tokens list" [
 #
 # POST /profile/tokens
 # operationId: createPersonalAccessToken
-export def "profile-tokens create-personal-access" [
+export def "create-personal-access-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12768,7 +12768,7 @@ export def "profile-tokens create-personal-access" [
 #
 # DELETE /profile/tokens/{tokenId}
 # operationId: deletePersonalAccessToken
-export def "profile-tokens delete-personal-access" [
+export def "delete-personal-access-token" [
   token_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12804,7 +12804,7 @@ export def "profile-tokens delete-personal-access" [
 #
 # GET /profile/tokens/{tokenId}
 # operationId: getPersonalAccessToken
-export def "profile-tokens get-personal-access" [
+export def "get-personal-access-token" [
   token_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12840,7 +12840,7 @@ export def "profile-tokens get-personal-access" [
 #
 # PUT /profile/tokens/{tokenId}
 # operationId: updatePersonalAccessToken
-export def "profile-tokens update-personal-access" [
+export def "update-personal-access-token" [
   token_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12880,7 +12880,7 @@ export def "profile-tokens update-personal-access" [
 #
 # GET /regions
 # operationId: getRegions
-export def "regions list" [
+export def "get-regions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12914,7 +12914,7 @@ export def "regions list" [
 #
 # GET /regions/{regionId}
 # operationId: getRegion
-export def "regions get" [
+export def "get-region" [
   region_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12950,7 +12950,7 @@ export def "regions get" [
 #
 # GET /support/tickets
 # operationId: getTickets
-export def "support-tickets list" [
+export def "get-tickets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12987,7 +12987,7 @@ export def "support-tickets list" [
 #
 # POST /support/tickets
 # operationId: createTicket
-export def "support-tickets create" [
+export def "create-ticket" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13037,7 +13037,7 @@ export def "support-tickets create" [
 #
 # GET /support/tickets/{ticketId}
 # operationId: getTicket
-export def "support-tickets get" [
+export def "get-ticket" [
   ticket_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13073,7 +13073,7 @@ export def "support-tickets get" [
 #
 # POST /support/tickets/{ticketId}/attachments
 # operationId: createTicketAttachment
-export def "support-tickets-attachments create" [
+export def "create-ticket-attachment" [
   ticket_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13115,7 +13115,7 @@ export def "support-tickets-attachments create" [
 #
 # POST /support/tickets/{ticketId}/close
 # operationId: closeTicket
-export def "support-tickets-close close" [
+export def "close-ticket" [
   ticket_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13151,7 +13151,7 @@ export def "support-tickets-close close" [
 #
 # GET /support/tickets/{ticketId}/replies
 # operationId: getTicketReplies
-export def "support-tickets-replies get" [
+export def "get-ticket-replies" [
   ticket_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13190,7 +13190,7 @@ export def "support-tickets-replies get" [
 #
 # POST /support/tickets/{ticketId}/replies
 # operationId: createTicketReply
-export def "support-tickets-replies create-reply" [
+export def "create-ticket-reply" [
   ticket_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13230,7 +13230,7 @@ export def "support-tickets-replies create-reply" [
 #
 # GET /tags
 # operationId: getTags
-export def "tags get" [
+export def "get-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13267,7 +13267,7 @@ export def "tags get" [
 #
 # POST /tags
 # operationId: createTag
-export def "tags create" [
+export def "create-tag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13309,7 +13309,7 @@ export def "tags create" [
 #
 # DELETE /tags/{label}
 # operationId: deleteTag
-export def "tags delete" [
+export def "delete-tag" [
   label: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13345,7 +13345,7 @@ export def "tags delete" [
 #
 # GET /tags/{label}
 # operationId: getTaggedObjects
-export def "tags get-tagged-objects" [
+export def "get-tagged-objects" [
   label: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13384,7 +13384,7 @@ export def "tags get-tagged-objects" [
 #
 # GET /volumes
 # operationId: getVolumes
-export def "volumes list" [
+export def "get-volumes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13421,7 +13421,7 @@ export def "volumes list" [
 #
 # POST /volumes
 # operationId: createVolume
-export def "volumes create" [
+export def "create-volume" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13464,7 +13464,7 @@ export def "volumes create" [
 #
 # DELETE /volumes/{volumeId}
 # operationId: deleteVolume
-export def "volumes delete" [
+export def "delete-volume" [
   volume_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13500,7 +13500,7 @@ export def "volumes delete" [
 #
 # GET /volumes/{volumeId}
 # operationId: getVolume
-export def "volumes get" [
+export def "get-volume" [
   volume_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13539,7 +13539,7 @@ export def "volumes get" [
 #
 # PUT /volumes/{volumeId}
 # operationId: updateVolume
-export def "volumes update" [
+export def "update-volume" [
   volume_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13580,7 +13580,7 @@ export def "volumes update" [
 #
 # POST /volumes/{volumeId}/attach
 # operationId: attachVolume
-export def "volumes-attach attach" [
+export def "attach-volume" [
   volume_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13622,7 +13622,7 @@ export def "volumes-attach attach" [
 #
 # POST /volumes/{volumeId}/clone
 # operationId: cloneVolume
-export def "volumes-clone clone" [
+export def "clone-volume" [
   volume_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13662,7 +13662,7 @@ export def "volumes-clone clone" [
 #
 # POST /volumes/{volumeId}/detach
 # operationId: detachVolume
-export def "volumes-detach create" [
+export def "detach-volume" [
   volume_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13698,7 +13698,7 @@ export def "volumes-detach create" [
 #
 # POST /volumes/{volumeId}/resize
 # operationId: resizeVolume
-export def "volumes-resize resize" [
+export def "resize-volume" [
   volume_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

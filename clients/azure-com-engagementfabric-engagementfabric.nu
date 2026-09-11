@@ -124,7 +124,7 @@ def rank-completer [] { ["PrimaryKey" "SecondaryKey"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-engagement-fabric-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -148,7 +148,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.EngagementFabric/operations
 # operationId: Operations_List
-export def "providers-microsoft-engagement-fabric-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,7 +184,7 @@ export def "providers-microsoft-engagement-fabric-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.EngagementFabric/Accounts
 # operationId: Accounts_List
-export def "subscriptions-providers-microsoft-engagement-fabric-accounts list" [
+export def "accounts-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -222,7 +222,7 @@ export def "subscriptions-providers-microsoft-engagement-fabric-accounts list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.EngagementFabric/skus
 # operationId: SKUs_List
-export def "subscriptions-providers-microsoft-engagement-fabric-skus list-sk-us" [
+export def "sk-us-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -260,7 +260,7 @@ export def "subscriptions-providers-microsoft-engagement-fabric-skus list-sk-us"
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EngagementFabric/Accounts
 # operationId: Accounts_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-engagement-fabric-accounts list" [
+export def "accounts-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -300,7 +300,7 @@ export def "subscriptions-resource-groups-providers-microsoft-engagement-fabric-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EngagementFabric/Accounts/{accountName}
 # operationId: Accounts_Delete
-export def "subscriptions-resource-groups-providers-microsoft-engagement-fabric-accounts delete" [
+export def "accounts-delete" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -342,7 +342,7 @@ export def "subscriptions-resource-groups-providers-microsoft-engagement-fabric-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EngagementFabric/Accounts/{accountName}
 # operationId: Accounts_Get
-export def "subscriptions-resource-groups-providers-microsoft-engagement-fabric-accounts get" [
+export def "accounts-get" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -384,7 +384,7 @@ export def "subscriptions-resource-groups-providers-microsoft-engagement-fabric-
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EngagementFabric/Accounts/{accountName}
 # operationId: Accounts_Update
-export def "subscriptions-resource-groups-providers-microsoft-engagement-fabric-accounts update" [
+export def "accounts-update" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -431,7 +431,7 @@ export def "subscriptions-resource-groups-providers-microsoft-engagement-fabric-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EngagementFabric/Accounts/{accountName}
 # operationId: Accounts_CreateOrUpdate
 # --sku shape: {name: string, tier?: string}
-export def "subscriptions-resource-groups-providers-microsoft-engagement-fabric-accounts create-or-update" [
+export def "accounts-create-or-update" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -479,7 +479,7 @@ export def "subscriptions-resource-groups-providers-microsoft-engagement-fabric-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EngagementFabric/Accounts/{accountName}/Channels
 # operationId: Channels_ListByAccount
-export def "subscriptions-resource-groups-providers-microsoft-engagement-fabric-accounts-channels list" [
+export def "channels-list-by-account" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -521,7 +521,7 @@ export def "subscriptions-resource-groups-providers-microsoft-engagement-fabric-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EngagementFabric/Accounts/{accountName}/Channels/{channelName}
 # operationId: Channels_Delete
-export def "subscriptions-resource-groups-providers-microsoft-engagement-fabric-accounts-channels delete" [
+export def "channels-delete" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -565,7 +565,7 @@ export def "subscriptions-resource-groups-providers-microsoft-engagement-fabric-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EngagementFabric/Accounts/{accountName}/Channels/{channelName}
 # operationId: Channels_Get
-export def "subscriptions-resource-groups-providers-microsoft-engagement-fabric-accounts-channels get" [
+export def "channels-get" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -610,7 +610,7 @@ export def "subscriptions-resource-groups-providers-microsoft-engagement-fabric-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EngagementFabric/Accounts/{accountName}/Channels/{channelName}
 # operationId: Channels_CreateOrUpdate
 # --properties shape: {channelFunctions?: list<string>, channelType: string, credentials?: record}
-export def "subscriptions-resource-groups-providers-microsoft-engagement-fabric-accounts-channels create-or-update" [
+export def "channels-create-or-update" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -658,7 +658,7 @@ export def "subscriptions-resource-groups-providers-microsoft-engagement-fabric-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EngagementFabric/Accounts/{accountName}/listChannelTypes
 # operationId: Accounts_ListChannelTypes
-export def "subscriptions-resource-groups-providers-microsoft-engagement-fabric-accounts-list-channel-types list" [
+export def "accounts-list-channel-types" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -700,7 +700,7 @@ export def "subscriptions-resource-groups-providers-microsoft-engagement-fabric-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EngagementFabric/Accounts/{accountName}/listKeys
 # operationId: Accounts_ListKeys
-export def "subscriptions-resource-groups-providers-microsoft-engagement-fabric-accounts-list-keys list" [
+export def "accounts-list-keys" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -742,7 +742,7 @@ export def "subscriptions-resource-groups-providers-microsoft-engagement-fabric-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EngagementFabric/Accounts/{accountName}/regenerateKey
 # operationId: Accounts_RegenerateKey
-export def "subscriptions-resource-groups-providers-microsoft-engagement-fabric-accounts-regenerate-key create" [
+export def "accounts-regenerate-key" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -789,7 +789,7 @@ export def "subscriptions-resource-groups-providers-microsoft-engagement-fabric-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EngagementFabric/checkNameAvailability
 # operationId: CheckNameAvailability
-export def "subscriptions-resource-groups-providers-microsoft-engagement-fabric-check-name-availability check" [
+export def "check-name-availability" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL

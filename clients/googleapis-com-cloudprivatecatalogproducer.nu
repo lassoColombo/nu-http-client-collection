@@ -129,7 +129,7 @@ def xgafv-completer [] { ["1" "2"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta1-catalogs list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cloudprivatecatalogproducer-catalogs-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -153,7 +153,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1beta1/catalogs
 # operationId: cloudprivatecatalogproducer.catalogs.list
-export def "v1beta1-catalogs list" [
+export def "cloudprivatecatalogproducer-catalogs-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -202,7 +202,7 @@ export def "v1beta1-catalogs list" [
 #
 # POST /v1beta1/catalogs
 # operationId: cloudprivatecatalogproducer.catalogs.create
-export def "v1beta1-catalogs create" [
+export def "cloudprivatecatalogproducer-catalogs-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -257,7 +257,7 @@ export def "v1beta1-catalogs create" [
 #
 # GET /v1beta1/operations
 # operationId: cloudprivatecatalogproducer.operations.list
-export def "v1beta1-operations list" [
+export def "cloudprivatecatalogproducer-operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -307,7 +307,7 @@ export def "v1beta1-operations list" [
 #
 # DELETE /v1beta1/{name}
 # operationId: cloudprivatecatalogproducer.catalogs.products.versions.delete
-export def "v1beta1 delete" [
+export def "cloudprivatecatalogproducer-catalogs-products-versions-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -356,7 +356,7 @@ export def "v1beta1 delete" [
 #
 # GET /v1beta1/{name}
 # operationId: cloudprivatecatalogproducer.catalogs.products.versions.get
-export def "v1beta1 get" [
+export def "cloudprivatecatalogproducer-catalogs-products-versions-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -404,7 +404,7 @@ export def "v1beta1 get" [
 #
 # PATCH /v1beta1/{name}
 # operationId: cloudprivatecatalogproducer.catalogs.products.versions.patch
-export def "v1beta1 update" [
+export def "cloudprivatecatalogproducer-catalogs-products-versions-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -462,7 +462,7 @@ export def "v1beta1 update" [
 #
 # POST /v1beta1/{name}:cancel
 # operationId: cloudprivatecatalogproducer.operations.cancel
-export def "v1beta1 cancel" [
+export def "cloudprivatecatalogproducer-operations-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -514,7 +514,7 @@ export def "v1beta1 cancel" [
 #
 # POST /v1beta1/{name}:copy
 # operationId: cloudprivatecatalogproducer.catalogs.products.copy
-export def "v1beta1 copy" [
+export def "cloudprivatecatalogproducer-catalogs-products-copy" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -566,7 +566,7 @@ export def "v1beta1 copy" [
 #
 # POST /v1beta1/{name}:undelete
 # operationId: cloudprivatecatalogproducer.catalogs.undelete
-export def "v1beta1 create-undelete" [
+export def "cloudprivatecatalogproducer-catalogs-undelete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -618,7 +618,7 @@ export def "v1beta1 create-undelete" [
 #
 # GET /v1beta1/{parent}/associations
 # operationId: cloudprivatecatalogproducer.catalogs.associations.list
-export def "v1beta1-associations list" [
+export def "cloudprivatecatalogproducer-catalogs-associations-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -669,7 +669,7 @@ export def "v1beta1-associations list" [
 # POST /v1beta1/{parent}/associations
 # operationId: cloudprivatecatalogproducer.catalogs.associations.create
 # --association shape: {createTime?: string, name?: string, resource?: string}
-export def "v1beta1-associations create" [
+export def "cloudprivatecatalogproducer-catalogs-associations-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -721,7 +721,7 @@ export def "v1beta1-associations create" [
 #
 # GET /v1beta1/{parent}/products
 # operationId: cloudprivatecatalogproducer.catalogs.products.list
-export def "v1beta1-products list" [
+export def "cloudprivatecatalogproducer-catalogs-products-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -772,7 +772,7 @@ export def "v1beta1-products list" [
 #
 # POST /v1beta1/{parent}/products
 # operationId: cloudprivatecatalogproducer.catalogs.products.create
-export def "v1beta1-products create" [
+export def "cloudprivatecatalogproducer-catalogs-products-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -829,7 +829,7 @@ export def "v1beta1-products create" [
 #
 # GET /v1beta1/{parent}/versions
 # operationId: cloudprivatecatalogproducer.catalogs.products.versions.list
-export def "v1beta1-versions list" [
+export def "cloudprivatecatalogproducer-catalogs-products-versions-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -879,7 +879,7 @@ export def "v1beta1-versions list" [
 #
 # POST /v1beta1/{parent}/versions
 # operationId: cloudprivatecatalogproducer.catalogs.products.versions.create
-export def "v1beta1-versions create" [
+export def "cloudprivatecatalogproducer-catalogs-products-versions-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -936,7 +936,7 @@ export def "v1beta1-versions create" [
 #
 # POST /v1beta1/{product}/icons:upload
 # operationId: cloudprivatecatalogproducer.catalogs.products.icons.upload
-export def "v1beta1-icons-upload upload" [
+export def "cloudprivatecatalogproducer-catalogs-products-icons-upload" [
   product: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -988,7 +988,7 @@ export def "v1beta1-icons-upload upload" [
 #
 # GET /v1beta1/{resource}:getIamPolicy
 # operationId: cloudprivatecatalogproducer.catalogs.getIamPolicy
-export def "v1beta1 get-iam-policy" [
+export def "cloudprivatecatalogproducer-catalogs-get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1038,7 +1038,7 @@ export def "v1beta1 get-iam-policy" [
 # POST /v1beta1/{resource}:setIamPolicy
 # operationId: cloudprivatecatalogproducer.catalogs.setIamPolicy
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
-export def "v1beta1 update-iam-policy" [
+export def "cloudprivatecatalogproducer-catalogs-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1091,7 +1091,7 @@ export def "v1beta1 update-iam-policy" [
 #
 # POST /v1beta1/{resource}:testIamPermissions
 # operationId: cloudprivatecatalogproducer.catalogs.testIamPermissions
-export def "v1beta1 test-iam-permissions" [
+export def "cloudprivatecatalogproducer-catalogs-test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

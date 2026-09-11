@@ -122,7 +122,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-network-virtual-networks list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "virtual-networks-list-all" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/virtualNetworks
 # operationId: VirtualNetworks_ListAll
-export def "subscriptions-providers-microsoft-network-virtual-networks list" [
+export def "virtual-networks-list-all" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -184,7 +184,7 @@ export def "subscriptions-providers-microsoft-network-virtual-networks list" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworks
 # operationId: VirtualNetworks_List
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks list" [
+export def "virtual-networks-list" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -224,7 +224,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworks/{virtualNetworkName}
 # operationId: VirtualNetworks_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks delete" [
+export def "virtual-networks-delete" [
   subscription_id: string
   resource_group_name: string
   virtual_network_name: string
@@ -266,7 +266,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworks/{virtualNetworkName}
 # operationId: VirtualNetworks_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks get" [
+export def "virtual-networks-get" [
   subscription_id: string
   resource_group_name: string
   virtual_network_name: string
@@ -309,7 +309,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworks/{virtualNetworkName}
 # operationId: VirtualNetworks_UpdateTags
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks update-tags" [
+export def "virtual-networks-update-tags" [
   subscription_id: string
   resource_group_name: string
   virtual_network_name: string
@@ -356,7 +356,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworks/{virtualNetworkName}
 # operationId: VirtualNetworks_CreateOrUpdate
 # --properties shape: {addressSpace?: any, bgpCommunities?: any, ddosProtectionPlan?: any, dhcpOptions?: any, enableDdosProtection?: bool, enableVmProtection?: bool, resourceGuid?: string, subnets?: list, virtualNetworkPeerings?: list}
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks create-or-update" [
+export def "virtual-networks-create-or-update" [
   subscription_id: string
   resource_group_name: string
   virtual_network_name: string
@@ -406,7 +406,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworks/{virtualNetworkName}/CheckIPAddressAvailability
 # operationId: VirtualNetworks_CheckIPAddressAvailability
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks-check-ip-address-availability check" [
+export def "virtual-networks-check-ip-address-availability" [
   subscription_id: string
   resource_group_name: string
   virtual_network_name: string
@@ -449,7 +449,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworks/{virtualNetworkName}/subnets
 # operationId: Subnets_List
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks-subnets list" [
+export def "subnets-list" [
   subscription_id: string
   resource_group_name: string
   virtual_network_name: string
@@ -491,7 +491,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworks/{virtualNetworkName}/subnets/{subnetName}
 # operationId: Subnets_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks-subnets delete" [
+export def "subnets-delete" [
   subscription_id: string
   resource_group_name: string
   virtual_network_name: string
@@ -535,7 +535,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworks/{virtualNetworkName}/subnets/{subnetName}
 # operationId: Subnets_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks-subnets get" [
+export def "subnets-get" [
   subscription_id: string
   resource_group_name: string
   virtual_network_name: string
@@ -581,7 +581,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworks/{virtualNetworkName}/subnets/{subnetName}
 # operationId: Subnets_CreateOrUpdate
 # --properties shape: {addressPrefix?: string, addressPrefixes?: list<string>, delegations?: list, natGateway?: any, networkSecurityGroup?: any, privateEndpointNetworkPolicies?: string, privateLinkServiceNetworkPolicies?: string, resourceNavigationLinks?: list, routeTable?: any, serviceAssociationLinks?: list, serviceEndpointPolicies?: list, serviceEndpoints?: list}
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks-subnets create-or-update" [
+export def "subnets-create-or-update" [
   subscription_id: string
   resource_group_name: string
   virtual_network_name: string
@@ -633,7 +633,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworks/{virtualNetworkName}/subnets/{subnetName}/PrepareNetworkPolicies
 # operationId: Subnets_PrepareNetworkPolicies
 # --networkIntentPolicyConfigurations item shape: {networkIntentPolicyName?: string, sourceNetworkIntentPolicy?: any}
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks-subnets-prepare-network-policies create" [
+export def "subnets-prepare-network-policies" [
   subscription_id: string
   resource_group_name: string
   virtual_network_name: string
@@ -682,7 +682,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworks/{virtualNetworkName}/subnets/{subnetName}/ResourceNavigationLinks
 # operationId: ResourceNavigationLinks_List
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks-subnets-resource-navigation-links list" [
+export def "resource-navigation-links-list" [
   subscription_id: string
   resource_group_name: string
   virtual_network_name: string
@@ -726,7 +726,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworks/{virtualNetworkName}/subnets/{subnetName}/ServiceAssociationLinks
 # operationId: ServiceAssociationLinks_List
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks-subnets-service-association-links list" [
+export def "service-association-links-list" [
   subscription_id: string
   resource_group_name: string
   virtual_network_name: string
@@ -770,7 +770,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworks/{virtualNetworkName}/subnets/{subnetName}/UnprepareNetworkPolicies
 # operationId: Subnets_UnprepareNetworkPolicies
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks-subnets-unprepare-network-policies create" [
+export def "subnets-unprepare-network-policies" [
   subscription_id: string
   resource_group_name: string
   virtual_network_name: string
@@ -818,7 +818,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworks/{virtualNetworkName}/usages
 # operationId: VirtualNetworks_ListUsage
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks-usages list" [
+export def "virtual-networks-list-usage" [
   subscription_id: string
   resource_group_name: string
   virtual_network_name: string
@@ -860,7 +860,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworks/{virtualNetworkName}/virtualNetworkPeerings
 # operationId: VirtualNetworkPeerings_List
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks-virtual-network-peerings list" [
+export def "virtual-network-peerings-list" [
   subscription_id: string
   resource_group_name: string
   virtual_network_name: string
@@ -902,7 +902,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworks/{virtualNetworkName}/virtualNetworkPeerings/{virtualNetworkPeeringName}
 # operationId: VirtualNetworkPeerings_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks-virtual-network-peerings delete" [
+export def "virtual-network-peerings-delete" [
   subscription_id: string
   resource_group_name: string
   virtual_network_name: string
@@ -946,7 +946,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworks/{virtualNetworkName}/virtualNetworkPeerings/{virtualNetworkPeeringName}
 # operationId: VirtualNetworkPeerings_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks-virtual-network-peerings get" [
+export def "virtual-network-peerings-get" [
   subscription_id: string
   resource_group_name: string
   virtual_network_name: string
@@ -991,7 +991,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworks/{virtualNetworkName}/virtualNetworkPeerings/{virtualNetworkPeeringName}
 # operationId: VirtualNetworkPeerings_CreateOrUpdate
 # --properties shape: {allowForwardedTraffic?: bool, allowGatewayTransit?: bool, allowVirtualNetworkAccess?: bool, peeringState?: "Initiated"|"Connected"|"Disconnected", remoteAddressSpace?: any, remoteVirtualNetwork?: any, useRemoteGateways?: bool}
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks-virtual-network-peerings create-or-update" [
+export def "virtual-network-peerings-create-or-update" [
   subscription_id: string
   resource_group_name: string
   virtual_network_name: string

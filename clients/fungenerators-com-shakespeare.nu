@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["x-fungenerators-api-secret"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "shakespeare-generate-insult get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-shakespeare-generate-insult" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -121,7 +121,7 @@ export def commands []: nothing -> table {
 # Generate random Shakespeare style insults.
 #
 # GET /shakespeare/generate/insult
-export def "shakespeare-generate-insult get" [
+export def "get-shakespeare-generate-insult" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -156,7 +156,7 @@ export def "shakespeare-generate-insult get" [
 # Generate Shakespeare lorem ipsum.
 #
 # GET /shakespeare/generate/lorem-ipsum
-export def "shakespeare-generate-lorem-ipsum get" [
+export def "get-shakespeare-generate-lorem-ipsum" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -192,7 +192,7 @@ export def "shakespeare-generate-lorem-ipsum get" [
 # Generate random Shakespearen names.
 #
 # GET /shakespeare/generate/name
-export def "shakespeare-generate-name get" [
+export def "get-shakespeare-generate-name" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -228,7 +228,7 @@ export def "shakespeare-generate-name get" [
 # Get a random Shakespeare quote.
 #
 # GET /shakespeare/quote
-export def "shakespeare-quote get" [
+export def "get-shakespeare-quote" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -261,7 +261,7 @@ export def "shakespeare-quote get" [
 # Translate from English to Shakespeare English.
 #
 # GET /shakespeare/translate
-export def "shakespeare-translate get" [
+export def "get-shakespeare-translate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

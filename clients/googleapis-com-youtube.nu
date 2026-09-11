@@ -154,7 +154,7 @@ def rating-completer [] { ["dislike" "like" "none"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "youtube-abuse-reports create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "youtube-abuse-reports-insert" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -181,7 +181,7 @@ export def commands []: nothing -> table {
 # --abuseTypes item shape: {id?: string}
 # --relatedEntities item shape: {entity?: record}
 # --subject shape: {id?: string, typeId?: string, url?: string}
-export def "youtube-abuse-reports create" [
+export def "youtube-abuse-reports-insert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -235,7 +235,7 @@ export def "youtube-abuse-reports create" [
 #
 # GET /youtube/v3/activities
 # operationId: youtube.activities.list
-export def "youtube-activities list" [
+export def "youtube-activities-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -290,7 +290,7 @@ export def "youtube-activities list" [
 #
 # DELETE /youtube/v3/captions
 # operationId: youtube.captions.delete
-export def "youtube-captions delete" [
+export def "youtube-captions-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -339,7 +339,7 @@ export def "youtube-captions delete" [
 #
 # GET /youtube/v3/captions
 # operationId: youtube.captions.list
-export def "youtube-captions list" [
+export def "youtube-captions-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -390,7 +390,7 @@ export def "youtube-captions list" [
 #
 # POST /youtube/v3/captions
 # operationId: youtube.captions.insert
-export def "youtube-captions create" [
+export def "youtube-captions-insert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -444,7 +444,7 @@ export def "youtube-captions create" [
 #
 # PUT /youtube/v3/captions
 # operationId: youtube.captions.update
-export def "youtube-captions update" [
+export def "youtube-captions-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -498,7 +498,7 @@ export def "youtube-captions update" [
 #
 # GET /youtube/v3/captions/{id}
 # operationId: youtube.captions.download
-export def "youtube-captions download" [
+export def "youtube-captions-download" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -550,7 +550,7 @@ export def "youtube-captions download" [
 #
 # POST /youtube/v3/channelBanners/insert
 # operationId: youtube.channelBanners.insert
-export def "youtube-channel-banners-insert create" [
+export def "youtube-channel-banners-insert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -603,7 +603,7 @@ export def "youtube-channel-banners-insert create" [
 #
 # DELETE /youtube/v3/channelSections
 # operationId: youtube.channelSections.delete
-export def "youtube-channel-sections delete" [
+export def "youtube-channel-sections-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -651,7 +651,7 @@ export def "youtube-channel-sections delete" [
 #
 # GET /youtube/v3/channelSections
 # operationId: youtube.channelSections.list
-export def "youtube-channel-sections list" [
+export def "youtube-channel-sections-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -706,7 +706,7 @@ export def "youtube-channel-sections list" [
 # --contentDetails shape: {channels?: list<string>, playlists?: list<string>}
 # --snippet shape: {channelId?: string, defaultLanguage?: string, localized?: record, position?: int, style?: "channelsectionStyleUnspecified"|"horizontalRow"|"verticalList", title?: string, type?: "channelsectionTypeUndefined"|"singlePlaylist"|"multiplePlaylists"|"popularUploads"|"recentUploads"|"likes"|"allPlaylists"|"likedPlaylists"|"recentPosts"|"recentActivity"|"liveEvents"|"upcomingEvents"|"completedEvents"|"multipleChannels"|"postedVideos"|"postedPlaylists"|"subscriptions"}
 # --targeting shape: {countries?: list<string>, languages?: list<string>, regions?: list<string>}
-export def "youtube-channel-sections create" [
+export def "youtube-channel-sections-insert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -768,7 +768,7 @@ export def "youtube-channel-sections create" [
 # --contentDetails shape: {channels?: list<string>, playlists?: list<string>}
 # --snippet shape: {channelId?: string, defaultLanguage?: string, localized?: record, position?: int, style?: "channelsectionStyleUnspecified"|"horizontalRow"|"verticalList", title?: string, type?: "channelsectionTypeUndefined"|"singlePlaylist"|"multiplePlaylists"|"popularUploads"|"recentUploads"|"likes"|"allPlaylists"|"likedPlaylists"|"recentPosts"|"recentActivity"|"liveEvents"|"upcomingEvents"|"completedEvents"|"multipleChannels"|"postedVideos"|"postedPlaylists"|"subscriptions"}
 # --targeting shape: {countries?: list<string>, languages?: list<string>, regions?: list<string>}
-export def "youtube-channel-sections update" [
+export def "youtube-channel-sections-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -826,7 +826,7 @@ export def "youtube-channel-sections update" [
 #
 # GET /youtube/v3/channels
 # operationId: youtube.channels.list
-export def "youtube-channels list" [
+export def "youtube-channels-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -892,7 +892,7 @@ export def "youtube-channels list" [
 # --statistics shape: {commentCount?: string, hiddenSubscriberCount?: bool, subscriberCount?: string, videoCount?: string, viewCount?: string}
 # --status shape: {isLinked?: bool, longUploadsStatus?: "longUploadsUnspecified"|"allowed"|"eligible"|"disallowed", madeForKids?: bool, privacyStatus?: "public"|"unlisted"|"private", selfDeclaredMadeForKids?: bool}
 # --topicDetails shape: {topicCategories?: list<string>, topicIds?: list<string>}
-export def "youtube-channels update" [
+export def "youtube-channels-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -956,7 +956,7 @@ export def "youtube-channels update" [
 #
 # GET /youtube/v3/commentThreads
 # operationId: youtube.commentThreads.list
-export def "youtube-comment-threads list" [
+export def "youtube-comment-threads-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1015,7 +1015,7 @@ export def "youtube-comment-threads list" [
 # operationId: youtube.commentThreads.insert
 # --replies shape: {comments?: list}
 # --snippet shape: {canReply?: bool, channelId?: string, isPublic?: bool, topLevelComment?: record, totalReplyCount?: int, videoId?: string}
-export def "youtube-comment-threads create" [
+export def "youtube-comment-threads-insert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1072,7 +1072,7 @@ export def "youtube-comment-threads create" [
 # operationId: youtube.youtube.v3.updateCommentThreads
 # --replies shape: {comments?: list}
 # --snippet shape: {canReply?: bool, channelId?: string, isPublic?: bool, topLevelComment?: record, totalReplyCount?: int, videoId?: string}
-export def "youtube-comment-threads update" [
+export def "youtube-youtube-v3-update-comment-threads" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1127,7 +1127,7 @@ export def "youtube-comment-threads update" [
 #
 # DELETE /youtube/v3/comments
 # operationId: youtube.comments.delete
-export def "youtube-comments delete" [
+export def "youtube-comments-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1174,7 +1174,7 @@ export def "youtube-comments delete" [
 #
 # GET /youtube/v3/comments
 # operationId: youtube.comments.list
-export def "youtube-comments list" [
+export def "youtube-comments-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1227,7 +1227,7 @@ export def "youtube-comments list" [
 # POST /youtube/v3/comments
 # operationId: youtube.comments.insert
 # --snippet shape: {authorChannelId?: record, authorChannelUrl?: string, authorDisplayName?: string, authorProfileImageUrl?: string, canRate?: bool, channelId?: string, likeCount?: int, moderationStatus?: "published"|"heldForReview"|"likelySpam"|"rejected", parentId?: string, publishedAt?: string, textDisplay?: string, textOriginal?: string, updatedAt?: string, videoId?: string, viewerRating?: "none"|"like"|"dislike"}
-export def "youtube-comments create" [
+export def "youtube-comments-insert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1282,7 +1282,7 @@ export def "youtube-comments create" [
 # PUT /youtube/v3/comments
 # operationId: youtube.comments.update
 # --snippet shape: {authorChannelId?: record, authorChannelUrl?: string, authorDisplayName?: string, authorProfileImageUrl?: string, canRate?: bool, channelId?: string, likeCount?: int, moderationStatus?: "published"|"heldForReview"|"likelySpam"|"rejected", parentId?: string, publishedAt?: string, textDisplay?: string, textOriginal?: string, updatedAt?: string, videoId?: string, viewerRating?: "none"|"like"|"dislike"}
-export def "youtube-comments update" [
+export def "youtube-comments-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1336,7 +1336,7 @@ export def "youtube-comments update" [
 #
 # POST /youtube/v3/comments/markAsSpam
 # operationId: youtube.comments.markAsSpam
-export def "youtube-comments-mark-as-spam create" [
+export def "youtube-comments-mark-as-spam" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1383,7 +1383,7 @@ export def "youtube-comments-mark-as-spam create" [
 #
 # POST /youtube/v3/comments/setModerationStatus
 # operationId: youtube.comments.setModerationStatus
-export def "youtube-comments-set-moderation-status update" [
+export def "youtube-comments-set-moderation-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1432,7 +1432,7 @@ export def "youtube-comments-set-moderation-status update" [
 #
 # GET /youtube/v3/i18nLanguages
 # operationId: youtube.i18nLanguages.list
-export def "youtube-i18n-languages list" [
+export def "youtube-i18n-languages-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1480,7 +1480,7 @@ export def "youtube-i18n-languages list" [
 #
 # GET /youtube/v3/i18nRegions
 # operationId: youtube.i18nRegions.list
-export def "youtube-i18n-regions list" [
+export def "youtube-i18n-regions-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1528,7 +1528,7 @@ export def "youtube-i18n-regions list" [
 #
 # DELETE /youtube/v3/liveBroadcasts
 # operationId: youtube.liveBroadcasts.delete
-export def "youtube-live-broadcasts delete" [
+export def "youtube-live-broadcasts-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1577,7 +1577,7 @@ export def "youtube-live-broadcasts delete" [
 #
 # GET /youtube/v3/liveBroadcasts
 # operationId: youtube.liveBroadcasts.list
-export def "youtube-live-broadcasts list" [
+export def "youtube-live-broadcasts-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1636,7 +1636,7 @@ export def "youtube-live-broadcasts list" [
 # --snippet shape: {actualEndTime?: string, actualStartTime?: string, channelId?: string, description?: string, isDefaultBroadcast?: bool, liveChatId?: string, publishedAt?: string, scheduledEndTime?: string, scheduledStartTime?: string, thumbnails?: record, title?: string}
 # --statistics shape: {concurrentViewers?: string}
 # --status shape: {lifeCycleStatus?: "lifeCycleStatusUnspecified"|"created"|"ready"|"testing"|"live"|"complete"|"revoked"|"testStarting"|"liveStarting", liveBroadcastPriority?: "liveBroadcastPriorityUnspecified"|"low"|"normal"|"high", madeForKids?: bool, privacyStatus?: "public"|"unlisted"|"private", recordingStatus?: "liveBroadcastRecordingStatusUnspecified"|"notRecording"|"recording"|"recorded", selfDeclaredMadeForKids?: bool}
-export def "youtube-live-broadcasts create" [
+export def "youtube-live-broadcasts-insert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1699,7 +1699,7 @@ export def "youtube-live-broadcasts create" [
 # --snippet shape: {actualEndTime?: string, actualStartTime?: string, channelId?: string, description?: string, isDefaultBroadcast?: bool, liveChatId?: string, publishedAt?: string, scheduledEndTime?: string, scheduledStartTime?: string, thumbnails?: record, title?: string}
 # --statistics shape: {concurrentViewers?: string}
 # --status shape: {lifeCycleStatus?: "lifeCycleStatusUnspecified"|"created"|"ready"|"testing"|"live"|"complete"|"revoked"|"testStarting"|"liveStarting", liveBroadcastPriority?: "liveBroadcastPriorityUnspecified"|"low"|"normal"|"high", madeForKids?: bool, privacyStatus?: "public"|"unlisted"|"private", recordingStatus?: "liveBroadcastRecordingStatusUnspecified"|"notRecording"|"recording"|"recorded", selfDeclaredMadeForKids?: bool}
-export def "youtube-live-broadcasts update" [
+export def "youtube-live-broadcasts-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1758,7 +1758,7 @@ export def "youtube-live-broadcasts update" [
 #
 # POST /youtube/v3/liveBroadcasts/bind
 # operationId: youtube.liveBroadcasts.bind
-export def "youtube-live-broadcasts-bind create" [
+export def "youtube-live-broadcasts-bind" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1809,7 +1809,7 @@ export def "youtube-live-broadcasts-bind create" [
 #
 # POST /youtube/v3/liveBroadcasts/cuepoint
 # operationId: youtube.liveBroadcasts.insertCuepoint
-export def "youtube-live-broadcasts-cuepoint create" [
+export def "youtube-live-broadcasts-insert-cuepoint" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1868,7 +1868,7 @@ export def "youtube-live-broadcasts-cuepoint create" [
 #
 # POST /youtube/v3/liveBroadcasts/transition
 # operationId: youtube.liveBroadcasts.transition
-export def "youtube-live-broadcasts-transition create" [
+export def "youtube-live-broadcasts-transition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1919,7 +1919,7 @@ export def "youtube-live-broadcasts-transition create" [
 #
 # DELETE /youtube/v3/liveChat/bans
 # operationId: youtube.liveChatBans.delete
-export def "youtube-live-chat-bans delete" [
+export def "youtube-live-chat-bans-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1967,7 +1967,7 @@ export def "youtube-live-chat-bans delete" [
 # POST /youtube/v3/liveChat/bans
 # operationId: youtube.liveChatBans.insert
 # --snippet shape: {banDurationSeconds?: string, bannedUserDetails?: record, liveChatId?: string, type?: "liveChatBanTypeUnspecified"|"permanent"|"temporary"}
-export def "youtube-live-chat-bans create" [
+export def "youtube-live-chat-bans-insert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -2021,7 +2021,7 @@ export def "youtube-live-chat-bans create" [
 #
 # DELETE /youtube/v3/liveChat/messages
 # operationId: youtube.liveChatMessages.delete
-export def "youtube-live-chat-messages delete" [
+export def "youtube-live-chat-messages-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -2068,7 +2068,7 @@ export def "youtube-live-chat-messages delete" [
 #
 # GET /youtube/v3/liveChat/messages
 # operationId: youtube.liveChatMessages.list
-export def "youtube-live-chat-messages list" [
+export def "youtube-live-chat-messages-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -2122,7 +2122,7 @@ export def "youtube-live-chat-messages list" [
 # operationId: youtube.liveChatMessages.insert
 # --authorDetails shape: {channelId?: string, channelUrl?: string, displayName?: string, isChatModerator?: bool, isChatOwner?: bool, isChatSponsor?: bool, isVerified?: bool, profileImageUrl?: string}
 # --snippet shape: {authorChannelId?: string, displayMessage?: string, fanFundingEventDetails?: record, giftMembershipReceivedDetails?: record, hasDisplayContent?: bool, liveChatId?: string, memberMilestoneChatDetails?: record, membershipGiftingDetails?: record, messageDeletedDetails?: record, messageRetractedDetails?: record, newSponsorDetails?: record, publishedAt?: string, superChatDetails?: record, superStickerDetails?: record, textMessageDetails?: record, ... (2 more fields)}
-export def "youtube-live-chat-messages create" [
+export def "youtube-live-chat-messages-insert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -2177,7 +2177,7 @@ export def "youtube-live-chat-messages create" [
 #
 # DELETE /youtube/v3/liveChat/moderators
 # operationId: youtube.liveChatModerators.delete
-export def "youtube-live-chat-moderators delete" [
+export def "youtube-live-chat-moderators-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -2224,7 +2224,7 @@ export def "youtube-live-chat-moderators delete" [
 #
 # GET /youtube/v3/liveChat/moderators
 # operationId: youtube.liveChatModerators.list
-export def "youtube-live-chat-moderators list" [
+export def "youtube-live-chat-moderators-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -2275,7 +2275,7 @@ export def "youtube-live-chat-moderators list" [
 # POST /youtube/v3/liveChat/moderators
 # operationId: youtube.liveChatModerators.insert
 # --snippet shape: {liveChatId?: string, moderatorDetails?: record}
-export def "youtube-live-chat-moderators create" [
+export def "youtube-live-chat-moderators-insert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -2329,7 +2329,7 @@ export def "youtube-live-chat-moderators create" [
 #
 # DELETE /youtube/v3/liveStreams
 # operationId: youtube.liveStreams.delete
-export def "youtube-live-streams delete" [
+export def "youtube-live-streams-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -2378,7 +2378,7 @@ export def "youtube-live-streams delete" [
 #
 # GET /youtube/v3/liveStreams
 # operationId: youtube.liveStreams.list
-export def "youtube-live-streams list" [
+export def "youtube-live-streams-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -2435,7 +2435,7 @@ export def "youtube-live-streams list" [
 # --contentDetails shape: {closedCaptionsIngestionUrl?: string, isReusable?: bool}
 # --snippet shape: {channelId?: string, description?: string, isDefaultStream?: bool, publishedAt?: string, title?: string}
 # --status shape: {healthStatus?: record, streamStatus?: "created"|"ready"|"active"|"inactive"|"error"}
-export def "youtube-live-streams create" [
+export def "youtube-live-streams-insert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -2498,7 +2498,7 @@ export def "youtube-live-streams create" [
 # --contentDetails shape: {closedCaptionsIngestionUrl?: string, isReusable?: bool}
 # --snippet shape: {channelId?: string, description?: string, isDefaultStream?: bool, publishedAt?: string, title?: string}
 # --status shape: {healthStatus?: record, streamStatus?: "created"|"ready"|"active"|"inactive"|"error"}
-export def "youtube-live-streams update" [
+export def "youtube-live-streams-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -2557,7 +2557,7 @@ export def "youtube-live-streams update" [
 #
 # GET /youtube/v3/members
 # operationId: youtube.members.list
-export def "youtube-members list" [
+export def "youtube-members-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -2609,7 +2609,7 @@ export def "youtube-members list" [
 #
 # GET /youtube/v3/membershipsLevels
 # operationId: youtube.membershipsLevels.list
-export def "youtube-memberships-levels list" [
+export def "youtube-memberships-levels-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -2656,7 +2656,7 @@ export def "youtube-memberships-levels list" [
 #
 # DELETE /youtube/v3/playlistItems
 # operationId: youtube.playlistItems.delete
-export def "youtube-playlist-items delete" [
+export def "youtube-playlist-items-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -2704,7 +2704,7 @@ export def "youtube-playlist-items delete" [
 #
 # GET /youtube/v3/playlistItems
 # operationId: youtube.playlistItems.list
-export def "youtube-playlist-items list" [
+export def "youtube-playlist-items-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -2760,7 +2760,7 @@ export def "youtube-playlist-items list" [
 # --contentDetails shape: {endAt?: string, note?: string, startAt?: string, videoId?: string, videoPublishedAt?: string}
 # --snippet shape: {channelId?: string, channelTitle?: string, description?: string, playlistId?: string, position?: int, publishedAt?: string, resourceId?: record, thumbnails?: record, title?: string, videoOwnerChannelId?: string, videoOwnerChannelTitle?: string}
 # --status shape: {privacyStatus?: "public"|"unlisted"|"private"}
-export def "youtube-playlist-items create" [
+export def "youtube-playlist-items-insert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -2820,7 +2820,7 @@ export def "youtube-playlist-items create" [
 # --contentDetails shape: {endAt?: string, note?: string, startAt?: string, videoId?: string, videoPublishedAt?: string}
 # --snippet shape: {channelId?: string, channelTitle?: string, description?: string, playlistId?: string, position?: int, publishedAt?: string, resourceId?: record, thumbnails?: record, title?: string, videoOwnerChannelId?: string, videoOwnerChannelTitle?: string}
 # --status shape: {privacyStatus?: "public"|"unlisted"|"private"}
-export def "youtube-playlist-items update" [
+export def "youtube-playlist-items-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -2877,7 +2877,7 @@ export def "youtube-playlist-items update" [
 #
 # DELETE /youtube/v3/playlists
 # operationId: youtube.playlists.delete
-export def "youtube-playlists delete" [
+export def "youtube-playlists-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -2925,7 +2925,7 @@ export def "youtube-playlists delete" [
 #
 # GET /youtube/v3/playlists
 # operationId: youtube.playlists.list
-export def "youtube-playlists list" [
+export def "youtube-playlists-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -2984,7 +2984,7 @@ export def "youtube-playlists list" [
 # --player shape: {embedHtml?: string}
 # --snippet shape: {channelId?: string, channelTitle?: string, defaultLanguage?: string, description?: string, localized?: record, publishedAt?: string, tags?: list<string>, thumbnailVideoId?: string, thumbnails?: record, title?: string}
 # --status shape: {privacyStatus?: "public"|"unlisted"|"private"}
-export def "youtube-playlists create" [
+export def "youtube-playlists-insert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -3048,7 +3048,7 @@ export def "youtube-playlists create" [
 # --player shape: {embedHtml?: string}
 # --snippet shape: {channelId?: string, channelTitle?: string, defaultLanguage?: string, description?: string, localized?: record, publishedAt?: string, tags?: list<string>, thumbnailVideoId?: string, thumbnails?: record, title?: string}
 # --status shape: {privacyStatus?: "public"|"unlisted"|"private"}
-export def "youtube-playlists update" [
+export def "youtube-playlists-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -3107,7 +3107,7 @@ export def "youtube-playlists update" [
 #
 # GET /youtube/v3/search
 # operationId: youtube.search.list
-export def "youtube-search list" [
+export def "youtube-search-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -3184,7 +3184,7 @@ export def "youtube-search list" [
 #
 # DELETE /youtube/v3/subscriptions
 # operationId: youtube.subscriptions.delete
-export def "youtube-subscriptions delete" [
+export def "youtube-subscriptions-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -3231,7 +3231,7 @@ export def "youtube-subscriptions delete" [
 #
 # GET /youtube/v3/subscriptions
 # operationId: youtube.subscriptions.list
-export def "youtube-subscriptions list" [
+export def "youtube-subscriptions-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -3292,7 +3292,7 @@ export def "youtube-subscriptions list" [
 # --contentDetails shape: {activityType?: "subscriptionActivityTypeUnspecified"|"all"|"uploads", newItemCount?: int, totalItemCount?: int}
 # --snippet shape: {channelId?: string, channelTitle?: string, description?: string, publishedAt?: string, resourceId?: record, thumbnails?: record, title?: string}
 # --subscriberSnippet shape: {channelId?: string, description?: string, thumbnails?: record, title?: string}
-export def "youtube-subscriptions create" [
+export def "youtube-subscriptions-insert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -3348,7 +3348,7 @@ export def "youtube-subscriptions create" [
 #
 # GET /youtube/v3/superChatEvents
 # operationId: youtube.superChatEvents.list
-export def "youtube-super-chat-events list" [
+export def "youtube-super-chat-events-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -3398,7 +3398,7 @@ export def "youtube-super-chat-events list" [
 #
 # POST /youtube/v3/tests
 # operationId: youtube.tests.insert
-export def "youtube-tests create" [
+export def "youtube-tests-insert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -3453,7 +3453,7 @@ export def "youtube-tests create" [
 #
 # DELETE /youtube/v3/thirdPartyLinks
 # operationId: youtube.thirdPartyLinks.delete
-export def "youtube-third-party-links delete" [
+export def "youtube-third-party-links-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3503,7 +3503,7 @@ export def "youtube-third-party-links delete" [
 #
 # GET /youtube/v3/thirdPartyLinks
 # operationId: youtube.thirdPartyLinks.list
-export def "youtube-third-party-links list" [
+export def "youtube-third-party-links-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3555,7 +3555,7 @@ export def "youtube-third-party-links list" [
 # operationId: youtube.thirdPartyLinks.insert
 # --snippet shape: {channelToStoreLink?: record, type?: "linkUnspecified"|"channelToStoreLink"}
 # --status shape: {linkStatus?: "unknown"|"failed"|"pending"|"linked"}
-export def "youtube-third-party-links create" [
+export def "youtube-third-party-links-insert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3613,7 +3613,7 @@ export def "youtube-third-party-links create" [
 # operationId: youtube.thirdPartyLinks.update
 # --snippet shape: {channelToStoreLink?: record, type?: "linkUnspecified"|"channelToStoreLink"}
 # --status shape: {linkStatus?: "unknown"|"failed"|"pending"|"linked"}
-export def "youtube-third-party-links update" [
+export def "youtube-third-party-links-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3669,7 +3669,7 @@ export def "youtube-third-party-links update" [
 #
 # POST /youtube/v3/thumbnails/set
 # operationId: youtube.thumbnails.set
-export def "youtube-thumbnails-set update" [
+export def "youtube-thumbnails-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -3717,7 +3717,7 @@ export def "youtube-thumbnails-set update" [
 #
 # GET /youtube/v3/videoAbuseReportReasons
 # operationId: youtube.videoAbuseReportReasons.list
-export def "youtube-video-abuse-report-reasons list" [
+export def "youtube-video-abuse-report-reasons-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -3765,7 +3765,7 @@ export def "youtube-video-abuse-report-reasons list" [
 #
 # GET /youtube/v3/videoCategories
 # operationId: youtube.videoCategories.list
-export def "youtube-video-categories list" [
+export def "youtube-video-categories-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -3815,7 +3815,7 @@ export def "youtube-video-categories list" [
 #
 # DELETE /youtube/v3/videos
 # operationId: youtube.videos.delete
-export def "youtube-videos delete" [
+export def "youtube-videos-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -3863,7 +3863,7 @@ export def "youtube-videos delete" [
 #
 # GET /youtube/v3/videos
 # operationId: youtube.videos.list
-export def "youtube-videos list" [
+export def "youtube-videos-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -3922,7 +3922,7 @@ export def "youtube-videos list" [
 #
 # POST /youtube/v3/videos
 # operationId: youtube.videos.insert
-export def "youtube-videos create" [
+export def "youtube-videos-insert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -3991,7 +3991,7 @@ export def "youtube-videos create" [
 # --status shape: {embeddable?: bool, failureReason?: "conversion"|"invalidFile"|"emptyFile"|"tooSmall"|"codec"|"uploadAborted", license?: "youtube"|"creativeCommon", madeForKids?: bool, privacyStatus?: "public"|"unlisted"|"private", publicStatsViewable?: bool, publishAt?: string, rejectionReason?: "copyright"|"inappropriate"|"duplicate"|"termsOfUse"|"uploaderAccountSuspended"|"length"|"claim"|"uploaderAccountClosed"|"trademark"|"legal", selfDeclaredMadeForKids?: bool, ... (1 more fields)}
 # --suggestions shape: {editorSuggestions?: list<string>, processingErrors?: list<string>, processingHints?: list<string>, processingWarnings?: list<string>, tagSuggestions?: list}
 # --topicDetails shape: {relevantTopicIds?: list<string>, topicCategories?: list<string>, topicIds?: list<string>}
-export def "youtube-videos update" [
+export def "youtube-videos-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -4060,7 +4060,7 @@ export def "youtube-videos update" [
 #
 # GET /youtube/v3/videos/getRating
 # operationId: youtube.videos.getRating
-export def "youtube-videos-get-rating get" [
+export def "youtube-videos-get-rating" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -4108,7 +4108,7 @@ export def "youtube-videos-get-rating get" [
 #
 # POST /youtube/v3/videos/rate
 # operationId: youtube.videos.rate
-export def "youtube-videos-rate create" [
+export def "youtube-videos-rate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -4156,7 +4156,7 @@ export def "youtube-videos-rate create" [
 #
 # POST /youtube/v3/videos/reportAbuse
 # operationId: youtube.videos.reportAbuse
-export def "youtube-videos-report-abuse create" [
+export def "youtube-videos-report-abuse" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -4211,7 +4211,7 @@ export def "youtube-videos-report-abuse create" [
 #
 # POST /youtube/v3/watermarks/set
 # operationId: youtube.watermarks.set
-export def "youtube-watermarks-set update" [
+export def "youtube-watermarks-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -4263,7 +4263,7 @@ export def "youtube-watermarks-set update" [
 #
 # POST /youtube/v3/watermarks/unset
 # operationId: youtube.watermarks.unset
-export def "youtube-watermarks-unset create" [
+export def "youtube-watermarks-unset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)

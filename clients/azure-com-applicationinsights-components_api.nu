@@ -122,7 +122,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-insights-components list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "components-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Insights/components
 # operationId: Components_List
-export def "subscriptions-providers-microsoft-insights-components list" [
+export def "components-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -184,7 +184,7 @@ export def "subscriptions-providers-microsoft-insights-components list" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/components
 # operationId: Components_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-insights-components list" [
+export def "components-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -224,7 +224,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/components/{resourceName}
 # operationId: Components_Delete
-export def "subscriptions-resource-groups-providers-microsoft-insights-components delete" [
+export def "components-delete" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -266,7 +266,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/components/{resourceName}
 # operationId: Components_Get
-export def "subscriptions-resource-groups-providers-microsoft-insights-components get" [
+export def "components-get" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -308,7 +308,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/components/{resourceName}
 # operationId: Components_UpdateTags
-export def "subscriptions-resource-groups-providers-microsoft-insights-components update-tags" [
+export def "components-update-tags" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -355,7 +355,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/components/{resourceName}
 # operationId: Components_CreateOrUpdate
 # --properties shape: {Application_Type: "web"|"other", DisableIpMasking?: bool, Flow_Type?: "Bluefield", HockeyAppId?: string, ImmediatePurgeDataOn30Days?: bool, Request_Source?: "rest", RetentionInDays?: int, SamplingPercentage?: float}
-export def "subscriptions-resource-groups-providers-microsoft-insights-components create-or-update" [
+export def "components-create-or-update" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -404,7 +404,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/components/{resourceName}/operations/{purgeId}
 # operationId: Components_GetPurgeStatus
-export def "subscriptions-resource-groups-providers-microsoft-insights-components-operations get-purge-status" [
+export def "components-get-purge-status" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -449,7 +449,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/components/{resourceName}/purge
 # operationId: Components_Purge
 # --filters item shape: {column?: string, key?: string, operator?: string, value?: any}
-export def "subscriptions-resource-groups-providers-microsoft-insights-components-purge create" [
+export def "components-purge" [
   subscription_id: string
   resource_group_name: string
   resource_name: string

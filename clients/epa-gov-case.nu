@@ -128,7 +128,7 @@ def descending-completer [] { ["N" "Y"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "case-rest-services-get-case-info get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-case-rest-services-get-case-info" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -151,7 +151,7 @@ export def commands []: nothing -> table {
 # Enforcement Case Search (new version)
 #
 # GET /case_rest_services.get_case_info
-export def "case-rest-services-get-case-info get" [
+export def "get-case-rest-services-get-case-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -262,7 +262,7 @@ export def "case-rest-services-get-case-info get" [
 # Enforcement Case Search (new version)
 #
 # POST /case_rest_services.get_case_info
-export def "case-rest-services-get-case-info create" [
+export def "post-case-rest-services-get-case-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -376,7 +376,7 @@ export def "case-rest-services-get-case-info create" [
 # Enforcement Case Summary Report Search
 #
 # GET /case_rest_services.get_case_report
-export def "case-rest-services-get-case-report get" [
+export def "get-case-rest-services-get-case-report" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -414,7 +414,7 @@ export def "case-rest-services-get-case-report get" [
 # Enforcement Case Summary Report Search
 #
 # POST /case_rest_services.get_case_report
-export def "case-rest-services-get-case-report create" [
+export def "post-case-rest-services-get-case-report" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -455,7 +455,7 @@ export def "case-rest-services-get-case-report create" [
 # Enforcement Case Search
 #
 # GET /case_rest_services.get_cases
-export def "case-rest-services-get-cases get" [
+export def "get-case-rest-services-get-cases" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -566,7 +566,7 @@ export def "case-rest-services-get-cases get" [
 # Enforcement Case Search
 #
 # POST /case_rest_services.get_cases
-export def "case-rest-services-get-cases create" [
+export def "post-case-rest-services-get-cases" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -680,7 +680,7 @@ export def "case-rest-services-get-cases create" [
 # Placeholder
 #
 # GET /case_rest_services.get_cases_from_facility
-export def "case-rest-services-get-cases-from-facility get" [
+export def "get-case-rest-services-get-cases-from-facility" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -718,7 +718,7 @@ export def "case-rest-services-get-cases-from-facility get" [
 # Placeholder
 #
 # POST /case_rest_services.get_cases_from_facility
-export def "case-rest-services-get-cases-from-facility create" [
+export def "post-case-rest-services-get-cases-from-facility" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -756,7 +756,7 @@ export def "case-rest-services-get-cases-from-facility create" [
 # Enforcement Criminal Case Summary Report Search
 #
 # GET /case_rest_services.get_crcase_report
-export def "case-rest-services-get-crcase-report get" [
+export def "get-case-rest-services-get-crcase-report" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -795,7 +795,7 @@ export def "case-rest-services-get-crcase-report get" [
 # Enforcement Criminal Case Summary Report Search
 #
 # POST /case_rest_services.get_crcase_report
-export def "case-rest-services-get-crcase-report create" [
+export def "post-case-rest-services-get-crcase-report" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -836,7 +836,7 @@ export def "case-rest-services-get-crcase-report create" [
 # Enforcement Case Download Data Service
 #
 # GET /case_rest_services.get_download
-export def "case-rest-services-get-download get" [
+export def "get-case-rest-services-get-download" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -874,7 +874,7 @@ export def "case-rest-services-get-download get" [
 # Enforcement Case Download Data Service
 #
 # POST /case_rest_services.get_download
-export def "case-rest-services-get-download create" [
+export def "post-case-rest-services-get-download" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -915,7 +915,7 @@ export def "case-rest-services-get-download create" [
 # Placeholder
 #
 # GET /case_rest_services.get_facilities_from_case
-export def "case-rest-services-get-facilities-from-case get" [
+export def "get-case-rest-services-get-facilities-from-case" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -953,7 +953,7 @@ export def "case-rest-services-get-facilities-from-case get" [
 # Placeholder
 #
 # POST /case_rest_services.get_facilities_from_case
-export def "case-rest-services-get-facilities-from-case create" [
+export def "post-case-rest-services-get-facilities-from-case" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -991,7 +991,7 @@ export def "case-rest-services-get-facilities-from-case create" [
 # Enforcement Case Map Service
 #
 # GET /case_rest_services.get_map
-export def "case-rest-services-get-map get" [
+export def "get-case-rest-services-get-map" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1034,7 +1034,7 @@ export def "case-rest-services-get-map get" [
 # Enforcement Case Map Service
 #
 # POST /case_rest_services.get_map
-export def "case-rest-services-get-map create" [
+export def "post-case-rest-services-get-map" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1081,7 +1081,7 @@ export def "case-rest-services-get-map create" [
 # Enforcement Case Paginated Results Service
 #
 # GET /case_rest_services.get_qid
-export def "case-rest-services-get-qid get" [
+export def "get-case-rest-services-get-qid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1123,7 +1123,7 @@ export def "case-rest-services-get-qid get" [
 # Enforcement Case Paginated Results Service
 #
 # POST /case_rest_services.get_qid
-export def "case-rest-services-get-qid create" [
+export def "post-case-rest-services-get-qid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1168,7 +1168,7 @@ export def "case-rest-services-get-qid create" [
 # Enforcement Case Metadata Service
 #
 # GET /case_rest_services.metadata
-export def "case-rest-services-metadata get" [
+export def "get-case-rest-services-metadata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1205,7 +1205,7 @@ export def "case-rest-services-metadata get" [
 # Enforcement Case Metadata Service
 #
 # POST /case_rest_services.metadata
-export def "case-rest-services-metadata create" [
+export def "post-case-rest-services-metadata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1245,7 +1245,7 @@ export def "case-rest-services-metadata create" [
 # ECHO ICIS Law Sections Lookup Service
 #
 # GET /rest_lookups.icis_law_sections
-export def "rest-lookups-icis-law-sections get" [
+export def "get-rest-lookups-icis-law-sections" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1287,7 +1287,7 @@ export def "rest-lookups-icis-law-sections get" [
 # ECHO ICIS Law Sections Lookup Service
 #
 # POST /rest_lookups.icis_law_sections
-export def "rest-lookups-icis-law-sections create" [
+export def "post-rest-lookups-icis-law-sections" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -130,7 +130,7 @@ def run-attempt-completer [] { ["LATEST" "RUN_ATTEMPT_UNSPECIFIED"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "bigquerydatatransfer-projects-transfer-configs-runs-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -154,7 +154,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1/{name}
 # operationId: bigquerydatatransfer.projects.transferConfigs.runs.delete
-export def "projects delete" [
+export def "bigquerydatatransfer-projects-transfer-configs-runs-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -202,7 +202,7 @@ export def "projects delete" [
 #
 # GET /v1/{name}
 # operationId: bigquerydatatransfer.projects.transferConfigs.runs.get
-export def "projects get" [
+export def "bigquerydatatransfer-projects-transfer-configs-runs-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -253,7 +253,7 @@ export def "projects get" [
 # --emailPreferences shape: {enableFailureEmail?: bool}
 # --ownerInfo shape: {email?: string}
 # --scheduleOptions shape: {disableAutoScheduling?: bool, endTime?: string, startTime?: string}
-export def "projects update" [
+export def "bigquerydatatransfer-projects-transfer-configs-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -321,7 +321,7 @@ export def "projects update" [
 #
 # GET /v1/{name}/locations
 # operationId: bigquerydatatransfer.projects.locations.list
-export def "locations list" [
+export def "bigquerydatatransfer-projects-locations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -372,7 +372,7 @@ export def "locations list" [
 #
 # POST /v1/{name}:checkValidCreds
 # operationId: bigquerydatatransfer.projects.locations.dataSources.checkValidCreds
-export def "projects check-valid-creds" [
+export def "bigquerydatatransfer-projects-locations-data-sources-check-valid-creds" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -424,7 +424,7 @@ export def "projects check-valid-creds" [
 #
 # POST /v1/{name}:enrollDataSources
 # operationId: bigquerydatatransfer.projects.locations.enrollDataSources
-export def "projects create-enroll-data-sources" [
+export def "bigquerydatatransfer-projects-locations-enroll-data-sources" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -476,7 +476,7 @@ export def "projects create-enroll-data-sources" [
 #
 # GET /v1/{parent}/dataSources
 # operationId: bigquerydatatransfer.projects.locations.dataSources.list
-export def "data-sources list" [
+export def "bigquerydatatransfer-projects-locations-data-sources-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -526,7 +526,7 @@ export def "data-sources list" [
 #
 # GET /v1/{parent}/runs
 # operationId: bigquerydatatransfer.projects.transferConfigs.runs.list
-export def "runs list" [
+export def "bigquerydatatransfer-projects-transfer-configs-runs-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -578,7 +578,7 @@ export def "runs list" [
 #
 # GET /v1/{parent}/transferConfigs
 # operationId: bigquerydatatransfer.projects.transferConfigs.list
-export def "transfer-configs list" [
+export def "bigquerydatatransfer-projects-transfer-configs-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -632,7 +632,7 @@ export def "transfer-configs list" [
 # --emailPreferences shape: {enableFailureEmail?: bool}
 # --ownerInfo shape: {email?: string}
 # --scheduleOptions shape: {disableAutoScheduling?: bool, endTime?: string, startTime?: string}
-export def "transfer-configs create" [
+export def "bigquerydatatransfer-projects-transfer-configs-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -699,7 +699,7 @@ export def "transfer-configs create" [
 #
 # GET /v1/{parent}/transferLogs
 # operationId: bigquerydatatransfer.projects.transferConfigs.runs.transferLogs.list
-export def "transfer-logs list" [
+export def "bigquerydatatransfer-projects-transfer-configs-runs-transfer-logs-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -750,7 +750,7 @@ export def "transfer-logs list" [
 #
 # POST /v1/{parent}:scheduleRuns
 # operationId: bigquerydatatransfer.projects.transferConfigs.scheduleRuns
-export def "projects create-schedule-runs" [
+export def "bigquerydatatransfer-projects-transfer-configs-schedule-runs" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -804,7 +804,7 @@ export def "projects create-schedule-runs" [
 # POST /v1/{parent}:startManualRuns
 # operationId: bigquerydatatransfer.projects.transferConfigs.startManualRuns
 # --requestedTimeRange shape: {endTime?: string, startTime?: string}
-export def "projects start-manual-runs" [
+export def "bigquerydatatransfer-projects-transfer-configs-start-manual-runs" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

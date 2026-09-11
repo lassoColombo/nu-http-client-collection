@@ -112,7 +112,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta create-estimate-cost-scenario" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cloudbilling-billing-accounts-estimate-cost-scenario" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -137,7 +137,7 @@ export def commands []: nothing -> table {
 # POST /v1beta/{billingAccount}:estimateCostScenario
 # operationId: cloudbilling.billingAccounts.estimateCostScenario
 # --costScenario shape: {commitments?: list, scenarioConfig?: record, workloads?: list}
-export def "v1beta create-estimate-cost-scenario" [
+export def "cloudbilling-billing-accounts-estimate-cost-scenario" [
   billing_account: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -190,7 +190,7 @@ export def "v1beta create-estimate-cost-scenario" [
 # POST /v1beta:estimateCostScenario
 # operationId: cloudbilling.estimateCostScenario
 # --costScenario shape: {commitments?: list, scenarioConfig?: record, workloads?: list}
-export def "v1beta-estimate-cost-scenario create" [
+export def "cloudbilling-estimate-cost-scenario" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)

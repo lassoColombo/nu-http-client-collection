@@ -133,7 +133,7 @@ def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "storage-profile-system-profiles create-client" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-client-profile" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -157,7 +157,7 @@ export def commands []: nothing -> table {
 #
 # POST /api/storage/profile-system/profiles
 # operationId: CreateClientProfile
-export def "storage-profile-system-profiles create-client" [
+export def "create-client-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -209,7 +209,7 @@ export def "storage-profile-system-profiles create-client" [
 # PUT /api/storage/profile-system/profiles/schema
 # operationId: CreateOrUpdateProfileSchema
 # --properties shape: {{fieldName}?: record}
-export def "storage-profile-system-profiles-schema create-or-update" [
+export def "create-or-update-profile-schema" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -261,7 +261,7 @@ export def "storage-profile-system-profiles-schema create-or-update" [
 #
 # DELETE /api/storage/profile-system/profiles/{profileId}
 # operationId: DeleteClientProfile
-export def "storage-profile-system-profiles delete-client" [
+export def "delete-client-profile" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -301,7 +301,7 @@ export def "storage-profile-system-profiles delete-client" [
 #
 # GET /api/storage/profile-system/profiles/{profileId}
 # operationId: GetProfile
-export def "storage-profile-system-profiles get" [
+export def "get-profile" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -343,7 +343,7 @@ export def "storage-profile-system-profiles get" [
 #
 # PATCH /api/storage/profile-system/profiles/{profileId}
 # operationId: UpdateClientProfile
-export def "storage-profile-system-profiles update-client" [
+export def "update-client-profile" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -397,7 +397,7 @@ export def "storage-profile-system-profiles update-client" [
 #
 # GET /api/storage/profile-system/profiles/{profileId}/addresses
 # operationId: GetClientAddresses
-export def "storage-profile-system-profiles-addresses get-client" [
+export def "get-client-addresses" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -439,7 +439,7 @@ export def "storage-profile-system-profiles-addresses get-client" [
 #
 # POST /api/storage/profile-system/profiles/{profileId}/addresses
 # operationId: CreateClientAddress
-export def "storage-profile-system-profiles-addresses create-client-address" [
+export def "create-client-address" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -494,7 +494,7 @@ export def "storage-profile-system-profiles-addresses create-client-address" [
 #
 # GET /api/storage/profile-system/profiles/{profileId}/addresses/unmask
 # operationId: GetUnmaskedClientAddresses
-export def "storage-profile-system-profiles-addresses-unmask get-unmasked-client" [
+export def "get-unmasked-client-addresses" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -536,7 +536,7 @@ export def "storage-profile-system-profiles-addresses-unmask get-unmasked-client
 #
 # DELETE /api/storage/profile-system/profiles/{profileId}/addresses/{addressId}
 # operationId: DeleteAddress
-export def "storage-profile-system-profiles-addresses delete-address" [
+export def "delete-address" [
   profile_id: string
   address_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -580,7 +580,7 @@ export def "storage-profile-system-profiles-addresses delete-address" [
 #
 # GET /api/storage/profile-system/profiles/{profileId}/addresses/{addressId}
 # operationId: GetAddress
-export def "storage-profile-system-profiles-addresses get-address" [
+export def "get-address" [
   profile_id: string
   address_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -624,7 +624,7 @@ export def "storage-profile-system-profiles-addresses get-address" [
 #
 # PATCH /api/storage/profile-system/profiles/{profileId}/addresses/{addressId}
 # operationId: UpdateClientAddress
-export def "storage-profile-system-profiles-addresses update-client-address" [
+export def "update-client-address" [
   profile_id: string
   address_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -681,7 +681,7 @@ export def "storage-profile-system-profiles-addresses update-client-address" [
 #
 # GET /api/storage/profile-system/profiles/{profileId}/addresses/{addressId}/unmask
 # operationId: GetUnmaskedAddress
-export def "storage-profile-system-profiles-addresses-unmask get-unmasked-address" [
+export def "get-unmasked-address" [
   profile_id: string
   address_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -726,7 +726,7 @@ export def "storage-profile-system-profiles-addresses-unmask get-unmasked-addres
 #
 # GET /api/storage/profile-system/profiles/{profileId}/addresses/{addressId}/versions/{addressVersionId}
 # operationId: GetAddressByVersion
-export def "storage-profile-system-profiles-addresses-versions get-address" [
+export def "get-address-by-version" [
   profile_id: string
   address_id: string
   address_version_id: string
@@ -773,7 +773,7 @@ export def "storage-profile-system-profiles-addresses-versions get-address" [
 #
 # GET /api/storage/profile-system/profiles/{profileId}/addresses/{addressId}/versions/{addressVersionId}/unmask
 # operationId: GetUnmaskedAddressByVersion
-export def "storage-profile-system-profiles-addresses-versions-unmask get-unmasked-address" [
+export def "get-unmasked-address-by-version" [
   profile_id: string
   address_id: string
   address_version_id: string
@@ -820,7 +820,7 @@ export def "storage-profile-system-profiles-addresses-versions-unmask get-unmask
 #
 # DELETE /api/storage/profile-system/profiles/{profileId}/purchase-info
 # operationId: DeletePurchaseInformation
-export def "storage-profile-system-profiles-purchase-info delete-information" [
+export def "delete-purchase-information" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -862,7 +862,7 @@ export def "storage-profile-system-profiles-purchase-info delete-information" [
 #
 # GET /api/storage/profile-system/profiles/{profileId}/purchase-info
 # operationId: GetPurchaseInformation
-export def "storage-profile-system-profiles-purchase-info get-information" [
+export def "get-purchase-information" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -904,7 +904,7 @@ export def "storage-profile-system-profiles-purchase-info get-information" [
 #
 # PATCH /api/storage/profile-system/profiles/{profileId}/purchase-info
 # operationId: UpdatePurchaseInformation
-export def "storage-profile-system-profiles-purchase-info update-information" [
+export def "update-purchase-information" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -952,7 +952,7 @@ export def "storage-profile-system-profiles-purchase-info update-information" [
 #
 # POST /api/storage/profile-system/profiles/{profileId}/purchase-info
 # operationId: CreatePurchaseInformation
-export def "storage-profile-system-profiles-purchase-info create-information" [
+export def "create-purchase-information" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -1000,7 +1000,7 @@ export def "storage-profile-system-profiles-purchase-info create-information" [
 #
 # GET /api/storage/profile-system/profiles/{profileId}/purchase-info/unmask
 # operationId: GetUnmaskedPurchaseInformation
-export def "storage-profile-system-profiles-purchase-info-unmask get-unmasked-information" [
+export def "get-unmasked-purchase-information" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -1040,7 +1040,7 @@ export def "storage-profile-system-profiles-purchase-info-unmask get-unmasked-in
 #
 # GET /api/storage/profile-system/profiles/{profileId}/unmask
 # operationId: GetUnmaskedProfile
-export def "storage-profile-system-profiles-unmask get-unmasked" [
+export def "get-unmasked-profile" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -1083,7 +1083,7 @@ export def "storage-profile-system-profiles-unmask get-unmasked" [
 #
 # GET /api/storage/profile-system/profiles/{profileId}/versions/{profileVersionId}
 # operationId: GetProfileByVersion
-export def "storage-profile-system-profiles-versions get" [
+export def "get-profile-by-version" [
   profile_id: string
   profile_version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1125,7 +1125,7 @@ export def "storage-profile-system-profiles-versions get" [
 #
 # GET /api/storage/profile-system/profiles/{profileId}/versions/{profileVersionId}/unmask
 # operationId: GetUnmaskedProfileByVersion
-export def "storage-profile-system-profiles-versions-unmask get-unmasked" [
+export def "get-unmasked-profile-by-version" [
   profile_id: string
   profile_version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1169,7 +1169,7 @@ export def "storage-profile-system-profiles-versions-unmask get-unmasked" [
 #
 # POST /api/storage/profile-system/prospects
 # operationId: CreateProspect
-export def "storage-profile-system-prospects create" [
+export def "create-prospect" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -1213,7 +1213,7 @@ export def "storage-profile-system-prospects create" [
 #
 # DELETE /api/storage/profile-system/prospects/{prospectId}
 # operationId: DeleteProspect
-export def "storage-profile-system-prospects delete" [
+export def "delete-prospect" [
   prospect_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -1253,7 +1253,7 @@ export def "storage-profile-system-prospects delete" [
 #
 # GET /api/storage/profile-system/prospects/{prospectId}
 # operationId: GetProspect
-export def "storage-profile-system-prospects get" [
+export def "get-prospect" [
   prospect_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -1293,7 +1293,7 @@ export def "storage-profile-system-prospects get" [
 #
 # PATCH /api/storage/profile-system/prospects/{prospectId}
 # operationId: UpdateProspect
-export def "storage-profile-system-prospects update" [
+export def "update-prospect" [
   prospect_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -1339,7 +1339,7 @@ export def "storage-profile-system-prospects update" [
 #
 # GET /api/storage/profile-system/prospects/{prospectId}/unmask
 # operationId: GetUnmaskedProspect
-export def "storage-profile-system-prospects-unmask get-unmasked" [
+export def "get-unmasked-prospect" [
   prospect_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)

@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["cast-local-authorization-token"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "notice-html-gz get-legal" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "legal-notice" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -128,7 +128,7 @@ export def commands []: nothing -> table {
 #
 # GET /NOTICE.html.gz
 # operationId: LegalNotice
-export def "notice-html-gz get-legal" [
+export def "legal-notice" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -162,7 +162,7 @@ export def "notice-html-gz get-legal" [
 #
 # POST /assistant/a11y_mode
 # operationId: Accessibility
-export def "assistant-a11y-mode create-accessibility" [
+export def "accessibility" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -201,7 +201,7 @@ export def "assistant-a11y-mode create-accessibility" [
 #
 # GET /assistant/alarms
 # operationId: GetAlarmsandTimers
-export def "assistant-alarms get-alarmsand-timers" [
+export def "get-alarmsand-timers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -235,7 +235,7 @@ export def "assistant-alarms get-alarmsand-timers" [
 #
 # POST /assistant/alarms/delete
 # operationId: DeleteAlarmsandTimers
-export def "assistant-alarms-delete delete-alarmsand-timers" [
+export def "delete-alarmsand-timers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -273,7 +273,7 @@ export def "assistant-alarms-delete delete-alarmsand-timers" [
 #
 # POST /assistant/alarms/volume
 # operationId: AlarmVolume
-export def "assistant-alarms-volume create" [
+export def "alarm-volume" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -311,7 +311,7 @@ export def "assistant-alarms-volume create" [
 #
 # POST /assistant/check_ready_status
 # operationId: CheckReadyStatus
-export def "assistant-check-ready-status check" [
+export def "check-ready-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -350,7 +350,7 @@ export def "assistant-check-ready-status check" [
 #
 # POST /assistant/notifications
 # operationId: DoNotDisturb
-export def "assistant-notifications create-do-not-disturb" [
+export def "do-not-disturb" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -388,7 +388,7 @@ export def "assistant-notifications create-do-not-disturb" [
 # POST /assistant/set_night_mode_params
 # operationId: NightModesettings
 # --windows item shape: {days: list<int>, length_hours: int, start_hour: int}
-export def "assistant-set-night-mode-params create-modesettings" [
+export def "night-modesettings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -431,7 +431,7 @@ export def "assistant-set-night-mode-params create-modesettings" [
 #
 # POST /bluetooth/bond
 # operationId: Forgetpaireddevice
-export def "bluetooth-bond create-forgetpaireddevice" [
+export def "forgetpaireddevice" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -470,7 +470,7 @@ export def "bluetooth-bond create-forgetpaireddevice" [
 #
 # POST /bluetooth/connect
 # operationId: PairwithSpeaker
-export def "bluetooth-connect create-pairwith-speaker" [
+export def "pairwith-speaker" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -510,7 +510,7 @@ export def "bluetooth-connect create-pairwith-speaker" [
 #
 # POST /bluetooth/discovery
 # operationId: ChangeDiscoverability
-export def "bluetooth-discovery create-change-discoverability" [
+export def "change-discoverability" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -548,7 +548,7 @@ export def "bluetooth-discovery create-change-discoverability" [
 #
 # GET /bluetooth/get_bonded
 # operationId: GetPairedDevices
-export def "bluetooth-get-bonded get-paired-devices" [
+export def "get-paired-devices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -582,7 +582,7 @@ export def "bluetooth-get-bonded get-paired-devices" [
 #
 # POST /bluetooth/scan
 # operationId: Scanfordevices
-export def "bluetooth-scan create-scanfordevices" [
+export def "scanfordevices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -622,7 +622,7 @@ export def "bluetooth-scan create-scanfordevices" [
 #
 # GET /bluetooth/scan_results
 # operationId: GetScanResults
-export def "bluetooth-scan-results get" [
+export def "get-scan-results" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -656,7 +656,7 @@ export def "bluetooth-scan-results get" [
 #
 # GET /bluetooth/status
 # operationId: Status
-export def "bluetooth-status get" [
+export def "status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -690,7 +690,7 @@ export def "bluetooth-status get" [
 #
 # GET /configured_networks
 # operationId: GetSavedNetworks
-export def "configured-networks get-saved" [
+export def "get-saved-networks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -724,7 +724,7 @@ export def "configured-networks get-saved" [
 #
 # POST /connect_wifi
 # operationId: ConnecttoWi-FiNetwork
-export def "connect-wifi create-connectto-wi-fi-network" [
+export def "connectto-wi-fi-network" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -767,7 +767,7 @@ export def "connect-wifi create-connectto-wi-fi-network" [
 #
 # GET /eureka_info
 # operationId: EurekaInfo
-export def "eureka-info get" [
+export def "eureka-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -805,7 +805,7 @@ export def "eureka-info get" [
 #
 # POST /forget_wifi
 # operationId: ForgetWi-FiNetwork
-export def "forget-wifi create-wi-fi-network" [
+export def "forget-wi-fi-network" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -843,7 +843,7 @@ export def "forget-wifi create-wi-fi-network" [
 #
 # POST /get_app_device_id
 # operationId: AppDeviceID
-export def "get-app-device-id create" [
+export def "app-device-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -881,7 +881,7 @@ export def "get-app-device-id create" [
 #
 # GET /icon.png
 # operationId: ChromecastIcon
-export def "icon-png get-chromecast" [
+export def "chromecast-icon" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -915,7 +915,7 @@ export def "icon-png get-chromecast" [
 #
 # GET /offer
 # operationId: Offer
-export def "offer get" [
+export def "offer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -949,7 +949,7 @@ export def "offer get" [
 #
 # POST /reboot
 # operationId: RebootandFactoryReset
-export def "reboot reset-rebootand-factory" [
+export def "rebootand-factory-reset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -987,7 +987,7 @@ export def "reboot reset-rebootand-factory" [
 #
 # GET /scan_results
 # operationId: GetWi-FiScanResults
-export def "scan-results get-wi-fi" [
+export def "get-wi-fi-scan-results" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1021,7 +1021,7 @@ export def "scan-results get-wi-fi" [
 #
 # POST /scan_wifi
 # operationId: ScanforNetworks
-export def "scan-wifi create-scanfor-networks" [
+export def "scanfor-networks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1057,7 +1057,7 @@ export def "scan-wifi create-scanfor-networks" [
 # operationId: SetEurekaInfo
 # --opt_in shape: {opencast: bool, preview_channel: bool, remote_ducking: bool, stats: bool}
 # --settings shape: {control_notifications: int}
-export def "set-eureka-info update" [
+export def "set-eureka-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1097,7 +1097,7 @@ export def "set-eureka-info update" [
 #
 # GET /supported_locales
 # operationId: Locales
-export def "supported-locales get" [
+export def "locales" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1131,7 +1131,7 @@ export def "supported-locales get" [
 #
 # GET /supported_timezones
 # operationId: Timezones
-export def "supported-timezones get" [
+export def "timezones" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1165,7 +1165,7 @@ export def "supported-timezones get" [
 #
 # POST /test_internet_download_speed
 # operationId: TestInternetDownloadSpeed
-export def "test-internet-download-speed test" [
+export def "test-internet-download-speed" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1205,7 +1205,7 @@ export def "test-internet-download-speed test" [
 # operationId: SetEqualizerValues
 # --high_shelf shape: {gain_db: int}
 # --low_shelf shape: {gain_db: int}
-export def "user-eq-set-equalizer update-values" [
+export def "set-equalizer-values" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

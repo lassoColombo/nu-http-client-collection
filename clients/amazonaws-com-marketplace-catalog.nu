@@ -118,7 +118,7 @@ def ownership-type-completer [] { ["SELF" "SHARED"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cancel-change-set cancel" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cancel-change-set" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -142,7 +142,7 @@ export def commands []: nothing -> table {
 #
 # PATCH /CancelChangeSet
 # operationId: CancelChangeSet
-export def "cancel-change-set cancel" [
+export def "cancel-change-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -188,7 +188,7 @@ export def "cancel-change-set cancel" [
 #
 # DELETE /DeleteResourcePolicy
 # operationId: DeleteResourcePolicy
-export def "delete-resource-policy delete" [
+export def "delete-resource-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -233,7 +233,7 @@ export def "delete-resource-policy delete" [
 #
 # GET /DescribeChangeSet
 # operationId: DescribeChangeSet
-export def "describe-change-set get" [
+export def "describe-change-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -279,7 +279,7 @@ export def "describe-change-set get" [
 #
 # GET /DescribeEntity
 # operationId: DescribeEntity
-export def "describe-entity get" [
+export def "describe-entity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -325,7 +325,7 @@ export def "describe-entity get" [
 #
 # GET /GetResourcePolicy
 # operationId: GetResourcePolicy
-export def "get-resource-policy get" [
+export def "get-resource-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -372,7 +372,7 @@ export def "get-resource-policy get" [
 # operationId: ListChangeSets
 # --FilterList item shape: {Name?: any, ValueList?: any}
 # --Sort shape: {SortBy?: any, SortOrder?: any}
-export def "list-change-sets list" [
+export def "list-change-sets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -428,7 +428,7 @@ export def "list-change-sets list" [
 # operationId: ListEntities
 # --FilterList item shape: {Name?: any, ValueList?: any}
 # --Sort shape: {SortBy?: any, SortOrder?: any}
-export def "list-entities list" [
+export def "list-entities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -484,7 +484,7 @@ export def "list-entities list" [
 #
 # POST /ListTagsForResource
 # operationId: ListTagsForResource
-export def "list-tags-for-resource list" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -531,7 +531,7 @@ export def "list-tags-for-resource list" [
 #
 # POST /PutResourcePolicy
 # operationId: PutResourcePolicy
-export def "put-resource-policy update" [
+export def "put-resource-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -581,7 +581,7 @@ export def "put-resource-policy update" [
 # operationId: StartChangeSet
 # --ChangeSet item shape: {ChangeType: any, Entity: any, EntityTags?: any, Details: any, ChangeName?: any}
 # --ChangeSetTags item shape: {Key: any, Value: any}
-export def "start-change-set start" [
+export def "start-change-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -633,7 +633,7 @@ export def "start-change-set start" [
 # POST /TagResource
 # operationId: TagResource
 # --Tags item shape: {Key: any, Value: any}
-export def "tag-resource tag" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -681,7 +681,7 @@ export def "tag-resource tag" [
 #
 # POST /UntagResource
 # operationId: UntagResource
-export def "untag-resource untag" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

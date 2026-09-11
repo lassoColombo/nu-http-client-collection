@@ -119,7 +119,7 @@ def type-completer [] { ["CREATE_S3_DATA_ACCESS_FROM_S3_BUCKET" "EXPORT_ASSETS_T
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "jobs cancel" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cancel-job" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -143,7 +143,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1/jobs/{JobId}
 # operationId: CancelJob
-export def "jobs cancel" [
+export def "cancel-job" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -188,7 +188,7 @@ export def "jobs cancel" [
 #
 # GET /v1/jobs/{JobId}
 # operationId: GetJob
-export def "jobs get" [
+export def "get-job" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -233,7 +233,7 @@ export def "jobs get" [
 #
 # PATCH /v1/jobs/{JobId}
 # operationId: StartJob
-export def "jobs start" [
+export def "start-job" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -278,7 +278,7 @@ export def "jobs start" [
 #
 # POST /v1/data-sets
 # operationId: CreateDataSet
-export def "data-sets create" [
+export def "create-data-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -328,7 +328,7 @@ export def "data-sets create" [
 #
 # GET /v1/data-sets
 # operationId: ListDataSets
-export def "data-sets list" [
+export def "list-data-sets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -379,7 +379,7 @@ export def "data-sets list" [
 # operationId: CreateEventAction
 # --Action shape: {ExportRevisionToS3?: any}
 # --Event shape: {RevisionPublished?: any}
-export def "event-actions create" [
+export def "create-event-action" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -427,7 +427,7 @@ export def "event-actions create" [
 #
 # GET /v1/event-actions
 # operationId: ListEventActions
-export def "event-actions list" [
+export def "list-event-actions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -477,7 +477,7 @@ export def "event-actions list" [
 # POST /v1/jobs
 # operationId: CreateJob
 # --Details shape: {ExportAssetToSignedUrl?: any, ExportAssetsToS3?: any, ExportRevisionsToS3?: any, ImportAssetFromSignedUrl?: any, ImportAssetsFromS3?: any, ImportAssetsFromRedshiftDataShares?: any, ImportAssetFromApiGatewayApi?: any, CreateS3DataAccessFromS3Bucket?: any, ImportAssetsFromLakeFormationTagPolicy?: any}
-export def "jobs create" [
+export def "create-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -525,7 +525,7 @@ export def "jobs create" [
 #
 # GET /v1/jobs
 # operationId: ListJobs
-export def "jobs list" [
+export def "list-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -575,7 +575,7 @@ export def "jobs list" [
 #
 # POST /v1/data-sets/{DataSetId}/revisions
 # operationId: CreateRevision
-export def "data-sets-revisions create" [
+export def "create-revision" [
   data_set_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -625,7 +625,7 @@ export def "data-sets-revisions create" [
 #
 # GET /v1/data-sets/{DataSetId}/revisions
 # operationId: ListDataSetRevisions
-export def "data-sets-revisions list" [
+export def "list-data-set-revisions" [
   data_set_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -675,7 +675,7 @@ export def "data-sets-revisions list" [
 #
 # DELETE /v1/data-sets/{DataSetId}/revisions/{RevisionId}/assets/{AssetId}
 # operationId: DeleteAsset
-export def "data-sets-revisions-assets delete" [
+export def "delete-asset" [
   data_set_id: string
   revision_id: string
   asset_id: string
@@ -724,7 +724,7 @@ export def "data-sets-revisions-assets delete" [
 #
 # GET /v1/data-sets/{DataSetId}/revisions/{RevisionId}/assets/{AssetId}
 # operationId: GetAsset
-export def "data-sets-revisions-assets get" [
+export def "get-asset" [
   data_set_id: string
   revision_id: string
   asset_id: string
@@ -773,7 +773,7 @@ export def "data-sets-revisions-assets get" [
 #
 # PATCH /v1/data-sets/{DataSetId}/revisions/{RevisionId}/assets/{AssetId}
 # operationId: UpdateAsset
-export def "data-sets-revisions-assets update" [
+export def "update-asset" [
   data_set_id: string
   revision_id: string
   asset_id: string
@@ -826,7 +826,7 @@ export def "data-sets-revisions-assets update" [
 #
 # DELETE /v1/data-sets/{DataSetId}
 # operationId: DeleteDataSet
-export def "data-sets delete" [
+export def "delete-data-set" [
   data_set_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -871,7 +871,7 @@ export def "data-sets delete" [
 #
 # GET /v1/data-sets/{DataSetId}
 # operationId: GetDataSet
-export def "data-sets get" [
+export def "get-data-set" [
   data_set_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -916,7 +916,7 @@ export def "data-sets get" [
 #
 # PATCH /v1/data-sets/{DataSetId}
 # operationId: UpdateDataSet
-export def "data-sets update" [
+export def "update-data-set" [
   data_set_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -966,7 +966,7 @@ export def "data-sets update" [
 #
 # DELETE /v1/event-actions/{EventActionId}
 # operationId: DeleteEventAction
-export def "event-actions delete" [
+export def "delete-event-action" [
   event_action_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1011,7 +1011,7 @@ export def "event-actions delete" [
 #
 # GET /v1/event-actions/{EventActionId}
 # operationId: GetEventAction
-export def "event-actions get" [
+export def "get-event-action" [
   event_action_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1057,7 +1057,7 @@ export def "event-actions get" [
 # PATCH /v1/event-actions/{EventActionId}
 # operationId: UpdateEventAction
 # --Action shape: {ExportRevisionToS3?: any}
-export def "event-actions update" [
+export def "update-event-action" [
   event_action_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1106,7 +1106,7 @@ export def "event-actions update" [
 #
 # DELETE /v1/data-sets/{DataSetId}/revisions/{RevisionId}
 # operationId: DeleteRevision
-export def "data-sets-revisions delete" [
+export def "delete-revision" [
   data_set_id: string
   revision_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1153,7 +1153,7 @@ export def "data-sets-revisions delete" [
 #
 # GET /v1/data-sets/{DataSetId}/revisions/{RevisionId}
 # operationId: GetRevision
-export def "data-sets-revisions get" [
+export def "get-revision" [
   data_set_id: string
   revision_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1200,7 +1200,7 @@ export def "data-sets-revisions get" [
 #
 # PATCH /v1/data-sets/{DataSetId}/revisions/{RevisionId}
 # operationId: UpdateRevision
-export def "data-sets-revisions update" [
+export def "update-revision" [
   data_set_id: string
   revision_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1252,7 +1252,7 @@ export def "data-sets-revisions update" [
 #
 # GET /v1/data-sets/{DataSetId}/revisions/{RevisionId}/assets
 # operationId: ListRevisionAssets
-export def "data-sets-revisions-assets list" [
+export def "list-revision-assets" [
   data_set_id: string
   revision_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1304,7 +1304,7 @@ export def "data-sets-revisions-assets list" [
 #
 # GET /tags/{ResourceArn}
 # operationId: ListTagsForResource
-export def "tags list-for-resource" [
+export def "list-tags-for-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1349,7 +1349,7 @@ export def "tags list-for-resource" [
 #
 # POST /tags/{ResourceArn}
 # operationId: TagResource
-export def "tags tag-resource" [
+export def "tag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1398,7 +1398,7 @@ export def "tags tag-resource" [
 #
 # POST /v1/data-sets/{DataSetId}/revisions/{RevisionId}/revoke
 # operationId: RevokeRevision
-export def "data-sets-revisions-revoke delete" [
+export def "revoke-revision" [
   data_set_id: string
   revision_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1449,7 +1449,7 @@ export def "data-sets-revisions-revoke delete" [
 #
 # POST /v1
 # operationId: SendApiAsset
-export def "api send-asset" [
+export def "send-api-asset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1504,7 +1504,7 @@ export def "api send-asset" [
 #
 # DELETE /tags/{ResourceArn}
 # operationId: UntagResource
-export def "tags untag-resource" [
+export def "untag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

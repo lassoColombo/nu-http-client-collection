@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "ad-campaign list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-campaigns" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # GET /ad_campaign
 # operationId: getCampaigns
-export def "ad-campaign list" [
+export def "get-campaigns" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -185,7 +185,7 @@ export def "ad-campaign list" [
 # --budget shape: {daily?: record}
 # --campaignCriterion shape: {autoSelectFutureInventory?: bool, criterionType?: string, selectionRules?: list}
 # --fundingStrategy shape: {adRateStrategy?: string, bidPercentage?: string, dynamicAdRatePreferences?: list, fundingModel?: string}
-export def "ad-campaign create" [
+export def "create-campaign" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -229,7 +229,7 @@ export def "ad-campaign create" [
 #
 # GET /ad_campaign/find_campaign_by_ad_reference
 # operationId: findCampaignByAdReference
-export def "ad-campaign-find-campaign-by-ad-reference find" [
+export def "find-campaign-by-ad-reference" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -267,7 +267,7 @@ export def "ad-campaign-find-campaign-by-ad-reference find" [
 #
 # GET /ad_campaign/get_campaign_by_name
 # operationId: getCampaignByName
-export def "ad-campaign-get-campaign-by-name get" [
+export def "get-campaign-by-name" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -303,7 +303,7 @@ export def "ad-campaign-get-campaign-by-name get" [
 #
 # DELETE /ad_campaign/{campaign_id}
 # operationId: deleteCampaign
-export def "ad-campaign delete" [
+export def "delete-campaign" [
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -339,7 +339,7 @@ export def "ad-campaign delete" [
 #
 # GET /ad_campaign/{campaign_id}
 # operationId: getCampaign
-export def "ad-campaign get" [
+export def "get-campaign" [
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -375,7 +375,7 @@ export def "ad-campaign get" [
 #
 # GET /ad_campaign/{campaign_id}/ad
 # operationId: getAds
-export def "ad-campaign-ad list" [
+export def "get-ads" [
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -417,7 +417,7 @@ export def "ad-campaign-ad list" [
 #
 # POST /ad_campaign/{campaign_id}/ad
 # operationId: createAdByListingId
-export def "ad-campaign-ad create-by-listing" [
+export def "create-ad-by-listing-id" [
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -459,7 +459,7 @@ export def "ad-campaign-ad create-by-listing" [
 #
 # DELETE /ad_campaign/{campaign_id}/ad/{ad_id}
 # operationId: deleteAd
-export def "ad-campaign-ad delete" [
+export def "delete-ad" [
   campaign_id: string
   ad_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -497,7 +497,7 @@ export def "ad-campaign-ad delete" [
 #
 # GET /ad_campaign/{campaign_id}/ad/{ad_id}
 # operationId: getAd
-export def "ad-campaign-ad get" [
+export def "get-ad" [
   campaign_id: string
   ad_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -535,7 +535,7 @@ export def "ad-campaign-ad get" [
 #
 # POST /ad_campaign/{campaign_id}/ad/{ad_id}/update_bid
 # operationId: updateBid
-export def "ad-campaign-ad-update-bid update" [
+export def "update-bid" [
   campaign_id: string
   ad_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -577,7 +577,7 @@ export def "ad-campaign-ad-update-bid update" [
 #
 # GET /ad_campaign/{campaign_id}/ad_group
 # operationId: getAdGroups
-export def "ad-campaign-ad-group list" [
+export def "get-ad-groups" [
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -618,7 +618,7 @@ export def "ad-campaign-ad-group list" [
 # POST /ad_campaign/{campaign_id}/ad_group
 # operationId: createAdGroup
 # --defaultBid shape: {currency?: string, value?: string}
-export def "ad-campaign-ad-group create" [
+export def "create-ad-group" [
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -659,7 +659,7 @@ export def "ad-campaign-ad-group create" [
 #
 # GET /ad_campaign/{campaign_id}/ad_group/{ad_group_id}
 # operationId: getAdGroup
-export def "ad-campaign-ad-group get" [
+export def "get-ad-group" [
   campaign_id: string
   ad_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -698,7 +698,7 @@ export def "ad-campaign-ad-group get" [
 # PUT /ad_campaign/{campaign_id}/ad_group/{ad_group_id}
 # operationId: updateAdGroup
 # --defaultBid shape: {currency?: string, value?: string}
-export def "ad-campaign-ad-group update" [
+export def "update-ad-group" [
   campaign_id: string
   ad_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -743,7 +743,7 @@ export def "ad-campaign-ad-group update" [
 # POST /ad_campaign/{campaign_id}/ad_group/{ad_group_id}/suggest_bids
 # operationId: suggestBids
 # --keywords item shape: {keywordText?: string, matchType?: string}
-export def "ad-campaign-ad-group-suggest-bids create" [
+export def "suggest-bids" [
   campaign_id: string
   ad_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -785,7 +785,7 @@ export def "ad-campaign-ad-group-suggest-bids create" [
 #
 # POST /ad_campaign/{campaign_id}/ad_group/{ad_group_id}/suggest_keywords
 # operationId: suggestKeywords
-export def "ad-campaign-ad-group-suggest-keywords create" [
+export def "suggest-keywords" [
   campaign_id: string
   ad_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -831,7 +831,7 @@ export def "ad-campaign-ad-group-suggest-keywords create" [
 # POST /ad_campaign/{campaign_id}/bulk_create_ads_by_inventory_reference
 # operationId: bulkCreateAdsByInventoryReference
 # --requests item shape: {adGroupId?: string, bidPercentage?: string, inventoryReferenceId?: string, inventoryReferenceType?: string}
-export def "ad-campaign-bulk-create-ads-by-inventory-reference create" [
+export def "bulk-create-ads-by-inventory-reference" [
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -872,7 +872,7 @@ export def "ad-campaign-bulk-create-ads-by-inventory-reference create" [
 # POST /ad_campaign/{campaign_id}/bulk_create_ads_by_listing_id
 # operationId: bulkCreateAdsByListingId
 # --requests item shape: {adGroupId?: string, bidPercentage?: string, listingId?: string}
-export def "ad-campaign-bulk-create-ads-by-listing-id create" [
+export def "bulk-create-ads-by-listing-id" [
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -913,7 +913,7 @@ export def "ad-campaign-bulk-create-ads-by-listing-id create" [
 # POST /ad_campaign/{campaign_id}/bulk_create_keyword
 # operationId: bulkCreateKeyword
 # --requests item shape: {adGroupId?: string, bid?: record, keywordText?: string, matchType?: string}
-export def "ad-campaign-bulk-create-keyword create" [
+export def "bulk-create-keyword" [
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -954,7 +954,7 @@ export def "ad-campaign-bulk-create-keyword create" [
 # POST /ad_campaign/{campaign_id}/bulk_delete_ads_by_inventory_reference
 # operationId: bulkDeleteAdsByInventoryReference
 # --requests item shape: {inventoryReferenceId?: string, inventoryReferenceType?: string}
-export def "ad-campaign-bulk-delete-ads-by-inventory-reference delete" [
+export def "bulk-delete-ads-by-inventory-reference" [
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -995,7 +995,7 @@ export def "ad-campaign-bulk-delete-ads-by-inventory-reference delete" [
 # POST /ad_campaign/{campaign_id}/bulk_delete_ads_by_listing_id
 # operationId: bulkDeleteAdsByListingId
 # --requests item shape: {listingId?: string}
-export def "ad-campaign-bulk-delete-ads-by-listing-id delete" [
+export def "bulk-delete-ads-by-listing-id" [
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1036,7 +1036,7 @@ export def "ad-campaign-bulk-delete-ads-by-listing-id delete" [
 # POST /ad_campaign/{campaign_id}/bulk_update_ads_bid_by_inventory_reference
 # operationId: bulkUpdateAdsBidByInventoryReference
 # --requests item shape: {adGroupId?: string, bidPercentage?: string, inventoryReferenceId?: string, inventoryReferenceType?: string}
-export def "ad-campaign-bulk-update-ads-bid-by-inventory-reference update" [
+export def "bulk-update-ads-bid-by-inventory-reference" [
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1077,7 +1077,7 @@ export def "ad-campaign-bulk-update-ads-bid-by-inventory-reference update" [
 # POST /ad_campaign/{campaign_id}/bulk_update_ads_bid_by_listing_id
 # operationId: bulkUpdateAdsBidByListingId
 # --requests item shape: {adGroupId?: string, bidPercentage?: string, listingId?: string}
-export def "ad-campaign-bulk-update-ads-bid-by-listing-id update" [
+export def "bulk-update-ads-bid-by-listing-id" [
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1118,7 +1118,7 @@ export def "ad-campaign-bulk-update-ads-bid-by-listing-id update" [
 # POST /ad_campaign/{campaign_id}/bulk_update_ads_status
 # operationId: bulkUpdateAdsStatus
 # --requests item shape: {adId?: string, adStatus?: string}
-export def "ad-campaign-bulk-update-ads-status update" [
+export def "bulk-update-ads-status" [
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1159,7 +1159,7 @@ export def "ad-campaign-bulk-update-ads-status update" [
 # POST /ad_campaign/{campaign_id}/bulk_update_ads_status_by_listing_id
 # operationId: bulkUpdateAdsStatusByListingId
 # --requests item shape: {adGroupId?: string, adStatus?: string, listingId?: string}
-export def "ad-campaign-bulk-update-ads-status-by-listing-id update" [
+export def "bulk-update-ads-status-by-listing-id" [
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1200,7 +1200,7 @@ export def "ad-campaign-bulk-update-ads-status-by-listing-id update" [
 # POST /ad_campaign/{campaign_id}/bulk_update_keyword
 # operationId: bulkUpdateKeyword
 # --requests item shape: {bid?: record, keywordId?: string, keywordStatus?: string}
-export def "ad-campaign-bulk-update-keyword update" [
+export def "bulk-update-keyword" [
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1241,7 +1241,7 @@ export def "ad-campaign-bulk-update-keyword update" [
 # POST /ad_campaign/{campaign_id}/clone
 # operationId: cloneCampaign
 # --fundingStrategy shape: {adRateStrategy?: string, bidPercentage?: string, dynamicAdRatePreferences?: list, fundingModel?: string}
-export def "ad-campaign-clone clone" [
+export def "clone-campaign" [
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1284,7 +1284,7 @@ export def "ad-campaign-clone clone" [
 #
 # POST /ad_campaign/{campaign_id}/create_ads_by_inventory_reference
 # operationId: createAdsByInventoryReference
-export def "ad-campaign-create-ads-by-inventory-reference create" [
+export def "create-ads-by-inventory-reference" [
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1327,7 +1327,7 @@ export def "ad-campaign-create-ads-by-inventory-reference create" [
 #
 # POST /ad_campaign/{campaign_id}/delete_ads_by_inventory_reference
 # operationId: deleteAdsByInventoryReference
-export def "ad-campaign-delete-ads-by-inventory-reference delete" [
+export def "delete-ads-by-inventory-reference" [
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1368,7 +1368,7 @@ export def "ad-campaign-delete-ads-by-inventory-reference delete" [
 #
 # POST /ad_campaign/{campaign_id}/end
 # operationId: endCampaign
-export def "ad-campaign-end create" [
+export def "end-campaign" [
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1404,7 +1404,7 @@ export def "ad-campaign-end create" [
 #
 # GET /ad_campaign/{campaign_id}/get_ads_by_inventory_reference
 # operationId: getAdsByInventoryReference
-export def "ad-campaign-get-ads-by-inventory-reference get" [
+export def "get-ads-by-inventory-reference" [
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1443,7 +1443,7 @@ export def "ad-campaign-get-ads-by-inventory-reference get" [
 #
 # GET /ad_campaign/{campaign_id}/keyword
 # operationId: getKeywords
-export def "ad-campaign-keyword list" [
+export def "get-keywords" [
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1485,7 +1485,7 @@ export def "ad-campaign-keyword list" [
 # POST /ad_campaign/{campaign_id}/keyword
 # operationId: createKeyword
 # --bid shape: {currency?: string, value?: string}
-export def "ad-campaign-keyword create" [
+export def "create-keyword" [
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1528,7 +1528,7 @@ export def "ad-campaign-keyword create" [
 #
 # GET /ad_campaign/{campaign_id}/keyword/{keyword_id}
 # operationId: getKeyword
-export def "ad-campaign-keyword get" [
+export def "get-keyword" [
   campaign_id: string
   keyword_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1567,7 +1567,7 @@ export def "ad-campaign-keyword get" [
 # PUT /ad_campaign/{campaign_id}/keyword/{keyword_id}
 # operationId: updateKeyword
 # --bid shape: {currency?: string, value?: string}
-export def "ad-campaign-keyword update" [
+export def "update-keyword" [
   campaign_id: string
   keyword_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1610,7 +1610,7 @@ export def "ad-campaign-keyword update" [
 #
 # POST /ad_campaign/{campaign_id}/pause
 # operationId: pauseCampaign
-export def "ad-campaign-pause pause" [
+export def "pause-campaign" [
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1646,7 +1646,7 @@ export def "ad-campaign-pause pause" [
 #
 # POST /ad_campaign/{campaign_id}/resume
 # operationId: resumeCampaign
-export def "ad-campaign-resume create" [
+export def "resume-campaign" [
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1682,7 +1682,7 @@ export def "ad-campaign-resume create" [
 #
 # GET /ad_campaign/{campaign_id}/suggest_items
 # operationId: suggestItems
-export def "ad-campaign-suggest-items get" [
+export def "suggest-items" [
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1723,7 +1723,7 @@ export def "ad-campaign-suggest-items get" [
 # POST /ad_campaign/{campaign_id}/update_ad_rate_strategy
 # operationId: updateAdRateStrategy
 # --dynamicAdRatePreferences item shape: {adRateAdjustmentPercent?: string, adRateCapPercent?: string}
-export def "ad-campaign-update-ad-rate-strategy update" [
+export def "update-ad-rate-strategy" [
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1766,7 +1766,7 @@ export def "ad-campaign-update-ad-rate-strategy update" [
 # POST /ad_campaign/{campaign_id}/update_campaign_budget
 # operationId: updateCampaignBudget
 # --daily shape: {amount?: record}
-export def "ad-campaign-update-campaign-budget update" [
+export def "update-campaign-budget" [
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1806,7 +1806,7 @@ export def "ad-campaign-update-campaign-budget update" [
 #
 # POST /ad_campaign/{campaign_id}/update_campaign_identification
 # operationId: updateCampaignIdentification
-export def "ad-campaign-update-campaign-identification update" [
+export def "update-campaign-identification" [
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1848,7 +1848,7 @@ export def "ad-campaign-update-campaign-identification update" [
 #
 # GET /ad_report/{report_id}
 # operationId: getReport
-export def "ad-report get" [
+export def "get-report" [
   report_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1884,7 +1884,7 @@ export def "ad-report get" [
 #
 # GET /ad_report_metadata
 # operationId: getReportMetadata
-export def "ad-report-metadata list" [
+export def "get-report-metadata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1918,7 +1918,7 @@ export def "ad-report-metadata list" [
 #
 # GET /ad_report_metadata/{report_type}
 # operationId: getReportMetadataForReportType
-export def "ad-report-metadata get" [
+export def "get-report-metadata-for-report-type" [
   report_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1954,7 +1954,7 @@ export def "ad-report-metadata get" [
 #
 # GET /ad_report_task
 # operationId: getReportTasks
-export def "ad-report-task list" [
+export def "get-report-tasks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1994,7 +1994,7 @@ export def "ad-report-task list" [
 # operationId: createReportTask
 # --dimensions item shape: {annotationKeys?: list<string>, dimensionKey?: string}
 # --inventoryReferences item shape: {inventoryReferenceId?: string, inventoryReferenceType?: string}
-export def "ad-report-task create" [
+export def "create-report-task" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2043,7 +2043,7 @@ export def "ad-report-task create" [
 #
 # DELETE /ad_report_task/{report_task_id}
 # operationId: deleteReportTask
-export def "ad-report-task delete" [
+export def "delete-report-task" [
   report_task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2079,7 +2079,7 @@ export def "ad-report-task delete" [
 #
 # GET /ad_report_task/{report_task_id}
 # operationId: getReportTask
-export def "ad-report-task get" [
+export def "get-report-task" [
   report_task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2116,7 +2116,7 @@ export def "ad-report-task get" [
 # POST /bulk_create_negative_keyword
 # operationId: bulkCreateNegativeKeyword
 # --requests item shape: {adGroupId?: string, campaignId?: string, negativeKeywordMatchType?: string, negativeKeywordText?: string}
-export def "bulk-create-negative-keyword create" [
+export def "bulk-create-negative-keyword" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2155,7 +2155,7 @@ export def "bulk-create-negative-keyword create" [
 # POST /bulk_update_negative_keyword
 # operationId: bulkUpdateNegativeKeyword
 # --requests item shape: {negativeKeywordId?: string, negativeKeywordStatus?: string}
-export def "bulk-update-negative-keyword update" [
+export def "bulk-update-negative-keyword" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2194,7 +2194,7 @@ export def "bulk-update-negative-keyword update" [
 # POST /item_price_markdown
 # operationId: createItemPriceMarkdownPromotion
 # --selectedInventoryDiscounts item shape: {discountBenefit?: record, discountId?: string, inventoryCriterion?: record, ruleOrder?: int}
-export def "item-price-markdown create-promotion" [
+export def "create-item-price-markdown-promotion" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2243,7 +2243,7 @@ export def "item-price-markdown create-promotion" [
 #
 # DELETE /item_price_markdown/{promotion_id}
 # operationId: deleteItemPriceMarkdownPromotion
-export def "item-price-markdown delete" [
+export def "delete-item-price-markdown-promotion" [
   promotion_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2279,7 +2279,7 @@ export def "item-price-markdown delete" [
 #
 # GET /item_price_markdown/{promotion_id}
 # operationId: getItemPriceMarkdownPromotion
-export def "item-price-markdown get" [
+export def "get-item-price-markdown-promotion" [
   promotion_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2316,7 +2316,7 @@ export def "item-price-markdown get" [
 # PUT /item_price_markdown/{promotion_id}
 # operationId: updateItemPriceMarkdownPromotion
 # --selectedInventoryDiscounts item shape: {discountBenefit?: record, discountId?: string, inventoryCriterion?: record, ruleOrder?: int}
-export def "item-price-markdown update" [
+export def "update-item-price-markdown-promotion" [
   promotion_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2371,7 +2371,7 @@ export def "item-price-markdown update" [
 # --couponConfiguration shape: {couponCode?: string, couponType?: string, maxCouponRedemptionPerUser?: int}
 # --discountRules item shape: {discountBenefit?: record, discountSpecification?: record, maxDiscountAmount?: record, ruleOrder?: int}
 # --inventoryCriterion shape: {inventoryCriterionType?: string, inventoryItems?: list, listingIds?: list<string>, ruleCriteria?: record}
-export def "item-promotion create" [
+export def "create-item-promotion" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2422,7 +2422,7 @@ export def "item-promotion create" [
 #
 # DELETE /item_promotion/{promotion_id}
 # operationId: deleteItemPromotion
-export def "item-promotion delete" [
+export def "delete-item-promotion" [
   promotion_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2458,7 +2458,7 @@ export def "item-promotion delete" [
 #
 # GET /item_promotion/{promotion_id}
 # operationId: getItemPromotion
-export def "item-promotion get" [
+export def "get-item-promotion" [
   promotion_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2498,7 +2498,7 @@ export def "item-promotion get" [
 # --couponConfiguration shape: {couponCode?: string, couponType?: string, maxCouponRedemptionPerUser?: int}
 # --discountRules item shape: {discountBenefit?: record, discountSpecification?: record, maxDiscountAmount?: record, ruleOrder?: int}
 # --inventoryCriterion shape: {inventoryCriterionType?: string, inventoryItems?: list, listingIds?: list<string>, ruleCriteria?: record}
-export def "item-promotion update" [
+export def "update-item-promotion" [
   promotion_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2551,7 +2551,7 @@ export def "item-promotion update" [
 #
 # GET /negative_keyword
 # operationId: getNegativeKeywords
-export def "negative-keyword list" [
+export def "get-negative-keywords" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2591,7 +2591,7 @@ export def "negative-keyword list" [
 #
 # POST /negative_keyword
 # operationId: createNegativeKeyword
-export def "negative-keyword create" [
+export def "create-negative-keyword" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2632,7 +2632,7 @@ export def "negative-keyword create" [
 #
 # GET /negative_keyword/{negative_keyword_id}
 # operationId: getNegativeKeyword
-export def "negative-keyword get" [
+export def "get-negative-keyword" [
   negative_keyword_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2668,7 +2668,7 @@ export def "negative-keyword get" [
 #
 # PUT /negative_keyword/{negative_keyword_id}
 # operationId: updateNegativeKeyword
-export def "negative-keyword update" [
+export def "update-negative-keyword" [
   negative_keyword_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2708,7 +2708,7 @@ export def "negative-keyword update" [
 #
 # GET /promotion
 # operationId: getPromotions
-export def "promotion get" [
+export def "get-promotions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2750,7 +2750,7 @@ export def "promotion get" [
 #
 # GET /promotion/{promotion_id}/get_listing_set
 # operationId: getListingSet
-export def "promotion-get-listing-set get" [
+export def "get-listing-set" [
   promotion_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2792,7 +2792,7 @@ export def "promotion-get-listing-set get" [
 #
 # POST /promotion/{promotion_id}/pause
 # operationId: pausePromotion
-export def "promotion-pause pause" [
+export def "pause-promotion" [
   promotion_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2828,7 +2828,7 @@ export def "promotion-pause pause" [
 #
 # POST /promotion/{promotion_id}/resume
 # operationId: resumePromotion
-export def "promotion-resume create" [
+export def "resume-promotion" [
   promotion_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2864,7 +2864,7 @@ export def "promotion-resume create" [
 #
 # GET /promotion_report
 # operationId: getPromotionReports
-export def "promotion-report get" [
+export def "get-promotion-reports" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2905,7 +2905,7 @@ export def "promotion-report get" [
 #
 # GET /promotion_summary_report
 # operationId: getPromotionSummaryReport
-export def "promotion-summary-report get" [
+export def "get-promotion-summary-report" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

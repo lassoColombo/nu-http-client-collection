@@ -154,7 +154,7 @@ def proximity-completer [] { ["far" "immediate" "near"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "authinfo get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-authinfo" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -178,7 +178,7 @@ export def commands []: nothing -> table {
 #
 # GET /authinfo
 # operationId: getAuthinfo
-export def "authinfo get" [
+export def "get-authinfo" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -212,7 +212,7 @@ export def "authinfo get" [
 #
 # GET /blobs
 # operationId: getBlobs
-export def "blobs get" [
+export def "get-blobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -270,7 +270,7 @@ export def "blobs get" [
 #
 # POST /blobs
 # operationId: addBlob
-export def "blobs create" [
+export def "add-blob" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -310,7 +310,7 @@ export def "blobs create" [
 #
 # DELETE /blobs/{id}
 # operationId: deleteBlob
-export def "blobs delete" [
+export def "delete-blob" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -346,7 +346,7 @@ export def "blobs delete" [
 #
 # GET /blobs/{id}
 # operationId: getBlobMetadataById
-export def "blobs get-metadata" [
+export def "get-blob-metadata-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -382,7 +382,7 @@ export def "blobs get-metadata" [
 #
 # GET /blobs/{id}/download/{filename}
 # operationId: getBlobById
-export def "blobs-download get" [
+export def "get-blob-by-id" [
   id: string
   filename: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -420,7 +420,7 @@ export def "blobs-download get" [
 #
 # POST /blobs/{id}/upload
 # operationId: uploadBlobById
-export def "blobs-upload upload" [
+export def "upload-blob-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -462,7 +462,7 @@ export def "blobs-upload upload" [
 #
 # GET /events
 # operationId: getEvents
-export def "events list" [
+export def "get-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -518,7 +518,7 @@ export def "events list" [
 #
 # GET /events/{id}
 # operationId: getEventById
-export def "events get" [
+export def "get-event-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -554,7 +554,7 @@ export def "events get" [
 #
 # GET /items
 # operationId: getItems
-export def "items list" [
+export def "get-items" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -624,7 +624,7 @@ export def "items list" [
 #
 # POST /items
 # operationId: addItem
-export def "items create" [
+export def "add-item" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -670,7 +670,7 @@ export def "items create" [
 #
 # DELETE /items/{id}
 # operationId: deleteItem
-export def "items delete" [
+export def "delete-item" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -706,7 +706,7 @@ export def "items delete" [
 #
 # GET /items/{id}
 # operationId: getItemById
-export def "items get" [
+export def "get-item-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -742,7 +742,7 @@ export def "items get" [
 #
 # PUT /items/{id}
 # operationId: updateItem
-export def "items update" [
+export def "update-item" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -786,7 +786,7 @@ export def "items update" [
 #
 # GET /keys
 # operationId: getKeys
-export def "keys list" [
+export def "get-keys" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -842,7 +842,7 @@ export def "keys list" [
 #
 # POST /keys
 # operationId: addKey
-export def "keys create" [
+export def "add-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -881,7 +881,7 @@ export def "keys create" [
 #
 # DELETE /keys/{id}
 # operationId: deleteKey
-export def "keys delete" [
+export def "delete-key" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -917,7 +917,7 @@ export def "keys delete" [
 #
 # GET /keys/{id}
 # operationId: getKeyById
-export def "keys get" [
+export def "get-key-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -953,7 +953,7 @@ export def "keys get" [
 #
 # PUT /keys/{id}
 # operationId: updateKey
-export def "keys update" [
+export def "update-key" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -994,7 +994,7 @@ export def "keys update" [
 #
 # GET /kvpairs
 # operationId: getKvPairs
-export def "kvpairs list" [
+export def "get-kv-pairs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1048,7 +1048,7 @@ export def "kvpairs list" [
 #
 # POST /kvpairs
 # operationId: addKvPairs
-export def "kvpairs create-kv-pairs" [
+export def "add-kv-pairs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1087,7 +1087,7 @@ export def "kvpairs create-kv-pairs" [
 #
 # DELETE /kvpairs/{id}
 # operationId: deleteKvPair
-export def "kvpairs delete-kv-pair" [
+export def "delete-kv-pair" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1123,7 +1123,7 @@ export def "kvpairs delete-kv-pair" [
 #
 # GET /kvpairs/{id}
 # operationId: getKvPairsById
-export def "kvpairs get-kv-pairs" [
+export def "get-kv-pairs-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1159,7 +1159,7 @@ export def "kvpairs get-kv-pairs" [
 #
 # PUT /kvpairs/{id}
 # operationId: updateKvPair
-export def "kvpairs update-kv-pair" [
+export def "update-kv-pair" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1199,7 +1199,7 @@ export def "kvpairs update-kv-pair" [
 #
 # GET /locationrules
 # operationId: getLocationRules
-export def "locationrules get-location-rules" [
+export def "get-location-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1256,7 +1256,7 @@ export def "locationrules get-location-rules" [
 # POST /locationrules
 # operationId: addLocationRule
 # --conditions shape: {from_location?: string, to_location?: string}
-export def "locationrules create-location-rule" [
+export def "add-location-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1298,7 +1298,7 @@ export def "locationrules create-location-rule" [
 #
 # DELETE /locationrules/{id}
 # operationId: deleteLocationRule
-export def "locationrules delete-location-rule" [
+export def "delete-location-rule" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1334,7 +1334,7 @@ export def "locationrules delete-location-rule" [
 #
 # GET /locationrules/{id}
 # operationId: getLocationRuleById
-export def "locationrules get-location-rule" [
+export def "get-location-rule-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1371,7 +1371,7 @@ export def "locationrules get-location-rule" [
 # PUT /locationrules/{id}
 # operationId: updateLocationRule
 # --conditions shape: {from_location?: string, to_location?: string}
-export def "locationrules update-location-rule" [
+export def "update-location-rule" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1415,7 +1415,7 @@ export def "locationrules update-location-rule" [
 #
 # GET /locations
 # operationId: getLocations
-export def "locations list" [
+export def "get-locations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1471,7 +1471,7 @@ export def "locations list" [
 #
 # POST /locations
 # operationId: addLocation
-export def "locations create" [
+export def "add-location" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1511,7 +1511,7 @@ export def "locations create" [
 #
 # DELETE /locations/{id}
 # operationId: deleteLocation
-export def "locations delete" [
+export def "delete-location" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1547,7 +1547,7 @@ export def "locations delete" [
 #
 # GET /locations/{id}
 # operationId: getLocationById
-export def "locations get" [
+export def "get-location-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1583,7 +1583,7 @@ export def "locations get" [
 #
 # PUT /locations/{id}
 # operationId: updateLocation
-export def "locations update" [
+export def "update-location" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1625,7 +1625,7 @@ export def "locations update" [
 #
 # GET /presences
 # operationId: getPresences
-export def "presences list" [
+export def "get-presences" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1682,7 +1682,7 @@ export def "presences list" [
 #
 # GET /presences/{id}
 # operationId: getPresenceById
-export def "presences get" [
+export def "get-presence-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1718,7 +1718,7 @@ export def "presences get" [
 #
 # GET /services
 # operationId: getServices
-export def "services list" [
+export def "get-services" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1772,7 +1772,7 @@ export def "services list" [
 #
 # GET /services/{id}
 # operationId: getServiceById
-export def "services get" [
+export def "get-service-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1808,7 +1808,7 @@ export def "services get" [
 #
 # PUT /services/{id}
 # operationId: updateService
-export def "services update" [
+export def "update-service" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1849,7 +1849,7 @@ export def "services update" [
 #
 # GET /sets/itemlists
 # operationId: getItemLists
-export def "sets-itemlists get-item-lists" [
+export def "get-item-lists" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1907,7 +1907,7 @@ export def "sets-itemlists get-item-lists" [
 #
 # POST /sets/itemlists
 # operationId: addItemList
-export def "sets-itemlists create-item-list" [
+export def "add-item-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1947,7 +1947,7 @@ export def "sets-itemlists create-item-list" [
 #
 # DELETE /sets/itemlists/{id}
 # operationId: deleteItemSet
-export def "sets-itemlists delete-item" [
+export def "delete-item-set" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1983,7 +1983,7 @@ export def "sets-itemlists delete-item" [
 #
 # GET /sets/itemlists/{id}
 # operationId: getItemListById
-export def "sets-itemlists get-item-list" [
+export def "get-item-list-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2019,7 +2019,7 @@ export def "sets-itemlists get-item-list" [
 #
 # PUT /sets/itemlists/{id}
 # operationId: updateItemList
-export def "sets-itemlists update-item-list" [
+export def "update-item-list" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2061,7 +2061,7 @@ export def "sets-itemlists update-item-list" [
 #
 # GET /sets/itemlists/{id}/ids
 # operationId: getItemListIdsById
-export def "sets-itemlists-ids get-item-list" [
+export def "get-item-list-ids-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2097,7 +2097,7 @@ export def "sets-itemlists-ids get-item-list" [
 #
 # POST /sets/itemlists/{id}/ids
 # operationId: addItemIdsList
-export def "sets-itemlists-ids create-item-list" [
+export def "add-item-ids-list" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2137,7 +2137,7 @@ export def "sets-itemlists-ids create-item-list" [
 #
 # DELETE /sets/itemlists/{id}/ids/{itemId}
 # operationId: deleteItemIdFromItemList
-export def "sets-itemlists-ids delete-item-from-item-list" [
+export def "delete-item-id-from-item-list" [
   id: string
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2175,7 +2175,7 @@ export def "sets-itemlists-ids delete-item-from-item-list" [
 #
 # GET /sets/spotlists
 # operationId: getSpotLists
-export def "sets-spotlists get-spot-lists" [
+export def "get-spot-lists" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2232,7 +2232,7 @@ export def "sets-spotlists get-spot-lists" [
 #
 # POST /sets/spotlists
 # operationId: addSpotList
-export def "sets-spotlists create-spot-list" [
+export def "add-spot-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2272,7 +2272,7 @@ export def "sets-spotlists create-spot-list" [
 #
 # DELETE /sets/spotlists/{id}
 # operationId: deleteSpotList
-export def "sets-spotlists delete-spot-list" [
+export def "delete-spot-list" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2308,7 +2308,7 @@ export def "sets-spotlists delete-spot-list" [
 #
 # GET /sets/spotlists/{id}
 # operationId: getSpotListById
-export def "sets-spotlists get-spot-list" [
+export def "get-spot-list-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2344,7 +2344,7 @@ export def "sets-spotlists get-spot-list" [
 #
 # PUT /sets/spotlists/{id}
 # operationId: updateSpotList
-export def "sets-spotlists update-spot-list" [
+export def "update-spot-list" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2386,7 +2386,7 @@ export def "sets-spotlists update-spot-list" [
 #
 # GET /sets/spotlists/{id}/ids
 # operationId: getSpotListIdsById
-export def "sets-spotlists-ids get-spot-list" [
+export def "get-spot-list-ids-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2422,7 +2422,7 @@ export def "sets-spotlists-ids get-spot-list" [
 #
 # POST /sets/spotlists/{id}/ids
 # operationId: addItemIdsSpotList
-export def "sets-spotlists-ids create-item-spot-list" [
+export def "add-item-ids-spot-list" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2462,7 +2462,7 @@ export def "sets-spotlists-ids create-item-spot-list" [
 #
 # DELETE /sets/spotlists/{id}/ids/{itemId}
 # operationId: deleteItemIdFromSpotList
-export def "sets-spotlists-ids delete-item-from-spot-list" [
+export def "delete-item-id-from-spot-list" [
   id: string
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2500,7 +2500,7 @@ export def "sets-spotlists-ids delete-item-from-spot-list" [
 #
 # GET /spots
 # operationId: getSpots
-export def "spots list" [
+export def "get-spots" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2556,7 +2556,7 @@ export def "spots list" [
 #
 # GET /spots/{id}
 # operationId: getSpotById
-export def "spots get" [
+export def "get-spot-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2594,7 +2594,7 @@ export def "spots get" [
 # operationId: updateSpot
 # --antenna_report_locations item shape: {antenna_number?: int}
 # --geo_coords shape: {lat?: float, lng?: float}
-export def "spots update" [
+export def "update-spot" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2638,7 +2638,7 @@ export def "spots update" [
 #
 # GET /spots/{id}/sets
 # operationId: getSpotSetsById
-export def "spots-sets list" [
+export def "get-spot-sets-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2674,7 +2674,7 @@ export def "spots-sets list" [
 #
 # POST /spots/{id}/sets
 # operationId: addSpotSet
-export def "spots-sets create" [
+export def "add-spot-set" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2714,7 +2714,7 @@ export def "spots-sets create" [
 #
 # GET /spots/{id}/sets/{setId}
 # operationId: getSpotSetById
-export def "spots-sets get" [
+export def "get-spot-set-by-id" [
   id: string
   set_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2752,7 +2752,7 @@ export def "spots-sets get" [
 #
 # PUT /spots/{id}/sets/{setId}
 # operationId: updateSpotSet
-export def "spots-sets update" [
+export def "update-spot-set" [
   id: string
   set_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2793,7 +2793,7 @@ export def "spots-sets update" [
 # Get spotsets
 #
 # GET /spotsets
-export def "spotsets list" [
+export def "get-spotsets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2826,7 +2826,7 @@ export def "spotsets list" [
 # Create spotset
 #
 # POST /spotsets
-export def "spotsets create" [
+export def "post-spotsets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2863,7 +2863,7 @@ export def "spotsets create" [
 # Get spotset
 #
 # GET /spotsets/{id}
-export def "spotsets get" [
+export def "get-spotsets-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2898,7 +2898,7 @@ export def "spotsets get" [
 # Update existing spotset
 #
 # PUT /spotsets/{id}
-export def "spotsets update" [
+export def "put-spotsets-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2938,7 +2938,7 @@ export def "spotsets update" [
 #
 # GET /subscriptions
 # operationId: getSubscriptions
-export def "subscriptions list" [
+export def "get-subscriptions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2996,7 +2996,7 @@ export def "subscriptions list" [
 #
 # POST /subscriptions
 # operationId: addSubscription
-export def "subscriptions create" [
+export def "add-subscription" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3041,7 +3041,7 @@ export def "subscriptions create" [
 #
 # DELETE /subscriptions/{id}
 # operationId: deleteSubscription
-export def "subscriptions delete" [
+export def "delete-subscription" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3077,7 +3077,7 @@ export def "subscriptions delete" [
 #
 # GET /subscriptions/{id}
 # operationId: getSubscriptionById
-export def "subscriptions get" [
+export def "get-subscription-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3113,7 +3113,7 @@ export def "subscriptions get" [
 #
 # PUT /subscriptions/{id}
 # operationId: updateSubscription
-export def "subscriptions update" [
+export def "update-subscription" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3160,7 +3160,7 @@ export def "subscriptions update" [
 #
 # GET /subscriptions/{id}/events
 # operationId: getEventsForSubscriptionById
-export def "subscriptions-events get-for" [
+export def "get-events-for-subscription-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3219,7 +3219,7 @@ export def "subscriptions-events get-for" [
 #
 # GET /users
 # operationId: getUsers
-export def "users list" [
+export def "get-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3277,7 +3277,7 @@ export def "users list" [
 #
 # POST /users
 # operationId: addUser
-export def "users create" [
+export def "add-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3320,7 +3320,7 @@ export def "users create" [
 #
 # DELETE /users/{id}
 # operationId: deleteUser
-export def "users delete" [
+export def "delete-user" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3356,7 +3356,7 @@ export def "users delete" [
 #
 # GET /users/{id}
 # operationId: getUserById
-export def "users get" [
+export def "get-user-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3392,7 +3392,7 @@ export def "users get" [
 #
 # PUT /users/{id}
 # operationId: updateUser
-export def "users update" [
+export def "update-user" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

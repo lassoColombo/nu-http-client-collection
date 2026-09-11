@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["jwt"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "aquifer-codes-demand list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "aquifer-codes-demand-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -122,7 +122,7 @@ export def commands []: nothing -> table {
 #
 # GET /aquifer-codes/demand/
 # operationId: aquifer-codes_demand_list
-export def "aquifer-codes-demand list" [
+export def "aquifer-codes-demand-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -159,7 +159,7 @@ export def "aquifer-codes-demand list" [
 #
 # GET /aquifer-codes/materials/
 # operationId: aquifer-codes_materials_list
-export def "aquifer-codes-materials list" [
+export def "aquifer-codes-materials-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -196,7 +196,7 @@ export def "aquifer-codes-materials list" [
 #
 # GET /aquifer-codes/productivity/
 # operationId: aquifer-codes_productivity_list
-export def "aquifer-codes-productivity list" [
+export def "aquifer-codes-productivity-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -233,7 +233,7 @@ export def "aquifer-codes-productivity list" [
 #
 # GET /aquifer-codes/quality-concerns/
 # operationId: aquifer-codes_quality-concerns_list
-export def "aquifer-codes-quality-concerns list" [
+export def "aquifer-codes-quality-concerns-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -270,7 +270,7 @@ export def "aquifer-codes-quality-concerns list" [
 #
 # GET /aquifer-codes/subtypes/
 # operationId: aquifer-codes_subtypes_list
-export def "aquifer-codes-subtypes list" [
+export def "aquifer-codes-subtypes-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -307,7 +307,7 @@ export def "aquifer-codes-subtypes list" [
 #
 # GET /aquifer-codes/vulnerability/
 # operationId: aquifer-codes_vulnerability_list
-export def "aquifer-codes-vulnerability list" [
+export def "aquifer-codes-vulnerability-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -344,7 +344,7 @@ export def "aquifer-codes-vulnerability list" [
 #
 # GET /aquifer-codes/water-use/
 # operationId: aquifer-codes_water-use_list
-export def "aquifer-codes-water-use list" [
+export def "aquifer-codes-water-use-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -381,7 +381,7 @@ export def "aquifer-codes-water-use list" [
 #
 # GET /aquifers/
 # operationId: aquifers_list
-export def "aquifers list" [
+export def "aquifers-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -421,7 +421,7 @@ export def "aquifers list" [
 #
 # GET /aquifers/names/
 # operationId: aquifers_names_list
-export def "aquifers-names list" [
+export def "aquifers-names-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -457,7 +457,7 @@ export def "aquifers-names list" [
 #
 # GET /aquifers/{aquifer_id}/
 # operationId: aquifers_read
-export def "aquifers get" [
+export def "aquifers-read" [
   aquifer_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -493,7 +493,7 @@ export def "aquifers get" [
 #
 # GET /aquifers/{aquifer_id}/files
 # operationId: aquifers_files_list
-export def "aquifers-files list" [
+export def "aquifers-files-list" [
   aquifer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -529,7 +529,7 @@ export def "aquifers-files list" [
 #
 # GET /cities/drillers/
 # operationId: cities_drillers_list
-export def "cities-drillers list" [
+export def "cities-drillers-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -563,7 +563,7 @@ export def "cities-drillers list" [
 #
 # GET /cities/installers/
 # operationId: cities_installers_list
-export def "cities-installers list" [
+export def "cities-installers-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -597,7 +597,7 @@ export def "cities-installers list" [
 #
 # GET /config
 # operationId: config_list
-export def "config list" [
+export def "config-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -631,7 +631,7 @@ export def "config list" [
 #
 # GET /drillers/
 # operationId: drillers_list
-export def "drillers list" [
+export def "drillers-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -670,7 +670,7 @@ export def "drillers list" [
 #
 # GET /drillers/names/
 # operationId: drillers_names_list
-export def "drillers-names list" [
+export def "drillers-names-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -706,7 +706,7 @@ export def "drillers-names list" [
 #
 # GET /drillers/{person_guid}/files/
 # operationId: drillers_files_list
-export def "drillers-files list" [
+export def "drillers-files-list" [
   person_guid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -742,7 +742,7 @@ export def "drillers-files list" [
 #
 # GET /keycloak
 # operationId: keycloak_list
-export def "keycloak list" [
+export def "keycloak-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -776,7 +776,7 @@ export def "keycloak list" [
 #
 # GET /submissions/options/
 # operationId: submissions_options_list
-export def "submissions-options list" [
+export def "submissions-options-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -810,7 +810,7 @@ export def "submissions-options list" [
 #
 # GET /surveys/
 # operationId: surveys_list
-export def "surveys list" [
+export def "surveys-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -844,7 +844,7 @@ export def "surveys list" [
 #
 # GET /wells/
 # operationId: wells_list
-export def "wells list" [
+export def "wells-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -881,7 +881,7 @@ export def "wells list" [
 #
 # GET /wells/tags/
 # operationId: wells_tags_list
-export def "wells-tags list" [
+export def "wells-tags-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -918,7 +918,7 @@ export def "wells-tags list" [
 #
 # GET /wells/{tag}/files
 # operationId: wells_files_list
-export def "wells-files list" [
+export def "wells-files-list" [
   tag: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -954,7 +954,7 @@ export def "wells-files list" [
 #
 # GET /wells/{well_tag_number}
 # operationId: wells_read
-export def "wells get" [
+export def "wells-read" [
   well_tag_number: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

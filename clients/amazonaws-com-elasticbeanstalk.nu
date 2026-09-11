@@ -156,7 +156,7 @@ def action-completer-46 [] { ["ValidateConfigurationSettings"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api get-abort-environment-update" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-abort-environment-update" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -180,7 +180,7 @@ export def commands []: nothing -> table {
 #
 # GET /
 # operationId: GET_AbortEnvironmentUpdate
-export def "api get-abort-environment-update" [
+export def "get-abort-environment-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -228,7 +228,7 @@ export def "api get-abort-environment-update" [
 #
 # POST /
 # operationId: POST_AbortEnvironmentUpdate
-export def "api create-abort-environment-update" [
+export def "post-abort-environment-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -278,7 +278,7 @@ export def "api create-abort-environment-update" [
 #
 # GET /
 # operationId: GET_ApplyEnvironmentManagedAction
-export def "api get-apply-environment-managed-action" [
+export def "get-apply-environment-managed-action" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -327,7 +327,7 @@ export def "api get-apply-environment-managed-action" [
 #
 # POST /
 # operationId: POST_ApplyEnvironmentManagedAction
-export def "api create-apply-environment-managed-action" [
+export def "post-apply-environment-managed-action" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -377,7 +377,7 @@ export def "api create-apply-environment-managed-action" [
 #
 # GET /
 # operationId: GET_AssociateEnvironmentOperationsRole
-export def "api get-associate-environment-operations-role" [
+export def "get-associate-environment-operations-role" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -425,7 +425,7 @@ export def "api get-associate-environment-operations-role" [
 #
 # POST /
 # operationId: POST_AssociateEnvironmentOperationsRole
-export def "api create-associate-environment-operations-role" [
+export def "post-associate-environment-operations-role" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -475,7 +475,7 @@ export def "api create-associate-environment-operations-role" [
 #
 # GET /
 # operationId: GET_CheckDNSAvailability
-export def "api get-check-dns-availability" [
+export def "get-check-dns-availability" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -522,7 +522,7 @@ export def "api get-check-dns-availability" [
 #
 # POST /
 # operationId: POST_CheckDNSAvailability
-export def "api create-check-dns-availability" [
+export def "post-check-dns-availability" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -572,7 +572,7 @@ export def "api create-check-dns-availability" [
 #
 # GET /
 # operationId: GET_ComposeEnvironments
-export def "api get-compose-environments" [
+export def "get-compose-environments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -621,7 +621,7 @@ export def "api get-compose-environments" [
 #
 # POST /
 # operationId: POST_ComposeEnvironments
-export def "api create-compose-environments" [
+export def "post-compose-environments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -671,7 +671,7 @@ export def "api create-compose-environments" [
 #
 # GET /
 # operationId: GET_CreateApplication
-export def "api get-create-application" [
+export def "get-create-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -721,7 +721,7 @@ export def "api get-create-application" [
 #
 # POST /
 # operationId: POST_CreateApplication
-export def "api create-application" [
+export def "post-create-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -771,7 +771,7 @@ export def "api create-application" [
 #
 # GET /
 # operationId: GET_CreateApplicationVersion
-export def "api get-create-application-version" [
+export def "get-create-application-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -826,7 +826,7 @@ export def "api get-create-application-version" [
 #
 # POST /
 # operationId: POST_CreateApplicationVersion
-export def "api create-application-version" [
+export def "post-create-application-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -876,7 +876,7 @@ export def "api create-application-version" [
 #
 # GET /
 # operationId: GET_CreateConfigurationTemplate
-export def "api get-create-configuration-template" [
+export def "get-create-configuration-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -931,7 +931,7 @@ export def "api get-create-configuration-template" [
 #
 # POST /
 # operationId: POST_CreateConfigurationTemplate
-export def "api create-configuration-template" [
+export def "post-create-configuration-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -981,7 +981,7 @@ export def "api create-configuration-template" [
 #
 # GET /
 # operationId: GET_CreateEnvironment
-export def "api get-create-environment" [
+export def "get-create-environment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1041,7 +1041,7 @@ export def "api get-create-environment" [
 #
 # POST /
 # operationId: POST_CreateEnvironment
-export def "api create-environment" [
+export def "post-create-environment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1091,7 +1091,7 @@ export def "api create-environment" [
 #
 # GET /
 # operationId: GET_CreatePlatformVersion
-export def "api get-create-platform-version" [
+export def "get-create-platform-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1143,7 +1143,7 @@ export def "api get-create-platform-version" [
 #
 # POST /
 # operationId: POST_CreatePlatformVersion
-export def "api create-platform-version" [
+export def "post-create-platform-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1193,7 +1193,7 @@ export def "api create-platform-version" [
 #
 # GET /
 # operationId: GET_CreateStorageLocation
-export def "api get-create-storage-location" [
+export def "get-create-storage-location" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1239,7 +1239,7 @@ export def "api get-create-storage-location" [
 #
 # POST /
 # operationId: POST_CreateStorageLocation
-export def "api create-storage-location" [
+export def "post-create-storage-location" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1285,7 +1285,7 @@ export def "api create-storage-location" [
 #
 # GET /
 # operationId: GET_DeleteApplication
-export def "api get-delete-application" [
+export def "get-delete-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1333,7 +1333,7 @@ export def "api get-delete-application" [
 #
 # POST /
 # operationId: POST_DeleteApplication
-export def "api create-delete-application" [
+export def "post-delete-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1383,7 +1383,7 @@ export def "api create-delete-application" [
 #
 # GET /
 # operationId: GET_DeleteApplicationVersion
-export def "api get-delete-application-version" [
+export def "get-delete-application-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1432,7 +1432,7 @@ export def "api get-delete-application-version" [
 #
 # POST /
 # operationId: POST_DeleteApplicationVersion
-export def "api create-delete-application-version" [
+export def "post-delete-application-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1482,7 +1482,7 @@ export def "api create-delete-application-version" [
 #
 # GET /
 # operationId: GET_DeleteConfigurationTemplate
-export def "api get-delete-configuration-template" [
+export def "get-delete-configuration-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1530,7 +1530,7 @@ export def "api get-delete-configuration-template" [
 #
 # POST /
 # operationId: POST_DeleteConfigurationTemplate
-export def "api create-delete-configuration-template" [
+export def "post-delete-configuration-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1580,7 +1580,7 @@ export def "api create-delete-configuration-template" [
 #
 # GET /
 # operationId: GET_DeleteEnvironmentConfiguration
-export def "api get-delete-environment-configuration" [
+export def "get-delete-environment-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1628,7 +1628,7 @@ export def "api get-delete-environment-configuration" [
 #
 # POST /
 # operationId: POST_DeleteEnvironmentConfiguration
-export def "api create-delete-environment-configuration" [
+export def "post-delete-environment-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1678,7 +1678,7 @@ export def "api create-delete-environment-configuration" [
 #
 # GET /
 # operationId: GET_DeletePlatformVersion
-export def "api get-delete-platform-version" [
+export def "get-delete-platform-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1725,7 +1725,7 @@ export def "api get-delete-platform-version" [
 #
 # POST /
 # operationId: POST_DeletePlatformVersion
-export def "api create-delete-platform-version" [
+export def "post-delete-platform-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1775,7 +1775,7 @@ export def "api create-delete-platform-version" [
 #
 # GET /
 # operationId: GET_DescribeAccountAttributes
-export def "api get-account-attributes" [
+export def "get-describe-account-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1821,7 +1821,7 @@ export def "api get-account-attributes" [
 #
 # POST /
 # operationId: POST_DescribeAccountAttributes
-export def "api create-get-account-attributes" [
+export def "post-describe-account-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1867,7 +1867,7 @@ export def "api create-get-account-attributes" [
 #
 # GET /
 # operationId: GET_DescribeApplicationVersions
-export def "api get-application-versions" [
+export def "get-describe-application-versions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1917,7 +1917,7 @@ export def "api get-application-versions" [
 #
 # POST /
 # operationId: POST_DescribeApplicationVersions
-export def "api create-get-application-versions" [
+export def "post-describe-application-versions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1967,7 +1967,7 @@ export def "api create-get-application-versions" [
 #
 # GET /
 # operationId: GET_DescribeApplications
-export def "api get-applications" [
+export def "get-describe-applications" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2014,7 +2014,7 @@ export def "api get-applications" [
 #
 # POST /
 # operationId: POST_DescribeApplications
-export def "api create-get-applications" [
+export def "post-describe-applications" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2064,7 +2064,7 @@ export def "api create-get-applications" [
 #
 # GET /
 # operationId: GET_DescribeConfigurationOptions
-export def "api get-configuration-options" [
+export def "get-describe-configuration-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2116,7 +2116,7 @@ export def "api get-configuration-options" [
 #
 # POST /
 # operationId: POST_DescribeConfigurationOptions
-export def "api create-get-configuration-options" [
+export def "post-describe-configuration-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2166,7 +2166,7 @@ export def "api create-get-configuration-options" [
 #
 # GET /
 # operationId: GET_DescribeConfigurationSettings
-export def "api get-configuration-settings" [
+export def "get-describe-configuration-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2215,7 +2215,7 @@ export def "api get-configuration-settings" [
 #
 # POST /
 # operationId: POST_DescribeConfigurationSettings
-export def "api create-get-configuration-settings" [
+export def "post-describe-configuration-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2265,7 +2265,7 @@ export def "api create-get-configuration-settings" [
 #
 # GET /
 # operationId: GET_DescribeEnvironmentHealth
-export def "api get-environment-health" [
+export def "get-describe-environment-health" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2314,7 +2314,7 @@ export def "api get-environment-health" [
 #
 # POST /
 # operationId: POST_DescribeEnvironmentHealth
-export def "api create-get-environment-health" [
+export def "post-describe-environment-health" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2364,7 +2364,7 @@ export def "api create-get-environment-health" [
 #
 # GET /
 # operationId: GET_DescribeEnvironmentManagedActionHistory
-export def "api get-environment-managed-action-history" [
+export def "get-describe-environment-managed-action-history" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2414,7 +2414,7 @@ export def "api get-environment-managed-action-history" [
 #
 # POST /
 # operationId: POST_DescribeEnvironmentManagedActionHistory
-export def "api create-get-environment-managed-action-history" [
+export def "post-describe-environment-managed-action-history" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2466,7 +2466,7 @@ export def "api create-get-environment-managed-action-history" [
 #
 # GET /
 # operationId: GET_DescribeEnvironmentManagedActions
-export def "api get-environment-managed-actions" [
+export def "get-describe-environment-managed-actions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2515,7 +2515,7 @@ export def "api get-environment-managed-actions" [
 #
 # POST /
 # operationId: POST_DescribeEnvironmentManagedActions
-export def "api create-get-environment-managed-actions" [
+export def "post-describe-environment-managed-actions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2565,7 +2565,7 @@ export def "api create-get-environment-managed-actions" [
 #
 # GET /
 # operationId: GET_DescribeEnvironmentResources
-export def "api get-environment-resources" [
+export def "get-describe-environment-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2613,7 +2613,7 @@ export def "api get-environment-resources" [
 #
 # POST /
 # operationId: POST_DescribeEnvironmentResources
-export def "api create-get-environment-resources" [
+export def "post-describe-environment-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2663,7 +2663,7 @@ export def "api create-get-environment-resources" [
 #
 # GET /
 # operationId: GET_DescribeEnvironments
-export def "api get-environments" [
+export def "get-describe-environments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2717,7 +2717,7 @@ export def "api get-environments" [
 #
 # POST /
 # operationId: POST_DescribeEnvironments
-export def "api create-get-environments" [
+export def "post-describe-environments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2767,7 +2767,7 @@ export def "api create-get-environments" [
 #
 # GET /
 # operationId: GET_DescribeEvents
-export def "api get-events" [
+export def "get-describe-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2825,7 +2825,7 @@ export def "api get-events" [
 #
 # POST /
 # operationId: POST_DescribeEvents
-export def "api create-get-events" [
+export def "post-describe-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2877,7 +2877,7 @@ export def "api create-get-events" [
 #
 # GET /
 # operationId: GET_DescribeInstancesHealth
-export def "api get-instances-health" [
+export def "get-describe-instances-health" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2927,7 +2927,7 @@ export def "api get-instances-health" [
 #
 # POST /
 # operationId: POST_DescribeInstancesHealth
-export def "api create-get-instances-health" [
+export def "post-describe-instances-health" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2977,7 +2977,7 @@ export def "api create-get-instances-health" [
 #
 # GET /
 # operationId: GET_DescribePlatformVersion
-export def "api get-platform-version" [
+export def "get-describe-platform-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3024,7 +3024,7 @@ export def "api get-platform-version" [
 #
 # POST /
 # operationId: POST_DescribePlatformVersion
-export def "api create-get-platform-version" [
+export def "post-describe-platform-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3074,7 +3074,7 @@ export def "api create-get-platform-version" [
 #
 # GET /
 # operationId: GET_DisassociateEnvironmentOperationsRole
-export def "api get-disassociate-environment-operations-role" [
+export def "get-disassociate-environment-operations-role" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3121,7 +3121,7 @@ export def "api get-disassociate-environment-operations-role" [
 #
 # POST /
 # operationId: POST_DisassociateEnvironmentOperationsRole
-export def "api create-disassociate-environment-operations-role" [
+export def "post-disassociate-environment-operations-role" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3171,7 +3171,7 @@ export def "api create-disassociate-environment-operations-role" [
 #
 # GET /
 # operationId: GET_ListAvailableSolutionStacks
-export def "api get-list-available-solution-stacks" [
+export def "get-list-available-solution-stacks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3217,7 +3217,7 @@ export def "api get-list-available-solution-stacks" [
 #
 # POST /
 # operationId: POST_ListAvailableSolutionStacks
-export def "api create-list-available-solution-stacks" [
+export def "post-list-available-solution-stacks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3263,7 +3263,7 @@ export def "api create-list-available-solution-stacks" [
 #
 # GET /
 # operationId: GET_ListPlatformBranches
-export def "api get-list-platform-branches" [
+export def "get-list-platform-branches" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3312,7 +3312,7 @@ export def "api get-list-platform-branches" [
 #
 # POST /
 # operationId: POST_ListPlatformBranches
-export def "api create-list-platform-branches" [
+export def "post-list-platform-branches" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3364,7 +3364,7 @@ export def "api create-list-platform-branches" [
 #
 # GET /
 # operationId: GET_ListPlatformVersions
-export def "api get-list-platform-versions" [
+export def "get-list-platform-versions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3413,7 +3413,7 @@ export def "api get-list-platform-versions" [
 #
 # POST /
 # operationId: POST_ListPlatformVersions
-export def "api create-list-platform-versions" [
+export def "post-list-platform-versions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3465,7 +3465,7 @@ export def "api create-list-platform-versions" [
 #
 # GET /
 # operationId: GET_ListTagsForResource
-export def "api get-list-tags-for-resource" [
+export def "get-list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3512,7 +3512,7 @@ export def "api get-list-tags-for-resource" [
 #
 # POST /
 # operationId: POST_ListTagsForResource
-export def "api create-list-tags-for-resource" [
+export def "post-list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3562,7 +3562,7 @@ export def "api create-list-tags-for-resource" [
 #
 # GET /
 # operationId: GET_RebuildEnvironment
-export def "api get-rebuild-environment" [
+export def "get-rebuild-environment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3610,7 +3610,7 @@ export def "api get-rebuild-environment" [
 #
 # POST /
 # operationId: POST_RebuildEnvironment
-export def "api create-rebuild-environment" [
+export def "post-rebuild-environment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3660,7 +3660,7 @@ export def "api create-rebuild-environment" [
 #
 # GET /
 # operationId: GET_RequestEnvironmentInfo
-export def "api get-request-environment" [
+export def "get-request-environment-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3709,7 +3709,7 @@ export def "api get-request-environment" [
 #
 # POST /
 # operationId: POST_RequestEnvironmentInfo
-export def "api create-request-environment-get" [
+export def "post-request-environment-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3759,7 +3759,7 @@ export def "api create-request-environment-get" [
 #
 # GET /
 # operationId: GET_RestartAppServer
-export def "api get-restart-app-server" [
+export def "get-restart-app-server" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3807,7 +3807,7 @@ export def "api get-restart-app-server" [
 #
 # POST /
 # operationId: POST_RestartAppServer
-export def "api create-restart-app-server" [
+export def "post-restart-app-server" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3857,7 +3857,7 @@ export def "api create-restart-app-server" [
 #
 # GET /
 # operationId: GET_RetrieveEnvironmentInfo
-export def "api get-environment" [
+export def "get-retrieve-environment-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3906,7 +3906,7 @@ export def "api get-environment" [
 #
 # POST /
 # operationId: POST_RetrieveEnvironmentInfo
-export def "api create-get-environment" [
+export def "post-retrieve-environment-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3956,7 +3956,7 @@ export def "api create-get-environment" [
 #
 # GET /
 # operationId: GET_SwapEnvironmentCNAMEs
-export def "api get-swap-environment-cnam-es" [
+export def "get-swap-environment-cnam-es" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4006,7 +4006,7 @@ export def "api get-swap-environment-cnam-es" [
 #
 # POST /
 # operationId: POST_SwapEnvironmentCNAMEs
-export def "api create-swap-environment-cnam-es" [
+export def "post-swap-environment-cnam-es" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4056,7 +4056,7 @@ export def "api create-swap-environment-cnam-es" [
 #
 # GET /
 # operationId: GET_TerminateEnvironment
-export def "api get-terminate-environment" [
+export def "get-terminate-environment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4106,7 +4106,7 @@ export def "api get-terminate-environment" [
 #
 # POST /
 # operationId: POST_TerminateEnvironment
-export def "api create-terminate-environment" [
+export def "post-terminate-environment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4156,7 +4156,7 @@ export def "api create-terminate-environment" [
 #
 # GET /
 # operationId: GET_UpdateApplication
-export def "api get-update-application" [
+export def "get-update-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4204,7 +4204,7 @@ export def "api get-update-application" [
 #
 # POST /
 # operationId: POST_UpdateApplication
-export def "api create-update-application" [
+export def "post-update-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4254,7 +4254,7 @@ export def "api create-update-application" [
 #
 # GET /
 # operationId: GET_UpdateApplicationResourceLifecycle
-export def "api get-update-application-resource-lifecycle" [
+export def "get-update-application-resource-lifecycle" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4302,7 +4302,7 @@ export def "api get-update-application-resource-lifecycle" [
 #
 # POST /
 # operationId: POST_UpdateApplicationResourceLifecycle
-export def "api create-update-application-resource-lifecycle" [
+export def "post-update-application-resource-lifecycle" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4352,7 +4352,7 @@ export def "api create-update-application-resource-lifecycle" [
 #
 # GET /
 # operationId: GET_UpdateApplicationVersion
-export def "api get-update-application-version" [
+export def "get-update-application-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4401,7 +4401,7 @@ export def "api get-update-application-version" [
 #
 # POST /
 # operationId: POST_UpdateApplicationVersion
-export def "api create-update-application-version" [
+export def "post-update-application-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4451,7 +4451,7 @@ export def "api create-update-application-version" [
 #
 # GET /
 # operationId: GET_UpdateConfigurationTemplate
-export def "api get-update-configuration-template" [
+export def "get-update-configuration-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4502,7 +4502,7 @@ export def "api get-update-configuration-template" [
 #
 # POST /
 # operationId: POST_UpdateConfigurationTemplate
-export def "api create-update-configuration-template" [
+export def "post-update-configuration-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4552,7 +4552,7 @@ export def "api create-update-configuration-template" [
 #
 # GET /
 # operationId: GET_UpdateEnvironment
-export def "api get-update-environment" [
+export def "get-update-environment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4610,7 +4610,7 @@ export def "api get-update-environment" [
 #
 # POST /
 # operationId: POST_UpdateEnvironment
-export def "api create-update-environment" [
+export def "post-update-environment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4660,7 +4660,7 @@ export def "api create-update-environment" [
 #
 # GET /
 # operationId: GET_UpdateTagsForResource
-export def "api get-update-tags-for-resource" [
+export def "get-update-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4709,7 +4709,7 @@ export def "api get-update-tags-for-resource" [
 #
 # POST /
 # operationId: POST_UpdateTagsForResource
-export def "api create-update-tags-for-resource" [
+export def "post-update-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4759,7 +4759,7 @@ export def "api create-update-tags-for-resource" [
 #
 # GET /
 # operationId: GET_ValidateConfigurationSettings
-export def "api get-validate-configuration-settings" [
+export def "get-validate-configuration-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4809,7 +4809,7 @@ export def "api get-validate-configuration-settings" [
 #
 # POST /
 # operationId: POST_ValidateConfigurationSettings
-export def "api create-validate-configuration-settings" [
+export def "post-validate-configuration-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

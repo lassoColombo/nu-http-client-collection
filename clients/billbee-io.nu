@@ -137,7 +137,7 @@ def shipping-carrier-completer [] { ["0" "1" "10" "11" "12" "13" "14" "15" "16" 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "automaticprovision-create-account create-automatic-provisioning" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "automatic-provisioning-create-account" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -162,7 +162,7 @@ export def commands []: nothing -> table {
 # POST /api/v1/automaticprovision/createaccount
 # operationId: AutomaticProvisioning_CreateAccount
 # --Address shape: {Address1?: string, Address2?: string, City?: string, Company?: string, Country?: string, Name?: string, VatId?: string, Zip?: string}
-export def "automaticprovision-create-account create-automatic-provisioning" [
+export def "automatic-provisioning-create-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -210,7 +210,7 @@ export def "automaticprovision-create-account create-automatic-provisioning" [
 #
 # GET /api/v1/automaticprovision/termsinfo
 # operationId: AutomaticProvisioning_TermsInfo
-export def "automaticprovision-termsinfo get-automatic-provisioning-terms" [
+export def "automatic-provisioning-terms-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -245,7 +245,7 @@ export def "automaticprovision-termsinfo get-automatic-provisioning-terms" [
 #
 # GET /api/v1/cloudstorages
 # operationId: CloudStorageApi_GetList
-export def "cloudstorages get-cloud-storage-list" [
+export def "cloud-storage-api-get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -280,7 +280,7 @@ export def "cloudstorages get-cloud-storage-list" [
 #
 # GET /api/v1/customer-addresses
 # operationId: CustomerAddresses_GetAll
-export def "customer-addresses get-list" [
+export def "customer-addresses-get-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -318,7 +318,7 @@ export def "customer-addresses get-list" [
 #
 # POST /api/v1/customer-addresses
 # operationId: CustomerAddresses_Create
-export def "customer-addresses create" [
+export def "customer-addresses-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -376,7 +376,7 @@ export def "customer-addresses create" [
 #
 # GET /api/v1/customer-addresses/{id}
 # operationId: CustomerAddresses_GetOne
-export def "customer-addresses get-one" [
+export def "customer-addresses-get-one" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -413,7 +413,7 @@ export def "customer-addresses get-one" [
 #
 # PUT /api/v1/customer-addresses/{id}
 # operationId: CustomerAddresses_Update
-export def "customer-addresses update" [
+export def "customer-addresses-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -473,7 +473,7 @@ export def "customer-addresses update" [
 #
 # GET /api/v1/customers
 # operationId: Customer_GetAll
-export def "customers get-list" [
+export def "customer-get-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -519,7 +519,7 @@ export def "customers get-list" [
 # --DefaultPhone2 shape: {Id?: int, SubType?: string, TypeId?: int, Value?: string}
 # --DefaultStatusUpdatesMailAddress shape: {Id?: int, SubType?: string, TypeId?: int, Value?: string}
 # --MetaData item shape: {Id?: int, SubType?: string, TypeId?: int, Value?: string}
-export def "customers create" [
+export def "customer-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -577,7 +577,7 @@ export def "customers create" [
 #
 # GET /api/v1/customers/addresses/{id}
 # operationId: Customer_GetCustomerAddress
-export def "customers-addresses get-address" [
+export def "customer-get-customer-address" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -614,7 +614,7 @@ export def "customers-addresses get-address" [
 #
 # PATCH /api/v1/customers/addresses/{id}
 # operationId: Customer_PatchAddress
-export def "customers-addresses update-address-by-id" [
+export def "customer-patch-address" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -655,7 +655,7 @@ export def "customers-addresses update-address-by-id" [
 #
 # PUT /api/v1/customers/addresses/{id}
 # operationId: Customer_UpdateAddress
-export def "customers-addresses update-address-by-id-1" [
+export def "customer-update-address" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -715,7 +715,7 @@ export def "customers-addresses update-address-by-id-1" [
 #
 # GET /api/v1/customers/{id}
 # operationId: Customer_GetOne
-export def "customers get-one" [
+export def "customer-get-one" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -759,7 +759,7 @@ export def "customers get-one" [
 # --DefaultPhone2 shape: {Id?: int, SubType?: string, TypeId?: int, Value?: string}
 # --DefaultStatusUpdatesMailAddress shape: {Id?: int, SubType?: string, TypeId?: int, Value?: string}
 # --MetaData item shape: {Id?: int, SubType?: string, TypeId?: int, Value?: string}
-export def "customers update" [
+export def "customer-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -818,7 +818,7 @@ export def "customers update" [
 #
 # GET /api/v1/customers/{id}/addresses
 # operationId: Customer_GetCustomerAddresses
-export def "customers-addresses get" [
+export def "customer-get-customer-addresses" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -858,7 +858,7 @@ export def "customers-addresses get" [
 #
 # POST /api/v1/customers/{id}/addresses
 # operationId: Customer_AddCustomerAddress
-export def "customers-addresses create-address" [
+export def "customer-add-customer-address" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -918,7 +918,7 @@ export def "customers-addresses create-address" [
 #
 # GET /api/v1/customers/{id}/orders
 # operationId: Customer_GetCustomerOrders
-export def "customers-orders get" [
+export def "customer-get-customer-orders" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -958,7 +958,7 @@ export def "customers-orders get" [
 #
 # GET /api/v1/enums/orderstates
 # operationId: EnumApi_GetOrderStates
-export def "enums-orderstates get-order-states" [
+export def "enum-api-get-order-states" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -993,7 +993,7 @@ export def "enums-orderstates get-order-states" [
 #
 # GET /api/v1/enums/paymenttypes
 # operationId: EnumApi_GetPaymentTypes
-export def "enums-paymenttypes get-payment-types" [
+export def "enum-api-get-payment-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1028,7 +1028,7 @@ export def "enums-paymenttypes get-payment-types" [
 #
 # GET /api/v1/enums/shipmenttypes
 # operationId: EnumApi_GetShipmentTypes
-export def "enums-shipmenttypes get-shipment-types" [
+export def "enum-api-get-shipment-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1063,7 +1063,7 @@ export def "enums-shipmenttypes get-shipment-types" [
 #
 # GET /api/v1/enums/shippingcarriers
 # operationId: EnumApi_GetShippingCarriers
-export def "enums-shippingcarriers get-shipping-carriers" [
+export def "enum-api-get-shipping-carriers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1098,7 +1098,7 @@ export def "enums-shippingcarriers get-shipping-carriers" [
 #
 # GET /api/v1/events
 # operationId: EventApi_GetList
-export def "events get-list" [
+export def "event-api-get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1139,7 +1139,7 @@ export def "events get-list" [
 # GET /api/v1/layouts
 #
 # operationId: LayoutApi_GetList
-export def "layouts get-list" [
+export def "layout-api-get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1174,7 +1174,7 @@ export def "layouts get-list" [
 #
 # GET /api/v1/orders
 # operationId: OrderApi_GetList
-export def "orders get-list" [
+export def "order-api-get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1232,7 +1232,7 @@ export def "orders get-list" [
 # --Seller shape: {BillbeeShopId?: int, BillbeeShopName?: string, Email?: string, FirstName?: string, Id?: string, LastName?: string, Nick?: string, Platform?: string}
 # --ShippingAddress shape: {BillbeeId?: int, City?: string, Company?: string, Country?: string, CountryISO2?: string, Email?: string, FirstName?: string, HouseNumber?: string, LastName?: string, Line2?: string, NameAddition?: string, Phone?: string, State?: string, Street?: string, Zip?: string}
 # --ShippingIds item shape: {BillbeeId?: int, Created?: string, ShipmentType?: int, Shipper?: string, ShippingCarrier?: int, ShippingId?: string, ShippingProviderId?: int, ShippingProviderProductId?: int, TrackingUrl?: string}
-export def "orders create-new" [
+export def "order-api-post-new-order" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1335,7 +1335,7 @@ export def "orders create-new" [
 #
 # POST /api/v1/orders/CreateDeliveryNote/{id}
 # operationId: OrderApi_CreateDeliveryNote
-export def "orders-create-delivery-note create" [
+export def "order-api-create-delivery-note" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1375,7 +1375,7 @@ export def "orders-create-delivery-note create" [
 #
 # POST /api/v1/orders/CreateInvoice/{id}
 # operationId: OrderApi_CreateInvoice
-export def "orders-create-invoice create" [
+export def "order-api-create-invoice" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1416,7 +1416,7 @@ export def "orders-create-invoice create" [
 #
 # GET /api/v1/orders/PatchableFields
 # operationId: OrderApi_GetPatchableFields
-export def "orders-patchable-fields get" [
+export def "order-api-get-patchable-fields" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1453,7 +1453,7 @@ export def "orders-patchable-fields get" [
 # DEPRECATED
 # operationId: OrderApi_Find
 @deprecated
-export def "orders-find find" [
+export def "order-api-find" [
   id: string
   partner: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1492,7 +1492,7 @@ export def "orders-find find" [
 #
 # GET /api/v1/orders/findbyextref/{extRef}
 # operationId: OrderApi_GetByExtRef
-export def "orders-findbyextref get-by-ext-ref" [
+export def "order-api-get-by-ext-ref" [
   ext_ref: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1529,7 +1529,7 @@ export def "orders-findbyextref get-by-ext-ref" [
 #
 # GET /api/v1/orders/invoices
 # operationId: OrderApi_GetInvoiceList
-export def "orders-invoices get-list" [
+export def "order-api-get-invoice-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1576,7 +1576,7 @@ export def "orders-invoices get-list" [
 #
 # GET /api/v1/orders/{id}
 # operationId: OrderApi_Get
-export def "orders get" [
+export def "order-api-get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1615,7 +1615,7 @@ export def "orders get" [
 #
 # PATCH /api/v1/orders/{id}
 # operationId: OrderApi_PatchOrder
-export def "orders update" [
+export def "order-api-patch-order" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1656,7 +1656,7 @@ export def "orders update" [
 #
 # PUT /api/v1/orders/{id}/orderstate
 # operationId: OrderApi_UpdateState
-export def "orders-orderstate update-state" [
+export def "order-api-update-state" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1697,7 +1697,7 @@ export def "orders-orderstate update-state" [
 #
 # POST /api/v1/orders/{id}/parse-placeholders
 # operationId: OrderApi_ParsePlaceholders
-export def "orders-parse-placeholders create" [
+export def "order-api-parse-placeholders" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1743,7 +1743,7 @@ export def "orders-parse-placeholders create" [
 # operationId: OrderApi_SendMessage
 # --Body item shape: {LanguageCode?: string, Text?: string}
 # --Subject item shape: {LanguageCode?: string, Text?: string}
-export def "orders-send-message send" [
+export def "order-api-send-message" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1787,7 +1787,7 @@ export def "orders-send-message send" [
 #
 # POST /api/v1/orders/{id}/shipment
 # operationId: OrderApi_AddShipment
-export def "orders-shipment create" [
+export def "order-api-add-shipment" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1834,7 +1834,7 @@ export def "orders-shipment create" [
 #
 # POST /api/v1/orders/{id}/tags
 # operationId: OrderApi_TagsCreate
-export def "orders-tags create" [
+export def "order-api-tags-create" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1875,7 +1875,7 @@ export def "orders-tags create" [
 #
 # PUT /api/v1/orders/{id}/tags
 # operationId: OrderApi_TagsUpdate
-export def "orders-tags update" [
+export def "order-api-tags-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1916,7 +1916,7 @@ export def "orders-tags update" [
 #
 # POST /api/v1/orders/{id}/trigger-event
 # operationId: OrderApi_TriggerEvent
-export def "orders-trigger-event trigger" [
+export def "order-api-trigger-event" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1958,7 +1958,7 @@ export def "orders-trigger-event trigger" [
 #
 # GET /api/v1/products
 # operationId: Article_GetList
-export def "products get-article-list" [
+export def "article-get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2015,7 +2015,7 @@ export def "products get-article-list" [
 # --Stocks item shape: {Name?: string, StockCode?: string, StockCurrent?: float, StockDesired?: float, StockId?: int, StockWarning?: float, UnfulfilledAmount?: float}
 # --Tags item shape: {LanguageCode?: string, Text?: string}
 # --Title item shape: {LanguageCode?: string, Text?: string}
-export def "products create-article-article" [
+export def "article-create-article" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2108,7 +2108,7 @@ export def "products create-article-article" [
 #
 # GET /api/v1/products/PatchableFields
 # operationId: Article_GetPatchableFields
-export def "products-patchable-fields get-article" [
+export def "article-get-patchable-fields" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2143,7 +2143,7 @@ export def "products-patchable-fields get-article" [
 #
 # GET /api/v1/products/category
 # operationId: Article_GetCategory
-export def "products-category get-article" [
+export def "article-get-category" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2178,7 +2178,7 @@ export def "products-category get-article" [
 #
 # GET /api/v1/products/custom-fields
 # operationId: Article_GetCustomFields
-export def "products-custom-fields list" [
+export def "article-get-custom-fields" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2216,7 +2216,7 @@ export def "products-custom-fields list" [
 #
 # GET /api/v1/products/custom-fields/{id}
 # operationId: Article_GetCustomField
-export def "products-custom-fields get-article" [
+export def "article-get-custom-field" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2253,7 +2253,7 @@ export def "products-custom-fields get-article" [
 #
 # POST /api/v1/products/images/delete
 # operationId: Article_DeleteImages
-export def "products-images-delete delete-article" [
+export def "article-delete-images" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2292,7 +2292,7 @@ export def "products-images-delete delete-article" [
 #
 # DELETE /api/v1/products/images/{imageId}
 # operationId: Article_DeleteImage
-export def "products-images delete-article-by-image-id" [
+export def "article-delete-image" [
   image_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2329,7 +2329,7 @@ export def "products-images delete-article-by-image-id" [
 #
 # GET /api/v1/products/images/{imageId}
 # operationId: Article_GetImage
-export def "products-images get-article-by-image-id" [
+export def "article-get-image" [
   image_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2366,7 +2366,7 @@ export def "products-images get-article-by-image-id" [
 #
 # GET /api/v1/products/reservedamount
 # operationId: Article_GetReservedAmount
-export def "products-reservedamount get-article-reserved-amount" [
+export def "article-get-reserved-amount" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2405,7 +2405,7 @@ export def "products-reservedamount get-article-reserved-amount" [
 #
 # GET /api/v1/products/stocks
 # operationId: Article_GetStocks
-export def "products-stocks get-article" [
+export def "article-get-stocks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2440,7 +2440,7 @@ export def "products-stocks get-article" [
 #
 # POST /api/v1/products/updatestock
 # operationId: Article_UpdateStock
-export def "products-update-stock update-article" [
+export def "article-update-stock" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2487,7 +2487,7 @@ export def "products-update-stock update-article" [
 #
 # POST /api/v1/products/updatestockcode
 # operationId: Article_UpdateStockCode
-export def "products-update-stockcode update-article-stock-code" [
+export def "article-update-stock-code" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2529,7 +2529,7 @@ export def "products-update-stockcode update-article-stock-code" [
 #
 # POST /api/v1/products/updatestockmultiple
 # operationId: Article_UpdateStockMultiple
-export def "products-update-stockmultiple update-article-stock-multiple" [
+export def "article-update-stock-multiple" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2568,7 +2568,7 @@ export def "products-update-stockmultiple update-article-stock-multiple" [
 #
 # DELETE /api/v1/products/{id}
 # operationId: Article_DeleteArticle
-export def "products delete-article-article" [
+export def "article-delete-article" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2605,7 +2605,7 @@ export def "products delete-article-article" [
 #
 # GET /api/v1/products/{id}
 # operationId: Article_GetArticle
-export def "products get-article-article" [
+export def "article-get-article" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2644,7 +2644,7 @@ export def "products get-article-article" [
 #
 # PATCH /api/v1/products/{id}
 # operationId: Article_PatchArticle
-export def "products update-article-article" [
+export def "article-patch-article" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2685,7 +2685,7 @@ export def "products update-article-article" [
 #
 # GET /api/v1/products/{productId}/images
 # operationId: Article_GetImages
-export def "products-images get-article-by-product-id" [
+export def "article-get-images" [
   product_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2722,7 +2722,7 @@ export def "products-images get-article-by-product-id" [
 #
 # PUT /api/v1/products/{productId}/images
 # operationId: Article_PutImages
-export def "products-images update-article-by-product-id" [
+export def "article-put-images" [
   product_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2765,7 +2765,7 @@ export def "products-images update-article-by-product-id" [
 #
 # DELETE /api/v1/products/{productId}/images/{imageId}
 # operationId: Article_DeleteImageFromProduct
-export def "products-images delete-article-by-product-id-image-id" [
+export def "article-delete-image-from-product" [
   product_id: int
   image_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2804,7 +2804,7 @@ export def "products-images delete-article-by-product-id-image-id" [
 #
 # GET /api/v1/products/{productId}/images/{imageId}
 # operationId: Article_GetImageFromProduct
-export def "products-images get-article-by-product-id-image-id" [
+export def "article-get-image-from-product" [
   product_id: int
   image_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2843,7 +2843,7 @@ export def "products-images get-article-by-product-id-image-id" [
 #
 # PUT /api/v1/products/{productId}/images/{imageId}
 # operationId: Article_PutImage
-export def "products-images update-article-by-product-id-image-id" [
+export def "article-put-image" [
   product_id: int
   image_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2892,7 +2892,7 @@ export def "products-images update-article-by-product-id-image-id" [
 #
 # POST /api/v1/search
 # operationId: Search_Search
-export def "search list" [
+export def "search-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2932,7 +2932,7 @@ export def "search list" [
 # GET /api/v1/shipment/ping
 #
 # operationId: Shipment_GetPing
-export def "shipment-ping get" [
+export def "shipment-get-ping" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2969,7 +2969,7 @@ export def "shipment-ping get" [
 # operationId: Shipment_PostShipment
 # --Dimension shape: {height?: float, length?: float, width?: float}
 # --ReceiverAddress shape: {AddressAddition?: string, City?: string, Company?: string, CountryCode?: string, CountryCodeISO3?: string, Email?: string, FirstName?: string, Housenumber?: string, IsExportCountry?: bool, LastName?: string, Name2?: string, State?: string, Street?: string, Telephone?: string, Zip?: string}
-export def "shipment-shipment create" [
+export def "shipment-post-shipment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3023,7 +3023,7 @@ export def "shipment-shipment create" [
 #
 # GET /api/v1/shipment/shipments
 # operationId: Shipment_GetList
-export def "shipment-shipments get-list" [
+export def "shipment-get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3066,7 +3066,7 @@ export def "shipment-shipments get-list" [
 #
 # GET /api/v1/shipment/shippingcarriers
 # operationId: Shipment_GetShippingCarrier
-export def "shipment-shippingcarriers get-shipping-carrier" [
+export def "shipment-get-shipping-carrier" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3101,7 +3101,7 @@ export def "shipment-shippingcarriers get-shipping-carrier" [
 #
 # GET /api/v1/shipment/shippingproviders
 # operationId: Shipment_GetShippingproviders
-export def "shipment-shippingproviders get" [
+export def "shipment-get-shippingproviders" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3137,7 +3137,7 @@ export def "shipment-shippingproviders get" [
 # POST /api/v1/shipment/shipwithlabel
 # operationId: Shipment_ShipWithLabel
 # --Dimension shape: {height?: float, length?: float, width?: float}
-export def "shipment-shipwithlabel create-ship-with-label" [
+export def "shipment-ship-with-label" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3184,7 +3184,7 @@ export def "shipment-shipwithlabel create-ship-with-label" [
 #
 # DELETE /api/v1/webhooks
 # operationId: WebHookManagement_DeleteAll
-export def "webhooks delete-web-hook-management-list" [
+export def "web-hook-management-delete-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3219,7 +3219,7 @@ export def "webhooks delete-web-hook-management-list" [
 #
 # GET /api/v1/webhooks
 # operationId: WebHookManagement_Get
-export def "webhooks get-web-hook-management" [
+export def "web-hook-management-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3254,7 +3254,7 @@ export def "webhooks get-web-hook-management" [
 #
 # POST /api/v1/webhooks
 # operationId: WebHookManagement_Post
-export def "webhooks create-web-hook-management" [
+export def "web-hook-management-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3300,7 +3300,7 @@ export def "webhooks create-web-hook-management" [
 #
 # GET /api/v1/webhooks/filters
 # operationId: WebHookManagement_GetFilters
-export def "webhooks-filters get-web-hook-management" [
+export def "web-hook-management-get-filters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3335,7 +3335,7 @@ export def "webhooks-filters get-web-hook-management" [
 #
 # DELETE /api/v1/webhooks/{id}
 # operationId: WebHookManagement_Delete
-export def "webhooks delete-web-hook-management" [
+export def "web-hook-management-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3372,7 +3372,7 @@ export def "webhooks delete-web-hook-management" [
 #
 # GET /api/v1/webhooks/{id}
 # operationId: WebHookManagement_Lookup
-export def "webhooks get-web-hook-management-lookup" [
+export def "web-hook-management-lookup" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3409,7 +3409,7 @@ export def "webhooks get-web-hook-management-lookup" [
 #
 # PUT /api/v1/webhooks/{id}
 # operationId: WebHookManagement_Put
-export def "webhooks update-web-hook-management" [
+export def "web-hook-management-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

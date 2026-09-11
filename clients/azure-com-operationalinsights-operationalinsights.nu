@@ -124,7 +124,7 @@ def kind-completer [] { ["AzureActivityLog" "ChangeTrackingCustomRegistry" "Chan
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-operational-insights-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -148,7 +148,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.OperationalInsights/operations
 # operationId: Operations_List
-export def "providers-microsoft-operational-insights-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,7 +184,7 @@ export def "providers-microsoft-operational-insights-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.OperationalInsights/workspaces
 # operationId: Workspaces_List
-export def "subscriptions-providers-microsoft-operational-insights-workspaces list" [
+export def "workspaces-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -222,7 +222,7 @@ export def "subscriptions-providers-microsoft-operational-insights-workspaces li
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces
 # operationId: Workspaces_ListByResourceGroup
-export def "subscriptions-resourcegroups-providers-microsoft-operational-insights-workspaces list-by-resource-group" [
+export def "workspaces-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -262,7 +262,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-operational-insight
 #
 # DELETE /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}
 # operationId: Workspaces_Delete
-export def "subscriptions-resourcegroups-providers-microsoft-operational-insights-workspaces delete" [
+export def "workspaces-delete" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -304,7 +304,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-operational-insight
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}
 # operationId: Workspaces_Get
-export def "subscriptions-resourcegroups-providers-microsoft-operational-insights-workspaces get" [
+export def "workspaces-get" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -347,7 +347,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-operational-insight
 # PATCH /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}
 # operationId: Workspaces_Update
 # --properties shape: {provisioningState?: "Creating"|"Succeeded"|"Failed"|"Canceled"|"Deleting"|"ProvisioningAccount", retentionInDays?: int, sku?: any}
-export def "subscriptions-resourcegroups-providers-microsoft-operational-insights-workspaces update" [
+export def "workspaces-update" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -397,7 +397,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-operational-insight
 # PUT /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}
 # operationId: Workspaces_CreateOrUpdate
 # --properties shape: {provisioningState?: "Creating"|"Succeeded"|"Failed"|"Canceled"|"Deleting"|"ProvisioningAccount", retentionInDays?: int, sku?: any}
-export def "subscriptions-resourcegroups-providers-microsoft-operational-insights-workspaces create-or-update" [
+export def "workspaces-create-or-update" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -446,7 +446,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-operational-insight
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/dataSources
 # operationId: DataSources_ListByWorkspace
-export def "subscriptions-resourcegroups-providers-microsoft-operational-insights-workspaces-data-sources list" [
+export def "data-sources-list-by-workspace" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -490,7 +490,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-operational-insight
 #
 # DELETE /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/dataSources/{dataSourceName}
 # operationId: DataSources_Delete
-export def "subscriptions-resourcegroups-providers-microsoft-operational-insights-workspaces-data-sources delete" [
+export def "data-sources-delete" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -534,7 +534,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-operational-insight
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/dataSources/{dataSourceName}
 # operationId: DataSources_Get
-export def "subscriptions-resourcegroups-providers-microsoft-operational-insights-workspaces-data-sources get" [
+export def "data-sources-get" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -578,7 +578,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-operational-insight
 #
 # PUT /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/dataSources/{dataSourceName}
 # operationId: DataSources_CreateOrUpdate
-export def "subscriptions-resourcegroups-providers-microsoft-operational-insights-workspaces-data-sources create-or-update" [
+export def "data-sources-create-or-update" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -629,7 +629,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-operational-insight
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/intelligencePacks
 # operationId: Workspaces_ListIntelligencePacks
-export def "subscriptions-resourcegroups-providers-microsoft-operational-insights-workspaces-intelligence-packs list" [
+export def "workspaces-list-intelligence-packs" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -671,7 +671,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-operational-insight
 #
 # POST /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/intelligencePacks/{intelligencePackName}/Disable
 # operationId: Workspaces_DisableIntelligencePack
-export def "subscriptions-resourcegroups-providers-microsoft-operational-insights-workspaces-intelligence-packs-disable disable" [
+export def "workspaces-disable-intelligence-pack" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -715,7 +715,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-operational-insight
 #
 # POST /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/intelligencePacks/{intelligencePackName}/Enable
 # operationId: Workspaces_EnableIntelligencePack
-export def "subscriptions-resourcegroups-providers-microsoft-operational-insights-workspaces-intelligence-packs-enable enable" [
+export def "workspaces-enable-intelligence-pack" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -759,7 +759,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-operational-insight
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/linkedServices
 # operationId: LinkedServices_ListByWorkspace
-export def "subscriptions-resourcegroups-providers-microsoft-operational-insights-workspaces-linked-services list" [
+export def "linked-services-list-by-workspace" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -801,7 +801,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-operational-insight
 #
 # DELETE /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/linkedServices/{linkedServiceName}
 # operationId: LinkedServices_Delete
-export def "subscriptions-resourcegroups-providers-microsoft-operational-insights-workspaces-linked-services delete" [
+export def "linked-services-delete" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -845,7 +845,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-operational-insight
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/linkedServices/{linkedServiceName}
 # operationId: LinkedServices_Get
-export def "subscriptions-resourcegroups-providers-microsoft-operational-insights-workspaces-linked-services get" [
+export def "linked-services-get" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -890,7 +890,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-operational-insight
 # PUT /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/linkedServices/{linkedServiceName}
 # operationId: LinkedServices_CreateOrUpdate
 # --properties shape: {resourceId: string}
-export def "subscriptions-resourcegroups-providers-microsoft-operational-insights-workspaces-linked-services create-or-update" [
+export def "linked-services-create-or-update" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -939,7 +939,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-operational-insight
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/managementGroups
 # operationId: Workspaces_ListManagementGroups
-export def "subscriptions-resourcegroups-providers-microsoft-operational-insights-workspaces-management-groups list" [
+export def "workspaces-list-management-groups" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -981,7 +981,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-operational-insight
 #
 # POST /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/sharedKeys
 # operationId: Workspaces_GetSharedKeys
-export def "subscriptions-resourcegroups-providers-microsoft-operational-insights-workspaces-shared-keys get" [
+export def "workspaces-get-shared-keys" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -1023,7 +1023,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-operational-insight
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/usages
 # operationId: Workspaces_ListUsages
-export def "subscriptions-resourcegroups-providers-microsoft-operational-insights-workspaces-usages list" [
+export def "workspaces-list-usages" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string

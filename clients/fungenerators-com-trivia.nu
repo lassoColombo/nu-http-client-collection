@@ -112,7 +112,7 @@ def accept-completer [] { ["application/js" "application/json" "application/xml"
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "trivia delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "delete-trivia" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -135,7 +135,7 @@ export def commands []: nothing -> table {
 # Create a random Trivia entry.
 #
 # DELETE /trivia
-export def "trivia delete" [
+export def "delete-trivia" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -171,7 +171,7 @@ export def "trivia delete" [
 # Get a Trivia entry for a given id. Retrieves a trivia question and answer based on the id.
 #
 # GET /trivia
-export def "trivia get" [
+export def "get-trivia" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -207,7 +207,7 @@ export def "trivia get" [
 # Create a random Trivia entry.
 #
 # PUT /trivia
-export def "trivia update" [
+export def "put-trivia" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -245,7 +245,7 @@ export def "trivia update" [
 # Get a random Trivia.
 #
 # GET /trivia/categories
-export def "trivia-categories get" [
+export def "get-trivia-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -281,7 +281,7 @@ export def "trivia-categories get" [
 # Get a random trivia for a given category(optional)
 #
 # GET /trivia/random
-export def "trivia-random get" [
+export def "get-trivia-random" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -317,7 +317,7 @@ export def "trivia-random get" [
 # Search for random trivia which has the text in the query, for a given category(optional).
 #
 # GET /trivia/search
-export def "trivia-search get" [
+export def "get-trivia-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

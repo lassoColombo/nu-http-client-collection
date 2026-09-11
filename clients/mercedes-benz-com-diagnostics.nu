@@ -103,7 +103,7 @@ def accept-completer-3 [] { ["application/json;charset=utf-8" "application/x.exv
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "vehicles-dtc-readouts get-data-list-by-ecu-using-create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-dtc-data-list-by-ecu-using-post" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -127,7 +127,7 @@ export def commands []: nothing -> table {
 #
 # POST /vehicles/{vehicleId}/dtcReadouts
 # operationId: getDtcDataListByEcuUsingPOST
-export def "vehicles-dtc-readouts get-data-list-by-ecu-using-create" [
+export def "get-dtc-data-list-by-ecu-using-post" [
   vehicle_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -167,7 +167,7 @@ export def "vehicles-dtc-readouts get-data-list-by-ecu-using-create" [
 #
 # POST /vehicles/{vehicleId}/ecuId/{ecuId}/dtcId/{dtcId}/dtcSnapshotReadouts
 # operationId: getDtcSnapshotReadoutsUsingPOST
-export def "vehicles-ecu-id-dtc-id-dtc-snapshot-readouts get-using-create" [
+export def "get-dtc-snapshot-readouts-using-post" [
   vehicle_id: string
   ecu_id: string
   dtc_id: string
@@ -208,7 +208,7 @@ export def "vehicles-ecu-id-dtc-id-dtc-snapshot-readouts get-using-create" [
 #
 # POST /vehicles/{vehicleId}/ecuReadouts
 # operationId: getEcuDataListByVehicleIdUsingPOST
-export def "vehicles-ecu-readouts get-data-list-by-using-create" [
+export def "get-ecu-data-list-by-vehicle-id-using-post" [
   vehicle_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -247,7 +247,7 @@ export def "vehicles-ecu-readouts get-data-list-by-using-create" [
 #
 # POST /vehicles/{vehicleId}/resourceReadouts
 # operationId: getResourceReadoutsUsingPOST
-export def "vehicles-resource-readouts get-using-create" [
+export def "get-resource-readouts-using-post" [
   vehicle_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

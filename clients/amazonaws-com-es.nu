@@ -119,7 +119,7 @@ def engine-type-completer [] { ["Elasticsearch" "OpenSearch"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "2015-01-01-es-ccs-inbound-connection-accept list-cross" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accept-inbound-cross-cluster-search-connection" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -143,7 +143,7 @@ export def commands []: nothing -> table {
 #
 # PUT /2015-01-01/es/ccs/inboundConnection/{ConnectionId}/accept
 # operationId: AcceptInboundCrossClusterSearchConnection
-export def "2015-01-01-es-ccs-inbound-connection-accept list-cross" [
+export def "accept-inbound-cross-cluster-search-connection" [
   connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -189,7 +189,7 @@ export def "2015-01-01-es-ccs-inbound-connection-accept list-cross" [
 # POST /2015-01-01/tags
 # operationId: AddTags
 # --TagList item shape: {Key: any, Value: any}
-export def "2015-01-01-tags create" [
+export def "add-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -237,7 +237,7 @@ export def "2015-01-01-tags create" [
 #
 # POST /2015-01-01/packages/associate/{PackageID}/{DomainName}
 # operationId: AssociatePackage
-export def "2015-01-01-packages-associate create" [
+export def "associate-package" [
   package_id: string
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -284,7 +284,7 @@ export def "2015-01-01-packages-associate create" [
 #
 # POST /2015-01-01/es/domain/{DomainName}/authorizeVpcEndpointAccess
 # operationId: AuthorizeVpcEndpointAccess
-export def "2015-01-01-es-domain-authorize-vpc-endpoint-access create" [
+export def "authorize-vpc-endpoint-access" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -333,7 +333,7 @@ export def "2015-01-01-es-domain-authorize-vpc-endpoint-access create" [
 #
 # POST /2015-01-01/es/serviceSoftwareUpdate/cancel
 # operationId: CancelElasticsearchServiceSoftwareUpdate
-export def "2015-01-01-es-service-software-update-cancel cancel-elasticsearch" [
+export def "cancel-elasticsearch-service-software-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -391,7 +391,7 @@ export def "2015-01-01-es-service-software-update-cancel cancel-elasticsearch" [
 # --AdvancedSecurityOptions shape: {Enabled?: any, InternalUserDatabaseEnabled?: any, MasterUserOptions?: any, SAMLOptions?: any, AnonymousAuthEnabled?: any}
 # --AutoTuneOptions shape: {DesiredState?: any, MaintenanceSchedules?: any}
 # --TagList item shape: {Key: any, Value: any}
-export def "2015-01-01-es-domain create-elasticsearch" [
+export def "create-elasticsearch-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -455,7 +455,7 @@ export def "2015-01-01-es-domain create-elasticsearch" [
 # operationId: CreateOutboundCrossClusterSearchConnection
 # --SourceDomainInfo shape: {OwnerId?: string, DomainName?: string, Region?: string}
 # --DestinationDomainInfo shape: {OwnerId?: string, DomainName?: string, Region?: string}
-export def "2015-01-01-es-ccs-outbound-connection create-cross-list" [
+export def "create-outbound-cross-cluster-search-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -505,7 +505,7 @@ export def "2015-01-01-es-ccs-outbound-connection create-cross-list" [
 # POST /2015-01-01/packages
 # operationId: CreatePackage
 # --PackageSource shape: {S3BucketName?: any, S3Key?: any}
-export def "2015-01-01-packages create" [
+export def "create-package" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -556,7 +556,7 @@ export def "2015-01-01-packages create" [
 # POST /2015-01-01/es/vpcEndpoints
 # operationId: CreateVpcEndpoint
 # --VpcOptions shape: {SubnetIds?: any, SecurityGroupIds?: any}
-export def "2015-01-01-es-vpc-endpoints create" [
+export def "create-vpc-endpoint" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -605,7 +605,7 @@ export def "2015-01-01-es-vpc-endpoints create" [
 #
 # GET /2015-01-01/es/vpcEndpoints
 # operationId: ListVpcEndpoints
-export def "2015-01-01-es-vpc-endpoints list" [
+export def "list-vpc-endpoints" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -650,7 +650,7 @@ export def "2015-01-01-es-vpc-endpoints list" [
 #
 # DELETE /2015-01-01/es/domain/{DomainName}
 # operationId: DeleteElasticsearchDomain
-export def "2015-01-01-es-domain delete-elasticsearch" [
+export def "delete-elasticsearch-domain" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -695,7 +695,7 @@ export def "2015-01-01-es-domain delete-elasticsearch" [
 #
 # GET /2015-01-01/es/domain/{DomainName}
 # operationId: DescribeElasticsearchDomain
-export def "2015-01-01-es-domain get-elasticsearch" [
+export def "describe-elasticsearch-domain" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -740,7 +740,7 @@ export def "2015-01-01-es-domain get-elasticsearch" [
 #
 # DELETE /2015-01-01/es/role
 # operationId: DeleteElasticsearchServiceRole
-export def "2015-01-01-es-role delete-elasticsearch-service" [
+export def "delete-elasticsearch-service-role" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -783,7 +783,7 @@ export def "2015-01-01-es-role delete-elasticsearch-service" [
 #
 # DELETE /2015-01-01/es/ccs/inboundConnection/{ConnectionId}
 # operationId: DeleteInboundCrossClusterSearchConnection
-export def "2015-01-01-es-ccs-inbound-connection delete-cross-list" [
+export def "delete-inbound-cross-cluster-search-connection" [
   connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -828,7 +828,7 @@ export def "2015-01-01-es-ccs-inbound-connection delete-cross-list" [
 #
 # DELETE /2015-01-01/es/ccs/outboundConnection/{ConnectionId}
 # operationId: DeleteOutboundCrossClusterSearchConnection
-export def "2015-01-01-es-ccs-outbound-connection delete-cross-list" [
+export def "delete-outbound-cross-cluster-search-connection" [
   connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -873,7 +873,7 @@ export def "2015-01-01-es-ccs-outbound-connection delete-cross-list" [
 #
 # DELETE /2015-01-01/packages/{PackageID}
 # operationId: DeletePackage
-export def "2015-01-01-packages delete" [
+export def "delete-package" [
   package_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -918,7 +918,7 @@ export def "2015-01-01-packages delete" [
 #
 # DELETE /2015-01-01/es/vpcEndpoints/{VpcEndpointId}
 # operationId: DeleteVpcEndpoint
-export def "2015-01-01-es-vpc-endpoints delete" [
+export def "delete-vpc-endpoint" [
   vpc_endpoint_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -963,7 +963,7 @@ export def "2015-01-01-es-vpc-endpoints delete" [
 #
 # GET /2015-01-01/es/domain/{DomainName}/autoTunes
 # operationId: DescribeDomainAutoTunes
-export def "2015-01-01-es-domain-auto-tunes get" [
+export def "describe-domain-auto-tunes" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1011,7 +1011,7 @@ export def "2015-01-01-es-domain-auto-tunes get" [
 #
 # GET /2015-01-01/es/domain/{DomainName}/progress
 # operationId: DescribeDomainChangeProgress
-export def "2015-01-01-es-domain-progress get-change" [
+export def "describe-domain-change-progress" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1058,7 +1058,7 @@ export def "2015-01-01-es-domain-progress get-change" [
 #
 # GET /2015-01-01/es/domain/{DomainName}/config
 # operationId: DescribeElasticsearchDomainConfig
-export def "2015-01-01-es-domain-config get-elasticsearch" [
+export def "describe-elasticsearch-domain-config" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1113,7 +1113,7 @@ export def "2015-01-01-es-domain-config get-elasticsearch" [
 # --NodeToNodeEncryptionOptions shape: {Enabled?: any}
 # --EncryptionAtRestOptions shape: {Enabled?: any, KmsKeyId?: any}
 # --AutoTuneOptions shape: {DesiredState?: any, RollbackOnDisable?: any, MaintenanceSchedules?: any}
-export def "2015-01-01-es-domain-config update-elasticsearch" [
+export def "update-elasticsearch-domain-config" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1175,7 +1175,7 @@ export def "2015-01-01-es-domain-config update-elasticsearch" [
 #
 # POST /2015-01-01/es/domain-info
 # operationId: DescribeElasticsearchDomains
-export def "2015-01-01-es-domain-info get-elasticsearch" [
+export def "describe-elasticsearch-domains" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1222,7 +1222,7 @@ export def "2015-01-01-es-domain-info get-elasticsearch" [
 #
 # GET /2015-01-01/es/instanceTypeLimits/{ElasticsearchVersion}/{InstanceType}
 # operationId: DescribeElasticsearchInstanceTypeLimits
-export def "2015-01-01-es-instance-type-limits get-elasticsearch" [
+export def "describe-elasticsearch-instance-type-limits" [
   elasticsearch_version: string
   instance_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1272,7 +1272,7 @@ export def "2015-01-01-es-instance-type-limits get-elasticsearch" [
 # POST /2015-01-01/es/ccs/inboundConnection/search
 # operationId: DescribeInboundCrossClusterSearchConnections
 # --Filters item shape: {Name?: any, Values?: any}
-export def "2015-01-01-es-ccs-inbound-connection-search get-cross" [
+export def "describe-inbound-cross-cluster-search-connections" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1325,7 +1325,7 @@ export def "2015-01-01-es-ccs-inbound-connection-search get-cross" [
 # POST /2015-01-01/es/ccs/outboundConnection/search
 # operationId: DescribeOutboundCrossClusterSearchConnections
 # --Filters item shape: {Name?: any, Values?: any}
-export def "2015-01-01-es-ccs-outbound-connection-search get-cross" [
+export def "describe-outbound-cross-cluster-search-connections" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1378,7 +1378,7 @@ export def "2015-01-01-es-ccs-outbound-connection-search get-cross" [
 # POST /2015-01-01/packages/describe
 # operationId: DescribePackages
 # --Filters item shape: {Name?: any, Value?: any}
-export def "2015-01-01-packages-describe get" [
+export def "describe-packages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1430,7 +1430,7 @@ export def "2015-01-01-packages-describe get" [
 #
 # GET /2015-01-01/es/reservedInstanceOfferings
 # operationId: DescribeReservedElasticsearchInstanceOfferings
-export def "2015-01-01-es-reserved-instance-offerings get-elasticsearch" [
+export def "describe-reserved-elasticsearch-instance-offerings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1479,7 +1479,7 @@ export def "2015-01-01-es-reserved-instance-offerings get-elasticsearch" [
 #
 # GET /2015-01-01/es/reservedInstances
 # operationId: DescribeReservedElasticsearchInstances
-export def "2015-01-01-es-reserved-instances get-elasticsearch" [
+export def "describe-reserved-elasticsearch-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1528,7 +1528,7 @@ export def "2015-01-01-es-reserved-instances get-elasticsearch" [
 #
 # POST /2015-01-01/es/vpcEndpoints/describe
 # operationId: DescribeVpcEndpoints
-export def "2015-01-01-es-vpc-endpoints-describe get" [
+export def "describe-vpc-endpoints" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1575,7 +1575,7 @@ export def "2015-01-01-es-vpc-endpoints-describe get" [
 #
 # POST /2015-01-01/packages/dissociate/{PackageID}/{DomainName}
 # operationId: DissociatePackage
-export def "2015-01-01-packages-dissociate create" [
+export def "dissociate-package" [
   package_id: string
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1622,7 +1622,7 @@ export def "2015-01-01-packages-dissociate create" [
 #
 # GET /2015-01-01/es/compatibleVersions
 # operationId: GetCompatibleElasticsearchVersions
-export def "2015-01-01-es-compatible-versions get-elasticsearch" [
+export def "get-compatible-elasticsearch-versions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1667,7 +1667,7 @@ export def "2015-01-01-es-compatible-versions get-elasticsearch" [
 #
 # GET /2015-01-01/packages/{PackageID}/history
 # operationId: GetPackageVersionHistory
-export def "2015-01-01-packages-history get-version" [
+export def "get-package-version-history" [
   package_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1717,7 +1717,7 @@ export def "2015-01-01-packages-history get-version" [
 #
 # GET /2015-01-01/es/upgradeDomain/{DomainName}/history
 # operationId: GetUpgradeHistory
-export def "2015-01-01-es-upgrade-domain-history get" [
+export def "get-upgrade-history" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1767,7 +1767,7 @@ export def "2015-01-01-es-upgrade-domain-history get" [
 #
 # GET /2015-01-01/es/upgradeDomain/{DomainName}/status
 # operationId: GetUpgradeStatus
-export def "2015-01-01-es-upgrade-domain-status get" [
+export def "get-upgrade-status" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1812,7 +1812,7 @@ export def "2015-01-01-es-upgrade-domain-status get" [
 #
 # GET /2015-01-01/domain
 # operationId: ListDomainNames
-export def "2015-01-01-domain list-names" [
+export def "list-domain-names" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1857,7 +1857,7 @@ export def "2015-01-01-domain list-names" [
 #
 # GET /2015-01-01/packages/{PackageID}/domains
 # operationId: ListDomainsForPackage
-export def "2015-01-01-packages-domains list" [
+export def "list-domains-for-package" [
   package_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1907,7 +1907,7 @@ export def "2015-01-01-packages-domains list" [
 #
 # GET /2015-01-01/es/instanceTypes/{ElasticsearchVersion}
 # operationId: ListElasticsearchInstanceTypes
-export def "2015-01-01-es-instance-types list-elasticsearch" [
+export def "list-elasticsearch-instance-types" [
   elasticsearch_version: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1958,7 +1958,7 @@ export def "2015-01-01-es-instance-types list-elasticsearch" [
 #
 # GET /2015-01-01/es/versions
 # operationId: ListElasticsearchVersions
-export def "2015-01-01-es-versions list-elasticsearch" [
+export def "list-elasticsearch-versions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2006,7 +2006,7 @@ export def "2015-01-01-es-versions list-elasticsearch" [
 #
 # GET /2015-01-01/domain/{DomainName}/packages
 # operationId: ListPackagesForDomain
-export def "2015-01-01-domain-packages list" [
+export def "list-packages-for-domain" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2056,7 +2056,7 @@ export def "2015-01-01-domain-packages list" [
 #
 # GET /2015-01-01/tags/
 # operationId: ListTags
-export def "2015-01-01-tags list" [
+export def "list-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2101,7 +2101,7 @@ export def "2015-01-01-tags list" [
 #
 # GET /2015-01-01/es/domain/{DomainName}/listVpcEndpointAccess
 # operationId: ListVpcEndpointAccess
-export def "2015-01-01-es-domain-list-vpc-endpoint-access list" [
+export def "list-vpc-endpoint-access" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2148,7 +2148,7 @@ export def "2015-01-01-es-domain-list-vpc-endpoint-access list" [
 #
 # GET /2015-01-01/es/domain/{DomainName}/vpcEndpoints
 # operationId: ListVpcEndpointsForDomain
-export def "2015-01-01-es-domain-vpc-endpoints list" [
+export def "list-vpc-endpoints-for-domain" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2195,7 +2195,7 @@ export def "2015-01-01-es-domain-vpc-endpoints list" [
 #
 # POST /2015-01-01/es/purchaseReservedInstanceOffering
 # operationId: PurchaseReservedElasticsearchInstanceOffering
-export def "2015-01-01-es-purchase-reserved-instance-offering create-elasticsearch" [
+export def "purchase-reserved-elasticsearch-instance-offering" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2244,7 +2244,7 @@ export def "2015-01-01-es-purchase-reserved-instance-offering create-elasticsear
 #
 # PUT /2015-01-01/es/ccs/inboundConnection/{ConnectionId}/reject
 # operationId: RejectInboundCrossClusterSearchConnection
-export def "2015-01-01-es-ccs-inbound-connection-reject list-cross" [
+export def "reject-inbound-cross-cluster-search-connection" [
   connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2289,7 +2289,7 @@ export def "2015-01-01-es-ccs-inbound-connection-reject list-cross" [
 #
 # POST /2015-01-01/tags-removal
 # operationId: RemoveTags
-export def "2015-01-01-tags-removal delete" [
+export def "remove-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2337,7 +2337,7 @@ export def "2015-01-01-tags-removal delete" [
 #
 # POST /2015-01-01/es/domain/{DomainName}/revokeVpcEndpointAccess
 # operationId: RevokeVpcEndpointAccess
-export def "2015-01-01-es-domain-revoke-vpc-endpoint-access delete" [
+export def "revoke-vpc-endpoint-access" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2386,7 +2386,7 @@ export def "2015-01-01-es-domain-revoke-vpc-endpoint-access delete" [
 #
 # POST /2015-01-01/es/serviceSoftwareUpdate/start
 # operationId: StartElasticsearchServiceSoftwareUpdate
-export def "2015-01-01-es-service-software-update-start start-elasticsearch" [
+export def "start-elasticsearch-service-software-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2434,7 +2434,7 @@ export def "2015-01-01-es-service-software-update-start start-elasticsearch" [
 # POST /2015-01-01/packages/update
 # operationId: UpdatePackage
 # --PackageSource shape: {S3BucketName?: any, S3Key?: any}
-export def "2015-01-01-packages-update update" [
+export def "update-package" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2485,7 +2485,7 @@ export def "2015-01-01-packages-update update" [
 # POST /2015-01-01/es/vpcEndpoints/update
 # operationId: UpdateVpcEndpoint
 # --VpcOptions shape: {SubnetIds?: any, SecurityGroupIds?: any}
-export def "2015-01-01-es-vpc-endpoints-update update" [
+export def "update-vpc-endpoint" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2533,7 +2533,7 @@ export def "2015-01-01-es-vpc-endpoints-update update" [
 #
 # POST /2015-01-01/es/upgradeDomain
 # operationId: UpgradeElasticsearchDomain
-export def "2015-01-01-es-upgrade-domain create-elasticsearch" [
+export def "upgrade-elasticsearch-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

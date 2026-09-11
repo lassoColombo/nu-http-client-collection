@@ -107,7 +107,7 @@ def method-completer [] { ["ADDRESS" "AUTO" "EMAIL" "PHONE_CALL" "SMS" "VERIFICA
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "verification-tokens-generate generate" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "mybusinessverifications-verification-tokens-generate" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -132,7 +132,7 @@ export def commands []: nothing -> table {
 # POST /v1/verificationTokens:generate
 # operationId: mybusinessverifications.verificationTokens.generate
 # --location shape: {address?: record, name?: string, primaryCategoryId?: string, primaryPhone?: string, websiteUri?: string}
-export def "verification-tokens-generate generate" [
+export def "mybusinessverifications-verification-tokens-generate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -183,7 +183,7 @@ export def "verification-tokens-generate generate" [
 # POST /v1/{location}:fetchVerificationOptions
 # operationId: mybusinessverifications.locations.fetchVerificationOptions
 # --context shape: {address?: record}
-export def "locations get-verification-options" [
+export def "mybusinessverifications-locations-fetch-verification-options" [
   location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -236,7 +236,7 @@ export def "locations get-verification-options" [
 #
 # GET /v1/{name}/VoiceOfMerchantState
 # operationId: mybusinessverifications.locations.getVoiceOfMerchantState
-export def "voice-of-merchant-state get" [
+export def "mybusinessverifications-locations-get-voice-of-merchant-state" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -284,7 +284,7 @@ export def "voice-of-merchant-state get" [
 #
 # POST /v1/{name}:complete
 # operationId: mybusinessverifications.locations.verifications.complete
-export def "locations complete" [
+export def "mybusinessverifications-locations-verifications-complete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -338,7 +338,7 @@ export def "locations complete" [
 # operationId: mybusinessverifications.locations.verify
 # --context shape: {address?: record}
 # --token shape: {tokenString?: string}
-export def "locations verify" [
+export def "mybusinessverifications-locations-verify" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -396,7 +396,7 @@ export def "locations verify" [
 #
 # GET /v1/{parent}/verifications
 # operationId: mybusinessverifications.locations.verifications.list
-export def "verifications list" [
+export def "mybusinessverifications-locations-verifications-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

@@ -97,7 +97,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "resources-json get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-resources-json" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -120,7 +120,7 @@ export def commands []: nothing -> table {
 # Get Resources by search query
 #
 # GET /resources.json
-export def "resources-json get" [
+export def "get-resources-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -155,7 +155,7 @@ export def "resources-json get" [
 # Get Campaigns
 #
 # GET /resources/campaigns.json
-export def "resources-campaigns-json get" [
+export def "get-resources-campaigns-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -192,7 +192,7 @@ export def "resources-campaigns-json get" [
 # Get Campaign by ID
 #
 # GET /resources/campaigns/{id}.json
-export def "resources-campaigns get" [
+export def "get-resources-campaigns-id-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -227,7 +227,7 @@ export def "resources-campaigns get" [
 # Get MediaItems by Campaign ID
 #
 # GET /resources/campaigns/{id}/media.json
-export def "resources-campaigns-media-json get" [
+export def "get-resources-campaigns-id-media-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -266,7 +266,7 @@ export def "resources-campaigns-media-json get" [
 # Get MediaItems for Campaign
 #
 # GET /resources/campaigns/{id}/syndicate.{format}
-export def "resources-campaigns-syndicate-format get" [
+export def "get-resources-campaigns-id-syndicate-format" [
   id: int
   format: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -305,7 +305,7 @@ export def "resources-campaigns-syndicate-format get" [
 # Get Languages
 #
 # GET /resources/languages.json
-export def "resources-languages-json get" [
+export def "get-resources-languages-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -342,7 +342,7 @@ export def "resources-languages-json get" [
 # Get Language by ID
 #
 # GET /resources/languages/{id}.json
-export def "resources-languages get" [
+export def "get-resources-languages-id-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -377,7 +377,7 @@ export def "resources-languages get" [
 # Get MediaItems
 #
 # GET /resources/media.json
-export def "resources-media-json get" [
+export def "get-resources-media-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -464,7 +464,7 @@ export def "resources-media-json get" [
 # Get the list of featured content in the syndication system
 #
 # GET /resources/media/featured.json
-export def "resources-media-featured-json get" [
+export def "get-resources-media-featured-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -501,7 +501,7 @@ export def "resources-media-featured-json get" [
 # Get MediaItems by popularity
 #
 # GET /resources/media/mostPopularMedia.{format}
-export def "resources-media-most-popular-media-format get" [
+export def "get-resources-media-most-popular-media-format" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -539,7 +539,7 @@ export def "resources-media-most-popular-media-format get" [
 # Get MediaItems by search query
 #
 # GET /resources/media/searchResults.json
-export def "resources-media-search-results-json get" [
+export def "get-resources-media-search-results-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -576,7 +576,7 @@ export def "resources-media-search-results-json get" [
 # Get MediaItem by ID
 #
 # GET /resources/media/{id}.json
-export def "resources-media get" [
+export def "get-resources-media-id-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -611,7 +611,7 @@ export def "resources-media get" [
 # Get content for MediaItem
 #
 # GET /resources/media/{id}/content
-export def "resources-media-content get" [
+export def "get-resources-media-id-content" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -648,7 +648,7 @@ export def "resources-media-content get" [
 # Get embed code for MediaItem
 #
 # GET /resources/media/{id}/embed.json
-export def "resources-media-embed-json get" [
+export def "get-resources-media-id-embed-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -692,7 +692,7 @@ export def "resources-media-embed-json get" [
 # Get Tag by ID
 #
 # GET /resources/media/{id}/preview.jpg
-export def "resources-media-preview-jpg get" [
+export def "get-resources-media-id-preview-jpg" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -727,7 +727,7 @@ export def "resources-media-preview-jpg get" [
 # Get related MediaItems by ID
 #
 # GET /resources/media/{id}/relatedMedia.{format}
-export def "resources-media-related-media-format get" [
+export def "get-resources-media-id-related-media-format" [
   id: int
   format: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -768,7 +768,7 @@ export def "resources-media-related-media-format get" [
 # Get syndicated content for MediaItem
 #
 # GET /resources/media/{id}/syndicate.{format}
-export def "resources-media-syndicate-format get" [
+export def "get-resources-media-id-syndicate-format" [
   id: int
   format: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -817,7 +817,7 @@ export def "resources-media-syndicate-format get" [
 # Get JPG thumbnail for MediaItem
 #
 # GET /resources/media/{id}/thumbnail.jpg
-export def "resources-media-thumbnail-jpg get" [
+export def "get-resources-media-id-thumbnail-jpg" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -852,7 +852,7 @@ export def "resources-media-thumbnail-jpg get" [
 # Get Youtube metadata for MediaItem
 #
 # GET /resources/media/{id}/youtubeMetaData.json
-export def "resources-media-youtube-meta-data-json get" [
+export def "get-resources-media-id-youtube-meta-data-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -887,7 +887,7 @@ export def "resources-media-youtube-meta-data-json get" [
 # Get MediaTypes
 #
 # GET /resources/mediaTypes.{format}
-export def "resources-media-types-format get" [
+export def "get-resources-media-types-format" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -922,7 +922,7 @@ export def "resources-media-types-format get" [
 # Get Sources
 #
 # GET /resources/sources.json
-export def "resources-sources-json get" [
+export def "get-resources-sources-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -959,7 +959,7 @@ export def "resources-sources-json get" [
 # Get Source by ID
 #
 # GET /resources/sources/{id}.json
-export def "resources-sources get" [
+export def "get-resources-sources-id-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -994,7 +994,7 @@ export def "resources-sources get" [
 # Get MediaItems for Source
 #
 # GET /resources/sources/{id}/syndicate.{format}
-export def "resources-sources-syndicate-format get" [
+export def "get-resources-sources-id-syndicate-format" [
   id: int
   format: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1033,7 +1033,7 @@ export def "resources-sources-syndicate-format get" [
 # Get Tags
 #
 # GET /resources/tags.{format}
-export def "resources-tags-format get" [
+export def "get-resources-tags-format" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1077,7 +1077,7 @@ export def "resources-tags-format get" [
 # Get TagLanguages
 #
 # GET /resources/tags/tagLanguages.{format}
-export def "resources-tags-tag-languages-format get" [
+export def "get-resources-tags-tag-languages-format" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1112,7 +1112,7 @@ export def "resources-tags-tag-languages-format get" [
 # Get MediaItems for Tag
 #
 # GET /resources/tags/tagTypes.{format}
-export def "resources-tags-tag-types-format get" [
+export def "get-resources-tags-tag-types-format" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1147,7 +1147,7 @@ export def "resources-tags-tag-types-format get" [
 # Get Tag by ID
 #
 # GET /resources/tags/{id}.{format}
-export def "resources-tags get" [
+export def "get-resources-tags-id-format" [
   id: int
   format: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1184,7 +1184,7 @@ export def "resources-tags get" [
 # Get MediaItems for Tag
 #
 # GET /resources/tags/{id}/media.{format}
-export def "resources-tags-media-format get" [
+export def "get-resources-tags-id-media-format" [
   id: int
   format: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1225,7 +1225,7 @@ export def "resources-tags-media-format get" [
 # Get related Tags by ID
 #
 # GET /resources/tags/{id}/related.{format}
-export def "resources-tags-related-format get" [
+export def "get-resources-tags-id-related-format" [
   id: int
   format: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1266,7 +1266,7 @@ export def "resources-tags-related-format get" [
 # Get MediaItems for Tag
 #
 # GET /resources/tags/{id}/syndicate.{format}
-export def "resources-tags-syndicate-format get" [
+export def "get-resources-tags-id-syndicate-format" [
   id: int
   format: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1305,7 +1305,7 @@ export def "resources-tags-syndicate-format get" [
 # Get UserMediaList by ID
 #
 # GET /resources/userMediaLists/{id}.json
-export def "resources-user-media-lists get" [
+export def "get-resources-user-media-lists-id-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

@@ -97,7 +97,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "ecosystems get-one" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "ecosystems-one" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -121,7 +121,7 @@ export def commands []: nothing -> table {
 #
 # GET /ecosystems/{ecosystem_id}
 # operationId: ecosystemsOne
-export def "ecosystems get-one" [
+export def "ecosystems-one" [
   ecosystem_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -157,7 +157,7 @@ export def "ecosystems get-one" [
 #
 # GET /ecosystems/{ecosystem_id}/categories
 # operationId: categoriesAll
-export def "ecosystems-categories list" [
+export def "categories-all" [
   ecosystem_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -196,7 +196,7 @@ export def "ecosystems-categories list" [
 #
 # GET /ecosystems/{ecosystem_id}/categories/{id}
 # operationId: categoriesOne
-export def "ecosystems-categories get-one" [
+export def "categories-one" [
   ecosystem_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -234,7 +234,7 @@ export def "ecosystems-categories get-one" [
 #
 # GET /ecosystems/{ecosystem_id}/categories/{id}/listings
 # operationId: categoryListingsAll
-export def "ecosystems-categories-listings list-category" [
+export def "category-listings-all" [
   ecosystem_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -275,7 +275,7 @@ export def "ecosystems-categories-listings list-category" [
 #
 # GET /ecosystems/{ecosystem_id}/collections
 # operationId: collectionsAll
-export def "ecosystems-collections list" [
+export def "collections-all" [
   ecosystem_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -314,7 +314,7 @@ export def "ecosystems-collections list" [
 #
 # GET /ecosystems/{ecosystem_id}/collections/{id}
 # operationId: collectionsOne
-export def "ecosystems-collections get-one" [
+export def "collections-one" [
   ecosystem_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -352,7 +352,7 @@ export def "ecosystems-collections get-one" [
 #
 # GET /ecosystems/{ecosystem_id}/collections/{id}/listings
 # operationId: collectionListingsAll
-export def "ecosystems-collections-listings list" [
+export def "collection-listings-all" [
   ecosystem_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -393,7 +393,7 @@ export def "ecosystems-collections-listings list" [
 #
 # GET /ecosystems/{ecosystem_id}/listings
 # operationId: listingsAll
-export def "ecosystems-listings list" [
+export def "listings-all" [
   ecosystem_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -433,7 +433,7 @@ export def "ecosystems-listings list" [
 #
 # GET /ecosystems/{ecosystem_id}/listings/{id}
 # operationId: listingsOne
-export def "ecosystems-listings get-one" [
+export def "listings-one" [
   ecosystem_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -471,7 +471,7 @@ export def "ecosystems-listings get-one" [
 #
 # GET /ecosystems/{ecosystem_id}/products
 # operationId: productsAll
-export def "ecosystems-products list" [
+export def "products-all" [
   ecosystem_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -507,7 +507,7 @@ export def "ecosystems-products list" [
 #
 # GET /ecosystems/{ecosystem_id}/products/{id}
 # operationId: productsOne
-export def "ecosystems-products get-one" [
+export def "products-one" [
   ecosystem_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -545,7 +545,7 @@ export def "ecosystems-products get-one" [
 #
 # GET /ecosystems/{ecosystem_id}/products/{id}/listings
 # operationId: productListingsAll
-export def "ecosystems-products-listings list" [
+export def "product-listings-all" [
   ecosystem_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL

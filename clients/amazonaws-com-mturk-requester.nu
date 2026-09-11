@@ -139,7 +139,7 @@ def x-amz-target-completer-38 [] { ["MTurkRequesterServiceV20170117.UpdateQualif
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api request-accept-qualification" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accept-qualification-request" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -163,7 +163,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AcceptQualificationRequest
-export def "api request-accept-qualification" [
+export def "accept-qualification-request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -212,7 +212,7 @@ export def "api request-accept-qualification" [
 #
 # POST /
 # operationId: ApproveAssignment
-export def "api approve-assignment" [
+export def "approve-assignment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -262,7 +262,7 @@ export def "api approve-assignment" [
 #
 # POST /
 # operationId: AssociateQualificationWithWorker
-export def "api create-associate-qualification-with-worker" [
+export def "associate-qualification-with-worker" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -313,7 +313,7 @@ export def "api create-associate-qualification-with-worker" [
 #
 # POST /
 # operationId: CreateAdditionalAssignmentsForHIT
-export def "api create-additional-assignments-for-hit" [
+export def "create-additional-assignments-for-hit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -363,7 +363,7 @@ export def "api create-additional-assignments-for-hit" [
 #
 # POST /
 # operationId: CreateHIT
-export def "api create-hit" [
+export def "create-hit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -426,7 +426,7 @@ export def "api create-hit" [
 #
 # POST /
 # operationId: CreateHITType
-export def "api create-hit-type" [
+export def "create-hit-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -480,7 +480,7 @@ export def "api create-hit-type" [
 #
 # POST /
 # operationId: CreateHITWithHITType
-export def "api create-hit-with-hit-type" [
+export def "create-hit-with-hit-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -537,7 +537,7 @@ export def "api create-hit-with-hit-type" [
 #
 # POST /
 # operationId: CreateQualificationType
-export def "api create-qualification-type" [
+export def "create-qualification-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -594,7 +594,7 @@ export def "api create-qualification-type" [
 #
 # POST /
 # operationId: CreateWorkerBlock
-export def "api create-worker-block" [
+export def "create-worker-block" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -643,7 +643,7 @@ export def "api create-worker-block" [
 #
 # POST /
 # operationId: DeleteHIT
-export def "api delete-hit" [
+export def "delete-hit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -691,7 +691,7 @@ export def "api delete-hit" [
 #
 # POST /
 # operationId: DeleteQualificationType
-export def "api delete-qualification-type" [
+export def "delete-qualification-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -739,7 +739,7 @@ export def "api delete-qualification-type" [
 #
 # POST /
 # operationId: DeleteWorkerBlock
-export def "api delete-worker-block" [
+export def "delete-worker-block" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -788,7 +788,7 @@ export def "api delete-worker-block" [
 #
 # POST /
 # operationId: DisassociateQualificationFromWorker
-export def "api create-disassociate-qualification-from-worker" [
+export def "disassociate-qualification-from-worker" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -838,7 +838,7 @@ export def "api create-disassociate-qualification-from-worker" [
 #
 # POST /
 # operationId: GetAccountBalance
-export def "api get-account-balance" [
+export def "get-account-balance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -886,7 +886,7 @@ export def "api get-account-balance" [
 #
 # POST /
 # operationId: GetAssignment
-export def "api get-assignment" [
+export def "get-assignment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -934,7 +934,7 @@ export def "api get-assignment" [
 #
 # POST /
 # operationId: GetFileUploadURL
-export def "api get-file-upload-url" [
+export def "get-file-upload-url" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -983,7 +983,7 @@ export def "api get-file-upload-url" [
 #
 # POST /
 # operationId: GetHIT
-export def "api get-hit" [
+export def "get-hit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1031,7 +1031,7 @@ export def "api get-hit" [
 #
 # POST /
 # operationId: GetQualificationScore
-export def "api get-qualification-score" [
+export def "get-qualification-score" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1080,7 +1080,7 @@ export def "api get-qualification-score" [
 #
 # POST /
 # operationId: GetQualificationType
-export def "api get-qualification-type" [
+export def "get-qualification-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1128,7 +1128,7 @@ export def "api get-qualification-type" [
 #
 # POST /
 # operationId: ListAssignmentsForHIT
-export def "api list-assignments-for-hit" [
+export def "list-assignments-for-hit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1182,7 +1182,7 @@ export def "api list-assignments-for-hit" [
 #
 # POST /
 # operationId: ListBonusPayments
-export def "api list-bonus-payments" [
+export def "list-bonus-payments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1236,7 +1236,7 @@ export def "api list-bonus-payments" [
 #
 # POST /
 # operationId: ListHITs
-export def "api list-hi-ts" [
+export def "list-hi-ts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1288,7 +1288,7 @@ export def "api list-hi-ts" [
 #
 # POST /
 # operationId: ListHITsForQualificationType
-export def "api list-hi-ts-for-qualification-type" [
+export def "list-hi-ts-for-qualification-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1341,7 +1341,7 @@ export def "api list-hi-ts-for-qualification-type" [
 #
 # POST /
 # operationId: ListQualificationRequests
-export def "api list-qualification-requests" [
+export def "list-qualification-requests" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1394,7 +1394,7 @@ export def "api list-qualification-requests" [
 #
 # POST /
 # operationId: ListQualificationTypes
-export def "api list-qualification-types" [
+export def "list-qualification-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1449,7 +1449,7 @@ export def "api list-qualification-types" [
 #
 # POST /
 # operationId: ListReviewPolicyResultsForHIT
-export def "api list-review-policy-results-for-hit" [
+export def "list-review-policy-results-for-hit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1505,7 +1505,7 @@ export def "api list-review-policy-results-for-hit" [
 #
 # POST /
 # operationId: ListReviewableHITs
-export def "api list-reviewable-hi-ts" [
+export def "list-reviewable-hi-ts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1559,7 +1559,7 @@ export def "api list-reviewable-hi-ts" [
 #
 # POST /
 # operationId: ListWorkerBlocks
-export def "api list-worker-blocks" [
+export def "list-worker-blocks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1611,7 +1611,7 @@ export def "api list-worker-blocks" [
 #
 # POST /
 # operationId: ListWorkersWithQualificationType
-export def "api list-workers-with-qualification-type" [
+export def "list-workers-with-qualification-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1665,7 +1665,7 @@ export def "api list-workers-with-qualification-type" [
 #
 # POST /
 # operationId: NotifyWorkers
-export def "api notify-workers" [
+export def "notify-workers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1715,7 +1715,7 @@ export def "api notify-workers" [
 #
 # POST /
 # operationId: RejectAssignment
-export def "api reject-assignment" [
+export def "reject-assignment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1764,7 +1764,7 @@ export def "api reject-assignment" [
 #
 # POST /
 # operationId: RejectQualificationRequest
-export def "api reject-qualification-request" [
+export def "reject-qualification-request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1813,7 +1813,7 @@ export def "api reject-qualification-request" [
 #
 # POST /
 # operationId: SendBonus
-export def "api send-bonus" [
+export def "send-bonus" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1865,7 +1865,7 @@ export def "api send-bonus" [
 #
 # POST /
 # operationId: SendTestEventNotification
-export def "api send-test-event-notification" [
+export def "send-test-event-notification" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1914,7 +1914,7 @@ export def "api send-test-event-notification" [
 #
 # POST /
 # operationId: UpdateExpirationForHIT
-export def "api update-expiration-for-hit" [
+export def "update-expiration-for-hit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1963,7 +1963,7 @@ export def "api update-expiration-for-hit" [
 #
 # POST /
 # operationId: UpdateHITReviewStatus
-export def "api update-hit-review-status" [
+export def "update-hit-review-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2012,7 +2012,7 @@ export def "api update-hit-review-status" [
 #
 # POST /
 # operationId: UpdateHITTypeOfHIT
-export def "api update-hit-type-of-hit" [
+export def "update-hit-type-of-hit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2061,7 +2061,7 @@ export def "api update-hit-type-of-hit" [
 #
 # POST /
 # operationId: UpdateNotificationSettings
-export def "api update-notification-settings" [
+export def "update-notification-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2111,7 +2111,7 @@ export def "api update-notification-settings" [
 #
 # POST /
 # operationId: UpdateQualificationType
-export def "api update-qualification-type" [
+export def "update-qualification-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

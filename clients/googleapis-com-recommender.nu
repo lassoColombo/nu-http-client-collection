@@ -123,7 +123,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta1 get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "recommender-projects-locations-recommenders-recommendations-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -147,7 +147,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1beta1/{name}
 # operationId: recommender.projects.locations.recommenders.recommendations.get
-export def "v1beta1 get" [
+export def "recommender-projects-locations-recommenders-recommendations-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -196,7 +196,7 @@ export def "v1beta1 get" [
 # PATCH /v1beta1/{name}
 # operationId: recommender.projects.locations.recommenders.updateConfig
 # --recommenderGenerationConfig shape: {params?: record}
-export def "v1beta1 update-config" [
+export def "recommender-projects-locations-recommenders-update-config" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -255,7 +255,7 @@ export def "v1beta1 update-config" [
 #
 # POST /v1beta1/{name}:markAccepted
 # operationId: recommender.projects.locations.insightTypes.insights.markAccepted
-export def "v1beta1 create-mark-accepted" [
+export def "recommender-projects-locations-insight-types-insights-mark-accepted" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -308,7 +308,7 @@ export def "v1beta1 create-mark-accepted" [
 #
 # POST /v1beta1/{name}:markClaimed
 # operationId: recommender.projects.locations.recommenders.recommendations.markClaimed
-export def "v1beta1 create-mark-claimed" [
+export def "recommender-projects-locations-recommenders-recommendations-mark-claimed" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -361,7 +361,7 @@ export def "v1beta1 create-mark-claimed" [
 #
 # POST /v1beta1/{name}:markDismissed
 # operationId: recommender.projects.locations.recommenders.recommendations.markDismissed
-export def "v1beta1 create-mark-dismissed" [
+export def "recommender-projects-locations-recommenders-recommendations-mark-dismissed" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -413,7 +413,7 @@ export def "v1beta1 create-mark-dismissed" [
 #
 # POST /v1beta1/{name}:markFailed
 # operationId: recommender.projects.locations.recommenders.recommendations.markFailed
-export def "v1beta1 create-mark-failed" [
+export def "recommender-projects-locations-recommenders-recommendations-mark-failed" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -466,7 +466,7 @@ export def "v1beta1 create-mark-failed" [
 #
 # POST /v1beta1/{name}:markSucceeded
 # operationId: recommender.projects.locations.recommenders.recommendations.markSucceeded
-export def "v1beta1 create-mark-succeeded" [
+export def "recommender-projects-locations-recommenders-recommendations-mark-succeeded" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -519,7 +519,7 @@ export def "v1beta1 create-mark-succeeded" [
 #
 # GET /v1beta1/{parent}/insights
 # operationId: recommender.projects.locations.insightTypes.insights.list
-export def "v1beta1-insights list" [
+export def "recommender-projects-locations-insight-types-insights-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -570,7 +570,7 @@ export def "v1beta1-insights list" [
 #
 # GET /v1beta1/{parent}/recommendations
 # operationId: recommender.projects.locations.recommenders.recommendations.list
-export def "v1beta1-recommendations list" [
+export def "recommender-projects-locations-recommenders-recommendations-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

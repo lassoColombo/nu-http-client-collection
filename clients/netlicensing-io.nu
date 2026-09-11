@@ -121,7 +121,7 @@ def status-completer [] { ["CANCELLED" "CLOSED" "PENDING"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "license list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-licenses" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -145,7 +145,7 @@ export def commands []: nothing -> table {
 #
 # GET /license
 # operationId: listLicenses
-export def "license list" [
+export def "list-licenses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -180,7 +180,7 @@ export def "license list" [
 #
 # POST /license
 # operationId: createLicense
-export def "license create" [
+export def "create-license" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -233,7 +233,7 @@ export def "license create" [
 #
 # DELETE /license/{licenseNumber}
 # operationId: deleteLicense
-export def "license delete" [
+export def "delete-license" [
   license_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -270,7 +270,7 @@ export def "license delete" [
 #
 # GET /license/{licenseNumber}
 # operationId: getLicense
-export def "license get" [
+export def "get-license" [
   license_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -307,7 +307,7 @@ export def "license get" [
 #
 # POST /license/{licenseNumber}
 # operationId: updateLicense
-export def "license update" [
+export def "update-license" [
   license_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -360,7 +360,7 @@ export def "license update" [
 #
 # GET /licensee
 # operationId: listLicensees
-export def "licensee list" [
+export def "list-licensees" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -395,7 +395,7 @@ export def "licensee list" [
 #
 # POST /licensee
 # operationId: createLicensee
-export def "licensee create" [
+export def "create-licensee" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -439,7 +439,7 @@ export def "licensee create" [
 #
 # DELETE /licensee/{licenseeNumber}
 # operationId: deleteLicensee
-export def "licensee delete" [
+export def "delete-licensee" [
   licensee_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -478,7 +478,7 @@ export def "licensee delete" [
 #
 # GET /licensee/{licenseeNumber}
 # operationId: getLicensee
-export def "licensee get" [
+export def "get-licensee" [
   licensee_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -515,7 +515,7 @@ export def "licensee get" [
 #
 # POST /licensee/{licenseeNumber}
 # operationId: updateLicensee
-export def "licensee update" [
+export def "update-licensee" [
   licensee_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -560,7 +560,7 @@ export def "licensee update" [
 #
 # POST /licensee/{licenseeNumber}/transfer
 # operationId: transferLicenses
-export def "licensee-transfer create-licenses" [
+export def "transfer-licenses" [
   licensee_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -602,7 +602,7 @@ export def "licensee-transfer create-licenses" [
 #
 # POST /licensee/{licenseeNumber}/validate
 # operationId: validateLicensee
-export def "licensee-validate validate" [
+export def "validate-licensee" [
   licensee_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -649,7 +649,7 @@ export def "licensee-validate validate" [
 #
 # GET /licensetemplate
 # operationId: listLicenseTemplates
-export def "licensetemplate list-license-templates" [
+export def "list-license-templates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -684,7 +684,7 @@ export def "licensetemplate list-license-templates" [
 #
 # POST /licensetemplate
 # operationId: createLicenseTemplate
-export def "licensetemplate create-license-template" [
+export def "create-license-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -738,7 +738,7 @@ export def "licensetemplate create-license-template" [
 #
 # DELETE /licensetemplate/{licenseTemplateNumber}
 # operationId: deleteLicenseTemplate
-export def "licensetemplate delete-license-template" [
+export def "delete-license-template" [
   license_template_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -777,7 +777,7 @@ export def "licensetemplate delete-license-template" [
 #
 # GET /licensetemplate/{licenseTemplateNumber}
 # operationId: getLicenseTemplate
-export def "licensetemplate get-license-template" [
+export def "get-license-template" [
   license_template_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -814,7 +814,7 @@ export def "licensetemplate get-license-template" [
 #
 # POST /licensetemplate/{licenseTemplateNumber}
 # operationId: updateLicenseTemplate
-export def "licensetemplate update-license-template" [
+export def "update-license-template" [
   license_template_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -869,7 +869,7 @@ export def "licensetemplate update-license-template" [
 #
 # GET /paymentmethod
 # operationId: listPaymentMethods
-export def "paymentmethod list-payment-methods" [
+export def "list-payment-methods" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -904,7 +904,7 @@ export def "paymentmethod list-payment-methods" [
 #
 # GET /paymentmethod/{paymentMethodNumber}
 # operationId: getPaymentMethod
-export def "paymentmethod get-payment-method" [
+export def "get-payment-method" [
   payment_method_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -941,7 +941,7 @@ export def "paymentmethod get-payment-method" [
 #
 # POST /paymentmethod/{paymentMethodNumber}
 # operationId: updatePaymentMethod
-export def "paymentmethod update-payment-method" [
+export def "update-payment-method" [
   payment_method_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -984,7 +984,7 @@ export def "paymentmethod update-payment-method" [
 #
 # GET /product
 # operationId: listProducts
-export def "product list" [
+export def "list-products" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1019,7 +1019,7 @@ export def "product list" [
 #
 # POST /product
 # operationId: createProduct
-export def "product create" [
+export def "create-product" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1066,7 +1066,7 @@ export def "product create" [
 #
 # DELETE /product/{productNumber}
 # operationId: deleteProduct
-export def "product delete" [
+export def "delete-product" [
   product_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1105,7 +1105,7 @@ export def "product delete" [
 #
 # GET /product/{productNumber}
 # operationId: productNumber
-export def "product get-number" [
+export def "product-number" [
   product_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1142,7 +1142,7 @@ export def "product get-number" [
 #
 # POST /product/{productNumber}
 # operationId: updateProduct
-export def "product update" [
+export def "update-product" [
   product_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1191,7 +1191,7 @@ export def "product update" [
 #
 # GET /productmodule
 # operationId: listProductModules
-export def "productmodule list-product-modules" [
+export def "list-product-modules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1226,7 +1226,7 @@ export def "productmodule list-product-modules" [
 #
 # POST /productmodule
 # operationId: createProductModule
-export def "productmodule create-product-module" [
+export def "create-product-module" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1275,7 +1275,7 @@ export def "productmodule create-product-module" [
 #
 # DELETE /productmodule/{productModuleNumber}
 # operationId: deleteProductModule
-export def "productmodule delete-product-module" [
+export def "delete-product-module" [
   product_module_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1314,7 +1314,7 @@ export def "productmodule delete-product-module" [
 #
 # GET /productmodule/{productModuleNumber}
 # operationId: getProductModule
-export def "productmodule get-product-module" [
+export def "get-product-module" [
   product_module_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1351,7 +1351,7 @@ export def "productmodule get-product-module" [
 #
 # POST /productmodule/{productModuleNumber}
 # operationId: updateProductModule
-export def "productmodule update-product-module" [
+export def "update-product-module" [
   product_module_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1401,7 +1401,7 @@ export def "productmodule update-product-module" [
 #
 # GET /token
 # operationId: listTokens
-export def "token list" [
+export def "list-tokens" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1436,7 +1436,7 @@ export def "token list" [
 #
 # POST /token
 # operationId: createToken
-export def "token create" [
+export def "create-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1488,7 +1488,7 @@ export def "token create" [
 #
 # DELETE /token/{tokenNumber}
 # operationId: deleteToken
-export def "token delete" [
+export def "delete-token" [
   token_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1525,7 +1525,7 @@ export def "token delete" [
 #
 # GET /token/{tokenNumber}
 # operationId: getToken
-export def "token get" [
+export def "get-token" [
   token_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1562,7 +1562,7 @@ export def "token get" [
 #
 # GET /transaction
 # operationId: listTransactions
-export def "transaction list" [
+export def "list-transactions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1597,7 +1597,7 @@ export def "transaction list" [
 #
 # POST /transaction
 # operationId: createTransaction
-export def "transaction create" [
+export def "create-transaction" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1644,7 +1644,7 @@ export def "transaction create" [
 #
 # GET /transaction/{transactionNumber}
 # operationId: getTransaction
-export def "transaction get" [
+export def "get-transaction" [
   transaction_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1681,7 +1681,7 @@ export def "transaction get" [
 #
 # POST /transaction/{transactionNumber}
 # operationId: updateTransaction
-export def "transaction update" [
+export def "update-transaction" [
   transaction_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1729,7 +1729,7 @@ export def "transaction update" [
 #
 # GET /utility/licenseTypes
 # operationId: licenseTypes
-export def "utility-license-types get" [
+export def "license-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1764,7 +1764,7 @@ export def "utility-license-types get" [
 #
 # GET /utility/licensingModels
 # operationId: licensingModels
-export def "utility-licensing-models get" [
+export def "licensing-models" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

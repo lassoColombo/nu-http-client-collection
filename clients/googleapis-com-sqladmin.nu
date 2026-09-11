@@ -145,7 +145,7 @@ def type-completer-1 [] { ["BUILT_IN" "CLOUD_IAM_SERVICE_ACCOUNT" "CLOUD_IAM_USE
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "flags list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "sql-flags-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -169,7 +169,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/flags
 # operationId: sql.flags.list
-export def "flags list" [
+export def "sql-flags-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -216,7 +216,7 @@ export def "flags list" [
 #
 # GET /v1/projects/{project}/instances
 # operationId: sql.instances.list
-export def "projects-instances list" [
+export def "sql-instances-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -277,7 +277,7 @@ export def "projects-instances list" [
 # --scheduledMaintenance shape: {canDefer?: bool, canReschedule?: bool, scheduleDeadlineTime?: string, startTime?: string}
 # --serverCaCert shape: {cert?: string, certSerialNumber?: string, commonName?: string, createTime?: string, expirationTime?: string, instance?: string, kind?: string, selfLink?: string, sha1Fingerprint?: string}
 # --settings shape: {activationPolicy?: "SQL_ACTIVATION_POLICY_UNSPECIFIED"|"ALWAYS"|"NEVER"|"ON_DEMAND", activeDirectoryConfig?: record, advancedMachineFeatures?: record, authorizedGaeApplications?: list<string>, availabilityType?: "SQL_AVAILABILITY_TYPE_UNSPECIFIED"|"ZONAL"|"REGIONAL", backupConfiguration?: record, collation?: string, connectorEnforcement?: "CONNECTOR_ENFORCEMENT_UNSPECIFIED"|"NOT_REQUIRED"|"REQUIRED", crashSafeReplicationEnabled?: bool, dataDiskSizeGb?: string, ... (20 more fields)}
-export def "projects-instances create" [
+export def "sql-instances-insert" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -361,7 +361,7 @@ export def "projects-instances create" [
 #
 # DELETE /v1/projects/{project}/instances/{instance}
 # operationId: sql.instances.delete
-export def "projects-instances delete" [
+export def "sql-instances-delete" [
   project: string
   instance: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -411,7 +411,7 @@ export def "projects-instances delete" [
 #
 # GET /v1/projects/{project}/instances/{instance}
 # operationId: sql.instances.get
-export def "projects-instances get" [
+export def "sql-instances-get" [
   project: string
   instance: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -471,7 +471,7 @@ export def "projects-instances get" [
 # --scheduledMaintenance shape: {canDefer?: bool, canReschedule?: bool, scheduleDeadlineTime?: string, startTime?: string}
 # --serverCaCert shape: {cert?: string, certSerialNumber?: string, commonName?: string, createTime?: string, expirationTime?: string, instance?: string, kind?: string, selfLink?: string, sha1Fingerprint?: string}
 # --settings shape: {activationPolicy?: "SQL_ACTIVATION_POLICY_UNSPECIFIED"|"ALWAYS"|"NEVER"|"ON_DEMAND", activeDirectoryConfig?: record, advancedMachineFeatures?: record, authorizedGaeApplications?: list<string>, availabilityType?: "SQL_AVAILABILITY_TYPE_UNSPECIFIED"|"ZONAL"|"REGIONAL", backupConfiguration?: record, collation?: string, connectorEnforcement?: "CONNECTOR_ENFORCEMENT_UNSPECIFIED"|"NOT_REQUIRED"|"REQUIRED", crashSafeReplicationEnabled?: bool, dataDiskSizeGb?: string, ... (20 more fields)}
-export def "projects-instances update-by-project-instance" [
+export def "sql-instances-patch" [
   project: string
   instance: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -567,7 +567,7 @@ export def "projects-instances update-by-project-instance" [
 # --scheduledMaintenance shape: {canDefer?: bool, canReschedule?: bool, scheduleDeadlineTime?: string, startTime?: string}
 # --serverCaCert shape: {cert?: string, certSerialNumber?: string, commonName?: string, createTime?: string, expirationTime?: string, instance?: string, kind?: string, selfLink?: string, sha1Fingerprint?: string}
 # --settings shape: {activationPolicy?: "SQL_ACTIVATION_POLICY_UNSPECIFIED"|"ALWAYS"|"NEVER"|"ON_DEMAND", activeDirectoryConfig?: record, advancedMachineFeatures?: record, authorizedGaeApplications?: list<string>, availabilityType?: "SQL_AVAILABILITY_TYPE_UNSPECIFIED"|"ZONAL"|"REGIONAL", backupConfiguration?: record, collation?: string, connectorEnforcement?: "CONNECTOR_ENFORCEMENT_UNSPECIFIED"|"NOT_REQUIRED"|"REQUIRED", crashSafeReplicationEnabled?: bool, dataDiskSizeGb?: string, ... (20 more fields)}
-export def "projects-instances update-by-project-instance-1" [
+export def "sql-instances-update" [
   project: string
   instance: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -653,7 +653,7 @@ export def "projects-instances update-by-project-instance-1" [
 #
 # POST /v1/projects/{project}/instances/{instance}/addServerCa
 # operationId: sql.instances.addServerCa
-export def "projects-instances-add-server-ca create" [
+export def "sql-instances-add-server-ca" [
   project: string
   instance: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -703,7 +703,7 @@ export def "projects-instances-add-server-ca create" [
 #
 # GET /v1/projects/{project}/instances/{instance}/backupRuns
 # operationId: sql.backupRuns.list
-export def "projects-instances-backup-runs list" [
+export def "sql-backup-runs-list" [
   project: string
   instance: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -758,7 +758,7 @@ export def "projects-instances-backup-runs list" [
 # --diskEncryptionConfiguration shape: {kind?: string, kmsKeyName?: string}
 # --diskEncryptionStatus shape: {kind?: string, kmsKeyVersionName?: string}
 # --error shape: {code?: string, kind?: string, message?: string}
-export def "projects-instances-backup-runs create" [
+export def "sql-backup-runs-insert" [
   project: string
   instance: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -828,7 +828,7 @@ export def "projects-instances-backup-runs create" [
 #
 # DELETE /v1/projects/{project}/instances/{instance}/backupRuns/{id}
 # operationId: sql.backupRuns.delete
-export def "projects-instances-backup-runs delete" [
+export def "sql-backup-runs-delete" [
   project: string
   instance: string
   id: string
@@ -880,7 +880,7 @@ export def "projects-instances-backup-runs delete" [
 #
 # GET /v1/projects/{project}/instances/{instance}/backupRuns/{id}
 # operationId: sql.backupRuns.get
-export def "projects-instances-backup-runs get" [
+export def "sql-backup-runs-get" [
   project: string
   instance: string
   id: string
@@ -933,7 +933,7 @@ export def "projects-instances-backup-runs get" [
 # POST /v1/projects/{project}/instances/{instance}/clone
 # operationId: sql.instances.clone
 # --cloneContext shape: {allocatedIpRange?: string, binLogCoordinates?: record, databaseNames?: list<string>, destinationInstanceName?: string, kind?: string, pitrTimestampMs?: string, pointInTime?: string}
-export def "projects-instances-clone clone" [
+export def "sql-instances-clone" [
   project: string
   instance: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -987,7 +987,7 @@ export def "projects-instances-clone clone" [
 #
 # GET /v1/projects/{project}/instances/{instance}/connectSettings
 # operationId: sql.connect.get
-export def "projects-instances-connect-settings get" [
+export def "sql-connect-get" [
   project: string
   instance: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1038,7 +1038,7 @@ export def "projects-instances-connect-settings get" [
 #
 # POST /v1/projects/{project}/instances/{instance}/createEphemeral
 # operationId: sql.sslCerts.createEphemeral
-export def "projects-instances-create-ephemeral create" [
+export def "sql-ssl-certs-create-ephemeral" [
   project: string
   instance: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1093,7 +1093,7 @@ export def "projects-instances-create-ephemeral create" [
 #
 # GET /v1/projects/{project}/instances/{instance}/databases
 # operationId: sql.databases.list
-export def "projects-instances-databases list" [
+export def "sql-databases-list" [
   project: string
   instance: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1144,7 +1144,7 @@ export def "projects-instances-databases list" [
 # POST /v1/projects/{project}/instances/{instance}/databases
 # operationId: sql.databases.insert
 # --sqlserverDatabaseDetails shape: {compatibilityLevel?: int, recoveryModel?: string}
-export def "projects-instances-databases create" [
+export def "sql-databases-insert" [
   project: string
   instance: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1206,7 +1206,7 @@ export def "projects-instances-databases create" [
 #
 # DELETE /v1/projects/{project}/instances/{instance}/databases/{database}
 # operationId: sql.databases.delete
-export def "projects-instances-databases delete" [
+export def "sql-databases-delete" [
   project: string
   instance: string
   database: string
@@ -1258,7 +1258,7 @@ export def "projects-instances-databases delete" [
 #
 # GET /v1/projects/{project}/instances/{instance}/databases/{database}
 # operationId: sql.databases.get
-export def "projects-instances-databases get" [
+export def "sql-databases-get" [
   project: string
   instance: string
   database: string
@@ -1311,7 +1311,7 @@ export def "projects-instances-databases get" [
 # PATCH /v1/projects/{project}/instances/{instance}/databases/{database}
 # operationId: sql.databases.patch
 # --sqlserverDatabaseDetails shape: {compatibilityLevel?: int, recoveryModel?: string}
-export def "projects-instances-databases update-by-project-instance-database" [
+export def "sql-databases-patch" [
   project: string
   instance: string
   database: string
@@ -1376,7 +1376,7 @@ export def "projects-instances-databases update-by-project-instance-database" [
 # PUT /v1/projects/{project}/instances/{instance}/databases/{database}
 # operationId: sql.databases.update
 # --sqlserverDatabaseDetails shape: {compatibilityLevel?: int, recoveryModel?: string}
-export def "projects-instances-databases update-by-project-instance-database-1" [
+export def "sql-databases-update" [
   project: string
   instance: string
   database: string
@@ -1441,7 +1441,7 @@ export def "projects-instances-databases update-by-project-instance-database-1" 
 # POST /v1/projects/{project}/instances/{instance}/demoteMaster
 # operationId: sql.instances.demoteMaster
 # --demoteMasterContext shape: {kind?: string, masterInstanceName?: string, replicaConfiguration?: record, skipReplicationSetup?: bool, verifyGtidConsistency?: bool}
-export def "projects-instances-demote-master create" [
+export def "sql-instances-demote-master" [
   project: string
   instance: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1496,7 +1496,7 @@ export def "projects-instances-demote-master create" [
 # POST /v1/projects/{project}/instances/{instance}/export
 # operationId: sql.instances.export
 # --exportContext shape: {bakExportOptions?: record, csvExportOptions?: record, databases?: list<string>, fileType?: "SQL_FILE_TYPE_UNSPECIFIED"|"SQL"|"CSV"|"BAK", kind?: string, offload?: bool, sqlExportOptions?: record, uri?: string}
-export def "projects-instances-export export" [
+export def "sql-instances-export" [
   project: string
   instance: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1551,7 +1551,7 @@ export def "projects-instances-export export" [
 # POST /v1/projects/{project}/instances/{instance}/failover
 # operationId: sql.instances.failover
 # --failoverContext shape: {kind?: string, settingsVersion?: string}
-export def "projects-instances-failover create" [
+export def "sql-instances-failover" [
   project: string
   instance: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1605,7 +1605,7 @@ export def "projects-instances-failover create" [
 #
 # GET /v1/projects/{project}/instances/{instance}/getDiskShrinkConfig
 # operationId: sql.projects.instances.getDiskShrinkConfig
-export def "projects-instances-get-disk-shrink-config get" [
+export def "sql-projects-instances-get-disk-shrink-config" [
   project: string
   instance: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1656,7 +1656,7 @@ export def "projects-instances-get-disk-shrink-config get" [
 # POST /v1/projects/{project}/instances/{instance}/import
 # operationId: sql.instances.import
 # --importContext shape: {bakImportOptions?: record, csvImportOptions?: record, database?: string, fileType?: "SQL_FILE_TYPE_UNSPECIFIED"|"SQL"|"CSV"|"BAK", importUser?: string, kind?: string, uri?: string}
-export def "projects-instances-import import" [
+export def "sql-instances-import" [
   project: string
   instance: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1710,7 +1710,7 @@ export def "projects-instances-import import" [
 #
 # GET /v1/projects/{project}/instances/{instance}/listServerCas
 # operationId: sql.instances.listServerCas
-export def "projects-instances-list-server-cas list" [
+export def "sql-instances-list-server-cas" [
   project: string
   instance: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1760,7 +1760,7 @@ export def "projects-instances-list-server-cas list" [
 #
 # POST /v1/projects/{project}/instances/{instance}/performDiskShrink
 # operationId: sql.projects.instances.performDiskShrink
-export def "projects-instances-perform-disk-shrink create" [
+export def "sql-projects-instances-perform-disk-shrink" [
   project: string
   instance: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1814,7 +1814,7 @@ export def "projects-instances-perform-disk-shrink create" [
 #
 # POST /v1/projects/{project}/instances/{instance}/promoteReplica
 # operationId: sql.instances.promoteReplica
-export def "projects-instances-promote-replica create" [
+export def "sql-instances-promote-replica" [
   project: string
   instance: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1865,7 +1865,7 @@ export def "projects-instances-promote-replica create" [
 # POST /v1/projects/{project}/instances/{instance}/rescheduleMaintenance
 # operationId: sql.projects.instances.rescheduleMaintenance
 # --reschedule shape: {rescheduleType?: "RESCHEDULE_TYPE_UNSPECIFIED"|"IMMEDIATE"|"NEXT_AVAILABLE_WINDOW"|"SPECIFIC_TIME", scheduleTime?: string}
-export def "projects-instances-reschedule-maintenance create" [
+export def "sql-projects-instances-reschedule-maintenance" [
   project: string
   instance: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1919,7 +1919,7 @@ export def "projects-instances-reschedule-maintenance create" [
 #
 # POST /v1/projects/{project}/instances/{instance}/resetReplicaSize
 # operationId: sql.projects.instances.resetReplicaSize
-export def "projects-instances-reset-replica-size reset" [
+export def "sql-projects-instances-reset-replica-size" [
   project: string
   instance: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1973,7 +1973,7 @@ export def "projects-instances-reset-replica-size reset" [
 #
 # POST /v1/projects/{project}/instances/{instance}/resetSslConfig
 # operationId: sql.instances.resetSslConfig
-export def "projects-instances-reset-ssl-config reset" [
+export def "sql-instances-reset-ssl-config" [
   project: string
   instance: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2023,7 +2023,7 @@ export def "projects-instances-reset-ssl-config reset" [
 #
 # POST /v1/projects/{project}/instances/{instance}/restart
 # operationId: sql.instances.restart
-export def "projects-instances-restart restart" [
+export def "sql-instances-restart" [
   project: string
   instance: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2074,7 +2074,7 @@ export def "projects-instances-restart restart" [
 # POST /v1/projects/{project}/instances/{instance}/restoreBackup
 # operationId: sql.instances.restoreBackup
 # --restoreBackupContext shape: {backupRunId?: string, instanceId?: string, kind?: string, project?: string}
-export def "projects-instances-restore-backup create" [
+export def "sql-instances-restore-backup" [
   project: string
   instance: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2129,7 +2129,7 @@ export def "projects-instances-restore-backup create" [
 # POST /v1/projects/{project}/instances/{instance}/rotateServerCa
 # operationId: sql.instances.rotateServerCa
 # --rotateServerCaContext shape: {kind?: string, nextVersion?: string}
-export def "projects-instances-rotate-server-ca create" [
+export def "sql-instances-rotate-server-ca" [
   project: string
   instance: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2183,7 +2183,7 @@ export def "projects-instances-rotate-server-ca create" [
 #
 # GET /v1/projects/{project}/instances/{instance}/sslCerts
 # operationId: sql.sslCerts.list
-export def "projects-instances-ssl-certs list" [
+export def "sql-ssl-certs-list" [
   project: string
   instance: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2233,7 +2233,7 @@ export def "projects-instances-ssl-certs list" [
 #
 # POST /v1/projects/{project}/instances/{instance}/sslCerts
 # operationId: sql.sslCerts.insert
-export def "projects-instances-ssl-certs create" [
+export def "sql-ssl-certs-insert" [
   project: string
   instance: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2287,7 +2287,7 @@ export def "projects-instances-ssl-certs create" [
 #
 # DELETE /v1/projects/{project}/instances/{instance}/sslCerts/{sha1Fingerprint}
 # operationId: sql.sslCerts.delete
-export def "projects-instances-ssl-certs delete" [
+export def "sql-ssl-certs-delete" [
   project: string
   instance: string
   sha1_fingerprint: string
@@ -2339,7 +2339,7 @@ export def "projects-instances-ssl-certs delete" [
 #
 # GET /v1/projects/{project}/instances/{instance}/sslCerts/{sha1Fingerprint}
 # operationId: sql.sslCerts.get
-export def "projects-instances-ssl-certs get" [
+export def "sql-ssl-certs-get" [
   project: string
   instance: string
   sha1_fingerprint: string
@@ -2392,7 +2392,7 @@ export def "projects-instances-ssl-certs get" [
 # POST /v1/projects/{project}/instances/{instance}/startExternalSync
 # operationId: sql.projects.instances.startExternalSync
 # --mysqlSyncConfig shape: {initialSyncFlags?: list}
-export def "projects-instances-start-external-sync start" [
+export def "sql-projects-instances-start-external-sync" [
   project: string
   instance: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2448,7 +2448,7 @@ export def "projects-instances-start-external-sync start" [
 #
 # POST /v1/projects/{project}/instances/{instance}/startReplica
 # operationId: sql.instances.startReplica
-export def "projects-instances-start-replica start" [
+export def "sql-instances-start-replica" [
   project: string
   instance: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2498,7 +2498,7 @@ export def "projects-instances-start-replica start" [
 #
 # POST /v1/projects/{project}/instances/{instance}/stopReplica
 # operationId: sql.instances.stopReplica
-export def "projects-instances-stop-replica stop" [
+export def "sql-instances-stop-replica" [
   project: string
   instance: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2549,7 +2549,7 @@ export def "projects-instances-stop-replica stop" [
 # POST /v1/projects/{project}/instances/{instance}/truncateLog
 # operationId: sql.instances.truncateLog
 # --truncateLogContext shape: {kind?: string, logType?: string}
-export def "projects-instances-truncate-log create" [
+export def "sql-instances-truncate-log" [
   project: string
   instance: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2603,7 +2603,7 @@ export def "projects-instances-truncate-log create" [
 #
 # DELETE /v1/projects/{project}/instances/{instance}/users
 # operationId: sql.users.delete
-export def "projects-instances-users delete" [
+export def "sql-users-delete" [
   project: string
   instance: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2655,7 +2655,7 @@ export def "projects-instances-users delete" [
 #
 # GET /v1/projects/{project}/instances/{instance}/users
 # operationId: sql.users.list
-export def "projects-instances-users list" [
+export def "sql-users-list" [
   project: string
   instance: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2707,7 +2707,7 @@ export def "projects-instances-users list" [
 # operationId: sql.users.insert
 # --passwordPolicy shape: {allowedFailedAttempts?: int, enableFailedAttemptsCheck?: bool, enablePasswordVerification?: bool, passwordExpirationDuration?: string, status?: record}
 # --sqlserverUserDetails shape: {disabled?: bool, serverRoles?: list<string>}
-export def "projects-instances-users create" [
+export def "sql-users-insert" [
   project: string
   instance: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2773,7 +2773,7 @@ export def "projects-instances-users create" [
 # operationId: sql.users.update
 # --passwordPolicy shape: {allowedFailedAttempts?: int, enableFailedAttemptsCheck?: bool, enablePasswordVerification?: bool, passwordExpirationDuration?: string, status?: record}
 # --sqlserverUserDetails shape: {disabled?: bool, serverRoles?: list<string>}
-export def "projects-instances-users update" [
+export def "sql-users-update" [
   project: string
   instance: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2839,7 +2839,7 @@ export def "projects-instances-users update" [
 #
 # GET /v1/projects/{project}/instances/{instance}/users/{name}
 # operationId: sql.users.get
-export def "projects-instances-users get" [
+export def "sql-users-get" [
   project: string
   instance: string
   name: string
@@ -2893,7 +2893,7 @@ export def "projects-instances-users get" [
 # POST /v1/projects/{project}/instances/{instance}/verifyExternalSyncSettings
 # operationId: sql.projects.instances.verifyExternalSyncSettings
 # --mysqlSyncConfig shape: {initialSyncFlags?: list}
-export def "projects-instances-verify-external-sync-settings verify" [
+export def "sql-projects-instances-verify-external-sync-settings" [
   project: string
   instance: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2950,7 +2950,7 @@ export def "projects-instances-verify-external-sync-settings verify" [
 #
 # POST /v1/projects/{project}/instances/{instance}:generateEphemeralCert
 # operationId: sql.connect.generateEphemeral
-export def "projects-instances generate-ephemeral" [
+export def "sql-connect-generate-ephemeral" [
   project: string
   instance: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3007,7 +3007,7 @@ export def "projects-instances generate-ephemeral" [
 #
 # GET /v1/projects/{project}/operations
 # operationId: sql.operations.list
-export def "projects-operations list" [
+export def "sql-operations-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3058,7 +3058,7 @@ export def "projects-operations list" [
 #
 # GET /v1/projects/{project}/operations/{operation}
 # operationId: sql.operations.get
-export def "projects-operations get" [
+export def "sql-operations-get" [
   project: string
   operation: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3108,7 +3108,7 @@ export def "projects-operations get" [
 #
 # GET /v1/projects/{project}/tiers
 # operationId: sql.tiers.list
-export def "projects-tiers list" [
+export def "sql-tiers-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

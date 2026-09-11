@@ -122,7 +122,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-web-serverfarms list-app-service-plans" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "app-service-plans-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Web/serverfarms
 # operationId: AppServicePlans_List
-export def "subscriptions-providers-microsoft-web-serverfarms list-app-service-plans" [
+export def "app-service-plans-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -185,7 +185,7 @@ export def "subscriptions-providers-microsoft-web-serverfarms list-app-service-p
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/serverfarms
 # operationId: AppServicePlans_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms list-app-service-plans" [
+export def "app-service-plans-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -225,7 +225,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms li
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/serverfarms/{name}
 # operationId: AppServicePlans_Delete
-export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms delete-app-service-plans" [
+export def "app-service-plans-delete" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -267,7 +267,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms de
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/serverfarms/{name}
 # operationId: AppServicePlans_Get
-export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms get-app-service-plans" [
+export def "app-service-plans-get" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -310,7 +310,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms ge
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/serverfarms/{name}
 # operationId: AppServicePlans_Update
 # --properties shape: {freeOfferExpirationTime?: string, hostingEnvironmentProfile?: record, hyperV?: bool, isSpot?: bool, isXenon?: bool, maximumElasticWorkerCount?: int, perSiteScaling?: bool, reserved?: bool, spotExpirationTime?: string, targetWorkerCount?: int, targetWorkerSizeId?: int, workerTierName?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms update-app-service-plans" [
+export def "app-service-plans-update" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -359,7 +359,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms up
 # operationId: AppServicePlans_CreateOrUpdate
 # --properties shape: {freeOfferExpirationTime?: string, hostingEnvironmentProfile?: record, hyperV?: bool, isSpot?: bool, isXenon?: bool, maximumElasticWorkerCount?: int, perSiteScaling?: bool, reserved?: bool, spotExpirationTime?: string, targetWorkerCount?: int, targetWorkerSizeId?: int, workerTierName?: string}
 # --sku shape: {capabilities?: list, capacity?: int, family?: string, locations?: list<string>, name?: string, size?: string, skuCapacity?: record, tier?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms create-app-service-plans-or-update" [
+export def "app-service-plans-create-or-update" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -409,7 +409,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms cr
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/serverfarms/{name}/capabilities
 # operationId: AppServicePlans_ListCapabilities
-export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-capabilities list-app-service-plans" [
+export def "app-service-plans-list-capabilities" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -451,7 +451,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-ca
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/serverfarms/{name}/hybridConnectionNamespaces/{namespaceName}/relays/{relayName}
 # operationId: AppServicePlans_DeleteHybridConnection
-export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-hybrid-connection-namespaces-relays delete-app-service-plans" [
+export def "app-service-plans-delete-hybrid-connection" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -497,7 +497,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-hy
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/serverfarms/{name}/hybridConnectionNamespaces/{namespaceName}/relays/{relayName}
 # operationId: AppServicePlans_GetHybridConnection
-export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-hybrid-connection-namespaces-relays get-app-service-plans" [
+export def "app-service-plans-get-hybrid-connection" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -543,7 +543,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-hy
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/serverfarms/{name}/hybridConnectionNamespaces/{namespaceName}/relays/{relayName}/listKeys
 # operationId: AppServicePlans_ListHybridConnectionKeys
-export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-hybrid-connection-namespaces-relays-list-keys list-app-service-plans" [
+export def "app-service-plans-list-hybrid-connection-keys" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -589,7 +589,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-hy
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/serverfarms/{name}/hybridConnectionNamespaces/{namespaceName}/relays/{relayName}/sites
 # operationId: AppServicePlans_ListWebAppsByHybridConnection
-export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-hybrid-connection-namespaces-relays-sites list-app-service-plans-apps" [
+export def "app-service-plans-list-web-apps-by-hybrid-connection" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -635,7 +635,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-hy
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/serverfarms/{name}/hybridConnectionPlanLimits/limit
 # operationId: AppServicePlans_GetHybridConnectionPlanLimit
-export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-hybrid-connection-plan-limits-limit get-app-service" [
+export def "app-service-plans-get-hybrid-connection-plan-limit" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -677,7 +677,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-hy
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/serverfarms/{name}/hybridConnectionRelays
 # operationId: AppServicePlans_ListHybridConnections
-export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-hybrid-connection-relays list-app-service-plans" [
+export def "app-service-plans-list-hybrid-connections" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -719,7 +719,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-hy
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/serverfarms/{name}/metricdefinitions
 # operationId: AppServicePlans_ListMetricDefintions
-export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-metricdefinitions list-app-service-plans-metric-defintions" [
+export def "app-service-plans-list-metric-defintions" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -761,7 +761,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-me
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/serverfarms/{name}/metrics
 # operationId: AppServicePlans_ListMetrics
-export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-metrics list-app-service-plans" [
+export def "app-service-plans-list-metrics" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -805,7 +805,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-me
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/serverfarms/{name}/restartSites
 # operationId: AppServicePlans_RestartWebApps
-export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-restart-sites restart-app-service-plans-apps" [
+export def "app-service-plans-restart-web-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -848,7 +848,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-re
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/serverfarms/{name}/sites
 # operationId: AppServicePlans_ListWebApps
-export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-sites list-app-service-plans-apps" [
+export def "app-service-plans-list-web-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -893,7 +893,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-si
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/serverfarms/{name}/skus
 # operationId: AppServicePlans_GetServerFarmSkus
-export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-skus get-app-service-plans-server-farm" [
+export def "app-service-plans-get-server-farm-skus" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -935,7 +935,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-sk
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/serverfarms/{name}/usages
 # operationId: AppServicePlans_ListUsages
-export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-usages list-app-service-plans" [
+export def "app-service-plans-list-usages" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -978,7 +978,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-us
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/serverfarms/{name}/virtualNetworkConnections
 # operationId: AppServicePlans_ListVnets
-export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-virtual-network-connections list-app-service-plans-vnets" [
+export def "app-service-plans-list-vnets" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1020,7 +1020,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-vi
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/serverfarms/{name}/virtualNetworkConnections/{vnetName}
 # operationId: AppServicePlans_GetVnetFromServerFarm
-export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-virtual-network-connections get-app-service-plans-vnet-from-server-farm" [
+export def "app-service-plans-get-vnet-from-server-farm" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1064,7 +1064,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-vi
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/serverfarms/{name}/virtualNetworkConnections/{vnetName}/gateways/{gatewayName}
 # operationId: AppServicePlans_GetVnetGateway
-export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-virtual-network-connections-gateways get-app-service-plans-vnet" [
+export def "app-service-plans-get-vnet-gateway" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1111,7 +1111,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-vi
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/serverfarms/{name}/virtualNetworkConnections/{vnetName}/gateways/{gatewayName}
 # operationId: AppServicePlans_UpdateVnetGateway
 # --properties shape: {vnetName?: string, vpnPackageUri: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-virtual-network-connections-gateways update-app-service-plans-vnet" [
+export def "app-service-plans-update-vnet-gateway" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1162,7 +1162,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-vi
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/serverfarms/{name}/virtualNetworkConnections/{vnetName}/routes
 # operationId: AppServicePlans_ListRoutesForVnet
-export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-virtual-network-connections-routes list-app-service-plans-for-vnet" [
+export def "app-service-plans-list-routes-for-vnet" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1206,7 +1206,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-vi
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/serverfarms/{name}/virtualNetworkConnections/{vnetName}/routes/{routeName}
 # operationId: AppServicePlans_DeleteVnetRoute
-export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-virtual-network-connections-routes delete-app-service-plans-vnet" [
+export def "app-service-plans-delete-vnet-route" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1252,7 +1252,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-vi
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/serverfarms/{name}/virtualNetworkConnections/{vnetName}/routes/{routeName}
 # operationId: AppServicePlans_GetRouteForVnet
-export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-virtual-network-connections-routes get-app-service-plans-for-vnet" [
+export def "app-service-plans-get-route-for-vnet" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1299,7 +1299,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-vi
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/serverfarms/{name}/virtualNetworkConnections/{vnetName}/routes/{routeName}
 # operationId: AppServicePlans_UpdateVnetRoute
 # --properties shape: {endAddress?: string, routeType?: "DEFAULT"|"INHERITED"|"STATIC", startAddress?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-virtual-network-connections-routes update-app-service-plans-vnet" [
+export def "app-service-plans-update-vnet-route" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1351,7 +1351,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-vi
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/serverfarms/{name}/virtualNetworkConnections/{vnetName}/routes/{routeName}
 # operationId: AppServicePlans_CreateOrUpdateVnetRoute
 # --properties shape: {endAddress?: string, routeType?: "DEFAULT"|"INHERITED"|"STATIC", startAddress?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-virtual-network-connections-routes create-app-service-plans-or-update-vnet" [
+export def "app-service-plans-create-or-update-vnet-route" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1402,7 +1402,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-vi
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/serverfarms/{name}/workers/{workerName}/reboot
 # operationId: AppServicePlans_RebootWorker
-export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-workers-reboot create-app-service-plans" [
+export def "app-service-plans-reboot-worker" [
   subscription_id: string
   resource_group_name: string
   name: string

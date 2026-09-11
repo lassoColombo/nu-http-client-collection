@@ -131,7 +131,7 @@ def state-completer [] { ["CREATING" "NEEDS_REPAIR" "READY" "STATE_UNSPECIFIED"]
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta2 delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "firestore-projects-databases-collection-groups-indexes-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -155,7 +155,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1beta2/{name}
 # operationId: firestore.projects.databases.collectionGroups.indexes.delete
-export def "v1beta2 delete" [
+export def "firestore-projects-databases-collection-groups-indexes-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -203,7 +203,7 @@ export def "v1beta2 delete" [
 #
 # GET /v1beta2/{name}
 # operationId: firestore.projects.databases.collectionGroups.indexes.get
-export def "v1beta2 get" [
+export def "firestore-projects-databases-collection-groups-indexes-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -252,7 +252,7 @@ export def "v1beta2 get" [
 # PATCH /v1beta2/{name}
 # operationId: firestore.projects.databases.collectionGroups.fields.patch
 # --indexConfig shape: {ancestorField?: string, indexes?: list, reverting?: bool, usesAncestorConfig?: bool}
-export def "v1beta2 update" [
+export def "firestore-projects-databases-collection-groups-fields-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -306,7 +306,7 @@ export def "v1beta2 update" [
 #
 # POST /v1beta2/{name}:exportDocuments
 # operationId: firestore.projects.databases.exportDocuments
-export def "v1beta2 export-documents" [
+export def "firestore-projects-databases-export-documents" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -359,7 +359,7 @@ export def "v1beta2 export-documents" [
 #
 # POST /v1beta2/{name}:importDocuments
 # operationId: firestore.projects.databases.importDocuments
-export def "v1beta2 import-documents" [
+export def "firestore-projects-databases-import-documents" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -412,7 +412,7 @@ export def "v1beta2 import-documents" [
 #
 # GET /v1beta2/{parent}/fields
 # operationId: firestore.projects.databases.collectionGroups.fields.list
-export def "v1beta2-fields list" [
+export def "firestore-projects-databases-collection-groups-fields-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -463,7 +463,7 @@ export def "v1beta2-fields list" [
 #
 # GET /v1beta2/{parent}/indexes
 # operationId: firestore.projects.databases.collectionGroups.indexes.list
-export def "v1beta2-indexes list" [
+export def "firestore-projects-databases-collection-groups-indexes-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -515,7 +515,7 @@ export def "v1beta2-indexes list" [
 # POST /v1beta2/{parent}/indexes
 # operationId: firestore.projects.databases.collectionGroups.indexes.create
 # --fields item shape: {arrayConfig?: "ARRAY_CONFIG_UNSPECIFIED"|"CONTAINS", fieldPath?: string, order?: "ORDER_UNSPECIFIED"|"ASCENDING"|"DESCENDING"}
-export def "v1beta2-indexes create" [
+export def "firestore-projects-databases-collection-groups-indexes-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

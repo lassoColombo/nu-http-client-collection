@@ -121,7 +121,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-intune-locations get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-locations" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -145,7 +145,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.Intune/locations
 # operationId: GetLocations
-export def "providers-microsoft-intune-locations get" [
+export def "get-locations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -181,7 +181,7 @@ export def "providers-microsoft-intune-locations get" [
 #
 # GET /providers/Microsoft.Intune/locations/hostName
 # operationId: GetLocationByHostName
-export def "providers-microsoft-intune-locations-host-name get" [
+export def "get-location-by-host-name" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -217,7 +217,7 @@ export def "providers-microsoft-intune-locations-host-name get" [
 #
 # GET /providers/Microsoft.Intune/locations/{hostName}/AndroidPolicies/{policyName}/apps
 # operationId: Android_GetAppForMAMPolicy
-export def "providers-microsoft-intune-locations-android-policies-apps get-for-mam-policy" [
+export def "android-get-app-for-mam-policy" [
   host_name: string
   policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -260,7 +260,7 @@ export def "providers-microsoft-intune-locations-android-policies-apps get-for-m
 #
 # GET /providers/Microsoft.Intune/locations/{hostName}/androidPolicies
 # operationId: Android_GetMAMPolicies
-export def "providers-microsoft-intune-locations-android-policies get-mam" [
+export def "android-get-mam-policies" [
   host_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -301,7 +301,7 @@ export def "providers-microsoft-intune-locations-android-policies get-mam" [
 #
 # DELETE /providers/Microsoft.Intune/locations/{hostName}/androidPolicies/{policyName}
 # operationId: Android_DeleteMAMPolicy
-export def "providers-microsoft-intune-locations-android-policies delete-mam-policy" [
+export def "android-delete-mam-policy" [
   host_name: string
   policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -341,7 +341,7 @@ export def "providers-microsoft-intune-locations-android-policies delete-mam-pol
 #
 # GET /providers/Microsoft.Intune/locations/{hostName}/androidPolicies/{policyName}
 # operationId: Android_GetMAMPolicyByName
-export def "providers-microsoft-intune-locations-android-policies get-mam-policy-by-name" [
+export def "android-get-mam-policy-by-name" [
   host_name: string
   policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -383,7 +383,7 @@ export def "providers-microsoft-intune-locations-android-policies get-mam-policy
 # PATCH /providers/Microsoft.Intune/locations/{hostName}/androidPolicies/{policyName}
 # operationId: Android_PatchMAMPolicy
 # --properties shape: {fileEncryption?: "required"|"notRequired", screenCapture?: "allow"|"block", accessRecheckOfflineTimeout?: string, accessRecheckOnlineTimeout?: string, appSharingFromLevel?: "none"|"policyManagedApps"|"allApps", appSharingToLevel?: "none"|"policyManagedApps"|"allApps", authentication?: "required"|"notRequired", clipboardSharingLevel?: "blocked"|"policyManagedApps"|"policyManagedAppsWithPasteIn"|"allApps", dataBackup?: "allow"|"block", description?: string, deviceCompliance?: "enable"|"disable", ... (6 more fields)}
-export def "providers-microsoft-intune-locations-android-policies update-mam-policy" [
+export def "android-patch-mam-policy" [
   host_name: string
   policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -430,7 +430,7 @@ export def "providers-microsoft-intune-locations-android-policies update-mam-pol
 # PUT /providers/Microsoft.Intune/locations/{hostName}/androidPolicies/{policyName}
 # operationId: Android_CreateOrUpdateMAMPolicy
 # --properties shape: {fileEncryption?: "required"|"notRequired", screenCapture?: "allow"|"block", accessRecheckOfflineTimeout?: string, accessRecheckOnlineTimeout?: string, appSharingFromLevel?: "none"|"policyManagedApps"|"allApps", appSharingToLevel?: "none"|"policyManagedApps"|"allApps", authentication?: "required"|"notRequired", clipboardSharingLevel?: "blocked"|"policyManagedApps"|"policyManagedAppsWithPasteIn"|"allApps", dataBackup?: "allow"|"block", description?: string, deviceCompliance?: "enable"|"disable", ... (6 more fields)}
-export def "providers-microsoft-intune-locations-android-policies create-or-update-mam-policy" [
+export def "android-create-or-update-mam-policy" [
   host_name: string
   policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -476,7 +476,7 @@ export def "providers-microsoft-intune-locations-android-policies create-or-upda
 #
 # DELETE /providers/Microsoft.Intune/locations/{hostName}/androidPolicies/{policyName}/apps/{appName}
 # operationId: Android_DeleteAppForMAMPolicy
-export def "providers-microsoft-intune-locations-android-policies-apps delete-for-mam-policy" [
+export def "android-delete-app-for-mam-policy" [
   host_name: string
   policy_name: string
   app_name: string
@@ -519,7 +519,7 @@ export def "providers-microsoft-intune-locations-android-policies-apps delete-fo
 # PUT /providers/Microsoft.Intune/locations/{hostName}/androidPolicies/{policyName}/apps/{appName}
 # operationId: Android_AddAppForMAMPolicy
 # --properties shape: {url: string}
-export def "providers-microsoft-intune-locations-android-policies-apps create-for-mam-policy" [
+export def "android-add-app-for-mam-policy" [
   host_name: string
   policy_name: string
   app_name: string
@@ -565,7 +565,7 @@ export def "providers-microsoft-intune-locations-android-policies-apps create-fo
 #
 # GET /providers/Microsoft.Intune/locations/{hostName}/androidPolicies/{policyName}/groups
 # operationId: Android_GetGroupsForMAMPolicy
-export def "providers-microsoft-intune-locations-android-policies-groups get-for-mam-policy" [
+export def "android-get-groups-for-mam-policy" [
   host_name: string
   policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -605,7 +605,7 @@ export def "providers-microsoft-intune-locations-android-policies-groups get-for
 #
 # DELETE /providers/Microsoft.Intune/locations/{hostName}/androidPolicies/{policyName}/groups/{groupId}
 # operationId: Android_DeleteGroupForMAMPolicy
-export def "providers-microsoft-intune-locations-android-policies-groups delete-for-mam-policy" [
+export def "android-delete-group-for-mam-policy" [
   host_name: string
   policy_name: string
   group_id: string
@@ -648,7 +648,7 @@ export def "providers-microsoft-intune-locations-android-policies-groups delete-
 # PUT /providers/Microsoft.Intune/locations/{hostName}/androidPolicies/{policyName}/groups/{groupId}
 # operationId: Android_AddGroupForMAMPolicy
 # --properties shape: {url: string}
-export def "providers-microsoft-intune-locations-android-policies-groups create-for-mam-policy" [
+export def "android-add-group-for-mam-policy" [
   host_name: string
   policy_name: string
   group_id: string
@@ -694,7 +694,7 @@ export def "providers-microsoft-intune-locations-android-policies-groups create-
 #
 # GET /providers/Microsoft.Intune/locations/{hostName}/apps
 # operationId: GetApps
-export def "providers-microsoft-intune-locations-apps get" [
+export def "get-apps" [
   host_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -735,7 +735,7 @@ export def "providers-microsoft-intune-locations-apps get" [
 #
 # GET /providers/Microsoft.Intune/locations/{hostName}/flaggedUsers
 # operationId: GetMAMFlaggedUsers
-export def "providers-microsoft-intune-locations-flagged-users get-mam" [
+export def "get-mam-flagged-users" [
   host_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -776,7 +776,7 @@ export def "providers-microsoft-intune-locations-flagged-users get-mam" [
 #
 # GET /providers/Microsoft.Intune/locations/{hostName}/flaggedUsers/{userName}
 # operationId: GetMAMFlaggedUserByName
-export def "providers-microsoft-intune-locations-flagged-users get-mam-by-name" [
+export def "get-mam-flagged-user-by-name" [
   host_name: string
   user_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -817,7 +817,7 @@ export def "providers-microsoft-intune-locations-flagged-users get-mam-by-name" 
 #
 # GET /providers/Microsoft.Intune/locations/{hostName}/flaggedUsers/{userName}/flaggedEnrolledApps
 # operationId: GetMAMUserFlaggedEnrolledApps
-export def "providers-microsoft-intune-locations-flagged-users-flagged-enrolled-apps get-mam" [
+export def "get-mam-user-flagged-enrolled-apps" [
   host_name: string
   user_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -860,7 +860,7 @@ export def "providers-microsoft-intune-locations-flagged-users-flagged-enrolled-
 #
 # GET /providers/Microsoft.Intune/locations/{hostName}/iosPolicies
 # operationId: Ios_GetMAMPolicies
-export def "providers-microsoft-intune-locations-ios-policies get-mam" [
+export def "ios-get-mam-policies" [
   host_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -901,7 +901,7 @@ export def "providers-microsoft-intune-locations-ios-policies get-mam" [
 #
 # DELETE /providers/Microsoft.Intune/locations/{hostName}/iosPolicies/{policyName}
 # operationId: Ios_DeleteMAMPolicy
-export def "providers-microsoft-intune-locations-ios-policies delete-mam-policy" [
+export def "ios-delete-mam-policy" [
   host_name: string
   policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -941,7 +941,7 @@ export def "providers-microsoft-intune-locations-ios-policies delete-mam-policy"
 #
 # GET /providers/Microsoft.Intune/locations/{hostName}/iosPolicies/{policyName}
 # operationId: Ios_GetMAMPolicyByName
-export def "providers-microsoft-intune-locations-ios-policies get-mam-policy-by-name" [
+export def "ios-get-mam-policy-by-name" [
   host_name: string
   policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -983,7 +983,7 @@ export def "providers-microsoft-intune-locations-ios-policies get-mam-policy-by-
 # PATCH /providers/Microsoft.Intune/locations/{hostName}/iosPolicies/{policyName}
 # operationId: Ios_PatchMAMPolicy
 # --properties shape: {fileEncryptionLevel?: "deviceLocked"|"deviceLockedExceptFilesOpen"|"afterDeviceRestart"|"useDeviceSettings", touchId?: "enable"|"disable", accessRecheckOfflineTimeout?: string, accessRecheckOnlineTimeout?: string, appSharingFromLevel?: "none"|"policyManagedApps"|"allApps", appSharingToLevel?: "none"|"policyManagedApps"|"allApps", authentication?: "required"|"notRequired", clipboardSharingLevel?: "blocked"|"policyManagedApps"|"policyManagedAppsWithPasteIn"|"allApps", dataBackup?: "allow"|"block", ... (8 more fields)}
-export def "providers-microsoft-intune-locations-ios-policies update-mam-policy" [
+export def "ios-patch-mam-policy" [
   host_name: string
   policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1030,7 +1030,7 @@ export def "providers-microsoft-intune-locations-ios-policies update-mam-policy"
 # PUT /providers/Microsoft.Intune/locations/{hostName}/iosPolicies/{policyName}
 # operationId: Ios_CreateOrUpdateMAMPolicy
 # --properties shape: {fileEncryptionLevel?: "deviceLocked"|"deviceLockedExceptFilesOpen"|"afterDeviceRestart"|"useDeviceSettings", touchId?: "enable"|"disable", accessRecheckOfflineTimeout?: string, accessRecheckOnlineTimeout?: string, appSharingFromLevel?: "none"|"policyManagedApps"|"allApps", appSharingToLevel?: "none"|"policyManagedApps"|"allApps", authentication?: "required"|"notRequired", clipboardSharingLevel?: "blocked"|"policyManagedApps"|"policyManagedAppsWithPasteIn"|"allApps", dataBackup?: "allow"|"block", ... (8 more fields)}
-export def "providers-microsoft-intune-locations-ios-policies create-or-update-mam-policy" [
+export def "ios-create-or-update-mam-policy" [
   host_name: string
   policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1076,7 +1076,7 @@ export def "providers-microsoft-intune-locations-ios-policies create-or-update-m
 #
 # GET /providers/Microsoft.Intune/locations/{hostName}/iosPolicies/{policyName}/apps
 # operationId: Ios_GetAppForMAMPolicy
-export def "providers-microsoft-intune-locations-ios-policies-apps get-for-mam-policy" [
+export def "ios-get-app-for-mam-policy" [
   host_name: string
   policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1119,7 +1119,7 @@ export def "providers-microsoft-intune-locations-ios-policies-apps get-for-mam-p
 #
 # DELETE /providers/Microsoft.Intune/locations/{hostName}/iosPolicies/{policyName}/apps/{appName}
 # operationId: Ios_DeleteAppForMAMPolicy
-export def "providers-microsoft-intune-locations-ios-policies-apps delete-for-mam-policy" [
+export def "ios-delete-app-for-mam-policy" [
   host_name: string
   policy_name: string
   app_name: string
@@ -1162,7 +1162,7 @@ export def "providers-microsoft-intune-locations-ios-policies-apps delete-for-ma
 # PUT /providers/Microsoft.Intune/locations/{hostName}/iosPolicies/{policyName}/apps/{appName}
 # operationId: Ios_AddAppForMAMPolicy
 # --properties shape: {url: string}
-export def "providers-microsoft-intune-locations-ios-policies-apps create-for-mam-policy" [
+export def "ios-add-app-for-mam-policy" [
   host_name: string
   policy_name: string
   app_name: string
@@ -1208,7 +1208,7 @@ export def "providers-microsoft-intune-locations-ios-policies-apps create-for-ma
 #
 # GET /providers/Microsoft.Intune/locations/{hostName}/iosPolicies/{policyName}/groups
 # operationId: Ios_GetGroupsForMAMPolicy
-export def "providers-microsoft-intune-locations-ios-policies-groups get-for-mam-policy" [
+export def "ios-get-groups-for-mam-policy" [
   host_name: string
   policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1248,7 +1248,7 @@ export def "providers-microsoft-intune-locations-ios-policies-groups get-for-mam
 #
 # DELETE /providers/Microsoft.Intune/locations/{hostName}/iosPolicies/{policyName}/groups/{groupId}
 # operationId: Ios_DeleteGroupForMAMPolicy
-export def "providers-microsoft-intune-locations-ios-policies-groups delete-for-mam-policy" [
+export def "ios-delete-group-for-mam-policy" [
   host_name: string
   policy_name: string
   group_id: string
@@ -1291,7 +1291,7 @@ export def "providers-microsoft-intune-locations-ios-policies-groups delete-for-
 # PUT /providers/Microsoft.Intune/locations/{hostName}/iosPolicies/{policyName}/groups/{groupId}
 # operationId: Ios_AddGroupForMAMPolicy
 # --properties shape: {url: string}
-export def "providers-microsoft-intune-locations-ios-policies-groups create-for-mam-policy" [
+export def "ios-add-group-for-mam-policy" [
   host_name: string
   policy_name: string
   group_id: string
@@ -1337,7 +1337,7 @@ export def "providers-microsoft-intune-locations-ios-policies-groups create-for-
 #
 # GET /providers/Microsoft.Intune/locations/{hostName}/operationResults
 # operationId: GetOperationResults
-export def "providers-microsoft-intune-locations-operation-results get" [
+export def "get-operation-results" [
   host_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1378,7 +1378,7 @@ export def "providers-microsoft-intune-locations-operation-results get" [
 #
 # GET /providers/Microsoft.Intune/locations/{hostName}/statuses/default
 # operationId: GetMAMStatuses
-export def "providers-microsoft-intune-locations-statuses-default get-mam" [
+export def "get-mam-statuses" [
   host_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1416,7 +1416,7 @@ export def "providers-microsoft-intune-locations-statuses-default get-mam" [
 #
 # GET /providers/Microsoft.Intune/locations/{hostName}/users/{userName}/devices
 # operationId: GetMAMUserDevices
-export def "providers-microsoft-intune-locations-users-devices get-mam" [
+export def "get-mam-user-devices" [
   host_name: string
   user_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1459,7 +1459,7 @@ export def "providers-microsoft-intune-locations-users-devices get-mam" [
 #
 # GET /providers/Microsoft.Intune/locations/{hostName}/users/{userName}/devices/{deviceName}
 # operationId: GetMAMUserDeviceByDeviceName
-export def "providers-microsoft-intune-locations-users-devices get-mam-by-name" [
+export def "get-mam-user-device-by-device-name" [
   host_name: string
   user_name: string
   device_name: string
@@ -1502,7 +1502,7 @@ export def "providers-microsoft-intune-locations-users-devices get-mam-by-name" 
 #
 # POST /providers/Microsoft.Intune/locations/{hostName}/users/{userName}/devices/{deviceName}/wipe
 # operationId: WipeMAMUserDevice
-export def "providers-microsoft-intune-locations-users-devices-wipe create-mam" [
+export def "wipe-mam-user-device" [
   host_name: string
   user_name: string
   device_name: string

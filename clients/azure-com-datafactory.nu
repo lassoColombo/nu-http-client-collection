@@ -126,7 +126,7 @@ def key-name-completer [] { ["authKey1" "authKey2"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-data-factory-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -150,7 +150,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.DataFactory/operations
 # operationId: Operations_List
-export def "providers-microsoft-data-factory-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -186,7 +186,7 @@ export def "providers-microsoft-data-factory-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.DataFactory/factories
 # operationId: Factories_List
-export def "subscriptions-providers-microsoft-data-factory-factories list" [
+export def "factories-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -225,7 +225,7 @@ export def "subscriptions-providers-microsoft-data-factory-factories list" [
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.DataFactory/locations/{locationId}/configureFactoryRepo
 # operationId: Factories_ConfigureFactoryRepo
 # --repoConfiguration shape: {accountName: string, collaborationBranch: string, lastCommitId?: string, repositoryName: string, rootFolder: string, type: string}
-export def "subscriptions-providers-microsoft-data-factory-locations-configure-factory-repo create-factories" [
+export def "factories-configure-factory-repo" [
   subscription_id: string
   location_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -270,7 +270,7 @@ export def "subscriptions-providers-microsoft-data-factory-locations-configure-f
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.DataFactory/locations/{locationId}/getFeatureValue
 # operationId: ExposureControl_GetFeatureValue
-export def "subscriptions-providers-microsoft-data-factory-locations-get-feature-value get-exposure-control" [
+export def "exposure-control-get-feature-value" [
   subscription_id: string
   location_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -315,7 +315,7 @@ export def "subscriptions-providers-microsoft-data-factory-locations-get-feature
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories
 # operationId: Factories_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories list" [
+export def "factories-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -355,7 +355,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}
 # operationId: Factories_Delete
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories delete" [
+export def "factories-delete" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -397,7 +397,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}
 # operationId: Factories_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories get" [
+export def "factories-get" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -443,7 +443,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}
 # operationId: Factories_Update
 # --identity shape: {type: "SystemAssigned"}
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories update" [
+export def "factories-update" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -492,7 +492,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 # operationId: Factories_CreateOrUpdate
 # --identity shape: {type: "SystemAssigned"}
 # --properties shape: {repoConfiguration?: record}
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories create-or-update" [
+export def "factories-create-or-update" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -549,7 +549,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 # --debugSettings shape: {datasetParameters?: record, parameters?: record, sourceSettings?: list}
 # --linkedServices item shape: {properties: record, name?: string}
 # --staging shape: {folderPath?: string, linkedService?: any}
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-add-data-flow-to-debug-session create" [
+export def "data-flow-debug-session-add-data-flow" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -601,7 +601,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/createDataFlowDebugSession
 # operationId: DataFlowDebugSession_Create
 # --integrationRuntime shape: {properties: record, name?: string}
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-create-data-flow-debug-session create" [
+export def "data-flow-debug-session-create" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -650,7 +650,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/dataflows
 # operationId: DataFlows_ListByFactory
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-dataflows list-flows" [
+export def "data-flows-list-by-factory" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -692,7 +692,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/dataflows/{dataFlowName}
 # operationId: DataFlows_Delete
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-dataflows delete-flows" [
+export def "data-flows-delete" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -736,7 +736,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/dataflows/{dataFlowName}
 # operationId: DataFlows_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-dataflows get-flows" [
+export def "data-flows-get" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -784,7 +784,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/dataflows/{dataFlowName}
 # operationId: DataFlows_CreateOrUpdate
 # --properties shape: {annotations?: list, description?: string, folder?: record, type: string}
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-dataflows create-flows-or-update" [
+export def "data-flows-create-or-update" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -835,7 +835,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/datasets
 # operationId: Datasets_ListByFactory
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-datasets list" [
+export def "datasets-list-by-factory" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -877,7 +877,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/datasets/{datasetName}
 # operationId: Datasets_Delete
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-datasets delete" [
+export def "datasets-delete" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -921,7 +921,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/datasets/{datasetName}
 # operationId: Datasets_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-datasets get" [
+export def "datasets-get" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -969,7 +969,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/datasets/{datasetName}
 # operationId: Datasets_CreateOrUpdate
 # --properties shape: {annotations?: list, description?: string, folder?: record, linkedServiceName: any, parameters?: record, schema?: record, structure?: record, type: string}
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-datasets create-or-update" [
+export def "datasets-create-or-update" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -1020,7 +1020,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/deleteDataFlowDebugSession
 # operationId: DataFlowDebugSession_Delete
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-delete-data-flow-debug-session delete" [
+export def "data-flow-debug-session-delete" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -1067,7 +1067,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/executeDataFlowDebugCommand
 # operationId: DataFlowDebugSession_ExecuteCommand
 # --commandPayload shape: {columns?: list<string>, expression?: string, rowLimits?: int, streamName: string}
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-execute-data-flow-debug-command create-session" [
+export def "data-flow-debug-session-execute-command" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -1115,7 +1115,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/getDataPlaneAccess
 # operationId: Factories_GetDataPlaneAccess
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-get-data-plane-access get" [
+export def "factories-get-data-plane-access" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -1165,7 +1165,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/getFeatureValue
 # operationId: ExposureControl_GetFeatureValueByFactory
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-get-feature-value get-exposure-control" [
+export def "exposure-control-get-feature-value-by-factory" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -1212,7 +1212,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/getGitHubAccessToken
 # operationId: Factories_GetGitHubAccessToken
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-get-git-hub-access-token get" [
+export def "factories-get-git-hub-access-token" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -1260,7 +1260,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/integrationRuntimes
 # operationId: IntegrationRuntimes_ListByFactory
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-integration-runtimes list" [
+export def "integration-runtimes-list-by-factory" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -1302,7 +1302,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/integrationRuntimes/{integrationRuntimeName}
 # operationId: IntegrationRuntimes_Delete
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-integration-runtimes delete" [
+export def "integration-runtimes-delete" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -1346,7 +1346,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/integrationRuntimes/{integrationRuntimeName}
 # operationId: IntegrationRuntimes_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-integration-runtimes get" [
+export def "integration-runtimes-get" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -1393,7 +1393,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/integrationRuntimes/{integrationRuntimeName}
 # operationId: IntegrationRuntimes_Update
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-integration-runtimes update" [
+export def "integration-runtimes-update" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -1443,7 +1443,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/integrationRuntimes/{integrationRuntimeName}
 # operationId: IntegrationRuntimes_CreateOrUpdate
 # --properties shape: {description?: string, type: "Managed"|"SelfHosted"}
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-integration-runtimes create-or-update" [
+export def "integration-runtimes-create-or-update" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -1494,7 +1494,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/integrationRuntimes/{integrationRuntimeName}/getConnectionInfo
 # operationId: IntegrationRuntimes_GetConnectionInfo
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-integration-runtimes-get-connection-info get" [
+export def "integration-runtimes-get-connection-info" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -1538,7 +1538,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/integrationRuntimes/{integrationRuntimeName}/getObjectMetadata
 # operationId: IntegrationRuntimeObjectMetadata_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-integration-runtimes-get-object-metadata get" [
+export def "integration-runtime-object-metadata-get" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -1586,7 +1586,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/integrationRuntimes/{integrationRuntimeName}/getStatus
 # operationId: IntegrationRuntimes_GetStatus
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-integration-runtimes-get-status get" [
+export def "integration-runtimes-get-status" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -1630,7 +1630,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/integrationRuntimes/{integrationRuntimeName}/linkedIntegrationRuntime
 # operationId: IntegrationRuntimes_CreateLinkedIntegrationRuntime
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-integration-runtimes-linked-integration-runtime create" [
+export def "integration-runtimes-create-linked-integration-runtime" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -1681,7 +1681,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/integrationRuntimes/{integrationRuntimeName}/listAuthKeys
 # operationId: IntegrationRuntimes_ListAuthKeys
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-integration-runtimes-list-auth-keys list" [
+export def "integration-runtimes-list-auth-keys" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -1725,7 +1725,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/integrationRuntimes/{integrationRuntimeName}/monitoringData
 # operationId: IntegrationRuntimes_GetMonitoringData
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-integration-runtimes-monitoring-data get" [
+export def "integration-runtimes-get-monitoring-data" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -1769,7 +1769,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/integrationRuntimes/{integrationRuntimeName}/nodes/{nodeName}
 # operationId: IntegrationRuntimeNodes_Delete
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-integration-runtimes-nodes delete" [
+export def "integration-runtime-nodes-delete" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -1815,7 +1815,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/integrationRuntimes/{integrationRuntimeName}/nodes/{nodeName}
 # operationId: IntegrationRuntimeNodes_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-integration-runtimes-nodes get" [
+export def "integration-runtime-nodes-get" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -1861,7 +1861,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/integrationRuntimes/{integrationRuntimeName}/nodes/{nodeName}
 # operationId: IntegrationRuntimeNodes_Update
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-integration-runtimes-nodes update" [
+export def "integration-runtime-nodes-update" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -1911,7 +1911,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/integrationRuntimes/{integrationRuntimeName}/nodes/{nodeName}/ipAddress
 # operationId: IntegrationRuntimeNodes_GetIpAddress
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-integration-runtimes-nodes-ip-address get" [
+export def "integration-runtime-nodes-get-ip-address" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -1957,7 +1957,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/integrationRuntimes/{integrationRuntimeName}/refreshObjectMetadata
 # operationId: IntegrationRuntimeObjectMetadata_Refresh
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-integration-runtimes-refresh-object-metadata refresh" [
+export def "integration-runtime-object-metadata-refresh" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -2001,7 +2001,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/integrationRuntimes/{integrationRuntimeName}/regenerateAuthKey
 # operationId: IntegrationRuntimes_RegenerateAuthKey
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-integration-runtimes-regenerate-auth-key create" [
+export def "integration-runtimes-regenerate-auth-key" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -2049,7 +2049,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/integrationRuntimes/{integrationRuntimeName}/removeLinks
 # operationId: IntegrationRuntimes_RemoveLinks
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-integration-runtimes-remove-links delete" [
+export def "integration-runtimes-remove-links" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -2097,7 +2097,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/integrationRuntimes/{integrationRuntimeName}/start
 # operationId: IntegrationRuntimes_Start
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-integration-runtimes-start start" [
+export def "integration-runtimes-start" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -2141,7 +2141,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/integrationRuntimes/{integrationRuntimeName}/stop
 # operationId: IntegrationRuntimes_Stop
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-integration-runtimes-stop stop" [
+export def "integration-runtimes-stop" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -2185,7 +2185,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/integrationRuntimes/{integrationRuntimeName}/syncCredentials
 # operationId: IntegrationRuntimes_SyncCredentials
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-integration-runtimes-sync-credentials sync" [
+export def "integration-runtimes-sync-credentials" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -2229,7 +2229,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/integrationRuntimes/{integrationRuntimeName}/upgrade
 # operationId: IntegrationRuntimes_Upgrade
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-integration-runtimes-upgrade create" [
+export def "integration-runtimes-upgrade" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -2273,7 +2273,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/linkedservices
 # operationId: LinkedServices_ListByFactory
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-linkedservices list-linked-services" [
+export def "linked-services-list-by-factory" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -2315,7 +2315,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/linkedservices/{linkedServiceName}
 # operationId: LinkedServices_Delete
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-linkedservices delete-linked-services" [
+export def "linked-services-delete" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -2359,7 +2359,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/linkedservices/{linkedServiceName}
 # operationId: LinkedServices_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-linkedservices get-linked-services" [
+export def "linked-services-get" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -2407,7 +2407,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/linkedservices/{linkedServiceName}
 # operationId: LinkedServices_CreateOrUpdate
 # --properties shape: {annotations?: list, connectVia?: any, description?: string, parameters?: record, type: string}
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-linkedservices create-linked-services-or-update" [
+export def "linked-services-create-or-update" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -2458,7 +2458,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/pipelineruns/{runId}
 # operationId: PipelineRuns_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-pipelineruns get-pipeline-runs" [
+export def "pipeline-runs-get" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -2502,7 +2502,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/pipelineruns/{runId}/cancel
 # operationId: PipelineRuns_Cancel
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-pipelineruns-cancel cancel-pipeline-runs" [
+export def "pipeline-runs-cancel" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -2549,7 +2549,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 # operationId: ActivityRuns_QueryByPipelineRun
 # --filters item shape: {operand: "PipelineName"|"Status"|"RunStart"|"RunEnd"|"ActivityName"|"ActivityRunStart"|"ActivityRunEnd"|"ActivityType"|"TriggerName"|"TriggerRunTimestamp"|"RunGroupId"|"LatestOnly", operator: "Equals"|"NotEquals"|"In"|"NotIn", values: list<string>}
 # --orderBy item shape: {order: "ASC"|"DESC", orderBy: "RunStart"|"RunEnd"|"PipelineName"|"Status"|"ActivityName"|"ActivityRunStart"|"ActivityRunEnd"|"TriggerName"|"TriggerRunTimestamp"}
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-pipelineruns-query-activityruns list-activity-runs-by-pipeline-run" [
+export def "activity-runs-query-by-pipeline-run" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -2601,7 +2601,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/pipelines
 # operationId: Pipelines_ListByFactory
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-pipelines list" [
+export def "pipelines-list-by-factory" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -2643,7 +2643,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/pipelines/{pipelineName}
 # operationId: Pipelines_Delete
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-pipelines delete" [
+export def "pipelines-delete" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -2687,7 +2687,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/pipelines/{pipelineName}
 # operationId: Pipelines_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-pipelines get" [
+export def "pipelines-get" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -2735,7 +2735,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/pipelines/{pipelineName}
 # operationId: Pipelines_CreateOrUpdate
 # --properties shape: {activities?: list, annotations?: list, concurrency?: int, description?: string, folder?: record, parameters?: record, runDimensions?: record, variables?: record}
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-pipelines create-or-update" [
+export def "pipelines-create-or-update" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -2786,7 +2786,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/pipelines/{pipelineName}/createRun
 # operationId: Pipelines_CreateRun
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-pipelines-create-run create" [
+export def "pipelines-create-run" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -2837,7 +2837,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/queryDataFlowDebugSessions
 # operationId: DataFlowDebugSession_QueryByFactory
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-query-data-flow-debug-sessions list" [
+export def "data-flow-debug-session-query-by-factory" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -2881,7 +2881,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 # operationId: PipelineRuns_QueryByFactory
 # --filters item shape: {operand: "PipelineName"|"Status"|"RunStart"|"RunEnd"|"ActivityName"|"ActivityRunStart"|"ActivityRunEnd"|"ActivityType"|"TriggerName"|"TriggerRunTimestamp"|"RunGroupId"|"LatestOnly", operator: "Equals"|"NotEquals"|"In"|"NotIn", values: list<string>}
 # --orderBy item shape: {order: "ASC"|"DESC", orderBy: "RunStart"|"RunEnd"|"PipelineName"|"Status"|"ActivityName"|"ActivityRunStart"|"ActivityRunEnd"|"TriggerName"|"TriggerRunTimestamp"}
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-query-pipeline-runs list" [
+export def "pipeline-runs-query-by-factory" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -2933,7 +2933,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 # operationId: TriggerRuns_QueryByFactory
 # --filters item shape: {operand: "PipelineName"|"Status"|"RunStart"|"RunEnd"|"ActivityName"|"ActivityRunStart"|"ActivityRunEnd"|"ActivityType"|"TriggerName"|"TriggerRunTimestamp"|"RunGroupId"|"LatestOnly", operator: "Equals"|"NotEquals"|"In"|"NotIn", values: list<string>}
 # --orderBy item shape: {order: "ASC"|"DESC", orderBy: "RunStart"|"RunEnd"|"PipelineName"|"Status"|"ActivityName"|"ActivityRunStart"|"ActivityRunEnd"|"TriggerName"|"TriggerRunTimestamp"}
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-query-trigger-runs trigger" [
+export def "trigger-runs-query-by-factory" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -2983,7 +2983,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/triggers
 # operationId: Triggers_ListByFactory
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-triggers list" [
+export def "triggers-list-by-factory" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -3025,7 +3025,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/triggers/{triggerName}
 # operationId: Triggers_Delete
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-triggers delete" [
+export def "triggers-delete" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -3069,7 +3069,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/triggers/{triggerName}
 # operationId: Triggers_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-triggers get" [
+export def "triggers-get" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -3117,7 +3117,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/triggers/{triggerName}
 # operationId: Triggers_CreateOrUpdate
 # --properties shape: {annotations?: list, description?: string, runtimeState?: "Started"|"Stopped"|"Disabled", type: string}
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-triggers create-or-update" [
+export def "triggers-create-or-update" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -3168,7 +3168,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/triggers/{triggerName}/getEventSubscriptionStatus
 # operationId: Triggers_GetEventSubscriptionStatus
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-triggers-get-event-subscription-status get" [
+export def "triggers-get-event-subscription-status" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -3212,7 +3212,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/triggers/{triggerName}/rerunTriggers
 # operationId: RerunTriggers_ListByTrigger
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-triggers-rerun-triggers list" [
+export def "rerun-triggers-list-by-trigger" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -3256,7 +3256,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/triggers/{triggerName}/rerunTriggers/{rerunTriggerName}
 # operationId: RerunTriggers_Create
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-triggers-rerun-triggers create" [
+export def "rerun-triggers-create" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -3308,7 +3308,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/triggers/{triggerName}/rerunTriggers/{rerunTriggerName}/cancel
 # operationId: RerunTriggers_Cancel
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-triggers-rerun-triggers-cancel cancel" [
+export def "rerun-triggers-cancel" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -3354,7 +3354,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/triggers/{triggerName}/rerunTriggers/{rerunTriggerName}/start
 # operationId: RerunTriggers_Start
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-triggers-rerun-triggers-start start" [
+export def "rerun-triggers-start" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -3400,7 +3400,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/triggers/{triggerName}/rerunTriggers/{rerunTriggerName}/stop
 # operationId: RerunTriggers_Stop
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-triggers-rerun-triggers-stop stop" [
+export def "rerun-triggers-stop" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -3446,7 +3446,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/triggers/{triggerName}/start
 # operationId: Triggers_Start
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-triggers-start start" [
+export def "triggers-start" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -3490,7 +3490,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/triggers/{triggerName}/stop
 # operationId: Triggers_Stop
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-triggers-stop stop" [
+export def "triggers-stop" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -3534,7 +3534,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/triggers/{triggerName}/subscribeToEvents
 # operationId: Triggers_SubscribeToEvents
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-triggers-subscribe-to-events subscribe" [
+export def "triggers-subscribe-to-events" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -3578,7 +3578,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/triggers/{triggerName}/triggerRuns/{runId}/rerun
 # operationId: TriggerRuns_Rerun
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-triggers-trigger-runs-rerun trigger" [
+export def "trigger-runs-rerun" [
   subscription_id: string
   resource_group_name: string
   factory_name: string
@@ -3624,7 +3624,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-factory-facto
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/triggers/{triggerName}/unsubscribeFromEvents
 # operationId: Triggers_UnsubscribeFromEvents
-export def "subscriptions-resource-groups-providers-microsoft-data-factory-factories-triggers-unsubscribe-from-events unsubscribe" [
+export def "triggers-unsubscribe-from-events" [
   subscription_id: string
   resource_group_name: string
   factory_name: string

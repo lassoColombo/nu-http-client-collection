@@ -126,7 +126,7 @@ def sort-order-completer [] { ["recency" "relevancy"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "2-compliance-jobs list-batch" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-batch-compliance-jobs" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -151,7 +151,7 @@ export def commands []: nothing -> table {
 # GET /2/compliance/jobs
 # Docs: https://developer.twitter.com/en/docs/twitter-api/compliance/batch-compliance/api-reference/get-compliance-jobs
 # operationId: listBatchComplianceJobs
-export def "2-compliance-jobs list-batch" [
+export def "list-batch-compliance-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -191,7 +191,7 @@ export def "2-compliance-jobs list-batch" [
 # POST /2/compliance/jobs
 # Docs: https://developer.twitter.com/en/docs/twitter-api/compliance/batch-compliance/api-reference/post-compliance-jobs
 # operationId: createBatchComplianceJob
-export def "2-compliance-jobs create-batch" [
+export def "create-batch-compliance-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -233,7 +233,7 @@ export def "2-compliance-jobs create-batch" [
 # GET /2/compliance/jobs/{id}
 # Docs: https://developer.twitter.com/en/docs/twitter-api/compliance/batch-compliance/api-reference/get-compliance-jobs-id
 # operationId: getBatchComplianceJob
-export def "2-compliance-jobs get-batch" [
+export def "get-batch-compliance-job" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -272,7 +272,7 @@ export def "2-compliance-jobs get-batch" [
 #
 # POST /2/dm_conversations
 # operationId: dmConversationIdCreate
-export def "2-dm-conversations create" [
+export def "dm-conversation-id-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -313,7 +313,7 @@ export def "2-dm-conversations create" [
 #
 # GET /2/dm_conversations/with/{participant_id}/dm_events
 # operationId: getDmConversationsWithParticipantIdDmEvents
-export def "2-dm-conversations-with-dm-events get" [
+export def "get-dm-conversations-with-participant-id-dm-events" [
   participant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -360,7 +360,7 @@ export def "2-dm-conversations-with-dm-events get" [
 # POST /2/dm_conversations/with/{participant_id}/messages
 # operationId: dmConversationWithUserEventIdCreate
 # --attachments item shape: {media_id: string}
-export def "2-dm-conversations-with-messages create-user-event" [
+export def "dm-conversation-with-user-event-id-create" [
   participant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -403,7 +403,7 @@ export def "2-dm-conversations-with-messages create-user-event" [
 # POST /2/dm_conversations/{dm_conversation_id}/messages
 # operationId: dmConversationByIdEventIdCreate
 # --attachments item shape: {media_id: string}
-export def "2-dm-conversations-messages create-by-event" [
+export def "dm-conversation-by-id-event-id-create" [
   dm_conversation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -445,7 +445,7 @@ export def "2-dm-conversations-messages create-by-event" [
 #
 # GET /2/dm_conversations/{id}/dm_events
 # operationId: getDmConversationsIdDmEvents
-export def "2-dm-conversations-dm-events get" [
+export def "get-dm-conversations-id-dm-events" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -491,7 +491,7 @@ export def "2-dm-conversations-dm-events get" [
 #
 # GET /2/dm_events
 # operationId: getDmEvents
-export def "2-dm-events get" [
+export def "get-dm-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -536,7 +536,7 @@ export def "2-dm-events get" [
 # POST /2/lists
 # Docs: https://developer.twitter.com/en/docs/twitter-api/lists/manage-lists/api-reference/post-lists
 # operationId: listIdCreate
-export def "2-lists create" [
+export def "list-id-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -578,7 +578,7 @@ export def "2-lists create" [
 # DELETE /2/lists/{id}
 # Docs: https://developer.twitter.com/en/docs/twitter-api/lists/manage-lists/api-reference/delete-lists-id
 # operationId: listIdDelete
-export def "2-lists delete" [
+export def "list-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -616,7 +616,7 @@ export def "2-lists delete" [
 # GET /2/lists/{id}
 # Docs: https://developer.twitter.com/en/docs/twitter-api/lists/list-lookup/api-reference/get-lists-id
 # operationId: listIdGet
-export def "2-lists get" [
+export def "list-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -658,7 +658,7 @@ export def "2-lists get" [
 # PUT /2/lists/{id}
 # Docs: https://developer.twitter.com/en/docs/twitter-api/lists/manage-lists/api-reference/put-lists-id
 # operationId: listIdUpdate
-export def "2-lists update" [
+export def "list-id-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -702,7 +702,7 @@ export def "2-lists update" [
 # GET /2/lists/{id}/followers
 # Docs: https://developer.twitter.com/en/docs/twitter-api/users/follows/api-reference/get-users-id-followers
 # operationId: listGetFollowers
-export def "2-lists-followers get" [
+export def "list-get-followers" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -746,7 +746,7 @@ export def "2-lists-followers get" [
 # GET /2/lists/{id}/members
 # Docs: https://developer.twitter.com/en/docs/twitter-api/lists/list-members/api-reference/get-users-id-list_memberships
 # operationId: listGetMembers
-export def "2-lists-members get" [
+export def "list-get-members" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -790,7 +790,7 @@ export def "2-lists-members get" [
 # POST /2/lists/{id}/members
 # Docs: https://developer.twitter.com/en/docs/twitter-api/lists/list-members/api-reference/post-lists-id-members
 # operationId: listAddMember
-export def "2-lists-members create" [
+export def "list-add-member" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -832,7 +832,7 @@ export def "2-lists-members create" [
 # DELETE /2/lists/{id}/members/{user_id}
 # Docs: https://developer.twitter.com/en/docs/twitter-api/lists/list-members/api-reference/delete-lists-id-members-user_id
 # operationId: listRemoveMember
-export def "2-lists-members delete" [
+export def "list-remove-member" [
   id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -872,7 +872,7 @@ export def "2-lists-members delete" [
 # GET /2/lists/{id}/tweets
 # Docs: https://developer.twitter.com/en/docs/twitter-api/lists/list-tweets/api-reference/get-lists-id-tweets
 # operationId: listsIdTweets
-export def "2-lists-tweets get" [
+export def "lists-id-tweets" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -918,7 +918,7 @@ export def "2-lists-tweets get" [
 #
 # GET /2/openapi.json
 # operationId: getOpenApiSpec
-export def "2-openapi-json get-open-spec" [
+export def "get-open-api-spec" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -953,7 +953,7 @@ export def "2-openapi-json get-open-spec" [
 # GET /2/spaces
 # Docs: https://developer.twitter.com/en/docs/twitter-api/spaces/lookup/api-reference/get-spaces
 # operationId: findSpacesByIds
-export def "2-spaces list" [
+export def "find-spaces-by-ids" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -995,7 +995,7 @@ export def "2-spaces list" [
 # GET /2/spaces/by/creator_ids
 # Docs: https://developer.twitter.com/en/docs/twitter-api/spaces/lookup/api-reference/get-spaces-by-creator-ids
 # operationId: findSpacesByCreatorIds
-export def "2-spaces-by-creator-ids find" [
+export def "find-spaces-by-creator-ids" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1037,7 +1037,7 @@ export def "2-spaces-by-creator-ids find" [
 # GET /2/spaces/search
 # Docs: https://developer.twitter.com/en/docs/twitter-api/spaces/search/api-reference/get-spaces-search
 # operationId: searchSpaces
-export def "2-spaces-search list" [
+export def "search-spaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1081,7 +1081,7 @@ export def "2-spaces-search list" [
 # GET /2/spaces/{id}
 # Docs: https://developer.twitter.com/en/docs/twitter-api/spaces/lookup/api-reference/get-spaces-id
 # operationId: findSpaceById
-export def "2-spaces find" [
+export def "find-space-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1124,7 +1124,7 @@ export def "2-spaces find" [
 # GET /2/spaces/{id}/buyers
 # Docs: https://developer.twitter.com/en/docs/twitter-api/spaces/lookup/api-reference/get-spaces-id-buyers
 # operationId: spaceBuyers
-export def "2-spaces-buyers get" [
+export def "space-buyers" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1168,7 +1168,7 @@ export def "2-spaces-buyers get" [
 # GET /2/spaces/{id}/tweets
 # Docs: https://developer.twitter.com/en/docs/twitter-api/spaces/lookup/api-reference/get-spaces-id-tweets
 # operationId: spaceTweets
-export def "2-spaces-tweets get" [
+export def "space-tweets" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1214,7 +1214,7 @@ export def "2-spaces-tweets get" [
 # GET /2/tweets
 # Docs: https://developer.twitter.com/en/docs/twitter-api/tweets/lookup/api-reference/get-tweets
 # operationId: findTweetsById
-export def "2-tweets list" [
+export def "find-tweets-by-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1262,7 +1262,7 @@ export def "2-tweets list" [
 # --media shape: {media_ids: list<string>, tagged_user_ids?: list<string>}
 # --poll shape: {duration_minutes: int, options: list<string>, reply_settings?: "following"|"mentionedUsers"}
 # --reply shape: {exclude_reply_user_ids?: list<string>, in_reply_to_tweet_id: string}
-export def "2-tweets create" [
+export def "create-tweet" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1311,7 +1311,7 @@ export def "2-tweets create" [
 #
 # GET /2/tweets/compliance/stream
 # operationId: getTweetsComplianceStream
-export def "2-tweets-compliance-stream get" [
+export def "get-tweets-compliance-stream" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1352,7 +1352,7 @@ export def "2-tweets-compliance-stream get" [
 # GET /2/tweets/counts/all
 # Docs: https://developer.twitter.com/en/docs/twitter-api/tweets/search/api-reference/get-tweets-search-all
 # operationId: tweetCountsFullArchiveSearch
-export def "2-tweets-counts-all archive-full-list" [
+export def "tweet-counts-full-archive-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1398,7 +1398,7 @@ export def "2-tweets-counts-all archive-full-list" [
 # GET /2/tweets/counts/recent
 # Docs: https://developer.twitter.com/en/docs/twitter-api/tweets/counts/api-reference/get-tweets-counts-recent
 # operationId: tweetCountsRecentSearch
-export def "2-tweets-counts-recent list" [
+export def "tweet-counts-recent-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1443,7 +1443,7 @@ export def "2-tweets-counts-recent list" [
 #
 # GET /2/tweets/firehose/stream
 # operationId: getTweetsFirehoseStream
-export def "2-tweets-firehose-stream get" [
+export def "get-tweets-firehose-stream" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1489,7 +1489,7 @@ export def "2-tweets-firehose-stream get" [
 #
 # GET /2/tweets/label/stream
 # operationId: getTweetsLabelStream
-export def "2-tweets-label-stream get" [
+export def "get-tweets-label-stream" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1529,7 +1529,7 @@ export def "2-tweets-label-stream get" [
 # GET /2/tweets/sample/stream
 # Docs: https://developer.twitter.com/en/docs/twitter-api/tweets/volume-streams/api-reference/get-tweets-sample-stream
 # operationId: sampleStream
-export def "2-tweets-sample-stream get" [
+export def "sample-stream" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1572,7 +1572,7 @@ export def "2-tweets-sample-stream get" [
 #
 # GET /2/tweets/sample10/stream
 # operationId: getTweetsSample10Stream
-export def "2-tweets-sample10-stream get" [
+export def "get-tweets-sample10-stream" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1619,7 +1619,7 @@ export def "2-tweets-sample10-stream get" [
 # GET /2/tweets/search/all
 # Docs: https://developer.twitter.com/en/docs/twitter-api/tweets/search/api-reference/get-tweets-search-all
 # operationId: tweetsFullarchiveSearch
-export def "2-tweets-search-all list-fullarchive" [
+export def "tweets-fullarchive-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1671,7 +1671,7 @@ export def "2-tweets-search-all list-fullarchive" [
 # GET /2/tweets/search/recent
 # Docs: https://developer.twitter.com/en/docs/twitter-api/tweets/search/api-reference/get-tweets-search-recent
 # operationId: tweetsRecentSearch
-export def "2-tweets-search-recent list" [
+export def "tweets-recent-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1723,7 +1723,7 @@ export def "2-tweets-search-recent list" [
 # GET /2/tweets/search/stream
 # Docs: https://developer.twitter.com/en/docs/twitter-api/tweets/filtered-stream/api-reference/get-tweets-search-stream
 # operationId: searchStream
-export def "2-tweets-search-stream list" [
+export def "search-stream" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1769,7 +1769,7 @@ export def "2-tweets-search-stream list" [
 # GET /2/tweets/search/stream/rules
 # Docs: https://developer.twitter.com/en/docs/twitter-api/tweets/filtered-stream/api-reference/get-tweets-search-stream-rules
 # operationId: getRules
-export def "2-tweets-search-stream-rules get" [
+export def "get-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1811,7 +1811,7 @@ export def "2-tweets-search-stream-rules get" [
 # operationId: addOrDeleteRules
 # --add item shape: {tag?: string, value: string}
 # --delete shape: {ids?: list<string>, values?: list<string>}
-export def "2-tweets-search-stream-rules create-or-delete" [
+export def "add-or-delete-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1854,7 +1854,7 @@ export def "2-tweets-search-stream-rules create-or-delete" [
 # DELETE /2/tweets/{id}
 # Docs: https://developer.twitter.com/en/docs/twitter-api/tweets/manage-tweets/api-reference/delete-tweets-id
 # operationId: deleteTweetById
-export def "2-tweets delete" [
+export def "delete-tweet-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1892,7 +1892,7 @@ export def "2-tweets delete" [
 # GET /2/tweets/{id}
 # Docs: https://developer.twitter.com/en/docs/twitter-api/tweets/lookup/api-reference/get-tweets-id
 # operationId: findTweetById
-export def "2-tweets find" [
+export def "find-tweet-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1937,7 +1937,7 @@ export def "2-tweets find" [
 # GET /2/tweets/{id}/liking_users
 # Docs: https://developer.twitter.com/en/docs/twitter-api/tweets/likes/api-reference/get-tweets-id-liking_users
 # operationId: tweetsIdLikingUsers
-export def "2-tweets-liking-users get" [
+export def "tweets-id-liking-users" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1981,7 +1981,7 @@ export def "2-tweets-liking-users get" [
 # GET /2/tweets/{id}/quote_tweets
 # Docs: https://developer.twitter.com/en/docs/twitter-api/tweets/quote-tweets/api-reference/get-tweets-id-quote_tweets
 # operationId: findTweetsThatQuoteATweet
-export def "2-tweets-quote-tweets find-that" [
+export def "find-tweets-that-quote-a-tweet" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2029,7 +2029,7 @@ export def "2-tweets-quote-tweets find-that" [
 # GET /2/tweets/{id}/retweeted_by
 # Docs: https://developer.twitter.com/en/docs/twitter-api/tweets/retweets/api-reference/get-tweets-id-retweeted_by
 # operationId: tweetsIdRetweetingUsers
-export def "2-tweets-retweeted-by get-retweeting-users" [
+export def "tweets-id-retweeting-users" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2073,7 +2073,7 @@ export def "2-tweets-retweeted-by get-retweeting-users" [
 # PUT /2/tweets/{tweet_id}/hidden
 # Docs: https://developer.twitter.com/en/docs/twitter-api/tweets/hide-replies/api-reference/put-tweets-id-hidden
 # operationId: hideReplyById
-export def "2-tweets-hidden update-hide-reply" [
+export def "hide-reply-by-id" [
   tweet_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2115,7 +2115,7 @@ export def "2-tweets-hidden update-hide-reply" [
 # GET /2/users
 # Docs: https://developer.twitter.com/en/docs/twitter-api/users/lookup/api-reference/get-users
 # operationId: findUsersById
-export def "2-users list" [
+export def "find-users-by-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2156,7 +2156,7 @@ export def "2-users list" [
 # GET /2/users/by
 # Docs: https://developer.twitter.com/en/docs/twitter-api/users/lookup/api-reference/get-users-by
 # operationId: findUsersByUsername
-export def "2-users-by find-username" [
+export def "find-users-by-username" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2197,7 +2197,7 @@ export def "2-users-by find-username" [
 # GET /2/users/by/username/{username}
 # Docs: https://developer.twitter.com/en/docs/twitter-api/users/lookup/api-reference/get-users-by-username-username
 # operationId: findUserByUsername
-export def "2-users-by-username find" [
+export def "find-user-by-username" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2238,7 +2238,7 @@ export def "2-users-by-username find" [
 #
 # GET /2/users/compliance/stream
 # operationId: getUsersComplianceStream
-export def "2-users-compliance-stream get" [
+export def "get-users-compliance-stream" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2279,7 +2279,7 @@ export def "2-users-compliance-stream get" [
 # GET /2/users/me
 # Docs: https://developer.twitter.com/en/docs/twitter-api/users/lookup/api-reference/get-users-me
 # operationId: findMyUser
-export def "2-users-me find-my" [
+export def "find-my-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2319,7 +2319,7 @@ export def "2-users-me find-my" [
 # GET /2/users/{id}
 # Docs: https://developer.twitter.com/en/docs/twitter-api/users/lookup/api-reference/get-users-id
 # operationId: findUserById
-export def "2-users find" [
+export def "find-user-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2361,7 +2361,7 @@ export def "2-users find" [
 # GET /2/users/{id}/blocking
 # Docs: https://developer.twitter.com/en/docs/twitter-api/users/blocks/api-reference/get-users-blocking
 # operationId: usersIdBlocking
-export def "2-users-blocking get" [
+export def "users-id-blocking" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2405,7 +2405,7 @@ export def "2-users-blocking get" [
 # POST /2/users/{id}/blocking
 # Docs: https://developer.twitter.com/en/docs/twitter-api/users/blocks/api-reference/post-users-user_id-blocking
 # operationId: usersIdBlock
-export def "2-users-blocking create-block" [
+export def "users-id-block" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2447,7 +2447,7 @@ export def "2-users-blocking create-block" [
 # GET /2/users/{id}/bookmarks
 # Docs: https://developer.twitter.com/en/docs/twitter-api/tweets/bookmarks/api-reference/get-users-id-bookmarks
 # operationId: getUsersIdBookmarks
-export def "2-users-bookmarks get" [
+export def "get-users-id-bookmarks" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2494,7 +2494,7 @@ export def "2-users-bookmarks get" [
 # POST /2/users/{id}/bookmarks
 # Docs: https://developer.twitter.com/en/docs/twitter-api/tweets/bookmarks/api-reference/post-users-id-bookmarks
 # operationId: postUsersIdBookmarks
-export def "2-users-bookmarks create" [
+export def "post-users-id-bookmarks" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2536,7 +2536,7 @@ export def "2-users-bookmarks create" [
 # DELETE /2/users/{id}/bookmarks/{tweet_id}
 # Docs: https://developer.twitter.com/en/docs/twitter-api/tweets/bookmarks/api-reference/delete-users-id-bookmarks-tweet_id
 # operationId: usersIdBookmarksDelete
-export def "2-users-bookmarks delete" [
+export def "users-id-bookmarks-delete" [
   id: string
   tweet_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2576,7 +2576,7 @@ export def "2-users-bookmarks delete" [
 # GET /2/users/{id}/followed_lists
 # Docs: https://developer.twitter.com/en/docs/twitter-api/lists/list-follows/api-reference/get-users-id-followed_lists
 # operationId: userFollowedLists
-export def "2-users-followed-lists get" [
+export def "user-followed-lists" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2620,7 +2620,7 @@ export def "2-users-followed-lists get" [
 # POST /2/users/{id}/followed_lists
 # Docs: https://developer.twitter.com/en/docs/twitter-api/lists/list-follows/api-reference/post-users-id-followed-lists
 # operationId: listUserFollow
-export def "2-users-followed-lists list-follow" [
+export def "list-user-follow" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2662,7 +2662,7 @@ export def "2-users-followed-lists list-follow" [
 # DELETE /2/users/{id}/followed_lists/{list_id}
 # Docs: https://developer.twitter.com/en/docs/twitter-api/lists/list-follows/api-reference/delete-users-id-followed-lists-list_id
 # operationId: listUserUnfollow
-export def "2-users-followed-lists list-unfollow" [
+export def "list-user-unfollow" [
   id: string
   list_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2702,7 +2702,7 @@ export def "2-users-followed-lists list-unfollow" [
 # GET /2/users/{id}/followers
 # Docs: https://developer.twitter.com/en/docs/twitter-api/users/follows/api-reference/get-users-id-followers
 # operationId: usersIdFollowers
-export def "2-users-followers get" [
+export def "users-id-followers" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2746,7 +2746,7 @@ export def "2-users-followers get" [
 # GET /2/users/{id}/following
 # Docs: https://developer.twitter.com/en/docs/twitter-api/users/follows/api-reference/get-users-id-following
 # operationId: usersIdFollowing
-export def "2-users-following get" [
+export def "users-id-following" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2790,7 +2790,7 @@ export def "2-users-following get" [
 # POST /2/users/{id}/following
 # Docs: https://developer.twitter.com/en/docs/twitter-api/users/follows/api-reference/post-users-source_user_id-following
 # operationId: usersIdFollow
-export def "2-users-following create-follow" [
+export def "users-id-follow" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2832,7 +2832,7 @@ export def "2-users-following create-follow" [
 # GET /2/users/{id}/liked_tweets
 # Docs: https://developer.twitter.com/en/docs/twitter-api/tweets/likes/api-reference/get-users-id-liked_tweets
 # operationId: usersIdLikedTweets
-export def "2-users-liked-tweets get" [
+export def "users-id-liked-tweets" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2879,7 +2879,7 @@ export def "2-users-liked-tweets get" [
 # POST /2/users/{id}/likes
 # Docs: https://developer.twitter.com/en/docs/twitter-api/tweets/likes/api-reference/post-users-id-likes
 # operationId: usersIdLike
-export def "2-users-likes create" [
+export def "users-id-like" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2921,7 +2921,7 @@ export def "2-users-likes create" [
 # DELETE /2/users/{id}/likes/{tweet_id}
 # Docs: https://developer.twitter.com/en/docs/twitter-api/tweets/likes/api-reference/delete-users-id-likes-tweet_id
 # operationId: usersIdUnlike
-export def "2-users-likes delete-unlike" [
+export def "users-id-unlike" [
   id: string
   tweet_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2961,7 +2961,7 @@ export def "2-users-likes delete-unlike" [
 # GET /2/users/{id}/list_memberships
 # Docs: https://developer.twitter.com/en/docs/twitter-api/lists/list-members/api-reference/get-users-id-list_memberships
 # operationId: getUserListMemberships
-export def "2-users-list-memberships get" [
+export def "get-user-list-memberships" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3005,7 +3005,7 @@ export def "2-users-list-memberships get" [
 # GET /2/users/{id}/mentions
 # Docs: https://developer.twitter.com/en/docs/twitter-api/tweets/timelines/api-reference/get-users-id-mentions
 # operationId: usersIdMentions
-export def "2-users-mentions get" [
+export def "users-id-mentions" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3056,7 +3056,7 @@ export def "2-users-mentions get" [
 # GET /2/users/{id}/muting
 # Docs: https://developer.twitter.com/en/docs/twitter-api/users/mutes/api-reference/get-users-muting
 # operationId: usersIdMuting
-export def "2-users-muting get" [
+export def "users-id-muting" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3100,7 +3100,7 @@ export def "2-users-muting get" [
 # POST /2/users/{id}/muting
 # Docs: https://developer.twitter.com/en/docs/twitter-api/users/mutes/api-reference/post-users-user_id-muting
 # operationId: usersIdMute
-export def "2-users-muting create-mute" [
+export def "users-id-mute" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3142,7 +3142,7 @@ export def "2-users-muting create-mute" [
 # GET /2/users/{id}/owned_lists
 # Docs: https://developer.twitter.com/en/docs/twitter-api/lists/list-lookup/api-reference/get-users-id-owned_lists
 # operationId: listUserOwnedLists
-export def "2-users-owned-lists list" [
+export def "list-user-owned-lists" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3186,7 +3186,7 @@ export def "2-users-owned-lists list" [
 # GET /2/users/{id}/pinned_lists
 # Docs: https://developer.twitter.com/en/docs/twitter-api/lists/pinned-lists/api-reference/get-users-id-pinned_lists
 # operationId: listUserPinnedLists
-export def "2-users-pinned-lists list" [
+export def "list-user-pinned-lists" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3228,7 +3228,7 @@ export def "2-users-pinned-lists list" [
 # POST /2/users/{id}/pinned_lists
 # Docs: https://developer.twitter.com/en/docs/twitter-api/lists/pinned-lists/api-reference/post-users-id-pinned-lists
 # operationId: listUserPin
-export def "2-users-pinned-lists list-pin" [
+export def "list-user-pin" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3270,7 +3270,7 @@ export def "2-users-pinned-lists list-pin" [
 # DELETE /2/users/{id}/pinned_lists/{list_id}
 # Docs: https://developer.twitter.com/en/docs/twitter-api/lists/pinned-lists/api-reference/delete-users-id-pinned-lists-list_id
 # operationId: listUserUnpin
-export def "2-users-pinned-lists list-unpin" [
+export def "list-user-unpin" [
   id: string
   list_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3310,7 +3310,7 @@ export def "2-users-pinned-lists list-unpin" [
 # POST /2/users/{id}/retweets
 # Docs: https://developer.twitter.com/en/docs/twitter-api/tweets/retweets/api-reference/post-users-id-retweets
 # operationId: usersIdRetweets
-export def "2-users-retweets create" [
+export def "users-id-retweets" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3352,7 +3352,7 @@ export def "2-users-retweets create" [
 # DELETE /2/users/{id}/retweets/{source_tweet_id}
 # Docs: https://developer.twitter.com/en/docs/twitter-api/tweets/retweets/api-reference/delete-users-id-retweets-tweet_id
 # operationId: usersIdUnretweets
-export def "2-users-retweets delete-unretweets" [
+export def "users-id-unretweets" [
   id: string
   source_tweet_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3392,7 +3392,7 @@ export def "2-users-retweets delete-unretweets" [
 # GET /2/users/{id}/timelines/reverse_chronological
 # Docs: https://developer.twitter.com/en/docs/twitter-api/tweets/timelines/api-reference/get-users-id-reverse-chronological
 # operationId: usersIdTimeline
-export def "2-users-timelines-reverse-chronological get" [
+export def "users-id-timeline" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3444,7 +3444,7 @@ export def "2-users-timelines-reverse-chronological get" [
 # GET /2/users/{id}/tweets
 # Docs: https://developer.twitter.com/en/docs/twitter-api/tweets/timelines/api-reference/get-users-id-tweets
 # operationId: usersIdTweets
-export def "2-users-tweets get" [
+export def "users-id-tweets" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3496,7 +3496,7 @@ export def "2-users-tweets get" [
 # DELETE /2/users/{source_user_id}/blocking/{target_user_id}
 # Docs: https://developer.twitter.com/en/docs/twitter-api/users/blocks/api-reference/delete-users-user_id-blocking
 # operationId: usersIdUnblock
-export def "2-users-blocking delete-unblock" [
+export def "users-id-unblock" [
   source_user_id: string
   target_user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3536,7 +3536,7 @@ export def "2-users-blocking delete-unblock" [
 # DELETE /2/users/{source_user_id}/following/{target_user_id}
 # Docs: https://developer.twitter.com/en/docs/twitter-api/users/follows/api-reference/delete-users-source_id-following
 # operationId: usersIdUnfollow
-export def "2-users-following delete-unfollow" [
+export def "users-id-unfollow" [
   source_user_id: string
   target_user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3576,7 +3576,7 @@ export def "2-users-following delete-unfollow" [
 # DELETE /2/users/{source_user_id}/muting/{target_user_id}
 # Docs: https://developer.twitter.com/en/docs/twitter-api/users/mutes/api-reference/delete-users-user_id-muting
 # operationId: usersIdUnmute
-export def "2-users-muting delete-unmute" [
+export def "users-id-unmute" [
   source_user_id: string
   target_user_id: string
   --base-url(-b): string@base-url-completer # API base URL

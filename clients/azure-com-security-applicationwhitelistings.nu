@@ -108,7 +108,7 @@ def enforcement-mode-completer [] { ["Audit" "Enforce" "None"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-security-application-whitelistings list-adaptive-controls" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "adaptive-application-controls-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -132,7 +132,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Security/applicationWhitelistings
 # operationId: AdaptiveApplicationControls_List
-export def "subscriptions-providers-microsoft-security-application-whitelistings list-adaptive-controls" [
+export def "adaptive-application-controls-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -172,7 +172,7 @@ export def "subscriptions-providers-microsoft-security-application-whitelistings
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Security/locations/{ascLocation}/applicationWhitelistings/{groupName}
 # operationId: AdaptiveApplicationControls_Get
-export def "subscriptions-providers-microsoft-security-locations-application-whitelistings get-adaptive-controls" [
+export def "adaptive-application-controls-get" [
   subscription_id: string
   asc_location: string
   group_name: string
@@ -217,7 +217,7 @@ export def "subscriptions-providers-microsoft-security-locations-application-whi
 # --pathRecommendations item shape: {action?: "Recommended"|"Add"|"Remove", common?: bool, configurationStatus?: "Configured"|"NotConfigured"|"InProgress"|"Failed"|"NoStatus", fileType?: "Exe"|"Dll"|"Msi"|"Script"|"Executable"|"Unknown", path?: string, publisherInfo?: record, type?: "File"|"FileHash"|"PublisherSignature"|"ProductSignature"|"BinarySignature"|"VersionAndAboveSignature", userSids?: list<string>, usernames?: list}
 # --protectionMode shape: {exe?: "Audit"|"Enforce"|"None", executable?: "Audit"|"Enforce"|"None", msi?: "Audit"|"Enforce"|"None", script?: "Audit"|"Enforce"|"None"}
 # --vmRecommendations item shape: {configurationStatus?: "Configured"|"NotConfigured"|"InProgress"|"Failed"|"NoStatus", recommendationAction?: "Recommended"|"Add"|"Remove", resourceId?: string}
-export def "subscriptions-providers-microsoft-security-locations-application-whitelistings update-adaptive-controls" [
+export def "adaptive-application-controls-put" [
   subscription_id: string
   asc_location: string
   group_name: string

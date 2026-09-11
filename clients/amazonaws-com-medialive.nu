@@ -122,7 +122,7 @@ def force-completer [] { ["NO" "YES"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "prod-input-devices-accept create-transfer" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accept-input-device-transfer" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # POST /prod/inputDevices/{inputDeviceId}/accept
 # operationId: AcceptInputDeviceTransfer
-export def "prod-input-devices-accept create-transfer" [
+export def "accept-input-device-transfer" [
   input_device_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -191,7 +191,7 @@ export def "prod-input-devices-accept create-transfer" [
 #
 # POST /prod/batch/delete
 # operationId: BatchDelete
-export def "prod-batch-delete delete" [
+export def "batch-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -241,7 +241,7 @@ export def "prod-batch-delete delete" [
 #
 # POST /prod/batch/start
 # operationId: BatchStart
-export def "prod-batch-start start" [
+export def "batch-start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -289,7 +289,7 @@ export def "prod-batch-start start" [
 #
 # POST /prod/batch/stop
 # operationId: BatchStop
-export def "prod-batch-stop stop" [
+export def "batch-stop" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -339,7 +339,7 @@ export def "prod-batch-stop stop" [
 # operationId: BatchUpdateSchedule
 # --creates shape: {ScheduleActions?: any}
 # --deletes shape: {ActionNames?: any}
-export def "prod-channels-schedule update-batch" [
+export def "batch-update-schedule" [
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -389,7 +389,7 @@ export def "prod-channels-schedule update-batch" [
 #
 # DELETE /prod/channels/{channelId}/schedule
 # operationId: DeleteSchedule
-export def "prod-channels-schedule delete" [
+export def "delete-schedule" [
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -434,7 +434,7 @@ export def "prod-channels-schedule delete" [
 #
 # GET /prod/channels/{channelId}/schedule
 # operationId: DescribeSchedule
-export def "prod-channels-schedule get" [
+export def "describe-schedule" [
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -484,7 +484,7 @@ export def "prod-channels-schedule get" [
 #
 # POST /prod/inputDevices/{inputDeviceId}/cancel
 # operationId: CancelInputDeviceTransfer
-export def "prod-input-devices-cancel cancel-transfer" [
+export def "cancel-input-device-transfer" [
   input_device_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -529,7 +529,7 @@ export def "prod-input-devices-cancel cancel-transfer" [
 #
 # POST /prod/claimDevice
 # operationId: ClaimDevice
-export def "prod-claim-device create" [
+export def "claim-device" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -583,7 +583,7 @@ export def "prod-claim-device create" [
 # --inputSpecification shape: {Codec?: any, MaximumBitrate?: any, Resolution?: any}
 # --maintenance shape: {MaintenanceDay?: any, MaintenanceStartTime?: any}
 # --vpc shape: {PublicAddressAllocationIds?: any, SecurityGroupIds?: any, SubnetIds?: any}
-export def "prod-channels create" [
+export def "create-channel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -643,7 +643,7 @@ export def "prod-channels create" [
 #
 # GET /prod/channels
 # operationId: ListChannels
-export def "prod-channels list" [
+export def "list-channels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -696,7 +696,7 @@ export def "prod-channels list" [
 # --mediaConnectFlows item shape: {FlowArn?: any}
 # --sources item shape: {PasswordParam?: any, Url?: any, Username?: any}
 # --vpc shape: {SecurityGroupIds?: any, SubnetIds?: any}
-export def "prod-inputs create" [
+export def "create-input" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -753,7 +753,7 @@ export def "prod-inputs create" [
 #
 # GET /prod/inputs
 # operationId: ListInputs
-export def "prod-inputs list" [
+export def "list-inputs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -802,7 +802,7 @@ export def "prod-inputs list" [
 # POST /prod/inputSecurityGroups
 # operationId: CreateInputSecurityGroup
 # --whitelistRules item shape: {Cidr?: any}
-export def "prod-input-security-groups create" [
+export def "create-input-security-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -850,7 +850,7 @@ export def "prod-input-security-groups create" [
 #
 # GET /prod/inputSecurityGroups
 # operationId: ListInputSecurityGroups
-export def "prod-input-security-groups list" [
+export def "list-input-security-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -899,7 +899,7 @@ export def "prod-input-security-groups list" [
 # POST /prod/multiplexes
 # operationId: CreateMultiplex
 # --multiplexSettings shape: {MaximumVideoBufferDelayMilliseconds?: any, TransportStreamBitrate?: any, TransportStreamId?: any, TransportStreamReservedBitrate?: any}
-export def "prod-multiplexes create-multiplex" [
+export def "create-multiplex" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -950,7 +950,7 @@ export def "prod-multiplexes create-multiplex" [
 #
 # GET /prod/multiplexes
 # operationId: ListMultiplexes
-export def "prod-multiplexes list" [
+export def "list-multiplexes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -999,7 +999,7 @@ export def "prod-multiplexes list" [
 # POST /prod/multiplexes/{multiplexId}/programs
 # operationId: CreateMultiplexProgram
 # --multiplexProgramSettings shape: {PreferredChannelPipeline?: any, ProgramNumber?: any, ServiceDescriptor?: any, VideoSettings?: any}
-export def "prod-multiplexes-programs create-multiplex" [
+export def "create-multiplex-program" [
   multiplex_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1050,7 +1050,7 @@ export def "prod-multiplexes-programs create-multiplex" [
 #
 # GET /prod/multiplexes/{multiplexId}/programs
 # operationId: ListMultiplexPrograms
-export def "prod-multiplexes-programs list-multiplex" [
+export def "list-multiplex-programs" [
   multiplex_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1100,7 +1100,7 @@ export def "prod-multiplexes-programs list-multiplex" [
 #
 # POST /prod/inputs/{inputId}/partners
 # operationId: CreatePartnerInput
-export def "prod-inputs-partners create" [
+export def "create-partner-input" [
   input_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1150,7 +1150,7 @@ export def "prod-inputs-partners create" [
 #
 # POST /prod/tags/{resource-arn}
 # operationId: CreateTags
-export def "prod-tags create" [
+export def "create-tags" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1199,7 +1199,7 @@ export def "prod-tags create" [
 #
 # GET /prod/tags/{resource-arn}
 # operationId: ListTagsForResource
-export def "prod-tags list" [
+export def "list-tags-for-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1244,7 +1244,7 @@ export def "prod-tags list" [
 #
 # DELETE /prod/channels/{channelId}
 # operationId: DeleteChannel
-export def "prod-channels delete" [
+export def "delete-channel" [
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1289,7 +1289,7 @@ export def "prod-channels delete" [
 #
 # GET /prod/channels/{channelId}
 # operationId: DescribeChannel
-export def "prod-channels get" [
+export def "describe-channel" [
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1340,7 +1340,7 @@ export def "prod-channels get" [
 # --inputAttachments item shape: {AutomaticInputFailoverSettings?: any, InputAttachmentName?: any, InputId?: any, InputSettings?: any}
 # --inputSpecification shape: {Codec?: any, MaximumBitrate?: any, Resolution?: any}
 # --maintenance shape: {MaintenanceDay?: any, MaintenanceScheduledDate?: any, MaintenanceStartTime?: any}
-export def "prod-channels update" [
+export def "update-channel" [
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1397,7 +1397,7 @@ export def "prod-channels update" [
 #
 # DELETE /prod/inputs/{inputId}
 # operationId: DeleteInput
-export def "prod-inputs delete" [
+export def "delete-input" [
   input_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1442,7 +1442,7 @@ export def "prod-inputs delete" [
 #
 # GET /prod/inputs/{inputId}
 # operationId: DescribeInput
-export def "prod-inputs get" [
+export def "describe-input" [
   input_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1491,7 +1491,7 @@ export def "prod-inputs get" [
 # --inputDevices item shape: {Id?: any}
 # --mediaConnectFlows item shape: {FlowArn?: any}
 # --sources item shape: {PasswordParam?: any, Url?: any, Username?: any}
-export def "prod-inputs update" [
+export def "update-input" [
   input_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1546,7 +1546,7 @@ export def "prod-inputs update" [
 #
 # DELETE /prod/inputSecurityGroups/{inputSecurityGroupId}
 # operationId: DeleteInputSecurityGroup
-export def "prod-input-security-groups delete" [
+export def "delete-input-security-group" [
   input_security_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1591,7 +1591,7 @@ export def "prod-input-security-groups delete" [
 #
 # GET /prod/inputSecurityGroups/{inputSecurityGroupId}
 # operationId: DescribeInputSecurityGroup
-export def "prod-input-security-groups get" [
+export def "describe-input-security-group" [
   input_security_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1637,7 +1637,7 @@ export def "prod-input-security-groups get" [
 # PUT /prod/inputSecurityGroups/{inputSecurityGroupId}
 # operationId: UpdateInputSecurityGroup
 # --whitelistRules item shape: {Cidr?: any}
-export def "prod-input-security-groups update" [
+export def "update-input-security-group" [
   input_security_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1687,7 +1687,7 @@ export def "prod-input-security-groups update" [
 #
 # DELETE /prod/multiplexes/{multiplexId}
 # operationId: DeleteMultiplex
-export def "prod-multiplexes delete-multiplex" [
+export def "delete-multiplex" [
   multiplex_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1732,7 +1732,7 @@ export def "prod-multiplexes delete-multiplex" [
 #
 # GET /prod/multiplexes/{multiplexId}
 # operationId: DescribeMultiplex
-export def "prod-multiplexes get-multiplex" [
+export def "describe-multiplex" [
   multiplex_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1778,7 +1778,7 @@ export def "prod-multiplexes get-multiplex" [
 # PUT /prod/multiplexes/{multiplexId}
 # operationId: UpdateMultiplex
 # --multiplexSettings shape: {MaximumVideoBufferDelayMilliseconds?: any, TransportStreamBitrate?: any, TransportStreamId?: any, TransportStreamReservedBitrate?: any}
-export def "prod-multiplexes update-multiplex" [
+export def "update-multiplex" [
   multiplex_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1828,7 +1828,7 @@ export def "prod-multiplexes update-multiplex" [
 #
 # DELETE /prod/multiplexes/{multiplexId}/programs/{programName}
 # operationId: DeleteMultiplexProgram
-export def "prod-multiplexes-programs delete-multiplex" [
+export def "delete-multiplex-program" [
   multiplex_id: string
   program_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1875,7 +1875,7 @@ export def "prod-multiplexes-programs delete-multiplex" [
 #
 # GET /prod/multiplexes/{multiplexId}/programs/{programName}
 # operationId: DescribeMultiplexProgram
-export def "prod-multiplexes-programs get-multiplex" [
+export def "describe-multiplex-program" [
   multiplex_id: string
   program_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1923,7 +1923,7 @@ export def "prod-multiplexes-programs get-multiplex" [
 # PUT /prod/multiplexes/{multiplexId}/programs/{programName}
 # operationId: UpdateMultiplexProgram
 # --multiplexProgramSettings shape: {PreferredChannelPipeline?: any, ProgramNumber?: any, ServiceDescriptor?: any, VideoSettings?: any}
-export def "prod-multiplexes-programs update-multiplex" [
+export def "update-multiplex-program" [
   multiplex_id: string
   program_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1974,7 +1974,7 @@ export def "prod-multiplexes-programs update-multiplex" [
 #
 # DELETE /prod/reservations/{reservationId}
 # operationId: DeleteReservation
-export def "prod-reservations delete" [
+export def "delete-reservation" [
   reservation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2019,7 +2019,7 @@ export def "prod-reservations delete" [
 #
 # GET /prod/reservations/{reservationId}
 # operationId: DescribeReservation
-export def "prod-reservations get" [
+export def "describe-reservation" [
   reservation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2065,7 +2065,7 @@ export def "prod-reservations get" [
 # PUT /prod/reservations/{reservationId}
 # operationId: UpdateReservation
 # --renewalSettings shape: {AutomaticRenewal?: any, RenewalCount?: any}
-export def "prod-reservations update" [
+export def "update-reservation" [
   reservation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2115,7 +2115,7 @@ export def "prod-reservations update" [
 #
 # DELETE /prod/tags/{resource-arn}
 # operationId: DeleteTags
-export def "prod-tags delete" [
+export def "delete-tags" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2162,7 +2162,7 @@ export def "prod-tags delete" [
 #
 # GET /prod/inputDevices/{inputDeviceId}
 # operationId: DescribeInputDevice
-export def "prod-input-devices get" [
+export def "describe-input-device" [
   input_device_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2209,7 +2209,7 @@ export def "prod-input-devices get" [
 # operationId: UpdateInputDevice
 # --hdDeviceSettings shape: {ConfiguredInput?: any, MaxBitrate?: any, LatencyMs?: any}
 # --uhdDeviceSettings shape: {ConfiguredInput?: any, MaxBitrate?: any, LatencyMs?: any}
-export def "prod-input-devices update" [
+export def "update-input-device" [
   input_device_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2260,7 +2260,7 @@ export def "prod-input-devices update" [
 #
 # GET /prod/inputDevices/{inputDeviceId}/thumbnailData
 # operationId: DescribeInputDeviceThumbnail
-export def "prod-input-devices-thumbnail-data get" [
+export def "describe-input-device-thumbnail" [
   input_device_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2306,7 +2306,7 @@ export def "prod-input-devices-thumbnail-data get" [
 #
 # GET /prod/offerings/{offeringId}
 # operationId: DescribeOffering
-export def "prod-offerings get" [
+export def "describe-offering" [
   offering_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2351,7 +2351,7 @@ export def "prod-offerings get" [
 #
 # GET /prod/inputDeviceTransfers
 # operationId: ListInputDeviceTransfers
-export def "prod-input-device-transfers list" [
+export def "list-input-device-transfers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2400,7 +2400,7 @@ export def "prod-input-device-transfers list" [
 #
 # GET /prod/inputDevices
 # operationId: ListInputDevices
-export def "prod-input-devices list" [
+export def "list-input-devices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2448,7 +2448,7 @@ export def "prod-input-devices list" [
 #
 # GET /prod/offerings
 # operationId: ListOfferings
-export def "prod-offerings list" [
+export def "list-offerings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2506,7 +2506,7 @@ export def "prod-offerings list" [
 #
 # GET /prod/reservations
 # operationId: ListReservations
-export def "prod-reservations list" [
+export def "list-reservations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2563,7 +2563,7 @@ export def "prod-reservations list" [
 # POST /prod/offerings/{offeringId}/purchase
 # operationId: PurchaseOffering
 # --renewalSettings shape: {AutomaticRenewal?: any, RenewalCount?: any}
-export def "prod-offerings-purchase create" [
+export def "purchase-offering" [
   offering_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2617,7 +2617,7 @@ export def "prod-offerings-purchase create" [
 #
 # POST /prod/inputDevices/{inputDeviceId}/reboot
 # operationId: RebootInputDevice
-export def "prod-input-devices-reboot create" [
+export def "reboot-input-device" [
   input_device_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2666,7 +2666,7 @@ export def "prod-input-devices-reboot create" [
 #
 # POST /prod/inputDevices/{inputDeviceId}/reject
 # operationId: RejectInputDeviceTransfer
-export def "prod-input-devices-reject reject-transfer" [
+export def "reject-input-device-transfer" [
   input_device_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2711,7 +2711,7 @@ export def "prod-input-devices-reject reject-transfer" [
 #
 # POST /prod/channels/{channelId}/start
 # operationId: StartChannel
-export def "prod-channels-start start" [
+export def "start-channel" [
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2756,7 +2756,7 @@ export def "prod-channels-start start" [
 #
 # POST /prod/inputDevices/{inputDeviceId}/startInputDeviceMaintenanceWindow
 # operationId: StartInputDeviceMaintenanceWindow
-export def "prod-input-devices-start-input-device-maintenance-window start" [
+export def "start-input-device-maintenance-window" [
   input_device_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2801,7 +2801,7 @@ export def "prod-input-devices-start-input-device-maintenance-window start" [
 #
 # POST /prod/multiplexes/{multiplexId}/start
 # operationId: StartMultiplex
-export def "prod-multiplexes-start start-multiplex" [
+export def "start-multiplex" [
   multiplex_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2846,7 +2846,7 @@ export def "prod-multiplexes-start start-multiplex" [
 #
 # POST /prod/channels/{channelId}/stop
 # operationId: StopChannel
-export def "prod-channels-stop stop" [
+export def "stop-channel" [
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2891,7 +2891,7 @@ export def "prod-channels-stop stop" [
 #
 # POST /prod/multiplexes/{multiplexId}/stop
 # operationId: StopMultiplex
-export def "prod-multiplexes-stop stop-multiplex" [
+export def "stop-multiplex" [
   multiplex_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2936,7 +2936,7 @@ export def "prod-multiplexes-stop stop-multiplex" [
 #
 # POST /prod/inputDevices/{inputDeviceId}/transfer
 # operationId: TransferInputDevice
-export def "prod-input-devices-transfer create" [
+export def "transfer-input-device" [
   input_device_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2988,7 +2988,7 @@ export def "prod-input-devices-transfer create" [
 # PUT /prod/channels/{channelId}/channelClass
 # operationId: UpdateChannelClass
 # --destinations item shape: {Id?: any, MediaPackageSettings?: any, MultiplexSettings?: any, Settings?: any}
-export def "prod-channels-channel-class update" [
+export def "update-channel-class" [
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

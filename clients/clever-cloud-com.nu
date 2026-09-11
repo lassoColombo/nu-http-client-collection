@@ -118,7 +118,7 @@ def type-completer [] { ["EXISTING_CARD" "NEW_CARD"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "openapi get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-openapi" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -139,7 +139,7 @@ export def commands []: nothing -> table {
 }
 
 # GET //openapi
-export def "openapi get" [
+export def "get-openapi" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -170,7 +170,7 @@ export def "openapi get" [
 }
 
 # GET /application/{appId}/environment
-export def "application-environment get" [
+export def "get-application-app-id-environment" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -205,7 +205,7 @@ export def "application-environment get" [
 }
 
 # PUT /application/{appId}/environment
-export def "application-environment update" [
+export def "put-application-app-id-environment" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -243,7 +243,7 @@ export def "application-environment update" [
 #
 # POST /authorize
 # operationId: postAuthorize
-export def "authorize create" [
+export def "post-authorize" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -276,7 +276,7 @@ export def "authorize create" [
 # Retrieve events as they come through a websocket connection. To have authorization, you have to send a `{ "message_type": "oauth", "authorization": "oauth authorization string" }` message
 #
 # GET /events/event-socket
-export def "events-event-socket get" [
+export def "get-events-event-socket" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -309,7 +309,7 @@ export def "events-event-socket get" [
 # GET /github
 #
 # operationId: getGithub
-export def "github get" [
+export def "get-github" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -342,7 +342,7 @@ export def "github get" [
 # GET /github/applications
 #
 # operationId: getGithubApplications
-export def "github-applications get" [
+export def "get-github-applications" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -375,7 +375,7 @@ export def "github-applications get" [
 # GET /github/callback
 #
 # operationId: getGithubCallback
-export def "github-callback get" [
+export def "get-github-callback" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -417,7 +417,7 @@ export def "github-callback get" [
 # GET /github/emails
 #
 # operationId: getGithubEmails
-export def "github-emails get" [
+export def "get-github-emails" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -450,7 +450,7 @@ export def "github-emails get" [
 # GET /github/keys
 #
 # operationId: getGithubKeys
-export def "github-keys get" [
+export def "get-github-keys" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -483,7 +483,7 @@ export def "github-keys get" [
 # DELETE /github/link
 #
 # operationId: deleteGithubLink
-export def "github-link delete" [
+export def "delete-github-link" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -516,7 +516,7 @@ export def "github-link delete" [
 # GET /github/link
 #
 # operationId: getGithubLink
-export def "github-link get" [
+export def "get-github-link" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -552,7 +552,7 @@ export def "github-link get" [
 # GET /github/login
 #
 # operationId: getGithubLogin
-export def "github-login get" [
+export def "get-github-login" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -588,7 +588,7 @@ export def "github-login get" [
 # POST /github/redeploy
 #
 # operationId: postGithubRedeploy
-export def "github-redeploy create" [
+export def "post-github-redeploy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -626,7 +626,7 @@ export def "github-redeploy create" [
 # GET /github/signup
 #
 # operationId: getGithubSignup
-export def "github-signup get" [
+export def "get-github-signup" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -662,7 +662,7 @@ export def "github-signup get" [
 # POST /github/signup
 #
 # operationId: postGithubSignup
-export def "github-signup create" [
+export def "post-github-signup" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -703,7 +703,7 @@ export def "github-signup create" [
 # GET /github/username
 #
 # operationId: getGithubUsername
-export def "github-username get" [
+export def "get-github-username" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -736,7 +736,7 @@ export def "github-username get" [
 # WebSocket to get logs for :appID. Optional queryString arg bind_to_es=true to bind WS on log storage and not real time AMQP broker
 #
 # GET /logs-socket/{appId}
-export def "logs-socket get" [
+export def "get-logs-socket-app-id" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -771,7 +771,7 @@ export def "logs-socket get" [
 # Fetch all the logs drains (ccadmin dedicated route)
 #
 # GET /logs/drains
-export def "logs-drains get" [
+export def "get-logs-drains" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -804,7 +804,7 @@ export def "logs-drains get" [
 # Fetch all the logs drains (ccadmin dedicated route)
 #
 # PUT /logs/drains/{drainId}
-export def "logs-drains update" [
+export def "put-logs-drains-drain-id" [
   drain_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -839,7 +839,7 @@ export def "logs-drains update" [
 # Retrieve logs as they come through a chunked, never-ending response
 #
 # GET /logs/logs-chunked/{appId}
-export def "logs-logs-chunked get-by-app-id" [
+export def "get-logs-logs-chunked-app-id" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -876,7 +876,7 @@ export def "logs-logs-chunked get-by-app-id" [
 # Retrieve logs as they come through a websocket connection. To have authorization, you have to send a `{ "message_type": "oauth", "authorization": "oauth authorization string" }` message
 #
 # GET /logs/logs-socket/{appId}
-export def "logs-logs-socket get-by-app-id" [
+export def "get-logs-logs-socket-app-id" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -915,7 +915,7 @@ export def "logs-logs-socket get-by-app-id" [
 # Fetch the logs for a given application
 #
 # GET /logs/{appId}
-export def "logs get-by-app-id" [
+export def "get-logs-app-id" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -957,7 +957,7 @@ export def "logs get-by-app-id" [
 # Fetch the logs drains for a given application
 #
 # GET /logs/{appId}/drains
-export def "logs-drains get-by-app-id" [
+export def "get-logs-app-id-drains" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -992,7 +992,7 @@ export def "logs-drains get-by-app-id" [
 # Add a log drain for a given application
 #
 # POST /logs/{appId}/drains
-export def "logs-drains create-by-app-id" [
+export def "post-logs-app-id-drains" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1027,7 +1027,7 @@ export def "logs-drains create-by-app-id" [
 # Delete the logs drain by id or url for a given application
 #
 # DELETE /logs/{appId}/drains/:idOrUrl
-export def "logs-drains-id-or-url delete-by-app-id" [
+export def "delete-logs-app-id-drains-id-or-url" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1062,7 +1062,7 @@ export def "logs-drains-id-or-url delete-by-app-id" [
 # Fetch the logs drain by id or url for a given application
 #
 # GET /logs/{appId}/drains/:idOrUrl
-export def "logs-drains-id-or-url get-by-app-id" [
+export def "get-logs-app-id-drains-id-or-url" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1097,7 +1097,7 @@ export def "logs-drains-id-or-url get-by-app-id" [
 # Retrieve logs as they come through a sse connection. To have authorization, you have to add `authorization=oAuthAuthorizationString` as query param.
 #
 # GET /logs/{appId}/sse
-export def "logs-sse get" [
+export def "get-logs-app-id-sse" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1132,7 +1132,7 @@ export def "logs-sse get" [
 # GET /newsfeeds/blog
 #
 # operationId: getNewsfeedsBlog
-export def "newsfeeds-blog get" [
+export def "get-newsfeeds-blog" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1165,7 +1165,7 @@ export def "newsfeeds-blog get" [
 # GET /newsfeeds/engineering
 #
 # operationId: getNewsfeedEngineering
-export def "newsfeeds-engineering get" [
+export def "get-newsfeed-engineering" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1198,7 +1198,7 @@ export def "newsfeeds-engineering get" [
 # list created e-mail hooks
 #
 # GET /notifications/emailhooks/{ownerId}
-export def "notifications-emailhooks get" [
+export def "get-notifications-emailhooks-owner-id" [
   owner_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1233,7 +1233,7 @@ export def "notifications-emailhooks get" [
 # create a hook for e-mail notifications
 #
 # POST /notifications/emailhooks/{ownerId}
-export def "notifications-emailhooks create" [
+export def "post-notifications-emailhooks-owner-id" [
   owner_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1268,7 +1268,7 @@ export def "notifications-emailhooks create" [
 # delete an e-mail hook
 #
 # DELETE /notifications/emailhooks/{ownerId}/:id
-export def "notifications-emailhooks-id delete" [
+export def "delete-notifications-emailhooks-owner-id-id" [
   owner_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1303,7 +1303,7 @@ export def "notifications-emailhooks-id delete" [
 # edit an e-mail hook
 #
 # PUT /notifications/emailhooks/{ownerId}/:id
-export def "notifications-emailhooks-id update" [
+export def "put-notifications-emailhooks-owner-id-id" [
   owner_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1338,7 +1338,7 @@ export def "notifications-emailhooks-id update" [
 # list available events
 #
 # GET /notifications/info/events
-export def "notifications-info-events get" [
+export def "get-notifications-info-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1371,7 +1371,7 @@ export def "notifications-info-events get" [
 # list available webhook formats
 #
 # GET /notifications/info/webhookformats
-export def "notifications-info-webhookformats get" [
+export def "get-notifications-info-webhookformats" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1404,7 +1404,7 @@ export def "notifications-info-webhookformats get" [
 # list created hooks
 #
 # GET /notifications/webhooks/{ownerId}
-export def "notifications-webhooks get" [
+export def "get-notifications-webhooks-owner-id" [
   owner_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1439,7 +1439,7 @@ export def "notifications-webhooks get" [
 # create a hook for notifications
 #
 # POST /notifications/webhooks/{ownerId}
-export def "notifications-webhooks create" [
+export def "post-notifications-webhooks-owner-id" [
   owner_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1474,7 +1474,7 @@ export def "notifications-webhooks create" [
 # delete a hook
 #
 # DELETE /notifications/webhooks/{ownerId}/:id
-export def "notifications-webhooks-id delete" [
+export def "delete-notifications-webhooks-owner-id-id" [
   owner_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1509,7 +1509,7 @@ export def "notifications-webhooks-id delete" [
 # edit a hook
 #
 # PUT /notifications/webhooks/{ownerId}/:id
-export def "notifications-webhooks-id update" [
+export def "put-notifications-webhooks-owner-id-id" [
   owner_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1544,7 +1544,7 @@ export def "notifications-webhooks-id update" [
 # POST /oauth/access_token
 #
 # operationId: postOauthAccessToken
-export def "oauth-access-token create" [
+export def "post-oauth-access-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1587,7 +1587,7 @@ export def "oauth-access-token create" [
 }
 
 # POST /oauth/access_token_query
-export def "oauth-access-token-query create" [
+export def "post-oauth-access-token-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1632,7 +1632,7 @@ export def "oauth-access-token-query create" [
 # GET /oauth/authorize
 #
 # operationId: getOauthAuthorize
-export def "oauth-authorize get" [
+export def "get-oauth-authorize" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1670,7 +1670,7 @@ export def "oauth-authorize get" [
 # POST /oauth/authorize
 #
 # operationId: postOauthAuthorize
-export def "oauth-authorize create" [
+export def "post-oauth-authorize" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1724,7 +1724,7 @@ export def "oauth-authorize create" [
 # POST /oauth/request_token
 #
 # operationId: postOauthRequestToken
-export def "oauth-request-token create" [
+export def "post-oauth-request-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1767,7 +1767,7 @@ export def "oauth-request-token create" [
 }
 
 # POST /oauth/request_token_query
-export def "oauth-request-token-query create" [
+export def "post-oauth-request-token-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1812,7 +1812,7 @@ export def "oauth-request-token-query create" [
 # GET /oauth/rights
 #
 # operationId: getOauthRights
-export def "oauth-rights get" [
+export def "get-oauth-rights" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1845,7 +1845,7 @@ export def "oauth-rights get" [
 # Get the swagger for this API as {type}
 #
 # GET /openapi.{type}
-export def "openapi-type get" [
+export def "get-openapi-type" [
   type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1880,7 +1880,7 @@ export def "openapi-type get" [
 # GET /organisations
 #
 # operationId: getOrganisations
-export def "organisations list" [
+export def "get-organisations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1915,7 +1915,7 @@ export def "organisations list" [
 # POST /organisations
 #
 # operationId: postOrganisations
-export def "organisations create" [
+export def "post-organisations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1959,7 +1959,7 @@ export def "organisations create" [
 # DELETE /organisations/{id}
 #
 # operationId: deleteOrganisationsId
-export def "organisations delete" [
+export def "delete-organisations-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1994,7 +1994,7 @@ export def "organisations delete" [
 # GET /organisations/{id}
 #
 # operationId: getOrganisationsId
-export def "organisations get" [
+export def "get-organisations-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2029,7 +2029,7 @@ export def "organisations get" [
 # PUT /organisations/{id}
 #
 # operationId: putOrganisationsId
-export def "organisations update" [
+export def "put-organisations-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2075,7 +2075,7 @@ export def "organisations update" [
 # GET /organisations/{id}/addonproviders
 #
 # operationId: getOrganisationsIdAddonproviders
-export def "organisations-addonproviders get" [
+export def "get-organisations-id-addonproviders" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2111,7 +2111,7 @@ export def "organisations-addonproviders get" [
 #
 # operationId: postOrganisationsIdAddonproviders
 # --api shape: {config_vars: list<string>, password: string, production?: record, regions?: list<string>, sso_salt: string, test?: record}
-export def "organisations-addonproviders create" [
+export def "post-organisations-id-addonproviders" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2152,7 +2152,7 @@ export def "organisations-addonproviders create" [
 # Remove an add-on provider
 #
 # DELETE /organisations/{id}/addonproviders/{providerId}
-export def "organisations-addonproviders delete" [
+export def "delete-organisations-id-addonproviders-provider-id" [
   id: string
   provider_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2189,7 +2189,7 @@ export def "organisations-addonproviders delete" [
 # GET /organisations/{id}/addonproviders/{providerId}
 #
 # operationId: getOrganisationsIdAddonprovidersProviderId
-export def "organisations-addonproviders get-provider" [
+export def "get-organisations-id-addonproviders-provider-id" [
   id: string
   provider_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2227,7 +2227,7 @@ export def "organisations-addonproviders get-provider" [
 #
 # operationId: putOrganisationsIdAddonprovidersProviderId
 # --api shape: {config_vars: list<string>, password: string, production?: record, regions?: list<string>, sso_salt: string, test?: record}
-export def "organisations-addonproviders update-provider" [
+export def "put-organisations-id-addonproviders-provider-id" [
   id: string
   provider_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2270,7 +2270,7 @@ export def "organisations-addonproviders update-provider" [
 # GET /organisations/{id}/addonproviders/{providerId}/features
 #
 # operationId: getOrganisationsIdAddonprovidersProviderIdFeatures
-export def "organisations-addonproviders-features get-provider" [
+export def "get-organisations-id-addonproviders-provider-id-features" [
   id: string
   provider_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2307,7 +2307,7 @@ export def "organisations-addonproviders-features get-provider" [
 # POST /organisations/{id}/addonproviders/{providerId}/features
 #
 # operationId: postOrganisationsIdAddonprovidersProviderIdFeatures
-export def "organisations-addonproviders-features create-provider" [
+export def "post-organisations-id-addonproviders-provider-id-features" [
   id: string
   provider_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2349,7 +2349,7 @@ export def "organisations-addonproviders-features create-provider" [
 # DELETE /organisations/{id}/addonproviders/{providerId}/features/{featureId}
 #
 # operationId: deleteOrganisationsIdAddonprovidersProviderIdFeaturesFeatureId
-export def "organisations-addonproviders-features delete-provider" [
+export def "delete-organisations-id-addonproviders-provider-id-features-feature-id" [
   id: string
   provider_id: string
   feature_id: string
@@ -2388,7 +2388,7 @@ export def "organisations-addonproviders-features delete-provider" [
 # GET /organisations/{id}/addonproviders/{providerId}/plans
 #
 # operationId: getOrganisationsIdAddonprovidersProviderIdPlans
-export def "organisations-addonproviders-plans list" [
+export def "get-organisations-id-addonproviders-provider-id-plans" [
   id: string
   provider_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2426,7 +2426,7 @@ export def "organisations-addonproviders-plans list" [
 #
 # operationId: postOrganisationsIdAddonprovidersProviderIdPlans
 # --features item shape: {name: string, type: string, value: string}
-export def "organisations-addonproviders-plans create-provider" [
+export def "post-organisations-id-addonproviders-provider-id-plans" [
   id: string
   provider_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2470,7 +2470,7 @@ export def "organisations-addonproviders-plans create-provider" [
 # DELETE /organisations/{id}/addonproviders/{providerId}/plans/{planId}
 #
 # operationId: deleteOrganisationsIdAddonprovidersProviderIdPlansPlanId
-export def "organisations-addonproviders-plans delete-provider" [
+export def "delete-organisations-id-addonproviders-provider-id-plans-plan-id" [
   id: string
   provider_id: string
   plan_id: string
@@ -2509,7 +2509,7 @@ export def "organisations-addonproviders-plans delete-provider" [
 # GET /organisations/{id}/addonproviders/{providerId}/plans/{planId}
 #
 # operationId: getOrganisationsIdAddonprovidersProviderIdPlansPlanId
-export def "organisations-addonproviders-plans get-provider" [
+export def "get-organisations-id-addonproviders-provider-id-plans-plan-id" [
   id: string
   provider_id: string
   plan_id: string
@@ -2549,7 +2549,7 @@ export def "organisations-addonproviders-plans get-provider" [
 #
 # operationId: putOrganisationsIdAddonprovidersProviderIdPlansPlanId
 # --features item shape: {name: string, type: string, value: string}
-export def "organisations-addonproviders-plans update-provider" [
+export def "put-organisations-id-addonproviders-provider-id-plans-plan-id" [
   id: string
   provider_id: string
   plan_id: string
@@ -2595,7 +2595,7 @@ export def "organisations-addonproviders-plans update-provider" [
 # DELETE /organisations/{id}/addonproviders/{providerId}/plans/{planId}/features/{featureName}
 #
 # operationId: deleteOrganisationsIdAddonprovidersProviderIdPlansPlanIdFeaturesFeatureName
-export def "organisations-addonproviders-plans-features delete-provider-name" [
+export def "delete-organisations-id-addonproviders-provider-id-plans-plan-id-features-feature-name" [
   id: string
   provider_id: string
   plan_id: string
@@ -2636,7 +2636,7 @@ export def "organisations-addonproviders-plans-features delete-provider-name" [
 # PUT /organisations/{id}/addonproviders/{providerId}/plans/{planId}/features/{featureName}
 #
 # operationId: putOrganisationsIdAddonprovidersProviderIdPlansPlanIdFeaturesFeatureName
-export def "organisations-addonproviders-plans-features update-provider-name" [
+export def "put-organisations-id-addonproviders-provider-id-plans-plan-id-features-feature-name" [
   id: string
   provider_id: string
   plan_id: string
@@ -2683,7 +2683,7 @@ export def "organisations-addonproviders-plans-features update-provider-name" [
 # GET /organisations/{id}/addonproviders/{providerId}/sso
 #
 # operationId: getOrganisationsIdAddonsAddonIdSso
-export def "organisations-addonproviders-sso get-addons-addon" [
+export def "get-organisations-id-addons-addon-id-sso" [
   id: string
   provider_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2720,7 +2720,7 @@ export def "organisations-addonproviders-sso get-addons-addon" [
 # GET /organisations/{id}/addonproviders/{providerId}/tags
 #
 # operationId: getOrganisationsIdAddonprovidersProviderIdTags
-export def "organisations-addonproviders-tags get-provider" [
+export def "get-organisations-id-addonproviders-provider-id-tags" [
   id: string
   provider_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2757,7 +2757,7 @@ export def "organisations-addonproviders-tags get-provider" [
 # POST /organisations/{id}/addonproviders/{providerId}/testers
 #
 # operationId: postOrganisationsIdAddonprovidersProviderIdTesters
-export def "organisations-addonproviders-testers create-provider" [
+export def "post-organisations-id-addonproviders-provider-id-testers" [
   id: string
   provider_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2794,7 +2794,7 @@ export def "organisations-addonproviders-testers create-provider" [
 # GET /organisations/{id}/addons
 #
 # operationId: getOrganisationsIdAddons
-export def "organisations-addons list" [
+export def "get-organisations-id-addons" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2830,7 +2830,7 @@ export def "organisations-addons list" [
 #
 # operationId: postOrganisationsIdAddons
 # --payment shape: {deviceData?: string, token: string, type: "NEW_CARD"|"EXISTING_CARD"}
-export def "organisations-addons create" [
+export def "post-organisations-id-addons" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2873,7 +2873,7 @@ export def "organisations-addons create" [
 # POST /organisations/{id}/addons/preorders
 #
 # --payment shape: {deviceData?: string, token: string, type: "NEW_CARD"|"EXISTING_CARD"}
-export def "organisations-addons-preorders create" [
+export def "post-organisations-id-addons-preorders" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2916,7 +2916,7 @@ export def "organisations-addons-preorders create" [
 # DELETE /organisations/{id}/addons/{addonId}
 #
 # operationId: deleteOrganisationsIdAddonsAddonId
-export def "organisations-addons delete" [
+export def "delete-organisations-id-addons-addon-id" [
   id: string
   addon_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2953,7 +2953,7 @@ export def "organisations-addons delete" [
 # GET /organisations/{id}/addons/{addonId}
 #
 # operationId: getOrganisationsIdAddonsAddonId
-export def "organisations-addons get" [
+export def "get-organisations-id-addons-addon-id" [
   id: string
   addon_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2991,7 +2991,7 @@ export def "organisations-addons get" [
 #
 # operationId: putOrganisationsIdAddonsAddonId
 # --payment shape: {deviceData?: string, token: string, type: "NEW_CARD"|"EXISTING_CARD"}
-export def "organisations-addons update" [
+export def "put-organisations-id-addons-addon-id" [
   id: string
   addon_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3036,7 +3036,7 @@ export def "organisations-addons update" [
 # GET /organisations/{id}/addons/{addonId}/applications
 #
 # operationId: getOrganisationsIdAddonsAddonIdApplications
-export def "organisations-addons-applications get" [
+export def "get-organisations-id-addons-addon-id-applications" [
   id: string
   addon_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3073,7 +3073,7 @@ export def "organisations-addons-applications get" [
 # GET /organisations/{id}/addons/{addonId}/env
 #
 # operationId: getOrganisationsIdAddonsAddonIdEnv
-export def "organisations-addons-env get" [
+export def "get-organisations-id-addons-addon-id-env" [
   id: string
   addon_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3110,7 +3110,7 @@ export def "organisations-addons-env get" [
 # List instances for this add-on.
 #
 # GET /organisations/{id}/addons/{addonId}/instances
-export def "organisations-addons-instances list" [
+export def "get-organisations-id-addons-addon-id-instances" [
   id: string
   addon_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3150,7 +3150,7 @@ export def "organisations-addons-instances list" [
 # Get a specific instance for {addonId}
 #
 # GET /organisations/{id}/addons/{addonId}/instances/{instanceId}
-export def "organisations-addons-instances get" [
+export def "get-organisations-id-addons-addon-id-instances-instance-id" [
   id: string
   addon_id: string
   instance_id: string
@@ -3189,7 +3189,7 @@ export def "organisations-addons-instances get" [
 # Get past migrations from add-on.
 #
 # GET /organisations/{id}/addons/{addonId}/migrations
-export def "organisations-addons-migrations list" [
+export def "get-organisations-id-addons-addon-id-migrations" [
   id: string
   addon_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3226,7 +3226,7 @@ export def "organisations-addons-migrations list" [
 # Start a new add-on migration
 #
 # POST /organisations/{id}/addons/{addonId}/migrations
-export def "organisations-addons-migrations create" [
+export def "post-organisations-id-addons-addon-id-migrations" [
   id: string
   addon_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3268,7 +3268,7 @@ export def "organisations-addons-migrations create" [
 # Get a given migration
 #
 # GET /organisations/{id}/addons/{addonId}/migrations/{migrationId}
-export def "organisations-addons-migrations get" [
+export def "get-organisations-id-addons-addon-id-migrations-migration-id" [
   id: string
   addon_id: string
   migration_id: string
@@ -3305,7 +3305,7 @@ export def "organisations-addons-migrations get" [
 }
 
 # GET /organisations/{id}/addons/{addonId}/sso
-export def "organisations-addons-sso get" [
+export def "get-organisations-id-addons-addon-id-sso-1" [
   id: string
   addon_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3342,7 +3342,7 @@ export def "organisations-addons-sso get" [
 # GET /organisations/{id}/addons/{addonId}/tags
 #
 # operationId: getOrganisationsIdAddonsAddonIdTags
-export def "organisations-addons-tags get" [
+export def "get-organisations-id-addons-addon-id-tags" [
   id: string
   addon_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3379,7 +3379,7 @@ export def "organisations-addons-tags get" [
 # DELETE /organisations/{id}/addons/{addonId}/tags/{tag}
 #
 # operationId: deleteOrganisationsIdAddonsAddonIdTagsTag
-export def "organisations-addons-tags delete" [
+export def "delete-organisations-id-addons-addon-id-tags-tag" [
   id: string
   addon_id: string
   tag: string
@@ -3418,7 +3418,7 @@ export def "organisations-addons-tags delete" [
 # PUT /organisations/{id}/addons/{addonId}/tags/{tag}
 #
 # operationId: putOrganisationsIdAddonsAddonIdTagsTag
-export def "organisations-addons-tags update" [
+export def "put-organisations-id-addons-addon-id-tags-tag" [
   id: string
   addon_id: string
   tag: string
@@ -3461,7 +3461,7 @@ export def "organisations-addons-tags update" [
 # GET /organisations/{id}/applications
 #
 # operationId: getOrganisationsIdApplications
-export def "organisations-applications get" [
+export def "get-organisations-id-applications" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3498,7 +3498,7 @@ export def "organisations-applications get" [
 # POST /organisations/{id}/applications
 # operationId: postOrganisationsIdApplications
 # --oauthApp shape: {name?: string, owner?: string}
-export def "organisations-applications create" [
+export def "post-organisations-id-applications" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3559,7 +3559,7 @@ export def "organisations-applications create" [
 # DELETE /organisations/{id}/applications/{appId}
 #
 # operationId: deleteOrganisationsIdApplicationsAppId
-export def "organisations-applications delete-app" [
+export def "delete-organisations-id-applications-app-id" [
   id: string
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3596,7 +3596,7 @@ export def "organisations-applications delete-app" [
 # GET /organisations/{id}/applications/{appId}
 #
 # operationId: getOrganisationsIdApplicationsAppId
-export def "organisations-applications get-app" [
+export def "get-organisations-id-applications-app-id" [
   id: string
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3634,7 +3634,7 @@ export def "organisations-applications get-app" [
 #
 # operationId: putOrganisationsIdApplicationsAppId
 # --oauthApp shape: {name?: string, owner?: string}
-export def "organisations-applications update-app" [
+export def "put-organisations-id-applications-app-id" [
   id: string
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3697,7 +3697,7 @@ export def "organisations-applications update-app" [
 # GET /organisations/{id}/applications/{appId}/addons
 #
 # operationId: getOrganisationsIdApplicationsAppIdAddons
-export def "organisations-applications-addons get-app" [
+export def "get-organisations-id-applications-app-id-addons" [
   id: string
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3734,7 +3734,7 @@ export def "organisations-applications-addons get-app" [
 # POST /organisations/{id}/applications/{appId}/addons
 #
 # operationId: postOrganisationsIdApplicationsAppIdAddons
-export def "organisations-applications-addons create-app" [
+export def "post-organisations-id-applications-app-id-addons" [
   id: string
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3775,7 +3775,7 @@ export def "organisations-applications-addons create-app" [
 # GET /organisations/{id}/applications/{appId}/addons/env
 #
 # operationId: getOrganisationsIdApplicationsAppIdAddonsEnv
-export def "organisations-applications-addons-env get-app" [
+export def "get-organisations-id-applications-app-id-addons-env" [
   id: string
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3812,7 +3812,7 @@ export def "organisations-applications-addons-env get-app" [
 # DELETE /organisations/{id}/applications/{appId}/addons/{addonId}
 #
 # operationId: deleteOrganisationsIdApplicationsAppIdAddonsAddonId
-export def "organisations-applications-addons delete-app" [
+export def "delete-organisations-id-applications-app-id-addons-addon-id" [
   id: string
   app_id: string
   addon_id: string
@@ -3849,7 +3849,7 @@ export def "organisations-applications-addons delete-app" [
 }
 
 # PUT /organisations/{id}/applications/{appId}/branch
-export def "organisations-applications-branch update" [
+export def "put-organisations-id-applications-app-id-branch" [
   id: string
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3884,7 +3884,7 @@ export def "organisations-applications-branch update" [
 }
 
 # GET /organisations/{id}/applications/{appId}/branches
-export def "organisations-applications-branches get" [
+export def "get-organisations-id-applications-app-id-branches" [
   id: string
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3919,7 +3919,7 @@ export def "organisations-applications-branches get" [
 }
 
 # PUT /organisations/{id}/applications/{appId}/buildflavor
-export def "organisations-applications-buildflavor update" [
+export def "put-organisations-id-applications-app-id-buildflavor" [
   id: string
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3956,7 +3956,7 @@ export def "organisations-applications-buildflavor update" [
 # GET /organisations/{id}/applications/{appId}/dependencies
 #
 # operationId: getOrganisationsIdApplicationsAppIdDependencies
-export def "organisations-applications-dependencies get-app" [
+export def "get-organisations-id-applications-app-id-dependencies" [
   id: string
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3991,7 +3991,7 @@ export def "organisations-applications-dependencies get-app" [
 }
 
 # GET /organisations/{id}/applications/{appId}/dependencies/env
-export def "organisations-applications-dependencies-env get" [
+export def "get-organisations-id-applications-app-id-dependencies-env" [
   id: string
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4028,7 +4028,7 @@ export def "organisations-applications-dependencies-env get" [
 # DELETE /organisations/{id}/applications/{appId}/dependencies/{dependencyId}
 #
 # operationId: deleteOrganisationsIdApplicationsAppIdDependenciesDependencyId
-export def "organisations-applications-dependencies delete-app-dependency" [
+export def "delete-organisations-id-applications-app-id-dependencies-dependency-id" [
   id: string
   app_id: string
   dependency_id: string
@@ -4067,7 +4067,7 @@ export def "organisations-applications-dependencies delete-app-dependency" [
 # PUT /organisations/{id}/applications/{appId}/dependencies/{dependencyId}
 #
 # operationId: putOrganisationsIdApplicationsAppIdDependenciesDependencyId
-export def "organisations-applications-dependencies update-app-dependency" [
+export def "put-organisations-id-applications-app-id-dependencies-dependency-id" [
   id: string
   app_id: string
   dependency_id: string
@@ -4110,7 +4110,7 @@ export def "organisations-applications-dependencies update-app-dependency" [
 # GET /organisations/{id}/applications/{appId}/dependents
 #
 # operationId: getOrganisationsIdApplicationsAppIdDependents
-export def "organisations-applications-dependents get-app" [
+export def "get-organisations-id-applications-app-id-dependents" [
   id: string
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4147,7 +4147,7 @@ export def "organisations-applications-dependents get-app" [
 # GET /organisations/{id}/applications/{appId}/deployments
 #
 # operationId: getOrganisationsIdApplicationsAppIdDeployments
-export def "organisations-applications-deployments get-app" [
+export def "get-organisations-id-applications-app-id-deployments" [
   id: string
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4186,7 +4186,7 @@ export def "organisations-applications-deployments get-app" [
 }
 
 # GET /organisations/{id}/applications/{appId}/deployments/{deploymentId}
-export def "organisations-applications-deployments get" [
+export def "get-organisations-id-applications-app-id-deployments-deployment-id" [
   id: string
   app_id: string
   deployment_id: string
@@ -4225,7 +4225,7 @@ export def "organisations-applications-deployments get" [
 # DELETE /organisations/{id}/applications/{appId}/deployments/{deploymentId}/instances
 #
 # operationId: deleteOrganisationsIdApplicationsAppIdDeploymentsDeploymentIdInstances
-export def "organisations-applications-deployments-instances delete-app" [
+export def "delete-organisations-id-applications-app-id-deployments-deployment-id-instances" [
   id: string
   app_id: string
   deployment_id: string
@@ -4264,7 +4264,7 @@ export def "organisations-applications-deployments-instances delete-app" [
 # GET /organisations/{id}/applications/{appId}/env
 #
 # operationId: getOrganisationsIdApplicationsAppIdEnv
-export def "organisations-applications-env get-app" [
+export def "get-organisations-id-applications-app-id-env" [
   id: string
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4301,7 +4301,7 @@ export def "organisations-applications-env get-app" [
 # PUT /organisations/{id}/applications/{appId}/env
 #
 # operationId: putOrganisationsIdApplicationsAppIdEnv
-export def "organisations-applications-env update-app" [
+export def "put-organisations-id-applications-app-id-env" [
   id: string
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4343,7 +4343,7 @@ export def "organisations-applications-env update-app" [
 # DELETE /organisations/{id}/applications/{appId}/env/{envName}
 #
 # operationId: deleteOrganisationsIdApplicationsAppIdEnvEnvName
-export def "organisations-applications-env delete-app-name" [
+export def "delete-organisations-id-applications-app-id-env-env-name" [
   id: string
   app_id: string
   env_name: string
@@ -4382,7 +4382,7 @@ export def "organisations-applications-env delete-app-name" [
 # PUT /organisations/{id}/applications/{appId}/env/{envName}
 #
 # operationId: putOrganisationsIdApplicationsAppIdEnvEnvName
-export def "organisations-applications-env update-app-name" [
+export def "put-organisations-id-applications-app-id-env-env-name" [
   id: string
   app_id: string
   env_name: string
@@ -4424,7 +4424,7 @@ export def "organisations-applications-env update-app-name" [
 }
 
 # GET /organisations/{id}/applications/{appId}/exposed_env
-export def "organisations-applications-exposed-env get" [
+export def "get-organisations-id-applications-app-id-exposed-env" [
   id: string
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4459,7 +4459,7 @@ export def "organisations-applications-exposed-env get" [
 }
 
 # PUT /organisations/{id}/applications/{appId}/exposed_env
-export def "organisations-applications-exposed-env update" [
+export def "put-organisations-id-applications-app-id-exposed-env" [
   id: string
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4496,7 +4496,7 @@ export def "organisations-applications-exposed-env update" [
 # DELETE /organisations/{id}/applications/{appId}/instances
 #
 # operationId: deleteOrganisationsIdApplicationsAppIdInstances
-export def "organisations-applications-instances delete-app" [
+export def "delete-organisations-id-applications-app-id-instances" [
   id: string
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4533,7 +4533,7 @@ export def "organisations-applications-instances delete-app" [
 # GET /organisations/{id}/applications/{appId}/instances
 #
 # operationId: getOrganisationsIdApplicationsAppIdInstances
-export def "organisations-applications-instances get-app" [
+export def "get-organisations-id-applications-app-id-instances" [
   id: string
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4570,7 +4570,7 @@ export def "organisations-applications-instances get-app" [
 # POST /organisations/{id}/applications/{appId}/instances
 #
 # operationId: postOrganisationsIdApplicationsAppIdInstances
-export def "organisations-applications-instances create-app" [
+export def "post-organisations-id-applications-app-id-instances" [
   id: string
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4607,7 +4607,7 @@ export def "organisations-applications-instances create-app" [
 }
 
 # GET /organisations/{id}/applications/{appId}/instances/{instanceId}
-export def "organisations-applications-instances get" [
+export def "get-organisations-id-applications-app-id-instances-instance-id" [
   id: string
   app_id: string
   instance_id: string
@@ -4646,7 +4646,7 @@ export def "organisations-applications-instances get" [
 # GET /organisations/{id}/applications/{appId}/tags
 #
 # operationId: getOrganisationsIdApplicationsAppIdTags
-export def "organisations-applications-tags get-app" [
+export def "get-organisations-id-applications-app-id-tags" [
   id: string
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4683,7 +4683,7 @@ export def "organisations-applications-tags get-app" [
 # DELETE /organisations/{id}/applications/{appId}/tags/{tag}
 #
 # operationId: deleteOrganisationsIdApplicationsAppIdTagsTag
-export def "organisations-applications-tags delete-app" [
+export def "delete-organisations-id-applications-app-id-tags-tag" [
   id: string
   app_id: string
   tag: string
@@ -4722,7 +4722,7 @@ export def "organisations-applications-tags delete-app" [
 # PUT /organisations/{id}/applications/{appId}/tags/{tag}
 #
 # operationId: putOrganisationsIdApplicationsAppIdTagsTag
-export def "organisations-applications-tags update-app" [
+export def "put-organisations-id-applications-app-id-tags-tag" [
   id: string
   app_id: string
   tag: string
@@ -4765,7 +4765,7 @@ export def "organisations-applications-tags update-app" [
 # GET /organisations/{id}/applications/{appId}/vhosts
 #
 # operationId: getOrganisationsIdApplicationsAppIdVhosts
-export def "organisations-applications-vhosts get-app" [
+export def "get-organisations-id-applications-app-id-vhosts" [
   id: string
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4802,7 +4802,7 @@ export def "organisations-applications-vhosts get-app" [
 # DELETE /organisations/{id}/applications/{appId}/vhosts/favourite
 #
 # operationId: deleteOrganisationsIdApplicationsAppIdVhostsFavourite
-export def "organisations-applications-vhosts-favourite delete-app" [
+export def "delete-organisations-id-applications-app-id-vhosts-favourite" [
   id: string
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4839,7 +4839,7 @@ export def "organisations-applications-vhosts-favourite delete-app" [
 # GET /organisations/{id}/applications/{appId}/vhosts/favourite
 #
 # operationId: getOrganisationsIdApplicationsAppIdVhostsFavourite
-export def "organisations-applications-vhosts-favourite get-app" [
+export def "get-organisations-id-applications-app-id-vhosts-favourite" [
   id: string
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4876,7 +4876,7 @@ export def "organisations-applications-vhosts-favourite get-app" [
 # PUT /organisations/{id}/applications/{appId}/vhosts/favourite
 #
 # operationId: putOrganisationsIdApplicationsAppIdVhostsFavourite
-export def "organisations-applications-vhosts-favourite update-app" [
+export def "put-organisations-id-applications-app-id-vhosts-favourite" [
   id: string
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4917,7 +4917,7 @@ export def "organisations-applications-vhosts-favourite update-app" [
 # DELETE /organisations/{id}/applications/{appId}/vhosts/{domain}
 #
 # operationId: deleteOrganisationsIdApplicationsAppIdVhostsDomain
-export def "organisations-applications-vhosts delete-app" [
+export def "delete-organisations-id-applications-app-id-vhosts-domain" [
   id: string
   app_id: string
   domain: string
@@ -4956,7 +4956,7 @@ export def "organisations-applications-vhosts delete-app" [
 # PUT /organisations/{id}/applications/{appId}/vhosts/{domain}
 #
 # operationId: putOrganisationsIdApplicationsAppIdVhostsDomain
-export def "organisations-applications-vhosts update-app" [
+export def "put-organisations-id-applications-app-id-vhosts-domain" [
   id: string
   app_id: string
   domain: string
@@ -5000,7 +5000,7 @@ export def "organisations-applications-vhosts update-app" [
 #
 # PUT /organisations/{id}/avatar
 # operationId: putOrganisationsIdAvatar
-export def "organisations-avatar update" [
+export def "put-organisations-id-avatar" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5035,7 +5035,7 @@ export def "organisations-avatar update" [
 # GET /organisations/{id}/consumers
 #
 # operationId: getOrganisationsIdConsumers
-export def "organisations-consumers list" [
+export def "get-organisations-id-consumers" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5073,7 +5073,7 @@ export def "organisations-consumers list" [
 # --baseUrl shape: {url: string}
 # --rights shape: {activated: bool, right: string}
 # --url shape: {url: string}
-export def "organisations-consumers create" [
+export def "post-organisations-id-consumers" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5117,7 +5117,7 @@ export def "organisations-consumers create" [
 # DELETE /organisations/{id}/consumers/{key}
 #
 # operationId: deleteOrganisationsIdConsumersKey
-export def "organisations-consumers delete" [
+export def "delete-organisations-id-consumers-key" [
   id: string
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5154,7 +5154,7 @@ export def "organisations-consumers delete" [
 # GET /organisations/{id}/consumers/{key}
 #
 # operationId: getOrganisationsIdConsumersKey
-export def "organisations-consumers get" [
+export def "get-organisations-id-consumers-key" [
   id: string
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5194,7 +5194,7 @@ export def "organisations-consumers get" [
 # --baseUrl shape: {url: string}
 # --rights shape: {activated: bool, right: string}
 # --url shape: {url: string}
-export def "organisations-consumers update" [
+export def "put-organisations-id-consumers-key" [
   id: string
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5240,7 +5240,7 @@ export def "organisations-consumers update" [
 # GET /organisations/{id}/consumers/{key}/secret
 #
 # operationId: getOrganisationsIdConsumersKeySecret
-export def "organisations-consumers-secret get" [
+export def "get-organisations-id-consumers-key-secret" [
   id: string
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5277,7 +5277,7 @@ export def "organisations-consumers-secret get" [
 # GET /organisations/{id}/consumptions
 #
 # operationId: getOrganisationsIdConsumptions
-export def "organisations-consumptions get" [
+export def "get-organisations-id-consumptions" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5316,7 +5316,7 @@ export def "organisations-consumptions get" [
 # GET /organisations/{id}/credits
 #
 # operationId: getOrganisationsIdCredits
-export def "organisations-credits get" [
+export def "get-organisations-id-credits" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5351,7 +5351,7 @@ export def "organisations-credits get" [
 # GET /organisations/{id}/deployments
 #
 # operationId: getOrganisationsIdDeployments
-export def "organisations-deployments get" [
+export def "get-organisations-id-deployments" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5386,7 +5386,7 @@ export def "organisations-deployments get" [
 # GET /organisations/{id}/instances
 #
 # operationId: getOrganisationsIdInstances
-export def "organisations-instances get" [
+export def "get-organisations-id-instances" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5421,7 +5421,7 @@ export def "organisations-instances get" [
 # GET /organisations/{id}/members
 #
 # operationId: getOrganisationsIdMembers
-export def "organisations-members get" [
+export def "get-organisations-id-members" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5456,7 +5456,7 @@ export def "organisations-members get" [
 # POST /organisations/{id}/members
 #
 # operationId: postOrganisationsIdMembers
-export def "organisations-members create" [
+export def "post-organisations-id-members" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5499,7 +5499,7 @@ export def "organisations-members create" [
 # DELETE /organisations/{id}/members/{userId}
 #
 # operationId: deleteOrganisationsIdMembersUserId
-export def "organisations-members delete-user" [
+export def "delete-organisations-id-members-user-id" [
   id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5536,7 +5536,7 @@ export def "organisations-members delete-user" [
 # PUT /organisations/{id}/members/{userId}
 #
 # operationId: putOrganisationsIdMembersUserId
-export def "organisations-members update-user" [
+export def "put-organisations-id-members-user-id" [
   id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5579,7 +5579,7 @@ export def "organisations-members update-user" [
 # GET /organisations/{id}/payment-info
 #
 # operationId: getOrganisationsIdPaymentInfo
-export def "organisations-payment-info get" [
+export def "get-organisations-id-payment-info" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5614,7 +5614,7 @@ export def "organisations-payment-info get" [
 # GET /organisations/{id}/payments/billings
 #
 # operationId: getOrganisationsIdPaymentsBillings
-export def "organisations-payments-billings list" [
+export def "get-organisations-id-payments-billings" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5649,7 +5649,7 @@ export def "organisations-payments-billings list" [
 # POST /organisations/{id}/payments/billings
 #
 # operationId: postOrganisationsIdPaymentsBillings
-export def "organisations-payments-billings create" [
+export def "post-organisations-id-payments-billings" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5682,7 +5682,7 @@ export def "organisations-payments-billings create" [
 }
 
 # GET /organisations/{id}/payments/billings/unpaid
-export def "organisations-payments-billings-unpaid get" [
+export def "get-organisations-id-payments-billings-unpaid" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5717,7 +5717,7 @@ export def "organisations-payments-billings-unpaid get" [
 # DELETE /organisations/{id}/payments/billings/{bid}
 #
 # operationId: deleteOrganisationsIdPaymentsBillingsBid
-export def "organisations-payments-billings delete" [
+export def "delete-organisations-id-payments-billings-bid" [
   id: string
   bid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5754,7 +5754,7 @@ export def "organisations-payments-billings delete" [
 # GET /organisations/{id}/payments/billings/{bid}
 #
 # operationId: getOrganisationsIdPaymentsBillingsBid
-export def "organisations-payments-billings get" [
+export def "get-organisations-id-payments-billings-bid" [
   id: string
   bid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5791,7 +5791,7 @@ export def "organisations-payments-billings get" [
 # PUT /organisations/{id}/payments/billings/{bid}
 #
 # operationId: putOrganisationsIdPaymentsBillingsBid
-export def "organisations-payments-billings update" [
+export def "put-organisations-id-payments-billings-bid" [
   id: string
   bid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5828,7 +5828,7 @@ export def "organisations-payments-billings update" [
 # GET /organisations/{id}/payments/billings/{bid}.pdf
 #
 # operationId: getOrganisationsIdPaymentsBillingsBidPdf
-export def "organisations-payments-billings get-pdf" [
+export def "get-organisations-id-payments-billings-bid-pdf" [
   id: string
   bid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5867,7 +5867,7 @@ export def "organisations-payments-billings get-pdf" [
 # GET /organisations/{id}/payments/fullprice/{price}
 #
 # operationId: getOrganisationsIdPaymentsFullPricePrice
-export def "organisations-payments-fullprice get-full" [
+export def "get-organisations-id-payments-full-price-price" [
   id: string
   price: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5902,7 +5902,7 @@ export def "organisations-payments-fullprice get-full" [
 }
 
 # GET /organisations/{id}/payments/methods
-export def "organisations-payments-methods get" [
+export def "get-organisations-id-payments-methods" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5935,7 +5935,7 @@ export def "organisations-payments-methods get" [
 }
 
 # POST /organisations/{id}/payments/methods
-export def "organisations-payments-methods create" [
+export def "post-organisations-id-payments-methods" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5972,7 +5972,7 @@ export def "organisations-payments-methods create" [
 }
 
 # GET /organisations/{id}/payments/methods/default
-export def "organisations-payments-methods-default get" [
+export def "get-organisations-id-payments-methods-default" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6005,7 +6005,7 @@ export def "organisations-payments-methods-default get" [
 }
 
 # PUT /organisations/{id}/payments/methods/default
-export def "organisations-payments-methods-default update" [
+export def "put-organisations-id-payments-methods-default" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6044,7 +6044,7 @@ export def "organisations-payments-methods-default update" [
 }
 
 # DELETE /organisations/{id}/payments/methods/{mId}
-export def "organisations-payments-methods delete" [
+export def "delete-organisations-id-payments-methods-m-id" [
   id: string
   m_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6079,7 +6079,7 @@ export def "organisations-payments-methods delete" [
 }
 
 # GET /organisations/{id}/payments/monthlyinvoice
-export def "organisations-payments-monthlyinvoice get" [
+export def "get-organisations-id-payments-monthlyinvoice" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6112,7 +6112,7 @@ export def "organisations-payments-monthlyinvoice get" [
 }
 
 # PUT /organisations/{id}/payments/monthlyinvoice/maxcredit
-export def "organisations-payments-monthlyinvoice-maxcredit update" [
+export def "put-organisations-id-payments-monthlyinvoice-maxcredit" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6147,7 +6147,7 @@ export def "organisations-payments-monthlyinvoice-maxcredit update" [
 # DELETE /organisations/{id}/payments/recurring
 #
 # operationId: deleteOrganisationsIdPaymentsRecurring
-export def "organisations-payments-recurring delete" [
+export def "delete-organisations-id-payments-recurring" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6180,7 +6180,7 @@ export def "organisations-payments-recurring delete" [
 }
 
 # GET /organisations/{id}/payments/recurring
-export def "organisations-payments-recurring get" [
+export def "get-organisations-id-payments-recurring" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6215,7 +6215,7 @@ export def "organisations-payments-recurring get" [
 # GET /password_forgotten
 #
 # operationId: getPasswordForgotten
-export def "password-forgotten list" [
+export def "get-password-forgotten" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6248,7 +6248,7 @@ export def "password-forgotten list" [
 # POST /password_forgotten
 #
 # operationId: postPasswordForgotten
-export def "password-forgotten create" [
+export def "post-password-forgotten" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6287,7 +6287,7 @@ export def "password-forgotten create" [
 # GET /password_forgotten/{key}
 #
 # operationId: getPasswordForgottenKey
-export def "password-forgotten get" [
+export def "get-password-forgotten-key" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6322,7 +6322,7 @@ export def "password-forgotten get" [
 # POST /password_forgotten/{key}
 #
 # operationId: postPasswordForgottenKey
-export def "password-forgotten create-by-key" [
+export def "post-password-forgotten-key" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6358,7 +6358,7 @@ export def "password-forgotten create-by-key" [
 }
 
 # GET /payments/assets/pay_button/{token}/button.png
-export def "payments-assets-pay-button-button-png get" [
+export def "get-payments-assets-pay-button-token-button-png" [
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6393,7 +6393,7 @@ export def "payments-assets-pay-button-button-png get" [
 # GET /payments/coupons/{name}
 #
 # operationId: getPaymentsCouponsName
-export def "payments-coupons get" [
+export def "get-payments-coupons-name" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6428,7 +6428,7 @@ export def "payments-coupons get" [
 # GET /payments/providers
 #
 # operationId: getPaymentsProviders
-export def "payments-providers get" [
+export def "get-payments-providers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6461,7 +6461,7 @@ export def "payments-providers get" [
 # GET /payments/tokens/stripe
 #
 # operationId: getPaymentsTokensStripe
-export def "payments-tokens-stripe get" [
+export def "get-payments-tokens-stripe" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6492,7 +6492,7 @@ export def "payments-tokens-stripe get" [
 }
 
 # POST /payments/{bid}/end/stripe
-export def "payments-end-stripe create" [
+export def "post-payments-bid-end-stripe" [
   bid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6527,7 +6527,7 @@ export def "payments-end-stripe create" [
 # GET /products/addonproviders
 #
 # operationId: getProductsAddonProviders
-export def "products-addonproviders get-addon-providers" [
+export def "get-products-addon-providers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6560,7 +6560,7 @@ export def "products-addonproviders get-addon-providers" [
 # GET /products/addonproviders/{provider_id}
 #
 # operationId: getProductsAddonProvidersProviderId
-export def "products-addonproviders get-addon" [
+export def "get-products-addon-providers-provider-id" [
   provider_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6593,7 +6593,7 @@ export def "products-addonproviders get-addon" [
 }
 
 # GET /products/addonproviders/{provider_id}/versions
-export def "products-addonproviders-versions get" [
+export def "get-products-addonproviders-provider-id-versions" [
   provider_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6628,7 +6628,7 @@ export def "products-addonproviders-versions get" [
 # GET /products/countries
 #
 # operationId: getProductsCountries
-export def "products-countries get" [
+export def "get-products-countries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6661,7 +6661,7 @@ export def "products-countries get" [
 # GET /products/countrycodes
 #
 # operationId: getProductsCountrycodes
-export def "products-countrycodes get" [
+export def "get-products-countrycodes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6694,7 +6694,7 @@ export def "products-countrycodes get" [
 # GET /products/instances
 #
 # operationId: getProductsInstances
-export def "products-instances get" [
+export def "get-products-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6729,7 +6729,7 @@ export def "products-instances get" [
 # GET /products/instances/{type}-{version}
 #
 # operationId: getProductsInstancesTypeVersion
-export def "products-instances get-by-type-version" [
+export def "get-products-instances-type-version" [
   type: string
   version: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6767,7 +6767,7 @@ export def "products-instances get-by-type-version" [
 }
 
 # GET /products/mfa_kinds
-export def "products-mfa-kinds get" [
+export def "get-products-mfa-kinds" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6800,7 +6800,7 @@ export def "products-mfa-kinds get" [
 # GET /products/packages
 #
 # operationId: getProductsPackages
-export def "products-packages get" [
+export def "get-products-packages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6837,7 +6837,7 @@ export def "products-packages get" [
 # GET /products/prices
 #
 # operationId: getProductsPrices
-export def "products-prices get" [
+export def "get-products-prices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6870,7 +6870,7 @@ export def "products-prices get" [
 # GET /products/zones
 #
 # operationId: getProductsZones
-export def "products-zones get" [
+export def "get-products-zones" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6903,7 +6903,7 @@ export def "products-zones get" [
 # DELETE /self
 #
 # operationId: deleteSelf
-export def "self delete" [
+export def "delete-self" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6937,7 +6937,7 @@ export def "self delete" [
 #
 # GET /self
 # operationId: getSelf
-export def "self get" [
+export def "get-self" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6970,7 +6970,7 @@ export def "self get" [
 # PUT /self
 #
 # operationId: putSelf
-export def "self update" [
+export def "put-self" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7017,7 +7017,7 @@ export def "self update" [
 #
 # GET /self/addons
 # operationId: getSelfAddons
-export def "self-addons list" [
+export def "get-self-addons" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7051,7 +7051,7 @@ export def "self-addons list" [
 #
 # operationId: postSelfAddons
 # --payment shape: {deviceData?: string, token: string, type: "NEW_CARD"|"EXISTING_CARD"}
-export def "self-addons create" [
+export def "post-self-addons" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7092,7 +7092,7 @@ export def "self-addons create" [
 # POST /self/addons/preorders
 #
 # --payment shape: {deviceData?: string, token: string, type: "NEW_CARD"|"EXISTING_CARD"}
-export def "self-addons-preorders create" [
+export def "post-self-addons-preorders" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7133,7 +7133,7 @@ export def "self-addons-preorders create" [
 # DELETE /self/addons/{addonId}
 #
 # operationId: deleteSelfAddonsAddonId
-export def "self-addons delete" [
+export def "delete-self-addons-addon-id" [
   addon_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7169,7 +7169,7 @@ export def "self-addons delete" [
 #
 # GET /self/addons/{addonId}
 # operationId: getSelfAddonsAddonId
-export def "self-addons get" [
+export def "get-self-addons-addon-id" [
   addon_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7205,7 +7205,7 @@ export def "self-addons get" [
 #
 # operationId: putSelfAddonsAddonId
 # --payment shape: {deviceData?: string, token: string, type: "NEW_CARD"|"EXISTING_CARD"}
-export def "self-addons update" [
+export def "put-self-addons-addon-id" [
   addon_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7248,7 +7248,7 @@ export def "self-addons update" [
 # GET /self/addons/{addonId}/applications
 #
 # operationId: getSelfAddonsAddonIdApplications
-export def "self-addons-applications get" [
+export def "get-self-addons-addon-id-applications" [
   addon_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7283,7 +7283,7 @@ export def "self-addons-applications get" [
 # GET /self/addons/{addonId}/env
 #
 # operationId: getSelfAddonsAddonIdEnv
-export def "self-addons-env get" [
+export def "get-self-addons-addon-id-env" [
   addon_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7319,7 +7319,7 @@ export def "self-addons-env get" [
 #
 # operationId: putSelfAddonsAddonIdPlan
 # --features item shape: {name: string, type: string, value: string}
-export def "self-addons-plan update" [
+export def "put-self-addons-addon-id-plan" [
   addon_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7361,7 +7361,7 @@ export def "self-addons-plan update" [
 # GET /self/addons/{addonId}/sso
 #
 # operationId: getSelfAddonsAddonIdSso
-export def "self-addons-sso get" [
+export def "get-self-addons-addon-id-sso" [
   addon_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7396,7 +7396,7 @@ export def "self-addons-sso get" [
 # GET /self/addons/{addonId}/tags
 #
 # operationId: getSelfAddonsAddonIdTags
-export def "self-addons-tags get" [
+export def "get-self-addons-addon-id-tags" [
   addon_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7431,7 +7431,7 @@ export def "self-addons-tags get" [
 # DELETE /self/addons/{addonId}/tags/{tag}
 #
 # operationId: deleteSelfAddonsAddonIdTagsTag
-export def "self-addons-tags delete" [
+export def "delete-self-addons-addon-id-tags-tag" [
   addon_id: string
   tag: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7468,7 +7468,7 @@ export def "self-addons-tags delete" [
 # PUT /self/addons/{addonId}/tags/{tag}
 #
 # operationId: putSelfAddonsAddonIdTagsTag
-export def "self-addons-tags update" [
+export def "put-self-addons-addon-id-tags-tag" [
   addon_id: string
   tag: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7509,7 +7509,7 @@ export def "self-addons-tags update" [
 # GET /self/applications
 #
 # operationId: getSelfApplications
-export def "self-applications get" [
+export def "get-self-applications" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7544,7 +7544,7 @@ export def "self-applications get" [
 # POST /self/applications
 # operationId: postSelfApplications
 # --oauthApp shape: {name?: string, owner?: string}
-export def "self-applications create" [
+export def "post-self-applications" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7603,7 +7603,7 @@ export def "self-applications create" [
 # DELETE /self/applications/{appId}
 #
 # operationId: deleteSelfApplicationsAppId
-export def "self-applications delete-app" [
+export def "delete-self-applications-app-id" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7638,7 +7638,7 @@ export def "self-applications delete-app" [
 # GET /self/applications/{appId}
 #
 # operationId: getSelfApplicationsAppId
-export def "self-applications get-app" [
+export def "get-self-applications-app-id" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7674,7 +7674,7 @@ export def "self-applications get-app" [
 #
 # operationId: putSelfApplicationsAppId
 # --oauthApp shape: {name?: string, owner?: string}
-export def "self-applications update-app" [
+export def "put-self-applications-app-id" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7735,7 +7735,7 @@ export def "self-applications update-app" [
 # GET /self/applications/{appId}/addons
 #
 # operationId: getSelfApplicationsAppIdAddons
-export def "self-applications-addons get-app" [
+export def "get-self-applications-app-id-addons" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7770,7 +7770,7 @@ export def "self-applications-addons get-app" [
 # POST /self/applications/{appId}/addons
 #
 # operationId: postSelfApplicationsAppIdAddons
-export def "self-applications-addons create-app" [
+export def "post-self-applications-app-id-addons" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7809,7 +7809,7 @@ export def "self-applications-addons create-app" [
 # GET /self/applications/{appId}/addons/env
 #
 # operationId: getSelfApplicationsAppIdAddonsEnv
-export def "self-applications-addons-env get-app" [
+export def "get-self-applications-app-id-addons-env" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7844,7 +7844,7 @@ export def "self-applications-addons-env get-app" [
 # DELETE /self/applications/{appId}/addons/{addonId}
 #
 # operationId: deleteSelfApplicationsAppIdAddonsAddonId
-export def "self-applications-addons delete-app" [
+export def "delete-self-applications-app-id-addons-addon-id" [
   app_id: string
   addon_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7879,7 +7879,7 @@ export def "self-applications-addons delete-app" [
 }
 
 # PUT /self/applications/{appId}/branch
-export def "self-applications-branch update" [
+export def "put-self-applications-app-id-branch" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7912,7 +7912,7 @@ export def "self-applications-branch update" [
 }
 
 # GET /self/applications/{appId}/branches
-export def "self-applications-branches get" [
+export def "get-self-applications-app-id-branches" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7945,7 +7945,7 @@ export def "self-applications-branches get" [
 }
 
 # PUT /self/applications/{appId}/buildflavor
-export def "self-applications-buildflavor update" [
+export def "put-self-applications-app-id-buildflavor" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7980,7 +7980,7 @@ export def "self-applications-buildflavor update" [
 # GET /self/applications/{appId}/dependencies
 #
 # operationId: getSelfApplicationsAppIdDependencies
-export def "self-applications-dependencies get-app" [
+export def "get-self-applications-app-id-dependencies" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8013,7 +8013,7 @@ export def "self-applications-dependencies get-app" [
 }
 
 # GET /self/applications/{appId}/dependencies/env
-export def "self-applications-dependencies-env get" [
+export def "get-self-applications-app-id-dependencies-env" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8048,7 +8048,7 @@ export def "self-applications-dependencies-env get" [
 # DELETE /self/applications/{appId}/dependencies/{dependencyId}
 #
 # operationId: deleteSelfApplicationsAppIdDependenciesDependencyId
-export def "self-applications-dependencies delete-app-dependency" [
+export def "delete-self-applications-app-id-dependencies-dependency-id" [
   app_id: string
   dependency_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8086,7 +8086,7 @@ export def "self-applications-dependencies delete-app-dependency" [
 #
 # operationId: getSelfApplicationsAppIdDependenciesDependencyId
 # --oauthApp shape: {name?: string, owner?: string}
-export def "self-applications-dependencies get-app-dependency" [
+export def "get-self-applications-app-id-dependencies-dependency-id" [
   app_id: string
   dependency_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8149,7 +8149,7 @@ export def "self-applications-dependencies get-app-dependency" [
 # GET /self/applications/{appId}/dependents
 #
 # operationId: getSelfApplicationsAppIdDependents
-export def "self-applications-dependents get-app" [
+export def "get-self-applications-app-id-dependents" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8184,7 +8184,7 @@ export def "self-applications-dependents get-app" [
 # GET /self/applications/{appId}/deployments
 #
 # operationId: getSelfApplicationsAppIdDeployments
-export def "self-applications-deployments get-app" [
+export def "get-self-applications-app-id-deployments" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8221,7 +8221,7 @@ export def "self-applications-deployments get-app" [
 }
 
 # GET /self/applications/{appId}/deployments/{deploymentId}
-export def "self-applications-deployments get" [
+export def "get-self-applications-app-id-deployments-deployment-id" [
   app_id: string
   deployment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8258,7 +8258,7 @@ export def "self-applications-deployments get" [
 # DELETE /self/applications/{appId}/deployments/{deploymentId}/instances
 #
 # operationId: deleteSelfApplicationsAppIdDeploymentsDeploymentIdInstances
-export def "self-applications-deployments-instances delete-app" [
+export def "delete-self-applications-app-id-deployments-deployment-id-instances" [
   app_id: string
   deployment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8295,7 +8295,7 @@ export def "self-applications-deployments-instances delete-app" [
 # GET /self/applications/{appId}/env
 #
 # operationId: getSelfApplicationsAppIdEnv
-export def "self-applications-env get-app" [
+export def "get-self-applications-app-id-env" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8330,7 +8330,7 @@ export def "self-applications-env get-app" [
 # PUT /self/applications/{appId}/env
 #
 # operationId: putSelfApplicationsAppIdEnv
-export def "self-applications-env update-app" [
+export def "put-self-applications-app-id-env" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8370,7 +8370,7 @@ export def "self-applications-env update-app" [
 # DELETE /self/applications/{appId}/env/{envName}
 #
 # operationId: deleteSelfApplicationsAppIdEnvEnvName
-export def "self-applications-env delete-app-name" [
+export def "delete-self-applications-app-id-env-env-name" [
   app_id: string
   env_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8407,7 +8407,7 @@ export def "self-applications-env delete-app-name" [
 # PUT /self/applications/{appId}/env/{envName}
 #
 # operationId: putSelfApplicationsAppIdEnvEnvName
-export def "self-applications-env update-app-name" [
+export def "put-self-applications-app-id-env-env-name" [
   app_id: string
   env_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8447,7 +8447,7 @@ export def "self-applications-env update-app-name" [
 }
 
 # GET /self/applications/{appId}/exposed_env
-export def "self-applications-exposed-env get" [
+export def "get-self-applications-app-id-exposed-env" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8480,7 +8480,7 @@ export def "self-applications-exposed-env get" [
 }
 
 # PUT /self/applications/{appId}/exposed_env
-export def "self-applications-exposed-env update" [
+export def "put-self-applications-app-id-exposed-env" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8515,7 +8515,7 @@ export def "self-applications-exposed-env update" [
 # DELETE /self/applications/{appId}/instances
 #
 # operationId: deleteSelfApplicationsAppIdInstances
-export def "self-applications-instances delete-app" [
+export def "delete-self-applications-app-id-instances" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8550,7 +8550,7 @@ export def "self-applications-instances delete-app" [
 # GET /self/applications/{appId}/instances
 #
 # operationId: getSelfApplicationsAppIdInstances
-export def "self-applications-instances get-app" [
+export def "get-self-applications-app-id-instances" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8585,7 +8585,7 @@ export def "self-applications-instances get-app" [
 # POST /self/applications/{appId}/instances
 #
 # operationId: postSelfApplicationsAppIdInstances
-export def "self-applications-instances create-app" [
+export def "post-self-applications-app-id-instances" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8620,7 +8620,7 @@ export def "self-applications-instances create-app" [
 }
 
 # GET /self/applications/{appId}/instances/{instanceId}
-export def "self-applications-instances get" [
+export def "get-self-applications-app-id-instances-instance-id" [
   app_id: string
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8657,7 +8657,7 @@ export def "self-applications-instances get" [
 # GET /self/applications/{appId}/tags
 #
 # operationId: getSelfApplicationsAppIdTags
-export def "self-applications-tags get-app" [
+export def "get-self-applications-app-id-tags" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8692,7 +8692,7 @@ export def "self-applications-tags get-app" [
 # DELETE /self/applications/{appId}/tags/{tag}
 #
 # operationId: deleteSelfApplicationsAppIdTagsTag
-export def "self-applications-tags delete-app" [
+export def "delete-self-applications-app-id-tags-tag" [
   app_id: string
   tag: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8729,7 +8729,7 @@ export def "self-applications-tags delete-app" [
 # PUT /self/applications/{appId}/tags/{tag}
 #
 # operationId: putSelfApplicationsAppIdTagsTag
-export def "self-applications-tags update-app" [
+export def "put-self-applications-app-id-tags-tag" [
   app_id: string
   tag: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8770,7 +8770,7 @@ export def "self-applications-tags update-app" [
 # GET /self/applications/{appId}/vhosts
 #
 # operationId: getSelfApplicationsAppIdVhosts
-export def "self-applications-vhosts get-app" [
+export def "get-self-applications-app-id-vhosts" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8805,7 +8805,7 @@ export def "self-applications-vhosts get-app" [
 # DELETE /self/applications/{appId}/vhosts/favourite
 #
 # operationId: deleteSelfApplicationsAppIdVhostsFavourite
-export def "self-applications-vhosts-favourite delete-app" [
+export def "delete-self-applications-app-id-vhosts-favourite" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8840,7 +8840,7 @@ export def "self-applications-vhosts-favourite delete-app" [
 # GET /self/applications/{appId}/vhosts/favourite
 #
 # operationId: getSelfApplicationsAppIdVhostsFavourite
-export def "self-applications-vhosts-favourite get-app" [
+export def "get-self-applications-app-id-vhosts-favourite" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8875,7 +8875,7 @@ export def "self-applications-vhosts-favourite get-app" [
 # PUT /self/applications/{appId}/vhosts/favourite
 #
 # operationId: putSelfApplicationsAppIdVhostsFavourite
-export def "self-applications-vhosts-favourite update-app" [
+export def "put-self-applications-app-id-vhosts-favourite" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8914,7 +8914,7 @@ export def "self-applications-vhosts-favourite update-app" [
 # DELETE /self/applications/{appId}/vhosts/{domain}
 #
 # operationId: deleteSelfApplicationsAppIdVhostsDomain
-export def "self-applications-vhosts delete-app" [
+export def "delete-self-applications-app-id-vhosts-domain" [
   app_id: string
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8951,7 +8951,7 @@ export def "self-applications-vhosts delete-app" [
 # PUT /self/applications/{appId}/vhosts/{domain}
 #
 # operationId: putSelfApplicationsAppIdVhostsDomain
-export def "self-applications-vhosts update-app" [
+export def "put-self-applications-app-id-vhosts-domain" [
   app_id: string
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8993,7 +8993,7 @@ export def "self-applications-vhosts update-app" [
 #
 # operationId: putSelfAvatar
 # --source shape: {source: string, value: record}
-export def "self-avatar update" [
+export def "put-self-avatar" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9030,7 +9030,7 @@ export def "self-avatar update" [
 # PUT /self/change_password
 #
 # operationId: putSelfChangePassword
-export def "self-change-password update" [
+export def "put-self-change-password" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9061,7 +9061,7 @@ export def "self-change-password update" [
 }
 
 # GET /self/cli_tokens
-export def "self-cli-tokens get" [
+export def "get-self-cli-tokens" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9096,7 +9096,7 @@ export def "self-cli-tokens get" [
 # GET /self/confirmation_email
 #
 # operationId: getSelfConfirmationEmail
-export def "self-confirmation-email get" [
+export def "get-self-confirmation-email" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9129,7 +9129,7 @@ export def "self-confirmation-email get" [
 # GET /self/consumers
 #
 # operationId: getSelfConsumers
-export def "self-consumers list" [
+export def "get-self-consumers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9165,7 +9165,7 @@ export def "self-consumers list" [
 # --baseUrl shape: {url: string}
 # --rights shape: {activated: bool, right: string}
 # --url shape: {url: string}
-export def "self-consumers create" [
+export def "post-self-consumers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9207,7 +9207,7 @@ export def "self-consumers create" [
 # DELETE /self/consumers/{key}
 #
 # operationId: deleteSelfConsumersKey
-export def "self-consumers delete" [
+export def "delete-self-consumers-key" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9242,7 +9242,7 @@ export def "self-consumers delete" [
 # GET /self/consumers/{key}
 #
 # operationId: getSelfConsumersKey
-export def "self-consumers get" [
+export def "get-self-consumers-key" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9280,7 +9280,7 @@ export def "self-consumers get" [
 # --baseUrl shape: {url: string}
 # --rights shape: {activated: bool, right: string}
 # --url shape: {url: string}
-export def "self-consumers update" [
+export def "put-self-consumers-key" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9324,7 +9324,7 @@ export def "self-consumers update" [
 # GET /self/consumers/{key}/secret
 #
 # operationId: getSelfConsumersKeySecret
-export def "self-consumers-secret get" [
+export def "get-self-consumers-key-secret" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9359,7 +9359,7 @@ export def "self-consumers-secret get" [
 # GET /self/consumptions
 #
 # operationId: getSelfConsumptions
-export def "self-consumptions get" [
+export def "get-self-consumptions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9396,7 +9396,7 @@ export def "self-consumptions get" [
 # GET /self/credits
 #
 # operationId: getSelfCredits
-export def "self-credits get" [
+export def "get-self-credits" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9429,7 +9429,7 @@ export def "self-credits get" [
 # GET /self/emails
 #
 # operationId: getSelfEmails
-export def "self-emails get" [
+export def "get-self-emails" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9462,7 +9462,7 @@ export def "self-emails get" [
 # DELETE /self/emails/{email}
 #
 # operationId: deleteSelfEmailsEmail
-export def "self-emails delete" [
+export def "delete-self-emails-email" [
   email: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9497,7 +9497,7 @@ export def "self-emails delete" [
 # PUT /self/emails/{email}
 #
 # operationId: putSelfEmailsEmail
-export def "self-emails update" [
+export def "put-self-emails-email" [
   email: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9536,7 +9536,7 @@ export def "self-emails update" [
 # GET /self/id
 #
 # operationId: getSelfId
-export def "self-id get" [
+export def "get-self-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9569,7 +9569,7 @@ export def "self-id get" [
 # GET /self/instances
 #
 # operationId: getSelfInstances
-export def "self-instances get" [
+export def "get-self-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9602,7 +9602,7 @@ export def "self-instances get" [
 # GET /self/keys
 #
 # operationId: getSelfKeys
-export def "self-keys get" [
+export def "get-self-keys" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9635,7 +9635,7 @@ export def "self-keys get" [
 # DELETE /self/keys/{key}
 #
 # operationId: deleteSelfKeysKey
-export def "self-keys delete" [
+export def "delete-self-keys-key" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9670,7 +9670,7 @@ export def "self-keys delete" [
 # PUT /self/keys/{key}
 #
 # operationId: putSelfKeysKey
-export def "self-keys update" [
+export def "put-self-keys-key" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9707,7 +9707,7 @@ export def "self-keys update" [
 }
 
 # DELETE /self/mfa/{kind}
-export def "self-mfa delete" [
+export def "delete-self-mfa-kind" [
   kind: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9740,7 +9740,7 @@ export def "self-mfa delete" [
 }
 
 # POST /self/mfa/{kind}
-export def "self-mfa create" [
+export def "post-self-mfa-kind" [
   kind: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9773,7 +9773,7 @@ export def "self-mfa create" [
 }
 
 # PUT /self/mfa/{kind}
-export def "self-mfa update" [
+export def "put-self-mfa-kind" [
   kind: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9806,7 +9806,7 @@ export def "self-mfa update" [
 }
 
 # GET /self/mfa/{kind}/backupcodes
-export def "self-mfa-backupcodes get" [
+export def "get-self-mfa-kind-backupcodes" [
   kind: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9839,7 +9839,7 @@ export def "self-mfa-backupcodes get" [
 }
 
 # POST /self/mfa/{kind}/confirmation
-export def "self-mfa-confirmation create" [
+export def "post-self-mfa-kind-confirmation" [
   kind: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9874,7 +9874,7 @@ export def "self-mfa-confirmation create" [
 # GET /self/payment-info
 #
 # operationId: getSelfPaymentInfo
-export def "self-payment-info get" [
+export def "get-self-payment-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9907,7 +9907,7 @@ export def "self-payment-info get" [
 # GET /self/payments/billings
 #
 # operationId: getSelfPaymentsBillings
-export def "self-payments-billings list" [
+export def "get-self-payments-billings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9940,7 +9940,7 @@ export def "self-payments-billings list" [
 # POST /self/payments/billings
 #
 # operationId: postSelfPaymentsBillings
-export def "self-payments-billings create" [
+export def "post-self-payments-billings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9973,7 +9973,7 @@ export def "self-payments-billings create" [
 # DELETE /self/payments/billings/{bid}
 #
 # operationId: deleteSelfPaymentsBillingsBid
-export def "self-payments-billings delete" [
+export def "delete-self-payments-billings-bid" [
   bid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10008,7 +10008,7 @@ export def "self-payments-billings delete" [
 # GET /self/payments/billings/{bid}
 #
 # operationId: getSelfPaymentsBillingsBid
-export def "self-payments-billings get" [
+export def "get-self-payments-billings-bid" [
   bid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10043,7 +10043,7 @@ export def "self-payments-billings get" [
 # PUT /self/payments/billings/{bid}
 #
 # operationId: putSelfPaymentsBillingsBid
-export def "self-payments-billings update" [
+export def "put-self-payments-billings-bid" [
   bid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10078,7 +10078,7 @@ export def "self-payments-billings update" [
 # GET /self/payments/billings/{bid}.pdf
 #
 # operationId: getSelfPaymentsBillingsBidPdf
-export def "self-payments-billings get-pdf" [
+export def "get-self-payments-billings-bid-pdf" [
   bid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10115,7 +10115,7 @@ export def "self-payments-billings get-pdf" [
 # GET /self/payments/fullprice/{price}
 #
 # operationId: getSelfPaymentsFullpricePrice
-export def "self-payments-fullprice get" [
+export def "get-self-payments-fullprice-price" [
   price: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10150,7 +10150,7 @@ export def "self-payments-fullprice get" [
 # GET /self/payments/methods
 #
 # operationId: getSelfPaymentsMethods
-export def "self-payments-methods get" [
+export def "get-self-payments-methods" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10183,7 +10183,7 @@ export def "self-payments-methods get" [
 # POST /self/payments/methods
 #
 # operationId: postSelfPaymentsMethods
-export def "self-payments-methods create" [
+export def "post-self-payments-methods" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10214,7 +10214,7 @@ export def "self-payments-methods create" [
 }
 
 # GET /self/payments/methods/default
-export def "self-payments-methods-default get" [
+export def "get-self-payments-methods-default" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10245,7 +10245,7 @@ export def "self-payments-methods-default get" [
 }
 
 # PUT /self/payments/methods/default
-export def "self-payments-methods-default update" [
+export def "put-self-payments-methods-default" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10278,7 +10278,7 @@ export def "self-payments-methods-default update" [
 # DELETE /self/payments/methods/{mId}
 #
 # operationId: deleteSelfPaymentsMethodsMId
-export def "self-payments-methods delete-m" [
+export def "delete-self-payments-methods-m-id" [
   m_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10311,7 +10311,7 @@ export def "self-payments-methods delete-m" [
 }
 
 # GET /self/payments/monthlyinvoice
-export def "self-payments-monthlyinvoice get" [
+export def "get-self-payments-monthlyinvoice" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10342,7 +10342,7 @@ export def "self-payments-monthlyinvoice get" [
 }
 
 # PUT /self/payments/monthlyinvoice/maxcredit
-export def "self-payments-monthlyinvoice-maxcredit update" [
+export def "put-self-payments-monthlyinvoice-maxcredit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10375,7 +10375,7 @@ export def "self-payments-monthlyinvoice-maxcredit update" [
 # DELETE /self/payments/recurring
 #
 # operationId: deleteSelfPaymentsRecurring
-export def "self-payments-recurring delete" [
+export def "delete-self-payments-recurring" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10406,7 +10406,7 @@ export def "self-payments-recurring delete" [
 }
 
 # GET /self/payments/recurring
-export def "self-payments-recurring get" [
+export def "get-self-payments-recurring" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10437,7 +10437,7 @@ export def "self-payments-recurring get" [
 }
 
 # GET /self/payments/tokens/stripe
-export def "self-payments-tokens-stripe get" [
+export def "get-self-payments-tokens-stripe" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10470,7 +10470,7 @@ export def "self-payments-tokens-stripe get" [
 # DELETE /self/tokens
 #
 # operationId: deleteSelfTokens
-export def "self-tokens delete" [
+export def "delete-self-tokens" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10503,7 +10503,7 @@ export def "self-tokens delete" [
 # GET /self/tokens
 #
 # operationId: getSelfTokens
-export def "self-tokens get" [
+export def "get-self-tokens" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10536,7 +10536,7 @@ export def "self-tokens get" [
 # DELETE /self/tokens/{token}
 #
 # operationId: deleteSelfTokensToken
-export def "self-tokens delete-by-token" [
+export def "delete-self-tokens-token" [
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10571,7 +10571,7 @@ export def "self-tokens delete-by-token" [
 # GET /self/validate_email
 #
 # operationId: getSelfValidateEmail
-export def "self-validate-email get" [
+export def "get-self-validate-email" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10606,7 +10606,7 @@ export def "self-validate-email get" [
 # GET /summary
 #
 # operationId: getSummary
-export def "summary get" [
+export def "get-summary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10639,7 +10639,7 @@ export def "summary get" [
 # POST /users
 #
 # operationId: postUsers
-export def "users create" [
+export def "post-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10692,7 +10692,7 @@ export def "users create" [
 # GET /users/{id}
 #
 # operationId: getUsersId
-export def "users get" [
+export def "get-users-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10727,7 +10727,7 @@ export def "users get" [
 # GET /users/{id}/applications
 #
 # operationId: getUsersIdApplications
-export def "users-applications get" [
+export def "get-users-id-applications" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10762,7 +10762,7 @@ export def "users-applications get" [
 # GET /users/{userId}/git-info
 #
 # operationId: getUsersUserIdGitInfo
-export def "users-git-info get" [
+export def "get-users-user-id-git-info" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10798,7 +10798,7 @@ export def "users-git-info get" [
 #
 # POST /v2/providers/addon-matomo/resources
 # operationId: createMatomo
-export def "providers-addon-matomo-resources create" [
+export def "create-matomo" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10836,7 +10836,7 @@ export def "providers-addon-matomo-resources create" [
 #
 # DELETE /v2/providers/addon-matomo/resources/{matomoId}
 # operationId: deleteMatomo
-export def "providers-addon-matomo-resources delete" [
+export def "delete-matomo" [
   matomo_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10875,7 +10875,7 @@ export def "providers-addon-matomo-resources delete" [
 # Fetch the logs for a given application
 #
 # GET /v3/logs/{appId}
-export def "logs get-by-app-id-1" [
+export def "get-v3-logs-app-id" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10910,7 +10910,7 @@ export def "logs get-by-app-id-1" [
 # Fetch the logs drains for a given application
 #
 # GET /v3/logs/{appId}/drains
-export def "logs-drains get-by-app-id-1" [
+export def "get-v3-logs-app-id-drains" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10945,7 +10945,7 @@ export def "logs-drains get-by-app-id-1" [
 # Add a log drain for a given application
 #
 # POST /v3/logs/{appId}/drains
-export def "logs-drains create-by-app-id-1" [
+export def "post-v3-logs-app-id-drains" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10980,7 +10980,7 @@ export def "logs-drains create-by-app-id-1" [
 # Delete the logs drain by id or url for a given application
 #
 # DELETE /v3/logs/{appId}/drains/:idOrUrl
-export def "logs-drains-id-or-url delete-by-app-id-1" [
+export def "delete-v3-logs-app-id-drains-id-or-url" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11015,7 +11015,7 @@ export def "logs-drains-id-or-url delete-by-app-id-1" [
 # Fetch the logs drain by id or url for a given application
 #
 # GET /v3/logs/{appId}/drains/:idOrUrl
-export def "logs-drains-id-or-url get-by-app-id-1" [
+export def "get-v3-logs-app-id-drains-id-or-url" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11050,7 +11050,7 @@ export def "logs-drains-id-or-url get-by-app-id-1" [
 # Retrieve logs as they come through a chunked, never-ending response
 #
 # GET /v3/logs/{appId}/logs-chunked
-export def "logs-logs-chunked get-by-app-id-1" [
+export def "get-v3-logs-app-id-logs-chunked" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11085,7 +11085,7 @@ export def "logs-logs-chunked get-by-app-id-1" [
 # Retrieve logs as they come through a websocket connection. To have authorization, you have to send a `{ "message_type": "oauth", "authorization": "oauth authorization string" }` message
 #
 # GET /v3/logs/{appId}/logs-socket
-export def "logs-logs-socket get-by-app-id-1" [
+export def "get-v3-logs-app-id-logs-socket" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11121,7 +11121,7 @@ export def "logs-logs-socket get-by-app-id-1" [
 #
 # GET /v4/addon-providers/addon-matomo/addons/{matomoId}
 # operationId: getMatomo
-export def "addon-providers-addon-matomo-addons get" [
+export def "get-matomo" [
   matomo_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11157,7 +11157,7 @@ export def "addon-providers-addon-matomo-addons get" [
 #
 # GET /v4/addon-providers/addon-matomo/token/validate
 # operationId: getMatomoKTokenValidation
-export def "addon-providers-addon-matomo-token-validate get-k-validation" [
+export def "get-matomo-k-token-validation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11193,7 +11193,7 @@ export def "addon-providers-addon-matomo-token-validate get-k-validation" [
 #
 # GET /v4/addon-providers/config-provider/addons/{configurationProviderId}
 # operationId: getConfigProvider
-export def "addon-providers-config-provider-addons get" [
+export def "get-config-provider" [
   configuration_provider_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11229,7 +11229,7 @@ export def "addon-providers-config-provider-addons get" [
 #
 # GET /v4/addon-providers/config-provider/addons/{configurationProviderId}/env
 # operationId: getConfigProviderEnv
-export def "addon-providers-config-provider-addons-env get" [
+export def "get-config-provider-env" [
   configuration_provider_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11265,7 +11265,7 @@ export def "addon-providers-config-provider-addons-env get" [
 #
 # PUT /v4/addon-providers/config-provider/addons/{configurationProviderId}/env
 # operationId: updateConfigProviderEnv
-export def "addon-providers-config-provider-addons-env update" [
+export def "update-config-provider-env" [
   configuration_provider_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11305,7 +11305,7 @@ export def "addon-providers-config-provider-addons-env update" [
 #
 # GET /v4/networkgroups/organisations/{ownerId}/networkgroups
 # operationId: listNetworkGroups
-export def "networkgroups-organisations-networkgroups list-network-groups" [
+export def "list-network-groups" [
   owner_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11341,7 +11341,7 @@ export def "networkgroups-organisations-networkgroups list-network-groups" [
 #
 # POST /v4/networkgroups/organisations/{ownerId}/networkgroups
 # operationId: createNetworkGroup
-export def "networkgroups-organisations-networkgroups create-network-group" [
+export def "create-network-group" [
   owner_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11381,7 +11381,7 @@ export def "networkgroups-organisations-networkgroups create-network-group" [
 #
 # DELETE /v4/networkgroups/organisations/{ownerId}/networkgroups/{networkGroupId}
 # operationId: deleteNetworkGroup
-export def "networkgroups-organisations-networkgroups delete-network-group" [
+export def "delete-network-group" [
   owner_id: string
   network_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11423,7 +11423,7 @@ export def "networkgroups-organisations-networkgroups delete-network-group" [
 #
 # GET /v4/networkgroups/organisations/{ownerId}/networkgroups/{networkGroupId}
 # operationId: getNetworkGroup
-export def "networkgroups-organisations-networkgroups get-network-group" [
+export def "get-network-group" [
   owner_id: string
   network_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11461,7 +11461,7 @@ export def "networkgroups-organisations-networkgroups get-network-group" [
 #
 # POST /v4/networkgroups/organisations/{ownerId}/networkgroups/{networkGroupId}/external-peers
 # operationId: createNetworkGroupExternalPeer
-export def "networkgroups-organisations-networkgroups-external-peers create-network-group" [
+export def "create-network-group-external-peer" [
   owner_id: string
   network_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11503,7 +11503,7 @@ export def "networkgroups-organisations-networkgroups-external-peers create-netw
 #
 # DELETE /v4/networkgroups/organisations/{ownerId}/networkgroups/{networkGroupId}/external-peers/{peerId}
 # operationId: deleteNetworkGroupExternalPeer
-export def "networkgroups-organisations-networkgroups-external-peers delete-network-group" [
+export def "delete-network-group-external-peer" [
   owner_id: string
   network_group_id: string
   peer_id: string
@@ -11547,7 +11547,7 @@ export def "networkgroups-organisations-networkgroups-external-peers delete-netw
 #
 # GET /v4/networkgroups/organisations/{ownerId}/networkgroups/{networkGroupId}/members
 # operationId: listNetworkGroupMembers
-export def "networkgroups-organisations-networkgroups-members list-network-group" [
+export def "list-network-group-members" [
   owner_id: string
   network_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11585,7 +11585,7 @@ export def "networkgroups-organisations-networkgroups-members list-network-group
 #
 # POST /v4/networkgroups/organisations/{ownerId}/networkgroups/{networkGroupId}/members
 # operationId: createNetworkGroupMember
-export def "networkgroups-organisations-networkgroups-members create-network-group" [
+export def "create-network-group-member" [
   owner_id: string
   network_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11629,7 +11629,7 @@ export def "networkgroups-organisations-networkgroups-members create-network-gro
 #
 # DELETE /v4/networkgroups/organisations/{ownerId}/networkgroups/{networkGroupId}/members/{memberId}
 # operationId: deleteNetworkGroupMember
-export def "networkgroups-organisations-networkgroups-members delete-network-group" [
+export def "delete-network-group-member" [
   owner_id: string
   network_group_id: string
   member_id: string
@@ -11673,7 +11673,7 @@ export def "networkgroups-organisations-networkgroups-members delete-network-gro
 #
 # GET /v4/networkgroups/organisations/{ownerId}/networkgroups/{networkGroupId}/members/{memberId}
 # operationId: getNetworkGroupMember
-export def "networkgroups-organisations-networkgroups-members get-network-group" [
+export def "get-network-group-member" [
   owner_id: string
   network_group_id: string
   member_id: string
@@ -11713,7 +11713,7 @@ export def "networkgroups-organisations-networkgroups-members get-network-group"
 #
 # GET /v4/networkgroups/organisations/{ownerId}/networkgroups/{networkGroupId}/peers
 # operationId: listNetworkGroupPeers
-export def "networkgroups-organisations-networkgroups-peers list-network-group" [
+export def "list-network-group-peers" [
   owner_id: string
   network_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11751,7 +11751,7 @@ export def "networkgroups-organisations-networkgroups-peers list-network-group" 
 #
 # DELETE /v4/networkgroups/organisations/{ownerId}/networkgroups/{networkGroupId}/peers/{peerId}
 # operationId: deleteNetworkGroupPeer
-export def "networkgroups-organisations-networkgroups-peers delete-network-group" [
+export def "delete-network-group-peer" [
   owner_id: string
   network_group_id: string
   peer_id: string
@@ -11795,7 +11795,7 @@ export def "networkgroups-organisations-networkgroups-peers delete-network-group
 #
 # GET /v4/networkgroups/organisations/{ownerId}/networkgroups/{networkGroupId}/peers/{peerId}
 # operationId: getNetworkGroupPeer
-export def "networkgroups-organisations-networkgroups-peers get-network-group" [
+export def "get-network-group-peer" [
   owner_id: string
   network_group_id: string
   peer_id: string
@@ -11835,7 +11835,7 @@ export def "networkgroups-organisations-networkgroups-peers get-network-group" [
 #
 # GET /v4/networkgroups/organisations/{ownerId}/networkgroups/{networkGroupId}/peers/{peerId}/wireguard/configuration
 # operationId: getNetworkGroupWireGuardConfiguration
-export def "networkgroups-organisations-networkgroups-peers-wireguard-configuration get-network-group-wire-guard" [
+export def "get-network-group-wire-guard-configuration" [
   owner_id: string
   network_group_id: string
   peer_id: string
@@ -11875,7 +11875,7 @@ export def "networkgroups-organisations-networkgroups-peers-wireguard-configurat
 #
 # GET /v4/networkgroups/organisations/{ownerId}/networkgroups/{networkGroupId}/peers/{peerId}/wireguard/configuration/stream
 # operationId: getNetworkGroupWireGuardConfigurationStream
-export def "networkgroups-organisations-networkgroups-peers-wireguard-configuration-stream get-network-group-wire-guard" [
+export def "get-network-group-wire-guard-configuration-stream" [
   owner_id: string
   network_group_id: string
   peer_id: string
@@ -11915,7 +11915,7 @@ export def "networkgroups-organisations-networkgroups-peers-wireguard-configurat
 #
 # GET /v4/networkgroups/organisations/{ownerId}/networkgroups/{networkGroupId}/stream
 # operationId: getNetworkGroupStream
-export def "networkgroups-organisations-networkgroups-stream get-network-group" [
+export def "get-network-group-stream" [
   owner_id: string
   network_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11950,7 +11950,7 @@ export def "networkgroups-organisations-networkgroups-stream get-network-group" 
 }
 
 # POST /vendor//addons
-export def "vendor-addons create" [
+export def "post-vendor-addons" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11981,7 +11981,7 @@ export def "vendor-addons create" [
 }
 
 # GET /vendor//apps/{addonId}/logscollector
-export def "vendor-apps-logscollector get" [
+export def "get-vendor-apps-addon-id-logscollector" [
   addon_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12016,7 +12016,7 @@ export def "vendor-apps-logscollector get" [
 # GET /vendor/apps
 #
 # operationId: getVendorApps
-export def "vendor-apps get" [
+export def "get-vendor-apps" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12051,7 +12051,7 @@ export def "vendor-apps get" [
 # GET /vendor/apps/{addonId}
 #
 # operationId: getVendorAppsAddonId
-export def "vendor-apps get-addon" [
+export def "get-vendor-apps-addon-id" [
   addon_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12086,7 +12086,7 @@ export def "vendor-apps get-addon" [
 # PUT /vendor/apps/{addonId}
 #
 # operationId: putVendorAppsAddonId
-export def "vendor-apps update-addon" [
+export def "put-vendor-apps-addon-id" [
   addon_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12121,7 +12121,7 @@ export def "vendor-apps update-addon" [
 # POST /vendor/apps/{addonId}/consumptions
 #
 # operationId: postVendorBillingOwnerId
-export def "vendor-apps-consumptions create-billing-owner" [
+export def "post-vendor-billing-owner-id" [
   addon_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12158,7 +12158,7 @@ export def "vendor-apps-consumptions create-billing-owner" [
 }
 
 # PUT /vendor/apps/{addonId}/migration_callback
-export def "vendor-apps-migration-callback update" [
+export def "put-vendor-apps-addon-id-migration-callback" [
   addon_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

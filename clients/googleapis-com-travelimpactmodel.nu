@@ -101,7 +101,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "flights-compute-flight-emissions create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "travelimpactmodel-flights-compute-flight-emissions" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -126,7 +126,7 @@ export def commands []: nothing -> table {
 # POST /v1/flights:computeFlightEmissions
 # operationId: travelimpactmodel.flights.computeFlightEmissions
 # --flights item shape: {departureDate?: record, destination?: string, flightNumber?: int, operatingCarrierCode?: string, origin?: string}
-export def "flights-compute-flight-emissions create" [
+export def "travelimpactmodel-flights-compute-flight-emissions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

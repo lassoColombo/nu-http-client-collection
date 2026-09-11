@@ -110,7 +110,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-security-assessment-metadata list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "assessments-metadata-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -134,7 +134,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.Security/assessmentMetadata
 # operationId: AssessmentsMetadata_List
-export def "providers-microsoft-security-assessment-metadata list" [
+export def "assessments-metadata-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -170,7 +170,7 @@ export def "providers-microsoft-security-assessment-metadata list" [
 #
 # GET /providers/Microsoft.Security/assessmentMetadata/{assessmentMetadataName}
 # operationId: AssessmentsMetadata_Get
-export def "providers-microsoft-security-assessment-metadata get" [
+export def "assessments-metadata-get" [
   assessment_metadata_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -208,7 +208,7 @@ export def "providers-microsoft-security-assessment-metadata get" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Security/assessmentMetadata
 # operationId: AssessmentsMetadataSubscription_List
-export def "subscriptions-providers-microsoft-security-assessment-metadata list" [
+export def "assessments-metadata-subscription-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -246,7 +246,7 @@ export def "subscriptions-providers-microsoft-security-assessment-metadata list"
 #
 # DELETE /subscriptions/{subscriptionId}/providers/Microsoft.Security/assessmentMetadata/{assessmentMetadataName}
 # operationId: AssessmentsMetadataSubscription_Delete
-export def "subscriptions-providers-microsoft-security-assessment-metadata delete" [
+export def "assessments-metadata-subscription-delete" [
   subscription_id: string
   assessment_metadata_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -286,7 +286,7 @@ export def "subscriptions-providers-microsoft-security-assessment-metadata delet
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Security/assessmentMetadata/{assessmentMetadataName}
 # operationId: AssessmentsMetadataSubscription_Get
-export def "subscriptions-providers-microsoft-security-assessment-metadata get" [
+export def "assessments-metadata-subscription-get" [
   subscription_id: string
   assessment_metadata_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -327,7 +327,7 @@ export def "subscriptions-providers-microsoft-security-assessment-metadata get" 
 # PUT /subscriptions/{subscriptionId}/providers/Microsoft.Security/assessmentMetadata/{assessmentMetadataName}
 # operationId: AssessmentsMetadataSubscription_Create
 # --properties shape: {assessmentType: "BuiltIn"|"CustomPolicy"|"CustomerManaged"|"VerifiedPartner", category?: list<string>, description?: string, displayName: string, implementationEffort?: "Low"|"Moderate"|"High", partnerData?: record, preview?: bool, remediationDescription?: string, severity: "Low"|"Medium"|"High", threats?: list<string>, userImpact?: "Low"|"Moderate"|"High"}
-export def "subscriptions-providers-microsoft-security-assessment-metadata create" [
+export def "assessments-metadata-subscription-create" [
   subscription_id: string
   assessment_metadata_name: string
   --base-url(-b): string@base-url-completer # API base URL

@@ -107,7 +107,7 @@ def content-encoding-completer [] { ["gzip"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "health get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-health" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -131,7 +131,7 @@ export def commands []: nothing -> table {
 #
 # GET /health
 # operationId: getHealth
-export def "health get" [
+export def "get-health" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -172,7 +172,7 @@ export def "health get" [
 # --tdscdma item shape: {cid: int, lac?: int, localId?: record, mcc: int, mnc: int, nmr?: list, pathloss?: int, rscp?: int, ta?: int}
 # --wcdma item shape: {cid: int, lac?: int, localId?: record, mcc: int, mnc: int, nmr?: list, pathloss?: int, rscp?: int}
 # --wlan item shape: {mac: string, rss?: int}
-export def "locate create" [
+export def "post-locate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -225,7 +225,7 @@ export def "locate create" [
 #
 # GET /version
 # operationId: getApiVersion
-export def "version get" [
+export def "get-api-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

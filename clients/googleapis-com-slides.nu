@@ -119,7 +119,7 @@ def thumbnail-properties-thumbnail-size-completer [] { ["LARGE" "MEDIUM" "SMALL"
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "presentations create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "slides-presentations-create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -148,7 +148,7 @@ export def commands []: nothing -> table {
 # --notesMaster shape: {layoutProperties?: record, masterProperties?: record, notesProperties?: record, objectId?: string, pageElements?: list, pageProperties?: record, pageType?: "SLIDE"|"MASTER"|"LAYOUT"|"NOTES"|"NOTES_MASTER", revisionId?: string, slideProperties?: record}
 # --pageSize shape: {height?: record, width?: record}
 # --slides item shape: {layoutProperties?: record, masterProperties?: record, notesProperties?: record, objectId?: string, pageElements?: list, pageProperties?: record, pageType?: "SLIDE"|"MASTER"|"LAYOUT"|"NOTES"|"NOTES_MASTER", revisionId?: string, slideProperties?: record}
-export def "presentations create" [
+export def "slides-presentations-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -206,7 +206,7 @@ export def "presentations create" [
 #
 # GET /v1/presentations/{presentationId}
 # operationId: slides.presentations.get
-export def "presentations get" [
+export def "slides-presentations-get" [
   presentation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -254,7 +254,7 @@ export def "presentations get" [
 #
 # GET /v1/presentations/{presentationId}/pages/{pageObjectId}
 # operationId: slides.presentations.pages.get
-export def "presentations-pages get" [
+export def "slides-presentations-pages-get" [
   presentation_id: string
   page_object_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -304,7 +304,7 @@ export def "presentations-pages get" [
 #
 # GET /v1/presentations/{presentationId}/pages/{pageObjectId}/thumbnail
 # operationId: slides.presentations.pages.getThumbnail
-export def "presentations-pages-thumbnail get" [
+export def "slides-presentations-pages-get-thumbnail" [
   presentation_id: string
   page_object_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -358,7 +358,7 @@ export def "presentations-pages-thumbnail get" [
 # operationId: slides.presentations.batchUpdate
 # --requests item shape: {createImage?: record, createLine?: record, createParagraphBullets?: record, createShape?: record, createSheetsChart?: record, createSlide?: record, createTable?: record, createVideo?: record, deleteObject?: record, deleteParagraphBullets?: record, deleteTableColumn?: record, deleteTableRow?: record, deleteText?: record, duplicateObject?: record, groupObjects?: record, insertTableColumns?: record, insertTableRows?: record, insertText?: record, mergeTableCells?: record, refreshSheetsChart?: record, ... (24 more fields)}
 # --writeControl shape: {requiredRevisionId?: string}
-export def "presentations update-batch" [
+export def "slides-presentations-batch-update" [
   presentation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

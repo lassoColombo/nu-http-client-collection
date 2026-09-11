@@ -113,7 +113,7 @@ def delivered-completer [] { ["0" "1" "false" "true"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "sms create-conversion" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "sms-conversion" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -137,7 +137,7 @@ export def commands []: nothing -> table {
 #
 # POST /sms
 # operationId: smsConversion
-export def "sms create-conversion" [
+export def "sms-conversion" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (api_key)
   --token-apisecret: string # Auth token for apiSecret (api_secret)
@@ -175,7 +175,7 @@ export def "sms create-conversion" [
 #
 # POST /voice
 # operationId: voiceConversion
-export def "voice create-conversion" [
+export def "voice-conversion" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (api_key)
   --token-apisecret: string # Auth token for apiSecret (api_secret)

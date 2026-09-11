@@ -125,7 +125,7 @@ def target-namespace-type-completer [] { ["EventHub" "Messaging" "Mixed" "Notifi
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-service-bus-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -149,7 +149,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.ServiceBus/operations
 # operationId: Operations_List
-export def "providers-microsoft-service-bus-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -185,7 +185,7 @@ export def "providers-microsoft-service-bus-operations list" [
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.ServiceBus/CheckNameAvailability
 # operationId: Namespaces_CheckNameAvailability
-export def "subscriptions-providers-microsoft-service-bus-check-name-availability check-namespaces" [
+export def "namespaces-check-name-availability" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -228,7 +228,7 @@ export def "subscriptions-providers-microsoft-service-bus-check-name-availabilit
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.ServiceBus/namespaces
 # Docs: https://msdn.microsoft.com/en-us/library/azure/mt639412.aspx
 # operationId: Namespaces_List
-export def "subscriptions-providers-microsoft-service-bus-namespaces list" [
+export def "namespaces-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -266,7 +266,7 @@ export def "subscriptions-providers-microsoft-service-bus-namespaces list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.ServiceBus/premiumMessagingRegions
 # operationId: PremiumMessagingRegions_List
-export def "subscriptions-providers-microsoft-service-bus-premium-messaging-regions list" [
+export def "premium-messaging-regions-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -304,7 +304,7 @@ export def "subscriptions-providers-microsoft-service-bus-premium-messaging-regi
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.ServiceBus/sku/{sku}/regions
 # operationId: Regions_ListBySku
-export def "subscriptions-providers-microsoft-service-bus-sku-regions list" [
+export def "regions-list-by-sku" [
   subscription_id: string
   sku: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -345,7 +345,7 @@ export def "subscriptions-providers-microsoft-service-bus-sku-regions list" [
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces
 # Docs: https://msdn.microsoft.com/en-us/library/azure/mt639412.aspx
 # operationId: Namespaces_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces list" [
+export def "namespaces-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -386,7 +386,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}
 # Docs: https://msdn.microsoft.com/en-us/library/azure/mt639389.aspx
 # operationId: Namespaces_Delete
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces delete" [
+export def "namespaces-delete" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -429,7 +429,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}
 # Docs: https://msdn.microsoft.com/en-us/library/azure/mt639379.aspx
 # operationId: Namespaces_Get
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces get" [
+export def "namespaces-get" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -472,7 +472,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}
 # operationId: Namespaces_Update
 # --sku shape: {capacity?: int, name: "Basic"|"Standard"|"Premium", tier?: "Basic"|"Standard"|"Premium"}
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces update" [
+export def "namespaces-update" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -523,7 +523,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 # Docs: https://msdn.microsoft.com/en-us/library/azure/mt639408.aspx
 # operationId: Namespaces_CreateOrUpdate
 # --sku shape: {capacity?: int, name: "Basic"|"Standard"|"Premium", tier?: "Basic"|"Standard"|"Premium"}
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces create-or-update" [
+export def "namespaces-create-or-update" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -573,7 +573,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/AuthorizationRules
 # Docs: https://msdn.microsoft.com/en-us/library/azure/mt639376.aspx
 # operationId: Namespaces_ListAuthorizationRules
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-authorization-rules list" [
+export def "namespaces-list-authorization-rules" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -616,7 +616,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/AuthorizationRules/{authorizationRuleName}
 # Docs: https://msdn.microsoft.com/en-us/library/azure/mt639417.aspx
 # operationId: Namespaces_DeleteAuthorizationRule
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-authorization-rules delete" [
+export def "namespaces-delete-authorization-rule" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -661,7 +661,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/AuthorizationRules/{authorizationRuleName}
 # Docs: https://msdn.microsoft.com/en-us/library/azure/mt639392.aspx
 # operationId: Namespaces_GetAuthorizationRule
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-authorization-rules get" [
+export def "namespaces-get-authorization-rule" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -707,7 +707,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 # Docs: https://msdn.microsoft.com/en-us/library/azure/mt639410.aspx
 # operationId: Namespaces_CreateOrUpdateAuthorizationRule
 # --properties shape: {rights: list<string>}
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-authorization-rules create-or-update" [
+export def "namespaces-create-or-update-authorization-rule" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -756,7 +756,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/AuthorizationRules/{authorizationRuleName}/listKeys
 # Docs: https://msdn.microsoft.com/en-us/library/azure/mt639398.aspx
 # operationId: Namespaces_ListKeys
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-authorization-rules-list-keys list" [
+export def "namespaces-list-keys" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -801,7 +801,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/AuthorizationRules/{authorizationRuleName}/regenerateKeys
 # Docs: https://msdn.microsoft.com/en-us/library/azure/mt718977.aspx
 # operationId: Namespaces_RegenerateKeys
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-authorization-rules-regenerate-keys create" [
+export def "namespaces-regenerate-keys" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -850,7 +850,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/disasterRecoveryConfigs
 # operationId: DisasterRecoveryConfigs_List
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-disaster-recovery-configs list" [
+export def "disaster-recovery-configs-list" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -892,7 +892,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/disasterRecoveryConfigs/CheckNameAvailability
 # operationId: DisasterRecoveryConfigs_CheckNameAvailability
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-disaster-recovery-configs-check-name-availability check" [
+export def "disaster-recovery-configs-check-name-availability" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -938,7 +938,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/disasterRecoveryConfigs/{alias}
 # operationId: DisasterRecoveryConfigs_Delete
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-disaster-recovery-configs delete" [
+export def "disaster-recovery-configs-delete" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -982,7 +982,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/disasterRecoveryConfigs/{alias}
 # operationId: DisasterRecoveryConfigs_Get
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-disaster-recovery-configs get" [
+export def "disaster-recovery-configs-get" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1027,7 +1027,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/disasterRecoveryConfigs/{alias}
 # operationId: DisasterRecoveryConfigs_CreateOrUpdate
 # --properties shape: {alternateName?: string, partnerNamespace?: string}
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-disaster-recovery-configs create-or-update" [
+export def "disaster-recovery-configs-create-or-update" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1076,7 +1076,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/disasterRecoveryConfigs/{alias}/AuthorizationRules
 # Docs: https://msdn.microsoft.com/en-us/library/azure/mt639376.aspx
 # operationId: DisasterRecoveryConfigs_ListAuthorizationRules
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-disaster-recovery-configs-authorization-rules list" [
+export def "disaster-recovery-configs-list-authorization-rules" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1121,7 +1121,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/disasterRecoveryConfigs/{alias}/AuthorizationRules/{authorizationRuleName}
 # Docs: https://msdn.microsoft.com/en-us/library/azure/mt639392.aspx
 # operationId: DisasterRecoveryConfigs_GetAuthorizationRule
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-disaster-recovery-configs-authorization-rules get" [
+export def "disaster-recovery-configs-get-authorization-rule" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1168,7 +1168,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/disasterRecoveryConfigs/{alias}/AuthorizationRules/{authorizationRuleName}/listKeys
 # Docs: https://msdn.microsoft.com/en-us/library/azure/mt639398.aspx
 # operationId: DisasterRecoveryConfigs_ListKeys
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-disaster-recovery-configs-authorization-rules-list-keys list" [
+export def "disaster-recovery-configs-list-keys" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1214,7 +1214,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/disasterRecoveryConfigs/{alias}/breakPairing
 # operationId: DisasterRecoveryConfigs_BreakPairing
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-disaster-recovery-configs-break-pairing create" [
+export def "disaster-recovery-configs-break-pairing" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1258,7 +1258,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/disasterRecoveryConfigs/{alias}/failover
 # operationId: DisasterRecoveryConfigs_FailOver
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-disaster-recovery-configs-failover create-fail-over" [
+export def "disaster-recovery-configs-fail-over" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1302,7 +1302,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/eventhubs
 # operationId: EventHubs_ListByNamespace
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-eventhubs list-event-hubs" [
+export def "event-hubs-list-by-namespace" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1344,7 +1344,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/migrate
 # operationId: Namespaces_Migrate
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-migrate create" [
+export def "namespaces-migrate" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1390,7 +1390,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/migrationConfigurations
 # operationId: MigrationConfigs_List
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-migration-configurations list-configs" [
+export def "migration-configs-list" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1432,7 +1432,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/migrationConfigurations/{configName}
 # operationId: MigrationConfigs_Delete
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-migration-configurations delete-configs" [
+export def "migration-configs-delete" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1476,7 +1476,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/migrationConfigurations/{configName}
 # operationId: MigrationConfigs_Get
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-migration-configurations get-configs" [
+export def "migration-configs-get" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1521,7 +1521,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/migrationConfigurations/{configName}
 # operationId: MigrationConfigs_CreateAndStartMigration
 # --properties shape: {postMigrationName: string, targetNamespace: string}
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-migration-configurations create-configs-and-start" [
+export def "migration-configs-create-and-start-migration" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1569,7 +1569,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/migrationConfigurations/{configName}/revert
 # operationId: MigrationConfigs_Revert
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-migration-configurations-revert create-configs" [
+export def "migration-configs-revert" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1613,7 +1613,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/migrationConfigurations/{configName}/upgrade
 # operationId: MigrationConfigs_CompleteMigration
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-migration-configurations-upgrade complete-configs" [
+export def "migration-configs-complete-migration" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1657,7 +1657,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/networkRuleSets
 # operationId: Namespaces_ListNetworkRuleSets
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-network-rule-sets list" [
+export def "namespaces-list-network-rule-sets" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1699,7 +1699,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/networkRuleSets/default
 # operationId: Namespaces_GetNetworkRuleSet
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-network-rule-sets-default get" [
+export def "namespaces-get-network-rule-set" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1742,7 +1742,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/networkRuleSets/default
 # operationId: Namespaces_CreateOrUpdateNetworkRuleSet
 # --properties shape: {defaultAction?: "Allow"|"Deny", ipRules?: list, virtualNetworkRules?: list}
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-network-rule-sets-default create-or-update" [
+export def "namespaces-create-or-update-network-rule-set" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1789,7 +1789,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/queues
 # Docs: https://msdn.microsoft.com/en-us/library/azure/mt639415.aspx
 # operationId: Queues_ListByNamespace
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-queues list" [
+export def "queues-list-by-namespace" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1834,7 +1834,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/queues/{queueName}
 # Docs: https://msdn.microsoft.com/en-us/library/azure/mt639411.aspx
 # operationId: Queues_Delete
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-queues delete" [
+export def "queues-delete" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1879,7 +1879,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/queues/{queueName}
 # Docs: https://msdn.microsoft.com/en-us/library/azure/mt639380.aspx
 # operationId: Queues_Get
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-queues get" [
+export def "queues-get" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1925,7 +1925,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 # Docs: https://msdn.microsoft.com/en-us/library/azure/mt639395.aspx
 # operationId: Queues_CreateOrUpdate
 # --properties shape: {autoDeleteOnIdle?: string, countDetails?: record, deadLetteringOnMessageExpiration?: bool, defaultMessageTimeToLive?: string, duplicateDetectionHistoryTimeWindow?: string, enableBatchedOperations?: bool, enableExpress?: bool, enablePartitioning?: bool, forwardDeadLetteredMessagesTo?: string, forwardTo?: string, lockDuration?: string, maxDeliveryCount?: int, maxSizeInMegabytes?: int, requiresDuplicateDetection?: bool, requiresSession?: bool, ... (1 more fields)}
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-queues create-or-update" [
+export def "queues-create-or-update" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1974,7 +1974,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/queues/{queueName}/authorizationRules
 # Docs: https://msdn.microsoft.com/en-us/library/azure/mt705607.aspx
 # operationId: Queues_ListAuthorizationRules
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-queues-authorization-rules list" [
+export def "queues-list-authorization-rules" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -2019,7 +2019,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/queues/{queueName}/authorizationRules/{authorizationRuleName}
 # Docs: https://msdn.microsoft.com/en-us/library/azure/mt705609.aspx
 # operationId: Queues_DeleteAuthorizationRule
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-queues-authorization-rules delete" [
+export def "queues-delete-authorization-rule" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -2066,7 +2066,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/queues/{queueName}/authorizationRules/{authorizationRuleName}
 # Docs: https://msdn.microsoft.com/en-us/library/azure/mt705611.aspx
 # operationId: Queues_GetAuthorizationRule
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-queues-authorization-rules get" [
+export def "queues-get-authorization-rule" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -2113,7 +2113,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/queues/{queueName}/authorizationRules/{authorizationRuleName}
 # operationId: Queues_CreateOrUpdateAuthorizationRule
 # --properties shape: {rights: list<string>}
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-queues-authorization-rules create-or-update" [
+export def "queues-create-or-update-authorization-rule" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -2164,7 +2164,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/queues/{queueName}/authorizationRules/{authorizationRuleName}/ListKeys
 # Docs: https://msdn.microsoft.com/en-us/library/azure/mt705608.aspx
 # operationId: Queues_ListKeys
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-queues-authorization-rules-list-keys list" [
+export def "queues-list-keys" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -2211,7 +2211,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/queues/{queueName}/authorizationRules/{authorizationRuleName}/regenerateKeys
 # Docs: https://msdn.microsoft.com/en-us/library/azure/mt705606.aspx
 # operationId: Queues_RegenerateKeys
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-queues-authorization-rules-regenerate-keys create" [
+export def "queues-regenerate-keys" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -2263,7 +2263,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/topics
 # Docs: https://msdn.microsoft.com/en-us/library/azure/mt639388.aspx
 # operationId: Topics_ListByNamespace
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-topics list" [
+export def "topics-list-by-namespace" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -2308,7 +2308,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/topics/{topicName}
 # Docs: https://msdn.microsoft.com/en-us/library/azure/mt639404.aspx
 # operationId: Topics_Delete
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-topics delete" [
+export def "topics-delete" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -2353,7 +2353,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/topics/{topicName}
 # Docs: https://msdn.microsoft.com/en-us/library/azure/mt639399.aspx
 # operationId: Topics_Get
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-topics get" [
+export def "topics-get" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -2399,7 +2399,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 # Docs: https://msdn.microsoft.com/en-us/library/azure/mt639409.aspx
 # operationId: Topics_CreateOrUpdate
 # --properties shape: {autoDeleteOnIdle?: string, countDetails?: record, defaultMessageTimeToLive?: string, duplicateDetectionHistoryTimeWindow?: string, enableBatchedOperations?: bool, enableExpress?: bool, enablePartitioning?: bool, maxSizeInMegabytes?: int, requiresDuplicateDetection?: bool, status?: "Active"|"Disabled"|"Restoring"|"SendDisabled"|"ReceiveDisabled"|"Creating"|"Deleting"|"Renaming"|"Unknown", supportOrdering?: bool}
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-topics create-or-update" [
+export def "topics-create-or-update" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -2448,7 +2448,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/topics/{topicName}/authorizationRules
 # Docs: https://msdn.microsoft.com/en-us/library/azure/mt720681.aspx
 # operationId: Topics_ListAuthorizationRules
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-topics-authorization-rules list" [
+export def "topics-list-authorization-rules" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -2493,7 +2493,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/topics/{topicName}/authorizationRules/{authorizationRuleName}
 # Docs: https://msdn.microsoft.com/en-us/library/azure/mt720681.aspx
 # operationId: Topics_DeleteAuthorizationRule
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-topics-authorization-rules delete" [
+export def "topics-delete-authorization-rule" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -2540,7 +2540,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/topics/{topicName}/authorizationRules/{authorizationRuleName}
 # Docs: https://msdn.microsoft.com/en-us/library/azure/mt720676.aspx
 # operationId: Topics_GetAuthorizationRule
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-topics-authorization-rules get" [
+export def "topics-get-authorization-rule" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -2588,7 +2588,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 # Docs: https://msdn.microsoft.com/en-us/library/azure/mt720678.aspx
 # operationId: Topics_CreateOrUpdateAuthorizationRule
 # --properties shape: {rights: list<string>}
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-topics-authorization-rules create-or-update" [
+export def "topics-create-or-update-authorization-rule" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -2639,7 +2639,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/topics/{topicName}/authorizationRules/{authorizationRuleName}/ListKeys
 # Docs: https://msdn.microsoft.com/en-us/library/azure/mt720677.aspx
 # operationId: Topics_ListKeys
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-topics-authorization-rules-list-keys list" [
+export def "topics-list-keys" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -2686,7 +2686,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/topics/{topicName}/authorizationRules/{authorizationRuleName}/regenerateKeys
 # Docs: https://msdn.microsoft.com/en-us/library/azure/mt720679.aspx
 # operationId: Topics_RegenerateKeys
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-topics-authorization-rules-regenerate-keys create" [
+export def "topics-regenerate-keys" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -2738,7 +2738,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/topics/{topicName}/subscriptions
 # Docs: https://msdn.microsoft.com/en-us/library/azure/mt639400.aspx
 # operationId: Subscriptions_ListByTopic
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-topics-subscriptions list" [
+export def "subscriptions-list-by-topic" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -2785,7 +2785,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/topics/{topicName}/subscriptions/{subscriptionName}
 # Docs: https://msdn.microsoft.com/en-us/library/azure/mt639381.aspx
 # operationId: Subscriptions_Delete
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-topics-subscriptions delete" [
+export def "subscriptions-delete" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -2832,7 +2832,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/topics/{topicName}/subscriptions/{subscriptionName}
 # Docs: https://msdn.microsoft.com/en-us/library/azure/mt639402.aspx
 # operationId: Subscriptions_Get
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-topics-subscriptions get" [
+export def "subscriptions-get" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -2880,7 +2880,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 # Docs: https://msdn.microsoft.com/en-us/library/azure/mt639385.aspx
 # operationId: Subscriptions_CreateOrUpdate
 # --properties shape: {autoDeleteOnIdle?: string, countDetails?: record, deadLetteringOnFilterEvaluationExceptions?: bool, deadLetteringOnMessageExpiration?: bool, defaultMessageTimeToLive?: string, duplicateDetectionHistoryTimeWindow?: string, enableBatchedOperations?: bool, forwardDeadLetteredMessagesTo?: string, forwardTo?: string, lockDuration?: string, maxDeliveryCount?: int, requiresSession?: bool, ... (1 more fields)}
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-topics-subscriptions create-or-update" [
+export def "subscriptions-create-or-update" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -2930,7 +2930,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/topics/{topicName}/subscriptions/{subscriptionName}/rules
 # operationId: Rules_ListBySubscriptions
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-topics-subscriptions-rules list" [
+export def "rules-list-by-subscriptions" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -2978,7 +2978,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/topics/{topicName}/subscriptions/{subscriptionName}/rules/{ruleName}
 # operationId: Rules_Delete
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-topics-subscriptions-rules delete" [
+export def "rules-delete" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -3026,7 +3026,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/topics/{topicName}/subscriptions/{subscriptionName}/rules/{ruleName}
 # operationId: Rules_Get
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-topics-subscriptions-rules get" [
+export def "rules-get" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -3075,7 +3075,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/topics/{topicName}/subscriptions/{subscriptionName}/rules/{ruleName}
 # operationId: Rules_CreateOrUpdate
 # --properties shape: {action?: record, correlationFilter?: record, filterType?: "SqlFilter"|"CorrelationFilter", sqlFilter?: record}
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-topics-subscriptions-rules create-or-update" [
+export def "rules-create-or-update" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string

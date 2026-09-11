@@ -124,7 +124,7 @@ def key-type-completer [] { ["PrimaryKey" "SecondaryKey"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-relay-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -148,7 +148,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.Relay/operations
 # operationId: Operations_List
-export def "providers-microsoft-relay-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,7 +184,7 @@ export def "providers-microsoft-relay-operations list" [
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Relay/checkNameAvailability
 # operationId: Namespaces_CheckNameAvailability
-export def "subscriptions-providers-microsoft-relay-check-name-availability check-namespaces" [
+export def "namespaces-check-name-availability" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -226,7 +226,7 @@ export def "subscriptions-providers-microsoft-relay-check-name-availability chec
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Relay/namespaces
 # operationId: Namespaces_List
-export def "subscriptions-providers-microsoft-relay-namespaces list" [
+export def "namespaces-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -264,7 +264,7 @@ export def "subscriptions-providers-microsoft-relay-namespaces list" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Relay/namespaces
 # operationId: Namespaces_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces list" [
+export def "namespaces-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -304,7 +304,7 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces l
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Relay/namespaces/{namespaceName}
 # operationId: Namespaces_Delete
-export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces delete" [
+export def "namespaces-delete" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -346,7 +346,7 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces d
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Relay/namespaces/{namespaceName}
 # operationId: Namespaces_Get
-export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces get" [
+export def "namespaces-get" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -389,7 +389,7 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces g
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Relay/namespaces/{namespaceName}
 # operationId: Namespaces_Update
 # --sku shape: {name: "Standard", tier?: "Standard"}
-export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces update" [
+export def "namespaces-update" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -438,7 +438,7 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces u
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Relay/namespaces/{namespaceName}
 # operationId: Namespaces_CreateOrUpdate
 # --sku shape: {name: "Standard", tier?: "Standard"}
-export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces create-or-update" [
+export def "namespaces-create-or-update" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -487,7 +487,7 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces c
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Relay/namespaces/{namespaceName}/authorizationRules
 # operationId: Namespaces_ListAuthorizationRules
-export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-authorization-rules list" [
+export def "namespaces-list-authorization-rules" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -529,7 +529,7 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-a
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Relay/namespaces/{namespaceName}/authorizationRules/{authorizationRuleName}
 # operationId: Namespaces_DeleteAuthorizationRule
-export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-authorization-rules delete" [
+export def "namespaces-delete-authorization-rule" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -573,7 +573,7 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-a
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Relay/namespaces/{namespaceName}/authorizationRules/{authorizationRuleName}
 # operationId: Namespaces_GetAuthorizationRule
-export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-authorization-rules get" [
+export def "namespaces-get-authorization-rule" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -618,7 +618,7 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-a
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Relay/namespaces/{namespaceName}/authorizationRules/{authorizationRuleName}
 # operationId: Namespaces_CreateOrUpdateAuthorizationRule
 # --properties shape: {rights: list<string>}
-export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-authorization-rules create-or-update" [
+export def "namespaces-create-or-update-authorization-rule" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -666,7 +666,7 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-a
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Relay/namespaces/{namespaceName}/authorizationRules/{authorizationRuleName}/listKeys
 # operationId: Namespaces_ListKeys
-export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-authorization-rules-list-keys list" [
+export def "namespaces-list-keys" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -710,7 +710,7 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-a
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Relay/namespaces/{namespaceName}/authorizationRules/{authorizationRuleName}/regenerateKeys
 # operationId: Namespaces_RegenerateKeys
-export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-authorization-rules-regenerate-keys create" [
+export def "namespaces-regenerate-keys" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -759,7 +759,7 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-a
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Relay/namespaces/{namespaceName}/hybridConnections
 # operationId: HybridConnections_ListByNamespace
-export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-hybrid-connections list" [
+export def "hybrid-connections-list-by-namespace" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -801,7 +801,7 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-h
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Relay/namespaces/{namespaceName}/hybridConnections/{hybridConnectionName}
 # operationId: HybridConnections_Delete
-export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-hybrid-connections delete" [
+export def "hybrid-connections-delete" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -845,7 +845,7 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-h
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Relay/namespaces/{namespaceName}/hybridConnections/{hybridConnectionName}
 # operationId: HybridConnections_Get
-export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-hybrid-connections get" [
+export def "hybrid-connections-get" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -890,7 +890,7 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-h
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Relay/namespaces/{namespaceName}/hybridConnections/{hybridConnectionName}
 # operationId: HybridConnections_CreateOrUpdate
 # --properties shape: {requiresClientAuthorization?: bool, userMetadata?: string}
-export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-hybrid-connections create-or-update" [
+export def "hybrid-connections-create-or-update" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -938,7 +938,7 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-h
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Relay/namespaces/{namespaceName}/hybridConnections/{hybridConnectionName}/authorizationRules
 # operationId: HybridConnections_ListAuthorizationRules
-export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-hybrid-connections-authorization-rules list" [
+export def "hybrid-connections-list-authorization-rules" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -982,7 +982,7 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-h
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Relay/namespaces/{namespaceName}/hybridConnections/{hybridConnectionName}/authorizationRules/{authorizationRuleName}
 # operationId: HybridConnections_DeleteAuthorizationRule
-export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-hybrid-connections-authorization-rules delete" [
+export def "hybrid-connections-delete-authorization-rule" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1028,7 +1028,7 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-h
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Relay/namespaces/{namespaceName}/hybridConnections/{hybridConnectionName}/authorizationRules/{authorizationRuleName}
 # operationId: HybridConnections_GetAuthorizationRule
-export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-hybrid-connections-authorization-rules get" [
+export def "hybrid-connections-get-authorization-rule" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1075,7 +1075,7 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-h
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Relay/namespaces/{namespaceName}/hybridConnections/{hybridConnectionName}/authorizationRules/{authorizationRuleName}
 # operationId: HybridConnections_CreateOrUpdateAuthorizationRule
 # --properties shape: {rights: list<string>}
-export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-hybrid-connections-authorization-rules create-or-update" [
+export def "hybrid-connections-create-or-update-authorization-rule" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1125,7 +1125,7 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-h
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Relay/namespaces/{namespaceName}/hybridConnections/{hybridConnectionName}/authorizationRules/{authorizationRuleName}/listKeys
 # operationId: HybridConnections_ListKeys
-export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-hybrid-connections-authorization-rules-list-keys list" [
+export def "hybrid-connections-list-keys" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1171,7 +1171,7 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-h
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Relay/namespaces/{namespaceName}/hybridConnections/{hybridConnectionName}/authorizationRules/{authorizationRuleName}/regenerateKeys
 # operationId: HybridConnections_RegenerateKeys
-export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-hybrid-connections-authorization-rules-regenerate-keys create" [
+export def "hybrid-connections-regenerate-keys" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1222,7 +1222,7 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-h
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Relay/namespaces/{namespaceName}/wcfRelays
 # operationId: WCFRelays_ListByNamespace
-export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-wcf-relays list" [
+export def "wcf-relays-list-by-namespace" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1264,7 +1264,7 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-w
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Relay/namespaces/{namespaceName}/wcfRelays/{relayName}
 # operationId: WCFRelays_Delete
-export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-wcf-relays delete" [
+export def "wcf-relays-delete" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1308,7 +1308,7 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-w
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Relay/namespaces/{namespaceName}/wcfRelays/{relayName}
 # operationId: WCFRelays_Get
-export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-wcf-relays get" [
+export def "wcf-relays-get" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1353,7 +1353,7 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-w
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Relay/namespaces/{namespaceName}/wcfRelays/{relayName}
 # operationId: WCFRelays_CreateOrUpdate
 # --properties shape: {relayType?: "NetTcp"|"Http", requiresClientAuthorization?: bool, requiresTransportSecurity?: bool, userMetadata?: string}
-export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-wcf-relays create-or-update" [
+export def "wcf-relays-create-or-update" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1401,7 +1401,7 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-w
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Relay/namespaces/{namespaceName}/wcfRelays/{relayName}/authorizationRules
 # operationId: WCFRelays_ListAuthorizationRules
-export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-wcf-relays-authorization-rules list" [
+export def "wcf-relays-list-authorization-rules" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1445,7 +1445,7 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-w
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Relay/namespaces/{namespaceName}/wcfRelays/{relayName}/authorizationRules/{authorizationRuleName}
 # operationId: WCFRelays_DeleteAuthorizationRule
-export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-wcf-relays-authorization-rules delete" [
+export def "wcf-relays-delete-authorization-rule" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1491,7 +1491,7 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-w
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Relay/namespaces/{namespaceName}/wcfRelays/{relayName}/authorizationRules/{authorizationRuleName}
 # operationId: WCFRelays_GetAuthorizationRule
-export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-wcf-relays-authorization-rules get" [
+export def "wcf-relays-get-authorization-rule" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1538,7 +1538,7 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-w
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Relay/namespaces/{namespaceName}/wcfRelays/{relayName}/authorizationRules/{authorizationRuleName}
 # operationId: WCFRelays_CreateOrUpdateAuthorizationRule
 # --properties shape: {rights: list<string>}
-export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-wcf-relays-authorization-rules create-or-update" [
+export def "wcf-relays-create-or-update-authorization-rule" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1588,7 +1588,7 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-w
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Relay/namespaces/{namespaceName}/wcfRelays/{relayName}/authorizationRules/{authorizationRuleName}/listKeys
 # operationId: WCFRelays_ListKeys
-export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-wcf-relays-authorization-rules-list-keys list" [
+export def "wcf-relays-list-keys" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1634,7 +1634,7 @@ export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-w
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Relay/namespaces/{namespaceName}/wcfRelays/{relayName}/authorizationRules/{authorizationRuleName}/regenerateKeys
 # operationId: WCFRelays_RegenerateKeys
-export def "subscriptions-resource-groups-providers-microsoft-relay-namespaces-wcf-relays-authorization-rules-regenerate-keys create" [
+export def "wcf-relays-regenerate-keys" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string

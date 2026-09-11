@@ -139,7 +139,7 @@ def search-mode-completer [] { ["FACETED_SEARCH_ONLY" "PRODUCT_SEARCH_ONLY" "SEA
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v2alpha create-catalog-attribute" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "retail-projects-locations-catalogs-attributes-config-add-catalog-attribute" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -164,7 +164,7 @@ export def commands []: nothing -> table {
 # POST /v2alpha/{attributesConfig}:addCatalogAttribute
 # operationId: retail.projects.locations.catalogs.attributesConfig.addCatalogAttribute
 # --catalogAttribute shape: {dynamicFacetableOption?: "DYNAMIC_FACETABLE_OPTION_UNSPECIFIED"|"DYNAMIC_FACETABLE_ENABLED"|"DYNAMIC_FACETABLE_DISABLED", exactSearchableOption?: "EXACT_SEARCHABLE_OPTION_UNSPECIFIED"|"EXACT_SEARCHABLE_ENABLED"|"EXACT_SEARCHABLE_DISABLED", indexableOption?: "INDEXABLE_OPTION_UNSPECIFIED"|"INDEXABLE_ENABLED"|"INDEXABLE_DISABLED", key?: string, recommendationsFilteringOption?: "RECOMMENDATIONS_FILTERING_OPTION_UNSPECIFIED"|"RECOMMENDATIONS_FILTERING_DISABLED"|"RECOMMENDATIONS_FILTERING_ENABLED", ... (2 more fields)}
-export def "v2alpha create-catalog-attribute" [
+export def "retail-projects-locations-catalogs-attributes-config-add-catalog-attribute" [
   attributes_config: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -216,7 +216,7 @@ export def "v2alpha create-catalog-attribute" [
 #
 # POST /v2alpha/{attributesConfig}:batchRemoveCatalogAttributes
 # operationId: retail.projects.locations.catalogs.attributesConfig.batchRemoveCatalogAttributes
-export def "v2alpha delete-batch-catalog-attributes" [
+export def "retail-projects-locations-catalogs-attributes-config-batch-remove-catalog-attributes" [
   attributes_config: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -268,7 +268,7 @@ export def "v2alpha delete-batch-catalog-attributes" [
 #
 # POST /v2alpha/{attributesConfig}:removeCatalogAttribute
 # operationId: retail.projects.locations.catalogs.attributesConfig.removeCatalogAttribute
-export def "v2alpha delete-catalog-attribute" [
+export def "retail-projects-locations-catalogs-attributes-config-remove-catalog-attribute" [
   attributes_config: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -321,7 +321,7 @@ export def "v2alpha delete-catalog-attribute" [
 # POST /v2alpha/{attributesConfig}:replaceCatalogAttribute
 # operationId: retail.projects.locations.catalogs.attributesConfig.replaceCatalogAttribute
 # --catalogAttribute shape: {dynamicFacetableOption?: "DYNAMIC_FACETABLE_OPTION_UNSPECIFIED"|"DYNAMIC_FACETABLE_ENABLED"|"DYNAMIC_FACETABLE_DISABLED", exactSearchableOption?: "EXACT_SEARCHABLE_OPTION_UNSPECIFIED"|"EXACT_SEARCHABLE_ENABLED"|"EXACT_SEARCHABLE_DISABLED", indexableOption?: "INDEXABLE_OPTION_UNSPECIFIED"|"INDEXABLE_ENABLED"|"INDEXABLE_DISABLED", key?: string, recommendationsFilteringOption?: "RECOMMENDATIONS_FILTERING_OPTION_UNSPECIFIED"|"RECOMMENDATIONS_FILTERING_DISABLED"|"RECOMMENDATIONS_FILTERING_ENABLED", ... (2 more fields)}
-export def "v2alpha update-catalog-attribute" [
+export def "retail-projects-locations-catalogs-attributes-config-replace-catalog-attribute" [
   attributes_config: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -374,7 +374,7 @@ export def "v2alpha update-catalog-attribute" [
 #
 # GET /v2alpha/{catalog}:completeQuery
 # operationId: retail.projects.locations.catalogs.completeQuery
-export def "v2alpha complete-list" [
+export def "retail-projects-locations-catalogs-complete-query" [
   catalog: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -430,7 +430,7 @@ export def "v2alpha complete-list" [
 #
 # GET /v2alpha/{catalog}:getDefaultBranch
 # operationId: retail.projects.locations.catalogs.getDefaultBranch
-export def "v2alpha get-default-branch" [
+export def "retail-projects-locations-catalogs-get-default-branch" [
   catalog: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -478,7 +478,7 @@ export def "v2alpha get-default-branch" [
 #
 # POST /v2alpha/{catalog}:setDefaultBranch
 # operationId: retail.projects.locations.catalogs.setDefaultBranch
-export def "v2alpha update-default-branch" [
+export def "retail-projects-locations-catalogs-set-default-branch" [
   catalog: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -532,7 +532,7 @@ export def "v2alpha update-default-branch" [
 #
 # DELETE /v2alpha/{name}
 # operationId: retail.projects.locations.catalogs.servingConfigs.delete
-export def "v2alpha delete" [
+export def "retail-projects-locations-catalogs-serving-configs-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -581,7 +581,7 @@ export def "v2alpha delete" [
 #
 # GET /v2alpha/{name}
 # operationId: retail.projects.operations.get
-export def "v2alpha get" [
+export def "retail-projects-operations-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -631,7 +631,7 @@ export def "v2alpha get" [
 # operationId: retail.projects.locations.catalogs.servingConfigs.patch
 # --dynamicFacetSpec shape: {mode?: "MODE_UNSPECIFIED"|"DISABLED"|"ENABLED"}
 # --personalizationSpec shape: {mode?: "MODE_UNSPECIFIED"|"AUTO"|"DISABLED"}
-export def "v2alpha update" [
+export def "retail-projects-locations-catalogs-serving-configs-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -703,7 +703,7 @@ export def "v2alpha update" [
 # POST /v2alpha/{name}
 # operationId: retail.projects.locations.catalogs.merchantCenterAccountLinks.createMerchantCenterAccountLink
 # --feedFilters item shape: {primaryFeedId?: string, primaryFeedName?: string}
-export def "v2alpha create-merchant-center-account-link" [
+export def "retail-projects-locations-catalogs-merchant-center-account-links-create-merchant-center-account-link" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -760,7 +760,7 @@ export def "v2alpha create-merchant-center-account-link" [
 #
 # GET /v2alpha/{name}/operations
 # operationId: retail.projects.operations.list
-export def "v2alpha-operations list" [
+export def "retail-projects-operations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -811,7 +811,7 @@ export def "v2alpha-operations list" [
 #
 # POST /v2alpha/{name}:pause
 # operationId: retail.projects.locations.catalogs.models.pause
-export def "v2alpha pause" [
+export def "retail-projects-locations-catalogs-models-pause" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -863,7 +863,7 @@ export def "v2alpha pause" [
 #
 # POST /v2alpha/{name}:resume
 # operationId: retail.projects.locations.catalogs.models.resume
-export def "v2alpha create-resume" [
+export def "retail-projects-locations-catalogs-models-resume" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -916,7 +916,7 @@ export def "v2alpha create-resume" [
 # POST /v2alpha/{name}:setInventory
 # operationId: retail.projects.locations.catalogs.branches.products.setInventory
 # --inventory shape: {attributes?: record, audience?: record, availability?: "AVAILABILITY_UNSPECIFIED"|"IN_STOCK"|"OUT_OF_STOCK"|"PREORDER"|"BACKORDER", availableQuantity?: int, availableTime?: string, brands?: list<string>, categories?: list<string>, collectionMemberIds?: list<string>, colorInfo?: record, conditions?: list<string>, description?: string, expireTime?: string, fulfillmentInfo?: list, gtin?: string, id?: string, images?: list, languageCode?: string, materials?: list<string>, name?: string, ... (13 more fields)}
-export def "v2alpha update-inventory" [
+export def "retail-projects-locations-catalogs-branches-products-set-inventory" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -971,7 +971,7 @@ export def "v2alpha update-inventory" [
 #
 # POST /v2alpha/{name}:tune
 # operationId: retail.projects.locations.catalogs.models.tune
-export def "v2alpha create-tune" [
+export def "retail-projects-locations-catalogs-models-tune" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1023,7 +1023,7 @@ export def "v2alpha create-tune" [
 #
 # GET /v2alpha/{parent}/catalogs
 # operationId: retail.projects.locations.catalogs.list
-export def "v2alpha-catalogs list" [
+export def "retail-projects-locations-catalogs-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1074,7 +1074,7 @@ export def "v2alpha-catalogs list" [
 # POST /v2alpha/{parent}/completionData:import
 # operationId: retail.projects.locations.catalogs.completionData.import
 # --inputConfig shape: {bigQuerySource?: record}
-export def "v2alpha-completion-data-import import" [
+export def "retail-projects-locations-catalogs-completion-data-import" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1127,7 +1127,7 @@ export def "v2alpha-completion-data-import import" [
 #
 # GET /v2alpha/{parent}/controls
 # operationId: retail.projects.locations.catalogs.controls.list
-export def "v2alpha-controls list" [
+export def "retail-projects-locations-catalogs-controls-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1180,7 +1180,7 @@ export def "v2alpha-controls list" [
 # operationId: retail.projects.locations.catalogs.controls.create
 # --facetSpec shape: {enableDynamicPosition?: bool, excludedFilterKeys?: list<string>, facetKey?: record, limit?: int}
 # --rule shape: {boostAction?: record, condition?: record, doNotAssociateAction?: record, filterAction?: record, ignoreAction?: record, onewaySynonymsAction?: record, redirectAction?: record, replacementAction?: record, twowaySynonymsAction?: record}
-export def "v2alpha-controls create" [
+export def "retail-projects-locations-catalogs-controls-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1238,7 +1238,7 @@ export def "v2alpha-controls create" [
 #
 # GET /v2alpha/{parent}/merchantCenterAccountLinks
 # operationId: retail.projects.locations.catalogs.merchantCenterAccountLinks.list
-export def "v2alpha-merchant-center-account-links list" [
+export def "retail-projects-locations-catalogs-merchant-center-account-links-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1286,7 +1286,7 @@ export def "v2alpha-merchant-center-account-links list" [
 #
 # GET /v2alpha/{parent}/models
 # operationId: retail.projects.locations.catalogs.models.list
-export def "v2alpha-models list" [
+export def "retail-projects-locations-catalogs-models-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1338,7 +1338,7 @@ export def "v2alpha-models list" [
 # operationId: retail.projects.locations.catalogs.models.create
 # --pageOptimizationConfig shape: {pageOptimizationEventType?: string, panels?: list, restriction?: "RESTRICTION_UNSPECIFIED"|"NO_RESTRICTION"|"UNIQUE_SERVING_CONFIG_RESTRICTION"|"UNIQUE_MODEL_RESTRICTION"|"UNIQUE_MODEL_TYPE_RESTRICTION"}
 # --servingConfigLists item shape: {servingConfigIds?: list<string>}
-export def "v2alpha-models create" [
+export def "retail-projects-locations-catalogs-models-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1398,7 +1398,7 @@ export def "v2alpha-models create" [
 #
 # GET /v2alpha/{parent}/products
 # operationId: retail.projects.locations.catalogs.branches.products.list
-export def "v2alpha-products list" [
+export def "retail-projects-locations-catalogs-branches-products-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1460,7 +1460,7 @@ export def "v2alpha-products list" [
 # --promotions item shape: {promotionId?: string}
 # --rating shape: {averageRating?: float, ratingCount?: int, ratingHistogram?: list<int>}
 # --variants item shape: {attributes?: record, audience?: record, availability?: "AVAILABILITY_UNSPECIFIED"|"IN_STOCK"|"OUT_OF_STOCK"|"PREORDER"|"BACKORDER", availableQuantity?: int, availableTime?: string, brands?: list<string>, categories?: list<string>, collectionMemberIds?: list<string>, colorInfo?: record, conditions?: list<string>, description?: string, expireTime?: string, fulfillmentInfo?: list, gtin?: string, id?: string, images?: list, languageCode?: string, materials?: list<string>, name?: string, ... (13 more fields)}
-export def "v2alpha-products create" [
+export def "retail-projects-locations-catalogs-branches-products-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1546,7 +1546,7 @@ export def "v2alpha-products create" [
 # operationId: retail.projects.locations.catalogs.branches.products.import
 # --errorsConfig shape: {gcsPrefix?: string}
 # --inputConfig shape: {bigQuerySource?: record, gcsSource?: record, productInlineSource?: record}
-export def "v2alpha-products-import import" [
+export def "retail-projects-locations-catalogs-branches-products-import" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1604,7 +1604,7 @@ export def "v2alpha-products-import import" [
 #
 # POST /v2alpha/{parent}/products:purge
 # operationId: retail.projects.locations.catalogs.branches.products.purge
-export def "v2alpha-products-purge create" [
+export def "retail-projects-locations-catalogs-branches-products-purge" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1657,7 +1657,7 @@ export def "v2alpha-products-purge create" [
 #
 # GET /v2alpha/{parent}/servingConfigs
 # operationId: retail.projects.locations.catalogs.servingConfigs.list
-export def "v2alpha-serving-configs list" [
+export def "retail-projects-locations-catalogs-serving-configs-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1709,7 +1709,7 @@ export def "v2alpha-serving-configs list" [
 # operationId: retail.projects.locations.catalogs.servingConfigs.create
 # --dynamicFacetSpec shape: {mode?: "MODE_UNSPECIFIED"|"DISABLED"|"ENABLED"}
 # --personalizationSpec shape: {mode?: "MODE_UNSPECIFIED"|"AUTO"|"DISABLED"}
-export def "v2alpha-serving-configs create" [
+export def "retail-projects-locations-catalogs-serving-configs-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1780,7 +1780,7 @@ export def "v2alpha-serving-configs create" [
 #
 # GET /v2alpha/{parent}/userEvents:collect
 # operationId: retail.projects.locations.catalogs.userEvents.collect
-export def "v2alpha-user-events-collect get" [
+export def "retail-projects-locations-catalogs-user-events-collect" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1835,7 +1835,7 @@ export def "v2alpha-user-events-collect get" [
 # operationId: retail.projects.locations.catalogs.userEvents.import
 # --errorsConfig shape: {gcsPrefix?: string}
 # --inputConfig shape: {bigQuerySource?: record, gcsSource?: record, userEventInlineSource?: record}
-export def "v2alpha-user-events-import import" [
+export def "retail-projects-locations-catalogs-user-events-import" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1888,7 +1888,7 @@ export def "v2alpha-user-events-import import" [
 #
 # POST /v2alpha/{parent}/userEvents:purge
 # operationId: retail.projects.locations.catalogs.userEvents.purge
-export def "v2alpha-user-events-purge create" [
+export def "retail-projects-locations-catalogs-user-events-purge" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1941,7 +1941,7 @@ export def "v2alpha-user-events-purge create" [
 #
 # POST /v2alpha/{parent}/userEvents:rejoin
 # operationId: retail.projects.locations.catalogs.userEvents.rejoin
-export def "v2alpha-user-events-rejoin create" [
+export def "retail-projects-locations-catalogs-user-events-rejoin" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1997,7 +1997,7 @@ export def "v2alpha-user-events-rejoin create" [
 # --productDetails item shape: {product?: record, quantity?: int}
 # --purchaseTransaction shape: {cost?: float, currencyCode?: string, id?: string, revenue?: float, tax?: float}
 # --userInfo shape: {directUserRequest?: bool, ipAddress?: string, userAgent?: string, userId?: string}
-export def "v2alpha-user-events-write create" [
+export def "retail-projects-locations-catalogs-user-events-write" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2071,7 +2071,7 @@ export def "v2alpha-user-events-write create" [
 # POST /v2alpha/{placement}:predict
 # operationId: retail.projects.locations.catalogs.servingConfigs.predict
 # --userEvent shape: {attributes?: record, attributionToken?: string, cartId?: string, completionDetail?: record, entity?: string, eventTime?: string, eventType?: string, experimentIds?: list<string>, filter?: string, offset?: int, orderBy?: string, pageCategories?: list<string>, pageViewId?: string, productDetails?: list, purchaseTransaction?: record, referrerUri?: string, searchQuery?: string, sessionId?: string, uri?: string, userInfo?: record, visitorId?: string}
-export def "v2alpha create-predict" [
+export def "retail-projects-locations-catalogs-serving-configs-predict" [
   placement: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2136,7 +2136,7 @@ export def "v2alpha create-predict" [
 # --queryExpansionSpec shape: {condition?: "CONDITION_UNSPECIFIED"|"DISABLED"|"AUTO", pinUnexpandedResults?: bool}
 # --spellCorrectionSpec shape: {mode?: "MODE_UNSPECIFIED"|"SUGGESTION_ONLY"|"AUTO"}
 # --userInfo shape: {directUserRequest?: bool, ipAddress?: string, userAgent?: string, userId?: string}
-export def "v2alpha list" [
+export def "retail-projects-locations-catalogs-serving-configs-search" [
   placement: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2209,7 +2209,7 @@ export def "v2alpha list" [
 #
 # POST /v2alpha/{product}:addFulfillmentPlaces
 # operationId: retail.projects.locations.catalogs.branches.products.addFulfillmentPlaces
-export def "v2alpha create-fulfillment-places" [
+export def "retail-projects-locations-catalogs-branches-products-add-fulfillment-places" [
   product: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2265,7 +2265,7 @@ export def "v2alpha create-fulfillment-places" [
 # POST /v2alpha/{product}:addLocalInventories
 # operationId: retail.projects.locations.catalogs.branches.products.addLocalInventories
 # --localInventories item shape: {attributes?: record, fulfillmentTypes?: list<string>, placeId?: string, priceInfo?: record}
-export def "v2alpha create-local-inventories" [
+export def "retail-projects-locations-catalogs-branches-products-add-local-inventories" [
   product: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2320,7 +2320,7 @@ export def "v2alpha create-local-inventories" [
 #
 # POST /v2alpha/{product}:removeFulfillmentPlaces
 # operationId: retail.projects.locations.catalogs.branches.products.removeFulfillmentPlaces
-export def "v2alpha delete-fulfillment-places" [
+export def "retail-projects-locations-catalogs-branches-products-remove-fulfillment-places" [
   product: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2375,7 +2375,7 @@ export def "v2alpha delete-fulfillment-places" [
 #
 # POST /v2alpha/{product}:removeLocalInventories
 # operationId: retail.projects.locations.catalogs.branches.products.removeLocalInventories
-export def "v2alpha delete-local-inventories" [
+export def "retail-projects-locations-catalogs-branches-products-remove-local-inventories" [
   product: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2429,7 +2429,7 @@ export def "v2alpha delete-local-inventories" [
 #
 # POST /v2alpha/{servingConfig}:addControl
 # operationId: retail.projects.locations.catalogs.servingConfigs.addControl
-export def "v2alpha create-control" [
+export def "retail-projects-locations-catalogs-serving-configs-add-control" [
   serving_config: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2481,7 +2481,7 @@ export def "v2alpha create-control" [
 #
 # POST /v2alpha/{servingConfig}:removeControl
 # operationId: retail.projects.locations.catalogs.servingConfigs.removeControl
-export def "v2alpha delete-control" [
+export def "retail-projects-locations-catalogs-serving-configs-remove-control" [
   serving_config: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

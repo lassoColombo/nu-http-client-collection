@@ -105,7 +105,7 @@ def accept-completer [] { ["application/json" "application/xml" "text/json" "tex
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "actors-search get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "actor-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -129,7 +129,7 @@ export def commands []: nothing -> table {
 #
 # GET /Actors/Search/{accesstoken}/{Query}
 # operationId: Actor_Get
-export def "actors-search get" [
+export def "actor-get" [
   accesstoken: string
   query: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -168,7 +168,7 @@ export def "actors-search get" [
 #
 # POST /AddActor
 # operationId: AddActor_Post
-export def "add-actor create" [
+export def "add-actor-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -214,7 +214,7 @@ export def "add-actor create" [
 #
 # POST /AddTVShow
 # operationId: AddTVShow_Post
-export def "add-tv-show create" [
+export def "add-tv-show-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -263,7 +263,7 @@ export def "add-tv-show create" [
 #
 # GET /Aliases/ByID/{AccessToken}/{imdbID}
 # operationId: AliasesByID_Get
-export def "aliases-by-id get" [
+export def "aliases-by-id-get" [
   access_token: string
   imdb_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -302,7 +302,7 @@ export def "aliases-by-id get" [
 #
 # GET /Aliases/ByName/{AccessToken}/{Title}
 # operationId: Aliases_Get
-export def "aliases-by-name get" [
+export def "aliases-get" [
   access_token: string
   title: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -341,7 +341,7 @@ export def "aliases-by-name get" [
 #
 # GET /Awards/ByWinner/{AccessToken}/{Nominee}
 # operationId: AwardsbyWinner_Get
-export def "awards-by-winner get-awardsby" [
+export def "awardsby-winner-get" [
   access_token: string
   nominee: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -380,7 +380,7 @@ export def "awards-by-winner get-awardsby" [
 #
 # GET /Awards/ByYear/{Year}
 # operationId: awards_Get
-export def "awards-by-year get" [
+export def "awards-get" [
   year: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -417,7 +417,7 @@ export def "awards-by-year get" [
 #
 # GET /Calendar/ByDate/{AccessToken}/{Date}/{Country}
 # operationId: ScheduleByDate_Get
-export def "calendar-by-date get-schedule" [
+export def "schedule-by-date-get" [
   access_token: string
   date: string
   country: string
@@ -458,7 +458,7 @@ export def "calendar-by-date get-schedule" [
 #
 # GET /Calendar/Countries/{AccessToken}
 # operationId: CalendarCountries_Get
-export def "calendar-countries get" [
+export def "calendar-countries-get" [
   access_token: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -495,7 +495,7 @@ export def "calendar-countries get" [
 #
 # GET /Calendar/Networks/{AccessToken}
 # operationId: CalendarNetworks_Get
-export def "calendar-networks get" [
+export def "calendar-networks-get" [
   access_token: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -532,7 +532,7 @@ export def "calendar-networks get" [
 #
 # GET /Calendar/Seasons/{AccessToken}/{Name}
 # operationId: CalendarShowSeasons_Get
-export def "calendar-seasons get-show" [
+export def "calendar-show-seasons-get" [
   access_token: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -571,7 +571,7 @@ export def "calendar-seasons get-show" [
 #
 # GET /Calendar/Show/Season/{AccessToken}/{Name}/{Season}
 # operationId: CalendarbyShownameSeason_Get
-export def "calendar-show-season get-calendarby-showname" [
+export def "calendarby-showname-season-get" [
   access_token: string
   name: string
   season: string
@@ -612,7 +612,7 @@ export def "calendar-show-season get-calendarby-showname" [
 #
 # GET /Calendar/Show/{AccessToken}/{Name}/{Year}
 # operationId: CalendarByShowName_Get
-export def "calendar-show get-by" [
+export def "calendar-by-show-name-get" [
   access_token: string
   name: string
   year: string
@@ -653,7 +653,7 @@ export def "calendar-show get-by" [
 #
 # GET /Calendar/Today/{AccessToken}
 # operationId: CalendarToday_Get
-export def "calendar-today get" [
+export def "calendar-today-get" [
   access_token: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -690,7 +690,7 @@ export def "calendar-today get" [
 #
 # GET /Cast/ActorBySearch/{AccessToken}/{Actor}
 # operationId: ActorInShows_Get
-export def "cast-actor-by-search get-in-shows" [
+export def "actor-in-shows-get" [
   access_token: string
   actor: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -729,7 +729,7 @@ export def "cast-actor-by-search get-in-shows" [
 #
 # GET /Cast/ByActor/{AccessToken}/{Actor}
 # operationId: CastByActor_Get
-export def "cast-by-actor get" [
+export def "cast-by-actor-get" [
   access_token: string
   actor: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -768,7 +768,7 @@ export def "cast-by-actor get" [
 #
 # GET /Cast/ByTVShow/{accesstoken}/{ShowName}
 # operationId: ActorsInTVShow_Get
-export def "cast-by-tv-show get-actors-in" [
+export def "actors-in-tv-show-get" [
   accesstoken: string
   show_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -807,7 +807,7 @@ export def "cast-by-tv-show get-actors-in" [
 #
 # GET /Crew/ByID/{AccessToken}/{ID}
 # operationId: CrewByID_Get
-export def "crew-by-id get" [
+export def "crew-by-id-get" [
   access_token: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -846,7 +846,7 @@ export def "crew-by-id get" [
 #
 # GET /Crew/ByPerson/{AccessToken}/{PersonName}
 # operationId: CrewByPerson_Get
-export def "crew-by-person get" [
+export def "crew-by-person-get" [
   access_token: string
   person_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -885,7 +885,7 @@ export def "crew-by-person get" [
 #
 # GET /Crew/ByShowName/{AccessToken}/{ShowName}
 # operationId: CrewbyShowname_Get
-export def "crew-by-show-name get-crewby" [
+export def "crewby-showname-get" [
   access_token: string
   show_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -924,7 +924,7 @@ export def "crew-by-show-name get-crewby" [
 #
 # GET /Crew/Search/{AccessToken}/{Phrase}
 # operationId: Crew_Get
-export def "crew-search get" [
+export def "crew-get" [
   access_token: string
   phrase: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -963,7 +963,7 @@ export def "crew-search get" [
 #
 # GET /Episodes/ByID/{AccessToken}/{ID}
 # operationId: EpisodesByID_Get
-export def "episodes-by-id get" [
+export def "episodes-by-id-get" [
   access_token: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1002,7 +1002,7 @@ export def "episodes-by-id get" [
 #
 # GET /Episodes/BySeason/{AccessToken}/{ID}/{Season}
 # operationId: EpisodesBySeason_Get
-export def "episodes-by-season get" [
+export def "episodes-by-season-get" [
   access_token: string
   id: string
   season: string
@@ -1043,7 +1043,7 @@ export def "episodes-by-season get" [
 #
 # GET /Episodes/ByShowName/{AccessToken}/{Showname}
 # operationId: Episodes_Get
-export def "episodes-by-show-name get" [
+export def "episodes-get" [
   access_token: string
   showname: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1082,7 +1082,7 @@ export def "episodes-by-show-name get" [
 #
 # GET /Episodes/LatestSeason/Show/{AccessToken}/{Name}
 # operationId: EpisodesLastAvailableSeasonbyName_Get
-export def "episodes-latest-season-show get-last-available-seasonby" [
+export def "episodes-last-available-seasonby-name-get" [
   access_token: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1121,7 +1121,7 @@ export def "episodes-latest-season-show get-last-available-seasonby" [
 #
 # GET /Episodes/LatestSeason/{AccessToken}/{ID}
 # operationId: EpisodesLastAvailableSeason_Get
-export def "episodes-latest-season get-last-available" [
+export def "episodes-last-available-season-get" [
   access_token: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1160,7 +1160,7 @@ export def "episodes-latest-season get-last-available" [
 #
 # GET /Episodes/SeasonCount/{AccessToken}/{ID}
 # operationId: EpisodesSeasonCount_Get
-export def "episodes-season-count get" [
+export def "episodes-season-count-get" [
   access_token: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1199,7 +1199,7 @@ export def "episodes-season-count get" [
 #
 # GET /GetIMDBid/ByID/{AccessToken}/{Query}
 # operationId: GetIMDBid_GetAsync
-export def "get-imd-bid-by-id get-async" [
+export def "get-imd-bid-get-async" [
   access_token: string
   query: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1238,7 +1238,7 @@ export def "get-imd-bid-by-id get-async" [
 #
 # GET /Images/ByID/{AccessToken}/{imdbID}
 # operationId: Images_Get
-export def "images-by-id get" [
+export def "images-get" [
   access_token: string
   imdb_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1277,7 +1277,7 @@ export def "images-by-id get" [
 #
 # GET /Images/Search/{Accesstoken}/{Query}
 # operationId: ImageSearch_Get
-export def "images-search get" [
+export def "image-search-get" [
   accesstoken: string
   query: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1318,7 +1318,7 @@ export def "images-search get" [
 #
 # GET /Magnets/ByDate/{AccessToken}/{Date}
 # operationId: MagnetsByDate_GetAsync
-export def "magnets-by-date get-async" [
+export def "magnets-by-date-get-async" [
   access_token: string
   date: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1357,7 +1357,7 @@ export def "magnets-by-date get-async" [
 #
 # GET /Magnets/ByIMDB/{AccessToken}/{imdbID}
 # operationId: MagnetsByimdbID_GetAsync
-export def "magnets-by-imdb get-byimdb-async" [
+export def "magnets-byimdb-id-get-async" [
   access_token: string
   imdb_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1396,7 +1396,7 @@ export def "magnets-by-imdb get-byimdb-async" [
 #
 # GET /Magnets/Search/{AccessToken}/{Query}
 # operationId: magnetsMovieByID_GetAsync
-export def "magnets-search get-movie-by-async" [
+export def "magnets-movie-by-id-get-async" [
   access_token: string
   query: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1435,7 +1435,7 @@ export def "magnets-search get-movie-by-async" [
 #
 # GET /Magnets/TVShow/{AccessToken}/{TVShow}
 # operationId: TVShowsearch_Get
-export def "magnets-tv-show get-showsearch" [
+export def "tv-showsearch-get" [
   access_token: string
   tv_show: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1473,7 +1473,7 @@ export def "magnets-tv-show get-showsearch" [
 # GET /Movie/ByID/{accesstoken}/{imdbID}
 #
 # operationId: MovieID_Get
-export def "movie-by-id get" [
+export def "movie-id-get" [
   accesstoken: string
   imdb_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1512,7 +1512,7 @@ export def "movie-by-id get" [
 #
 # GET /Movie/Search/{AccessToken}/{Query}
 # operationId: MovieSearch_GetAsync
-export def "movie-search get-async" [
+export def "movie-search-get-async" [
   access_token: string
   query: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1551,7 +1551,7 @@ export def "movie-search get-async" [
 #
 # GET /Music/Albums/Art/{AccessToken}/{AlbumID}
 # operationId: musicAlbumArt_Get
-export def "music-albums-art get" [
+export def "music-album-art-get" [
   access_token: string
   album_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1590,7 +1590,7 @@ export def "music-albums-art get" [
 #
 # GET /Music/Albums/CoverArt/{AccessToken}/{MBID}
 # operationId: musicCDCovers_Get
-export def "music-albums-cover-art get-cd" [
+export def "music-cd-covers-get" [
   access_token: string
   mbid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1629,7 +1629,7 @@ export def "music-albums-cover-art get-cd" [
 #
 # GET /Music/Albums/MusicBrainzID/{AccessToken}/{MBID}
 # operationId: MusicByMusicBrainz_Get
-export def "music-albums-music-brainz-id get-by" [
+export def "music-by-music-brainz-get" [
   access_token: string
   mbid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1668,7 +1668,7 @@ export def "music-albums-music-brainz-id get-by" [
 #
 # GET /Music/Albums/{AccessToken}/{ArtistID}
 # operationId: musicAlbums_Get
-export def "music-albums get" [
+export def "music-albums-get" [
   access_token: string
   artist_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1707,7 +1707,7 @@ export def "music-albums get" [
 #
 # GET /Music/Artist/Art/ID/{AccessToken}/{ArtistID}
 # operationId: musicCoverArt_Get
-export def "music-artist-art-id get-cover" [
+export def "music-cover-art-get" [
   access_token: string
   artist_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1746,7 +1746,7 @@ export def "music-artist-art-id get-cover" [
 #
 # GET /Music/Artist/Art/Name/{AccessToken}/{Name}
 # operationId: musicCoverArtByName_Get
-export def "music-artist-art-name get-cover-by" [
+export def "music-cover-art-by-name-get" [
   access_token: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1785,7 +1785,7 @@ export def "music-artist-art-name get-cover-by" [
 #
 # GET /Music/Artist/Extended/{AccessToken}/{Name}
 # operationId: musicArtistExtended_Get
-export def "music-artist-extended get" [
+export def "music-artist-extended-get" [
   access_token: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1824,7 +1824,7 @@ export def "music-artist-extended get" [
 #
 # GET /Music/Artist/{AccessToken}/{Name}
 # operationId: Music_Get
-export def "music-artist get" [
+export def "music-get" [
   access_token: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1863,7 +1863,7 @@ export def "music-artist get" [
 #
 # GET /Music/Lyrics/AlbumID/{AccessToken}/{AlbumID}
 # operationId: musicLyricsbyAlbumID_Get
-export def "music-lyrics-album-id get-lyricsby" [
+export def "music-lyricsby-album-id-get" [
   access_token: string
   album_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1902,7 +1902,7 @@ export def "music-lyrics-album-id get-lyricsby" [
 #
 # GET /Music/Lyrics/ByName/{AccessToken}/{Name}
 # operationId: musicLyrics_Get
-export def "music-lyrics-by-name get" [
+export def "music-lyrics-get" [
   access_token: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1941,7 +1941,7 @@ export def "music-lyrics-by-name get" [
 #
 # GET /Music/Lyrics/BySong/{AccessToken}/{Song}
 # operationId: musicLyricsBySong_Get
-export def "music-lyrics-by-song get" [
+export def "music-lyrics-by-song-get" [
   access_token: string
   song: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1980,7 +1980,7 @@ export def "music-lyrics-by-song get" [
 #
 # GET /Music/Tracks/{AccessToken}/{AlbumID}
 # operationId: musicTracks_Get
-export def "music-tracks get" [
+export def "music-tracks-get" [
   access_token: string
   album_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2019,7 +2019,7 @@ export def "music-tracks get" [
 #
 # GET /Music/Videos/{AccessToken}/{ArtistID}
 # operationId: MusiVideos_Get
-export def "music-videos get-musi" [
+export def "musi-videos-get" [
   access_token: string
   artist_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2058,7 +2058,7 @@ export def "music-videos get-musi" [
 #
 # GET /Rating/ByID/{AccessToken}/{imdbID}
 # operationId: Rating_Get
-export def "rating-by-id get" [
+export def "rating-get" [
   access_token: string
   imdb_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2096,7 +2096,7 @@ export def "rating-by-id get" [
 # GET /Rating/ByName/{AccessToken}/{Name}
 #
 # operationId: RatingByName_Get
-export def "rating-by-name get" [
+export def "rating-by-name-get" [
   access_token: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2135,7 +2135,7 @@ export def "rating-by-name get" [
 #
 # GET /Status/{AccessToken}/{Query}
 # operationId: ShowStatus_Get
-export def "status get-show" [
+export def "show-status-get" [
   access_token: string
   query: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2174,7 +2174,7 @@ export def "status get-show" [
 #
 # GET /TV/ByID/{accesstoken}/{imdbID}
 # operationId: TVShowID_Get
-export def "tv-by-id get-show" [
+export def "tv-show-id-get" [
   accesstoken: string
   imdb_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2215,7 +2215,7 @@ export def "tv-by-id get-show" [
 #
 # GET /TV/ByName/{AccessToken}/{Query}
 # operationId: TVShowByName_Get
-export def "tv-by-name get-show" [
+export def "tv-show-by-name-get" [
   access_token: string
   query: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2254,7 +2254,7 @@ export def "tv-by-name get-show" [
 #
 # GET /Trailers/ByID/{AccessToken}/{imdbID}
 # operationId: TrailersbyID_Get
-export def "trailers-by-id get-trailersby" [
+export def "trailersby-id-get" [
   access_token: string
   imdb_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2293,7 +2293,7 @@ export def "trailers-by-id get-trailersby" [
 #
 # GET /Trailers/CountByID/{AccessToken}/{imdbID}
 # operationId: TrailerCountByID_Get
-export def "trailers-count-by-id get" [
+export def "trailer-count-by-id-get" [
   access_token: string
   imdb_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2332,7 +2332,7 @@ export def "trailers-count-by-id get" [
 #
 # GET /Trailers/CountByName/{AccessToken}/{Name}
 # operationId: TrailerCountByName_Get
-export def "trailers-count-by-name get" [
+export def "trailer-count-by-name-get" [
   access_token: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2371,7 +2371,7 @@ export def "trailers-count-by-name get" [
 #
 # GET /Trailers/Search/{AccessToken}/{Phrase}
 # operationId: TrailerSearch_Get
-export def "trailers-search get" [
+export def "trailer-search-get" [
   access_token: string
   phrase: string
   --base-url(-b): string@base-url-completer # API base URL

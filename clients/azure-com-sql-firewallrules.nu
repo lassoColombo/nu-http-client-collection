@@ -110,7 +110,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-sql-servers-firewall-rules list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "firewall-rules-list-by-server" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -134,7 +134,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/firewallRules
 # operationId: FirewallRules_ListByServer
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-firewall-rules list" [
+export def "firewall-rules-list-by-server" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -177,7 +177,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-firewa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/firewallRules
 # operationId: FirewallRules_Replace
 # --values item shape: {properties?: record}
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-firewall-rules update" [
+export def "firewall-rules-replace" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -223,7 +223,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-firewa
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/firewallRules/{firewallRuleName}
 # operationId: FirewallRules_Delete
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-firewall-rules delete" [
+export def "firewall-rules-delete" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -267,7 +267,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-firewa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/firewallRules/{firewallRuleName}
 # operationId: FirewallRules_Get
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-firewall-rules get" [
+export def "firewall-rules-get" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -312,7 +312,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-firewa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/firewallRules/{firewallRuleName}
 # operationId: FirewallRules_CreateOrUpdate
 # --properties shape: {endIpAddress?: string, startIpAddress?: string}
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-firewall-rules create-or-update" [
+export def "firewall-rules-create-or-update" [
   subscription_id: string
   resource_group_name: string
   server_name: string

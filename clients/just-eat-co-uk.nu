@@ -143,7 +143,7 @@ def status-completer [] { ["driver_at_address" "repreparing"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "acceptance-requested create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-acceptance-requested" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -173,7 +173,7 @@ export def commands []: nothing -> table {
 # --PriceBreakdown shape: {Discount?: float, Fees?: record, Items?: float, Taxes?: float, Tips?: float}
 # --Restaurant shape: {Address?: record, Id?: string, Name?: string, PhoneNumber?: string, Reference?: string, TimeZone?: string}
 # --Restrictions item shape: {Type?: "Alcohol"}
-export def "acceptance-requested create" [
+export def "post-acceptance-requested" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -224,7 +224,7 @@ export def "acceptance-requested create" [
 #
 # PUT /attempted-delivery-query-resolved
 # --Resolution shape: {Cancellation?: record, Redelivery?: record, Type?: "order_cancelled"|"redeliver_order"}
-export def "attempted-delivery-query-resolved update" [
+export def "put-attempted-delivery-query-resolved" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -263,7 +263,7 @@ export def "attempted-delivery-query-resolved update" [
 # Get Checkout
 #
 # GET /checkout/{tenant}/{checkoutId}
-export def "checkout get" [
+export def "get-checkout-tenant-checkout-id" [
   tenant: string
   checkout_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -306,7 +306,7 @@ export def "checkout get" [
 # --customer shape: {dateOfBirth?: string, firstName?: string, lastName?: string, phoneNumber?: string}
 # --fulfilment shape: {location?: record, time?: record}
 # --notes item shape: {note: string, type: "delivery"}
-export def "checkout update" [
+export def "patch-checkout-tenant-checkout-id" [
   tenant: string
   checkout_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -352,7 +352,7 @@ export def "checkout update" [
 # Get Available Fulfilment Times
 #
 # GET /checkout/{tenant}/{checkoutId}/fulfilment/availabletimes
-export def "checkout-fulfilment-availabletimes get" [
+export def "get-checkout-tenant-checkout-id-fulfilment-availabletimes" [
   tenant: string
   checkout_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -392,7 +392,7 @@ export def "checkout-fulfilment-availabletimes get" [
 # Get consumers details
 #
 # GET /consumers/{tenant}
-export def "consumers get" [
+export def "get-consumers-tenant" [
   tenant: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -432,7 +432,7 @@ export def "consumers get" [
 #
 # POST /consumers/{tenant}
 # --marketingPreferences item shape: {channelName?: "Email"|"Push"|"Sms", dateUpdated?: string, isSubscribed?: bool}
-export def "consumers create" [
+export def "post-consumers-tenant" [
   tenant: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -476,7 +476,7 @@ export def "consumers create" [
 # Get communication preferences
 #
 # GET /consumers/{tenant}/me/communication-preferences
-export def "consumers-me-communication-preferences list" [
+export def "get-consumers-tenant-me-communication-preferences" [
   tenant: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -511,7 +511,7 @@ export def "consumers-me-communication-preferences list" [
 # Get channel subscriptions for a given consumer's communication preference type
 #
 # GET /consumers/{tenant}/me/communication-preferences/{type}
-export def "consumers-me-communication-preferences get" [
+export def "get-consumers-tenant-me-communication-preferences-type" [
   tenant: string
   type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -548,7 +548,7 @@ export def "consumers-me-communication-preferences get" [
 # Set only the channel subscriptions for a given consumer's communication preference type
 #
 # PUT /consumers/{tenant}/me/communication-preferences/{type}
-export def "consumers-me-communication-preferences update" [
+export def "put-consumers-tenant-me-communication-preferences-type" [
   tenant: string
   type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -589,7 +589,7 @@ export def "consumers-me-communication-preferences update" [
 # Remove subscription of a specific communication preference channel
 #
 # DELETE /consumers/{tenant}/me/communication-preferences/{type}/subscribedChannels/{channel}
-export def "consumers-me-communication-preferences-subscribed-channels delete" [
+export def "delete-consumers-tenant-me-communication-preferences-type-subscribed-channels-channel" [
   tenant: string
   type: string
   channel: string
@@ -632,7 +632,7 @@ export def "consumers-me-communication-preferences-subscribed-channels delete" [
 # Subscribe to a specific communication preference channel
 #
 # POST /consumers/{tenant}/me/communication-preferences/{type}/subscribedChannels/{channel}
-export def "consumers-me-communication-preferences-subscribed-channels create" [
+export def "post-consumers-tenant-me-communication-preferences-type-subscribed-channels-channel" [
   tenant: string
   type: string
   channel: string
@@ -675,7 +675,7 @@ export def "consumers-me-communication-preferences-subscribed-channels create" [
 # Delivery Attempt Failed
 #
 # PUT /delivery-failed
-export def "delivery-failed update" [
+export def "put-delivery-failed" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -715,7 +715,7 @@ export def "delivery-failed update" [
 # Get restaurant delivery fees
 #
 # GET /delivery-fees/{tenant}
-export def "delivery-fees get" [
+export def "get-delivery-fees-tenant" [
   tenant: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -757,7 +757,7 @@ export def "delivery-fees get" [
 # GET /delivery/estimate
 # DEPRECATED
 @deprecated
-export def "delivery-estimate get" [
+export def "get-delivery-estimate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -795,7 +795,7 @@ export def "delivery-estimate get" [
 # Get your delivery pools
 #
 # GET /delivery/pools
-export def "delivery-pools list" [
+export def "get-delivery-pools" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -828,7 +828,7 @@ export def "delivery-pools list" [
 # Create a new delivery pool
 #
 # POST /delivery/pools
-export def "delivery-pools create" [
+export def "post-delivery-pools" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -866,7 +866,7 @@ export def "delivery-pools create" [
 # Delete a delivery pool
 #
 # DELETE /delivery/pools/{deliveryPoolId}
-export def "delivery-pools delete" [
+export def "delete-delivery-pools-delivery-pool-id" [
   delivery_pool_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -901,7 +901,7 @@ export def "delivery-pools delete" [
 # Get an individual delivery pool
 #
 # GET /delivery/pools/{deliveryPoolId}
-export def "delivery-pools get" [
+export def "get-delivery-pools-delivery-pool-id" [
   delivery_pool_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -936,7 +936,7 @@ export def "delivery-pools get" [
 # Modify a delivery pool
 #
 # PATCH /delivery/pools/{deliveryPoolId}
-export def "delivery-pools update-by-delivery-pool-id" [
+export def "patch-delivery-pools-delivery-pool-id" [
   delivery_pool_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -976,7 +976,7 @@ export def "delivery-pools update-by-delivery-pool-id" [
 # Replace an existing delivery pool
 #
 # PUT /delivery/pools/{deliveryPoolId}
-export def "delivery-pools update-by-delivery-pool-id-1" [
+export def "put-delivery-pools-delivery-pool-id" [
   delivery_pool_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1016,7 +1016,7 @@ export def "delivery-pools update-by-delivery-pool-id-1" [
 # Get availability for pickup
 #
 # GET /delivery/pools/{deliveryPoolId}/availability/relative
-export def "delivery-pools-availability-relative get" [
+export def "get-delivery-pools-delivery-pool-id-availability-relative" [
   delivery_pool_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1051,7 +1051,7 @@ export def "delivery-pools-availability-relative get" [
 # Set availability for pickup
 #
 # PUT /delivery/pools/{deliveryPoolId}/availability/relative
-export def "delivery-pools-availability-relative update" [
+export def "put-delivery-pools-delivery-pool-id-availability-relative" [
   delivery_pool_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1097,7 +1097,7 @@ export def "delivery-pools-availability-relative update" [
 # --thursday shape: {closed?: bool, poolTimes: list}
 # --tuesday shape: {closed?: bool, poolTimes: list}
 # --wednesday shape: {closed?: bool, poolTimes: list}
-export def "delivery-pools-hours update" [
+export def "put-delivery-pools-delivery-pool-id-hours" [
   delivery_pool_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1142,7 +1142,7 @@ export def "delivery-pools-hours update" [
 # Remove restaurants from a delivery pool
 #
 # DELETE /delivery/pools/{deliveryPoolId}/restaurants
-export def "delivery-pools-restaurants delete" [
+export def "delete-delivery-pools-delivery-pool-id-restaurants" [
   delivery_pool_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1181,7 +1181,7 @@ export def "delivery-pools-restaurants delete" [
 # Add restaurants to an existing delivery pool
 #
 # PUT /delivery/pools/{deliveryPoolId}/restaurants
-export def "delivery-pools-restaurants update" [
+export def "put-delivery-pools-delivery-pool-id-restaurants" [
   delivery_pool_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1216,7 +1216,7 @@ export def "delivery-pools-restaurants update" [
 # Driver Assigned to Delivery
 #
 # PUT /driver-assigned-to-delivery
-export def "driver-assigned-to-delivery update" [
+export def "put-driver-assigned-to-delivery" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1259,7 +1259,7 @@ export def "driver-assigned-to-delivery update" [
 # Driver at delivery address
 #
 # PUT /driver-at-delivery-address
-export def "driver-at-delivery-address update" [
+export def "put-driver-at-delivery-address" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1302,7 +1302,7 @@ export def "driver-at-delivery-address update" [
 # Driver at restaurant
 #
 # PUT /driver-at-restaurant
-export def "driver-at-restaurant update" [
+export def "put-driver-at-restaurant" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1345,7 +1345,7 @@ export def "driver-at-restaurant update" [
 # Driver has delivered order
 #
 # PUT /driver-has-delivered-order
-export def "driver-has-delivered-order update" [
+export def "put-driver-has-delivered-order" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1389,7 +1389,7 @@ export def "driver-has-delivered-order update" [
 #
 # PUT /driver-location
 # --Location shape: {Latitude: float, Longitude: float}
-export def "driver-location update" [
+export def "put-driver-location" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1428,7 +1428,7 @@ export def "driver-location update" [
 # Driver on their way to delivery address
 #
 # PUT /driver-on-their-way-to-delivery-address
-export def "driver-on-their-way-to-delivery-address update" [
+export def "put-driver-on-their-way-to-delivery-address" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1472,7 +1472,7 @@ export def "driver-on-their-way-to-delivery-address update" [
 #
 # POST /late-order-compensation-query
 # --compensationOptions item shape: {amount?: float, isRecommended?: bool}
-export def "late-order-compensation-query create" [
+export def "post-late-order-compensation-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1512,7 +1512,7 @@ export def "late-order-compensation-query create" [
 # late order query, restaurant response required
 #
 # POST /late-order-query
-export def "late-order-query create" [
+export def "post-late-order-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1552,7 +1552,7 @@ export def "late-order-query create" [
 #
 # POST /menu-ingestion-complete
 # --fault shape: {errors?: list, id?: string}
-export def "menu-ingestion-complete create" [
+export def "post-menu-ingestion-complete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1594,7 +1594,7 @@ export def "menu-ingestion-complete create" [
 # Order accepted
 #
 # POST /order-accepted
-export def "order-accepted create" [
+export def "post-order-accepted" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1633,7 +1633,7 @@ export def "order-accepted create" [
 # Order cancelled
 #
 # POST /order-cancelled
-export def "order-cancelled create" [
+export def "post-order-cancelled" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1672,7 +1672,7 @@ export def "order-cancelled create" [
 # Order Eligible For Restaurant Compensation
 #
 # POST /order-eligible-for-restaurant-compensation
-export def "order-eligible-for-restaurant-compensation create" [
+export def "post-order-eligible-for-restaurant-compensation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1710,7 +1710,7 @@ export def "order-eligible-for-restaurant-compensation create" [
 # Order ready for pickup
 #
 # PUT /order-is-ready-for-pickup
-export def "order-is-ready-for-pickup update" [
+export def "put-order-is-ready-for-pickup" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1754,7 +1754,7 @@ export def "order-is-ready-for-pickup update" [
 # --Payment shape: {Lines?: list}
 # --PriceBreakdown shape: {Discount?: float, Fees?: record, Items?: float, Taxes?: float, Tips?: float}
 # --Restaurant shape: {Address?: record, Id?: string, Name?: string, PhoneNumber?: string, Reference?: string}
-export def "order-ready-for-preparation-async create" [
+export def "post-order-ready-for-preparation-async" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1808,7 +1808,7 @@ export def "order-ready-for-preparation-async create" [
 # --Payment shape: {Lines?: list}
 # --PriceBreakdown shape: {Discount?: float, Fees?: record, Items?: float, Taxes?: float, Tips?: float}
 # --Restaurant shape: {Address?: record, Id?: string, Name?: string, PhoneNumber?: string, Reference?: string}
-export def "order-ready-for-preparation-sync create" [
+export def "post-order-ready-for-preparation-sync" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1856,7 +1856,7 @@ export def "order-ready-for-preparation-sync create" [
 # Order rejected
 #
 # POST /order-rejected
-export def "order-rejected create" [
+export def "post-order-rejected" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1896,7 +1896,7 @@ export def "order-rejected create" [
 # Order requires delivery acceptance
 #
 # PUT /order-requires-delivery-acceptance
-export def "order-requires-delivery-acceptance update" [
+export def "put-order-requires-delivery-acceptance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1933,7 +1933,7 @@ export def "order-requires-delivery-acceptance update" [
 # Order time updated
 #
 # POST /order-time-updated
-export def "order-time-updated create" [
+export def "post-order-time-updated" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1979,7 +1979,7 @@ export def "order-time-updated create" [
 # --Fulfilment shape: {DueAsap?: bool, DueDate: string, Method: "Delivery"|"Collection"}
 # --Items item shape: {Items?: list, Name: string, Quantity: int, Reference: string, TotalPrice: float, UnitPrice?: int}
 # --Payment shape: {Fees?: list, Lines: list, PaidDate?: string, Taxes?: list, Tips?: list}
-export def "orders create" [
+export def "post-orders" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2028,7 +2028,7 @@ export def "orders create" [
 # Update current driver locations (bulk upload)
 #
 # PUT /orders/deliverystate/driverlocation
-export def "orders-deliverystate-driverlocation update" [
+export def "put-orders-deliverystate-driverlocation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2065,7 +2065,7 @@ export def "orders-deliverystate-driverlocation update" [
 # Accept order
 #
 # PUT /orders/{orderId}/accept
-export def "orders-accept update" [
+export def "put-orders-order-id-accept" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2104,7 +2104,7 @@ export def "orders-accept update" [
 # Cancel order
 #
 # PUT /orders/{orderId}/cancel
-export def "orders-cancel update" [
+export def "put-orders-order-id-cancel" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2143,7 +2143,7 @@ export def "orders-cancel update" [
 # Complete order
 #
 # POST /orders/{orderId}/complete
-export def "orders-complete create" [
+export def "post-orders-order-id-complete" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2179,7 +2179,7 @@ export def "orders-complete create" [
 #
 # PUT /orders/{orderId}/deliverystate/atdeliveryaddress
 # --Location shape: {Accuracy?: float, Heading?: float, Latitude: float, Longitude: float, Speed?: float}
-export def "orders-deliverystate-atdeliveryaddress update" [
+export def "put-orders-order-id-deliverystate-atdeliveryaddress" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2220,7 +2220,7 @@ export def "orders-deliverystate-atdeliveryaddress update" [
 #
 # PUT /orders/{orderId}/deliverystate/atrestaurant
 # --Location shape: {Accuracy?: float, Heading?: float, Latitude: float, Longitude: float, Speed?: float}
-export def "orders-deliverystate-atrestaurant update" [
+export def "put-orders-order-id-deliverystate-atrestaurant" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2261,7 +2261,7 @@ export def "orders-deliverystate-atrestaurant update" [
 # Update the driver's estimated time to arrive at the Restaurant
 #
 # PUT /orders/{orderId}/deliverystate/atrestauranteta
-export def "orders-deliverystate-atrestauranteta update" [
+export def "put-orders-order-id-deliverystate-atrestauranteta" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2302,7 +2302,7 @@ export def "orders-deliverystate-atrestauranteta update" [
 #
 # PUT /orders/{orderId}/deliverystate/delivered
 # --Location shape: {Accuracy?: float, Heading?: float, Latitude: float, Longitude: float, Speed?: float}
-export def "orders-deliverystate-delivered update" [
+export def "put-orders-order-id-deliverystate-delivered" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2344,7 +2344,7 @@ export def "orders-deliverystate-delivered update" [
 # PUT /orders/{orderId}/deliverystate/driverassigned
 # --Location shape: {Accuracy?: float, Heading?: float, Latitude: float, Longitude: float, Speed?: float}
 # --VehicleDetails shape: {Vehicle?: string, VehicleRegistration?: string}
-export def "orders-deliverystate-driverassigned update" [
+export def "put-orders-order-id-deliverystate-driverassigned" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2390,7 +2390,7 @@ export def "orders-deliverystate-driverassigned update" [
 #
 # PUT /orders/{orderId}/deliverystate/driverlocation
 # --Location shape: {Accuracy?: float, Heading?: float, Latitude: float, Longitude: float, Speed?: float}
-export def "orders-deliverystate-driverlocation update-by-order-id" [
+export def "put-orders-order-id-deliverystate-driverlocation" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2433,7 +2433,7 @@ export def "orders-deliverystate-driverlocation update-by-order-id" [
 #
 # PUT /orders/{orderId}/deliverystate/driverunassigned
 # --Location: shape: {Accuracy?: float, Heading?: float, Latitude: float, Longitude: float, Speed?: float}
-export def "orders-deliverystate-driverunassigned update" [
+export def "put-orders-order-id-deliverystate-driverunassigned" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2481,7 +2481,7 @@ export def "orders-deliverystate-driverunassigned update" [
 #
 # PUT /orders/{orderId}/deliverystate/onitsway
 # --Location shape: {Accuracy?: float, Heading?: float, Latitude: float, Longitude: float, Speed?: float}
-export def "orders-deliverystate-onitsway update" [
+export def "put-orders-order-id-deliverystate-onitsway" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2522,7 +2522,7 @@ export def "orders-deliverystate-onitsway update" [
 # Update order ETA
 #
 # PUT /orders/{orderId}/duedate
-export def "orders-duedate update" [
+export def "put-orders-order-id-duedate" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2561,7 +2561,7 @@ export def "orders-duedate update" [
 # Ignore order
 #
 # PUT /orders/{orderId}/ignore
-export def "orders-ignore update" [
+export def "put-orders-order-id-ignore" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2596,7 +2596,7 @@ export def "orders-ignore update" [
 # Mark order as ready for collection
 #
 # POST /orders/{orderId}/readyforcollection
-export def "orders-readyforcollection create" [
+export def "post-orders-order-id-readyforcollection" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2631,7 +2631,7 @@ export def "orders-readyforcollection create" [
 # Reject order
 #
 # PUT /orders/{orderId}/reject
-export def "orders-reject update" [
+export def "put-orders-order-id-reject" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2670,7 +2670,7 @@ export def "orders-reject update" [
 # Response to Late Order Update Request
 #
 # POST /orders/{tenant}/{orderId}/consumerqueries/lateorder/restaurantresponse
-export def "orders-consumerqueries-lateorder-restaurantresponse create" [
+export def "post-orders-tenant-order-id-consumerqueries-lateorder-restaurantresponse" [
   tenant: string
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2715,7 +2715,7 @@ export def "orders-consumerqueries-lateorder-restaurantresponse create" [
 # Update late order compensation request with Restaurant response
 #
 # POST /orders/{tenant}/{orderId}/consumerqueries/lateordercompensation/restaurantresponse
-export def "orders-consumerqueries-lateordercompensation-restaurantresponse create" [
+export def "post-orders-tenant-order-id-consumerqueries-lateordercompensation-restaurantresponse" [
   tenant: string
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2762,7 +2762,7 @@ export def "orders-consumerqueries-lateordercompensation-restaurantresponse crea
 # Create Compensation requests
 #
 # POST /orders/{tenant}/{orderId}/restaurantqueries/compensation
-export def "orders-restaurantqueries-compensation create" [
+export def "post-orders-tenant-order-id-restaurantqueries-compensation" [
   tenant: string
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2807,7 +2807,7 @@ export def "orders-restaurantqueries-compensation create" [
 # Customer Requested Redelivery
 #
 # PUT /redelivery-requested
-export def "redelivery-requested update" [
+export def "put-redelivery-requested" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2847,7 +2847,7 @@ export def "redelivery-requested update" [
 # Restaurant Offline Status
 #
 # PUT /restaurant-offline-status
-export def "restaurant-offline-status update" [
+export def "put-restaurant-offline-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2887,7 +2887,7 @@ export def "restaurant-offline-status update" [
 # Restaurant Online Status
 #
 # PUT /restaurant-online-status
-export def "restaurant-online-status update" [
+export def "put-restaurant-online-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2928,7 +2928,7 @@ export def "restaurant-online-status update" [
 #
 # GET /restaurants/bylatlong
 # operationId: SearchByLocation
-export def "restaurants-bylatlong list-by-location" [
+export def "search-by-location" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2972,7 +2972,7 @@ export def "restaurants-bylatlong list-by-location" [
 #
 # GET /restaurants/bypostcode/{postcode}
 # operationId: SearchByPostcode
-export def "restaurants-bypostcode list" [
+export def "search-by-postcode" [
   postcode: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3015,7 +3015,7 @@ export def "restaurants-bypostcode list" [
 # Set ETA for pickup
 #
 # PUT /restaurants/driver/eta
-export def "restaurants-driver-eta update" [
+export def "put-restaurants-driver-eta" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3052,7 +3052,7 @@ export def "restaurants-driver-eta update" [
 # Get product catalogue
 #
 # GET /restaurants/{tenant}/{restaurantId}/catalogue
-export def "restaurants-catalogue get" [
+export def "get-restaurants-tenant-restaurant-id-catalogue" [
   tenant: string
   restaurant_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3089,7 +3089,7 @@ export def "restaurants-catalogue get" [
 # Get all availabilities
 #
 # GET /restaurants/{tenant}/{restaurantId}/catalogue/availabilities
-export def "restaurants-catalogue-availabilities get" [
+export def "get-restaurants-tenant-restaurant-id-catalogue-availabilities" [
   tenant: string
   restaurant_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3129,7 +3129,7 @@ export def "restaurants-catalogue-availabilities get" [
 # Get all categories
 #
 # GET /restaurants/{tenant}/{restaurantId}/catalogue/categories
-export def "restaurants-catalogue-categories get" [
+export def "get-restaurants-tenant-restaurant-id-catalogue-categories" [
   tenant: string
   restaurant_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3169,7 +3169,7 @@ export def "restaurants-catalogue-categories get" [
 # Get all category item IDs
 #
 # GET /restaurants/{tenant}/{restaurantId}/catalogue/categories/{categoryId}/items
-export def "restaurants-catalogue-categories-items get" [
+export def "get-restaurants-tenant-restaurant-id-catalogue-categories-category-id-items" [
   tenant: string
   restaurant_id: string
   category_id: string
@@ -3211,7 +3211,7 @@ export def "restaurants-catalogue-categories-items get" [
 # Get all menu items
 #
 # GET /restaurants/{tenant}/{restaurantId}/catalogue/items
-export def "restaurants-catalogue-items get" [
+export def "get-restaurants-tenant-restaurant-id-catalogue-items" [
   tenant: string
   restaurant_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3251,7 +3251,7 @@ export def "restaurants-catalogue-items get" [
 # Get all menu item deal groups
 #
 # GET /restaurants/{tenant}/{restaurantId}/catalogue/items/{itemId}/dealgroups
-export def "restaurants-catalogue-items-dealgroups get" [
+export def "get-restaurants-tenant-restaurant-id-catalogue-items-item-id-dealgroups" [
   tenant: string
   restaurant_id: string
   item_id: string
@@ -3293,7 +3293,7 @@ export def "restaurants-catalogue-items-dealgroups get" [
 # Get all deal item variations for a deal group
 #
 # GET /restaurants/{tenant}/{restaurantId}/catalogue/items/{itemId}/dealgroups/{dealGroupId}/dealitemvariations
-export def "restaurants-catalogue-items-dealgroups-dealitemvariations get" [
+export def "get-restaurants-tenant-restaurant-id-catalogue-items-item-id-dealgroups-deal-group-id-dealitemvariations" [
   tenant: string
   restaurant_id: string
   item_id: string
@@ -3337,7 +3337,7 @@ export def "restaurants-catalogue-items-dealgroups-dealitemvariations get" [
 # Get all menu item modifier groups
 #
 # GET /restaurants/{tenant}/{restaurantId}/catalogue/items/{itemId}/modifiergroups
-export def "restaurants-catalogue-items-modifiergroups get" [
+export def "get-restaurants-tenant-restaurant-id-catalogue-items-item-id-modifiergroups" [
   tenant: string
   restaurant_id: string
   item_id: string
@@ -3379,7 +3379,7 @@ export def "restaurants-catalogue-items-modifiergroups get" [
 # Get all menu item variations
 #
 # GET /restaurants/{tenant}/{restaurantId}/catalogue/items/{itemId}/variations
-export def "restaurants-catalogue-items-variations get" [
+export def "get-restaurants-tenant-restaurant-id-catalogue-items-item-id-variations" [
   tenant: string
   restaurant_id: string
   item_id: string
@@ -3421,7 +3421,7 @@ export def "restaurants-catalogue-items-variations get" [
 # Get claims
 #
 # GET /restaurants/{tenant}/{restaurantId}/customerclaims
-export def "restaurants-customerclaims list" [
+export def "get-restaurants-tenant-restaurant-id-customerclaims" [
   tenant: string
   restaurant_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3466,7 +3466,7 @@ export def "restaurants-customerclaims list" [
 # Get order claim
 #
 # GET /restaurants/{tenant}/{restaurantId}/customerclaims/{id}
-export def "restaurants-customerclaims get" [
+export def "get-restaurants-tenant-restaurant-id-customerclaims-id" [
   tenant: string
   restaurant_id: string
   id: string
@@ -3510,7 +3510,7 @@ export def "restaurants-customerclaims get" [
 # POST /restaurants/{tenant}/{restaurantId}/customerclaims/{id}/restaurantresponse
 # --items item shape: {decision?: "Accepted"|"Rejected", id?: string}
 # --justification shape: {comments?: string, reason?: "AlreadyRefunded"|"ItemReplaced"|"PartialRefundRequired"|"WasNotMissing"|"WillRedeliver"|"OrderWasHot"|"OrderWasOnTime"|"OrderWasPacked"|"FoodWasIntact"|"AddExtraItem"|"Other"}
-export def "restaurants-customerclaims-restaurantresponse create" [
+export def "post-restaurants-tenant-restaurant-id-customerclaims-id-restaurantresponse" [
   tenant: string
   restaurant_id: string
   id: string
@@ -3560,7 +3560,7 @@ export def "restaurants-customerclaims-restaurantresponse create" [
 # Add reason and comments to the response
 #
 # PUT /restaurants/{tenant}/{restaurantId}/customerclaims/{id}/restaurantresponse/justification
-export def "restaurants-customerclaims-restaurantresponse-justification update" [
+export def "put-restaurants-tenant-restaurant-id-customerclaims-id-restaurantresponse-justification" [
   tenant: string
   restaurant_id: string
   id: string
@@ -3609,7 +3609,7 @@ export def "restaurants-customerclaims-restaurantresponse-justification update" 
 # Get Restaurant Fees
 #
 # GET /restaurants/{tenant}/{restaurantId}/fees
-export def "restaurants-fees get" [
+export def "get-restaurants-tenant-restaurant-id-fees" [
   tenant: string
   restaurant_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3650,7 +3650,7 @@ export def "restaurants-fees get" [
 #
 # PUT /restaurants/{tenant}/{restaurantId}/fees
 # --bagFee shape: {description?: string, serviceTypes?: record}
-export def "restaurants-fees update" [
+export def "put-restaurants-tenant-restaurant-id-fees" [
   tenant: string
   restaurant_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3694,7 +3694,7 @@ export def "restaurants-fees update" [
 # Get the latest version of the restaurant's full menu
 #
 # GET /restaurants/{tenant}/{restaurantId}/menu
-export def "restaurants-menu get" [
+export def "get-restaurants-tenant-restaurant-id-menu" [
   tenant: string
   restaurant_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3738,7 +3738,7 @@ export def "restaurants-menu get" [
 # --availabilities item shape: {description?: string, id?: string, name?: string, serviceTypes?: list<string>, times?: list}
 # --categories item shape: {description?: string, id?: string, name?: string, itemIds?: list<string>}
 # --items item shape: {description?: string, id?: string, labels?: list<string>, name?: string, requireOtherProducts?: bool, type?: "menuItem"|"deal", dealGroups?: list, imageUrl?: string, modifierGroups?: list, variations?: list}
-export def "restaurants-menu update-for-ingestion" [
+export def "put-menu-for-ingestion" [
   tenant: string
   restaurant_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3792,7 +3792,7 @@ export def "restaurants-menu update-for-ingestion" [
 #
 # GET /restaurants/{tenant}/{restaurantId}/ordertimes
 # operationId: GetOrderTimes
-export def "restaurants-ordertimes get-order-times" [
+export def "get-order-times" [
   tenant: string
   restaurant_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3833,7 +3833,7 @@ export def "restaurants-ordertimes get-order-times" [
 #
 # PUT /restaurants/{tenant}/{restaurantId}/ordertimes/{dayOfWeek}/{serviceType}
 # operationId: UpdateOrderTime
-export def "restaurants-ordertimes update-order-time" [
+export def "update-order-time" [
   tenant: string
   restaurant_id: string
   day_of_week: string
@@ -3883,7 +3883,7 @@ export def "restaurants-ordertimes update-order-time" [
 #
 # GET /restaurants/{tenant}/{restaurantId}/servicetimes
 # operationId: getRestaurantServiceTimes
-export def "restaurants-servicetimes get-service-times" [
+export def "get-restaurant-service-times" [
   tenant: string
   restaurant_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3922,7 +3922,7 @@ export def "restaurants-servicetimes get-service-times" [
 # PUT /restaurants/{tenant}/{restaurantId}/servicetimes
 # operationId: putRestaurantServiceTimes
 # --serviceTimes shape: {friday?: any, monday?: any, saturday?: any, sunday?: any, thursday?: any, tuesday?: any, wednesday?: any}
-export def "restaurants-servicetimes update-service-times" [
+export def "put-restaurant-service-times" [
   tenant: string
   restaurant_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3963,7 +3963,7 @@ export def "restaurants-servicetimes update-service-times" [
 # Get auto-completed search terms
 #
 # GET /search/autocomplete/{tenant}
-export def "search-autocomplete get" [
+export def "get-search-autocomplete-tenant" [
   tenant: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4002,7 +4002,7 @@ export def "search-autocomplete get" [
 # Search restaurants
 #
 # GET /search/restaurants/{tenant}
-export def "search-restaurants get" [
+export def "get-search-restaurants-tenant" [
   tenant: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4041,7 +4041,7 @@ export def "search-restaurants get" [
 # Send to POS failed
 #
 # POST /send-to-pos-failed
-export def "send-to-pos-failed create" [
+export def "post-send-to-pos-failed" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4079,7 +4079,7 @@ export def "send-to-pos-failed create" [
 #
 # POST /v1/{tenant}/restaurants/event/offline
 @deprecated --flag category
-export def "restaurants-event-offline create" [
+export def "post-v1-tenant-restaurants-event-offline" [
   tenant: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4130,7 +4130,7 @@ export def "restaurants-event-offline create" [
 # Delete Offline Event
 #
 # DELETE /v1/{tenant}/restaurants/{id}/event/offline
-export def "restaurants-event-offline delete" [
+export def "delete-v1-tenant-restaurants-id-event-offline" [
   tenant: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4171,7 +4171,7 @@ export def "restaurants-event-offline delete" [
 # Delivery Attempt Failed
 #
 # POST /{tenant}/orders/{orderId}/queries/attempteddelivery
-export def "orders-queries-attempteddelivery create" [
+export def "post-tenant-orders-order-id-queries-attempteddelivery" [
   tenant: string
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4215,7 +4215,7 @@ export def "orders-queries-attempteddelivery create" [
 # Request Redelivery of the Order
 #
 # POST /{tenant}/orders/{orderId}/queries/attempteddelivery/resolution/redeliverorder
-export def "orders-queries-attempteddelivery-resolution-redeliverorder create" [
+export def "post-tenant-orders-order-id-queries-attempteddelivery-resolution-redeliverorder" [
   tenant: string
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL

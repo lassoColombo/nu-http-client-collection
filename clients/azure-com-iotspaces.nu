@@ -124,7 +124,7 @@ def api-version-completer [] { ["2017-10-01-preview"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-io-t-spaces-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -148,7 +148,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.IoTSpaces/operations
 # operationId: Operations_List
-export def "providers-microsoft-io-t-spaces-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,7 +184,7 @@ export def "providers-microsoft-io-t-spaces-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.IoTSpaces/Graph
 # operationId: IoTSpaces_List
-export def "subscriptions-providers-microsoft-io-t-spaces-graph list" [
+export def "io-t-spaces-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -222,7 +222,7 @@ export def "subscriptions-providers-microsoft-io-t-spaces-graph list" [
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.IoTSpaces/checkNameAvailability
 # operationId: IoTSpaces_CheckNameAvailability
-export def "subscriptions-providers-microsoft-io-t-spaces-check-name-availability check" [
+export def "io-t-spaces-check-name-availability" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -264,7 +264,7 @@ export def "subscriptions-providers-microsoft-io-t-spaces-check-name-availabilit
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.IoTSpaces/Graph
 # operationId: IoTSpaces_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-io-t-spaces-graph list" [
+export def "io-t-spaces-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -304,7 +304,7 @@ export def "subscriptions-resource-groups-providers-microsoft-io-t-spaces-graph 
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.IoTSpaces/Graph/{resourceName}
 # operationId: IoTSpaces_Delete
-export def "subscriptions-resource-groups-providers-microsoft-io-t-spaces-graph delete" [
+export def "io-t-spaces-delete" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -346,7 +346,7 @@ export def "subscriptions-resource-groups-providers-microsoft-io-t-spaces-graph 
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.IoTSpaces/Graph/{resourceName}
 # operationId: IoTSpaces_Get
-export def "subscriptions-resource-groups-providers-microsoft-io-t-spaces-graph get" [
+export def "io-t-spaces-get" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -389,7 +389,7 @@ export def "subscriptions-resource-groups-providers-microsoft-io-t-spaces-graph 
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.IoTSpaces/Graph/{resourceName}
 # operationId: IoTSpaces_Update
 # --properties shape: {storageContainer?: record}
-export def "subscriptions-resource-groups-providers-microsoft-io-t-spaces-graph update" [
+export def "io-t-spaces-update" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -438,7 +438,7 @@ export def "subscriptions-resource-groups-providers-microsoft-io-t-spaces-graph 
 # operationId: IoTSpaces_CreateOrUpdate
 # --properties shape: {storageContainer?: record}
 # --sku shape: {name: "F1"|"S1"|"S2"|"S3"}
-export def "subscriptions-resource-groups-providers-microsoft-io-t-spaces-graph create-or-update" [
+export def "io-t-spaces-create-or-update" [
   subscription_id: string
   resource_group_name: string
   resource_name: string

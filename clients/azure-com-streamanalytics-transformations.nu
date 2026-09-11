@@ -110,7 +110,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resourcegroups-providers-microsoft-stream-analytics-streamingjobs-transformations get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "transformations-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -134,7 +134,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.StreamAnalytics/streamingjobs/{jobName}/transformations/{transformationName}
 # operationId: Transformations_Get
-export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-streamingjobs-transformations get" [
+export def "transformations-get" [
   subscription_id: string
   resource_group_name: string
   job_name: string
@@ -179,7 +179,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-st
 # PATCH /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.StreamAnalytics/streamingjobs/{jobName}/transformations/{transformationName}
 # operationId: Transformations_Update
 # --properties shape: {query?: string, streamingUnits?: int}
-export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-streamingjobs-transformations update" [
+export def "transformations-update" [
   subscription_id: string
   resource_group_name: string
   job_name: string
@@ -232,7 +232,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-st
 # PUT /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.StreamAnalytics/streamingjobs/{jobName}/transformations/{transformationName}
 # operationId: Transformations_CreateOrReplace
 # --properties shape: {query?: string, streamingUnits?: int}
-export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-streamingjobs-transformations create-or-update" [
+export def "transformations-create-or-replace" [
   subscription_id: string
   resource_group_name: string
   job_name: string

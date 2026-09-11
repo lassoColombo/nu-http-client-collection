@@ -126,7 +126,7 @@ def encoding-completer [] { ["base64" "plain"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "group-audit get-level-logs" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-group-level-audit-logs" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -151,7 +151,7 @@ export def commands []: nothing -> table {
 # POST /group/{groupId}/audit
 # operationId: Get group level audit logs
 # --filters shape: {email?: string, ... (4 more fields)}
-export def "group-audit get-level-logs" [
+export def "get-group-level-audit-logs" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -196,7 +196,7 @@ export def "group-audit get-level-logs" [
 #
 # GET /group/{groupId}/members
 # operationId: List all members in a group
-export def "group-members list" [
+export def "list-all-members-in-a-group" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -232,7 +232,7 @@ export def "group-members list" [
 #
 # POST /group/{groupId}/org/{orgId}/members
 # operationId: Add a member to an organization within a group
-export def "group-org-members create-to-organization-within" [
+export def "add-a-member-to-an-organization-within-a-group" [
   group_id: string
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -275,7 +275,7 @@ export def "group-org-members create-to-organization-within" [
 #
 # GET /group/{groupId}/orgs
 # operationId: List all organizations in a group
-export def "group-orgs list-organizations" [
+export def "list-all-organizations-in-a-group" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -315,7 +315,7 @@ export def "group-orgs list-organizations" [
 #
 # GET /group/{groupId}/roles
 # operationId: List all roles in a group
-export def "group-roles list" [
+export def "list-all-roles-in-a-group" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -351,7 +351,7 @@ export def "group-roles list" [
 #
 # GET /group/{groupId}/settings
 # operationId: View group settings
-export def "group-settings get-view" [
+export def "view-group-settings" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -387,7 +387,7 @@ export def "group-settings get-view" [
 #
 # PUT /group/{groupId}/settings
 # operationId: Update group settings
-export def "group-settings update" [
+export def "update-group-settings" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -423,7 +423,7 @@ export def "group-settings update" [
 #
 # GET /group/{groupId}/tags
 # operationId: List all tags in a group
-export def "group-tags list" [
+export def "list-all-tags-in-a-group" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -462,7 +462,7 @@ export def "group-tags list" [
 #
 # POST /group/{groupId}/tags/delete
 # operationId: Delete tag from group
-export def "group-tags-delete delete" [
+export def "delete-tag-from-group" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -506,7 +506,7 @@ export def "group-tags-delete delete" [
 # operationId: Monitor Dep Graph
 # --depGraph shape: {graph: record, pkgManager: record, pkgs: list, schemaVersion: string}
 # --meta shape: {targetFramework?: string}
-export def "monitor-dep-graph create" [
+export def "monitor-dep-graph" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -547,7 +547,7 @@ export def "monitor-dep-graph create" [
 #
 # POST /org
 # operationId: Create a new organization
-export def "org create-new-organization" [
+export def "create-a-new-organization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -587,7 +587,7 @@ export def "org create-new-organization" [
 #
 # DELETE /org/{orgId}
 # operationId: Remove organization
-export def "org delete-organization" [
+export def "remove-organization" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -624,7 +624,7 @@ export def "org delete-organization" [
 # POST /org/{orgId}/audit
 # operationId: Get organization level audit logs
 # --filters shape: {email?: string, ... (4 more fields)}
-export def "org-audit get-organization-level-logs" [
+export def "get-organization-level-audit-logs" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -670,7 +670,7 @@ export def "org-audit get-organization-level-logs" [
 # POST /org/{orgId}/dependencies
 # operationId: List all dependencies
 # --filters shape: {depStatus?: string, dependencies?: any, languages?: list, licenses?: any, projects?: any, severity?: list}
-export def "org-dependencies list" [
+export def "list-all-dependencies" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -715,7 +715,7 @@ export def "org-dependencies list" [
 #
 # GET /org/{orgId}/entitlement/{entitlementKey}
 # operationId: Get an organization's entitlement value
-export def "org-entitlement get-organizations-value" [
+export def "get-an-organizations-entitlement-value" [
   org_id: string
   entitlement_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -753,7 +753,7 @@ export def "org-entitlement get-organizations-value" [
 #
 # GET /org/{orgId}/entitlements
 # operationId: List all entitlements
-export def "org-entitlements list" [
+export def "list-all-entitlements" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -789,7 +789,7 @@ export def "org-entitlements list" [
 #
 # GET /org/{orgId}/integrations
 # operationId: List
-export def "org-integrations list" [
+export def "list" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -827,7 +827,7 @@ export def "org-integrations list" [
 # operationId: Add new integration
 # --credentials shape: {AcrCredentials?: record, ArtifactoryCrCredentials?: record, AzureReposCredentials?: record, BitbucketCloudCredentials?: record, BitbucketServerCredentials?: record, DigitalOceanCrCredentials?: record, DockerHubCredentials?: record, EcrCredentials?: record, GcrCredentials?: record, GitHubCredentials?: record, GitHubCrCredentials?: record, GitHubEnterpriseCredentials?: record, GitLabCredentials?: record, GitLabCrCredentials?: record, GoogleArtifactCrCredentials?: record, ... (3 more fields)}
 # --broker shape: {enabled?: bool}
-export def "org-integrations create-new" [
+export def "add-new-integration" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -871,7 +871,7 @@ export def "org-integrations create-new" [
 # operationId: Update existing integration
 # --broker shape: {enabled?: bool}
 # --credentials shape: {AcrCredentials?: record, ArtifactoryCrCredentials?: record, AzureReposCredentials?: record, BitbucketCloudCredentials?: record, BitbucketServerCredentials?: record, DigitalOceanCrCredentials?: record, DockerHubCredentials?: record, EcrCredentials?: record, GcrCredentials?: record, GitHubCredentials?: record, GitHubCrCredentials?: record, GitHubEnterpriseCredentials?: record, GitLabCredentials?: record, GitLabCrCredentials?: record, GoogleArtifactCrCredentials?: record, ... (3 more fields)}
-export def "org-integrations update-existing" [
+export def "update-existing-integration" [
   org_id: string
   integration_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -915,7 +915,7 @@ export def "org-integrations update-existing" [
 #
 # DELETE /org/{orgId}/integrations/{integrationId}/authentication
 # operationId: Delete credentials
-export def "org-integrations-authentication delete-credentials" [
+export def "delete-credentials" [
   org_id: string
   integration_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -953,7 +953,7 @@ export def "org-integrations-authentication delete-credentials" [
 #
 # POST /org/{orgId}/integrations/{integrationId}/authentication/provision-token
 # operationId: Provision new broker token
-export def "org-integrations-authentication-provision-token create-new-broker" [
+export def "provision-new-broker-token" [
   org_id: string
   integration_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -991,7 +991,7 @@ export def "org-integrations-authentication-provision-token create-new-broker" [
 #
 # POST /org/{orgId}/integrations/{integrationId}/authentication/switch-token
 # operationId: Switch between broker tokens
-export def "org-integrations-authentication-switch-token create-between-broker" [
+export def "switch-between-broker-tokens" [
   org_id: string
   integration_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1029,7 +1029,7 @@ export def "org-integrations-authentication-switch-token create-between-broker" 
 #
 # POST /org/{orgId}/integrations/{integrationId}/clone
 # operationId: Clone an integration (with settings and credentials)
-export def "org-integrations-clone clone-with-settings-and-credentials" [
+export def "clone-an-integration-with-settings-and-credentials" [
   org_id: string
   integration_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1072,7 +1072,7 @@ export def "org-integrations-clone clone-with-settings-and-credentials" [
 # POST /org/{orgId}/integrations/{integrationId}/import
 # operationId: Import targets
 # --target shape: {branch: string, name: string, owner: string}
-export def "org-integrations-import import-targets" [
+export def "import-targets" [
   org_id: string
   integration_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1116,7 +1116,7 @@ export def "org-integrations-import import-targets" [
 #
 # GET /org/{orgId}/integrations/{integrationId}/import/{jobId}
 # operationId: Get import job details
-export def "org-integrations-import get-job-details" [
+export def "get-import-job-details" [
   org_id: string
   integration_id: string
   job_id: string
@@ -1156,7 +1156,7 @@ export def "org-integrations-import get-job-details" [
 #
 # GET /org/{orgId}/integrations/{integrationId}/settings
 # operationId: Retrieve
-export def "org-integrations-settings get" [
+export def "retrieve" [
   org_id: string
   integration_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1197,7 +1197,7 @@ export def "org-integrations-settings get" [
 # --autoRemediationPrs shape: {backlogPrsEnabled?: bool, freshPrsEnabled?: bool, usePatchRemediation?: bool}
 # --manualRemediationPrs shape: {usePatchRemediation?: bool}
 # --pullRequestAssignment shape: {assignees?: list, enabled?: bool, type?: "auto"|"manual"}
-export def "org-integrations-settings update" [
+export def "update" [
   org_id: string
   integration_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1249,7 +1249,7 @@ export def "org-integrations-settings update" [
 #
 # GET /org/{orgId}/integrations/{type}
 # operationId: Get existing integration by type
-export def "org-integrations get-existing" [
+export def "get-existing-integration-by-type" [
   org_id: string
   type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1287,7 +1287,7 @@ export def "org-integrations get-existing" [
 #
 # POST /org/{orgId}/invite
 # operationId: Invite users
-export def "org-invite create-users" [
+export def "invite-users" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1329,7 +1329,7 @@ export def "org-invite create-users" [
 # POST /org/{orgId}/licenses
 # operationId: List all licenses
 # --filters shape: {dependencies?: any, languages?: list, licenses?: any, projects?: any, severity?: list}
-export def "org-licenses list" [
+export def "list-all-licenses" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1372,7 +1372,7 @@ export def "org-licenses list" [
 #
 # GET /org/{orgId}/members
 # operationId: List Members
-export def "org-members list" [
+export def "list-members" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1410,7 +1410,7 @@ export def "org-members list" [
 #
 # PUT /org/{orgId}/members/update/{userId}
 # operationId: Update a member's role in the organization
-export def "org-members-update update-members-role-in-organization" [
+export def "update-a-members-role-in-the-organization" [
   org_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1452,7 +1452,7 @@ export def "org-members-update update-members-role-in-organization" [
 #
 # DELETE /org/{orgId}/members/{userId}
 # operationId: Remove a member from the organization
-export def "org-members delete-from-organization" [
+export def "remove-a-member-from-the-organization" [
   org_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1490,7 +1490,7 @@ export def "org-members delete-from-organization" [
 #
 # PUT /org/{orgId}/members/{userId}
 # operationId: Update a member in the organization
-export def "org-members update-in-organization" [
+export def "update-a-member-in-the-organization" [
   org_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1531,7 +1531,7 @@ export def "org-members update-in-organization" [
 # Get organization notification settings
 #
 # GET /org/{orgId}/notification-settings
-export def "org-notification-settings get" [
+export def "get-org-org-id-notification-settings" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1571,7 +1571,7 @@ export def "org-notification-settings get" [
 # --project-imported shape: {enabled: bool}
 # --test-limit shape: {enabled: bool}
 # --weekly-report shape: {enabled: bool}
-export def "org-notification-settings update" [
+export def "set-notification-settings" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1614,7 +1614,7 @@ export def "org-notification-settings update" [
 #
 # DELETE /org/{orgId}/project/{projectId}
 # operationId: Delete a project
-export def "org-project delete" [
+export def "delete-a-project" [
   org_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1652,7 +1652,7 @@ export def "org-project delete" [
 #
 # GET /org/{orgId}/project/{projectId}
 # operationId: Retrieve a single project
-export def "org-project get-single" [
+export def "retrieve-a-single-project" [
   org_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1691,7 +1691,7 @@ export def "org-project get-single" [
 # PUT /org/{orgId}/project/{projectId}
 # operationId: Update a project
 # --owner shape: {id?: string}
-export def "org-project update" [
+export def "update-a-project" [
   org_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1734,7 +1734,7 @@ export def "org-project update" [
 #
 # POST /org/{orgId}/project/{projectId}/activate
 # operationId: Activate
-export def "org-project-activate create" [
+export def "activate" [
   org_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1773,7 +1773,7 @@ export def "org-project-activate create" [
 # POST /org/{orgId}/project/{projectId}/aggregated-issues
 # operationId: List all Aggregated issues
 # --filters shape: {exploitMaturity?: list, ignored?: bool, patched?: bool, priority?: record, severities?: list, types?: list}
-export def "org-project-aggregated-issues list" [
+export def "list-all-aggregated-issues" [
   org_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1817,7 +1817,7 @@ export def "org-project-aggregated-issues list" [
 #
 # POST /org/{orgId}/project/{projectId}/attributes
 # operationId: Applying attributes
-export def "org-project-attributes create-applying" [
+export def "applying-attributes" [
   org_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1861,7 +1861,7 @@ export def "org-project-attributes create-applying" [
 #
 # POST /org/{orgId}/project/{projectId}/deactivate
 # operationId: Deactivate
-export def "org-project-deactivate create" [
+export def "deactivate" [
   org_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1899,7 +1899,7 @@ export def "org-project-deactivate create" [
 #
 # GET /org/{orgId}/project/{projectId}/dep-graph
 # operationId: Get Project dependency graph
-export def "org-project-dep-graph get-dependency" [
+export def "get-project-dependency-graph" [
   org_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1938,7 +1938,7 @@ export def "org-project-dep-graph get-dependency" [
 # POST /org/{orgId}/project/{projectId}/history
 # operationId: List all project snapshots
 # --filters shape: {imageId?: string}
-export def "org-project-history list-snapshots" [
+export def "list-all-project-snapshots" [
   org_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1984,7 +1984,7 @@ export def "org-project-history list-snapshots" [
 # POST /org/{orgId}/project/{projectId}/history/{snapshotId}/aggregated-issues
 # operationId: List all project snapshot aggregated issues
 # --filters shape: {exploitMaturity?: list, ignored?: bool, patched?: bool, priority?: record, severities?: list, types?: list}
-export def "org-project-history-aggregated-issues list-snapshot" [
+export def "list-all-project-snapshot-aggregated-issues" [
   org_id: string
   project_id: string
   snapshot_id: string
@@ -2030,7 +2030,7 @@ export def "org-project-history-aggregated-issues list-snapshot" [
 #
 # GET /org/{orgId}/project/{projectId}/history/{snapshotId}/issue/{issueId}/paths
 # operationId: List all project snapshot issue paths
-export def "org-project-history-issue-paths list-snapshot" [
+export def "list-all-project-snapshot-issue-paths" [
   org_id: string
   project_id: string
   snapshot_id: string
@@ -2075,7 +2075,7 @@ export def "org-project-history-issue-paths list-snapshot" [
 #
 # DELETE /org/{orgId}/project/{projectId}/ignore/{issueId}
 # operationId: Delete ignores
-export def "org-project-ignore delete" [
+export def "delete-ignores" [
   org_id: string
   project_id: string
   issue_id: string
@@ -2115,7 +2115,7 @@ export def "org-project-ignore delete" [
 #
 # GET /org/{orgId}/project/{projectId}/ignore/{issueId}
 # operationId: Retrieve ignore
-export def "org-project-ignore get" [
+export def "retrieve-ignore" [
   org_id: string
   project_id: string
   issue_id: string
@@ -2155,7 +2155,7 @@ export def "org-project-ignore get" [
 #
 # POST /org/{orgId}/project/{projectId}/ignore/{issueId}
 # operationId: Add ignore
-export def "org-project-ignore create" [
+export def "add-ignore" [
   org_id: string
   project_id: string
   issue_id: string
@@ -2203,7 +2203,7 @@ export def "org-project-ignore create" [
 #
 # PUT /org/{orgId}/project/{projectId}/ignore/{issueId}
 # operationId: Replace ignores
-export def "org-project-ignore update" [
+export def "replace-ignores" [
   org_id: string
   project_id: string
   issue_id: string
@@ -2243,7 +2243,7 @@ export def "org-project-ignore update" [
 #
 # GET /org/{orgId}/project/{projectId}/ignores
 # operationId: List all ignores
-export def "org-project-ignores list" [
+export def "list-all-ignores" [
   org_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2282,7 +2282,7 @@ export def "org-project-ignores list" [
 # POST /org/{orgId}/project/{projectId}/issue/{issueId}/jira-issue
 # operationId: Create jira issue
 # --fields shape: {issuetype?: record, project?: record, summary?: string}
-export def "org-project-issue-jira-issue create" [
+export def "create-jira-issue" [
   org_id: string
   project_id: string
   issue_id: string
@@ -2326,7 +2326,7 @@ export def "org-project-issue-jira-issue create" [
 #
 # GET /org/{orgId}/project/{projectId}/issue/{issueId}/paths
 # operationId: List all project issue paths
-export def "org-project-issue-paths list" [
+export def "list-all-project-issue-paths" [
   org_id: string
   project_id: string
   issue_id: string
@@ -2370,7 +2370,7 @@ export def "org-project-issue-paths list" [
 #
 # GET /org/{orgId}/project/{projectId}/jira-issues
 # operationId: List all jira issues
-export def "org-project-jira-issues list" [
+export def "list-all-jira-issues" [
   org_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2408,7 +2408,7 @@ export def "org-project-jira-issues list" [
 #
 # PUT /org/{orgId}/project/{projectId}/move
 # operationId: Move project to a different organization
-export def "org-project-move move-to-different-organization" [
+export def "move-project-to-a-different-organization" [
   org_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2450,7 +2450,7 @@ export def "org-project-move move-to-different-organization" [
 #
 # DELETE /org/{orgId}/project/{projectId}/settings
 # operationId: Delete project settings
-export def "org-project-settings delete" [
+export def "delete-project-settings" [
   org_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2488,7 +2488,7 @@ export def "org-project-settings delete" [
 #
 # GET /org/{orgId}/project/{projectId}/settings
 # operationId: List project settings
-export def "org-project-settings list" [
+export def "list-project-settings" [
   org_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2528,7 +2528,7 @@ export def "org-project-settings list" [
 # operationId: Update project settings
 # --autoRemediationPrs shape: {backlogPrsEnabled?: bool, freshPrsEnabled?: bool, usePatchRemediation?: bool}
 # --pullRequestAssignment shape: {assignees?: list, enabled?: bool, type?: "auto"|"manual"}
-export def "org-project-settings update" [
+export def "update-project-settings" [
   org_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2578,7 +2578,7 @@ export def "org-project-settings update" [
 #
 # POST /org/{orgId}/project/{projectId}/tags
 # operationId: Add a tag to a project
-export def "org-project-tags create" [
+export def "add-a-tag-to-a-project" [
   org_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2621,7 +2621,7 @@ export def "org-project-tags create" [
 #
 # POST /org/{orgId}/project/{projectId}/tags/remove
 # operationId: Remove a tag from a project
-export def "org-project-tags-remove delete" [
+export def "remove-a-tag-from-a-project" [
   org_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2665,7 +2665,7 @@ export def "org-project-tags-remove delete" [
 # POST /org/{orgId}/projects
 # operationId: List all projects
 # --filters shape: {attributes?: record, isMonitored?: bool, name?: string, origin?: string, tags?: record, type?: string}
-export def "org-projects list" [
+export def "list-all-projects" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2705,7 +2705,7 @@ export def "org-projects list" [
 #
 # DELETE /org/{orgId}/provision
 # operationId: Delete pending user provision
-export def "org-provision delete-pending-user" [
+export def "delete-pending-user-provision" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2741,7 +2741,7 @@ export def "org-provision delete-pending-user" [
 #
 # GET /org/{orgId}/provision
 # operationId: List pending user provisions
-export def "org-provision list-pending-user" [
+export def "list-pending-user-provisions" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2777,7 +2777,7 @@ export def "org-provision list-pending-user" [
 #
 # POST /org/{orgId}/provision
 # operationId: Provision a user to the organization
-export def "org-provision create-user-to-organization" [
+export def "provision-a-user-to-the-organization" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2819,7 +2819,7 @@ export def "org-provision create-user-to-organization" [
 #
 # GET /org/{orgId}/settings
 # operationId: View organization settings
-export def "org-settings get-view-organization" [
+export def "view-organization-settings" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2856,7 +2856,7 @@ export def "org-settings get-view-organization" [
 # PUT /org/{orgId}/settings
 # operationId: Update organization settings
 # --requestAccess shape: {enabled: bool}
-export def "org-settings update-organization" [
+export def "update-organization-settings" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2896,7 +2896,7 @@ export def "org-settings update-organization" [
 #
 # GET /org/{orgId}/webhooks
 # operationId: List webhooks
-export def "org-webhooks list" [
+export def "list-webhooks" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2932,7 +2932,7 @@ export def "org-webhooks list" [
 #
 # POST /org/{orgId}/webhooks
 # operationId: Create a webhook
-export def "org-webhooks create" [
+export def "create-a-webhook" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2973,7 +2973,7 @@ export def "org-webhooks create" [
 #
 # DELETE /org/{orgId}/webhooks/{webhookId}
 # operationId: Delete a webhook
-export def "org-webhooks delete" [
+export def "delete-a-webhook" [
   org_id: string
   webhook_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3011,7 +3011,7 @@ export def "org-webhooks delete" [
 #
 # GET /org/{orgId}/webhooks/{webhookId}
 # operationId: Retrieve a webhook
-export def "org-webhooks get" [
+export def "retrieve-a-webhook" [
   org_id: string
   webhook_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3049,7 +3049,7 @@ export def "org-webhooks get" [
 #
 # POST /org/{orgId}/webhooks/{webhookId}/ping
 # operationId: Ping a webhook
-export def "org-webhooks-ping ping" [
+export def "ping-a-webhook" [
   org_id: string
   webhook_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3087,7 +3087,7 @@ export def "org-webhooks-ping ping" [
 #
 # GET /orgs
 # operationId: List all the organizations a user belongs to
-export def "orgs list-organizations-user-belongs" [
+export def "list-all-the-organizations-a-user-belongs-to" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3122,7 +3122,7 @@ export def "orgs list-organizations-user-belongs" [
 # POST /reporting/counts/issues
 # operationId: Get issue counts
 # --filters shape: {fixable?: bool, ignored?: bool, isPatchable?: bool, isPinnable?: bool, isUpgradable?: bool, languages?: list, orgs: any, patched?: bool, priorityScore?: record, projects?: any, severity?: list, types?: list}
-export def "reporting-counts-issues get" [
+export def "get-issue-counts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3165,7 +3165,7 @@ export def "reporting-counts-issues get" [
 # POST /reporting/counts/issues/latest
 # operationId: Get latest issue counts
 # --filters shape: {fixable?: bool, ignored?: bool, isPatchable?: bool, isPinnable?: bool, isUpgradable?: bool, languages?: list, orgs: any, patched?: bool, priorityScore?: record, projects?: any, severity?: list, types?: list}
-export def "reporting-counts-issues-latest get" [
+export def "get-latest-issue-counts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3206,7 +3206,7 @@ export def "reporting-counts-issues-latest get" [
 # POST /reporting/counts/projects
 # operationId: Get project counts
 # --filters shape: {languages?: list, orgs: any, projects?: any}
-export def "reporting-counts-projects get" [
+export def "get-project-counts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3248,7 +3248,7 @@ export def "reporting-counts-projects get" [
 # POST /reporting/counts/projects/latest
 # operationId: Get latest project counts
 # --filters shape: {languages?: list, orgs: any, projects?: any}
-export def "reporting-counts-projects-latest get" [
+export def "get-latest-project-counts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3287,7 +3287,7 @@ export def "reporting-counts-projects-latest get" [
 # POST /reporting/counts/tests
 # operationId: Get test counts
 # --filters shape: {isPrivate?: bool, issuesPrevented?: bool, orgs: any, projects?: any}
-export def "reporting-counts-tests get" [
+export def "get-test-counts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3330,7 +3330,7 @@ export def "reporting-counts-tests get" [
 # POST /reporting/issues/
 # operationId: Get list of issues
 # --filters shape: {exploitMaturity?: list, fixable?: bool, identifier?: string, ignored?: bool, isFixed?: bool, isPatchable?: bool, isPinnable?: bool, isUpgradable?: bool, issues?: any, languages?: list, orgs: any, patched?: bool, priorityScore?: record, projects?: any, severity?: list, types?: list}
-export def "reporting-issues get-list" [
+export def "get-list-of-issues" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3377,7 +3377,7 @@ export def "reporting-issues get-list" [
 # POST /reporting/issues/latest
 # operationId: Get list of latest issues
 # --filters shape: {exploitMaturity?: list, fixable?: bool, identifier?: string, ignored?: bool, isFixed?: bool, isPatchable?: bool, isPinnable?: bool, isUpgradable?: bool, issues?: any, languages?: list, orgs: any, patched?: bool, priorityScore?: record, projects?: any, severity?: list, types?: list}
-export def "reporting-issues-latest get-list" [
+export def "get-list-of-latest-issues" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3422,7 +3422,7 @@ export def "reporting-issues-latest get-list" [
 # POST /test/composer
 # operationId: Test composer.json & composer.lock file
 # --files shape: {additional: list, target: record}
-export def "test-composer lock-file" [
+export def "test-composer-json-composer-lock-file" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3462,7 +3462,7 @@ export def "test-composer lock-file" [
 # POST /test/dep-graph
 # operationId: Test Dep Graph
 # --depGraph shape: {graph: record, pkgManager: record, pkgs: list, schemaVersion: string}
-export def "test-dep-graph test" [
+export def "test-dep-graph" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3503,7 +3503,7 @@ export def "test-dep-graph test" [
 # POST /test/golangdep
 # operationId: Test Gopkg.toml & Gopkg.lock File
 # --files shape: {additional: list, target: record}
-export def "test-golangdep lock-file" [
+export def "test-gopkg-toml-gopkg-lock-file" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3545,7 +3545,7 @@ export def "test-golangdep lock-file" [
 # POST /test/govendor
 # operationId: Test vendor.json File
 # --files shape: {target: record}
-export def "test-govendor create-json-file" [
+export def "test-vendor-json-file" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3585,7 +3585,7 @@ export def "test-govendor create-json-file" [
 # POST /test/gradle
 # operationId: Test gradle file
 # --files shape: {target: record}
-export def "test-gradle test-file" [
+export def "test-gradle-file" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3624,7 +3624,7 @@ export def "test-gradle test-file" [
 #
 # GET /test/gradle/{group}/{name}/{version}
 # operationId: Test for issues in a public package by group, name and version
-export def "test-gradle test-for-issues-in-public-package-by-group-and" [
+export def "test-for-issues-in-a-public-package-by-group-name-and-version" [
   group: string
   name: string
   version: string
@@ -3668,7 +3668,7 @@ export def "test-gradle test-for-issues-in-public-package-by-group-and" [
 # POST /test/maven
 # operationId: Test maven file
 # --files shape: {additional?: list, target: record}
-export def "test-maven test-file" [
+export def "test-maven-file" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3710,7 +3710,7 @@ export def "test-maven test-file" [
 #
 # GET /test/maven/{groupId}/{artifactId}/{version}
 # operationId: Test for issues in a public package by group id, artifact id and version
-export def "test-maven test-for-issues-in-public-package-by-group-id-artifact-and" [
+export def "test-for-issues-in-a-public-package-by-group-id-artifact-id-and-version" [
   group_id: string
   artifact_id: string
   version: string
@@ -3754,7 +3754,7 @@ export def "test-maven test-for-issues-in-public-package-by-group-id-artifact-an
 # POST /test/npm
 # operationId: Test package.json & package-lock.json File
 # --files shape: {additional?: list, target: record}
-export def "test-npm create-json-file" [
+export def "test-package-json-package-lock-json-file" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3793,7 +3793,7 @@ export def "test-npm create-json-file" [
 #
 # GET /test/npm/{packageName}/{version}
 # operationId: Test for issues in a public package by name and version
-export def "test-npm test-for-issues-in-public-package-by-name-and" [
+export def "test-for-issues-in-a-public-package-by-name-and-version" [
   package_name: string
   version: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3834,7 +3834,7 @@ export def "test-npm test-for-issues-in-public-package-by-name-and" [
 # POST /test/pip
 # operationId: Test requirements.txt file
 # --files shape: {target: record}
-export def "test-pip create-txt-file" [
+export def "test-requirements-txt-file" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3872,7 +3872,7 @@ export def "test-pip create-txt-file" [
 # Test for issues in a public package by name and version
 #
 # GET /test/pip/{packageName}/{version}
-export def "test-pip get" [
+export def "get-test-pip-package-name-version" [
   package_name: string
   version: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3913,7 +3913,7 @@ export def "test-pip get" [
 # POST /test/rubygems
 # operationId: Test gemfile.lock file
 # --files shape: {target: record}
-export def "test-rubygems lock-file" [
+export def "test-gemfile-lock-file" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3952,7 +3952,7 @@ export def "test-rubygems lock-file" [
 #
 # GET /test/rubygems/{gemName}/{version}
 # operationId: Test for issues in a public gem by name and version
-export def "test-rubygems test-for-issues-in-public-gem-by-name-and" [
+export def "test-for-issues-in-a-public-gem-by-name-and-version" [
   gem_name: string
   version: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3993,7 +3993,7 @@ export def "test-rubygems test-for-issues-in-public-gem-by-name-and" [
 # POST /test/sbt
 # operationId: Test sbt file
 # --files shape: {target: record}
-export def "test-sbt test-file" [
+export def "test-sbt-file" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4031,7 +4031,7 @@ export def "test-sbt test-file" [
 # Test for issues in a public package by group id, artifact id and version
 #
 # GET /test/sbt/{groupId}/{artifactId}/{version}
-export def "test-sbt get" [
+export def "get-test-sbt-group-id-artifact-id-version" [
   group_id: string
   artifact_id: string
   version: string
@@ -4075,7 +4075,7 @@ export def "test-sbt get" [
 # POST /test/yarn
 # operationId: Test package.json & yarn.lock File
 # --files shape: {additional?: list, target: record}
-export def "test-yarn lock-file" [
+export def "test-package-json-yarn-lock-file" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4114,7 +4114,7 @@ export def "test-yarn lock-file" [
 #
 # GET /user/me
 # operationId: Get My Details
-export def "user-me get-my-details" [
+export def "get-my-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4148,7 +4148,7 @@ export def "user-me get-my-details" [
 #
 # GET /user/me/notification-settings/org/{orgId}
 # operationId: Get organization notification settings
-export def "user-me-notification-settings-org get-organization" [
+export def "get-organization-notification-settings" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4188,7 +4188,7 @@ export def "user-me-notification-settings-org get-organization" [
 # --project-imported shape: {enabled: bool}
 # --test-limit shape: {enabled: bool}
 # --weekly-report shape: {enabled: bool}
-export def "user-me-notification-settings-org update-modify-organization" [
+export def "modify-organization-notification-settings" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4231,7 +4231,7 @@ export def "user-me-notification-settings-org update-modify-organization" [
 #
 # GET /user/me/notification-settings/org/{orgId}/project/{projectId}
 # operationId: Get project notification settings
-export def "user-me-notification-settings-org-project get" [
+export def "get-project-notification-settings" [
   org_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4270,7 +4270,7 @@ export def "user-me-notification-settings-org-project get" [
 # PUT /user/me/notification-settings/org/{orgId}/project/{projectId}
 # operationId: Modify project notification settings
 # --new-issues-remediations shape: {enabled: bool, issueSeverity: "all"|"high", issueType: "all"|"vuln"|"license"|"none"}
-export def "user-me-notification-settings-org-project update-modify" [
+export def "modify-project-notification-settings" [
   org_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4312,7 +4312,7 @@ export def "user-me-notification-settings-org-project update-modify" [
 #
 # GET /user/{userId}
 # operationId: Get User Details
-export def "user get-details" [
+export def "get-user-details" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

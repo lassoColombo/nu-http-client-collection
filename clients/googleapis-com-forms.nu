@@ -123,7 +123,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "forms create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "forms-forms-create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -150,7 +150,7 @@ export def commands []: nothing -> table {
 # --info shape: {description?: string, title?: string}
 # --items item shape: {description?: string, imageItem?: record, itemId?: string, pageBreakItem?: record, questionGroupItem?: record, questionItem?: record, textItem?: record, title?: string, videoItem?: record}
 # --settings shape: {quizSettings?: record}
-export def "forms create" [
+export def "forms-forms-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -202,7 +202,7 @@ export def "forms create" [
 #
 # GET /v1/forms/{formId}
 # operationId: forms.forms.get
-export def "forms get" [
+export def "forms-forms-get" [
   form_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -250,7 +250,7 @@ export def "forms get" [
 #
 # GET /v1/forms/{formId}/responses
 # operationId: forms.forms.responses.list
-export def "forms-responses list" [
+export def "forms-forms-responses-list" [
   form_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -301,7 +301,7 @@ export def "forms-responses list" [
 #
 # GET /v1/forms/{formId}/responses/{responseId}
 # operationId: forms.forms.responses.get
-export def "forms-responses get" [
+export def "forms-forms-responses-get" [
   form_id: string
   response_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -351,7 +351,7 @@ export def "forms-responses get" [
 #
 # GET /v1/forms/{formId}/watches
 # operationId: forms.forms.watches.list
-export def "forms-watches list" [
+export def "forms-forms-watches-list" [
   form_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -400,7 +400,7 @@ export def "forms-watches list" [
 # POST /v1/forms/{formId}/watches
 # operationId: forms.forms.watches.create
 # --watch shape: {eventType?: "EVENT_TYPE_UNSPECIFIED"|"SCHEMA"|"RESPONSES", target?: record}
-export def "forms-watches create" [
+export def "forms-forms-watches-create" [
   form_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -453,7 +453,7 @@ export def "forms-watches create" [
 #
 # DELETE /v1/forms/{formId}/watches/{watchId}
 # operationId: forms.forms.watches.delete
-export def "forms-watches delete" [
+export def "forms-forms-watches-delete" [
   form_id: string
   watch_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -503,7 +503,7 @@ export def "forms-watches delete" [
 #
 # POST /v1/forms/{formId}/watches/{watchId}:renew
 # operationId: forms.forms.watches.renew
-export def "forms-watches create-renew" [
+export def "forms-forms-watches-renew" [
   form_id: string
   watch_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -559,7 +559,7 @@ export def "forms-watches create-renew" [
 # operationId: forms.forms.batchUpdate
 # --requests item shape: {createItem?: record, deleteItem?: record, moveItem?: record, updateFormInfo?: record, updateItem?: record, updateSettings?: record}
 # --writeControl shape: {requiredRevisionId?: string, targetRevisionId?: string}
-export def "forms update-batch" [
+export def "forms-forms-batch-update" [
   form_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

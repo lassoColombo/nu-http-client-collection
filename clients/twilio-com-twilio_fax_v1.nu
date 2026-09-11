@@ -105,7 +105,7 @@ def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "faxes list-fax" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-fax" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -129,7 +129,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/Faxes
 # operationId: ListFax
-export def "faxes list-fax" [
+export def "list-fax" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -169,7 +169,7 @@ export def "faxes list-fax" [
 #
 # GET /v1/Faxes/{FaxSid}/Media
 # operationId: ListFaxMedia
-export def "faxes-media list-fax" [
+export def "list-fax-media" [
   fax_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -207,7 +207,7 @@ export def "faxes-media list-fax" [
 #
 # DELETE /v1/Faxes/{FaxSid}/Media/{Sid}
 # operationId: DeleteFaxMedia
-export def "faxes-media delete-fax" [
+export def "delete-fax-media" [
   fax_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -245,7 +245,7 @@ export def "faxes-media delete-fax" [
 #
 # GET /v1/Faxes/{FaxSid}/Media/{Sid}
 # operationId: FetchFaxMedia
-export def "faxes-media get-fax" [
+export def "fetch-fax-media" [
   fax_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -283,7 +283,7 @@ export def "faxes-media get-fax" [
 #
 # DELETE /v1/Faxes/{Sid}
 # operationId: DeleteFax
-export def "faxes delete-fax" [
+export def "delete-fax" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -319,7 +319,7 @@ export def "faxes delete-fax" [
 #
 # GET /v1/Faxes/{Sid}
 # operationId: FetchFax
-export def "faxes get-fax" [
+export def "fetch-fax" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

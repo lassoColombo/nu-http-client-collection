@@ -122,7 +122,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-notification-hubs-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.NotificationHubs/operations
 # operationId: Operations_List
-export def "providers-microsoft-notification-hubs-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -183,7 +183,7 @@ export def "providers-microsoft-notification-hubs-operations list" [
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.NotificationHubs/checkNamespaceAvailability
 # operationId: Namespaces_CheckAvailability
 # --sku shape: {capacity?: int, family?: string, name: "Free"|"Basic"|"Standard", size?: string, tier?: string}
-export def "subscriptions-providers-microsoft-notification-hubs-check-namespace-availability check" [
+export def "namespaces-check-availability" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -229,7 +229,7 @@ export def "subscriptions-providers-microsoft-notification-hubs-check-namespace-
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.NotificationHubs/namespaces
 # operationId: Namespaces_ListAll
-export def "subscriptions-providers-microsoft-notification-hubs-namespaces list" [
+export def "namespaces-list-all" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -267,7 +267,7 @@ export def "subscriptions-providers-microsoft-notification-hubs-namespaces list"
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NotificationHubs/namespaces
 # operationId: Namespaces_List
-export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces list" [
+export def "namespaces-list" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -308,7 +308,7 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NotificationHubs/namespaces/{namespaceName}
 # Docs: http://msdn.microsoft.com/en-us/library/windowsazure/jj856296.aspx
 # operationId: Namespaces_Delete
-export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces delete" [
+export def "namespaces-delete" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -350,7 +350,7 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NotificationHubs/namespaces/{namespaceName}
 # operationId: Namespaces_Get
-export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces get" [
+export def "namespaces-get" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -393,7 +393,7 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NotificationHubs/namespaces/{namespaceName}
 # operationId: Namespaces_Patch
 # --sku shape: {capacity?: int, family?: string, name: "Free"|"Basic"|"Standard", size?: string, tier?: string}
-export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces update" [
+export def "namespaces-patch" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -443,7 +443,7 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
 # operationId: Namespaces_CreateOrUpdate
 # --properties shape: {createdAt?: string, critical?: bool, dataCenter?: string, enabled?: bool, name?: string, namespaceType?: "Messaging"|"NotificationHub", provisioningState?: string, region?: string, scaleUnit?: string, serviceBusEndpoint?: string, status?: string, subscriptionId?: string, updatedAt?: string}
 # --sku shape: {capacity?: int, family?: string, name: "Free"|"Basic"|"Standard", size?: string, tier?: string}
-export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces create-or-update" [
+export def "namespaces-create-or-update" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -492,7 +492,7 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NotificationHubs/namespaces/{namespaceName}/AuthorizationRules
 # operationId: Namespaces_ListAuthorizationRules
-export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces-authorization-rules list" [
+export def "namespaces-list-authorization-rules" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -534,7 +534,7 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NotificationHubs/namespaces/{namespaceName}/AuthorizationRules/{authorizationRuleName}
 # operationId: Namespaces_DeleteAuthorizationRule
-export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces-authorization-rules delete" [
+export def "namespaces-delete-authorization-rule" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -578,7 +578,7 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NotificationHubs/namespaces/{namespaceName}/AuthorizationRules/{authorizationRuleName}
 # operationId: Namespaces_GetAuthorizationRule
-export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces-authorization-rules get" [
+export def "namespaces-get-authorization-rule" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -623,7 +623,7 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NotificationHubs/namespaces/{namespaceName}/AuthorizationRules/{authorizationRuleName}
 # operationId: Namespaces_CreateOrUpdateAuthorizationRule
 # --properties shape: {rights?: list<string>}
-export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces-authorization-rules create-or-update" [
+export def "namespaces-create-or-update-authorization-rule" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -671,7 +671,7 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NotificationHubs/namespaces/{namespaceName}/AuthorizationRules/{authorizationRuleName}/listKeys
 # operationId: Namespaces_ListKeys
-export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces-authorization-rules-list-keys list" [
+export def "namespaces-list-keys" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -715,7 +715,7 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NotificationHubs/namespaces/{namespaceName}/AuthorizationRules/{authorizationRuleName}/regenerateKeys
 # operationId: Namespaces_RegenerateKeys
-export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces-authorization-rules-regenerate-keys create" [
+export def "namespaces-regenerate-keys" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -764,7 +764,7 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NotificationHubs/namespaces/{namespaceName}/checkNotificationHubAvailability
 # operationId: NotificationHubs_CheckNotificationHubAvailability
 # --sku shape: {capacity?: int, family?: string, name: "Free"|"Basic"|"Standard", size?: string, tier?: string}
-export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces-check-notification-hub-availability check" [
+export def "notification-hubs-check-notification-hub-availability" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -814,7 +814,7 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NotificationHubs/namespaces/{namespaceName}/notificationHubs
 # operationId: NotificationHubs_List
-export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces-notification-hubs list" [
+export def "notification-hubs-list" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -856,7 +856,7 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NotificationHubs/namespaces/{namespaceName}/notificationHubs/{notificationHubName}
 # operationId: NotificationHubs_Delete
-export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces-notification-hubs delete" [
+export def "notification-hubs-delete" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -900,7 +900,7 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NotificationHubs/namespaces/{namespaceName}/notificationHubs/{notificationHubName}
 # operationId: NotificationHubs_Get
-export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces-notification-hubs get" [
+export def "notification-hubs-get" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -946,7 +946,7 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
 # operationId: NotificationHubs_Patch
 # --properties shape: {admCredential?: any, apnsCredential?: any, authorizationRules?: list, baiduCredential?: any, gcmCredential?: any, mpnsCredential?: any, name?: string, registrationTtl?: string, wnsCredential?: any}
 # --sku shape: {capacity?: int, family?: string, name: "Free"|"Basic"|"Standard", size?: string, tier?: string}
-export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces-notification-hubs update" [
+export def "notification-hubs-patch" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -999,7 +999,7 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
 # operationId: NotificationHubs_CreateOrUpdate
 # --properties shape: {admCredential?: any, apnsCredential?: any, authorizationRules?: list, baiduCredential?: any, gcmCredential?: any, mpnsCredential?: any, name?: string, registrationTtl?: string, wnsCredential?: any}
 # --sku shape: {capacity?: int, family?: string, name: "Free"|"Basic"|"Standard", size?: string, tier?: string}
-export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces-notification-hubs create-or-update" [
+export def "notification-hubs-create-or-update" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1050,7 +1050,7 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NotificationHubs/namespaces/{namespaceName}/notificationHubs/{notificationHubName}/AuthorizationRules
 # operationId: NotificationHubs_ListAuthorizationRules
-export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces-notification-hubs-authorization-rules list" [
+export def "notification-hubs-list-authorization-rules" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1094,7 +1094,7 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NotificationHubs/namespaces/{namespaceName}/notificationHubs/{notificationHubName}/AuthorizationRules/{authorizationRuleName}
 # operationId: NotificationHubs_DeleteAuthorizationRule
-export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces-notification-hubs-authorization-rules delete" [
+export def "notification-hubs-delete-authorization-rule" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1140,7 +1140,7 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NotificationHubs/namespaces/{namespaceName}/notificationHubs/{notificationHubName}/AuthorizationRules/{authorizationRuleName}
 # operationId: NotificationHubs_GetAuthorizationRule
-export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces-notification-hubs-authorization-rules get" [
+export def "notification-hubs-get-authorization-rule" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1187,7 +1187,7 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NotificationHubs/namespaces/{namespaceName}/notificationHubs/{notificationHubName}/AuthorizationRules/{authorizationRuleName}
 # operationId: NotificationHubs_CreateOrUpdateAuthorizationRule
 # --properties shape: {rights?: list<string>}
-export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces-notification-hubs-authorization-rules create-or-update" [
+export def "notification-hubs-create-or-update-authorization-rule" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1237,7 +1237,7 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NotificationHubs/namespaces/{namespaceName}/notificationHubs/{notificationHubName}/AuthorizationRules/{authorizationRuleName}/listKeys
 # operationId: NotificationHubs_ListKeys
-export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces-notification-hubs-authorization-rules-list-keys list" [
+export def "notification-hubs-list-keys" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1283,7 +1283,7 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NotificationHubs/namespaces/{namespaceName}/notificationHubs/{notificationHubName}/AuthorizationRules/{authorizationRuleName}/regenerateKeys
 # operationId: NotificationHubs_RegenerateKeys
-export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces-notification-hubs-authorization-rules-regenerate-keys create" [
+export def "notification-hubs-regenerate-keys" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1333,7 +1333,7 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NotificationHubs/namespaces/{namespaceName}/notificationHubs/{notificationHubName}/debugsend
 # operationId: NotificationHubs_DebugSend
-export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces-notification-hubs-debugsend send-debug" [
+export def "notification-hubs-debug-send" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1381,7 +1381,7 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NotificationHubs/namespaces/{namespaceName}/notificationHubs/{notificationHubName}/pnsCredentials
 # operationId: NotificationHubs_GetPnsCredentials
-export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces-notification-hubs-pns-credentials get" [
+export def "notification-hubs-get-pns-credentials" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string

@@ -149,7 +149,7 @@ def rule-type-completer-1 [] { ["amqp" "amqp/external" "aws/kinesis" "aws/lambda
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts-apps get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-accounts-account-id-apps" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -172,7 +172,7 @@ export def commands []: nothing -> table {
 # Lists apps
 #
 # GET /accounts/{account_id}/apps
-export def "accounts-apps get" [
+export def "get-accounts-account-id-apps" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -207,7 +207,7 @@ export def "accounts-apps get" [
 # Creates an app
 #
 # POST /accounts/{account_id}/apps
-export def "accounts-apps create" [
+export def "post-accounts-account-id-apps" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -252,7 +252,7 @@ export def "accounts-apps create" [
 # Lists app keys
 #
 # GET /apps/{app_id}/keys
-export def "apps-keys get" [
+export def "get-apps-app-id-keys" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -287,7 +287,7 @@ export def "apps-keys get" [
 # Creates a key
 #
 # POST /apps/{app_id}/keys
-export def "apps-keys create" [
+export def "post-apps-app-id-keys" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -328,7 +328,7 @@ export def "apps-keys create" [
 # Updates a key
 #
 # PATCH /apps/{app_id}/keys/{key_id}
-export def "apps-keys update" [
+export def "patch-apps-app-id-keys-key-id" [
   app_id: string
   key_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -371,7 +371,7 @@ export def "apps-keys update" [
 # Revokes a key
 #
 # POST /apps/{app_id}/keys/{key_id}/revoke
-export def "apps-keys-revoke create" [
+export def "post-apps-app-id-keys-key-id-revoke" [
   app_id: string
   key_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -408,7 +408,7 @@ export def "apps-keys-revoke create" [
 # Lists namespaces
 #
 # GET /apps/{app_id}/namespaces
-export def "apps-namespaces get" [
+export def "get-apps-app-id-namespaces" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -443,7 +443,7 @@ export def "apps-namespaces get" [
 # Creates a namespace
 #
 # POST /apps/{app_id}/namespaces
-export def "apps-namespaces create" [
+export def "post-apps-app-id-namespaces" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -487,7 +487,7 @@ export def "apps-namespaces create" [
 # Deletes a namespace
 #
 # DELETE /apps/{app_id}/namespaces/{namespace_id}
-export def "apps-namespaces delete" [
+export def "delete-apps-app-id-namespaces-namespace-id" [
   app_id: string
   namespace_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -524,7 +524,7 @@ export def "apps-namespaces delete" [
 # Updates a namespace
 #
 # PATCH /apps/{app_id}/namespaces/{namespace_id}
-export def "apps-namespaces update" [
+export def "patch-apps-app-id-namespaces-namespace-id" [
   app_id: string
   namespace_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -569,7 +569,7 @@ export def "apps-namespaces update" [
 # Lists queues
 #
 # GET /apps/{app_id}/queues
-export def "apps-queues get" [
+export def "get-apps-app-id-queues" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -604,7 +604,7 @@ export def "apps-queues get" [
 # Creates a queue
 #
 # POST /apps/{app_id}/queues
-export def "apps-queues create" [
+export def "post-apps-app-id-queues" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -646,7 +646,7 @@ export def "apps-queues create" [
 # Deletes a queue
 #
 # DELETE /apps/{app_id}/queues/{queue_id}
-export def "apps-queues delete" [
+export def "delete-apps-app-id-queues-queue-id" [
   app_id: string
   queue_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -683,7 +683,7 @@ export def "apps-queues delete" [
 # Lists Reactor rules
 #
 # GET /apps/{app_id}/rules
-export def "apps-rules list" [
+export def "get-apps-app-id-rules" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -721,7 +721,7 @@ export def "apps-rules list" [
 # Discriminator (request): ruleType = amqp, amqp/external, aws/kinesis, aws/lambda, aws/sqs, http, http/azure-function, http/cloudflare-worker, http/google-cloud-function, http/ifttt, http/zapier, unsupported
 # --source shape: {channelFilter: string, type: "channel.message"|"channel.presence"|"channel.lifecycle"|"channel.occupancy"}
 # --target shape: {enveloped?: bool, format: "json"|"msgpack", headers?: list, signingKeyId?: string, url: string}
-export def "apps-rules create" [
+export def "post-apps-app-id-rules" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -770,7 +770,7 @@ export def "apps-rules create" [
 # Deletes a Reactor rule
 #
 # DELETE /apps/{app_id}/rules/{rule_id}
-export def "apps-rules delete" [
+export def "delete-apps-app-id-rules-rule-id" [
   app_id: string
   rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -808,7 +808,7 @@ export def "apps-rules delete" [
 #
 # GET /apps/{app_id}/rules/{rule_id}
 # Discriminator (response): ruleType = amqp, amqp/external, aws/kinesis, aws/lambda, aws/sqs, http, http/azure-function, http/cloudflare-worker, http/google-cloud-function, http/ifttt, http/zapier
-export def "apps-rules get" [
+export def "get-apps-app-id-rules-rule-id" [
   app_id: string
   rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -848,7 +848,7 @@ export def "apps-rules get" [
 # Discriminator (request): ruleType = amqp, amqp/external, aws/kinesis, aws/lambda, aws/sqs, http, http/azure-function, http/cloudflare-worker, http/google-cloud-function, http/ifttt, http/zapier
 # --source shape: {channelFilter: string, type: "channel.message"|"channel.presence"|"channel.lifecycle"|"channel.occupancy"}
 # --target shape: {enveloped?: bool, format?: "json"|"msgpack", headers?: list, signingKeyId?: string, url?: string}
-export def "apps-rules update" [
+export def "patch-apps-app-id-rules-rule-id" [
   app_id: string
   rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -893,7 +893,7 @@ export def "apps-rules update" [
 # Deletes an app
 #
 # DELETE /apps/{id}
-export def "apps delete" [
+export def "delete-apps-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -928,7 +928,7 @@ export def "apps delete" [
 # Updates an app
 #
 # PATCH /apps/{id}
-export def "apps update" [
+export def "patch-apps-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -973,7 +973,7 @@ export def "apps update" [
 # Updates app's APNs info from a `.p12` file
 #
 # POST /apps/{id}/pkcs12
-export def "apps-pkcs12 create" [
+export def "post-apps-id-pkcs12" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1015,7 +1015,7 @@ export def "apps-pkcs12 create" [
 # Get token details
 #
 # GET /me
-export def "me get" [
+export def "get-me" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

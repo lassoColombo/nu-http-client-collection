@@ -97,7 +97,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "classes-competitions get-for-class" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-competitions-for-class" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -121,7 +121,7 @@ export def commands []: nothing -> table {
 #
 # GET /classes/{classId}/competitions/
 # operationId: getCompetitionsForClass
-export def "classes-competitions get-for-class" [
+export def "get-competitions-for-class" [
   class_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -172,7 +172,7 @@ export def "classes-competitions get-for-class" [
 #
 # GET /classes/{classId}/events/
 # operationId: getEventsForClass
-export def "classes-events get-for-class" [
+export def "get-events-for-class" [
   class_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -242,7 +242,7 @@ export def "classes-events get-for-class" [
 #
 # GET /competitions/{competitionId}
 # operationId: getCompetition
-export def "competitions get" [
+export def "get-competition" [
   competition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -286,7 +286,7 @@ export def "competitions get" [
 #
 # GET /competitions/{competitionId}/events/
 # operationId: getEventsForCompetition
-export def "competitions-events get" [
+export def "get-events-for-competition" [
   competition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -357,7 +357,7 @@ export def "competitions-events get" [
 #
 # GET /competitions/{competitionId}/marketgroups/
 # operationId: getMarketGroupsForCompetition
-export def "competitions-marketgroups get-market-groups" [
+export def "get-market-groups-for-competition" [
   competition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -405,7 +405,7 @@ export def "competitions-marketgroups get-market-groups" [
 #
 # GET /competitions/{competitionId}/marketsByGroupid
 # operationId: getMarketsByGroupId
-export def "competitions-markets-by-groupid get-group" [
+export def "get-markets-by-group-id" [
   competition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -450,7 +450,7 @@ export def "competitions-markets-by-groupid get-group" [
 #
 # GET /events/
 # operationId: getEvents
-export def "events list" [
+export def "get-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -513,7 +513,7 @@ export def "events list" [
 #
 # GET /events/{eventId}
 # operationId: getEvent
-export def "events get" [
+export def "get-event" [
   event_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -571,7 +571,7 @@ export def "events get" [
 #
 # GET /events/{eventId}/competitors
 # operationId: getEventCompetitors
-export def "events-competitors get" [
+export def "get-event-competitors" [
   event_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -614,7 +614,7 @@ export def "events-competitors get" [
 #
 # GET /events/{eventId}/markets/
 # operationId: getMarkets
-export def "events-markets get" [
+export def "get-markets" [
   event_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -670,7 +670,7 @@ export def "events-markets get" [
 #
 # GET /events/{eventId}/markets/{marketId}/selections/
 # operationId: getSelections
-export def "events-markets-selections get" [
+export def "get-selections" [
   event_id: string
   market_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -720,7 +720,7 @@ export def "events-markets-selections get" [
 #
 # GET /sports/
 # operationId: getSports
-export def "sports get" [
+export def "get-sports" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -766,7 +766,7 @@ export def "sports get" [
 #
 # GET /sports/{sportId}/classes/
 # operationId: getClassesForSport
-export def "sports-classes get" [
+export def "get-classes-for-sport" [
   sport_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -817,7 +817,7 @@ export def "sports-classes get" [
 #
 # GET /sports/{sportId}/competitions/
 # operationId: getCompetitionsForSport
-export def "sports-competitions get" [
+export def "get-competitions-for-sport" [
   sport_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -868,7 +868,7 @@ export def "sports-competitions get" [
 #
 # GET /topbets/
 # operationId: getTopBets
-export def "topbets get-top-bets" [
+export def "get-top-bets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

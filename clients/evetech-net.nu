@@ -126,7 +126,7 @@ def filter-completer [] { ["manufacturing_basic" "market"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "alliances list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-alliances" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -150,7 +150,7 @@ export def commands []: nothing -> table {
 #
 # GET /alliances/
 # operationId: get_alliances
-export def "alliances list" [
+export def "get-alliances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -189,7 +189,7 @@ export def "alliances list" [
 #
 # GET /alliances/{alliance_id}/
 # operationId: get_alliances_alliance_id
-export def "alliances get" [
+export def "get-alliances-alliance-id" [
   alliance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -230,7 +230,7 @@ export def "alliances get" [
 #
 # GET /alliances/{alliance_id}/contacts/
 # operationId: get_alliances_alliance_id_contacts
-export def "alliances-contacts get" [
+export def "get-alliances-alliance-id-contacts" [
   alliance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -273,7 +273,7 @@ export def "alliances-contacts get" [
 #
 # GET /alliances/{alliance_id}/contacts/labels/
 # operationId: get_alliances_alliance_id_contacts_labels
-export def "alliances-contacts-labels get" [
+export def "get-alliances-alliance-id-contacts-labels" [
   alliance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -315,7 +315,7 @@ export def "alliances-contacts-labels get" [
 #
 # GET /alliances/{alliance_id}/corporations/
 # operationId: get_alliances_alliance_id_corporations
-export def "alliances-corporations get" [
+export def "get-alliances-alliance-id-corporations" [
   alliance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -356,7 +356,7 @@ export def "alliances-corporations get" [
 #
 # GET /alliances/{alliance_id}/icons/
 # operationId: get_alliances_alliance_id_icons
-export def "alliances-icons get" [
+export def "get-alliances-alliance-id-icons" [
   alliance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -397,7 +397,7 @@ export def "alliances-icons get" [
 #
 # POST /characters/affiliation/
 # operationId: post_characters_affiliation
-export def "characters-affiliation create" [
+export def "post-characters-affiliation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -437,7 +437,7 @@ export def "characters-affiliation create" [
 #
 # GET /characters/{character_id}/
 # operationId: get_characters_character_id
-export def "characters get" [
+export def "get-characters-character-id" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -478,7 +478,7 @@ export def "characters get" [
 #
 # GET /characters/{character_id}/agents_research/
 # operationId: get_characters_character_id_agents_research
-export def "characters-agents-research get" [
+export def "get-characters-character-id-agents-research" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -520,7 +520,7 @@ export def "characters-agents-research get" [
 #
 # GET /characters/{character_id}/assets/
 # operationId: get_characters_character_id_assets
-export def "characters-assets get" [
+export def "get-characters-character-id-assets" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -563,7 +563,7 @@ export def "characters-assets get" [
 #
 # POST /characters/{character_id}/assets/locations/
 # operationId: post_characters_character_id_assets_locations
-export def "characters-assets-locations create" [
+export def "post-characters-character-id-assets-locations" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -606,7 +606,7 @@ export def "characters-assets-locations create" [
 #
 # POST /characters/{character_id}/assets/names/
 # operationId: post_characters_character_id_assets_names
-export def "characters-assets-names create" [
+export def "post-characters-character-id-assets-names" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -649,7 +649,7 @@ export def "characters-assets-names create" [
 #
 # GET /characters/{character_id}/attributes/
 # operationId: get_characters_character_id_attributes
-export def "characters-attributes get" [
+export def "get-characters-character-id-attributes" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -691,7 +691,7 @@ export def "characters-attributes get" [
 #
 # GET /characters/{character_id}/blueprints/
 # operationId: get_characters_character_id_blueprints
-export def "characters-blueprints get" [
+export def "get-characters-character-id-blueprints" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -734,7 +734,7 @@ export def "characters-blueprints get" [
 #
 # GET /characters/{character_id}/bookmarks/
 # operationId: get_characters_character_id_bookmarks
-export def "characters-bookmarks get" [
+export def "get-characters-character-id-bookmarks" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -777,7 +777,7 @@ export def "characters-bookmarks get" [
 #
 # GET /characters/{character_id}/bookmarks/folders/
 # operationId: get_characters_character_id_bookmarks_folders
-export def "characters-bookmarks-folders get" [
+export def "get-characters-character-id-bookmarks-folders" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -820,7 +820,7 @@ export def "characters-bookmarks-folders get" [
 #
 # GET /characters/{character_id}/calendar/
 # operationId: get_characters_character_id_calendar
-export def "characters-calendar list" [
+export def "get-characters-character-id-calendar" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -863,7 +863,7 @@ export def "characters-calendar list" [
 #
 # GET /characters/{character_id}/calendar/{event_id}/
 # operationId: get_characters_character_id_calendar_event_id
-export def "characters-calendar get" [
+export def "get-characters-character-id-calendar-event-id" [
   character_id: int
   event_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -907,7 +907,7 @@ export def "characters-calendar get" [
 #
 # PUT /characters/{character_id}/calendar/{event_id}/
 # operationId: put_characters_character_id_calendar_event_id
-export def "characters-calendar update" [
+export def "put-characters-character-id-calendar-event-id" [
   character_id: int
   event_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -952,7 +952,7 @@ export def "characters-calendar update" [
 #
 # GET /characters/{character_id}/calendar/{event_id}/attendees/
 # operationId: get_characters_character_id_calendar_event_id_attendees
-export def "characters-calendar-attendees get" [
+export def "get-characters-character-id-calendar-event-id-attendees" [
   character_id: int
   event_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -996,7 +996,7 @@ export def "characters-calendar-attendees get" [
 #
 # GET /characters/{character_id}/clones/
 # operationId: get_characters_character_id_clones
-export def "characters-clones get" [
+export def "get-characters-character-id-clones" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1038,7 +1038,7 @@ export def "characters-clones get" [
 #
 # DELETE /characters/{character_id}/contacts/
 # operationId: delete_characters_character_id_contacts
-export def "characters-contacts delete" [
+export def "delete-characters-character-id-contacts" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1078,7 +1078,7 @@ export def "characters-contacts delete" [
 #
 # GET /characters/{character_id}/contacts/
 # operationId: get_characters_character_id_contacts
-export def "characters-contacts get" [
+export def "get-characters-character-id-contacts" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1121,7 +1121,7 @@ export def "characters-contacts get" [
 #
 # POST /characters/{character_id}/contacts/
 # operationId: post_characters_character_id_contacts
-export def "characters-contacts create" [
+export def "post-characters-character-id-contacts" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1167,7 +1167,7 @@ export def "characters-contacts create" [
 #
 # PUT /characters/{character_id}/contacts/
 # operationId: put_characters_character_id_contacts
-export def "characters-contacts update" [
+export def "put-characters-character-id-contacts" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1213,7 +1213,7 @@ export def "characters-contacts update" [
 #
 # GET /characters/{character_id}/contacts/labels/
 # operationId: get_characters_character_id_contacts_labels
-export def "characters-contacts-labels get" [
+export def "get-characters-character-id-contacts-labels" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1255,7 +1255,7 @@ export def "characters-contacts-labels get" [
 #
 # GET /characters/{character_id}/contracts/
 # operationId: get_characters_character_id_contracts
-export def "characters-contracts get" [
+export def "get-characters-character-id-contracts" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1298,7 +1298,7 @@ export def "characters-contracts get" [
 #
 # GET /characters/{character_id}/contracts/{contract_id}/bids/
 # operationId: get_characters_character_id_contracts_contract_id_bids
-export def "characters-contracts-bids get" [
+export def "get-characters-character-id-contracts-contract-id-bids" [
   character_id: int
   contract_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1342,7 +1342,7 @@ export def "characters-contracts-bids get" [
 #
 # GET /characters/{character_id}/contracts/{contract_id}/items/
 # operationId: get_characters_character_id_contracts_contract_id_items
-export def "characters-contracts-items get" [
+export def "get-characters-character-id-contracts-contract-id-items" [
   character_id: int
   contract_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1386,7 +1386,7 @@ export def "characters-contracts-items get" [
 #
 # GET /characters/{character_id}/corporationhistory/
 # operationId: get_characters_character_id_corporationhistory
-export def "characters-corporationhistory get" [
+export def "get-characters-character-id-corporationhistory" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1427,7 +1427,7 @@ export def "characters-corporationhistory get" [
 #
 # POST /characters/{character_id}/cspa/
 # operationId: post_characters_character_id_cspa
-export def "characters-cspa create" [
+export def "post-characters-character-id-cspa" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1470,7 +1470,7 @@ export def "characters-cspa create" [
 #
 # GET /characters/{character_id}/fatigue/
 # operationId: get_characters_character_id_fatigue
-export def "characters-fatigue get" [
+export def "get-characters-character-id-fatigue" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1512,7 +1512,7 @@ export def "characters-fatigue get" [
 #
 # GET /characters/{character_id}/fittings/
 # operationId: get_characters_character_id_fittings
-export def "characters-fittings get" [
+export def "get-characters-character-id-fittings" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1555,7 +1555,7 @@ export def "characters-fittings get" [
 # POST /characters/{character_id}/fittings/
 # operationId: post_characters_character_id_fittings
 # --items item shape: {flag: int, quantity: int, type_id: int}
-export def "characters-fittings create" [
+export def "post-characters-character-id-fittings" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1601,7 +1601,7 @@ export def "characters-fittings create" [
 #
 # DELETE /characters/{character_id}/fittings/{fitting_id}/
 # operationId: delete_characters_character_id_fittings_fitting_id
-export def "characters-fittings delete" [
+export def "delete-characters-character-id-fittings-fitting-id" [
   character_id: int
   fitting_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1642,7 +1642,7 @@ export def "characters-fittings delete" [
 #
 # GET /characters/{character_id}/fleet/
 # operationId: get_characters_character_id_fleet
-export def "characters-fleet get" [
+export def "get-characters-character-id-fleet" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1684,7 +1684,7 @@ export def "characters-fleet get" [
 #
 # GET /characters/{character_id}/fw/stats/
 # operationId: get_characters_character_id_fw_stats
-export def "characters-fw-stats get" [
+export def "get-characters-character-id-fw-stats" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1726,7 +1726,7 @@ export def "characters-fw-stats get" [
 #
 # GET /characters/{character_id}/implants/
 # operationId: get_characters_character_id_implants
-export def "characters-implants get" [
+export def "get-characters-character-id-implants" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1768,7 +1768,7 @@ export def "characters-implants get" [
 #
 # GET /characters/{character_id}/industry/jobs/
 # operationId: get_characters_character_id_industry_jobs
-export def "characters-industry-jobs get" [
+export def "get-characters-character-id-industry-jobs" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1811,7 +1811,7 @@ export def "characters-industry-jobs get" [
 #
 # GET /characters/{character_id}/killmails/recent/
 # operationId: get_characters_character_id_killmails_recent
-export def "characters-killmails-recent get" [
+export def "get-characters-character-id-killmails-recent" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1854,7 +1854,7 @@ export def "characters-killmails-recent get" [
 #
 # GET /characters/{character_id}/location/
 # operationId: get_characters_character_id_location
-export def "characters-location get" [
+export def "get-characters-character-id-location" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1896,7 +1896,7 @@ export def "characters-location get" [
 #
 # GET /characters/{character_id}/loyalty/points/
 # operationId: get_characters_character_id_loyalty_points
-export def "characters-loyalty-points get" [
+export def "get-characters-character-id-loyalty-points" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1938,7 +1938,7 @@ export def "characters-loyalty-points get" [
 #
 # GET /characters/{character_id}/mail/
 # operationId: get_characters_character_id_mail
-export def "characters-mail list" [
+export def "get-characters-character-id-mail" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1983,7 +1983,7 @@ export def "characters-mail list" [
 # POST /characters/{character_id}/mail/
 # operationId: post_characters_character_id_mail
 # --recipients item shape: {recipient_id: int, recipient_type: "alliance"|"character"|"corporation"|"mailing_list"}
-export def "characters-mail create" [
+export def "post-characters-character-id-mail" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2029,7 +2029,7 @@ export def "characters-mail create" [
 #
 # GET /characters/{character_id}/mail/labels/
 # operationId: get_characters_character_id_mail_labels
-export def "characters-mail-labels get" [
+export def "get-characters-character-id-mail-labels" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2071,7 +2071,7 @@ export def "characters-mail-labels get" [
 #
 # POST /characters/{character_id}/mail/labels/
 # operationId: post_characters_character_id_mail_labels
-export def "characters-mail-labels create" [
+export def "post-characters-character-id-mail-labels" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2115,7 +2115,7 @@ export def "characters-mail-labels create" [
 #
 # DELETE /characters/{character_id}/mail/labels/{label_id}/
 # operationId: delete_characters_character_id_mail_labels_label_id
-export def "characters-mail-labels delete" [
+export def "delete-characters-character-id-mail-labels-label-id" [
   character_id: int
   label_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2156,7 +2156,7 @@ export def "characters-mail-labels delete" [
 #
 # GET /characters/{character_id}/mail/lists/
 # operationId: get_characters_character_id_mail_lists
-export def "characters-mail-lists get" [
+export def "get-characters-character-id-mail-lists" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2198,7 +2198,7 @@ export def "characters-mail-lists get" [
 #
 # DELETE /characters/{character_id}/mail/{mail_id}/
 # operationId: delete_characters_character_id_mail_mail_id
-export def "characters-mail delete" [
+export def "delete-characters-character-id-mail-mail-id" [
   character_id: int
   mail_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2239,7 +2239,7 @@ export def "characters-mail delete" [
 #
 # GET /characters/{character_id}/mail/{mail_id}/
 # operationId: get_characters_character_id_mail_mail_id
-export def "characters-mail get" [
+export def "get-characters-character-id-mail-mail-id" [
   character_id: int
   mail_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2283,7 +2283,7 @@ export def "characters-mail get" [
 #
 # PUT /characters/{character_id}/mail/{mail_id}/
 # operationId: put_characters_character_id_mail_mail_id
-export def "characters-mail update" [
+export def "put-characters-character-id-mail-mail-id" [
   character_id: int
   mail_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2329,7 +2329,7 @@ export def "characters-mail update" [
 #
 # GET /characters/{character_id}/medals/
 # operationId: get_characters_character_id_medals
-export def "characters-medals get" [
+export def "get-characters-character-id-medals" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2371,7 +2371,7 @@ export def "characters-medals get" [
 #
 # GET /characters/{character_id}/mining/
 # operationId: get_characters_character_id_mining
-export def "characters-mining get" [
+export def "get-characters-character-id-mining" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2414,7 +2414,7 @@ export def "characters-mining get" [
 #
 # GET /characters/{character_id}/notifications/
 # operationId: get_characters_character_id_notifications
-export def "characters-notifications get" [
+export def "get-characters-character-id-notifications" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2456,7 +2456,7 @@ export def "characters-notifications get" [
 #
 # GET /characters/{character_id}/notifications/contacts/
 # operationId: get_characters_character_id_notifications_contacts
-export def "characters-notifications-contacts get" [
+export def "get-characters-character-id-notifications-contacts" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2498,7 +2498,7 @@ export def "characters-notifications-contacts get" [
 #
 # GET /characters/{character_id}/online/
 # operationId: get_characters_character_id_online
-export def "characters-online get" [
+export def "get-characters-character-id-online" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2540,7 +2540,7 @@ export def "characters-online get" [
 #
 # GET /characters/{character_id}/opportunities/
 # operationId: get_characters_character_id_opportunities
-export def "characters-opportunities get" [
+export def "get-characters-character-id-opportunities" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2582,7 +2582,7 @@ export def "characters-opportunities get" [
 #
 # GET /characters/{character_id}/orders/
 # operationId: get_characters_character_id_orders
-export def "characters-orders get" [
+export def "get-characters-character-id-orders" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2624,7 +2624,7 @@ export def "characters-orders get" [
 #
 # GET /characters/{character_id}/orders/history/
 # operationId: get_characters_character_id_orders_history
-export def "characters-orders-history get" [
+export def "get-characters-character-id-orders-history" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2667,7 +2667,7 @@ export def "characters-orders-history get" [
 #
 # GET /characters/{character_id}/planets/
 # operationId: get_characters_character_id_planets
-export def "characters-planets list" [
+export def "get-characters-character-id-planets" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2709,7 +2709,7 @@ export def "characters-planets list" [
 #
 # GET /characters/{character_id}/planets/{planet_id}/
 # operationId: get_characters_character_id_planets_planet_id
-export def "characters-planets get" [
+export def "get-characters-character-id-planets-planet-id" [
   character_id: int
   planet_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2753,7 +2753,7 @@ export def "characters-planets get" [
 #
 # GET /characters/{character_id}/portrait/
 # operationId: get_characters_character_id_portrait
-export def "characters-portrait get" [
+export def "get-characters-character-id-portrait" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2794,7 +2794,7 @@ export def "characters-portrait get" [
 #
 # GET /characters/{character_id}/roles/
 # operationId: get_characters_character_id_roles
-export def "characters-roles get" [
+export def "get-characters-character-id-roles" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2836,7 +2836,7 @@ export def "characters-roles get" [
 #
 # GET /characters/{character_id}/search/
 # operationId: get_characters_character_id_search
-export def "characters-search get" [
+export def "get-characters-character-id-search" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2883,7 +2883,7 @@ export def "characters-search get" [
 #
 # GET /characters/{character_id}/ship/
 # operationId: get_characters_character_id_ship
-export def "characters-ship get" [
+export def "get-characters-character-id-ship" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2925,7 +2925,7 @@ export def "characters-ship get" [
 #
 # GET /characters/{character_id}/skillqueue/
 # operationId: get_characters_character_id_skillqueue
-export def "characters-skillqueue get" [
+export def "get-characters-character-id-skillqueue" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2967,7 +2967,7 @@ export def "characters-skillqueue get" [
 #
 # GET /characters/{character_id}/skills/
 # operationId: get_characters_character_id_skills
-export def "characters-skills get" [
+export def "get-characters-character-id-skills" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3009,7 +3009,7 @@ export def "characters-skills get" [
 #
 # GET /characters/{character_id}/standings/
 # operationId: get_characters_character_id_standings
-export def "characters-standings get" [
+export def "get-characters-character-id-standings" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3051,7 +3051,7 @@ export def "characters-standings get" [
 #
 # GET /characters/{character_id}/stats/
 # operationId: get_characters_character_id_stats
-export def "characters-stats get" [
+export def "get-characters-character-id-stats" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3093,7 +3093,7 @@ export def "characters-stats get" [
 #
 # GET /characters/{character_id}/titles/
 # operationId: get_characters_character_id_titles
-export def "characters-titles get" [
+export def "get-characters-character-id-titles" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3135,7 +3135,7 @@ export def "characters-titles get" [
 #
 # GET /characters/{character_id}/wallet/
 # operationId: get_characters_character_id_wallet
-export def "characters-wallet get" [
+export def "get-characters-character-id-wallet" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3177,7 +3177,7 @@ export def "characters-wallet get" [
 #
 # GET /characters/{character_id}/wallet/journal/
 # operationId: get_characters_character_id_wallet_journal
-export def "characters-wallet-journal get" [
+export def "get-characters-character-id-wallet-journal" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3220,7 +3220,7 @@ export def "characters-wallet-journal get" [
 #
 # GET /characters/{character_id}/wallet/transactions/
 # operationId: get_characters_character_id_wallet_transactions
-export def "characters-wallet-transactions get" [
+export def "get-characters-character-id-wallet-transactions" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3263,7 +3263,7 @@ export def "characters-wallet-transactions get" [
 #
 # GET /contracts/public/bids/{contract_id}/
 # operationId: get_contracts_public_bids_contract_id
-export def "contracts-public-bids get" [
+export def "get-contracts-public-bids-contract-id" [
   contract_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3305,7 +3305,7 @@ export def "contracts-public-bids get" [
 #
 # GET /contracts/public/items/{contract_id}/
 # operationId: get_contracts_public_items_contract_id
-export def "contracts-public-items get" [
+export def "get-contracts-public-items-contract-id" [
   contract_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3347,7 +3347,7 @@ export def "contracts-public-items get" [
 #
 # GET /contracts/public/{region_id}/
 # operationId: get_contracts_public_region_id
-export def "contracts-public get" [
+export def "get-contracts-public-region-id" [
   region_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3389,7 +3389,7 @@ export def "contracts-public get" [
 #
 # GET /corporation/{corporation_id}/mining/extractions/
 # operationId: get_corporation_corporation_id_mining_extractions
-export def "corporation-mining-extractions get" [
+export def "get-corporation-corporation-id-mining-extractions" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3432,7 +3432,7 @@ export def "corporation-mining-extractions get" [
 #
 # GET /corporation/{corporation_id}/mining/observers/
 # operationId: get_corporation_corporation_id_mining_observers
-export def "corporation-mining-observers list" [
+export def "get-corporation-corporation-id-mining-observers" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3475,7 +3475,7 @@ export def "corporation-mining-observers list" [
 #
 # GET /corporation/{corporation_id}/mining/observers/{observer_id}/
 # operationId: get_corporation_corporation_id_mining_observers_observer_id
-export def "corporation-mining-observers get" [
+export def "get-corporation-corporation-id-mining-observers-observer-id" [
   corporation_id: int
   observer_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3520,7 +3520,7 @@ export def "corporation-mining-observers get" [
 #
 # GET /corporations/npccorps/
 # operationId: get_corporations_npccorps
-export def "corporations-npccorps get" [
+export def "get-corporations-npccorps" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3559,7 +3559,7 @@ export def "corporations-npccorps get" [
 #
 # GET /corporations/{corporation_id}/
 # operationId: get_corporations_corporation_id
-export def "corporations get" [
+export def "get-corporations-corporation-id" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3600,7 +3600,7 @@ export def "corporations get" [
 #
 # GET /corporations/{corporation_id}/alliancehistory/
 # operationId: get_corporations_corporation_id_alliancehistory
-export def "corporations-alliancehistory get" [
+export def "get-corporations-corporation-id-alliancehistory" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3641,7 +3641,7 @@ export def "corporations-alliancehistory get" [
 #
 # GET /corporations/{corporation_id}/assets/
 # operationId: get_corporations_corporation_id_assets
-export def "corporations-assets get" [
+export def "get-corporations-corporation-id-assets" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3684,7 +3684,7 @@ export def "corporations-assets get" [
 #
 # POST /corporations/{corporation_id}/assets/locations/
 # operationId: post_corporations_corporation_id_assets_locations
-export def "corporations-assets-locations create" [
+export def "post-corporations-corporation-id-assets-locations" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3727,7 +3727,7 @@ export def "corporations-assets-locations create" [
 #
 # POST /corporations/{corporation_id}/assets/names/
 # operationId: post_corporations_corporation_id_assets_names
-export def "corporations-assets-names create" [
+export def "post-corporations-corporation-id-assets-names" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3770,7 +3770,7 @@ export def "corporations-assets-names create" [
 #
 # GET /corporations/{corporation_id}/blueprints/
 # operationId: get_corporations_corporation_id_blueprints
-export def "corporations-blueprints get" [
+export def "get-corporations-corporation-id-blueprints" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3813,7 +3813,7 @@ export def "corporations-blueprints get" [
 #
 # GET /corporations/{corporation_id}/bookmarks/
 # operationId: get_corporations_corporation_id_bookmarks
-export def "corporations-bookmarks get" [
+export def "get-corporations-corporation-id-bookmarks" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3856,7 +3856,7 @@ export def "corporations-bookmarks get" [
 #
 # GET /corporations/{corporation_id}/bookmarks/folders/
 # operationId: get_corporations_corporation_id_bookmarks_folders
-export def "corporations-bookmarks-folders get" [
+export def "get-corporations-corporation-id-bookmarks-folders" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3899,7 +3899,7 @@ export def "corporations-bookmarks-folders get" [
 #
 # GET /corporations/{corporation_id}/contacts/
 # operationId: get_corporations_corporation_id_contacts
-export def "corporations-contacts get" [
+export def "get-corporations-corporation-id-contacts" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3942,7 +3942,7 @@ export def "corporations-contacts get" [
 #
 # GET /corporations/{corporation_id}/contacts/labels/
 # operationId: get_corporations_corporation_id_contacts_labels
-export def "corporations-contacts-labels get" [
+export def "get-corporations-corporation-id-contacts-labels" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3984,7 +3984,7 @@ export def "corporations-contacts-labels get" [
 #
 # GET /corporations/{corporation_id}/containers/logs/
 # operationId: get_corporations_corporation_id_containers_logs
-export def "corporations-containers-logs get" [
+export def "get-corporations-corporation-id-containers-logs" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4027,7 +4027,7 @@ export def "corporations-containers-logs get" [
 #
 # GET /corporations/{corporation_id}/contracts/
 # operationId: get_corporations_corporation_id_contracts
-export def "corporations-contracts get" [
+export def "get-corporations-corporation-id-contracts" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4070,7 +4070,7 @@ export def "corporations-contracts get" [
 #
 # GET /corporations/{corporation_id}/contracts/{contract_id}/bids/
 # operationId: get_corporations_corporation_id_contracts_contract_id_bids
-export def "corporations-contracts-bids get" [
+export def "get-corporations-corporation-id-contracts-contract-id-bids" [
   corporation_id: int
   contract_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4115,7 +4115,7 @@ export def "corporations-contracts-bids get" [
 #
 # GET /corporations/{corporation_id}/contracts/{contract_id}/items/
 # operationId: get_corporations_corporation_id_contracts_contract_id_items
-export def "corporations-contracts-items get" [
+export def "get-corporations-corporation-id-contracts-contract-id-items" [
   corporation_id: int
   contract_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4159,7 +4159,7 @@ export def "corporations-contracts-items get" [
 #
 # GET /corporations/{corporation_id}/customs_offices/
 # operationId: get_corporations_corporation_id_customs_offices
-export def "corporations-customs-offices get" [
+export def "get-corporations-corporation-id-customs-offices" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4202,7 +4202,7 @@ export def "corporations-customs-offices get" [
 #
 # GET /corporations/{corporation_id}/divisions/
 # operationId: get_corporations_corporation_id_divisions
-export def "corporations-divisions get" [
+export def "get-corporations-corporation-id-divisions" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4244,7 +4244,7 @@ export def "corporations-divisions get" [
 #
 # GET /corporations/{corporation_id}/facilities/
 # operationId: get_corporations_corporation_id_facilities
-export def "corporations-facilities get" [
+export def "get-corporations-corporation-id-facilities" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4286,7 +4286,7 @@ export def "corporations-facilities get" [
 #
 # GET /corporations/{corporation_id}/fw/stats/
 # operationId: get_corporations_corporation_id_fw_stats
-export def "corporations-fw-stats get" [
+export def "get-corporations-corporation-id-fw-stats" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4328,7 +4328,7 @@ export def "corporations-fw-stats get" [
 #
 # GET /corporations/{corporation_id}/icons/
 # operationId: get_corporations_corporation_id_icons
-export def "corporations-icons get" [
+export def "get-corporations-corporation-id-icons" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4369,7 +4369,7 @@ export def "corporations-icons get" [
 #
 # GET /corporations/{corporation_id}/industry/jobs/
 # operationId: get_corporations_corporation_id_industry_jobs
-export def "corporations-industry-jobs get" [
+export def "get-corporations-corporation-id-industry-jobs" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4413,7 +4413,7 @@ export def "corporations-industry-jobs get" [
 #
 # GET /corporations/{corporation_id}/killmails/recent/
 # operationId: get_corporations_corporation_id_killmails_recent
-export def "corporations-killmails-recent get" [
+export def "get-corporations-corporation-id-killmails-recent" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4456,7 +4456,7 @@ export def "corporations-killmails-recent get" [
 #
 # GET /corporations/{corporation_id}/medals/
 # operationId: get_corporations_corporation_id_medals
-export def "corporations-medals get" [
+export def "get-corporations-corporation-id-medals" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4499,7 +4499,7 @@ export def "corporations-medals get" [
 #
 # GET /corporations/{corporation_id}/medals/issued/
 # operationId: get_corporations_corporation_id_medals_issued
-export def "corporations-medals-issued get" [
+export def "get-corporations-corporation-id-medals-issued" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4542,7 +4542,7 @@ export def "corporations-medals-issued get" [
 #
 # GET /corporations/{corporation_id}/members/
 # operationId: get_corporations_corporation_id_members
-export def "corporations-members get" [
+export def "get-corporations-corporation-id-members" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4584,7 +4584,7 @@ export def "corporations-members get" [
 #
 # GET /corporations/{corporation_id}/members/limit/
 # operationId: get_corporations_corporation_id_members_limit
-export def "corporations-members-limit get" [
+export def "get-corporations-corporation-id-members-limit" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4626,7 +4626,7 @@ export def "corporations-members-limit get" [
 #
 # GET /corporations/{corporation_id}/members/titles/
 # operationId: get_corporations_corporation_id_members_titles
-export def "corporations-members-titles get" [
+export def "get-corporations-corporation-id-members-titles" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4668,7 +4668,7 @@ export def "corporations-members-titles get" [
 #
 # GET /corporations/{corporation_id}/membertracking/
 # operationId: get_corporations_corporation_id_membertracking
-export def "corporations-membertracking get" [
+export def "get-corporations-corporation-id-membertracking" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4710,7 +4710,7 @@ export def "corporations-membertracking get" [
 #
 # GET /corporations/{corporation_id}/orders/
 # operationId: get_corporations_corporation_id_orders
-export def "corporations-orders get" [
+export def "get-corporations-corporation-id-orders" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4753,7 +4753,7 @@ export def "corporations-orders get" [
 #
 # GET /corporations/{corporation_id}/orders/history/
 # operationId: get_corporations_corporation_id_orders_history
-export def "corporations-orders-history get" [
+export def "get-corporations-corporation-id-orders-history" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4796,7 +4796,7 @@ export def "corporations-orders-history get" [
 #
 # GET /corporations/{corporation_id}/roles/
 # operationId: get_corporations_corporation_id_roles
-export def "corporations-roles get" [
+export def "get-corporations-corporation-id-roles" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4838,7 +4838,7 @@ export def "corporations-roles get" [
 #
 # GET /corporations/{corporation_id}/roles/history/
 # operationId: get_corporations_corporation_id_roles_history
-export def "corporations-roles-history get" [
+export def "get-corporations-corporation-id-roles-history" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4881,7 +4881,7 @@ export def "corporations-roles-history get" [
 #
 # GET /corporations/{corporation_id}/shareholders/
 # operationId: get_corporations_corporation_id_shareholders
-export def "corporations-shareholders get" [
+export def "get-corporations-corporation-id-shareholders" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4924,7 +4924,7 @@ export def "corporations-shareholders get" [
 #
 # GET /corporations/{corporation_id}/standings/
 # operationId: get_corporations_corporation_id_standings
-export def "corporations-standings get" [
+export def "get-corporations-corporation-id-standings" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4967,7 +4967,7 @@ export def "corporations-standings get" [
 #
 # GET /corporations/{corporation_id}/starbases/
 # operationId: get_corporations_corporation_id_starbases
-export def "corporations-starbases list" [
+export def "get-corporations-corporation-id-starbases" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5010,7 +5010,7 @@ export def "corporations-starbases list" [
 #
 # GET /corporations/{corporation_id}/starbases/{starbase_id}/
 # operationId: get_corporations_corporation_id_starbases_starbase_id
-export def "corporations-starbases get" [
+export def "get-corporations-corporation-id-starbases-starbase-id" [
   corporation_id: int
   starbase_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5055,7 +5055,7 @@ export def "corporations-starbases get" [
 #
 # GET /corporations/{corporation_id}/structures/
 # operationId: get_corporations_corporation_id_structures
-export def "corporations-structures get" [
+export def "get-corporations-corporation-id-structures" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5100,7 +5100,7 @@ export def "corporations-structures get" [
 #
 # GET /corporations/{corporation_id}/titles/
 # operationId: get_corporations_corporation_id_titles
-export def "corporations-titles get" [
+export def "get-corporations-corporation-id-titles" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5142,7 +5142,7 @@ export def "corporations-titles get" [
 #
 # GET /corporations/{corporation_id}/wallets/
 # operationId: get_corporations_corporation_id_wallets
-export def "corporations-wallets get" [
+export def "get-corporations-corporation-id-wallets" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5184,7 +5184,7 @@ export def "corporations-wallets get" [
 #
 # GET /corporations/{corporation_id}/wallets/{division}/journal/
 # operationId: get_corporations_corporation_id_wallets_division_journal
-export def "corporations-wallets-journal get" [
+export def "get-corporations-corporation-id-wallets-division-journal" [
   corporation_id: int
   division: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5229,7 +5229,7 @@ export def "corporations-wallets-journal get" [
 #
 # GET /corporations/{corporation_id}/wallets/{division}/transactions/
 # operationId: get_corporations_corporation_id_wallets_division_transactions
-export def "corporations-wallets-transactions get" [
+export def "get-corporations-corporation-id-wallets-division-transactions" [
   corporation_id: int
   division: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5274,7 +5274,7 @@ export def "corporations-wallets-transactions get" [
 #
 # GET /dogma/attributes/
 # operationId: get_dogma_attributes
-export def "dogma-attributes list" [
+export def "get-dogma-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5313,7 +5313,7 @@ export def "dogma-attributes list" [
 #
 # GET /dogma/attributes/{attribute_id}/
 # operationId: get_dogma_attributes_attribute_id
-export def "dogma-attributes get" [
+export def "get-dogma-attributes-attribute-id" [
   attribute_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5354,7 +5354,7 @@ export def "dogma-attributes get" [
 #
 # GET /dogma/dynamic/items/{type_id}/{item_id}/
 # operationId: get_dogma_dynamic_items_type_id_item_id
-export def "dogma-dynamic-items get" [
+export def "get-dogma-dynamic-items-type-id-item-id" [
   type_id: int
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5397,7 +5397,7 @@ export def "dogma-dynamic-items get" [
 #
 # GET /dogma/effects/
 # operationId: get_dogma_effects
-export def "dogma-effects list" [
+export def "get-dogma-effects" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5436,7 +5436,7 @@ export def "dogma-effects list" [
 #
 # GET /dogma/effects/{effect_id}/
 # operationId: get_dogma_effects_effect_id
-export def "dogma-effects get" [
+export def "get-dogma-effects-effect-id" [
   effect_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5477,7 +5477,7 @@ export def "dogma-effects get" [
 #
 # GET /fleets/{fleet_id}/
 # operationId: get_fleets_fleet_id
-export def "fleets get" [
+export def "get-fleets-fleet-id" [
   fleet_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5519,7 +5519,7 @@ export def "fleets get" [
 #
 # PUT /fleets/{fleet_id}/
 # operationId: put_fleets_fleet_id
-export def "fleets update" [
+export def "put-fleets-fleet-id" [
   fleet_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5563,7 +5563,7 @@ export def "fleets update" [
 #
 # GET /fleets/{fleet_id}/members/
 # operationId: get_fleets_fleet_id_members
-export def "fleets-members get" [
+export def "get-fleets-fleet-id-members" [
   fleet_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5607,7 +5607,7 @@ export def "fleets-members get" [
 #
 # POST /fleets/{fleet_id}/members/
 # operationId: post_fleets_fleet_id_members
-export def "fleets-members create" [
+export def "post-fleets-fleet-id-members" [
   fleet_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5653,7 +5653,7 @@ export def "fleets-members create" [
 #
 # DELETE /fleets/{fleet_id}/members/{member_id}/
 # operationId: delete_fleets_fleet_id_members_member_id
-export def "fleets-members delete" [
+export def "delete-fleets-fleet-id-members-member-id" [
   fleet_id: int
   member_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5694,7 +5694,7 @@ export def "fleets-members delete" [
 #
 # PUT /fleets/{fleet_id}/members/{member_id}/
 # operationId: put_fleets_fleet_id_members_member_id
-export def "fleets-members update" [
+export def "put-fleets-fleet-id-members-member-id" [
   fleet_id: int
   member_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5741,7 +5741,7 @@ export def "fleets-members update" [
 #
 # DELETE /fleets/{fleet_id}/squads/{squad_id}/
 # operationId: delete_fleets_fleet_id_squads_squad_id
-export def "fleets-squads delete" [
+export def "delete-fleets-fleet-id-squads-squad-id" [
   fleet_id: int
   squad_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5782,7 +5782,7 @@ export def "fleets-squads delete" [
 #
 # PUT /fleets/{fleet_id}/squads/{squad_id}/
 # operationId: put_fleets_fleet_id_squads_squad_id
-export def "fleets-squads update" [
+export def "put-fleets-fleet-id-squads-squad-id" [
   fleet_id: int
   squad_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5827,7 +5827,7 @@ export def "fleets-squads update" [
 #
 # GET /fleets/{fleet_id}/wings/
 # operationId: get_fleets_fleet_id_wings
-export def "fleets-wings get" [
+export def "get-fleets-fleet-id-wings" [
   fleet_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5871,7 +5871,7 @@ export def "fleets-wings get" [
 #
 # POST /fleets/{fleet_id}/wings/
 # operationId: post_fleets_fleet_id_wings
-export def "fleets-wings create" [
+export def "post-fleets-fleet-id-wings" [
   fleet_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5910,7 +5910,7 @@ export def "fleets-wings create" [
 #
 # DELETE /fleets/{fleet_id}/wings/{wing_id}/
 # operationId: delete_fleets_fleet_id_wings_wing_id
-export def "fleets-wings delete" [
+export def "delete-fleets-fleet-id-wings-wing-id" [
   fleet_id: int
   wing_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5951,7 +5951,7 @@ export def "fleets-wings delete" [
 #
 # PUT /fleets/{fleet_id}/wings/{wing_id}/
 # operationId: put_fleets_fleet_id_wings_wing_id
-export def "fleets-wings update" [
+export def "put-fleets-fleet-id-wings-wing-id" [
   fleet_id: int
   wing_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5996,7 +5996,7 @@ export def "fleets-wings update" [
 #
 # POST /fleets/{fleet_id}/wings/{wing_id}/squads/
 # operationId: post_fleets_fleet_id_wings_wing_id_squads
-export def "fleets-wings-squads create" [
+export def "post-fleets-fleet-id-wings-wing-id-squads" [
   fleet_id: int
   wing_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6037,7 +6037,7 @@ export def "fleets-wings-squads create" [
 #
 # GET /fw/leaderboards/
 # operationId: get_fw_leaderboards
-export def "fw-leaderboards get" [
+export def "get-fw-leaderboards" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6076,7 +6076,7 @@ export def "fw-leaderboards get" [
 #
 # GET /fw/leaderboards/characters/
 # operationId: get_fw_leaderboards_characters
-export def "fw-leaderboards-characters get" [
+export def "get-fw-leaderboards-characters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6115,7 +6115,7 @@ export def "fw-leaderboards-characters get" [
 #
 # GET /fw/leaderboards/corporations/
 # operationId: get_fw_leaderboards_corporations
-export def "fw-leaderboards-corporations get" [
+export def "get-fw-leaderboards-corporations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6154,7 +6154,7 @@ export def "fw-leaderboards-corporations get" [
 #
 # GET /fw/stats/
 # operationId: get_fw_stats
-export def "fw-stats get" [
+export def "get-fw-stats" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6193,7 +6193,7 @@ export def "fw-stats get" [
 #
 # GET /fw/systems/
 # operationId: get_fw_systems
-export def "fw-systems get" [
+export def "get-fw-systems" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6232,7 +6232,7 @@ export def "fw-systems get" [
 #
 # GET /fw/wars/
 # operationId: get_fw_wars
-export def "fw-wars get" [
+export def "get-fw-wars" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6271,7 +6271,7 @@ export def "fw-wars get" [
 #
 # GET /incursions/
 # operationId: get_incursions
-export def "incursions get" [
+export def "get-incursions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6310,7 +6310,7 @@ export def "incursions get" [
 #
 # GET /industry/facilities/
 # operationId: get_industry_facilities
-export def "industry-facilities get" [
+export def "get-industry-facilities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6349,7 +6349,7 @@ export def "industry-facilities get" [
 #
 # GET /industry/systems/
 # operationId: get_industry_systems
-export def "industry-systems get" [
+export def "get-industry-systems" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6388,7 +6388,7 @@ export def "industry-systems get" [
 #
 # GET /insurance/prices/
 # operationId: get_insurance_prices
-export def "insurance-prices get" [
+export def "get-insurance-prices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6429,7 +6429,7 @@ export def "insurance-prices get" [
 #
 # GET /killmails/{killmail_id}/{killmail_hash}/
 # operationId: get_killmails_killmail_id_killmail_hash
-export def "killmails get" [
+export def "get-killmails-killmail-id-killmail-hash" [
   killmail_id: int
   killmail_hash: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6472,7 +6472,7 @@ export def "killmails get" [
 #
 # GET /loyalty/stores/{corporation_id}/offers/
 # operationId: get_loyalty_stores_corporation_id_offers
-export def "loyalty-stores-offers get" [
+export def "get-loyalty-stores-corporation-id-offers" [
   corporation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6513,7 +6513,7 @@ export def "loyalty-stores-offers get" [
 #
 # GET /markets/groups/
 # operationId: get_markets_groups
-export def "markets-groups list" [
+export def "get-markets-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6552,7 +6552,7 @@ export def "markets-groups list" [
 #
 # GET /markets/groups/{market_group_id}/
 # operationId: get_markets_groups_market_group_id
-export def "markets-groups get" [
+export def "get-markets-groups-market-group-id" [
   market_group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6595,7 +6595,7 @@ export def "markets-groups get" [
 #
 # GET /markets/prices/
 # operationId: get_markets_prices
-export def "markets-prices get" [
+export def "get-markets-prices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6634,7 +6634,7 @@ export def "markets-prices get" [
 #
 # GET /markets/structures/{structure_id}/
 # operationId: get_markets_structures_structure_id
-export def "markets-structures get" [
+export def "get-markets-structures-structure-id" [
   structure_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6677,7 +6677,7 @@ export def "markets-structures get" [
 #
 # GET /markets/{region_id}/history/
 # operationId: get_markets_region_id_history
-export def "markets-history get" [
+export def "get-markets-region-id-history" [
   region_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6719,7 +6719,7 @@ export def "markets-history get" [
 #
 # GET /markets/{region_id}/orders/
 # operationId: get_markets_region_id_orders
-export def "markets-orders get" [
+export def "get-markets-region-id-orders" [
   region_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6763,7 +6763,7 @@ export def "markets-orders get" [
 #
 # GET /markets/{region_id}/types/
 # operationId: get_markets_region_id_types
-export def "markets-types get" [
+export def "get-markets-region-id-types" [
   region_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6805,7 +6805,7 @@ export def "markets-types get" [
 #
 # GET /opportunities/groups/
 # operationId: get_opportunities_groups
-export def "opportunities-groups list" [
+export def "get-opportunities-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6844,7 +6844,7 @@ export def "opportunities-groups list" [
 #
 # GET /opportunities/groups/{group_id}/
 # operationId: get_opportunities_groups_group_id
-export def "opportunities-groups get" [
+export def "get-opportunities-groups-group-id" [
   group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6887,7 +6887,7 @@ export def "opportunities-groups get" [
 #
 # GET /opportunities/tasks/
 # operationId: get_opportunities_tasks
-export def "opportunities-tasks list" [
+export def "get-opportunities-tasks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6926,7 +6926,7 @@ export def "opportunities-tasks list" [
 #
 # GET /opportunities/tasks/{task_id}/
 # operationId: get_opportunities_tasks_task_id
-export def "opportunities-tasks get" [
+export def "get-opportunities-tasks-task-id" [
   task_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6967,7 +6967,7 @@ export def "opportunities-tasks get" [
 #
 # GET /route/{origin}/{destination}/
 # operationId: get_route_origin_destination
-export def "route get" [
+export def "get-route-origin-destination" [
   origin: int
   destination: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -7013,7 +7013,7 @@ export def "route get" [
 #
 # GET /search/
 # operationId: get_search
-export def "search get" [
+export def "get-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7057,7 +7057,7 @@ export def "search get" [
 #
 # GET /sovereignty/campaigns/
 # operationId: get_sovereignty_campaigns
-export def "sovereignty-campaigns get" [
+export def "get-sovereignty-campaigns" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7096,7 +7096,7 @@ export def "sovereignty-campaigns get" [
 #
 # GET /sovereignty/map/
 # operationId: get_sovereignty_map
-export def "sovereignty-map get" [
+export def "get-sovereignty-map" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7135,7 +7135,7 @@ export def "sovereignty-map get" [
 #
 # GET /sovereignty/structures/
 # operationId: get_sovereignty_structures
-export def "sovereignty-structures get" [
+export def "get-sovereignty-structures" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7174,7 +7174,7 @@ export def "sovereignty-structures get" [
 #
 # GET /status/
 # operationId: get_status
-export def "status get" [
+export def "get-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7213,7 +7213,7 @@ export def "status get" [
 #
 # POST /ui/autopilot/waypoint/
 # operationId: post_ui_autopilot_waypoint
-export def "ui-autopilot-waypoint create" [
+export def "post-ui-autopilot-waypoint" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7253,7 +7253,7 @@ export def "ui-autopilot-waypoint create" [
 #
 # POST /ui/openwindow/contract/
 # operationId: post_ui_openwindow_contract
-export def "ui-openwindow-contract create" [
+export def "post-ui-openwindow-contract" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7291,7 +7291,7 @@ export def "ui-openwindow-contract create" [
 #
 # POST /ui/openwindow/information/
 # operationId: post_ui_openwindow_information
-export def "ui-openwindow-information create" [
+export def "post-ui-openwindow-information" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7329,7 +7329,7 @@ export def "ui-openwindow-information create" [
 #
 # POST /ui/openwindow/marketdetails/
 # operationId: post_ui_openwindow_marketdetails
-export def "ui-openwindow-marketdetails create" [
+export def "post-ui-openwindow-marketdetails" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7367,7 +7367,7 @@ export def "ui-openwindow-marketdetails create" [
 #
 # POST /ui/openwindow/newmail/
 # operationId: post_ui_openwindow_newmail
-export def "ui-openwindow-newmail create" [
+export def "post-ui-openwindow-newmail" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7412,7 +7412,7 @@ export def "ui-openwindow-newmail create" [
 #
 # GET /universe/ancestries/
 # operationId: get_universe_ancestries
-export def "universe-ancestries get" [
+export def "get-universe-ancestries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7453,7 +7453,7 @@ export def "universe-ancestries get" [
 #
 # GET /universe/asteroid_belts/{asteroid_belt_id}/
 # operationId: get_universe_asteroid_belts_asteroid_belt_id
-export def "universe-asteroid-belts get" [
+export def "get-universe-asteroid-belts-asteroid-belt-id" [
   asteroid_belt_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7494,7 +7494,7 @@ export def "universe-asteroid-belts get" [
 #
 # GET /universe/bloodlines/
 # operationId: get_universe_bloodlines
-export def "universe-bloodlines get" [
+export def "get-universe-bloodlines" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7535,7 +7535,7 @@ export def "universe-bloodlines get" [
 #
 # GET /universe/categories/
 # operationId: get_universe_categories
-export def "universe-categories list" [
+export def "get-universe-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7574,7 +7574,7 @@ export def "universe-categories list" [
 #
 # GET /universe/categories/{category_id}/
 # operationId: get_universe_categories_category_id
-export def "universe-categories get" [
+export def "get-universe-categories-category-id" [
   category_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7617,7 +7617,7 @@ export def "universe-categories get" [
 #
 # GET /universe/constellations/
 # operationId: get_universe_constellations
-export def "universe-constellations list" [
+export def "get-universe-constellations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7656,7 +7656,7 @@ export def "universe-constellations list" [
 #
 # GET /universe/constellations/{constellation_id}/
 # operationId: get_universe_constellations_constellation_id
-export def "universe-constellations get" [
+export def "get-universe-constellations-constellation-id" [
   constellation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7699,7 +7699,7 @@ export def "universe-constellations get" [
 #
 # GET /universe/factions/
 # operationId: get_universe_factions
-export def "universe-factions get" [
+export def "get-universe-factions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7740,7 +7740,7 @@ export def "universe-factions get" [
 #
 # GET /universe/graphics/
 # operationId: get_universe_graphics
-export def "universe-graphics list" [
+export def "get-universe-graphics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7779,7 +7779,7 @@ export def "universe-graphics list" [
 #
 # GET /universe/graphics/{graphic_id}/
 # operationId: get_universe_graphics_graphic_id
-export def "universe-graphics get" [
+export def "get-universe-graphics-graphic-id" [
   graphic_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7820,7 +7820,7 @@ export def "universe-graphics get" [
 #
 # GET /universe/groups/
 # operationId: get_universe_groups
-export def "universe-groups list" [
+export def "get-universe-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7860,7 +7860,7 @@ export def "universe-groups list" [
 #
 # GET /universe/groups/{group_id}/
 # operationId: get_universe_groups_group_id
-export def "universe-groups get" [
+export def "get-universe-groups-group-id" [
   group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7903,7 +7903,7 @@ export def "universe-groups get" [
 #
 # POST /universe/ids/
 # operationId: post_universe_ids
-export def "universe-ids create" [
+export def "post-universe-ids" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7947,7 +7947,7 @@ export def "universe-ids create" [
 #
 # GET /universe/moons/{moon_id}/
 # operationId: get_universe_moons_moon_id
-export def "universe-moons get" [
+export def "get-universe-moons-moon-id" [
   moon_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7988,7 +7988,7 @@ export def "universe-moons get" [
 #
 # POST /universe/names/
 # operationId: post_universe_names
-export def "universe-names create" [
+export def "post-universe-names" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8028,7 +8028,7 @@ export def "universe-names create" [
 #
 # GET /universe/planets/{planet_id}/
 # operationId: get_universe_planets_planet_id
-export def "universe-planets get" [
+export def "get-universe-planets-planet-id" [
   planet_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8069,7 +8069,7 @@ export def "universe-planets get" [
 #
 # GET /universe/races/
 # operationId: get_universe_races
-export def "universe-races get" [
+export def "get-universe-races" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8110,7 +8110,7 @@ export def "universe-races get" [
 #
 # GET /universe/regions/
 # operationId: get_universe_regions
-export def "universe-regions list" [
+export def "get-universe-regions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8149,7 +8149,7 @@ export def "universe-regions list" [
 #
 # GET /universe/regions/{region_id}/
 # operationId: get_universe_regions_region_id
-export def "universe-regions get" [
+export def "get-universe-regions-region-id" [
   region_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8192,7 +8192,7 @@ export def "universe-regions get" [
 #
 # GET /universe/schematics/{schematic_id}/
 # operationId: get_universe_schematics_schematic_id
-export def "universe-schematics get" [
+export def "get-universe-schematics-schematic-id" [
   schematic_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8233,7 +8233,7 @@ export def "universe-schematics get" [
 #
 # GET /universe/stargates/{stargate_id}/
 # operationId: get_universe_stargates_stargate_id
-export def "universe-stargates get" [
+export def "get-universe-stargates-stargate-id" [
   stargate_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8274,7 +8274,7 @@ export def "universe-stargates get" [
 #
 # GET /universe/stars/{star_id}/
 # operationId: get_universe_stars_star_id
-export def "universe-stars get" [
+export def "get-universe-stars-star-id" [
   star_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8315,7 +8315,7 @@ export def "universe-stars get" [
 #
 # GET /universe/stations/{station_id}/
 # operationId: get_universe_stations_station_id
-export def "universe-stations get" [
+export def "get-universe-stations-station-id" [
   station_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8356,7 +8356,7 @@ export def "universe-stations get" [
 #
 # GET /universe/structures/
 # operationId: get_universe_structures
-export def "universe-structures list" [
+export def "get-universe-structures" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8396,7 +8396,7 @@ export def "universe-structures list" [
 #
 # GET /universe/structures/{structure_id}/
 # operationId: get_universe_structures_structure_id
-export def "universe-structures get" [
+export def "get-universe-structures-structure-id" [
   structure_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8438,7 +8438,7 @@ export def "universe-structures get" [
 #
 # GET /universe/system_jumps/
 # operationId: get_universe_system_jumps
-export def "universe-system-jumps get" [
+export def "get-universe-system-jumps" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8477,7 +8477,7 @@ export def "universe-system-jumps get" [
 #
 # GET /universe/system_kills/
 # operationId: get_universe_system_kills
-export def "universe-system-kills get" [
+export def "get-universe-system-kills" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8516,7 +8516,7 @@ export def "universe-system-kills get" [
 #
 # GET /universe/systems/
 # operationId: get_universe_systems
-export def "universe-systems list" [
+export def "get-universe-systems" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8555,7 +8555,7 @@ export def "universe-systems list" [
 #
 # GET /universe/systems/{system_id}/
 # operationId: get_universe_systems_system_id
-export def "universe-systems get" [
+export def "get-universe-systems-system-id" [
   system_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8598,7 +8598,7 @@ export def "universe-systems get" [
 #
 # GET /universe/types/
 # operationId: get_universe_types
-export def "universe-types list" [
+export def "get-universe-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8638,7 +8638,7 @@ export def "universe-types list" [
 #
 # GET /universe/types/{type_id}/
 # operationId: get_universe_types_type_id
-export def "universe-types get" [
+export def "get-universe-types-type-id" [
   type_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8681,7 +8681,7 @@ export def "universe-types get" [
 #
 # GET /wars/
 # operationId: get_wars
-export def "wars list" [
+export def "get-wars" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8721,7 +8721,7 @@ export def "wars list" [
 #
 # GET /wars/{war_id}/
 # operationId: get_wars_war_id
-export def "wars get" [
+export def "get-wars-war-id" [
   war_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8762,7 +8762,7 @@ export def "wars get" [
 #
 # GET /wars/{war_id}/killmails/
 # operationId: get_wars_war_id_killmails
-export def "wars-killmails get" [
+export def "get-wars-war-id-killmails" [
   war_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

@@ -163,7 +163,7 @@ def auth-scheme-completer [] { ["x-appwrite-jwt" "x-appwrite-key" "x-appwrite-lo
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -187,7 +187,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /account
 # operationId: accountDelete
-export def "account delete" [
+export def "account-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
   --token-project: string # Auth token for Project (X-Appwrite-Project)
@@ -221,7 +221,7 @@ export def "account delete" [
 #
 # GET /account
 # operationId: accountGet
-export def "account get" [
+export def "account-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
   --token-project: string # Auth token for Project (X-Appwrite-Project)
@@ -255,7 +255,7 @@ export def "account get" [
 #
 # PATCH /account/email
 # operationId: accountUpdateEmail
-export def "account-email update" [
+export def "account-update-email" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
   --token-project: string # Auth token for Project (X-Appwrite-Project)
@@ -294,7 +294,7 @@ export def "account-email update" [
 #
 # GET /account/logs
 # operationId: accountGetLogs
-export def "account-logs get" [
+export def "account-get-logs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
   --token-project: string # Auth token for Project (X-Appwrite-Project)
@@ -328,7 +328,7 @@ export def "account-logs get" [
 #
 # PATCH /account/name
 # operationId: accountUpdateName
-export def "account-name update" [
+export def "account-update-name" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
   --token-project: string # Auth token for Project (X-Appwrite-Project)
@@ -366,7 +366,7 @@ export def "account-name update" [
 #
 # PATCH /account/password
 # operationId: accountUpdatePassword
-export def "account-password update" [
+export def "account-update-password" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
   --token-project: string # Auth token for Project (X-Appwrite-Project)
@@ -405,7 +405,7 @@ export def "account-password update" [
 #
 # GET /account/prefs
 # operationId: accountGetPrefs
-export def "account-prefs get" [
+export def "account-get-prefs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
   --token-project: string # Auth token for Project (X-Appwrite-Project)
@@ -439,7 +439,7 @@ export def "account-prefs get" [
 #
 # PATCH /account/prefs
 # operationId: accountUpdatePrefs
-export def "account-prefs update" [
+export def "account-update-prefs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
   --token-project: string # Auth token for Project (X-Appwrite-Project)
@@ -477,7 +477,7 @@ export def "account-prefs update" [
 #
 # POST /account/recovery
 # operationId: accountCreateRecovery
-export def "account-recovery create" [
+export def "account-create-recovery" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
   --token-project: string # Auth token for Project (X-Appwrite-Project)
@@ -516,7 +516,7 @@ export def "account-recovery create" [
 #
 # PUT /account/recovery
 # operationId: accountUpdateRecovery
-export def "account-recovery update" [
+export def "account-update-recovery" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
   --token-project: string # Auth token for Project (X-Appwrite-Project)
@@ -557,7 +557,7 @@ export def "account-recovery update" [
 #
 # DELETE /account/sessions
 # operationId: accountDeleteSessions
-export def "account-sessions delete" [
+export def "account-delete-sessions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
   --token-project: string # Auth token for Project (X-Appwrite-Project)
@@ -591,7 +591,7 @@ export def "account-sessions delete" [
 #
 # GET /account/sessions
 # operationId: accountGetSessions
-export def "account-sessions list" [
+export def "account-get-sessions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
   --token-project: string # Auth token for Project (X-Appwrite-Project)
@@ -625,7 +625,7 @@ export def "account-sessions list" [
 #
 # DELETE /account/sessions/{sessionId}
 # operationId: accountDeleteSession
-export def "account-sessions delete-by-session-id" [
+export def "account-delete-session" [
   session_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
@@ -661,7 +661,7 @@ export def "account-sessions delete-by-session-id" [
 #
 # GET /account/sessions/{sessionId}
 # operationId: accountGetSession
-export def "account-sessions get" [
+export def "account-get-session" [
   session_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
@@ -697,7 +697,7 @@ export def "account-sessions get" [
 #
 # POST /account/verification
 # operationId: accountCreateVerification
-export def "account-verification create" [
+export def "account-create-verification" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
   --token-project: string # Auth token for Project (X-Appwrite-Project)
@@ -735,7 +735,7 @@ export def "account-verification create" [
 #
 # PUT /account/verification
 # operationId: accountUpdateVerification
-export def "account-verification update" [
+export def "account-update-verification" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
   --token-project: string # Auth token for Project (X-Appwrite-Project)
@@ -774,7 +774,7 @@ export def "account-verification update" [
 #
 # GET /avatars/browsers/{code}
 # operationId: avatarsGetBrowser
-export def "avatars-browsers get" [
+export def "avatars-get-browser" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
@@ -815,7 +815,7 @@ export def "avatars-browsers get" [
 #
 # GET /avatars/credit-cards/{code}
 # operationId: avatarsGetCreditCard
-export def "avatars-credit-cards get" [
+export def "avatars-get-credit-card" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
@@ -856,7 +856,7 @@ export def "avatars-credit-cards get" [
 #
 # GET /avatars/favicon
 # operationId: avatarsGetFavicon
-export def "avatars-favicon get" [
+export def "avatars-get-favicon" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
   --token-key: string # Auth token for Key (X-Appwrite-Key)
@@ -893,7 +893,7 @@ export def "avatars-favicon get" [
 #
 # GET /avatars/flags/{code}
 # operationId: avatarsGetFlag
-export def "avatars-flags get" [
+export def "avatars-get-flag" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
@@ -934,7 +934,7 @@ export def "avatars-flags get" [
 #
 # GET /avatars/image
 # operationId: avatarsGetImage
-export def "avatars-image get" [
+export def "avatars-get-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
   --token-key: string # Auth token for Key (X-Appwrite-Key)
@@ -973,7 +973,7 @@ export def "avatars-image get" [
 #
 # GET /avatars/initials
 # operationId: avatarsGetInitials
-export def "avatars-initials get" [
+export def "avatars-get-initials" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
   --token-key: string # Auth token for Key (X-Appwrite-Key)
@@ -1014,7 +1014,7 @@ export def "avatars-initials get" [
 #
 # GET /avatars/qr
 # operationId: avatarsGetQR
-export def "avatars-qr get" [
+export def "avatars-get-qr" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
   --token-key: string # Auth token for Key (X-Appwrite-Key)
@@ -1054,7 +1054,7 @@ export def "avatars-qr get" [
 #
 # GET /database/collections
 # operationId: databaseListCollections
-export def "database-collections list" [
+export def "database-list-collections" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-key: string # Auth token for Key (X-Appwrite-Key)
   --token-project: string # Auth token for Project (X-Appwrite-Project)
@@ -1093,7 +1093,7 @@ export def "database-collections list" [
 #
 # POST /database/collections
 # operationId: databaseCreateCollection
-export def "database-collections create" [
+export def "database-create-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-key: string # Auth token for Key (X-Appwrite-Key)
   --token-project: string # Auth token for Project (X-Appwrite-Project)
@@ -1134,7 +1134,7 @@ export def "database-collections create" [
 #
 # DELETE /database/collections/{collectionId}
 # operationId: databaseDeleteCollection
-export def "database-collections delete" [
+export def "database-delete-collection" [
   collection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-key: string # Auth token for Key (X-Appwrite-Key)
@@ -1170,7 +1170,7 @@ export def "database-collections delete" [
 #
 # GET /database/collections/{collectionId}
 # operationId: databaseGetCollection
-export def "database-collections get" [
+export def "database-get-collection" [
   collection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-key: string # Auth token for Key (X-Appwrite-Key)
@@ -1206,7 +1206,7 @@ export def "database-collections get" [
 #
 # PUT /database/collections/{collectionId}
 # operationId: databaseUpdateCollection
-export def "database-collections update" [
+export def "database-update-collection" [
   collection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-key: string # Auth token for Key (X-Appwrite-Key)
@@ -1249,7 +1249,7 @@ export def "database-collections update" [
 #
 # GET /database/collections/{collectionId}/documents
 # operationId: databaseListDocuments
-export def "database-collections-documents list" [
+export def "database-list-documents" [
   collection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
@@ -1294,7 +1294,7 @@ export def "database-collections-documents list" [
 #
 # POST /database/collections/{collectionId}/documents
 # operationId: databaseCreateDocument
-export def "database-collections-documents create" [
+export def "database-create-document" [
   collection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
@@ -1340,7 +1340,7 @@ export def "database-collections-documents create" [
 #
 # DELETE /database/collections/{collectionId}/documents/{documentId}
 # operationId: databaseDeleteDocument
-export def "database-collections-documents delete" [
+export def "database-delete-document" [
   collection_id: string
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1379,7 +1379,7 @@ export def "database-collections-documents delete" [
 #
 # GET /database/collections/{collectionId}/documents/{documentId}
 # operationId: databaseGetDocument
-export def "database-collections-documents get" [
+export def "database-get-document" [
   collection_id: string
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1418,7 +1418,7 @@ export def "database-collections-documents get" [
 #
 # PATCH /database/collections/{collectionId}/documents/{documentId}
 # operationId: databaseUpdateDocument
-export def "database-collections-documents update" [
+export def "database-update-document" [
   collection_id: string
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1463,7 +1463,7 @@ export def "database-collections-documents update" [
 #
 # GET /functions
 # operationId: functionsList
-export def "functions list" [
+export def "functions-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-key: string # Auth token for Key (X-Appwrite-Key)
   --token-project: string # Auth token for Project (X-Appwrite-Project)
@@ -1502,7 +1502,7 @@ export def "functions list" [
 #
 # POST /functions
 # operationId: functionsCreate
-export def "functions create" [
+export def "functions-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-key: string # Auth token for Key (X-Appwrite-Key)
   --token-project: string # Auth token for Project (X-Appwrite-Project)
@@ -1546,7 +1546,7 @@ export def "functions create" [
 #
 # DELETE /functions/{functionId}
 # operationId: functionsDelete
-export def "functions delete" [
+export def "functions-delete" [
   function_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-key: string # Auth token for Key (X-Appwrite-Key)
@@ -1582,7 +1582,7 @@ export def "functions delete" [
 #
 # GET /functions/{functionId}
 # operationId: functionsGet
-export def "functions get" [
+export def "functions-get" [
   function_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-key: string # Auth token for Key (X-Appwrite-Key)
@@ -1618,7 +1618,7 @@ export def "functions get" [
 #
 # PUT /functions/{functionId}
 # operationId: functionsUpdate
-export def "functions update" [
+export def "functions-update" [
   function_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-key: string # Auth token for Key (X-Appwrite-Key)
@@ -1663,7 +1663,7 @@ export def "functions update" [
 #
 # GET /functions/{functionId}/executions
 # operationId: functionsListExecutions
-export def "functions-executions list" [
+export def "functions-list-executions" [
   function_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
@@ -1705,7 +1705,7 @@ export def "functions-executions list" [
 #
 # POST /functions/{functionId}/executions
 # operationId: functionsCreateExecution
-export def "functions-executions create" [
+export def "functions-create-execution" [
   function_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
@@ -1746,7 +1746,7 @@ export def "functions-executions create" [
 #
 # GET /functions/{functionId}/executions/{executionId}
 # operationId: functionsGetExecution
-export def "functions-executions get" [
+export def "functions-get-execution" [
   function_id: string
   execution_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1785,7 +1785,7 @@ export def "functions-executions get" [
 #
 # PATCH /functions/{functionId}/tag
 # operationId: functionsUpdateTag
-export def "functions-tag update" [
+export def "functions-update-tag" [
   function_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-key: string # Auth token for Key (X-Appwrite-Key)
@@ -1825,7 +1825,7 @@ export def "functions-tag update" [
 #
 # GET /functions/{functionId}/tags
 # operationId: functionsListTags
-export def "functions-tags list" [
+export def "functions-list-tags" [
   function_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-key: string # Auth token for Key (X-Appwrite-Key)
@@ -1866,7 +1866,7 @@ export def "functions-tags list" [
 #
 # POST /functions/{functionId}/tags
 # operationId: functionsCreateTag
-export def "functions-tags create" [
+export def "functions-create-tag" [
   function_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-key: string # Auth token for Key (X-Appwrite-Key)
@@ -1909,7 +1909,7 @@ export def "functions-tags create" [
 #
 # DELETE /functions/{functionId}/tags/{tagId}
 # operationId: functionsDeleteTag
-export def "functions-tags delete" [
+export def "functions-delete-tag" [
   function_id: string
   tag_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1947,7 +1947,7 @@ export def "functions-tags delete" [
 #
 # GET /functions/{functionId}/tags/{tagId}
 # operationId: functionsGetTag
-export def "functions-tags get" [
+export def "functions-get-tag" [
   function_id: string
   tag_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1985,7 +1985,7 @@ export def "functions-tags get" [
 #
 # GET /health
 # operationId: healthGet
-export def "health get" [
+export def "health-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-key: string # Auth token for Key (X-Appwrite-Key)
   --token-project: string # Auth token for Project (X-Appwrite-Project)
@@ -2019,7 +2019,7 @@ export def "health get" [
 #
 # GET /health/anti-virus
 # operationId: healthGetAntiVirus
-export def "health-anti-virus get" [
+export def "health-get-anti-virus" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-key: string # Auth token for Key (X-Appwrite-Key)
   --token-project: string # Auth token for Project (X-Appwrite-Project)
@@ -2053,7 +2053,7 @@ export def "health-anti-virus get" [
 #
 # GET /health/cache
 # operationId: healthGetCache
-export def "health-cache get" [
+export def "health-get-cache" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-key: string # Auth token for Key (X-Appwrite-Key)
   --token-project: string # Auth token for Project (X-Appwrite-Project)
@@ -2087,7 +2087,7 @@ export def "health-cache get" [
 #
 # GET /health/db
 # operationId: healthGetDB
-export def "health-db get" [
+export def "health-get-db" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-key: string # Auth token for Key (X-Appwrite-Key)
   --token-project: string # Auth token for Project (X-Appwrite-Project)
@@ -2121,7 +2121,7 @@ export def "health-db get" [
 #
 # GET /health/queue/certificates
 # operationId: healthGetQueueCertificates
-export def "health-queue-certificates get" [
+export def "health-get-queue-certificates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-key: string # Auth token for Key (X-Appwrite-Key)
   --token-project: string # Auth token for Project (X-Appwrite-Project)
@@ -2155,7 +2155,7 @@ export def "health-queue-certificates get" [
 #
 # GET /health/queue/functions
 # operationId: healthGetQueueFunctions
-export def "health-queue-functions get" [
+export def "health-get-queue-functions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-key: string # Auth token for Key (X-Appwrite-Key)
   --token-project: string # Auth token for Project (X-Appwrite-Project)
@@ -2189,7 +2189,7 @@ export def "health-queue-functions get" [
 #
 # GET /health/queue/logs
 # operationId: healthGetQueueLogs
-export def "health-queue-logs get" [
+export def "health-get-queue-logs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-key: string # Auth token for Key (X-Appwrite-Key)
   --token-project: string # Auth token for Project (X-Appwrite-Project)
@@ -2223,7 +2223,7 @@ export def "health-queue-logs get" [
 #
 # GET /health/queue/tasks
 # operationId: healthGetQueueTasks
-export def "health-queue-tasks get" [
+export def "health-get-queue-tasks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-key: string # Auth token for Key (X-Appwrite-Key)
   --token-project: string # Auth token for Project (X-Appwrite-Project)
@@ -2257,7 +2257,7 @@ export def "health-queue-tasks get" [
 #
 # GET /health/queue/usage
 # operationId: healthGetQueueUsage
-export def "health-queue-usage get" [
+export def "health-get-queue-usage" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-key: string # Auth token for Key (X-Appwrite-Key)
   --token-project: string # Auth token for Project (X-Appwrite-Project)
@@ -2291,7 +2291,7 @@ export def "health-queue-usage get" [
 #
 # GET /health/queue/webhooks
 # operationId: healthGetQueueWebhooks
-export def "health-queue-webhooks get" [
+export def "health-get-queue-webhooks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-key: string # Auth token for Key (X-Appwrite-Key)
   --token-project: string # Auth token for Project (X-Appwrite-Project)
@@ -2325,7 +2325,7 @@ export def "health-queue-webhooks get" [
 #
 # GET /health/storage/local
 # operationId: healthGetStorageLocal
-export def "health-storage-local get" [
+export def "health-get-storage-local" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-key: string # Auth token for Key (X-Appwrite-Key)
   --token-project: string # Auth token for Project (X-Appwrite-Project)
@@ -2359,7 +2359,7 @@ export def "health-storage-local get" [
 #
 # GET /health/time
 # operationId: healthGetTime
-export def "health-time get" [
+export def "health-get-time" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-key: string # Auth token for Key (X-Appwrite-Key)
   --token-project: string # Auth token for Project (X-Appwrite-Project)
@@ -2393,7 +2393,7 @@ export def "health-time get" [
 #
 # GET /locale
 # operationId: localeGet
-export def "locale get" [
+export def "locale-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
   --token-key: string # Auth token for Key (X-Appwrite-Key)
@@ -2428,7 +2428,7 @@ export def "locale get" [
 #
 # GET /locale/continents
 # operationId: localeGetContinents
-export def "locale-continents get" [
+export def "locale-get-continents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
   --token-key: string # Auth token for Key (X-Appwrite-Key)
@@ -2463,7 +2463,7 @@ export def "locale-continents get" [
 #
 # GET /locale/countries
 # operationId: localeGetCountries
-export def "locale-countries get" [
+export def "locale-get-countries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
   --token-key: string # Auth token for Key (X-Appwrite-Key)
@@ -2498,7 +2498,7 @@ export def "locale-countries get" [
 #
 # GET /locale/countries/eu
 # operationId: localeGetCountriesEU
-export def "locale-countries-eu get" [
+export def "locale-get-countries-eu" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
   --token-key: string # Auth token for Key (X-Appwrite-Key)
@@ -2533,7 +2533,7 @@ export def "locale-countries-eu get" [
 #
 # GET /locale/countries/phones
 # operationId: localeGetCountriesPhones
-export def "locale-countries-phones get" [
+export def "locale-get-countries-phones" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
   --token-key: string # Auth token for Key (X-Appwrite-Key)
@@ -2568,7 +2568,7 @@ export def "locale-countries-phones get" [
 #
 # GET /locale/currencies
 # operationId: localeGetCurrencies
-export def "locale-currencies get" [
+export def "locale-get-currencies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
   --token-key: string # Auth token for Key (X-Appwrite-Key)
@@ -2603,7 +2603,7 @@ export def "locale-currencies get" [
 #
 # GET /locale/languages
 # operationId: localeGetLanguages
-export def "locale-languages get" [
+export def "locale-get-languages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
   --token-key: string # Auth token for Key (X-Appwrite-Key)
@@ -2638,7 +2638,7 @@ export def "locale-languages get" [
 #
 # GET /storage/files
 # operationId: storageListFiles
-export def "storage-files list" [
+export def "storage-list-files" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
   --token-key: string # Auth token for Key (X-Appwrite-Key)
@@ -2678,7 +2678,7 @@ export def "storage-files list" [
 #
 # POST /storage/files
 # operationId: storageCreateFile
-export def "storage-files create" [
+export def "storage-create-file" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
   --token-key: string # Auth token for Key (X-Appwrite-Key)
@@ -2721,7 +2721,7 @@ export def "storage-files create" [
 #
 # DELETE /storage/files/{fileId}
 # operationId: storageDeleteFile
-export def "storage-files delete" [
+export def "storage-delete-file" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
@@ -2758,7 +2758,7 @@ export def "storage-files delete" [
 #
 # GET /storage/files/{fileId}
 # operationId: storageGetFile
-export def "storage-files get" [
+export def "storage-get-file" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
@@ -2795,7 +2795,7 @@ export def "storage-files get" [
 #
 # PUT /storage/files/{fileId}
 # operationId: storageUpdateFile
-export def "storage-files update" [
+export def "storage-update-file" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
@@ -2837,7 +2837,7 @@ export def "storage-files update" [
 #
 # GET /storage/files/{fileId}/download
 # operationId: storageGetFileDownload
-export def "storage-files-download get" [
+export def "storage-get-file-download" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
@@ -2874,7 +2874,7 @@ export def "storage-files-download get" [
 #
 # GET /storage/files/{fileId}/preview
 # operationId: storageGetFilePreview
-export def "storage-files-preview get" [
+export def "storage-get-file-preview" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
@@ -2923,7 +2923,7 @@ export def "storage-files-preview get" [
 #
 # GET /storage/files/{fileId}/view
 # operationId: storageGetFileView
-export def "storage-files-view get" [
+export def "storage-get-file-view" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
@@ -2960,7 +2960,7 @@ export def "storage-files-view get" [
 #
 # GET /teams
 # operationId: teamsList
-export def "teams list" [
+export def "teams-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
   --token-key: string # Auth token for Key (X-Appwrite-Key)
@@ -3000,7 +3000,7 @@ export def "teams list" [
 #
 # POST /teams
 # operationId: teamsCreate
-export def "teams create" [
+export def "teams-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
   --token-key: string # Auth token for Key (X-Appwrite-Key)
@@ -3040,7 +3040,7 @@ export def "teams create" [
 #
 # DELETE /teams/{teamId}
 # operationId: teamsDelete
-export def "teams delete" [
+export def "teams-delete" [
   team_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
@@ -3077,7 +3077,7 @@ export def "teams delete" [
 #
 # GET /teams/{teamId}
 # operationId: teamsGet
-export def "teams get" [
+export def "teams-get" [
   team_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
@@ -3114,7 +3114,7 @@ export def "teams get" [
 #
 # PUT /teams/{teamId}
 # operationId: teamsUpdate
-export def "teams update" [
+export def "teams-update" [
   team_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
@@ -3155,7 +3155,7 @@ export def "teams update" [
 #
 # GET /teams/{teamId}/memberships
 # operationId: teamsGetMemberships
-export def "teams-memberships get" [
+export def "teams-get-memberships" [
   team_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
@@ -3197,7 +3197,7 @@ export def "teams-memberships get" [
 #
 # POST /teams/{teamId}/memberships
 # operationId: teamsCreateMembership
-export def "teams-memberships create" [
+export def "teams-create-membership" [
   team_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
@@ -3241,7 +3241,7 @@ export def "teams-memberships create" [
 #
 # DELETE /teams/{teamId}/memberships/{membershipId}
 # operationId: teamsDeleteMembership
-export def "teams-memberships delete" [
+export def "teams-delete-membership" [
   team_id: string
   membership_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3280,7 +3280,7 @@ export def "teams-memberships delete" [
 #
 # PATCH /teams/{teamId}/memberships/{membershipId}
 # operationId: teamsUpdateMembershipRoles
-export def "teams-memberships update-roles" [
+export def "teams-update-membership-roles" [
   team_id: string
   membership_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3323,7 +3323,7 @@ export def "teams-memberships update-roles" [
 #
 # PATCH /teams/{teamId}/memberships/{membershipId}/status
 # operationId: teamsUpdateMembershipStatus
-export def "teams-memberships-status update" [
+export def "teams-update-membership-status" [
   team_id: string
   membership_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3366,7 +3366,7 @@ export def "teams-memberships-status update" [
 #
 # GET /users
 # operationId: usersList
-export def "users list" [
+export def "users-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-key: string # Auth token for Key (X-Appwrite-Key)
   --token-project: string # Auth token for Project (X-Appwrite-Project)
@@ -3405,7 +3405,7 @@ export def "users list" [
 #
 # POST /users
 # operationId: usersCreate
-export def "users create" [
+export def "users-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-key: string # Auth token for Key (X-Appwrite-Key)
   --token-project: string # Auth token for Project (X-Appwrite-Project)
@@ -3445,7 +3445,7 @@ export def "users create" [
 #
 # DELETE /users/{userId}
 # operationId: usersDelete
-export def "users delete" [
+export def "users-delete" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-key: string # Auth token for Key (X-Appwrite-Key)
@@ -3481,7 +3481,7 @@ export def "users delete" [
 #
 # GET /users/{userId}
 # operationId: usersGet
-export def "users get" [
+export def "users-get" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-key: string # Auth token for Key (X-Appwrite-Key)
@@ -3517,7 +3517,7 @@ export def "users get" [
 #
 # GET /users/{userId}/logs
 # operationId: usersGetLogs
-export def "users-logs get" [
+export def "users-get-logs" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-key: string # Auth token for Key (X-Appwrite-Key)
@@ -3553,7 +3553,7 @@ export def "users-logs get" [
 #
 # GET /users/{userId}/prefs
 # operationId: usersGetPrefs
-export def "users-prefs get" [
+export def "users-get-prefs" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-key: string # Auth token for Key (X-Appwrite-Key)
@@ -3589,7 +3589,7 @@ export def "users-prefs get" [
 #
 # PATCH /users/{userId}/prefs
 # operationId: usersUpdatePrefs
-export def "users-prefs update" [
+export def "users-update-prefs" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-key: string # Auth token for Key (X-Appwrite-Key)
@@ -3629,7 +3629,7 @@ export def "users-prefs update" [
 #
 # DELETE /users/{userId}/sessions
 # operationId: usersDeleteSessions
-export def "users-sessions delete-by-user-id" [
+export def "users-delete-sessions" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-key: string # Auth token for Key (X-Appwrite-Key)
@@ -3665,7 +3665,7 @@ export def "users-sessions delete-by-user-id" [
 #
 # GET /users/{userId}/sessions
 # operationId: usersGetSessions
-export def "users-sessions get" [
+export def "users-get-sessions" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-key: string # Auth token for Key (X-Appwrite-Key)
@@ -3701,7 +3701,7 @@ export def "users-sessions get" [
 #
 # DELETE /users/{userId}/sessions/{sessionId}
 # operationId: usersDeleteSession
-export def "users-sessions delete-by-user-id-session-id" [
+export def "users-delete-session" [
   user_id: string
   session_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3739,7 +3739,7 @@ export def "users-sessions delete-by-user-id-session-id" [
 #
 # PATCH /users/{userId}/status
 # operationId: usersUpdateStatus
-export def "users-status update" [
+export def "users-update-status" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-key: string # Auth token for Key (X-Appwrite-Key)
@@ -3779,7 +3779,7 @@ export def "users-status update" [
 #
 # PATCH /users/{userId}/verification
 # operationId: usersUpdateVerification
-export def "users-verification update" [
+export def "users-update-verification" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-key: string # Auth token for Key (X-Appwrite-Key)

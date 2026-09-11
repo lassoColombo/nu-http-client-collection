@@ -130,7 +130,7 @@ def type-completer [] { ["ALERT_FEEDBACK_TYPE_UNSPECIFIED" "NOT_USEFUL" "SOMEWHA
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta1-alerts list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "alertcenter-alerts-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -154,7 +154,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1beta1/alerts
 # operationId: alertcenter.alerts.list
-export def "v1beta1-alerts list" [
+export def "alertcenter-alerts-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -205,7 +205,7 @@ export def "v1beta1-alerts list" [
 #
 # DELETE /v1beta1/alerts/{alertId}
 # operationId: alertcenter.alerts.delete
-export def "v1beta1-alerts delete" [
+export def "alertcenter-alerts-delete" [
   alert_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -254,7 +254,7 @@ export def "v1beta1-alerts delete" [
 #
 # GET /v1beta1/alerts/{alertId}
 # operationId: alertcenter.alerts.get
-export def "v1beta1-alerts get" [
+export def "alertcenter-alerts-get" [
   alert_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -303,7 +303,7 @@ export def "v1beta1-alerts get" [
 #
 # GET /v1beta1/alerts/{alertId}/feedback
 # operationId: alertcenter.alerts.feedback.list
-export def "v1beta1-alerts-feedback list" [
+export def "alertcenter-alerts-feedback-list" [
   alert_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -353,7 +353,7 @@ export def "v1beta1-alerts-feedback list" [
 #
 # POST /v1beta1/alerts/{alertId}/feedback
 # operationId: alertcenter.alerts.feedback.create
-export def "v1beta1-alerts-feedback create" [
+export def "alertcenter-alerts-feedback-create" [
   alert_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -411,7 +411,7 @@ export def "v1beta1-alerts-feedback create" [
 #
 # GET /v1beta1/alerts/{alertId}/metadata
 # operationId: alertcenter.alerts.getMetadata
-export def "v1beta1-alerts-metadata get" [
+export def "alertcenter-alerts-get-metadata" [
   alert_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -460,7 +460,7 @@ export def "v1beta1-alerts-metadata get" [
 #
 # POST /v1beta1/alerts/{alertId}:undelete
 # operationId: alertcenter.alerts.undelete
-export def "v1beta1-alerts create-undelete" [
+export def "alertcenter-alerts-undelete" [
   alert_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -512,7 +512,7 @@ export def "v1beta1-alerts create-undelete" [
 #
 # POST /v1beta1/alerts:batchDelete
 # operationId: alertcenter.alerts.batchDelete
-export def "v1beta1-alerts-batch-delete delete" [
+export def "alertcenter-alerts-batch-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -563,7 +563,7 @@ export def "v1beta1-alerts-batch-delete delete" [
 #
 # POST /v1beta1/alerts:batchUndelete
 # operationId: alertcenter.alerts.batchUndelete
-export def "v1beta1-alerts-batch-undelete create" [
+export def "alertcenter-alerts-batch-undelete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -614,7 +614,7 @@ export def "v1beta1-alerts-batch-undelete create" [
 #
 # GET /v1beta1/settings
 # operationId: alertcenter.getSettings
-export def "v1beta1-settings get" [
+export def "alertcenter-get-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -662,7 +662,7 @@ export def "v1beta1-settings get" [
 # PATCH /v1beta1/settings
 # operationId: alertcenter.updateSettings
 # --notifications item shape: {cloudPubsubTopic?: record}
-export def "v1beta1-settings update" [
+export def "alertcenter-update-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)

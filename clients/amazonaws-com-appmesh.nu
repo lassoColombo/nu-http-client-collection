@@ -110,7 +110,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "meshes-virtual-gateway-gateway-routes create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-gateway-route" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -136,7 +136,7 @@ export def commands []: nothing -> table {
 # operationId: CreateGatewayRoute
 # --spec shape: {grpcRoute?: any, http2Route?: any, httpRoute?: any, priority?: any}
 # --tags item shape: {key: any, value: any}
-export def "meshes-virtual-gateway-gateway-routes create" [
+export def "create-gateway-route" [
   mesh_name: string
   virtual_gateway_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -192,7 +192,7 @@ export def "meshes-virtual-gateway-gateway-routes create" [
 #
 # GET /v20190125/meshes/{meshName}/virtualGateway/{virtualGatewayName}/gatewayRoutes
 # operationId: ListGatewayRoutes
-export def "meshes-virtual-gateway-gateway-routes list" [
+export def "list-gateway-routes" [
   mesh_name: string
   virtual_gateway_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -245,7 +245,7 @@ export def "meshes-virtual-gateway-gateway-routes list" [
 # operationId: CreateMesh
 # --spec shape: {egressFilter?: any, serviceDiscovery?: record}
 # --tags item shape: {key: any, value: any}
-export def "meshes create-mesh" [
+export def "create-mesh" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -295,7 +295,7 @@ export def "meshes create-mesh" [
 #
 # GET /v20190125/meshes
 # operationId: ListMeshes
-export def "meshes list" [
+export def "list-meshes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -343,7 +343,7 @@ export def "meshes list" [
 # operationId: CreateRoute
 # --spec shape: {grpcRoute?: any, http2Route?: any, httpRoute?: any, priority?: any, tcpRoute?: any}
 # --tags item shape: {key: any, value: any}
-export def "meshes-virtual-router-routes create" [
+export def "create-route" [
   mesh_name: string
   virtual_router_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -399,7 +399,7 @@ export def "meshes-virtual-router-routes create" [
 #
 # GET /v20190125/meshes/{meshName}/virtualRouter/{virtualRouterName}/routes
 # operationId: ListRoutes
-export def "meshes-virtual-router-routes list" [
+export def "list-routes" [
   mesh_name: string
   virtual_router_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -452,7 +452,7 @@ export def "meshes-virtual-router-routes list" [
 # operationId: CreateVirtualGateway
 # --spec shape: {backendDefaults?: any, listeners?: any, logging?: record}
 # --tags item shape: {key: any, value: any}
-export def "meshes-virtual-gateways create" [
+export def "create-virtual-gateway" [
   mesh_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -506,7 +506,7 @@ export def "meshes-virtual-gateways create" [
 #
 # GET /v20190125/meshes/{meshName}/virtualGateways
 # operationId: ListVirtualGateways
-export def "meshes-virtual-gateways list" [
+export def "list-virtual-gateways" [
   mesh_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -557,7 +557,7 @@ export def "meshes-virtual-gateways list" [
 # operationId: CreateVirtualNode
 # --spec shape: {backendDefaults?: any, backends?: any, listeners?: any, logging?: any, serviceDiscovery?: any}
 # --tags item shape: {key: any, value: any}
-export def "meshes-virtual-nodes create" [
+export def "create-virtual-node" [
   mesh_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -611,7 +611,7 @@ export def "meshes-virtual-nodes create" [
 #
 # GET /v20190125/meshes/{meshName}/virtualNodes
 # operationId: ListVirtualNodes
-export def "meshes-virtual-nodes list" [
+export def "list-virtual-nodes" [
   mesh_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -662,7 +662,7 @@ export def "meshes-virtual-nodes list" [
 # operationId: CreateVirtualRouter
 # --spec shape: {listeners?: any}
 # --tags item shape: {key: any, value: any}
-export def "meshes-virtual-routers create" [
+export def "create-virtual-router" [
   mesh_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -716,7 +716,7 @@ export def "meshes-virtual-routers create" [
 #
 # GET /v20190125/meshes/{meshName}/virtualRouters
 # operationId: ListVirtualRouters
-export def "meshes-virtual-routers list" [
+export def "list-virtual-routers" [
   mesh_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -767,7 +767,7 @@ export def "meshes-virtual-routers list" [
 # operationId: CreateVirtualService
 # --spec shape: {provider?: any}
 # --tags item shape: {key: any, value: any}
-export def "meshes-virtual-services create" [
+export def "create-virtual-service" [
   mesh_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -821,7 +821,7 @@ export def "meshes-virtual-services create" [
 #
 # GET /v20190125/meshes/{meshName}/virtualServices
 # operationId: ListVirtualServices
-export def "meshes-virtual-services list" [
+export def "list-virtual-services" [
   mesh_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -870,7 +870,7 @@ export def "meshes-virtual-services list" [
 #
 # DELETE /v20190125/meshes/{meshName}/virtualGateway/{virtualGatewayName}/gatewayRoutes/{gatewayRouteName}
 # operationId: DeleteGatewayRoute
-export def "meshes-virtual-gateway-gateway-routes delete" [
+export def "delete-gateway-route" [
   mesh_name: string
   virtual_gateway_name: string
   gateway_route_name: string
@@ -921,7 +921,7 @@ export def "meshes-virtual-gateway-gateway-routes delete" [
 #
 # GET /v20190125/meshes/{meshName}/virtualGateway/{virtualGatewayName}/gatewayRoutes/{gatewayRouteName}
 # operationId: DescribeGatewayRoute
-export def "meshes-virtual-gateway-gateway-routes get" [
+export def "describe-gateway-route" [
   mesh_name: string
   virtual_gateway_name: string
   gateway_route_name: string
@@ -973,7 +973,7 @@ export def "meshes-virtual-gateway-gateway-routes get" [
 # PUT /v20190125/meshes/{meshName}/virtualGateway/{virtualGatewayName}/gatewayRoutes/{gatewayRouteName}
 # operationId: UpdateGatewayRoute
 # --spec shape: {grpcRoute?: any, http2Route?: any, httpRoute?: any, priority?: any}
-export def "meshes-virtual-gateway-gateway-routes update" [
+export def "update-gateway-route" [
   mesh_name: string
   virtual_gateway_name: string
   gateway_route_name: string
@@ -1029,7 +1029,7 @@ export def "meshes-virtual-gateway-gateway-routes update" [
 #
 # DELETE /v20190125/meshes/{meshName}
 # operationId: DeleteMesh
-export def "meshes delete-mesh" [
+export def "delete-mesh" [
   mesh_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1074,7 +1074,7 @@ export def "meshes delete-mesh" [
 #
 # GET /v20190125/meshes/{meshName}
 # operationId: DescribeMesh
-export def "meshes get-mesh" [
+export def "describe-mesh" [
   mesh_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1122,7 +1122,7 @@ export def "meshes get-mesh" [
 # PUT /v20190125/meshes/{meshName}
 # operationId: UpdateMesh
 # --spec shape: {egressFilter?: any, serviceDiscovery?: record}
-export def "meshes update-mesh" [
+export def "update-mesh" [
   mesh_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1172,7 +1172,7 @@ export def "meshes update-mesh" [
 #
 # DELETE /v20190125/meshes/{meshName}/virtualRouter/{virtualRouterName}/routes/{routeName}
 # operationId: DeleteRoute
-export def "meshes-virtual-router-routes delete" [
+export def "delete-route" [
   mesh_name: string
   virtual_router_name: string
   route_name: string
@@ -1223,7 +1223,7 @@ export def "meshes-virtual-router-routes delete" [
 #
 # GET /v20190125/meshes/{meshName}/virtualRouter/{virtualRouterName}/routes/{routeName}
 # operationId: DescribeRoute
-export def "meshes-virtual-router-routes get" [
+export def "describe-route" [
   mesh_name: string
   virtual_router_name: string
   route_name: string
@@ -1275,7 +1275,7 @@ export def "meshes-virtual-router-routes get" [
 # PUT /v20190125/meshes/{meshName}/virtualRouter/{virtualRouterName}/routes/{routeName}
 # operationId: UpdateRoute
 # --spec shape: {grpcRoute?: any, http2Route?: any, httpRoute?: any, priority?: any, tcpRoute?: any}
-export def "meshes-virtual-router-routes update" [
+export def "update-route" [
   mesh_name: string
   virtual_router_name: string
   route_name: string
@@ -1331,7 +1331,7 @@ export def "meshes-virtual-router-routes update" [
 #
 # DELETE /v20190125/meshes/{meshName}/virtualGateways/{virtualGatewayName}
 # operationId: DeleteVirtualGateway
-export def "meshes-virtual-gateways delete" [
+export def "delete-virtual-gateway" [
   mesh_name: string
   virtual_gateway_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1380,7 +1380,7 @@ export def "meshes-virtual-gateways delete" [
 #
 # GET /v20190125/meshes/{meshName}/virtualGateways/{virtualGatewayName}
 # operationId: DescribeVirtualGateway
-export def "meshes-virtual-gateways get" [
+export def "describe-virtual-gateway" [
   mesh_name: string
   virtual_gateway_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1430,7 +1430,7 @@ export def "meshes-virtual-gateways get" [
 # PUT /v20190125/meshes/{meshName}/virtualGateways/{virtualGatewayName}
 # operationId: UpdateVirtualGateway
 # --spec shape: {backendDefaults?: any, listeners?: any, logging?: record}
-export def "meshes-virtual-gateways update" [
+export def "update-virtual-gateway" [
   mesh_name: string
   virtual_gateway_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1484,7 +1484,7 @@ export def "meshes-virtual-gateways update" [
 #
 # DELETE /v20190125/meshes/{meshName}/virtualNodes/{virtualNodeName}
 # operationId: DeleteVirtualNode
-export def "meshes-virtual-nodes delete" [
+export def "delete-virtual-node" [
   mesh_name: string
   virtual_node_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1533,7 +1533,7 @@ export def "meshes-virtual-nodes delete" [
 #
 # GET /v20190125/meshes/{meshName}/virtualNodes/{virtualNodeName}
 # operationId: DescribeVirtualNode
-export def "meshes-virtual-nodes get" [
+export def "describe-virtual-node" [
   mesh_name: string
   virtual_node_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1583,7 +1583,7 @@ export def "meshes-virtual-nodes get" [
 # PUT /v20190125/meshes/{meshName}/virtualNodes/{virtualNodeName}
 # operationId: UpdateVirtualNode
 # --spec shape: {backendDefaults?: any, backends?: any, listeners?: any, logging?: any, serviceDiscovery?: any}
-export def "meshes-virtual-nodes update" [
+export def "update-virtual-node" [
   mesh_name: string
   virtual_node_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1637,7 +1637,7 @@ export def "meshes-virtual-nodes update" [
 #
 # DELETE /v20190125/meshes/{meshName}/virtualRouters/{virtualRouterName}
 # operationId: DeleteVirtualRouter
-export def "meshes-virtual-routers delete" [
+export def "delete-virtual-router" [
   mesh_name: string
   virtual_router_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1686,7 +1686,7 @@ export def "meshes-virtual-routers delete" [
 #
 # GET /v20190125/meshes/{meshName}/virtualRouters/{virtualRouterName}
 # operationId: DescribeVirtualRouter
-export def "meshes-virtual-routers get" [
+export def "describe-virtual-router" [
   mesh_name: string
   virtual_router_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1736,7 +1736,7 @@ export def "meshes-virtual-routers get" [
 # PUT /v20190125/meshes/{meshName}/virtualRouters/{virtualRouterName}
 # operationId: UpdateVirtualRouter
 # --spec shape: {listeners?: any}
-export def "meshes-virtual-routers update" [
+export def "update-virtual-router" [
   mesh_name: string
   virtual_router_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1790,7 +1790,7 @@ export def "meshes-virtual-routers update" [
 #
 # DELETE /v20190125/meshes/{meshName}/virtualServices/{virtualServiceName}
 # operationId: DeleteVirtualService
-export def "meshes-virtual-services delete" [
+export def "delete-virtual-service" [
   mesh_name: string
   virtual_service_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1839,7 +1839,7 @@ export def "meshes-virtual-services delete" [
 #
 # GET /v20190125/meshes/{meshName}/virtualServices/{virtualServiceName}
 # operationId: DescribeVirtualService
-export def "meshes-virtual-services get" [
+export def "describe-virtual-service" [
   mesh_name: string
   virtual_service_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1889,7 +1889,7 @@ export def "meshes-virtual-services get" [
 # PUT /v20190125/meshes/{meshName}/virtualServices/{virtualServiceName}
 # operationId: UpdateVirtualService
 # --spec shape: {provider?: any}
-export def "meshes-virtual-services update" [
+export def "update-virtual-service" [
   mesh_name: string
   virtual_service_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1943,7 +1943,7 @@ export def "meshes-virtual-services update" [
 #
 # GET /v20190125/tags
 # operationId: ListTagsForResource
-export def "tags list-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1991,7 +1991,7 @@ export def "tags list-for-resource" [
 # PUT /v20190125/tag
 # operationId: TagResource
 # --tags item shape: {key: any, value: any}
-export def "tag tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2040,7 +2040,7 @@ export def "tag tag-resource" [
 #
 # PUT /v20190125/untag
 # operationId: UntagResource
-export def "untag untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

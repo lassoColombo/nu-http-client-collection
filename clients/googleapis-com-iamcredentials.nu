@@ -112,7 +112,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects generate-access-token" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "iamcredentials-projects-service-accounts-generate-access-token" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -136,7 +136,7 @@ export def commands []: nothing -> table {
 #
 # POST /v1/{name}:generateAccessToken
 # operationId: iamcredentials.projects.serviceAccounts.generateAccessToken
-export def "projects generate-access-token" [
+export def "iamcredentials-projects-service-accounts-generate-access-token" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -190,7 +190,7 @@ export def "projects generate-access-token" [
 #
 # POST /v1/{name}:generateIdToken
 # operationId: iamcredentials.projects.serviceAccounts.generateIdToken
-export def "projects generate-token" [
+export def "iamcredentials-projects-service-accounts-generate-id-token" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -244,7 +244,7 @@ export def "projects generate-token" [
 #
 # POST /v1/{name}:signBlob
 # operationId: iamcredentials.projects.serviceAccounts.signBlob
-export def "projects create-sign-blob" [
+export def "iamcredentials-projects-service-accounts-sign-blob" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -297,7 +297,7 @@ export def "projects create-sign-blob" [
 #
 # POST /v1/{name}:signJwt
 # operationId: iamcredentials.projects.serviceAccounts.signJwt
-export def "projects create-sign-jwt" [
+export def "iamcredentials-projects-service-accounts-sign-jwt" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

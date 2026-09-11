@@ -110,7 +110,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-management-policies delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "management-policies-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -134,7 +134,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Storage/storageAccounts/{accountName}/managementPolicies/{managementPolicyName}
 # operationId: ManagementPolicies_Delete
-export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-management-policies delete" [
+export def "management-policies-delete" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -178,7 +178,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Storage/storageAccounts/{accountName}/managementPolicies/{managementPolicyName}
 # operationId: ManagementPolicies_Get
-export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-management-policies get" [
+export def "management-policies-get" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -223,7 +223,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Storage/storageAccounts/{accountName}/managementPolicies/{managementPolicyName}
 # operationId: ManagementPolicies_CreateOrUpdate
 # --properties shape: {policy?: record}
-export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-management-policies create-or-update" [
+export def "management-policies-create-or-update" [
   subscription_id: string
   resource_group_name: string
   account_name: string

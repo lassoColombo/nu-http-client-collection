@@ -99,7 +99,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-management-groups-providers-microsoft-policy-insights-policy-tracked-resources-query-results list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "policy-tracked-resources-list-query-results-for-management-group" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -123,7 +123,7 @@ export def commands []: nothing -> table {
 #
 # POST /providers/{managementGroupsNamespace}/managementGroups/{managementGroupName}/providers/Microsoft.PolicyInsights/policyTrackedResources/{policyTrackedResourcesResource}/queryResults
 # operationId: PolicyTrackedResources_ListQueryResultsForManagementGroup
-export def "providers-management-groups-providers-microsoft-policy-insights-policy-tracked-resources-query-results list" [
+export def "policy-tracked-resources-list-query-results-for-management-group" [
   management_groups_namespace: string
   management_group_name: string
   policy_tracked_resources_resource: string
@@ -167,7 +167,7 @@ export def "providers-management-groups-providers-microsoft-policy-insights-poli
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.PolicyInsights/policyTrackedResources/{policyTrackedResourcesResource}/queryResults
 # operationId: PolicyTrackedResources_ListQueryResultsForSubscription
-export def "subscriptions-providers-microsoft-policy-insights-policy-tracked-resources-query-results list" [
+export def "policy-tracked-resources-list-query-results-for-subscription" [
   subscription_id: string
   policy_tracked_resources_resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -209,7 +209,7 @@ export def "subscriptions-providers-microsoft-policy-insights-policy-tracked-res
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.PolicyInsights/policyTrackedResources/{policyTrackedResourcesResource}/queryResults
 # operationId: PolicyTrackedResources_ListQueryResultsForResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-policy-insights-policy-tracked-resources-query-results list" [
+export def "policy-tracked-resources-list-query-results-for-resource-group" [
   subscription_id: string
   resource_group_name: string
   policy_tracked_resources_resource: string
@@ -253,7 +253,7 @@ export def "subscriptions-resource-groups-providers-microsoft-policy-insights-po
 #
 # POST /{resourceId}/providers/Microsoft.PolicyInsights/policyTrackedResources/{policyTrackedResourcesResource}/queryResults
 # operationId: PolicyTrackedResources_ListQueryResultsForResource
-export def "providers-microsoft-policy-insights-policy-tracked-resources-query-results list" [
+export def "policy-tracked-resources-list-query-results-for-resource" [
   resource_id: string
   policy_tracked_resources_resource: string
   --base-url(-b): string@base-url-completer # API base URL

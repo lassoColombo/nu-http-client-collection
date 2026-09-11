@@ -136,7 +136,7 @@ def status-completer-1 [] { ["DISABLED" "ENABLED"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "instance-approved-origin update-associate" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associate-approved-origin" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -160,7 +160,7 @@ export def commands []: nothing -> table {
 #
 # PUT /instance/{InstanceId}/approved-origin
 # operationId: AssociateApprovedOrigin
-export def "instance-approved-origin update-associate" [
+export def "associate-approved-origin" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -211,7 +211,7 @@ export def "instance-approved-origin update-associate" [
 # operationId: AssociateBot
 # --LexBot shape: {Name?: any, LexRegion?: any}
 # --LexV2Bot shape: {AliasArn?: any}
-export def "instance-bot update-associate" [
+export def "associate-bot" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -263,7 +263,7 @@ export def "instance-bot update-associate" [
 # operationId: DisassociateBot
 # --LexBot shape: {Name?: any, LexRegion?: any}
 # --LexV2Bot shape: {AliasArn?: any}
-export def "instance-bot create-disassociate" [
+export def "disassociate-bot" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -313,7 +313,7 @@ export def "instance-bot create-disassociate" [
 #
 # PUT /default-vocabulary/{InstanceId}/{LanguageCode}
 # operationId: AssociateDefaultVocabulary
-export def "default-vocabulary update-associate" [
+export def "associate-default-vocabulary" [
   instance_id: string
   language_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -365,7 +365,7 @@ export def "default-vocabulary update-associate" [
 # PUT /instance/{InstanceId}/storage-config
 # operationId: AssociateInstanceStorageConfig
 # --StorageConfig shape: {AssociationId?: any, StorageType?: any, S3Config?: any, KinesisVideoStreamConfig?: any, KinesisStreamConfig?: any, KinesisFirehoseConfig?: any}
-export def "instance-storage-config update-associate" [
+export def "associate-instance-storage-config" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -415,7 +415,7 @@ export def "instance-storage-config update-associate" [
 #
 # PUT /instance/{InstanceId}/lambda-function
 # operationId: AssociateLambdaFunction
-export def "instance-lambda-function update-associate" [
+export def "associate-lambda-function" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -465,7 +465,7 @@ export def "instance-lambda-function update-associate" [
 # PUT /instance/{InstanceId}/lex-bot
 # operationId: AssociateLexBot
 # --LexBot shape: {Name?: any, LexRegion?: any}
-export def "instance-lex-bot update-associate" [
+export def "associate-lex-bot" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -514,7 +514,7 @@ export def "instance-lex-bot update-associate" [
 #
 # PUT /phone-number/{PhoneNumberId}/contact-flow
 # operationId: AssociatePhoneNumberContactFlow
-export def "phone-number-contact-flow update-associate" [
+export def "associate-phone-number-contact-flow" [
   phone_number_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -564,7 +564,7 @@ export def "phone-number-contact-flow update-associate" [
 #
 # POST /queues/{InstanceId}/{QueueId}/associate-quick-connects
 # operationId: AssociateQueueQuickConnects
-export def "queues-associate-quick-connects create" [
+export def "associate-queue-quick-connects" [
   instance_id: string
   queue_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -616,7 +616,7 @@ export def "queues-associate-quick-connects create" [
 # POST /routing-profiles/{InstanceId}/{RoutingProfileId}/associate-queues
 # operationId: AssociateRoutingProfileQueues
 # --QueueConfigs item shape: {QueueReference: any, Priority: any, Delay: any}
-export def "routing-profiles-associate-queues create" [
+export def "associate-routing-profile-queues" [
   instance_id: string
   routing_profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -667,7 +667,7 @@ export def "routing-profiles-associate-queues create" [
 #
 # PUT /instance/{InstanceId}/security-key
 # operationId: AssociateSecurityKey
-export def "instance-security-key update-associate" [
+export def "associate-security-key" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -716,7 +716,7 @@ export def "instance-security-key update-associate" [
 #
 # POST /phone-number/claim
 # operationId: ClaimPhoneNumber
-export def "phone-number-claim create" [
+export def "claim-phone-number" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -767,7 +767,7 @@ export def "phone-number-claim create" [
 #
 # PUT /agent-status/{InstanceId}
 # operationId: CreateAgentStatus
-export def "agent-status create" [
+export def "create-agent-status" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -820,7 +820,7 @@ export def "agent-status create" [
 #
 # GET /agent-status/{InstanceId}
 # operationId: ListAgentStatuses
-export def "agent-status list-statuses" [
+export def "list-agent-statuses" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -871,7 +871,7 @@ export def "agent-status list-statuses" [
 #
 # PUT /contact-flows/{InstanceId}
 # operationId: CreateContactFlow
-export def "contact-flows create" [
+export def "create-contact-flow" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -924,7 +924,7 @@ export def "contact-flows create" [
 #
 # PUT /contact-flow-modules/{InstanceId}
 # operationId: CreateContactFlowModule
-export def "contact-flow-modules create" [
+export def "create-contact-flow-module" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -978,7 +978,7 @@ export def "contact-flow-modules create" [
 # PUT /hours-of-operations/{InstanceId}
 # operationId: CreateHoursOfOperation
 # --Config item shape: {Day: any, StartTime: any, EndTime: any}
-export def "hours-of-operations create" [
+export def "create-hours-of-operation" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1031,7 +1031,7 @@ export def "hours-of-operations create" [
 #
 # PUT /instance
 # operationId: CreateInstance
-export def "instance create" [
+export def "create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1083,7 +1083,7 @@ export def "instance create" [
 #
 # GET /instance
 # operationId: ListInstances
-export def "instance list" [
+export def "list-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1131,7 +1131,7 @@ export def "instance list" [
 #
 # PUT /instance/{InstanceId}/integration-associations
 # operationId: CreateIntegrationAssociation
-export def "instance-integration-associations create" [
+export def "create-integration-association" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1185,7 +1185,7 @@ export def "instance-integration-associations create" [
 #
 # GET /instance/{InstanceId}/integration-associations
 # operationId: ListIntegrationAssociations
-export def "instance-integration-associations list" [
+export def "list-integration-associations" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1237,7 +1237,7 @@ export def "instance-integration-associations list" [
 # POST /contact/create-participant
 # operationId: CreateParticipant
 # --ParticipantDetails shape: {ParticipantRole?: any, DisplayName?: any}
-export def "contact-create-participant create" [
+export def "create-participant" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1288,7 +1288,7 @@ export def "contact-create-participant create" [
 # PUT /queues/{InstanceId}
 # operationId: CreateQueue
 # --OutboundCallerConfig shape: {OutboundCallerIdName?: any, OutboundCallerIdNumberId?: any, OutboundFlowId?: any}
-export def "queues create" [
+export def "create-queue" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1344,7 +1344,7 @@ export def "queues create" [
 # PUT /quick-connects/{InstanceId}
 # operationId: CreateQuickConnect
 # --QuickConnectConfig shape: {QuickConnectType?: any, UserConfig?: any, QueueConfig?: any, PhoneConfig?: any}
-export def "quick-connects create" [
+export def "create-quick-connect" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1396,7 +1396,7 @@ export def "quick-connects create" [
 #
 # GET /quick-connects/{InstanceId}
 # operationId: ListQuickConnects
-export def "quick-connects list" [
+export def "list-quick-connects" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1449,7 +1449,7 @@ export def "quick-connects list" [
 # operationId: CreateRoutingProfile
 # --QueueConfigs item shape: {QueueReference: any, Priority: any, Delay: any}
 # --MediaConcurrencies item shape: {Channel: any, Concurrency: any, CrossChannelBehavior?: any}
-export def "routing-profiles create" [
+export def "create-routing-profile" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1505,7 +1505,7 @@ export def "routing-profiles create" [
 # operationId: CreateRule
 # --TriggerEventSource shape: {EventSourceName?: any, IntegrationAssociationId?: any}
 # --Actions item shape: {ActionType: any, TaskAction?: any, EventBridgeAction?: any, AssignContactCategoryAction?: any, SendNotificationAction?: any}
-export def "rules create" [
+export def "create-rule" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1559,7 +1559,7 @@ export def "rules create" [
 #
 # GET /rules/{InstanceId}
 # operationId: ListRules
-export def "rules list" [
+export def "list-rules" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1611,7 +1611,7 @@ export def "rules list" [
 #
 # PUT /security-profiles/{InstanceId}
 # operationId: CreateSecurityProfile
-export def "security-profiles create" [
+export def "create-security-profile" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1668,7 +1668,7 @@ export def "security-profiles create" [
 # --Constraints shape: {RequiredFields?: any, ReadOnlyFields?: any, InvisibleFields?: any}
 # --Defaults shape: {DefaultFieldValues?: any}
 # --Fields item shape: {Id: any, Description?: any, Type?: any, SingleSelectOptions?: any}
-export def "instance-task-template create" [
+export def "create-task-template" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1724,7 +1724,7 @@ export def "instance-task-template create" [
 #
 # GET /instance/{InstanceId}/task/template
 # operationId: ListTaskTemplates
-export def "instance-task-template list" [
+export def "list-task-templates" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1776,7 +1776,7 @@ export def "instance-task-template list" [
 #
 # PUT /traffic-distribution-group
 # operationId: CreateTrafficDistributionGroup
-export def "traffic-distribution-group create" [
+export def "create-traffic-distribution-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1827,7 +1827,7 @@ export def "traffic-distribution-group create" [
 #
 # PUT /instance/{InstanceId}/integration-associations/{IntegrationAssociationId}/use-cases
 # operationId: CreateUseCase
-export def "instance-integration-associations-use-cases create" [
+export def "create-use-case" [
   instance_id: string
   integration_association_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1879,7 +1879,7 @@ export def "instance-integration-associations-use-cases create" [
 #
 # GET /instance/{InstanceId}/integration-associations/{IntegrationAssociationId}/use-cases
 # operationId: ListUseCases
-export def "instance-integration-associations-use-cases list" [
+export def "list-use-cases" [
   instance_id: string
   integration_association_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1933,7 +1933,7 @@ export def "instance-integration-associations-use-cases list" [
 # operationId: CreateUser
 # --IdentityInfo shape: {FirstName?: any, LastName?: any, Email?: any, SecondaryEmail?: any, Mobile?: any}
 # --PhoneConfig shape: {PhoneType?: any, AutoAccept?: any, AfterContactWorkTimeLimit?: any, DeskPhoneNumber?: any}
-export def "users create" [
+export def "create-user" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1990,7 +1990,7 @@ export def "users create" [
 #
 # PUT /user-hierarchy-groups/{InstanceId}
 # operationId: CreateUserHierarchyGroup
-export def "user-hierarchy-groups create" [
+export def "create-user-hierarchy-group" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2041,7 +2041,7 @@ export def "user-hierarchy-groups create" [
 #
 # POST /vocabulary/{InstanceId}
 # operationId: CreateVocabulary
-export def "vocabulary create" [
+export def "create-vocabulary" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2094,7 +2094,7 @@ export def "vocabulary create" [
 #
 # DELETE /contact-flows/{InstanceId}/{ContactFlowId}
 # operationId: DeleteContactFlow
-export def "contact-flows delete" [
+export def "delete-contact-flow" [
   instance_id: string
   contact_flow_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2141,7 +2141,7 @@ export def "contact-flows delete" [
 #
 # GET /contact-flows/{InstanceId}/{ContactFlowId}
 # operationId: DescribeContactFlow
-export def "contact-flows get" [
+export def "describe-contact-flow" [
   instance_id: string
   contact_flow_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2188,7 +2188,7 @@ export def "contact-flows get" [
 #
 # DELETE /contact-flow-modules/{InstanceId}/{ContactFlowModuleId}
 # operationId: DeleteContactFlowModule
-export def "contact-flow-modules delete" [
+export def "delete-contact-flow-module" [
   instance_id: string
   contact_flow_module_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2235,7 +2235,7 @@ export def "contact-flow-modules delete" [
 #
 # GET /contact-flow-modules/{InstanceId}/{ContactFlowModuleId}
 # operationId: DescribeContactFlowModule
-export def "contact-flow-modules get" [
+export def "describe-contact-flow-module" [
   instance_id: string
   contact_flow_module_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2282,7 +2282,7 @@ export def "contact-flow-modules get" [
 #
 # DELETE /hours-of-operations/{InstanceId}/{HoursOfOperationId}
 # operationId: DeleteHoursOfOperation
-export def "hours-of-operations delete" [
+export def "delete-hours-of-operation" [
   instance_id: string
   hours_of_operation_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2329,7 +2329,7 @@ export def "hours-of-operations delete" [
 #
 # GET /hours-of-operations/{InstanceId}/{HoursOfOperationId}
 # operationId: DescribeHoursOfOperation
-export def "hours-of-operations get" [
+export def "describe-hours-of-operation" [
   instance_id: string
   hours_of_operation_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2377,7 +2377,7 @@ export def "hours-of-operations get" [
 # POST /hours-of-operations/{InstanceId}/{HoursOfOperationId}
 # operationId: UpdateHoursOfOperation
 # --Config item shape: {Day: any, StartTime: any, EndTime: any}
-export def "hours-of-operations update" [
+export def "update-hours-of-operation" [
   instance_id: string
   hours_of_operation_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2431,7 +2431,7 @@ export def "hours-of-operations update" [
 #
 # DELETE /instance/{InstanceId}
 # operationId: DeleteInstance
-export def "instance delete" [
+export def "delete-instance" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2476,7 +2476,7 @@ export def "instance delete" [
 #
 # GET /instance/{InstanceId}
 # operationId: DescribeInstance
-export def "instance get" [
+export def "describe-instance" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2521,7 +2521,7 @@ export def "instance get" [
 #
 # DELETE /instance/{InstanceId}/integration-associations/{IntegrationAssociationId}
 # operationId: DeleteIntegrationAssociation
-export def "instance-integration-associations delete" [
+export def "delete-integration-association" [
   instance_id: string
   integration_association_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2568,7 +2568,7 @@ export def "instance-integration-associations delete" [
 #
 # DELETE /quick-connects/{InstanceId}/{QuickConnectId}
 # operationId: DeleteQuickConnect
-export def "quick-connects delete" [
+export def "delete-quick-connect" [
   instance_id: string
   quick_connect_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2615,7 +2615,7 @@ export def "quick-connects delete" [
 #
 # GET /quick-connects/{InstanceId}/{QuickConnectId}
 # operationId: DescribeQuickConnect
-export def "quick-connects get" [
+export def "describe-quick-connect" [
   instance_id: string
   quick_connect_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2662,7 +2662,7 @@ export def "quick-connects get" [
 #
 # DELETE /rules/{InstanceId}/{RuleId}
 # operationId: DeleteRule
-export def "rules delete" [
+export def "delete-rule" [
   instance_id: string
   rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2709,7 +2709,7 @@ export def "rules delete" [
 #
 # GET /rules/{InstanceId}/{RuleId}
 # operationId: DescribeRule
-export def "rules get" [
+export def "describe-rule" [
   instance_id: string
   rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2757,7 +2757,7 @@ export def "rules get" [
 # PUT /rules/{InstanceId}/{RuleId}
 # operationId: UpdateRule
 # --Actions item shape: {ActionType: any, TaskAction?: any, EventBridgeAction?: any, AssignContactCategoryAction?: any, SendNotificationAction?: any}
-export def "rules update" [
+export def "update-rule" [
   instance_id: string
   rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2811,7 +2811,7 @@ export def "rules update" [
 #
 # DELETE /security-profiles/{InstanceId}/{SecurityProfileId}
 # operationId: DeleteSecurityProfile
-export def "security-profiles delete" [
+export def "delete-security-profile" [
   instance_id: string
   security_profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2858,7 +2858,7 @@ export def "security-profiles delete" [
 #
 # GET /security-profiles/{InstanceId}/{SecurityProfileId}
 # operationId: DescribeSecurityProfile
-export def "security-profiles get" [
+export def "describe-security-profile" [
   instance_id: string
   security_profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2905,7 +2905,7 @@ export def "security-profiles get" [
 #
 # POST /security-profiles/{InstanceId}/{SecurityProfileId}
 # operationId: UpdateSecurityProfile
-export def "security-profiles update" [
+export def "update-security-profile" [
   instance_id: string
   security_profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2959,7 +2959,7 @@ export def "security-profiles update" [
 #
 # DELETE /instance/{InstanceId}/task/template/{TaskTemplateId}
 # operationId: DeleteTaskTemplate
-export def "instance-task-template delete" [
+export def "delete-task-template" [
   instance_id: string
   task_template_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3006,7 +3006,7 @@ export def "instance-task-template delete" [
 #
 # GET /instance/{InstanceId}/task/template/{TaskTemplateId}
 # operationId: GetTaskTemplate
-export def "instance-task-template get" [
+export def "get-task-template" [
   instance_id: string
   task_template_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3058,7 +3058,7 @@ export def "instance-task-template get" [
 # --Constraints shape: {RequiredFields?: any, ReadOnlyFields?: any, InvisibleFields?: any}
 # --Defaults shape: {DefaultFieldValues?: any}
 # --Fields item shape: {Id: any, Description?: any, Type?: any, SingleSelectOptions?: any}
-export def "instance-task-template update" [
+export def "update-task-template" [
   instance_id: string
   task_template_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3115,7 +3115,7 @@ export def "instance-task-template update" [
 #
 # DELETE /traffic-distribution-group/{TrafficDistributionGroupId}
 # operationId: DeleteTrafficDistributionGroup
-export def "traffic-distribution-group delete" [
+export def "delete-traffic-distribution-group" [
   traffic_distribution_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3160,7 +3160,7 @@ export def "traffic-distribution-group delete" [
 #
 # GET /traffic-distribution-group/{TrafficDistributionGroupId}
 # operationId: DescribeTrafficDistributionGroup
-export def "traffic-distribution-group get" [
+export def "describe-traffic-distribution-group" [
   traffic_distribution_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3205,7 +3205,7 @@ export def "traffic-distribution-group get" [
 #
 # DELETE /instance/{InstanceId}/integration-associations/{IntegrationAssociationId}/use-cases/{UseCaseId}
 # operationId: DeleteUseCase
-export def "instance-integration-associations-use-cases delete" [
+export def "delete-use-case" [
   instance_id: string
   integration_association_id: string
   use_case_id: string
@@ -3254,7 +3254,7 @@ export def "instance-integration-associations-use-cases delete" [
 #
 # DELETE /users/{InstanceId}/{UserId}
 # operationId: DeleteUser
-export def "users delete" [
+export def "delete-user" [
   instance_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3301,7 +3301,7 @@ export def "users delete" [
 #
 # GET /users/{InstanceId}/{UserId}
 # operationId: DescribeUser
-export def "users get" [
+export def "describe-user" [
   instance_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3348,7 +3348,7 @@ export def "users get" [
 #
 # DELETE /user-hierarchy-groups/{InstanceId}/{HierarchyGroupId}
 # operationId: DeleteUserHierarchyGroup
-export def "user-hierarchy-groups delete" [
+export def "delete-user-hierarchy-group" [
   instance_id: string
   hierarchy_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3395,7 +3395,7 @@ export def "user-hierarchy-groups delete" [
 #
 # GET /user-hierarchy-groups/{InstanceId}/{HierarchyGroupId}
 # operationId: DescribeUserHierarchyGroup
-export def "user-hierarchy-groups get" [
+export def "describe-user-hierarchy-group" [
   instance_id: string
   hierarchy_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3442,7 +3442,7 @@ export def "user-hierarchy-groups get" [
 #
 # POST /vocabulary-remove/{InstanceId}/{VocabularyId}
 # operationId: DeleteVocabulary
-export def "vocabulary-remove delete" [
+export def "delete-vocabulary" [
   instance_id: string
   vocabulary_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3489,7 +3489,7 @@ export def "vocabulary-remove delete" [
 #
 # GET /agent-status/{InstanceId}/{AgentStatusId}
 # operationId: DescribeAgentStatus
-export def "agent-status get" [
+export def "describe-agent-status" [
   instance_id: string
   agent_status_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3536,7 +3536,7 @@ export def "agent-status get" [
 #
 # POST /agent-status/{InstanceId}/{AgentStatusId}
 # operationId: UpdateAgentStatus
-export def "agent-status update" [
+export def "update-agent-status" [
   instance_id: string
   agent_status_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3591,7 +3591,7 @@ export def "agent-status update" [
 #
 # GET /contacts/{InstanceId}/{ContactId}
 # operationId: DescribeContact
-export def "contacts get" [
+export def "describe-contact" [
   instance_id: string
   contact_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3638,7 +3638,7 @@ export def "contacts get" [
 #
 # POST /contacts/{InstanceId}/{ContactId}
 # operationId: UpdateContact
-export def "contacts update" [
+export def "update-contact" [
   instance_id: string
   contact_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3691,7 +3691,7 @@ export def "contacts update" [
 #
 # GET /instance/{InstanceId}/attribute/{AttributeType}
 # operationId: DescribeInstanceAttribute
-export def "instance-attribute get" [
+export def "describe-instance-attribute" [
   instance_id: string
   attribute_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3738,7 +3738,7 @@ export def "instance-attribute get" [
 #
 # POST /instance/{InstanceId}/attribute/{AttributeType}
 # operationId: UpdateInstanceAttribute
-export def "instance-attribute update" [
+export def "update-instance-attribute" [
   instance_id: string
   attribute_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3789,7 +3789,7 @@ export def "instance-attribute update" [
 #
 # GET /instance/{InstanceId}/storage-config/{AssociationId}
 # operationId: DescribeInstanceStorageConfig
-export def "instance-storage-config get" [
+export def "describe-instance-storage-config" [
   instance_id: string
   association_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3838,7 +3838,7 @@ export def "instance-storage-config get" [
 #
 # DELETE /instance/{InstanceId}/storage-config/{AssociationId}
 # operationId: DisassociateInstanceStorageConfig
-export def "instance-storage-config delete-disassociate" [
+export def "disassociate-instance-storage-config" [
   instance_id: string
   association_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3888,7 +3888,7 @@ export def "instance-storage-config delete-disassociate" [
 # POST /instance/{InstanceId}/storage-config/{AssociationId}
 # operationId: UpdateInstanceStorageConfig
 # --StorageConfig shape: {AssociationId?: any, StorageType?: any, S3Config?: any, KinesisVideoStreamConfig?: any, KinesisStreamConfig?: any, KinesisFirehoseConfig?: any}
-export def "instance-storage-config update" [
+export def "update-instance-storage-config" [
   instance_id: string
   association_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3941,7 +3941,7 @@ export def "instance-storage-config update" [
 #
 # GET /phone-number/{PhoneNumberId}
 # operationId: DescribePhoneNumber
-export def "phone-number get" [
+export def "describe-phone-number" [
   phone_number_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3986,7 +3986,7 @@ export def "phone-number get" [
 #
 # DELETE /phone-number/{PhoneNumberId}
 # operationId: ReleasePhoneNumber
-export def "phone-number delete-release" [
+export def "release-phone-number" [
   phone_number_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4033,7 +4033,7 @@ export def "phone-number delete-release" [
 #
 # PUT /phone-number/{PhoneNumberId}
 # operationId: UpdatePhoneNumber
-export def "phone-number update" [
+export def "update-phone-number" [
   phone_number_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4083,7 +4083,7 @@ export def "phone-number update" [
 #
 # GET /queues/{InstanceId}/{QueueId}
 # operationId: DescribeQueue
-export def "queues get" [
+export def "describe-queue" [
   instance_id: string
   queue_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4130,7 +4130,7 @@ export def "queues get" [
 #
 # GET /routing-profiles/{InstanceId}/{RoutingProfileId}
 # operationId: DescribeRoutingProfile
-export def "routing-profiles get" [
+export def "describe-routing-profile" [
   instance_id: string
   routing_profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4177,7 +4177,7 @@ export def "routing-profiles get" [
 #
 # GET /user-hierarchy-structure/{InstanceId}
 # operationId: DescribeUserHierarchyStructure
-export def "user-hierarchy-structure get" [
+export def "describe-user-hierarchy-structure" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4223,7 +4223,7 @@ export def "user-hierarchy-structure get" [
 # POST /user-hierarchy-structure/{InstanceId}
 # operationId: UpdateUserHierarchyStructure
 # --HierarchyStructure shape: {LevelOne?: any, LevelTwo?: any, LevelThree?: any, LevelFour?: any, LevelFive?: any}
-export def "user-hierarchy-structure update" [
+export def "update-user-hierarchy-structure" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4272,7 +4272,7 @@ export def "user-hierarchy-structure update" [
 #
 # GET /vocabulary/{InstanceId}/{VocabularyId}
 # operationId: DescribeVocabulary
-export def "vocabulary get" [
+export def "describe-vocabulary" [
   instance_id: string
   vocabulary_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4319,7 +4319,7 @@ export def "vocabulary get" [
 #
 # DELETE /instance/{InstanceId}/approved-origin
 # operationId: DisassociateApprovedOrigin
-export def "instance-approved-origin delete-disassociate" [
+export def "disassociate-approved-origin" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4366,7 +4366,7 @@ export def "instance-approved-origin delete-disassociate" [
 #
 # DELETE /instance/{InstanceId}/lambda-function
 # operationId: DisassociateLambdaFunction
-export def "instance-lambda-function delete-disassociate" [
+export def "disassociate-lambda-function" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4413,7 +4413,7 @@ export def "instance-lambda-function delete-disassociate" [
 #
 # DELETE /instance/{InstanceId}/lex-bot
 # operationId: DisassociateLexBot
-export def "instance-lex-bot delete-disassociate" [
+export def "disassociate-lex-bot" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4461,7 +4461,7 @@ export def "instance-lex-bot delete-disassociate" [
 #
 # DELETE /phone-number/{PhoneNumberId}/contact-flow
 # operationId: DisassociatePhoneNumberContactFlow
-export def "phone-number-contact-flow delete-disassociate" [
+export def "disassociate-phone-number-contact-flow" [
   phone_number_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4508,7 +4508,7 @@ export def "phone-number-contact-flow delete-disassociate" [
 #
 # POST /queues/{InstanceId}/{QueueId}/disassociate-quick-connects
 # operationId: DisassociateQueueQuickConnects
-export def "queues-disassociate-quick-connects create" [
+export def "disassociate-queue-quick-connects" [
   instance_id: string
   queue_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4560,7 +4560,7 @@ export def "queues-disassociate-quick-connects create" [
 # POST /routing-profiles/{InstanceId}/{RoutingProfileId}/disassociate-queues
 # operationId: DisassociateRoutingProfileQueues
 # --QueueReferences item shape: {QueueId: any, Channel: any}
-export def "routing-profiles-disassociate-queues create" [
+export def "disassociate-routing-profile-queues" [
   instance_id: string
   routing_profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4611,7 +4611,7 @@ export def "routing-profiles-disassociate-queues create" [
 #
 # DELETE /instance/{InstanceId}/security-key/{AssociationId}
 # operationId: DisassociateSecurityKey
-export def "instance-security-key delete-disassociate" [
+export def "disassociate-security-key" [
   instance_id: string
   association_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4658,7 +4658,7 @@ export def "instance-security-key delete-disassociate" [
 #
 # POST /users/{InstanceId}/{UserId}/contact
 # operationId: DismissUserContact
-export def "users-contact create-dismiss" [
+export def "dismiss-user-contact" [
   instance_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4709,7 +4709,7 @@ export def "users-contact create-dismiss" [
 #
 # GET /contact/attributes/{InstanceId}/{InitialContactId}
 # operationId: GetContactAttributes
-export def "contact-attributes get" [
+export def "get-contact-attributes" [
   instance_id: string
   initial_contact_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4759,7 +4759,7 @@ export def "contact-attributes get" [
 # --Filters shape: {Queues?: any, Channels?: any, RoutingProfiles?: any}
 # --CurrentMetrics item shape: {Name?: any, Unit?: any}
 # --SortCriteria item shape: {SortByMetric?: "AGENTS_ONLINE"|"AGENTS_AVAILABLE"|"AGENTS_ON_CALL"|"AGENTS_NON_PRODUCTIVE"|"AGENTS_AFTER_CONTACT_WORK"|"AGENTS_ERROR"|"AGENTS_STAFFED"|"CONTACTS_IN_QUEUE"|"OLDEST_CONTACT_AGE"|"CONTACTS_SCHEDULED"|"AGENTS_ON_CONTACT"|"SLOTS_ACTIVE"|"SLOTS_AVAILABLE", SortOrder?: any}
-export def "metrics-current get-data" [
+export def "get-current-metric-data" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4817,7 +4817,7 @@ export def "metrics-current get-data" [
 # POST /metrics/userdata/{InstanceId}
 # operationId: GetCurrentUserData
 # --Filters shape: {Queues?: any, ContactFilter?: any, RoutingProfiles?: any, Agents?: any, UserHierarchyGroups?: any}
-export def "metrics-userdata get-user-data" [
+export def "get-current-user-data" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4871,7 +4871,7 @@ export def "metrics-userdata get-user-data" [
 #
 # GET /user/federate/{InstanceId}
 # operationId: GetFederationToken
-export def "user-federate get-federation-token" [
+export def "get-federation-token" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4918,7 +4918,7 @@ export def "user-federate get-federation-token" [
 # operationId: GetMetricData
 # --Filters shape: {Queues?: any, Channels?: any, RoutingProfiles?: any}
 # --HistoricalMetrics item shape: {Name?: any, Threshold?: any, Statistic?: any, Unit?: any}
-export def "metrics-historical get-data" [
+export def "get-metric-data" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4978,7 +4978,7 @@ export def "metrics-historical get-data" [
 # operationId: GetMetricDataV2
 # --Filters item shape: {FilterKey?: any, FilterValues?: any}
 # --Metrics item shape: {Name?: any, Threshold?: any, MetricFilters?: any}
-export def "metrics-data get" [
+export def "get-metric-data-v2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5035,7 +5035,7 @@ export def "metrics-data get" [
 #
 # GET /traffic-distribution/{Id}
 # operationId: GetTrafficDistribution
-export def "traffic-distribution get" [
+export def "get-traffic-distribution" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5081,7 +5081,7 @@ export def "traffic-distribution get" [
 # PUT /traffic-distribution/{Id}
 # operationId: UpdateTrafficDistribution
 # --TelephonyConfig shape: {Distributions?: any}
-export def "traffic-distribution update" [
+export def "update-traffic-distribution" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5130,7 +5130,7 @@ export def "traffic-distribution update" [
 #
 # GET /instance/{InstanceId}/approved-origins
 # operationId: ListApprovedOrigins
-export def "instance-approved-origins list" [
+export def "list-approved-origins" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5180,7 +5180,7 @@ export def "instance-approved-origins list" [
 #
 # GET /instance/{InstanceId}/bots
 # operationId: ListBots
-export def "instance-bots list" [
+export def "list-bots" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5231,7 +5231,7 @@ export def "instance-bots list" [
 #
 # GET /contact-flow-modules-summary/{InstanceId}
 # operationId: ListContactFlowModules
-export def "contact-flow-modules-summary list" [
+export def "list-contact-flow-modules" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5282,7 +5282,7 @@ export def "contact-flow-modules-summary list" [
 #
 # GET /contact-flows-summary/{InstanceId}
 # operationId: ListContactFlows
-export def "contact-flows-summary list" [
+export def "list-contact-flows" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5333,7 +5333,7 @@ export def "contact-flows-summary list" [
 #
 # GET /contact/references/{InstanceId}/{ContactId}
 # operationId: ListContactReferences
-export def "contact-references list" [
+export def "list-contact-references" [
   instance_id: string
   contact_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5384,7 +5384,7 @@ export def "contact-references list" [
 #
 # POST /default-vocabulary-summary/{InstanceId}
 # operationId: ListDefaultVocabularies
-export def "default-vocabulary-summary list-vocabularies" [
+export def "list-default-vocabularies" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5438,7 +5438,7 @@ export def "default-vocabulary-summary list-vocabularies" [
 #
 # GET /hours-of-operations-summary/{InstanceId}
 # operationId: ListHoursOfOperations
-export def "hours-of-operations-summary list" [
+export def "list-hours-of-operations" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5488,7 +5488,7 @@ export def "hours-of-operations-summary list" [
 #
 # GET /instance/{InstanceId}/attributes
 # operationId: ListInstanceAttributes
-export def "instance-attributes list" [
+export def "list-instance-attributes" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5538,7 +5538,7 @@ export def "instance-attributes list" [
 #
 # GET /instance/{InstanceId}/storage-configs
 # operationId: ListInstanceStorageConfigs
-export def "instance-storage-configs list" [
+export def "list-instance-storage-configs" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5589,7 +5589,7 @@ export def "instance-storage-configs list" [
 #
 # GET /instance/{InstanceId}/lambda-functions
 # operationId: ListLambdaFunctions
-export def "instance-lambda-functions list" [
+export def "list-lambda-functions" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5639,7 +5639,7 @@ export def "instance-lambda-functions list" [
 #
 # GET /instance/{InstanceId}/lex-bots
 # operationId: ListLexBots
-export def "instance-lex-bots list" [
+export def "list-lex-bots" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5689,7 +5689,7 @@ export def "instance-lex-bots list" [
 #
 # GET /phone-numbers-summary/{InstanceId}
 # operationId: ListPhoneNumbers
-export def "phone-numbers-summary list" [
+export def "list-phone-numbers" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5741,7 +5741,7 @@ export def "phone-numbers-summary list" [
 #
 # POST /phone-number/list
 # operationId: ListPhoneNumbersV2
-export def "phone-number-list list" [
+export def "list-phone-numbers-v2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5796,7 +5796,7 @@ export def "phone-number-list list" [
 #
 # GET /prompts-summary/{InstanceId}
 # operationId: ListPrompts
-export def "prompts-summary list" [
+export def "list-prompts" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5846,7 +5846,7 @@ export def "prompts-summary list" [
 #
 # GET /queues/{InstanceId}/{QueueId}/quick-connects
 # operationId: ListQueueQuickConnects
-export def "queues-quick-connects list" [
+export def "list-queue-quick-connects" [
   instance_id: string
   queue_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5898,7 +5898,7 @@ export def "queues-quick-connects list" [
 #
 # GET /queues-summary/{InstanceId}
 # operationId: ListQueues
-export def "queues-summary list" [
+export def "list-queues" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5949,7 +5949,7 @@ export def "queues-summary list" [
 #
 # GET /routing-profiles/{InstanceId}/{RoutingProfileId}/queues
 # operationId: ListRoutingProfileQueues
-export def "routing-profiles-queues list" [
+export def "list-routing-profile-queues" [
   instance_id: string
   routing_profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6002,7 +6002,7 @@ export def "routing-profiles-queues list" [
 # POST /routing-profiles/{InstanceId}/{RoutingProfileId}/queues
 # operationId: UpdateRoutingProfileQueues
 # --QueueConfigs item shape: {QueueReference: any, Priority: any, Delay: any}
-export def "routing-profiles-queues update" [
+export def "update-routing-profile-queues" [
   instance_id: string
   routing_profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6053,7 +6053,7 @@ export def "routing-profiles-queues update" [
 #
 # GET /routing-profiles-summary/{InstanceId}
 # operationId: ListRoutingProfiles
-export def "routing-profiles-summary list" [
+export def "list-routing-profiles" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6103,7 +6103,7 @@ export def "routing-profiles-summary list" [
 #
 # GET /instance/{InstanceId}/security-keys
 # operationId: ListSecurityKeys
-export def "instance-security-keys list" [
+export def "list-security-keys" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6153,7 +6153,7 @@ export def "instance-security-keys list" [
 #
 # GET /security-profiles-permissions/{InstanceId}/{SecurityProfileId}
 # operationId: ListSecurityProfilePermissions
-export def "security-profiles-permissions list" [
+export def "list-security-profile-permissions" [
   instance_id: string
   security_profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6205,7 +6205,7 @@ export def "security-profiles-permissions list" [
 #
 # GET /security-profiles-summary/{InstanceId}
 # operationId: ListSecurityProfiles
-export def "security-profiles-summary list" [
+export def "list-security-profiles" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6255,7 +6255,7 @@ export def "security-profiles-summary list" [
 #
 # GET /tags/{resourceArn}
 # operationId: ListTagsForResource
-export def "tags list-for-resource" [
+export def "list-tags-for-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6300,7 +6300,7 @@ export def "tags list-for-resource" [
 #
 # POST /tags/{resourceArn}
 # operationId: TagResource
-export def "tags tag-resource" [
+export def "tag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6349,7 +6349,7 @@ export def "tags tag-resource" [
 #
 # GET /traffic-distribution-groups
 # operationId: ListTrafficDistributionGroups
-export def "traffic-distribution-groups list" [
+export def "list-traffic-distribution-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6398,7 +6398,7 @@ export def "traffic-distribution-groups list" [
 #
 # GET /user-hierarchy-groups-summary/{InstanceId}
 # operationId: ListUserHierarchyGroups
-export def "user-hierarchy-groups-summary list" [
+export def "list-user-hierarchy-groups" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6448,7 +6448,7 @@ export def "user-hierarchy-groups-summary list" [
 #
 # GET /users-summary/{InstanceId}
 # operationId: ListUsers
-export def "users-summary list" [
+export def "list-users" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6498,7 +6498,7 @@ export def "users-summary list" [
 #
 # POST /contact/monitor
 # operationId: MonitorContact
-export def "contact-monitor create" [
+export def "monitor-contact" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6549,7 +6549,7 @@ export def "contact-monitor create" [
 #
 # PUT /users/{InstanceId}/{UserId}/status
 # operationId: PutUserStatus
-export def "users-status update" [
+export def "put-user-status" [
   instance_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6600,7 +6600,7 @@ export def "users-status update" [
 #
 # POST /instance/{InstanceId}/replicate
 # operationId: ReplicateInstance
-export def "instance-replicate create" [
+export def "replicate-instance" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6651,7 +6651,7 @@ export def "instance-replicate create" [
 #
 # POST /contact/resume-recording
 # operationId: ResumeContactRecording
-export def "contact-resume-recording create" [
+export def "resume-contact-recording" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6700,7 +6700,7 @@ export def "contact-resume-recording create" [
 #
 # POST /phone-number/search-available
 # operationId: SearchAvailablePhoneNumbers
-export def "phone-number-search-available list" [
+export def "search-available-phone-numbers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6757,7 +6757,7 @@ export def "phone-number-search-available list" [
 # operationId: SearchQueues
 # --SearchFilter shape: {TagFilter?: record}
 # --SearchCriteria shape: {OrConditions?: any, AndConditions?: any, StringCondition?: record, QueueTypeCondition?: any}
-export def "search-queues list" [
+export def "search-queues" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6813,7 +6813,7 @@ export def "search-queues list" [
 # operationId: SearchRoutingProfiles
 # --SearchFilter shape: {TagFilter?: record}
 # --SearchCriteria shape: {OrConditions?: any, AndConditions?: any, StringCondition?: record}
-export def "search-routing-profiles list" [
+export def "search-routing-profiles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6869,7 +6869,7 @@ export def "search-routing-profiles list" [
 # operationId: SearchSecurityProfiles
 # --SearchCriteria shape: {OrConditions?: any, AndConditions?: any, StringCondition?: record}
 # --SearchFilter shape: {TagFilter?: record}
-export def "search-security-profiles list" [
+export def "search-security-profiles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6925,7 +6925,7 @@ export def "search-security-profiles list" [
 # operationId: SearchUsers
 # --SearchFilter shape: {TagFilter?: record}
 # --SearchCriteria shape: {OrConditions?: any, AndConditions?: any, StringCondition?: any, HierarchyGroupCondition?: any}
-export def "search-users list" [
+export def "search-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6979,7 +6979,7 @@ export def "search-users list" [
 #
 # POST /vocabulary-summary/{InstanceId}
 # operationId: SearchVocabularies
-export def "vocabulary-summary list-vocabularies" [
+export def "search-vocabularies" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7038,7 +7038,7 @@ export def "vocabulary-summary list-vocabularies" [
 # --ParticipantDetails shape: {DisplayName?: any}
 # --InitialMessage shape: {ContentType?: any, Content?: any}
 # --PersistentChat shape: {RehydrationType?: any, SourceContactId?: any}
-export def "contact-chat start" [
+export def "start-chat-contact" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7095,7 +7095,7 @@ export def "contact-chat start" [
 # POST /contact/start-recording
 # operationId: StartContactRecording
 # --VoiceRecordingConfiguration shape: {VoiceRecordingTrack?: any}
-export def "contact-start-recording start" [
+export def "start-contact-recording" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7146,7 +7146,7 @@ export def "contact-start-recording start" [
 # POST /contact/start-streaming
 # operationId: StartContactStreaming
 # --ChatStreamingConfiguration shape: {StreamingEndpointArn?: any}
-export def "contact-start-streaming start" [
+export def "start-contact-streaming" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7197,7 +7197,7 @@ export def "contact-start-streaming start" [
 # PUT /contact/outbound-voice
 # operationId: StartOutboundVoiceContact
 # --AnswerMachineDetectionConfig shape: {EnableAnswerMachineDetection?: any, AwaitAnswerMachinePrompt?: any}
-export def "contact-outbound-voice start" [
+export def "start-outbound-voice-contact" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7253,7 +7253,7 @@ export def "contact-outbound-voice start" [
 #
 # PUT /contact/task
 # operationId: StartTaskContact
-export def "contact-task start" [
+export def "start-task-contact" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7311,7 +7311,7 @@ export def "contact-task start" [
 #
 # POST /contact/stop
 # operationId: StopContact
-export def "contact-stop stop" [
+export def "stop-contact" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7359,7 +7359,7 @@ export def "contact-stop stop" [
 #
 # POST /contact/stop-recording
 # operationId: StopContactRecording
-export def "contact-stop-recording stop" [
+export def "stop-contact-recording" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7408,7 +7408,7 @@ export def "contact-stop-recording stop" [
 #
 # POST /contact/stop-streaming
 # operationId: StopContactStreaming
-export def "contact-stop-streaming stop" [
+export def "stop-contact-streaming" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7457,7 +7457,7 @@ export def "contact-stop-streaming stop" [
 #
 # POST /contact/suspend-recording
 # operationId: SuspendContactRecording
-export def "contact-suspend-recording create" [
+export def "suspend-contact-recording" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7506,7 +7506,7 @@ export def "contact-suspend-recording create" [
 #
 # POST /contact/transfer
 # operationId: TransferContact
-export def "contact-transfer create" [
+export def "transfer-contact" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7558,7 +7558,7 @@ export def "contact-transfer create" [
 #
 # DELETE /tags/{resourceArn}
 # operationId: UntagResource
-export def "tags untag-resource" [
+export def "untag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7605,7 +7605,7 @@ export def "tags untag-resource" [
 #
 # POST /contact/attributes
 # operationId: UpdateContactAttributes
-export def "contact-attributes update" [
+export def "update-contact-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7654,7 +7654,7 @@ export def "contact-attributes update" [
 #
 # POST /contact-flows/{InstanceId}/{ContactFlowId}/content
 # operationId: UpdateContactFlowContent
-export def "contact-flows-content update" [
+export def "update-contact-flow-content" [
   instance_id: string
   contact_flow_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7705,7 +7705,7 @@ export def "contact-flows-content update" [
 #
 # POST /contact-flows/{InstanceId}/{ContactFlowId}/metadata
 # operationId: UpdateContactFlowMetadata
-export def "contact-flows-metadata update" [
+export def "update-contact-flow-metadata" [
   instance_id: string
   contact_flow_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7758,7 +7758,7 @@ export def "contact-flows-metadata update" [
 #
 # POST /contact-flow-modules/{InstanceId}/{ContactFlowModuleId}/content
 # operationId: UpdateContactFlowModuleContent
-export def "contact-flow-modules-content update" [
+export def "update-contact-flow-module-content" [
   instance_id: string
   contact_flow_module_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7809,7 +7809,7 @@ export def "contact-flow-modules-content update" [
 #
 # POST /contact-flow-modules/{InstanceId}/{ContactFlowModuleId}/metadata
 # operationId: UpdateContactFlowModuleMetadata
-export def "contact-flow-modules-metadata update" [
+export def "update-contact-flow-module-metadata" [
   instance_id: string
   contact_flow_module_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7862,7 +7862,7 @@ export def "contact-flow-modules-metadata update" [
 #
 # POST /contact-flows/{InstanceId}/{ContactFlowId}/name
 # operationId: UpdateContactFlowName
-export def "contact-flows-name update" [
+export def "update-contact-flow-name" [
   instance_id: string
   contact_flow_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7914,7 +7914,7 @@ export def "contact-flows-name update" [
 #
 # POST /contact/schedule
 # operationId: UpdateContactSchedule
-export def "contact-schedule update" [
+export def "update-contact-schedule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7964,7 +7964,7 @@ export def "contact-schedule update" [
 # PUT /contact/participant-role-config/{InstanceId}/{ContactId}
 # operationId: UpdateParticipantRoleConfig
 # --ChannelConfiguration shape: {Chat?: any}
-export def "contact-participant-role-config update" [
+export def "update-participant-role-config" [
   instance_id: string
   contact_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8015,7 +8015,7 @@ export def "contact-participant-role-config update" [
 #
 # POST /queues/{InstanceId}/{QueueId}/hours-of-operation
 # operationId: UpdateQueueHoursOfOperation
-export def "queues-hours-of-operation update" [
+export def "update-queue-hours-of-operation" [
   instance_id: string
   queue_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8066,7 +8066,7 @@ export def "queues-hours-of-operation update" [
 #
 # POST /queues/{InstanceId}/{QueueId}/max-contacts
 # operationId: UpdateQueueMaxContacts
-export def "queues-max-contacts update" [
+export def "update-queue-max-contacts" [
   instance_id: string
   queue_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8117,7 +8117,7 @@ export def "queues-max-contacts update" [
 #
 # POST /queues/{InstanceId}/{QueueId}/name
 # operationId: UpdateQueueName
-export def "queues-name update" [
+export def "update-queue-name" [
   instance_id: string
   queue_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8170,7 +8170,7 @@ export def "queues-name update" [
 # POST /queues/{InstanceId}/{QueueId}/outbound-caller-config
 # operationId: UpdateQueueOutboundCallerConfig
 # --OutboundCallerConfig shape: {OutboundCallerIdName?: any, OutboundCallerIdNumberId?: any, OutboundFlowId?: any}
-export def "queues-outbound-caller-config update" [
+export def "update-queue-outbound-caller-config" [
   instance_id: string
   queue_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8221,7 +8221,7 @@ export def "queues-outbound-caller-config update" [
 #
 # POST /queues/{InstanceId}/{QueueId}/status
 # operationId: UpdateQueueStatus
-export def "queues-status update" [
+export def "update-queue-status" [
   instance_id: string
   queue_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8273,7 +8273,7 @@ export def "queues-status update" [
 # POST /quick-connects/{InstanceId}/{QuickConnectId}/config
 # operationId: UpdateQuickConnectConfig
 # --QuickConnectConfig shape: {QuickConnectType?: any, UserConfig?: any, QueueConfig?: any, PhoneConfig?: any}
-export def "quick-connects-config update" [
+export def "update-quick-connect-config" [
   instance_id: string
   quick_connect_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8324,7 +8324,7 @@ export def "quick-connects-config update" [
 #
 # POST /quick-connects/{InstanceId}/{QuickConnectId}/name
 # operationId: UpdateQuickConnectName
-export def "quick-connects-name update" [
+export def "update-quick-connect-name" [
   instance_id: string
   quick_connect_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8377,7 +8377,7 @@ export def "quick-connects-name update" [
 # POST /routing-profiles/{InstanceId}/{RoutingProfileId}/concurrency
 # operationId: UpdateRoutingProfileConcurrency
 # --MediaConcurrencies item shape: {Channel: any, Concurrency: any, CrossChannelBehavior?: any}
-export def "routing-profiles-concurrency update" [
+export def "update-routing-profile-concurrency" [
   instance_id: string
   routing_profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8428,7 +8428,7 @@ export def "routing-profiles-concurrency update" [
 #
 # POST /routing-profiles/{InstanceId}/{RoutingProfileId}/default-outbound-queue
 # operationId: UpdateRoutingProfileDefaultOutboundQueue
-export def "routing-profiles-default-outbound-queue update" [
+export def "update-routing-profile-default-outbound-queue" [
   instance_id: string
   routing_profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8479,7 +8479,7 @@ export def "routing-profiles-default-outbound-queue update" [
 #
 # POST /routing-profiles/{InstanceId}/{RoutingProfileId}/name
 # operationId: UpdateRoutingProfileName
-export def "routing-profiles-name update" [
+export def "update-routing-profile-name" [
   instance_id: string
   routing_profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8531,7 +8531,7 @@ export def "routing-profiles-name update" [
 #
 # POST /users/{InstanceId}/{UserId}/hierarchy
 # operationId: UpdateUserHierarchy
-export def "users-hierarchy update" [
+export def "update-user-hierarchy" [
   instance_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8582,7 +8582,7 @@ export def "users-hierarchy update" [
 #
 # POST /user-hierarchy-groups/{InstanceId}/{HierarchyGroupId}/name
 # operationId: UpdateUserHierarchyGroupName
-export def "user-hierarchy-groups-name update" [
+export def "update-user-hierarchy-group-name" [
   instance_id: string
   hierarchy_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8634,7 +8634,7 @@ export def "user-hierarchy-groups-name update" [
 # POST /users/{InstanceId}/{UserId}/identity-info
 # operationId: UpdateUserIdentityInfo
 # --IdentityInfo shape: {FirstName?: any, LastName?: any, Email?: any, SecondaryEmail?: any, Mobile?: any}
-export def "users-identity-info update" [
+export def "update-user-identity-info" [
   instance_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8686,7 +8686,7 @@ export def "users-identity-info update" [
 # POST /users/{InstanceId}/{UserId}/phone-config
 # operationId: UpdateUserPhoneConfig
 # --PhoneConfig shape: {PhoneType?: any, AutoAccept?: any, AfterContactWorkTimeLimit?: any, DeskPhoneNumber?: any}
-export def "users-phone-config update" [
+export def "update-user-phone-config" [
   instance_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8737,7 +8737,7 @@ export def "users-phone-config update" [
 #
 # POST /users/{InstanceId}/{UserId}/routing-profile
 # operationId: UpdateUserRoutingProfile
-export def "users-routing-profile update" [
+export def "update-user-routing-profile" [
   instance_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8788,7 +8788,7 @@ export def "users-routing-profile update" [
 #
 # POST /users/{InstanceId}/{UserId}/security-profiles
 # operationId: UpdateUserSecurityProfiles
-export def "users-security-profiles update" [
+export def "update-user-security-profiles" [
   instance_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL

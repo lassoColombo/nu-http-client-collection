@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-sql-servers-elastic-pools-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "elastic-pool-operations-list-by-elastic-pool" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -128,7 +128,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/elasticPools/{elasticPoolName}/operations
 # operationId: ElasticPoolOperations_ListByElasticPool
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-elastic-pools-operations list" [
+export def "elastic-pool-operations-list-by-elastic-pool" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -172,7 +172,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-elasti
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/elasticPools/{elasticPoolName}/operations/{operationId}/cancel
 # operationId: ElasticPoolOperations_Cancel
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-elastic-pools-operations-cancel cancel" [
+export def "elastic-pool-operations-cancel" [
   subscription_id: string
   resource_group_name: string
   server_name: string

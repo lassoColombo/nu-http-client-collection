@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["query-apikey"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "album-get get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-album-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -119,7 +119,7 @@ export def commands []: nothing -> table {
 }
 
 # GET /album.get
-export def "album-get get" [
+export def "get-album-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -154,7 +154,7 @@ export def "album-get get" [
 }
 
 # GET /album.tracks.get
-export def "album-tracks-get get" [
+export def "get-album-tracks-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -192,7 +192,7 @@ export def "album-tracks-get get" [
 }
 
 # GET /artist.albums.get
-export def "artist-albums-get get" [
+export def "get-artist-albums-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -231,7 +231,7 @@ export def "artist-albums-get get" [
 }
 
 # GET /artist.get
-export def "artist-get get" [
+export def "get-artist-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -266,7 +266,7 @@ export def "artist-get get" [
 }
 
 # GET /artist.related.get
-export def "artist-related-get get" [
+export def "get-artist-related-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -303,7 +303,7 @@ export def "artist-related-get get" [
 }
 
 # GET /artist.search
-export def "artist-search get" [
+export def "get-artist-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -341,7 +341,7 @@ export def "artist-search get" [
 }
 
 # GET /chart.artists.get
-export def "chart-artists-get get" [
+export def "get-chart-artists-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -378,7 +378,7 @@ export def "chart-artists-get get" [
 }
 
 # GET /chart.tracks.get
-export def "chart-tracks-get get" [
+export def "get-chart-tracks-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -416,7 +416,7 @@ export def "chart-tracks-get get" [
 }
 
 # GET /matcher.lyrics.get
-export def "matcher-lyrics-get get" [
+export def "get-matcher-lyrics-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -452,7 +452,7 @@ export def "matcher-lyrics-get get" [
 }
 
 # GET /matcher.subtitle.get
-export def "matcher-subtitle-get get" [
+export def "get-matcher-subtitle-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -490,7 +490,7 @@ export def "matcher-subtitle-get get" [
 }
 
 # GET /matcher.track.get
-export def "matcher-track-get get" [
+export def "get-matcher-track-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -528,7 +528,7 @@ export def "matcher-track-get get" [
 }
 
 # GET /track.get
-export def "track-get get" [
+export def "get-track-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -563,7 +563,7 @@ export def "track-get get" [
 }
 
 # GET /track.lyrics.get
-export def "track-lyrics-get get" [
+export def "get-track-lyrics-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -598,7 +598,7 @@ export def "track-lyrics-get get" [
 }
 
 # GET /track.search
-export def "track-search get" [
+export def "get-track-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -644,7 +644,7 @@ export def "track-search get" [
 }
 
 # GET /track.snippet.get
-export def "track-snippet-get get" [
+export def "get-track-snippet-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -679,7 +679,7 @@ export def "track-snippet-get get" [
 }
 
 # GET /track.subtitle.get
-export def "track-subtitle-get get" [
+export def "get-track-subtitle-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

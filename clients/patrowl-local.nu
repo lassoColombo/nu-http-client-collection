@@ -103,7 +103,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "patrowl-engine get-default-page" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-default-page" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -127,7 +127,7 @@ export def commands []: nothing -> table {
 #
 # GET /
 # operationId: getDefaultPage
-export def "patrowl-engine get-default-page" [
+export def "get-default-page" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -161,7 +161,7 @@ export def "patrowl-engine get-default-page" [
 #
 # GET /clean
 # operationId: CleanScansPage
-export def "clean get-scans-page" [
+export def "clean-scans-page" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -195,7 +195,7 @@ export def "clean get-scans-page" [
 #
 # GET /clean/{scanId}
 # operationId: CleanScanPage
-export def "clean get-scan-page" [
+export def "clean-scan-page" [
   scan_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -231,7 +231,7 @@ export def "clean get-scan-page" [
 #
 # GET /getfindings/{scanId}
 # operationId: GetFindingPage
-export def "get-findings get-page" [
+export def "get-finding-page" [
   scan_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -267,7 +267,7 @@ export def "get-findings get-page" [
 #
 # GET /info
 # operationId: getInfoPage
-export def "info get-page" [
+export def "get-info-page" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -301,7 +301,7 @@ export def "info get-page" [
 #
 # GET /liveness
 # operationId: getLivenessPage
-export def "liveness get-page" [
+export def "get-liveness-page" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -335,7 +335,7 @@ export def "liveness get-page" [
 #
 # GET /readiness
 # operationId: getReadinessPage
-export def "readiness get-page" [
+export def "get-readiness-page" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -369,7 +369,7 @@ export def "readiness get-page" [
 #
 # GET /reloadconfig
 # operationId: reloadConfigurationPage
-export def "reloadconfig reload-configuration-page" [
+export def "reload-configuration-page" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -404,7 +404,7 @@ export def "reloadconfig reload-configuration-page" [
 # POST /startscan
 # operationId: StartScanPage
 # --assets item shape: {criticity?: "low"|"medium"|"high", datatype?: "ip"|"ip-range"|"ip-subnet"|"fqdn"|"domain"|"url"|"keyword"|"person"|"organisation"|"path"|"application", id?: string, value?: string}
-export def "startscan start-scan-page" [
+export def "start-scan-page" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -444,7 +444,7 @@ export def "startscan start-scan-page" [
 #
 # GET /status
 # operationId: StatusScansPage
-export def "status get-scans-page" [
+export def "status-scans-page" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -478,7 +478,7 @@ export def "status get-scans-page" [
 #
 # GET /status/{scanId}
 # operationId: StatusScanPage
-export def "status get-scan-page" [
+export def "status-scan-page" [
   scan_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -514,7 +514,7 @@ export def "status get-scan-page" [
 #
 # GET /stop/{scanId}
 # operationId: StopScanPage
-export def "stop stop-scan-page" [
+export def "stop-scan-page" [
   scan_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -550,7 +550,7 @@ export def "stop stop-scan-page" [
 #
 # GET /stopscans
 # operationId: StopScansPage
-export def "stopscans stop-scans-page" [
+export def "stop-scans-page" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -584,7 +584,7 @@ export def "stopscans stop-scans-page" [
 #
 # GET /test
 # operationId: getTestPage
-export def "test get-page" [
+export def "get-test-page" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

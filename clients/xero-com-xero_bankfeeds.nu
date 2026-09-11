@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "feed-connections list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-feed-connections" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -128,7 +128,7 @@ export def commands []: nothing -> table {
 #
 # GET /FeedConnections
 # operationId: getFeedConnections
-export def "feed-connections list" [
+export def "get-feed-connections" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -170,7 +170,7 @@ export def "feed-connections list" [
 # operationId: createFeedConnections
 # --items item shape: {accountId?: string, accountName?: string, accountNumber?: string, accountToken?: string, accountType?: "BANK"|"CREDITCARD", ... (5 more fields)}
 # --pagination shape: {itemCount?: int, page?: int, pageCount?: int, pageSize?: int}
-export def "feed-connections create" [
+export def "create-feed-connections" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -214,7 +214,7 @@ export def "feed-connections create" [
 # operationId: deleteFeedConnections
 # --items item shape: {accountId?: string, accountName?: string, accountNumber?: string, accountToken?: string, accountType?: "BANK"|"CREDITCARD", ... (5 more fields)}
 # --pagination shape: {itemCount?: int, page?: int, pageCount?: int, pageSize?: int}
-export def "feed-connections-delete-requests delete" [
+export def "delete-feed-connections" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -256,7 +256,7 @@ export def "feed-connections-delete-requests delete" [
 #
 # GET /FeedConnections/{id}
 # operationId: getFeedConnection
-export def "feed-connections get" [
+export def "get-feed-connection" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -295,7 +295,7 @@ export def "feed-connections get" [
 #
 # GET /Statements
 # operationId: getStatements
-export def "statements list" [
+export def "get-statements" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -339,7 +339,7 @@ export def "statements list" [
 # operationId: createStatements
 # --items item shape: {endBalance?: record, endDate?: string, errors?: list, feedConnectionId?: string, id?: string, startBalance?: record, startDate?: string, statementLineCount?: int, statementLines?: list, status?: "PENDING"|"REJECTED"|"DELIVERED"}
 # --pagination shape: {itemCount?: int, page?: int, pageCount?: int, pageSize?: int}
-export def "statements create" [
+export def "create-statements" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -381,7 +381,7 @@ export def "statements create" [
 #
 # GET /Statements/{statementID}
 # operationId: getStatement
-export def "statements get" [
+export def "get-statement" [
   statement_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

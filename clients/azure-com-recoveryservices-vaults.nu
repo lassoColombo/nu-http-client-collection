@@ -122,7 +122,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-recovery-services-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.RecoveryServices/operations
 # operationId: Operations_List
-export def "providers-microsoft-recovery-services-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -182,7 +182,7 @@ export def "providers-microsoft-recovery-services-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.RecoveryServices/vaults
 # operationId: Vaults_ListBySubscriptionId
-export def "subscriptions-providers-microsoft-recovery-services-vaults list" [
+export def "vaults-list-by-subscription-id" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -220,7 +220,7 @@ export def "subscriptions-providers-microsoft-recovery-services-vaults list" [
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/locations/{location}/checkNameAvailability
 # operationId: RecoveryServices_CheckNameAvailability
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-locations-check-name-availability check" [
+export def "recovery-services-check-name-availability" [
   subscription_id: string
   resource_group_name: string
   location: string
@@ -267,7 +267,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults
 # operationId: Vaults_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults list" [
+export def "vaults-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -307,7 +307,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{vaultName}
 # operationId: Vaults_Delete
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults delete" [
+export def "vaults-delete" [
   subscription_id: string
   resource_group_name: string
   vault_name: string
@@ -349,7 +349,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{vaultName}
 # operationId: Vaults_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults get" [
+export def "vaults-get" [
   subscription_id: string
   resource_group_name: string
   vault_name: string
@@ -393,7 +393,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # operationId: Vaults_Update
 # --properties shape: {upgradeDetails?: record}
 # --sku shape: {name: "Standard"|"RS0"}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults update" [
+export def "vaults-update" [
   subscription_id: string
   resource_group_name: string
   vault_name: string
@@ -444,7 +444,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # operationId: Vaults_CreateOrUpdate
 # --properties shape: {upgradeDetails?: record}
 # --sku shape: {name: "Standard"|"RS0"}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults create-or-update" [
+export def "vaults-create-or-update" [
   subscription_id: string
   resource_group_name: string
   vault_name: string
@@ -493,7 +493,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{vaultName}/extendedInformation/vaultExtendedInfo
 # operationId: VaultExtendedInfo_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-extended-information-vault-extended-info get" [
+export def "vault-extended-info-get" [
   subscription_id: string
   resource_group_name: string
   vault_name: string
@@ -536,7 +536,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{vaultName}/extendedInformation/vaultExtendedInfo
 # operationId: VaultExtendedInfo_Update
 # --properties shape: {algorithm?: string, encryptionKey?: string, encryptionKeyThumbprint?: string, integrityKey?: string}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-extended-information-vault-extended-info update" [
+export def "vault-extended-info-update" [
   subscription_id: string
   resource_group_name: string
   vault_name: string
@@ -584,7 +584,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{vaultName}/extendedInformation/vaultExtendedInfo
 # operationId: VaultExtendedInfo_CreateOrUpdate
 # --properties shape: {algorithm?: string, encryptionKey?: string, encryptionKeyThumbprint?: string, integrityKey?: string}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-extended-information-vault-extended-info create-or-update" [
+export def "vault-extended-info-create-or-update" [
   subscription_id: string
   resource_group_name: string
   vault_name: string

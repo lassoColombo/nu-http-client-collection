@@ -130,7 +130,7 @@ def executable-version-completer [] { ["FIREBASE_RULES_EXECUTABLE_V1" "FIREBASE_
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "firebaserules-projects-rulesets-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -154,7 +154,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1/{name}
 # operationId: firebaserules.projects.rulesets.delete
-export def "projects delete" [
+export def "firebaserules-projects-rulesets-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -202,7 +202,7 @@ export def "projects delete" [
 #
 # GET /v1/{name}
 # operationId: firebaserules.projects.rulesets.get
-export def "projects get" [
+export def "firebaserules-projects-rulesets-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -251,7 +251,7 @@ export def "projects get" [
 # PATCH /v1/{name}
 # operationId: firebaserules.projects.releases.patch
 # --release shape: {name?: string, rulesetName?: string}
-export def "projects update" [
+export def "firebaserules-projects-releases-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -304,7 +304,7 @@ export def "projects update" [
 #
 # GET /v1/{name}/releases
 # operationId: firebaserules.projects.releases.list
-export def "releases list" [
+export def "firebaserules-projects-releases-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -355,7 +355,7 @@ export def "releases list" [
 #
 # POST /v1/{name}/releases
 # operationId: firebaserules.projects.releases.create
-export def "releases create" [
+export def "firebaserules-projects-releases-create" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -408,7 +408,7 @@ export def "releases create" [
 #
 # GET /v1/{name}/rulesets
 # operationId: firebaserules.projects.rulesets.list
-export def "rulesets list" [
+export def "firebaserules-projects-rulesets-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -461,7 +461,7 @@ export def "rulesets list" [
 # operationId: firebaserules.projects.rulesets.create
 # --metadata shape: {services?: list<string>}
 # --source shape: {files?: list}
-export def "rulesets create" [
+export def "firebaserules-projects-rulesets-create" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -514,7 +514,7 @@ export def "rulesets create" [
 #
 # GET /v1/{name}:getExecutable
 # operationId: firebaserules.projects.releases.getExecutable
-export def "projects get-executable" [
+export def "firebaserules-projects-releases-get-executable" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -565,7 +565,7 @@ export def "projects get-executable" [
 # operationId: firebaserules.projects.test
 # --source shape: {files?: list}
 # --testSuite shape: {testCases?: list}
-export def "projects test" [
+export def "firebaserules-projects-test" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

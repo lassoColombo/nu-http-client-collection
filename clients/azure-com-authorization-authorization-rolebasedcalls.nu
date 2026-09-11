@@ -110,7 +110,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-authorization-provider-operations list-metadata" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "provider-operations-metadata-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -134,7 +134,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.Authorization/providerOperations
 # operationId: ProviderOperationsMetadata_List
-export def "providers-microsoft-authorization-provider-operations list-metadata" [
+export def "provider-operations-metadata-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -171,7 +171,7 @@ export def "providers-microsoft-authorization-provider-operations list-metadata"
 #
 # GET /providers/Microsoft.Authorization/providerOperations/{resourceProviderNamespace}
 # operationId: ProviderOperationsMetadata_Get
-export def "providers-microsoft-authorization-provider-operations get-metadata" [
+export def "provider-operations-metadata-get" [
   resource_provider_namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -210,7 +210,7 @@ export def "providers-microsoft-authorization-provider-operations get-metadata" 
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Authorization/roleAssignments
 # operationId: RoleAssignments_List
-export def "subscriptions-providers-microsoft-authorization-role-assignments list" [
+export def "role-assignments-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -249,7 +249,7 @@ export def "subscriptions-providers-microsoft-authorization-role-assignments lis
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Authorization/roleAssignments
 # operationId: RoleAssignments_ListForResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-authorization-role-assignments list" [
+export def "role-assignments-list-for-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -290,7 +290,7 @@ export def "subscriptions-resource-groups-providers-microsoft-authorization-role
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Authorization/permissions
 # operationId: Permissions_ListForResourceGroup
-export def "subscriptions-resourcegroups-providers-microsoft-authorization-permissions list-for-resource-group" [
+export def "permissions-list-for-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -330,7 +330,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-authorization-permi
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/{resourceProviderNamespace}/{parentResourcePath}/{resourceType}/{resourceName}/providers/Microsoft.Authorization/permissions
 # operationId: Permissions_ListForResource
-export def "subscriptions-resourcegroups-providers-providers-microsoft-authorization-permissions list-for-resource" [
+export def "permissions-list-for-resource" [
   subscription_id: string
   resource_group_name: string
   resource_provider_namespace: string
@@ -378,7 +378,7 @@ export def "subscriptions-resourcegroups-providers-providers-microsoft-authoriza
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/{resourceProviderNamespace}/{parentResourcePath}/{resourceType}/{resourceName}/providers/Microsoft.Authorization/roleAssignments
 # operationId: RoleAssignments_ListForResource
-export def "subscriptions-resourcegroups-providers-providers-microsoft-authorization-role-assignments list-for-resource" [
+export def "role-assignments-list-for-resource" [
   subscription_id: string
   resource_group_name: string
   resource_provider_namespace: string
@@ -427,7 +427,7 @@ export def "subscriptions-resourcegroups-providers-providers-microsoft-authoriza
 #
 # DELETE /{roleId}
 # operationId: RoleAssignments_DeleteById
-export def "role-assignments delete" [
+export def "role-assignments-delete-by-id" [
   role_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -465,7 +465,7 @@ export def "role-assignments delete" [
 #
 # GET /{roleId}
 # operationId: RoleAssignments_GetById
-export def "role-assignments get" [
+export def "role-assignments-get-by-id" [
   role_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -504,7 +504,7 @@ export def "role-assignments get" [
 # PUT /{roleId}
 # operationId: RoleAssignments_CreateById
 # --properties shape: {canDelegate?: bool, principalId?: string, roleDefinitionId?: string}
-export def "role-assignments create" [
+export def "role-assignments-create-by-id" [
   role_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -546,7 +546,7 @@ export def "role-assignments create" [
 #
 # GET /{scope}/providers/Microsoft.Authorization/roleAssignments
 # operationId: RoleAssignments_ListForScope
-export def "providers-microsoft-authorization-role-assignments list" [
+export def "role-assignments-list-for-scope" [
   scope: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -585,7 +585,7 @@ export def "providers-microsoft-authorization-role-assignments list" [
 #
 # DELETE /{scope}/providers/Microsoft.Authorization/roleAssignments/{roleAssignmentName}
 # operationId: RoleAssignments_Delete
-export def "providers-microsoft-authorization-role-assignments delete" [
+export def "role-assignments-delete" [
   scope: string
   role_assignment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -625,7 +625,7 @@ export def "providers-microsoft-authorization-role-assignments delete" [
 #
 # GET /{scope}/providers/Microsoft.Authorization/roleAssignments/{roleAssignmentName}
 # operationId: RoleAssignments_Get
-export def "providers-microsoft-authorization-role-assignments get" [
+export def "role-assignments-get" [
   scope: string
   role_assignment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -666,7 +666,7 @@ export def "providers-microsoft-authorization-role-assignments get" [
 # PUT /{scope}/providers/Microsoft.Authorization/roleAssignments/{roleAssignmentName}
 # operationId: RoleAssignments_Create
 # --properties shape: {canDelegate?: bool, principalId?: string, roleDefinitionId?: string}
-export def "providers-microsoft-authorization-role-assignments create" [
+export def "role-assignments-create" [
   scope: string
   role_assignment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -710,7 +710,7 @@ export def "providers-microsoft-authorization-role-assignments create" [
 #
 # GET /{scope}/providers/Microsoft.Authorization/roleDefinitions
 # operationId: RoleDefinitions_List
-export def "providers-microsoft-authorization-role-definitions list" [
+export def "role-definitions-list" [
   scope: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -749,7 +749,7 @@ export def "providers-microsoft-authorization-role-definitions list" [
 #
 # DELETE /{scope}/providers/Microsoft.Authorization/roleDefinitions/{roleDefinitionId}
 # operationId: RoleDefinitions_Delete
-export def "providers-microsoft-authorization-role-definitions delete" [
+export def "role-definitions-delete" [
   scope: string
   role_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -789,7 +789,7 @@ export def "providers-microsoft-authorization-role-definitions delete" [
 #
 # GET /{scope}/providers/Microsoft.Authorization/roleDefinitions/{roleDefinitionId}
 # operationId: RoleDefinitions_Get
-export def "providers-microsoft-authorization-role-definitions get" [
+export def "role-definitions-get" [
   scope: string
   role_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -830,7 +830,7 @@ export def "providers-microsoft-authorization-role-definitions get" [
 # PUT /{scope}/providers/Microsoft.Authorization/roleDefinitions/{roleDefinitionId}
 # operationId: RoleDefinitions_CreateOrUpdate
 # --properties shape: {assignableScopes?: list<string>, description?: string, permissions?: list, roleName?: string, type?: string}
-export def "providers-microsoft-authorization-role-definitions create-or-update" [
+export def "role-definitions-create-or-update" [
   scope: string
   role_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL

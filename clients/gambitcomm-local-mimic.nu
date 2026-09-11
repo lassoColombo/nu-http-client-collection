@@ -117,7 +117,7 @@ def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "mimic-access-add create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "access-add" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -141,7 +141,7 @@ export def commands []: nothing -> table {
 #
 # POST /mimic/access/add/{user}/{agents}/{mask}
 # operationId: access_add
-export def "mimic-access-add create" [
+export def "access-add" [
   user: string
   agents: string
   mask: string
@@ -181,7 +181,7 @@ export def "mimic-access-add create" [
 #
 # DELETE /mimic/access/del/{user}
 # operationId: access_del
-export def "mimic-access-del delete" [
+export def "access-del" [
   user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -217,7 +217,7 @@ export def "mimic-access-del delete" [
 #
 # GET /mimic/access/get/acldb
 # operationId: access_get_acldb
-export def "mimic-access-get-acldb get" [
+export def "access-get-acldb" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -251,7 +251,7 @@ export def "mimic-access-get-acldb get" [
 #
 # GET /mimic/access/get/admindir
 # operationId: access_get_admindir
-export def "mimic-access-get-admindir get" [
+export def "access-get-admindir" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -285,7 +285,7 @@ export def "mimic-access-get-admindir get" [
 #
 # GET /mimic/access/get/adminuser
 # operationId: access_get_adminuser
-export def "mimic-access-get-adminuser get" [
+export def "access-get-adminuser" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -319,7 +319,7 @@ export def "mimic-access-get-adminuser get" [
 #
 # GET /mimic/access/get/enabled
 # operationId: access_get_enabled
-export def "mimic-access-get-enabled get" [
+export def "access-get-enabled" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -353,7 +353,7 @@ export def "mimic-access-get-enabled get" [
 #
 # GET /mimic/access/list
 # operationId: access_list
-export def "mimic-access-list list" [
+export def "access-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -387,7 +387,7 @@ export def "mimic-access-list list" [
 #
 # PUT /mimic/access/load/{filename}
 # operationId: access_load
-export def "mimic-access-load update" [
+export def "access-load" [
   filename: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -423,7 +423,7 @@ export def "mimic-access-load update" [
 #
 # PUT /mimic/access/save/{filename}
 # operationId: access_save
-export def "mimic-access-save update" [
+export def "access-save" [
   filename: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -459,7 +459,7 @@ export def "mimic-access-save update" [
 #
 # PUT /mimic/access/set/acldb/{databaseName}
 # operationId: access_set_acldb
-export def "mimic-access-set-acldb update" [
+export def "access-set-acldb" [
   database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -495,7 +495,7 @@ export def "mimic-access-set-acldb update" [
 #
 # PUT /mimic/access/set/enabled/{enabledOrNot}
 # operationId: access_set_enabled
-export def "mimic-access-set-enabled update" [
+export def "access-set-enabled" [
   enabled_or_not: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -531,7 +531,7 @@ export def "mimic-access-set-enabled update" [
 #
 # POST /mimic/agent/{agentNum}/add/{IP}
 # operationId: new
-export def "mimic-agent-add create-new" [
+export def "new" [
   agent_num: int
   ip: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -573,7 +573,7 @@ export def "mimic-agent-add create-new" [
 #
 # POST /mimic/agent/{agentNum}/from/add/{IP}/{port}
 # operationId: from_add
-export def "mimic-agent-from-add create" [
+export def "from-add" [
   agent_num: int
   ip: string
   port: int
@@ -613,7 +613,7 @@ export def "mimic-agent-from-add create" [
 #
 # DELETE /mimic/agent/{agentNum}/from/delete/{IP}/{port}
 # operationId: from_del
-export def "mimic-agent-from-delete delete" [
+export def "from-del" [
   agent_num: int
   ip: string
   port: int
@@ -653,7 +653,7 @@ export def "mimic-agent-from-delete delete" [
 #
 # GET /mimic/agent/{agentNum}/from/list
 # operationId: from_list
-export def "mimic-agent-from-list list" [
+export def "from-list" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -689,7 +689,7 @@ export def "mimic-agent-from-list list" [
 #
 # GET /mimic/agent/{agentNum}/get/changed
 # operationId: get_changed
-export def "mimic-agent-get-changed get" [
+export def "get-changed" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -725,7 +725,7 @@ export def "mimic-agent-get-changed get" [
 #
 # GET /mimic/agent/{agentNum}/get/config_changed
 # operationId: get_config_changed
-export def "mimic-agent-get-config-changed get" [
+export def "get-config-changed" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -761,7 +761,7 @@ export def "mimic-agent-get-config-changed get" [
 #
 # GET /mimic/agent/{agentNum}/get/delay
 # operationId: get_delay
-export def "mimic-agent-get-delay get" [
+export def "get-delay" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -797,7 +797,7 @@ export def "mimic-agent-get-delay get" [
 #
 # GET /mimic/agent/{agentNum}/get/drops
 # operationId: get_drops
-export def "mimic-agent-get-drops get" [
+export def "get-drops" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -833,7 +833,7 @@ export def "mimic-agent-get-drops get" [
 #
 # GET /mimic/agent/{agentNum}/get/host
 # operationId: get_host
-export def "mimic-agent-get-host get" [
+export def "get-host" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -869,7 +869,7 @@ export def "mimic-agent-get-host get" [
 #
 # GET /mimic/agent/{agentNum}/get/inform_timeout
 # operationId: get_inform_timeout
-export def "mimic-agent-get-inform-timeout get" [
+export def "get-inform-timeout" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -905,7 +905,7 @@ export def "mimic-agent-get-inform-timeout get" [
 #
 # GET /mimic/agent/{agentNum}/get/interface
 # operationId: get_interface
-export def "mimic-agent-get-interface get" [
+export def "get-interface" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -941,7 +941,7 @@ export def "mimic-agent-get-interface get" [
 #
 # GET /mimic/agent/{agentNum}/get/mask
 # operationId: get_mask
-export def "mimic-agent-get-mask get" [
+export def "get-mask" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -977,7 +977,7 @@ export def "mimic-agent-get-mask get" [
 #
 # GET /mimic/agent/{agentNum}/get/mibs
 # operationId: get_mibs
-export def "mimic-agent-get-mibs get" [
+export def "get-mibs" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1013,7 +1013,7 @@ export def "mimic-agent-get-mibs get" [
 #
 # GET /mimic/agent/{agentNum}/get/num_starts
 # operationId: get_number_starts
-export def "mimic-agent-get-num-starts get-number" [
+export def "get-number-starts" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1049,7 +1049,7 @@ export def "mimic-agent-get-num-starts get-number" [
 #
 # GET /mimic/agent/{agentNum}/get/oiddir
 # operationId: get_oiddir
-export def "mimic-agent-get-oiddir get" [
+export def "get-oiddir" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1085,7 +1085,7 @@ export def "mimic-agent-get-oiddir get" [
 #
 # GET /mimic/agent/{agentNum}/get/owner
 # operationId: get_owner
-export def "mimic-agent-get-owner get" [
+export def "get-owner" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1121,7 +1121,7 @@ export def "mimic-agent-get-owner get" [
 #
 # GET /mimic/agent/{agentNum}/get/pdusize
 # operationId: get_pdusize
-export def "mimic-agent-get-pdusize get" [
+export def "get-pdusize" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1157,7 +1157,7 @@ export def "mimic-agent-get-pdusize get" [
 #
 # GET /mimic/agent/{agentNum}/get/port
 # operationId: get_port
-export def "mimic-agent-get-port get" [
+export def "get-port" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1193,7 +1193,7 @@ export def "mimic-agent-get-port get" [
 #
 # GET /mimic/agent/{agentNum}/get/privdir
 # operationId: get_privdir
-export def "mimic-agent-get-privdir get" [
+export def "get-privdir" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1229,7 +1229,7 @@ export def "mimic-agent-get-privdir get" [
 #
 # GET /mimic/agent/{agentNum}/get/protocol
 # operationId: get_protocols
-export def "mimic-agent-get-protocol get" [
+export def "get-protocols" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1265,7 +1265,7 @@ export def "mimic-agent-get-protocol get" [
 #
 # GET /mimic/agent/{agentNum}/get/read
 # operationId: get_read_community
-export def "mimic-agent-get-read get-community" [
+export def "get-read-community" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1301,7 +1301,7 @@ export def "mimic-agent-get-read get-community" [
 #
 # GET /mimic/agent/{agentNum}/get/scen
 # operationId: get_scen
-export def "mimic-agent-get-scen get" [
+export def "get-scen" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1337,7 +1337,7 @@ export def "mimic-agent-get-scen get" [
 #
 # GET /mimic/agent/{agentNum}/get/sim
 # operationId: get_sim
-export def "mimic-agent-get-sim get" [
+export def "get-sim" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1373,7 +1373,7 @@ export def "mimic-agent-get-sim get" [
 #
 # GET /mimic/agent/{agentNum}/get/start
 # operationId: get_starttime
-export def "mimic-agent-get-start get-starttime" [
+export def "get-starttime" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1409,7 +1409,7 @@ export def "mimic-agent-get-start get-starttime" [
 #
 # GET /mimic/agent/{agentNum}/get/state
 # operationId: get_agent_state
-export def "mimic-agent-get-state get" [
+export def "get-agent-state" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1445,7 +1445,7 @@ export def "mimic-agent-get-state get" [
 #
 # GET /mimic/agent/{agentNum}/get/state_changed
 # operationId: get_state_changed
-export def "mimic-agent-get-state-changed get" [
+export def "get-state-changed" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1481,7 +1481,7 @@ export def "mimic-agent-get-state-changed get" [
 #
 # GET /mimic/agent/{agentNum}/get/statistics
 # operationId: get_statistics
-export def "mimic-agent-get-statistics get" [
+export def "get-statistics" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1517,7 +1517,7 @@ export def "mimic-agent-get-statistics get" [
 #
 # GET /mimic/agent/{agentNum}/get/trace
 # operationId: get_trace
-export def "mimic-agent-get-trace get" [
+export def "get-trace" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1553,7 +1553,7 @@ export def "mimic-agent-get-trace get" [
 #
 # GET /mimic/agent/{agentNum}/get/validate
 # operationId: get_validate
-export def "mimic-agent-get-validate get" [
+export def "get-validate" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1589,7 +1589,7 @@ export def "mimic-agent-get-validate get" [
 #
 # GET /mimic/agent/{agentNum}/get/write
 # operationId: get_write_community
-export def "mimic-agent-get-write get-community" [
+export def "get-write-community" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1625,7 +1625,7 @@ export def "mimic-agent-get-write get-community" [
 #
 # PUT /mimic/agent/{agentNum}/halt
 # operationId: halt
-export def "mimic-agent-halt update" [
+export def "halt" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1661,7 +1661,7 @@ export def "mimic-agent-halt update" [
 #
 # POST /mimic/agent/{agentNum}/ipalias/add/{IP}/{port}/{mask}/{interface}
 # operationId: add_ipalias
-export def "mimic-agent-ipalias-add create" [
+export def "add-ipalias" [
   agent_num: int
   ip: string
   port: int
@@ -1705,7 +1705,7 @@ export def "mimic-agent-ipalias-add create" [
 #
 # DELETE /mimic/agent/{agentNum}/ipalias/delete/{IP}/{port}
 # operationId: del_ipalias
-export def "mimic-agent-ipalias-delete delete" [
+export def "del-ipalias" [
   agent_num: int
   ip: string
   port: int
@@ -1745,7 +1745,7 @@ export def "mimic-agent-ipalias-delete delete" [
 #
 # GET /mimic/agent/{agentNum}/ipalias/list
 # operationId: list_ipaliases
-export def "mimic-agent-ipalias-list list-ipaliases" [
+export def "list-ipaliases" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1781,7 +1781,7 @@ export def "mimic-agent-ipalias-list list-ipaliases" [
 #
 # PUT /mimic/agent/{agentNum}/ipalias/start/{IP}/{port}
 # operationId: start_ipalias
-export def "mimic-agent-ipalias-start start" [
+export def "start-ipalias" [
   agent_num: int
   ip: string
   port: int
@@ -1821,7 +1821,7 @@ export def "mimic-agent-ipalias-start start" [
 #
 # GET /mimic/agent/{agentNum}/ipalias/status/{IP}/{port}
 # operationId: status_ipalias
-export def "mimic-agent-ipalias-status get" [
+export def "status-ipalias" [
   agent_num: int
   ip: string
   port: int
@@ -1861,7 +1861,7 @@ export def "mimic-agent-ipalias-status get" [
 #
 # PUT /mimic/agent/{agentNum}/ipalias/stop/{IP}/{port}
 # operationId: stop_ipalias
-export def "mimic-agent-ipalias-stop stop" [
+export def "stop-ipalias" [
   agent_num: int
   ip: string
   port: int
@@ -1901,7 +1901,7 @@ export def "mimic-agent-ipalias-stop stop" [
 #
 # PUT /mimic/agent/{agentNum}/pause
 # operationId: pause_now
-export def "mimic-agent-pause pause-now" [
+export def "pause-now" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1937,7 +1937,7 @@ export def "mimic-agent-pause pause-now" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/coap/get/args
 # operationId: protocol_coap_get_args
-export def "mimic-agent-protocol-msg-coap-get-args get" [
+export def "protocol-coap-get-args" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1973,7 +1973,7 @@ export def "mimic-agent-protocol-msg-coap-get-args get" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/coap/get/config
 # operationId: protocol_coap_get_config
-export def "mimic-agent-protocol-msg-coap-get-config get" [
+export def "protocol-coap-get-config" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2009,7 +2009,7 @@ export def "mimic-agent-protocol-msg-coap-get-config get" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/coap/get/statistics
 # operationId: protocol_coap_get_statistics
-export def "mimic-agent-protocol-msg-coap-get-statistics get" [
+export def "protocol-coap-get-statistics" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2045,7 +2045,7 @@ export def "mimic-agent-protocol-msg-coap-get-statistics get" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/coap/get/trace
 # operationId: protocol_coap_get_trace
-export def "mimic-agent-protocol-msg-coap-get-trace get" [
+export def "protocol-coap-get-trace" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2081,7 +2081,7 @@ export def "mimic-agent-protocol-msg-coap-get-trace get" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/coap/set/config/{argument}/{value}
 # operationId: protocol_coap_set_config
-export def "mimic-agent-protocol-msg-coap-set-config update" [
+export def "protocol-coap-set-config" [
   agent_num: int
   argument: string
   value: string
@@ -2121,7 +2121,7 @@ export def "mimic-agent-protocol-msg-coap-set-config update" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/coap/set/trace/{enableOrNot}
 # operationId: protocol_coap_set_trace
-export def "mimic-agent-protocol-msg-coap-set-trace update" [
+export def "protocol-coap-set-trace" [
   agent_num: int
   enable_or_not: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2159,7 +2159,7 @@ export def "mimic-agent-protocol-msg-coap-set-trace update" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/dhcp/get/args
 # operationId: protocol_dhcp_get_args
-export def "mimic-agent-protocol-msg-dhcp-get-args get" [
+export def "protocol-dhcp-get-args" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2195,7 +2195,7 @@ export def "mimic-agent-protocol-msg-dhcp-get-args get" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/dhcp/get/config
 # operationId: protocol_dhcp_get_config
-export def "mimic-agent-protocol-msg-dhcp-get-config get" [
+export def "protocol-dhcp-get-config" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2231,7 +2231,7 @@ export def "mimic-agent-protocol-msg-dhcp-get-config get" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/dhcp/get/statistics
 # operationId: protocol_dhcp_get_statistics
-export def "mimic-agent-protocol-msg-dhcp-get-statistics get" [
+export def "protocol-dhcp-get-statistics" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2267,7 +2267,7 @@ export def "mimic-agent-protocol-msg-dhcp-get-statistics get" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/dhcp/get/trace
 # operationId: protocol_dhcp_get_trace
-export def "mimic-agent-protocol-msg-dhcp-get-trace get" [
+export def "protocol-dhcp-get-trace" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2303,7 +2303,7 @@ export def "mimic-agent-protocol-msg-dhcp-get-trace get" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/dhcp/params
 # operationId: protocol_dhcp_params
-export def "mimic-agent-protocol-msg-dhcp-params get" [
+export def "protocol-dhcp-params" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2339,7 +2339,7 @@ export def "mimic-agent-protocol-msg-dhcp-params get" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/dhcp/set/config/{argument}/{value}
 # operationId: protocol_dhcp_set_config
-export def "mimic-agent-protocol-msg-dhcp-set-config update" [
+export def "protocol-dhcp-set-config" [
   agent_num: int
   argument: string
   value: string
@@ -2379,7 +2379,7 @@ export def "mimic-agent-protocol-msg-dhcp-set-config update" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/dhcp/set/trace/{enableOrNot}
 # operationId: protocol_dhcp_set_trace
-export def "mimic-agent-protocol-msg-dhcp-set-trace update" [
+export def "protocol-dhcp-set-trace" [
   agent_num: int
   enable_or_not: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2417,7 +2417,7 @@ export def "mimic-agent-protocol-msg-dhcp-set-trace update" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/ipmi/get/args
 # operationId: protocol_ipmi_get_args
-export def "mimic-agent-protocol-msg-ipmi-get-args get" [
+export def "protocol-ipmi-get-args" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2453,7 +2453,7 @@ export def "mimic-agent-protocol-msg-ipmi-get-args get" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/ipmi/get/config
 # operationId: protocol_ipmi_get_config
-export def "mimic-agent-protocol-msg-ipmi-get-config get" [
+export def "protocol-ipmi-get-config" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2489,7 +2489,7 @@ export def "mimic-agent-protocol-msg-ipmi-get-config get" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/ipmi/get/statistics
 # operationId: protocol_ipmi_get_statistics
-export def "mimic-agent-protocol-msg-ipmi-get-statistics get" [
+export def "protocol-ipmi-get-statistics" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2525,7 +2525,7 @@ export def "mimic-agent-protocol-msg-ipmi-get-statistics get" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/ipmi/get/trace
 # operationId: protocol_ipmi_get_trace
-export def "mimic-agent-protocol-msg-ipmi-get-trace get" [
+export def "protocol-ipmi-get-trace" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2561,7 +2561,7 @@ export def "mimic-agent-protocol-msg-ipmi-get-trace get" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/ipmi/get/{attr}
 # operationId: protocol_ipmi_get_attr
-export def "mimic-agent-protocol-msg-ipmi-get get" [
+export def "protocol-ipmi-get-attr" [
   agent_num: int
   attr: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2599,7 +2599,7 @@ export def "mimic-agent-protocol-msg-ipmi-get get" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/ipmi/set/config/{argument}/{value}
 # operationId: protocol_ipmi_set_config
-export def "mimic-agent-protocol-msg-ipmi-set-config update" [
+export def "protocol-ipmi-set-config" [
   agent_num: int
   argument: string
   value: string
@@ -2639,7 +2639,7 @@ export def "mimic-agent-protocol-msg-ipmi-set-config update" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/ipmi/set/trace/{enableOrNot}
 # operationId: protocol_ipmi_set_trace
-export def "mimic-agent-protocol-msg-ipmi-set-trace update" [
+export def "protocol-ipmi-set-trace" [
   agent_num: int
   enable_or_not: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2677,7 +2677,7 @@ export def "mimic-agent-protocol-msg-ipmi-set-trace update" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/ipmi/set/{attr}/{value}
 # operationId: protocol_ipmi_set_attr
-export def "mimic-agent-protocol-msg-ipmi-set update" [
+export def "protocol-ipmi-set-attr" [
   agent_num: int
   attr: string
   value: string
@@ -2717,7 +2717,7 @@ export def "mimic-agent-protocol-msg-ipmi-set update" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/mqtt/client/get/protstate
 # operationId: protocol_mqtt_client_get_protstate
-export def "mimic-agent-protocol-msg-mqtt-client-get-protstate get" [
+export def "protocol-mqtt-client-get-protstate" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2753,7 +2753,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-get-protstate get" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/mqtt/client/get/state
 # operationId: protocol_mqtt_client_get_state
-export def "mimic-agent-protocol-msg-mqtt-client-get-state get" [
+export def "protocol-mqtt-client-get-state" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2789,7 +2789,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-get-state get" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/mqtt/client/message/card
 # operationId: protocol_mqtt_client_message_card
-export def "mimic-agent-protocol-msg-mqtt-client-message-card get" [
+export def "protocol-mqtt-client-message-card" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2825,7 +2825,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-message-card get" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/mqtt/client/message/get/{msgNum}/{attr}
 # operationId: protocol_mqtt_client_message_get
-export def "mimic-agent-protocol-msg-mqtt-client-message-get get" [
+export def "protocol-mqtt-client-message-get" [
   agent_num: int
   msg_num: int
   attr: string
@@ -2865,7 +2865,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-message-get get" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/mqtt/client/message/set/{msgNum}/{attr}/{value}
 # operationId: protocol_mqtt_client_message_set
-export def "mimic-agent-protocol-msg-mqtt-client-message-set update" [
+export def "protocol-mqtt-client-message-set" [
   agent_num: int
   msg_num: int
   attr: string
@@ -2907,7 +2907,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-message-set update" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/mqtt/client/resubscribe/{subNum}
 # operationId: protocol_mqtt_client_resubscribe
-export def "mimic-agent-protocol-msg-mqtt-client-resubscribe update" [
+export def "protocol-mqtt-client-resubscribe" [
   agent_num: int
   sub_num: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2945,7 +2945,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-resubscribe update" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/mqtt/client/runtime/abort
 # operationId: protocol_mqtt_client_runtime_abort
-export def "mimic-agent-protocol-msg-mqtt-client-runtime-abort abort" [
+export def "protocol-mqtt-client-runtime-abort" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2981,7 +2981,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-runtime-abort abort" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/mqtt/client/runtime/connect
 # operationId: protocol_mqtt_client_runtime_connect
-export def "mimic-agent-protocol-msg-mqtt-client-runtime-connect update" [
+export def "protocol-mqtt-client-runtime-connect" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3017,7 +3017,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-runtime-connect update" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/mqtt/client/runtime/disconnect
 # operationId: protocol_mqtt_client_runtime_disconnect
-export def "mimic-agent-protocol-msg-mqtt-client-runtime-disconnect update" [
+export def "protocol-mqtt-client-runtime-disconnect" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3053,7 +3053,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-runtime-disconnect update" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/mqtt/client/set/broker/{brokerAddr}
 # operationId: protocol_mqtt_client_set_broker
-export def "mimic-agent-protocol-msg-mqtt-client-set-broker update" [
+export def "protocol-mqtt-client-set-broker" [
   agent_num: int
   broker_addr: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3091,7 +3091,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-set-broker update" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/mqtt/client/set/cleansession/{cleanOrNot}
 # operationId: protocol_mqtt_client_set_cleansession
-export def "mimic-agent-protocol-msg-mqtt-client-set-cleansession update" [
+export def "protocol-mqtt-client-set-cleansession" [
   agent_num: int
   clean_or_not: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3129,7 +3129,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-set-cleansession update" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/mqtt/client/set/clientid/{clientID}
 # operationId: protocol_mqtt_client_set_clientid
-export def "mimic-agent-protocol-msg-mqtt-client-set-clientid update" [
+export def "protocol-mqtt-client-set-clientid" [
   agent_num: int
   client_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3167,7 +3167,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-set-clientid update" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/mqtt/client/set/keepalive/{aliveTime}
 # operationId: protocol_mqtt_client_set_keepalive
-export def "mimic-agent-protocol-msg-mqtt-client-set-keepalive update" [
+export def "protocol-mqtt-client-set-keepalive" [
   agent_num: int
   alive_time: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3205,7 +3205,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-set-keepalive update" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/mqtt/client/set/on_disconnect/{action}
 # operationId: protocol_mqtt_client_set_on_disconnect
-export def "mimic-agent-protocol-msg-mqtt-client-set-on-disconnect update" [
+export def "protocol-mqtt-client-set-on-disconnect" [
   agent_num: int
   action: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3243,7 +3243,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-set-on-disconnect update" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/mqtt/client/set/password/{password}
 # operationId: protocol_mqtt_client_set_password
-export def "mimic-agent-protocol-msg-mqtt-client-set-password update" [
+export def "protocol-mqtt-client-set-password" [
   agent_num: int
   password: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3281,7 +3281,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-set-password update" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/mqtt/client/set/port/{port}
 # operationId: protocol_mqtt_client_set_port
-export def "mimic-agent-protocol-msg-mqtt-client-set-port update" [
+export def "protocol-mqtt-client-set-port" [
   agent_num: int
   port: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3319,7 +3319,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-set-port update" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/mqtt/client/set/username/{username}
 # operationId: protocol_mqtt_client_set_username
-export def "mimic-agent-protocol-msg-mqtt-client-set-username update" [
+export def "protocol-mqtt-client-set-username" [
   agent_num: int
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3357,7 +3357,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-set-username update" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/mqtt/client/set/willmsg/{msg}
 # operationId: protocol_mqtt_client_set_willmsg
-export def "mimic-agent-protocol-msg-mqtt-client-set-willmsg update" [
+export def "protocol-mqtt-client-set-willmsg" [
   agent_num: int
   msg: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3395,7 +3395,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-set-willmsg update" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/mqtt/client/set/willqos/{qos}
 # operationId: protocol_mqtt_client_set_willqos
-export def "mimic-agent-protocol-msg-mqtt-client-set-willqos update" [
+export def "protocol-mqtt-client-set-willqos" [
   agent_num: int
   qos: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3433,7 +3433,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-set-willqos update" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/mqtt/client/set/willretain/{retain}
 # operationId: protocol_mqtt_client_set_willretain
-export def "mimic-agent-protocol-msg-mqtt-client-set-willretain update" [
+export def "protocol-mqtt-client-set-willretain" [
   agent_num: int
   retain: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3471,7 +3471,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-set-willretain update" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/mqtt/client/set/willtopic/{topic}
 # operationId: protocol_mqtt_client_set_willtopic
-export def "mimic-agent-protocol-msg-mqtt-client-set-willtopic update" [
+export def "protocol-mqtt-client-set-willtopic" [
   agent_num: int
   topic: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3509,7 +3509,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-set-willtopic update" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/mqtt/client/subscribe/card
 # operationId: protocol_mqtt_client_subscribe_card
-export def "mimic-agent-protocol-msg-mqtt-client-subscribe-card subscribe" [
+export def "protocol-mqtt-client-subscribe-card" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3545,7 +3545,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-subscribe-card subscribe" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/mqtt/client/subscribe/get/{subNum}/{attr}
 # operationId: protocol_mqtt_client_subscribe_get
-export def "mimic-agent-protocol-msg-mqtt-client-subscribe-get subscribe" [
+export def "protocol-mqtt-client-subscribe-get" [
   agent_num: int
   sub_num: int
   attr: string
@@ -3585,7 +3585,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-subscribe-get subscribe" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/mqtt/client/subscribe/set/{subNum}/{attr}/{value}
 # operationId: protocol_mqtt_client_subscribe_set
-export def "mimic-agent-protocol-msg-mqtt-client-subscribe-set subscribe" [
+export def "protocol-mqtt-client-subscribe-set" [
   agent_num: int
   sub_num: int
   attr: string
@@ -3627,7 +3627,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-subscribe-set subscribe" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/mqtt/client/unsubscribe/{subNum}
 # operationId: protocol_mqtt_client_unsubscribe
-export def "mimic-agent-protocol-msg-mqtt-client-unsubscribe unsubscribe" [
+export def "protocol-mqtt-client-unsubscribe" [
   agent_num: int
   sub_num: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3665,7 +3665,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-unsubscribe unsubscribe" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/mqtt/get/args
 # operationId: protocol_mqtt_get_args
-export def "mimic-agent-protocol-msg-mqtt-get-args get" [
+export def "protocol-mqtt-get-args" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3701,7 +3701,7 @@ export def "mimic-agent-protocol-msg-mqtt-get-args get" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/mqtt/get/config
 # operationId: protocol_mqtt_get_config
-export def "mimic-agent-protocol-msg-mqtt-get-config get" [
+export def "protocol-mqtt-get-config" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3737,7 +3737,7 @@ export def "mimic-agent-protocol-msg-mqtt-get-config get" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/mqtt/get/statistics
 # operationId: protocol_mqtt_get_statistics
-export def "mimic-agent-protocol-msg-mqtt-get-statistics get" [
+export def "protocol-mqtt-get-statistics" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3773,7 +3773,7 @@ export def "mimic-agent-protocol-msg-mqtt-get-statistics get" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/mqtt/get/trace
 # operationId: protocol_mqtt_get_trace
-export def "mimic-agent-protocol-msg-mqtt-get-trace get" [
+export def "protocol-mqtt-get-trace" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3809,7 +3809,7 @@ export def "mimic-agent-protocol-msg-mqtt-get-trace get" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/mqtt/set/config/{argument}/{value}
 # operationId: protocol_mqtt_set_config
-export def "mimic-agent-protocol-msg-mqtt-set-config update" [
+export def "protocol-mqtt-set-config" [
   agent_num: int
   argument: string
   value: string
@@ -3849,7 +3849,7 @@ export def "mimic-agent-protocol-msg-mqtt-set-config update" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/mqtt/set/trace/{enableOrNot}
 # operationId: protocol_mqtt_set_trace
-export def "mimic-agent-protocol-msg-mqtt-set-trace update" [
+export def "protocol-mqtt-set-trace" [
   agent_num: int
   enable_or_not: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3887,7 +3887,7 @@ export def "mimic-agent-protocol-msg-mqtt-set-trace update" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/netflow/flow/change/dfs_interval/{interval}
 # operationId: protocol_netflow_change_dfs
-export def "mimic-agent-protocol-msg-netflow-flow-change-dfs-interval update" [
+export def "protocol-netflow-change-dfs" [
   agent_num: int
   interval: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3925,7 +3925,7 @@ export def "mimic-agent-protocol-msg-netflow-flow-change-dfs-interval update" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/netflow/flow/change/tfs_interval/{interval}
 # operationId: protocol_netflow_change_tfs
-export def "mimic-agent-protocol-msg-netflow-flow-change-tfs-interval update" [
+export def "protocol-netflow-change-tfs" [
   agent_num: int
   interval: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3963,7 +3963,7 @@ export def "mimic-agent-protocol-msg-netflow-flow-change-tfs-interval update" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/netflow/flow/change/{flowset-uid}/{field-num}/{attr}/{value}
 # operationId: protocol_netflow_change_attr
-export def "mimic-agent-protocol-msg-netflow-flow-change update" [
+export def "protocol-netflow-change-attr" [
   agent_num: int
   flowset_uid: int
   field_num: int
@@ -4007,7 +4007,7 @@ export def "mimic-agent-protocol-msg-netflow-flow-change update" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/netflow/flow/list
 # operationId: protocol_netflow_list
-export def "mimic-agent-protocol-msg-netflow-flow-list list" [
+export def "protocol-netflow-list" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4043,7 +4043,7 @@ export def "mimic-agent-protocol-msg-netflow-flow-list list" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/netflow/get/args
 # operationId: protocol_netflow_get_args
-export def "mimic-agent-protocol-msg-netflow-get-args get" [
+export def "protocol-netflow-get-args" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4079,7 +4079,7 @@ export def "mimic-agent-protocol-msg-netflow-get-args get" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/netflow/get/config
 # operationId: protocol_netflow_get_config
-export def "mimic-agent-protocol-msg-netflow-get-config get" [
+export def "protocol-netflow-get-config" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4115,7 +4115,7 @@ export def "mimic-agent-protocol-msg-netflow-get-config get" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/netflow/get/statistics
 # operationId: protocol_netflow_get_statistics
-export def "mimic-agent-protocol-msg-netflow-get-statistics get" [
+export def "protocol-netflow-get-statistics" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4151,7 +4151,7 @@ export def "mimic-agent-protocol-msg-netflow-get-statistics get" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/netflow/get/trace
 # operationId: protocol_netflow_get_trace
-export def "mimic-agent-protocol-msg-netflow-get-trace get" [
+export def "protocol-netflow-get-trace" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4187,7 +4187,7 @@ export def "mimic-agent-protocol-msg-netflow-get-trace get" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/netflow/halt
 # operationId: protocol_netflow_halt
-export def "mimic-agent-protocol-msg-netflow-halt update" [
+export def "protocol-netflow-halt" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4223,7 +4223,7 @@ export def "mimic-agent-protocol-msg-netflow-halt update" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/netflow/reload
 # operationId: protocol_netflow_reload
-export def "mimic-agent-protocol-msg-netflow-reload reload" [
+export def "protocol-netflow-reload" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4259,7 +4259,7 @@ export def "mimic-agent-protocol-msg-netflow-reload reload" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/netflow/resume
 # operationId: protocol_netflow_resume
-export def "mimic-agent-protocol-msg-netflow-resume update" [
+export def "protocol-netflow-resume" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4295,7 +4295,7 @@ export def "mimic-agent-protocol-msg-netflow-resume update" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/netflow/set/collector/{collectorIP}
 # operationId: protocol_netflow_set_collector
-export def "mimic-agent-protocol-msg-netflow-set-collector update" [
+export def "protocol-netflow-set-collector" [
   agent_num: int
   collector_ip: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4333,7 +4333,7 @@ export def "mimic-agent-protocol-msg-netflow-set-collector update" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/netflow/set/config/{argument}/{value}
 # operationId: protocol_netflow_set_config
-export def "mimic-agent-protocol-msg-netflow-set-config update" [
+export def "protocol-netflow-set-config" [
   agent_num: int
   argument: string
   value: string
@@ -4373,7 +4373,7 @@ export def "mimic-agent-protocol-msg-netflow-set-config update" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/netflow/set/filename/{fileName}
 # operationId: protocol_netflow_set_fileName
-export def "mimic-agent-protocol-msg-netflow-set-filename update-file-name" [
+export def "protocol-netflow-set-file-name" [
   agent_num: int
   file_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4411,7 +4411,7 @@ export def "mimic-agent-protocol-msg-netflow-set-filename update-file-name" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/netflow/set/trace/{enableOrNot}
 # operationId: protocol_netflow_set_trace
-export def "mimic-agent-protocol-msg-netflow-set-trace update" [
+export def "protocol-netflow-set-trace" [
   agent_num: int
   enable_or_not: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4449,7 +4449,7 @@ export def "mimic-agent-protocol-msg-netflow-set-trace update" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/proxy/get/args
 # operationId: protocol_proxy_get_args
-export def "mimic-agent-protocol-msg-proxy-get-args get" [
+export def "protocol-proxy-get-args" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4485,7 +4485,7 @@ export def "mimic-agent-protocol-msg-proxy-get-args get" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/proxy/get/config
 # operationId: protocol_proxy_get_config
-export def "mimic-agent-protocol-msg-proxy-get-config get" [
+export def "protocol-proxy-get-config" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4521,7 +4521,7 @@ export def "mimic-agent-protocol-msg-proxy-get-config get" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/proxy/get/statistics
 # operationId: protocol_proxy_get_statistics
-export def "mimic-agent-protocol-msg-proxy-get-statistics get" [
+export def "protocol-proxy-get-statistics" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4557,7 +4557,7 @@ export def "mimic-agent-protocol-msg-proxy-get-statistics get" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/proxy/get/trace
 # operationId: protocol_proxy_get_trace
-export def "mimic-agent-protocol-msg-proxy-get-trace get" [
+export def "protocol-proxy-get-trace" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4593,7 +4593,7 @@ export def "mimic-agent-protocol-msg-proxy-get-trace get" [
 #
 # POST /mimic/agent/{agentNum}/protocol/msg/proxy/port/add/{port}/{target}/{targetPort}
 # operationId: protocol_proxy_port_add
-export def "mimic-agent-protocol-msg-proxy-port-add create" [
+export def "protocol-proxy-port-add" [
   agent_num: int
   port: int
   target: string
@@ -4635,7 +4635,7 @@ export def "mimic-agent-protocol-msg-proxy-port-add create" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/proxy/port/isStarted/{port}
 # operationId: protocol_proxy_port_isstarted
-export def "mimic-agent-protocol-msg-proxy-port-is-started get-isstarted" [
+export def "protocol-proxy-port-isstarted" [
   agent_num: int
   port: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4673,7 +4673,7 @@ export def "mimic-agent-protocol-msg-proxy-port-is-started get-isstarted" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/proxy/port/list
 # operationId: protocol_proxy_port_list
-export def "mimic-agent-protocol-msg-proxy-port-list list" [
+export def "protocol-proxy-port-list" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4709,7 +4709,7 @@ export def "mimic-agent-protocol-msg-proxy-port-list list" [
 #
 # DELETE /mimic/agent/{agentNum}/protocol/msg/proxy/port/remove/{port}
 # operationId: protocol_proxy_port_remove
-export def "mimic-agent-protocol-msg-proxy-port-remove delete" [
+export def "protocol-proxy-port-remove" [
   agent_num: int
   port: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4747,7 +4747,7 @@ export def "mimic-agent-protocol-msg-proxy-port-remove delete" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/proxy/port/start/{port}
 # operationId: protocol_proxy_port_start
-export def "mimic-agent-protocol-msg-proxy-port-start start" [
+export def "protocol-proxy-port-start" [
   agent_num: int
   port: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4785,7 +4785,7 @@ export def "mimic-agent-protocol-msg-proxy-port-start start" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/proxy/port/stop/{port}
 # operationId: protocol_proxy_port_stop
-export def "mimic-agent-protocol-msg-proxy-port-stop stop" [
+export def "protocol-proxy-port-stop" [
   agent_num: int
   port: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4823,7 +4823,7 @@ export def "mimic-agent-protocol-msg-proxy-port-stop stop" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/proxy/set/config/{argument}/{value}
 # operationId: protocol_proxy_set_config
-export def "mimic-agent-protocol-msg-proxy-set-config update" [
+export def "protocol-proxy-set-config" [
   agent_num: int
   argument: string
   value: string
@@ -4863,7 +4863,7 @@ export def "mimic-agent-protocol-msg-proxy-set-config update" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/proxy/set/trace/{enableOrNot}
 # operationId: protocol_proxy_set_trace
-export def "mimic-agent-protocol-msg-proxy-set-trace update" [
+export def "protocol-proxy-set-trace" [
   agent_num: int
   enable_or_not: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4901,7 +4901,7 @@ export def "mimic-agent-protocol-msg-proxy-set-trace update" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/sflow/get/args
 # operationId: protocol_sflow_get_args
-export def "mimic-agent-protocol-msg-sflow-get-args get" [
+export def "protocol-sflow-get-args" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4937,7 +4937,7 @@ export def "mimic-agent-protocol-msg-sflow-get-args get" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/sflow/get/config
 # operationId: protocol_sflow_get_config
-export def "mimic-agent-protocol-msg-sflow-get-config get" [
+export def "protocol-sflow-get-config" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4973,7 +4973,7 @@ export def "mimic-agent-protocol-msg-sflow-get-config get" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/sflow/get/statistics
 # operationId: protocol_sflow_get_statistics
-export def "mimic-agent-protocol-msg-sflow-get-statistics get" [
+export def "protocol-sflow-get-statistics" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5009,7 +5009,7 @@ export def "mimic-agent-protocol-msg-sflow-get-statistics get" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/sflow/get/trace
 # operationId: protocol_sflow_get_trace
-export def "mimic-agent-protocol-msg-sflow-get-trace get" [
+export def "protocol-sflow-get-trace" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5045,7 +5045,7 @@ export def "mimic-agent-protocol-msg-sflow-get-trace get" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/sflow/halt
 # operationId: protocol_sflow_halt
-export def "mimic-agent-protocol-msg-sflow-halt update" [
+export def "protocol-sflow-halt" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5081,7 +5081,7 @@ export def "mimic-agent-protocol-msg-sflow-halt update" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/sflow/reload
 # operationId: protocol_sflow_reload
-export def "mimic-agent-protocol-msg-sflow-reload reload" [
+export def "protocol-sflow-reload" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5117,7 +5117,7 @@ export def "mimic-agent-protocol-msg-sflow-reload reload" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/sflow/resume
 # operationId: protocol_sflow_resume
-export def "mimic-agent-protocol-msg-sflow-resume update" [
+export def "protocol-sflow-resume" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5153,7 +5153,7 @@ export def "mimic-agent-protocol-msg-sflow-resume update" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/sflow/set/config/{argument}/{value}
 # operationId: protocol_sflow_set_config
-export def "mimic-agent-protocol-msg-sflow-set-config update" [
+export def "protocol-sflow-set-config" [
   agent_num: int
   argument: string
   value: string
@@ -5193,7 +5193,7 @@ export def "mimic-agent-protocol-msg-sflow-set-config update" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/sflow/set/trace/{enableOrNot}
 # operationId: protocol_sflow_set_trace
-export def "mimic-agent-protocol-msg-sflow-set-trace update" [
+export def "protocol-sflow-set-trace" [
   agent_num: int
   enable_or_not: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5231,7 +5231,7 @@ export def "mimic-agent-protocol-msg-sflow-set-trace update" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/snmptcp/get/args
 # operationId: protocol_snmptcp_get_args
-export def "mimic-agent-protocol-msg-snmptcp-get-args get" [
+export def "protocol-snmptcp-get-args" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5267,7 +5267,7 @@ export def "mimic-agent-protocol-msg-snmptcp-get-args get" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/snmptcp/get/config
 # operationId: protocol_snmptcp_get_config
-export def "mimic-agent-protocol-msg-snmptcp-get-config get" [
+export def "protocol-snmptcp-get-config" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5303,7 +5303,7 @@ export def "mimic-agent-protocol-msg-snmptcp-get-config get" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/snmptcp/get/statistics
 # operationId: protocol_snmptcp_get_statistics
-export def "mimic-agent-protocol-msg-snmptcp-get-statistics get" [
+export def "protocol-snmptcp-get-statistics" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5339,7 +5339,7 @@ export def "mimic-agent-protocol-msg-snmptcp-get-statistics get" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/snmptcp/get/trace
 # operationId: protocol_snmptcp_get_trace
-export def "mimic-agent-protocol-msg-snmptcp-get-trace get" [
+export def "protocol-snmptcp-get-trace" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5375,7 +5375,7 @@ export def "mimic-agent-protocol-msg-snmptcp-get-trace get" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/snmptcp/ipalias/disable/{ipaddress}/{port}
 # operationId: protocol_snmptcp_ipalias_disable
-export def "mimic-agent-protocol-msg-snmptcp-ipalias-disable disable" [
+export def "protocol-snmptcp-ipalias-disable" [
   agent_num: int
   ipaddress: string
   port: int
@@ -5415,7 +5415,7 @@ export def "mimic-agent-protocol-msg-snmptcp-ipalias-disable disable" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/snmptcp/ipalias/enable/{ipaddress}/{port}
 # operationId: protocol_snmptcp_ipalias_enable
-export def "mimic-agent-protocol-msg-snmptcp-ipalias-enable enable" [
+export def "protocol-snmptcp-ipalias-enable" [
   agent_num: int
   ipaddress: string
   port: int
@@ -5455,7 +5455,7 @@ export def "mimic-agent-protocol-msg-snmptcp-ipalias-enable enable" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/snmptcp/ipalias/isenabled/{ipaddress}/{port}
 # operationId: protocol_snmptcp_ipalias_isenabled
-export def "mimic-agent-protocol-msg-snmptcp-ipalias-isenabled get" [
+export def "protocol-snmptcp-ipalias-isenabled" [
   agent_num: int
   ipaddress: string
   port: int
@@ -5495,7 +5495,7 @@ export def "mimic-agent-protocol-msg-snmptcp-ipalias-isenabled get" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/snmptcp/ipalias/list
 # operationId: protocol_snmptcp_ipalias_list
-export def "mimic-agent-protocol-msg-snmptcp-ipalias-list list" [
+export def "protocol-snmptcp-ipalias-list" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5531,7 +5531,7 @@ export def "mimic-agent-protocol-msg-snmptcp-ipalias-list list" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/snmptcp/set/config/{argument}/{value}
 # operationId: protocol_snmptcp_set_config
-export def "mimic-agent-protocol-msg-snmptcp-set-config update" [
+export def "protocol-snmptcp-set-config" [
   agent_num: int
   argument: string
   value: string
@@ -5571,7 +5571,7 @@ export def "mimic-agent-protocol-msg-snmptcp-set-config update" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/snmptcp/set/trace/{enableOrNot}
 # operationId: protocol_snmptcp_set_trace
-export def "mimic-agent-protocol-msg-snmptcp-set-trace update" [
+export def "protocol-snmptcp-set-trace" [
   agent_num: int
   enable_or_not: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5609,7 +5609,7 @@ export def "mimic-agent-protocol-msg-snmptcp-set-trace update" [
 #
 # POST /mimic/agent/{agentNum}/protocol/msg/snmpv3/access/add/{groupName}/{prefix}/{securityModel}/{securityLevel}/{contextMatch}/{readView}/{writeView}/{notifyView}
 # operationId: protocol_snmpv3_access_add
-export def "mimic-agent-protocol-msg-snmpv3-access-add create" [
+export def "protocol-snmpv3-access-add" [
   agent_num: int
   group_name: string
   prefix: string
@@ -5661,7 +5661,7 @@ export def "mimic-agent-protocol-msg-snmpv3-access-add create" [
 #
 # DELETE /mimic/agent/{agentNum}/protocol/msg/snmpv3/access/clear
 # operationId: protocol_snmpv3_access_clear
-export def "mimic-agent-protocol-msg-snmpv3-access-clear delete" [
+export def "protocol-snmpv3-access-clear" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5697,7 +5697,7 @@ export def "mimic-agent-protocol-msg-snmpv3-access-clear delete" [
 #
 # DELETE /mimic/agent/{agentNum}/protocol/msg/snmpv3/access/del/{accessName}
 # operationId: protocol_snmpv3_access_del
-export def "mimic-agent-protocol-msg-snmpv3-access-del delete" [
+export def "protocol-snmpv3-access-del" [
   agent_num: int
   access_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5735,7 +5735,7 @@ export def "mimic-agent-protocol-msg-snmpv3-access-del delete" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/snmpv3/access/list
 # operationId: protocol_snmpv3_access_list
-export def "mimic-agent-protocol-msg-snmpv3-access-list list" [
+export def "protocol-snmpv3-access-list" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5771,7 +5771,7 @@ export def "mimic-agent-protocol-msg-snmpv3-access-list list" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/snmpv3/get/config
 # operationId: protocol_snmpv3_get_config
-export def "mimic-agent-protocol-msg-snmpv3-get-config get" [
+export def "protocol-snmpv3-get-config" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5807,7 +5807,7 @@ export def "mimic-agent-protocol-msg-snmpv3-get-config get" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/snmpv3/get/context_engineid
 # operationId: protocol_snmpv3_get_context_engineid
-export def "mimic-agent-protocol-msg-snmpv3-get-context-engineid get" [
+export def "protocol-snmpv3-get-context-engineid" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5843,7 +5843,7 @@ export def "mimic-agent-protocol-msg-snmpv3-get-context-engineid get" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/snmpv3/get/engineboots
 # operationId: protocol_snmpv3_get_engineboots
-export def "mimic-agent-protocol-msg-snmpv3-get-engineboots get" [
+export def "protocol-snmpv3-get-engineboots" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5879,7 +5879,7 @@ export def "mimic-agent-protocol-msg-snmpv3-get-engineboots get" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/snmpv3/get/engineid
 # operationId: protocol_snmpv3_get_engineid
-export def "mimic-agent-protocol-msg-snmpv3-get-engineid get" [
+export def "protocol-snmpv3-get-engineid" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5915,7 +5915,7 @@ export def "mimic-agent-protocol-msg-snmpv3-get-engineid get" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/snmpv3/get/enginetime
 # operationId: protocol_snmpv3_get_enginetime
-export def "mimic-agent-protocol-msg-snmpv3-get-enginetime get" [
+export def "protocol-snmpv3-get-enginetime" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5951,7 +5951,7 @@ export def "mimic-agent-protocol-msg-snmpv3-get-enginetime get" [
 #
 # POST /mimic/agent/{agentNum}/protocol/msg/snmpv3/group/add/{groupName}/{securityModel}/{securityName}
 # operationId: protocol_snmpv3_group_add
-export def "mimic-agent-protocol-msg-snmpv3-group-add create" [
+export def "protocol-snmpv3-group-add" [
   agent_num: int
   group_name: string
   security_model: string
@@ -5993,7 +5993,7 @@ export def "mimic-agent-protocol-msg-snmpv3-group-add create" [
 #
 # DELETE /mimic/agent/{agentNum}/protocol/msg/snmpv3/group/clear
 # operationId: protocol_snmpv3_group_clear
-export def "mimic-agent-protocol-msg-snmpv3-group-clear delete" [
+export def "protocol-snmpv3-group-clear" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6029,7 +6029,7 @@ export def "mimic-agent-protocol-msg-snmpv3-group-clear delete" [
 #
 # DELETE /mimic/agent/{agentNum}/protocol/msg/snmpv3/group/del/{groupName}
 # operationId: protocol_snmpv3_group_del
-export def "mimic-agent-protocol-msg-snmpv3-group-del delete" [
+export def "protocol-snmpv3-group-del" [
   agent_num: int
   group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6067,7 +6067,7 @@ export def "mimic-agent-protocol-msg-snmpv3-group-del delete" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/snmpv3/group/list
 # operationId: protocol_snmpv3_group_list
-export def "mimic-agent-protocol-msg-snmpv3-group-list list" [
+export def "protocol-snmpv3-group-list" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6103,7 +6103,7 @@ export def "mimic-agent-protocol-msg-snmpv3-group-list list" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/snmpv3/set/config/{parameter}/{value}
 # operationId: protocol_snmpv3_set_config
-export def "mimic-agent-protocol-msg-snmpv3-set-config update" [
+export def "protocol-snmpv3-set-config" [
   agent_num: int
   parameter: string
   value: string
@@ -6143,7 +6143,7 @@ export def "mimic-agent-protocol-msg-snmpv3-set-config update" [
 #
 # POST /mimic/agent/{agentNum}/protocol/msg/snmpv3/user/add/{userName}/{securityName}/{authProtocol}/{authKey}/{privProtocol}/{privKey}
 # operationId: protocol_snmpv3_user_add
-export def "mimic-agent-protocol-msg-snmpv3-user-add create" [
+export def "protocol-snmpv3-user-add" [
   agent_num: int
   user_name: string
   security_name: string
@@ -6191,7 +6191,7 @@ export def "mimic-agent-protocol-msg-snmpv3-user-add create" [
 #
 # DELETE /mimic/agent/{agentNum}/protocol/msg/snmpv3/user/clear
 # operationId: protocol_snmpv3_user_clear
-export def "mimic-agent-protocol-msg-snmpv3-user-clear delete" [
+export def "protocol-snmpv3-user-clear" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6227,7 +6227,7 @@ export def "mimic-agent-protocol-msg-snmpv3-user-clear delete" [
 #
 # DELETE /mimic/agent/{agentNum}/protocol/msg/snmpv3/user/del/{userName}
 # operationId: protocol_snmpv3_user_del
-export def "mimic-agent-protocol-msg-snmpv3-user-del delete" [
+export def "protocol-snmpv3-user-del" [
   agent_num: int
   user_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6265,7 +6265,7 @@ export def "mimic-agent-protocol-msg-snmpv3-user-del delete" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/snmpv3/user/list
 # operationId: protocol_snmpv3_user_list
-export def "mimic-agent-protocol-msg-snmpv3-user-list list" [
+export def "protocol-snmpv3-user-list" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6301,7 +6301,7 @@ export def "mimic-agent-protocol-msg-snmpv3-user-list list" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/snmpv3/usm/save
 # operationId: protocol_snmpv3_usm_save
-export def "mimic-agent-protocol-msg-snmpv3-usm-save update" [
+export def "protocol-snmpv3-usm-save" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6337,7 +6337,7 @@ export def "mimic-agent-protocol-msg-snmpv3-usm-save update" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/snmpv3/usm/saveas/{filename}
 # operationId: protocol_snmpv3_usm_saveas
-export def "mimic-agent-protocol-msg-snmpv3-usm-saveas update" [
+export def "protocol-snmpv3-usm-saveas" [
   agent_num: int
   filename: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6375,7 +6375,7 @@ export def "mimic-agent-protocol-msg-snmpv3-usm-saveas update" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/snmpv3/vacm/save
 # operationId: protocol_snmpv3_vacm_save
-export def "mimic-agent-protocol-msg-snmpv3-vacm-save update" [
+export def "protocol-snmpv3-vacm-save" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6411,7 +6411,7 @@ export def "mimic-agent-protocol-msg-snmpv3-vacm-save update" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/snmpv3/vacm/saveas/{filename}
 # operationId: protocol_snmpv3_vacm_saveas
-export def "mimic-agent-protocol-msg-snmpv3-vacm-saveas update" [
+export def "protocol-snmpv3-vacm-saveas" [
   agent_num: int
   filename: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6449,7 +6449,7 @@ export def "mimic-agent-protocol-msg-snmpv3-vacm-saveas update" [
 #
 # POST /mimic/agent/{agentNum}/protocol/msg/snmpv3/view/add/{viewName}/{viewType}/{subtree}/{mask}
 # operationId: protocol_snmpv3_view_add
-export def "mimic-agent-protocol-msg-snmpv3-view-add create" [
+export def "protocol-snmpv3-view-add" [
   agent_num: int
   view_name: string
   view_type: string
@@ -6493,7 +6493,7 @@ export def "mimic-agent-protocol-msg-snmpv3-view-add create" [
 #
 # DELETE /mimic/agent/{agentNum}/protocol/msg/snmpv3/view/clear
 # operationId: protocol_snmpv3_view_clear
-export def "mimic-agent-protocol-msg-snmpv3-view-clear delete" [
+export def "protocol-snmpv3-view-clear" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6529,7 +6529,7 @@ export def "mimic-agent-protocol-msg-snmpv3-view-clear delete" [
 #
 # DELETE /mimic/agent/{agentNum}/protocol/msg/snmpv3/view/del/{viewName}
 # operationId: protocol_snmpv3_view_del
-export def "mimic-agent-protocol-msg-snmpv3-view-del delete" [
+export def "protocol-snmpv3-view-del" [
   agent_num: int
   view_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6567,7 +6567,7 @@ export def "mimic-agent-protocol-msg-snmpv3-view-del delete" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/snmpv3/view/list
 # operationId: protocol_snmpv3_view_list
-export def "mimic-agent-protocol-msg-snmpv3-view-list list" [
+export def "protocol-snmpv3-view-list" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6603,7 +6603,7 @@ export def "mimic-agent-protocol-msg-snmpv3-view-list list" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/ssh/get/args
 # operationId: protocol_ssh_get_args
-export def "mimic-agent-protocol-msg-ssh-get-args get" [
+export def "protocol-ssh-get-args" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6639,7 +6639,7 @@ export def "mimic-agent-protocol-msg-ssh-get-args get" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/ssh/get/config
 # operationId: protocol_ssh_get_config
-export def "mimic-agent-protocol-msg-ssh-get-config get" [
+export def "protocol-ssh-get-config" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6675,7 +6675,7 @@ export def "mimic-agent-protocol-msg-ssh-get-config get" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/ssh/get/statistics
 # operationId: protocol_ssh_get_statistics
-export def "mimic-agent-protocol-msg-ssh-get-statistics get" [
+export def "protocol-ssh-get-statistics" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6711,7 +6711,7 @@ export def "mimic-agent-protocol-msg-ssh-get-statistics get" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/ssh/get/trace
 # operationId: protocol_ssh_get_trace
-export def "mimic-agent-protocol-msg-ssh-get-trace get" [
+export def "protocol-ssh-get-trace" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6747,7 +6747,7 @@ export def "mimic-agent-protocol-msg-ssh-get-trace get" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/ssh/ipalias/disable/{ipaddress}/{port}
 # operationId: protocol_ssh_ipalias_disable
-export def "mimic-agent-protocol-msg-ssh-ipalias-disable disable" [
+export def "protocol-ssh-ipalias-disable" [
   agent_num: int
   ipaddress: string
   port: int
@@ -6787,7 +6787,7 @@ export def "mimic-agent-protocol-msg-ssh-ipalias-disable disable" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/ssh/ipalias/enable/{ipaddress}/{port}
 # operationId: protocol_ssh_ipalias_enable
-export def "mimic-agent-protocol-msg-ssh-ipalias-enable enable" [
+export def "protocol-ssh-ipalias-enable" [
   agent_num: int
   ipaddress: string
   port: int
@@ -6827,7 +6827,7 @@ export def "mimic-agent-protocol-msg-ssh-ipalias-enable enable" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/ssh/ipalias/isenabled/{ipaddress}/{port}
 # operationId: protocol_ssh_ipalias_isenabled
-export def "mimic-agent-protocol-msg-ssh-ipalias-isenabled get" [
+export def "protocol-ssh-ipalias-isenabled" [
   agent_num: int
   ipaddress: string
   port: int
@@ -6867,7 +6867,7 @@ export def "mimic-agent-protocol-msg-ssh-ipalias-isenabled get" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/ssh/ipalias/list
 # operationId: protocol_ssh_ipalias_list
-export def "mimic-agent-protocol-msg-ssh-ipalias-list list" [
+export def "protocol-ssh-ipalias-list" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6903,7 +6903,7 @@ export def "mimic-agent-protocol-msg-ssh-ipalias-list list" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/ssh/set/config/{argument}/{value}
 # operationId: protocol_ssh_set_config
-export def "mimic-agent-protocol-msg-ssh-set-config update" [
+export def "protocol-ssh-set-config" [
   agent_num: int
   argument: string
   value: string
@@ -6943,7 +6943,7 @@ export def "mimic-agent-protocol-msg-ssh-set-config update" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/ssh/set/trace/{enableOrNot}
 # operationId: protocol_ssh_set_trace
-export def "mimic-agent-protocol-msg-ssh-set-trace update" [
+export def "protocol-ssh-set-trace" [
   agent_num: int
   enable_or_not: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6981,7 +6981,7 @@ export def "mimic-agent-protocol-msg-ssh-set-trace update" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/syslog/get/args
 # operationId: protocol_syslog_get_args
-export def "mimic-agent-protocol-msg-syslog-get-args get" [
+export def "protocol-syslog-get-args" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7017,7 +7017,7 @@ export def "mimic-agent-protocol-msg-syslog-get-args get" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/syslog/get/config
 # operationId: protocol_syslog_get_config
-export def "mimic-agent-protocol-msg-syslog-get-config get" [
+export def "protocol-syslog-get-config" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7053,7 +7053,7 @@ export def "mimic-agent-protocol-msg-syslog-get-config get" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/syslog/get/statistics
 # operationId: protocol_syslog_get_statistics
-export def "mimic-agent-protocol-msg-syslog-get-statistics get" [
+export def "protocol-syslog-get-statistics" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7089,7 +7089,7 @@ export def "mimic-agent-protocol-msg-syslog-get-statistics get" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/syslog/get/trace
 # operationId: protocol_syslog_get_trace
-export def "mimic-agent-protocol-msg-syslog-get-trace get" [
+export def "protocol-syslog-get-trace" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7125,7 +7125,7 @@ export def "mimic-agent-protocol-msg-syslog-get-trace get" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/syslog/get/{attr}
 # operationId: protocol_syslog_get_attr
-export def "mimic-agent-protocol-msg-syslog-get get" [
+export def "protocol-syslog-get-attr" [
   agent_num: int
   attr: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7163,7 +7163,7 @@ export def "mimic-agent-protocol-msg-syslog-get get" [
 #
 # POST /mimic/agent/{agentNum}/protocol/msg/syslog/send/{pri}
 # operationId: protocol_syslog_send
-export def "mimic-agent-protocol-msg-syslog-send send" [
+export def "protocol-syslog-send" [
   agent_num: int
   pri: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -7209,7 +7209,7 @@ export def "mimic-agent-protocol-msg-syslog-send send" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/syslog/set/config/{argument}/{value}
 # operationId: protocol_syslog_set_config
-export def "mimic-agent-protocol-msg-syslog-set-config update" [
+export def "protocol-syslog-set-config" [
   agent_num: int
   argument: string
   value: string
@@ -7249,7 +7249,7 @@ export def "mimic-agent-protocol-msg-syslog-set-config update" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/syslog/set/trace/{enableOrNot}
 # operationId: protocol_syslog_set_trace
-export def "mimic-agent-protocol-msg-syslog-set-trace update" [
+export def "protocol-syslog-set-trace" [
   agent_num: int
   enable_or_not: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7287,7 +7287,7 @@ export def "mimic-agent-protocol-msg-syslog-set-trace update" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/syslog/set/{attr}/{value}
 # operationId: protocol_syslog_set_attr
-export def "mimic-agent-protocol-msg-syslog-set update" [
+export def "protocol-syslog-set-attr" [
   agent_num: int
   attr: string
   value: string
@@ -7327,7 +7327,7 @@ export def "mimic-agent-protocol-msg-syslog-set update" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/telnet/connection/logon/{connectionID}/{user}/{password}
 # operationId: protocol_telnet_connection_logon
-export def "mimic-agent-protocol-msg-telnet-connection-logon update" [
+export def "protocol-telnet-connection-logon" [
   agent_num: int
   connection_id: int
   user: string
@@ -7369,7 +7369,7 @@ export def "mimic-agent-protocol-msg-telnet-connection-logon update" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/telnet/connection/request/{connectionID}/{command}
 # operationId: protocol_telnet_connection_request
-export def "mimic-agent-protocol-msg-telnet-connection-request request" [
+export def "protocol-telnet-connection-request" [
   agent_num: int
   connection_id: int
   command: string
@@ -7409,7 +7409,7 @@ export def "mimic-agent-protocol-msg-telnet-connection-request request" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/telnet/connection/signal/{connectionID}/{signalName}
 # operationId: protocol_telnet_connection_signal
-export def "mimic-agent-protocol-msg-telnet-connection-signal update" [
+export def "protocol-telnet-connection-signal" [
   agent_num: int
   connection_id: int
   signal_name: string
@@ -7449,7 +7449,7 @@ export def "mimic-agent-protocol-msg-telnet-connection-signal update" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/telnet/get/args
 # operationId: protocol_telnet_get_args
-export def "mimic-agent-protocol-msg-telnet-get-args get" [
+export def "protocol-telnet-get-args" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7485,7 +7485,7 @@ export def "mimic-agent-protocol-msg-telnet-get-args get" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/telnet/get/config
 # operationId: protocol_telnet_get_config
-export def "mimic-agent-protocol-msg-telnet-get-config get" [
+export def "protocol-telnet-get-config" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7521,7 +7521,7 @@ export def "mimic-agent-protocol-msg-telnet-get-config get" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/telnet/get/statistics
 # operationId: protocol_telnet_get_statistics
-export def "mimic-agent-protocol-msg-telnet-get-statistics get" [
+export def "protocol-telnet-get-statistics" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7557,7 +7557,7 @@ export def "mimic-agent-protocol-msg-telnet-get-statistics get" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/telnet/get/trace
 # operationId: protocol_telnet_get_trace
-export def "mimic-agent-protocol-msg-telnet-get-trace get" [
+export def "protocol-telnet-get-trace" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7593,7 +7593,7 @@ export def "mimic-agent-protocol-msg-telnet-get-trace get" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/telnet/ipalias/disable/{ipaddress}/{port}
 # operationId: protocol_telnet_ipalias_disable
-export def "mimic-agent-protocol-msg-telnet-ipalias-disable disable" [
+export def "protocol-telnet-ipalias-disable" [
   agent_num: int
   ipaddress: string
   port: int
@@ -7633,7 +7633,7 @@ export def "mimic-agent-protocol-msg-telnet-ipalias-disable disable" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/telnet/ipalias/enable/{ipaddress}/{port}
 # operationId: protocol_telnet_ipalias_enable
-export def "mimic-agent-protocol-msg-telnet-ipalias-enable enable" [
+export def "protocol-telnet-ipalias-enable" [
   agent_num: int
   ipaddress: string
   port: int
@@ -7673,7 +7673,7 @@ export def "mimic-agent-protocol-msg-telnet-ipalias-enable enable" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/telnet/ipalias/isenabled/{ipaddress}/{port}
 # operationId: protocol_telnet_ipalias_isenabled
-export def "mimic-agent-protocol-msg-telnet-ipalias-isenabled get" [
+export def "protocol-telnet-ipalias-isenabled" [
   agent_num: int
   ipaddress: string
   port: int
@@ -7713,7 +7713,7 @@ export def "mimic-agent-protocol-msg-telnet-ipalias-isenabled get" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/telnet/ipalias/list
 # operationId: protocol_telnet_ipalias_list
-export def "mimic-agent-protocol-msg-telnet-ipalias-list list" [
+export def "protocol-telnet-ipalias-list" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7749,7 +7749,7 @@ export def "mimic-agent-protocol-msg-telnet-ipalias-list list" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/telnet/server/get/connections
 # operationId: protocol_telnet_server_get_connections
-export def "mimic-agent-protocol-msg-telnet-server-get-connections get" [
+export def "protocol-telnet-server-get-connections" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7785,7 +7785,7 @@ export def "mimic-agent-protocol-msg-telnet-server-get-connections get" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/telnet/server/get/keymap
 # operationId: protocol_telnet_server_get_keymap
-export def "mimic-agent-protocol-msg-telnet-server-get-keymap get" [
+export def "protocol-telnet-server-get-keymap" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7821,7 +7821,7 @@ export def "mimic-agent-protocol-msg-telnet-server-get-keymap get" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/telnet/server/get/rulesdb
 # operationId: protocol_telnet_server_get_rulesdb
-export def "mimic-agent-protocol-msg-telnet-server-get-rulesdb get" [
+export def "protocol-telnet-server-get-rulesdb" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7857,7 +7857,7 @@ export def "mimic-agent-protocol-msg-telnet-server-get-rulesdb get" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/telnet/server/get/state
 # operationId: protocol_telnet_server_get_state
-export def "mimic-agent-protocol-msg-telnet-server-get-state get" [
+export def "protocol-telnet-server-get-state" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7893,7 +7893,7 @@ export def "mimic-agent-protocol-msg-telnet-server-get-state get" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/telnet/server/get/userdb
 # operationId: protocol_telnet_server_get_userdb
-export def "mimic-agent-protocol-msg-telnet-server-get-userdb get" [
+export def "protocol-telnet-server-get-userdb" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7929,7 +7929,7 @@ export def "mimic-agent-protocol-msg-telnet-server-get-userdb get" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/telnet/server/get/users
 # operationId: protocol_telnet_server_get_users
-export def "mimic-agent-protocol-msg-telnet-server-get-users get" [
+export def "protocol-telnet-server-get-users" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7965,7 +7965,7 @@ export def "mimic-agent-protocol-msg-telnet-server-get-users get" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/telnet/set/config/{argument}/{value}
 # operationId: protocol_telnet_set_config
-export def "mimic-agent-protocol-msg-telnet-set-config update" [
+export def "protocol-telnet-set-config" [
   agent_num: int
   argument: string
   value: string
@@ -8005,7 +8005,7 @@ export def "mimic-agent-protocol-msg-telnet-set-config update" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/telnet/set/trace/{enableOrNot}
 # operationId: protocol_telnet_set_trace
-export def "mimic-agent-protocol-msg-telnet-set-trace update" [
+export def "protocol-telnet-set-trace" [
   agent_num: int
   enable_or_not: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8043,7 +8043,7 @@ export def "mimic-agent-protocol-msg-telnet-set-trace update" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/tftp/get/args
 # operationId: protocol_tftp_get_args
-export def "mimic-agent-protocol-msg-tftp-get-args get" [
+export def "protocol-tftp-get-args" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8079,7 +8079,7 @@ export def "mimic-agent-protocol-msg-tftp-get-args get" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/tftp/get/config
 # operationId: protocol_tftp_get_config
-export def "mimic-agent-protocol-msg-tftp-get-config get" [
+export def "protocol-tftp-get-config" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8115,7 +8115,7 @@ export def "mimic-agent-protocol-msg-tftp-get-config get" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/tftp/get/statistics
 # operationId: protocol_tftp_get_statistics
-export def "mimic-agent-protocol-msg-tftp-get-statistics get" [
+export def "protocol-tftp-get-statistics" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8151,7 +8151,7 @@ export def "mimic-agent-protocol-msg-tftp-get-statistics get" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/tftp/get/trace
 # operationId: protocol_tftp_get_trace
-export def "mimic-agent-protocol-msg-tftp-get-trace get" [
+export def "protocol-tftp-get-trace" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8187,7 +8187,7 @@ export def "mimic-agent-protocol-msg-tftp-get-trace get" [
 #
 # POST /mimic/agent/{agentNum}/protocol/msg/tftp/session/read/server/{srcfile}
 # operationId: protocol_tftp_session_read
-export def "mimic-agent-protocol-msg-tftp-session-read-server get" [
+export def "protocol-tftp-session-read" [
   agent_num: int
   srcfile: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8225,7 +8225,7 @@ export def "mimic-agent-protocol-msg-tftp-session-read-server get" [
 #
 # POST /mimic/agent/{agentNum}/protocol/msg/tftp/session/write/server/{srcfile}
 # operationId: protocol_tftp_session_write
-export def "mimic-agent-protocol-msg-tftp-session-write-server create" [
+export def "protocol-tftp-session-write" [
   agent_num: int
   srcfile: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8263,7 +8263,7 @@ export def "mimic-agent-protocol-msg-tftp-session-write-server create" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/tftp/set/config/{argument}/{value}
 # operationId: protocol_tftp_set_config
-export def "mimic-agent-protocol-msg-tftp-set-config update" [
+export def "protocol-tftp-set-config" [
   agent_num: int
   argument: string
   value: string
@@ -8303,7 +8303,7 @@ export def "mimic-agent-protocol-msg-tftp-set-config update" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/tftp/set/trace/{enableOrNot}
 # operationId: protocol_tftp_set_trace
-export def "mimic-agent-protocol-msg-tftp-set-trace update" [
+export def "protocol-tftp-set-trace" [
   agent_num: int
   enable_or_not: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8341,7 +8341,7 @@ export def "mimic-agent-protocol-msg-tftp-set-trace update" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/tftp/{sessionID}/get/{parameter}
 # operationId: protocol_tftp_session_get_parameter
-export def "mimic-agent-protocol-msg-tftp-get get-session" [
+export def "protocol-tftp-session-get-parameter" [
   agent_num: int
   session_id: string
   parameter: string
@@ -8381,7 +8381,7 @@ export def "mimic-agent-protocol-msg-tftp-get get-session" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/tftp/{sessionID}/set/{parameter}/{value}
 # operationId: protocol_tftp_session_set_parameter
-export def "mimic-agent-protocol-msg-tftp-set update-session" [
+export def "protocol-tftp-session-set-parameter" [
   agent_num: int
   session_id: string
   parameter: string
@@ -8423,7 +8423,7 @@ export def "mimic-agent-protocol-msg-tftp-set update-session" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/tftp/{sessionID}/start
 # operationId: protocol_tftp_session_start
-export def "mimic-agent-protocol-msg-tftp-start start-session" [
+export def "protocol-tftp-session-start" [
   agent_num: int
   session_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8461,7 +8461,7 @@ export def "mimic-agent-protocol-msg-tftp-start start-session" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/tftp/{sessionID}/status
 # operationId: protocol_tftp_session_status
-export def "mimic-agent-protocol-msg-tftp-status get-session" [
+export def "protocol-tftp-session-status" [
   agent_num: int
   session_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8499,7 +8499,7 @@ export def "mimic-agent-protocol-msg-tftp-status get-session" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/tftp/{sessionID}/stop
 # operationId: protocol_tftp_session_stop
-export def "mimic-agent-protocol-msg-tftp-stop stop-session" [
+export def "protocol-tftp-session-stop" [
   agent_num: int
   session_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8537,7 +8537,7 @@ export def "mimic-agent-protocol-msg-tftp-stop stop-session" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/tod/get/args
 # operationId: protocol_tod_get_args
-export def "mimic-agent-protocol-msg-tod-get-args get" [
+export def "protocol-tod-get-args" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8573,7 +8573,7 @@ export def "mimic-agent-protocol-msg-tod-get-args get" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/tod/get/config
 # operationId: protocol_tod_get_config
-export def "mimic-agent-protocol-msg-tod-get-config get" [
+export def "protocol-tod-get-config" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8609,7 +8609,7 @@ export def "mimic-agent-protocol-msg-tod-get-config get" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/tod/get/statistics
 # operationId: protocol_tod_get_statistics
-export def "mimic-agent-protocol-msg-tod-get-statistics get" [
+export def "protocol-tod-get-statistics" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8645,7 +8645,7 @@ export def "mimic-agent-protocol-msg-tod-get-statistics get" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/tod/get/trace
 # operationId: protocol_tod_get_trace
-export def "mimic-agent-protocol-msg-tod-get-trace get" [
+export def "protocol-tod-get-trace" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8681,7 +8681,7 @@ export def "mimic-agent-protocol-msg-tod-get-trace get" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/tod/gettime/server/{serverAddr}/port/{portNum}/script/{scriptName}/timeout/{timeSec}/retries/{numRetries}
 # operationId: protocol_tod_gettime
-export def "mimic-agent-protocol-msg-tod-gettime-server-port-script-timeout-retries get" [
+export def "protocol-tod-gettime" [
   agent_num: int
   server_addr: string
   port_num: int
@@ -8727,7 +8727,7 @@ export def "mimic-agent-protocol-msg-tod-gettime-server-port-script-timeout-retr
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/tod/set/config/{argument}/{value}
 # operationId: protocol_tod_set_config
-export def "mimic-agent-protocol-msg-tod-set-config update" [
+export def "protocol-tod-set-config" [
   agent_num: int
   argument: string
   value: string
@@ -8767,7 +8767,7 @@ export def "mimic-agent-protocol-msg-tod-set-config update" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/tod/set/trace/{enableOrNot}
 # operationId: protocol_tod_set_trace
-export def "mimic-agent-protocol-msg-tod-set-trace update" [
+export def "protocol-tod-set-trace" [
   agent_num: int
   enable_or_not: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8805,7 +8805,7 @@ export def "mimic-agent-protocol-msg-tod-set-trace update" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/web/get/args
 # operationId: protocol_web_get_args
-export def "mimic-agent-protocol-msg-web-get-args get" [
+export def "protocol-web-get-args" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8841,7 +8841,7 @@ export def "mimic-agent-protocol-msg-web-get-args get" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/web/get/config
 # operationId: protocol_web_get_config
-export def "mimic-agent-protocol-msg-web-get-config get" [
+export def "protocol-web-get-config" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8877,7 +8877,7 @@ export def "mimic-agent-protocol-msg-web-get-config get" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/web/get/statistics
 # operationId: protocol_web_get_statistics
-export def "mimic-agent-protocol-msg-web-get-statistics get" [
+export def "protocol-web-get-statistics" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8913,7 +8913,7 @@ export def "mimic-agent-protocol-msg-web-get-statistics get" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/web/get/trace
 # operationId: protocol_web_get_trace
-export def "mimic-agent-protocol-msg-web-get-trace get" [
+export def "protocol-web-get-trace" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8949,7 +8949,7 @@ export def "mimic-agent-protocol-msg-web-get-trace get" [
 #
 # POST /mimic/agent/{agentNum}/protocol/msg/web/port/add/{port}
 # operationId: protocol_web_port_add
-export def "mimic-agent-protocol-msg-web-port-add create" [
+export def "protocol-web-port-add" [
   agent_num: int
   port: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -8987,7 +8987,7 @@ export def "mimic-agent-protocol-msg-web-port-add create" [
 #
 # GET /mimic/agent/{agentNum}/protocol/msg/web/port/exists/{port}
 # operationId: protocol_web_port_exists
-export def "mimic-agent-protocol-msg-web-port-exists get" [
+export def "protocol-web-port-exists" [
   agent_num: int
   port: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -9025,7 +9025,7 @@ export def "mimic-agent-protocol-msg-web-port-exists get" [
 #
 # DELETE /mimic/agent/{agentNum}/protocol/msg/web/port/remove/{port}
 # operationId: protocol_web_port_remove
-export def "mimic-agent-protocol-msg-web-port-remove delete" [
+export def "protocol-web-port-remove" [
   agent_num: int
   port: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -9063,7 +9063,7 @@ export def "mimic-agent-protocol-msg-web-port-remove delete" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/web/port/set/{port}/{protocol}/{version}
 # operationId: protocol_web_port_set
-export def "mimic-agent-protocol-msg-web-port-set update" [
+export def "protocol-web-port-set" [
   agent_num: int
   port: int
   protocol: string
@@ -9105,7 +9105,7 @@ export def "mimic-agent-protocol-msg-web-port-set update" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/web/port/start/{port}
 # operationId: protocol_web_port_start
-export def "mimic-agent-protocol-msg-web-port-start start" [
+export def "protocol-web-port-start" [
   agent_num: int
   port: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -9143,7 +9143,7 @@ export def "mimic-agent-protocol-msg-web-port-start start" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/web/port/stop/{port}
 # operationId: protocol_web_port_stop
-export def "mimic-agent-protocol-msg-web-port-stop stop" [
+export def "protocol-web-port-stop" [
   agent_num: int
   port: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -9181,7 +9181,7 @@ export def "mimic-agent-protocol-msg-web-port-stop stop" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/web/set/config/{argument}/{value}
 # operationId: protocol_web_set_config
-export def "mimic-agent-protocol-msg-web-set-config update" [
+export def "protocol-web-set-config" [
   agent_num: int
   argument: string
   value: string
@@ -9221,7 +9221,7 @@ export def "mimic-agent-protocol-msg-web-set-config update" [
 #
 # PUT /mimic/agent/{agentNum}/protocol/msg/web/set/trace/{enableOrNot}
 # operationId: protocol_web_set_trace
-export def "mimic-agent-protocol-msg-web-set-trace update" [
+export def "protocol-web-set-trace" [
   agent_num: int
   enable_or_not: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9259,7 +9259,7 @@ export def "mimic-agent-protocol-msg-web-set-trace update" [
 #
 # GET /mimic/agent/{agentNum}/protocol/{prot}/get/config
 # operationId: protocol_get_config
-export def "mimic-agent-protocol-get-config get" [
+export def "protocol-get-config" [
   agent_num: int
   prot: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9297,7 +9297,7 @@ export def "mimic-agent-protocol-get-config get" [
 #
 # PUT /mimic/agent/{agentNum}/reload
 # operationId: reload
-export def "mimic-agent-reload reload" [
+export def "reload" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9333,7 +9333,7 @@ export def "mimic-agent-reload reload" [
 #
 # DELETE /mimic/agent/{agentNum}/remove
 # operationId: agent_remove
-export def "mimic-agent-remove delete" [
+export def "agent-remove" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9369,7 +9369,7 @@ export def "mimic-agent-remove delete" [
 #
 # PUT /mimic/agent/{agentNum}/resume
 # operationId: resume
-export def "mimic-agent-resume update" [
+export def "resume" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9405,7 +9405,7 @@ export def "mimic-agent-resume update" [
 #
 # PUT /mimic/agent/{agentNum}/save
 # operationId: save
-export def "mimic-agent-save update" [
+export def "save" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9441,7 +9441,7 @@ export def "mimic-agent-save update" [
 #
 # PUT /mimic/agent/{agentNum}/set/delay/{delay}
 # operationId: set_delay
-export def "mimic-agent-set-delay update" [
+export def "set-delay" [
   agent_num: int
   delay: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -9479,7 +9479,7 @@ export def "mimic-agent-set-delay update" [
 #
 # PUT /mimic/agent/{agentNum}/set/drops/{drops}
 # operationId: set_drops
-export def "mimic-agent-set-drops update" [
+export def "set-drops" [
   agent_num: int
   drops: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -9517,7 +9517,7 @@ export def "mimic-agent-set-drops update" [
 #
 # PUT /mimic/agent/{agentNum}/set/host/{host}
 # operationId: set_host
-export def "mimic-agent-set-host update" [
+export def "set-host" [
   agent_num: int
   host: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9555,7 +9555,7 @@ export def "mimic-agent-set-host update" [
 #
 # PUT /mimic/agent/{agentNum}/set/inform_timeout/{inform_timeout}
 # operationId: set_inform_timeout
-export def "mimic-agent-set-inform-timeout update" [
+export def "set-inform-timeout" [
   agent_num: int
   inform_timeout: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -9593,7 +9593,7 @@ export def "mimic-agent-set-inform-timeout update" [
 #
 # PUT /mimic/agent/{agentNum}/set/interface/{interface}
 # operationId: set_interface
-export def "mimic-agent-set-interface update" [
+export def "set-interface" [
   agent_num: int
   interface: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9631,7 +9631,7 @@ export def "mimic-agent-set-interface update" [
 #
 # PUT /mimic/agent/{agentNum}/set/mask/{mask}
 # operationId: set_mask
-export def "mimic-agent-set-mask update" [
+export def "set-mask" [
   agent_num: int
   mask: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9669,7 +9669,7 @@ export def "mimic-agent-set-mask update" [
 #
 # PUT /mimic/agent/{agentNum}/set/mibs
 # operationId: set_mibs
-export def "mimic-agent-set-mibs update" [
+export def "set-mibs" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9709,7 +9709,7 @@ export def "mimic-agent-set-mibs update" [
 #
 # PUT /mimic/agent/{agentNum}/set/oiddir/{oiddir}
 # operationId: set_oiddir
-export def "mimic-agent-set-oiddir update" [
+export def "set-oiddir" [
   agent_num: int
   oiddir: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9747,7 +9747,7 @@ export def "mimic-agent-set-oiddir update" [
 #
 # PUT /mimic/agent/{agentNum}/set/owner/{owner}
 # operationId: set_owner
-export def "mimic-agent-set-owner update" [
+export def "set-owner" [
   agent_num: int
   owner: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9785,7 +9785,7 @@ export def "mimic-agent-set-owner update" [
 #
 # PUT /mimic/agent/{agentNum}/set/pdusize/{pdusize}
 # operationId: set_pdusize
-export def "mimic-agent-set-pdusize update" [
+export def "set-pdusize" [
   agent_num: int
   pdusize: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -9823,7 +9823,7 @@ export def "mimic-agent-set-pdusize update" [
 #
 # PUT /mimic/agent/{agentNum}/set/port/{port}
 # operationId: set_port
-export def "mimic-agent-set-port update" [
+export def "set-port" [
   agent_num: int
   port: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -9861,7 +9861,7 @@ export def "mimic-agent-set-port update" [
 #
 # PUT /mimic/agent/{agentNum}/set/privdir/{privdir}
 # operationId: set_privdir
-export def "mimic-agent-set-privdir update" [
+export def "set-privdir" [
   agent_num: int
   privdir: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9899,7 +9899,7 @@ export def "mimic-agent-set-privdir update" [
 #
 # PUT /mimic/agent/{agentNum}/set/protocol
 # operationId: set_protocols
-export def "mimic-agent-set-protocol update" [
+export def "set-protocols" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9939,7 +9939,7 @@ export def "mimic-agent-set-protocol update" [
 #
 # PUT /mimic/agent/{agentNum}/set/read/{read}
 # operationId: set_read_community
-export def "mimic-agent-set-read update-community" [
+export def "set-read-community" [
   agent_num: int
   read: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9977,7 +9977,7 @@ export def "mimic-agent-set-read update-community" [
 #
 # PUT /mimic/agent/{agentNum}/set/start/{start}
 # operationId: set_starttime
-export def "mimic-agent-set-start update-starttime" [
+export def "set-starttime" [
   agent_num: int
   start: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -10015,7 +10015,7 @@ export def "mimic-agent-set-start update-starttime" [
 #
 # PUT /mimic/agent/{agentNum}/set/trace/{trace}
 # operationId: set_trace
-export def "mimic-agent-set-trace update" [
+export def "set-trace" [
   agent_num: int
   trace: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -10053,7 +10053,7 @@ export def "mimic-agent-set-trace update" [
 #
 # PUT /mimic/agent/{agentNum}/set/validate/{validate}
 # operationId: set_validate
-export def "mimic-agent-set-validate update" [
+export def "set-validate" [
   agent_num: int
   validate: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -10091,7 +10091,7 @@ export def "mimic-agent-set-validate update" [
 #
 # PUT /mimic/agent/{agentNum}/set/write/{write}
 # operationId: set_write_community
-export def "mimic-agent-set-write update-community" [
+export def "set-write-community" [
   agent_num: int
   write: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10129,7 +10129,7 @@ export def "mimic-agent-set-write update-community" [
 #
 # PUT /mimic/agent/{agentNum}/start
 # operationId: start
-export def "mimic-agent-start start" [
+export def "start" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10165,7 +10165,7 @@ export def "mimic-agent-start start" [
 #
 # PUT /mimic/agent/{agentNum}/stop
 # operationId: stop
-export def "mimic-agent-stop stop" [
+export def "stop" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10201,7 +10201,7 @@ export def "mimic-agent-stop stop" [
 #
 # PUT /mimic/agent/{agentNum}/store/copy/{otherAgent}
 # operationId: agent_store_copy
-export def "mimic-agent-store-copy copy" [
+export def "agent-store-copy" [
   agent_num: int
   other_agent: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -10239,7 +10239,7 @@ export def "mimic-agent-store-copy copy" [
 #
 # GET /mimic/agent/{agentNum}/store/exists/{var}
 # operationId: agent_store_exists
-export def "mimic-agent-store-exists get" [
+export def "agent-store-exists" [
   agent_num: int
   var: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10277,7 +10277,7 @@ export def "mimic-agent-store-exists get" [
 #
 # GET /mimic/agent/{agentNum}/store/get/{var}
 # operationId: agent_store_get
-export def "mimic-agent-store-get get" [
+export def "agent-store-get" [
   agent_num: int
   var: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10315,7 +10315,7 @@ export def "mimic-agent-store-get get" [
 #
 # GET /mimic/agent/{agentNum}/store/list
 # operationId: agent_store_list
-export def "mimic-agent-store-list list" [
+export def "agent-store-list" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10351,7 +10351,7 @@ export def "mimic-agent-store-list list" [
 #
 # PUT /mimic/agent/{agentNum}/store/lreplace/{var}/{index}
 # operationId: agent_store_lreplace
-export def "mimic-agent-store-lreplace update" [
+export def "agent-store-lreplace" [
   agent_num: int
   var: string
   index: int
@@ -10395,7 +10395,7 @@ export def "mimic-agent-store-lreplace update" [
 #
 # GET /mimic/agent/{agentNum}/store/persists/{var}
 # operationId: agent_store_persists
-export def "mimic-agent-store-persists get" [
+export def "agent-store-persists" [
   agent_num: int
   var: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10433,7 +10433,7 @@ export def "mimic-agent-store-persists get" [
 #
 # PUT /mimic/agent/{agentNum}/store/set/{var}/{persist}
 # operationId: agent_store_set
-export def "mimic-agent-store-set update" [
+export def "agent-store-set" [
   agent_num: int
   var: string
   persist: int
@@ -10477,7 +10477,7 @@ export def "mimic-agent-store-set update" [
 #
 # PUT /mimic/agent/{agentNum}/store/unset/{var}
 # operationId: agent_store_unset
-export def "mimic-agent-store-unset update" [
+export def "agent-store-unset" [
   agent_num: int
   var: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10515,7 +10515,7 @@ export def "mimic-agent-store-unset update" [
 #
 # POST /mimic/agent/{agentNum}/timer/script/add/{script}/{interval}/{arg}
 # operationId: add_timer_script
-export def "mimic-agent-timer-script-add create" [
+export def "add-timer-script" [
   agent_num: int
   script: string
   interval: int
@@ -10557,7 +10557,7 @@ export def "mimic-agent-timer-script-add create" [
 #
 # DELETE /mimic/agent/{agentNum}/timer/script/delete/{script}/{interval}/{arg}
 # operationId: del_timer_script
-export def "mimic-agent-timer-script-delete delete" [
+export def "del-timer-script" [
   agent_num: int
   script: string
   interval: int
@@ -10599,7 +10599,7 @@ export def "mimic-agent-timer-script-delete delete" [
 #
 # GET /mimic/agent/{agentNum}/timer/script/list
 # operationId: list_timer_scripts
-export def "mimic-agent-timer-script-list list" [
+export def "list-timer-scripts" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10635,7 +10635,7 @@ export def "mimic-agent-timer-script-list list" [
 #
 # POST /mimic/agent/{agentNum}/trap/config/add/{IP}/{port}
 # operationId: trap_config_add
-export def "mimic-agent-trap-config-add create" [
+export def "trap-config-add" [
   agent_num: int
   ip: string
   port: int
@@ -10675,7 +10675,7 @@ export def "mimic-agent-trap-config-add create" [
 #
 # DELETE /mimic/agent/{agentNum}/trap/config/delete/{IP}/{port}
 # operationId: trap_config_del
-export def "mimic-agent-trap-config-delete delete" [
+export def "trap-config-del" [
   agent_num: int
   ip: string
   port: int
@@ -10715,7 +10715,7 @@ export def "mimic-agent-trap-config-delete delete" [
 #
 # GET /mimic/agent/{agentNum}/trap/config/list
 # operationId: trap_config_list
-export def "mimic-agent-trap-config-list list" [
+export def "trap-config-list" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10751,7 +10751,7 @@ export def "mimic-agent-trap-config-list list" [
 #
 # GET /mimic/agent/{agentNum}/trap/list
 # operationId: trap_list
-export def "mimic-agent-trap-list list" [
+export def "trap-list" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10787,7 +10787,7 @@ export def "mimic-agent-trap-list list" [
 #
 # POST /mimic/agent/{agentNum}/value/add/{object}/{instance}
 # operationId: add
-export def "mimic-agent-value-add create" [
+export def "add" [
   agent_num: int
   object: string
   instance: string
@@ -10827,7 +10827,7 @@ export def "mimic-agent-value-add create" [
 #
 # GET /mimic/agent/{agentNum}/value/eval/{object}/{instance}
 # operationId: eval_value
-export def "mimic-agent-value-eval get" [
+export def "eval-value" [
   agent_num: int
   object: string
   instance: string
@@ -10867,7 +10867,7 @@ export def "mimic-agent-value-eval get" [
 #
 # GET /mimic/agent/{agentNum}/value/get/{object}/{instance}/{variable}
 # operationId: get_value
-export def "mimic-agent-value-get get" [
+export def "get-value" [
   agent_num: int
   object: string
   instance: string
@@ -10909,7 +10909,7 @@ export def "mimic-agent-value-get get" [
 #
 # GET /mimic/agent/{agentNum}/value/info/{object}
 # operationId: get_info
-export def "mimic-agent-value-info get" [
+export def "get-info" [
   agent_num: int
   object: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10947,7 +10947,7 @@ export def "mimic-agent-value-info get" [
 #
 # GET /mimic/agent/{agentNum}/value/instances/{object}
 # operationId: get_instances
-export def "mimic-agent-value-instances get" [
+export def "get-instances" [
   agent_num: int
   object: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10985,7 +10985,7 @@ export def "mimic-agent-value-instances get" [
 #
 # GET /mimic/agent/{agentNum}/value/list/{OID}
 # operationId: get_objects
-export def "mimic-agent-value-list get-objects" [
+export def "get-objects" [
   agent_num: int
   oid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11023,7 +11023,7 @@ export def "mimic-agent-value-list get-objects" [
 #
 # GET /mimic/agent/{agentNum}/value/meval/{objInsArray}
 # operationId: meval_value
-export def "mimic-agent-value-meval get" [
+export def "meval-value" [
   agent_num: int
   obj_ins_array: list
   --base-url(-b): string@base-url-completer # API base URL
@@ -11061,7 +11061,7 @@ export def "mimic-agent-value-meval get" [
 #
 # GET /mimic/agent/{agentNum}/value/mget/{objInsVarArray}
 # operationId: mget_value
-export def "mimic-agent-value-mget get" [
+export def "mget-value" [
   agent_num: int
   obj_ins_var_array: list
   --base-url(-b): string@base-url-completer # API base URL
@@ -11099,7 +11099,7 @@ export def "mimic-agent-value-mget get" [
 #
 # GET /mimic/agent/{agentNum}/value/mib/{object}
 # operationId: get_mib
-export def "mimic-agent-value-mib get" [
+export def "get-mib" [
   agent_num: int
   object: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11137,7 +11137,7 @@ export def "mimic-agent-value-mib get" [
 #
 # PUT /mimic/agent/{agentNum}/value/mset
 # operationId: mset_value
-export def "mimic-agent-value-mset update" [
+export def "mset-value" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11177,7 +11177,7 @@ export def "mimic-agent-value-mset update" [
 #
 # PUT /mimic/agent/{agentNum}/value/munset
 # operationId: munset_value
-export def "mimic-agent-value-munset update" [
+export def "munset-value" [
   agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11217,7 +11217,7 @@ export def "mimic-agent-value-munset update" [
 #
 # GET /mimic/agent/{agentNum}/value/name/{OID}
 # operationId: get_name
-export def "mimic-agent-value-name get" [
+export def "get-name" [
   agent_num: int
   oid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11255,7 +11255,7 @@ export def "mimic-agent-value-name get" [
 #
 # GET /mimic/agent/{agentNum}/value/oid/{object}
 # operationId: get_oid
-export def "mimic-agent-value-oid get" [
+export def "get-oid" [
   agent_num: int
   object: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11293,7 +11293,7 @@ export def "mimic-agent-value-oid get" [
 #
 # DELETE /mimic/agent/{agentNum}/value/remove/{object}/{instance}
 # operationId: remove
-export def "mimic-agent-value-remove delete" [
+export def "remove" [
   agent_num: int
   object: string
   instance: string
@@ -11333,7 +11333,7 @@ export def "mimic-agent-value-remove delete" [
 #
 # PUT /mimic/agent/{agentNum}/value/set/{object}/{instance}/{variable}
 # operationId: set_value
-export def "mimic-agent-value-set update" [
+export def "set-value" [
   agent_num: int
   object: string
   instance: string
@@ -11379,7 +11379,7 @@ export def "mimic-agent-value-set update" [
 #
 # GET /mimic/agent/{agentNum}/value/split/{OID}
 # operationId: split_oid
-export def "mimic-agent-value-split get" [
+export def "split-oid" [
   agent_num: int
   oid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11417,7 +11417,7 @@ export def "mimic-agent-value-split get" [
 #
 # GET /mimic/agent/{agentNum}/value/state/get/{object}
 # operationId: get_state
-export def "mimic-agent-value-state-get get" [
+export def "get-state" [
   agent_num: int
   object: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11455,7 +11455,7 @@ export def "mimic-agent-value-state-get get" [
 #
 # PUT /mimic/agent/{agentNum}/value/state/set/{object}/{state}
 # operationId: set_state
-export def "mimic-agent-value-state-set update" [
+export def "set-state" [
   agent_num: int
   object: string
   state: int
@@ -11495,7 +11495,7 @@ export def "mimic-agent-value-state-set update" [
 #
 # PUT /mimic/agent/{agentNum}/value/unset/{object}/{instance}/{variable}
 # operationId: unset_value
-export def "mimic-agent-value-unset update" [
+export def "unset-value" [
   agent_num: int
   object: string
   instance: string
@@ -11537,7 +11537,7 @@ export def "mimic-agent-value-unset update" [
 #
 # GET /mimic/agent/{agentNum}/value/variables/{object}/{instance}
 # operationId: get_variables
-export def "mimic-agent-value-variables get" [
+export def "get-variables" [
   agent_num: int
   object: string
   instance: string
@@ -11577,7 +11577,7 @@ export def "mimic-agent-value-variables get" [
 #
 # PUT /mimic/clear/{firstAgentNum}/{lastAgentNum}
 # operationId: cfg_new
-export def "mimic-clear update-cfg-new" [
+export def "cfg-new" [
   first_agent_num: int
   last_agent_num: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -11615,7 +11615,7 @@ export def "mimic-clear update-cfg-new" [
 #
 # GET /mimic/get/active_data_list
 # operationId: get_active_data_list
-export def "mimic-get-active-data-list get" [
+export def "get-active-data-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11649,7 +11649,7 @@ export def "mimic-get-active-data-list get" [
 #
 # GET /mimic/get/active_list
 # operationId: get_active_list
-export def "mimic-get-active-list get" [
+export def "get-active-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11683,7 +11683,7 @@ export def "mimic-get-active-list get" [
 #
 # GET /mimic/get/cfgfile
 # operationId: get_cfgfile
-export def "mimic-get-cfgfile get" [
+export def "get-cfgfile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11717,7 +11717,7 @@ export def "mimic-get-cfgfile get" [
 #
 # GET /mimic/get/cfgfile_changed
 # operationId: get_cfg_file_changed
-export def "mimic-get-cfgfile-changed get-cfg-file" [
+export def "get-cfg-file-changed" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11751,7 +11751,7 @@ export def "mimic-get-cfgfile-changed get-cfg-file" [
 #
 # GET /mimic/get/changed_config_list
 # operationId: get_changed_config_list
-export def "mimic-get-changed-config-list get" [
+export def "get-changed-config-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11785,7 +11785,7 @@ export def "mimic-get-changed-config-list get" [
 #
 # GET /mimic/get/changed_state_list
 # operationId: get_changed_state_list
-export def "mimic-get-changed-state-list get" [
+export def "get-changed-state-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11819,7 +11819,7 @@ export def "mimic-get-changed-state-list get" [
 #
 # GET /mimic/get/clients
 # operationId: get_clients
-export def "mimic-get-clients get" [
+export def "get-clients" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11853,7 +11853,7 @@ export def "mimic-get-clients get" [
 #
 # GET /mimic/get/configured_list
 # operationId: get_configured_list
-export def "mimic-get-configured-list get" [
+export def "get-configured-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11887,7 +11887,7 @@ export def "mimic-get-configured-list get" [
 #
 # GET /mimic/get/interfaces
 # operationId: get_interfaces
-export def "mimic-get-interfaces get" [
+export def "get-interfaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11921,7 +11921,7 @@ export def "mimic-get-interfaces get" [
 #
 # GET /mimic/get/last
 # operationId: get_last
-export def "mimic-get-last get" [
+export def "get-last" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11955,7 +11955,7 @@ export def "mimic-get-last get" [
 #
 # GET /mimic/get/log
 # operationId: get_log
-export def "mimic-get-log get" [
+export def "get-log" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11989,7 +11989,7 @@ export def "mimic-get-log get" [
 #
 # GET /mimic/get/max
 # operationId: get_max
-export def "mimic-get-max get" [
+export def "get-max" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12023,7 +12023,7 @@ export def "mimic-get-max get" [
 #
 # GET /mimic/get/netaddr
 # operationId: get_netaddr
-export def "mimic-get-netaddr get" [
+export def "get-netaddr" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12057,7 +12057,7 @@ export def "mimic-get-netaddr get" [
 #
 # GET /mimic/get/netdev
 # operationId: get_netdev
-export def "mimic-get-netdev get" [
+export def "get-netdev" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12091,7 +12091,7 @@ export def "mimic-get-netdev get" [
 #
 # GET /mimic/get/product
 # operationId: get_product
-export def "mimic-get-product get" [
+export def "get-product" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12125,7 +12125,7 @@ export def "mimic-get-product get" [
 #
 # GET /mimic/get/protocols
 # operationId: get_daemon_protocols
-export def "mimic-get-protocols get-daemon" [
+export def "get-daemon-protocols" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12159,7 +12159,7 @@ export def "mimic-get-protocols get-daemon" [
 #
 # GET /mimic/get/return
 # operationId: get_return
-export def "mimic-get-return get" [
+export def "get-return" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12193,7 +12193,7 @@ export def "mimic-get-return get" [
 #
 # GET /mimic/get/version
 # operationId: get_version
-export def "mimic-get-version get" [
+export def "get-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12227,7 +12227,7 @@ export def "mimic-get-version get" [
 #
 # PUT /mimic/load/{cfgFile}/{firstAgentNum}/{lastAgentNum}/{startAgentNum}
 # operationId: cfg_load
-export def "mimic-load update-cfg" [
+export def "cfg-load" [
   cfg_file: string
   first_agent_num: int
   last_agent_num: int
@@ -12269,7 +12269,7 @@ export def "mimic-load update-cfg" [
 #
 # GET /mimic/mget/{infoArray}
 # operationId: mget_info
-export def "mimic-mget get" [
+export def "mget-info" [
   info_array: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12305,7 +12305,7 @@ export def "mimic-mget get" [
 #
 # GET /mimic/protocol/msg/coap/get/stats_hdr
 # operationId: protocol_coap_get_stats_hdr
-export def "mimic-protocol-msg-coap-get-stats-hdr get" [
+export def "protocol-coap-get-stats-hdr" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12339,7 +12339,7 @@ export def "mimic-protocol-msg-coap-get-stats-hdr get" [
 #
 # GET /mimic/protocol/msg/dhcp/get/stats_hdr
 # operationId: protocol_dhcp_get_stats_hdr
-export def "mimic-protocol-msg-dhcp-get-stats-hdr get" [
+export def "protocol-dhcp-get-stats-hdr" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12373,7 +12373,7 @@ export def "mimic-protocol-msg-dhcp-get-stats-hdr get" [
 #
 # GET /mimic/protocol/msg/ipmi/get/stats_hdr
 # operationId: protocol_ipmi_get_stats_hdr
-export def "mimic-protocol-msg-ipmi-get-stats-hdr get" [
+export def "protocol-ipmi-get-stats-hdr" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12407,7 +12407,7 @@ export def "mimic-protocol-msg-ipmi-get-stats-hdr get" [
 #
 # GET /mimic/protocol/msg/mqtt/get/stats_hdr
 # operationId: protocol_mqtt_get_stats_hdr
-export def "mimic-protocol-msg-mqtt-get-stats-hdr get" [
+export def "protocol-mqtt-get-stats-hdr" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12441,7 +12441,7 @@ export def "mimic-protocol-msg-mqtt-get-stats-hdr get" [
 #
 # GET /mimic/protocol/msg/netflow/get/stats_hdr
 # operationId: protocol_netflow_get_stats_hdr
-export def "mimic-protocol-msg-netflow-get-stats-hdr get" [
+export def "protocol-netflow-get-stats-hdr" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12475,7 +12475,7 @@ export def "mimic-protocol-msg-netflow-get-stats-hdr get" [
 #
 # GET /mimic/protocol/msg/proxy/get/stats_hdr
 # operationId: protocol_proxy_get_stats_hdr
-export def "mimic-protocol-msg-proxy-get-stats-hdr get" [
+export def "protocol-proxy-get-stats-hdr" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12509,7 +12509,7 @@ export def "mimic-protocol-msg-proxy-get-stats-hdr get" [
 #
 # GET /mimic/protocol/msg/sflow/get/stats_hdr
 # operationId: protocol_sflow_get_stats_hdr
-export def "mimic-protocol-msg-sflow-get-stats-hdr get" [
+export def "protocol-sflow-get-stats-hdr" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12543,7 +12543,7 @@ export def "mimic-protocol-msg-sflow-get-stats-hdr get" [
 #
 # GET /mimic/protocol/msg/snmptcp/get/stats_hdr
 # operationId: protocol_snmptcp_get_stats_hdr
-export def "mimic-protocol-msg-snmptcp-get-stats-hdr get" [
+export def "protocol-snmptcp-get-stats-hdr" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12577,7 +12577,7 @@ export def "mimic-protocol-msg-snmptcp-get-stats-hdr get" [
 #
 # GET /mimic/protocol/msg/ssh/get/stats_hdr
 # operationId: protocol_ssh_get_stats_hdr
-export def "mimic-protocol-msg-ssh-get-stats-hdr get" [
+export def "protocol-ssh-get-stats-hdr" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12611,7 +12611,7 @@ export def "mimic-protocol-msg-ssh-get-stats-hdr get" [
 #
 # GET /mimic/protocol/msg/syslog/get/stats_hdr
 # operationId: protocol_syslog_get_stats_hdr
-export def "mimic-protocol-msg-syslog-get-stats-hdr get" [
+export def "protocol-syslog-get-stats-hdr" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12645,7 +12645,7 @@ export def "mimic-protocol-msg-syslog-get-stats-hdr get" [
 #
 # GET /mimic/protocol/msg/telnet/get/stats_hdr
 # operationId: protocol_telnet_get_stats_hdr
-export def "mimic-protocol-msg-telnet-get-stats-hdr get" [
+export def "protocol-telnet-get-stats-hdr" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12679,7 +12679,7 @@ export def "mimic-protocol-msg-telnet-get-stats-hdr get" [
 #
 # GET /mimic/protocol/msg/tftp/get/stats_hdr
 # operationId: protocol_tftp_get_stats_hdr
-export def "mimic-protocol-msg-tftp-get-stats-hdr get" [
+export def "protocol-tftp-get-stats-hdr" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12713,7 +12713,7 @@ export def "mimic-protocol-msg-tftp-get-stats-hdr get" [
 #
 # GET /mimic/protocol/msg/tod/get/stats_hdr
 # operationId: protocol_tod_get_stats_hdr
-export def "mimic-protocol-msg-tod-get-stats-hdr get" [
+export def "protocol-tod-get-stats-hdr" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12747,7 +12747,7 @@ export def "mimic-protocol-msg-tod-get-stats-hdr get" [
 #
 # GET /mimic/protocol/msg/web/get/stats_hdr
 # operationId: protocol_web_get_stats_hdr
-export def "mimic-protocol-msg-web-get-stats-hdr get" [
+export def "protocol-web-get-stats-hdr" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12781,7 +12781,7 @@ export def "mimic-protocol-msg-web-get-stats-hdr get" [
 #
 # PUT /mimic/save
 # operationId: cfg_save
-export def "mimic-save update-cfg" [
+export def "cfg-save" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12815,7 +12815,7 @@ export def "mimic-save update-cfg" [
 #
 # PUT /mimic/saveas/{cfgFile}/{firstAgentNum}/{lastAgentNum}
 # operationId: cfg_saveas
-export def "mimic-saveas update-cfg" [
+export def "cfg-saveas" [
   cfg_file: string
   first_agent_num: int
   last_agent_num: int
@@ -12855,7 +12855,7 @@ export def "mimic-saveas update-cfg" [
 #
 # PUT /mimic/set/log
 # operationId: set_log
-export def "mimic-set-log update" [
+export def "set-log" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12893,7 +12893,7 @@ export def "mimic-set-log update" [
 #
 # PUT /mimic/set/netdev
 # operationId: set_netdev
-export def "mimic-set-netdev update" [
+export def "set-netdev" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12927,7 +12927,7 @@ export def "mimic-set-netdev update" [
 #
 # PUT /mimic/set/persistent
 # operationId: store_save
-export def "mimic-set-persistent update-store-save" [
+export def "store-save" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12961,7 +12961,7 @@ export def "mimic-set-persistent update-store-save" [
 #
 # PUT /mimic/start
 # operationId: start_all_agents
-export def "mimic-start list-agents" [
+export def "start-all-agents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12995,7 +12995,7 @@ export def "mimic-start list-agents" [
 #
 # PUT /mimic/stop
 # operationId: stop_all_agents
-export def "mimic-stop list-agents" [
+export def "stop-all-agents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13029,7 +13029,7 @@ export def "mimic-stop list-agents" [
 #
 # GET /mimic/store/exists/{var}
 # operationId: store_exists
-export def "mimic-store-exists get" [
+export def "store-exists" [
   var: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13065,7 +13065,7 @@ export def "mimic-store-exists get" [
 #
 # GET /mimic/store/get/{var}
 # operationId: store_get
-export def "mimic-store-get get" [
+export def "store-get" [
   var: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13101,7 +13101,7 @@ export def "mimic-store-get get" [
 #
 # GET /mimic/store/list
 # operationId: store_list
-export def "mimic-store-list list" [
+export def "store-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13135,7 +13135,7 @@ export def "mimic-store-list list" [
 #
 # PUT /mimic/store/lreplace/{var}/{index}
 # operationId: store_lreplace
-export def "mimic-store-lreplace update" [
+export def "store-lreplace" [
   var: string
   index: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -13177,7 +13177,7 @@ export def "mimic-store-lreplace update" [
 #
 # GET /mimic/store/persists/{var}
 # operationId: store_persists
-export def "mimic-store-persists get" [
+export def "store-persists" [
   var: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13213,7 +13213,7 @@ export def "mimic-store-persists get" [
 #
 # PUT /mimic/store/set/{var}/{persist}
 # operationId: store_set
-export def "mimic-store-set update" [
+export def "store-set" [
   var: string
   persist: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -13255,7 +13255,7 @@ export def "mimic-store-set update" [
 #
 # PUT /mimic/store/unset/{var}
 # operationId: store_unset
-export def "mimic-store-unset update" [
+export def "store-unset" [
   var: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13291,7 +13291,7 @@ export def "mimic-store-unset update" [
 #
 # PUT /mimic/terminate
 # operationId: terminate
-export def "mimic-terminate update" [
+export def "terminate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13325,7 +13325,7 @@ export def "mimic-terminate update" [
 #
 # POST /mimic/timer/script/add/{script}/{interval}/{arg}
 # operationId: add_daemon_timer_script
-export def "mimic-timer-script-add create-daemon" [
+export def "add-daemon-timer-script" [
   script: string
   interval: int
   arg: string
@@ -13365,7 +13365,7 @@ export def "mimic-timer-script-add create-daemon" [
 #
 # DELETE /mimic/timer/script/delete/{script}/{interval}/{arg}
 # operationId: del_daemon_timer_script
-export def "mimic-timer-script-delete delete-daemon" [
+export def "del-daemon-timer-script" [
   script: string
   interval: int
   arg: string
@@ -13405,7 +13405,7 @@ export def "mimic-timer-script-delete delete-daemon" [
 #
 # GET /mimic/timer/script/list
 # operationId: list_daemon_timer_scripts
-export def "mimic-timer-script-list list-daemon" [
+export def "list-daemon-timer-scripts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

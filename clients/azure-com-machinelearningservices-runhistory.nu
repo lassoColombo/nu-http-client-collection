@@ -121,7 +121,7 @@ def sortorder-completer [] { ["Asc" "Desc"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "history-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experimentids get-experiments" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "experiments-get-by-id" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -145,7 +145,7 @@ export def commands []: nothing -> table {
 #
 # GET /history/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/experimentids/{experimentId}
 # operationId: Experiments_GetById
-export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experimentids get-experiments" [
+export def "experiments-get-by-id" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -187,7 +187,7 @@ export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machi
 #
 # PATCH /history/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/experimentids/{experimentId}
 # operationId: Experiments_Update
-export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experimentids update-experiments" [
+export def "experiments-update" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -235,7 +235,7 @@ export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machi
 #
 # DELETE /history/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/experimentids/{experimentId}/tags
 # operationId: Experiments_DeleteTags
-export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experimentids-tags delete-experiments" [
+export def "experiments-delete-tags" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -281,7 +281,7 @@ export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machi
 #
 # GET /history/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/experiments/{experimentName}
 # operationId: Experiments_Get
-export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments get" [
+export def "experiments-get" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -323,7 +323,7 @@ export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machi
 #
 # POST /history/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/experiments/{experimentName}
 # operationId: Experiments_Create
-export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments create" [
+export def "experiments-create" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -366,7 +366,7 @@ export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machi
 # POST /history/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/experiments/{experimentName}/batch/events
 # operationId: Events_BatchPost
 # --events item shape: {data?: record, name?: string, timestamp?: string}
-export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-batch-events create" [
+export def "events-batch-post" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -413,7 +413,7 @@ export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machi
 # PATCH /history/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/experiments/{experimentName}/batch/runs
 # operationId: Runs_BatchAddOrModify
 # --runs item shape: {cancelUri?: string, createdFrom?: record, dataContainerId?: string, description?: string, diagnosticsUri?: string, endTimeUtc?: string, heartbeatEnabled?: bool, hidden?: bool, name?: string, options?: record, parentRunId?: string, properties?: record, runDefinition?: record, runId?: string, runType?: string, scriptName?: string, startTimeUtc?: string, status?: string, tags?: record, target?: string}
-export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-batch-runs create-or-modify" [
+export def "runs-batch-add-or-modify" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -459,7 +459,7 @@ export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machi
 #
 # GET /history/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/experiments/{experimentName}/metrics/{metricId}
 # operationId: RunMetrics_Get
-export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-metrics get-run" [
+export def "run-metrics-get" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -503,7 +503,7 @@ export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machi
 #
 # POST /history/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/experiments/{experimentName}/metrics:query
 # operationId: RunMetrics_GetByQuery
-export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-metrics-query get-run" [
+export def "run-metrics-get-by-query" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -557,7 +557,7 @@ export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machi
 #
 # GET /history/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/experiments/{experimentName}/runs/{runId}
 # operationId: Runs_Get
-export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-runs get" [
+export def "runs-get" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -603,7 +603,7 @@ export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machi
 # operationId: Runs_Patch
 # --createdFrom shape: {location?: string, locationType?: "ArtifactId", type?: "Notebook"}
 # --options shape: {generateDataContainerIdIfNotSpecified?: bool}
-export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-runs update" [
+export def "runs-patch" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -670,7 +670,7 @@ export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machi
 #
 # GET /history/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/experiments/{experimentName}/runs/{runId}/artifacts
 # operationId: RunArtifacts_ListInContainer
-export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-runs-artifacts list-in-container" [
+export def "run-artifacts-list-in-container" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -716,7 +716,7 @@ export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machi
 #
 # GET /history/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/experiments/{experimentName}/runs/{runId}/artifacts/artifacturi
 # operationId: RunArtifacts_GetSasUri
-export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-runs-artifacts-artifacturi get-sas-uri" [
+export def "run-artifacts-get-sas-uri" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -763,7 +763,7 @@ export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machi
 # POST /history/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/experiments/{experimentName}/runs/{runId}/artifacts/batch/metadata
 # operationId: RunArtifacts_BatchCreateEmptyArtifacts
 # --paths item shape: {path: string}
-export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-runs-artifacts-batch-metadata create-empty" [
+export def "run-artifacts-batch-create-empty-artifacts" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -811,7 +811,7 @@ export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machi
 #
 # GET /history/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/experiments/{experimentName}/runs/{runId}/artifacts/contentinfo
 # operationId: RunArtifacts_GetContentInformation
-export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-runs-artifacts-contentinfo get-content-information" [
+export def "run-artifacts-get-content-information" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -857,7 +857,7 @@ export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machi
 #
 # GET /history/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/experiments/{experimentName}/runs/{runId}/artifacts/metadata
 # operationId: RunArtifacts_GetById
-export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-runs-artifacts-metadata get" [
+export def "run-artifacts-get-by-id" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -903,7 +903,7 @@ export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machi
 #
 # GET /history/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/experiments/{experimentName}/runs/{runId}/artifacts/path
 # operationId: RunArtifacts_ListInPath
-export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-runs-artifacts-path list" [
+export def "run-artifacts-list-in-path" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -950,7 +950,7 @@ export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machi
 #
 # GET /history/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/experiments/{experimentName}/runs/{runId}/artifacts/prefix/contentinfo
 # operationId: RunArtifacts_ListSasByPrefix
-export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-runs-artifacts-prefix-contentinfo list-sas" [
+export def "run-artifacts-list-sas-by-prefix" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -998,7 +998,7 @@ export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machi
 # POST /history/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/experiments/{experimentName}/runs/{runId}/batch/metrics
 # operationId: RunMetrics_BatchPost
 # --values item shape: {cells?: list, createdUtc?: string, dataContainerId?: string, dataLocation?: string, description?: string, label?: string, metricId?: string, metricType?: string, name?: string, numCells?: int, schema?: record}
-export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-runs-batch-metrics create" [
+export def "run-metrics-batch-post" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -1046,7 +1046,7 @@ export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machi
 #
 # GET /history/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/experiments/{experimentName}/runs/{runId}/children
 # operationId: Runs_GetChild
-export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-runs-children get-child" [
+export def "runs-get-child" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -1097,7 +1097,7 @@ export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machi
 #
 # GET /history/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/experiments/{experimentName}/runs/{runId}/details
 # operationId: Runs_GetDetails
-export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-runs-details get" [
+export def "runs-get-details" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -1141,7 +1141,7 @@ export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machi
 #
 # POST /history/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/experiments/{experimentName}/runs/{runId}/events
 # operationId: Events_Post
-export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-runs-events create" [
+export def "events-post" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -1192,7 +1192,7 @@ export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machi
 # POST /history/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/experiments/{experimentName}/runs/{runId}/metrics
 # operationId: RunMetrics_Post
 # --schema shape: {numProperties?: int, properties?: list}
-export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-runs-metrics create" [
+export def "run-metrics-post" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -1250,7 +1250,7 @@ export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machi
 #
 # DELETE /history/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/experiments/{experimentName}/runs/{runId}/tags
 # operationId: Runs_DeleteTags
-export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-runs-tags delete" [
+export def "runs-delete-tags" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -1298,7 +1298,7 @@ export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machi
 #
 # POST /history/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/experiments/{experimentName}/runs:query
 # operationId: Runs_GetByQuery
-export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-runs-query get" [
+export def "runs-get-by-query" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -1347,7 +1347,7 @@ export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machi
 #
 # POST /history/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/experiments:query
 # operationId: Experiments_GetByQuery
-export def "history-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-query get" [
+export def "experiments-get-by-query" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string

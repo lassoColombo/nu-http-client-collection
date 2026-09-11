@@ -150,7 +150,7 @@ def aspect-ratio-completer [] { ["16_9" "4_3" "nonstandard"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "ai-audio-descriptors list-custom" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-custom-descriptors" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -174,7 +174,7 @@ export def commands []: nothing -> table {
 #
 # GET /v2/ai/audio/descriptors
 # operationId: listCustomDescriptors
-export def "ai-audio-descriptors list-custom" [
+export def "list-custom-descriptors" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -222,7 +222,7 @@ export def "ai-audio-descriptors list-custom" [
 #
 # GET /v2/ai/audio/instruments
 # operationId: listCustomInstruments
-export def "ai-audio-instruments list-custom" [
+export def "list-custom-instruments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -262,7 +262,7 @@ export def "ai-audio-instruments list-custom" [
 #
 # GET /v2/ai/audio/renders
 # operationId: fetchRenders
-export def "ai-audio-renders get" [
+export def "fetch-renders" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -299,7 +299,7 @@ export def "ai-audio-renders get" [
 # POST /v2/ai/audio/renders
 # operationId: createAudioRenders
 # --audio_renders item shape: {filename: string, preset: "MASTER_MP3"|"MASTER_WAV"|"STEMS_WAV", timeline: record}
-export def "ai-audio-renders create" [
+export def "create-audio-renders" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -337,7 +337,7 @@ export def "ai-audio-renders create" [
 #
 # GET /v2/audio
 # operationId: getTrackList
-export def "audio get-track-list" [
+export def "get-track-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -375,7 +375,7 @@ export def "audio get-track-list" [
 #
 # GET /v2/audio/collections
 # operationId: getTrackCollectionList
-export def "audio-collections get-track-list" [
+export def "get-track-collection-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -413,7 +413,7 @@ export def "audio-collections get-track-list" [
 #
 # POST /v2/audio/collections
 # operationId: createTrackCollection
-export def "audio-collections create-track" [
+export def "create-track-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -451,7 +451,7 @@ export def "audio-collections create-track" [
 #
 # DELETE /v2/audio/collections/{id}
 # operationId: deleteTrackCollection
-export def "audio-collections delete-track" [
+export def "delete-track-collection" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -487,7 +487,7 @@ export def "audio-collections delete-track" [
 #
 # GET /v2/audio/collections/{id}
 # operationId: getTrackCollection
-export def "audio-collections get-track" [
+export def "get-track-collection" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -526,7 +526,7 @@ export def "audio-collections get-track" [
 #
 # POST /v2/audio/collections/{id}
 # operationId: renameTrackCollection
-export def "audio-collections rename-track" [
+export def "rename-track-collection" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -566,7 +566,7 @@ export def "audio-collections rename-track" [
 #
 # DELETE /v2/audio/collections/{id}/items
 # operationId: deleteTrackCollectionItems
-export def "audio-collections-items delete-track" [
+export def "delete-track-collection-items" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -604,7 +604,7 @@ export def "audio-collections-items delete-track" [
 #
 # GET /v2/audio/collections/{id}/items
 # operationId: getTrackCollectionItems
-export def "audio-collections-items get-track" [
+export def "get-track-collection-items" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -646,7 +646,7 @@ export def "audio-collections-items get-track" [
 # POST /v2/audio/collections/{id}/items
 # operationId: addTrackCollectionItems
 # --items item shape: {added_time?: string, id: string, media_type?: string}
-export def "audio-collections-items create-track" [
+export def "add-track-collection-items" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -686,7 +686,7 @@ export def "audio-collections-items create-track" [
 #
 # GET /v2/audio/genres
 # operationId: listGenres
-export def "audio-genres list" [
+export def "list-genres" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -722,7 +722,7 @@ export def "audio-genres list" [
 #
 # GET /v2/audio/instruments
 # operationId: listInstruments
-export def "audio-instruments list" [
+export def "list-instruments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -758,7 +758,7 @@ export def "audio-instruments list" [
 #
 # GET /v2/audio/licenses
 # operationId: getTrackLicenseList
-export def "audio-licenses get-track-list" [
+export def "get-track-license-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -804,7 +804,7 @@ export def "audio-licenses get-track-list" [
 # POST /v2/audio/licenses
 # operationId: licenseTrack
 # --audio item shape: {audio_id: string, license?: "audio_platform"|"premier_music_basic"|"premier_music_extended"|"premier_music_pro"|"premier_music_comp"|"asset_all_music", search_id?: string}
-export def "audio-licenses create-track" [
+export def "license-track" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -845,7 +845,7 @@ export def "audio-licenses create-track" [
 #
 # POST /v2/audio/licenses/{id}/downloads
 # operationId: downloadTracks
-export def "audio-licenses-downloads download-tracks" [
+export def "download-tracks" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -881,7 +881,7 @@ export def "audio-licenses-downloads download-tracks" [
 #
 # GET /v2/audio/moods
 # operationId: listMoods
-export def "audio-moods list" [
+export def "list-moods" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -918,7 +918,7 @@ export def "audio-moods list" [
 # GET /v2/audio/search
 # operationId: searchTracks
 @deprecated --flag bpm
-export def "audio-search list-tracks" [
+export def "search-tracks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -974,7 +974,7 @@ export def "audio-search list-tracks" [
 #
 # GET /v2/audio/{id}
 # operationId: getTrack
-export def "audio get-track" [
+export def "get-track" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1015,7 +1015,7 @@ export def "audio get-track" [
 # operationId: bulkSearchImages
 @deprecated --flag height
 @deprecated --flag width
-export def "bulk-search-images list" [
+export def "bulk-search-images" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1089,7 +1089,7 @@ export def "bulk-search-images list" [
 #
 # GET /v2/catalog/collections
 # operationId: getCollections
-export def "catalog-collections get" [
+export def "get-collections" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1129,7 +1129,7 @@ export def "catalog-collections get" [
 # POST /v2/catalog/collections
 # operationId: createCollection
 # --items item shape: {asset: record}
-export def "catalog-collections create" [
+export def "create-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1169,7 +1169,7 @@ export def "catalog-collections create" [
 #
 # DELETE /v2/catalog/collections/{collection_id}
 # operationId: deleteCollection
-export def "catalog-collections delete" [
+export def "delete-collection" [
   collection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1206,7 +1206,7 @@ export def "catalog-collections delete" [
 # PATCH /v2/catalog/collections/{collection_id}
 # operationId: updateCollection
 # --cover_asset shape: {id: string}
-export def "catalog-collections update" [
+export def "update-collection" [
   collection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1249,7 +1249,7 @@ export def "catalog-collections update" [
 # DELETE /v2/catalog/collections/{collection_id}/items
 # operationId: deleteFromCollection
 # --items item shape: {id: string}
-export def "catalog-collections-items delete" [
+export def "delete-from-collection" [
   collection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1290,7 +1290,7 @@ export def "catalog-collections-items delete" [
 # POST /v2/catalog/collections/{collection_id}/items
 # operationId: addToCollection
 # --items item shape: {asset: record}
-export def "catalog-collections-items create" [
+export def "add-to-collection" [
   collection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1330,7 +1330,7 @@ export def "catalog-collections-items create" [
 #
 # GET /v2/catalog/search
 # operationId: searchCatalog
-export def "catalog-search list" [
+export def "search-catalog" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1371,7 +1371,7 @@ export def "catalog-search list" [
 #
 # GET /v2/contributors
 # operationId: getContributorList
-export def "contributors get-list" [
+export def "get-contributor-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1407,7 +1407,7 @@ export def "contributors get-list" [
 #
 # GET /v2/contributors/{contributor_id}
 # operationId: getContributor
-export def "contributors get" [
+export def "get-contributor" [
   contributor_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1443,7 +1443,7 @@ export def "contributors get" [
 #
 # GET /v2/contributors/{contributor_id}/collections
 # operationId: getContributorCollectionsList
-export def "contributors-collections get-list" [
+export def "get-contributor-collections-list" [
   contributor_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1481,7 +1481,7 @@ export def "contributors-collections get-list" [
 #
 # GET /v2/contributors/{contributor_id}/collections/{id}
 # operationId: getContributorCollections
-export def "contributors-collections get" [
+export def "get-contributor-collections" [
   contributor_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1519,7 +1519,7 @@ export def "contributors-collections get" [
 #
 # GET /v2/contributors/{contributor_id}/collections/{id}/items
 # operationId: getContributorCollectionItems
-export def "contributors-collections-items get" [
+export def "get-contributor-collection-items" [
   contributor_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1561,7 +1561,7 @@ export def "contributors-collections-items get" [
 #
 # POST /v2/cv/images
 # operationId: uploadImage
-export def "cv-images upload" [
+export def "upload-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1599,7 +1599,7 @@ export def "cv-images upload" [
 #
 # GET /v2/cv/keywords
 # operationId: getKeywords
-export def "cv-keywords get" [
+export def "get-keywords" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1635,7 +1635,7 @@ export def "cv-keywords get" [
 #
 # GET /v2/cv/similar/images
 # operationId: getSimilarImages
-export def "cv-similar-images get" [
+export def "get-similar-images" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1677,7 +1677,7 @@ export def "cv-similar-images get" [
 #
 # GET /v2/cv/similar/videos
 # operationId: getSimilarVideos
-export def "cv-similar-videos get" [
+export def "get-similar-videos" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1721,7 +1721,7 @@ export def "cv-similar-videos get" [
 # DEPRECATED
 # operationId: getEditorialCategories
 @deprecated
-export def "editorial-categories get" [
+export def "get-editorial-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1755,7 +1755,7 @@ export def "editorial-categories get" [
 #
 # GET /v2/editorial/images/categories
 # operationId: listEditorialImageCategories
-export def "editorial-images-categories list" [
+export def "list-editorial-image-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1789,7 +1789,7 @@ export def "editorial-images-categories list" [
 #
 # GET /v2/editorial/images/licenses
 # operationId: getEditorialImageLicenseList
-export def "editorial-images-licenses get-list" [
+export def "get-editorial-image-license-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1835,7 +1835,7 @@ export def "editorial-images-licenses get-list" [
 # POST /v2/editorial/images/licenses
 # operationId: licenseEditorialImages
 # --editorial item shape: {editorial_id: string, license: string, metadata?: record, size?: "small"|"medium"|"original"}
-export def "editorial-images-licenses create" [
+export def "license-editorial-images" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1874,7 +1874,7 @@ export def "editorial-images-licenses create" [
 #
 # GET /v2/editorial/images/livefeeds
 # operationId: getEditorialImageLivefeedList
-export def "editorial-images-livefeeds get-list" [
+export def "get-editorial-image-livefeed-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1912,7 +1912,7 @@ export def "editorial-images-livefeeds get-list" [
 #
 # GET /v2/editorial/images/livefeeds/{id}
 # operationId: getEditorialImageLivefeed
-export def "editorial-images-livefeeds get" [
+export def "get-editorial-image-livefeed" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1950,7 +1950,7 @@ export def "editorial-images-livefeeds get" [
 #
 # GET /v2/editorial/images/livefeeds/{id}/items
 # operationId: getEditorialImageLivefeedItems
-export def "editorial-images-livefeeds-items get" [
+export def "get-editorial-image-livefeed-items" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1988,7 +1988,7 @@ export def "editorial-images-livefeeds-items get" [
 #
 # GET /v2/editorial/images/search
 # operationId: searchEditorialImages
-export def "editorial-images-search list" [
+export def "search-editorial-images" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2032,7 +2032,7 @@ export def "editorial-images-search list" [
 #
 # GET /v2/editorial/images/updated
 # operationId: getUpdatedEditorialImages
-export def "editorial-images-updated get" [
+export def "get-updated-editorial-images" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2077,7 +2077,7 @@ export def "editorial-images-updated get" [
 #
 # GET /v2/editorial/images/{id}
 # operationId: getEditorialImage
-export def "editorial-images get" [
+export def "get-editorial-image" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2118,7 +2118,7 @@ export def "editorial-images get" [
 # operationId: licenseEditorialImage
 # --editorial item shape: {editorial_id: string, license: string, metadata?: record, size?: "small"|"medium"|"original"}
 @deprecated
-export def "editorial-licenses create-image" [
+export def "license-editorial-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2159,7 +2159,7 @@ export def "editorial-licenses create-image" [
 # DEPRECATED
 # operationId: getEditorialLivefeedList
 @deprecated
-export def "editorial-livefeeds get-list" [
+export def "get-editorial-livefeed-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2199,7 +2199,7 @@ export def "editorial-livefeeds get-list" [
 # DEPRECATED
 # operationId: getEditorialLivefeed
 @deprecated
-export def "editorial-livefeeds get" [
+export def "get-editorial-livefeed" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2239,7 +2239,7 @@ export def "editorial-livefeeds get" [
 # DEPRECATED
 # operationId: getEditorialLivefeedItems
 @deprecated
-export def "editorial-livefeeds-items get" [
+export def "get-editorial-livefeed-items" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2279,7 +2279,7 @@ export def "editorial-livefeeds-items get" [
 # DEPRECATED
 # operationId: searchEditorial
 @deprecated
-export def "editorial-search list" [
+export def "search-editorial" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2325,7 +2325,7 @@ export def "editorial-search list" [
 # DEPRECATED
 # operationId: getUpdatedEditorialImage
 @deprecated
-export def "editorial-updated get-image" [
+export def "get-updated-editorial-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2370,7 +2370,7 @@ export def "editorial-updated get-image" [
 #
 # GET /v2/editorial/videos/categories
 # operationId: listEditorialVideoCategories
-export def "editorial-videos-categories list" [
+export def "list-editorial-video-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2404,7 +2404,7 @@ export def "editorial-videos-categories list" [
 #
 # GET /v2/editorial/videos/licenses
 # operationId: getEditorialVideoLicenseList
-export def "editorial-videos-licenses get-list" [
+export def "get-editorial-video-license-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2450,7 +2450,7 @@ export def "editorial-videos-licenses get-list" [
 # POST /v2/editorial/videos/licenses
 # operationId: licenseEditorialVideo
 # --editorial item shape: {editorial_id: string, license: "premier_editorial_video_digital_only"|"premier_editorial_video_all_media"|"premier_editorial_video_all_media_single_territory"|"premier_editorial_video_comp", metadata?: record, size?: "original"}
-export def "editorial-videos-licenses create" [
+export def "license-editorial-video" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2489,7 +2489,7 @@ export def "editorial-videos-licenses create" [
 #
 # GET /v2/editorial/videos/search
 # operationId: searchEditorialVideos
-export def "editorial-videos-search list" [
+export def "search-editorial-videos" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2535,7 +2535,7 @@ export def "editorial-videos-search list" [
 #
 # GET /v2/editorial/videos/{id}
 # operationId: getEditorialVideo
-export def "editorial-videos get" [
+export def "get-editorial-video" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2575,7 +2575,7 @@ export def "editorial-videos get" [
 # GET /v2/editorial/{id}
 # DEPRECATED
 @deprecated
-export def "editorial get" [
+export def "get-v2-editorial-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2614,7 +2614,7 @@ export def "editorial get" [
 #
 # GET /v2/images
 # operationId: getImageList
-export def "images get-list" [
+export def "get-image-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2654,7 +2654,7 @@ export def "images get-list" [
 # DEPRECATED
 # operationId: uploadEphemeralImage
 @deprecated
-export def "images upload-ephemeral" [
+export def "upload-ephemeral-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2692,7 +2692,7 @@ export def "images upload-ephemeral" [
 #
 # GET /v2/images/categories
 # operationId: listImageCategories
-export def "images-categories list" [
+export def "list-image-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2728,7 +2728,7 @@ export def "images-categories list" [
 #
 # GET /v2/images/collections
 # operationId: getImageCollectionList
-export def "images-collections get-list" [
+export def "get-image-collection-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2766,7 +2766,7 @@ export def "images-collections get-list" [
 #
 # POST /v2/images/collections
 # operationId: createImageCollection
-export def "images-collections create" [
+export def "create-image-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2804,7 +2804,7 @@ export def "images-collections create" [
 #
 # GET /v2/images/collections/featured
 # operationId: getFeaturedImageCollectionList
-export def "images-collections-featured get-list" [
+export def "get-featured-image-collection-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2842,7 +2842,7 @@ export def "images-collections-featured get-list" [
 #
 # GET /v2/images/collections/featured/{id}
 # operationId: getFeaturedImageCollection
-export def "images-collections-featured get" [
+export def "get-featured-image-collection" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2881,7 +2881,7 @@ export def "images-collections-featured get" [
 #
 # GET /v2/images/collections/featured/{id}/items
 # operationId: getFeaturedImageCollectionItems
-export def "images-collections-featured-items get" [
+export def "get-featured-image-collection-items" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2920,7 +2920,7 @@ export def "images-collections-featured-items get" [
 #
 # DELETE /v2/images/collections/{id}
 # operationId: deleteImageCollection
-export def "images-collections delete" [
+export def "delete-image-collection" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2956,7 +2956,7 @@ export def "images-collections delete" [
 #
 # GET /v2/images/collections/{id}
 # operationId: getImageCollection
-export def "images-collections get" [
+export def "get-image-collection" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2995,7 +2995,7 @@ export def "images-collections get" [
 #
 # POST /v2/images/collections/{id}
 # operationId: renameImageCollection
-export def "images-collections rename" [
+export def "rename-image-collection" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3035,7 +3035,7 @@ export def "images-collections rename" [
 #
 # DELETE /v2/images/collections/{id}/items
 # operationId: deleteImageCollectionItems
-export def "images-collections-items delete" [
+export def "delete-image-collection-items" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3073,7 +3073,7 @@ export def "images-collections-items delete" [
 #
 # GET /v2/images/collections/{id}/items
 # operationId: getImageCollectionItems
-export def "images-collections-items get" [
+export def "get-image-collection-items" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3115,7 +3115,7 @@ export def "images-collections-items get" [
 # POST /v2/images/collections/{id}/items
 # operationId: addImageCollectionItems
 # --items item shape: {added_time?: string, id: string, media_type?: string}
-export def "images-collections-items create" [
+export def "add-image-collection-items" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3155,7 +3155,7 @@ export def "images-collections-items create" [
 #
 # GET /v2/images/licenses
 # operationId: getImageLicenseList
-export def "images-licenses get-list" [
+export def "get-image-license-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3201,7 +3201,7 @@ export def "images-licenses get-list" [
 # POST /v2/images/licenses
 # operationId: licenseImages
 @deprecated --flag format
-export def "images-licenses create" [
+export def "license-images" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3247,7 +3247,7 @@ export def "images-licenses create" [
 # --auth_cookie shape: {name: string, value: string}
 @deprecated --flag show-modal
 @deprecated --flag verification-code
-export def "images-licenses-downloads download" [
+export def "download-image" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3290,7 +3290,7 @@ export def "images-licenses-downloads download" [
 #
 # GET /v2/images/recommendations
 # operationId: getImageRecommendations
-export def "images-recommendations get" [
+export def "get-image-recommendations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3330,7 +3330,7 @@ export def "images-recommendations get" [
 # operationId: searchImages
 @deprecated --flag height
 @deprecated --flag width
-export def "images-search list" [
+export def "search-images" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3405,7 +3405,7 @@ export def "images-search list" [
 #
 # GET /v2/images/search/suggestions
 # operationId: getImageSuggestions
-export def "images-search-suggestions get" [
+export def "get-image-suggestions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3442,7 +3442,7 @@ export def "images-search-suggestions get" [
 #
 # POST /v2/images/search/suggestions
 # operationId: getImageKeywordSuggestions
-export def "images-search-suggestions get-keyword" [
+export def "get-image-keyword-suggestions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3480,7 +3480,7 @@ export def "images-search-suggestions get-keyword" [
 #
 # GET /v2/images/updated
 # operationId: getUpdatedImages
-export def "images-updated get" [
+export def "get-updated-images" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3522,7 +3522,7 @@ export def "images-updated get" [
 #
 # GET /v2/images/{id}
 # operationId: getImage
-export def "images get" [
+export def "get-image" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3562,7 +3562,7 @@ export def "images get" [
 #
 # GET /v2/images/{id}/similar
 # operationId: listSimilarImages
-export def "images-similar list" [
+export def "list-similar-images" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3603,7 +3603,7 @@ export def "images-similar list" [
 #
 # POST /v2/oauth/access_token
 # operationId: createAccessToken
-export def "oauth-access-token create" [
+export def "create-access-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3647,7 +3647,7 @@ export def "oauth-access-token create" [
 #
 # GET /v2/oauth/authorize
 # operationId: authorize
-export def "oauth-authorize get" [
+export def "authorize" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3688,7 +3688,7 @@ export def "oauth-authorize get" [
 #
 # GET /v2/sfx
 # operationId: getSfxListDetails
-export def "sfx get-list-details" [
+export def "get-sfx-list-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3728,7 +3728,7 @@ export def "sfx get-list-details" [
 #
 # GET /v2/sfx/licenses
 # operationId: getSfxLicenseList
-export def "sfx-licenses get-list" [
+export def "get-sfx-license-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3775,7 +3775,7 @@ export def "sfx-licenses get-list" [
 # POST /v2/sfx/licenses
 # operationId: licensesSFX
 # --sound_effects item shape: {audio_layout?: "ambisonic"|"5.1"|"stereo", format?: "wav"|"mp3", search_id?: string, sfx_id: string, subscription_id: string}
-export def "sfx-licenses create" [
+export def "licenses-sfx" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3813,7 +3813,7 @@ export def "sfx-licenses create" [
 #
 # POST /v2/sfx/licenses/{id}/downloads
 # operationId: downloadSfx
-export def "sfx-licenses-downloads download" [
+export def "download-sfx" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3849,7 +3849,7 @@ export def "sfx-licenses-downloads download" [
 #
 # GET /v2/sfx/search
 # operationId: searchSFX
-export def "sfx-search list" [
+export def "search-sfx" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3897,7 +3897,7 @@ export def "sfx-search list" [
 #
 # GET /v2/sfx/{id}
 # operationId: getSfxDetails
-export def "sfx get-details" [
+export def "get-sfx-details" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3938,7 +3938,7 @@ export def "sfx get-details" [
 #
 # GET /v2/test
 # operationId: echo
-export def "test get-echo" [
+export def "echo" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3974,7 +3974,7 @@ export def "test get-echo" [
 #
 # GET /v2/test/validate
 # operationId: validate
-export def "test-validate validate" [
+export def "validate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4014,7 +4014,7 @@ export def "test-validate validate" [
 #
 # GET /v2/user
 # operationId: getUser
-export def "user get" [
+export def "get-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4048,7 +4048,7 @@ export def "user get" [
 #
 # GET /v2/user/access_token
 # operationId: getAccessToken
-export def "user-access-token get" [
+export def "get-access-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4082,7 +4082,7 @@ export def "user-access-token get" [
 #
 # GET /v2/user/subscriptions
 # operationId: getUserSubscriptionList
-export def "user-subscriptions get-list" [
+export def "get-user-subscription-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4116,7 +4116,7 @@ export def "user-subscriptions get-list" [
 #
 # GET /v2/videos
 # operationId: getVideoList
-export def "videos get-list" [
+export def "get-video-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4154,7 +4154,7 @@ export def "videos get-list" [
 #
 # GET /v2/videos/categories
 # operationId: listVideoCategories
-export def "videos-categories list" [
+export def "list-video-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4190,7 +4190,7 @@ export def "videos-categories list" [
 #
 # GET /v2/videos/collections
 # operationId: getVideoCollectionList
-export def "videos-collections get-list" [
+export def "get-video-collection-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4228,7 +4228,7 @@ export def "videos-collections get-list" [
 #
 # POST /v2/videos/collections
 # operationId: createVideoCollection
-export def "videos-collections create" [
+export def "create-video-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4266,7 +4266,7 @@ export def "videos-collections create" [
 #
 # GET /v2/videos/collections/featured
 # operationId: getFeaturedVideoCollectionList
-export def "videos-collections-featured get-list" [
+export def "get-featured-video-collection-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4302,7 +4302,7 @@ export def "videos-collections-featured get-list" [
 #
 # GET /v2/videos/collections/featured/{id}
 # operationId: getFeaturedVideoCollection
-export def "videos-collections-featured get" [
+export def "get-featured-video-collection" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4340,7 +4340,7 @@ export def "videos-collections-featured get" [
 #
 # GET /v2/videos/collections/featured/{id}/items
 # operationId: getFeaturedVideoCollectionItems
-export def "videos-collections-featured-items get" [
+export def "get-featured-video-collection-items" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4379,7 +4379,7 @@ export def "videos-collections-featured-items get" [
 #
 # DELETE /v2/videos/collections/{id}
 # operationId: deleteVideoCollection
-export def "videos-collections delete" [
+export def "delete-video-collection" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4415,7 +4415,7 @@ export def "videos-collections delete" [
 #
 # GET /v2/videos/collections/{id}
 # operationId: getVideoCollection
-export def "videos-collections get" [
+export def "get-video-collection" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4454,7 +4454,7 @@ export def "videos-collections get" [
 #
 # POST /v2/videos/collections/{id}
 # operationId: renameVideoCollection
-export def "videos-collections rename" [
+export def "rename-video-collection" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4494,7 +4494,7 @@ export def "videos-collections rename" [
 #
 # DELETE /v2/videos/collections/{id}/items
 # operationId: deleteVideoCollectionItems
-export def "videos-collections-items delete" [
+export def "delete-video-collection-items" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4532,7 +4532,7 @@ export def "videos-collections-items delete" [
 #
 # GET /v2/videos/collections/{id}/items
 # operationId: getVideoCollectionItems
-export def "videos-collections-items get" [
+export def "get-video-collection-items" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4574,7 +4574,7 @@ export def "videos-collections-items get" [
 # POST /v2/videos/collections/{id}/items
 # operationId: addVideoCollectionItems
 # --items item shape: {added_time?: string, id: string, media_type?: string}
-export def "videos-collections-items create" [
+export def "add-video-collection-items" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4614,7 +4614,7 @@ export def "videos-collections-items create" [
 #
 # GET /v2/videos/licenses
 # operationId: getVideoLicenseList
-export def "videos-licenses get-list" [
+export def "get-video-license-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4660,7 +4660,7 @@ export def "videos-licenses get-list" [
 # POST /v2/videos/licenses
 # operationId: licenseVideos
 # --videos item shape: {auth_cookie?: record, editorial_acknowledgement?: bool, metadata?: record, price?: float, search_id?: string, show_modal?: bool, size?: "web"|"sd"|"hd"|"4k", subscription_id?: string, video_id: string}
-export def "videos-licenses create" [
+export def "license-videos" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4705,7 +4705,7 @@ export def "videos-licenses create" [
 # --auth_cookie shape: {name: string, value: string}
 @deprecated --flag show-modal
 @deprecated --flag verification-code
-export def "videos-licenses-downloads download" [
+export def "download-videos" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4750,7 +4750,7 @@ export def "videos-licenses-downloads download" [
 # operationId: searchVideos
 @deprecated --flag duration
 @deprecated --flag fps
-export def "videos-search list" [
+export def "search-videos" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4814,7 +4814,7 @@ export def "videos-search list" [
 #
 # GET /v2/videos/search/suggestions
 # operationId: getVideoSuggestions
-export def "videos-search-suggestions get" [
+export def "get-video-suggestions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4851,7 +4851,7 @@ export def "videos-search-suggestions get" [
 #
 # GET /v2/videos/updated
 # operationId: getUpdatedVideos
-export def "videos-updated get" [
+export def "get-updated-videos" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4892,7 +4892,7 @@ export def "videos-updated get" [
 #
 # GET /v2/videos/{id}
 # operationId: getVideo
-export def "videos get" [
+export def "get-video" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4932,7 +4932,7 @@ export def "videos get" [
 #
 # GET /v2/videos/{id}/similar
 # operationId: findSimilarVideos
-export def "videos-similar find" [
+export def "find-similar-videos" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

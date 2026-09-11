@@ -101,7 +101,7 @@ def domain-completer [] { ["Ecom" "Employee" "Hotel" "Restaurant"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "communication create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "communication" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -125,7 +125,7 @@ export def commands []: nothing -> table {
 #
 # POST /communication
 # operationId: communication
-export def "communication create" [
+export def "communication" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -165,7 +165,7 @@ export def "communication create" [
 #
 # POST /ekman-emotion
 # operationId: ekman-emotion
-export def "ekman-emotion create" [
+export def "ekman-emotion" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -205,7 +205,7 @@ export def "ekman-emotion create" [
 #
 # POST /emotion
 # operationId: emotion
-export def "emotion create" [
+export def "emotion" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -245,7 +245,7 @@ export def "emotion create" [
 #
 # POST /language-detection
 # operationId: language-detection
-export def "language-detection create" [
+export def "language-detection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -283,7 +283,7 @@ export def "language-detection create" [
 #
 # POST /personality
 # operationId: personality
-export def "personality create" [
+export def "personality" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -323,7 +323,7 @@ export def "personality create" [
 #
 # POST /sentiment
 # operationId: sentiment
-export def "sentiment create" [
+export def "sentiment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -363,7 +363,7 @@ export def "sentiment create" [
 #
 # POST /topic-sentiment
 # operationId: topic-sentiment
-export def "topic-sentiment create" [
+export def "topic-sentiment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

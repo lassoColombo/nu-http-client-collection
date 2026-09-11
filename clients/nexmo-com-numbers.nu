@@ -122,7 +122,7 @@ def voice-callback-type-completer [] { ["app" "sip" "tel"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account-numbers get-owned" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-owned-numbers" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # GET /account/numbers
 # operationId: getOwnedNumbers
-export def "account-numbers get-owned" [
+export def "get-owned-numbers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (api_key)
   --token-apisecret: string # Auth token for apiSecret (api_secret)
@@ -189,7 +189,7 @@ export def "account-numbers get-owned" [
 #
 # POST /number/buy
 # operationId: buyANumber
-export def "number-buy create" [
+export def "buy-a-number" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (api_key)
   --token-apisecret: string # Auth token for apiSecret (api_secret)
@@ -231,7 +231,7 @@ export def "number-buy create" [
 #
 # POST /number/cancel
 # operationId: cancelANumber
-export def "number-cancel cancel" [
+export def "cancel-a-number" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (api_key)
   --token-apisecret: string # Auth token for apiSecret (api_secret)
@@ -273,7 +273,7 @@ export def "number-cancel cancel" [
 #
 # GET /number/search
 # operationId: getAvailableNumbers
-export def "number-search get-available" [
+export def "get-available-numbers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (api_key)
   --token-apisecret: string # Auth token for apiSecret (api_secret)
@@ -318,7 +318,7 @@ export def "number-search get-available" [
 # operationId: updateANumber
 @deprecated --flag messages-callback-type
 @deprecated --flag messages-callback-value
-export def "number-update update" [
+export def "update-a-number" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (api_key)
   --token-apisecret: string # Auth token for apiSecret (api_secret)

@@ -99,7 +99,7 @@ def type-completer [] { ["incentive" "regulation" "tech" "user"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1-output-format list-transportation-incentives-laws" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "transportation-incentives-laws-all" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -123,7 +123,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1.{output_format}
 # operationId: transportation_incentives_laws_all
-export def "v1-output-format list-transportation-incentives-laws" [
+export def "transportation-incentives-laws-all" [
   output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -173,7 +173,7 @@ export def "v1-output-format list-transportation-incentives-laws" [
 #
 # GET /v1/category-list.{output_format}
 # operationId: transportation_incentives_laws_categories
-export def "category-list-output-format get-transportation-incentives-laws-categories" [
+export def "transportation-incentives-laws-categories" [
   output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -212,7 +212,7 @@ export def "category-list-output-format get-transportation-incentives-laws-categ
 #
 # GET /v1/pocs.{output_format}
 # operationId: transportation_incentives_laws_pocs
-export def "pocs-output-format get-transportation-incentives-laws" [
+export def "transportation-incentives-laws-pocs" [
   output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -251,7 +251,7 @@ export def "pocs-output-format get-transportation-incentives-laws" [
 #
 # GET /v1/{id}.{output_format}
 # operationId: transportation_incentives_laws_id
-export def "api get-transportation-incentives-laws" [
+export def "transportation-incentives-laws-id" [
   id: int
   output_format: string
   --base-url(-b): string@base-url-completer # API base URL

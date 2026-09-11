@@ -103,7 +103,7 @@ def creditable-type-completer [] { ["Episode" "Season" "Series"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "classification-inclusions list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-classification-inclusions" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -126,7 +126,7 @@ export def commands []: nothing -> table {
 # Get ClassificationInclusion records
 #
 # GET /classification_inclusions
-export def "classification-inclusions list" [
+export def "get-classification-inclusions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -169,7 +169,7 @@ export def "classification-inclusions list" [
 # Get a specific classification inclusion
 #
 # GET /classification_inclusions/{id}
-export def "classification-inclusions get" [
+export def "get-classification-inclusions-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -204,7 +204,7 @@ export def "classification-inclusions get" [
 # Get a list of classifications
 #
 # GET /classifications
-export def "classifications list" [
+export def "get-classifications" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -245,7 +245,7 @@ export def "classifications list" [
 # Get a specific classification
 #
 # GET /classifications/{id}
-export def "classifications get" [
+export def "get-classifications-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -280,7 +280,7 @@ export def "classifications get" [
 # Get a list of credits
 #
 # GET /credits
-export def "credits list" [
+export def "get-credits" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -320,7 +320,7 @@ export def "credits list" [
 # Get a specific credit
 #
 # GET /credits/{id}
-export def "credits get" [
+export def "get-credits-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -355,7 +355,7 @@ export def "credits get" [
 # Get a list of episodes
 #
 # GET /episodes
-export def "episodes list" [
+export def "get-episodes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -403,7 +403,7 @@ export def "episodes list" [
 # Get a specific episode
 #
 # GET /episodes/{id}
-export def "episodes get" [
+export def "get-episodes-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -438,7 +438,7 @@ export def "episodes get" [
 # Get the episode released right after the specified one
 #
 # GET /episodes/{id}/next_sibling
-export def "episodes-next-sibling get" [
+export def "get-episodes-id-next-sibling" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -475,7 +475,7 @@ export def "episodes-next-sibling get" [
 # Get the episode released right before the specified one
 #
 # GET /episodes/{id}/previous_sibling
-export def "episodes-previous-sibling get" [
+export def "get-episodes-id-previous-sibling" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -512,7 +512,7 @@ export def "episodes-previous-sibling get" [
 # Get a list of images
 #
 # GET /images
-export def "images list" [
+export def "get-images" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -547,7 +547,7 @@ export def "images list" [
 # Get a specific image
 #
 # GET /images/{id}
-export def "images get" [
+export def "get-images-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -582,7 +582,7 @@ export def "images get" [
 # Get a list of media assets
 #
 # GET /media_assets
-export def "media-assets list" [
+export def "get-media-assets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -617,7 +617,7 @@ export def "media-assets list" [
 # Get a specific media asset
 #
 # GET /media_assets/{id}
-export def "media-assets get" [
+export def "get-media-assets-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -652,7 +652,7 @@ export def "media-assets get" [
 # Get a list of networks
 #
 # GET /networks
-export def "networks list" [
+export def "get-networks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -693,7 +693,7 @@ export def "networks list" [
 # Get a specific network
 #
 # GET /networks/{id}
-export def "networks get" [
+export def "get-networks-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -728,7 +728,7 @@ export def "networks get" [
 # Get a list of people
 #
 # GET /people
-export def "people list" [
+export def "get-people" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -767,7 +767,7 @@ export def "people list" [
 # Get a specific person
 #
 # GET /people/{id}
-export def "people get" [
+export def "get-people-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -802,7 +802,7 @@ export def "people get" [
 # Get a list of seasons
 #
 # GET /seasons
-export def "seasons list" [
+export def "get-seasons" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -842,7 +842,7 @@ export def "seasons list" [
 # Get a specific season
 #
 # GET /seasons/{id}
-export def "seasons get" [
+export def "get-seasons-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -877,7 +877,7 @@ export def "seasons get" [
 # Get a list of series
 #
 # GET /series
-export def "series list" [
+export def "get-series" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -918,7 +918,7 @@ export def "series list" [
 # Get a specific series
 #
 # GET /series/{id}
-export def "series get" [
+export def "get-series-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

@@ -134,7 +134,7 @@ def alt-completer [] { ["json"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "token get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "site-verification-web-resource-get-token" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -159,7 +159,7 @@ export def commands []: nothing -> table {
 # POST /token
 # operationId: siteVerification.webResource.getToken
 # --site shape: {identifier?: string, type?: string}
-export def "token get" [
+export def "site-verification-web-resource-get-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -206,7 +206,7 @@ export def "token get" [
 #
 # GET /webResource
 # operationId: siteVerification.webResource.list
-export def "web-resource list" [
+export def "site-verification-web-resource-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -249,7 +249,7 @@ export def "web-resource list" [
 # POST /webResource
 # operationId: siteVerification.webResource.insert
 # --site shape: {identifier?: string, type?: string}
-export def "web-resource create" [
+export def "site-verification-web-resource-insert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -298,7 +298,7 @@ export def "web-resource create" [
 #
 # DELETE /webResource/{id}
 # operationId: siteVerification.webResource.delete
-export def "web-resource delete" [
+export def "site-verification-web-resource-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -342,7 +342,7 @@ export def "web-resource delete" [
 #
 # GET /webResource/{id}
 # operationId: siteVerification.webResource.get
-export def "web-resource get" [
+export def "site-verification-web-resource-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -387,7 +387,7 @@ export def "web-resource get" [
 # PATCH /webResource/{id}
 # operationId: siteVerification.webResource.patch
 # --site shape: {identifier?: string, type?: string}
-export def "web-resource update-by-id" [
+export def "site-verification-web-resource-patch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -438,7 +438,7 @@ export def "web-resource update-by-id" [
 # PUT /webResource/{id}
 # operationId: siteVerification.webResource.update
 # --site shape: {identifier?: string, type?: string}
-export def "web-resource update-by-id-1" [
+export def "site-verification-web-resource-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

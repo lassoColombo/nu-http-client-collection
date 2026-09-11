@@ -110,7 +110,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "bots-bot-aliases-bot-locales-sessions delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "delete-session" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -134,7 +134,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /bots/{botId}/botAliases/{botAliasId}/botLocales/{localeId}/sessions/{sessionId}
 # operationId: DeleteSession
-export def "bots-bot-aliases-bot-locales-sessions delete" [
+export def "delete-session" [
   bot_id: string
   bot_alias_id: string
   locale_id: string
@@ -185,7 +185,7 @@ export def "bots-bot-aliases-bot-locales-sessions delete" [
 #
 # GET /bots/{botId}/botAliases/{botAliasId}/botLocales/{localeId}/sessions/{sessionId}
 # operationId: GetSession
-export def "bots-bot-aliases-bot-locales-sessions get" [
+export def "get-session" [
   bot_id: string
   bot_alias_id: string
   locale_id: string
@@ -238,7 +238,7 @@ export def "bots-bot-aliases-bot-locales-sessions get" [
 # operationId: PutSession
 # --messages item shape: {content?: any, contentType: any, imageResponseCard?: record}
 # --sessionState shape: {dialogAction?: any, intent?: any, activeContexts?: any, sessionAttributes?: any, originatingRequestId?: any, runtimeHints?: any}
-export def "bots-bot-aliases-bot-locales-sessions update" [
+export def "put-session" [
   bot_id: string
   bot_alias_id: string
   locale_id: string
@@ -297,7 +297,7 @@ export def "bots-bot-aliases-bot-locales-sessions update" [
 # POST /bots/{botId}/botAliases/{botAliasId}/botLocales/{localeId}/sessions/{sessionId}/text
 # operationId: RecognizeText
 # --sessionState shape: {dialogAction?: any, intent?: any, activeContexts?: any, sessionAttributes?: any, originatingRequestId?: any, runtimeHints?: any}
-export def "bots-bot-aliases-bot-locales-sessions-text create-recognize" [
+export def "recognize-text" [
   bot_id: string
   bot_alias_id: string
   locale_id: string
@@ -354,7 +354,7 @@ export def "bots-bot-aliases-bot-locales-sessions-text create-recognize" [
 #
 # POST /bots/{botId}/botAliases/{botAliasId}/botLocales/{localeId}/sessions/{sessionId}/utterance
 # operationId: RecognizeUtterance
-export def "bots-bot-aliases-bot-locales-sessions-utterance create-recognize" [
+export def "recognize-utterance" [
   bot_id: string
   bot_alias_id: string
   locale_id: string

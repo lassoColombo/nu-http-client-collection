@@ -100,7 +100,7 @@ def os-type-selected-completer [] { ["Linux" "LinuxFunctions" "Windows" "Windows
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-web-available-stacks get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "provider-get-available-stacks" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -124,7 +124,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.Web/availableStacks
 # operationId: Provider_GetAvailableStacks
-export def "providers-microsoft-web-available-stacks get" [
+export def "provider-get-available-stacks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -161,7 +161,7 @@ export def "providers-microsoft-web-available-stacks get" [
 #
 # GET /providers/Microsoft.Web/operations
 # operationId: Provider_ListOperations
-export def "providers-microsoft-web-operations list" [
+export def "provider-list-operations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -197,7 +197,7 @@ export def "providers-microsoft-web-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Web/availableStacks
 # operationId: Provider_GetAvailableStacksOnPrem
-export def "subscriptions-providers-microsoft-web-available-stacks get-on-prem" [
+export def "provider-get-available-stacks-on-prem" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

@@ -123,7 +123,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "doubleclicksearch-agency-advertiser-engine-conversion get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "doubleclicksearch-conversion-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -147,7 +147,7 @@ export def commands []: nothing -> table {
 #
 # GET /doubleclicksearch/v2/agency/{agencyId}/advertiser/{advertiserId}/engine/{engineAccountId}/conversion
 # operationId: doubleclicksearch.conversion.get
-export def "doubleclicksearch-agency-advertiser-engine-conversion get" [
+export def "doubleclicksearch-conversion-get" [
   agency_id: string
   advertiser_id: string
   engine_account_id: string
@@ -208,7 +208,7 @@ export def "doubleclicksearch-agency-advertiser-engine-conversion get" [
 #
 # GET /doubleclicksearch/v2/agency/{agencyId}/advertiser/{advertiserId}/idmapping
 # operationId: doubleclicksearch.reports.getIdMappingFile
-export def "doubleclicksearch-agency-advertiser-idmapping get-mapping-file" [
+export def "doubleclicksearch-reports-get-id-mapping-file" [
   agency_id: string
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -258,7 +258,7 @@ export def "doubleclicksearch-agency-advertiser-idmapping get-mapping-file" [
 #
 # GET /doubleclicksearch/v2/agency/{agencyId}/advertiser/{advertiserId}/savedcolumns
 # operationId: doubleclicksearch.savedColumns.list
-export def "doubleclicksearch-agency-advertiser-savedcolumns list" [
+export def "doubleclicksearch-saved-columns-list" [
   agency_id: string
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -309,7 +309,7 @@ export def "doubleclicksearch-agency-advertiser-savedcolumns list" [
 # POST /doubleclicksearch/v2/conversion
 # operationId: doubleclicksearch.conversion.insert
 # --conversion item shape: {adGroupId?: string, adId?: string, advertiserId?: string, agencyId?: string, attributionModel?: string, campaignId?: string, channel?: string, clickId?: string, conversionId?: string, conversionModifiedTimestamp?: string, conversionTimestamp?: string, countMillis?: string, criterionId?: string, currencyCode?: string, customDimension?: list, customMetric?: list, customerId?: string, deviceType?: string, dsConversionId?: string, engineAccountId?: string, floodlightOrderId?: string, ... (13 more fields)}
-export def "doubleclicksearch-conversion create" [
+export def "doubleclicksearch-conversion-insert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -361,7 +361,7 @@ export def "doubleclicksearch-conversion create" [
 # PUT /doubleclicksearch/v2/conversion
 # operationId: doubleclicksearch.conversion.update
 # --conversion item shape: {adGroupId?: string, adId?: string, advertiserId?: string, agencyId?: string, attributionModel?: string, campaignId?: string, channel?: string, clickId?: string, conversionId?: string, conversionModifiedTimestamp?: string, conversionTimestamp?: string, countMillis?: string, criterionId?: string, currencyCode?: string, customDimension?: list, customMetric?: list, customerId?: string, deviceType?: string, dsConversionId?: string, engineAccountId?: string, floodlightOrderId?: string, ... (13 more fields)}
-export def "doubleclicksearch-conversion update" [
+export def "doubleclicksearch-conversion-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -413,7 +413,7 @@ export def "doubleclicksearch-conversion update" [
 # POST /doubleclicksearch/v2/conversion/updateAvailability
 # operationId: doubleclicksearch.conversion.updateAvailability
 # --availabilities item shape: {advertiserId?: string, agencyId?: string, availabilityTimestamp?: string, customerId?: string, segmentationId?: string, segmentationName?: string, segmentationType?: string}
-export def "doubleclicksearch-conversion-update-availability update" [
+export def "doubleclicksearch-conversion-update-availability" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -463,7 +463,7 @@ export def "doubleclicksearch-conversion-update-availability update" [
 #
 # GET /doubleclicksearch/v2/customer/{customerId}/conversion
 # operationId: doubleclicksearch.conversion.getByCustomerId
-export def "doubleclicksearch-customer-conversion get" [
+export def "doubleclicksearch-conversion-get-by-customer-id" [
   customer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -527,7 +527,7 @@ export def "doubleclicksearch-customer-conversion get" [
 # --orderBy item shape: {column?: record, sortOrder?: string}
 # --reportScope shape: {adGroupId?: string, adId?: string, advertiserId?: string, agencyId?: string, campaignId?: string, engineAccountId?: string, keywordId?: string}
 # --timeRange shape: {changedAttributesSinceTimestamp?: string, changedMetricsSinceTimestamp?: string, endDate?: string, startDate?: string}
-export def "doubleclicksearch-reports request" [
+export def "doubleclicksearch-reports-request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -595,7 +595,7 @@ export def "doubleclicksearch-reports request" [
 # --orderBy item shape: {column?: record, sortOrder?: string}
 # --reportScope shape: {adGroupId?: string, adId?: string, advertiserId?: string, agencyId?: string, campaignId?: string, engineAccountId?: string, keywordId?: string}
 # --timeRange shape: {changedAttributesSinceTimestamp?: string, changedMetricsSinceTimestamp?: string, endDate?: string, startDate?: string}
-export def "doubleclicksearch-reports-generate generate" [
+export def "doubleclicksearch-reports-generate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -658,7 +658,7 @@ export def "doubleclicksearch-reports-generate generate" [
 #
 # GET /doubleclicksearch/v2/reports/{reportId}
 # operationId: doubleclicksearch.reports.get
-export def "doubleclicksearch-reports get" [
+export def "doubleclicksearch-reports-get" [
   report_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -706,7 +706,7 @@ export def "doubleclicksearch-reports get" [
 #
 # GET /doubleclicksearch/v2/reports/{reportId}/files/{reportFragment}
 # operationId: doubleclicksearch.reports.getFile
-export def "doubleclicksearch-reports-files get" [
+export def "doubleclicksearch-reports-get-file" [
   report_id: string
   report_fragment: int
   --base-url(-b): string@base-url-completer # API base URL

@@ -122,7 +122,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "applications create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-application" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # POST /applications
 # operationId: CreateApplication
-export def "applications create" [
+export def "create-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -207,7 +207,7 @@ export def "applications create" [
 #
 # GET /applications
 # operationId: ListApplications
-export def "applications list" [
+export def "list-applications" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -255,7 +255,7 @@ export def "applications list" [
 #
 # PUT /applications/{applicationId}/versions/{semanticVersion}
 # operationId: CreateApplicationVersion
-export def "applications-versions create" [
+export def "create-application-version" [
   application_id: string
   semantic_version: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -312,7 +312,7 @@ export def "applications-versions create" [
 # --parameterOverrides item shape: {Name: any, Value: any}
 # --rollbackConfiguration shape: {MonitoringTimeInMinutes?: any, RollbackTriggers?: any}
 # --tags item shape: {Key: any, Value: any}
-export def "applications-changesets create-cloud-formation-change-update" [
+export def "create-cloud-formation-change-set" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -372,7 +372,7 @@ export def "applications-changesets create-cloud-formation-change-update" [
 #
 # POST /applications/{applicationId}/templates
 # operationId: CreateCloudFormationTemplate
-export def "applications-templates create-cloud-formation" [
+export def "create-cloud-formation-template" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -421,7 +421,7 @@ export def "applications-templates create-cloud-formation" [
 #
 # DELETE /applications/{applicationId}
 # operationId: DeleteApplication
-export def "applications delete" [
+export def "delete-application" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -466,7 +466,7 @@ export def "applications delete" [
 #
 # GET /applications/{applicationId}
 # operationId: GetApplication
-export def "applications get" [
+export def "get-application" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -513,7 +513,7 @@ export def "applications get" [
 #
 # PATCH /applications/{applicationId}
 # operationId: UpdateApplication
-export def "applications update" [
+export def "update-application" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -567,7 +567,7 @@ export def "applications update" [
 #
 # GET /applications/{applicationId}/policy
 # operationId: GetApplicationPolicy
-export def "applications-policy get" [
+export def "get-application-policy" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -613,7 +613,7 @@ export def "applications-policy get" [
 # PUT /applications/{applicationId}/policy
 # operationId: PutApplicationPolicy
 # --statements item shape: {Actions: any, PrincipalOrgIDs?: any, Principals: any, StatementId?: any}
-export def "applications-policy update" [
+export def "put-application-policy" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -662,7 +662,7 @@ export def "applications-policy update" [
 #
 # GET /applications/{applicationId}/templates/{templateId}
 # operationId: GetCloudFormationTemplate
-export def "applications-templates get-cloud-formation" [
+export def "get-cloud-formation-template" [
   application_id: string
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -709,7 +709,7 @@ export def "applications-templates get-cloud-formation" [
 #
 # GET /applications/{applicationId}/dependencies
 # operationId: ListApplicationDependencies
-export def "applications-dependencies list" [
+export def "list-application-dependencies" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -760,7 +760,7 @@ export def "applications-dependencies list" [
 #
 # GET /applications/{applicationId}/versions
 # operationId: ListApplicationVersions
-export def "applications-versions list" [
+export def "list-application-versions" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -810,7 +810,7 @@ export def "applications-versions list" [
 #
 # POST /applications/{applicationId}/unshare
 # operationId: UnshareApplication
-export def "applications-unshare create" [
+export def "unshare-application" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

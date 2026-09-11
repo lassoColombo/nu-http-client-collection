@@ -130,7 +130,7 @@ def reconciliation-mode-completer [] { ["FULL" "INCREMENTAL" "RECONCILIATION_MOD
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "discoveryengine-projects-locations-data-stores-branches-documents-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -154,7 +154,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1beta/{name}
 # operationId: discoveryengine.projects.locations.dataStores.branches.documents.delete
-export def "v1beta delete" [
+export def "discoveryengine-projects-locations-data-stores-branches-documents-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -202,7 +202,7 @@ export def "v1beta delete" [
 #
 # GET /v1beta/{name}
 # operationId: discoveryengine.projects.operations.get
-export def "v1beta get" [
+export def "discoveryengine-projects-operations-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -250,7 +250,7 @@ export def "v1beta get" [
 #
 # PATCH /v1beta/{name}
 # operationId: discoveryengine.projects.locations.dataStores.branches.documents.patch
-export def "v1beta update" [
+export def "discoveryengine-projects-locations-data-stores-branches-documents-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -308,7 +308,7 @@ export def "v1beta update" [
 #
 # GET /v1beta/{name}/operations
 # operationId: discoveryengine.projects.operations.list
-export def "v1beta-operations list" [
+export def "discoveryengine-projects-operations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -359,7 +359,7 @@ export def "v1beta-operations list" [
 #
 # GET /v1beta/{parent}/documents
 # operationId: discoveryengine.projects.locations.dataStores.branches.documents.list
-export def "v1beta-documents list" [
+export def "discoveryengine-projects-locations-data-stores-branches-documents-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -409,7 +409,7 @@ export def "v1beta-documents list" [
 #
 # POST /v1beta/{parent}/documents
 # operationId: discoveryengine.projects.locations.dataStores.branches.documents.create
-export def "v1beta-documents create" [
+export def "discoveryengine-projects-locations-data-stores-branches-documents-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -471,7 +471,7 @@ export def "v1beta-documents create" [
 # --errorConfig shape: {gcsPrefix?: string}
 # --gcsSource shape: {dataSchema?: string, inputUris?: list<string>}
 # --inlineSource shape: {documents?: list}
-export def "v1beta-documents-import import" [
+export def "discoveryengine-projects-locations-data-stores-branches-documents-import" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -527,7 +527,7 @@ export def "v1beta-documents-import import" [
 #
 # GET /v1beta/{parent}/userEvents:collect
 # operationId: discoveryengine.projects.locations.dataStores.userEvents.collect
-export def "v1beta-user-events-collect get" [
+export def "discoveryengine-projects-locations-data-stores-user-events-collect" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -582,7 +582,7 @@ export def "v1beta-user-events-collect get" [
 # --errorConfig shape: {gcsPrefix?: string}
 # --gcsSource shape: {dataSchema?: string, inputUris?: list<string>}
 # --inlineSource shape: {userEvents?: list}
-export def "v1beta-user-events-import import" [
+export def "discoveryengine-projects-locations-data-stores-user-events-import" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -645,7 +645,7 @@ export def "v1beta-user-events-import import" [
 # --searchInfo shape: {offset?: int, orderBy?: string, searchQuery?: string}
 # --transactionInfo shape: {cost?: float, currency?: string, discountValue?: float, tax?: float, transactionId?: string, value?: float}
 # --userInfo shape: {userAgent?: string, userId?: string}
-export def "v1beta-user-events-write create" [
+export def "discoveryengine-projects-locations-data-stores-user-events-write" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -715,7 +715,7 @@ export def "v1beta-user-events-write create" [
 # POST /v1beta/{servingConfig}:recommend
 # operationId: discoveryengine.projects.locations.dataStores.servingConfigs.recommend
 # --userEvent shape: {attributes?: record, attributionToken?: string, completionInfo?: record, directUserRequest?: bool, documents?: list, eventTime?: string, eventType?: string, filter?: string, mediaInfo?: record, pageInfo?: record, panel?: record, promotionIds?: list<string>, searchInfo?: record, sessionId?: string, tagIds?: list<string>, transactionInfo?: record, userInfo?: record, userPseudoId?: string}
-export def "v1beta create-recommend" [
+export def "discoveryengine-projects-locations-data-stores-serving-configs-recommend" [
   serving_config: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

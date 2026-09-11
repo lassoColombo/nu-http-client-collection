@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-security-information-protection-policies list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "information-protection-policies-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -128,7 +128,7 @@ export def commands []: nothing -> table {
 #
 # GET /{scope}/providers/Microsoft.Security/informationProtectionPolicies
 # operationId: InformationProtectionPolicies_List
-export def "providers-microsoft-security-information-protection-policies list" [
+export def "information-protection-policies-list" [
   scope: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -166,7 +166,7 @@ export def "providers-microsoft-security-information-protection-policies list" [
 #
 # GET /{scope}/providers/Microsoft.Security/informationProtectionPolicies/{informationProtectionPolicyName}
 # operationId: InformationProtectionPolicies_Get
-export def "providers-microsoft-security-information-protection-policies get" [
+export def "information-protection-policies-get" [
   scope: string
   information_protection_policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -206,7 +206,7 @@ export def "providers-microsoft-security-information-protection-policies get" [
 #
 # PUT /{scope}/providers/Microsoft.Security/informationProtectionPolicies/{informationProtectionPolicyName}
 # operationId: InformationProtectionPolicies_CreateOrUpdate
-export def "providers-microsoft-security-information-protection-policies create-or-update" [
+export def "information-protection-policies-create-or-update" [
   scope: string
   information_protection_policy_name: string
   --base-url(-b): string@base-url-completer # API base URL

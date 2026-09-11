@@ -102,7 +102,7 @@ def locale-geo-id-completer [] { ["bn-BD" "de-DE" "en-AR" "en-AU" "en-CA" "en-CO
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "products-get-codename get-code-name" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-code-name" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -126,7 +126,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/products/get-codename
 # operationId: getCodeName
-export def "products-get-codename get-code-name" [
+export def "get-code-name" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -162,7 +162,7 @@ export def "products-get-codename get-code-name" [
 #
 # GET /api/products/get-ordering-info
 # operationId: getorderinginfo
-export def "products-get-ordering-info get-orderinginfo" [
+export def "getorderinginfo" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -199,7 +199,7 @@ export def "products-get-ordering-info get-orderinginfo" [
 #
 # GET /api/products/get-products
 # operationId: getProductList
-export def "products-get-products list" [
+export def "get-product-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -242,7 +242,7 @@ export def "products-get-products list" [
 #
 # GET /api/products/get-products-info
 # operationId: getProductInfo
-export def "products-get-products-info get" [
+export def "get-product-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

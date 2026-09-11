@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-security-workspace-settings list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "workspace-settings-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Security/workspaceSettings
 # operationId: WorkspaceSettings_List
-export def "subscriptions-providers-microsoft-security-workspace-settings list" [
+export def "workspace-settings-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -178,7 +178,7 @@ export def "subscriptions-providers-microsoft-security-workspace-settings list" 
 #
 # DELETE /subscriptions/{subscriptionId}/providers/Microsoft.Security/workspaceSettings/{workspaceSettingName}
 # operationId: WorkspaceSettings_Delete
-export def "subscriptions-providers-microsoft-security-workspace-settings delete" [
+export def "workspace-settings-delete" [
   subscription_id: string
   workspace_setting_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -218,7 +218,7 @@ export def "subscriptions-providers-microsoft-security-workspace-settings delete
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Security/workspaceSettings/{workspaceSettingName}
 # operationId: WorkspaceSettings_Get
-export def "subscriptions-providers-microsoft-security-workspace-settings get" [
+export def "workspace-settings-get" [
   subscription_id: string
   workspace_setting_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -259,7 +259,7 @@ export def "subscriptions-providers-microsoft-security-workspace-settings get" [
 # PATCH /subscriptions/{subscriptionId}/providers/Microsoft.Security/workspaceSettings/{workspaceSettingName}
 # operationId: WorkspaceSettings_Update
 # --properties shape: {scope: string, workspaceId: string}
-export def "subscriptions-providers-microsoft-security-workspace-settings update" [
+export def "workspace-settings-update" [
   subscription_id: string
   workspace_setting_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -304,7 +304,7 @@ export def "subscriptions-providers-microsoft-security-workspace-settings update
 # PUT /subscriptions/{subscriptionId}/providers/Microsoft.Security/workspaceSettings/{workspaceSettingName}
 # operationId: WorkspaceSettings_Create
 # --properties shape: {scope: string, workspaceId: string}
-export def "subscriptions-providers-microsoft-security-workspace-settings create" [
+export def "workspace-settings-create" [
   subscription_id: string
   workspace_setting_name: string
   --base-url(-b): string@base-url-completer # API base URL

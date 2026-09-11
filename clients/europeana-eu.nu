@@ -107,7 +107,7 @@ def accept-completer-2 [] { ["application/turtle" "application/x-turtle" "text/t
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "record-opensearch-rss open-list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "open-search" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -131,7 +131,7 @@ export def commands []: nothing -> table {
 #
 # GET /record/v2/opensearch.rss
 # operationId: openSearch
-export def "record-opensearch-rss open-list" [
+export def "open-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -170,7 +170,7 @@ export def "record-opensearch-rss open-list" [
 #
 # GET /record/v2/search.json
 # operationId: searchRecords
-export def "record-search-json list" [
+export def "search-records" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -229,7 +229,7 @@ export def "record-search-json list" [
 # POST /record/v2/search.json
 # operationId: searchRecordsPost
 # --hit shape: {fl?: string, selectors?: string}
-export def "record-search-json create" [
+export def "search-records-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -286,7 +286,7 @@ export def "record-search-json create" [
 #
 # GET /record/v2/translateQuery.json
 # operationId: translateQueryUsingGET
-export def "record-translate-query-json get-using" [
+export def "translate-query-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -326,7 +326,7 @@ export def "record-translate-query-json get-using" [
 #
 # GET /record/v2/{collectionId}/{recordId}.json
 # operationId: getSingleRecordJson
-export def "record get-single-json" [
+export def "get-single-record-json" [
   collection_id: string
   record_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -369,7 +369,7 @@ export def "record get-single-json" [
 #
 # GET /record/v2/{collectionId}/{recordId}.jsonld
 # operationId: getSingleRecordJsonLD
-export def "record get-single-json-ld" [
+export def "get-single-record-json-ld" [
   collection_id: string
   record_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -413,7 +413,7 @@ export def "record get-single-json-ld" [
 #
 # GET /record/v2/{collectionId}/{recordId}.rdf
 # operationId: getSingleRecordRDF
-export def "record get-single-rdf" [
+export def "get-single-record-rdf" [
   collection_id: string
   record_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -455,7 +455,7 @@ export def "record get-single-rdf" [
 #
 # GET /record/v2/{collectionId}/{recordId}.schema.jsonld
 # operationId: getSingleRecordSchemaOrg
-export def "record get-single-schema-org" [
+export def "get-single-record-schema-org" [
   collection_id: string
   record_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -499,7 +499,7 @@ export def "record get-single-schema-org" [
 #
 # GET /record/v2/{collectionId}/{recordId}.ttl
 # operationId: getSingleRecordTurtle
-export def "record get-single-turtle" [
+export def "get-single-record-turtle" [
   collection_id: string
   record_id: string
   --base-url(-b): string@base-url-completer # API base URL

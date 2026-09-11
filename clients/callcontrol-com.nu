@@ -108,7 +108,7 @@ def caller-type-completer [] { ["Business" "Callback" "Collection_Agency" "Fax_M
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "2015-11-01-complaints get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "complaints-complaints" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -132,7 +132,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/2015-11-01/Complaints/{phoneNumber}
 # operationId: Complaints_Complaints
-export def "2015-11-01-complaints get" [
+export def "complaints-complaints" [
   phone_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -169,7 +169,7 @@ export def "2015-11-01-complaints get" [
 #
 # GET /api/2015-11-01/Enterprise/GetUser/{phoneNumber}
 # operationId: EnterpriseApi_GetUser
-export def "2015-11-01-enterprise-get-user get" [
+export def "enterprise-api-get-user" [
   phone_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -206,7 +206,7 @@ export def "2015-11-01-enterprise-get-user get" [
 #
 # GET /api/2015-11-01/Enterprise/ShouldBlock/{phoneNumber}/{userPhoneNumber}
 # operationId: EnterpriseApi_ShouldBlock
-export def "2015-11-01-enterprise-should-block get" [
+export def "enterprise-api-should-block" [
   phone_number: string
   user_phone_number: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -246,7 +246,7 @@ export def "2015-11-01-enterprise-should-block get" [
 # POST /api/2015-11-01/Enterprise/UpsertUser
 # operationId: EnterpriseApi_UpsertUser
 # --QuietHourList item shape: {DayOfWeekList?: list<string>, DurationMin?: int, StartHourLocal?: int, StartMinLocal?: int, TimeZoneName?: string}
-export def "2015-11-01-enterprise-upsert-user update" [
+export def "enterprise-api-upsert-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -301,7 +301,7 @@ export def "2015-11-01-enterprise-upsert-user update" [
 #
 # POST /api/2015-11-01/Report
 # operationId: Reputation_Report
-export def "2015-11-01-report create-reputation" [
+export def "reputation-report" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -350,7 +350,7 @@ export def "2015-11-01-report create-reputation" [
 #
 # GET /api/2015-11-01/Reputation/{phoneNumber}
 # operationId: Reputation_Reputation
-export def "2015-11-01-reputation get" [
+export def "reputation-reputation" [
   phone_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

@@ -97,7 +97,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "content list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-content-aspect-id" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -120,7 +120,7 @@ export def commands []: nothing -> table {
 # Describes the documents and directories available within a specific 'aspect' (content group) of the BCLaws library
 #
 # GET /content/{aspectId}
-export def "content list" [
+export def "get-content-aspect-id" [
   aspect_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -155,7 +155,7 @@ export def "content list" [
 # Lists the metadata available for the specified index or directory from the BCLaws legislative respository
 #
 # GET /content/{aspectId}/{civixDocumentId}
-export def "content get" [
+export def "get-content-aspect-id-civix-document-id" [
   aspect_id: string
   civix_document_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -192,7 +192,7 @@ export def "content get" [
 # Retrieves a specific document from the BCLaws legislative repository (HTML format)
 #
 # GET /document/id/{aspectId}/{civixIndexId}/{civixDocumentId}
-export def "document-id get" [
+export def "get-document-id-aspect-id-civix-index-id-civix-document-id" [
   aspect_id: string
   civix_index_id: string
   civix_document_id: string
@@ -231,7 +231,7 @@ export def "document-id get" [
 # Retrieves a specific document from the BCLaws legislative repository with search text highlighted (HTML format)
 #
 # GET /document/id/{aspectId}/{civixIndexId}/{civixDocumentId}/search/{searchString}
-export def "document-id-search get" [
+export def "get-document-id-aspect-id-civix-index-id-civix-document-id-search-search-string" [
   aspect_id: string
   civix_index_id: string
   civix_document_id: string
@@ -272,7 +272,7 @@ export def "document-id-search get" [
 # Retrieves a specific document from the BCLaws legislative repository (XML format)
 #
 # GET /document/id/{aspectId}/{civixIndexId}/{civixDocumentId}/xml
-export def "document-id-xml get" [
+export def "get-document-id-aspect-id-civix-index-id-civix-document-id-xml" [
   aspect_id: string
   civix_index_id: string
   civix_document_id: string
@@ -311,7 +311,7 @@ export def "document-id-xml get" [
 # Retrieves a specific document from the BCLaws legislative repository with search text highlighted (XML format)
 #
 # GET /document/id/{aspectId}/{civixIndexId}/{civixDocumentId}/xml/search/{searchString}
-export def "document-id-xml-search get" [
+export def "get-document-id-aspect-id-civix-index-id-civix-document-id-xml-search-search-string" [
   aspect_id: string
   civix_index_id: string
   civix_document_id: string
@@ -352,7 +352,7 @@ export def "document-id-xml-search get" [
 # A listing of metadata available for the specified aspect and search term from the BCLaws legislative repository
 #
 # GET /search/{aspectId}/fullsearch
-export def "search-fullsearch get" [
+export def "get-search-aspect-id-fullsearch" [
   aspect_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

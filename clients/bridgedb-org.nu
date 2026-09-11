@@ -105,7 +105,7 @@ def data-source-completer [] { ["Ag" "Ca" "Ce" "Cg" "Ch" "Ck" "Cks" "Cpc" "Cs" "
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "attribute-search get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-organism-attribute-search-query" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -128,7 +128,7 @@ export def commands []: nothing -> table {
 # Returns a list of xrefs and associated attributes that contain the query string for a given organism. Results are not restricted to exact matches. Optionally limit results to a specified number per data source, or by the type of attribute. See possible attribute types via /{organism}/attributeSet.
 #
 # GET /{organism}/attributeSearch/{query}
-export def "attribute-search get" [
+export def "get-organism-attribute-search-query" [
   organism: string
   query: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -168,7 +168,7 @@ export def "attribute-search get" [
 # Returns the supported attributes to the given Organism.
 #
 # GET /{organism}/attributeSet
-export def "attribute-set get" [
+export def "get-organism-attribute-set" [
   organism: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -203,7 +203,7 @@ export def "attribute-set get" [
 # Returns the attributes for a given identifier, data source, organism. Optionally display only a specified attribute
 #
 # GET /{organism}/attributes/{systemCode}/{identifier}
-export def "attributes get" [
+export def "get-organism-attributes-system-code-identifier" [
   organism: string
   system_code: string
   identifier: string
@@ -244,7 +244,7 @@ export def "attributes get" [
 # Returns `true` or `false` based on whether or not /{organism}/search/{query} is supported for a given organism.
 #
 # GET /{organism}/isFreeSearchSupported
-export def "is-free-search-supported get" [
+export def "get-organism-is-free-search-supported" [
   organism: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -279,7 +279,7 @@ export def "is-free-search-supported get" [
 # Returns `true` or `false` based on whether or not /{organism}/xrefs/{systemCode}/{identifier} would possibly return a {targetSystemCode} result given a {sourceSystemCode} query. This function basically combines the results of /{organism}/sourceDataSources and /{organism}/targetDataSources into a single boolean result.
 #
 # GET /{organism}/isMappingSupported/{sourceSystemCode}/{targetSystemCode}
-export def "is-mapping-supported get" [
+export def "get-organism-is-mapping-supported-source-system-code-target-system-code" [
   organism: string
   source_system_code: string
   target_system_code: string
@@ -318,7 +318,7 @@ export def "is-mapping-supported get" [
 # Returns the list of properties available for a given organism
 #
 # GET /{organism}/properties
-export def "properties get" [
+export def "get-organism-properties" [
   organism: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -353,7 +353,7 @@ export def "properties get" [
 # Returns a list of xrefs with identifiers that contain the query string for a given organism. Results are not restricted to exact matches. Optionally limit results to a specified number per data source.
 #
 # GET /{organism}/search/{query}
-export def "search get" [
+export def "get-organism-search-query" [
   organism: string
   query: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -392,7 +392,7 @@ export def "search get" [
 # Returns a list of data sources available as xref sources for a given organism.
 #
 # GET /{organism}/sourceDataSources
-export def "source-data-sources get" [
+export def "get-organism-source-data-sources" [
   organism: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -427,7 +427,7 @@ export def "source-data-sources get" [
 # Returns a list of data sources available as xref targets for a given organism.
 #
 # GET /{organism}/targetDataSources
-export def "target-data-sources get" [
+export def "get-organism-target-data-sources" [
   organism: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -462,7 +462,7 @@ export def "target-data-sources get" [
 # Returns `true` or `false` based on whether or not an xref exists in the database given an identifier, data source, and organism.
 #
 # GET /{organism}/xrefExists/{systemCode}/{identifier}
-export def "xref-exists get" [
+export def "get-organism-xref-exists-system-code-identifier" [
   organism: string
   system_code: string
   identifier: string
@@ -501,7 +501,7 @@ export def "xref-exists get" [
 # Returns a list of xrefs that map to a given identifier, data source, and organism.
 #
 # GET /{organism}/xrefs/{systemCode}/{identifier}
-export def "xrefs get" [
+export def "get-organism-xrefs-system-code-identifier" [
   organism: string
   system_code: string
   identifier: string
@@ -542,7 +542,7 @@ export def "xrefs get" [
 # Returns a list of xrefs, per identifier, that maps to a given list of identifiers an data source given an organism.
 #
 # POST /{organism}/xrefsBatch
-export def "xrefs-batch create-by-organism" [
+export def "post-organism-xrefs-batch" [
   organism: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -583,7 +583,7 @@ export def "xrefs-batch create-by-organism" [
 # Returns a list of xrefs, that maps to a given list of identifiers to a given data source and organism.
 #
 # POST /{organism}/xrefsBatch/{systemCode}
-export def "xrefs-batch create-by-organism-system-code" [
+export def "post-organism-xrefs-batch-system-code" [
   organism: string
   system_code: string
   --base-url(-b): string@base-url-completer # API base URL

@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms-blobservices get-blob-services" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "blob-services-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -122,7 +122,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Storage.Admin/farms/{farmId}/blobservices/{serviceType}
 # operationId: BlobServices_Get
-export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms-blobservices get-blob-services" [
+export def "blob-services-get" [
   subscription_id: string
   resource_group_name: string
   farm_id: string
@@ -166,7 +166,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Storage.Admin/farms/{farmId}/blobservices/{serviceType}/metricdefinitions
 # operationId: BlobServices_ListMetricDefinitions
-export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms-blobservices-metricdefinitions list-blob-services-metric-definitions" [
+export def "blob-services-list-metric-definitions" [
   subscription_id: string
   resource_group_name: string
   farm_id: string
@@ -210,7 +210,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Storage.Admin/farms/{farmId}/blobservices/{serviceType}/metrics
 # operationId: BlobServices_ListMetrics
-export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms-blobservices-metrics list-blob-services" [
+export def "blob-services-list-metrics" [
   subscription_id: string
   resource_group_name: string
   farm_id: string

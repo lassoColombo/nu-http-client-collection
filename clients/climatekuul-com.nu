@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "airtravel-coordinates create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "airtravel-coordinates" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -128,7 +128,7 @@ export def commands []: nothing -> table {
 #
 # POST /airtravelCoordinates
 # operationId: airtravelCoordinates
-export def "airtravel-coordinates create" [
+export def "airtravel-coordinates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -179,7 +179,7 @@ export def "airtravel-coordinates create" [
 #
 # PATCH /airtravelCoordinates/confirmCarbonOffset
 # operationId: confirmCarbonOffset4
-export def "airtravel-coordinates-confirm-carbon-offset confirm-offset4" [
+export def "confirm-carbon-offset4" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -222,7 +222,7 @@ export def "airtravel-coordinates-confirm-carbon-offset confirm-offset4" [
 #
 # PATCH /airtravelCoordinates/confirmPayment
 # operationId: confirmPayment4
-export def "airtravel-coordinates-confirm-payment confirm-payment4" [
+export def "confirm-payment4" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -265,7 +265,7 @@ export def "airtravel-coordinates-confirm-payment confirm-payment4" [
 #
 # PATCH /airtravelCoordinates/confirmPlanting
 # operationId: confirmsPlanting4
-export def "airtravel-coordinates-confirm-planting update-planting4" [
+export def "confirms-planting4" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -307,7 +307,7 @@ export def "airtravel-coordinates-confirm-planting update-planting4" [
 #
 # PATCH /airtravelCoordinates/confirmTransaction
 # operationId: confirmPaymentOfTransaction4
-export def "airtravel-coordinates-confirm-transaction confirm-payment-of-transaction4" [
+export def "confirm-payment-of-transaction4" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -350,7 +350,7 @@ export def "airtravel-coordinates-confirm-transaction confirm-payment-of-transac
 # --leg1 shape: {destination_airport_code: string, origin_airport_code: string, travel_class: string}
 # --leg2 shape: {destination_airport_code: string, origin_airport_code: string, travel_class: string}
 # --leg3 shape: {destination_airport_code: string, origin_airport_code: string, travel_class: string}
-export def "airtravel-multileg create" [
+export def "airtravel-multileg" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -398,7 +398,7 @@ export def "airtravel-multileg create" [
 #
 # PATCH /airtravelMultileg/confirmCarbonOffset
 # operationId: confirmCarbonOffset3
-export def "airtravel-multileg-confirm-carbon-offset confirm-offset3" [
+export def "confirm-carbon-offset3" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -441,7 +441,7 @@ export def "airtravel-multileg-confirm-carbon-offset confirm-offset3" [
 #
 # PATCH /airtravelMultileg/confirmPayment
 # operationId: confirmPayment3
-export def "airtravel-multileg-confirm-payment confirm-payment3" [
+export def "confirm-payment3" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -484,7 +484,7 @@ export def "airtravel-multileg-confirm-payment confirm-payment3" [
 #
 # PATCH /airtravelMultileg/confirmPlanting
 # operationId: confirmsPlanting3
-export def "airtravel-multileg-confirm-planting update-planting3" [
+export def "confirms-planting3" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -526,7 +526,7 @@ export def "airtravel-multileg-confirm-planting update-planting3" [
 #
 # PATCH /airtravelMultileg/confirmTransaction
 # operationId: confirmPaymentOfTransaction3
-export def "airtravel-multileg-confirm-transaction confirm-payment-of-transaction3" [
+export def "confirm-payment-of-transaction3" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -566,7 +566,7 @@ export def "airtravel-multileg-confirm-transaction confirm-payment-of-transactio
 #
 # POST /ecommerceDelivery
 # operationId: ecommerceDelivery
-export def "ecommerce-delivery create" [
+export def "ecommerce-delivery" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -618,7 +618,7 @@ export def "ecommerce-delivery create" [
 #
 # PATCH /ecommerceDelivery/confirmCarbonOffset
 # operationId: confirmCarbonOffset1
-export def "ecommerce-delivery-confirm-carbon-offset confirm-offset1" [
+export def "confirm-carbon-offset1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -661,7 +661,7 @@ export def "ecommerce-delivery-confirm-carbon-offset confirm-offset1" [
 #
 # PATCH /ecommerceDelivery/confirmPayment
 # operationId: confirmPayment1
-export def "ecommerce-delivery-confirm-payment confirm-payment1" [
+export def "confirm-payment1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -704,7 +704,7 @@ export def "ecommerce-delivery-confirm-payment confirm-payment1" [
 #
 # PATCH /ecommerceDelivery/confirmPlanting
 # operationId: confirmsPlanting2
-export def "ecommerce-delivery-confirm-planting update-planting2" [
+export def "confirms-planting2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -746,7 +746,7 @@ export def "ecommerce-delivery-confirm-planting update-planting2" [
 #
 # PATCH /ecommerceDelivery/confirmTransaction
 # operationId: confirmPaymentOfTransaction1
-export def "ecommerce-delivery-confirm-transaction confirm-payment-of-transaction1" [
+export def "confirm-payment-of-transaction1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -786,7 +786,7 @@ export def "ecommerce-delivery-confirm-transaction confirm-payment-of-transactio
 #
 # POST /requestApiKey
 # operationId: requestApiKey
-export def "request-api-key request" [
+export def "request-api-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -830,7 +830,7 @@ export def "request-api-key request" [
 #
 # POST /roadDistance
 # operationId: roadDistance
-export def "road-distance create" [
+export def "road-distance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -876,7 +876,7 @@ export def "road-distance create" [
 #
 # PATCH /roadDistance/confirmCarbonOffset
 # operationId: confirmCarbonOffset5
-export def "road-distance-confirm-carbon-offset confirm-offset5" [
+export def "confirm-carbon-offset5" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -919,7 +919,7 @@ export def "road-distance-confirm-carbon-offset confirm-offset5" [
 #
 # PATCH /roadDistance/confirmPayment
 # operationId: confirmPayment5
-export def "road-distance-confirm-payment confirm-payment5" [
+export def "confirm-payment5" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -962,7 +962,7 @@ export def "road-distance-confirm-payment confirm-payment5" [
 #
 # PATCH /roadDistance/confirmPlanting
 # operationId: confirmsPlanting5
-export def "road-distance-confirm-planting update-planting5" [
+export def "confirms-planting5" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1004,7 +1004,7 @@ export def "road-distance-confirm-planting update-planting5" [
 #
 # PATCH /roadDistance/confirmTransaction
 # operationId: confirmPaymentOfTransaction5
-export def "road-distance-confirm-transaction confirm-payment-of-transaction5" [
+export def "confirm-payment-of-transaction5" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1044,7 +1044,7 @@ export def "road-distance-confirm-transaction confirm-payment-of-transaction5" [
 #
 # POST /urbanDelivery
 # operationId: urbanDelivery
-export def "urban-delivery create" [
+export def "urban-delivery" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1090,7 +1090,7 @@ export def "urban-delivery create" [
 #
 # PATCH /urbanDelivery/confirmCarbonOffset
 # operationId: confirmCarbonOffset
-export def "urban-delivery-confirm-carbon-offset confirm" [
+export def "confirm-carbon-offset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1133,7 +1133,7 @@ export def "urban-delivery-confirm-carbon-offset confirm" [
 #
 # PATCH /urbanDelivery/confirmPayment
 # operationId: confirmPayment
-export def "urban-delivery-confirm-payment confirm" [
+export def "confirm-payment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1176,7 +1176,7 @@ export def "urban-delivery-confirm-payment confirm" [
 #
 # PATCH /urbanDelivery/confirmPlanting
 # operationId: confirmsPlanting
-export def "urban-delivery-confirm-planting update" [
+export def "confirms-planting" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1218,7 +1218,7 @@ export def "urban-delivery-confirm-planting update" [
 #
 # PATCH /urbanDelivery/confirmTransaction
 # operationId: confirmPaymentOfTransaction
-export def "urban-delivery-confirm-transaction confirm-payment" [
+export def "confirm-payment-of-transaction" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

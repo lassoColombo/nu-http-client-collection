@@ -118,7 +118,7 @@ def x-amz-target-completer-17 [] { ["CodeStar_20170419.UpdateUserProfile"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-associate-team-member" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associate-team-member" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -142,7 +142,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AssociateTeamMember
-export def "api create-associate-team-member" [
+export def "associate-team-member" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -194,7 +194,7 @@ export def "api create-associate-team-member" [
 #
 # POST /
 # operationId: CreateProject
-export def "api create-project" [
+export def "create-project" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -248,7 +248,7 @@ export def "api create-project" [
 #
 # POST /
 # operationId: CreateUserProfile
-export def "api create-user-profile" [
+export def "create-user-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -299,7 +299,7 @@ export def "api create-user-profile" [
 #
 # POST /
 # operationId: DeleteProject
-export def "api delete-project" [
+export def "delete-project" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -349,7 +349,7 @@ export def "api delete-project" [
 #
 # POST /
 # operationId: DeleteUserProfile
-export def "api delete-user-profile" [
+export def "delete-user-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -397,7 +397,7 @@ export def "api delete-user-profile" [
 #
 # POST /
 # operationId: DescribeProject
-export def "api get-project" [
+export def "describe-project" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -445,7 +445,7 @@ export def "api get-project" [
 #
 # POST /
 # operationId: DescribeUserProfile
-export def "api get-user-profile" [
+export def "describe-user-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -493,7 +493,7 @@ export def "api get-user-profile" [
 #
 # POST /
 # operationId: DisassociateTeamMember
-export def "api create-disassociate-team-member" [
+export def "disassociate-team-member" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -542,7 +542,7 @@ export def "api create-disassociate-team-member" [
 #
 # POST /
 # operationId: ListProjects
-export def "api list-projects" [
+export def "list-projects" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -591,7 +591,7 @@ export def "api list-projects" [
 #
 # POST /
 # operationId: ListResources
-export def "api list-resources" [
+export def "list-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -641,7 +641,7 @@ export def "api list-resources" [
 #
 # POST /
 # operationId: ListTagsForProject
-export def "api list-tags-for-project" [
+export def "list-tags-for-project" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -691,7 +691,7 @@ export def "api list-tags-for-project" [
 #
 # POST /
 # operationId: ListTeamMembers
-export def "api list-team-members" [
+export def "list-team-members" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -741,7 +741,7 @@ export def "api list-team-members" [
 #
 # POST /
 # operationId: ListUserProfiles
-export def "api list-user-profiles" [
+export def "list-user-profiles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -790,7 +790,7 @@ export def "api list-user-profiles" [
 #
 # POST /
 # operationId: TagProject
-export def "api tag-project" [
+export def "tag-project" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -839,7 +839,7 @@ export def "api tag-project" [
 #
 # POST /
 # operationId: UntagProject
-export def "api untag-project" [
+export def "untag-project" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -888,7 +888,7 @@ export def "api untag-project" [
 #
 # POST /
 # operationId: UpdateProject
-export def "api update-project" [
+export def "update-project" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -938,7 +938,7 @@ export def "api update-project" [
 #
 # POST /
 # operationId: UpdateTeamMember
-export def "api update-team-member" [
+export def "update-team-member" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -989,7 +989,7 @@ export def "api update-team-member" [
 #
 # POST /
 # operationId: UpdateUserProfile
-export def "api update-user-profile" [
+export def "update-user-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

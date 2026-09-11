@@ -109,7 +109,7 @@ def sort-completer-5 [] { ["-city" "-country" "-label" "city" "country" "label"]
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "categories get-list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "fetch-all-categories" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -133,7 +133,7 @@ export def commands []: nothing -> table {
 #
 # GET /categories
 # operationId: fetchAllCategories
-export def "categories get-list" [
+export def "fetch-all-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -175,7 +175,7 @@ export def "categories get-list" [
 #
 # GET /categories/{category_id}
 # operationId: fetchOneCategory
-export def "categories get-one" [
+export def "fetch-one-category" [
   category_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -214,7 +214,7 @@ export def "categories get-one" [
 #
 # GET /channels
 # operationId: fetchAllChannels
-export def "channels get-list" [
+export def "fetch-all-channels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -256,7 +256,7 @@ export def "channels get-list" [
 #
 # GET /channels/{channel_id}
 # operationId: fetchOneChannel
-export def "channels get-one" [
+export def "fetch-one-channel" [
   channel_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -295,7 +295,7 @@ export def "channels get-one" [
 #
 # GET /events
 # operationId: fetchAllEvents
-export def "events get-list" [
+export def "fetch-all-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -339,7 +339,7 @@ export def "events get-list" [
 #
 # GET /events/{event_id}
 # operationId: fetchOneEvent
-export def "events get-one" [
+export def "fetch-one-event" [
   event_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -378,7 +378,7 @@ export def "events get-one" [
 #
 # GET /events/{event_id}/capacities
 # operationId: fetchAllEventsCapacities
-export def "events-capacities get-list" [
+export def "fetch-all-events-capacities" [
   event_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -418,7 +418,7 @@ export def "events-capacities get-list" [
 #
 # GET /events/{event_id}/capacities/{capacity_id}
 # operationId: fetchOneEventCapacity
-export def "events-capacities get-one" [
+export def "fetch-one-event-capacity" [
   event_id: int
   capacity_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -458,7 +458,7 @@ export def "events-capacities get-one" [
 #
 # GET /events/{event_id}/categories
 # operationId: fetchAllEventsCategories
-export def "events-categories get-list" [
+export def "fetch-all-events-categories" [
   event_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -497,7 +497,7 @@ export def "events-categories get-list" [
 #
 # GET /events/{event_id}/categories/{category_id}
 # operationId: fetchOneEventCategory
-export def "events-categories get-one" [
+export def "fetch-one-event-category" [
   event_id: int
   category_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -537,7 +537,7 @@ export def "events-categories get-one" [
 #
 # GET /events/{event_id}/channels
 # operationId: fetchAllEventsChannels
-export def "events-channels get-list" [
+export def "fetch-all-events-channels" [
   event_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -576,7 +576,7 @@ export def "events-channels get-list" [
 #
 # GET /events/{event_id}/channels/{channel_id}
 # operationId: fetchOneEventChannel
-export def "events-channels get-one" [
+export def "fetch-one-event-channel" [
   event_id: int
   channel_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -614,7 +614,7 @@ export def "events-channels get-one" [
 #
 # GET /events/{event_id}/promotions
 # operationId: fetchAllEventsPromotions
-export def "events-promotions get-list" [
+export def "fetch-all-events-promotions" [
   event_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -661,7 +661,7 @@ export def "events-promotions get-list" [
 #
 # GET /events/{event_id}/ticket-counts
 # operationId: fetchAllTicketCounts
-export def "events-ticket-counts get-list" [
+export def "fetch-all-ticket-counts" [
   event_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -704,7 +704,7 @@ export def "events-ticket-counts get-list" [
 #
 # GET /events/{event_id}/ticket-counts/detailed
 # operationId: fetchAllDetailedTicketCounts
-export def "events-ticket-counts-detailed get-list" [
+export def "fetch-all-detailed-ticket-counts" [
   event_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -747,7 +747,7 @@ export def "events-ticket-counts-detailed get-list" [
 #
 # GET /events/{event_id}/ticket-counts/detailed/{ticket_count_id}
 # operationId: fetchOneDetailedTicketCount
-export def "events-ticket-counts-detailed get-one" [
+export def "fetch-one-detailed-ticket-count" [
   event_id: int
   ticket_count_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -787,7 +787,7 @@ export def "events-ticket-counts-detailed get-one" [
 #
 # GET /events/{event_id}/ticket-counts/{ticket_count_id}
 # operationId: fetchOneTicketCount
-export def "events-ticket-counts get-one" [
+export def "fetch-one-ticket-count" [
   event_id: int
   ticket_count_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -827,7 +827,7 @@ export def "events-ticket-counts get-one" [
 #
 # GET /price-ranges
 # operationId: fetchAllPriceRanges
-export def "price-ranges get-list" [
+export def "fetch-all-price-ranges" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -869,7 +869,7 @@ export def "price-ranges get-list" [
 #
 # GET /price-ranges/{price_range_id}
 # operationId: fetchOnePriceRange
-export def "price-ranges get-one" [
+export def "fetch-one-price-range" [
   price_range_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -908,7 +908,7 @@ export def "price-ranges get-one" [
 #
 # GET /promotions
 # operationId: fetchAllPromotions
-export def "promotions get-list" [
+export def "fetch-all-promotions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -953,7 +953,7 @@ export def "promotions get-list" [
 #
 # GET /promotions/{promotion_id}
 # operationId: fetchOnePromotion
-export def "promotions get-one" [
+export def "fetch-one-promotion" [
   promotion_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -992,7 +992,7 @@ export def "promotions get-one" [
 #
 # GET /series
 # operationId: fetchAllSeries
-export def "series get-list" [
+export def "fetch-all-series" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1036,7 +1036,7 @@ export def "series get-list" [
 #
 # GET /series/{series_id}
 # operationId: fetchOneSeries
-export def "series get-one" [
+export def "fetch-one-series" [
   series_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1075,7 +1075,7 @@ export def "series get-one" [
 #
 # GET /series/{series_id}/events
 # operationId: fetchAllSeriesEvents
-export def "series-events get-list" [
+export def "fetch-all-series-events" [
   series_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1120,7 +1120,7 @@ export def "series-events get-list" [
 #
 # GET /series/{series_id}/promotions
 # operationId: fetchAllSeriesPromotions
-export def "series-promotions get-list" [
+export def "fetch-all-series-promotions" [
   series_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1167,7 +1167,7 @@ export def "series-promotions get-list" [
 #
 # GET /venues
 # operationId: fetchAllVenues
-export def "venues get-list" [
+export def "fetch-all-venues" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1211,7 +1211,7 @@ export def "venues get-list" [
 #
 # GET /venues/{venue_id}
 # operationId: fetchOneVenue
-export def "venues get-one" [
+export def "fetch-one-venue" [
   venue_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1250,7 +1250,7 @@ export def "venues get-one" [
 #
 # GET /venues/{venue_id}/events
 # operationId: fetchAllVenuesEvents
-export def "venues-events get-list" [
+export def "fetch-all-venues-events" [
   venue_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

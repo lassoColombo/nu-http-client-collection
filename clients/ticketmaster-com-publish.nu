@@ -108,7 +108,7 @@ def source-completer [] { ["ticketmaster"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "publish-attractions publish" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "publish-attraction" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -135,7 +135,7 @@ export def commands []: nothing -> table {
 # --classifications item shape: {genre?: record, primary?: bool, segment?: record, subGenre?: record, subType?: record, type?: record}
 # --images item shape: {attribution?: string, domains?: list<string>, fallback?: bool, height?: int, ratio?: "16_9"|"3_2"|"4_3", url?: string, width?: int}
 # --source shape: {id?: string, name?: string}
-export def "publish-attractions publish" [
+export def "publish-attraction" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -190,7 +190,7 @@ export def "publish-attractions publish" [
 # PATCH /publish/v2/attractions/{id}
 # operationId: patchAttraction
 # --changes item shape: {from?: string, op: "add"|"remove"|"replace"|"move"|"copy"|"test", path: string, value?: record}
-export def "publish-attractions update" [
+export def "patch-attraction" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -240,7 +240,7 @@ export def "publish-attractions update" [
 # operationId: publishAttractionVideos
 # --licensingInformation shape: {license: string, regionRestriction?: record}
 # --source shape: {id?: string, name?: string}
-export def "publish-attractions-videos publish" [
+export def "publish-attraction-videos" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -287,7 +287,7 @@ export def "publish-attractions-videos publish" [
 # POST /publish/v2/entitlements
 # operationId: publishEntitlements
 # --relatedEntitySource shape: {id?: string, name?: string}
-export def "publish-entitlements publish" [
+export def "publish-entitlements" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -345,7 +345,7 @@ export def "publish-entitlements publish" [
 # --sales shape: {presales?: list, public?: record}
 # --source shape: {id?: string, name?: string}
 # --venue shape: {accessibleSeatingDetails?: record, active?: bool, additionalInfos?: record, address?: record, boxOfficeInfo?: record, city?: record, country?: record, currency?: string, descriptions?: record, discoverable?: bool, distance?: float, dma?: list, generalInfo?: record, images?: list, location?: record, markets?: list, names?: record, parkingDetails?: record, postalCode?: string, references?: record, relationships?: list, social?: record, source?: record, state?: record, test?: bool, ... (5 more fields)}
-export def "publish-events publish" [
+export def "publish-event" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -413,7 +413,7 @@ export def "publish-events publish" [
 # PATCH /publish/v2/events/{id}
 # operationId: patchEvent
 # --changes item shape: {from?: string, op: "add"|"remove"|"replace"|"move"|"copy"|"test", path: string, value?: record}
-export def "publish-events update" [
+export def "patch-event" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -463,7 +463,7 @@ export def "publish-events update" [
 # operationId: publishEventVideos
 # --licensingInformation shape: {license: string, regionRestriction?: record}
 # --source shape: {id?: string, name?: string}
-export def "publish-events-videos publish" [
+export def "publish-event-videos" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -510,7 +510,7 @@ export def "publish-events-videos publish" [
 # POST /publish/v2/extensions
 # operationId: publishExtension
 # --relatedEntitySource shape: {id?: string, name?: string}
-export def "publish-extensions publish" [
+export def "publish-extension" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -569,7 +569,7 @@ export def "publish-extensions publish" [
 # --social shape: {twitter?: record}
 # --source shape: {id?: string, name?: string}
 # --state shape: {names?: record, stateCode?: string}
-export def "publish-venues publish" [
+export def "publish-venue" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -640,7 +640,7 @@ export def "publish-venues publish" [
 # PATCH /publish/v2/venues/{id}
 # operationId: patchVenue
 # --changes item shape: {from?: string, op: "add"|"remove"|"replace"|"move"|"copy"|"test", path: string, value?: record}
-export def "publish-venues update" [
+export def "patch-venue" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

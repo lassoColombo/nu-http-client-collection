@@ -177,7 +177,7 @@ def x-amz-target-completer-76 [] { ["DeviceFarm_20150623.UpdateVPCEConfiguration
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-device-pool" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-device-pool" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -201,7 +201,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CreateDevicePool
-export def "api create-device-pool" [
+export def "create-device-pool" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -253,7 +253,7 @@ export def "api create-device-pool" [
 #
 # POST /
 # operationId: CreateInstanceProfile
-export def "api create-instance-profile" [
+export def "create-instance-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -305,7 +305,7 @@ export def "api create-instance-profile" [
 #
 # POST /
 # operationId: CreateNetworkProfile
-export def "api create-network-profile" [
+export def "create-network-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -364,7 +364,7 @@ export def "api create-network-profile" [
 #
 # POST /
 # operationId: CreateProject
-export def "api create-project" [
+export def "create-project" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -414,7 +414,7 @@ export def "api create-project" [
 #
 # POST /
 # operationId: CreateRemoteAccessSession
-export def "api create-remote-access-session" [
+export def "create-remote-access-session" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -473,7 +473,7 @@ export def "api create-remote-access-session" [
 #
 # POST /
 # operationId: CreateTestGridProject
-export def "api create-test-grid-project" [
+export def "create-test-grid-project" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -523,7 +523,7 @@ export def "api create-test-grid-project" [
 #
 # POST /
 # operationId: CreateTestGridUrl
-export def "api create-test-grid-url" [
+export def "create-test-grid-url" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -572,7 +572,7 @@ export def "api create-test-grid-url" [
 #
 # POST /
 # operationId: CreateUpload
-export def "api create-upload" [
+export def "create-upload" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -623,7 +623,7 @@ export def "api create-upload" [
 #
 # POST /
 # operationId: CreateVPCEConfiguration
-export def "api create-vpce-configuration" [
+export def "create-vpce-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -674,7 +674,7 @@ export def "api create-vpce-configuration" [
 #
 # POST /
 # operationId: DeleteDevicePool
-export def "api delete-device-pool" [
+export def "delete-device-pool" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -722,7 +722,7 @@ export def "api delete-device-pool" [
 #
 # POST /
 # operationId: DeleteInstanceProfile
-export def "api delete-instance-profile" [
+export def "delete-instance-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -770,7 +770,7 @@ export def "api delete-instance-profile" [
 #
 # POST /
 # operationId: DeleteNetworkProfile
-export def "api delete-network-profile" [
+export def "delete-network-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -818,7 +818,7 @@ export def "api delete-network-profile" [
 #
 # POST /
 # operationId: DeleteProject
-export def "api delete-project" [
+export def "delete-project" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -866,7 +866,7 @@ export def "api delete-project" [
 #
 # POST /
 # operationId: DeleteRemoteAccessSession
-export def "api delete-remote-access-session" [
+export def "delete-remote-access-session" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -914,7 +914,7 @@ export def "api delete-remote-access-session" [
 #
 # POST /
 # operationId: DeleteRun
-export def "api delete-run" [
+export def "delete-run" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -962,7 +962,7 @@ export def "api delete-run" [
 #
 # POST /
 # operationId: DeleteTestGridProject
-export def "api delete-test-grid-project" [
+export def "delete-test-grid-project" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1010,7 +1010,7 @@ export def "api delete-test-grid-project" [
 #
 # POST /
 # operationId: DeleteUpload
-export def "api delete-upload" [
+export def "delete-upload" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1058,7 +1058,7 @@ export def "api delete-upload" [
 #
 # POST /
 # operationId: DeleteVPCEConfiguration
-export def "api delete-vpce-configuration" [
+export def "delete-vpce-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1106,7 +1106,7 @@ export def "api delete-vpce-configuration" [
 #
 # POST /
 # operationId: GetAccountSettings
-export def "api get-account-settings" [
+export def "get-account-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1154,7 +1154,7 @@ export def "api get-account-settings" [
 #
 # POST /
 # operationId: GetDevice
-export def "api get-device" [
+export def "get-device" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1202,7 +1202,7 @@ export def "api get-device" [
 #
 # POST /
 # operationId: GetDeviceInstance
-export def "api get-device-instance" [
+export def "get-device-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1250,7 +1250,7 @@ export def "api get-device-instance" [
 #
 # POST /
 # operationId: GetDevicePool
-export def "api get-device-pool" [
+export def "get-device-pool" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1298,7 +1298,7 @@ export def "api get-device-pool" [
 #
 # POST /
 # operationId: GetDevicePoolCompatibility
-export def "api get-device-pool-compatibility" [
+export def "get-device-pool-compatibility" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1350,7 +1350,7 @@ export def "api get-device-pool-compatibility" [
 #
 # POST /
 # operationId: GetInstanceProfile
-export def "api get-instance-profile" [
+export def "get-instance-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1398,7 +1398,7 @@ export def "api get-instance-profile" [
 #
 # POST /
 # operationId: GetJob
-export def "api get-job" [
+export def "get-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1446,7 +1446,7 @@ export def "api get-job" [
 #
 # POST /
 # operationId: GetNetworkProfile
-export def "api get-network-profile" [
+export def "get-network-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1494,7 +1494,7 @@ export def "api get-network-profile" [
 #
 # POST /
 # operationId: GetOfferingStatus
-export def "api get-offering-status" [
+export def "get-offering-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1544,7 +1544,7 @@ export def "api get-offering-status" [
 #
 # POST /
 # operationId: GetProject
-export def "api get-project" [
+export def "get-project" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1592,7 +1592,7 @@ export def "api get-project" [
 #
 # POST /
 # operationId: GetRemoteAccessSession
-export def "api get-remote-access-session" [
+export def "get-remote-access-session" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1640,7 +1640,7 @@ export def "api get-remote-access-session" [
 #
 # POST /
 # operationId: GetRun
-export def "api get-run" [
+export def "get-run" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1688,7 +1688,7 @@ export def "api get-run" [
 #
 # POST /
 # operationId: GetSuite
-export def "api get-suite" [
+export def "get-suite" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1736,7 +1736,7 @@ export def "api get-suite" [
 #
 # POST /
 # operationId: GetTest
-export def "api get-test" [
+export def "get-test" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1784,7 +1784,7 @@ export def "api get-test" [
 #
 # POST /
 # operationId: GetTestGridProject
-export def "api get-test-grid-project" [
+export def "get-test-grid-project" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1832,7 +1832,7 @@ export def "api get-test-grid-project" [
 #
 # POST /
 # operationId: GetTestGridSession
-export def "api get-test-grid-session" [
+export def "get-test-grid-session" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1882,7 +1882,7 @@ export def "api get-test-grid-session" [
 #
 # POST /
 # operationId: GetUpload
-export def "api get-upload" [
+export def "get-upload" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1930,7 +1930,7 @@ export def "api get-upload" [
 #
 # POST /
 # operationId: GetVPCEConfiguration
-export def "api get-vpce-configuration" [
+export def "get-vpce-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1978,7 +1978,7 @@ export def "api get-vpce-configuration" [
 #
 # POST /
 # operationId: InstallToRemoteAccessSession
-export def "api create-install-to-remote-access-session" [
+export def "install-to-remote-access-session" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2027,7 +2027,7 @@ export def "api create-install-to-remote-access-session" [
 #
 # POST /
 # operationId: ListArtifacts
-export def "api list-artifacts" [
+export def "list-artifacts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2079,7 +2079,7 @@ export def "api list-artifacts" [
 #
 # POST /
 # operationId: ListDeviceInstances
-export def "api list-device-instances" [
+export def "list-device-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2128,7 +2128,7 @@ export def "api list-device-instances" [
 #
 # POST /
 # operationId: ListDevicePools
-export def "api list-device-pools" [
+export def "list-device-pools" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2180,7 +2180,7 @@ export def "api list-device-pools" [
 #
 # POST /
 # operationId: ListDevices
-export def "api list-devices" [
+export def "list-devices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2232,7 +2232,7 @@ export def "api list-devices" [
 #
 # POST /
 # operationId: ListInstanceProfiles
-export def "api list-instance-profiles" [
+export def "list-instance-profiles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2281,7 +2281,7 @@ export def "api list-instance-profiles" [
 #
 # POST /
 # operationId: ListJobs
-export def "api list-jobs" [
+export def "list-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2332,7 +2332,7 @@ export def "api list-jobs" [
 #
 # POST /
 # operationId: ListNetworkProfiles
-export def "api list-network-profiles" [
+export def "list-network-profiles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2382,7 +2382,7 @@ export def "api list-network-profiles" [
 #
 # POST /
 # operationId: ListOfferingPromotions
-export def "api list-offering-promotions" [
+export def "list-offering-promotions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2430,7 +2430,7 @@ export def "api list-offering-promotions" [
 #
 # POST /
 # operationId: ListOfferingTransactions
-export def "api list-offering-transactions" [
+export def "list-offering-transactions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2480,7 +2480,7 @@ export def "api list-offering-transactions" [
 #
 # POST /
 # operationId: ListOfferings
-export def "api list-offerings" [
+export def "list-offerings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2530,7 +2530,7 @@ export def "api list-offerings" [
 #
 # POST /
 # operationId: ListProjects
-export def "api list-projects" [
+export def "list-projects" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2581,7 +2581,7 @@ export def "api list-projects" [
 #
 # POST /
 # operationId: ListRemoteAccessSessions
-export def "api list-remote-access-sessions" [
+export def "list-remote-access-sessions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2630,7 +2630,7 @@ export def "api list-remote-access-sessions" [
 #
 # POST /
 # operationId: ListRuns
-export def "api list-runs" [
+export def "list-runs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2681,7 +2681,7 @@ export def "api list-runs" [
 #
 # POST /
 # operationId: ListSamples
-export def "api list-samples" [
+export def "list-samples" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2732,7 +2732,7 @@ export def "api list-samples" [
 #
 # POST /
 # operationId: ListSuites
-export def "api list-suites" [
+export def "list-suites" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2783,7 +2783,7 @@ export def "api list-suites" [
 #
 # POST /
 # operationId: ListTagsForResource
-export def "api list-tags-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2831,7 +2831,7 @@ export def "api list-tags-for-resource" [
 #
 # POST /
 # operationId: ListTestGridProjects
-export def "api list-test-grid-projects" [
+export def "list-test-grid-projects" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2883,7 +2883,7 @@ export def "api list-test-grid-projects" [
 #
 # POST /
 # operationId: ListTestGridSessionActions
-export def "api list-test-grid-session-actions" [
+export def "list-test-grid-session-actions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2936,7 +2936,7 @@ export def "api list-test-grid-session-actions" [
 #
 # POST /
 # operationId: ListTestGridSessionArtifacts
-export def "api list-test-grid-session-artifacts" [
+export def "list-test-grid-session-artifacts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2990,7 +2990,7 @@ export def "api list-test-grid-session-artifacts" [
 #
 # POST /
 # operationId: ListTestGridSessions
-export def "api list-test-grid-sessions" [
+export def "list-test-grid-sessions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3048,7 +3048,7 @@ export def "api list-test-grid-sessions" [
 #
 # POST /
 # operationId: ListTests
-export def "api list-tests" [
+export def "list-tests" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3099,7 +3099,7 @@ export def "api list-tests" [
 #
 # POST /
 # operationId: ListUniqueProblems
-export def "api list-unique-problems" [
+export def "list-unique-problems" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3150,7 +3150,7 @@ export def "api list-unique-problems" [
 #
 # POST /
 # operationId: ListUploads
-export def "api list-uploads" [
+export def "list-uploads" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3202,7 +3202,7 @@ export def "api list-uploads" [
 #
 # POST /
 # operationId: ListVPCEConfigurations
-export def "api list-vpce-configurations" [
+export def "list-vpce-configurations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3251,7 +3251,7 @@ export def "api list-vpce-configurations" [
 #
 # POST /
 # operationId: PurchaseOffering
-export def "api create-purchase-offering" [
+export def "purchase-offering" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3301,7 +3301,7 @@ export def "api create-purchase-offering" [
 #
 # POST /
 # operationId: RenewOffering
-export def "api create-renew-offering" [
+export def "renew-offering" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3350,7 +3350,7 @@ export def "api create-renew-offering" [
 #
 # POST /
 # operationId: ScheduleRun
-export def "api create-schedule-run" [
+export def "schedule-run" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3405,7 +3405,7 @@ export def "api create-schedule-run" [
 #
 # POST /
 # operationId: StopJob
-export def "api stop-job" [
+export def "stop-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3453,7 +3453,7 @@ export def "api stop-job" [
 #
 # POST /
 # operationId: StopRemoteAccessSession
-export def "api stop-remote-access-session" [
+export def "stop-remote-access-session" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3501,7 +3501,7 @@ export def "api stop-remote-access-session" [
 #
 # POST /
 # operationId: StopRun
-export def "api stop-run" [
+export def "stop-run" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3549,7 +3549,7 @@ export def "api stop-run" [
 #
 # POST /
 # operationId: TagResource
-export def "api tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3598,7 +3598,7 @@ export def "api tag-resource" [
 #
 # POST /
 # operationId: UntagResource
-export def "api untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3647,7 +3647,7 @@ export def "api untag-resource" [
 #
 # POST /
 # operationId: UpdateDeviceInstance
-export def "api update-device-instance" [
+export def "update-device-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3697,7 +3697,7 @@ export def "api update-device-instance" [
 #
 # POST /
 # operationId: UpdateDevicePool
-export def "api update-device-pool" [
+export def "update-device-pool" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3750,7 +3750,7 @@ export def "api update-device-pool" [
 #
 # POST /
 # operationId: UpdateInstanceProfile
-export def "api update-instance-profile" [
+export def "update-instance-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3803,7 +3803,7 @@ export def "api update-instance-profile" [
 #
 # POST /
 # operationId: UpdateNetworkProfile
-export def "api update-network-profile" [
+export def "update-network-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3862,7 +3862,7 @@ export def "api update-network-profile" [
 #
 # POST /
 # operationId: UpdateProject
-export def "api update-project" [
+export def "update-project" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3913,7 +3913,7 @@ export def "api update-project" [
 #
 # POST /
 # operationId: UpdateTestGridProject
-export def "api update-test-grid-project" [
+export def "update-test-grid-project" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3964,7 +3964,7 @@ export def "api update-test-grid-project" [
 #
 # POST /
 # operationId: UpdateUpload
-export def "api update-upload" [
+export def "update-upload" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4015,7 +4015,7 @@ export def "api update-upload" [
 #
 # POST /
 # operationId: UpdateVPCEConfiguration
-export def "api update-vpce-configuration" [
+export def "update-vpce-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

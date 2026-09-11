@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "customer-service-metric get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-customer-service-metric" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -122,7 +122,7 @@ export def commands []: nothing -> table {
 #
 # GET /customer_service_metric/{customer_service_metric_type}/{evaluation_type}
 # operationId: getCustomerServiceMetric
-export def "customer-service-metric get" [
+export def "get-customer-service-metric" [
   customer_service_metric_type: string
   evaluation_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -162,7 +162,7 @@ export def "customer-service-metric get" [
 #
 # GET /seller_standards_profile
 # operationId: findSellerStandardsProfiles
-export def "seller-standards-profile find" [
+export def "find-seller-standards-profiles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -196,7 +196,7 @@ export def "seller-standards-profile find" [
 #
 # GET /seller_standards_profile/{program}/{cycle}
 # operationId: getSellerStandardsProfile
-export def "seller-standards-profile get" [
+export def "get-seller-standards-profile" [
   program: string
   cycle: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -234,7 +234,7 @@ export def "seller-standards-profile get" [
 #
 # GET /traffic_report
 # operationId: getTrafficReport
-export def "traffic-report get" [
+export def "get-traffic-report" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

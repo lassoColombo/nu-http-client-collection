@@ -99,7 +99,7 @@ def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "screenshots-comparison-parallel get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-screenshots-target-screenshot-test-id-target-version-id-comparison-parallel-base-version-id" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -122,7 +122,7 @@ export def commands []: nothing -> table {
 # Compare Screenshot Test Versions
 #
 # GET /screenshots/{target_screenshot_test_id}/{target_version_id}/comparison/parallel/{base_version_id}
-export def "screenshots-comparison-parallel get" [
+export def "get-screenshots-target-screenshot-test-id-target-version-id-comparison-parallel-base-version-id" [
   target_screenshot_test_id: int
   target_version_id: int
   base_version_id: int
@@ -165,7 +165,7 @@ export def "screenshots-comparison-parallel get" [
 # Compare Full Screenshot Test
 #
 # GET /screenshots/{target_screenshot_test_id}/{target_version_id}/comparison/{base_result_id}
-export def "screenshots-comparison list" [
+export def "get-screenshots-target-screenshot-test-id-target-version-id-comparison-base-result-id" [
   target_screenshot_test_id: int
   target_version_id: int
   base_result_id: int
@@ -208,7 +208,7 @@ export def "screenshots-comparison list" [
 # Compare Single Screenshot
 #
 # GET /screenshots/{target_screenshot_test_id}/{target_version_id}/{target_result_id}/comparison/{base_result_id}
-export def "screenshots-comparison get" [
+export def "get-screenshots-target-screenshot-test-id-target-version-id-target-result-id-comparison-base-result-id" [
   target_screenshot_test_id: int
   target_version_id: int
   target_result_id: int

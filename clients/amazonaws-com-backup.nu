@@ -120,7 +120,7 @@ def status-completer [] { ["ABORTED" "COMPLETED" "FAILED" "PENDING" "RUNNING"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "legal-holds cancel" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cancel-legal-hold" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -144,7 +144,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /legal-holds/{legalHoldId}
 # operationId: CancelLegalHold
-export def "legal-holds cancel" [
+export def "cancel-legal-hold" [
   legal_hold_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -193,7 +193,7 @@ export def "legal-holds cancel" [
 # PUT /backup/plans/
 # operationId: CreateBackupPlan
 # --BackupPlan shape: {BackupPlanName?: any, Rules?: any, AdvancedBackupSettings?: any}
-export def "backup-plans create" [
+export def "create-backup-plan" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -242,7 +242,7 @@ export def "backup-plans create" [
 #
 # GET /backup/plans/
 # operationId: ListBackupPlans
-export def "backup-plans list" [
+export def "list-backup-plans" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -292,7 +292,7 @@ export def "backup-plans list" [
 # PUT /backup/plans/{backupPlanId}/selections/
 # operationId: CreateBackupSelection
 # --BackupSelection shape: {SelectionName?: any, IamRoleArn?: any, Resources?: any, ListOfTags?: any, NotResources?: any, Conditions?: any}
-export def "backup-plans-selections create" [
+export def "create-backup-selection" [
   backup_plan_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -342,7 +342,7 @@ export def "backup-plans-selections create" [
 #
 # GET /backup/plans/{backupPlanId}/selections/
 # operationId: ListBackupSelections
-export def "backup-plans-selections list" [
+export def "list-backup-selections" [
   backup_plan_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -392,7 +392,7 @@ export def "backup-plans-selections list" [
 #
 # PUT /backup-vaults/{backupVaultName}
 # operationId: CreateBackupVault
-export def "backup-vaults create" [
+export def "create-backup-vault" [
   backup_vault_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -443,7 +443,7 @@ export def "backup-vaults create" [
 #
 # DELETE /backup-vaults/{backupVaultName}
 # operationId: DeleteBackupVault
-export def "backup-vaults delete" [
+export def "delete-backup-vault" [
   backup_vault_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -488,7 +488,7 @@ export def "backup-vaults delete" [
 #
 # GET /backup-vaults/{backupVaultName}
 # operationId: DescribeBackupVault
-export def "backup-vaults get" [
+export def "describe-backup-vault" [
   backup_vault_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -534,7 +534,7 @@ export def "backup-vaults get" [
 # POST /audit/frameworks
 # operationId: CreateFramework
 # --FrameworkControls item shape: {ControlName: any, ControlInputParameters?: any, ControlScope?: any}
-export def "audit-frameworks create" [
+export def "create-framework" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -585,7 +585,7 @@ export def "audit-frameworks create" [
 #
 # GET /audit/frameworks
 # operationId: ListFrameworks
-export def "audit-frameworks list" [
+export def "list-frameworks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -632,7 +632,7 @@ export def "audit-frameworks list" [
 # POST /legal-holds/
 # operationId: CreateLegalHold
 # --RecoveryPointSelection shape: {VaultNames?: any, ResourceIdentifiers?: any, DateRange?: record}
-export def "legal-holds create" [
+export def "create-legal-hold" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -683,7 +683,7 @@ export def "legal-holds create" [
 #
 # GET /legal-holds/
 # operationId: ListLegalHolds
-export def "legal-holds list" [
+export def "list-legal-holds" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -733,7 +733,7 @@ export def "legal-holds list" [
 # operationId: CreateReportPlan
 # --ReportDeliveryChannel shape: {S3BucketName?: any, S3KeyPrefix?: any, Formats?: any}
 # --ReportSetting shape: {ReportTemplate?: any, FrameworkArns?: any, NumberOfFrameworks?: any, Accounts?: any, OrganizationUnits?: any, Regions?: any}
-export def "audit-report-plans create" [
+export def "create-report-plan" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -785,7 +785,7 @@ export def "audit-report-plans create" [
 #
 # GET /audit/report-plans
 # operationId: ListReportPlans
-export def "audit-report-plans list" [
+export def "list-report-plans" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -831,7 +831,7 @@ export def "audit-report-plans list" [
 #
 # DELETE /backup/plans/{backupPlanId}
 # operationId: DeleteBackupPlan
-export def "backup-plans delete" [
+export def "delete-backup-plan" [
   backup_plan_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -877,7 +877,7 @@ export def "backup-plans delete" [
 # POST /backup/plans/{backupPlanId}
 # operationId: UpdateBackupPlan
 # --BackupPlan shape: {BackupPlanName?: any, Rules?: any, AdvancedBackupSettings?: any}
-export def "backup-plans update" [
+export def "update-backup-plan" [
   backup_plan_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -926,7 +926,7 @@ export def "backup-plans update" [
 #
 # DELETE /backup/plans/{backupPlanId}/selections/{selectionId}
 # operationId: DeleteBackupSelection
-export def "backup-plans-selections delete" [
+export def "delete-backup-selection" [
   backup_plan_id: string
   selection_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -973,7 +973,7 @@ export def "backup-plans-selections delete" [
 #
 # GET /backup/plans/{backupPlanId}/selections/{selectionId}
 # operationId: GetBackupSelection
-export def "backup-plans-selections get" [
+export def "get-backup-selection" [
   backup_plan_id: string
   selection_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1020,7 +1020,7 @@ export def "backup-plans-selections get" [
 #
 # DELETE /backup-vaults/{backupVaultName}/access-policy
 # operationId: DeleteBackupVaultAccessPolicy
-export def "backup-vaults-access-policy delete" [
+export def "delete-backup-vault-access-policy" [
   backup_vault_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1065,7 +1065,7 @@ export def "backup-vaults-access-policy delete" [
 #
 # GET /backup-vaults/{backupVaultName}/access-policy
 # operationId: GetBackupVaultAccessPolicy
-export def "backup-vaults-access-policy get" [
+export def "get-backup-vault-access-policy" [
   backup_vault_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1110,7 +1110,7 @@ export def "backup-vaults-access-policy get" [
 #
 # PUT /backup-vaults/{backupVaultName}/access-policy
 # operationId: PutBackupVaultAccessPolicy
-export def "backup-vaults-access-policy update" [
+export def "put-backup-vault-access-policy" [
   backup_vault_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1159,7 +1159,7 @@ export def "backup-vaults-access-policy update" [
 #
 # DELETE /backup-vaults/{backupVaultName}/vault-lock
 # operationId: DeleteBackupVaultLockConfiguration
-export def "backup-vaults-vault-lock delete-configuration" [
+export def "delete-backup-vault-lock-configuration" [
   backup_vault_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1204,7 +1204,7 @@ export def "backup-vaults-vault-lock delete-configuration" [
 #
 # PUT /backup-vaults/{backupVaultName}/vault-lock
 # operationId: PutBackupVaultLockConfiguration
-export def "backup-vaults-vault-lock update-configuration" [
+export def "put-backup-vault-lock-configuration" [
   backup_vault_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1255,7 +1255,7 @@ export def "backup-vaults-vault-lock update-configuration" [
 #
 # DELETE /backup-vaults/{backupVaultName}/notification-configuration
 # operationId: DeleteBackupVaultNotifications
-export def "backup-vaults-notification-configuration delete" [
+export def "delete-backup-vault-notifications" [
   backup_vault_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1300,7 +1300,7 @@ export def "backup-vaults-notification-configuration delete" [
 #
 # GET /backup-vaults/{backupVaultName}/notification-configuration
 # operationId: GetBackupVaultNotifications
-export def "backup-vaults-notification-configuration get" [
+export def "get-backup-vault-notifications" [
   backup_vault_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1345,7 +1345,7 @@ export def "backup-vaults-notification-configuration get" [
 #
 # PUT /backup-vaults/{backupVaultName}/notification-configuration
 # operationId: PutBackupVaultNotifications
-export def "backup-vaults-notification-configuration update" [
+export def "put-backup-vault-notifications" [
   backup_vault_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1395,7 +1395,7 @@ export def "backup-vaults-notification-configuration update" [
 #
 # DELETE /audit/frameworks/{frameworkName}
 # operationId: DeleteFramework
-export def "audit-frameworks delete" [
+export def "delete-framework" [
   framework_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1440,7 +1440,7 @@ export def "audit-frameworks delete" [
 #
 # GET /audit/frameworks/{frameworkName}
 # operationId: DescribeFramework
-export def "audit-frameworks get" [
+export def "describe-framework" [
   framework_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1486,7 +1486,7 @@ export def "audit-frameworks get" [
 # PUT /audit/frameworks/{frameworkName}
 # operationId: UpdateFramework
 # --FrameworkControls item shape: {ControlName: any, ControlInputParameters?: any, ControlScope?: any}
-export def "audit-frameworks update" [
+export def "update-framework" [
   framework_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1537,7 +1537,7 @@ export def "audit-frameworks update" [
 #
 # DELETE /backup-vaults/{backupVaultName}/recovery-points/{recoveryPointArn}
 # operationId: DeleteRecoveryPoint
-export def "backup-vaults-recovery-points delete" [
+export def "delete-recovery-point" [
   backup_vault_name: string
   recovery_point_arn: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1584,7 +1584,7 @@ export def "backup-vaults-recovery-points delete" [
 #
 # GET /backup-vaults/{backupVaultName}/recovery-points/{recoveryPointArn}
 # operationId: DescribeRecoveryPoint
-export def "backup-vaults-recovery-points get" [
+export def "describe-recovery-point" [
   backup_vault_name: string
   recovery_point_arn: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1632,7 +1632,7 @@ export def "backup-vaults-recovery-points get" [
 # POST /backup-vaults/{backupVaultName}/recovery-points/{recoveryPointArn}
 # operationId: UpdateRecoveryPointLifecycle
 # --Lifecycle shape: {MoveToColdStorageAfterDays?: any, DeleteAfterDays?: any}
-export def "backup-vaults-recovery-points update-lifecycle" [
+export def "update-recovery-point-lifecycle" [
   backup_vault_name: string
   recovery_point_arn: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1683,7 +1683,7 @@ export def "backup-vaults-recovery-points update-lifecycle" [
 #
 # DELETE /audit/report-plans/{reportPlanName}
 # operationId: DeleteReportPlan
-export def "audit-report-plans delete" [
+export def "delete-report-plan" [
   report_plan_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1728,7 +1728,7 @@ export def "audit-report-plans delete" [
 #
 # GET /audit/report-plans/{reportPlanName}
 # operationId: DescribeReportPlan
-export def "audit-report-plans get" [
+export def "describe-report-plan" [
   report_plan_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1775,7 +1775,7 @@ export def "audit-report-plans get" [
 # operationId: UpdateReportPlan
 # --ReportDeliveryChannel shape: {S3BucketName?: any, S3KeyPrefix?: any, Formats?: any}
 # --ReportSetting shape: {ReportTemplate?: any, FrameworkArns?: any, NumberOfFrameworks?: any, Accounts?: any, OrganizationUnits?: any, Regions?: any}
-export def "audit-report-plans update" [
+export def "update-report-plan" [
   report_plan_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1827,7 +1827,7 @@ export def "audit-report-plans update" [
 #
 # GET /backup-jobs/{backupJobId}
 # operationId: DescribeBackupJob
-export def "backup-jobs get" [
+export def "describe-backup-job" [
   backup_job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1872,7 +1872,7 @@ export def "backup-jobs get" [
 #
 # POST /backup-jobs/{backupJobId}
 # operationId: StopBackupJob
-export def "backup-jobs stop" [
+export def "stop-backup-job" [
   backup_job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1917,7 +1917,7 @@ export def "backup-jobs stop" [
 #
 # GET /copy-jobs/{copyJobId}
 # operationId: DescribeCopyJob
-export def "copy-jobs get" [
+export def "describe-copy-job" [
   copy_job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1962,7 +1962,7 @@ export def "copy-jobs get" [
 #
 # GET /global-settings
 # operationId: DescribeGlobalSettings
-export def "global-settings get" [
+export def "describe-global-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2005,7 +2005,7 @@ export def "global-settings get" [
 #
 # PUT /global-settings
 # operationId: UpdateGlobalSettings
-export def "global-settings update" [
+export def "update-global-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2052,7 +2052,7 @@ export def "global-settings update" [
 #
 # GET /resources/{resourceArn}
 # operationId: DescribeProtectedResource
-export def "resources get-protected" [
+export def "describe-protected-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2097,7 +2097,7 @@ export def "resources get-protected" [
 #
 # GET /account-settings
 # operationId: DescribeRegionSettings
-export def "account-settings get-region" [
+export def "describe-region-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2140,7 +2140,7 @@ export def "account-settings get-region" [
 #
 # PUT /account-settings
 # operationId: UpdateRegionSettings
-export def "account-settings update-region" [
+export def "update-region-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2188,7 +2188,7 @@ export def "account-settings update-region" [
 #
 # GET /audit/report-jobs/{reportJobId}
 # operationId: DescribeReportJob
-export def "audit-report-jobs get" [
+export def "describe-report-job" [
   report_job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2233,7 +2233,7 @@ export def "audit-report-jobs get" [
 #
 # GET /restore-jobs/{restoreJobId}
 # operationId: DescribeRestoreJob
-export def "restore-jobs get" [
+export def "describe-restore-job" [
   restore_job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2278,7 +2278,7 @@ export def "restore-jobs get" [
 #
 # POST /backup-vaults/{backupVaultName}/recovery-points/{recoveryPointArn}/disassociate
 # operationId: DisassociateRecoveryPoint
-export def "backup-vaults-recovery-points-disassociate create" [
+export def "disassociate-recovery-point" [
   backup_vault_name: string
   recovery_point_arn: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2325,7 +2325,7 @@ export def "backup-vaults-recovery-points-disassociate create" [
 #
 # DELETE /backup-vaults/{backupVaultName}/recovery-points/{recoveryPointArn}/parentAssociation
 # operationId: DisassociateRecoveryPointFromParent
-export def "backup-vaults-recovery-points-parent-association delete-disassociate" [
+export def "disassociate-recovery-point-from-parent" [
   backup_vault_name: string
   recovery_point_arn: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2372,7 +2372,7 @@ export def "backup-vaults-recovery-points-parent-association delete-disassociate
 #
 # GET /backup/plans/{backupPlanId}/toTemplate/
 # operationId: ExportBackupPlanTemplate
-export def "backup-plans-to-template export" [
+export def "export-backup-plan-template" [
   backup_plan_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2417,7 +2417,7 @@ export def "backup-plans-to-template export" [
 #
 # GET /backup/plans/{backupPlanId}/
 # operationId: GetBackupPlan
-export def "backup-plans get" [
+export def "get-backup-plan" [
   backup_plan_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2464,7 +2464,7 @@ export def "backup-plans get" [
 #
 # POST /backup/template/json/toPlan
 # operationId: GetBackupPlanFromJSON
-export def "backup-template-json-to-plan get" [
+export def "get-backup-plan-from-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2511,7 +2511,7 @@ export def "backup-template-json-to-plan get" [
 #
 # GET /backup/template/plans/{templateId}/toPlan
 # operationId: GetBackupPlanFromTemplate
-export def "backup-template-plans-to-plan get" [
+export def "get-backup-plan-from-template" [
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2556,7 +2556,7 @@ export def "backup-template-plans-to-plan get" [
 #
 # GET /legal-holds/{legalHoldId}/
 # operationId: GetLegalHold
-export def "legal-holds get" [
+export def "get-legal-hold" [
   legal_hold_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2601,7 +2601,7 @@ export def "legal-holds get" [
 #
 # GET /backup-vaults/{backupVaultName}/recovery-points/{recoveryPointArn}/restore-metadata
 # operationId: GetRecoveryPointRestoreMetadata
-export def "backup-vaults-recovery-points-restore-metadata get" [
+export def "get-recovery-point-restore-metadata" [
   backup_vault_name: string
   recovery_point_arn: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2648,7 +2648,7 @@ export def "backup-vaults-recovery-points-restore-metadata get" [
 #
 # GET /supported-resource-types
 # operationId: GetSupportedResourceTypes
-export def "supported-resource-types get" [
+export def "get-supported-resource-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2691,7 +2691,7 @@ export def "supported-resource-types get" [
 #
 # GET /backup-jobs/
 # operationId: ListBackupJobs
-export def "backup-jobs list" [
+export def "list-backup-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2749,7 +2749,7 @@ export def "backup-jobs list" [
 #
 # GET /backup/template/plans
 # operationId: ListBackupPlanTemplates
-export def "backup-template-plans list" [
+export def "list-backup-plan-templates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2797,7 +2797,7 @@ export def "backup-template-plans list" [
 #
 # GET /backup/plans/{backupPlanId}/versions/
 # operationId: ListBackupPlanVersions
-export def "backup-plans-versions list" [
+export def "list-backup-plan-versions" [
   backup_plan_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2847,7 +2847,7 @@ export def "backup-plans-versions list" [
 #
 # GET /backup-vaults/
 # operationId: ListBackupVaults
-export def "backup-vaults list" [
+export def "list-backup-vaults" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2895,7 +2895,7 @@ export def "backup-vaults list" [
 #
 # GET /copy-jobs/
 # operationId: ListCopyJobs
-export def "copy-jobs list" [
+export def "list-copy-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2953,7 +2953,7 @@ export def "copy-jobs list" [
 #
 # GET /resources/
 # operationId: ListProtectedResources
-export def "resources list-protected" [
+export def "list-protected-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3001,7 +3001,7 @@ export def "resources list-protected" [
 #
 # GET /backup-vaults/{backupVaultName}/recovery-points/
 # operationId: ListRecoveryPointsByBackupVault
-export def "backup-vaults-recovery-points list" [
+export def "list-recovery-points-by-backup-vault" [
   backup_vault_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3057,7 +3057,7 @@ export def "backup-vaults-recovery-points list" [
 #
 # GET /legal-holds/{legalHoldId}/recovery-points
 # operationId: ListRecoveryPointsByLegalHold
-export def "legal-holds-recovery-points list" [
+export def "list-recovery-points-by-legal-hold" [
   legal_hold_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3107,7 +3107,7 @@ export def "legal-holds-recovery-points list" [
 #
 # GET /resources/{resourceArn}/recovery-points/
 # operationId: ListRecoveryPointsByResource
-export def "resources-recovery-points list" [
+export def "list-recovery-points-by-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3157,7 +3157,7 @@ export def "resources-recovery-points list" [
 #
 # GET /audit/report-jobs
 # operationId: ListReportJobs
-export def "audit-report-jobs list" [
+export def "list-report-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3207,7 +3207,7 @@ export def "audit-report-jobs list" [
 #
 # GET /restore-jobs/
 # operationId: ListRestoreJobs
-export def "restore-jobs list" [
+export def "list-restore-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3261,7 +3261,7 @@ export def "restore-jobs list" [
 #
 # GET /tags/{resourceArn}/
 # operationId: ListTags
-export def "tags list" [
+export def "list-tags" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3312,7 +3312,7 @@ export def "tags list" [
 # PUT /backup-jobs
 # operationId: StartBackupJob
 # --Lifecycle shape: {MoveToColdStorageAfterDays?: any, DeleteAfterDays?: any}
-export def "backup-jobs start" [
+export def "start-backup-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3368,7 +3368,7 @@ export def "backup-jobs start" [
 # PUT /copy-jobs
 # operationId: StartCopyJob
 # --Lifecycle shape: {MoveToColdStorageAfterDays?: any, DeleteAfterDays?: any}
-export def "copy-jobs start" [
+export def "start-copy-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3420,7 +3420,7 @@ export def "copy-jobs start" [
 #
 # POST /audit/report-jobs/{reportPlanName}
 # operationId: StartReportJob
-export def "audit-report-jobs start" [
+export def "start-report-job" [
   report_plan_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3469,7 +3469,7 @@ export def "audit-report-jobs start" [
 #
 # PUT /restore-jobs
 # operationId: StartRestoreJob
-export def "restore-jobs start" [
+export def "start-restore-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3520,7 +3520,7 @@ export def "restore-jobs start" [
 #
 # POST /tags/{resourceArn}
 # operationId: TagResource
-export def "tags tag-resource" [
+export def "tag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3569,7 +3569,7 @@ export def "tags tag-resource" [
 #
 # POST /untag/{resourceArn}
 # operationId: UntagResource
-export def "untag untag-resource" [
+export def "untag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

@@ -136,7 +136,7 @@ def replace-all-completer [] { ["false" "true"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cppreference create-opt-cap-program-in-price" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "opt-cap-program-in-price" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -161,7 +161,7 @@ export def commands []: nothing -> table {
 # POST /v3/cppreference
 # Docs: /doc/us/mp/us-mp-price/#1290 — View Guide
 # operationId: optCapProgramInPrice
-export def "cppreference create-opt-cap-program-in-price" [
+export def "opt-cap-program-in-price" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -206,7 +206,7 @@ export def "cppreference create-opt-cap-program-in-price" [
 #
 # POST /v3/feeds
 # operationId: priceBulkUploads
-export def "feeds create-price-bulk-uploads" [
+export def "price-bulk-uploads" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -256,7 +256,7 @@ export def "feeds create-price-bulk-uploads" [
 # PUT /v3/price
 # operationId: updatePrice
 # --pricing item shape: {comparisonPrice?: record, comparisonPriceType?: "BASE", currentPrice: record, currentPriceType: "BASE"|"REDUCED"|"CLEARANCE", effectiveDate?: string, expirationDate?: string, priceDisplayCodes?: "CART"|"CHECKOUT", processMode?: "UPSERT"|"DELETE", promoId?: string}
-export def "price update" [
+export def "update-price" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

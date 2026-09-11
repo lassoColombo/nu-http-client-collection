@@ -108,7 +108,7 @@ def distance-unit-completer [] { ["km" "mi"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "directions-output-format get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-directions-output-format" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -131,7 +131,7 @@ export def commands []: nothing -> table {
 # Get the directions, path, distance and travel time between a series of geographic points
 #
 # GET /directions.{outputFormat}
-export def "directions-output-format get" [
+export def "get-directions-output-format" [
   output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -176,7 +176,7 @@ export def "directions-output-format get" [
 # Get the directions, path, distance and travel time between a series of geographic points
 #
 # POST /directions.{outputFormat}
-export def "directions-output-format create" [
+export def "post-directions-output-format" [
   output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -221,7 +221,7 @@ export def "directions-output-format create" [
 # Get distance and travel time between two geographic points
 #
 # GET /distance.{outputFormat}
-export def "distance-output-format get" [
+export def "get-distance-output-format" [
   output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -266,7 +266,7 @@ export def "distance-output-format get" [
 # Get distance and travel time between two geographic points
 #
 # POST /distance.{outputFormat}
-export def "distance-output-format create" [
+export def "post-distance-output-format" [
   output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -311,7 +311,7 @@ export def "distance-output-format create" [
 # Get distance and travel time between each pair of geographic points
 #
 # GET /distance/betweenPairs.{outputFormat}
-export def "distance-between-pairs-output-format get" [
+export def "get-distance-between-pairs-output-format" [
   output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -357,7 +357,7 @@ export def "distance-between-pairs-output-format get" [
 # Get distance and travel time between each pair of geographic points
 #
 # POST /distance/betweenPairs.{outputFormat}
-export def "distance-between-pairs-output-format create" [
+export def "post-distance-between-pairs-output-format" [
   output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -403,7 +403,7 @@ export def "distance-between-pairs-output-format create" [
 # Get the directions, optimal path, distance and travel time between a start point and a series of end points which are reordered to minimize total distance or time.
 #
 # GET /optimalDirections.{outputFormat}
-export def "optimal-directions-output-format get" [
+export def "get-optimal-directions-output-format" [
   output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -448,7 +448,7 @@ export def "optimal-directions-output-format get" [
 # Get the directions, optimal path, distance and travel time between a start point and one or more end points which are reordered to minimize total distance or time.
 #
 # POST /optimalDirections.{outputFormat}
-export def "optimal-directions-output-format create" [
+export def "post-optimal-directions-output-format" [
   output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -493,7 +493,7 @@ export def "optimal-directions-output-format create" [
 # Get the optimal path, distance and travel time between a start point and a series of end points which are reordered to minimize total distance or time.
 #
 # GET /optimalRoute.{outputFormat}
-export def "optimal-route-output-format get" [
+export def "get-optimal-route-output-format" [
   output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -538,7 +538,7 @@ export def "optimal-route-output-format get" [
 # Get the path, distance and travel time between a start point and a series of end points which are reordered to minimize total distance or time.
 #
 # POST /optimalRoute.{outputFormat}
-export def "optimal-route-output-format create" [
+export def "post-optimal-route-output-format" [
   output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -583,7 +583,7 @@ export def "optimal-route-output-format create" [
 # Get the path, distance and travel time between a series of geographic points
 #
 # GET /route.{outputFormat}
-export def "route-output-format get" [
+export def "get-route-output-format" [
   output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -628,7 +628,7 @@ export def "route-output-format get" [
 # Get the path, distance and travel time between a series of geographic points
 #
 # POST /route.{outputFormat}
-export def "route-output-format create" [
+export def "post-route-output-format" [
   output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -673,7 +673,7 @@ export def "route-output-format create" [
 # Get the directions, path, distance and travel time between a series of geographic points for a commercial vehicle
 #
 # GET /truck/directions.{outputFormat}
-export def "truck-directions-output-format get" [
+export def "get-truck-directions-output-format" [
   output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -720,7 +720,7 @@ export def "truck-directions-output-format get" [
 # Get the directions, path, distance and travel time between a series of geographic points
 #
 # POST /truck/directions.{outputFormat}
-export def "truck-directions-output-format create" [
+export def "post-truck-directions-output-format" [
   output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -767,7 +767,7 @@ export def "truck-directions-output-format create" [
 # Get distance and travel time between two geographic points for a commercial vehicle
 #
 # GET /truck/distance.{outputFormat}
-export def "truck-distance-output-format get" [
+export def "get-truck-distance-output-format" [
   output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -813,7 +813,7 @@ export def "truck-distance-output-format get" [
 # Get distance and travel time between two geographic points
 #
 # POST /truck/distance.{outputFormat}
-export def "truck-distance-output-format create" [
+export def "post-truck-distance-output-format" [
   output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -858,7 +858,7 @@ export def "truck-distance-output-format create" [
 # Get distance and travel time between each pair of geographic points for a commercial vehicle
 #
 # GET /truck/distance/betweenPairs.{outputFormat}
-export def "truck-distance-between-pairs-output-format get" [
+export def "get-truck-distance-between-pairs-output-format" [
   output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -904,7 +904,7 @@ export def "truck-distance-between-pairs-output-format get" [
 # Get distance and travel time between each pair of geographic points
 #
 # POST /truck/distance/betweenPairs.{outputFormat}
-export def "truck-distance-between-pairs-output-format create" [
+export def "post-truck-distance-between-pairs-output-format" [
   output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -950,7 +950,7 @@ export def "truck-distance-between-pairs-output-format create" [
 # Get the directions, optimal path, distance and travel time between a start point and a series of end points which are reordered to minimize total distance or time for a commercial vehicle
 #
 # GET /truck/optimalDirections.{outputFormat}
-export def "truck-optimal-directions-output-format get" [
+export def "get-truck-optimal-directions-output-format" [
   output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -997,7 +997,7 @@ export def "truck-optimal-directions-output-format get" [
 # Get the directions, optimal path, distance and travel time between a start point and one or more end points which are reordered to minimize total distance or time.
 #
 # POST /truck/optimalDirections.{outputFormat}
-export def "truck-optimal-directions-output-format create" [
+export def "post-truck-optimal-directions-output-format" [
   output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1044,7 +1044,7 @@ export def "truck-optimal-directions-output-format create" [
 # Get the optimal path, distance and travel time between a start point and a series of end points which are reordered to minimize total distance or time for a commercial vehicle
 #
 # GET /truck/optimalRoute.{outputFormat}
-export def "truck-optimal-route-output-format get" [
+export def "get-truck-optimal-route-output-format" [
   output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1091,7 +1091,7 @@ export def "truck-optimal-route-output-format get" [
 # Get the path, distance and travel time between a start point and a series of end points which are reordered to minimize total distance or time.
 #
 # POST /truck/optimalRoute.{outputFormat}
-export def "truck-optimal-route-output-format create" [
+export def "post-truck-optimal-route-output-format" [
   output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1138,7 +1138,7 @@ export def "truck-optimal-route-output-format create" [
 # Get the path, distance and travel time between a series of geographic points for a commercial vehicle
 #
 # GET /truck/route.{outputFormat}
-export def "truck-route-output-format get" [
+export def "get-truck-route-output-format" [
   output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1185,7 +1185,7 @@ export def "truck-route-output-format get" [
 # Get the path, distance and travel time between a series of geographic points
 #
 # POST /truck/route.{outputFormat}
-export def "truck-route-output-format create" [
+export def "post-truck-route-output-format" [
   output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

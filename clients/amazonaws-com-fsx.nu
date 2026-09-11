@@ -141,7 +141,7 @@ def x-amz-target-completer-40 [] { ["AWSSimbaAPIService_v20180301.UpdateVolume"]
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-associate-file-system-aliases" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associate-file-system-aliases" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -165,7 +165,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AssociateFileSystemAliases
-export def "api create-associate-file-system-aliases" [
+export def "associate-file-system-aliases" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -215,7 +215,7 @@ export def "api create-associate-file-system-aliases" [
 #
 # POST /
 # operationId: CancelDataRepositoryTask
-export def "api cancel-data-repository-task" [
+export def "cancel-data-repository-task" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -264,7 +264,7 @@ export def "api cancel-data-repository-task" [
 # POST /
 # operationId: CopyBackup
 # --Tags item shape: {Key: any, Value: any}
-export def "api copy-backup" [
+export def "copy-backup" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -317,7 +317,7 @@ export def "api copy-backup" [
 #
 # POST /
 # operationId: CreateBackup
-export def "api create-backup" [
+export def "create-backup" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -369,7 +369,7 @@ export def "api create-backup" [
 # POST /
 # operationId: CreateDataRepositoryAssociation
 # --Tags item shape: {Key: any, Value: any}
-export def "api create-data-repository-association" [
+export def "create-data-repository-association" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -425,7 +425,7 @@ export def "api create-data-repository-association" [
 # POST /
 # operationId: CreateDataRepositoryTask
 # --Tags item shape: {Key: any, Value: any}
-export def "api create-data-repository-task" [
+export def "create-data-repository-task" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -480,7 +480,7 @@ export def "api create-data-repository-task" [
 # POST /
 # operationId: CreateFileCache
 # --Tags item shape: {Key: any, Value: any}
-export def "api create-file-cache" [
+export def "create-file-cache" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -540,7 +540,7 @@ export def "api create-file-cache" [
 # operationId: CreateFileSystem
 # --LustreConfiguration shape: {WeeklyMaintenanceStartTime?: any, ImportPath?: any, ExportPath?: any, ImportedFileChunkSize?: any, DeploymentType?: any, AutoImportPolicy?: any, PerUnitStorageThroughput?: any, DailyAutomaticBackupStartTime?: string, AutomaticBackupRetentionDays?: int, CopyTagsToBackups?: any, DriveCacheType?: any, DataCompressionType?: any, LogConfiguration?: any, RootSquashConfiguration?: any}
 # --OntapConfiguration shape: {AutomaticBackupRetentionDays?: int, DailyAutomaticBackupStartTime?: string, DeploymentType: any, EndpointIpAddressRange?: any, FsxAdminPassword?: any, DiskIopsConfiguration?: any, PreferredSubnetId?: any, RouteTableIds?: any, ThroughputCapacity: any, WeeklyMaintenanceStartTime?: string}
-export def "api create-file-system" [
+export def "create-file-system" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -601,7 +601,7 @@ export def "api create-file-system" [
 # POST /
 # operationId: CreateFileSystemFromBackup
 # --LustreConfiguration shape: {WeeklyMaintenanceStartTime?: any, ImportPath?: any, ExportPath?: any, ImportedFileChunkSize?: any, DeploymentType?: any, AutoImportPolicy?: any, PerUnitStorageThroughput?: any, DailyAutomaticBackupStartTime?: string, AutomaticBackupRetentionDays?: int, CopyTagsToBackups?: any, DriveCacheType?: any, DataCompressionType?: any, LogConfiguration?: any, RootSquashConfiguration?: any}
-export def "api create-file-system-from-backup" [
+export def "create-file-system-from-backup" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -661,7 +661,7 @@ export def "api create-file-system-from-backup" [
 # POST /
 # operationId: CreateSnapshot
 # --Tags item shape: {Key: any, Value: any}
-export def "api create-snapshot" [
+export def "create-snapshot" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -713,7 +713,7 @@ export def "api create-snapshot" [
 # POST /
 # operationId: CreateStorageVirtualMachine
 # --Tags item shape: {Key: any, Value: any}
-export def "api create-storage-virtual-machine" [
+export def "create-storage-virtual-machine" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -768,7 +768,7 @@ export def "api create-storage-virtual-machine" [
 # POST /
 # operationId: CreateVolume
 # --Tags item shape: {Key: any, Value: any}
-export def "api create-volume" [
+export def "create-volume" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -822,7 +822,7 @@ export def "api create-volume" [
 # POST /
 # operationId: CreateVolumeFromBackup
 # --Tags item shape: {Key: any, Value: any}
-export def "api create-volume-from-backup" [
+export def "create-volume-from-backup" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -874,7 +874,7 @@ export def "api create-volume-from-backup" [
 #
 # POST /
 # operationId: DeleteBackup
-export def "api delete-backup" [
+export def "delete-backup" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -923,7 +923,7 @@ export def "api delete-backup" [
 #
 # POST /
 # operationId: DeleteDataRepositoryAssociation
-export def "api delete-data-repository-association" [
+export def "delete-data-repository-association" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -973,7 +973,7 @@ export def "api delete-data-repository-association" [
 #
 # POST /
 # operationId: DeleteFileCache
-export def "api delete-file-cache" [
+export def "delete-file-cache" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1024,7 +1024,7 @@ export def "api delete-file-cache" [
 # operationId: DeleteFileSystem
 # --WindowsConfiguration shape: {SkipFinalBackup?: any, FinalBackupTags?: any}
 # --LustreConfiguration shape: {SkipFinalBackup?: any, FinalBackupTags?: any}
-export def "api delete-file-system" [
+export def "delete-file-system" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1076,7 +1076,7 @@ export def "api delete-file-system" [
 #
 # POST /
 # operationId: DeleteSnapshot
-export def "api delete-snapshot" [
+export def "delete-snapshot" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1125,7 +1125,7 @@ export def "api delete-snapshot" [
 #
 # POST /
 # operationId: DeleteStorageVirtualMachine
-export def "api delete-storage-virtual-machine" [
+export def "delete-storage-virtual-machine" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1174,7 +1174,7 @@ export def "api delete-storage-virtual-machine" [
 #
 # POST /
 # operationId: DeleteVolume
-export def "api delete-volume" [
+export def "delete-volume" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1225,7 +1225,7 @@ export def "api delete-volume" [
 #
 # POST /
 # operationId: DescribeBackups
-export def "api get-backups" [
+export def "describe-backups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1280,7 +1280,7 @@ export def "api get-backups" [
 # POST /
 # operationId: DescribeDataRepositoryAssociations
 # --Filters item shape: {Name?: any, Values?: any}
-export def "api get-data-repository-associations" [
+export def "describe-data-repository-associations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1334,7 +1334,7 @@ export def "api get-data-repository-associations" [
 #
 # POST /
 # operationId: DescribeDataRepositoryTasks
-export def "api get-data-repository-tasks" [
+export def "describe-data-repository-tasks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1388,7 +1388,7 @@ export def "api get-data-repository-tasks" [
 #
 # POST /
 # operationId: DescribeFileCaches
-export def "api get-file-caches" [
+export def "describe-file-caches" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1441,7 +1441,7 @@ export def "api get-file-caches" [
 #
 # POST /
 # operationId: DescribeFileSystemAliases
-export def "api get-file-system-aliases" [
+export def "describe-file-system-aliases" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1495,7 +1495,7 @@ export def "api get-file-system-aliases" [
 #
 # POST /
 # operationId: DescribeFileSystems
-export def "api get-file-systems" [
+export def "describe-file-systems" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1548,7 +1548,7 @@ export def "api get-file-systems" [
 #
 # POST /
 # operationId: DescribeSnapshots
-export def "api get-snapshots" [
+export def "describe-snapshots" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1602,7 +1602,7 @@ export def "api get-snapshots" [
 #
 # POST /
 # operationId: DescribeStorageVirtualMachines
-export def "api get-storage-virtual-machines" [
+export def "describe-storage-virtual-machines" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1656,7 +1656,7 @@ export def "api get-storage-virtual-machines" [
 #
 # POST /
 # operationId: DescribeVolumes
-export def "api get-volumes" [
+export def "describe-volumes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1710,7 +1710,7 @@ export def "api get-volumes" [
 #
 # POST /
 # operationId: DisassociateFileSystemAliases
-export def "api create-disassociate-file-system-aliases" [
+export def "disassociate-file-system-aliases" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1760,7 +1760,7 @@ export def "api create-disassociate-file-system-aliases" [
 #
 # POST /
 # operationId: ListTagsForResource
-export def "api list-tags-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1813,7 +1813,7 @@ export def "api list-tags-for-resource" [
 #
 # POST /
 # operationId: ReleaseFileSystemNfsV3Locks
-export def "api create-release-file-system-nfs-locks" [
+export def "release-file-system-nfs-v3-locks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1862,7 +1862,7 @@ export def "api create-release-file-system-nfs-locks" [
 #
 # POST /
 # operationId: RestoreVolumeFromSnapshot
-export def "api create-restore-volume-from-snapshot" [
+export def "restore-volume-from-snapshot" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1913,7 +1913,7 @@ export def "api create-restore-volume-from-snapshot" [
 #
 # POST /
 # operationId: TagResource
-export def "api tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1962,7 +1962,7 @@ export def "api tag-resource" [
 #
 # POST /
 # operationId: UntagResource
-export def "api untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2011,7 +2011,7 @@ export def "api untag-resource" [
 #
 # POST /
 # operationId: UpdateDataRepositoryAssociation
-export def "api update-data-repository-association" [
+export def "update-data-repository-association" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2062,7 +2062,7 @@ export def "api update-data-repository-association" [
 #
 # POST /
 # operationId: UpdateFileCache
-export def "api update-file-cache" [
+export def "update-file-cache" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2114,7 +2114,7 @@ export def "api update-file-cache" [
 # operationId: UpdateFileSystem
 # --LustreConfiguration shape: {WeeklyMaintenanceStartTime?: any, DailyAutomaticBackupStartTime?: string, AutomaticBackupRetentionDays?: int, AutoImportPolicy?: any, DataCompressionType?: any, LogConfiguration?: any, RootSquashConfiguration?: any}
 # --OntapConfiguration shape: {AutomaticBackupRetentionDays?: int, DailyAutomaticBackupStartTime?: string, FsxAdminPassword?: any, WeeklyMaintenanceStartTime?: string, DiskIopsConfiguration?: any, ThroughputCapacity?: any, AddRouteTableIds?: any, RemoveRouteTableIds?: any}
-export def "api update-file-system" [
+export def "update-file-system" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2168,7 +2168,7 @@ export def "api update-file-system" [
 #
 # POST /
 # operationId: UpdateSnapshot
-export def "api update-snapshot" [
+export def "update-snapshot" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2218,7 +2218,7 @@ export def "api update-snapshot" [
 #
 # POST /
 # operationId: UpdateStorageVirtualMachine
-export def "api update-storage-virtual-machine" [
+export def "update-storage-virtual-machine" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2269,7 +2269,7 @@ export def "api update-storage-virtual-machine" [
 #
 # POST /
 # operationId: UpdateVolume
-export def "api update-volume" [
+export def "update-volume" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -174,7 +174,7 @@ def x-amz-target-completer-73 [] { ["OpsWorks_20130218.UpdateVolume"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api assign-instance" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "assign-instance" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -198,7 +198,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AssignInstance
-export def "api assign-instance" [
+export def "assign-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -247,7 +247,7 @@ export def "api assign-instance" [
 #
 # POST /
 # operationId: AssignVolume
-export def "api assign-volume" [
+export def "assign-volume" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -296,7 +296,7 @@ export def "api assign-volume" [
 #
 # POST /
 # operationId: AssociateElasticIp
-export def "api create-associate-elastic-ip" [
+export def "associate-elastic-ip" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -345,7 +345,7 @@ export def "api create-associate-elastic-ip" [
 #
 # POST /
 # operationId: AttachElasticLoadBalancer
-export def "api attach-elastic-load-balancer" [
+export def "attach-elastic-load-balancer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -394,7 +394,7 @@ export def "api attach-elastic-load-balancer" [
 #
 # POST /
 # operationId: CloneStack
-export def "api clone-stack" [
+export def "clone-stack" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -463,7 +463,7 @@ export def "api clone-stack" [
 #
 # POST /
 # operationId: CreateApp
-export def "api create-app" [
+export def "create-app" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -522,7 +522,7 @@ export def "api create-app" [
 #
 # POST /
 # operationId: CreateDeployment
-export def "api create-deployment" [
+export def "create-deployment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -576,7 +576,7 @@ export def "api create-deployment" [
 #
 # POST /
 # operationId: CreateInstance
-export def "api create-instance" [
+export def "create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -641,7 +641,7 @@ export def "api create-instance" [
 #
 # POST /
 # operationId: CreateLayer
-export def "api create-layer" [
+export def "create-layer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -706,7 +706,7 @@ export def "api create-layer" [
 #
 # POST /
 # operationId: CreateStack
-export def "api create-stack" [
+export def "create-stack" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -772,7 +772,7 @@ export def "api create-stack" [
 #
 # POST /
 # operationId: CreateUserProfile
-export def "api create-user-profile" [
+export def "create-user-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -823,7 +823,7 @@ export def "api create-user-profile" [
 #
 # POST /
 # operationId: DeleteApp
-export def "api delete-app" [
+export def "delete-app" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -871,7 +871,7 @@ export def "api delete-app" [
 #
 # POST /
 # operationId: DeleteInstance
-export def "api delete-instance" [
+export def "delete-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -921,7 +921,7 @@ export def "api delete-instance" [
 #
 # POST /
 # operationId: DeleteLayer
-export def "api delete-layer" [
+export def "delete-layer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -969,7 +969,7 @@ export def "api delete-layer" [
 #
 # POST /
 # operationId: DeleteStack
-export def "api delete-stack" [
+export def "delete-stack" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1017,7 +1017,7 @@ export def "api delete-stack" [
 #
 # POST /
 # operationId: DeleteUserProfile
-export def "api delete-user-profile" [
+export def "delete-user-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1065,7 +1065,7 @@ export def "api delete-user-profile" [
 #
 # POST /
 # operationId: DeregisterEcsCluster
-export def "api create-deregister-ecs" [
+export def "deregister-ecs-cluster" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1113,7 +1113,7 @@ export def "api create-deregister-ecs" [
 #
 # POST /
 # operationId: DeregisterElasticIp
-export def "api create-deregister-elastic-ip" [
+export def "deregister-elastic-ip" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1161,7 +1161,7 @@ export def "api create-deregister-elastic-ip" [
 #
 # POST /
 # operationId: DeregisterInstance
-export def "api create-deregister-instance" [
+export def "deregister-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1209,7 +1209,7 @@ export def "api create-deregister-instance" [
 #
 # POST /
 # operationId: DeregisterRdsDbInstance
-export def "api create-deregister-rds-db-instance" [
+export def "deregister-rds-db-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1257,7 +1257,7 @@ export def "api create-deregister-rds-db-instance" [
 #
 # POST /
 # operationId: DeregisterVolume
-export def "api create-deregister-volume" [
+export def "deregister-volume" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1305,7 +1305,7 @@ export def "api create-deregister-volume" [
 #
 # POST /
 # operationId: DescribeAgentVersions
-export def "api get-agent-versions" [
+export def "describe-agent-versions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1354,7 +1354,7 @@ export def "api get-agent-versions" [
 #
 # POST /
 # operationId: DescribeApps
-export def "api get-apps" [
+export def "describe-apps" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1403,7 +1403,7 @@ export def "api get-apps" [
 #
 # POST /
 # operationId: DescribeCommands
-export def "api get-commands" [
+export def "describe-commands" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1453,7 +1453,7 @@ export def "api get-commands" [
 #
 # POST /
 # operationId: DescribeDeployments
-export def "api get-deployments" [
+export def "describe-deployments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1503,7 +1503,7 @@ export def "api get-deployments" [
 #
 # POST /
 # operationId: DescribeEcsClusters
-export def "api get-ecs-clusters" [
+export def "describe-ecs-clusters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1557,7 +1557,7 @@ export def "api get-ecs-clusters" [
 #
 # POST /
 # operationId: DescribeElasticIps
-export def "api get-elastic-ips" [
+export def "describe-elastic-ips" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1607,7 +1607,7 @@ export def "api get-elastic-ips" [
 #
 # POST /
 # operationId: DescribeElasticLoadBalancers
-export def "api get-elastic-load-balancers" [
+export def "describe-elastic-load-balancers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1656,7 +1656,7 @@ export def "api get-elastic-load-balancers" [
 #
 # POST /
 # operationId: DescribeInstances
-export def "api get-instances" [
+export def "describe-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1706,7 +1706,7 @@ export def "api get-instances" [
 #
 # POST /
 # operationId: DescribeLayers
-export def "api get-layers" [
+export def "describe-layers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1755,7 +1755,7 @@ export def "api get-layers" [
 #
 # POST /
 # operationId: DescribeLoadBasedAutoScaling
-export def "api get-load-based-auto-scaling" [
+export def "describe-load-based-auto-scaling" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1803,7 +1803,7 @@ export def "api get-load-based-auto-scaling" [
 #
 # POST /
 # operationId: DescribeMyUserProfile
-export def "api get-my-user-profile" [
+export def "describe-my-user-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1847,7 +1847,7 @@ export def "api get-my-user-profile" [
 #
 # POST /
 # operationId: DescribeOperatingSystems
-export def "api get-operating-systems" [
+export def "describe-operating-systems" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1891,7 +1891,7 @@ export def "api get-operating-systems" [
 #
 # POST /
 # operationId: DescribePermissions
-export def "api get-permissions" [
+export def "describe-permissions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1940,7 +1940,7 @@ export def "api get-permissions" [
 #
 # POST /
 # operationId: DescribeRaidArrays
-export def "api get-raid-arrays" [
+export def "describe-raid-arrays" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1990,7 +1990,7 @@ export def "api get-raid-arrays" [
 #
 # POST /
 # operationId: DescribeRdsDbInstances
-export def "api get-rds-db-instances" [
+export def "describe-rds-db-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2039,7 +2039,7 @@ export def "api get-rds-db-instances" [
 #
 # POST /
 # operationId: DescribeServiceErrors
-export def "api get-service-errors" [
+export def "describe-service-errors" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2089,7 +2089,7 @@ export def "api get-service-errors" [
 #
 # POST /
 # operationId: DescribeStackProvisioningParameters
-export def "api get-stack-provisioning-parameters" [
+export def "describe-stack-provisioning-parameters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2137,7 +2137,7 @@ export def "api get-stack-provisioning-parameters" [
 #
 # POST /
 # operationId: DescribeStackSummary
-export def "api get-stack-summary" [
+export def "describe-stack-summary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2185,7 +2185,7 @@ export def "api get-stack-summary" [
 #
 # POST /
 # operationId: DescribeStacks
-export def "api get-stacks" [
+export def "describe-stacks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2233,7 +2233,7 @@ export def "api get-stacks" [
 #
 # POST /
 # operationId: DescribeTimeBasedAutoScaling
-export def "api get-time-based-auto-scaling" [
+export def "describe-time-based-auto-scaling" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2281,7 +2281,7 @@ export def "api get-time-based-auto-scaling" [
 #
 # POST /
 # operationId: DescribeUserProfiles
-export def "api get-user-profiles" [
+export def "describe-user-profiles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2329,7 +2329,7 @@ export def "api get-user-profiles" [
 #
 # POST /
 # operationId: DescribeVolumes
-export def "api get-volumes" [
+export def "describe-volumes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2380,7 +2380,7 @@ export def "api get-volumes" [
 #
 # POST /
 # operationId: DetachElasticLoadBalancer
-export def "api create-detach-elastic-load-balancer" [
+export def "detach-elastic-load-balancer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2429,7 +2429,7 @@ export def "api create-detach-elastic-load-balancer" [
 #
 # POST /
 # operationId: DisassociateElasticIp
-export def "api create-disassociate-elastic-ip" [
+export def "disassociate-elastic-ip" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2477,7 +2477,7 @@ export def "api create-disassociate-elastic-ip" [
 #
 # POST /
 # operationId: GetHostnameSuggestion
-export def "api get-hostname-suggestion" [
+export def "get-hostname-suggestion" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2525,7 +2525,7 @@ export def "api get-hostname-suggestion" [
 #
 # POST /
 # operationId: GrantAccess
-export def "api create-grant-access" [
+export def "grant-access" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2574,7 +2574,7 @@ export def "api create-grant-access" [
 #
 # POST /
 # operationId: ListTags
-export def "api list-tags" [
+export def "list-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2624,7 +2624,7 @@ export def "api list-tags" [
 #
 # POST /
 # operationId: RebootInstance
-export def "api create-reboot-instance" [
+export def "reboot-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2672,7 +2672,7 @@ export def "api create-reboot-instance" [
 #
 # POST /
 # operationId: RegisterEcsCluster
-export def "api create-ecs" [
+export def "register-ecs-cluster" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2721,7 +2721,7 @@ export def "api create-ecs" [
 #
 # POST /
 # operationId: RegisterElasticIp
-export def "api create-elastic-ip" [
+export def "register-elastic-ip" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2770,7 +2770,7 @@ export def "api create-elastic-ip" [
 #
 # POST /
 # operationId: RegisterInstance
-export def "api create-instance-1" [
+export def "register-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2824,7 +2824,7 @@ export def "api create-instance-1" [
 #
 # POST /
 # operationId: RegisterRdsDbInstance
-export def "api create-rds-db-instance" [
+export def "register-rds-db-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2875,7 +2875,7 @@ export def "api create-rds-db-instance" [
 #
 # POST /
 # operationId: RegisterVolume
-export def "api create-volume" [
+export def "register-volume" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2924,7 +2924,7 @@ export def "api create-volume" [
 #
 # POST /
 # operationId: SetLoadBasedAutoScaling
-export def "api update-load-based-auto-scaling" [
+export def "set-load-based-auto-scaling" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2975,7 +2975,7 @@ export def "api update-load-based-auto-scaling" [
 #
 # POST /
 # operationId: SetPermission
-export def "api update-permission" [
+export def "set-permission" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3027,7 +3027,7 @@ export def "api update-permission" [
 #
 # POST /
 # operationId: SetTimeBasedAutoScaling
-export def "api update-time-based-auto-scaling" [
+export def "set-time-based-auto-scaling" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3076,7 +3076,7 @@ export def "api update-time-based-auto-scaling" [
 #
 # POST /
 # operationId: StartInstance
-export def "api start-instance" [
+export def "start-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3124,7 +3124,7 @@ export def "api start-instance" [
 #
 # POST /
 # operationId: StartStack
-export def "api start-stack" [
+export def "start-stack" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3172,7 +3172,7 @@ export def "api start-stack" [
 #
 # POST /
 # operationId: StopInstance
-export def "api stop-instance" [
+export def "stop-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3221,7 +3221,7 @@ export def "api stop-instance" [
 #
 # POST /
 # operationId: StopStack
-export def "api stop-stack" [
+export def "stop-stack" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3269,7 +3269,7 @@ export def "api stop-stack" [
 #
 # POST /
 # operationId: TagResource
-export def "api tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3318,7 +3318,7 @@ export def "api tag-resource" [
 #
 # POST /
 # operationId: UnassignInstance
-export def "api create-unassign-instance" [
+export def "unassign-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3366,7 +3366,7 @@ export def "api create-unassign-instance" [
 #
 # POST /
 # operationId: UnassignVolume
-export def "api create-unassign-volume" [
+export def "unassign-volume" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3414,7 +3414,7 @@ export def "api create-unassign-volume" [
 #
 # POST /
 # operationId: UntagResource
-export def "api untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3463,7 +3463,7 @@ export def "api untag-resource" [
 #
 # POST /
 # operationId: UpdateApp
-export def "api update-app" [
+export def "update-app" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3521,7 +3521,7 @@ export def "api update-app" [
 #
 # POST /
 # operationId: UpdateElasticIp
-export def "api update-elastic-ip" [
+export def "update-elastic-ip" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3570,7 +3570,7 @@ export def "api update-elastic-ip" [
 #
 # POST /
 # operationId: UpdateInstance
-export def "api update-instance" [
+export def "update-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3629,7 +3629,7 @@ export def "api update-instance" [
 #
 # POST /
 # operationId: UpdateLayer
-export def "api update-layer" [
+export def "update-layer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3693,7 +3693,7 @@ export def "api update-layer" [
 #
 # POST /
 # operationId: UpdateMyUserProfile
-export def "api update-my-user-profile" [
+export def "update-my-user-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3741,7 +3741,7 @@ export def "api update-my-user-profile" [
 #
 # POST /
 # operationId: UpdateRdsDbInstance
-export def "api update-rds-db-instance" [
+export def "update-rds-db-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3791,7 +3791,7 @@ export def "api update-rds-db-instance" [
 #
 # POST /
 # operationId: UpdateStack
-export def "api update-stack" [
+export def "update-stack" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3856,7 +3856,7 @@ export def "api update-stack" [
 #
 # POST /
 # operationId: UpdateUserProfile
-export def "api update-user-profile" [
+export def "update-user-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3907,7 +3907,7 @@ export def "api update-user-profile" [
 #
 # POST /
 # operationId: UpdateVolume
-export def "api update-volume" [
+export def "update-volume" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

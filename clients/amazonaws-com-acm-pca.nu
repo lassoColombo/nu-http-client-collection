@@ -123,7 +123,7 @@ def x-amz-target-completer-22 [] { ["ACMPrivateCA.UpdateCertificateAuthority"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-certificate-authority" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-certificate-authority" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -147,7 +147,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CreateCertificateAuthority
-export def "api create-certificate-authority" [
+export def "create-certificate-authority" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -201,7 +201,7 @@ export def "api create-certificate-authority" [
 #
 # POST /
 # operationId: CreateCertificateAuthorityAuditReport
-export def "api create-certificate-authority-audit-report" [
+export def "create-certificate-authority-audit-report" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -251,7 +251,7 @@ export def "api create-certificate-authority-audit-report" [
 #
 # POST /
 # operationId: CreatePermission
-export def "api create-permission" [
+export def "create-permission" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -302,7 +302,7 @@ export def "api create-permission" [
 #
 # POST /
 # operationId: DeleteCertificateAuthority
-export def "api delete-certificate-authority" [
+export def "delete-certificate-authority" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -351,7 +351,7 @@ export def "api delete-certificate-authority" [
 #
 # POST /
 # operationId: DeletePermission
-export def "api delete-permission" [
+export def "delete-permission" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -401,7 +401,7 @@ export def "api delete-permission" [
 #
 # POST /
 # operationId: DeletePolicy
-export def "api delete-policy" [
+export def "delete-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -449,7 +449,7 @@ export def "api delete-policy" [
 #
 # POST /
 # operationId: DescribeCertificateAuthority
-export def "api get-certificate-authority" [
+export def "describe-certificate-authority" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -497,7 +497,7 @@ export def "api get-certificate-authority" [
 #
 # POST /
 # operationId: DescribeCertificateAuthorityAuditReport
-export def "api get-certificate-authority-audit-report" [
+export def "describe-certificate-authority-audit-report" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -546,7 +546,7 @@ export def "api get-certificate-authority-audit-report" [
 #
 # POST /
 # operationId: GetCertificate
-export def "api get-certificate" [
+export def "get-certificate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -595,7 +595,7 @@ export def "api get-certificate" [
 #
 # POST /
 # operationId: GetCertificateAuthorityCertificate
-export def "api get-certificate-authority-certificate" [
+export def "get-certificate-authority-certificate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -643,7 +643,7 @@ export def "api get-certificate-authority-certificate" [
 #
 # POST /
 # operationId: GetCertificateAuthorityCsr
-export def "api get-certificate-authority-csr" [
+export def "get-certificate-authority-csr" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -691,7 +691,7 @@ export def "api get-certificate-authority-csr" [
 #
 # POST /
 # operationId: GetPolicy
-export def "api get-policy" [
+export def "get-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -739,7 +739,7 @@ export def "api get-policy" [
 #
 # POST /
 # operationId: ImportCertificateAuthorityCertificate
-export def "api import-certificate-authority-certificate" [
+export def "import-certificate-authority-certificate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -789,7 +789,7 @@ export def "api import-certificate-authority-certificate" [
 #
 # POST /
 # operationId: IssueCertificate
-export def "api create-issue-certificate" [
+export def "issue-certificate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -844,7 +844,7 @@ export def "api create-issue-certificate" [
 #
 # POST /
 # operationId: ListCertificateAuthorities
-export def "api list-certificate-authorities" [
+export def "list-certificate-authorities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -897,7 +897,7 @@ export def "api list-certificate-authorities" [
 #
 # POST /
 # operationId: ListPermissions
-export def "api list-permissions" [
+export def "list-permissions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -950,7 +950,7 @@ export def "api list-permissions" [
 #
 # POST /
 # operationId: ListTags
-export def "api list-tags" [
+export def "list-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1003,7 +1003,7 @@ export def "api list-tags" [
 #
 # POST /
 # operationId: PutPolicy
-export def "api update-policy" [
+export def "put-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1052,7 +1052,7 @@ export def "api update-policy" [
 #
 # POST /
 # operationId: RestoreCertificateAuthority
-export def "api create-restore-certificate-authority" [
+export def "restore-certificate-authority" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1100,7 +1100,7 @@ export def "api create-restore-certificate-authority" [
 #
 # POST /
 # operationId: RevokeCertificate
-export def "api delete-certificate" [
+export def "revoke-certificate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1150,7 +1150,7 @@ export def "api delete-certificate" [
 #
 # POST /
 # operationId: TagCertificateAuthority
-export def "api tag-certificate-authority" [
+export def "tag-certificate-authority" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1199,7 +1199,7 @@ export def "api tag-certificate-authority" [
 #
 # POST /
 # operationId: UntagCertificateAuthority
-export def "api untag-certificate-authority" [
+export def "untag-certificate-authority" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1248,7 +1248,7 @@ export def "api untag-certificate-authority" [
 #
 # POST /
 # operationId: UpdateCertificateAuthority
-export def "api update-certificate-authority" [
+export def "update-certificate-authority" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -129,7 +129,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects delete-access-approval-settings" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accessapproval-projects-delete-access-approval-settings" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -153,7 +153,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1/{name}
 # operationId: accessapproval.projects.deleteAccessApprovalSettings
-export def "projects delete-access-approval-settings" [
+export def "accessapproval-projects-delete-access-approval-settings" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -201,7 +201,7 @@ export def "projects delete-access-approval-settings" [
 #
 # GET /v1/{name}
 # operationId: accessapproval.projects.approvalRequests.get
-export def "projects get" [
+export def "accessapproval-projects-approval-requests-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -250,7 +250,7 @@ export def "projects get" [
 # PATCH /v1/{name}
 # operationId: accessapproval.projects.updateAccessApprovalSettings
 # --enrolledServices item shape: {cloudProduct?: string, enrollmentLevel?: "ENROLLMENT_LEVEL_UNSPECIFIED"|"BLOCK_ALL"}
-export def "projects update-access-approval-settings" [
+export def "accessapproval-projects-update-access-approval-settings" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -306,7 +306,7 @@ export def "projects update-access-approval-settings" [
 #
 # POST /v1/{name}:approve
 # operationId: accessapproval.projects.approvalRequests.approve
-export def "projects approve" [
+export def "accessapproval-projects-approval-requests-approve" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -358,7 +358,7 @@ export def "projects approve" [
 #
 # POST /v1/{name}:dismiss
 # operationId: accessapproval.projects.approvalRequests.dismiss
-export def "projects create-dismiss" [
+export def "accessapproval-projects-approval-requests-dismiss" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -410,7 +410,7 @@ export def "projects create-dismiss" [
 #
 # POST /v1/{name}:invalidate
 # operationId: accessapproval.projects.approvalRequests.invalidate
-export def "projects create-invalidate" [
+export def "accessapproval-projects-approval-requests-invalidate" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -462,7 +462,7 @@ export def "projects create-invalidate" [
 #
 # GET /v1/{parent}/approvalRequests
 # operationId: accessapproval.projects.approvalRequests.list
-export def "approval-requests list" [
+export def "accessapproval-projects-approval-requests-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

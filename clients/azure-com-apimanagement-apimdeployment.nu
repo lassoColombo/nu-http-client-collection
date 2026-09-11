@@ -122,7 +122,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-api-management-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api-management-operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.ApiManagement/operations
 # operationId: ApiManagementOperations_List
-export def "providers-microsoft-api-management-operations list" [
+export def "api-management-operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -182,7 +182,7 @@ export def "providers-microsoft-api-management-operations list" [
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.ApiManagement/checkNameAvailability
 # operationId: ApiManagementService_CheckNameAvailability
-export def "subscriptions-providers-microsoft-api-management-check-name-availability check-service" [
+export def "api-management-service-check-name-availability" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -224,7 +224,7 @@ export def "subscriptions-providers-microsoft-api-management-check-name-availabi
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.ApiManagement/service
 # operationId: ApiManagementService_List
-export def "subscriptions-providers-microsoft-api-management-service list" [
+export def "api-management-service-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -262,7 +262,7 @@ export def "subscriptions-providers-microsoft-api-management-service list" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service
 # operationId: ApiManagementService_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service list" [
+export def "api-management-service-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -302,7 +302,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}
 # operationId: ApiManagementService_Delete
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service delete" [
+export def "api-management-service-delete" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -344,7 +344,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}
 # operationId: ApiManagementService_Get
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service get" [
+export def "api-management-service-get" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -389,7 +389,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 # --identity shape: {type: "SystemAssigned"}
 # --properties shape: {publisherEmail?: string, publisherName?: string, additionalLocations?: list, certificates?: list, customProperties?: record, enableClientCertificate?: bool, hostnameConfigurations?: list, notificationSenderEmail?: string, virtualNetworkConfiguration?: any, virtualNetworkType?: "None"|"External"|"Internal"}
 # --sku shape: {capacity?: int, name: "Developer"|"Standard"|"Premium"|"Basic"|"Consumption"}
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service update" [
+export def "api-management-service-update" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -441,7 +441,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 # --identity shape: {type: "SystemAssigned"}
 # --properties shape: {publisherEmail: string, publisherName: string, additionalLocations?: list, certificates?: list, customProperties?: record, enableClientCertificate?: bool, hostnameConfigurations?: list, notificationSenderEmail?: string, virtualNetworkConfiguration?: any, virtualNetworkType?: "None"|"External"|"Internal"}
 # --sku shape: {capacity?: int, name: "Developer"|"Standard"|"Premium"|"Basic"|"Consumption"}
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service create-or-update" [
+export def "api-management-service-create-or-update" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -491,7 +491,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/applynetworkconfigurationupdates
 # operationId: ApiManagementService_ApplyNetworkConfigurationUpdates
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-applynetworkconfigurationupdates create-apply-network-configuration-updates" [
+export def "api-management-service-apply-network-configuration-updates" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -537,7 +537,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/backup
 # operationId: ApiManagementService_Backup
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-backup create" [
+export def "api-management-service-backup" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -586,7 +586,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/getssotoken
 # operationId: ApiManagementService_GetSsoToken
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-get-ssotoken get-sso-token" [
+export def "api-management-service-get-sso-token" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -628,7 +628,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/restore
 # operationId: ApiManagementService_Restore
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-restore create" [
+export def "api-management-service-restore" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -677,7 +677,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/skus
 # operationId: ApiManagementServiceSkus_ListAvailableServiceSkus
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-skus list-available" [
+export def "api-management-service-skus-list-available-service-skus" [
   subscription_id: string
   resource_group_name: string
   service_name: string

@@ -109,7 +109,7 @@ def auth-scheme-completer [] { ["none"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "utilities get-server" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "server-info" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -132,7 +132,7 @@ export def commands []: nothing -> table {
 # GET /
 #
 # operationId: server_info
-export def "utilities get-server" [
+export def "server-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -165,7 +165,7 @@ export def "utilities get-server" [
 # GET /__api__
 #
 # operationId: get_openapi_spec
-export def "api get-openapi-spec" [
+export def "get-openapi-spec" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -198,7 +198,7 @@ export def "api get-openapi-spec" [
 # GET /__heartbeat__
 #
 # operationId: __heartbeat__
-export def "heartbeat get" [
+export def "heartbeat" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -231,7 +231,7 @@ export def "heartbeat get" [
 # GET /__lbheartbeat__
 #
 # operationId: __lbheartbeat__
-export def "lbheartbeat get" [
+export def "lbheartbeat" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -264,7 +264,7 @@ export def "lbheartbeat get" [
 # GET /__version__
 #
 # operationId: __version__
-export def "version get" [
+export def "version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -299,7 +299,7 @@ export def "version get" [
 # operationId: batch
 # --defaults shape: {body?: record, headers?: record, method?: "GET"|"HEAD"|"DELETE"|"TRACE"|"POST"|"PUT"|"PATCH", path?: string}
 # --requests item shape: {body?: record, headers?: record, method?: "GET"|"HEAD"|"DELETE"|"TRACE"|"POST"|"PUT"|"PATCH", path: string}
-export def "batch create" [
+export def "batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -337,7 +337,7 @@ export def "batch create" [
 # GET /buckets
 #
 # operationId: get_buckets
-export def "buckets list" [
+export def "get-buckets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -384,7 +384,7 @@ export def "buckets list" [
 # GET /buckets/monitor/collections/changes/records
 #
 # operationId: get_changess
-export def "buckets-monitor-collections-changes-records get-changess" [
+export def "get-changess" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -431,7 +431,7 @@ export def "buckets-monitor-collections-changes-records get-changess" [
 # GET /buckets/{bid}/collections/{cid}/changeset
 #
 # operationId: get_collection-changeset
-export def "buckets-collections-changeset get" [
+export def "get-collection-changeset" [
   bid: string
   cid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -474,7 +474,7 @@ export def "buckets-collections-changeset get" [
 # GET /buckets/{bucket_id}/collections
 #
 # operationId: get_collections
-export def "buckets-collections list" [
+export def "get-collections" [
   bucket_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -523,7 +523,7 @@ export def "buckets-collections list" [
 # GET /buckets/{bucket_id}/collections/{collection_id}/records
 #
 # operationId: get_records
-export def "buckets-collections-records list" [
+export def "get-records" [
   bucket_id: string
   collection_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -574,7 +574,7 @@ export def "buckets-collections-records list" [
 # GET /buckets/{bucket_id}/collections/{collection_id}/records/{id}
 #
 # operationId: get_record
-export def "buckets-collections-records get" [
+export def "get-record" [
   bucket_id: string
   collection_id: string
   id: string
@@ -619,7 +619,7 @@ export def "buckets-collections-records get" [
 # DELETE /buckets/{bucket_id}/collections/{collection_id}/records/{id}/attachment
 #
 # operationId: delete_attachment
-export def "buckets-collections-records-attachment delete" [
+export def "delete-attachment" [
   bucket_id: string
   collection_id: string
   id: string
@@ -658,7 +658,7 @@ export def "buckets-collections-records-attachment delete" [
 # POST /buckets/{bucket_id}/collections/{collection_id}/records/{id}/attachment
 #
 # operationId: create_attachment
-export def "buckets-collections-records-attachment create" [
+export def "create-attachment" [
   bucket_id: string
   collection_id: string
   id: string
@@ -697,7 +697,7 @@ export def "buckets-collections-records-attachment create" [
 # GET /buckets/{bucket_id}/collections/{id}
 #
 # operationId: get_collection
-export def "buckets-collections get" [
+export def "get-collection" [
   bucket_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -740,7 +740,7 @@ export def "buckets-collections get" [
 # GET /buckets/{bucket_id}/groups
 #
 # operationId: get_groups
-export def "buckets-groups list" [
+export def "get-groups" [
   bucket_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -789,7 +789,7 @@ export def "buckets-groups list" [
 # GET /buckets/{bucket_id}/groups/{id}
 #
 # operationId: get_group
-export def "buckets-groups get" [
+export def "get-group" [
   bucket_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -832,7 +832,7 @@ export def "buckets-groups get" [
 # GET /buckets/{id}
 #
 # operationId: get_bucket
-export def "buckets get" [
+export def "get-bucket" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -873,7 +873,7 @@ export def "buckets get" [
 # GET /contribute.json
 #
 # operationId: contribute
-export def "contribute-json get" [
+export def "contribute" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

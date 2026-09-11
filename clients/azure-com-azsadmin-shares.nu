@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms-shares list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "shares-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -122,7 +122,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Storage.Admin/farms/{farmId}/shares
 # operationId: Shares_List
-export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms-shares list" [
+export def "shares-list" [
   subscription_id: string
   resource_group_name: string
   farm_id: string
@@ -164,7 +164,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Storage.Admin/farms/{farmId}/shares/{shareName}
 # operationId: Shares_Get
-export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms-shares get" [
+export def "shares-get" [
   subscription_id: string
   resource_group_name: string
   farm_id: string
@@ -208,7 +208,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Storage.Admin/farms/{farmId}/shares/{shareName}/metricdefinitions
 # operationId: Shares_ListMetricDefinitions
-export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms-shares-metricdefinitions list-metric-definitions" [
+export def "shares-list-metric-definitions" [
   subscription_id: string
   resource_group_name: string
   farm_id: string
@@ -252,7 +252,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Storage.Admin/farms/{farmId}/shares/{shareName}/metrics
 # operationId: Shares_ListMetrics
-export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms-shares-metrics list" [
+export def "shares-list-metrics" [
   subscription_id: string
   resource_group_name: string
   farm_id: string

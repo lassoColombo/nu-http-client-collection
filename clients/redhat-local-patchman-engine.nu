@@ -117,7 +117,7 @@ def sort-completer-4 [] { ["id" "name" "public_date" "synopsis" "type"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "patch-advisories list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-advisories" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -141,7 +141,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/patch/v1/advisories
 # operationId: listAdvisories
-export def "patch-advisories list" [
+export def "list-advisories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -190,7 +190,7 @@ export def "patch-advisories list" [
 #
 # GET /api/patch/v1/advisories/{advisory_id}
 # operationId: detailAdvisory
-export def "patch-advisories get-detail" [
+export def "detail-advisory" [
   advisory_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -226,7 +226,7 @@ export def "patch-advisories get-detail" [
 #
 # GET /api/patch/v1/advisories/{advisory_id}/systems
 # operationId: listAdvisorySystems
-export def "patch-advisories-systems list" [
+export def "list-advisory-systems" [
   advisory_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -284,7 +284,7 @@ export def "patch-advisories-systems list" [
 #
 # GET /api/patch/v1/export/advisories
 # operationId: exportAdvisories
-export def "patch-export-advisories export" [
+export def "export-advisories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -328,7 +328,7 @@ export def "patch-export-advisories export" [
 #
 # GET /api/patch/v1/export/advisories/{advisory_id}/systems
 # operationId: exportAdvisorySystems
-export def "patch-export-advisories-systems export" [
+export def "export-advisory-systems" [
   advisory_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -381,7 +381,7 @@ export def "patch-export-advisories-systems export" [
 #
 # GET /api/patch/v1/export/packages
 # operationId: exportPackages
-export def "patch-export-packages export" [
+export def "export-packages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -423,7 +423,7 @@ export def "patch-export-packages export" [
 #
 # GET /api/patch/v1/export/packages/{package_name}/systems
 # operationId: exportPackageSystems
-export def "patch-export-packages-systems export" [
+export def "export-package-systems" [
   package_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -463,7 +463,7 @@ export def "patch-export-packages-systems export" [
 #
 # GET /api/patch/v1/export/systems
 # operationId: exportSystems
-export def "patch-export-systems export" [
+export def "export-systems" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -514,7 +514,7 @@ export def "patch-export-systems export" [
 #
 # GET /api/patch/v1/export/systems/{inventory_id}/advisories
 # operationId: exportSystemAdvisories
-export def "patch-export-systems-advisories export" [
+export def "export-system-advisories" [
   inventory_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -559,7 +559,7 @@ export def "patch-export-systems-advisories export" [
 #
 # GET /api/patch/v1/export/systems/{inventory_id}/packages
 # operationId: exportSystemPackages
-export def "patch-export-systems-packages export" [
+export def "export-system-packages" [
   inventory_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -602,7 +602,7 @@ export def "patch-export-systems-packages export" [
 #
 # GET /api/patch/v1/packages/
 # operationId: listPackages
-export def "patch-packages list" [
+export def "list-packages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -648,7 +648,7 @@ export def "patch-packages list" [
 #
 # GET /api/patch/v1/packages/{package_name}
 # operationId: LatestPackage
-export def "patch-packages get-latest" [
+export def "latest-package" [
   package_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -684,7 +684,7 @@ export def "patch-packages get-latest" [
 #
 # GET /api/patch/v1/packages/{package_name}/systems
 # operationId: packageSystems
-export def "patch-packages-systems get" [
+export def "package-systems" [
   package_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -726,7 +726,7 @@ export def "patch-packages-systems get" [
 #
 # GET /api/patch/v1/packages/{package_name}/versions
 # operationId: packageVersions
-export def "patch-packages-versions get" [
+export def "package-versions" [
   package_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -765,7 +765,7 @@ export def "patch-packages-versions get" [
 #
 # GET /api/patch/v1/systems
 # operationId: listSystems
-export def "patch-systems list" [
+export def "list-systems" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -823,7 +823,7 @@ export def "patch-systems list" [
 #
 # DELETE /api/patch/v1/systems/{inventory_id}
 # operationId: deletesystem
-export def "patch-systems delete" [
+export def "deletesystem" [
   inventory_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -859,7 +859,7 @@ export def "patch-systems delete" [
 #
 # GET /api/patch/v1/systems/{inventory_id}
 # operationId: detailSystem
-export def "patch-systems get-detail" [
+export def "detail-system" [
   inventory_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -895,7 +895,7 @@ export def "patch-systems get-detail" [
 #
 # GET /api/patch/v1/systems/{inventory_id}/advisories
 # operationId: listSystemAdvisories
-export def "patch-systems-advisories list" [
+export def "list-system-advisories" [
   inventory_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -942,7 +942,7 @@ export def "patch-systems-advisories list" [
 #
 # GET /api/patch/v1/systems/{inventory_id}/packages
 # operationId: systemPackages
-export def "patch-systems-packages get" [
+export def "system-packages" [
   inventory_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -987,7 +987,7 @@ export def "patch-systems-packages get" [
 #
 # POST /api/patch/v1/views/advisories/systems
 # operationId: viewAdvisoriesSystems
-export def "patch-views-advisories-systems create" [
+export def "view-advisories-systems" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1026,7 +1026,7 @@ export def "patch-views-advisories-systems create" [
 #
 # POST /api/patch/v1/views/systems/advisories
 # operationId: viewSystemsAdvisories
-export def "patch-views-systems-advisories create" [
+export def "view-systems-advisories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

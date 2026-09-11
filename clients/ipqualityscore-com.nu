@@ -97,7 +97,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "json-email get-validation" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "email-validation" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -121,7 +121,7 @@ export def commands []: nothing -> table {
 #
 # GET /json/email/{YOUR_API_KEY_HERE}/{USER_EMAIL_HERE}
 # operationId: emailValidation
-export def "json-email get-validation" [
+export def "email-validation" [
   your_api_key_here: string
   user_email_here: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -159,7 +159,7 @@ export def "json-email get-validation" [
 #
 # GET /json/phone/{YOUR_API_KEY_HERE}/{USER_PHONE_HERE}
 # operationId: phoneValidation
-export def "json-phone get-validation" [
+export def "phone-validation" [
   your_api_key_here: string
   user_phone_here: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -199,7 +199,7 @@ export def "json-phone get-validation" [
 #
 # GET /json/url/{YOUR_API_KEY_HERE}/{URL_HERE}
 # operationId: maliciousUrlScanner
-export def "json-url get-malicious-scanner" [
+export def "malicious-url-scanner" [
   your_api_key_here: string
   url_here: string
   --base-url(-b): string@base-url-completer # API base URL

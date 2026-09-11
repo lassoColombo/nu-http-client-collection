@@ -120,7 +120,7 @@ def provider-completer [] { ["messenger" "viber_service_msg" "whatsapp"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account get-list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-all-accounts" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -144,7 +144,7 @@ export def commands []: nothing -> table {
 #
 # GET /
 # operationId: GetAllAccounts
-export def "account get-list" [
+export def "get-all-accounts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -182,7 +182,7 @@ export def "account get-list" [
 #
 # POST /messenger
 # operationId: CreateMessengerAccount
-export def "messenger create-account" [
+export def "create-messenger-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -223,7 +223,7 @@ export def "messenger create-account" [
 #
 # DELETE /messenger/{external_id}
 # operationId: DeleteMessengerAccount
-export def "messenger delete-account" [
+export def "delete-messenger-account" [
   external_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -259,7 +259,7 @@ export def "messenger delete-account" [
 #
 # GET /messenger/{external_id}
 # operationId: GetMessengerAccount
-export def "messenger get-account" [
+export def "get-messenger-account" [
   external_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -295,7 +295,7 @@ export def "messenger get-account" [
 #
 # PATCH /messenger/{external_id}
 # operationId: UpdateMessengerAccount
-export def "messenger update-account" [
+export def "update-messenger-account" [
   external_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -337,7 +337,7 @@ export def "messenger update-account" [
 #
 # GET /viber_service_msg/{external_id}
 # operationId: GetVSMAccount
-export def "viber-service-msg get-vsm-account" [
+export def "get-vsm-account" [
   external_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -373,7 +373,7 @@ export def "viber-service-msg get-vsm-account" [
 #
 # GET /whatsapp/{external_id}
 # operationId: GetWAAccount
-export def "whatsapp get-wa-account" [
+export def "get-wa-account" [
   external_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -409,7 +409,7 @@ export def "whatsapp get-wa-account" [
 #
 # POST /{provider}/{external_id}/applications
 # operationId: LinkApplication
-export def "applications create-link" [
+export def "link-application" [
   provider: string
   external_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -451,7 +451,7 @@ export def "applications create-link" [
 #
 # DELETE /{provider}/{external_id}/applications/{application_id}
 # operationId: UnliWithoutApplicationnkApplication
-export def "applications delete-unli-without-applicationnk" [
+export def "unli-without-applicationnk-application" [
   provider: string
   external_id: string
   application_id: string

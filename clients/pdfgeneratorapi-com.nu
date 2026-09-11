@@ -120,7 +120,7 @@ def language-completer [] { ["cs" "en" "et" "ru" "sk"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "templates get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-templates" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -144,7 +144,7 @@ export def commands []: nothing -> table {
 #
 # GET /templates
 # operationId: getTemplates
-export def "templates get" [
+export def "get-templates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -180,7 +180,7 @@ export def "templates get" [
 # operationId: createTemplate
 # --layout shape: {emptyLabels?: int, format?: "A4"|"letter"|"custom", height?: float, margins?: record, orientation?: "portrait"|"landscape", repeatLayout?: record, rotaion?: "0"|"90"|"180"|"270", unit?: "cm"|"in", width?: float}
 # --pages item shape: {components?: list, height?: float, margins?: record, width?: float}
-export def "templates create" [
+export def "create-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -222,7 +222,7 @@ export def "templates create" [
 #
 # POST /templates/output
 # operationId: mergeTemplates
-export def "templates-output create-merge" [
+export def "merge-templates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -264,7 +264,7 @@ export def "templates-output create-merge" [
 #
 # DELETE /templates/templateId
 # operationId: deleteTemplate
-export def "templates-template-id delete" [
+export def "delete-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -300,7 +300,7 @@ export def "templates-template-id delete" [
 #
 # GET /templates/templateId
 # operationId: getTemplate
-export def "templates-template-id get" [
+export def "get-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -338,7 +338,7 @@ export def "templates-template-id get" [
 # operationId: updateTemplate
 # --layout shape: {emptyLabels?: int, format?: "A4"|"letter"|"custom", height?: float, margins?: record, orientation?: "portrait"|"landscape", repeatLayout?: record, rotaion?: "0"|"90"|"180"|"270", unit?: "cm"|"in", width?: float}
 # --pages item shape: {components?: list, height?: float, margins?: record, width?: float}
-export def "templates-template-id update" [
+export def "update-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -382,7 +382,7 @@ export def "templates-template-id update" [
 #
 # POST /templates/templateId/copy
 # operationId: copyTemplate
-export def "templates-template-id-copy copy" [
+export def "copy-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -419,7 +419,7 @@ export def "templates-template-id-copy copy" [
 #
 # POST /templates/templateId/editor
 # operationId: getEditorUrl
-export def "templates-template-id-editor get-url" [
+export def "get-editor-url" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -460,7 +460,7 @@ export def "templates-template-id-editor get-url" [
 #
 # POST /templates/templateId/output
 # operationId: mergeTemplate
-export def "templates-template-id-output create-merge" [
+export def "merge-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -504,7 +504,7 @@ export def "templates-template-id-output create-merge" [
 #
 # DELETE /workspaces/workspaceId
 # operationId: deleteWorkspace
-export def "workspaces-workspace-id delete" [
+export def "delete-workspace" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -540,7 +540,7 @@ export def "workspaces-workspace-id delete" [
 #
 # GET /workspaces/workspaceId
 # operationId: getWorkspace
-export def "workspaces-workspace-id get" [
+export def "get-workspace" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

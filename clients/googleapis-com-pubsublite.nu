@@ -130,7 +130,7 @@ def named-target-completer [] { ["HEAD" "NAMED_TARGET_UNSPECIFIED" "TAIL"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "admin delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "pubsublite-admin-projects-locations-topics-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -154,7 +154,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1/admin/{name}
 # operationId: pubsublite.admin.projects.locations.topics.delete
-export def "admin delete" [
+export def "pubsublite-admin-projects-locations-topics-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -202,7 +202,7 @@ export def "admin delete" [
 #
 # GET /v1/admin/{name}
 # operationId: pubsublite.admin.projects.locations.topics.get
-export def "admin get" [
+export def "pubsublite-admin-projects-locations-topics-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -253,7 +253,7 @@ export def "admin get" [
 # --partitionConfig shape: {capacity?: record, count?: string, scale?: int}
 # --reservationConfig shape: {throughputReservation?: string}
 # --retentionConfig shape: {perPartitionBytes?: string, period?: string}
-export def "admin update" [
+export def "pubsublite-admin-projects-locations-topics-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -309,7 +309,7 @@ export def "admin update" [
 #
 # GET /v1/admin/{name}/operations
 # operationId: pubsublite.admin.projects.locations.operations.list
-export def "admin-operations list" [
+export def "pubsublite-admin-projects-locations-operations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -360,7 +360,7 @@ export def "admin-operations list" [
 #
 # GET /v1/admin/{name}/partitions
 # operationId: pubsublite.admin.projects.locations.topics.getPartitions
-export def "admin-partitions get" [
+export def "pubsublite-admin-projects-locations-topics-get-partitions" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -408,7 +408,7 @@ export def "admin-partitions get" [
 #
 # GET /v1/admin/{name}/subscriptions
 # operationId: pubsublite.admin.projects.locations.topics.subscriptions.list
-export def "admin-subscriptions list-by-name" [
+export def "pubsublite-admin-projects-locations-topics-subscriptions-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -458,7 +458,7 @@ export def "admin-subscriptions list-by-name" [
 #
 # GET /v1/admin/{name}/topics
 # operationId: pubsublite.admin.projects.locations.reservations.topics.list
-export def "admin-topics list-by-name" [
+export def "pubsublite-admin-projects-locations-reservations-topics-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -508,7 +508,7 @@ export def "admin-topics list-by-name" [
 #
 # POST /v1/admin/{name}:cancel
 # operationId: pubsublite.admin.projects.locations.operations.cancel
-export def "admin cancel" [
+export def "pubsublite-admin-projects-locations-operations-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -561,7 +561,7 @@ export def "admin cancel" [
 # POST /v1/admin/{name}:seek
 # operationId: pubsublite.admin.projects.locations.subscriptions.seek
 # --timeTarget shape: {eventTime?: string, publishTime?: string}
-export def "admin create-seek" [
+export def "pubsublite-admin-projects-locations-subscriptions-seek" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -614,7 +614,7 @@ export def "admin create-seek" [
 #
 # GET /v1/admin/{parent}/reservations
 # operationId: pubsublite.admin.projects.locations.reservations.list
-export def "admin-reservations list" [
+export def "pubsublite-admin-projects-locations-reservations-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -664,7 +664,7 @@ export def "admin-reservations list" [
 #
 # POST /v1/admin/{parent}/reservations
 # operationId: pubsublite.admin.projects.locations.reservations.create
-export def "admin-reservations create" [
+export def "pubsublite-admin-projects-locations-reservations-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -718,7 +718,7 @@ export def "admin-reservations create" [
 #
 # GET /v1/admin/{parent}/subscriptions
 # operationId: pubsublite.admin.projects.locations.subscriptions.list
-export def "admin-subscriptions list-by-parent" [
+export def "pubsublite-admin-projects-locations-subscriptions-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -770,7 +770,7 @@ export def "admin-subscriptions list-by-parent" [
 # operationId: pubsublite.admin.projects.locations.subscriptions.create
 # --deliveryConfig shape: {deliveryRequirement?: "DELIVERY_REQUIREMENT_UNSPECIFIED"|"DELIVER_IMMEDIATELY"|"DELIVER_AFTER_STORED"}
 # --exportConfig shape: {deadLetterTopic?: string, desiredState?: "STATE_UNSPECIFIED"|"ACTIVE"|"PAUSED"|"PERMISSION_DENIED"|"NOT_FOUND", pubsubConfig?: record}
-export def "admin-subscriptions create" [
+export def "pubsublite-admin-projects-locations-subscriptions-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -827,7 +827,7 @@ export def "admin-subscriptions create" [
 #
 # GET /v1/admin/{parent}/topics
 # operationId: pubsublite.admin.projects.locations.topics.list
-export def "admin-topics list-by-parent" [
+export def "pubsublite-admin-projects-locations-topics-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -880,7 +880,7 @@ export def "admin-topics list-by-parent" [
 # --partitionConfig shape: {capacity?: record, count?: string, scale?: int}
 # --reservationConfig shape: {throughputReservation?: string}
 # --retentionConfig shape: {perPartitionBytes?: string, period?: string}
-export def "admin-topics create" [
+export def "pubsublite-admin-projects-locations-topics-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -936,7 +936,7 @@ export def "admin-topics create" [
 #
 # GET /v1/cursor/{parent}/cursors
 # operationId: pubsublite.cursor.projects.locations.subscriptions.cursors.list
-export def "cursor-cursors list" [
+export def "pubsublite-cursor-projects-locations-subscriptions-cursors-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -987,7 +987,7 @@ export def "cursor-cursors list" [
 # POST /v1/cursor/{subscription}:commitCursor
 # operationId: pubsublite.cursor.projects.locations.subscriptions.commitCursor
 # --cursor shape: {offset?: string}
-export def "cursor commit" [
+export def "pubsublite-cursor-projects-locations-subscriptions-commit-cursor" [
   subscription: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1040,7 +1040,7 @@ export def "cursor commit" [
 #
 # POST /v1/topicStats/{topic}:computeHeadCursor
 # operationId: pubsublite.topicStats.projects.locations.topics.computeHeadCursor
-export def "topic-stats head-compute-cursor" [
+export def "pubsublite-topic-stats-projects-locations-topics-compute-head-cursor" [
   topic: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1094,7 +1094,7 @@ export def "topic-stats head-compute-cursor" [
 # operationId: pubsublite.topicStats.projects.locations.topics.computeMessageStats
 # --endCursor shape: {offset?: string}
 # --startCursor shape: {offset?: string}
-export def "topic-stats stats-compute-message" [
+export def "pubsublite-topic-stats-projects-locations-topics-compute-message-stats" [
   topic: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1149,7 +1149,7 @@ export def "topic-stats stats-compute-message" [
 # POST /v1/topicStats/{topic}:computeTimeCursor
 # operationId: pubsublite.topicStats.projects.locations.topics.computeTimeCursor
 # --target shape: {eventTime?: string, publishTime?: string}
-export def "topic-stats create-compute-time-cursor" [
+export def "pubsublite-topic-stats-projects-locations-topics-compute-time-cursor" [
   topic: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

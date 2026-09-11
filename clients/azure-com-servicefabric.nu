@@ -146,7 +146,7 @@ def service-kind-completer-1 [] { ["Stateful" "Stateless"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cancel-repair-task cancel" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cancel-repair-task" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -170,7 +170,7 @@ export def commands []: nothing -> table {
 #
 # POST /$/CancelRepairTask
 # operationId: CancelRepairTask
-export def "cancel-repair-task cancel" [
+export def "cancel-repair-task" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -215,7 +215,7 @@ export def "cancel-repair-task cancel" [
 # --History shape: {ApprovedUtcTimestamp?: string, ClaimedUtcTimestamp?: string, CompletedUtcTimestamp?: string, CreatedUtcTimestamp?: string, ExecutingUtcTimestamp?: string, PreparingHealthCheckEndUtcTimestamp?: string, PreparingHealthCheckStartUtcTimestamp?: string, PreparingUtcTimestamp?: string, RestoringHealthCheckEndUtcTimestamp?: string, RestoringHealthCheckStartUtcTimestamp?: string, RestoringUtcTimestamp?: string}
 # --Impact shape: {Kind: "Invalid"|"Node"}
 # --Target shape: {Kind: "Invalid"|"Node"}
-export def "create-repair-task create" [
+export def "create-repair-task" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -272,7 +272,7 @@ export def "create-repair-task create" [
 #
 # POST /$/DeleteRepairTask
 # operationId: DeleteRepairTask
-export def "delete-repair-task delete" [
+export def "delete-repair-task" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -313,7 +313,7 @@ export def "delete-repair-task delete" [
 #
 # POST /$/ForceApproveRepairTask
 # operationId: ForceApproveRepairTask
-export def "force-approve-repair-task approve" [
+export def "force-approve-repair-task" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -354,7 +354,7 @@ export def "force-approve-repair-task approve" [
 #
 # GET /$/GetAadMetadata
 # operationId: GetAadMetadata
-export def "get-aad-metadata get" [
+export def "get-aad-metadata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -391,7 +391,7 @@ export def "get-aad-metadata get" [
 #
 # GET /$/GetClusterConfiguration
 # operationId: GetClusterConfiguration
-export def "get-cluster-configuration get" [
+export def "get-cluster-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -429,7 +429,7 @@ export def "get-cluster-configuration get" [
 #
 # GET /$/GetClusterConfigurationUpgradeStatus
 # operationId: GetClusterConfigurationUpgradeStatus
-export def "get-cluster-configuration-upgrade-status get" [
+export def "get-cluster-configuration-upgrade-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -466,7 +466,7 @@ export def "get-cluster-configuration-upgrade-status get" [
 #
 # GET /$/GetClusterHealth
 # operationId: GetClusterHealth
-export def "get-cluster-health get" [
+export def "get-cluster-health" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -510,7 +510,7 @@ export def "get-cluster-health get" [
 # operationId: GetClusterHealthUsingPolicy
 # --ApplicationHealthPolicyMap item shape: {Key: string, Value: any}
 # --ClusterHealthPolicy shape: {ApplicationTypeHealthPolicyMap?: list, ConsiderWarningAsError?: bool, MaxPercentUnhealthyApplications?: int, MaxPercentUnhealthyNodes?: int}
-export def "get-cluster-health get-using-policy" [
+export def "get-cluster-health-using-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -557,7 +557,7 @@ export def "get-cluster-health get-using-policy" [
 #
 # GET /$/GetClusterHealthChunk
 # operationId: GetClusterHealthChunk
-export def "get-cluster-health-chunk get" [
+export def "get-cluster-health-chunk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -598,7 +598,7 @@ export def "get-cluster-health-chunk get" [
 # --ApplicationHealthPolicies shape: {ApplicationHealthPolicyMap?: list}
 # --ClusterHealthPolicy shape: {ApplicationTypeHealthPolicyMap?: list, ConsiderWarningAsError?: bool, MaxPercentUnhealthyApplications?: int, MaxPercentUnhealthyNodes?: int}
 # --NodeFilters item shape: {HealthStateFilter?: int, NodeNameFilter?: string}
-export def "get-cluster-health-chunk get-using-policy-and-advanced-filters" [
+export def "get-cluster-health-chunk-using-policy-and-advanced-filters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -642,7 +642,7 @@ export def "get-cluster-health-chunk get-using-policy-and-advanced-filters" [
 #
 # GET /$/GetClusterManifest
 # operationId: GetClusterManifest
-export def "get-cluster-manifest get" [
+export def "get-cluster-manifest" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -679,7 +679,7 @@ export def "get-cluster-manifest get" [
 #
 # GET /$/GetClusterVersion
 # operationId: GetClusterVersion
-export def "get-cluster-version get" [
+export def "get-cluster-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -716,7 +716,7 @@ export def "get-cluster-version get" [
 #
 # GET /$/GetLoadInformation
 # operationId: GetClusterLoad
-export def "get-load-information get" [
+export def "get-cluster-load" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -753,7 +753,7 @@ export def "get-load-information get" [
 #
 # GET /$/GetProvisionedCodeVersions
 # operationId: GetProvisionedFabricCodeVersionInfoList
-export def "get-provisioned-code-versions get-fabric-list" [
+export def "get-provisioned-fabric-code-version-info-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -791,7 +791,7 @@ export def "get-provisioned-code-versions get-fabric-list" [
 #
 # GET /$/GetProvisionedConfigVersions
 # operationId: GetProvisionedFabricConfigVersionInfoList
-export def "get-provisioned-config-versions get-fabric-list" [
+export def "get-provisioned-fabric-config-version-info-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -829,7 +829,7 @@ export def "get-provisioned-config-versions get-fabric-list" [
 #
 # GET /$/GetRepairTaskList
 # operationId: GetRepairTaskList
-export def "get-repair-task-list get" [
+export def "get-repair-task-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -868,7 +868,7 @@ export def "get-repair-task-list get" [
 #
 # GET /$/GetUpgradeOrchestrationServiceState
 # operationId: GetUpgradeOrchestrationServiceState
-export def "get-upgrade-orchestration-service-state get" [
+export def "get-upgrade-orchestration-service-state" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -905,7 +905,7 @@ export def "get-upgrade-orchestration-service-state get" [
 #
 # GET /$/GetUpgradeProgress
 # operationId: GetClusterUpgradeProgress
-export def "get-upgrade-progress get" [
+export def "get-cluster-upgrade-progress" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -942,7 +942,7 @@ export def "get-upgrade-progress get" [
 #
 # POST /$/InvokeInfrastructureCommand
 # operationId: InvokeInfrastructureCommand
-export def "invoke-infrastructure-command create" [
+export def "invoke-infrastructure-command" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -981,7 +981,7 @@ export def "invoke-infrastructure-command create" [
 #
 # GET /$/InvokeInfrastructureQuery
 # operationId: InvokeInfrastructureQuery
-export def "invoke-infrastructure-query list" [
+export def "invoke-infrastructure-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1020,7 +1020,7 @@ export def "invoke-infrastructure-query list" [
 #
 # POST /$/MoveToNextUpgradeDomain
 # operationId: ResumeClusterUpgrade
-export def "move-to-next-upgrade-domain create-resume" [
+export def "resume-cluster-upgrade" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1061,7 +1061,7 @@ export def "move-to-next-upgrade-domain create-resume" [
 #
 # POST /$/Provision
 # operationId: ProvisionCluster
-export def "provision create" [
+export def "provision-cluster" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1103,7 +1103,7 @@ export def "provision create" [
 #
 # POST /$/RecoverAllPartitions
 # operationId: RecoverAllPartitions
-export def "recover-all-partitions list" [
+export def "recover-all-partitions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1140,7 +1140,7 @@ export def "recover-all-partitions list" [
 #
 # POST /$/RecoverSystemPartitions
 # operationId: RecoverSystemPartitions
-export def "recover-system-partitions create" [
+export def "recover-system-partitions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1177,7 +1177,7 @@ export def "recover-system-partitions create" [
 #
 # POST /$/ReportClusterHealth
 # operationId: ReportClusterHealth
-export def "report-cluster-health create" [
+export def "report-cluster-health" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1225,7 +1225,7 @@ export def "report-cluster-health create" [
 #
 # POST /$/RollbackUpgrade
 # operationId: RollbackClusterUpgrade
-export def "rollback-upgrade create" [
+export def "rollback-cluster-upgrade" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1262,7 +1262,7 @@ export def "rollback-upgrade create" [
 #
 # POST /$/SetUpgradeOrchestrationServiceState
 # operationId: SetUpgradeOrchestrationServiceState
-export def "set-upgrade-orchestration-service-state update" [
+export def "set-upgrade-orchestration-service-state" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1304,7 +1304,7 @@ export def "set-upgrade-orchestration-service-state update" [
 # POST /$/StartClusterConfigurationUpgrade
 # operationId: StartClusterConfigurationUpgrade
 # --ApplicationHealthPolicies shape: {ApplicationHealthPolicyMap?: list}
-export def "start-cluster-configuration-upgrade start" [
+export def "start-cluster-configuration-upgrade" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1355,7 +1355,7 @@ export def "start-cluster-configuration-upgrade start" [
 #
 # POST /$/ToggleVerboseServicePlacementHealthReporting
 # operationId: ToggleVerboseServicePlacementHealthReporting
-export def "toggle-verbose-service-placement-health-reporting create" [
+export def "toggle-verbose-service-placement-health-reporting" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1393,7 +1393,7 @@ export def "toggle-verbose-service-placement-health-reporting create" [
 #
 # POST /$/Unprovision
 # operationId: UnprovisionCluster
-export def "unprovision create" [
+export def "unprovision-cluster" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1438,7 +1438,7 @@ export def "unprovision create" [
 # --History shape: {ApprovedUtcTimestamp?: string, ClaimedUtcTimestamp?: string, CompletedUtcTimestamp?: string, CreatedUtcTimestamp?: string, ExecutingUtcTimestamp?: string, PreparingHealthCheckEndUtcTimestamp?: string, PreparingHealthCheckStartUtcTimestamp?: string, PreparingUtcTimestamp?: string, RestoringHealthCheckEndUtcTimestamp?: string, RestoringHealthCheckStartUtcTimestamp?: string, RestoringUtcTimestamp?: string}
 # --Impact shape: {Kind: "Invalid"|"Node"}
 # --Target shape: {Kind: "Invalid"|"Node"}
-export def "update-repair-execution-state update" [
+export def "update-repair-execution-state" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1495,7 +1495,7 @@ export def "update-repair-execution-state update" [
 #
 # POST /$/UpdateRepairTaskHealthPolicy
 # operationId: UpdateRepairTaskHealthPolicy
-export def "update-repair-task-health-policy update" [
+export def "update-repair-task-health-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1542,7 +1542,7 @@ export def "update-repair-task-health-policy update" [
 # --ClusterHealthPolicy shape: {ApplicationTypeHealthPolicyMap?: list, ConsiderWarningAsError?: bool, MaxPercentUnhealthyApplications?: int, MaxPercentUnhealthyNodes?: int}
 # --ClusterUpgradeHealthPolicy shape: {MaxPercentDeltaUnhealthyNodes?: int, MaxPercentUpgradeDomainDeltaUnhealthyNodes?: int}
 # --UpdateDescription shape: {FailureAction?: "Invalid"|"Rollback"|"Manual", ForceRestart?: bool, HealthCheckRetryTimeoutInMilliseconds?: string, HealthCheckStableDurationInMilliseconds?: string, HealthCheckWaitDurationInMilliseconds?: string, ReplicaSetCheckTimeoutInMilliseconds?: int, RollingUpgradeMode: "Invalid"|"UnmonitoredAuto"|"UnmonitoredManual"|"Monitored", UpgradeDomainTimeoutInMilliseconds?: string, UpgradeTimeoutInMilliseconds?: string}
-export def "update-upgrade update" [
+export def "update-cluster-upgrade" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1592,7 +1592,7 @@ export def "update-upgrade update" [
 # --ClusterHealthPolicy shape: {ApplicationTypeHealthPolicyMap?: list, ConsiderWarningAsError?: bool, MaxPercentUnhealthyApplications?: int, MaxPercentUnhealthyNodes?: int}
 # --ClusterUpgradeHealthPolicy shape: {MaxPercentDeltaUnhealthyNodes?: int, MaxPercentUpgradeDomainDeltaUnhealthyNodes?: int}
 # --MonitoringPolicy shape: {FailureAction?: "Invalid"|"Rollback"|"Manual", HealthCheckRetryTimeoutInMilliseconds?: string, HealthCheckStableDurationInMilliseconds?: string, HealthCheckWaitDurationInMilliseconds?: string, UpgradeDomainTimeoutInMilliseconds?: string, UpgradeTimeoutInMilliseconds?: string}
-export def "upgrade start" [
+export def "start-cluster-upgrade" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1644,7 +1644,7 @@ export def "upgrade start" [
 #
 # GET /ApplicationTypes
 # operationId: GetApplicationTypeInfoList
-export def "application-types get-list" [
+export def "get-application-type-info-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1686,7 +1686,7 @@ export def "application-types get-list" [
 # POST /ApplicationTypes/$/Provision
 # Discriminator (request): Kind
 # operationId: ProvisionApplicationType
-export def "application-types-provision create" [
+export def "provision-application-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1728,7 +1728,7 @@ export def "application-types-provision create" [
 #
 # GET /ApplicationTypes/{applicationTypeName}
 # operationId: GetApplicationTypeInfoListByName
-export def "application-types get-list-by-name" [
+export def "get-application-type-info-list-by-name" [
   application_type_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1771,7 +1771,7 @@ export def "application-types get-list-by-name" [
 #
 # GET /ApplicationTypes/{applicationTypeName}/$/GetApplicationManifest
 # operationId: GetApplicationManifest
-export def "application-types-get-application-manifest get" [
+export def "get-application-manifest" [
   application_type_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1811,7 +1811,7 @@ export def "application-types-get-application-manifest get" [
 #
 # GET /ApplicationTypes/{applicationTypeName}/$/GetServiceManifest
 # operationId: GetServiceManifest
-export def "application-types-get-service-manifest get" [
+export def "get-service-manifest" [
   application_type_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1852,7 +1852,7 @@ export def "application-types-get-service-manifest get" [
 #
 # GET /ApplicationTypes/{applicationTypeName}/$/GetServiceTypes
 # operationId: GetServiceTypeInfoList
-export def "application-types-get-service-types get-list" [
+export def "get-service-type-info-list" [
   application_type_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1892,7 +1892,7 @@ export def "application-types-get-service-types get-list" [
 #
 # GET /ApplicationTypes/{applicationTypeName}/$/GetServiceTypes/{serviceTypeName}
 # operationId: GetServiceTypeInfoByName
-export def "application-types-get-service-types get-by-name" [
+export def "get-service-type-info-by-name" [
   application_type_name: string
   service_type_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1934,7 +1934,7 @@ export def "application-types-get-service-types get-by-name" [
 #
 # POST /ApplicationTypes/{applicationTypeName}/$/Unprovision
 # operationId: UnprovisionApplicationType
-export def "application-types-unprovision create" [
+export def "unprovision-application-type" [
   application_type_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1978,7 +1978,7 @@ export def "application-types-unprovision create" [
 #
 # GET /Applications
 # operationId: GetApplicationInfoList
-export def "applications get-list" [
+export def "get-application-info-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2023,7 +2023,7 @@ export def "applications get-list" [
 # --ApplicationCapacity shape: {ApplicationMetrics?: list, MaximumNodes?: int, MinimumNodes?: int}
 # --ManagedApplicationIdentity shape: {ManagedIdentities?: list, TokenServiceEndpoint?: string}
 # --ParameterList item shape: {Key: string, Value: string}
-export def "applications-create create" [
+export def "create-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2069,7 +2069,7 @@ export def "applications-create create" [
 #
 # GET /Applications/{applicationId}
 # operationId: GetApplicationInfo
-export def "applications get" [
+export def "get-application-info" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2109,7 +2109,7 @@ export def "applications get" [
 #
 # POST /Applications/{applicationId}/$/Delete
 # operationId: DeleteApplication
-export def "applications-delete delete" [
+export def "delete-application" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2149,7 +2149,7 @@ export def "applications-delete delete" [
 #
 # POST /Applications/{applicationId}/$/DisableBackup
 # operationId: DisableApplicationBackup
-export def "applications-disable-backup disable" [
+export def "disable-application-backup" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2192,7 +2192,7 @@ export def "applications-disable-backup disable" [
 #
 # POST /Applications/{applicationId}/$/EnableBackup
 # operationId: EnableApplicationBackup
-export def "applications-enable-backup enable" [
+export def "enable-application-backup" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2235,7 +2235,7 @@ export def "applications-enable-backup enable" [
 #
 # GET /Applications/{applicationId}/$/GetBackupConfigurationInfo
 # operationId: GetApplicationBackupConfigurationInfo
-export def "applications-get-backup-configuration-info get" [
+export def "get-application-backup-configuration-info" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2276,7 +2276,7 @@ export def "applications-get-backup-configuration-info get" [
 #
 # GET /Applications/{applicationId}/$/GetBackups
 # operationId: GetApplicationBackupList
-export def "applications-get-backups list" [
+export def "get-application-backup-list" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2320,7 +2320,7 @@ export def "applications-get-backups list" [
 #
 # GET /Applications/{applicationId}/$/GetHealth
 # operationId: GetApplicationHealth
-export def "applications-get-health get" [
+export def "get-application-health" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2365,7 +2365,7 @@ export def "applications-get-health get" [
 # operationId: GetApplicationHealthUsingPolicy
 # --DefaultServiceTypeHealthPolicy shape: {MaxPercentUnhealthyPartitionsPerService?: int, MaxPercentUnhealthyReplicasPerPartition?: int, MaxPercentUnhealthyServices?: int}
 # --ServiceTypeHealthPolicyMap item shape: {Key: string, Value: any}
-export def "applications-get-health get-using-policy" [
+export def "get-application-health-using-policy" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2415,7 +2415,7 @@ export def "applications-get-health get-using-policy" [
 #
 # GET /Applications/{applicationId}/$/GetLoadInformation
 # operationId: GetApplicationLoadInfo
-export def "applications-get-load-information get" [
+export def "get-application-load-info" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2454,7 +2454,7 @@ export def "applications-get-load-information get" [
 #
 # GET /Applications/{applicationId}/$/GetServices
 # operationId: GetServiceInfoList
-export def "applications-get-services get-list" [
+export def "get-service-info-list" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2501,7 +2501,7 @@ export def "applications-get-services get-list" [
 # --ScalingPolicies item shape: {ScalingMechanism: any, ScalingTrigger: any}
 # --ServiceLoadMetrics item shape: {DefaultLoad?: int, Name: string, PrimaryDefaultLoad?: int, SecondaryDefaultLoad?: int, Weight?: "Zero"|"Low"|"Medium"|"High"}
 # --ServicePlacementPolicies item shape: {Type: "Invalid"|"InvalidDomain"|"RequireDomain"|"PreferPrimaryDomain"|"RequireDomainDistribution"|"NonPartiallyPlaceService"}
-export def "applications-get-services-create create" [
+export def "create-service" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2558,7 +2558,7 @@ export def "applications-get-services-create create" [
 #
 # POST /Applications/{applicationId}/$/GetServices/$/CreateFromTemplate
 # operationId: CreateServiceFromTemplate
-export def "applications-get-services-create-from-template create" [
+export def "create-service-from-template" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2606,7 +2606,7 @@ export def "applications-get-services-create-from-template create" [
 #
 # GET /Applications/{applicationId}/$/GetServices/{serviceId}
 # operationId: GetServiceInfo
-export def "applications-get-services get" [
+export def "get-service-info" [
   application_id: string
   service_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2647,7 +2647,7 @@ export def "applications-get-services get" [
 #
 # GET /Applications/{applicationId}/$/GetUpgradeProgress
 # operationId: GetApplicationUpgrade
-export def "applications-get-upgrade-progress get" [
+export def "get-application-upgrade" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2686,7 +2686,7 @@ export def "applications-get-upgrade-progress get" [
 #
 # POST /Applications/{applicationId}/$/MoveToNextUpgradeDomain
 # operationId: ResumeApplicationUpgrade
-export def "applications-move-to-next-upgrade-domain create-resume" [
+export def "resume-application-upgrade" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2729,7 +2729,7 @@ export def "applications-move-to-next-upgrade-domain create-resume" [
 #
 # POST /Applications/{applicationId}/$/ReportHealth
 # operationId: ReportApplicationHealth
-export def "applications-report-health create" [
+export def "report-application-health" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2779,7 +2779,7 @@ export def "applications-report-health create" [
 #
 # POST /Applications/{applicationId}/$/ResumeBackup
 # operationId: ResumeApplicationBackup
-export def "applications-resume-backup create" [
+export def "resume-application-backup" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2818,7 +2818,7 @@ export def "applications-resume-backup create" [
 #
 # POST /Applications/{applicationId}/$/RollbackUpgrade
 # operationId: RollbackApplicationUpgrade
-export def "applications-rollback-upgrade create" [
+export def "rollback-application-upgrade" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2857,7 +2857,7 @@ export def "applications-rollback-upgrade create" [
 #
 # POST /Applications/{applicationId}/$/SuspendBackup
 # operationId: SuspendApplicationBackup
-export def "applications-suspend-backup create" [
+export def "suspend-application-backup" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2898,7 +2898,7 @@ export def "applications-suspend-backup create" [
 # operationId: UpdateApplicationUpgrade
 # --ApplicationHealthPolicy shape: {ConsiderWarningAsError?: bool, DefaultServiceTypeHealthPolicy?: any, MaxPercentUnhealthyDeployedApplications?: int, ServiceTypeHealthPolicyMap?: list}
 # --UpdateDescription shape: {FailureAction?: "Invalid"|"Rollback"|"Manual", ForceRestart?: bool, HealthCheckRetryTimeoutInMilliseconds?: string, HealthCheckStableDurationInMilliseconds?: string, HealthCheckWaitDurationInMilliseconds?: string, ReplicaSetCheckTimeoutInMilliseconds?: int, RollingUpgradeMode: "Invalid"|"UnmonitoredAuto"|"UnmonitoredManual"|"Monitored", UpgradeDomainTimeoutInMilliseconds?: string, UpgradeTimeoutInMilliseconds?: string}
-export def "applications-update-upgrade update" [
+export def "update-application-upgrade" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2947,7 +2947,7 @@ export def "applications-update-upgrade update" [
 # --ApplicationHealthPolicy shape: {ConsiderWarningAsError?: bool, DefaultServiceTypeHealthPolicy?: any, MaxPercentUnhealthyDeployedApplications?: int, ServiceTypeHealthPolicyMap?: list}
 # --MonitoringPolicy shape: {FailureAction?: "Invalid"|"Rollback"|"Manual", HealthCheckRetryTimeoutInMilliseconds?: string, HealthCheckStableDurationInMilliseconds?: string, HealthCheckWaitDurationInMilliseconds?: string, UpgradeDomainTimeoutInMilliseconds?: string, UpgradeTimeoutInMilliseconds?: string}
 # --Parameters item shape: {Key: string, Value: string}
-export def "applications-upgrade start" [
+export def "start-application-upgrade" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3001,7 +3001,7 @@ export def "applications-upgrade start" [
 # operationId: GetBackupsFromBackupLocation
 # --BackupEntity shape: {EntityKind: "Invalid"|"Partition"|"Service"|"Application"}
 # --Storage shape: {FriendlyName?: string, StorageKind: "Invalid"|"FileShare"|"AzureBlobStore"}
-export def "backup-restore-get-backups get-from-location" [
+export def "get-backups-from-backup-location" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3048,7 +3048,7 @@ export def "backup-restore-get-backups get-from-location" [
 #
 # GET /BackupRestore/BackupPolicies
 # operationId: GetBackupPolicyList
-export def "backup-restore-backup-policies get-policy-list" [
+export def "get-backup-policy-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3090,7 +3090,7 @@ export def "backup-restore-backup-policies get-policy-list" [
 # --RetentionPolicy shape: {RetentionPolicyType: "Basic"|"Invalid"}
 # --Schedule shape: {ScheduleKind: "Invalid"|"TimeBased"|"FrequencyBased"}
 # --Storage shape: {FriendlyName?: string, StorageKind: "Invalid"|"FileShare"|"AzureBlobStore"}
-export def "backup-restore-backup-policies-create create-policy" [
+export def "create-backup-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3136,7 +3136,7 @@ export def "backup-restore-backup-policies-create create-policy" [
 #
 # GET /BackupRestore/BackupPolicies/{backupPolicyName}
 # operationId: GetBackupPolicyByName
-export def "backup-restore-backup-policies get-policy-by-name" [
+export def "get-backup-policy-by-name" [
   backup_policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3175,7 +3175,7 @@ export def "backup-restore-backup-policies get-policy-by-name" [
 #
 # POST /BackupRestore/BackupPolicies/{backupPolicyName}/$/Delete
 # operationId: DeleteBackupPolicy
-export def "backup-restore-backup-policies-delete delete-policy" [
+export def "delete-backup-policy" [
   backup_policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3214,7 +3214,7 @@ export def "backup-restore-backup-policies-delete delete-policy" [
 #
 # GET /BackupRestore/BackupPolicies/{backupPolicyName}/$/GetBackupEnabledEntities
 # operationId: GetAllEntitiesBackedUpByPolicy
-export def "backup-restore-backup-policies-get-backup-enabled-entities list-backed-up-by-policy" [
+export def "get-all-entities-backed-up-by-policy" [
   backup_policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3258,7 +3258,7 @@ export def "backup-restore-backup-policies-get-backup-enabled-entities list-back
 # --RetentionPolicy shape: {RetentionPolicyType: "Basic"|"Invalid"}
 # --Schedule shape: {ScheduleKind: "Invalid"|"TimeBased"|"FrequencyBased"}
 # --Storage shape: {FriendlyName?: string, StorageKind: "Invalid"|"FileShare"|"AzureBlobStore"}
-export def "backup-restore-backup-policies-update update-policy" [
+export def "update-backup-policy" [
   backup_policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3306,7 +3306,7 @@ export def "backup-restore-backup-policies-update update-policy" [
 #
 # GET /ComposeDeployments
 # operationId: GetComposeDeploymentStatusList
-export def "compose-deployments get-status-list" [
+export def "get-compose-deployment-status-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3346,7 +3346,7 @@ export def "compose-deployments get-status-list" [
 # PUT /ComposeDeployments/$/Create
 # operationId: CreateComposeDeployment
 # --RegistryCredential shape: {PasswordEncrypted?: bool, RegistryPassword?: string, RegistryUserName?: string}
-export def "compose-deployments-create create" [
+export def "create-compose-deployment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3389,7 +3389,7 @@ export def "compose-deployments-create create" [
 #
 # GET /ComposeDeployments/{deploymentName}
 # operationId: GetComposeDeploymentStatus
-export def "compose-deployments get-status" [
+export def "get-compose-deployment-status" [
   deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3428,7 +3428,7 @@ export def "compose-deployments get-status" [
 #
 # POST /ComposeDeployments/{deploymentName}/$/Delete
 # operationId: RemoveComposeDeployment
-export def "compose-deployments-delete delete" [
+export def "remove-compose-deployment" [
   deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3467,7 +3467,7 @@ export def "compose-deployments-delete delete" [
 #
 # GET /ComposeDeployments/{deploymentName}/$/GetUpgradeProgress
 # operationId: GetComposeDeploymentUpgradeProgress
-export def "compose-deployments-get-upgrade-progress get" [
+export def "get-compose-deployment-upgrade-progress" [
   deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3506,7 +3506,7 @@ export def "compose-deployments-get-upgrade-progress get" [
 #
 # POST /ComposeDeployments/{deploymentName}/$/RollbackUpgrade
 # operationId: StartRollbackComposeDeploymentUpgrade
-export def "compose-deployments-rollback-upgrade start" [
+export def "start-rollback-compose-deployment-upgrade" [
   deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3548,7 +3548,7 @@ export def "compose-deployments-rollback-upgrade start" [
 # --ApplicationHealthPolicy shape: {ConsiderWarningAsError?: bool, DefaultServiceTypeHealthPolicy?: any, MaxPercentUnhealthyDeployedApplications?: int, ServiceTypeHealthPolicyMap?: list}
 # --MonitoringPolicy shape: {FailureAction?: "Invalid"|"Rollback"|"Manual", HealthCheckRetryTimeoutInMilliseconds?: string, HealthCheckStableDurationInMilliseconds?: string, HealthCheckWaitDurationInMilliseconds?: string, UpgradeDomainTimeoutInMilliseconds?: string, UpgradeTimeoutInMilliseconds?: string}
 # --RegistryCredential shape: {PasswordEncrypted?: bool, RegistryPassword?: string, RegistryUserName?: string}
-export def "compose-deployments-upgrade start" [
+export def "start-compose-deployment-upgrade" [
   deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3599,7 +3599,7 @@ export def "compose-deployments-upgrade start" [
 #
 # GET /EventsStore/Applications/Events
 # operationId: GetApplicationsEventList
-export def "events-store-applications-events list" [
+export def "get-applications-event-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3641,7 +3641,7 @@ export def "events-store-applications-events list" [
 #
 # GET /EventsStore/Applications/{applicationId}/$/Events
 # operationId: GetApplicationEventList
-export def "events-store-applications-events get-list" [
+export def "get-application-event-list" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3685,7 +3685,7 @@ export def "events-store-applications-events get-list" [
 #
 # GET /EventsStore/Cluster/Events
 # operationId: GetClusterEventList
-export def "events-store-cluster-events get-list" [
+export def "get-cluster-event-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3727,7 +3727,7 @@ export def "events-store-cluster-events get-list" [
 #
 # GET /EventsStore/Containers/Events
 # operationId: GetContainersEventList
-export def "events-store-containers-events get-list" [
+export def "get-containers-event-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3769,7 +3769,7 @@ export def "events-store-containers-events get-list" [
 #
 # GET /EventsStore/CorrelatedEvents/{eventInstanceId}/$/Events
 # operationId: GetCorrelatedEventList
-export def "events-store-correlated-events-events get-list" [
+export def "get-correlated-event-list" [
   event_instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3808,7 +3808,7 @@ export def "events-store-correlated-events-events get-list" [
 #
 # GET /EventsStore/Nodes/Events
 # operationId: GetNodesEventList
-export def "events-store-nodes-events list" [
+export def "get-nodes-event-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3850,7 +3850,7 @@ export def "events-store-nodes-events list" [
 #
 # GET /EventsStore/Nodes/{nodeName}/$/Events
 # operationId: GetNodeEventList
-export def "events-store-nodes-events get-list" [
+export def "get-node-event-list" [
   node_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3894,7 +3894,7 @@ export def "events-store-nodes-events get-list" [
 #
 # GET /EventsStore/Partitions/Events
 # operationId: GetPartitionsEventList
-export def "events-store-partitions-events list" [
+export def "get-partitions-event-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3936,7 +3936,7 @@ export def "events-store-partitions-events list" [
 #
 # GET /EventsStore/Partitions/{partitionId}/$/Events
 # operationId: GetPartitionEventList
-export def "events-store-partitions-events get-list" [
+export def "get-partition-event-list" [
   partition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3980,7 +3980,7 @@ export def "events-store-partitions-events get-list" [
 #
 # GET /EventsStore/Partitions/{partitionId}/$/Replicas/Events
 # operationId: GetPartitionReplicasEventList
-export def "events-store-partitions-replicas-events list" [
+export def "get-partition-replicas-event-list" [
   partition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4024,7 +4024,7 @@ export def "events-store-partitions-replicas-events list" [
 #
 # GET /EventsStore/Partitions/{partitionId}/$/Replicas/{replicaId}/$/Events
 # operationId: GetPartitionReplicaEventList
-export def "events-store-partitions-replicas-events get-list" [
+export def "get-partition-replica-event-list" [
   partition_id: string
   replica_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4070,7 +4070,7 @@ export def "events-store-partitions-replicas-events get-list" [
 #
 # GET /EventsStore/Services/Events
 # operationId: GetServicesEventList
-export def "events-store-services-events list" [
+export def "get-services-event-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4112,7 +4112,7 @@ export def "events-store-services-events list" [
 #
 # GET /EventsStore/Services/{serviceId}/$/Events
 # operationId: GetServiceEventList
-export def "events-store-services-events get-list" [
+export def "get-service-event-list" [
   service_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4156,7 +4156,7 @@ export def "events-store-services-events get-list" [
 #
 # GET /Faults/
 # operationId: GetFaultOperationList
-export def "faults get-operation-list" [
+export def "get-fault-operation-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4195,7 +4195,7 @@ export def "faults get-operation-list" [
 #
 # POST /Faults/$/Cancel
 # operationId: CancelOperation
-export def "faults-cancel cancel-operation" [
+export def "cancel-operation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4234,7 +4234,7 @@ export def "faults-cancel cancel-operation" [
 #
 # GET /Faults/Nodes/{nodeName}/$/GetTransitionProgress
 # operationId: GetNodeTransitionProgress
-export def "faults-nodes-get-transition-progress get" [
+export def "get-node-transition-progress" [
   node_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4274,7 +4274,7 @@ export def "faults-nodes-get-transition-progress get" [
 #
 # POST /Faults/Nodes/{nodeName}/$/StartTransition/
 # operationId: StartNodeTransition
-export def "faults-nodes-start-transition start" [
+export def "start-node-transition" [
   node_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4317,7 +4317,7 @@ export def "faults-nodes-start-transition start" [
 #
 # GET /Faults/Services/{serviceId}/$/GetPartitions/{partitionId}/$/GetDataLossProgress
 # operationId: GetDataLossProgress
-export def "faults-services-get-partitions-get-data-loss-progress get" [
+export def "get-data-loss-progress" [
   service_id: string
   partition_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4359,7 +4359,7 @@ export def "faults-services-get-partitions-get-data-loss-progress get" [
 #
 # GET /Faults/Services/{serviceId}/$/GetPartitions/{partitionId}/$/GetQuorumLossProgress
 # operationId: GetQuorumLossProgress
-export def "faults-services-get-partitions-get-quorum-loss-progress get" [
+export def "get-quorum-loss-progress" [
   service_id: string
   partition_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4401,7 +4401,7 @@ export def "faults-services-get-partitions-get-quorum-loss-progress get" [
 #
 # GET /Faults/Services/{serviceId}/$/GetPartitions/{partitionId}/$/GetRestartProgress
 # operationId: GetPartitionRestartProgress
-export def "faults-services-get-partitions-get-restart-progress get" [
+export def "get-partition-restart-progress" [
   service_id: string
   partition_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4443,7 +4443,7 @@ export def "faults-services-get-partitions-get-restart-progress get" [
 #
 # POST /Faults/Services/{serviceId}/$/GetPartitions/{partitionId}/$/StartDataLoss
 # operationId: StartDataLoss
-export def "faults-services-get-partitions-start-data-loss start" [
+export def "start-data-loss" [
   service_id: string
   partition_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4486,7 +4486,7 @@ export def "faults-services-get-partitions-start-data-loss start" [
 #
 # POST /Faults/Services/{serviceId}/$/GetPartitions/{partitionId}/$/StartQuorumLoss
 # operationId: StartQuorumLoss
-export def "faults-services-get-partitions-start-quorum-loss start" [
+export def "start-quorum-loss" [
   service_id: string
   partition_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4530,7 +4530,7 @@ export def "faults-services-get-partitions-start-quorum-loss start" [
 #
 # POST /Faults/Services/{serviceId}/$/GetPartitions/{partitionId}/$/StartRestart
 # operationId: StartPartitionRestart
-export def "faults-services-get-partitions-start-restart start" [
+export def "start-partition-restart" [
   service_id: string
   partition_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4573,7 +4573,7 @@ export def "faults-services-get-partitions-start-restart start" [
 #
 # GET /ImageStore
 # operationId: GetImageStoreRootContent
-export def "image-store get-root-content" [
+export def "get-image-store-root-content" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4610,7 +4610,7 @@ export def "image-store get-root-content" [
 #
 # POST /ImageStore/$/CommitUploadSession
 # operationId: CommitImageStoreUploadSession
-export def "image-store-commit-upload-session commit" [
+export def "commit-image-store-upload-session" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4648,7 +4648,7 @@ export def "image-store-commit-upload-session commit" [
 #
 # POST /ImageStore/$/Copy
 # operationId: CopyImageStoreContent
-export def "image-store-copy copy-content" [
+export def "copy-image-store-content" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4692,7 +4692,7 @@ export def "image-store-copy copy-content" [
 #
 # DELETE /ImageStore/$/DeleteUploadSession
 # operationId: DeleteImageStoreUploadSession
-export def "image-store-delete-upload-session delete" [
+export def "delete-image-store-upload-session" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4730,7 +4730,7 @@ export def "image-store-delete-upload-session delete" [
 #
 # GET /ImageStore/$/FolderSize
 # operationId: GetImageStoreRootFolderSize
-export def "image-store-folder-size get-root" [
+export def "get-image-store-root-folder-size" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4767,7 +4767,7 @@ export def "image-store-folder-size get-root" [
 #
 # GET /ImageStore/$/GetUploadSession
 # operationId: GetImageStoreUploadSessionById
-export def "image-store-get-upload-session get" [
+export def "get-image-store-upload-session-by-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4805,7 +4805,7 @@ export def "image-store-get-upload-session get" [
 #
 # DELETE /ImageStore/{contentPath}
 # operationId: DeleteImageStoreContent
-export def "image-store delete-content" [
+export def "delete-image-store-content" [
   content_path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4844,7 +4844,7 @@ export def "image-store delete-content" [
 #
 # GET /ImageStore/{contentPath}
 # operationId: GetImageStoreContent
-export def "image-store get-content" [
+export def "get-image-store-content" [
   content_path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4883,7 +4883,7 @@ export def "image-store get-content" [
 #
 # PUT /ImageStore/{contentPath}
 # operationId: UploadFile
-export def "image-store upload-file" [
+export def "upload-file" [
   content_path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4922,7 +4922,7 @@ export def "image-store upload-file" [
 #
 # GET /ImageStore/{contentPath}/$/FolderSize
 # operationId: GetImageStoreFolderSize
-export def "image-store-folder-size get" [
+export def "get-image-store-folder-size" [
   content_path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4961,7 +4961,7 @@ export def "image-store-folder-size get" [
 #
 # GET /ImageStore/{contentPath}/$/GetUploadSession
 # operationId: GetImageStoreUploadSessionByPath
-export def "image-store-get-upload-session get-by-path" [
+export def "get-image-store-upload-session-by-path" [
   content_path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5000,7 +5000,7 @@ export def "image-store-get-upload-session get-by-path" [
 #
 # PUT /ImageStore/{contentPath}/$/UploadChunk
 # operationId: UploadFileChunk
-export def "image-store-upload-chunk upload-file" [
+export def "upload-file-chunk" [
   content_path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5043,7 +5043,7 @@ export def "image-store-upload-chunk upload-file" [
 #
 # POST /Names/$/Create
 # operationId: CreateName
-export def "names-create create" [
+export def "create-name" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5084,7 +5084,7 @@ export def "names-create create" [
 #
 # DELETE /Names/{nameId}
 # operationId: DeleteName
-export def "names delete" [
+export def "delete-name" [
   name_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5123,7 +5123,7 @@ export def "names delete" [
 #
 # GET /Names/{nameId}
 # operationId: GetNameExistsInfo
-export def "names get-exists" [
+export def "get-name-exists-info" [
   name_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5162,7 +5162,7 @@ export def "names get-exists" [
 #
 # GET /Names/{nameId}/$/GetProperties
 # operationId: GetPropertyInfoList
-export def "names-get-properties get-property-list" [
+export def "get-property-info-list" [
   name_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5204,7 +5204,7 @@ export def "names-get-properties get-property-list" [
 # POST /Names/{nameId}/$/GetProperties/$/SubmitBatch
 # operationId: SubmitPropertyBatch
 # --Operations item shape: {Kind: "Invalid"|"Put"|"Get"|"CheckExists"|"CheckSequence"|"Delete"|"CheckValue", PropertyName: string}
-export def "names-get-properties-submit-batch submit-property" [
+export def "submit-property-batch" [
   name_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5247,7 +5247,7 @@ export def "names-get-properties-submit-batch submit-property" [
 #
 # DELETE /Names/{nameId}/$/GetProperty
 # operationId: DeleteProperty
-export def "names-get-property delete" [
+export def "delete-property" [
   name_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5287,7 +5287,7 @@ export def "names-get-property delete" [
 #
 # GET /Names/{nameId}/$/GetProperty
 # operationId: GetPropertyInfo
-export def "names-get-property get" [
+export def "get-property-info" [
   name_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5328,7 +5328,7 @@ export def "names-get-property get" [
 # PUT /Names/{nameId}/$/GetProperty
 # operationId: PutProperty
 # --Value shape: {Kind: "Invalid"|"Binary"|"Int64"|"Double"|"String"|"Guid"}
-export def "names-get-property update" [
+export def "put-property" [
   name_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5373,7 +5373,7 @@ export def "names-get-property update" [
 #
 # GET /Names/{nameId}/$/GetSubNames
 # operationId: GetSubNameInfoList
-export def "names-get-sub-names get-list" [
+export def "get-sub-name-info-list" [
   name_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5414,7 +5414,7 @@ export def "names-get-sub-names get-list" [
 #
 # GET /Nodes
 # operationId: GetNodeInfoList
-export def "nodes get-list" [
+export def "get-node-info-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5454,7 +5454,7 @@ export def "nodes get-list" [
 #
 # GET /Nodes/{nodeName}
 # operationId: GetNodeInfo
-export def "nodes get" [
+export def "get-node-info" [
   node_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5493,7 +5493,7 @@ export def "nodes get" [
 #
 # POST /Nodes/{nodeName}/$/Activate
 # operationId: EnableNode
-export def "nodes-activate enable" [
+export def "enable-node" [
   node_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5532,7 +5532,7 @@ export def "nodes-activate enable" [
 #
 # POST /Nodes/{nodeName}/$/Deactivate
 # operationId: DisableNode
-export def "nodes-deactivate disable" [
+export def "disable-node" [
   node_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5576,7 +5576,7 @@ export def "nodes-deactivate disable" [
 # POST /Nodes/{nodeName}/$/DeployServicePackage
 # operationId: DeployServicePackageToNode
 # --PackageSharingPolicy item shape: {PackageSharingScope?: "None"|"All"|"Code"|"Config"|"Data", SharedPackageName?: string}
-export def "nodes-deploy-service-package create" [
+export def "deploy-service-package-to-node" [
   node_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5623,7 +5623,7 @@ export def "nodes-deploy-service-package create" [
 #
 # GET /Nodes/{nodeName}/$/GetApplications
 # operationId: GetDeployedApplicationInfoList
-export def "nodes-get-applications get-deployed-list" [
+export def "get-deployed-application-info-list" [
   node_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5665,7 +5665,7 @@ export def "nodes-get-applications get-deployed-list" [
 #
 # GET /Nodes/{nodeName}/$/GetApplications/{applicationId}
 # operationId: GetDeployedApplicationInfo
-export def "nodes-get-applications get-deployed" [
+export def "get-deployed-application-info" [
   node_name: string
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5707,7 +5707,7 @@ export def "nodes-get-applications get-deployed" [
 #
 # GET /Nodes/{nodeName}/$/GetApplications/{applicationId}/$/GetCodePackages
 # operationId: GetDeployedCodePackageInfoList
-export def "nodes-get-applications-get-code-packages get-deployed-list" [
+export def "get-deployed-code-package-info-list" [
   node_name: string
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5750,7 +5750,7 @@ export def "nodes-get-applications-get-code-packages get-deployed-list" [
 #
 # POST /Nodes/{nodeName}/$/GetApplications/{applicationId}/$/GetCodePackages/$/ContainerApi
 # operationId: InvokeContainerApi
-export def "nodes-get-applications-get-code-packages-container-api create-invoke" [
+export def "invoke-container-api" [
   node_name: string
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5801,7 +5801,7 @@ export def "nodes-get-applications-get-code-packages-container-api create-invoke
 #
 # GET /Nodes/{nodeName}/$/GetApplications/{applicationId}/$/GetCodePackages/$/ContainerLogs
 # operationId: GetContainerLogsDeployedOnNode
-export def "nodes-get-applications-get-code-packages-container-logs get-deployed" [
+export def "get-container-logs-deployed-on-node" [
   node_name: string
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5846,7 +5846,7 @@ export def "nodes-get-applications-get-code-packages-container-logs get-deployed
 #
 # POST /Nodes/{nodeName}/$/GetApplications/{applicationId}/$/GetCodePackages/$/Restart
 # operationId: RestartDeployedCodePackage
-export def "nodes-get-applications-get-code-packages-restart restart-deployed" [
+export def "restart-deployed-code-package" [
   node_name: string
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5894,7 +5894,7 @@ export def "nodes-get-applications-get-code-packages-restart restart-deployed" [
 #
 # GET /Nodes/{nodeName}/$/GetApplications/{applicationId}/$/GetHealth
 # operationId: GetDeployedApplicationHealth
-export def "nodes-get-applications-get-health get-deployed" [
+export def "get-deployed-application-health" [
   node_name: string
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5940,7 +5940,7 @@ export def "nodes-get-applications-get-health get-deployed" [
 # operationId: GetDeployedApplicationHealthUsingPolicy
 # --DefaultServiceTypeHealthPolicy shape: {MaxPercentUnhealthyPartitionsPerService?: int, MaxPercentUnhealthyReplicasPerPartition?: int, MaxPercentUnhealthyServices?: int}
 # --ServiceTypeHealthPolicyMap item shape: {Key: string, Value: any}
-export def "nodes-get-applications-get-health get-deployed-using-policy" [
+export def "get-deployed-application-health-using-policy" [
   node_name: string
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5991,7 +5991,7 @@ export def "nodes-get-applications-get-health get-deployed-using-policy" [
 #
 # GET /Nodes/{nodeName}/$/GetApplications/{applicationId}/$/GetReplicas
 # operationId: GetDeployedServiceReplicaInfoList
-export def "nodes-get-applications-get-replicas get-deployed-service-list" [
+export def "get-deployed-service-replica-info-list" [
   node_name: string
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6034,7 +6034,7 @@ export def "nodes-get-applications-get-replicas get-deployed-service-list" [
 #
 # GET /Nodes/{nodeName}/$/GetApplications/{applicationId}/$/GetServicePackages
 # operationId: GetDeployedServicePackageInfoList
-export def "nodes-get-applications-get-service-packages get-deployed-list" [
+export def "get-deployed-service-package-info-list" [
   node_name: string
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6075,7 +6075,7 @@ export def "nodes-get-applications-get-service-packages get-deployed-list" [
 #
 # GET /Nodes/{nodeName}/$/GetApplications/{applicationId}/$/GetServicePackages/{servicePackageName}
 # operationId: GetDeployedServicePackageInfoListByName
-export def "nodes-get-applications-get-service-packages get-deployed-list-by-name" [
+export def "get-deployed-service-package-info-list-by-name" [
   node_name: string
   application_id: string
   service_package_name: string
@@ -6118,7 +6118,7 @@ export def "nodes-get-applications-get-service-packages get-deployed-list-by-nam
 #
 # GET /Nodes/{nodeName}/$/GetApplications/{applicationId}/$/GetServicePackages/{servicePackageName}/$/GetHealth
 # operationId: GetDeployedServicePackageHealth
-export def "nodes-get-applications-get-service-packages-get-health get-deployed" [
+export def "get-deployed-service-package-health" [
   node_name: string
   application_id: string
   service_package_name: string
@@ -6164,7 +6164,7 @@ export def "nodes-get-applications-get-service-packages-get-health get-deployed"
 # operationId: GetDeployedServicePackageHealthUsingPolicy
 # --DefaultServiceTypeHealthPolicy shape: {MaxPercentUnhealthyPartitionsPerService?: int, MaxPercentUnhealthyReplicasPerPartition?: int, MaxPercentUnhealthyServices?: int}
 # --ServiceTypeHealthPolicyMap item shape: {Key: string, Value: any}
-export def "nodes-get-applications-get-service-packages-get-health get-deployed-using-policy" [
+export def "get-deployed-service-package-health-using-policy" [
   node_name: string
   application_id: string
   service_package_name: string
@@ -6215,7 +6215,7 @@ export def "nodes-get-applications-get-service-packages-get-health get-deployed-
 #
 # POST /Nodes/{nodeName}/$/GetApplications/{applicationId}/$/GetServicePackages/{servicePackageName}/$/ReportHealth
 # operationId: ReportDeployedServicePackageHealth
-export def "nodes-get-applications-get-service-packages-report-health create-deployed" [
+export def "report-deployed-service-package-health" [
   node_name: string
   application_id: string
   service_package_name: string
@@ -6269,7 +6269,7 @@ export def "nodes-get-applications-get-service-packages-report-health create-dep
 #
 # GET /Nodes/{nodeName}/$/GetApplications/{applicationId}/$/GetServiceTypes
 # operationId: GetDeployedServiceTypeInfoList
-export def "nodes-get-applications-get-service-types get-deployed-list" [
+export def "get-deployed-service-type-info-list" [
   node_name: string
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6311,7 +6311,7 @@ export def "nodes-get-applications-get-service-types get-deployed-list" [
 #
 # GET /Nodes/{nodeName}/$/GetApplications/{applicationId}/$/GetServiceTypes/{serviceTypeName}
 # operationId: GetDeployedServiceTypeInfoByName
-export def "nodes-get-applications-get-service-types get-deployed-by-name" [
+export def "get-deployed-service-type-info-by-name" [
   node_name: string
   application_id: string
   service_type_name: string
@@ -6355,7 +6355,7 @@ export def "nodes-get-applications-get-service-types get-deployed-by-name" [
 #
 # POST /Nodes/{nodeName}/$/GetApplications/{applicationId}/$/ReportHealth
 # operationId: ReportDeployedApplicationHealth
-export def "nodes-get-applications-report-health create-deployed" [
+export def "report-deployed-application-health" [
   node_name: string
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6407,7 +6407,7 @@ export def "nodes-get-applications-report-health create-deployed" [
 #
 # GET /Nodes/{nodeName}/$/GetHealth
 # operationId: GetNodeHealth
-export def "nodes-get-health get" [
+export def "get-node-health" [
   node_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6448,7 +6448,7 @@ export def "nodes-get-health get" [
 # POST /Nodes/{nodeName}/$/GetHealth
 # operationId: GetNodeHealthUsingPolicy
 # --ApplicationTypeHealthPolicyMap item shape: {Key: string, Value: int}
-export def "nodes-get-health get-using-policy" [
+export def "get-node-health-using-policy" [
   node_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6495,7 +6495,7 @@ export def "nodes-get-health get-using-policy" [
 #
 # GET /Nodes/{nodeName}/$/GetLoadInformation
 # operationId: GetNodeLoadInfo
-export def "nodes-get-load-information get" [
+export def "get-node-load-info" [
   node_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6534,7 +6534,7 @@ export def "nodes-get-load-information get" [
 #
 # GET /Nodes/{nodeName}/$/GetPartitions/{partitionId}/$/GetReplicas
 # operationId: GetDeployedServiceReplicaDetailInfoByPartitionId
-export def "nodes-get-partitions-get-replicas get-deployed-service-detail" [
+export def "get-deployed-service-replica-detail-info-by-partition-id" [
   node_name: string
   partition_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6575,7 +6575,7 @@ export def "nodes-get-partitions-get-replicas get-deployed-service-detail" [
 #
 # POST /Nodes/{nodeName}/$/GetPartitions/{partitionId}/$/GetReplicas/{replicaId}/$/Delete
 # operationId: RemoveReplica
-export def "nodes-get-partitions-get-replicas-delete delete" [
+export def "remove-replica" [
   node_name: string
   partition_id: string
   replica_id: string
@@ -6619,7 +6619,7 @@ export def "nodes-get-partitions-get-replicas-delete delete" [
 #
 # GET /Nodes/{nodeName}/$/GetPartitions/{partitionId}/$/GetReplicas/{replicaId}/$/GetDetail
 # operationId: GetDeployedServiceReplicaDetailInfo
-export def "nodes-get-partitions-get-replicas-get-detail get-deployed-service" [
+export def "get-deployed-service-replica-detail-info" [
   node_name: string
   partition_id: string
   replica_id: string
@@ -6662,7 +6662,7 @@ export def "nodes-get-partitions-get-replicas-get-detail get-deployed-service" [
 #
 # POST /Nodes/{nodeName}/$/GetPartitions/{partitionId}/$/GetReplicas/{replicaId}/$/Restart
 # operationId: RestartReplica
-export def "nodes-get-partitions-get-replicas-restart restart" [
+export def "restart-replica" [
   node_name: string
   partition_id: string
   replica_id: string
@@ -6705,7 +6705,7 @@ export def "nodes-get-partitions-get-replicas-restart restart" [
 #
 # POST /Nodes/{nodeName}/$/RemoveNodeState
 # operationId: RemoveNodeState
-export def "nodes-remove-node-state delete" [
+export def "remove-node-state" [
   node_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6744,7 +6744,7 @@ export def "nodes-remove-node-state delete" [
 #
 # POST /Nodes/{nodeName}/$/ReportHealth
 # operationId: ReportNodeHealth
-export def "nodes-report-health create" [
+export def "report-node-health" [
   node_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6794,7 +6794,7 @@ export def "nodes-report-health create" [
 #
 # POST /Nodes/{nodeName}/$/Restart
 # operationId: RestartNode
-export def "nodes-restart restart" [
+export def "restart-node" [
   node_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6838,7 +6838,7 @@ export def "nodes-restart restart" [
 #
 # GET /Partitions/{partitionId}
 # operationId: GetPartitionInfo
-export def "partitions get" [
+export def "get-partition-info" [
   partition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6878,7 +6878,7 @@ export def "partitions get" [
 # POST /Partitions/{partitionId}/$/Backup
 # operationId: BackupPartition
 # --BackupStorage shape: {FriendlyName?: string, StorageKind: "Invalid"|"FileShare"|"AzureBlobStore"}
-export def "partitions-backup create" [
+export def "backup-partition" [
   partition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6922,7 +6922,7 @@ export def "partitions-backup create" [
 #
 # POST /Partitions/{partitionId}/$/DisableBackup
 # operationId: DisablePartitionBackup
-export def "partitions-disable-backup disable" [
+export def "disable-partition-backup" [
   partition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6965,7 +6965,7 @@ export def "partitions-disable-backup disable" [
 #
 # POST /Partitions/{partitionId}/$/EnableBackup
 # operationId: EnablePartitionBackup
-export def "partitions-enable-backup enable" [
+export def "enable-partition-backup" [
   partition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7008,7 +7008,7 @@ export def "partitions-enable-backup enable" [
 #
 # GET /Partitions/{partitionId}/$/GetBackupConfigurationInfo
 # operationId: GetPartitionBackupConfigurationInfo
-export def "partitions-get-backup-configuration-info get" [
+export def "get-partition-backup-configuration-info" [
   partition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7047,7 +7047,7 @@ export def "partitions-get-backup-configuration-info get" [
 #
 # GET /Partitions/{partitionId}/$/GetBackupProgress
 # operationId: GetPartitionBackupProgress
-export def "partitions-get-backup-progress get" [
+export def "get-partition-backup-progress" [
   partition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7086,7 +7086,7 @@ export def "partitions-get-backup-progress get" [
 #
 # GET /Partitions/{partitionId}/$/GetBackups
 # operationId: GetPartitionBackupList
-export def "partitions-get-backups list" [
+export def "get-partition-backup-list" [
   partition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7128,7 +7128,7 @@ export def "partitions-get-backups list" [
 #
 # GET /Partitions/{partitionId}/$/GetHealth
 # operationId: GetPartitionHealth
-export def "partitions-get-health get" [
+export def "get-partition-health" [
   partition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7172,7 +7172,7 @@ export def "partitions-get-health get" [
 # operationId: GetPartitionHealthUsingPolicy
 # --DefaultServiceTypeHealthPolicy shape: {MaxPercentUnhealthyPartitionsPerService?: int, MaxPercentUnhealthyReplicasPerPartition?: int, MaxPercentUnhealthyServices?: int}
 # --ServiceTypeHealthPolicyMap item shape: {Key: string, Value: any}
-export def "partitions-get-health get-using-policy" [
+export def "get-partition-health-using-policy" [
   partition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7221,7 +7221,7 @@ export def "partitions-get-health get-using-policy" [
 #
 # GET /Partitions/{partitionId}/$/GetLoadInformation
 # operationId: GetPartitionLoadInformation
-export def "partitions-get-load-information get" [
+export def "get-partition-load-information" [
   partition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7260,7 +7260,7 @@ export def "partitions-get-load-information get" [
 #
 # GET /Partitions/{partitionId}/$/GetReplicas
 # operationId: GetReplicaInfoList
-export def "partitions-get-replicas get-list" [
+export def "get-replica-info-list" [
   partition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7300,7 +7300,7 @@ export def "partitions-get-replicas get-list" [
 #
 # GET /Partitions/{partitionId}/$/GetReplicas/{replicaId}
 # operationId: GetReplicaInfo
-export def "partitions-get-replicas get" [
+export def "get-replica-info" [
   partition_id: string
   replica_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7341,7 +7341,7 @@ export def "partitions-get-replicas get" [
 #
 # GET /Partitions/{partitionId}/$/GetReplicas/{replicaId}/$/GetHealth
 # operationId: GetReplicaHealth
-export def "partitions-get-replicas-get-health get" [
+export def "get-replica-health" [
   partition_id: string
   replica_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7385,7 +7385,7 @@ export def "partitions-get-replicas-get-health get" [
 # operationId: GetReplicaHealthUsingPolicy
 # --DefaultServiceTypeHealthPolicy shape: {MaxPercentUnhealthyPartitionsPerService?: int, MaxPercentUnhealthyReplicasPerPartition?: int, MaxPercentUnhealthyServices?: int}
 # --ServiceTypeHealthPolicyMap item shape: {Key: string, Value: any}
-export def "partitions-get-replicas-get-health get-using-policy" [
+export def "get-replica-health-using-policy" [
   partition_id: string
   replica_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7434,7 +7434,7 @@ export def "partitions-get-replicas-get-health get-using-policy" [
 #
 # POST /Partitions/{partitionId}/$/GetReplicas/{replicaId}/$/ReportHealth
 # operationId: ReportReplicaHealth
-export def "partitions-get-replicas-report-health create" [
+export def "report-replica-health" [
   partition_id: string
   replica_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7487,7 +7487,7 @@ export def "partitions-get-replicas-report-health create" [
 #
 # GET /Partitions/{partitionId}/$/GetRestoreProgress
 # operationId: GetPartitionRestoreProgress
-export def "partitions-get-restore-progress get" [
+export def "get-partition-restore-progress" [
   partition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7526,7 +7526,7 @@ export def "partitions-get-restore-progress get" [
 #
 # GET /Partitions/{partitionId}/$/GetServiceName
 # operationId: GetServiceNameInfo
-export def "partitions-get-service-name get" [
+export def "get-service-name-info" [
   partition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7565,7 +7565,7 @@ export def "partitions-get-service-name get" [
 #
 # POST /Partitions/{partitionId}/$/MovePrimaryReplica
 # operationId: MovePrimaryReplica
-export def "partitions-move-primary-replica move" [
+export def "move-primary-replica" [
   partition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7606,7 +7606,7 @@ export def "partitions-move-primary-replica move" [
 #
 # POST /Partitions/{partitionId}/$/MoveSecondaryReplica
 # operationId: MoveSecondaryReplica
-export def "partitions-move-secondary-replica move" [
+export def "move-secondary-replica" [
   partition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7648,7 +7648,7 @@ export def "partitions-move-secondary-replica move" [
 #
 # POST /Partitions/{partitionId}/$/Recover
 # operationId: RecoverPartition
-export def "partitions-recover create" [
+export def "recover-partition" [
   partition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7687,7 +7687,7 @@ export def "partitions-recover create" [
 #
 # POST /Partitions/{partitionId}/$/ReportHealth
 # operationId: ReportPartitionHealth
-export def "partitions-report-health create" [
+export def "report-partition-health" [
   partition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7737,7 +7737,7 @@ export def "partitions-report-health create" [
 #
 # POST /Partitions/{partitionId}/$/ResetLoad
 # operationId: ResetPartitionLoad
-export def "partitions-reset-load reset" [
+export def "reset-partition-load" [
   partition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7777,7 +7777,7 @@ export def "partitions-reset-load reset" [
 # POST /Partitions/{partitionId}/$/Restore
 # operationId: RestorePartition
 # --BackupStorage shape: {FriendlyName?: string, StorageKind: "Invalid"|"FileShare"|"AzureBlobStore"}
-export def "partitions-restore create" [
+export def "restore-partition" [
   partition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7823,7 +7823,7 @@ export def "partitions-restore create" [
 #
 # POST /Partitions/{partitionId}/$/ResumeBackup
 # operationId: ResumePartitionBackup
-export def "partitions-resume-backup create" [
+export def "resume-partition-backup" [
   partition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7862,7 +7862,7 @@ export def "partitions-resume-backup create" [
 #
 # POST /Partitions/{partitionId}/$/SuspendBackup
 # operationId: SuspendPartitionBackup
-export def "partitions-suspend-backup create" [
+export def "suspend-partition-backup" [
   partition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7901,7 +7901,7 @@ export def "partitions-suspend-backup create" [
 #
 # GET /Resources/Applications
 # operationId: MeshApplication_List
-export def "resources-applications list-mesh" [
+export def "mesh-application-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7937,7 +7937,7 @@ export def "resources-applications list-mesh" [
 #
 # DELETE /Resources/Applications/{applicationResourceName}
 # operationId: MeshApplication_Delete
-export def "resources-applications delete-mesh" [
+export def "mesh-application-delete" [
   application_resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7975,7 +7975,7 @@ export def "resources-applications delete-mesh" [
 #
 # GET /Resources/Applications/{applicationResourceName}
 # operationId: MeshApplication_Get
-export def "resources-applications get-mesh" [
+export def "mesh-application-get" [
   application_resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8015,7 +8015,7 @@ export def "resources-applications get-mesh" [
 # operationId: MeshApplication_CreateOrUpdate
 # --identity shape: {principalId?: string, tenantId?: string, tokenServiceEndpoint?: string, type: string, userAssignedIdentities?: record}
 # --properties shape: {debugParams?: string, description?: string, diagnostics?: any, healthState?: "Invalid"|"Ok"|"Warning"|"Error"|"Unknown", services?: list, status?: "Unknown"|"Ready"|"Upgrading"|"Creating"|"Deleting"|"Failed"}
-export def "resources-applications create-mesh-or-update" [
+export def "mesh-application-create-or-update" [
   application_resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8059,7 +8059,7 @@ export def "resources-applications create-mesh-or-update" [
 #
 # GET /Resources/Applications/{applicationResourceName}/Services
 # operationId: MeshService_List
-export def "resources-applications-services list-mesh" [
+export def "mesh-service-list" [
   application_resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8097,7 +8097,7 @@ export def "resources-applications-services list-mesh" [
 #
 # GET /Resources/Applications/{applicationResourceName}/Services/{serviceResourceName}
 # operationId: MeshService_Get
-export def "resources-applications-services get-mesh" [
+export def "mesh-service-get" [
   application_resource_name: string
   service_resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8137,7 +8137,7 @@ export def "resources-applications-services get-mesh" [
 #
 # GET /Resources/Applications/{applicationResourceName}/Services/{serviceResourceName}/Replicas
 # operationId: MeshServiceReplica_List
-export def "resources-applications-services-replicas list-mesh" [
+export def "mesh-service-replica-list" [
   application_resource_name: string
   service_resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8177,7 +8177,7 @@ export def "resources-applications-services-replicas list-mesh" [
 #
 # GET /Resources/Applications/{applicationResourceName}/Services/{serviceResourceName}/Replicas/{replicaName}
 # operationId: MeshServiceReplica_Get
-export def "resources-applications-services-replicas get-mesh" [
+export def "mesh-service-replica-get" [
   application_resource_name: string
   service_resource_name: string
   replica_name: string
@@ -8219,7 +8219,7 @@ export def "resources-applications-services-replicas get-mesh" [
 #
 # GET /Resources/Applications/{applicationResourceName}/Services/{serviceResourceName}/Replicas/{replicaName}/CodePackages/{codePackageName}/Logs
 # operationId: MeshCodePackage_GetContainerLogs
-export def "resources-applications-services-replicas-code-packages-logs get-mesh-container" [
+export def "mesh-code-package-get-container-logs" [
   application_resource_name: string
   service_resource_name: string
   replica_name: string
@@ -8264,7 +8264,7 @@ export def "resources-applications-services-replicas-code-packages-logs get-mesh
 #
 # GET /Resources/Gateways
 # operationId: MeshGateway_List
-export def "resources-gateways list-mesh" [
+export def "mesh-gateway-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8300,7 +8300,7 @@ export def "resources-gateways list-mesh" [
 #
 # DELETE /Resources/Gateways/{gatewayResourceName}
 # operationId: MeshGateway_Delete
-export def "resources-gateways delete-mesh" [
+export def "mesh-gateway-delete" [
   gateway_resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8338,7 +8338,7 @@ export def "resources-gateways delete-mesh" [
 #
 # GET /Resources/Gateways/{gatewayResourceName}
 # operationId: MeshGateway_Get
-export def "resources-gateways get-mesh" [
+export def "mesh-gateway-get" [
   gateway_resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8377,7 +8377,7 @@ export def "resources-gateways get-mesh" [
 # PUT /Resources/Gateways/{gatewayResourceName}
 # operationId: MeshGateway_CreateOrUpdate
 # --properties shape: {description?: string, destinationNetwork: any, http?: list, sourceNetwork: any, status?: "Unknown"|"Ready"|"Upgrading"|"Creating"|"Deleting"|"Failed", tcp?: list}
-export def "resources-gateways create-mesh-or-update" [
+export def "mesh-gateway-create-or-update" [
   gateway_resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8420,7 +8420,7 @@ export def "resources-gateways create-mesh-or-update" [
 #
 # GET /Resources/Networks
 # operationId: MeshNetwork_List
-export def "resources-networks list-mesh" [
+export def "mesh-network-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8456,7 +8456,7 @@ export def "resources-networks list-mesh" [
 #
 # DELETE /Resources/Networks/{networkResourceName}
 # operationId: MeshNetwork_Delete
-export def "resources-networks delete-mesh" [
+export def "mesh-network-delete" [
   network_resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8494,7 +8494,7 @@ export def "resources-networks delete-mesh" [
 #
 # GET /Resources/Networks/{networkResourceName}
 # operationId: MeshNetwork_Get
-export def "resources-networks get-mesh" [
+export def "mesh-network-get" [
   network_resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8533,7 +8533,7 @@ export def "resources-networks get-mesh" [
 # PUT /Resources/Networks/{networkResourceName}
 # operationId: MeshNetwork_CreateOrUpdate
 # --properties shape: {description?: string, status?: "Unknown"|"Ready"|"Upgrading"|"Creating"|"Deleting"|"Failed", kind: "Local"}
-export def "resources-networks create-mesh-or-update" [
+export def "mesh-network-create-or-update" [
   network_resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8576,7 +8576,7 @@ export def "resources-networks create-mesh-or-update" [
 #
 # GET /Resources/Secrets
 # operationId: MeshSecret_List
-export def "resources-secrets list-mesh" [
+export def "mesh-secret-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8612,7 +8612,7 @@ export def "resources-secrets list-mesh" [
 #
 # DELETE /Resources/Secrets/{secretResourceName}
 # operationId: MeshSecret_Delete
-export def "resources-secrets delete-mesh" [
+export def "mesh-secret-delete" [
   secret_resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8650,7 +8650,7 @@ export def "resources-secrets delete-mesh" [
 #
 # GET /Resources/Secrets/{secretResourceName}
 # operationId: MeshSecret_Get
-export def "resources-secrets get-mesh" [
+export def "mesh-secret-get" [
   secret_resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8689,7 +8689,7 @@ export def "resources-secrets get-mesh" [
 # PUT /Resources/Secrets/{secretResourceName}
 # operationId: MeshSecret_CreateOrUpdate
 # --properties shape: {contentType?: string, description?: string, status?: "Unknown"|"Ready"|"Upgrading"|"Creating"|"Deleting"|"Failed", kind: "inlinedValue"}
-export def "resources-secrets create-mesh-or-update" [
+export def "mesh-secret-create-or-update" [
   secret_resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8732,7 +8732,7 @@ export def "resources-secrets create-mesh-or-update" [
 #
 # GET /Resources/Secrets/{secretResourceName}/values
 # operationId: MeshSecretValue_List
-export def "resources-secrets-values list-mesh" [
+export def "mesh-secret-value-list" [
   secret_resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8770,7 +8770,7 @@ export def "resources-secrets-values list-mesh" [
 #
 # DELETE /Resources/Secrets/{secretResourceName}/values/{secretValueResourceName}
 # operationId: MeshSecretValue_Delete
-export def "resources-secrets-values delete-mesh" [
+export def "mesh-secret-value-delete" [
   secret_resource_name: string
   secret_value_resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8810,7 +8810,7 @@ export def "resources-secrets-values delete-mesh" [
 #
 # GET /Resources/Secrets/{secretResourceName}/values/{secretValueResourceName}
 # operationId: MeshSecretValue_Get
-export def "resources-secrets-values get-mesh" [
+export def "mesh-secret-value-get" [
   secret_resource_name: string
   secret_value_resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8850,7 +8850,7 @@ export def "resources-secrets-values get-mesh" [
 #
 # PUT /Resources/Secrets/{secretResourceName}/values/{secretValueResourceName}
 # operationId: MeshSecretValue_AddValue
-export def "resources-secrets-values create-mesh" [
+export def "mesh-secret-value-add-value" [
   secret_resource_name: string
   secret_value_resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8895,7 +8895,7 @@ export def "resources-secrets-values create-mesh" [
 #
 # POST /Resources/Secrets/{secretResourceName}/values/{secretValueResourceName}/list_value
 # operationId: MeshSecretValue_Show
-export def "resources-secrets-values-list-value create-mesh-show" [
+export def "mesh-secret-value-show" [
   secret_resource_name: string
   secret_value_resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8935,7 +8935,7 @@ export def "resources-secrets-values-list-value create-mesh-show" [
 #
 # GET /Resources/Volumes
 # operationId: MeshVolume_List
-export def "resources-volumes list-mesh" [
+export def "mesh-volume-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8971,7 +8971,7 @@ export def "resources-volumes list-mesh" [
 #
 # DELETE /Resources/Volumes/{volumeResourceName}
 # operationId: MeshVolume_Delete
-export def "resources-volumes delete-mesh" [
+export def "mesh-volume-delete" [
   volume_resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9009,7 +9009,7 @@ export def "resources-volumes delete-mesh" [
 #
 # GET /Resources/Volumes/{volumeResourceName}
 # operationId: MeshVolume_Get
-export def "resources-volumes get-mesh" [
+export def "mesh-volume-get" [
   volume_resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9048,7 +9048,7 @@ export def "resources-volumes get-mesh" [
 # PUT /Resources/Volumes/{volumeResourceName}
 # operationId: MeshVolume_CreateOrUpdate
 # --properties shape: {azureFileParameters?: any, description?: string, provider: "SFAzureFile", status?: "Unknown"|"Ready"|"Upgrading"|"Creating"|"Deleting"|"Failed"}
-export def "resources-volumes create-mesh-or-update" [
+export def "mesh-volume-create-or-update" [
   volume_resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9091,7 +9091,7 @@ export def "resources-volumes create-mesh-or-update" [
 #
 # POST /Services/$/{serviceId}/$/GetPartitions/$/Recover
 # operationId: RecoverServicePartitions
-export def "services-get-partitions-recover create" [
+export def "recover-service-partitions" [
   service_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9130,7 +9130,7 @@ export def "services-get-partitions-recover create" [
 #
 # POST /Services/{serviceId}/$/Delete
 # operationId: DeleteService
-export def "services-delete delete" [
+export def "delete-service" [
   service_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9170,7 +9170,7 @@ export def "services-delete delete" [
 #
 # POST /Services/{serviceId}/$/DisableBackup
 # operationId: DisableServiceBackup
-export def "services-disable-backup disable" [
+export def "disable-service-backup" [
   service_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9213,7 +9213,7 @@ export def "services-disable-backup disable" [
 #
 # POST /Services/{serviceId}/$/EnableBackup
 # operationId: EnableServiceBackup
-export def "services-enable-backup enable" [
+export def "enable-service-backup" [
   service_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9256,7 +9256,7 @@ export def "services-enable-backup enable" [
 #
 # GET /Services/{serviceId}/$/GetApplicationName
 # operationId: GetApplicationNameInfo
-export def "services-get-application-name get" [
+export def "get-application-name-info" [
   service_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9295,7 +9295,7 @@ export def "services-get-application-name get" [
 #
 # GET /Services/{serviceId}/$/GetBackupConfigurationInfo
 # operationId: GetServiceBackupConfigurationInfo
-export def "services-get-backup-configuration-info get" [
+export def "get-service-backup-configuration-info" [
   service_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9336,7 +9336,7 @@ export def "services-get-backup-configuration-info get" [
 #
 # GET /Services/{serviceId}/$/GetBackups
 # operationId: GetServiceBackupList
-export def "services-get-backups list" [
+export def "get-service-backup-list" [
   service_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9380,7 +9380,7 @@ export def "services-get-backups list" [
 #
 # GET /Services/{serviceId}/$/GetDescription
 # operationId: GetServiceDescription
-export def "services-get-description get" [
+export def "get-service-description" [
   service_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9419,7 +9419,7 @@ export def "services-get-description get" [
 #
 # GET /Services/{serviceId}/$/GetHealth
 # operationId: GetServiceHealth
-export def "services-get-health get" [
+export def "get-service-health" [
   service_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9463,7 +9463,7 @@ export def "services-get-health get" [
 # operationId: GetServiceHealthUsingPolicy
 # --DefaultServiceTypeHealthPolicy shape: {MaxPercentUnhealthyPartitionsPerService?: int, MaxPercentUnhealthyReplicasPerPartition?: int, MaxPercentUnhealthyServices?: int}
 # --ServiceTypeHealthPolicyMap item shape: {Key: string, Value: any}
-export def "services-get-health get-using-policy" [
+export def "get-service-health-using-policy" [
   service_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9512,7 +9512,7 @@ export def "services-get-health get-using-policy" [
 #
 # GET /Services/{serviceId}/$/GetPartitions
 # operationId: GetPartitionInfoList
-export def "services-get-partitions get-list" [
+export def "get-partition-info-list" [
   service_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9552,7 +9552,7 @@ export def "services-get-partitions get-list" [
 #
 # GET /Services/{serviceId}/$/GetUnplacedReplicaInformation
 # operationId: GetUnplacedReplicaInformation
-export def "services-get-unplaced-replica-information get" [
+export def "get-unplaced-replica-information" [
   service_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9593,7 +9593,7 @@ export def "services-get-unplaced-replica-information get" [
 #
 # POST /Services/{serviceId}/$/ReportHealth
 # operationId: ReportServiceHealth
-export def "services-report-health create" [
+export def "report-service-health" [
   service_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9643,7 +9643,7 @@ export def "services-report-health create" [
 #
 # GET /Services/{serviceId}/$/ResolvePartition
 # operationId: ResolveService
-export def "services-resolve-partition get" [
+export def "resolve-service" [
   service_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9685,7 +9685,7 @@ export def "services-resolve-partition get" [
 #
 # POST /Services/{serviceId}/$/ResumeBackup
 # operationId: ResumeServiceBackup
-export def "services-resume-backup create" [
+export def "resume-service-backup" [
   service_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9724,7 +9724,7 @@ export def "services-resume-backup create" [
 #
 # POST /Services/{serviceId}/$/SuspendBackup
 # operationId: SuspendServiceBackup
-export def "services-suspend-backup create" [
+export def "suspend-service-backup" [
   service_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9768,7 +9768,7 @@ export def "services-suspend-backup create" [
 # --LoadMetrics item shape: {DefaultLoad?: int, Name: string, PrimaryDefaultLoad?: int, SecondaryDefaultLoad?: int, Weight?: "Zero"|"Low"|"Medium"|"High"}
 # --ScalingPolicies item shape: {ScalingMechanism: any, ScalingTrigger: any}
 # --ServicePlacementPolicies item shape: {Type: "Invalid"|"InvalidDomain"|"RequireDomain"|"PreferPrimaryDomain"|"RequireDomainDistribution"|"NonPartiallyPlaceService"}
-export def "services-update update" [
+export def "update-service" [
   service_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9818,7 +9818,7 @@ export def "services-update update" [
 #
 # GET /Tools/Chaos
 # operationId: GetChaos
-export def "tools-chaos get" [
+export def "get-chaos" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9858,7 +9858,7 @@ export def "tools-chaos get" [
 # --ChaosTargetFilter shape: {ApplicationInclusionList?: list<string>, NodeTypeInclusionList?: list<string>}
 # --ClusterHealthPolicy shape: {ApplicationTypeHealthPolicyMap?: list, ConsiderWarningAsError?: bool, MaxPercentUnhealthyApplications?: int, MaxPercentUnhealthyNodes?: int}
 # --Context shape: {Map?: any}
-export def "tools-chaos-start start" [
+export def "start-chaos" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9907,7 +9907,7 @@ export def "tools-chaos-start start" [
 #
 # POST /Tools/Chaos/$/Stop
 # operationId: StopChaos
-export def "tools-chaos-stop stop" [
+export def "stop-chaos" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9944,7 +9944,7 @@ export def "tools-chaos-stop stop" [
 #
 # GET /Tools/Chaos/Events
 # operationId: GetChaosEvents
-export def "tools-chaos-events get" [
+export def "get-chaos-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9985,7 +9985,7 @@ export def "tools-chaos-events get" [
 #
 # GET /Tools/Chaos/Schedule
 # operationId: GetChaosSchedule
-export def "tools-chaos-schedule get" [
+export def "get-chaos-schedule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10023,7 +10023,7 @@ export def "tools-chaos-schedule get" [
 # POST /Tools/Chaos/Schedule
 # operationId: PostChaosSchedule
 # --Schedule shape: {ChaosParametersDictionary?: list, ExpiryDate?: string, Jobs?: list, StartDate?: string}
-export def "tools-chaos-schedule create" [
+export def "post-chaos-schedule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

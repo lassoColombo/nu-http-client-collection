@@ -103,7 +103,7 @@ def exact-completer [] { ["false" "true"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "domains get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-domains-source-domains-language-target-domains-language" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -126,7 +126,7 @@ export def commands []: nothing -> table {
 # Lists available domains in a bilingual dataset
 #
 # GET /domains/{source_domains_language}/{target_domains_language}
-export def "domains get" [
+export def "get-domains-source-domains-language-target-domains-language" [
   source_domains_language: string
   target_domains_language: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -167,7 +167,7 @@ export def "domains get" [
 # Lists available domains in a monolingual dataset
 #
 # GET /domains/{source_language}
-export def "domains list" [
+export def "get-domains-source-language" [
   source_language: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -207,7 +207,7 @@ export def "domains list" [
 #
 # GET /entries/{source_language}/{word_id}/sentences
 # Docs: https://helloreverb.com/about — find more info here
-export def "entries-sentences get" [
+export def "get-entries-source-language-word-id-sentences" [
   source_language: string
   word_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -249,7 +249,7 @@ export def "entries-sentences get" [
 #
 # GET /entries/{source_lang}/{word_id}
 # Docs: https://helloreverb.com/about — find more info here
-export def "entries list" [
+export def "get-entries-source-lang-word-id" [
   source_lang: string
   word_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -291,7 +291,7 @@ export def "entries list" [
 #
 # GET /entries/{source_lang}/{word_id}/antonyms
 # Docs: https://helloreverb.com/about — find more info here
-export def "entries-antonyms get" [
+export def "get-entries-source-lang-word-id-antonyms" [
   source_lang: string
   word_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -333,7 +333,7 @@ export def "entries-antonyms get" [
 #
 # GET /entries/{source_lang}/{word_id}/regions={region}
 # Docs: https://helloreverb.com/about — find more info here
-export def "entries-regionsregion get" [
+export def "get-entries-source-lang-word-id-regions-region" [
   source_lang: string
   word_id: string
   region: string
@@ -377,7 +377,7 @@ export def "entries-regionsregion get" [
 #
 # GET /entries/{source_lang}/{word_id}/synonyms
 # Docs: https://helloreverb.com/about — find more info here
-export def "entries-synonyms get" [
+export def "get-entries-source-lang-word-id-synonyms" [
   source_lang: string
   word_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -419,7 +419,7 @@ export def "entries-synonyms get" [
 #
 # GET /entries/{source_lang}/{word_id}/synonyms;antonyms
 # Docs: https://helloreverb.com/about — find more info here
-export def "entries-synonyms-antonyms get" [
+export def "get-entries-source-lang-word-id-synonymsantonyms" [
   source_lang: string
   word_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -460,7 +460,7 @@ export def "entries-synonyms-antonyms get" [
 # Apply filters to response
 #
 # GET /entries/{source_lang}/{word_id}/{filters}
-export def "entries get" [
+export def "get-entries-source-lang-word-id-filters" [
   source_lang: string
   word_id: string
   filters: string
@@ -503,7 +503,7 @@ export def "entries get" [
 # Retrieve translation for a given word
 #
 # GET /entries/{source_translation_language}/{word_id}/translations={target_translation_language}
-export def "entries-translationstarget-translation-language get" [
+export def "get-entries-source-translation-language-word-id-translations-target-translation-language" [
   source_translation_language: string
   word_id: string
   target_translation_language: string
@@ -546,7 +546,7 @@ export def "entries-translationstarget-translation-language get" [
 # Lists available filters
 #
 # GET /filters
-export def "filters list" [
+export def "get-filters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -583,7 +583,7 @@ export def "filters list" [
 # Lists available filters for specific endpoint
 #
 # GET /filters/{endpoint}
-export def "filters get" [
+export def "get-filters-endpoint" [
   endpoint: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -622,7 +622,7 @@ export def "filters get" [
 # Lists available grammatical features in a dataset
 #
 # GET /grammaticalFeatures/{source_language}
-export def "grammatical-features get" [
+export def "get-grammatical-features-source-language" [
   source_language: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -661,7 +661,7 @@ export def "grammatical-features get" [
 # Check a word exists in the dictionary and retrieve its root form
 #
 # GET /inflections/{source_lang}/{word_id}/{filters}
-export def "inflections get" [
+export def "get-inflections-source-lang-word-id-filters" [
   source_lang: string
   word_id: string
   filters: string
@@ -704,7 +704,7 @@ export def "inflections get" [
 # Lists available dictionaries
 #
 # GET /languages
-export def "languages get" [
+export def "get-languages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -744,7 +744,7 @@ export def "languages get" [
 # Lists available lexical categories in a dataset
 #
 # GET /lexicalcategories/{language}
-export def "lexicalcategories get" [
+export def "get-lexicalcategories-language" [
   language: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -783,7 +783,7 @@ export def "lexicalcategories get" [
 # Lists available regions in a monolingual dataset
 #
 # GET /regions/{source_language}
-export def "regions get" [
+export def "get-regions-source-language" [
   source_language: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -822,7 +822,7 @@ export def "regions get" [
 # Lists available registers in a monolingual dataset
 #
 # GET /registers/{source_language}
-export def "registers list" [
+export def "get-registers-source-language" [
   source_language: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -861,7 +861,7 @@ export def "registers list" [
 # Lists available registers in a bilingual dataset
 #
 # GET /registers/{source_register_language}/{target_register_language}
-export def "registers get" [
+export def "get-registers-source-register-language-target-register-language" [
   source_register_language: string
   target_register_language: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -903,7 +903,7 @@ export def "registers get" [
 #
 # GET /search/{source_lang}
 # Docs: https://helloreverb.com/about — find more info here
-export def "search get" [
+export def "get-search-source-lang" [
   source_lang: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -949,7 +949,7 @@ export def "search get" [
 #
 # GET /search/{source_search_language}/translations={target_search_language}
 # Docs: https://helloreverb.com/about — find more info here
-export def "search-translationstarget-search-language get" [
+export def "get-search-source-search-language-translations-target-search-language" [
   source_search_language: string
   target_search_language: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -996,7 +996,7 @@ export def "search-translationstarget-search-language get" [
 # Retrieve the frequency of ngrams (1-4) derived from a corpus
 #
 # GET /stats/frequency/ngrams/{source_lang}/{corpus}/{ngram-size}/
-export def "stats-frequency-ngrams get" [
+export def "get-stats-frequency-ngrams-source-lang-corpus-ngram-size" [
   source_lang: string
   corpus: string
   ngram_size: string
@@ -1053,7 +1053,7 @@ export def "stats-frequency-ngrams get" [
 # Retrieve the frequency of a word derived from a corpus.
 #
 # GET /stats/frequency/word/{source_lang}/
-export def "stats-frequency-word get" [
+export def "get-stats-frequency-word-source-lang" [
   source_lang: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1099,7 +1099,7 @@ export def "stats-frequency-word get" [
 # Retrieve a list of frequencies of a word/words derived from a corpus.
 #
 # GET /stats/frequency/words/{source_lang}/
-export def "stats-frequency-words get" [
+export def "get-stats-frequency-words-source-lang" [
   source_lang: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1154,7 +1154,7 @@ export def "stats-frequency-words get" [
 # Retrieve list of words for category with advanced options
 #
 # GET /wordlist/{source_lang}/{filters_advanced}
-export def "wordlist get-by-source-lang-filters-advanced" [
+export def "get-wordlist-source-lang-filters-advanced" [
   source_lang: string
   filters_advanced: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1204,7 +1204,7 @@ export def "wordlist get-by-source-lang-filters-advanced" [
 # Retrieve a list of words in a category
 #
 # GET /wordlist/{source_lang}/{filters_basic}
-export def "wordlist get-by-source-lang-filters-basic" [
+export def "get-wordlist-source-lang-filters-basic" [
   source_lang: string
   filters_basic: string
   --base-url(-b): string@base-url-completer # API base URL

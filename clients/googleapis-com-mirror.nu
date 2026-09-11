@@ -135,7 +135,7 @@ def order-by-completer [] { ["displayTime" "writeTime"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "mirror-accounts-insert" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -161,7 +161,7 @@ export def commands []: nothing -> table {
 # operationId: mirror.accounts.insert
 # --authTokens item shape: {authToken?: string, type?: string}
 # --userData item shape: {key?: string, value?: string}
-export def "accounts create" [
+export def "mirror-accounts-insert" [
   user_token: string
   account_type: string
   account_name: string
@@ -216,7 +216,7 @@ export def "accounts create" [
 #
 # GET /contacts
 # operationId: mirror.contacts.list
-export def "contacts list" [
+export def "mirror-contacts-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -259,7 +259,7 @@ export def "contacts list" [
 # POST /contacts
 # operationId: mirror.contacts.insert
 # --acceptCommands item shape: {type?: string}
-export def "contacts create" [
+export def "mirror-contacts-insert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -316,7 +316,7 @@ export def "contacts create" [
 #
 # DELETE /contacts/{id}
 # operationId: mirror.contacts.delete
-export def "contacts delete" [
+export def "mirror-contacts-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -360,7 +360,7 @@ export def "contacts delete" [
 #
 # GET /contacts/{id}
 # operationId: mirror.contacts.get
-export def "contacts get" [
+export def "mirror-contacts-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -405,7 +405,7 @@ export def "contacts get" [
 # PATCH /contacts/{id}
 # operationId: mirror.contacts.patch
 # --acceptCommands item shape: {type?: string}
-export def "contacts update-by-id" [
+export def "mirror-contacts-patch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -465,7 +465,7 @@ export def "contacts update-by-id" [
 # PUT /contacts/{id}
 # operationId: mirror.contacts.update
 # --acceptCommands item shape: {type?: string}
-export def "contacts update-by-id-1" [
+export def "mirror-contacts-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -524,7 +524,7 @@ export def "contacts update-by-id-1" [
 #
 # GET /locations
 # operationId: mirror.locations.list
-export def "locations list" [
+export def "mirror-locations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -566,7 +566,7 @@ export def "locations list" [
 #
 # GET /locations/{id}
 # operationId: mirror.locations.get
-export def "locations get" [
+export def "mirror-locations-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -610,7 +610,7 @@ export def "locations get" [
 #
 # GET /settings/{id}
 # operationId: mirror.settings.get
-export def "settings get" [
+export def "mirror-settings-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -654,7 +654,7 @@ export def "settings get" [
 #
 # GET /subscriptions
 # operationId: mirror.subscriptions.list
-export def "subscriptions list" [
+export def "mirror-subscriptions-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -697,7 +697,7 @@ export def "subscriptions list" [
 # POST /subscriptions
 # operationId: mirror.subscriptions.insert
 # --notification shape: {collection?: string, itemId?: string, operation?: string, userActions?: list, userToken?: string, verifyToken?: string}
-export def "subscriptions create" [
+export def "mirror-subscriptions-insert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -751,7 +751,7 @@ export def "subscriptions create" [
 #
 # DELETE /subscriptions/{id}
 # operationId: mirror.subscriptions.delete
-export def "subscriptions delete" [
+export def "mirror-subscriptions-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -796,7 +796,7 @@ export def "subscriptions delete" [
 # PUT /subscriptions/{id}
 # operationId: mirror.subscriptions.update
 # --notification shape: {collection?: string, itemId?: string, operation?: string, userActions?: list, userToken?: string, verifyToken?: string}
-export def "subscriptions update" [
+export def "mirror-subscriptions-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -852,7 +852,7 @@ export def "subscriptions update" [
 #
 # GET /timeline
 # operationId: mirror.timeline.list
-export def "timeline list" [
+export def "mirror-timeline-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -901,7 +901,7 @@ export def "timeline list" [
 #
 # POST /timeline
 # operationId: mirror.timeline.insert
-export def "timeline create" [
+export def "mirror-timeline-insert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -947,7 +947,7 @@ export def "timeline create" [
 #
 # DELETE /timeline/{id}
 # operationId: mirror.timeline.delete
-export def "timeline delete" [
+export def "mirror-timeline-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -991,7 +991,7 @@ export def "timeline delete" [
 #
 # GET /timeline/{id}
 # operationId: mirror.timeline.get
-export def "timeline get" [
+export def "mirror-timeline-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1041,7 +1041,7 @@ export def "timeline get" [
 # --menuItems item shape: {action?: string, contextual_command?: string, id?: string, payload?: string, removeWhenSelected?: bool, values?: list}
 # --notification shape: {deliveryTime?: string, level?: string}
 # --recipients item shape: {acceptCommands?: list, acceptTypes?: list<string>, displayName?: string, id?: string, imageUrls?: list<string>, kind?: string, phoneNumber?: string, priority?: int, sharingFeatures?: list<string>, source?: string, speakableName?: string, type?: string}
-export def "timeline update-by-id" [
+export def "mirror-timeline-patch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1114,7 +1114,7 @@ export def "timeline update-by-id" [
 #
 # PUT /timeline/{id}
 # operationId: mirror.timeline.update
-export def "timeline update-by-id-1" [
+export def "mirror-timeline-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1162,7 +1162,7 @@ export def "timeline update-by-id-1" [
 #
 # GET /timeline/{itemId}/attachments
 # operationId: mirror.timeline.attachments.list
-export def "timeline-attachments list" [
+export def "mirror-timeline-attachments-list" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1206,7 +1206,7 @@ export def "timeline-attachments list" [
 #
 # POST /timeline/{itemId}/attachments
 # operationId: mirror.timeline.attachments.insert
-export def "timeline-attachments create" [
+export def "mirror-timeline-attachments-insert" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1250,7 +1250,7 @@ export def "timeline-attachments create" [
 #
 # DELETE /timeline/{itemId}/attachments/{attachmentId}
 # operationId: mirror.timeline.attachments.delete
-export def "timeline-attachments delete" [
+export def "mirror-timeline-attachments-delete" [
   item_id: string
   attachment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1296,7 +1296,7 @@ export def "timeline-attachments delete" [
 #
 # GET /timeline/{itemId}/attachments/{attachmentId}
 # operationId: mirror.timeline.attachments.get
-export def "timeline-attachments get" [
+export def "mirror-timeline-attachments-get" [
   item_id: string
   attachment_id: string
   --base-url(-b): string@base-url-completer # API base URL

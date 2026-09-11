@@ -125,7 +125,7 @@ def accept-completer-1 [] { ["application/js" "application/json" "application/xm
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "jod get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-jod" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -148,7 +148,7 @@ export def commands []: nothing -> table {
 # Gets `Joke of the Day`. Optional `category` param determines the category of returned joke of the day
 #
 # GET /jod
-export def "jod get" [
+export def "get-jod" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -183,7 +183,7 @@ export def "jod get" [
 # Gets a list of `Joke of the Day` Categories.
 #
 # GET /jod/categories
-export def "jod-categories get" [
+export def "get-jod-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -217,7 +217,7 @@ export def "jod-categories get" [
 # Delete a joke. The user needs to be the owner of the joke to be able to delete it.
 #
 # DELETE /joke
-export def "joke delete" [
+export def "delete-joke" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -253,7 +253,7 @@ export def "joke delete" [
 # Gets a `Joke` with a given `id`.
 #
 # GET /joke
-export def "joke get" [
+export def "get-joke" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -289,7 +289,7 @@ export def "joke get" [
 # Update a joke
 #
 # PATCH /joke
-export def "joke update" [
+export def "patch-joke" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -329,7 +329,7 @@ export def "joke update" [
 # Add a new joke to your private collection.
 #
 # PUT /joke
-export def "joke update-1" [
+export def "put-joke" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -368,7 +368,7 @@ export def "joke update-1" [
 # Gets a list of `Joke` Categories, based on a query term.
 #
 # GET /joke/categories/search
-export def "joke-categories-search get" [
+export def "get-joke-categories-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -405,7 +405,7 @@ export def "joke-categories-search get" [
 # Get the list of jokes in your private collection.
 #
 # GET /joke/list
-export def "joke-list get" [
+export def "get-joke-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -441,7 +441,7 @@ export def "joke-list get" [
 # Gets a `Random Joke`. When you are in a hurry this is what you call to get a random famous joke.
 #
 # GET /joke/random
-export def "joke-random get" [
+export def "get-joke-random" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -475,7 +475,7 @@ export def "joke-random get" [
 # Search for a `Joke` in Jokes One platform. Optional `category` , `author`, `minlength`, `maxlength` params determines the filters applied while searching for the joke.
 #
 # GET /joke/search
-export def "joke-search get" [
+export def "get-joke-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -516,7 +516,7 @@ export def "joke-search get" [
 # Add a tag to a given Joke.
 #
 # POST /joke/tags/add
-export def "joke-tags-add create" [
+export def "post-joke-tags-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -553,7 +553,7 @@ export def "joke-tags-add create" [
 # Remove a tag from a given joke.
 #
 # POST /joke/tags/remove
-export def "joke-tags-remove create" [
+export def "post-joke-tags-remove" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

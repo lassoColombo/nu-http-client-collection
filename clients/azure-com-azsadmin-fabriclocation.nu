@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-fabric-admin-fabric-locations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "fabric-locations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -122,7 +122,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Fabric.Admin/fabricLocations
 # operationId: FabricLocations_List
-export def "subscriptions-resource-groups-providers-microsoft-fabric-admin-fabric-locations list" [
+export def "fabric-locations-list" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -163,7 +163,7 @@ export def "subscriptions-resource-groups-providers-microsoft-fabric-admin-fabri
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Fabric.Admin/fabricLocations/{fabricLocation}
 # operationId: FabricLocations_Get
-export def "subscriptions-resource-groups-providers-microsoft-fabric-admin-fabric-locations get" [
+export def "fabric-locations-get" [
   subscription_id: string
   resource_group_name: string
   fabric_location: string

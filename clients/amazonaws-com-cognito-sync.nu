@@ -112,7 +112,7 @@ def platform-completer [] { ["ADM" "APNS" "APNS_SANDBOX" "GCM"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "identitypools-bulkpublish publish-bulk" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "bulk-publish" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -136,7 +136,7 @@ export def commands []: nothing -> table {
 #
 # POST /identitypools/{IdentityPoolId}/bulkpublish
 # operationId: BulkPublish
-export def "identitypools-bulkpublish publish-bulk" [
+export def "bulk-publish" [
   identity_pool_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -181,7 +181,7 @@ export def "identitypools-bulkpublish publish-bulk" [
 #
 # DELETE /identitypools/{IdentityPoolId}/identities/{IdentityId}/datasets/{DatasetName}
 # operationId: DeleteDataset
-export def "identitypools-identities-datasets delete" [
+export def "delete-dataset" [
   identity_pool_id: string
   identity_id: string
   dataset_name: string
@@ -230,7 +230,7 @@ export def "identitypools-identities-datasets delete" [
 #
 # GET /identitypools/{IdentityPoolId}/identities/{IdentityId}/datasets/{DatasetName}
 # operationId: DescribeDataset
-export def "identitypools-identities-datasets get" [
+export def "describe-dataset" [
   identity_pool_id: string
   identity_id: string
   dataset_name: string
@@ -280,7 +280,7 @@ export def "identitypools-identities-datasets get" [
 # POST /identitypools/{IdentityPoolId}/identities/{IdentityId}/datasets/{DatasetName}
 # operationId: UpdateRecords
 # --RecordPatches item shape: {Op: any, Key: any, Value?: any, SyncCount: any, DeviceLastModifiedDate?: any}
-export def "identitypools-identities-datasets update-records" [
+export def "update-records" [
   identity_pool_id: string
   identity_id: string
   dataset_name: string
@@ -336,7 +336,7 @@ export def "identitypools-identities-datasets update-records" [
 #
 # GET /identitypools/{IdentityPoolId}
 # operationId: DescribeIdentityPoolUsage
-export def "identitypools get-identity-pool-usage" [
+export def "describe-identity-pool-usage" [
   identity_pool_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -381,7 +381,7 @@ export def "identitypools get-identity-pool-usage" [
 #
 # GET /identitypools/{IdentityPoolId}/identities/{IdentityId}
 # operationId: DescribeIdentityUsage
-export def "identitypools-identities get-identity-usage" [
+export def "describe-identity-usage" [
   identity_pool_id: string
   identity_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -428,7 +428,7 @@ export def "identitypools-identities get-identity-usage" [
 #
 # POST /identitypools/{IdentityPoolId}/getBulkPublishDetails
 # operationId: GetBulkPublishDetails
-export def "identitypools-get-bulk-publish-details get" [
+export def "get-bulk-publish-details" [
   identity_pool_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -473,7 +473,7 @@ export def "identitypools-get-bulk-publish-details get" [
 #
 # GET /identitypools/{IdentityPoolId}/events
 # operationId: GetCognitoEvents
-export def "identitypools-events get-cognito" [
+export def "get-cognito-events" [
   identity_pool_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -518,7 +518,7 @@ export def "identitypools-events get-cognito" [
 #
 # POST /identitypools/{IdentityPoolId}/events
 # operationId: SetCognitoEvents
-export def "identitypools-events update-cognito" [
+export def "set-cognito-events" [
   identity_pool_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -567,7 +567,7 @@ export def "identitypools-events update-cognito" [
 #
 # GET /identitypools/{IdentityPoolId}/configuration
 # operationId: GetIdentityPoolConfiguration
-export def "identitypools-configuration get-identity-pool" [
+export def "get-identity-pool-configuration" [
   identity_pool_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -614,7 +614,7 @@ export def "identitypools-configuration get-identity-pool" [
 # operationId: SetIdentityPoolConfiguration
 # --PushSync shape: {ApplicationArns?: any, RoleArn?: any}
 # --CognitoStreams shape: {StreamName?: any, RoleArn?: any, StreamingStatus?: any}
-export def "identitypools-configuration update-identity-pool" [
+export def "set-identity-pool-configuration" [
   identity_pool_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -664,7 +664,7 @@ export def "identitypools-configuration update-identity-pool" [
 #
 # GET /identitypools/{IdentityPoolId}/identities/{IdentityId}/datasets
 # operationId: ListDatasets
-export def "identitypools-identities-datasets list" [
+export def "list-datasets" [
   identity_pool_id: string
   identity_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -714,7 +714,7 @@ export def "identitypools-identities-datasets list" [
 #
 # GET /identitypools
 # operationId: ListIdentityPoolUsage
-export def "identitypools list-identity-pool-usage" [
+export def "list-identity-pool-usage" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -760,7 +760,7 @@ export def "identitypools list-identity-pool-usage" [
 #
 # GET /identitypools/{IdentityPoolId}/identities/{IdentityId}/datasets/{DatasetName}/records
 # operationId: ListRecords
-export def "identitypools-identities-datasets-records list" [
+export def "list-records" [
   identity_pool_id: string
   identity_id: string
   dataset_name: string
@@ -814,7 +814,7 @@ export def "identitypools-identities-datasets-records list" [
 #
 # POST /identitypools/{IdentityPoolId}/identity/{IdentityId}/device
 # operationId: RegisterDevice
-export def "identitypools-identity-device create" [
+export def "register-device" [
   identity_pool_id: string
   identity_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -866,7 +866,7 @@ export def "identitypools-identity-device create" [
 #
 # POST /identitypools/{IdentityPoolId}/identities/{IdentityId}/datasets/{DatasetName}/subscriptions/{DeviceId}
 # operationId: SubscribeToDataset
-export def "identitypools-identities-datasets-subscriptions subscribe" [
+export def "subscribe-to-dataset" [
   identity_pool_id: string
   identity_id: string
   dataset_name: string
@@ -917,7 +917,7 @@ export def "identitypools-identities-datasets-subscriptions subscribe" [
 #
 # DELETE /identitypools/{IdentityPoolId}/identities/{IdentityId}/datasets/{DatasetName}/subscriptions/{DeviceId}
 # operationId: UnsubscribeFromDataset
-export def "identitypools-identities-datasets-subscriptions unsubscribe" [
+export def "unsubscribe-from-dataset" [
   identity_pool_id: string
   identity_id: string
   dataset_name: string

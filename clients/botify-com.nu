@@ -109,7 +109,7 @@ def area-completer-2 [] { ["current" "disappeared" "new"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "analyses get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-project-analyses" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -133,7 +133,7 @@ export def commands []: nothing -> table {
 #
 # GET /analyses/{username}/{project_slug}
 # operationId: getProjectAnalyses
-export def "analyses get" [
+export def "get-project-analyses" [
   username: string
   project_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -174,7 +174,7 @@ export def "analyses get" [
 #
 # GET /analyses/{username}/{project_slug}/{analysis_slug}
 # operationId: getAnalysisSummary
-export def "analyses get-summary" [
+export def "get-analysis-summary" [
   username: string
   project_slug: string
   analysis_slug: string
@@ -214,7 +214,7 @@ export def "analyses get-summary" [
 #
 # GET /analyses/{username}/{project_slug}/{analysis_slug}/crawl_statistics
 # operationId: getCrawlStatistics
-export def "analyses-crawl-statistics get" [
+export def "get-crawl-statistics" [
   username: string
   project_slug: string
   analysis_slug: string
@@ -254,7 +254,7 @@ export def "analyses-crawl-statistics get" [
 #
 # GET /analyses/{username}/{project_slug}/{analysis_slug}/crawl_statistics/time
 # operationId: getCrawlStatisticsByFrequency
-export def "analyses-crawl-statistics-time get-by-frequency" [
+export def "get-crawl-statistics-by-frequency" [
   username: string
   project_slug: string
   analysis_slug: string
@@ -297,7 +297,7 @@ export def "analyses-crawl-statistics-time get-by-frequency" [
 #
 # GET /analyses/{username}/{project_slug}/{analysis_slug}/crawl_statistics/urls/{list_type}
 # operationId: getCrawlStatisticsUrls
-export def "analyses-crawl-statistics-urls get" [
+export def "get-crawl-statistics-urls" [
   username: string
   project_slug: string
   analysis_slug: string
@@ -339,7 +339,7 @@ export def "analyses-crawl-statistics-urls get" [
 #
 # GET /analyses/{username}/{project_slug}/{analysis_slug}/features/ganalytics/orphan_urls/{medium}/{source}
 # operationId: getGanalyticsOrphanURLs
-export def "analyses-features-ganalytics-orphan-urls get-ur-ls" [
+export def "get-ganalytics-orphan-ur-ls" [
   username: string
   project_slug: string
   analysis_slug: string
@@ -386,7 +386,7 @@ export def "analyses-features-ganalytics-orphan-urls get-ur-ls" [
 #
 # GET /analyses/{username}/{project_slug}/{analysis_slug}/features/links/percentiles
 # operationId: getLinksPercentiles
-export def "analyses-features-links-percentiles get" [
+export def "get-links-percentiles" [
   username: string
   project_slug: string
   analysis_slug: string
@@ -426,7 +426,7 @@ export def "analyses-features-links-percentiles get" [
 #
 # GET /analyses/{username}/{project_slug}/{analysis_slug}/features/pagerank/lost
 # operationId: getPageRankLost
-export def "analyses-features-pagerank-lost get-page-rank" [
+export def "get-page-rank-lost" [
   username: string
   project_slug: string
   analysis_slug: string
@@ -466,7 +466,7 @@ export def "analyses-features-pagerank-lost get-page-rank" [
 #
 # GET /analyses/{username}/{project_slug}/{analysis_slug}/features/sitemaps/report
 # operationId: getSitemapsReport
-export def "analyses-features-sitemaps-report get" [
+export def "get-sitemaps-report" [
   username: string
   project_slug: string
   analysis_slug: string
@@ -506,7 +506,7 @@ export def "analyses-features-sitemaps-report get" [
 #
 # GET /analyses/{username}/{project_slug}/{analysis_slug}/features/sitemaps/samples/out_of_config
 # operationId: getSitemapsSamplesOutOfConfig
-export def "analyses-features-sitemaps-samples-out-of-config get" [
+export def "get-sitemaps-samples-out-of-config" [
   username: string
   project_slug: string
   analysis_slug: string
@@ -549,7 +549,7 @@ export def "analyses-features-sitemaps-samples-out-of-config get" [
 #
 # GET /analyses/{username}/{project_slug}/{analysis_slug}/features/sitemaps/samples/sitemap_only
 # operationId: getSitemapsSamplesSitemapsOnly
-export def "analyses-features-sitemaps-samples-sitemap-only get" [
+export def "get-sitemaps-samples-sitemaps-only" [
   username: string
   project_slug: string
   analysis_slug: string
@@ -592,7 +592,7 @@ export def "analyses-features-sitemaps-samples-sitemap-only get" [
 #
 # GET /analyses/{username}/{project_slug}/{analysis_slug}/features/top_domains/domains
 # operationId: getLinksTopDomains
-export def "analyses-features-top-domains-domains get-links" [
+export def "get-links-top-domains" [
   username: string
   project_slug: string
   analysis_slug: string
@@ -635,7 +635,7 @@ export def "analyses-features-top-domains-domains get-links" [
 #
 # GET /analyses/{username}/{project_slug}/{analysis_slug}/features/top_domains/subdomains
 # operationId: getLinksTopSubdomains
-export def "analyses-features-top-domains-subdomains get-links" [
+export def "get-links-top-subdomains" [
   username: string
   project_slug: string
   analysis_slug: string
@@ -678,7 +678,7 @@ export def "analyses-features-top-domains-subdomains get-links" [
 #
 # POST /analyses/{username}/{project_slug}/{analysis_slug}/urls
 # operationId: getUrls
-export def "analyses-urls get" [
+export def "get-urls" [
   username: string
   project_slug: string
   analysis_slug: string
@@ -728,7 +728,7 @@ export def "analyses-urls get" [
 #
 # POST /analyses/{username}/{project_slug}/{analysis_slug}/urls/aggs
 # operationId: getUrlsAggs
-export def "analyses-urls-aggs get" [
+export def "get-urls-aggs" [
   username: string
   project_slug: string
   analysis_slug: string
@@ -774,7 +774,7 @@ export def "analyses-urls-aggs get" [
 #
 # GET /analyses/{username}/{project_slug}/{analysis_slug}/urls/datamodel
 # operationId: getUrlsDatamodel
-export def "analyses-urls-datamodel get" [
+export def "get-urls-datamodel" [
   username: string
   project_slug: string
   analysis_slug: string
@@ -816,7 +816,7 @@ export def "analyses-urls-datamodel get" [
 #
 # GET /analyses/{username}/{project_slug}/{analysis_slug}/urls/export
 # operationId: getUrlsExports
-export def "analyses-urls-export get" [
+export def "get-urls-exports" [
   username: string
   project_slug: string
   analysis_slug: string
@@ -859,7 +859,7 @@ export def "analyses-urls-export get" [
 #
 # POST /analyses/{username}/{project_slug}/{analysis_slug}/urls/export
 # operationId: createUrlsExport
-export def "analyses-urls-export create" [
+export def "create-urls-export" [
   username: string
   project_slug: string
   analysis_slug: string
@@ -907,7 +907,7 @@ export def "analyses-urls-export create" [
 #
 # GET /analyses/{username}/{project_slug}/{analysis_slug}/urls/export/{url_export_id}
 # operationId: getUrlsExportStatus
-export def "analyses-urls-export get-status" [
+export def "get-urls-export-status" [
   username: string
   project_slug: string
   analysis_slug: string
@@ -949,7 +949,7 @@ export def "analyses-urls-export get-status" [
 #
 # POST /analyses/{username}/{project_slug}/{analysis_slug}/urls/suggested_filters
 # operationId: getUrlsSuggestedFilters
-export def "analyses-urls-suggested-filters get" [
+export def "get-urls-suggested-filters" [
   username: string
   project_slug: string
   analysis_slug: string
@@ -996,7 +996,7 @@ export def "analyses-urls-suggested-filters get" [
 #
 # GET /analyses/{username}/{project_slug}/{analysis_slug}/urls/{url}
 # operationId: getUrlDetail
-export def "analyses-urls get-detail" [
+export def "get-url-detail" [
   username: string
   project_slug: string
   analysis_slug: string
@@ -1040,7 +1040,7 @@ export def "analyses-urls get-detail" [
 #
 # GET /projects/{username}
 # operationId: getUserProjects
-export def "projects get-user" [
+export def "get-user-projects" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1079,7 +1079,7 @@ export def "projects get-user" [
 #
 # POST /projects/{username}/{project_slug}/features/url_rewriting/rules_validator
 # operationId: testUrlRewritingRules
-export def "projects-features-url-rewriting-rules-validator test" [
+export def "test-url-rewriting-rules" [
   username: string
   project_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1117,7 +1117,7 @@ export def "projects-features-url-rewriting-rules-validator test" [
 #
 # GET /projects/{username}/{project_slug}/filters
 # operationId: getSavedFilters
-export def "projects-filters list" [
+export def "get-saved-filters" [
   username: string
   project_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1158,7 +1158,7 @@ export def "projects-filters list" [
 #
 # GET /projects/{username}/{project_slug}/filters/{identifier}
 # operationId: getSavedFilter
-export def "projects-filters get-saved" [
+export def "get-saved-filter" [
   username: string
   project_slug: string
   identifier: string
@@ -1198,7 +1198,7 @@ export def "projects-filters get-saved" [
 #
 # POST /projects/{username}/{project_slug}/urls/aggs
 # operationId: getProjectUrlsAggs
-export def "projects-urls-aggs get" [
+export def "get-project-urls-aggs" [
   username: string
   project_slug: string
   --base-url(-b): string@base-url-completer # API base URL

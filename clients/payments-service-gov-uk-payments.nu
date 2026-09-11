@@ -106,7 +106,7 @@ def state-completer [] { ["cancelled" "created" "error" "failed" "started" "subm
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "payments list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "search-payments" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -130,7 +130,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/payments
 # operationId: Search payments
-export def "payments list" [
+export def "search-payments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -179,7 +179,7 @@ export def "payments list" [
 # POST /v1/payments
 # operationId: Create a payment
 # --prefilled_cardholder_details shape: {billing_address?: record, cardholder_name?: string}
-export def "payments create" [
+export def "create-a-payment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -217,7 +217,7 @@ export def "payments create" [
 #
 # GET /v1/payments/{paymentId}
 # operationId: Get a payment
-export def "payments get" [
+export def "get-a-payment" [
   payment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -253,7 +253,7 @@ export def "payments get" [
 #
 # POST /v1/payments/{paymentId}/cancel
 # operationId: Cancel a payment
-export def "payments-cancel cancel" [
+export def "cancel-a-payment" [
   payment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -289,7 +289,7 @@ export def "payments-cancel cancel" [
 #
 # POST /v1/payments/{paymentId}/capture
 # operationId: Capture a payment
-export def "payments-capture create" [
+export def "capture-a-payment" [
   payment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -325,7 +325,7 @@ export def "payments-capture create" [
 #
 # GET /v1/payments/{paymentId}/events
 # operationId: Get events for a payment
-export def "payments-events get" [
+export def "get-events-for-a-payment" [
   payment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -361,7 +361,7 @@ export def "payments-events get" [
 #
 # GET /v1/payments/{paymentId}/refunds
 # operationId: Get all refunds for a payment
-export def "payments-refunds get-list" [
+export def "get-all-refunds-for-a-payment" [
   payment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -397,7 +397,7 @@ export def "payments-refunds get-list" [
 #
 # POST /v1/payments/{paymentId}/refunds
 # operationId: Submit a refund for a payment
-export def "payments-refunds submit" [
+export def "submit-a-refund-for-a-payment" [
   payment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -437,7 +437,7 @@ export def "payments-refunds submit" [
 #
 # GET /v1/payments/{paymentId}/refunds/{refundId}
 # operationId: Get a payment refund
-export def "payments-refunds get" [
+export def "get-a-payment-refund" [
   payment_id: string
   refund_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -475,7 +475,7 @@ export def "payments-refunds get" [
 #
 # GET /v1/refunds
 # operationId: Search refunds
-export def "refunds list" [
+export def "search-refunds" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -124,7 +124,7 @@ def mode-completer [] { ["poweroff" "reboot" "shutdown" "suspend"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-v-mware-cloud-simple-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -148,7 +148,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.VMwareCloudSimple/operations
 # operationId: Operations_List
-export def "providers-microsoft-v-mware-cloud-simple-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,7 +184,7 @@ export def "providers-microsoft-v-mware-cloud-simple-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.VMwareCloudSimple/dedicatedCloudNodes
 # operationId: DedicatedCloudNodes_ListBySubscription
-export def "subscriptions-providers-microsoft-v-mware-cloud-simple-dedicated-cloud-nodes list" [
+export def "dedicated-cloud-nodes-list-by-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -225,7 +225,7 @@ export def "subscriptions-providers-microsoft-v-mware-cloud-simple-dedicated-clo
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.VMwareCloudSimple/dedicatedCloudServices
 # operationId: DedicatedCloudServices_ListBySubscription
-export def "subscriptions-providers-microsoft-v-mware-cloud-simple-dedicated-cloud-services list" [
+export def "dedicated-cloud-services-list-by-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -266,7 +266,7 @@ export def "subscriptions-providers-microsoft-v-mware-cloud-simple-dedicated-clo
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.VMwareCloudSimple/locations/{regionId}/availabilities
 # operationId: SkusAvailability_List
-export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-availabilities list-skus-availability" [
+export def "skus-availability-list" [
   subscription_id: string
   region_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -307,7 +307,7 @@ export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-ava
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.VMwareCloudSimple/locations/{regionId}/operationResults/{operationId}
 # operationId: Operations_Get
-export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-operation-results get" [
+export def "operations-get" [
   subscription_id: string
   region_id: string
   operation_id: string
@@ -352,7 +352,7 @@ export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-ope
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.VMwareCloudSimple/locations/{regionId}/privateClouds
 # operationId: PrivateClouds_List
-export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-private-clouds list" [
+export def "private-clouds-list" [
   subscription_id: string
   region_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -392,7 +392,7 @@ export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-pri
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.VMwareCloudSimple/locations/{regionId}/privateClouds/{pcName}
 # operationId: PrivateClouds_Get
-export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-private-clouds get" [
+export def "private-clouds-get" [
   subscription_id: string
   region_id: string
   pc_name: string
@@ -434,7 +434,7 @@ export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-pri
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.VMwareCloudSimple/locations/{regionId}/privateClouds/{pcName}/customizationPolicies
 # operationId: customizationPolicies_List
-export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-private-clouds-customization-policies list" [
+export def "customization-policies-list" [
   subscription_id: string
   region_id: string
   pc_name: string
@@ -477,7 +477,7 @@ export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-pri
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.VMwareCloudSimple/locations/{regionId}/privateClouds/{pcName}/customizationPolicies/{customizationPolicyName}
 # operationId: customizationPolicies_Get
-export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-private-clouds-customization-policies get" [
+export def "customization-policies-get" [
   subscription_id: string
   region_id: string
   pc_name: string
@@ -521,7 +521,7 @@ export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-pri
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.VMwareCloudSimple/locations/{regionId}/privateClouds/{pcName}/resourcePools
 # operationId: ResourcePools_List
-export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-private-clouds-resource-pools list" [
+export def "resource-pools-list" [
   subscription_id: string
   region_id: string
   pc_name: string
@@ -563,7 +563,7 @@ export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-pri
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.VMwareCloudSimple/locations/{regionId}/privateClouds/{pcName}/resourcePools/{resourcePoolName}
 # operationId: ResourcePools_Get
-export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-private-clouds-resource-pools get" [
+export def "resource-pools-get" [
   subscription_id: string
   region_id: string
   pc_name: string
@@ -607,7 +607,7 @@ export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-pri
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.VMwareCloudSimple/locations/{regionId}/privateClouds/{pcName}/virtualMachineTemplates
 # operationId: VirtualMachineTemplates_List
-export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-private-clouds-virtual-machine-templates list" [
+export def "virtual-machine-templates-list" [
   subscription_id: string
   region_id: string
   pc_name: string
@@ -650,7 +650,7 @@ export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-pri
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.VMwareCloudSimple/locations/{regionId}/privateClouds/{pcName}/virtualMachineTemplates/{virtualMachineTemplateName}
 # operationId: VirtualMachineTemplates_Get
-export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-private-clouds-virtual-machine-templates get" [
+export def "virtual-machine-templates-get" [
   subscription_id: string
   region_id: string
   pc_name: string
@@ -694,7 +694,7 @@ export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-pri
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.VMwareCloudSimple/locations/{regionId}/privateClouds/{pcName}/virtualNetworks
 # operationId: VirtualNetworks_List
-export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-private-clouds-virtual-networks list" [
+export def "virtual-networks-list" [
   subscription_id: string
   region_id: string
   pc_name: string
@@ -737,7 +737,7 @@ export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-pri
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.VMwareCloudSimple/locations/{regionId}/privateClouds/{pcName}/virtualNetworks/{virtualNetworkName}
 # operationId: VirtualNetworks_Get
-export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-private-clouds-virtual-networks get" [
+export def "virtual-networks-get" [
   subscription_id: string
   region_id: string
   pc_name: string
@@ -781,7 +781,7 @@ export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-pri
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.VMwareCloudSimple/locations/{regionId}/usages
 # operationId: Usages_List
-export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-usages list" [
+export def "usages-list" [
   subscription_id: string
   region_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -822,7 +822,7 @@ export def "subscriptions-providers-microsoft-v-mware-cloud-simple-locations-usa
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.VMwareCloudSimple/virtualMachines
 # operationId: VirtualMachines_ListBySubscription
-export def "subscriptions-providers-microsoft-v-mware-cloud-simple-virtual-machines list" [
+export def "virtual-machines-list-by-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -863,7 +863,7 @@ export def "subscriptions-providers-microsoft-v-mware-cloud-simple-virtual-machi
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.VMwareCloudSimple/dedicatedCloudNodes
 # operationId: DedicatedCloudNodes_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simple-dedicated-cloud-nodes list" [
+export def "dedicated-cloud-nodes-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -906,7 +906,7 @@ export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simp
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.VMwareCloudSimple/dedicatedCloudNodes/{dedicatedCloudNodeName}
 # operationId: DedicatedCloudNodes_Delete
-export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simple-dedicated-cloud-nodes delete" [
+export def "dedicated-cloud-nodes-delete" [
   subscription_id: string
   resource_group_name: string
   dedicated_cloud_node_name: string
@@ -948,7 +948,7 @@ export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simp
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.VMwareCloudSimple/dedicatedCloudNodes/{dedicatedCloudNodeName}
 # operationId: DedicatedCloudNodes_Get
-export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simple-dedicated-cloud-nodes get" [
+export def "dedicated-cloud-nodes-get" [
   subscription_id: string
   resource_group_name: string
   dedicated_cloud_node_name: string
@@ -990,7 +990,7 @@ export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simp
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.VMwareCloudSimple/dedicatedCloudNodes/{dedicatedCloudNodeName}
 # operationId: DedicatedCloudNodes_Update
-export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simple-dedicated-cloud-nodes update" [
+export def "dedicated-cloud-nodes-update" [
   subscription_id: string
   resource_group_name: string
   dedicated_cloud_node_name: string
@@ -1038,7 +1038,7 @@ export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simp
 # operationId: DedicatedCloudNodes_CreateOrUpdate
 # --properties shape: {availabilityZoneId: string, nodesCount: int, placementGroupId: string, purchaseId: string, skuDescription?: any}
 # --sku shape: {capacity?: string, description?: string, family?: string, name: string, tier?: string}
-export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simple-dedicated-cloud-nodes create-or-update" [
+export def "dedicated-cloud-nodes-create-or-update" [
   subscription_id: string
   resource_group_name: string
   dedicated_cloud_node_name: string
@@ -1090,7 +1090,7 @@ export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simp
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.VMwareCloudSimple/dedicatedCloudServices
 # operationId: DedicatedCloudServices_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simple-dedicated-cloud-services list" [
+export def "dedicated-cloud-services-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1133,7 +1133,7 @@ export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simp
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.VMwareCloudSimple/dedicatedCloudServices/{dedicatedCloudServiceName}
 # operationId: DedicatedCloudServices_Delete
-export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simple-dedicated-cloud-services delete" [
+export def "dedicated-cloud-services-delete" [
   subscription_id: string
   resource_group_name: string
   dedicated_cloud_service_name: string
@@ -1175,7 +1175,7 @@ export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simp
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.VMwareCloudSimple/dedicatedCloudServices/{dedicatedCloudServiceName}
 # operationId: DedicatedCloudServices_Get
-export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simple-dedicated-cloud-services get" [
+export def "dedicated-cloud-services-get" [
   subscription_id: string
   resource_group_name: string
   dedicated_cloud_service_name: string
@@ -1217,7 +1217,7 @@ export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simp
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.VMwareCloudSimple/dedicatedCloudServices/{dedicatedCloudServiceName}
 # operationId: DedicatedCloudServices_Update
-export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simple-dedicated-cloud-services update" [
+export def "dedicated-cloud-services-update" [
   subscription_id: string
   resource_group_name: string
   dedicated_cloud_service_name: string
@@ -1264,7 +1264,7 @@ export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simp
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.VMwareCloudSimple/dedicatedCloudServices/{dedicatedCloudServiceName}
 # operationId: DedicatedCloudServices_CreateOrUpdate
 # --properties shape: {gatewaySubnet: string}
-export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simple-dedicated-cloud-services create-or-update" [
+export def "dedicated-cloud-services-create-or-update" [
   subscription_id: string
   resource_group_name: string
   dedicated_cloud_service_name: string
@@ -1312,7 +1312,7 @@ export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simp
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.VMwareCloudSimple/virtualMachines
 # operationId: VirtualMachines_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simple-virtual-machines list" [
+export def "virtual-machines-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1355,7 +1355,7 @@ export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simp
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.VMwareCloudSimple/virtualMachines/{virtualMachineName}
 # operationId: VirtualMachines_Delete
-export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simple-virtual-machines delete" [
+export def "virtual-machines-delete" [
   subscription_id: string
   resource_group_name: string
   virtual_machine_name: string
@@ -1400,7 +1400,7 @@ export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simp
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.VMwareCloudSimple/virtualMachines/{virtualMachineName}
 # operationId: VirtualMachines_Get
-export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simple-virtual-machines get" [
+export def "virtual-machines-get" [
   subscription_id: string
   resource_group_name: string
   virtual_machine_name: string
@@ -1442,7 +1442,7 @@ export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simp
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.VMwareCloudSimple/virtualMachines/{virtualMachineName}
 # operationId: VirtualMachines_Update
-export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simple-virtual-machines update" [
+export def "virtual-machines-update" [
   subscription_id: string
   resource_group_name: string
   virtual_machine_name: string
@@ -1489,7 +1489,7 @@ export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simp
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.VMwareCloudSimple/virtualMachines/{virtualMachineName}
 # operationId: VirtualMachines_CreateOrUpdate
 # --properties shape: {amountOfRam: int, customization?: any, disks?: list, exposeToGuestVM?: bool, nics?: list, numberOfCores: int, password?: string, privateCloudId: string, resourcePool?: any, templateId?: string, username?: string, vSphereNetworks?: list<string>}
-export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simple-virtual-machines create-or-update" [
+export def "virtual-machines-create-or-update" [
   subscription_id: string
   resource_group_name: string
   virtual_machine_name: string
@@ -1540,7 +1540,7 @@ export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simp
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.VMwareCloudSimple/virtualMachines/{virtualMachineName}/start
 # operationId: VirtualMachines_Start
-export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simple-virtual-machines-start start" [
+export def "virtual-machines-start" [
   subscription_id: string
   resource_group_name: string
   virtual_machine_name: string
@@ -1585,7 +1585,7 @@ export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simp
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.VMwareCloudSimple/virtualMachines/{virtualMachineName}/stop
 # operationId: VirtualMachines_Stop
-export def "subscriptions-resource-groups-providers-microsoft-v-mware-cloud-simple-virtual-machines-stop stop" [
+export def "virtual-machines-stop" [
   subscription_id: string
   resource_group_name: string
   virtual_machine_name: string

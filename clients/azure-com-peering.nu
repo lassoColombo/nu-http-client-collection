@@ -124,7 +124,7 @@ def kind-completer [] { ["Direct" "Exchange"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-peering-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -148,7 +148,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.Peering/operations
 # operationId: Operations_List
-export def "providers-microsoft-peering-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,7 +184,7 @@ export def "providers-microsoft-peering-operations list" [
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Peering/CheckServiceProviderAvailability
 # operationId: CheckServiceProviderAvailability
-export def "subscriptions-providers-microsoft-peering-check-service-provider-availability check" [
+export def "check-service-provider-availability" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -227,7 +227,7 @@ export def "subscriptions-providers-microsoft-peering-check-service-provider-ava
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Peering/legacyPeerings
 # operationId: LegacyPeerings_List
-export def "subscriptions-providers-microsoft-peering-legacy-peerings list" [
+export def "legacy-peerings-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -267,7 +267,7 @@ export def "subscriptions-providers-microsoft-peering-legacy-peerings list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Peering/peerAsns
 # operationId: PeerAsns_ListBySubscription
-export def "subscriptions-providers-microsoft-peering-peer-asns list" [
+export def "peer-asns-list-by-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -305,7 +305,7 @@ export def "subscriptions-providers-microsoft-peering-peer-asns list" [
 #
 # DELETE /subscriptions/{subscriptionId}/providers/Microsoft.Peering/peerAsns/{peerAsnName}
 # operationId: PeerAsns_Delete
-export def "subscriptions-providers-microsoft-peering-peer-asns delete" [
+export def "peer-asns-delete" [
   subscription_id: string
   peer_asn_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -345,7 +345,7 @@ export def "subscriptions-providers-microsoft-peering-peer-asns delete" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Peering/peerAsns/{peerAsnName}
 # operationId: PeerAsns_Get
-export def "subscriptions-providers-microsoft-peering-peer-asns get" [
+export def "peer-asns-get" [
   subscription_id: string
   peer_asn_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -386,7 +386,7 @@ export def "subscriptions-providers-microsoft-peering-peer-asns get" [
 # PUT /subscriptions/{subscriptionId}/providers/Microsoft.Peering/peerAsns/{peerAsnName}
 # operationId: PeerAsns_CreateOrUpdate
 # --properties shape: {peerAsn?: int, peerContactInfo?: record, peerName?: string, validationState?: "None"|"Pending"|"Approved"|"Failed"}
-export def "subscriptions-providers-microsoft-peering-peer-asns create-or-update" [
+export def "peer-asns-create-or-update" [
   subscription_id: string
   peer_asn_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -430,7 +430,7 @@ export def "subscriptions-providers-microsoft-peering-peer-asns create-or-update
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Peering/peeringLocations
 # operationId: PeeringLocations_List
-export def "subscriptions-providers-microsoft-peering-peering-locations list" [
+export def "peering-locations-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -469,7 +469,7 @@ export def "subscriptions-providers-microsoft-peering-peering-locations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Peering/peeringServiceLocations
 # operationId: PeeringServiceLocations_List
-export def "subscriptions-providers-microsoft-peering-peering-service-locations list" [
+export def "peering-service-locations-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -507,7 +507,7 @@ export def "subscriptions-providers-microsoft-peering-peering-service-locations 
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Peering/peeringServiceProviders
 # operationId: PeeringServiceProviders_List
-export def "subscriptions-providers-microsoft-peering-peering-service-providers list" [
+export def "peering-service-providers-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -545,7 +545,7 @@ export def "subscriptions-providers-microsoft-peering-peering-service-providers 
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Peering/peeringServices
 # operationId: PeeringServices_ListBySubscription
-export def "subscriptions-providers-microsoft-peering-peering-services list" [
+export def "peering-services-list-by-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -583,7 +583,7 @@ export def "subscriptions-providers-microsoft-peering-peering-services list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Peering/peerings
 # operationId: Peerings_ListBySubscription
-export def "subscriptions-providers-microsoft-peering-peerings list" [
+export def "peerings-list-by-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -621,7 +621,7 @@ export def "subscriptions-providers-microsoft-peering-peerings list" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Peering/peeringServices
 # operationId: PeeringServices_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-peering-peering-services list" [
+export def "peering-services-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -661,7 +661,7 @@ export def "subscriptions-resource-groups-providers-microsoft-peering-peering-se
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Peering/peeringServices/{peeringServiceName}
 # operationId: PeeringServices_Delete
-export def "subscriptions-resource-groups-providers-microsoft-peering-peering-services delete" [
+export def "peering-services-delete" [
   subscription_id: string
   resource_group_name: string
   peering_service_name: string
@@ -703,7 +703,7 @@ export def "subscriptions-resource-groups-providers-microsoft-peering-peering-se
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Peering/peeringServices/{peeringServiceName}
 # operationId: PeeringServices_Get
-export def "subscriptions-resource-groups-providers-microsoft-peering-peering-services get" [
+export def "peering-services-get" [
   subscription_id: string
   resource_group_name: string
   peering_service_name: string
@@ -745,7 +745,7 @@ export def "subscriptions-resource-groups-providers-microsoft-peering-peering-se
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Peering/peeringServices/{peeringServiceName}
 # operationId: PeeringServices_Update
-export def "subscriptions-resource-groups-providers-microsoft-peering-peering-services update" [
+export def "peering-services-update" [
   subscription_id: string
   resource_group_name: string
   peering_service_name: string
@@ -792,7 +792,7 @@ export def "subscriptions-resource-groups-providers-microsoft-peering-peering-se
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Peering/peeringServices/{peeringServiceName}
 # operationId: PeeringServices_CreateOrUpdate
 # --properties shape: {peeringServiceLocation?: string, peeringServiceProvider?: string}
-export def "subscriptions-resource-groups-providers-microsoft-peering-peering-services create-or-update" [
+export def "peering-services-create-or-update" [
   subscription_id: string
   resource_group_name: string
   peering_service_name: string
@@ -840,7 +840,7 @@ export def "subscriptions-resource-groups-providers-microsoft-peering-peering-se
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Peering/peeringServices/{peeringServiceName}/prefixes
 # operationId: Prefixes_ListByPeeringService
-export def "subscriptions-resource-groups-providers-microsoft-peering-peering-services-prefixes list" [
+export def "prefixes-list-by-peering-service" [
   subscription_id: string
   resource_group_name: string
   peering_service_name: string
@@ -882,7 +882,7 @@ export def "subscriptions-resource-groups-providers-microsoft-peering-peering-se
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Peering/peeringServices/{peeringServiceName}/prefixes/{prefixName}
 # operationId: PeeringServicePrefixes_Delete
-export def "subscriptions-resource-groups-providers-microsoft-peering-peering-services-prefixes delete" [
+export def "peering-service-prefixes-delete" [
   subscription_id: string
   resource_group_name: string
   peering_service_name: string
@@ -926,7 +926,7 @@ export def "subscriptions-resource-groups-providers-microsoft-peering-peering-se
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Peering/peeringServices/{peeringServiceName}/prefixes/{prefixName}
 # operationId: PeeringServicePrefixes_Get
-export def "subscriptions-resource-groups-providers-microsoft-peering-peering-services-prefixes get" [
+export def "peering-service-prefixes-get" [
   subscription_id: string
   resource_group_name: string
   peering_service_name: string
@@ -971,7 +971,7 @@ export def "subscriptions-resource-groups-providers-microsoft-peering-peering-se
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Peering/peeringServices/{peeringServiceName}/prefixes/{prefixName}
 # operationId: PeeringServicePrefixes_CreateOrUpdate
 # --properties shape: {learnedType?: "None"|"ViaPartner"|"ViaSession", prefix?: string, prefixValidationState?: "None"|"Invalid"|"Verified"|"Failed"|"Pending"|"Unknown"}
-export def "subscriptions-resource-groups-providers-microsoft-peering-peering-services-prefixes create-or-update" [
+export def "peering-service-prefixes-create-or-update" [
   subscription_id: string
   resource_group_name: string
   peering_service_name: string
@@ -1019,7 +1019,7 @@ export def "subscriptions-resource-groups-providers-microsoft-peering-peering-se
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Peering/peerings
 # operationId: Peerings_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-peering-peerings list" [
+export def "peerings-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1059,7 +1059,7 @@ export def "subscriptions-resource-groups-providers-microsoft-peering-peerings l
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Peering/peerings/{peeringName}
 # operationId: Peerings_Delete
-export def "subscriptions-resource-groups-providers-microsoft-peering-peerings delete" [
+export def "peerings-delete" [
   subscription_id: string
   resource_group_name: string
   peering_name: string
@@ -1101,7 +1101,7 @@ export def "subscriptions-resource-groups-providers-microsoft-peering-peerings d
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Peering/peerings/{peeringName}
 # operationId: Peerings_Get
-export def "subscriptions-resource-groups-providers-microsoft-peering-peerings get" [
+export def "peerings-get" [
   subscription_id: string
   resource_group_name: string
   peering_name: string
@@ -1143,7 +1143,7 @@ export def "subscriptions-resource-groups-providers-microsoft-peering-peerings g
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Peering/peerings/{peeringName}
 # operationId: Peerings_Update
-export def "subscriptions-resource-groups-providers-microsoft-peering-peerings update" [
+export def "peerings-update" [
   subscription_id: string
   resource_group_name: string
   peering_name: string
@@ -1191,7 +1191,7 @@ export def "subscriptions-resource-groups-providers-microsoft-peering-peerings u
 # operationId: Peerings_CreateOrUpdate
 # --properties shape: {direct?: record, exchange?: record, peeringLocation?: string}
 # --sku shape: {family?: "Direct"|"Exchange", name?: "Basic_Exchange_Free"|"Basic_Direct_Free"|"Premium_Direct_Free"|"Premium_Exchange_Metered", size?: "Free"|"Metered"|"Unlimited", tier?: "Basic"|"Premium"}
-export def "subscriptions-resource-groups-providers-microsoft-peering-peerings create-or-update" [
+export def "peerings-create-or-update" [
   subscription_id: string
   resource_group_name: string
   peering_name: string

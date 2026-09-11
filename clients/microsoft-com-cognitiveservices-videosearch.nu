@@ -106,7 +106,7 @@ def pricing-completer [] { ["All" "Free" "Paid"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "videos-details get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "videos-details" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -130,7 +130,7 @@ export def commands []: nothing -> table {
 #
 # GET /videos/details
 # operationId: Videos_Details
-export def "videos-details get" [
+export def "videos-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,7 +184,7 @@ export def "videos-details get" [
 #
 # GET /videos/search
 # operationId: Videos_Search
-export def "videos-search list" [
+export def "videos-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -242,7 +242,7 @@ export def "videos-search list" [
 #
 # GET /videos/trending
 # operationId: Videos_Trending
-export def "videos-trending get" [
+export def "videos-trending" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

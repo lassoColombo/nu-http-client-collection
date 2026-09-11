@@ -137,7 +137,7 @@ def sort-completer-3 [] { ["id" "id:asc" "id:desc" "name" "name:asc" "name:desc"
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "actions list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-actions" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -160,7 +160,7 @@ export def commands []: nothing -> table {
 # Get all Actions
 #
 # GET /actions
-export def "actions list" [
+export def "get-actions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -197,7 +197,7 @@ export def "actions list" [
 # Get an Action
 #
 # GET /actions/{id}
-export def "actions get" [
+export def "get-actions-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -232,7 +232,7 @@ export def "actions get" [
 # Get all Certificates
 #
 # GET /certificates
-export def "certificates list" [
+export def "get-certificates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -270,7 +270,7 @@ export def "certificates list" [
 # Create a Certificate
 #
 # POST /certificates
-export def "certificates create" [
+export def "post-certificates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -312,7 +312,7 @@ export def "certificates create" [
 # Delete a Certificate
 #
 # DELETE /certificates/{id}
-export def "certificates delete" [
+export def "delete-certificates-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -347,7 +347,7 @@ export def "certificates delete" [
 # Get a Certificate
 #
 # GET /certificates/{id}
-export def "certificates get" [
+export def "get-certificates-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -382,7 +382,7 @@ export def "certificates get" [
 # Update a Certificate
 #
 # PUT /certificates/{id}
-export def "certificates update" [
+export def "put-certificates-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -422,7 +422,7 @@ export def "certificates update" [
 # Get all Actions for a Certificate
 #
 # GET /certificates/{id}/actions
-export def "certificates-actions list" [
+export def "get-certificates-id-actions" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -460,7 +460,7 @@ export def "certificates-actions list" [
 # Retry Issuance or Renewal
 #
 # POST /certificates/{id}/actions/retry
-export def "certificates-actions-retry create" [
+export def "post-certificates-id-actions-retry" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -495,7 +495,7 @@ export def "certificates-actions-retry create" [
 # Get an Action for a Certificate
 #
 # GET /certificates/{id}/actions/{action_id}
-export def "certificates-actions get" [
+export def "get-certificates-id-actions-action-id" [
   id: int
   action_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -532,7 +532,7 @@ export def "certificates-actions get" [
 # Get all Datacenters
 #
 # GET /datacenters
-export def "datacenters list" [
+export def "get-datacenters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -567,7 +567,7 @@ export def "datacenters list" [
 # Get a Datacenter
 #
 # GET /datacenters/{id}
-export def "datacenters get" [
+export def "get-datacenters-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -602,7 +602,7 @@ export def "datacenters get" [
 # Get all Firewalls
 #
 # GET /firewalls
-export def "firewalls list" [
+export def "get-firewalls" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -641,7 +641,7 @@ export def "firewalls list" [
 # POST /firewalls
 # --apply_to item shape: {label_selector?: record, server?: record, type: "server"|"label_selector"}
 # --rules item shape: {description?: string, destination_ips?: list<string>, direction: "in"|"out", port?: string, protocol: "tcp"|"udp"|"icmp"|"esp"|"gre", source_ips?: list<string>}
-export def "firewalls create" [
+export def "post-firewalls" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -681,7 +681,7 @@ export def "firewalls create" [
 # Delete a Firewall
 #
 # DELETE /firewalls/{id}
-export def "firewalls delete" [
+export def "delete-firewalls-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -716,7 +716,7 @@ export def "firewalls delete" [
 # Get a Firewall
 #
 # GET /firewalls/{id}
-export def "firewalls get" [
+export def "get-firewalls-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -751,7 +751,7 @@ export def "firewalls get" [
 # Update a Firewall
 #
 # PUT /firewalls/{id}
-export def "firewalls update" [
+export def "put-firewalls-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -791,7 +791,7 @@ export def "firewalls update" [
 # Get all Actions for a Firewall
 #
 # GET /firewalls/{id}/actions
-export def "firewalls-actions list" [
+export def "get-firewalls-id-actions" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -830,7 +830,7 @@ export def "firewalls-actions list" [
 #
 # POST /firewalls/{id}/actions/apply_to_resources
 # --apply_to item shape: {label_selector?: record, server?: record, type?: "server"|"label_selector"}
-export def "firewalls-actions-apply-to-resources create" [
+export def "post-firewalls-id-actions-apply-to-resources" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -870,7 +870,7 @@ export def "firewalls-actions-apply-to-resources create" [
 #
 # POST /firewalls/{id}/actions/remove_from_resources
 # --remove_from item shape: {label_selector?: record, server?: record, type?: "server"|"label_selector"}
-export def "firewalls-actions-remove-from-resources create" [
+export def "post-firewalls-id-actions-remove-from-resources" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -910,7 +910,7 @@ export def "firewalls-actions-remove-from-resources create" [
 #
 # POST /firewalls/{id}/actions/set_rules
 # --rules item shape: {description?: string, destination_ips?: list<string>, direction: "in"|"out", port?: string, protocol: "tcp"|"udp"|"icmp"|"esp"|"gre", source_ips?: list<string>}
-export def "firewalls-actions-set-rules create" [
+export def "post-firewalls-id-actions-set-rules" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -949,7 +949,7 @@ export def "firewalls-actions-set-rules create" [
 # Get an Action for a Firewall
 #
 # GET /firewalls/{id}/actions/{action_id}
-export def "firewalls-actions get" [
+export def "get-firewalls-id-actions-action-id" [
   id: int
   action_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -986,7 +986,7 @@ export def "firewalls-actions get" [
 # Get all Floating IPs
 #
 # GET /floating_ips
-export def "floating-ips list" [
+export def "get-floating-ips" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1023,7 +1023,7 @@ export def "floating-ips list" [
 # Create a Floating IP
 #
 # POST /floating_ips
-export def "floating-ips create" [
+export def "post-floating-ips" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1065,7 +1065,7 @@ export def "floating-ips create" [
 # Delete a Floating IP
 #
 # DELETE /floating_ips/{id}
-export def "floating-ips delete" [
+export def "delete-floating-ips-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1100,7 +1100,7 @@ export def "floating-ips delete" [
 # Get a Floating IP
 #
 # GET /floating_ips/{id}
-export def "floating-ips get" [
+export def "get-floating-ips-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1135,7 +1135,7 @@ export def "floating-ips get" [
 # Update a Floating IP
 #
 # PUT /floating_ips/{id}
-export def "floating-ips update" [
+export def "put-floating-ips-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1176,7 +1176,7 @@ export def "floating-ips update" [
 # Get all Actions for a Floating IP
 #
 # GET /floating_ips/{id}/actions
-export def "floating-ips-actions list" [
+export def "get-floating-ips-id-actions" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1214,7 +1214,7 @@ export def "floating-ips-actions list" [
 # Assign a Floating IP to a Server
 #
 # POST /floating_ips/{id}/actions/assign
-export def "floating-ips-actions-assign create" [
+export def "post-floating-ips-id-actions-assign" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1253,7 +1253,7 @@ export def "floating-ips-actions-assign create" [
 # Change reverse DNS entry for a Floating IP
 #
 # POST /floating_ips/{id}/actions/change_dns_ptr
-export def "floating-ips-actions-change-dns-ptr create" [
+export def "post-floating-ips-id-actions-change-dns-ptr" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1293,7 +1293,7 @@ export def "floating-ips-actions-change-dns-ptr create" [
 # Change Floating IP Protection
 #
 # POST /floating_ips/{id}/actions/change_protection
-export def "floating-ips-actions-change-protection create" [
+export def "post-floating-ips-id-actions-change-protection" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1332,7 +1332,7 @@ export def "floating-ips-actions-change-protection create" [
 # Unassign a Floating IP
 #
 # POST /floating_ips/{id}/actions/unassign
-export def "floating-ips-actions-unassign create" [
+export def "post-floating-ips-id-actions-unassign" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1367,7 +1367,7 @@ export def "floating-ips-actions-unassign create" [
 # Get an Action for a Floating IP
 #
 # GET /floating_ips/{id}/actions/{action_id}
-export def "floating-ips-actions get" [
+export def "get-floating-ips-id-actions-action-id" [
   id: int
   action_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1404,7 +1404,7 @@ export def "floating-ips-actions get" [
 # Get all Images
 #
 # GET /images
-export def "images list" [
+export def "get-images" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1445,7 +1445,7 @@ export def "images list" [
 # Delete an Image
 #
 # DELETE /images/{id}
-export def "images delete" [
+export def "delete-images-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1480,7 +1480,7 @@ export def "images delete" [
 # Get an Image
 #
 # GET /images/{id}
-export def "images get" [
+export def "get-images-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1515,7 +1515,7 @@ export def "images get" [
 # Update an Image
 #
 # PUT /images/{id}
-export def "images update" [
+export def "put-images-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1556,7 +1556,7 @@ export def "images update" [
 # Get all Actions for an Image
 #
 # GET /images/{id}/actions
-export def "images-actions list" [
+export def "get-images-id-actions" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1594,7 +1594,7 @@ export def "images-actions list" [
 # Change Image Protection
 #
 # POST /images/{id}/actions/change_protection
-export def "images-actions-change-protection create" [
+export def "post-images-id-actions-change-protection" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1633,7 +1633,7 @@ export def "images-actions-change-protection create" [
 # Get an Action for an Image
 #
 # GET /images/{id}/actions/{action_id}
-export def "images-actions get" [
+export def "get-images-id-actions-action-id" [
   id: int
   action_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1670,7 +1670,7 @@ export def "images-actions get" [
 # Get all ISOs
 #
 # GET /isos
-export def "isos list" [
+export def "get-isos" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1705,7 +1705,7 @@ export def "isos list" [
 # Get an ISO
 #
 # GET /isos/{id}
-export def "isos get" [
+export def "get-isos-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1740,7 +1740,7 @@ export def "isos get" [
 # Get all Load Balancer Types
 #
 # GET /load_balancer_types
-export def "load-balancer-types list" [
+export def "get-load-balancer-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1775,7 +1775,7 @@ export def "load-balancer-types list" [
 # Get a Load Balancer Type
 #
 # GET /load_balancer_types/{id}
-export def "load-balancer-types get" [
+export def "get-load-balancer-types-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1810,7 +1810,7 @@ export def "load-balancer-types get" [
 # Get all Load Balancers
 #
 # GET /load_balancers
-export def "load-balancers list" [
+export def "get-load-balancers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1851,7 +1851,7 @@ export def "load-balancers list" [
 # --labels shape: {labelkey?: string}
 # --services item shape: {destination_port: int, health_check: record, http?: record, listen_port: int, protocol: "tcp"|"http"|"https", proxyprotocol: bool}
 # --targets item shape: {health_status?: list, ip?: record, label_selector?: record, server?: record, targets?: list, type: "server"|"label_selector"|"ip", use_private_ip?: bool}
-export def "load-balancers create" [
+export def "post-load-balancers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1897,7 +1897,7 @@ export def "load-balancers create" [
 # Delete a Load Balancer
 #
 # DELETE /load_balancers/{id}
-export def "load-balancers delete" [
+export def "delete-load-balancers-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1932,7 +1932,7 @@ export def "load-balancers delete" [
 # Get a Load Balancer
 #
 # GET /load_balancers/{id}
-export def "load-balancers get" [
+export def "get-load-balancers-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1967,7 +1967,7 @@ export def "load-balancers get" [
 # Update a Load Balancer
 #
 # PUT /load_balancers/{id}
-export def "load-balancers update" [
+export def "put-load-balancers-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2007,7 +2007,7 @@ export def "load-balancers update" [
 # Get all Actions for a Load Balancer
 #
 # GET /load_balancers/{id}/actions
-export def "load-balancers-actions list" [
+export def "get-load-balancers-id-actions" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2047,7 +2047,7 @@ export def "load-balancers-actions list" [
 # POST /load_balancers/{id}/actions/add_service
 # --health_check shape: {http?: record, interval: int, port: int, protocol: "tcp"|"http", retries: int, timeout: int}
 # --http shape: {certificates?: list<int>, cookie_lifetime?: int, cookie_name?: string, redirect_http?: bool, sticky_sessions?: bool}
-export def "load-balancers-actions-add-service create" [
+export def "post-load-balancers-id-actions-add-service" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2094,7 +2094,7 @@ export def "load-balancers-actions-add-service create" [
 # --ip shape: {ip: string}
 # --label_selector shape: {selector: string}
 # --server shape: {id: float}
-export def "load-balancers-actions-add-target create" [
+export def "post-load-balancers-id-actions-add-target" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2137,7 +2137,7 @@ export def "load-balancers-actions-add-target create" [
 # Attach a Load Balancer to a Network
 #
 # POST /load_balancers/{id}/actions/attach_to_network
-export def "load-balancers-actions-attach-to-network create" [
+export def "post-load-balancers-id-actions-attach-to-network" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2177,7 +2177,7 @@ export def "load-balancers-actions-attach-to-network create" [
 # Change Algorithm
 #
 # POST /load_balancers/{id}/actions/change_algorithm
-export def "load-balancers-actions-change-algorithm create" [
+export def "post-load-balancers-id-actions-change-algorithm" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2216,7 +2216,7 @@ export def "load-balancers-actions-change-algorithm create" [
 # Change reverse DNS entry for this Load Balancer
 #
 # POST /load_balancers/{id}/actions/change_dns_ptr
-export def "load-balancers-actions-change-dns-ptr create" [
+export def "post-load-balancers-id-actions-change-dns-ptr" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2256,7 +2256,7 @@ export def "load-balancers-actions-change-dns-ptr create" [
 # Change Load Balancer Protection
 #
 # POST /load_balancers/{id}/actions/change_protection
-export def "load-balancers-actions-change-protection create" [
+export def "post-load-balancers-id-actions-change-protection" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2295,7 +2295,7 @@ export def "load-balancers-actions-change-protection create" [
 # Change the Type of a Load Balancer
 #
 # POST /load_balancers/{id}/actions/change_type
-export def "load-balancers-actions-change-type create" [
+export def "post-load-balancers-id-actions-change-type" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2334,7 +2334,7 @@ export def "load-balancers-actions-change-type create" [
 # Delete Service
 #
 # POST /load_balancers/{id}/actions/delete_service
-export def "load-balancers-actions-delete-service create" [
+export def "post-load-balancers-id-actions-delete-service" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2373,7 +2373,7 @@ export def "load-balancers-actions-delete-service create" [
 # Detach a Load Balancer from a Network
 #
 # POST /load_balancers/{id}/actions/detach_from_network
-export def "load-balancers-actions-detach-from-network create" [
+export def "post-load-balancers-id-actions-detach-from-network" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2412,7 +2412,7 @@ export def "load-balancers-actions-detach-from-network create" [
 # Disable the public interface of a Load Balancer
 #
 # POST /load_balancers/{id}/actions/disable_public_interface
-export def "load-balancers-actions-disable-public-interface create" [
+export def "post-load-balancers-id-actions-disable-public-interface" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2447,7 +2447,7 @@ export def "load-balancers-actions-disable-public-interface create" [
 # Enable the public interface of a Load Balancer
 #
 # POST /load_balancers/{id}/actions/enable_public_interface
-export def "load-balancers-actions-enable-public-interface create" [
+export def "post-load-balancers-id-actions-enable-public-interface" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2485,7 +2485,7 @@ export def "load-balancers-actions-enable-public-interface create" [
 # --ip shape: {ip: string}
 # --label_selector shape: {selector: string}
 # --server shape: {id: float}
-export def "load-balancers-actions-remove-target create" [
+export def "post-load-balancers-id-actions-remove-target" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2529,7 +2529,7 @@ export def "load-balancers-actions-remove-target create" [
 # POST /load_balancers/{id}/actions/update_service
 # --health_check shape: {http?: record, interval: int, port: int, protocol: "tcp"|"http", retries: int, timeout: int}
 # --http shape: {certificates?: list<int>, cookie_lifetime?: int, cookie_name?: string, redirect_http?: bool, sticky_sessions?: bool}
-export def "load-balancers-actions-update-service create" [
+export def "post-load-balancers-id-actions-update-service" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2573,7 +2573,7 @@ export def "load-balancers-actions-update-service create" [
 # Get an Action for a Load Balancer
 #
 # GET /load_balancers/{id}/actions/{action_id}
-export def "load-balancers-actions get" [
+export def "get-load-balancers-id-actions-action-id" [
   id: int
   action_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2610,7 +2610,7 @@ export def "load-balancers-actions get" [
 # Get Metrics for a LoadBalancer
 #
 # GET /load_balancers/{id}/metrics
-export def "load-balancers-metrics get" [
+export def "get-load-balancers-id-metrics" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2650,7 +2650,7 @@ export def "load-balancers-metrics get" [
 # Get all Locations
 #
 # GET /locations
-export def "locations list" [
+export def "get-locations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2685,7 +2685,7 @@ export def "locations list" [
 # Get a Location
 #
 # GET /locations/{id}
-export def "locations get" [
+export def "get-locations-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2720,7 +2720,7 @@ export def "locations get" [
 # Get all Networks
 #
 # GET /networks
-export def "networks list" [
+export def "get-networks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2759,7 +2759,7 @@ export def "networks list" [
 # --labels shape: {labelkey?: string}
 # --routes item shape: {destination: string, gateway: string}
 # --subnets item shape: {ip_range?: string, network_zone: string, type: "cloud"|"server"|"vswitch"}
-export def "networks create" [
+export def "post-networks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2800,7 +2800,7 @@ export def "networks create" [
 # Delete a Network
 #
 # DELETE /networks/{id}
-export def "networks delete" [
+export def "delete-networks-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2835,7 +2835,7 @@ export def "networks delete" [
 # Get a Network
 #
 # GET /networks/{id}
-export def "networks get" [
+export def "get-networks-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2871,7 +2871,7 @@ export def "networks get" [
 #
 # PUT /networks/{id}
 # --labels shape: {labelkey?: string}
-export def "networks update" [
+export def "put-networks-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2911,7 +2911,7 @@ export def "networks update" [
 # Get all Actions for a Network
 #
 # GET /networks/{id}/actions
-export def "networks-actions list" [
+export def "get-networks-id-actions" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2949,7 +2949,7 @@ export def "networks-actions list" [
 # Add a route to a Network
 #
 # POST /networks/{id}/actions/add_route
-export def "networks-actions-add-route create" [
+export def "post-networks-id-actions-add-route" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2989,7 +2989,7 @@ export def "networks-actions-add-route create" [
 # Add a subnet to a Network
 #
 # POST /networks/{id}/actions/add_subnet
-export def "networks-actions-add-subnet create" [
+export def "post-networks-id-actions-add-subnet" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3031,7 +3031,7 @@ export def "networks-actions-add-subnet create" [
 # Change IP range of a Network
 #
 # POST /networks/{id}/actions/change_ip_range
-export def "networks-actions-change-ip-range create" [
+export def "post-networks-id-actions-change-ip-range" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3070,7 +3070,7 @@ export def "networks-actions-change-ip-range create" [
 # Change Network Protection
 #
 # POST /networks/{id}/actions/change_protection
-export def "networks-actions-change-protection create" [
+export def "post-networks-id-actions-change-protection" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3109,7 +3109,7 @@ export def "networks-actions-change-protection create" [
 # Delete a route from a Network
 #
 # POST /networks/{id}/actions/delete_route
-export def "networks-actions-delete-route create" [
+export def "post-networks-id-actions-delete-route" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3149,7 +3149,7 @@ export def "networks-actions-delete-route create" [
 # Delete a subnet from a Network
 #
 # POST /networks/{id}/actions/delete_subnet
-export def "networks-actions-delete-subnet create" [
+export def "post-networks-id-actions-delete-subnet" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3188,7 +3188,7 @@ export def "networks-actions-delete-subnet create" [
 # Get an Action for a Network
 #
 # GET /networks/{id}/actions/{action_id}
-export def "networks-actions get" [
+export def "get-networks-id-actions-action-id" [
   id: int
   action_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3225,7 +3225,7 @@ export def "networks-actions get" [
 # Get all PlacementGroups
 #
 # GET /placement_groups
-export def "placement-groups list" [
+export def "get-placement-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3263,7 +3263,7 @@ export def "placement-groups list" [
 # Create a PlacementGroup
 #
 # POST /placement_groups
-export def "placement-groups create" [
+export def "post-placement-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3302,7 +3302,7 @@ export def "placement-groups create" [
 # Delete a PlacementGroup
 #
 # DELETE /placement_groups/{id}
-export def "placement-groups delete" [
+export def "delete-placement-groups-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3337,7 +3337,7 @@ export def "placement-groups delete" [
 # Get a PlacementGroup
 #
 # GET /placement_groups/{id}
-export def "placement-groups get" [
+export def "get-placement-groups-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3372,7 +3372,7 @@ export def "placement-groups get" [
 # Update a PlacementGroup
 #
 # PUT /placement_groups/{id}
-export def "placement-groups update" [
+export def "put-placement-groups-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3412,7 +3412,7 @@ export def "placement-groups update" [
 # Get all prices
 #
 # GET /pricing
-export def "pricing get" [
+export def "get-pricing" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3445,7 +3445,7 @@ export def "pricing get" [
 # Get all Primary IPs
 #
 # GET /primary_ips
-export def "primary-ips list" [
+export def "get-primary-ips" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3483,7 +3483,7 @@ export def "primary-ips list" [
 # Create a Primary IP
 #
 # POST /primary_ips
-export def "primary-ips create" [
+export def "post-primary-ips" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3526,7 +3526,7 @@ export def "primary-ips create" [
 # Delete a Primary IP
 #
 # DELETE /primary_ips/{id}
-export def "primary-ips delete" [
+export def "delete-primary-ips-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3561,7 +3561,7 @@ export def "primary-ips delete" [
 # Get a Primary IP
 #
 # GET /primary_ips/{id}
-export def "primary-ips get" [
+export def "get-primary-ips-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3596,7 +3596,7 @@ export def "primary-ips get" [
 # Update a Primary IP
 #
 # PUT /primary_ips/{id}
-export def "primary-ips update" [
+export def "put-primary-ips-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3637,7 +3637,7 @@ export def "primary-ips update" [
 # Assign a Primary IP to a resource
 #
 # POST /primary_ips/{id}/actions/assign
-export def "primary-ips-actions-assign create" [
+export def "post-primary-ips-id-actions-assign" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3677,7 +3677,7 @@ export def "primary-ips-actions-assign create" [
 # Change reverse DNS entry for a Primary IP
 #
 # POST /primary_ips/{id}/actions/change_dns_ptr
-export def "primary-ips-actions-change-dns-ptr create" [
+export def "post-primary-ips-id-actions-change-dns-ptr" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3717,7 +3717,7 @@ export def "primary-ips-actions-change-dns-ptr create" [
 # Change Primary IP Protection
 #
 # POST /primary_ips/{id}/actions/change_protection
-export def "primary-ips-actions-change-protection create" [
+export def "post-primary-ips-id-actions-change-protection" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3756,7 +3756,7 @@ export def "primary-ips-actions-change-protection create" [
 # Unassign a Primary IP from a resource
 #
 # POST /primary_ips/{id}/actions/unassign
-export def "primary-ips-actions-unassign create" [
+export def "post-primary-ips-id-actions-unassign" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3791,7 +3791,7 @@ export def "primary-ips-actions-unassign create" [
 # Get all Server Types
 #
 # GET /server_types
-export def "server-types list" [
+export def "get-server-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3826,7 +3826,7 @@ export def "server-types list" [
 # Get a Server Type
 #
 # GET /server_types/{id}
-export def "server-types get" [
+export def "get-server-types-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3861,7 +3861,7 @@ export def "server-types get" [
 # Get all Servers
 #
 # GET /servers
-export def "servers list" [
+export def "get-servers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3901,7 +3901,7 @@ export def "servers list" [
 # POST /servers
 # --firewalls item shape: {firewall?: int}
 # --public_net shape: {enable_ipv4?: bool, enable_ipv6?: bool, ipv4?: int, ipv6?: int}
-export def "servers create" [
+export def "post-servers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3952,7 +3952,7 @@ export def "servers create" [
 # Delete a Server
 #
 # DELETE /servers/{id}
-export def "servers delete" [
+export def "delete-servers-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3987,7 +3987,7 @@ export def "servers delete" [
 # Get a Server
 #
 # GET /servers/{id}
-export def "servers get" [
+export def "get-servers-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4022,7 +4022,7 @@ export def "servers get" [
 # Update a Server
 #
 # PUT /servers/{id}
-export def "servers update" [
+export def "put-servers-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4062,7 +4062,7 @@ export def "servers update" [
 # Get all Actions for a Server
 #
 # GET /servers/{id}/actions
-export def "servers-actions list" [
+export def "get-servers-id-actions" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4100,7 +4100,7 @@ export def "servers-actions list" [
 # Add a Server to a Placement Group
 #
 # POST /servers/{id}/actions/add_to_placement_group
-export def "servers-actions-add-to-placement-group create" [
+export def "post-servers-id-actions-add-to-placement-group" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4139,7 +4139,7 @@ export def "servers-actions-add-to-placement-group create" [
 # Attach an ISO to a Server
 #
 # POST /servers/{id}/actions/attach_iso
-export def "servers-actions-attach-iso create" [
+export def "post-servers-id-actions-attach-iso" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4178,7 +4178,7 @@ export def "servers-actions-attach-iso create" [
 # Attach a Server to a Network
 #
 # POST /servers/{id}/actions/attach_to_network
-export def "servers-actions-attach-to-network create" [
+export def "post-servers-id-actions-attach-to-network" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4219,7 +4219,7 @@ export def "servers-actions-attach-to-network create" [
 # Change alias IPs of a Network
 #
 # POST /servers/{id}/actions/change_alias_ips
-export def "servers-actions-change-alias-ips create" [
+export def "post-servers-id-actions-change-alias-ips" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4259,7 +4259,7 @@ export def "servers-actions-change-alias-ips create" [
 # Change reverse DNS entry for this Server
 #
 # POST /servers/{id}/actions/change_dns_ptr
-export def "servers-actions-change-dns-ptr create" [
+export def "post-servers-id-actions-change-dns-ptr" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4299,7 +4299,7 @@ export def "servers-actions-change-dns-ptr create" [
 # Change Server Protection
 #
 # POST /servers/{id}/actions/change_protection
-export def "servers-actions-change-protection create" [
+export def "post-servers-id-actions-change-protection" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4339,7 +4339,7 @@ export def "servers-actions-change-protection create" [
 # Change the Type of a Server
 #
 # POST /servers/{id}/actions/change_type
-export def "servers-actions-change-type create" [
+export def "post-servers-id-actions-change-type" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4380,7 +4380,7 @@ export def "servers-actions-change-type create" [
 #
 # POST /servers/{id}/actions/create_image
 # --labels shape: {labelkey?: string}
-export def "servers-actions-create-image create" [
+export def "post-servers-id-actions-create-image" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4421,7 +4421,7 @@ export def "servers-actions-create-image create" [
 # Detach a Server from a Network
 #
 # POST /servers/{id}/actions/detach_from_network
-export def "servers-actions-detach-from-network create" [
+export def "post-servers-id-actions-detach-from-network" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4460,7 +4460,7 @@ export def "servers-actions-detach-from-network create" [
 # Detach an ISO from a Server
 #
 # POST /servers/{id}/actions/detach_iso
-export def "servers-actions-detach-iso create" [
+export def "post-servers-id-actions-detach-iso" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4495,7 +4495,7 @@ export def "servers-actions-detach-iso create" [
 # Disable Backups for a Server
 #
 # POST /servers/{id}/actions/disable_backup
-export def "servers-actions-disable-backup create" [
+export def "post-servers-id-actions-disable-backup" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4530,7 +4530,7 @@ export def "servers-actions-disable-backup create" [
 # Disable Rescue Mode for a Server
 #
 # POST /servers/{id}/actions/disable_rescue
-export def "servers-actions-disable-rescue create" [
+export def "post-servers-id-actions-disable-rescue" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4565,7 +4565,7 @@ export def "servers-actions-disable-rescue create" [
 # Enable and Configure Backups for a Server
 #
 # POST /servers/{id}/actions/enable_backup
-export def "servers-actions-enable-backup create" [
+export def "post-servers-id-actions-enable-backup" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4600,7 +4600,7 @@ export def "servers-actions-enable-backup create" [
 # Enable Rescue Mode for a Server
 #
 # POST /servers/{id}/actions/enable_rescue
-export def "servers-actions-enable-rescue create" [
+export def "post-servers-id-actions-enable-rescue" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4640,7 +4640,7 @@ export def "servers-actions-enable-rescue create" [
 # Power off a Server
 #
 # POST /servers/{id}/actions/poweroff
-export def "servers-actions-poweroff create" [
+export def "post-servers-id-actions-poweroff" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4675,7 +4675,7 @@ export def "servers-actions-poweroff create" [
 # Power on a Server
 #
 # POST /servers/{id}/actions/poweron
-export def "servers-actions-poweron create" [
+export def "post-servers-id-actions-poweron" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4710,7 +4710,7 @@ export def "servers-actions-poweron create" [
 # Soft-reboot a Server
 #
 # POST /servers/{id}/actions/reboot
-export def "servers-actions-reboot create" [
+export def "post-servers-id-actions-reboot" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4745,7 +4745,7 @@ export def "servers-actions-reboot create" [
 # Rebuild a Server from an Image
 #
 # POST /servers/{id}/actions/rebuild
-export def "servers-actions-rebuild create" [
+export def "post-servers-id-actions-rebuild" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4784,7 +4784,7 @@ export def "servers-actions-rebuild create" [
 # Remove from Placement Group
 #
 # POST /servers/{id}/actions/remove_from_placement_group
-export def "servers-actions-remove-from-placement-group create" [
+export def "post-servers-id-actions-remove-from-placement-group" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4819,7 +4819,7 @@ export def "servers-actions-remove-from-placement-group create" [
 # Request Console for a Server
 #
 # POST /servers/{id}/actions/request_console
-export def "servers-actions-request-console create" [
+export def "post-servers-id-actions-request-console" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4854,7 +4854,7 @@ export def "servers-actions-request-console create" [
 # Reset a Server
 #
 # POST /servers/{id}/actions/reset
-export def "servers-actions-reset create" [
+export def "post-servers-id-actions-reset" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4889,7 +4889,7 @@ export def "servers-actions-reset create" [
 # Reset root Password of a Server
 #
 # POST /servers/{id}/actions/reset_password
-export def "servers-actions-reset-password create" [
+export def "post-servers-id-actions-reset-password" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4924,7 +4924,7 @@ export def "servers-actions-reset-password create" [
 # Shutdown a Server
 #
 # POST /servers/{id}/actions/shutdown
-export def "servers-actions-shutdown create" [
+export def "post-servers-id-actions-shutdown" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4959,7 +4959,7 @@ export def "servers-actions-shutdown create" [
 # Get an Action for a Server
 #
 # GET /servers/{id}/actions/{action_id}
-export def "servers-actions get" [
+export def "get-servers-id-actions-action-id" [
   id: int
   action_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4996,7 +4996,7 @@ export def "servers-actions get" [
 # Get Metrics for a Server
 #
 # GET /servers/{id}/metrics
-export def "servers-metrics get" [
+export def "get-servers-id-metrics" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5036,7 +5036,7 @@ export def "servers-metrics get" [
 # Get all SSH keys
 #
 # GET /ssh_keys
-export def "ssh-keys list" [
+export def "get-ssh-keys" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5074,7 +5074,7 @@ export def "ssh-keys list" [
 # Create an SSH key
 #
 # POST /ssh_keys
-export def "ssh-keys create" [
+export def "post-ssh-keys" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5113,7 +5113,7 @@ export def "ssh-keys create" [
 # Delete an SSH key
 #
 # DELETE /ssh_keys/{id}
-export def "ssh-keys delete" [
+export def "delete-ssh-keys-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5148,7 +5148,7 @@ export def "ssh-keys delete" [
 # Get a SSH key
 #
 # GET /ssh_keys/{id}
-export def "ssh-keys get" [
+export def "get-ssh-keys-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5183,7 +5183,7 @@ export def "ssh-keys get" [
 # Update an SSH key
 #
 # PUT /ssh_keys/{id}
-export def "ssh-keys update" [
+export def "put-ssh-keys-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5223,7 +5223,7 @@ export def "ssh-keys update" [
 # Get all Volumes
 #
 # GET /volumes
-export def "volumes list" [
+export def "get-volumes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5261,7 +5261,7 @@ export def "volumes list" [
 # Create a Volume
 #
 # POST /volumes
-export def "volumes create" [
+export def "post-volumes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5304,7 +5304,7 @@ export def "volumes create" [
 # Delete a Volume
 #
 # DELETE /volumes/{id}
-export def "volumes delete" [
+export def "delete-volumes-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5339,7 +5339,7 @@ export def "volumes delete" [
 # Get a Volume
 #
 # GET /volumes/{id}
-export def "volumes get" [
+export def "get-volumes-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5375,7 +5375,7 @@ export def "volumes get" [
 #
 # PUT /volumes/{id}
 # --labels shape: {labelkey?: string}
-export def "volumes update" [
+export def "put-volumes-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5415,7 +5415,7 @@ export def "volumes update" [
 # Get all Actions for a Volume
 #
 # GET /volumes/{id}/actions
-export def "volumes-actions list" [
+export def "get-volumes-id-actions" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5453,7 +5453,7 @@ export def "volumes-actions list" [
 # Attach Volume to a Server
 #
 # POST /volumes/{id}/actions/attach
-export def "volumes-actions-attach create" [
+export def "post-volumes-id-actions-attach" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5493,7 +5493,7 @@ export def "volumes-actions-attach create" [
 # Change Volume Protection
 #
 # POST /volumes/{id}/actions/change_protection
-export def "volumes-actions-change-protection create" [
+export def "post-volumes-id-actions-change-protection" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5532,7 +5532,7 @@ export def "volumes-actions-change-protection create" [
 # Detach Volume
 #
 # POST /volumes/{id}/actions/detach
-export def "volumes-actions-detach create" [
+export def "post-volumes-id-actions-detach" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5567,7 +5567,7 @@ export def "volumes-actions-detach create" [
 # Resize Volume
 #
 # POST /volumes/{id}/actions/resize
-export def "volumes-actions-resize create" [
+export def "post-volumes-id-actions-resize" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5606,7 +5606,7 @@ export def "volumes-actions-resize create" [
 # Get an Action for a Volume
 #
 # GET /volumes/{id}/actions/{action_id}
-export def "volumes-actions get" [
+export def "get-volumes-id-actions-action-id" [
   id: int
   action_id: int
   --base-url(-b): string@base-url-completer # API base URL

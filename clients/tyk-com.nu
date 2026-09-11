@@ -115,7 +115,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "tyk-apis list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-tyk-apis" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -138,7 +138,7 @@ export def commands []: nothing -> table {
 # Gets a list of *API Definition* objects that are currently live on the gateway
 #
 # GET /tyk/apis/
-export def "tyk-apis list" [
+export def "get-tyk-apis" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -180,7 +180,7 @@ export def "tyk-apis list" [
 # --oauth_meta shape: {allowed_access_types?: list<string>, allowed_authorize_types?: list<string>, auth_login_redirect?: string}
 # --uptime_tests shape: {CORS?: record, active?: bool, allowed_ips?: list<string>, cache_options?: record, check_list?: list, config?: record, custom_middleware?: record, do_not_track?: string, domain?: string, dont_set_quota_on_create?: bool, enable_batch_request_support?: bool, enable_ip_whitelisting?: bool, event_handlers?: record, expire_analytics_after?: float, proxy?: record, response_processors?: list, session_lifetime?: float, tags?: list<string>}
 # --version_data shape: {not_versioned?: bool, versions?: record}
-export def "tyk-apis create" [
+export def "post-tyk-apis" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -237,7 +237,7 @@ export def "tyk-apis create" [
 # Deletes an *API Definition* object, if it exists
 #
 # DELETE /tyk/apis/{apiID}
-export def "tyk-apis delete" [
+export def "delete-tyk-apis-api-id" [
   api_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -275,7 +275,7 @@ export def "tyk-apis delete" [
 # Gets an *API Definition* object, if it exists
 #
 # GET /tyk/apis/{apiID}
-export def "tyk-apis get" [
+export def "get-tyk-apis-api-id" [
   api_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -319,7 +319,7 @@ export def "tyk-apis get" [
 # --oauth_meta shape: {allowed_access_types?: list<string>, allowed_authorize_types?: list<string>, auth_login_redirect?: string}
 # --uptime_tests shape: {CORS?: record, active?: bool, allowed_ips?: list<string>, cache_options?: record, check_list?: list, config?: record, custom_middleware?: record, do_not_track?: string, domain?: string, dont_set_quota_on_create?: bool, enable_batch_request_support?: bool, enable_ip_whitelisting?: bool, event_handlers?: record, expire_analytics_after?: float, proxy?: record, response_processors?: list, session_lifetime?: float, tags?: list<string>}
 # --version_data shape: {not_versioned?: bool, versions?: record}
-export def "tyk-apis update" [
+export def "put-tyk-apis-api-id" [
   api_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -381,7 +381,7 @@ export def "tyk-apis update" [
 # Gets the health check values for an API if it is being recorded
 #
 # GET /tyk/health/
-export def "tyk-health get" [
+export def "get-tyk-health" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -419,7 +419,7 @@ export def "tyk-health get" [
 # Gets a list of *key* IDs (will only work with non-hashed installations)
 #
 # GET /tyk/keys/
-export def "tyk-keys get" [
+export def "get-tyk-keys" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -460,7 +460,7 @@ export def "tyk-keys get" [
 # --basic_auth_data shape: {hash_type?: ""|"bcrypt", password?: string}
 # --jwt_data shape: {secret?: string}
 # --monitor shape: {trigger_limits?: list<string>}
-export def "tyk-keys-create create" [
+export def "post-tyk-keys-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -521,7 +521,7 @@ export def "tyk-keys-create create" [
 # Remove this *API token* from the gateway, this will completely destroy the token and metadata associated with the token and instantly stop access from being granted
 #
 # DELETE /tyk/keys/{keyId}
-export def "tyk-keys delete" [
+export def "delete-tyk-keys-key-id" [
   key_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -564,7 +564,7 @@ export def "tyk-keys delete" [
 # --basic_auth_data shape: {hash_type?: ""|"bcrypt", password?: string}
 # --jwt_data shape: {secret?: string}
 # --monitor shape: {trigger_limits?: list<string>}
-export def "tyk-keys create" [
+export def "post-tyk-keys-key-id" [
   key_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -628,7 +628,7 @@ export def "tyk-keys create" [
 # --basic_auth_data shape: {hash_type?: ""|"bcrypt", password?: string}
 # --jwt_data shape: {secret?: string}
 # --monitor shape: {trigger_limits?: list<string>}
-export def "tyk-keys update" [
+export def "put-tyk-keys-key-id" [
   key_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -692,7 +692,7 @@ export def "tyk-keys update" [
 # The final request from an authorising party for a redirect URI during the Tyk OAuth flow
 #
 # POST /tyk/oauth/authorize-client/
-export def "tyk-oauth-authorize-client create" [
+export def "post-tyk-oauth-authorize-client" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -736,7 +736,7 @@ export def "tyk-oauth-authorize-client create" [
 # Create a new OAuth client
 #
 # POST /tyk/oauth/clients/create
-export def "tyk-oauth-clients-create create" [
+export def "post-tyk-oauth-clients-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -777,7 +777,7 @@ export def "tyk-oauth-clients-create create" [
 # Get a list of OAuth clients bound to this back end
 #
 # GET /tyk/oauth/clients/{apiId}
-export def "tyk-oauth-clients get" [
+export def "get-tyk-oauth-clients-api-id" [
   api_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -815,7 +815,7 @@ export def "tyk-oauth-clients get" [
 # Delete the OAuth client
 #
 # DELETE /tyk/oauth/clients/{apiId}/{clientId}
-export def "tyk-oauth-clients delete" [
+export def "delete-tyk-oauth-clients-api-id-client-id" [
   api_id: string
   client_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -855,7 +855,7 @@ export def "tyk-oauth-clients delete" [
 # Invalidate a refresh token
 #
 # DELETE /tyk/oauth/refresh/{keyId}
-export def "tyk-oauth-refresh delete" [
+export def "delete-tyk-oauth-refresh-key-id" [
   key_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -895,7 +895,7 @@ export def "tyk-oauth-refresh delete" [
 # Will reload the targetted gateway
 #
 # GET /tyk/reload/
-export def "tyk-reload get" [
+export def "get-tyk-reload" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -931,7 +931,7 @@ export def "tyk-reload get" [
 # Will reload the cluster via the targeted gateway
 #
 # GET /tyk/reload/group
-export def "tyk-reload-group get" [
+export def "get-tyk-reload-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

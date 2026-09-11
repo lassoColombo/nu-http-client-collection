@@ -168,7 +168,7 @@ def filter-completer-16 [] { ["related"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api-information get-endpoints" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-endpoints" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -192,7 +192,7 @@ export def commands []: nothing -> table {
 #
 # GET /
 # operationId: get_endpoints
-export def "api-information get-endpoints" [
+export def "get-endpoints" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -228,7 +228,7 @@ export def "api-information get-endpoints" [
 #
 # GET /categories
 # operationId: get_categories
-export def "categories list" [
+export def "get-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -267,7 +267,7 @@ export def "categories list" [
 #
 # GET /categories/{category}
 # operationId: get_category
-export def "categories get" [
+export def "get-category" [
   category: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -303,7 +303,7 @@ export def "categories get" [
 #
 # GET /categories/{category}/channels
 # operationId: get_category_channels
-export def "categories-channels get" [
+export def "get-category-channels" [
   category: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -345,7 +345,7 @@ export def "categories-channels get" [
 #
 # GET /categories/{category}/groups
 # operationId: get_category_groups
-export def "categories-groups get" [
+export def "get-category-groups" [
   category: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -387,7 +387,7 @@ export def "categories-groups get" [
 #
 # GET /categories/{category}/videos
 # operationId: get_category_videos
-export def "categories-videos get" [
+export def "get-category-videos" [
   category: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -431,7 +431,7 @@ export def "categories-videos get" [
 #
 # GET /categories/{category}/videos/{video_id}
 # operationId: check_category_for_video
-export def "categories-videos check" [
+export def "check-category-for-video" [
   category: string
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -469,7 +469,7 @@ export def "categories-videos check" [
 #
 # GET /channels
 # operationId: get_channels
-export def "channels list" [
+export def "get-channels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -510,7 +510,7 @@ export def "channels list" [
 #
 # POST /channels
 # operationId: create_channel
-export def "channels create" [
+export def "create-channel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -548,7 +548,7 @@ export def "channels create" [
 #
 # DELETE /channels/{channel_id}
 # operationId: delete_channel
-export def "channels delete" [
+export def "delete-channel" [
   channel_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -584,7 +584,7 @@ export def "channels delete" [
 #
 # GET /channels/{channel_id}
 # operationId: get_channel
-export def "channels get" [
+export def "get-channel" [
   channel_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -620,7 +620,7 @@ export def "channels get" [
 #
 # PATCH /channels/{channel_id}
 # operationId: edit_channel
-export def "channels update-edit" [
+export def "edit-channel" [
   channel_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -660,7 +660,7 @@ export def "channels update-edit" [
 #
 # GET /channels/{channel_id}/categories
 # operationId: get_channel_categories
-export def "channels-categories get" [
+export def "get-channel-categories" [
   channel_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -696,7 +696,7 @@ export def "channels-categories get" [
 #
 # PUT /channels/{channel_id}/categories
 # operationId: add_channel_categories
-export def "channels-categories create" [
+export def "add-channel-categories" [
   channel_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -736,7 +736,7 @@ export def "channels-categories create" [
 #
 # DELETE /channels/{channel_id}/categories/{category}
 # operationId: delete_channel_category
-export def "channels-categories delete" [
+export def "delete-channel-category" [
   channel_id: float
   category: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -774,7 +774,7 @@ export def "channels-categories delete" [
 #
 # PUT /channels/{channel_id}/categories/{category}
 # operationId: categorize_channel
-export def "channels-categories update-categorize" [
+export def "categorize-channel" [
   channel_id: float
   category: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -812,7 +812,7 @@ export def "channels-categories update-categorize" [
 #
 # DELETE /channels/{channel_id}/moderators
 # operationId: remove_channel_moderators
-export def "channels-moderators delete-by-channel-id" [
+export def "remove-channel-moderators" [
   channel_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -852,7 +852,7 @@ export def "channels-moderators delete-by-channel-id" [
 #
 # GET /channels/{channel_id}/moderators
 # operationId: get_channel_moderators
-export def "channels-moderators list" [
+export def "get-channel-moderators" [
   channel_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -894,7 +894,7 @@ export def "channels-moderators list" [
 #
 # PATCH /channels/{channel_id}/moderators
 # operationId: replace_channel_moderators
-export def "channels-moderators update" [
+export def "replace-channel-moderators" [
   channel_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -934,7 +934,7 @@ export def "channels-moderators update" [
 #
 # PUT /channels/{channel_id}/moderators
 # operationId: add_channel_moderators
-export def "channels-moderators create-by-channel-id" [
+export def "add-channel-moderators" [
   channel_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -974,7 +974,7 @@ export def "channels-moderators create-by-channel-id" [
 #
 # DELETE /channels/{channel_id}/moderators/{user_id}
 # operationId: remove_channel_moderator
-export def "channels-moderators delete-by-channel-id-user-id" [
+export def "remove-channel-moderator" [
   channel_id: float
   user_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -1012,7 +1012,7 @@ export def "channels-moderators delete-by-channel-id-user-id" [
 #
 # GET /channels/{channel_id}/moderators/{user_id}
 # operationId: get_channel_moderator
-export def "channels-moderators get" [
+export def "get-channel-moderator" [
   channel_id: float
   user_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -1050,7 +1050,7 @@ export def "channels-moderators get" [
 #
 # PUT /channels/{channel_id}/moderators/{user_id}
 # operationId: add_channel_moderator
-export def "channels-moderators create-by-channel-id-user-id" [
+export def "add-channel-moderator" [
   channel_id: float
   user_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -1088,7 +1088,7 @@ export def "channels-moderators create-by-channel-id-user-id" [
 #
 # GET /channels/{channel_id}/privacy/users
 # operationId: get_channel_privacy_users
-export def "channels-privacy-users get" [
+export def "get-channel-privacy-users" [
   channel_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1128,7 +1128,7 @@ export def "channels-privacy-users get" [
 #
 # PUT /channels/{channel_id}/privacy/users
 # operationId: set_channel_privacy_users
-export def "channels-privacy-users update-by-channel-id" [
+export def "set-channel-privacy-users" [
   channel_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1168,7 +1168,7 @@ export def "channels-privacy-users update-by-channel-id" [
 #
 # DELETE /channels/{channel_id}/privacy/users/{user_id}
 # operationId: delete_channel_privacy_user
-export def "channels-privacy-users delete" [
+export def "delete-channel-privacy-user" [
   channel_id: float
   user_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -1206,7 +1206,7 @@ export def "channels-privacy-users delete" [
 #
 # PUT /channels/{channel_id}/privacy/users/{user_id}
 # operationId: set_channel_privacy_user
-export def "channels-privacy-users update-by-channel-id-user-id" [
+export def "set-channel-privacy-user" [
   channel_id: float
   user_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -1244,7 +1244,7 @@ export def "channels-privacy-users update-by-channel-id-user-id" [
 #
 # GET /channels/{channel_id}/tags
 # operationId: get_channel_tags
-export def "channels-tags get" [
+export def "get-channel-tags" [
   channel_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1280,7 +1280,7 @@ export def "channels-tags get" [
 #
 # PUT /channels/{channel_id}/tags
 # operationId: add_tags_to_channel
-export def "channels-tags create-by-channel-id" [
+export def "add-tags-to-channel" [
   channel_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1320,7 +1320,7 @@ export def "channels-tags create-by-channel-id" [
 #
 # DELETE /channels/{channel_id}/tags/{word}
 # operationId: delete_tag_from_channel
-export def "channels-tags delete" [
+export def "delete-tag-from-channel" [
   channel_id: float
   word: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1358,7 +1358,7 @@ export def "channels-tags delete" [
 #
 # GET /channels/{channel_id}/tags/{word}
 # operationId: check_if_channel_has_tag
-export def "channels-tags check-if-has" [
+export def "check-if-channel-has-tag" [
   channel_id: float
   word: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1396,7 +1396,7 @@ export def "channels-tags check-if-has" [
 #
 # PUT /channels/{channel_id}/tags/{word}
 # operationId: add_channel_tag
-export def "channels-tags create-by-channel-id-word" [
+export def "add-channel-tag" [
   channel_id: float
   word: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1434,7 +1434,7 @@ export def "channels-tags create-by-channel-id-word" [
 #
 # GET /channels/{channel_id}/users
 # operationId: get_channel_subscribers
-export def "channels-users get-subscribers" [
+export def "get-channel-subscribers" [
   channel_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1477,7 +1477,7 @@ export def "channels-users get-subscribers" [
 #
 # DELETE /channels/{channel_id}/videos
 # operationId: remove_videos_from_channel
-export def "channels-videos delete-by-channel-id" [
+export def "remove-videos-from-channel" [
   channel_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1517,7 +1517,7 @@ export def "channels-videos delete-by-channel-id" [
 #
 # GET /channels/{channel_id}/videos
 # operationId: get_channel_videos
-export def "channels-videos list" [
+export def "get-channel-videos" [
   channel_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1562,7 +1562,7 @@ export def "channels-videos list" [
 #
 # PUT /channels/{channel_id}/videos
 # operationId: add_videos_to_channel
-export def "channels-videos create-by-channel-id" [
+export def "add-videos-to-channel" [
   channel_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1602,7 +1602,7 @@ export def "channels-videos create-by-channel-id" [
 #
 # DELETE /channels/{channel_id}/videos/{video_id}
 # operationId: delete_video_from_channel
-export def "channels-videos delete-by-channel-id-video-id" [
+export def "delete-video-from-channel" [
   channel_id: float
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -1640,7 +1640,7 @@ export def "channels-videos delete-by-channel-id-video-id" [
 #
 # GET /channels/{channel_id}/videos/{video_id}
 # operationId: get_channel_video
-export def "channels-videos get" [
+export def "get-channel-video" [
   channel_id: float
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -1678,7 +1678,7 @@ export def "channels-videos get" [
 #
 # PUT /channels/{channel_id}/videos/{video_id}
 # operationId: add_video_to_channel
-export def "channels-videos create-by-channel-id-video-id" [
+export def "add-video-to-channel" [
   channel_id: float
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -1716,7 +1716,7 @@ export def "channels-videos create-by-channel-id-video-id" [
 #
 # GET /channels/{channel_id}/videos/{video_id}/comments
 # operationId: get_comments_alt1
-export def "channels-videos-comments get-alt1" [
+export def "get-comments-alt1" [
   channel_id: float
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -1758,7 +1758,7 @@ export def "channels-videos-comments get-alt1" [
 #
 # POST /channels/{channel_id}/videos/{video_id}/comments
 # operationId: create_comment_alt1
-export def "channels-videos-comments create-alt1" [
+export def "create-comment-alt1" [
   channel_id: float
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -1800,7 +1800,7 @@ export def "channels-videos-comments create-alt1" [
 #
 # GET /channels/{channel_id}/videos/{video_id}/credits
 # operationId: get_video_credits_alt1
-export def "channels-videos-credits get-alt1" [
+export def "get-video-credits-alt1" [
   channel_id: float
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -1844,7 +1844,7 @@ export def "channels-videos-credits get-alt1" [
 #
 # POST /channels/{channel_id}/videos/{video_id}/credits
 # operationId: add_video_credit_alt1
-export def "channels-videos-credits create-alt1" [
+export def "add-video-credit-alt1" [
   channel_id: float
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -1886,7 +1886,7 @@ export def "channels-videos-credits create-alt1" [
 #
 # GET /channels/{channel_id}/videos/{video_id}/likes
 # operationId: get_video_likes_alt1
-export def "channels-videos-likes get-alt1" [
+export def "get-video-likes-alt1" [
   channel_id: float
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -1929,7 +1929,7 @@ export def "channels-videos-likes get-alt1" [
 #
 # GET /channels/{channel_id}/videos/{video_id}/pictures
 # operationId: get_video_thumbnails_alt1
-export def "channels-videos-pictures get-thumbnails-alt1" [
+export def "get-video-thumbnails-alt1" [
   channel_id: float
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -1970,7 +1970,7 @@ export def "channels-videos-pictures get-thumbnails-alt1" [
 #
 # POST /channels/{channel_id}/videos/{video_id}/pictures
 # operationId: create_video_thumbnail_alt1
-export def "channels-videos-pictures create-thumbnail-alt1" [
+export def "create-video-thumbnail-alt1" [
   channel_id: float
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -2012,7 +2012,7 @@ export def "channels-videos-pictures create-thumbnail-alt1" [
 #
 # GET /channels/{channel_id}/videos/{video_id}/privacy/users
 # operationId: get_video_privacy_users_alt1
-export def "channels-videos-privacy-users get-alt1" [
+export def "get-video-privacy-users-alt1" [
   channel_id: float
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -2053,7 +2053,7 @@ export def "channels-videos-privacy-users get-alt1" [
 #
 # PUT /channels/{channel_id}/videos/{video_id}/privacy/users
 # operationId: add_video_privacy_users_alt1
-export def "channels-videos-privacy-users create-alt1" [
+export def "add-video-privacy-users-alt1" [
   channel_id: float
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -2091,7 +2091,7 @@ export def "channels-videos-privacy-users create-alt1" [
 #
 # GET /channels/{channel_id}/videos/{video_id}/texttracks
 # operationId: get_text_tracks_alt1
-export def "channels-videos-texttracks get-text-tracks-alt1" [
+export def "get-text-tracks-alt1" [
   channel_id: float
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -2129,7 +2129,7 @@ export def "channels-videos-texttracks get-text-tracks-alt1" [
 #
 # POST /channels/{channel_id}/videos/{video_id}/texttracks
 # operationId: create_text_track_alt1
-export def "channels-videos-texttracks create-text-track-alt1" [
+export def "create-text-track-alt1" [
   channel_id: float
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -2171,7 +2171,7 @@ export def "channels-videos-texttracks create-text-track-alt1" [
 #
 # GET /contentratings
 # operationId: get_content_ratings
-export def "contentratings get-content-ratings" [
+export def "get-content-ratings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2205,7 +2205,7 @@ export def "contentratings get-content-ratings" [
 #
 # GET /creativecommons
 # operationId: get_cc_licenses
-export def "creativecommons get-cc-licenses" [
+export def "get-cc-licenses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2239,7 +2239,7 @@ export def "creativecommons get-cc-licenses" [
 #
 # GET /groups
 # operationId: get_groups
-export def "groups list" [
+export def "get-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2280,7 +2280,7 @@ export def "groups list" [
 #
 # POST /groups
 # operationId: create_group
-export def "groups create" [
+export def "create-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2318,7 +2318,7 @@ export def "groups create" [
 #
 # DELETE /groups/{group_id}
 # operationId: delete_group
-export def "groups delete" [
+export def "delete-group" [
   group_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2354,7 +2354,7 @@ export def "groups delete" [
 #
 # GET /groups/{group_id}
 # operationId: get_group
-export def "groups get" [
+export def "get-group" [
   group_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2390,7 +2390,7 @@ export def "groups get" [
 #
 # GET /groups/{group_id}/users
 # operationId: get_group_members
-export def "groups-users get-members" [
+export def "get-group-members" [
   group_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2433,7 +2433,7 @@ export def "groups-users get-members" [
 #
 # GET /groups/{group_id}/videos
 # operationId: get_group_videos
-export def "groups-videos list" [
+export def "get-group-videos" [
   group_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2477,7 +2477,7 @@ export def "groups-videos list" [
 #
 # DELETE /groups/{group_id}/videos/{video_id}
 # operationId: delete_video_from_group
-export def "groups-videos delete" [
+export def "delete-video-from-group" [
   group_id: float
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -2515,7 +2515,7 @@ export def "groups-videos delete" [
 #
 # GET /groups/{group_id}/videos/{video_id}
 # operationId: get_group_video
-export def "groups-videos get" [
+export def "get-group-video" [
   group_id: float
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -2553,7 +2553,7 @@ export def "groups-videos get" [
 #
 # PUT /groups/{group_id}/videos/{video_id}
 # operationId: add_video_to_group
-export def "groups-videos create" [
+export def "add-video-to-group" [
   group_id: float
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -2591,7 +2591,7 @@ export def "groups-videos create" [
 #
 # GET /languages
 # operationId: get_languages
-export def "languages get" [
+export def "get-languages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2627,7 +2627,7 @@ export def "languages get" [
 #
 # GET /me
 # operationId: get_user_alt1
-export def "me get-user-alt1" [
+export def "get-user-alt1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2661,7 +2661,7 @@ export def "me get-user-alt1" [
 #
 # PATCH /me
 # operationId: edit_user_alt1
-export def "me update-edit-user-alt1" [
+export def "edit-user-alt1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2699,7 +2699,7 @@ export def "me update-edit-user-alt1" [
 #
 # GET /me/albums
 # operationId: get_albums_alt1
-export def "me-albums list" [
+export def "get-albums-alt1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2739,7 +2739,7 @@ export def "me-albums list" [
 #
 # POST /me/albums
 # operationId: create_album_alt1
-export def "me-albums create-alt1" [
+export def "create-album-alt1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2777,7 +2777,7 @@ export def "me-albums create-alt1" [
 #
 # DELETE /me/albums/{album_id}
 # operationId: delete_album_alt1
-export def "me-albums delete-alt1" [
+export def "delete-album-alt1" [
   album_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2813,7 +2813,7 @@ export def "me-albums delete-alt1" [
 #
 # GET /me/albums/{album_id}
 # operationId: get_album_alt1
-export def "me-albums get-alt1" [
+export def "get-album-alt1" [
   album_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2849,7 +2849,7 @@ export def "me-albums get-alt1" [
 #
 # PATCH /me/albums/{album_id}
 # operationId: edit_album_alt1
-export def "me-albums update-edit-alt1" [
+export def "edit-album-alt1" [
   album_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2889,7 +2889,7 @@ export def "me-albums update-edit-alt1" [
 #
 # GET /me/albums/{album_id}/videos
 # operationId: get_album_videos_alt1
-export def "me-albums-videos list" [
+export def "get-album-videos-alt1" [
   album_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2936,7 +2936,7 @@ export def "me-albums-videos list" [
 #
 # PUT /me/albums/{album_id}/videos
 # operationId: replace_videos_in_album_alt1
-export def "me-albums-videos update-in-alt1" [
+export def "replace-videos-in-album-alt1" [
   album_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2976,7 +2976,7 @@ export def "me-albums-videos update-in-alt1" [
 #
 # DELETE /me/albums/{album_id}/videos/{video_id}
 # operationId: remove_video_from_album_alt1
-export def "me-albums-videos delete-from-alt1" [
+export def "remove-video-from-album-alt1" [
   album_id: float
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -3014,7 +3014,7 @@ export def "me-albums-videos delete-from-alt1" [
 #
 # GET /me/albums/{album_id}/videos/{video_id}
 # operationId: get_album_video_alt1
-export def "me-albums-videos get-alt1" [
+export def "get-album-video-alt1" [
   album_id: float
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -3054,7 +3054,7 @@ export def "me-albums-videos get-alt1" [
 #
 # PUT /me/albums/{album_id}/videos/{video_id}
 # operationId: add_video_to_album_alt1
-export def "me-albums-videos create-to-alt1" [
+export def "add-video-to-album-alt1" [
   album_id: float
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -3092,7 +3092,7 @@ export def "me-albums-videos create-to-alt1" [
 #
 # POST /me/albums/{album_id}/videos/{video_id}/set_album_thumbnail
 # operationId: set_video_as_album_thumbnail_alt1
-export def "me-albums-videos-set-album-thumbnail update-as-alt1" [
+export def "set-video-as-album-thumbnail-alt1" [
   album_id: float
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -3134,7 +3134,7 @@ export def "me-albums-videos-set-album-thumbnail update-as-alt1" [
 #
 # GET /me/appearances
 # operationId: get_appearances_alt1
-export def "me-appearances get-alt1" [
+export def "get-appearances-alt1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3176,7 +3176,7 @@ export def "me-appearances get-alt1" [
 #
 # GET /me/categories
 # operationId: get_category_subscriptions_alt1
-export def "me-categories get-category-subscriptions-alt1" [
+export def "get-category-subscriptions-alt1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3215,7 +3215,7 @@ export def "me-categories get-category-subscriptions-alt1" [
 #
 # DELETE /me/categories/{category}
 # operationId: unsubscribe_from_category_alt1
-export def "me-categories unsubscribe-from-alt1" [
+export def "unsubscribe-from-category-alt1" [
   category: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3251,7 +3251,7 @@ export def "me-categories unsubscribe-from-alt1" [
 #
 # GET /me/categories/{category}
 # operationId: check_if_user_subscribed_to_category_alt1
-export def "me-categories check-if-user-subscribed-to-alt1" [
+export def "check-if-user-subscribed-to-category-alt1" [
   category: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3287,7 +3287,7 @@ export def "me-categories check-if-user-subscribed-to-alt1" [
 #
 # PUT /me/categories/{category}
 # operationId: subscribe_to_category_alt1
-export def "me-categories subscribe-to-alt1" [
+export def "subscribe-to-category-alt1" [
   category: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3323,7 +3323,7 @@ export def "me-categories subscribe-to-alt1" [
 #
 # GET /me/channels
 # operationId: get_channel_subscriptions_alt1
-export def "me-channels get-subscriptions-alt1" [
+export def "get-channel-subscriptions-alt1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3364,7 +3364,7 @@ export def "me-channels get-subscriptions-alt1" [
 #
 # DELETE /me/channels/{channel_id}
 # operationId: unsubscribe_from_channel_alt1
-export def "me-channels unsubscribe-from-alt1" [
+export def "unsubscribe-from-channel-alt1" [
   channel_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3400,7 +3400,7 @@ export def "me-channels unsubscribe-from-alt1" [
 #
 # GET /me/channels/{channel_id}
 # operationId: check_if_user_subscribed_to_channel_alt1
-export def "me-channels check-if-user-subscribed-to-alt1" [
+export def "check-if-user-subscribed-to-channel-alt1" [
   channel_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3436,7 +3436,7 @@ export def "me-channels check-if-user-subscribed-to-alt1" [
 #
 # PUT /me/channels/{channel_id}
 # operationId: subscribe_to_channel_alt1
-export def "me-channels subscribe-to-alt1" [
+export def "subscribe-to-channel-alt1" [
   channel_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3472,7 +3472,7 @@ export def "me-channels subscribe-to-alt1" [
 #
 # GET /me/customlogos
 # operationId: get_custom_logos_alt1
-export def "me-customlogos get-custom-logos-alt1" [
+export def "get-custom-logos-alt1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3506,7 +3506,7 @@ export def "me-customlogos get-custom-logos-alt1" [
 #
 # POST /me/customlogos
 # operationId: create_custom_logo_alt1
-export def "me-customlogos create-custom-logo-alt1" [
+export def "create-custom-logo-alt1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3540,7 +3540,7 @@ export def "me-customlogos create-custom-logo-alt1" [
 #
 # GET /me/customlogos/{logo_id}
 # operationId: get_custom_logo_alt1
-export def "me-customlogos get-custom-alt1" [
+export def "get-custom-logo-alt1" [
   logo_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3576,7 +3576,7 @@ export def "me-customlogos get-custom-alt1" [
 #
 # GET /me/feed
 # operationId: get_feed_alt1
-export def "me-feed get-alt1" [
+export def "get-feed-alt1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3615,7 +3615,7 @@ export def "me-feed get-alt1" [
 #
 # GET /me/followers
 # operationId: get_followers_alt1
-export def "me-followers get-alt1" [
+export def "get-followers-alt1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3655,7 +3655,7 @@ export def "me-followers get-alt1" [
 #
 # GET /me/following
 # operationId: get_user_following_alt1
-export def "me-following get-user-alt1" [
+export def "get-user-following-alt1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3696,7 +3696,7 @@ export def "me-following get-user-alt1" [
 #
 # POST /me/following
 # operationId: follow_users_alt1
-export def "me-following create-follow-users-alt1" [
+export def "follow-users-alt1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3734,7 +3734,7 @@ export def "me-following create-follow-users-alt1" [
 #
 # DELETE /me/following/{follow_user_id}
 # operationId: unfollow_user_alt1
-export def "me-following delete-unfollow-alt1" [
+export def "unfollow-user-alt1" [
   follow_user_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3770,7 +3770,7 @@ export def "me-following delete-unfollow-alt1" [
 #
 # GET /me/following/{follow_user_id}
 # operationId: check_if_user_is_following_alt1
-export def "me-following check-if-is-alt1" [
+export def "check-if-user-is-following-alt1" [
   follow_user_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3806,7 +3806,7 @@ export def "me-following check-if-is-alt1" [
 #
 # PUT /me/following/{follow_user_id}
 # operationId: follow_user_alt1
-export def "me-following update-alt1" [
+export def "follow-user-alt1" [
   follow_user_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3842,7 +3842,7 @@ export def "me-following update-alt1" [
 #
 # GET /me/groups
 # operationId: get_user_groups_alt1
-export def "me-groups get-user-alt1" [
+export def "get-user-groups-alt1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3883,7 +3883,7 @@ export def "me-groups get-user-alt1" [
 #
 # DELETE /me/groups/{group_id}
 # operationId: leave_group_alt1
-export def "me-groups delete-leave-alt1" [
+export def "leave-group-alt1" [
   group_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3919,7 +3919,7 @@ export def "me-groups delete-leave-alt1" [
 #
 # GET /me/groups/{group_id}
 # operationId: check_if_user_joined_group_alt1
-export def "me-groups check-if-user-joined-alt1" [
+export def "check-if-user-joined-group-alt1" [
   group_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3955,7 +3955,7 @@ export def "me-groups check-if-user-joined-alt1" [
 #
 # PUT /me/groups/{group_id}
 # operationId: join_group_alt1
-export def "me-groups update-join-alt1" [
+export def "join-group-alt1" [
   group_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3991,7 +3991,7 @@ export def "me-groups update-join-alt1" [
 #
 # GET /me/likes
 # operationId: get_likes_alt1
-export def "me-likes get-alt1" [
+export def "get-likes-alt1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4032,7 +4032,7 @@ export def "me-likes get-alt1" [
 #
 # DELETE /me/likes/{video_id}
 # operationId: unlike_video_alt1
-export def "me-likes delete-unlike-alt1" [
+export def "unlike-video-alt1" [
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4068,7 +4068,7 @@ export def "me-likes delete-unlike-alt1" [
 #
 # GET /me/likes/{video_id}
 # operationId: check_if_user_liked_video_alt1
-export def "me-likes check-if-user-liked-alt1" [
+export def "check-if-user-liked-video-alt1" [
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4104,7 +4104,7 @@ export def "me-likes check-if-user-liked-alt1" [
 #
 # PUT /me/likes/{video_id}
 # operationId: like_video_alt1
-export def "me-likes update-alt1" [
+export def "like-video-alt1" [
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4140,7 +4140,7 @@ export def "me-likes update-alt1" [
 #
 # GET /me/ondemand/pages
 # operationId: get_user_vods_alt1
-export def "me-ondemand-pages get-user-vods-alt1" [
+export def "get-user-vods-alt1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4184,7 +4184,7 @@ export def "me-ondemand-pages get-user-vods-alt1" [
 # --episodes shape: {buy?: record, rent?: record}
 # --rent shape: {active?: bool, period?: "1 week"|"1 year"|"24 hour"|"3 month"|"30 day"|"48 hour"|"6 month"|"72 hour", price?: record}
 # --subscription shape: {monthly?: record}
-export def "me-ondemand-pages create-vod-alt1" [
+export def "create-vod-alt1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4232,7 +4232,7 @@ export def "me-ondemand-pages create-vod-alt1" [
 #
 # GET /me/ondemand/purchases
 # operationId: get_vod_purchases
-export def "me-ondemand-purchases get-vod" [
+export def "get-vod-purchases" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4272,7 +4272,7 @@ export def "me-ondemand-purchases get-vod" [
 #
 # GET /me/ondemand/purchases/{ondemand_id}
 # operationId: check_if_vod_was_purchased_alt1
-export def "me-ondemand-purchases check-if-vod-was-purchased-alt1" [
+export def "check-if-vod-was-purchased-alt1" [
   ondemand_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4308,7 +4308,7 @@ export def "me-ondemand-purchases check-if-vod-was-purchased-alt1" [
 #
 # GET /me/pictures
 # operationId: get_pictures_alt1
-export def "me-pictures list" [
+export def "get-pictures-alt1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4345,7 +4345,7 @@ export def "me-pictures list" [
 #
 # POST /me/pictures
 # operationId: create_picture_alt1
-export def "me-pictures create-alt1" [
+export def "create-picture-alt1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4379,7 +4379,7 @@ export def "me-pictures create-alt1" [
 #
 # DELETE /me/pictures/{portraitset_id}
 # operationId: delete_picture_alt1
-export def "me-pictures delete-alt1" [
+export def "delete-picture-alt1" [
   portraitset_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4415,7 +4415,7 @@ export def "me-pictures delete-alt1" [
 #
 # GET /me/pictures/{portraitset_id}
 # operationId: get_picture_alt1
-export def "me-pictures get-alt1" [
+export def "get-picture-alt1" [
   portraitset_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4451,7 +4451,7 @@ export def "me-pictures get-alt1" [
 #
 # PATCH /me/pictures/{portraitset_id}
 # operationId: edit_picture_alt1
-export def "me-pictures update-edit-alt1" [
+export def "edit-picture-alt1" [
   portraitset_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4491,7 +4491,7 @@ export def "me-pictures update-edit-alt1" [
 #
 # GET /me/portfolios
 # operationId: get_portfolios_alt1
-export def "me-portfolios list" [
+export def "get-portfolios-alt1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4531,7 +4531,7 @@ export def "me-portfolios list" [
 #
 # GET /me/portfolios/{portfolio_id}
 # operationId: get_portfolio_alt1
-export def "me-portfolios get-alt1" [
+export def "get-portfolio-alt1" [
   portfolio_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4567,7 +4567,7 @@ export def "me-portfolios get-alt1" [
 #
 # GET /me/portfolios/{portfolio_id}/videos
 # operationId: get_portfolio_videos_alt1
-export def "me-portfolios-videos list" [
+export def "get-portfolio-videos-alt1" [
   portfolio_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4610,7 +4610,7 @@ export def "me-portfolios-videos list" [
 #
 # DELETE /me/portfolios/{portfolio_id}/videos/{video_id}
 # operationId: delete_video_from_portfolio_alt1
-export def "me-portfolios-videos delete-from-alt1" [
+export def "delete-video-from-portfolio-alt1" [
   portfolio_id: float
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -4648,7 +4648,7 @@ export def "me-portfolios-videos delete-from-alt1" [
 #
 # GET /me/portfolios/{portfolio_id}/videos/{video_id}
 # operationId: get_portfolio_video_alt1
-export def "me-portfolios-videos get-alt1" [
+export def "get-portfolio-video-alt1" [
   portfolio_id: float
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -4686,7 +4686,7 @@ export def "me-portfolios-videos get-alt1" [
 #
 # PUT /me/portfolios/{portfolio_id}/videos/{video_id}
 # operationId: add_video_to_portfolio_alt1
-export def "me-portfolios-videos create-to-alt1" [
+export def "add-video-to-portfolio-alt1" [
   portfolio_id: float
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -4724,7 +4724,7 @@ export def "me-portfolios-videos create-to-alt1" [
 #
 # GET /me/presets
 # operationId: get_embed_presets_alt1
-export def "me-presets list" [
+export def "get-embed-presets-alt1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4761,7 +4761,7 @@ export def "me-presets list" [
 #
 # GET /me/presets/{preset_id}
 # operationId: get_embed_preset_alt1
-export def "me-presets get-embed-alt1" [
+export def "get-embed-preset-alt1" [
   preset_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4797,7 +4797,7 @@ export def "me-presets get-embed-alt1" [
 #
 # PATCH /me/presets/{preset_id}
 # operationId: edit_embed_preset_alt1
-export def "me-presets update-edit-embed-alt1" [
+export def "edit-embed-preset-alt1" [
   preset_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4837,7 +4837,7 @@ export def "me-presets update-edit-embed-alt1" [
 #
 # GET /me/presets/{preset_id}/videos
 # operationId: get_embed_preset_videos_alt1
-export def "me-presets-videos get-embed-alt1" [
+export def "get-embed-preset-videos-alt1" [
   preset_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4876,7 +4876,7 @@ export def "me-presets-videos get-embed-alt1" [
 #
 # GET /me/projects
 # operationId: get_projects_alt1
-export def "me-projects list" [
+export def "get-projects-alt1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4915,7 +4915,7 @@ export def "me-projects list" [
 #
 # POST /me/projects
 # operationId: create_project_alt1
-export def "me-projects create-alt1" [
+export def "create-project-alt1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4953,7 +4953,7 @@ export def "me-projects create-alt1" [
 #
 # DELETE /me/projects/{project_id}
 # operationId: delete_project_alt1
-export def "me-projects delete-alt1" [
+export def "delete-project-alt1" [
   project_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4991,7 +4991,7 @@ export def "me-projects delete-alt1" [
 #
 # GET /me/projects/{project_id}
 # operationId: get_project_alt1
-export def "me-projects get-alt1" [
+export def "get-project-alt1" [
   project_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5027,7 +5027,7 @@ export def "me-projects get-alt1" [
 #
 # PATCH /me/projects/{project_id}
 # operationId: edit_project_alt1
-export def "me-projects update-edit-alt1" [
+export def "edit-project-alt1" [
   project_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5067,7 +5067,7 @@ export def "me-projects update-edit-alt1" [
 #
 # DELETE /me/projects/{project_id}/videos
 # operationId: remove_videos_from_project_alt1
-export def "me-projects-videos delete-from-alt1-by-project-id" [
+export def "remove-videos-from-project-alt1" [
   project_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5106,7 +5106,7 @@ export def "me-projects-videos delete-from-alt1-by-project-id" [
 #
 # GET /me/projects/{project_id}/videos
 # operationId: get_project_videos_alt1
-export def "me-projects-videos get-alt1" [
+export def "get-project-videos-alt1" [
   project_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5147,7 +5147,7 @@ export def "me-projects-videos get-alt1" [
 #
 # PUT /me/projects/{project_id}/videos
 # operationId: add_videos_to_project_alt1
-export def "me-projects-videos create-to-alt1-by-project-id" [
+export def "add-videos-to-project-alt1" [
   project_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5185,7 +5185,7 @@ export def "me-projects-videos create-to-alt1-by-project-id" [
 #
 # DELETE /me/projects/{project_id}/videos/{video_id}
 # operationId: remove_video_from_project_alt1
-export def "me-projects-videos delete-from-alt1-by-project-id-video-id" [
+export def "remove-video-from-project-alt1" [
   project_id: float
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -5223,7 +5223,7 @@ export def "me-projects-videos delete-from-alt1-by-project-id-video-id" [
 #
 # PUT /me/projects/{project_id}/videos/{video_id}
 # operationId: add_video_to_project_alt1
-export def "me-projects-videos create-to-alt1-by-project-id-video-id" [
+export def "add-video-to-project-alt1" [
   project_id: float
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -5261,7 +5261,7 @@ export def "me-projects-videos create-to-alt1-by-project-id-video-id" [
 #
 # GET /me/videos
 # operationId: get_videos_alt1
-export def "me-videos get-alt1" [
+export def "get-videos-alt1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5305,7 +5305,7 @@ export def "me-videos get-alt1" [
 #
 # POST /me/videos
 # operationId: upload_video_alt1
-export def "me-videos upload-alt1" [
+export def "upload-video-alt1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5343,7 +5343,7 @@ export def "me-videos upload-alt1" [
 #
 # GET /me/videos/{video_id}
 # operationId: check_if_user_owns_video_alt1
-export def "me-videos check-if-user-owns-alt1" [
+export def "check-if-user-owns-video-alt1" [
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5379,7 +5379,7 @@ export def "me-videos check-if-user-owns-alt1" [
 #
 # DELETE /me/watched/videos
 # operationId: delete_watch_history
-export def "me-watched-videos delete-watch-history" [
+export def "delete-watch-history" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5413,7 +5413,7 @@ export def "me-watched-videos delete-watch-history" [
 #
 # GET /me/watched/videos
 # operationId: get_watch_history
-export def "me-watched-videos get-watch-history" [
+export def "get-watch-history" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5450,7 +5450,7 @@ export def "me-watched-videos get-watch-history" [
 #
 # DELETE /me/watched/videos/{video_id}
 # operationId: delete_from_watch_history
-export def "me-watched-videos delete-from-watch-history" [
+export def "delete-from-watch-history" [
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5486,7 +5486,7 @@ export def "me-watched-videos delete-from-watch-history" [
 #
 # GET /me/watchlater
 # operationId: get_watch_later_queue_alt1
-export def "me-watchlater get-watch-later-queue-alt1" [
+export def "get-watch-later-queue-alt1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5528,7 +5528,7 @@ export def "me-watchlater get-watch-later-queue-alt1" [
 #
 # DELETE /me/watchlater/{video_id}
 # operationId: delete_video_from_watch_later_alt1
-export def "me-watchlater delete-from-watch-later-alt1" [
+export def "delete-video-from-watch-later-alt1" [
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5564,7 +5564,7 @@ export def "me-watchlater delete-from-watch-later-alt1" [
 #
 # GET /me/watchlater/{video_id}
 # operationId: check_watch_later_queue_alt1
-export def "me-watchlater check-watch-later-queue-alt1" [
+export def "check-watch-later-queue-alt1" [
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5600,7 +5600,7 @@ export def "me-watchlater check-watch-later-queue-alt1" [
 #
 # PUT /me/watchlater/{video_id}
 # operationId: add_video_to_watch_later_alt1
-export def "me-watchlater create-to-watch-later-alt1" [
+export def "add-video-to-watch-later-alt1" [
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5636,7 +5636,7 @@ export def "me-watchlater create-to-watch-later-alt1" [
 #
 # POST /oauth/access_token
 # operationId: exchange_auth_code
-export def "oauth-access-token create-exchange-auth-code" [
+export def "exchange-auth-code" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5674,7 +5674,7 @@ export def "oauth-access-token create-exchange-auth-code" [
 #
 # POST /oauth/authorize/client
 # operationId: client_auth
-export def "oauth-authorize-client create-auth" [
+export def "client-auth" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5712,7 +5712,7 @@ export def "oauth-authorize-client create-auth" [
 #
 # POST /oauth/authorize/vimeo_oauth1
 # operationId: convert_access_token
-export def "oauth-authorize-vimeo-oauth1 create-convert-access-token" [
+export def "convert-access-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5750,7 +5750,7 @@ export def "oauth-authorize-vimeo-oauth1 create-convert-access-token" [
 #
 # GET /oauth/verify
 # operationId: verify_token
-export def "oauth-verify verify-token" [
+export def "verify-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5784,7 +5784,7 @@ export def "oauth-verify verify-token" [
 #
 # GET /ondemand/genres
 # operationId: get_vod_genres
-export def "ondemand-genres list" [
+export def "get-vod-genres" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5818,7 +5818,7 @@ export def "ondemand-genres list" [
 #
 # GET /ondemand/genres/{genre_id}
 # operationId: get_vod_genre
-export def "ondemand-genres get-vod" [
+export def "get-vod-genre" [
   genre_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5854,7 +5854,7 @@ export def "ondemand-genres get-vod" [
 #
 # GET /ondemand/genres/{genre_id}/pages
 # operationId: get_genre_vods
-export def "ondemand-genres-pages get-vods" [
+export def "get-genre-vods" [
   genre_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5897,7 +5897,7 @@ export def "ondemand-genres-pages get-vods" [
 #
 # GET /ondemand/genres/{genre_id}/pages/{ondemand_id}
 # operationId: get_genre_vod
-export def "ondemand-genres-pages get-vod" [
+export def "get-genre-vod" [
   genre_id: string
   ondemand_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -5935,7 +5935,7 @@ export def "ondemand-genres-pages get-vod" [
 #
 # DELETE /ondemand/pages/{ondemand_id}
 # operationId: delete_vod_draft
-export def "ondemand-pages delete-vod-draft" [
+export def "delete-vod-draft" [
   ondemand_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5971,7 +5971,7 @@ export def "ondemand-pages delete-vod-draft" [
 #
 # GET /ondemand/pages/{ondemand_id}
 # operationId: get_vod
-export def "ondemand-pages get-vod" [
+export def "get-vod" [
   ondemand_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6007,7 +6007,7 @@ export def "ondemand-pages get-vod" [
 #
 # PATCH /ondemand/pages/{ondemand_id}
 # operationId: edit_vod
-export def "ondemand-pages update-edit-vod" [
+export def "edit-vod" [
   ondemand_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6047,7 +6047,7 @@ export def "ondemand-pages update-edit-vod" [
 #
 # GET /ondemand/pages/{ondemand_id}/backgrounds
 # operationId: get_vod_backgrounds
-export def "ondemand-pages-backgrounds list" [
+export def "get-vod-backgrounds" [
   ondemand_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6086,7 +6086,7 @@ export def "ondemand-pages-backgrounds list" [
 #
 # POST /ondemand/pages/{ondemand_id}/backgrounds
 # operationId: create_vod_background
-export def "ondemand-pages-backgrounds create-vod" [
+export def "create-vod-background" [
   ondemand_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6122,7 +6122,7 @@ export def "ondemand-pages-backgrounds create-vod" [
 #
 # DELETE /ondemand/pages/{ondemand_id}/backgrounds/{background_id}
 # operationId: delete_vod_background
-export def "ondemand-pages-backgrounds delete-vod" [
+export def "delete-vod-background" [
   ondemand_id: float
   background_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -6160,7 +6160,7 @@ export def "ondemand-pages-backgrounds delete-vod" [
 #
 # GET /ondemand/pages/{ondemand_id}/backgrounds/{background_id}
 # operationId: get_vod_background
-export def "ondemand-pages-backgrounds get-vod" [
+export def "get-vod-background" [
   ondemand_id: float
   background_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -6198,7 +6198,7 @@ export def "ondemand-pages-backgrounds get-vod" [
 #
 # PATCH /ondemand/pages/{ondemand_id}/backgrounds/{background_id}
 # operationId: edit_vod_background
-export def "ondemand-pages-backgrounds update-edit-vod" [
+export def "edit-vod-background" [
   ondemand_id: float
   background_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -6240,7 +6240,7 @@ export def "ondemand-pages-backgrounds update-edit-vod" [
 #
 # GET /ondemand/pages/{ondemand_id}/genres
 # operationId: get_vod_genres_by_ondemand_id
-export def "ondemand-pages-genres list" [
+export def "get-vod-genres-by-ondemand-id" [
   ondemand_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6276,7 +6276,7 @@ export def "ondemand-pages-genres list" [
 #
 # DELETE /ondemand/pages/{ondemand_id}/genres/{genre_id}
 # operationId: delete_vod_genre
-export def "ondemand-pages-genres delete-vod" [
+export def "delete-vod-genre" [
   ondemand_id: float
   genre_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6314,7 +6314,7 @@ export def "ondemand-pages-genres delete-vod" [
 #
 # GET /ondemand/pages/{ondemand_id}/genres/{genre_id}
 # operationId: get_vod_genre_by_ondemand_id
-export def "ondemand-pages-genres get-vod" [
+export def "get-vod-genre-by-ondemand-id" [
   ondemand_id: float
   genre_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6352,7 +6352,7 @@ export def "ondemand-pages-genres get-vod" [
 #
 # PUT /ondemand/pages/{ondemand_id}/genres/{genre_id}
 # operationId: add_vod_genre
-export def "ondemand-pages-genres create-vod" [
+export def "add-vod-genre" [
   ondemand_id: float
   genre_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6390,7 +6390,7 @@ export def "ondemand-pages-genres create-vod" [
 #
 # GET /ondemand/pages/{ondemand_id}/likes
 # operationId: get_vod_likes
-export def "ondemand-pages-likes get-vod" [
+export def "get-vod-likes" [
   ondemand_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6432,7 +6432,7 @@ export def "ondemand-pages-likes get-vod" [
 #
 # GET /ondemand/pages/{ondemand_id}/pictures
 # operationId: get_vod_posters
-export def "ondemand-pages-pictures get-vod-posters" [
+export def "get-vod-posters" [
   ondemand_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6471,7 +6471,7 @@ export def "ondemand-pages-pictures get-vod-posters" [
 #
 # POST /ondemand/pages/{ondemand_id}/pictures
 # operationId: add_vod_poster
-export def "ondemand-pages-pictures create-vod-poster" [
+export def "add-vod-poster" [
   ondemand_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6507,7 +6507,7 @@ export def "ondemand-pages-pictures create-vod-poster" [
 #
 # GET /ondemand/pages/{ondemand_id}/pictures/{poster_id}
 # operationId: get_vod_poster
-export def "ondemand-pages-pictures get-vod" [
+export def "get-vod-poster" [
   ondemand_id: float
   poster_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -6545,7 +6545,7 @@ export def "ondemand-pages-pictures get-vod" [
 #
 # PATCH /ondemand/pages/{ondemand_id}/pictures/{poster_id}
 # operationId: edit_vod_poster
-export def "ondemand-pages-pictures update-edit-vod" [
+export def "edit-vod-poster" [
   ondemand_id: float
   poster_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -6587,7 +6587,7 @@ export def "ondemand-pages-pictures update-edit-vod" [
 #
 # GET /ondemand/pages/{ondemand_id}/promotions
 # operationId: get_vod_promotions
-export def "ondemand-pages-promotions list" [
+export def "get-vod-promotions" [
   ondemand_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6627,7 +6627,7 @@ export def "ondemand-pages-promotions list" [
 #
 # POST /ondemand/pages/{ondemand_id}/promotions
 # operationId: create_vod_promotion
-export def "ondemand-pages-promotions create-vod" [
+export def "create-vod-promotion" [
   ondemand_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6667,7 +6667,7 @@ export def "ondemand-pages-promotions create-vod" [
 #
 # DELETE /ondemand/pages/{ondemand_id}/promotions/{promotion_id}
 # operationId: delete_vod_promotion
-export def "ondemand-pages-promotions delete-vod" [
+export def "delete-vod-promotion" [
   ondemand_id: float
   promotion_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -6705,7 +6705,7 @@ export def "ondemand-pages-promotions delete-vod" [
 #
 # GET /ondemand/pages/{ondemand_id}/promotions/{promotion_id}
 # operationId: get_vod_promotion
-export def "ondemand-pages-promotions get-vod" [
+export def "get-vod-promotion" [
   ondemand_id: float
   promotion_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -6743,7 +6743,7 @@ export def "ondemand-pages-promotions get-vod" [
 #
 # GET /ondemand/pages/{ondemand_id}/promotions/{promotion_id}/codes
 # operationId: get_vod_promotion_codes
-export def "ondemand-pages-promotions-codes get-vod" [
+export def "get-vod-promotion-codes" [
   ondemand_id: float
   promotion_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -6784,7 +6784,7 @@ export def "ondemand-pages-promotions-codes get-vod" [
 #
 # DELETE /ondemand/pages/{ondemand_id}/regions
 # operationId: delete_vod_regions
-export def "ondemand-pages-regions delete-vod-by-ondemand-id" [
+export def "delete-vod-regions" [
   ondemand_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6824,7 +6824,7 @@ export def "ondemand-pages-regions delete-vod-by-ondemand-id" [
 #
 # GET /ondemand/pages/{ondemand_id}/regions
 # operationId: get_vod_regions
-export def "ondemand-pages-regions list" [
+export def "get-vod-regions" [
   ondemand_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6860,7 +6860,7 @@ export def "ondemand-pages-regions list" [
 #
 # PUT /ondemand/pages/{ondemand_id}/regions
 # operationId: set_vod_regions
-export def "ondemand-pages-regions update-vod" [
+export def "set-vod-regions" [
   ondemand_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6900,7 +6900,7 @@ export def "ondemand-pages-regions update-vod" [
 #
 # DELETE /ondemand/pages/{ondemand_id}/regions/{country}
 # operationId: delete_vod_region
-export def "ondemand-pages-regions delete-vod-by-ondemand-id-country" [
+export def "delete-vod-region" [
   ondemand_id: float
   country: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6938,7 +6938,7 @@ export def "ondemand-pages-regions delete-vod-by-ondemand-id-country" [
 #
 # GET /ondemand/pages/{ondemand_id}/regions/{country}
 # operationId: get_vod_region
-export def "ondemand-pages-regions get-vod" [
+export def "get-vod-region" [
   ondemand_id: float
   country: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6976,7 +6976,7 @@ export def "ondemand-pages-regions get-vod" [
 #
 # PUT /ondemand/pages/{ondemand_id}/regions/{country}
 # operationId: add_vod_region
-export def "ondemand-pages-regions create-vod" [
+export def "add-vod-region" [
   ondemand_id: float
   country: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7014,7 +7014,7 @@ export def "ondemand-pages-regions create-vod" [
 #
 # GET /ondemand/pages/{ondemand_id}/seasons
 # operationId: get_vod_seasons
-export def "ondemand-pages-seasons list" [
+export def "get-vod-seasons" [
   ondemand_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7056,7 +7056,7 @@ export def "ondemand-pages-seasons list" [
 #
 # GET /ondemand/pages/{ondemand_id}/seasons/{season_id}
 # operationId: get_vod_season
-export def "ondemand-pages-seasons get-vod" [
+export def "get-vod-season" [
   ondemand_id: float
   season_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -7094,7 +7094,7 @@ export def "ondemand-pages-seasons get-vod" [
 #
 # GET /ondemand/pages/{ondemand_id}/seasons/{season_id}/videos
 # operationId: get_vod_season_videos
-export def "ondemand-pages-seasons-videos get-vod" [
+export def "get-vod-season-videos" [
   ondemand_id: float
   season_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -7137,7 +7137,7 @@ export def "ondemand-pages-seasons-videos get-vod" [
 #
 # GET /ondemand/pages/{ondemand_id}/videos
 # operationId: get_vod_videos
-export def "ondemand-pages-videos list" [
+export def "get-vod-videos" [
   ondemand_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7179,7 +7179,7 @@ export def "ondemand-pages-videos list" [
 #
 # DELETE /ondemand/pages/{ondemand_id}/videos/{video_id}
 # operationId: delete_video_from_vod
-export def "ondemand-pages-videos delete-from-vod" [
+export def "delete-video-from-vod" [
   ondemand_id: float
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -7217,7 +7217,7 @@ export def "ondemand-pages-videos delete-from-vod" [
 #
 # GET /ondemand/pages/{ondemand_id}/videos/{video_id}
 # operationId: get_vod_video
-export def "ondemand-pages-videos get-vod" [
+export def "get-vod-video" [
   ondemand_id: float
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -7255,7 +7255,7 @@ export def "ondemand-pages-videos get-vod" [
 #
 # PUT /ondemand/pages/{ondemand_id}/videos/{video_id}
 # operationId: add_video_to_vod
-export def "ondemand-pages-videos create-to-vod" [
+export def "add-video-to-vod" [
   ondemand_id: float
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -7297,7 +7297,7 @@ export def "ondemand-pages-videos create-to-vod" [
 #
 # GET /ondemand/regions
 # operationId: get_regions
-export def "ondemand-regions list" [
+export def "get-regions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7331,7 +7331,7 @@ export def "ondemand-regions list" [
 #
 # GET /ondemand/regions/{country}
 # operationId: get_region
-export def "ondemand-regions get" [
+export def "get-region" [
   country: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7367,7 +7367,7 @@ export def "ondemand-regions get" [
 #
 # GET /tags/{word}
 # operationId: get_tag
-export def "tags get" [
+export def "get-tag" [
   word: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7403,7 +7403,7 @@ export def "tags get" [
 #
 # GET /tags/{word}/videos
 # operationId: get_videos_with_tag
-export def "tags-videos get" [
+export def "get-videos-with-tag" [
   word: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7444,7 +7444,7 @@ export def "tags-videos get" [
 #
 # DELETE /tokens
 # operationId: delete_token
-export def "tokens delete" [
+export def "delete-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7478,7 +7478,7 @@ export def "tokens delete" [
 #
 # GET /users
 # operationId: search_users
-export def "users list" [
+export def "search-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7518,7 +7518,7 @@ export def "users list" [
 #
 # GET /users/{user_id}
 # operationId: get_user
-export def "users get" [
+export def "get-user" [
   user_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7554,7 +7554,7 @@ export def "users get" [
 #
 # PATCH /users/{user_id}
 # operationId: edit_user
-export def "users update-edit" [
+export def "edit-user" [
   user_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7594,7 +7594,7 @@ export def "users update-edit" [
 #
 # GET /users/{user_id}/albums
 # operationId: get_albums
-export def "users-albums list" [
+export def "get-albums" [
   user_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7636,7 +7636,7 @@ export def "users-albums list" [
 #
 # POST /users/{user_id}/albums
 # operationId: create_album
-export def "users-albums create" [
+export def "create-album" [
   user_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7676,7 +7676,7 @@ export def "users-albums create" [
 #
 # DELETE /users/{user_id}/albums/{album_id}
 # operationId: delete_album
-export def "users-albums delete" [
+export def "delete-album" [
   user_id: float
   album_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -7714,7 +7714,7 @@ export def "users-albums delete" [
 #
 # GET /users/{user_id}/albums/{album_id}
 # operationId: get_album
-export def "users-albums get" [
+export def "get-album" [
   user_id: float
   album_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -7752,7 +7752,7 @@ export def "users-albums get" [
 #
 # PATCH /users/{user_id}/albums/{album_id}
 # operationId: edit_album
-export def "users-albums update-edit" [
+export def "edit-album" [
   user_id: float
   album_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -7794,7 +7794,7 @@ export def "users-albums update-edit" [
 #
 # GET /users/{user_id}/albums/{album_id}/custom_thumbnails
 # operationId: get_album_custom_thumbs
-export def "users-albums-custom-thumbnails get-thumbs" [
+export def "get-album-custom-thumbs" [
   user_id: float
   album_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -7835,7 +7835,7 @@ export def "users-albums-custom-thumbnails get-thumbs" [
 #
 # POST /users/{user_id}/albums/{album_id}/custom_thumbnails
 # operationId: create_album_custom_thumb
-export def "users-albums-custom-thumbnails create-thumb" [
+export def "create-album-custom-thumb" [
   user_id: float
   album_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -7873,7 +7873,7 @@ export def "users-albums-custom-thumbnails create-thumb" [
 #
 # DELETE /users/{user_id}/albums/{album_id}/custom_thumbnails/{thumbnail_id}
 # operationId: delete_album_custom_thumbnail
-export def "users-albums-custom-thumbnails delete" [
+export def "delete-album-custom-thumbnail" [
   user_id: float
   album_id: float
   thumbnail_id: float
@@ -7913,7 +7913,7 @@ export def "users-albums-custom-thumbnails delete" [
 #
 # GET /users/{user_id}/albums/{album_id}/custom_thumbnails/{thumbnail_id}
 # operationId: get_album_custom_thumbnail
-export def "users-albums-custom-thumbnails get" [
+export def "get-album-custom-thumbnail" [
   user_id: float
   album_id: float
   thumbnail_id: float
@@ -7953,7 +7953,7 @@ export def "users-albums-custom-thumbnails get" [
 #
 # PATCH /users/{user_id}/albums/{album_id}/custom_thumbnails/{thumbnail_id}
 # operationId: replace_album_custom_thumb
-export def "users-albums-custom-thumbnails update-thumb" [
+export def "replace-album-custom-thumb" [
   user_id: float
   album_id: float
   thumbnail_id: float
@@ -7997,7 +7997,7 @@ export def "users-albums-custom-thumbnails update-thumb" [
 #
 # GET /users/{user_id}/albums/{album_id}/logos
 # operationId: get_album_logos
-export def "users-albums-logos list" [
+export def "get-album-logos" [
   user_id: float
   album_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -8038,7 +8038,7 @@ export def "users-albums-logos list" [
 #
 # POST /users/{user_id}/albums/{album_id}/logos
 # operationId: create_album_logo
-export def "users-albums-logos create" [
+export def "create-album-logo" [
   user_id: float
   album_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -8076,7 +8076,7 @@ export def "users-albums-logos create" [
 #
 # DELETE /users/{user_id}/albums/{album_id}/logos/{logo_id}
 # operationId: delete_album_logo
-export def "users-albums-logos delete" [
+export def "delete-album-logo" [
   user_id: float
   album_id: float
   logo_id: float
@@ -8116,7 +8116,7 @@ export def "users-albums-logos delete" [
 #
 # GET /users/{user_id}/albums/{album_id}/logos/{logo_id}
 # operationId: get_album_logo
-export def "users-albums-logos get" [
+export def "get-album-logo" [
   user_id: float
   album_id: float
   logo_id: float
@@ -8156,7 +8156,7 @@ export def "users-albums-logos get" [
 #
 # PATCH /users/{user_id}/albums/{album_id}/logos/{logo_id}
 # operationId: replace_album_logo
-export def "users-albums-logos update" [
+export def "replace-album-logo" [
   user_id: float
   album_id: float
   logo_id: float
@@ -8200,7 +8200,7 @@ export def "users-albums-logos update" [
 #
 # GET /users/{user_id}/albums/{album_id}/videos
 # operationId: get_album_videos
-export def "users-albums-videos list" [
+export def "get-album-videos" [
   user_id: float
   album_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -8249,7 +8249,7 @@ export def "users-albums-videos list" [
 #
 # PUT /users/{user_id}/albums/{album_id}/videos
 # operationId: replace_videos_in_album
-export def "users-albums-videos update" [
+export def "replace-videos-in-album" [
   user_id: float
   album_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -8291,7 +8291,7 @@ export def "users-albums-videos update" [
 #
 # DELETE /users/{user_id}/albums/{album_id}/videos/{video_id}
 # operationId: remove_video_from_album
-export def "users-albums-videos delete" [
+export def "remove-video-from-album" [
   user_id: float
   album_id: float
   video_id: float
@@ -8331,7 +8331,7 @@ export def "users-albums-videos delete" [
 #
 # GET /users/{user_id}/albums/{album_id}/videos/{video_id}
 # operationId: get_album_video
-export def "users-albums-videos get" [
+export def "get-album-video" [
   user_id: float
   album_id: float
   video_id: float
@@ -8373,7 +8373,7 @@ export def "users-albums-videos get" [
 #
 # PUT /users/{user_id}/albums/{album_id}/videos/{video_id}
 # operationId: add_video_to_album
-export def "users-albums-videos create" [
+export def "add-video-to-album" [
   user_id: float
   album_id: float
   video_id: float
@@ -8413,7 +8413,7 @@ export def "users-albums-videos create" [
 #
 # POST /users/{user_id}/albums/{album_id}/videos/{video_id}/set_album_thumbnail
 # operationId: set_video_as_album_thumbnail
-export def "users-albums-videos-set-album-thumbnail update" [
+export def "set-video-as-album-thumbnail" [
   user_id: float
   album_id: float
   video_id: float
@@ -8457,7 +8457,7 @@ export def "users-albums-videos-set-album-thumbnail update" [
 #
 # GET /users/{user_id}/appearances
 # operationId: get_appearances
-export def "users-appearances get" [
+export def "get-appearances" [
   user_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8501,7 +8501,7 @@ export def "users-appearances get" [
 #
 # GET /users/{user_id}/categories
 # operationId: get_category_subscriptions
-export def "users-categories get-category-subscriptions" [
+export def "get-category-subscriptions" [
   user_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8542,7 +8542,7 @@ export def "users-categories get-category-subscriptions" [
 #
 # DELETE /users/{user_id}/categories/{category}
 # operationId: unsubscribe_from_category
-export def "users-categories unsubscribe" [
+export def "unsubscribe-from-category" [
   user_id: float
   category: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8580,7 +8580,7 @@ export def "users-categories unsubscribe" [
 #
 # GET /users/{user_id}/categories/{category}
 # operationId: check_if_user_subscribed_to_category
-export def "users-categories check-if-subscribed" [
+export def "check-if-user-subscribed-to-category" [
   user_id: float
   category: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8618,7 +8618,7 @@ export def "users-categories check-if-subscribed" [
 #
 # PUT /users/{user_id}/categories/{category}
 # operationId: subscribe_to_category
-export def "users-categories subscribe" [
+export def "subscribe-to-category" [
   user_id: float
   category: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -8656,7 +8656,7 @@ export def "users-categories subscribe" [
 #
 # GET /users/{user_id}/channels
 # operationId: get_channel_subscriptions
-export def "users-channels get-subscriptions" [
+export def "get-channel-subscriptions" [
   user_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8699,7 +8699,7 @@ export def "users-channels get-subscriptions" [
 #
 # DELETE /users/{user_id}/channels/{channel_id}
 # operationId: unsubscribe_from_channel
-export def "users-channels unsubscribe" [
+export def "unsubscribe-from-channel" [
   user_id: float
   channel_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -8737,7 +8737,7 @@ export def "users-channels unsubscribe" [
 #
 # GET /users/{user_id}/channels/{channel_id}
 # operationId: check_if_user_subscribed_to_channel
-export def "users-channels check-if-subscribed" [
+export def "check-if-user-subscribed-to-channel" [
   user_id: float
   channel_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -8775,7 +8775,7 @@ export def "users-channels check-if-subscribed" [
 #
 # PUT /users/{user_id}/channels/{channel_id}
 # operationId: subscribe_to_channel
-export def "users-channels subscribe" [
+export def "subscribe-to-channel" [
   user_id: float
   channel_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -8813,7 +8813,7 @@ export def "users-channels subscribe" [
 #
 # GET /users/{user_id}/customlogos
 # operationId: get_custom_logos
-export def "users-customlogos get-custom-logos" [
+export def "get-custom-logos" [
   user_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8849,7 +8849,7 @@ export def "users-customlogos get-custom-logos" [
 #
 # POST /users/{user_id}/customlogos
 # operationId: create_custom_logo
-export def "users-customlogos create-custom-logo" [
+export def "create-custom-logo" [
   user_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8885,7 +8885,7 @@ export def "users-customlogos create-custom-logo" [
 #
 # GET /users/{user_id}/customlogos/{logo_id}
 # operationId: get_custom_logo
-export def "users-customlogos get-custom" [
+export def "get-custom-logo" [
   user_id: float
   logo_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -8923,7 +8923,7 @@ export def "users-customlogos get-custom" [
 #
 # GET /users/{user_id}/feed
 # operationId: get_feed
-export def "users-feed get" [
+export def "get-feed" [
   user_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8964,7 +8964,7 @@ export def "users-feed get" [
 #
 # GET /users/{user_id}/followers
 # operationId: get_followers
-export def "users-followers get" [
+export def "get-followers" [
   user_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9006,7 +9006,7 @@ export def "users-followers get" [
 #
 # GET /users/{user_id}/following
 # operationId: get_user_following
-export def "users-following get" [
+export def "get-user-following" [
   user_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9049,7 +9049,7 @@ export def "users-following get" [
 #
 # POST /users/{user_id}/following
 # operationId: follow_users
-export def "users-following create-follow" [
+export def "follow-users" [
   user_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9089,7 +9089,7 @@ export def "users-following create-follow" [
 #
 # DELETE /users/{user_id}/following/{follow_user_id}
 # operationId: unfollow_user
-export def "users-following delete-unfollow" [
+export def "unfollow-user" [
   user_id: float
   follow_user_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -9127,7 +9127,7 @@ export def "users-following delete-unfollow" [
 #
 # GET /users/{user_id}/following/{follow_user_id}
 # operationId: check_if_user_is_following
-export def "users-following check-if-is" [
+export def "check-if-user-is-following" [
   user_id: float
   follow_user_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -9165,7 +9165,7 @@ export def "users-following check-if-is" [
 #
 # PUT /users/{user_id}/following/{follow_user_id}
 # operationId: follow_user
-export def "users-following update" [
+export def "follow-user" [
   user_id: float
   follow_user_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -9203,7 +9203,7 @@ export def "users-following update" [
 #
 # GET /users/{user_id}/groups
 # operationId: get_user_groups
-export def "users-groups get" [
+export def "get-user-groups" [
   user_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9246,7 +9246,7 @@ export def "users-groups get" [
 #
 # DELETE /users/{user_id}/groups/{group_id}
 # operationId: leave_group
-export def "users-groups delete-leave" [
+export def "leave-group" [
   user_id: float
   group_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -9284,7 +9284,7 @@ export def "users-groups delete-leave" [
 #
 # GET /users/{user_id}/groups/{group_id}
 # operationId: check_if_user_joined_group
-export def "users-groups check-if-joined" [
+export def "check-if-user-joined-group" [
   user_id: float
   group_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -9322,7 +9322,7 @@ export def "users-groups check-if-joined" [
 #
 # PUT /users/{user_id}/groups/{group_id}
 # operationId: join_group
-export def "users-groups update-join" [
+export def "join-group" [
   user_id: float
   group_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -9360,7 +9360,7 @@ export def "users-groups update-join" [
 #
 # GET /users/{user_id}/likes
 # operationId: get_likes
-export def "users-likes get" [
+export def "get-likes" [
   user_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9403,7 +9403,7 @@ export def "users-likes get" [
 #
 # DELETE /users/{user_id}/likes/{video_id}
 # operationId: unlike_video
-export def "users-likes delete-unlike" [
+export def "unlike-video" [
   user_id: float
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -9441,7 +9441,7 @@ export def "users-likes delete-unlike" [
 #
 # GET /users/{user_id}/likes/{video_id}
 # operationId: check_if_user_liked_video
-export def "users-likes check-if-liked" [
+export def "check-if-user-liked-video" [
   user_id: float
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -9479,7 +9479,7 @@ export def "users-likes check-if-liked" [
 #
 # PUT /users/{user_id}/likes/{video_id}
 # operationId: like_video
-export def "users-likes update" [
+export def "like-video" [
   user_id: float
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -9517,7 +9517,7 @@ export def "users-likes update" [
 #
 # GET /users/{user_id}/ondemand/pages
 # operationId: get_user_vods
-export def "users-ondemand-pages get-vods" [
+export def "get-user-vods" [
   user_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9563,7 +9563,7 @@ export def "users-ondemand-pages get-vods" [
 # --episodes shape: {buy?: record, rent?: record}
 # --rent shape: {active?: bool, period?: "1 week"|"1 year"|"24 hour"|"3 month"|"30 day"|"48 hour"|"6 month"|"72 hour", price?: record}
 # --subscription shape: {monthly?: record}
-export def "users-ondemand-pages create-vod" [
+export def "create-vod" [
   user_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9613,7 +9613,7 @@ export def "users-ondemand-pages create-vod" [
 #
 # GET /users/{user_id}/ondemand/purchases
 # operationId: check_if_vod_was_purchased
-export def "users-ondemand-purchases check-if-vod-was-purchased" [
+export def "check-if-vod-was-purchased" [
   user_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9649,7 +9649,7 @@ export def "users-ondemand-purchases check-if-vod-was-purchased" [
 #
 # GET /users/{user_id}/pictures
 # operationId: get_pictures
-export def "users-pictures list" [
+export def "get-pictures" [
   user_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9688,7 +9688,7 @@ export def "users-pictures list" [
 #
 # POST /users/{user_id}/pictures
 # operationId: create_picture
-export def "users-pictures create" [
+export def "create-picture" [
   user_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9724,7 +9724,7 @@ export def "users-pictures create" [
 #
 # DELETE /users/{user_id}/pictures/{portraitset_id}
 # operationId: delete_picture
-export def "users-pictures delete" [
+export def "delete-picture" [
   user_id: float
   portraitset_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -9762,7 +9762,7 @@ export def "users-pictures delete" [
 #
 # GET /users/{user_id}/pictures/{portraitset_id}
 # operationId: get_picture
-export def "users-pictures get" [
+export def "get-picture" [
   user_id: float
   portraitset_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -9800,7 +9800,7 @@ export def "users-pictures get" [
 #
 # PATCH /users/{user_id}/pictures/{portraitset_id}
 # operationId: edit_picture
-export def "users-pictures update-edit" [
+export def "edit-picture" [
   user_id: float
   portraitset_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -9842,7 +9842,7 @@ export def "users-pictures update-edit" [
 #
 # GET /users/{user_id}/portfolios
 # operationId: get_portfolios
-export def "users-portfolios list" [
+export def "get-portfolios" [
   user_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9884,7 +9884,7 @@ export def "users-portfolios list" [
 #
 # GET /users/{user_id}/portfolios/{portfolio_id}
 # operationId: get_portfolio
-export def "users-portfolios get" [
+export def "get-portfolio" [
   user_id: float
   portfolio_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -9922,7 +9922,7 @@ export def "users-portfolios get" [
 #
 # GET /users/{user_id}/portfolios/{portfolio_id}/videos
 # operationId: get_portfolio_videos
-export def "users-portfolios-videos list" [
+export def "get-portfolio-videos" [
   user_id: float
   portfolio_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -9967,7 +9967,7 @@ export def "users-portfolios-videos list" [
 #
 # DELETE /users/{user_id}/portfolios/{portfolio_id}/videos/{video_id}
 # operationId: delete_video_from_portfolio
-export def "users-portfolios-videos delete" [
+export def "delete-video-from-portfolio" [
   user_id: float
   portfolio_id: float
   video_id: float
@@ -10007,7 +10007,7 @@ export def "users-portfolios-videos delete" [
 #
 # GET /users/{user_id}/portfolios/{portfolio_id}/videos/{video_id}
 # operationId: get_portfolio_video
-export def "users-portfolios-videos get" [
+export def "get-portfolio-video" [
   user_id: float
   portfolio_id: float
   video_id: float
@@ -10047,7 +10047,7 @@ export def "users-portfolios-videos get" [
 #
 # PUT /users/{user_id}/portfolios/{portfolio_id}/videos/{video_id}
 # operationId: add_video_to_portfolio
-export def "users-portfolios-videos create" [
+export def "add-video-to-portfolio" [
   user_id: float
   portfolio_id: float
   video_id: float
@@ -10087,7 +10087,7 @@ export def "users-portfolios-videos create" [
 #
 # GET /users/{user_id}/presets
 # operationId: get_embed_presets
-export def "users-presets list" [
+export def "get-embed-presets" [
   user_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10126,7 +10126,7 @@ export def "users-presets list" [
 #
 # GET /users/{user_id}/presets/{preset_id}
 # operationId: get_embed_preset
-export def "users-presets get-embed" [
+export def "get-embed-preset" [
   user_id: float
   preset_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -10164,7 +10164,7 @@ export def "users-presets get-embed" [
 #
 # PATCH /users/{user_id}/presets/{preset_id}
 # operationId: edit_embed_preset
-export def "users-presets update-edit-embed" [
+export def "edit-embed-preset" [
   user_id: float
   preset_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -10206,7 +10206,7 @@ export def "users-presets update-edit-embed" [
 #
 # GET /users/{user_id}/presets/{preset_id}/videos
 # operationId: get_embed_preset_videos
-export def "users-presets-videos get-embed" [
+export def "get-embed-preset-videos" [
   user_id: float
   preset_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -10247,7 +10247,7 @@ export def "users-presets-videos get-embed" [
 #
 # GET /users/{user_id}/projects
 # operationId: get_projects
-export def "users-projects list" [
+export def "get-projects" [
   user_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10288,7 +10288,7 @@ export def "users-projects list" [
 #
 # POST /users/{user_id}/projects
 # operationId: create_project
-export def "users-projects create" [
+export def "create-project" [
   user_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10328,7 +10328,7 @@ export def "users-projects create" [
 #
 # DELETE /users/{user_id}/projects/{project_id}
 # operationId: delete_project
-export def "users-projects delete" [
+export def "delete-project" [
   user_id: float
   project_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -10368,7 +10368,7 @@ export def "users-projects delete" [
 #
 # GET /users/{user_id}/projects/{project_id}
 # operationId: get_project
-export def "users-projects get" [
+export def "get-project" [
   user_id: float
   project_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -10406,7 +10406,7 @@ export def "users-projects get" [
 #
 # PATCH /users/{user_id}/projects/{project_id}
 # operationId: edit_project
-export def "users-projects update-edit" [
+export def "edit-project" [
   user_id: float
   project_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -10448,7 +10448,7 @@ export def "users-projects update-edit" [
 #
 # DELETE /users/{user_id}/projects/{project_id}/videos
 # operationId: remove_videos_from_project
-export def "users-projects-videos delete-by-user-id-project-id" [
+export def "remove-videos-from-project" [
   user_id: float
   project_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -10489,7 +10489,7 @@ export def "users-projects-videos delete-by-user-id-project-id" [
 #
 # GET /users/{user_id}/projects/{project_id}/videos
 # operationId: get_project_videos
-export def "users-projects-videos get" [
+export def "get-project-videos" [
   user_id: float
   project_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -10532,7 +10532,7 @@ export def "users-projects-videos get" [
 #
 # PUT /users/{user_id}/projects/{project_id}/videos
 # operationId: add_videos_to_project
-export def "users-projects-videos create-by-user-id-project-id" [
+export def "add-videos-to-project" [
   user_id: float
   project_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -10572,7 +10572,7 @@ export def "users-projects-videos create-by-user-id-project-id" [
 #
 # DELETE /users/{user_id}/projects/{project_id}/videos/{video_id}
 # operationId: remove_video_from_project
-export def "users-projects-videos delete-by-user-id-project-id-video-id" [
+export def "remove-video-from-project" [
   user_id: float
   project_id: float
   video_id: float
@@ -10612,7 +10612,7 @@ export def "users-projects-videos delete-by-user-id-project-id-video-id" [
 #
 # PUT /users/{user_id}/projects/{project_id}/videos/{video_id}
 # operationId: add_video_to_project
-export def "users-projects-videos create-by-user-id-project-id-video-id" [
+export def "add-video-to-project" [
   user_id: float
   project_id: float
   video_id: float
@@ -10652,7 +10652,7 @@ export def "users-projects-videos create-by-user-id-project-id-video-id" [
 #
 # DELETE /users/{user_id}/uploads/{upload}
 # operationId: complete_streaming_upload
-export def "users-uploads complete-streaming" [
+export def "complete-streaming-upload" [
   user_id: float
   upload: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -10693,7 +10693,7 @@ export def "users-uploads complete-streaming" [
 #
 # GET /users/{user_id}/uploads/{upload}
 # operationId: get_upload_attempt
-export def "users-uploads get-attempt" [
+export def "get-upload-attempt" [
   user_id: float
   upload: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -10731,7 +10731,7 @@ export def "users-uploads get-attempt" [
 #
 # GET /users/{user_id}/videos
 # operationId: get_videos
-export def "users-videos get" [
+export def "get-videos" [
   user_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10777,7 +10777,7 @@ export def "users-videos get" [
 #
 # POST /users/{user_id}/videos
 # operationId: upload_video
-export def "users-videos upload" [
+export def "upload-video" [
   user_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10817,7 +10817,7 @@ export def "users-videos upload" [
 #
 # GET /users/{user_id}/videos/{video_id}
 # operationId: check_if_user_owns_video
-export def "users-videos check-if-owns" [
+export def "check-if-user-owns-video" [
   user_id: float
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -10855,7 +10855,7 @@ export def "users-videos check-if-owns" [
 #
 # GET /users/{user_id}/watchlater
 # operationId: get_watch_later_queue
-export def "users-watchlater get-watch-later-queue" [
+export def "get-watch-later-queue" [
   user_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10899,7 +10899,7 @@ export def "users-watchlater get-watch-later-queue" [
 #
 # DELETE /users/{user_id}/watchlater/{video_id}
 # operationId: delete_video_from_watch_later
-export def "users-watchlater delete-from-watch-later" [
+export def "delete-video-from-watch-later" [
   user_id: float
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -10937,7 +10937,7 @@ export def "users-watchlater delete-from-watch-later" [
 #
 # GET /users/{user_id}/watchlater/{video_id}
 # operationId: check_watch_later_queue
-export def "users-watchlater check-watch-later-queue" [
+export def "check-watch-later-queue" [
   user_id: float
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -10975,7 +10975,7 @@ export def "users-watchlater check-watch-later-queue" [
 #
 # PUT /users/{user_id}/watchlater/{video_id}
 # operationId: add_video_to_watch_later
-export def "users-watchlater create-to-watch-later" [
+export def "add-video-to-watch-later" [
   user_id: float
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -11013,7 +11013,7 @@ export def "users-watchlater create-to-watch-later" [
 #
 # GET /videos
 # operationId: search_videos
-export def "videos list" [
+export def "search-videos" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11056,7 +11056,7 @@ export def "videos list" [
 #
 # DELETE /videos/{video_id}
 # operationId: delete_video
-export def "videos delete" [
+export def "delete-video" [
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11092,7 +11092,7 @@ export def "videos delete" [
 #
 # GET /videos/{video_id}
 # operationId: get_video
-export def "videos get" [
+export def "get-video" [
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11128,7 +11128,7 @@ export def "videos get" [
 #
 # PATCH /videos/{video_id}
 # operationId: edit_video
-export def "videos update-edit" [
+export def "edit-video" [
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11168,7 +11168,7 @@ export def "videos update-edit" [
 #
 # GET /videos/{video_id}/available_channels
 # operationId: get_available_video_channels
-export def "videos-available-channels get" [
+export def "get-available-video-channels" [
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11204,7 +11204,7 @@ export def "videos-available-channels get" [
 #
 # GET /videos/{video_id}/categories
 # operationId: get_video_categories
-export def "videos-categories get" [
+export def "get-video-categories" [
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11240,7 +11240,7 @@ export def "videos-categories get" [
 #
 # PUT /videos/{video_id}/categories
 # operationId: suggest_video_category
-export def "videos-categories update-suggest-category" [
+export def "suggest-video-category" [
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11280,7 +11280,7 @@ export def "videos-categories update-suggest-category" [
 #
 # GET /videos/{video_id}/comments
 # operationId: get_comments
-export def "videos-comments list" [
+export def "get-comments" [
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11320,7 +11320,7 @@ export def "videos-comments list" [
 #
 # POST /videos/{video_id}/comments
 # operationId: create_comment
-export def "videos-comments create" [
+export def "create-comment" [
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11360,7 +11360,7 @@ export def "videos-comments create" [
 #
 # DELETE /videos/{video_id}/comments/{comment_id}
 # operationId: delete_comment
-export def "videos-comments delete" [
+export def "delete-comment" [
   video_id: float
   comment_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -11398,7 +11398,7 @@ export def "videos-comments delete" [
 #
 # GET /videos/{video_id}/comments/{comment_id}
 # operationId: get_comment
-export def "videos-comments get" [
+export def "get-comment" [
   video_id: float
   comment_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -11436,7 +11436,7 @@ export def "videos-comments get" [
 #
 # PATCH /videos/{video_id}/comments/{comment_id}
 # operationId: edit_comment
-export def "videos-comments update-edit" [
+export def "edit-comment" [
   video_id: float
   comment_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -11478,7 +11478,7 @@ export def "videos-comments update-edit" [
 #
 # GET /videos/{video_id}/comments/{comment_id}/replies
 # operationId: get_comment_replies
-export def "videos-comments-replies get" [
+export def "get-comment-replies" [
   video_id: float
   comment_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -11519,7 +11519,7 @@ export def "videos-comments-replies get" [
 #
 # POST /videos/{video_id}/comments/{comment_id}/replies
 # operationId: create_comment_reply
-export def "videos-comments-replies create-reply" [
+export def "create-comment-reply" [
   video_id: float
   comment_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -11561,7 +11561,7 @@ export def "videos-comments-replies create-reply" [
 #
 # GET /videos/{video_id}/credits
 # operationId: get_video_credits
-export def "videos-credits list" [
+export def "get-video-credits" [
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11603,7 +11603,7 @@ export def "videos-credits list" [
 #
 # POST /videos/{video_id}/credits
 # operationId: add_video_credit
-export def "videos-credits create" [
+export def "add-video-credit" [
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11643,7 +11643,7 @@ export def "videos-credits create" [
 #
 # DELETE /videos/{video_id}/credits/{credit_id}
 # operationId: delete_video_credit
-export def "videos-credits delete" [
+export def "delete-video-credit" [
   video_id: float
   credit_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -11681,7 +11681,7 @@ export def "videos-credits delete" [
 #
 # GET /videos/{video_id}/credits/{credit_id}
 # operationId: get_video_credit
-export def "videos-credits get" [
+export def "get-video-credit" [
   video_id: float
   credit_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -11719,7 +11719,7 @@ export def "videos-credits get" [
 #
 # PATCH /videos/{video_id}/credits/{credit_id}
 # operationId: edit_video_credit
-export def "videos-credits update-edit" [
+export def "edit-video-credit" [
   video_id: float
   credit_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -11761,7 +11761,7 @@ export def "videos-credits update-edit" [
 #
 # GET /videos/{video_id}/likes
 # operationId: get_video_likes
-export def "videos-likes get" [
+export def "get-video-likes" [
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11802,7 +11802,7 @@ export def "videos-likes get" [
 #
 # GET /videos/{video_id}/pictures
 # operationId: get_video_thumbnails
-export def "videos-pictures get-thumbnails" [
+export def "get-video-thumbnails" [
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11841,7 +11841,7 @@ export def "videos-pictures get-thumbnails" [
 #
 # POST /videos/{video_id}/pictures
 # operationId: create_video_thumbnail
-export def "videos-pictures create-thumbnail" [
+export def "create-video-thumbnail" [
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11881,7 +11881,7 @@ export def "videos-pictures create-thumbnail" [
 #
 # DELETE /videos/{video_id}/pictures/{picture_id}
 # operationId: delete_video_thumbnail
-export def "videos-pictures delete-thumbnail" [
+export def "delete-video-thumbnail" [
   video_id: float
   picture_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -11919,7 +11919,7 @@ export def "videos-pictures delete-thumbnail" [
 #
 # GET /videos/{video_id}/pictures/{picture_id}
 # operationId: get_video_thumbnail
-export def "videos-pictures get-thumbnail" [
+export def "get-video-thumbnail" [
   video_id: float
   picture_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -11957,7 +11957,7 @@ export def "videos-pictures get-thumbnail" [
 #
 # PATCH /videos/{video_id}/pictures/{picture_id}
 # operationId: edit_video_thumbnail
-export def "videos-pictures update-edit-thumbnail" [
+export def "edit-video-thumbnail" [
   video_id: float
   picture_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -11999,7 +11999,7 @@ export def "videos-pictures update-edit-thumbnail" [
 #
 # DELETE /videos/{video_id}/presets/{preset_id}
 # operationId: delete_video_embed_preset
-export def "videos-presets delete-embed" [
+export def "delete-video-embed-preset" [
   video_id: float
   preset_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -12037,7 +12037,7 @@ export def "videos-presets delete-embed" [
 #
 # GET /videos/{video_id}/presets/{preset_id}
 # operationId: get_video_embed_preset
-export def "videos-presets get-embed" [
+export def "get-video-embed-preset" [
   video_id: float
   preset_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -12075,7 +12075,7 @@ export def "videos-presets get-embed" [
 #
 # PUT /videos/{video_id}/presets/{preset_id}
 # operationId: add_video_embed_preset
-export def "videos-presets create-embed" [
+export def "add-video-embed-preset" [
   video_id: float
   preset_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -12113,7 +12113,7 @@ export def "videos-presets create-embed" [
 #
 # GET /videos/{video_id}/privacy/domains
 # operationId: get_video_privacy_domains
-export def "videos-privacy-domains get" [
+export def "get-video-privacy-domains" [
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12152,7 +12152,7 @@ export def "videos-privacy-domains get" [
 #
 # DELETE /videos/{video_id}/privacy/domains/{domain}
 # operationId: delete_video_privacy_domain
-export def "videos-privacy-domains delete" [
+export def "delete-video-privacy-domain" [
   video_id: float
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12190,7 +12190,7 @@ export def "videos-privacy-domains delete" [
 #
 # PUT /videos/{video_id}/privacy/domains/{domain}
 # operationId: add_video_privacy_domain
-export def "videos-privacy-domains create" [
+export def "add-video-privacy-domain" [
   video_id: float
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12228,7 +12228,7 @@ export def "videos-privacy-domains create" [
 #
 # GET /videos/{video_id}/privacy/users
 # operationId: get_video_privacy_users
-export def "videos-privacy-users get" [
+export def "get-video-privacy-users" [
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12267,7 +12267,7 @@ export def "videos-privacy-users get" [
 #
 # PUT /videos/{video_id}/privacy/users
 # operationId: add_video_privacy_users
-export def "videos-privacy-users create-by-video-id" [
+export def "add-video-privacy-users" [
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12303,7 +12303,7 @@ export def "videos-privacy-users create-by-video-id" [
 #
 # DELETE /videos/{video_id}/privacy/users/{user_id}
 # operationId: delete_video_privacy_user
-export def "videos-privacy-users delete" [
+export def "delete-video-privacy-user" [
   video_id: float
   user_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -12341,7 +12341,7 @@ export def "videos-privacy-users delete" [
 #
 # PUT /videos/{video_id}/privacy/users/{user_id}
 # operationId: add_video_privacy_user
-export def "videos-privacy-users create-by-video-id-user-id" [
+export def "add-video-privacy-user" [
   video_id: float
   user_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -12379,7 +12379,7 @@ export def "videos-privacy-users create-by-video-id-user-id" [
 #
 # GET /videos/{video_id}/tags
 # operationId: get_video_tags
-export def "videos-tags get" [
+export def "get-video-tags" [
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12415,7 +12415,7 @@ export def "videos-tags get" [
 #
 # PUT /videos/{video_id}/tags
 # operationId: add_video_tags
-export def "videos-tags create-by-video-id" [
+export def "add-video-tags" [
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12455,7 +12455,7 @@ export def "videos-tags create-by-video-id" [
 #
 # DELETE /videos/{video_id}/tags/{word}
 # operationId: delete_video_tag
-export def "videos-tags delete" [
+export def "delete-video-tag" [
   video_id: float
   word: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12493,7 +12493,7 @@ export def "videos-tags delete" [
 #
 # GET /videos/{video_id}/tags/{word}
 # operationId: check_video_for_tag
-export def "videos-tags check" [
+export def "check-video-for-tag" [
   video_id: float
   word: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12531,7 +12531,7 @@ export def "videos-tags check" [
 #
 # PUT /videos/{video_id}/tags/{word}
 # operationId: add_video_tag
-export def "videos-tags create-by-video-id-word" [
+export def "add-video-tag" [
   video_id: float
   word: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12569,7 +12569,7 @@ export def "videos-tags create-by-video-id-word" [
 #
 # GET /videos/{video_id}/texttracks
 # operationId: get_text_tracks
-export def "videos-texttracks get-text-tracks" [
+export def "get-text-tracks" [
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12605,7 +12605,7 @@ export def "videos-texttracks get-text-tracks" [
 #
 # POST /videos/{video_id}/texttracks
 # operationId: create_text_track
-export def "videos-texttracks create-text-track" [
+export def "create-text-track" [
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12645,7 +12645,7 @@ export def "videos-texttracks create-text-track" [
 #
 # DELETE /videos/{video_id}/texttracks/{texttrack_id}
 # operationId: delete_text_track
-export def "videos-texttracks delete-text-track" [
+export def "delete-text-track" [
   video_id: float
   texttrack_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -12683,7 +12683,7 @@ export def "videos-texttracks delete-text-track" [
 #
 # GET /videos/{video_id}/texttracks/{texttrack_id}
 # operationId: get_text_track
-export def "videos-texttracks get-text-track" [
+export def "get-text-track" [
   video_id: float
   texttrack_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -12721,7 +12721,7 @@ export def "videos-texttracks get-text-track" [
 #
 # PATCH /videos/{video_id}/texttracks/{texttrack_id}
 # operationId: edit_text_track
-export def "videos-texttracks update-edit-text-track" [
+export def "edit-text-track" [
   video_id: float
   texttrack_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -12763,7 +12763,7 @@ export def "videos-texttracks update-edit-text-track" [
 #
 # POST /videos/{video_id}/timelinethumbnails
 # operationId: create_video_custom_logo
-export def "videos-timelinethumbnails create-custom-logo" [
+export def "create-video-custom-logo" [
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12799,7 +12799,7 @@ export def "videos-timelinethumbnails create-custom-logo" [
 #
 # GET /videos/{video_id}/timelinethumbnails/{thumbnail_id}
 # operationId: get_video_custom_logo
-export def "videos-timelinethumbnails get-custom-logo" [
+export def "get-video-custom-logo" [
   video_id: float
   thumbnail_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -12837,7 +12837,7 @@ export def "videos-timelinethumbnails get-custom-logo" [
 #
 # POST /videos/{video_id}/versions
 # operationId: create_video_version
-export def "videos-versions create" [
+export def "create-video-version" [
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12877,7 +12877,7 @@ export def "videos-versions create" [
 #
 # GET /videos/{video_id}/videos
 # operationId: get_related_videos
-export def "videos-videos get-related" [
+export def "get-related-videos" [
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

@@ -105,7 +105,7 @@ def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "device get-details" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "read-device-details" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -129,7 +129,7 @@ export def commands []: nothing -> table {
 #
 # GET /device
 # operationId: readDeviceDetails
-export def "device get-details" [
+export def "read-device-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -163,7 +163,7 @@ export def "device get-details" [
 #
 # GET /device/strategy
 # operationId: readStrategyDetails
-export def "device-strategy get-details" [
+export def "read-strategy-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -197,7 +197,7 @@ export def "device-strategy get-details" [
 #
 # GET /device/strategy/ios/analogInputs
 # operationId: readAnalogInputs
-export def "device-strategy-ios-analog-inputs get" [
+export def "read-analog-inputs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -231,7 +231,7 @@ export def "device-strategy-ios-analog-inputs get" [
 #
 # GET /device/strategy/ios/analogInputs/{ioName}/eu
 # operationId: readAnalogInputEu
-export def "device-strategy-ios-analog-inputs-eu get" [
+export def "read-analog-input-eu" [
   io_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -267,7 +267,7 @@ export def "device-strategy-ios-analog-inputs-eu get" [
 #
 # GET /device/strategy/ios/analogOutputs
 # operationId: readAnalogOutputs
-export def "device-strategy-ios-analog-outputs get" [
+export def "read-analog-outputs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -301,7 +301,7 @@ export def "device-strategy-ios-analog-outputs get" [
 #
 # GET /device/strategy/ios/analogOutputs/{ioName}/eu
 # operationId: readAnalogOutputEu
-export def "device-strategy-ios-analog-outputs-eu get" [
+export def "read-analog-output-eu" [
   io_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -337,7 +337,7 @@ export def "device-strategy-ios-analog-outputs-eu get" [
 #
 # POST /device/strategy/ios/analogOutputs/{ioName}/eu
 # operationId: writeAnalogOutputEu
-export def "device-strategy-ios-analog-outputs-eu create-write" [
+export def "write-analog-output-eu" [
   io_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -377,7 +377,7 @@ export def "device-strategy-ios-analog-outputs-eu create-write" [
 #
 # GET /device/strategy/ios/digitalInputs
 # operationId: readDigitalInputs
-export def "device-strategy-ios-digital-inputs get" [
+export def "read-digital-inputs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -411,7 +411,7 @@ export def "device-strategy-ios-digital-inputs get" [
 #
 # GET /device/strategy/ios/digitalInputs/{ioName}/state
 # operationId: readDigitalInputState
-export def "device-strategy-ios-digital-inputs-state get" [
+export def "read-digital-input-state" [
   io_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -447,7 +447,7 @@ export def "device-strategy-ios-digital-inputs-state get" [
 #
 # GET /device/strategy/ios/digitalOutputs
 # operationId: readDigitalOutputs
-export def "device-strategy-ios-digital-outputs get" [
+export def "read-digital-outputs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -481,7 +481,7 @@ export def "device-strategy-ios-digital-outputs get" [
 #
 # GET /device/strategy/ios/digitalOutputs/{ioName}/state
 # operationId: readDigitalOutputState
-export def "device-strategy-ios-digital-outputs-state get" [
+export def "read-digital-output-state" [
   io_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -517,7 +517,7 @@ export def "device-strategy-ios-digital-outputs-state get" [
 #
 # POST /device/strategy/ios/digitalOutputs/{ioName}/state
 # operationId: writeDigitalOutputState
-export def "device-strategy-ios-digital-outputs-state create-write" [
+export def "write-digital-output-state" [
   io_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -557,7 +557,7 @@ export def "device-strategy-ios-digital-outputs-state create-write" [
 #
 # GET /device/strategy/tables/floats
 # operationId: readFloatTables
-export def "device-strategy-tables-floats list" [
+export def "read-float-tables" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -591,7 +591,7 @@ export def "device-strategy-tables-floats list" [
 #
 # GET /device/strategy/tables/floats/{tableName}
 # operationId: readFloatTable
-export def "device-strategy-tables-floats get" [
+export def "read-float-table" [
   table_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -630,7 +630,7 @@ export def "device-strategy-tables-floats get" [
 #
 # POST /device/strategy/tables/floats/{tableName}
 # operationId: writeFloatTable
-export def "device-strategy-tables-floats create-write" [
+export def "write-float-table" [
   table_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -672,7 +672,7 @@ export def "device-strategy-tables-floats create-write" [
 #
 # GET /device/strategy/tables/floats/{tableName}/{index}
 # operationId: readFloatTableElement
-export def "device-strategy-tables-floats get-element" [
+export def "read-float-table-element" [
   table_name: string
   index: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -710,7 +710,7 @@ export def "device-strategy-tables-floats get-element" [
 #
 # POST /device/strategy/tables/floats/{tableName}/{index}
 # operationId: writeFloatTableElement
-export def "device-strategy-tables-floats create-write-element" [
+export def "write-float-table-element" [
   table_name: string
   index: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -752,7 +752,7 @@ export def "device-strategy-tables-floats create-write-element" [
 #
 # GET /device/strategy/tables/int32s
 # operationId: readInt32Tables
-export def "device-strategy-tables-int32s list" [
+export def "read-int32-tables" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -786,7 +786,7 @@ export def "device-strategy-tables-int32s list" [
 #
 # GET /device/strategy/tables/int32s/{tableName}
 # operationId: readInt32Table
-export def "device-strategy-tables-int32s get" [
+export def "read-int32-table" [
   table_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -825,7 +825,7 @@ export def "device-strategy-tables-int32s get" [
 #
 # POST /device/strategy/tables/int32s/{tableName}
 # operationId: writeInt32Table
-export def "device-strategy-tables-int32s create-write" [
+export def "write-int32-table" [
   table_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -867,7 +867,7 @@ export def "device-strategy-tables-int32s create-write" [
 #
 # GET /device/strategy/tables/int32s/{tableName}/{index}
 # operationId: readInt32TableElement
-export def "device-strategy-tables-int32s get-element" [
+export def "read-int32-table-element" [
   table_name: string
   index: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -905,7 +905,7 @@ export def "device-strategy-tables-int32s get-element" [
 #
 # POST /device/strategy/tables/int32s/{tableName}/{index}
 # operationId: writeInt32TableElement
-export def "device-strategy-tables-int32s create-write-element" [
+export def "write-int32-table-element" [
   table_name: string
   index: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -947,7 +947,7 @@ export def "device-strategy-tables-int32s create-write-element" [
 #
 # GET /device/strategy/tables/int64s
 # operationId: readInt64Tables
-export def "device-strategy-tables-int64s list" [
+export def "read-int64-tables" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -981,7 +981,7 @@ export def "device-strategy-tables-int64s list" [
 #
 # GET /device/strategy/tables/int64s/{tableName}
 # operationId: readInt64Table
-export def "device-strategy-tables-int64s get" [
+export def "read-int64-table" [
   table_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1020,7 +1020,7 @@ export def "device-strategy-tables-int64s get" [
 #
 # POST /device/strategy/tables/int64s/{tableName}
 # operationId: writeInt64Table
-export def "device-strategy-tables-int64s create-write" [
+export def "write-int64-table" [
   table_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1062,7 +1062,7 @@ export def "device-strategy-tables-int64s create-write" [
 #
 # GET /device/strategy/tables/int64s/{tableName}/_string
 # operationId: readInt64TableAsString
-export def "device-strategy-tables-int64s-string get" [
+export def "read-int64-table-as-string" [
   table_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1101,7 +1101,7 @@ export def "device-strategy-tables-int64s-string get" [
 #
 # POST /device/strategy/tables/int64s/{tableName}/_string
 # operationId: writeInt64TableAsString
-export def "device-strategy-tables-int64s-string create-write" [
+export def "write-int64-table-as-string" [
   table_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1143,7 +1143,7 @@ export def "device-strategy-tables-int64s-string create-write" [
 #
 # GET /device/strategy/tables/int64s/{tableName}/{index}
 # operationId: readInt64TableElement
-export def "device-strategy-tables-int64s get-element" [
+export def "read-int64-table-element" [
   table_name: string
   index: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1181,7 +1181,7 @@ export def "device-strategy-tables-int64s get-element" [
 #
 # POST /device/strategy/tables/int64s/{tableName}/{index}
 # operationId: writeInt64TableElement
-export def "device-strategy-tables-int64s create-write-element" [
+export def "write-int64-table-element" [
   table_name: string
   index: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1223,7 +1223,7 @@ export def "device-strategy-tables-int64s create-write-element" [
 #
 # GET /device/strategy/tables/int64s/{tableName}/{index}/_string
 # operationId: readInt64TableElementAsString
-export def "device-strategy-tables-int64s-string get-element" [
+export def "read-int64-table-element-as-string" [
   table_name: string
   index: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1261,7 +1261,7 @@ export def "device-strategy-tables-int64s-string get-element" [
 #
 # POST /device/strategy/tables/int64s/{tableName}/{index}/_string
 # operationId: writeInt64TableElementAsString
-export def "device-strategy-tables-int64s-string create-write-element" [
+export def "write-int64-table-element-as-string" [
   table_name: string
   index: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1303,7 +1303,7 @@ export def "device-strategy-tables-int64s-string create-write-element" [
 #
 # GET /device/strategy/tables/strings
 # operationId: readStringTables
-export def "device-strategy-tables-strings list" [
+export def "read-string-tables" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1337,7 +1337,7 @@ export def "device-strategy-tables-strings list" [
 #
 # GET /device/strategy/tables/strings/{tableName}
 # operationId: readStringTable
-export def "device-strategy-tables-strings get" [
+export def "read-string-table" [
   table_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1376,7 +1376,7 @@ export def "device-strategy-tables-strings get" [
 #
 # POST /device/strategy/tables/strings/{tableName}
 # operationId: writeStringTable
-export def "device-strategy-tables-strings create-write" [
+export def "write-string-table" [
   table_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1418,7 +1418,7 @@ export def "device-strategy-tables-strings create-write" [
 #
 # GET /device/strategy/tables/strings/{tableName}/{index}
 # operationId: readStringTableElement
-export def "device-strategy-tables-strings get-element" [
+export def "read-string-table-element" [
   table_name: string
   index: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1456,7 +1456,7 @@ export def "device-strategy-tables-strings get-element" [
 #
 # POST /device/strategy/tables/strings/{tableName}/{index}
 # operationId: writeStringTableElement
-export def "device-strategy-tables-strings create-write-element" [
+export def "write-string-table-element" [
   table_name: string
   index: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1498,7 +1498,7 @@ export def "device-strategy-tables-strings create-write-element" [
 #
 # GET /device/strategy/vars/downTimers
 # operationId: readDownTimerVars
-export def "device-strategy-vars-down-timers get" [
+export def "read-down-timer-vars" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1532,7 +1532,7 @@ export def "device-strategy-vars-down-timers get" [
 #
 # GET /device/strategy/vars/downTimers/{downTimerName}/value
 # operationId: readDownTimerValue
-export def "device-strategy-vars-down-timers-value get" [
+export def "read-down-timer-value" [
   down_timer_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1568,7 +1568,7 @@ export def "device-strategy-vars-down-timers-value get" [
 #
 # GET /device/strategy/vars/floats
 # operationId: readFloatVars
-export def "device-strategy-vars-floats list" [
+export def "read-float-vars" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1602,7 +1602,7 @@ export def "device-strategy-vars-floats list" [
 #
 # GET /device/strategy/vars/floats/{floatName}
 # operationId: readFloatVar
-export def "device-strategy-vars-floats get" [
+export def "read-float-var" [
   float_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1638,7 +1638,7 @@ export def "device-strategy-vars-floats get" [
 #
 # POST /device/strategy/vars/floats/{floatName}
 # operationId: writeFloatVar
-export def "device-strategy-vars-floats create-write" [
+export def "write-float-var" [
   float_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1678,7 +1678,7 @@ export def "device-strategy-vars-floats create-write" [
 #
 # GET /device/strategy/vars/int32s
 # operationId: readInt32Vars
-export def "device-strategy-vars-int32s list" [
+export def "read-int32-vars" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1712,7 +1712,7 @@ export def "device-strategy-vars-int32s list" [
 #
 # GET /device/strategy/vars/int32s/{int32Name}
 # operationId: readInt32Var
-export def "device-strategy-vars-int32s get" [
+export def "read-int32-var" [
   int32_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1748,7 +1748,7 @@ export def "device-strategy-vars-int32s get" [
 #
 # POST /device/strategy/vars/int32s/{int32Name}
 # operationId: writeInt32Var
-export def "device-strategy-vars-int32s create-write" [
+export def "write-int32-var" [
   int32_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1788,7 +1788,7 @@ export def "device-strategy-vars-int32s create-write" [
 #
 # GET /device/strategy/vars/int64s
 # operationId: readInt64Vars
-export def "device-strategy-vars-int64s list" [
+export def "read-int64-vars" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1822,7 +1822,7 @@ export def "device-strategy-vars-int64s list" [
 #
 # GET /device/strategy/vars/int64s/_string
 # operationId: readInt64VarsAsStrings
-export def "device-strategy-vars-int64s-string list" [
+export def "read-int64-vars-as-strings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1856,7 +1856,7 @@ export def "device-strategy-vars-int64s-string list" [
 #
 # GET /device/strategy/vars/int64s/{int64Name}
 # operationId: readInt64Var
-export def "device-strategy-vars-int64s get" [
+export def "read-int64-var" [
   int64_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1892,7 +1892,7 @@ export def "device-strategy-vars-int64s get" [
 #
 # POST /device/strategy/vars/int64s/{int64Name}
 # operationId: writeInt64Var
-export def "device-strategy-vars-int64s create-write" [
+export def "write-int64-var" [
   int64_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1932,7 +1932,7 @@ export def "device-strategy-vars-int64s create-write" [
 #
 # GET /device/strategy/vars/int64s/{int64Name}/_string
 # operationId: readInt64VarAsString
-export def "device-strategy-vars-int64s-string get" [
+export def "read-int64-var-as-string" [
   int64_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1968,7 +1968,7 @@ export def "device-strategy-vars-int64s-string get" [
 #
 # POST /device/strategy/vars/int64s/{int64Name}/_string
 # operationId: writeInt64VarAsString
-export def "device-strategy-vars-int64s-string create-write" [
+export def "write-int64-var-as-string" [
   int64_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2008,7 +2008,7 @@ export def "device-strategy-vars-int64s-string create-write" [
 #
 # GET /device/strategy/vars/strings
 # operationId: readStringVars
-export def "device-strategy-vars-strings list" [
+export def "read-string-vars" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2042,7 +2042,7 @@ export def "device-strategy-vars-strings list" [
 #
 # GET /device/strategy/vars/strings/{stringName}
 # operationId: readStringVar
-export def "device-strategy-vars-strings get" [
+export def "read-string-var" [
   string_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2078,7 +2078,7 @@ export def "device-strategy-vars-strings get" [
 #
 # POST /device/strategy/vars/strings/{stringName}
 # operationId: writeStringVar
-export def "device-strategy-vars-strings create-write" [
+export def "write-string-var" [
   string_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2118,7 +2118,7 @@ export def "device-strategy-vars-strings create-write" [
 #
 # GET /device/strategy/vars/upTimers
 # operationId: readUpTimerVars
-export def "device-strategy-vars-up-timers get" [
+export def "read-up-timer-vars" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2152,7 +2152,7 @@ export def "device-strategy-vars-up-timers get" [
 #
 # GET /device/strategy/vars/upTimers/{upTimerName}/value
 # operationId: readUpTimerValue
-export def "device-strategy-vars-up-timers-value get" [
+export def "read-up-timer-value" [
   up_timer_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

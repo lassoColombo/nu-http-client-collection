@@ -97,7 +97,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "creator-roles list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "creator-roles-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -121,7 +121,7 @@ export def commands []: nothing -> table {
 #
 # GET /creator-roles
 # operationId: creator-roles_list
-export def "creator-roles list" [
+export def "creator-roles-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -158,7 +158,7 @@ export def "creator-roles list" [
 #
 # GET /creators
 # operationId: creators_list
-export def "creators list" [
+export def "creators-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -195,7 +195,7 @@ export def "creators list" [
 #
 # GET /creators/{id}
 # operationId: creators_read
-export def "creators get" [
+export def "creators-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -231,7 +231,7 @@ export def "creators get" [
 #
 # GET /developers
 # operationId: developers_list
-export def "developers list" [
+export def "developers-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -268,7 +268,7 @@ export def "developers list" [
 #
 # GET /developers/{id}
 # operationId: developers_read
-export def "developers get" [
+export def "developers-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -304,7 +304,7 @@ export def "developers get" [
 #
 # GET /games
 # operationId: games_list
-export def "games list" [
+export def "games-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -362,7 +362,7 @@ export def "games list" [
 #
 # GET /games/{game_pk}/additions
 # operationId: games_additions_list
-export def "games-additions list" [
+export def "games-additions-list" [
   game_pk: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -401,7 +401,7 @@ export def "games-additions list" [
 #
 # GET /games/{game_pk}/development-team
 # operationId: games_development-team_list
-export def "games-development-team list" [
+export def "games-development-team-list" [
   game_pk: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -441,7 +441,7 @@ export def "games-development-team list" [
 #
 # GET /games/{game_pk}/game-series
 # operationId: games_game-series_list
-export def "games-game-series list" [
+export def "games-game-series-list" [
   game_pk: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -480,7 +480,7 @@ export def "games-game-series list" [
 #
 # GET /games/{game_pk}/parent-games
 # operationId: games_parent-games_list
-export def "games-parent-games list" [
+export def "games-parent-games-list" [
   game_pk: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -519,7 +519,7 @@ export def "games-parent-games list" [
 #
 # GET /games/{game_pk}/screenshots
 # operationId: games_screenshots_list
-export def "games-screenshots list" [
+export def "games-screenshots-list" [
   game_pk: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -559,7 +559,7 @@ export def "games-screenshots list" [
 #
 # GET /games/{game_pk}/stores
 # operationId: games_stores_list
-export def "games-stores list" [
+export def "games-stores-list" [
   game_pk: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -599,7 +599,7 @@ export def "games-stores list" [
 #
 # GET /games/{id}
 # operationId: games_read
-export def "games get" [
+export def "games-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -635,7 +635,7 @@ export def "games get" [
 #
 # GET /games/{id}/achievements
 # operationId: games_achievements_read
-export def "games-achievements get" [
+export def "games-achievements-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -671,7 +671,7 @@ export def "games-achievements get" [
 #
 # GET /games/{id}/movies
 # operationId: games_movies_read
-export def "games-movies get" [
+export def "games-movies-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -707,7 +707,7 @@ export def "games-movies get" [
 #
 # GET /games/{id}/reddit
 # operationId: games_reddit_read
-export def "games-reddit get" [
+export def "games-reddit-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -743,7 +743,7 @@ export def "games-reddit get" [
 #
 # GET /games/{id}/suggested
 # operationId: games_suggested_read
-export def "games-suggested get" [
+export def "games-suggested-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -779,7 +779,7 @@ export def "games-suggested get" [
 #
 # GET /games/{id}/twitch
 # operationId: games_twitch_read
-export def "games-twitch get" [
+export def "games-twitch-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -815,7 +815,7 @@ export def "games-twitch get" [
 #
 # GET /games/{id}/youtube
 # operationId: games_youtube_read
-export def "games-youtube get" [
+export def "games-youtube-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -851,7 +851,7 @@ export def "games-youtube get" [
 #
 # GET /genres
 # operationId: genres_list
-export def "genres list" [
+export def "genres-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -889,7 +889,7 @@ export def "genres list" [
 #
 # GET /genres/{id}
 # operationId: genres_read
-export def "genres get" [
+export def "genres-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -925,7 +925,7 @@ export def "genres get" [
 #
 # GET /platforms
 # operationId: platforms_list
-export def "platforms list" [
+export def "platforms-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -963,7 +963,7 @@ export def "platforms list" [
 #
 # GET /platforms/lists/parents
 # operationId: platforms_lists_parents_list
-export def "platforms-lists-parents list" [
+export def "platforms-lists-parents-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1001,7 +1001,7 @@ export def "platforms-lists-parents list" [
 #
 # GET /platforms/{id}
 # operationId: platforms_read
-export def "platforms get" [
+export def "platforms-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1037,7 +1037,7 @@ export def "platforms get" [
 #
 # GET /publishers
 # operationId: publishers_list
-export def "publishers list" [
+export def "publishers-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1074,7 +1074,7 @@ export def "publishers list" [
 #
 # GET /publishers/{id}
 # operationId: publishers_read
-export def "publishers get" [
+export def "publishers-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1110,7 +1110,7 @@ export def "publishers get" [
 #
 # GET /stores
 # operationId: stores_list
-export def "stores list" [
+export def "stores-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1148,7 +1148,7 @@ export def "stores list" [
 #
 # GET /stores/{id}
 # operationId: stores_read
-export def "stores get" [
+export def "stores-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1184,7 +1184,7 @@ export def "stores get" [
 #
 # GET /tags
 # operationId: tags_list
-export def "tags list" [
+export def "tags-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1221,7 +1221,7 @@ export def "tags list" [
 #
 # GET /tags/{id}
 # operationId: tags_read
-export def "tags get" [
+export def "tags-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

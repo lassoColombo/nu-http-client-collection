@@ -97,7 +97,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "restrooms get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-v1-restrooms" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -121,7 +121,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/restrooms
 # operationId: getV1Restrooms
-export def "restrooms get" [
+export def "get-v1-restrooms" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -161,7 +161,7 @@ export def "restrooms get" [
 #
 # GET /v1/restrooms/by_date
 # operationId: getV1RestroomsByDate
-export def "restrooms-by-date get" [
+export def "get-v1-restrooms-by-date" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -205,7 +205,7 @@ export def "restrooms-by-date get" [
 #
 # GET /v1/restrooms/by_location
 # operationId: getV1RestroomsByLocation
-export def "restrooms-by-location get" [
+export def "get-v1-restrooms-by-location" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -247,7 +247,7 @@ export def "restrooms-by-location get" [
 #
 # GET /v1/restrooms/search
 # operationId: getV1RestroomsSearch
-export def "restrooms-search get" [
+export def "get-v1-restrooms-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

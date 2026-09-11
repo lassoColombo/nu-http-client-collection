@@ -113,7 +113,7 @@ def content-type-completer [] { ["application/json"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "me get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-me" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -136,7 +136,7 @@ export def commands []: nothing -> table {
 # Provides information about the signed in user.
 #
 # GET /me
-export def "me get" [
+export def "get-me" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -169,7 +169,7 @@ export def "me get" [
 # Build summary for each of the last 30 builds for a single git repo.
 #
 # GET /project/{username}/{project}
-export def "project list" [
+export def "get-project-username-project" [
   username: any
   project: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -210,7 +210,7 @@ export def "project list" [
 # Triggers a new build, returns a summary of the build.
 #
 # POST /project/{username}/{project}
-export def "project create" [
+export def "post-project-username-project" [
   username: string
   project: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -254,7 +254,7 @@ export def "project create" [
 # Clears the cache for a project.
 #
 # DELETE /project/{username}/{project}/build-cache
-export def "project-build-cache delete" [
+export def "delete-project-username-project-build-cache" [
   username: string
   project: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -291,7 +291,7 @@ export def "project-build-cache delete" [
 # Lists checkout keys.
 #
 # GET /project/{username}/{project}/checkout-key
-export def "project-checkout-key list" [
+export def "get-project-username-project-checkout-key" [
   username: string
   project: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -328,7 +328,7 @@ export def "project-checkout-key list" [
 # Creates a new checkout key. Only usable with a user API token.
 #
 # POST /project/{username}/{project}/checkout-key
-export def "project-checkout-key create" [
+export def "post-project-username-project-checkout-key" [
   username: string
   project: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -369,7 +369,7 @@ export def "project-checkout-key create" [
 # Delete a checkout key.
 #
 # DELETE /project/{username}/{project}/checkout-key/{fingerprint}
-export def "project-checkout-key delete" [
+export def "delete-project-username-project-checkout-key-fingerprint" [
   username: string
   project: string
   fingerprint: string
@@ -408,7 +408,7 @@ export def "project-checkout-key delete" [
 # Get a checkout key.
 #
 # GET /project/{username}/{project}/checkout-key/{fingerprint}
-export def "project-checkout-key get" [
+export def "get-project-username-project-checkout-key-fingerprint" [
   username: string
   project: string
   fingerprint: string
@@ -447,7 +447,7 @@ export def "project-checkout-key get" [
 # Lists the environment variables for :project
 #
 # GET /project/{username}/{project}/envvar
-export def "project-envvar list" [
+export def "get-project-username-project-envvar" [
   username: string
   project: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -484,7 +484,7 @@ export def "project-envvar list" [
 # Creates a new environment variable
 #
 # POST /project/{username}/{project}/envvar
-export def "project-envvar create" [
+export def "post-project-username-project-envvar" [
   username: string
   project: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -521,7 +521,7 @@ export def "project-envvar create" [
 # Deletes the environment variable named ':name'
 #
 # DELETE /project/{username}/{project}/envvar/{name}
-export def "project-envvar delete" [
+export def "delete-project-username-project-envvar-name" [
   username: string
   project: string
   name: string
@@ -560,7 +560,7 @@ export def "project-envvar delete" [
 # Gets the hidden value of environment variable :name
 #
 # GET /project/{username}/{project}/envvar/{name}
-export def "project-envvar get" [
+export def "get-project-username-project-envvar-name" [
   username: string
   project: string
   name: string
@@ -599,7 +599,7 @@ export def "project-envvar get" [
 # Create an ssh key used to access external systems that require SSH key-based authentication
 #
 # POST /project/{username}/{project}/ssh-key
-export def "project-ssh-key create" [
+export def "post-project-username-project-ssh-key" [
   username: string
   project: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -646,7 +646,7 @@ export def "project-ssh-key create" [
 # Triggers a new build, returns a summary of the build. Optional build parameters can be set using an experimental API. Note: For more about build parameters, read about [using parameterized builds](https://circleci.com/docs/parameterized-builds/)
 #
 # POST /project/{username}/{project}/tree/{branch}
-export def "project-tree create" [
+export def "post-project-username-project-tree-branch" [
   username: string
   project: string
   branch: string
@@ -691,7 +691,7 @@ export def "project-tree create" [
 # Full details for a single build. The response includes all of the fields from the build summary. This is also the payload for the [notification webhooks](/docs/configuration/#notify), in which case this object is the value to a key named 'payload'.
 #
 # GET /project/{username}/{project}/{build_num}
-export def "project get" [
+export def "get-project-username-project-build-num" [
   username: string
   project: string
   build_num: int
@@ -730,7 +730,7 @@ export def "project get" [
 # List the artifacts produced by a given build.
 #
 # GET /project/{username}/{project}/{build_num}/artifacts
-export def "project-artifacts get" [
+export def "get-project-username-project-build-num-artifacts" [
   username: string
   project: string
   build_num: int
@@ -769,7 +769,7 @@ export def "project-artifacts get" [
 # Cancels the build, returns a summary of the build.
 #
 # POST /project/{username}/{project}/{build_num}/cancel
-export def "project-cancel create" [
+export def "post-project-username-project-build-num-cancel" [
   username: string
   project: string
   build_num: int
@@ -808,7 +808,7 @@ export def "project-cancel create" [
 # Retries the build, returns a summary of the new build.
 #
 # POST /project/{username}/{project}/{build_num}/retry
-export def "project-retry create" [
+export def "post-project-username-project-build-num-retry" [
   username: string
   project: string
   build_num: int
@@ -847,7 +847,7 @@ export def "project-retry create" [
 # Provides test metadata for a build Note: [Learn how to set up your builds to collect test metadata](https://circleci.com/docs/test-metadata/)
 #
 # GET /project/{username}/{project}/{build_num}/tests
-export def "project-tests get" [
+export def "get-project-username-project-build-num-tests" [
   username: string
   project: string
   build_num: int
@@ -886,7 +886,7 @@ export def "project-tests get" [
 # List of all the projects you're following on CircleCI, with build information organized by branch.
 #
 # GET /projects
-export def "projects get" [
+export def "get-projects" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -919,7 +919,7 @@ export def "projects get" [
 # Build summary for each of the last 30 recent builds, ordered by build_num.
 #
 # GET /recent-builds
-export def "recent-builds get" [
+export def "get-recent-builds" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -955,7 +955,7 @@ export def "recent-builds get" [
 # Adds your Heroku API key to CircleCI, takes apikey as form param name.
 #
 # POST /user/heroku-key
-export def "user-heroku-key create" [
+export def "post-user-heroku-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -160,7 +160,7 @@ def x-amz-target-completer-59 [] { ["AmazonAthena.UpdateWorkGroup"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api get-batch-named-list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "batch-get-named-query" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -184,7 +184,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: BatchGetNamedQuery
-export def "api get-batch-named-list" [
+export def "batch-get-named-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -232,7 +232,7 @@ export def "api get-batch-named-list" [
 #
 # POST /
 # operationId: BatchGetPreparedStatement
-export def "api get-batch-prepared-statement" [
+export def "batch-get-prepared-statement" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -281,7 +281,7 @@ export def "api get-batch-prepared-statement" [
 #
 # POST /
 # operationId: BatchGetQueryExecution
-export def "api get-batch-list-execution" [
+export def "batch-get-query-execution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -329,7 +329,7 @@ export def "api get-batch-list-execution" [
 #
 # POST /
 # operationId: CreateDataCatalog
-export def "api create-data-catalog" [
+export def "create-data-catalog" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -381,7 +381,7 @@ export def "api create-data-catalog" [
 #
 # POST /
 # operationId: CreateNamedQuery
-export def "api create-named-list" [
+export def "create-named-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -434,7 +434,7 @@ export def "api create-named-list" [
 #
 # POST /
 # operationId: CreateNotebook
-export def "api create-notebook" [
+export def "create-notebook" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -484,7 +484,7 @@ export def "api create-notebook" [
 #
 # POST /
 # operationId: CreatePreparedStatement
-export def "api create-prepared-statement" [
+export def "create-prepared-statement" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -535,7 +535,7 @@ export def "api create-prepared-statement" [
 #
 # POST /
 # operationId: CreatePresignedNotebookUrl
-export def "api create-presigned-notebook-url" [
+export def "create-presigned-notebook-url" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -583,7 +583,7 @@ export def "api create-presigned-notebook-url" [
 #
 # POST /
 # operationId: CreateWorkGroup
-export def "api create-work-group" [
+export def "create-work-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -634,7 +634,7 @@ export def "api create-work-group" [
 #
 # POST /
 # operationId: DeleteDataCatalog
-export def "api delete-data-catalog" [
+export def "delete-data-catalog" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -682,7 +682,7 @@ export def "api delete-data-catalog" [
 #
 # POST /
 # operationId: DeleteNamedQuery
-export def "api delete-named-list" [
+export def "delete-named-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -730,7 +730,7 @@ export def "api delete-named-list" [
 #
 # POST /
 # operationId: DeleteNotebook
-export def "api delete-notebook" [
+export def "delete-notebook" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -778,7 +778,7 @@ export def "api delete-notebook" [
 #
 # POST /
 # operationId: DeletePreparedStatement
-export def "api delete-prepared-statement" [
+export def "delete-prepared-statement" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -827,7 +827,7 @@ export def "api delete-prepared-statement" [
 #
 # POST /
 # operationId: DeleteWorkGroup
-export def "api delete-work-group" [
+export def "delete-work-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -876,7 +876,7 @@ export def "api delete-work-group" [
 #
 # POST /
 # operationId: ExportNotebook
-export def "api export-notebook" [
+export def "export-notebook" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -924,7 +924,7 @@ export def "api export-notebook" [
 #
 # POST /
 # operationId: GetCalculationExecution
-export def "api get-calculation-execution" [
+export def "get-calculation-execution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -972,7 +972,7 @@ export def "api get-calculation-execution" [
 #
 # POST /
 # operationId: GetCalculationExecutionCode
-export def "api get-calculation-execution-code" [
+export def "get-calculation-execution-code" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1020,7 +1020,7 @@ export def "api get-calculation-execution-code" [
 #
 # POST /
 # operationId: GetCalculationExecutionStatus
-export def "api get-calculation-execution-status" [
+export def "get-calculation-execution-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1068,7 +1068,7 @@ export def "api get-calculation-execution-status" [
 #
 # POST /
 # operationId: GetDataCatalog
-export def "api get-data-catalog" [
+export def "get-data-catalog" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1116,7 +1116,7 @@ export def "api get-data-catalog" [
 #
 # POST /
 # operationId: GetDatabase
-export def "api get-database" [
+export def "get-database" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1165,7 +1165,7 @@ export def "api get-database" [
 #
 # POST /
 # operationId: GetNamedQuery
-export def "api get-named-list" [
+export def "get-named-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1213,7 +1213,7 @@ export def "api get-named-list" [
 #
 # POST /
 # operationId: GetNotebookMetadata
-export def "api get-notebook-metadata" [
+export def "get-notebook-metadata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1261,7 +1261,7 @@ export def "api get-notebook-metadata" [
 #
 # POST /
 # operationId: GetPreparedStatement
-export def "api get-prepared-statement" [
+export def "get-prepared-statement" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1310,7 +1310,7 @@ export def "api get-prepared-statement" [
 #
 # POST /
 # operationId: GetQueryExecution
-export def "api get-list-execution" [
+export def "get-query-execution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1358,7 +1358,7 @@ export def "api get-list-execution" [
 #
 # POST /
 # operationId: GetQueryResults
-export def "api get-list-results" [
+export def "get-query-results" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1411,7 +1411,7 @@ export def "api get-list-results" [
 #
 # POST /
 # operationId: GetQueryRuntimeStatistics
-export def "api get-list-runtime-statistics" [
+export def "get-query-runtime-statistics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1459,7 +1459,7 @@ export def "api get-list-runtime-statistics" [
 #
 # POST /
 # operationId: GetSession
-export def "api get-session" [
+export def "get-session" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1507,7 +1507,7 @@ export def "api get-session" [
 #
 # POST /
 # operationId: GetSessionStatus
-export def "api get-session-status" [
+export def "get-session-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1555,7 +1555,7 @@ export def "api get-session-status" [
 #
 # POST /
 # operationId: GetTableMetadata
-export def "api get-table-metadata" [
+export def "get-table-metadata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1605,7 +1605,7 @@ export def "api get-table-metadata" [
 #
 # POST /
 # operationId: GetWorkGroup
-export def "api get-work-group" [
+export def "get-work-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1653,7 +1653,7 @@ export def "api get-work-group" [
 #
 # POST /
 # operationId: ImportNotebook
-export def "api import-notebook" [
+export def "import-notebook" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1705,7 +1705,7 @@ export def "api import-notebook" [
 #
 # POST /
 # operationId: ListApplicationDPUSizes
-export def "api list-application-dpu-sizes" [
+export def "list-application-dpu-sizes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1757,7 +1757,7 @@ export def "api list-application-dpu-sizes" [
 #
 # POST /
 # operationId: ListCalculationExecutions
-export def "api list-calculation-executions" [
+export def "list-calculation-executions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1811,7 +1811,7 @@ export def "api list-calculation-executions" [
 #
 # POST /
 # operationId: ListDataCatalogs
-export def "api list-data-catalogs" [
+export def "list-data-catalogs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1863,7 +1863,7 @@ export def "api list-data-catalogs" [
 #
 # POST /
 # operationId: ListDatabases
-export def "api list-databases" [
+export def "list-databases" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1916,7 +1916,7 @@ export def "api list-databases" [
 #
 # POST /
 # operationId: ListEngineVersions
-export def "api list-engine-versions" [
+export def "list-engine-versions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1968,7 +1968,7 @@ export def "api list-engine-versions" [
 #
 # POST /
 # operationId: ListExecutors
-export def "api list-executors" [
+export def "list-executors" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2022,7 +2022,7 @@ export def "api list-executors" [
 #
 # POST /
 # operationId: ListNamedQueries
-export def "api list-named-queries" [
+export def "list-named-queries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2075,7 +2075,7 @@ export def "api list-named-queries" [
 #
 # POST /
 # operationId: ListNotebookMetadata
-export def "api list-notebook-metadata" [
+export def "list-notebook-metadata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2126,7 +2126,7 @@ export def "api list-notebook-metadata" [
 #
 # POST /
 # operationId: ListNotebookSessions
-export def "api list-notebook-sessions" [
+export def "list-notebook-sessions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2176,7 +2176,7 @@ export def "api list-notebook-sessions" [
 #
 # POST /
 # operationId: ListPreparedStatements
-export def "api list-prepared-statements" [
+export def "list-prepared-statements" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2229,7 +2229,7 @@ export def "api list-prepared-statements" [
 #
 # POST /
 # operationId: ListQueryExecutions
-export def "api list-executions" [
+export def "list-query-executions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2282,7 +2282,7 @@ export def "api list-executions" [
 #
 # POST /
 # operationId: ListSessions
-export def "api list-sessions" [
+export def "list-sessions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2336,7 +2336,7 @@ export def "api list-sessions" [
 #
 # POST /
 # operationId: ListTableMetadata
-export def "api list-table-metadata" [
+export def "list-table-metadata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2391,7 +2391,7 @@ export def "api list-table-metadata" [
 #
 # POST /
 # operationId: ListTagsForResource
-export def "api list-tags-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2444,7 +2444,7 @@ export def "api list-tags-for-resource" [
 #
 # POST /
 # operationId: ListWorkGroups
-export def "api list-work-groups" [
+export def "list-work-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2496,7 +2496,7 @@ export def "api list-work-groups" [
 #
 # POST /
 # operationId: StartCalculationExecution
-export def "api start-calculation-execution" [
+export def "start-calculation-execution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2548,7 +2548,7 @@ export def "api start-calculation-execution" [
 #
 # POST /
 # operationId: StartQueryExecution
-export def "api start-list-execution" [
+export def "start-query-execution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2602,7 +2602,7 @@ export def "api start-list-execution" [
 #
 # POST /
 # operationId: StartSession
-export def "api start-session" [
+export def "start-session" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2655,7 +2655,7 @@ export def "api start-session" [
 #
 # POST /
 # operationId: StopCalculationExecution
-export def "api stop-calculation-execution" [
+export def "stop-calculation-execution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2703,7 +2703,7 @@ export def "api stop-calculation-execution" [
 #
 # POST /
 # operationId: StopQueryExecution
-export def "api stop-list-execution" [
+export def "stop-query-execution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2751,7 +2751,7 @@ export def "api stop-list-execution" [
 #
 # POST /
 # operationId: TagResource
-export def "api tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2800,7 +2800,7 @@ export def "api tag-resource" [
 #
 # POST /
 # operationId: TerminateSession
-export def "api create-terminate-session" [
+export def "terminate-session" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2848,7 +2848,7 @@ export def "api create-terminate-session" [
 #
 # POST /
 # operationId: UntagResource
-export def "api untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2897,7 +2897,7 @@ export def "api untag-resource" [
 #
 # POST /
 # operationId: UpdateDataCatalog
-export def "api update-data-catalog" [
+export def "update-data-catalog" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2948,7 +2948,7 @@ export def "api update-data-catalog" [
 #
 # POST /
 # operationId: UpdateNamedQuery
-export def "api update-named-list" [
+export def "update-named-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2999,7 +2999,7 @@ export def "api update-named-list" [
 #
 # POST /
 # operationId: UpdateNotebook
-export def "api update-notebook" [
+export def "update-notebook" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3051,7 +3051,7 @@ export def "api update-notebook" [
 #
 # POST /
 # operationId: UpdateNotebookMetadata
-export def "api update-notebook-metadata" [
+export def "update-notebook-metadata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3101,7 +3101,7 @@ export def "api update-notebook-metadata" [
 #
 # POST /
 # operationId: UpdatePreparedStatement
-export def "api update-prepared-statement" [
+export def "update-prepared-statement" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3152,7 +3152,7 @@ export def "api update-prepared-statement" [
 #
 # POST /
 # operationId: UpdateWorkGroup
-export def "api update-work-group" [
+export def "update-work-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

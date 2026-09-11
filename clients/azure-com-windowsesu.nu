@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-windows-esu-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.WindowsESU/operations
 # operationId: Operations_List
-export def "providers-microsoft-windows-esu-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -176,7 +176,7 @@ export def "providers-microsoft-windows-esu-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.WindowsESU/multipleActivationKeys
 # operationId: MultipleActivationKeys_List
-export def "subscriptions-providers-microsoft-windows-esu-multiple-activation-keys list" [
+export def "multiple-activation-keys-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -214,7 +214,7 @@ export def "subscriptions-providers-microsoft-windows-esu-multiple-activation-ke
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.WindowsESU/multipleActivationKeys
 # operationId: MultipleActivationKeys_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-windows-esu-multiple-activation-keys list" [
+export def "multiple-activation-keys-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -254,7 +254,7 @@ export def "subscriptions-resource-groups-providers-microsoft-windows-esu-multip
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.WindowsESU/multipleActivationKeys/{multipleActivationKeyName}
 # operationId: MultipleActivationKeys_Delete
-export def "subscriptions-resource-groups-providers-microsoft-windows-esu-multiple-activation-keys delete" [
+export def "multiple-activation-keys-delete" [
   subscription_id: string
   resource_group_name: string
   multiple_activation_key_name: string
@@ -296,7 +296,7 @@ export def "subscriptions-resource-groups-providers-microsoft-windows-esu-multip
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.WindowsESU/multipleActivationKeys/{multipleActivationKeyName}
 # operationId: MultipleActivationKeys_Get
-export def "subscriptions-resource-groups-providers-microsoft-windows-esu-multiple-activation-keys get" [
+export def "multiple-activation-keys-get" [
   subscription_id: string
   resource_group_name: string
   multiple_activation_key_name: string
@@ -338,7 +338,7 @@ export def "subscriptions-resource-groups-providers-microsoft-windows-esu-multip
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.WindowsESU/multipleActivationKeys/{multipleActivationKeyName}
 # operationId: MultipleActivationKeys_Update
-export def "subscriptions-resource-groups-providers-microsoft-windows-esu-multiple-activation-keys update" [
+export def "multiple-activation-keys-update" [
   subscription_id: string
   resource_group_name: string
   multiple_activation_key_name: string
@@ -385,7 +385,7 @@ export def "subscriptions-resource-groups-providers-microsoft-windows-esu-multip
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.WindowsESU/multipleActivationKeys/{multipleActivationKeyName}
 # operationId: MultipleActivationKeys_Create
 # --properties shape: {agreementNumber?: string, installedServerNumber?: int, isEligible?: bool, osType?: "Windows7"|"WindowsServer2008"|"WindowsServer2008R2", supportType?: "SupplementalServicing"|"PremiumAssurance"}
-export def "subscriptions-resource-groups-providers-microsoft-windows-esu-multiple-activation-keys create" [
+export def "multiple-activation-keys-create" [
   subscription_id: string
   resource_group_name: string
   multiple_activation_key_name: string

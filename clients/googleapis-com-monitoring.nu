@@ -129,7 +129,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "locations-global-metrics-scopes-list-metrics-scopes-by-monitored-project list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "monitoring-locations-global-metrics-scopes-list-metrics-scopes-by-monitored-project" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -153,7 +153,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/locations/global/metricsScopes:listMetricsScopesByMonitoredProject
 # operationId: monitoring.locations.global.metricsScopes.listMetricsScopesByMonitoredProject
-export def "locations-global-metrics-scopes-list-metrics-scopes-by-monitored-project list" [
+export def "monitoring-locations-global-metrics-scopes-list-metrics-scopes-by-monitored-project" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -200,7 +200,7 @@ export def "locations-global-metrics-scopes-list-metrics-scopes-by-monitored-pro
 #
 # DELETE /v1/{name}
 # operationId: monitoring.projects.dashboards.delete
-export def "projects delete" [
+export def "monitoring-projects-dashboards-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -248,7 +248,7 @@ export def "projects delete" [
 #
 # GET /v1/{name}
 # operationId: monitoring.projects.dashboards.get
-export def "projects get" [
+export def "monitoring-projects-dashboards-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -301,7 +301,7 @@ export def "projects get" [
 # --gridLayout shape: {columns?: string, widgets?: list}
 # --mosaicLayout shape: {columns?: int, tiles?: list}
 # --rowLayout shape: {rows?: list}
-export def "projects update" [
+export def "monitoring-projects-dashboards-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -362,7 +362,7 @@ export def "projects update" [
 #
 # GET /v1/{name}/location/{location}/prometheus/api/v1/label/{label}/values
 # operationId: monitoring.projects.location.prometheus.api.v1.label.values
-export def "location-prometheus-label-values get" [
+export def "monitoring-projects-location-prometheus-api-v1-label-values" [
   name: string
   location: string
   label: string
@@ -417,7 +417,7 @@ export def "location-prometheus-label-values get" [
 #
 # GET /v1/{name}/location/{location}/prometheus/api/v1/labels
 # operationId: monitoring.projects.location.prometheus.api.v1.labels.list
-export def "location-prometheus-labels list" [
+export def "monitoring-projects-location-prometheus-api-v1-labels-list" [
   name: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -470,7 +470,7 @@ export def "location-prometheus-labels list" [
 #
 # POST /v1/{name}/location/{location}/prometheus/api/v1/labels
 # operationId: monitoring.projects.location.prometheus.api.v1.labels
-export def "location-prometheus-labels create" [
+export def "monitoring-projects-location-prometheus-api-v1-labels" [
   name: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -526,7 +526,7 @@ export def "location-prometheus-labels create" [
 #
 # GET /v1/{name}/location/{location}/prometheus/api/v1/metadata
 # operationId: monitoring.projects.location.prometheus.api.v1.metadata.list
-export def "location-prometheus-metadata list" [
+export def "monitoring-projects-location-prometheus-api-v1-metadata-list" [
   name: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -578,7 +578,7 @@ export def "location-prometheus-metadata list" [
 #
 # POST /v1/{name}/location/{location}/prometheus/api/v1/query
 # operationId: monitoring.projects.location.prometheus.api.v1.query
-export def "location-prometheus-query list" [
+export def "monitoring-projects-location-prometheus-api-v1-query" [
   name: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -634,7 +634,7 @@ export def "location-prometheus-query list" [
 #
 # POST /v1/{name}/location/{location}/prometheus/api/v1/query_exemplars
 # operationId: monitoring.projects.location.prometheus.api.v1.query_exemplars
-export def "location-prometheus-query-exemplars list" [
+export def "monitoring-projects-location-prometheus-api-v1-query-exemplars" [
   name: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -690,7 +690,7 @@ export def "location-prometheus-query-exemplars list" [
 #
 # POST /v1/{name}/location/{location}/prometheus/api/v1/query_range
 # operationId: monitoring.projects.location.prometheus.api.v1.query_range
-export def "location-prometheus-query-range list" [
+export def "monitoring-projects-location-prometheus-api-v1-query-range" [
   name: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -748,7 +748,7 @@ export def "location-prometheus-query-range list" [
 #
 # POST /v1/{name}/location/{location}/prometheus/api/v1/series
 # operationId: monitoring.projects.location.prometheus.api.v1.series
-export def "location-prometheus-series create" [
+export def "monitoring-projects-location-prometheus-api-v1-series" [
   name: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -803,7 +803,7 @@ export def "location-prometheus-series create" [
 #
 # GET /v1/{parent}/dashboards
 # operationId: monitoring.projects.dashboards.list
-export def "dashboards list" [
+export def "monitoring-projects-dashboards-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -858,7 +858,7 @@ export def "dashboards list" [
 # --gridLayout shape: {columns?: string, widgets?: list}
 # --mosaicLayout shape: {columns?: int, tiles?: list}
 # --rowLayout shape: {rows?: list}
-export def "dashboards create" [
+export def "monitoring-projects-dashboards-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -919,7 +919,7 @@ export def "dashboards create" [
 #
 # POST /v1/{parent}/projects
 # operationId: monitoring.locations.global.metricsScopes.projects.create
-export def "projects create" [
+export def "monitoring-locations-global-metrics-scopes-projects-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

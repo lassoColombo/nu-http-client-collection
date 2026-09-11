@@ -123,7 +123,7 @@ def show-genres-completer [] { ["0" "1"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "best-podcasts get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-best-podcasts" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -147,7 +147,7 @@ export def commands []: nothing -> table {
 #
 # GET /best_podcasts
 # operationId: getBestPodcasts
-export def "best-podcasts get" [
+export def "get-best-podcasts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -192,7 +192,7 @@ export def "best-podcasts get" [
 #
 # GET /curated_podcasts
 # operationId: getCuratedPodcasts
-export def "curated-podcasts list" [
+export def "get-curated-podcasts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -231,7 +231,7 @@ export def "curated-podcasts list" [
 #
 # GET /curated_podcasts/{id}
 # operationId: getCuratedPodcastById
-export def "curated-podcasts get" [
+export def "get-curated-podcast-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -270,7 +270,7 @@ export def "curated-podcasts get" [
 #
 # POST /episodes
 # operationId: getEpisodesInBatch
-export def "episodes get-in-batch" [
+export def "get-episodes-in-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -312,7 +312,7 @@ export def "episodes get-in-batch" [
 #
 # GET /episodes/{id}
 # operationId: getEpisodeById
-export def "episodes get" [
+export def "get-episode-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -353,7 +353,7 @@ export def "episodes get" [
 #
 # GET /episodes/{id}/recommendations
 # operationId: getEpisodeRecommendations
-export def "episodes-recommendations get" [
+export def "get-episode-recommendations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -394,7 +394,7 @@ export def "episodes-recommendations get" [
 #
 # GET /genres
 # operationId: getGenres
-export def "genres get" [
+export def "get-genres" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -433,7 +433,7 @@ export def "genres get" [
 #
 # GET /just_listen
 # operationId: justListen
-export def "just-listen get" [
+export def "just-listen" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -470,7 +470,7 @@ export def "just-listen get" [
 #
 # GET /languages
 # operationId: getLanguages
-export def "languages get" [
+export def "get-languages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -507,7 +507,7 @@ export def "languages get" [
 #
 # GET /playlists
 # operationId: getPlaylists
-export def "playlists list" [
+export def "get-playlists" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -547,7 +547,7 @@ export def "playlists list" [
 #
 # GET /playlists/{id}
 # operationId: getPlaylistById
-export def "playlists get" [
+export def "get-playlist-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -590,7 +590,7 @@ export def "playlists get" [
 #
 # POST /podcasts
 # operationId: getPodcastsInBatch
-export def "podcasts get-in-batch" [
+export def "get-podcasts-in-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -637,7 +637,7 @@ export def "podcasts get-in-batch" [
 #
 # POST /podcasts/submit
 # operationId: submitPodcast
-export def "podcasts-submit submit" [
+export def "submit-podcast" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -680,7 +680,7 @@ export def "podcasts-submit submit" [
 #
 # DELETE /podcasts/{id}
 # operationId: deletePodcastById
-export def "podcasts delete" [
+export def "delete-podcast-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -721,7 +721,7 @@ export def "podcasts delete" [
 #
 # GET /podcasts/{id}
 # operationId: getPodcastById
-export def "podcasts get" [
+export def "get-podcast-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -763,7 +763,7 @@ export def "podcasts get" [
 #
 # GET /podcasts/{id}/audience
 # operationId: getPodcastAudience
-export def "podcasts-audience get" [
+export def "get-podcast-audience" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -802,7 +802,7 @@ export def "podcasts-audience get" [
 #
 # GET /podcasts/{id}/recommendations
 # operationId: getPodcastRecommendations
-export def "podcasts-recommendations get" [
+export def "get-podcast-recommendations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -843,7 +843,7 @@ export def "podcasts-recommendations get" [
 #
 # GET /regions
 # operationId: getRegions
-export def "regions get" [
+export def "get-regions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -880,7 +880,7 @@ export def "regions get" [
 #
 # GET /related_searches
 # operationId: getRelatedSearches
-export def "related-searches get" [
+export def "get-related-searches" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -919,7 +919,7 @@ export def "related-searches get" [
 #
 # GET /search
 # operationId: search
-export def "search list" [
+export def "search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -977,7 +977,7 @@ export def "search list" [
 #
 # GET /spellcheck
 # operationId: spellcheck
-export def "spellcheck get" [
+export def "spellcheck" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1016,7 +1016,7 @@ export def "spellcheck get" [
 #
 # GET /trending_searches
 # operationId: getTrendingSearches
-export def "trending-searches get" [
+export def "get-trending-searches" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1053,7 +1053,7 @@ export def "trending-searches get" [
 #
 # GET /typeahead
 # operationId: typeahead
-export def "typeahead get" [
+export def "typeahead" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

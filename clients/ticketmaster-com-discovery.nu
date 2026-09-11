@@ -107,7 +107,7 @@ def accept-completer [] { ["application/hal+json; charset=utf-8" "application/js
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "discovery-attractions find" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "find" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -131,7 +131,7 @@ export def commands []: nothing -> table {
 #
 # GET /discovery/v2/attractions
 # operationId: find
-export def "discovery-attractions find" [
+export def "find" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -178,7 +178,7 @@ export def "discovery-attractions find" [
 #
 # GET /discovery/v2/attractions/{id}
 # operationId: get
-export def "discovery-attractions get" [
+export def "get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -216,7 +216,7 @@ export def "discovery-attractions get" [
 # Classification Search
 #
 # GET /discovery/v2/classifications
-export def "discovery-classifications list" [
+export def "get-discovery-v2-classifications" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -261,7 +261,7 @@ export def "discovery-classifications list" [
 #
 # GET /discovery/v2/classifications/genres/{id}
 # operationId: getGenre
-export def "discovery-classifications-genres get" [
+export def "get-genre" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -300,7 +300,7 @@ export def "discovery-classifications-genres get" [
 #
 # GET /discovery/v2/classifications/segments/{id}
 # operationId: getSegment
-export def "discovery-classifications-segments get" [
+export def "get-segment" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -339,7 +339,7 @@ export def "discovery-classifications-segments get" [
 #
 # GET /discovery/v2/classifications/subgenres/{id}
 # operationId: getSubgenre
-export def "discovery-classifications-subgenres get" [
+export def "get-subgenre" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -377,7 +377,7 @@ export def "discovery-classifications-subgenres get" [
 # Get Classification Details
 #
 # GET /discovery/v2/classifications/{id}
-export def "discovery-classifications get" [
+export def "get-discovery-v2-classifications-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -415,7 +415,7 @@ export def "discovery-classifications get" [
 # Event Search
 #
 # GET /discovery/v2/events
-export def "discovery-events list" [
+export def "get-discovery-v2-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -485,7 +485,7 @@ export def "discovery-events list" [
 # Get Event Details
 #
 # GET /discovery/v2/events/{id}
-export def "discovery-events get" [
+export def "get-discovery-v2-events-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -524,7 +524,7 @@ export def "discovery-events get" [
 #
 # GET /discovery/v2/events/{id}/images
 # operationId: getImages
-export def "discovery-events-images get" [
+export def "get-images" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -562,7 +562,7 @@ export def "discovery-events-images get" [
 # Find Suggest
 #
 # GET /discovery/v2/suggest
-export def "discovery-suggest get" [
+export def "get-discovery-v2-suggest" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -613,7 +613,7 @@ export def "discovery-suggest get" [
 # Venue Search
 #
 # GET /discovery/v2/venues
-export def "discovery-venues list" [
+export def "get-discovery-v2-venues" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -663,7 +663,7 @@ export def "discovery-venues list" [
 # Get Venue Details
 #
 # GET /discovery/v2/venues/{id}
-export def "discovery-venues get" [
+export def "get-discovery-v2-venues-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

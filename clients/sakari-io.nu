@@ -148,7 +148,7 @@ def type-completer-1 [] { ["SMS" "Web"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "oauth2-token create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "auth-token" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -172,7 +172,7 @@ export def commands []: nothing -> table {
 #
 # POST /oauth2/token
 # operationId: auth.token
-export def "oauth2-token create" [
+export def "auth-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -212,7 +212,7 @@ export def "oauth2-token create" [
 #
 # GET /v1/accounts/{accountId}/campaigns
 # operationId: campaigns.fetchAll
-export def "accounts-campaigns get-list" [
+export def "campaigns-fetch-all" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -254,7 +254,7 @@ export def "accounts-campaigns get-list" [
 # operationId: campaigns.create
 # --filters shape: {attributes?: list<string>, contacts?: list<string>, tags?: list<string>}
 # --trigger shape: {code?: "M"|"S"|"FU"}
-export def "accounts-campaigns create" [
+export def "campaigns-create" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -296,7 +296,7 @@ export def "accounts-campaigns create" [
 #
 # DELETE /v1/accounts/{accountId}/campaigns/{campaignId}
 # operationId: campaigns.remove
-export def "accounts-campaigns delete" [
+export def "campaigns-remove" [
   account_id: string
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -334,7 +334,7 @@ export def "accounts-campaigns delete" [
 #
 # GET /v1/accounts/{accountId}/campaigns/{campaignId}
 # operationId: campaigns.fetch
-export def "accounts-campaigns get" [
+export def "campaigns-fetch" [
   account_id: string
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -372,7 +372,7 @@ export def "accounts-campaigns get" [
 #
 # PUT /v1/accounts/{accountId}/campaigns/{campaignId}
 # operationId: campaigns.update
-export def "accounts-campaigns update" [
+export def "campaigns-update" [
   account_id: string
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -410,7 +410,7 @@ export def "accounts-campaigns update" [
 #
 # GET /v1/accounts/{accountId}/contacts
 # operationId: contacts.fetchAll
-export def "accounts-contacts get-list" [
+export def "contacts-fetch-all" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -456,7 +456,7 @@ export def "accounts-contacts get-list" [
 # operationId: contacts.create
 # --mobile shape: {country?: string, number?: string}
 # --tags item shape: {tag?: string, visible?: bool}
-export def "accounts-contacts create" [
+export def "contacts-create" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -504,7 +504,7 @@ export def "accounts-contacts create" [
 #
 # DELETE /v1/accounts/{accountId}/contacts/{contactId}
 # operationId: contacts.remove
-export def "accounts-contacts delete" [
+export def "contacts-remove" [
   account_id: string
   contact_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -542,7 +542,7 @@ export def "accounts-contacts delete" [
 #
 # GET /v1/accounts/{accountId}/contacts/{contactId}
 # operationId: contacts.fetch
-export def "accounts-contacts get" [
+export def "contacts-fetch" [
   account_id: string
   contact_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -580,7 +580,7 @@ export def "accounts-contacts get" [
 #
 # PUT /v1/accounts/{accountId}/contacts/{contactId}
 # operationId: contacts.update
-export def "accounts-contacts update" [
+export def "contacts-update" [
   account_id: string
   contact_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -618,7 +618,7 @@ export def "accounts-contacts update" [
 #
 # GET /v1/accounts/{accountId}/conversations
 # operationId: conversations.fetchAll
-export def "accounts-conversations get-list" [
+export def "conversations-fetch-all" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -657,7 +657,7 @@ export def "accounts-conversations get-list" [
 #
 # GET /v1/accounts/{accountId}/conversations/{conversationId}
 # operationId: conversations.fetch
-export def "accounts-conversations get" [
+export def "conversations-fetch" [
   account_id: string
   conversation_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -695,7 +695,7 @@ export def "accounts-conversations get" [
 #
 # PUT /v1/accounts/{accountId}/conversations/{conversationId}/close
 # operationId: conversations.close
-export def "accounts-conversations-close close" [
+export def "conversations-close" [
   account_id: string
   conversation_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -733,7 +733,7 @@ export def "accounts-conversations-close close" [
 #
 # GET /v1/accounts/{accountId}/messages
 # operationId: messages.fetchAll
-export def "accounts-messages get-list" [
+export def "messages-fetch-all" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -778,7 +778,7 @@ export def "accounts-messages get-list" [
 # --filters shape: {attributes?: list, tags?: list<string>}
 # --media item shape: {url?: string}
 # --phoneNumberFilter shape: {group?: record}
-export def "accounts-messages send" [
+export def "messages-send" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -825,7 +825,7 @@ export def "accounts-messages send" [
 #
 # GET /v1/accounts/{accountId}/messages/{messageId}
 # operationId: messages.fetch
-export def "accounts-messages get" [
+export def "messages-fetch" [
   account_id: string
   message_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -863,7 +863,7 @@ export def "accounts-messages get" [
 #
 # GET /v1/accounts/{accountId}/templates
 # operationId: templates.fetchAll
-export def "accounts-templates get-list" [
+export def "templates-fetch-all" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -903,7 +903,7 @@ export def "accounts-templates get-list" [
 #
 # POST /v1/accounts/{accountId}/templates
 # operationId: templates.create
-export def "accounts-templates create" [
+export def "templates-create" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -945,7 +945,7 @@ export def "accounts-templates create" [
 #
 # DELETE /v1/accounts/{accountId}/templates/{templateId}
 # operationId: templates.remove
-export def "accounts-templates delete" [
+export def "templates-remove" [
   account_id: string
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -983,7 +983,7 @@ export def "accounts-templates delete" [
 #
 # GET /v1/accounts/{accountId}/templates/{templateId}
 # operationId: templates.fetch
-export def "accounts-templates get" [
+export def "templates-fetch" [
   account_id: string
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1021,7 +1021,7 @@ export def "accounts-templates get" [
 #
 # PUT /v1/accounts/{accountId}/templates/{templateId}
 # operationId: templates.update
-export def "accounts-templates update" [
+export def "templates-update" [
   account_id: string
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1059,7 +1059,7 @@ export def "accounts-templates update" [
 #
 # GET /v1/accounts/{accountId}/webhooks
 # operationId: webhooks.fetchAll
-export def "accounts-webhooks get-list" [
+export def "webhooks-fetch-all" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1095,7 +1095,7 @@ export def "accounts-webhooks get-list" [
 #
 # POST /v1/accounts/{accountId}/webhooks
 # operationId: webhooks.subscribe
-export def "accounts-webhooks subscribe" [
+export def "webhooks-subscribe" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1136,7 +1136,7 @@ export def "accounts-webhooks subscribe" [
 #
 # DELETE /v1/accounts/{accountId}/webhooks/{url}
 # operationId: webhooks.unsubscribe
-export def "accounts-webhooks unsubscribe" [
+export def "webhooks-unsubscribe" [
   account_id: string
   url: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1174,7 +1174,7 @@ export def "accounts-webhooks unsubscribe" [
 #
 # POST /v1/tools/sharefile
 # operationId: tools.shareFile
-export def "tools-sharefile create-share-file" [
+export def "tools-share-file" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

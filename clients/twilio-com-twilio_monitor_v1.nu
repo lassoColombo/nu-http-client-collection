@@ -99,7 +99,7 @@ def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "alerts list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-alert" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -122,7 +122,7 @@ export def commands []: nothing -> table {
 # GET /v1/Alerts
 #
 # operationId: ListAlert
-export def "alerts list" [
+export def "list-alert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -162,7 +162,7 @@ export def "alerts list" [
 # GET /v1/Alerts/{Sid}
 #
 # operationId: FetchAlert
-export def "alerts get" [
+export def "fetch-alert" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -198,7 +198,7 @@ export def "alerts get" [
 #
 # GET /v1/Events
 # operationId: ListEvent
-export def "events list" [
+export def "list-event" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -241,7 +241,7 @@ export def "events list" [
 # GET /v1/Events/{Sid}
 #
 # operationId: FetchEvent
-export def "events get" [
+export def "fetch-event" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

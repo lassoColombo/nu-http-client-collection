@@ -110,7 +110,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-hybrid-runbook-worker-groups list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "hybrid-runbook-worker-group-list-by-automation-account" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -135,7 +135,7 @@ export def commands []: nothing -> table {
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/hybridRunbookWorkerGroups
 # Docs: http://aka.ms/azureautomationsdk/hybridrunbookworkergroupoperations
 # operationId: HybridRunbookWorkerGroup_ListByAutomationAccount
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-hybrid-runbook-worker-groups list" [
+export def "hybrid-runbook-worker-group-list-by-automation-account" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -179,7 +179,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/hybridRunbookWorkerGroups/{hybridRunbookWorkerGroupName}
 # Docs: http://aka.ms/azureautomationsdk/hybridrunbookworkergroupoperations
 # operationId: HybridRunbookWorkerGroup_Delete
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-hybrid-runbook-worker-groups delete" [
+export def "hybrid-runbook-worker-group-delete" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -224,7 +224,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/hybridRunbookWorkerGroups/{hybridRunbookWorkerGroupName}
 # Docs: http://aka.ms/azureautomationsdk/hybridrunbookworkergroupoperations
 # operationId: HybridRunbookWorkerGroup_Get
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-hybrid-runbook-worker-groups get" [
+export def "hybrid-runbook-worker-group-get" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -270,7 +270,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # Docs: http://aka.ms/azureautomationsdk/hybridrunbookworkergroupoperations
 # operationId: HybridRunbookWorkerGroup_Update
 # --credential shape: {name?: string}
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-hybrid-runbook-worker-groups update" [
+export def "hybrid-runbook-worker-group-update" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string

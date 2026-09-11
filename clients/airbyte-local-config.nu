@@ -114,7 +114,7 @@ def default-geography-completer [] { ["auto" "eu" "us"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "attempt-save-stats stats" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "save-stats" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 # operationId: saveStats
 # --stats shape: {bytesEmitted?: int, estimatedBytes?: int, estimatedRecords?: int, recordsCommitted?: int, recordsEmitted?: int, stateMessagesEmitted?: int}
 # --streamStats item shape: {stats: record, streamName: string, streamNamespace?: string}
-export def "attempt-save-stats stats" [
+export def "save-stats" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -182,7 +182,7 @@ export def "attempt-save-stats stats" [
 # POST /v1/attempt/save_sync_config
 # operationId: saveSyncConfig
 # --syncConfig shape: {destinationConfiguration: any, sourceConfiguration: any, state?: record}
-export def "attempt-save-sync-config sync" [
+export def "save-sync-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -222,7 +222,7 @@ export def "attempt-save-sync-config sync" [
 #
 # POST /v1/attempt/set_workflow_in_attempt
 # operationId: setWorkflowInAttempt
-export def "attempt-set-workflow-in-attempt update" [
+export def "set-workflow-in-attempt" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -267,7 +267,7 @@ export def "attempt-set-workflow-in-attempt update" [
 # --schedule shape: {timeUnit: "minutes"|"hours"|"days"|"weeks"|"months", units: int}
 # --scheduleData shape: {basicSchedule?: record, cron?: record}
 # --syncCatalog shape: {streams: list}
-export def "connections-create create" [
+export def "create-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -321,7 +321,7 @@ export def "connections-create create" [
 #
 # POST /v1/connections/delete
 # operationId: deleteConnection
-export def "connections-delete delete" [
+export def "delete-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -359,7 +359,7 @@ export def "connections-delete delete" [
 #
 # POST /v1/connections/get
 # operationId: getConnection
-export def "connections-get get" [
+export def "get-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -397,7 +397,7 @@ export def "connections-get get" [
 #
 # POST /v1/connections/list
 # operationId: listConnectionsForWorkspace
-export def "connections-list list-for-workspace" [
+export def "list-connections-for-workspace" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -435,7 +435,7 @@ export def "connections-list list-for-workspace" [
 #
 # POST /v1/connections/list_all
 # operationId: listAllConnectionsForWorkspace
-export def "connections-list-all list-for-workspace" [
+export def "list-all-connections-for-workspace" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -473,7 +473,7 @@ export def "connections-list-all list-for-workspace" [
 #
 # POST /v1/connections/reset
 # operationId: resetConnection
-export def "connections-reset reset" [
+export def "reset-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -515,7 +515,7 @@ export def "connections-reset reset" [
 # --schedule shape: {timeUnit: "minutes"|"hours"|"days"|"weeks"|"months", units: int}
 # --scheduleData shape: {basicSchedule?: record, cron?: record}
 # --source shape: {connectionConfiguration?: any, name?: string, sourceDefinitionId?: string, sourceId?: string, sourceName?: string, workspaceId?: string}
-export def "connections-search list" [
+export def "search-connections" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -565,7 +565,7 @@ export def "connections-search list" [
 #
 # POST /v1/connections/sync
 # operationId: syncConnection
-export def "connections-sync sync" [
+export def "sync-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -607,7 +607,7 @@ export def "connections-sync sync" [
 # --schedule shape: {timeUnit: "minutes"|"hours"|"days"|"weeks"|"months", units: int}
 # --scheduleData shape: {basicSchedule?: record, cron?: record}
 # --syncCatalog shape: {streams: list}
-export def "connections-update update" [
+export def "update-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -661,7 +661,7 @@ export def "connections-update update" [
 #
 # POST /v1/destination_definition_specifications/get
 # operationId: getDestinationDefinitionSpecification
-export def "destination-definition-specifications-get get" [
+export def "get-destination-definition-specification" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -701,7 +701,7 @@ export def "destination-definition-specifications-get get" [
 # POST /v1/destination_definitions/create_custom
 # operationId: createCustomDestinationDefinition
 # --destinationDefinition shape: {dockerImageTag: string, dockerRepository: string, documentationUrl: string, icon?: string, name: string, resourceRequirements?: record}
-export def "destination-definitions-create-custom create" [
+export def "create-custom-destination-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -740,7 +740,7 @@ export def "destination-definitions-create-custom create" [
 #
 # POST /v1/destination_definitions/delete
 # operationId: deleteDestinationDefinition
-export def "destination-definitions-delete delete" [
+export def "delete-destination-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -778,7 +778,7 @@ export def "destination-definitions-delete delete" [
 #
 # POST /v1/destination_definitions/get
 # operationId: getDestinationDefinition
-export def "destination-definitions-get get" [
+export def "get-destination-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -816,7 +816,7 @@ export def "destination-definitions-get get" [
 #
 # POST /v1/destination_definitions/get_for_workspace
 # operationId: getDestinationDefinitionForWorkspace
-export def "destination-definitions-get-for-workspace get" [
+export def "get-destination-definition-for-workspace" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -855,7 +855,7 @@ export def "destination-definitions-get-for-workspace get" [
 #
 # POST /v1/destination_definitions/grant_definition
 # operationId: grantDestinationDefinitionToWorkspace
-export def "destination-definitions-grant-definition create-to-workspace" [
+export def "grant-destination-definition-to-workspace" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -894,7 +894,7 @@ export def "destination-definitions-grant-definition create-to-workspace" [
 #
 # POST /v1/destination_definitions/list
 # operationId: listDestinationDefinitions
-export def "destination-definitions-list list" [
+export def "list-destination-definitions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -928,7 +928,7 @@ export def "destination-definitions-list list" [
 #
 # POST /v1/destination_definitions/list_for_workspace
 # operationId: listDestinationDefinitionsForWorkspace
-export def "destination-definitions-list-for-workspace list" [
+export def "list-destination-definitions-for-workspace" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -966,7 +966,7 @@ export def "destination-definitions-list-for-workspace list" [
 #
 # POST /v1/destination_definitions/list_latest
 # operationId: listLatestDestinationDefinitions
-export def "destination-definitions-list-latest list" [
+export def "list-latest-destination-definitions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1000,7 +1000,7 @@ export def "destination-definitions-list-latest list" [
 #
 # POST /v1/destination_definitions/list_private
 # operationId: listPrivateDestinationDefinitions
-export def "destination-definitions-list-private list" [
+export def "list-private-destination-definitions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1038,7 +1038,7 @@ export def "destination-definitions-list-private list" [
 #
 # POST /v1/destination_definitions/revoke_definition
 # operationId: revokeDestinationDefinitionFromWorkspace
-export def "destination-definitions-revoke-definition delete-from-workspace" [
+export def "revoke-destination-definition-from-workspace" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1078,7 +1078,7 @@ export def "destination-definitions-revoke-definition delete-from-workspace" [
 # POST /v1/destination_definitions/update
 # operationId: updateDestinationDefinition
 # --resourceRequirements shape: {default?: record, jobSpecific?: list}
-export def "destination-definitions-update update" [
+export def "update-destination-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1118,7 +1118,7 @@ export def "destination-definitions-update update" [
 #
 # POST /v1/destination_oauths/complete_oauth
 # operationId: completeDestinationOAuth
-export def "destination-oauths-complete-oauth complete-o-auth" [
+export def "complete-destination-o-auth" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1161,7 +1161,7 @@ export def "destination-oauths-complete-oauth complete-o-auth" [
 #
 # POST /v1/destination_oauths/get_consent_url
 # operationId: getDestinationOAuthConsent
-export def "destination-oauths-get-consent-url get-o-auth" [
+export def "get-destination-o-auth-consent" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1203,7 +1203,7 @@ export def "destination-oauths-get-consent-url get-o-auth" [
 #
 # POST /v1/destination_oauths/oauth_params/create
 # operationId: setInstancewideDestinationOauthParams
-export def "destination-oauths-oauth-params-create update-instancewide" [
+export def "set-instancewide-destination-oauth-params" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1242,7 +1242,7 @@ export def "destination-oauths-oauth-params-create update-instancewide" [
 #
 # POST /v1/destinations/check_connection
 # operationId: checkConnectionToDestination
-export def "destinations-check-connection check" [
+export def "check-connection-to-destination" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1280,7 +1280,7 @@ export def "destinations-check-connection check" [
 #
 # POST /v1/destinations/check_connection_for_update
 # operationId: checkConnectionToDestinationForUpdate
-export def "destinations-check-connection-for-update check" [
+export def "check-connection-to-destination-for-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1321,7 +1321,7 @@ export def "destinations-check-connection-for-update check" [
 # POST /v1/destinations/clone
 # operationId: cloneDestination
 # --destinationConfiguration shape: {connectionConfiguration?: any, name?: string}
-export def "destinations-clone clone" [
+export def "clone-destination" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1360,7 +1360,7 @@ export def "destinations-clone clone" [
 #
 # POST /v1/destinations/create
 # operationId: createDestination
-export def "destinations-create create" [
+export def "create-destination" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1401,7 +1401,7 @@ export def "destinations-create create" [
 #
 # POST /v1/destinations/delete
 # operationId: deleteDestination
-export def "destinations-delete delete" [
+export def "delete-destination" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1439,7 +1439,7 @@ export def "destinations-delete delete" [
 #
 # POST /v1/destinations/get
 # operationId: getDestination
-export def "destinations-get get" [
+export def "get-destination" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1477,7 +1477,7 @@ export def "destinations-get get" [
 #
 # POST /v1/destinations/list
 # operationId: listDestinationsForWorkspace
-export def "destinations-list list-for-workspace" [
+export def "list-destinations-for-workspace" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1515,7 +1515,7 @@ export def "destinations-list list-for-workspace" [
 #
 # POST /v1/destinations/search
 # operationId: searchDestinations
-export def "destinations-search list" [
+export def "search-destinations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1558,7 +1558,7 @@ export def "destinations-search list" [
 #
 # POST /v1/destinations/update
 # operationId: updateDestination
-export def "destinations-update update" [
+export def "update-destination" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1598,7 +1598,7 @@ export def "destinations-update update" [
 #
 # GET /v1/health
 # operationId: getHealthCheck
-export def "health get-check" [
+export def "get-health-check" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1632,7 +1632,7 @@ export def "health get-check" [
 #
 # POST /v1/jobs/cancel
 # operationId: cancelJob
-export def "jobs-cancel cancel" [
+export def "cancel-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1670,7 +1670,7 @@ export def "jobs-cancel cancel" [
 #
 # POST /v1/jobs/get
 # operationId: getJobInfo
-export def "jobs-get get" [
+export def "get-job-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1708,7 +1708,7 @@ export def "jobs-get get" [
 #
 # POST /v1/jobs/get_debug_info
 # operationId: getJobDebugInfo
-export def "jobs-get-debug-info get" [
+export def "get-job-debug-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1745,7 +1745,7 @@ export def "jobs-get-debug-info get" [
 # POST /v1/jobs/get_last_replication_job
 #
 # operationId: getLastReplicationJob
-export def "jobs-get-last-replication-job get" [
+export def "get-last-replication-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1783,7 +1783,7 @@ export def "jobs-get-last-replication-job get" [
 #
 # POST /v1/jobs/get_light
 # operationId: getJobInfoLight
-export def "jobs-get-light get" [
+export def "get-job-info-light" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1821,7 +1821,7 @@ export def "jobs-get-light get" [
 #
 # POST /v1/jobs/get_normalization_status
 # operationId: getAttemptNormalizationStatusesForJob
-export def "jobs-get-normalization-status get-attempt-statuses" [
+export def "get-attempt-normalization-statuses-for-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1860,7 +1860,7 @@ export def "jobs-get-normalization-status get-attempt-statuses" [
 # POST /v1/jobs/list
 # operationId: listJobsFor
 # --pagination shape: {pageSize?: int, rowOffset?: int}
-export def "jobs-list list" [
+export def "list-jobs-for" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1901,7 +1901,7 @@ export def "jobs-list list" [
 #
 # POST /v1/logs/get
 # operationId: getLogs
-export def "logs-get get" [
+export def "get-logs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1940,7 +1940,7 @@ export def "logs-get get" [
 # POST /v1/notifications/try
 # operationId: tryNotificationConfig
 # --slackConfiguration shape: {webhook: string}
-export def "notifications-try create-config" [
+export def "try-notification-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1982,7 +1982,7 @@ export def "notifications-try create-config" [
 #
 # GET /v1/openapi
 # operationId: getOpenApiSpec
-export def "openapi get-open-spec" [
+export def "get-open-api-spec" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2019,7 +2019,7 @@ export def "openapi get-open-spec" [
 # --dbt shape: {dbtArguments?: string, dockerImage?: string, gitRepoBranch?: string, gitRepoUrl: string}
 # --normalization shape: {option?: "basic"}
 # --webhook shape: {dbtCloud?: record, executionBody?: string, executionUrl?: string, webhookConfigId?: string, webhookType?: "dbtCloud"}
-export def "operations-check check" [
+export def "check-operation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2061,7 +2061,7 @@ export def "operations-check check" [
 # POST /v1/operations/create
 # operationId: createOperation
 # --operatorConfiguration shape: {dbt?: record, normalization?: record, operatorType: "normalization"|"dbt"|"webhook", webhook?: record}
-export def "operations-create create" [
+export def "create-operation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2101,7 +2101,7 @@ export def "operations-create create" [
 #
 # POST /v1/operations/delete
 # operationId: deleteOperation
-export def "operations-delete delete" [
+export def "delete-operation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2139,7 +2139,7 @@ export def "operations-delete delete" [
 #
 # POST /v1/operations/get
 # operationId: getOperation
-export def "operations-get get" [
+export def "get-operation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2177,7 +2177,7 @@ export def "operations-get get" [
 #
 # POST /v1/operations/list
 # operationId: listOperationsForConnection
-export def "operations-list list-for-connection" [
+export def "list-operations-for-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2216,7 +2216,7 @@ export def "operations-list list-for-connection" [
 # POST /v1/operations/update
 # operationId: updateOperation
 # --operatorConfiguration shape: {dbt?: record, normalization?: record, operatorType: "normalization"|"dbt"|"webhook", webhook?: record}
-export def "operations-update update" [
+export def "update-operation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2256,7 +2256,7 @@ export def "operations-update update" [
 #
 # POST /v1/scheduler/destinations/check_connection
 # operationId: executeDestinationCheckConnection
-export def "scheduler-destinations-check-connection check-execute" [
+export def "execute-destination-check-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2297,7 +2297,7 @@ export def "scheduler-destinations-check-connection check-execute" [
 #
 # POST /v1/scheduler/sources/check_connection
 # operationId: executeSourceCheckConnection
-export def "scheduler-sources-check-connection check-execute" [
+export def "execute-source-check-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2338,7 +2338,7 @@ export def "scheduler-sources-check-connection check-execute" [
 #
 # POST /v1/scheduler/sources/discover_schema
 # operationId: executeSourceDiscoverSchema
-export def "scheduler-sources-discover-schema create-execute" [
+export def "execute-source-discover-schema" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2379,7 +2379,7 @@ export def "scheduler-sources-discover-schema create-execute" [
 #
 # POST /v1/source_definition_specifications/get
 # operationId: getSourceDefinitionSpecification
-export def "source-definition-specifications-get get" [
+export def "get-source-definition-specification" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2419,7 +2419,7 @@ export def "source-definition-specifications-get get" [
 # POST /v1/source_definitions/create_custom
 # operationId: createCustomSourceDefinition
 # --sourceDefinition shape: {dockerImageTag: string, dockerRepository: string, documentationUrl: string, icon?: string, name: string, resourceRequirements?: record}
-export def "source-definitions-create-custom create" [
+export def "create-custom-source-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2458,7 +2458,7 @@ export def "source-definitions-create-custom create" [
 #
 # POST /v1/source_definitions/delete
 # operationId: deleteSourceDefinition
-export def "source-definitions-delete delete" [
+export def "delete-source-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2496,7 +2496,7 @@ export def "source-definitions-delete delete" [
 #
 # POST /v1/source_definitions/get
 # operationId: getSourceDefinition
-export def "source-definitions-get get" [
+export def "get-source-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2534,7 +2534,7 @@ export def "source-definitions-get get" [
 #
 # POST /v1/source_definitions/get_for_workspace
 # operationId: getSourceDefinitionForWorkspace
-export def "source-definitions-get-for-workspace get" [
+export def "get-source-definition-for-workspace" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2573,7 +2573,7 @@ export def "source-definitions-get-for-workspace get" [
 #
 # POST /v1/source_definitions/grant_definition
 # operationId: grantSourceDefinitionToWorkspace
-export def "source-definitions-grant-definition create-to-workspace" [
+export def "grant-source-definition-to-workspace" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2612,7 +2612,7 @@ export def "source-definitions-grant-definition create-to-workspace" [
 #
 # POST /v1/source_definitions/list
 # operationId: listSourceDefinitions
-export def "source-definitions-list list" [
+export def "list-source-definitions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2646,7 +2646,7 @@ export def "source-definitions-list list" [
 #
 # POST /v1/source_definitions/list_for_workspace
 # operationId: listSourceDefinitionsForWorkspace
-export def "source-definitions-list-for-workspace list" [
+export def "list-source-definitions-for-workspace" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2684,7 +2684,7 @@ export def "source-definitions-list-for-workspace list" [
 #
 # POST /v1/source_definitions/list_latest
 # operationId: listLatestSourceDefinitions
-export def "source-definitions-list-latest list" [
+export def "list-latest-source-definitions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2718,7 +2718,7 @@ export def "source-definitions-list-latest list" [
 #
 # POST /v1/source_definitions/list_private
 # operationId: listPrivateSourceDefinitions
-export def "source-definitions-list-private list" [
+export def "list-private-source-definitions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2756,7 +2756,7 @@ export def "source-definitions-list-private list" [
 #
 # POST /v1/source_definitions/revoke_definition
 # operationId: revokeSourceDefinitionFromWorkspace
-export def "source-definitions-revoke-definition delete-from-workspace" [
+export def "revoke-source-definition-from-workspace" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2796,7 +2796,7 @@ export def "source-definitions-revoke-definition delete-from-workspace" [
 # POST /v1/source_definitions/update
 # operationId: updateSourceDefinition
 # --resourceRequirements shape: {default?: record, jobSpecific?: list}
-export def "source-definitions-update update" [
+export def "update-source-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2836,7 +2836,7 @@ export def "source-definitions-update update" [
 #
 # POST /v1/source_oauths/complete_oauth
 # operationId: completeSourceOAuth
-export def "source-oauths-complete-oauth complete-o-auth" [
+export def "complete-source-o-auth" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2879,7 +2879,7 @@ export def "source-oauths-complete-oauth complete-o-auth" [
 #
 # POST /v1/source_oauths/get_consent_url
 # operationId: getSourceOAuthConsent
-export def "source-oauths-get-consent-url get-o-auth" [
+export def "get-source-o-auth-consent" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2921,7 +2921,7 @@ export def "source-oauths-get-consent-url get-o-auth" [
 #
 # POST /v1/source_oauths/oauth_params/create
 # operationId: setInstancewideSourceOauthParams
-export def "source-oauths-oauth-params-create update-instancewide" [
+export def "set-instancewide-source-oauth-params" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2960,7 +2960,7 @@ export def "source-oauths-oauth-params-create update-instancewide" [
 #
 # POST /v1/sources/check_connection
 # operationId: checkConnectionToSource
-export def "sources-check-connection check" [
+export def "check-connection-to-source" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2998,7 +2998,7 @@ export def "sources-check-connection check" [
 #
 # POST /v1/sources/check_connection_for_update
 # operationId: checkConnectionToSourceForUpdate
-export def "sources-check-connection-for-update check" [
+export def "check-connection-to-source-for-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3039,7 +3039,7 @@ export def "sources-check-connection-for-update check" [
 # POST /v1/sources/clone
 # operationId: cloneSource
 # --sourceConfiguration shape: {connectionConfiguration?: any, name?: string}
-export def "sources-clone clone" [
+export def "clone-source" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3078,7 +3078,7 @@ export def "sources-clone clone" [
 #
 # POST /v1/sources/create
 # operationId: createSource
-export def "sources-create create" [
+export def "create-source" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3119,7 +3119,7 @@ export def "sources-create create" [
 #
 # POST /v1/sources/delete
 # operationId: deleteSource
-export def "sources-delete delete" [
+export def "delete-source" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3157,7 +3157,7 @@ export def "sources-delete delete" [
 #
 # POST /v1/sources/discover_schema
 # operationId: discoverSchemaForSource
-export def "sources-discover-schema create" [
+export def "discover-schema-for-source" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3198,7 +3198,7 @@ export def "sources-discover-schema create" [
 #
 # POST /v1/sources/get
 # operationId: getSource
-export def "sources-get get" [
+export def "get-source" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3236,7 +3236,7 @@ export def "sources-get get" [
 #
 # POST /v1/sources/list
 # operationId: listSourcesForWorkspace
-export def "sources-list list-for-workspace" [
+export def "list-sources-for-workspace" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3274,7 +3274,7 @@ export def "sources-list list-for-workspace" [
 #
 # POST /v1/sources/most_recent_source_actor_catalog
 # operationId: getMostRecentSourceActorCatalog
-export def "sources-most-recent-source-actor-catalog get" [
+export def "get-most-recent-source-actor-catalog" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3312,7 +3312,7 @@ export def "sources-most-recent-source-actor-catalog get" [
 #
 # POST /v1/sources/search
 # operationId: searchSources
-export def "sources-search list" [
+export def "search-sources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3355,7 +3355,7 @@ export def "sources-search list" [
 #
 # POST /v1/sources/update
 # operationId: updateSource
-export def "sources-update update" [
+export def "update-source" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3396,7 +3396,7 @@ export def "sources-update update" [
 # POST /v1/sources/write_discover_catalog_result
 # operationId: writeDiscoverCatalogResult
 # --catalog shape: {streams: list}
-export def "sources-write-discover-catalog-result create" [
+export def "write-discover-catalog-result" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3438,7 +3438,7 @@ export def "sources-write-discover-catalog-result create" [
 # POST /v1/state/create_or_update
 # operationId: createOrUpdateState
 # --connectionState shape: {connectionId: string, globalState?: record, state?: record, stateType: "global"|"stream"|"legacy"|"not_set", streamState?: list}
-export def "state-create-or-update create" [
+export def "create-or-update-state" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3477,7 +3477,7 @@ export def "state-create-or-update create" [
 #
 # POST /v1/state/get
 # operationId: getState
-export def "state-get get" [
+export def "get-state" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3515,7 +3515,7 @@ export def "state-get get" [
 #
 # POST /v1/web_backend/check_updates
 # operationId: webBackendCheckUpdates
-export def "web-backend-check-updates check" [
+export def "web-backend-check-updates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3554,7 +3554,7 @@ export def "web-backend-check-updates check" [
 # --schedule shape: {timeUnit: "minutes"|"hours"|"days"|"weeks"|"months", units: int}
 # --scheduleData shape: {basicSchedule?: record, cron?: record}
 # --syncCatalog shape: {streams: list}
-export def "web-backend-connections-create create" [
+export def "web-backend-create-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3608,7 +3608,7 @@ export def "web-backend-connections-create create" [
 #
 # POST /v1/web_backend/connections/get
 # operationId: webBackendGetConnection
-export def "web-backend-connections-get get" [
+export def "web-backend-get-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3647,7 +3647,7 @@ export def "web-backend-connections-get get" [
 #
 # POST /v1/web_backend/connections/list
 # operationId: webBackendListConnectionsForWorkspace
-export def "web-backend-connections-list list-for-workspace" [
+export def "web-backend-list-connections-for-workspace" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3692,7 +3692,7 @@ export def "web-backend-connections-list list-for-workspace" [
 # --schedule shape: {timeUnit: "minutes"|"hours"|"days"|"weeks"|"months", units: int}
 # --scheduleData shape: {basicSchedule?: record, cron?: record}
 # --syncCatalog shape: {streams: list}
-export def "web-backend-connections-update update" [
+export def "web-backend-update-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3746,7 +3746,7 @@ export def "web-backend-connections-update update" [
 #
 # POST /v1/web_backend/geographies/list
 # operationId: webBackendListGeographies
-export def "web-backend-geographies-list list" [
+export def "web-backend-list-geographies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3780,7 +3780,7 @@ export def "web-backend-geographies-list list" [
 #
 # POST /v1/web_backend/state/get_type
 # operationId: getStateType
-export def "web-backend-state-get-type get" [
+export def "get-state-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3818,7 +3818,7 @@ export def "web-backend-state-get-type get" [
 #
 # POST /v1/web_backend/workspace/state
 # operationId: webBackendGetWorkspaceState
-export def "web-backend-workspace-state get" [
+export def "web-backend-get-workspace-state" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3858,7 +3858,7 @@ export def "web-backend-workspace-state get" [
 # operationId: createWorkspace
 # --notifications item shape: {customerioConfiguration?: record, notificationType: "slack"|"customerio", sendOnFailure: bool, sendOnSuccess: bool, slackConfiguration?: record}
 # --webhookConfigs item shape: {authToken?: string, name?: string, validationUrl?: string}
-export def "workspaces-create create" [
+export def "create-workspace" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3904,7 +3904,7 @@ export def "workspaces-create create" [
 #
 # POST /v1/workspaces/delete
 # operationId: deleteWorkspace
-export def "workspaces-delete delete" [
+export def "delete-workspace" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3942,7 +3942,7 @@ export def "workspaces-delete delete" [
 #
 # POST /v1/workspaces/get
 # operationId: getWorkspace
-export def "workspaces-get get" [
+export def "get-workspace" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3980,7 +3980,7 @@ export def "workspaces-get get" [
 #
 # POST /v1/workspaces/get_by_connection_id
 # operationId: getWorkspaceByConnectionId
-export def "workspaces-get-by-connection-id get" [
+export def "get-workspace-by-connection-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4018,7 +4018,7 @@ export def "workspaces-get-by-connection-id get" [
 #
 # POST /v1/workspaces/get_by_slug
 # operationId: getWorkspaceBySlug
-export def "workspaces-get-by-slug get" [
+export def "get-workspace-by-slug" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4056,7 +4056,7 @@ export def "workspaces-get-by-slug get" [
 #
 # POST /v1/workspaces/list
 # operationId: listWorkspaces
-export def "workspaces-list list" [
+export def "list-workspaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4090,7 +4090,7 @@ export def "workspaces-list list" [
 #
 # POST /v1/workspaces/tag_feedback_status_as_done
 # operationId: updateWorkspaceFeedback
-export def "workspaces-tag-feedback-status-as-done update" [
+export def "update-workspace-feedback" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4130,7 +4130,7 @@ export def "workspaces-tag-feedback-status-as-done update" [
 # operationId: updateWorkspace
 # --notifications item shape: {customerioConfiguration?: record, notificationType: "slack"|"customerio", sendOnFailure: bool, sendOnSuccess: bool, slackConfiguration?: record}
 # --webhookConfigs item shape: {authToken?: string, name?: string, validationUrl?: string}
-export def "workspaces-update update" [
+export def "update-workspace" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4177,7 +4177,7 @@ export def "workspaces-update update" [
 #
 # POST /v1/workspaces/update_name
 # operationId: updateWorkspaceName
-export def "workspaces-update-name update" [
+export def "update-workspace-name" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

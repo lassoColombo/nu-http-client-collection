@@ -139,7 +139,7 @@ def resource-type-completer-1 [] { ["SidewalkAccount" "WirelessDevice" "Wireless
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "partner-accounts create-associate-aws" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associate-aws-account-with-partner-account" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -165,7 +165,7 @@ export def commands []: nothing -> table {
 # operationId: AssociateAwsAccountWithPartnerAccount
 # --Sidewalk shape: {AmazonId?: any, AppServerPrivateKey?: any}
 # --Tags item shape: {Key: any, Value: any}
-export def "partner-accounts create-associate-aws" [
+export def "associate-aws-account-with-partner-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -214,7 +214,7 @@ export def "partner-accounts create-associate-aws" [
 #
 # GET /partner-accounts
 # operationId: ListPartnerAccounts
-export def "partner-accounts list" [
+export def "list-partner-accounts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -260,7 +260,7 @@ export def "partner-accounts list" [
 #
 # PUT /fuota-tasks/{Id}/multicast-group
 # operationId: AssociateMulticastGroupWithFuotaTask
-export def "fuota-tasks-multicast-group update-associate" [
+export def "associate-multicast-group-with-fuota-task" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -309,7 +309,7 @@ export def "fuota-tasks-multicast-group update-associate" [
 #
 # PUT /fuota-tasks/{Id}/wireless-device
 # operationId: AssociateWirelessDeviceWithFuotaTask
-export def "fuota-tasks-wireless-device update-associate" [
+export def "associate-wireless-device-with-fuota-task" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -358,7 +358,7 @@ export def "fuota-tasks-wireless-device update-associate" [
 #
 # PUT /multicast-groups/{Id}/wireless-device
 # operationId: AssociateWirelessDeviceWithMulticastGroup
-export def "multicast-groups-wireless-device update-associate" [
+export def "associate-wireless-device-with-multicast-group" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -407,7 +407,7 @@ export def "multicast-groups-wireless-device update-associate" [
 #
 # PUT /wireless-devices/{Id}/thing
 # operationId: AssociateWirelessDeviceWithThing
-export def "wireless-devices-thing update-associate" [
+export def "associate-wireless-device-with-thing" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -456,7 +456,7 @@ export def "wireless-devices-thing update-associate" [
 #
 # DELETE /wireless-devices/{Id}/thing
 # operationId: DisassociateWirelessDeviceFromThing
-export def "wireless-devices-thing delete-disassociate" [
+export def "disassociate-wireless-device-from-thing" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -501,7 +501,7 @@ export def "wireless-devices-thing delete-disassociate" [
 #
 # PUT /wireless-gateways/{Id}/certificate
 # operationId: AssociateWirelessGatewayWithCertificate
-export def "wireless-gateways-certificate update-associate" [
+export def "associate-wireless-gateway-with-certificate" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -550,7 +550,7 @@ export def "wireless-gateways-certificate update-associate" [
 #
 # DELETE /wireless-gateways/{Id}/certificate
 # operationId: DisassociateWirelessGatewayFromCertificate
-export def "wireless-gateways-certificate delete-disassociate" [
+export def "disassociate-wireless-gateway-from-certificate" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -595,7 +595,7 @@ export def "wireless-gateways-certificate delete-disassociate" [
 #
 # GET /wireless-gateways/{Id}/certificate
 # operationId: GetWirelessGatewayCertificate
-export def "wireless-gateways-certificate get" [
+export def "get-wireless-gateway-certificate" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -640,7 +640,7 @@ export def "wireless-gateways-certificate get" [
 #
 # PUT /wireless-gateways/{Id}/thing
 # operationId: AssociateWirelessGatewayWithThing
-export def "wireless-gateways-thing update-associate" [
+export def "associate-wireless-gateway-with-thing" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -689,7 +689,7 @@ export def "wireless-gateways-thing update-associate" [
 #
 # DELETE /wireless-gateways/{Id}/thing
 # operationId: DisassociateWirelessGatewayFromThing
-export def "wireless-gateways-thing delete-disassociate" [
+export def "disassociate-wireless-gateway-from-thing" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -734,7 +734,7 @@ export def "wireless-gateways-thing delete-disassociate" [
 #
 # DELETE /multicast-groups/{Id}/session
 # operationId: CancelMulticastGroupSession
-export def "multicast-groups-session cancel" [
+export def "cancel-multicast-group-session" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -779,7 +779,7 @@ export def "multicast-groups-session cancel" [
 #
 # GET /multicast-groups/{Id}/session
 # operationId: GetMulticastGroupSession
-export def "multicast-groups-session get" [
+export def "get-multicast-group-session" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -825,7 +825,7 @@ export def "multicast-groups-session get" [
 # PUT /multicast-groups/{Id}/session
 # operationId: StartMulticastGroupSession
 # --LoRaWAN shape: {DlDr?: int, DlFreq?: int, SessionStartTime?: string, SessionTimeout?: int, PingSlotPeriod?: any}
-export def "multicast-groups-session start" [
+export def "start-multicast-group-session" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -875,7 +875,7 @@ export def "multicast-groups-session start" [
 # POST /destinations
 # operationId: CreateDestination
 # --Tags item shape: {Key: any, Value: any}
-export def "destinations create" [
+export def "create-destination" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -928,7 +928,7 @@ export def "destinations create" [
 #
 # GET /destinations
 # operationId: ListDestinations
-export def "destinations list" [
+export def "list-destinations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -978,7 +978,7 @@ export def "destinations list" [
 # operationId: CreateDeviceProfile
 # --LoRaWAN shape: {SupportsClassB?: any, ClassBTimeout?: any, PingSlotPeriod?: any, PingSlotDr?: any, PingSlotFreq?: any, SupportsClassC?: any, ClassCTimeout?: any, MacVersion?: any, RegParamsRevision?: any, RxDelay1?: any, RxDrOffset1?: any, RxDataRate2?: any, RxFreq2?: any, FactoryPresetFreqsList?: any, MaxEirp?: any, MaxDutyCycle?: any, RfRegion?: any, SupportsJoin?: any, Supports32BitFCnt?: any}
 # --Tags item shape: {Key: any, Value: any}
-export def "device-profiles create" [
+export def "create-device-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1029,7 +1029,7 @@ export def "device-profiles create" [
 #
 # GET /device-profiles
 # operationId: ListDeviceProfiles
-export def "device-profiles list" [
+export def "list-device-profiles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1080,7 +1080,7 @@ export def "device-profiles list" [
 # operationId: CreateFuotaTask
 # --LoRaWAN shape: {RfRegion?: "EU868"|"US915"|"AU915"|"AS923-1"|"AS923-2"|"AS923-3"|"AS923-4"|"EU433"|"CN470"|"CN779"|"RU864"|"KR920"|"IN865"}
 # --Tags item shape: {Key: any, Value: any}
-export def "fuota-tasks create" [
+export def "create-fuota-task" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1136,7 +1136,7 @@ export def "fuota-tasks create" [
 #
 # GET /fuota-tasks
 # operationId: ListFuotaTasks
-export def "fuota-tasks list" [
+export def "list-fuota-tasks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1186,7 +1186,7 @@ export def "fuota-tasks list" [
 # operationId: CreateMulticastGroup
 # --LoRaWAN shape: {RfRegion?: "EU868"|"US915"|"AU915"|"AS923-1"|"AS923-2"|"AS923-3"|"AS923-4"|"EU433"|"CN470"|"CN779"|"RU864"|"KR920"|"IN865", DlClass?: "ClassB"|"ClassC"}
 # --Tags item shape: {Key: any, Value: any}
-export def "multicast-groups create" [
+export def "create-multicast-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1237,7 +1237,7 @@ export def "multicast-groups create" [
 #
 # GET /multicast-groups
 # operationId: ListMulticastGroups
-export def "multicast-groups list" [
+export def "list-multicast-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1287,7 +1287,7 @@ export def "multicast-groups list" [
 # operationId: CreateNetworkAnalyzerConfiguration
 # --TraceContent shape: {WirelessDeviceFrameInfo?: "ENABLED"|"DISABLED", LogLevel?: "INFO"|"ERROR"|"DISABLED"}
 # --Tags item shape: {Key: any, Value: any}
-export def "network-analyzer-configurations create" [
+export def "create-network-analyzer-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1340,7 +1340,7 @@ export def "network-analyzer-configurations create" [
 #
 # GET /network-analyzer-configurations
 # operationId: ListNetworkAnalyzerConfigurations
-export def "network-analyzer-configurations list" [
+export def "list-network-analyzer-configurations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1390,7 +1390,7 @@ export def "network-analyzer-configurations list" [
 # operationId: CreateServiceProfile
 # --LoRaWAN shape: {AddGwMetadata?: any, DrMin?: any, DrMax?: any, PrAllowed?: any, RaAllowed?: any}
 # --Tags item shape: {Key: any, Value: any}
-export def "service-profiles create" [
+export def "create-service-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1440,7 +1440,7 @@ export def "service-profiles create" [
 #
 # GET /service-profiles
 # operationId: ListServiceProfiles
-export def "service-profiles list" [
+export def "list-service-profiles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1491,7 +1491,7 @@ export def "service-profiles list" [
 # --LoRaWAN shape: {DevEui?: any, DeviceProfileId?: any, ServiceProfileId?: any, OtaaV1_1?: any, OtaaV1_0_x?: any, AbpV1_1?: any, AbpV1_0_x?: any, FPorts?: record}
 # --Tags item shape: {Key: any, Value: any}
 # --Sidewalk shape: {DeviceProfileId?: any}
-export def "wireless-devices create" [
+export def "create-wireless-device" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1546,7 +1546,7 @@ export def "wireless-devices create" [
 #
 # GET /wireless-devices
 # operationId: ListWirelessDevices
-export def "wireless-devices list" [
+export def "list-wireless-devices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1602,7 +1602,7 @@ export def "wireless-devices list" [
 # operationId: CreateWirelessGateway
 # --LoRaWAN shape: {GatewayEui?: any, RfRegion?: any, JoinEuiFilters?: list, NetIdFilters?: list<string>, SubBands?: list<int>, Beaconing?: any, MaxEirp?: any}
 # --Tags item shape: {Key: any, Value: any}
-export def "wireless-gateways create" [
+export def "create-wireless-gateway" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1653,7 +1653,7 @@ export def "wireless-gateways create" [
 #
 # GET /wireless-gateways
 # operationId: ListWirelessGateways
-export def "wireless-gateways list" [
+export def "list-wireless-gateways" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1701,7 +1701,7 @@ export def "wireless-gateways list" [
 #
 # POST /wireless-gateways/{Id}/tasks
 # operationId: CreateWirelessGatewayTask
-export def "wireless-gateways-tasks create" [
+export def "create-wireless-gateway-task" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1750,7 +1750,7 @@ export def "wireless-gateways-tasks create" [
 #
 # DELETE /wireless-gateways/{Id}/tasks
 # operationId: DeleteWirelessGatewayTask
-export def "wireless-gateways-tasks delete" [
+export def "delete-wireless-gateway-task" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1795,7 +1795,7 @@ export def "wireless-gateways-tasks delete" [
 #
 # GET /wireless-gateways/{Id}/tasks
 # operationId: GetWirelessGatewayTask
-export def "wireless-gateways-tasks get" [
+export def "get-wireless-gateway-task" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1842,7 +1842,7 @@ export def "wireless-gateways-tasks get" [
 # operationId: CreateWirelessGatewayTaskDefinition
 # --Update shape: {UpdateDataSource?: any, UpdateDataRole?: any, LoRaWAN?: any}
 # --Tags item shape: {Key: any, Value: any}
-export def "wireless-gateway-task-definitions create" [
+export def "create-wireless-gateway-task-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1893,7 +1893,7 @@ export def "wireless-gateway-task-definitions create" [
 #
 # GET /wireless-gateway-task-definitions
 # operationId: ListWirelessGatewayTaskDefinitions
-export def "wireless-gateway-task-definitions list" [
+export def "list-wireless-gateway-task-definitions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1940,7 +1940,7 @@ export def "wireless-gateway-task-definitions list" [
 #
 # DELETE /destinations/{Name}
 # operationId: DeleteDestination
-export def "destinations delete" [
+export def "delete-destination" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1985,7 +1985,7 @@ export def "destinations delete" [
 #
 # GET /destinations/{Name}
 # operationId: GetDestination
-export def "destinations get" [
+export def "get-destination" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2030,7 +2030,7 @@ export def "destinations get" [
 #
 # PATCH /destinations/{Name}
 # operationId: UpdateDestination
-export def "destinations update" [
+export def "update-destination" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2082,7 +2082,7 @@ export def "destinations update" [
 #
 # DELETE /device-profiles/{Id}
 # operationId: DeleteDeviceProfile
-export def "device-profiles delete" [
+export def "delete-device-profile" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2127,7 +2127,7 @@ export def "device-profiles delete" [
 #
 # GET /device-profiles/{Id}
 # operationId: GetDeviceProfile
-export def "device-profiles get" [
+export def "get-device-profile" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2172,7 +2172,7 @@ export def "device-profiles get" [
 #
 # DELETE /fuota-tasks/{Id}
 # operationId: DeleteFuotaTask
-export def "fuota-tasks delete" [
+export def "delete-fuota-task" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2217,7 +2217,7 @@ export def "fuota-tasks delete" [
 #
 # GET /fuota-tasks/{Id}
 # operationId: GetFuotaTask
-export def "fuota-tasks get" [
+export def "get-fuota-task" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2263,7 +2263,7 @@ export def "fuota-tasks get" [
 # PUT /fuota-tasks/{Id}
 # operationId: StartFuotaTask
 # --LoRaWAN shape: {StartTime?: string}
-export def "fuota-tasks start" [
+export def "start-fuota-task" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2313,7 +2313,7 @@ export def "fuota-tasks start" [
 # PATCH /fuota-tasks/{Id}
 # operationId: UpdateFuotaTask
 # --LoRaWAN shape: {RfRegion?: "EU868"|"US915"|"AU915"|"AS923-1"|"AS923-2"|"AS923-3"|"AS923-4"|"EU433"|"CN470"|"CN779"|"RU864"|"KR920"|"IN865"}
-export def "fuota-tasks update" [
+export def "update-fuota-task" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2369,7 +2369,7 @@ export def "fuota-tasks update" [
 #
 # DELETE /multicast-groups/{Id}
 # operationId: DeleteMulticastGroup
-export def "multicast-groups delete" [
+export def "delete-multicast-group" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2414,7 +2414,7 @@ export def "multicast-groups delete" [
 #
 # GET /multicast-groups/{Id}
 # operationId: GetMulticastGroup
-export def "multicast-groups get" [
+export def "get-multicast-group" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2460,7 +2460,7 @@ export def "multicast-groups get" [
 # PATCH /multicast-groups/{Id}
 # operationId: UpdateMulticastGroup
 # --LoRaWAN shape: {RfRegion?: "EU868"|"US915"|"AU915"|"AS923-1"|"AS923-2"|"AS923-3"|"AS923-4"|"EU433"|"CN470"|"CN779"|"RU864"|"KR920"|"IN865", DlClass?: "ClassB"|"ClassC"}
-export def "multicast-groups update" [
+export def "update-multicast-group" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2511,7 +2511,7 @@ export def "multicast-groups update" [
 #
 # DELETE /network-analyzer-configurations/{ConfigurationName}
 # operationId: DeleteNetworkAnalyzerConfiguration
-export def "network-analyzer-configurations delete" [
+export def "delete-network-analyzer-configuration" [
   configuration_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2556,7 +2556,7 @@ export def "network-analyzer-configurations delete" [
 #
 # GET /network-analyzer-configurations/{ConfigurationName}
 # operationId: GetNetworkAnalyzerConfiguration
-export def "network-analyzer-configurations get" [
+export def "get-network-analyzer-configuration" [
   configuration_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2602,7 +2602,7 @@ export def "network-analyzer-configurations get" [
 # PATCH /network-analyzer-configurations/{ConfigurationName}
 # operationId: UpdateNetworkAnalyzerConfiguration
 # --TraceContent shape: {WirelessDeviceFrameInfo?: "ENABLED"|"DISABLED", LogLevel?: "INFO"|"ERROR"|"DISABLED"}
-export def "network-analyzer-configurations update" [
+export def "update-network-analyzer-configuration" [
   configuration_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2656,7 +2656,7 @@ export def "network-analyzer-configurations update" [
 #
 # DELETE /wireless-devices/{Id}/data
 # operationId: DeleteQueuedMessages
-export def "wireless-devices-data delete-queued-messages" [
+export def "delete-queued-messages" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2704,7 +2704,7 @@ export def "wireless-devices-data delete-queued-messages" [
 #
 # DELETE /service-profiles/{Id}
 # operationId: DeleteServiceProfile
-export def "service-profiles delete" [
+export def "delete-service-profile" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2749,7 +2749,7 @@ export def "service-profiles delete" [
 #
 # GET /service-profiles/{Id}
 # operationId: GetServiceProfile
-export def "service-profiles get" [
+export def "get-service-profile" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2794,7 +2794,7 @@ export def "service-profiles get" [
 #
 # DELETE /wireless-devices/{Id}
 # operationId: DeleteWirelessDevice
-export def "wireless-devices delete" [
+export def "delete-wireless-device" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2840,7 +2840,7 @@ export def "wireless-devices delete" [
 # PATCH /wireless-devices/{Id}
 # operationId: UpdateWirelessDevice
 # --LoRaWAN shape: {DeviceProfileId?: any, ServiceProfileId?: any, AbpV1_1?: any, AbpV1_0_x?: any, FPorts?: any}
-export def "wireless-devices update" [
+export def "update-wireless-device" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2893,7 +2893,7 @@ export def "wireless-devices update" [
 #
 # DELETE /wireless_device_import_task/{Id}
 # operationId: DeleteWirelessDeviceImportTask
-export def "wireless-device-import-task delete" [
+export def "delete-wireless-device-import-task" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2938,7 +2938,7 @@ export def "wireless-device-import-task delete" [
 #
 # GET /wireless_device_import_task/{Id}
 # operationId: GetWirelessDeviceImportTask
-export def "wireless-device-import-task get" [
+export def "get-wireless-device-import-task" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2984,7 +2984,7 @@ export def "wireless-device-import-task get" [
 # PATCH /wireless_device_import_task/{Id}
 # operationId: UpdateWirelessDeviceImportTask
 # --Sidewalk shape: {DeviceCreationFile?: any}
-export def "wireless-device-import-task update" [
+export def "update-wireless-device-import-task" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3033,7 +3033,7 @@ export def "wireless-device-import-task update" [
 #
 # DELETE /wireless-gateways/{Id}
 # operationId: DeleteWirelessGateway
-export def "wireless-gateways delete" [
+export def "delete-wireless-gateway" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3078,7 +3078,7 @@ export def "wireless-gateways delete" [
 #
 # PATCH /wireless-gateways/{Id}
 # operationId: UpdateWirelessGateway
-export def "wireless-gateways update" [
+export def "update-wireless-gateway" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3131,7 +3131,7 @@ export def "wireless-gateways update" [
 #
 # DELETE /wireless-gateway-task-definitions/{Id}
 # operationId: DeleteWirelessGatewayTaskDefinition
-export def "wireless-gateway-task-definitions delete" [
+export def "delete-wireless-gateway-task-definition" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3176,7 +3176,7 @@ export def "wireless-gateway-task-definitions delete" [
 #
 # GET /wireless-gateway-task-definitions/{Id}
 # operationId: GetWirelessGatewayTaskDefinition
-export def "wireless-gateway-task-definitions get" [
+export def "get-wireless-gateway-task-definition" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3221,7 +3221,7 @@ export def "wireless-gateway-task-definitions get" [
 #
 # PATCH /wireless-devices/{Identifier}/deregister
 # operationId: DeregisterWirelessDevice
-export def "wireless-devices-deregister update" [
+export def "deregister-wireless-device" [
   identifier: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3268,7 +3268,7 @@ export def "wireless-devices-deregister update" [
 #
 # DELETE /partner-accounts/{PartnerAccountId}
 # operationId: DisassociateAwsAccountFromPartnerAccount
-export def "partner-accounts delete-disassociate-aws" [
+export def "disassociate-aws-account-from-partner-account" [
   partner_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3315,7 +3315,7 @@ export def "partner-accounts delete-disassociate-aws" [
 #
 # GET /partner-accounts/{PartnerAccountId}
 # operationId: GetPartnerAccount
-export def "partner-accounts get" [
+export def "get-partner-account" [
   partner_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3363,7 +3363,7 @@ export def "partner-accounts get" [
 # PATCH /partner-accounts/{PartnerAccountId}
 # operationId: UpdatePartnerAccount
 # --Sidewalk shape: {AppServerPrivateKey?: any}
-export def "partner-accounts update" [
+export def "update-partner-account" [
   partner_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3414,7 +3414,7 @@ export def "partner-accounts update" [
 #
 # DELETE /fuota-tasks/{Id}/multicast-groups/{MulticastGroupId}
 # operationId: DisassociateMulticastGroupFromFuotaTask
-export def "fuota-tasks-multicast-groups delete-disassociate" [
+export def "disassociate-multicast-group-from-fuota-task" [
   id: string
   multicast_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3461,7 +3461,7 @@ export def "fuota-tasks-multicast-groups delete-disassociate" [
 #
 # DELETE /fuota-tasks/{Id}/wireless-devices/{WirelessDeviceId}
 # operationId: DisassociateWirelessDeviceFromFuotaTask
-export def "fuota-tasks-wireless-devices delete-disassociate" [
+export def "disassociate-wireless-device-from-fuota-task" [
   id: string
   wireless_device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3508,7 +3508,7 @@ export def "fuota-tasks-wireless-devices delete-disassociate" [
 #
 # DELETE /multicast-groups/{Id}/wireless-devices/{WirelessDeviceId}
 # operationId: DisassociateWirelessDeviceFromMulticastGroup
-export def "multicast-groups-wireless-devices delete-disassociate" [
+export def "disassociate-wireless-device-from-multicast-group" [
   id: string
   wireless_device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3555,7 +3555,7 @@ export def "multicast-groups-wireless-devices delete-disassociate" [
 #
 # GET /event-configurations-resource-types
 # operationId: GetEventConfigurationByResourceTypes
-export def "event-configurations-resource-types get" [
+export def "get-event-configuration-by-resource-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3603,7 +3603,7 @@ export def "event-configurations-resource-types get" [
 # --Join shape: {LoRaWAN?: any}
 # --ConnectionStatus shape: {LoRaWAN?: any}
 # --MessageDeliveryStatus shape: {Sidewalk?: record}
-export def "event-configurations-resource-types update" [
+export def "update-event-configuration-by-resource-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3654,7 +3654,7 @@ export def "event-configurations-resource-types update" [
 #
 # GET /log-levels
 # operationId: GetLogLevelsByResourceTypes
-export def "log-levels get-by-resource-types" [
+export def "get-log-levels-by-resource-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3697,7 +3697,7 @@ export def "log-levels get-by-resource-types" [
 #
 # DELETE /log-levels
 # operationId: ResetAllResourceLogLevels
-export def "log-levels reset-list-resource" [
+export def "reset-all-resource-log-levels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3742,7 +3742,7 @@ export def "log-levels reset-list-resource" [
 # operationId: UpdateLogLevelsByResourceTypes
 # --WirelessDeviceLogOptions item shape: {Type: any, LogLevel: "INFO"|"ERROR"|"DISABLED", Events?: list}
 # --WirelessGatewayLogOptions item shape: {Type: "LoRaWAN", LogLevel: "INFO"|"ERROR"|"DISABLED", Events?: list}
-export def "log-levels update-by-resource-types" [
+export def "update-log-levels-by-resource-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3793,7 +3793,7 @@ export def "log-levels update-by-resource-types" [
 # DEPRECATED
 # operationId: GetPosition
 @deprecated
-export def "positions get" [
+export def "get-position" [
   resource_identifier: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3842,7 +3842,7 @@ export def "positions get" [
 # DEPRECATED
 # operationId: UpdatePosition
 @deprecated
-export def "positions update" [
+export def "update-position" [
   resource_identifier: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3895,7 +3895,7 @@ export def "positions update" [
 # DEPRECATED
 # operationId: GetPositionConfiguration
 @deprecated
-export def "position-configurations get" [
+export def "get-position-configuration" [
   resource_identifier: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3945,7 +3945,7 @@ export def "position-configurations get" [
 # operationId: PutPositionConfiguration
 # --Solvers shape: {SemtechGnss?: any}
 @deprecated
-export def "position-configurations update" [
+export def "put-position-configuration" [
   resource_identifier: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4001,7 +4001,7 @@ export def "position-configurations update" [
 # --CellTowers shape: {Gsm?: any, Wcdma?: any, Tdscdma?: any, Lte?: any, Cdma?: any}
 # --Ip shape: {IpAddress?: any}
 # --Gnss shape: {Payload?: any, CaptureTime?: any, CaptureTimeAccuracy?: any, AssistPosition?: any, AssistAltitude?: any, Use2DSolver?: any}
-export def "position-estimate get" [
+export def "get-position-estimate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4052,7 +4052,7 @@ export def "position-estimate get" [
 #
 # GET /event-configurations/{Identifier}
 # operationId: GetResourceEventConfiguration
-export def "event-configurations get-resource" [
+export def "get-resource-event-configuration" [
   identifier: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4105,7 +4105,7 @@ export def "event-configurations get-resource" [
 # --Join shape: {LoRaWAN?: any, WirelessDeviceIdEventTopic?: any}
 # --ConnectionStatus shape: {LoRaWAN?: any, WirelessGatewayIdEventTopic?: any}
 # --MessageDeliveryStatus shape: {Sidewalk?: record, WirelessDeviceIdEventTopic?: any}
-export def "event-configurations update-resource" [
+export def "update-resource-event-configuration" [
   identifier: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4161,7 +4161,7 @@ export def "event-configurations update-resource" [
 #
 # GET /log-levels/{ResourceIdentifier}
 # operationId: GetResourceLogLevel
-export def "log-levels get-resource" [
+export def "get-resource-log-level" [
   resource_identifier: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4208,7 +4208,7 @@ export def "log-levels get-resource" [
 #
 # PUT /log-levels/{ResourceIdentifier}
 # operationId: PutResourceLogLevel
-export def "log-levels update-resource" [
+export def "put-resource-log-level" [
   resource_identifier: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4259,7 +4259,7 @@ export def "log-levels update-resource" [
 #
 # DELETE /log-levels/{ResourceIdentifier}
 # operationId: ResetResourceLogLevel
-export def "log-levels reset-resource" [
+export def "reset-resource-log-level" [
   resource_identifier: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4306,7 +4306,7 @@ export def "log-levels reset-resource" [
 #
 # GET /resource-positions/{ResourceIdentifier}
 # operationId: GetResourcePosition
-export def "resource-positions get" [
+export def "get-resource-position" [
   resource_identifier: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4353,7 +4353,7 @@ export def "resource-positions get" [
 #
 # PATCH /resource-positions/{ResourceIdentifier}
 # operationId: UpdateResourcePosition
-export def "resource-positions update" [
+export def "update-resource-position" [
   resource_identifier: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4404,7 +4404,7 @@ export def "resource-positions update" [
 #
 # GET /service-endpoint
 # operationId: GetServiceEndpoint
-export def "service-endpoint get" [
+export def "get-service-endpoint" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4449,7 +4449,7 @@ export def "service-endpoint get" [
 #
 # GET /wireless-devices/{Identifier}
 # operationId: GetWirelessDevice
-export def "wireless-devices get" [
+export def "get-wireless-device" [
   identifier: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4496,7 +4496,7 @@ export def "wireless-devices get" [
 #
 # GET /wireless-devices/{Id}/statistics
 # operationId: GetWirelessDeviceStatistics
-export def "wireless-devices-statistics get" [
+export def "get-wireless-device-statistics" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4541,7 +4541,7 @@ export def "wireless-devices-statistics get" [
 #
 # GET /wireless-gateways/{Identifier}
 # operationId: GetWirelessGateway
-export def "wireless-gateways get" [
+export def "get-wireless-gateway" [
   identifier: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4588,7 +4588,7 @@ export def "wireless-gateways get" [
 #
 # GET /wireless-gateways/{Id}/firmware-information
 # operationId: GetWirelessGatewayFirmwareInformation
-export def "wireless-gateways-firmware-information get" [
+export def "get-wireless-gateway-firmware-information" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4633,7 +4633,7 @@ export def "wireless-gateways-firmware-information get" [
 #
 # GET /wireless-gateways/{Id}/statistics
 # operationId: GetWirelessGatewayStatistics
-export def "wireless-gateways-statistics get" [
+export def "get-wireless-gateway-statistics" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4678,7 +4678,7 @@ export def "wireless-gateways-statistics get" [
 #
 # GET /wireless_device_import_task
 # operationId: ListDevicesForWirelessDeviceImportTask
-export def "wireless-device-import-task list" [
+export def "list-devices-for-wireless-device-import-task" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4726,7 +4726,7 @@ export def "wireless-device-import-task list" [
 #
 # GET /event-configurations
 # operationId: ListEventConfigurations
-export def "event-configurations list" [
+export def "list-event-configurations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4773,7 +4773,7 @@ export def "event-configurations list" [
 #
 # GET /fuota-tasks/{Id}/multicast-groups
 # operationId: ListMulticastGroupsByFuotaTask
-export def "fuota-tasks-multicast-groups list" [
+export def "list-multicast-groups-by-fuota-task" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4825,7 +4825,7 @@ export def "fuota-tasks-multicast-groups list" [
 # DEPRECATED
 # operationId: ListPositionConfigurations
 @deprecated
-export def "position-configurations list" [
+export def "list-position-configurations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4874,7 +4874,7 @@ export def "position-configurations list" [
 #
 # GET /wireless-devices/{Id}/data
 # operationId: ListQueuedMessages
-export def "wireless-devices-data list-queued-messages" [
+export def "list-queued-messages" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4926,7 +4926,7 @@ export def "wireless-devices-data list-queued-messages" [
 # POST /wireless-devices/{Id}/data
 # operationId: SendDataToWirelessDevice
 # --WirelessMetadata shape: {LoRaWAN?: any, Sidewalk?: any}
-export def "wireless-devices-data send" [
+export def "send-data-to-wireless-device" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4977,7 +4977,7 @@ export def "wireless-devices-data send" [
 #
 # GET /tags
 # operationId: ListTagsForResource
-export def "tags list-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5023,7 +5023,7 @@ export def "tags list-for-resource" [
 # POST /tags
 # operationId: TagResource
 # --Tags item shape: {Key: any, Value: any}
-export def "tags tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5072,7 +5072,7 @@ export def "tags tag-resource" [
 #
 # GET /wireless_device_import_tasks
 # operationId: ListWirelessDeviceImportTasks
-export def "wireless-device-import-tasks list" [
+export def "list-wireless-device-import-tasks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5119,7 +5119,7 @@ export def "wireless-device-import-tasks list" [
 # POST /multicast-groups/{Id}/data
 # operationId: SendDataToMulticastGroup
 # --WirelessMetadata shape: {LoRaWAN?: record}
-export def "multicast-groups-data send" [
+export def "send-data-to-multicast-group" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5170,7 +5170,7 @@ export def "multicast-groups-data send" [
 # PATCH /multicast-groups/{Id}/bulk
 # operationId: StartBulkAssociateWirelessDeviceWithMulticastGroup
 # --Tags item shape: {Key: any, Value: any}
-export def "multicast-groups-bulk start-associate-wireless-device" [
+export def "start-bulk-associate-wireless-device-with-multicast-group" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5221,7 +5221,7 @@ export def "multicast-groups-bulk start-associate-wireless-device" [
 # POST /multicast-groups/{Id}/bulk
 # operationId: StartBulkDisassociateWirelessDeviceFromMulticastGroup
 # --Tags item shape: {Key: any, Value: any}
-export def "multicast-groups-bulk start-disassociate-wireless-device" [
+export def "start-bulk-disassociate-wireless-device-from-multicast-group" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5273,7 +5273,7 @@ export def "multicast-groups-bulk start-disassociate-wireless-device" [
 # operationId: StartSingleWirelessDeviceImportTask
 # --Tags item shape: {Key: any, Value: any}
 # --Sidewalk shape: {SidewalkManufacturingSn?: any}
-export def "wireless-single-device-import-task start" [
+export def "start-single-wireless-device-import-task" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5326,7 +5326,7 @@ export def "wireless-single-device-import-task start" [
 # operationId: StartWirelessDeviceImportTask
 # --Tags item shape: {Key: any, Value: any}
 # --Sidewalk shape: {DeviceCreationFile?: any, Role?: any}
-export def "wireless-device-import-task start" [
+export def "start-wireless-device-import-task" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5376,7 +5376,7 @@ export def "wireless-device-import-task start" [
 #
 # POST /wireless-devices/{Id}/test
 # operationId: TestWirelessDevice
-export def "wireless-devices-test test" [
+export def "test-wireless-device" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5421,7 +5421,7 @@ export def "wireless-devices-test test" [
 #
 # DELETE /tags
 # operationId: UntagResource
-export def "tags untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

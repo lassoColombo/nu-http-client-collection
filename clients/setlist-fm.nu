@@ -99,7 +99,7 @@ def accept-completer [] { ["application/json" "application/xml"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "1-0-artist get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "resource-1-0-artist-mbid-get-artist-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -123,7 +123,7 @@ export def commands []: nothing -> table {
 #
 # GET /1.0/artist/{mbid}
 # operationId: resource__1.0_artist__mbid__getArtist_GET
-export def "1-0-artist get" [
+export def "resource-1-0-artist-mbid-get-artist-get" [
   mbid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -160,7 +160,7 @@ export def "1-0-artist get" [
 #
 # GET /1.0/artist/{mbid}/setlists
 # operationId: resource__1.0_artist__mbid__setlists_getArtistSetlists_GET
-export def "1-0-artist-setlists get" [
+export def "resource-1-0-artist-mbid-setlists-get-artist-setlists-get" [
   mbid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -199,7 +199,7 @@ export def "1-0-artist-setlists get" [
 #
 # GET /1.0/city/{geoId}
 # operationId: resource__1.0_city__geoId__getCity_GET
-export def "1-0-city get-geo" [
+export def "resource-1-0-city-geo-id-get-city-get" [
   geo_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -236,7 +236,7 @@ export def "1-0-city get-geo" [
 #
 # GET /1.0/search/artists
 # operationId: resource__1.0_search_artists_getArtists_GET
-export def "1-0-search-artists get" [
+export def "resource-1-0-search-artists-get-artists-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -277,7 +277,7 @@ export def "1-0-search-artists get" [
 #
 # GET /1.0/search/cities
 # operationId: resource__1.0_search_cities_getCities_GET
-export def "1-0-search-cities get" [
+export def "resource-1-0-search-cities-get-cities-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -318,7 +318,7 @@ export def "1-0-search-cities get" [
 #
 # GET /1.0/search/countries
 # operationId: resource__1.0_search_countries_getCountries_GET
-export def "1-0-search-countries get" [
+export def "resource-1-0-search-countries-get-countries-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -353,7 +353,7 @@ export def "1-0-search-countries get" [
 #
 # GET /1.0/search/setlists
 # operationId: resource__1.0_search_setlists_getSetlists_GET
-export def "1-0-search-setlists get" [
+export def "resource-1-0-search-setlists-get-setlists-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -405,7 +405,7 @@ export def "1-0-search-setlists get" [
 #
 # GET /1.0/search/venues
 # operationId: resource__1.0_search_venues_getVenues_GET
-export def "1-0-search-venues get" [
+export def "resource-1-0-search-venues-get-venues-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -448,7 +448,7 @@ export def "1-0-search-venues get" [
 #
 # GET /1.0/setlist/version/{versionId}
 # operationId: resource__1.0_setlist_version__versionId__getSetlistVersion_GET
-export def "1-0-setlist-version get" [
+export def "resource-1-0-setlist-version-version-id-get-setlist-version-get" [
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -485,7 +485,7 @@ export def "1-0-setlist-version get" [
 #
 # GET /1.0/setlist/{setlistId}
 # operationId: resource__1.0_setlist__setlistId__getSetlist_GET
-export def "1-0-setlist get" [
+export def "resource-1-0-setlist-setlist-id-get-setlist-get" [
   setlist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -522,7 +522,7 @@ export def "1-0-setlist get" [
 #
 # GET /1.0/user/{userId}
 # operationId: resource__1.0_user__userId__getUser_GET
-export def "1-0-user get" [
+export def "resource-1-0-user-user-id-get-user-get" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -559,7 +559,7 @@ export def "1-0-user get" [
 #
 # GET /1.0/user/{userId}/attended
 # operationId: resource__1.0_user__userId__attended_getUserAttendedSetlists_GET
-export def "1-0-user-attended get-setlists" [
+export def "resource-1-0-user-user-id-attended-get-user-attended-setlists-get" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -598,7 +598,7 @@ export def "1-0-user-attended get-setlists" [
 #
 # GET /1.0/user/{userId}/edited
 # operationId: resource__1.0_user__userId__edited_getUserEditedSetlists_GET
-export def "1-0-user-edited get-setlists" [
+export def "resource-1-0-user-user-id-edited-get-user-edited-setlists-get" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -637,7 +637,7 @@ export def "1-0-user-edited get-setlists" [
 #
 # GET /1.0/venue/{venueId}
 # operationId: resource__1.0_venue__venueId__getVenue_GET
-export def "1-0-venue get" [
+export def "resource-1-0-venue-venue-id-get-venue-get" [
   venue_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -674,7 +674,7 @@ export def "1-0-venue get" [
 #
 # GET /1.0/venue/{venueId}/setlists
 # operationId: resource__1.0_venue__venueId__setlists_getVenueSetlists_GET
-export def "1-0-venue-setlists get" [
+export def "resource-1-0-venue-venue-id-setlists-get-venue-setlists-get" [
   venue_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

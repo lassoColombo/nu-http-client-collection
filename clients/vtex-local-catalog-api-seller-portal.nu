@@ -121,7 +121,7 @@ def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "catalog-seller-portal-brands list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-brand" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -145,7 +145,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/catalog-seller-portal/brands
 # operationId: ListBrand
-export def "catalog-seller-portal-brands list" [
+export def "list-brand" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -189,7 +189,7 @@ export def "catalog-seller-portal-brands list" [
 #
 # POST /api/catalog-seller-portal/brands
 # operationId: PostBrand
-export def "catalog-seller-portal-brands create" [
+export def "post-brand" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -234,7 +234,7 @@ export def "catalog-seller-portal-brands create" [
 #
 # GET /api/catalog-seller-portal/brands/{brandId}
 # operationId: GetBrand
-export def "catalog-seller-portal-brands get" [
+export def "get-brand" [
   brand_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -274,7 +274,7 @@ export def "catalog-seller-portal-brands get" [
 #
 # PUT /api/catalog-seller-portal/brands/{brandId}
 # operationId: PutBrand
-export def "catalog-seller-portal-brands update" [
+export def "put-brand" [
   brand_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -322,7 +322,7 @@ export def "catalog-seller-portal-brands update" [
 #
 # GET /api/catalog-seller-portal/category-tree
 # operationId: GetCategoryTree
-export def "catalog-seller-portal-category-tree get" [
+export def "get-category-tree" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -363,7 +363,7 @@ export def "catalog-seller-portal-category-tree get" [
 # PUT /api/catalog-seller-portal/category-tree
 # operationId: UpdateCategoryTree
 # --roots item shape: {children: list, value: record}
-export def "catalog-seller-portal-category-tree update" [
+export def "update-category-tree" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -407,7 +407,7 @@ export def "catalog-seller-portal-category-tree update" [
 #
 # POST /api/catalog-seller-portal/category-tree/categories
 # operationId: CreateCategory
-export def "catalog-seller-portal-category-tree-categories create" [
+export def "create-category" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -452,7 +452,7 @@ export def "catalog-seller-portal-category-tree-categories create" [
 #
 # GET /api/catalog-seller-portal/category-tree/categories/{categoryId}
 # operationId: Getbyid
-export def "catalog-seller-portal-category-tree-categories get" [
+export def "getbyid" [
   category_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -496,7 +496,7 @@ export def "catalog-seller-portal-category-tree-categories get" [
 # --images item shape: {alt?: string, id: string, url: string}
 # --skus item shape: {dimensions: record, ean?: string, externalId?: string, images: list, isActive: bool, manufacturerCode?: string, name: string, specs: list, weight: int}
 # --specs item shape: {name: string, values: list<string>}
-export def "catalog-seller-portal-products create" [
+export def "post-product" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -553,7 +553,7 @@ export def "catalog-seller-portal-products create" [
 #
 # GET /api/catalog-seller-portal/products/{param}
 # operationId: GetProductQuery
-export def "catalog-seller-portal-products get-list" [
+export def "get-product-query" [
   param: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -593,7 +593,7 @@ export def "catalog-seller-portal-products get-list" [
 #
 # GET /api/catalog-seller-portal/products/{productId}
 # operationId: GetProduct
-export def "catalog-seller-portal-products get" [
+export def "get-product" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -637,7 +637,7 @@ export def "catalog-seller-portal-products get" [
 # --images item shape: {alt?: string, id: string, url: string}
 # --skus item shape: {dimensions: record, ean?: string, externalId?: string, id?: string, images: list, isActive: bool, manufacturerCode?: string, name?: string, specs: list, weight: int}
 # --specs item shape: {name: string, values: list<string>}
-export def "catalog-seller-portal-products update" [
+export def "put-product" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -696,7 +696,7 @@ export def "catalog-seller-portal-products update" [
 #
 # GET /api/catalog-seller-portal/products/{productId}/description
 # operationId: GetProductDescription
-export def "catalog-seller-portal-products-description get" [
+export def "get-product-description" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -736,7 +736,7 @@ export def "catalog-seller-portal-products-description get" [
 #
 # PUT /api/catalog-seller-portal/products/{productId}/description
 # operationId: PutProductDescription
-export def "catalog-seller-portal-products-description update" [
+export def "put-product-description" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -783,7 +783,7 @@ export def "catalog-seller-portal-products-description update" [
 #
 # GET /api/catalog-seller-portal/skus/_search
 # operationId: SearchSKU
-export def "catalog-seller-portal-skus-search list" [
+export def "search-sku" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -826,7 +826,7 @@ export def "catalog-seller-portal-skus-search list" [
 #
 # GET /api/catalog-seller-portal/skus/ids
 # operationId: ListSKU
-export def "catalog-seller-portal-skus-ids list" [
+export def "list-sku" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)

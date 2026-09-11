@@ -177,7 +177,7 @@ def user-completer [] { ["hard" "pruning" "soft"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "app get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-app" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -201,7 +201,7 @@ export def commands []: nothing -> table {
 #
 # GET /app
 # operationId: GetApp
-export def "app get" [
+export def "get-app" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
   --token-apikey: string # Auth token for api_key (api_key)
@@ -246,7 +246,7 @@ export def "app get" [
 # --image_upload_config shape: {allowed_file_extensions?: list<string>, allowed_mime_types?: list<string>, blocked_file_extensions?: list<string>, blocked_mime_types?: list<string>}
 # --push_config shape: {offline_only?: bool, version?: "v1"|"v2"}
 # --xiaomi_config shape: {Disabled?: bool, package_name?: string, secret?: string}
-export def "app update" [
+export def "update-app" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
   --token-apikey: string # Auth token for api_key (api_key)
@@ -319,7 +319,7 @@ export def "app update" [
 #
 # GET /blocklists
 # operationId: ListBlockLists
-export def "blocklists list-block-lists" [
+export def "list-block-lists" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
   --token-apikey: string # Auth token for api_key (api_key)
@@ -354,7 +354,7 @@ export def "blocklists list-block-lists" [
 #
 # POST /blocklists
 # operationId: CreateBlockList
-export def "blocklists create-block-list" [
+export def "create-block-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
   --token-apikey: string # Auth token for api_key (api_key)
@@ -394,7 +394,7 @@ export def "blocklists create-block-list" [
 #
 # DELETE /blocklists/{name}
 # operationId: DeleteBlockList
-export def "blocklists delete-block-list" [
+export def "delete-block-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
@@ -431,7 +431,7 @@ export def "blocklists delete-block-list" [
 #
 # GET /blocklists/{name}
 # operationId: GetBlockList
-export def "blocklists get-block-list" [
+export def "get-block-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
@@ -468,7 +468,7 @@ export def "blocklists get-block-list" [
 #
 # PUT /blocklists/{name}
 # operationId: UpdateBlockList
-export def "blocklists update-block-list" [
+export def "update-block-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
@@ -511,7 +511,7 @@ export def "blocklists update-block-list" [
 # POST /calls/
 # operationId: GetCallToken__1
 # --user shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
-export def "calls get-token" [
+export def "get-call-token-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
   --token-apikey: string # Auth token for api_key (api_key)
@@ -552,7 +552,7 @@ export def "calls get-token" [
 # POST /calls/{call_id}
 # operationId: GetCallToken_call_id_0
 # --user shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
-export def "calls get-token-by-call-id" [
+export def "get-call-token-call-id-0" [
   call_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
@@ -594,7 +594,7 @@ export def "calls get-token-by-call-id" [
 #
 # GET /campaigns
 # operationId: QueryCampaigns
-export def "campaigns list" [
+export def "query-campaigns" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
   --token-apikey: string # Auth token for api_key (api_key)
@@ -632,7 +632,7 @@ export def "campaigns list" [
 # POST /campaigns
 # operationId: CreateCampaign
 # --campaign shape: {attachments?: list, channel_type?: string, defaults?: record, description?: string, name: string, segment_id: string, sender_id: string, text: string}
-export def "campaigns create" [
+export def "create-campaign" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
   --token-apikey: string # Auth token for api_key (api_key)
@@ -671,7 +671,7 @@ export def "campaigns create" [
 #
 # DELETE /campaigns/{id}
 # operationId: DeleteCampaign
-export def "campaigns delete" [
+export def "delete-campaign" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
@@ -711,7 +711,7 @@ export def "campaigns delete" [
 # PUT /campaigns/{id}
 # operationId: UpdateCampaign
 # --campaign shape: {attachments?: list, channel_type?: string, defaults?: record, description?: string, name?: string, segment_id?: string, sender_id?: string, text?: string}
-export def "campaigns update" [
+export def "update-campaign" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
@@ -752,7 +752,7 @@ export def "campaigns update" [
 #
 # PATCH /campaigns/{id}/resume
 # operationId: ResumeCampaign
-export def "campaigns-resume update" [
+export def "resume-campaign" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
@@ -789,7 +789,7 @@ export def "campaigns-resume update" [
 #
 # PATCH /campaigns/{id}/schedule
 # operationId: ScheduleCampaign
-export def "campaigns-schedule update" [
+export def "schedule-campaign" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
@@ -830,7 +830,7 @@ export def "campaigns-schedule update" [
 #
 # PATCH /campaigns/{id}/stop
 # operationId: StopCampaign
-export def "campaigns-stop stop" [
+export def "stop-campaign" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
@@ -867,7 +867,7 @@ export def "campaigns-stop stop" [
 #
 # POST /campaigns/{id}/test
 # operationId: TestCampaign
-export def "campaigns-test test" [
+export def "test-campaign" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
@@ -910,7 +910,7 @@ export def "campaigns-test test" [
 # operationId: QueryChannels
 # --sort item shape: {direction?: float, field?: string}
 # --user shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
-export def "channels list" [
+export def "query-channels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
   --token-apikey: string # Auth token for api_key (api_key)
@@ -964,7 +964,7 @@ export def "channels list" [
 #
 # POST /channels/delete
 # operationId: DeleteChannels
-export def "channels-delete delete" [
+export def "delete-channels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
   --token-apikey: string # Auth token for api_key (api_key)
@@ -1005,7 +1005,7 @@ export def "channels-delete delete" [
 # POST /channels/read
 # operationId: MarkChannelsRead
 # --user shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
-export def "channels-read get-mark" [
+export def "mark-channels-read" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
   --token-apikey: string # Auth token for api_key (api_key)
@@ -1049,7 +1049,7 @@ export def "channels-read get-mark" [
 # --members shape: {id_gt?: float, id_gte?: float, id_lt?: float, id_lte?: float, limit?: float, offset?: float}
 # --messages shape: {created_at_after?: string, created_at_after_or_equal?: string, created_at_around?: string, created_at_before?: string, created_at_before_or_equal?: string, id_around?: string, id_gt?: string, id_gte?: string, id_lt?: string, id_lte?: string, limit?: float, offset?: float}
 # --watchers shape: {id_gt?: float, id_gte?: float, id_lt?: float, id_lte?: float, limit?: float, offset?: float}
-export def "channels-query get-or-create-by-type" [
+export def "get-or-create-channel-type-1" [
   type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
@@ -1101,7 +1101,7 @@ export def "channels-query get-or-create-by-type" [
 #
 # DELETE /channels/{type}/{id}
 # operationId: DeleteChannel
-export def "channels delete" [
+export def "delete-channel" [
   type: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1143,7 +1143,7 @@ export def "channels delete" [
 # PATCH /channels/{type}/{id}
 # operationId: UpdateChannelPartial
 # --user shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
-export def "channels update-partial" [
+export def "update-channel-partial" [
   type: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1195,7 +1195,7 @@ export def "channels update-partial" [
 # --invites item shape: {ban_expires?: string, banned?: bool, channel_role?: string, created_at?: string, deleted_at?: string, invite_accepted_at?: string, invite_rejected_at?: string, invited?: bool, is_moderator?: bool, role?: "member"|"moderator"|"admin"|"owner", shadow_banned?: bool, updated_at?: string, user?: record, user_id?: string}
 # --message shape: {attachments: list, cid?: list<float>, html?: string, id?: string, mentioned_users?: list<string>, mml?: string, parent?: list<float>, parent_id?: string, pin_expires?: string, pinned?: bool, pinned_at?: string, pinned_by?: list<float>, quoted_message_id?: string, reaction_scores?: list<float>, show_in_channel?: bool, silent?: bool, text?: string, user?: record, user_id?: string}
 # --user shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
-export def "channels update" [
+export def "update-channel" [
   type: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1253,7 +1253,7 @@ export def "channels update" [
 # POST /channels/{type}/{id}/call
 # operationId: CreateCall
 # --user shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
-export def "channels-call create" [
+export def "create-call" [
   type: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1301,7 +1301,7 @@ export def "channels-call create" [
 # POST /channels/{type}/{id}/event
 # operationId: SendEvent
 # --event shape: {automoderation?: bool, automoderation_scores?: record, channel?: record, channel_id?: string, channel_type?: string, cid?: string, connection_id?: string, created_at?: string, created_by?: record, me?: record, member?: record, message?: record, parent_id?: string, reaction?: record, reason?: string, team?: string, type: string, user?: record, user_id?: string, watcher_count?: float}
-export def "channels-event send" [
+export def "send-event" [
   type: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1344,7 +1344,7 @@ export def "channels-event send" [
 #
 # DELETE /channels/{type}/{id}/file
 # operationId: DeleteFile
-export def "channels-file delete" [
+export def "delete-file" [
   type: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1386,7 +1386,7 @@ export def "channels-file delete" [
 # POST /channels/{type}/{id}/file
 # operationId: UploadFile
 # --user shape: {id: string}
-export def "channels-file upload" [
+export def "upload-file" [
   type: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1433,7 +1433,7 @@ export def "channels-file upload" [
 # POST /channels/{type}/{id}/hide
 # operationId: HideChannel
 # --user shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
-export def "channels-hide create" [
+export def "hide-channel" [
   type: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1478,7 +1478,7 @@ export def "channels-hide create" [
 #
 # DELETE /channels/{type}/{id}/image
 # operationId: DeleteImage
-export def "channels-image delete" [
+export def "delete-image" [
   type: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1521,7 +1521,7 @@ export def "channels-image delete" [
 # operationId: UploadImage
 # --upload_sizes item shape: {crop?: "top"|"bottom"|"left"|"right"|"center", height?: float, resize?: "clip"|"crop"|"scale"|"fill", width?: float}
 # --user shape: {id: string}
-export def "channels-image upload" [
+export def "upload-image" [
   type: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1569,7 +1569,7 @@ export def "channels-image upload" [
 # POST /channels/{type}/{id}/message
 # operationId: SendMessage
 # --message shape: {attachments: list, cid?: list<float>, html?: string, id?: string, mentioned_users?: list<string>, mml?: string, parent?: list<float>, parent_id?: string, pin_expires?: string, pinned?: bool, pinned_at?: string, pinned_by?: list<float>, quoted_message_id?: string, reaction_scores?: list<float>, show_in_channel?: bool, silent?: bool, text?: string, user?: record, user_id?: string}
-export def "channels-message send" [
+export def "send-message" [
   type: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1617,7 +1617,7 @@ export def "channels-message send" [
 #
 # GET /channels/{type}/{id}/messages
 # operationId: GetManyMessages
-export def "channels-messages get-many" [
+export def "get-many-messages" [
   type: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1662,7 +1662,7 @@ export def "channels-messages get-many" [
 # --members shape: {id_gt?: float, id_gte?: float, id_lt?: float, id_lte?: float, limit?: float, offset?: float}
 # --messages shape: {created_at_after?: string, created_at_after_or_equal?: string, created_at_around?: string, created_at_before?: string, created_at_before_or_equal?: string, id_around?: string, id_gt?: string, id_gte?: string, id_lt?: string, id_lte?: string, limit?: float, offset?: float}
 # --watchers shape: {id_gt?: float, id_gte?: float, id_lt?: float, id_lte?: float, limit?: float, offset?: float}
-export def "channels-query get-or-create-by-type-id" [
+export def "get-or-create-channel-type-id-0" [
   type: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1717,7 +1717,7 @@ export def "channels-query get-or-create-by-type-id" [
 # POST /channels/{type}/{id}/read
 # operationId: MarkRead
 # --user shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
-export def "channels-read get-mark-by-type-id" [
+export def "mark-read" [
   type: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1763,7 +1763,7 @@ export def "channels-read get-mark-by-type-id" [
 # POST /channels/{type}/{id}/show
 # operationId: ShowChannel
 # --user shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
-export def "channels-show create" [
+export def "show-channel" [
   type: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1807,7 +1807,7 @@ export def "channels-show create" [
 #
 # POST /channels/{type}/{id}/stop-watching
 # operationId: StopWatchingChannel
-export def "channels-stop-watching stop" [
+export def "stop-watching-channel" [
   type: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1856,7 +1856,7 @@ export def "channels-stop-watching stop" [
 # operationId: TruncateChannel
 # --message shape: {attachments: list, cid?: list<float>, html?: string, id?: string, mentioned_users?: list<string>, mml?: string, parent?: list<float>, parent_id?: string, pin_expires?: string, pinned?: bool, pinned_at?: string, pinned_by?: list<float>, quoted_message_id?: string, reaction_scores?: list<float>, show_in_channel?: bool, silent?: bool, text?: string, user?: record, user_id?: string}
 # --user shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
-export def "channels-truncate create" [
+export def "truncate-channel" [
   type: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1905,7 +1905,7 @@ export def "channels-truncate create" [
 # POST /channels/{type}/{id}/unread
 # operationId: MarkUnread
 # --user shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
-export def "channels-unread create-mark" [
+export def "mark-unread" [
   type: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1950,7 +1950,7 @@ export def "channels-unread create-mark" [
 #
 # GET /channeltypes
 # operationId: ListChannelTypes
-export def "channeltypes list-channel-types" [
+export def "list-channel-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
   --token-apikey: string # Auth token for api_key (api_key)
@@ -1986,7 +1986,7 @@ export def "channeltypes list-channel-types" [
 # POST /channeltypes
 # operationId: CreateChannelType
 # --permissions item shape: {action?: "Deny"|"Allow", name: string, owner?: bool, priority: float, resources?: list<string>, roles?: list<string>}
-export def "channeltypes create-channel-type" [
+export def "create-channel-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
   --token-apikey: string # Auth token for api_key (api_key)
@@ -2045,7 +2045,7 @@ export def "channeltypes create-channel-type" [
 #
 # DELETE /channeltypes/{name}
 # operationId: DeleteChannelType
-export def "channeltypes delete-channel-type" [
+export def "delete-channel-type" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
@@ -2082,7 +2082,7 @@ export def "channeltypes delete-channel-type" [
 #
 # GET /channeltypes/{name}
 # operationId: GetChannelType
-export def "channeltypes get-channel-type" [
+export def "get-channel-type" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
@@ -2121,7 +2121,7 @@ export def "channeltypes get-channel-type" [
 # operationId: UpdateChannelType
 # --automod_thresholds shape: {explicit?: record, spam?: record, toxic?: record}
 # --permissions item shape: {action?: "Deny"|"Allow", name: string, owner?: bool, priority: float, resources?: list<string>, roles?: list<string>}
-export def "channeltypes update-channel-type" [
+export def "update-channel-type" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
@@ -2186,7 +2186,7 @@ export def "channeltypes update-channel-type" [
 # POST /check_push
 # operationId: CheckPush
 # --user shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
-export def "check-push check" [
+export def "check-push" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
   --token-apikey: string # Auth token for api_key (api_key)
@@ -2233,7 +2233,7 @@ export def "check-push check" [
 #
 # POST /check_sqs
 # operationId: CheckSQS
-export def "check-sqs check" [
+export def "check-sqs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
   --token-apikey: string # Auth token for api_key (api_key)
@@ -2274,7 +2274,7 @@ export def "check-sqs check" [
 #
 # GET /commands
 # operationId: ListCommands
-export def "commands list" [
+export def "list-commands" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
   --token-apikey: string # Auth token for api_key (api_key)
@@ -2309,7 +2309,7 @@ export def "commands list" [
 #
 # POST /commands
 # operationId: CreateCommand
-export def "commands create" [
+export def "create-command" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
   --token-apikey: string # Auth token for api_key (api_key)
@@ -2351,7 +2351,7 @@ export def "commands create" [
 #
 # DELETE /commands/{name}
 # operationId: DeleteCommand
-export def "commands delete" [
+export def "delete-command" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
@@ -2388,7 +2388,7 @@ export def "commands delete" [
 #
 # GET /commands/{name}
 # operationId: GetCommand
-export def "commands get" [
+export def "get-command" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
@@ -2425,7 +2425,7 @@ export def "commands get" [
 #
 # PUT /commands/{name}
 # operationId: UpdateCommand
-export def "commands update" [
+export def "update-command" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
@@ -2469,7 +2469,7 @@ export def "commands update" [
 #
 # GET /connect
 # operationId: Connect
-export def "connect get" [
+export def "connect" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
   --token-apikey: string # Auth token for api_key (api_key)
@@ -2506,7 +2506,7 @@ export def "connect get" [
 #
 # DELETE /devices
 # operationId: DeleteDevice
-export def "devices delete" [
+export def "delete-device" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
   --token-apikey: string # Auth token for api_key (api_key)
@@ -2544,7 +2544,7 @@ export def "devices delete" [
 #
 # GET /devices
 # operationId: ListDevices
-export def "devices list" [
+export def "list-devices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
   --token-apikey: string # Auth token for api_key (api_key)
@@ -2582,7 +2582,7 @@ export def "devices list" [
 # POST /devices
 # operationId: CreateDevice
 # --user shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
-export def "devices create" [
+export def "create-device" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
   --token-apikey: string # Auth token for api_key (api_key)
@@ -2625,7 +2625,7 @@ export def "devices create" [
 #
 # POST /export/users
 # operationId: ExportUser
-export def "export-users export" [
+export def "export-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
   --token-apikey: string # Auth token for api_key (api_key)
@@ -2665,7 +2665,7 @@ export def "export-users export" [
 # POST /export_channels
 # operationId: ExportChannels
 # --channels item shape: {cid?: string, id?: string, messages_since?: string, messages_until?: string, type?: string}
-export def "export-channels export" [
+export def "export-channels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
   --token-apikey: string # Auth token for api_key (api_key)
@@ -2708,7 +2708,7 @@ export def "export-channels export" [
 #
 # GET /export_channels/{id}
 # operationId: GetExportChannelsStatus
-export def "export-channels get-status" [
+export def "get-export-channels-status" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
@@ -2746,7 +2746,7 @@ export def "export-channels get-status" [
 # POST /guest
 # operationId: CreateGuest
 # --user shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
-export def "guest create" [
+export def "create-guest" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
   --token-apikey: string # Auth token for api_key (api_key)
@@ -2785,7 +2785,7 @@ export def "guest create" [
 #
 # POST /import_urls
 # operationId: CreateImportURL
-export def "import-urls create" [
+export def "create-import-url" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
   --token-apikey: string # Auth token for api_key (api_key)
@@ -2824,7 +2824,7 @@ export def "import-urls create" [
 #
 # GET /imports
 # operationId: ListImports
-export def "imports list" [
+export def "list-imports" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
   --token-apikey: string # Auth token for api_key (api_key)
@@ -2859,7 +2859,7 @@ export def "imports list" [
 #
 # POST /imports
 # operationId: CreateImport
-export def "imports create" [
+export def "create-import" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
   --token-apikey: string # Auth token for api_key (api_key)
@@ -2899,7 +2899,7 @@ export def "imports create" [
 #
 # GET /imports/{id}
 # operationId: GetImport
-export def "imports get" [
+export def "get-import" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
@@ -2936,7 +2936,7 @@ export def "imports get" [
 #
 # GET /longpoll
 # operationId: LongPoll
-export def "longpoll get-long-poll" [
+export def "long-poll" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
   --token-apikey: string # Auth token for api_key (api_key)
@@ -2974,7 +2974,7 @@ export def "longpoll get-long-poll" [
 #
 # GET /members
 # operationId: QueryMembers
-export def "members list" [
+export def "query-members" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
   --token-apikey: string # Auth token for api_key (api_key)
@@ -3011,7 +3011,7 @@ export def "members list" [
 #
 # DELETE /messages/{id}
 # operationId: DeleteMessage
-export def "messages delete" [
+export def "delete-message" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
@@ -3050,7 +3050,7 @@ export def "messages delete" [
 #
 # GET /messages/{id}
 # operationId: GetMessage
-export def "messages get" [
+export def "get-message" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
@@ -3088,7 +3088,7 @@ export def "messages get" [
 # POST /messages/{id}
 # operationId: UpdateMessage
 # --message shape: {attachments: list, cid?: list<float>, html?: string, id?: string, mentioned_users?: list<string>, mml?: string, parent?: list<float>, parent_id?: string, pin_expires?: string, pinned?: bool, pinned_at?: string, pinned_by?: list<float>, quoted_message_id?: string, reaction_scores?: list<float>, show_in_channel?: bool, silent?: bool, text?: string, user?: record, user_id?: string}
-export def "messages update" [
+export def "update-message" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
@@ -3132,7 +3132,7 @@ export def "messages update" [
 # PUT /messages/{id}
 # operationId: UpdateMessagePartial
 # --user shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
-export def "messages update-partial" [
+export def "update-message-partial" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
@@ -3178,7 +3178,7 @@ export def "messages update-partial" [
 # POST /messages/{id}/action
 # operationId: RunMessageAction
 # --user shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
-export def "messages-action create-run" [
+export def "run-message-action" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
@@ -3222,7 +3222,7 @@ export def "messages-action create-run" [
 #
 # POST /messages/{id}/commit
 # operationId: CommitMessage
-export def "messages-commit commit" [
+export def "commit-message" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
@@ -3260,7 +3260,7 @@ export def "messages-commit commit" [
 # POST /messages/{id}/reaction
 # operationId: SendReaction
 # --reaction shape: {message_id?: string, score?: float, type: string, user?: record, user_id?: string}
-export def "messages-reaction send" [
+export def "send-reaction" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
@@ -3304,7 +3304,7 @@ export def "messages-reaction send" [
 #
 # DELETE /messages/{id}/reaction/{type}
 # operationId: DeleteReaction
-export def "messages-reaction delete" [
+export def "delete-reaction" [
   id: string
   type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3345,7 +3345,7 @@ export def "messages-reaction delete" [
 #
 # GET /messages/{id}/reactions
 # operationId: GetReactions
-export def "messages-reactions get" [
+export def "get-reactions" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
@@ -3385,7 +3385,7 @@ export def "messages-reactions get" [
 #
 # POST /messages/{id}/translate
 # operationId: TranslateMessage
-export def "messages-translate create" [
+export def "translate-message" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
@@ -3426,7 +3426,7 @@ export def "messages-translate create" [
 #
 # GET /messages/{parent_id}/replies
 # operationId: GetReplies
-export def "messages-replies get" [
+export def "get-replies" [
   parent_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
@@ -3474,7 +3474,7 @@ export def "messages-replies get" [
 #
 # DELETE /moderation/ban
 # operationId: Unban
-export def "moderation-ban delete-unban" [
+export def "unban" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
   --token-apikey: string # Auth token for api_key (api_key)
@@ -3515,7 +3515,7 @@ export def "moderation-ban delete-unban" [
 # operationId: Ban
 # --banned_by shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
 # --user shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
-export def "moderation-ban create" [
+export def "ban" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
   --token-apikey: string # Auth token for api_key (api_key)
@@ -3565,7 +3565,7 @@ export def "moderation-ban create" [
 # POST /moderation/flag
 # operationId: Flag
 # --user shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
-export def "moderation-flag create" [
+export def "flag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
   --token-apikey: string # Auth token for api_key (api_key)
@@ -3607,7 +3607,7 @@ export def "moderation-flag create" [
 #
 # GET /moderation/flags/message
 # operationId: QueryMessageFlags
-export def "moderation-flags-message list" [
+export def "query-message-flags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
   --token-apikey: string # Auth token for api_key (api_key)
@@ -3645,7 +3645,7 @@ export def "moderation-flags-message list" [
 # POST /moderation/mute
 # operationId: MuteUser
 # --user shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
-export def "moderation-mute create-user" [
+export def "mute-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
   --token-apikey: string # Auth token for api_key (api_key)
@@ -3688,7 +3688,7 @@ export def "moderation-mute create-user" [
 # POST /moderation/mute/channel
 # operationId: MuteChannel
 # --user shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
-export def "moderation-mute-channel create" [
+export def "mute-channel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
   --token-apikey: string # Auth token for api_key (api_key)
@@ -3731,7 +3731,7 @@ export def "moderation-mute-channel create" [
 # POST /moderation/unflag
 # operationId: Unflag
 # --user shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
-export def "moderation-unflag create" [
+export def "unflag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
   --token-apikey: string # Auth token for api_key (api_key)
@@ -3774,7 +3774,7 @@ export def "moderation-unflag create" [
 # POST /moderation/unmute
 # operationId: UnmuteUser
 # --user shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
-export def "moderation-unmute create-user" [
+export def "unmute-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
   --token-apikey: string # Auth token for api_key (api_key)
@@ -3818,7 +3818,7 @@ export def "moderation-unmute create-user" [
 # POST /moderation/unmute/channel
 # operationId: UnmuteChannel
 # --user shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
-export def "moderation-unmute-channel create" [
+export def "unmute-channel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
   --token-apikey: string # Auth token for api_key (api_key)
@@ -3861,7 +3861,7 @@ export def "moderation-unmute-channel create" [
 #
 # GET /og
 # operationId: GetOG
-export def "og get" [
+export def "get-og" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
   --token-apikey: string # Auth token for api_key (api_key)
@@ -3898,7 +3898,7 @@ export def "og get" [
 #
 # GET /permissions
 # operationId: ListPermissions
-export def "permissions list" [
+export def "list-permissions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
   --token-apikey: string # Auth token for api_key (api_key)
@@ -3933,7 +3933,7 @@ export def "permissions list" [
 #
 # GET /permissions/{id}
 # operationId: GetPermission
-export def "permissions get" [
+export def "get-permission" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
@@ -3970,7 +3970,7 @@ export def "permissions get" [
 #
 # GET /push_providers
 # operationId: ListPushProviders
-export def "push-providers list" [
+export def "list-push-providers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
   --token-apikey: string # Auth token for api_key (api_key)
@@ -4006,7 +4006,7 @@ export def "push-providers list" [
 # POST /push_providers
 # operationId: UpsertPushProvider
 # --push_provider shape: {apn_auth_key?: string, apn_auth_type?: string, apn_development?: bool, apn_host?: string, apn_key_id?: string, apn_notification_template?: string, apn_p12_cert?: string, apn_team_id?: string, apn_topic?: string, created_at?: string, description?: string, disabled_at?: string, disabled_reason?: string, firebase_apn_template?: string, firebase_credentials?: string, firebase_data_template?: string, firebase_notification_template?: string, firebase_server_key?: string, huawei_app_id?: string, ... (6 more fields)}
-export def "push-providers update" [
+export def "upsert-push-provider" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
   --token-apikey: string # Auth token for api_key (api_key)
@@ -4045,7 +4045,7 @@ export def "push-providers update" [
 #
 # DELETE /push_providers/{type}/{name}
 # operationId: DeletePushProvider
-export def "push-providers delete" [
+export def "delete-push-provider" [
   type: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4084,7 +4084,7 @@ export def "push-providers delete" [
 #
 # GET /query_banned_users
 # operationId: QueryBannedUsers
-export def "query-banned-users list" [
+export def "query-banned-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
   --token-apikey: string # Auth token for api_key (api_key)
@@ -4121,7 +4121,7 @@ export def "query-banned-users list" [
 #
 # GET /rate_limits
 # operationId: GetRateLimits
-export def "rate-limits get" [
+export def "get-rate-limits" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
   --token-apikey: string # Auth token for api_key (api_key)
@@ -4162,7 +4162,7 @@ export def "rate-limits get" [
 #
 # GET /recipients
 # operationId: QueryRecipients
-export def "recipients list" [
+export def "query-recipients" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
   --token-apikey: string # Auth token for api_key (api_key)
@@ -4199,7 +4199,7 @@ export def "recipients list" [
 #
 # GET /roles
 # operationId: ListRoles
-export def "roles list" [
+export def "list-roles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
   --token-apikey: string # Auth token for api_key (api_key)
@@ -4234,7 +4234,7 @@ export def "roles list" [
 #
 # POST /roles
 # operationId: CreateRole
-export def "roles create" [
+export def "create-role" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
   --token-apikey: string # Auth token for api_key (api_key)
@@ -4273,7 +4273,7 @@ export def "roles create" [
 #
 # DELETE /roles/{name}
 # operationId: DeleteRole
-export def "roles delete" [
+export def "delete-role" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
@@ -4310,7 +4310,7 @@ export def "roles delete" [
 #
 # GET /search
 # operationId: Search
-export def "search list" [
+export def "search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
   --token-apikey: string # Auth token for api_key (api_key)
@@ -4347,7 +4347,7 @@ export def "search list" [
 #
 # GET /segments
 # operationId: QuerySegments
-export def "segments list" [
+export def "query-segments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
   --token-apikey: string # Auth token for api_key (api_key)
@@ -4385,7 +4385,7 @@ export def "segments list" [
 # POST /segments
 # operationId: CreateSegment
 # --segment shape: {description?: string, filter: record, name: string, type: "user"|"channel"}
-export def "segments create" [
+export def "create-segment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
   --token-apikey: string # Auth token for api_key (api_key)
@@ -4424,7 +4424,7 @@ export def "segments create" [
 #
 # DELETE /segments/{id}
 # operationId: DeleteSegment
-export def "segments delete" [
+export def "delete-segment" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
@@ -4462,7 +4462,7 @@ export def "segments delete" [
 # PUT /segments/{id}
 # operationId: UpdateSegment
 # --segment shape: {description?: string, filter?: record, name?: string, type?: "user"|"channel"}
-export def "segments update" [
+export def "update-segment" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
@@ -4504,7 +4504,7 @@ export def "segments update" [
 # POST /sync
 # operationId: Sync
 # --user shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
-export def "sync create" [
+export def "sync" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
   --token-apikey: string # Auth token for api_key (api_key)
@@ -4555,7 +4555,7 @@ export def "sync create" [
 #
 # GET /tasks/{id}
 # operationId: GetTask
-export def "tasks get" [
+export def "get-task" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
@@ -4592,7 +4592,7 @@ export def "tasks get" [
 #
 # GET /users
 # operationId: QueryUsers
-export def "users list" [
+export def "query-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
   --token-apikey: string # Auth token for api_key (api_key)
@@ -4629,7 +4629,7 @@ export def "users list" [
 #
 # PATCH /users
 # operationId: UpdateUsersPartial
-export def "users update-partial" [
+export def "update-users-partial" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
   --token-apikey: string # Auth token for api_key (api_key)
@@ -4670,7 +4670,7 @@ export def "users update-partial" [
 #
 # POST /users
 # operationId: UpdateUsers
-export def "users update" [
+export def "update-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
   --token-apikey: string # Auth token for api_key (api_key)
@@ -4709,7 +4709,7 @@ export def "users update" [
 #
 # POST /users/deactivate
 # operationId: DeactivateUsers
-export def "users-deactivate create" [
+export def "deactivate-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
   --token-apikey: string # Auth token for api_key (api_key)
@@ -4750,7 +4750,7 @@ export def "users-deactivate create" [
 #
 # POST /users/delete
 # operationId: DeleteUsers
-export def "users-delete delete" [
+export def "delete-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
   --token-apikey: string # Auth token for api_key (api_key)
@@ -4793,7 +4793,7 @@ export def "users-delete delete" [
 #
 # POST /users/reactivate
 # operationId: ReactivateUsers
-export def "users-reactivate create" [
+export def "reactivate-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
   --token-apikey: string # Auth token for api_key (api_key)
@@ -4834,7 +4834,7 @@ export def "users-reactivate create" [
 #
 # POST /users/restore
 # operationId: RestoreUsers
-export def "users-restore create" [
+export def "restore-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
   --token-apikey: string # Auth token for api_key (api_key)
@@ -4873,7 +4873,7 @@ export def "users-restore create" [
 #
 # DELETE /users/{user_id}
 # operationId: DeleteUser
-export def "users delete" [
+export def "delete-user" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
@@ -4914,7 +4914,7 @@ export def "users delete" [
 #
 # POST /users/{user_id}/deactivate
 # operationId: DeactivateUser
-export def "users-deactivate create-by-user-id" [
+export def "deactivate-user" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
@@ -4958,7 +4958,7 @@ export def "users-deactivate create-by-user-id" [
 # POST /users/{user_id}/event
 # operationId: SendUserCustomEvent
 # --event shape: {created_at?: string, type: string}
-export def "users-event send-custom" [
+export def "send-user-custom-event" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
@@ -4998,7 +4998,7 @@ export def "users-event send-custom" [
 # Export user
 #
 # GET /users/{user_id}/export
-export def "users-export get" [
+export def "get-users-user-id-export" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)
@@ -5035,7 +5035,7 @@ export def "users-export get" [
 #
 # POST /users/{user_id}/reactivate
 # operationId: ReactivateUser
-export def "users-reactivate create-by-user-id" [
+export def "reactivate-user" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-jwt: string # Auth token for JWT (Authorization)

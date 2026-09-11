@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "apps create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-app" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -141,7 +141,7 @@ export def commands []: nothing -> table {
 # POST /v1/apps
 # operationId: CreateApp
 # --CreateApplicationRequest shape: {Name?: any, tags?: any}
-export def "apps create" [
+export def "create-app" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -188,7 +188,7 @@ export def "apps create" [
 #
 # GET /v1/apps
 # operationId: GetApps
-export def "apps list" [
+export def "get-apps" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -235,7 +235,7 @@ export def "apps list" [
 # POST /v1/apps/{application-id}/campaigns
 # operationId: CreateCampaign
 # --WriteCampaignRequest shape: {AdditionalTreatments?: any, CustomDeliveryConfiguration?: any, Description?: any, HoldoutPercent?: any, Hook?: any, IsPaused?: any, Limits?: any, MessageConfiguration?: any, Name?: any, Schedule?: any, SegmentId?: any, SegmentVersion?: any, tags?: any, TemplateConfiguration?: any, TreatmentDescription?: any, TreatmentName?: any, Priority?: any}
-export def "apps-campaigns create" [
+export def "create-campaign" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -284,7 +284,7 @@ export def "apps-campaigns create" [
 #
 # GET /v1/apps/{application-id}/campaigns
 # operationId: GetCampaigns
-export def "apps-campaigns list" [
+export def "get-campaigns" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -333,7 +333,7 @@ export def "apps-campaigns list" [
 # POST /v1/templates/{template-name}/email
 # operationId: CreateEmailTemplate
 # --EmailTemplateRequest shape: {DefaultSubstitutions?: any, HtmlPart?: any, RecommenderId?: any, Subject?: any, tags?: any, TemplateDescription?: any, TextPart?: any}
-export def "templates-email create" [
+export def "create-email-template" [
   template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -382,7 +382,7 @@ export def "templates-email create" [
 #
 # DELETE /v1/templates/{template-name}/email
 # operationId: DeleteEmailTemplate
-export def "templates-email delete" [
+export def "delete-email-template" [
   template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -429,7 +429,7 @@ export def "templates-email delete" [
 #
 # GET /v1/templates/{template-name}/email
 # operationId: GetEmailTemplate
-export def "templates-email get" [
+export def "get-email-template" [
   template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -477,7 +477,7 @@ export def "templates-email get" [
 # PUT /v1/templates/{template-name}/email
 # operationId: UpdateEmailTemplate
 # --EmailTemplateRequest shape: {DefaultSubstitutions?: any, HtmlPart?: any, RecommenderId?: any, Subject?: any, tags?: any, TemplateDescription?: any, TextPart?: any}
-export def "templates-email update" [
+export def "update-email-template" [
   template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -530,7 +530,7 @@ export def "templates-email update" [
 # POST /v1/apps/{application-id}/jobs/export
 # operationId: CreateExportJob
 # --ExportJobRequest shape: {RoleArn?: any, S3UrlPrefix?: any, SegmentId?: any, SegmentVersion?: any}
-export def "apps-jobs-export create" [
+export def "create-export-job" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -579,7 +579,7 @@ export def "apps-jobs-export create" [
 #
 # GET /v1/apps/{application-id}/jobs/export
 # operationId: GetExportJobs
-export def "apps-jobs-export list" [
+export def "get-export-jobs" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -628,7 +628,7 @@ export def "apps-jobs-export list" [
 # POST /v1/apps/{application-id}/jobs/import
 # operationId: CreateImportJob
 # --ImportJobRequest shape: {DefineSegment?: any, ExternalId?: any, Format?: any, RegisterEndpoints?: any, RoleArn?: any, S3Url?: any, SegmentId?: any, SegmentName?: any}
-export def "apps-jobs-import create" [
+export def "create-import-job" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -677,7 +677,7 @@ export def "apps-jobs-import create" [
 #
 # GET /v1/apps/{application-id}/jobs/import
 # operationId: GetImportJobs
-export def "apps-jobs-import list" [
+export def "get-import-jobs" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -726,7 +726,7 @@ export def "apps-jobs-import list" [
 # POST /v1/templates/{template-name}/inapp
 # operationId: CreateInAppTemplate
 # --InAppTemplateRequest shape: {Content?: any, CustomConfig?: any, Layout?: any, tags?: any, TemplateDescription?: any}
-export def "templates-inapp create-in-app" [
+export def "create-in-app-template" [
   template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -775,7 +775,7 @@ export def "templates-inapp create-in-app" [
 #
 # DELETE /v1/templates/{template-name}/inapp
 # operationId: DeleteInAppTemplate
-export def "templates-inapp delete-in-app" [
+export def "delete-in-app-template" [
   template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -822,7 +822,7 @@ export def "templates-inapp delete-in-app" [
 #
 # GET /v1/templates/{template-name}/inapp
 # operationId: GetInAppTemplate
-export def "templates-inapp get-in-app" [
+export def "get-in-app-template" [
   template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -870,7 +870,7 @@ export def "templates-inapp get-in-app" [
 # PUT /v1/templates/{template-name}/inapp
 # operationId: UpdateInAppTemplate
 # --InAppTemplateRequest shape: {Content?: any, CustomConfig?: any, Layout?: any, tags?: any, TemplateDescription?: any}
-export def "templates-inapp update-in-app" [
+export def "update-in-app-template" [
   template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -923,7 +923,7 @@ export def "templates-inapp update-in-app" [
 # POST /v1/apps/{application-id}/journeys
 # operationId: CreateJourney
 # --WriteJourneyRequest shape: {Activities?: any, CreationDate?: any, LastModifiedDate?: any, Limits?: any, LocalTime?: any, Name?: any, QuietTime?: any, RefreshFrequency?: any, Schedule?: any, StartActivity?: any, StartCondition?: any, State?: any, WaitForQuietTime?: any, RefreshOnSegmentUpdate?: any, JourneyChannelSettings?: any, SendingSchedule?: any, OpenHours?: any, ClosedDays?: any}
-export def "apps-journeys create" [
+export def "create-journey" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -972,7 +972,7 @@ export def "apps-journeys create" [
 #
 # GET /v1/apps/{application-id}/journeys
 # operationId: ListJourneys
-export def "apps-journeys list" [
+export def "list-journeys" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1021,7 +1021,7 @@ export def "apps-journeys list" [
 # POST /v1/templates/{template-name}/push
 # operationId: CreatePushTemplate
 # --PushNotificationTemplateRequest shape: {ADM?: any, APNS?: any, Baidu?: any, Default?: any, DefaultSubstitutions?: any, GCM?: any, RecommenderId?: any, tags?: any, TemplateDescription?: any}
-export def "templates-push create" [
+export def "create-push-template" [
   template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1070,7 +1070,7 @@ export def "templates-push create" [
 #
 # DELETE /v1/templates/{template-name}/push
 # operationId: DeletePushTemplate
-export def "templates-push delete" [
+export def "delete-push-template" [
   template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1117,7 +1117,7 @@ export def "templates-push delete" [
 #
 # GET /v1/templates/{template-name}/push
 # operationId: GetPushTemplate
-export def "templates-push get" [
+export def "get-push-template" [
   template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1165,7 +1165,7 @@ export def "templates-push get" [
 # PUT /v1/templates/{template-name}/push
 # operationId: UpdatePushTemplate
 # --PushNotificationTemplateRequest shape: {ADM?: any, APNS?: any, Baidu?: any, Default?: any, DefaultSubstitutions?: any, GCM?: any, RecommenderId?: any, tags?: any, TemplateDescription?: any}
-export def "templates-push update" [
+export def "update-push-template" [
   template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1218,7 +1218,7 @@ export def "templates-push update" [
 # POST /v1/recommenders
 # operationId: CreateRecommenderConfiguration
 # --CreateRecommenderConfiguration shape: {Attributes?: any, Description?: any, Name?: any, RecommendationProviderIdType?: any, RecommendationProviderRoleArn?: any, RecommendationProviderUri?: any, RecommendationTransformerUri?: any, RecommendationsDisplayName?: any, RecommendationsPerMessage?: any}
-export def "recommenders create-configuration" [
+export def "create-recommender-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1265,7 +1265,7 @@ export def "recommenders create-configuration" [
 #
 # GET /v1/recommenders
 # operationId: GetRecommenderConfigurations
-export def "recommenders get-configurations" [
+export def "get-recommender-configurations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1312,7 +1312,7 @@ export def "recommenders get-configurations" [
 # POST /v1/apps/{application-id}/segments
 # operationId: CreateSegment
 # --WriteSegmentRequest shape: {Dimensions?: any, Name?: any, SegmentGroups?: any, tags?: any}
-export def "apps-segments create" [
+export def "create-segment" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1361,7 +1361,7 @@ export def "apps-segments create" [
 #
 # GET /v1/apps/{application-id}/segments
 # operationId: GetSegments
-export def "apps-segments list" [
+export def "get-segments" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1410,7 +1410,7 @@ export def "apps-segments list" [
 # POST /v1/templates/{template-name}/sms
 # operationId: CreateSmsTemplate
 # --SMSTemplateRequest shape: {Body?: any, DefaultSubstitutions?: any, RecommenderId?: any, tags?: any, TemplateDescription?: any}
-export def "templates-sms create" [
+export def "create-sms-template" [
   template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1459,7 +1459,7 @@ export def "templates-sms create" [
 #
 # DELETE /v1/templates/{template-name}/sms
 # operationId: DeleteSmsTemplate
-export def "templates-sms delete" [
+export def "delete-sms-template" [
   template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1506,7 +1506,7 @@ export def "templates-sms delete" [
 #
 # GET /v1/templates/{template-name}/sms
 # operationId: GetSmsTemplate
-export def "templates-sms get" [
+export def "get-sms-template" [
   template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1554,7 +1554,7 @@ export def "templates-sms get" [
 # PUT /v1/templates/{template-name}/sms
 # operationId: UpdateSmsTemplate
 # --SMSTemplateRequest shape: {Body?: any, DefaultSubstitutions?: any, RecommenderId?: any, tags?: any, TemplateDescription?: any}
-export def "templates-sms update" [
+export def "update-sms-template" [
   template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1607,7 +1607,7 @@ export def "templates-sms update" [
 # POST /v1/templates/{template-name}/voice
 # operationId: CreateVoiceTemplate
 # --VoiceTemplateRequest shape: {Body?: any, DefaultSubstitutions?: any, LanguageCode?: any, tags?: any, TemplateDescription?: any, VoiceId?: any}
-export def "templates-voice create" [
+export def "create-voice-template" [
   template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1656,7 +1656,7 @@ export def "templates-voice create" [
 #
 # DELETE /v1/templates/{template-name}/voice
 # operationId: DeleteVoiceTemplate
-export def "templates-voice delete" [
+export def "delete-voice-template" [
   template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1703,7 +1703,7 @@ export def "templates-voice delete" [
 #
 # GET /v1/templates/{template-name}/voice
 # operationId: GetVoiceTemplate
-export def "templates-voice get" [
+export def "get-voice-template" [
   template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1751,7 +1751,7 @@ export def "templates-voice get" [
 # PUT /v1/templates/{template-name}/voice
 # operationId: UpdateVoiceTemplate
 # --VoiceTemplateRequest shape: {Body?: any, DefaultSubstitutions?: any, LanguageCode?: any, tags?: any, TemplateDescription?: any, VoiceId?: any}
-export def "templates-voice update" [
+export def "update-voice-template" [
   template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1803,7 +1803,7 @@ export def "templates-voice update" [
 #
 # DELETE /v1/apps/{application-id}/channels/adm
 # operationId: DeleteAdmChannel
-export def "apps-channels-adm delete" [
+export def "delete-adm-channel" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1848,7 +1848,7 @@ export def "apps-channels-adm delete" [
 #
 # GET /v1/apps/{application-id}/channels/adm
 # operationId: GetAdmChannel
-export def "apps-channels-adm get" [
+export def "get-adm-channel" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1894,7 +1894,7 @@ export def "apps-channels-adm get" [
 # PUT /v1/apps/{application-id}/channels/adm
 # operationId: UpdateAdmChannel
 # --ADMChannelRequest shape: {ClientId?: any, ClientSecret?: any, Enabled?: any}
-export def "apps-channels-adm update" [
+export def "update-adm-channel" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1943,7 +1943,7 @@ export def "apps-channels-adm update" [
 #
 # DELETE /v1/apps/{application-id}/channels/apns
 # operationId: DeleteApnsChannel
-export def "apps-channels-apns delete" [
+export def "delete-apns-channel" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1988,7 +1988,7 @@ export def "apps-channels-apns delete" [
 #
 # GET /v1/apps/{application-id}/channels/apns
 # operationId: GetApnsChannel
-export def "apps-channels-apns get" [
+export def "get-apns-channel" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2034,7 +2034,7 @@ export def "apps-channels-apns get" [
 # PUT /v1/apps/{application-id}/channels/apns
 # operationId: UpdateApnsChannel
 # --APNSChannelRequest shape: {BundleId?: any, Certificate?: any, DefaultAuthenticationMethod?: any, Enabled?: any, PrivateKey?: any, TeamId?: any, TokenKey?: any, TokenKeyId?: any}
-export def "apps-channels-apns update" [
+export def "update-apns-channel" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2083,7 +2083,7 @@ export def "apps-channels-apns update" [
 #
 # DELETE /v1/apps/{application-id}/channels/apns_sandbox
 # operationId: DeleteApnsSandboxChannel
-export def "apps-channels-apns-sandbox delete" [
+export def "delete-apns-sandbox-channel" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2128,7 +2128,7 @@ export def "apps-channels-apns-sandbox delete" [
 #
 # GET /v1/apps/{application-id}/channels/apns_sandbox
 # operationId: GetApnsSandboxChannel
-export def "apps-channels-apns-sandbox get" [
+export def "get-apns-sandbox-channel" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2174,7 +2174,7 @@ export def "apps-channels-apns-sandbox get" [
 # PUT /v1/apps/{application-id}/channels/apns_sandbox
 # operationId: UpdateApnsSandboxChannel
 # --APNSSandboxChannelRequest shape: {BundleId?: any, Certificate?: any, DefaultAuthenticationMethod?: any, Enabled?: any, PrivateKey?: any, TeamId?: any, TokenKey?: any, TokenKeyId?: any}
-export def "apps-channels-apns-sandbox update" [
+export def "update-apns-sandbox-channel" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2223,7 +2223,7 @@ export def "apps-channels-apns-sandbox update" [
 #
 # DELETE /v1/apps/{application-id}/channels/apns_voip
 # operationId: DeleteApnsVoipChannel
-export def "apps-channels-apns-voip delete" [
+export def "delete-apns-voip-channel" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2268,7 +2268,7 @@ export def "apps-channels-apns-voip delete" [
 #
 # GET /v1/apps/{application-id}/channels/apns_voip
 # operationId: GetApnsVoipChannel
-export def "apps-channels-apns-voip get" [
+export def "get-apns-voip-channel" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2314,7 +2314,7 @@ export def "apps-channels-apns-voip get" [
 # PUT /v1/apps/{application-id}/channels/apns_voip
 # operationId: UpdateApnsVoipChannel
 # --APNSVoipChannelRequest shape: {BundleId?: any, Certificate?: any, DefaultAuthenticationMethod?: any, Enabled?: any, PrivateKey?: any, TeamId?: any, TokenKey?: any, TokenKeyId?: any}
-export def "apps-channels-apns-voip update" [
+export def "update-apns-voip-channel" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2363,7 +2363,7 @@ export def "apps-channels-apns-voip update" [
 #
 # DELETE /v1/apps/{application-id}/channels/apns_voip_sandbox
 # operationId: DeleteApnsVoipSandboxChannel
-export def "apps-channels-apns-voip-sandbox delete" [
+export def "delete-apns-voip-sandbox-channel" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2408,7 +2408,7 @@ export def "apps-channels-apns-voip-sandbox delete" [
 #
 # GET /v1/apps/{application-id}/channels/apns_voip_sandbox
 # operationId: GetApnsVoipSandboxChannel
-export def "apps-channels-apns-voip-sandbox get" [
+export def "get-apns-voip-sandbox-channel" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2454,7 +2454,7 @@ export def "apps-channels-apns-voip-sandbox get" [
 # PUT /v1/apps/{application-id}/channels/apns_voip_sandbox
 # operationId: UpdateApnsVoipSandboxChannel
 # --APNSVoipSandboxChannelRequest shape: {BundleId?: any, Certificate?: any, DefaultAuthenticationMethod?: any, Enabled?: any, PrivateKey?: any, TeamId?: any, TokenKey?: any, TokenKeyId?: any}
-export def "apps-channels-apns-voip-sandbox update" [
+export def "update-apns-voip-sandbox-channel" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2503,7 +2503,7 @@ export def "apps-channels-apns-voip-sandbox update" [
 #
 # DELETE /v1/apps/{application-id}
 # operationId: DeleteApp
-export def "apps delete" [
+export def "delete-app" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2548,7 +2548,7 @@ export def "apps delete" [
 #
 # GET /v1/apps/{application-id}
 # operationId: GetApp
-export def "apps get" [
+export def "get-app" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2593,7 +2593,7 @@ export def "apps get" [
 #
 # DELETE /v1/apps/{application-id}/channels/baidu
 # operationId: DeleteBaiduChannel
-export def "apps-channels-baidu delete" [
+export def "delete-baidu-channel" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2638,7 +2638,7 @@ export def "apps-channels-baidu delete" [
 #
 # GET /v1/apps/{application-id}/channels/baidu
 # operationId: GetBaiduChannel
-export def "apps-channels-baidu get" [
+export def "get-baidu-channel" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2684,7 +2684,7 @@ export def "apps-channels-baidu get" [
 # PUT /v1/apps/{application-id}/channels/baidu
 # operationId: UpdateBaiduChannel
 # --BaiduChannelRequest shape: {ApiKey?: any, Enabled?: any, SecretKey?: any}
-export def "apps-channels-baidu update" [
+export def "update-baidu-channel" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2733,7 +2733,7 @@ export def "apps-channels-baidu update" [
 #
 # DELETE /v1/apps/{application-id}/campaigns/{campaign-id}
 # operationId: DeleteCampaign
-export def "apps-campaigns delete" [
+export def "delete-campaign" [
   application_id: string
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2780,7 +2780,7 @@ export def "apps-campaigns delete" [
 #
 # GET /v1/apps/{application-id}/campaigns/{campaign-id}
 # operationId: GetCampaign
-export def "apps-campaigns get" [
+export def "get-campaign" [
   application_id: string
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2828,7 +2828,7 @@ export def "apps-campaigns get" [
 # PUT /v1/apps/{application-id}/campaigns/{campaign-id}
 # operationId: UpdateCampaign
 # --WriteCampaignRequest shape: {AdditionalTreatments?: any, CustomDeliveryConfiguration?: any, Description?: any, HoldoutPercent?: any, Hook?: any, IsPaused?: any, Limits?: any, MessageConfiguration?: any, Name?: any, Schedule?: any, SegmentId?: any, SegmentVersion?: any, tags?: any, TemplateConfiguration?: any, TreatmentDescription?: any, TreatmentName?: any, Priority?: any}
-export def "apps-campaigns update" [
+export def "update-campaign" [
   application_id: string
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2879,7 +2879,7 @@ export def "apps-campaigns update" [
 #
 # DELETE /v1/apps/{application-id}/channels/email
 # operationId: DeleteEmailChannel
-export def "apps-channels-email delete" [
+export def "delete-email-channel" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2924,7 +2924,7 @@ export def "apps-channels-email delete" [
 #
 # GET /v1/apps/{application-id}/channels/email
 # operationId: GetEmailChannel
-export def "apps-channels-email get" [
+export def "get-email-channel" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2970,7 +2970,7 @@ export def "apps-channels-email get" [
 # PUT /v1/apps/{application-id}/channels/email
 # operationId: UpdateEmailChannel
 # --EmailChannelRequest shape: {ConfigurationSet?: any, Enabled?: any, FromAddress?: any, Identity?: any, RoleArn?: any}
-export def "apps-channels-email update" [
+export def "update-email-channel" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3019,7 +3019,7 @@ export def "apps-channels-email update" [
 #
 # DELETE /v1/apps/{application-id}/endpoints/{endpoint-id}
 # operationId: DeleteEndpoint
-export def "apps-endpoints delete" [
+export def "delete-endpoint" [
   application_id: string
   endpoint_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3066,7 +3066,7 @@ export def "apps-endpoints delete" [
 #
 # GET /v1/apps/{application-id}/endpoints/{endpoint-id}
 # operationId: GetEndpoint
-export def "apps-endpoints get" [
+export def "get-endpoint" [
   application_id: string
   endpoint_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3114,7 +3114,7 @@ export def "apps-endpoints get" [
 # PUT /v1/apps/{application-id}/endpoints/{endpoint-id}
 # operationId: UpdateEndpoint
 # --EndpointRequest shape: {Address?: any, Attributes?: any, ChannelType?: any, Demographic?: any, EffectiveDate?: any, EndpointStatus?: any, Location?: any, Metrics?: any, OptOut?: any, RequestId?: any, User?: any}
-export def "apps-endpoints update" [
+export def "update-endpoint" [
   application_id: string
   endpoint_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3165,7 +3165,7 @@ export def "apps-endpoints update" [
 #
 # DELETE /v1/apps/{application-id}/eventstream
 # operationId: DeleteEventStream
-export def "apps-eventstream delete-event-stream" [
+export def "delete-event-stream" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3210,7 +3210,7 @@ export def "apps-eventstream delete-event-stream" [
 #
 # GET /v1/apps/{application-id}/eventstream
 # operationId: GetEventStream
-export def "apps-eventstream get-event-stream" [
+export def "get-event-stream" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3256,7 +3256,7 @@ export def "apps-eventstream get-event-stream" [
 # POST /v1/apps/{application-id}/eventstream
 # operationId: PutEventStream
 # --WriteEventStream shape: {DestinationStreamArn?: any, RoleArn?: any}
-export def "apps-eventstream update-event-stream" [
+export def "put-event-stream" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3305,7 +3305,7 @@ export def "apps-eventstream update-event-stream" [
 #
 # DELETE /v1/apps/{application-id}/channels/gcm
 # operationId: DeleteGcmChannel
-export def "apps-channels-gcm delete" [
+export def "delete-gcm-channel" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3350,7 +3350,7 @@ export def "apps-channels-gcm delete" [
 #
 # GET /v1/apps/{application-id}/channels/gcm
 # operationId: GetGcmChannel
-export def "apps-channels-gcm get" [
+export def "get-gcm-channel" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3396,7 +3396,7 @@ export def "apps-channels-gcm get" [
 # PUT /v1/apps/{application-id}/channels/gcm
 # operationId: UpdateGcmChannel
 # --GCMChannelRequest shape: {ApiKey?: any, Enabled?: any}
-export def "apps-channels-gcm update" [
+export def "update-gcm-channel" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3445,7 +3445,7 @@ export def "apps-channels-gcm update" [
 #
 # DELETE /v1/apps/{application-id}/journeys/{journey-id}
 # operationId: DeleteJourney
-export def "apps-journeys delete" [
+export def "delete-journey" [
   application_id: string
   journey_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3492,7 +3492,7 @@ export def "apps-journeys delete" [
 #
 # GET /v1/apps/{application-id}/journeys/{journey-id}
 # operationId: GetJourney
-export def "apps-journeys get" [
+export def "get-journey" [
   application_id: string
   journey_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3540,7 +3540,7 @@ export def "apps-journeys get" [
 # PUT /v1/apps/{application-id}/journeys/{journey-id}
 # operationId: UpdateJourney
 # --WriteJourneyRequest shape: {Activities?: any, CreationDate?: any, LastModifiedDate?: any, Limits?: any, LocalTime?: any, Name?: any, QuietTime?: any, RefreshFrequency?: any, Schedule?: any, StartActivity?: any, StartCondition?: any, State?: any, WaitForQuietTime?: any, RefreshOnSegmentUpdate?: any, JourneyChannelSettings?: any, SendingSchedule?: any, OpenHours?: any, ClosedDays?: any}
-export def "apps-journeys update" [
+export def "update-journey" [
   application_id: string
   journey_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3591,7 +3591,7 @@ export def "apps-journeys update" [
 #
 # DELETE /v1/recommenders/{recommender-id}
 # operationId: DeleteRecommenderConfiguration
-export def "recommenders delete-configuration" [
+export def "delete-recommender-configuration" [
   recommender_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3636,7 +3636,7 @@ export def "recommenders delete-configuration" [
 #
 # GET /v1/recommenders/{recommender-id}
 # operationId: GetRecommenderConfiguration
-export def "recommenders get-configuration" [
+export def "get-recommender-configuration" [
   recommender_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3682,7 +3682,7 @@ export def "recommenders get-configuration" [
 # PUT /v1/recommenders/{recommender-id}
 # operationId: UpdateRecommenderConfiguration
 # --UpdateRecommenderConfiguration shape: {Attributes?: any, Description?: any, Name?: any, RecommendationProviderIdType?: any, RecommendationProviderRoleArn?: any, RecommendationProviderUri?: any, RecommendationTransformerUri?: any, RecommendationsDisplayName?: any, RecommendationsPerMessage?: any}
-export def "recommenders update-configuration" [
+export def "update-recommender-configuration" [
   recommender_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3731,7 +3731,7 @@ export def "recommenders update-configuration" [
 #
 # DELETE /v1/apps/{application-id}/segments/{segment-id}
 # operationId: DeleteSegment
-export def "apps-segments delete" [
+export def "delete-segment" [
   application_id: string
   segment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3778,7 +3778,7 @@ export def "apps-segments delete" [
 #
 # GET /v1/apps/{application-id}/segments/{segment-id}
 # operationId: GetSegment
-export def "apps-segments get" [
+export def "get-segment" [
   application_id: string
   segment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3826,7 +3826,7 @@ export def "apps-segments get" [
 # PUT /v1/apps/{application-id}/segments/{segment-id}
 # operationId: UpdateSegment
 # --WriteSegmentRequest shape: {Dimensions?: any, Name?: any, SegmentGroups?: any, tags?: any}
-export def "apps-segments update" [
+export def "update-segment" [
   application_id: string
   segment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3877,7 +3877,7 @@ export def "apps-segments update" [
 #
 # DELETE /v1/apps/{application-id}/channels/sms
 # operationId: DeleteSmsChannel
-export def "apps-channels-sms delete" [
+export def "delete-sms-channel" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3922,7 +3922,7 @@ export def "apps-channels-sms delete" [
 #
 # GET /v1/apps/{application-id}/channels/sms
 # operationId: GetSmsChannel
-export def "apps-channels-sms get" [
+export def "get-sms-channel" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3968,7 +3968,7 @@ export def "apps-channels-sms get" [
 # PUT /v1/apps/{application-id}/channels/sms
 # operationId: UpdateSmsChannel
 # --SMSChannelRequest shape: {Enabled?: any, SenderId?: any, ShortCode?: any}
-export def "apps-channels-sms update" [
+export def "update-sms-channel" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4017,7 +4017,7 @@ export def "apps-channels-sms update" [
 #
 # DELETE /v1/apps/{application-id}/users/{user-id}
 # operationId: DeleteUserEndpoints
-export def "apps-users delete-endpoints" [
+export def "delete-user-endpoints" [
   application_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4064,7 +4064,7 @@ export def "apps-users delete-endpoints" [
 #
 # GET /v1/apps/{application-id}/users/{user-id}
 # operationId: GetUserEndpoints
-export def "apps-users get-endpoints" [
+export def "get-user-endpoints" [
   application_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4111,7 +4111,7 @@ export def "apps-users get-endpoints" [
 #
 # DELETE /v1/apps/{application-id}/channels/voice
 # operationId: DeleteVoiceChannel
-export def "apps-channels-voice delete" [
+export def "delete-voice-channel" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4156,7 +4156,7 @@ export def "apps-channels-voice delete" [
 #
 # GET /v1/apps/{application-id}/channels/voice
 # operationId: GetVoiceChannel
-export def "apps-channels-voice get" [
+export def "get-voice-channel" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4202,7 +4202,7 @@ export def "apps-channels-voice get" [
 # PUT /v1/apps/{application-id}/channels/voice
 # operationId: UpdateVoiceChannel
 # --VoiceChannelRequest shape: {Enabled?: any}
-export def "apps-channels-voice update" [
+export def "update-voice-channel" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4251,7 +4251,7 @@ export def "apps-channels-voice update" [
 #
 # GET /v1/apps/{application-id}/kpis/daterange/{kpi-name}
 # operationId: GetApplicationDateRangeKpi
-export def "apps-kpis-daterange get-date-range" [
+export def "get-application-date-range-kpi" [
   application_id: string
   kpi_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4303,7 +4303,7 @@ export def "apps-kpis-daterange get-date-range" [
 #
 # GET /v1/apps/{application-id}/settings
 # operationId: GetApplicationSettings
-export def "apps-settings get" [
+export def "get-application-settings" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4349,7 +4349,7 @@ export def "apps-settings get" [
 # PUT /v1/apps/{application-id}/settings
 # operationId: UpdateApplicationSettings
 # --WriteApplicationSettingsRequest shape: {CampaignHook?: any, CloudWatchMetricsEnabled?: any, EventTaggingEnabled?: bool, Limits?: any, QuietTime?: any}
-export def "apps-settings update" [
+export def "update-application-settings" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4398,7 +4398,7 @@ export def "apps-settings update" [
 #
 # GET /v1/apps/{application-id}/campaigns/{campaign-id}/activities
 # operationId: GetCampaignActivities
-export def "apps-campaigns-activities get" [
+export def "get-campaign-activities" [
   application_id: string
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4448,7 +4448,7 @@ export def "apps-campaigns-activities get" [
 #
 # GET /v1/apps/{application-id}/campaigns/{campaign-id}/kpis/daterange/{kpi-name}
 # operationId: GetCampaignDateRangeKpi
-export def "apps-campaigns-kpis-daterange get-date-range" [
+export def "get-campaign-date-range-kpi" [
   application_id: string
   campaign_id: string
   kpi_name: string
@@ -4502,7 +4502,7 @@ export def "apps-campaigns-kpis-daterange get-date-range" [
 #
 # GET /v1/apps/{application-id}/campaigns/{campaign-id}/versions/{version}
 # operationId: GetCampaignVersion
-export def "apps-campaigns-versions get" [
+export def "get-campaign-version" [
   application_id: string
   campaign_id: string
   version: string
@@ -4551,7 +4551,7 @@ export def "apps-campaigns-versions get" [
 #
 # GET /v1/apps/{application-id}/campaigns/{campaign-id}/versions
 # operationId: GetCampaignVersions
-export def "apps-campaigns-versions list" [
+export def "get-campaign-versions" [
   application_id: string
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4601,7 +4601,7 @@ export def "apps-campaigns-versions list" [
 #
 # GET /v1/apps/{application-id}/channels
 # operationId: GetChannels
-export def "apps-channels get" [
+export def "get-channels" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4646,7 +4646,7 @@ export def "apps-channels get" [
 #
 # GET /v1/apps/{application-id}/jobs/export/{job-id}
 # operationId: GetExportJob
-export def "apps-jobs-export get" [
+export def "get-export-job" [
   application_id: string
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4693,7 +4693,7 @@ export def "apps-jobs-export get" [
 #
 # GET /v1/apps/{application-id}/jobs/import/{job-id}
 # operationId: GetImportJob
-export def "apps-jobs-import get" [
+export def "get-import-job" [
   application_id: string
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4740,7 +4740,7 @@ export def "apps-jobs-import get" [
 #
 # GET /v1/apps/{application-id}/endpoints/{endpoint-id}/inappmessages
 # operationId: GetInAppMessages
-export def "apps-endpoints-inappmessages get-in-messages" [
+export def "get-in-app-messages" [
   application_id: string
   endpoint_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4787,7 +4787,7 @@ export def "apps-endpoints-inappmessages get-in-messages" [
 #
 # GET /v1/apps/{application-id}/journeys/{journey-id}/kpis/daterange/{kpi-name}
 # operationId: GetJourneyDateRangeKpi
-export def "apps-journeys-kpis-daterange get-date-range" [
+export def "get-journey-date-range-kpi" [
   application_id: string
   journey_id: string
   kpi_name: string
@@ -4841,7 +4841,7 @@ export def "apps-journeys-kpis-daterange get-date-range" [
 #
 # GET /v1/apps/{application-id}/journeys/{journey-id}/activities/{journey-activity-id}/execution-metrics
 # operationId: GetJourneyExecutionActivityMetrics
-export def "apps-journeys-activities-execution-metrics get" [
+export def "get-journey-execution-activity-metrics" [
   application_id: string
   journey_id: string
   journey_activity_id: string
@@ -4893,7 +4893,7 @@ export def "apps-journeys-activities-execution-metrics get" [
 #
 # GET /v1/apps/{application-id}/journeys/{journey-id}/execution-metrics
 # operationId: GetJourneyExecutionMetrics
-export def "apps-journeys-execution-metrics get" [
+export def "get-journey-execution-metrics" [
   application_id: string
   journey_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4943,7 +4943,7 @@ export def "apps-journeys-execution-metrics get" [
 #
 # GET /v1/apps/{application-id}/segments/{segment-id}/jobs/export
 # operationId: GetSegmentExportJobs
-export def "apps-segments-jobs-export get" [
+export def "get-segment-export-jobs" [
   application_id: string
   segment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4993,7 +4993,7 @@ export def "apps-segments-jobs-export get" [
 #
 # GET /v1/apps/{application-id}/segments/{segment-id}/jobs/import
 # operationId: GetSegmentImportJobs
-export def "apps-segments-jobs-import get" [
+export def "get-segment-import-jobs" [
   application_id: string
   segment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5043,7 +5043,7 @@ export def "apps-segments-jobs-import get" [
 #
 # GET /v1/apps/{application-id}/segments/{segment-id}/versions/{version}
 # operationId: GetSegmentVersion
-export def "apps-segments-versions get" [
+export def "get-segment-version" [
   application_id: string
   segment_id: string
   version: string
@@ -5092,7 +5092,7 @@ export def "apps-segments-versions get" [
 #
 # GET /v1/apps/{application-id}/segments/{segment-id}/versions
 # operationId: GetSegmentVersions
-export def "apps-segments-versions list" [
+export def "get-segment-versions" [
   application_id: string
   segment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5142,7 +5142,7 @@ export def "apps-segments-versions list" [
 #
 # GET /v1/tags/{resource-arn}
 # operationId: ListTagsForResource
-export def "tags list" [
+export def "list-tags-for-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5188,7 +5188,7 @@ export def "tags list" [
 # POST /v1/tags/{resource-arn}
 # operationId: TagResource
 # --TagsModel shape: {tags?: any}
-export def "tags tag" [
+export def "tag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5237,7 +5237,7 @@ export def "tags tag" [
 #
 # GET /v1/templates/{template-name}/{template-type}/versions
 # operationId: ListTemplateVersions
-export def "templates-versions list" [
+export def "list-template-versions" [
   template_name: string
   template_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5287,7 +5287,7 @@ export def "templates-versions list" [
 #
 # GET /v1/templates
 # operationId: ListTemplates
-export def "templates list" [
+export def "list-templates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5336,7 +5336,7 @@ export def "templates list" [
 # POST /v1/phone/number/validate
 # operationId: PhoneNumberValidate
 # --NumberValidateRequest shape: {IsoCountryCode?: any, PhoneNumber?: any}
-export def "phone-number-validate validate" [
+export def "phone-number-validate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5384,7 +5384,7 @@ export def "phone-number-validate validate" [
 # POST /v1/apps/{application-id}/events
 # operationId: PutEvents
 # --EventsRequest shape: {BatchItem?: any}
-export def "apps-events update" [
+export def "put-events" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5434,7 +5434,7 @@ export def "apps-events update" [
 # PUT /v1/apps/{application-id}/attributes/{attribute-type}
 # operationId: RemoveAttributes
 # --UpdateAttributesRequest shape: {Blacklist?: any}
-export def "apps-attributes delete" [
+export def "remove-attributes" [
   application_id: string
   attribute_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5486,7 +5486,7 @@ export def "apps-attributes delete" [
 # POST /v1/apps/{application-id}/messages
 # operationId: SendMessages
 # --MessageRequest shape: {Addresses?: any, Context?: any, Endpoints?: any, MessageConfiguration?: any, TemplateConfiguration?: any, TraceId?: any}
-export def "apps-messages send" [
+export def "send-messages" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5536,7 +5536,7 @@ export def "apps-messages send" [
 # POST /v1/apps/{application-id}/otp
 # operationId: SendOTPMessage
 # --SendOTPMessageRequestParameters shape: {AllowedAttempts?: any, BrandName?: any, Channel?: any, CodeLength?: any, DestinationIdentity?: any, EntityId?: any, Language?: any, OriginationIdentity?: any, ReferenceId?: any, TemplateId?: any, ValidityPeriod?: any}
-export def "apps-otp send-message" [
+export def "send-otp-message" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5586,7 +5586,7 @@ export def "apps-otp send-message" [
 # POST /v1/apps/{application-id}/users-messages
 # operationId: SendUsersMessages
 # --SendUsersMessageRequest shape: {Context?: any, MessageConfiguration?: any, TemplateConfiguration?: any, TraceId?: any, Users?: any}
-export def "apps-users-messages send" [
+export def "send-users-messages" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5635,7 +5635,7 @@ export def "apps-users-messages send" [
 #
 # DELETE /v1/tags/{resource-arn}
 # operationId: UntagResource
-export def "tags untag" [
+export def "untag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5683,7 +5683,7 @@ export def "tags untag" [
 # PUT /v1/apps/{application-id}/endpoints
 # operationId: UpdateEndpointsBatch
 # --EndpointBatchRequest shape: {Item?: any}
-export def "apps-endpoints update-batch" [
+export def "update-endpoints-batch" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5733,7 +5733,7 @@ export def "apps-endpoints update-batch" [
 # PUT /v1/apps/{application-id}/journeys/{journey-id}/state
 # operationId: UpdateJourneyState
 # --JourneyStateRequest shape: {State?: any}
-export def "apps-journeys-state update" [
+export def "update-journey-state" [
   application_id: string
   journey_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5785,7 +5785,7 @@ export def "apps-journeys-state update" [
 # PUT /v1/templates/{template-name}/{template-type}/active-version
 # operationId: UpdateTemplateActiveVersion
 # --TemplateActiveVersionRequest shape: {Version?: any}
-export def "templates-active-version update" [
+export def "update-template-active-version" [
   template_name: string
   template_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5837,7 +5837,7 @@ export def "templates-active-version update" [
 # POST /v1/apps/{application-id}/verify-otp
 # operationId: VerifyOTPMessage
 # --VerifyOTPMessageRequestParameters shape: {DestinationIdentity?: any, Otp?: any, ReferenceId?: any}
-export def "apps-verify-otp verify-message" [
+export def "verify-otp-message" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["query-_apikey"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "extractor-csv-latest get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-extractor-extractor-id-csv-latest" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -121,7 +121,7 @@ export def commands []: nothing -> table {
 # Get the latest crawl run results as a csv
 #
 # GET /extractor/{extractorId}/csv/latest
-export def "extractor-csv-latest get" [
+export def "get-extractor-extractor-id-csv-latest" [
   extractor_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -156,7 +156,7 @@ export def "extractor-csv-latest get" [
 # Get the latest crawl run results as json
 #
 # GET /extractor/{extractorId}/json/latest
-export def "extractor-json-latest get" [
+export def "get-extractor-extractor-id-json-latest" [
   extractor_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

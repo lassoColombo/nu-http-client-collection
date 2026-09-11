@@ -190,7 +190,7 @@ def x-amz-target-completer-89 [] { ["AWS242ServiceCatalogService.UpdateTagOption
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-accept-portfolio-share" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accept-portfolio-share" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -214,7 +214,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AcceptPortfolioShare
-export def "api create-accept-portfolio-share" [
+export def "accept-portfolio-share" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -264,7 +264,7 @@ export def "api create-accept-portfolio-share" [
 #
 # POST /
 # operationId: AssociateBudgetWithResource
-export def "api create-associate-budget-with-resource" [
+export def "associate-budget-with-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -313,7 +313,7 @@ export def "api create-associate-budget-with-resource" [
 #
 # POST /
 # operationId: AssociatePrincipalWithPortfolio
-export def "api create-associate-principal-with-portfolio" [
+export def "associate-principal-with-portfolio" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -364,7 +364,7 @@ export def "api create-associate-principal-with-portfolio" [
 #
 # POST /
 # operationId: AssociateProductWithPortfolio
-export def "api create-associate-product-with-portfolio" [
+export def "associate-product-with-portfolio" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -415,7 +415,7 @@ export def "api create-associate-product-with-portfolio" [
 #
 # POST /
 # operationId: AssociateServiceActionWithProvisioningArtifact
-export def "api create-associate-service-action-with-provisioning-artifact" [
+export def "associate-service-action-with-provisioning-artifact" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -466,7 +466,7 @@ export def "api create-associate-service-action-with-provisioning-artifact" [
 #
 # POST /
 # operationId: AssociateTagOptionWithResource
-export def "api tag-associate-option-with-resource" [
+export def "associate-tag-option-with-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -515,7 +515,7 @@ export def "api tag-associate-option-with-resource" [
 #
 # POST /
 # operationId: BatchAssociateServiceActionWithProvisioningArtifact
-export def "api create-batch-associate-service-action-with-provisioning-artifact" [
+export def "batch-associate-service-action-with-provisioning-artifact" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -564,7 +564,7 @@ export def "api create-batch-associate-service-action-with-provisioning-artifact
 #
 # POST /
 # operationId: BatchDisassociateServiceActionFromProvisioningArtifact
-export def "api create-batch-disassociate-service-action-from-provisioning-artifact" [
+export def "batch-disassociate-service-action-from-provisioning-artifact" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -613,7 +613,7 @@ export def "api create-batch-disassociate-service-action-from-provisioning-artif
 #
 # POST /
 # operationId: CopyProduct
-export def "api copy-product" [
+export def "copy-product" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -667,7 +667,7 @@ export def "api copy-product" [
 #
 # POST /
 # operationId: CreateConstraint
-export def "api create-constraint" [
+export def "create-constraint" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -721,7 +721,7 @@ export def "api create-constraint" [
 #
 # POST /
 # operationId: CreatePortfolio
-export def "api create-portfolio" [
+export def "create-portfolio" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -774,7 +774,7 @@ export def "api create-portfolio" [
 #
 # POST /
 # operationId: CreatePortfolioShare
-export def "api create-portfolio-share" [
+export def "create-portfolio-share" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -827,7 +827,7 @@ export def "api create-portfolio-share" [
 #
 # POST /
 # operationId: CreateProduct
-export def "api create-product" [
+export def "create-product" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -887,7 +887,7 @@ export def "api create-product" [
 #
 # POST /
 # operationId: CreateProvisionedProductPlan
-export def "api create-provisioned-product-plan" [
+export def "create-provisioned-product-plan" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -945,7 +945,7 @@ export def "api create-provisioned-product-plan" [
 #
 # POST /
 # operationId: CreateProvisioningArtifact
-export def "api create-provisioning-artifact" [
+export def "create-provisioning-artifact" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -996,7 +996,7 @@ export def "api create-provisioning-artifact" [
 #
 # POST /
 # operationId: CreateServiceAction
-export def "api create-service-action" [
+export def "create-service-action" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1049,7 +1049,7 @@ export def "api create-service-action" [
 #
 # POST /
 # operationId: CreateTagOption
-export def "api create-tag-option" [
+export def "create-tag-option" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1098,7 +1098,7 @@ export def "api create-tag-option" [
 #
 # POST /
 # operationId: DeleteConstraint
-export def "api delete-constraint" [
+export def "delete-constraint" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1147,7 +1147,7 @@ export def "api delete-constraint" [
 #
 # POST /
 # operationId: DeletePortfolio
-export def "api delete-portfolio" [
+export def "delete-portfolio" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1196,7 +1196,7 @@ export def "api delete-portfolio" [
 #
 # POST /
 # operationId: DeletePortfolioShare
-export def "api delete-portfolio-share" [
+export def "delete-portfolio-share" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1247,7 +1247,7 @@ export def "api delete-portfolio-share" [
 #
 # POST /
 # operationId: DeleteProduct
-export def "api delete-product" [
+export def "delete-product" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1296,7 +1296,7 @@ export def "api delete-product" [
 #
 # POST /
 # operationId: DeleteProvisionedProductPlan
-export def "api delete-provisioned-product-plan" [
+export def "delete-provisioned-product-plan" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1346,7 +1346,7 @@ export def "api delete-provisioned-product-plan" [
 #
 # POST /
 # operationId: DeleteProvisioningArtifact
-export def "api delete-provisioning-artifact" [
+export def "delete-provisioning-artifact" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1396,7 +1396,7 @@ export def "api delete-provisioning-artifact" [
 #
 # POST /
 # operationId: DeleteServiceAction
-export def "api delete-service-action" [
+export def "delete-service-action" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1445,7 +1445,7 @@ export def "api delete-service-action" [
 #
 # POST /
 # operationId: DeleteTagOption
-export def "api delete-tag-option" [
+export def "delete-tag-option" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1493,7 +1493,7 @@ export def "api delete-tag-option" [
 #
 # POST /
 # operationId: DescribeConstraint
-export def "api get-constraint" [
+export def "describe-constraint" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1542,7 +1542,7 @@ export def "api get-constraint" [
 #
 # POST /
 # operationId: DescribeCopyProductStatus
-export def "api get-copy-product-status" [
+export def "describe-copy-product-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1591,7 +1591,7 @@ export def "api get-copy-product-status" [
 #
 # POST /
 # operationId: DescribePortfolio
-export def "api get-portfolio" [
+export def "describe-portfolio" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1640,7 +1640,7 @@ export def "api get-portfolio" [
 #
 # POST /
 # operationId: DescribePortfolioShareStatus
-export def "api get-portfolio-share-status" [
+export def "describe-portfolio-share-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1688,7 +1688,7 @@ export def "api get-portfolio-share-status" [
 #
 # POST /
 # operationId: DescribePortfolioShares
-export def "api get-portfolio-shares" [
+export def "describe-portfolio-shares" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1742,7 +1742,7 @@ export def "api get-portfolio-shares" [
 #
 # POST /
 # operationId: DescribeProduct
-export def "api get-product" [
+export def "describe-product" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1792,7 +1792,7 @@ export def "api get-product" [
 #
 # POST /
 # operationId: DescribeProductAsAdmin
-export def "api get-product-as-admin" [
+export def "describe-product-as-admin" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1843,7 +1843,7 @@ export def "api get-product-as-admin" [
 #
 # POST /
 # operationId: DescribeProductView
-export def "api get-product-view" [
+export def "describe-product-view" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1892,7 +1892,7 @@ export def "api get-product-view" [
 #
 # POST /
 # operationId: DescribeProvisionedProduct
-export def "api get-provisioned-product" [
+export def "describe-provisioned-product" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1942,7 +1942,7 @@ export def "api get-provisioned-product" [
 #
 # POST /
 # operationId: DescribeProvisionedProductPlan
-export def "api get-provisioned-product-plan" [
+export def "describe-provisioned-product-plan" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1993,7 +1993,7 @@ export def "api get-provisioned-product-plan" [
 #
 # POST /
 # operationId: DescribeProvisioningArtifact
-export def "api get-provisioning-artifact" [
+export def "describe-provisioning-artifact" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2046,7 +2046,7 @@ export def "api get-provisioning-artifact" [
 #
 # POST /
 # operationId: DescribeProvisioningParameters
-export def "api get-provisioning-parameters" [
+export def "describe-provisioning-parameters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2100,7 +2100,7 @@ export def "api get-provisioning-parameters" [
 #
 # POST /
 # operationId: DescribeRecord
-export def "api get-record" [
+export def "describe-record" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2151,7 +2151,7 @@ export def "api get-record" [
 #
 # POST /
 # operationId: DescribeServiceAction
-export def "api get-service-action" [
+export def "describe-service-action" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2200,7 +2200,7 @@ export def "api get-service-action" [
 #
 # POST /
 # operationId: DescribeServiceActionExecutionParameters
-export def "api get-service-action-execution-parameters" [
+export def "describe-service-action-execution-parameters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2250,7 +2250,7 @@ export def "api get-service-action-execution-parameters" [
 #
 # POST /
 # operationId: DescribeTagOption
-export def "api get-tag-option" [
+export def "describe-tag-option" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2298,7 +2298,7 @@ export def "api get-tag-option" [
 #
 # POST /
 # operationId: DisableAWSOrganizationsAccess
-export def "api disable-aws-organizations-access" [
+export def "disable-aws-organizations-access" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2346,7 +2346,7 @@ export def "api disable-aws-organizations-access" [
 #
 # POST /
 # operationId: DisassociateBudgetFromResource
-export def "api create-disassociate-budget-from-resource" [
+export def "disassociate-budget-from-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2395,7 +2395,7 @@ export def "api create-disassociate-budget-from-resource" [
 #
 # POST /
 # operationId: DisassociatePrincipalFromPortfolio
-export def "api create-disassociate-principal-from-portfolio" [
+export def "disassociate-principal-from-portfolio" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2446,7 +2446,7 @@ export def "api create-disassociate-principal-from-portfolio" [
 #
 # POST /
 # operationId: DisassociateProductFromPortfolio
-export def "api create-disassociate-product-from-portfolio" [
+export def "disassociate-product-from-portfolio" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2496,7 +2496,7 @@ export def "api create-disassociate-product-from-portfolio" [
 #
 # POST /
 # operationId: DisassociateServiceActionFromProvisioningArtifact
-export def "api create-disassociate-service-action-from-provisioning-artifact" [
+export def "disassociate-service-action-from-provisioning-artifact" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2547,7 +2547,7 @@ export def "api create-disassociate-service-action-from-provisioning-artifact" [
 #
 # POST /
 # operationId: DisassociateTagOptionFromResource
-export def "api tag-disassociate-option-from-resource" [
+export def "disassociate-tag-option-from-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2596,7 +2596,7 @@ export def "api tag-disassociate-option-from-resource" [
 #
 # POST /
 # operationId: EnableAWSOrganizationsAccess
-export def "api enable-aws-organizations-access" [
+export def "enable-aws-organizations-access" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2644,7 +2644,7 @@ export def "api enable-aws-organizations-access" [
 #
 # POST /
 # operationId: ExecuteProvisionedProductPlan
-export def "api create-execute-provisioned-product-plan" [
+export def "execute-provisioned-product-plan" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2694,7 +2694,7 @@ export def "api create-execute-provisioned-product-plan" [
 #
 # POST /
 # operationId: ExecuteProvisionedProductServiceAction
-export def "api create-execute-provisioned-product-service-action" [
+export def "execute-provisioned-product-service-action" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2746,7 +2746,7 @@ export def "api create-execute-provisioned-product-service-action" [
 #
 # POST /
 # operationId: GetAWSOrganizationsAccessStatus
-export def "api get-aws-organizations-access-status" [
+export def "get-aws-organizations-access-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2794,7 +2794,7 @@ export def "api get-aws-organizations-access-status" [
 #
 # POST /
 # operationId: GetProvisionedProductOutputs
-export def "api get-provisioned-product-outputs" [
+export def "get-provisioned-product-outputs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2850,7 +2850,7 @@ export def "api get-provisioned-product-outputs" [
 #
 # POST /
 # operationId: ImportAsProvisionedProduct
-export def "api import-as-provisioned-product" [
+export def "import-as-provisioned-product" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2903,7 +2903,7 @@ export def "api import-as-provisioned-product" [
 #
 # POST /
 # operationId: ListAcceptedPortfolioShares
-export def "api list-accepted-portfolio-shares" [
+export def "list-accepted-portfolio-shares" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2957,7 +2957,7 @@ export def "api list-accepted-portfolio-shares" [
 #
 # POST /
 # operationId: ListBudgetsForResource
-export def "api list-budgets-for-resource" [
+export def "list-budgets-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3011,7 +3011,7 @@ export def "api list-budgets-for-resource" [
 #
 # POST /
 # operationId: ListConstraintsForPortfolio
-export def "api list-constraints-for-portfolio" [
+export def "list-constraints-for-portfolio" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3066,7 +3066,7 @@ export def "api list-constraints-for-portfolio" [
 #
 # POST /
 # operationId: ListLaunchPaths
-export def "api list-launch-paths" [
+export def "list-launch-paths" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3120,7 +3120,7 @@ export def "api list-launch-paths" [
 #
 # POST /
 # operationId: ListOrganizationPortfolioAccess
-export def "api list-organization-portfolio-access" [
+export def "list-organization-portfolio-access" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3175,7 +3175,7 @@ export def "api list-organization-portfolio-access" [
 #
 # POST /
 # operationId: ListPortfolioAccess
-export def "api list-portfolio-access" [
+export def "list-portfolio-access" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3230,7 +3230,7 @@ export def "api list-portfolio-access" [
 #
 # POST /
 # operationId: ListPortfolios
-export def "api list-portfolios" [
+export def "list-portfolios" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3283,7 +3283,7 @@ export def "api list-portfolios" [
 #
 # POST /
 # operationId: ListPortfoliosForProduct
-export def "api list-portfolios-for-product" [
+export def "list-portfolios-for-product" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3337,7 +3337,7 @@ export def "api list-portfolios-for-product" [
 #
 # POST /
 # operationId: ListPrincipalsForPortfolio
-export def "api list-principals-for-portfolio" [
+export def "list-principals-for-portfolio" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3391,7 +3391,7 @@ export def "api list-principals-for-portfolio" [
 #
 # POST /
 # operationId: ListProvisionedProductPlans
-export def "api list-provisioned-product-plans" [
+export def "list-provisioned-product-plans" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3443,7 +3443,7 @@ export def "api list-provisioned-product-plans" [
 #
 # POST /
 # operationId: ListProvisioningArtifacts
-export def "api list-provisioning-artifacts" [
+export def "list-provisioning-artifacts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3492,7 +3492,7 @@ export def "api list-provisioning-artifacts" [
 #
 # POST /
 # operationId: ListProvisioningArtifactsForServiceAction
-export def "api list-provisioning-artifacts-for-service-action" [
+export def "list-provisioning-artifacts-for-service-action" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3546,7 +3546,7 @@ export def "api list-provisioning-artifacts-for-service-action" [
 #
 # POST /
 # operationId: ListRecordHistory
-export def "api list-record-history" [
+export def "list-record-history" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3598,7 +3598,7 @@ export def "api list-record-history" [
 #
 # POST /
 # operationId: ListResourcesForTagOption
-export def "api list-resources-for-tag-option" [
+export def "list-resources-for-tag-option" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3652,7 +3652,7 @@ export def "api list-resources-for-tag-option" [
 #
 # POST /
 # operationId: ListServiceActions
-export def "api list-service-actions" [
+export def "list-service-actions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3705,7 +3705,7 @@ export def "api list-service-actions" [
 #
 # POST /
 # operationId: ListServiceActionsForProvisioningArtifact
-export def "api list-service-actions-for-provisioning-artifact" [
+export def "list-service-actions-for-provisioning-artifact" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3760,7 +3760,7 @@ export def "api list-service-actions-for-provisioning-artifact" [
 #
 # POST /
 # operationId: ListStackInstancesForProvisionedProduct
-export def "api list-stack-instances-for-provisioned-product" [
+export def "list-stack-instances-for-provisioned-product" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3811,7 +3811,7 @@ export def "api list-stack-instances-for-provisioned-product" [
 #
 # POST /
 # operationId: ListTagOptions
-export def "api list-tag-options" [
+export def "list-tag-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3864,7 +3864,7 @@ export def "api list-tag-options" [
 #
 # POST /
 # operationId: NotifyProvisionProductEngineWorkflowResult
-export def "api notify-provision-product-engine-workflow-result" [
+export def "notify-provision-product-engine-workflow-result" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3918,7 +3918,7 @@ export def "api notify-provision-product-engine-workflow-result" [
 #
 # POST /
 # operationId: NotifyTerminateProvisionedProductEngineWorkflowResult
-export def "api notify-terminate-provisioned-product-engine-workflow-result" [
+export def "notify-terminate-provisioned-product-engine-workflow-result" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3970,7 +3970,7 @@ export def "api notify-terminate-provisioned-product-engine-workflow-result" [
 #
 # POST /
 # operationId: NotifyUpdateProvisionedProductEngineWorkflowResult
-export def "api notify-update-provisioned-product-engine-workflow-result" [
+export def "notify-update-provisioned-product-engine-workflow-result" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4023,7 +4023,7 @@ export def "api notify-update-provisioned-product-engine-workflow-result" [
 #
 # POST /
 # operationId: ProvisionProduct
-export def "api create-provision-product" [
+export def "provision-product" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4083,7 +4083,7 @@ export def "api create-provision-product" [
 #
 # POST /
 # operationId: RejectPortfolioShare
-export def "api reject-portfolio-share" [
+export def "reject-portfolio-share" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4133,7 +4133,7 @@ export def "api reject-portfolio-share" [
 #
 # POST /
 # operationId: ScanProvisionedProducts
-export def "api create-scan-provisioned-products" [
+export def "scan-provisioned-products" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4184,7 +4184,7 @@ export def "api create-scan-provisioned-products" [
 #
 # POST /
 # operationId: SearchProducts
-export def "api list-products" [
+export def "search-products" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4240,7 +4240,7 @@ export def "api list-products" [
 #
 # POST /
 # operationId: SearchProductsAsAdmin
-export def "api list-products-as-admin" [
+export def "search-products-as-admin" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4298,7 +4298,7 @@ export def "api list-products-as-admin" [
 #
 # POST /
 # operationId: SearchProvisionedProducts
-export def "api list-provisioned-products" [
+export def "search-provisioned-products" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4355,7 +4355,7 @@ export def "api list-provisioned-products" [
 #
 # POST /
 # operationId: TerminateProvisionedProduct
-export def "api create-terminate-provisioned-product" [
+export def "terminate-provisioned-product" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4408,7 +4408,7 @@ export def "api create-terminate-provisioned-product" [
 #
 # POST /
 # operationId: UpdateConstraint
-export def "api update-constraint" [
+export def "update-constraint" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4459,7 +4459,7 @@ export def "api update-constraint" [
 #
 # POST /
 # operationId: UpdatePortfolio
-export def "api update-portfolio" [
+export def "update-portfolio" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4514,7 +4514,7 @@ export def "api update-portfolio" [
 # POST /
 # operationId: UpdatePortfolioShare
 # --OrganizationNode shape: {Type?: any, Value?: any}
-export def "api update-portfolio-share" [
+export def "update-portfolio-share" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4567,7 +4567,7 @@ export def "api update-portfolio-share" [
 #
 # POST /
 # operationId: UpdateProduct
-export def "api update-product" [
+export def "update-product" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4626,7 +4626,7 @@ export def "api update-product" [
 #
 # POST /
 # operationId: UpdateProvisionedProduct
-export def "api update-provisioned-product" [
+export def "update-provisioned-product" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4686,7 +4686,7 @@ export def "api update-provisioned-product" [
 #
 # POST /
 # operationId: UpdateProvisionedProductProperties
-export def "api update-provisioned-product-properties" [
+export def "update-provisioned-product-properties" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4737,7 +4737,7 @@ export def "api update-provisioned-product-properties" [
 #
 # POST /
 # operationId: UpdateProvisioningArtifact
-export def "api update-provisioning-artifact" [
+export def "update-provisioning-artifact" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4791,7 +4791,7 @@ export def "api update-provisioning-artifact" [
 #
 # POST /
 # operationId: UpdateServiceAction
-export def "api update-service-action" [
+export def "update-service-action" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4843,7 +4843,7 @@ export def "api update-service-action" [
 #
 # POST /
 # operationId: UpdateTagOption
-export def "api update-tag-option" [
+export def "update-tag-option" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

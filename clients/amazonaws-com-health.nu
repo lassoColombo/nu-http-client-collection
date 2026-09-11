@@ -113,7 +113,7 @@ def x-amz-target-completer-12 [] { ["AWSHealth_20160804.EnableHealthServiceAcces
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api get-affected-accounts-for-organization" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "describe-affected-accounts-for-organization" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -137,7 +137,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: DescribeAffectedAccountsForOrganization
-export def "api get-affected-accounts-for-organization" [
+export def "describe-affected-accounts-for-organization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -190,7 +190,7 @@ export def "api get-affected-accounts-for-organization" [
 #
 # POST /
 # operationId: DescribeAffectedEntities
-export def "api get-affected-entities" [
+export def "describe-affected-entities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -244,7 +244,7 @@ export def "api get-affected-entities" [
 #
 # POST /
 # operationId: DescribeAffectedEntitiesForOrganization
-export def "api get-affected-entities-for-organization" [
+export def "describe-affected-entities-for-organization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -298,7 +298,7 @@ export def "api get-affected-entities-for-organization" [
 #
 # POST /
 # operationId: DescribeEntityAggregates
-export def "api get-entity-aggregates" [
+export def "describe-entity-aggregates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -346,7 +346,7 @@ export def "api get-entity-aggregates" [
 #
 # POST /
 # operationId: DescribeEventAggregates
-export def "api get-event-aggregates" [
+export def "describe-event-aggregates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -400,7 +400,7 @@ export def "api get-event-aggregates" [
 #
 # POST /
 # operationId: DescribeEventDetails
-export def "api get-event-details" [
+export def "describe-event-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -449,7 +449,7 @@ export def "api get-event-details" [
 #
 # POST /
 # operationId: DescribeEventDetailsForOrganization
-export def "api get-event-details-for-organization" [
+export def "describe-event-details-for-organization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -498,7 +498,7 @@ export def "api get-event-details-for-organization" [
 #
 # POST /
 # operationId: DescribeEventTypes
-export def "api get-event-types" [
+export def "describe-event-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -552,7 +552,7 @@ export def "api get-event-types" [
 #
 # POST /
 # operationId: DescribeEvents
-export def "api get-events" [
+export def "describe-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -606,7 +606,7 @@ export def "api get-events" [
 #
 # POST /
 # operationId: DescribeEventsForOrganization
-export def "api get-events-for-organization" [
+export def "describe-events-for-organization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -660,7 +660,7 @@ export def "api get-events-for-organization" [
 #
 # POST /
 # operationId: DescribeHealthServiceStatusForOrganization
-export def "api get-health-service-status-for-organization" [
+export def "describe-health-service-status-for-organization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -704,7 +704,7 @@ export def "api get-health-service-status-for-organization" [
 #
 # POST /
 # operationId: DisableHealthServiceAccessForOrganization
-export def "api disable-health-service-access-for-organization" [
+export def "disable-health-service-access-for-organization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -748,7 +748,7 @@ export def "api disable-health-service-access-for-organization" [
 #
 # POST /
 # operationId: EnableHealthServiceAccessForOrganization
-export def "api enable-health-service-access-for-organization" [
+export def "enable-health-service-access-for-organization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

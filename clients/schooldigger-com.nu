@@ -97,7 +97,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "districts get-list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "districts-get-all-districts" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -121,7 +121,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/districts
 # operationId: Districts_GetAllDistricts
-export def "districts get-list" [
+export def "districts-get-all-districts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -175,7 +175,7 @@ export def "districts get-list" [
 #
 # GET /v1/districts/{id}
 # operationId: Districts_GetDistrict
-export def "districts get" [
+export def "districts-get-district" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -214,7 +214,7 @@ export def "districts get" [
 #
 # GET /v1/rankings/districts/{st}
 # operationId: Rankings_GetRank_District
-export def "rankings-districts get-rank" [
+export def "rankings-get-rank-district" [
   st: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -256,7 +256,7 @@ export def "rankings-districts get-rank" [
 #
 # GET /v1/rankings/schools/{st}
 # operationId: Rankings_GetRank
-export def "rankings-schools get-rank" [
+export def "rankings-get-rank" [
   st: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -299,7 +299,7 @@ export def "rankings-schools get-rank" [
 #
 # GET /v1/schools
 # operationId: Schools_GetAllSchools
-export def "schools get-list" [
+export def "schools-get-all-schools" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -361,7 +361,7 @@ export def "schools get-list" [
 #
 # GET /v1/schools/{id}
 # operationId: Schools_GetSchool10
-export def "schools get-school10" [
+export def "schools-get-school10" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

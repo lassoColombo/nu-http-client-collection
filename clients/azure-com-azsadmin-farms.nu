@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "farms-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Storage.Admin/farms
 # operationId: Farms_List
-export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms list" [
+export def "farms-list" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -180,7 +180,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Storage.Admin/farms/{farmId}
 # operationId: Farms_Get
-export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms get" [
+export def "farms-get" [
   subscription_id: string
   resource_group_name: string
   farm_id: string
@@ -223,7 +223,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms
 # PATCH /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Storage.Admin/farms/{farmId}
 # operationId: Farms_Update
 # --properties shape: {farmId?: string, settings?: record, settingsStore?: string, version?: string}
-export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms update" [
+export def "farms-update" [
   subscription_id: string
   resource_group_name: string
   farm_id: string
@@ -275,7 +275,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms
 # PUT /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Storage.Admin/farms/{farmId}
 # operationId: Farms_Create
 # --properties shape: {settingAccessString?: string}
-export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms create" [
+export def "farms-create" [
   subscription_id: string
   resource_group_name: string
   farm_id: string
@@ -326,7 +326,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Storage.Admin/farms/{farmId}/metricdefinitions
 # operationId: Farms_ListMetricDefinitions
-export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms-metricdefinitions list-metric-definitions" [
+export def "farms-list-metric-definitions" [
   subscription_id: string
   resource_group_name: string
   farm_id: string
@@ -368,7 +368,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Storage.Admin/farms/{farmId}/metrics
 # operationId: Farms_ListMetrics
-export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms-metrics list" [
+export def "farms-list-metrics" [
   subscription_id: string
   resource_group_name: string
   farm_id: string
@@ -410,7 +410,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms
 #
 # POST /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Storage.Admin/farms/{farmId}/ondemandgc
 # operationId: Farms_StartGarbageCollection
-export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms-ondemandgc start-garbage-collection" [
+export def "farms-start-garbage-collection" [
   subscription_id: string
   resource_group_name: string
   farm_id: string
@@ -452,7 +452,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Storage.Admin/farms/{farmId}/operationresults/{operationId}
 # operationId: Farms_GetGarbageCollectionState
-export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms-operationresults get-garbage-collection-state" [
+export def "farms-get-garbage-collection-state" [
   subscription_id: string
   resource_group_name: string
   farm_id: string

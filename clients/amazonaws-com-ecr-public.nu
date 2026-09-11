@@ -123,7 +123,7 @@ def x-amz-target-completer-22 [] { ["SpencerFrontendService.UploadLayerPart"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api check-batch-layer-availability" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "batch-check-layer-availability" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -147,7 +147,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: BatchCheckLayerAvailability
-export def "api check-batch-layer-availability" [
+export def "batch-check-layer-availability" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -197,7 +197,7 @@ export def "api check-batch-layer-availability" [
 #
 # POST /
 # operationId: BatchDeleteImage
-export def "api delete-batch-image" [
+export def "batch-delete-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -247,7 +247,7 @@ export def "api delete-batch-image" [
 #
 # POST /
 # operationId: CompleteLayerUpload
-export def "api complete-layer-upload" [
+export def "complete-layer-upload" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -298,7 +298,7 @@ export def "api complete-layer-upload" [
 #
 # POST /
 # operationId: CreateRepository
-export def "api create-repository" [
+export def "create-repository" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -348,7 +348,7 @@ export def "api create-repository" [
 #
 # POST /
 # operationId: DeleteRepository
-export def "api delete-repository" [
+export def "delete-repository" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -398,7 +398,7 @@ export def "api delete-repository" [
 #
 # POST /
 # operationId: DeleteRepositoryPolicy
-export def "api delete-repository-policy" [
+export def "delete-repository-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -447,7 +447,7 @@ export def "api delete-repository-policy" [
 #
 # POST /
 # operationId: DescribeImageTags
-export def "api get-image-tags" [
+export def "describe-image-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -501,7 +501,7 @@ export def "api get-image-tags" [
 #
 # POST /
 # operationId: DescribeImages
-export def "api get-images" [
+export def "describe-images" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -556,7 +556,7 @@ export def "api get-images" [
 #
 # POST /
 # operationId: DescribeRegistries
-export def "api get-registries" [
+export def "describe-registries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -608,7 +608,7 @@ export def "api get-registries" [
 #
 # POST /
 # operationId: DescribeRepositories
-export def "api get-repositories" [
+export def "describe-repositories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -662,7 +662,7 @@ export def "api get-repositories" [
 #
 # POST /
 # operationId: GetAuthorizationToken
-export def "api get-authorization-token" [
+export def "get-authorization-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -710,7 +710,7 @@ export def "api get-authorization-token" [
 #
 # POST /
 # operationId: GetRegistryCatalogData
-export def "api get-registry-catalog-data" [
+export def "get-registry-catalog-data" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -758,7 +758,7 @@ export def "api get-registry-catalog-data" [
 #
 # POST /
 # operationId: GetRepositoryCatalogData
-export def "api get-repository-catalog-data" [
+export def "get-repository-catalog-data" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -807,7 +807,7 @@ export def "api get-repository-catalog-data" [
 #
 # POST /
 # operationId: GetRepositoryPolicy
-export def "api get-repository-policy" [
+export def "get-repository-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -856,7 +856,7 @@ export def "api get-repository-policy" [
 #
 # POST /
 # operationId: InitiateLayerUpload
-export def "api upload-initiate-layer" [
+export def "initiate-layer-upload" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -905,7 +905,7 @@ export def "api upload-initiate-layer" [
 #
 # POST /
 # operationId: ListTagsForResource
-export def "api list-tags-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -953,7 +953,7 @@ export def "api list-tags-for-resource" [
 #
 # POST /
 # operationId: PutImage
-export def "api update-image" [
+export def "put-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1006,7 +1006,7 @@ export def "api update-image" [
 #
 # POST /
 # operationId: PutRegistryCatalogData
-export def "api update-registry-catalog-data" [
+export def "put-registry-catalog-data" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1054,7 +1054,7 @@ export def "api update-registry-catalog-data" [
 #
 # POST /
 # operationId: PutRepositoryCatalogData
-export def "api update-repository-catalog-data" [
+export def "put-repository-catalog-data" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1104,7 +1104,7 @@ export def "api update-repository-catalog-data" [
 #
 # POST /
 # operationId: SetRepositoryPolicy
-export def "api update-repository-policy" [
+export def "set-repository-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1155,7 +1155,7 @@ export def "api update-repository-policy" [
 #
 # POST /
 # operationId: TagResource
-export def "api tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1204,7 +1204,7 @@ export def "api tag-resource" [
 #
 # POST /
 # operationId: UntagResource
-export def "api untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1253,7 +1253,7 @@ export def "api untag-resource" [
 #
 # POST /
 # operationId: UploadLayerPart
-export def "api upload-layer-part" [
+export def "upload-layer-part" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

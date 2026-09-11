@@ -126,7 +126,7 @@ def status-completer [] { ["active" "closed" "inactive"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "companies get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-companies" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -150,7 +150,7 @@ export def commands []: nothing -> table {
 #
 # GET /companies
 # operationId: get-companies
-export def "companies get" [
+export def "get-companies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -187,7 +187,7 @@ export def "companies get" [
 #
 # GET /companies/{companyId}
 # operationId: get-companies-companyId
-export def "companies get-company" [
+export def "get-companies-company-id" [
   company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -223,7 +223,7 @@ export def "companies get-company" [
 #
 # GET /companies/{companyId}/androidApps
 # operationId: get-companies-companyId-androidApps
-export def "companies-android-apps get-company" [
+export def "get-companies-company-id-android-apps" [
   company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -262,7 +262,7 @@ export def "companies-android-apps get-company" [
 #
 # GET /companies/{companyId}/androidCertificates
 # operationId: get-companies-companyId-androidCertificates
-export def "companies-android-certificates get-company" [
+export def "get-companies-company-id-android-certificates" [
   company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -301,7 +301,7 @@ export def "companies-android-certificates get-company" [
 #
 # GET /companies/{companyId}/apiCredentials
 # operationId: get-companies-companyId-apiCredentials
-export def "companies-api-credentials list" [
+export def "get-companies-company-id-api-credentials" [
   company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -340,7 +340,7 @@ export def "companies-api-credentials list" [
 #
 # POST /companies/{companyId}/apiCredentials
 # operationId: post-companies-companyId-apiCredentials
-export def "companies-api-credentials create-company" [
+export def "post-companies-company-id-api-credentials" [
   company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -383,7 +383,7 @@ export def "companies-api-credentials create-company" [
 #
 # GET /companies/{companyId}/apiCredentials/{apiCredentialId}
 # operationId: get-companies-companyId-apiCredentials-apiCredentialId
-export def "companies-api-credentials get-company" [
+export def "get-companies-company-id-api-credentials-api-credential-id" [
   company_id: string
   api_credential_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -421,7 +421,7 @@ export def "companies-api-credentials get-company" [
 #
 # PATCH /companies/{companyId}/apiCredentials/{apiCredentialId}
 # operationId: patch-companies-companyId-apiCredentials-apiCredentialId
-export def "companies-api-credentials update-company" [
+export def "patch-companies-company-id-api-credentials-api-credential-id" [
   company_id: string
   api_credential_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -467,7 +467,7 @@ export def "companies-api-credentials update-company" [
 #
 # GET /companies/{companyId}/apiCredentials/{apiCredentialId}/allowedOrigins
 # operationId: get-companies-companyId-apiCredentials-apiCredentialId-allowedOrigins
-export def "companies-api-credentials-allowed-origins list" [
+export def "get-companies-company-id-api-credentials-api-credential-id-allowed-origins" [
   company_id: string
   api_credential_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -506,7 +506,7 @@ export def "companies-api-credentials-allowed-origins list" [
 # POST /companies/{companyId}/apiCredentials/{apiCredentialId}/allowedOrigins
 # operationId: post-companies-companyId-apiCredentials-apiCredentialId-allowedOrigins
 # --_links shape: {self: record}
-export def "companies-api-credentials-allowed-origins create-company" [
+export def "post-companies-company-id-api-credentials-api-credential-id-allowed-origins" [
   company_id: string
   api_credential_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -550,7 +550,7 @@ export def "companies-api-credentials-allowed-origins create-company" [
 #
 # DELETE /companies/{companyId}/apiCredentials/{apiCredentialId}/allowedOrigins/{originId}
 # operationId: delete-companies-companyId-apiCredentials-apiCredentialId-allowedOrigins-originId
-export def "companies-api-credentials-allowed-origins delete-company" [
+export def "delete-companies-company-id-api-credentials-api-credential-id-allowed-origins-origin-id" [
   company_id: string
   api_credential_id: string
   origin_id: string
@@ -590,7 +590,7 @@ export def "companies-api-credentials-allowed-origins delete-company" [
 #
 # GET /companies/{companyId}/apiCredentials/{apiCredentialId}/allowedOrigins/{originId}
 # operationId: get-companies-companyId-apiCredentials-apiCredentialId-allowedOrigins-originId
-export def "companies-api-credentials-allowed-origins get-company" [
+export def "get-companies-company-id-api-credentials-api-credential-id-allowed-origins-origin-id" [
   company_id: string
   api_credential_id: string
   origin_id: string
@@ -630,7 +630,7 @@ export def "companies-api-credentials-allowed-origins get-company" [
 #
 # POST /companies/{companyId}/apiCredentials/{apiCredentialId}/generateApiKey
 # operationId: post-companies-companyId-apiCredentials-apiCredentialId-generateApiKey
-export def "companies-api-credentials-generate-api-key create-company" [
+export def "post-companies-company-id-api-credentials-api-credential-id-generate-api-key" [
   company_id: string
   api_credential_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -668,7 +668,7 @@ export def "companies-api-credentials-generate-api-key create-company" [
 #
 # POST /companies/{companyId}/apiCredentials/{apiCredentialId}/generateClientKey
 # operationId: post-companies-companyId-apiCredentials-apiCredentialId-generateClientKey
-export def "companies-api-credentials-generate-client-key create-company" [
+export def "post-companies-company-id-api-credentials-api-credential-id-generate-client-key" [
   company_id: string
   api_credential_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -706,7 +706,7 @@ export def "companies-api-credentials-generate-client-key create-company" [
 #
 # GET /companies/{companyId}/billingEntities
 # operationId: get-companies-companyId-billingEntities
-export def "companies-billing-entities get-company" [
+export def "get-companies-company-id-billing-entities" [
   company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -744,7 +744,7 @@ export def "companies-billing-entities get-company" [
 #
 # GET /companies/{companyId}/merchants
 # operationId: get-companies-companyId-merchants
-export def "companies-merchants get-company" [
+export def "get-companies-company-id-merchants" [
   company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -783,7 +783,7 @@ export def "companies-merchants get-company" [
 #
 # GET /companies/{companyId}/shippingLocations
 # operationId: get-companies-companyId-shippingLocations
-export def "companies-shipping-locations get-company" [
+export def "get-companies-company-id-shipping-locations" [
   company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -825,7 +825,7 @@ export def "companies-shipping-locations get-company" [
 # operationId: post-companies-companyId-shippingLocations
 # --address shape: {city?: string, companyName?: string, country?: string, postalCode?: string, stateOrProvince?: string, streetAddress?: string, streetAddress2?: string}
 # --contact shape: {email?: string, firstName?: string, infix?: string, lastName?: string, phoneNumber?: string}
-export def "companies-shipping-locations create-company" [
+export def "post-companies-company-id-shipping-locations" [
   company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -868,7 +868,7 @@ export def "companies-shipping-locations create-company" [
 #
 # GET /companies/{companyId}/terminalActions
 # operationId: get-companies-companyId-terminalActions
-export def "companies-terminal-actions list" [
+export def "get-companies-company-id-terminal-actions" [
   company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -909,7 +909,7 @@ export def "companies-terminal-actions list" [
 #
 # GET /companies/{companyId}/terminalActions/{actionId}
 # operationId: get-companies-companyId-terminalActions-actionId
-export def "companies-terminal-actions get-company" [
+export def "get-companies-company-id-terminal-actions-action-id" [
   company_id: string
   action_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -947,7 +947,7 @@ export def "companies-terminal-actions get-company" [
 #
 # GET /companies/{companyId}/terminalLogos
 # operationId: get-companies-companyId-terminalLogos
-export def "companies-terminal-logos get-company" [
+export def "get-companies-company-id-terminal-logos" [
   company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -985,7 +985,7 @@ export def "companies-terminal-logos get-company" [
 #
 # PATCH /companies/{companyId}/terminalLogos
 # operationId: patch-companies-companyId-terminalLogos
-export def "companies-terminal-logos update-company" [
+export def "patch-companies-company-id-terminal-logos" [
   company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1027,7 +1027,7 @@ export def "companies-terminal-logos update-company" [
 #
 # GET /companies/{companyId}/terminalModels
 # operationId: get-companies-companyId-terminalModels
-export def "companies-terminal-models get-company" [
+export def "get-companies-company-id-terminal-models" [
   company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1063,7 +1063,7 @@ export def "companies-terminal-models get-company" [
 #
 # GET /companies/{companyId}/terminalOrders
 # operationId: get-companies-companyId-terminalOrders
-export def "companies-terminal-orders list" [
+export def "get-companies-company-id-terminal-orders" [
   company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1105,7 +1105,7 @@ export def "companies-terminal-orders list" [
 # POST /companies/{companyId}/terminalOrders
 # operationId: post-companies-companyId-terminalOrders
 # --items item shape: {id?: string, installments?: int, name?: string, quantity?: int}
-export def "companies-terminal-orders create-company" [
+export def "post-companies-company-id-terminal-orders" [
   company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1149,7 +1149,7 @@ export def "companies-terminal-orders create-company" [
 #
 # GET /companies/{companyId}/terminalOrders/{orderId}
 # operationId: get-companies-companyId-terminalOrders-orderId
-export def "companies-terminal-orders get-company" [
+export def "get-companies-company-id-terminal-orders-order-id" [
   company_id: string
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1188,7 +1188,7 @@ export def "companies-terminal-orders get-company" [
 # PATCH /companies/{companyId}/terminalOrders/{orderId}
 # operationId: patch-companies-companyId-terminalOrders-orderId
 # --items item shape: {id?: string, installments?: int, name?: string, quantity?: int}
-export def "companies-terminal-orders update-company" [
+export def "patch-companies-company-id-terminal-orders-order-id" [
   company_id: string
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1234,7 +1234,7 @@ export def "companies-terminal-orders update-company" [
 #
 # POST /companies/{companyId}/terminalOrders/{orderId}/cancel
 # operationId: post-companies-companyId-terminalOrders-orderId-cancel
-export def "companies-terminal-orders-cancel create-company" [
+export def "post-companies-company-id-terminal-orders-order-id-cancel" [
   company_id: string
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1272,7 +1272,7 @@ export def "companies-terminal-orders-cancel create-company" [
 #
 # GET /companies/{companyId}/terminalProducts
 # operationId: get-companies-companyId-terminalProducts
-export def "companies-terminal-products get-company" [
+export def "get-companies-company-id-terminal-products" [
   company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1313,7 +1313,7 @@ export def "companies-terminal-products get-company" [
 #
 # GET /companies/{companyId}/terminalSettings
 # operationId: get-companies-companyId-terminalSettings
-export def "companies-terminal-settings get-company" [
+export def "get-companies-company-id-terminal-settings" [
   company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1366,7 +1366,7 @@ export def "companies-terminal-settings get-company" [
 # --surcharge shape: {askConfirmation?: bool, configurations?: list}
 # --timeouts shape: {fromActiveToSleep?: int}
 # --wifiProfiles shape: {profiles?: list, settings?: record}
-export def "companies-terminal-settings update-company" [
+export def "patch-companies-company-id-terminal-settings" [
   company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1422,7 +1422,7 @@ export def "companies-terminal-settings update-company" [
 #
 # GET /companies/{companyId}/users
 # operationId: get-companies-companyId-users
-export def "companies-users list" [
+export def "get-companies-company-id-users" [
   company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1463,7 +1463,7 @@ export def "companies-users list" [
 # POST /companies/{companyId}/users
 # operationId: post-companies-companyId-users
 # --name shape: {firstName: string, lastName: string}
-export def "companies-users create-company" [
+export def "post-companies-company-id-users" [
   company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1510,7 +1510,7 @@ export def "companies-users create-company" [
 #
 # GET /companies/{companyId}/users/{userId}
 # operationId: get-companies-companyId-users-userId
-export def "companies-users get-company" [
+export def "get-companies-company-id-users-user-id" [
   company_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1549,7 +1549,7 @@ export def "companies-users get-company" [
 # PATCH /companies/{companyId}/users/{userId}
 # operationId: patch-companies-companyId-users-userId
 # --name shape: {firstName?: string, lastName?: string}
-export def "companies-users update-company" [
+export def "patch-companies-company-id-users-user-id" [
   company_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1599,7 +1599,7 @@ export def "companies-users update-company" [
 #
 # GET /companies/{companyId}/webhooks
 # operationId: get-companies-companyId-webhooks
-export def "companies-webhooks list" [
+export def "get-companies-company-id-webhooks" [
   company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1639,7 +1639,7 @@ export def "companies-webhooks list" [
 # POST /companies/{companyId}/webhooks
 # operationId: post-companies-companyId-webhooks
 # --additionalSettings shape: {includeEventCodes?: list<string>, properties?: record}
-export def "companies-webhooks create-company" [
+export def "post-companies-company-id-webhooks" [
   company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1694,7 +1694,7 @@ export def "companies-webhooks create-company" [
 #
 # DELETE /companies/{companyId}/webhooks/{webhookId}
 # operationId: delete-companies-companyId-webhooks-webhookId
-export def "companies-webhooks delete-company" [
+export def "delete-companies-company-id-webhooks-webhook-id" [
   company_id: string
   webhook_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1732,7 +1732,7 @@ export def "companies-webhooks delete-company" [
 #
 # GET /companies/{companyId}/webhooks/{webhookId}
 # operationId: get-companies-companyId-webhooks-webhookId
-export def "companies-webhooks get-company" [
+export def "get-companies-company-id-webhooks-webhook-id" [
   company_id: string
   webhook_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1771,7 +1771,7 @@ export def "companies-webhooks get-company" [
 # PATCH /companies/{companyId}/webhooks/{webhookId}
 # operationId: patch-companies-companyId-webhooks-webhookId
 # --additionalSettings shape: {includeEventCodes?: list<string>, properties?: record}
-export def "companies-webhooks update-company" [
+export def "patch-companies-company-id-webhooks-webhook-id" [
   company_id: string
   webhook_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1827,7 +1827,7 @@ export def "companies-webhooks update-company" [
 #
 # POST /companies/{companyId}/webhooks/{webhookId}/generateHmac
 # operationId: post-companies-companyId-webhooks-webhookId-generateHmac
-export def "companies-webhooks-generate-hmac create-company" [
+export def "post-companies-company-id-webhooks-webhook-id-generate-hmac" [
   company_id: string
   webhook_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1866,7 +1866,7 @@ export def "companies-webhooks-generate-hmac create-company" [
 # POST /companies/{companyId}/webhooks/{webhookId}/test
 # operationId: post-companies-companyId-webhooks-webhookId-test
 # --notification shape: {amount?: record, eventCode?: string, eventDate?: string, merchantReference?: string, paymentMethod?: string, reason?: string, success?: bool}
-export def "companies-webhooks-test create-company" [
+export def "post-companies-company-id-webhooks-webhook-id-test" [
   company_id: string
   webhook_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1910,7 +1910,7 @@ export def "companies-webhooks-test create-company" [
 #
 # GET /me
 # operationId: get-me
-export def "me get" [
+export def "get-me" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1944,7 +1944,7 @@ export def "me get" [
 #
 # GET /me/allowedOrigins
 # operationId: get-me-allowedOrigins
-export def "me-allowed-origins list" [
+export def "get-me-allowed-origins" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1979,7 +1979,7 @@ export def "me-allowed-origins list" [
 # POST /me/allowedOrigins
 # operationId: post-me-allowedOrigins
 # --_links shape: {self: record}
-export def "me-allowed-origins create" [
+export def "post-me-allowed-origins" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2019,7 +2019,7 @@ export def "me-allowed-origins create" [
 #
 # DELETE /me/allowedOrigins/{originId}
 # operationId: delete-me-allowedOrigins-originId
-export def "me-allowed-origins delete" [
+export def "delete-me-allowed-origins-origin-id" [
   origin_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2055,7 +2055,7 @@ export def "me-allowed-origins delete" [
 #
 # GET /me/allowedOrigins/{originId}
 # operationId: get-me-allowedOrigins-originId
-export def "me-allowed-origins get" [
+export def "get-me-allowed-origins-origin-id" [
   origin_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2091,7 +2091,7 @@ export def "me-allowed-origins get" [
 #
 # GET /merchants
 # operationId: get-merchants
-export def "merchants list" [
+export def "get-merchants" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2128,7 +2128,7 @@ export def "merchants list" [
 #
 # POST /merchants
 # operationId: post-merchants
-export def "merchants create" [
+export def "post-merchants" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2172,7 +2172,7 @@ export def "merchants create" [
 #
 # GET /merchants/{merchantId}
 # operationId: get-merchants-merchantId
-export def "merchants get" [
+export def "get-merchants-merchant-id" [
   merchant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2208,7 +2208,7 @@ export def "merchants get" [
 #
 # POST /merchants/{merchantId}/activate
 # operationId: post-merchants-merchantId-activate
-export def "merchants-activate create" [
+export def "post-merchants-merchant-id-activate" [
   merchant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2244,7 +2244,7 @@ export def "merchants-activate create" [
 #
 # GET /merchants/{merchantId}/apiCredentials
 # operationId: get-merchants-merchantId-apiCredentials
-export def "merchants-api-credentials list" [
+export def "get-merchants-merchant-id-api-credentials" [
   merchant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2283,7 +2283,7 @@ export def "merchants-api-credentials list" [
 #
 # POST /merchants/{merchantId}/apiCredentials
 # operationId: post-merchants-merchantId-apiCredentials
-export def "merchants-api-credentials create" [
+export def "post-merchants-merchant-id-api-credentials" [
   merchant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2325,7 +2325,7 @@ export def "merchants-api-credentials create" [
 #
 # GET /merchants/{merchantId}/apiCredentials/{apiCredentialId}
 # operationId: get-merchants-merchantId-apiCredentials-apiCredentialId
-export def "merchants-api-credentials get" [
+export def "get-merchants-merchant-id-api-credentials-api-credential-id" [
   merchant_id: string
   api_credential_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2363,7 +2363,7 @@ export def "merchants-api-credentials get" [
 #
 # PATCH /merchants/{merchantId}/apiCredentials/{apiCredentialId}
 # operationId: patch-merchants-merchantId-apiCredentials-apiCredentialId
-export def "merchants-api-credentials update" [
+export def "patch-merchants-merchant-id-api-credentials-api-credential-id" [
   merchant_id: string
   api_credential_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2408,7 +2408,7 @@ export def "merchants-api-credentials update" [
 #
 # GET /merchants/{merchantId}/apiCredentials/{apiCredentialId}/allowedOrigins
 # operationId: get-merchants-merchantId-apiCredentials-apiCredentialId-allowedOrigins
-export def "merchants-api-credentials-allowed-origins list" [
+export def "get-merchants-merchant-id-api-credentials-api-credential-id-allowed-origins" [
   merchant_id: string
   api_credential_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2447,7 +2447,7 @@ export def "merchants-api-credentials-allowed-origins list" [
 # POST /merchants/{merchantId}/apiCredentials/{apiCredentialId}/allowedOrigins
 # operationId: post-merchants-merchantId-apiCredentials-apiCredentialId-allowedOrigins
 # --_links shape: {self: record}
-export def "merchants-api-credentials-allowed-origins create" [
+export def "post-merchants-merchant-id-api-credentials-api-credential-id-allowed-origins" [
   merchant_id: string
   api_credential_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2491,7 +2491,7 @@ export def "merchants-api-credentials-allowed-origins create" [
 #
 # DELETE /merchants/{merchantId}/apiCredentials/{apiCredentialId}/allowedOrigins/{originId}
 # operationId: delete-merchants-merchantId-apiCredentials-apiCredentialId-allowedOrigins-originId
-export def "merchants-api-credentials-allowed-origins delete" [
+export def "delete-merchants-merchant-id-api-credentials-api-credential-id-allowed-origins-origin-id" [
   merchant_id: string
   api_credential_id: string
   origin_id: string
@@ -2531,7 +2531,7 @@ export def "merchants-api-credentials-allowed-origins delete" [
 #
 # GET /merchants/{merchantId}/apiCredentials/{apiCredentialId}/allowedOrigins/{originId}
 # operationId: get-merchants-merchantId-apiCredentials-apiCredentialId-allowedOrigins-originId
-export def "merchants-api-credentials-allowed-origins get" [
+export def "get-merchants-merchant-id-api-credentials-api-credential-id-allowed-origins-origin-id" [
   merchant_id: string
   api_credential_id: string
   origin_id: string
@@ -2571,7 +2571,7 @@ export def "merchants-api-credentials-allowed-origins get" [
 #
 # POST /merchants/{merchantId}/apiCredentials/{apiCredentialId}/generateApiKey
 # operationId: post-merchants-merchantId-apiCredentials-apiCredentialId-generateApiKey
-export def "merchants-api-credentials-generate-api-key create" [
+export def "post-merchants-merchant-id-api-credentials-api-credential-id-generate-api-key" [
   merchant_id: string
   api_credential_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2609,7 +2609,7 @@ export def "merchants-api-credentials-generate-api-key create" [
 #
 # POST /merchants/{merchantId}/apiCredentials/{apiCredentialId}/generateClientKey
 # operationId: post-merchants-merchantId-apiCredentials-apiCredentialId-generateClientKey
-export def "merchants-api-credentials-generate-client-key create" [
+export def "post-merchants-merchant-id-api-credentials-api-credential-id-generate-client-key" [
   merchant_id: string
   api_credential_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2647,7 +2647,7 @@ export def "merchants-api-credentials-generate-client-key create" [
 #
 # GET /merchants/{merchantId}/billingEntities
 # operationId: get-merchants-merchantId-billingEntities
-export def "merchants-billing-entities get" [
+export def "get-merchants-merchant-id-billing-entities" [
   merchant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2685,7 +2685,7 @@ export def "merchants-billing-entities get" [
 #
 # GET /merchants/{merchantId}/paymentMethodSettings
 # operationId: get-merchants-merchantId-paymentMethodSettings
-export def "merchants-payment-method-settings list" [
+export def "get-merchants-merchant-id-payment-method-settings" [
   merchant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2737,7 +2737,7 @@ export def "merchants-payment-method-settings list" [
 # --sofort shape: {currencyCode: string, logo: string}
 # --swish shape: {swishNumber?: string}
 # --vipps shape: {logo: string, subscriptionCancelUrl?: string}
-export def "merchants-payment-method-settings create" [
+export def "post-merchants-merchant-id-payment-method-settings" [
   merchant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2795,7 +2795,7 @@ export def "merchants-payment-method-settings create" [
 #
 # GET /merchants/{merchantId}/paymentMethodSettings/{paymentMethodId}
 # operationId: get-merchants-merchantId-paymentMethodSettings-paymentMethodId
-export def "merchants-payment-method-settings get" [
+export def "get-merchants-merchant-id-payment-method-settings-payment-method-id" [
   merchant_id: string
   payment_method_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2834,7 +2834,7 @@ export def "merchants-payment-method-settings get" [
 # PATCH /merchants/{merchantId}/paymentMethodSettings/{paymentMethodId}
 # operationId: patch-merchants-merchantId-paymentMethodSettings-paymentMethodId
 # --shopperStatement shape: {doingBusinessAsName?: string, type?: "append"|"dynamic"|"fixed"}
-export def "merchants-payment-method-settings update" [
+export def "patch-merchants-merchant-id-payment-method-settings-payment-method-id" [
   merchant_id: string
   payment_method_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2881,7 +2881,7 @@ export def "merchants-payment-method-settings update" [
 #
 # POST /merchants/{merchantId}/paymentMethodSettings/{paymentMethodId}/addApplePayDomains
 # operationId: post-merchants-merchantId-paymentMethodSettings-paymentMethodId-addApplePayDomains
-export def "merchants-payment-method-settings-add-apple-pay-domains create" [
+export def "post-merchants-merchant-id-payment-method-settings-payment-method-id-add-apple-pay-domains" [
   merchant_id: string
   payment_method_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2923,7 +2923,7 @@ export def "merchants-payment-method-settings-add-apple-pay-domains create" [
 #
 # GET /merchants/{merchantId}/paymentMethodSettings/{paymentMethodId}/getApplePayDomains
 # operationId: get-merchants-merchantId-paymentMethodSettings-paymentMethodId-getApplePayDomains
-export def "merchants-payment-method-settings-get-apple-pay-domains get" [
+export def "get-merchants-merchant-id-payment-method-settings-payment-method-id-get-apple-pay-domains" [
   merchant_id: string
   payment_method_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2961,7 +2961,7 @@ export def "merchants-payment-method-settings-get-apple-pay-domains get" [
 #
 # GET /merchants/{merchantId}/payoutSettings
 # operationId: get-merchants-merchantId-payoutSettings
-export def "merchants-payout-settings list" [
+export def "get-merchants-merchant-id-payout-settings" [
   merchant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2997,7 +2997,7 @@ export def "merchants-payout-settings list" [
 #
 # POST /merchants/{merchantId}/payoutSettings
 # operationId: post-merchants-merchantId-payoutSettings
-export def "merchants-payout-settings create" [
+export def "post-merchants-merchant-id-payout-settings" [
   merchant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3039,7 +3039,7 @@ export def "merchants-payout-settings create" [
 #
 # DELETE /merchants/{merchantId}/payoutSettings/{payoutSettingsId}
 # operationId: delete-merchants-merchantId-payoutSettings-payoutSettingsId
-export def "merchants-payout-settings delete" [
+export def "delete-merchants-merchant-id-payout-settings-payout-settings-id" [
   merchant_id: string
   payout_settings_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3077,7 +3077,7 @@ export def "merchants-payout-settings delete" [
 #
 # GET /merchants/{merchantId}/payoutSettings/{payoutSettingsId}
 # operationId: get-merchants-merchantId-payoutSettings-payoutSettingsId
-export def "merchants-payout-settings get" [
+export def "get-merchants-merchant-id-payout-settings-payout-settings-id" [
   merchant_id: string
   payout_settings_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3115,7 +3115,7 @@ export def "merchants-payout-settings get" [
 #
 # PATCH /merchants/{merchantId}/payoutSettings/{payoutSettingsId}
 # operationId: patch-merchants-merchantId-payoutSettings-payoutSettingsId
-export def "merchants-payout-settings update" [
+export def "patch-merchants-merchant-id-payout-settings-payout-settings-id" [
   merchant_id: string
   payout_settings_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3157,7 +3157,7 @@ export def "merchants-payout-settings update" [
 #
 # GET /merchants/{merchantId}/shippingLocations
 # operationId: get-merchants-merchantId-shippingLocations
-export def "merchants-shipping-locations get" [
+export def "get-merchants-merchant-id-shipping-locations" [
   merchant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3199,7 +3199,7 @@ export def "merchants-shipping-locations get" [
 # operationId: post-merchants-merchantId-shippingLocations
 # --address shape: {city?: string, companyName?: string, country?: string, postalCode?: string, stateOrProvince?: string, streetAddress?: string, streetAddress2?: string}
 # --contact shape: {email?: string, firstName?: string, infix?: string, lastName?: string, phoneNumber?: string}
-export def "merchants-shipping-locations create" [
+export def "post-merchants-merchant-id-shipping-locations" [
   merchant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3242,7 +3242,7 @@ export def "merchants-shipping-locations create" [
 #
 # GET /merchants/{merchantId}/stores
 # operationId: get-merchants-merchantId-stores
-export def "merchants-stores list" [
+export def "get-merchants-merchant-id-stores" [
   merchant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3284,7 +3284,7 @@ export def "merchants-stores list" [
 # operationId: post-merchants-merchantId-stores
 # --address shape: {city?: string, country: string, line1?: string, line2?: string, line3?: string, postalCode?: string, stateOrProvince?: string}
 # --splitConfiguration shape: {balanceAccountId?: string, splitConfigurationId?: string}
-export def "merchants-stores create" [
+export def "post-merchants-merchant-id-stores" [
   merchant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3331,7 +3331,7 @@ export def "merchants-stores create" [
 #
 # GET /merchants/{merchantId}/stores/{reference}/terminalLogos
 # operationId: get-merchants-merchantId-stores-reference-terminalLogos
-export def "merchants-stores-terminal-logos get" [
+export def "get-merchants-merchant-id-stores-reference-terminal-logos" [
   merchant_id: string
   reference: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3371,7 +3371,7 @@ export def "merchants-stores-terminal-logos get" [
 #
 # PATCH /merchants/{merchantId}/stores/{reference}/terminalLogos
 # operationId: patch-merchants-merchantId-stores-reference-terminalLogos
-export def "merchants-stores-terminal-logos update" [
+export def "patch-merchants-merchant-id-stores-reference-terminal-logos" [
   merchant_id: string
   reference: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3415,7 +3415,7 @@ export def "merchants-stores-terminal-logos update" [
 #
 # GET /merchants/{merchantId}/stores/{reference}/terminalSettings
 # operationId: get-merchants-merchantId-stores-reference-terminalSettings
-export def "merchants-stores-terminal-settings get" [
+export def "get-merchants-merchant-id-stores-reference-terminal-settings" [
   merchant_id: string
   reference: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3470,7 +3470,7 @@ export def "merchants-stores-terminal-settings get" [
 # --surcharge shape: {askConfirmation?: bool, configurations?: list}
 # --timeouts shape: {fromActiveToSleep?: int}
 # --wifiProfiles shape: {profiles?: list, settings?: record}
-export def "merchants-stores-terminal-settings update" [
+export def "patch-merchants-merchant-id-stores-reference-terminal-settings" [
   merchant_id: string
   reference: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3528,7 +3528,7 @@ export def "merchants-stores-terminal-settings update" [
 #
 # GET /merchants/{merchantId}/stores/{storeId}
 # operationId: get-merchants-merchantId-stores-storeId
-export def "merchants-stores get" [
+export def "get-merchants-merchant-id-stores-store-id" [
   merchant_id: string
   store_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3568,7 +3568,7 @@ export def "merchants-stores get" [
 # operationId: patch-merchants-merchantId-stores-storeId
 # --address shape: {city?: string, line1?: string, line2?: string, line3?: string, postalCode?: string, stateOrProvince?: string}
 # --splitConfiguration shape: {balanceAccountId?: string, splitConfigurationId?: string}
-export def "merchants-stores update" [
+export def "patch-merchants-merchant-id-stores-store-id" [
   merchant_id: string
   store_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3615,7 +3615,7 @@ export def "merchants-stores update" [
 #
 # GET /merchants/{merchantId}/terminalLogos
 # operationId: get-merchants-merchantId-terminalLogos
-export def "merchants-terminal-logos get" [
+export def "get-merchants-merchant-id-terminal-logos" [
   merchant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3653,7 +3653,7 @@ export def "merchants-terminal-logos get" [
 #
 # PATCH /merchants/{merchantId}/terminalLogos
 # operationId: patch-merchants-merchantId-terminalLogos
-export def "merchants-terminal-logos update" [
+export def "patch-merchants-merchant-id-terminal-logos" [
   merchant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3695,7 +3695,7 @@ export def "merchants-terminal-logos update" [
 #
 # GET /merchants/{merchantId}/terminalModels
 # operationId: get-merchants-merchantId-terminalModels
-export def "merchants-terminal-models get" [
+export def "get-merchants-merchant-id-terminal-models" [
   merchant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3731,7 +3731,7 @@ export def "merchants-terminal-models get" [
 #
 # GET /merchants/{merchantId}/terminalOrders
 # operationId: get-merchants-merchantId-terminalOrders
-export def "merchants-terminal-orders list" [
+export def "get-merchants-merchant-id-terminal-orders" [
   merchant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3773,7 +3773,7 @@ export def "merchants-terminal-orders list" [
 # POST /merchants/{merchantId}/terminalOrders
 # operationId: post-merchants-merchantId-terminalOrders
 # --items item shape: {id?: string, installments?: int, name?: string, quantity?: int}
-export def "merchants-terminal-orders create" [
+export def "post-merchants-merchant-id-terminal-orders" [
   merchant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3817,7 +3817,7 @@ export def "merchants-terminal-orders create" [
 #
 # GET /merchants/{merchantId}/terminalOrders/{orderId}
 # operationId: get-merchants-merchantId-terminalOrders-orderId
-export def "merchants-terminal-orders get" [
+export def "get-merchants-merchant-id-terminal-orders-order-id" [
   merchant_id: string
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3856,7 +3856,7 @@ export def "merchants-terminal-orders get" [
 # PATCH /merchants/{merchantId}/terminalOrders/{orderId}
 # operationId: patch-merchants-merchantId-terminalOrders-orderId
 # --items item shape: {id?: string, installments?: int, name?: string, quantity?: int}
-export def "merchants-terminal-orders update" [
+export def "patch-merchants-merchant-id-terminal-orders-order-id" [
   merchant_id: string
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3902,7 +3902,7 @@ export def "merchants-terminal-orders update" [
 #
 # POST /merchants/{merchantId}/terminalOrders/{orderId}/cancel
 # operationId: post-merchants-merchantId-terminalOrders-orderId-cancel
-export def "merchants-terminal-orders-cancel create" [
+export def "post-merchants-merchant-id-terminal-orders-order-id-cancel" [
   merchant_id: string
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3940,7 +3940,7 @@ export def "merchants-terminal-orders-cancel create" [
 #
 # GET /merchants/{merchantId}/terminalProducts
 # operationId: get-merchants-merchantId-terminalProducts
-export def "merchants-terminal-products get" [
+export def "get-merchants-merchant-id-terminal-products" [
   merchant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3981,7 +3981,7 @@ export def "merchants-terminal-products get" [
 #
 # GET /merchants/{merchantId}/terminalSettings
 # operationId: get-merchants-merchantId-terminalSettings
-export def "merchants-terminal-settings get" [
+export def "get-merchants-merchant-id-terminal-settings" [
   merchant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4034,7 +4034,7 @@ export def "merchants-terminal-settings get" [
 # --surcharge shape: {askConfirmation?: bool, configurations?: list}
 # --timeouts shape: {fromActiveToSleep?: int}
 # --wifiProfiles shape: {profiles?: list, settings?: record}
-export def "merchants-terminal-settings update" [
+export def "patch-merchants-merchant-id-terminal-settings" [
   merchant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4090,7 +4090,7 @@ export def "merchants-terminal-settings update" [
 #
 # GET /merchants/{merchantId}/users
 # operationId: get-merchants-merchantId-users
-export def "merchants-users list" [
+export def "get-merchants-merchant-id-users" [
   merchant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4131,7 +4131,7 @@ export def "merchants-users list" [
 # POST /merchants/{merchantId}/users
 # operationId: post-merchants-merchantId-users
 # --name shape: {firstName: string, lastName: string}
-export def "merchants-users create" [
+export def "post-merchants-merchant-id-users" [
   merchant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4177,7 +4177,7 @@ export def "merchants-users create" [
 #
 # GET /merchants/{merchantId}/users/{userId}
 # operationId: get-merchants-merchantId-users-userId
-export def "merchants-users get" [
+export def "get-merchants-merchant-id-users-user-id" [
   merchant_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4216,7 +4216,7 @@ export def "merchants-users get" [
 # PATCH /merchants/{merchantId}/users/{userId}
 # operationId: patch-merchants-merchantId-users-userId
 # --name shape: {firstName?: string, lastName?: string}
-export def "merchants-users update" [
+export def "patch-merchants-merchant-id-users-user-id" [
   merchant_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4265,7 +4265,7 @@ export def "merchants-users update" [
 #
 # GET /merchants/{merchantId}/webhooks
 # operationId: get-merchants-merchantId-webhooks
-export def "merchants-webhooks list" [
+export def "get-merchants-merchant-id-webhooks" [
   merchant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4305,7 +4305,7 @@ export def "merchants-webhooks list" [
 # POST /merchants/{merchantId}/webhooks
 # operationId: post-merchants-merchantId-webhooks
 # --additionalSettings shape: {includeEventCodes?: list<string>, properties?: record}
-export def "merchants-webhooks create" [
+export def "post-merchants-merchant-id-webhooks" [
   merchant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4358,7 +4358,7 @@ export def "merchants-webhooks create" [
 #
 # DELETE /merchants/{merchantId}/webhooks/{webhookId}
 # operationId: delete-merchants-merchantId-webhooks-webhookId
-export def "merchants-webhooks delete" [
+export def "delete-merchants-merchant-id-webhooks-webhook-id" [
   merchant_id: string
   webhook_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4396,7 +4396,7 @@ export def "merchants-webhooks delete" [
 #
 # GET /merchants/{merchantId}/webhooks/{webhookId}
 # operationId: get-merchants-merchantId-webhooks-webhookId
-export def "merchants-webhooks get" [
+export def "get-merchants-merchant-id-webhooks-webhook-id" [
   merchant_id: string
   webhook_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4435,7 +4435,7 @@ export def "merchants-webhooks get" [
 # PATCH /merchants/{merchantId}/webhooks/{webhookId}
 # operationId: patch-merchants-merchantId-webhooks-webhookId
 # --additionalSettings shape: {includeEventCodes?: list<string>, properties?: record}
-export def "merchants-webhooks update" [
+export def "patch-merchants-merchant-id-webhooks-webhook-id" [
   merchant_id: string
   webhook_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4489,7 +4489,7 @@ export def "merchants-webhooks update" [
 #
 # POST /merchants/{merchantId}/webhooks/{webhookId}/generateHmac
 # operationId: post-merchants-merchantId-webhooks-webhookId-generateHmac
-export def "merchants-webhooks-generate-hmac create" [
+export def "post-merchants-merchant-id-webhooks-webhook-id-generate-hmac" [
   merchant_id: string
   webhook_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4528,7 +4528,7 @@ export def "merchants-webhooks-generate-hmac create" [
 # POST /merchants/{merchantId}/webhooks/{webhookId}/test
 # operationId: post-merchants-merchantId-webhooks-webhookId-test
 # --notification shape: {amount?: record, eventCode?: string, eventDate?: string, merchantReference?: string, paymentMethod?: string, reason?: string, success?: bool}
-export def "merchants-webhooks-test create" [
+export def "post-merchants-merchant-id-webhooks-webhook-id-test" [
   merchant_id: string
   webhook_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4571,7 +4571,7 @@ export def "merchants-webhooks-test create" [
 #
 # GET /stores
 # operationId: get-stores
-export def "stores list" [
+export def "get-stores" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4612,7 +4612,7 @@ export def "stores list" [
 # operationId: post-stores
 # --address shape: {city?: string, country: string, line1?: string, line2?: string, line3?: string, postalCode?: string, stateOrProvince?: string}
 # --splitConfiguration shape: {balanceAccountId?: string, splitConfigurationId?: string}
-export def "stores create" [
+export def "post-stores" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4658,7 +4658,7 @@ export def "stores create" [
 #
 # GET /stores/{storeId}
 # operationId: get-stores-storeId
-export def "stores get" [
+export def "get-stores-store-id" [
   store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4696,7 +4696,7 @@ export def "stores get" [
 # operationId: patch-stores-storeId
 # --address shape: {city?: string, line1?: string, line2?: string, line3?: string, postalCode?: string, stateOrProvince?: string}
 # --splitConfiguration shape: {balanceAccountId?: string, splitConfigurationId?: string}
-export def "stores update" [
+export def "patch-stores-store-id" [
   store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4741,7 +4741,7 @@ export def "stores update" [
 #
 # GET /stores/{storeId}/terminalLogos
 # operationId: get-stores-storeId-terminalLogos
-export def "stores-terminal-logos get" [
+export def "get-stores-store-id-terminal-logos" [
   store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4779,7 +4779,7 @@ export def "stores-terminal-logos get" [
 #
 # PATCH /stores/{storeId}/terminalLogos
 # operationId: patch-stores-storeId-terminalLogos
-export def "stores-terminal-logos update" [
+export def "patch-stores-store-id-terminal-logos" [
   store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4821,7 +4821,7 @@ export def "stores-terminal-logos update" [
 #
 # GET /stores/{storeId}/terminalSettings
 # operationId: get-stores-storeId-terminalSettings
-export def "stores-terminal-settings get" [
+export def "get-stores-store-id-terminal-settings" [
   store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4874,7 +4874,7 @@ export def "stores-terminal-settings get" [
 # --surcharge shape: {askConfirmation?: bool, configurations?: list}
 # --timeouts shape: {fromActiveToSleep?: int}
 # --wifiProfiles shape: {profiles?: list, settings?: record}
-export def "stores-terminal-settings update" [
+export def "patch-stores-store-id-terminal-settings" [
   store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4930,7 +4930,7 @@ export def "stores-terminal-settings update" [
 #
 # GET /terminals
 # operationId: get-terminals
-export def "terminals get" [
+export def "get-terminals" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4972,7 +4972,7 @@ export def "terminals get" [
 #
 # POST /terminals/scheduleActions
 # operationId: post-terminals-scheduleActions
-export def "terminals-schedule-actions create" [
+export def "post-terminals-schedule-actions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5013,7 +5013,7 @@ export def "terminals-schedule-actions create" [
 #
 # GET /terminals/{terminalId}/terminalLogos
 # operationId: get-terminals-terminalId-terminalLogos
-export def "terminals-terminal-logos get" [
+export def "get-terminals-terminal-id-terminal-logos" [
   terminal_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5049,7 +5049,7 @@ export def "terminals-terminal-logos get" [
 #
 # PATCH /terminals/{terminalId}/terminalLogos
 # operationId: patch-terminals-terminalId-terminalLogos
-export def "terminals-terminal-logos update" [
+export def "patch-terminals-terminal-id-terminal-logos" [
   terminal_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5089,7 +5089,7 @@ export def "terminals-terminal-logos update" [
 #
 # GET /terminals/{terminalId}/terminalSettings
 # operationId: get-terminals-terminalId-terminalSettings
-export def "terminals-terminal-settings get" [
+export def "get-terminals-terminal-id-terminal-settings" [
   terminal_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5142,7 +5142,7 @@ export def "terminals-terminal-settings get" [
 # --surcharge shape: {askConfirmation?: bool, configurations?: list}
 # --timeouts shape: {fromActiveToSleep?: int}
 # --wifiProfiles shape: {profiles?: list, settings?: record}
-export def "terminals-terminal-settings update" [
+export def "patch-terminals-terminal-id-terminal-settings" [
   terminal_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

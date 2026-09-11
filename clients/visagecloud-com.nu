@@ -126,7 +126,7 @@ def method-completer [] { ["INGESTION_ENDPOINT" "WEBRTC_PULL" "WEBRTC_PUSH"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "rest-v1-1-account-account get-by-access-key-using" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-account-by-access-key-using-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -150,7 +150,7 @@ export def commands []: nothing -> table {
 #
 # GET /rest/v1.1/account/account
 # operationId: getAccountByAccessKeyUsingGET
-export def "rest-v1-1-account-account get-by-access-key-using" [
+export def "get-account-by-access-key-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -187,7 +187,7 @@ export def "rest-v1-1-account-account get-by-access-key-using" [
 #
 # GET /rest/v1.1/account/billing
 # operationId: getBillingPerAccountUsingGET
-export def "rest-v1-1-account-billing get-per-using" [
+export def "get-billing-per-account-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -227,7 +227,7 @@ export def "rest-v1-1-account-billing get-per-using" [
 #
 # POST /rest/v1.1/account/changePassword
 # operationId: changePasswordUsingPOST
-export def "rest-v1-1-account-change-password create-using" [
+export def "change-password-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -265,7 +265,7 @@ export def "rest-v1-1-account-change-password create-using" [
 #
 # POST /rest/v1.1/account/login
 # operationId: loginWithEmailUsingPOST
-export def "rest-v1-1-account-login create-with-email-using" [
+export def "login-with-email-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -302,7 +302,7 @@ export def "rest-v1-1-account-login create-with-email-using" [
 #
 # GET /rest/v1.1/analysis/compare
 # operationId: compareFacesUsingGET
-export def "rest-v1-1-analysis-compare get-faces-using" [
+export def "compare-faces-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -341,7 +341,7 @@ export def "rest-v1-1-analysis-compare get-faces-using" [
 #
 # POST /rest/v1.1/analysis/detection
 # operationId: performAnalysisUsingPOST
-export def "rest-v1-1-analysis-detection create-perform-using" [
+export def "perform-analysis-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -394,7 +394,7 @@ export def "rest-v1-1-analysis-detection create-perform-using" [
 #
 # GET /rest/v1.1/analysis/listLatest
 # operationId: retriveLatestUsingGET
-export def "rest-v1-1-analysis-list-latest get-retrive-using" [
+export def "retrive-latest-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -432,7 +432,7 @@ export def "rest-v1-1-analysis-list-latest get-retrive-using" [
 #
 # POST /rest/v1.1/analysis/recognition
 # operationId: performRecognitionUsingPOST
-export def "rest-v1-1-analysis-recognition create-perform-using" [
+export def "perform-recognition-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -488,7 +488,7 @@ export def "rest-v1-1-analysis-recognition create-perform-using" [
 #
 # GET /rest/v1.1/analysis/retrieve
 # operationId: retrieveAnalysisUsingGET
-export def "rest-v1-1-analysis-retrieve get-using" [
+export def "retrieve-analysis-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -526,7 +526,7 @@ export def "rest-v1-1-analysis-retrieve get-using" [
 #
 # POST /rest/v1.1/analytics/counting
 # operationId: counterUsingPOST
-export def "rest-v1-1-analytics-counting create-counter-using" [
+export def "counter-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -573,7 +573,7 @@ export def "rest-v1-1-analytics-counting create-counter-using" [
 #
 # POST /rest/v1.1/analytics/presence/timeseries
 # operationId: presenceTimeseriesUsingPOST
-export def "rest-v1-1-analytics-presence-timeseries create-using" [
+export def "presence-timeseries-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -615,7 +615,7 @@ export def "rest-v1-1-analytics-presence-timeseries create-using" [
 #
 # POST /rest/v1.1/analytics/presence/total
 # operationId: presenceTotalUsingPOST
-export def "rest-v1-1-analytics-presence-total create-using" [
+export def "presence-total-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -656,7 +656,7 @@ export def "rest-v1-1-analytics-presence-total create-using" [
 #
 # DELETE /rest/v1.1/classifier/svm
 # operationId: removeClassiferUsingDELETE
-export def "rest-v1-1-classifier-svm delete-classifer-using" [
+export def "remove-classifer-using-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -694,7 +694,7 @@ export def "rest-v1-1-classifier-svm delete-classifer-using" [
 #
 # GET /rest/v1.1/classifier/svm
 # operationId: getClassiferFullUsingGET
-export def "rest-v1-1-classifier-svm get-classifer-full-using" [
+export def "get-classifer-full-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -732,7 +732,7 @@ export def "rest-v1-1-classifier-svm get-classifer-full-using" [
 #
 # POST /rest/v1.1/classifier/svm
 # operationId: addSVMClassifierUsingPOST
-export def "rest-v1-1-classifier-svm create-using" [
+export def "add-svm-classifier-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -784,7 +784,7 @@ export def "rest-v1-1-classifier-svm create-using" [
 #
 # GET /rest/v1.1/classifier/svm/status
 # operationId: getClassiferStatusUsingGET
-export def "rest-v1-1-classifier-svm-status get-classifer-using" [
+export def "get-classifer-status-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -822,7 +822,7 @@ export def "rest-v1-1-classifier-svm-status get-classifer-using" [
 #
 # GET /rest/v1.1/collection/
 # operationId: getAllCollectionsUsingGET
-export def "rest-v1-1-collection get-list-using" [
+export def "get-all-collections-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -859,7 +859,7 @@ export def "rest-v1-1-collection get-list-using" [
 #
 # POST /rest/v1.1/collection/
 # operationId: addCollectionUsingPOST
-export def "rest-v1-1-collection create-using" [
+export def "add-collection-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -905,7 +905,7 @@ export def "rest-v1-1-collection create-using" [
 # DEPRECATED
 # operationId: getAllCollections2UsingGET
 @deprecated
-export def "rest-v1-1-collection-all get-collections2-using" [
+export def "get-all-collections2-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -944,7 +944,7 @@ export def "rest-v1-1-collection-all get-collections2-using" [
 # DEPRECATED
 # operationId: deleteCollection2UsingDELETE
 @deprecated
-export def "rest-v1-1-collection-collection delete-collection2-using" [
+export def "delete-collection2-using-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -984,7 +984,7 @@ export def "rest-v1-1-collection-collection delete-collection2-using" [
 # DEPRECATED
 # operationId: getCollection2UsingGET
 @deprecated
-export def "rest-v1-1-collection-collection get-collection2-using" [
+export def "get-collection2-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1024,7 +1024,7 @@ export def "rest-v1-1-collection-collection get-collection2-using" [
 # DEPRECATED
 # operationId: addCollection2UsingPOST
 @deprecated
-export def "rest-v1-1-collection-collection create-collection2-using" [
+export def "add-collection2-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1065,7 +1065,7 @@ export def "rest-v1-1-collection-collection create-collection2-using" [
 #
 # GET /rest/v1.1/collection/export/csv
 # operationId: exportCSVUsingGET
-export def "rest-v1-1-collection-export-csv get-using" [
+export def "export-csv-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1105,7 +1105,7 @@ export def "rest-v1-1-collection-export-csv get-using" [
 # DEPRECATED
 # operationId: repurposeCollectionUsingPUT
 @deprecated
-export def "rest-v1-1-collection-purpose update-repurpose-using" [
+export def "repurpose-collection-using-put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1144,7 +1144,7 @@ export def "rest-v1-1-collection-purpose update-repurpose-using" [
 #
 # DELETE /rest/v1.1/collection/{id}
 # operationId: deleteCollectionUsingDELETE
-export def "rest-v1-1-collection delete-using" [
+export def "delete-collection-using-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1183,7 +1183,7 @@ export def "rest-v1-1-collection delete-using" [
 #
 # GET /rest/v1.1/collection/{id}
 # operationId: getCollectionUsingGET
-export def "rest-v1-1-collection get-using" [
+export def "get-collection-using-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1222,7 +1222,7 @@ export def "rest-v1-1-collection get-using" [
 #
 # PATCH /rest/v1.1/collection/{id}
 # operationId: updateCollectionUsingPATCH
-export def "rest-v1-1-collection update-using" [
+export def "update-collection-using-patch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1265,7 +1265,7 @@ export def "rest-v1-1-collection update-using" [
 # DEPRECATED
 # operationId: updateCollection2UsingPOST
 @deprecated
-export def "rest-v1-1-collection update-collection2-using-create" [
+export def "update-collection2-using-post" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1306,7 +1306,7 @@ export def "rest-v1-1-collection update-collection2-using-create" [
 #
 # GET /rest/v1.1/collection/{id}/profile
 # operationId: getAllCollectionProfilesUsingGET
-export def "rest-v1-1-collection-profile get-list-using" [
+export def "get-all-collection-profiles-using-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1347,7 +1347,7 @@ export def "rest-v1-1-collection-profile get-list-using" [
 # DEPRECATED
 # operationId: removeClassificationAttributesFromProfileUsingDELETE
 @deprecated
-export def "rest-v1-1-profile-classification-attributes delete-from-using" [
+export def "remove-classification-attributes-from-profile-using-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1388,7 +1388,7 @@ export def "rest-v1-1-profile-classification-attributes delete-from-using" [
 # DEPRECATED
 # operationId: getClassificationAttributesFromProfileUsingGET
 @deprecated
-export def "rest-v1-1-profile-classification-attributes get-from-using" [
+export def "get-classification-attributes-from-profile-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1429,7 +1429,7 @@ export def "rest-v1-1-profile-classification-attributes get-from-using" [
 # DEPRECATED
 # operationId: mapClassificationAttributesToProfileUsingPUT
 @deprecated
-export def "rest-v1-1-profile-classification-attributes update-map-to-using" [
+export def "map-classification-attributes-to-profile-using-put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1469,7 +1469,7 @@ export def "rest-v1-1-profile-classification-attributes update-map-to-using" [
 #
 # GET /rest/v1.1/profile/enrollmentStatus
 # operationId: getProfileEnrollmentStatusUsingGET
-export def "rest-v1-1-profile-enrollment-status get-using" [
+export def "get-profile-enrollment-status-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1508,7 +1508,7 @@ export def "rest-v1-1-profile-enrollment-status get-using" [
 #
 # DELETE /rest/v1.1/profile/map
 # operationId: removeFacesFromProfileUsingDELETE
-export def "rest-v1-1-profile-map delete-faces-from-using" [
+export def "remove-faces-from-profile-using-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1548,7 +1548,7 @@ export def "rest-v1-1-profile-map delete-faces-from-using" [
 #
 # GET /rest/v1.1/profile/map
 # operationId: getFacesFromProfileUsingGET
-export def "rest-v1-1-profile-map get-faces-from-using" [
+export def "get-faces-from-profile-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1587,7 +1587,7 @@ export def "rest-v1-1-profile-map get-faces-from-using" [
 #
 # POST /rest/v1.1/profile/map
 # operationId: mapFacesToProfileUsingPOST
-export def "rest-v1-1-profile-map create-faces-to-using" [
+export def "map-faces-to-profile-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1629,7 +1629,7 @@ export def "rest-v1-1-profile-map create-faces-to-using" [
 # DEPRECATED
 # operationId: deleteProfile2UsingDELETE
 @deprecated
-export def "rest-v1-1-profile-profile delete-profile2-using" [
+export def "delete-profile2-using-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1668,7 +1668,7 @@ export def "rest-v1-1-profile-profile delete-profile2-using" [
 #
 # POST /rest/v1.1/profile/profile
 # operationId: addProfileUsingPOST
-export def "rest-v1-1-profile-profile create-using" [
+export def "add-profile-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1711,7 +1711,7 @@ export def "rest-v1-1-profile-profile create-using" [
 #
 # DELETE /rest/v1.1/profile/{id}
 # operationId: deleteProfileUsingDELETE
-export def "rest-v1-1-profile delete-using" [
+export def "delete-profile-using-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1751,7 +1751,7 @@ export def "rest-v1-1-profile delete-using" [
 #
 # GET /rest/v1.1/profile/{id}
 # operationId: getProfileUsingGET
-export def "rest-v1-1-profile get-using" [
+export def "get-profile-using-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1792,7 +1792,7 @@ export def "rest-v1-1-profile get-using" [
 #
 # PATCH /rest/v1.1/profile/{id}
 # operationId: updateProfileUsingPATCH
-export def "rest-v1-1-profile update-using" [
+export def "update-profile-using-patch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1837,7 +1837,7 @@ export def "rest-v1-1-profile update-using" [
 #
 # GET /rest/v1.1/stream/all
 # operationId: streamsByAccountUsingGET
-export def "rest-v1-1-stream-all get-by-account-using" [
+export def "streams-by-account-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1874,7 +1874,7 @@ export def "rest-v1-1-stream-all get-by-account-using" [
 #
 # GET /rest/v1.1/stream/attendance
 # operationId: getLastNAttedanceUsingGET
-export def "rest-v1-1-stream-attendance get-last-n-attedance-using" [
+export def "get-last-n-attedance-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1913,7 +1913,7 @@ export def "rest-v1-1-stream-attendance get-last-n-attedance-using" [
 #
 # PATCH /rest/v1.1/stream/cleanup
 # operationId: cleanupStreamUsingPATCH
-export def "rest-v1-1-stream-cleanup update-using" [
+export def "cleanup-stream-using-patch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1952,7 +1952,7 @@ export def "rest-v1-1-stream-cleanup update-using" [
 #
 # GET /rest/v1.1/stream/frameImage
 # operationId: getFrameImageUsingGET
-export def "rest-v1-1-stream-frame-image get-using" [
+export def "get-frame-image-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1991,7 +1991,7 @@ export def "rest-v1-1-stream-frame-image get-using" [
 #
 # GET /rest/v1.1/stream/frames
 # operationId: getLastNFramesUsingGET
-export def "rest-v1-1-stream-frames get-last-n-using" [
+export def "get-last-n-frames-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2033,7 +2033,7 @@ export def "rest-v1-1-stream-frames get-last-n-using" [
 #
 # PATCH /rest/v1.1/stream/start
 # operationId: startStreamUsingPATCH
-export def "rest-v1-1-stream-start update-using" [
+export def "start-stream-using-patch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2071,7 +2071,7 @@ export def "rest-v1-1-stream-start update-using" [
 #
 # PATCH /rest/v1.1/stream/stop
 # operationId: stopStreamUsingPATCH
-export def "rest-v1-1-stream-stop update-using" [
+export def "stop-stream-using-patch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2109,7 +2109,7 @@ export def "rest-v1-1-stream-stop update-using" [
 #
 # POST /rest/v1.1/stream/stream
 # operationId: addStreamUsingPOST
-export def "rest-v1-1-stream-stream create-using" [
+export def "add-stream-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2159,7 +2159,7 @@ export def "rest-v1-1-stream-stream create-using" [
 #
 # DELETE /rest/v1.1/stream/{id}
 # operationId: removeStreamUsingDELETE
-export def "rest-v1-1-stream delete-using" [
+export def "remove-stream-using-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2198,7 +2198,7 @@ export def "rest-v1-1-stream delete-using" [
 #
 # GET /rest/v1.1/stream/{streamId}
 # operationId: getStreamUsingGET
-export def "rest-v1-1-stream get-using" [
+export def "get-stream-using-get" [
   stream_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2237,7 +2237,7 @@ export def "rest-v1-1-stream get-using" [
 #
 # PATCH /rest/v1.1/stream/{streamId}
 # operationId: updateStreamUsingPATCH
-export def "rest-v1-1-stream update-using" [
+export def "update-stream-using-patch" [
   stream_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

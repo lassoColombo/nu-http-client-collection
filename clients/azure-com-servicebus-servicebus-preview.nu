@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-service-bus-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.ServiceBus/operations
 # operationId: Operations_List
-export def "providers-microsoft-service-bus-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -177,7 +177,7 @@ export def "providers-microsoft-service-bus-operations list" [
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.ServiceBus/namespaces
 # Docs: https://msdn.microsoft.com/en-us/library/azure/mt639412.aspx
 # operationId: Namespaces_List
-export def "subscriptions-providers-microsoft-service-bus-namespaces list" [
+export def "namespaces-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -216,7 +216,7 @@ export def "subscriptions-providers-microsoft-service-bus-namespaces list" [
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces
 # Docs: https://msdn.microsoft.com/en-us/library/azure/mt639412.aspx
 # operationId: Namespaces_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces list" [
+export def "namespaces-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -257,7 +257,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}
 # Docs: https://msdn.microsoft.com/en-us/library/azure/mt639389.aspx
 # operationId: Namespaces_Delete
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces delete" [
+export def "namespaces-delete" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -300,7 +300,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}
 # Docs: https://msdn.microsoft.com/en-us/library/azure/mt639379.aspx
 # operationId: Namespaces_Get
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces get" [
+export def "namespaces-get" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -344,7 +344,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 # operationId: Namespaces_Update
 # --properties shape: {encryption?: any, identity?: any, zoneRedundant?: bool}
 # --sku shape: {capacity?: int, name: "Basic"|"Standard"|"Premium", tier?: "Basic"|"Standard"|"Premium"}
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces update" [
+export def "namespaces-update" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -396,7 +396,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 # operationId: Namespaces_CreateOrUpdate
 # --properties shape: {encryption?: any, identity?: any, zoneRedundant?: bool}
 # --sku shape: {capacity?: int, name: "Basic"|"Standard"|"Premium", tier?: "Basic"|"Standard"|"Premium"}
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces create-or-update" [
+export def "namespaces-create-or-update" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -445,7 +445,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/ipfilterrules
 # operationId: Namespaces_ListIpFilterRules
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-ipfilterrules list-ip-filter-rules" [
+export def "namespaces-list-ip-filter-rules" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -487,7 +487,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/ipfilterrules/{ipFilterRuleName}
 # operationId: Namespaces_DeleteIpFilterRule
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-ipfilterrules delete-ip-filter-rule" [
+export def "namespaces-delete-ip-filter-rule" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -531,7 +531,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/ipfilterrules/{ipFilterRuleName}
 # operationId: Namespaces_GetIpFilterRule
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-ipfilterrules get-ip-filter-rule" [
+export def "namespaces-get-ip-filter-rule" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -576,7 +576,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/ipfilterrules/{ipFilterRuleName}
 # operationId: Namespaces_CreateOrUpdateIpFilterRule
 # --properties shape: {action?: "Accept"|"Reject", filterName?: string, ipMask?: string}
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-ipfilterrules create-or-update-ip-filter-rule" [
+export def "namespaces-create-or-update-ip-filter-rule" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -624,7 +624,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/networkrulesets/default
 # operationId: Namespaces_GetNetworkRuleSet
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-networkrulesets-default get-network-rule-update" [
+export def "namespaces-get-network-rule-set" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -667,7 +667,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/networkrulesets/default
 # operationId: Namespaces_CreateOrUpdateNetworkRuleSet
 # --properties shape: {defaultAction?: "Allow"|"Deny", ipRules?: list, virtualNetworkRules?: list}
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-networkrulesets-default create-or-update-network-rule" [
+export def "namespaces-create-or-update-network-rule-set" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -713,7 +713,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/virtualnetworkrules
 # operationId: Namespaces_ListVirtualNetworkRules
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-virtualnetworkrules list-virtual-network-rules" [
+export def "namespaces-list-virtual-network-rules" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -755,7 +755,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/virtualnetworkrules/{virtualNetworkRuleName}
 # operationId: Namespaces_DeleteVirtualNetworkRule
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-virtualnetworkrules delete-virtual-network-rule" [
+export def "namespaces-delete-virtual-network-rule" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -799,7 +799,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/virtualnetworkrules/{virtualNetworkRuleName}
 # operationId: Namespaces_GetVirtualNetworkRule
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-virtualnetworkrules get-virtual-network-rule" [
+export def "namespaces-get-virtual-network-rule" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -844,7 +844,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/virtualnetworkrules/{virtualNetworkRuleName}
 # operationId: Namespaces_CreateOrUpdateVirtualNetworkRule
 # --properties shape: {virtualNetworkSubnetId?: string}
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-virtualnetworkrules create-or-update-virtual-network-rule" [
+export def "namespaces-create-or-update-virtual-network-rule" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string

@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-network-ddos-custom-policies delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "ddos-custom-policies-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/ddosCustomPolicies/{ddosCustomPolicyName}
 # operationId: DdosCustomPolicies_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-ddos-custom-policies delete" [
+export def "ddos-custom-policies-delete" [
   subscription_id: string
   resource_group_name: string
   ddos_custom_policy_name: string
@@ -182,7 +182,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-ddos-custo
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/ddosCustomPolicies/{ddosCustomPolicyName}
 # operationId: DdosCustomPolicies_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-ddos-custom-policies get" [
+export def "ddos-custom-policies-get" [
   subscription_id: string
   resource_group_name: string
   ddos_custom_policy_name: string
@@ -224,7 +224,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-ddos-custo
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/ddosCustomPolicies/{ddosCustomPolicyName}
 # operationId: DdosCustomPolicies_UpdateTags
-export def "subscriptions-resource-groups-providers-microsoft-network-ddos-custom-policies update-tags" [
+export def "ddos-custom-policies-update-tags" [
   subscription_id: string
   resource_group_name: string
   ddos_custom_policy_name: string
@@ -271,7 +271,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-ddos-custo
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/ddosCustomPolicies/{ddosCustomPolicyName}
 # operationId: DdosCustomPolicies_CreateOrUpdate
 # --properties shape: {protocolCustomSettings?: list}
-export def "subscriptions-resource-groups-providers-microsoft-network-ddos-custom-policies create-or-update" [
+export def "ddos-custom-policies-create-or-update" [
   subscription_id: string
   resource_group_name: string
   ddos_custom_policy_name: string

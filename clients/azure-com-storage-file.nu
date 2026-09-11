@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-file-services list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "file-services-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Storage/storageAccounts/{accountName}/fileServices
 # operationId: FileServices_List
-export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-file-services list" [
+export def "file-services-list" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -182,7 +182,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Storage/storageAccounts/{accountName}/fileServices/default/shares
 # operationId: FileShares_List
-export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-file-services-default-shares list" [
+export def "file-shares-list" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -226,7 +226,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Storage/storageAccounts/{accountName}/fileServices/default/shares/{shareName}
 # operationId: FileShares_Delete
-export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-file-services-default-shares delete" [
+export def "file-shares-delete" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -270,7 +270,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Storage/storageAccounts/{accountName}/fileServices/default/shares/{shareName}
 # operationId: FileShares_Get
-export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-file-services-default-shares get" [
+export def "file-shares-get" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -315,7 +315,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Storage/storageAccounts/{accountName}/fileServices/default/shares/{shareName}
 # operationId: FileShares_Update
 # --properties shape: {metadata?: record, shareQuota?: int}
-export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-file-services-default-shares update" [
+export def "file-shares-update" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -364,7 +364,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Storage/storageAccounts/{accountName}/fileServices/default/shares/{shareName}
 # operationId: FileShares_Create
 # --properties shape: {metadata?: record, shareQuota?: int}
-export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-file-services-default-shares create" [
+export def "file-shares-create" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -412,7 +412,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Storage/storageAccounts/{accountName}/fileServices/{FileServicesName}
 # operationId: FileServices_GetServiceProperties
-export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-file-services get-properties" [
+export def "file-services-get-service-properties" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -458,7 +458,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
 # operationId: FileServices_SetServiceProperties
 # --properties shape: {cors?: any, shareDeleteRetentionPolicy?: any}
 # --sku shape: {name: "Standard_LRS"|"Standard_GRS"|"Standard_RAGRS"|"Standard_ZRS"|"Premium_LRS"|"Premium_ZRS"|"Standard_GZRS"|"Standard_RAGZRS"}
-export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-file-services update-properties" [
+export def "file-services-set-service-properties" [
   subscription_id: string
   resource_group_name: string
   account_name: string

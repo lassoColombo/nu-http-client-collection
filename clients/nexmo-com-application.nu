@@ -117,7 +117,7 @@ def type-completer [] { ["messages" "voice"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api get-applications" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "retrieve-applications" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -141,7 +141,7 @@ export def commands []: nothing -> table {
 #
 # GET /
 # operationId: retrieveApplications
-export def "api get-applications" [
+export def "retrieve-applications" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -180,7 +180,7 @@ export def "api get-applications" [
 #
 # POST /
 # operationId: createApplication
-export def "api create-application" [
+export def "create-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -229,7 +229,7 @@ export def "api create-application" [
 #
 # DELETE /{app_id}
 # operationId: deleteApplication
-export def "api delete-application" [
+export def "delete-application" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -265,7 +265,7 @@ export def "api delete-application" [
 #
 # GET /{app_id}
 # operationId: retrieveApplication
-export def "api get-application" [
+export def "retrieve-application" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -304,7 +304,7 @@ export def "api get-application" [
 #
 # PUT /{app_id}
 # operationId: updateApplication
-export def "api update-application" [
+export def "update-application" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

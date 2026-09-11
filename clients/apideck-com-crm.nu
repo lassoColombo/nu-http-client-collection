@@ -124,7 +124,7 @@ def type-completer-1 [] { ["customer" "employee" "personal" "supplier"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "crm-activities list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "activities-all" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -148,7 +148,7 @@ export def commands []: nothing -> table {
 #
 # GET /crm/activities
 # operationId: activitiesAll
-export def "crm-activities list" [
+export def "activities-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -196,7 +196,7 @@ export def "crm-activities list" [
 # --attendees item shape: {email_address?: string, first_name?: string, is_organizer?: bool, last_name?: string, middle_name?: string, name?: string, prefix?: string, status?: "accepted"|"tentative"|"declined", suffix?: string}
 # --custom_fields item shape: {description?: string, id: string, name?: string, value?: any}
 # --location_address shape: {city?: string, contact_name?: string, country?: string, county?: string, email?: string, fax?: string, id?: string, latitude?: string, line1?: string, line2?: string, line3?: string, line4?: string, longitude?: string, name?: string, phone_number?: string, postal_code?: string, row_version?: string, salutation?: string, state?: string, street_number?: string, string?: string, type?: "primary"|"secondary"|"home"|"office"|"shipping"|"billing"|"other", website?: string}
-export def "crm-activities create" [
+export def "activities-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -283,7 +283,7 @@ export def "crm-activities create" [
 #
 # DELETE /crm/activities/{id}
 # operationId: activitiesDelete
-export def "crm-activities delete" [
+export def "activities-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -326,7 +326,7 @@ export def "crm-activities delete" [
 #
 # GET /crm/activities/{id}
 # operationId: activitiesOne
-export def "crm-activities get-one" [
+export def "activities-one" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -373,7 +373,7 @@ export def "crm-activities get-one" [
 # --attendees item shape: {email_address?: string, first_name?: string, is_organizer?: bool, last_name?: string, middle_name?: string, name?: string, prefix?: string, status?: "accepted"|"tentative"|"declined", suffix?: string}
 # --custom_fields item shape: {description?: string, id: string, name?: string, value?: any}
 # --location_address shape: {city?: string, contact_name?: string, country?: string, county?: string, email?: string, fax?: string, id?: string, latitude?: string, line1?: string, line2?: string, line3?: string, line4?: string, longitude?: string, name?: string, phone_number?: string, postal_code?: string, row_version?: string, salutation?: string, state?: string, street_number?: string, string?: string, type?: "primary"|"secondary"|"home"|"office"|"shipping"|"billing"|"other", website?: string}
-export def "crm-activities update" [
+export def "activities-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -462,7 +462,7 @@ export def "crm-activities update" [
 #
 # GET /crm/companies
 # operationId: companiesAll
-export def "crm-companies list" [
+export def "companies-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -516,7 +516,7 @@ export def "crm-companies list" [
 # --row_type shape: {id?: string, name?: string}
 # --social_links item shape: {id?: string, type?: string, url: string}
 # --websites item shape: {id?: string, type?: "primary"|"secondary"|"work"|"personal"|"other", url: string}
-export def "crm-companies create" [
+export def "companies-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -591,7 +591,7 @@ export def "crm-companies create" [
 #
 # DELETE /crm/companies/{id}
 # operationId: companiesDelete
-export def "crm-companies delete" [
+export def "companies-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -634,7 +634,7 @@ export def "crm-companies delete" [
 #
 # GET /crm/companies/{id}
 # operationId: companiesOne
-export def "crm-companies get-one" [
+export def "companies-one" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -686,7 +686,7 @@ export def "crm-companies get-one" [
 # --row_type shape: {id?: string, name?: string}
 # --social_links item shape: {id?: string, type?: string, url: string}
 # --websites item shape: {id?: string, type?: "primary"|"secondary"|"work"|"personal"|"other", url: string}
-export def "crm-companies update" [
+export def "companies-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -763,7 +763,7 @@ export def "crm-companies update" [
 #
 # GET /crm/contacts
 # operationId: contactsAll
-export def "crm-contacts list" [
+export def "contacts-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -816,7 +816,7 @@ export def "crm-contacts list" [
 # --social_links item shape: {id?: string, type?: string, url: string}
 # --websites item shape: {id?: string, type?: "primary"|"secondary"|"work"|"personal"|"other", url: string}
 @deprecated --flag image
-export def "crm-contacts create" [
+export def "contacts-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -892,7 +892,7 @@ export def "crm-contacts create" [
 #
 # DELETE /crm/contacts/{id}
 # operationId: contactsDelete
-export def "crm-contacts delete" [
+export def "contacts-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -935,7 +935,7 @@ export def "crm-contacts delete" [
 #
 # GET /crm/contacts/{id}
 # operationId: contactsOne
-export def "crm-contacts get-one" [
+export def "contacts-one" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -986,7 +986,7 @@ export def "crm-contacts get-one" [
 # --social_links item shape: {id?: string, type?: string, url: string}
 # --websites item shape: {id?: string, type?: "primary"|"secondary"|"work"|"personal"|"other", url: string}
 @deprecated --flag image
-export def "crm-contacts update" [
+export def "contacts-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1064,7 +1064,7 @@ export def "crm-contacts update" [
 #
 # GET /crm/leads
 # operationId: leadsAll
-export def "crm-leads list" [
+export def "leads-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1116,7 +1116,7 @@ export def "crm-leads list" [
 # --phone_numbers item shape: {area_code?: string, country_code?: string, extension?: string, id?: string, number: string, type?: "primary"|"secondary"|"home"|"work"|"office"|"mobile"|"assistant"|"fax"|"direct-dial-in"|"personal"|"other"}
 # --social_links item shape: {id?: string, type?: string, url: string}
 # --websites item shape: {id?: string, type?: "primary"|"secondary"|"work"|"personal"|"other", url: string}
-export def "crm-leads create" [
+export def "leads-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1183,7 +1183,7 @@ export def "crm-leads create" [
 #
 # DELETE /crm/leads/{id}
 # operationId: leadsDelete
-export def "crm-leads delete" [
+export def "leads-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1226,7 +1226,7 @@ export def "crm-leads delete" [
 #
 # GET /crm/leads/{id}
 # operationId: leadsOne
-export def "crm-leads get-one" [
+export def "leads-one" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1276,7 +1276,7 @@ export def "crm-leads get-one" [
 # --phone_numbers item shape: {area_code?: string, country_code?: string, extension?: string, id?: string, number: string, type?: "primary"|"secondary"|"home"|"work"|"office"|"mobile"|"assistant"|"fax"|"direct-dial-in"|"personal"|"other"}
 # --social_links item shape: {id?: string, type?: string, url: string}
 # --websites item shape: {id?: string, type?: "primary"|"secondary"|"work"|"personal"|"other", url: string}
-export def "crm-leads update" [
+export def "leads-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1345,7 +1345,7 @@ export def "crm-leads update" [
 #
 # GET /crm/notes
 # operationId: notesAll
-export def "crm-notes list" [
+export def "notes-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1389,7 +1389,7 @@ export def "crm-notes list" [
 #
 # POST /crm/notes
 # operationId: notesAdd
-export def "crm-notes create" [
+export def "notes-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1441,7 +1441,7 @@ export def "crm-notes create" [
 #
 # DELETE /crm/notes/{id}
 # operationId: notesDelete
-export def "crm-notes delete" [
+export def "notes-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1484,7 +1484,7 @@ export def "crm-notes delete" [
 #
 # GET /crm/notes/{id}
 # operationId: notesOne
-export def "crm-notes get-one" [
+export def "notes-one" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1528,7 +1528,7 @@ export def "crm-notes get-one" [
 #
 # PATCH /crm/notes/{id}
 # operationId: notesUpdate
-export def "crm-notes update" [
+export def "notes-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1582,7 +1582,7 @@ export def "crm-notes update" [
 #
 # GET /crm/opportunities
 # operationId: opportunitiesAll
-export def "crm-opportunities list" [
+export def "opportunities-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1629,7 +1629,7 @@ export def "crm-opportunities list" [
 # POST /crm/opportunities
 # operationId: opportunitiesAdd
 # --custom_fields item shape: {description?: string, id: string, name?: string, value?: any}
-export def "crm-opportunities create" [
+export def "opportunities-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1701,7 +1701,7 @@ export def "crm-opportunities create" [
 #
 # DELETE /crm/opportunities/{id}
 # operationId: opportunitiesDelete
-export def "crm-opportunities delete" [
+export def "opportunities-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1744,7 +1744,7 @@ export def "crm-opportunities delete" [
 #
 # GET /crm/opportunities/{id}
 # operationId: opportunitiesOne
-export def "crm-opportunities get-one" [
+export def "opportunities-one" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1789,7 +1789,7 @@ export def "crm-opportunities get-one" [
 # PATCH /crm/opportunities/{id}
 # operationId: opportunitiesUpdate
 # --custom_fields item shape: {description?: string, id: string, name?: string, value?: any}
-export def "crm-opportunities update" [
+export def "opportunities-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1863,7 +1863,7 @@ export def "crm-opportunities update" [
 #
 # GET /crm/pipelines
 # operationId: pipelinesAll
-export def "crm-pipelines list" [
+export def "pipelines-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1908,7 +1908,7 @@ export def "crm-pipelines list" [
 # POST /crm/pipelines
 # operationId: pipelinesAdd
 # --stages item shape: {display_order?: int, name?: string, value?: string, win_probability?: int}
-export def "crm-pipelines create" [
+export def "pipelines-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1960,7 +1960,7 @@ export def "crm-pipelines create" [
 #
 # DELETE /crm/pipelines/{id}
 # operationId: pipelinesDelete
-export def "crm-pipelines delete" [
+export def "pipelines-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2003,7 +2003,7 @@ export def "crm-pipelines delete" [
 #
 # GET /crm/pipelines/{id}
 # operationId: pipelinesOne
-export def "crm-pipelines get-one" [
+export def "pipelines-one" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2048,7 +2048,7 @@ export def "crm-pipelines get-one" [
 # PATCH /crm/pipelines/{id}
 # operationId: pipelinesUpdate
 # --stages item shape: {display_order?: int, name?: string, value?: string, win_probability?: int}
-export def "crm-pipelines update" [
+export def "pipelines-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2102,7 +2102,7 @@ export def "crm-pipelines update" [
 #
 # GET /crm/users
 # operationId: usersAll
-export def "crm-users list" [
+export def "users-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2150,7 +2150,7 @@ export def "crm-users list" [
 # --emails item shape: {email: string, id?: string, type?: "primary"|"secondary"|"work"|"personal"|"billing"|"other"}
 # --phone_numbers item shape: {area_code?: string, country_code?: string, extension?: string, id?: string, number: string, type?: "primary"|"secondary"|"home"|"work"|"office"|"mobile"|"assistant"|"fax"|"direct-dial-in"|"personal"|"other"}
 @deprecated --flag department
-export def "crm-users create" [
+export def "users-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2211,7 +2211,7 @@ export def "crm-users create" [
 #
 # DELETE /crm/users/{id}
 # operationId: usersDelete
-export def "crm-users delete" [
+export def "users-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2254,7 +2254,7 @@ export def "crm-users delete" [
 #
 # GET /crm/users/{id}
 # operationId: usersOne
-export def "crm-users get-one" [
+export def "users-one" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2302,7 +2302,7 @@ export def "crm-users get-one" [
 # --emails item shape: {email: string, id?: string, type?: "primary"|"secondary"|"work"|"personal"|"billing"|"other"}
 # --phone_numbers item shape: {area_code?: string, country_code?: string, extension?: string, id?: string, number: string, type?: "primary"|"secondary"|"home"|"work"|"office"|"mobile"|"assistant"|"fax"|"direct-dial-in"|"personal"|"other"}
 @deprecated --flag department
-export def "crm-users update" [
+export def "users-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

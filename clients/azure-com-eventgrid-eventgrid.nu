@@ -122,7 +122,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-event-grid-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.EventGrid/operations
 # operationId: Operations_List
-export def "providers-microsoft-event-grid-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -182,7 +182,7 @@ export def "providers-microsoft-event-grid-operations list" [
 #
 # GET /providers/Microsoft.EventGrid/topicTypes
 # operationId: TopicTypes_List
-export def "providers-microsoft-event-grid-topic-types list" [
+export def "topic-types-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -218,7 +218,7 @@ export def "providers-microsoft-event-grid-topic-types list" [
 #
 # GET /providers/Microsoft.EventGrid/topicTypes/{topicTypeName}
 # operationId: TopicTypes_Get
-export def "providers-microsoft-event-grid-topic-types get" [
+export def "topic-types-get" [
   topic_type_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -256,7 +256,7 @@ export def "providers-microsoft-event-grid-topic-types get" [
 #
 # GET /providers/Microsoft.EventGrid/topicTypes/{topicTypeName}/eventTypes
 # operationId: TopicTypes_ListEventTypes
-export def "providers-microsoft-event-grid-topic-types-event-types list" [
+export def "topic-types-list-event-types" [
   topic_type_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -294,7 +294,7 @@ export def "providers-microsoft-event-grid-topic-types-event-types list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.EventGrid/domains
 # operationId: Domains_ListBySubscription
-export def "subscriptions-providers-microsoft-event-grid-domains list" [
+export def "domains-list-by-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -334,7 +334,7 @@ export def "subscriptions-providers-microsoft-event-grid-domains list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.EventGrid/eventSubscriptions
 # operationId: EventSubscriptions_ListGlobalBySubscription
-export def "subscriptions-providers-microsoft-event-grid-event-subscriptions list-global" [
+export def "event-subscriptions-list-global-by-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -374,7 +374,7 @@ export def "subscriptions-providers-microsoft-event-grid-event-subscriptions lis
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.EventGrid/locations/{location}/eventSubscriptions
 # operationId: EventSubscriptions_ListRegionalBySubscription
-export def "subscriptions-providers-microsoft-event-grid-locations-event-subscriptions list-regional" [
+export def "event-subscriptions-list-regional-by-subscription" [
   subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -416,7 +416,7 @@ export def "subscriptions-providers-microsoft-event-grid-locations-event-subscri
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.EventGrid/locations/{location}/topicTypes/{topicTypeName}/eventSubscriptions
 # operationId: EventSubscriptions_ListRegionalBySubscriptionForTopicType
-export def "subscriptions-providers-microsoft-event-grid-locations-topic-types-event-subscriptions list-regional-by" [
+export def "event-subscriptions-list-regional-by-subscription-for-topic-type" [
   subscription_id: string
   location: string
   topic_type_name: string
@@ -460,7 +460,7 @@ export def "subscriptions-providers-microsoft-event-grid-locations-topic-types-e
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.EventGrid/topicTypes/{topicTypeName}/eventSubscriptions
 # operationId: EventSubscriptions_ListGlobalBySubscriptionForTopicType
-export def "subscriptions-providers-microsoft-event-grid-topic-types-event-subscriptions list-global-by" [
+export def "event-subscriptions-list-global-by-subscription-for-topic-type" [
   subscription_id: string
   topic_type_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -502,7 +502,7 @@ export def "subscriptions-providers-microsoft-event-grid-topic-types-event-subsc
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.EventGrid/topics
 # operationId: Topics_ListBySubscription
-export def "subscriptions-providers-microsoft-event-grid-topics list" [
+export def "topics-list-by-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -542,7 +542,7 @@ export def "subscriptions-providers-microsoft-event-grid-topics list" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventGrid/domains
 # operationId: Domains_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains list" [
+export def "domains-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -584,7 +584,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventGrid/domains/{domainName}
 # operationId: Domains_Delete
-export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains delete" [
+export def "domains-delete" [
   subscription_id: string
   resource_group_name: string
   domain_name: string
@@ -626,7 +626,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventGrid/domains/{domainName}
 # operationId: Domains_Get
-export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains get" [
+export def "domains-get" [
   subscription_id: string
   resource_group_name: string
   domain_name: string
@@ -668,7 +668,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventGrid/domains/{domainName}
 # operationId: Domains_Update
-export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains update" [
+export def "domains-update" [
   subscription_id: string
   resource_group_name: string
   domain_name: string
@@ -714,7 +714,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventGrid/domains/{domainName}
 # operationId: Domains_CreateOrUpdate
-export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains create-or-update" [
+export def "domains-create-or-update" [
   subscription_id: string
   resource_group_name: string
   domain_name: string
@@ -762,7 +762,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventGrid/domains/{domainName}/listKeys
 # operationId: Domains_ListSharedAccessKeys
-export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains-list-keys list-shared-access" [
+export def "domains-list-shared-access-keys" [
   subscription_id: string
   resource_group_name: string
   domain_name: string
@@ -804,7 +804,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventGrid/domains/{domainName}/regenerateKey
 # operationId: Domains_RegenerateKey
-export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains-regenerate-key create" [
+export def "domains-regenerate-key" [
   subscription_id: string
   resource_group_name: string
   domain_name: string
@@ -850,7 +850,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventGrid/domains/{domainName}/topics
 # operationId: DomainTopics_ListByDomain
-export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains-topics list" [
+export def "domain-topics-list-by-domain" [
   subscription_id: string
   resource_group_name: string
   domain_name: string
@@ -894,7 +894,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventGrid/domains/{domainName}/topics/{domainTopicName}
 # operationId: DomainTopics_Delete
-export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains-topics delete" [
+export def "domain-topics-delete" [
   subscription_id: string
   resource_group_name: string
   domain_name: string
@@ -938,7 +938,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventGrid/domains/{domainName}/topics/{domainTopicName}
 # operationId: DomainTopics_Get
-export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains-topics get" [
+export def "domain-topics-get" [
   subscription_id: string
   resource_group_name: string
   domain_name: string
@@ -982,7 +982,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventGrid/domains/{domainName}/topics/{domainTopicName}
 # operationId: DomainTopics_CreateOrUpdate
-export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains-topics create-or-update" [
+export def "domain-topics-create-or-update" [
   subscription_id: string
   resource_group_name: string
   domain_name: string
@@ -1026,7 +1026,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventGrid/domains/{domainName}/topics/{topicName}/providers/Microsoft.EventGrid/eventSubscriptions
 # operationId: EventSubscriptions_ListByDomainTopic
-export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains-topics-providers-microsoft-event-grid-event-subscriptions list" [
+export def "event-subscriptions-list-by-domain-topic" [
   subscription_id: string
   resource_group_name: string
   domain_name: string
@@ -1072,7 +1072,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-domains
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventGrid/eventSubscriptions
 # operationId: EventSubscriptions_ListGlobalByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-event-grid-event-subscriptions list-global" [
+export def "event-subscriptions-list-global-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1114,7 +1114,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-event-s
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventGrid/locations/{location}/eventSubscriptions
 # operationId: EventSubscriptions_ListRegionalByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-event-grid-locations-event-subscriptions list-regional" [
+export def "event-subscriptions-list-regional-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   location: string
@@ -1158,7 +1158,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-locatio
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventGrid/locations/{location}/topicTypes/{topicTypeName}/eventSubscriptions
 # operationId: EventSubscriptions_ListRegionalByResourceGroupForTopicType
-export def "subscriptions-resource-groups-providers-microsoft-event-grid-locations-topic-types-event-subscriptions list-regional-by" [
+export def "event-subscriptions-list-regional-by-resource-group-for-topic-type" [
   subscription_id: string
   resource_group_name: string
   location: string
@@ -1204,7 +1204,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-locatio
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventGrid/topicTypes/{topicTypeName}/eventSubscriptions
 # operationId: EventSubscriptions_ListGlobalByResourceGroupForTopicType
-export def "subscriptions-resource-groups-providers-microsoft-event-grid-topic-types-event-subscriptions list-global-by" [
+export def "event-subscriptions-list-global-by-resource-group-for-topic-type" [
   subscription_id: string
   resource_group_name: string
   topic_type_name: string
@@ -1248,7 +1248,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-topic-t
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventGrid/topics
 # operationId: Topics_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-event-grid-topics list" [
+export def "topics-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1290,7 +1290,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-topics 
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventGrid/topics/{topicName}
 # operationId: Topics_Delete
-export def "subscriptions-resource-groups-providers-microsoft-event-grid-topics delete" [
+export def "topics-delete" [
   subscription_id: string
   resource_group_name: string
   topic_name: string
@@ -1332,7 +1332,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-topics 
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventGrid/topics/{topicName}
 # operationId: Topics_Get
-export def "subscriptions-resource-groups-providers-microsoft-event-grid-topics get" [
+export def "topics-get" [
   subscription_id: string
   resource_group_name: string
   topic_name: string
@@ -1374,7 +1374,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-topics 
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventGrid/topics/{topicName}
 # operationId: Topics_Update
-export def "subscriptions-resource-groups-providers-microsoft-event-grid-topics update" [
+export def "topics-update" [
   subscription_id: string
   resource_group_name: string
   topic_name: string
@@ -1420,7 +1420,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-topics 
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventGrid/topics/{topicName}
 # operationId: Topics_CreateOrUpdate
-export def "subscriptions-resource-groups-providers-microsoft-event-grid-topics create-or-update" [
+export def "topics-create-or-update" [
   subscription_id: string
   resource_group_name: string
   topic_name: string
@@ -1468,7 +1468,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-topics 
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventGrid/topics/{topicName}/listKeys
 # operationId: Topics_ListSharedAccessKeys
-export def "subscriptions-resource-groups-providers-microsoft-event-grid-topics-list-keys list-shared-access" [
+export def "topics-list-shared-access-keys" [
   subscription_id: string
   resource_group_name: string
   topic_name: string
@@ -1510,7 +1510,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-topics-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventGrid/topics/{topicName}/regenerateKey
 # operationId: Topics_RegenerateKey
-export def "subscriptions-resource-groups-providers-microsoft-event-grid-topics-regenerate-key create" [
+export def "topics-regenerate-key" [
   subscription_id: string
   resource_group_name: string
   topic_name: string
@@ -1556,7 +1556,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-grid-topics-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/{providerNamespace}/{resourceTypeName}/{resourceName}/providers/Microsoft.EventGrid/eventSubscriptions
 # operationId: EventSubscriptions_ListByResource
-export def "subscriptions-resource-groups-providers-providers-microsoft-event-grid-event-subscriptions list" [
+export def "event-subscriptions-list-by-resource" [
   subscription_id: string
   resource_group_name: string
   provider_namespace: string
@@ -1604,7 +1604,7 @@ export def "subscriptions-resource-groups-providers-providers-microsoft-event-gr
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/{providerNamespace}/{resourceTypeName}/{resourceName}/providers/Microsoft.EventGrid/eventTypes
 # operationId: Topics_ListEventTypes
-export def "subscriptions-resource-groups-providers-providers-microsoft-event-grid-event-types list-topics" [
+export def "topics-list-event-types" [
   subscription_id: string
   resource_group_name: string
   provider_namespace: string
@@ -1650,7 +1650,7 @@ export def "subscriptions-resource-groups-providers-providers-microsoft-event-gr
 #
 # DELETE /{scope}/providers/Microsoft.EventGrid/eventSubscriptions/{eventSubscriptionName}
 # operationId: EventSubscriptions_Delete
-export def "providers-microsoft-event-grid-event-subscriptions delete" [
+export def "event-subscriptions-delete" [
   scope: string
   event_subscription_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1690,7 +1690,7 @@ export def "providers-microsoft-event-grid-event-subscriptions delete" [
 #
 # GET /{scope}/providers/Microsoft.EventGrid/eventSubscriptions/{eventSubscriptionName}
 # operationId: EventSubscriptions_Get
-export def "providers-microsoft-event-grid-event-subscriptions get" [
+export def "event-subscriptions-get" [
   scope: string
   event_subscription_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1734,7 +1734,7 @@ export def "providers-microsoft-event-grid-event-subscriptions get" [
 # --destination shape: {endpointType: "WebHook"|"EventHub"|"StorageQueue"|"HybridConnection"|"ServiceBusQueue"}
 # --filter shape: {advancedFilters?: list, includedEventTypes?: list<string>, isSubjectCaseSensitive?: bool, subjectBeginsWith?: string, subjectEndsWith?: string}
 # --retryPolicy shape: {eventTimeToLiveInMinutes?: int, maxDeliveryAttempts?: int}
-export def "providers-microsoft-event-grid-event-subscriptions update" [
+export def "event-subscriptions-update" [
   scope: string
   event_subscription_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1784,7 +1784,7 @@ export def "providers-microsoft-event-grid-event-subscriptions update" [
 # PUT /{scope}/providers/Microsoft.EventGrid/eventSubscriptions/{eventSubscriptionName}
 # operationId: EventSubscriptions_CreateOrUpdate
 # --properties shape: {deadLetterDestination?: record, destination?: record, expirationTimeUtc?: string, filter?: record, labels?: list<string>, retryPolicy?: record}
-export def "providers-microsoft-event-grid-event-subscriptions create-or-update" [
+export def "event-subscriptions-create-or-update" [
   scope: string
   event_subscription_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1828,7 +1828,7 @@ export def "providers-microsoft-event-grid-event-subscriptions create-or-update"
 #
 # POST /{scope}/providers/Microsoft.EventGrid/eventSubscriptions/{eventSubscriptionName}/getFullUrl
 # operationId: EventSubscriptions_GetFullUrl
-export def "providers-microsoft-event-grid-event-subscriptions-get-full-url get" [
+export def "event-subscriptions-get-full-url" [
   scope: string
   event_subscription_name: string
   --base-url(-b): string@base-url-completer # API base URL

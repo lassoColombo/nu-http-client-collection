@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-storage-admin-locations-reclaim-storage-capacity create-accounts" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "storage-accounts-reclaim-storage-capacity" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -128,7 +128,7 @@ export def commands []: nothing -> table {
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Storage.Admin/locations/{location}/reclaimStorageCapacity
 # operationId: StorageAccounts_ReclaimStorageCapacity
-export def "subscriptions-providers-microsoft-storage-admin-locations-reclaim-storage-capacity create-accounts" [
+export def "storage-accounts-reclaim-storage-capacity" [
   subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -168,7 +168,7 @@ export def "subscriptions-providers-microsoft-storage-admin-locations-reclaim-st
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Storage.Admin/locations/{location}/storageaccounts
 # operationId: StorageAccounts_List
-export def "subscriptions-providers-microsoft-storage-admin-locations-storageaccounts list-accounts" [
+export def "storage-accounts-list" [
   subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -210,7 +210,7 @@ export def "subscriptions-providers-microsoft-storage-admin-locations-storageacc
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Storage.Admin/locations/{location}/storageaccounts/{accountId}
 # operationId: StorageAccounts_Get
-export def "subscriptions-providers-microsoft-storage-admin-locations-storageaccounts get-accounts" [
+export def "storage-accounts-get" [
   subscription_id: string
   location: string
   account_id: string
@@ -252,7 +252,7 @@ export def "subscriptions-providers-microsoft-storage-admin-locations-storageacc
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Storage.Admin/locations/{location}/storageaccounts/{accountId}/undelete
 # operationId: StorageAccounts_Undelete
-export def "subscriptions-providers-microsoft-storage-admin-locations-storageaccounts-undelete create-accounts" [
+export def "storage-accounts-undelete" [
   subscription_id: string
   location: string
   account_id: string

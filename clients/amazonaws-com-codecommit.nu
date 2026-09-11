@@ -177,7 +177,7 @@ def x-amz-target-completer-76 [] { ["CodeCommit_20150413.UpdateRepositoryName"] 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-associate-approval-rule-template-with-repository" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associate-approval-rule-template-with-repository" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -201,7 +201,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AssociateApprovalRuleTemplateWithRepository
-export def "api create-associate-approval-rule-template-with-repository" [
+export def "associate-approval-rule-template-with-repository" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -250,7 +250,7 @@ export def "api create-associate-approval-rule-template-with-repository" [
 #
 # POST /
 # operationId: BatchAssociateApprovalRuleTemplateWithRepositories
-export def "api create-batch-associate-approval-rule-template-with-repositories" [
+export def "batch-associate-approval-rule-template-with-repositories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -299,7 +299,7 @@ export def "api create-batch-associate-approval-rule-template-with-repositories"
 #
 # POST /
 # operationId: BatchDescribeMergeConflicts
-export def "api get-batch-merge-conflicts" [
+export def "batch-describe-merge-conflicts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -356,7 +356,7 @@ export def "api get-batch-merge-conflicts" [
 #
 # POST /
 # operationId: BatchDisassociateApprovalRuleTemplateFromRepositories
-export def "api create-batch-disassociate-approval-rule-template-from-repositories" [
+export def "batch-disassociate-approval-rule-template-from-repositories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -405,7 +405,7 @@ export def "api create-batch-disassociate-approval-rule-template-from-repositori
 #
 # POST /
 # operationId: BatchGetCommits
-export def "api get-batch-commits" [
+export def "batch-get-commits" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -454,7 +454,7 @@ export def "api get-batch-commits" [
 #
 # POST /
 # operationId: BatchGetRepositories
-export def "api get-batch-repositories" [
+export def "batch-get-repositories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -502,7 +502,7 @@ export def "api get-batch-repositories" [
 #
 # POST /
 # operationId: CreateApprovalRuleTemplate
-export def "api create-approval-rule-template" [
+export def "create-approval-rule-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -552,7 +552,7 @@ export def "api create-approval-rule-template" [
 #
 # POST /
 # operationId: CreateBranch
-export def "api create-branch" [
+export def "create-branch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -602,7 +602,7 @@ export def "api create-branch" [
 #
 # POST /
 # operationId: CreateCommit
-export def "api create-commit" [
+export def "create-commit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -659,7 +659,7 @@ export def "api create-commit" [
 #
 # POST /
 # operationId: CreatePullRequest
-export def "api create-pull-request" [
+export def "create-pull-request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -710,7 +710,7 @@ export def "api create-pull-request" [
 #
 # POST /
 # operationId: CreatePullRequestApprovalRule
-export def "api create-pull-request-approval-rule" [
+export def "create-pull-request-approval-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -760,7 +760,7 @@ export def "api create-pull-request-approval-rule" [
 #
 # POST /
 # operationId: CreateRepository
-export def "api create-repository" [
+export def "create-repository" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -810,7 +810,7 @@ export def "api create-repository" [
 #
 # POST /
 # operationId: CreateUnreferencedMergeCommit
-export def "api create-unreferenced-merge-commit" [
+export def "create-unreferenced-merge-commit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -868,7 +868,7 @@ export def "api create-unreferenced-merge-commit" [
 #
 # POST /
 # operationId: DeleteApprovalRuleTemplate
-export def "api delete-approval-rule-template" [
+export def "delete-approval-rule-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -916,7 +916,7 @@ export def "api delete-approval-rule-template" [
 #
 # POST /
 # operationId: DeleteBranch
-export def "api delete-branch" [
+export def "delete-branch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -965,7 +965,7 @@ export def "api delete-branch" [
 #
 # POST /
 # operationId: DeleteCommentContent
-export def "api delete-comment-content" [
+export def "delete-comment-content" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1013,7 +1013,7 @@ export def "api delete-comment-content" [
 #
 # POST /
 # operationId: DeleteFile
-export def "api delete-file" [
+export def "delete-file" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1068,7 +1068,7 @@ export def "api delete-file" [
 #
 # POST /
 # operationId: DeletePullRequestApprovalRule
-export def "api delete-pull-request-approval-rule" [
+export def "delete-pull-request-approval-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1117,7 +1117,7 @@ export def "api delete-pull-request-approval-rule" [
 #
 # POST /
 # operationId: DeleteRepository
-export def "api delete-repository" [
+export def "delete-repository" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1165,7 +1165,7 @@ export def "api delete-repository" [
 #
 # POST /
 # operationId: DescribeMergeConflicts
-export def "api get-merge-conflicts" [
+export def "describe-merge-conflicts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1224,7 +1224,7 @@ export def "api get-merge-conflicts" [
 #
 # POST /
 # operationId: DescribePullRequestEvents
-export def "api get-pull-request-events" [
+export def "describe-pull-request-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1279,7 +1279,7 @@ export def "api get-pull-request-events" [
 #
 # POST /
 # operationId: DisassociateApprovalRuleTemplateFromRepository
-export def "api create-disassociate-approval-rule-template-from-repository" [
+export def "disassociate-approval-rule-template-from-repository" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1328,7 +1328,7 @@ export def "api create-disassociate-approval-rule-template-from-repository" [
 #
 # POST /
 # operationId: EvaluatePullRequestApprovalRules
-export def "api pull-evaluate-request-approval-rules" [
+export def "evaluate-pull-request-approval-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1377,7 +1377,7 @@ export def "api pull-evaluate-request-approval-rules" [
 #
 # POST /
 # operationId: GetApprovalRuleTemplate
-export def "api get-approval-rule-template" [
+export def "get-approval-rule-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1425,7 +1425,7 @@ export def "api get-approval-rule-template" [
 #
 # POST /
 # operationId: GetBlob
-export def "api get-blob" [
+export def "get-blob" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1474,7 +1474,7 @@ export def "api get-blob" [
 #
 # POST /
 # operationId: GetBranch
-export def "api get-branch" [
+export def "get-branch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1523,7 +1523,7 @@ export def "api get-branch" [
 #
 # POST /
 # operationId: GetComment
-export def "api get-comment" [
+export def "get-comment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1571,7 +1571,7 @@ export def "api get-comment" [
 #
 # POST /
 # operationId: GetCommentReactions
-export def "api get-comment-reactions" [
+export def "get-comment-reactions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1625,7 +1625,7 @@ export def "api get-comment-reactions" [
 #
 # POST /
 # operationId: GetCommentsForComparedCommit
-export def "api get-comments-for-compared-commit" [
+export def "get-comments-for-compared-commit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1680,7 +1680,7 @@ export def "api get-comments-for-compared-commit" [
 #
 # POST /
 # operationId: GetCommentsForPullRequest
-export def "api get-comments-for-pull-request" [
+export def "get-comments-for-pull-request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1736,7 +1736,7 @@ export def "api get-comments-for-pull-request" [
 #
 # POST /
 # operationId: GetCommit
-export def "api get-commit" [
+export def "get-commit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1785,7 +1785,7 @@ export def "api get-commit" [
 #
 # POST /
 # operationId: GetDifferences
-export def "api get-differences" [
+export def "get-differences" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1842,7 +1842,7 @@ export def "api get-differences" [
 #
 # POST /
 # operationId: GetFile
-export def "api get-file" [
+export def "get-file" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1892,7 +1892,7 @@ export def "api get-file" [
 #
 # POST /
 # operationId: GetFolder
-export def "api get-folder" [
+export def "get-folder" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1942,7 +1942,7 @@ export def "api get-folder" [
 #
 # POST /
 # operationId: GetMergeCommit
-export def "api get-merge-commit" [
+export def "get-merge-commit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1994,7 +1994,7 @@ export def "api get-merge-commit" [
 #
 # POST /
 # operationId: GetMergeConflicts
-export def "api get-merge-conflicts-1" [
+export def "get-merge-conflicts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2052,7 +2052,7 @@ export def "api get-merge-conflicts-1" [
 #
 # POST /
 # operationId: GetMergeOptions
-export def "api get-merge-options" [
+export def "get-merge-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2104,7 +2104,7 @@ export def "api get-merge-options" [
 #
 # POST /
 # operationId: GetPullRequest
-export def "api get-pull-request" [
+export def "get-pull-request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2152,7 +2152,7 @@ export def "api get-pull-request" [
 #
 # POST /
 # operationId: GetPullRequestApprovalStates
-export def "api get-pull-request-approval-states" [
+export def "get-pull-request-approval-states" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2201,7 +2201,7 @@ export def "api get-pull-request-approval-states" [
 #
 # POST /
 # operationId: GetPullRequestOverrideState
-export def "api get-pull-request-override-state" [
+export def "get-pull-request-override-state" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2250,7 +2250,7 @@ export def "api get-pull-request-override-state" [
 #
 # POST /
 # operationId: GetRepository
-export def "api get-repository" [
+export def "get-repository" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2298,7 +2298,7 @@ export def "api get-repository" [
 #
 # POST /
 # operationId: GetRepositoryTriggers
-export def "api get-repository-triggers" [
+export def "get-repository-triggers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2346,7 +2346,7 @@ export def "api get-repository-triggers" [
 #
 # POST /
 # operationId: ListApprovalRuleTemplates
-export def "api list-approval-rule-templates" [
+export def "list-approval-rule-templates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2398,7 +2398,7 @@ export def "api list-approval-rule-templates" [
 #
 # POST /
 # operationId: ListAssociatedApprovalRuleTemplatesForRepository
-export def "api list-associated-approval-rule-templates-for-repository" [
+export def "list-associated-approval-rule-templates-for-repository" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2451,7 +2451,7 @@ export def "api list-associated-approval-rule-templates-for-repository" [
 #
 # POST /
 # operationId: ListBranches
-export def "api list-branches" [
+export def "list-branches" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2502,7 +2502,7 @@ export def "api list-branches" [
 #
 # POST /
 # operationId: ListPullRequests
-export def "api list-pull-requests" [
+export def "list-pull-requests" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2557,7 +2557,7 @@ export def "api list-pull-requests" [
 #
 # POST /
 # operationId: ListRepositories
-export def "api list-repositories" [
+export def "list-repositories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2609,7 +2609,7 @@ export def "api list-repositories" [
 #
 # POST /
 # operationId: ListRepositoriesForApprovalRuleTemplate
-export def "api list-repositories-for-approval-rule-template" [
+export def "list-repositories-for-approval-rule-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2662,7 +2662,7 @@ export def "api list-repositories-for-approval-rule-template" [
 #
 # POST /
 # operationId: ListTagsForResource
-export def "api list-tags-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2711,7 +2711,7 @@ export def "api list-tags-for-resource" [
 #
 # POST /
 # operationId: MergeBranchesByFastForward
-export def "api create-merge-branches-by-fast-forward" [
+export def "merge-branches-by-fast-forward" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2762,7 +2762,7 @@ export def "api create-merge-branches-by-fast-forward" [
 #
 # POST /
 # operationId: MergeBranchesBySquash
-export def "api create-merge-branches-by-squash" [
+export def "merge-branches-by-squash" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2820,7 +2820,7 @@ export def "api create-merge-branches-by-squash" [
 #
 # POST /
 # operationId: MergeBranchesByThreeWay
-export def "api create-merge-branches-by-three-way" [
+export def "merge-branches-by-three-way" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2878,7 +2878,7 @@ export def "api create-merge-branches-by-three-way" [
 #
 # POST /
 # operationId: MergePullRequestByFastForward
-export def "api pull-merge-request-by-fast-forward" [
+export def "merge-pull-request-by-fast-forward" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2928,7 +2928,7 @@ export def "api pull-merge-request-by-fast-forward" [
 #
 # POST /
 # operationId: MergePullRequestBySquash
-export def "api pull-merge-request-by-squash" [
+export def "merge-pull-request-by-squash" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2985,7 +2985,7 @@ export def "api pull-merge-request-by-squash" [
 #
 # POST /
 # operationId: MergePullRequestByThreeWay
-export def "api pull-merge-request-by-three-way" [
+export def "merge-pull-request-by-three-way" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3042,7 +3042,7 @@ export def "api pull-merge-request-by-three-way" [
 #
 # POST /
 # operationId: OverridePullRequestApprovalRules
-export def "api pull-override-request-approval-rules" [
+export def "override-pull-request-approval-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3092,7 +3092,7 @@ export def "api pull-override-request-approval-rules" [
 #
 # POST /
 # operationId: PostCommentForComparedCommit
-export def "api create-comment-for-compared-commit" [
+export def "post-comment-for-compared-commit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3145,7 +3145,7 @@ export def "api create-comment-for-compared-commit" [
 #
 # POST /
 # operationId: PostCommentForPullRequest
-export def "api create-comment-for-pull-request" [
+export def "post-comment-for-pull-request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3199,7 +3199,7 @@ export def "api create-comment-for-pull-request" [
 #
 # POST /
 # operationId: PostCommentReply
-export def "api create-comment-reply" [
+export def "post-comment-reply" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3249,7 +3249,7 @@ export def "api create-comment-reply" [
 #
 # POST /
 # operationId: PutCommentReaction
-export def "api update-comment-reaction" [
+export def "put-comment-reaction" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3298,7 +3298,7 @@ export def "api update-comment-reaction" [
 #
 # POST /
 # operationId: PutFile
-export def "api update-file" [
+export def "put-file" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3354,7 +3354,7 @@ export def "api update-file" [
 #
 # POST /
 # operationId: PutRepositoryTriggers
-export def "api update-repository-triggers" [
+export def "put-repository-triggers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3403,7 +3403,7 @@ export def "api update-repository-triggers" [
 #
 # POST /
 # operationId: TagResource
-export def "api tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3452,7 +3452,7 @@ export def "api tag-resource" [
 #
 # POST /
 # operationId: TestRepositoryTriggers
-export def "api test-repository-triggers" [
+export def "test-repository-triggers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3501,7 +3501,7 @@ export def "api test-repository-triggers" [
 #
 # POST /
 # operationId: UntagResource
-export def "api untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3550,7 +3550,7 @@ export def "api untag-resource" [
 #
 # POST /
 # operationId: UpdateApprovalRuleTemplateContent
-export def "api update-approval-rule-template-content" [
+export def "update-approval-rule-template-content" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3600,7 +3600,7 @@ export def "api update-approval-rule-template-content" [
 #
 # POST /
 # operationId: UpdateApprovalRuleTemplateDescription
-export def "api update-approval-rule-template-description" [
+export def "update-approval-rule-template-description" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3649,7 +3649,7 @@ export def "api update-approval-rule-template-description" [
 #
 # POST /
 # operationId: UpdateApprovalRuleTemplateName
-export def "api update-approval-rule-template-name" [
+export def "update-approval-rule-template-name" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3698,7 +3698,7 @@ export def "api update-approval-rule-template-name" [
 #
 # POST /
 # operationId: UpdateComment
-export def "api update-comment" [
+export def "update-comment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3747,7 +3747,7 @@ export def "api update-comment" [
 #
 # POST /
 # operationId: UpdateDefaultBranch
-export def "api update-default-branch" [
+export def "update-default-branch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3796,7 +3796,7 @@ export def "api update-default-branch" [
 #
 # POST /
 # operationId: UpdatePullRequestApprovalRuleContent
-export def "api update-pull-request-approval-rule-content" [
+export def "update-pull-request-approval-rule-content" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3847,7 +3847,7 @@ export def "api update-pull-request-approval-rule-content" [
 #
 # POST /
 # operationId: UpdatePullRequestApprovalState
-export def "api update-pull-request-approval-state" [
+export def "update-pull-request-approval-state" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3897,7 +3897,7 @@ export def "api update-pull-request-approval-state" [
 #
 # POST /
 # operationId: UpdatePullRequestDescription
-export def "api update-pull-request-description" [
+export def "update-pull-request-description" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3946,7 +3946,7 @@ export def "api update-pull-request-description" [
 #
 # POST /
 # operationId: UpdatePullRequestStatus
-export def "api update-pull-request-status" [
+export def "update-pull-request-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3995,7 +3995,7 @@ export def "api update-pull-request-status" [
 #
 # POST /
 # operationId: UpdatePullRequestTitle
-export def "api update-pull-request-title" [
+export def "update-pull-request-title" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4044,7 +4044,7 @@ export def "api update-pull-request-title" [
 #
 # POST /
 # operationId: UpdateRepositoryDescription
-export def "api update-repository-description" [
+export def "update-repository-description" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4093,7 +4093,7 @@ export def "api update-repository-description" [
 #
 # POST /
 # operationId: UpdateRepositoryName
-export def "api update-repository-name" [
+export def "update-repository-name" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

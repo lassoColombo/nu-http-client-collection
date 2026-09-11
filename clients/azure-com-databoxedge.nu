@@ -125,7 +125,7 @@ def kind-completer-1 [] { ["FileEvent" "PeriodicTimerEvent"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-data-box-edge-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -149,7 +149,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.DataBoxEdge/operations
 # operationId: Operations_List
-export def "providers-microsoft-data-box-edge-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -185,7 +185,7 @@ export def "providers-microsoft-data-box-edge-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices
 # operationId: Devices_ListBySubscription
-export def "subscriptions-providers-microsoft-data-box-edge-data-box-edge-devices list" [
+export def "devices-list-by-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -224,7 +224,7 @@ export def "subscriptions-providers-microsoft-data-box-edge-data-box-edge-device
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices
 # operationId: Devices_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices list" [
+export def "devices-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -265,7 +265,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}
 # operationId: Devices_Delete
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices delete" [
+export def "devices-delete" [
   subscription_id: string
   resource_group_name: string
   device_name: string
@@ -307,7 +307,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}
 # operationId: Devices_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices get" [
+export def "devices-get" [
   subscription_id: string
   resource_group_name: string
   device_name: string
@@ -349,7 +349,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}
 # operationId: Devices_Update
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices update" [
+export def "devices-update" [
   subscription_id: string
   resource_group_name: string
   device_name: string
@@ -397,7 +397,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 # operationId: Devices_CreateOrUpdate
 # --properties shape: {dataBoxEdgeDeviceStatus?: "ReadyToSetup"|"Online"|"Offline"|"NeedsAttention"|"Disconnected"|"PartiallyDisconnected"|"Maintenance", description?: string, friendlyName?: string, modelDescription?: string}
 # --sku shape: {name?: "Gateway"|"Edge", tier?: "Standard"}
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices create-or-update" [
+export def "devices-create-or-update" [
   subscription_id: string
   resource_group_name: string
   device_name: string
@@ -447,7 +447,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/alerts
 # operationId: Alerts_ListByDataBoxEdgeDevice
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-alerts list" [
+export def "alerts-list-by-data-box-edge-device" [
   subscription_id: string
   resource_group_name: string
   device_name: string
@@ -489,7 +489,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/alerts/{name}
 # operationId: Alerts_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-alerts get" [
+export def "alerts-get" [
   subscription_id: string
   resource_group_name: string
   device_name: string
@@ -533,7 +533,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/bandwidthSchedules
 # operationId: BandwidthSchedules_ListByDataBoxEdgeDevice
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-bandwidth-schedules list" [
+export def "bandwidth-schedules-list-by-data-box-edge-device" [
   subscription_id: string
   resource_group_name: string
   device_name: string
@@ -575,7 +575,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/bandwidthSchedules/{name}
 # operationId: BandwidthSchedules_Delete
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-bandwidth-schedules delete" [
+export def "bandwidth-schedules-delete" [
   subscription_id: string
   resource_group_name: string
   device_name: string
@@ -619,7 +619,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/bandwidthSchedules/{name}
 # operationId: BandwidthSchedules_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-bandwidth-schedules get" [
+export def "bandwidth-schedules-get" [
   subscription_id: string
   resource_group_name: string
   device_name: string
@@ -664,7 +664,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/bandwidthSchedules/{name}
 # operationId: BandwidthSchedules_CreateOrUpdate
 # --properties shape: {days: list<string>, rateInMbps: int, start: string, stop: string}
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-bandwidth-schedules create-or-update" [
+export def "bandwidth-schedules-create-or-update" [
   subscription_id: string
   resource_group_name: string
   device_name: string
@@ -712,7 +712,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/downloadUpdates
 # operationId: Devices_DownloadUpdates
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-download-updates download" [
+export def "devices-download-updates" [
   subscription_id: string
   resource_group_name: string
   device_name: string
@@ -754,7 +754,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/getExtendedInformation
 # operationId: Devices_GetExtendedInformation
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-get-extended-information get" [
+export def "devices-get-extended-information" [
   subscription_id: string
   resource_group_name: string
   device_name: string
@@ -796,7 +796,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/installUpdates
 # operationId: Devices_InstallUpdates
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-install-updates create" [
+export def "devices-install-updates" [
   subscription_id: string
   resource_group_name: string
   device_name: string
@@ -838,7 +838,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/jobs/{name}
 # operationId: Jobs_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-jobs get" [
+export def "jobs-get" [
   subscription_id: string
   resource_group_name: string
   device_name: string
@@ -882,7 +882,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/networkSettings/default
 # operationId: Devices_GetNetworkSettings
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-network-settings-default get" [
+export def "devices-get-network-settings" [
   subscription_id: string
   resource_group_name: string
   device_name: string
@@ -924,7 +924,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/nodes
 # operationId: Nodes_ListByDataBoxEdgeDevice
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-nodes list" [
+export def "nodes-list-by-data-box-edge-device" [
   subscription_id: string
   resource_group_name: string
   device_name: string
@@ -966,7 +966,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/operationsStatus/{name}
 # operationId: OperationsStatus_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-operations-status get" [
+export def "operations-status-get" [
   subscription_id: string
   resource_group_name: string
   device_name: string
@@ -1010,7 +1010,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/orders
 # operationId: Orders_ListByDataBoxEdgeDevice
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-orders list" [
+export def "orders-list-by-data-box-edge-device" [
   subscription_id: string
   resource_group_name: string
   device_name: string
@@ -1052,7 +1052,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/orders/default
 # operationId: Orders_Delete
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-orders-default delete" [
+export def "orders-delete" [
   subscription_id: string
   resource_group_name: string
   device_name: string
@@ -1094,7 +1094,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/orders/default
 # operationId: Orders_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-orders-default get" [
+export def "orders-get" [
   subscription_id: string
   resource_group_name: string
   device_name: string
@@ -1137,7 +1137,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/orders/default
 # operationId: Orders_CreateOrUpdate
 # --properties shape: {contactInformation: record, currentStatus?: record, shippingAddress: record}
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-orders-default create-or-update" [
+export def "orders-create-or-update" [
   subscription_id: string
   resource_group_name: string
   device_name: string
@@ -1183,7 +1183,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/roles
 # operationId: Roles_ListByDataBoxEdgeDevice
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-roles list" [
+export def "roles-list-by-data-box-edge-device" [
   subscription_id: string
   resource_group_name: string
   device_name: string
@@ -1225,7 +1225,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/roles/{name}
 # operationId: Roles_Delete
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-roles delete" [
+export def "roles-delete" [
   subscription_id: string
   resource_group_name: string
   device_name: string
@@ -1269,7 +1269,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/roles/{name}
 # operationId: Roles_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-roles get" [
+export def "roles-get" [
   subscription_id: string
   resource_group_name: string
   device_name: string
@@ -1314,7 +1314,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/roles/{name}
 # Discriminator (request): kind
 # operationId: Roles_CreateOrUpdate
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-roles create-or-update" [
+export def "roles-create-or-update" [
   subscription_id: string
   resource_group_name: string
   device_name: string
@@ -1362,7 +1362,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/scanForUpdates
 # operationId: Devices_ScanForUpdates
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-scan-for-updates create" [
+export def "devices-scan-for-updates" [
   subscription_id: string
   resource_group_name: string
   device_name: string
@@ -1405,7 +1405,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/securitySettings/default/update
 # operationId: Devices_CreateOrUpdateSecuritySettings
 # --properties shape: {deviceAdminPassword: record}
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-security-settings-default-update create-or" [
+export def "devices-create-or-update-security-settings" [
   subscription_id: string
   resource_group_name: string
   device_name: string
@@ -1451,7 +1451,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/shares
 # operationId: Shares_ListByDataBoxEdgeDevice
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-shares list" [
+export def "shares-list-by-data-box-edge-device" [
   subscription_id: string
   resource_group_name: string
   device_name: string
@@ -1493,7 +1493,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/shares/{name}
 # operationId: Shares_Delete
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-shares delete" [
+export def "shares-delete" [
   subscription_id: string
   resource_group_name: string
   device_name: string
@@ -1537,7 +1537,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/shares/{name}
 # operationId: Shares_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-shares get" [
+export def "shares-get" [
   subscription_id: string
   resource_group_name: string
   device_name: string
@@ -1582,7 +1582,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/shares/{name}
 # operationId: Shares_CreateOrUpdate
 # --properties shape: {accessProtocol: "SMB"|"NFS", azureContainerInfo?: record, clientAccessRights?: list, dataPolicy?: "Cloud"|"Local", description?: string, monitoringStatus: "Enabled"|"Disabled", refreshDetails?: record, shareStatus: "Offline"|"Unknown"|"OK"|"Updating"|"NeedsAttention", userAccessRights?: list}
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-shares create-or-update" [
+export def "shares-create-or-update" [
   subscription_id: string
   resource_group_name: string
   device_name: string
@@ -1630,7 +1630,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/shares/{name}/refresh
 # operationId: Shares_Refresh
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-shares-refresh refresh" [
+export def "shares-refresh" [
   subscription_id: string
   resource_group_name: string
   device_name: string
@@ -1674,7 +1674,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/storageAccountCredentials
 # operationId: StorageAccountCredentials_ListByDataBoxEdgeDevice
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-storage-account-credentials list" [
+export def "storage-account-credentials-list-by-data-box-edge-device" [
   subscription_id: string
   resource_group_name: string
   device_name: string
@@ -1716,7 +1716,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/storageAccountCredentials/{name}
 # operationId: StorageAccountCredentials_Delete
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-storage-account-credentials delete" [
+export def "storage-account-credentials-delete" [
   subscription_id: string
   resource_group_name: string
   device_name: string
@@ -1760,7 +1760,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/storageAccountCredentials/{name}
 # operationId: StorageAccountCredentials_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-storage-account-credentials get" [
+export def "storage-account-credentials-get" [
   subscription_id: string
   resource_group_name: string
   device_name: string
@@ -1805,7 +1805,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/storageAccountCredentials/{name}
 # operationId: StorageAccountCredentials_CreateOrUpdate
 # --properties shape: {accountKey?: record, accountType: "GeneralPurposeStorage"|"BlobStorage", alias: string, blobDomainName?: string, connectionString?: string, sslStatus: "Enabled"|"Disabled", storageAccountId?: string, userName?: string}
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-storage-account-credentials create-or-update" [
+export def "storage-account-credentials-create-or-update" [
   subscription_id: string
   resource_group_name: string
   device_name: string
@@ -1853,7 +1853,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/triggers
 # operationId: Triggers_ListByDataBoxEdgeDevice
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-triggers list" [
+export def "triggers-list-by-data-box-edge-device" [
   subscription_id: string
   resource_group_name: string
   device_name: string
@@ -1896,7 +1896,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/triggers/{name}
 # operationId: Triggers_Delete
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-triggers delete" [
+export def "triggers-delete" [
   subscription_id: string
   resource_group_name: string
   device_name: string
@@ -1940,7 +1940,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/triggers/{name}
 # operationId: Triggers_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-triggers get" [
+export def "triggers-get" [
   subscription_id: string
   resource_group_name: string
   device_name: string
@@ -1985,7 +1985,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/triggers/{name}
 # Discriminator (request): kind
 # operationId: Triggers_CreateOrUpdate
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-triggers create-or-update" [
+export def "triggers-create-or-update" [
   subscription_id: string
   resource_group_name: string
   device_name: string
@@ -2033,7 +2033,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/updateSummary/default
 # operationId: Devices_GetUpdateSummary
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-update-summary-default get" [
+export def "devices-get-update-summary" [
   subscription_id: string
   resource_group_name: string
   device_name: string
@@ -2076,7 +2076,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/uploadCertificate
 # operationId: Devices_UploadCertificate
 # --properties shape: {authenticationType?: "Invalid"|"AzureActiveDirectory", certificate: string}
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-upload-certificate upload" [
+export def "devices-upload-certificate" [
   subscription_id: string
   resource_group_name: string
   device_name: string
@@ -2122,7 +2122,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/users
 # operationId: Users_ListByDataBoxEdgeDevice
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-users list" [
+export def "users-list-by-data-box-edge-device" [
   subscription_id: string
   resource_group_name: string
   device_name: string
@@ -2164,7 +2164,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/users/{name}
 # operationId: Users_Delete
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-users delete" [
+export def "users-delete" [
   subscription_id: string
   resource_group_name: string
   device_name: string
@@ -2208,7 +2208,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/users/{name}
 # operationId: Users_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-users get" [
+export def "users-get" [
   subscription_id: string
   resource_group_name: string
   device_name: string
@@ -2253,7 +2253,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/users/{name}
 # operationId: Users_CreateOrUpdate
 # --properties shape: {encryptedPassword?: record, shareAccessRights?: list}
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-users create-or-update" [
+export def "users-create-or-update" [
   subscription_id: string
   resource_group_name: string
   device_name: string

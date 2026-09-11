@@ -100,7 +100,7 @@ def accept-completer [] { ["application/js" "application/json" "application/xml"
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "translate-braille get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-translate-braille" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -123,7 +123,7 @@ export def commands []: nothing -> table {
 # Translate from English to Braille. This is what you use if you have a braille display. This API translates the English text into characters that a braille display understands and you can feed the translated text directly to the display.
 #
 # GET /translate/braille
-export def "translate-braille get" [
+export def "get-translate-braille" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -159,7 +159,7 @@ export def "translate-braille get" [
 # Use this to see which dots are enabled for each Braille letters. This is highly educational (to see which dots are enabled) and can potentially drive a non braille display which works on individual dots.
 #
 # GET /translate/braille/dots
-export def "translate-braille-dots get" [
+export def "get-translate-braille-dots" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -195,7 +195,7 @@ export def "translate-braille-dots get" [
 # Translate from English to Braille Image characters. This is probably what you want to use if you are displaying braille in a browser.
 #
 # GET /translate/braille/html
-export def "translate-braille-html get" [
+export def "get-translate-braille-html" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -231,7 +231,7 @@ export def "translate-braille-html get" [
 # Translate from English to Braille image characters. This is probably what you want to use if you are displaying braille in a browser.
 #
 # GET /translate/braille/image
-export def "translate-braille-image get" [
+export def "get-translate-braille-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -267,7 +267,7 @@ export def "translate-braille-image get" [
 # Translate from English to Braille Unicode characters.
 #
 # GET /translate/braille/unicode
-export def "translate-braille-unicode get" [
+export def "get-translate-braille-unicode" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -303,7 +303,7 @@ export def "translate-braille-unicode get" [
 # Translate from English to Brooklyn Speak.
 #
 # GET /translate/brooklyn
-export def "translate-brooklyn get" [
+export def "get-translate-brooklyn" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -339,7 +339,7 @@ export def "translate-brooklyn get" [
 # Translate from English to Swedish Chef speak.
 #
 # GET /translate/chef
-export def "translate-chef get" [
+export def "get-translate-chef" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -375,7 +375,7 @@ export def "translate-chef get" [
 # Translate from English to Starwars cheunh.
 #
 # GET /translate/cheunh
-export def "translate-cheunh get" [
+export def "get-translate-cheunh" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -411,7 +411,7 @@ export def "translate-cheunh get" [
 # Translate from English to Cockney Speak.
 #
 # GET /translate/cockney
-export def "translate-cockney get" [
+export def "get-translate-cockney" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -447,7 +447,7 @@ export def "translate-cockney get" [
 # Translate from English to Dolan Speak.
 #
 # GET /translate/dolan
-export def "translate-dolan get" [
+export def "get-translate-dolan" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -483,7 +483,7 @@ export def "translate-dolan get" [
 # Translate from English to Dothraki.
 #
 # GET /translate/dothraki
-export def "translate-dothraki get" [
+export def "get-translate-dothraki" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -519,7 +519,7 @@ export def "translate-dothraki get" [
 # Translate from English to ERMAHGERD.
 #
 # GET /translate/ermahgerd
-export def "translate-ermahgerd get" [
+export def "get-translate-ermahgerd" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -555,7 +555,7 @@ export def "translate-ermahgerd get" [
 # Translate from English to Ferb Latin.
 #
 # GET /translate/ferblatin
-export def "translate-ferblatin get" [
+export def "get-translate-ferblatin" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -591,7 +591,7 @@ export def "translate-ferblatin get" [
 # Translate from English to Fudd Speak.
 #
 # GET /translate/fudd
-export def "translate-fudd get" [
+export def "get-translate-fudd" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -627,7 +627,7 @@ export def "translate-fudd get" [
 # Translate from English to Starwars Gungan Language.
 #
 # GET /translate/gungan
-export def "translate-gungan get" [
+export def "get-translate-gungan" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -663,7 +663,7 @@ export def "translate-gungan get" [
 # Translate from English to Starwars Huttese Language.
 #
 # GET /translate/huttese
-export def "translate-huttese get" [
+export def "get-translate-huttese" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -699,7 +699,7 @@ export def "translate-huttese get" [
 # Translate from normal English to Jive Speak.
 #
 # GET /translate/jive
-export def "translate-jive get" [
+export def "get-translate-jive" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -735,7 +735,7 @@ export def "translate-jive get" [
 # Translate from English to Startrek Klingon Language.
 #
 # GET /translate/klingon
-export def "translate-klingon get" [
+export def "get-translate-klingon" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -771,7 +771,7 @@ export def "translate-klingon get" [
 # Translate from English to Starwars Mandalorian Language.
 #
 # GET /translate/mandalorian
-export def "translate-mandalorian get" [
+export def "get-translate-mandalorian" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -807,7 +807,7 @@ export def "translate-mandalorian get" [
 # Translate from English to Minion Speak.
 #
 # GET /translate/minion
-export def "translate-minion get" [
+export def "get-translate-minion" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -843,7 +843,7 @@ export def "translate-minion get" [
 # Translate from English to morse code.
 #
 # GET /translate/morse
-export def "translate-morse get" [
+export def "get-translate-morse" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -879,7 +879,7 @@ export def "translate-morse get" [
 # Translate from English to morse code and get the result as an audio file.
 #
 # GET /translate/morse/audio
-export def "translate-morse-audio get" [
+export def "get-translate-morse-audio" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -917,7 +917,7 @@ export def "translate-morse-audio get" [
 # Translate from Morse code to English.
 #
 # GET /translate/morse2english
-export def "translate-morse2english get" [
+export def "get-translate-morse2english" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -953,7 +953,7 @@ export def "translate-morse2english get" [
 # Translate from English to Old English.
 #
 # GET /translate/oldenglish
-export def "translate-oldenglish get" [
+export def "get-translate-oldenglish" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -989,7 +989,7 @@ export def "translate-oldenglish get" [
 # Translate from English to Pig Latin.
 #
 # GET /translate/piglatin
-export def "translate-piglatin get" [
+export def "get-translate-piglatin" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1025,7 +1025,7 @@ export def "translate-piglatin get" [
 # Translate from English to Pirate Speak.
 #
 # GET /translate/pirate
-export def "translate-pirate get" [
+export def "get-translate-pirate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1061,7 +1061,7 @@ export def "translate-pirate get" [
 # Translate from English to Elvish Quenya Language.
 #
 # GET /translate/quneya
-export def "translate-quneya get" [
+export def "get-translate-quneya" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1097,7 +1097,7 @@ export def "translate-quneya get" [
 # Translate from English to Shakespeare English.
 #
 # GET /translate/shakespeare
-export def "translate-shakespeare get" [
+export def "get-translate-shakespeare" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1133,7 +1133,7 @@ export def "translate-shakespeare get" [
 # Translate from English to Elvish Sindarin Language.
 #
 # GET /translate/sindarin
-export def "translate-sindarin get" [
+export def "get-translate-sindarin" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1169,7 +1169,7 @@ export def "translate-sindarin get" [
 # Translate from English to Sith Speak.
 #
 # GET /translate/sith
-export def "translate-sith get" [
+export def "get-translate-sith" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1205,7 +1205,7 @@ export def "translate-sith get" [
 # Translate from UK English to US English.
 #
 # GET /translate/uk2us
-export def "translate-uk2us get" [
+export def "get-translate-uk2us" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1241,7 +1241,7 @@ export def "translate-uk2us get" [
 # Translate from US English to UK English.
 #
 # GET /translate/us2uk
-export def "translate-us2uk get" [
+export def "get-translate-us2uk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1277,7 +1277,7 @@ export def "translate-us2uk get" [
 # Translate from English to Valley Speak.
 #
 # GET /translate/valspeak
-export def "translate-valspeak get" [
+export def "get-translate-valspeak" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1313,7 +1313,7 @@ export def "translate-valspeak get" [
 # Translate from English to Valyrian.
 #
 # GET /translate/valyrian
-export def "translate-valyrian get" [
+export def "get-translate-valyrian" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1349,7 +1349,7 @@ export def "translate-valyrian get" [
 # Translate from English to Startrek Vulcan Language.
 #
 # GET /translate/vulcan
-export def "translate-vulcan get" [
+export def "get-translate-vulcan" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1385,7 +1385,7 @@ export def "translate-vulcan get" [
 # Translate from English to Yoda Speak.
 #
 # GET /translate/yoda
-export def "translate-yoda get" [
+export def "get-translate-yoda" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

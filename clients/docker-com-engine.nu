@@ -128,7 +128,7 @@ def accept-completer-1 [] { ["application/json" "application/vnd.docker.raw-stre
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "ping ping-system" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "system-ping" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -152,7 +152,7 @@ export def commands []: nothing -> table {
 #
 # GET /_ping
 # operationId: SystemPing
-export def "ping ping-system" [
+export def "system-ping" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -186,7 +186,7 @@ export def "ping ping-system" [
 #
 # POST /auth
 # operationId: SystemAuth
-export def "auth create-system" [
+export def "system-auth" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -227,7 +227,7 @@ export def "auth create-system" [
 #
 # POST /build
 # operationId: ImageBuild
-export def "build build-image" [
+export def "image-build" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -293,7 +293,7 @@ export def "build build-image" [
 #
 # POST /build/prune
 # operationId: BuildPrune
-export def "build-prune build" [
+export def "build-prune" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -329,7 +329,7 @@ export def "build-prune build" [
 # operationId: ImageCommit
 # --Healthcheck shape: {Interval?: int, Retries?: int, StartPeriod?: int, Test?: list<string>, Timeout?: int}
 # --Volumes shape: {additionalProperties?: "{}"}
-export def "commit commit-image" [
+export def "image-commit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -399,7 +399,7 @@ export def "commit commit-image" [
 #
 # GET /configs
 # operationId: ConfigList
-export def "configs list" [
+export def "config-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -435,7 +435,7 @@ export def "configs list" [
 #
 # POST /configs/create
 # operationId: ConfigCreate
-export def "configs-create create" [
+export def "config-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -475,7 +475,7 @@ export def "configs-create create" [
 #
 # DELETE /configs/{id}
 # operationId: ConfigDelete
-export def "configs delete" [
+export def "config-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -511,7 +511,7 @@ export def "configs delete" [
 #
 # GET /configs/{id}
 # operationId: ConfigInspect
-export def "configs get" [
+export def "config-inspect" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -547,7 +547,7 @@ export def "configs get" [
 #
 # POST /configs/{id}/update
 # operationId: ConfigUpdate
-export def "configs-update update" [
+export def "config-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -594,7 +594,7 @@ export def "configs-update update" [
 # --Healthcheck shape: {Interval?: int, Retries?: int, StartPeriod?: int, Test?: list<string>, Timeout?: int}
 # --Volumes shape: {additionalProperties?: "{}"}
 # --NetworkingConfig shape: {EndpointsConfig?: record}
-export def "containers-create create" [
+export def "container-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -660,7 +660,7 @@ export def "containers-create create" [
 #
 # GET /containers/json
 # operationId: ContainerList
-export def "containers-json list" [
+export def "container-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -699,7 +699,7 @@ export def "containers-json list" [
 #
 # POST /containers/prune
 # operationId: ContainerPrune
-export def "containers-prune prune" [
+export def "container-prune" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -735,7 +735,7 @@ export def "containers-prune prune" [
 #
 # DELETE /containers/{id}
 # operationId: ContainerDelete
-export def "containers delete" [
+export def "container-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -775,7 +775,7 @@ export def "containers delete" [
 #
 # GET /containers/{id}/archive
 # operationId: ContainerArchive
-export def "containers-archive archive" [
+export def "container-archive" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -813,7 +813,7 @@ export def "containers-archive archive" [
 #
 # HEAD /containers/{id}/archive
 # operationId: ContainerArchiveInfo
-export def "containers-archive get" [
+export def "container-archive-info" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -851,7 +851,7 @@ export def "containers-archive get" [
 #
 # PUT /containers/{id}/archive
 # operationId: PutContainerArchive
-export def "containers-archive update" [
+export def "put-container-archive" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -894,7 +894,7 @@ export def "containers-archive update" [
 #
 # POST /containers/{id}/attach
 # operationId: ContainerAttach
-export def "containers-attach attach" [
+export def "container-attach" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -937,7 +937,7 @@ export def "containers-attach attach" [
 #
 # GET /containers/{id}/attach/ws
 # operationId: ContainerAttachWebsocket
-export def "containers-attach-ws attach-websocket" [
+export def "container-attach-websocket" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -980,7 +980,7 @@ export def "containers-attach-ws attach-websocket" [
 #
 # GET /containers/{id}/changes
 # operationId: ContainerChanges
-export def "containers-changes changes" [
+export def "container-changes" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1016,7 +1016,7 @@ export def "containers-changes changes" [
 #
 # POST /containers/{id}/exec
 # operationId: ContainerExec
-export def "containers-exec exec" [
+export def "container-exec" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1064,7 +1064,7 @@ export def "containers-exec exec" [
 #
 # GET /containers/{id}/export
 # operationId: ContainerExport
-export def "containers-export export" [
+export def "container-export" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1100,7 +1100,7 @@ export def "containers-export export" [
 #
 # GET /containers/{id}/json
 # operationId: ContainerInspect
-export def "containers-json get" [
+export def "container-inspect" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1138,7 +1138,7 @@ export def "containers-json get" [
 #
 # POST /containers/{id}/kill
 # operationId: ContainerKill
-export def "containers-kill kill" [
+export def "container-kill" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1176,7 +1176,7 @@ export def "containers-kill kill" [
 #
 # GET /containers/{id}/logs
 # operationId: ContainerLogs
-export def "containers-logs logs" [
+export def "container-logs" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1220,7 +1220,7 @@ export def "containers-logs logs" [
 #
 # POST /containers/{id}/pause
 # operationId: ContainerPause
-export def "containers-pause pause" [
+export def "container-pause" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1256,7 +1256,7 @@ export def "containers-pause pause" [
 #
 # POST /containers/{id}/rename
 # operationId: ContainerRename
-export def "containers-rename rename" [
+export def "container-rename" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1294,7 +1294,7 @@ export def "containers-rename rename" [
 #
 # POST /containers/{id}/resize
 # operationId: ContainerResize
-export def "containers-resize resize" [
+export def "container-resize" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1333,7 +1333,7 @@ export def "containers-resize resize" [
 #
 # POST /containers/{id}/restart
 # operationId: ContainerRestart
-export def "containers-restart restart" [
+export def "container-restart" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1371,7 +1371,7 @@ export def "containers-restart restart" [
 #
 # POST /containers/{id}/start
 # operationId: ContainerStart
-export def "containers-start start" [
+export def "container-start" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1409,7 +1409,7 @@ export def "containers-start start" [
 #
 # GET /containers/{id}/stats
 # operationId: ContainerStats
-export def "containers-stats stats" [
+export def "container-stats" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1447,7 +1447,7 @@ export def "containers-stats stats" [
 #
 # POST /containers/{id}/stop
 # operationId: ContainerStop
-export def "containers-stop stop" [
+export def "container-stop" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1485,7 +1485,7 @@ export def "containers-stop stop" [
 #
 # GET /containers/{id}/top
 # operationId: ContainerTop
-export def "containers-top top" [
+export def "container-top" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1524,7 +1524,7 @@ export def "containers-top top" [
 #
 # POST /containers/{id}/unpause
 # operationId: ContainerUnpause
-export def "containers-unpause unpause" [
+export def "container-unpause" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1568,7 +1568,7 @@ export def "containers-unpause unpause" [
 # --Devices item shape: {CgroupPermissions?: string, PathInContainer?: string, PathOnHost?: string}
 # --Ulimits item shape: {Hard?: int, Name?: string, Soft?: int}
 # --RestartPolicy shape: {MaximumRetryCount?: int, Name?: ""|"always"|"unless-stopped"|"on-failure"}
-export def "containers-update update" [
+export def "container-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1638,7 +1638,7 @@ export def "containers-update update" [
 #
 # POST /containers/{id}/wait
 # operationId: ContainerWait
-export def "containers-wait wait" [
+export def "container-wait" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1676,7 +1676,7 @@ export def "containers-wait wait" [
 #
 # GET /distribution/{name}/json
 # operationId: DistributionInspect
-export def "distribution-json get" [
+export def "distribution-inspect" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1712,7 +1712,7 @@ export def "distribution-json get" [
 #
 # GET /events
 # operationId: SystemEvents
-export def "events get-system" [
+export def "system-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1750,7 +1750,7 @@ export def "events get-system" [
 #
 # GET /exec/{id}/json
 # operationId: ExecInspect
-export def "exec-json get" [
+export def "exec-inspect" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1786,7 +1786,7 @@ export def "exec-json get" [
 #
 # POST /exec/{id}/resize
 # operationId: ExecResize
-export def "exec-resize exec" [
+export def "exec-resize" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1825,7 +1825,7 @@ export def "exec-resize exec" [
 #
 # POST /exec/{id}/start
 # operationId: ExecStart
-export def "exec-start exec" [
+export def "exec-start" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1866,7 +1866,7 @@ export def "exec-start exec" [
 #
 # POST /images/create
 # operationId: ImageCreate
-export def "images-create create" [
+export def "image-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1912,7 +1912,7 @@ export def "images-create create" [
 #
 # GET /images/get
 # operationId: ImageGetAll
-export def "images-get list" [
+export def "image-get-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1948,7 +1948,7 @@ export def "images-get list" [
 #
 # GET /images/json
 # operationId: ImageList
-export def "images-json list" [
+export def "image-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1986,7 +1986,7 @@ export def "images-json list" [
 #
 # POST /images/load
 # operationId: ImageLoad
-export def "images-load create" [
+export def "image-load" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2026,7 +2026,7 @@ export def "images-load create" [
 #
 # POST /images/prune
 # operationId: ImagePrune
-export def "images-prune prune" [
+export def "image-prune" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2062,7 +2062,7 @@ export def "images-prune prune" [
 #
 # GET /images/search
 # operationId: ImageSearch
-export def "images-search list" [
+export def "image-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2100,7 +2100,7 @@ export def "images-search list" [
 #
 # DELETE /images/{name}
 # operationId: ImageDelete
-export def "images delete" [
+export def "image-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2139,7 +2139,7 @@ export def "images delete" [
 #
 # GET /images/{name}/get
 # operationId: ImageGet
-export def "images-get get" [
+export def "image-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2175,7 +2175,7 @@ export def "images-get get" [
 #
 # GET /images/{name}/history
 # operationId: ImageHistory
-export def "images-history get" [
+export def "image-history" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2211,7 +2211,7 @@ export def "images-history get" [
 #
 # GET /images/{name}/json
 # operationId: ImageInspect
-export def "images-json get" [
+export def "image-inspect" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2247,7 +2247,7 @@ export def "images-json get" [
 #
 # POST /images/{name}/push
 # operationId: ImagePush
-export def "images-push push" [
+export def "image-push" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2288,7 +2288,7 @@ export def "images-push push" [
 #
 # POST /images/{name}/tag
 # operationId: ImageTag
-export def "images-tag tag" [
+export def "image-tag" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2327,7 +2327,7 @@ export def "images-tag tag" [
 #
 # GET /info
 # operationId: SystemInfo
-export def "info get-system" [
+export def "system-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2361,7 +2361,7 @@ export def "info get-system" [
 #
 # GET /networks
 # operationId: NetworkList
-export def "networks list" [
+export def "network-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2398,7 +2398,7 @@ export def "networks list" [
 # POST /networks/create
 # operationId: NetworkCreate
 # --IPAM shape: {Config?: list, Driver?: string, Options?: list}
-export def "networks-create create" [
+export def "network-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2445,7 +2445,7 @@ export def "networks-create create" [
 #
 # POST /networks/prune
 # operationId: NetworkPrune
-export def "networks-prune prune" [
+export def "network-prune" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2481,7 +2481,7 @@ export def "networks-prune prune" [
 #
 # DELETE /networks/{id}
 # operationId: NetworkDelete
-export def "networks delete" [
+export def "network-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2517,7 +2517,7 @@ export def "networks delete" [
 #
 # GET /networks/{id}
 # operationId: NetworkInspect
-export def "networks get" [
+export def "network-inspect" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2556,7 +2556,7 @@ export def "networks get" [
 #
 # POST /networks/{id}/connect
 # operationId: NetworkConnect
-export def "networks-connect create" [
+export def "network-connect" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2596,7 +2596,7 @@ export def "networks-connect create" [
 #
 # POST /networks/{id}/disconnect
 # operationId: NetworkDisconnect
-export def "networks-disconnect create" [
+export def "network-disconnect" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2637,7 +2637,7 @@ export def "networks-disconnect create" [
 #
 # GET /nodes
 # operationId: NodeList
-export def "nodes list" [
+export def "node-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2674,7 +2674,7 @@ export def "nodes list" [
 #
 # DELETE /nodes/{id}
 # operationId: NodeDelete
-export def "nodes delete" [
+export def "node-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2712,7 +2712,7 @@ export def "nodes delete" [
 #
 # GET /nodes/{id}
 # operationId: NodeInspect
-export def "nodes get" [
+export def "node-inspect" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2749,7 +2749,7 @@ export def "nodes get" [
 #
 # POST /nodes/{id}/update
 # operationId: NodeUpdate
-export def "nodes-update update" [
+export def "node-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2794,7 +2794,7 @@ export def "nodes-update update" [
 #
 # GET /plugins
 # operationId: PluginList
-export def "plugins list" [
+export def "plugin-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2830,7 +2830,7 @@ export def "plugins list" [
 #
 # POST /plugins/create
 # operationId: PluginCreate
-export def "plugins-create create" [
+export def "plugin-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2870,7 +2870,7 @@ export def "plugins-create create" [
 #
 # GET /plugins/privileges
 # operationId: GetPluginPrivileges
-export def "plugins-privileges get" [
+export def "get-plugin-privileges" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2907,7 +2907,7 @@ export def "plugins-privileges get" [
 #
 # POST /plugins/pull
 # operationId: PluginPull
-export def "plugins-pull pull" [
+export def "plugin-pull" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2951,7 +2951,7 @@ export def "plugins-pull pull" [
 #
 # DELETE /plugins/{name}
 # operationId: PluginDelete
-export def "plugins delete" [
+export def "plugin-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2990,7 +2990,7 @@ export def "plugins delete" [
 #
 # POST /plugins/{name}/disable
 # operationId: PluginDisable
-export def "plugins-disable disable" [
+export def "plugin-disable" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3026,7 +3026,7 @@ export def "plugins-disable disable" [
 #
 # POST /plugins/{name}/enable
 # operationId: PluginEnable
-export def "plugins-enable enable" [
+export def "plugin-enable" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3064,7 +3064,7 @@ export def "plugins-enable enable" [
 #
 # GET /plugins/{name}/json
 # operationId: PluginInspect
-export def "plugins-json get" [
+export def "plugin-inspect" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3101,7 +3101,7 @@ export def "plugins-json get" [
 #
 # POST /plugins/{name}/push
 # operationId: PluginPush
-export def "plugins-push push" [
+export def "plugin-push" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3137,7 +3137,7 @@ export def "plugins-push push" [
 #
 # POST /plugins/{name}/set
 # operationId: PluginSet
-export def "plugins-set update" [
+export def "plugin-set" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3177,7 +3177,7 @@ export def "plugins-set update" [
 #
 # POST /plugins/{name}/upgrade
 # operationId: PluginUpgrade
-export def "plugins-upgrade create" [
+export def "plugin-upgrade" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3222,7 +3222,7 @@ export def "plugins-upgrade create" [
 #
 # GET /secrets
 # operationId: SecretList
-export def "secrets list" [
+export def "secret-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3259,7 +3259,7 @@ export def "secrets list" [
 # POST /secrets/create
 # operationId: SecretCreate
 # --Driver shape: {Name: string, Options?: record}
-export def "secrets-create create" [
+export def "secret-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3300,7 +3300,7 @@ export def "secrets-create create" [
 #
 # DELETE /secrets/{id}
 # operationId: SecretDelete
-export def "secrets delete" [
+export def "secret-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3336,7 +3336,7 @@ export def "secrets delete" [
 #
 # GET /secrets/{id}
 # operationId: SecretInspect
-export def "secrets get" [
+export def "secret-inspect" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3373,7 +3373,7 @@ export def "secrets get" [
 # POST /secrets/{id}/update
 # operationId: SecretUpdate
 # --Driver shape: {Name: string, Options?: record}
-export def "secrets-update update" [
+export def "secret-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3418,7 +3418,7 @@ export def "secrets-update update" [
 #
 # GET /services
 # operationId: ServiceList
-export def "services list" [
+export def "service-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3461,7 +3461,7 @@ export def "services list" [
 # --RollbackConfig shape: {Delay?: int, FailureAction?: "continue"|"pause", MaxFailureRatio?: float, Monitor?: int, Order?: "stop-first"|"start-first", Parallelism?: int}
 # --TaskTemplate shape: {ContainerSpec?: record, ForceUpdate?: int, LogDriver?: record, Networks?: list, Placement?: record, PluginSpec?: record, Resources?: record, RestartPolicy?: record, Runtime?: string}
 # --UpdateConfig shape: {Delay?: int, FailureAction?: "continue"|"pause"|"rollback", MaxFailureRatio?: float, Monitor?: int, Order?: "stop-first"|"start-first", Parallelism?: int}
-export def "services-create create" [
+export def "service-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3509,7 +3509,7 @@ export def "services-create create" [
 #
 # DELETE /services/{id}
 # operationId: ServiceDelete
-export def "services delete" [
+export def "service-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3545,7 +3545,7 @@ export def "services delete" [
 #
 # GET /services/{id}
 # operationId: ServiceInspect
-export def "services get" [
+export def "service-inspect" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3584,7 +3584,7 @@ export def "services get" [
 #
 # GET /services/{id}/logs
 # operationId: ServiceLogs
-export def "services-logs logs" [
+export def "service-logs" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3635,7 +3635,7 @@ export def "services-logs logs" [
 # --RollbackConfig shape: {Delay?: int, FailureAction?: "continue"|"pause", MaxFailureRatio?: float, Monitor?: int, Order?: "stop-first"|"start-first", Parallelism?: int}
 # --TaskTemplate shape: {ContainerSpec?: record, ForceUpdate?: int, LogDriver?: record, Networks?: list, Placement?: record, PluginSpec?: record, Resources?: record, RestartPolicy?: record, Runtime?: string}
 # --UpdateConfig shape: {Delay?: int, FailureAction?: "continue"|"pause"|"rollback", MaxFailureRatio?: float, Monitor?: int, Order?: "stop-first"|"start-first", Parallelism?: int}
-export def "services-update update" [
+export def "service-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3689,7 +3689,7 @@ export def "services-update update" [
 #
 # POST /session
 # operationId: Session
-export def "session create" [
+export def "session" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3723,7 +3723,7 @@ export def "session create" [
 #
 # GET /swarm
 # operationId: SwarmInspect
-export def "swarm get" [
+export def "swarm-inspect" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3759,7 +3759,7 @@ export def "swarm get" [
 # POST /swarm/init
 # operationId: SwarmInit
 # --Spec shape: {CAConfig?: record, Dispatcher?: record, EncryptionConfig?: record, Labels?: record, Name?: string, Orchestration?: record, Raft?: record, TaskDefaults?: record}
-export def "swarm-init create" [
+export def "swarm-init" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3802,7 +3802,7 @@ export def "swarm-init create" [
 #
 # POST /swarm/join
 # operationId: SwarmJoin
-export def "swarm-join create" [
+export def "swarm-join" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3844,7 +3844,7 @@ export def "swarm-join create" [
 #
 # POST /swarm/leave
 # operationId: SwarmLeave
-export def "swarm-leave create" [
+export def "swarm-leave" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3880,7 +3880,7 @@ export def "swarm-leave create" [
 #
 # POST /swarm/unlock
 # operationId: SwarmUnlock
-export def "swarm-unlock unlock" [
+export def "swarm-unlock" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3918,7 +3918,7 @@ export def "swarm-unlock unlock" [
 #
 # GET /swarm/unlockkey
 # operationId: SwarmUnlockkey
-export def "swarm-unlockkey get" [
+export def "swarm-unlockkey" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3959,7 +3959,7 @@ export def "swarm-unlockkey get" [
 # --Orchestration shape: {TaskHistoryRetentionLimit?: int}
 # --Raft shape: {ElectionTick?: int, HeartbeatTick?: int, KeepOldSnapshots?: int, LogEntriesForSlowFollowers?: int, SnapshotInterval?: int}
 # --TaskDefaults shape: {LogDriver?: record}
-export def "swarm-update update" [
+export def "swarm-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4009,7 +4009,7 @@ export def "swarm-update update" [
 #
 # GET /system/df
 # operationId: SystemDataUsage
-export def "system-df get-data-usage" [
+export def "system-data-usage" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4044,7 +4044,7 @@ export def "system-df get-data-usage" [
 #
 # GET /tasks
 # operationId: TaskList
-export def "tasks list" [
+export def "task-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4080,7 +4080,7 @@ export def "tasks list" [
 #
 # GET /tasks/{id}
 # operationId: TaskInspect
-export def "tasks get" [
+export def "task-inspect" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4116,7 +4116,7 @@ export def "tasks get" [
 #
 # GET /tasks/{id}/logs
 # operationId: TaskLogs
-export def "tasks-logs logs" [
+export def "task-logs" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4161,7 +4161,7 @@ export def "tasks-logs logs" [
 #
 # GET /version
 # operationId: SystemVersion
-export def "version version-system" [
+export def "system-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4195,7 +4195,7 @@ export def "version version-system" [
 #
 # GET /volumes
 # operationId: VolumeList
-export def "volumes list" [
+export def "volume-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4231,7 +4231,7 @@ export def "volumes list" [
 #
 # POST /volumes/create
 # operationId: VolumeCreate
-export def "volumes-create create" [
+export def "volume-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4272,7 +4272,7 @@ export def "volumes-create create" [
 #
 # POST /volumes/prune
 # operationId: VolumePrune
-export def "volumes-prune prune" [
+export def "volume-prune" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4308,7 +4308,7 @@ export def "volumes-prune prune" [
 #
 # DELETE /volumes/{name}
 # operationId: VolumeDelete
-export def "volumes delete" [
+export def "volume-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4346,7 +4346,7 @@ export def "volumes delete" [
 #
 # GET /volumes/{name}
 # operationId: VolumeInspect
-export def "volumes get" [
+export def "volume-inspect" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

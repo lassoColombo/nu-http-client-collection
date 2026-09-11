@@ -124,7 +124,7 @@ def type-completer [] { ["Microsoft.DataLakeAnalytics/accounts"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-data-lake-analytics-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -148,7 +148,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.DataLakeAnalytics/operations
 # operationId: Operations_List
-export def "providers-microsoft-data-lake-analytics-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,7 +184,7 @@ export def "providers-microsoft-data-lake-analytics-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.DataLakeAnalytics/accounts
 # operationId: Accounts_List
-export def "subscriptions-providers-microsoft-data-lake-analytics-accounts list" [
+export def "accounts-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -228,7 +228,7 @@ export def "subscriptions-providers-microsoft-data-lake-analytics-accounts list"
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.DataLakeAnalytics/locations/{location}/capability
 # operationId: Locations_GetCapability
-export def "subscriptions-providers-microsoft-data-lake-analytics-locations-capability get" [
+export def "locations-get-capability" [
   subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -268,7 +268,7 @@ export def "subscriptions-providers-microsoft-data-lake-analytics-locations-capa
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.DataLakeAnalytics/locations/{location}/checkNameAvailability
 # operationId: Accounts_CheckNameAvailability
-export def "subscriptions-providers-microsoft-data-lake-analytics-locations-check-name-availability check-accounts" [
+export def "accounts-check-name-availability" [
   subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -313,7 +313,7 @@ export def "subscriptions-providers-microsoft-data-lake-analytics-locations-chec
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeAnalytics/accounts
 # operationId: Accounts_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytics-accounts list" [
+export def "accounts-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -359,7 +359,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytic
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeAnalytics/accounts/{accountName}
 # operationId: Accounts_Delete
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytics-accounts delete" [
+export def "accounts-delete" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -401,7 +401,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytic
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeAnalytics/accounts/{accountName}
 # operationId: Accounts_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytics-accounts get" [
+export def "accounts-get" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -444,7 +444,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytic
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeAnalytics/accounts/{accountName}
 # operationId: Accounts_Update
 # --properties shape: {computePolicies?: list, dataLakeStoreAccounts?: list, firewallAllowAzureIps?: "Enabled"|"Disabled", firewallRules?: list, firewallState?: "Enabled"|"Disabled", maxDegreeOfParallelism?: int, maxDegreeOfParallelismPerJob?: int, maxJobCount?: int, minPriorityPerJob?: int, newTier?: "Consumption"|"Commitment_100AUHours"|"Commitment_500AUHours"|"Commitment_1000AUHours"|"Commitment_5000AUHours"|"Commitment_10000AUHours"|"Commitment_50000AUHours"|"Commitment_100000AUHours"|"Commitment_500000AUHours", ... (2 more fields)}
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytics-accounts update" [
+export def "accounts-update" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -492,7 +492,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytic
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeAnalytics/accounts/{accountName}
 # operationId: Accounts_Create
 # --properties shape: {computePolicies?: list, dataLakeStoreAccounts: list, defaultDataLakeStoreAccount: string, firewallAllowAzureIps?: "Enabled"|"Disabled", firewallRules?: list, firewallState?: "Enabled"|"Disabled", maxDegreeOfParallelism?: int, maxDegreeOfParallelismPerJob?: int, maxJobCount?: int, minPriorityPerJob?: int, ... (3 more fields)}
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytics-accounts create" [
+export def "accounts-create" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -540,7 +540,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytic
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeAnalytics/accounts/{accountName}/computePolicies
 # operationId: ComputePolicies_ListByAccount
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytics-accounts-compute-policies list" [
+export def "compute-policies-list-by-account" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -582,7 +582,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytic
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeAnalytics/accounts/{accountName}/computePolicies/{computePolicyName}
 # operationId: ComputePolicies_Delete
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytics-accounts-compute-policies delete" [
+export def "compute-policies-delete" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -626,7 +626,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytic
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeAnalytics/accounts/{accountName}/computePolicies/{computePolicyName}
 # operationId: ComputePolicies_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytics-accounts-compute-policies get" [
+export def "compute-policies-get" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -671,7 +671,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytic
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeAnalytics/accounts/{accountName}/computePolicies/{computePolicyName}
 # operationId: ComputePolicies_Update
 # --properties shape: {maxDegreeOfParallelismPerJob?: int, minPriorityPerJob?: int, objectId?: string, objectType?: "User"|"Group"|"ServicePrincipal"}
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytics-accounts-compute-policies update" [
+export def "compute-policies-update" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -720,7 +720,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytic
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeAnalytics/accounts/{accountName}/computePolicies/{computePolicyName}
 # operationId: ComputePolicies_CreateOrUpdate
 # --properties shape: {maxDegreeOfParallelismPerJob?: int, minPriorityPerJob?: int, objectId: string, objectType: "User"|"Group"|"ServicePrincipal"}
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytics-accounts-compute-policies create-or-update" [
+export def "compute-policies-create-or-update" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -768,7 +768,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytic
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeAnalytics/accounts/{accountName}/dataLakeStoreAccounts
 # operationId: DataLakeStoreAccounts_ListByAccount
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytics-accounts-data-lake-store-accounts list" [
+export def "data-lake-store-accounts-list-by-account" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -816,7 +816,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytic
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeAnalytics/accounts/{accountName}/dataLakeStoreAccounts/{dataLakeStoreAccountName}
 # operationId: DataLakeStoreAccounts_Delete
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytics-accounts-data-lake-store-accounts delete" [
+export def "data-lake-store-accounts-delete" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -860,7 +860,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytic
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeAnalytics/accounts/{accountName}/dataLakeStoreAccounts/{dataLakeStoreAccountName}
 # operationId: DataLakeStoreAccounts_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytics-accounts-data-lake-store-accounts get" [
+export def "data-lake-store-accounts-get" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -905,7 +905,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytic
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeAnalytics/accounts/{accountName}/dataLakeStoreAccounts/{dataLakeStoreAccountName}
 # operationId: DataLakeStoreAccounts_Add
 # --properties shape: {suffix?: string}
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytics-accounts-data-lake-store-accounts create" [
+export def "data-lake-store-accounts-add" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -953,7 +953,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytic
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeAnalytics/accounts/{accountName}/firewallRules
 # operationId: FirewallRules_ListByAccount
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytics-accounts-firewall-rules list" [
+export def "firewall-rules-list-by-account" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -995,7 +995,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytic
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeAnalytics/accounts/{accountName}/firewallRules/{firewallRuleName}
 # operationId: FirewallRules_Delete
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytics-accounts-firewall-rules delete" [
+export def "firewall-rules-delete" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1039,7 +1039,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytic
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeAnalytics/accounts/{accountName}/firewallRules/{firewallRuleName}
 # operationId: FirewallRules_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytics-accounts-firewall-rules get" [
+export def "firewall-rules-get" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1084,7 +1084,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytic
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeAnalytics/accounts/{accountName}/firewallRules/{firewallRuleName}
 # operationId: FirewallRules_Update
 # --properties shape: {endIpAddress?: string, startIpAddress?: string}
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytics-accounts-firewall-rules update" [
+export def "firewall-rules-update" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1133,7 +1133,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytic
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeAnalytics/accounts/{accountName}/firewallRules/{firewallRuleName}
 # operationId: FirewallRules_CreateOrUpdate
 # --properties shape: {endIpAddress: string, startIpAddress: string}
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytics-accounts-firewall-rules create-or-update" [
+export def "firewall-rules-create-or-update" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1181,7 +1181,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytic
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeAnalytics/accounts/{accountName}/storageAccounts
 # operationId: StorageAccounts_ListByAccount
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytics-accounts-storage-accounts list" [
+export def "storage-accounts-list-by-account" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1229,7 +1229,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytic
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeAnalytics/accounts/{accountName}/storageAccounts/{storageAccountName}
 # operationId: StorageAccounts_Delete
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytics-accounts-storage-accounts delete" [
+export def "storage-accounts-delete" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1273,7 +1273,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytic
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeAnalytics/accounts/{accountName}/storageAccounts/{storageAccountName}
 # operationId: StorageAccounts_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytics-accounts-storage-accounts get" [
+export def "storage-accounts-get" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1318,7 +1318,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytic
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeAnalytics/accounts/{accountName}/storageAccounts/{storageAccountName}
 # operationId: StorageAccounts_Update
 # --properties shape: {accessKey?: string, suffix?: string}
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytics-accounts-storage-accounts update" [
+export def "storage-accounts-update" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1367,7 +1367,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytic
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeAnalytics/accounts/{accountName}/storageAccounts/{storageAccountName}
 # operationId: StorageAccounts_Add
 # --properties shape: {accessKey: string, suffix?: string}
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytics-accounts-storage-accounts create" [
+export def "storage-accounts-add" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1415,7 +1415,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytic
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeAnalytics/accounts/{accountName}/storageAccounts/{storageAccountName}/containers
 # operationId: StorageAccounts_ListStorageContainers
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytics-accounts-storage-accounts-containers list" [
+export def "storage-accounts-list-storage-containers" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1459,7 +1459,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytic
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeAnalytics/accounts/{accountName}/storageAccounts/{storageAccountName}/containers/{containerName}
 # operationId: StorageAccounts_GetStorageContainer
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytics-accounts-storage-accounts-containers get" [
+export def "storage-accounts-get-storage-container" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1505,7 +1505,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytic
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeAnalytics/accounts/{accountName}/storageAccounts/{storageAccountName}/containers/{containerName}/listSasTokens
 # operationId: StorageAccounts_ListSasTokens
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytics-accounts-storage-accounts-containers-list-sas-tokens list" [
+export def "storage-accounts-list-sas-tokens" [
   subscription_id: string
   resource_group_name: string
   account_name: string

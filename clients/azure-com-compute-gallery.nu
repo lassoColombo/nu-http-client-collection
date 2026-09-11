@@ -118,7 +118,7 @@ def expand-completer [] { ["ReplicationStatus"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-compute-galleries list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "galleries-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -142,7 +142,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Compute/galleries
 # operationId: Galleries_List
-export def "subscriptions-providers-microsoft-compute-galleries list" [
+export def "galleries-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -180,7 +180,7 @@ export def "subscriptions-providers-microsoft-compute-galleries list" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/galleries
 # operationId: Galleries_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-compute-galleries list" [
+export def "galleries-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -220,7 +220,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-galleries 
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/galleries/{galleryName}
 # operationId: Galleries_Delete
-export def "subscriptions-resource-groups-providers-microsoft-compute-galleries delete" [
+export def "galleries-delete" [
   subscription_id: string
   resource_group_name: string
   gallery_name: string
@@ -262,7 +262,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-galleries 
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/galleries/{galleryName}
 # operationId: Galleries_Get
-export def "subscriptions-resource-groups-providers-microsoft-compute-galleries get" [
+export def "galleries-get" [
   subscription_id: string
   resource_group_name: string
   gallery_name: string
@@ -305,7 +305,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-galleries 
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/galleries/{galleryName}
 # operationId: Galleries_Update
 # --properties shape: {description?: string, identifier?: any}
-export def "subscriptions-resource-groups-providers-microsoft-compute-galleries update" [
+export def "galleries-update" [
   subscription_id: string
   resource_group_name: string
   gallery_name: string
@@ -353,7 +353,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-galleries 
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/galleries/{galleryName}
 # operationId: Galleries_CreateOrUpdate
 # --properties shape: {description?: string, identifier?: any}
-export def "subscriptions-resource-groups-providers-microsoft-compute-galleries create-or-update" [
+export def "galleries-create-or-update" [
   subscription_id: string
   resource_group_name: string
   gallery_name: string
@@ -401,7 +401,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-galleries 
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/galleries/{galleryName}/applications
 # operationId: GalleryApplications_ListByGallery
-export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-applications list-gallery-by-gallery" [
+export def "gallery-applications-list-by-gallery" [
   subscription_id: string
   resource_group_name: string
   gallery_name: string
@@ -443,7 +443,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/galleries/{galleryName}/applications/{galleryApplicationName}
 # operationId: GalleryApplications_Delete
-export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-applications delete-gallery" [
+export def "gallery-applications-delete" [
   subscription_id: string
   resource_group_name: string
   gallery_name: string
@@ -487,7 +487,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/galleries/{galleryName}/applications/{galleryApplicationName}
 # operationId: GalleryApplications_Get
-export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-applications get-gallery" [
+export def "gallery-applications-get" [
   subscription_id: string
   resource_group_name: string
   gallery_name: string
@@ -532,7 +532,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/galleries/{galleryName}/applications/{galleryApplicationName}
 # operationId: GalleryApplications_Update
 # --properties shape: {description?: string, endOfLifeDate?: string, eula?: string, privacyStatementUri?: string, releaseNoteUri?: string, supportedOSType: "Windows"|"Linux"}
-export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-applications update-gallery" [
+export def "gallery-applications-update" [
   subscription_id: string
   resource_group_name: string
   gallery_name: string
@@ -582,7 +582,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/galleries/{galleryName}/applications/{galleryApplicationName}
 # operationId: GalleryApplications_CreateOrUpdate
 # --properties shape: {description?: string, endOfLifeDate?: string, eula?: string, privacyStatementUri?: string, releaseNoteUri?: string, supportedOSType: "Windows"|"Linux"}
-export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-applications create-gallery-or-update" [
+export def "gallery-applications-create-or-update" [
   subscription_id: string
   resource_group_name: string
   gallery_name: string
@@ -632,7 +632,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/galleries/{galleryName}/applications/{galleryApplicationName}/versions
 # operationId: GalleryApplicationVersions_ListByGalleryApplication
-export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-applications-versions list-gallery-by-gallery" [
+export def "gallery-application-versions-list-by-gallery-application" [
   subscription_id: string
   resource_group_name: string
   gallery_name: string
@@ -676,7 +676,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/galleries/{galleryName}/applications/{galleryApplicationName}/versions/{galleryApplicationVersionName}
 # operationId: GalleryApplicationVersions_Delete
-export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-applications-versions delete-gallery" [
+export def "gallery-application-versions-delete" [
   subscription_id: string
   resource_group_name: string
   gallery_name: string
@@ -722,7 +722,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/galleries/{galleryName}/applications/{galleryApplicationName}/versions/{galleryApplicationVersionName}
 # operationId: GalleryApplicationVersions_Get
-export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-applications-versions get-gallery" [
+export def "gallery-application-versions-get" [
   subscription_id: string
   resource_group_name: string
   gallery_name: string
@@ -770,7 +770,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/galleries/{galleryName}/applications/{galleryApplicationName}/versions/{galleryApplicationVersionName}
 # operationId: GalleryApplicationVersions_Update
 # --properties shape: {publishingProfile: any, replicationStatus?: any}
-export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-applications-versions update-gallery" [
+export def "gallery-application-versions-update" [
   subscription_id: string
   resource_group_name: string
   gallery_name: string
@@ -822,7 +822,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/galleries/{galleryName}/applications/{galleryApplicationName}/versions/{galleryApplicationVersionName}
 # operationId: GalleryApplicationVersions_CreateOrUpdate
 # --properties shape: {publishingProfile: any, replicationStatus?: any}
-export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-applications-versions create-gallery-or-update" [
+export def "gallery-application-versions-create-or-update" [
   subscription_id: string
   resource_group_name: string
   gallery_name: string
@@ -874,7 +874,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/galleries/{galleryName}/images
 # operationId: GalleryImages_ListByGallery
-export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-images list-gallery-by-gallery" [
+export def "gallery-images-list-by-gallery" [
   subscription_id: string
   resource_group_name: string
   gallery_name: string
@@ -916,7 +916,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/galleries/{galleryName}/images/{galleryImageName}
 # operationId: GalleryImages_Delete
-export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-images delete-gallery" [
+export def "gallery-images-delete" [
   subscription_id: string
   resource_group_name: string
   gallery_name: string
@@ -960,7 +960,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/galleries/{galleryName}/images/{galleryImageName}
 # operationId: GalleryImages_Get
-export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-images get-gallery" [
+export def "gallery-images-get" [
   subscription_id: string
   resource_group_name: string
   gallery_name: string
@@ -1005,7 +1005,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/galleries/{galleryName}/images/{galleryImageName}
 # operationId: GalleryImages_Update
 # --properties shape: {description?: string, disallowed?: any, endOfLifeDate?: string, eula?: string, hyperVGeneration?: "V1"|"V2", identifier: any, osState: "Generalized"|"Specialized", osType: "Windows"|"Linux", privacyStatementUri?: string, purchasePlan?: any, recommended?: any, releaseNoteUri?: string}
-export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-images update-gallery" [
+export def "gallery-images-update" [
   subscription_id: string
   resource_group_name: string
   gallery_name: string
@@ -1055,7 +1055,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/galleries/{galleryName}/images/{galleryImageName}
 # operationId: GalleryImages_CreateOrUpdate
 # --properties shape: {description?: string, disallowed?: any, endOfLifeDate?: string, eula?: string, hyperVGeneration?: "V1"|"V2", identifier: any, osState: "Generalized"|"Specialized", osType: "Windows"|"Linux", privacyStatementUri?: string, purchasePlan?: any, recommended?: any, releaseNoteUri?: string}
-export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-images create-gallery-or-update" [
+export def "gallery-images-create-or-update" [
   subscription_id: string
   resource_group_name: string
   gallery_name: string
@@ -1105,7 +1105,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/galleries/{galleryName}/images/{galleryImageName}/versions
 # operationId: GalleryImageVersions_ListByGalleryImage
-export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-images-versions list-gallery-by-gallery" [
+export def "gallery-image-versions-list-by-gallery-image" [
   subscription_id: string
   resource_group_name: string
   gallery_name: string
@@ -1149,7 +1149,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/galleries/{galleryName}/images/{galleryImageName}/versions/{galleryImageVersionName}
 # operationId: GalleryImageVersions_Delete
-export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-images-versions delete-gallery" [
+export def "gallery-image-versions-delete" [
   subscription_id: string
   resource_group_name: string
   gallery_name: string
@@ -1195,7 +1195,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/galleries/{galleryName}/images/{galleryImageName}/versions/{galleryImageVersionName}
 # operationId: GalleryImageVersions_Get
-export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-images-versions get-gallery" [
+export def "gallery-image-versions-get" [
   subscription_id: string
   resource_group_name: string
   gallery_name: string
@@ -1243,7 +1243,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/galleries/{galleryName}/images/{galleryImageName}/versions/{galleryImageVersionName}
 # operationId: GalleryImageVersions_Update
 # --properties shape: {publishingProfile?: any, replicationStatus?: any, storageProfile: any}
-export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-images-versions update-gallery" [
+export def "gallery-image-versions-update" [
   subscription_id: string
   resource_group_name: string
   gallery_name: string
@@ -1295,7 +1295,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/galleries/{galleryName}/images/{galleryImageName}/versions/{galleryImageVersionName}
 # operationId: GalleryImageVersions_CreateOrUpdate
 # --properties shape: {publishingProfile?: any, replicationStatus?: any, storageProfile: any}
-export def "subscriptions-resource-groups-providers-microsoft-compute-galleries-images-versions create-gallery-or-update" [
+export def "gallery-image-versions-create-or-update" [
   subscription_id: string
   resource_group_name: string
   gallery_name: string

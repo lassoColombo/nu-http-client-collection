@@ -145,7 +145,7 @@ def auth-scheme-completer [] { ["query-api_key" "bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "conversations get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-conversations" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -169,7 +169,7 @@ export def commands []: nothing -> table {
 #
 # GET /conversations
 # operationId: get_conversations
-export def "conversations get" [
+export def "get-conversations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -210,7 +210,7 @@ export def "conversations get" [
 #
 # PUT /conversations/archive-all
 # operationId: archive_all_conversations
-export def "conversations-archive-all archive" [
+export def "archive-all-conversations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -250,7 +250,7 @@ export def "conversations-archive-all archive" [
 #
 # PUT /conversations/mark-all-read
 # operationId: mark_all_conversations_read
-export def "conversations-mark-all-read list" [
+export def "mark-all-conversations-read" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -290,7 +290,7 @@ export def "conversations-mark-all-read list" [
 #
 # GET /conversations/search
 # operationId: search_conversations
-export def "conversations-search list" [
+export def "search-conversations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -329,7 +329,7 @@ export def "conversations-search list" [
 #
 # DELETE /conversations/{conversation_id}
 # operationId: delete_conversation
-export def "conversations delete" [
+export def "delete-conversation" [
   conversation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -367,7 +367,7 @@ export def "conversations delete" [
 #
 # PUT /conversations/{conversation_id}/archive
 # operationId: archive_conversation
-export def "conversations-archive archive" [
+export def "archive-conversation" [
   conversation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -403,7 +403,7 @@ export def "conversations-archive archive" [
 #
 # PUT /conversations/{conversation_id}/block
 # operationId: block_conversation
-export def "conversations-block update" [
+export def "block-conversation" [
   conversation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -439,7 +439,7 @@ export def "conversations-block update" [
 #
 # PUT /conversations/{conversation_id}/mark-read
 # operationId: mark_conversation_read
-export def "conversations-mark-read get" [
+export def "mark-conversation-read" [
   conversation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -481,7 +481,7 @@ export def "conversations-mark-read get" [
 #
 # GET /conversations/{conversation_id}/messages
 # operationId: get_conversation_messages
-export def "conversations-messages get" [
+export def "get-conversation-messages" [
   conversation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -522,7 +522,7 @@ export def "conversations-messages get" [
 #
 # POST /conversations/{conversation_id}/reply
 # operationId: reply_to_conversation
-export def "conversations-reply create" [
+export def "reply-to-conversation" [
   conversation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -566,7 +566,7 @@ export def "conversations-reply create" [
 #
 # POST /conversations/{conversation_id}/report
 # operationId: report_conversation
-export def "conversations-report create" [
+export def "report-conversation" [
   conversation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -608,7 +608,7 @@ export def "conversations-report create" [
 #
 # PUT /conversations/{conversation_id}/unarchive
 # operationId: unarchive_conversation
-export def "conversations-unarchive unarchive" [
+export def "unarchive-conversation" [
   conversation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -644,7 +644,7 @@ export def "conversations-unarchive unarchive" [
 #
 # PUT /conversations/{conversation_id}/unblock
 # operationId: unblock_conversation
-export def "conversations-unblock update" [
+export def "unblock-conversation" [
   conversation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -680,7 +680,7 @@ export def "conversations-unblock update" [
 #
 # POST /feedback
 # operationId: send_feedback
-export def "feedback send" [
+export def "send-feedback" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -722,7 +722,7 @@ export def "feedback send" [
 #
 # GET /groups
 # operationId: search_groups
-export def "groups list" [
+export def "search-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -766,7 +766,7 @@ export def "groups list" [
 #
 # GET /groups/multiple
 # operationId: get_groups_by_ids
-export def "groups-multiple get" [
+export def "get-groups-by-ids" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -802,7 +802,7 @@ export def "groups-multiple get" [
 #
 # POST /groups/subscribe
 # operationId: join_groups
-export def "groups-subscribe create-join" [
+export def "join-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -842,7 +842,7 @@ export def "groups-subscribe create-join" [
 #
 # GET /groups/{group_id}
 # operationId: get_group
-export def "groups get" [
+export def "get-group" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -878,7 +878,7 @@ export def "groups get" [
 #
 # POST /groups/{group_id}/answers
 # operationId: submit_answers
-export def "groups-answers submit" [
+export def "submit-answers" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -918,7 +918,7 @@ export def "groups-answers submit" [
 #
 # POST /groups/{group_id}/contact
 # operationId: contact_moderators
-export def "groups-contact create-moderators" [
+export def "contact-moderators" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -961,7 +961,7 @@ export def "groups-contact create-moderators" [
 #
 # POST /groups/{group_id}/unsubscribe
 # operationId: leave_group
-export def "groups-unsubscribe create-leave" [
+export def "leave-group" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -997,7 +997,7 @@ export def "groups-unsubscribe create-leave" [
 #
 # POST /photos
 # operationId: upload_photo
-export def "photos upload" [
+export def "upload-photo" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1038,7 +1038,7 @@ export def "photos upload" [
 #
 # GET /photos/multiple
 # operationId: get_photos_by_ids
-export def "photos-multiple get" [
+export def "get-photos-by-ids" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1075,7 +1075,7 @@ export def "photos-multiple get" [
 #
 # DELETE /photos/{photo_id}
 # operationId: delete_photo
-export def "photos delete" [
+export def "delete-photo" [
   photo_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1111,7 +1111,7 @@ export def "photos delete" [
 #
 # POST /photos/{photo_id}/rotate
 # operationId: rotate_photo
-export def "photos-rotate create" [
+export def "rotate-photo" [
   photo_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1150,7 +1150,7 @@ export def "photos-rotate create" [
 #
 # GET /posts
 # operationId: get_posts
-export def "posts list" [
+export def "get-posts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1200,7 +1200,7 @@ export def "posts list" [
 #
 # POST /posts
 # operationId: submit_post
-export def "posts submit" [
+export def "submit-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1253,7 +1253,7 @@ export def "posts submit" [
 #
 # GET /posts/all
 # operationId: get_all_posts
-export def "posts-all get" [
+export def "get-all-posts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1294,7 +1294,7 @@ export def "posts-all get" [
 #
 # GET /posts/all/changes
 # operationId: get_all_posts_changes
-export def "posts-all-changes get" [
+export def "get-all-posts-changes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1333,7 +1333,7 @@ export def "posts-all-changes get" [
 #
 # GET /posts/multiple
 # operationId: get_posts_by_ids
-export def "posts-multiple get" [
+export def "get-posts-by-ids" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1369,7 +1369,7 @@ export def "posts-multiple get" [
 #
 # GET /posts/search
 # operationId: search_posts
-export def "posts-search list" [
+export def "search-posts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1420,7 +1420,7 @@ export def "posts-search list" [
 #
 # DELETE /posts/{post_id}
 # operationId: delete_post
-export def "posts delete" [
+export def "delete-post" [
   post_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1456,7 +1456,7 @@ export def "posts delete" [
 #
 # GET /posts/{post_id}
 # operationId: get_post
-export def "posts get" [
+export def "get-post" [
   post_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1492,7 +1492,7 @@ export def "posts get" [
 #
 # PUT /posts/{post_id}
 # operationId: update_post
-export def "posts update" [
+export def "update-post" [
   post_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1545,7 +1545,7 @@ export def "posts update" [
 #
 # DELETE /posts/{post_id}/bookmark
 # operationId: delete_bookmark
-export def "posts-bookmark delete" [
+export def "delete-bookmark" [
   post_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1581,7 +1581,7 @@ export def "posts-bookmark delete" [
 #
 # PUT /posts/{post_id}/bookmark
 # operationId: bookmark_post
-export def "posts-bookmark create" [
+export def "bookmark-post" [
   post_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1617,7 +1617,7 @@ export def "posts-bookmark create" [
 #
 # GET /posts/{post_id}/display
 # operationId: get_post_and_related_data
-export def "posts-display get-and-related-data" [
+export def "get-post-and-related-data" [
   post_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1653,7 +1653,7 @@ export def "posts-display get-and-related-data" [
 #
 # PUT /posts/{post_id}/promise
 # operationId: promise_post
-export def "posts-promise create" [
+export def "promise-post" [
   post_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1689,7 +1689,7 @@ export def "posts-promise create" [
 #
 # POST /posts/{post_id}/reply
 # operationId: reply_to_post
-export def "posts-reply create" [
+export def "reply-to-post" [
   post_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1732,7 +1732,7 @@ export def "posts-reply create" [
 #
 # POST /posts/{post_id}/report
 # operationId: report_post
-export def "posts-report create" [
+export def "report-post" [
   post_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1775,7 +1775,7 @@ export def "posts-report create" [
 #
 # PUT /posts/{post_id}/satisfy
 # operationId: satisfy_post
-export def "posts-satisfy create" [
+export def "satisfy-post" [
   post_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1811,7 +1811,7 @@ export def "posts-satisfy create" [
 #
 # POST /posts/{post_id}/share
 # operationId: share_post
-export def "posts-share create" [
+export def "share-post" [
   post_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1847,7 +1847,7 @@ export def "posts-share create" [
 #
 # PUT /posts/{post_id}/unpromise
 # operationId: unpromise_post
-export def "posts-unpromise create" [
+export def "unpromise-post" [
   post_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1883,7 +1883,7 @@ export def "posts-unpromise create" [
 #
 # PUT /posts/{post_id}/withdraw
 # operationId: withdraw_post
-export def "posts-withdraw create" [
+export def "withdraw-post" [
   post_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1919,7 +1919,7 @@ export def "posts-withdraw create" [
 #
 # GET /stories
 # operationId: get_stories
-export def "stories list" [
+export def "get-stories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1960,7 +1960,7 @@ export def "stories list" [
 #
 # POST /stories
 # operationId: submit_story
-export def "stories submit-story" [
+export def "submit-story" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2004,7 +2004,7 @@ export def "stories submit-story" [
 #
 # GET /stories/{story_id}
 # operationId: get_story
-export def "stories get" [
+export def "get-story" [
   story_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2042,7 +2042,7 @@ export def "stories get" [
 #
 # PUT /stories/{story_id}/like
 # operationId: like_story
-export def "stories-like update" [
+export def "like-story" [
   story_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2080,7 +2080,7 @@ export def "stories-like update" [
 #
 # PUT /stories/{story_id}/unlike
 # operationId: unlike_story
-export def "stories-unlike update" [
+export def "unlike-story" [
   story_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2118,7 +2118,7 @@ export def "stories-unlike update" [
 #
 # POST /stories/{story_id}/viewed
 # operationId: viewed_story
-export def "stories-viewed create" [
+export def "viewed-story" [
   story_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2154,7 +2154,7 @@ export def "stories-viewed create" [
 #
 # GET /users/me
 # operationId: get_current_user
-export def "users-me get" [
+export def "get-current-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2188,7 +2188,7 @@ export def "users-me get" [
 #
 # PUT /users/me
 # operationId: update_current_user
-export def "users-me update-get" [
+export def "update-current-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2245,7 +2245,7 @@ export def "users-me update-get" [
 #
 # GET /users/me/alerts
 # operationId: get_alerts
-export def "users-me-alerts get" [
+export def "get-alerts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2279,7 +2279,7 @@ export def "users-me-alerts get" [
 #
 # PUT /users/me/alerts
 # operationId: create_alert
-export def "users-me-alerts create" [
+export def "create-alert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2320,7 +2320,7 @@ export def "users-me-alerts create" [
 #
 # DELETE /users/me/alerts/{alert_id}
 # operationId: delete_alert
-export def "users-me-alerts delete" [
+export def "delete-alert" [
   alert_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2356,7 +2356,7 @@ export def "users-me-alerts delete" [
 #
 # POST /users/me/email
 # operationId: change_email
-export def "users-me-email create-change" [
+export def "change-email" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2396,7 +2396,7 @@ export def "users-me-email create-change" [
 #
 # PUT /users/me/email/not-bouncing
 # operationId: set_email_not_bouncing
-export def "users-me-email-not-bouncing update" [
+export def "set-email-not-bouncing" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2430,7 +2430,7 @@ export def "users-me-email-not-bouncing update" [
 #
 # GET /users/me/groups
 # operationId: get_current_user_groups
-export def "users-me-groups get" [
+export def "get-current-user-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2466,7 +2466,7 @@ export def "users-me-groups get" [
 #
 # PUT /users/me/location
 # operationId: update_location
-export def "users-me-location update" [
+export def "update-location" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2509,7 +2509,7 @@ export def "users-me-location update" [
 #
 # GET /users/me/notices
 # operationId: get_user_group_notices
-export def "users-me-notices get-group" [
+export def "get-user-group-notices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2545,7 +2545,7 @@ export def "users-me-notices get-group" [
 #
 # GET /users/me/post-locations
 # operationId: get_post_locations
-export def "users-me-post-locations get" [
+export def "get-post-locations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2579,7 +2579,7 @@ export def "users-me-post-locations get" [
 #
 # PUT /users/me/post-locations
 # operationId: save_post_location
-export def "users-me-post-locations create-save" [
+export def "save-post-location" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2621,7 +2621,7 @@ export def "users-me-post-locations create-save" [
 #
 # GET /users/me/posts
 # operationId: get_current_user_posts
-export def "users-me-posts get" [
+export def "get-current-user-posts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2671,7 +2671,7 @@ export def "users-me-posts get" [
 #
 # GET /users/me/posts/search
 # operationId: search_current_user_posts
-export def "users-me-posts-search get" [
+export def "search-current-user-posts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2722,7 +2722,7 @@ export def "users-me-posts-search get" [
 #
 # POST /users/me/profile-image
 # operationId: set_profile_image
-export def "users-me-profile-image update" [
+export def "set-profile-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2766,7 +2766,7 @@ export def "users-me-profile-image update" [
 #
 # GET /users/me/profile-images
 # operationId: get_profile_images
-export def "users-me-profile-images get" [
+export def "get-profile-images" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2800,7 +2800,7 @@ export def "users-me-profile-images get" [
 #
 # POST /users/me/resend-verification
 # operationId: resend_account_verification_email
-export def "users-me-resend-verification resend-account-email" [
+export def "resend-account-verification-email" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2834,7 +2834,7 @@ export def "users-me-resend-verification resend-account-email" [
 #
 # POST /users/me/reset-password
 # operationId: send_password_reset_email
-export def "users-me-reset-password send-email" [
+export def "send-password-reset-email" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2868,7 +2868,7 @@ export def "users-me-reset-password send-email" [
 #
 # POST /users/report
 # operationId: report_user
-export def "users-report create" [
+export def "report-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2912,7 +2912,7 @@ export def "users-report create" [
 #
 # GET /users/{user_id}
 # operationId: get_user
-export def "users get" [
+export def "get-user" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2948,7 +2948,7 @@ export def "users get" [
 #
 # GET /users/{user_id}/display
 # operationId: get_user_and_related_data
-export def "users-display get-and-related-data" [
+export def "get-user-and-related-data" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2984,7 +2984,7 @@ export def "users-display get-and-related-data" [
 #
 # DELETE /users/{user_id}/feedback
 # operationId: remove_user_feedback
-export def "users-feedback delete" [
+export def "remove-user-feedback" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3020,7 +3020,7 @@ export def "users-feedback delete" [
 #
 # POST /users/{user_id}/feedback
 # operationId: submit_user_feedback
-export def "users-feedback submit" [
+export def "submit-user-feedback" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3064,7 +3064,7 @@ export def "users-feedback submit" [
 #
 # GET /users/{user_id}/posts
 # operationId: get_user_posts
-export def "users-posts get" [
+export def "get-user-posts" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3115,7 +3115,7 @@ export def "users-posts get" [
 #
 # GET /users/{user_id}/posts/search
 # operationId: search_user_posts
-export def "users-posts-search list" [
+export def "search-user-posts" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3167,7 +3167,7 @@ export def "users-posts-search list" [
 #
 # GET /users/{user_id}/profile-image
 # operationId: get_profile_image_file
-export def "users-profile-image get-file" [
+export def "get-profile-image-file" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

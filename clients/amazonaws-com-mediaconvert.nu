@@ -127,7 +127,7 @@ def mode-completer [] { ["DEFAULT" "GET_ONLY"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "2017-08-29-certificates create-associate" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associate-certificate" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -151,7 +151,7 @@ export def commands []: nothing -> table {
 #
 # POST /2017-08-29/certificates
 # operationId: AssociateCertificate
-export def "2017-08-29-certificates create-associate" [
+export def "associate-certificate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -198,7 +198,7 @@ export def "2017-08-29-certificates create-associate" [
 #
 # DELETE /2017-08-29/jobs/{id}
 # operationId: CancelJob
-export def "2017-08-29-jobs cancel" [
+export def "cancel-job" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -243,7 +243,7 @@ export def "2017-08-29-jobs cancel" [
 #
 # GET /2017-08-29/jobs/{id}
 # operationId: GetJob
-export def "2017-08-29-jobs get" [
+export def "get-job" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -291,7 +291,7 @@ export def "2017-08-29-jobs get" [
 # --accelerationSettings shape: {Mode?: any}
 # --hopDestinations item shape: {Priority?: any, Queue?: any, WaitMinutes?: any}
 # --settings shape: {AdAvailOffset?: any, AvailBlanking?: any, Esam?: any, ExtendedDataServices?: any, Inputs?: any, KantarWatermark?: any, MotionImageInserter?: any, NielsenConfiguration?: any, NielsenNonLinearWatermark?: any, OutputGroups?: any, TimecodeConfig?: any, TimedMetadataInsertion?: any}
-export def "2017-08-29-jobs create" [
+export def "create-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -350,7 +350,7 @@ export def "2017-08-29-jobs create" [
 #
 # GET /2017-08-29/jobs
 # operationId: ListJobs
-export def "2017-08-29-jobs list" [
+export def "list-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -404,7 +404,7 @@ export def "2017-08-29-jobs list" [
 # --accelerationSettings shape: {Mode?: any}
 # --hopDestinations item shape: {Priority?: any, Queue?: any, WaitMinutes?: any}
 # --settings shape: {AdAvailOffset?: any, AvailBlanking?: any, Esam?: any, ExtendedDataServices?: any, Inputs?: any, KantarWatermark?: any, MotionImageInserter?: any, NielsenConfiguration?: any, NielsenNonLinearWatermark?: any, OutputGroups?: any, TimecodeConfig?: any, TimedMetadataInsertion?: any}
-export def "2017-08-29-job-templates create" [
+export def "create-job-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -460,7 +460,7 @@ export def "2017-08-29-job-templates create" [
 #
 # GET /2017-08-29/jobTemplates
 # operationId: ListJobTemplates
-export def "2017-08-29-job-templates list" [
+export def "list-job-templates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -512,7 +512,7 @@ export def "2017-08-29-job-templates list" [
 # POST /2017-08-29/presets
 # operationId: CreatePreset
 # --settings shape: {AudioDescriptions?: any, CaptionDescriptions?: any, ContainerSettings?: any, VideoDescription?: any}
-export def "2017-08-29-presets create" [
+export def "create-preset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -563,7 +563,7 @@ export def "2017-08-29-presets create" [
 #
 # GET /2017-08-29/presets
 # operationId: ListPresets
-export def "2017-08-29-presets list" [
+export def "list-presets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -615,7 +615,7 @@ export def "2017-08-29-presets list" [
 # POST /2017-08-29/queues
 # operationId: CreateQueue
 # --reservationPlanSettings shape: {Commitment?: any, RenewalType?: any, ReservedSlots?: any}
-export def "2017-08-29-queues create" [
+export def "create-queue" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -667,7 +667,7 @@ export def "2017-08-29-queues create" [
 #
 # GET /2017-08-29/queues
 # operationId: ListQueues
-export def "2017-08-29-queues list" [
+export def "list-queues" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -717,7 +717,7 @@ export def "2017-08-29-queues list" [
 #
 # DELETE /2017-08-29/jobTemplates/{name}
 # operationId: DeleteJobTemplate
-export def "2017-08-29-job-templates delete" [
+export def "delete-job-template" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -762,7 +762,7 @@ export def "2017-08-29-job-templates delete" [
 #
 # GET /2017-08-29/jobTemplates/{name}
 # operationId: GetJobTemplate
-export def "2017-08-29-job-templates get" [
+export def "get-job-template" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -810,7 +810,7 @@ export def "2017-08-29-job-templates get" [
 # --accelerationSettings shape: {Mode?: any}
 # --hopDestinations item shape: {Priority?: any, Queue?: any, WaitMinutes?: any}
 # --settings shape: {AdAvailOffset?: any, AvailBlanking?: any, Esam?: any, ExtendedDataServices?: any, Inputs?: any, KantarWatermark?: any, MotionImageInserter?: any, NielsenConfiguration?: any, NielsenNonLinearWatermark?: any, OutputGroups?: any, TimecodeConfig?: any, TimedMetadataInsertion?: any}
-export def "2017-08-29-job-templates update" [
+export def "update-job-template" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -866,7 +866,7 @@ export def "2017-08-29-job-templates update" [
 #
 # DELETE /2017-08-29/policy
 # operationId: DeletePolicy
-export def "2017-08-29-policy delete" [
+export def "delete-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -909,7 +909,7 @@ export def "2017-08-29-policy delete" [
 #
 # GET /2017-08-29/policy
 # operationId: GetPolicy
-export def "2017-08-29-policy get" [
+export def "get-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -953,7 +953,7 @@ export def "2017-08-29-policy get" [
 # PUT /2017-08-29/policy
 # operationId: PutPolicy
 # --policy shape: {HttpInputs?: any, HttpsInputs?: any, S3Inputs?: any}
-export def "2017-08-29-policy update" [
+export def "put-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1000,7 +1000,7 @@ export def "2017-08-29-policy update" [
 #
 # DELETE /2017-08-29/presets/{name}
 # operationId: DeletePreset
-export def "2017-08-29-presets delete" [
+export def "delete-preset" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1045,7 +1045,7 @@ export def "2017-08-29-presets delete" [
 #
 # GET /2017-08-29/presets/{name}
 # operationId: GetPreset
-export def "2017-08-29-presets get" [
+export def "get-preset" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1091,7 +1091,7 @@ export def "2017-08-29-presets get" [
 # PUT /2017-08-29/presets/{name}
 # operationId: UpdatePreset
 # --settings shape: {AudioDescriptions?: any, CaptionDescriptions?: any, ContainerSettings?: any, VideoDescription?: any}
-export def "2017-08-29-presets update" [
+export def "update-preset" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1142,7 +1142,7 @@ export def "2017-08-29-presets update" [
 #
 # DELETE /2017-08-29/queues/{name}
 # operationId: DeleteQueue
-export def "2017-08-29-queues delete" [
+export def "delete-queue" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1187,7 +1187,7 @@ export def "2017-08-29-queues delete" [
 #
 # GET /2017-08-29/queues/{name}
 # operationId: GetQueue
-export def "2017-08-29-queues get" [
+export def "get-queue" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1233,7 +1233,7 @@ export def "2017-08-29-queues get" [
 # PUT /2017-08-29/queues/{name}
 # operationId: UpdateQueue
 # --reservationPlanSettings shape: {Commitment?: any, RenewalType?: any, ReservedSlots?: any}
-export def "2017-08-29-queues update" [
+export def "update-queue" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1284,7 +1284,7 @@ export def "2017-08-29-queues update" [
 #
 # POST /2017-08-29/endpoints
 # operationId: DescribeEndpoints
-export def "2017-08-29-endpoints get" [
+export def "describe-endpoints" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1336,7 +1336,7 @@ export def "2017-08-29-endpoints get" [
 #
 # DELETE /2017-08-29/certificates/{arn}
 # operationId: DisassociateCertificate
-export def "2017-08-29-certificates delete-disassociate" [
+export def "disassociate-certificate" [
   arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1381,7 +1381,7 @@ export def "2017-08-29-certificates delete-disassociate" [
 #
 # GET /2017-08-29/tags/{arn}
 # operationId: ListTagsForResource
-export def "2017-08-29-tags list-for-resource" [
+export def "list-tags-for-resource" [
   arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1426,7 +1426,7 @@ export def "2017-08-29-tags list-for-resource" [
 #
 # PUT /2017-08-29/tags/{arn}
 # operationId: UntagResource
-export def "2017-08-29-tags untag-resource" [
+export def "untag-resource" [
   arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1475,7 +1475,7 @@ export def "2017-08-29-tags untag-resource" [
 #
 # POST /2017-08-29/tags
 # operationId: TagResource
-export def "2017-08-29-tags tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

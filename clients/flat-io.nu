@@ -138,7 +138,7 @@ def state-completer-2 [] { ["completed" "deleted" "draft"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "classes list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-classes" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -162,7 +162,7 @@ export def commands []: nothing -> table {
 #
 # GET /classes
 # operationId: listClasses
-export def "classes list" [
+export def "list-classes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -198,7 +198,7 @@ export def "classes list" [
 #
 # POST /classes
 # operationId: createClass
-export def "classes create-class" [
+export def "create-class" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -237,7 +237,7 @@ export def "classes create-class" [
 #
 # POST /classes/enroll/{enrollmentCode}
 # operationId: enrollClass
-export def "classes-enroll create-class" [
+export def "enroll-class" [
   enrollment_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -273,7 +273,7 @@ export def "classes-enroll create-class" [
 #
 # GET /classes/{class}
 # operationId: getClass
-export def "classes get" [
+export def "get-class" [
   class: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -309,7 +309,7 @@ export def "classes get" [
 #
 # PUT /classes/{class}
 # operationId: updateClass
-export def "classes update" [
+export def "update-class" [
   class: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -350,7 +350,7 @@ export def "classes update" [
 #
 # POST /classes/{class}/activate
 # operationId: activateClass
-export def "classes-activate create" [
+export def "activate-class" [
   class: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -386,7 +386,7 @@ export def "classes-activate create" [
 #
 # DELETE /classes/{class}/archive
 # operationId: unarchiveClass
-export def "classes-archive unarchive" [
+export def "unarchive-class" [
   class: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -422,7 +422,7 @@ export def "classes-archive unarchive" [
 #
 # POST /classes/{class}/archive
 # operationId: archiveClass
-export def "classes-archive archive" [
+export def "archive-class" [
   class: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -458,7 +458,7 @@ export def "classes-archive archive" [
 #
 # GET /classes/{class}/assignments
 # operationId: listAssignments
-export def "classes-assignments list" [
+export def "list-assignments" [
   class: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -497,7 +497,7 @@ export def "classes-assignments list" [
 # --attachments item shape: {googleDriveFileId?: string, lockScoreTemplate?: bool, score?: string, sharingMode?: "read"|"write"|"copy"|"performance", type?: "flat"|"link"|"googleDrive"|"worksheet", url?: string, worksheet?: string}
 # --googleClassroom shape: {topicId?: string}
 # --microsoftGraph shape: {categories?: list<string>}
-export def "classes-assignments create" [
+export def "create-assignment" [
   class: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -552,7 +552,7 @@ export def "classes-assignments create" [
 #
 # DELETE /classes/{class}/assignments/{assignment}/archive
 # operationId: unarchiveAssignment
-export def "classes-assignments-archive unarchive" [
+export def "unarchive-assignment" [
   class: string
   assignment: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -590,7 +590,7 @@ export def "classes-assignments-archive unarchive" [
 #
 # POST /classes/{class}/assignments/{assignment}/archive
 # operationId: archiveAssignment
-export def "classes-assignments-archive archive" [
+export def "archive-assignment" [
   class: string
   assignment: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -628,7 +628,7 @@ export def "classes-assignments-archive archive" [
 #
 # POST /classes/{class}/assignments/{assignment}/copy
 # operationId: copyAssignment
-export def "classes-assignments-copy copy" [
+export def "copy-assignment" [
   class: string
   assignment: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -672,7 +672,7 @@ export def "classes-assignments-copy copy" [
 #
 # GET /classes/{class}/assignments/{assignment}/submissions
 # operationId: getSubmissions
-export def "classes-assignments-submissions list" [
+export def "get-submissions" [
   class: string
   assignment: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -712,7 +712,7 @@ export def "classes-assignments-submissions list" [
 # operationId: createSubmission
 # --attachments item shape: {googleDriveFileId?: string, lockScoreTemplate?: bool, score?: string, sharingMode?: "read"|"write"|"copy"|"performance", type?: "flat"|"link"|"googleDrive"|"worksheet", url?: string, worksheet?: string}
 # --comments shape: {total?: float, unread?: float}
-export def "classes-assignments-submissions create" [
+export def "create-submission" [
   class: string
   assignment: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -759,7 +759,7 @@ export def "classes-assignments-submissions create" [
 #
 # GET /classes/{class}/assignments/{assignment}/submissions/csv
 # operationId: exportSubmissionsReviewsAsCsv
-export def "classes-assignments-submissions-csv export-reviews" [
+export def "export-submissions-reviews-as-csv" [
   class: string
   assignment: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -797,7 +797,7 @@ export def "classes-assignments-submissions-csv export-reviews" [
 #
 # GET /classes/{class}/assignments/{assignment}/submissions/excel
 # operationId: exportSubmissionsReviewsAsExcel
-export def "classes-assignments-submissions-excel export-reviews" [
+export def "export-submissions-reviews-as-excel" [
   class: string
   assignment: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -835,7 +835,7 @@ export def "classes-assignments-submissions-excel export-reviews" [
 #
 # DELETE /classes/{class}/assignments/{assignment}/submissions/{submission}
 # operationId: deleteSubmission
-export def "classes-assignments-submissions delete" [
+export def "delete-submission" [
   class: string
   assignment: string
   submission: string
@@ -875,7 +875,7 @@ export def "classes-assignments-submissions delete" [
 #
 # GET /classes/{class}/assignments/{assignment}/submissions/{submission}
 # operationId: getSubmission
-export def "classes-assignments-submissions get" [
+export def "get-submission" [
   class: string
   assignment: string
   submission: string
@@ -917,7 +917,7 @@ export def "classes-assignments-submissions get" [
 # operationId: editSubmission
 # --attachments item shape: {googleDriveFileId?: string, lockScoreTemplate?: bool, score?: string, sharingMode?: "read"|"write"|"copy"|"performance", type?: "flat"|"link"|"googleDrive"|"worksheet", url?: string, worksheet?: string}
 # --comments shape: {total?: float, unread?: float}
-export def "classes-assignments-submissions update-edit" [
+export def "edit-submission" [
   class: string
   assignment: string
   submission: string
@@ -966,7 +966,7 @@ export def "classes-assignments-submissions update-edit" [
 #
 # GET /classes/{class}/assignments/{assignment}/submissions/{submission}/comments
 # operationId: getSubmissionComments
-export def "classes-assignments-submissions-comments get" [
+export def "get-submission-comments" [
   class: string
   assignment: string
   submission: string
@@ -1006,7 +1006,7 @@ export def "classes-assignments-submissions-comments get" [
 #
 # POST /classes/{class}/assignments/{assignment}/submissions/{submission}/comments
 # operationId: postSubmissionComment
-export def "classes-assignments-submissions-comments create" [
+export def "post-submission-comment" [
   class: string
   assignment: string
   submission: string
@@ -1050,7 +1050,7 @@ export def "classes-assignments-submissions-comments create" [
 #
 # DELETE /classes/{class}/assignments/{assignment}/submissions/{submission}/comments/{comment}
 # operationId: deleteSubmissionComment
-export def "classes-assignments-submissions-comments delete" [
+export def "delete-submission-comment" [
   class: string
   assignment: string
   submission: string
@@ -1092,7 +1092,7 @@ export def "classes-assignments-submissions-comments delete" [
 #
 # PUT /classes/{class}/assignments/{assignment}/submissions/{submission}/comments/{comment}
 # operationId: updateSubmissionComment
-export def "classes-assignments-submissions-comments update" [
+export def "update-submission-comment" [
   class: string
   assignment: string
   submission: string
@@ -1138,7 +1138,7 @@ export def "classes-assignments-submissions-comments update" [
 #
 # GET /classes/{class}/assignments/{assignment}/submissions/{submission}/history
 # operationId: getSubmissionHistory
-export def "classes-assignments-submissions-history get" [
+export def "get-submission-history" [
   class: string
   assignment: string
   submission: string
@@ -1178,7 +1178,7 @@ export def "classes-assignments-submissions-history get" [
 #
 # GET /classes/{class}/students/{user}/submissions
 # operationId: listClassStudentSubmissions
-export def "classes-students-submissions list" [
+export def "list-class-student-submissions" [
   class: string
   user: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1216,7 +1216,7 @@ export def "classes-students-submissions list" [
 #
 # DELETE /classes/{class}/users/{user}
 # operationId: deleteClassUser
-export def "classes-users delete" [
+export def "delete-class-user" [
   class: string
   user: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1254,7 +1254,7 @@ export def "classes-users delete" [
 #
 # PUT /classes/{class}/users/{user}
 # operationId: addClassUser
-export def "classes-users create" [
+export def "add-class-user" [
   class: string
   user: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1292,7 +1292,7 @@ export def "classes-users create" [
 #
 # GET /collections
 # operationId: listCollections
-export def "collections list" [
+export def "list-collections" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1333,7 +1333,7 @@ export def "collections list" [
 #
 # POST /collections
 # operationId: createCollection
-export def "collections create" [
+export def "create-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1372,7 +1372,7 @@ export def "collections create" [
 #
 # DELETE /collections/{collection}
 # operationId: deleteCollection
-export def "collections delete" [
+export def "delete-collection" [
   collection: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1408,7 +1408,7 @@ export def "collections delete" [
 #
 # GET /collections/{collection}
 # operationId: getCollection
-export def "collections get" [
+export def "get-collection" [
   collection: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1446,7 +1446,7 @@ export def "collections get" [
 #
 # PUT /collections/{collection}
 # operationId: editCollection
-export def "collections update-edit" [
+export def "edit-collection" [
   collection: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1487,7 +1487,7 @@ export def "collections update-edit" [
 #
 # GET /collections/{collection}/scores
 # operationId: listCollectionScores
-export def "collections-scores list" [
+export def "list-collection-scores" [
   collection: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1530,7 +1530,7 @@ export def "collections-scores list" [
 #
 # DELETE /collections/{collection}/scores/{score}
 # operationId: deleteScoreFromCollection
-export def "collections-scores delete" [
+export def "delete-score-from-collection" [
   collection: string
   score: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1570,7 +1570,7 @@ export def "collections-scores delete" [
 #
 # PUT /collections/{collection}/scores/{score}
 # operationId: addScoreToCollection
-export def "collections-scores create" [
+export def "add-score-to-collection" [
   collection: string
   score: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1610,7 +1610,7 @@ export def "collections-scores create" [
 #
 # POST /collections/{collection}/untrash
 # operationId: untrashCollection
-export def "collections-untrash create" [
+export def "untrash-collection" [
   collection: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1646,7 +1646,7 @@ export def "collections-untrash create" [
 #
 # GET /groups/{group}
 # operationId: getGroupDetails
-export def "groups get-details" [
+export def "get-group-details" [
   group: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1682,7 +1682,7 @@ export def "groups get-details" [
 #
 # GET /groups/{group}/scores
 # operationId: getGroupScores
-export def "groups-scores get" [
+export def "get-group-scores" [
   group: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1720,7 +1720,7 @@ export def "groups-scores get" [
 #
 # GET /groups/{group}/users
 # operationId: listGroupUsers
-export def "groups-users list" [
+export def "list-group-users" [
   group: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1758,7 +1758,7 @@ export def "groups-users list" [
 #
 # GET /me
 # operationId: getAuthenticatedUser
-export def "me get-authenticated-user" [
+export def "get-authenticated-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1794,7 +1794,7 @@ export def "me get-authenticated-user" [
 #
 # GET /organizations/invitations
 # operationId: listOrganizationInvitations
-export def "organizations-invitations list" [
+export def "list-organization-invitations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1833,7 +1833,7 @@ export def "organizations-invitations list" [
 #
 # POST /organizations/invitations
 # operationId: createOrganizationInvitation
-export def "organizations-invitations create" [
+export def "create-organization-invitation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1872,7 +1872,7 @@ export def "organizations-invitations create" [
 #
 # DELETE /organizations/invitations/{invitation}
 # operationId: removeOrganizationInvitation
-export def "organizations-invitations delete" [
+export def "remove-organization-invitation" [
   invitation: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1908,7 +1908,7 @@ export def "organizations-invitations delete" [
 #
 # GET /organizations/lti/credentials
 # operationId: listLtiCredentials
-export def "organizations-lti-credentials list" [
+export def "list-lti-credentials" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1942,7 +1942,7 @@ export def "organizations-lti-credentials list" [
 #
 # POST /organizations/lti/credentials
 # operationId: createLtiCredentials
-export def "organizations-lti-credentials create" [
+export def "create-lti-credentials" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1981,7 +1981,7 @@ export def "organizations-lti-credentials create" [
 #
 # DELETE /organizations/lti/credentials/{credentials}
 # operationId: revokeLtiCredentials
-export def "organizations-lti-credentials delete" [
+export def "revoke-lti-credentials" [
   credentials: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2017,7 +2017,7 @@ export def "organizations-lti-credentials delete" [
 #
 # GET /organizations/users
 # operationId: listOrganizationUsers
-export def "organizations-users list" [
+export def "list-organization-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2063,7 +2063,7 @@ export def "organizations-users list" [
 #
 # POST /organizations/users
 # operationId: createOrganizationUser
-export def "organizations-users create" [
+export def "create-organization-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2106,7 +2106,7 @@ export def "organizations-users create" [
 #
 # GET /organizations/users/count
 # operationId: countOrgaUsers
-export def "organizations-users-count get-orga" [
+export def "count-orga-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2145,7 +2145,7 @@ export def "organizations-users-count get-orga" [
 #
 # DELETE /organizations/users/{user}
 # operationId: removeOrganizationUser
-export def "organizations-users delete" [
+export def "remove-organization-user" [
   user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2183,7 +2183,7 @@ export def "organizations-users delete" [
 #
 # PUT /organizations/users/{user}
 # operationId: updateOrganizationUser
-export def "organizations-users update" [
+export def "update-organization-user" [
   user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2229,7 +2229,7 @@ export def "organizations-users update" [
 # POST /scores
 # operationId: createScore
 # --source shape: {googleDrive?: string}
-export def "scores create" [
+export def "create-score" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2274,7 +2274,7 @@ export def "scores create" [
 #
 # DELETE /scores/{score}
 # operationId: deleteScore
-export def "scores delete" [
+export def "delete-score" [
   score: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2312,7 +2312,7 @@ export def "scores delete" [
 #
 # GET /scores/{score}
 # operationId: getScore
-export def "scores get" [
+export def "get-score" [
   score: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2350,7 +2350,7 @@ export def "scores get" [
 #
 # PUT /scores/{score}
 # operationId: editScore
-export def "scores update-edit" [
+export def "edit-score" [
   score: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2401,7 +2401,7 @@ export def "scores update-edit" [
 #
 # GET /scores/{score}/collaborators
 # operationId: getScoreCollaborators
-export def "scores-collaborators list" [
+export def "get-score-collaborators" [
   score: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2439,7 +2439,7 @@ export def "scores-collaborators list" [
 #
 # POST /scores/{score}/collaborators
 # operationId: addScoreCollaborator
-export def "scores-collaborators create" [
+export def "add-score-collaborator" [
   score: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2485,7 +2485,7 @@ export def "scores-collaborators create" [
 #
 # DELETE /scores/{score}/collaborators/{collaborator}
 # operationId: removeScoreCollaborator
-export def "scores-collaborators delete" [
+export def "remove-score-collaborator" [
   score: string
   collaborator: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2523,7 +2523,7 @@ export def "scores-collaborators delete" [
 #
 # GET /scores/{score}/collaborators/{collaborator}
 # operationId: getScoreCollaborator
-export def "scores-collaborators get" [
+export def "get-score-collaborator" [
   score: string
   collaborator: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2563,7 +2563,7 @@ export def "scores-collaborators get" [
 #
 # GET /scores/{score}/comments
 # operationId: getScoreComments
-export def "scores-comments get" [
+export def "get-score-comments" [
   score: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2605,7 +2605,7 @@ export def "scores-comments get" [
 # POST /scores/{score}/comments
 # operationId: postScoreComment
 # --context shape: {measureUuids: list<string>, partUuid: string, staffIdx?: float, staffUuid?: string, startDpq: float, startTimePos: float, stopDpq: float, stopTimePos: float}
-export def "scores-comments create" [
+export def "post-score-comment" [
   score: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2652,7 +2652,7 @@ export def "scores-comments create" [
 #
 # DELETE /scores/{score}/comments/{comment}
 # operationId: deleteScoreComment
-export def "scores-comments delete" [
+export def "delete-score-comment" [
   score: string
   comment: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2693,7 +2693,7 @@ export def "scores-comments delete" [
 # PUT /scores/{score}/comments/{comment}
 # operationId: updateScoreComment
 # --context shape: {measureUuids: list<string>, partUuid: string, staffIdx?: float, staffUuid?: string, startDpq: float, startTimePos: float, stopDpq: float, stopTimePos: float}
-export def "scores-comments update" [
+export def "update-score-comment" [
   score: string
   comment: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2740,7 +2740,7 @@ export def "scores-comments update" [
 #
 # DELETE /scores/{score}/comments/{comment}/resolved
 # operationId: markScoreCommentUnresolved
-export def "scores-comments-resolved delete-mark-unresolved" [
+export def "mark-score-comment-unresolved" [
   score: string
   comment: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2780,7 +2780,7 @@ export def "scores-comments-resolved delete-mark-unresolved" [
 #
 # PUT /scores/{score}/comments/{comment}/resolved
 # operationId: markScoreCommentResolved
-export def "scores-comments-resolved update-mark" [
+export def "mark-score-comment-resolved" [
   score: string
   comment: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2820,7 +2820,7 @@ export def "scores-comments-resolved update-mark" [
 #
 # POST /scores/{score}/fork
 # operationId: forkScore
-export def "scores-fork create" [
+export def "fork-score" [
   score: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2862,7 +2862,7 @@ export def "scores-fork create" [
 #
 # GET /scores/{score}/revisions
 # operationId: getScoreRevisions
-export def "scores-revisions list" [
+export def "get-score-revisions" [
   score: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2900,7 +2900,7 @@ export def "scores-revisions list" [
 #
 # POST /scores/{score}/revisions
 # operationId: createScoreRevision
-export def "scores-revisions create" [
+export def "create-score-revision" [
   score: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2943,7 +2943,7 @@ export def "scores-revisions create" [
 #
 # GET /scores/{score}/revisions/{revision}
 # operationId: getScoreRevision
-export def "scores-revisions get" [
+export def "get-score-revision" [
   score: string
   revision: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2983,7 +2983,7 @@ export def "scores-revisions get" [
 #
 # GET /scores/{score}/revisions/{revision}/{format}
 # operationId: getScoreRevisionData
-export def "scores-revisions get-data" [
+export def "get-score-revision-data" [
   score: string
   revision: string
   format: string
@@ -3029,7 +3029,7 @@ export def "scores-revisions get-data" [
 #
 # GET /scores/{score}/submissions
 # operationId: getScoreSubmissions
-export def "scores-submissions get" [
+export def "get-score-submissions" [
   score: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3065,7 +3065,7 @@ export def "scores-submissions get" [
 #
 # GET /scores/{score}/tracks
 # operationId: listScoreTracks
-export def "scores-tracks list" [
+export def "list-score-tracks" [
   score: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3106,7 +3106,7 @@ export def "scores-tracks list" [
 # POST /scores/{score}/tracks
 # operationId: addScoreTrack
 # --synchronizationPoints item shape: {measureUuid?: string, time: float, type: "measure"|"end"}
-export def "scores-tracks create" [
+export def "add-score-track" [
   score: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3150,7 +3150,7 @@ export def "scores-tracks create" [
 #
 # DELETE /scores/{score}/tracks/{track}
 # operationId: deleteScoreTrack
-export def "scores-tracks delete" [
+export def "delete-score-track" [
   score: string
   track: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3188,7 +3188,7 @@ export def "scores-tracks delete" [
 #
 # GET /scores/{score}/tracks/{track}
 # operationId: getScoreTrack
-export def "scores-tracks get" [
+export def "get-score-track" [
   score: string
   track: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3229,7 +3229,7 @@ export def "scores-tracks get" [
 # PUT /scores/{score}/tracks/{track}
 # operationId: updateScoreTrack
 # --synchronizationPoints item shape: {measureUuid?: string, time: float, type: "measure"|"end"}
-export def "scores-tracks update" [
+export def "update-score-track" [
   score: string
   track: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3274,7 +3274,7 @@ export def "scores-tracks update" [
 #
 # POST /scores/{score}/untrash
 # operationId: untrashScore
-export def "scores-untrash create" [
+export def "untrash-score" [
   score: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3310,7 +3310,7 @@ export def "scores-untrash create" [
 #
 # GET /users/{user}
 # operationId: getUser
-export def "users get" [
+export def "get-user" [
   user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3346,7 +3346,7 @@ export def "users get" [
 #
 # GET /users/{user}/likes
 # operationId: gerUserLikes
-export def "users-likes get-ger" [
+export def "ger-user-likes" [
   user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3384,7 +3384,7 @@ export def "users-likes get-ger" [
 #
 # GET /users/{user}/scores
 # operationId: getUserScores
-export def "users-scores get" [
+export def "get-user-scores" [
   user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

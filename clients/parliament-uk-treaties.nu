@@ -102,7 +102,7 @@ def house-completer [] { ["Commons" "Lords"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "business-item get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-business-item-by-id" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -126,7 +126,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/BusinessItem/{id}
 # operationId: GetBusinessItemById
-export def "business-item get" [
+export def "get-business-item-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -163,7 +163,7 @@ export def "business-item get" [
 #
 # GET /api/GovernmentOrganisation
 # operationId: GetOrganisations
-export def "government-organisation get" [
+export def "get-organisations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -198,7 +198,7 @@ export def "government-organisation get" [
 #
 # GET /api/SeriesMembership
 # operationId: GetSeriesMemberships
-export def "series-membership get" [
+export def "get-series-memberships" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -233,7 +233,7 @@ export def "series-membership get" [
 #
 # GET /api/Treaty
 # operationId: GetTreaties
-export def "treaty get-treaties" [
+export def "get-treaties" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -279,7 +279,7 @@ export def "treaty get-treaties" [
 #
 # GET /api/Treaty/{id}
 # operationId: GetTreatyById
-export def "treaty get" [
+export def "get-treaty-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -316,7 +316,7 @@ export def "treaty get" [
 #
 # GET /api/Treaty/{id}/BusinessItems
 # operationId: GetBusinessItemsByTreatyId
-export def "treaty-business-items get" [
+export def "get-business-items-by-treaty-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

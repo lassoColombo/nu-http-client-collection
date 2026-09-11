@@ -110,7 +110,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-jobs list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "job-list-by-automation-account" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -135,7 +135,7 @@ export def commands []: nothing -> table {
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/jobs
 # Docs: http://aka.ms/azureautomationsdk/joboperations
 # operationId: Job_ListByAutomationAccount
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-jobs list" [
+export def "job-list-by-automation-account" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -182,7 +182,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/jobs/{jobName}
 # Docs: http://aka.ms/azureautomationsdk/joboperations
 # operationId: Job_Get
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-jobs get" [
+export def "job-get" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -231,7 +231,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # Docs: http://aka.ms/azureautomationsdk/joboperations
 # operationId: Job_Create
 # --properties shape: {parameters?: record, runOn?: string, runbook?: any}
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-jobs create" [
+export def "job-create" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -283,7 +283,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/jobs/{jobName}/output
 # Docs: http://aka.ms/azureautomationsdk/joboperations
 # operationId: Job_GetOutput
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-jobs-output get" [
+export def "job-get-output" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -331,7 +331,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/jobs/{jobName}/resume
 # Docs: http://aka.ms/azureautomationsdk/joboperations
 # operationId: Job_Resume
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-jobs-resume create" [
+export def "job-resume" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -379,7 +379,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/jobs/{jobName}/runbookContent
 # Docs: http://aka.ms/azureautomationsdk/joboperations
 # operationId: Job_GetRunbookContent
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-jobs-runbook-content get" [
+export def "job-get-runbook-content" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -427,7 +427,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/jobs/{jobName}/stop
 # Docs: http://aka.ms/azureautomationsdk/joboperations
 # operationId: Job_Stop
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-jobs-stop stop" [
+export def "job-stop" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -475,7 +475,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/jobs/{jobName}/streams
 # Docs: http://aka.ms/azureautomationsdk/jobstreamoperations
 # operationId: JobStream_ListByJob
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-jobs-streams list" [
+export def "job-stream-list-by-job" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -524,7 +524,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/jobs/{jobName}/streams/{jobStreamId}
 # Docs: http://aka.ms/azureautomationsdk/jobstreamoperations
 # operationId: JobStream_Get
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-jobs-streams get" [
+export def "job-stream-get" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -574,7 +574,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/jobs/{jobName}/suspend
 # Docs: http://aka.ms/azureautomationsdk/joboperations
 # operationId: Job_Suspend
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-jobs-suspend create" [
+export def "job-suspend" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string

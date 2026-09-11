@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-insights-activity-log-alerts list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "activity-log-alerts-list-by-subscription-id" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/microsoft.insights/activityLogAlerts
 # operationId: ActivityLogAlerts_ListBySubscriptionId
-export def "subscriptions-providers-microsoft-insights-activity-log-alerts list" [
+export def "activity-log-alerts-list-by-subscription-id" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -178,7 +178,7 @@ export def "subscriptions-providers-microsoft-insights-activity-log-alerts list"
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/microsoft.insights/activityLogAlerts
 # operationId: ActivityLogAlerts_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-insights-activity-log-alerts list" [
+export def "activity-log-alerts-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -218,7 +218,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-activity-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/microsoft.insights/activityLogAlerts/{activityLogAlertName}
 # operationId: ActivityLogAlerts_Delete
-export def "subscriptions-resource-groups-providers-microsoft-insights-activity-log-alerts delete" [
+export def "activity-log-alerts-delete" [
   subscription_id: string
   resource_group_name: string
   activity_log_alert_name: string
@@ -260,7 +260,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-activity-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/microsoft.insights/activityLogAlerts/{activityLogAlertName}
 # operationId: ActivityLogAlerts_Get
-export def "subscriptions-resource-groups-providers-microsoft-insights-activity-log-alerts get" [
+export def "activity-log-alerts-get" [
   subscription_id: string
   resource_group_name: string
   activity_log_alert_name: string
@@ -303,7 +303,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-activity-
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/microsoft.insights/activityLogAlerts/{activityLogAlertName}
 # operationId: ActivityLogAlerts_Update
 # --properties shape: {enabled?: bool}
-export def "subscriptions-resource-groups-providers-microsoft-insights-activity-log-alerts update" [
+export def "activity-log-alerts-update" [
   subscription_id: string
   resource_group_name: string
   activity_log_alert_name: string
@@ -351,7 +351,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-activity-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/microsoft.insights/activityLogAlerts/{activityLogAlertName}
 # operationId: ActivityLogAlerts_CreateOrUpdate
 # --properties shape: {actions: any, condition: any, description?: string, enabled?: bool, scopes: list<string>}
-export def "subscriptions-resource-groups-providers-microsoft-insights-activity-log-alerts create-or-update" [
+export def "activity-log-alerts-create-or-update" [
   subscription_id: string
   resource_group_name: string
   activity_log_alert_name: string

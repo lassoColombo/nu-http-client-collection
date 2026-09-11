@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["x-api-key"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "author get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-author-name" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -121,7 +121,7 @@ export def commands []: nothing -> table {
 # Gets author details
 #
 # GET /author/{name}
-export def "author get" [
+export def "get-author-name" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -159,7 +159,7 @@ export def "author get" [
 # Search authors
 #
 # GET /authors/{query}
-export def "authors get" [
+export def "get-authors-query" [
   query: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -197,7 +197,7 @@ export def "authors get" [
 # Gets book details
 #
 # GET /book/{isbn}
-export def "book get" [
+export def "get-book-isbn" [
   isbn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -232,7 +232,7 @@ export def "book get" [
 # Search books
 #
 # GET /books/{query}
-export def "books get" [
+export def "get-books-query" [
   query: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -271,7 +271,7 @@ export def "books get" [
 # Gets publisher details
 #
 # GET /publisher/{name}
-export def "publisher get" [
+export def "get-publisher-name" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -309,7 +309,7 @@ export def "publisher get" [
 # Search publishers
 #
 # GET /publishers/{query}
-export def "publishers get" [
+export def "get-publishers-query" [
   query: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -347,7 +347,7 @@ export def "publishers get" [
 # Search all ISBNDB databases
 #
 # GET /search
-export def "search get" [
+export def "get-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -382,7 +382,7 @@ export def "search get" [
 # Gets status on the ISBNDB Database
 #
 # GET /stats
-export def "stats get" [
+export def "get-stats" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -415,7 +415,7 @@ export def "stats get" [
 # Gets subject details
 #
 # GET /subject/{name}
-export def "subject get" [
+export def "get-subject-name" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -450,7 +450,7 @@ export def "subject get" [
 # Search subjects
 #
 # GET /subjects/{query}
-export def "subjects get" [
+export def "get-subjects-query" [
   query: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

@@ -115,7 +115,7 @@ def recordtype-completer [] { ["A" "AAAA" "CAA" "CNAME" "DS" "MX" "NAPTR" "NS" "
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "2013-04-01-keysigningkey-activate create-key-signing-key" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "activate-key-signing-key" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -139,7 +139,7 @@ export def commands []: nothing -> table {
 #
 # POST /2013-04-01/keysigningkey/{HostedZoneId}/{Name}/activate
 # operationId: ActivateKeySigningKey
-export def "2013-04-01-keysigningkey-activate create-key-signing-key" [
+export def "activate-key-signing-key" [
   hosted_zone_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -186,7 +186,7 @@ export def "2013-04-01-keysigningkey-activate create-key-signing-key" [
 #
 # POST /2013-04-01/hostedzone/{Id}/associatevpc
 # operationId: AssociateVPCWithHostedZone
-export def "2013-04-01-hostedzone-associatevpc create-associate-vpc-with-hosted-zone" [
+export def "associate-vpc-with-hosted-zone" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -235,7 +235,7 @@ export def "2013-04-01-hostedzone-associatevpc create-associate-vpc-with-hosted-
 #
 # POST /2013-04-01/cidrcollection/{CidrCollectionId}
 # operationId: ChangeCidrCollection
-export def "2013-04-01-cidrcollection create-change-cidr-collection" [
+export def "change-cidr-collection" [
   cidr_collection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -284,7 +284,7 @@ export def "2013-04-01-cidrcollection create-change-cidr-collection" [
 #
 # DELETE /2013-04-01/cidrcollection/{CidrCollectionId}
 # operationId: DeleteCidrCollection
-export def "2013-04-01-cidrcollection delete-cidr-collection" [
+export def "delete-cidr-collection" [
   cidr_collection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -329,7 +329,7 @@ export def "2013-04-01-cidrcollection delete-cidr-collection" [
 #
 # GET /2013-04-01/cidrcollection/{CidrCollectionId}
 # operationId: ListCidrLocations
-export def "2013-04-01-cidrcollection list-cidr-locations" [
+export def "list-cidr-locations" [
   cidr_collection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -379,7 +379,7 @@ export def "2013-04-01-cidrcollection list-cidr-locations" [
 #
 # POST /2013-04-01/hostedzone/{Id}/rrset/
 # operationId: ChangeResourceRecordSets
-export def "2013-04-01-hostedzone-rrset create-change-resource-record-sets" [
+export def "change-resource-record-sets" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -428,7 +428,7 @@ export def "2013-04-01-hostedzone-rrset create-change-resource-record-sets" [
 #
 # POST /2013-04-01/tags/{ResourceType}/{ResourceId}
 # operationId: ChangeTagsForResource
-export def "2013-04-01-tags create-change-for-resource" [
+export def "change-tags-for-resource" [
   resource_type: string
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -479,7 +479,7 @@ export def "2013-04-01-tags create-change-for-resource" [
 #
 # GET /2013-04-01/tags/{ResourceType}/{ResourceId}
 # operationId: ListTagsForResource
-export def "2013-04-01-tags list-for-resource" [
+export def "list-tags-for-resource" [
   resource_type: string
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -526,7 +526,7 @@ export def "2013-04-01-tags list-for-resource" [
 #
 # POST /2013-04-01/cidrcollection
 # operationId: CreateCidrCollection
-export def "2013-04-01-cidrcollection create-cidr-collection" [
+export def "create-cidr-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -573,7 +573,7 @@ export def "2013-04-01-cidrcollection create-cidr-collection" [
 #
 # GET /2013-04-01/cidrcollection
 # operationId: ListCidrCollections
-export def "2013-04-01-cidrcollection list-cidr-collections" [
+export def "list-cidr-collections" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -621,7 +621,7 @@ export def "2013-04-01-cidrcollection list-cidr-collections" [
 #
 # POST /2013-04-01/healthcheck
 # operationId: CreateHealthCheck
-export def "2013-04-01-healthcheck create-health-check" [
+export def "create-health-check" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -668,7 +668,7 @@ export def "2013-04-01-healthcheck create-health-check" [
 #
 # GET /2013-04-01/healthcheck
 # operationId: ListHealthChecks
-export def "2013-04-01-healthcheck list-health-checks" [
+export def "list-health-checks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -716,7 +716,7 @@ export def "2013-04-01-healthcheck list-health-checks" [
 #
 # POST /2013-04-01/hostedzone
 # operationId: CreateHostedZone
-export def "2013-04-01-hostedzone create-hosted-zone" [
+export def "create-hosted-zone" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -763,7 +763,7 @@ export def "2013-04-01-hostedzone create-hosted-zone" [
 #
 # GET /2013-04-01/hostedzone
 # operationId: ListHostedZones
-export def "2013-04-01-hostedzone list-hosted-zones" [
+export def "list-hosted-zones" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -812,7 +812,7 @@ export def "2013-04-01-hostedzone list-hosted-zones" [
 #
 # POST /2013-04-01/keysigningkey
 # operationId: CreateKeySigningKey
-export def "2013-04-01-keysigningkey create-key-signing-key" [
+export def "create-key-signing-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -859,7 +859,7 @@ export def "2013-04-01-keysigningkey create-key-signing-key" [
 #
 # POST /2013-04-01/queryloggingconfig
 # operationId: CreateQueryLoggingConfig
-export def "2013-04-01-queryloggingconfig create-list-logging-config" [
+export def "create-query-logging-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -906,7 +906,7 @@ export def "2013-04-01-queryloggingconfig create-list-logging-config" [
 #
 # GET /2013-04-01/queryloggingconfig
 # operationId: ListQueryLoggingConfigs
-export def "2013-04-01-queryloggingconfig list-logging-configs" [
+export def "list-query-logging-configs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -955,7 +955,7 @@ export def "2013-04-01-queryloggingconfig list-logging-configs" [
 #
 # POST /2013-04-01/delegationset
 # operationId: CreateReusableDelegationSet
-export def "2013-04-01-delegationset create-reusable-delegation-update" [
+export def "create-reusable-delegation-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1002,7 +1002,7 @@ export def "2013-04-01-delegationset create-reusable-delegation-update" [
 #
 # GET /2013-04-01/delegationset
 # operationId: ListReusableDelegationSets
-export def "2013-04-01-delegationset list-reusable-delegation-sets" [
+export def "list-reusable-delegation-sets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1048,7 +1048,7 @@ export def "2013-04-01-delegationset list-reusable-delegation-sets" [
 #
 # POST /2013-04-01/trafficpolicy
 # operationId: CreateTrafficPolicy
-export def "2013-04-01-trafficpolicy create-traffic-policy" [
+export def "create-traffic-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1095,7 +1095,7 @@ export def "2013-04-01-trafficpolicy create-traffic-policy" [
 #
 # POST /2013-04-01/trafficpolicyinstance
 # operationId: CreateTrafficPolicyInstance
-export def "2013-04-01-trafficpolicyinstance create-traffic-policy-instance" [
+export def "create-traffic-policy-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1142,7 +1142,7 @@ export def "2013-04-01-trafficpolicyinstance create-traffic-policy-instance" [
 #
 # POST /2013-04-01/trafficpolicy/{Id}
 # operationId: CreateTrafficPolicyVersion
-export def "2013-04-01-trafficpolicy create-traffic-policy-version" [
+export def "create-traffic-policy-version" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1191,7 +1191,7 @@ export def "2013-04-01-trafficpolicy create-traffic-policy-version" [
 #
 # POST /2013-04-01/hostedzone/{Id}/authorizevpcassociation
 # operationId: CreateVPCAssociationAuthorization
-export def "2013-04-01-hostedzone-authorizevpcassociation create-vpc-association-authorization" [
+export def "create-vpc-association-authorization" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1240,7 +1240,7 @@ export def "2013-04-01-hostedzone-authorizevpcassociation create-vpc-association
 #
 # GET /2013-04-01/hostedzone/{Id}/authorizevpcassociation
 # operationId: ListVPCAssociationAuthorizations
-export def "2013-04-01-hostedzone-authorizevpcassociation list-vpc-association-authorizations" [
+export def "list-vpc-association-authorizations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1288,7 +1288,7 @@ export def "2013-04-01-hostedzone-authorizevpcassociation list-vpc-association-a
 #
 # POST /2013-04-01/keysigningkey/{HostedZoneId}/{Name}/deactivate
 # operationId: DeactivateKeySigningKey
-export def "2013-04-01-keysigningkey-deactivate create-key-signing-key" [
+export def "deactivate-key-signing-key" [
   hosted_zone_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1335,7 +1335,7 @@ export def "2013-04-01-keysigningkey-deactivate create-key-signing-key" [
 #
 # DELETE /2013-04-01/healthcheck/{HealthCheckId}
 # operationId: DeleteHealthCheck
-export def "2013-04-01-healthcheck delete-health-check" [
+export def "delete-health-check" [
   health_check_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1380,7 +1380,7 @@ export def "2013-04-01-healthcheck delete-health-check" [
 #
 # GET /2013-04-01/healthcheck/{HealthCheckId}
 # operationId: GetHealthCheck
-export def "2013-04-01-healthcheck get-health-check" [
+export def "get-health-check" [
   health_check_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1425,7 +1425,7 @@ export def "2013-04-01-healthcheck get-health-check" [
 #
 # POST /2013-04-01/healthcheck/{HealthCheckId}
 # operationId: UpdateHealthCheck
-export def "2013-04-01-healthcheck update-health-check" [
+export def "update-health-check" [
   health_check_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1474,7 +1474,7 @@ export def "2013-04-01-healthcheck update-health-check" [
 #
 # DELETE /2013-04-01/hostedzone/{Id}
 # operationId: DeleteHostedZone
-export def "2013-04-01-hostedzone delete-hosted-zone" [
+export def "delete-hosted-zone" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1519,7 +1519,7 @@ export def "2013-04-01-hostedzone delete-hosted-zone" [
 #
 # GET /2013-04-01/hostedzone/{Id}
 # operationId: GetHostedZone
-export def "2013-04-01-hostedzone get-hosted-zone" [
+export def "get-hosted-zone" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1564,7 +1564,7 @@ export def "2013-04-01-hostedzone get-hosted-zone" [
 #
 # POST /2013-04-01/hostedzone/{Id}
 # operationId: UpdateHostedZoneComment
-export def "2013-04-01-hostedzone update-hosted-zone-comment" [
+export def "update-hosted-zone-comment" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1613,7 +1613,7 @@ export def "2013-04-01-hostedzone update-hosted-zone-comment" [
 #
 # DELETE /2013-04-01/keysigningkey/{HostedZoneId}/{Name}
 # operationId: DeleteKeySigningKey
-export def "2013-04-01-keysigningkey delete-key-signing-key" [
+export def "delete-key-signing-key" [
   hosted_zone_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1660,7 +1660,7 @@ export def "2013-04-01-keysigningkey delete-key-signing-key" [
 #
 # DELETE /2013-04-01/queryloggingconfig/{Id}
 # operationId: DeleteQueryLoggingConfig
-export def "2013-04-01-queryloggingconfig delete-list-logging-config" [
+export def "delete-query-logging-config" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1705,7 +1705,7 @@ export def "2013-04-01-queryloggingconfig delete-list-logging-config" [
 #
 # GET /2013-04-01/queryloggingconfig/{Id}
 # operationId: GetQueryLoggingConfig
-export def "2013-04-01-queryloggingconfig get-list-logging-config" [
+export def "get-query-logging-config" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1750,7 +1750,7 @@ export def "2013-04-01-queryloggingconfig get-list-logging-config" [
 #
 # DELETE /2013-04-01/delegationset/{Id}
 # operationId: DeleteReusableDelegationSet
-export def "2013-04-01-delegationset delete-reusable-delegation-update" [
+export def "delete-reusable-delegation-set" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1795,7 +1795,7 @@ export def "2013-04-01-delegationset delete-reusable-delegation-update" [
 #
 # GET /2013-04-01/delegationset/{Id}
 # operationId: GetReusableDelegationSet
-export def "2013-04-01-delegationset get-reusable-delegation-update" [
+export def "get-reusable-delegation-set" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1840,7 +1840,7 @@ export def "2013-04-01-delegationset get-reusable-delegation-update" [
 #
 # DELETE /2013-04-01/trafficpolicy/{Id}/{Version}
 # operationId: DeleteTrafficPolicy
-export def "2013-04-01-trafficpolicy delete-traffic-policy" [
+export def "delete-traffic-policy" [
   id: string
   version: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1887,7 +1887,7 @@ export def "2013-04-01-trafficpolicy delete-traffic-policy" [
 #
 # GET /2013-04-01/trafficpolicy/{Id}/{Version}
 # operationId: GetTrafficPolicy
-export def "2013-04-01-trafficpolicy get-traffic-policy" [
+export def "get-traffic-policy" [
   id: string
   version: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1934,7 +1934,7 @@ export def "2013-04-01-trafficpolicy get-traffic-policy" [
 #
 # POST /2013-04-01/trafficpolicy/{Id}/{Version}
 # operationId: UpdateTrafficPolicyComment
-export def "2013-04-01-trafficpolicy update-traffic-policy-comment" [
+export def "update-traffic-policy-comment" [
   id: string
   version: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1985,7 +1985,7 @@ export def "2013-04-01-trafficpolicy update-traffic-policy-comment" [
 #
 # DELETE /2013-04-01/trafficpolicyinstance/{Id}
 # operationId: DeleteTrafficPolicyInstance
-export def "2013-04-01-trafficpolicyinstance delete-traffic-policy-instance" [
+export def "delete-traffic-policy-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2030,7 +2030,7 @@ export def "2013-04-01-trafficpolicyinstance delete-traffic-policy-instance" [
 #
 # GET /2013-04-01/trafficpolicyinstance/{Id}
 # operationId: GetTrafficPolicyInstance
-export def "2013-04-01-trafficpolicyinstance get-traffic-policy-instance" [
+export def "get-traffic-policy-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2075,7 +2075,7 @@ export def "2013-04-01-trafficpolicyinstance get-traffic-policy-instance" [
 #
 # POST /2013-04-01/trafficpolicyinstance/{Id}
 # operationId: UpdateTrafficPolicyInstance
-export def "2013-04-01-trafficpolicyinstance update-traffic-policy-instance" [
+export def "update-traffic-policy-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2124,7 +2124,7 @@ export def "2013-04-01-trafficpolicyinstance update-traffic-policy-instance" [
 #
 # POST /2013-04-01/hostedzone/{Id}/deauthorizevpcassociation
 # operationId: DeleteVPCAssociationAuthorization
-export def "2013-04-01-hostedzone-deauthorizevpcassociation delete-vpc-association-authorization" [
+export def "delete-vpc-association-authorization" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2173,7 +2173,7 @@ export def "2013-04-01-hostedzone-deauthorizevpcassociation delete-vpc-associati
 #
 # POST /2013-04-01/hostedzone/{Id}/disable-dnssec
 # operationId: DisableHostedZoneDNSSEC
-export def "2013-04-01-hostedzone-disable-dnssec disable-hosted-zone" [
+export def "disable-hosted-zone-dnssec" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2218,7 +2218,7 @@ export def "2013-04-01-hostedzone-disable-dnssec disable-hosted-zone" [
 #
 # POST /2013-04-01/hostedzone/{Id}/disassociatevpc
 # operationId: DisassociateVPCFromHostedZone
-export def "2013-04-01-hostedzone-disassociatevpc create-disassociate-vpc-from-hosted-zone" [
+export def "disassociate-vpc-from-hosted-zone" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2267,7 +2267,7 @@ export def "2013-04-01-hostedzone-disassociatevpc create-disassociate-vpc-from-h
 #
 # POST /2013-04-01/hostedzone/{Id}/enable-dnssec
 # operationId: EnableHostedZoneDNSSEC
-export def "2013-04-01-hostedzone-enable-dnssec enable-hosted-zone" [
+export def "enable-hosted-zone-dnssec" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2312,7 +2312,7 @@ export def "2013-04-01-hostedzone-enable-dnssec enable-hosted-zone" [
 #
 # GET /2013-04-01/accountlimit/{Type}
 # operationId: GetAccountLimit
-export def "2013-04-01-accountlimit get-account-limit" [
+export def "get-account-limit" [
   type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2357,7 +2357,7 @@ export def "2013-04-01-accountlimit get-account-limit" [
 #
 # GET /2013-04-01/change/{Id}
 # operationId: GetChange
-export def "2013-04-01-change get" [
+export def "get-change" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2402,7 +2402,7 @@ export def "2013-04-01-change get" [
 #
 # GET /2013-04-01/checkeripranges
 # operationId: GetCheckerIpRanges
-export def "2013-04-01-checkeripranges get-checker-ip-ranges" [
+export def "get-checker-ip-ranges" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2445,7 +2445,7 @@ export def "2013-04-01-checkeripranges get-checker-ip-ranges" [
 #
 # GET /2013-04-01/hostedzone/{Id}/dnssec
 # operationId: GetDNSSEC
-export def "2013-04-01-hostedzone-dnssec get" [
+export def "get-dnssec" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2490,7 +2490,7 @@ export def "2013-04-01-hostedzone-dnssec get" [
 #
 # GET /2013-04-01/geolocation
 # operationId: GetGeoLocation
-export def "2013-04-01-geolocation get-geo-location" [
+export def "get-geo-location" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2537,7 +2537,7 @@ export def "2013-04-01-geolocation get-geo-location" [
 #
 # GET /2013-04-01/healthcheckcount
 # operationId: GetHealthCheckCount
-export def "2013-04-01-healthcheckcount get-health-check-count" [
+export def "get-health-check-count" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2580,7 +2580,7 @@ export def "2013-04-01-healthcheckcount get-health-check-count" [
 #
 # GET /2013-04-01/healthcheck/{HealthCheckId}/lastfailurereason
 # operationId: GetHealthCheckLastFailureReason
-export def "2013-04-01-healthcheck-lastfailurereason get-health-check-last-failure-reason" [
+export def "get-health-check-last-failure-reason" [
   health_check_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2625,7 +2625,7 @@ export def "2013-04-01-healthcheck-lastfailurereason get-health-check-last-failu
 #
 # GET /2013-04-01/healthcheck/{HealthCheckId}/status
 # operationId: GetHealthCheckStatus
-export def "2013-04-01-healthcheck-status get-health-check" [
+export def "get-health-check-status" [
   health_check_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2670,7 +2670,7 @@ export def "2013-04-01-healthcheck-status get-health-check" [
 #
 # GET /2013-04-01/hostedzonecount
 # operationId: GetHostedZoneCount
-export def "2013-04-01-hostedzonecount get-hosted-zone-count" [
+export def "get-hosted-zone-count" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2713,7 +2713,7 @@ export def "2013-04-01-hostedzonecount get-hosted-zone-count" [
 #
 # GET /2013-04-01/hostedzonelimit/{Id}/{Type}
 # operationId: GetHostedZoneLimit
-export def "2013-04-01-hostedzonelimit get-hosted-zone-limit" [
+export def "get-hosted-zone-limit" [
   id: string
   type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2760,7 +2760,7 @@ export def "2013-04-01-hostedzonelimit get-hosted-zone-limit" [
 #
 # GET /2013-04-01/reusabledelegationsetlimit/{Id}/{Type}
 # operationId: GetReusableDelegationSetLimit
-export def "2013-04-01-reusabledelegationsetlimit get-reusable-delegation-update-limit" [
+export def "get-reusable-delegation-set-limit" [
   id: string
   type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2807,7 +2807,7 @@ export def "2013-04-01-reusabledelegationsetlimit get-reusable-delegation-update
 #
 # GET /2013-04-01/trafficpolicyinstancecount
 # operationId: GetTrafficPolicyInstanceCount
-export def "2013-04-01-trafficpolicyinstancecount get-traffic-policy-instance-count" [
+export def "get-traffic-policy-instance-count" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2850,7 +2850,7 @@ export def "2013-04-01-trafficpolicyinstancecount get-traffic-policy-instance-co
 #
 # GET /2013-04-01/cidrcollection/{CidrCollectionId}/cidrblocks
 # operationId: ListCidrBlocks
-export def "2013-04-01-cidrcollection-cidrblocks list-cidr-blocks" [
+export def "list-cidr-blocks" [
   cidr_collection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2901,7 +2901,7 @@ export def "2013-04-01-cidrcollection-cidrblocks list-cidr-blocks" [
 #
 # GET /2013-04-01/geolocations
 # operationId: ListGeoLocations
-export def "2013-04-01-geolocations list-geo-locations" [
+export def "list-geo-locations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2949,7 +2949,7 @@ export def "2013-04-01-geolocations list-geo-locations" [
 #
 # GET /2013-04-01/hostedzonesbyname
 # operationId: ListHostedZonesByName
-export def "2013-04-01-hostedzonesbyname list-hosted-zones-by-name" [
+export def "list-hosted-zones-by-name" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2996,7 +2996,7 @@ export def "2013-04-01-hostedzonesbyname list-hosted-zones-by-name" [
 #
 # GET /2013-04-01/hostedzonesbyvpc
 # operationId: ListHostedZonesByVPC
-export def "2013-04-01-hostedzonesbyvpc list-hosted-zones-by-vpc" [
+export def "list-hosted-zones-by-vpc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3044,7 +3044,7 @@ export def "2013-04-01-hostedzonesbyvpc list-hosted-zones-by-vpc" [
 #
 # GET /2013-04-01/hostedzone/{Id}/rrset
 # operationId: ListResourceRecordSets
-export def "2013-04-01-hostedzone-rrset list-resource-record-sets" [
+export def "list-resource-record-sets" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3098,7 +3098,7 @@ export def "2013-04-01-hostedzone-rrset list-resource-record-sets" [
 #
 # POST /2013-04-01/tags/{ResourceType}
 # operationId: ListTagsForResources
-export def "2013-04-01-tags list-for-resources" [
+export def "list-tags-for-resources" [
   resource_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3147,7 +3147,7 @@ export def "2013-04-01-tags list-for-resources" [
 #
 # GET /2013-04-01/trafficpolicies
 # operationId: ListTrafficPolicies
-export def "2013-04-01-trafficpolicies list-traffic-policies" [
+export def "list-traffic-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3193,7 +3193,7 @@ export def "2013-04-01-trafficpolicies list-traffic-policies" [
 #
 # GET /2013-04-01/trafficpolicyinstances
 # operationId: ListTrafficPolicyInstances
-export def "2013-04-01-trafficpolicyinstances list-traffic-policy-instances" [
+export def "list-traffic-policy-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3241,7 +3241,7 @@ export def "2013-04-01-trafficpolicyinstances list-traffic-policy-instances" [
 #
 # GET /2013-04-01/trafficpolicyinstances/hostedzone
 # operationId: ListTrafficPolicyInstancesByHostedZone
-export def "2013-04-01-trafficpolicyinstances-hostedzone list-traffic-policy-instances-by-hosted-zone" [
+export def "list-traffic-policy-instances-by-hosted-zone" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3289,7 +3289,7 @@ export def "2013-04-01-trafficpolicyinstances-hostedzone list-traffic-policy-ins
 #
 # GET /2013-04-01/trafficpolicyinstances/trafficpolicy
 # operationId: ListTrafficPolicyInstancesByPolicy
-export def "2013-04-01-trafficpolicyinstances-trafficpolicy list-traffic-policy-instances-by-policy" [
+export def "list-traffic-policy-instances-by-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3339,7 +3339,7 @@ export def "2013-04-01-trafficpolicyinstances-trafficpolicy list-traffic-policy-
 #
 # GET /2013-04-01/trafficpolicies/{Id}/versions
 # operationId: ListTrafficPolicyVersions
-export def "2013-04-01-trafficpolicies-versions list-traffic-policy" [
+export def "list-traffic-policy-versions" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3387,7 +3387,7 @@ export def "2013-04-01-trafficpolicies-versions list-traffic-policy" [
 #
 # GET /2013-04-01/testdnsanswer
 # operationId: TestDNSAnswer
-export def "2013-04-01-testdnsanswer test-dns-answer" [
+export def "test-dns-answer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

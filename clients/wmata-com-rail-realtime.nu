@@ -99,7 +99,7 @@ def auth-scheme-completer [] { ["api_key" "query-api_key"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-prediction get-547636a6f918230da8553640" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "547636a6f918230da8553640" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -123,7 +123,7 @@ export def commands []: nothing -> table {
 #
 # GET /GetPrediction/{StationCodes}
 # operationId: 547636a6f918230da8553640
-export def "get-prediction get-547636a6f918230da8553640" [
+export def "547636a6f918230da8553640" [
   station_codes: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -159,7 +159,7 @@ export def "get-prediction get-547636a6f918230da8553640" [
 #
 # GET /json/GetPrediction/{StationCodes}
 # operationId: 547636a6f918230da855363f
-export def "json-get-prediction get-547636a6f918230da855363f" [
+export def "547636a6f918230da855363f" [
   station_codes: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-managed-identity-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.ManagedIdentity/operations
 # operationId: Operations_List
-export def "providers-microsoft-managed-identity-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -176,7 +176,7 @@ export def "providers-microsoft-managed-identity-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.ManagedIdentity/userAssignedIdentities
 # operationId: UserAssignedIdentities_ListBySubscription
-export def "subscriptions-providers-microsoft-managed-identity-user-assigned-identities list" [
+export def "user-assigned-identities-list-by-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -214,7 +214,7 @@ export def "subscriptions-providers-microsoft-managed-identity-user-assigned-ide
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ManagedIdentity/userAssignedIdentities
 # operationId: UserAssignedIdentities_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-managed-identity-user-assigned-identities list" [
+export def "user-assigned-identities-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -254,7 +254,7 @@ export def "subscriptions-resource-groups-providers-microsoft-managed-identity-u
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ManagedIdentity/userAssignedIdentities/{resourceName}
 # operationId: UserAssignedIdentities_Delete
-export def "subscriptions-resource-groups-providers-microsoft-managed-identity-user-assigned-identities delete" [
+export def "user-assigned-identities-delete" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -296,7 +296,7 @@ export def "subscriptions-resource-groups-providers-microsoft-managed-identity-u
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ManagedIdentity/userAssignedIdentities/{resourceName}
 # operationId: UserAssignedIdentities_Get
-export def "subscriptions-resource-groups-providers-microsoft-managed-identity-user-assigned-identities get" [
+export def "user-assigned-identities-get" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -338,7 +338,7 @@ export def "subscriptions-resource-groups-providers-microsoft-managed-identity-u
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ManagedIdentity/userAssignedIdentities/{resourceName}
 # operationId: UserAssignedIdentities_Update
-export def "subscriptions-resource-groups-providers-microsoft-managed-identity-user-assigned-identities update" [
+export def "user-assigned-identities-update" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -386,7 +386,7 @@ export def "subscriptions-resource-groups-providers-microsoft-managed-identity-u
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ManagedIdentity/userAssignedIdentities/{resourceName}
 # operationId: UserAssignedIdentities_CreateOrUpdate
-export def "subscriptions-resource-groups-providers-microsoft-managed-identity-user-assigned-identities create-or-update" [
+export def "user-assigned-identities-create-or-update" [
   subscription_id: string
   resource_group_name: string
   resource_name: string

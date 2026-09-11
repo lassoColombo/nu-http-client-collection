@@ -155,7 +155,7 @@ def x-amz-target-completer-54 [] { ["AWSOrganizationsV20161128.UpdatePolicy"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-accept-handshake" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accept-handshake" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -179,7 +179,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AcceptHandshake
-export def "api create-accept-handshake" [
+export def "accept-handshake" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -227,7 +227,7 @@ export def "api create-accept-handshake" [
 #
 # POST /
 # operationId: AttachPolicy
-export def "api attach-policy" [
+export def "attach-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -276,7 +276,7 @@ export def "api attach-policy" [
 #
 # POST /
 # operationId: CancelHandshake
-export def "api cancel-handshake" [
+export def "cancel-handshake" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -324,7 +324,7 @@ export def "api cancel-handshake" [
 #
 # POST /
 # operationId: CloseAccount
-export def "api close-account" [
+export def "close-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -372,7 +372,7 @@ export def "api close-account" [
 #
 # POST /
 # operationId: CreateAccount
-export def "api create-account" [
+export def "create-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -424,7 +424,7 @@ export def "api create-account" [
 #
 # POST /
 # operationId: CreateGovCloudAccount
-export def "api create-gov-cloud-account" [
+export def "create-gov-cloud-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -476,7 +476,7 @@ export def "api create-gov-cloud-account" [
 #
 # POST /
 # operationId: CreateOrganization
-export def "api create-organization" [
+export def "create-organization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -524,7 +524,7 @@ export def "api create-organization" [
 #
 # POST /
 # operationId: CreateOrganizationalUnit
-export def "api create-organizational-unit" [
+export def "create-organizational-unit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -574,7 +574,7 @@ export def "api create-organizational-unit" [
 #
 # POST /
 # operationId: CreatePolicy
-export def "api create-policy" [
+export def "create-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -626,7 +626,7 @@ export def "api create-policy" [
 #
 # POST /
 # operationId: DeclineHandshake
-export def "api create-decline-handshake" [
+export def "decline-handshake" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -674,7 +674,7 @@ export def "api create-decline-handshake" [
 #
 # POST /
 # operationId: DeleteOrganization
-export def "api delete-organization" [
+export def "delete-organization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -718,7 +718,7 @@ export def "api delete-organization" [
 #
 # POST /
 # operationId: DeleteOrganizationalUnit
-export def "api delete-organizational-unit" [
+export def "delete-organizational-unit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -766,7 +766,7 @@ export def "api delete-organizational-unit" [
 #
 # POST /
 # operationId: DeletePolicy
-export def "api delete-policy" [
+export def "delete-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -814,7 +814,7 @@ export def "api delete-policy" [
 #
 # POST /
 # operationId: DeleteResourcePolicy
-export def "api delete-resource-policy" [
+export def "delete-resource-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -858,7 +858,7 @@ export def "api delete-resource-policy" [
 #
 # POST /
 # operationId: DeregisterDelegatedAdministrator
-export def "api create-deregister-delegated-administrator" [
+export def "deregister-delegated-administrator" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -907,7 +907,7 @@ export def "api create-deregister-delegated-administrator" [
 #
 # POST /
 # operationId: DescribeAccount
-export def "api get-account" [
+export def "describe-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -955,7 +955,7 @@ export def "api get-account" [
 #
 # POST /
 # operationId: DescribeCreateAccountStatus
-export def "api get-create-account-status" [
+export def "describe-create-account-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1003,7 +1003,7 @@ export def "api get-create-account-status" [
 #
 # POST /
 # operationId: DescribeEffectivePolicy
-export def "api get-effective-policy" [
+export def "describe-effective-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1052,7 +1052,7 @@ export def "api get-effective-policy" [
 #
 # POST /
 # operationId: DescribeHandshake
-export def "api get-handshake" [
+export def "describe-handshake" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1100,7 +1100,7 @@ export def "api get-handshake" [
 #
 # POST /
 # operationId: DescribeOrganization
-export def "api get-organization" [
+export def "describe-organization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1144,7 +1144,7 @@ export def "api get-organization" [
 #
 # POST /
 # operationId: DescribeOrganizationalUnit
-export def "api get-organizational-unit" [
+export def "describe-organizational-unit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1192,7 +1192,7 @@ export def "api get-organizational-unit" [
 #
 # POST /
 # operationId: DescribePolicy
-export def "api get-policy" [
+export def "describe-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1240,7 +1240,7 @@ export def "api get-policy" [
 #
 # POST /
 # operationId: DescribeResourcePolicy
-export def "api get-resource-policy" [
+export def "describe-resource-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1284,7 +1284,7 @@ export def "api get-resource-policy" [
 #
 # POST /
 # operationId: DetachPolicy
-export def "api create-detach-policy" [
+export def "detach-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1333,7 +1333,7 @@ export def "api create-detach-policy" [
 #
 # POST /
 # operationId: DisableAWSServiceAccess
-export def "api disable-aws-service-access" [
+export def "disable-aws-service-access" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1381,7 +1381,7 @@ export def "api disable-aws-service-access" [
 #
 # POST /
 # operationId: DisablePolicyType
-export def "api disable-policy-type" [
+export def "disable-policy-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1430,7 +1430,7 @@ export def "api disable-policy-type" [
 #
 # POST /
 # operationId: EnableAWSServiceAccess
-export def "api enable-aws-service-access" [
+export def "enable-aws-service-access" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1478,7 +1478,7 @@ export def "api enable-aws-service-access" [
 #
 # POST /
 # operationId: EnableAllFeatures
-export def "api enable-list-features" [
+export def "enable-all-features" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1526,7 +1526,7 @@ export def "api enable-list-features" [
 #
 # POST /
 # operationId: EnablePolicyType
-export def "api enable-policy-type" [
+export def "enable-policy-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1575,7 +1575,7 @@ export def "api enable-policy-type" [
 #
 # POST /
 # operationId: InviteAccountToOrganization
-export def "api create-invite-account-to-organization" [
+export def "invite-account-to-organization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1625,7 +1625,7 @@ export def "api create-invite-account-to-organization" [
 #
 # POST /
 # operationId: LeaveOrganization
-export def "api create-leave-organization" [
+export def "leave-organization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1669,7 +1669,7 @@ export def "api create-leave-organization" [
 #
 # POST /
 # operationId: ListAWSServiceAccessForOrganization
-export def "api list-aws-service-access-for-organization" [
+export def "list-aws-service-access-for-organization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1721,7 +1721,7 @@ export def "api list-aws-service-access-for-organization" [
 #
 # POST /
 # operationId: ListAccounts
-export def "api list-accounts" [
+export def "list-accounts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1773,7 +1773,7 @@ export def "api list-accounts" [
 #
 # POST /
 # operationId: ListAccountsForParent
-export def "api list-accounts-for-parent" [
+export def "list-accounts-for-parent" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1826,7 +1826,7 @@ export def "api list-accounts-for-parent" [
 #
 # POST /
 # operationId: ListChildren
-export def "api list-children" [
+export def "list-children" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1880,7 +1880,7 @@ export def "api list-children" [
 #
 # POST /
 # operationId: ListCreateAccountStatus
-export def "api list-create-account-status" [
+export def "list-create-account-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1933,7 +1933,7 @@ export def "api list-create-account-status" [
 #
 # POST /
 # operationId: ListDelegatedAdministrators
-export def "api list-delegated-administrators" [
+export def "list-delegated-administrators" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1986,7 +1986,7 @@ export def "api list-delegated-administrators" [
 #
 # POST /
 # operationId: ListDelegatedServicesForAccount
-export def "api list-delegated-services-for-account" [
+export def "list-delegated-services-for-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2039,7 +2039,7 @@ export def "api list-delegated-services-for-account" [
 #
 # POST /
 # operationId: ListHandshakesForAccount
-export def "api list-handshakes-for-account" [
+export def "list-handshakes-for-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2092,7 +2092,7 @@ export def "api list-handshakes-for-account" [
 #
 # POST /
 # operationId: ListHandshakesForOrganization
-export def "api list-handshakes-for-organization" [
+export def "list-handshakes-for-organization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2145,7 +2145,7 @@ export def "api list-handshakes-for-organization" [
 #
 # POST /
 # operationId: ListOrganizationalUnitsForParent
-export def "api list-organizational-units-for-parent" [
+export def "list-organizational-units-for-parent" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2198,7 +2198,7 @@ export def "api list-organizational-units-for-parent" [
 #
 # POST /
 # operationId: ListParents
-export def "api list-parents" [
+export def "list-parents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2251,7 +2251,7 @@ export def "api list-parents" [
 #
 # POST /
 # operationId: ListPolicies
-export def "api list-policies" [
+export def "list-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2304,7 +2304,7 @@ export def "api list-policies" [
 #
 # POST /
 # operationId: ListPoliciesForTarget
-export def "api list-policies-for-target" [
+export def "list-policies-for-target" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2358,7 +2358,7 @@ export def "api list-policies-for-target" [
 #
 # POST /
 # operationId: ListRoots
-export def "api list-roots" [
+export def "list-roots" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2410,7 +2410,7 @@ export def "api list-roots" [
 #
 # POST /
 # operationId: ListTagsForResource
-export def "api list-tags-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2461,7 +2461,7 @@ export def "api list-tags-for-resource" [
 #
 # POST /
 # operationId: ListTargetsForPolicy
-export def "api list-targets-for-policy" [
+export def "list-targets-for-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2514,7 +2514,7 @@ export def "api list-targets-for-policy" [
 #
 # POST /
 # operationId: MoveAccount
-export def "api move-account" [
+export def "move-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2564,7 +2564,7 @@ export def "api move-account" [
 #
 # POST /
 # operationId: PutResourcePolicy
-export def "api update-resource-policy" [
+export def "put-resource-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2613,7 +2613,7 @@ export def "api update-resource-policy" [
 #
 # POST /
 # operationId: RegisterDelegatedAdministrator
-export def "api create-delegated-administrator" [
+export def "register-delegated-administrator" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2662,7 +2662,7 @@ export def "api create-delegated-administrator" [
 #
 # POST /
 # operationId: RemoveAccountFromOrganization
-export def "api delete-account-from-organization" [
+export def "remove-account-from-organization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2710,7 +2710,7 @@ export def "api delete-account-from-organization" [
 #
 # POST /
 # operationId: TagResource
-export def "api tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2759,7 +2759,7 @@ export def "api tag-resource" [
 #
 # POST /
 # operationId: UntagResource
-export def "api untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2808,7 +2808,7 @@ export def "api untag-resource" [
 #
 # POST /
 # operationId: UpdateOrganizationalUnit
-export def "api update-organizational-unit" [
+export def "update-organizational-unit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2857,7 +2857,7 @@ export def "api update-organizational-unit" [
 #
 # POST /
 # operationId: UpdatePolicy
-export def "api update-policy" [
+export def "update-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

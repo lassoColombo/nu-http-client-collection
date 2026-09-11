@@ -154,7 +154,7 @@ def callback-method-completer [] { ["DELETE" "GET" "HEAD" "PATCH" "POST" "PUT"] 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "2010-04-01-accounts-json list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-account" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -178,7 +178,7 @@ export def commands []: nothing -> table {
 #
 # GET /2010-04-01/Accounts.json
 # operationId: ListAccount
-export def "2010-04-01-accounts-json list" [
+export def "list-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -218,7 +218,7 @@ export def "2010-04-01-accounts-json list" [
 #
 # POST /2010-04-01/Accounts.json
 # operationId: CreateAccount
-export def "2010-04-01-accounts-json create" [
+export def "create-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -256,7 +256,7 @@ export def "2010-04-01-accounts-json create" [
 # GET /2010-04-01/Accounts/{AccountSid}/Addresses.json
 #
 # operationId: ListAddress
-export def "2010-04-01-accounts-addresses-json list-address" [
+export def "list-address" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -298,7 +298,7 @@ export def "2010-04-01-accounts-addresses-json list-address" [
 # POST /2010-04-01/Accounts/{AccountSid}/Addresses.json
 #
 # operationId: CreateAddress
-export def "2010-04-01-accounts-addresses-json create-address" [
+export def "create-address" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -347,7 +347,7 @@ export def "2010-04-01-accounts-addresses-json create-address" [
 # GET /2010-04-01/Accounts/{AccountSid}/Addresses/{AddressSid}/DependentPhoneNumbers.json
 #
 # operationId: ListDependentPhoneNumber
-export def "2010-04-01-accounts-addresses-dependent-phone-numbers-json list" [
+export def "list-dependent-phone-number" [
   account_sid: string
   address_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -388,7 +388,7 @@ export def "2010-04-01-accounts-addresses-dependent-phone-numbers-json list" [
 # DELETE /2010-04-01/Accounts/{AccountSid}/Addresses/{Sid}.json
 #
 # operationId: DeleteAddress
-export def "2010-04-01-accounts-addresses delete-address" [
+export def "delete-address" [
   account_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -425,7 +425,7 @@ export def "2010-04-01-accounts-addresses delete-address" [
 # GET /2010-04-01/Accounts/{AccountSid}/Addresses/{Sid}.json
 #
 # operationId: FetchAddress
-export def "2010-04-01-accounts-addresses get-address" [
+export def "fetch-address" [
   account_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -462,7 +462,7 @@ export def "2010-04-01-accounts-addresses get-address" [
 # POST /2010-04-01/Accounts/{AccountSid}/Addresses/{Sid}.json
 #
 # operationId: UpdateAddress
-export def "2010-04-01-accounts-addresses update-address" [
+export def "update-address" [
   account_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -513,7 +513,7 @@ export def "2010-04-01-accounts-addresses update-address" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Applications.json
 # operationId: ListApplication
-export def "2010-04-01-accounts-applications-json list" [
+export def "list-application" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -554,7 +554,7 @@ export def "2010-04-01-accounts-applications-json list" [
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Applications.json
 # operationId: CreateApplication
-export def "2010-04-01-accounts-applications-json create" [
+export def "create-application" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -610,7 +610,7 @@ export def "2010-04-01-accounts-applications-json create" [
 #
 # DELETE /2010-04-01/Accounts/{AccountSid}/Applications/{Sid}.json
 # operationId: DeleteApplication
-export def "2010-04-01-accounts-applications delete" [
+export def "delete-application" [
   account_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -648,7 +648,7 @@ export def "2010-04-01-accounts-applications delete" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Applications/{Sid}.json
 # operationId: FetchApplication
-export def "2010-04-01-accounts-applications get" [
+export def "fetch-application" [
   account_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -686,7 +686,7 @@ export def "2010-04-01-accounts-applications get" [
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Applications/{Sid}.json
 # operationId: UpdateApplication
-export def "2010-04-01-accounts-applications update" [
+export def "update-application" [
   account_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -744,7 +744,7 @@ export def "2010-04-01-accounts-applications update" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/AuthorizedConnectApps.json
 # operationId: ListAuthorizedConnectApp
-export def "2010-04-01-accounts-authorized-connect-apps-json list" [
+export def "list-authorized-connect-app" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -784,7 +784,7 @@ export def "2010-04-01-accounts-authorized-connect-apps-json list" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/AuthorizedConnectApps/{ConnectAppSid}.json
 # operationId: FetchAuthorizedConnectApp
-export def "2010-04-01-accounts-authorized-connect-apps get" [
+export def "fetch-authorized-connect-app" [
   account_sid: string
   connect_app_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -821,7 +821,7 @@ export def "2010-04-01-accounts-authorized-connect-apps get" [
 # GET /2010-04-01/Accounts/{AccountSid}/AvailablePhoneNumbers.json
 #
 # operationId: ListAvailablePhoneNumberCountry
-export def "2010-04-01-accounts-available-phone-numbers-json list-country" [
+export def "list-available-phone-number-country" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -860,7 +860,7 @@ export def "2010-04-01-accounts-available-phone-numbers-json list-country" [
 # GET /2010-04-01/Accounts/{AccountSid}/AvailablePhoneNumbers/{CountryCode}.json
 #
 # operationId: FetchAvailablePhoneNumberCountry
-export def "2010-04-01-accounts-available-phone-numbers get-country" [
+export def "fetch-available-phone-number-country" [
   account_sid: string
   country_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -897,7 +897,7 @@ export def "2010-04-01-accounts-available-phone-numbers get-country" [
 # GET /2010-04-01/Accounts/{AccountSid}/AvailablePhoneNumbers/{CountryCode}/Local.json
 #
 # operationId: ListAvailablePhoneNumberLocal
-export def "2010-04-01-accounts-available-phone-numbers-local-json list" [
+export def "list-available-phone-number-local" [
   account_sid: string
   country_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -956,7 +956,7 @@ export def "2010-04-01-accounts-available-phone-numbers-local-json list" [
 # GET /2010-04-01/Accounts/{AccountSid}/AvailablePhoneNumbers/{CountryCode}/MachineToMachine.json
 #
 # operationId: ListAvailablePhoneNumberMachineToMachine
-export def "2010-04-01-accounts-available-phone-numbers-machine-to-machine-json list" [
+export def "list-available-phone-number-machine-to-machine" [
   account_sid: string
   country_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1015,7 +1015,7 @@ export def "2010-04-01-accounts-available-phone-numbers-machine-to-machine-json 
 # GET /2010-04-01/Accounts/{AccountSid}/AvailablePhoneNumbers/{CountryCode}/Mobile.json
 #
 # operationId: ListAvailablePhoneNumberMobile
-export def "2010-04-01-accounts-available-phone-numbers-mobile-json list" [
+export def "list-available-phone-number-mobile" [
   account_sid: string
   country_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1074,7 +1074,7 @@ export def "2010-04-01-accounts-available-phone-numbers-mobile-json list" [
 # GET /2010-04-01/Accounts/{AccountSid}/AvailablePhoneNumbers/{CountryCode}/National.json
 #
 # operationId: ListAvailablePhoneNumberNational
-export def "2010-04-01-accounts-available-phone-numbers-national-json list" [
+export def "list-available-phone-number-national" [
   account_sid: string
   country_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1133,7 +1133,7 @@ export def "2010-04-01-accounts-available-phone-numbers-national-json list" [
 # GET /2010-04-01/Accounts/{AccountSid}/AvailablePhoneNumbers/{CountryCode}/SharedCost.json
 #
 # operationId: ListAvailablePhoneNumberSharedCost
-export def "2010-04-01-accounts-available-phone-numbers-shared-cost-json list" [
+export def "list-available-phone-number-shared-cost" [
   account_sid: string
   country_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1192,7 +1192,7 @@ export def "2010-04-01-accounts-available-phone-numbers-shared-cost-json list" [
 # GET /2010-04-01/Accounts/{AccountSid}/AvailablePhoneNumbers/{CountryCode}/TollFree.json
 #
 # operationId: ListAvailablePhoneNumberTollFree
-export def "2010-04-01-accounts-available-phone-numbers-toll-free-json list" [
+export def "list-available-phone-number-toll-free" [
   account_sid: string
   country_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1251,7 +1251,7 @@ export def "2010-04-01-accounts-available-phone-numbers-toll-free-json list" [
 # GET /2010-04-01/Accounts/{AccountSid}/AvailablePhoneNumbers/{CountryCode}/Voip.json
 #
 # operationId: ListAvailablePhoneNumberVoip
-export def "2010-04-01-accounts-available-phone-numbers-voip-json list" [
+export def "list-available-phone-number-voip" [
   account_sid: string
   country_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1311,7 +1311,7 @@ export def "2010-04-01-accounts-available-phone-numbers-voip-json list" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Balance.json
 # operationId: FetchBalance
-export def "2010-04-01-accounts-balance-json get" [
+export def "fetch-balance" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1347,7 +1347,7 @@ export def "2010-04-01-accounts-balance-json get" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Calls.json
 # operationId: ListCall
-export def "2010-04-01-accounts-calls-json list" [
+export def "list-call" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1397,7 +1397,7 @@ export def "2010-04-01-accounts-calls-json list" [
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Calls.json
 # operationId: CreateCall
-export def "2010-04-01-accounts-calls-json create" [
+export def "create-call" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1472,7 +1472,7 @@ export def "2010-04-01-accounts-calls-json create" [
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Calls/FeedbackSummary.json
 # operationId: CreateCallFeedbackSummary
-export def "2010-04-01-accounts-calls-feedback-summary-json create" [
+export def "create-call-feedback-summary" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1517,7 +1517,7 @@ export def "2010-04-01-accounts-calls-feedback-summary-json create" [
 #
 # DELETE /2010-04-01/Accounts/{AccountSid}/Calls/FeedbackSummary/{Sid}.json
 # operationId: DeleteCallFeedbackSummary
-export def "2010-04-01-accounts-calls-feedback-summary delete" [
+export def "delete-call-feedback-summary" [
   account_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1555,7 +1555,7 @@ export def "2010-04-01-accounts-calls-feedback-summary delete" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Calls/FeedbackSummary/{Sid}.json
 # operationId: FetchCallFeedbackSummary
-export def "2010-04-01-accounts-calls-feedback-summary get" [
+export def "fetch-call-feedback-summary" [
   account_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1593,7 +1593,7 @@ export def "2010-04-01-accounts-calls-feedback-summary get" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/Events.json
 # operationId: ListCallEvent
-export def "2010-04-01-accounts-calls-events-json list" [
+export def "list-call-event" [
   account_sid: string
   call_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1635,7 +1635,7 @@ export def "2010-04-01-accounts-calls-events-json list" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/Feedback.json
 # operationId: FetchCallFeedback
-export def "2010-04-01-accounts-calls-feedback-json get" [
+export def "fetch-call-feedback" [
   account_sid: string
   call_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1673,7 +1673,7 @@ export def "2010-04-01-accounts-calls-feedback-json get" [
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/Feedback.json
 # operationId: UpdateCallFeedback
-export def "2010-04-01-accounts-calls-feedback-json update" [
+export def "update-call-feedback" [
   account_sid: string
   call_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1716,7 +1716,7 @@ export def "2010-04-01-accounts-calls-feedback-json update" [
 # GET /2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/Notifications.json
 #
 # operationId: ListCallNotification
-export def "2010-04-01-accounts-calls-notifications-json list" [
+export def "list-call-notification" [
   account_sid: string
   call_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1761,7 +1761,7 @@ export def "2010-04-01-accounts-calls-notifications-json list" [
 # GET /2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/Notifications/{Sid}.json
 #
 # operationId: FetchCallNotification
-export def "2010-04-01-accounts-calls-notifications get" [
+export def "fetch-call-notification" [
   account_sid: string
   call_sid: string
   sid: string
@@ -1801,7 +1801,7 @@ export def "2010-04-01-accounts-calls-notifications get" [
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/Payments.json
 # operationId: CreatePayments
-export def "2010-04-01-accounts-calls-payments-json create" [
+export def "create-payments" [
   account_sid: string
   call_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1859,7 +1859,7 @@ export def "2010-04-01-accounts-calls-payments-json create" [
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/Payments/{Sid}.json
 # operationId: UpdatePayments
-export def "2010-04-01-accounts-calls-payments update" [
+export def "update-payments" [
   account_sid: string
   call_sid: string
   sid: string
@@ -1907,7 +1907,7 @@ export def "2010-04-01-accounts-calls-payments update" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/Recordings.json
 # operationId: ListCallRecording
-export def "2010-04-01-accounts-calls-recordings-json list" [
+export def "list-call-recording" [
   account_sid: string
   call_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1952,7 +1952,7 @@ export def "2010-04-01-accounts-calls-recordings-json list" [
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/Recordings.json
 # operationId: CreateCallRecording
-export def "2010-04-01-accounts-calls-recordings-json create" [
+export def "create-call-recording" [
   account_sid: string
   call_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2000,7 +2000,7 @@ export def "2010-04-01-accounts-calls-recordings-json create" [
 #
 # DELETE /2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/Recordings/{Sid}.json
 # operationId: DeleteCallRecording
-export def "2010-04-01-accounts-calls-recordings delete" [
+export def "delete-call-recording" [
   account_sid: string
   call_sid: string
   sid: string
@@ -2040,7 +2040,7 @@ export def "2010-04-01-accounts-calls-recordings delete" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/Recordings/{Sid}.json
 # operationId: FetchCallRecording
-export def "2010-04-01-accounts-calls-recordings get" [
+export def "fetch-call-recording" [
   account_sid: string
   call_sid: string
   sid: string
@@ -2080,7 +2080,7 @@ export def "2010-04-01-accounts-calls-recordings get" [
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/Recordings/{Sid}.json
 # operationId: UpdateCallRecording
-export def "2010-04-01-accounts-calls-recordings update" [
+export def "update-call-recording" [
   account_sid: string
   call_sid: string
   sid: string
@@ -2126,7 +2126,7 @@ export def "2010-04-01-accounts-calls-recordings update" [
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/Siprec.json
 # operationId: CreateSiprec
-export def "2010-04-01-accounts-calls-siprec-json create" [
+export def "create-siprec" [
   account_sid: string
   call_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2371,7 +2371,7 @@ export def "2010-04-01-accounts-calls-siprec-json create" [
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/Siprec/{Sid}.json
 # operationId: UpdateSiprec
-export def "2010-04-01-accounts-calls-siprec update" [
+export def "update-siprec" [
   account_sid: string
   call_sid: string
   sid: string
@@ -2416,7 +2416,7 @@ export def "2010-04-01-accounts-calls-siprec update" [
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/Streams.json
 # operationId: CreateStream
-export def "2010-04-01-accounts-calls-streams-json create" [
+export def "create-stream" [
   account_sid: string
   call_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2661,7 +2661,7 @@ export def "2010-04-01-accounts-calls-streams-json create" [
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/Streams/{Sid}.json
 # operationId: UpdateStream
-export def "2010-04-01-accounts-calls-streams update" [
+export def "update-stream" [
   account_sid: string
   call_sid: string
   sid: string
@@ -2706,7 +2706,7 @@ export def "2010-04-01-accounts-calls-streams update" [
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/UserDefinedMessageSubscriptions.json
 # operationId: CreateUserDefinedMessageSubscription
-export def "2010-04-01-accounts-calls-user-defined-message-subscriptions-json create" [
+export def "create-user-defined-message-subscription" [
   account_sid: string
   call_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2751,7 +2751,7 @@ export def "2010-04-01-accounts-calls-user-defined-message-subscriptions-json cr
 #
 # DELETE /2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/UserDefinedMessageSubscriptions/{Sid}.json
 # operationId: DeleteUserDefinedMessageSubscription
-export def "2010-04-01-accounts-calls-user-defined-message-subscriptions delete" [
+export def "delete-user-defined-message-subscription" [
   account_sid: string
   call_sid: string
   sid: string
@@ -2791,7 +2791,7 @@ export def "2010-04-01-accounts-calls-user-defined-message-subscriptions delete"
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/UserDefinedMessages.json
 # operationId: CreateUserDefinedMessage
-export def "2010-04-01-accounts-calls-user-defined-messages-json create" [
+export def "create-user-defined-message" [
   account_sid: string
   call_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2835,7 +2835,7 @@ export def "2010-04-01-accounts-calls-user-defined-messages-json create" [
 #
 # DELETE /2010-04-01/Accounts/{AccountSid}/Calls/{Sid}.json
 # operationId: DeleteCall
-export def "2010-04-01-accounts-calls delete" [
+export def "delete-call" [
   account_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2873,7 +2873,7 @@ export def "2010-04-01-accounts-calls delete" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Calls/{Sid}.json
 # operationId: FetchCall
-export def "2010-04-01-accounts-calls get" [
+export def "fetch-call" [
   account_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2911,7 +2911,7 @@ export def "2010-04-01-accounts-calls get" [
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Calls/{Sid}.json
 # operationId: UpdateCall
-export def "2010-04-01-accounts-calls update" [
+export def "update-call" [
   account_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2962,7 +2962,7 @@ export def "2010-04-01-accounts-calls update" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Conferences.json
 # operationId: ListConference
-export def "2010-04-01-accounts-conferences-json list" [
+export def "list-conference" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3010,7 +3010,7 @@ export def "2010-04-01-accounts-conferences-json list" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Conferences/{ConferenceSid}/Participants.json
 # operationId: ListParticipant
-export def "2010-04-01-accounts-conferences-participants-json list" [
+export def "list-participant" [
   account_sid: string
   conference_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3054,7 +3054,7 @@ export def "2010-04-01-accounts-conferences-participants-json list" [
 # POST /2010-04-01/Accounts/{AccountSid}/Conferences/{ConferenceSid}/Participants.json
 #
 # operationId: CreateParticipant
-export def "2010-04-01-accounts-conferences-participants-json create" [
+export def "create-participant" [
   account_sid: string
   conference_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3142,7 +3142,7 @@ export def "2010-04-01-accounts-conferences-participants-json create" [
 #
 # DELETE /2010-04-01/Accounts/{AccountSid}/Conferences/{ConferenceSid}/Participants/{CallSid}.json
 # operationId: DeleteParticipant
-export def "2010-04-01-accounts-conferences-participants delete" [
+export def "delete-participant" [
   account_sid: string
   conference_sid: string
   call_sid: string
@@ -3182,7 +3182,7 @@ export def "2010-04-01-accounts-conferences-participants delete" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Conferences/{ConferenceSid}/Participants/{CallSid}.json
 # operationId: FetchParticipant
-export def "2010-04-01-accounts-conferences-participants get" [
+export def "fetch-participant" [
   account_sid: string
   conference_sid: string
   call_sid: string
@@ -3222,7 +3222,7 @@ export def "2010-04-01-accounts-conferences-participants get" [
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Conferences/{ConferenceSid}/Participants/{CallSid}.json
 # operationId: UpdateParticipant
-export def "2010-04-01-accounts-conferences-participants update" [
+export def "update-participant" [
   account_sid: string
   conference_sid: string
   call_sid: string
@@ -3278,7 +3278,7 @@ export def "2010-04-01-accounts-conferences-participants update" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Conferences/{ConferenceSid}/Recordings.json
 # operationId: ListConferenceRecording
-export def "2010-04-01-accounts-conferences-recordings-json list" [
+export def "list-conference-recording" [
   account_sid: string
   conference_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3323,7 +3323,7 @@ export def "2010-04-01-accounts-conferences-recordings-json list" [
 #
 # DELETE /2010-04-01/Accounts/{AccountSid}/Conferences/{ConferenceSid}/Recordings/{Sid}.json
 # operationId: DeleteConferenceRecording
-export def "2010-04-01-accounts-conferences-recordings delete" [
+export def "delete-conference-recording" [
   account_sid: string
   conference_sid: string
   sid: string
@@ -3363,7 +3363,7 @@ export def "2010-04-01-accounts-conferences-recordings delete" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Conferences/{ConferenceSid}/Recordings/{Sid}.json
 # operationId: FetchConferenceRecording
-export def "2010-04-01-accounts-conferences-recordings get" [
+export def "fetch-conference-recording" [
   account_sid: string
   conference_sid: string
   sid: string
@@ -3403,7 +3403,7 @@ export def "2010-04-01-accounts-conferences-recordings get" [
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Conferences/{ConferenceSid}/Recordings/{Sid}.json
 # operationId: UpdateConferenceRecording
-export def "2010-04-01-accounts-conferences-recordings update" [
+export def "update-conference-recording" [
   account_sid: string
   conference_sid: string
   sid: string
@@ -3449,7 +3449,7 @@ export def "2010-04-01-accounts-conferences-recordings update" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Conferences/{Sid}.json
 # operationId: FetchConference
-export def "2010-04-01-accounts-conferences get" [
+export def "fetch-conference" [
   account_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3486,7 +3486,7 @@ export def "2010-04-01-accounts-conferences get" [
 # POST /2010-04-01/Accounts/{AccountSid}/Conferences/{Sid}.json
 #
 # operationId: UpdateConference
-export def "2010-04-01-accounts-conferences update" [
+export def "update-conference" [
   account_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3531,7 +3531,7 @@ export def "2010-04-01-accounts-conferences update" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/ConnectApps.json
 # operationId: ListConnectApp
-export def "2010-04-01-accounts-connect-apps-json list" [
+export def "list-connect-app" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3571,7 +3571,7 @@ export def "2010-04-01-accounts-connect-apps-json list" [
 #
 # DELETE /2010-04-01/Accounts/{AccountSid}/ConnectApps/{Sid}.json
 # operationId: DeleteConnectApp
-export def "2010-04-01-accounts-connect-apps delete" [
+export def "delete-connect-app" [
   account_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3609,7 +3609,7 @@ export def "2010-04-01-accounts-connect-apps delete" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/ConnectApps/{Sid}.json
 # operationId: FetchConnectApp
-export def "2010-04-01-accounts-connect-apps get" [
+export def "fetch-connect-app" [
   account_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3647,7 +3647,7 @@ export def "2010-04-01-accounts-connect-apps get" [
 #
 # POST /2010-04-01/Accounts/{AccountSid}/ConnectApps/{Sid}.json
 # operationId: UpdateConnectApp
-export def "2010-04-01-accounts-connect-apps update" [
+export def "update-connect-app" [
   account_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3697,7 +3697,7 @@ export def "2010-04-01-accounts-connect-apps update" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers.json
 # operationId: ListIncomingPhoneNumber
-export def "2010-04-01-accounts-incoming-phone-numbers-json list" [
+export def "list-incoming-phone-number" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3741,7 +3741,7 @@ export def "2010-04-01-accounts-incoming-phone-numbers-json list" [
 #
 # POST /2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers.json
 # operationId: CreateIncomingPhoneNumber
-export def "2010-04-01-accounts-incoming-phone-numbers-json create" [
+export def "create-incoming-phone-number" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3804,7 +3804,7 @@ export def "2010-04-01-accounts-incoming-phone-numbers-json create" [
 # GET /2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers/Local.json
 #
 # operationId: ListIncomingPhoneNumberLocal
-export def "2010-04-01-accounts-incoming-phone-numbers-local-json list" [
+export def "list-incoming-phone-number-local" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3847,7 +3847,7 @@ export def "2010-04-01-accounts-incoming-phone-numbers-local-json list" [
 # POST /2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers/Local.json
 #
 # operationId: CreateIncomingPhoneNumberLocal
-export def "2010-04-01-accounts-incoming-phone-numbers-local-json create" [
+export def "create-incoming-phone-number-local" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3909,7 +3909,7 @@ export def "2010-04-01-accounts-incoming-phone-numbers-local-json create" [
 # GET /2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers/Mobile.json
 #
 # operationId: ListIncomingPhoneNumberMobile
-export def "2010-04-01-accounts-incoming-phone-numbers-mobile-json list" [
+export def "list-incoming-phone-number-mobile" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3952,7 +3952,7 @@ export def "2010-04-01-accounts-incoming-phone-numbers-mobile-json list" [
 # POST /2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers/Mobile.json
 #
 # operationId: CreateIncomingPhoneNumberMobile
-export def "2010-04-01-accounts-incoming-phone-numbers-mobile-json create" [
+export def "create-incoming-phone-number-mobile" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4014,7 +4014,7 @@ export def "2010-04-01-accounts-incoming-phone-numbers-mobile-json create" [
 # GET /2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers/TollFree.json
 #
 # operationId: ListIncomingPhoneNumberTollFree
-export def "2010-04-01-accounts-incoming-phone-numbers-toll-free-json list" [
+export def "list-incoming-phone-number-toll-free" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4057,7 +4057,7 @@ export def "2010-04-01-accounts-incoming-phone-numbers-toll-free-json list" [
 # POST /2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers/TollFree.json
 #
 # operationId: CreateIncomingPhoneNumberTollFree
-export def "2010-04-01-accounts-incoming-phone-numbers-toll-free-json create" [
+export def "create-incoming-phone-number-toll-free" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4120,7 +4120,7 @@ export def "2010-04-01-accounts-incoming-phone-numbers-toll-free-json create" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers/{ResourceSid}/AssignedAddOns.json
 # operationId: ListIncomingPhoneNumberAssignedAddOn
-export def "2010-04-01-accounts-incoming-phone-numbers-assigned-add-ons-json list" [
+export def "list-incoming-phone-number-assigned-add-on" [
   account_sid: string
   resource_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4162,7 +4162,7 @@ export def "2010-04-01-accounts-incoming-phone-numbers-assigned-add-ons-json lis
 #
 # POST /2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers/{ResourceSid}/AssignedAddOns.json
 # operationId: CreateIncomingPhoneNumberAssignedAddOn
-export def "2010-04-01-accounts-incoming-phone-numbers-assigned-add-ons-json create" [
+export def "create-incoming-phone-number-assigned-add-on" [
   account_sid: string
   resource_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4205,7 +4205,7 @@ export def "2010-04-01-accounts-incoming-phone-numbers-assigned-add-ons-json cre
 #
 # GET /2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers/{ResourceSid}/AssignedAddOns/{AssignedAddOnSid}/Extensions.json
 # operationId: ListIncomingPhoneNumberAssignedAddOnExtension
-export def "2010-04-01-accounts-incoming-phone-numbers-assigned-add-ons-extensions-json list" [
+export def "list-incoming-phone-number-assigned-add-on-extension" [
   account_sid: string
   resource_sid: string
   assigned_add_on_sid: string
@@ -4249,7 +4249,7 @@ export def "2010-04-01-accounts-incoming-phone-numbers-assigned-add-ons-extensio
 #
 # GET /2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers/{ResourceSid}/AssignedAddOns/{AssignedAddOnSid}/Extensions/{Sid}.json
 # operationId: FetchIncomingPhoneNumberAssignedAddOnExtension
-export def "2010-04-01-accounts-incoming-phone-numbers-assigned-add-ons-extensions get" [
+export def "fetch-incoming-phone-number-assigned-add-on-extension" [
   account_sid: string
   resource_sid: string
   assigned_add_on_sid: string
@@ -4291,7 +4291,7 @@ export def "2010-04-01-accounts-incoming-phone-numbers-assigned-add-ons-extensio
 #
 # DELETE /2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers/{ResourceSid}/AssignedAddOns/{Sid}.json
 # operationId: DeleteIncomingPhoneNumberAssignedAddOn
-export def "2010-04-01-accounts-incoming-phone-numbers-assigned-add-ons delete" [
+export def "delete-incoming-phone-number-assigned-add-on" [
   account_sid: string
   resource_sid: string
   sid: string
@@ -4331,7 +4331,7 @@ export def "2010-04-01-accounts-incoming-phone-numbers-assigned-add-ons delete" 
 #
 # GET /2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers/{ResourceSid}/AssignedAddOns/{Sid}.json
 # operationId: FetchIncomingPhoneNumberAssignedAddOn
-export def "2010-04-01-accounts-incoming-phone-numbers-assigned-add-ons get" [
+export def "fetch-incoming-phone-number-assigned-add-on" [
   account_sid: string
   resource_sid: string
   sid: string
@@ -4371,7 +4371,7 @@ export def "2010-04-01-accounts-incoming-phone-numbers-assigned-add-ons get" [
 #
 # DELETE /2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers/{Sid}.json
 # operationId: DeleteIncomingPhoneNumber
-export def "2010-04-01-accounts-incoming-phone-numbers delete" [
+export def "delete-incoming-phone-number" [
   account_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4409,7 +4409,7 @@ export def "2010-04-01-accounts-incoming-phone-numbers delete" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers/{Sid}.json
 # operationId: FetchIncomingPhoneNumber
-export def "2010-04-01-accounts-incoming-phone-numbers get" [
+export def "fetch-incoming-phone-number" [
   account_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4447,7 +4447,7 @@ export def "2010-04-01-accounts-incoming-phone-numbers get" [
 #
 # POST /2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers/{Sid}.json
 # operationId: UpdateIncomingPhoneNumber
-export def "2010-04-01-accounts-incoming-phone-numbers update" [
+export def "update-incoming-phone-number" [
   account_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4511,7 +4511,7 @@ export def "2010-04-01-accounts-incoming-phone-numbers update" [
 # GET /2010-04-01/Accounts/{AccountSid}/Keys.json
 #
 # operationId: ListKey
-export def "2010-04-01-accounts-keys-json list" [
+export def "list-key" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4550,7 +4550,7 @@ export def "2010-04-01-accounts-keys-json list" [
 # POST /2010-04-01/Accounts/{AccountSid}/Keys.json
 #
 # operationId: CreateNewKey
-export def "2010-04-01-accounts-keys-json create-new" [
+export def "create-new-key" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4590,7 +4590,7 @@ export def "2010-04-01-accounts-keys-json create-new" [
 # DELETE /2010-04-01/Accounts/{AccountSid}/Keys/{Sid}.json
 #
 # operationId: DeleteKey
-export def "2010-04-01-accounts-keys delete" [
+export def "delete-key" [
   account_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4627,7 +4627,7 @@ export def "2010-04-01-accounts-keys delete" [
 # GET /2010-04-01/Accounts/{AccountSid}/Keys/{Sid}.json
 #
 # operationId: FetchKey
-export def "2010-04-01-accounts-keys get" [
+export def "fetch-key" [
   account_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4664,7 +4664,7 @@ export def "2010-04-01-accounts-keys get" [
 # POST /2010-04-01/Accounts/{AccountSid}/Keys/{Sid}.json
 #
 # operationId: UpdateKey
-export def "2010-04-01-accounts-keys update" [
+export def "update-key" [
   account_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4707,7 +4707,7 @@ export def "2010-04-01-accounts-keys update" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Messages.json
 # operationId: ListMessage
-export def "2010-04-01-accounts-messages-json list" [
+export def "list-message" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4752,7 +4752,7 @@ export def "2010-04-01-accounts-messages-json list" [
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Messages.json
 # operationId: CreateMessage
-export def "2010-04-01-accounts-messages-json create" [
+export def "create-message" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4813,7 +4813,7 @@ export def "2010-04-01-accounts-messages-json create" [
 # POST /2010-04-01/Accounts/{AccountSid}/Messages/{MessageSid}/Feedback.json
 #
 # operationId: CreateMessageFeedback
-export def "2010-04-01-accounts-messages-feedback-json create" [
+export def "create-message-feedback" [
   account_sid: string
   message_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4856,7 +4856,7 @@ export def "2010-04-01-accounts-messages-feedback-json create" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Messages/{MessageSid}/Media.json
 # operationId: ListMedia
-export def "2010-04-01-accounts-messages-media-json list" [
+export def "list-media" [
   account_sid: string
   message_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4901,7 +4901,7 @@ export def "2010-04-01-accounts-messages-media-json list" [
 #
 # DELETE /2010-04-01/Accounts/{AccountSid}/Messages/{MessageSid}/Media/{Sid}.json
 # operationId: DeleteMedia
-export def "2010-04-01-accounts-messages-media delete" [
+export def "delete-media" [
   account_sid: string
   message_sid: string
   sid: string
@@ -4941,7 +4941,7 @@ export def "2010-04-01-accounts-messages-media delete" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Messages/{MessageSid}/Media/{Sid}.json
 # operationId: FetchMedia
-export def "2010-04-01-accounts-messages-media get" [
+export def "fetch-media" [
   account_sid: string
   message_sid: string
   sid: string
@@ -4981,7 +4981,7 @@ export def "2010-04-01-accounts-messages-media get" [
 #
 # DELETE /2010-04-01/Accounts/{AccountSid}/Messages/{Sid}.json
 # operationId: DeleteMessage
-export def "2010-04-01-accounts-messages delete" [
+export def "delete-message" [
   account_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5019,7 +5019,7 @@ export def "2010-04-01-accounts-messages delete" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Messages/{Sid}.json
 # operationId: FetchMessage
-export def "2010-04-01-accounts-messages get" [
+export def "fetch-message" [
   account_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5057,7 +5057,7 @@ export def "2010-04-01-accounts-messages get" [
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Messages/{Sid}.json
 # operationId: UpdateMessage
-export def "2010-04-01-accounts-messages update" [
+export def "update-message" [
   account_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5101,7 +5101,7 @@ export def "2010-04-01-accounts-messages update" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Notifications.json
 # operationId: ListNotification
-export def "2010-04-01-accounts-notifications-json list" [
+export def "list-notification" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5145,7 +5145,7 @@ export def "2010-04-01-accounts-notifications-json list" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Notifications/{Sid}.json
 # operationId: FetchNotification
-export def "2010-04-01-accounts-notifications get" [
+export def "fetch-notification" [
   account_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5183,7 +5183,7 @@ export def "2010-04-01-accounts-notifications get" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/OutgoingCallerIds.json
 # operationId: ListOutgoingCallerId
-export def "2010-04-01-accounts-outgoing-caller-ids-json list" [
+export def "list-outgoing-caller-id" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5224,7 +5224,7 @@ export def "2010-04-01-accounts-outgoing-caller-ids-json list" [
 # POST /2010-04-01/Accounts/{AccountSid}/OutgoingCallerIds.json
 #
 # operationId: CreateValidationRequest
-export def "2010-04-01-accounts-outgoing-caller-ids-json create-validation-request" [
+export def "create-validation-request" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5270,7 +5270,7 @@ export def "2010-04-01-accounts-outgoing-caller-ids-json create-validation-reque
 #
 # DELETE /2010-04-01/Accounts/{AccountSid}/OutgoingCallerIds/{Sid}.json
 # operationId: DeleteOutgoingCallerId
-export def "2010-04-01-accounts-outgoing-caller-ids delete" [
+export def "delete-outgoing-caller-id" [
   account_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5308,7 +5308,7 @@ export def "2010-04-01-accounts-outgoing-caller-ids delete" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/OutgoingCallerIds/{Sid}.json
 # operationId: FetchOutgoingCallerId
-export def "2010-04-01-accounts-outgoing-caller-ids get" [
+export def "fetch-outgoing-caller-id" [
   account_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5346,7 +5346,7 @@ export def "2010-04-01-accounts-outgoing-caller-ids get" [
 #
 # POST /2010-04-01/Accounts/{AccountSid}/OutgoingCallerIds/{Sid}.json
 # operationId: UpdateOutgoingCallerId
-export def "2010-04-01-accounts-outgoing-caller-ids update" [
+export def "update-outgoing-caller-id" [
   account_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5389,7 +5389,7 @@ export def "2010-04-01-accounts-outgoing-caller-ids update" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Queues.json
 # operationId: ListQueue
-export def "2010-04-01-accounts-queues-json list" [
+export def "list-queue" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5429,7 +5429,7 @@ export def "2010-04-01-accounts-queues-json list" [
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Queues.json
 # operationId: CreateQueue
-export def "2010-04-01-accounts-queues-json create" [
+export def "create-queue" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5471,7 +5471,7 @@ export def "2010-04-01-accounts-queues-json create" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Queues/{QueueSid}/Members.json
 # operationId: ListMember
-export def "2010-04-01-accounts-queues-members-json list" [
+export def "list-member" [
   account_sid: string
   queue_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5513,7 +5513,7 @@ export def "2010-04-01-accounts-queues-members-json list" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Queues/{QueueSid}/Members/{CallSid}.json
 # operationId: FetchMember
-export def "2010-04-01-accounts-queues-members get" [
+export def "fetch-member" [
   account_sid: string
   queue_sid: string
   call_sid: string
@@ -5553,7 +5553,7 @@ export def "2010-04-01-accounts-queues-members get" [
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Queues/{QueueSid}/Members/{CallSid}.json
 # operationId: UpdateMember
-export def "2010-04-01-accounts-queues-members update" [
+export def "update-member" [
   account_sid: string
   queue_sid: string
   call_sid: string
@@ -5599,7 +5599,7 @@ export def "2010-04-01-accounts-queues-members update" [
 #
 # DELETE /2010-04-01/Accounts/{AccountSid}/Queues/{Sid}.json
 # operationId: DeleteQueue
-export def "2010-04-01-accounts-queues delete" [
+export def "delete-queue" [
   account_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5637,7 +5637,7 @@ export def "2010-04-01-accounts-queues delete" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Queues/{Sid}.json
 # operationId: FetchQueue
-export def "2010-04-01-accounts-queues get" [
+export def "fetch-queue" [
   account_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5675,7 +5675,7 @@ export def "2010-04-01-accounts-queues get" [
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Queues/{Sid}.json
 # operationId: UpdateQueue
-export def "2010-04-01-accounts-queues update" [
+export def "update-queue" [
   account_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5719,7 +5719,7 @@ export def "2010-04-01-accounts-queues update" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Recordings.json
 # operationId: ListRecording
-export def "2010-04-01-accounts-recordings-json list" [
+export def "list-recording" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5764,7 +5764,7 @@ export def "2010-04-01-accounts-recordings-json list" [
 # GET /2010-04-01/Accounts/{AccountSid}/Recordings/{RecordingSid}/Transcriptions.json
 #
 # operationId: ListRecordingTranscription
-export def "2010-04-01-accounts-recordings-transcriptions-json list" [
+export def "list-recording-transcription" [
   account_sid: string
   recording_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5805,7 +5805,7 @@ export def "2010-04-01-accounts-recordings-transcriptions-json list" [
 # DELETE /2010-04-01/Accounts/{AccountSid}/Recordings/{RecordingSid}/Transcriptions/{Sid}.json
 #
 # operationId: DeleteRecordingTranscription
-export def "2010-04-01-accounts-recordings-transcriptions delete" [
+export def "delete-recording-transcription" [
   account_sid: string
   recording_sid: string
   sid: string
@@ -5844,7 +5844,7 @@ export def "2010-04-01-accounts-recordings-transcriptions delete" [
 # GET /2010-04-01/Accounts/{AccountSid}/Recordings/{RecordingSid}/Transcriptions/{Sid}.json
 #
 # operationId: FetchRecordingTranscription
-export def "2010-04-01-accounts-recordings-transcriptions get" [
+export def "fetch-recording-transcription" [
   account_sid: string
   recording_sid: string
   sid: string
@@ -5884,7 +5884,7 @@ export def "2010-04-01-accounts-recordings-transcriptions get" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Recordings/{ReferenceSid}/AddOnResults.json
 # operationId: ListRecordingAddOnResult
-export def "2010-04-01-accounts-recordings-add-on-results-json list" [
+export def "list-recording-add-on-result" [
   account_sid: string
   reference_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5926,7 +5926,7 @@ export def "2010-04-01-accounts-recordings-add-on-results-json list" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Recordings/{ReferenceSid}/AddOnResults/{AddOnResultSid}/Payloads.json
 # operationId: ListRecordingAddOnResultPayload
-export def "2010-04-01-accounts-recordings-add-on-results-payloads-json list" [
+export def "list-recording-add-on-result-payload" [
   account_sid: string
   reference_sid: string
   add_on_result_sid: string
@@ -5970,7 +5970,7 @@ export def "2010-04-01-accounts-recordings-add-on-results-payloads-json list" [
 #
 # DELETE /2010-04-01/Accounts/{AccountSid}/Recordings/{ReferenceSid}/AddOnResults/{AddOnResultSid}/Payloads/{Sid}.json
 # operationId: DeleteRecordingAddOnResultPayload
-export def "2010-04-01-accounts-recordings-add-on-results-payloads delete" [
+export def "delete-recording-add-on-result-payload" [
   account_sid: string
   reference_sid: string
   add_on_result_sid: string
@@ -6012,7 +6012,7 @@ export def "2010-04-01-accounts-recordings-add-on-results-payloads delete" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Recordings/{ReferenceSid}/AddOnResults/{AddOnResultSid}/Payloads/{Sid}.json
 # operationId: FetchRecordingAddOnResultPayload
-export def "2010-04-01-accounts-recordings-add-on-results-payloads get" [
+export def "fetch-recording-add-on-result-payload" [
   account_sid: string
   reference_sid: string
   add_on_result_sid: string
@@ -6054,7 +6054,7 @@ export def "2010-04-01-accounts-recordings-add-on-results-payloads get" [
 #
 # DELETE /2010-04-01/Accounts/{AccountSid}/Recordings/{ReferenceSid}/AddOnResults/{Sid}.json
 # operationId: DeleteRecordingAddOnResult
-export def "2010-04-01-accounts-recordings-add-on-results delete" [
+export def "delete-recording-add-on-result" [
   account_sid: string
   reference_sid: string
   sid: string
@@ -6094,7 +6094,7 @@ export def "2010-04-01-accounts-recordings-add-on-results delete" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Recordings/{ReferenceSid}/AddOnResults/{Sid}.json
 # operationId: FetchRecordingAddOnResult
-export def "2010-04-01-accounts-recordings-add-on-results get" [
+export def "fetch-recording-add-on-result" [
   account_sid: string
   reference_sid: string
   sid: string
@@ -6134,7 +6134,7 @@ export def "2010-04-01-accounts-recordings-add-on-results get" [
 #
 # DELETE /2010-04-01/Accounts/{AccountSid}/Recordings/{Sid}.json
 # operationId: DeleteRecording
-export def "2010-04-01-accounts-recordings delete" [
+export def "delete-recording" [
   account_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6172,7 +6172,7 @@ export def "2010-04-01-accounts-recordings delete" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Recordings/{Sid}.json
 # operationId: FetchRecording
-export def "2010-04-01-accounts-recordings get" [
+export def "fetch-recording" [
   account_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6212,7 +6212,7 @@ export def "2010-04-01-accounts-recordings get" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/SIP/CredentialLists.json
 # operationId: ListSipCredentialList
-export def "2010-04-01-accounts-sip-credential-lists-json list" [
+export def "list-sip-credential-list" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6252,7 +6252,7 @@ export def "2010-04-01-accounts-sip-credential-lists-json list" [
 #
 # POST /2010-04-01/Accounts/{AccountSid}/SIP/CredentialLists.json
 # operationId: CreateSipCredentialList
-export def "2010-04-01-accounts-sip-credential-lists-json create" [
+export def "create-sip-credential-list" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6293,7 +6293,7 @@ export def "2010-04-01-accounts-sip-credential-lists-json create" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/SIP/CredentialLists/{CredentialListSid}/Credentials.json
 # operationId: ListSipCredential
-export def "2010-04-01-accounts-sip-credential-lists-credentials-json list" [
+export def "list-sip-credential" [
   account_sid: string
   credential_list_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6335,7 +6335,7 @@ export def "2010-04-01-accounts-sip-credential-lists-credentials-json list" [
 #
 # POST /2010-04-01/Accounts/{AccountSid}/SIP/CredentialLists/{CredentialListSid}/Credentials.json
 # operationId: CreateSipCredential
-export def "2010-04-01-accounts-sip-credential-lists-credentials-json create" [
+export def "create-sip-credential" [
   account_sid: string
   credential_list_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6379,7 +6379,7 @@ export def "2010-04-01-accounts-sip-credential-lists-credentials-json create" [
 #
 # DELETE /2010-04-01/Accounts/{AccountSid}/SIP/CredentialLists/{CredentialListSid}/Credentials/{Sid}.json
 # operationId: DeleteSipCredential
-export def "2010-04-01-accounts-sip-credential-lists-credentials delete" [
+export def "delete-sip-credential" [
   account_sid: string
   credential_list_sid: string
   sid: string
@@ -6419,7 +6419,7 @@ export def "2010-04-01-accounts-sip-credential-lists-credentials delete" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/SIP/CredentialLists/{CredentialListSid}/Credentials/{Sid}.json
 # operationId: FetchSipCredential
-export def "2010-04-01-accounts-sip-credential-lists-credentials get" [
+export def "fetch-sip-credential" [
   account_sid: string
   credential_list_sid: string
   sid: string
@@ -6459,7 +6459,7 @@ export def "2010-04-01-accounts-sip-credential-lists-credentials get" [
 #
 # POST /2010-04-01/Accounts/{AccountSid}/SIP/CredentialLists/{CredentialListSid}/Credentials/{Sid}.json
 # operationId: UpdateSipCredential
-export def "2010-04-01-accounts-sip-credential-lists-credentials update" [
+export def "update-sip-credential" [
   account_sid: string
   credential_list_sid: string
   sid: string
@@ -6504,7 +6504,7 @@ export def "2010-04-01-accounts-sip-credential-lists-credentials update" [
 #
 # DELETE /2010-04-01/Accounts/{AccountSid}/SIP/CredentialLists/{Sid}.json
 # operationId: DeleteSipCredentialList
-export def "2010-04-01-accounts-sip-credential-lists delete" [
+export def "delete-sip-credential-list" [
   account_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6542,7 +6542,7 @@ export def "2010-04-01-accounts-sip-credential-lists delete" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/SIP/CredentialLists/{Sid}.json
 # operationId: FetchSipCredentialList
-export def "2010-04-01-accounts-sip-credential-lists get" [
+export def "fetch-sip-credential-list" [
   account_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6580,7 +6580,7 @@ export def "2010-04-01-accounts-sip-credential-lists get" [
 #
 # POST /2010-04-01/Accounts/{AccountSid}/SIP/CredentialLists/{Sid}.json
 # operationId: UpdateSipCredentialList
-export def "2010-04-01-accounts-sip-credential-lists update" [
+export def "update-sip-credential-list" [
   account_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6623,7 +6623,7 @@ export def "2010-04-01-accounts-sip-credential-lists update" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/SIP/Domains.json
 # operationId: ListSipDomain
-export def "2010-04-01-accounts-sip-domains-json list" [
+export def "list-sip-domain" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6663,7 +6663,7 @@ export def "2010-04-01-accounts-sip-domains-json list" [
 #
 # POST /2010-04-01/Accounts/{AccountSid}/SIP/Domains.json
 # operationId: CreateSipDomain
-export def "2010-04-01-accounts-sip-domains-json create" [
+export def "create-sip-domain" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6716,7 +6716,7 @@ export def "2010-04-01-accounts-sip-domains-json create" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/Auth/Calls/CredentialListMappings.json
 # operationId: ListSipAuthCallsCredentialListMapping
-export def "2010-04-01-accounts-sip-domains-auth-calls-credential-list-mappings-json list" [
+export def "list-sip-auth-calls-credential-list-mapping" [
   account_sid: string
   domain_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6758,7 +6758,7 @@ export def "2010-04-01-accounts-sip-domains-auth-calls-credential-list-mappings-
 #
 # POST /2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/Auth/Calls/CredentialListMappings.json
 # operationId: CreateSipAuthCallsCredentialListMapping
-export def "2010-04-01-accounts-sip-domains-auth-calls-credential-list-mappings-json create" [
+export def "create-sip-auth-calls-credential-list-mapping" [
   account_sid: string
   domain_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6801,7 +6801,7 @@ export def "2010-04-01-accounts-sip-domains-auth-calls-credential-list-mappings-
 #
 # DELETE /2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/Auth/Calls/CredentialListMappings/{Sid}.json
 # operationId: DeleteSipAuthCallsCredentialListMapping
-export def "2010-04-01-accounts-sip-domains-auth-calls-credential-list-mappings delete" [
+export def "delete-sip-auth-calls-credential-list-mapping" [
   account_sid: string
   domain_sid: string
   sid: string
@@ -6841,7 +6841,7 @@ export def "2010-04-01-accounts-sip-domains-auth-calls-credential-list-mappings 
 #
 # GET /2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/Auth/Calls/CredentialListMappings/{Sid}.json
 # operationId: FetchSipAuthCallsCredentialListMapping
-export def "2010-04-01-accounts-sip-domains-auth-calls-credential-list-mappings get" [
+export def "fetch-sip-auth-calls-credential-list-mapping" [
   account_sid: string
   domain_sid: string
   sid: string
@@ -6881,7 +6881,7 @@ export def "2010-04-01-accounts-sip-domains-auth-calls-credential-list-mappings 
 #
 # GET /2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/Auth/Calls/IpAccessControlListMappings.json
 # operationId: ListSipAuthCallsIpAccessControlListMapping
-export def "2010-04-01-accounts-sip-domains-auth-calls-ip-access-control-list-mappings-json list" [
+export def "list-sip-auth-calls-ip-access-control-list-mapping" [
   account_sid: string
   domain_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6923,7 +6923,7 @@ export def "2010-04-01-accounts-sip-domains-auth-calls-ip-access-control-list-ma
 #
 # POST /2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/Auth/Calls/IpAccessControlListMappings.json
 # operationId: CreateSipAuthCallsIpAccessControlListMapping
-export def "2010-04-01-accounts-sip-domains-auth-calls-ip-access-control-list-mappings-json create" [
+export def "create-sip-auth-calls-ip-access-control-list-mapping" [
   account_sid: string
   domain_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6966,7 +6966,7 @@ export def "2010-04-01-accounts-sip-domains-auth-calls-ip-access-control-list-ma
 #
 # DELETE /2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/Auth/Calls/IpAccessControlListMappings/{Sid}.json
 # operationId: DeleteSipAuthCallsIpAccessControlListMapping
-export def "2010-04-01-accounts-sip-domains-auth-calls-ip-access-control-list-mappings delete" [
+export def "delete-sip-auth-calls-ip-access-control-list-mapping" [
   account_sid: string
   domain_sid: string
   sid: string
@@ -7006,7 +7006,7 @@ export def "2010-04-01-accounts-sip-domains-auth-calls-ip-access-control-list-ma
 #
 # GET /2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/Auth/Calls/IpAccessControlListMappings/{Sid}.json
 # operationId: FetchSipAuthCallsIpAccessControlListMapping
-export def "2010-04-01-accounts-sip-domains-auth-calls-ip-access-control-list-mappings get" [
+export def "fetch-sip-auth-calls-ip-access-control-list-mapping" [
   account_sid: string
   domain_sid: string
   sid: string
@@ -7046,7 +7046,7 @@ export def "2010-04-01-accounts-sip-domains-auth-calls-ip-access-control-list-ma
 #
 # GET /2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/Auth/Registrations/CredentialListMappings.json
 # operationId: ListSipAuthRegistrationsCredentialListMapping
-export def "2010-04-01-accounts-sip-domains-auth-registrations-credential-list-mappings-json list" [
+export def "list-sip-auth-registrations-credential-list-mapping" [
   account_sid: string
   domain_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7088,7 +7088,7 @@ export def "2010-04-01-accounts-sip-domains-auth-registrations-credential-list-m
 #
 # POST /2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/Auth/Registrations/CredentialListMappings.json
 # operationId: CreateSipAuthRegistrationsCredentialListMapping
-export def "2010-04-01-accounts-sip-domains-auth-registrations-credential-list-mappings-json create" [
+export def "create-sip-auth-registrations-credential-list-mapping" [
   account_sid: string
   domain_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7131,7 +7131,7 @@ export def "2010-04-01-accounts-sip-domains-auth-registrations-credential-list-m
 #
 # DELETE /2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/Auth/Registrations/CredentialListMappings/{Sid}.json
 # operationId: DeleteSipAuthRegistrationsCredentialListMapping
-export def "2010-04-01-accounts-sip-domains-auth-registrations-credential-list-mappings delete" [
+export def "delete-sip-auth-registrations-credential-list-mapping" [
   account_sid: string
   domain_sid: string
   sid: string
@@ -7171,7 +7171,7 @@ export def "2010-04-01-accounts-sip-domains-auth-registrations-credential-list-m
 #
 # GET /2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/Auth/Registrations/CredentialListMappings/{Sid}.json
 # operationId: FetchSipAuthRegistrationsCredentialListMapping
-export def "2010-04-01-accounts-sip-domains-auth-registrations-credential-list-mappings get" [
+export def "fetch-sip-auth-registrations-credential-list-mapping" [
   account_sid: string
   domain_sid: string
   sid: string
@@ -7211,7 +7211,7 @@ export def "2010-04-01-accounts-sip-domains-auth-registrations-credential-list-m
 #
 # GET /2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/CredentialListMappings.json
 # operationId: ListSipCredentialListMapping
-export def "2010-04-01-accounts-sip-domains-credential-list-mappings-json list" [
+export def "list-sip-credential-list-mapping" [
   account_sid: string
   domain_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7253,7 +7253,7 @@ export def "2010-04-01-accounts-sip-domains-credential-list-mappings-json list" 
 #
 # POST /2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/CredentialListMappings.json
 # operationId: CreateSipCredentialListMapping
-export def "2010-04-01-accounts-sip-domains-credential-list-mappings-json create" [
+export def "create-sip-credential-list-mapping" [
   account_sid: string
   domain_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7296,7 +7296,7 @@ export def "2010-04-01-accounts-sip-domains-credential-list-mappings-json create
 #
 # DELETE /2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/CredentialListMappings/{Sid}.json
 # operationId: DeleteSipCredentialListMapping
-export def "2010-04-01-accounts-sip-domains-credential-list-mappings delete" [
+export def "delete-sip-credential-list-mapping" [
   account_sid: string
   domain_sid: string
   sid: string
@@ -7336,7 +7336,7 @@ export def "2010-04-01-accounts-sip-domains-credential-list-mappings delete" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/CredentialListMappings/{Sid}.json
 # operationId: FetchSipCredentialListMapping
-export def "2010-04-01-accounts-sip-domains-credential-list-mappings get" [
+export def "fetch-sip-credential-list-mapping" [
   account_sid: string
   domain_sid: string
   sid: string
@@ -7376,7 +7376,7 @@ export def "2010-04-01-accounts-sip-domains-credential-list-mappings get" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/IpAccessControlListMappings.json
 # operationId: ListSipIpAccessControlListMapping
-export def "2010-04-01-accounts-sip-domains-ip-access-control-list-mappings-json list" [
+export def "list-sip-ip-access-control-list-mapping" [
   account_sid: string
   domain_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7418,7 +7418,7 @@ export def "2010-04-01-accounts-sip-domains-ip-access-control-list-mappings-json
 #
 # POST /2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/IpAccessControlListMappings.json
 # operationId: CreateSipIpAccessControlListMapping
-export def "2010-04-01-accounts-sip-domains-ip-access-control-list-mappings-json create" [
+export def "create-sip-ip-access-control-list-mapping" [
   account_sid: string
   domain_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7461,7 +7461,7 @@ export def "2010-04-01-accounts-sip-domains-ip-access-control-list-mappings-json
 #
 # DELETE /2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/IpAccessControlListMappings/{Sid}.json
 # operationId: DeleteSipIpAccessControlListMapping
-export def "2010-04-01-accounts-sip-domains-ip-access-control-list-mappings delete" [
+export def "delete-sip-ip-access-control-list-mapping" [
   account_sid: string
   domain_sid: string
   sid: string
@@ -7501,7 +7501,7 @@ export def "2010-04-01-accounts-sip-domains-ip-access-control-list-mappings dele
 #
 # GET /2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/IpAccessControlListMappings/{Sid}.json
 # operationId: FetchSipIpAccessControlListMapping
-export def "2010-04-01-accounts-sip-domains-ip-access-control-list-mappings get" [
+export def "fetch-sip-ip-access-control-list-mapping" [
   account_sid: string
   domain_sid: string
   sid: string
@@ -7541,7 +7541,7 @@ export def "2010-04-01-accounts-sip-domains-ip-access-control-list-mappings get"
 #
 # DELETE /2010-04-01/Accounts/{AccountSid}/SIP/Domains/{Sid}.json
 # operationId: DeleteSipDomain
-export def "2010-04-01-accounts-sip-domains delete" [
+export def "delete-sip-domain" [
   account_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7579,7 +7579,7 @@ export def "2010-04-01-accounts-sip-domains delete" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/SIP/Domains/{Sid}.json
 # operationId: FetchSipDomain
-export def "2010-04-01-accounts-sip-domains get" [
+export def "fetch-sip-domain" [
   account_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7617,7 +7617,7 @@ export def "2010-04-01-accounts-sip-domains get" [
 #
 # POST /2010-04-01/Accounts/{AccountSid}/SIP/Domains/{Sid}.json
 # operationId: UpdateSipDomain
-export def "2010-04-01-accounts-sip-domains update" [
+export def "update-sip-domain" [
   account_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7672,7 +7672,7 @@ export def "2010-04-01-accounts-sip-domains update" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/SIP/IpAccessControlLists.json
 # operationId: ListSipIpAccessControlList
-export def "2010-04-01-accounts-sip-ip-access-control-lists-json list" [
+export def "list-sip-ip-access-control-list" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7712,7 +7712,7 @@ export def "2010-04-01-accounts-sip-ip-access-control-lists-json list" [
 #
 # POST /2010-04-01/Accounts/{AccountSid}/SIP/IpAccessControlLists.json
 # operationId: CreateSipIpAccessControlList
-export def "2010-04-01-accounts-sip-ip-access-control-lists-json create" [
+export def "create-sip-ip-access-control-list" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7753,7 +7753,7 @@ export def "2010-04-01-accounts-sip-ip-access-control-lists-json create" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/SIP/IpAccessControlLists/{IpAccessControlListSid}/IpAddresses.json
 # operationId: ListSipIpAddress
-export def "2010-04-01-accounts-sip-ip-access-control-lists-ip-addresses-json list-address" [
+export def "list-sip-ip-address" [
   account_sid: string
   ip_access_control_list_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7795,7 +7795,7 @@ export def "2010-04-01-accounts-sip-ip-access-control-lists-ip-addresses-json li
 #
 # POST /2010-04-01/Accounts/{AccountSid}/SIP/IpAccessControlLists/{IpAccessControlListSid}/IpAddresses.json
 # operationId: CreateSipIpAddress
-export def "2010-04-01-accounts-sip-ip-access-control-lists-ip-addresses-json create-address" [
+export def "create-sip-ip-address" [
   account_sid: string
   ip_access_control_list_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7840,7 +7840,7 @@ export def "2010-04-01-accounts-sip-ip-access-control-lists-ip-addresses-json cr
 #
 # DELETE /2010-04-01/Accounts/{AccountSid}/SIP/IpAccessControlLists/{IpAccessControlListSid}/IpAddresses/{Sid}.json
 # operationId: DeleteSipIpAddress
-export def "2010-04-01-accounts-sip-ip-access-control-lists-ip-addresses delete-address" [
+export def "delete-sip-ip-address" [
   account_sid: string
   ip_access_control_list_sid: string
   sid: string
@@ -7880,7 +7880,7 @@ export def "2010-04-01-accounts-sip-ip-access-control-lists-ip-addresses delete-
 #
 # GET /2010-04-01/Accounts/{AccountSid}/SIP/IpAccessControlLists/{IpAccessControlListSid}/IpAddresses/{Sid}.json
 # operationId: FetchSipIpAddress
-export def "2010-04-01-accounts-sip-ip-access-control-lists-ip-addresses get-address" [
+export def "fetch-sip-ip-address" [
   account_sid: string
   ip_access_control_list_sid: string
   sid: string
@@ -7920,7 +7920,7 @@ export def "2010-04-01-accounts-sip-ip-access-control-lists-ip-addresses get-add
 #
 # POST /2010-04-01/Accounts/{AccountSid}/SIP/IpAccessControlLists/{IpAccessControlListSid}/IpAddresses/{Sid}.json
 # operationId: UpdateSipIpAddress
-export def "2010-04-01-accounts-sip-ip-access-control-lists-ip-addresses update-address" [
+export def "update-sip-ip-address" [
   account_sid: string
   ip_access_control_list_sid: string
   sid: string
@@ -7967,7 +7967,7 @@ export def "2010-04-01-accounts-sip-ip-access-control-lists-ip-addresses update-
 #
 # DELETE /2010-04-01/Accounts/{AccountSid}/SIP/IpAccessControlLists/{Sid}.json
 # operationId: DeleteSipIpAccessControlList
-export def "2010-04-01-accounts-sip-ip-access-control-lists delete" [
+export def "delete-sip-ip-access-control-list" [
   account_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8005,7 +8005,7 @@ export def "2010-04-01-accounts-sip-ip-access-control-lists delete" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/SIP/IpAccessControlLists/{Sid}.json
 # operationId: FetchSipIpAccessControlList
-export def "2010-04-01-accounts-sip-ip-access-control-lists get" [
+export def "fetch-sip-ip-access-control-list" [
   account_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8043,7 +8043,7 @@ export def "2010-04-01-accounts-sip-ip-access-control-lists get" [
 #
 # POST /2010-04-01/Accounts/{AccountSid}/SIP/IpAccessControlLists/{Sid}.json
 # operationId: UpdateSipIpAccessControlList
-export def "2010-04-01-accounts-sip-ip-access-control-lists update" [
+export def "update-sip-ip-access-control-list" [
   account_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8086,7 +8086,7 @@ export def "2010-04-01-accounts-sip-ip-access-control-lists update" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/SMS/ShortCodes.json
 # operationId: ListShortCode
-export def "2010-04-01-accounts-sms-short-codes-json list" [
+export def "list-short-code" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8128,7 +8128,7 @@ export def "2010-04-01-accounts-sms-short-codes-json list" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/SMS/ShortCodes/{Sid}.json
 # operationId: FetchShortCode
-export def "2010-04-01-accounts-sms-short-codes get" [
+export def "fetch-short-code" [
   account_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8166,7 +8166,7 @@ export def "2010-04-01-accounts-sms-short-codes get" [
 #
 # POST /2010-04-01/Accounts/{AccountSid}/SMS/ShortCodes/{Sid}.json
 # operationId: UpdateShortCode
-export def "2010-04-01-accounts-sms-short-codes update" [
+export def "update-short-code" [
   account_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8213,7 +8213,7 @@ export def "2010-04-01-accounts-sms-short-codes update" [
 # GET /2010-04-01/Accounts/{AccountSid}/SigningKeys.json
 #
 # operationId: ListSigningKey
-export def "2010-04-01-accounts-signing-keys-json list" [
+export def "list-signing-key" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8253,7 +8253,7 @@ export def "2010-04-01-accounts-signing-keys-json list" [
 #
 # POST /2010-04-01/Accounts/{AccountSid}/SigningKeys.json
 # operationId: CreateNewSigningKey
-export def "2010-04-01-accounts-signing-keys-json create-new" [
+export def "create-new-signing-key" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8293,7 +8293,7 @@ export def "2010-04-01-accounts-signing-keys-json create-new" [
 # DELETE /2010-04-01/Accounts/{AccountSid}/SigningKeys/{Sid}.json
 #
 # operationId: DeleteSigningKey
-export def "2010-04-01-accounts-signing-keys delete" [
+export def "delete-signing-key" [
   account_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8330,7 +8330,7 @@ export def "2010-04-01-accounts-signing-keys delete" [
 # GET /2010-04-01/Accounts/{AccountSid}/SigningKeys/{Sid}.json
 #
 # operationId: FetchSigningKey
-export def "2010-04-01-accounts-signing-keys get" [
+export def "fetch-signing-key" [
   account_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8367,7 +8367,7 @@ export def "2010-04-01-accounts-signing-keys get" [
 # POST /2010-04-01/Accounts/{AccountSid}/SigningKeys/{Sid}.json
 #
 # operationId: UpdateSigningKey
-export def "2010-04-01-accounts-signing-keys update" [
+export def "update-signing-key" [
   account_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8410,7 +8410,7 @@ export def "2010-04-01-accounts-signing-keys update" [
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Tokens.json
 # operationId: CreateToken
-export def "2010-04-01-accounts-tokens-json create" [
+export def "create-token" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8451,7 +8451,7 @@ export def "2010-04-01-accounts-tokens-json create" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Transcriptions.json
 # operationId: ListTranscription
-export def "2010-04-01-accounts-transcriptions-json list" [
+export def "list-transcription" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8491,7 +8491,7 @@ export def "2010-04-01-accounts-transcriptions-json list" [
 #
 # DELETE /2010-04-01/Accounts/{AccountSid}/Transcriptions/{Sid}.json
 # operationId: DeleteTranscription
-export def "2010-04-01-accounts-transcriptions delete" [
+export def "delete-transcription" [
   account_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8529,7 +8529,7 @@ export def "2010-04-01-accounts-transcriptions delete" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Transcriptions/{Sid}.json
 # operationId: FetchTranscription
-export def "2010-04-01-accounts-transcriptions get" [
+export def "fetch-transcription" [
   account_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8567,7 +8567,7 @@ export def "2010-04-01-accounts-transcriptions get" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Usage/Records.json
 # operationId: ListUsageRecord
-export def "2010-04-01-accounts-usage-records-json list" [
+export def "list-usage-record" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8610,7 +8610,7 @@ export def "2010-04-01-accounts-usage-records-json list" [
 # GET /2010-04-01/Accounts/{AccountSid}/Usage/Records/AllTime.json
 #
 # operationId: ListUsageRecordAllTime
-export def "2010-04-01-accounts-usage-records-all-time-json list" [
+export def "list-usage-record-all-time" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8653,7 +8653,7 @@ export def "2010-04-01-accounts-usage-records-all-time-json list" [
 # GET /2010-04-01/Accounts/{AccountSid}/Usage/Records/Daily.json
 #
 # operationId: ListUsageRecordDaily
-export def "2010-04-01-accounts-usage-records-daily-json list" [
+export def "list-usage-record-daily" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8696,7 +8696,7 @@ export def "2010-04-01-accounts-usage-records-daily-json list" [
 # GET /2010-04-01/Accounts/{AccountSid}/Usage/Records/LastMonth.json
 #
 # operationId: ListUsageRecordLastMonth
-export def "2010-04-01-accounts-usage-records-last-month-json list" [
+export def "list-usage-record-last-month" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8739,7 +8739,7 @@ export def "2010-04-01-accounts-usage-records-last-month-json list" [
 # GET /2010-04-01/Accounts/{AccountSid}/Usage/Records/Monthly.json
 #
 # operationId: ListUsageRecordMonthly
-export def "2010-04-01-accounts-usage-records-monthly-json list" [
+export def "list-usage-record-monthly" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8782,7 +8782,7 @@ export def "2010-04-01-accounts-usage-records-monthly-json list" [
 # GET /2010-04-01/Accounts/{AccountSid}/Usage/Records/ThisMonth.json
 #
 # operationId: ListUsageRecordThisMonth
-export def "2010-04-01-accounts-usage-records-this-month-json list" [
+export def "list-usage-record-this-month" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8825,7 +8825,7 @@ export def "2010-04-01-accounts-usage-records-this-month-json list" [
 # GET /2010-04-01/Accounts/{AccountSid}/Usage/Records/Today.json
 #
 # operationId: ListUsageRecordToday
-export def "2010-04-01-accounts-usage-records-today-json list" [
+export def "list-usage-record-today" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8868,7 +8868,7 @@ export def "2010-04-01-accounts-usage-records-today-json list" [
 # GET /2010-04-01/Accounts/{AccountSid}/Usage/Records/Yearly.json
 #
 # operationId: ListUsageRecordYearly
-export def "2010-04-01-accounts-usage-records-yearly-json list" [
+export def "list-usage-record-yearly" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8911,7 +8911,7 @@ export def "2010-04-01-accounts-usage-records-yearly-json list" [
 # GET /2010-04-01/Accounts/{AccountSid}/Usage/Records/Yesterday.json
 #
 # operationId: ListUsageRecordYesterday
-export def "2010-04-01-accounts-usage-records-yesterday-json list" [
+export def "list-usage-record-yesterday" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8955,7 +8955,7 @@ export def "2010-04-01-accounts-usage-records-yesterday-json list" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Usage/Triggers.json
 # operationId: ListUsageTrigger
-export def "2010-04-01-accounts-usage-triggers-json list" [
+export def "list-usage-trigger" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8998,7 +8998,7 @@ export def "2010-04-01-accounts-usage-triggers-json list" [
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Usage/Triggers.json
 # operationId: CreateUsageTrigger
-export def "2010-04-01-accounts-usage-triggers-json create" [
+export def "create-usage-trigger" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9044,7 +9044,7 @@ export def "2010-04-01-accounts-usage-triggers-json create" [
 # DELETE /2010-04-01/Accounts/{AccountSid}/Usage/Triggers/{Sid}.json
 #
 # operationId: DeleteUsageTrigger
-export def "2010-04-01-accounts-usage-triggers delete" [
+export def "delete-usage-trigger" [
   account_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9082,7 +9082,7 @@ export def "2010-04-01-accounts-usage-triggers delete" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Usage/Triggers/{Sid}.json
 # operationId: FetchUsageTrigger
-export def "2010-04-01-accounts-usage-triggers get" [
+export def "fetch-usage-trigger" [
   account_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9120,7 +9120,7 @@ export def "2010-04-01-accounts-usage-triggers get" [
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Usage/Triggers/{Sid}.json
 # operationId: UpdateUsageTrigger
-export def "2010-04-01-accounts-usage-triggers update" [
+export def "update-usage-trigger" [
   account_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9165,7 +9165,7 @@ export def "2010-04-01-accounts-usage-triggers update" [
 #
 # GET /2010-04-01/Accounts/{Sid}.json
 # operationId: FetchAccount
-export def "2010-04-01-accounts get" [
+export def "fetch-account" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9201,7 +9201,7 @@ export def "2010-04-01-accounts get" [
 #
 # POST /2010-04-01/Accounts/{Sid}.json
 # operationId: UpdateAccount
-export def "2010-04-01-accounts update" [
+export def "update-account" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

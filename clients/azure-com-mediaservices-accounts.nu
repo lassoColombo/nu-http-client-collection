@@ -122,7 +122,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-media-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.Media/operations
 # operationId: Operations_List
-export def "providers-microsoft-media-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -182,7 +182,7 @@ export def "providers-microsoft-media-operations list" [
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Media/locations/{locationName}/checkNameAvailability
 # operationId: Locations_CheckNameAvailability
-export def "subscriptions-providers-microsoft-media-locations-check-name-availability check" [
+export def "locations-check-name-availability" [
   subscription_id: string
   location_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -227,7 +227,7 @@ export def "subscriptions-providers-microsoft-media-locations-check-name-availab
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Media/mediaservices
 # operationId: Mediaservices_ListBySubscription
-export def "subscriptions-providers-microsoft-media-mediaservices list" [
+export def "mediaservices-list-by-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -265,7 +265,7 @@ export def "subscriptions-providers-microsoft-media-mediaservices list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Media/mediaservices/{accountName}
 # operationId: Mediaservices_GetBySubscription
-export def "subscriptions-providers-microsoft-media-mediaservices get" [
+export def "mediaservices-get-by-subscription" [
   subscription_id: string
   account_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -305,7 +305,7 @@ export def "subscriptions-providers-microsoft-media-mediaservices get" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaservices
 # operationId: Mediaservices_List
-export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices list" [
+export def "mediaservices-list" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -345,7 +345,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-mediaservice
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaservices/{accountName}
 # operationId: Mediaservices_Delete
-export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices delete" [
+export def "mediaservices-delete" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -387,7 +387,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-mediaservice
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaservices/{accountName}
 # operationId: Mediaservices_Get
-export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices get" [
+export def "mediaservices-get" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -430,7 +430,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-mediaservice
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaservices/{accountName}
 # operationId: Mediaservices_Update
 # --properties shape: {storageAccounts?: list}
-export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices update" [
+export def "mediaservices-update" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -479,7 +479,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-mediaservice
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaservices/{accountName}
 # operationId: Mediaservices_CreateOrUpdate
 # --properties shape: {storageAccounts?: list}
-export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices create-or-update" [
+export def "mediaservices-create-or-update" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -527,7 +527,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-mediaservice
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaservices/{accountName}/syncStorageKeys
 # operationId: Mediaservices_SyncStorageKeys
-export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-sync-storage-keys sync" [
+export def "mediaservices-sync-storage-keys" [
   subscription_id: string
   resource_group_name: string
   account_name: string

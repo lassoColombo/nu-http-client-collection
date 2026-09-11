@@ -129,7 +129,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1alpha1 delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "contactcenteraiplatform-projects-locations-operations-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -153,7 +153,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1alpha1/{name}
 # operationId: contactcenteraiplatform.projects.locations.operations.delete
-export def "v1alpha1 delete" [
+export def "contactcenteraiplatform-projects-locations-operations-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -202,7 +202,7 @@ export def "v1alpha1 delete" [
 #
 # GET /v1alpha1/{name}
 # operationId: contactcenteraiplatform.projects.locations.operations.get
-export def "v1alpha1 get" [
+export def "contactcenteraiplatform-projects-locations-operations-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -254,7 +254,7 @@ export def "v1alpha1 get" [
 # --instanceConfig shape: {instanceSize?: "INSTANCE_SIZE_UNSPECIFIED"|"STANDARD_SMALL"|"STANDARD_MEDIUM"|"STANDARD_LARGE"|"STANDARD_XLARGE"|"STANDARD_2XLARGE"|"STANDARD_3XLARGE"}
 # --samlParams shape: {certificate?: string, entityId?: string, ssoUri?: string, userEmail?: string}
 # --uris shape: {chatBotUri?: string, mediaUri?: string, rootUri?: string, virtualAgentStreamingServiceUri?: string}
-export def "v1alpha1 update" [
+export def "contactcenteraiplatform-projects-locations-contact-centers-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -317,7 +317,7 @@ export def "v1alpha1 update" [
 #
 # GET /v1alpha1/{name}/locations
 # operationId: contactcenteraiplatform.projects.locations.list
-export def "v1alpha1-locations list" [
+export def "contactcenteraiplatform-projects-locations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -368,7 +368,7 @@ export def "v1alpha1-locations list" [
 #
 # GET /v1alpha1/{name}/operations
 # operationId: contactcenteraiplatform.projects.locations.operations.list
-export def "v1alpha1-operations list" [
+export def "contactcenteraiplatform-projects-locations-operations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -419,7 +419,7 @@ export def "v1alpha1-operations list" [
 #
 # POST /v1alpha1/{name}:cancel
 # operationId: contactcenteraiplatform.projects.locations.operations.cancel
-export def "v1alpha1 cancel" [
+export def "contactcenteraiplatform-projects-locations-operations-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -471,7 +471,7 @@ export def "v1alpha1 cancel" [
 #
 # GET /v1alpha1/{parent}/contactCenters
 # operationId: contactcenteraiplatform.projects.locations.contactCenters.list
-export def "v1alpha1-contact-centers list" [
+export def "contactcenteraiplatform-projects-locations-contact-centers-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -527,7 +527,7 @@ export def "v1alpha1-contact-centers list" [
 # --instanceConfig shape: {instanceSize?: "INSTANCE_SIZE_UNSPECIFIED"|"STANDARD_SMALL"|"STANDARD_MEDIUM"|"STANDARD_LARGE"|"STANDARD_XLARGE"|"STANDARD_2XLARGE"|"STANDARD_3XLARGE"}
 # --samlParams shape: {certificate?: string, entityId?: string, ssoUri?: string, userEmail?: string}
 # --uris shape: {chatBotUri?: string, mediaUri?: string, rootUri?: string, virtualAgentStreamingServiceUri?: string}
-export def "v1alpha1-contact-centers create" [
+export def "contactcenteraiplatform-projects-locations-contact-centers-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -590,7 +590,7 @@ export def "v1alpha1-contact-centers create" [
 #
 # GET /v1alpha1/{parent}:queryContactCenterQuota
 # operationId: contactcenteraiplatform.projects.locations.queryContactCenterQuota
-export def "v1alpha1 list-contact-center-quota" [
+export def "contactcenteraiplatform-projects-locations-query-contact-center-quota" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

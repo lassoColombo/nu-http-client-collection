@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-event-hub-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.EventHub/operations
 # operationId: Operations_List
-export def "providers-microsoft-event-hub-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -176,7 +176,7 @@ export def "providers-microsoft-event-hub-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.EventHub/availableClusterRegions
 # operationId: Clusters_ListAvailableClusters
-export def "subscriptions-providers-microsoft-event-hub-available-cluster-regions list" [
+export def "clusters-list-available-clusters" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -214,7 +214,7 @@ export def "subscriptions-providers-microsoft-event-hub-available-cluster-region
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.EventHub/namespaces
 # operationId: Namespaces_List
-export def "subscriptions-providers-microsoft-event-hub-namespaces list" [
+export def "namespaces-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -252,7 +252,7 @@ export def "subscriptions-providers-microsoft-event-hub-namespaces list" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/clusters
 # operationId: Clusters_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-clusters list" [
+export def "clusters-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -292,7 +292,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-clusters
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/clusters/{clusterName}
 # operationId: Clusters_Delete
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-clusters delete" [
+export def "clusters-delete" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -334,7 +334,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-clusters
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/clusters/{clusterName}
 # operationId: Clusters_Get
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-clusters get" [
+export def "clusters-get" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -377,7 +377,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-clusters
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/clusters/{clusterName}
 # operationId: Clusters_Patch
 # --sku shape: {capacity?: int, name: "Dedicated"}
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-clusters update-by-subscription-id-resource-group-name-cluster-name" [
+export def "clusters-patch" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -426,7 +426,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-clusters
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/clusters/{clusterName}
 # operationId: Clusters_Put
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-clusters update-by-subscription-id-resource-group-name-cluster-name-1" [
+export def "clusters-put" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -468,7 +468,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-clusters
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/clusters/{clusterName}/namespaces
 # operationId: Clusters_ListNamespaces
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-clusters-namespaces list" [
+export def "clusters-list-namespaces" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -510,7 +510,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-clusters
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/clusters/{clusterName}/quotaConfiguration/default
 # operationId: Configuration_Get
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-clusters-quota-configuration-default get" [
+export def "configuration-get" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -552,7 +552,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-clusters
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/clusters/{clusterName}/quotaConfiguration/default
 # operationId: Configuration_Patch
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-clusters-quota-configuration-default update" [
+export def "configuration-patch" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -598,7 +598,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-clusters
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces
 # operationId: Namespaces_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces list" [
+export def "namespaces-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -638,7 +638,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}
 # operationId: Namespaces_Delete
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces delete" [
+export def "namespaces-delete" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -680,7 +680,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}
 # operationId: Namespaces_Get
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces get" [
+export def "namespaces-get" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -724,7 +724,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 # operationId: Namespaces_Update
 # --properties shape: {clusterArmId?: string, encryption?: any, identity?: any, isAutoInflateEnabled?: bool, kafkaEnabled?: bool, maximumThroughputUnits?: int, zoneRedundant?: bool}
 # --sku shape: {capacity?: int, name: "Basic"|"Standard", tier?: "Basic"|"Standard"}
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces update" [
+export def "namespaces-update" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -775,7 +775,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 # operationId: Namespaces_CreateOrUpdate
 # --properties shape: {clusterArmId?: string, encryption?: any, identity?: any, isAutoInflateEnabled?: bool, kafkaEnabled?: bool, maximumThroughputUnits?: int, zoneRedundant?: bool}
 # --sku shape: {capacity?: int, name: "Basic"|"Standard", tier?: "Basic"|"Standard"}
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces create-or-update" [
+export def "namespaces-create-or-update" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -824,7 +824,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/ipfilterrules
 # operationId: Namespaces_ListIPFilterRules
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-ipfilterrules list-ip-filter-rules" [
+export def "namespaces-list-ip-filter-rules" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -866,7 +866,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/ipfilterrules/{ipFilterRuleName}
 # operationId: Namespaces_DeleteIpFilterRule
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-ipfilterrules delete-ip-filter-rule" [
+export def "namespaces-delete-ip-filter-rule" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -910,7 +910,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/ipfilterrules/{ipFilterRuleName}
 # operationId: Namespaces_GetIpFilterRule
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-ipfilterrules get-ip-filter-rule" [
+export def "namespaces-get-ip-filter-rule" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -955,7 +955,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/ipfilterrules/{ipFilterRuleName}
 # operationId: Namespaces_CreateOrUpdateIpFilterRule
 # --properties shape: {action?: "Accept"|"Reject", filterName?: string, ipMask?: string}
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-ipfilterrules create-or-update-ip-filter-rule" [
+export def "namespaces-create-or-update-ip-filter-rule" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1003,7 +1003,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/networkRuleSets/default
 # operationId: Namespaces_GetNetworkRuleSet
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-network-rule-sets-default get" [
+export def "namespaces-get-network-rule-set" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1046,7 +1046,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/networkRuleSets/default
 # operationId: Namespaces_CreateOrUpdateNetworkRuleSet
 # --properties shape: {defaultAction?: "Allow"|"Deny", ipRules?: list, virtualNetworkRules?: list}
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-network-rule-sets-default create-or-update" [
+export def "namespaces-create-or-update-network-rule-set" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1092,7 +1092,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/virtualnetworkrules
 # operationId: Namespaces_ListVirtualNetworkRules
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-virtualnetworkrules list-virtual-network-rules" [
+export def "namespaces-list-virtual-network-rules" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1134,7 +1134,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/virtualnetworkrules/{virtualNetworkRuleName}
 # operationId: Namespaces_DeleteVirtualNetworkRule
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-virtualnetworkrules delete-virtual-network-rule" [
+export def "namespaces-delete-virtual-network-rule" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1178,7 +1178,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/virtualnetworkrules/{virtualNetworkRuleName}
 # operationId: Namespaces_GetVirtualNetworkRule
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-virtualnetworkrules get-virtual-network-rule" [
+export def "namespaces-get-virtual-network-rule" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1223,7 +1223,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/virtualnetworkrules/{virtualNetworkRuleName}
 # operationId: Namespaces_CreateOrUpdateVirtualNetworkRule
 # --properties shape: {virtualNetworkSubnetId?: string}
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-virtualnetworkrules create-or-update-virtual-network-rule" [
+export def "namespaces-create-or-update-virtual-network-rule" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string

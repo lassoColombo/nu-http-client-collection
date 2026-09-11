@@ -139,7 +139,7 @@ def order-completer [] { ["ascending" "descending"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api list-and-media-items" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-and-search-media-items" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -163,7 +163,7 @@ export def commands []: nothing -> table {
 #
 # GET /
 # operationId: list-and-search-media-items
-export def "api list-and-media-items" [
+export def "list-and-search-media-items" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -203,7 +203,7 @@ export def "api list-and-media-items" [
 #
 # DELETE /:id
 # operationId: delete-a-media-item
-export def "id delete-media-item" [
+export def "delete-a-media-item" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -237,7 +237,7 @@ export def "id delete-media-item" [
 #
 # GET /:id/info
 # operationId: retrieve-a-media-item
-export def "id-info get-media-item" [
+export def "retrieve-a-media-item" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -271,7 +271,7 @@ export def "id-info get-media-item" [
 #
 # PUT /:id/info
 # operationId: update-a-media-item
-export def "id-info update-media-item" [
+export def "update-a-media-item" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

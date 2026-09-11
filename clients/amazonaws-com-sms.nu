@@ -135,7 +135,7 @@ def x-amz-target-completer-34 [] { ["AWSServerMigrationService_V2016_10_24.Updat
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-app" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-app" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -159,7 +159,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CreateApp
-export def "api create-app" [
+export def "create-app" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -212,7 +212,7 @@ export def "api create-app" [
 #
 # POST /
 # operationId: CreateReplicationJob
-export def "api create-replication-job" [
+export def "create-replication-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -269,7 +269,7 @@ export def "api create-replication-job" [
 #
 # POST /
 # operationId: DeleteApp
-export def "api delete-app" [
+export def "delete-app" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -319,7 +319,7 @@ export def "api delete-app" [
 #
 # POST /
 # operationId: DeleteAppLaunchConfiguration
-export def "api delete-app-launch-configuration" [
+export def "delete-app-launch-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -367,7 +367,7 @@ export def "api delete-app-launch-configuration" [
 #
 # POST /
 # operationId: DeleteAppReplicationConfiguration
-export def "api delete-app-replication-configuration" [
+export def "delete-app-replication-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -415,7 +415,7 @@ export def "api delete-app-replication-configuration" [
 #
 # POST /
 # operationId: DeleteAppValidationConfiguration
-export def "api delete-app-validation-configuration" [
+export def "delete-app-validation-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -463,7 +463,7 @@ export def "api delete-app-validation-configuration" [
 #
 # POST /
 # operationId: DeleteReplicationJob
-export def "api delete-replication-job" [
+export def "delete-replication-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -511,7 +511,7 @@ export def "api delete-replication-job" [
 #
 # POST /
 # operationId: DeleteServerCatalog
-export def "api delete-server-catalog" [
+export def "delete-server-catalog" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -559,7 +559,7 @@ export def "api delete-server-catalog" [
 #
 # POST /
 # operationId: DisassociateConnector
-export def "api create-disassociate-connector" [
+export def "disassociate-connector" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -607,7 +607,7 @@ export def "api create-disassociate-connector" [
 #
 # POST /
 # operationId: GenerateChangeSet
-export def "api generate-change-update" [
+export def "generate-change-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -656,7 +656,7 @@ export def "api generate-change-update" [
 #
 # POST /
 # operationId: GenerateTemplate
-export def "api generate-template" [
+export def "generate-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -705,7 +705,7 @@ export def "api generate-template" [
 #
 # POST /
 # operationId: GetApp
-export def "api get-app" [
+export def "get-app" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -753,7 +753,7 @@ export def "api get-app" [
 #
 # POST /
 # operationId: GetAppLaunchConfiguration
-export def "api get-app-launch-configuration" [
+export def "get-app-launch-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -801,7 +801,7 @@ export def "api get-app-launch-configuration" [
 #
 # POST /
 # operationId: GetAppReplicationConfiguration
-export def "api get-app-replication-configuration" [
+export def "get-app-replication-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -849,7 +849,7 @@ export def "api get-app-replication-configuration" [
 #
 # POST /
 # operationId: GetAppValidationConfiguration
-export def "api get-app-validation-configuration" [
+export def "get-app-validation-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -897,7 +897,7 @@ export def "api get-app-validation-configuration" [
 #
 # POST /
 # operationId: GetAppValidationOutput
-export def "api get-app-validation-output" [
+export def "get-app-validation-output" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -945,7 +945,7 @@ export def "api get-app-validation-output" [
 #
 # POST /
 # operationId: GetConnectors
-export def "api get-connectors" [
+export def "get-connectors" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -997,7 +997,7 @@ export def "api get-connectors" [
 #
 # POST /
 # operationId: GetReplicationJobs
-export def "api get-replication-jobs" [
+export def "get-replication-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1050,7 +1050,7 @@ export def "api get-replication-jobs" [
 #
 # POST /
 # operationId: GetReplicationRuns
-export def "api get-replication-runs" [
+export def "get-replication-runs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1103,7 +1103,7 @@ export def "api get-replication-runs" [
 #
 # POST /
 # operationId: GetServers
-export def "api get-servers" [
+export def "get-servers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1156,7 +1156,7 @@ export def "api get-servers" [
 #
 # POST /
 # operationId: ImportAppCatalog
-export def "api import-app-catalog" [
+export def "import-app-catalog" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1204,7 +1204,7 @@ export def "api import-app-catalog" [
 #
 # POST /
 # operationId: ImportServerCatalog
-export def "api import-server-catalog" [
+export def "import-server-catalog" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1252,7 +1252,7 @@ export def "api import-server-catalog" [
 #
 # POST /
 # operationId: LaunchApp
-export def "api create-launch-app" [
+export def "launch-app" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1300,7 +1300,7 @@ export def "api create-launch-app" [
 #
 # POST /
 # operationId: ListApps
-export def "api list-apps" [
+export def "list-apps" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1350,7 +1350,7 @@ export def "api list-apps" [
 #
 # POST /
 # operationId: NotifyAppValidationOutput
-export def "api notify-app-validation-output" [
+export def "notify-app-validation-output" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1399,7 +1399,7 @@ export def "api notify-app-validation-output" [
 #
 # POST /
 # operationId: PutAppLaunchConfiguration
-export def "api update-app-launch-configuration" [
+export def "put-app-launch-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1450,7 +1450,7 @@ export def "api update-app-launch-configuration" [
 #
 # POST /
 # operationId: PutAppReplicationConfiguration
-export def "api update-app-replication-configuration" [
+export def "put-app-replication-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1499,7 +1499,7 @@ export def "api update-app-replication-configuration" [
 #
 # POST /
 # operationId: PutAppValidationConfiguration
-export def "api update-app-validation-configuration" [
+export def "put-app-validation-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1549,7 +1549,7 @@ export def "api update-app-validation-configuration" [
 #
 # POST /
 # operationId: StartAppReplication
-export def "api start-app-replication" [
+export def "start-app-replication" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1597,7 +1597,7 @@ export def "api start-app-replication" [
 #
 # POST /
 # operationId: StartOnDemandAppReplication
-export def "api start-on-demand-app-replication" [
+export def "start-on-demand-app-replication" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1646,7 +1646,7 @@ export def "api start-on-demand-app-replication" [
 #
 # POST /
 # operationId: StartOnDemandReplicationRun
-export def "api start-on-demand-replication-run" [
+export def "start-on-demand-replication-run" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1695,7 +1695,7 @@ export def "api start-on-demand-replication-run" [
 #
 # POST /
 # operationId: StopAppReplication
-export def "api stop-app-replication" [
+export def "stop-app-replication" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1743,7 +1743,7 @@ export def "api stop-app-replication" [
 #
 # POST /
 # operationId: TerminateApp
-export def "api create-terminate-app" [
+export def "terminate-app" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1791,7 +1791,7 @@ export def "api create-terminate-app" [
 #
 # POST /
 # operationId: UpdateApp
-export def "api update-app" [
+export def "update-app" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1844,7 +1844,7 @@ export def "api update-app" [
 #
 # POST /
 # operationId: UpdateReplicationJob
-export def "api update-replication-job" [
+export def "update-replication-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

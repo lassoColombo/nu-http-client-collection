@@ -103,7 +103,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "iconsets-categories-platformplatformlanguagelanguage get-categories" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "categories" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -127,7 +127,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/iconsets/v3/categories?platform={platform}&language={language}
 # operationId: Categories
-export def "iconsets-categories-platformplatformlanguagelanguage get-categories" [
+export def "categories" [
   platform: string
   language: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -165,7 +165,7 @@ export def "iconsets-categories-platformplatformlanguagelanguage get-categories"
 #
 # GET /api/iconsets/v3/category?category={category}&subcategory={subcategory}&amount={amount}&offset={offset}&platform={platform}&language={language}
 # operationId: By Category
-export def "iconsets-category-categorycategorysubcategorysubcategoryamountamountoffsetoffsetplatformplatformlanguagelanguage get" [
+export def "by-category" [
   category: string
   subcategory: string
   amount: float
@@ -211,7 +211,7 @@ export def "iconsets-category-categorycategorysubcategorysubcategoryamountamount
 #
 # GET /api/iconsets/v3/latest?term={term}&amount={amount}&offset={offset}&platform={platform}&language={language}
 # operationId: Latest
-export def "iconsets-latest-termtermamountamountoffsetoffsetplatformplatformlanguagelanguage get-latest" [
+export def "latest" [
   term: any
   amount: float
   offset: float
@@ -255,7 +255,7 @@ export def "iconsets-latest-termtermamountamountoffsetoffsetplatformplatformlang
 #
 # GET /api/iconsets/v3/search?term={term}&amount={amount}&offset={offset}&platform={platform}&language={language}&exact_amount={exact_amount}
 # operationId: By Keyword v3
-export def "iconsets-search-termtermamountamountoffsetoffsetplatformplatformlanguagelanguageexact-amountexact-amount get-by-keyword-by-term-amount-offset-platform-language-exact-amount" [
+export def "by-keyword-v3" [
   term: string
   amount: float
   offset: float
@@ -301,7 +301,7 @@ export def "iconsets-search-termtermamountamountoffsetoffsetplatformplatformlang
 #
 # GET /api/iconsets/v3/total?since={since}
 # operationId: Totals
-export def "iconsets-total-sincesince get-totals" [
+export def "totals" [
   since: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -337,7 +337,7 @@ export def "iconsets-total-sincesince get-totals" [
 #
 # GET /api/iconsets/v4/search?term={term}&amount={amount}&offset={offset}&platform={platform}&language={language}&exact_amount={exact_amount}
 # operationId: By Keyword v4
-export def "iconsets-search-termtermamountamountoffsetoffsetplatformplatformlanguagelanguageexact-amountexact-amount get-by-keyword-by-term-amount-offset-platform-language-exact-amount-1" [
+export def "by-keyword-v4" [
   term: string
   amount: float
   offset: float
@@ -385,7 +385,7 @@ export def "iconsets-search-termtermamountamountoffsetoffsetplatformplatformlang
 # operationId: From a Collection
 # --auth shape: {hash: string}
 # --task shape: {arguments?: record}
-export def "task-web-font-collection create" [
+export def "from-a-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -426,7 +426,7 @@ export def "task-web-font-collection create" [
 # operationId: From Separate Icons
 # --auth shape: {hash: string}
 # --task shape: {arguments?: record}
-export def "task-web-font-icons create-from-separate" [
+export def "from-separate-icons" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -137,7 +137,7 @@ def descending-completer [] { ["N" "Y"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "echo-rest-services-get-download get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-echo-rest-services-get-download" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -160,7 +160,7 @@ export def commands []: nothing -> table {
 # Combined ECHO Download Data Service
 #
 # GET /echo_rest_services.get_download
-export def "echo-rest-services-get-download get" [
+export def "get-echo-rest-services-get-download" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -199,7 +199,7 @@ export def "echo-rest-services-get-download get" [
 # Combined ECHO Download Data Service
 #
 # POST /echo_rest_services.get_download
-export def "echo-rest-services-get-download create" [
+export def "post-echo-rest-services-get-download" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -241,7 +241,7 @@ export def "echo-rest-services-get-download create" [
 # Combined ECHO Facility Search Service
 #
 # GET /echo_rest_services.get_facilities
-export def "echo-rest-services-get-facilities get" [
+export def "get-echo-rest-services-get-facilities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -352,7 +352,7 @@ export def "echo-rest-services-get-facilities get" [
 # Combined ECHO Facility Search Service
 #
 # POST /echo_rest_services.get_facilities
-export def "echo-rest-services-get-facilities create" [
+export def "post-echo-rest-services-get-facilities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -466,7 +466,7 @@ export def "echo-rest-services-get-facilities create" [
 # Combined ECHO Facility Enhanced Search Service
 #
 # GET /echo_rest_services.get_facility_info
-export def "echo-rest-services-get-facility-info get" [
+export def "get-echo-rest-services-get-facility-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -574,7 +574,7 @@ export def "echo-rest-services-get-facility-info get" [
 # Combined ECHO Facility Enhanced Search Service
 #
 # POST /echo_rest_services.get_facility_info
-export def "echo-rest-services-get-facility-info create" [
+export def "post-echo-rest-services-get-facility-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -685,7 +685,7 @@ export def "echo-rest-services-get-facility-info create" [
 # Combined ECHO GeoJSON Service
 #
 # GET /echo_rest_services.get_geojson
-export def "echo-rest-services-get-geojson get" [
+export def "get-echo-rest-services-get-geojson" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -727,7 +727,7 @@ export def "echo-rest-services-get-geojson get" [
 # Combined ECHO GeoJSON Service
 #
 # POST /echo_rest_services.get_geojson
-export def "echo-rest-services-get-geojson create" [
+export def "post-echo-rest-services-get-geojson" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -772,7 +772,7 @@ export def "echo-rest-services-get-geojson create" [
 # Combined ECHO Info Clusters Service
 #
 # GET /echo_rest_services.get_info_clusters
-export def "echo-rest-services-get-info-clusters get" [
+export def "get-echo-rest-services-get-info-clusters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -810,7 +810,7 @@ export def "echo-rest-services-get-info-clusters get" [
 # Combined ECHO Info Clusters Service
 #
 # POST /echo_rest_services.get_info_clusters
-export def "echo-rest-services-get-info-clusters create" [
+export def "post-echo-rest-services-get-info-clusters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -851,7 +851,7 @@ export def "echo-rest-services-get-info-clusters create" [
 # Combined ECHO Map Service
 #
 # GET /echo_rest_services.get_map
-export def "echo-rest-services-get-map get" [
+export def "get-echo-rest-services-get-map" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -895,7 +895,7 @@ export def "echo-rest-services-get-map get" [
 # Combined ECHO Map Service
 #
 # POST /echo_rest_services.get_map
-export def "echo-rest-services-get-map create" [
+export def "post-echo-rest-services-get-map" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -942,7 +942,7 @@ export def "echo-rest-services-get-map create" [
 # Combined ECHO Paginated Results Service
 #
 # GET /echo_rest_services.get_qid
-export def "echo-rest-services-get-qid get" [
+export def "get-echo-rest-services-get-qid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -984,7 +984,7 @@ export def "echo-rest-services-get-qid get" [
 # Combined ECHO Paginated Results Service
 #
 # POST /echo_rest_services.get_qid
-export def "echo-rest-services-get-qid create" [
+export def "post-echo-rest-services-get-qid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1029,7 +1029,7 @@ export def "echo-rest-services-get-qid create" [
 # Combined ECHO Metadata Service
 #
 # GET /echo_rest_services.metadata
-export def "echo-rest-services-metadata get" [
+export def "get-echo-rest-services-metadata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1066,7 +1066,7 @@ export def "echo-rest-services-metadata get" [
 # Combined ECHO Metadata Service
 #
 # POST /echo_rest_services.metadata
-export def "echo-rest-services-metadata create" [
+export def "post-echo-rest-services-metadata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

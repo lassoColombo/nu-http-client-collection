@@ -122,7 +122,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-software-plan-register create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "software-plan-register" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.SoftwarePlan/register
 # operationId: SoftwarePlan_Register
-export def "subscriptions-providers-microsoft-software-plan-register create" [
+export def "software-plan-register" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -184,7 +184,7 @@ export def "subscriptions-providers-microsoft-software-plan-register create" [
 #
 # GET /{scope}/providers/Microsoft.SoftwarePlan/hybridUseBenefits
 # operationId: HybridUseBenefit_List
-export def "providers-microsoft-software-plan-hybrid-use-benefits list" [
+export def "hybrid-use-benefit-list" [
   scope: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -223,7 +223,7 @@ export def "providers-microsoft-software-plan-hybrid-use-benefits list" [
 #
 # DELETE /{scope}/providers/Microsoft.SoftwarePlan/hybridUseBenefits/{planId}
 # operationId: HybridUseBenefit_Delete
-export def "providers-microsoft-software-plan-hybrid-use-benefits delete" [
+export def "hybrid-use-benefit-delete" [
   scope: string
   plan_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -263,7 +263,7 @@ export def "providers-microsoft-software-plan-hybrid-use-benefits delete" [
 #
 # GET /{scope}/providers/Microsoft.SoftwarePlan/hybridUseBenefits/{planId}
 # operationId: HybridUseBenefit_Get
-export def "providers-microsoft-software-plan-hybrid-use-benefits get" [
+export def "hybrid-use-benefit-get" [
   scope: string
   plan_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -305,7 +305,7 @@ export def "providers-microsoft-software-plan-hybrid-use-benefits get" [
 # operationId: HybridUseBenefit_Update
 # --properties shape: {provisioningState?: "Succeeded"|"Cancelled"|"Failed"}
 # --sku shape: {name?: string}
-export def "providers-microsoft-software-plan-hybrid-use-benefits update" [
+export def "hybrid-use-benefit-update" [
   scope: string
   plan_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -352,7 +352,7 @@ export def "providers-microsoft-software-plan-hybrid-use-benefits update" [
 # operationId: HybridUseBenefit_Create
 # --properties shape: {provisioningState?: "Succeeded"|"Cancelled"|"Failed"}
 # --sku shape: {name?: string}
-export def "providers-microsoft-software-plan-hybrid-use-benefits create" [
+export def "hybrid-use-benefit-create" [
   scope: string
   plan_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -397,7 +397,7 @@ export def "providers-microsoft-software-plan-hybrid-use-benefits create" [
 #
 # GET /{scope}/providers/Microsoft.SoftwarePlan/hybridUseBenefits/{planId}/revisions
 # operationId: HybridUseBenefitRevision_List
-export def "providers-microsoft-software-plan-hybrid-use-benefits-revisions list" [
+export def "hybrid-use-benefit-revision-list" [
   scope: string
   plan_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -437,7 +437,7 @@ export def "providers-microsoft-software-plan-hybrid-use-benefits-revisions list
 #
 # GET /{scope}/providers/Microsoft.SoftwarePlan/operations
 # operationId: Operations_List
-export def "providers-microsoft-software-plan-operations list" [
+export def "operations-list" [
   scope: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

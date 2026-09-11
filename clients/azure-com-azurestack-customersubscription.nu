@@ -110,7 +110,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-azure-stack-registrations-customer-subscriptions list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "customer-subscriptions-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -134,7 +134,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.AzureStack/registrations/{registrationName}/customerSubscriptions
 # operationId: CustomerSubscriptions_List
-export def "subscriptions-resource-groups-providers-microsoft-azure-stack-registrations-customer-subscriptions list" [
+export def "customer-subscriptions-list" [
   subscription_id: string
   resource_group: string
   registration_name: string
@@ -176,7 +176,7 @@ export def "subscriptions-resource-groups-providers-microsoft-azure-stack-regist
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.AzureStack/registrations/{registrationName}/customerSubscriptions/{customerSubscriptionName}
 # operationId: CustomerSubscriptions_Delete
-export def "subscriptions-resource-groups-providers-microsoft-azure-stack-registrations-customer-subscriptions delete" [
+export def "customer-subscriptions-delete" [
   subscription_id: string
   resource_group: string
   registration_name: string
@@ -220,7 +220,7 @@ export def "subscriptions-resource-groups-providers-microsoft-azure-stack-regist
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.AzureStack/registrations/{registrationName}/customerSubscriptions/{customerSubscriptionName}
 # operationId: CustomerSubscriptions_Get
-export def "subscriptions-resource-groups-providers-microsoft-azure-stack-registrations-customer-subscriptions get" [
+export def "customer-subscriptions-get" [
   subscription_id: string
   resource_group: string
   registration_name: string
@@ -265,7 +265,7 @@ export def "subscriptions-resource-groups-providers-microsoft-azure-stack-regist
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.AzureStack/registrations/{registrationName}/customerSubscriptions/{customerSubscriptionName}
 # operationId: CustomerSubscriptions_Create
 # --properties shape: {tenantId?: string}
-export def "subscriptions-resource-groups-providers-microsoft-azure-stack-registrations-customer-subscriptions create" [
+export def "customer-subscriptions-create" [
   subscription_id: string
   resource_group: string
   registration_name: string

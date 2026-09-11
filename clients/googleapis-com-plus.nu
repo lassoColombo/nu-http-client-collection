@@ -113,7 +113,7 @@ def order-by-completer-1 [] { ["alphabetical" "best"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "activities list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "plus-activities-search" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -137,7 +137,7 @@ export def commands []: nothing -> table {
 #
 # GET /activities
 # operationId: plus.activities.search
-export def "activities list" [
+export def "plus-activities-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -184,7 +184,7 @@ export def "activities list" [
 #
 # GET /activities/{activityId}
 # operationId: plus.activities.get
-export def "activities get" [
+export def "plus-activities-get" [
   activity_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -228,7 +228,7 @@ export def "activities get" [
 #
 # GET /activities/{activityId}/comments
 # operationId: plus.comments.list
-export def "activities-comments list" [
+export def "plus-comments-list" [
   activity_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -275,7 +275,7 @@ export def "activities-comments list" [
 #
 # GET /activities/{activityId}/people/{collection}
 # operationId: plus.people.listByActivity
-export def "activities-people list-by-activity" [
+export def "plus-people-list-by-activity" [
   activity_id: string
   collection: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -323,7 +323,7 @@ export def "activities-people list-by-activity" [
 #
 # GET /comments/{commentId}
 # operationId: plus.comments.get
-export def "comments get" [
+export def "plus-comments-get" [
   comment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -367,7 +367,7 @@ export def "comments get" [
 #
 # GET /people
 # operationId: plus.people.search
-export def "people list" [
+export def "plus-people-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -413,7 +413,7 @@ export def "people list" [
 #
 # GET /people/{userId}
 # operationId: plus.people.get
-export def "people get" [
+export def "plus-people-get" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -457,7 +457,7 @@ export def "people get" [
 #
 # GET /people/{userId}/activities/{collection}
 # operationId: plus.activities.list
-export def "people-activities list" [
+export def "plus-activities-list" [
   user_id: string
   collection: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -505,7 +505,7 @@ export def "people-activities list" [
 #
 # GET /people/{userId}/people/{collection}
 # operationId: plus.people.list
-export def "people-people list" [
+export def "plus-people-list" [
   user_id: string
   collection: string
   --base-url(-b): string@base-url-completer # API base URL

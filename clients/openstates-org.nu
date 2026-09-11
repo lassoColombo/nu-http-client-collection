@@ -99,7 +99,7 @@ def classification-completer [] { ["committee" "subcommittee"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "bills list-get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "bills-search-bills-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -123,7 +123,7 @@ export def commands []: nothing -> table {
 #
 # GET /bills
 # operationId: bills_search_bills_get
-export def "bills list-get" [
+export def "bills-search-bills-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -178,7 +178,7 @@ export def "bills list-get" [
 #
 # GET /bills/ocd-bill/{openstates_bill_id}
 # operationId: bill_detail_by_id_bills_ocd_bill__openstates_bill_id__get
-export def "bills-ocd-bill get-detail-by" [
+export def "bill-detail-by-id-bills-ocd-bill-openstates-bill-id-get" [
   openstates_bill_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -220,7 +220,7 @@ export def "bills-ocd-bill get-detail-by" [
 #
 # GET /bills/{jurisdiction}/{session}/{bill_id}
 # operationId: bill_detail_bills__jurisdiction___session___bill_id__get
-export def "bills get-detail" [
+export def "bill-detail-bills-jurisdiction-session-bill-id-get" [
   jurisdiction: string
   session: string
   bill_id: string
@@ -266,7 +266,7 @@ export def "bills get-detail" [
 #
 # GET /committees
 # operationId: committee_list_committees_get
-export def "committees list-get" [
+export def "committee-list-committees-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -312,7 +312,7 @@ export def "committees list-get" [
 #
 # GET /committees/{committee_id}
 # operationId: committee_detail_committees__committee_id__get
-export def "committees get-detail" [
+export def "committee-detail-committees-committee-id-get" [
   committee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -354,7 +354,7 @@ export def "committees get-detail" [
 #
 # GET /events
 # operationId: event_list_events_get
-export def "events list-get" [
+export def "event-list-events-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -401,7 +401,7 @@ export def "events list-get" [
 #
 # GET /events/{event_id}
 # operationId: event_detail_events__event_id__get
-export def "events get-detail" [
+export def "event-detail-events-event-id-get" [
   event_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -443,7 +443,7 @@ export def "events get-detail" [
 #
 # GET /jurisdictions
 # operationId: jurisdiction_list_jurisdictions_get
-export def "jurisdictions list-get" [
+export def "jurisdiction-list-jurisdictions-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -486,7 +486,7 @@ export def "jurisdictions list-get" [
 #
 # GET /jurisdictions/{jurisdiction_id}
 # operationId: jurisdiction_detail_jurisdictions__jurisdiction_id__get
-export def "jurisdictions get-detail" [
+export def "jurisdiction-detail-jurisdictions-jurisdiction-id-get" [
   jurisdiction_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -528,7 +528,7 @@ export def "jurisdictions get-detail" [
 #
 # GET /metrics
 # operationId: metrics_metrics_get
-export def "metrics get" [
+export def "metrics-metrics-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -562,7 +562,7 @@ export def "metrics get" [
 #
 # GET /people
 # operationId: people_search_people_get
-export def "people list-get" [
+export def "people-search-people-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -609,7 +609,7 @@ export def "people list-get" [
 #
 # GET /people.geo
 # operationId: people_geo_people_geo_get
-export def "people-geo get" [
+export def "people-geo-people-geo-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

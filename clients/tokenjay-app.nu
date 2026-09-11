@@ -103,7 +103,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "ageusd-info get-age-usd" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-age-usd-info" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -127,7 +127,7 @@ export def commands []: nothing -> table {
 #
 # GET /ageusd/info
 # operationId: getAgeUsdInfo
-export def "ageusd-info get-age-usd" [
+export def "get-age-usd-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -160,7 +160,7 @@ export def "ageusd-info get-age-usd" [
 # GET /cancelbabel/{boxId}
 #
 # operationId: ergoPayCreateBabelBox_1
-export def "cancelbabel create-ergo-pay-babel-box-by-box-id" [
+export def "ergo-pay-create-babel-box-1" [
   box_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -195,7 +195,7 @@ export def "cancelbabel create-ergo-pay-babel-box-by-box-id" [
 # GET /createbabel/{address}
 #
 # operationId: ergoPayCreateBabelBox
-export def "create-babel create-ergo-pay-box" [
+export def "ergo-pay-create-babel-box" [
   address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -234,7 +234,7 @@ export def "create-babel create-ergo-pay-box" [
 # GET /mosaik/babelfee/
 #
 # operationId: getBabelFeeOverview
-export def "mosaik-babelfee get-babel-fee-overview" [
+export def "get-babel-fee-overview" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -267,7 +267,7 @@ export def "mosaik-babelfee get-babel-fee-overview" [
 # GET /mosaik/babelfee/newoffer
 #
 # operationId: getBabelFeeNewOffer
-export def "mosaik-babelfee-newoffer get-babel-fee-new-offer" [
+export def "get-babel-fee-new-offer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -300,7 +300,7 @@ export def "mosaik-babelfee-newoffer get-babel-fee-new-offer" [
 # POST /mosaik/babelfee/newoffer/doit
 #
 # operationId: doCreateBabelBox
-export def "mosaik-babelfee-newoffer-doit create-do-babel-box" [
+export def "do-create-babel-box" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -337,7 +337,7 @@ export def "mosaik-babelfee-newoffer-doit create-do-babel-box" [
 # POST /mosaik/babelfee/newoffer/new-input
 #
 # operationId: replaceTokenAmountInputFields
-export def "mosaik-babelfee-newoffer-new-input update-token-amount-fields" [
+export def "replace-token-amount-input-fields" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -374,7 +374,7 @@ export def "mosaik-babelfee-newoffer-new-input update-token-amount-fields" [
 # GET /mosaik/babelfee/notificationcheck
 #
 # operationId: checkForNotifications
-export def "mosaik-babelfee-notificationcheck check-for-notifications" [
+export def "check-for-notifications" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -407,7 +407,7 @@ export def "mosaik-babelfee-notificationcheck check-for-notifications" [
 # GET /mosaik/boxconsolidation/
 #
 # operationId: mainApp_1
-export def "mosaik-boxconsolidation get-main-app" [
+export def "main-app-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -440,7 +440,7 @@ export def "mosaik-boxconsolidation get-main-app" [
 # GET /mosaik/boxconsolidation/consolidate/{p2pkaddress}
 #
 # operationId: epConsolidate
-export def "mosaik-boxconsolidation-consolidate get-ep" [
+export def "ep-consolidate" [
   p2pkaddress: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -475,7 +475,7 @@ export def "mosaik-boxconsolidation-consolidate get-ep" [
 # GET /mosaik/tokenburn
 #
 # operationId: mainApp
-export def "mosaik-tokenburn get-main-app" [
+export def "main-app" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -508,7 +508,7 @@ export def "mosaik-tokenburn get-main-app" [
 # GET /mosaik/tokenburn/get/{uuid}
 #
 # operationId: getBurningTransaction
-export def "mosaik-tokenburn-get get-burning-transaction" [
+export def "get-burning-transaction" [
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -543,7 +543,7 @@ export def "mosaik-tokenburn-get get-burning-transaction" [
 # POST /mosaik/tokenburn/prepare
 #
 # operationId: prepareTransaction
-export def "mosaik-tokenburn-prepare create-transaction" [
+export def "prepare-transaction" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -581,7 +581,7 @@ export def "mosaik-tokenburn-prepare create-transaction" [
 #
 # POST /payment/addrequest
 # operationId: addPaymentRequest
-export def "payment-addrequest create-request" [
+export def "add-payment-request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -624,7 +624,7 @@ export def "payment-addrequest create-request" [
 #
 # GET /payment/state/{requestId}
 # operationId: getPaymentState
-export def "payment-state get" [
+export def "get-payment-state" [
   request_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -660,7 +660,7 @@ export def "payment-state get" [
 #
 # GET /peers/list
 # operationId: getPeersList
-export def "peers-list get" [
+export def "get-peers-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -698,7 +698,7 @@ export def "peers-list get" [
 #
 # GET /sigrsv/exchange/
 # operationId: doSigmaRsvExchange
-export def "sigrsv-exchange get-do-sigma-rsv" [
+export def "do-sigma-rsv-exchange" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -737,7 +737,7 @@ export def "sigrsv-exchange get-do-sigma-rsv" [
 #
 # GET /sigrsv/exchange/{amount}/info
 # operationId: calcSigmaRsvExchange
-export def "sigrsv-exchange-info get-calc-sigma-rsv" [
+export def "calc-sigma-rsv-exchange" [
   amount: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -773,7 +773,7 @@ export def "sigrsv-exchange-info get-calc-sigma-rsv" [
 #
 # GET /sigrsv/price
 # operationId: getSigmaRsvPrice
-export def "sigrsv-price get-sigma-rsv" [
+export def "get-sigma-rsv-price" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -807,7 +807,7 @@ export def "sigrsv-price get-sigma-rsv" [
 #
 # GET /sigusd/exchange/
 # operationId: doSigmaUsdExchange
-export def "sigusd-exchange get-do-sigma-usd" [
+export def "do-sigma-usd-exchange" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -846,7 +846,7 @@ export def "sigusd-exchange get-do-sigma-usd" [
 #
 # GET /sigusd/exchange/{amount}/info
 # operationId: calcSigmaUsdExchange
-export def "sigusd-exchange-info get-calc-sigma-usd" [
+export def "calc-sigma-usd-exchange" [
   amount: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -882,7 +882,7 @@ export def "sigusd-exchange-info get-calc-sigma-usd" [
 #
 # GET /sigusd/price
 # operationId: getSigmaUsdPrice
-export def "sigusd-price get-sigma-usd" [
+export def "get-sigma-usd-price" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -916,7 +916,7 @@ export def "sigusd-price get-sigma-usd" [
 #
 # GET /tokens/check/{tokenId}/{tokenName}
 # operationId: checkToken
-export def "tokens-check check" [
+export def "check-token" [
   token_id: string
   token_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -954,7 +954,7 @@ export def "tokens-check check" [
 #
 # GET /tokens/listBlocked
 # operationId: listBlocked
-export def "tokens-list-blocked list" [
+export def "list-blocked" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -988,7 +988,7 @@ export def "tokens-list-blocked list" [
 #
 # GET /tokens/listGenuine
 # operationId: listGenuine
-export def "tokens-list-genuine list" [
+export def "list-genuine" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1022,7 +1022,7 @@ export def "tokens-list-genuine list" [
 #
 # GET /tokens/prices/all
 # operationId: getTokenPrices
-export def "tokens-prices-all get" [
+export def "get-token-prices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1056,7 +1056,7 @@ export def "tokens-prices-all get" [
 #
 # GET /tokens/prices/{tokenId}
 # operationId: getTokenPrice
-export def "tokens-prices get" [
+export def "get-token-price" [
   token_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

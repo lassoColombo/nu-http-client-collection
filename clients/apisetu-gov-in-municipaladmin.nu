@@ -112,7 +112,7 @@ def format-completer [] { ["pdf"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "kecer-certificate create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "kecer" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -138,7 +138,7 @@ export def commands []: nothing -> table {
 # operationId: kecer
 # --certificateParameters shape: {DocumentNumber: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "kecer-certificate create" [
+export def "kecer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -181,7 +181,7 @@ export def "kecer-certificate create" [
 # operationId: tapcn
 # --certificateParameters shape: {DocumentNumber: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "tapcn-certificate create" [
+export def "tapcn" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -224,7 +224,7 @@ export def "tapcn-certificate create" [
 # operationId: tdlcs
 # --certificateParameters shape: {DocumentNumber: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "tdlcs-certificate create" [
+export def "tdlcs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -267,7 +267,7 @@ export def "tdlcs-certificate create" [
 # operationId: ugdcn
 # --certificateParameters shape: {DocumentNumber: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "ugdcn-certificate create" [
+export def "ugdcn" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)

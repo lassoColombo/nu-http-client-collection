@@ -107,7 +107,7 @@ def state-type-completer [] { ["LimitedPayout" "LimitedProcessing" "LimitlessPay
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "check-account-holder create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-check-account-holder" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -131,7 +131,7 @@ export def commands []: nothing -> table {
 #
 # POST /checkAccountHolder
 # operationId: post-checkAccountHolder
-export def "check-account-holder create" [
+export def "post-check-account-holder" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -171,7 +171,7 @@ export def "check-account-holder create" [
 #
 # POST /closeAccount
 # operationId: post-closeAccount
-export def "close-account create" [
+export def "post-close-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -209,7 +209,7 @@ export def "close-account create" [
 #
 # POST /closeAccountHolder
 # operationId: post-closeAccountHolder
-export def "close-account-holder create" [
+export def "post-close-account-holder" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -247,7 +247,7 @@ export def "close-account-holder create" [
 #
 # POST /closeStores
 # operationId: post-closeStores
-export def "close-stores create" [
+export def "post-close-stores" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -286,7 +286,7 @@ export def "close-stores create" [
 #
 # POST /createAccount
 # operationId: post-createAccount
-export def "create-account create" [
+export def "post-create-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -333,7 +333,7 @@ export def "create-account create" [
 # operationId: post-createAccountHolder
 # --accountHolderDetails shape: {address?: record, bankAccountDetails?: list, bankAggregatorDataReference?: string, businessDetails?: record, email?: string, fullPhoneNumber?: string, individualDetails?: record, lastReviewDate?: string, legalArrangements?: list, merchantCategoryCode?: string, metadata?: record, payoutMethods?: list, principalBusinessAddress?: record, storeDetails?: list, webAddress?: string}
 @deprecated --flag primary-currency
-export def "create-account-holder create" [
+export def "post-create-account-holder" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -378,7 +378,7 @@ export def "create-account-holder create" [
 #
 # POST /deleteBankAccounts
 # operationId: post-deleteBankAccounts
-export def "delete-bank-accounts create" [
+export def "post-delete-bank-accounts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -418,7 +418,7 @@ export def "delete-bank-accounts create" [
 # POST /deleteLegalArrangements
 # operationId: post-deleteLegalArrangements
 # --legalArrangements item shape: {legalArrangementCode: string, legalArrangementEntityCodes?: list<string>}
-export def "delete-legal-arrangements create" [
+export def "post-delete-legal-arrangements" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -457,7 +457,7 @@ export def "delete-legal-arrangements create" [
 #
 # POST /deletePayoutMethods
 # operationId: post-deletePayoutMethods
-export def "delete-payout-methods create" [
+export def "post-delete-payout-methods" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -496,7 +496,7 @@ export def "delete-payout-methods create" [
 #
 # POST /deleteShareholders
 # operationId: post-deleteShareholders
-export def "delete-shareholders create" [
+export def "post-delete-shareholders" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -535,7 +535,7 @@ export def "delete-shareholders create" [
 #
 # POST /deleteSignatories
 # operationId: post-deleteSignatories
-export def "delete-signatories create" [
+export def "post-delete-signatories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -574,7 +574,7 @@ export def "delete-signatories create" [
 #
 # POST /getAccountHolder
 # operationId: post-getAccountHolder
-export def "get-account-holder create" [
+export def "post-get-account-holder" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -614,7 +614,7 @@ export def "get-account-holder create" [
 #
 # POST /getTaxForm
 # operationId: post-getTaxForm
-export def "get-tax-form create" [
+export def "post-get-tax-form" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -654,7 +654,7 @@ export def "get-tax-form create" [
 #
 # POST /getUploadedDocuments
 # operationId: post-getUploadedDocuments
-export def "get-uploaded-documents create" [
+export def "post-get-uploaded-documents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -694,7 +694,7 @@ export def "get-uploaded-documents create" [
 #
 # POST /suspendAccountHolder
 # operationId: post-suspendAccountHolder
-export def "suspend-account-holder create" [
+export def "post-suspend-account-holder" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -732,7 +732,7 @@ export def "suspend-account-holder create" [
 #
 # POST /unSuspendAccountHolder
 # operationId: post-unSuspendAccountHolder
-export def "un-suspend-account-holder create" [
+export def "post-un-suspend-account-holder" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -771,7 +771,7 @@ export def "un-suspend-account-holder create" [
 # POST /updateAccount
 # operationId: post-updateAccount
 # --payoutSchedule shape: {action?: "CLOSE"|"NOTHING"|"UPDATE", reason?: string, schedule: "BIWEEKLY_ON_1ST_AND_15TH_AT_MIDNIGHT"|"DAILY"|"DAILY_AU"|"DAILY_EU"|"DAILY_SG"|"DAILY_US"|"HOLD"|"MONTHLY"|"WEEKLY"|"WEEKLY_MON_TO_FRI_AU"|"WEEKLY_MON_TO_FRI_EU"|"WEEKLY_MON_TO_FRI_US"|"WEEKLY_ON_TUE_FRI_MIDNIGHT"|"WEEKLY_SUN_TO_THU_AU"|"WEEKLY_SUN_TO_THU_US"}
-export def "update-account create" [
+export def "post-update-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -817,7 +817,7 @@ export def "update-account create" [
 # operationId: post-updateAccountHolder
 # --accountHolderDetails shape: {address?: record, bankAccountDetails?: list, bankAggregatorDataReference?: string, businessDetails?: record, email?: string, fullPhoneNumber?: string, individualDetails?: record, lastReviewDate?: string, legalArrangements?: list, merchantCategoryCode?: string, metadata?: record, payoutMethods?: list, principalBusinessAddress?: record, storeDetails?: list, webAddress?: string}
 @deprecated --flag primary-currency
-export def "update-account-holder create" [
+export def "post-update-account-holder" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -861,7 +861,7 @@ export def "update-account-holder create" [
 #
 # POST /updateAccountHolderState
 # operationId: post-updateAccountHolderState
-export def "update-account-holder-state create" [
+export def "post-update-account-holder-state" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -903,7 +903,7 @@ export def "update-account-holder-state create" [
 # POST /uploadDocument
 # operationId: post-uploadDocument
 # --documentDetail shape: {accountHolderCode?: string, bankAccountUUID?: string, description?: string, documentType: "BANK_STATEMENT"|"BSN"|"COMPANY_REGISTRATION_SCREENING"|"CONSTITUTIONAL_DOCUMENT"|"DRIVING_LICENCE"|"DRIVING_LICENCE_BACK"|"DRIVING_LICENCE_FRONT"|"ID_CARD"|"ID_CARD_BACK"|"ID_CARD_FRONT"|"PASSPORT"|"PROOF_OF_RESIDENCY"|"SSN"|"SUPPORTING_DOCUMENTS", filename?: string, legalArrangementCode?: string, legalArrangementEntityCode?: string, shareholderCode?: string, signatoryCode?: string}
-export def "upload-document create" [
+export def "post-upload-document" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

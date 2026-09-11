@@ -100,7 +100,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "channels list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "versionhistory-platforms-channels-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -124,7 +124,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/{parent}/channels
 # operationId: versionhistory.platforms.channels.list
-export def "channels list" [
+export def "versionhistory-platforms-channels-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -174,7 +174,7 @@ export def "channels list" [
 #
 # GET /v1/{parent}/platforms
 # operationId: versionhistory.platforms.list
-export def "platforms list" [
+export def "versionhistory-platforms-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -224,7 +224,7 @@ export def "platforms list" [
 #
 # GET /v1/{parent}/releases
 # operationId: versionhistory.platforms.channels.versions.releases.list
-export def "releases list" [
+export def "versionhistory-platforms-channels-versions-releases-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -276,7 +276,7 @@ export def "releases list" [
 #
 # GET /v1/{parent}/versions
 # operationId: versionhistory.platforms.channels.versions.list
-export def "versions list" [
+export def "versionhistory-platforms-channels-versions-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

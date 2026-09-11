@@ -105,7 +105,7 @@ def type-completer [] { ["A_RECORD" "CHILD_ABUSE" "CONTENT" "FRAUD_WIRE" "IP_BLO
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "abuse-tickets list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-tickets" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -129,7 +129,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/abuse/tickets
 # operationId: getTickets
-export def "abuse-tickets list" [
+export def "get-tickets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -172,7 +172,7 @@ export def "abuse-tickets list" [
 #
 # POST /v1/abuse/tickets
 # operationId: createTicket
-export def "abuse-tickets create" [
+export def "create-ticket" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -216,7 +216,7 @@ export def "abuse-tickets create" [
 #
 # GET /v1/abuse/tickets/{ticketId}
 # operationId: getTicketInfo
-export def "abuse-tickets get" [
+export def "get-ticket-info" [
   ticket_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

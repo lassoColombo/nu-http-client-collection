@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account-stages-json get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-v2-account-stages-json" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -139,7 +139,7 @@ export def commands []: nothing -> table {
 # List account stages
 #
 # GET /v2/account_stages.json
-export def "account-stages-json get" [
+export def "get-v2-account-stages-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -181,7 +181,7 @@ export def "account-stages-json get" [
 # Fetch an account stage
 #
 # GET /v2/account_stages/{id}.json
-export def "account-stages get" [
+export def "get-v2-account-stages-id-json" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -216,7 +216,7 @@ export def "account-stages get" [
 # List Account Tiers
 #
 # GET /v2/account_tiers.json
-export def "account-tiers-json get" [
+export def "get-v2-account-tiers-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -258,7 +258,7 @@ export def "account-tiers-json get" [
 # Fetch an account tier
 #
 # GET /v2/account_tiers/{id}.json
-export def "account-tiers get" [
+export def "get-v2-account-tiers-id-json" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -293,7 +293,7 @@ export def "account-tiers get" [
 # Upsert an account
 #
 # POST /v2/account_upserts.json
-export def "account-upserts-json create" [
+export def "post-v2-account-upserts-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -359,7 +359,7 @@ export def "account-upserts-json create" [
 # List accounts
 #
 # GET /v2/accounts.json
-export def "accounts-json get" [
+export def "get-v2-accounts-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -422,7 +422,7 @@ export def "accounts-json get" [
 # Create an account
 #
 # POST /v2/accounts.json
-export def "accounts-json create" [
+export def "post-v2-accounts-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -486,7 +486,7 @@ export def "accounts-json create" [
 # Delete an account
 #
 # DELETE /v2/accounts/{id}.json
-export def "accounts delete" [
+export def "delete-v2-accounts-id-json" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -521,7 +521,7 @@ export def "accounts delete" [
 # Fetch an account
 #
 # GET /v2/accounts/{id}.json
-export def "accounts get" [
+export def "get-v2-accounts-id-json" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -556,7 +556,7 @@ export def "accounts get" [
 # Update an existing Account
 #
 # PUT /v2/accounts/{id}.json
-export def "accounts update" [
+export def "put-v2-accounts-id-json" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -623,7 +623,7 @@ export def "accounts update" [
 # List call instructions
 #
 # GET /v2/action_details/call_instructions.json
-export def "action-details-call-instructions-json get" [
+export def "get-v2-action-details-call-instructions-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -664,7 +664,7 @@ export def "action-details-call-instructions-json get" [
 # Fetch a call instructions
 #
 # GET /v2/action_details/call_instructions/{id}.json
-export def "action-details-call-instructions get" [
+export def "get-v2-action-details-call-instructions-id-json" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -699,7 +699,7 @@ export def "action-details-call-instructions get" [
 # List actions
 #
 # GET /v2/actions.json
-export def "actions-json get" [
+export def "get-v2-actions-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -748,7 +748,7 @@ export def "actions-json get" [
 # Fetch an action
 #
 # GET /v2/actions/{id}.json
-export def "actions get" [
+export def "get-v2-actions-id-json" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -783,7 +783,7 @@ export def "actions get" [
 # Create an activity
 #
 # POST /v2/activities.json
-export def "activities-json create" [
+export def "post-v2-activities-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -822,7 +822,7 @@ export def "activities-json create" [
 # List calls
 #
 # GET /v2/activities/calls.json
-export def "activities-calls-json get" [
+export def "get-v2-activities-calls-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -869,7 +869,7 @@ export def "activities-calls-json get" [
 # Create a call
 #
 # POST /v2/activities/calls.json
-export def "activities-calls-json create" [
+export def "post-v2-activities-calls-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -916,7 +916,7 @@ export def "activities-calls-json create" [
 # Fetch a call
 #
 # GET /v2/activities/calls/{id}.json
-export def "activities-calls get" [
+export def "get-v2-activities-calls-id-json" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -951,7 +951,7 @@ export def "activities-calls get" [
 # List emails
 #
 # GET /v2/activities/emails.json
-export def "activities-emails-json get" [
+export def "get-v2-activities-emails-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1006,7 +1006,7 @@ export def "activities-emails-json get" [
 # Fetch an email
 #
 # GET /v2/activities/emails/{id}.json
-export def "activities-emails get" [
+export def "get-v2-activities-emails-id-json" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1041,7 +1041,7 @@ export def "activities-emails get" [
 # List Past Activities
 #
 # GET /v2/activity_histories
-export def "activity-histories get" [
+export def "get-v2-activity-histories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1088,7 +1088,7 @@ export def "activity-histories get" [
 # List bulk jobs
 #
 # GET /v2/bulk_jobs
-export def "bulk-jobs list" [
+export def "get-v2-bulk-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1125,7 +1125,7 @@ export def "bulk-jobs list" [
 # Create a bulk job
 #
 # POST /v2/bulk_jobs
-export def "bulk-jobs create" [
+export def "post-v2-bulk-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1164,7 +1164,7 @@ export def "bulk-jobs create" [
 # List job data for a bulk job
 #
 # GET /v2/bulk_jobs/{bulk_jobs_id}/job_data
-export def "bulk-jobs-job-data get" [
+export def "get-v2-bulk-jobs-bulk-jobs-id-job-data" [
   bulk_jobs_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1203,7 +1203,7 @@ export def "bulk-jobs-job-data get" [
 # Create job data for a bulk job
 #
 # POST /v2/bulk_jobs/{bulk_jobs_id}/job_data
-export def "bulk-jobs-job-data create" [
+export def "post-v2-bulk-jobs-bulk-jobs-id-job-data" [
   bulk_jobs_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1243,7 +1243,7 @@ export def "bulk-jobs-job-data create" [
 # List job data for a completed bulk job.
 #
 # GET /v2/bulk_jobs/{bulk_jobs_id}/results
-export def "bulk-jobs-results get" [
+export def "get-v2-bulk-jobs-bulk-jobs-id-results" [
   bulk_jobs_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1282,7 +1282,7 @@ export def "bulk-jobs-results get" [
 # Fetch a bulk job
 #
 # GET /v2/bulk_jobs/{id}
-export def "bulk-jobs get" [
+export def "get-v2-bulk-jobs-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1317,7 +1317,7 @@ export def "bulk-jobs get" [
 # Update a bulk job
 #
 # PUT /v2/bulk_jobs/{id}
-export def "bulk-jobs update" [
+export def "put-v2-bulk-jobs-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1358,7 +1358,7 @@ export def "bulk-jobs update" [
 # Export a cadence
 #
 # GET /v2/cadence_exports/{id}.json
-export def "cadence-exports get" [
+export def "get-v2-cadence-exports-id-json" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1393,7 +1393,7 @@ export def "cadence-exports get" [
 # Import cadences from JSON
 #
 # POST /v2/cadence_imports.json
-export def "cadence-imports-json create" [
+export def "post-v2-cadence-imports-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1433,7 +1433,7 @@ export def "cadence-imports-json create" [
 # List cadence memberships
 #
 # GET /v2/cadence_memberships.json
-export def "cadence-memberships-json get" [
+export def "get-v2-cadence-memberships-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1478,7 +1478,7 @@ export def "cadence-memberships-json get" [
 # Create a cadence membership
 #
 # POST /v2/cadence_memberships.json
-export def "cadence-memberships-json create" [
+export def "post-v2-cadence-memberships-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1516,7 +1516,7 @@ export def "cadence-memberships-json create" [
 # Delete a cadence membership
 #
 # DELETE /v2/cadence_memberships/{id}.json
-export def "cadence-memberships delete" [
+export def "delete-v2-cadence-memberships-id-json" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1551,7 +1551,7 @@ export def "cadence-memberships delete" [
 # Fetch a cadence membership
 #
 # GET /v2/cadence_memberships/{id}.json
-export def "cadence-memberships get" [
+export def "get-v2-cadence-memberships-id-json" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1586,7 +1586,7 @@ export def "cadence-memberships get" [
 # List cadences
 #
 # GET /v2/cadences.json
-export def "cadences-json get" [
+export def "get-v2-cadences-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1635,7 +1635,7 @@ export def "cadences-json get" [
 # Fetch a cadence
 #
 # GET /v2/cadences/{id}.json
-export def "cadences get" [
+export def "get-v2-cadences-id-json" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1670,7 +1670,7 @@ export def "cadences get" [
 # List calendar events
 #
 # GET /v2/calendar/events
-export def "calendar-events get" [
+export def "get-v2-calendar-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1712,7 +1712,7 @@ export def "calendar-events get" [
 # Upsert a calendar event
 #
 # POST /v2/calendar/events/upsert
-export def "calendar-events-upsert create" [
+export def "post-v2-calendar-events-upsert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1763,7 +1763,7 @@ export def "calendar-events-upsert create" [
 # List call data records
 #
 # GET /v2/call_data_records.json
-export def "call-data-records-json get" [
+export def "get-v2-call-data-records-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1809,7 +1809,7 @@ export def "call-data-records-json get" [
 # Fetch a call data record
 #
 # GET /v2/call_data_records/{id}.json
-export def "call-data-records get" [
+export def "get-v2-call-data-records-id-json" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1844,7 +1844,7 @@ export def "call-data-records get" [
 # List call dispositions
 #
 # GET /v2/call_dispositions.json
-export def "call-dispositions-json get" [
+export def "get-v2-call-dispositions-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1884,7 +1884,7 @@ export def "call-dispositions-json get" [
 # List call sentiments
 #
 # GET /v2/call_sentiments.json
-export def "call-sentiments-json get" [
+export def "get-v2-call-sentiments-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1925,7 +1925,7 @@ export def "call-sentiments-json get" [
 # Create Conversations Call
 #
 # POST /v2/conversations/calls
-export def "conversations-calls create" [
+export def "post-v2-conversations-calls" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1969,7 +1969,7 @@ export def "conversations-calls create" [
 # List crm activities
 #
 # GET /v2/crm_activities.json
-export def "crm-activities-json get" [
+export def "get-v2-crm-activities-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2011,7 +2011,7 @@ export def "crm-activities-json get" [
 # Fetch a crm activity
 #
 # GET /v2/crm_activities/{id}.json
-export def "crm-activities get" [
+export def "get-v2-crm-activities-id-json" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2046,7 +2046,7 @@ export def "crm-activities get" [
 # List crm activity fields
 #
 # GET /v2/crm_activity_fields.json
-export def "crm-activity-fields-json get" [
+export def "get-v2-crm-activity-fields-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2087,7 +2087,7 @@ export def "crm-activity-fields-json get" [
 # List crm users
 #
 # GET /v2/crm_users.json
-export def "crm-users-json get" [
+export def "get-v2-crm-users-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2131,7 +2131,7 @@ export def "crm-users-json get" [
 # List custom fields
 #
 # GET /v2/custom_fields.json
-export def "custom-fields-json get" [
+export def "get-v2-custom-fields-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2173,7 +2173,7 @@ export def "custom-fields-json get" [
 # Create a custom field
 #
 # POST /v2/custom_fields.json
-export def "custom-fields-json create" [
+export def "post-v2-custom-fields-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2212,7 +2212,7 @@ export def "custom-fields-json create" [
 # Delete a custom field
 #
 # DELETE /v2/custom_fields/{id}.json
-export def "custom-fields delete" [
+export def "delete-v2-custom-fields-id-json" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2247,7 +2247,7 @@ export def "custom-fields delete" [
 # Fetch a custom field
 #
 # GET /v2/custom_fields/{id}.json
-export def "custom-fields get" [
+export def "get-v2-custom-fields-id-json" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2282,7 +2282,7 @@ export def "custom-fields get" [
 # Update a custom field
 #
 # PUT /v2/custom_fields/{id}.json
-export def "custom-fields update" [
+export def "put-v2-custom-fields-id-json" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2323,7 +2323,7 @@ export def "custom-fields update" [
 # List email template attachments
 #
 # GET /v2/email_template_attachments.json
-export def "email-template-attachments-json get" [
+export def "get-v2-email-template-attachments-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2363,7 +2363,7 @@ export def "email-template-attachments-json get" [
 # List email templates
 #
 # GET /v2/email_templates.json
-export def "email-templates-json get" [
+export def "get-v2-email-templates-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2414,7 +2414,7 @@ export def "email-templates-json get" [
 # Fetch an email template
 #
 # GET /v2/email_templates/{id}.json
-export def "email-templates get" [
+export def "get-v2-email-templates-id-json" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2451,7 +2451,7 @@ export def "email-templates get" [
 # Create an External Email
 #
 # POST /v2/external_emails.json
-export def "external-emails-json create" [
+export def "post-v2-external-emails-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2490,7 +2490,7 @@ export def "external-emails-json create" [
 # List groups
 #
 # GET /v2/groups.json
-export def "groups-json get" [
+export def "get-v2-groups-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2527,7 +2527,7 @@ export def "groups-json get" [
 # Fetch a group
 #
 # GET /v2/groups/{id}.json
-export def "groups get" [
+export def "get-v2-groups-id-json" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2562,7 +2562,7 @@ export def "groups get" [
 # List imports
 #
 # GET /v2/imports.json
-export def "imports-json get" [
+export def "get-v2-imports-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2604,7 +2604,7 @@ export def "imports-json get" [
 # Create an import
 #
 # POST /v2/imports.json
-export def "imports-json create" [
+export def "post-v2-imports-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2643,7 +2643,7 @@ export def "imports-json create" [
 # Delete an import
 #
 # DELETE /v2/imports/{id}.json
-export def "imports delete" [
+export def "delete-v2-imports-id-json" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2680,7 +2680,7 @@ export def "imports delete" [
 # Fetch an import
 #
 # GET /v2/imports/{id}.json
-export def "imports get" [
+export def "get-v2-imports-id-json" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2715,7 +2715,7 @@ export def "imports get" [
 # Update an import
 #
 # PUT /v2/imports/{id}.json
-export def "imports update" [
+export def "put-v2-imports-id-json" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2756,7 +2756,7 @@ export def "imports update" [
 # Create an Live Website Tracking Parameter
 #
 # POST /v2/live_website_tracking_parameters.json
-export def "live-website-tracking-parameters-json create" [
+export def "post-v2-live-website-tracking-parameters-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2794,7 +2794,7 @@ export def "live-website-tracking-parameters-json create" [
 # Fetch current user
 #
 # GET /v2/me.json
-export def "me-json get" [
+export def "get-v2-me-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2827,7 +2827,7 @@ export def "me-json get" [
 # List meetings
 #
 # GET /v2/meetings.json
-export def "meetings-json get" [
+export def "get-v2-meetings-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2879,7 +2879,7 @@ export def "meetings-json get" [
 # List meeting settings
 #
 # POST /v2/meetings/settings/searches.json
-export def "meetings-settings-searches-json create" [
+export def "post-v2-meetings-settings-searches-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2920,7 +2920,7 @@ export def "meetings-settings-searches-json create" [
 # Update a meeting setting
 #
 # PUT /v2/meetings/settings/{id}.json
-export def "meetings-settings update" [
+export def "put-v2-meetings-settings-id-json" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2980,7 +2980,7 @@ export def "meetings-settings update" [
 # Update a meeting
 #
 # PUT /v2/meetings/{id}.json
-export def "meetings update" [
+export def "put-v2-meetings-id-json" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3023,7 +3023,7 @@ export def "meetings update" [
 # Fetch the MIME content for email
 #
 # GET /v2/mime_email_payloads/{id}.json
-export def "mime-email-payloads get" [
+export def "get-v2-mime-email-payloads-id-json" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3058,7 +3058,7 @@ export def "mime-email-payloads get" [
 # List notes
 #
 # GET /v2/notes.json
-export def "notes-json get" [
+export def "get-v2-notes-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3102,7 +3102,7 @@ export def "notes-json get" [
 # Create a note
 #
 # POST /v2/notes.json
-export def "notes-json create" [
+export def "post-v2-notes-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3146,7 +3146,7 @@ export def "notes-json create" [
 # Delete a note
 #
 # DELETE /v2/notes/{id}.json
-export def "notes delete" [
+export def "delete-v2-notes-id-json" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3181,7 +3181,7 @@ export def "notes delete" [
 # Fetch a note
 #
 # GET /v2/notes/{id}.json
-export def "notes get" [
+export def "get-v2-notes-id-json" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3216,7 +3216,7 @@ export def "notes get" [
 # Update a note
 #
 # PUT /v2/notes/{id}.json
-export def "notes update" [
+export def "put-v2-notes-id-json" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3257,7 +3257,7 @@ export def "notes update" [
 # Create an ongoing action
 #
 # POST /v2/ongoing_actions.json
-export def "ongoing-actions-json create" [
+export def "post-v2-ongoing-actions-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3295,7 +3295,7 @@ export def "ongoing-actions-json create" [
 # Fetches a list of emails ready to be sent by an external email service. Only emails sent with an External Email Client will appear here.
 #
 # GET /v2/pending_emails.json
-export def "pending-emails-json get" [
+export def "get-v2-pending-emails-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3333,7 +3333,7 @@ export def "pending-emails-json get" [
 # Updates the status of an email sent by an External Email Client
 #
 # PUT /v2/pending_emails/{id}.json
-export def "pending-emails update" [
+export def "put-v2-pending-emails-id-json" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3376,7 +3376,7 @@ export def "pending-emails update" [
 # List people
 #
 # GET /v2/people.json
-export def "people-json get" [
+export def "get-v2-people-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3450,7 +3450,7 @@ export def "people-json get" [
 # Create a person
 #
 # POST /v2/people.json
-export def "people-json create" [
+export def "post-v2-people-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3522,7 +3522,7 @@ export def "people-json create" [
 # Delete a person
 #
 # DELETE /v2/people/{id}.json
-export def "people delete" [
+export def "delete-v2-people-id-json" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3557,7 +3557,7 @@ export def "people delete" [
 # Fetch a person
 #
 # GET /v2/people/{id}.json
-export def "people get" [
+export def "get-v2-people-id-json" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3592,7 +3592,7 @@ export def "people get" [
 # Update a person
 #
 # PUT /v2/people/{id}.json
-export def "people update" [
+export def "put-v2-people-id-json" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3665,7 +3665,7 @@ export def "people update" [
 # List person stages
 #
 # GET /v2/person_stages.json
-export def "person-stages-json get" [
+export def "get-v2-person-stages-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3706,7 +3706,7 @@ export def "person-stages-json get" [
 # Create a person stage
 #
 # POST /v2/person_stages.json
-export def "person-stages-json create" [
+export def "post-v2-person-stages-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3744,7 +3744,7 @@ export def "person-stages-json create" [
 # Delete an person stage
 #
 # DELETE /v2/person_stages/{id}.json
-export def "person-stages delete" [
+export def "delete-v2-person-stages-id-json" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3779,7 +3779,7 @@ export def "person-stages delete" [
 # Fetch a person stage
 #
 # GET /v2/person_stages/{id}.json
-export def "person-stages get" [
+export def "get-v2-person-stages-id-json" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3814,7 +3814,7 @@ export def "person-stages get" [
 # Update a person stage
 #
 # PUT /v2/person_stages/{id}.json
-export def "person-stages update" [
+export def "put-v2-person-stages-id-json" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3854,7 +3854,7 @@ export def "person-stages update" [
 # Upsert a person
 #
 # POST /v2/person_upserts.json
-export def "person-upserts-json create" [
+export def "post-v2-person-upserts-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3927,7 +3927,7 @@ export def "person-upserts-json create" [
 # List phone number assignments
 #
 # GET /v2/phone_number_assignments.json
-export def "phone-number-assignments-json get" [
+export def "get-v2-phone-number-assignments-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3968,7 +3968,7 @@ export def "phone-number-assignments-json get" [
 # Fetch a phone number assignment
 #
 # GET /v2/phone_number_assignments/{id}.json
-export def "phone-number-assignments get" [
+export def "get-v2-phone-number-assignments-id-json" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4003,7 +4003,7 @@ export def "phone-number-assignments get" [
 # List caller ids
 #
 # GET /v2/phone_numbers/caller_ids.json
-export def "phone-numbers-caller-ids-json get" [
+export def "get-v2-phone-numbers-caller-ids-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4038,7 +4038,7 @@ export def "phone-numbers-caller-ids-json get" [
 # Fetch recording setting
 #
 # GET /v2/phone_numbers/recording_settings/{id}.json
-export def "phone-numbers-recording-settings get" [
+export def "get-v2-phone-numbers-recording-settings-id-json" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4073,7 +4073,7 @@ export def "phone-numbers-recording-settings get" [
 # List saved list views
 #
 # GET /v2/saved_list_views.json
-export def "saved-list-views-json get" [
+export def "get-v2-saved-list-views-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4115,7 +4115,7 @@ export def "saved-list-views-json get" [
 # Create a saved list view
 #
 # POST /v2/saved_list_views.json
-export def "saved-list-views-json create" [
+export def "post-v2-saved-list-views-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4156,7 +4156,7 @@ export def "saved-list-views-json create" [
 # Delete a saved list view
 #
 # DELETE /v2/saved_list_views/{id}.json
-export def "saved-list-views delete" [
+export def "delete-v2-saved-list-views-id-json" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4191,7 +4191,7 @@ export def "saved-list-views delete" [
 # Fetch a saved list view
 #
 # GET /v2/saved_list_views/{id}.json
-export def "saved-list-views get" [
+export def "get-v2-saved-list-views-id-json" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4226,7 +4226,7 @@ export def "saved-list-views get" [
 # Update a saved list view
 #
 # PUT /v2/saved_list_views/{id}.json
-export def "saved-list-views update" [
+export def "put-v2-saved-list-views-id-json" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4268,7 +4268,7 @@ export def "saved-list-views update" [
 # List steps
 #
 # GET /v2/steps.json
-export def "steps-json get" [
+export def "get-v2-steps-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4312,7 +4312,7 @@ export def "steps-json get" [
 # Fetch a step
 #
 # GET /v2/steps/{id}.json
-export def "steps get" [
+export def "get-v2-steps-id-json" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4347,7 +4347,7 @@ export def "steps get" [
 # List successes
 #
 # GET /v2/successes.json
-export def "successes-json get" [
+export def "get-v2-successes-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4390,7 +4390,7 @@ export def "successes-json get" [
 # List team tags
 #
 # GET /v2/tags.json
-export def "tags-json get" [
+export def "get-v2-tags-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4432,7 +4432,7 @@ export def "tags-json get" [
 # List tasks
 #
 # GET /v2/tasks.json
-export def "tasks-json get" [
+export def "get-v2-tasks-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4481,7 +4481,7 @@ export def "tasks-json get" [
 # Create a Task
 #
 # POST /v2/tasks.json
-export def "tasks-json create" [
+export def "post-v2-tasks-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4527,7 +4527,7 @@ export def "tasks-json create" [
 # Fetch a task
 #
 # GET /v2/tasks/{id}.json
-export def "tasks get" [
+export def "get-v2-tasks-id-json" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4562,7 +4562,7 @@ export def "tasks get" [
 # Update a Task
 #
 # PUT /v2/tasks/{id}.json
-export def "tasks update" [
+export def "put-v2-tasks-id-json" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4607,7 +4607,7 @@ export def "tasks update" [
 # Fetch current team
 #
 # GET /v2/team.json
-export def "team-json get" [
+export def "get-v2-team-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4640,7 +4640,7 @@ export def "team-json get" [
 # List team template attachments
 #
 # GET /v2/team_template_attachments.json
-export def "team-template-attachments-json get" [
+export def "get-v2-team-template-attachments-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4680,7 +4680,7 @@ export def "team-template-attachments-json get" [
 # List team templates
 #
 # GET /v2/team_templates.json
-export def "team-templates-json get" [
+export def "get-v2-team-templates-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4726,7 +4726,7 @@ export def "team-templates-json get" [
 # Fetch a team template
 #
 # GET /v2/team_templates/{id}.json
-export def "team-templates get" [
+export def "get-v2-team-templates-id-json" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4763,7 +4763,7 @@ export def "team-templates get" [
 # Create a live feed item
 #
 # POST /v2/third_party_live_feed_items
-export def "third-party-live-feed-items create" [
+export def "post-v2-third-party-live-feed-items" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4806,7 +4806,7 @@ export def "third-party-live-feed-items create" [
 # List users
 #
 # GET /v2/users.json
-export def "users-json get" [
+export def "get-v2-users-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4854,7 +4854,7 @@ export def "users-json get" [
 # Fetch a user
 #
 # GET /v2/users/{id}.json
-export def "users get" [
+export def "get-v2-users-id-json" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4889,7 +4889,7 @@ export def "users get" [
 # List webhook subscriptions
 #
 # GET /v2/webhook_subscriptions
-export def "webhook-subscriptions list" [
+export def "get-v2-webhook-subscriptions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4924,7 +4924,7 @@ export def "webhook-subscriptions list" [
 # Create a webhook subscription
 #
 # POST /v2/webhook_subscriptions
-export def "webhook-subscriptions create" [
+export def "post-v2-webhook-subscriptions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4964,7 +4964,7 @@ export def "webhook-subscriptions create" [
 # Delete a webhook subscription
 #
 # DELETE /v2/webhook_subscriptions/{id}
-export def "webhook-subscriptions delete" [
+export def "delete-v2-webhook-subscriptions-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4999,7 +4999,7 @@ export def "webhook-subscriptions delete" [
 # Fetch a webhook subscription
 #
 # GET /v2/webhook_subscriptions/{id}
-export def "webhook-subscriptions get" [
+export def "get-v2-webhook-subscriptions-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5034,7 +5034,7 @@ export def "webhook-subscriptions get" [
 # Update a webhook subscription
 #
 # PUT /v2/webhook_subscriptions/{id}
-export def "webhook-subscriptions update" [
+export def "put-v2-webhook-subscriptions-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

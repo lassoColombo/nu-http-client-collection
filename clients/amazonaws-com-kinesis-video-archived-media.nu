@@ -107,7 +107,7 @@ def format-completer [] { ["JPEG" "PNG"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-clip get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-clip" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -132,7 +132,7 @@ export def commands []: nothing -> table {
 # POST /getClip
 # operationId: GetClip
 # --ClipFragmentSelector shape: {FragmentSelectorType?: any, TimestampRange?: any}
-export def "get-clip get" [
+export def "get-clip" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -182,7 +182,7 @@ export def "get-clip get" [
 # POST /getDASHStreamingSessionURL
 # operationId: GetDASHStreamingSessionURL
 # --DASHFragmentSelector shape: {FragmentSelectorType?: any, TimestampRange?: any}
-export def "get-dash-streaming-session-url get" [
+export def "get-dash-streaming-session-url" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -237,7 +237,7 @@ export def "get-dash-streaming-session-url get" [
 # POST /getHLSStreamingSessionURL
 # operationId: GetHLSStreamingSessionURL
 # --HLSFragmentSelector shape: {FragmentSelectorType?: any, TimestampRange?: any}
-export def "get-hls-streaming-session-url get" [
+export def "get-hls-streaming-session-url" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -292,7 +292,7 @@ export def "get-hls-streaming-session-url get" [
 #
 # POST /getImages
 # operationId: GetImages
-export def "get-images get" [
+export def "get-images" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -353,7 +353,7 @@ export def "get-images get" [
 #
 # POST /getMediaForFragmentList
 # operationId: GetMediaForFragmentList
-export def "get-media-for-fragment-list get" [
+export def "get-media-for-fragment-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -403,7 +403,7 @@ export def "get-media-for-fragment-list get" [
 # POST /listFragments
 # operationId: ListFragments
 # --FragmentSelector shape: {FragmentSelectorType?: any, TimestampRange?: any}
-export def "list-fragments list" [
+export def "list-fragments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

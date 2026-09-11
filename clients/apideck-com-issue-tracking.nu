@@ -118,7 +118,7 @@ def priority-completer [] { ["high" "low" "normal" "urgent"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "issue-tracking-collections list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "collections-all" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -142,7 +142,7 @@ export def commands []: nothing -> table {
 #
 # GET /issue-tracking/collections
 # operationId: collectionsAll
-export def "issue-tracking-collections list" [
+export def "collections-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -187,7 +187,7 @@ export def "issue-tracking-collections list" [
 #
 # GET /issue-tracking/collections/{collection_id}
 # operationId: collectionsOne
-export def "issue-tracking-collections get-one" [
+export def "collections-one" [
   collection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -231,7 +231,7 @@ export def "issue-tracking-collections get-one" [
 #
 # GET /issue-tracking/collections/{collection_id}/tags
 # operationId: collectionTagsAll
-export def "issue-tracking-collections-tags list" [
+export def "collection-tags-all" [
   collection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -277,7 +277,7 @@ export def "issue-tracking-collections-tags list" [
 #
 # GET /issue-tracking/collections/{collection_id}/tickets
 # operationId: collectionTicketsAll
-export def "issue-tracking-collections-tickets list" [
+export def "collection-tickets-all" [
   collection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -327,7 +327,7 @@ export def "issue-tracking-collections-tickets list" [
 # operationId: collectionTicketsAdd
 # --assignees item shape: {id: string}
 # --tags item shape: {id: string}
-export def "issue-tracking-collections-tickets create" [
+export def "collection-tickets-add" [
   collection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -382,7 +382,7 @@ export def "issue-tracking-collections-tickets create" [
 #
 # DELETE /issue-tracking/collections/{collection_id}/tickets/{ticket_id}
 # operationId: collectionTicketsDelete
-export def "issue-tracking-collections-tickets delete" [
+export def "collection-tickets-delete" [
   collection_id: string
   ticket_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -427,7 +427,7 @@ export def "issue-tracking-collections-tickets delete" [
 #
 # GET /issue-tracking/collections/{collection_id}/tickets/{ticket_id}
 # operationId: collectionTicketsOne
-export def "issue-tracking-collections-tickets get-one" [
+export def "collection-tickets-one" [
   collection_id: string
   ticket_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -475,7 +475,7 @@ export def "issue-tracking-collections-tickets get-one" [
 # operationId: collectionTicketsUpdate
 # --assignees item shape: {id: string}
 # --tags item shape: {id: string}
-export def "issue-tracking-collections-tickets update" [
+export def "collection-tickets-update" [
   collection_id: string
   ticket_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -532,7 +532,7 @@ export def "issue-tracking-collections-tickets update" [
 #
 # GET /issue-tracking/collections/{collection_id}/tickets/{ticket_id}/comments
 # operationId: collectionTicketCommentsAll
-export def "issue-tracking-collections-tickets-comments list" [
+export def "collection-ticket-comments-all" [
   collection_id: string
   ticket_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -581,7 +581,7 @@ export def "issue-tracking-collections-tickets-comments list" [
 #
 # POST /issue-tracking/collections/{collection_id}/tickets/{ticket_id}/comments
 # operationId: collectionTicketCommentsAdd
-export def "issue-tracking-collections-tickets-comments create" [
+export def "collection-ticket-comments-add" [
   collection_id: string
   ticket_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -630,7 +630,7 @@ export def "issue-tracking-collections-tickets-comments create" [
 #
 # DELETE /issue-tracking/collections/{collection_id}/tickets/{ticket_id}/comments/{id}
 # operationId: collectionTicketCommentsDelete
-export def "issue-tracking-collections-tickets-comments delete" [
+export def "collection-ticket-comments-delete" [
   collection_id: string
   ticket_id: string
   id: string
@@ -677,7 +677,7 @@ export def "issue-tracking-collections-tickets-comments delete" [
 #
 # GET /issue-tracking/collections/{collection_id}/tickets/{ticket_id}/comments/{id}
 # operationId: collectionTicketCommentsOne
-export def "issue-tracking-collections-tickets-comments get-one" [
+export def "collection-ticket-comments-one" [
   collection_id: string
   ticket_id: string
   id: string
@@ -727,7 +727,7 @@ export def "issue-tracking-collections-tickets-comments get-one" [
 #
 # PATCH /issue-tracking/collections/{collection_id}/tickets/{ticket_id}/comments/{id}
 # operationId: collectionTicketCommentsUpdate
-export def "issue-tracking-collections-tickets-comments update" [
+export def "collection-ticket-comments-update" [
   collection_id: string
   ticket_id: string
   id: string
@@ -778,7 +778,7 @@ export def "issue-tracking-collections-tickets-comments update" [
 #
 # GET /issue-tracking/collections/{collection_id}/users
 # operationId: collectionUsersAll
-export def "issue-tracking-collections-users list" [
+export def "collection-users-all" [
   collection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -824,7 +824,7 @@ export def "issue-tracking-collections-users list" [
 #
 # GET /issue-tracking/collections/{collection_id}/users/{id}
 # operationId: collectionUsersOne
-export def "issue-tracking-collections-users get-one" [
+export def "collection-users-one" [
   collection_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL

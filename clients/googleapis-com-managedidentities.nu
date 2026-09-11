@@ -130,7 +130,7 @@ def state-completer [] { ["CREATING" "DELETING" "DOWN" "PERFORMING_MAINTENANCE" 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1alpha1 check-migration-permission" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "managedidentities-projects-locations-global-domains-check-migration-permission" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -154,7 +154,7 @@ export def commands []: nothing -> table {
 #
 # POST /v1alpha1/{domain}:checkMigrationPermission
 # operationId: managedidentities.projects.locations.global.domains.checkMigrationPermission
-export def "v1alpha1 check-migration-permission" [
+export def "managedidentities-projects-locations-global-domains-check-migration-permission" [
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -206,7 +206,7 @@ export def "v1alpha1 check-migration-permission" [
 #
 # POST /v1alpha1/{domain}:disableMigration
 # operationId: managedidentities.projects.locations.global.domains.disableMigration
-export def "v1alpha1 disable-migration" [
+export def "managedidentities-projects-locations-global-domains-disable-migration" [
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -258,7 +258,7 @@ export def "v1alpha1 disable-migration" [
 #
 # POST /v1alpha1/{domain}:domainJoinMachine
 # operationId: managedidentities.projects.locations.global.domains.domainJoinMachine
-export def "v1alpha1 create-join-machine" [
+export def "managedidentities-projects-locations-global-domains-domain-join-machine" [
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -313,7 +313,7 @@ export def "v1alpha1 create-join-machine" [
 # POST /v1alpha1/{domain}:enableMigration
 # operationId: managedidentities.projects.locations.global.domains.enableMigration
 # --migratingDomains item shape: {disableSidFiltering?: bool, domainName?: string}
-export def "v1alpha1 enable-migration" [
+export def "managedidentities-projects-locations-global-domains-enable-migration" [
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -365,7 +365,7 @@ export def "v1alpha1 enable-migration" [
 #
 # POST /v1alpha1/{domain}:extendSchema
 # operationId: managedidentities.projects.locations.global.domains.extendSchema
-export def "v1alpha1 create-extend-schema" [
+export def "managedidentities-projects-locations-global-domains-extend-schema" [
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -419,7 +419,7 @@ export def "v1alpha1 create-extend-schema" [
 #
 # DELETE /v1alpha1/{name}
 # operationId: managedidentities.projects.locations.global.peerings.delete
-export def "v1alpha1 delete" [
+export def "managedidentities-projects-locations-global-peerings-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -467,7 +467,7 @@ export def "v1alpha1 delete" [
 #
 # GET /v1alpha1/{name}
 # operationId: managedidentities.projects.locations.global.peerings.get
-export def "v1alpha1 get" [
+export def "managedidentities-projects-locations-global-peerings-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -515,7 +515,7 @@ export def "v1alpha1 get" [
 #
 # PATCH /v1alpha1/{name}
 # operationId: managedidentities.projects.locations.global.peerings.patch
-export def "v1alpha1 update" [
+export def "managedidentities-projects-locations-global-peerings-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -570,7 +570,7 @@ export def "v1alpha1 update" [
 #
 # GET /v1alpha1/{name}/ldapssettings
 # operationId: managedidentities.projects.locations.global.domains.getLdapssettings
-export def "v1alpha1-ldapssettings get" [
+export def "managedidentities-projects-locations-global-domains-get-ldapssettings" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -619,7 +619,7 @@ export def "v1alpha1-ldapssettings get" [
 # PATCH /v1alpha1/{name}/ldapssettings
 # operationId: managedidentities.projects.locations.global.domains.updateLdapssettings
 # --certificate shape: {expireTime?: string, issuingCertificate?: record, subject?: string, subjectAlternativeName?: list<string>, thumbprint?: string}
-export def "v1alpha1-ldapssettings update" [
+export def "managedidentities-projects-locations-global-domains-update-ldapssettings" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -675,7 +675,7 @@ export def "v1alpha1-ldapssettings update" [
 #
 # GET /v1alpha1/{name}/locations
 # operationId: managedidentities.projects.locations.list
-export def "v1alpha1-locations list" [
+export def "managedidentities-projects-locations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -726,7 +726,7 @@ export def "v1alpha1-locations list" [
 #
 # GET /v1alpha1/{name}/operations
 # operationId: managedidentities.projects.locations.global.operations.list
-export def "v1alpha1-operations list" [
+export def "managedidentities-projects-locations-global-operations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -778,7 +778,7 @@ export def "v1alpha1-operations list" [
 # POST /v1alpha1/{name}:attachTrust
 # operationId: managedidentities.projects.locations.global.domains.attachTrust
 # --trust shape: {createTime?: string, lastKnownTrustConnectedHeartbeatTime?: string, selectiveAuthentication?: bool, state?: "STATE_UNSPECIFIED"|"CREATING"|"UPDATING"|"DELETING"|"CONNECTED"|"DISCONNECTED", stateDescription?: string, targetDnsIpAddresses?: list<string>, targetDomainName?: string, trustDirection?: "TRUST_DIRECTION_UNSPECIFIED"|"INBOUND"|"OUTBOUND"|"BIDIRECTIONAL", trustHandshakeSecret?: string, trustType?: "TRUST_TYPE_UNSPECIFIED"|"FOREST"|"EXTERNAL", updateTime?: string}
-export def "v1alpha1 attach-trust" [
+export def "managedidentities-projects-locations-global-domains-attach-trust" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -830,7 +830,7 @@ export def "v1alpha1 attach-trust" [
 #
 # POST /v1alpha1/{name}:cancel
 # operationId: managedidentities.projects.locations.global.operations.cancel
-export def "v1alpha1 cancel" [
+export def "managedidentities-projects-locations-global-operations-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -883,7 +883,7 @@ export def "v1alpha1 cancel" [
 # POST /v1alpha1/{name}:detachTrust
 # operationId: managedidentities.projects.locations.global.domains.detachTrust
 # --trust shape: {createTime?: string, lastKnownTrustConnectedHeartbeatTime?: string, selectiveAuthentication?: bool, state?: "STATE_UNSPECIFIED"|"CREATING"|"UPDATING"|"DELETING"|"CONNECTED"|"DISCONNECTED", stateDescription?: string, targetDnsIpAddresses?: list<string>, targetDomainName?: string, trustDirection?: "TRUST_DIRECTION_UNSPECIFIED"|"INBOUND"|"OUTBOUND"|"BIDIRECTIONAL", trustHandshakeSecret?: string, trustType?: "TRUST_TYPE_UNSPECIFIED"|"FOREST"|"EXTERNAL", updateTime?: string}
-export def "v1alpha1 create-detach-trust" [
+export def "managedidentities-projects-locations-global-domains-detach-trust" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -936,7 +936,7 @@ export def "v1alpha1 create-detach-trust" [
 # POST /v1alpha1/{name}:reconfigureTrust
 # operationId: managedidentities.projects.locations.global.domains.reconfigureTrust
 # --trust shape: {createTime?: string, lastKnownTrustConnectedHeartbeatTime?: string, selectiveAuthentication?: bool, state?: "STATE_UNSPECIFIED"|"CREATING"|"UPDATING"|"DELETING"|"CONNECTED"|"DISCONNECTED", stateDescription?: string, targetDnsIpAddresses?: list<string>, targetDomainName?: string, trustDirection?: "TRUST_DIRECTION_UNSPECIFIED"|"INBOUND"|"OUTBOUND"|"BIDIRECTIONAL", trustHandshakeSecret?: string, trustType?: "TRUST_TYPE_UNSPECIFIED"|"FOREST"|"EXTERNAL", updateTime?: string}
-export def "v1alpha1 create-reconfigure-trust" [
+export def "managedidentities-projects-locations-global-domains-reconfigure-trust" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -988,7 +988,7 @@ export def "v1alpha1 create-reconfigure-trust" [
 #
 # POST /v1alpha1/{name}:resetAdminPassword
 # operationId: managedidentities.projects.locations.global.domains.resetAdminPassword
-export def "v1alpha1 reset-admin-password" [
+export def "managedidentities-projects-locations-global-domains-reset-admin-password" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1040,7 +1040,7 @@ export def "v1alpha1 reset-admin-password" [
 #
 # POST /v1alpha1/{name}:restore
 # operationId: managedidentities.projects.locations.global.domains.restore
-export def "v1alpha1 create-restore" [
+export def "managedidentities-projects-locations-global-domains-restore" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1093,7 +1093,7 @@ export def "v1alpha1 create-restore" [
 # POST /v1alpha1/{name}:validateTrust
 # operationId: managedidentities.projects.locations.global.domains.validateTrust
 # --trust shape: {createTime?: string, lastKnownTrustConnectedHeartbeatTime?: string, selectiveAuthentication?: bool, state?: "STATE_UNSPECIFIED"|"CREATING"|"UPDATING"|"DELETING"|"CONNECTED"|"DISCONNECTED", stateDescription?: string, targetDnsIpAddresses?: list<string>, targetDomainName?: string, trustDirection?: "TRUST_DIRECTION_UNSPECIFIED"|"INBOUND"|"OUTBOUND"|"BIDIRECTIONAL", trustHandshakeSecret?: string, trustType?: "TRUST_TYPE_UNSPECIFIED"|"FOREST"|"EXTERNAL", updateTime?: string}
-export def "v1alpha1 validate-trust" [
+export def "managedidentities-projects-locations-global-domains-validate-trust" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1145,7 +1145,7 @@ export def "v1alpha1 validate-trust" [
 #
 # GET /v1alpha1/{parent}/backups
 # operationId: managedidentities.projects.locations.global.domains.backups.list
-export def "v1alpha1-backups list" [
+export def "managedidentities-projects-locations-global-domains-backups-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1197,7 +1197,7 @@ export def "v1alpha1-backups list" [
 #
 # POST /v1alpha1/{parent}/backups
 # operationId: managedidentities.projects.locations.global.domains.backups.create
-export def "v1alpha1-backups create" [
+export def "managedidentities-projects-locations-global-domains-backups-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1251,7 +1251,7 @@ export def "v1alpha1-backups create" [
 #
 # GET /v1alpha1/{parent}/domains
 # operationId: managedidentities.projects.locations.global.domains.list
-export def "v1alpha1-domains list" [
+export def "managedidentities-projects-locations-global-domains-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1304,7 +1304,7 @@ export def "v1alpha1-domains list" [
 # POST /v1alpha1/{parent}/domains
 # operationId: managedidentities.projects.locations.global.domains.create
 # --trusts item shape: {createTime?: string, lastKnownTrustConnectedHeartbeatTime?: string, selectiveAuthentication?: bool, state?: "STATE_UNSPECIFIED"|"CREATING"|"UPDATING"|"DELETING"|"CONNECTED"|"DISCONNECTED", stateDescription?: string, targetDnsIpAddresses?: list<string>, targetDomainName?: string, trustDirection?: "TRUST_DIRECTION_UNSPECIFIED"|"INBOUND"|"OUTBOUND"|"BIDIRECTIONAL", trustHandshakeSecret?: string, trustType?: "TRUST_TYPE_UNSPECIFIED"|"FOREST"|"EXTERNAL", updateTime?: string}
-export def "v1alpha1-domains create" [
+export def "managedidentities-projects-locations-global-domains-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1369,7 +1369,7 @@ export def "v1alpha1-domains create" [
 #
 # GET /v1alpha1/{parent}/peerings
 # operationId: managedidentities.projects.locations.global.peerings.list
-export def "v1alpha1-peerings list" [
+export def "managedidentities-projects-locations-global-peerings-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1421,7 +1421,7 @@ export def "v1alpha1-peerings list" [
 #
 # POST /v1alpha1/{parent}/peerings
 # operationId: managedidentities.projects.locations.global.peerings.create
-export def "v1alpha1-peerings create" [
+export def "managedidentities-projects-locations-global-peerings-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1476,7 +1476,7 @@ export def "v1alpha1-peerings create" [
 #
 # GET /v1alpha1/{parent}/sqlIntegrations
 # operationId: managedidentities.projects.locations.global.domains.sqlIntegrations.list
-export def "v1alpha1-sql-integrations list" [
+export def "managedidentities-projects-locations-global-domains-sql-integrations-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1528,7 +1528,7 @@ export def "v1alpha1-sql-integrations list" [
 #
 # GET /v1alpha1/{resource}:getIamPolicy
 # operationId: managedidentities.projects.locations.global.peerings.getIamPolicy
-export def "v1alpha1 get-iam-policy" [
+export def "managedidentities-projects-locations-global-peerings-get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1578,7 +1578,7 @@ export def "v1alpha1 get-iam-policy" [
 # POST /v1alpha1/{resource}:setIamPolicy
 # operationId: managedidentities.projects.locations.global.peerings.setIamPolicy
 # --policy shape: {bindings?: list, etag?: string, version?: int}
-export def "v1alpha1 update-iam-policy" [
+export def "managedidentities-projects-locations-global-peerings-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1630,7 +1630,7 @@ export def "v1alpha1 update-iam-policy" [
 #
 # POST /v1alpha1/{resource}:testIamPermissions
 # operationId: managedidentities.projects.locations.global.peerings.testIamPermissions
-export def "v1alpha1 test-iam-permissions" [
+export def "managedidentities-projects-locations-global-peerings-test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

@@ -103,7 +103,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "aggregate get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "aggregate" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -126,7 +126,7 @@ export def commands []: nothing -> table {
 # GET /aggregate
 #
 # operationId: Aggregate
-export def "aggregate get" [
+export def "aggregate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -162,7 +162,7 @@ export def "aggregate get" [
 #
 # operationId: Aggregate2
 # --json shape: {seldonMessages?: list}
-export def "aggregate create-aggregate2" [
+export def "aggregate2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -200,7 +200,7 @@ export def "aggregate create-aggregate2" [
 # GET /predict
 #
 # operationId: TransformInput4
-export def "predict get-transform-input4" [
+export def "transform-input4" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -236,7 +236,7 @@ export def "predict get-transform-input4" [
 #
 # operationId: TransformInput3
 # --json shape: {binData?: string, data?: record, meta?: record, status?: record, strData?: string}
-export def "predict create-transform-input3" [
+export def "transform-input3" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -274,7 +274,7 @@ export def "predict create-transform-input3" [
 # GET /route
 #
 # operationId: Route2
-export def "route get-route2" [
+export def "route2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -310,7 +310,7 @@ export def "route get-route2" [
 #
 # operationId: Route
 # --json shape: {binData?: string, data?: record, meta?: record, status?: record, strData?: string}
-export def "route create" [
+export def "route" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -348,7 +348,7 @@ export def "route create" [
 # GET /send-feedback
 #
 # operationId: SendFeedback2
-export def "send-feedback send-feedback2" [
+export def "send-feedback2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -384,7 +384,7 @@ export def "send-feedback send-feedback2" [
 #
 # operationId: SendFeedback
 # --json shape: {request?: record, response?: record, reward?: float, truth?: record}
-export def "send-feedback send" [
+export def "send-feedback" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -422,7 +422,7 @@ export def "send-feedback send" [
 # GET /transform-input
 #
 # operationId: TransformInput2
-export def "transform-input get-input2" [
+export def "transform-input2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -458,7 +458,7 @@ export def "transform-input get-input2" [
 #
 # operationId: TransformInput
 # --json shape: {binData?: string, data?: record, meta?: record, status?: record, strData?: string}
-export def "transform-input create" [
+export def "transform-input" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -496,7 +496,7 @@ export def "transform-input create" [
 # GET /transform-output
 #
 # operationId: TransformOutput2
-export def "transform-output get-output2" [
+export def "transform-output2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -532,7 +532,7 @@ export def "transform-output get-output2" [
 #
 # operationId: TransformOutput
 # --json shape: {binData?: string, data?: record, meta?: record, status?: record, strData?: string}
-export def "transform-output create" [
+export def "transform-output" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

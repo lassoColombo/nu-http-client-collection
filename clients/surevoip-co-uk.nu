@@ -144,7 +144,7 @@ def accept-completer [] { ["application/json" "text/xml"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "global get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -167,7 +167,7 @@ export def commands []: nothing -> table {
 # List global resources
 #
 # GET /
-export def "global get" [
+export def "get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -204,7 +204,7 @@ export def "global get" [
 # List global announcements
 #
 # GET /announcements
-export def "announcements get" [
+export def "get-announcements" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -238,7 +238,7 @@ export def "announcements get" [
 # Add a new announcement audio file
 #
 # POST /announcements
-export def "announcements create" [
+export def "post-announcements" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -278,7 +278,7 @@ export def "announcements create" [
 # List areacodes
 #
 # GET /areacodes
-export def "areacodes get" [
+export def "get-areacodes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -311,7 +311,7 @@ export def "areacodes get" [
 # List global billing detail
 #
 # GET /billing
-export def "billing get" [
+export def "get-billing" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -344,7 +344,7 @@ export def "billing get" [
 # Validate a phone number by calling it once
 #
 # GET /calls
-export def "calls get" [
+export def "get-calls" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -380,7 +380,7 @@ export def "calls get" [
 #
 # POST /calls
 # --options shape: {a_leg_caller_id?: string, a_leg_only?: int, cancel_key?: int, connect_key?: int, play_audio?: list}
-export def "calls create" [
+export def "post-calls" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -424,7 +424,7 @@ export def "calls create" [
 # List charges
 #
 # GET /charges
-export def "charges get" [
+export def "get-charges" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -457,7 +457,7 @@ export def "charges get" [
 # Create charges for invoices
 #
 # POST /charges
-export def "charges create" [
+export def "post-charges" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -490,7 +490,7 @@ export def "charges create" [
 # List contacts
 #
 # GET /contacts
-export def "contacts get" [
+export def "get-contacts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -523,7 +523,7 @@ export def "contacts get" [
 # List all customers or find your own account
 #
 # GET /customers
-export def "customers list" [
+export def "get-customers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -557,7 +557,7 @@ export def "customers list" [
 #
 # GET /customers/{account}
 # operationId: getCustomer
-export def "customers get" [
+export def "get-customer" [
   account: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -592,7 +592,7 @@ export def "customers get" [
 # List of announcement audio files
 #
 # GET /customers/{account}/announcements
-export def "customers-announcements list" [
+export def "get-customers-account-announcements" [
   account: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -627,7 +627,7 @@ export def "customers-announcements list" [
 # Delete an announcement audio file
 #
 # DELETE /customers/{account}/announcements/{announcement_id}
-export def "customers-announcements delete" [
+export def "delete-customers-account-announcements-announcement-id" [
   account: any
   announcement_id: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -664,7 +664,7 @@ export def "customers-announcements delete" [
 # Represents an announcement audio file
 #
 # GET /customers/{account}/announcements/{announcement_id}
-export def "customers-announcements get" [
+export def "get-customers-account-announcements-announcement-id" [
   account: any
   announcement_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -701,7 +701,7 @@ export def "customers-announcements get" [
 # List global ongoing faxes
 #
 # GET /faxes
-export def "faxes get" [
+export def "get-faxes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -734,7 +734,7 @@ export def "faxes get" [
 # List Hosted VoIP domains
 #
 # GET /hosted
-export def "hosted get" [
+export def "get-hosted" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -767,7 +767,7 @@ export def "hosted get" [
 # Return the IP address from where your API request originated
 #
 # GET /ip-address
-export def "ip-address get" [
+export def "get-ip-address" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -800,7 +800,7 @@ export def "ip-address get" [
 # List mobile accounts
 #
 # GET /mobile
-export def "mobile get" [
+export def "get-mobile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -833,7 +833,7 @@ export def "mobile get" [
 # List available SureVoIP Ofcom number allocations for purchase
 #
 # GET /numbers
-export def "numbers get" [
+export def "get-numbers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -866,7 +866,7 @@ export def "numbers get" [
 # Search available numbers by areacode
 #
 # GET /numbers/areacodes
-export def "numbers-areacodes get" [
+export def "get-numbers-areacodes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -899,7 +899,7 @@ export def "numbers-areacodes get" [
 # List SureVoIP Partner accounts
 #
 # GET /partners
-export def "partners get" [
+export def "get-partners" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -932,7 +932,7 @@ export def "partners get" [
 # List ported numbers
 #
 # GET /porting
-export def "porting get" [
+export def "get-porting" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -965,7 +965,7 @@ export def "porting get" [
 # List all Service Status messages
 #
 # GET /service-status
-export def "service-status get" [
+export def "get-service-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -998,7 +998,7 @@ export def "service-status get" [
 # List all SIP accounts
 #
 # GET /sip
-export def "sip get" [
+export def "get-sip" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1031,7 +1031,7 @@ export def "sip get" [
 # List SMS
 #
 # GET /sms
-export def "sms get" [
+export def "get-sms" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1064,7 +1064,7 @@ export def "sms get" [
 # Return your POSTed data for testing
 #
 # POST /support/echo
-export def "support-echo create" [
+export def "post-support-echo" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1097,7 +1097,7 @@ export def "support-echo create" [
 # Return the IP address from where your API request originated
 #
 # GET /support/ip-address
-export def "support-ip-address get" [
+export def "get-support-ip-address" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1130,7 +1130,7 @@ export def "support-ip-address get" [
 # List all Service Status messages
 #
 # GET /support/service-status
-export def "support-service-status get" [
+export def "get-support-service-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1163,7 +1163,7 @@ export def "support-service-status get" [
 # List all account credit topups
 #
 # GET /topups
-export def "topups get" [
+export def "get-topups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

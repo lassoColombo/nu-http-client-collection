@@ -125,7 +125,7 @@ def status-completer [] { ["CANCELLED" "FAILED" "FAILED_ROLLED_BACK" "IN_PROGRES
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "servicemanagement-operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -149,7 +149,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/operations
 # operationId: servicemanagement.operations.list
-export def "operations list" [
+export def "servicemanagement-operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -199,7 +199,7 @@ export def "operations list" [
 #
 # GET /v1/services
 # operationId: servicemanagement.services.list
-export def "services list" [
+export def "servicemanagement-services-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -249,7 +249,7 @@ export def "services list" [
 #
 # POST /v1/services
 # operationId: servicemanagement.services.create
-export def "services create" [
+export def "servicemanagement-services-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -300,7 +300,7 @@ export def "services create" [
 #
 # DELETE /v1/services/{serviceName}
 # operationId: servicemanagement.services.delete
-export def "services delete" [
+export def "servicemanagement-services-delete" [
   service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -348,7 +348,7 @@ export def "services delete" [
 #
 # GET /v1/services/{serviceName}
 # operationId: servicemanagement.services.get
-export def "services get" [
+export def "servicemanagement-services-get" [
   service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -396,7 +396,7 @@ export def "services get" [
 #
 # GET /v1/services/{serviceName}/config
 # operationId: servicemanagement.services.getConfig
-export def "services-config get" [
+export def "servicemanagement-services-get-config" [
   service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -446,7 +446,7 @@ export def "services-config get" [
 #
 # GET /v1/services/{serviceName}/configs
 # operationId: servicemanagement.services.configs.list
-export def "services-configs list" [
+export def "servicemanagement-services-configs-list" [
   service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -519,7 +519,7 @@ export def "services-configs list" [
 # --systemTypes item shape: {edition?: string, fields?: list, name?: string, oneofs?: list<string>, options?: list, sourceContext?: record, syntax?: "SYNTAX_PROTO2"|"SYNTAX_PROTO3"|"SYNTAX_EDITIONS"}
 # --types item shape: {edition?: string, fields?: list, name?: string, oneofs?: list<string>, options?: list, sourceContext?: record, syntax?: "SYNTAX_PROTO2"|"SYNTAX_PROTO3"|"SYNTAX_EDITIONS"}
 # --usage shape: {producerNotificationChannel?: string, requirements?: list<string>, rules?: list}
-export def "services-configs create" [
+export def "servicemanagement-services-configs-create" [
   service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -598,7 +598,7 @@ export def "services-configs create" [
 #
 # GET /v1/services/{serviceName}/configs/{configId}
 # operationId: servicemanagement.services.configs.get
-export def "services-configs get" [
+export def "servicemanagement-services-configs-get" [
   service_name: string
   config_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -650,7 +650,7 @@ export def "services-configs get" [
 # POST /v1/services/{serviceName}/configs:submit
 # operationId: servicemanagement.services.configs.submit
 # --configSource shape: {files?: list, id?: string}
-export def "services-configs-submit submit" [
+export def "servicemanagement-services-configs-submit" [
   service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -703,7 +703,7 @@ export def "services-configs-submit submit" [
 #
 # GET /v1/services/{serviceName}/rollouts
 # operationId: servicemanagement.services.rollouts.list
-export def "services-rollouts list" [
+export def "servicemanagement-services-rollouts-list" [
   service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -755,7 +755,7 @@ export def "services-rollouts list" [
 # POST /v1/services/{serviceName}/rollouts
 # operationId: servicemanagement.services.rollouts.create
 # --trafficPercentStrategy shape: {percentages?: record}
-export def "services-rollouts create" [
+export def "servicemanagement-services-rollouts-create" [
   service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -813,7 +813,7 @@ export def "services-rollouts create" [
 #
 # GET /v1/services/{serviceName}/rollouts/{rolloutId}
 # operationId: servicemanagement.services.rollouts.get
-export def "services-rollouts get" [
+export def "servicemanagement-services-rollouts-get" [
   service_name: string
   rollout_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -863,7 +863,7 @@ export def "services-rollouts get" [
 #
 # POST /v1/services/{serviceName}:undelete
 # operationId: servicemanagement.services.undelete
-export def "services create-undelete" [
+export def "servicemanagement-services-undelete" [
   service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -911,7 +911,7 @@ export def "services create-undelete" [
 #
 # POST /v1/services:generateConfigReport
 # operationId: servicemanagement.services.generateConfigReport
-export def "services-generate-config-report generate" [
+export def "servicemanagement-services-generate-config-report" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -962,7 +962,7 @@ export def "services-generate-config-report generate" [
 #
 # GET /v1/{name}
 # operationId: servicemanagement.operations.get
-export def "operations get" [
+export def "servicemanagement-operations-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1011,7 +1011,7 @@ export def "operations get" [
 # POST /v1/{resource}:getIamPolicy
 # operationId: servicemanagement.services.consumers.getIamPolicy
 # --options shape: {requestedPolicyVersion?: int}
-export def "services get-iam-policy" [
+export def "servicemanagement-services-consumers-get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1064,7 +1064,7 @@ export def "services get-iam-policy" [
 # POST /v1/{resource}:setIamPolicy
 # operationId: servicemanagement.services.consumers.setIamPolicy
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
-export def "services update-iam-policy" [
+export def "servicemanagement-services-consumers-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1117,7 +1117,7 @@ export def "services update-iam-policy" [
 #
 # POST /v1/{resource}:testIamPermissions
 # operationId: servicemanagement.services.consumers.testIamPermissions
-export def "services test-iam-permissions" [
+export def "servicemanagement-services-consumers-test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

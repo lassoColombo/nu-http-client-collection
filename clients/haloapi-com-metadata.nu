@@ -99,7 +99,7 @@ def auth-scheme-completer [] { ["ocp-apim-subscription-key" "query-subscription-
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "h5-metadata-campaign-missions get-halo-5" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "halo-5-campaign-missions" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -123,7 +123,7 @@ export def commands []: nothing -> table {
 #
 # GET /h5/metadata/campaign-missions
 # operationId: Halo-5-Campaign-Missions
-export def "h5-metadata-campaign-missions get-halo-5" [
+export def "halo-5-campaign-missions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -160,7 +160,7 @@ export def "h5-metadata-campaign-missions get-halo-5" [
 #
 # GET /h5/metadata/commendations
 # operationId: Halo-5-Commendations
-export def "h5-metadata-commendations get-halo-5" [
+export def "halo-5-commendations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -197,7 +197,7 @@ export def "h5-metadata-commendations get-halo-5" [
 #
 # GET /h5/metadata/company-commendations
 # operationId: Halo-5-Company-Commendations
-export def "h5-metadata-company-commendations get-halo-5" [
+export def "halo-5-company-commendations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -234,7 +234,7 @@ export def "h5-metadata-company-commendations get-halo-5" [
 #
 # GET /h5/metadata/csr-designations
 # operationId: Halo-5-CSR-Designations
-export def "h5-metadata-csr-designations get-halo-5" [
+export def "halo-5-csr-designations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -271,7 +271,7 @@ export def "h5-metadata-csr-designations get-halo-5" [
 #
 # GET /h5/metadata/enemies
 # operationId: Halo-5-Enemies
-export def "h5-metadata-enemies get-halo-5" [
+export def "halo-5-enemies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -308,7 +308,7 @@ export def "h5-metadata-enemies get-halo-5" [
 #
 # GET /h5/metadata/flexible-stats
 # operationId: Halo-5-Flexible-Stats
-export def "h5-metadata-flexible-stats stats-halo-5" [
+export def "halo-5-flexible-stats" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -345,7 +345,7 @@ export def "h5-metadata-flexible-stats stats-halo-5" [
 #
 # GET /h5/metadata/game-base-variants
 # operationId: Halo-5-Game-Base-Variants
-export def "h5-metadata-game-base-variants get-halo-5" [
+export def "halo-5-game-base-variants" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -382,7 +382,7 @@ export def "h5-metadata-game-base-variants get-halo-5" [
 #
 # GET /h5/metadata/game-variants/{id}
 # operationId: Halo-5-Game-Variant
-export def "h5-metadata-game-variants get-halo-5" [
+export def "halo-5-game-variant" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -421,7 +421,7 @@ export def "h5-metadata-game-variants get-halo-5" [
 #
 # GET /h5/metadata/impulses
 # operationId: Halo-5-Impulses
-export def "h5-metadata-impulses get-halo-5" [
+export def "halo-5-impulses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -458,7 +458,7 @@ export def "h5-metadata-impulses get-halo-5" [
 #
 # GET /h5/metadata/map-variants/{id}
 # operationId: Halo-5-Map-Variant
-export def "h5-metadata-map-variants get-halo-5" [
+export def "halo-5-map-variant" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -497,7 +497,7 @@ export def "h5-metadata-map-variants get-halo-5" [
 #
 # GET /h5/metadata/maps
 # operationId: Halo-5-Maps
-export def "h5-metadata-maps get-halo-5" [
+export def "halo-5-maps" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -534,7 +534,7 @@ export def "h5-metadata-maps get-halo-5" [
 #
 # GET /h5/metadata/medals
 # operationId: Halo-5-Medals
-export def "h5-metadata-medals get-halo-5" [
+export def "halo-5-medals" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -571,7 +571,7 @@ export def "h5-metadata-medals get-halo-5" [
 #
 # GET /h5/metadata/playlists
 # operationId: Halo-5-Playlists
-export def "h5-metadata-playlists get-halo-5" [
+export def "halo-5-playlists" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -608,7 +608,7 @@ export def "h5-metadata-playlists get-halo-5" [
 #
 # GET /h5/metadata/requisition-packs/{id}
 # operationId: Halo-5-Requisition-Pack
-export def "h5-metadata-requisition-packs get-halo-5" [
+export def "halo-5-requisition-pack" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -647,7 +647,7 @@ export def "h5-metadata-requisition-packs get-halo-5" [
 #
 # GET /h5/metadata/requisitions/{id}
 # operationId: Halo-5-Requisition
-export def "h5-metadata-requisitions get-halo-5" [
+export def "halo-5-requisition" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -686,7 +686,7 @@ export def "h5-metadata-requisitions get-halo-5" [
 #
 # GET /h5/metadata/seasons
 # operationId: Halo-5-Seasons
-export def "h5-metadata-seasons get-halo-5" [
+export def "halo-5-seasons" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -723,7 +723,7 @@ export def "h5-metadata-seasons get-halo-5" [
 #
 # GET /h5/metadata/skulls
 # operationId: Halo-5-Skulls
-export def "h5-metadata-skulls get-halo-5" [
+export def "halo-5-skulls" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -760,7 +760,7 @@ export def "h5-metadata-skulls get-halo-5" [
 #
 # GET /h5/metadata/spartan-ranks
 # operationId: Halo-5-Spartan-Ranks
-export def "h5-metadata-spartan-ranks get-halo-5" [
+export def "halo-5-spartan-ranks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -797,7 +797,7 @@ export def "h5-metadata-spartan-ranks get-halo-5" [
 #
 # GET /h5/metadata/team-colors
 # operationId: Halo-5-Team-Colors
-export def "h5-metadata-team-colors get-halo-5" [
+export def "halo-5-team-colors" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -834,7 +834,7 @@ export def "h5-metadata-team-colors get-halo-5" [
 #
 # GET /h5/metadata/vehicles
 # operationId: Halo-5-Vehicles
-export def "h5-metadata-vehicles get-halo-5" [
+export def "halo-5-vehicles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -871,7 +871,7 @@ export def "h5-metadata-vehicles get-halo-5" [
 #
 # GET /h5/metadata/weapons
 # operationId: Halo-5-Weapons
-export def "h5-metadata-weapons get-halo-5" [
+export def "halo-5-weapons" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -908,7 +908,7 @@ export def "h5-metadata-weapons get-halo-5" [
 #
 # GET /hw2/campaign-levels
 # operationId: Halo-Wars-2-Campaign-Levels
-export def "hw2-campaign-levels get-halo-wars-2" [
+export def "halo-wars-2-campaign-levels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -947,7 +947,7 @@ export def "hw2-campaign-levels get-halo-wars-2" [
 #
 # GET /hw2/campaign-logs
 # operationId: Halo-Wars-2-Campaign-Logs
-export def "hw2-campaign-logs logs-halo-wars-2" [
+export def "halo-wars-2-campaign-logs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -983,7 +983,7 @@ export def "hw2-campaign-logs logs-halo-wars-2" [
 #
 # GET /hw2/card-keywords
 # operationId: Halo-Wars-2-Card-Keywords
-export def "hw2-card-keywords get-halo-wars-2" [
+export def "halo-wars-2-card-keywords" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1022,7 +1022,7 @@ export def "hw2-card-keywords get-halo-wars-2" [
 #
 # GET /hw2/cards
 # operationId: Halo-Wars-2-Cards
-export def "hw2-cards get-halo-wars-2" [
+export def "halo-wars-2-cards" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1061,7 +1061,7 @@ export def "hw2-cards get-halo-wars-2" [
 #
 # GET /hw2/csr-designations
 # operationId: Halo-Wars-2-CSR-Designations
-export def "hw2-csr-designations get-halo-wars-2" [
+export def "halo-wars-2-csr-designations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1100,7 +1100,7 @@ export def "hw2-csr-designations get-halo-wars-2" [
 #
 # GET /hw2/difficulties
 # operationId: Halo-Wars-2-Difficulties
-export def "hw2-difficulties get-halo-wars-2" [
+export def "halo-wars-2-difficulties" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1139,7 +1139,7 @@ export def "hw2-difficulties get-halo-wars-2" [
 #
 # GET /hw2/game-object-categories
 # operationId: Halo-Wars-2-Game-Object-Categories
-export def "hw2-game-object-categories get-halo-wars-2" [
+export def "halo-wars-2-game-object-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1175,7 +1175,7 @@ export def "hw2-game-object-categories get-halo-wars-2" [
 #
 # GET /hw2/game-objects
 # operationId: Halo-Wars-2-Game-Objects
-export def "hw2-game-objects get-halo-wars-2" [
+export def "halo-wars-2-game-objects" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1214,7 +1214,7 @@ export def "hw2-game-objects get-halo-wars-2" [
 #
 # GET /hw2/leader-powers
 # operationId: Halo-Wars-2-Leader-Powers
-export def "hw2-leader-powers get-halo-wars-2" [
+export def "halo-wars-2-leader-powers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1253,7 +1253,7 @@ export def "hw2-leader-powers get-halo-wars-2" [
 #
 # GET /hw2/leaders
 # operationId: Halo-Wars-2-Leaders
-export def "hw2-leaders get-halo-wars-2" [
+export def "halo-wars-2-leaders" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1292,7 +1292,7 @@ export def "hw2-leaders get-halo-wars-2" [
 #
 # GET /hw2/maps
 # operationId: Halo-Wars-2-Maps
-export def "hw2-maps get-halo-wars-2" [
+export def "halo-wars-2-maps" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1331,7 +1331,7 @@ export def "hw2-maps get-halo-wars-2" [
 #
 # GET /hw2/packs
 # operationId: Halo-Wars-2-Packs
-export def "hw2-packs get-halo-wars-2" [
+export def "halo-wars-2-packs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1370,7 +1370,7 @@ export def "hw2-packs get-halo-wars-2" [
 #
 # GET /hw2/playlists
 # operationId: Halo-Wars-2-Playlists
-export def "hw2-playlists get-halo-wars-2" [
+export def "halo-wars-2-playlists" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1409,7 +1409,7 @@ export def "hw2-playlists get-halo-wars-2" [
 #
 # GET /hw2/seasons
 # operationId: Halo-Wars-2-Seasons
-export def "hw2-seasons get-halo-wars-2" [
+export def "halo-wars-2-seasons" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1448,7 +1448,7 @@ export def "hw2-seasons get-halo-wars-2" [
 #
 # GET /hw2/spartan-ranks
 # operationId: Halo-Wars-2-Spartan-Ranks
-export def "hw2-spartan-ranks get-halo-wars-2" [
+export def "halo-wars-2-spartan-ranks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1487,7 +1487,7 @@ export def "hw2-spartan-ranks get-halo-wars-2" [
 #
 # GET /hw2/techs
 # operationId: Halo-Wars-2-Techs
-export def "hw2-techs get-halo-wars-2" [
+export def "halo-wars-2-techs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

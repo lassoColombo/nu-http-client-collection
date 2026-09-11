@@ -124,7 +124,7 @@ def kind-completer [] { ["Series8000"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-stor-simple-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -148,7 +148,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.StorSimple/operations
 # operationId: Operations_List
-export def "providers-microsoft-stor-simple-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,7 +184,7 @@ export def "providers-microsoft-stor-simple-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.StorSimple/managers
 # operationId: Managers_List
-export def "subscriptions-providers-microsoft-stor-simple-managers list" [
+export def "managers-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -222,7 +222,7 @@ export def "subscriptions-providers-microsoft-stor-simple-managers list" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers
 # operationId: Managers_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers list" [
+export def "managers-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -262,7 +262,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}
 # operationId: Managers_Delete
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers delete" [
+export def "managers-delete" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -304,7 +304,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}
 # operationId: Managers_Get
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers get" [
+export def "managers-get" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -346,7 +346,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}
 # operationId: Managers_Update
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers update" [
+export def "managers-update" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -393,7 +393,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}
 # operationId: Managers_CreateOrUpdate
 # --properties shape: {cisIntrinsicSettings?: record, provisioningState?: string, sku?: record}
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers create-or-update" [
+export def "managers-create-or-update" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -442,7 +442,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/accessControlRecords
 # operationId: AccessControlRecords_ListByManager
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-access-control-records list" [
+export def "access-control-records-list-by-manager" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -484,7 +484,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/accessControlRecords/{accessControlRecordName}
 # operationId: AccessControlRecords_Delete
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-access-control-records delete" [
+export def "access-control-records-delete" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -528,7 +528,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/accessControlRecords/{accessControlRecordName}
 # operationId: AccessControlRecords_Get
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-access-control-records get" [
+export def "access-control-records-get" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -573,7 +573,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/accessControlRecords/{accessControlRecordName}
 # operationId: AccessControlRecords_CreateOrUpdate
 # --properties shape: {initiatorName: string}
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-access-control-records create-or-update" [
+export def "access-control-records-create-or-update" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -622,7 +622,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/alerts
 # operationId: Alerts_ListByManager
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-alerts list" [
+export def "alerts-list-by-manager" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -665,7 +665,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/bandwidthSettings
 # operationId: BandwidthSettings_ListByManager
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-bandwidth-settings list" [
+export def "bandwidth-settings-list-by-manager" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -707,7 +707,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/bandwidthSettings/{bandwidthSettingName}
 # operationId: BandwidthSettings_Delete
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-bandwidth-settings delete" [
+export def "bandwidth-settings-delete" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -751,7 +751,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/bandwidthSettings/{bandwidthSettingName}
 # operationId: BandwidthSettings_Get
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-bandwidth-settings get" [
+export def "bandwidth-settings-get" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -796,7 +796,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/bandwidthSettings/{bandwidthSettingName}
 # operationId: BandwidthSettings_CreateOrUpdate
 # --properties shape: {schedules: list}
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-bandwidth-settings create-or-update" [
+export def "bandwidth-settings-create-or-update" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -845,7 +845,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/clearAlerts
 # operationId: Alerts_Clear
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-clear-alerts create" [
+export def "alerts-clear" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -892,7 +892,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/cloudApplianceConfigurations
 # operationId: CloudAppliances_ListSupportedConfigurations
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-cloud-appliance-configurations list-supported" [
+export def "cloud-appliances-list-supported-configurations" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -935,7 +935,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/configureDevice
 # operationId: Devices_Configure
 # --properties shape: {currentDeviceName: string, dnsSettings?: record, friendlyName: string, networkInterfaceData0Settings?: record, timeZone: string}
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-configure-device create" [
+export def "devices-configure" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -982,7 +982,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices
 # operationId: Devices_ListByManager
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices list" [
+export def "devices-list-by-manager" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -1025,7 +1025,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}
 # operationId: Devices_Delete
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices delete" [
+export def "devices-delete" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -1069,7 +1069,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}
 # operationId: Devices_Get
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices get" [
+export def "devices-get" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -1115,7 +1115,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}
 # operationId: Devices_Update
 # --properties shape: {deviceDescription?: string}
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices update" [
+export def "devices-update" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -1163,7 +1163,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/alertSettings/default
 # operationId: DeviceSettings_GetAlertSettings
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-alert-settings-default get" [
+export def "device-settings-get-alert-settings" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -1208,7 +1208,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/alertSettings/default
 # operationId: DeviceSettings_CreateOrUpdateAlertSettings
 # --properties shape: {additionalRecipientEmailList?: list<string>, alertNotificationCulture?: string, emailNotification: "Enabled"|"Disabled", notificationToServiceOwners?: "Enabled"|"Disabled"}
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-alert-settings-default create-or-update" [
+export def "device-settings-create-or-update-alert-settings" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -1257,7 +1257,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/authorizeForServiceEncryptionKeyRollover
 # operationId: Devices_AuthorizeForServiceEncryptionKeyRollover
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-authorize-for-service-encryption-key-rollover create" [
+export def "devices-authorize-for-service-encryption-key-rollover" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -1301,7 +1301,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/backupPolicies
 # operationId: BackupPolicies_ListByDevice
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-backup-policies list" [
+export def "backup-policies-list-by-device" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -1345,7 +1345,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/backupPolicies/{backupPolicyName}
 # operationId: BackupPolicies_Delete
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-backup-policies delete" [
+export def "backup-policies-delete" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -1391,7 +1391,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/backupPolicies/{backupPolicyName}
 # operationId: BackupPolicies_Get
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-backup-policies get" [
+export def "backup-policies-get" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -1438,7 +1438,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/backupPolicies/{backupPolicyName}
 # operationId: BackupPolicies_CreateOrUpdate
 # --properties shape: {volumeIds: list<string>}
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-backup-policies create-or-update" [
+export def "backup-policies-create-or-update" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -1489,7 +1489,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/backupPolicies/{backupPolicyName}/backup
 # operationId: BackupPolicies_BackupNow
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-backup-policies-backup create-now" [
+export def "backup-policies-backup-now" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -1536,7 +1536,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/backupPolicies/{backupPolicyName}/schedules
 # operationId: BackupSchedules_ListByBackupPolicy
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-backup-policies-schedules list-by-policy" [
+export def "backup-schedules-list-by-backup-policy" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -1582,7 +1582,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/backupPolicies/{backupPolicyName}/schedules/{backupScheduleName}
 # operationId: BackupSchedules_Delete
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-backup-policies-schedules delete" [
+export def "backup-schedules-delete" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -1630,7 +1630,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/backupPolicies/{backupPolicyName}/schedules/{backupScheduleName}
 # operationId: BackupSchedules_Get
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-backup-policies-schedules get" [
+export def "backup-schedules-get" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -1679,7 +1679,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/backupPolicies/{backupPolicyName}/schedules/{backupScheduleName}
 # operationId: BackupSchedules_CreateOrUpdate
 # --properties shape: {backupType: "LocalSnapshot"|"CloudSnapshot", retentionCount: int, scheduleRecurrence: record, scheduleStatus: "Enabled"|"Disabled", startTime: string}
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-backup-policies-schedules create-or-update" [
+export def "backup-schedules-create-or-update" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -1732,7 +1732,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/backups
 # operationId: Backups_ListByDevice
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-backups list" [
+export def "backups-list-by-device" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -1777,7 +1777,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/backups/{backupName}
 # operationId: Backups_Delete
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-backups delete" [
+export def "backups-delete" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -1824,7 +1824,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/backups/{backupName}/elements/{backupElementName}/clone
 # operationId: Backups_Clone
 # --backupElement shape: {elementId: string, elementName: string, elementType: string, sizeInBytes: int, volumeContainerId: string, volumeName: string, volumeType?: "Tiered"|"Archival"|"LocallyPinned"}
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-backups-elements-clone clone" [
+export def "backups-clone" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -1879,7 +1879,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/backups/{backupName}/restore
 # operationId: Backups_Restore
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-backups-restore create" [
+export def "backups-restore" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -1925,7 +1925,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/deactivate
 # operationId: Devices_Deactivate
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-deactivate create" [
+export def "devices-deactivate" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -1969,7 +1969,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/hardwareComponentGroups
 # operationId: HardwareComponentGroups_ListByDevice
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-hardware-component-groups list" [
+export def "hardware-component-groups-list-by-device" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -2014,7 +2014,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/hardwareComponentGroups/{hardwareComponentGroupName}/changeControllerPowerState
 # operationId: HardwareComponentGroups_ChangeControllerPowerState
 # --properties shape: {action: "Start"|"Restart"|"Shutdown", activeController: "Unknown"|"None"|"Controller0"|"Controller1", controller0State: "NotPresent"|"PoweredOff"|"Ok"|"Recovering"|"Warning"|"Failure", controller1State: "NotPresent"|"PoweredOff"|"Ok"|"Recovering"|"Warning"|"Failure"}
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-hardware-component-groups-change-controller-power-state create" [
+export def "hardware-component-groups-change-controller-power-state" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -2065,7 +2065,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/installUpdates
 # operationId: Devices_InstallUpdates
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-install-updates create" [
+export def "devices-install-updates" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -2109,7 +2109,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/jobs
 # operationId: Jobs_ListByDevice
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-jobs list" [
+export def "jobs-list-by-device" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -2154,7 +2154,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/jobs/{jobName}
 # operationId: Jobs_Get
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-jobs get" [
+export def "jobs-get" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -2200,7 +2200,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/jobs/{jobName}/cancel
 # operationId: Jobs_Cancel
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-jobs-cancel cancel" [
+export def "jobs-cancel" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -2246,7 +2246,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/listFailoverSets
 # operationId: Devices_ListFailoverSets
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-list-failover-sets list" [
+export def "devices-list-failover-sets" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -2290,7 +2290,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/metrics
 # operationId: Devices_ListMetrics
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-metrics list" [
+export def "devices-list-metrics" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -2335,7 +2335,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/metricsDefinitions
 # operationId: Devices_ListMetricDefinition
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-metrics-definitions list" [
+export def "devices-list-metric-definition" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -2379,7 +2379,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/networkSettings/default
 # operationId: DeviceSettings_GetNetworkSettings
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-network-settings-default get" [
+export def "device-settings-get-network-settings" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -2424,7 +2424,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/networkSettings/default
 # operationId: DeviceSettings_UpdateNetworkSettings
 # --properties shape: {dnsSettings?: record, networkAdapters?: record}
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-network-settings-default update" [
+export def "device-settings-update-network-settings" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -2472,7 +2472,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/publicEncryptionKey
 # operationId: Managers_GetDevicePublicEncryptionKey
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-public-encryption-key get" [
+export def "managers-get-device-public-encryption-key" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -2516,7 +2516,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/scanForUpdates
 # operationId: Devices_ScanForUpdates
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-scan-for-updates create" [
+export def "devices-scan-for-updates" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -2560,7 +2560,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/securitySettings/default
 # operationId: DeviceSettings_GetSecuritySettings
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-security-settings-default get" [
+export def "device-settings-get-security-settings" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -2605,7 +2605,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/securitySettings/default
 # operationId: DeviceSettings_UpdateSecuritySettings
 # --properties shape: {chapSettings?: record, cloudApplianceSettings?: record, deviceAdminPassword?: record, remoteManagementSettings?: record, snapshotPassword?: record}
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-security-settings-default update" [
+export def "device-settings-update-security-settings" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -2653,7 +2653,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/securitySettings/default/syncRemoteManagementCertificate
 # operationId: DeviceSettings_SyncRemotemanagementCertificate
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-security-settings-default-sync-remote-management-certificate sync-remotemanagement" [
+export def "device-settings-sync-remotemanagement-certificate" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -2697,7 +2697,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/sendTestAlertEmail
 # operationId: Alerts_SendTestEmail
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-send-test-alert-email send" [
+export def "alerts-send-test-email" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -2745,7 +2745,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/timeSettings/default
 # operationId: DeviceSettings_GetTimeSettings
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-time-settings-default get" [
+export def "device-settings-get-time-settings" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -2790,7 +2790,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/timeSettings/default
 # operationId: DeviceSettings_CreateOrUpdateTimeSettings
 # --properties shape: {primaryTimeServer?: string, secondaryTimeServer?: list<string>, timeZone: string}
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-time-settings-default create-or-update" [
+export def "device-settings-create-or-update-time-settings" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -2839,7 +2839,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/updateSummary/default
 # operationId: Devices_GetUpdateSummary
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-update-summary-default get" [
+export def "devices-get-update-summary" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -2883,7 +2883,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/volumeContainers
 # operationId: VolumeContainers_ListByDevice
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-volume-containers list" [
+export def "volume-containers-list-by-device" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -2927,7 +2927,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/volumeContainers/{volumeContainerName}
 # operationId: VolumeContainers_Delete
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-volume-containers delete" [
+export def "volume-containers-delete" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -2973,7 +2973,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/volumeContainers/{volumeContainerName}
 # operationId: VolumeContainers_Get
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-volume-containers get" [
+export def "volume-containers-get" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -3020,7 +3020,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/volumeContainers/{volumeContainerName}
 # operationId: VolumeContainers_CreateOrUpdate
 # --properties shape: {bandWidthRateInMbps?: int, bandwidthSettingId?: string, encryptionKey?: record, storageAccountCredentialId: string}
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-volume-containers create-or-update" [
+export def "volume-containers-create-or-update" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -3071,7 +3071,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/volumeContainers/{volumeContainerName}/metrics
 # operationId: VolumeContainers_ListMetrics
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-volume-containers-metrics list" [
+export def "volume-containers-list-metrics" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -3118,7 +3118,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/volumeContainers/{volumeContainerName}/metricsDefinitions
 # operationId: VolumeContainers_ListMetricDefinition
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-volume-containers-metrics-definitions list" [
+export def "volume-containers-list-metric-definition" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -3164,7 +3164,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/volumeContainers/{volumeContainerName}/volumes
 # operationId: Volumes_ListByVolumeContainer
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-volume-containers-volumes list" [
+export def "volumes-list-by-volume-container" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -3210,7 +3210,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/volumeContainers/{volumeContainerName}/volumes/{volumeName}
 # operationId: Volumes_Delete
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-volume-containers-volumes delete" [
+export def "volumes-delete" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -3258,7 +3258,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/volumeContainers/{volumeContainerName}/volumes/{volumeName}
 # operationId: Volumes_Get
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-volume-containers-volumes get" [
+export def "volumes-get" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -3307,7 +3307,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/volumeContainers/{volumeContainerName}/volumes/{volumeName}
 # operationId: Volumes_CreateOrUpdate
 # --properties shape: {accessControlRecordIds: list<string>, monitoringStatus: "Enabled"|"Disabled", sizeInBytes: int, volumeStatus: "Online"|"Offline", volumeType: "Tiered"|"Archival"|"LocallyPinned"}
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-volume-containers-volumes create-or-update" [
+export def "volumes-create-or-update" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -3360,7 +3360,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/volumeContainers/{volumeContainerName}/volumes/{volumeName}/metrics
 # operationId: Volumes_ListMetrics
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-volume-containers-volumes-metrics list" [
+export def "volumes-list-metrics" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -3409,7 +3409,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/volumeContainers/{volumeContainerName}/volumes/{volumeName}/metricsDefinitions
 # operationId: Volumes_ListMetricDefinition
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-volume-containers-volumes-metrics-definitions list" [
+export def "volumes-list-metric-definition" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -3457,7 +3457,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/volumes
 # operationId: Volumes_ListByDevice
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-volumes list" [
+export def "volumes-list-by-device" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -3501,7 +3501,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{sourceDeviceName}/failover
 # operationId: Devices_Failover
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-failover create" [
+export def "devices-failover" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -3550,7 +3550,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{sourceDeviceName}/listFailoverTargets
 # operationId: Devices_ListFailoverTargets
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-devices-list-failover-targets list" [
+export def "devices-list-failover-targets" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -3598,7 +3598,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/encryptionSettings/default
 # operationId: Managers_GetEncryptionSettings
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-encryption-settings-default get" [
+export def "managers-get-encryption-settings" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -3640,7 +3640,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/extendedInformation/vaultExtendedInfo
 # operationId: Managers_DeleteExtendedInfo
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-extended-information-vault-extended-info delete" [
+export def "managers-delete-extended-info" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -3682,7 +3682,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/extendedInformation/vaultExtendedInfo
 # operationId: Managers_GetExtendedInfo
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-extended-information-vault-extended-info get" [
+export def "managers-get-extended-info" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -3725,7 +3725,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/extendedInformation/vaultExtendedInfo
 # operationId: Managers_UpdateExtendedInfo
 # --properties shape: {algorithm: string, encryptionKey?: string, encryptionKeyThumbprint?: string, integrityKey: string, portalCertificateThumbprint?: string, version?: string}
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-extended-information-vault-extended-info update" [
+export def "managers-update-extended-info" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -3777,7 +3777,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/extendedInformation/vaultExtendedInfo
 # operationId: Managers_CreateExtendedInfo
 # --properties shape: {algorithm: string, encryptionKey?: string, encryptionKeyThumbprint?: string, integrityKey: string, portalCertificateThumbprint?: string, version?: string}
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-extended-information-vault-extended-info create" [
+export def "managers-create-extended-info" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -3825,7 +3825,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/features
 # operationId: Managers_ListFeatureSupportStatus
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-features list-support-status" [
+export def "managers-list-feature-support-status" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -3868,7 +3868,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/jobs
 # operationId: Jobs_ListByManager
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-jobs list" [
+export def "jobs-list-by-manager" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -3911,7 +3911,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/listActivationKey
 # operationId: Managers_GetActivationKey
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-list-activation-key get" [
+export def "managers-get-activation-key" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -3953,7 +3953,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/listPublicEncryptionKey
 # operationId: Managers_GetPublicEncryptionKey
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-list-public-encryption-key get" [
+export def "managers-get-public-encryption-key" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -3995,7 +3995,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/metrics
 # operationId: Managers_ListMetrics
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-metrics list" [
+export def "managers-list-metrics" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -4038,7 +4038,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/metricsDefinitions
 # operationId: Managers_ListMetricDefinition
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-metrics-definitions list" [
+export def "managers-list-metric-definition" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -4080,7 +4080,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/provisionCloudAppliance
 # operationId: CloudAppliances_Provision
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-provision-cloud-appliance create" [
+export def "cloud-appliances-provision" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -4136,7 +4136,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/regenerateActivationKey
 # operationId: Managers_RegenerateActivationKey
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-regenerate-activation-key create" [
+export def "managers-regenerate-activation-key" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -4178,7 +4178,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/storageAccountCredentials
 # operationId: StorageAccountCredentials_ListByManager
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-storage-account-credentials list" [
+export def "storage-account-credentials-list-by-manager" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -4220,7 +4220,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/storageAccountCredentials/{storageAccountCredentialName}
 # operationId: StorageAccountCredentials_Delete
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-storage-account-credentials delete" [
+export def "storage-account-credentials-delete" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -4264,7 +4264,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/storageAccountCredentials/{storageAccountCredentialName}
 # operationId: StorageAccountCredentials_Get
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-storage-account-credentials get" [
+export def "storage-account-credentials-get" [
   subscription_id: string
   resource_group_name: string
   manager_name: string
@@ -4309,7 +4309,7 @@ export def "subscriptions-resource-groups-providers-microsoft-stor-simple-manage
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/storageAccountCredentials/{storageAccountCredentialName}
 # operationId: StorageAccountCredentials_CreateOrUpdate
 # --properties shape: {accessKey?: record, endPoint: string, sslStatus: "Enabled"|"Disabled"}
-export def "subscriptions-resource-groups-providers-microsoft-stor-simple-managers-storage-account-credentials create-or-update" [
+export def "storage-account-credentials-create-or-update" [
   subscription_id: string
   resource_group_name: string
   manager_name: string

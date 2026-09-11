@@ -115,7 +115,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "estimate get-estimated-price" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-estimated-price" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -139,7 +139,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/estimate
 # operationId: getEstimatedPrice
-export def "estimate get-estimated-price" [
+export def "get-estimated-price" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -180,7 +180,7 @@ export def "estimate get-estimated-price" [
 #
 # GET /v1/min-amount
 # operationId: getTheMinimumPaymentAmount
-export def "min-amount get-minimum-payment" [
+export def "get-the-minimum-payment-amount" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -220,7 +220,7 @@ export def "min-amount get-minimum-payment" [
 #
 # GET /v1/payment/
 # operationId: getListOfPayments
-export def "payment get-list" [
+export def "get-list-of-payments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -264,7 +264,7 @@ export def "payment get-list" [
 #
 # POST /v1/payment/{id}/update-merchant-estimate
 # operationId: getUpdatePaymentEstimate
-export def "payment-update-merchant-estimate get" [
+export def "get-update-payment-estimate" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -303,7 +303,7 @@ export def "payment-update-merchant-estimate get" [
 #
 # GET /v1/payment/{payment_id}
 # operationId: getPaymentStatus
-export def "payment get-status" [
+export def "get-payment-status" [
   payment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -342,7 +342,7 @@ export def "payment get-status" [
 #
 # POST /v1/payout/{withdrawals-id}/verify
 # operationId: verifyPayout
-export def "payout-verify verify" [
+export def "verify-payout" [
   withdrawals_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -385,7 +385,7 @@ export def "payout-verify verify" [
 #
 # GET /v1/sub-partner
 # operationId: getSubPartners
-export def "sub-partner get" [
+export def "get-sub-partners" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -424,7 +424,7 @@ export def "sub-partner get" [
 #
 # GET /v1/sub-partner/balance/{id}
 # operationId: getSubPartnerBalance
-export def "sub-partner-balance get" [
+export def "get-sub-partner-balance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -463,7 +463,7 @@ export def "sub-partner-balance get" [
 #
 # GET /v1/sub-partner/transfer/{id}
 # operationId: getTransfer
-export def "sub-partner-transfer get" [
+export def "get-transfer" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -499,7 +499,7 @@ export def "sub-partner-transfer get" [
 #
 # GET /v1/sub-partner/transfers
 # operationId: getAllTransfers
-export def "sub-partner-transfers get-list" [
+export def "get-all-transfers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -539,7 +539,7 @@ export def "sub-partner-transfers get-list" [
 #
 # GET /v1/subscriptions
 # operationId: getManyRecurringPayments
-export def "subscriptions get-many-recurring-payments" [
+export def "get-many-recurring-payments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -582,7 +582,7 @@ export def "subscriptions get-many-recurring-payments" [
 #
 # GET /v1/subscriptions/plans
 # operationId: getManyPlans
-export def "subscriptions-plans get-many" [
+export def "get-many-plans" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -622,7 +622,7 @@ export def "subscriptions-plans get-many" [
 #
 # GET /v1/subscriptions/plans/{plan-id}
 # operationId: getOnePlan
-export def "subscriptions-plans get-one" [
+export def "get-one-plan" [
   plan_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -661,7 +661,7 @@ export def "subscriptions-plans get-one" [
 #
 # PATCH /v1/subscriptions/plans/{plan-id}
 # operationId: updatePlan
-export def "subscriptions-plans update" [
+export def "update-plan" [
   plan_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -704,7 +704,7 @@ export def "subscriptions-plans update" [
 #
 # DELETE /v1/subscriptions/{sub_id}
 # operationId: deleteRecurringPayment
-export def "subscriptions delete-recurring-payment" [
+export def "delete-recurring-payment" [
   sub_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -744,7 +744,7 @@ export def "subscriptions delete-recurring-payment" [
 #
 # GET /v1/subscriptions/{sub_id}
 # operationId: getOneRecurringPayment
-export def "subscriptions get-one-recurring-payment" [
+export def "get-one-recurring-payment" [
   sub_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

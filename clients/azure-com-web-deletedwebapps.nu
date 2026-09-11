@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-web-deleted-sites list-apps" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "deleted-web-apps-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -122,7 +122,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Web/deletedSites
 # operationId: DeletedWebApps_List
-export def "subscriptions-providers-microsoft-web-deleted-sites list-apps" [
+export def "deleted-web-apps-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -160,7 +160,7 @@ export def "subscriptions-providers-microsoft-web-deleted-sites list-apps" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Web/locations/{location}/deletedSites
 # operationId: DeletedWebApps_ListByLocation
-export def "subscriptions-providers-microsoft-web-locations-deleted-sites list-apps" [
+export def "deleted-web-apps-list-by-location" [
   subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -200,7 +200,7 @@ export def "subscriptions-providers-microsoft-web-locations-deleted-sites list-a
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Web/locations/{location}/deletedSites/{deletedSiteId}
 # operationId: DeletedWebApps_GetDeletedWebAppByLocation
-export def "subscriptions-providers-microsoft-web-locations-deleted-sites get-apps-app" [
+export def "deleted-web-apps-get-deleted-web-app-by-location" [
   subscription_id: string
   location: string
   deleted_site_id: string

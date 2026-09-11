@@ -129,7 +129,7 @@ def merge-strategy-completer [] { ["FAIL_ON_CONFLICT" "OVERWRITE_LATEST"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "bots-versions create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-bot-version" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -153,7 +153,7 @@ export def commands []: nothing -> table {
 #
 # POST /bots/{name}/versions
 # operationId: CreateBotVersion
-export def "bots-versions create" [
+export def "create-bot-version" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -202,7 +202,7 @@ export def "bots-versions create" [
 #
 # POST /intents/{name}/versions
 # operationId: CreateIntentVersion
-export def "intents-versions create" [
+export def "create-intent-version" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -251,7 +251,7 @@ export def "intents-versions create" [
 #
 # POST /slottypes/{name}/versions
 # operationId: CreateSlotTypeVersion
-export def "slottypes-versions create-slot-type" [
+export def "create-slot-type-version" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -300,7 +300,7 @@ export def "slottypes-versions create-slot-type" [
 #
 # DELETE /bots/{name}
 # operationId: DeleteBot
-export def "bots delete" [
+export def "delete-bot" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -345,7 +345,7 @@ export def "bots delete" [
 #
 # DELETE /bots/{botName}/aliases/{name}
 # operationId: DeleteBotAlias
-export def "bots-aliases delete-alias" [
+export def "delete-bot-alias" [
   bot_name: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -392,7 +392,7 @@ export def "bots-aliases delete-alias" [
 #
 # GET /bots/{botName}/aliases/{name}
 # operationId: GetBotAlias
-export def "bots-aliases get-alias" [
+export def "get-bot-alias" [
   bot_name: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -441,7 +441,7 @@ export def "bots-aliases get-alias" [
 # operationId: PutBotAlias
 # --conversationLogs shape: {logSettings?: any, iamRoleArn?: any}
 # --tags item shape: {key: any, value: any}
-export def "bots-aliases update-alias" [
+export def "put-bot-alias" [
   bot_name: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -496,7 +496,7 @@ export def "bots-aliases update-alias" [
 #
 # DELETE /bots/{botName}/aliases/{aliasName}/channels/{name}
 # operationId: DeleteBotChannelAssociation
-export def "bots-aliases-channels delete-association" [
+export def "delete-bot-channel-association" [
   bot_name: string
   alias_name: string
   name: string
@@ -545,7 +545,7 @@ export def "bots-aliases-channels delete-association" [
 #
 # GET /bots/{botName}/aliases/{aliasName}/channels/{name}
 # operationId: GetBotChannelAssociation
-export def "bots-aliases-channels get-association" [
+export def "get-bot-channel-association" [
   bot_name: string
   alias_name: string
   name: string
@@ -594,7 +594,7 @@ export def "bots-aliases-channels get-association" [
 #
 # DELETE /bots/{name}/versions/{version}
 # operationId: DeleteBotVersion
-export def "bots-versions delete" [
+export def "delete-bot-version" [
   name: string
   version: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -641,7 +641,7 @@ export def "bots-versions delete" [
 #
 # DELETE /intents/{name}
 # operationId: DeleteIntent
-export def "intents delete" [
+export def "delete-intent" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -686,7 +686,7 @@ export def "intents delete" [
 #
 # DELETE /intents/{name}/versions/{version}
 # operationId: DeleteIntentVersion
-export def "intents-versions delete" [
+export def "delete-intent-version" [
   name: string
   version: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -733,7 +733,7 @@ export def "intents-versions delete" [
 #
 # GET /intents/{name}/versions/{version}
 # operationId: GetIntent
-export def "intents-versions get" [
+export def "get-intent" [
   name: string
   version: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -780,7 +780,7 @@ export def "intents-versions get" [
 #
 # DELETE /slottypes/{name}
 # operationId: DeleteSlotType
-export def "slottypes delete-slot-type" [
+export def "delete-slot-type" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -825,7 +825,7 @@ export def "slottypes delete-slot-type" [
 #
 # DELETE /slottypes/{name}/version/{version}
 # operationId: DeleteSlotTypeVersion
-export def "slottypes-version delete-slot-type" [
+export def "delete-slot-type-version" [
   name: string
   version: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -872,7 +872,7 @@ export def "slottypes-version delete-slot-type" [
 #
 # DELETE /bots/{botName}/utterances/{userId}
 # operationId: DeleteUtterances
-export def "bots-utterances delete" [
+export def "delete-utterances" [
   bot_name: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -919,7 +919,7 @@ export def "bots-utterances delete" [
 #
 # GET /bots/{name}/versions/{versionoralias}
 # operationId: GetBot
-export def "bots-versions get" [
+export def "get-bot" [
   name: string
   versionoralias: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -966,7 +966,7 @@ export def "bots-versions get" [
 #
 # GET /bots/{botName}/aliases/
 # operationId: GetBotAliases
-export def "bots-aliases get" [
+export def "get-bot-aliases" [
   bot_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1015,7 +1015,7 @@ export def "bots-aliases get" [
 #
 # GET /bots/{botName}/aliases/{aliasName}/channels/
 # operationId: GetBotChannelAssociations
-export def "bots-aliases-channels get-associations" [
+export def "get-bot-channel-associations" [
   bot_name: string
   alias_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1066,7 +1066,7 @@ export def "bots-aliases-channels get-associations" [
 #
 # GET /bots/{name}/versions/
 # operationId: GetBotVersions
-export def "bots-versions list" [
+export def "get-bot-versions" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1114,7 +1114,7 @@ export def "bots-versions list" [
 #
 # GET /bots/
 # operationId: GetBots
-export def "bots get" [
+export def "get-bots" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1161,7 +1161,7 @@ export def "bots get" [
 #
 # GET /builtins/intents/{signature}
 # operationId: GetBuiltinIntent
-export def "builtins-intents get" [
+export def "get-builtin-intent" [
   signature: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1206,7 +1206,7 @@ export def "builtins-intents get" [
 #
 # GET /builtins/intents/
 # operationId: GetBuiltinIntents
-export def "builtins-intents list" [
+export def "get-builtin-intents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1254,7 +1254,7 @@ export def "builtins-intents list" [
 #
 # GET /builtins/slottypes/
 # operationId: GetBuiltinSlotTypes
-export def "builtins-slottypes get-slot-types" [
+export def "get-builtin-slot-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1302,7 +1302,7 @@ export def "builtins-slottypes get-slot-types" [
 #
 # GET /exports/
 # operationId: GetExport
-export def "exports get" [
+export def "get-export" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1350,7 +1350,7 @@ export def "exports get" [
 #
 # GET /imports/{importId}
 # operationId: GetImport
-export def "imports get" [
+export def "get-import" [
   import_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1395,7 +1395,7 @@ export def "imports get" [
 #
 # GET /intents/{name}/versions/
 # operationId: GetIntentVersions
-export def "intents-versions list" [
+export def "get-intent-versions" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1443,7 +1443,7 @@ export def "intents-versions list" [
 #
 # GET /intents/
 # operationId: GetIntents
-export def "intents get" [
+export def "get-intents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1490,7 +1490,7 @@ export def "intents get" [
 #
 # GET /migrations/{migrationId}
 # operationId: GetMigration
-export def "migrations get" [
+export def "get-migration" [
   migration_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1535,7 +1535,7 @@ export def "migrations get" [
 #
 # GET /migrations
 # operationId: GetMigrations
-export def "migrations list" [
+export def "get-migrations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1585,7 +1585,7 @@ export def "migrations list" [
 #
 # POST /migrations
 # operationId: StartMigration
-export def "migrations start" [
+export def "start-migration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1636,7 +1636,7 @@ export def "migrations start" [
 #
 # GET /slottypes/{name}/versions/{version}
 # operationId: GetSlotType
-export def "slottypes-versions get-slot-type" [
+export def "get-slot-type" [
   name: string
   version: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1683,7 +1683,7 @@ export def "slottypes-versions get-slot-type" [
 #
 # GET /slottypes/{name}/versions/
 # operationId: GetSlotTypeVersions
-export def "slottypes-versions list" [
+export def "get-slot-type-versions" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1731,7 +1731,7 @@ export def "slottypes-versions list" [
 #
 # GET /slottypes/
 # operationId: GetSlotTypes
-export def "slottypes get-slot-types" [
+export def "get-slot-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1778,7 +1778,7 @@ export def "slottypes get-slot-types" [
 #
 # GET /bots/{botname}/utterances
 # operationId: GetUtterancesView
-export def "bots-utterances get-view" [
+export def "get-utterances-view" [
   botname: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1827,7 +1827,7 @@ export def "bots-utterances get-view" [
 #
 # GET /tags/{resourceArn}
 # operationId: ListTagsForResource
-export def "tags list-for-resource" [
+export def "list-tags-for-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1873,7 +1873,7 @@ export def "tags list-for-resource" [
 # POST /tags/{resourceArn}
 # operationId: TagResource
 # --tags item shape: {key: any, value: any}
-export def "tags tag-resource" [
+export def "tag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1926,7 +1926,7 @@ export def "tags tag-resource" [
 # --clarificationPrompt shape: {messages?: any, maxAttempts?: any, responseCard?: any}
 # --abortStatement shape: {messages?: any, responseCard?: any}
 # --tags item shape: {key: any, value: any}
-export def "bots-versions-latest update" [
+export def "put-bot" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1999,7 +1999,7 @@ export def "bots-versions-latest update" [
 # --kendraConfiguration shape: {kendraIndex?: any, queryFilterString?: any, role?: any}
 # --inputContexts item shape: {name: any}
 # --outputContexts item shape: {name: any, timeToLiveInSeconds: any, turnsToLive: any}
-export def "intents-versions-latest update" [
+export def "put-intent" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2064,7 +2064,7 @@ export def "intents-versions-latest update" [
 # operationId: PutSlotType
 # --enumerationValues item shape: {value: any, synonyms?: any}
 # --slotTypeConfigurations item shape: {regexConfiguration?: any}
-export def "slottypes-versions-latest update-slot-type" [
+export def "put-slot-type" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2120,7 +2120,7 @@ export def "slottypes-versions-latest update-slot-type" [
 # POST /imports/
 # operationId: StartImport
 # --tags item shape: {key: any, value: any}
-export def "imports start" [
+export def "start-import" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2170,7 +2170,7 @@ export def "imports start" [
 #
 # DELETE /tags/{resourceArn}
 # operationId: UntagResource
-export def "tags untag-resource" [
+export def "untag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

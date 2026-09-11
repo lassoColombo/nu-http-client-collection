@@ -97,7 +97,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "arrival-board get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-arrival-board-id" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -120,7 +120,7 @@ export def commands []: nothing -> table {
 # Get arrival board of a location
 #
 # GET /arrivalBoard/{id}
-export def "arrival-board get" [
+export def "get-arrival-board-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -157,7 +157,7 @@ export def "arrival-board get" [
 # Get departure board of a location
 #
 # GET /departureBoard/{id}
-export def "departure-board get" [
+export def "get-departure-board-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -194,7 +194,7 @@ export def "departure-board get" [
 # Get details about a single journey
 #
 # GET /journeyDetails/{id}
-export def "journey-details get" [
+export def "get-journey-details-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -229,7 +229,7 @@ export def "journey-details get" [
 # Get location information
 #
 # GET /location/{name}
-export def "location get" [
+export def "get-location-name" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

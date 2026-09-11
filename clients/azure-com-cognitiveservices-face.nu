@@ -128,7 +128,7 @@ def mode-completer-1 [] { ["CreateNew"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "detect create-face-with-url" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "face-detect-with-url" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -152,7 +152,7 @@ export def commands []: nothing -> table {
 #
 # POST /detect
 # operationId: Face_DetectWithUrl
-export def "detect create-face-with-url" [
+export def "face-detect-with-url" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -197,7 +197,7 @@ export def "detect create-face-with-url" [
 #
 # GET /facelists
 # operationId: FaceList_List
-export def "facelists list-face" [
+export def "face-list-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -233,7 +233,7 @@ export def "facelists list-face" [
 #
 # DELETE /facelists/{faceListId}
 # operationId: FaceList_Delete
-export def "facelists list-face-delete" [
+export def "face-list-delete" [
   face_list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -269,7 +269,7 @@ export def "facelists list-face-delete" [
 #
 # GET /facelists/{faceListId}
 # operationId: FaceList_Get
-export def "facelists list-face-get" [
+export def "face-list-get" [
   face_list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -307,7 +307,7 @@ export def "facelists list-face-get" [
 #
 # PATCH /facelists/{faceListId}
 # operationId: FaceList_Update
-export def "facelists list-face-update" [
+export def "face-list-update" [
   face_list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -348,7 +348,7 @@ export def "facelists list-face-update" [
 #
 # PUT /facelists/{faceListId}
 # operationId: FaceList_Create
-export def "facelists list-face-create" [
+export def "face-list-create" [
   face_list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -390,7 +390,7 @@ export def "facelists list-face-create" [
 #
 # POST /facelists/{faceListId}/persistedfaces
 # operationId: FaceList_AddFaceFromUrl
-export def "facelists-persistedfaces list-face-create-face-from-url" [
+export def "face-list-add-face-from-url" [
   face_list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -434,7 +434,7 @@ export def "facelists-persistedfaces list-face-create-face-from-url" [
 #
 # DELETE /facelists/{faceListId}/persistedfaces/{persistedFaceId}
 # operationId: FaceList_DeleteFace
-export def "facelists-persistedfaces list-face-delete-face" [
+export def "face-list-delete-face" [
   face_list_id: string
   persisted_face_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -472,7 +472,7 @@ export def "facelists-persistedfaces list-face-delete-face" [
 #
 # POST /findsimilars
 # operationId: Face_FindSimilar
-export def "findsimilars find-face-similar" [
+export def "face-find-similar" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -515,7 +515,7 @@ export def "findsimilars find-face-similar" [
 #
 # POST /group
 # operationId: Face_Group
-export def "group create-face" [
+export def "face-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -553,7 +553,7 @@ export def "group create-face" [
 #
 # POST /identify
 # operationId: Face_Identify
-export def "identify create-face" [
+export def "face-identify" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -595,7 +595,7 @@ export def "identify create-face" [
 #
 # GET /largefacelists
 # operationId: LargeFaceList_List
-export def "largefacelists list-large-face" [
+export def "large-face-list-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -631,7 +631,7 @@ export def "largefacelists list-large-face" [
 #
 # DELETE /largefacelists/{largeFaceListId}
 # operationId: LargeFaceList_Delete
-export def "largefacelists list-large-face-delete" [
+export def "large-face-list-delete" [
   large_face_list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -667,7 +667,7 @@ export def "largefacelists list-large-face-delete" [
 #
 # GET /largefacelists/{largeFaceListId}
 # operationId: LargeFaceList_Get
-export def "largefacelists list-large-face-get" [
+export def "large-face-list-get" [
   large_face_list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -705,7 +705,7 @@ export def "largefacelists list-large-face-get" [
 #
 # PATCH /largefacelists/{largeFaceListId}
 # operationId: LargeFaceList_Update
-export def "largefacelists list-large-face-update" [
+export def "large-face-list-update" [
   large_face_list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -746,7 +746,7 @@ export def "largefacelists list-large-face-update" [
 #
 # PUT /largefacelists/{largeFaceListId}
 # operationId: LargeFaceList_Create
-export def "largefacelists list-large-face-create" [
+export def "large-face-list-create" [
   large_face_list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -788,7 +788,7 @@ export def "largefacelists list-large-face-create" [
 #
 # GET /largefacelists/{largeFaceListId}/persistedfaces
 # operationId: LargeFaceList_ListFaces
-export def "largefacelists-persistedfaces list-large-face-faces" [
+export def "large-face-list-list-faces" [
   large_face_list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -827,7 +827,7 @@ export def "largefacelists-persistedfaces list-large-face-faces" [
 #
 # POST /largefacelists/{largeFaceListId}/persistedfaces
 # operationId: LargeFaceList_AddFaceFromUrl
-export def "largefacelists-persistedfaces list-large-face-create-face-from-url" [
+export def "large-face-list-add-face-from-url" [
   large_face_list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -871,7 +871,7 @@ export def "largefacelists-persistedfaces list-large-face-create-face-from-url" 
 #
 # DELETE /largefacelists/{largeFaceListId}/persistedfaces/{persistedFaceId}
 # operationId: LargeFaceList_DeleteFace
-export def "largefacelists-persistedfaces list-large-face-delete-face" [
+export def "large-face-list-delete-face" [
   large_face_list_id: string
   persisted_face_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -909,7 +909,7 @@ export def "largefacelists-persistedfaces list-large-face-delete-face" [
 #
 # GET /largefacelists/{largeFaceListId}/persistedfaces/{persistedFaceId}
 # operationId: LargeFaceList_GetFace
-export def "largefacelists-persistedfaces list-large-face-get-face" [
+export def "large-face-list-get-face" [
   large_face_list_id: string
   persisted_face_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -947,7 +947,7 @@ export def "largefacelists-persistedfaces list-large-face-get-face" [
 #
 # PATCH /largefacelists/{largeFaceListId}/persistedfaces/{persistedFaceId}
 # operationId: LargeFaceList_UpdateFace
-export def "largefacelists-persistedfaces list-large-face-update-face" [
+export def "large-face-list-update-face" [
   large_face_list_id: string
   persisted_face_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -989,7 +989,7 @@ export def "largefacelists-persistedfaces list-large-face-update-face" [
 #
 # POST /largefacelists/{largeFaceListId}/train
 # operationId: LargeFaceList_Train
-export def "largefacelists-train list-large-face" [
+export def "large-face-list-train" [
   large_face_list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1025,7 +1025,7 @@ export def "largefacelists-train list-large-face" [
 #
 # GET /largefacelists/{largeFaceListId}/training
 # operationId: LargeFaceList_GetTrainingStatus
-export def "largefacelists-training list-large-face-get-status" [
+export def "large-face-list-get-training-status" [
   large_face_list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1061,7 +1061,7 @@ export def "largefacelists-training list-large-face-get-status" [
 #
 # GET /largepersongroups
 # operationId: LargePersonGroup_List
-export def "largepersongroups list-large-person-group" [
+export def "large-person-group-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1099,7 +1099,7 @@ export def "largepersongroups list-large-person-group" [
 #
 # DELETE /largepersongroups/{largePersonGroupId}
 # operationId: LargePersonGroup_Delete
-export def "largepersongroups delete-large-person-group" [
+export def "large-person-group-delete" [
   large_person_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1135,7 +1135,7 @@ export def "largepersongroups delete-large-person-group" [
 #
 # GET /largepersongroups/{largePersonGroupId}
 # operationId: LargePersonGroup_Get
-export def "largepersongroups get-large-person-group" [
+export def "large-person-group-get" [
   large_person_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1173,7 +1173,7 @@ export def "largepersongroups get-large-person-group" [
 #
 # PATCH /largepersongroups/{largePersonGroupId}
 # operationId: LargePersonGroup_Update
-export def "largepersongroups update-large-person-group" [
+export def "large-person-group-update" [
   large_person_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1214,7 +1214,7 @@ export def "largepersongroups update-large-person-group" [
 #
 # PUT /largepersongroups/{largePersonGroupId}
 # operationId: LargePersonGroup_Create
-export def "largepersongroups create-large-person-group" [
+export def "large-person-group-create" [
   large_person_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1256,7 +1256,7 @@ export def "largepersongroups create-large-person-group" [
 #
 # GET /largepersongroups/{largePersonGroupId}/persons
 # operationId: LargePersonGroupPerson_List
-export def "largepersongroups-persons list-large-group" [
+export def "large-person-group-person-list" [
   large_person_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1295,7 +1295,7 @@ export def "largepersongroups-persons list-large-group" [
 #
 # POST /largepersongroups/{largePersonGroupId}/persons
 # operationId: LargePersonGroupPerson_Create
-export def "largepersongroups-persons create-large-group" [
+export def "large-person-group-person-create" [
   large_person_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1336,7 +1336,7 @@ export def "largepersongroups-persons create-large-group" [
 #
 # DELETE /largepersongroups/{largePersonGroupId}/persons/{personId}
 # operationId: LargePersonGroupPerson_Delete
-export def "largepersongroups-persons delete-large-group" [
+export def "large-person-group-person-delete" [
   large_person_group_id: string
   person_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1374,7 +1374,7 @@ export def "largepersongroups-persons delete-large-group" [
 #
 # GET /largepersongroups/{largePersonGroupId}/persons/{personId}
 # operationId: LargePersonGroupPerson_Get
-export def "largepersongroups-persons get-large-group" [
+export def "large-person-group-person-get" [
   large_person_group_id: string
   person_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1412,7 +1412,7 @@ export def "largepersongroups-persons get-large-group" [
 #
 # PATCH /largepersongroups/{largePersonGroupId}/persons/{personId}
 # operationId: LargePersonGroupPerson_Update
-export def "largepersongroups-persons update-large-group" [
+export def "large-person-group-person-update" [
   large_person_group_id: string
   person_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1455,7 +1455,7 @@ export def "largepersongroups-persons update-large-group" [
 #
 # POST /largepersongroups/{largePersonGroupId}/persons/{personId}/persistedfaces
 # operationId: LargePersonGroupPerson_AddFaceFromUrl
-export def "largepersongroups-persons-persistedfaces create-large-group-face-from-url" [
+export def "large-person-group-person-add-face-from-url" [
   large_person_group_id: string
   person_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1501,7 +1501,7 @@ export def "largepersongroups-persons-persistedfaces create-large-group-face-fro
 #
 # DELETE /largepersongroups/{largePersonGroupId}/persons/{personId}/persistedfaces/{persistedFaceId}
 # operationId: LargePersonGroupPerson_DeleteFace
-export def "largepersongroups-persons-persistedfaces delete-large-group-face" [
+export def "large-person-group-person-delete-face" [
   large_person_group_id: string
   person_id: string
   persisted_face_id: string
@@ -1541,7 +1541,7 @@ export def "largepersongroups-persons-persistedfaces delete-large-group-face" [
 #
 # GET /largepersongroups/{largePersonGroupId}/persons/{personId}/persistedfaces/{persistedFaceId}
 # operationId: LargePersonGroupPerson_GetFace
-export def "largepersongroups-persons-persistedfaces get-large-group-face" [
+export def "large-person-group-person-get-face" [
   large_person_group_id: string
   person_id: string
   persisted_face_id: string
@@ -1581,7 +1581,7 @@ export def "largepersongroups-persons-persistedfaces get-large-group-face" [
 #
 # PATCH /largepersongroups/{largePersonGroupId}/persons/{personId}/persistedfaces/{persistedFaceId}
 # operationId: LargePersonGroupPerson_UpdateFace
-export def "largepersongroups-persons-persistedfaces update-large-group-face" [
+export def "large-person-group-person-update-face" [
   large_person_group_id: string
   person_id: string
   persisted_face_id: string
@@ -1625,7 +1625,7 @@ export def "largepersongroups-persons-persistedfaces update-large-group-face" [
 #
 # POST /largepersongroups/{largePersonGroupId}/train
 # operationId: LargePersonGroup_Train
-export def "largepersongroups-train create-large-person-group" [
+export def "large-person-group-train" [
   large_person_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1661,7 +1661,7 @@ export def "largepersongroups-train create-large-person-group" [
 #
 # GET /largepersongroups/{largePersonGroupId}/training
 # operationId: LargePersonGroup_GetTrainingStatus
-export def "largepersongroups-training get-large-person-group-status" [
+export def "large-person-group-get-training-status" [
   large_person_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1697,7 +1697,7 @@ export def "largepersongroups-training get-large-person-group-status" [
 #
 # GET /operations/{operationId}
 # operationId: Snapshot_GetOperationStatus
-export def "operations get-snapshot-status" [
+export def "snapshot-get-operation-status" [
   operation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1733,7 +1733,7 @@ export def "operations get-snapshot-status" [
 #
 # GET /persongroups
 # operationId: PersonGroup_List
-export def "persongroups list-person-group" [
+export def "person-group-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1771,7 +1771,7 @@ export def "persongroups list-person-group" [
 #
 # DELETE /persongroups/{personGroupId}
 # operationId: PersonGroup_Delete
-export def "persongroups delete-person-group" [
+export def "person-group-delete" [
   person_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1807,7 +1807,7 @@ export def "persongroups delete-person-group" [
 #
 # GET /persongroups/{personGroupId}
 # operationId: PersonGroup_Get
-export def "persongroups get-person-group" [
+export def "person-group-get" [
   person_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1845,7 +1845,7 @@ export def "persongroups get-person-group" [
 #
 # PATCH /persongroups/{personGroupId}
 # operationId: PersonGroup_Update
-export def "persongroups update-person-group" [
+export def "person-group-update" [
   person_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1886,7 +1886,7 @@ export def "persongroups update-person-group" [
 #
 # PUT /persongroups/{personGroupId}
 # operationId: PersonGroup_Create
-export def "persongroups create-person-group" [
+export def "person-group-create" [
   person_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1928,7 +1928,7 @@ export def "persongroups create-person-group" [
 #
 # GET /persongroups/{personGroupId}/persons
 # operationId: PersonGroupPerson_List
-export def "persongroups-persons list-group" [
+export def "person-group-person-list" [
   person_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1967,7 +1967,7 @@ export def "persongroups-persons list-group" [
 #
 # POST /persongroups/{personGroupId}/persons
 # operationId: PersonGroupPerson_Create
-export def "persongroups-persons create-group" [
+export def "person-group-person-create" [
   person_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2008,7 +2008,7 @@ export def "persongroups-persons create-group" [
 #
 # DELETE /persongroups/{personGroupId}/persons/{personId}
 # operationId: PersonGroupPerson_Delete
-export def "persongroups-persons delete-group" [
+export def "person-group-person-delete" [
   person_group_id: string
   person_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2046,7 +2046,7 @@ export def "persongroups-persons delete-group" [
 #
 # GET /persongroups/{personGroupId}/persons/{personId}
 # operationId: PersonGroupPerson_Get
-export def "persongroups-persons get-group" [
+export def "person-group-person-get" [
   person_group_id: string
   person_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2084,7 +2084,7 @@ export def "persongroups-persons get-group" [
 #
 # PATCH /persongroups/{personGroupId}/persons/{personId}
 # operationId: PersonGroupPerson_Update
-export def "persongroups-persons update-group" [
+export def "person-group-person-update" [
   person_group_id: string
   person_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2127,7 +2127,7 @@ export def "persongroups-persons update-group" [
 #
 # POST /persongroups/{personGroupId}/persons/{personId}/persistedfaces
 # operationId: PersonGroupPerson_AddFaceFromUrl
-export def "persongroups-persons-persistedfaces create-group-face-from-url" [
+export def "person-group-person-add-face-from-url" [
   person_group_id: string
   person_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2173,7 +2173,7 @@ export def "persongroups-persons-persistedfaces create-group-face-from-url" [
 #
 # DELETE /persongroups/{personGroupId}/persons/{personId}/persistedfaces/{persistedFaceId}
 # operationId: PersonGroupPerson_DeleteFace
-export def "persongroups-persons-persistedfaces delete-group-face" [
+export def "person-group-person-delete-face" [
   person_group_id: string
   person_id: string
   persisted_face_id: string
@@ -2213,7 +2213,7 @@ export def "persongroups-persons-persistedfaces delete-group-face" [
 #
 # GET /persongroups/{personGroupId}/persons/{personId}/persistedfaces/{persistedFaceId}
 # operationId: PersonGroupPerson_GetFace
-export def "persongroups-persons-persistedfaces get-group-face" [
+export def "person-group-person-get-face" [
   person_group_id: string
   person_id: string
   persisted_face_id: string
@@ -2253,7 +2253,7 @@ export def "persongroups-persons-persistedfaces get-group-face" [
 #
 # PATCH /persongroups/{personGroupId}/persons/{personId}/persistedfaces/{persistedFaceId}
 # operationId: PersonGroupPerson_UpdateFace
-export def "persongroups-persons-persistedfaces update-group-face" [
+export def "person-group-person-update-face" [
   person_group_id: string
   person_id: string
   persisted_face_id: string
@@ -2297,7 +2297,7 @@ export def "persongroups-persons-persistedfaces update-group-face" [
 #
 # POST /persongroups/{personGroupId}/train
 # operationId: PersonGroup_Train
-export def "persongroups-train create-person-group" [
+export def "person-group-train" [
   person_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2333,7 +2333,7 @@ export def "persongroups-train create-person-group" [
 #
 # GET /persongroups/{personGroupId}/training
 # operationId: PersonGroup_GetTrainingStatus
-export def "persongroups-training get-person-group-status" [
+export def "person-group-get-training-status" [
   person_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2369,7 +2369,7 @@ export def "persongroups-training get-person-group-status" [
 #
 # GET /snapshots
 # operationId: Snapshot_List
-export def "snapshots list" [
+export def "snapshot-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2406,7 +2406,7 @@ export def "snapshots list" [
 #
 # POST /snapshots
 # operationId: Snapshot_Take
-export def "snapshots create-take" [
+export def "snapshot-take" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2447,7 +2447,7 @@ export def "snapshots create-take" [
 #
 # DELETE /snapshots/{snapshotId}
 # operationId: Snapshot_Delete
-export def "snapshots delete" [
+export def "snapshot-delete" [
   snapshot_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2483,7 +2483,7 @@ export def "snapshots delete" [
 #
 # GET /snapshots/{snapshotId}
 # operationId: Snapshot_Get
-export def "snapshots get" [
+export def "snapshot-get" [
   snapshot_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2519,7 +2519,7 @@ export def "snapshots get" [
 #
 # PATCH /snapshots/{snapshotId}
 # operationId: Snapshot_Update
-export def "snapshots update" [
+export def "snapshot-update" [
   snapshot_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2560,7 +2560,7 @@ export def "snapshots update" [
 #
 # POST /snapshots/{snapshotId}/apply
 # operationId: Snapshot_Apply
-export def "snapshots-apply create" [
+export def "snapshot-apply" [
   snapshot_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2601,7 +2601,7 @@ export def "snapshots-apply create" [
 #
 # POST /verify
 # operationId: Face_VerifyFaceToFace
-export def "verify verify-face-face-to-face" [
+export def "face-verify-face-to-face" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

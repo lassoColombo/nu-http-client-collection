@@ -101,7 +101,7 @@ def accept-completer-2 [] { ["application/json" "application/xml" "text/csv" "te
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "data get-datasets" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-datasets" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -125,7 +125,7 @@ export def commands []: nothing -> table {
 #
 # GET /data
 # operationId: getDatasets
-export def "data get-datasets" [
+export def "get-datasets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -160,7 +160,7 @@ export def "data get-datasets" [
 #
 # GET /data/hmda
 # operationId: getDatasetHmda
-export def "data-hmda get-dataset" [
+export def "get-dataset-hmda" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -195,7 +195,7 @@ export def "data-hmda get-dataset" [
 #
 # GET /data/hmda/concept/{concept}
 # operationId: getConceptHmda
-export def "data-hmda-concept get" [
+export def "get-concept-hmda" [
   concept: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -232,7 +232,7 @@ export def "data-hmda-concept get" [
 #
 # GET /data/hmda/slice/{slice}
 # operationId: querySliceHmda
-export def "data-hmda-slice list" [
+export def "query-slice-hmda" [
   slice: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -277,7 +277,7 @@ export def "data-hmda-slice list" [
 #
 # GET /data/hmda/slice/{slice}/metadata
 # operationId: getSliceMetadataHmda
-export def "data-hmda-slice-metadata get" [
+export def "get-slice-metadata-hmda" [
   slice: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -314,7 +314,7 @@ export def "data-hmda-slice-metadata get" [
 #
 # GET /data/{dataset}
 # operationId: getDataset
-export def "data get" [
+export def "get-dataset" [
   dataset: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

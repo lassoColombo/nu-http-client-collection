@@ -100,7 +100,7 @@ def accept-completer [] { ["application/js" "application/json" "application/xml"
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "translate-cheunh get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-translate-cheunh" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -123,7 +123,7 @@ export def commands []: nothing -> table {
 # Translate from English to Starwars cheunh.
 #
 # GET /translate/cheunh
-export def "translate-cheunh get" [
+export def "get-translate-cheunh" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -159,7 +159,7 @@ export def "translate-cheunh get" [
 # Translate from English to Starwars Gungan Language.
 #
 # GET /translate/gungan
-export def "translate-gungan get" [
+export def "get-translate-gungan" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -195,7 +195,7 @@ export def "translate-gungan get" [
 # Translate from English to Starwars Huttese Language.
 #
 # GET /translate/huttese
-export def "translate-huttese get" [
+export def "get-translate-huttese" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -231,7 +231,7 @@ export def "translate-huttese get" [
 # Translate from English to Starwars Mandalorian Language.
 #
 # GET /translate/mandalorian
-export def "translate-mandalorian get" [
+export def "get-translate-mandalorian" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -267,7 +267,7 @@ export def "translate-mandalorian get" [
 # Translate from English to Sith Speak.
 #
 # GET /translate/sith
-export def "translate-sith get" [
+export def "get-translate-sith" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -303,7 +303,7 @@ export def "translate-sith get" [
 # Translate from English to Yoda Speak.
 #
 # GET /translate/yoda
-export def "translate-yoda get" [
+export def "get-translate-yoda" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

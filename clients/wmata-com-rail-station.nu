@@ -111,7 +111,7 @@ def line-code-completer [] { ["BL" "GR" "OR" "RD" "SV" "YL"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "lines get-5476364f031f5909e4fe3314" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "5476364f031f5909e4fe3314" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -135,7 +135,7 @@ export def commands []: nothing -> table {
 #
 # GET /Lines
 # operationId: 5476364f031f5909e4fe3314
-export def "lines get-5476364f031f5909e4fe3314" [
+export def "5476364f031f5909e4fe3314" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -169,7 +169,7 @@ export def "lines get-5476364f031f5909e4fe3314" [
 #
 # GET /Path
 # operationId: 5476364f031f5909e4fe3316
-export def "path get-5476364f031f5909e4fe3316" [
+export def "5476364f031f5909e4fe3316" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -206,7 +206,7 @@ export def "path get-5476364f031f5909e4fe3316" [
 #
 # GET /SrcStationToDstStationInfo
 # operationId: 5476364f031f5909e4fe331b
-export def "src-station-to-dst-station-info get-5476364f031f5909e4fe331b" [
+export def "5476364f031f5909e4fe331b" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -243,7 +243,7 @@ export def "src-station-to-dst-station-info get-5476364f031f5909e4fe331b" [
 #
 # GET /StationEntrances
 # operationId: 5476364f031f5909e4fe3317
-export def "station-entrances get-5476364f031f5909e4fe3317" [
+export def "5476364f031f5909e4fe3317" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -281,7 +281,7 @@ export def "station-entrances get-5476364f031f5909e4fe3317" [
 #
 # GET /StationInfo
 # operationId: 5476364f031f5909e4fe3318
-export def "station-info get-5476364f031f5909e4fe3318" [
+export def "5476364f031f5909e4fe3318" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -317,7 +317,7 @@ export def "station-info get-5476364f031f5909e4fe3318" [
 #
 # GET /StationParking
 # operationId: 5476364f031f5909e4fe3315
-export def "station-parking get-5476364f031f5909e4fe3315" [
+export def "5476364f031f5909e4fe3315" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -353,7 +353,7 @@ export def "station-parking get-5476364f031f5909e4fe3315" [
 #
 # GET /StationTimes
 # operationId: 5476364f031f5909e4fe331a
-export def "station-times get-5476364f031f5909e4fe331a" [
+export def "5476364f031f5909e4fe331a" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -389,7 +389,7 @@ export def "station-times get-5476364f031f5909e4fe331a" [
 #
 # GET /Stations
 # operationId: 5476364f031f5909e4fe3319
-export def "stations get-5476364f031f5909e4fe3319" [
+export def "5476364f031f5909e4fe3319" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -425,7 +425,7 @@ export def "stations get-5476364f031f5909e4fe3319" [
 #
 # GET /json/jLines
 # operationId: 5476364f031f5909e4fe330c
-export def "json-j-lines get-5476364f031f5909e4fe330c" [
+export def "5476364f031f5909e4fe330c" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -459,7 +459,7 @@ export def "json-j-lines get-5476364f031f5909e4fe330c" [
 #
 # GET /json/jPath
 # operationId: 5476364f031f5909e4fe330e
-export def "json-j-path get-5476364f031f5909e4fe330e" [
+export def "5476364f031f5909e4fe330e" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -496,7 +496,7 @@ export def "json-j-path get-5476364f031f5909e4fe330e" [
 #
 # GET /json/jSrcStationToDstStationInfo
 # operationId: 5476364f031f5909e4fe3313
-export def "json-j-src-station-to-dst-station-info get-5476364f031f5909e4fe3313" [
+export def "5476364f031f5909e4fe3313" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -533,7 +533,7 @@ export def "json-j-src-station-to-dst-station-info get-5476364f031f5909e4fe3313"
 #
 # GET /json/jStationEntrances
 # operationId: 5476364f031f5909e4fe330f
-export def "json-j-station-entrances get-5476364f031f5909e4fe330f" [
+export def "5476364f031f5909e4fe330f" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -571,7 +571,7 @@ export def "json-j-station-entrances get-5476364f031f5909e4fe330f" [
 #
 # GET /json/jStationInfo
 # operationId: 5476364f031f5909e4fe3310
-export def "json-j-station-info get-5476364f031f5909e4fe3310" [
+export def "5476364f031f5909e4fe3310" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -607,7 +607,7 @@ export def "json-j-station-info get-5476364f031f5909e4fe3310" [
 #
 # GET /json/jStationParking
 # operationId: 5476364f031f5909e4fe330d
-export def "json-j-station-parking get-5476364f031f5909e4fe330d" [
+export def "5476364f031f5909e4fe330d" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -643,7 +643,7 @@ export def "json-j-station-parking get-5476364f031f5909e4fe330d" [
 #
 # GET /json/jStationTimes
 # operationId: 5476364f031f5909e4fe3312
-export def "json-j-station-times get-5476364f031f5909e4fe3312" [
+export def "5476364f031f5909e4fe3312" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -679,7 +679,7 @@ export def "json-j-station-times get-5476364f031f5909e4fe3312" [
 #
 # GET /json/jStations
 # operationId: 5476364f031f5909e4fe3311
-export def "json-j-stations get-5476364f031f5909e4fe3311" [
+export def "5476364f031f5909e4fe3311" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

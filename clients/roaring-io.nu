@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "company-board-members get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-company-board-members" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -125,7 +125,7 @@ export def commands []: nothing -> table {
 }
 
 # GET /company-board-members
-export def "company-board-members get" [
+export def "get-company-board-members" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -159,7 +159,7 @@ export def "company-board-members get" [
 }
 
 # POST /company-board-members
-export def "company-board-members create" [
+export def "post-company-board-members" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -196,7 +196,7 @@ export def "company-board-members create" [
 }
 
 # GET /company-credit-decision
-export def "company-credit-decision get" [
+export def "get-company-credit-decision" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -231,7 +231,7 @@ export def "company-credit-decision get" [
 }
 
 # GET /company-economy-overview
-export def "company-economy-overview get" [
+export def "get-company-economy-overview" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -265,7 +265,7 @@ export def "company-economy-overview get" [
 }
 
 # POST /company-economy-overview
-export def "company-economy-overview create" [
+export def "post-company-economy-overview" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -304,7 +304,7 @@ export def "company-economy-overview create" [
 # POST /company-event
 #
 # --requests item shape: {companyId?: string, date?: string}
-export def "company-event create" [
+export def "post-company-event" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -341,7 +341,7 @@ export def "company-event create" [
 }
 
 # GET /company-overview
-export def "company-overview get" [
+export def "get-company-overview" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -375,7 +375,7 @@ export def "company-overview get" [
 }
 
 # POST /company-overview
-export def "company-overview create" [
+export def "post-company-overview" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -412,7 +412,7 @@ export def "company-overview create" [
 }
 
 # GET /company-signatory
-export def "company-signatory get" [
+export def "get-company-signatory" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -446,7 +446,7 @@ export def "company-signatory get" [
 }
 
 # POST /company-signatory
-export def "company-signatory create" [
+export def "post-company-signatory" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -483,7 +483,7 @@ export def "company-signatory create" [
 }
 
 # GET /company-simple-search
-export def "company-simple-search get" [
+export def "get-company-simple-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

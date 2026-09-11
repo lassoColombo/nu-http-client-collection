@@ -132,7 +132,7 @@ def scope-completer [] { ["DEFAULT" "EDGE_CACHE"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "certificatemanager-projects-locations-trust-configs-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -156,7 +156,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1/{name}
 # operationId: certificatemanager.projects.locations.trustConfigs.delete
-export def "projects delete" [
+export def "certificatemanager-projects-locations-trust-configs-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -205,7 +205,7 @@ export def "projects delete" [
 #
 # GET /v1/{name}
 # operationId: certificatemanager.projects.locations.trustConfigs.get
-export def "projects get" [
+export def "certificatemanager-projects-locations-trust-configs-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -254,7 +254,7 @@ export def "projects get" [
 # PATCH /v1/{name}
 # operationId: certificatemanager.projects.locations.trustConfigs.patch
 # --trustStores item shape: {intermediateCas?: list, trustAnchors?: list}
-export def "projects update" [
+export def "certificatemanager-projects-locations-trust-configs-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -311,7 +311,7 @@ export def "projects update" [
 #
 # GET /v1/{name}/locations
 # operationId: certificatemanager.projects.locations.list
-export def "locations list" [
+export def "certificatemanager-projects-locations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -362,7 +362,7 @@ export def "locations list" [
 #
 # GET /v1/{name}/operations
 # operationId: certificatemanager.projects.locations.operations.list
-export def "operations list" [
+export def "certificatemanager-projects-locations-operations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -413,7 +413,7 @@ export def "operations list" [
 #
 # POST /v1/{name}:cancel
 # operationId: certificatemanager.projects.locations.operations.cancel
-export def "projects cancel" [
+export def "certificatemanager-projects-locations-operations-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -465,7 +465,7 @@ export def "projects cancel" [
 #
 # GET /v1/{parent}/certificateIssuanceConfigs
 # operationId: certificatemanager.projects.locations.certificateIssuanceConfigs.list
-export def "certificate-issuance-configs list" [
+export def "certificatemanager-projects-locations-certificate-issuance-configs-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -518,7 +518,7 @@ export def "certificate-issuance-configs list" [
 # POST /v1/{parent}/certificateIssuanceConfigs
 # operationId: certificatemanager.projects.locations.certificateIssuanceConfigs.create
 # --certificateAuthorityConfig shape: {certificateAuthorityServiceConfig?: record}
-export def "certificate-issuance-configs create" [
+export def "certificatemanager-projects-locations-certificate-issuance-configs-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -577,7 +577,7 @@ export def "certificate-issuance-configs create" [
 #
 # GET /v1/{parent}/certificateMapEntries
 # operationId: certificatemanager.projects.locations.certificateMaps.certificateMapEntries.list
-export def "certificate-map-entries list" [
+export def "certificatemanager-projects-locations-certificate-maps-certificate-map-entries-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -629,7 +629,7 @@ export def "certificate-map-entries list" [
 #
 # POST /v1/{parent}/certificateMapEntries
 # operationId: certificatemanager.projects.locations.certificateMaps.certificateMapEntries.create
-export def "certificate-map-entries create" [
+export def "certificatemanager-projects-locations-certificate-maps-certificate-map-entries-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -687,7 +687,7 @@ export def "certificate-map-entries create" [
 #
 # GET /v1/{parent}/certificateMaps
 # operationId: certificatemanager.projects.locations.certificateMaps.list
-export def "certificate-maps list" [
+export def "certificatemanager-projects-locations-certificate-maps-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -739,7 +739,7 @@ export def "certificate-maps list" [
 #
 # POST /v1/{parent}/certificateMaps
 # operationId: certificatemanager.projects.locations.certificateMaps.create
-export def "certificate-maps create" [
+export def "certificatemanager-projects-locations-certificate-maps-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -794,7 +794,7 @@ export def "certificate-maps create" [
 #
 # GET /v1/{parent}/certificates
 # operationId: certificatemanager.projects.locations.certificates.list
-export def "certificates list" [
+export def "certificatemanager-projects-locations-certificates-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -848,7 +848,7 @@ export def "certificates list" [
 # operationId: certificatemanager.projects.locations.certificates.create
 # --managed shape: {dnsAuthorizations?: list<string>, domains?: list<string>, issuanceConfig?: string, provisioningIssue?: record}
 # --selfManaged shape: {pemCertificate?: string, pemPrivateKey?: string}
-export def "certificates create" [
+export def "certificatemanager-projects-locations-certificates-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -906,7 +906,7 @@ export def "certificates create" [
 #
 # GET /v1/{parent}/dnsAuthorizations
 # operationId: certificatemanager.projects.locations.dnsAuthorizations.list
-export def "dns-authorizations list" [
+export def "certificatemanager-projects-locations-dns-authorizations-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -958,7 +958,7 @@ export def "dns-authorizations list" [
 #
 # POST /v1/{parent}/dnsAuthorizations
 # operationId: certificatemanager.projects.locations.dnsAuthorizations.create
-export def "dns-authorizations create" [
+export def "certificatemanager-projects-locations-dns-authorizations-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1015,7 +1015,7 @@ export def "dns-authorizations create" [
 #
 # GET /v1/{parent}/trustConfigs
 # operationId: certificatemanager.projects.locations.trustConfigs.list
-export def "trust-configs list" [
+export def "certificatemanager-projects-locations-trust-configs-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1068,7 +1068,7 @@ export def "trust-configs list" [
 # POST /v1/{parent}/trustConfigs
 # operationId: certificatemanager.projects.locations.trustConfigs.create
 # --trustStores item shape: {intermediateCas?: list, trustAnchors?: list}
-export def "trust-configs create" [
+export def "certificatemanager-projects-locations-trust-configs-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

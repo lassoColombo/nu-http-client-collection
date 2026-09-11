@@ -97,7 +97,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "gasweekly get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-gasweekly" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -120,7 +120,7 @@ export def commands []: nothing -> table {
 # Returns the weekly gasoline report. This resource pulls back the report with ProductLine = "US Weekly Gasoline Demand Report". Keep in mind that you must be subscribed to the gasoline weekly report to be able to receive data back from this resource.
 #
 # GET /gasweekly
-export def "gasweekly get" [
+export def "get-gasweekly" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -156,7 +156,7 @@ export def "gasweekly get" [
 # Returns a distinct list of all reports are available and that one is subscribed to.
 #
 # GET /parameters
-export def "parameters get" [
+export def "get-parameters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -192,7 +192,7 @@ export def "parameters get" [
 # Returns all Spending Pulse reports (with the exception of the gasoline weekly report, which has its own resource), that one is subscribed to.
 #
 # GET /spendingpulse
-export def "spendingpulse get" [
+export def "get-spendingpulse" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -235,7 +235,7 @@ export def "spendingpulse get" [
 # Returns a list of all reports one is currently subscribed to.
 #
 # GET /subscription
-export def "subscription get" [
+export def "get-subscription" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

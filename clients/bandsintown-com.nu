@@ -97,7 +97,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "artists get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "artist" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -121,7 +121,7 @@ export def commands []: nothing -> table {
 #
 # GET /artists/{artistname}
 # operationId: artist
-export def "artists get" [
+export def "artist" [
   artistname: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -159,7 +159,7 @@ export def "artists get" [
 #
 # GET /artists/{artistname}/events
 # operationId: artistEvents
-export def "artists-events get" [
+export def "artist-events" [
   artistname: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

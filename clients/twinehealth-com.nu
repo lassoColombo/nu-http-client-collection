@@ -131,7 +131,7 @@ def include-completer-5 [] { ["actions" "bundles" "current_results" "patient"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "action create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-action" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -155,7 +155,7 @@ export def commands []: nothing -> table {
 #
 # POST /action
 # operationId: createAction
-export def "action create" [
+export def "create-action" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -193,7 +193,7 @@ export def "action create" [
 #
 # GET /action/{id}
 # operationId: fetchAction
-export def "action get" [
+export def "fetch-action" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -229,7 +229,7 @@ export def "action get" [
 #
 # PATCH /action/{id}
 # operationId: updateAction
-export def "action update" [
+export def "update-action" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -269,7 +269,7 @@ export def "action update" [
 #
 # POST /bundle
 # operationId: createBundle
-export def "bundle create" [
+export def "create-bundle" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -307,7 +307,7 @@ export def "bundle create" [
 #
 # GET /bundle/{id}
 # operationId: fetchBundle
-export def "bundle get" [
+export def "fetch-bundle" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -343,7 +343,7 @@ export def "bundle get" [
 #
 # PATCH /bundle/{id}
 # operationId: updateBundle
-export def "bundle update" [
+export def "update-bundle" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -383,7 +383,7 @@ export def "bundle update" [
 #
 # GET /calendar_event
 # operationId: fetchCalendarEvents
-export def "calendar-event list" [
+export def "fetch-calendar-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -434,7 +434,7 @@ export def "calendar-event list" [
 #
 # POST /calendar_event
 # operationId: createCalendarEvent
-export def "calendar-event create" [
+export def "create-calendar-event" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -472,7 +472,7 @@ export def "calendar-event create" [
 #
 # DELETE /calendar_event/{id}
 # operationId: deleteCalendarEvent
-export def "calendar-event delete" [
+export def "delete-calendar-event" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -508,7 +508,7 @@ export def "calendar-event delete" [
 #
 # GET /calendar_event/{id}
 # operationId: fetchCalendarEvent
-export def "calendar-event get" [
+export def "fetch-calendar-event" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -544,7 +544,7 @@ export def "calendar-event get" [
 #
 # PATCH /calendar_event/{id}
 # operationId: updateCalendarEvent
-export def "calendar-event update" [
+export def "update-calendar-event" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -584,7 +584,7 @@ export def "calendar-event update" [
 #
 # POST /calendar_event_response
 # operationId: createCalendarEventResponse
-export def "calendar-event-response create" [
+export def "create-calendar-event-response" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -622,7 +622,7 @@ export def "calendar-event-response create" [
 #
 # GET /coach
 # operationId: fetchCoaches
-export def "coach get-coaches" [
+export def "fetch-coaches" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -659,7 +659,7 @@ export def "coach get-coaches" [
 #
 # GET /coach/{id}
 # operationId: fetchCoach
-export def "coach get" [
+export def "fetch-coach" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -695,7 +695,7 @@ export def "coach get" [
 #
 # GET /email_history
 # operationId: fetchEmailHistories
-export def "email-history get-histories" [
+export def "fetch-email-histories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -734,7 +734,7 @@ export def "email-history get-histories" [
 #
 # GET /email_history/{id}
 # operationId: fetchEmailHistory
-export def "email-history get" [
+export def "fetch-email-history" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -770,7 +770,7 @@ export def "email-history get" [
 #
 # GET /group
 # operationId: fetchGroups
-export def "group list" [
+export def "fetch-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -807,7 +807,7 @@ export def "group list" [
 #
 # POST /group
 # operationId: createGroup
-export def "group create" [
+export def "create-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -845,7 +845,7 @@ export def "group create" [
 #
 # GET /group/{id}
 # operationId: fetchGroup
-export def "group get" [
+export def "fetch-group" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -881,7 +881,7 @@ export def "group get" [
 #
 # GET /health_profile
 # operationId: fetchHealthProfiles
-export def "health-profile list" [
+export def "fetch-health-profiles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -924,7 +924,7 @@ export def "health-profile list" [
 #
 # GET /health_profile/{id}
 # operationId: fetchHealthProfile
-export def "health-profile get" [
+export def "fetch-health-profile" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -962,7 +962,7 @@ export def "health-profile get" [
 #
 # GET /health_profile_answer
 # operationId: fetchHealthProfileAnswers
-export def "health-profile-answer list" [
+export def "fetch-health-profile-answers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1005,7 +1005,7 @@ export def "health-profile-answer list" [
 #
 # GET /health_profile_answer/{id}
 # operationId: fetchHealthProfileAnswer
-export def "health-profile-answer get" [
+export def "fetch-health-profile-answer" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1043,7 +1043,7 @@ export def "health-profile-answer get" [
 #
 # GET /health_profile_question
 # operationId: fetchHealthProfileQuestions
-export def "health-profile-question list" [
+export def "fetch-health-profile-questions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1082,7 +1082,7 @@ export def "health-profile-question list" [
 #
 # GET /health_profile_question/{id}
 # operationId: fetchHealthProfileQuestion
-export def "health-profile-question get" [
+export def "fetch-health-profile-question" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1120,7 +1120,7 @@ export def "health-profile-question get" [
 #
 # GET /health_question_definition
 # operationId: fetchHealthQuestionDefinitions
-export def "health-question-definition list" [
+export def "fetch-health-question-definitions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1154,7 +1154,7 @@ export def "health-question-definition list" [
 #
 # GET /health_question_definition/{id}
 # operationId: fetchHealthQuestionDefinition
-export def "health-question-definition get" [
+export def "fetch-health-question-definition" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1191,7 +1191,7 @@ export def "health-question-definition get" [
 # POST /oauth/token
 # operationId: createToken
 # --data shape: {attributes: record, type?: "token"}
-export def "oauth-token create" [
+export def "create-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1231,7 +1231,7 @@ export def "oauth-token create" [
 #
 # GET /oauth/token/{id}/groups
 # operationId: fetchTokenGroups
-export def "oauth-token-groups get" [
+export def "fetch-token-groups" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1267,7 +1267,7 @@ export def "oauth-token-groups get" [
 #
 # GET /oauth/token/{id}/organization
 # operationId: fetchTokenOrganization
-export def "oauth-token-organization get" [
+export def "fetch-token-organization" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1303,7 +1303,7 @@ export def "oauth-token-organization get" [
 #
 # GET /organization/{id}
 # operationId: fetchOrganization
-export def "organization get" [
+export def "fetch-organization" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1339,7 +1339,7 @@ export def "organization get" [
 #
 # GET /patient
 # operationId: fetchPatients
-export def "patient list" [
+export def "fetch-patients" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1385,7 +1385,7 @@ export def "patient list" [
 #
 # POST /patient
 # operationId: createPatient
-export def "patient create" [
+export def "create-patient" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1423,7 +1423,7 @@ export def "patient create" [
 #
 # PUT /patient
 # operationId: upsertPatient
-export def "patient update" [
+export def "upsert-patient" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1461,7 +1461,7 @@ export def "patient update" [
 #
 # GET /patient/{id}
 # operationId: fetchPatient
-export def "patient get" [
+export def "fetch-patient" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1497,7 +1497,7 @@ export def "patient get" [
 #
 # PATCH /patient/{id}
 # operationId: updatePatient
-export def "patient update-by-id" [
+export def "update-patient" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1537,7 +1537,7 @@ export def "patient update-by-id" [
 #
 # GET /patient/{id}/coaches
 # operationId: fetchPatientCoaches
-export def "patient-coaches get" [
+export def "fetch-patient-coaches" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1573,7 +1573,7 @@ export def "patient-coaches get" [
 #
 # GET /patient/{id}/groups
 # operationId: fetchPatientGroups
-export def "patient-groups get" [
+export def "fetch-patient-groups" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1609,7 +1609,7 @@ export def "patient-groups get" [
 #
 # GET /patient_health_metric
 # operationId: fetchPatientHealthMetrics
-export def "patient-health-metric list" [
+export def "fetch-patient-health-metrics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1651,7 +1651,7 @@ export def "patient-health-metric list" [
 #
 # POST /patient_health_metric
 # operationId: createPatientHealthMetric
-export def "patient-health-metric create" [
+export def "create-patient-health-metric" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1689,7 +1689,7 @@ export def "patient-health-metric create" [
 #
 # GET /patient_health_metric/{id}
 # operationId: fetchPatientHealthMetric
-export def "patient-health-metric get" [
+export def "fetch-patient-health-metric" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1725,7 +1725,7 @@ export def "patient-health-metric get" [
 #
 # GET /patient_plan_summary
 # operationId: fetchPatientPlanSummaries
-export def "patient-plan-summary get-summaries" [
+export def "fetch-patient-plan-summaries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1764,7 +1764,7 @@ export def "patient-plan-summary get-summaries" [
 #
 # GET /patient_plan_summary/{id}
 # operationId: fetchPatientPlanSummary
-export def "patient-plan-summary get" [
+export def "fetch-patient-plan-summary" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1802,7 +1802,7 @@ export def "patient-plan-summary get" [
 #
 # PATCH /patient_plan_summary/{id}
 # operationId: updatePatientPlanSummary
-export def "patient-plan-summary update" [
+export def "update-patient-plan-summary" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1842,7 +1842,7 @@ export def "patient-plan-summary update" [
 #
 # GET /result
 # operationId: fetchPatientHealthResults
-export def "result list" [
+export def "fetch-patient-health-results" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1888,7 +1888,7 @@ export def "result list" [
 #
 # GET /result/{id}
 # operationId: fetchPatientHealthResult
-export def "result get-patient-health" [
+export def "fetch-patient-health-result" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1924,7 +1924,7 @@ export def "result get-patient-health" [
 #
 # GET /reward
 # operationId: fetchRewards
-export def "reward list" [
+export def "fetch-rewards" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1964,7 +1964,7 @@ export def "reward list" [
 #
 # POST /reward
 # operationId: createReward
-export def "reward create" [
+export def "create-reward" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2002,7 +2002,7 @@ export def "reward create" [
 #
 # GET /reward/{id}
 # operationId: fetchReward
-export def "reward get" [
+export def "fetch-reward" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2038,7 +2038,7 @@ export def "reward get" [
 #
 # GET /reward_earning
 # operationId: fetchRewardEarnings
-export def "reward-earning list" [
+export def "fetch-reward-earnings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2076,7 +2076,7 @@ export def "reward-earning list" [
 #
 # POST /reward_earning
 # operationId: createRewardEarning
-export def "reward-earning create" [
+export def "create-reward-earning" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2114,7 +2114,7 @@ export def "reward-earning create" [
 #
 # GET /reward_earning/{id}
 # operationId: fetchRewardEarning
-export def "reward-earning get" [
+export def "fetch-reward-earning" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2150,7 +2150,7 @@ export def "reward-earning get" [
 #
 # GET /reward_earning_fulfillment
 # operationId: fetchRewardEarningFulfillments
-export def "reward-earning-fulfillment list" [
+export def "fetch-reward-earning-fulfillments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2186,7 +2186,7 @@ export def "reward-earning-fulfillment list" [
 #
 # POST /reward_earning_fulfillment
 # operationId: createRewardEarningFulfillment
-export def "reward-earning-fulfillment create" [
+export def "create-reward-earning-fulfillment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2224,7 +2224,7 @@ export def "reward-earning-fulfillment create" [
 #
 # GET /reward_earning_fulfillment/{id}
 # operationId: fetchRewardEarningFulfillment
-export def "reward-earning-fulfillment get" [
+export def "fetch-reward-earning-fulfillment" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2260,7 +2260,7 @@ export def "reward-earning-fulfillment get" [
 #
 # GET /reward_program
 # operationId: fetchRewardPrograms
-export def "reward-program list" [
+export def "fetch-reward-programs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2297,7 +2297,7 @@ export def "reward-program list" [
 #
 # POST /reward_program
 # operationId: createRewardProgram
-export def "reward-program create" [
+export def "create-reward-program" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2335,7 +2335,7 @@ export def "reward-program create" [
 #
 # GET /reward_program/{id}
 # operationId: fetchRewardProgram
-export def "reward-program get" [
+export def "fetch-reward-program" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2371,7 +2371,7 @@ export def "reward-program get" [
 #
 # GET /reward_program/{id}/group
 # operationId: fetchRewardProgramGroup
-export def "reward-program-group get" [
+export def "fetch-reward-program-group" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2407,7 +2407,7 @@ export def "reward-program-group get" [
 #
 # GET /reward_program_activation
 # operationId: fetchRewardProgramActivations
-export def "reward-program-activation list" [
+export def "fetch-reward-program-activations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2445,7 +2445,7 @@ export def "reward-program-activation list" [
 #
 # POST /reward_program_activation
 # operationId: createRewardProgramActivation
-export def "reward-program-activation create" [
+export def "create-reward-program-activation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2483,7 +2483,7 @@ export def "reward-program-activation create" [
 #
 # GET /reward_program_activation/{id}
 # operationId: fetchRewardProgramActivation
-export def "reward-program-activation get" [
+export def "fetch-reward-program-activation" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

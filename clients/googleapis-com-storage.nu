@@ -139,7 +139,7 @@ def destination-predefined-acl-completer [] { ["authenticatedRead" "bucketOwnerF
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "b list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "storage-buckets-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -163,7 +163,7 @@ export def commands []: nothing -> table {
 #
 # GET /b
 # operationId: storage.buckets.list
-export def "b list" [
+export def "storage-buckets-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -226,7 +226,7 @@ export def "b list" [
 # --retentionPolicy shape: {effectiveTime?: string, isLocked?: bool, retentionPeriod?: string}
 # --versioning shape: {enabled?: bool}
 # --website shape: {mainPageSuffix?: string, notFoundPage?: string}
-export def "b create" [
+export def "storage-buckets-insert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -307,7 +307,7 @@ export def "b create" [
 #
 # DELETE /b/{bucket}
 # operationId: storage.buckets.delete
-export def "b delete" [
+export def "storage-buckets-delete" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -355,7 +355,7 @@ export def "b delete" [
 #
 # GET /b/{bucket}
 # operationId: storage.buckets.get
-export def "b get" [
+export def "storage-buckets-get" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -418,7 +418,7 @@ export def "b get" [
 # --retentionPolicy shape: {effectiveTime?: string, isLocked?: bool, retentionPeriod?: string}
 # --versioning shape: {enabled?: bool}
 # --website shape: {mainPageSuffix?: string, notFoundPage?: string}
-export def "b update-by-bucket" [
+export def "storage-buckets-patch" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -516,7 +516,7 @@ export def "b update-by-bucket" [
 # --retentionPolicy shape: {effectiveTime?: string, isLocked?: bool, retentionPeriod?: string}
 # --versioning shape: {enabled?: bool}
 # --website shape: {mainPageSuffix?: string, notFoundPage?: string}
-export def "b update-by-bucket-1" [
+export def "storage-buckets-update" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -600,7 +600,7 @@ export def "b update-by-bucket-1" [
 #
 # GET /b/{bucket}/acl
 # operationId: storage.bucketAccessControls.list
-export def "b-acl list" [
+export def "storage-bucket-access-controls-list" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -647,7 +647,7 @@ export def "b-acl list" [
 # POST /b/{bucket}/acl
 # operationId: storage.bucketAccessControls.insert
 # --projectTeam shape: {projectNumber?: string, team?: string}
-export def "b-acl create" [
+export def "storage-bucket-access-controls-insert" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -707,7 +707,7 @@ export def "b-acl create" [
 #
 # DELETE /b/{bucket}/acl/{entity}
 # operationId: storage.bucketAccessControls.delete
-export def "b-acl delete" [
+export def "storage-bucket-access-controls-delete" [
   bucket: string
   entity: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -755,7 +755,7 @@ export def "b-acl delete" [
 #
 # GET /b/{bucket}/acl/{entity}
 # operationId: storage.bucketAccessControls.get
-export def "b-acl get" [
+export def "storage-bucket-access-controls-get" [
   bucket: string
   entity: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -804,7 +804,7 @@ export def "b-acl get" [
 # PATCH /b/{bucket}/acl/{entity}
 # operationId: storage.bucketAccessControls.patch
 # --projectTeam shape: {projectNumber?: string, team?: string}
-export def "b-acl update-by-bucket-entity" [
+export def "storage-bucket-access-controls-patch" [
   bucket: string
   entity: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -867,7 +867,7 @@ export def "b-acl update-by-bucket-entity" [
 # PUT /b/{bucket}/acl/{entity}
 # operationId: storage.bucketAccessControls.update
 # --projectTeam shape: {projectNumber?: string, team?: string}
-export def "b-acl update-by-bucket-entity-1" [
+export def "storage-bucket-access-controls-update" [
   bucket: string
   entity: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -929,7 +929,7 @@ export def "b-acl update-by-bucket-entity-1" [
 #
 # GET /b/{bucket}/defaultObjectAcl
 # operationId: storage.defaultObjectAccessControls.list
-export def "b-default-object-acl list" [
+export def "storage-default-object-access-controls-list" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -978,7 +978,7 @@ export def "b-default-object-acl list" [
 # POST /b/{bucket}/defaultObjectAcl
 # operationId: storage.defaultObjectAccessControls.insert
 # --projectTeam shape: {projectNumber?: string, team?: string}
-export def "b-default-object-acl create" [
+export def "storage-default-object-access-controls-insert" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1040,7 +1040,7 @@ export def "b-default-object-acl create" [
 #
 # DELETE /b/{bucket}/defaultObjectAcl/{entity}
 # operationId: storage.defaultObjectAccessControls.delete
-export def "b-default-object-acl delete" [
+export def "storage-default-object-access-controls-delete" [
   bucket: string
   entity: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1088,7 +1088,7 @@ export def "b-default-object-acl delete" [
 #
 # GET /b/{bucket}/defaultObjectAcl/{entity}
 # operationId: storage.defaultObjectAccessControls.get
-export def "b-default-object-acl get" [
+export def "storage-default-object-access-controls-get" [
   bucket: string
   entity: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1137,7 +1137,7 @@ export def "b-default-object-acl get" [
 # PATCH /b/{bucket}/defaultObjectAcl/{entity}
 # operationId: storage.defaultObjectAccessControls.patch
 # --projectTeam shape: {projectNumber?: string, team?: string}
-export def "b-default-object-acl update-by-bucket-entity" [
+export def "storage-default-object-access-controls-patch" [
   bucket: string
   entity: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1202,7 +1202,7 @@ export def "b-default-object-acl update-by-bucket-entity" [
 # PUT /b/{bucket}/defaultObjectAcl/{entity}
 # operationId: storage.defaultObjectAccessControls.update
 # --projectTeam shape: {projectNumber?: string, team?: string}
-export def "b-default-object-acl update-by-bucket-entity-1" [
+export def "storage-default-object-access-controls-update" [
   bucket: string
   entity: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1266,7 +1266,7 @@ export def "b-default-object-acl update-by-bucket-entity-1" [
 #
 # GET /b/{bucket}/iam
 # operationId: storage.buckets.getIamPolicy
-export def "b-iam get-policy" [
+export def "storage-buckets-get-iam-policy" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1314,7 +1314,7 @@ export def "b-iam get-policy" [
 # PUT /b/{bucket}/iam
 # operationId: storage.buckets.setIamPolicy
 # --bindings item shape: {condition?: record, members?: list<string>, role?: string}
-export def "b-iam update-policy" [
+export def "storage-buckets-set-iam-policy" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1368,7 +1368,7 @@ export def "b-iam update-policy" [
 #
 # GET /b/{bucket}/iam/testPermissions
 # operationId: storage.buckets.testIamPermissions
-export def "b-iam-test-permissions test" [
+export def "storage-buckets-test-iam-permissions" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1415,7 +1415,7 @@ export def "b-iam-test-permissions test" [
 #
 # POST /b/{bucket}/lockRetentionPolicy
 # operationId: storage.buckets.lockRetentionPolicy
-export def "b-lock-retention-policy lock" [
+export def "storage-buckets-lock-retention-policy" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1462,7 +1462,7 @@ export def "b-lock-retention-policy lock" [
 #
 # GET /b/{bucket}/notificationConfigs
 # operationId: storage.notifications.list
-export def "b-notification-configs list" [
+export def "storage-notifications-list" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1508,7 +1508,7 @@ export def "b-notification-configs list" [
 #
 # POST /b/{bucket}/notificationConfigs
 # operationId: storage.notifications.insert
-export def "b-notification-configs create" [
+export def "storage-notifications-insert" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1566,7 +1566,7 @@ export def "b-notification-configs create" [
 #
 # DELETE /b/{bucket}/notificationConfigs/{notification}
 # operationId: storage.notifications.delete
-export def "b-notification-configs delete" [
+export def "storage-notifications-delete" [
   bucket: string
   notification: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1614,7 +1614,7 @@ export def "b-notification-configs delete" [
 #
 # GET /b/{bucket}/notificationConfigs/{notification}
 # operationId: storage.notifications.get
-export def "b-notification-configs get" [
+export def "storage-notifications-get" [
   bucket: string
   notification: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1662,7 +1662,7 @@ export def "b-notification-configs get" [
 #
 # GET /b/{bucket}/o
 # operationId: storage.objects.list
-export def "b-o list" [
+export def "storage-objects-list" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1718,7 +1718,7 @@ export def "b-o list" [
 #
 # POST /b/{bucket}/o
 # operationId: storage.objects.insert
-export def "b-o create" [
+export def "storage-objects-insert" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1777,7 +1777,7 @@ export def "b-o create" [
 #
 # POST /b/{bucket}/o/watch
 # operationId: storage.objects.watchAll
-export def "b-o-watch list" [
+export def "storage-objects-watch-all" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1845,7 +1845,7 @@ export def "b-o-watch list" [
 #
 # DELETE /b/{bucket}/o/{object}
 # operationId: storage.objects.delete
-export def "b-o delete" [
+export def "storage-objects-delete" [
   bucket: string
   object: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1898,7 +1898,7 @@ export def "b-o delete" [
 #
 # GET /b/{bucket}/o/{object}
 # operationId: storage.objects.get
-export def "b-o get" [
+export def "storage-objects-get" [
   bucket: string
   object: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1955,7 +1955,7 @@ export def "b-o get" [
 # --acl item shape: {bucket?: string, domain?: string, email?: string, entity?: string, entityId?: string, etag?: string, generation?: string, id?: string, kind?: string, object?: string, projectTeam?: record, role?: string, selfLink?: string}
 # --customerEncryption shape: {encryptionAlgorithm?: string, keySha256?: string}
 # --owner shape: {entity?: string, entityId?: string}
-export def "b-o update-by-bucket-object" [
+export def "storage-objects-patch" [
   bucket: string
   object: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2048,7 +2048,7 @@ export def "b-o update-by-bucket-object" [
 # --acl item shape: {bucket?: string, domain?: string, email?: string, entity?: string, entityId?: string, etag?: string, generation?: string, id?: string, kind?: string, object?: string, projectTeam?: record, role?: string, selfLink?: string}
 # --customerEncryption shape: {encryptionAlgorithm?: string, keySha256?: string}
 # --owner shape: {entity?: string, entityId?: string}
-export def "b-o update-by-bucket-object-1" [
+export def "storage-objects-update" [
   bucket: string
   object: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2138,7 +2138,7 @@ export def "b-o update-by-bucket-object-1" [
 #
 # GET /b/{bucket}/o/{object}/acl
 # operationId: storage.objectAccessControls.list
-export def "b-o-acl list" [
+export def "storage-object-access-controls-list" [
   bucket: string
   object: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2188,7 +2188,7 @@ export def "b-o-acl list" [
 # POST /b/{bucket}/o/{object}/acl
 # operationId: storage.objectAccessControls.insert
 # --projectTeam shape: {projectNumber?: string, team?: string}
-export def "b-o-acl create" [
+export def "storage-object-access-controls-insert" [
   bucket: string
   object: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2253,7 +2253,7 @@ export def "b-o-acl create" [
 #
 # DELETE /b/{bucket}/o/{object}/acl/{entity}
 # operationId: storage.objectAccessControls.delete
-export def "b-o-acl delete" [
+export def "storage-object-access-controls-delete" [
   bucket: string
   object: string
   entity: string
@@ -2304,7 +2304,7 @@ export def "b-o-acl delete" [
 #
 # GET /b/{bucket}/o/{object}/acl/{entity}
 # operationId: storage.objectAccessControls.get
-export def "b-o-acl get" [
+export def "storage-object-access-controls-get" [
   bucket: string
   object: string
   entity: string
@@ -2356,7 +2356,7 @@ export def "b-o-acl get" [
 # PATCH /b/{bucket}/o/{object}/acl/{entity}
 # operationId: storage.objectAccessControls.patch
 # --projectTeam shape: {projectNumber?: string, team?: string}
-export def "b-o-acl update-by-bucket-object-entity" [
+export def "storage-object-access-controls-patch" [
   bucket: string
   object: string
   entity: string
@@ -2424,7 +2424,7 @@ export def "b-o-acl update-by-bucket-object-entity" [
 # PUT /b/{bucket}/o/{object}/acl/{entity}
 # operationId: storage.objectAccessControls.update
 # --projectTeam shape: {projectNumber?: string, team?: string}
-export def "b-o-acl update-by-bucket-object-entity-1" [
+export def "storage-object-access-controls-update" [
   bucket: string
   object: string
   entity: string
@@ -2491,7 +2491,7 @@ export def "b-o-acl update-by-bucket-object-entity-1" [
 #
 # GET /b/{bucket}/o/{object}/iam
 # operationId: storage.objects.getIamPolicy
-export def "b-o-iam get-policy" [
+export def "storage-objects-get-iam-policy" [
   bucket: string
   object: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2541,7 +2541,7 @@ export def "b-o-iam get-policy" [
 # PUT /b/{bucket}/o/{object}/iam
 # operationId: storage.objects.setIamPolicy
 # --bindings item shape: {condition?: record, members?: list<string>, role?: string}
-export def "b-o-iam update-policy" [
+export def "storage-objects-set-iam-policy" [
   bucket: string
   object: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2598,7 +2598,7 @@ export def "b-o-iam update-policy" [
 #
 # GET /b/{bucket}/o/{object}/iam/testPermissions
 # operationId: storage.objects.testIamPermissions
-export def "b-o-iam-test-permissions test" [
+export def "storage-objects-test-iam-permissions" [
   bucket: string
   object: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2650,7 +2650,7 @@ export def "b-o-iam-test-permissions test" [
 # operationId: storage.objects.compose
 # --destination shape: {acl?: list, bucket?: string, cacheControl?: string, componentCount?: int, contentDisposition?: string, contentEncoding?: string, contentLanguage?: string, contentType?: string, crc32c?: string, customTime?: string, customerEncryption?: record, etag?: string, eventBasedHold?: bool, generation?: string, id?: string, kind?: string, kmsKeyName?: string, md5Hash?: string, mediaLink?: string, metadata?: record, metageneration?: string, name?: string, owner?: record, retentionExpirationTime?: string, ... (8 more fields)}
 # --sourceObjects item shape: {generation?: string, name?: string, objectPreconditions?: record}
-export def "b-o-compose create" [
+export def "storage-objects-compose" [
   destination_bucket: string
   destination_object: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2711,7 +2711,7 @@ export def "b-o-compose create" [
 # --acl item shape: {bucket?: string, domain?: string, email?: string, entity?: string, entityId?: string, etag?: string, generation?: string, id?: string, kind?: string, object?: string, projectTeam?: record, role?: string, selfLink?: string}
 # --customerEncryption shape: {encryptionAlgorithm?: string, keySha256?: string}
 # --owner shape: {entity?: string, entityId?: string}
-export def "b-o-copy-to-b-o copy" [
+export def "storage-objects-copy" [
   source_bucket: string
   source_object: string
   destination_bucket: string
@@ -2813,7 +2813,7 @@ export def "b-o-copy-to-b-o copy" [
 # --acl item shape: {bucket?: string, domain?: string, email?: string, entity?: string, entityId?: string, etag?: string, generation?: string, id?: string, kind?: string, object?: string, projectTeam?: record, role?: string, selfLink?: string}
 # --customerEncryption shape: {encryptionAlgorithm?: string, keySha256?: string}
 # --owner shape: {entity?: string, entityId?: string}
-export def "b-o-rewrite-to-b-o create" [
+export def "storage-objects-rewrite" [
   source_bucket: string
   source_object: string
   destination_bucket: string
@@ -2914,7 +2914,7 @@ export def "b-o-rewrite-to-b-o create" [
 #
 # POST /channels/stop
 # operationId: storage.channels.stop
-export def "channels-stop stop" [
+export def "storage-channels-stop" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -2970,7 +2970,7 @@ export def "channels-stop stop" [
 #
 # GET /projects/{projectId}/hmacKeys
 # operationId: storage.projects.hmacKeys.list
-export def "projects-hmac-keys list" [
+export def "storage-projects-hmac-keys-list" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3020,7 +3020,7 @@ export def "projects-hmac-keys list" [
 #
 # POST /projects/{projectId}/hmacKeys
 # operationId: storage.projects.hmacKeys.create
-export def "projects-hmac-keys create" [
+export def "storage-projects-hmac-keys-create" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3067,7 +3067,7 @@ export def "projects-hmac-keys create" [
 #
 # DELETE /projects/{projectId}/hmacKeys/{accessId}
 # operationId: storage.projects.hmacKeys.delete
-export def "projects-hmac-keys delete" [
+export def "storage-projects-hmac-keys-delete" [
   project_id: string
   access_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3115,7 +3115,7 @@ export def "projects-hmac-keys delete" [
 #
 # GET /projects/{projectId}/hmacKeys/{accessId}
 # operationId: storage.projects.hmacKeys.get
-export def "projects-hmac-keys get" [
+export def "storage-projects-hmac-keys-get" [
   project_id: string
   access_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3163,7 +3163,7 @@ export def "projects-hmac-keys get" [
 #
 # PUT /projects/{projectId}/hmacKeys/{accessId}
 # operationId: storage.projects.hmacKeys.update
-export def "projects-hmac-keys update" [
+export def "storage-projects-hmac-keys-update" [
   project_id: string
   access_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3224,7 +3224,7 @@ export def "projects-hmac-keys update" [
 #
 # GET /projects/{projectId}/serviceAccount
 # operationId: storage.projects.serviceAccount.get
-export def "projects-service-account get" [
+export def "storage-projects-service-account-get" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

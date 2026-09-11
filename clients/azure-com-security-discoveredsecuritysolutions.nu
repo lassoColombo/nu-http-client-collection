@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-security-discovered-security-solutions list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "discovered-security-solutions-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -122,7 +122,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Security/discoveredSecuritySolutions
 # operationId: DiscoveredSecuritySolutions_List
-export def "subscriptions-providers-microsoft-security-discovered-security-solutions list" [
+export def "discovered-security-solutions-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -160,7 +160,7 @@ export def "subscriptions-providers-microsoft-security-discovered-security-solut
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Security/locations/{ascLocation}/discoveredSecuritySolutions
 # operationId: DiscoveredSecuritySolutions_ListByHomeRegion
-export def "subscriptions-providers-microsoft-security-locations-discovered-security-solutions list-by-home-region" [
+export def "discovered-security-solutions-list-by-home-region" [
   subscription_id: string
   asc_location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -200,7 +200,7 @@ export def "subscriptions-providers-microsoft-security-locations-discovered-secu
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Security/locations/{ascLocation}/discoveredSecuritySolutions/{discoveredSecuritySolutionName}
 # operationId: DiscoveredSecuritySolutions_Get
-export def "subscriptions-resource-groups-providers-microsoft-security-locations-discovered-security-solutions get" [
+export def "discovered-security-solutions-get" [
   subscription_id: string
   resource_group_name: string
   asc_location: string

@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-sql-servers-advisors list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "server-advisors-list-by-server" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -128,7 +128,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/advisors
 # operationId: ServerAdvisors_ListByServer
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-advisors list" [
+export def "server-advisors-list-by-server" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -170,7 +170,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-adviso
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/advisors/{advisorName}
 # operationId: ServerAdvisors_Get
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-advisors get" [
+export def "server-advisors-get" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -215,7 +215,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-adviso
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/advisors/{advisorName}
 # operationId: ServerAdvisors_Update
 # --properties shape: {autoExecuteStatus: "Enabled"|"Disabled"|"Default"}
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-advisors update" [
+export def "server-advisors-update" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -263,7 +263,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-adviso
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/advisors
 # operationId: DatabaseAdvisors_ListByDatabase
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-advisors list" [
+export def "database-advisors-list-by-database" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -307,7 +307,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/advisors/{advisorName}
 # operationId: DatabaseAdvisors_Get
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-advisors get" [
+export def "database-advisors-get" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -354,7 +354,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/advisors/{advisorName}
 # operationId: DatabaseAdvisors_Update
 # --properties shape: {autoExecuteStatus: "Enabled"|"Disabled"|"Default"}
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-advisors update" [
+export def "database-advisors-update" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -404,7 +404,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/advisors/{advisorName}/recommendedActions
 # operationId: DatabaseRecommendedActions_ListByDatabaseAdvisor
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-advisors-recommended-actions list" [
+export def "database-recommended-actions-list-by-database-advisor" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -450,7 +450,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/advisors/{advisorName}/recommendedActions/{recommendedActionName}
 # operationId: DatabaseRecommendedActions_Get
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-advisors-recommended-actions get" [
+export def "database-recommended-actions-get" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -499,7 +499,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/advisors/{advisorName}/recommendedActions/{recommendedActionName}
 # operationId: DatabaseRecommendedActions_Update
 # --properties shape: {errorDetails?: record, implementationDetails?: record, state: record}
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-advisors-recommended-actions update" [
+export def "database-recommended-actions-update" [
   subscription_id: string
   resource_group_name: string
   server_name: string

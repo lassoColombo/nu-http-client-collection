@@ -113,7 +113,7 @@ def accept-completer [] { ["application/pdf" "application/xml"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "drvlc-certificate create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "drvlc" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -139,7 +139,7 @@ export def commands []: nothing -> table {
 # operationId: drvlc
 # --certificateParameters shape: {DOB: string, FullName: string, UID: string, dlno: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "drvlc-certificate create" [
+export def "drvlc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -183,7 +183,7 @@ export def "drvlc-certificate create" [
 # operationId: rvcer
 # --certificateParameters shape: {FullName: string, UID: string, chasis_no: string, reg_no: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "rvcer-certificate create" [
+export def "rvcer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)

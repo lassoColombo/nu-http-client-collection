@@ -140,7 +140,7 @@ def size-completer [] { ["1024x1024" "256x256" "512x512"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "answers create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-answer" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -166,7 +166,7 @@ export def commands []: nothing -> table {
 # DEPRECATED
 # operationId: createAnswer
 @deprecated
-export def "answers create" [
+export def "create-answer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -221,7 +221,7 @@ export def "answers create" [
 #
 # POST /audio/transcriptions
 # operationId: createTranscription
-export def "audio-transcriptions create" [
+export def "create-transcription" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -266,7 +266,7 @@ export def "audio-transcriptions create" [
 #
 # POST /audio/translations
 # operationId: createTranslation
-export def "audio-translations create" [
+export def "create-translation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -311,7 +311,7 @@ export def "audio-translations create" [
 # POST /chat/completions
 # operationId: createChatCompletion
 # --messages item shape: {content: string, name?: string, role: "system"|"user"|"assistant"}
-export def "chat-completions create" [
+export def "create-chat-completion" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -362,7 +362,7 @@ export def "chat-completions create" [
 # DEPRECATED
 # operationId: createClassification
 @deprecated
-export def "classifications create" [
+export def "create-classification" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -413,7 +413,7 @@ export def "classifications create" [
 #
 # POST /completions
 # operationId: createCompletion
-export def "completions create" [
+export def "create-completion" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -466,7 +466,7 @@ export def "completions create" [
 #
 # POST /edits
 # operationId: createEdit
-export def "edits create" [
+export def "create-edit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -509,7 +509,7 @@ export def "edits create" [
 #
 # POST /embeddings
 # operationId: createEmbedding
-export def "embeddings create" [
+export def "create-embedding" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -551,7 +551,7 @@ export def "embeddings create" [
 # DEPRECATED
 # operationId: listEngines
 @deprecated
-export def "engines list" [
+export def "list-engines" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -587,7 +587,7 @@ export def "engines list" [
 # DEPRECATED
 # operationId: retrieveEngine
 @deprecated
-export def "engines get" [
+export def "retrieve-engine" [
   engine_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -625,7 +625,7 @@ export def "engines get" [
 # DEPRECATED
 # operationId: createSearch
 @deprecated
-export def "engines-search create" [
+export def "create-search" [
   engine_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -670,7 +670,7 @@ export def "engines-search create" [
 #
 # GET /files
 # operationId: listFiles
-export def "files list" [
+export def "list-files" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -704,7 +704,7 @@ export def "files list" [
 #
 # POST /files
 # operationId: createFile
-export def "files create" [
+export def "create-file" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -745,7 +745,7 @@ export def "files create" [
 #
 # DELETE /files/{file_id}
 # operationId: deleteFile
-export def "files delete" [
+export def "delete-file" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -781,7 +781,7 @@ export def "files delete" [
 #
 # GET /files/{file_id}
 # operationId: retrieveFile
-export def "files get" [
+export def "retrieve-file" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -817,7 +817,7 @@ export def "files get" [
 #
 # GET /files/{file_id}/content
 # operationId: downloadFile
-export def "files-content download" [
+export def "download-file" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -853,7 +853,7 @@ export def "files-content download" [
 #
 # GET /fine-tunes
 # operationId: listFineTunes
-export def "fine-tunes list" [
+export def "list-fine-tunes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -887,7 +887,7 @@ export def "fine-tunes list" [
 #
 # POST /fine-tunes
 # operationId: createFineTune
-export def "fine-tunes create" [
+export def "create-fine-tune" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -936,7 +936,7 @@ export def "fine-tunes create" [
 #
 # GET /fine-tunes/{fine_tune_id}
 # operationId: retrieveFineTune
-export def "fine-tunes get" [
+export def "retrieve-fine-tune" [
   fine_tune_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -972,7 +972,7 @@ export def "fine-tunes get" [
 #
 # POST /fine-tunes/{fine_tune_id}/cancel
 # operationId: cancelFineTune
-export def "fine-tunes-cancel cancel" [
+export def "cancel-fine-tune" [
   fine_tune_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1008,7 +1008,7 @@ export def "fine-tunes-cancel cancel" [
 #
 # GET /fine-tunes/{fine_tune_id}/events
 # operationId: listFineTuneEvents
-export def "fine-tunes-events list" [
+export def "list-fine-tune-events" [
   fine_tune_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1046,7 +1046,7 @@ export def "fine-tunes-events list" [
 #
 # POST /images/edits
 # operationId: createImageEdit
-export def "images-edits create" [
+export def "create-image-edit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1092,7 +1092,7 @@ export def "images-edits create" [
 #
 # POST /images/generations
 # operationId: createImage
-export def "images-generations create" [
+export def "create-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1134,7 +1134,7 @@ export def "images-generations create" [
 #
 # POST /images/variations
 # operationId: createImageVariation
-export def "images-variations create" [
+export def "create-image-variation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1178,7 +1178,7 @@ export def "images-variations create" [
 #
 # GET /models
 # operationId: listModels
-export def "models list" [
+export def "list-models" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1212,7 +1212,7 @@ export def "models list" [
 #
 # DELETE /models/{model}
 # operationId: deleteModel
-export def "models delete" [
+export def "delete-model" [
   model: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1248,7 +1248,7 @@ export def "models delete" [
 #
 # GET /models/{model}
 # operationId: retrieveModel
-export def "models get" [
+export def "retrieve-model" [
   model: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1284,7 +1284,7 @@ export def "models get" [
 #
 # POST /moderations
 # operationId: createModeration
-export def "moderations create" [
+export def "create-moderation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

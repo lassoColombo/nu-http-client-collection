@@ -110,7 +110,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-compute-admin-locations-quotas list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "quotas-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -134,7 +134,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Compute.Admin/locations/{location}/quotas
 # operationId: Quotas_List
-export def "subscriptions-providers-microsoft-compute-admin-locations-quotas list" [
+export def "quotas-list" [
   subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -174,7 +174,7 @@ export def "subscriptions-providers-microsoft-compute-admin-locations-quotas lis
 #
 # DELETE /subscriptions/{subscriptionId}/providers/Microsoft.Compute.Admin/locations/{location}/quotas/{quotaName}
 # operationId: Quotas_Delete
-export def "subscriptions-providers-microsoft-compute-admin-locations-quotas delete" [
+export def "quotas-delete" [
   subscription_id: string
   location: string
   quota_name: string
@@ -216,7 +216,7 @@ export def "subscriptions-providers-microsoft-compute-admin-locations-quotas del
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Compute.Admin/locations/{location}/quotas/{quotaName}
 # operationId: Quotas_Get
-export def "subscriptions-providers-microsoft-compute-admin-locations-quotas get" [
+export def "quotas-get" [
   subscription_id: string
   location: string
   quota_name: string
@@ -259,7 +259,7 @@ export def "subscriptions-providers-microsoft-compute-admin-locations-quotas get
 # PUT /subscriptions/{subscriptionId}/providers/Microsoft.Compute.Admin/locations/{location}/quotas/{quotaName}
 # operationId: Quotas_CreateOrUpdate
 # --properties shape: {availabilitySetCount?: int, coresLimit?: int, maxAllocationPremiumManagedDisksAndSnapshots?: int, maxAllocationStandardManagedDisksAndSnapshots?: int, virtualMachineCount?: int, vmScaleSetCount?: int}
-export def "subscriptions-providers-microsoft-compute-admin-locations-quotas create-or-update" [
+export def "quotas-create-or-update" [
   subscription_id: string
   location: string
   quota_name: string

@@ -118,7 +118,7 @@ def kind-completer [] { ["multistep" "ping"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-insights-webtests list-web-tests" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "web-tests-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -142,7 +142,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Insights/webtests
 # operationId: WebTests_List
-export def "subscriptions-providers-microsoft-insights-webtests list-web-tests" [
+export def "web-tests-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -180,7 +180,7 @@ export def "subscriptions-providers-microsoft-insights-webtests list-web-tests" 
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/components/{componentName}/webtests
 # operationId: WebTests_ListByComponent
-export def "subscriptions-resource-groups-providers-microsoft-insights-components-webtests list-web-tests" [
+export def "web-tests-list-by-component" [
   subscription_id: string
   resource_group_name: string
   component_name: string
@@ -222,7 +222,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/webtests
 # operationId: WebTests_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-insights-webtests list-web-tests" [
+export def "web-tests-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -262,7 +262,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-webtests 
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/webtests/{webTestName}
 # operationId: WebTests_Delete
-export def "subscriptions-resource-groups-providers-microsoft-insights-webtests delete-web-tests" [
+export def "web-tests-delete" [
   subscription_id: string
   resource_group_name: string
   web_test_name: string
@@ -304,7 +304,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-webtests 
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/webtests/{webTestName}
 # operationId: WebTests_Get
-export def "subscriptions-resource-groups-providers-microsoft-insights-webtests get-web-tests" [
+export def "web-tests-get" [
   subscription_id: string
   resource_group_name: string
   web_test_name: string
@@ -346,7 +346,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-webtests 
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/webtests/{webTestName}
 # operationId: WebTests_UpdateTags
-export def "subscriptions-resource-groups-providers-microsoft-insights-webtests update-web-tests-tags" [
+export def "web-tests-update-tags" [
   subscription_id: string
   resource_group_name: string
   web_test_name: string
@@ -393,7 +393,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-webtests 
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/webtests/{webTestName}
 # operationId: WebTests_CreateOrUpdate
 # --properties shape: {Configuration?: record, Description?: string, Enabled?: bool, Frequency?: int, Kind: "ping"|"multistep", Locations: list, Name: string, RetryEnabled?: bool, SyntheticMonitorId: string, Timeout?: int}
-export def "subscriptions-resource-groups-providers-microsoft-insights-webtests create-web-tests-or-update" [
+export def "web-tests-create-or-update" [
   subscription_id: string
   resource_group_name: string
   web_test_name: string

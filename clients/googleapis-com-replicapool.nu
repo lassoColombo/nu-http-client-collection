@@ -116,7 +116,7 @@ def alt-completer [] { ["json"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "zones-pools list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "replicapool-pools-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # GET /{projectName}/zones/{zone}/pools
 # operationId: replicapool.pools.list
-export def "zones-pools list" [
+export def "replicapool-pools-list" [
   project_name: string
   zone: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -191,7 +191,7 @@ export def "zones-pools list" [
 # --healthChecks item shape: {checkIntervalSec?: int, description?: string, healthyThreshold?: int, host?: string, name?: string, path?: string, port?: int, timeoutSec?: int, unhealthyThreshold?: int}
 # --labels item shape: {key?: string, value?: string}
 # --template shape: {action?: record, healthChecks?: list, version?: string, vmParams?: record}
-export def "zones-pools create" [
+export def "replicapool-pools-insert" [
   project_name: string
   zone: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -255,7 +255,7 @@ export def "zones-pools create" [
 #
 # GET /{projectName}/zones/{zone}/pools/{poolName}
 # operationId: replicapool.pools.get
-export def "zones-pools get" [
+export def "replicapool-pools-get" [
   project_name: string
   zone: string
   pool_name: string
@@ -303,7 +303,7 @@ export def "zones-pools get" [
 #
 # POST /{projectName}/zones/{zone}/pools/{poolName}
 # operationId: replicapool.pools.delete
-export def "zones-pools delete" [
+export def "replicapool-pools-delete" [
   project_name: string
   zone: string
   pool_name: string
@@ -355,7 +355,7 @@ export def "zones-pools delete" [
 #
 # GET /{projectName}/zones/{zone}/pools/{poolName}/replicas
 # operationId: replicapool.replicas.list
-export def "zones-pools-replicas list" [
+export def "replicapool-replicas-list" [
   project_name: string
   zone: string
   pool_name: string
@@ -405,7 +405,7 @@ export def "zones-pools-replicas list" [
 #
 # GET /{projectName}/zones/{zone}/pools/{poolName}/replicas/{replicaName}
 # operationId: replicapool.replicas.get
-export def "zones-pools-replicas get" [
+export def "replicapool-replicas-get" [
   project_name: string
   zone: string
   pool_name: string
@@ -455,7 +455,7 @@ export def "zones-pools-replicas get" [
 #
 # POST /{projectName}/zones/{zone}/pools/{poolName}/replicas/{replicaName}
 # operationId: replicapool.replicas.delete
-export def "zones-pools-replicas delete" [
+export def "replicapool-replicas-delete" [
   project_name: string
   zone: string
   pool_name: string
@@ -509,7 +509,7 @@ export def "zones-pools-replicas delete" [
 #
 # POST /{projectName}/zones/{zone}/pools/{poolName}/replicas/{replicaName}/restart
 # operationId: replicapool.replicas.restart
-export def "zones-pools-replicas-restart restart" [
+export def "replicapool-replicas-restart" [
   project_name: string
   zone: string
   pool_name: string
@@ -559,7 +559,7 @@ export def "zones-pools-replicas-restart restart" [
 #
 # POST /{projectName}/zones/{zone}/pools/{poolName}/resize
 # operationId: replicapool.pools.resize
-export def "zones-pools-resize resize" [
+export def "replicapool-pools-resize" [
   project_name: string
   zone: string
   pool_name: string
@@ -611,7 +611,7 @@ export def "zones-pools-resize resize" [
 # --action shape: {commands?: list<string>, envVariables?: list, timeoutMilliSeconds?: int}
 # --healthChecks item shape: {checkIntervalSec?: int, description?: string, healthyThreshold?: int, host?: string, name?: string, path?: string, port?: int, timeoutSec?: int, unhealthyThreshold?: int}
 # --vmParams shape: {baseInstanceName?: string, canIpForward?: bool, description?: string, disksToAttach?: list, disksToCreate?: list, machineType?: string, metadata?: record, networkInterfaces?: list, onHostMaintenance?: string, serviceAccounts?: list, tags?: record}
-export def "zones-pools-update-template update" [
+export def "replicapool-pools-updatetemplate" [
   project_name: string
   zone: string
   pool_name: string

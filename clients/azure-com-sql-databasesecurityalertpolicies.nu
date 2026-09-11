@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-security-alert-policies list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "database-security-alert-policies-list-by-database" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -128,7 +128,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/securityAlertPolicies
 # operationId: DatabaseSecurityAlertPolicies_ListByDatabase
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-security-alert-policies list" [
+export def "database-security-alert-policies-list-by-database" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -172,7 +172,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/securityAlertPolicies/{securityAlertPolicyName}
 # operationId: DatabaseSecurityAlertPolicies_Get
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-security-alert-policies get" [
+export def "database-security-alert-policies-get" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -219,7 +219,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/securityAlertPolicies/{securityAlertPolicyName}
 # operationId: DatabaseSecurityAlertPolicies_CreateOrUpdate
 # --properties shape: {disabledAlerts?: list<string>, emailAccountAdmins?: bool, emailAddresses?: list<string>, retentionDays?: int, state: "New"|"Enabled"|"Disabled", storageAccountAccessKey?: string, storageEndpoint?: string}
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-security-alert-policies create-or-update" [
+export def "database-security-alert-policies-create-or-update" [
   subscription_id: string
   resource_group_name: string
   server_name: string

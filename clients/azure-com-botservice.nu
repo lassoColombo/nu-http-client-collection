@@ -124,7 +124,7 @@ def kind-completer [] { ["bot" "designer" "function" "sdk"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-bot-service-check-enterprise-channel-name-availability check" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "enterprise-channels-check-name-availability" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -148,7 +148,7 @@ export def commands []: nothing -> table {
 #
 # POST /providers/Microsoft.BotService/checkEnterpriseChannelNameAvailability
 # operationId: EnterpriseChannels_CheckNameAvailability
-export def "providers-microsoft-bot-service-check-enterprise-channel-name-availability check" [
+export def "enterprise-channels-check-name-availability" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -188,7 +188,7 @@ export def "providers-microsoft-bot-service-check-enterprise-channel-name-availa
 #
 # POST /providers/Microsoft.BotService/checkNameAvailability
 # operationId: Bots_GetCheckNameAvailability
-export def "providers-microsoft-bot-service-check-name-availability get" [
+export def "bots-get-check-name-availability" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -229,7 +229,7 @@ export def "providers-microsoft-bot-service-check-name-availability get" [
 #
 # GET /providers/Microsoft.BotService/operations
 # operationId: Operations_List
-export def "providers-microsoft-bot-service-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -265,7 +265,7 @@ export def "providers-microsoft-bot-service-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.BotService/botServices
 # operationId: Bots_List
-export def "subscriptions-providers-microsoft-bot-service-bot-services list" [
+export def "bots-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -303,7 +303,7 @@ export def "subscriptions-providers-microsoft-bot-service-bot-services list" [
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.BotService/listAuthServiceProviders
 # operationId: BotConnection_ListServiceProviders
-export def "subscriptions-providers-microsoft-bot-service-list-auth-service-providers list-connection" [
+export def "bot-connection-list-service-providers" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -341,7 +341,7 @@ export def "subscriptions-providers-microsoft-bot-service-list-auth-service-prov
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BotService/botServices
 # operationId: Bots_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-bot-service-bot-services list" [
+export def "bots-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -381,7 +381,7 @@ export def "subscriptions-resource-groups-providers-microsoft-bot-service-bot-se
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BotService/botServices/{resourceName}
 # operationId: Bots_Delete
-export def "subscriptions-resource-groups-providers-microsoft-bot-service-bot-services delete" [
+export def "bots-delete" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -423,7 +423,7 @@ export def "subscriptions-resource-groups-providers-microsoft-bot-service-bot-se
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BotService/botServices/{resourceName}
 # operationId: Bots_Get
-export def "subscriptions-resource-groups-providers-microsoft-bot-service-bot-services get" [
+export def "bots-get" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -467,7 +467,7 @@ export def "subscriptions-resource-groups-providers-microsoft-bot-service-bot-se
 # operationId: Bots_Update
 # --properties shape: {description?: string, developerAppInsightKey?: string, developerAppInsightsApiKey?: string, developerAppInsightsApplicationId?: string, displayName: string, endpoint: string, iconUrl?: string, luisAppIds?: list<string>, luisKey?: string, msaAppId: string}
 # --sku shape: {name: "F0"|"S1"}
-export def "subscriptions-resource-groups-providers-microsoft-bot-service-bot-services update" [
+export def "bots-update" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -520,7 +520,7 @@ export def "subscriptions-resource-groups-providers-microsoft-bot-service-bot-se
 # operationId: Bots_Create
 # --properties shape: {description?: string, developerAppInsightKey?: string, developerAppInsightsApiKey?: string, developerAppInsightsApplicationId?: string, displayName: string, endpoint: string, iconUrl?: string, luisAppIds?: list<string>, luisKey?: string, msaAppId: string}
 # --sku shape: {name: "F0"|"S1"}
-export def "subscriptions-resource-groups-providers-microsoft-bot-service-bot-services create" [
+export def "bots-create" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -571,7 +571,7 @@ export def "subscriptions-resource-groups-providers-microsoft-bot-service-bot-se
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BotService/botServices/{resourceName}/Connections/{connectionName}
 # operationId: BotConnection_Delete
-export def "subscriptions-resource-groups-providers-microsoft-bot-service-bot-services-connections delete" [
+export def "bot-connection-delete" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -615,7 +615,7 @@ export def "subscriptions-resource-groups-providers-microsoft-bot-service-bot-se
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BotService/botServices/{resourceName}/Connections/{connectionName}
 # operationId: BotConnection_Get
-export def "subscriptions-resource-groups-providers-microsoft-bot-service-bot-services-connections get" [
+export def "bot-connection-get" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -661,7 +661,7 @@ export def "subscriptions-resource-groups-providers-microsoft-bot-service-bot-se
 # operationId: BotConnection_Update
 # --properties shape: {clientId?: string, clientSecret?: string, parameters?: list, scopes?: string, serviceProviderDisplayName?: string, serviceProviderId?: string}
 # --sku shape: {name: "F0"|"S1"}
-export def "subscriptions-resource-groups-providers-microsoft-bot-service-bot-services-connections update" [
+export def "bot-connection-update" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -716,7 +716,7 @@ export def "subscriptions-resource-groups-providers-microsoft-bot-service-bot-se
 # operationId: BotConnection_Create
 # --properties shape: {clientId?: string, clientSecret?: string, parameters?: list, scopes?: string, serviceProviderDisplayName?: string, serviceProviderId?: string}
 # --sku shape: {name: "F0"|"S1"}
-export def "subscriptions-resource-groups-providers-microsoft-bot-service-bot-services-connections create" [
+export def "bot-connection-create" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -769,7 +769,7 @@ export def "subscriptions-resource-groups-providers-microsoft-bot-service-bot-se
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BotService/botServices/{resourceName}/Connections/{connectionName}/listWithSecrets
 # operationId: BotConnection_ListWithSecrets
-export def "subscriptions-resource-groups-providers-microsoft-bot-service-bot-services-connections-list-with-secrets list" [
+export def "bot-connection-list-with-secrets" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -813,7 +813,7 @@ export def "subscriptions-resource-groups-providers-microsoft-bot-service-bot-se
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BotService/botServices/{resourceName}/channels
 # operationId: Channels_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-bot-service-bot-services-channels list" [
+export def "channels-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -855,7 +855,7 @@ export def "subscriptions-resource-groups-providers-microsoft-bot-service-bot-se
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BotService/botServices/{resourceName}/channels/{channelName}
 # operationId: Channels_Delete
-export def "subscriptions-resource-groups-providers-microsoft-bot-service-bot-services-channels delete" [
+export def "channels-delete" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -899,7 +899,7 @@ export def "subscriptions-resource-groups-providers-microsoft-bot-service-bot-se
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BotService/botServices/{resourceName}/channels/{channelName}
 # operationId: Channels_Get
-export def "subscriptions-resource-groups-providers-microsoft-bot-service-bot-services-channels get" [
+export def "channels-get" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -945,7 +945,7 @@ export def "subscriptions-resource-groups-providers-microsoft-bot-service-bot-se
 # operationId: Channels_Update
 # --properties shape: {channelName: string}
 # --sku shape: {name: "F0"|"S1"}
-export def "subscriptions-resource-groups-providers-microsoft-bot-service-bot-services-channels update" [
+export def "channels-update" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -1000,7 +1000,7 @@ export def "subscriptions-resource-groups-providers-microsoft-bot-service-bot-se
 # operationId: Channels_Create
 # --properties shape: {channelName: string}
 # --sku shape: {name: "F0"|"S1"}
-export def "subscriptions-resource-groups-providers-microsoft-bot-service-bot-services-channels create" [
+export def "channels-create" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -1053,7 +1053,7 @@ export def "subscriptions-resource-groups-providers-microsoft-bot-service-bot-se
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BotService/botServices/{resourceName}/channels/{channelName}/listChannelWithKeys
 # operationId: Channels_ListWithKeys
-export def "subscriptions-resource-groups-providers-microsoft-bot-service-bot-services-channels-list-channel-with-keys list" [
+export def "channels-list-with-keys" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -1097,7 +1097,7 @@ export def "subscriptions-resource-groups-providers-microsoft-bot-service-bot-se
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BotService/botServices/{resourceName}/connections
 # operationId: BotConnection_ListByBotService
-export def "subscriptions-resource-groups-providers-microsoft-bot-service-bot-services-connections list" [
+export def "bot-connection-list-by-bot-service" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -1139,7 +1139,7 @@ export def "subscriptions-resource-groups-providers-microsoft-bot-service-bot-se
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BotService/enterpriseChannels
 # operationId: EnterpriseChannels_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-bot-service-enterprise-channels list" [
+export def "enterprise-channels-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1179,7 +1179,7 @@ export def "subscriptions-resource-groups-providers-microsoft-bot-service-enterp
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BotService/enterpriseChannels/{resourceName}
 # operationId: EnterpriseChannels_Delete
-export def "subscriptions-resource-groups-providers-microsoft-bot-service-enterprise-channels delete" [
+export def "enterprise-channels-delete" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -1221,7 +1221,7 @@ export def "subscriptions-resource-groups-providers-microsoft-bot-service-enterp
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BotService/enterpriseChannels/{resourceName}
 # operationId: EnterpriseChannels_Get
-export def "subscriptions-resource-groups-providers-microsoft-bot-service-enterprise-channels get" [
+export def "enterprise-channels-get" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -1265,7 +1265,7 @@ export def "subscriptions-resource-groups-providers-microsoft-bot-service-enterp
 # operationId: EnterpriseChannels_Update
 # --properties shape: {nodes: list, state?: "Creating"|"CreateFailed"|"Started"|"Starting"|"StartFailed"|"Stopped"|"Stopping"|"StopFailed"|"Deleting"|"DeleteFailed"}
 # --sku shape: {name: "F0"|"S1"}
-export def "subscriptions-resource-groups-providers-microsoft-bot-service-enterprise-channels update" [
+export def "enterprise-channels-update" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -1318,7 +1318,7 @@ export def "subscriptions-resource-groups-providers-microsoft-bot-service-enterp
 # operationId: EnterpriseChannels_Create
 # --properties shape: {nodes: list, state?: "Creating"|"CreateFailed"|"Started"|"Starting"|"StartFailed"|"Stopped"|"Stopping"|"StopFailed"|"Deleting"|"DeleteFailed"}
 # --sku shape: {name: "F0"|"S1"}
-export def "subscriptions-resource-groups-providers-microsoft-bot-service-enterprise-channels create" [
+export def "enterprise-channels-create" [
   subscription_id: string
   resource_group_name: string
   resource_name: string

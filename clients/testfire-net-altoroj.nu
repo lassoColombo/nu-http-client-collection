@@ -103,7 +103,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-account" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -127,7 +127,7 @@ export def commands []: nothing -> table {
 #
 # GET /account
 # operationId: getAccount
-export def "account get" [
+export def "get-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -164,7 +164,7 @@ export def "account get" [
 #
 # GET /account/{accountNo}
 # operationId: getAccountBalance
-export def "account get-balance" [
+export def "get-account-balance" [
   account_no: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -203,7 +203,7 @@ export def "account get-balance" [
 #
 # GET /account/{accountNo}/transactions
 # operationId: showLastTenTransactions
-export def "account-transactions get-show-last-ten" [
+export def "show-last-ten-transactions" [
   account_no: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -242,7 +242,7 @@ export def "account-transactions get-show-last-ten" [
 #
 # POST /account/{accountNo}/transactions
 # operationId: getTransactions
-export def "account-transactions get" [
+export def "get-transactions" [
   account_no: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -286,7 +286,7 @@ export def "account-transactions get" [
 #
 # POST /admin/addUser
 # operationId: addUser
-export def "admin-add-user create" [
+export def "add-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -331,7 +331,7 @@ export def "admin-add-user create" [
 #
 # POST /admin/changePassword
 # operationId: changePassword
-export def "admin-change-password create" [
+export def "change-password" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -374,7 +374,7 @@ export def "admin-change-password create" [
 #
 # POST /feedback/submit
 # operationId: sendFeedback
-export def "feedback-submit send" [
+export def "send-feedback" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -415,7 +415,7 @@ export def "feedback-submit send" [
 #
 # GET /feedback/{feedbackId}
 # operationId: getFeedback
-export def "feedback get" [
+export def "get-feedback" [
   feedback_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -454,7 +454,7 @@ export def "feedback get" [
 #
 # GET /login
 # operationId: checkLogin
-export def "login check" [
+export def "check-login" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -491,7 +491,7 @@ export def "login check" [
 #
 # POST /login
 # operationId: login
-export def "login create" [
+export def "login" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -530,7 +530,7 @@ export def "login create" [
 #
 # GET /logout
 # operationId: doLogOut
-export def "logout get-do-log-out" [
+export def "do-log-out" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -564,7 +564,7 @@ export def "logout get-do-log-out" [
 #
 # POST /transfer
 # operationId: trasnfer
-export def "transfer create-trasnfer" [
+export def "trasnfer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

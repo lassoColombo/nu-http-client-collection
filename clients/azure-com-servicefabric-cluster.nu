@@ -118,7 +118,7 @@ def api-version-completer [] { ["2019-03-01-preview"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-service-fabric-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -142,7 +142,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.ServiceFabric/operations
 # operationId: Operations_List
-export def "providers-microsoft-service-fabric-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -178,7 +178,7 @@ export def "providers-microsoft-service-fabric-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.ServiceFabric/clusters
 # operationId: Clusters_List
-export def "subscriptions-providers-microsoft-service-fabric-clusters list" [
+export def "clusters-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -216,7 +216,7 @@ export def "subscriptions-providers-microsoft-service-fabric-clusters list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.ServiceFabric/locations/{location}/clusterVersions
 # operationId: ClusterVersions_List
-export def "subscriptions-providers-microsoft-service-fabric-locations-cluster-versions list" [
+export def "cluster-versions-list" [
   subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -256,7 +256,7 @@ export def "subscriptions-providers-microsoft-service-fabric-locations-cluster-v
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.ServiceFabric/locations/{location}/clusterVersions/{clusterVersion}
 # operationId: ClusterVersions_Get
-export def "subscriptions-providers-microsoft-service-fabric-locations-cluster-versions get" [
+export def "cluster-versions-get" [
   subscription_id: string
   location: string
   cluster_version: string
@@ -298,7 +298,7 @@ export def "subscriptions-providers-microsoft-service-fabric-locations-cluster-v
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.ServiceFabric/locations/{location}/environments/{environment}/clusterVersions
 # operationId: ClusterVersions_ListByEnvironment
-export def "subscriptions-providers-microsoft-service-fabric-locations-environments-cluster-versions list" [
+export def "cluster-versions-list-by-environment" [
   subscription_id: string
   location: string
   environment: string
@@ -340,7 +340,7 @@ export def "subscriptions-providers-microsoft-service-fabric-locations-environme
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.ServiceFabric/locations/{location}/environments/{environment}/clusterVersions/{clusterVersion}
 # operationId: ClusterVersions_GetByEnvironment
-export def "subscriptions-providers-microsoft-service-fabric-locations-environments-cluster-versions get" [
+export def "cluster-versions-get-by-environment" [
   subscription_id: string
   location: string
   environment: string
@@ -384,7 +384,7 @@ export def "subscriptions-providers-microsoft-service-fabric-locations-environme
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabric/clusters/{clusterName}
 # operationId: Clusters_Delete
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters delete" [
+export def "clusters-delete" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -426,7 +426,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clu
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabric/clusters/{clusterName}
 # operationId: Clusters_Get
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters get" [
+export def "clusters-get" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -469,7 +469,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clu
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabric/clusters/{clusterName}
 # operationId: Clusters_Update
 # --properties shape: {addOnFeatures?: list<string>, certificate?: any, certificateCommonNames?: any, clientCertificateCommonNames?: list, clientCertificateThumbprints?: list, clusterCodeVersion?: string, eventStoreServiceEnabled?: bool, fabricSettings?: list, nodeTypes?: list, reliabilityLevel?: "None"|"Bronze"|"Silver"|"Gold"|"Platinum", reverseProxyCertificate?: any, upgradeDescription?: any, upgradeMode?: "Automatic"|"Manual"}
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters update" [
+export def "clusters-update" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -517,7 +517,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clu
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabric/clusters/{clusterName}
 # operationId: Clusters_Create
 # --properties shape: {addOnFeatures?: list<string>, azureActiveDirectory?: any, certificate?: any, certificateCommonNames?: any, clientCertificateCommonNames?: list, clientCertificateThumbprints?: list, clusterCodeVersion?: string, clusterState?: "WaitingForNodes"|"Deploying"|"BaselineUpgrade"|"UpdatingUserConfiguration"|"UpdatingUserCertificate"|"UpdatingInfrastructure"|"EnforcingClusterVersion"|"UpgradeServiceUnreachable"|"AutoScale"|"Ready", diagnosticsStorageAccountConfig?: any, eventStoreServiceEnabled?: bool, ... (9 more fields)}
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clusters create" [
+export def "clusters-create" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -565,7 +565,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-clu
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.ServiceFabric/clusters
 # operationId: Clusters_ListByResourceGroup
-export def "subscriptions-resourcegroups-providers-microsoft-service-fabric-clusters list-by-resource-group" [
+export def "clusters-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL

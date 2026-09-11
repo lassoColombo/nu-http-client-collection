@@ -165,7 +165,7 @@ def x-amz-target-completer-64 [] { ["RekognitionService.UpdateStreamProcessor"] 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-compare-faces" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "compare-faces" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -189,7 +189,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CompareFaces
-export def "api create-compare-faces" [
+export def "compare-faces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -240,7 +240,7 @@ export def "api create-compare-faces" [
 #
 # POST /
 # operationId: CopyProjectVersion
-export def "api copy-project-version" [
+export def "copy-project-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -294,7 +294,7 @@ export def "api copy-project-version" [
 #
 # POST /
 # operationId: CreateCollection
-export def "api create-collection" [
+export def "create-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -343,7 +343,7 @@ export def "api create-collection" [
 #
 # POST /
 # operationId: CreateDataset
-export def "api create-dataset" [
+export def "create-dataset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -393,7 +393,7 @@ export def "api create-dataset" [
 #
 # POST /
 # operationId: CreateFaceLivenessSession
-export def "api create-face-liveness-session" [
+export def "create-face-liveness-session" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -443,7 +443,7 @@ export def "api create-face-liveness-session" [
 #
 # POST /
 # operationId: CreateProject
-export def "api create-project" [
+export def "create-project" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -491,7 +491,7 @@ export def "api create-project" [
 #
 # POST /
 # operationId: CreateProjectVersion
-export def "api create-project-version" [
+export def "create-project-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -546,7 +546,7 @@ export def "api create-project-version" [
 # POST /
 # operationId: CreateStreamProcessor
 # --NotificationChannel shape: {SNSTopicArn: any}
-export def "api create-stream-processor" [
+export def "create-stream-processor" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -603,7 +603,7 @@ export def "api create-stream-processor" [
 #
 # POST /
 # operationId: DeleteCollection
-export def "api delete-collection" [
+export def "delete-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -651,7 +651,7 @@ export def "api delete-collection" [
 #
 # POST /
 # operationId: DeleteDataset
-export def "api delete-dataset" [
+export def "delete-dataset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -699,7 +699,7 @@ export def "api delete-dataset" [
 #
 # POST /
 # operationId: DeleteFaces
-export def "api delete-faces" [
+export def "delete-faces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -748,7 +748,7 @@ export def "api delete-faces" [
 #
 # POST /
 # operationId: DeleteProject
-export def "api delete-project" [
+export def "delete-project" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -796,7 +796,7 @@ export def "api delete-project" [
 #
 # POST /
 # operationId: DeleteProjectPolicy
-export def "api delete-project-policy" [
+export def "delete-project-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -846,7 +846,7 @@ export def "api delete-project-policy" [
 #
 # POST /
 # operationId: DeleteProjectVersion
-export def "api delete-project-version" [
+export def "delete-project-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -894,7 +894,7 @@ export def "api delete-project-version" [
 #
 # POST /
 # operationId: DeleteStreamProcessor
-export def "api delete-stream-processor" [
+export def "delete-stream-processor" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -942,7 +942,7 @@ export def "api delete-stream-processor" [
 #
 # POST /
 # operationId: DescribeCollection
-export def "api get-collection" [
+export def "describe-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -990,7 +990,7 @@ export def "api get-collection" [
 #
 # POST /
 # operationId: DescribeDataset
-export def "api get-dataset" [
+export def "describe-dataset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1038,7 +1038,7 @@ export def "api get-dataset" [
 #
 # POST /
 # operationId: DescribeProjectVersions
-export def "api get-project-versions" [
+export def "describe-project-versions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1092,7 +1092,7 @@ export def "api get-project-versions" [
 #
 # POST /
 # operationId: DescribeProjects
-export def "api get-projects" [
+export def "describe-projects" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1145,7 +1145,7 @@ export def "api get-projects" [
 #
 # POST /
 # operationId: DescribeStreamProcessor
-export def "api get-stream-processor" [
+export def "describe-stream-processor" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1194,7 +1194,7 @@ export def "api get-stream-processor" [
 # POST /
 # operationId: DetectCustomLabels
 # --Image shape: {Bytes?: any, S3Object?: any}
-export def "api create-detect-custom-labels" [
+export def "detect-custom-labels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1245,7 +1245,7 @@ export def "api create-detect-custom-labels" [
 #
 # POST /
 # operationId: DetectFaces
-export def "api create-detect-faces" [
+export def "detect-faces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1294,7 +1294,7 @@ export def "api create-detect-faces" [
 #
 # POST /
 # operationId: DetectLabels
-export def "api create-detect-labels" [
+export def "detect-labels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1346,7 +1346,7 @@ export def "api create-detect-labels" [
 #
 # POST /
 # operationId: DetectModerationLabels
-export def "api create-detect-moderation-labels" [
+export def "detect-moderation-labels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1396,7 +1396,7 @@ export def "api create-detect-moderation-labels" [
 #
 # POST /
 # operationId: DetectProtectiveEquipment
-export def "api create-detect-protective-equipment" [
+export def "detect-protective-equipment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1445,7 +1445,7 @@ export def "api create-detect-protective-equipment" [
 #
 # POST /
 # operationId: DetectText
-export def "api create-detect-text" [
+export def "detect-text" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1494,7 +1494,7 @@ export def "api create-detect-text" [
 #
 # POST /
 # operationId: DistributeDatasetEntries
-export def "api create-distribute-dataset-entries" [
+export def "distribute-dataset-entries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1542,7 +1542,7 @@ export def "api create-distribute-dataset-entries" [
 #
 # POST /
 # operationId: GetCelebrityInfo
-export def "api get-celebrity" [
+export def "get-celebrity-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1590,7 +1590,7 @@ export def "api get-celebrity" [
 #
 # POST /
 # operationId: GetCelebrityRecognition
-export def "api get-celebrity-recognition" [
+export def "get-celebrity-recognition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1644,7 +1644,7 @@ export def "api get-celebrity-recognition" [
 #
 # POST /
 # operationId: GetContentModeration
-export def "api get-content-moderation" [
+export def "get-content-moderation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1698,7 +1698,7 @@ export def "api get-content-moderation" [
 #
 # POST /
 # operationId: GetFaceDetection
-export def "api get-face-detection" [
+export def "get-face-detection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1751,7 +1751,7 @@ export def "api get-face-detection" [
 #
 # POST /
 # operationId: GetFaceLivenessSessionResults
-export def "api get-face-liveness-session-results" [
+export def "get-face-liveness-session-results" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1799,7 +1799,7 @@ export def "api get-face-liveness-session-results" [
 #
 # POST /
 # operationId: GetFaceSearch
-export def "api get-face-list" [
+export def "get-face-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1853,7 +1853,7 @@ export def "api get-face-list" [
 #
 # POST /
 # operationId: GetLabelDetection
-export def "api get-label-detection" [
+export def "get-label-detection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1908,7 +1908,7 @@ export def "api get-label-detection" [
 #
 # POST /
 # operationId: GetPersonTracking
-export def "api get-person-tracking" [
+export def "get-person-tracking" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1962,7 +1962,7 @@ export def "api get-person-tracking" [
 #
 # POST /
 # operationId: GetSegmentDetection
-export def "api get-segment-detection" [
+export def "get-segment-detection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2015,7 +2015,7 @@ export def "api get-segment-detection" [
 #
 # POST /
 # operationId: GetTextDetection
-export def "api get-text-detection" [
+export def "get-text-detection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2068,7 +2068,7 @@ export def "api get-text-detection" [
 #
 # POST /
 # operationId: IndexFaces
-export def "api create-index-faces" [
+export def "index-faces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2121,7 +2121,7 @@ export def "api create-index-faces" [
 #
 # POST /
 # operationId: ListCollections
-export def "api list-collections" [
+export def "list-collections" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2173,7 +2173,7 @@ export def "api list-collections" [
 #
 # POST /
 # operationId: ListDatasetEntries
-export def "api list-dataset-entries" [
+export def "list-dataset-entries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2230,7 +2230,7 @@ export def "api list-dataset-entries" [
 #
 # POST /
 # operationId: ListDatasetLabels
-export def "api list-dataset-labels" [
+export def "list-dataset-labels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2283,7 +2283,7 @@ export def "api list-dataset-labels" [
 #
 # POST /
 # operationId: ListFaces
-export def "api list-faces" [
+export def "list-faces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2336,7 +2336,7 @@ export def "api list-faces" [
 #
 # POST /
 # operationId: ListProjectPolicies
-export def "api list-project-policies" [
+export def "list-project-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2389,7 +2389,7 @@ export def "api list-project-policies" [
 #
 # POST /
 # operationId: ListStreamProcessors
-export def "api list-stream-processors" [
+export def "list-stream-processors" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2441,7 +2441,7 @@ export def "api list-stream-processors" [
 #
 # POST /
 # operationId: ListTagsForResource
-export def "api list-tags-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2489,7 +2489,7 @@ export def "api list-tags-for-resource" [
 #
 # POST /
 # operationId: PutProjectPolicy
-export def "api update-project-policy" [
+export def "put-project-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2540,7 +2540,7 @@ export def "api update-project-policy" [
 #
 # POST /
 # operationId: RecognizeCelebrities
-export def "api create-recognize-celebrities" [
+export def "recognize-celebrities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2588,7 +2588,7 @@ export def "api create-recognize-celebrities" [
 #
 # POST /
 # operationId: SearchFaces
-export def "api list-faces-1" [
+export def "search-faces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2639,7 +2639,7 @@ export def "api list-faces-1" [
 #
 # POST /
 # operationId: SearchFacesByImage
-export def "api list-faces-by-image" [
+export def "search-faces-by-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2691,7 +2691,7 @@ export def "api list-faces-by-image" [
 #
 # POST /
 # operationId: StartCelebrityRecognition
-export def "api start-celebrity-recognition" [
+export def "start-celebrity-recognition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2742,7 +2742,7 @@ export def "api start-celebrity-recognition" [
 #
 # POST /
 # operationId: StartContentModeration
-export def "api start-content-moderation" [
+export def "start-content-moderation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2794,7 +2794,7 @@ export def "api start-content-moderation" [
 #
 # POST /
 # operationId: StartFaceDetection
-export def "api start-face-detection" [
+export def "start-face-detection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2846,7 +2846,7 @@ export def "api start-face-detection" [
 #
 # POST /
 # operationId: StartFaceSearch
-export def "api start-face-list" [
+export def "start-face-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2899,7 +2899,7 @@ export def "api start-face-list" [
 #
 # POST /
 # operationId: StartLabelDetection
-export def "api start-label-detection" [
+export def "start-label-detection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2953,7 +2953,7 @@ export def "api start-label-detection" [
 #
 # POST /
 # operationId: StartPersonTracking
-export def "api start-person-tracking" [
+export def "start-person-tracking" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3004,7 +3004,7 @@ export def "api start-person-tracking" [
 #
 # POST /
 # operationId: StartProjectVersion
-export def "api start-project-version" [
+export def "start-project-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3055,7 +3055,7 @@ export def "api start-project-version" [
 # POST /
 # operationId: StartSegmentDetection
 # --Video shape: {S3Object?: any}
-export def "api start-segment-detection" [
+export def "start-segment-detection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3108,7 +3108,7 @@ export def "api start-segment-detection" [
 #
 # POST /
 # operationId: StartStreamProcessor
-export def "api start-stream-processor" [
+export def "start-stream-processor" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3160,7 +3160,7 @@ export def "api start-stream-processor" [
 # operationId: StartTextDetection
 # --Video shape: {S3Object?: any}
 # --NotificationChannel shape: {SNSTopicArn: any, RoleArn: any}
-export def "api start-text-detection" [
+export def "start-text-detection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3212,7 +3212,7 @@ export def "api start-text-detection" [
 #
 # POST /
 # operationId: StopProjectVersion
-export def "api stop-project-version" [
+export def "stop-project-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3260,7 +3260,7 @@ export def "api stop-project-version" [
 #
 # POST /
 # operationId: StopStreamProcessor
-export def "api stop-stream-processor" [
+export def "stop-stream-processor" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3308,7 +3308,7 @@ export def "api stop-stream-processor" [
 #
 # POST /
 # operationId: TagResource
-export def "api tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3357,7 +3357,7 @@ export def "api tag-resource" [
 #
 # POST /
 # operationId: UntagResource
-export def "api untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3406,7 +3406,7 @@ export def "api untag-resource" [
 #
 # POST /
 # operationId: UpdateDatasetEntries
-export def "api update-dataset-entries" [
+export def "update-dataset-entries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3455,7 +3455,7 @@ export def "api update-dataset-entries" [
 #
 # POST /
 # operationId: UpdateStreamProcessor
-export def "api update-stream-processor" [
+export def "update-stream-processor" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

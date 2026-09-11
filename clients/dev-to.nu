@@ -124,7 +124,7 @@ def reactable-type-completer [] { ["Article" "Comment" "User"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "admin-users create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-admin-users-create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -148,7 +148,7 @@ export def commands []: nothing -> table {
 #
 # POST /api/admin/users
 # operationId: postAdminUsersCreate
-export def "admin-users create" [
+export def "post-admin-users-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -187,7 +187,7 @@ export def "admin-users create" [
 #
 # GET /api/articles
 # operationId: getArticles
-export def "articles list" [
+export def "get-articles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -232,7 +232,7 @@ export def "articles list" [
 # POST /api/articles
 # operationId: createArticle
 # --article shape: {body_markdown?: string, canonical_url?: string, description?: string, main_image?: string, organization_id?: int, published?: bool, series?: string, tags?: string, title?: string}
-export def "articles create" [
+export def "create-article" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -270,7 +270,7 @@ export def "articles create" [
 #
 # GET /api/articles/latest
 # operationId: getLatestArticles
-export def "articles-latest get" [
+export def "get-latest-articles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -307,7 +307,7 @@ export def "articles-latest get" [
 #
 # GET /api/articles/me
 # operationId: getUserArticles
-export def "articles-me get-user" [
+export def "get-user-articles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -344,7 +344,7 @@ export def "articles-me get-user" [
 #
 # GET /api/articles/me/all
 # operationId: getUserAllArticles
-export def "articles-me-all get-user" [
+export def "get-user-all-articles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -381,7 +381,7 @@ export def "articles-me-all get-user" [
 #
 # GET /api/articles/me/published
 # operationId: getUserPublishedArticles
-export def "articles-me-published get-user" [
+export def "get-user-published-articles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -418,7 +418,7 @@ export def "articles-me-published get-user" [
 #
 # GET /api/articles/me/unpublished
 # operationId: getUserUnpublishedArticles
-export def "articles-me-unpublished get-user" [
+export def "get-user-unpublished-articles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -455,7 +455,7 @@ export def "articles-me-unpublished get-user" [
 #
 # GET /api/articles/{id}
 # operationId: getArticleById
-export def "articles get" [
+export def "get-article-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -492,7 +492,7 @@ export def "articles get" [
 # PUT /api/articles/{id}
 # operationId: updateArticle
 # --article shape: {body_markdown?: string, canonical_url?: string, description?: string, main_image?: string, organization_id?: int, published?: bool, series?: string, tags?: string, title?: string}
-export def "articles update" [
+export def "update-article" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -532,7 +532,7 @@ export def "articles update" [
 #
 # PUT /api/articles/{id}/unpublish
 # operationId: unpublishArticle
-export def "articles-unpublish delete" [
+export def "unpublish-article" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -570,7 +570,7 @@ export def "articles-unpublish delete" [
 #
 # GET /api/articles/{username}/{slug}
 # operationId: getArticleByPath
-export def "articles get-by-path" [
+export def "get-article-by-path" [
   username: string
   slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -608,7 +608,7 @@ export def "articles get-by-path" [
 #
 # GET /api/comments
 # operationId: getCommentsByArticleId
-export def "comments get-by-article" [
+export def "get-comments-by-article-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -645,7 +645,7 @@ export def "comments get-by-article" [
 #
 # GET /api/comments/{id}
 # operationId: getCommentById
-export def "comments get" [
+export def "get-comment-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -680,7 +680,7 @@ export def "comments get" [
 # display ads
 #
 # GET /api/display_ads
-export def "display-ads list" [
+export def "get-api-display-ads" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -713,7 +713,7 @@ export def "display-ads list" [
 # display ads
 #
 # POST /api/display_ads
-export def "display-ads create" [
+export def "post-api-display-ads" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -759,7 +759,7 @@ export def "display-ads create" [
 # display ad
 #
 # GET /api/display_ads/{id}
-export def "display-ads get" [
+export def "get-api-display-ads-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -794,7 +794,7 @@ export def "display-ads get" [
 # display ads
 #
 # PUT /api/display_ads/{id}
-export def "display-ads update" [
+export def "put-api-display-ads-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -841,7 +841,7 @@ export def "display-ads update" [
 # unpublish
 #
 # PUT /api/display_ads/{id}/unpublish
-export def "display-ads-unpublish update" [
+export def "put-api-display-ads-id-unpublish" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -877,7 +877,7 @@ export def "display-ads-unpublish update" [
 #
 # GET /api/followers/users
 # operationId: getFollowers
-export def "followers-users get" [
+export def "get-followers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -915,7 +915,7 @@ export def "followers-users get" [
 #
 # GET /api/follows/tags
 # operationId: getFollowedTags
-export def "follows-tags get-followed" [
+export def "get-followed-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -949,7 +949,7 @@ export def "follows-tags get-followed" [
 #
 # GET /api/organizations/{username}
 # operationId: getOrganization
-export def "organizations get" [
+export def "get-organization" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -985,7 +985,7 @@ export def "organizations get" [
 #
 # GET /api/organizations/{username}/articles
 # operationId: getOrgArticles
-export def "organizations-articles get-org" [
+export def "get-org-articles" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1024,7 +1024,7 @@ export def "organizations-articles get-org" [
 #
 # GET /api/organizations/{username}/users
 # operationId: getOrgUsers
-export def "organizations-users get-org" [
+export def "get-org-users" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1062,7 +1062,7 @@ export def "organizations-users get-org" [
 # show details for all pages
 #
 # GET /api/pages
-export def "pages list" [
+export def "get-api-pages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1095,7 +1095,7 @@ export def "pages list" [
 # pages
 #
 # POST /api/pages
-export def "pages create" [
+export def "post-api-pages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1138,7 +1138,7 @@ export def "pages create" [
 # remove a page
 #
 # DELETE /api/pages/{id}
-export def "pages delete" [
+export def "delete-api-pages-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1173,7 +1173,7 @@ export def "pages delete" [
 # show details for a page
 #
 # GET /api/pages/{id}
-export def "pages get" [
+export def "get-api-pages-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1208,7 +1208,7 @@ export def "pages get" [
 # update details for a page
 #
 # PUT /api/pages/{id}
-export def "pages update" [
+export def "put-api-pages-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1255,7 +1255,7 @@ export def "pages update" [
 #
 # GET /api/podcast_episodes
 # operationId: getPodcastEpisodes
-export def "podcast-episodes get" [
+export def "get-podcast-episodes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1293,7 +1293,7 @@ export def "podcast-episodes get" [
 #
 # GET /api/profile_images/{username}
 # operationId: getProfileImage
-export def "profile-images get" [
+export def "get-profile-image" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1328,7 +1328,7 @@ export def "profile-images get" [
 # create reaction
 #
 # POST /api/reactions
-export def "reactions create" [
+export def "post-api-reactions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1365,7 +1365,7 @@ export def "reactions create" [
 # toggle reaction
 #
 # POST /api/reactions/toggle
-export def "reactions-toggle create" [
+export def "post-api-reactions-toggle" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1403,7 +1403,7 @@ export def "reactions-toggle create" [
 #
 # GET /api/readinglist
 # operationId: getReadinglist
-export def "readinglist get" [
+export def "get-readinglist" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1440,7 +1440,7 @@ export def "readinglist get" [
 #
 # GET /api/tags
 # operationId: getTags
-export def "tags get" [
+export def "get-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1477,7 +1477,7 @@ export def "tags get" [
 #
 # GET /api/users/me
 # operationId: getUserMe
-export def "users-me get" [
+export def "get-user-me" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1511,7 +1511,7 @@ export def "users-me get" [
 #
 # GET /api/users/{id}
 # operationId: getUser
-export def "users get" [
+export def "get-user" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1547,7 +1547,7 @@ export def "users get" [
 #
 # PUT /api/users/{id}/suspend
 # operationId: suspendUser
-export def "users-suspend update" [
+export def "suspend-user" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1583,7 +1583,7 @@ export def "users-suspend update" [
 #
 # PUT /api/users/{id}/unpublish
 # operationId: unpublishUser
-export def "users-unpublish delete" [
+export def "unpublish-user" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1619,7 +1619,7 @@ export def "users-unpublish delete" [
 #
 # GET /api/videos
 # operationId: videos
-export def "videos get" [
+export def "videos" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

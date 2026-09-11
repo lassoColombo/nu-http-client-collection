@@ -100,7 +100,7 @@ def include-completer [] { ["supportedEditions" "supportedElasticPoolEditions" "
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-sql-locations-capabilities list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "capabilities-list-by-location" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -124,7 +124,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Sql/locations/{locationName}/capabilities
 # operationId: Capabilities_ListByLocation
-export def "subscriptions-providers-microsoft-sql-locations-capabilities list" [
+export def "capabilities-list-by-location" [
   subscription_id: string
   location_name: string
   --base-url(-b): string@base-url-completer # API base URL

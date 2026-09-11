@@ -150,7 +150,7 @@ def x-amz-target-completer-49 [] { ["AWSLicenseManager.UpdateServiceSettings"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-accept-grant" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accept-grant" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -174,7 +174,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AcceptGrant
-export def "api create-accept-grant" [
+export def "accept-grant" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -222,7 +222,7 @@ export def "api create-accept-grant" [
 #
 # POST /
 # operationId: CheckInLicense
-export def "api check-in-license" [
+export def "check-in-license" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -271,7 +271,7 @@ export def "api check-in-license" [
 #
 # POST /
 # operationId: CheckoutBorrowLicense
-export def "api create-checkout-borrow-license" [
+export def "checkout-borrow-license" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -324,7 +324,7 @@ export def "api create-checkout-borrow-license" [
 #
 # POST /
 # operationId: CheckoutLicense
-export def "api create-checkout-license" [
+export def "checkout-license" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -378,7 +378,7 @@ export def "api create-checkout-license" [
 #
 # POST /
 # operationId: CreateGrant
-export def "api create-grant" [
+export def "create-grant" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -431,7 +431,7 @@ export def "api create-grant" [
 #
 # POST /
 # operationId: CreateGrantVersion
-export def "api create-grant-version" [
+export def "create-grant-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -486,7 +486,7 @@ export def "api create-grant-version" [
 #
 # POST /
 # operationId: CreateLicense
-export def "api create-license" [
+export def "create-license" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -544,7 +544,7 @@ export def "api create-license" [
 #
 # POST /
 # operationId: CreateLicenseConfiguration
-export def "api create-license-configuration" [
+export def "create-license-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -600,7 +600,7 @@ export def "api create-license-configuration" [
 #
 # POST /
 # operationId: CreateLicenseConversionTaskForResource
-export def "api create-license-conversion-task-for-resource" [
+export def "create-license-conversion-task-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -650,7 +650,7 @@ export def "api create-license-conversion-task-for-resource" [
 #
 # POST /
 # operationId: CreateLicenseManagerReportGenerator
-export def "api create-license-manager-report-generator" [
+export def "create-license-manager-report-generator" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -704,7 +704,7 @@ export def "api create-license-manager-report-generator" [
 #
 # POST /
 # operationId: CreateLicenseVersion
-export def "api create-license-version" [
+export def "create-license-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -763,7 +763,7 @@ export def "api create-license-version" [
 #
 # POST /
 # operationId: CreateToken
-export def "api create-token" [
+export def "create-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -815,7 +815,7 @@ export def "api create-token" [
 #
 # POST /
 # operationId: DeleteGrant
-export def "api delete-grant" [
+export def "delete-grant" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -865,7 +865,7 @@ export def "api delete-grant" [
 #
 # POST /
 # operationId: DeleteLicense
-export def "api delete-license" [
+export def "delete-license" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -914,7 +914,7 @@ export def "api delete-license" [
 #
 # POST /
 # operationId: DeleteLicenseConfiguration
-export def "api delete-license-configuration" [
+export def "delete-license-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -962,7 +962,7 @@ export def "api delete-license-configuration" [
 #
 # POST /
 # operationId: DeleteLicenseManagerReportGenerator
-export def "api delete-license-manager-report-generator" [
+export def "delete-license-manager-report-generator" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1010,7 +1010,7 @@ export def "api delete-license-manager-report-generator" [
 #
 # POST /
 # operationId: DeleteToken
-export def "api delete-token" [
+export def "delete-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1058,7 +1058,7 @@ export def "api delete-token" [
 #
 # POST /
 # operationId: ExtendLicenseConsumption
-export def "api create-extend-license-consumption" [
+export def "extend-license-consumption" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1107,7 +1107,7 @@ export def "api create-extend-license-consumption" [
 #
 # POST /
 # operationId: GetAccessToken
-export def "api get-access-token" [
+export def "get-access-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1156,7 +1156,7 @@ export def "api get-access-token" [
 #
 # POST /
 # operationId: GetGrant
-export def "api get-grant" [
+export def "get-grant" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1205,7 +1205,7 @@ export def "api get-grant" [
 #
 # POST /
 # operationId: GetLicense
-export def "api get-license" [
+export def "get-license" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1254,7 +1254,7 @@ export def "api get-license" [
 #
 # POST /
 # operationId: GetLicenseConfiguration
-export def "api get-license-configuration" [
+export def "get-license-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1302,7 +1302,7 @@ export def "api get-license-configuration" [
 #
 # POST /
 # operationId: GetLicenseConversionTask
-export def "api get-license-conversion-task" [
+export def "get-license-conversion-task" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1350,7 +1350,7 @@ export def "api get-license-conversion-task" [
 #
 # POST /
 # operationId: GetLicenseManagerReportGenerator
-export def "api get-license-manager-report-generator" [
+export def "get-license-manager-report-generator" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1398,7 +1398,7 @@ export def "api get-license-manager-report-generator" [
 #
 # POST /
 # operationId: GetLicenseUsage
-export def "api get-license-usage" [
+export def "get-license-usage" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1446,7 +1446,7 @@ export def "api get-license-usage" [
 #
 # POST /
 # operationId: GetServiceSettings
-export def "api get-service-settings" [
+export def "get-service-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1494,7 +1494,7 @@ export def "api get-service-settings" [
 #
 # POST /
 # operationId: ListAssociationsForLicenseConfiguration
-export def "api list-associations-for-license-configuration" [
+export def "list-associations-for-license-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1544,7 +1544,7 @@ export def "api list-associations-for-license-configuration" [
 #
 # POST /
 # operationId: ListDistributedGrants
-export def "api list-distributed-grants" [
+export def "list-distributed-grants" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1595,7 +1595,7 @@ export def "api list-distributed-grants" [
 #
 # POST /
 # operationId: ListFailuresForLicenseConfigurationOperations
-export def "api list-failures-for-license-configuration-operations" [
+export def "list-failures-for-license-configuration-operations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1645,7 +1645,7 @@ export def "api list-failures-for-license-configuration-operations" [
 #
 # POST /
 # operationId: ListLicenseConfigurations
-export def "api list-license-configurations" [
+export def "list-license-configurations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1696,7 +1696,7 @@ export def "api list-license-configurations" [
 #
 # POST /
 # operationId: ListLicenseConversionTasks
-export def "api list-license-conversion-tasks" [
+export def "list-license-conversion-tasks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1746,7 +1746,7 @@ export def "api list-license-conversion-tasks" [
 #
 # POST /
 # operationId: ListLicenseManagerReportGenerators
-export def "api list-license-manager-report-generators" [
+export def "list-license-manager-report-generators" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1796,7 +1796,7 @@ export def "api list-license-manager-report-generators" [
 #
 # POST /
 # operationId: ListLicenseSpecificationsForResource
-export def "api list-license-specifications-for-resource" [
+export def "list-license-specifications-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1846,7 +1846,7 @@ export def "api list-license-specifications-for-resource" [
 #
 # POST /
 # operationId: ListLicenseVersions
-export def "api list-license-versions" [
+export def "list-license-versions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1896,7 +1896,7 @@ export def "api list-license-versions" [
 #
 # POST /
 # operationId: ListLicenses
-export def "api list-licenses" [
+export def "list-licenses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1947,7 +1947,7 @@ export def "api list-licenses" [
 #
 # POST /
 # operationId: ListReceivedGrants
-export def "api list-received-grants" [
+export def "list-received-grants" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1998,7 +1998,7 @@ export def "api list-received-grants" [
 #
 # POST /
 # operationId: ListReceivedGrantsForOrganization
-export def "api list-received-grants-for-organization" [
+export def "list-received-grants-for-organization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2049,7 +2049,7 @@ export def "api list-received-grants-for-organization" [
 #
 # POST /
 # operationId: ListReceivedLicenses
-export def "api list-received-licenses" [
+export def "list-received-licenses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2100,7 +2100,7 @@ export def "api list-received-licenses" [
 #
 # POST /
 # operationId: ListReceivedLicensesForOrganization
-export def "api list-received-licenses-for-organization" [
+export def "list-received-licenses-for-organization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2150,7 +2150,7 @@ export def "api list-received-licenses-for-organization" [
 #
 # POST /
 # operationId: ListResourceInventory
-export def "api list-resource-inventory" [
+export def "list-resource-inventory" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2200,7 +2200,7 @@ export def "api list-resource-inventory" [
 #
 # POST /
 # operationId: ListTagsForResource
-export def "api list-tags-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2248,7 +2248,7 @@ export def "api list-tags-for-resource" [
 #
 # POST /
 # operationId: ListTokens
-export def "api list-tokens" [
+export def "list-tokens" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2299,7 +2299,7 @@ export def "api list-tokens" [
 #
 # POST /
 # operationId: ListUsageForLicenseConfiguration
-export def "api list-usage-for-license-configuration" [
+export def "list-usage-for-license-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2350,7 +2350,7 @@ export def "api list-usage-for-license-configuration" [
 #
 # POST /
 # operationId: RejectGrant
-export def "api reject-grant" [
+export def "reject-grant" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2398,7 +2398,7 @@ export def "api reject-grant" [
 #
 # POST /
 # operationId: TagResource
-export def "api tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2447,7 +2447,7 @@ export def "api tag-resource" [
 #
 # POST /
 # operationId: UntagResource
-export def "api untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2496,7 +2496,7 @@ export def "api untag-resource" [
 #
 # POST /
 # operationId: UpdateLicenseConfiguration
-export def "api update-license-configuration" [
+export def "update-license-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2552,7 +2552,7 @@ export def "api update-license-configuration" [
 #
 # POST /
 # operationId: UpdateLicenseManagerReportGenerator
-export def "api update-license-manager-report-generator" [
+export def "update-license-manager-report-generator" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2606,7 +2606,7 @@ export def "api update-license-manager-report-generator" [
 #
 # POST /
 # operationId: UpdateLicenseSpecificationsForResource
-export def "api update-license-specifications-for-resource" [
+export def "update-license-specifications-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2656,7 +2656,7 @@ export def "api update-license-specifications-for-resource" [
 #
 # POST /
 # operationId: UpdateServiceSettings
-export def "api update-service-settings" [
+export def "update-service-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

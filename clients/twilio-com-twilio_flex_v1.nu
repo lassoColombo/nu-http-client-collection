@@ -117,7 +117,7 @@ def chat-status-completer [] { ["inactive"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "channels list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-channel" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 # GET /v1/Channels
 #
 # operationId: ListChannel
-export def "channels list" [
+export def "list-channel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -177,7 +177,7 @@ export def "channels list" [
 # POST /v1/Channels
 #
 # operationId: CreateChannel
-export def "channels create" [
+export def "create-channel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -224,7 +224,7 @@ export def "channels create" [
 # DELETE /v1/Channels/{Sid}
 #
 # operationId: DeleteChannel
-export def "channels delete" [
+export def "delete-channel" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -259,7 +259,7 @@ export def "channels delete" [
 # GET /v1/Channels/{Sid}
 #
 # operationId: FetchChannel
-export def "channels get" [
+export def "fetch-channel" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -294,7 +294,7 @@ export def "channels get" [
 # GET /v1/Configuration
 #
 # operationId: FetchConfiguration
-export def "configuration get" [
+export def "fetch-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -329,7 +329,7 @@ export def "configuration get" [
 # GET /v1/FlexFlows
 #
 # operationId: ListFlexFlow
-export def "flex-flows list" [
+export def "list-flex-flow" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -367,7 +367,7 @@ export def "flex-flows list" [
 # POST /v1/FlexFlows
 #
 # operationId: CreateFlexFlow
-export def "flex-flows create" [
+export def "create-flex-flow" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -421,7 +421,7 @@ export def "flex-flows create" [
 # DELETE /v1/FlexFlows/{Sid}
 #
 # operationId: DeleteFlexFlow
-export def "flex-flows delete" [
+export def "delete-flex-flow" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -456,7 +456,7 @@ export def "flex-flows delete" [
 # GET /v1/FlexFlows/{Sid}
 #
 # operationId: FetchFlexFlow
-export def "flex-flows get" [
+export def "fetch-flex-flow" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -491,7 +491,7 @@ export def "flex-flows get" [
 # POST /v1/FlexFlows/{Sid}
 #
 # operationId: UpdateFlexFlow
-export def "flex-flows update" [
+export def "update-flex-flow" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -548,7 +548,7 @@ export def "flex-flows update" [
 #
 # GET /v1/Insights/Conversations
 # operationId: ListInsightsConversations
-export def "insights-conversations list" [
+export def "list-insights-conversations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -590,7 +590,7 @@ export def "insights-conversations list" [
 #
 # GET /v1/Insights/QM/Assessments
 # operationId: ListInsightsAssessments
-export def "insights-qm-assessments list" [
+export def "list-insights-assessments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -632,7 +632,7 @@ export def "insights-qm-assessments list" [
 #
 # POST /v1/Insights/QM/Assessments
 # operationId: CreateInsightsAssessments
-export def "insights-qm-assessments create" [
+export def "create-insights-assessments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -685,7 +685,7 @@ export def "insights-qm-assessments create" [
 #
 # GET /v1/Insights/QM/Assessments/Comments
 # operationId: ListInsightsAssessmentsComment
-export def "insights-qm-assessments-comments list" [
+export def "list-insights-assessments-comment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -728,7 +728,7 @@ export def "insights-qm-assessments-comments list" [
 #
 # POST /v1/Insights/QM/Assessments/Comments
 # operationId: CreateInsightsAssessmentsComment
-export def "insights-qm-assessments-comments create" [
+export def "create-insights-assessments-comment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -777,7 +777,7 @@ export def "insights-qm-assessments-comments create" [
 #
 # POST /v1/Insights/QM/Assessments/{AssessmentId}
 # operationId: UpdateInsightsAssessments
-export def "insights-qm-assessments update" [
+export def "update-insights-assessments" [
   assessment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -823,7 +823,7 @@ export def "insights-qm-assessments update" [
 #
 # GET /v1/Insights/QM/Categories
 # operationId: ListInsightsQuestionnairesCategory
-export def "insights-qm-categories list-questionnaires-category" [
+export def "list-insights-questionnaires-category" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -864,7 +864,7 @@ export def "insights-qm-categories list-questionnaires-category" [
 #
 # POST /v1/Insights/QM/Categories
 # operationId: CreateInsightsQuestionnairesCategory
-export def "insights-qm-categories create-questionnaires-category" [
+export def "create-insights-questionnaires-category" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -905,7 +905,7 @@ export def "insights-qm-categories create-questionnaires-category" [
 # DELETE /v1/Insights/QM/Categories/{CategoryId}
 #
 # operationId: DeleteInsightsQuestionnairesCategory
-export def "insights-qm-categories delete-questionnaires-category" [
+export def "delete-insights-questionnaires-category" [
   category_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -944,7 +944,7 @@ export def "insights-qm-categories delete-questionnaires-category" [
 #
 # POST /v1/Insights/QM/Categories/{CategoryId}
 # operationId: UpdateInsightsQuestionnairesCategory
-export def "insights-qm-categories update-questionnaires-category" [
+export def "update-insights-questionnaires-category" [
   category_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -988,7 +988,7 @@ export def "insights-qm-categories update-questionnaires-category" [
 #
 # GET /v1/Insights/QM/Questionnaires
 # operationId: ListInsightsQuestionnaires
-export def "insights-qm-questionnaires list" [
+export def "list-insights-questionnaires" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1030,7 +1030,7 @@ export def "insights-qm-questionnaires list" [
 #
 # POST /v1/Insights/QM/Questionnaires
 # operationId: CreateInsightsQuestionnaires
-export def "insights-qm-questionnaires create" [
+export def "create-insights-questionnaires" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1075,7 +1075,7 @@ export def "insights-qm-questionnaires create" [
 #
 # DELETE /v1/Insights/QM/Questionnaires/{Id}
 # operationId: DeleteInsightsQuestionnaires
-export def "insights-qm-questionnaires delete" [
+export def "delete-insights-questionnaires" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1114,7 +1114,7 @@ export def "insights-qm-questionnaires delete" [
 #
 # GET /v1/Insights/QM/Questionnaires/{Id}
 # operationId: FetchInsightsQuestionnaires
-export def "insights-qm-questionnaires get" [
+export def "fetch-insights-questionnaires" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1153,7 +1153,7 @@ export def "insights-qm-questionnaires get" [
 #
 # POST /v1/Insights/QM/Questionnaires/{Id}
 # operationId: UpdateInsightsQuestionnaires
-export def "insights-qm-questionnaires update" [
+export def "update-insights-questionnaires" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1200,7 +1200,7 @@ export def "insights-qm-questionnaires update" [
 #
 # GET /v1/Insights/QM/Questions
 # operationId: ListInsightsQuestionnairesQuestion
-export def "insights-qm-questions list-questionnaires" [
+export def "list-insights-questionnaires-question" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1242,7 +1242,7 @@ export def "insights-qm-questions list-questionnaires" [
 #
 # POST /v1/Insights/QM/Questions
 # operationId: CreateInsightsQuestionnairesQuestion
-export def "insights-qm-questions create-questionnaires" [
+export def "create-insights-questionnaires-question" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1287,7 +1287,7 @@ export def "insights-qm-questions create-questionnaires" [
 # DELETE /v1/Insights/QM/Questions/{QuestionId}
 #
 # operationId: DeleteInsightsQuestionnairesQuestion
-export def "insights-qm-questions delete-questionnaires" [
+export def "delete-insights-questionnaires-question" [
   question_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1326,7 +1326,7 @@ export def "insights-qm-questions delete-questionnaires" [
 #
 # POST /v1/Insights/QM/Questions/{QuestionId}
 # operationId: UpdateInsightsQuestionnairesQuestion
-export def "insights-qm-questions update-questionnaires" [
+export def "update-insights-questionnaires-question" [
   question_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1374,7 +1374,7 @@ export def "insights-qm-questions update-questionnaires" [
 #
 # GET /v1/Insights/QM/Settings/AnswerSets
 # operationId: FetchInsightsSettingsAnswersets
-export def "insights-qm-settings-answer-sets get-answersets" [
+export def "fetch-insights-settings-answersets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1411,7 +1411,7 @@ export def "insights-qm-settings-answer-sets get-answersets" [
 #
 # GET /v1/Insights/QM/Settings/CommentTags
 # operationId: FetchInsightsSettingsComment
-export def "insights-qm-settings-comment-tags get" [
+export def "fetch-insights-settings-comment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1448,7 +1448,7 @@ export def "insights-qm-settings-comment-tags get" [
 #
 # GET /v1/Insights/Segments
 # operationId: ListInsightsSegments
-export def "insights-segments list" [
+export def "list-insights-segments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1490,7 +1490,7 @@ export def "insights-segments list" [
 #
 # GET /v1/Insights/Segments/{SegmentId}
 # operationId: FetchInsightsSegments
-export def "insights-segments get" [
+export def "fetch-insights-segments" [
   segment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1529,7 +1529,7 @@ export def "insights-segments get" [
 #
 # POST /v1/Insights/Session
 # operationId: CreateInsightsSession
-export def "insights-session create" [
+export def "create-insights-session" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1566,7 +1566,7 @@ export def "insights-session create" [
 #
 # GET /v1/Insights/UserRoles
 # operationId: FetchInsightsUserRoles
-export def "insights-user-roles get" [
+export def "fetch-insights-user-roles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1603,7 +1603,7 @@ export def "insights-user-roles get" [
 #
 # POST /v1/Interactions
 # operationId: CreateInteraction
-export def "interactions create" [
+export def "create-interaction" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1643,7 +1643,7 @@ export def "interactions create" [
 #
 # GET /v1/Interactions/{InteractionSid}/Channels
 # operationId: ListInteractionChannel
-export def "interactions-channels list" [
+export def "list-interaction-channel" [
   interaction_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1683,7 +1683,7 @@ export def "interactions-channels list" [
 #
 # GET /v1/Interactions/{InteractionSid}/Channels/{ChannelSid}/Invites
 # operationId: ListInteractionChannelInvite
-export def "interactions-channels-invites list" [
+export def "list-interaction-channel-invite" [
   interaction_sid: string
   channel_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1725,7 +1725,7 @@ export def "interactions-channels-invites list" [
 #
 # POST /v1/Interactions/{InteractionSid}/Channels/{ChannelSid}/Invites
 # operationId: CreateInteractionChannelInvite
-export def "interactions-channels-invites create" [
+export def "create-interaction-channel-invite" [
   interaction_sid: string
   channel_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1768,7 +1768,7 @@ export def "interactions-channels-invites create" [
 #
 # GET /v1/Interactions/{InteractionSid}/Channels/{ChannelSid}/Participants
 # operationId: ListInteractionChannelParticipant
-export def "interactions-channels-participants list" [
+export def "list-interaction-channel-participant" [
   interaction_sid: string
   channel_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1810,7 +1810,7 @@ export def "interactions-channels-participants list" [
 #
 # POST /v1/Interactions/{InteractionSid}/Channels/{ChannelSid}/Participants
 # operationId: CreateInteractionChannelParticipant
-export def "interactions-channels-participants create" [
+export def "create-interaction-channel-participant" [
   interaction_sid: string
   channel_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1854,7 +1854,7 @@ export def "interactions-channels-participants create" [
 #
 # POST /v1/Interactions/{InteractionSid}/Channels/{ChannelSid}/Participants/{Sid}
 # operationId: UpdateInteractionChannelParticipant
-export def "interactions-channels-participants update" [
+export def "update-interaction-channel-participant" [
   interaction_sid: string
   channel_sid: string
   sid: string
@@ -1899,7 +1899,7 @@ export def "interactions-channels-participants update" [
 #
 # GET /v1/Interactions/{InteractionSid}/Channels/{Sid}
 # operationId: FetchInteractionChannel
-export def "interactions-channels get" [
+export def "fetch-interaction-channel" [
   interaction_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1937,7 +1937,7 @@ export def "interactions-channels get" [
 #
 # POST /v1/Interactions/{InteractionSid}/Channels/{Sid}
 # operationId: UpdateInteractionChannel
-export def "interactions-channels update" [
+export def "update-interaction-channel" [
   interaction_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1980,7 +1980,7 @@ export def "interactions-channels update" [
 # GET /v1/Interactions/{Sid}
 #
 # operationId: FetchInteraction
-export def "interactions get" [
+export def "fetch-interaction" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2015,7 +2015,7 @@ export def "interactions get" [
 # GET /v1/WebChannels
 #
 # operationId: ListWebChannel
-export def "web-channels list" [
+export def "list-web-channel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2052,7 +2052,7 @@ export def "web-channels list" [
 # POST /v1/WebChannels
 #
 # operationId: CreateWebChannel
-export def "web-channels create" [
+export def "create-web-channel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2095,7 +2095,7 @@ export def "web-channels create" [
 # DELETE /v1/WebChannels/{Sid}
 #
 # operationId: DeleteWebChannel
-export def "web-channels delete" [
+export def "delete-web-channel" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2130,7 +2130,7 @@ export def "web-channels delete" [
 # GET /v1/WebChannels/{Sid}
 #
 # operationId: FetchWebChannel
-export def "web-channels get" [
+export def "fetch-web-channel" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2165,7 +2165,7 @@ export def "web-channels get" [
 # POST /v1/WebChannels/{Sid}
 #
 # operationId: UpdateWebChannel
-export def "web-channels update" [
+export def "update-web-channel" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

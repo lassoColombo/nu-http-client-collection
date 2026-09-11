@@ -150,7 +150,7 @@ def interval-completer [] { ["HOURLY"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "allowlist-private create-of-user" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-private-allowlist-of-the-user-v1-allowlist-private-post" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -174,7 +174,7 @@ export def commands []: nothing -> table {
 #
 # POST /v1/allowlist/private
 # operationId: create_private_allowlist_of_the_user_v1_allowlist_private_post
-export def "allowlist-private create-of-user" [
+export def "create-private-allowlist-of-the-user-v1-allowlist-private-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -212,7 +212,7 @@ export def "allowlist-private create-of-user" [
 #
 # GET /v1/allowlist/private/all
 # operationId: get_all_private_allowlists_v1_allowlist_private_all_get
-export def "allowlist-private-all get" [
+export def "get-all-private-allowlists-v1-allowlist-private-all-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -246,7 +246,7 @@ export def "allowlist-private-all get" [
 #
 # GET /v1/allowlist/private/all/{resource_type}
 # operationId: get_all_private_allowlists_by_resource_type_v1_allowlist_private_all__resource_type__get
-export def "allowlist-private-all get-by" [
+export def "get-all-private-allowlists-by-resource-type-v1-allowlist-private-all-resource-type-get" [
   resource_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -282,7 +282,7 @@ export def "allowlist-private-all get-by" [
 #
 # GET /v1/allowlist/private/ip/{address}
 # operationId: query_resource_denylists_v1_allowlist_private_ip__address__get
-export def "allowlist-private-ip list-resource-denylists-get" [
+export def "query-resource-denylists-v1-allowlist-private-ip-address-get" [
   address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -318,7 +318,7 @@ export def "allowlist-private-ip list-resource-denylists-get" [
 #
 # DELETE /v1/allowlist/private/{allowlist_id}
 # operationId: delete_the_allowlist_v1_allowlist_private__allowlist_id__delete
-export def "allowlist-private delete" [
+export def "delete-the-allowlist-v1-allowlist-private-allowlist-id-delete" [
   allowlist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -354,7 +354,7 @@ export def "allowlist-private delete" [
 #
 # GET /v1/allowlist/private/{allowlist_id}
 # operationId: get_single_allowlist_v1_allowlist_private__allowlist_id__get
-export def "allowlist-private get-single" [
+export def "get-single-allowlist-v1-allowlist-private-allowlist-id-get" [
   allowlist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -390,7 +390,7 @@ export def "allowlist-private get-single" [
 #
 # PUT /v1/allowlist/private/{allowlist_id}
 # operationId: update_private_allowlist_of_the_user_v1_allowlist_private__allowlist_id__put
-export def "allowlist-private update-of-user" [
+export def "update-private-allowlist-of-the-user-v1-allowlist-private-allowlist-id-put" [
   allowlist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -433,7 +433,7 @@ export def "allowlist-private update-of-user" [
 #
 # DELETE /v1/allowlist/private/{allowlist_id}/content
 # operationId: delete_the_allowlist_content_v1_allowlist_private__allowlist_id__content_delete
-export def "allowlist-private-content delete" [
+export def "delete-the-allowlist-content-v1-allowlist-private-allowlist-id-content-delete" [
   allowlist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -469,7 +469,7 @@ export def "allowlist-private-content delete" [
 #
 # GET /v1/allowlist/private/{allowlist_id}/content
 # operationId: get_allowlist_content_v1_allowlist_private__allowlist_id__content_get
-export def "allowlist-private-content get" [
+export def "get-allowlist-content-v1-allowlist-private-allowlist-id-content-get" [
   allowlist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -505,7 +505,7 @@ export def "allowlist-private-content get" [
 #
 # PUT /v1/allowlist/private/{allowlist_id}/content
 # operationId: update_private_content_of_the_allowlist_of_the_user_v1_allowlist_private__allowlist_id__content_put
-export def "allowlist-private-content update-of-of-user" [
+export def "update-private-content-of-the-allowlist-of-the-user-v1-allowlist-private-allowlist-id-content-put" [
   allowlist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -546,7 +546,7 @@ export def "allowlist-private-content update-of-of-user" [
 #
 # PUT /v1/allowlist/private/{allowlist_id}/origin
 # operationId: change_status_of_the_origin_allowlist_v1_allowlist_private__allowlist_id__origin_put
-export def "allowlist-private-origin update-change-status-of" [
+export def "change-status-of-the-origin-allowlist-v1-allowlist-private-allowlist-id-origin-put" [
   allowlist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -587,7 +587,7 @@ export def "allowlist-private-origin update-change-status-of" [
 #
 # GET /v1/allowlist/public/all
 # operationId: get_all_public_allowlists_v1_allowlist_public_all_get
-export def "allowlist-public-all get" [
+export def "get-all-public-allowlists-v1-allowlist-public-all-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -621,7 +621,7 @@ export def "allowlist-public-all get" [
 #
 # GET /v1/allowlist/public/all/{resource_type}
 # operationId: get_all_public_allowlists_by_resource_type_v1_allowlist_public_all__resource_type__get
-export def "allowlist-public-all get-by" [
+export def "get-all-public-allowlists-by-resource-type-v1-allowlist-public-all-resource-type-get" [
   resource_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -657,7 +657,7 @@ export def "allowlist-public-all get-by" [
 #
 # GET /v1/allowlist/public/ip/{address}
 # operationId: query_resource_allowlists_v1_allowlist_public_ip__address__get
-export def "allowlist-public-ip list-resource-get" [
+export def "query-resource-allowlists-v1-allowlist-public-ip-address-get" [
   address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -693,7 +693,7 @@ export def "allowlist-public-ip list-resource-get" [
 #
 # GET /v1/allowlist/public/owned
 # operationId: get_public_allowlists_owned_by_the_user_v1_allowlist_public_owned_get
-export def "allowlist-public-owned get-by-user" [
+export def "get-public-allowlists-owned-by-the-user-v1-allowlist-public-owned-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -727,7 +727,7 @@ export def "allowlist-public-owned get-by-user" [
 #
 # GET /v1/allowlist/public/owned/{resource_type}
 # operationId: get_all_owned_allowlists_by_resource_type_v1_allowlist_public_owned__resource_type__get
-export def "allowlist-public-owned get-list-by" [
+export def "get-all-owned-allowlists-by-resource-type-v1-allowlist-public-owned-resource-type-get" [
   resource_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -763,7 +763,7 @@ export def "allowlist-public-owned get-list-by" [
 #
 # DELETE /v1/allowlist/public/{allowlist_id}
 # operationId: delete_the_allowlist_v1_allowlist_public__allowlist_id__delete
-export def "allowlist-public delete" [
+export def "delete-the-allowlist-v1-allowlist-public-allowlist-id-delete" [
   allowlist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -799,7 +799,7 @@ export def "allowlist-public delete" [
 #
 # GET /v1/allowlist/public/{allowlist_id}
 # operationId: get_single_allowlist_v1_allowlist_public__allowlist_id__get
-export def "allowlist-public get-single" [
+export def "get-single-allowlist-v1-allowlist-public-allowlist-id-get" [
   allowlist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -835,7 +835,7 @@ export def "allowlist-public get-single" [
 #
 # PUT /v1/allowlist/public/{allowlist_id}
 # operationId: change_status_of_the_allowlist_v1_allowlist_public__allowlist_id__put
-export def "allowlist-public update-change-status-of" [
+export def "change-status-of-the-allowlist-v1-allowlist-public-allowlist-id-put" [
   allowlist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -875,7 +875,7 @@ export def "allowlist-public update-change-status-of" [
 #
 # PUT /v1/allowlist/public/{allowlist_id}/origin
 # operationId: change_status_of_the_origin_allowlist_v1_allowlist_public__allowlist_id__origin_put
-export def "allowlist-public-origin update-change-status-of" [
+export def "change-status-of-the-origin-allowlist-v1-allowlist-public-allowlist-id-origin-put" [
   allowlist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -916,7 +916,7 @@ export def "allowlist-public-origin update-change-status-of" [
 #
 # GET /v1/asn/ip/{ip_address}
 # operationId: query_IP_address_network_information_v1_asn_ip__ip_address__get
-export def "asn-ip list-network-information-get" [
+export def "query-ip-address-network-information-v1-asn-ip-ip-address-get" [
   ip_address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -952,7 +952,7 @@ export def "asn-ip list-network-information-get" [
 #
 # POST /v1/asn/prefix
 # operationId: query_asn_prefix_information_v1_asn_prefix_post
-export def "asn-prefix list-information-create" [
+export def "query-asn-prefix-information-v1-asn-prefix-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -990,7 +990,7 @@ export def "asn-prefix list-information-create" [
 #
 # GET /v1/asn/registry/all
 # operationId: query_registry_names_v1_asn_registry_all_get
-export def "asn-registry-all list-names-get" [
+export def "query-registry-names-v1-asn-registry-all-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1024,7 +1024,7 @@ export def "asn-registry-all list-names-get" [
 #
 # GET /v1/asn/registry/{code}
 # operationId: query_registry_by_the_name_v1_asn_registry__code__get
-export def "asn-registry list-by-name-get" [
+export def "query-registry-by-the-name-v1-asn-registry-code-get" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1060,7 +1060,7 @@ export def "asn-registry list-by-name-get" [
 #
 # GET /v1/asn/status/all
 # operationId: query_status_names_v1_asn_status_all_get
-export def "asn-status-all list-names-get" [
+export def "query-status-names-v1-asn-status-all-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1094,7 +1094,7 @@ export def "asn-status-all list-names-get" [
 #
 # GET /v1/asn/status/{code}
 # operationId: query_status_by_the_name_v1_asn_status__code__get
-export def "asn-status list-by-name-get" [
+export def "query-status-by-the-name-v1-asn-status-code-get" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1130,7 +1130,7 @@ export def "asn-status list-by-name-get" [
 #
 # GET /v1/asn/{number}
 # operationId: query_asn_v1_asn__number__get
-export def "asn list-get" [
+export def "query-asn-v1-asn-number-get" [
   number: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1166,7 +1166,7 @@ export def "asn list-get" [
 #
 # GET /v1/asn/{number}/prefixes
 # operationId: query_asn_prefixes_list_v1_asn__number__prefixes_get
-export def "asn-prefixes list-get" [
+export def "query-asn-prefixes-list-v1-asn-number-prefixes-get" [
   number: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1202,7 +1202,7 @@ export def "asn-prefixes list-get" [
 #
 # POST /v1/assess/ip
 # operationId: assess_ip_set_v1_assess_ip_post
-export def "assess-ip update-create" [
+export def "assess-ip-set-v1-assess-ip-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1240,7 +1240,7 @@ export def "assess-ip update-create" [
 #
 # POST /v1/assess/ip/csv
 # operationId: assess_ip_set_csv_v1_assess_ip_csv_post
-export def "assess-ip-csv update-create" [
+export def "assess-ip-set-csv-v1-assess-ip-csv-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1282,7 +1282,7 @@ export def "assess-ip-csv update-create" [
 #
 # GET /v1/assess/ip/{ip_address}
 # operationId: assess_ip_v1_assess_ip__ip_address__get
-export def "assess-ip get" [
+export def "assess-ip-v1-assess-ip-ip-address-get" [
   ip_address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1318,7 +1318,7 @@ export def "assess-ip get" [
 #
 # GET /v1/datacenter/ip/{ip_address}
 # operationId: query_IP_address_network_information_v1_datacenter_ip__ip_address__get
-export def "datacenter-ip list-network-information-get" [
+export def "query-ip-address-network-information-v1-datacenter-ip-ip-address-get" [
   ip_address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1354,7 +1354,7 @@ export def "datacenter-ip list-network-information-get" [
 #
 # POST /v1/datacenter/prefix
 # operationId: query_datacenter_prefix_information_v1_datacenter_prefix_post
-export def "datacenter-prefix list-information-create" [
+export def "query-datacenter-prefix-information-v1-datacenter-prefix-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1392,7 +1392,7 @@ export def "datacenter-prefix list-information-create" [
 #
 # GET /v1/datacenter/{datacenter_id}
 # operationId: query_datacenter_v1_datacenter__datacenter_id__get
-export def "datacenter list-get" [
+export def "query-datacenter-v1-datacenter-datacenter-id-get" [
   datacenter_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1428,7 +1428,7 @@ export def "datacenter list-get" [
 #
 # GET /v1/datacenter/{datacenter_id}/prefixes
 # operationId: query_datacenter_prefixes_list_v1_datacenter__datacenter_id__prefixes_get
-export def "datacenter-prefixes list-get" [
+export def "query-datacenter-prefixes-list-v1-datacenter-datacenter-id-prefixes-get" [
   datacenter_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1464,7 +1464,7 @@ export def "datacenter-prefixes list-get" [
 #
 # GET /v1/dataset/ip
 # operationId: query_datataset_information_of_all_the_resource_types_v1_dataset_ip_get
-export def "dataset-ip list-datataset-information-of-resource-types-get" [
+export def "query-datataset-information-of-all-the-resource-types-v1-dataset-ip-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1498,7 +1498,7 @@ export def "dataset-ip list-datataset-information-of-resource-types-get" [
 #
 # GET /v1/dataset/ip/{name}
 # operationId: query_datataset_information_of_the_resource_type_v1_dataset_ip__name__get
-export def "dataset-ip list-datataset-information-of-resource-type-get" [
+export def "query-datataset-information-of-the-resource-type-v1-dataset-ip-name-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1534,7 +1534,7 @@ export def "dataset-ip list-datataset-information-of-resource-type-get" [
 #
 # POST /v1/denylist/private
 # operationId: create_private_denylist_of_the_user_v1_denylist_private_post
-export def "denylist-private create-of-user" [
+export def "create-private-denylist-of-the-user-v1-denylist-private-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1572,7 +1572,7 @@ export def "denylist-private create-of-user" [
 #
 # GET /v1/denylist/private/all
 # operationId: get_all_private_denylists_v1_denylist_private_all_get
-export def "denylist-private-all get" [
+export def "get-all-private-denylists-v1-denylist-private-all-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1606,7 +1606,7 @@ export def "denylist-private-all get" [
 #
 # GET /v1/denylist/private/all/{resource_type}
 # operationId: get_all_private_denylists_by_resource_type_v1_denylist_private_all__resource_type__get
-export def "denylist-private-all get-by" [
+export def "get-all-private-denylists-by-resource-type-v1-denylist-private-all-resource-type-get" [
   resource_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1642,7 +1642,7 @@ export def "denylist-private-all get-by" [
 #
 # GET /v1/denylist/private/ip/{address}
 # operationId: query_resource_denylists_v1_denylist_private_ip__address__get
-export def "denylist-private-ip list-resource-get" [
+export def "query-resource-denylists-v1-denylist-private-ip-address-get" [
   address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1678,7 +1678,7 @@ export def "denylist-private-ip list-resource-get" [
 #
 # DELETE /v1/denylist/private/{denylist_id}
 # operationId: delete_the_denylist_v1_denylist_private__denylist_id__delete
-export def "denylist-private delete" [
+export def "delete-the-denylist-v1-denylist-private-denylist-id-delete" [
   denylist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1714,7 +1714,7 @@ export def "denylist-private delete" [
 #
 # GET /v1/denylist/private/{denylist_id}
 # operationId: get_single_denylist_v1_denylist_private__denylist_id__get
-export def "denylist-private get-single" [
+export def "get-single-denylist-v1-denylist-private-denylist-id-get" [
   denylist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1750,7 +1750,7 @@ export def "denylist-private get-single" [
 #
 # PUT /v1/denylist/private/{denylist_id}
 # operationId: update_private_denylist_of_the_user_v1_denylist_private__denylist_id__put
-export def "denylist-private update-of-user" [
+export def "update-private-denylist-of-the-user-v1-denylist-private-denylist-id-put" [
   denylist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1793,7 +1793,7 @@ export def "denylist-private update-of-user" [
 #
 # DELETE /v1/denylist/private/{denylist_id}/content
 # operationId: delete_the_denylist_content_v1_denylist_private__denylist_id__content_delete
-export def "denylist-private-content delete" [
+export def "delete-the-denylist-content-v1-denylist-private-denylist-id-content-delete" [
   denylist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1829,7 +1829,7 @@ export def "denylist-private-content delete" [
 #
 # GET /v1/denylist/private/{denylist_id}/content
 # operationId: get_denylist_content_v1_denylist_private__denylist_id__content_get
-export def "denylist-private-content get" [
+export def "get-denylist-content-v1-denylist-private-denylist-id-content-get" [
   denylist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1865,7 +1865,7 @@ export def "denylist-private-content get" [
 #
 # PUT /v1/denylist/private/{denylist_id}/content
 # operationId: update_private_content_of_the_denylist_of_the_user_v1_denylist_private__denylist_id__content_put
-export def "denylist-private-content update-of-of-user" [
+export def "update-private-content-of-the-denylist-of-the-user-v1-denylist-private-denylist-id-content-put" [
   denylist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1906,7 +1906,7 @@ export def "denylist-private-content update-of-of-user" [
 #
 # PUT /v1/denylist/private/{denylist_id}/origin
 # operationId: change_status_of_the_origin_denylist_v1_denylist_private__denylist_id__origin_put
-export def "denylist-private-origin update-change-status-of" [
+export def "change-status-of-the-origin-denylist-v1-denylist-private-denylist-id-origin-put" [
   denylist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1947,7 +1947,7 @@ export def "denylist-private-origin update-change-status-of" [
 #
 # GET /v1/denylist/public/all
 # operationId: get_all_public_denylists_v1_denylist_public_all_get
-export def "denylist-public-all get" [
+export def "get-all-public-denylists-v1-denylist-public-all-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1981,7 +1981,7 @@ export def "denylist-public-all get" [
 #
 # GET /v1/denylist/public/all/{resource_type}
 # operationId: get_all_public_denylists_by_resource_type_v1_denylist_public_all__resource_type__get
-export def "denylist-public-all get-by" [
+export def "get-all-public-denylists-by-resource-type-v1-denylist-public-all-resource-type-get" [
   resource_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2017,7 +2017,7 @@ export def "denylist-public-all get-by" [
 #
 # GET /v1/denylist/public/ip/{address}
 # operationId: query_resource_denylists_v1_denylist_public_ip__address__get
-export def "denylist-public-ip list-resource-get" [
+export def "query-resource-denylists-v1-denylist-public-ip-address-get" [
   address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2053,7 +2053,7 @@ export def "denylist-public-ip list-resource-get" [
 #
 # GET /v1/denylist/public/owned
 # operationId: get_public_denylists_owned_by_the_user_v1_denylist_public_owned_get
-export def "denylist-public-owned get-by-user" [
+export def "get-public-denylists-owned-by-the-user-v1-denylist-public-owned-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2087,7 +2087,7 @@ export def "denylist-public-owned get-by-user" [
 #
 # GET /v1/denylist/public/owned/{resource_type}
 # operationId: get_all_owned_denylists_by_resource_type_v1_denylist_public_owned__resource_type__get
-export def "denylist-public-owned get-list-by" [
+export def "get-all-owned-denylists-by-resource-type-v1-denylist-public-owned-resource-type-get" [
   resource_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2123,7 +2123,7 @@ export def "denylist-public-owned get-list-by" [
 #
 # DELETE /v1/denylist/public/{denylist_id}
 # operationId: delete_the_denylist_v1_denylist_public__denylist_id__delete
-export def "denylist-public delete" [
+export def "delete-the-denylist-v1-denylist-public-denylist-id-delete" [
   denylist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2159,7 +2159,7 @@ export def "denylist-public delete" [
 #
 # GET /v1/denylist/public/{denylist_id}
 # operationId: get_single_denylist_v1_denylist_public__denylist_id__get
-export def "denylist-public get-single" [
+export def "get-single-denylist-v1-denylist-public-denylist-id-get" [
   denylist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2195,7 +2195,7 @@ export def "denylist-public get-single" [
 #
 # PUT /v1/denylist/public/{denylist_id}
 # operationId: change_status_of_the_denylist_v1_denylist_public__denylist_id__put
-export def "denylist-public update-change-status-of" [
+export def "change-status-of-the-denylist-v1-denylist-public-denylist-id-put" [
   denylist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2235,7 +2235,7 @@ export def "denylist-public update-change-status-of" [
 #
 # PUT /v1/denylist/public/{denylist_id}/origin
 # operationId: change_status_of_the_origin_denylist_v1_denylist_public__denylist_id__origin_put
-export def "denylist-public-origin update-change-status-of" [
+export def "change-status-of-the-origin-denylist-v1-denylist-public-denylist-id-origin-put" [
   denylist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2276,7 +2276,7 @@ export def "denylist-public-origin update-change-status-of" [
 #
 # GET /v1/denylist/reported/ip
 # operationId: query_all_the_ip_addresses_reported_by_the_user_v1_denylist_reported_ip_get
-export def "denylist-reported-ip list" [
+export def "query-all-the-ip-addresses-reported-by-the-user-v1-denylist-reported-ip-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2320,7 +2320,7 @@ export def "denylist-reported-ip list" [
 #
 # DELETE /v1/denylist/reported/ip/all
 # operationId: delete_all_ip_addresses_reported_by_the_user_v1_denylist_reported_ip_all_delete
-export def "denylist-reported-ip-all delete-addresses-by-user" [
+export def "delete-all-ip-addresses-reported-by-the-user-v1-denylist-reported-ip-all-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2354,7 +2354,7 @@ export def "denylist-reported-ip-all delete-addresses-by-user" [
 #
 # DELETE /v1/denylist/reported/ip/{ip_address}
 # operationId: delete_an_ip_address_reported_by_the_user_v1_denylist_reported_ip__ip_address__delete
-export def "denylist-reported-ip delete-by-user" [
+export def "delete-an-ip-address-reported-by-the-user-v1-denylist-reported-ip-ip-address-delete" [
   ip_address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2390,7 +2390,7 @@ export def "denylist-reported-ip delete-by-user" [
 #
 # GET /v1/denylist/reported/ip/{ip_address}
 # operationId: query_an_ip_addresses_reported_by_the_user_v1_denylist_reported_ip__ip_address__get
-export def "denylist-reported-ip list-addresses-by-user-get" [
+export def "query-an-ip-addresses-reported-by-the-user-v1-denylist-reported-ip-ip-address-get" [
   ip_address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2426,7 +2426,7 @@ export def "denylist-reported-ip list-addresses-by-user-get" [
 #
 # POST /v1/geo
 # operationId: geolocate_ip_set_v1_geo_post
-export def "geo update-geolocate-ip-create" [
+export def "geolocate-ip-set-v1-geo-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2464,7 +2464,7 @@ export def "geo update-geolocate-ip-create" [
 #
 # POST /v1/geo/csv
 # operationId: assess_ip_set_csv_v1_geo_csv_post
-export def "geo-csv update-assess-ip-create" [
+export def "assess-ip-set-csv-v1-geo-csv-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2506,7 +2506,7 @@ export def "geo-csv update-assess-ip-create" [
 #
 # GET /v1/geo/{ip_address}
 # operationId: geolocate_ip_v1_geo__ip_address__get
-export def "geo get-geolocate" [
+export def "geolocate-ip-v1-geo-ip-address-get" [
   ip_address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2542,7 +2542,7 @@ export def "geo get-geolocate" [
 #
 # GET /v1/log/ip/id/{logchange_id}
 # operationId: log_change_id_v1_log_ip_id__logchange_id__get
-export def "log-ip-id get-change" [
+export def "log-change-id-v1-log-ip-id-logchange-id-get" [
   logchange_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2578,7 +2578,7 @@ export def "log-ip-id get-change" [
 #
 # GET /v1/log/ip/{ip_address}
 # operationId: logchanges_ip_v1_log_ip__ip_address__get
-export def "log-ip get-logchanges" [
+export def "logchanges-ip-v1-log-ip-ip-address-get" [
   ip_address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2617,7 +2617,7 @@ export def "log-ip get-logchanges" [
 #
 # GET /v1/origin
 # operationId: query_origin_information_v1_origin_get
-export def "origin list-information-get" [
+export def "query-origin-information-v1-origin-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2653,7 +2653,7 @@ export def "origin list-information-get" [
 #
 # PUT /v1/origin
 # operationId: update_configuration_origin_v1_origin_put
-export def "origin update-configuration" [
+export def "update-configuration-origin-v1-origin-put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2692,7 +2692,7 @@ export def "origin update-configuration" [
 #
 # GET /v1/origin/addresses
 # operationId: query_origin_address_status_information_v1_origin_addresses_get
-export def "origin-addresses list-address-status-information-get" [
+export def "query-origin-address-status-information-v1-origin-addresses-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2730,7 +2730,7 @@ export def "origin-addresses list-address-status-information-get" [
 #
 # GET /v1/origin/all
 # operationId: query_all_origin_information_v1_origin_all_get
-export def "origin-all list-information-get" [
+export def "query-all-origin-information-v1-origin-all-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2764,7 +2764,7 @@ export def "origin-all list-information-get" [
 #
 # GET /v1/origin/client/analysis
 # operationId: query_origin_traffic_client_v1_origin_client_analysis_get
-export def "origin-client-analysis list-traffic-get" [
+export def "query-origin-traffic-client-v1-origin-client-analysis-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2803,7 +2803,7 @@ export def "origin-client-analysis list-traffic-get" [
 #
 # GET /v1/origin/cookies
 # operationId: query_origin_cookie_id_status_information_v1_origin_cookies_get
-export def "origin-cookies list-status-information-get" [
+export def "query-origin-cookie-id-status-information-v1-origin-cookies-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2841,7 +2841,7 @@ export def "origin-cookies list-status-information-get" [
 #
 # GET /v1/origin/scripts
 # operationId: query_origin_scripts_v1_origin_scripts_get
-export def "origin-scripts list-get" [
+export def "query-origin-scripts-v1-origin-scripts-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2877,7 +2877,7 @@ export def "origin-scripts list-get" [
 #
 # POST /v1/origin/status
 # operationId: query_origin_status_v1_origin_status_post
-export def "origin-status list-create" [
+export def "query-origin-status-v1-origin-status-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2918,7 +2918,7 @@ export def "origin-status list-create" [
 #
 # GET /v1/origin/status/detail/{status_id}
 # operationId: query_origin_status_detail_v1_origin_status_detail__status_id__get
-export def "origin-status-detail list-get" [
+export def "query-origin-status-detail-v1-origin-status-detail-status-id-get" [
   status_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2954,7 +2954,7 @@ export def "origin-status-detail list-get" [
 #
 # GET /v1/origin/status/details
 # operationId: query_origin_status_details_v1_origin_status_details_get
-export def "origin-status-details list-get" [
+export def "query-origin-status-details-v1-origin-status-details-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2988,7 +2988,7 @@ export def "origin-status-details list-get" [
 #
 # GET /v1/origin/traffic/analysis
 # operationId: query_origin_traffic_analysis_v1_origin_traffic_analysis_get
-export def "origin-traffic-analysis list-get" [
+export def "query-origin-traffic-analysis-v1-origin-traffic-analysis-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3027,7 +3027,7 @@ export def "origin-traffic-analysis list-get" [
 #
 # DELETE /v1/origin_token
 # operationId: delete_token_v1_origin_token_delete
-export def "origin-token delete" [
+export def "delete-token-v1-origin-token-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3065,7 +3065,7 @@ export def "origin-token delete" [
 #
 # POST /v1/origin_token
 # operationId: query_origin_token_info_v1_origin_token_post
-export def "origin-token list-get-create" [
+export def "query-origin-token-info-v1-origin-token-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3103,7 +3103,7 @@ export def "origin-token list-get-create" [
 #
 # GET /v1/origin_token/all
 # operationId: query_all_origin_tokens_in_the_region_v1_origin_token_all_get
-export def "origin-token-all list-in-region-get" [
+export def "query-all-origin-tokens-in-the-region-v1-origin-token-all-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3137,7 +3137,7 @@ export def "origin-token-all list-in-region-get" [
 #
 # PUT /v1/origin_token/disable
 # operationId: disable_origin_token_v1_origin_token_disable_put
-export def "origin-token-disable update" [
+export def "disable-origin-token-v1-origin-token-disable-put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3175,7 +3175,7 @@ export def "origin-token-disable update" [
 #
 # PUT /v1/origin_token/enable
 # operationId: enable_origin_token_v1_origin_token_enable_put
-export def "origin-token-enable update" [
+export def "enable-origin-token-v1-origin-token-enable-put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3213,7 +3213,7 @@ export def "origin-token-enable update" [
 #
 # POST /v1/origin_token/new
 # operationId: create_a_new_origin_token_v1_origin_token_new_post
-export def "origin-token-new create" [
+export def "create-a-new-origin-token-v1-origin-token-new-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3251,7 +3251,7 @@ export def "origin-token-new create" [
 #
 # GET /v1/source/ip
 # operationId: get_all_sources_v1_source_ip_get
-export def "source-ip get-list" [
+export def "get-all-sources-v1-source-ip-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3285,7 +3285,7 @@ export def "source-ip get-list" [
 #
 # GET /v1/source/ip/{source}
 # operationId: get_source_info_v1_source_ip__source__get
-export def "source-ip get" [
+export def "get-source-info-v1-source-ip-source-get" [
   source: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3321,7 +3321,7 @@ export def "source-ip get" [
 #
 # GET /v1/source/ip/{source}/range/{time_range}
 # operationId: get_source_and_timerange_info_v1_source_ip__source__range__time_range__get
-export def "source-ip-range get-and-timerange" [
+export def "get-source-and-timerange-info-v1-source-ip-source-range-time-range-get" [
   source: string
   time_range: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3359,7 +3359,7 @@ export def "source-ip-range get-and-timerange" [
 #
 # GET /v1/token
 # operationId: query_token_info_v1_token_get
-export def "token list-get" [
+export def "query-token-info-v1-token-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3393,7 +3393,7 @@ export def "token list-get" [
 #
 # GET /v1/token/activity
 # operationId: query_token_activity_v1_token_activity_get
-export def "token-activity list-get" [
+export def "query-token-activity-v1-token-activity-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3430,7 +3430,7 @@ export def "token-activity list-get" [
 #
 # POST /v1/ua
 # operationId: parse_user_agents_v1_ua_post
-export def "ua create-parse-user-agents" [
+export def "parse-user-agents-v1-ua-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3468,7 +3468,7 @@ export def "ua create-parse-user-agents" [
 #
 # POST /v1/ua/csv
 # operationId: parse_user_agents_csv_v1_ua_csv_post
-export def "ua-csv create-parse-user-agents" [
+export def "parse-user-agents-csv-v1-ua-csv-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3508,7 +3508,7 @@ export def "ua-csv create-parse-user-agents" [
 #
 # GET /v1/ua/device/{code}
 # operationId: query_device_by_code_v1_ua_device__code__get
-export def "ua-device list-by-get" [
+export def "query-device-by-code-v1-ua-device-code-get" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3544,7 +3544,7 @@ export def "ua-device list-by-get" [
 #
 # GET /v1/ua/family/{code}
 # operationId: query_family_by_code_v1_ua_family__code__get
-export def "ua-family list-by-get" [
+export def "query-family-by-code-v1-ua-family-code-get" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3580,7 +3580,7 @@ export def "ua-family list-by-get" [
 #
 # GET /v1/ua/os/{code}
 # operationId: query_os_by_code_v1_ua_os__code__get
-export def "ua-os list-by-get" [
+export def "query-os-by-code-v1-ua-os-code-get" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3616,7 +3616,7 @@ export def "ua-os list-by-get" [
 #
 # GET /v1/ua/type/{code}
 # operationId: query_type_by_code_v1_ua_type__code__get
-export def "ua-type list-by-get" [
+export def "query-type-by-code-v1-ua-type-code-get" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3652,7 +3652,7 @@ export def "ua-type list-by-get" [
 #
 # GET /v1/ua/vendor/{code}
 # operationId: query_vendor_by_code_v1_ua_vendor__code__get
-export def "ua-vendor list-by-get" [
+export def "query-vendor-by-code-v1-ua-vendor-code-get" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3688,7 +3688,7 @@ export def "ua-vendor list-by-get" [
 #
 # GET /v1/ua/{user_agent_urlencoded}
 # operationId: parse_user_agent_v1_ua__user_agent_urlencoded__get
-export def "ua get-parse" [
+export def "parse-user-agent-v1-ua-user-agent-urlencoded-get" [
   user_agent_urlencoded: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

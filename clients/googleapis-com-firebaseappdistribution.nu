@@ -129,7 +129,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "releases-upload upload" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "firebaseappdistribution-media-upload" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -153,7 +153,7 @@ export def commands []: nothing -> table {
 #
 # POST /v1/{app}/releases:upload
 # operationId: firebaseappdistribution.media.upload
-export def "releases-upload upload" [
+export def "firebaseappdistribution-media-upload" [
   app: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -205,7 +205,7 @@ export def "releases-upload upload" [
 #
 # POST /v1/{group}:batchJoin
 # operationId: firebaseappdistribution.projects.groups.batchJoin
-export def "projects create-batch-join" [
+export def "firebaseappdistribution-projects-groups-batch-join" [
   group: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -258,7 +258,7 @@ export def "projects create-batch-join" [
 #
 # POST /v1/{group}:batchLeave
 # operationId: firebaseappdistribution.projects.groups.batchLeave
-export def "projects create-batch-leave" [
+export def "firebaseappdistribution-projects-groups-batch-leave" [
   group: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -310,7 +310,7 @@ export def "projects create-batch-leave" [
 #
 # DELETE /v1/{name}
 # operationId: firebaseappdistribution.projects.groups.delete
-export def "projects delete" [
+export def "firebaseappdistribution-projects-groups-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -358,7 +358,7 @@ export def "projects delete" [
 #
 # GET /v1/{name}
 # operationId: firebaseappdistribution.projects.groups.get
-export def "projects get" [
+export def "firebaseappdistribution-projects-groups-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -406,7 +406,7 @@ export def "projects get" [
 #
 # PATCH /v1/{name}
 # operationId: firebaseappdistribution.projects.testers.patch
-export def "projects update" [
+export def "firebaseappdistribution-projects-testers-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -461,7 +461,7 @@ export def "projects update" [
 #
 # GET /v1/{name}/operations
 # operationId: firebaseappdistribution.projects.apps.releases.operations.list
-export def "operations list" [
+export def "firebaseappdistribution-projects-apps-releases-operations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -512,7 +512,7 @@ export def "operations list" [
 #
 # POST /v1/{name}:cancel
 # operationId: firebaseappdistribution.projects.apps.releases.operations.cancel
-export def "projects cancel" [
+export def "firebaseappdistribution-projects-apps-releases-operations-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -564,7 +564,7 @@ export def "projects cancel" [
 #
 # POST /v1/{name}:distribute
 # operationId: firebaseappdistribution.projects.apps.releases.distribute
-export def "projects create-distribute" [
+export def "firebaseappdistribution-projects-apps-releases-distribute" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -617,7 +617,7 @@ export def "projects create-distribute" [
 #
 # POST /v1/{name}:wait
 # operationId: firebaseappdistribution.projects.apps.releases.operations.wait
-export def "projects wait" [
+export def "firebaseappdistribution-projects-apps-releases-operations-wait" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -669,7 +669,7 @@ export def "projects wait" [
 #
 # GET /v1/{parent}/feedbackReports
 # operationId: firebaseappdistribution.projects.apps.releases.feedbackReports.list
-export def "feedback-reports list" [
+export def "firebaseappdistribution-projects-apps-releases-feedback-reports-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -721,7 +721,7 @@ export def "feedback-reports list" [
 #
 # GET /v1/{parent}/groups
 # operationId: firebaseappdistribution.projects.groups.list
-export def "groups list" [
+export def "firebaseappdistribution-projects-groups-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -771,7 +771,7 @@ export def "groups list" [
 #
 # POST /v1/{parent}/groups
 # operationId: firebaseappdistribution.projects.groups.create
-export def "groups create" [
+export def "firebaseappdistribution-projects-groups-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -825,7 +825,7 @@ export def "groups create" [
 #
 # GET /v1/{parent}/releases
 # operationId: firebaseappdistribution.projects.apps.releases.list
-export def "releases list" [
+export def "firebaseappdistribution-projects-apps-releases-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -877,7 +877,7 @@ export def "releases list" [
 #
 # POST /v1/{parent}/releases:batchDelete
 # operationId: firebaseappdistribution.projects.apps.releases.batchDelete
-export def "releases-batch-delete delete" [
+export def "firebaseappdistribution-projects-apps-releases-batch-delete" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -929,7 +929,7 @@ export def "releases-batch-delete delete" [
 #
 # GET /v1/{parent}/testers
 # operationId: firebaseappdistribution.projects.testers.list
-export def "testers list" [
+export def "firebaseappdistribution-projects-testers-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -980,7 +980,7 @@ export def "testers list" [
 #
 # POST /v1/{project}/testers:batchAdd
 # operationId: firebaseappdistribution.projects.testers.batchAdd
-export def "testers-batch-add create" [
+export def "firebaseappdistribution-projects-testers-batch-add" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1032,7 +1032,7 @@ export def "testers-batch-add create" [
 #
 # POST /v1/{project}/testers:batchRemove
 # operationId: firebaseappdistribution.projects.testers.batchRemove
-export def "testers-batch-remove delete" [
+export def "firebaseappdistribution-projects-testers-batch-remove" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

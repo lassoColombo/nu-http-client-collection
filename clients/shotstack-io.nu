@@ -112,7 +112,7 @@ def disk-completer [] { ["local" "mount"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "assets-render get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-asset-by-render-id" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -136,7 +136,7 @@ export def commands []: nothing -> table {
 #
 # GET /assets/render/{id}
 # operationId: getAssetByRenderId
-export def "assets-render get" [
+export def "get-asset-by-render-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -172,7 +172,7 @@ export def "assets-render get" [
 #
 # DELETE /assets/{id}
 # operationId: deleteAsset
-export def "assets delete" [
+export def "delete-asset" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -208,7 +208,7 @@ export def "assets delete" [
 #
 # GET /assets/{id}
 # operationId: getAsset
-export def "assets get" [
+export def "get-asset" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -246,7 +246,7 @@ export def "assets get" [
 # operationId: postRender
 # --output shape: {aspectRatio?: "16:9"|"9:16"|"1:1"|"4:5"|"4:3", destinations?: list, format: "mp4"|"gif"|"mp3"|"jpg"|"png"|"bmp", fps?: "12"|"15"|"24"|"25"|"30", poster?: record, quality?: "low"|"medium"|"high", range?: record, resolution?: "preview"|"mobile"|"sd"|"hd"|"1080", scaleTo?: "preview"|"mobile"|"sd"|"hd"|"1080", size?: record, thumbnail?: record}
 # --timeline shape: {background?: string, cache?: bool, fonts?: list, soundtrack?: record, tracks: list}
-export def "render create" [
+export def "post-render" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -287,7 +287,7 @@ export def "render create" [
 #
 # GET /render/{id}
 # operationId: getRender
-export def "render get" [
+export def "get-render" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

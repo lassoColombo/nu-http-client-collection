@@ -139,7 +139,7 @@ def node-deallocation-option-completer [] { ["requeue" "retaineddata" "taskcompl
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "applications list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "application-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -163,7 +163,7 @@ export def commands []: nothing -> table {
 #
 # GET /applications
 # operationId: Application_List
-export def "applications list" [
+export def "application-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -206,7 +206,7 @@ export def "applications list" [
 #
 # GET /applications/{applicationId}
 # operationId: Application_Get
-export def "applications get" [
+export def "application-get" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -250,7 +250,7 @@ export def "applications get" [
 #
 # GET /certificates
 # operationId: Certificate_List
-export def "certificates list" [
+export def "certificate-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -295,7 +295,7 @@ export def "certificates list" [
 #
 # POST /certificates
 # operationId: Certificate_Add
-export def "certificates create" [
+export def "certificate-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -345,7 +345,7 @@ export def "certificates create" [
 #
 # DELETE /certificates(thumbprintAlgorithm={thumbprintAlgorithm},thumbprint={thumbprint})
 # operationId: Certificate_Delete
-export def "certificates delete" [
+export def "certificate-delete" [
   thumbprint_algorithm: string
   thumbprint: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -391,7 +391,7 @@ export def "certificates delete" [
 #
 # GET /certificates(thumbprintAlgorithm={thumbprintAlgorithm},thumbprint={thumbprint})
 # operationId: Certificate_Get
-export def "certificates get" [
+export def "certificate-get" [
   thumbprint_algorithm: string
   thumbprint: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -438,7 +438,7 @@ export def "certificates get" [
 #
 # POST /certificates(thumbprintAlgorithm={thumbprintAlgorithm},thumbprint={thumbprint})/canceldelete
 # operationId: Certificate_CancelDeletion
-export def "certificates-canceldelete cancel-deletion" [
+export def "certificate-cancel-deletion" [
   thumbprint_algorithm: string
   thumbprint: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -484,7 +484,7 @@ export def "certificates-canceldelete cancel-deletion" [
 #
 # GET /jobs
 # operationId: Job_List
-export def "jobs list" [
+export def "job-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -538,7 +538,7 @@ export def "jobs list" [
 # --metadata item shape: {name: string, value: string}
 # --networkConfiguration shape: {subnetId: string}
 # --poolInfo shape: {autoPoolSpecification?: any, poolId?: string}
-export def "jobs create" [
+export def "job-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -597,7 +597,7 @@ export def "jobs create" [
 #
 # DELETE /jobs/{jobId}
 # operationId: Job_Delete
-export def "jobs delete" [
+export def "job-delete" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -645,7 +645,7 @@ export def "jobs delete" [
 #
 # GET /jobs/{jobId}
 # operationId: Job_Get
-export def "jobs get" [
+export def "job-get" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -698,7 +698,7 @@ export def "jobs get" [
 # --constraints shape: {maxTaskRetryCount?: int, maxWallClockTime?: string}
 # --metadata item shape: {name: string, value: string}
 # --poolInfo shape: {autoPoolSpecification?: any, poolId?: string}
-export def "jobs update-by-job-id" [
+export def "job-patch" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -757,7 +757,7 @@ export def "jobs update-by-job-id" [
 # --constraints shape: {maxTaskRetryCount?: int, maxWallClockTime?: string}
 # --metadata item shape: {name: string, value: string}
 # --poolInfo shape: {autoPoolSpecification?: any, poolId?: string}
-export def "jobs update-by-job-id-1" [
+export def "job-update" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -814,7 +814,7 @@ export def "jobs update-by-job-id-1" [
 # POST /jobs/{jobId}/addtaskcollection
 # operationId: Task_AddCollection
 # --value item shape: {affinityInfo?: any, applicationPackageReferences?: list, authenticationTokenSettings?: any, commandLine: string, constraints?: any, containerSettings?: any, dependsOn?: any, displayName?: string, environmentSettings?: list, exitConditions?: any, id: string, multiInstanceSettings?: any, outputFiles?: list, resourceFiles?: list, userIdentity?: any}
-export def "jobs-addtaskcollection create-task-collection" [
+export def "task-add-collection" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -862,7 +862,7 @@ export def "jobs-addtaskcollection create-task-collection" [
 #
 # POST /jobs/{jobId}/disable
 # operationId: Job_Disable
-export def "jobs-disable disable" [
+export def "job-disable" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -914,7 +914,7 @@ export def "jobs-disable disable" [
 #
 # POST /jobs/{jobId}/enable
 # operationId: Job_Enable
-export def "jobs-enable enable" [
+export def "job-enable" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -962,7 +962,7 @@ export def "jobs-enable enable" [
 #
 # GET /jobs/{jobId}/jobpreparationandreleasetaskstatus
 # operationId: Job_ListPreparationAndReleaseTaskStatus
-export def "jobs-jobpreparationandreleasetaskstatus list-preparation-and-release-task-status" [
+export def "job-list-preparation-and-release-task-status" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1009,7 +1009,7 @@ export def "jobs-jobpreparationandreleasetaskstatus list-preparation-and-release
 #
 # GET /jobs/{jobId}/taskcounts
 # operationId: Job_GetTaskCounts
-export def "jobs-taskcounts get-task-counts" [
+export def "job-get-task-counts" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1053,7 +1053,7 @@ export def "jobs-taskcounts get-task-counts" [
 #
 # GET /jobs/{jobId}/tasks
 # operationId: Task_List
-export def "jobs-tasks list" [
+export def "task-list" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1113,7 +1113,7 @@ export def "jobs-tasks list" [
 # --outputFiles item shape: {destination: any, filePattern: string, uploadOptions: any}
 # --resourceFiles item shape: {autoStorageContainerName?: string, blobPrefix?: string, fileMode?: string, filePath?: string, httpUrl?: string, storageContainerUrl?: string}
 # --userIdentity shape: {autoUser?: any, username?: string}
-export def "jobs-tasks create" [
+export def "task-add" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1175,7 +1175,7 @@ export def "jobs-tasks create" [
 #
 # DELETE /jobs/{jobId}/tasks/{taskId}
 # operationId: Task_Delete
-export def "jobs-tasks delete" [
+export def "task-delete" [
   job_id: string
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1225,7 +1225,7 @@ export def "jobs-tasks delete" [
 #
 # GET /jobs/{jobId}/tasks/{taskId}
 # operationId: Task_Get
-export def "jobs-tasks get" [
+export def "task-get" [
   job_id: string
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1278,7 +1278,7 @@ export def "jobs-tasks get" [
 # PUT /jobs/{jobId}/tasks/{taskId}
 # operationId: Task_Update
 # --constraints shape: {maxTaskRetryCount?: int, maxWallClockTime?: string, retentionTime?: string}
-export def "jobs-tasks update" [
+export def "task-update" [
   job_id: string
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1332,7 +1332,7 @@ export def "jobs-tasks update" [
 #
 # GET /jobs/{jobId}/tasks/{taskId}/files
 # operationId: File_ListFromTask
-export def "jobs-tasks-files list" [
+export def "file-list-from-task" [
   job_id: string
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1381,7 +1381,7 @@ export def "jobs-tasks-files list" [
 #
 # DELETE /jobs/{jobId}/tasks/{taskId}/files/{filePath}
 # operationId: File_DeleteFromTask
-export def "jobs-tasks-files delete" [
+export def "file-delete-from-task" [
   job_id: string
   task_id: string
   file_path: string
@@ -1430,7 +1430,7 @@ export def "jobs-tasks-files delete" [
 #
 # GET /jobs/{jobId}/tasks/{taskId}/files/{filePath}
 # operationId: File_GetFromTask
-export def "jobs-tasks-files get" [
+export def "file-get-from-task" [
   job_id: string
   task_id: string
   file_path: string
@@ -1482,7 +1482,7 @@ export def "jobs-tasks-files get" [
 #
 # HEAD /jobs/{jobId}/tasks/{taskId}/files/{filePath}
 # operationId: File_GetPropertiesFromTask
-export def "jobs-tasks-files get-properties" [
+export def "file-get-properties-from-task" [
   job_id: string
   task_id: string
   file_path: string
@@ -1532,7 +1532,7 @@ export def "jobs-tasks-files get-properties" [
 #
 # POST /jobs/{jobId}/tasks/{taskId}/reactivate
 # operationId: Task_Reactivate
-export def "jobs-tasks-reactivate create" [
+export def "task-reactivate" [
   job_id: string
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1582,7 +1582,7 @@ export def "jobs-tasks-reactivate create" [
 #
 # GET /jobs/{jobId}/tasks/{taskId}/subtasksinfo
 # operationId: Task_ListSubtasks
-export def "jobs-tasks-subtasksinfo list-subtasks" [
+export def "task-list-subtasks" [
   job_id: string
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1629,7 +1629,7 @@ export def "jobs-tasks-subtasksinfo list-subtasks" [
 #
 # POST /jobs/{jobId}/tasks/{taskId}/terminate
 # operationId: Task_Terminate
-export def "jobs-tasks-terminate create" [
+export def "task-terminate" [
   job_id: string
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1679,7 +1679,7 @@ export def "jobs-tasks-terminate create" [
 #
 # POST /jobs/{jobId}/terminate
 # operationId: Job_Terminate
-export def "jobs-terminate create" [
+export def "job-terminate" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1731,7 +1731,7 @@ export def "jobs-terminate create" [
 #
 # GET /jobschedules
 # operationId: JobSchedule_List
-export def "jobschedules list-job-schedule" [
+export def "job-schedule-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1780,7 +1780,7 @@ export def "jobschedules list-job-schedule" [
 # --jobSpecification shape: {commonEnvironmentSettings?: list, constraints?: any, displayName?: string, jobManagerTask?: any, jobPreparationTask?: any, jobReleaseTask?: any, metadata?: list, networkConfiguration?: any, onAllTasksComplete?: "noaction"|"terminatejob", onTaskFailure?: "noaction"|"performexitoptionsjobaction", poolInfo: any, priority?: int, usesTaskDependencies?: bool}
 # --metadata item shape: {name: string, value: string}
 # --schedule shape: {doNotRunAfter?: string, doNotRunUntil?: string, recurrenceInterval?: string, startWindow?: string}
-export def "jobschedules create-job-schedule" [
+export def "job-schedule-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1830,7 +1830,7 @@ export def "jobschedules create-job-schedule" [
 #
 # DELETE /jobschedules/{jobScheduleId}
 # operationId: JobSchedule_Delete
-export def "jobschedules delete-job-schedule" [
+export def "job-schedule-delete" [
   job_schedule_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1878,7 +1878,7 @@ export def "jobschedules delete-job-schedule" [
 #
 # GET /jobschedules/{jobScheduleId}
 # operationId: JobSchedule_Get
-export def "jobschedules get-job-schedule" [
+export def "job-schedule-get" [
   job_schedule_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1928,7 +1928,7 @@ export def "jobschedules get-job-schedule" [
 #
 # HEAD /jobschedules/{jobScheduleId}
 # operationId: JobSchedule_Exists
-export def "jobschedules head-job-schedule-exists" [
+export def "job-schedule-exists" [
   job_schedule_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1979,7 +1979,7 @@ export def "jobschedules head-job-schedule-exists" [
 # --jobSpecification shape: {commonEnvironmentSettings?: list, constraints?: any, displayName?: string, jobManagerTask?: any, jobPreparationTask?: any, jobReleaseTask?: any, metadata?: list, networkConfiguration?: any, onAllTasksComplete?: "noaction"|"terminatejob", onTaskFailure?: "noaction"|"performexitoptionsjobaction", poolInfo: any, priority?: int, usesTaskDependencies?: bool}
 # --metadata item shape: {name: string, value: string}
 # --schedule shape: {doNotRunAfter?: string, doNotRunUntil?: string, recurrenceInterval?: string, startWindow?: string}
-export def "jobschedules update-job-schedule-by-job-schedule-id" [
+export def "job-schedule-patch" [
   job_schedule_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2036,7 +2036,7 @@ export def "jobschedules update-job-schedule-by-job-schedule-id" [
 # --jobSpecification shape: {commonEnvironmentSettings?: list, constraints?: any, displayName?: string, jobManagerTask?: any, jobPreparationTask?: any, jobReleaseTask?: any, metadata?: list, networkConfiguration?: any, onAllTasksComplete?: "noaction"|"terminatejob", onTaskFailure?: "noaction"|"performexitoptionsjobaction", poolInfo: any, priority?: int, usesTaskDependencies?: bool}
 # --metadata item shape: {name: string, value: string}
 # --schedule shape: {doNotRunAfter?: string, doNotRunUntil?: string, recurrenceInterval?: string, startWindow?: string}
-export def "jobschedules update-job-schedule-by-job-schedule-id-1" [
+export def "job-schedule-update" [
   job_schedule_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2090,7 +2090,7 @@ export def "jobschedules update-job-schedule-by-job-schedule-id-1" [
 #
 # POST /jobschedules/{jobScheduleId}/disable
 # operationId: JobSchedule_Disable
-export def "jobschedules-disable disable-job-schedule" [
+export def "job-schedule-disable" [
   job_schedule_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2138,7 +2138,7 @@ export def "jobschedules-disable disable-job-schedule" [
 #
 # POST /jobschedules/{jobScheduleId}/enable
 # operationId: JobSchedule_Enable
-export def "jobschedules-enable enable-job-schedule" [
+export def "job-schedule-enable" [
   job_schedule_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2186,7 +2186,7 @@ export def "jobschedules-enable enable-job-schedule" [
 #
 # GET /jobschedules/{jobScheduleId}/jobs
 # operationId: Job_ListFromJobSchedule
-export def "jobschedules-jobs list-from-schedule" [
+export def "job-list-from-job-schedule" [
   job_schedule_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2234,7 +2234,7 @@ export def "jobschedules-jobs list-from-schedule" [
 #
 # POST /jobschedules/{jobScheduleId}/terminate
 # operationId: JobSchedule_Terminate
-export def "jobschedules-terminate create-job-schedule" [
+export def "job-schedule-terminate" [
   job_schedule_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2282,7 +2282,7 @@ export def "jobschedules-terminate create-job-schedule" [
 #
 # GET /lifetimejobstats
 # operationId: Job_GetAllLifetimeStatistics
-export def "lifetimejobstats get-job-list-lifetime-statistics" [
+export def "job-get-all-lifetime-statistics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2324,7 +2324,7 @@ export def "lifetimejobstats get-job-list-lifetime-statistics" [
 #
 # GET /lifetimepoolstats
 # operationId: Pool_GetAllLifetimeStatistics
-export def "lifetimepoolstats get-pool-list-lifetime-statistics" [
+export def "pool-get-all-lifetime-statistics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2366,7 +2366,7 @@ export def "lifetimepoolstats get-pool-list-lifetime-statistics" [
 #
 # GET /nodecounts
 # operationId: Account_ListPoolNodeCounts
-export def "nodecounts list-account-pool-node-counts" [
+export def "account-list-pool-node-counts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2410,7 +2410,7 @@ export def "nodecounts list-account-pool-node-counts" [
 #
 # GET /pools
 # operationId: Pool_List
-export def "pools list" [
+export def "pool-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2466,7 +2466,7 @@ export def "pools list" [
 # --taskSchedulingPolicy shape: {nodeFillType: "spread"|"pack"}
 # --userAccounts item shape: {elevationLevel?: "nonadmin"|"admin", linuxUserConfiguration?: any, name: string, password: string, windowsUserConfiguration?: any}
 # --virtualMachineConfiguration shape: {containerConfiguration?: any, dataDisks?: list, imageReference: any, licenseType?: string, nodeAgentSKUId: string, windowsConfiguration?: any}
-export def "pools create" [
+export def "pool-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2533,7 +2533,7 @@ export def "pools create" [
 #
 # DELETE /pools/{poolId}
 # operationId: Pool_Delete
-export def "pools delete" [
+export def "pool-delete" [
   pool_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2581,7 +2581,7 @@ export def "pools delete" [
 #
 # GET /pools/{poolId}
 # operationId: Pool_Get
-export def "pools get" [
+export def "pool-get" [
   pool_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2631,7 +2631,7 @@ export def "pools get" [
 #
 # HEAD /pools/{poolId}
 # operationId: Pool_Exists
-export def "pools head-exists" [
+export def "pool-exists" [
   pool_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2683,7 +2683,7 @@ export def "pools head-exists" [
 # --certificateReferences item shape: {storeLocation?: "currentuser"|"localmachine", storeName?: string, thumbprint: string, thumbprintAlgorithm: string, visibility?: list<string>}
 # --metadata item shape: {name: string, value: string}
 # --startTask shape: {commandLine: string, containerSettings?: any, environmentSettings?: list, maxTaskRetryCount?: int, resourceFiles?: list, userIdentity?: any, waitForSuccess?: bool}
-export def "pools update" [
+export def "pool-patch" [
   pool_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2738,7 +2738,7 @@ export def "pools update" [
 #
 # POST /pools/{poolId}/disableautoscale
 # operationId: Pool_DisableAutoScale
-export def "pools-disableautoscale disable-auto-scale" [
+export def "pool-disable-auto-scale" [
   pool_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2782,7 +2782,7 @@ export def "pools-disableautoscale disable-auto-scale" [
 #
 # POST /pools/{poolId}/enableautoscale
 # operationId: Pool_EnableAutoScale
-export def "pools-enableautoscale enable-auto-scale" [
+export def "pool-enable-auto-scale" [
   pool_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2835,7 +2835,7 @@ export def "pools-enableautoscale enable-auto-scale" [
 #
 # POST /pools/{poolId}/evaluateautoscale
 # operationId: Pool_EvaluateAutoScale
-export def "pools-evaluateautoscale create-evaluate-auto-scale" [
+export def "pool-evaluate-auto-scale" [
   pool_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2883,7 +2883,7 @@ export def "pools-evaluateautoscale create-evaluate-auto-scale" [
 #
 # GET /pools/{poolId}/nodes
 # operationId: ComputeNode_List
-export def "pools-nodes list-compute" [
+export def "compute-node-list" [
   pool_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2930,7 +2930,7 @@ export def "pools-nodes list-compute" [
 #
 # GET /pools/{poolId}/nodes/{nodeId}
 # operationId: ComputeNode_Get
-export def "pools-nodes get-compute" [
+export def "compute-node-get" [
   pool_id: string
   node_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2977,7 +2977,7 @@ export def "pools-nodes get-compute" [
 #
 # POST /pools/{poolId}/nodes/{nodeId}/disablescheduling
 # operationId: ComputeNode_DisableScheduling
-export def "pools-nodes-disablescheduling disable-compute-scheduling" [
+export def "compute-node-disable-scheduling" [
   pool_id: string
   node_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3027,7 +3027,7 @@ export def "pools-nodes-disablescheduling disable-compute-scheduling" [
 #
 # POST /pools/{poolId}/nodes/{nodeId}/enablescheduling
 # operationId: ComputeNode_EnableScheduling
-export def "pools-nodes-enablescheduling enable-compute-scheduling" [
+export def "compute-node-enable-scheduling" [
   pool_id: string
   node_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3073,7 +3073,7 @@ export def "pools-nodes-enablescheduling enable-compute-scheduling" [
 #
 # GET /pools/{poolId}/nodes/{nodeId}/files
 # operationId: File_ListFromComputeNode
-export def "pools-nodes-files list-from-compute" [
+export def "file-list-from-compute-node" [
   pool_id: string
   node_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3122,7 +3122,7 @@ export def "pools-nodes-files list-from-compute" [
 #
 # DELETE /pools/{poolId}/nodes/{nodeId}/files/{filePath}
 # operationId: File_DeleteFromComputeNode
-export def "pools-nodes-files delete-from-compute" [
+export def "file-delete-from-compute-node" [
   pool_id: string
   node_id: string
   file_path: string
@@ -3171,7 +3171,7 @@ export def "pools-nodes-files delete-from-compute" [
 #
 # GET /pools/{poolId}/nodes/{nodeId}/files/{filePath}
 # operationId: File_GetFromComputeNode
-export def "pools-nodes-files get-from-compute" [
+export def "file-get-from-compute-node" [
   pool_id: string
   node_id: string
   file_path: string
@@ -3223,7 +3223,7 @@ export def "pools-nodes-files get-from-compute" [
 #
 # HEAD /pools/{poolId}/nodes/{nodeId}/files/{filePath}
 # operationId: File_GetPropertiesFromComputeNode
-export def "pools-nodes-files get-properties-from-compute" [
+export def "file-get-properties-from-compute-node" [
   pool_id: string
   node_id: string
   file_path: string
@@ -3273,7 +3273,7 @@ export def "pools-nodes-files get-properties-from-compute" [
 #
 # GET /pools/{poolId}/nodes/{nodeId}/rdp
 # operationId: ComputeNode_GetRemoteDesktop
-export def "pools-nodes-rdp get-compute-remote-desktop" [
+export def "compute-node-get-remote-desktop" [
   pool_id: string
   node_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3320,7 +3320,7 @@ export def "pools-nodes-rdp get-compute-remote-desktop" [
 #
 # POST /pools/{poolId}/nodes/{nodeId}/reboot
 # operationId: ComputeNode_Reboot
-export def "pools-nodes-reboot create-compute" [
+export def "compute-node-reboot" [
   pool_id: string
   node_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3370,7 +3370,7 @@ export def "pools-nodes-reboot create-compute" [
 #
 # POST /pools/{poolId}/nodes/{nodeId}/reimage
 # operationId: ComputeNode_Reimage
-export def "pools-nodes-reimage create-compute" [
+export def "compute-node-reimage" [
   pool_id: string
   node_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3420,7 +3420,7 @@ export def "pools-nodes-reimage create-compute" [
 #
 # GET /pools/{poolId}/nodes/{nodeId}/remoteloginsettings
 # operationId: ComputeNode_GetRemoteLoginSettings
-export def "pools-nodes-remoteloginsettings get-compute-remote-login-settings" [
+export def "compute-node-get-remote-login-settings" [
   pool_id: string
   node_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3466,7 +3466,7 @@ export def "pools-nodes-remoteloginsettings get-compute-remote-login-settings" [
 #
 # POST /pools/{poolId}/nodes/{nodeId}/uploadbatchservicelogs
 # operationId: ComputeNode_UploadBatchServiceLogs
-export def "pools-nodes-uploadbatchservicelogs upload-compute-batch-service-logs" [
+export def "compute-node-upload-batch-service-logs" [
   pool_id: string
   node_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3518,7 +3518,7 @@ export def "pools-nodes-uploadbatchservicelogs upload-compute-batch-service-logs
 #
 # POST /pools/{poolId}/nodes/{nodeId}/users
 # operationId: ComputeNode_AddUser
-export def "pools-nodes-users create-compute" [
+export def "compute-node-add-user" [
   pool_id: string
   node_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3572,7 +3572,7 @@ export def "pools-nodes-users create-compute" [
 #
 # DELETE /pools/{poolId}/nodes/{nodeId}/users/{userName}
 # operationId: ComputeNode_DeleteUser
-export def "pools-nodes-users delete-compute" [
+export def "compute-node-delete-user" [
   pool_id: string
   node_id: string
   user_name: string
@@ -3620,7 +3620,7 @@ export def "pools-nodes-users delete-compute" [
 #
 # PUT /pools/{poolId}/nodes/{nodeId}/users/{userName}
 # operationId: ComputeNode_UpdateUser
-export def "pools-nodes-users update-compute" [
+export def "compute-node-update-user" [
   pool_id: string
   node_id: string
   user_name: string
@@ -3674,7 +3674,7 @@ export def "pools-nodes-users update-compute" [
 #
 # POST /pools/{poolId}/removenodes
 # operationId: Pool_RemoveNodes
-export def "pools-remove-nodes delete" [
+export def "pool-remove-nodes" [
   pool_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3728,7 +3728,7 @@ export def "pools-remove-nodes delete" [
 #
 # POST /pools/{poolId}/resize
 # operationId: Pool_Resize
-export def "pools-resize resize" [
+export def "pool-resize" [
   pool_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3783,7 +3783,7 @@ export def "pools-resize resize" [
 #
 # POST /pools/{poolId}/stopresize
 # operationId: Pool_StopResize
-export def "pools-stopresize stop-resize" [
+export def "pool-stop-resize" [
   pool_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3835,7 +3835,7 @@ export def "pools-stopresize stop-resize" [
 # --certificateReferences item shape: {storeLocation?: "currentuser"|"localmachine", storeName?: string, thumbprint: string, thumbprintAlgorithm: string, visibility?: list<string>}
 # --metadata item shape: {name: string, value: string}
 # --startTask shape: {commandLine: string, containerSettings?: any, environmentSettings?: list, maxTaskRetryCount?: int, resourceFiles?: list, userIdentity?: any, waitForSuccess?: bool}
-export def "pools-update-properties update" [
+export def "pool-update-properties" [
   pool_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3886,7 +3886,7 @@ export def "pools-update-properties update" [
 #
 # GET /poolusagemetrics
 # operationId: Pool_ListUsageMetrics
-export def "poolusagemetrics list-pool-usage-metrics" [
+export def "pool-list-usage-metrics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3932,7 +3932,7 @@ export def "poolusagemetrics list-pool-usage-metrics" [
 #
 # GET /supportedimages
 # operationId: Account_ListSupportedImages
-export def "supportedimages list-account-supported-images" [
+export def "account-list-supported-images" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

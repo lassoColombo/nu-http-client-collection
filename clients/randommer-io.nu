@@ -110,7 +110,7 @@ def case-type-completer [] { ["LowerCase" "SentenceCase" "TitleCase" "UpperCase"
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "card get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-api-card" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -133,7 +133,7 @@ export def commands []: nothing -> table {
 # Get Card
 #
 # GET /api/Card
-export def "card get" [
+export def "get-api-card" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -171,7 +171,7 @@ export def "card get" [
 # Get available card types
 #
 # GET /api/Card/Types
-export def "card-types get" [
+export def "get-api-card-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -207,7 +207,7 @@ export def "card-types get" [
 # Get available countries
 #
 # GET /api/Finance/Countries
-export def "finance-countries get" [
+export def "get-api-finance-countries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -243,7 +243,7 @@ export def "finance-countries get" [
 # Get crypto address
 #
 # GET /api/Finance/CryptoAddress
-export def "finance-crypto-address get" [
+export def "get-api-finance-crypto-address" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -281,7 +281,7 @@ export def "finance-crypto-address get" [
 # Get available crypto types
 #
 # GET /api/Finance/CryptoAddress/Types
-export def "finance-crypto-address-types get" [
+export def "get-api-finance-crypto-address-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -317,7 +317,7 @@ export def "finance-crypto-address-types get" [
 # Get IBAN by countryCode
 #
 # GET /api/Finance/Iban/{countryCode}
-export def "finance-iban get" [
+export def "get-api-finance-iban-country-code" [
   country_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -353,7 +353,7 @@ export def "finance-iban get" [
 }
 
 # POST /api/Finance/Vat/Validator
-export def "finance-vat-validator create" [
+export def "post-api-finance-vat-validator" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -390,7 +390,7 @@ export def "finance-vat-validator create" [
 }
 
 # GET /api/Misc/Cultures
-export def "misc-cultures get" [
+export def "get-api-misc-cultures" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -424,7 +424,7 @@ export def "misc-cultures get" [
 }
 
 # GET /api/Misc/Random-Address
-export def "misc-random-address get" [
+export def "get-api-misc-random-address" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -463,7 +463,7 @@ export def "misc-random-address get" [
 # Get name
 #
 # GET /api/Name
-export def "name get" [
+export def "get-api-name" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -502,7 +502,7 @@ export def "name get" [
 # Generate brand name suggestions
 #
 # POST /api/Name/BrandName
-export def "name-brand-name create" [
+export def "post-api-name-brand-name" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -540,7 +540,7 @@ export def "name-brand-name create" [
 # Get business names for a specific culture
 #
 # POST /api/Name/BusinessName
-export def "name-business-name create" [
+export def "post-api-name-business-name" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -579,7 +579,7 @@ export def "name-business-name create" [
 # Get available cultures
 #
 # GET /api/Name/Cultures
-export def "name-cultures get" [
+export def "get-api-name-cultures" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -615,7 +615,7 @@ export def "name-cultures get" [
 # Get business name suggestions
 #
 # GET /api/Name/Suggestions
-export def "name-suggestions get" [
+export def "get-api-name-suggestions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -653,7 +653,7 @@ export def "name-suggestions get" [
 # Get available countries
 #
 # GET /api/Phone/Countries
-export def "phone-countries get" [
+export def "get-api-phone-countries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -689,7 +689,7 @@ export def "phone-countries get" [
 # Get bulk telephone numbers for a country
 #
 # GET /api/Phone/Generate
-export def "phone-generate get" [
+export def "get-api-phone-generate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -728,7 +728,7 @@ export def "phone-generate get" [
 # Get bulk imeis
 #
 # GET /api/Phone/IMEI
-export def "phone-imei get" [
+export def "get-api-phone-imei" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -766,7 +766,7 @@ export def "phone-imei get" [
 # Validate a phone number
 #
 # GET /api/Phone/Validate
-export def "phone-validate get" [
+export def "get-api-phone-validate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -805,7 +805,7 @@ export def "phone-validate get" [
 # Generate a social security number
 #
 # GET /api/SocialNumber
-export def "social-number get" [
+export def "get-api-social-number" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -841,7 +841,7 @@ export def "social-number get" [
 # Validate VAT/identity numbers
 #
 # POST /api/SocialNumber
-export def "social-number create" [
+export def "post-api-social-number" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -884,7 +884,7 @@ export def "social-number create" [
 # Humanize text
 #
 # POST /api/Text/Humanize
-export def "text-humanize create" [
+export def "post-api-text-humanize" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -924,7 +924,7 @@ export def "text-humanize create" [
 # Generate lorem ipsum
 #
 # GET /api/Text/LoremIpsum
-export def "text-lorem-ipsum get" [
+export def "get-api-text-lorem-ipsum" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -964,7 +964,7 @@ export def "text-lorem-ipsum get" [
 # Generate password
 #
 # GET /api/Text/Password
-export def "text-password get" [
+export def "get-api-text-password" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1005,7 +1005,7 @@ export def "text-password get" [
 # Get reviews (max quantity=500)
 #
 # POST /api/Text/Review
-export def "text-review create" [
+export def "post-api-text-review" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1044,7 +1044,7 @@ export def "text-review create" [
 # Transform text
 #
 # POST /api/Text/Transform
-export def "text-transform create" [
+export def "post-api-text-transform" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

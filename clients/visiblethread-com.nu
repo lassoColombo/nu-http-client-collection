@@ -132,7 +132,7 @@ def auth-scheme-completer [] { ["apikey"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "dictionaries get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-dictionaries" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -155,7 +155,7 @@ export def commands []: nothing -> table {
 # Get your list of dictionaries
 #
 # GET /dictionaries
-export def "dictionaries get" [
+export def "get-dictionaries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -189,7 +189,7 @@ export def "dictionaries get" [
 #
 # POST /dictionaries
 # operationId: uploadDictionary
-export def "dictionaries upload-dictionary" [
+export def "upload-dictionary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -228,7 +228,7 @@ export def "dictionaries upload-dictionary" [
 # Get your list of documents
 #
 # GET /documents
-export def "documents get" [
+export def "get-documents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -262,7 +262,7 @@ export def "documents get" [
 #
 # POST /documents
 # operationId: uploadDoc
-export def "documents upload-doc" [
+export def "upload-doc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -304,7 +304,7 @@ export def "documents upload-doc" [
 #
 # GET /documents/{docId}
 # operationId: getDocById
-export def "documents get-doc" [
+export def "get-doc-by-id" [
   doc_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -339,7 +339,7 @@ export def "documents get-doc" [
 # Get your list of searches
 #
 # GET /searches
-export def "searches get" [
+export def "get-searches" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -373,7 +373,7 @@ export def "searches get" [
 #
 # POST /searches
 # operationId: runSearch
-export def "searches list-run" [
+export def "run-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -412,7 +412,7 @@ export def "searches list-run" [
 #
 # GET /searches/{docId}/{dictionaryId}
 # operationId: getSearchResults
-export def "searches get-list-results" [
+export def "get-search-results" [
   doc_id: int
   dictionary_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -451,7 +451,7 @@ export def "searches get-list-results" [
 # Get your list of scans
 #
 # GET /webscans
-export def "webscans get" [
+export def "get-webscans" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -487,7 +487,7 @@ export def "webscans get" [
 # operationId: runScan
 # --scanSettings shape: {longSentenceWordCount?: int, veryLongSentenceWordCount?: int}
 # --webUrls item shape: {url: string}
-export def "webscans create-run-scan" [
+export def "run-scan" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -527,7 +527,7 @@ export def "webscans create-run-scan" [
 #
 # GET /webscans/{scanId}
 # operationId: getScanById
-export def "webscans get-scan" [
+export def "get-scan-by-id" [
   scan_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -563,7 +563,7 @@ export def "webscans get-scan" [
 #
 # GET /webscans/{scanId}/webUrls/{urlId}
 # operationId: getScanUrlById
-export def "webscans-web-urls get-scan" [
+export def "get-scan-url-by-id" [
   scan_id: int
   url_id: int
   --base-url(-b): string@base-url-completer # API base URL

@@ -114,7 +114,7 @@ def status-completer-1 [] { ["active" "ended"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "flows list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-flow" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -138,7 +138,7 @@ export def commands []: nothing -> table {
 #
 # GET /v2/Flows
 # operationId: ListFlow
-export def "flows list" [
+export def "list-flow" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -176,7 +176,7 @@ export def "flows list" [
 #
 # POST /v2/Flows
 # operationId: CreateFlow
-export def "flows create" [
+export def "create-flow" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -218,7 +218,7 @@ export def "flows create" [
 #
 # POST /v2/Flows/Validate
 # operationId: UpdateFlowValidate
-export def "flows-validate update" [
+export def "update-flow-validate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -260,7 +260,7 @@ export def "flows-validate update" [
 #
 # GET /v2/Flows/{FlowSid}/Executions
 # operationId: ListExecution
-export def "flows-executions list" [
+export def "list-execution" [
   flow_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -302,7 +302,7 @@ export def "flows-executions list" [
 #
 # POST /v2/Flows/{FlowSid}/Executions
 # operationId: CreateExecution
-export def "flows-executions create" [
+export def "create-execution" [
   flow_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -345,7 +345,7 @@ export def "flows-executions create" [
 #
 # GET /v2/Flows/{FlowSid}/Executions/{ExecutionSid}/Context
 # operationId: FetchExecutionContext
-export def "flows-executions-context get" [
+export def "fetch-execution-context" [
   flow_sid: string
   execution_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -383,7 +383,7 @@ export def "flows-executions-context get" [
 #
 # GET /v2/Flows/{FlowSid}/Executions/{ExecutionSid}/Steps
 # operationId: ListExecutionStep
-export def "flows-executions-steps list" [
+export def "list-execution-step" [
   flow_sid: string
   execution_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -425,7 +425,7 @@ export def "flows-executions-steps list" [
 #
 # GET /v2/Flows/{FlowSid}/Executions/{ExecutionSid}/Steps/{Sid}
 # operationId: FetchExecutionStep
-export def "flows-executions-steps get" [
+export def "fetch-execution-step" [
   flow_sid: string
   execution_sid: string
   sid: string
@@ -465,7 +465,7 @@ export def "flows-executions-steps get" [
 #
 # GET /v2/Flows/{FlowSid}/Executions/{ExecutionSid}/Steps/{StepSid}/Context
 # operationId: FetchExecutionStepContext
-export def "flows-executions-steps-context get" [
+export def "fetch-execution-step-context" [
   flow_sid: string
   execution_sid: string
   step_sid: string
@@ -505,7 +505,7 @@ export def "flows-executions-steps-context get" [
 #
 # DELETE /v2/Flows/{FlowSid}/Executions/{Sid}
 # operationId: DeleteExecution
-export def "flows-executions delete" [
+export def "delete-execution" [
   flow_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -543,7 +543,7 @@ export def "flows-executions delete" [
 #
 # GET /v2/Flows/{FlowSid}/Executions/{Sid}
 # operationId: FetchExecution
-export def "flows-executions get" [
+export def "fetch-execution" [
   flow_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -581,7 +581,7 @@ export def "flows-executions get" [
 #
 # POST /v2/Flows/{FlowSid}/Executions/{Sid}
 # operationId: UpdateExecution
-export def "flows-executions update" [
+export def "update-execution" [
   flow_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -624,7 +624,7 @@ export def "flows-executions update" [
 #
 # DELETE /v2/Flows/{Sid}
 # operationId: DeleteFlow
-export def "flows delete" [
+export def "delete-flow" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -660,7 +660,7 @@ export def "flows delete" [
 #
 # GET /v2/Flows/{Sid}
 # operationId: FetchFlow
-export def "flows get" [
+export def "fetch-flow" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -696,7 +696,7 @@ export def "flows get" [
 #
 # POST /v2/Flows/{Sid}
 # operationId: UpdateFlow
-export def "flows update" [
+export def "update-flow" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -740,7 +740,7 @@ export def "flows update" [
 #
 # GET /v2/Flows/{Sid}/Revisions
 # operationId: ListFlowRevision
-export def "flows-revisions list" [
+export def "list-flow-revision" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -780,7 +780,7 @@ export def "flows-revisions list" [
 #
 # GET /v2/Flows/{Sid}/Revisions/{Revision}
 # operationId: FetchFlowRevision
-export def "flows-revisions get" [
+export def "fetch-flow-revision" [
   sid: string
   revision: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -818,7 +818,7 @@ export def "flows-revisions get" [
 #
 # GET /v2/Flows/{Sid}/TestUsers
 # operationId: FetchTestUser
-export def "flows-test-users get" [
+export def "fetch-test-user" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -854,7 +854,7 @@ export def "flows-test-users get" [
 #
 # POST /v2/Flows/{Sid}/TestUsers
 # operationId: UpdateTestUser
-export def "flows-test-users update" [
+export def "update-test-user" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

@@ -133,7 +133,7 @@ def serving-visibility-completer [] { ["PUBLIC" "UNLISTED" "VISIBILITY_UNSPECIFI
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta1-beaconinfo-get-forobserved get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "proximitybeacon-beaconinfo-getforobserved" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -158,7 +158,7 @@ export def commands []: nothing -> table {
 # POST /v1beta1/beaconinfo:getforobserved
 # operationId: proximitybeacon.beaconinfo.getforobserved
 # --observations item shape: {advertisedId?: record, telemetry?: string, timestampMs?: string}
-export def "v1beta1-beaconinfo-get-forobserved get" [
+export def "proximitybeacon-beaconinfo-getforobserved" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -209,7 +209,7 @@ export def "v1beta1-beaconinfo-get-forobserved get" [
 #
 # GET /v1beta1/beacons
 # operationId: proximitybeacon.beacons.list
-export def "v1beta1-beacons list" [
+export def "proximitybeacon-beacons-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -263,7 +263,7 @@ export def "v1beta1-beacons list" [
 # --ephemeralIdRegistration shape: {beaconEcdhPublicKey?: string, beaconIdentityKey?: string, initialClockValue?: string, initialEid?: string, rotationPeriodExponent?: int, serviceEcdhPublicKey?: string}
 # --indoorLevel shape: {name?: string}
 # --latLng shape: {latitude?: float, longitude?: float}
-export def "v1beta1-beacons-register create" [
+export def "proximitybeacon-beacons-register" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -324,7 +324,7 @@ export def "v1beta1-beacons-register create" [
 #
 # GET /v1beta1/eidparams
 # operationId: proximitybeacon.getEidparams
-export def "v1beta1-eidparams get" [
+export def "proximitybeacon-get-eidparams" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -370,7 +370,7 @@ export def "v1beta1-eidparams get" [
 #
 # GET /v1beta1/namespaces
 # operationId: proximitybeacon.namespaces.list
-export def "v1beta1-namespaces list" [
+export def "proximitybeacon-namespaces-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -417,7 +417,7 @@ export def "v1beta1-namespaces list" [
 #
 # DELETE /v1beta1/{attachmentName}
 # operationId: proximitybeacon.beacons.attachments.delete
-export def "v1beta1 delete-by-attachment-name" [
+export def "proximitybeacon-beacons-attachments-delete" [
   attachment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -466,7 +466,7 @@ export def "v1beta1 delete-by-attachment-name" [
 #
 # DELETE /v1beta1/{beaconName}
 # operationId: proximitybeacon.beacons.delete
-export def "v1beta1 delete-by-beacon-name" [
+export def "proximitybeacon-beacons-delete" [
   beacon_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -515,7 +515,7 @@ export def "v1beta1 delete-by-beacon-name" [
 #
 # GET /v1beta1/{beaconName}
 # operationId: proximitybeacon.beacons.get
-export def "v1beta1 get" [
+export def "proximitybeacon-beacons-get" [
   beacon_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -568,7 +568,7 @@ export def "v1beta1 get" [
 # --ephemeralIdRegistration shape: {beaconEcdhPublicKey?: string, beaconIdentityKey?: string, initialClockValue?: string, initialEid?: string, rotationPeriodExponent?: int, serviceEcdhPublicKey?: string}
 # --indoorLevel shape: {name?: string}
 # --latLng shape: {latitude?: float, longitude?: float}
-export def "v1beta1 update-by-beacon-name" [
+export def "proximitybeacon-beacons-update" [
   beacon_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -631,7 +631,7 @@ export def "v1beta1 update-by-beacon-name" [
 #
 # GET /v1beta1/{beaconName}/attachments
 # operationId: proximitybeacon.beacons.attachments.list
-export def "v1beta1-attachments list" [
+export def "proximitybeacon-beacons-attachments-list" [
   beacon_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -681,7 +681,7 @@ export def "v1beta1-attachments list" [
 #
 # POST /v1beta1/{beaconName}/attachments
 # operationId: proximitybeacon.beacons.attachments.create
-export def "v1beta1-attachments create" [
+export def "proximitybeacon-beacons-attachments-create" [
   beacon_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -738,7 +738,7 @@ export def "v1beta1-attachments create" [
 #
 # POST /v1beta1/{beaconName}/attachments:batchDelete
 # operationId: proximitybeacon.beacons.attachments.batchDelete
-export def "v1beta1-attachments-batch-delete delete" [
+export def "proximitybeacon-beacons-attachments-batch-delete" [
   beacon_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -788,7 +788,7 @@ export def "v1beta1-attachments-batch-delete delete" [
 #
 # GET /v1beta1/{beaconName}/diagnostics
 # operationId: proximitybeacon.beacons.diagnostics.list
-export def "v1beta1-diagnostics list" [
+export def "proximitybeacon-beacons-diagnostics-list" [
   beacon_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -840,7 +840,7 @@ export def "v1beta1-diagnostics list" [
 #
 # POST /v1beta1/{beaconName}:activate
 # operationId: proximitybeacon.beacons.activate
-export def "v1beta1 create-activate" [
+export def "proximitybeacon-beacons-activate" [
   beacon_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -889,7 +889,7 @@ export def "v1beta1 create-activate" [
 #
 # POST /v1beta1/{beaconName}:deactivate
 # operationId: proximitybeacon.beacons.deactivate
-export def "v1beta1 create-deactivate" [
+export def "proximitybeacon-beacons-deactivate" [
   beacon_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -938,7 +938,7 @@ export def "v1beta1 create-deactivate" [
 #
 # POST /v1beta1/{beaconName}:decommission
 # operationId: proximitybeacon.beacons.decommission
-export def "v1beta1 create-decommission" [
+export def "proximitybeacon-beacons-decommission" [
   beacon_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -987,7 +987,7 @@ export def "v1beta1 create-decommission" [
 #
 # PUT /v1beta1/{namespaceName}
 # operationId: proximitybeacon.namespaces.update
-export def "v1beta1 update-by-namespace-name" [
+export def "proximitybeacon-namespaces-update" [
   namespace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

@@ -97,7 +97,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "classifier-business-batch get-of-transaction-classification-results" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-a-batch-of-business-transaction-classification-results" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -121,7 +121,7 @@ export def commands []: nothing -> table {
 #
 # GET /classifier/business/batch/{id}
 # operationId: getABatchOfBusinessTransactionClassificationResults
-export def "classifier-business-batch get-of-transaction-classification-results" [
+export def "get-a-batch-of-business-transaction-classification-results" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -157,7 +157,7 @@ export def "classifier-business-batch get-of-transaction-classification-results"
 #
 # GET /classifier/consumer/batch/{id}
 # operationId: getABatchOfConsumerTransactionClassificationResults
-export def "classifier-consumer-batch get-of-transaction-classification-results" [
+export def "get-a-batch-of-consumer-transaction-classification-results" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

@@ -117,7 +117,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta1-text-synthesize create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "texttospeech-text-synthesize" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -144,7 +144,7 @@ export def commands []: nothing -> table {
 # --audioConfig shape: {audioEncoding?: "AUDIO_ENCODING_UNSPECIFIED"|"LINEAR16"|"MP3"|"MP3_64_KBPS"|"OGG_OPUS"|"MULAW"|"ALAW", effectsProfileId?: list<string>, pitch?: float, sampleRateHertz?: int, speakingRate?: float, volumeGainDb?: float}
 # --input shape: {ssml?: string, text?: string}
 # --voice shape: {customVoice?: record, languageCode?: string, name?: string, ssmlGender?: "SSML_VOICE_GENDER_UNSPECIFIED"|"MALE"|"FEMALE"|"NEUTRAL"}
-export def "v1beta1-text-synthesize create" [
+export def "texttospeech-text-synthesize" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -197,7 +197,7 @@ export def "v1beta1-text-synthesize create" [
 #
 # GET /v1beta1/voices
 # operationId: texttospeech.voices.list
-export def "v1beta1-voices list" [
+export def "texttospeech-voices-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -244,7 +244,7 @@ export def "v1beta1-voices list" [
 #
 # GET /v1beta1/{name}
 # operationId: texttospeech.projects.locations.operations.get
-export def "v1beta1 get" [
+export def "texttospeech-projects-locations-operations-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -292,7 +292,7 @@ export def "v1beta1 get" [
 #
 # GET /v1beta1/{name}/operations
 # operationId: texttospeech.projects.locations.operations.list
-export def "v1beta1-operations list" [
+export def "texttospeech-projects-locations-operations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -346,7 +346,7 @@ export def "v1beta1-operations list" [
 # --audioConfig shape: {audioEncoding?: "AUDIO_ENCODING_UNSPECIFIED"|"LINEAR16"|"MP3"|"MP3_64_KBPS"|"OGG_OPUS"|"MULAW"|"ALAW", effectsProfileId?: list<string>, pitch?: float, sampleRateHertz?: int, speakingRate?: float, volumeGainDb?: float}
 # --input shape: {ssml?: string, text?: string}
 # --voice shape: {customVoice?: record, languageCode?: string, name?: string, ssmlGender?: "SSML_VOICE_GENDER_UNSPECIFIED"|"MALE"|"FEMALE"|"NEUTRAL"}
-export def "v1beta1 create-synthesize-long-audio" [
+export def "texttospeech-projects-locations-synthesize-long-audio" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

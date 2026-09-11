@@ -136,7 +136,7 @@ def serving-status-completer-1 [] { ["SERVING" "SERVING_STATUS_UNSPECIFIED" "STO
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta-apps create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "appengine-apps-create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -163,7 +163,7 @@ export def commands []: nothing -> table {
 # --dispatchRules item shape: {domain?: string, path?: string, service?: string}
 # --featureSettings shape: {splitHealthChecks?: bool, useContainerOptimizedOs?: bool}
 # --iap shape: {enabled?: bool, oauth2ClientId?: string, oauth2ClientSecret?: string}
-export def "v1beta-apps create" [
+export def "appengine-apps-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -223,7 +223,7 @@ export def "v1beta-apps create" [
 #
 # GET /v1beta/apps/{appsId}
 # operationId: appengine.apps.get
-export def "v1beta-apps get" [
+export def "appengine-apps-get" [
   apps_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -274,7 +274,7 @@ export def "v1beta-apps get" [
 # --dispatchRules item shape: {domain?: string, path?: string, service?: string}
 # --featureSettings shape: {splitHealthChecks?: bool, useContainerOptimizedOs?: bool}
 # --iap shape: {enabled?: bool, oauth2ClientId?: string, oauth2ClientSecret?: string}
-export def "v1beta-apps update" [
+export def "appengine-apps-patch" [
   apps_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -336,7 +336,7 @@ export def "v1beta-apps update" [
 #
 # GET /v1beta/apps/{appsId}/authorizedCertificates
 # operationId: appengine.apps.authorizedCertificates.list
-export def "v1beta-apps-authorized-certificates list" [
+export def "appengine-apps-authorized-certificates-list" [
   apps_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -389,7 +389,7 @@ export def "v1beta-apps-authorized-certificates list" [
 # operationId: appengine.apps.authorizedCertificates.create
 # --certificateRawData shape: {privateKey?: string, publicCertificate?: string}
 # --managedCertificate shape: {lastRenewalTime?: string, status?: "MANAGEMENT_STATUS_UNSPECIFIED"|"OK"|"PENDING"|"FAILED_RETRYING_NOT_VISIBLE"|"FAILED_PERMANENT"|"FAILED_RETRYING_CAA_FORBIDDEN"|"FAILED_RETRYING_CAA_CHECKING"}
-export def "v1beta-apps-authorized-certificates create" [
+export def "appengine-apps-authorized-certificates-create" [
   apps_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -449,7 +449,7 @@ export def "v1beta-apps-authorized-certificates create" [
 #
 # DELETE /v1beta/apps/{appsId}/authorizedCertificates/{authorizedCertificatesId}
 # operationId: appengine.apps.authorizedCertificates.delete
-export def "v1beta-apps-authorized-certificates delete" [
+export def "appengine-apps-authorized-certificates-delete" [
   apps_id: string
   authorized_certificates_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -499,7 +499,7 @@ export def "v1beta-apps-authorized-certificates delete" [
 #
 # GET /v1beta/apps/{appsId}/authorizedCertificates/{authorizedCertificatesId}
 # operationId: appengine.apps.authorizedCertificates.get
-export def "v1beta-apps-authorized-certificates get" [
+export def "appengine-apps-authorized-certificates-get" [
   apps_id: string
   authorized_certificates_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -552,7 +552,7 @@ export def "v1beta-apps-authorized-certificates get" [
 # operationId: appengine.apps.authorizedCertificates.patch
 # --certificateRawData shape: {privateKey?: string, publicCertificate?: string}
 # --managedCertificate shape: {lastRenewalTime?: string, status?: "MANAGEMENT_STATUS_UNSPECIFIED"|"OK"|"PENDING"|"FAILED_RETRYING_NOT_VISIBLE"|"FAILED_PERMANENT"|"FAILED_RETRYING_CAA_FORBIDDEN"|"FAILED_RETRYING_CAA_CHECKING"}
-export def "v1beta-apps-authorized-certificates update" [
+export def "appengine-apps-authorized-certificates-patch" [
   apps_id: string
   authorized_certificates_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -615,7 +615,7 @@ export def "v1beta-apps-authorized-certificates update" [
 #
 # GET /v1beta/apps/{appsId}/authorizedDomains
 # operationId: appengine.apps.authorizedDomains.list
-export def "v1beta-apps-authorized-domains list" [
+export def "appengine-apps-authorized-domains-list" [
   apps_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -665,7 +665,7 @@ export def "v1beta-apps-authorized-domains list" [
 #
 # GET /v1beta/apps/{appsId}/domainMappings
 # operationId: appengine.apps.domainMappings.list
-export def "v1beta-apps-domain-mappings list" [
+export def "appengine-apps-domain-mappings-list" [
   apps_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -717,7 +717,7 @@ export def "v1beta-apps-domain-mappings list" [
 # operationId: appengine.apps.domainMappings.create
 # --resourceRecords item shape: {name?: string, rrdata?: string, type?: "A"|"AAAA"|"CNAME"}
 # --sslSettings shape: {certificateId?: string, pendingManagedCertificateId?: string, sslManagementType?: "AUTOMATIC"|"MANUAL"}
-export def "v1beta-apps-domain-mappings create" [
+export def "appengine-apps-domain-mappings-create" [
   apps_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -773,7 +773,7 @@ export def "v1beta-apps-domain-mappings create" [
 #
 # DELETE /v1beta/apps/{appsId}/domainMappings/{domainMappingsId}
 # operationId: appengine.apps.domainMappings.delete
-export def "v1beta-apps-domain-mappings delete" [
+export def "appengine-apps-domain-mappings-delete" [
   apps_id: string
   domain_mappings_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -823,7 +823,7 @@ export def "v1beta-apps-domain-mappings delete" [
 #
 # GET /v1beta/apps/{appsId}/domainMappings/{domainMappingsId}
 # operationId: appengine.apps.domainMappings.get
-export def "v1beta-apps-domain-mappings get" [
+export def "appengine-apps-domain-mappings-get" [
   apps_id: string
   domain_mappings_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -875,7 +875,7 @@ export def "v1beta-apps-domain-mappings get" [
 # operationId: appengine.apps.domainMappings.patch
 # --resourceRecords item shape: {name?: string, rrdata?: string, type?: "A"|"AAAA"|"CNAME"}
 # --sslSettings shape: {certificateId?: string, pendingManagedCertificateId?: string, sslManagementType?: "AUTOMATIC"|"MANUAL"}
-export def "v1beta-apps-domain-mappings update" [
+export def "appengine-apps-domain-mappings-patch" [
   apps_id: string
   domain_mappings_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -933,7 +933,7 @@ export def "v1beta-apps-domain-mappings update" [
 #
 # GET /v1beta/apps/{appsId}/firewall/ingressRules
 # operationId: appengine.apps.firewall.ingressRules.list
-export def "v1beta-apps-firewall-ingress-rules list" [
+export def "appengine-apps-firewall-ingress-rules-list" [
   apps_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -984,7 +984,7 @@ export def "v1beta-apps-firewall-ingress-rules list" [
 #
 # POST /v1beta/apps/{appsId}/firewall/ingressRules
 # operationId: appengine.apps.firewall.ingressRules.create
-export def "v1beta-apps-firewall-ingress-rules create" [
+export def "appengine-apps-firewall-ingress-rules-create" [
   apps_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1039,7 +1039,7 @@ export def "v1beta-apps-firewall-ingress-rules create" [
 #
 # DELETE /v1beta/apps/{appsId}/firewall/ingressRules/{ingressRulesId}
 # operationId: appengine.apps.firewall.ingressRules.delete
-export def "v1beta-apps-firewall-ingress-rules delete" [
+export def "appengine-apps-firewall-ingress-rules-delete" [
   apps_id: string
   ingress_rules_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1089,7 +1089,7 @@ export def "v1beta-apps-firewall-ingress-rules delete" [
 #
 # GET /v1beta/apps/{appsId}/firewall/ingressRules/{ingressRulesId}
 # operationId: appengine.apps.firewall.ingressRules.get
-export def "v1beta-apps-firewall-ingress-rules get" [
+export def "appengine-apps-firewall-ingress-rules-get" [
   apps_id: string
   ingress_rules_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1139,7 +1139,7 @@ export def "v1beta-apps-firewall-ingress-rules get" [
 #
 # PATCH /v1beta/apps/{appsId}/firewall/ingressRules/{ingressRulesId}
 # operationId: appengine.apps.firewall.ingressRules.patch
-export def "v1beta-apps-firewall-ingress-rules update" [
+export def "appengine-apps-firewall-ingress-rules-patch" [
   apps_id: string
   ingress_rules_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1198,7 +1198,7 @@ export def "v1beta-apps-firewall-ingress-rules update" [
 # POST /v1beta/apps/{appsId}/firewall/ingressRules:batchUpdate
 # operationId: appengine.apps.firewall.ingressRules.batchUpdate
 # --ingressRules item shape: {action?: "UNSPECIFIED_ACTION"|"ALLOW"|"DENY", description?: string, priority?: int, sourceRange?: string}
-export def "v1beta-apps-firewall-ingress-rules-batch-update update" [
+export def "appengine-apps-firewall-ingress-rules-batch-update" [
   apps_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1250,7 +1250,7 @@ export def "v1beta-apps-firewall-ingress-rules-batch-update update" [
 #
 # GET /v1beta/apps/{appsId}/locations
 # operationId: appengine.apps.locations.list
-export def "v1beta-apps-locations list" [
+export def "appengine-apps-locations-list" [
   apps_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1301,7 +1301,7 @@ export def "v1beta-apps-locations list" [
 #
 # GET /v1beta/apps/{appsId}/locations/{locationsId}
 # operationId: appengine.apps.locations.get
-export def "v1beta-apps-locations get" [
+export def "appengine-apps-locations-get" [
   apps_id: string
   locations_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1351,7 +1351,7 @@ export def "v1beta-apps-locations get" [
 #
 # GET /v1beta/apps/{appsId}/operations
 # operationId: appengine.apps.operations.list
-export def "v1beta-apps-operations list" [
+export def "appengine-apps-operations-list" [
   apps_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1402,7 +1402,7 @@ export def "v1beta-apps-operations list" [
 #
 # GET /v1beta/apps/{appsId}/operations/{operationsId}
 # operationId: appengine.apps.operations.get
-export def "v1beta-apps-operations get" [
+export def "appengine-apps-operations-get" [
   apps_id: string
   operations_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1452,7 +1452,7 @@ export def "v1beta-apps-operations get" [
 #
 # GET /v1beta/apps/{appsId}/services
 # operationId: appengine.apps.services.list
-export def "v1beta-apps-services list" [
+export def "appengine-apps-services-list" [
   apps_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1502,7 +1502,7 @@ export def "v1beta-apps-services list" [
 #
 # DELETE /v1beta/apps/{appsId}/services/{servicesId}
 # operationId: appengine.apps.services.delete
-export def "v1beta-apps-services delete" [
+export def "appengine-apps-services-delete" [
   apps_id: string
   services_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1552,7 +1552,7 @@ export def "v1beta-apps-services delete" [
 #
 # GET /v1beta/apps/{appsId}/services/{servicesId}
 # operationId: appengine.apps.services.get
-export def "v1beta-apps-services get" [
+export def "appengine-apps-services-get" [
   apps_id: string
   services_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1604,7 +1604,7 @@ export def "v1beta-apps-services get" [
 # operationId: appengine.apps.services.patch
 # --networkSettings shape: {ingressTrafficAllowed?: "INGRESS_TRAFFIC_ALLOWED_UNSPECIFIED"|"INGRESS_TRAFFIC_ALLOWED_ALL"|"INGRESS_TRAFFIC_ALLOWED_INTERNAL_ONLY"|"INGRESS_TRAFFIC_ALLOWED_INTERNAL_AND_LB"}
 # --split shape: {allocations?: record, shardBy?: "UNSPECIFIED"|"COOKIE"|"IP"|"RANDOM"}
-export def "v1beta-apps-services update" [
+export def "appengine-apps-services-patch" [
   apps_id: string
   services_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1664,7 +1664,7 @@ export def "v1beta-apps-services update" [
 #
 # GET /v1beta/apps/{appsId}/services/{servicesId}/versions
 # operationId: appengine.apps.services.versions.list
-export def "v1beta-apps-services-versions list" [
+export def "appengine-apps-services-versions-list" [
   apps_id: string
   services_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1734,7 +1734,7 @@ export def "v1beta-apps-services-versions list" [
 # --readinessCheck shape: {appStartTimeout?: string, checkInterval?: string, failureThreshold?: int, host?: string, path?: string, successThreshold?: int, timeout?: string}
 # --resources shape: {cpu?: float, diskGb?: float, kmsKeyReference?: string, memoryGb?: float, volumes?: list}
 # --vpcAccessConnector shape: {egressSetting?: "EGRESS_SETTING_UNSPECIFIED"|"ALL_TRAFFIC"|"PRIVATE_IP_RANGES", name?: string}
-export def "v1beta-apps-services-versions create" [
+export def "appengine-apps-services-versions-create" [
   apps_id: string
   services_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1828,7 +1828,7 @@ export def "v1beta-apps-services-versions create" [
 #
 # DELETE /v1beta/apps/{appsId}/services/{servicesId}/versions/{versionsId}
 # operationId: appengine.apps.services.versions.delete
-export def "v1beta-apps-services-versions delete" [
+export def "appengine-apps-services-versions-delete" [
   apps_id: string
   services_id: string
   versions_id: string
@@ -1880,7 +1880,7 @@ export def "v1beta-apps-services-versions delete" [
 #
 # GET /v1beta/apps/{appsId}/services/{servicesId}/versions/{versionsId}
 # operationId: appengine.apps.services.versions.get
-export def "v1beta-apps-services-versions get" [
+export def "appengine-apps-services-versions-get" [
   apps_id: string
   services_id: string
   versions_id: string
@@ -1950,7 +1950,7 @@ export def "v1beta-apps-services-versions get" [
 # --readinessCheck shape: {appStartTimeout?: string, checkInterval?: string, failureThreshold?: int, host?: string, path?: string, successThreshold?: int, timeout?: string}
 # --resources shape: {cpu?: float, diskGb?: float, kmsKeyReference?: string, memoryGb?: float, volumes?: list}
 # --vpcAccessConnector shape: {egressSetting?: "EGRESS_SETTING_UNSPECIFIED"|"ALL_TRAFFIC"|"PRIVATE_IP_RANGES", name?: string}
-export def "v1beta-apps-services-versions update" [
+export def "appengine-apps-services-versions-patch" [
   apps_id: string
   services_id: string
   versions_id: string
@@ -2047,7 +2047,7 @@ export def "v1beta-apps-services-versions update" [
 #
 # GET /v1beta/apps/{appsId}/services/{servicesId}/versions/{versionsId}/instances
 # operationId: appengine.apps.services.versions.instances.list
-export def "v1beta-apps-services-versions-instances list" [
+export def "appengine-apps-services-versions-instances-list" [
   apps_id: string
   services_id: string
   versions_id: string
@@ -2101,7 +2101,7 @@ export def "v1beta-apps-services-versions-instances list" [
 #
 # DELETE /v1beta/apps/{appsId}/services/{servicesId}/versions/{versionsId}/instances/{instancesId}
 # operationId: appengine.apps.services.versions.instances.delete
-export def "v1beta-apps-services-versions-instances delete" [
+export def "appengine-apps-services-versions-instances-delete" [
   apps_id: string
   services_id: string
   versions_id: string
@@ -2155,7 +2155,7 @@ export def "v1beta-apps-services-versions-instances delete" [
 #
 # GET /v1beta/apps/{appsId}/services/{servicesId}/versions/{versionsId}/instances/{instancesId}
 # operationId: appengine.apps.services.versions.instances.get
-export def "v1beta-apps-services-versions-instances get" [
+export def "appengine-apps-services-versions-instances-get" [
   apps_id: string
   services_id: string
   versions_id: string
@@ -2209,7 +2209,7 @@ export def "v1beta-apps-services-versions-instances get" [
 #
 # POST /v1beta/apps/{appsId}/services/{servicesId}/versions/{versionsId}/instances/{instancesId}:debug
 # operationId: appengine.apps.services.versions.instances.debug
-export def "v1beta-apps-services-versions-instances create-debug" [
+export def "appengine-apps-services-versions-instances-debug" [
   apps_id: string
   services_id: string
   versions_id: string
@@ -2267,7 +2267,7 @@ export def "v1beta-apps-services-versions-instances create-debug" [
 #
 # POST /v1beta/apps/{appsId}:repair
 # operationId: appengine.apps.repair
-export def "v1beta-apps create-repair" [
+export def "appengine-apps-repair" [
   apps_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2319,7 +2319,7 @@ export def "v1beta-apps create-repair" [
 #
 # GET /v1beta/projects/{projectsId}/locations
 # operationId: appengine.projects.locations.list
-export def "v1beta-projects-locations list" [
+export def "appengine-projects-locations-list" [
   projects_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2370,7 +2370,7 @@ export def "v1beta-projects-locations list" [
 #
 # GET /v1beta/projects/{projectsId}/locations/{locationsId}
 # operationId: appengine.projects.locations.get
-export def "v1beta-projects-locations get" [
+export def "appengine-projects-locations-get" [
   projects_id: string
   locations_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2423,7 +2423,7 @@ export def "v1beta-projects-locations get" [
 # --dispatchRules item shape: {domain?: string, path?: string, service?: string}
 # --featureSettings shape: {splitHealthChecks?: bool, useContainerOptimizedOs?: bool}
 # --iap shape: {enabled?: bool, oauth2ClientId?: string, oauth2ClientSecret?: string}
-export def "v1beta-projects-locations-applications create" [
+export def "appengine-projects-locations-applications-create" [
   projects_id: string
   locations_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2486,7 +2486,7 @@ export def "v1beta-projects-locations-applications create" [
 #
 # GET /v1beta/projects/{projectsId}/locations/{locationsId}/applications/{applicationsId}
 # operationId: appengine.projects.locations.applications.get
-export def "v1beta-projects-locations-applications get" [
+export def "appengine-projects-locations-applications-get" [
   projects_id: string
   locations_id: string
   applications_id: string
@@ -2538,7 +2538,7 @@ export def "v1beta-projects-locations-applications get" [
 #
 # POST /v1beta/projects/{projectsId}/locations/{locationsId}/applications/{applicationsId}:repair
 # operationId: appengine.projects.locations.applications.repair
-export def "v1beta-projects-locations-applications create-repair" [
+export def "appengine-projects-locations-applications-repair" [
   projects_id: string
   locations_id: string
   applications_id: string
@@ -2594,7 +2594,7 @@ export def "v1beta-projects-locations-applications create-repair" [
 #
 # GET /v1beta/projects/{projectsId}/locations/{locationsId}/operations
 # operationId: appengine.projects.locations.operations.list
-export def "v1beta-projects-locations-operations list" [
+export def "appengine-projects-locations-operations-list" [
   projects_id: string
   locations_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2647,7 +2647,7 @@ export def "v1beta-projects-locations-operations list" [
 #
 # GET /v1beta/projects/{projectsId}/locations/{locationsId}/operations/{operationsId}
 # operationId: appengine.projects.locations.operations.get
-export def "v1beta-projects-locations-operations get" [
+export def "appengine-projects-locations-operations-get" [
   projects_id: string
   locations_id: string
   operations_id: string

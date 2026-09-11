@@ -120,7 +120,7 @@ def include-external-completer [] { ["audio"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "albums get-multiple" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-multiple-albums" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -144,7 +144,7 @@ export def commands []: nothing -> table {
 #
 # GET /albums
 # operationId: get-multiple-albums
-export def "albums get-multiple" [
+export def "get-multiple-albums" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -181,7 +181,7 @@ export def "albums get-multiple" [
 #
 # GET /albums/{id}
 # operationId: get-an-album
-export def "albums get" [
+export def "get-an-album" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -219,7 +219,7 @@ export def "albums get" [
 #
 # GET /albums/{id}/tracks
 # operationId: get-an-albums-tracks
-export def "albums-tracks get" [
+export def "get-an-albums-tracks" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -259,7 +259,7 @@ export def "albums-tracks get" [
 #
 # GET /artists
 # operationId: get-multiple-artists
-export def "artists get-multiple" [
+export def "get-multiple-artists" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -295,7 +295,7 @@ export def "artists get-multiple" [
 #
 # GET /artists/{id}
 # operationId: get-an-artist
-export def "artists get" [
+export def "get-an-artist" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -331,7 +331,7 @@ export def "artists get" [
 #
 # GET /artists/{id}/albums
 # operationId: get-an-artists-albums
-export def "artists-albums get" [
+export def "get-an-artists-albums" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -372,7 +372,7 @@ export def "artists-albums get" [
 #
 # GET /artists/{id}/related-artists
 # operationId: get-an-artists-related-artists
-export def "artists-related-artists get" [
+export def "get-an-artists-related-artists" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -408,7 +408,7 @@ export def "artists-related-artists get" [
 #
 # GET /artists/{id}/top-tracks
 # operationId: get-an-artists-top-tracks
-export def "artists-top-tracks get" [
+export def "get-an-artists-top-tracks" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -446,7 +446,7 @@ export def "artists-top-tracks get" [
 #
 # GET /audio-analysis/{id}
 # operationId: get-audio-analysis
-export def "audio-analysis get" [
+export def "get-audio-analysis" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -482,7 +482,7 @@ export def "audio-analysis get" [
 #
 # GET /audio-features
 # operationId: get-several-audio-features
-export def "audio-features get-several" [
+export def "get-several-audio-features" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -518,7 +518,7 @@ export def "audio-features get-several" [
 #
 # GET /audio-features/{id}
 # operationId: get-audio-features
-export def "audio-features get" [
+export def "get-audio-features" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -554,7 +554,7 @@ export def "audio-features get" [
 #
 # GET /audiobooks
 # operationId: get-multiple-audiobooks
-export def "audiobooks get-multiple" [
+export def "get-multiple-audiobooks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -591,7 +591,7 @@ export def "audiobooks get-multiple" [
 #
 # GET /audiobooks/{id}
 # operationId: get-an-audiobook
-export def "audiobooks get" [
+export def "get-an-audiobook" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -629,7 +629,7 @@ export def "audiobooks get" [
 #
 # GET /audiobooks/{id}/chapters
 # operationId: get-audiobook-chapters
-export def "audiobooks-chapters get" [
+export def "get-audiobook-chapters" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -669,7 +669,7 @@ export def "audiobooks-chapters get" [
 #
 # GET /browse/categories
 # operationId: get-categories
-export def "browse-categories list" [
+export def "get-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -708,7 +708,7 @@ export def "browse-categories list" [
 #
 # GET /browse/categories/{category_id}
 # operationId: get-a-category
-export def "browse-categories get" [
+export def "get-a-category" [
   category_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -747,7 +747,7 @@ export def "browse-categories get" [
 #
 # GET /browse/categories/{category_id}/playlists
 # operationId: get-a-categories-playlists
-export def "browse-categories-playlists get" [
+export def "get-a-categories-playlists" [
   category_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -787,7 +787,7 @@ export def "browse-categories-playlists get" [
 #
 # GET /browse/featured-playlists
 # operationId: get-featured-playlists
-export def "browse-featured-playlists get" [
+export def "get-featured-playlists" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -827,7 +827,7 @@ export def "browse-featured-playlists get" [
 #
 # GET /browse/new-releases
 # operationId: get-new-releases
-export def "browse-new-releases get" [
+export def "get-new-releases" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -865,7 +865,7 @@ export def "browse-new-releases get" [
 #
 # GET /chapters
 # operationId: get-several-chapters
-export def "chapters get-several" [
+export def "get-several-chapters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -902,7 +902,7 @@ export def "chapters get-several" [
 #
 # GET /chapters/{id}
 # operationId: get-a-chapter
-export def "chapters get" [
+export def "get-a-chapter" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -940,7 +940,7 @@ export def "chapters get" [
 #
 # GET /episodes
 # operationId: get-multiple-episodes
-export def "episodes get-multiple" [
+export def "get-multiple-episodes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -977,7 +977,7 @@ export def "episodes get-multiple" [
 #
 # GET /episodes/{id}
 # operationId: get-an-episode
-export def "episodes get" [
+export def "get-an-episode" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1015,7 +1015,7 @@ export def "episodes get" [
 #
 # GET /markets
 # operationId: get-available-markets
-export def "markets get-available" [
+export def "get-available-markets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1049,7 +1049,7 @@ export def "markets get-available" [
 #
 # GET /me
 # operationId: get-current-users-profile
-export def "me get-users-profile" [
+export def "get-current-users-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1083,7 +1083,7 @@ export def "me get-users-profile" [
 #
 # DELETE /me/albums
 # operationId: remove-albums-user
-export def "me-albums delete-user" [
+export def "remove-albums-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1123,7 +1123,7 @@ export def "me-albums delete-user" [
 #
 # GET /me/albums
 # operationId: get-users-saved-albums
-export def "me-albums get-users-saved" [
+export def "get-users-saved-albums" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1161,7 +1161,7 @@ export def "me-albums get-users-saved" [
 #
 # PUT /me/albums
 # operationId: save-albums-user
-export def "me-albums update-save-user" [
+export def "save-albums-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1201,7 +1201,7 @@ export def "me-albums update-save-user" [
 #
 # GET /me/albums/contains
 # operationId: check-users-saved-albums
-export def "me-albums-contains check-users-saved" [
+export def "check-users-saved-albums" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1237,7 +1237,7 @@ export def "me-albums-contains check-users-saved" [
 #
 # DELETE /me/audiobooks
 # operationId: remove-audiobooks-user
-export def "me-audiobooks delete-user" [
+export def "remove-audiobooks-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1273,7 +1273,7 @@ export def "me-audiobooks delete-user" [
 #
 # GET /me/audiobooks
 # operationId: get-users-saved-audiobooks
-export def "me-audiobooks get-users-saved" [
+export def "get-users-saved-audiobooks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1310,7 +1310,7 @@ export def "me-audiobooks get-users-saved" [
 #
 # PUT /me/audiobooks
 # operationId: save-audiobooks-user
-export def "me-audiobooks update-save-user" [
+export def "save-audiobooks-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1346,7 +1346,7 @@ export def "me-audiobooks update-save-user" [
 #
 # GET /me/audiobooks/contains
 # operationId: check-users-saved-audiobooks
-export def "me-audiobooks-contains check-users-saved" [
+export def "check-users-saved-audiobooks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1382,7 +1382,7 @@ export def "me-audiobooks-contains check-users-saved" [
 #
 # DELETE /me/episodes
 # operationId: remove-episodes-user
-export def "me-episodes delete-user" [
+export def "remove-episodes-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1422,7 +1422,7 @@ export def "me-episodes delete-user" [
 #
 # GET /me/episodes
 # operationId: get-users-saved-episodes
-export def "me-episodes get-users-saved" [
+export def "get-users-saved-episodes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1460,7 +1460,7 @@ export def "me-episodes get-users-saved" [
 #
 # PUT /me/episodes
 # operationId: save-episodes-user
-export def "me-episodes update-save-user" [
+export def "save-episodes-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1500,7 +1500,7 @@ export def "me-episodes update-save-user" [
 #
 # GET /me/episodes/contains
 # operationId: check-users-saved-episodes
-export def "me-episodes-contains check-users-saved" [
+export def "check-users-saved-episodes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1536,7 +1536,7 @@ export def "me-episodes-contains check-users-saved" [
 #
 # DELETE /me/following
 # operationId: unfollow-artists-users
-export def "me-following delete-unfollow-artists-users" [
+export def "unfollow-artists-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1577,7 +1577,7 @@ export def "me-following delete-unfollow-artists-users" [
 #
 # GET /me/following
 # operationId: get-followed
-export def "me-following get-followed" [
+export def "get-followed" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1615,7 +1615,7 @@ export def "me-following get-followed" [
 #
 # PUT /me/following
 # operationId: follow-artists-users
-export def "me-following update-follow-artists-users" [
+export def "follow-artists-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1656,7 +1656,7 @@ export def "me-following update-follow-artists-users" [
 #
 # GET /me/following/contains
 # operationId: check-current-user-follows
-export def "me-following-contains check-get-user-follows" [
+export def "check-current-user-follows" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1693,7 +1693,7 @@ export def "me-following-contains check-get-user-follows" [
 #
 # GET /me/player
 # operationId: get-information-about-the-users-current-playback
-export def "me-player get-information-about-users-playback" [
+export def "get-information-about-the-users-current-playback" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1730,7 +1730,7 @@ export def "me-player get-information-about-users-playback" [
 #
 # PUT /me/player
 # operationId: transfer-a-users-playback
-export def "me-player update-transfer-users-playback" [
+export def "transfer-a-users-playback" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1769,7 +1769,7 @@ export def "me-player update-transfer-users-playback" [
 #
 # GET /me/player/currently-playing
 # operationId: get-the-users-currently-playing-track
-export def "me-player-currently-playing get-users-track" [
+export def "get-the-users-currently-playing-track" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1806,7 +1806,7 @@ export def "me-player-currently-playing get-users-track" [
 #
 # GET /me/player/devices
 # operationId: get-a-users-available-devices
-export def "me-player-devices get-users-available" [
+export def "get-a-users-available-devices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1840,7 +1840,7 @@ export def "me-player-devices get-users-available" [
 #
 # POST /me/player/next
 # operationId: skip-users-playback-to-next-track
-export def "me-player-next create-skip-users-playback-to-track" [
+export def "skip-users-playback-to-next-track" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1876,7 +1876,7 @@ export def "me-player-next create-skip-users-playback-to-track" [
 #
 # PUT /me/player/pause
 # operationId: pause-a-users-playback
-export def "me-player-pause pause-users-playback" [
+export def "pause-a-users-playback" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1912,7 +1912,7 @@ export def "me-player-pause pause-users-playback" [
 #
 # PUT /me/player/play
 # operationId: start-a-users-playback
-export def "me-player-play start-users-playback" [
+export def "start-a-users-playback" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1955,7 +1955,7 @@ export def "me-player-play start-users-playback" [
 #
 # POST /me/player/previous
 # operationId: skip-users-playback-to-previous-track
-export def "me-player-previous create-skip-users-playback-to-track" [
+export def "skip-users-playback-to-previous-track" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1991,7 +1991,7 @@ export def "me-player-previous create-skip-users-playback-to-track" [
 #
 # GET /me/player/queue
 # operationId: get-queue
-export def "me-player-queue get" [
+export def "get-queue" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2025,7 +2025,7 @@ export def "me-player-queue get" [
 #
 # POST /me/player/queue
 # operationId: add-to-queue
-export def "me-player-queue create" [
+export def "add-to-queue" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2062,7 +2062,7 @@ export def "me-player-queue create" [
 #
 # GET /me/player/recently-played
 # operationId: get-recently-played
-export def "me-player-recently-played get" [
+export def "get-recently-played" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2100,7 +2100,7 @@ export def "me-player-recently-played get" [
 #
 # PUT /me/player/repeat
 # operationId: set-repeat-mode-on-users-playback
-export def "me-player-repeat update-mode-on-users-playback" [
+export def "set-repeat-mode-on-users-playback" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2137,7 +2137,7 @@ export def "me-player-repeat update-mode-on-users-playback" [
 #
 # PUT /me/player/seek
 # operationId: seek-to-position-in-currently-playing-track
-export def "me-player-seek update-to-position-in-currently-playing-track" [
+export def "seek-to-position-in-currently-playing-track" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2174,7 +2174,7 @@ export def "me-player-seek update-to-position-in-currently-playing-track" [
 #
 # PUT /me/player/shuffle
 # operationId: toggle-shuffle-for-users-playback
-export def "me-player-shuffle update-toggle-for-users-playback" [
+export def "toggle-shuffle-for-users-playback" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2211,7 +2211,7 @@ export def "me-player-shuffle update-toggle-for-users-playback" [
 #
 # PUT /me/player/volume
 # operationId: set-volume-for-users-playback
-export def "me-player-volume update-for-users-playback" [
+export def "set-volume-for-users-playback" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2248,7 +2248,7 @@ export def "me-player-volume update-for-users-playback" [
 #
 # GET /me/playlists
 # operationId: get-a-list-of-current-users-playlists
-export def "me-playlists get-list-of-users" [
+export def "get-a-list-of-current-users-playlists" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2285,7 +2285,7 @@ export def "me-playlists get-list-of-users" [
 #
 # DELETE /me/shows
 # operationId: remove-shows-user
-export def "me-shows delete-user" [
+export def "remove-shows-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2322,7 +2322,7 @@ export def "me-shows delete-user" [
 #
 # GET /me/shows
 # operationId: get-users-saved-shows
-export def "me-shows get-users-saved" [
+export def "get-users-saved-shows" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2359,7 +2359,7 @@ export def "me-shows get-users-saved" [
 #
 # PUT /me/shows
 # operationId: save-shows-user
-export def "me-shows update-save-user" [
+export def "save-shows-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2395,7 +2395,7 @@ export def "me-shows update-save-user" [
 #
 # GET /me/shows/contains
 # operationId: check-users-saved-shows
-export def "me-shows-contains check-users-saved" [
+export def "check-users-saved-shows" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2431,7 +2431,7 @@ export def "me-shows-contains check-users-saved" [
 #
 # GET /me/top/{type}
 # operationId: get-users-top-artists-and-tracks
-export def "me-top get-users-artists-and-tracks" [
+export def "get-users-top-artists-and-tracks" [
   type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2471,7 +2471,7 @@ export def "me-top get-users-artists-and-tracks" [
 #
 # DELETE /me/tracks
 # operationId: remove-tracks-user
-export def "me-tracks delete-user" [
+export def "remove-tracks-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2511,7 +2511,7 @@ export def "me-tracks delete-user" [
 #
 # GET /me/tracks
 # operationId: get-users-saved-tracks
-export def "me-tracks get-users-saved" [
+export def "get-users-saved-tracks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2549,7 +2549,7 @@ export def "me-tracks get-users-saved" [
 #
 # PUT /me/tracks
 # operationId: save-tracks-user
-export def "me-tracks update-save-user" [
+export def "save-tracks-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2589,7 +2589,7 @@ export def "me-tracks update-save-user" [
 #
 # GET /me/tracks/contains
 # operationId: check-users-saved-tracks
-export def "me-tracks-contains check-users-saved" [
+export def "check-users-saved-tracks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2625,7 +2625,7 @@ export def "me-tracks-contains check-users-saved" [
 #
 # GET /playlists/{playlist_id}
 # operationId: get-playlist
-export def "playlists get" [
+export def "get-playlist" [
   playlist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2665,7 +2665,7 @@ export def "playlists get" [
 #
 # PUT /playlists/{playlist_id}
 # operationId: change-playlist-details
-export def "playlists update-change-details" [
+export def "change-playlist-details" [
   playlist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2708,7 +2708,7 @@ export def "playlists update-change-details" [
 #
 # DELETE /playlists/{playlist_id}/followers
 # operationId: unfollow-playlist
-export def "playlists-followers delete-unfollow" [
+export def "unfollow-playlist" [
   playlist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2744,7 +2744,7 @@ export def "playlists-followers delete-unfollow" [
 #
 # PUT /playlists/{playlist_id}/followers
 # operationId: follow-playlist
-export def "playlists-followers update-follow" [
+export def "follow-playlist" [
   playlist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2784,7 +2784,7 @@ export def "playlists-followers update-follow" [
 #
 # GET /playlists/{playlist_id}/followers/contains
 # operationId: check-if-user-follows-playlist
-export def "playlists-followers-contains check-if-user-follows" [
+export def "check-if-user-follows-playlist" [
   playlist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2822,7 +2822,7 @@ export def "playlists-followers-contains check-if-user-follows" [
 #
 # GET /playlists/{playlist_id}/images
 # operationId: get-playlist-cover
-export def "playlists-images get-cover" [
+export def "get-playlist-cover" [
   playlist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2858,7 +2858,7 @@ export def "playlists-images get-cover" [
 #
 # PUT /playlists/{playlist_id}/images
 # operationId: upload-custom-playlist-cover
-export def "playlists-images upload-custom-cover" [
+export def "upload-custom-playlist-cover" [
   playlist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2895,7 +2895,7 @@ export def "playlists-images upload-custom-cover" [
 # DELETE /playlists/{playlist_id}/tracks
 # operationId: remove-tracks-playlist
 # --tracks item shape: {uri?: string}
-export def "playlists-tracks delete" [
+export def "remove-tracks-playlist" [
   playlist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2936,7 +2936,7 @@ export def "playlists-tracks delete" [
 #
 # GET /playlists/{playlist_id}/tracks
 # operationId: get-playlists-tracks
-export def "playlists-tracks get" [
+export def "get-playlists-tracks" [
   playlist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2978,7 +2978,7 @@ export def "playlists-tracks get" [
 #
 # POST /playlists/{playlist_id}/tracks
 # operationId: add-tracks-to-playlist
-export def "playlists-tracks create" [
+export def "add-tracks-to-playlist" [
   playlist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3022,7 +3022,7 @@ export def "playlists-tracks create" [
 #
 # PUT /playlists/{playlist_id}/tracks
 # operationId: reorder-or-replace-playlists-tracks
-export def "playlists-tracks update-reorder-or" [
+export def "reorder-or-replace-playlists-tracks" [
   playlist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3068,7 +3068,7 @@ export def "playlists-tracks update-reorder-or" [
 #
 # GET /recommendations
 # operationId: get-recommendations
-export def "recommendations get" [
+export def "get-recommendations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3150,7 +3150,7 @@ export def "recommendations get" [
 #
 # GET /recommendations/available-genre-seeds
 # operationId: get-recommendation-genres
-export def "recommendations-available-genre-seeds get" [
+export def "get-recommendation-genres" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3184,7 +3184,7 @@ export def "recommendations-available-genre-seeds get" [
 #
 # GET /search
 # operationId: search
-export def "search list" [
+export def "search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3225,7 +3225,7 @@ export def "search list" [
 #
 # GET /shows
 # operationId: get-multiple-shows
-export def "shows get-multiple" [
+export def "get-multiple-shows" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3262,7 +3262,7 @@ export def "shows get-multiple" [
 #
 # GET /shows/{id}
 # operationId: get-a-show
-export def "shows get" [
+export def "get-a-show" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3300,7 +3300,7 @@ export def "shows get" [
 #
 # GET /shows/{id}/episodes
 # operationId: get-a-shows-episodes
-export def "shows-episodes get" [
+export def "get-a-shows-episodes" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3340,7 +3340,7 @@ export def "shows-episodes get" [
 #
 # GET /tracks
 # operationId: get-several-tracks
-export def "tracks get-several" [
+export def "get-several-tracks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3377,7 +3377,7 @@ export def "tracks get-several" [
 #
 # GET /tracks/{id}
 # operationId: get-track
-export def "tracks get" [
+export def "get-track" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3415,7 +3415,7 @@ export def "tracks get" [
 #
 # GET /users/{user_id}
 # operationId: get-users-profile
-export def "users get-profile" [
+export def "get-users-profile" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3451,7 +3451,7 @@ export def "users get-profile" [
 #
 # GET /users/{user_id}/playlists
 # operationId: get-list-users-playlists
-export def "users-playlists get-list" [
+export def "get-list-users-playlists" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3490,7 +3490,7 @@ export def "users-playlists get-list" [
 #
 # POST /users/{user_id}/playlists
 # operationId: create-playlist
-export def "users-playlists create" [
+export def "create-playlist" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

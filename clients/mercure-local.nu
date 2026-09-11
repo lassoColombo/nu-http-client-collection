@@ -105,7 +105,7 @@ def auth-scheme-completer [] { ["bearer" "cookie-mercureAuthorization"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "well-known-mercure get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-well-known-mercure" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -129,7 +129,7 @@ export def commands []: nothing -> table {
 #
 # GET /.well-known/mercure
 # Docs: https://mercure.rocks/spec#subscription — Subscription specification
-export def "well-known-mercure get" [
+export def "get-well-known-mercure" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -169,7 +169,7 @@ export def "well-known-mercure get" [
 #
 # POST /.well-known/mercure
 # Docs: https://mercure.rocks/spec#publication — Publishing specification
-export def "well-known-mercure create" [
+export def "post-well-known-mercure" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -213,7 +213,7 @@ export def "well-known-mercure create" [
 #
 # GET /.well-known/mercure/subscriptions
 # Docs: https://mercure.rocks/spec#subscription-api — Subscription API
-export def "well-known-mercure-subscriptions get" [
+export def "get-well-known-mercure-subscriptions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -247,7 +247,7 @@ export def "well-known-mercure-subscriptions get" [
 #
 # GET /.well-known/mercure/subscriptions/{topic}
 # Docs: https://mercure.rocks/spec#subscription-api — Subscription API
-export def "well-known-mercure-subscriptions get-by-topic" [
+export def "get-well-known-mercure-subscriptions-topic" [
   topic: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -283,7 +283,7 @@ export def "well-known-mercure-subscriptions get-by-topic" [
 #
 # GET /.well-known/mercure/subscriptions/{topic}/{subscriber}
 # Docs: https://mercure.rocks/spec#active-subscriptions — Subscription API
-export def "well-known-mercure-subscriptions get-by-topic-subscriber" [
+export def "get-well-known-mercure-subscriptions-topic-subscriber" [
   topic: string
   subscriber: string
   --base-url(-b): string@base-url-completer # API base URL

@@ -99,7 +99,7 @@ def auth-scheme-completer [] { ["ocp-apim-subscription-key" "query-key"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "all-teams list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "teams-all" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -123,7 +123,7 @@ export def commands []: nothing -> table {
 #
 # GET /{format}/AllTeams
 # operationId: TeamsAll
-export def "all-teams list" [
+export def "teams-all" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -159,7 +159,7 @@ export def "all-teams list" [
 #
 # GET /{format}/AreAnyGamesInProgress
 # operationId: AreGamesInProgress
-export def "are-any-games-in-progress get" [
+export def "are-games-in-progress" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -195,7 +195,7 @@ export def "are-any-games-in-progress get" [
 #
 # GET /{format}/Byes/{season}
 # operationId: ByeWeeks
-export def "byes get-weeks" [
+export def "bye-weeks" [
   format: string
   season: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -233,7 +233,7 @@ export def "byes get-weeks" [
 #
 # GET /{format}/CurrentSeason
 # operationId: SeasonCurrent
-export def "current-season get" [
+export def "season-current" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -269,7 +269,7 @@ export def "current-season get" [
 #
 # GET /{format}/CurrentWeek
 # operationId: WeekCurrent
-export def "current-week get" [
+export def "week-current" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -305,7 +305,7 @@ export def "current-week get" [
 #
 # GET /{format}/DepthCharts
 # operationId: DepthCharts
-export def "depth-charts get" [
+export def "depth-charts" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -341,7 +341,7 @@ export def "depth-charts get" [
 #
 # GET /{format}/FreeAgents
 # operationId: PlayerDetailsByFreeAgents
-export def "free-agents get-player-details" [
+export def "player-details-by-free-agents" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -377,7 +377,7 @@ export def "free-agents get-player-details" [
 #
 # GET /{format}/GameStats/{season}
 # operationId: GameStatsBySeasonDeprecatedUseTeamGameStatsInstead
-export def "game-stats stats-by-deprecated-use-team-instead" [
+export def "game-stats-by-season-deprecated-use-team-game-stats-instead" [
   format: string
   season: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -415,7 +415,7 @@ export def "game-stats stats-by-deprecated-use-team-instead" [
 #
 # GET /{format}/GameStatsByWeek/{season}/{week}
 # operationId: GameStatsByWeekDeprecatedUseTeamGameStatsInstead
-export def "game-stats-by-week stats-deprecated-use-team-instead" [
+export def "game-stats-by-week-deprecated-use-team-game-stats-instead" [
   format: string
   season: string
   week: string
@@ -455,7 +455,7 @@ export def "game-stats-by-week stats-deprecated-use-team-instead" [
 #
 # GET /{format}/LastCompletedSeason
 # operationId: SeasonLastCompleted
-export def "last-completed-season get" [
+export def "season-last-completed" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -491,7 +491,7 @@ export def "last-completed-season get" [
 #
 # GET /{format}/LastCompletedWeek
 # operationId: WeekLastCompleted
-export def "last-completed-week get" [
+export def "week-last-completed" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -527,7 +527,7 @@ export def "last-completed-week get" [
 #
 # GET /{format}/News
 # operationId: News
-export def "news get" [
+export def "news" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -563,7 +563,7 @@ export def "news get" [
 #
 # GET /{format}/NewsByDate/{date}
 # operationId: NewsByDate
-export def "news-by-date get" [
+export def "news-by-date" [
   format: string
   date: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -601,7 +601,7 @@ export def "news-by-date get" [
 #
 # GET /{format}/NewsByPlayerID/{playerid}
 # operationId: NewsByPlayer
-export def "news-by-player-id get" [
+export def "news-by-player" [
   format: string
   playerid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -639,7 +639,7 @@ export def "news-by-player-id get" [
 #
 # GET /{format}/NewsByTeam/{team}
 # operationId: NewsByTeam
-export def "news-by-team get" [
+export def "news-by-team" [
   format: string
   team: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -677,7 +677,7 @@ export def "news-by-team get" [
 #
 # GET /{format}/Ping/{seconds}
 # operationId: XPing
-export def "ping ping-x" [
+export def "x-ping" [
   format: string
   seconds: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -715,7 +715,7 @@ export def "ping ping-x" [
 #
 # GET /{format}/Player/{playerid}
 # operationId: PlayerDetailsByPlayer
-export def "player get-details" [
+export def "player-details-by-player" [
   format: string
   playerid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -753,7 +753,7 @@ export def "player get-details" [
 #
 # GET /{format}/Players
 # operationId: PlayerDetailsByAvailable
-export def "players get-details-by-available" [
+export def "player-details-by-available" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -789,7 +789,7 @@ export def "players get-details-by-available" [
 #
 # GET /{format}/Players/{team}
 # operationId: PlayerDetailsByTeam
-export def "players get-details" [
+export def "player-details-by-team" [
   format: string
   team: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -827,7 +827,7 @@ export def "players get-details" [
 #
 # GET /{format}/Referees
 # operationId: Referees
-export def "referees get" [
+export def "referees" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -863,7 +863,7 @@ export def "referees get" [
 #
 # GET /{format}/Rookies/{season}
 # operationId: PlayerDetailsByRookieDraftYear
-export def "rookies get-player-details-by-draft-year" [
+export def "player-details-by-rookie-draft-year" [
   format: string
   season: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -901,7 +901,7 @@ export def "rookies get-player-details-by-draft-year" [
 #
 # GET /{format}/Schedules/{season}
 # operationId: Schedule
-export def "schedules get" [
+export def "schedule" [
   format: string
   season: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -939,7 +939,7 @@ export def "schedules get" [
 #
 # GET /{format}/Scores/{season}
 # operationId: ScoresBySeason
-export def "scores get" [
+export def "scores-by-season" [
   format: string
   season: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -977,7 +977,7 @@ export def "scores get" [
 #
 # GET /{format}/ScoresByDate/{date}
 # operationId: ScoresByDate
-export def "scores-by-date get" [
+export def "scores-by-date" [
   format: string
   date: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1015,7 +1015,7 @@ export def "scores-by-date get" [
 #
 # GET /{format}/ScoresByWeek/{season}/{week}
 # operationId: ScoresByWeek
-export def "scores-by-week get" [
+export def "scores-by-week" [
   format: string
   season: string
   week: string
@@ -1055,7 +1055,7 @@ export def "scores-by-week get" [
 #
 # GET /{format}/SimulatedScores/{numberofplays}
 # operationId: ScoresByWeekSimulation
-export def "simulated-scores get-by-week-simulation" [
+export def "scores-by-week-simulation" [
   format: string
   numberofplays: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1093,7 +1093,7 @@ export def "simulated-scores get-by-week-simulation" [
 #
 # GET /{format}/Stadiums
 # operationId: Stadiums
-export def "stadiums get" [
+export def "stadiums" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1129,7 +1129,7 @@ export def "stadiums get" [
 #
 # GET /{format}/Standings/{season}
 # operationId: Standings
-export def "standings get" [
+export def "standings" [
   format: string
   season: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1167,7 +1167,7 @@ export def "standings get" [
 #
 # GET /{format}/TeamGameStats/{season}/{week}
 # operationId: TeamGameStats
-export def "team-game-stats stats" [
+export def "team-game-stats" [
   format: string
   season: string
   week: string
@@ -1207,7 +1207,7 @@ export def "team-game-stats stats" [
 #
 # GET /{format}/TeamGameStatsBySeason/{season}/{teamid}/{numberofgames}
 # operationId: TeamGameLogsBySeason
-export def "team-game-stats-by-season logs" [
+export def "team-game-logs-by-season" [
   format: string
   season: string
   teamid: string
@@ -1249,7 +1249,7 @@ export def "team-game-stats-by-season logs" [
 #
 # GET /{format}/TeamSeasonStats/{season}
 # operationId: TeamSeasonStats
-export def "team-season-stats stats" [
+export def "team-season-stats" [
   format: string
   season: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1287,7 +1287,7 @@ export def "team-season-stats stats" [
 #
 # GET /{format}/Teams
 # operationId: TeamsActive
-export def "teams get-active" [
+export def "teams-active" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1323,7 +1323,7 @@ export def "teams get-active" [
 #
 # GET /{format}/Teams/{season}
 # operationId: TeamsBySeason
-export def "teams get" [
+export def "teams-by-season" [
   format: string
   season: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1361,7 +1361,7 @@ export def "teams get" [
 #
 # GET /{format}/Timeframes/{type}
 # operationId: Timeframes
-export def "timeframes get" [
+export def "timeframes" [
   format: string
   type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1399,7 +1399,7 @@ export def "timeframes get" [
 #
 # GET /{format}/UpcomingSeason
 # operationId: SeasonUpcoming
-export def "upcoming-season get" [
+export def "season-upcoming" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1435,7 +1435,7 @@ export def "upcoming-season get" [
 #
 # GET /{format}/UpcomingWeek
 # operationId: WeekUpcoming
-export def "upcoming-week get" [
+export def "week-upcoming" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

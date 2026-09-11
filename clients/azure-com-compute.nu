@@ -125,7 +125,7 @@ def expand-completer [] { ["instanceView"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-compute-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -149,7 +149,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.Compute/operations
 # operationId: Operations_List
-export def "providers-microsoft-compute-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -185,7 +185,7 @@ export def "providers-microsoft-compute-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Compute/availabilitySets
 # operationId: AvailabilitySets_ListBySubscription
-export def "subscriptions-providers-microsoft-compute-availability-sets list" [
+export def "availability-sets-list-by-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -224,7 +224,7 @@ export def "subscriptions-providers-microsoft-compute-availability-sets list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Compute/hostGroups
 # operationId: DedicatedHostGroups_ListBySubscription
-export def "subscriptions-providers-microsoft-compute-host-groups list-dedicated" [
+export def "dedicated-host-groups-list-by-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -262,7 +262,7 @@ export def "subscriptions-providers-microsoft-compute-host-groups list-dedicated
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Compute/images
 # operationId: Images_List
-export def "subscriptions-providers-microsoft-compute-images list" [
+export def "images-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -300,7 +300,7 @@ export def "subscriptions-providers-microsoft-compute-images list" [
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Compute/locations/{location}/logAnalytics/apiAccess/getRequestRateByInterval
 # operationId: LogAnalytics_ExportRequestRateByInterval
-export def "subscriptions-providers-microsoft-compute-locations-log-analytics-api-access-get-request-rate-by-interval export" [
+export def "log-analytics-export-request-rate-by-interval" [
   subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -350,7 +350,7 @@ export def "subscriptions-providers-microsoft-compute-locations-log-analytics-ap
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Compute/locations/{location}/logAnalytics/apiAccess/getThrottledRequests
 # operationId: LogAnalytics_ExportThrottledRequests
-export def "subscriptions-providers-microsoft-compute-locations-log-analytics-api-access-get-throttled-requests export" [
+export def "log-analytics-export-throttled-requests" [
   subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -399,7 +399,7 @@ export def "subscriptions-providers-microsoft-compute-locations-log-analytics-ap
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Compute/locations/{location}/publishers
 # operationId: VirtualMachineImages_ListPublishers
-export def "subscriptions-providers-microsoft-compute-locations-publishers list-virtual-machine-images" [
+export def "virtual-machine-images-list-publishers" [
   subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -439,7 +439,7 @@ export def "subscriptions-providers-microsoft-compute-locations-publishers list-
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Compute/locations/{location}/publishers/{publisherName}/artifacttypes/vmextension/types
 # operationId: VirtualMachineExtensionImages_ListTypes
-export def "subscriptions-providers-microsoft-compute-locations-publishers-artifacttypes-vmextension-types list-virtual-machine-extension-images" [
+export def "virtual-machine-extension-images-list-types" [
   subscription_id: string
   location: string
   publisher_name: string
@@ -481,7 +481,7 @@ export def "subscriptions-providers-microsoft-compute-locations-publishers-artif
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Compute/locations/{location}/publishers/{publisherName}/artifacttypes/vmextension/types/{type}/versions
 # operationId: VirtualMachineExtensionImages_ListVersions
-export def "subscriptions-providers-microsoft-compute-locations-publishers-artifacttypes-vmextension-types-versions list-virtual-machine-extension-images" [
+export def "virtual-machine-extension-images-list-versions" [
   subscription_id: string
   location: string
   publisher_name: string
@@ -528,7 +528,7 @@ export def "subscriptions-providers-microsoft-compute-locations-publishers-artif
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Compute/locations/{location}/publishers/{publisherName}/artifacttypes/vmextension/types/{type}/versions/{version}
 # operationId: VirtualMachineExtensionImages_Get
-export def "subscriptions-providers-microsoft-compute-locations-publishers-artifacttypes-vmextension-types-versions get-virtual-machine-extension-images" [
+export def "virtual-machine-extension-images-get" [
   subscription_id: string
   location: string
   publisher_name: string
@@ -574,7 +574,7 @@ export def "subscriptions-providers-microsoft-compute-locations-publishers-artif
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Compute/locations/{location}/publishers/{publisherName}/artifacttypes/vmimage/offers
 # operationId: VirtualMachineImages_ListOffers
-export def "subscriptions-providers-microsoft-compute-locations-publishers-artifacttypes-vmimage-offers list-virtual-machine-images" [
+export def "virtual-machine-images-list-offers" [
   subscription_id: string
   location: string
   publisher_name: string
@@ -616,7 +616,7 @@ export def "subscriptions-providers-microsoft-compute-locations-publishers-artif
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Compute/locations/{location}/publishers/{publisherName}/artifacttypes/vmimage/offers/{offer}/skus
 # operationId: VirtualMachineImages_ListSkus
-export def "subscriptions-providers-microsoft-compute-locations-publishers-artifacttypes-vmimage-offers-skus list-virtual-machine-images" [
+export def "virtual-machine-images-list-skus" [
   subscription_id: string
   location: string
   publisher_name: string
@@ -660,7 +660,7 @@ export def "subscriptions-providers-microsoft-compute-locations-publishers-artif
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Compute/locations/{location}/publishers/{publisherName}/artifacttypes/vmimage/offers/{offer}/skus/{skus}/versions
 # operationId: VirtualMachineImages_List
-export def "subscriptions-providers-microsoft-compute-locations-publishers-artifacttypes-vmimage-offers-skus-versions list-virtual-machine-images" [
+export def "virtual-machine-images-list" [
   subscription_id: string
   location: string
   publisher_name: string
@@ -709,7 +709,7 @@ export def "subscriptions-providers-microsoft-compute-locations-publishers-artif
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Compute/locations/{location}/publishers/{publisherName}/artifacttypes/vmimage/offers/{offer}/skus/{skus}/versions/{version}
 # operationId: VirtualMachineImages_Get
-export def "subscriptions-providers-microsoft-compute-locations-publishers-artifacttypes-vmimage-offers-skus-versions get-virtual-machine-images" [
+export def "virtual-machine-images-get" [
   subscription_id: string
   location: string
   publisher_name: string
@@ -757,7 +757,7 @@ export def "subscriptions-providers-microsoft-compute-locations-publishers-artif
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Compute/locations/{location}/usages
 # operationId: Usage_List
-export def "subscriptions-providers-microsoft-compute-locations-usages list" [
+export def "usage-list" [
   subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -797,7 +797,7 @@ export def "subscriptions-providers-microsoft-compute-locations-usages list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Compute/locations/{location}/virtualMachines
 # operationId: VirtualMachines_ListByLocation
-export def "subscriptions-providers-microsoft-compute-locations-virtual-machines list" [
+export def "virtual-machines-list-by-location" [
   subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -837,7 +837,7 @@ export def "subscriptions-providers-microsoft-compute-locations-virtual-machines
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Compute/locations/{location}/vmSizes
 # operationId: VirtualMachineSizes_List
-export def "subscriptions-providers-microsoft-compute-locations-vm-sizes list-virtual-machine" [
+export def "virtual-machine-sizes-list" [
   subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -877,7 +877,7 @@ export def "subscriptions-providers-microsoft-compute-locations-vm-sizes list-vi
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Compute/proximityPlacementGroups
 # operationId: ProximityPlacementGroups_ListBySubscription
-export def "subscriptions-providers-microsoft-compute-proximity-placement-groups list" [
+export def "proximity-placement-groups-list-by-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -915,7 +915,7 @@ export def "subscriptions-providers-microsoft-compute-proximity-placement-groups
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Compute/virtualMachineScaleSets
 # operationId: VirtualMachineScaleSets_ListAll
-export def "subscriptions-providers-microsoft-compute-virtual-machine-scale-sets list" [
+export def "virtual-machine-scale-sets-list-all" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -953,7 +953,7 @@ export def "subscriptions-providers-microsoft-compute-virtual-machine-scale-sets
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Compute/virtualMachines
 # operationId: VirtualMachines_ListAll
-export def "subscriptions-providers-microsoft-compute-virtual-machines list" [
+export def "virtual-machines-list-all" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -991,7 +991,7 @@ export def "subscriptions-providers-microsoft-compute-virtual-machines list" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/availabilitySets
 # operationId: AvailabilitySets_List
-export def "subscriptions-resource-groups-providers-microsoft-compute-availability-sets list" [
+export def "availability-sets-list" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1031,7 +1031,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-availabili
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/availabilitySets/{availabilitySetName}
 # operationId: AvailabilitySets_Delete
-export def "subscriptions-resource-groups-providers-microsoft-compute-availability-sets delete" [
+export def "availability-sets-delete" [
   subscription_id: string
   resource_group_name: string
   availability_set_name: string
@@ -1073,7 +1073,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-availabili
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/availabilitySets/{availabilitySetName}
 # operationId: AvailabilitySets_Get
-export def "subscriptions-resource-groups-providers-microsoft-compute-availability-sets get" [
+export def "availability-sets-get" [
   subscription_id: string
   resource_group_name: string
   availability_set_name: string
@@ -1117,7 +1117,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-availabili
 # operationId: AvailabilitySets_Update
 # --properties shape: {platformFaultDomainCount?: int, platformUpdateDomainCount?: int, proximityPlacementGroup?: any, virtualMachines?: list}
 # --sku shape: {capacity?: int, name?: string, tier?: string}
-export def "subscriptions-resource-groups-providers-microsoft-compute-availability-sets update" [
+export def "availability-sets-update" [
   subscription_id: string
   resource_group_name: string
   availability_set_name: string
@@ -1167,7 +1167,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-availabili
 # operationId: AvailabilitySets_CreateOrUpdate
 # --properties shape: {platformFaultDomainCount?: int, platformUpdateDomainCount?: int, proximityPlacementGroup?: any, virtualMachines?: list}
 # --sku shape: {capacity?: int, name?: string, tier?: string}
-export def "subscriptions-resource-groups-providers-microsoft-compute-availability-sets create-or-update" [
+export def "availability-sets-create-or-update" [
   subscription_id: string
   resource_group_name: string
   availability_set_name: string
@@ -1216,7 +1216,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-availabili
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/availabilitySets/{availabilitySetName}/vmSizes
 # operationId: AvailabilitySets_ListAvailableSizes
-export def "subscriptions-resource-groups-providers-microsoft-compute-availability-sets-vm-sizes list-available" [
+export def "availability-sets-list-available-sizes" [
   subscription_id: string
   resource_group_name: string
   availability_set_name: string
@@ -1258,7 +1258,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-availabili
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/hostGroups
 # operationId: DedicatedHostGroups_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-compute-host-groups list-dedicated" [
+export def "dedicated-host-groups-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1298,7 +1298,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-host-group
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/hostGroups/{hostGroupName}
 # operationId: DedicatedHostGroups_Delete
-export def "subscriptions-resource-groups-providers-microsoft-compute-host-groups delete-dedicated" [
+export def "dedicated-host-groups-delete" [
   subscription_id: string
   resource_group_name: string
   host_group_name: string
@@ -1340,7 +1340,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-host-group
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/hostGroups/{hostGroupName}
 # operationId: DedicatedHostGroups_Get
-export def "subscriptions-resource-groups-providers-microsoft-compute-host-groups get-dedicated" [
+export def "dedicated-host-groups-get" [
   subscription_id: string
   resource_group_name: string
   host_group_name: string
@@ -1383,7 +1383,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-host-group
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/hostGroups/{hostGroupName}
 # operationId: DedicatedHostGroups_Update
 # --properties shape: {platformFaultDomainCount: int}
-export def "subscriptions-resource-groups-providers-microsoft-compute-host-groups update-dedicated" [
+export def "dedicated-host-groups-update" [
   subscription_id: string
   resource_group_name: string
   host_group_name: string
@@ -1432,7 +1432,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-host-group
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/hostGroups/{hostGroupName}
 # operationId: DedicatedHostGroups_CreateOrUpdate
 # --properties shape: {platformFaultDomainCount: int}
-export def "subscriptions-resource-groups-providers-microsoft-compute-host-groups create-dedicated-or-update" [
+export def "dedicated-host-groups-create-or-update" [
   subscription_id: string
   resource_group_name: string
   host_group_name: string
@@ -1481,7 +1481,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-host-group
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/hostGroups/{hostGroupName}/hosts
 # operationId: DedicatedHosts_ListByHostGroup
-export def "subscriptions-resource-groups-providers-microsoft-compute-host-groups-hosts list-dedicated" [
+export def "dedicated-hosts-list-by-host-group" [
   subscription_id: string
   resource_group_name: string
   host_group_name: string
@@ -1523,7 +1523,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-host-group
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/hostGroups/{hostGroupName}/hosts/{hostName}
 # operationId: DedicatedHosts_Delete
-export def "subscriptions-resource-groups-providers-microsoft-compute-host-groups-hosts delete-dedicated" [
+export def "dedicated-hosts-delete" [
   subscription_id: string
   resource_group_name: string
   host_group_name: string
@@ -1567,7 +1567,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-host-group
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/hostGroups/{hostGroupName}/hosts/{hostName}
 # operationId: DedicatedHosts_Get
-export def "subscriptions-resource-groups-providers-microsoft-compute-host-groups-hosts get-dedicated" [
+export def "dedicated-hosts-get" [
   subscription_id: string
   resource_group_name: string
   host_group_name: string
@@ -1613,7 +1613,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-host-group
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/hostGroups/{hostGroupName}/hosts/{hostName}
 # operationId: DedicatedHosts_Update
 # --properties shape: {autoReplaceOnFailure?: bool, instanceView?: any, licenseType?: "None"|"Windows_Server_Hybrid"|"Windows_Server_Perpetual", platformFaultDomain?: int}
-export def "subscriptions-resource-groups-providers-microsoft-compute-host-groups-hosts update-dedicated" [
+export def "dedicated-hosts-update" [
   subscription_id: string
   resource_group_name: string
   host_group_name: string
@@ -1664,7 +1664,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-host-group
 # operationId: DedicatedHosts_CreateOrUpdate
 # --properties shape: {autoReplaceOnFailure?: bool, instanceView?: any, licenseType?: "None"|"Windows_Server_Hybrid"|"Windows_Server_Perpetual", platformFaultDomain?: int}
 # --sku shape: {capacity?: int, name?: string, tier?: string}
-export def "subscriptions-resource-groups-providers-microsoft-compute-host-groups-hosts create-dedicated-or-update" [
+export def "dedicated-hosts-create-or-update" [
   subscription_id: string
   resource_group_name: string
   host_group_name: string
@@ -1715,7 +1715,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-host-group
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/images
 # operationId: Images_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-compute-images list" [
+export def "images-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1755,7 +1755,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-images lis
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/images/{imageName}
 # operationId: Images_Delete
-export def "subscriptions-resource-groups-providers-microsoft-compute-images delete" [
+export def "images-delete" [
   subscription_id: string
   resource_group_name: string
   image_name: string
@@ -1797,7 +1797,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-images del
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/images/{imageName}
 # operationId: Images_Get
-export def "subscriptions-resource-groups-providers-microsoft-compute-images get" [
+export def "images-get" [
   subscription_id: string
   resource_group_name: string
   image_name: string
@@ -1841,7 +1841,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-images get
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/images/{imageName}
 # operationId: Images_Update
 # --properties shape: {hyperVGeneration?: "V1"|"V2", sourceVirtualMachine?: any, storageProfile?: any}
-export def "subscriptions-resource-groups-providers-microsoft-compute-images update" [
+export def "images-update" [
   subscription_id: string
   resource_group_name: string
   image_name: string
@@ -1889,7 +1889,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-images upd
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/images/{imageName}
 # operationId: Images_CreateOrUpdate
 # --properties shape: {hyperVGeneration?: "V1"|"V2", sourceVirtualMachine?: any, storageProfile?: any}
-export def "subscriptions-resource-groups-providers-microsoft-compute-images create-or-update" [
+export def "images-create-or-update" [
   subscription_id: string
   resource_group_name: string
   image_name: string
@@ -1937,7 +1937,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-images cre
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/proximityPlacementGroups
 # operationId: ProximityPlacementGroups_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-compute-proximity-placement-groups list" [
+export def "proximity-placement-groups-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1977,7 +1977,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-proximity-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/proximityPlacementGroups/{proximityPlacementGroupName}
 # operationId: ProximityPlacementGroups_Delete
-export def "subscriptions-resource-groups-providers-microsoft-compute-proximity-placement-groups delete" [
+export def "proximity-placement-groups-delete" [
   subscription_id: string
   resource_group_name: string
   proximity_placement_group_name: string
@@ -2019,7 +2019,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-proximity-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/proximityPlacementGroups/{proximityPlacementGroupName}
 # operationId: ProximityPlacementGroups_Get
-export def "subscriptions-resource-groups-providers-microsoft-compute-proximity-placement-groups get" [
+export def "proximity-placement-groups-get" [
   subscription_id: string
   resource_group_name: string
   proximity_placement_group_name: string
@@ -2061,7 +2061,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-proximity-
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/proximityPlacementGroups/{proximityPlacementGroupName}
 # operationId: ProximityPlacementGroups_Update
-export def "subscriptions-resource-groups-providers-microsoft-compute-proximity-placement-groups update" [
+export def "proximity-placement-groups-update" [
   subscription_id: string
   resource_group_name: string
   proximity_placement_group_name: string
@@ -2108,7 +2108,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-proximity-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/proximityPlacementGroups/{proximityPlacementGroupName}
 # operationId: ProximityPlacementGroups_CreateOrUpdate
 # --properties shape: {proximityPlacementGroupType?: "Standard"|"Ultra"}
-export def "subscriptions-resource-groups-providers-microsoft-compute-proximity-placement-groups create-or-update" [
+export def "proximity-placement-groups-create-or-update" [
   subscription_id: string
   resource_group_name: string
   proximity_placement_group_name: string
@@ -2156,7 +2156,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-proximity-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachineScaleSets
 # operationId: VirtualMachineScaleSets_List
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machine-scale-sets list" [
+export def "virtual-machine-scale-sets-list" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2196,7 +2196,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachineScaleSets/{virtualMachineScaleSetName}/virtualMachines
 # operationId: VirtualMachineScaleSetVMs_List
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machine-scale-sets-virtual-machines list-v-ms" [
+export def "virtual-machine-scale-set-v-ms-list" [
   subscription_id: string
   resource_group_name: string
   virtual_machine_scale_set_name: string
@@ -2241,7 +2241,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachineScaleSets/{vmScaleSetName}
 # operationId: VirtualMachineScaleSets_Delete
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machine-scale-sets delete" [
+export def "virtual-machine-scale-sets-delete" [
   subscription_id: string
   resource_group_name: string
   vm_scale_set_name: string
@@ -2283,7 +2283,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachineScaleSets/{vmScaleSetName}
 # operationId: VirtualMachineScaleSets_Get
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machine-scale-sets get" [
+export def "virtual-machine-scale-sets-get" [
   subscription_id: string
   resource_group_name: string
   vm_scale_set_name: string
@@ -2329,7 +2329,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 # --plan shape: {name?: string, product?: string, promotionCode?: string, publisher?: string}
 # --properties shape: {additionalCapabilities?: any, overprovision?: bool, scaleInPolicy?: any, singlePlacementGroup?: bool, upgradePolicy?: any, virtualMachineProfile?: any}
 # --sku shape: {capacity?: int, name?: string, tier?: string}
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machine-scale-sets update" [
+export def "virtual-machine-scale-sets-update" [
   subscription_id: string
   resource_group_name: string
   vm_scale_set_name: string
@@ -2383,7 +2383,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 # --plan shape: {name?: string, product?: string, promotionCode?: string, publisher?: string}
 # --properties shape: {additionalCapabilities?: any, doNotRunExtensionsOnOverprovisionedVMs?: bool, overprovision?: bool, platformFaultDomainCount?: int, proximityPlacementGroup?: any, scaleInPolicy?: any, singlePlacementGroup?: bool, upgradePolicy?: any, virtualMachineProfile?: any, zoneBalance?: bool}
 # --sku shape: {capacity?: int, name?: string, tier?: string}
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machine-scale-sets create-or-update" [
+export def "virtual-machine-scale-sets-create-or-update" [
   subscription_id: string
   resource_group_name: string
   vm_scale_set_name: string
@@ -2435,7 +2435,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachineScaleSets/{vmScaleSetName}/convertToSinglePlacementGroup
 # operationId: VirtualMachineScaleSets_ConvertToSinglePlacementGroup
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machine-scale-sets-convert-to-single-placement-group create" [
+export def "virtual-machine-scale-sets-convert-to-single-placement-group" [
   subscription_id: string
   resource_group_name: string
   vm_scale_set_name: string
@@ -2479,7 +2479,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachineScaleSets/{vmScaleSetName}/deallocate
 # operationId: VirtualMachineScaleSets_Deallocate
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machine-scale-sets-deallocate create" [
+export def "virtual-machine-scale-sets-deallocate" [
   subscription_id: string
   resource_group_name: string
   vm_scale_set_name: string
@@ -2525,7 +2525,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachineScaleSets/{vmScaleSetName}/delete
 # operationId: VirtualMachineScaleSets_DeleteInstances
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machine-scale-sets-delete delete-instances" [
+export def "virtual-machine-scale-sets-delete-instances" [
   subscription_id: string
   resource_group_name: string
   vm_scale_set_name: string
@@ -2571,7 +2571,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachineScaleSets/{vmScaleSetName}/extensionRollingUpgrade
 # operationId: VirtualMachineScaleSetRollingUpgrades_StartExtensionUpgrade
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machine-scale-sets-extension-rolling-upgrade start" [
+export def "virtual-machine-scale-set-rolling-upgrades-start-extension-upgrade" [
   subscription_id: string
   resource_group_name: string
   vm_scale_set_name: string
@@ -2613,7 +2613,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachineScaleSets/{vmScaleSetName}/extensions
 # operationId: VirtualMachineScaleSetExtensions_List
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machine-scale-sets-extensions list" [
+export def "virtual-machine-scale-set-extensions-list" [
   subscription_id: string
   resource_group_name: string
   vm_scale_set_name: string
@@ -2655,7 +2655,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachineScaleSets/{vmScaleSetName}/extensions/{vmssExtensionName}
 # operationId: VirtualMachineScaleSetExtensions_Delete
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machine-scale-sets-extensions delete" [
+export def "virtual-machine-scale-set-extensions-delete" [
   subscription_id: string
   resource_group_name: string
   vm_scale_set_name: string
@@ -2699,7 +2699,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachineScaleSets/{vmScaleSetName}/extensions/{vmssExtensionName}
 # operationId: VirtualMachineScaleSetExtensions_Get
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machine-scale-sets-extensions get" [
+export def "virtual-machine-scale-set-extensions-get" [
   subscription_id: string
   resource_group_name: string
   vm_scale_set_name: string
@@ -2745,7 +2745,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachineScaleSets/{vmScaleSetName}/extensions/{vmssExtensionName}
 # operationId: VirtualMachineScaleSetExtensions_CreateOrUpdate
 # --properties shape: {autoUpgradeMinorVersion?: bool, forceUpdateTag?: string, protectedSettings?: record, provisionAfterExtensions?: list<string>, publisher?: string, settings?: record, type?: string, typeHandlerVersion?: string}
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machine-scale-sets-extensions create-or-update" [
+export def "virtual-machine-scale-set-extensions-create-or-update" [
   subscription_id: string
   resource_group_name: string
   vm_scale_set_name: string
@@ -2794,7 +2794,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachineScaleSets/{vmScaleSetName}/forceRecoveryServiceFabricPlatformUpdateDomainWalk
 # operationId: VirtualMachineScaleSets_ForceRecoveryServiceFabricPlatformUpdateDomainWalk
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machine-scale-sets-force-recovery-service-fabric-platform-update-domain-walk update" [
+export def "virtual-machine-scale-sets-force-recovery-service-fabric-platform-update-domain-walk" [
   subscription_id: string
   resource_group_name: string
   vm_scale_set_name: string
@@ -2837,7 +2837,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachineScaleSets/{vmScaleSetName}/instanceView
 # operationId: VirtualMachineScaleSets_GetInstanceView
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machine-scale-sets-instance-view get" [
+export def "virtual-machine-scale-sets-get-instance-view" [
   subscription_id: string
   resource_group_name: string
   vm_scale_set_name: string
@@ -2879,7 +2879,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachineScaleSets/{vmScaleSetName}/manualupgrade
 # operationId: VirtualMachineScaleSets_UpdateInstances
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machine-scale-sets-manualupgrade update-instances" [
+export def "virtual-machine-scale-sets-update-instances" [
   subscription_id: string
   resource_group_name: string
   vm_scale_set_name: string
@@ -2925,7 +2925,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachineScaleSets/{vmScaleSetName}/osRollingUpgrade
 # operationId: VirtualMachineScaleSetRollingUpgrades_StartOSUpgrade
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machine-scale-sets-os-rolling-upgrade start" [
+export def "virtual-machine-scale-set-rolling-upgrades-start-os-upgrade" [
   subscription_id: string
   resource_group_name: string
   vm_scale_set_name: string
@@ -2967,7 +2967,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachineScaleSets/{vmScaleSetName}/osUpgradeHistory
 # operationId: VirtualMachineScaleSets_GetOSUpgradeHistory
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machine-scale-sets-os-upgrade-history get" [
+export def "virtual-machine-scale-sets-get-os-upgrade-history" [
   subscription_id: string
   resource_group_name: string
   vm_scale_set_name: string
@@ -3009,7 +3009,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachineScaleSets/{vmScaleSetName}/performMaintenance
 # operationId: VirtualMachineScaleSets_PerformMaintenance
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machine-scale-sets-perform-maintenance create" [
+export def "virtual-machine-scale-sets-perform-maintenance" [
   subscription_id: string
   resource_group_name: string
   vm_scale_set_name: string
@@ -3055,7 +3055,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachineScaleSets/{vmScaleSetName}/poweroff
 # operationId: VirtualMachineScaleSets_PowerOff
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machine-scale-sets-poweroff create-power-off" [
+export def "virtual-machine-scale-sets-power-off" [
   subscription_id: string
   resource_group_name: string
   vm_scale_set_name: string
@@ -3102,7 +3102,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachineScaleSets/{vmScaleSetName}/redeploy
 # operationId: VirtualMachineScaleSets_Redeploy
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machine-scale-sets-redeploy create" [
+export def "virtual-machine-scale-sets-redeploy" [
   subscription_id: string
   resource_group_name: string
   vm_scale_set_name: string
@@ -3148,7 +3148,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachineScaleSets/{vmScaleSetName}/reimage
 # operationId: VirtualMachineScaleSets_Reimage
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machine-scale-sets-reimage create" [
+export def "virtual-machine-scale-sets-reimage" [
   subscription_id: string
   resource_group_name: string
   vm_scale_set_name: string
@@ -3194,7 +3194,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachineScaleSets/{vmScaleSetName}/reimageall
 # operationId: VirtualMachineScaleSets_ReimageAll
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machine-scale-sets-reimageall list-reimage" [
+export def "virtual-machine-scale-sets-reimage-all" [
   subscription_id: string
   resource_group_name: string
   vm_scale_set_name: string
@@ -3240,7 +3240,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachineScaleSets/{vmScaleSetName}/restart
 # operationId: VirtualMachineScaleSets_Restart
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machine-scale-sets-restart restart" [
+export def "virtual-machine-scale-sets-restart" [
   subscription_id: string
   resource_group_name: string
   vm_scale_set_name: string
@@ -3286,7 +3286,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachineScaleSets/{vmScaleSetName}/rollingUpgrades/cancel
 # operationId: VirtualMachineScaleSetRollingUpgrades_Cancel
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machine-scale-sets-rolling-upgrades-cancel update" [
+export def "virtual-machine-scale-set-rolling-upgrades-cancel" [
   subscription_id: string
   resource_group_name: string
   vm_scale_set_name: string
@@ -3328,7 +3328,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachineScaleSets/{vmScaleSetName}/rollingUpgrades/latest
 # operationId: VirtualMachineScaleSetRollingUpgrades_GetLatest
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machine-scale-sets-rolling-upgrades-latest get" [
+export def "virtual-machine-scale-set-rolling-upgrades-get-latest" [
   subscription_id: string
   resource_group_name: string
   vm_scale_set_name: string
@@ -3370,7 +3370,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachineScaleSets/{vmScaleSetName}/skus
 # operationId: VirtualMachineScaleSets_ListSkus
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machine-scale-sets-skus list" [
+export def "virtual-machine-scale-sets-list-skus" [
   subscription_id: string
   resource_group_name: string
   vm_scale_set_name: string
@@ -3412,7 +3412,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachineScaleSets/{vmScaleSetName}/start
 # operationId: VirtualMachineScaleSets_Start
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machine-scale-sets-start start" [
+export def "virtual-machine-scale-sets-start" [
   subscription_id: string
   resource_group_name: string
   vm_scale_set_name: string
@@ -3458,7 +3458,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachineScaleSets/{vmScaleSetName}/virtualmachines/{instanceId}
 # operationId: VirtualMachineScaleSetVMs_Delete
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machine-scale-sets-virtualmachines delete-v-ms" [
+export def "virtual-machine-scale-set-v-ms-delete" [
   subscription_id: string
   resource_group_name: string
   vm_scale_set_name: string
@@ -3502,7 +3502,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachineScaleSets/{vmScaleSetName}/virtualmachines/{instanceId}
 # operationId: VirtualMachineScaleSetVMs_Get
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machine-scale-sets-virtualmachines get-v-ms" [
+export def "virtual-machine-scale-set-v-ms-get" [
   subscription_id: string
   resource_group_name: string
   vm_scale_set_name: string
@@ -3551,7 +3551,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 # --properties shape: {additionalCapabilities?: any, availabilitySet?: any, diagnosticsProfile?: any, hardwareProfile?: any, instanceView?: any, licenseType?: string, networkProfile?: any, networkProfileConfiguration?: any, osProfile?: any, protectionPolicy?: any, storageProfile?: any}
 # --resources item shape: {properties?: any, location: string, tags?: record}
 # --sku shape: {capacity?: int, name?: string, tier?: string}
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machine-scale-sets-virtualmachines update-v-ms" [
+export def "virtual-machine-scale-set-v-ms-update" [
   subscription_id: string
   resource_group_name: string
   vm_scale_set_name: string
@@ -3603,7 +3603,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachineScaleSets/{vmScaleSetName}/virtualmachines/{instanceId}/deallocate
 # operationId: VirtualMachineScaleSetVMs_Deallocate
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machine-scale-sets-virtualmachines-deallocate update-v-ms" [
+export def "virtual-machine-scale-set-v-ms-deallocate" [
   subscription_id: string
   resource_group_name: string
   vm_scale_set_name: string
@@ -3647,7 +3647,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachineScaleSets/{vmScaleSetName}/virtualmachines/{instanceId}/instanceView
 # operationId: VirtualMachineScaleSetVMs_GetInstanceView
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machine-scale-sets-virtualmachines-instance-view get-v-ms" [
+export def "virtual-machine-scale-set-v-ms-get-instance-view" [
   subscription_id: string
   resource_group_name: string
   vm_scale_set_name: string
@@ -3691,7 +3691,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachineScaleSets/{vmScaleSetName}/virtualmachines/{instanceId}/performMaintenance
 # operationId: VirtualMachineScaleSetVMs_PerformMaintenance
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machine-scale-sets-virtualmachines-perform-maintenance update-v-ms" [
+export def "virtual-machine-scale-set-v-ms-perform-maintenance" [
   subscription_id: string
   resource_group_name: string
   vm_scale_set_name: string
@@ -3735,7 +3735,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachineScaleSets/{vmScaleSetName}/virtualmachines/{instanceId}/poweroff
 # operationId: VirtualMachineScaleSetVMs_PowerOff
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machine-scale-sets-virtualmachines-poweroff update-v-ms-power-off" [
+export def "virtual-machine-scale-set-v-ms-power-off" [
   subscription_id: string
   resource_group_name: string
   vm_scale_set_name: string
@@ -3780,7 +3780,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachineScaleSets/{vmScaleSetName}/virtualmachines/{instanceId}/redeploy
 # operationId: VirtualMachineScaleSetVMs_Redeploy
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machine-scale-sets-virtualmachines-redeploy update-v-ms" [
+export def "virtual-machine-scale-set-v-ms-redeploy" [
   subscription_id: string
   resource_group_name: string
   vm_scale_set_name: string
@@ -3824,7 +3824,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachineScaleSets/{vmScaleSetName}/virtualmachines/{instanceId}/reimage
 # operationId: VirtualMachineScaleSetVMs_Reimage
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machine-scale-sets-virtualmachines-reimage update-v-ms" [
+export def "virtual-machine-scale-set-v-ms-reimage" [
   subscription_id: string
   resource_group_name: string
   vm_scale_set_name: string
@@ -3872,7 +3872,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachineScaleSets/{vmScaleSetName}/virtualmachines/{instanceId}/reimageall
 # operationId: VirtualMachineScaleSetVMs_ReimageAll
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machine-scale-sets-virtualmachines-reimageall list-v-ms-reimage" [
+export def "virtual-machine-scale-set-v-ms-reimage-all" [
   subscription_id: string
   resource_group_name: string
   vm_scale_set_name: string
@@ -3916,7 +3916,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachineScaleSets/{vmScaleSetName}/virtualmachines/{instanceId}/restart
 # operationId: VirtualMachineScaleSetVMs_Restart
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machine-scale-sets-virtualmachines-restart update-v-ms" [
+export def "virtual-machine-scale-set-v-ms-restart" [
   subscription_id: string
   resource_group_name: string
   vm_scale_set_name: string
@@ -3960,7 +3960,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachineScaleSets/{vmScaleSetName}/virtualmachines/{instanceId}/start
 # operationId: VirtualMachineScaleSetVMs_Start
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machine-scale-sets-virtualmachines-start update-v-ms" [
+export def "virtual-machine-scale-set-v-ms-start" [
   subscription_id: string
   resource_group_name: string
   vm_scale_set_name: string
@@ -4004,7 +4004,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines
 # operationId: VirtualMachines_List
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machines list" [
+export def "virtual-machines-list" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4044,7 +4044,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}
 # operationId: VirtualMachines_Delete
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machines delete" [
+export def "virtual-machines-delete" [
   subscription_id: string
   resource_group_name: string
   vm_name: string
@@ -4086,7 +4086,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}
 # operationId: VirtualMachines_Get
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machines get" [
+export def "virtual-machines-get" [
   subscription_id: string
   resource_group_name: string
   vm_name: string
@@ -4132,7 +4132,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 # --identity shape: {type?: "SystemAssigned"|"UserAssigned"|"SystemAssigned, UserAssigned"|"None", userAssignedIdentities?: record}
 # --plan shape: {name?: string, product?: string, promotionCode?: string, publisher?: string}
 # --properties shape: {additionalCapabilities?: any, availabilitySet?: any, billingProfile?: any, diagnosticsProfile?: any, evictionPolicy?: "Deallocate"|"Delete", hardwareProfile?: any, host?: any, instanceView?: any, licenseType?: string, networkProfile?: any, osProfile?: any, priority?: "Regular"|"Low", proximityPlacementGroup?: any, storageProfile?: any, virtualMachineScaleSet?: any}
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machines update" [
+export def "virtual-machines-update" [
   subscription_id: string
   resource_group_name: string
   vm_name: string
@@ -4186,7 +4186,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 # --plan shape: {name?: string, product?: string, promotionCode?: string, publisher?: string}
 # --properties shape: {additionalCapabilities?: any, availabilitySet?: any, billingProfile?: any, diagnosticsProfile?: any, evictionPolicy?: "Deallocate"|"Delete", hardwareProfile?: any, host?: any, instanceView?: any, licenseType?: string, networkProfile?: any, osProfile?: any, priority?: "Regular"|"Low", proximityPlacementGroup?: any, storageProfile?: any, virtualMachineScaleSet?: any}
 # --resources item shape: {properties?: any, location: string, tags?: record}
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machines create-or-update" [
+export def "virtual-machines-create-or-update" [
   subscription_id: string
   resource_group_name: string
   vm_name: string
@@ -4237,7 +4237,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}/capture
 # operationId: VirtualMachines_Capture
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machines-capture create" [
+export def "virtual-machines-capture" [
   subscription_id: string
   resource_group_name: string
   vm_name: string
@@ -4285,7 +4285,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}/convertToManagedDisks
 # operationId: VirtualMachines_ConvertToManagedDisks
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machines-convert-to-managed-disks create" [
+export def "virtual-machines-convert-to-managed-disks" [
   subscription_id: string
   resource_group_name: string
   vm_name: string
@@ -4327,7 +4327,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}/deallocate
 # operationId: VirtualMachines_Deallocate
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machines-deallocate create" [
+export def "virtual-machines-deallocate" [
   subscription_id: string
   resource_group_name: string
   vm_name: string
@@ -4369,7 +4369,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}/extensions
 # operationId: VirtualMachineExtensions_List
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machines-extensions list" [
+export def "virtual-machine-extensions-list" [
   subscription_id: string
   resource_group_name: string
   vm_name: string
@@ -4412,7 +4412,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}/extensions/{vmExtensionName}
 # operationId: VirtualMachineExtensions_Delete
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machines-extensions delete" [
+export def "virtual-machine-extensions-delete" [
   subscription_id: string
   resource_group_name: string
   vm_name: string
@@ -4456,7 +4456,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}/extensions/{vmExtensionName}
 # operationId: VirtualMachineExtensions_Get
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machines-extensions get" [
+export def "virtual-machine-extensions-get" [
   subscription_id: string
   resource_group_name: string
   vm_name: string
@@ -4502,7 +4502,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}/extensions/{vmExtensionName}
 # operationId: VirtualMachineExtensions_Update
 # --properties shape: {autoUpgradeMinorVersion?: bool, forceUpdateTag?: string, protectedSettings?: record, publisher?: string, settings?: record, type?: string, typeHandlerVersion?: string}
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machines-extensions update" [
+export def "virtual-machine-extensions-update" [
   subscription_id: string
   resource_group_name: string
   vm_name: string
@@ -4552,7 +4552,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}/extensions/{vmExtensionName}
 # operationId: VirtualMachineExtensions_CreateOrUpdate
 # --properties shape: {autoUpgradeMinorVersion?: bool, forceUpdateTag?: string, instanceView?: any, protectedSettings?: record, publisher?: string, settings?: record, type?: string, typeHandlerVersion?: string}
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machines-extensions create-or-update" [
+export def "virtual-machine-extensions-create-or-update" [
   subscription_id: string
   resource_group_name: string
   vm_name: string
@@ -4602,7 +4602,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}/generalize
 # operationId: VirtualMachines_Generalize
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machines-generalize create" [
+export def "virtual-machines-generalize" [
   subscription_id: string
   resource_group_name: string
   vm_name: string
@@ -4644,7 +4644,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}/instanceView
 # operationId: VirtualMachines_InstanceView
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machines-instance-view get" [
+export def "virtual-machines-instance-view" [
   subscription_id: string
   resource_group_name: string
   vm_name: string
@@ -4686,7 +4686,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}/performMaintenance
 # operationId: VirtualMachines_PerformMaintenance
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machines-perform-maintenance create" [
+export def "virtual-machines-perform-maintenance" [
   subscription_id: string
   resource_group_name: string
   vm_name: string
@@ -4728,7 +4728,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}/powerOff
 # operationId: VirtualMachines_PowerOff
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machines-power-off create" [
+export def "virtual-machines-power-off" [
   subscription_id: string
   resource_group_name: string
   vm_name: string
@@ -4771,7 +4771,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}/redeploy
 # operationId: VirtualMachines_Redeploy
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machines-redeploy create" [
+export def "virtual-machines-redeploy" [
   subscription_id: string
   resource_group_name: string
   vm_name: string
@@ -4813,7 +4813,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}/reimage
 # operationId: VirtualMachines_Reimage
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machines-reimage create" [
+export def "virtual-machines-reimage" [
   subscription_id: string
   resource_group_name: string
   vm_name: string
@@ -4859,7 +4859,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}/restart
 # operationId: VirtualMachines_Restart
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machines-restart restart" [
+export def "virtual-machines-restart" [
   subscription_id: string
   resource_group_name: string
   vm_name: string
@@ -4901,7 +4901,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}/start
 # operationId: VirtualMachines_Start
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machines-start start" [
+export def "virtual-machines-start" [
   subscription_id: string
   resource_group_name: string
   vm_name: string
@@ -4943,7 +4943,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}/vmSizes
 # operationId: VirtualMachines_ListAvailableSizes
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machines-vm-sizes list-available" [
+export def "virtual-machines-list-available-sizes" [
   subscription_id: string
   resource_group_name: string
   vm_name: string

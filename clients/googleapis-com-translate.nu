@@ -123,7 +123,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v3beta1 delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "translate-projects-locations-operations-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -147,7 +147,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v3beta1/{name}
 # operationId: translate.projects.locations.operations.delete
-export def "v3beta1 delete" [
+export def "translate-projects-locations-operations-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -195,7 +195,7 @@ export def "v3beta1 delete" [
 #
 # GET /v3beta1/{name}
 # operationId: translate.projects.locations.operations.get
-export def "v3beta1 get" [
+export def "translate-projects-locations-operations-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -243,7 +243,7 @@ export def "v3beta1 get" [
 #
 # GET /v3beta1/{name}/locations
 # operationId: translate.projects.locations.list
-export def "v3beta1-locations list" [
+export def "translate-projects-locations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -294,7 +294,7 @@ export def "v3beta1-locations list" [
 #
 # GET /v3beta1/{name}/operations
 # operationId: translate.projects.locations.operations.list
-export def "v3beta1-operations list" [
+export def "translate-projects-locations-operations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -345,7 +345,7 @@ export def "v3beta1-operations list" [
 #
 # POST /v3beta1/{name}:cancel
 # operationId: translate.projects.locations.operations.cancel
-export def "v3beta1 cancel" [
+export def "translate-projects-locations-operations-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -397,7 +397,7 @@ export def "v3beta1 cancel" [
 #
 # POST /v3beta1/{name}:wait
 # operationId: translate.projects.locations.operations.wait
-export def "v3beta1 wait" [
+export def "translate-projects-locations-operations-wait" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -449,7 +449,7 @@ export def "v3beta1 wait" [
 #
 # GET /v3beta1/{parent}/glossaries
 # operationId: translate.projects.locations.glossaries.list
-export def "v3beta1-glossaries list" [
+export def "translate-projects-locations-glossaries-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -503,7 +503,7 @@ export def "v3beta1-glossaries list" [
 # --inputConfig shape: {gcsSource?: record}
 # --languageCodesSet shape: {languageCodes?: list<string>}
 # --languagePair shape: {sourceLanguageCode?: string, targetLanguageCode?: string}
-export def "v3beta1-glossaries create" [
+export def "translate-projects-locations-glossaries-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -558,7 +558,7 @@ export def "v3beta1-glossaries create" [
 #
 # GET /v3beta1/{parent}/supportedLanguages
 # operationId: translate.projects.locations.getSupportedLanguages
-export def "v3beta1-supported-languages get" [
+export def "translate-projects-locations-get-supported-languages" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -610,7 +610,7 @@ export def "v3beta1-supported-languages get" [
 # operationId: translate.projects.locations.batchTranslateDocument
 # --inputConfigs item shape: {gcsSource?: record}
 # --outputConfig shape: {gcsDestination?: record}
-export def "v3beta1 create-batch-translate-document" [
+export def "translate-projects-locations-batch-translate-document" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -672,7 +672,7 @@ export def "v3beta1 create-batch-translate-document" [
 # operationId: translate.projects.locations.batchTranslateText
 # --inputConfigs item shape: {gcsSource?: record, mimeType?: string}
 # --outputConfig shape: {gcsDestination?: record}
-export def "v3beta1 create-batch-translate-text" [
+export def "translate-projects-locations-batch-translate-text" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -730,7 +730,7 @@ export def "v3beta1 create-batch-translate-text" [
 #
 # POST /v3beta1/{parent}:detectLanguage
 # operationId: translate.projects.locations.detectLanguage
-export def "v3beta1 create-detect-language" [
+export def "translate-projects-locations-detect-language" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -788,7 +788,7 @@ export def "v3beta1 create-detect-language" [
 # --documentInputConfig shape: {content?: string, gcsSource?: record, mimeType?: string}
 # --documentOutputConfig shape: {gcsDestination?: record, mimeType?: string}
 # --glossaryConfig shape: {glossary?: string, ignoreCase?: bool}
-export def "v3beta1 create-translate-document" [
+export def "translate-projects-locations-translate-document" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -851,7 +851,7 @@ export def "v3beta1 create-translate-document" [
 # POST /v3beta1/{parent}:translateText
 # operationId: translate.projects.locations.translateText
 # --glossaryConfig shape: {glossary?: string, ignoreCase?: bool}
-export def "v3beta1 create-translate-text" [
+export def "translate-projects-locations-translate-text" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

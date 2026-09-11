@@ -124,7 +124,7 @@ def status-completer [] { ["Active" "Deleted" "Discovering" "Evaluating" "Evalua
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-customer-insights-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -148,7 +148,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.CustomerInsights/operations
 # operationId: Operations_List
-export def "providers-microsoft-customer-insights-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,7 +184,7 @@ export def "providers-microsoft-customer-insights-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.CustomerInsights/hubs
 # operationId: Hubs_List
-export def "subscriptions-providers-microsoft-customer-insights-hubs list" [
+export def "hubs-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -222,7 +222,7 @@ export def "subscriptions-providers-microsoft-customer-insights-hubs list" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs
 # operationId: Hubs_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs list" [
+export def "hubs-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -262,7 +262,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}
 # operationId: Hubs_Delete
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs delete" [
+export def "hubs-delete" [
   subscription_id: string
   resource_group_name: string
   hub_name: string
@@ -304,7 +304,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}
 # operationId: Hubs_Get
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs get" [
+export def "hubs-get" [
   subscription_id: string
   resource_group_name: string
   hub_name: string
@@ -347,7 +347,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}
 # operationId: Hubs_Update
 # --properties shape: {hubBillingInfo?: any, tenantFeatures?: int}
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs update" [
+export def "hubs-update" [
   subscription_id: string
   resource_group_name: string
   hub_name: string
@@ -396,7 +396,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}
 # operationId: Hubs_CreateOrUpdate
 # --properties shape: {hubBillingInfo?: any, tenantFeatures?: int}
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs create-or-update" [
+export def "hubs-create-or-update" [
   subscription_id: string
   resource_group_name: string
   hub_name: string
@@ -444,7 +444,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/authorizationPolicies
 # operationId: AuthorizationPolicies_ListByHub
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-authorization-policies list" [
+export def "authorization-policies-list-by-hub" [
   subscription_id: string
   resource_group_name: string
   hub_name: string
@@ -486,7 +486,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/authorizationPolicies/{authorizationPolicyName}
 # operationId: AuthorizationPolicies_Get
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-authorization-policies get" [
+export def "authorization-policies-get" [
   subscription_id: string
   resource_group_name: string
   hub_name: string
@@ -531,7 +531,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/authorizationPolicies/{authorizationPolicyName}
 # operationId: AuthorizationPolicies_CreateOrUpdate
 # --properties shape: {permissions: list<string>, primaryKey?: string, secondaryKey?: string}
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-authorization-policies create-or-update" [
+export def "authorization-policies-create-or-update" [
   subscription_id: string
   resource_group_name: string
   hub_name: string
@@ -579,7 +579,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/authorizationPolicies/{authorizationPolicyName}/regeneratePrimaryKey
 # operationId: AuthorizationPolicies_RegeneratePrimaryKey
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-authorization-policies-regenerate-primary-key create" [
+export def "authorization-policies-regenerate-primary-key" [
   subscription_id: string
   resource_group_name: string
   hub_name: string
@@ -623,7 +623,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/authorizationPolicies/{authorizationPolicyName}/regenerateSecondaryKey
 # operationId: AuthorizationPolicies_RegenerateSecondaryKey
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-authorization-policies-regenerate-secondary-key create" [
+export def "authorization-policies-regenerate-secondary-key" [
   subscription_id: string
   resource_group_name: string
   hub_name: string
@@ -667,7 +667,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/connectors
 # operationId: Connectors_ListByHub
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-connectors list" [
+export def "connectors-list-by-hub" [
   subscription_id: string
   resource_group_name: string
   hub_name: string
@@ -709,7 +709,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/connectors/{connectorName}
 # operationId: Connectors_Delete
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-connectors delete" [
+export def "connectors-delete" [
   subscription_id: string
   resource_group_name: string
   hub_name: string
@@ -753,7 +753,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/connectors/{connectorName}
 # operationId: Connectors_Get
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-connectors get" [
+export def "connectors-get" [
   subscription_id: string
   resource_group_name: string
   hub_name: string
@@ -798,7 +798,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/connectors/{connectorName}
 # operationId: Connectors_CreateOrUpdate
 # --properties shape: {connectorName?: string, connectorProperties: record, connectorType: "None"|"CRM"|"AzureBlob"|"Salesforce"|"ExchangeOnline"|"Outbound", description?: string, displayName?: string, isInternal?: bool}
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-connectors create-or-update" [
+export def "connectors-create-or-update" [
   subscription_id: string
   resource_group_name: string
   hub_name: string
@@ -846,7 +846,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/connectors/{connectorName}/mappings
 # operationId: ConnectorMappings_ListByConnector
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-connectors-mappings list" [
+export def "connector-mappings-list-by-connector" [
   subscription_id: string
   resource_group_name: string
   hub_name: string
@@ -890,7 +890,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/connectors/{connectorName}/mappings/{mappingName}
 # operationId: ConnectorMappings_Delete
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-connectors-mappings delete" [
+export def "connector-mappings-delete" [
   subscription_id: string
   resource_group_name: string
   hub_name: string
@@ -936,7 +936,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/connectors/{connectorName}/mappings/{mappingName}
 # operationId: ConnectorMappings_Get
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-connectors-mappings get" [
+export def "connector-mappings-get" [
   subscription_id: string
   resource_group_name: string
   hub_name: string
@@ -983,7 +983,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/connectors/{connectorName}/mappings/{mappingName}
 # operationId: ConnectorMappings_CreateOrUpdate
 # --properties shape: {connectorType?: "None"|"CRM"|"AzureBlob"|"Salesforce"|"ExchangeOnline"|"Outbound", description?: string, displayName?: string, entityType: "None"|"Profile"|"Interaction"|"Relationship", entityTypeName: string, mappingProperties: any}
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-connectors-mappings create-or-update" [
+export def "connector-mappings-create-or-update" [
   subscription_id: string
   resource_group_name: string
   hub_name: string
@@ -1033,7 +1033,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/images/getDataImageUploadUrl
 # operationId: Images_GetUploadUrlForData
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-images-get-data-image-upload-url get" [
+export def "images-get-upload-url-for-data" [
   subscription_id: string
   resource_group_name: string
   hub_name: string
@@ -1081,7 +1081,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/images/getEntityTypeImageUploadUrl
 # operationId: Images_GetUploadUrlForEntityType
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-images-get-entity-type-image-upload-url get" [
+export def "images-get-upload-url-for-entity-type" [
   subscription_id: string
   resource_group_name: string
   hub_name: string
@@ -1129,7 +1129,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/interactions
 # operationId: Interactions_ListByHub
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-interactions list" [
+export def "interactions-list-by-hub" [
   subscription_id: string
   resource_group_name: string
   hub_name: string
@@ -1172,7 +1172,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/interactions/{interactionName}
 # operationId: Interactions_Get
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-interactions get" [
+export def "interactions-get" [
   subscription_id: string
   resource_group_name: string
   hub_name: string
@@ -1218,7 +1218,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/interactions/{interactionName}
 # operationId: Interactions_CreateOrUpdate
 # --properties shape: {defaultDataSource?: any, idPropertyNames?: list<string>, isActivity?: bool, participantProfiles?: list, primaryParticipantProfilePropertyName?: string, apiEntitySetName?: string, entityType?: "None"|"Profile"|"Interaction"|"Relationship", fields?: list, instancesCount?: int, provisioningState?: "Provisioning"|"Succeeded"|"Expiring"|"Deleting"|"HumanIntervention"|"Failed", schemaItemTypeLink?: string, timestampFieldName?: string, typeName?: string}
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-interactions create-or-update" [
+export def "interactions-create-or-update" [
   subscription_id: string
   resource_group_name: string
   hub_name: string
@@ -1266,7 +1266,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/interactions/{interactionName}/suggestRelationshipLinks
 # operationId: Interactions_SuggestRelationshipLinks
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-interactions-suggest-relationship-links create" [
+export def "interactions-suggest-relationship-links" [
   subscription_id: string
   resource_group_name: string
   hub_name: string
@@ -1310,7 +1310,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/kpi
 # operationId: Kpi_ListByHub
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-kpi list" [
+export def "kpi-list-by-hub" [
   subscription_id: string
   resource_group_name: string
   hub_name: string
@@ -1352,7 +1352,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/kpi/{kpiName}
 # operationId: Kpi_Delete
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-kpi delete" [
+export def "kpi-delete" [
   subscription_id: string
   resource_group_name: string
   hub_name: string
@@ -1396,7 +1396,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/kpi/{kpiName}
 # operationId: Kpi_Get
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-kpi get" [
+export def "kpi-get" [
   subscription_id: string
   resource_group_name: string
   hub_name: string
@@ -1441,7 +1441,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/kpi/{kpiName}
 # operationId: Kpi_CreateOrUpdate
 # --properties shape: {aliases?: list, calculationWindow: "Lifetime"|"Hour"|"Day"|"Week"|"Month", calculationWindowFieldName?: string, description?: record, displayName?: record, entityType: "None"|"Profile"|"Interaction"|"Relationship", entityTypeName: string, expression: string, extracts?: list, filter?: string, function: "Sum"|"Avg"|"Min"|"Max"|"Last"|"Count"|"None"|"CountDistinct", groupBy?: list<string>, provisioningState?: "Provisioning"|"Succeeded"|"Expiring"|"Deleting"|"HumanIntervention"|"Failed", ... (2 more fields)}
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-kpi create-or-update" [
+export def "kpi-create-or-update" [
   subscription_id: string
   resource_group_name: string
   hub_name: string
@@ -1489,7 +1489,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/kpi/{kpiName}/reprocess
 # operationId: Kpi_Reprocess
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-kpi-reprocess create" [
+export def "kpi-reprocess" [
   subscription_id: string
   resource_group_name: string
   hub_name: string
@@ -1533,7 +1533,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/links
 # operationId: Links_ListByHub
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-links list" [
+export def "links-list-by-hub" [
   subscription_id: string
   resource_group_name: string
   hub_name: string
@@ -1575,7 +1575,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/links/{linkName}
 # operationId: Links_Delete
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-links delete" [
+export def "links-delete" [
   subscription_id: string
   resource_group_name: string
   hub_name: string
@@ -1619,7 +1619,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/links/{linkName}
 # operationId: Links_Get
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-links get" [
+export def "links-get" [
   subscription_id: string
   resource_group_name: string
   hub_name: string
@@ -1664,7 +1664,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/links/{linkName}
 # operationId: Links_CreateOrUpdate
 # --properties shape: {description?: record, displayName?: record, mappings?: list, operationType?: "Upsert"|"Delete", participantPropertyReferences: list, provisioningState?: "Provisioning"|"Succeeded"|"Expiring"|"Deleting"|"HumanIntervention"|"Failed", referenceOnly?: bool, sourceEntityType: "None"|"Profile"|"Interaction"|"Relationship", sourceEntityTypeName: string, targetEntityType: "None"|"Profile"|"Interaction"|"Relationship", targetEntityTypeName: string}
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-links create-or-update" [
+export def "links-create-or-update" [
   subscription_id: string
   resource_group_name: string
   hub_name: string
@@ -1712,7 +1712,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/predictions
 # operationId: Predictions_ListByHub
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-predictions list" [
+export def "predictions-list-by-hub" [
   subscription_id: string
   resource_group_name: string
   hub_name: string
@@ -1754,7 +1754,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/predictions/{predictionName}
 # operationId: Predictions_Delete
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-predictions delete" [
+export def "predictions-delete" [
   subscription_id: string
   resource_group_name: string
   hub_name: string
@@ -1798,7 +1798,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/predictions/{predictionName}
 # operationId: Predictions_Get
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-predictions get" [
+export def "predictions-get" [
   subscription_id: string
   resource_group_name: string
   hub_name: string
@@ -1843,7 +1843,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/predictions/{predictionName}
 # operationId: Predictions_CreateOrUpdate
 # --properties shape: {autoAnalyze: bool, description?: record, displayName?: record, grades?: list, involvedInteractionTypes?: list<string>, involvedKpiTypes?: list<string>, involvedRelationships?: list<string>, mappings: record, negativeOutcomeExpression: string, positiveOutcomeExpression: string, predictionName?: string, primaryProfileType: string, provisioningState?: "Provisioning"|"Succeeded"|"Expiring"|"Deleting"|"HumanIntervention"|"Failed", scopeExpression: string, scoreLabel: string}
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-predictions create-or-update" [
+export def "predictions-create-or-update" [
   subscription_id: string
   resource_group_name: string
   hub_name: string
@@ -1891,7 +1891,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/predictions/{predictionName}/getModelStatus
 # operationId: Predictions_GetModelStatus
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-predictions-get-model-status get" [
+export def "predictions-get-model-status" [
   subscription_id: string
   resource_group_name: string
   hub_name: string
@@ -1935,7 +1935,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/predictions/{predictionName}/getTrainingResults
 # operationId: Predictions_GetTrainingResults
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-predictions-get-training-results get" [
+export def "predictions-get-training-results" [
   subscription_id: string
   resource_group_name: string
   hub_name: string
@@ -1979,7 +1979,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/predictions/{predictionName}/modelStatus
 # operationId: Predictions_ModelStatus
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-predictions-model-status create" [
+export def "predictions-model-status" [
   subscription_id: string
   resource_group_name: string
   hub_name: string
@@ -2027,7 +2027,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/profiles
 # operationId: Profiles_ListByHub
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-profiles list" [
+export def "profiles-list-by-hub" [
   subscription_id: string
   resource_group_name: string
   hub_name: string
@@ -2070,7 +2070,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/profiles/{profileName}
 # operationId: Profiles_Delete
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-profiles delete" [
+export def "profiles-delete" [
   subscription_id: string
   resource_group_name: string
   hub_name: string
@@ -2115,7 +2115,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/profiles/{profileName}
 # operationId: Profiles_Get
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-profiles get" [
+export def "profiles-get" [
   subscription_id: string
   resource_group_name: string
   hub_name: string
@@ -2161,7 +2161,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/profiles/{profileName}
 # operationId: Profiles_CreateOrUpdate
 # --properties shape: {strongIds?: list, apiEntitySetName?: string, entityType?: "None"|"Profile"|"Interaction"|"Relationship", fields?: list, instancesCount?: int, provisioningState?: "Provisioning"|"Succeeded"|"Expiring"|"Deleting"|"HumanIntervention"|"Failed", schemaItemTypeLink?: string, timestampFieldName?: string, typeName?: string}
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-profiles create-or-update" [
+export def "profiles-create-or-update" [
   subscription_id: string
   resource_group_name: string
   hub_name: string
@@ -2209,7 +2209,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/profiles/{profileName}/getEnrichingKpis
 # operationId: Profiles_GetEnrichingKpis
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-profiles-get-enriching-kpis get" [
+export def "profiles-get-enriching-kpis" [
   subscription_id: string
   resource_group_name: string
   hub_name: string
@@ -2253,7 +2253,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/relationshipLinks
 # operationId: RelationshipLinks_ListByHub
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-relationship-links list" [
+export def "relationship-links-list-by-hub" [
   subscription_id: string
   resource_group_name: string
   hub_name: string
@@ -2295,7 +2295,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/relationshipLinks/{relationshipLinkName}
 # operationId: RelationshipLinks_Delete
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-relationship-links delete" [
+export def "relationship-links-delete" [
   subscription_id: string
   resource_group_name: string
   hub_name: string
@@ -2339,7 +2339,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/relationshipLinks/{relationshipLinkName}
 # operationId: RelationshipLinks_Get
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-relationship-links get" [
+export def "relationship-links-get" [
   subscription_id: string
   resource_group_name: string
   hub_name: string
@@ -2384,7 +2384,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/relationshipLinks/{relationshipLinkName}
 # operationId: RelationshipLinks_CreateOrUpdate
 # --properties shape: {description?: record, displayName?: record, interactionType: string, mappings?: list, profilePropertyReferences: list, provisioningState?: "Provisioning"|"Succeeded"|"Expiring"|"Deleting"|"HumanIntervention"|"Failed", relatedProfilePropertyReferences: list, relationshipName: string}
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-relationship-links create-or-update" [
+export def "relationship-links-create-or-update" [
   subscription_id: string
   resource_group_name: string
   hub_name: string
@@ -2432,7 +2432,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/relationships
 # operationId: Relationships_ListByHub
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-relationships list" [
+export def "relationships-list-by-hub" [
   subscription_id: string
   resource_group_name: string
   hub_name: string
@@ -2474,7 +2474,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/relationships/{relationshipName}
 # operationId: Relationships_Delete
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-relationships delete" [
+export def "relationships-delete" [
   subscription_id: string
   resource_group_name: string
   hub_name: string
@@ -2518,7 +2518,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/relationships/{relationshipName}
 # operationId: Relationships_Get
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-relationships get" [
+export def "relationships-get" [
   subscription_id: string
   resource_group_name: string
   hub_name: string
@@ -2563,7 +2563,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/relationships/{relationshipName}
 # operationId: Relationships_CreateOrUpdate
 # --properties shape: {cardinality?: "OneToOne"|"OneToMany"|"ManyToMany", description?: record, displayName?: record, expiryDateTimeUtc?: string, fields?: list, lookupMappings?: list, profileType: string, provisioningState?: "Provisioning"|"Succeeded"|"Expiring"|"Deleting"|"HumanIntervention"|"Failed", relatedProfileType: string}
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-relationships create-or-update" [
+export def "relationships-create-or-update" [
   subscription_id: string
   resource_group_name: string
   hub_name: string
@@ -2611,7 +2611,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/roleAssignments
 # operationId: RoleAssignments_ListByHub
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-role-assignments list" [
+export def "role-assignments-list-by-hub" [
   subscription_id: string
   resource_group_name: string
   hub_name: string
@@ -2653,7 +2653,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/roleAssignments/{assignmentName}
 # operationId: RoleAssignments_Delete
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-role-assignments delete" [
+export def "role-assignments-delete" [
   subscription_id: string
   resource_group_name: string
   hub_name: string
@@ -2697,7 +2697,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/roleAssignments/{assignmentName}
 # operationId: RoleAssignments_Get
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-role-assignments get" [
+export def "role-assignments-get" [
   subscription_id: string
   resource_group_name: string
   hub_name: string
@@ -2742,7 +2742,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/roleAssignments/{assignmentName}
 # operationId: RoleAssignments_CreateOrUpdate
 # --properties shape: {conflationPolicies?: any, connectors?: any, description?: record, displayName?: record, interactions?: any, kpis?: any, links?: any, principals: list, profiles?: any, provisioningState?: "Provisioning"|"Succeeded"|"Expiring"|"Deleting"|"HumanIntervention"|"Failed", relationshipLinks?: any, relationships?: any, role: "Admin"|"Reader"|"ManageAdmin"|"ManageReader"|"DataAdmin"|"DataReader", roleAssignments?: any, sasPolicies?: any, segments?: any, views?: any, widgetTypes?: any}
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-role-assignments create-or-update" [
+export def "role-assignments-create-or-update" [
   subscription_id: string
   resource_group_name: string
   hub_name: string
@@ -2790,7 +2790,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/roles
 # operationId: Roles_ListByHub
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-roles list" [
+export def "roles-list-by-hub" [
   subscription_id: string
   resource_group_name: string
   hub_name: string
@@ -2832,7 +2832,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/views
 # operationId: Views_ListByHub
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-views list" [
+export def "views-list-by-hub" [
   subscription_id: string
   resource_group_name: string
   hub_name: string
@@ -2875,7 +2875,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/views/{viewName}
 # operationId: Views_Delete
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-views delete" [
+export def "views-delete" [
   subscription_id: string
   resource_group_name: string
   hub_name: string
@@ -2920,7 +2920,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/views/{viewName}
 # operationId: Views_Get
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-views get" [
+export def "views-get" [
   subscription_id: string
   resource_group_name: string
   hub_name: string
@@ -2966,7 +2966,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/views/{viewName}
 # operationId: Views_CreateOrUpdate
 # --properties shape: {definition: string, displayName?: record, userId?: string}
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-views create-or-update" [
+export def "views-create-or-update" [
   subscription_id: string
   resource_group_name: string
   hub_name: string
@@ -3014,7 +3014,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/widgetTypes
 # operationId: WidgetTypes_ListByHub
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-widget-types list" [
+export def "widget-types-list-by-hub" [
   subscription_id: string
   resource_group_name: string
   hub_name: string
@@ -3056,7 +3056,7 @@ export def "subscriptions-resource-groups-providers-microsoft-customer-insights-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CustomerInsights/hubs/{hubName}/widgetTypes/{widgetTypeName}
 # operationId: WidgetTypes_Get
-export def "subscriptions-resource-groups-providers-microsoft-customer-insights-hubs-widget-types get" [
+export def "widget-types-get" [
   subscription_id: string
   resource_group_name: string
   hub_name: string

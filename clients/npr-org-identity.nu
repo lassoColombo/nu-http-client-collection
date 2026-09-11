@@ -118,7 +118,7 @@ def accept-completer [] { ["application/json" "application/vnd.collection.doc+js
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "following create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-following" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -142,7 +142,7 @@ export def commands []: nothing -> table {
 #
 # POST /v2/following
 # operationId: postFollowing
-export def "following create" [
+export def "post-following" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -191,7 +191,7 @@ export def "following create" [
 #
 # PUT /v2/stations
 # operationId: updateStations
-export def "stations update" [
+export def "update-stations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -233,7 +233,7 @@ export def "stations update" [
 #
 # DELETE /v2/user
 # operationId: deleteUser
-export def "user delete" [
+export def "delete-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -271,7 +271,7 @@ export def "user delete" [
 #
 # GET /v2/user
 # operationId: getUser
-export def "user get" [
+export def "get-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -309,7 +309,7 @@ export def "user get" [
 #
 # POST /v2/user/inherit
 # operationId: inheritFromTempUser
-export def "user-inherit create-from-temp" [
+export def "inherit-from-temp-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

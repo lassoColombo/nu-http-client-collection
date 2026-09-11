@@ -130,7 +130,7 @@ def state-completer [] { ["DEREGISTERED" "DEVICE_STATE_UNSPECIFIED" "REGISTERED"
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1alpha1-customers list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "prod-tt-sasportal-customers-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -154,7 +154,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1alpha1/customers
 # operationId: prod_tt_sasportal.customers.list
-export def "v1alpha1-customers list" [
+export def "prod-tt-sasportal-customers-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -202,7 +202,7 @@ export def "v1alpha1-customers list" [
 #
 # POST /v1alpha1/customers:provisionDeployment
 # operationId: prod_tt_sasportal.customers.provisionDeployment
-export def "v1alpha1-customers-provision-deployment create" [
+export def "prod-tt-sasportal-customers-provision-deployment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -253,7 +253,7 @@ export def "v1alpha1-customers-provision-deployment create" [
 #
 # POST /v1alpha1/installer:generateSecret
 # operationId: prod_tt_sasportal.installer.generateSecret
-export def "v1alpha1-installer-generate-secret generate" [
+export def "prod-tt-sasportal-installer-generate-secret" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -303,7 +303,7 @@ export def "v1alpha1-installer-generate-secret generate" [
 #
 # POST /v1alpha1/installer:validate
 # operationId: prod_tt_sasportal.installer.validate
-export def "v1alpha1-installer-validate validate" [
+export def "prod-tt-sasportal-installer-validate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -355,7 +355,7 @@ export def "v1alpha1-installer-validate validate" [
 #
 # POST /v1alpha1/policies:get
 # operationId: prod_tt_sasportal.policies.get
-export def "v1alpha1-policies-get get" [
+export def "prod-tt-sasportal-policies-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -406,7 +406,7 @@ export def "v1alpha1-policies-get get" [
 # POST /v1alpha1/policies:set
 # operationId: prod_tt_sasportal.policies.set
 # --policy shape: {assignments?: list, etag?: string}
-export def "v1alpha1-policies-set update" [
+export def "prod-tt-sasportal-policies-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -458,7 +458,7 @@ export def "v1alpha1-policies-set update" [
 #
 # POST /v1alpha1/policies:test
 # operationId: prod_tt_sasportal.policies.test
-export def "v1alpha1-policies-test test" [
+export def "prod-tt-sasportal-policies-test" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -509,7 +509,7 @@ export def "v1alpha1-policies-test test" [
 #
 # DELETE /v1alpha1/{name}
 # operationId: prod_tt_sasportal.nodes.nodes.delete
-export def "v1alpha1 delete" [
+export def "prod-tt-sasportal-nodes-nodes-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -557,7 +557,7 @@ export def "v1alpha1 delete" [
 #
 # GET /v1alpha1/{name}
 # operationId: prod_tt_sasportal.nodes.nodes.get
-export def "v1alpha1 get" [
+export def "prod-tt-sasportal-nodes-nodes-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -605,7 +605,7 @@ export def "v1alpha1 get" [
 #
 # PATCH /v1alpha1/{name}
 # operationId: prod_tt_sasportal.nodes.nodes.patch
-export def "v1alpha1 update" [
+export def "prod-tt-sasportal-nodes-nodes-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -660,7 +660,7 @@ export def "v1alpha1 update" [
 #
 # POST /v1alpha1/{name}:move
 # operationId: prod_tt_sasportal.nodes.nodes.move
-export def "v1alpha1 move" [
+export def "prod-tt-sasportal-nodes-nodes-move" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -713,7 +713,7 @@ export def "v1alpha1 move" [
 # POST /v1alpha1/{name}:signDevice
 # operationId: prod_tt_sasportal.nodes.devices.signDevice
 # --device shape: {activeConfig?: record, deviceMetadata?: record, displayName?: string, fccId?: string, grantRangeAllowlists?: list, grants?: list, name?: string, preloadedConfig?: record, serialNumber?: string, state?: "DEVICE_STATE_UNSPECIFIED"|"RESERVED"|"REGISTERED"|"DEREGISTERED"}
-export def "v1alpha1 create-sign-device" [
+export def "prod-tt-sasportal-nodes-devices-sign-device" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -765,7 +765,7 @@ export def "v1alpha1 create-sign-device" [
 #
 # PATCH /v1alpha1/{name}:updateSigned
 # operationId: prod_tt_sasportal.nodes.devices.updateSigned
-export def "v1alpha1 update-signed" [
+export def "prod-tt-sasportal-nodes-devices-update-signed" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -818,7 +818,7 @@ export def "v1alpha1 update-signed" [
 #
 # GET /v1alpha1/{parent}/deployments
 # operationId: prod_tt_sasportal.nodes.nodes.deployments.list
-export def "v1alpha1-deployments list" [
+export def "prod-tt-sasportal-nodes-nodes-deployments-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -869,7 +869,7 @@ export def "v1alpha1-deployments list" [
 #
 # POST /v1alpha1/{parent}/deployments
 # operationId: prod_tt_sasportal.nodes.nodes.deployments.create
-export def "v1alpha1-deployments create" [
+export def "prod-tt-sasportal-nodes-nodes-deployments-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -922,7 +922,7 @@ export def "v1alpha1-deployments create" [
 #
 # GET /v1alpha1/{parent}/devices
 # operationId: prod_tt_sasportal.nodes.nodes.devices.list
-export def "v1alpha1-devices list" [
+export def "prod-tt-sasportal-nodes-nodes-devices-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -979,7 +979,7 @@ export def "v1alpha1-devices list" [
 # --grantRangeAllowlists item shape: {highFrequencyMhz?: float, lowFrequencyMhz?: float}
 # --grants item shape: {channelType?: "CHANNEL_TYPE_UNSPECIFIED"|"CHANNEL_TYPE_GAA"|"CHANNEL_TYPE_PAL", expireTime?: string, frequencyRange?: record, grantId?: string, lastHeartbeatTransmitExpireTime?: string, maxEirp?: float, moveList?: list, state?: "GRANT_STATE_UNSPECIFIED"|"GRANT_STATE_GRANTED"|"GRANT_STATE_TERMINATED"|"GRANT_STATE_SUSPENDED"|"GRANT_STATE_AUTHORIZED"|"GRANT_STATE_EXPIRED", suspensionReason?: list<string>}
 # --preloadedConfig shape: {airInterface?: record, callSign?: string, category?: "DEVICE_CATEGORY_UNSPECIFIED"|"DEVICE_CATEGORY_A"|"DEVICE_CATEGORY_B", installationParams?: record, isSigned?: bool, measurementCapabilities?: list<string>, model?: record, state?: "DEVICE_CONFIG_STATE_UNSPECIFIED"|"DRAFT"|"FINAL", updateTime?: string, userId?: string}
-export def "v1alpha1-devices create" [
+export def "prod-tt-sasportal-nodes-nodes-devices-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1040,7 +1040,7 @@ export def "v1alpha1-devices create" [
 #
 # POST /v1alpha1/{parent}/devices:createSigned
 # operationId: prod_tt_sasportal.nodes.nodes.devices.createSigned
-export def "v1alpha1-devices-create-signed create" [
+export def "prod-tt-sasportal-nodes-nodes-devices-create-signed" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1093,7 +1093,7 @@ export def "v1alpha1-devices-create-signed create" [
 #
 # GET /v1alpha1/{parent}/nodes
 # operationId: prod_tt_sasportal.nodes.nodes.nodes.list
-export def "v1alpha1-nodes list" [
+export def "prod-tt-sasportal-nodes-nodes-nodes-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1144,7 +1144,7 @@ export def "v1alpha1-nodes list" [
 #
 # POST /v1alpha1/{parent}/nodes
 # operationId: prod_tt_sasportal.nodes.nodes.nodes.create
-export def "v1alpha1-nodes create" [
+export def "prod-tt-sasportal-nodes-nodes-nodes-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

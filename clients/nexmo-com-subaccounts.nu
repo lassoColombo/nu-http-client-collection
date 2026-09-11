@@ -111,7 +111,7 @@ def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "balance-transfers get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "retrieve-balance-transfers" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -135,7 +135,7 @@ export def commands []: nothing -> table {
 #
 # GET /{api_key}/balance-transfers
 # operationId: retrieveBalanceTransfers
-export def "balance-transfers get" [
+export def "retrieve-balance-transfers" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -175,7 +175,7 @@ export def "balance-transfers get" [
 #
 # POST /{api_key}/balance-transfers
 # operationId: transferBalance
-export def "balance-transfers create" [
+export def "transfer-balance" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -218,7 +218,7 @@ export def "balance-transfers create" [
 #
 # GET /{api_key}/credit-transfers
 # operationId: retrieveCreditTransfers
-export def "credit-transfers get" [
+export def "retrieve-credit-transfers" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -258,7 +258,7 @@ export def "credit-transfers get" [
 #
 # POST /{api_key}/credit-transfers
 # operationId: transferCredit
-export def "credit-transfers create" [
+export def "transfer-credit" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -301,7 +301,7 @@ export def "credit-transfers create" [
 #
 # GET /{api_key}/subaccounts
 # operationId: retrieveSubaccountsList
-export def "subaccounts get-list" [
+export def "retrieve-subaccounts-list" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -337,7 +337,7 @@ export def "subaccounts get-list" [
 #
 # POST /{api_key}/subaccounts
 # operationId: createSubAccount
-export def "subaccounts create-sub-account" [
+export def "create-sub-account" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -379,7 +379,7 @@ export def "subaccounts create-sub-account" [
 #
 # GET /{api_key}/subaccounts/{subaccount_key}
 # operationId: retrieveSubaccount
-export def "subaccounts get" [
+export def "retrieve-subaccount" [
   api_key: string
   subaccount_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -417,7 +417,7 @@ export def "subaccounts get" [
 #
 # PATCH /{api_key}/subaccounts/{subaccount_key}
 # operationId: modifySubaccount
-export def "subaccounts update-modify" [
+export def "modify-subaccount" [
   api_key: string
   subaccount_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -461,7 +461,7 @@ export def "subaccounts update-modify" [
 #
 # POST /{api_key}/transfer-number
 # operationId: transferNumber
-export def "transfer-number create" [
+export def "transfer-number" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

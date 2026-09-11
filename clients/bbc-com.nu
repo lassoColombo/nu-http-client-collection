@@ -110,7 +110,7 @@ def sort-completer-5 [] { ["group_position" "pid" "position" "promotion" "releas
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "schema get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-api" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -134,7 +134,7 @@ export def commands []: nothing -> table {
 #
 # GET /
 # operationId: getAPI
-export def "schema get" [
+export def "get-api" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -169,7 +169,7 @@ export def "schema get" [
 #
 # GET /availabilities
 # operationId: listAvailability
-export def "availabilities list-availability" [
+export def "list-availability" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -214,7 +214,7 @@ export def "availabilities list-availability" [
 #
 # GET /broadcasts
 # operationId: listBroadcasts
-export def "broadcasts list" [
+export def "list-broadcasts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -274,7 +274,7 @@ export def "broadcasts list" [
 #
 # GET /groups
 # operationId: listGroups
-export def "groups list" [
+export def "list-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -325,7 +325,7 @@ export def "groups list" [
 #
 # GET /images
 # operationId: listImages
-export def "images list" [
+export def "list-images" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -374,7 +374,7 @@ export def "images list" [
 #
 # GET /items
 # operationId: listItems
-export def "items list" [
+export def "list-items" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -426,7 +426,7 @@ export def "items list" [
 #
 # GET /master_brands
 # operationId: listMasterbrands
-export def "master-brands list-masterbrands" [
+export def "list-masterbrands" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -471,7 +471,7 @@ export def "master-brands list-masterbrands" [
 #
 # GET /people
 # operationId: listPeople
-export def "people list" [
+export def "list-people" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -518,7 +518,7 @@ export def "people list" [
 #
 # GET /pips
 # operationId: listPips
-export def "pips list" [
+export def "list-pips" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -557,7 +557,7 @@ export def "pips list" [
 #
 # GET /programme_details
 # operationId: listProgrammeDetails
-export def "programme-details list" [
+export def "list-programme-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -598,7 +598,7 @@ export def "programme-details list" [
 # GET /programmes
 # operationId: listProgrammes
 @deprecated --flag availability-from
-export def "programmes list" [
+export def "list-programmes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -672,7 +672,7 @@ export def "programmes list" [
 #
 # GET /promotions
 # operationId: listPromotions
-export def "promotions list" [
+export def "list-promotions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -719,7 +719,7 @@ export def "promotions list" [
 #
 # GET /schedules
 # operationId: listSchedules
-export def "schedules list" [
+export def "list-schedules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -784,7 +784,7 @@ export def "schedules list" [
 #
 # GET /schema
 # operationId: getXSD
-export def "schema get-xsd" [
+export def "get-xsd" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -819,7 +819,7 @@ export def "schema get-xsd" [
 #
 # GET /services
 # operationId: listServices
-export def "services list" [
+export def "list-services" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -867,7 +867,7 @@ export def "services list" [
 #
 # GET /v1/brands/{pid}
 # operationId: Get_Raw_brand
-export def "brands get-raw" [
+export def "get-raw-brand" [
   pid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -904,7 +904,7 @@ export def "brands get-raw" [
 #
 # GET /v1/brands/{pid}/franchises/
 # operationId: Get_Raw_brand franchises
-export def "brands-franchises get-raw" [
+export def "get-raw-brand-franchises" [
   pid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -941,7 +941,7 @@ export def "brands-franchises get-raw" [
 #
 # GET /v1/episodes/{pid}
 # operationId: Get_Raw_episode
-export def "episodes get-raw" [
+export def "get-raw-episode" [
   pid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -978,7 +978,7 @@ export def "episodes get-raw" [
 #
 # GET /v1/episodes/{pid}/ancestors/
 # operationId: Get_Raw_ancestors
-export def "episodes-ancestors get-raw" [
+export def "get-raw-ancestors" [
   pid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1015,7 +1015,7 @@ export def "episodes-ancestors get-raw" [
 #
 # GET /v1/episodes/{pid}/formats/
 # operationId: Get_Raw_formats
-export def "episodes-formats get-raw" [
+export def "get-raw-formats" [
   pid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1052,7 +1052,7 @@ export def "episodes-formats get-raw" [
 #
 # GET /v1/episodes/{pid}/genre_groups/
 # operationId: Get_Raw_genre_groups
-export def "episodes-genre-groups get-raw" [
+export def "get-raw-genre-groups" [
   pid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1089,7 +1089,7 @@ export def "episodes-genre-groups get-raw" [
 #
 # GET /v1/images/{pid}
 # operationId: Get_Raw_image
-export def "images get-raw" [
+export def "get-raw-image" [
   pid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1126,7 +1126,7 @@ export def "images get-raw" [
 #
 # GET /v1/master_brands/{mbid}
 # operationId: Get_Raw_masterbrand
-export def "master-brands get-raw-masterbrand" [
+export def "get-raw-masterbrand" [
   mbid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1163,7 +1163,7 @@ export def "master-brands get-raw-masterbrand" [
 #
 # GET /v1/promotions/{pid}
 # operationId: Get_Raw_promotion
-export def "promotions get-raw" [
+export def "get-raw-promotion" [
   pid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1200,7 +1200,7 @@ export def "promotions get-raw" [
 #
 # GET /versions
 # operationId: listVersions
-export def "versions list" [
+export def "list-versions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

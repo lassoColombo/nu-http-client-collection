@@ -130,7 +130,7 @@ def authorization-type-completer [] { ["AWS_IAM" "CUSTOM" "JWT" "NONE"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "apis create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-api" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -155,7 +155,7 @@ export def commands []: nothing -> table {
 # POST /v2/apis
 # operationId: CreateApi
 # --corsConfiguration shape: {AllowCredentials?: any, AllowHeaders?: any, AllowMethods?: any, AllowOrigins?: any, ExposeHeaders?: any, MaxAge?: any}
-export def "apis create" [
+export def "create-api" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -214,7 +214,7 @@ export def "apis create" [
 #
 # GET /v2/apis
 # operationId: GetApis
-export def "apis list" [
+export def "get-apis" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -260,7 +260,7 @@ export def "apis list" [
 #
 # PUT /v2/apis
 # operationId: ImportApi
-export def "apis import" [
+export def "import-api" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -310,7 +310,7 @@ export def "apis import" [
 #
 # POST /v2/domainnames/{domainName}/apimappings
 # operationId: CreateApiMapping
-export def "domainnames-apimappings create-mapping" [
+export def "create-api-mapping" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -361,7 +361,7 @@ export def "domainnames-apimappings create-mapping" [
 #
 # GET /v2/domainnames/{domainName}/apimappings
 # operationId: GetApiMappings
-export def "domainnames-apimappings get-mappings" [
+export def "get-api-mappings" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -410,7 +410,7 @@ export def "domainnames-apimappings get-mappings" [
 # POST /v2/apis/{apiId}/authorizers
 # operationId: CreateAuthorizer
 # --jwtConfiguration shape: {Audience?: any, Issuer?: any}
-export def "apis-authorizers create" [
+export def "create-authorizer" [
   api_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -468,7 +468,7 @@ export def "apis-authorizers create" [
 #
 # GET /v2/apis/{apiId}/authorizers
 # operationId: GetAuthorizers
-export def "apis-authorizers list" [
+export def "get-authorizers" [
   api_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -516,7 +516,7 @@ export def "apis-authorizers list" [
 #
 # POST /v2/apis/{apiId}/deployments
 # operationId: CreateDeployment
-export def "apis-deployments create" [
+export def "create-deployment" [
   api_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -566,7 +566,7 @@ export def "apis-deployments create" [
 #
 # GET /v2/apis/{apiId}/deployments
 # operationId: GetDeployments
-export def "apis-deployments list" [
+export def "get-deployments" [
   api_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -616,7 +616,7 @@ export def "apis-deployments list" [
 # operationId: CreateDomainName
 # --domainNameConfigurations item shape: {ApiGatewayDomainName?: any, CertificateArn?: any, CertificateName?: any, CertificateUploadDate?: any, DomainNameStatus?: any, DomainNameStatusMessage?: any, EndpointType?: any, HostedZoneId?: any, SecurityPolicy?: any, OwnershipVerificationCertificateArn?: any}
 # --mutualTlsAuthentication shape: {TruststoreUri?: any, TruststoreVersion?: any}
-export def "domainnames create-domain-name" [
+export def "create-domain-name" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -666,7 +666,7 @@ export def "domainnames create-domain-name" [
 #
 # GET /v2/domainnames
 # operationId: GetDomainNames
-export def "domainnames get-domain-names" [
+export def "get-domain-names" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -713,7 +713,7 @@ export def "domainnames get-domain-names" [
 # POST /v2/apis/{apiId}/integrations
 # operationId: CreateIntegration
 # --tlsConfig shape: {ServerNameToVerify?: any}
-export def "apis-integrations create" [
+export def "create-integration" [
   api_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -778,7 +778,7 @@ export def "apis-integrations create" [
 #
 # GET /v2/apis/{apiId}/integrations
 # operationId: GetIntegrations
-export def "apis-integrations list" [
+export def "get-integrations" [
   api_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -826,7 +826,7 @@ export def "apis-integrations list" [
 #
 # POST /v2/apis/{apiId}/integrations/{integrationId}/integrationresponses
 # operationId: CreateIntegrationResponse
-export def "apis-integrations-integrationresponses create-response" [
+export def "create-integration-response" [
   api_id: string
   integration_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -881,7 +881,7 @@ export def "apis-integrations-integrationresponses create-response" [
 #
 # GET /v2/apis/{apiId}/integrations/{integrationId}/integrationresponses
 # operationId: GetIntegrationResponses
-export def "apis-integrations-integrationresponses get-responses" [
+export def "get-integration-responses" [
   api_id: string
   integration_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -931,7 +931,7 @@ export def "apis-integrations-integrationresponses get-responses" [
 #
 # POST /v2/apis/{apiId}/models
 # operationId: CreateModel
-export def "apis-models create" [
+export def "create-model" [
   api_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -983,7 +983,7 @@ export def "apis-models create" [
 #
 # GET /v2/apis/{apiId}/models
 # operationId: GetModels
-export def "apis-models list" [
+export def "get-models" [
   api_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1031,7 +1031,7 @@ export def "apis-models list" [
 #
 # POST /v2/apis/{apiId}/routes
 # operationId: CreateRoute
-export def "apis-routes create" [
+export def "create-route" [
   api_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1090,7 +1090,7 @@ export def "apis-routes create" [
 #
 # GET /v2/apis/{apiId}/routes
 # operationId: GetRoutes
-export def "apis-routes list" [
+export def "get-routes" [
   api_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1138,7 +1138,7 @@ export def "apis-routes list" [
 #
 # POST /v2/apis/{apiId}/routes/{routeId}/routeresponses
 # operationId: CreateRouteResponse
-export def "apis-routes-routeresponses create-response" [
+export def "create-route-response" [
   api_id: string
   route_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1192,7 +1192,7 @@ export def "apis-routes-routeresponses create-response" [
 #
 # GET /v2/apis/{apiId}/routes/{routeId}/routeresponses
 # operationId: GetRouteResponses
-export def "apis-routes-routeresponses get-responses" [
+export def "get-route-responses" [
   api_id: string
   route_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1244,7 +1244,7 @@ export def "apis-routes-routeresponses get-responses" [
 # operationId: CreateStage
 # --accessLogSettings shape: {DestinationArn?: any, Format?: any}
 # --defaultRouteSettings shape: {DataTraceEnabled?: any, DetailedMetricsEnabled?: any, LoggingLevel?: any, ThrottlingBurstLimit?: any, ThrottlingRateLimit?: any}
-export def "apis-stages create" [
+export def "create-stage" [
   api_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1302,7 +1302,7 @@ export def "apis-stages create" [
 #
 # GET /v2/apis/{apiId}/stages
 # operationId: GetStages
-export def "apis-stages list" [
+export def "get-stages" [
   api_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1350,7 +1350,7 @@ export def "apis-stages list" [
 #
 # POST /v2/vpclinks
 # operationId: CreateVpcLink
-export def "vpclinks create-vpc-link" [
+export def "create-vpc-link" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1400,7 +1400,7 @@ export def "vpclinks create-vpc-link" [
 #
 # GET /v2/vpclinks
 # operationId: GetVpcLinks
-export def "vpclinks get-vpc-links" [
+export def "get-vpc-links" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1446,7 +1446,7 @@ export def "vpclinks get-vpc-links" [
 #
 # DELETE /v2/apis/{apiId}/stages/{stageName}/accesslogsettings
 # operationId: DeleteAccessLogSettings
-export def "apis-stages-accesslogsettings delete-access-log-settings" [
+export def "delete-access-log-settings" [
   api_id: string
   stage_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1493,7 +1493,7 @@ export def "apis-stages-accesslogsettings delete-access-log-settings" [
 #
 # DELETE /v2/apis/{apiId}
 # operationId: DeleteApi
-export def "apis delete" [
+export def "delete-api" [
   api_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1538,7 +1538,7 @@ export def "apis delete" [
 #
 # GET /v2/apis/{apiId}
 # operationId: GetApi
-export def "apis get" [
+export def "get-api" [
   api_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1583,7 +1583,7 @@ export def "apis get" [
 #
 # PUT /v2/apis/{apiId}
 # operationId: ReimportApi
-export def "apis update-reimport" [
+export def "reimport-api" [
   api_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1636,7 +1636,7 @@ export def "apis update-reimport" [
 # PATCH /v2/apis/{apiId}
 # operationId: UpdateApi
 # --corsConfiguration shape: {AllowCredentials?: any, AllowHeaders?: any, AllowMethods?: any, AllowOrigins?: any, ExposeHeaders?: any, MaxAge?: any}
-export def "apis update" [
+export def "update-api" [
   api_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1695,7 +1695,7 @@ export def "apis update" [
 #
 # DELETE /v2/domainnames/{domainName}/apimappings/{apiMappingId}
 # operationId: DeleteApiMapping
-export def "domainnames-apimappings delete-mapping" [
+export def "delete-api-mapping" [
   domain_name: string
   api_mapping_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1742,7 +1742,7 @@ export def "domainnames-apimappings delete-mapping" [
 #
 # GET /v2/domainnames/{domainName}/apimappings/{apiMappingId}
 # operationId: GetApiMapping
-export def "domainnames-apimappings get-mapping" [
+export def "get-api-mapping" [
   domain_name: string
   api_mapping_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1789,7 +1789,7 @@ export def "domainnames-apimappings get-mapping" [
 #
 # PATCH /v2/domainnames/{domainName}/apimappings/{apiMappingId}
 # operationId: UpdateApiMapping
-export def "domainnames-apimappings update-mapping" [
+export def "update-api-mapping" [
   domain_name: string
   api_mapping_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1842,7 +1842,7 @@ export def "domainnames-apimappings update-mapping" [
 #
 # DELETE /v2/apis/{apiId}/authorizers/{authorizerId}
 # operationId: DeleteAuthorizer
-export def "apis-authorizers delete" [
+export def "delete-authorizer" [
   api_id: string
   authorizer_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1889,7 +1889,7 @@ export def "apis-authorizers delete" [
 #
 # GET /v2/apis/{apiId}/authorizers/{authorizerId}
 # operationId: GetAuthorizer
-export def "apis-authorizers get" [
+export def "get-authorizer" [
   api_id: string
   authorizer_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1937,7 +1937,7 @@ export def "apis-authorizers get" [
 # PATCH /v2/apis/{apiId}/authorizers/{authorizerId}
 # operationId: UpdateAuthorizer
 # --jwtConfiguration shape: {Audience?: any, Issuer?: any}
-export def "apis-authorizers update" [
+export def "update-authorizer" [
   api_id: string
   authorizer_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1997,7 +1997,7 @@ export def "apis-authorizers update" [
 #
 # DELETE /v2/apis/{apiId}/cors
 # operationId: DeleteCorsConfiguration
-export def "apis-cors delete-configuration" [
+export def "delete-cors-configuration" [
   api_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2042,7 +2042,7 @@ export def "apis-cors delete-configuration" [
 #
 # DELETE /v2/apis/{apiId}/deployments/{deploymentId}
 # operationId: DeleteDeployment
-export def "apis-deployments delete" [
+export def "delete-deployment" [
   api_id: string
   deployment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2089,7 +2089,7 @@ export def "apis-deployments delete" [
 #
 # GET /v2/apis/{apiId}/deployments/{deploymentId}
 # operationId: GetDeployment
-export def "apis-deployments get" [
+export def "get-deployment" [
   api_id: string
   deployment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2136,7 +2136,7 @@ export def "apis-deployments get" [
 #
 # PATCH /v2/apis/{apiId}/deployments/{deploymentId}
 # operationId: UpdateDeployment
-export def "apis-deployments update" [
+export def "update-deployment" [
   api_id: string
   deployment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2187,7 +2187,7 @@ export def "apis-deployments update" [
 #
 # DELETE /v2/domainnames/{domainName}
 # operationId: DeleteDomainName
-export def "domainnames delete-domain-name" [
+export def "delete-domain-name" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2232,7 +2232,7 @@ export def "domainnames delete-domain-name" [
 #
 # GET /v2/domainnames/{domainName}
 # operationId: GetDomainName
-export def "domainnames get-domain-name" [
+export def "get-domain-name" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2279,7 +2279,7 @@ export def "domainnames get-domain-name" [
 # operationId: UpdateDomainName
 # --domainNameConfigurations item shape: {ApiGatewayDomainName?: any, CertificateArn?: any, CertificateName?: any, CertificateUploadDate?: any, DomainNameStatus?: any, DomainNameStatusMessage?: any, EndpointType?: any, HostedZoneId?: any, SecurityPolicy?: any, OwnershipVerificationCertificateArn?: any}
 # --mutualTlsAuthentication shape: {TruststoreUri?: any, TruststoreVersion?: any}
-export def "domainnames update-domain-name" [
+export def "update-domain-name" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2329,7 +2329,7 @@ export def "domainnames update-domain-name" [
 #
 # DELETE /v2/apis/{apiId}/integrations/{integrationId}
 # operationId: DeleteIntegration
-export def "apis-integrations delete" [
+export def "delete-integration" [
   api_id: string
   integration_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2376,7 +2376,7 @@ export def "apis-integrations delete" [
 #
 # GET /v2/apis/{apiId}/integrations/{integrationId}
 # operationId: GetIntegration
-export def "apis-integrations get" [
+export def "get-integration" [
   api_id: string
   integration_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2424,7 +2424,7 @@ export def "apis-integrations get" [
 # PATCH /v2/apis/{apiId}/integrations/{integrationId}
 # operationId: UpdateIntegration
 # --tlsConfig shape: {ServerNameToVerify?: any}
-export def "apis-integrations update" [
+export def "update-integration" [
   api_id: string
   integration_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2491,7 +2491,7 @@ export def "apis-integrations update" [
 #
 # DELETE /v2/apis/{apiId}/integrations/{integrationId}/integrationresponses/{integrationResponseId}
 # operationId: DeleteIntegrationResponse
-export def "apis-integrations-integrationresponses delete-response" [
+export def "delete-integration-response" [
   api_id: string
   integration_id: string
   integration_response_id: string
@@ -2540,7 +2540,7 @@ export def "apis-integrations-integrationresponses delete-response" [
 #
 # GET /v2/apis/{apiId}/integrations/{integrationId}/integrationresponses/{integrationResponseId}
 # operationId: GetIntegrationResponse
-export def "apis-integrations-integrationresponses get-response" [
+export def "get-integration-response" [
   api_id: string
   integration_id: string
   integration_response_id: string
@@ -2589,7 +2589,7 @@ export def "apis-integrations-integrationresponses get-response" [
 #
 # PATCH /v2/apis/{apiId}/integrations/{integrationId}/integrationresponses/{integrationResponseId}
 # operationId: UpdateIntegrationResponse
-export def "apis-integrations-integrationresponses update-response" [
+export def "update-integration-response" [
   api_id: string
   integration_id: string
   integration_response_id: string
@@ -2646,7 +2646,7 @@ export def "apis-integrations-integrationresponses update-response" [
 #
 # DELETE /v2/apis/{apiId}/models/{modelId}
 # operationId: DeleteModel
-export def "apis-models delete" [
+export def "delete-model" [
   api_id: string
   model_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2693,7 +2693,7 @@ export def "apis-models delete" [
 #
 # GET /v2/apis/{apiId}/models/{modelId}
 # operationId: GetModel
-export def "apis-models get" [
+export def "get-model" [
   api_id: string
   model_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2740,7 +2740,7 @@ export def "apis-models get" [
 #
 # PATCH /v2/apis/{apiId}/models/{modelId}
 # operationId: UpdateModel
-export def "apis-models update" [
+export def "update-model" [
   api_id: string
   model_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2794,7 +2794,7 @@ export def "apis-models update" [
 #
 # DELETE /v2/apis/{apiId}/routes/{routeId}
 # operationId: DeleteRoute
-export def "apis-routes delete" [
+export def "delete-route" [
   api_id: string
   route_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2841,7 +2841,7 @@ export def "apis-routes delete" [
 #
 # GET /v2/apis/{apiId}/routes/{routeId}
 # operationId: GetRoute
-export def "apis-routes get" [
+export def "get-route" [
   api_id: string
   route_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2888,7 +2888,7 @@ export def "apis-routes get" [
 #
 # PATCH /v2/apis/{apiId}/routes/{routeId}
 # operationId: UpdateRoute
-export def "apis-routes update" [
+export def "update-route" [
   api_id: string
   route_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2949,7 +2949,7 @@ export def "apis-routes update" [
 #
 # DELETE /v2/apis/{apiId}/routes/{routeId}/requestparameters/{requestParameterKey}
 # operationId: DeleteRouteRequestParameter
-export def "apis-routes-requestparameters delete-request-parameter" [
+export def "delete-route-request-parameter" [
   api_id: string
   route_id: string
   request_parameter_key: string
@@ -2998,7 +2998,7 @@ export def "apis-routes-requestparameters delete-request-parameter" [
 #
 # DELETE /v2/apis/{apiId}/routes/{routeId}/routeresponses/{routeResponseId}
 # operationId: DeleteRouteResponse
-export def "apis-routes-routeresponses delete-response" [
+export def "delete-route-response" [
   api_id: string
   route_id: string
   route_response_id: string
@@ -3047,7 +3047,7 @@ export def "apis-routes-routeresponses delete-response" [
 #
 # GET /v2/apis/{apiId}/routes/{routeId}/routeresponses/{routeResponseId}
 # operationId: GetRouteResponse
-export def "apis-routes-routeresponses get-response" [
+export def "get-route-response" [
   api_id: string
   route_id: string
   route_response_id: string
@@ -3096,7 +3096,7 @@ export def "apis-routes-routeresponses get-response" [
 #
 # PATCH /v2/apis/{apiId}/routes/{routeId}/routeresponses/{routeResponseId}
 # operationId: UpdateRouteResponse
-export def "apis-routes-routeresponses update-response" [
+export def "update-route-response" [
   api_id: string
   route_id: string
   route_response_id: string
@@ -3152,7 +3152,7 @@ export def "apis-routes-routeresponses update-response" [
 #
 # DELETE /v2/apis/{apiId}/stages/{stageName}/routesettings/{routeKey}
 # operationId: DeleteRouteSettings
-export def "apis-stages-routesettings delete-route-settings" [
+export def "delete-route-settings" [
   api_id: string
   stage_name: string
   route_key: string
@@ -3201,7 +3201,7 @@ export def "apis-stages-routesettings delete-route-settings" [
 #
 # DELETE /v2/apis/{apiId}/stages/{stageName}
 # operationId: DeleteStage
-export def "apis-stages delete" [
+export def "delete-stage" [
   api_id: string
   stage_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3248,7 +3248,7 @@ export def "apis-stages delete" [
 #
 # GET /v2/apis/{apiId}/stages/{stageName}
 # operationId: GetStage
-export def "apis-stages get" [
+export def "get-stage" [
   api_id: string
   stage_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3297,7 +3297,7 @@ export def "apis-stages get" [
 # operationId: UpdateStage
 # --accessLogSettings shape: {DestinationArn?: any, Format?: any}
 # --defaultRouteSettings shape: {DataTraceEnabled?: any, DetailedMetricsEnabled?: any, LoggingLevel?: any, ThrottlingBurstLimit?: any, ThrottlingRateLimit?: any}
-export def "apis-stages update" [
+export def "update-stage" [
   api_id: string
   stage_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3355,7 +3355,7 @@ export def "apis-stages update" [
 #
 # DELETE /v2/vpclinks/{vpcLinkId}
 # operationId: DeleteVpcLink
-export def "vpclinks delete-vpc-link" [
+export def "delete-vpc-link" [
   vpc_link_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3400,7 +3400,7 @@ export def "vpclinks delete-vpc-link" [
 #
 # GET /v2/vpclinks/{vpcLinkId}
 # operationId: GetVpcLink
-export def "vpclinks get-vpc-link" [
+export def "get-vpc-link" [
   vpc_link_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3445,7 +3445,7 @@ export def "vpclinks get-vpc-link" [
 #
 # PATCH /v2/vpclinks/{vpcLinkId}
 # operationId: UpdateVpcLink
-export def "vpclinks update-vpc-link" [
+export def "update-vpc-link" [
   vpc_link_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3493,7 +3493,7 @@ export def "vpclinks update-vpc-link" [
 # GET /v2/apis/{apiId}/exports/{specification}
 #
 # operationId: ExportApi
-export def "apis-exports export" [
+export def "export-api" [
   api_id: string
   specification: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3545,7 +3545,7 @@ export def "apis-exports export" [
 #
 # DELETE /v2/apis/{apiId}/stages/{stageName}/cache/authorizers
 # operationId: ResetAuthorizersCache
-export def "apis-stages-cache-authorizers reset" [
+export def "reset-authorizers-cache" [
   api_id: string
   stage_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3592,7 +3592,7 @@ export def "apis-stages-cache-authorizers reset" [
 #
 # GET /v2/apis/{apiId}/models/{modelId}/template
 # operationId: GetModelTemplate
-export def "apis-models-template get" [
+export def "get-model-template" [
   api_id: string
   model_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3639,7 +3639,7 @@ export def "apis-models-template get" [
 #
 # GET /v2/tags/{resource-arn}
 # operationId: GetTags
-export def "tags get" [
+export def "get-tags" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3684,7 +3684,7 @@ export def "tags get" [
 #
 # POST /v2/tags/{resource-arn}
 # operationId: TagResource
-export def "tags tag" [
+export def "tag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3733,7 +3733,7 @@ export def "tags tag" [
 #
 # DELETE /v2/tags/{resource-arn}
 # operationId: UntagResource
-export def "tags untag" [
+export def "untag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

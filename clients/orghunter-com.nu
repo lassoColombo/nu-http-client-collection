@@ -99,7 +99,7 @@ def auth-scheme-completer [] { ["query-user_key"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "categories get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-categories" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -123,7 +123,7 @@ export def commands []: nothing -> table {
 #
 # POST /v1/categories
 # operationId: get categories
-export def "categories get" [
+export def "get-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -156,7 +156,7 @@ export def "categories get" [
 # Get details!
 #
 # POST /v1/charitybasic
-export def "charitybasic create" [
+export def "post-v1-charitybasic" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -191,7 +191,7 @@ export def "charitybasic create" [
 # Get details!
 #
 # POST /v1/charityfinancial
-export def "charityfinancial create" [
+export def "post-v1-charityfinancial" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -226,7 +226,7 @@ export def "charityfinancial create" [
 # Get details!
 #
 # POST /v1/charitygeolocation
-export def "charitygeolocation create" [
+export def "post-v1-charitygeolocation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -261,7 +261,7 @@ export def "charitygeolocation create" [
 # Get details!
 #
 # POST /v1/charitypremium
-export def "charitypremium create" [
+export def "post-v1-charitypremium" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -297,7 +297,7 @@ export def "charitypremium create" [
 #
 # POST /v1/charitysearch
 # operationId: get summary
-export def "charitysearch get-summary" [
+export def "get-summary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -99,7 +99,7 @@ def accept-completer [] { ["application/json" "text/html" "text/xml"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "allstarballotpredictor get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-allstarballotpredictor" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -120,7 +120,7 @@ export def commands []: nothing -> table {
 }
 
 # GET /allstarballotpredictor
-export def "allstarballotpredictor get" [
+export def "get-allstarballotpredictor" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -167,7 +167,7 @@ export def "allstarballotpredictor get" [
 #
 # DEPRECATED
 @deprecated
-export def "boxscore get" [
+export def "get-boxscore" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -209,7 +209,7 @@ export def "boxscore get" [
 #
 # DEPRECATED
 @deprecated
-export def "boxscoreadvanced get" [
+export def "get-boxscoreadvanced" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -248,7 +248,7 @@ export def "boxscoreadvanced get" [
 }
 
 # GET /boxscoreadvancedv2
-export def "boxscoreadvancedv2 get" [
+export def "get-boxscoreadvancedv2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -290,7 +290,7 @@ export def "boxscoreadvancedv2 get" [
 #
 # DEPRECATED
 @deprecated
-export def "boxscorefourfactors get" [
+export def "get-boxscorefourfactors" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -329,7 +329,7 @@ export def "boxscorefourfactors get" [
 }
 
 # GET /boxscorefourfactorsv2
-export def "boxscorefourfactorsv2 get" [
+export def "get-boxscorefourfactorsv2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -371,7 +371,7 @@ export def "boxscorefourfactorsv2 get" [
 #
 # DEPRECATED
 @deprecated
-export def "boxscoremisc get" [
+export def "get-boxscoremisc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -410,7 +410,7 @@ export def "boxscoremisc get" [
 }
 
 # GET /boxscoremiscv2
-export def "boxscoremiscv2 get" [
+export def "get-boxscoremiscv2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -449,7 +449,7 @@ export def "boxscoremiscv2 get" [
 }
 
 # GET /boxscoreplayertrackv2
-export def "boxscoreplayertrackv2 get" [
+export def "get-boxscoreplayertrackv2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -486,7 +486,7 @@ export def "boxscoreplayertrackv2 get" [
 #
 # DEPRECATED
 @deprecated
-export def "boxscorescoring get" [
+export def "get-boxscorescoring" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -525,7 +525,7 @@ export def "boxscorescoring get" [
 }
 
 # GET /boxscorescoringv2
-export def "boxscorescoringv2 get" [
+export def "get-boxscorescoringv2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -564,7 +564,7 @@ export def "boxscorescoringv2 get" [
 }
 
 # GET /boxscoresummaryv2
-export def "boxscoresummaryv2 get" [
+export def "get-boxscoresummaryv2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -598,7 +598,7 @@ export def "boxscoresummaryv2 get" [
 }
 
 # GET /boxscoretraditionalv2
-export def "boxscoretraditionalv2 get" [
+export def "get-boxscoretraditionalv2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -640,7 +640,7 @@ export def "boxscoretraditionalv2 get" [
 #
 # DEPRECATED
 @deprecated
-export def "boxscoreusage get" [
+export def "get-boxscoreusage" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -679,7 +679,7 @@ export def "boxscoreusage get" [
 }
 
 # GET /boxscoreusagev2
-export def "boxscoreusagev2 get" [
+export def "get-boxscoreusagev2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -718,7 +718,7 @@ export def "boxscoreusagev2 get" [
 }
 
 # GET /commonTeamYears
-export def "common-team-years get" [
+export def "get-common-team-years" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -752,7 +752,7 @@ export def "common-team-years get" [
 }
 
 # GET /commonallplayers
-export def "commonallplayers get" [
+export def "get-commonallplayers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -788,7 +788,7 @@ export def "commonallplayers get" [
 }
 
 # GET /commonplayerinfo
-export def "commonplayerinfo get" [
+export def "get-commonplayerinfo" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -822,7 +822,7 @@ export def "commonplayerinfo get" [
 }
 
 # GET /commonplayoffseries
-export def "commonplayoffseries get" [
+export def "get-commonplayoffseries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -857,7 +857,7 @@ export def "commonplayoffseries get" [
 }
 
 # GET /commonteamroster
-export def "commonteamroster get" [
+export def "get-commonteamroster" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -892,7 +892,7 @@ export def "commonteamroster get" [
 }
 
 # GET /draftcombinedrillresults
-export def "draftcombinedrillresults get" [
+export def "get-draftcombinedrillresults" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -927,7 +927,7 @@ export def "draftcombinedrillresults get" [
 }
 
 # GET /draftcombinenonstationaryshooting
-export def "draftcombinenonstationaryshooting get" [
+export def "get-draftcombinenonstationaryshooting" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -962,7 +962,7 @@ export def "draftcombinenonstationaryshooting get" [
 }
 
 # GET /draftcombineplayeranthro
-export def "draftcombineplayeranthro get" [
+export def "get-draftcombineplayeranthro" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -997,7 +997,7 @@ export def "draftcombineplayeranthro get" [
 }
 
 # GET /draftcombinespotshooting
-export def "draftcombinespotshooting get" [
+export def "get-draftcombinespotshooting" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1032,7 +1032,7 @@ export def "draftcombinespotshooting get" [
 }
 
 # GET /draftcombinestats
-export def "draftcombinestats get" [
+export def "get-draftcombinestats" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1067,7 +1067,7 @@ export def "draftcombinestats get" [
 }
 
 # GET /drafthistory
-export def "drafthistory get" [
+export def "get-drafthistory" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1101,7 +1101,7 @@ export def "drafthistory get" [
 }
 
 # GET /franchisehistory
-export def "franchisehistory get" [
+export def "get-franchisehistory" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1135,7 +1135,7 @@ export def "franchisehistory get" [
 }
 
 # GET /homepageleaders
-export def "homepageleaders get" [
+export def "get-homepageleaders" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1177,7 +1177,7 @@ export def "homepageleaders get" [
 }
 
 # GET /homepagev2
-export def "homepagev2 get" [
+export def "get-homepagev2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1219,7 +1219,7 @@ export def "homepagev2 get" [
 }
 
 # GET /leaderstiles
-export def "leaderstiles get" [
+export def "get-leaderstiles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1261,7 +1261,7 @@ export def "leaderstiles get" [
 }
 
 # GET /leaguedashlineups
-export def "leaguedashlineups get" [
+export def "get-leaguedashlineups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1314,7 +1314,7 @@ export def "leaguedashlineups get" [
 }
 
 # GET /leaguedashplayerbiostats
-export def "leaguedashplayerbiostats get" [
+export def "get-leaguedashplayerbiostats" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1351,7 +1351,7 @@ export def "leaguedashplayerbiostats get" [
 }
 
 # GET /leaguedashplayerclutch
-export def "leaguedashplayerclutch get" [
+export def "get-leaguedashplayerclutch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1410,7 +1410,7 @@ export def "leaguedashplayerclutch get" [
 }
 
 # GET /leaguedashplayerptshot
-export def "leaguedashplayerptshot get" [
+export def "get-leaguedashplayerptshot" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1447,7 +1447,7 @@ export def "leaguedashplayerptshot get" [
 }
 
 # GET /leaguedashplayershotlocations
-export def "leaguedashplayershotlocations get" [
+export def "get-leaguedashplayershotlocations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1504,7 +1504,7 @@ export def "leaguedashplayershotlocations get" [
 }
 
 # GET /leaguedashplayerstats
-export def "leaguedashplayerstats get" [
+export def "get-leaguedashplayerstats" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1560,7 +1560,7 @@ export def "leaguedashplayerstats get" [
 }
 
 # GET /leaguedashptdefend
-export def "leaguedashptdefend get" [
+export def "get-leaguedashptdefend" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1598,7 +1598,7 @@ export def "leaguedashptdefend get" [
 }
 
 # GET /leaguedashptteamdefend
-export def "leaguedashptteamdefend get" [
+export def "get-leaguedashptteamdefend" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1636,7 +1636,7 @@ export def "leaguedashptteamdefend get" [
 }
 
 # GET /leaguedashteamclutch
-export def "leaguedashteamclutch get" [
+export def "get-leaguedashteamclutch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1695,7 +1695,7 @@ export def "leaguedashteamclutch get" [
 }
 
 # GET /leaguedashteamptshot
-export def "leaguedashteamptshot get" [
+export def "get-leaguedashteamptshot" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1732,7 +1732,7 @@ export def "leaguedashteamptshot get" [
 }
 
 # GET /leaguedashteamshotlocations
-export def "leaguedashteamshotlocations get" [
+export def "get-leaguedashteamshotlocations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1789,7 +1789,7 @@ export def "leaguedashteamshotlocations get" [
 }
 
 # GET /leaguedashteamstats
-export def "leaguedashteamstats get" [
+export def "get-leaguedashteamstats" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1841,7 +1841,7 @@ export def "leaguedashteamstats get" [
 }
 
 # GET /leagueleaders
-export def "leagueleaders get" [
+export def "get-leagueleaders" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1880,7 +1880,7 @@ export def "leagueleaders get" [
 }
 
 # GET /playbyplay
-export def "playbyplay get" [
+export def "get-playbyplay" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1916,7 +1916,7 @@ export def "playbyplay get" [
 }
 
 # GET /playbyplayv2
-export def "playbyplayv2 get" [
+export def "get-playbyplayv2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1952,7 +1952,7 @@ export def "playbyplayv2 get" [
 }
 
 # GET /playercareerstats
-export def "playercareerstats get" [
+export def "get-playercareerstats" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1987,7 +1987,7 @@ export def "playercareerstats get" [
 }
 
 # GET /playercompare
-export def "playercompare get" [
+export def "get-playercompare" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2041,7 +2041,7 @@ export def "playercompare get" [
 }
 
 # GET /playerdashboardbyclutch
-export def "playerdashboardbyclutch get" [
+export def "get-playerdashboardbyclutch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2094,7 +2094,7 @@ export def "playerdashboardbyclutch get" [
 }
 
 # GET /playerdashboardbygamesplits
-export def "playerdashboardbygamesplits get" [
+export def "get-playerdashboardbygamesplits" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2147,7 +2147,7 @@ export def "playerdashboardbygamesplits get" [
 }
 
 # GET /playerdashboardbygeneralsplits
-export def "playerdashboardbygeneralsplits get" [
+export def "get-playerdashboardbygeneralsplits" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2200,7 +2200,7 @@ export def "playerdashboardbygeneralsplits get" [
 }
 
 # GET /playerdashboardbylastngames
-export def "playerdashboardbylastngames get" [
+export def "get-playerdashboardbylastngames" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2253,7 +2253,7 @@ export def "playerdashboardbylastngames get" [
 }
 
 # GET /playerdashboardbyopponent
-export def "playerdashboardbyopponent get" [
+export def "get-playerdashboardbyopponent" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2306,7 +2306,7 @@ export def "playerdashboardbyopponent get" [
 }
 
 # GET /playerdashboardbyshootingsplits
-export def "playerdashboardbyshootingsplits get" [
+export def "get-playerdashboardbyshootingsplits" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2359,7 +2359,7 @@ export def "playerdashboardbyshootingsplits get" [
 }
 
 # GET /playerdashboardbyteamperformance
-export def "playerdashboardbyteamperformance get" [
+export def "get-playerdashboardbyteamperformance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2412,7 +2412,7 @@ export def "playerdashboardbyteamperformance get" [
 }
 
 # GET /playerdashboardbyyearoveryear
-export def "playerdashboardbyyearoveryear get" [
+export def "get-playerdashboardbyyearoveryear" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2465,7 +2465,7 @@ export def "playerdashboardbyyearoveryear get" [
 }
 
 # GET /playerdashptpass
-export def "playerdashptpass get" [
+export def "get-playerdashptpass" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2513,7 +2513,7 @@ export def "playerdashptpass get" [
 }
 
 # GET /playerdashptreb
-export def "playerdashptreb get" [
+export def "get-playerdashptreb" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2566,7 +2566,7 @@ export def "playerdashptreb get" [
 #
 # DEPRECATED
 @deprecated
-export def "playerdashptreboundlogs get" [
+export def "get-playerdashptreboundlogs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2615,7 +2615,7 @@ export def "playerdashptreboundlogs get" [
 }
 
 # GET /playerdashptshotdefend
-export def "playerdashptshotdefend get" [
+export def "get-playerdashptshotdefend" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2668,7 +2668,7 @@ export def "playerdashptshotdefend get" [
 #
 # DEPRECATED
 @deprecated
-export def "playerdashptshotlog get" [
+export def "get-playerdashptshotlog" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2706,7 +2706,7 @@ export def "playerdashptshotlog get" [
 }
 
 # GET /playerdashptshots
-export def "playerdashptshots get" [
+export def "get-playerdashptshots" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2756,7 +2756,7 @@ export def "playerdashptshots get" [
 }
 
 # GET /playergamelog
-export def "playergamelog get" [
+export def "get-playergamelog" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2792,7 +2792,7 @@ export def "playergamelog get" [
 }
 
 # GET /playerprofile
-export def "playerprofile get" [
+export def "get-playerprofile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2832,7 +2832,7 @@ export def "playerprofile get" [
 }
 
 # GET /playerprofilev2
-export def "playerprofilev2 get" [
+export def "get-playerprofilev2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2867,7 +2867,7 @@ export def "playerprofilev2 get" [
 }
 
 # GET /playersvsplayers
-export def "playersvsplayers get" [
+export def "get-playersvsplayers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2931,7 +2931,7 @@ export def "playersvsplayers get" [
 }
 
 # GET /playervsplayer
-export def "playervsplayer get" [
+export def "get-playervsplayer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2985,7 +2985,7 @@ export def "playervsplayer get" [
 }
 
 # GET /playoffpicture
-export def "playoffpicture get" [
+export def "get-playoffpicture" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3020,7 +3020,7 @@ export def "playoffpicture get" [
 }
 
 # GET /scoreboard
-export def "scoreboard get" [
+export def "get-scoreboard" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3056,7 +3056,7 @@ export def "scoreboard get" [
 }
 
 # GET /scoreboardV2
-export def "scoreboard-v2 get" [
+export def "get-scoreboard-v2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3092,7 +3092,7 @@ export def "scoreboard-v2 get" [
 }
 
 # GET /shotchartdetail
-export def "shotchartdetail get" [
+export def "get-shotchartdetail" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3144,7 +3144,7 @@ export def "shotchartdetail get" [
 }
 
 # GET /shotchartlineupdetail
-export def "shotchartlineupdetail get" [
+export def "get-shotchartlineupdetail" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3197,7 +3197,7 @@ export def "shotchartlineupdetail get" [
 }
 
 # GET /teamdashboardbyclutch
-export def "teamdashboardbyclutch get" [
+export def "get-teamdashboardbyclutch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3250,7 +3250,7 @@ export def "teamdashboardbyclutch get" [
 }
 
 # GET /teamdashboardbygamesplits
-export def "teamdashboardbygamesplits get" [
+export def "get-teamdashboardbygamesplits" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3303,7 +3303,7 @@ export def "teamdashboardbygamesplits get" [
 }
 
 # GET /teamdashboardbygeneralsplits
-export def "teamdashboardbygeneralsplits get" [
+export def "get-teamdashboardbygeneralsplits" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3356,7 +3356,7 @@ export def "teamdashboardbygeneralsplits get" [
 }
 
 # GET /teamdashboardbylastngames
-export def "teamdashboardbylastngames get" [
+export def "get-teamdashboardbylastngames" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3409,7 +3409,7 @@ export def "teamdashboardbylastngames get" [
 }
 
 # GET /teamdashboardbyopponent
-export def "teamdashboardbyopponent get" [
+export def "get-teamdashboardbyopponent" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3462,7 +3462,7 @@ export def "teamdashboardbyopponent get" [
 }
 
 # GET /teamdashboardbyshootingsplits
-export def "teamdashboardbyshootingsplits get" [
+export def "get-teamdashboardbyshootingsplits" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3515,7 +3515,7 @@ export def "teamdashboardbyshootingsplits get" [
 }
 
 # GET /teamdashboardbyteamperformance
-export def "teamdashboardbyteamperformance get" [
+export def "get-teamdashboardbyteamperformance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3568,7 +3568,7 @@ export def "teamdashboardbyteamperformance get" [
 }
 
 # GET /teamdashboardbyyearoveryear
-export def "teamdashboardbyyearoveryear get" [
+export def "get-teamdashboardbyyearoveryear" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3621,7 +3621,7 @@ export def "teamdashboardbyyearoveryear get" [
 }
 
 # GET /teamdashlineups
-export def "teamdashlineups get" [
+export def "get-teamdashlineups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3676,7 +3676,7 @@ export def "teamdashlineups get" [
 }
 
 # GET /teamdashptpass
-export def "teamdashptpass get" [
+export def "get-teamdashptpass" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3723,7 +3723,7 @@ export def "teamdashptpass get" [
 }
 
 # GET /teamdashptreb
-export def "teamdashptreb get" [
+export def "get-teamdashptreb" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3772,7 +3772,7 @@ export def "teamdashptreb get" [
 }
 
 # GET /teamdashptshots
-export def "teamdashptshots get" [
+export def "get-teamdashptshots" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3821,7 +3821,7 @@ export def "teamdashptshots get" [
 }
 
 # GET /teamgamelog
-export def "teamgamelog get" [
+export def "get-teamgamelog" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3857,7 +3857,7 @@ export def "teamgamelog get" [
 }
 
 # GET /teaminfocommon
-export def "teaminfocommon get" [
+export def "get-teaminfocommon" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3894,7 +3894,7 @@ export def "teaminfocommon get" [
 }
 
 # GET /teamplayerdashboard
-export def "teamplayerdashboard get" [
+export def "get-teamplayerdashboard" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3947,7 +3947,7 @@ export def "teamplayerdashboard get" [
 }
 
 # GET /teamplayeronoffdetails
-export def "teamplayeronoffdetails get" [
+export def "get-teamplayeronoffdetails" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4000,7 +4000,7 @@ export def "teamplayeronoffdetails get" [
 }
 
 # GET /teamplayeronoffsummary
-export def "teamplayeronoffsummary get" [
+export def "get-teamplayeronoffsummary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4053,7 +4053,7 @@ export def "teamplayeronoffsummary get" [
 }
 
 # GET /teamvsplayer
-export def "teamvsplayer get" [
+export def "get-teamvsplayer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4107,7 +4107,7 @@ export def "teamvsplayer get" [
 }
 
 # GET /teamyearbyyearstats
-export def "teamyearbyyearstats get" [
+export def "get-teamyearbyyearstats" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4144,7 +4144,7 @@ export def "teamyearbyyearstats get" [
 }
 
 # GET /videoStatus
-export def "video-status get" [
+export def "get-video-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

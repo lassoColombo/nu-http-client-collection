@@ -122,7 +122,7 @@ def update-targets-operating-system-completer [] { ["amazon_linux" "openwrt" "ra
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "greengrass-groups-role update-associate" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associate-role-to-group" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # PUT /greengrass/groups/{GroupId}/role
 # operationId: AssociateRoleToGroup
-export def "greengrass-groups-role update-associate" [
+export def "associate-role-to-group" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -195,7 +195,7 @@ export def "greengrass-groups-role update-associate" [
 #
 # DELETE /greengrass/groups/{GroupId}/role
 # operationId: DisassociateRoleFromGroup
-export def "greengrass-groups-role delete-disassociate" [
+export def "disassociate-role-from-group" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -240,7 +240,7 @@ export def "greengrass-groups-role delete-disassociate" [
 #
 # GET /greengrass/groups/{GroupId}/role
 # operationId: GetAssociatedRole
-export def "greengrass-groups-role get-associated" [
+export def "get-associated-role" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -285,7 +285,7 @@ export def "greengrass-groups-role get-associated" [
 #
 # PUT /greengrass/servicerole
 # operationId: AssociateServiceRoleToAccount
-export def "greengrass-servicerole update-associate-service-role-to-account" [
+export def "associate-service-role-to-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -332,7 +332,7 @@ export def "greengrass-servicerole update-associate-service-role-to-account" [
 #
 # DELETE /greengrass/servicerole
 # operationId: DisassociateServiceRoleFromAccount
-export def "greengrass-servicerole delete-disassociate-service-role-from-account" [
+export def "disassociate-service-role-from-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -375,7 +375,7 @@ export def "greengrass-servicerole delete-disassociate-service-role-from-account
 #
 # GET /greengrass/servicerole
 # operationId: GetServiceRoleForAccount
-export def "greengrass-servicerole get-service-role-for-account" [
+export def "get-service-role-for-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -419,7 +419,7 @@ export def "greengrass-servicerole get-service-role-for-account" [
 # POST /greengrass/definition/connectors
 # operationId: CreateConnectorDefinition
 # --InitialVersion shape: {Connectors?: any}
-export def "greengrass-definition-connectors create" [
+export def "create-connector-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -469,7 +469,7 @@ export def "greengrass-definition-connectors create" [
 #
 # GET /greengrass/definition/connectors
 # operationId: ListConnectorDefinitions
-export def "greengrass-definition-connectors list" [
+export def "list-connector-definitions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -516,7 +516,7 @@ export def "greengrass-definition-connectors list" [
 # POST /greengrass/definition/connectors/{ConnectorDefinitionId}/versions
 # operationId: CreateConnectorDefinitionVersion
 # --Connectors item shape: {ConnectorArn: any, Id: any, Parameters?: any}
-export def "greengrass-definition-connectors-versions create" [
+export def "create-connector-definition-version" [
   connector_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -566,7 +566,7 @@ export def "greengrass-definition-connectors-versions create" [
 #
 # GET /greengrass/definition/connectors/{ConnectorDefinitionId}/versions
 # operationId: ListConnectorDefinitionVersions
-export def "greengrass-definition-connectors-versions list" [
+export def "list-connector-definition-versions" [
   connector_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -615,7 +615,7 @@ export def "greengrass-definition-connectors-versions list" [
 # POST /greengrass/definition/cores
 # operationId: CreateCoreDefinition
 # --InitialVersion shape: {Cores?: any}
-export def "greengrass-definition-cores create" [
+export def "create-core-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -665,7 +665,7 @@ export def "greengrass-definition-cores create" [
 #
 # GET /greengrass/definition/cores
 # operationId: ListCoreDefinitions
-export def "greengrass-definition-cores list" [
+export def "list-core-definitions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -712,7 +712,7 @@ export def "greengrass-definition-cores list" [
 # POST /greengrass/definition/cores/{CoreDefinitionId}/versions
 # operationId: CreateCoreDefinitionVersion
 # --Cores item shape: {CertificateArn: any, Id: any, SyncShadow?: any, ThingArn: any}
-export def "greengrass-definition-cores-versions create" [
+export def "create-core-definition-version" [
   core_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -762,7 +762,7 @@ export def "greengrass-definition-cores-versions create" [
 #
 # GET /greengrass/definition/cores/{CoreDefinitionId}/versions
 # operationId: ListCoreDefinitionVersions
-export def "greengrass-definition-cores-versions list" [
+export def "list-core-definition-versions" [
   core_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -810,7 +810,7 @@ export def "greengrass-definition-cores-versions list" [
 #
 # POST /greengrass/groups/{GroupId}/deployments
 # operationId: CreateDeployment
-export def "greengrass-groups-deployments create" [
+export def "create-deployment" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -862,7 +862,7 @@ export def "greengrass-groups-deployments create" [
 #
 # GET /greengrass/groups/{GroupId}/deployments
 # operationId: ListDeployments
-export def "greengrass-groups-deployments list" [
+export def "list-deployments" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -911,7 +911,7 @@ export def "greengrass-groups-deployments list" [
 # POST /greengrass/definition/devices
 # operationId: CreateDeviceDefinition
 # --InitialVersion shape: {Devices?: any}
-export def "greengrass-definition-devices create" [
+export def "create-device-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -961,7 +961,7 @@ export def "greengrass-definition-devices create" [
 #
 # GET /greengrass/definition/devices
 # operationId: ListDeviceDefinitions
-export def "greengrass-definition-devices list" [
+export def "list-device-definitions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1008,7 +1008,7 @@ export def "greengrass-definition-devices list" [
 # POST /greengrass/definition/devices/{DeviceDefinitionId}/versions
 # operationId: CreateDeviceDefinitionVersion
 # --Devices item shape: {CertificateArn: any, Id: any, SyncShadow?: any, ThingArn: any}
-export def "greengrass-definition-devices-versions create" [
+export def "create-device-definition-version" [
   device_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1058,7 +1058,7 @@ export def "greengrass-definition-devices-versions create" [
 #
 # GET /greengrass/definition/devices/{DeviceDefinitionId}/versions
 # operationId: ListDeviceDefinitionVersions
-export def "greengrass-definition-devices-versions list" [
+export def "list-device-definition-versions" [
   device_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1107,7 +1107,7 @@ export def "greengrass-definition-devices-versions list" [
 # POST /greengrass/definition/functions
 # operationId: CreateFunctionDefinition
 # --InitialVersion shape: {DefaultConfig?: any, Functions?: any}
-export def "greengrass-definition-functions create" [
+export def "create-function-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1157,7 +1157,7 @@ export def "greengrass-definition-functions create" [
 #
 # GET /greengrass/definition/functions
 # operationId: ListFunctionDefinitions
-export def "greengrass-definition-functions list" [
+export def "list-function-definitions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1205,7 +1205,7 @@ export def "greengrass-definition-functions list" [
 # operationId: CreateFunctionDefinitionVersion
 # --DefaultConfig shape: {Execution?: record}
 # --Functions item shape: {FunctionArn?: any, FunctionConfiguration?: any, Id: any}
-export def "greengrass-definition-functions-versions create" [
+export def "create-function-definition-version" [
   function_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1256,7 +1256,7 @@ export def "greengrass-definition-functions-versions create" [
 #
 # GET /greengrass/definition/functions/{FunctionDefinitionId}/versions
 # operationId: ListFunctionDefinitionVersions
-export def "greengrass-definition-functions-versions list" [
+export def "list-function-definition-versions" [
   function_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1305,7 +1305,7 @@ export def "greengrass-definition-functions-versions list" [
 # POST /greengrass/groups
 # operationId: CreateGroup
 # --InitialVersion shape: {ConnectorDefinitionVersionArn?: any, CoreDefinitionVersionArn?: any, DeviceDefinitionVersionArn?: any, FunctionDefinitionVersionArn?: any, LoggerDefinitionVersionArn?: any, ResourceDefinitionVersionArn?: any, SubscriptionDefinitionVersionArn?: any}
-export def "greengrass-groups create" [
+export def "create-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1355,7 +1355,7 @@ export def "greengrass-groups create" [
 #
 # GET /greengrass/groups
 # operationId: ListGroups
-export def "greengrass-groups list" [
+export def "list-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1401,7 +1401,7 @@ export def "greengrass-groups list" [
 #
 # POST /greengrass/groups/{GroupId}/certificateauthorities
 # operationId: CreateGroupCertificateAuthority
-export def "greengrass-groups-certificateauthorities create-certificate-authority" [
+export def "create-group-certificate-authority" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1447,7 +1447,7 @@ export def "greengrass-groups-certificateauthorities create-certificate-authorit
 #
 # GET /greengrass/groups/{GroupId}/certificateauthorities
 # operationId: ListGroupCertificateAuthorities
-export def "greengrass-groups-certificateauthorities list-certificate-authorities" [
+export def "list-group-certificate-authorities" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1492,7 +1492,7 @@ export def "greengrass-groups-certificateauthorities list-certificate-authoritie
 #
 # POST /greengrass/groups/{GroupId}/versions
 # operationId: CreateGroupVersion
-export def "greengrass-groups-versions create" [
+export def "create-group-version" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1548,7 +1548,7 @@ export def "greengrass-groups-versions create" [
 #
 # GET /greengrass/groups/{GroupId}/versions
 # operationId: ListGroupVersions
-export def "greengrass-groups-versions list" [
+export def "list-group-versions" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1597,7 +1597,7 @@ export def "greengrass-groups-versions list" [
 # POST /greengrass/definition/loggers
 # operationId: CreateLoggerDefinition
 # --InitialVersion shape: {Loggers?: any}
-export def "greengrass-definition-loggers create" [
+export def "create-logger-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1647,7 +1647,7 @@ export def "greengrass-definition-loggers create" [
 #
 # GET /greengrass/definition/loggers
 # operationId: ListLoggerDefinitions
-export def "greengrass-definition-loggers list" [
+export def "list-logger-definitions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1694,7 +1694,7 @@ export def "greengrass-definition-loggers list" [
 # POST /greengrass/definition/loggers/{LoggerDefinitionId}/versions
 # operationId: CreateLoggerDefinitionVersion
 # --Loggers item shape: {Component: any, Id: any, Level: any, Space?: any, Type: any}
-export def "greengrass-definition-loggers-versions create" [
+export def "create-logger-definition-version" [
   logger_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1744,7 +1744,7 @@ export def "greengrass-definition-loggers-versions create" [
 #
 # GET /greengrass/definition/loggers/{LoggerDefinitionId}/versions
 # operationId: ListLoggerDefinitionVersions
-export def "greengrass-definition-loggers-versions list" [
+export def "list-logger-definition-versions" [
   logger_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1793,7 +1793,7 @@ export def "greengrass-definition-loggers-versions list" [
 # POST /greengrass/definition/resources
 # operationId: CreateResourceDefinition
 # --InitialVersion shape: {Resources?: any}
-export def "greengrass-definition-resources create" [
+export def "create-resource-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1843,7 +1843,7 @@ export def "greengrass-definition-resources create" [
 #
 # GET /greengrass/definition/resources
 # operationId: ListResourceDefinitions
-export def "greengrass-definition-resources list" [
+export def "list-resource-definitions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1890,7 +1890,7 @@ export def "greengrass-definition-resources list" [
 # POST /greengrass/definition/resources/{ResourceDefinitionId}/versions
 # operationId: CreateResourceDefinitionVersion
 # --Resources item shape: {Id: any, Name: any, ResourceDataContainer: any}
-export def "greengrass-definition-resources-versions create" [
+export def "create-resource-definition-version" [
   resource_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1940,7 +1940,7 @@ export def "greengrass-definition-resources-versions create" [
 #
 # GET /greengrass/definition/resources/{ResourceDefinitionId}/versions
 # operationId: ListResourceDefinitionVersions
-export def "greengrass-definition-resources-versions list" [
+export def "list-resource-definition-versions" [
   resource_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1988,7 +1988,7 @@ export def "greengrass-definition-resources-versions list" [
 #
 # POST /greengrass/updates
 # operationId: CreateSoftwareUpdateJob
-export def "greengrass-updates create-software-job" [
+export def "create-software-update-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2042,7 +2042,7 @@ export def "greengrass-updates create-software-job" [
 # POST /greengrass/definition/subscriptions
 # operationId: CreateSubscriptionDefinition
 # --InitialVersion shape: {Subscriptions?: any}
-export def "greengrass-definition-subscriptions create" [
+export def "create-subscription-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2092,7 +2092,7 @@ export def "greengrass-definition-subscriptions create" [
 #
 # GET /greengrass/definition/subscriptions
 # operationId: ListSubscriptionDefinitions
-export def "greengrass-definition-subscriptions list" [
+export def "list-subscription-definitions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2139,7 +2139,7 @@ export def "greengrass-definition-subscriptions list" [
 # POST /greengrass/definition/subscriptions/{SubscriptionDefinitionId}/versions
 # operationId: CreateSubscriptionDefinitionVersion
 # --Subscriptions item shape: {Id: any, Source: any, Subject: any, Target: any}
-export def "greengrass-definition-subscriptions-versions create" [
+export def "create-subscription-definition-version" [
   subscription_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2189,7 +2189,7 @@ export def "greengrass-definition-subscriptions-versions create" [
 #
 # GET /greengrass/definition/subscriptions/{SubscriptionDefinitionId}/versions
 # operationId: ListSubscriptionDefinitionVersions
-export def "greengrass-definition-subscriptions-versions list" [
+export def "list-subscription-definition-versions" [
   subscription_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2237,7 +2237,7 @@ export def "greengrass-definition-subscriptions-versions list" [
 #
 # DELETE /greengrass/definition/connectors/{ConnectorDefinitionId}
 # operationId: DeleteConnectorDefinition
-export def "greengrass-definition-connectors delete" [
+export def "delete-connector-definition" [
   connector_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2282,7 +2282,7 @@ export def "greengrass-definition-connectors delete" [
 #
 # GET /greengrass/definition/connectors/{ConnectorDefinitionId}
 # operationId: GetConnectorDefinition
-export def "greengrass-definition-connectors get" [
+export def "get-connector-definition" [
   connector_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2327,7 +2327,7 @@ export def "greengrass-definition-connectors get" [
 #
 # PUT /greengrass/definition/connectors/{ConnectorDefinitionId}
 # operationId: UpdateConnectorDefinition
-export def "greengrass-definition-connectors update" [
+export def "update-connector-definition" [
   connector_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2376,7 +2376,7 @@ export def "greengrass-definition-connectors update" [
 #
 # DELETE /greengrass/definition/cores/{CoreDefinitionId}
 # operationId: DeleteCoreDefinition
-export def "greengrass-definition-cores delete" [
+export def "delete-core-definition" [
   core_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2421,7 +2421,7 @@ export def "greengrass-definition-cores delete" [
 #
 # GET /greengrass/definition/cores/{CoreDefinitionId}
 # operationId: GetCoreDefinition
-export def "greengrass-definition-cores get" [
+export def "get-core-definition" [
   core_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2466,7 +2466,7 @@ export def "greengrass-definition-cores get" [
 #
 # PUT /greengrass/definition/cores/{CoreDefinitionId}
 # operationId: UpdateCoreDefinition
-export def "greengrass-definition-cores update" [
+export def "update-core-definition" [
   core_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2515,7 +2515,7 @@ export def "greengrass-definition-cores update" [
 #
 # DELETE /greengrass/definition/devices/{DeviceDefinitionId}
 # operationId: DeleteDeviceDefinition
-export def "greengrass-definition-devices delete" [
+export def "delete-device-definition" [
   device_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2560,7 +2560,7 @@ export def "greengrass-definition-devices delete" [
 #
 # GET /greengrass/definition/devices/{DeviceDefinitionId}
 # operationId: GetDeviceDefinition
-export def "greengrass-definition-devices get" [
+export def "get-device-definition" [
   device_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2605,7 +2605,7 @@ export def "greengrass-definition-devices get" [
 #
 # PUT /greengrass/definition/devices/{DeviceDefinitionId}
 # operationId: UpdateDeviceDefinition
-export def "greengrass-definition-devices update" [
+export def "update-device-definition" [
   device_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2654,7 +2654,7 @@ export def "greengrass-definition-devices update" [
 #
 # DELETE /greengrass/definition/functions/{FunctionDefinitionId}
 # operationId: DeleteFunctionDefinition
-export def "greengrass-definition-functions delete" [
+export def "delete-function-definition" [
   function_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2699,7 +2699,7 @@ export def "greengrass-definition-functions delete" [
 #
 # GET /greengrass/definition/functions/{FunctionDefinitionId}
 # operationId: GetFunctionDefinition
-export def "greengrass-definition-functions get" [
+export def "get-function-definition" [
   function_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2744,7 +2744,7 @@ export def "greengrass-definition-functions get" [
 #
 # PUT /greengrass/definition/functions/{FunctionDefinitionId}
 # operationId: UpdateFunctionDefinition
-export def "greengrass-definition-functions update" [
+export def "update-function-definition" [
   function_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2793,7 +2793,7 @@ export def "greengrass-definition-functions update" [
 #
 # DELETE /greengrass/groups/{GroupId}
 # operationId: DeleteGroup
-export def "greengrass-groups delete" [
+export def "delete-group" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2838,7 +2838,7 @@ export def "greengrass-groups delete" [
 #
 # GET /greengrass/groups/{GroupId}
 # operationId: GetGroup
-export def "greengrass-groups get" [
+export def "get-group" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2883,7 +2883,7 @@ export def "greengrass-groups get" [
 #
 # PUT /greengrass/groups/{GroupId}
 # operationId: UpdateGroup
-export def "greengrass-groups update" [
+export def "update-group" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2932,7 +2932,7 @@ export def "greengrass-groups update" [
 #
 # DELETE /greengrass/definition/loggers/{LoggerDefinitionId}
 # operationId: DeleteLoggerDefinition
-export def "greengrass-definition-loggers delete" [
+export def "delete-logger-definition" [
   logger_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2977,7 +2977,7 @@ export def "greengrass-definition-loggers delete" [
 #
 # GET /greengrass/definition/loggers/{LoggerDefinitionId}
 # operationId: GetLoggerDefinition
-export def "greengrass-definition-loggers get" [
+export def "get-logger-definition" [
   logger_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3022,7 +3022,7 @@ export def "greengrass-definition-loggers get" [
 #
 # PUT /greengrass/definition/loggers/{LoggerDefinitionId}
 # operationId: UpdateLoggerDefinition
-export def "greengrass-definition-loggers update" [
+export def "update-logger-definition" [
   logger_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3071,7 +3071,7 @@ export def "greengrass-definition-loggers update" [
 #
 # DELETE /greengrass/definition/resources/{ResourceDefinitionId}
 # operationId: DeleteResourceDefinition
-export def "greengrass-definition-resources delete" [
+export def "delete-resource-definition" [
   resource_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3116,7 +3116,7 @@ export def "greengrass-definition-resources delete" [
 #
 # GET /greengrass/definition/resources/{ResourceDefinitionId}
 # operationId: GetResourceDefinition
-export def "greengrass-definition-resources get" [
+export def "get-resource-definition" [
   resource_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3161,7 +3161,7 @@ export def "greengrass-definition-resources get" [
 #
 # PUT /greengrass/definition/resources/{ResourceDefinitionId}
 # operationId: UpdateResourceDefinition
-export def "greengrass-definition-resources update" [
+export def "update-resource-definition" [
   resource_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3210,7 +3210,7 @@ export def "greengrass-definition-resources update" [
 #
 # DELETE /greengrass/definition/subscriptions/{SubscriptionDefinitionId}
 # operationId: DeleteSubscriptionDefinition
-export def "greengrass-definition-subscriptions delete" [
+export def "delete-subscription-definition" [
   subscription_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3255,7 +3255,7 @@ export def "greengrass-definition-subscriptions delete" [
 #
 # GET /greengrass/definition/subscriptions/{SubscriptionDefinitionId}
 # operationId: GetSubscriptionDefinition
-export def "greengrass-definition-subscriptions get" [
+export def "get-subscription-definition" [
   subscription_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3300,7 +3300,7 @@ export def "greengrass-definition-subscriptions get" [
 #
 # PUT /greengrass/definition/subscriptions/{SubscriptionDefinitionId}
 # operationId: UpdateSubscriptionDefinition
-export def "greengrass-definition-subscriptions update" [
+export def "update-subscription-definition" [
   subscription_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3349,7 +3349,7 @@ export def "greengrass-definition-subscriptions update" [
 #
 # GET /greengrass/bulk/deployments/{BulkDeploymentId}/status
 # operationId: GetBulkDeploymentStatus
-export def "greengrass-bulk-deployments-status get" [
+export def "get-bulk-deployment-status" [
   bulk_deployment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3394,7 +3394,7 @@ export def "greengrass-bulk-deployments-status get" [
 #
 # GET /greengrass/things/{ThingName}/connectivityInfo
 # operationId: GetConnectivityInfo
-export def "greengrass-things-connectivity-info get" [
+export def "get-connectivity-info" [
   thing_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3440,7 +3440,7 @@ export def "greengrass-things-connectivity-info get" [
 # PUT /greengrass/things/{ThingName}/connectivityInfo
 # operationId: UpdateConnectivityInfo
 # --ConnectivityInfo item shape: {HostAddress?: any, Id?: any, Metadata?: any, PortNumber?: any}
-export def "greengrass-things-connectivity-info update" [
+export def "update-connectivity-info" [
   thing_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3489,7 +3489,7 @@ export def "greengrass-things-connectivity-info update" [
 #
 # GET /greengrass/definition/connectors/{ConnectorDefinitionId}/versions/{ConnectorDefinitionVersionId}
 # operationId: GetConnectorDefinitionVersion
-export def "greengrass-definition-connectors-versions get" [
+export def "get-connector-definition-version" [
   connector_definition_id: string
   connector_definition_version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3538,7 +3538,7 @@ export def "greengrass-definition-connectors-versions get" [
 #
 # GET /greengrass/definition/cores/{CoreDefinitionId}/versions/{CoreDefinitionVersionId}
 # operationId: GetCoreDefinitionVersion
-export def "greengrass-definition-cores-versions get" [
+export def "get-core-definition-version" [
   core_definition_id: string
   core_definition_version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3585,7 +3585,7 @@ export def "greengrass-definition-cores-versions get" [
 #
 # GET /greengrass/groups/{GroupId}/deployments/{DeploymentId}/status
 # operationId: GetDeploymentStatus
-export def "greengrass-groups-deployments-status get" [
+export def "get-deployment-status" [
   group_id: string
   deployment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3632,7 +3632,7 @@ export def "greengrass-groups-deployments-status get" [
 #
 # GET /greengrass/definition/devices/{DeviceDefinitionId}/versions/{DeviceDefinitionVersionId}
 # operationId: GetDeviceDefinitionVersion
-export def "greengrass-definition-devices-versions get" [
+export def "get-device-definition-version" [
   device_definition_id: string
   device_definition_version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3681,7 +3681,7 @@ export def "greengrass-definition-devices-versions get" [
 #
 # GET /greengrass/definition/functions/{FunctionDefinitionId}/versions/{FunctionDefinitionVersionId}
 # operationId: GetFunctionDefinitionVersion
-export def "greengrass-definition-functions-versions get" [
+export def "get-function-definition-version" [
   function_definition_id: string
   function_definition_version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3730,7 +3730,7 @@ export def "greengrass-definition-functions-versions get" [
 #
 # GET /greengrass/groups/{GroupId}/certificateauthorities/{CertificateAuthorityId}
 # operationId: GetGroupCertificateAuthority
-export def "greengrass-groups-certificateauthorities get-certificate-authority" [
+export def "get-group-certificate-authority" [
   group_id: string
   certificate_authority_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3777,7 +3777,7 @@ export def "greengrass-groups-certificateauthorities get-certificate-authority" 
 #
 # GET /greengrass/groups/{GroupId}/certificateauthorities/configuration/expiry
 # operationId: GetGroupCertificateConfiguration
-export def "greengrass-groups-certificateauthorities-configuration-expiry get-certificate" [
+export def "get-group-certificate-configuration" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3822,7 +3822,7 @@ export def "greengrass-groups-certificateauthorities-configuration-expiry get-ce
 #
 # PUT /greengrass/groups/{GroupId}/certificateauthorities/configuration/expiry
 # operationId: UpdateGroupCertificateConfiguration
-export def "greengrass-groups-certificateauthorities-configuration-expiry update-certificate" [
+export def "update-group-certificate-configuration" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3871,7 +3871,7 @@ export def "greengrass-groups-certificateauthorities-configuration-expiry update
 #
 # GET /greengrass/groups/{GroupId}/versions/{GroupVersionId}
 # operationId: GetGroupVersion
-export def "greengrass-groups-versions get" [
+export def "get-group-version" [
   group_id: string
   group_version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3918,7 +3918,7 @@ export def "greengrass-groups-versions get" [
 #
 # GET /greengrass/definition/loggers/{LoggerDefinitionId}/versions/{LoggerDefinitionVersionId}
 # operationId: GetLoggerDefinitionVersion
-export def "greengrass-definition-loggers-versions get" [
+export def "get-logger-definition-version" [
   logger_definition_id: string
   logger_definition_version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3967,7 +3967,7 @@ export def "greengrass-definition-loggers-versions get" [
 #
 # GET /greengrass/definition/resources/{ResourceDefinitionId}/versions/{ResourceDefinitionVersionId}
 # operationId: GetResourceDefinitionVersion
-export def "greengrass-definition-resources-versions get" [
+export def "get-resource-definition-version" [
   resource_definition_id: string
   resource_definition_version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4014,7 +4014,7 @@ export def "greengrass-definition-resources-versions get" [
 #
 # GET /greengrass/definition/subscriptions/{SubscriptionDefinitionId}/versions/{SubscriptionDefinitionVersionId}
 # operationId: GetSubscriptionDefinitionVersion
-export def "greengrass-definition-subscriptions-versions get" [
+export def "get-subscription-definition-version" [
   subscription_definition_id: string
   subscription_definition_version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4063,7 +4063,7 @@ export def "greengrass-definition-subscriptions-versions get" [
 #
 # GET /greengrass/things/{ThingName}/runtimeconfig
 # operationId: GetThingRuntimeConfiguration
-export def "greengrass-things-runtimeconfig get-runtime-configuration" [
+export def "get-thing-runtime-configuration" [
   thing_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4109,7 +4109,7 @@ export def "greengrass-things-runtimeconfig get-runtime-configuration" [
 # PUT /greengrass/things/{ThingName}/runtimeconfig
 # operationId: UpdateThingRuntimeConfiguration
 # --TelemetryConfiguration shape: {Telemetry?: any}
-export def "greengrass-things-runtimeconfig update-runtime-configuration" [
+export def "update-thing-runtime-configuration" [
   thing_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4158,7 +4158,7 @@ export def "greengrass-things-runtimeconfig update-runtime-configuration" [
 #
 # GET /greengrass/bulk/deployments/{BulkDeploymentId}/detailed-reports
 # operationId: ListBulkDeploymentDetailedReports
-export def "greengrass-bulk-deployments-detailed-reports list" [
+export def "list-bulk-deployment-detailed-reports" [
   bulk_deployment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4206,7 +4206,7 @@ export def "greengrass-bulk-deployments-detailed-reports list" [
 #
 # GET /greengrass/bulk/deployments
 # operationId: ListBulkDeployments
-export def "greengrass-bulk-deployments list" [
+export def "list-bulk-deployments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4252,7 +4252,7 @@ export def "greengrass-bulk-deployments list" [
 #
 # POST /greengrass/bulk/deployments
 # operationId: StartBulkDeployment
-export def "greengrass-bulk-deployments start" [
+export def "start-bulk-deployment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4302,7 +4302,7 @@ export def "greengrass-bulk-deployments start" [
 #
 # GET /tags/{resource-arn}
 # operationId: ListTagsForResource
-export def "tags list" [
+export def "list-tags-for-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4347,7 +4347,7 @@ export def "tags list" [
 #
 # POST /tags/{resource-arn}
 # operationId: TagResource
-export def "tags tag" [
+export def "tag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4396,7 +4396,7 @@ export def "tags tag" [
 #
 # POST /greengrass/groups/{GroupId}/deployments/$reset
 # operationId: ResetDeployments
-export def "greengrass-groups-deployments-reset reset" [
+export def "reset-deployments" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4446,7 +4446,7 @@ export def "greengrass-groups-deployments-reset reset" [
 #
 # PUT /greengrass/bulk/deployments/{BulkDeploymentId}/$stop
 # operationId: StopBulkDeployment
-export def "greengrass-bulk-deployments-stop stop" [
+export def "stop-bulk-deployment" [
   bulk_deployment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4491,7 +4491,7 @@ export def "greengrass-bulk-deployments-stop stop" [
 #
 # DELETE /tags/{resource-arn}
 # operationId: UntagResource
-export def "tags untag" [
+export def "untag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

@@ -153,7 +153,7 @@ def notification-type-completer [] { ["analysis_update" "policy_eval" "tag_updat
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api ping" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "ping" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -177,7 +177,7 @@ export def commands []: nothing -> table {
 #
 # GET /
 # operationId: ping
-export def "api ping" [
+export def "ping" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -211,7 +211,7 @@ export def "api ping" [
 #
 # GET /account
 # operationId: get_users_account
-export def "account get-users" [
+export def "get-users-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -245,7 +245,7 @@ export def "account get-users" [
 #
 # GET /accounts
 # operationId: list_accounts
-export def "accounts list" [
+export def "list-accounts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -281,7 +281,7 @@ export def "accounts list" [
 #
 # POST /accounts
 # operationId: create_account
-export def "accounts create" [
+export def "create-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -320,7 +320,7 @@ export def "accounts create" [
 #
 # DELETE /accounts/{accountname}
 # operationId: delete_account
-export def "accounts delete" [
+export def "delete-account" [
   accountname: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -356,7 +356,7 @@ export def "accounts delete" [
 #
 # GET /accounts/{accountname}
 # operationId: get_account
-export def "accounts get" [
+export def "get-account" [
   accountname: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -392,7 +392,7 @@ export def "accounts get" [
 #
 # PUT /accounts/{accountname}/state
 # operationId: update_account_state
-export def "accounts-state update" [
+export def "update-account-state" [
   accountname: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -432,7 +432,7 @@ export def "accounts-state update" [
 #
 # GET /accounts/{accountname}/users
 # operationId: list_users
-export def "accounts-users list" [
+export def "list-users" [
   accountname: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -468,7 +468,7 @@ export def "accounts-users list" [
 #
 # POST /accounts/{accountname}/users
 # operationId: create_user
-export def "accounts-users create" [
+export def "create-user" [
   accountname: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -509,7 +509,7 @@ export def "accounts-users create" [
 #
 # DELETE /accounts/{accountname}/users/{username}
 # operationId: delete_user
-export def "accounts-users delete" [
+export def "delete-user" [
   accountname: string
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -547,7 +547,7 @@ export def "accounts-users delete" [
 #
 # GET /accounts/{accountname}/users/{username}
 # operationId: get_account_user
-export def "accounts-users get" [
+export def "get-account-user" [
   accountname: string
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -585,7 +585,7 @@ export def "accounts-users get" [
 #
 # DELETE /accounts/{accountname}/users/{username}/credentials
 # operationId: delete_user_credential
-export def "accounts-users-credentials delete" [
+export def "delete-user-credential" [
   accountname: string
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -625,7 +625,7 @@ export def "accounts-users-credentials delete" [
 #
 # GET /accounts/{accountname}/users/{username}/credentials
 # operationId: list_user_credentials
-export def "accounts-users-credentials list" [
+export def "list-user-credentials" [
   accountname: string
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -663,7 +663,7 @@ export def "accounts-users-credentials list" [
 #
 # POST /accounts/{accountname}/users/{username}/credentials
 # operationId: create_user_credential
-export def "accounts-users-credentials create" [
+export def "create-user-credential" [
   accountname: string
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -706,7 +706,7 @@ export def "accounts-users-credentials create" [
 # GET /archives
 #
 # operationId: list_archives
-export def "archives list" [
+export def "list-archives" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -739,7 +739,7 @@ export def "archives list" [
 # GET /archives/images
 #
 # operationId: list_analysis_archive
-export def "archives-images list-analysis" [
+export def "list-analysis-archive" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -772,7 +772,7 @@ export def "archives-images list-analysis" [
 # POST /archives/images
 #
 # operationId: archive_image_analysis
-export def "archives-images archive-analysis" [
+export def "archive-image-analysis" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -810,7 +810,7 @@ export def "archives-images archive-analysis" [
 #
 # DELETE /archives/images/{imageDigest}
 # operationId: delete_archived_analysis
-export def "archives-images delete-archived-analysis" [
+export def "delete-archived-analysis" [
   image_digest: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -848,7 +848,7 @@ export def "archives-images delete-archived-analysis" [
 #
 # GET /archives/images/{imageDigest}
 # operationId: get_archived_analysis
-export def "archives-images get-archived-analysis" [
+export def "get-archived-analysis" [
   image_digest: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -883,7 +883,7 @@ export def "archives-images get-archived-analysis" [
 # GET /archives/rules
 #
 # operationId: list_analysis_archive_rules
-export def "archives-rules list-analysis" [
+export def "list-analysis-archive-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -920,7 +920,7 @@ export def "archives-rules list-analysis" [
 # operationId: create_analysis_archive_rule
 # --exclude shape: {expiration_days?: int, selector?: record}
 # --selector shape: {registry?: string, repository?: string, tag?: string}
-export def "archives-rules create-analysis" [
+export def "create-analysis-archive-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -966,7 +966,7 @@ export def "archives-rules create-analysis" [
 # DELETE /archives/rules/{ruleId}
 #
 # operationId: delete_analysis_archive_rule
-export def "archives-rules delete-analysis" [
+export def "delete-analysis-archive-rule" [
   rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1001,7 +1001,7 @@ export def "archives-rules delete-analysis" [
 # GET /archives/rules/{ruleId}
 #
 # operationId: get_analysis_archive_rule
-export def "archives-rules get-analysis" [
+export def "get-analysis-archive-rule" [
   rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1037,7 +1037,7 @@ export def "archives-rules get-analysis" [
 #
 # GET /event_types
 # operationId: list_event_types
-export def "event-types list" [
+export def "list-event-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1071,7 +1071,7 @@ export def "event-types list" [
 #
 # DELETE /events
 # operationId: delete_events
-export def "events delete" [
+export def "delete-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1112,7 +1112,7 @@ export def "events delete" [
 #
 # GET /events
 # operationId: list_events
-export def "events list" [
+export def "list-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1160,7 +1160,7 @@ export def "events list" [
 #
 # DELETE /events/{eventId}
 # operationId: delete_event
-export def "events delete-by-event-id" [
+export def "delete-event" [
   event_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1199,7 +1199,7 @@ export def "events delete-by-event-id" [
 #
 # GET /events/{eventId}
 # operationId: get_event
-export def "events get" [
+export def "get-event" [
   event_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1238,7 +1238,7 @@ export def "events get" [
 #
 # GET /health
 # operationId: health_check
-export def "health check" [
+export def "health-check" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1272,7 +1272,7 @@ export def "health check" [
 #
 # DELETE /images
 # operationId: delete_images_async
-export def "images delete-async" [
+export def "delete-images-async" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1312,7 +1312,7 @@ export def "images delete-async" [
 #
 # GET /images
 # operationId: list_images
-export def "images list" [
+export def "list-images" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1355,7 +1355,7 @@ export def "images list" [
 # POST /images
 # operationId: add_image
 # --source shape: {archive?: record, digest?: record, import?: record, tag?: record}
-export def "images create" [
+export def "add-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1405,7 +1405,7 @@ export def "images create" [
 #
 # DELETE /images/by_id/{imageId}
 # operationId: delete_image_by_imageId
-export def "images-by-id delete" [
+export def "delete-image-by-image-id" [
   image_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1446,7 +1446,7 @@ export def "images-by-id delete" [
 #
 # GET /images/by_id/{imageId}
 # operationId: get_image_by_imageId
-export def "images-by-id get" [
+export def "get-image-by-image-id" [
   image_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1485,7 +1485,7 @@ export def "images-by-id get" [
 #
 # GET /images/by_id/{imageId}/check
 # operationId: get_image_policy_check_by_imageId
-export def "images-by-id-check get-policy" [
+export def "get-image-policy-check-by-image-id" [
   image_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1529,7 +1529,7 @@ export def "images-by-id-check get-policy" [
 #
 # GET /images/by_id/{imageId}/content
 # operationId: list_image_content_by_imageid
-export def "images-by-id-content list" [
+export def "list-image-content-by-imageid" [
   image_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1568,7 +1568,7 @@ export def "images-by-id-content list" [
 #
 # GET /images/by_id/{imageId}/content/files
 # operationId: get_image_content_by_type_imageId_files
-export def "images-by-id-content-files get-type" [
+export def "get-image-content-by-type-image-id-files" [
   image_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1607,7 +1607,7 @@ export def "images-by-id-content-files get-type" [
 #
 # GET /images/by_id/{imageId}/content/java
 # operationId: get_image_content_by_type_imageId_javapackage
-export def "images-by-id-content-java get-type-javapackage" [
+export def "get-image-content-by-type-image-id-javapackage" [
   image_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1646,7 +1646,7 @@ export def "images-by-id-content-java get-type-javapackage" [
 #
 # GET /images/by_id/{imageId}/content/{ctype}
 # operationId: get_image_content_by_type_imageId
-export def "images-by-id-content get-type" [
+export def "get-image-content-by-type-image-id" [
   image_id: string
   ctype: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1687,7 +1687,7 @@ export def "images-by-id-content get-type" [
 #
 # GET /images/by_id/{imageId}/vuln
 # operationId: get_image_vulnerability_types_by_imageId
-export def "images-by-id-vuln get-vulnerability-types" [
+export def "get-image-vulnerability-types-by-image-id" [
   image_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1726,7 +1726,7 @@ export def "images-by-id-vuln get-vulnerability-types" [
 #
 # GET /images/by_id/{imageId}/vuln/{vtype}
 # operationId: get_image_vulnerabilities_by_type_imageId
-export def "images-by-id-vuln get-vulnerabilities-type" [
+export def "get-image-vulnerabilities-by-type-image-id" [
   image_id: string
   vtype: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1767,7 +1767,7 @@ export def "images-by-id-vuln get-vulnerabilities-type" [
 #
 # DELETE /images/{imageDigest}
 # operationId: delete_image
-export def "images delete" [
+export def "delete-image" [
   image_digest: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1808,7 +1808,7 @@ export def "images delete" [
 #
 # GET /images/{imageDigest}
 # operationId: get_image
-export def "images get" [
+export def "get-image" [
   image_digest: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1847,7 +1847,7 @@ export def "images get" [
 #
 # GET /images/{imageDigest}/artifacts/file_content_search
 # operationId: list_file_content_search_results
-export def "images-artifacts-file-content-search list-results" [
+export def "list-file-content-search-results" [
   image_digest: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1883,7 +1883,7 @@ export def "images-artifacts-file-content-search list-results" [
 #
 # GET /images/{imageDigest}/artifacts/retrieved_files
 # operationId: list_retrieved_files
-export def "images-artifacts-retrieved-files list" [
+export def "list-retrieved-files" [
   image_digest: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1919,7 +1919,7 @@ export def "images-artifacts-retrieved-files list" [
 #
 # GET /images/{imageDigest}/artifacts/secret_search
 # operationId: list_secret_search_results
-export def "images-artifacts-secret-search list-results" [
+export def "list-secret-search-results" [
   image_digest: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1955,7 +1955,7 @@ export def "images-artifacts-secret-search list-results" [
 #
 # GET /images/{imageDigest}/check
 # operationId: get_image_policy_check
-export def "images-check get-policy" [
+export def "get-image-policy-check" [
   image_digest: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2000,7 +2000,7 @@ export def "images-check get-policy" [
 #
 # GET /images/{imageDigest}/content
 # operationId: list_image_content
-export def "images-content list" [
+export def "list-image-content" [
   image_digest: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2039,7 +2039,7 @@ export def "images-content list" [
 #
 # GET /images/{imageDigest}/content/files
 # operationId: get_image_content_by_type_files
-export def "images-content-files get-by-type" [
+export def "get-image-content-by-type-files" [
   image_digest: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2078,7 +2078,7 @@ export def "images-content-files get-by-type" [
 #
 # GET /images/{imageDigest}/content/java
 # operationId: get_image_content_by_type_javapackage
-export def "images-content-java get-by-type-javapackage" [
+export def "get-image-content-by-type-javapackage" [
   image_digest: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2117,7 +2117,7 @@ export def "images-content-java get-by-type-javapackage" [
 #
 # GET /images/{imageDigest}/content/malware
 # operationId: get_image_content_by_type_malware
-export def "images-content-malware get-by-type" [
+export def "get-image-content-by-type-malware" [
   image_digest: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2156,7 +2156,7 @@ export def "images-content-malware get-by-type" [
 #
 # GET /images/{imageDigest}/content/{ctype}
 # operationId: get_image_content_by_type
-export def "images-content get-by-type" [
+export def "get-image-content-by-type" [
   image_digest: string
   ctype: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2197,7 +2197,7 @@ export def "images-content get-by-type" [
 #
 # GET /images/{imageDigest}/metadata
 # operationId: list_image_metadata
-export def "images-metadata list" [
+export def "list-image-metadata" [
   image_digest: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2236,7 +2236,7 @@ export def "images-metadata list" [
 #
 # GET /images/{imageDigest}/metadata/{mtype}
 # operationId: get_image_metadata_by_type
-export def "images-metadata get-by-type" [
+export def "get-image-metadata-by-type" [
   image_digest: string
   mtype: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2277,7 +2277,7 @@ export def "images-metadata get-by-type" [
 #
 # GET /images/{imageDigest}/sboms/native
 # operationId: get_image_sbom_native
-export def "images-sboms-native get" [
+export def "get-image-sbom-native" [
   image_digest: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2316,7 +2316,7 @@ export def "images-sboms-native get" [
 #
 # GET /images/{imageDigest}/vuln
 # operationId: get_image_vulnerability_types
-export def "images-vuln get-vulnerability-types" [
+export def "get-image-vulnerability-types" [
   image_digest: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2355,7 +2355,7 @@ export def "images-vuln get-vulnerability-types" [
 #
 # GET /images/{imageDigest}/vuln/{vtype}
 # operationId: get_image_vulnerabilities_by_type
-export def "images-vuln get-vulnerabilities-by-type" [
+export def "get-image-vulnerabilities-by-type" [
   image_digest: string
   vtype: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2399,7 +2399,7 @@ export def "images-vuln get-vulnerabilities-by-type" [
 #
 # POST /import/images
 # operationId: import_image_archive
-export def "import-images archive" [
+export def "import-image-archive" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2439,7 +2439,7 @@ export def "import-images archive" [
 #
 # GET /imports/images
 # operationId: list_operations
-export def "imports-images list-operations" [
+export def "list-operations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2473,7 +2473,7 @@ export def "imports-images list-operations" [
 #
 # POST /imports/images
 # operationId: create_operation
-export def "imports-images create-operation" [
+export def "create-operation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2507,7 +2507,7 @@ export def "imports-images create-operation" [
 #
 # DELETE /imports/images/{operation_id}
 # operationId: invalidate_operation
-export def "imports-images delete-invalidate" [
+export def "invalidate-operation" [
   operation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2543,7 +2543,7 @@ export def "imports-images delete-invalidate" [
 #
 # GET /imports/images/{operation_id}
 # operationId: get_operation
-export def "imports-images get" [
+export def "get-operation" [
   operation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2579,7 +2579,7 @@ export def "imports-images get" [
 #
 # GET /imports/images/{operation_id}/dockerfile
 # operationId: list_import_dockerfiles
-export def "imports-images-dockerfile list" [
+export def "list-import-dockerfiles" [
   operation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2615,7 +2615,7 @@ export def "imports-images-dockerfile list" [
 #
 # POST /imports/images/{operation_id}/dockerfile
 # operationId: import_image_dockerfile
-export def "imports-images-dockerfile import" [
+export def "import-image-dockerfile" [
   operation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2655,7 +2655,7 @@ export def "imports-images-dockerfile import" [
 #
 # GET /imports/images/{operation_id}/image_config
 # operationId: list_import_image_configs
-export def "imports-images-image-config list" [
+export def "list-import-image-configs" [
   operation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2691,7 +2691,7 @@ export def "imports-images-image-config list" [
 #
 # POST /imports/images/{operation_id}/image_config
 # operationId: import_image_config
-export def "imports-images-image-config import" [
+export def "import-image-config" [
   operation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2731,7 +2731,7 @@ export def "imports-images-image-config import" [
 #
 # GET /imports/images/{operation_id}/manifest
 # operationId: list_import_image_manifests
-export def "imports-images-manifest list" [
+export def "list-import-image-manifests" [
   operation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2767,7 +2767,7 @@ export def "imports-images-manifest list" [
 #
 # POST /imports/images/{operation_id}/manifest
 # operationId: import_image_manifest
-export def "imports-images-manifest import" [
+export def "import-image-manifest" [
   operation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2807,7 +2807,7 @@ export def "imports-images-manifest import" [
 #
 # GET /imports/images/{operation_id}/packages
 # operationId: list_import_packages
-export def "imports-images-packages list" [
+export def "list-import-packages" [
   operation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2849,7 +2849,7 @@ export def "imports-images-packages list" [
 # --distro shape: {idLike: string, name: string, version: string}
 # --schema shape: {url: string, version: string}
 # --source shape: {target: any, type: string}
-export def "imports-images-packages import" [
+export def "import-image-packages" [
   operation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2894,7 +2894,7 @@ export def "imports-images-packages import" [
 #
 # GET /imports/images/{operation_id}/parent_manifest
 # operationId: list_import_parent_manifests
-export def "imports-images-parent-manifest list" [
+export def "list-import-parent-manifests" [
   operation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2930,7 +2930,7 @@ export def "imports-images-parent-manifest list" [
 #
 # POST /imports/images/{operation_id}/parent_manifest
 # operationId: import_image_parent_manifest
-export def "imports-images-parent-manifest import" [
+export def "import-image-parent-manifest" [
   operation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2970,7 +2970,7 @@ export def "imports-images-parent-manifest import" [
 #
 # POST /oauth/token
 # operationId: get_oauth_token
-export def "oauth-token get" [
+export def "get-oauth-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3012,7 +3012,7 @@ export def "oauth-token get" [
 #
 # GET /policies
 # operationId: list_policies
-export def "policies list" [
+export def "list-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3056,7 +3056,7 @@ export def "policies list" [
 # --policies item shape: {comment?: string, id: string, name?: string, rules?: list, version: string}
 # --whitelisted_images item shape: {id?: string, image: record, name: string, registry: string, repository: string}
 # --whitelists item shape: {comment?: string, id: string, items?: list, name?: string, version: string}
-export def "policies create-policy" [
+export def "add-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3105,7 +3105,7 @@ export def "policies create-policy" [
 #
 # DELETE /policies/{policyId}
 # operationId: delete_policy
-export def "policies delete-policy" [
+export def "delete-policy" [
   policy_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3144,7 +3144,7 @@ export def "policies delete-policy" [
 #
 # GET /policies/{policyId}
 # operationId: get_policy
-export def "policies get-policy" [
+export def "get-policy" [
   policy_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3186,7 +3186,7 @@ export def "policies get-policy" [
 # PUT /policies/{policyId}
 # operationId: update_policy
 # --policybundle shape: {blacklisted_images?: list, comment?: string, id: string, mappings: list, name?: string, policies: list, version: string, whitelisted_images?: list, whitelists?: list}
-export def "policies update-policy" [
+export def "update-policy" [
   policy_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3237,7 +3237,7 @@ export def "policies update-policy" [
 #
 # GET /query/images/by_package
 # operationId: query_images_by_package
-export def "query-images-by-package list" [
+export def "query-images-by-package" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3280,7 +3280,7 @@ export def "query-images-by-package list" [
 #
 # GET /query/images/by_vulnerability
 # operationId: query_images_by_vulnerability
-export def "query-images-by-vulnerability list" [
+export def "query-images-by-vulnerability" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3325,7 +3325,7 @@ export def "query-images-by-vulnerability list" [
 #
 # GET /query/vulnerabilities
 # operationId: query_vulnerabilities
-export def "query-vulnerabilities list" [
+export def "query-vulnerabilities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3366,7 +3366,7 @@ export def "query-vulnerabilities list" [
 #
 # GET /registries
 # operationId: list_registries
-export def "registries list" [
+export def "list-registries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3403,7 +3403,7 @@ export def "registries list" [
 #
 # POST /registries
 # operationId: create_registry
-export def "registries create-registry" [
+export def "create-registry" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3451,7 +3451,7 @@ export def "registries create-registry" [
 #
 # DELETE /registries/{registry}
 # operationId: delete_registry
-export def "registries delete" [
+export def "delete-registry" [
   registry: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3490,7 +3490,7 @@ export def "registries delete" [
 #
 # GET /registries/{registry}
 # operationId: get_registry
-export def "registries get" [
+export def "get-registry" [
   registry: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3529,7 +3529,7 @@ export def "registries get" [
 #
 # PUT /registries/{registry}
 # operationId: update_registry
-export def "registries update" [
+export def "update-registry" [
   registry: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3579,7 +3579,7 @@ export def "registries update" [
 #
 # POST /repositories
 # operationId: add_repository
-export def "repositories create-repository" [
+export def "add-repository" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3620,7 +3620,7 @@ export def "repositories create-repository" [
 #
 # GET /status
 # operationId: get_status
-export def "status get" [
+export def "get-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3654,7 +3654,7 @@ export def "status get" [
 #
 # GET /subscriptions
 # operationId: list_subscriptions
-export def "subscriptions list" [
+export def "list-subscriptions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3694,7 +3694,7 @@ export def "subscriptions list" [
 #
 # POST /subscriptions
 # operationId: add_subscription
-export def "subscriptions create" [
+export def "add-subscription" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3737,7 +3737,7 @@ export def "subscriptions create" [
 #
 # DELETE /subscriptions/{subscriptionId}
 # operationId: delete_subscription
-export def "subscriptions delete" [
+export def "delete-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3776,7 +3776,7 @@ export def "subscriptions delete" [
 #
 # GET /subscriptions/{subscriptionId}
 # operationId: get_subscription
-export def "subscriptions get" [
+export def "get-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3815,7 +3815,7 @@ export def "subscriptions get" [
 #
 # PUT /subscriptions/{subscriptionId}
 # operationId: update_subscription
-export def "subscriptions update" [
+export def "update-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3859,7 +3859,7 @@ export def "subscriptions update" [
 #
 # GET /summaries/imagetags
 # operationId: list_imagetags
-export def "summaries-imagetags list" [
+export def "list-imagetags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3898,7 +3898,7 @@ export def "summaries-imagetags list" [
 #
 # GET /system
 # operationId: get_service_detail
-export def "system get-service-detail" [
+export def "get-service-detail" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3932,7 +3932,7 @@ export def "system get-service-detail" [
 #
 # GET /system/error_codes
 # operationId: describe_error_codes
-export def "system-error-codes get" [
+export def "describe-error-codes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3966,7 +3966,7 @@ export def "system-error-codes get" [
 #
 # GET /system/feeds
 # operationId: get_system_feeds
-export def "system-feeds get" [
+export def "get-system-feeds" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4000,7 +4000,7 @@ export def "system-feeds get" [
 #
 # POST /system/feeds
 # operationId: post_system_feeds
-export def "system-feeds create" [
+export def "post-system-feeds" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4037,7 +4037,7 @@ export def "system-feeds create" [
 #
 # DELETE /system/feeds/{feed}
 # operationId: delete_feed
-export def "system-feeds delete-by-feed" [
+export def "delete-feed" [
   feed: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4073,7 +4073,7 @@ export def "system-feeds delete-by-feed" [
 #
 # PUT /system/feeds/{feed}
 # operationId: toggle_feed_enabled
-export def "system-feeds update-toggle-enabled-by-feed" [
+export def "toggle-feed-enabled" [
   feed: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4111,7 +4111,7 @@ export def "system-feeds update-toggle-enabled-by-feed" [
 #
 # DELETE /system/feeds/{feed}/{group}
 # operationId: delete_feed_group
-export def "system-feeds delete-by-feed-group" [
+export def "delete-feed-group" [
   feed: string
   group: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4149,7 +4149,7 @@ export def "system-feeds delete-by-feed-group" [
 #
 # PUT /system/feeds/{feed}/{group}
 # operationId: toggle_group_enabled
-export def "system-feeds update-toggle-enabled-by-feed-group" [
+export def "toggle-group-enabled" [
   feed: string
   group: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4189,7 +4189,7 @@ export def "system-feeds update-toggle-enabled-by-feed-group" [
 #
 # GET /system/policy_spec
 # operationId: describe_policy
-export def "system-policy-spec get" [
+export def "describe-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4223,7 +4223,7 @@ export def "system-policy-spec get" [
 #
 # GET /system/services
 # operationId: list_services
-export def "system-services list" [
+export def "list-services" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4257,7 +4257,7 @@ export def "system-services list" [
 #
 # GET /system/services/{servicename}
 # operationId: get_services_by_name
-export def "system-services get-by-name" [
+export def "get-services-by-name" [
   servicename: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4293,7 +4293,7 @@ export def "system-services get-by-name" [
 #
 # DELETE /system/services/{servicename}/{hostid}
 # operationId: delete_service
-export def "system-services delete" [
+export def "delete-service" [
   servicename: string
   hostid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4331,7 +4331,7 @@ export def "system-services delete" [
 #
 # GET /system/services/{servicename}/{hostid}
 # operationId: get_services_by_name_and_host
-export def "system-services get-by-name-and-host" [
+export def "get-services-by-name-and-host" [
   servicename: string
   hostid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4369,7 +4369,7 @@ export def "system-services get-by-name-and-host" [
 #
 # POST /system/webhooks/{webhook_type}/test
 # operationId: test_webhook
-export def "system-webhooks-test test" [
+export def "test-webhook" [
   webhook_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4407,7 +4407,7 @@ export def "system-webhooks-test test" [
 #
 # GET /user
 # operationId: get_user
-export def "user get" [
+export def "get-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4441,7 +4441,7 @@ export def "user get" [
 #
 # GET /user/credentials
 # operationId: get_credentials
-export def "user-credentials get" [
+export def "get-credentials" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4475,7 +4475,7 @@ export def "user-credentials get" [
 #
 # POST /user/credentials
 # operationId: add_credential
-export def "user-credentials create" [
+export def "add-credential" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4515,7 +4515,7 @@ export def "user-credentials create" [
 #
 # GET /version
 # operationId: version_check
-export def "version check" [
+export def "version-check" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

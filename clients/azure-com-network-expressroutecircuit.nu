@@ -122,7 +122,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-network-express-route-circuits list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "express-route-circuits-list-all" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/expressRouteCircuits
 # operationId: ExpressRouteCircuits_ListAll
-export def "subscriptions-providers-microsoft-network-express-route-circuits list" [
+export def "express-route-circuits-list-all" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -184,7 +184,7 @@ export def "subscriptions-providers-microsoft-network-express-route-circuits lis
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/expressRouteServiceProviders
 # operationId: ExpressRouteServiceProviders_List
-export def "subscriptions-providers-microsoft-network-express-route-service-providers list" [
+export def "express-route-service-providers-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -222,7 +222,7 @@ export def "subscriptions-providers-microsoft-network-express-route-service-prov
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteCircuits
 # operationId: ExpressRouteCircuits_List
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits list" [
+export def "express-route-circuits-list" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -262,7 +262,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteCircuits/{circuitName}
 # operationId: ExpressRouteCircuits_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits delete" [
+export def "express-route-circuits-delete" [
   subscription_id: string
   resource_group_name: string
   circuit_name: string
@@ -304,7 +304,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteCircuits/{circuitName}
 # operationId: ExpressRouteCircuits_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits get" [
+export def "express-route-circuits-get" [
   subscription_id: string
   resource_group_name: string
   circuit_name: string
@@ -346,7 +346,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteCircuits/{circuitName}
 # operationId: ExpressRouteCircuits_UpdateTags
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits update-tags" [
+export def "express-route-circuits-update-tags" [
   subscription_id: string
   resource_group_name: string
   circuit_name: string
@@ -394,7 +394,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 # operationId: ExpressRouteCircuits_CreateOrUpdate
 # --properties shape: {allowClassicOperations?: bool, authorizations?: list, bandwidthInGbps?: float, circuitProvisioningState?: string, expressRoutePort?: any, gatewayManagerEtag?: string, globalReachEnabled?: bool, peerings?: list, serviceKey?: string, serviceProviderNotes?: string, serviceProviderProperties?: any, serviceProviderProvisioningState?: "NotProvisioned"|"Provisioning"|"Provisioned"|"Deprovisioning"}
 # --sku shape: {family?: "UnlimitedData"|"MeteredData", name?: string, tier?: "Standard"|"Premium"|"Basic"|"Local"}
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits create-or-update" [
+export def "express-route-circuits-create-or-update" [
   subscription_id: string
   resource_group_name: string
   circuit_name: string
@@ -444,7 +444,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteCircuits/{circuitName}/authorizations
 # operationId: ExpressRouteCircuitAuthorizations_List
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-authorizations list" [
+export def "express-route-circuit-authorizations-list" [
   subscription_id: string
   resource_group_name: string
   circuit_name: string
@@ -486,7 +486,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteCircuits/{circuitName}/authorizations/{authorizationName}
 # operationId: ExpressRouteCircuitAuthorizations_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-authorizations delete" [
+export def "express-route-circuit-authorizations-delete" [
   subscription_id: string
   resource_group_name: string
   circuit_name: string
@@ -530,7 +530,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteCircuits/{circuitName}/authorizations/{authorizationName}
 # operationId: ExpressRouteCircuitAuthorizations_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-authorizations get" [
+export def "express-route-circuit-authorizations-get" [
   subscription_id: string
   resource_group_name: string
   circuit_name: string
@@ -575,7 +575,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteCircuits/{circuitName}/authorizations/{authorizationName}
 # operationId: ExpressRouteCircuitAuthorizations_CreateOrUpdate
 # --properties shape: {authorizationKey?: string, authorizationUseStatus?: "Available"|"InUse"}
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-authorizations create-or-update" [
+export def "express-route-circuit-authorizations-create-or-update" [
   subscription_id: string
   resource_group_name: string
   circuit_name: string
@@ -625,7 +625,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteCircuits/{circuitName}/peerings
 # operationId: ExpressRouteCircuitPeerings_List
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-peerings list" [
+export def "express-route-circuit-peerings-list" [
   subscription_id: string
   resource_group_name: string
   circuit_name: string
@@ -667,7 +667,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteCircuits/{circuitName}/peerings/{peeringName}
 # operationId: ExpressRouteCircuitPeerings_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-peerings delete" [
+export def "express-route-circuit-peerings-delete" [
   subscription_id: string
   resource_group_name: string
   circuit_name: string
@@ -711,7 +711,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteCircuits/{circuitName}/peerings/{peeringName}
 # operationId: ExpressRouteCircuitPeerings_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-peerings get" [
+export def "express-route-circuit-peerings-get" [
   subscription_id: string
   resource_group_name: string
   circuit_name: string
@@ -756,7 +756,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteCircuits/{circuitName}/peerings/{peeringName}
 # operationId: ExpressRouteCircuitPeerings_CreateOrUpdate
 # --properties shape: {azureASN?: int, connections?: list, expressRouteConnection?: any, gatewayManagerEtag?: string, ipv6PeeringConfig?: any, lastModifiedBy?: string, microsoftPeeringConfig?: any, peerASN?: int, peeringType?: "AzurePublicPeering"|"AzurePrivatePeering"|"MicrosoftPeering", primaryAzurePort?: string, primaryPeerAddressPrefix?: string, routeFilter?: any, secondaryAzurePort?: string, secondaryPeerAddressPrefix?: string, sharedKey?: string, state?: "Disabled"|"Enabled", stats?: any, vlanId?: int}
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-peerings create-or-update" [
+export def "express-route-circuit-peerings-create-or-update" [
   subscription_id: string
   resource_group_name: string
   circuit_name: string
@@ -806,7 +806,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteCircuits/{circuitName}/peerings/{peeringName}/arpTables/{devicePath}
 # operationId: ExpressRouteCircuits_ListArpTable
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-peerings-arp-tables list" [
+export def "express-route-circuits-list-arp-table" [
   subscription_id: string
   resource_group_name: string
   circuit_name: string
@@ -852,7 +852,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteCircuits/{circuitName}/peerings/{peeringName}/connections
 # operationId: ExpressRouteCircuitConnections_List
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-peerings-connections list" [
+export def "express-route-circuit-connections-list" [
   subscription_id: string
   resource_group_name: string
   circuit_name: string
@@ -896,7 +896,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteCircuits/{circuitName}/peerings/{peeringName}/connections/{connectionName}
 # operationId: ExpressRouteCircuitConnections_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-peerings-connections delete" [
+export def "express-route-circuit-connections-delete" [
   subscription_id: string
   resource_group_name: string
   circuit_name: string
@@ -942,7 +942,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteCircuits/{circuitName}/peerings/{peeringName}/connections/{connectionName}
 # operationId: ExpressRouteCircuitConnections_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-peerings-connections get" [
+export def "express-route-circuit-connections-get" [
   subscription_id: string
   resource_group_name: string
   circuit_name: string
@@ -989,7 +989,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteCircuits/{circuitName}/peerings/{peeringName}/connections/{connectionName}
 # operationId: ExpressRouteCircuitConnections_CreateOrUpdate
 # --properties shape: {addressPrefix?: string, authorizationKey?: string, expressRouteCircuitPeering?: any, peerExpressRouteCircuitPeering?: any}
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-peerings-connections create-or-update" [
+export def "express-route-circuit-connections-create-or-update" [
   subscription_id: string
   resource_group_name: string
   circuit_name: string
@@ -1041,7 +1041,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteCircuits/{circuitName}/peerings/{peeringName}/peerConnections
 # operationId: PeerExpressRouteCircuitConnections_List
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-peerings-peer-connections list" [
+export def "peer-express-route-circuit-connections-list" [
   subscription_id: string
   resource_group_name: string
   circuit_name: string
@@ -1085,7 +1085,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteCircuits/{circuitName}/peerings/{peeringName}/peerConnections/{connectionName}
 # operationId: PeerExpressRouteCircuitConnections_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-peerings-peer-connections get" [
+export def "peer-express-route-circuit-connections-get" [
   subscription_id: string
   resource_group_name: string
   circuit_name: string
@@ -1131,7 +1131,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteCircuits/{circuitName}/peerings/{peeringName}/routeTables/{devicePath}
 # operationId: ExpressRouteCircuits_ListRoutesTable
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-peerings-route-tables list" [
+export def "express-route-circuits-list-routes-table" [
   subscription_id: string
   resource_group_name: string
   circuit_name: string
@@ -1177,7 +1177,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteCircuits/{circuitName}/peerings/{peeringName}/routeTablesSummary/{devicePath}
 # operationId: ExpressRouteCircuits_ListRoutesTableSummary
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-peerings-route-tables-summary list" [
+export def "express-route-circuits-list-routes-table-summary" [
   subscription_id: string
   resource_group_name: string
   circuit_name: string
@@ -1223,7 +1223,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteCircuits/{circuitName}/peerings/{peeringName}/stats
 # operationId: ExpressRouteCircuits_GetPeeringStats
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-peerings-stats get" [
+export def "express-route-circuits-get-peering-stats" [
   subscription_id: string
   resource_group_name: string
   circuit_name: string
@@ -1267,7 +1267,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteCircuits/{circuitName}/stats
 # operationId: ExpressRouteCircuits_GetStats
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-stats get" [
+export def "express-route-circuits-get-stats" [
   subscription_id: string
   resource_group_name: string
   circuit_name: string

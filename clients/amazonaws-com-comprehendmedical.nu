@@ -126,7 +126,7 @@ def x-amz-target-completer-25 [] { ["ComprehendMedical_20181030.StopSNOMEDCTInfe
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api get-entities-detection-job" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "describe-entities-detection-v2-job" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -150,7 +150,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: DescribeEntitiesDetectionV2Job
-export def "api get-entities-detection-job" [
+export def "describe-entities-detection-v2-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -198,7 +198,7 @@ export def "api get-entities-detection-job" [
 #
 # POST /
 # operationId: DescribeICD10CMInferenceJob
-export def "api get-icd10-cm-inference-job" [
+export def "describe-icd10cm-inference-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -246,7 +246,7 @@ export def "api get-icd10-cm-inference-job" [
 #
 # POST /
 # operationId: DescribePHIDetectionJob
-export def "api get-phi-detection-job" [
+export def "describe-phi-detection-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -294,7 +294,7 @@ export def "api get-phi-detection-job" [
 #
 # POST /
 # operationId: DescribeRxNormInferenceJob
-export def "api get-rx-norm-inference-job" [
+export def "describe-rx-norm-inference-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -342,7 +342,7 @@ export def "api get-rx-norm-inference-job" [
 #
 # POST /
 # operationId: DescribeSNOMEDCTInferenceJob
-export def "api get-snomedct-inference-job" [
+export def "describe-snomedct-inference-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -392,7 +392,7 @@ export def "api get-snomedct-inference-job" [
 # DEPRECATED
 # operationId: DetectEntities
 @deprecated
-export def "api create-detect-entities" [
+export def "detect-entities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -440,7 +440,7 @@ export def "api create-detect-entities" [
 #
 # POST /
 # operationId: DetectEntitiesV2
-export def "api create-detect-entities-1" [
+export def "detect-entities-v2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -488,7 +488,7 @@ export def "api create-detect-entities-1" [
 #
 # POST /
 # operationId: DetectPHI
-export def "api create-detect-phi" [
+export def "detect-phi" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -536,7 +536,7 @@ export def "api create-detect-phi" [
 #
 # POST /
 # operationId: InferICD10CM
-export def "api create-infer-icd10-cm" [
+export def "infer-icd10cm" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -584,7 +584,7 @@ export def "api create-infer-icd10-cm" [
 #
 # POST /
 # operationId: InferRxNorm
-export def "api create-infer-rx-norm" [
+export def "infer-rx-norm" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -632,7 +632,7 @@ export def "api create-infer-rx-norm" [
 #
 # POST /
 # operationId: InferSNOMEDCT
-export def "api create-infer-snomedct" [
+export def "infer-snomedct" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -680,7 +680,7 @@ export def "api create-infer-snomedct" [
 #
 # POST /
 # operationId: ListEntitiesDetectionV2Jobs
-export def "api list-entities-detection-jobs" [
+export def "list-entities-detection-v2-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -730,7 +730,7 @@ export def "api list-entities-detection-jobs" [
 #
 # POST /
 # operationId: ListICD10CMInferenceJobs
-export def "api list-icd10-cm-inference-jobs" [
+export def "list-icd10cm-inference-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -780,7 +780,7 @@ export def "api list-icd10-cm-inference-jobs" [
 #
 # POST /
 # operationId: ListPHIDetectionJobs
-export def "api list-phi-detection-jobs" [
+export def "list-phi-detection-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -830,7 +830,7 @@ export def "api list-phi-detection-jobs" [
 #
 # POST /
 # operationId: ListRxNormInferenceJobs
-export def "api list-rx-norm-inference-jobs" [
+export def "list-rx-norm-inference-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -881,7 +881,7 @@ export def "api list-rx-norm-inference-jobs" [
 # POST /
 # operationId: ListSNOMEDCTInferenceJobs
 # --Filter shape: {JobName?: any, JobStatus?: any, SubmitTimeBefore?: any, SubmitTimeAfter?: any}
-export def "api list-snomedct-inference-jobs" [
+export def "list-snomedct-inference-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -931,7 +931,7 @@ export def "api list-snomedct-inference-jobs" [
 #
 # POST /
 # operationId: StartEntitiesDetectionV2Job
-export def "api start-entities-detection-job" [
+export def "start-entities-detection-v2-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -985,7 +985,7 @@ export def "api start-entities-detection-job" [
 #
 # POST /
 # operationId: StartICD10CMInferenceJob
-export def "api start-icd10-cm-inference-job" [
+export def "start-icd10cm-inference-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1039,7 +1039,7 @@ export def "api start-icd10-cm-inference-job" [
 #
 # POST /
 # operationId: StartPHIDetectionJob
-export def "api start-phi-detection-job" [
+export def "start-phi-detection-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1093,7 +1093,7 @@ export def "api start-phi-detection-job" [
 #
 # POST /
 # operationId: StartRxNormInferenceJob
-export def "api start-rx-norm-inference-job" [
+export def "start-rx-norm-inference-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1149,7 +1149,7 @@ export def "api start-rx-norm-inference-job" [
 # operationId: StartSNOMEDCTInferenceJob
 # --InputDataConfig shape: {S3Bucket: any, S3Key?: any}
 # --OutputDataConfig shape: {S3Bucket: any, S3Key?: any}
-export def "api start-snomedct-inference-job" [
+export def "start-snomedct-inference-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1203,7 +1203,7 @@ export def "api start-snomedct-inference-job" [
 #
 # POST /
 # operationId: StopEntitiesDetectionV2Job
-export def "api stop-entities-detection-job" [
+export def "stop-entities-detection-v2-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1251,7 +1251,7 @@ export def "api stop-entities-detection-job" [
 #
 # POST /
 # operationId: StopICD10CMInferenceJob
-export def "api stop-icd10-cm-inference-job" [
+export def "stop-icd10cm-inference-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1299,7 +1299,7 @@ export def "api stop-icd10-cm-inference-job" [
 #
 # POST /
 # operationId: StopPHIDetectionJob
-export def "api stop-phi-detection-job" [
+export def "stop-phi-detection-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1347,7 +1347,7 @@ export def "api stop-phi-detection-job" [
 #
 # POST /
 # operationId: StopRxNormInferenceJob
-export def "api stop-rx-norm-inference-job" [
+export def "stop-rx-norm-inference-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1395,7 +1395,7 @@ export def "api stop-rx-norm-inference-job" [
 #
 # POST /
 # operationId: StopSNOMEDCTInferenceJob
-export def "api stop-snomedct-inference-job" [
+export def "stop-snomedct-inference-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -110,7 +110,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-cost-management-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -134,7 +134,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.CostManagement/operations
 # operationId: Operations_List
-export def "providers-microsoft-cost-management-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -171,7 +171,7 @@ export def "providers-microsoft-cost-management-operations list" [
 # GET /providers/Microsoft.CostManagement/views
 # Docs: https://docs.microsoft.com/en-us/rest/api/costmanagement/
 # operationId: Views_List
-export def "providers-microsoft-cost-management-views list" [
+export def "views-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -208,7 +208,7 @@ export def "providers-microsoft-cost-management-views list" [
 # DELETE /providers/Microsoft.CostManagement/views/{viewName}
 # Docs: https://docs.microsoft.com/en-us/rest/api/costmanagement/
 # operationId: Views_Delete
-export def "providers-microsoft-cost-management-views delete-by-view-name" [
+export def "views-delete" [
   view_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -247,7 +247,7 @@ export def "providers-microsoft-cost-management-views delete-by-view-name" [
 # GET /providers/Microsoft.CostManagement/views/{viewName}
 # Docs: https://docs.microsoft.com/en-us/rest/api/costmanagement/
 # operationId: Views_Get
-export def "providers-microsoft-cost-management-views list-1" [
+export def "views-get" [
   view_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -287,7 +287,7 @@ export def "providers-microsoft-cost-management-views list-1" [
 # Docs: https://docs.microsoft.com/en-us/rest/api/costmanagement/
 # operationId: Views_CreateOrUpdate
 # --properties shape: {accumulated?: "true"|"false", chart?: "Area"|"Line"|"StackedColumn"|"GroupedColumn"|"Table", displayName?: string, kpis?: list, metric?: "ActualCost"|"AmortizedCost"|"AHUB", pivots?: list, query?: any, scope?: string}
-export def "providers-microsoft-cost-management-views create-or-update-by-view-name" [
+export def "views-create-or-update" [
   view_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -331,7 +331,7 @@ export def "providers-microsoft-cost-management-views create-or-update-by-view-n
 # GET /{scope}/providers/Microsoft.CostManagement/budgets
 # Docs: https://docs.microsoft.com/en-us/rest/api/cost-management/
 # operationId: Budgets_List
-export def "providers-microsoft-cost-management-budgets list" [
+export def "budgets-list" [
   scope: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -370,7 +370,7 @@ export def "providers-microsoft-cost-management-budgets list" [
 # DELETE /{scope}/providers/Microsoft.CostManagement/budgets/{budgetName}
 # Docs: https://docs.microsoft.com/en-us/rest/api/cost-management/
 # operationId: Budget_Delete
-export def "providers-microsoft-cost-management-budgets delete" [
+export def "budget-delete" [
   scope: string
   budget_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -411,7 +411,7 @@ export def "providers-microsoft-cost-management-budgets delete" [
 # GET /{scope}/providers/Microsoft.CostManagement/budgets/{budgetName}
 # Docs: https://docs.microsoft.com/en-us/rest/api/cost-management/
 # operationId: Budget_Get
-export def "providers-microsoft-cost-management-budgets get" [
+export def "budget-get" [
   scope: string
   budget_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -453,7 +453,7 @@ export def "providers-microsoft-cost-management-budgets get" [
 # Docs: https://docs.microsoft.com/en-us/rest/api/cost-management/
 # operationId: Budget_CreateOrUpdate
 # --properties shape: {amount: float, category: "Cost"|"Usage", currentSpend?: any, filter?: any, notifications?: record, timeGrain: "Monthly"|"Quarterly"|"Annually", timePeriod: any}
-export def "providers-microsoft-cost-management-budgets create-or-update" [
+export def "budget-create-or-update" [
   scope: string
   budget_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -499,7 +499,7 @@ export def "providers-microsoft-cost-management-budgets create-or-update" [
 # GET /{scope}/providers/Microsoft.CostManagement/views
 # Docs: https://docs.microsoft.com/en-us/rest/api/costmanagement/
 # operationId: Views_ListByScope
-export def "providers-microsoft-cost-management-views list-2" [
+export def "views-list-by-scope" [
   scope: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -538,7 +538,7 @@ export def "providers-microsoft-cost-management-views list-2" [
 # DELETE /{scope}/providers/Microsoft.CostManagement/views/{viewName}
 # Docs: https://docs.microsoft.com/en-us/rest/api/costmanagement/
 # operationId: Views_DeleteByScope
-export def "providers-microsoft-cost-management-views delete-by-scope-view-name" [
+export def "views-delete-by-scope" [
   scope: string
   view_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -579,7 +579,7 @@ export def "providers-microsoft-cost-management-views delete-by-scope-view-name"
 # GET /{scope}/providers/Microsoft.CostManagement/views/{viewName}
 # Docs: https://docs.microsoft.com/en-us/rest/api/costmanagement/
 # operationId: Views_GetByScope
-export def "providers-microsoft-cost-management-views get" [
+export def "views-get-by-scope" [
   scope: string
   view_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -621,7 +621,7 @@ export def "providers-microsoft-cost-management-views get" [
 # Docs: https://docs.microsoft.com/en-us/rest/api/costmanagement/
 # operationId: Views_CreateOrUpdateByScope
 # --properties shape: {accumulated?: "true"|"false", chart?: "Area"|"Line"|"StackedColumn"|"GroupedColumn"|"Table", displayName?: string, kpis?: list, metric?: "ActualCost"|"AmortizedCost"|"AHUB", pivots?: list, query?: any, scope?: string}
-export def "providers-microsoft-cost-management-views create-or-update-by-scope-view-name" [
+export def "views-create-or-update-by-scope" [
   scope: string
   view_name: string
   --base-url(-b): string@base-url-completer # API base URL

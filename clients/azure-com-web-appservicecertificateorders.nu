@@ -122,7 +122,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-certificate-registration-certificate-orders list-app-service" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "app-service-certificate-orders-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.CertificateRegistration/certificateOrders
 # operationId: AppServiceCertificateOrders_List
-export def "subscriptions-providers-microsoft-certificate-registration-certificate-orders list-app-service" [
+export def "app-service-certificate-orders-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -185,7 +185,7 @@ export def "subscriptions-providers-microsoft-certificate-registration-certifica
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.CertificateRegistration/validateCertificateRegistrationInformation
 # operationId: AppServiceCertificateOrders_ValidatePurchaseInformation
 # --properties shape: {autoRenew?: bool, certificates?: record, csr?: string, distinguishedName?: string, intermediate?: record, keySize?: int, productType: "StandardDomainValidatedSsl"|"StandardDomainValidatedWildCardSsl", root?: record, signedCertificate?: record, validityInYears?: int}
-export def "subscriptions-providers-microsoft-certificate-registration-validate-certificate-registration-information validate-app-service-orders-purchase" [
+export def "app-service-certificate-orders-validate-purchase-information" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -230,7 +230,7 @@ export def "subscriptions-providers-microsoft-certificate-registration-validate-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CertificateRegistration/certificateOrders
 # operationId: AppServiceCertificateOrders_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders list-app-service" [
+export def "app-service-certificate-orders-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -270,7 +270,7 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CertificateRegistration/certificateOrders/{certificateOrderName}
 # operationId: AppServiceCertificateOrders_Delete
-export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders delete-app-service" [
+export def "app-service-certificate-orders-delete" [
   subscription_id: string
   resource_group_name: string
   certificate_order_name: string
@@ -312,7 +312,7 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CertificateRegistration/certificateOrders/{certificateOrderName}
 # operationId: AppServiceCertificateOrders_Get
-export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders get-app-service" [
+export def "app-service-certificate-orders-get" [
   subscription_id: string
   resource_group_name: string
   certificate_order_name: string
@@ -355,7 +355,7 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CertificateRegistration/certificateOrders/{certificateOrderName}
 # operationId: AppServiceCertificateOrders_Update
 # --properties shape: {autoRenew?: bool, certificates?: record, csr?: string, distinguishedName?: string, intermediate?: record, keySize?: int, productType: "StandardDomainValidatedSsl"|"StandardDomainValidatedWildCardSsl", root?: record, signedCertificate?: record, validityInYears?: int}
-export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders update-app-service" [
+export def "app-service-certificate-orders-update" [
   subscription_id: string
   resource_group_name: string
   certificate_order_name: string
@@ -403,7 +403,7 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CertificateRegistration/certificateOrders/{certificateOrderName}
 # operationId: AppServiceCertificateOrders_CreateOrUpdate
 # --properties shape: {autoRenew?: bool, certificates?: record, csr?: string, distinguishedName?: string, intermediate?: record, keySize?: int, productType: "StandardDomainValidatedSsl"|"StandardDomainValidatedWildCardSsl", root?: record, signedCertificate?: record, validityInYears?: int}
-export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders create-app-service-or-update" [
+export def "app-service-certificate-orders-create-or-update" [
   subscription_id: string
   resource_group_name: string
   certificate_order_name: string
@@ -452,7 +452,7 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CertificateRegistration/certificateOrders/{certificateOrderName}/certificates
 # operationId: AppServiceCertificateOrders_ListCertificates
-export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders-certificates list-app-service" [
+export def "app-service-certificate-orders-list-certificates" [
   subscription_id: string
   resource_group_name: string
   certificate_order_name: string
@@ -494,7 +494,7 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CertificateRegistration/certificateOrders/{certificateOrderName}/certificates/{name}
 # operationId: AppServiceCertificateOrders_DeleteCertificate
-export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders-certificates delete-app-service" [
+export def "app-service-certificate-orders-delete-certificate" [
   subscription_id: string
   resource_group_name: string
   certificate_order_name: string
@@ -538,7 +538,7 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CertificateRegistration/certificateOrders/{certificateOrderName}/certificates/{name}
 # operationId: AppServiceCertificateOrders_GetCertificate
-export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders-certificates get-app-service" [
+export def "app-service-certificate-orders-get-certificate" [
   subscription_id: string
   resource_group_name: string
   certificate_order_name: string
@@ -583,7 +583,7 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CertificateRegistration/certificateOrders/{certificateOrderName}/certificates/{name}
 # operationId: AppServiceCertificateOrders_UpdateCertificate
 # --properties shape: {keyVaultId?: string, keyVaultSecretName?: string}
-export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders-certificates update-app-service" [
+export def "app-service-certificate-orders-update-certificate" [
   subscription_id: string
   resource_group_name: string
   certificate_order_name: string
@@ -633,7 +633,7 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CertificateRegistration/certificateOrders/{certificateOrderName}/certificates/{name}
 # operationId: AppServiceCertificateOrders_CreateOrUpdateCertificate
 # --properties shape: {keyVaultId?: string, keyVaultSecretName?: string}
-export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders-certificates create-app-service-or-update" [
+export def "app-service-certificate-orders-create-or-update-certificate" [
   subscription_id: string
   resource_group_name: string
   certificate_order_name: string
@@ -685,7 +685,7 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CertificateRegistration/certificateOrders/{certificateOrderName}/reissue
 # operationId: AppServiceCertificateOrders_Reissue
 # --properties shape: {csr?: string, delayExistingRevokeInHours?: int, isPrivateKeyExternal?: bool, keySize?: int}
-export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders-reissue create-app-service" [
+export def "app-service-certificate-orders-reissue" [
   subscription_id: string
   resource_group_name: string
   certificate_order_name: string
@@ -733,7 +733,7 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CertificateRegistration/certificateOrders/{certificateOrderName}/renew
 # operationId: AppServiceCertificateOrders_Renew
 # --properties shape: {csr?: string, isPrivateKeyExternal?: bool, keySize?: int}
-export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders-renew create-app-service" [
+export def "app-service-certificate-orders-renew" [
   subscription_id: string
   resource_group_name: string
   certificate_order_name: string
@@ -780,7 +780,7 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CertificateRegistration/certificateOrders/{certificateOrderName}/resendEmail
 # operationId: AppServiceCertificateOrders_ResendEmail
-export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders-resend-email resend-app-service" [
+export def "app-service-certificate-orders-resend-email" [
   subscription_id: string
   resource_group_name: string
   certificate_order_name: string
@@ -822,7 +822,7 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CertificateRegistration/certificateOrders/{certificateOrderName}/resendRequestEmails
 # operationId: AppServiceCertificateOrders_ResendRequestEmails
-export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders-resend-request-emails resend-app-service" [
+export def "app-service-certificate-orders-resend-request-emails" [
   subscription_id: string
   resource_group_name: string
   certificate_order_name: string
@@ -868,7 +868,7 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CertificateRegistration/certificateOrders/{certificateOrderName}/retrieveSiteSeal
 # operationId: AppServiceCertificateOrders_RetrieveSiteSeal
-export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders-retrieve-site-seal get-app-service" [
+export def "app-service-certificate-orders-retrieve-site-seal" [
   subscription_id: string
   resource_group_name: string
   certificate_order_name: string
@@ -915,7 +915,7 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CertificateRegistration/certificateOrders/{certificateOrderName}/verifyDomainOwnership
 # operationId: AppServiceCertificateOrders_VerifyDomainOwnership
-export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders-verify-domain-ownership verify-app-service" [
+export def "app-service-certificate-orders-verify-domain-ownership" [
   subscription_id: string
   resource_group_name: string
   certificate_order_name: string
@@ -957,7 +957,7 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CertificateRegistration/certificateOrders/{name}/retrieveCertificateActions
 # operationId: AppServiceCertificateOrders_RetrieveCertificateActions
-export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders-retrieve-certificate-actions get-app-service" [
+export def "app-service-certificate-orders-retrieve-certificate-actions" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -999,7 +999,7 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CertificateRegistration/certificateOrders/{name}/retrieveEmailHistory
 # operationId: AppServiceCertificateOrders_RetrieveCertificateEmailHistory
-export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders-retrieve-email-history get-app-service" [
+export def "app-service-certificate-orders-retrieve-certificate-email-history" [
   subscription_id: string
   resource_group_name: string
   name: string

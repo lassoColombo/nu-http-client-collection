@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-management-groups-providers-microsoft-policy-insights-remediations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "remediations-list-for-management-group" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/{managementGroupsNamespace}/managementGroups/{managementGroupId}/providers/Microsoft.PolicyInsights/remediations
 # operationId: Remediations_ListForManagementGroup
-export def "providers-management-groups-providers-microsoft-policy-insights-remediations list" [
+export def "remediations-list-for-management-group" [
   management_groups_namespace: string
   management_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -182,7 +182,7 @@ export def "providers-management-groups-providers-microsoft-policy-insights-reme
 #
 # DELETE /providers/{managementGroupsNamespace}/managementGroups/{managementGroupId}/providers/Microsoft.PolicyInsights/remediations/{remediationName}
 # operationId: Remediations_DeleteAtManagementGroup
-export def "providers-management-groups-providers-microsoft-policy-insights-remediations delete-at" [
+export def "remediations-delete-at-management-group" [
   management_groups_namespace: string
   management_group_id: string
   remediation_name: string
@@ -224,7 +224,7 @@ export def "providers-management-groups-providers-microsoft-policy-insights-reme
 #
 # GET /providers/{managementGroupsNamespace}/managementGroups/{managementGroupId}/providers/Microsoft.PolicyInsights/remediations/{remediationName}
 # operationId: Remediations_GetAtManagementGroup
-export def "providers-management-groups-providers-microsoft-policy-insights-remediations get-at" [
+export def "remediations-get-at-management-group" [
   management_groups_namespace: string
   management_group_id: string
   remediation_name: string
@@ -267,7 +267,7 @@ export def "providers-management-groups-providers-microsoft-policy-insights-reme
 # PUT /providers/{managementGroupsNamespace}/managementGroups/{managementGroupId}/providers/Microsoft.PolicyInsights/remediations/{remediationName}
 # operationId: Remediations_CreateOrUpdateAtManagementGroup
 # --properties shape: {deploymentStatus?: any, filters?: any, policyAssignmentId?: string, policyDefinitionReferenceId?: string, resourceDiscoveryMode?: "ExistingNonCompliant"|"ReEvaluateCompliance"}
-export def "providers-management-groups-providers-microsoft-policy-insights-remediations create-or-update-at" [
+export def "remediations-create-or-update-at-management-group" [
   management_groups_namespace: string
   management_group_id: string
   remediation_name: string
@@ -313,7 +313,7 @@ export def "providers-management-groups-providers-microsoft-policy-insights-reme
 #
 # POST /providers/{managementGroupsNamespace}/managementGroups/{managementGroupId}/providers/Microsoft.PolicyInsights/remediations/{remediationName}/cancel
 # operationId: Remediations_CancelAtManagementGroup
-export def "providers-management-groups-providers-microsoft-policy-insights-remediations-cancel cancel-at" [
+export def "remediations-cancel-at-management-group" [
   management_groups_namespace: string
   management_group_id: string
   remediation_name: string
@@ -355,7 +355,7 @@ export def "providers-management-groups-providers-microsoft-policy-insights-reme
 #
 # POST /providers/{managementGroupsNamespace}/managementGroups/{managementGroupId}/providers/Microsoft.PolicyInsights/remediations/{remediationName}/listDeployments
 # operationId: Remediations_ListDeploymentsAtManagementGroup
-export def "providers-management-groups-providers-microsoft-policy-insights-remediations-list-deployments list-at" [
+export def "remediations-list-deployments-at-management-group" [
   management_groups_namespace: string
   management_group_id: string
   remediation_name: string
@@ -398,7 +398,7 @@ export def "providers-management-groups-providers-microsoft-policy-insights-reme
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.PolicyInsights/remediations
 # operationId: Remediations_ListForSubscription
-export def "subscriptions-providers-microsoft-policy-insights-remediations list" [
+export def "remediations-list-for-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -438,7 +438,7 @@ export def "subscriptions-providers-microsoft-policy-insights-remediations list"
 #
 # DELETE /subscriptions/{subscriptionId}/providers/Microsoft.PolicyInsights/remediations/{remediationName}
 # operationId: Remediations_DeleteAtSubscription
-export def "subscriptions-providers-microsoft-policy-insights-remediations delete-at" [
+export def "remediations-delete-at-subscription" [
   subscription_id: string
   remediation_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -478,7 +478,7 @@ export def "subscriptions-providers-microsoft-policy-insights-remediations delet
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.PolicyInsights/remediations/{remediationName}
 # operationId: Remediations_GetAtSubscription
-export def "subscriptions-providers-microsoft-policy-insights-remediations get-at" [
+export def "remediations-get-at-subscription" [
   subscription_id: string
   remediation_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -519,7 +519,7 @@ export def "subscriptions-providers-microsoft-policy-insights-remediations get-a
 # PUT /subscriptions/{subscriptionId}/providers/Microsoft.PolicyInsights/remediations/{remediationName}
 # operationId: Remediations_CreateOrUpdateAtSubscription
 # --properties shape: {deploymentStatus?: any, filters?: any, policyAssignmentId?: string, policyDefinitionReferenceId?: string, resourceDiscoveryMode?: "ExistingNonCompliant"|"ReEvaluateCompliance"}
-export def "subscriptions-providers-microsoft-policy-insights-remediations create-or-update-at" [
+export def "remediations-create-or-update-at-subscription" [
   subscription_id: string
   remediation_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -563,7 +563,7 @@ export def "subscriptions-providers-microsoft-policy-insights-remediations creat
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.PolicyInsights/remediations/{remediationName}/cancel
 # operationId: Remediations_CancelAtSubscription
-export def "subscriptions-providers-microsoft-policy-insights-remediations-cancel cancel-at" [
+export def "remediations-cancel-at-subscription" [
   subscription_id: string
   remediation_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -603,7 +603,7 @@ export def "subscriptions-providers-microsoft-policy-insights-remediations-cance
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.PolicyInsights/remediations/{remediationName}/listDeployments
 # operationId: Remediations_ListDeploymentsAtSubscription
-export def "subscriptions-providers-microsoft-policy-insights-remediations-list-deployments list-at" [
+export def "remediations-list-deployments-at-subscription" [
   subscription_id: string
   remediation_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -644,7 +644,7 @@ export def "subscriptions-providers-microsoft-policy-insights-remediations-list-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.PolicyInsights/remediations
 # operationId: Remediations_ListForResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-policy-insights-remediations list" [
+export def "remediations-list-for-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -686,7 +686,7 @@ export def "subscriptions-resource-groups-providers-microsoft-policy-insights-re
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.PolicyInsights/remediations/{remediationName}
 # operationId: Remediations_DeleteAtResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-policy-insights-remediations delete-at" [
+export def "remediations-delete-at-resource-group" [
   subscription_id: string
   resource_group_name: string
   remediation_name: string
@@ -728,7 +728,7 @@ export def "subscriptions-resource-groups-providers-microsoft-policy-insights-re
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.PolicyInsights/remediations/{remediationName}
 # operationId: Remediations_GetAtResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-policy-insights-remediations get-at" [
+export def "remediations-get-at-resource-group" [
   subscription_id: string
   resource_group_name: string
   remediation_name: string
@@ -771,7 +771,7 @@ export def "subscriptions-resource-groups-providers-microsoft-policy-insights-re
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.PolicyInsights/remediations/{remediationName}
 # operationId: Remediations_CreateOrUpdateAtResourceGroup
 # --properties shape: {deploymentStatus?: any, filters?: any, policyAssignmentId?: string, policyDefinitionReferenceId?: string, resourceDiscoveryMode?: "ExistingNonCompliant"|"ReEvaluateCompliance"}
-export def "subscriptions-resource-groups-providers-microsoft-policy-insights-remediations create-or-update-at" [
+export def "remediations-create-or-update-at-resource-group" [
   subscription_id: string
   resource_group_name: string
   remediation_name: string
@@ -817,7 +817,7 @@ export def "subscriptions-resource-groups-providers-microsoft-policy-insights-re
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.PolicyInsights/remediations/{remediationName}/cancel
 # operationId: Remediations_CancelAtResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-policy-insights-remediations-cancel cancel-at" [
+export def "remediations-cancel-at-resource-group" [
   subscription_id: string
   resource_group_name: string
   remediation_name: string
@@ -859,7 +859,7 @@ export def "subscriptions-resource-groups-providers-microsoft-policy-insights-re
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.PolicyInsights/remediations/{remediationName}/listDeployments
 # operationId: Remediations_ListDeploymentsAtResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-policy-insights-remediations-list-deployments list-at" [
+export def "remediations-list-deployments-at-resource-group" [
   subscription_id: string
   resource_group_name: string
   remediation_name: string
@@ -902,7 +902,7 @@ export def "subscriptions-resource-groups-providers-microsoft-policy-insights-re
 #
 # GET /{resourceId}/providers/Microsoft.PolicyInsights/remediations
 # operationId: Remediations_ListForResource
-export def "providers-microsoft-policy-insights-remediations list-for-resource" [
+export def "remediations-list-for-resource" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -942,7 +942,7 @@ export def "providers-microsoft-policy-insights-remediations list-for-resource" 
 #
 # DELETE /{resourceId}/providers/Microsoft.PolicyInsights/remediations/{remediationName}
 # operationId: Remediations_DeleteAtResource
-export def "providers-microsoft-policy-insights-remediations delete-at-resource" [
+export def "remediations-delete-at-resource" [
   resource_id: string
   remediation_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -982,7 +982,7 @@ export def "providers-microsoft-policy-insights-remediations delete-at-resource"
 #
 # GET /{resourceId}/providers/Microsoft.PolicyInsights/remediations/{remediationName}
 # operationId: Remediations_GetAtResource
-export def "providers-microsoft-policy-insights-remediations get-at-resource" [
+export def "remediations-get-at-resource" [
   resource_id: string
   remediation_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1023,7 +1023,7 @@ export def "providers-microsoft-policy-insights-remediations get-at-resource" [
 # PUT /{resourceId}/providers/Microsoft.PolicyInsights/remediations/{remediationName}
 # operationId: Remediations_CreateOrUpdateAtResource
 # --properties shape: {deploymentStatus?: any, filters?: any, policyAssignmentId?: string, policyDefinitionReferenceId?: string, resourceDiscoveryMode?: "ExistingNonCompliant"|"ReEvaluateCompliance"}
-export def "providers-microsoft-policy-insights-remediations create-or-update-at-resource" [
+export def "remediations-create-or-update-at-resource" [
   resource_id: string
   remediation_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1067,7 +1067,7 @@ export def "providers-microsoft-policy-insights-remediations create-or-update-at
 #
 # POST /{resourceId}/providers/Microsoft.PolicyInsights/remediations/{remediationName}/cancel
 # operationId: Remediations_CancelAtResource
-export def "providers-microsoft-policy-insights-remediations-cancel cancel-at-resource" [
+export def "remediations-cancel-at-resource" [
   resource_id: string
   remediation_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1107,7 +1107,7 @@ export def "providers-microsoft-policy-insights-remediations-cancel cancel-at-re
 #
 # POST /{resourceId}/providers/Microsoft.PolicyInsights/remediations/{remediationName}/listDeployments
 # operationId: Remediations_ListDeploymentsAtResource
-export def "providers-microsoft-policy-insights-remediations-list-deployments list-at-resource" [
+export def "remediations-list-deployments-at-resource" [
   resource_id: string
   remediation_name: string
   --base-url(-b): string@base-url-completer # API base URL

@@ -139,7 +139,7 @@ def accept-completer [] { ["application/json" "application/x-pem-file"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "authenticators get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-authenticators" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -163,7 +163,7 @@ export def commands []: nothing -> table {
 #
 # GET /authenticators
 # operationId: getAuthenticators
-export def "authenticators get" [
+export def "get-authenticators" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -200,7 +200,7 @@ export def "authenticators get" [
 #
 # POST /authn-azure/{service_id}/{account}/{login}/authenticate
 # operationId: getAccessTokenViaAzure
-export def "authn-azure-authenticate get-access-token-via" [
+export def "get-access-token-via-azure" [
   service_id: string
   account: string
   login: string
@@ -248,7 +248,7 @@ export def "authn-azure-authenticate get-access-token-via" [
 #
 # POST /authn-gcp/{account}/authenticate
 # operationId: getAccessTokenViaGCP
-export def "authn-gcp-authenticate get-access-token-via" [
+export def "get-access-token-via-gcp" [
   account: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -293,7 +293,7 @@ export def "authn-gcp-authenticate get-access-token-via" [
 #
 # GET /authn-gcp/{account}/status
 # operationId: getGCPAuthenticatorStatus
-export def "authn-gcp-status get-authenticator" [
+export def "get-gcp-authenticator-status" [
   account: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -332,7 +332,7 @@ export def "authn-gcp-status get-authenticator" [
 #
 # POST /authn-iam/{service_id}/{account}/{login}/authenticate
 # operationId: getAccessTokenViaAWS
-export def "authn-iam-authenticate get-access-token-via-aws" [
+export def "get-access-token-via-aws" [
   service_id: string
   account: string
   login: string
@@ -379,7 +379,7 @@ export def "authn-iam-authenticate get-access-token-via-aws" [
 #
 # POST /authn-jwt/{service_id}/{account}/authenticate
 # operationId: getAccessTokenViaJWT
-export def "authn-jwt-authenticate get-access-token-via-by-service-id-account" [
+export def "get-access-token-via-jwt" [
   service_id: string
   account: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -422,7 +422,7 @@ export def "authn-jwt-authenticate get-access-token-via-by-service-id-account" [
 #
 # POST /authn-jwt/{service_id}/{account}/{id}/authenticate
 # operationId: getAccessTokenViaJWTWithId
-export def "authn-jwt-authenticate get-access-token-via-by-service-id-account-id" [
+export def "get-access-token-via-jwt-with-id" [
   service_id: string
   account: string
   id: string
@@ -467,7 +467,7 @@ export def "authn-jwt-authenticate get-access-token-via-by-service-id-account-id
 #
 # POST /authn-k8s/{service_id}/inject_client_cert
 # operationId: k8sInjectClientCert
-export def "authn-k8s-inject-client-cert create" [
+export def "k8s-inject-client-cert" [
   service_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -510,7 +510,7 @@ export def "authn-k8s-inject-client-cert create" [
 #
 # POST /authn-k8s/{service_id}/{account}/{login}/authenticate
 # operationId: getAccessTokenViaKubernetes
-export def "authn-k8s-authenticate get-access-token-via-kubernetes" [
+export def "get-access-token-via-kubernetes" [
   service_id: string
   account: string
   login: string
@@ -553,7 +553,7 @@ export def "authn-k8s-authenticate get-access-token-via-kubernetes" [
 #
 # GET /authn-ldap/{service_id}/{account}/login
 # operationId: getAPIKeyViaLDAP
-export def "authn-ldap-login get-key-via" [
+export def "get-api-key-via-ldap" [
   service_id: string
   account: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -591,7 +591,7 @@ export def "authn-ldap-login get-key-via" [
 #
 # POST /authn-ldap/{service_id}/{account}/{login}/authenticate
 # operationId: getAccessTokenViaLDAP
-export def "authn-ldap-authenticate get-access-token-via" [
+export def "get-access-token-via-ldap" [
   service_id: string
   account: string
   login: string
@@ -638,7 +638,7 @@ export def "authn-ldap-authenticate get-access-token-via" [
 #
 # POST /authn-oidc/{service_id}/{account}/authenticate
 # operationId: getAccessTokenViaOIDC
-export def "authn-oidc-authenticate get-access-token-via" [
+export def "get-access-token-via-oidc" [
   service_id: string
   account: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -681,7 +681,7 @@ export def "authn-oidc-authenticate get-access-token-via" [
 #
 # PUT /authn/{account}/api_key
 # operationId: rotateApiKey
-export def "authn-api-key update-rotate" [
+export def "rotate-api-key" [
   account: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-basicauth: string # Auth token for basicAuth (Authorization)
@@ -722,7 +722,7 @@ export def "authn-api-key update-rotate" [
 #
 # GET /authn/{account}/login
 # operationId: getAPIKey
-export def "authn-login get-key" [
+export def "get-api-key" [
   account: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -761,7 +761,7 @@ export def "authn-login get-key" [
 #
 # PUT /authn/{account}/password
 # operationId: changePassword
-export def "authn-password update-change" [
+export def "change-password" [
   account: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -804,7 +804,7 @@ export def "authn-password update-change" [
 #
 # POST /authn/{account}/{login}/authenticate
 # operationId: getAccessToken
-export def "authn-authenticate get-access-token" [
+export def "get-access-token" [
   account: string
   login: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -850,7 +850,7 @@ export def "authn-authenticate get-access-token" [
 #
 # POST /ca/{account}/{service_id}/sign
 # operationId: sign
-export def "ca-sign create" [
+export def "sign" [
   account: string
   service_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -899,7 +899,7 @@ export def "ca-sign create" [
 #
 # GET /health
 # operationId: health
-export def "health get" [
+export def "health" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -933,7 +933,7 @@ export def "health get" [
 #
 # POST /host_factories/hosts
 # operationId: createHost
-export def "host-factories-hosts create" [
+export def "create-host" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -976,7 +976,7 @@ export def "host-factories-hosts create" [
 #
 # POST /host_factory_tokens
 # operationId: createToken
-export def "host-factory-tokens create" [
+export def "create-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1021,7 +1021,7 @@ export def "host-factory-tokens create" [
 #
 # DELETE /host_factory_tokens/{token}
 # operationId: revokeToken
-export def "host-factory-tokens delete" [
+export def "revoke-token" [
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1060,7 +1060,7 @@ export def "host-factory-tokens delete" [
 #
 # GET /info
 # operationId: info
-export def "info get" [
+export def "info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1094,7 +1094,7 @@ export def "info get" [
 #
 # PATCH /policies/{account}/policy/{identifier}
 # operationId: updatePolicy
-export def "policies-policy update-by-account-identifier" [
+export def "update-policy" [
   account: string
   identifier: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1139,7 +1139,7 @@ export def "policies-policy update-by-account-identifier" [
 #
 # POST /policies/{account}/policy/{identifier}
 # operationId: loadPolicy
-export def "policies-policy create-load" [
+export def "load-policy" [
   account: string
   identifier: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1184,7 +1184,7 @@ export def "policies-policy create-load" [
 #
 # PUT /policies/{account}/policy/{identifier}
 # operationId: replacePolicy
-export def "policies-policy update-by-account-identifier-1" [
+export def "replace-policy" [
   account: string
   identifier: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1229,7 +1229,7 @@ export def "policies-policy update-by-account-identifier-1" [
 #
 # GET /public_keys/{account}/{kind}/{identifier}
 # operationId: showPublicKeys
-export def "public-keys get-show" [
+export def "show-public-keys" [
   account: string
   kind: string
   identifier: string
@@ -1272,7 +1272,7 @@ export def "public-keys get-show" [
 #
 # GET /remote_health/{remote}
 # operationId: remoteHealth
-export def "remote-health get" [
+export def "remote-health" [
   remote: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1308,7 +1308,7 @@ export def "remote-health get" [
 #
 # GET /resources
 # operationId: showResourcesForAllAccounts
-export def "resources list-show-for-accounts" [
+export def "show-resources-for-all-accounts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1354,7 +1354,7 @@ export def "resources list-show-for-accounts" [
 #
 # GET /resources/{account}
 # operationId: showResourcesForAccount
-export def "resources get-show-by-account" [
+export def "show-resources-for-account" [
   account: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1401,7 +1401,7 @@ export def "resources get-show-by-account" [
 #
 # GET /resources/{account}/{kind}
 # operationId: showResourcesForKind
-export def "resources get-show-by-account-kind" [
+export def "show-resources-for-kind" [
   account: string
   kind: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1449,7 +1449,7 @@ export def "resources get-show-by-account-kind" [
 #
 # GET /resources/{account}/{kind}/{identifier}
 # operationId: showResource
-export def "resources get-show-by-account-kind-identifier" [
+export def "show-resource" [
   account: string
   kind: string
   identifier: string
@@ -1497,7 +1497,7 @@ export def "resources get-show-by-account-kind-identifier" [
 #
 # DELETE /roles/{account}/{kind}/{identifier}
 # operationId: removeMemberFromRole
-export def "roles delete-member" [
+export def "remove-member-from-role" [
   account: string
   kind: string
   identifier: string
@@ -1543,7 +1543,7 @@ export def "roles delete-member" [
 #
 # GET /roles/{account}/{kind}/{identifier}
 # operationId: showRole
-export def "roles get-show" [
+export def "show-role" [
   account: string
   kind: string
   identifier: string
@@ -1595,7 +1595,7 @@ export def "roles get-show" [
 #
 # POST /roles/{account}/{kind}/{identifier}
 # operationId: addMemberToRole
-export def "roles create-member" [
+export def "add-member-to-role" [
   account: string
   kind: string
   identifier: string
@@ -1641,7 +1641,7 @@ export def "roles create-member" [
 #
 # GET /secrets
 # operationId: getSecrets
-export def "secrets get" [
+export def "get-secrets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1681,7 +1681,7 @@ export def "secrets get" [
 #
 # GET /secrets/{account}/{kind}/{identifier}
 # operationId: getSecret
-export def "secrets get-by-account-kind-identifier" [
+export def "get-secret" [
   account: string
   kind: string
   identifier: string
@@ -1726,7 +1726,7 @@ export def "secrets get-by-account-kind-identifier" [
 #
 # POST /secrets/{account}/{kind}/{identifier}
 # operationId: createSecret
-export def "secrets create" [
+export def "create-secret" [
   account: string
   kind: string
   identifier: string
@@ -1775,7 +1775,7 @@ export def "secrets create" [
 #
 # GET /whoami
 # operationId: whoAmI
-export def "whoami get-who-am-i" [
+export def "who-am-i" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1812,7 +1812,7 @@ export def "whoami get-who-am-i" [
 #
 # PATCH /{authenticator}/{account}
 # operationId: enableAuthenticator
-export def "authentication enable" [
+export def "enable-authenticator" [
   authenticator: string
   account: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1858,7 +1858,7 @@ export def "authentication enable" [
 #
 # PATCH /{authenticator}/{service_id}/{account}
 # operationId: enableAuthenticatorInstance
-export def "authentication enable-instance" [
+export def "enable-authenticator-instance" [
   authenticator: string
   service_id: string
   account: string
@@ -1903,7 +1903,7 @@ export def "authentication enable-instance" [
 #
 # GET /{authenticator}/{service_id}/{account}/status
 # operationId: getServiceAuthenticatorStatus
-export def "status get" [
+export def "get-service-authenticator-status" [
   authenticator: string
   service_id: string
   account: string

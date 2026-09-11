@@ -112,7 +112,7 @@ def query-options-order-completer [] { ["Asc" "Desc" "None"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "client-all list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "client-api-all" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -136,7 +136,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/client/all
 # operationId: ClientApi_All
-export def "client-all list" [
+export def "client-api-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -175,7 +175,7 @@ export def "client-all list" [
 #
 # GET /api/client/candelete
 # operationId: ClientApi_CanDelete
-export def "client-candelete delete-can" [
+export def "client-api-can-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -216,7 +216,7 @@ export def "client-candelete delete-can" [
 #
 # POST /api/client/delete
 # operationId: ClientApi_Delete
-export def "client-delete delete" [
+export def "client-api-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -259,7 +259,7 @@ export def "client-delete delete" [
 #
 # GET /api/client/details
 # operationId: ClientApi_Details
-export def "client-details get" [
+export def "client-api-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -301,7 +301,7 @@ export def "client-details get" [
 # POST /api/client/new
 # operationId: ClientApi_New
 # --AdditionalEmails item shape: {Email?: string}
-export def "client-new create" [
+export def "client-api-new" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -355,7 +355,7 @@ export def "client-new create" [
 # POST /api/client/update
 # operationId: ClientApi_Update
 # --AdditionalEmails item shape: {Email?: string}
-export def "client-update update" [
+export def "client-api-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -408,7 +408,7 @@ export def "client-update update" [
 #
 # GET /api/estimation/all
 # operationId: EstimationApi_All
-export def "estimation-all list" [
+export def "estimation-api-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -450,7 +450,7 @@ export def "estimation-all list" [
 #
 # POST /api/estimation/changestatus
 # operationId: EstimationApi_ChangeStatus
-export def "estimation-changestatus create-change-status" [
+export def "estimation-api-change-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -494,7 +494,7 @@ export def "estimation-changestatus create-change-status" [
 #
 # POST /api/estimation/convert
 # operationId: EstimationApi_Convert
-export def "estimation-convert create" [
+export def "estimation-api-convert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -537,7 +537,7 @@ export def "estimation-convert create" [
 #
 # POST /api/estimation/delete
 # operationId: EstimationApi_Delete
-export def "estimation-delete delete" [
+export def "estimation-api-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -580,7 +580,7 @@ export def "estimation-delete delete" [
 #
 # GET /api/estimation/details
 # operationId: EstimationApi_Details
-export def "estimation-details get" [
+export def "estimation-api-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -624,7 +624,7 @@ export def "estimation-details get" [
 # --Attachments item shape: {Link?: string, ObfuscatedFileName?: string, OriginalFileName?: string, Size?: int, Type?: "External"|"Uploaded"}
 # --Items item shape: {Cost?: float, Description?: string, DiscountPercentage?: float, Quantity?: float, TaxId?: int, TaxPercentage?: float, WorkTypeId?: int}
 # --PaymentGateways item shape: {Name?: string}
-export def "estimation-new create" [
+export def "estimation-api-new" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -679,7 +679,7 @@ export def "estimation-new create" [
 #
 # POST /api/estimation/sendtoclient
 # operationId: EstimationApi_SendToClient
-export def "estimation-sendtoclient send-to-client" [
+export def "estimation-api-send-to-client" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -727,7 +727,7 @@ export def "estimation-sendtoclient send-to-client" [
 #
 # GET /api/estimation/status
 # operationId: EstimationApi_Status
-export def "estimation-status get" [
+export def "estimation-api-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -771,7 +771,7 @@ export def "estimation-status get" [
 # --Attachments item shape: {Id?: int, Link?: string, ObfuscatedFileName?: string, OriginalFileName?: string, Size?: int, Type?: "External"|"Uploaded"}
 # --Items item shape: {Cost?: float, Description?: string, DiscountPercentage?: float, Id?: int, Quantity?: float, TaxId?: int, TaxPercentage?: float, WorkTypeId?: int}
 # --PaymentGateways item shape: {Name?: string}
-export def "estimation-update update" [
+export def "estimation-api-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -827,7 +827,7 @@ export def "estimation-update update" [
 #
 # GET /api/estimation/uri
 # operationId: EstimationApi_Uri
-export def "estimation-uri get" [
+export def "estimation-api-uri" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -868,7 +868,7 @@ export def "estimation-uri get" [
 #
 # GET /api/general/countries
 # operationId: GeneralApi_Countries
-export def "general-countries get" [
+export def "general-api-countries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -907,7 +907,7 @@ export def "general-countries get" [
 #
 # GET /api/general/currencies
 # operationId: GeneralApi_Currencies
-export def "general-currencies get" [
+export def "general-api-currencies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -946,7 +946,7 @@ export def "general-currencies get" [
 #
 # GET /api/general/dateformats
 # operationId: GeneralApi_DateFormats
-export def "general-dateformats get-date-formats" [
+export def "general-api-date-formats" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -985,7 +985,7 @@ export def "general-dateformats get-date-formats" [
 #
 # GET /api/general/uilanguages
 # operationId: GeneralApi_UiLanguages
-export def "general-uilanguages get-ui-languages" [
+export def "general-api-ui-languages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1024,7 +1024,7 @@ export def "general-uilanguages get-ui-languages" [
 #
 # GET /api/invoice/all
 # operationId: InvoiceApi_All
-export def "invoice-all list" [
+export def "invoice-api-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1065,7 +1065,7 @@ export def "invoice-all list" [
 # Return all invoice categories for the account
 #
 # GET /api/invoice/allcategories
-export def "invoice-allcategories get" [
+export def "get-api-invoice-allcategories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1106,7 +1106,7 @@ export def "invoice-allcategories get" [
 #
 # POST /api/invoice/changestatus
 # operationId: InvoiceApi_ChangeStatus
-export def "invoice-changestatus create-change-status" [
+export def "invoice-api-change-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1150,7 +1150,7 @@ export def "invoice-changestatus create-change-status" [
 #
 # POST /api/invoice/delete
 # operationId: InvoiceApi_Delete
-export def "invoice-delete delete" [
+export def "invoice-api-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1192,7 +1192,7 @@ export def "invoice-delete delete" [
 # Delete an existing invoice category
 #
 # POST /api/invoice/deletecategory
-export def "invoice-delete-category create" [
+export def "post-api-invoice-deletecategory" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1235,7 +1235,7 @@ export def "invoice-delete-category create" [
 #
 # GET /api/invoice/details
 # operationId: InvoiceApi_Details
-export def "invoice-details get" [
+export def "invoice-api-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1280,7 +1280,7 @@ export def "invoice-details get" [
 # --Items item shape: {Cost?: float, Description?: string, DiscountPercentage?: float, Quantity?: float, TaxId?: int, TaxPercentage?: float, WorkTypeId?: int}
 # --PaymentGateways item shape: {Name?: string}
 # --RecurringProfile shape: {DayOfMonth?: int, DayOfWeek?: "Sunday"|"Monday"|"Tuesday"|"Wednesday"|"Thursday"|"Friday"|"Saturday", DueDateInDays?: int, EndOfRecurrance?: string, Month?: int, RecurrancePattern?: "Daily"|"Weekly"|"Monthly"|"Yearly", RecurranceValue?: int, StartOfRecurrance?: string, Status?: "Pending"|"Active"|"Cancelled"|"Finished", Title?: string}
-export def "invoice-new create" [
+export def "invoice-api-new" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1338,7 +1338,7 @@ export def "invoice-new create" [
 # Create an invoice category
 #
 # POST /api/invoice/newcategory
-export def "invoice-newcategory create" [
+export def "post-api-invoice-newcategory" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1381,7 +1381,7 @@ export def "invoice-newcategory create" [
 #
 # GET /api/invoice/pdf
 # operationId: InvoiceApi_Pdf
-export def "invoice-pdf get" [
+export def "invoice-api-pdf" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1423,7 +1423,7 @@ export def "invoice-pdf get" [
 #
 # POST /api/invoice/sendtoaccountant
 # operationId: InvoiceApi_SendToAccountant
-export def "invoice-sendtoaccountant send-to-accountant" [
+export def "invoice-api-send-to-accountant" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1466,7 +1466,7 @@ export def "invoice-sendtoaccountant send-to-accountant" [
 #
 # POST /api/invoice/sendtoclient
 # operationId: InvoiceApi_SendToClient
-export def "invoice-sendtoclient send-to-client" [
+export def "invoice-api-send-to-client" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1514,7 +1514,7 @@ export def "invoice-sendtoclient send-to-client" [
 #
 # GET /api/invoice/status
 # operationId: InvoiceApi_Status
-export def "invoice-status get" [
+export def "invoice-api-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1559,7 +1559,7 @@ export def "invoice-status get" [
 # --Items item shape: {Cost?: float, Description?: string, DiscountPercentage?: float, Id?: int, Quantity?: float, TaxId?: int, TaxPercentage?: float, WorkTypeId?: int}
 # --PaymentGateways item shape: {Name?: string}
 # --RecurringProfile shape: {DayOfMonth?: int, DayOfWeek?: "Sunday"|"Monday"|"Tuesday"|"Wednesday"|"Thursday"|"Friday"|"Saturday", DueDateInDays?: int, EndOfRecurrance?: string, Month?: int, RecurrancePattern?: "Daily"|"Weekly"|"Monthly"|"Yearly", RecurranceValue?: int, StartOfRecurrance?: string, Status?: "Pending"|"Active"|"Cancelled"|"Finished", Title?: string}
-export def "invoice-update update" [
+export def "invoice-api-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1618,7 +1618,7 @@ export def "invoice-update update" [
 # Update an existing invoice category
 #
 # POST /api/invoice/updatecategory
-export def "invoice-update-category create" [
+export def "post-api-invoice-updatecategory" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1662,7 +1662,7 @@ export def "invoice-update-category create" [
 #
 # GET /api/invoice/uri
 # operationId: InvoiceApi_Uri
-export def "invoice-uri get" [
+export def "invoice-api-uri" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1703,7 +1703,7 @@ export def "invoice-uri get" [
 #
 # GET /api/order/all
 # operationId: OrderApi_All
-export def "order-all list" [
+export def "order-api-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1745,7 +1745,7 @@ export def "order-all list" [
 #
 # POST /api/order/changeshippingdetails
 # operationId: OrderApi_ChangeShippingDetails
-export def "order-changeshippingdetails create-change-shipping-details" [
+export def "order-api-change-shipping-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1793,7 +1793,7 @@ export def "order-changeshippingdetails create-change-shipping-details" [
 #
 # POST /api/order/changestatus
 # operationId: OrderApi_ChangeStatus
-export def "order-changestatus create-change-status" [
+export def "order-api-change-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1837,7 +1837,7 @@ export def "order-changestatus create-change-status" [
 #
 # POST /api/order/delete
 # operationId: OrderApi_Delete
-export def "order-delete delete" [
+export def "order-api-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1880,7 +1880,7 @@ export def "order-delete delete" [
 #
 # GET /api/order/details
 # operationId: OrderApi_Details
-export def "order-details get" [
+export def "order-api-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1925,7 +1925,7 @@ export def "order-details get" [
 # --Items item shape: {Cost?: float, Description?: string, ProductItemId?: int, Quantity?: float, ReferenceId?: string, SubTotalAmount?: float, TaxAmount?: float, TaxId?: int, TaxPercentage?: float, TotalAmount?: float, WorkTypeId?: int}
 # --OrderBillingDetails shape: {Address?: string, CountryId?: int, Email?: string, Name?: string, PhoneNumber?: string}
 # --OrderShippingDetails shape: {Address?: string, CountryId?: int, Email?: string, Name?: string, PhoneNumber?: string}
-export def "order-new create" [
+export def "order-api-new" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1987,7 +1987,7 @@ export def "order-new create" [
 #
 # GET /api/payment/supported
 # operationId: PaymentApi_Supported
-export def "payment-supported get" [
+export def "payment-api-supported" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2026,7 +2026,7 @@ export def "payment-supported get" [
 #
 # GET /api/paymentlink/all
 # operationId: PaymentLinkApi_All
-export def "paymentlink-all list-payment-link" [
+export def "payment-link-api-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2073,7 +2073,7 @@ export def "paymentlink-all list-payment-link" [
 # --Invoice shape: {AccessToken?: string, Activities?: list, Attachments?: list, ClientId?: int, ClonedFromId?: int, CurrencyId?: int, DiscountAmount?: float, Duedate?: string, EnablePartialPayments?: bool, EstimationId?: int, Id?: int, InvoiceCategoryId?: int, IsDigitallySigned?: bool, IssuedOn?: string, Items?: list, Notes?: string, Number?: string, OrderId?: int, PaymentGateways?: list, PaymentLinkId?: int, Payments?: list, PoNumber?: string, RecurringProfileId?: int, ShouldSendReminders?: bool, ... (6 more fields)}
 # --Items item shape: {Cost?: float, DiscountAmount?: float, DiscountPercentage?: float, Id?: int, PaymentLinkId?: int, Quantity?: float, SubTotalAmount?: float, Tax?: record, TaxAmount?: float, TaxId?: int, TaxPercentage?: float, TotalAmount?: float, WorkType?: record, WorkTypeId?: int}
 # --User shape: {ActionNotificationsLastReadOn?: string, Email?: string, ExternalConnections?: list, HasBeenOnboarded?: bool, Id?: int, IsLocked?: bool, IsVerified?: bool, KnowledgeNotificationsLastReadOn?: string, LastSeenOn?: string, Name?: string, Password?: string, PasswordSalt?: string, ReferralPath?: string, ReferredUsers?: int, ReferrerKey?: string, Settings?: record, Status?: "Normal"|"Fraudlent"|"Locked", SubscriptionPlan?: record, Type?: "Anonymous"|"Customer"|"SystemAdministrator"|"Collaborator", ... (3 more fields)}
-export def "paymentlink-delete delete-payment-link" [
+export def "payment-link-api-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2135,7 +2135,7 @@ export def "paymentlink-delete delete-payment-link" [
 # --Invoice shape: {AccessToken?: string, Activities?: list, Attachments?: list, ClientId?: int, ClonedFromId?: int, CurrencyId?: int, DiscountAmount?: float, Duedate?: string, EnablePartialPayments?: bool, EstimationId?: int, Id?: int, InvoiceCategoryId?: int, IsDigitallySigned?: bool, IssuedOn?: string, Items?: list, Notes?: string, Number?: string, OrderId?: int, PaymentGateways?: list, PaymentLinkId?: int, Payments?: list, PoNumber?: string, RecurringProfileId?: int, ShouldSendReminders?: bool, ... (6 more fields)}
 # --Items item shape: {Cost?: float, DiscountAmount?: float, DiscountPercentage?: float, Id?: int, PaymentLinkId?: int, Quantity?: float, SubTotalAmount?: float, Tax?: record, TaxAmount?: float, TaxId?: int, TaxPercentage?: float, TotalAmount?: float, WorkType?: record, WorkTypeId?: int}
 # --User shape: {ActionNotificationsLastReadOn?: string, Email?: string, ExternalConnections?: list, HasBeenOnboarded?: bool, Id?: int, IsLocked?: bool, IsVerified?: bool, KnowledgeNotificationsLastReadOn?: string, LastSeenOn?: string, Name?: string, Password?: string, PasswordSalt?: string, ReferralPath?: string, ReferredUsers?: int, ReferrerKey?: string, Settings?: record, Status?: "Normal"|"Fraudlent"|"Locked", SubscriptionPlan?: record, Type?: "Anonymous"|"Customer"|"SystemAdministrator"|"Collaborator", ... (3 more fields)}
-export def "paymentlink-new create-payment-link" [
+export def "payment-link-api-new" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2192,7 +2192,7 @@ export def "paymentlink-new create-payment-link" [
 #
 # GET /api/paymentlink/uri
 # operationId: PaymentLinkApi_Uri
-export def "paymentlink-uri get-payment-link" [
+export def "payment-link-api-uri" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2233,7 +2233,7 @@ export def "paymentlink-uri get-payment-link" [
 #
 # GET /api/product/all
 # operationId: ProductApi_All
-export def "product-all list" [
+export def "product-api-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2275,7 +2275,7 @@ export def "product-all list" [
 #
 # POST /api/product/delete
 # operationId: ProductApi_Delete
-export def "product-delete delete" [
+export def "product-api-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2318,7 +2318,7 @@ export def "product-delete delete" [
 #
 # GET /api/product/details
 # operationId: ProductApi_Details
-export def "product-details get" [
+export def "product-api-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2364,7 +2364,7 @@ export def "product-details get" [
 # --Discounts item shape: {DiscountAmount?: float, DiscountPercentage?: float, Id?: int, Name?: string, ValidFrom?: string, ValidTo?: string}
 # --Items item shape: {Cost?: float, Description?: string, Id?: int, MinimumQuantity?: float, ReferenceId?: string, SubTotalAmount?: float, TaxAmount?: float, TaxId?: int, TaxPercentage?: float, TotalAmount?: float, WorkTypeId?: int}
 # --PaymentGateways item shape: {Name?: string}
-export def "product-new create" [
+export def "product-api-new" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2426,7 +2426,7 @@ export def "product-new create" [
 # --Discounts item shape: {DiscountAmount?: float, DiscountPercentage?: float, Id?: int, Name?: string, ValidFrom?: string, ValidTo?: string}
 # --Items item shape: {Cost?: float, Description?: string, Id?: int, MinimumQuantity?: float, ReferenceId?: string, SubTotalAmount?: float, TaxAmount?: float, TaxId?: int, TaxPercentage?: float, TotalAmount?: float, WorkTypeId?: int}
 # --PaymentGateways item shape: {Name?: string}
-export def "product-update update" [
+export def "product-api-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2483,7 +2483,7 @@ export def "product-update update" [
 #
 # GET /api/tax/all
 # operationId: TaxApi_All
-export def "tax-all list" [
+export def "tax-api-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2522,7 +2522,7 @@ export def "tax-all list" [
 #
 # POST /api/tax/delete
 # operationId: TaxApi_Delete
-export def "tax-delete delete" [
+export def "tax-api-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2565,7 +2565,7 @@ export def "tax-delete delete" [
 #
 # POST /api/tax/new
 # operationId: TaxApi_New
-export def "tax-new create" [
+export def "tax-api-new" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2609,7 +2609,7 @@ export def "tax-new create" [
 #
 # POST /api/tax/update
 # operationId: TaxApi_Update
-export def "tax-update update" [
+export def "tax-api-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2653,7 +2653,7 @@ export def "tax-update update" [
 #
 # GET /api/worktype/all
 # operationId: WorkTypeApi_All
-export def "worktype-all list-work-type" [
+export def "work-type-api-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2692,7 +2692,7 @@ export def "worktype-all list-work-type" [
 #
 # POST /api/worktype/delete
 # operationId: WorkTypeApi_Delete
-export def "worktype-delete delete-work-type" [
+export def "work-type-api-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2735,7 +2735,7 @@ export def "worktype-delete delete-work-type" [
 #
 # GET /api/worktype/details
 # operationId: WorkTypeApi_Details
-export def "worktype-details get-work-type" [
+export def "work-type-api-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2776,7 +2776,7 @@ export def "worktype-details get-work-type" [
 #
 # POST /api/worktype/new
 # operationId: WorkTypeApi_New
-export def "worktype-new create-work-type" [
+export def "work-type-api-new" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2819,7 +2819,7 @@ export def "worktype-new create-work-type" [
 #
 # GET /api/worktype/search
 # operationId: WorkTypeApi_Search
-export def "worktype-search list-work-type" [
+export def "work-type-api-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2864,7 +2864,7 @@ export def "worktype-search list-work-type" [
 #
 # POST /api/worktype/update
 # operationId: WorkTypeApi_Update
-export def "worktype-update update-work-type" [
+export def "work-type-api-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

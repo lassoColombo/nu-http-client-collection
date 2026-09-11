@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-media-media-services-account-filters list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account-filters-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaServices/{accountName}/accountFilters
 # operationId: AccountFilters_List
-export def "subscriptions-resource-groups-providers-microsoft-media-media-services-account-filters list" [
+export def "account-filters-list" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -182,7 +182,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-media-servic
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaServices/{accountName}/accountFilters/{filterName}
 # operationId: AccountFilters_Delete
-export def "subscriptions-resource-groups-providers-microsoft-media-media-services-account-filters delete" [
+export def "account-filters-delete" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -226,7 +226,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-media-servic
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaServices/{accountName}/accountFilters/{filterName}
 # operationId: AccountFilters_Get
-export def "subscriptions-resource-groups-providers-microsoft-media-media-services-account-filters get" [
+export def "account-filters-get" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -271,7 +271,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-media-servic
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaServices/{accountName}/accountFilters/{filterName}
 # operationId: AccountFilters_Update
 # --properties shape: {firstQuality?: record, presentationTimeRange?: record, tracks?: list}
-export def "subscriptions-resource-groups-providers-microsoft-media-media-services-account-filters update" [
+export def "account-filters-update" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -320,7 +320,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-media-servic
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaServices/{accountName}/accountFilters/{filterName}
 # operationId: AccountFilters_CreateOrUpdate
 # --properties shape: {firstQuality?: record, presentationTimeRange?: record, tracks?: list}
-export def "subscriptions-resource-groups-providers-microsoft-media-media-services-account-filters create-or-update" [
+export def "account-filters-create-or-update" [
   subscription_id: string
   resource_group_name: string
   account_name: string

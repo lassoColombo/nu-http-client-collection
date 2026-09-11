@@ -119,7 +119,7 @@ def candidate-office-completer [] { ["" "H" "P" "S"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "audit-case get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-audit-case" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -142,7 +142,7 @@ export def commands []: nothing -> table {
 # This endpoint contains Final Audit Reports approved by the Commission since inception. The search can be based on information about the audited committee (Name, FEC ID Number, Type, Election Cycle) or the issues covered in the report.
 #
 # GET /audit-case/
-export def "audit-case get" [
+export def "get-audit-case" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -197,7 +197,7 @@ export def "audit-case get" [
 # This lists the options for the categories and subcategories available in the /audit-search/ endpoint.
 #
 # GET /audit-category/
-export def "audit-category get" [
+export def "get-audit-category" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -241,7 +241,7 @@ export def "audit-category get" [
 # This lists the options for the primary categories available in the /audit-search/ endpoint.
 #
 # GET /audit-primary-category/
-export def "audit-primary-category get" [
+export def "get-audit-primary-category" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -285,7 +285,7 @@ export def "audit-primary-category get" [
 # Combines the election and reporting dates with Commission meetings, conferences, outreach, Advisory Opinions, rules, litigation dates and other events into one calendar. State and report type filtering is no longer available.
 #
 # GET /calendar-dates/
-export def "calendar-dates get" [
+export def "get-calendar-dates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -335,7 +335,7 @@ export def "calendar-dates get" [
 # Returns CSV or ICS for downloading directly into calendar applications like Google, Outlook or other applications. Combines the election and reporting dates with Commission meetings, conferences, outreach, Advisory Opinions, rules, litigation dates and other events into one calendar. State filtering now applies to elections, reports and reporting periods. Presidential pre-primary report due dates are not shown on even years. Filers generally opt to file monthly rather than submit over 50 pre-primary election reports. All reporting deadlines are available at /reporting-dates/ for reference. This is [the sql function](https://github.com/fecgov/openFEC/blob/develop/data/migrations/V40__omnibus_dates.sql) that creates the calendar.
 #
 # GET /calendar-dates/export/
-export def "calendar-dates-export get" [
+export def "get-calendar-dates-export" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -386,7 +386,7 @@ export def "calendar-dates-export get" [
 # This endpoint is useful for finding detailed information about a particular candidate. Use the `candidate_id` to find the most recent information about that candidate.
 #
 # GET /candidate/{candidate_id}/
-export def "candidate get" [
+export def "get-candidate-candidate-id" [
   candidate_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
@@ -442,7 +442,7 @@ export def "candidate get" [
 # This endpoint is useful for finding detailed information about a particular committee or filer. Use the `committee_id` to find the most recent information about the committee.
 #
 # GET /candidate/{candidate_id}/committees/
-export def "candidate-committees get" [
+export def "get-candidate-candidate-id-committees" [
   candidate_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
@@ -492,7 +492,7 @@ export def "candidate-committees get" [
 # Explore a filer's characteristics over time. This can be particularly useful if the committees change treasurers, designation, or `committee_type`.
 #
 # GET /candidate/{candidate_id}/committees/history/
-export def "candidate-committees-history list" [
+export def "get-candidate-candidate-id-committees-history" [
   candidate_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
@@ -538,7 +538,7 @@ export def "candidate-committees-history list" [
 # Explore a filer's characteristics over time. This can be particularly useful if the committees change treasurers, designation, or `committee_type`.
 #
 # GET /candidate/{candidate_id}/committees/history/{cycle}/
-export def "candidate-committees-history get" [
+export def "get-candidate-candidate-id-committees-history-cycle" [
   candidate_id: string
   cycle: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -586,7 +586,7 @@ export def "candidate-committees-history get" [
 # All official records and reports filed by or delivered to the FEC. Note: because the filings data includes many records, counts for large result sets are approximate; you will want to page through the records until no records are returned.
 #
 # GET /candidate/{candidate_id}/filings/
-export def "candidate-filings get" [
+export def "get-candidate-candidate-id-filings" [
   candidate_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
@@ -652,7 +652,7 @@ export def "candidate-filings get" [
 # Find out a candidate's characteristics over time. This is particularly useful if the candidate runs for the same office in different districts or you want to know more about a candidate's previous races. This information is organized by `candidate_id`, so it won't help you find a candidate who ran for different offices over time; candidates get a new ID for each office.
 #
 # GET /candidate/{candidate_id}/history/
-export def "candidate-history list" [
+export def "get-candidate-candidate-id-history" [
   candidate_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
@@ -697,7 +697,7 @@ export def "candidate-history list" [
 # Find out a candidate's characteristics over time. This is particularly useful if the candidate runs for the same office in different districts or you want to know more about a candidate's previous races. This information is organized by `candidate_id`, so it won't help you find a candidate who ran for different offices over time; candidates get a new ID for each office.
 #
 # GET /candidate/{candidate_id}/history/{cycle}/
-export def "candidate-history get" [
+export def "get-candidate-candidate-id-history-cycle" [
   candidate_id: string
   cycle: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -744,7 +744,7 @@ export def "candidate-history get" [
 # This endpoint provides information about a committee's Form 3, Form 3X, or Form 3P financial reports, which are aggregated by two-year period. We refer to two-year periods as a `cycle`. The cycle is named after the even-numbered year and includes the year before it. To obtain totals from 2013 and 2014, you would use 2014. In odd-numbered years, the current cycle is the next year — for example, in 2015, the current cycle is 2016. For presidential and Senate candidates, multiple two-year cycles exist between elections.
 #
 # GET /candidate/{candidate_id}/totals/
-export def "candidate-totals get" [
+export def "get-candidate-candidate-id-totals" [
   candidate_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
@@ -790,7 +790,7 @@ export def "candidate-totals get" [
 # Fetch basic information about candidates, and use parameters to filter results to the candidates you're looking for. Each result reflects a unique FEC candidate ID. That ID is particular to the candidate for a particular office sought. If a candidate runs for the same office multiple times, the ID stays the same. If the same person runs for another office — for example, a House candidate runs for a Senate office — that candidate will get a unique ID for each office.
 #
 # GET /candidates/
-export def "candidates get" [
+export def "get-candidates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -849,7 +849,7 @@ export def "candidates get" [
 # Fetch basic information about candidates and their principal committees. Each result reflects a unique FEC candidate ID. That ID is assigned to the candidate for a particular office sought. If a candidate runs for the same office over time, that ID stays the same. If the same person runs for multiple offices — for example, a House candidate runs for a Senate office — that candidate will get a unique ID for each office. The candidate endpoints primarily use data from FEC registration [Form 1](https://www.fec.gov/pdf/forms/fecfrm1.pdf) for committee information and [Form 2](https://www.fec.gov/pdf/forms/fecfrm2.pdf) for candidate information.
 #
 # GET /candidates/search/
-export def "candidates-search get" [
+export def "get-candidates-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -908,7 +908,7 @@ export def "candidates-search get" [
 # Aggregated candidate receipts and disbursements grouped by cycle.
 #
 # GET /candidates/totals/
-export def "candidates-totals get" [
+export def "get-candidates-totals" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -970,7 +970,7 @@ export def "candidates-totals get" [
 # Candidate total receipts and disbursements aggregated by `aggregate_by`.
 #
 # GET /candidates/totals/aggregates/
-export def "candidates-totals-aggregates get" [
+export def "get-candidates-totals-aggregates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -1022,7 +1022,7 @@ export def "candidates-totals-aggregates get" [
 # Aggregated candidate receipts and disbursements grouped by office by cycle.
 #
 # GET /candidates/totals/by_office/
-export def "candidates-totals-by-office get" [
+export def "get-candidates-totals-by-office" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -1070,7 +1070,7 @@ export def "candidates-totals-by-office get" [
 # Aggregated candidate receipts and disbursements grouped by office by party by cycle.
 #
 # GET /candidates/totals/by_office/by_party/
-export def "candidates-totals-by-office-by-party get" [
+export def "get-candidates-totals-by-office-by-party" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -1116,7 +1116,7 @@ export def "candidates-totals-by-office-by-party get" [
 # This endpoint is useful for finding detailed information about a particular committee or filer. Use the `committee_id` to find the most recent information about the committee.
 #
 # GET /committee/{committee_id}/
-export def "committee get" [
+export def "get-committee-committee-id" [
   committee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
@@ -1166,7 +1166,7 @@ export def "committee get" [
 # This endpoint is useful for finding detailed information about a particular candidate. Use the `candidate_id` to find the most recent information about that candidate.
 #
 # GET /committee/{committee_id}/candidates/
-export def "committee-candidates get" [
+export def "get-committee-committee-id-candidates" [
   committee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
@@ -1222,7 +1222,7 @@ export def "committee-candidates get" [
 # Find out a candidate's characteristics over time. This is particularly useful if the candidate runs for the same office in different districts or you want to know more about a candidate's previous races. This information is organized by `candidate_id`, so it won't help you find a candidate who ran for different offices over time; candidates get a new ID for each office.
 #
 # GET /committee/{committee_id}/candidates/history/
-export def "committee-candidates-history list" [
+export def "get-committee-committee-id-candidates-history" [
   committee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
@@ -1267,7 +1267,7 @@ export def "committee-candidates-history list" [
 # Find out a candidate's characteristics over time. This is particularly useful if the candidate runs for the same office in different districts or you want to know more about a candidate's previous races. This information is organized by `candidate_id`, so it won't help you find a candidate who ran for different offices over time; candidates get a new ID for each office.
 #
 # GET /committee/{committee_id}/candidates/history/{cycle}/
-export def "committee-candidates-history get" [
+export def "get-committee-committee-id-candidates-history-cycle" [
   committee_id: string
   cycle: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1314,7 +1314,7 @@ export def "committee-candidates-history get" [
 # All official records and reports filed by or delivered to the FEC. Note: because the filings data includes many records, counts for large result sets are approximate; you will want to page through the records until no records are returned.
 #
 # GET /committee/{committee_id}/filings/
-export def "committee-filings get" [
+export def "get-committee-committee-id-filings" [
   committee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
@@ -1380,7 +1380,7 @@ export def "committee-filings get" [
 # Explore a filer's characteristics over time. This can be particularly useful if the committees change treasurers, designation, or `committee_type`.
 #
 # GET /committee/{committee_id}/history/
-export def "committee-history list" [
+export def "get-committee-committee-id-history" [
   committee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
@@ -1426,7 +1426,7 @@ export def "committee-history list" [
 # Explore a filer's characteristics over time. This can be particularly useful if the committees change treasurers, designation, or `committee_type`.
 #
 # GET /committee/{committee_id}/history/{cycle}/
-export def "committee-history get" [
+export def "get-committee-committee-id-history-cycle" [
   committee_id: string
   cycle: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1474,7 +1474,7 @@ export def "committee-history get" [
 # Each report represents the summary information from Form 3, Form 3X and Form 3P. These reports have key statistics that illuminate the financial status of a given committee. Things like cash on hand, debts owed by committee, total receipts, and total disbursements are especially helpful for understanding a committee's financial dealings. By default, this endpoint includes both amended and final versions of each report. To restrict to only the final versions of each report, use `is_amended=false`; to retrieve only reports that have been amended, use `is_amended=true`. Several different reporting structures exist, depending on the type of organization that submits financial information. To see an example of these reporting requirements, look at the summary and detailed summary pages of Form 3, Form 3X, and Form 3P. DISCLAIMER: The field labels contained within this resource are subject to change. We are attempting to succinctly label these fields while conveying clear meaning to ensure accessibility for all users.
 #
 # GET /committee/{committee_id}/reports/
-export def "committee-reports get" [
+export def "get-committee-committee-id-reports" [
   committee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
@@ -1539,7 +1539,7 @@ export def "committee-reports get" [
 # This endpoint provides information about a committee's Form 3, Form 3X, or Form 3P financial reports, which are aggregated by two-year period. We refer to two-year periods as a `cycle`. The cycle is named after the even-numbered year and includes the year before it. To obtain totals from 2013 and 2014, you would use 2014. In odd-numbered years, the current cycle is the next year — for example, in 2015, the current cycle is 2016. For presidential and Senate candidates, multiple two-year cycles exist between elections.
 #
 # GET /committee/{committee_id}/totals/
-export def "committee-totals get" [
+export def "get-committee-committee-id-totals" [
   committee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
@@ -1584,7 +1584,7 @@ export def "committee-totals get" [
 # Fetch basic information about committees and filers. Use parameters to filter for particular characteristics.
 #
 # GET /committees/
-export def "committees get" [
+export def "get-committees" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -1645,7 +1645,7 @@ export def "committees get" [
 # 52 U.S.C. 30118 allows "communications by a corporation to its stockholders and executive or administrative personnel and their families or by a labor organization to its members and their families on any subject," including the express advocacy of the election or defeat of any Federal candidate. The costs of such communications must be reported to the Federal Election Commission under certain circumstances.
 #
 # GET /communication_costs/
-export def "communication-costs get" [
+export def "get-communication-costs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -1698,7 +1698,7 @@ export def "communication-costs get" [
 # Communication cost aggregated by candidate ID and committee ID.
 #
 # GET /communication_costs/aggregates/
-export def "communication-costs-aggregates get" [
+export def "get-communication-costs-aggregates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -1744,7 +1744,7 @@ export def "communication-costs-aggregates get" [
 # Communication cost aggregated by candidate ID and committee ID.
 #
 # GET /communication_costs/by_candidate/
-export def "communication-costs-by-candidate get" [
+export def "get-communication-costs-by-candidate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -1793,7 +1793,7 @@ export def "communication-costs-by-candidate get" [
 # Total communications costs aggregated across committees on supported or opposed candidates by cycle or candidate election year.
 #
 # GET /communication_costs/totals/by_candidate/
-export def "communication-costs-totals-by-candidate get" [
+export def "get-communication-costs-totals-by-candidate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -1838,7 +1838,7 @@ export def "communication-costs-totals-by-candidate get" [
 # Basic information about electronic files coming into the FEC, posted as they are received.
 #
 # GET /efile/filings/
-export def "efile-filings get" [
+export def "get-efile-filings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -1885,7 +1885,7 @@ export def "efile-filings get" [
 # Key financial data reported periodically by committees as they are reported. This feed includes summary information from the the House F3 reports, the presidential F3p reports and the PAC and party F3x reports. Generally, committees file reports on a quarterly or monthly basis, but some must also submit a report 12 days before primary elections. Therefore, during the primary season, the period covered by this file may be different for different committees. These totals also incorporate any changes made by committees, if any report covering the period is amended. DISCLAIMER: The field labels contained within this resource are subject to change. We are attempting to succinctly label these fields while conveying clear meaning to ensure accessibility for all users.
 #
 # GET /efile/reports/house-senate/
-export def "efile-reports-house-senate get" [
+export def "get-efile-reports-house-senate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -1932,7 +1932,7 @@ export def "efile-reports-house-senate get" [
 # Key financial data reported periodically by committees as they are reported. This feed includes summary information from the the House F3 reports, the presidential F3p reports and the PAC and party F3x reports. Generally, committees file reports on a quarterly or monthly basis, but some must also submit a report 12 days before primary elections. Therefore, during the primary season, the period covered by this file may be different for different committees. These totals also incorporate any changes made by committees, if any report covering the period is amended. DISCLAIMER: The field labels contained within this resource are subject to change. We are attempting to succinctly label these fields while conveying clear meaning to ensure accessibility for all users.
 #
 # GET /efile/reports/pac-party/
-export def "efile-reports-pac-party get" [
+export def "get-efile-reports-pac-party" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -1979,7 +1979,7 @@ export def "efile-reports-pac-party get" [
 # Key financial data reported periodically by committees as they are reported. This feed includes summary information from the the House F3 reports, the presidential F3p reports and the PAC and party F3x reports. Generally, committees file reports on a quarterly or monthly basis, but some must also submit a report 12 days before primary elections. Therefore, during the primary season, the period covered by this file may be different for different committees. These totals also incorporate any changes made by committees, if any report covering the period is amended. DISCLAIMER: The field labels contained within this resource are subject to change. We are attempting to succinctly label these fields while conveying clear meaning to ensure accessibility for all users.
 #
 # GET /efile/reports/presidential/
-export def "efile-reports-presidential get" [
+export def "get-efile-reports-presidential" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -2026,7 +2026,7 @@ export def "efile-reports-presidential get" [
 # FEC election dates since 1995.
 #
 # GET /election-dates/
-export def "election-dates get" [
+export def "get-election-dates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -2082,7 +2082,7 @@ export def "election-dates get" [
 # An electioneering communication is any broadcast, cable or satellite communication that fulfills each of the following conditions: _The communication refers to a clearly identified federal candidate._ _The communication is publicly distributed by a television station, radio station, cable television system or satellite system for a fee._ _The communication is distributed within 60 days prior to a general election or 30 days prior to a primary election to federal office._
 #
 # GET /electioneering/
-export def "electioneering get" [
+export def "get-electioneering" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -2133,7 +2133,7 @@ export def "electioneering get" [
 # Electioneering communications costs aggregates
 #
 # GET /electioneering/aggregates/
-export def "electioneering-aggregates get" [
+export def "get-electioneering-aggregates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -2178,7 +2178,7 @@ export def "electioneering-aggregates get" [
 # Electioneering costs aggregated by candidate
 #
 # GET /electioneering/by_candidate/
-export def "electioneering-by-candidate get" [
+export def "get-electioneering-by-candidate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -2226,7 +2226,7 @@ export def "electioneering-by-candidate get" [
 # Total electioneering communications spent on candidates by cycle or candidate election year
 #
 # GET /electioneering/totals/by_candidate/
-export def "electioneering-totals-by-candidate get" [
+export def "get-electioneering-totals-by-candidate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -2271,7 +2271,7 @@ export def "electioneering-totals-by-candidate get" [
 # Look at the top-level financial information for all candidates running for the same office. Choose a 2-year cycle, and `house`, `senate` or `presidential`. If you are looking for a Senate seat, you will need to select the state using a two-letter abbreviation. House races require state and a two-digit district number. Since this endpoint reflects financial information, it will only have candidates once they file financial reporting forms. Query the `/candidates` endpoint to retrieve an-up-to-date list of all the candidates that filed to run for a particular seat.
 #
 # GET /elections/
-export def "elections get" [
+export def "get-elections" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -2318,7 +2318,7 @@ export def "elections get" [
 # List elections by cycle, office, state, and district.
 #
 # GET /elections/search/
-export def "elections-search get" [
+export def "get-elections-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -2365,7 +2365,7 @@ export def "elections-search get" [
 # List elections by cycle, office, state, and district.
 #
 # GET /elections/summary/
-export def "elections-summary get" [
+export def "get-elections-summary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -2406,7 +2406,7 @@ export def "elections-summary get" [
 # All official records and reports filed by or delivered to the FEC. Note: because the filings data includes many records, counts for large result sets are approximate; you will want to page through the records until no records are returned.
 #
 # GET /filings/
-export def "filings get" [
+export def "get-filings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -2472,7 +2472,7 @@ export def "filings get" [
 # Search legal documents by document type, or across all document types using keywords, parameter values and ranges.
 #
 # GET /legal/search/
-export def "legal-search get" [
+export def "get-legal-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -2550,7 +2550,7 @@ export def "legal-search get" [
 # Search for candidates or committees by name. If you're looking for information on a particular person or group, using a name to find the `candidate_id` or `committee_id` on this endpoint can be a helpful first step.
 #
 # GET /names/audit_candidates/
-export def "names-audit-candidates get" [
+export def "get-names-audit-candidates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -2587,7 +2587,7 @@ export def "names-audit-candidates get" [
 # Search for candidates or committees by name. If you're looking for information on a particular person or group, using a name to find the `candidate_id` or `committee_id` on this endpoint can be a helpful first step.
 #
 # GET /names/audit_committees/
-export def "names-audit-committees get" [
+export def "get-names-audit-committees" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -2624,7 +2624,7 @@ export def "names-audit-committees get" [
 # Search for candidates or committees by name. If you're looking for information on a particular person or group, using a name to find the `candidate_id` or `committee_id` on this endpoint can be a helpful first step.
 #
 # GET /names/candidates/
-export def "names-candidates get" [
+export def "get-names-candidates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -2661,7 +2661,7 @@ export def "names-candidates get" [
 # Search for candidates or committees by name. If you're looking for information on a particular person or group, using a name to find the `candidate_id` or `committee_id` on this endpoint can be a helpful first step.
 #
 # GET /names/committees/
-export def "names-committees get" [
+export def "get-names-committees" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -2698,7 +2698,7 @@ export def "names-committees get" [
 # The Operations log contains details of each report loaded into the database. It is primarily used as status check to determine when all of the data processes, from initial entry through review are complete.
 #
 # GET /operations-log/
-export def "operations-log get" [
+export def "get-operations-log" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -2753,7 +2753,7 @@ export def "operations-log get" [
 # Net receipts per candidate. Filter with `contributor_state='US'` for national totals
 #
 # GET /presidential/contributions/by_candidate/
-export def "presidential-contributions-by-candidate get" [
+export def "get-presidential-contributions-by-candidate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -2797,7 +2797,7 @@ export def "presidential-contributions-by-candidate get" [
 # Contribution receipts by size per candidate. Filter by candidate_id, election_year and/or size
 #
 # GET /presidential/contributions/by_size/
-export def "presidential-contributions-by-size get" [
+export def "get-presidential-contributions-by-size" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -2842,7 +2842,7 @@ export def "presidential-contributions-by-size get" [
 # Contribution receipts by state per candidate. Filter by candidate_id and/or election_year
 #
 # GET /presidential/contributions/by_state/
-export def "presidential-contributions-by-state get" [
+export def "get-presidential-contributions-by-state" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -2886,7 +2886,7 @@ export def "presidential-contributions-by-state get" [
 # Coverage end date per candidate. Filter by candidate_id and/or election_year
 #
 # GET /presidential/coverage_end_date/
-export def "presidential-coverage-end-date get" [
+export def "get-presidential-coverage-end-date" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -2930,7 +2930,7 @@ export def "presidential-coverage-end-date get" [
 # Financial summary per candidate. Filter by candidate_id and/or election_year
 #
 # GET /presidential/financial_summary/
-export def "presidential-financial-summary get" [
+export def "get-presidential-financial-summary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -2974,7 +2974,7 @@ export def "presidential-financial-summary get" [
 # Use this endpoint to look up the RAD Analyst for a committee. The mission of the Reports Analysis Division (RAD) is to ensure that campaigns and political committees file timely and accurate reports that fully disclose their financial activities. RAD is responsible for reviewing statements and financial reports filed by political committees participating in federal elections, providing assistance and guidance to the committees to properly file their reports, and for taking appropriate action to ensure compliance with the Federal Election Campaign Act (FECA).
 #
 # GET /rad-analyst/
-export def "rad-analyst get" [
+export def "get-rad-analyst" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -3025,7 +3025,7 @@ export def "rad-analyst get" [
 # FEC election dates since 1995.
 #
 # GET /reporting-dates/
-export def "reporting-dates get" [
+export def "get-reporting-dates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -3075,7 +3075,7 @@ export def "reporting-dates get" [
 # Each report represents the summary information from Form 3, Form 3X and Form 3P. These reports have key statistics that illuminate the financial status of a given committee. Things like cash on hand, debts owed by committee, total receipts, and total disbursements are especially helpful for understanding a committee's financial dealings. By default, this endpoint includes both amended and final versions of each report. To restrict to only the final versions of each report, use `is_amended=false`; to retrieve only reports that have been amended, use `is_amended=true`. Several different reporting structures exist, depending on the type of organization that submits financial information. To see an example of these reporting requirements, look at the summary and detailed summary pages of Form 3, Form 3X, and Form 3P. DISCLAIMER: The field labels contained within this resource are subject to change. We are attempting to succinctly label these fields while conveying clear meaning to ensure accessibility for all users.
 #
 # GET /reports/{entity_type}/
-export def "reports get" [
+export def "get-reports-entity-type" [
   entity_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
@@ -3148,7 +3148,7 @@ export def "reports get" [
 # This description is for both ​`/schedules​/schedule_a​/` and ​ `/schedules​/schedule_a​/{sub_id}​/`. This endpoint provides itemized receipts. Schedule A records describe itemized receipts, including contributions from individuals. If you are interested in contributions from an individual, use the `/schedules/schedule_a/` endpoint. For a more complete description of all Schedule A records visit [About receipts data](https://www.fec.gov/campaign-finance-data/about-campaign-finance-data/about-receipts-data/). If you are interested in our "is_individual" methodology visit our [methodology page](https://www.fec.gov/campaign-finance-data/about-campaign-finance-data/methodology/). ​The `/schedules​/schedule_a​/` endpoint is not paginated by page number. This endpoint uses keyset pagination to improve query performance and these indices are required to properly page through this large dataset. To request the next page, you should append the values found in the `last_indexes` object from pagination to the URL of your last request as additional parameters. For example, when sorting by `contribution_receipt_date`, you might receive a page of results with the two scenarios of following pagination information: case #1: ``` pagination: { pages: 2152643, per_page: 20, count: 43052850, last_indexes: { last_index: "230880619", last_contribution_receipt_date: "2014-01-01" } } ``` case #2 (results which include contribution_receipt_date = NULL): ``` pagination: { pages: 2152644, per_page: 20, count: 43052850, last_indexes: { last_index: "230880639", sort_null_only: True } } ``` To fetch the next page of sorted results, append `last_index=230880619` and `last_contribution_receipt_date=2014-01-01` to the URL and when reaching `contribution_receipt_date=NULL`, append `last_index=230880639` and `sort_null_only=True`. We strongly advise paging through these results using sort indices. The default sort is acending by `contribution_receipt_date` (`deprecated`, will be descending). If you do not page using sort indices, some transactions may be unintentionally filtered out. Calls to ​`/schedules​/schedule_a​/` may return many records. For large result sets, the record counts found in the pagination object are approximate; you will need to page through the records until no records are returned. To avoid throwing the "out of range" exception on the last page, one recommandation is to use total count and `per_page` to control the traverse loop of results. ​The `/schedules​/schedule_a​/{sub_id}​/` endpoint returns a single transaction, but it does include a pagination object class. Please ignore the information in that object class.
 #
 # GET /schedules/schedule_a/
-export def "schedules-schedule-a list" [
+export def "get-schedules-schedule-a" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -3215,7 +3215,7 @@ export def "schedules-schedule-a list" [
 # This endpoint provides itemized individual contributions received by a committee, aggregated by the contributor’s employer name. If you are interested in our “is_individual” methodology, review the [methodology page](https://www.fec.gov/campaign-finance-data/about-campaign-finance-data/methodology). Unitemized individual contributions are not included.
 #
 # GET /schedules/schedule_a/by_employer/
-export def "schedules-schedule-a-by-employer get" [
+export def "get-schedules-schedule-a-by-employer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -3260,7 +3260,7 @@ export def "schedules-schedule-a-by-employer get" [
 # This endpoint provides itemized individual contributions received by a committee, aggregated by the contributor’s occupation. If you are interested in our “is_individual” methodology, review the [methodology page](https://www.fec.gov/campaign-finance-data/about-campaign-finance-data/methodology). Unitemized individual contributions are not included.
 #
 # GET /schedules/schedule_a/by_occupation/
-export def "schedules-schedule-a-by-occupation get" [
+export def "get-schedules-schedule-a-by-occupation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -3305,7 +3305,7 @@ export def "schedules-schedule-a-by-occupation get" [
 # This endpoint provides individual contributions received by a committee, aggregated by size: ``` - $200 and under - $200.01 - $499.99 - $500 - $999.99 - $1000 - $1999.99 - $2000 + ``` The $200.00 and under category includes contributions of $200 or less combined with unitemized individual contributions.
 #
 # GET /schedules/schedule_a/by_size/
-export def "schedules-schedule-a-by-size get" [
+export def "get-schedules-schedule-a-by-size" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -3350,7 +3350,7 @@ export def "schedules-schedule-a-by-size get" [
 # This endpoint provides itemized individual contributions received by a committee, aggregated by size of contribution and candidate. If you are interested in our “is_individual” methodology, review the [methodology page](https://www.fec.gov/campaign-finance-data/about-campaign-finance-data/methodology). Unitemized individual contributions are not included.
 #
 # GET /schedules/schedule_a/by_size/by_candidate/
-export def "schedules-schedule-a-by-size-by-candidate get" [
+export def "get-schedules-schedule-a-by-size-by-candidate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -3395,7 +3395,7 @@ export def "schedules-schedule-a-by-size-by-candidate get" [
 # This endpoint provides itemized individual contributions received by a committee, aggregated by the contributor’s state. If you are interested in our “is_individual” methodology, review the [methodology page](https://www.fec.gov/campaign-finance-data/about-campaign-finance-data/methodology). Unitemized individual contributions are not included.
 #
 # GET /schedules/schedule_a/by_state/
-export def "schedules-schedule-a-by-state get" [
+export def "get-schedules-schedule-a-by-state" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -3441,7 +3441,7 @@ export def "schedules-schedule-a-by-state get" [
 # This endpoint provides itemized individual contributions received by a committee, aggregated by contributor’s state and candidate. If you are interested in our “is_individual” methodology, review the [methodology page](https://www.fec.gov/campaign-finance-data/about-campaign-finance-data/methodology). Unitemized individual contributions are not included.
 #
 # GET /schedules/schedule_a/by_state/by_candidate/
-export def "schedules-schedule-a-by-state-by-candidate get" [
+export def "get-schedules-schedule-a-by-state-by-candidate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -3486,7 +3486,7 @@ export def "schedules-schedule-a-by-state-by-candidate get" [
 # Itemized individual contributions aggregated by contributor’s state, candidate, committee type and cycle. If you are interested in our “is_individual” methodology, review the [methodology page](https://www.fec.gov/campaign-finance-data/about-campaign-finance-data/methodology). Unitemized individual contributions are not included.
 #
 # GET /schedules/schedule_a/by_state/by_candidate/totals/
-export def "schedules-schedule-a-by-state-by-candidate-totals get" [
+export def "get-schedules-schedule-a-by-state-by-candidate-totals" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -3531,7 +3531,7 @@ export def "schedules-schedule-a-by-state-by-candidate-totals get" [
 # This endpoint provides itemized individual contributions received by a committee, aggregated by contributor’s state, committee type and cycle. If you are interested in our “is_individual” methodology, review the [methodology page](https://www.fec.gov/campaign-finance-data/about-campaign-finance-data/methodology). Unitemized individual contributions are not included.
 #
 # GET /schedules/schedule_a/by_state/totals/
-export def "schedules-schedule-a-by-state-totals get" [
+export def "get-schedules-schedule-a-by-state-totals" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -3576,7 +3576,7 @@ export def "schedules-schedule-a-by-state-totals get" [
 # This endpoint provides itemized individual contributions received by a committee, aggregated by the contributor’s ZIP code. If you are interested in our “is_individual” methodology, review the [methodology page](https://www.fec.gov/campaign-finance-data/about-campaign-finance-data/methodology). Unitemized individual contributions are not included.
 #
 # GET /schedules/schedule_a/by_zip/
-export def "schedules-schedule-a-by-zip get" [
+export def "get-schedules-schedule-a-by-zip" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -3622,7 +3622,7 @@ export def "schedules-schedule-a-by-zip get" [
 # Efiling endpoints provide real-time campaign finance data received from electronic filers. Efiling endpoints only contain the most recent four months of data and don't contain the processed and coded data that you can find on other endpoints.
 #
 # GET /schedules/schedule_a/efile/
-export def "schedules-schedule-a-efile get" [
+export def "get-schedules-schedule-a-efile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -3678,7 +3678,7 @@ export def "schedules-schedule-a-efile get" [
 # This description is for both ​`/schedules​/schedule_a​/` and ​ `/schedules​/schedule_a​/{sub_id}​/`. This endpoint provides itemized receipts. Schedule A records describe itemized receipts, including contributions from individuals. If you are interested in contributions from an individual, use the `/schedules/schedule_a/` endpoint. For a more complete description of all Schedule A records visit [About receipts data](https://www.fec.gov/campaign-finance-data/about-campaign-finance-data/about-receipts-data/). If you are interested in our "is_individual" methodology visit our [methodology page](https://www.fec.gov/campaign-finance-data/about-campaign-finance-data/methodology/). ​The `/schedules​/schedule_a​/` endpoint is not paginated by page number. This endpoint uses keyset pagination to improve query performance and these indices are required to properly page through this large dataset. To request the next page, you should append the values found in the `last_indexes` object from pagination to the URL of your last request as additional parameters. For example, when sorting by `contribution_receipt_date`, you might receive a page of results with the two scenarios of following pagination information: case #1: ``` pagination: { pages: 2152643, per_page: 20, count: 43052850, last_indexes: { last_index: "230880619", last_contribution_receipt_date: "2014-01-01" } } ``` case #2 (results which include contribution_receipt_date = NULL): ``` pagination: { pages: 2152644, per_page: 20, count: 43052850, last_indexes: { last_index: "230880639", sort_null_only: True } } ``` To fetch the next page of sorted results, append `last_index=230880619` and `last_contribution_receipt_date=2014-01-01` to the URL and when reaching `contribution_receipt_date=NULL`, append `last_index=230880639` and `sort_null_only=True`. We strongly advise paging through these results using sort indices. The default sort is acending by `contribution_receipt_date` (`deprecated`, will be descending). If you do not page using sort indices, some transactions may be unintentionally filtered out. Calls to ​`/schedules​/schedule_a​/` may return many records. For large result sets, the record counts found in the pagination object are approximate; you will need to page through the records until no records are returned. To avoid throwing the "out of range" exception on the last page, one recommandation is to use total count and `per_page` to control the traverse loop of results. ​The `/schedules​/schedule_a​/{sub_id}​/` endpoint returns a single transaction, but it does include a pagination object class. Please ignore the information in that object class.
 #
 # GET /schedules/schedule_a/{sub_id}/
-export def "schedules-schedule-a get" [
+export def "get-schedules-schedule-a-sub-id" [
   sub_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
@@ -3747,7 +3747,7 @@ export def "schedules-schedule-a get" [
 # Schedule B filings describe itemized disbursements. This data explains how committees and other filers spend their money. These figures are reported as part of forms F3, F3X and F3P. The data is divided in two-year periods, called `two_year_transaction_period`, which is derived from the `report_year` submitted of the corresponding form. If no value is supplied, the results will default to the most recent two-year period that is named after the ending, even-numbered year. Due to the large quantity of Schedule B filings, this endpoint is not paginated by page number. Instead, you can request the next page of results by adding the values in the `last_indexes` object from `pagination` to the URL of your last request. For example, when sorting by `disbursement_date`, you might receive a page of results with the following pagination information: ``` pagination: { pages: 965191, per_page: 20, count: 19303814, last_indexes: { last_index: "230906248", last_disbursement_date: "2014-07-04" } } ``` To fetch the next page of sorted results, append `last_index=230906248` and `last_disbursement_date=2014-07-04` to the URL. We strongly advise paging through these results by using the sort indices (defaults to sort by disbursement date, e.g. `last_disbursement_date`), otherwise some resources may be unintentionally filtered out. This resource uses keyset pagination to improve query performance and these indices are required to properly page through this large dataset. Note: because the Schedule B data includes many records, counts for large result sets are approximate; you will want to page through the records until no records are returned.
 #
 # GET /schedules/schedule_b/
-export def "schedules-schedule-b list" [
+export def "get-schedules-schedule-b" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -3809,7 +3809,7 @@ export def "schedules-schedule-b list" [
 # Schedule B disbursements aggregated by disbursement purpose category. To avoid double counting, memoed items are not included. Purpose is a combination of transaction codes, category codes and disbursement description. Inspect the `disbursement_purpose` sql function within the migrations for more details.
 #
 # GET /schedules/schedule_b/by_purpose/
-export def "schedules-schedule-b-by-purpose get" [
+export def "get-schedules-schedule-b-by-purpose" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -3854,7 +3854,7 @@ export def "schedules-schedule-b-by-purpose get" [
 # Schedule B disbursements aggregated by recipient name. To avoid double counting, memoed items are not included.
 #
 # GET /schedules/schedule_b/by_recipient/
-export def "schedules-schedule-b-by-recipient get" [
+export def "get-schedules-schedule-b-by-recipient" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -3899,7 +3899,7 @@ export def "schedules-schedule-b-by-recipient get" [
 # Schedule B disbursements aggregated by recipient committee ID, if applicable. To avoid double counting, memoed items are not included.
 #
 # GET /schedules/schedule_b/by_recipient_id/
-export def "schedules-schedule-b-by-recipient-id get" [
+export def "get-schedules-schedule-b-by-recipient-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -3944,7 +3944,7 @@ export def "schedules-schedule-b-by-recipient-id get" [
 # Efiling endpoints provide real-time campaign finance data received from electronic filers. Efiling endpoints only contain the most recent four months of data and don't contain the processed and coded data that you can find on other endpoints.
 #
 # GET /schedules/schedule_b/efile/
-export def "schedules-schedule-b-efile get" [
+export def "get-schedules-schedule-b-efile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -3995,7 +3995,7 @@ export def "schedules-schedule-b-efile get" [
 # Schedule B filings describe itemized disbursements. This data explains how committees and other filers spend their money. These figures are reported as part of forms F3, F3X and F3P. The data is divided in two-year periods, called `two_year_transaction_period`, which is derived from the `report_year` submitted of the corresponding form. If no value is supplied, the results will default to the most recent two-year period that is named after the ending, even-numbered year. Due to the large quantity of Schedule B filings, this endpoint is not paginated by page number. Instead, you can request the next page of results by adding the values in the `last_indexes` object from `pagination` to the URL of your last request. For example, when sorting by `disbursement_date`, you might receive a page of results with the following pagination information: ``` pagination: { pages: 965191, per_page: 20, count: 19303814, last_indexes: { last_index: "230906248", last_disbursement_date: "2014-07-04" } } ``` To fetch the next page of sorted results, append `last_index=230906248` and `last_disbursement_date=2014-07-04` to the URL. We strongly advise paging through these results by using the sort indices (defaults to sort by disbursement date, e.g. `last_disbursement_date`), otherwise some resources may be unintentionally filtered out. This resource uses keyset pagination to improve query performance and these indices are required to properly page through this large dataset. Note: because the Schedule B data includes many records, counts for large result sets are approximate; you will want to page through the records until no records are returned.
 #
 # GET /schedules/schedule_b/{sub_id}/
-export def "schedules-schedule-b get" [
+export def "get-schedules-schedule-b-sub-id" [
   sub_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
@@ -4059,7 +4059,7 @@ export def "schedules-schedule-b get" [
 # Schedule C shows all loans, endorsements and loan guarantees a committee receives or makes. The committee continues to report the loan until it is repaid.
 #
 # GET /schedules/schedule_c/
-export def "schedules-schedule-c list" [
+export def "get-schedules-schedule-c" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -4115,7 +4115,7 @@ export def "schedules-schedule-c list" [
 # Schedule C shows all loans, endorsements and loan guarantees a committee receives or makes. The committee continues to report the loan until it is repaid.
 #
 # GET /schedules/schedule_c/{sub_id}/
-export def "schedules-schedule-c get" [
+export def "get-schedules-schedule-c-sub-id" [
   sub_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
@@ -4159,7 +4159,7 @@ export def "schedules-schedule-c get" [
 # Schedule D, it shows debts and obligations owed to or by the committee that are required to be disclosed.
 #
 # GET /schedules/schedule_d/
-export def "schedules-schedule-d list" [
+export def "get-schedules-schedule-d" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -4218,7 +4218,7 @@ export def "schedules-schedule-d list" [
 # Schedule D, it shows debts and obligations owed to or by the committee that are required to be disclosed.
 #
 # GET /schedules/schedule_d/{sub_id}/
-export def "schedules-schedule-d get" [
+export def "get-schedules-schedule-d-sub-id" [
   sub_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
@@ -4262,7 +4262,7 @@ export def "schedules-schedule-d get" [
 # Schedule E covers the line item expenditures for independent expenditures. For example, if a super PAC bought ads on TV to oppose a federal candidate, each ad purchase would be recorded here with the expenditure amount, name and id of the candidate, and whether the ad supported or opposed the candidate. An independent expenditure is an expenditure for a communication "expressly advocating the election or defeat of a clearly identified candidate that is not made in cooperation, consultation, or concert with, or at the request or suggestion of, a candidate, a candidate’s authorized committee, or their agents, or a political party or its agents." Aggregates by candidate do not include 24 and 48 hour reports. This ensures we don't double count expenditures and the totals are more accurate. You can still find the information from 24 and 48 hour reports in `/schedule/schedule_e/`. Due to the large quantity of Schedule E filings, this endpoint is not paginated by page number. Instead, you can request the next page of results by adding the values in the `last_indexes` object from `pagination` to the URL of your last request. For example, when sorting by `expenditure_amount`, you might receive a page of results with the following pagination information: ``` "pagination": { "count": 152623, "last_indexes": { "last_index": "3023037", "last_expenditure_amount": -17348.5 }, "per_page": 20, "pages": 7632 } } ``` To fetch the next page of sorted results, append `last_index=3023037` and `last_expenditure_amount=` to the URL. We strongly advise paging through these results by using the sort indices (defaults to sort by disbursement date, e.g. `last_disbursement_date`), otherwise some resources may be unintentionally filtered out. This resource uses keyset pagination to improve query performance and these indices are required to properly page through this large dataset. Note: because the Schedule E data includes many records, counts for large result sets are approximate; you will want to page through the records until no records are returned.
 #
 # GET /schedules/schedule_e/
-export def "schedules-schedule-e get" [
+export def "get-schedules-schedule-e" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -4333,7 +4333,7 @@ export def "schedules-schedule-e get" [
 # Schedule E receipts aggregated by recipient candidate. To avoid double counting, memoed items are not included.
 #
 # GET /schedules/schedule_e/by_candidate/
-export def "schedules-schedule-e-by-candidate get" [
+export def "get-schedules-schedule-e-by-candidate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -4383,7 +4383,7 @@ export def "schedules-schedule-e-by-candidate get" [
 # Efiling endpoints provide real-time campaign finance data received from electronic filers. Efiling endpoints only contain the most recent four months of data and don't contain the processed and coded data that you can find on other endpoints.
 #
 # GET /schedules/schedule_e/efile/
-export def "schedules-schedule-e-efile get" [
+export def "get-schedules-schedule-e-efile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -4447,7 +4447,7 @@ export def "schedules-schedule-e-efile get" [
 # Total independent expenditure on supported or opposed candidates by cycle or candidate election year.
 #
 # GET /schedules/schedule_e/totals/by_candidate/
-export def "schedules-schedule-e-totals-by-candidate get" [
+export def "get-schedules-schedule-e-totals-by-candidate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -4492,7 +4492,7 @@ export def "schedules-schedule-e-totals-by-candidate get" [
 # Schedule F, it shows all special expenditures a national or state party committee makes in connection with the general election campaigns of federal candidates. These coordinated party expenditures do not count against the contribution limits but are subject to other limits, these limits are detailed in Chapter 7 of the FEC Campaign Guide for Political Party Committees.
 #
 # GET /schedules/schedule_f/
-export def "schedules-schedule-f list" [
+export def "get-schedules-schedule-f" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -4546,7 +4546,7 @@ export def "schedules-schedule-f list" [
 # Schedule F, it shows all special expenditures a national or state party committee makes in connection with the general election campaigns of federal candidates. These coordinated party expenditures do not count against the contribution limits but are subject to other limits, these limits are detailed in Chapter 7 of the FEC Campaign Guide for Political Party Committees.
 #
 # GET /schedules/schedule_f/{sub_id}/
-export def "schedules-schedule-f get" [
+export def "get-schedules-schedule-f-sub-id" [
   sub_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
@@ -4586,7 +4586,7 @@ export def "schedules-schedule-f get" [
 # State laws and procedures govern elections for state or local offices as well as how candidates appear on election ballots. Contact the appropriate state election office for more information.
 #
 # GET /state-election-office/
-export def "state-election-office get" [
+export def "get-state-election-office" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -4629,7 +4629,7 @@ export def "state-election-office get" [
 # Provides cumulative receipt totals by entity type, over a two year cycle. Totals are adjusted to avoid double counting. This is [the sql](https://github.com/fecgov/openFEC/blob/develop/data/migrations/V41__large_aggregates.sql) that creates these calculations.
 #
 # GET /totals/by_entity/
-export def "totals-by-entity get" [
+export def "get-totals-by-entity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)
   --token-apikeyqueryauth: string # Auth token for ApiKeyQueryAuth (api_key)
@@ -4672,7 +4672,7 @@ export def "totals-by-entity get" [
 # This endpoint provides information about a committee's Form 3, Form 3X, or Form 3P financial reports, which are aggregated by two-year period. We refer to two-year periods as a `cycle`. The cycle is named after the even-numbered year and includes the year before it. To obtain totals from 2013 and 2014, you would use 2014. In odd-numbered years, the current cycle is the next year — for example, in 2015, the current cycle is 2016. For presidential and Senate candidates, multiple two-year cycles exist between elections.
 #
 # GET /totals/{entity_type}/
-export def "totals get" [
+export def "get-totals-entity-type" [
   entity_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheaderauth: string # Auth token for ApiKeyHeaderAuth (X-Api-Key)

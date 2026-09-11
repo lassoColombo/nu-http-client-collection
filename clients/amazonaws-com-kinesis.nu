@@ -128,7 +128,7 @@ def x-amz-target-completer-27 [] { ["Kinesis_20131202.UpdateStreamMode"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-tags-to-stream" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "add-tags-to-stream" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -152,7 +152,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AddTagsToStream
-export def "api create-tags-to-stream" [
+export def "add-tags-to-stream" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -202,7 +202,7 @@ export def "api create-tags-to-stream" [
 #
 # POST /
 # operationId: CreateStream
-export def "api create-stream" [
+export def "create-stream" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -252,7 +252,7 @@ export def "api create-stream" [
 #
 # POST /
 # operationId: DecreaseStreamRetentionPeriod
-export def "api create-decrease-stream-retention-period" [
+export def "decrease-stream-retention-period" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -302,7 +302,7 @@ export def "api create-decrease-stream-retention-period" [
 #
 # POST /
 # operationId: DeleteStream
-export def "api delete-stream" [
+export def "delete-stream" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -352,7 +352,7 @@ export def "api delete-stream" [
 #
 # POST /
 # operationId: DeregisterStreamConsumer
-export def "api create-deregister-stream-consumer" [
+export def "deregister-stream-consumer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -402,7 +402,7 @@ export def "api create-deregister-stream-consumer" [
 #
 # POST /
 # operationId: DescribeLimits
-export def "api get-limits" [
+export def "describe-limits" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -450,7 +450,7 @@ export def "api get-limits" [
 #
 # POST /
 # operationId: DescribeStream
-export def "api get-stream" [
+export def "describe-stream" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -504,7 +504,7 @@ export def "api get-stream" [
 #
 # POST /
 # operationId: DescribeStreamConsumer
-export def "api get-stream-consumer" [
+export def "describe-stream-consumer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -554,7 +554,7 @@ export def "api get-stream-consumer" [
 #
 # POST /
 # operationId: DescribeStreamSummary
-export def "api get-stream-summary" [
+export def "describe-stream-summary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -603,7 +603,7 @@ export def "api get-stream-summary" [
 #
 # POST /
 # operationId: DisableEnhancedMonitoring
-export def "api disable-enhanced-monitoring" [
+export def "disable-enhanced-monitoring" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -653,7 +653,7 @@ export def "api disable-enhanced-monitoring" [
 #
 # POST /
 # operationId: EnableEnhancedMonitoring
-export def "api enable-enhanced-monitoring" [
+export def "enable-enhanced-monitoring" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -703,7 +703,7 @@ export def "api enable-enhanced-monitoring" [
 #
 # POST /
 # operationId: GetRecords
-export def "api get-records" [
+export def "get-records" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -753,7 +753,7 @@ export def "api get-records" [
 #
 # POST /
 # operationId: GetShardIterator
-export def "api get-shard-iterator" [
+export def "get-shard-iterator" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -806,7 +806,7 @@ export def "api get-shard-iterator" [
 #
 # POST /
 # operationId: IncreaseStreamRetentionPeriod
-export def "api create-increase-stream-retention-period" [
+export def "increase-stream-retention-period" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -856,7 +856,7 @@ export def "api create-increase-stream-retention-period" [
 #
 # POST /
 # operationId: ListShards
-export def "api list-shards" [
+export def "list-shards" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -910,7 +910,7 @@ export def "api list-shards" [
 #
 # POST /
 # operationId: ListStreamConsumers
-export def "api list-stream-consumers" [
+export def "list-stream-consumers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -964,7 +964,7 @@ export def "api list-stream-consumers" [
 #
 # POST /
 # operationId: ListStreams
-export def "api list-streams" [
+export def "list-streams" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1017,7 +1017,7 @@ export def "api list-streams" [
 #
 # POST /
 # operationId: ListTagsForStream
-export def "api list-tags-for-stream" [
+export def "list-tags-for-stream" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1068,7 +1068,7 @@ export def "api list-tags-for-stream" [
 #
 # POST /
 # operationId: MergeShards
-export def "api create-merge-shards" [
+export def "merge-shards" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1119,7 +1119,7 @@ export def "api create-merge-shards" [
 #
 # POST /
 # operationId: PutRecord
-export def "api update-record" [
+export def "put-record" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1172,7 +1172,7 @@ export def "api update-record" [
 #
 # POST /
 # operationId: PutRecords
-export def "api update-records" [
+export def "put-records" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1222,7 +1222,7 @@ export def "api update-records" [
 #
 # POST /
 # operationId: RegisterStreamConsumer
-export def "api create-stream-consumer" [
+export def "register-stream-consumer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1271,7 +1271,7 @@ export def "api create-stream-consumer" [
 #
 # POST /
 # operationId: RemoveTagsFromStream
-export def "api delete-tags-from-stream" [
+export def "remove-tags-from-stream" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1321,7 +1321,7 @@ export def "api delete-tags-from-stream" [
 #
 # POST /
 # operationId: SplitShard
-export def "api create-split-shard" [
+export def "split-shard" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1372,7 +1372,7 @@ export def "api create-split-shard" [
 #
 # POST /
 # operationId: StartStreamEncryption
-export def "api start-stream-encryption" [
+export def "start-stream-encryption" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1423,7 +1423,7 @@ export def "api start-stream-encryption" [
 #
 # POST /
 # operationId: StopStreamEncryption
-export def "api stop-stream-encryption" [
+export def "stop-stream-encryption" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1474,7 +1474,7 @@ export def "api stop-stream-encryption" [
 #
 # POST /
 # operationId: UpdateShardCount
-export def "api update-shard-count" [
+export def "update-shard-count" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1525,7 +1525,7 @@ export def "api update-shard-count" [
 #
 # POST /
 # operationId: UpdateStreamMode
-export def "api update-stream-mode" [
+export def "update-stream-mode" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

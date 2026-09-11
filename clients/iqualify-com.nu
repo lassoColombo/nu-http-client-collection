@@ -127,7 +127,7 @@ def markers-completer [] { ["false" "true"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api-info get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -150,7 +150,7 @@ export def commands []: nothing -> table {
 # List supported endpoints URLs
 #
 # GET /
-export def "api-info get" [
+export def "get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -183,7 +183,7 @@ export def "api-info get" [
 # Find course mappings
 #
 # GET /course-mappings
-export def "course-mappings list" [
+export def "get-course-mappings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -216,7 +216,7 @@ export def "course-mappings list" [
 # Find course mappings by externalCourseId
 #
 # GET /course-mappings/externalcourse/{externalCourseId}
-export def "course-mappings-externalcourse get" [
+export def "get-course-mappings-externalcourse-external-course-id" [
   external_course_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -251,7 +251,7 @@ export def "course-mappings-externalcourse get" [
 # Find course mappings by offeringId
 #
 # GET /course-mappings/{offeringId}
-export def "course-mappings get" [
+export def "get-course-mappings-offering-id" [
   offering_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -286,7 +286,7 @@ export def "course-mappings get" [
 # Remove course mapping
 #
 # DELETE /course-mappings/{offeringId}/{externalCourseId}
-export def "course-mappings delete" [
+export def "delete-course-mappings-offering-id-external-course-id" [
   offering_id: string
   external_course_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -323,7 +323,7 @@ export def "course-mappings delete" [
 # Add course mapping
 #
 # PUT /course-mappings/{offeringId}/{externalCourseId}
-export def "course-mappings update" [
+export def "put-course-mappings-offering-id-external-course-id" [
   offering_id: string
   external_course_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -360,7 +360,7 @@ export def "course-mappings update" [
 # Find courses
 #
 # GET /courses
-export def "courses list" [
+export def "get-courses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -393,7 +393,7 @@ export def "courses list" [
 # Find course by contentId
 #
 # GET /courses/{contentId}
-export def "courses get" [
+export def "get-courses-content-id" [
   content_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -428,7 +428,7 @@ export def "courses get" [
 # Find activations for a contentId
 #
 # GET /courses/{contentId}/activations
-export def "courses-activations get" [
+export def "get-courses-content-id-activations" [
   content_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -463,7 +463,7 @@ export def "courses-activations get" [
 # Update course category
 #
 # PUT /courses/{contentId}/metadata/category
-export def "courses-metadata-category update" [
+export def "put-courses-content-id-metadata-category" [
   content_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -502,7 +502,7 @@ export def "courses-metadata-category update" [
 # Update course level
 #
 # PUT /courses/{contentId}/metadata/level
-export def "courses-metadata-level update" [
+export def "put-courses-content-id-metadata-level" [
   content_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -541,7 +541,7 @@ export def "courses-metadata-level update" [
 # Update course tags
 #
 # PUT /courses/{contentId}/metadata/tags
-export def "courses-metadata-tags update" [
+export def "put-courses-content-id-metadata-tags" [
   content_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -580,7 +580,7 @@ export def "courses-metadata-tags update" [
 # Update course topic
 #
 # PUT /courses/{contentId}/metadata/topic
-export def "courses-metadata-topic update" [
+export def "put-courses-content-id-metadata-topic" [
   content_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -619,7 +619,7 @@ export def "courses-metadata-topic update" [
 # Find users who have access to the contentId provided
 #
 # GET /courses/{contentId}/permissions
-export def "courses-permissions get" [
+export def "get-courses-content-id-permissions" [
   content_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -654,7 +654,7 @@ export def "courses-permissions get" [
 # Update course access
 #
 # POST /courses/{rootContentId}/permissions/{userEmail}
-export def "courses-permissions create" [
+export def "post-courses-root-content-id-permissions-user-email" [
   root_content_id: string
   user_email: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -696,7 +696,7 @@ export def "courses-permissions create" [
 # Find current, past and future offerings
 #
 # GET /offerings
-export def "offerings list" [
+export def "get-offerings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -731,7 +731,7 @@ export def "offerings list" [
 # POST /offerings
 # --badge shape: {badgeExpiry?: record, description?: string, requiresApproval?: bool, title?: string}
 # --metadata shape: {category?: string, level?: string, tags?: list<string>, topic?: string}
-export def "offerings create" [
+export def "post-offerings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -782,7 +782,7 @@ export def "offerings create" [
 # Find active offerings
 #
 # GET /offerings/current
-export def "offerings-current get" [
+export def "get-offerings-current" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -815,7 +815,7 @@ export def "offerings-current get" [
 # Find scheduled offerings
 #
 # GET /offerings/future
-export def "offerings-future get" [
+export def "get-offerings-future" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -848,7 +848,7 @@ export def "offerings-future get" [
 # Find offerings where info field matches the specified textPattern
 #
 # GET /offerings/info/{textPattern}
-export def "offerings-info get" [
+export def "get-offerings-info-text-pattern" [
   text_pattern: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -883,7 +883,7 @@ export def "offerings-info get" [
 # Find past offerings
 #
 # GET /offerings/past
-export def "offerings-past get" [
+export def "get-offerings-past" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -916,7 +916,7 @@ export def "offerings-past get" [
 # Offerings summary
 #
 # GET /offerings/summary
-export def "offerings-summary get" [
+export def "get-offerings-summary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -953,7 +953,7 @@ export def "offerings-summary get" [
 # Find offering by ID
 #
 # GET /offerings/{offeringId}
-export def "offerings get" [
+export def "get-offerings-offering-id" [
   offering_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -990,7 +990,7 @@ export def "offerings get" [
 # PATCH /offerings/{offeringId}
 # --badge shape: {badgeExpiry?: record, description?: string, requiresApproval?: bool, title?: string}
 # --metadata shape: {category?: string, level?: string, tags?: list<string>, topic?: string}
-export def "offerings update" [
+export def "patch-offerings-offering-id" [
   offering_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1043,7 +1043,7 @@ export def "offerings update" [
 # Find offering's activities
 #
 # GET /offerings/{offeringId}/activities/openresponse
-export def "offerings-activities-openresponse get" [
+export def "get-offerings-offering-id-activities-openresponse" [
   offering_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1078,7 +1078,7 @@ export def "offerings-activities-openresponse get" [
 # Find open response activity attempts
 #
 # GET /offerings/{offeringId}/analytics/activities/responses
-export def "offerings-analytics-activities-responses get" [
+export def "get-offerings-offering-id-analytics-activities-responses" [
   offering_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1113,7 +1113,7 @@ export def "offerings-analytics-activities-responses get" [
 # Find comments
 #
 # GET /offerings/{offeringId}/analytics/channels/{channelId}/comments
-export def "offerings-analytics-channels-comments get" [
+export def "get-offerings-offering-id-analytics-channels-channel-id-comments" [
   offering_id: string
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1150,7 +1150,7 @@ export def "offerings-analytics-channels-comments get" [
 # Find posts
 #
 # GET /offerings/{offeringId}/analytics/channels/{channelId}/posts
-export def "offerings-analytics-channels-posts get" [
+export def "get-offerings-offering-id-analytics-channels-channel-id-posts" [
   offering_id: string
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1187,7 +1187,7 @@ export def "offerings-analytics-channels-posts get" [
 # Find replies
 #
 # GET /offerings/{offeringId}/analytics/channels/{channelId}/replies
-export def "offerings-analytics-channels-replies get" [
+export def "get-offerings-offering-id-analytics-channels-channel-id-replies" [
   offering_id: string
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1224,7 +1224,7 @@ export def "offerings-analytics-channels-replies get" [
 # Find learner progress in a specified offering
 #
 # GET /offerings/{offeringId}/analytics/learners-progress
-export def "offerings-analytics-learners-progress get" [
+export def "get-offerings-offering-id-analytics-learners-progress" [
   offering_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1259,7 +1259,7 @@ export def "offerings-analytics-learners-progress get" [
 # Find assessment marks
 #
 # GET /offerings/{offeringId}/analytics/marks/assignments
-export def "offerings-analytics-marks-assignments get" [
+export def "get-offerings-offering-id-analytics-marks-assignments" [
   offering_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1294,7 +1294,7 @@ export def "offerings-analytics-marks-assignments get" [
 # Find quiz marks
 #
 # GET /offerings/{offeringId}/analytics/marks/quizzes
-export def "offerings-analytics-marks-quizzes get" [
+export def "get-offerings-offering-id-analytics-marks-quizzes" [
   offering_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1329,7 +1329,7 @@ export def "offerings-analytics-marks-quizzes get" [
 # Find all pulse IDs in the specified offering
 #
 # GET /offerings/{offeringId}/analytics/pulses
-export def "offerings-analytics-pulses get" [
+export def "get-offerings-offering-id-analytics-pulses" [
   offering_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1364,7 +1364,7 @@ export def "offerings-analytics-pulses get" [
 # Find pulses by offeringId
 #
 # GET /offerings/{offeringId}/analytics/pulses/responses
-export def "offerings-analytics-pulses-responses list" [
+export def "get-offerings-offering-id-analytics-pulses-responses" [
   offering_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1402,7 +1402,7 @@ export def "offerings-analytics-pulses-responses list" [
 # Find pulses by offeringId and pulseId
 #
 # GET /offerings/{offeringId}/analytics/pulses/{pulseId}/responses
-export def "offerings-analytics-pulses-responses get" [
+export def "get-offerings-offering-id-analytics-pulses-pulse-id-responses" [
   offering_id: string
   pulse_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1439,7 +1439,7 @@ export def "offerings-analytics-pulses-responses get" [
 # Find shared social notes in an offering
 #
 # GET /offerings/{offeringId}/analytics/social-notes
-export def "offerings-analytics-social-notes get" [
+export def "get-offerings-offering-id-analytics-social-notes" [
   offering_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1474,7 +1474,7 @@ export def "offerings-analytics-social-notes get" [
 # Find submissions to assessments, including marks if any
 #
 # GET /offerings/{offeringId}/analytics/submissions/assignments
-export def "offerings-analytics-submissions-assignments get-by-offering-id" [
+export def "get-offerings-offering-id-analytics-submissions-assignments" [
   offering_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1509,7 +1509,7 @@ export def "offerings-analytics-submissions-assignments get-by-offering-id" [
 # Find submissions to a specified open response assessment, including marks if any
 #
 # GET /offerings/{offeringId}/analytics/submissions/open-response/{assessmentId}
-export def "offerings-analytics-submissions-open-response get" [
+export def "get-offerings-offering-id-analytics-submissions-open-response-assessment-id" [
   offering_id: string
   assessment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1546,7 +1546,7 @@ export def "offerings-analytics-submissions-open-response get" [
 # Find a learner's submission to a specified assessment, including marks if any
 #
 # GET /offerings/{offeringId}/analytics/submissions/{userEmail}/assignments/{assessmentId}
-export def "offerings-analytics-submissions-assignments get-by-offering-id-user-email-assessment-id" [
+export def "get-offerings-offering-id-analytics-submissions-user-email-assignments-assessment-id" [
   offering_id: string
   user_email: string
   assessment_id: string
@@ -1585,7 +1585,7 @@ export def "offerings-analytics-submissions-assignments get-by-offering-id-user-
 # Find unit reactions
 #
 # GET /offerings/{offeringId}/analytics/unit-reactions
-export def "offerings-analytics-unit-reactions get" [
+export def "get-offerings-offering-id-analytics-unit-reactions" [
   offering_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1620,7 +1620,7 @@ export def "offerings-analytics-unit-reactions get" [
 # Find offering's assessments
 #
 # GET /offerings/{offeringId}/assessments
-export def "offerings-assessments get" [
+export def "get-offerings-offering-id-assessments" [
   offering_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1655,7 +1655,7 @@ export def "offerings-assessments get" [
 # Update assessment details
 #
 # PATCH /offerings/{offeringId}/assessments/{assessmentId}
-export def "offerings-assessments update-by-offering-id-assessment-id" [
+export def "patch-offerings-offering-id-assessments-assessment-id" [
   offering_id: string
   assessment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1700,7 +1700,7 @@ export def "offerings-assessments update-by-offering-id-assessment-id" [
 # Remove assessment document
 #
 # DELETE /offerings/{offeringId}/assessments/{assessmentId}/documents/{documentId}
-export def "offerings-assessments-documents delete" [
+export def "delete-offerings-offering-id-assessments-assessment-id-documents-document-id" [
   offering_id: string
   assessment_id: string
   document_id: string
@@ -1739,7 +1739,7 @@ export def "offerings-assessments-documents delete" [
 # Update the due dates for a learner's quiz attempt
 #
 # PATCH /offerings/{offeringId}/assessments/{assessmentId}/{userEmail}
-export def "offerings-assessments update-by-offering-id-assessment-id-user-email" [
+export def "patch-offerings-offering-id-assessments-assessment-id-user-email" [
   offering_id: string
   assessment_id: string
   user_email: string
@@ -1782,7 +1782,7 @@ export def "offerings-assessments update-by-offering-id-assessment-id-user-email
 # Find offering badges
 #
 # GET /offerings/{offeringId}/badges
-export def "offerings-badges get" [
+export def "get-offerings-offering-id-badges" [
   offering_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1817,7 +1817,7 @@ export def "offerings-badges get" [
 # Find channels
 #
 # GET /offerings/{offeringId}/channels
-export def "offerings-channels get" [
+export def "get-offerings-offering-id-channels" [
   offering_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1852,7 +1852,7 @@ export def "offerings-channels get" [
 # Add channel
 #
 # POST /offerings/{offeringId}/channels
-export def "offerings-channels create" [
+export def "post-offerings-offering-id-channels" [
   offering_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1893,7 +1893,7 @@ export def "offerings-channels create" [
 #
 # PATCH /offerings/{offeringId}/channels/{channelId}
 # --group shape: {autoAssign?: bool}
-export def "offerings-channels update" [
+export def "patch-offerings-offering-id-channels-channel-id" [
   offering_id: string
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1938,7 +1938,7 @@ export def "offerings-channels update" [
 # Remove learners from a group channel
 #
 # DELETE /offerings/{offeringId}/channels/{channelId}/learners
-export def "offerings-channels-learners delete" [
+export def "delete-offerings-offering-id-channels-channel-id-learners" [
   offering_id: string
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1979,7 +1979,7 @@ export def "offerings-channels-learners delete" [
 # Find learners in a group channel
 #
 # GET /offerings/{offeringId}/channels/{channelId}/learners
-export def "offerings-channels-learners get" [
+export def "get-offerings-offering-id-channels-channel-id-learners" [
   offering_id: string
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2016,7 +2016,7 @@ export def "offerings-channels-learners get" [
 # Add learners to a group channel
 #
 # POST /offerings/{offeringId}/channels/{channelId}/learners
-export def "offerings-channels-learners create" [
+export def "post-offerings-offering-id-channels-channel-id-learners" [
   offering_id: string
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2057,7 +2057,7 @@ export def "offerings-channels-learners create" [
 # Find assessment groups
 #
 # GET /offerings/{offeringId}/groups
-export def "offerings-groups get" [
+export def "get-offerings-offering-id-groups" [
   offering_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2092,7 +2092,7 @@ export def "offerings-groups get" [
 # Add an assessment group
 #
 # POST /offerings/{offeringId}/groups
-export def "offerings-groups create" [
+export def "post-offerings-offering-id-groups" [
   offering_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2131,7 +2131,7 @@ export def "offerings-groups create" [
 # Find learners in an assessment group
 #
 # GET /offerings/{offeringId}/groups/{groupId}/learners
-export def "offerings-groups-learners get" [
+export def "get-offerings-offering-id-groups-group-id-learners" [
   offering_id: string
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2168,7 +2168,7 @@ export def "offerings-groups-learners get" [
 # Add a learner to an assessment group
 #
 # POST /offerings/{offeringId}/groups/{groupId}/learners
-export def "offerings-groups-learners create" [
+export def "post-offerings-offering-id-groups-group-id-learners" [
   offering_id: string
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2209,7 +2209,7 @@ export def "offerings-groups-learners create" [
 # Remove a learner from an assessment group
 #
 # DELETE /offerings/{offeringId}/groups/{groupId}/learners/{userEmail}
-export def "offerings-groups-learners delete" [
+export def "delete-offerings-offering-id-groups-group-id-learners-user-email" [
   offering_id: string
   group_id: string
   user_email: string
@@ -2248,7 +2248,7 @@ export def "offerings-groups-learners delete" [
 # Find learners with assessments pending x days before due date within the specified offeringId
 #
 # GET /offerings/{offeringId}/learners/pending-submission
-export def "offerings-learners-pending-submission get" [
+export def "get-offerings-offering-id-learners-pending-submission" [
   offering_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2285,7 +2285,7 @@ export def "offerings-learners-pending-submission get" [
 # Update offering category metadata
 #
 # PUT /offerings/{offeringId}/metadata/category
-export def "offerings-metadata-category update" [
+export def "put-offerings-offering-id-metadata-category" [
   offering_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2324,7 +2324,7 @@ export def "offerings-metadata-category update" [
 # Update offering level metadata
 #
 # PUT /offerings/{offeringId}/metadata/level
-export def "offerings-metadata-level update" [
+export def "put-offerings-offering-id-metadata-level" [
   offering_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2363,7 +2363,7 @@ export def "offerings-metadata-level update" [
 # Update offering tags metadata
 #
 # PUT /offerings/{offeringId}/metadata/tags
-export def "offerings-metadata-tags update" [
+export def "put-offerings-offering-id-metadata-tags" [
   offering_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2402,7 +2402,7 @@ export def "offerings-metadata-tags update" [
 # Update offering topic metadata
 #
 # PUT /offerings/{offeringId}/metadata/topic
-export def "offerings-metadata-topic update" [
+export def "put-offerings-offering-id-metadata-topic" [
   offering_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2441,7 +2441,7 @@ export def "offerings-metadata-topic update" [
 # Find offering's users
 #
 # GET /offerings/{offeringId}/users
-export def "offerings-users get" [
+export def "get-offerings-offering-id-users" [
   offering_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2480,7 +2480,7 @@ export def "offerings-users get" [
 # Adds user to the offering
 #
 # POST /offerings/{offeringId}/users
-export def "offerings-users create" [
+export def "post-offerings-offering-id-users" [
   offering_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2519,7 +2519,7 @@ export def "offerings-users create" [
 # Remove learners from coach's marking list
 #
 # DELETE /offerings/{offeringId}/users/{markerEmail}/marks
-export def "offerings-users-marks delete" [
+export def "delete-offerings-offering-id-users-marker-email-marks" [
   offering_id: string
   marker_email: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2560,7 +2560,7 @@ export def "offerings-users-marks delete" [
 # Find Learners marked by a coach
 #
 # GET /offerings/{offeringId}/users/{markerEmail}/marks
-export def "offerings-users-marks get" [
+export def "get-offerings-offering-id-users-marker-email-marks" [
   offering_id: string
   marker_email: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2597,7 +2597,7 @@ export def "offerings-users-marks get" [
 # Add learners to be marked by a coach
 #
 # POST /offerings/{offeringId}/users/{markerEmail}/marks
-export def "offerings-users-marks create" [
+export def "post-offerings-offering-id-users-marker-email-marks" [
   offering_id: string
   marker_email: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2638,7 +2638,7 @@ export def "offerings-users-marks create" [
 # Removes user from the offering
 #
 # DELETE /offerings/{offeringId}/users/{userEmail}
-export def "offerings-users delete" [
+export def "delete-offerings-offering-id-users-user-email" [
   offering_id: string
   user_email: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2675,7 +2675,7 @@ export def "offerings-users delete" [
 # Reset user's assessment to draft state
 #
 # DELETE /offerings/{offeringId}/users/{userEmail}/assessments/{assessmentId}
-export def "offerings-users-assessments delete" [
+export def "delete-offerings-offering-id-users-user-email-assessments-assessment-id" [
   offering_id: string
   user_email: string
   assessment_id: string
@@ -2714,7 +2714,7 @@ export def "offerings-users-assessments delete" [
 # Award badge
 #
 # POST /offerings/{offeringId}/users/{userEmail}/badges/award
-export def "offerings-users-badges-award create" [
+export def "post-offerings-offering-id-users-user-email-badges-award" [
   offering_id: string
   user_email: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2751,7 +2751,7 @@ export def "offerings-users-badges-award create" [
 # Find learner's open response assessment submissions
 #
 # GET /offerings/{offeringId}/users/{userEmail}/submissions/open-response
-export def "offerings-users-submissions-open-response get" [
+export def "get-offerings-offering-id-users-user-email-submissions-open-response" [
   offering_id: string
   user_email: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2788,7 +2788,7 @@ export def "offerings-users-submissions-open-response get" [
 # Gets the current organisation
 #
 # GET /org
-export def "org get" [
+export def "get-org" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2823,7 +2823,7 @@ export def "org get" [
 # POST /users
 # --metadata shape: {tags?: list<string>}
 # --profile shape: {displayName?: string}
-export def "users create" [
+export def "post-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2866,7 +2866,7 @@ export def "users create" [
 # Find learner progress in all offerings
 #
 # GET /users/all/progress
-export def "users-all-progress get" [
+export def "get-users-all-progress" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2903,7 +2903,7 @@ export def "users-all-progress get" [
 # Find user by email
 #
 # GET /users/{userEmail}
-export def "users get" [
+export def "get-users-user-email" [
   user_email: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2940,7 +2940,7 @@ export def "users get" [
 # PATCH /users/{userEmail}
 # --metadata shape: {tags?: list<string>}
 # --profile shape: {displayName?: string}
-export def "users update" [
+export def "patch-users-user-email" [
   user_email: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2985,7 +2985,7 @@ export def "users update" [
 # Find user's badges
 #
 # GET /users/{userEmail}/badges
-export def "users-badges get" [
+export def "get-users-user-email-badges" [
   user_email: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3020,7 +3020,7 @@ export def "users-badges get" [
 # Resend invitation email
 #
 # POST /users/{userEmail}/invite-email
-export def "users-invite-email create" [
+export def "post-users-user-email-invite-email" [
   user_email: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3055,7 +3055,7 @@ export def "users-invite-email create" [
 # Find user's offerings
 #
 # GET /users/{userEmail}/offerings
-export def "users-offerings get" [
+export def "get-users-user-email-offerings" [
   user_email: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3090,7 +3090,7 @@ export def "users-offerings get" [
 # Adds the user to the specified offerings as a learner
 #
 # POST /users/{userEmail}/offerings
-export def "users-offerings create" [
+export def "post-users-user-email-offerings" [
   user_email: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3129,7 +3129,7 @@ export def "users-offerings create" [
 # Find learner's progress in a specified offering
 #
 # GET /users/{userEmail}/offerings/{offeringId}/progress
-export def "users-offerings-progress get" [
+export def "get-users-user-email-offerings-offering-id-progress" [
   user_email: string
   offering_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3166,7 +3166,7 @@ export def "users-offerings-progress get" [
 # Add permission to user
 #
 # POST /users/{userEmail}/permissions/{permissionName}
-export def "users-permissions create" [
+export def "post-users-user-email-permissions-permission-name" [
   user_email: string
   permission_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3203,7 +3203,7 @@ export def "users-permissions create" [
 # Find learner's progress in offerings
 #
 # GET /users/{userEmail}/progress
-export def "users-progress get" [
+export def "get-users-user-email-progress" [
   user_email: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3238,7 +3238,7 @@ export def "users-progress get" [
 # Suspend user
 #
 # PUT /users/{userEmail}/suspend
-export def "users-suspend update" [
+export def "put-users-user-email-suspend" [
   user_email: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3277,7 +3277,7 @@ export def "users-suspend update" [
 # Transfer a user between offerings
 #
 # PATCH /users/{userEmail}/transfer
-export def "users-transfer update" [
+export def "patch-users-user-email-transfer" [
   user_email: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

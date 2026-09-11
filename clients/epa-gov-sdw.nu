@@ -130,7 +130,7 @@ def p-ysla-completer [] { ["A" "E" "S"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "sdw-rest-services-get-download get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-sdw-rest-services-get-download" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -153,7 +153,7 @@ export def commands []: nothing -> table {
 # Safe Drinking Water Act (SDWA) Download Data Service
 #
 # GET /sdw_rest_services.get_download
-export def "sdw-rest-services-get-download get" [
+export def "get-sdw-rest-services-get-download" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -191,7 +191,7 @@ export def "sdw-rest-services-get-download get" [
 # Safe Drinking Water Act (SDWA) Download Data Service
 #
 # POST /sdw_rest_services.get_download
-export def "sdw-rest-services-get-download create" [
+export def "post-sdw-rest-services-get-download" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -232,7 +232,7 @@ export def "sdw-rest-services-get-download create" [
 # Safe Drinking Water Act (SDWA) Paginated Results Service
 #
 # GET /sdw_rest_services.get_qid
-export def "sdw-rest-services-get-qid get" [
+export def "get-sdw-rest-services-get-qid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -274,7 +274,7 @@ export def "sdw-rest-services-get-qid get" [
 # Safe Drinking Water Act (SDWA) Paginated Results Service
 #
 # POST /sdw_rest_services.get_qid
-export def "sdw-rest-services-get-qid create" [
+export def "post-sdw-rest-services-get-qid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -319,7 +319,7 @@ export def "sdw-rest-services-get-qid create" [
 # Safe Drinking Water Act (SDWA) Systems Search Service
 #
 # GET /sdw_rest_services.get_systems
-export def "sdw-rest-services-get-systems get" [
+export def "get-sdw-rest-services-get-systems" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -411,7 +411,7 @@ export def "sdw-rest-services-get-systems get" [
 # Safe Drinking Water Act (SDWA) Systems Search Service
 #
 # POST /sdw_rest_services.get_systems
-export def "sdw-rest-services-get-systems create" [
+export def "post-sdw-rest-services-get-systems" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -506,7 +506,7 @@ export def "sdw-rest-services-get-systems create" [
 # Safe Drinking Water Act (SDWA) Metadata Service
 #
 # GET /sdw_rest_services.metadata
-export def "sdw-rest-services-metadata get" [
+export def "get-sdw-rest-services-metadata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -543,7 +543,7 @@ export def "sdw-rest-services-metadata get" [
 # Safe Drinking Water Act (SDWA) Metadata Service
 #
 # POST /sdw_rest_services.metadata
-export def "sdw-rest-services-metadata create" [
+export def "post-sdw-rest-services-metadata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

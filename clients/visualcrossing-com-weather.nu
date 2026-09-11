@@ -97,7 +97,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "visual-crossing-web-services-rest-services-timeline get-by-location" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-visual-crossing-web-services-rest-services-timeline-location" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -120,7 +120,7 @@ export def commands []: nothing -> table {
 # Historical and Forecast Weather API
 #
 # GET /VisualCrossingWebServices/rest/services/timeline/{location}
-export def "visual-crossing-web-services-rest-services-timeline get-by-location" [
+export def "get-visual-crossing-web-services-rest-services-timeline-location" [
   location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -161,7 +161,7 @@ export def "visual-crossing-web-services-rest-services-timeline get-by-location"
 # Historical and Forecast Weather API
 #
 # GET /VisualCrossingWebServices/rest/services/timeline/{location}/{startdate}
-export def "visual-crossing-web-services-rest-services-timeline get-by-location-startdate" [
+export def "get-visual-crossing-web-services-rest-services-timeline-location-startdate" [
   location: string
   startdate: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -204,7 +204,7 @@ export def "visual-crossing-web-services-rest-services-timeline get-by-location-
 # Historical and Forecast Weather API
 #
 # GET /VisualCrossingWebServices/rest/services/timeline/{location}/{startdate}/{enddate}
-export def "visual-crossing-web-services-rest-services-timeline get-by-location-startdate-enddate" [
+export def "get-visual-crossing-web-services-rest-services-timeline-location-startdate-enddate" [
   location: string
   startdate: string
   enddate: string
@@ -249,7 +249,7 @@ export def "visual-crossing-web-services-rest-services-timeline get-by-location-
 # Weather Forecast API
 #
 # GET /VisualCrossingWebServices/rest/services/weatherdata/forecast
-export def "visual-crossing-web-services-rest-services-weatherdata-forecast get" [
+export def "get-visual-crossing-web-services-rest-services-weatherdata-forecast" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -291,7 +291,7 @@ export def "visual-crossing-web-services-rest-services-weatherdata-forecast get"
 # Retrieves hourly or daily historical weather records.
 #
 # GET /VisualCrossingWebServices/rest/services/weatherdata/history
-export def "visual-crossing-web-services-rest-services-weatherdata-history get" [
+export def "get-visual-crossing-web-services-rest-services-weatherdata-history" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

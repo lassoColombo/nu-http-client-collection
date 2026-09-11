@@ -108,7 +108,7 @@ def accept-completer-3 [] { ["application/sparql-results+json" "application/spar
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "id-media get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-media" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -132,7 +132,7 @@ export def commands []: nothing -> table {
 #
 # GET /id/media/{path}
 # operationId: get media
-export def "id-media get" [
+export def "get-media" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -171,7 +171,7 @@ export def "id-media get" [
 #
 # GET /id/{identifier}
 # operationId: get subject
-export def "id get-subject" [
+export def "get-subject" [
   identifier: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -208,7 +208,7 @@ export def "id get-subject" [
 #
 # GET /search/{index}/{operation}
 # operationId: get search
-export def "search get" [
+export def "get-search" [
   index: string
   operation: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -248,7 +248,7 @@ export def "search get" [
 #
 # POST /search/{index}/{operation}
 # operationId: post search
-export def "search create" [
+export def "post-search" [
   index: string
   operation: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -290,7 +290,7 @@ export def "search create" [
 #
 # GET /sparql
 # operationId: get sparql
-export def "sparql get" [
+export def "get-sparql" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -329,7 +329,7 @@ export def "sparql get" [
 #
 # POST /sparql
 # operationId: post sparql
-export def "sparql create" [
+export def "post-sparql" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

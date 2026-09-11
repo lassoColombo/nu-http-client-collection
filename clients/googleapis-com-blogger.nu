@@ -142,7 +142,7 @@ def status-completer-2 [] { ["EMPTIED" "LIVE" "PENDING" "SPAM"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "blogs-byurl get-by-url" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "blogger-blogs-get-by-url" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -166,7 +166,7 @@ export def commands []: nothing -> table {
 #
 # GET /v3/blogs/byurl
 # operationId: blogger.blogs.getByUrl
-export def "blogs-byurl get-by-url" [
+export def "blogger-blogs-get-by-url" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -214,7 +214,7 @@ export def "blogs-byurl get-by-url" [
 #
 # GET /v3/blogs/{blogId}
 # operationId: blogger.blogs.get
-export def "blogs get" [
+export def "blogger-blogs-get" [
   blog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -264,7 +264,7 @@ export def "blogs get" [
 #
 # GET /v3/blogs/{blogId}/comments
 # operationId: blogger.comments.listByBlog
-export def "blogs-comments list" [
+export def "blogger-comments-list-by-blog" [
   blog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -318,7 +318,7 @@ export def "blogs-comments list" [
 #
 # GET /v3/blogs/{blogId}/pages
 # operationId: blogger.pages.list
-export def "blogs-pages list" [
+export def "blogger-pages-list" [
   blog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -373,7 +373,7 @@ export def "blogs-pages list" [
 # operationId: blogger.pages.insert
 # --author shape: {displayName?: string, id?: string, image?: record, url?: string}
 # --blog shape: {id?: string}
-export def "blogs-pages create" [
+export def "blogger-pages-insert" [
   blog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -438,7 +438,7 @@ export def "blogs-pages create" [
 #
 # DELETE /v3/blogs/{blogId}/pages/{pageId}
 # operationId: blogger.pages.delete
-export def "blogs-pages delete" [
+export def "blogger-pages-delete" [
   blog_id: string
   page_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -489,7 +489,7 @@ export def "blogs-pages delete" [
 #
 # GET /v3/blogs/{blogId}/pages/{pageId}
 # operationId: blogger.pages.get
-export def "blogs-pages get" [
+export def "blogger-pages-get" [
   blog_id: string
   page_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -542,7 +542,7 @@ export def "blogs-pages get" [
 # operationId: blogger.pages.patch
 # --author shape: {displayName?: string, id?: string, image?: record, url?: string}
 # --blog shape: {id?: string}
-export def "blogs-pages update-by-blog-id-page-id" [
+export def "blogger-pages-patch" [
   blog_id: string
   page_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -612,7 +612,7 @@ export def "blogs-pages update-by-blog-id-page-id" [
 # operationId: blogger.pages.update
 # --author shape: {displayName?: string, id?: string, image?: record, url?: string}
 # --blog shape: {id?: string}
-export def "blogs-pages update-by-blog-id-page-id-1" [
+export def "blogger-pages-update" [
   blog_id: string
   page_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -680,7 +680,7 @@ export def "blogs-pages update-by-blog-id-page-id-1" [
 #
 # POST /v3/blogs/{blogId}/pages/{pageId}/publish
 # operationId: blogger.pages.publish
-export def "blogs-pages-publish publish" [
+export def "blogger-pages-publish" [
   blog_id: string
   page_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -730,7 +730,7 @@ export def "blogs-pages-publish publish" [
 #
 # POST /v3/blogs/{blogId}/pages/{pageId}/revert
 # operationId: blogger.pages.revert
-export def "blogs-pages-revert create" [
+export def "blogger-pages-revert" [
   blog_id: string
   page_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -780,7 +780,7 @@ export def "blogs-pages-revert create" [
 #
 # GET /v3/blogs/{blogId}/pageviews
 # operationId: blogger.pageViews.get
-export def "blogs-pageviews get" [
+export def "blogger-page-views-get" [
   blog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -829,7 +829,7 @@ export def "blogs-pageviews get" [
 #
 # GET /v3/blogs/{blogId}/posts
 # operationId: blogger.posts.list
-export def "blogs-posts list" [
+export def "blogger-posts-list" [
   blog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -893,7 +893,7 @@ export def "blogs-posts list" [
 # --images item shape: {url?: string}
 # --location shape: {lat?: float, lng?: float, name?: string, span?: string}
 # --replies shape: {items?: list, selfLink?: string, totalItems?: string}
-export def "blogs-posts create" [
+export def "blogger-posts-insert" [
   blog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -967,7 +967,7 @@ export def "blogs-posts create" [
 #
 # GET /v3/blogs/{blogId}/posts/bypath
 # operationId: blogger.posts.getByPath
-export def "blogs-posts-bypath get-by-path" [
+export def "blogger-posts-get-by-path" [
   blog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1018,7 +1018,7 @@ export def "blogs-posts-bypath get-by-path" [
 #
 # GET /v3/blogs/{blogId}/posts/search
 # operationId: blogger.posts.search
-export def "blogs-posts-search list" [
+export def "blogger-posts-search" [
   blog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1069,7 +1069,7 @@ export def "blogs-posts-search list" [
 #
 # DELETE /v3/blogs/{blogId}/posts/{postId}
 # operationId: blogger.posts.delete
-export def "blogs-posts delete" [
+export def "blogger-posts-delete" [
   blog_id: string
   post_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1120,7 +1120,7 @@ export def "blogs-posts delete" [
 #
 # GET /v3/blogs/{blogId}/posts/{postId}
 # operationId: blogger.posts.get
-export def "blogs-posts get" [
+export def "blogger-posts-get" [
   blog_id: string
   post_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1179,7 +1179,7 @@ export def "blogs-posts get" [
 # --images item shape: {url?: string}
 # --location shape: {lat?: float, lng?: float, name?: string, span?: string}
 # --replies shape: {items?: list, selfLink?: string, totalItems?: string}
-export def "blogs-posts update-by-blog-id-post-id" [
+export def "blogger-posts-patch" [
   blog_id: string
   post_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1262,7 +1262,7 @@ export def "blogs-posts update-by-blog-id-post-id" [
 # --images item shape: {url?: string}
 # --location shape: {lat?: float, lng?: float, name?: string, span?: string}
 # --replies shape: {items?: list, selfLink?: string, totalItems?: string}
-export def "blogs-posts update-by-blog-id-post-id-1" [
+export def "blogger-posts-update" [
   blog_id: string
   post_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1340,7 +1340,7 @@ export def "blogs-posts update-by-blog-id-post-id-1" [
 #
 # GET /v3/blogs/{blogId}/posts/{postId}/comments
 # operationId: blogger.comments.list
-export def "blogs-posts-comments list" [
+export def "blogger-comments-list" [
   blog_id: string
   post_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1397,7 +1397,7 @@ export def "blogs-posts-comments list" [
 #
 # DELETE /v3/blogs/{blogId}/posts/{postId}/comments/{commentId}
 # operationId: blogger.comments.delete
-export def "blogs-posts-comments delete" [
+export def "blogger-comments-delete" [
   blog_id: string
   post_id: string
   comment_id: string
@@ -1449,7 +1449,7 @@ export def "blogs-posts-comments delete" [
 #
 # GET /v3/blogs/{blogId}/posts/{postId}/comments/{commentId}
 # operationId: blogger.comments.get
-export def "blogs-posts-comments get" [
+export def "blogger-comments-get" [
   blog_id: string
   post_id: string
   comment_id: string
@@ -1502,7 +1502,7 @@ export def "blogs-posts-comments get" [
 #
 # POST /v3/blogs/{blogId}/posts/{postId}/comments/{commentId}/approve
 # operationId: blogger.comments.approve
-export def "blogs-posts-comments-approve approve" [
+export def "blogger-comments-approve" [
   blog_id: string
   post_id: string
   comment_id: string
@@ -1554,7 +1554,7 @@ export def "blogs-posts-comments-approve approve" [
 #
 # POST /v3/blogs/{blogId}/posts/{postId}/comments/{commentId}/removecontent
 # operationId: blogger.comments.removeContent
-export def "blogs-posts-comments-remove-content delete" [
+export def "blogger-comments-remove-content" [
   blog_id: string
   post_id: string
   comment_id: string
@@ -1606,7 +1606,7 @@ export def "blogs-posts-comments-remove-content delete" [
 #
 # POST /v3/blogs/{blogId}/posts/{postId}/comments/{commentId}/spam
 # operationId: blogger.comments.markAsSpam
-export def "blogs-posts-comments-spam create-mark" [
+export def "blogger-comments-mark-as-spam" [
   blog_id: string
   post_id: string
   comment_id: string
@@ -1658,7 +1658,7 @@ export def "blogs-posts-comments-spam create-mark" [
 #
 # POST /v3/blogs/{blogId}/posts/{postId}/publish
 # operationId: blogger.posts.publish
-export def "blogs-posts-publish publish" [
+export def "blogger-posts-publish" [
   blog_id: string
   post_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1709,7 +1709,7 @@ export def "blogs-posts-publish publish" [
 #
 # POST /v3/blogs/{blogId}/posts/{postId}/revert
 # operationId: blogger.posts.revert
-export def "blogs-posts-revert create" [
+export def "blogger-posts-revert" [
   blog_id: string
   post_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1759,7 +1759,7 @@ export def "blogs-posts-revert create" [
 #
 # GET /v3/users/{userId}
 # operationId: blogger.users.get
-export def "users get" [
+export def "blogger-users-get" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1807,7 +1807,7 @@ export def "users get" [
 #
 # GET /v3/users/{userId}/blogs
 # operationId: blogger.blogs.listByUser
-export def "users-blogs list" [
+export def "blogger-blogs-list-by-user" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1859,7 +1859,7 @@ export def "users-blogs list" [
 #
 # GET /v3/users/{userId}/blogs/{blogId}
 # operationId: blogger.blogUserInfos.get
-export def "users-blogs get" [
+export def "blogger-blog-user-infos-get" [
   user_id: string
   blog_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1910,7 +1910,7 @@ export def "users-blogs get" [
 #
 # GET /v3/users/{userId}/blogs/{blogId}/posts
 # operationId: blogger.postUserInfos.list
-export def "users-blogs-posts list" [
+export def "blogger-post-user-infos-list" [
   user_id: string
   blog_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1969,7 +1969,7 @@ export def "users-blogs-posts list" [
 #
 # GET /v3/users/{userId}/blogs/{blogId}/posts/{postId}
 # operationId: blogger.postUserInfos.get
-export def "users-blogs-posts get" [
+export def "blogger-post-user-infos-get" [
   user_id: string
   blog_id: string
   post_id: string

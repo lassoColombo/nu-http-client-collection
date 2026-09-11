@@ -113,7 +113,7 @@ def format-completer [] { ["formatted" "json" "raw"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "batch get-batches" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-batches" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -137,7 +137,7 @@ export def commands []: nothing -> table {
 #
 # GET /batch
 # operationId: getBatches
-export def "batch get-batches" [
+export def "get-batches" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -172,7 +172,7 @@ export def "batch get-batches" [
 # POST /batch
 # operationId: createBatch
 # --options shape: {format?: "raw"|"formatted"|"json"}
-export def "batch create" [
+export def "create-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -212,7 +212,7 @@ export def "batch create" [
 #
 # DELETE /batch/{id}
 # operationId: deleteBatch
-export def "batch delete" [
+export def "delete-batch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -248,7 +248,7 @@ export def "batch delete" [
 #
 # GET /batch/{id}
 # operationId: getBatch
-export def "batch get" [
+export def "get-batch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -284,7 +284,7 @@ export def "batch get" [
 #
 # GET /db
 # operationId: queryDb
-export def "db list" [
+export def "query-db" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -320,7 +320,7 @@ export def "db list" [
 #
 # GET /domains/{domain}/check
 # operationId: checkDomain
-export def "domains-check check" [
+export def "check-domain" [
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -356,7 +356,7 @@ export def "domains-check check" [
 #
 # GET /domains/{domain}/rank
 # operationId: domainRank
-export def "domains-rank get" [
+export def "domain-rank" [
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -392,7 +392,7 @@ export def "domains-rank get" [
 #
 # GET /domains/{domain}/whois
 # operationId: whois
-export def "domains-whois get" [
+export def "whois" [
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

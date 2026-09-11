@@ -127,7 +127,7 @@ def validation-category-completer [] { ["JobCreationValidation"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-data-box-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -151,7 +151,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.DataBox/operations
 # operationId: Operations_List
-export def "providers-microsoft-data-box-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -187,7 +187,7 @@ export def "providers-microsoft-data-box-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.DataBox/jobs
 # operationId: Jobs_List
-export def "subscriptions-providers-microsoft-data-box-jobs list" [
+export def "jobs-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -226,7 +226,7 @@ export def "subscriptions-providers-microsoft-data-box-jobs list" [
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.DataBox/locations/{location}/availableSkus
 # operationId: Service_ListAvailableSkus
-export def "subscriptions-providers-microsoft-data-box-locations-available-skus list-service" [
+export def "service-list-available-skus" [
   subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -275,7 +275,7 @@ export def "subscriptions-providers-microsoft-data-box-locations-available-skus 
 # operationId: Service_RegionConfiguration
 # --scheduleAvailabilityRequest shape: {skuName: "DataBox"|"DataBoxDisk"|"DataBoxHeavy", storageLocation: string}
 # --transportAvailabilityRequest shape: {skuName?: "DataBox"|"DataBoxDisk"|"DataBoxHeavy"}
-export def "subscriptions-providers-microsoft-data-box-locations-region-configuration create-service" [
+export def "service-region-configuration" [
   subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -324,7 +324,7 @@ export def "subscriptions-providers-microsoft-data-box-locations-region-configur
 # --shippingAddress shape: {addressType?: "None"|"Residential"|"Commercial", city?: string, companyName?: string, country: string, postalCode: string, stateOrProvince?: string, streetAddress1: string, streetAddress2?: string, streetAddress3?: string, zipExtendedCode?: string}
 # --transportPreferences shape: {preferredShipmentType: "CustomerManaged"|"MicrosoftManaged"}
 @deprecated
-export def "subscriptions-providers-microsoft-data-box-locations-validate-address validate-service" [
+export def "service-validate-address" [
   subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -373,7 +373,7 @@ export def "subscriptions-providers-microsoft-data-box-locations-validate-addres
 # Discriminator (request): validationCategory
 # operationId: Service_ValidateInputs
 # --individualRequestDetails item shape: {validationType: "ValidateAddress"|"ValidateDataDestinationDetails"|"ValidateSubscriptionIsAllowedToCreateJob"|"ValidatePreferences"|"ValidateCreateOrderLimit"|"ValidateSkuAvailability"}
-export def "subscriptions-providers-microsoft-data-box-locations-validate-inputs validate-service" [
+export def "service-validate-inputs" [
   subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -418,7 +418,7 @@ export def "subscriptions-providers-microsoft-data-box-locations-validate-inputs
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBox/jobs
 # operationId: Jobs_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-data-box-jobs list" [
+export def "jobs-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -459,7 +459,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-jobs list
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBox/jobs/{jobName}
 # operationId: Jobs_Delete
-export def "subscriptions-resource-groups-providers-microsoft-data-box-jobs delete" [
+export def "jobs-delete" [
   subscription_id: string
   resource_group_name: string
   job_name: string
@@ -501,7 +501,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-jobs dele
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBox/jobs/{jobName}
 # operationId: Jobs_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-box-jobs get" [
+export def "jobs-get" [
   subscription_id: string
   resource_group_name: string
   job_name: string
@@ -545,7 +545,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-jobs get"
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBox/jobs/{jobName}
 # operationId: Jobs_Update
 # --properties shape: {destinationAccountDetails?: list, details?: record}
-export def "subscriptions-resource-groups-providers-microsoft-data-box-jobs update" [
+export def "jobs-update" [
   subscription_id: string
   resource_group_name: string
   job_name: string
@@ -597,7 +597,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-jobs upda
 # operationId: Jobs_Create
 # --properties shape: {deliveryInfo?: record, deliveryType?: "NonScheduled"|"Scheduled", details?: record, error?: record}
 # --sku shape: {displayName?: string, family?: string, name: "DataBox"|"DataBoxDisk"|"DataBoxHeavy"}
-export def "subscriptions-resource-groups-providers-microsoft-data-box-jobs create" [
+export def "jobs-create" [
   subscription_id: string
   resource_group_name: string
   job_name: string
@@ -646,7 +646,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-jobs crea
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBox/jobs/{jobName}/bookShipmentPickUp
 # operationId: Jobs_BookShipmentPickUp
-export def "subscriptions-resource-groups-providers-microsoft-data-box-jobs-book-shipment-pick-up create" [
+export def "jobs-book-shipment-pick-up" [
   subscription_id: string
   resource_group_name: string
   job_name: string
@@ -694,7 +694,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-jobs-book
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBox/jobs/{jobName}/cancel
 # operationId: Jobs_Cancel
-export def "subscriptions-resource-groups-providers-microsoft-data-box-jobs-cancel cancel" [
+export def "jobs-cancel" [
   subscription_id: string
   resource_group_name: string
   job_name: string
@@ -740,7 +740,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-jobs-canc
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBox/jobs/{jobName}/listCredentials
 # operationId: Jobs_ListCredentials
-export def "subscriptions-resource-groups-providers-microsoft-data-box-jobs-list-credentials list" [
+export def "jobs-list-credentials" [
   subscription_id: string
   resource_group_name: string
   job_name: string
@@ -782,7 +782,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-jobs-list
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBox/locations/{location}/availableSkus
 # operationId: Service_ListAvailableSkusByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-data-box-locations-available-skus list-service" [
+export def "service-list-available-skus-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   location: string
@@ -833,7 +833,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-locations
 # Discriminator (request): validationCategory
 # operationId: Service_ValidateInputsByResourceGroup
 # --individualRequestDetails item shape: {validationType: "ValidateAddress"|"ValidateDataDestinationDetails"|"ValidateSubscriptionIsAllowedToCreateJob"|"ValidatePreferences"|"ValidateCreateOrderLimit"|"ValidateSkuAvailability"}
-export def "subscriptions-resource-groups-providers-microsoft-data-box-locations-validate-inputs validate-service" [
+export def "service-validate-inputs-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   location: string

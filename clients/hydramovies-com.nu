@@ -97,7 +97,7 @@ def auth-scheme-completer [] { ["none"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "current-movie-data-csvimdb-id-imd-bid get-csv" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "current-movie-data-csv-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -121,7 +121,7 @@ export def commands []: nothing -> table {
 #
 # GET /current-Movie-Data.csv&imdb_id={IMDBid}
 # operationId: CurrentMovieDataCsvGet
-export def "current-movie-data-csvimdb-id-imd-bid get-csv" [
+export def "current-movie-data-csv-get" [
   imd_bid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -157,7 +157,7 @@ export def "current-movie-data-csvimdb-id-imd-bid get-csv" [
 #
 # GET /current-Movie-Data.csv&movie_year={MovieYear}
 # operationId: CurrentMovieDataCsvGet2
-export def "current-movie-data-csvmovie-year-movie-year get-csv-get2" [
+export def "current-movie-data-csv-get2" [
   movie_year: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

@@ -143,7 +143,7 @@ def display-mode-completer [] { ["displayModeUnspecified" "fullScreen" "minimalU
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "androidenterprise-enterprises list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "androidenterprise-enterprises-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -167,7 +167,7 @@ export def commands []: nothing -> table {
 #
 # GET /androidenterprise/v1/enterprises
 # operationId: androidenterprise.enterprises.list
-export def "androidenterprise-enterprises list" [
+export def "androidenterprise-enterprises-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -214,7 +214,7 @@ export def "androidenterprise-enterprises list" [
 #
 # POST /androidenterprise/v1/enterprises/acknowledgeNotificationSet
 # operationId: androidenterprise.enterprises.acknowledgeNotificationSet
-export def "androidenterprise-enterprises-acknowledge-notification-set update" [
+export def "androidenterprise-enterprises-acknowledge-notification-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -261,7 +261,7 @@ export def "androidenterprise-enterprises-acknowledge-notification-set update" [
 #
 # POST /androidenterprise/v1/enterprises/completeSignup
 # operationId: androidenterprise.enterprises.completeSignup
-export def "androidenterprise-enterprises-complete-signup complete" [
+export def "androidenterprise-enterprises-complete-signup" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -311,7 +311,7 @@ export def "androidenterprise-enterprises-complete-signup complete" [
 # operationId: androidenterprise.enterprises.enroll
 # --administrator item shape: {email?: string}
 # --googleAuthenticationSettings shape: {dedicatedDevicesAllowed?: "dedicatedDevicesAllowedUnspecified"|"disallowed"|"allowed", googleAuthenticationRequired?: "googleAuthenticationRequiredUnspecified"|"notRequired"|"required"}
-export def "androidenterprise-enterprises-enroll create" [
+export def "androidenterprise-enterprises-enroll" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -366,7 +366,7 @@ export def "androidenterprise-enterprises-enroll create" [
 #
 # POST /androidenterprise/v1/enterprises/pullNotificationSet
 # operationId: androidenterprise.enterprises.pullNotificationSet
-export def "androidenterprise-enterprises-pull-notification-set pull" [
+export def "androidenterprise-enterprises-pull-notification-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -413,7 +413,7 @@ export def "androidenterprise-enterprises-pull-notification-set pull" [
 #
 # POST /androidenterprise/v1/enterprises/signupUrl
 # operationId: androidenterprise.enterprises.generateSignupUrl
-export def "androidenterprise-enterprises-signup-url generate" [
+export def "androidenterprise-enterprises-generate-signup-url" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -460,7 +460,7 @@ export def "androidenterprise-enterprises-signup-url generate" [
 #
 # GET /androidenterprise/v1/enterprises/{enterpriseId}
 # operationId: androidenterprise.enterprises.get
-export def "androidenterprise-enterprises get" [
+export def "androidenterprise-enterprises-get" [
   enterprise_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -508,7 +508,7 @@ export def "androidenterprise-enterprises get" [
 #
 # PUT /androidenterprise/v1/enterprises/{enterpriseId}/account
 # operationId: androidenterprise.enterprises.setAccount
-export def "androidenterprise-enterprises-account update" [
+export def "androidenterprise-enterprises-set-account" [
   enterprise_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -560,7 +560,7 @@ export def "androidenterprise-enterprises-account update" [
 #
 # POST /androidenterprise/v1/enterprises/{enterpriseId}/createEnrollmentToken
 # operationId: androidenterprise.enterprises.createEnrollmentToken
-export def "androidenterprise-enterprises-create-enrollment-token create" [
+export def "androidenterprise-enterprises-create-enrollment-token" [
   enterprise_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -615,7 +615,7 @@ export def "androidenterprise-enterprises-create-enrollment-token create" [
 # --storeBuilder shape: {enabled?: bool}
 # --webApps shape: {enabled?: bool}
 # --zeroTouch shape: {enabled?: bool}
-export def "androidenterprise-enterprises-create-web-token create" [
+export def "androidenterprise-enterprises-create-web-token" [
   enterprise_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -674,7 +674,7 @@ export def "androidenterprise-enterprises-create-web-token create" [
 #
 # GET /androidenterprise/v1/enterprises/{enterpriseId}/groupLicenses
 # operationId: androidenterprise.grouplicenses.list
-export def "androidenterprise-enterprises-group-licenses list" [
+export def "androidenterprise-grouplicenses-list" [
   enterprise_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -722,7 +722,7 @@ export def "androidenterprise-enterprises-group-licenses list" [
 #
 # GET /androidenterprise/v1/enterprises/{enterpriseId}/groupLicenses/{groupLicenseId}
 # operationId: androidenterprise.grouplicenses.get
-export def "androidenterprise-enterprises-group-licenses get" [
+export def "androidenterprise-grouplicenses-get" [
   enterprise_id: string
   group_license_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -772,7 +772,7 @@ export def "androidenterprise-enterprises-group-licenses get" [
 #
 # GET /androidenterprise/v1/enterprises/{enterpriseId}/groupLicenses/{groupLicenseId}/users
 # operationId: androidenterprise.grouplicenseusers.list
-export def "androidenterprise-enterprises-group-licenses-users list" [
+export def "androidenterprise-grouplicenseusers-list" [
   enterprise_id: string
   group_license_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -822,7 +822,7 @@ export def "androidenterprise-enterprises-group-licenses-users list" [
 #
 # GET /androidenterprise/v1/enterprises/{enterpriseId}/products
 # operationId: androidenterprise.products.list
-export def "androidenterprise-enterprises-products list" [
+export def "androidenterprise-products-list" [
   enterprise_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -875,7 +875,7 @@ export def "androidenterprise-enterprises-products list" [
 #
 # GET /androidenterprise/v1/enterprises/{enterpriseId}/products/{productId}
 # operationId: androidenterprise.products.get
-export def "androidenterprise-enterprises-products get" [
+export def "androidenterprise-products-get" [
   enterprise_id: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -926,7 +926,7 @@ export def "androidenterprise-enterprises-products get" [
 #
 # GET /androidenterprise/v1/enterprises/{enterpriseId}/products/{productId}/appRestrictionsSchema
 # operationId: androidenterprise.products.getAppRestrictionsSchema
-export def "androidenterprise-enterprises-products-app-restrictions-schema get" [
+export def "androidenterprise-products-get-app-restrictions-schema" [
   enterprise_id: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -978,7 +978,7 @@ export def "androidenterprise-enterprises-products-app-restrictions-schema get" 
 # POST /androidenterprise/v1/enterprises/{enterpriseId}/products/{productId}/approve
 # operationId: androidenterprise.products.approve
 # --approvalUrlInfo shape: {approvalUrl?: string}
-export def "androidenterprise-enterprises-products-approve approve" [
+export def "androidenterprise-products-approve" [
   enterprise_id: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1033,7 +1033,7 @@ export def "androidenterprise-enterprises-products-approve approve" [
 #
 # POST /androidenterprise/v1/enterprises/{enterpriseId}/products/{productId}/generateApprovalUrl
 # operationId: androidenterprise.products.generateApprovalUrl
-export def "androidenterprise-enterprises-products-generate-approval-url generate" [
+export def "androidenterprise-products-generate-approval-url" [
   enterprise_id: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1084,7 +1084,7 @@ export def "androidenterprise-enterprises-products-generate-approval-url generat
 #
 # GET /androidenterprise/v1/enterprises/{enterpriseId}/products/{productId}/managedConfigurationsSettings
 # operationId: androidenterprise.managedconfigurationssettings.list
-export def "androidenterprise-enterprises-products-managed-configurations-settings list" [
+export def "androidenterprise-managedconfigurationssettings-list" [
   enterprise_id: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1134,7 +1134,7 @@ export def "androidenterprise-enterprises-products-managed-configurations-settin
 #
 # GET /androidenterprise/v1/enterprises/{enterpriseId}/products/{productId}/permissions
 # operationId: androidenterprise.products.getPermissions
-export def "androidenterprise-enterprises-products-permissions get" [
+export def "androidenterprise-products-get-permissions" [
   enterprise_id: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1184,7 +1184,7 @@ export def "androidenterprise-enterprises-products-permissions get" [
 #
 # POST /androidenterprise/v1/enterprises/{enterpriseId}/products/{productId}/unapprove
 # operationId: androidenterprise.products.unapprove
-export def "androidenterprise-enterprises-products-unapprove create" [
+export def "androidenterprise-products-unapprove" [
   enterprise_id: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1234,7 +1234,7 @@ export def "androidenterprise-enterprises-products-unapprove create" [
 #
 # POST /androidenterprise/v1/enterprises/{enterpriseId}/sendTestPushNotification
 # operationId: androidenterprise.enterprises.sendTestPushNotification
-export def "androidenterprise-enterprises-send-test-push-notification send" [
+export def "androidenterprise-enterprises-send-test-push-notification" [
   enterprise_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1282,7 +1282,7 @@ export def "androidenterprise-enterprises-send-test-push-notification send" [
 #
 # GET /androidenterprise/v1/enterprises/{enterpriseId}/serviceAccount
 # operationId: androidenterprise.enterprises.getServiceAccount
-export def "androidenterprise-enterprises-service-account get" [
+export def "androidenterprise-enterprises-get-service-account" [
   enterprise_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1331,7 +1331,7 @@ export def "androidenterprise-enterprises-service-account get" [
 #
 # GET /androidenterprise/v1/enterprises/{enterpriseId}/serviceAccountKeys
 # operationId: androidenterprise.serviceaccountkeys.list
-export def "androidenterprise-enterprises-service-account-keys list" [
+export def "androidenterprise-serviceaccountkeys-list" [
   enterprise_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1379,7 +1379,7 @@ export def "androidenterprise-enterprises-service-account-keys list" [
 #
 # POST /androidenterprise/v1/enterprises/{enterpriseId}/serviceAccountKeys
 # operationId: androidenterprise.serviceaccountkeys.insert
-export def "androidenterprise-enterprises-service-account-keys create" [
+export def "androidenterprise-serviceaccountkeys-insert" [
   enterprise_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1434,7 +1434,7 @@ export def "androidenterprise-enterprises-service-account-keys create" [
 #
 # DELETE /androidenterprise/v1/enterprises/{enterpriseId}/serviceAccountKeys/{keyId}
 # operationId: androidenterprise.serviceaccountkeys.delete
-export def "androidenterprise-enterprises-service-account-keys delete" [
+export def "androidenterprise-serviceaccountkeys-delete" [
   enterprise_id: string
   key_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1484,7 +1484,7 @@ export def "androidenterprise-enterprises-service-account-keys delete" [
 #
 # GET /androidenterprise/v1/enterprises/{enterpriseId}/storeLayout
 # operationId: androidenterprise.enterprises.getStoreLayout
-export def "androidenterprise-enterprises-store-layout get" [
+export def "androidenterprise-enterprises-get-store-layout" [
   enterprise_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1532,7 +1532,7 @@ export def "androidenterprise-enterprises-store-layout get" [
 #
 # PUT /androidenterprise/v1/enterprises/{enterpriseId}/storeLayout
 # operationId: androidenterprise.enterprises.setStoreLayout
-export def "androidenterprise-enterprises-store-layout update" [
+export def "androidenterprise-enterprises-set-store-layout" [
   enterprise_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1585,7 +1585,7 @@ export def "androidenterprise-enterprises-store-layout update" [
 #
 # GET /androidenterprise/v1/enterprises/{enterpriseId}/storeLayout/pages
 # operationId: androidenterprise.storelayoutpages.list
-export def "androidenterprise-enterprises-store-layout-pages list" [
+export def "androidenterprise-storelayoutpages-list" [
   enterprise_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1634,7 +1634,7 @@ export def "androidenterprise-enterprises-store-layout-pages list" [
 # POST /androidenterprise/v1/enterprises/{enterpriseId}/storeLayout/pages
 # operationId: androidenterprise.storelayoutpages.insert
 # --name item shape: {locale?: string, text?: string}
-export def "androidenterprise-enterprises-store-layout-pages create" [
+export def "androidenterprise-storelayoutpages-insert" [
   enterprise_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1688,7 +1688,7 @@ export def "androidenterprise-enterprises-store-layout-pages create" [
 #
 # DELETE /androidenterprise/v1/enterprises/{enterpriseId}/storeLayout/pages/{pageId}
 # operationId: androidenterprise.storelayoutpages.delete
-export def "androidenterprise-enterprises-store-layout-pages delete" [
+export def "androidenterprise-storelayoutpages-delete" [
   enterprise_id: string
   page_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1738,7 +1738,7 @@ export def "androidenterprise-enterprises-store-layout-pages delete" [
 #
 # GET /androidenterprise/v1/enterprises/{enterpriseId}/storeLayout/pages/{pageId}
 # operationId: androidenterprise.storelayoutpages.get
-export def "androidenterprise-enterprises-store-layout-pages get" [
+export def "androidenterprise-storelayoutpages-get" [
   enterprise_id: string
   page_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1789,7 +1789,7 @@ export def "androidenterprise-enterprises-store-layout-pages get" [
 # PUT /androidenterprise/v1/enterprises/{enterpriseId}/storeLayout/pages/{pageId}
 # operationId: androidenterprise.storelayoutpages.update
 # --name item shape: {locale?: string, text?: string}
-export def "androidenterprise-enterprises-store-layout-pages update" [
+export def "androidenterprise-storelayoutpages-update" [
   enterprise_id: string
   page_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1845,7 +1845,7 @@ export def "androidenterprise-enterprises-store-layout-pages update" [
 #
 # GET /androidenterprise/v1/enterprises/{enterpriseId}/storeLayout/pages/{pageId}/clusters
 # operationId: androidenterprise.storelayoutclusters.list
-export def "androidenterprise-enterprises-store-layout-pages-clusters list" [
+export def "androidenterprise-storelayoutclusters-list" [
   enterprise_id: string
   page_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1896,7 +1896,7 @@ export def "androidenterprise-enterprises-store-layout-pages-clusters list" [
 # POST /androidenterprise/v1/enterprises/{enterpriseId}/storeLayout/pages/{pageId}/clusters
 # operationId: androidenterprise.storelayoutclusters.insert
 # --name item shape: {locale?: string, text?: string}
-export def "androidenterprise-enterprises-store-layout-pages-clusters create" [
+export def "androidenterprise-storelayoutclusters-insert" [
   enterprise_id: string
   page_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1953,7 +1953,7 @@ export def "androidenterprise-enterprises-store-layout-pages-clusters create" [
 #
 # DELETE /androidenterprise/v1/enterprises/{enterpriseId}/storeLayout/pages/{pageId}/clusters/{clusterId}
 # operationId: androidenterprise.storelayoutclusters.delete
-export def "androidenterprise-enterprises-store-layout-pages-clusters delete" [
+export def "androidenterprise-storelayoutclusters-delete" [
   enterprise_id: string
   page_id: string
   cluster_id: string
@@ -2005,7 +2005,7 @@ export def "androidenterprise-enterprises-store-layout-pages-clusters delete" [
 #
 # GET /androidenterprise/v1/enterprises/{enterpriseId}/storeLayout/pages/{pageId}/clusters/{clusterId}
 # operationId: androidenterprise.storelayoutclusters.get
-export def "androidenterprise-enterprises-store-layout-pages-clusters get" [
+export def "androidenterprise-storelayoutclusters-get" [
   enterprise_id: string
   page_id: string
   cluster_id: string
@@ -2058,7 +2058,7 @@ export def "androidenterprise-enterprises-store-layout-pages-clusters get" [
 # PUT /androidenterprise/v1/enterprises/{enterpriseId}/storeLayout/pages/{pageId}/clusters/{clusterId}
 # operationId: androidenterprise.storelayoutclusters.update
 # --name item shape: {locale?: string, text?: string}
-export def "androidenterprise-enterprises-store-layout-pages-clusters update" [
+export def "androidenterprise-storelayoutclusters-update" [
   enterprise_id: string
   page_id: string
   cluster_id: string
@@ -2117,7 +2117,7 @@ export def "androidenterprise-enterprises-store-layout-pages-clusters update" [
 #
 # POST /androidenterprise/v1/enterprises/{enterpriseId}/unenroll
 # operationId: androidenterprise.enterprises.unenroll
-export def "androidenterprise-enterprises-unenroll create" [
+export def "androidenterprise-enterprises-unenroll" [
   enterprise_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2165,7 +2165,7 @@ export def "androidenterprise-enterprises-unenroll create" [
 #
 # GET /androidenterprise/v1/enterprises/{enterpriseId}/users
 # operationId: androidenterprise.users.list
-export def "androidenterprise-enterprises-users list" [
+export def "androidenterprise-users-list" [
   enterprise_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2214,7 +2214,7 @@ export def "androidenterprise-enterprises-users list" [
 #
 # POST /androidenterprise/v1/enterprises/{enterpriseId}/users
 # operationId: androidenterprise.users.insert
-export def "androidenterprise-enterprises-users create" [
+export def "androidenterprise-users-insert" [
   enterprise_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2271,7 +2271,7 @@ export def "androidenterprise-enterprises-users create" [
 #
 # DELETE /androidenterprise/v1/enterprises/{enterpriseId}/users/{userId}
 # operationId: androidenterprise.users.delete
-export def "androidenterprise-enterprises-users delete" [
+export def "androidenterprise-users-delete" [
   enterprise_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2321,7 +2321,7 @@ export def "androidenterprise-enterprises-users delete" [
 #
 # GET /androidenterprise/v1/enterprises/{enterpriseId}/users/{userId}
 # operationId: androidenterprise.users.get
-export def "androidenterprise-enterprises-users get" [
+export def "androidenterprise-users-get" [
   enterprise_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2371,7 +2371,7 @@ export def "androidenterprise-enterprises-users get" [
 #
 # PUT /androidenterprise/v1/enterprises/{enterpriseId}/users/{userId}
 # operationId: androidenterprise.users.update
-export def "androidenterprise-enterprises-users update" [
+export def "androidenterprise-users-update" [
   enterprise_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2430,7 +2430,7 @@ export def "androidenterprise-enterprises-users update" [
 #
 # POST /androidenterprise/v1/enterprises/{enterpriseId}/users/{userId}/authenticationToken
 # operationId: androidenterprise.users.generateAuthenticationToken
-export def "androidenterprise-enterprises-users-authentication-token generate" [
+export def "androidenterprise-users-generate-authentication-token" [
   enterprise_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2480,7 +2480,7 @@ export def "androidenterprise-enterprises-users-authentication-token generate" [
 #
 # GET /androidenterprise/v1/enterprises/{enterpriseId}/users/{userId}/availableProductSet
 # operationId: androidenterprise.users.getAvailableProductSet
-export def "androidenterprise-enterprises-users-available-product-set get" [
+export def "androidenterprise-users-get-available-product-set" [
   enterprise_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2531,7 +2531,7 @@ export def "androidenterprise-enterprises-users-available-product-set get" [
 # PUT /androidenterprise/v1/enterprises/{enterpriseId}/users/{userId}/availableProductSet
 # operationId: androidenterprise.users.setAvailableProductSet
 # --productVisibility item shape: {productId?: string, trackIds?: list<string>, tracks?: list<string>}
-export def "androidenterprise-enterprises-users-available-product-set update" [
+export def "androidenterprise-users-set-available-product-set" [
   enterprise_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2587,7 +2587,7 @@ export def "androidenterprise-enterprises-users-available-product-set update" [
 #
 # DELETE /androidenterprise/v1/enterprises/{enterpriseId}/users/{userId}/deviceAccess
 # operationId: androidenterprise.users.revokeDeviceAccess
-export def "androidenterprise-enterprises-users-device-access delete" [
+export def "androidenterprise-users-revoke-device-access" [
   enterprise_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2637,7 +2637,7 @@ export def "androidenterprise-enterprises-users-device-access delete" [
 #
 # GET /androidenterprise/v1/enterprises/{enterpriseId}/users/{userId}/devices
 # operationId: androidenterprise.devices.list
-export def "androidenterprise-enterprises-users-devices list" [
+export def "androidenterprise-devices-list" [
   enterprise_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2687,7 +2687,7 @@ export def "androidenterprise-enterprises-users-devices list" [
 #
 # GET /androidenterprise/v1/enterprises/{enterpriseId}/users/{userId}/devices/{deviceId}
 # operationId: androidenterprise.devices.get
-export def "androidenterprise-enterprises-users-devices get" [
+export def "androidenterprise-devices-get" [
   enterprise_id: string
   user_id: string
   device_id: string
@@ -2741,7 +2741,7 @@ export def "androidenterprise-enterprises-users-devices get" [
 # operationId: androidenterprise.devices.update
 # --policy shape: {autoUpdatePolicy?: "autoUpdatePolicyUnspecified"|"choiceToTheUser"|"never"|"wifiOnly"|"always", deviceReportPolicy?: "deviceReportPolicyUnspecified"|"deviceReportDisabled"|"deviceReportEnabled", maintenanceWindow?: record, productAvailabilityPolicy?: "productAvailabilityPolicyUnspecified"|"whitelist"|"all", productPolicy?: list}
 # --report shape: {appState?: list, lastUpdatedTimestampMillis?: string}
-export def "androidenterprise-enterprises-users-devices update" [
+export def "androidenterprise-devices-update" [
   enterprise_id: string
   user_id: string
   device_id: string
@@ -2808,7 +2808,7 @@ export def "androidenterprise-enterprises-users-devices update" [
 #
 # POST /androidenterprise/v1/enterprises/{enterpriseId}/users/{userId}/devices/{deviceId}/forceReportUpload
 # operationId: androidenterprise.devices.forceReportUpload
-export def "androidenterprise-enterprises-users-devices-force-report-upload upload" [
+export def "androidenterprise-devices-force-report-upload" [
   enterprise_id: string
   user_id: string
   device_id: string
@@ -2860,7 +2860,7 @@ export def "androidenterprise-enterprises-users-devices-force-report-upload uplo
 #
 # GET /androidenterprise/v1/enterprises/{enterpriseId}/users/{userId}/devices/{deviceId}/installs
 # operationId: androidenterprise.installs.list
-export def "androidenterprise-enterprises-users-devices-installs list" [
+export def "androidenterprise-installs-list" [
   enterprise_id: string
   user_id: string
   device_id: string
@@ -2912,7 +2912,7 @@ export def "androidenterprise-enterprises-users-devices-installs list" [
 #
 # DELETE /androidenterprise/v1/enterprises/{enterpriseId}/users/{userId}/devices/{deviceId}/installs/{installId}
 # operationId: androidenterprise.installs.delete
-export def "androidenterprise-enterprises-users-devices-installs delete" [
+export def "androidenterprise-installs-delete" [
   enterprise_id: string
   user_id: string
   device_id: string
@@ -2966,7 +2966,7 @@ export def "androidenterprise-enterprises-users-devices-installs delete" [
 #
 # GET /androidenterprise/v1/enterprises/{enterpriseId}/users/{userId}/devices/{deviceId}/installs/{installId}
 # operationId: androidenterprise.installs.get
-export def "androidenterprise-enterprises-users-devices-installs get" [
+export def "androidenterprise-installs-get" [
   enterprise_id: string
   user_id: string
   device_id: string
@@ -3020,7 +3020,7 @@ export def "androidenterprise-enterprises-users-devices-installs get" [
 #
 # PUT /androidenterprise/v1/enterprises/{enterpriseId}/users/{userId}/devices/{deviceId}/installs/{installId}
 # operationId: androidenterprise.installs.update
-export def "androidenterprise-enterprises-users-devices-installs update" [
+export def "androidenterprise-installs-update" [
   enterprise_id: string
   user_id: string
   device_id: string
@@ -3080,7 +3080,7 @@ export def "androidenterprise-enterprises-users-devices-installs update" [
 #
 # GET /androidenterprise/v1/enterprises/{enterpriseId}/users/{userId}/devices/{deviceId}/managedConfigurationsForDevice
 # operationId: androidenterprise.managedconfigurationsfordevice.list
-export def "androidenterprise-enterprises-users-devices-managed-configurations-for-device list" [
+export def "androidenterprise-managedconfigurationsfordevice-list" [
   enterprise_id: string
   user_id: string
   device_id: string
@@ -3132,7 +3132,7 @@ export def "androidenterprise-enterprises-users-devices-managed-configurations-f
 #
 # DELETE /androidenterprise/v1/enterprises/{enterpriseId}/users/{userId}/devices/{deviceId}/managedConfigurationsForDevice/{managedConfigurationForDeviceId}
 # operationId: androidenterprise.managedconfigurationsfordevice.delete
-export def "androidenterprise-enterprises-users-devices-managed-configurations-for-device delete" [
+export def "androidenterprise-managedconfigurationsfordevice-delete" [
   enterprise_id: string
   user_id: string
   device_id: string
@@ -3186,7 +3186,7 @@ export def "androidenterprise-enterprises-users-devices-managed-configurations-f
 #
 # GET /androidenterprise/v1/enterprises/{enterpriseId}/users/{userId}/devices/{deviceId}/managedConfigurationsForDevice/{managedConfigurationForDeviceId}
 # operationId: androidenterprise.managedconfigurationsfordevice.get
-export def "androidenterprise-enterprises-users-devices-managed-configurations-for-device get" [
+export def "androidenterprise-managedconfigurationsfordevice-get" [
   enterprise_id: string
   user_id: string
   device_id: string
@@ -3242,7 +3242,7 @@ export def "androidenterprise-enterprises-users-devices-managed-configurations-f
 # operationId: androidenterprise.managedconfigurationsfordevice.update
 # --configurationVariables shape: {mcmId?: string, variableSet?: list}
 # --managedProperty item shape: {key?: string, valueBool?: bool, valueBundle?: record, valueBundleArray?: list, valueInteger?: int, valueString?: string, valueStringArray?: list<string>}
-export def "androidenterprise-enterprises-users-devices-managed-configurations-for-device update" [
+export def "androidenterprise-managedconfigurationsfordevice-update" [
   enterprise_id: string
   user_id: string
   device_id: string
@@ -3303,7 +3303,7 @@ export def "androidenterprise-enterprises-users-devices-managed-configurations-f
 #
 # GET /androidenterprise/v1/enterprises/{enterpriseId}/users/{userId}/devices/{deviceId}/state
 # operationId: androidenterprise.devices.getState
-export def "androidenterprise-enterprises-users-devices-state get" [
+export def "androidenterprise-devices-get-state" [
   enterprise_id: string
   user_id: string
   device_id: string
@@ -3355,7 +3355,7 @@ export def "androidenterprise-enterprises-users-devices-state get" [
 #
 # PUT /androidenterprise/v1/enterprises/{enterpriseId}/users/{userId}/devices/{deviceId}/state
 # operationId: androidenterprise.devices.setState
-export def "androidenterprise-enterprises-users-devices-state update" [
+export def "androidenterprise-devices-set-state" [
   enterprise_id: string
   user_id: string
   device_id: string
@@ -3411,7 +3411,7 @@ export def "androidenterprise-enterprises-users-devices-state update" [
 #
 # GET /androidenterprise/v1/enterprises/{enterpriseId}/users/{userId}/entitlements
 # operationId: androidenterprise.entitlements.list
-export def "androidenterprise-enterprises-users-entitlements list" [
+export def "androidenterprise-entitlements-list" [
   enterprise_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3461,7 +3461,7 @@ export def "androidenterprise-enterprises-users-entitlements list" [
 #
 # DELETE /androidenterprise/v1/enterprises/{enterpriseId}/users/{userId}/entitlements/{entitlementId}
 # operationId: androidenterprise.entitlements.delete
-export def "androidenterprise-enterprises-users-entitlements delete" [
+export def "androidenterprise-entitlements-delete" [
   enterprise_id: string
   user_id: string
   entitlement_id: string
@@ -3513,7 +3513,7 @@ export def "androidenterprise-enterprises-users-entitlements delete" [
 #
 # GET /androidenterprise/v1/enterprises/{enterpriseId}/users/{userId}/entitlements/{entitlementId}
 # operationId: androidenterprise.entitlements.get
-export def "androidenterprise-enterprises-users-entitlements get" [
+export def "androidenterprise-entitlements-get" [
   enterprise_id: string
   user_id: string
   entitlement_id: string
@@ -3565,7 +3565,7 @@ export def "androidenterprise-enterprises-users-entitlements get" [
 #
 # PUT /androidenterprise/v1/enterprises/{enterpriseId}/users/{userId}/entitlements/{entitlementId}
 # operationId: androidenterprise.entitlements.update
-export def "androidenterprise-enterprises-users-entitlements update" [
+export def "androidenterprise-entitlements-update" [
   enterprise_id: string
   user_id: string
   entitlement_id: string
@@ -3623,7 +3623,7 @@ export def "androidenterprise-enterprises-users-entitlements update" [
 #
 # GET /androidenterprise/v1/enterprises/{enterpriseId}/users/{userId}/managedConfigurationsForUser
 # operationId: androidenterprise.managedconfigurationsforuser.list
-export def "androidenterprise-enterprises-users-managed-configurations-for-user list" [
+export def "androidenterprise-managedconfigurationsforuser-list" [
   enterprise_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3673,7 +3673,7 @@ export def "androidenterprise-enterprises-users-managed-configurations-for-user 
 #
 # DELETE /androidenterprise/v1/enterprises/{enterpriseId}/users/{userId}/managedConfigurationsForUser/{managedConfigurationForUserId}
 # operationId: androidenterprise.managedconfigurationsforuser.delete
-export def "androidenterprise-enterprises-users-managed-configurations-for-user delete" [
+export def "androidenterprise-managedconfigurationsforuser-delete" [
   enterprise_id: string
   user_id: string
   managed_configuration_for_user_id: string
@@ -3725,7 +3725,7 @@ export def "androidenterprise-enterprises-users-managed-configurations-for-user 
 #
 # GET /androidenterprise/v1/enterprises/{enterpriseId}/users/{userId}/managedConfigurationsForUser/{managedConfigurationForUserId}
 # operationId: androidenterprise.managedconfigurationsforuser.get
-export def "androidenterprise-enterprises-users-managed-configurations-for-user get" [
+export def "androidenterprise-managedconfigurationsforuser-get" [
   enterprise_id: string
   user_id: string
   managed_configuration_for_user_id: string
@@ -3779,7 +3779,7 @@ export def "androidenterprise-enterprises-users-managed-configurations-for-user 
 # operationId: androidenterprise.managedconfigurationsforuser.update
 # --configurationVariables shape: {mcmId?: string, variableSet?: list}
 # --managedProperty item shape: {key?: string, valueBool?: bool, valueBundle?: record, valueBundleArray?: list, valueInteger?: int, valueString?: string, valueStringArray?: list<string>}
-export def "androidenterprise-enterprises-users-managed-configurations-for-user update" [
+export def "androidenterprise-managedconfigurationsforuser-update" [
   enterprise_id: string
   user_id: string
   managed_configuration_for_user_id: string
@@ -3838,7 +3838,7 @@ export def "androidenterprise-enterprises-users-managed-configurations-for-user 
 #
 # GET /androidenterprise/v1/enterprises/{enterpriseId}/webApps
 # operationId: androidenterprise.webapps.list
-export def "androidenterprise-enterprises-web-apps list" [
+export def "androidenterprise-webapps-list" [
   enterprise_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3887,7 +3887,7 @@ export def "androidenterprise-enterprises-web-apps list" [
 # POST /androidenterprise/v1/enterprises/{enterpriseId}/webApps
 # operationId: androidenterprise.webapps.insert
 # --icons item shape: {imageData?: string}
-export def "androidenterprise-enterprises-web-apps create" [
+export def "androidenterprise-webapps-insert" [
   enterprise_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3945,7 +3945,7 @@ export def "androidenterprise-enterprises-web-apps create" [
 #
 # DELETE /androidenterprise/v1/enterprises/{enterpriseId}/webApps/{webAppId}
 # operationId: androidenterprise.webapps.delete
-export def "androidenterprise-enterprises-web-apps delete" [
+export def "androidenterprise-webapps-delete" [
   enterprise_id: string
   web_app_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3995,7 +3995,7 @@ export def "androidenterprise-enterprises-web-apps delete" [
 #
 # GET /androidenterprise/v1/enterprises/{enterpriseId}/webApps/{webAppId}
 # operationId: androidenterprise.webapps.get
-export def "androidenterprise-enterprises-web-apps get" [
+export def "androidenterprise-webapps-get" [
   enterprise_id: string
   web_app_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4046,7 +4046,7 @@ export def "androidenterprise-enterprises-web-apps get" [
 # PUT /androidenterprise/v1/enterprises/{enterpriseId}/webApps/{webAppId}
 # operationId: androidenterprise.webapps.update
 # --icons item shape: {imageData?: string}
-export def "androidenterprise-enterprises-web-apps update" [
+export def "androidenterprise-webapps-update" [
   enterprise_id: string
   web_app_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4106,7 +4106,7 @@ export def "androidenterprise-enterprises-web-apps update" [
 #
 # GET /androidenterprise/v1/permissions/{permissionId}
 # operationId: androidenterprise.permissions.get
-export def "androidenterprise-permissions get" [
+export def "androidenterprise-permissions-get" [
   permission_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

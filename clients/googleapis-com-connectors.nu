@@ -129,7 +129,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects list-execute-sql" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "connectors-projects-locations-connections-execute-sql-query" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -154,7 +154,7 @@ export def commands []: nothing -> table {
 # POST /v2/{connection}:executeSqlQuery
 # operationId: connectors.projects.locations.connections.executeSqlQuery
 # --query shape: {query?: string}
-export def "projects list-execute-sql" [
+export def "connectors-projects-locations-connections-execute-sql-query" [
   connection: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -206,7 +206,7 @@ export def "projects list-execute-sql" [
 #
 # POST /v2/{entityType}/entities:deleteEntitiesWithConditions
 # operationId: connectors.projects.locations.connections.entityTypes.entities.deleteEntitiesWithConditions
-export def "entities-delete-entities-with-conditions delete" [
+export def "connectors-projects-locations-connections-entity-types-entities-delete-entities-with-conditions" [
   entity_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -255,7 +255,7 @@ export def "entities-delete-entities-with-conditions delete" [
 #
 # POST /v2/{entityType}/entities:updateEntitiesWithConditions
 # operationId: connectors.projects.locations.connections.entityTypes.entities.updateEntitiesWithConditions
-export def "entities-update-entities-with-conditions update" [
+export def "connectors-projects-locations-connections-entity-types-entities-update-entities-with-conditions" [
   entity_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -308,7 +308,7 @@ export def "entities-update-entities-with-conditions update" [
 #
 # DELETE /v2/{name}
 # operationId: connectors.projects.locations.connections.entityTypes.entities.delete
-export def "projects delete" [
+export def "connectors-projects-locations-connections-entity-types-entities-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -356,7 +356,7 @@ export def "projects delete" [
 #
 # GET /v2/{name}
 # operationId: connectors.projects.locations.connections.entityTypes.entities.get
-export def "projects get" [
+export def "connectors-projects-locations-connections-entity-types-entities-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -404,7 +404,7 @@ export def "projects get" [
 #
 # PATCH /v2/{name}
 # operationId: connectors.projects.locations.connections.entityTypes.entities.patch
-export def "projects update" [
+export def "connectors-projects-locations-connections-entity-types-entities-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -456,7 +456,7 @@ export def "projects update" [
 #
 # POST /v2/{name}:execute
 # operationId: connectors.projects.locations.connections.actions.execute
-export def "projects create-execute" [
+export def "connectors-projects-locations-connections-actions-execute" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -508,7 +508,7 @@ export def "projects create-execute" [
 #
 # GET /v2/{parent}/actions
 # operationId: connectors.projects.locations.connections.actions.list
-export def "actions list" [
+export def "connectors-projects-locations-connections-actions-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -558,7 +558,7 @@ export def "actions list" [
 #
 # GET /v2/{parent}/entities
 # operationId: connectors.projects.locations.connections.entityTypes.entities.list
-export def "entities list" [
+export def "connectors-projects-locations-connections-entity-types-entities-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -610,7 +610,7 @@ export def "entities list" [
 #
 # POST /v2/{parent}/entities
 # operationId: connectors.projects.locations.connections.entityTypes.entities.create
-export def "entities create" [
+export def "connectors-projects-locations-connections-entity-types-entities-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -662,7 +662,7 @@ export def "entities create" [
 #
 # GET /v2/{parent}/entityTypes
 # operationId: connectors.projects.locations.connections.entityTypes.list
-export def "entity-types list" [
+export def "connectors-projects-locations-connections-entity-types-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

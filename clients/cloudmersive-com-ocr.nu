@@ -129,7 +129,7 @@ def accept-completer [] { ["application/json" "application/xml" "text/json" "tex
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "ocr-image-to-lines-with-location create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "image-ocr-image-lines-with-location" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -153,7 +153,7 @@ export def commands []: nothing -> table {
 #
 # POST /ocr/image/to/lines-with-location
 # operationId: ImageOcr_ImageLinesWithLocation
-export def "ocr-image-to-lines-with-location create" [
+export def "image-ocr-image-lines-with-location" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -198,7 +198,7 @@ export def "ocr-image-to-lines-with-location create" [
 #
 # POST /ocr/image/to/words-with-location
 # operationId: ImageOcr_ImageWordsWithLocation
-export def "ocr-image-to-words-with-location create" [
+export def "image-ocr-image-words-with-location" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -243,7 +243,7 @@ export def "ocr-image-to-words-with-location create" [
 #
 # POST /ocr/image/toText
 # operationId: ImageOcr_Post
-export def "ocr-image-to-text create" [
+export def "image-ocr-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -289,7 +289,7 @@ export def "ocr-image-to-text create" [
 #
 # POST /ocr/pdf/to/lines-with-location
 # operationId: PdfOcr_PdfToLinesWithLocation
-export def "ocr-pdf-to-lines-with-location create" [
+export def "pdf-ocr-pdf-to-lines-with-location" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -334,7 +334,7 @@ export def "ocr-pdf-to-lines-with-location create" [
 #
 # POST /ocr/pdf/to/words-with-location
 # operationId: PdfOcr_PdfToWordsWithLocation
-export def "ocr-pdf-to-words-with-location create" [
+export def "pdf-ocr-pdf-to-words-with-location" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -379,7 +379,7 @@ export def "ocr-pdf-to-words-with-location create" [
 #
 # POST /ocr/pdf/toText
 # operationId: PdfOcr_Post
-export def "ocr-pdf-to-text create" [
+export def "pdf-ocr-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -425,7 +425,7 @@ export def "ocr-pdf-to-text create" [
 #
 # POST /ocr/photo/recognize/business-card
 # operationId: ImageOcr_PhotoRecognizeBusinessCard
-export def "ocr-photo-recognize-business-card create-image" [
+export def "image-ocr-photo-recognize-business-card" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -466,7 +466,7 @@ export def "ocr-photo-recognize-business-card create-image" [
 #
 # POST /ocr/photo/recognize/form
 # operationId: ImageOcr_PhotoRecognizeForm
-export def "ocr-photo-recognize-form create-image" [
+export def "image-ocr-photo-recognize-form" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -514,7 +514,7 @@ export def "ocr-photo-recognize-form create-image" [
 #
 # POST /ocr/photo/recognize/form/advanced
 # operationId: ImageOcr_PhotoRecognizeFormAdvanced
-export def "ocr-photo-recognize-form-advanced create-image" [
+export def "image-ocr-photo-recognize-form-advanced" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -562,7 +562,7 @@ export def "ocr-photo-recognize-form-advanced create-image" [
 #
 # POST /ocr/photo/recognize/receipt
 # operationId: ImageOcr_PhotoRecognizeReceipt
-export def "ocr-photo-recognize-receipt create-image" [
+export def "image-ocr-photo-recognize-receipt" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -608,7 +608,7 @@ export def "ocr-photo-recognize-receipt create-image" [
 #
 # POST /ocr/photo/to/words-with-location
 # operationId: ImageOcr_PhotoWordsWithLocation
-export def "ocr-photo-to-words-with-location create-image" [
+export def "image-ocr-photo-words-with-location" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -655,7 +655,7 @@ export def "ocr-photo-to-words-with-location create-image" [
 #
 # POST /ocr/photo/toText
 # operationId: ImageOcr_PhotoToText
-export def "ocr-photo-to-text create-image" [
+export def "image-ocr-photo-to-text" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -700,7 +700,7 @@ export def "ocr-photo-to-text create-image" [
 #
 # POST /ocr/preprocessing/image/binarize
 # operationId: Preprocessing_Binarize
-export def "ocr-preprocessing-image-binarize create" [
+export def "preprocessing-binarize" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -741,7 +741,7 @@ export def "ocr-preprocessing-image-binarize create" [
 #
 # POST /ocr/preprocessing/image/binarize/advanced
 # operationId: Preprocessing_BinarizeAdvanced
-export def "ocr-preprocessing-image-binarize-advanced create" [
+export def "preprocessing-binarize-advanced" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -782,7 +782,7 @@ export def "ocr-preprocessing-image-binarize-advanced create" [
 #
 # POST /ocr/preprocessing/image/get-page-angle
 # operationId: Preprocessing_GetPageAngle
-export def "ocr-preprocessing-image-get-page-angle get" [
+export def "preprocessing-get-page-angle" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -823,7 +823,7 @@ export def "ocr-preprocessing-image-get-page-angle get" [
 #
 # POST /ocr/preprocessing/image/unrotate
 # operationId: Preprocessing_Unrotate
-export def "ocr-preprocessing-image-unrotate create" [
+export def "preprocessing-unrotate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -864,7 +864,7 @@ export def "ocr-preprocessing-image-unrotate create" [
 #
 # POST /ocr/preprocessing/image/unrotate/advanced
 # operationId: Preprocessing_UnrotateAdvanced
-export def "ocr-preprocessing-image-unrotate-advanced create" [
+export def "preprocessing-unrotate-advanced" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -905,7 +905,7 @@ export def "ocr-preprocessing-image-unrotate-advanced create" [
 #
 # POST /ocr/preprocessing/image/unskew
 # operationId: Preprocessing_Unskew
-export def "ocr-preprocessing-image-unskew create" [
+export def "preprocessing-unskew" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -948,7 +948,7 @@ export def "ocr-preprocessing-image-unskew create" [
 # DEPRECATED
 # operationId: Receipts_PhotoToCSV
 @deprecated
-export def "ocr-receipts-photo-to-csv create" [
+export def "receipts-photo-to-csv" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

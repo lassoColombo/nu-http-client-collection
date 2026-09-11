@@ -109,7 +109,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "auth-login create-log" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "log-in" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -133,7 +133,7 @@ export def commands []: nothing -> table {
 #
 # POST /auth/login
 # operationId: logIn
-export def "auth-login create-log" [
+export def "log-in" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -173,7 +173,7 @@ export def "auth-login create-log" [
 #
 # DELETE /auth/logout/{token}
 # operationId: logOut
-export def "auth-logout delete-log-out" [
+export def "log-out" [
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -209,7 +209,7 @@ export def "auth-logout delete-log-out" [
 #
 # GET /auth/{token}/basicuserinformation
 # operationId: getBasicUserInformation
-export def "auth-basicuserinformation get-basic-user-information" [
+export def "get-basic-user-information" [
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -245,7 +245,7 @@ export def "auth-basicuserinformation get-basic-user-information" [
 #
 # GET /patient/{userId}/basic
 # operationId: getBasicPatientDetails
-export def "patient-basic get-details" [
+export def "get-basic-patient-details" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -281,7 +281,7 @@ export def "patient-basic get-details" [
 #
 # GET /patientmanagement/diagnoses
 # operationId: getPatientManagementDiagnoses
-export def "patientmanagement-diagnoses get-patient-management" [
+export def "get-patient-management-diagnoses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -315,7 +315,7 @@ export def "patientmanagement-diagnoses get-patient-management" [
 #
 # GET /patientmanagement/lookuptypes
 # operationId: getPatientManagementLookupTypes
-export def "patientmanagement-lookuptypes get-patient-management-lookup-types" [
+export def "get-patient-management-lookup-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -354,7 +354,7 @@ export def "patientmanagement-lookuptypes get-patient-management-lookup-types" [
 # --observations item shape: {applies?: string, bodySite?: string, comments?: string, comparator?: string, diagram?: string, group?: record, id?: int, identifier?: string, location?: string, name?: string, temporaryUuid?: string, units?: string, value?: string}
 # --patient shape: {address1?: string, address2?: string, address3?: string, address4?: string, contacts?: list, dateOfBirth?: string, dateOfBirthNoTime?: string, forename?: string, gender?: string, group?: record, groupCode?: string, identifier?: string, identifiers?: list, postcode?: string, practitioners?: list, surname?: string}
 # --practitioners item shape: {address1?: string, address2?: string, address3?: string, address4?: string, allowInviteGp?: bool, contacts?: list, gender?: string, groupCode?: string, identifier?: string, inviteDate?: string, name?: string, postcode?: string, role?: string}
-export def "patientmanagement-validate validate-patient-management" [
+export def "validate-patient-management" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -398,7 +398,7 @@ export def "patientmanagement-validate validate-patient-management" [
 #
 # GET /patientmanagement/{userId}/group/{groupId}/identifier/{identifierId}
 # operationId: getPatientManagement
-export def "patientmanagement-group-identifier get-patient-management" [
+export def "get-patient-management" [
   user_id: int
   group_id: int
   identifier_id: int
@@ -443,7 +443,7 @@ export def "patientmanagement-group-identifier get-patient-management" [
 # --observations item shape: {applies?: string, bodySite?: string, comments?: string, comparator?: string, diagram?: string, group?: record, id?: int, identifier?: string, location?: string, name?: string, temporaryUuid?: string, units?: string, value?: string}
 # --patient shape: {address1?: string, address2?: string, address3?: string, address4?: string, contacts?: list, dateOfBirth?: string, dateOfBirthNoTime?: string, forename?: string, gender?: string, group?: record, groupCode?: string, identifier?: string, identifiers?: list, postcode?: string, practitioners?: list, surname?: string}
 # --practitioners item shape: {address1?: string, address2?: string, address3?: string, address4?: string, allowInviteGp?: bool, contacts?: list, gender?: string, groupCode?: string, identifier?: string, inviteDate?: string, name?: string, postcode?: string, role?: string}
-export def "patientmanagement-group-identifier create-save-patient-management" [
+export def "save-patient-management" [
   user_id: int
   group_id: int
   identifier_id: int
@@ -498,7 +498,7 @@ export def "patientmanagement-group-identifier create-save-patient-management" [
 # --observations item shape: {applies?: string, bodySite?: string, comments?: string, comparator?: string, diagram?: string, group?: record, id?: int, identifier?: string, location?: string, name?: string, temporaryUuid?: string, units?: string, value?: string}
 # --patient shape: {address1?: string, address2?: string, address3?: string, address4?: string, contacts?: list, dateOfBirth?: string, dateOfBirthNoTime?: string, forename?: string, gender?: string, group?: record, groupCode?: string, identifier?: string, identifiers?: list, postcode?: string, practitioners?: list, surname?: string}
 # --practitioners item shape: {address1?: string, address2?: string, address3?: string, address4?: string, allowInviteGp?: bool, contacts?: list, gender?: string, groupCode?: string, identifier?: string, inviteDate?: string, name?: string, postcode?: string, role?: string}
-export def "patientmanagement-group-identifier-surgeries create-save-patient-management" [
+export def "save-patient-management-surgeries" [
   user_id: int
   group_id: int
   identifier_id: int
@@ -548,7 +548,7 @@ export def "patientmanagement-group-identifier-surgeries create-save-patient-man
 #
 # GET /user/{userId}/availableobservationheadings
 # operationId: getAvailableObservationHeadings
-export def "user-availableobservationheadings get-available-observation-headings" [
+export def "get-available-observation-headings" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -584,7 +584,7 @@ export def "user-availableobservationheadings get-available-observation-headings
 #
 # GET /user/{userId}/observations
 # operationId: getObservationsByCodes
-export def "user-observations get-by-codes" [
+export def "get-observations-by-codes" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -625,7 +625,7 @@ export def "user-observations get-by-codes" [
 #
 # GET /user/{userId}/observations/{code}
 # operationId: getObservationsByCode
-export def "user-observations get" [
+export def "get-observations-by-code" [
   user_id: int
   code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -663,7 +663,7 @@ export def "user-observations get" [
 #
 # GET /user/{userId}/observations/{code}/patiententered
 # operationId: getPatientEnteredObservationsByCode
-export def "user-observations-patiententered get-patient-entered" [
+export def "get-patient-entered-observations-by-code" [
   user_id: int
   code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -701,7 +701,7 @@ export def "user-observations-patiententered get-patient-entered" [
 #
 # GET /user/{userId}/patiententeredobservationheadings
 # operationId: getPatientEnteredObservationHeadings
-export def "user-patiententeredobservationheadings get-patient-entered-observation-headings" [
+export def "get-patient-entered-observation-headings" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

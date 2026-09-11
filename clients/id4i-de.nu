@@ -156,7 +156,7 @@ def alias-type-completer [] { ["article" "eclass" "gtin" "item" "mapp" "material
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account-password request-reset" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "request-password-reset" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -180,7 +180,7 @@ export def commands []: nothing -> table {
 #
 # POST /account/password
 # operationId: requestPasswordReset
-export def "account-password request-reset" [
+export def "request-password-reset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -219,7 +219,7 @@ export def "account-password request-reset" [
 #
 # PUT /account/password
 # operationId: verifyPasswordReset
-export def "account-password verify-reset" [
+export def "verify-password-reset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -259,7 +259,7 @@ export def "account-password verify-reset" [
 #
 # POST /account/registration
 # operationId: registerUser
-export def "account-registration create-user" [
+export def "register-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -300,7 +300,7 @@ export def "account-registration create-user" [
 #
 # PUT /account/registration
 # operationId: completeRegistration
-export def "account-registration complete" [
+export def "complete-registration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -340,7 +340,7 @@ export def "account-registration complete" [
 #
 # POST /account/verification
 # operationId: verifyUserRegistration
-export def "account-verification verify-user-registration" [
+export def "verify-user-registration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -378,7 +378,7 @@ export def "account-verification verify-user-registration" [
 #
 # GET /api/v1/apikeys
 # operationId: listAllApiKeysOfOrganization
-export def "apikeys list-keys-of-organization" [
+export def "list-all-api-keys-of-organization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -417,7 +417,7 @@ export def "apikeys list-keys-of-organization" [
 #
 # POST /api/v1/apikeys
 # operationId: createNewApiKey
-export def "apikeys create-new-key" [
+export def "create-new-api-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -458,7 +458,7 @@ export def "apikeys create-new-key" [
 #
 # GET /api/v1/apikeys/privileges
 # operationId: listAllApiKeyPrivileges
-export def "apikeys-privileges list-key" [
+export def "list-all-api-key-privileges" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -497,7 +497,7 @@ export def "apikeys-privileges list-key" [
 #
 # DELETE /api/v1/apikeys/{key}
 # operationId: deleteApiKey
-export def "apikeys delete" [
+export def "delete-api-key" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -533,7 +533,7 @@ export def "apikeys delete" [
 #
 # GET /api/v1/apikeys/{key}
 # operationId: getApiKey
-export def "apikeys get" [
+export def "get-api-key" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -570,7 +570,7 @@ export def "apikeys get" [
 #
 # PUT /api/v1/apikeys/{key}
 # operationId: updateApiKey
-export def "apikeys update" [
+export def "update-api-key" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -611,7 +611,7 @@ export def "apikeys update" [
 #
 # DELETE /api/v1/apikeys/{key}/privileges
 # operationId: removeApiKeyPrivilege
-export def "apikeys-privileges delete" [
+export def "remove-api-key-privilege" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -651,7 +651,7 @@ export def "apikeys-privileges delete" [
 #
 # GET /api/v1/apikeys/{key}/privileges
 # operationId: listApiKeyPrivileges
-export def "apikeys-privileges list" [
+export def "list-api-key-privileges" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -691,7 +691,7 @@ export def "apikeys-privileges list" [
 #
 # POST /api/v1/apikeys/{key}/privileges
 # operationId: addApiKeyPrivilege
-export def "apikeys-privileges create" [
+export def "add-api-key-privilege" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -731,7 +731,7 @@ export def "apikeys-privileges create" [
 #
 # DELETE /api/v1/apikeys/{key}/privileges/{privilege}/id4ns
 # operationId: removeApiKeyPrivilegeForId4ns
-export def "apikeys-privileges-id4ns delete" [
+export def "remove-api-key-privilege-for-id4ns" [
   key: string
   privilege: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -773,7 +773,7 @@ export def "apikeys-privileges-id4ns delete" [
 #
 # GET /api/v1/apikeys/{key}/privileges/{privilege}/id4ns
 # operationId: listId4ns
-export def "apikeys-privileges-id4ns list" [
+export def "list-id4ns" [
   key: string
   privilege: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -815,7 +815,7 @@ export def "apikeys-privileges-id4ns list" [
 #
 # POST /api/v1/apikeys/{key}/privileges/{privilege}/id4ns
 # operationId: addApiKeyPrivilegeForId4ns
-export def "apikeys-privileges-id4ns create" [
+export def "add-api-key-privilege-for-id4ns" [
   key: string
   privilege: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -857,7 +857,7 @@ export def "apikeys-privileges-id4ns create" [
 #
 # GET /api/v1/billing/{organizationId}
 # operationId: getSumForOrganization
-export def "billing get-sum-for-organization" [
+export def "get-sum-for-organization" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -897,7 +897,7 @@ export def "billing get-sum-for-organization" [
 #
 # GET /api/v1/billing/{organizationId}/positions
 # operationId: getPositionsForOrganization
-export def "billing-positions get-for-organization" [
+export def "get-positions-for-organization" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -937,7 +937,7 @@ export def "billing-positions get-for-organization" [
 #
 # GET /api/v1/changelog/organization/{organizationId}/
 # operationId: listOrganizationChangeLog
-export def "changelog-organization list-change-log" [
+export def "list-organization-change-log" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -980,7 +980,7 @@ export def "changelog-organization list-change-log" [
 #
 # POST /api/v1/collections
 # operationId: createCollection
-export def "collections create" [
+export def "create-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1022,7 +1022,7 @@ export def "collections create" [
 #
 # DELETE /api/v1/collections/{id4n}
 # operationId: deleteCollection
-export def "collections delete" [
+export def "delete-collection" [
   id4n: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1058,7 +1058,7 @@ export def "collections delete" [
 #
 # GET /api/v1/collections/{id4n}
 # operationId: findCollection
-export def "collections find" [
+export def "find-collection" [
   id4n: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1095,7 +1095,7 @@ export def "collections find" [
 #
 # PATCH /api/v1/collections/{id4n}
 # operationId: updateCollection
-export def "collections update" [
+export def "update-collection" [
   id4n: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1138,7 +1138,7 @@ export def "collections update" [
 #
 # DELETE /api/v1/collections/{id4n}/elements
 # operationId: removeElementsFromCollection
-export def "collections-elements delete" [
+export def "remove-elements-from-collection" [
   id4n: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1178,7 +1178,7 @@ export def "collections-elements delete" [
 #
 # GET /api/v1/collections/{id4n}/elements
 # operationId: listElementsOfCollection
-export def "collections-elements list" [
+export def "list-elements-of-collection" [
   id4n: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1219,7 +1219,7 @@ export def "collections-elements list" [
 #
 # POST /api/v1/collections/{id4n}/elements
 # operationId: addElementsToCollection
-export def "collections-elements create" [
+export def "add-elements-to-collection" [
   id4n: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1259,7 +1259,7 @@ export def "collections-elements create" [
 #
 # GET /api/v1/countries
 # operationId: listCountries
-export def "countries list" [
+export def "list-countries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1297,7 +1297,7 @@ export def "countries list" [
 #
 # GET /api/v1/documents/{id4n}
 # operationId: listAllDocuments
-export def "documents list" [
+export def "list-all-documents" [
   id4n: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1338,7 +1338,7 @@ export def "documents list" [
 #
 # GET /api/v1/documents/{id4n}/{organizationId}
 # operationId: listDocuments
-export def "documents list-1" [
+export def "list-documents" [
   id4n: string
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1381,7 +1381,7 @@ export def "documents list-1" [
 #
 # POST /api/v1/documents/{id4n}/{organizationId}
 # operationId: createDocument
-export def "documents create" [
+export def "create-document" [
   id4n: string
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1426,7 +1426,7 @@ export def "documents create" [
 #
 # PUT /api/v1/documents/{id4n}/{organizationId}
 # operationId: putDocument
-export def "documents update" [
+export def "put-document" [
   id4n: string
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1471,7 +1471,7 @@ export def "documents update" [
 #
 # DELETE /api/v1/documents/{id4n}/{organizationId}/{fileName}
 # operationId: deleteDocument
-export def "documents delete" [
+export def "delete-document" [
   id4n: string
   organization_id: string
   file_name: string
@@ -1511,7 +1511,7 @@ export def "documents delete" [
 #
 # GET /api/v1/documents/{id4n}/{organizationId}/{fileName}
 # operationId: readDocument
-export def "documents get" [
+export def "read-document" [
   id4n: string
   organization_id: string
   file_name: string
@@ -1552,7 +1552,7 @@ export def "documents get" [
 #
 # GET /api/v1/documents/{id4n}/{organizationId}/{fileName}/metadata
 # operationId: getDocument
-export def "documents-metadata get" [
+export def "get-document" [
   id4n: string
   organization_id: string
   file_name: string
@@ -1594,7 +1594,7 @@ export def "documents-metadata get" [
 # PATCH /api/v1/documents/{id4n}/{organizationId}/{fileName}/metadata
 # operationId: updateDocumentMetadata
 # --visibility shape: {public?: bool, sharedWithOrganizationIds?: list<string>}
-export def "documents-metadata update" [
+export def "update-document-metadata" [
   id4n: string
   organization_id: string
   file_name: string
@@ -1641,7 +1641,7 @@ export def "documents-metadata update" [
 #
 # POST /api/v1/guids
 # operationId: createGuid
-export def "guids create" [
+export def "create-guid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1682,7 +1682,7 @@ export def "guids create" [
 #
 # GET /api/v1/guids/withoutCollection
 # operationId: getGuidsWithoutCollection
-export def "guids-without-collection get" [
+export def "get-guids-without-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1721,7 +1721,7 @@ export def "guids-without-collection get" [
 #
 # GET /api/v1/guids/{id4n}
 # operationId: getGuid
-export def "guids get" [
+export def "get-guid" [
   id4n: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1760,7 +1760,7 @@ export def "guids get" [
 #
 # PATCH /api/v1/guids/{id4n}
 # operationId: updateGuid
-export def "guids update" [
+export def "update-guid" [
   id4n: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1801,7 +1801,7 @@ export def "guids update" [
 #
 # GET /api/v1/history/{id4n}
 # operationId: filteredList
-export def "history list-filtered" [
+export def "filtered-list" [
   id4n: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1848,7 +1848,7 @@ export def "history list-filtered" [
 # POST /api/v1/history/{id4n}
 # operationId: addItem
 # --visibility shape: {public?: bool, sharedOrganizationIds?: list<string>}
-export def "history create-item" [
+export def "add-item" [
   id4n: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1893,7 +1893,7 @@ export def "history create-item" [
 # DEPRECATED
 # operationId: list
 @deprecated
-export def "history list" [
+export def "list" [
   id4n: string
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1936,7 +1936,7 @@ export def "history list" [
 #
 # GET /api/v1/history/{id4n}/{organizationId}/{sequenceId}
 # operationId: retrieveItem
-export def "history get-item" [
+export def "retrieve-item" [
   id4n: string
   organization_id: string
   sequence_id: int
@@ -1978,7 +1978,7 @@ export def "history get-item" [
 # PATCH /api/v1/history/{id4n}/{organizationId}/{sequenceId}
 # operationId: updateItem
 # --visibility shape: {public?: bool, sharedOrganizationIds?: list<string>}
-export def "history update-item" [
+export def "update-item" [
   id4n: string
   organization_id: string
   sequence_id: int
@@ -2024,7 +2024,7 @@ export def "history update-item" [
 #
 # PUT /api/v1/history/{id4n}/{organizationId}/{sequenceId}/visibility
 # operationId: updateItemVisibility
-export def "history-visibility update-item" [
+export def "update-item-visibility" [
   id4n: string
   organization_id: string
   sequence_id: int
@@ -2070,7 +2070,7 @@ export def "history-visibility update-item" [
 #
 # GET /api/v1/id4ns/{id4n}
 # operationId: getId4n
-export def "id4ns get" [
+export def "get-id4n" [
   id4n: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2109,7 +2109,7 @@ export def "id4ns get" [
 #
 # GET /api/v1/id4ns/{id4n}/alias
 # operationId: getGuidAliases
-export def "id4ns-alias get-guid-aliases" [
+export def "get-guid-aliases" [
   id4n: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2146,7 +2146,7 @@ export def "id4ns-alias get-guid-aliases" [
 #
 # DELETE /api/v1/id4ns/{id4n}/alias/{aliasType}
 # operationId: removeGuidAlias
-export def "id4ns-alias delete-guid" [
+export def "remove-guid-alias" [
   id4n: string
   alias_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2184,7 +2184,7 @@ export def "id4ns-alias delete-guid" [
 #
 # POST /api/v1/id4ns/{id4n}/alias/{aliasType}
 # operationId: addGuidAlias
-export def "id4ns-alias create-guid" [
+export def "add-guid-alias" [
   id4n: string
   alias_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2226,7 +2226,7 @@ export def "id4ns-alias create-guid" [
 #
 # GET /api/v1/id4ns/{id4n}/collections
 # operationId: getCollections
-export def "id4ns-collections get" [
+export def "get-collections" [
   id4n: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2267,7 +2267,7 @@ export def "id4ns-collections get" [
 #
 # DELETE /api/v1/id4ns/{id4n}/properties
 # operationId: deleteProperties
-export def "id4ns-properties delete" [
+export def "delete-properties" [
   id4n: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2309,7 +2309,7 @@ export def "id4ns-properties delete" [
 #
 # GET /api/v1/id4ns/{id4n}/properties
 # operationId: getProperties
-export def "id4ns-properties get" [
+export def "get-properties" [
   id4n: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2348,7 +2348,7 @@ export def "id4ns-properties get" [
 #
 # PATCH /api/v1/id4ns/{id4n}/properties
 # operationId: patchProperties
-export def "id4ns-properties update" [
+export def "patch-properties" [
   id4n: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2391,7 +2391,7 @@ export def "id4ns-properties update" [
 # POST /api/v1/import/gs1
 # operationId: importGS1Codes
 # --listOfGS1s shape: {codes?: list<string>}
-export def "import-gs1 import-codes" [
+export def "import-gs1-codes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2430,7 +2430,7 @@ export def "import-gs1 import-codes" [
 #
 # GET /api/v1/info
 # operationId: applicationInfo
-export def "info get-application" [
+export def "application-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2465,7 +2465,7 @@ export def "info get-application" [
 #
 # GET /api/v1/microstorage/{id4n}/{organization}
 # operationId: readFromMicrostorage
-export def "microstorage get" [
+export def "read-from-microstorage" [
   id4n: string
   organization: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2504,7 +2504,7 @@ export def "microstorage get" [
 #
 # PUT /api/v1/microstorage/{id4n}/{organization}
 # operationId: writeToMicrostorage
-export def "microstorage update-write" [
+export def "write-to-microstorage" [
   id4n: string
   organization: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2553,7 +2553,7 @@ export def "microstorage update-write" [
 #
 # GET /api/v1/multiple/id4ns/properties
 # operationId: getMultipleProperties
-export def "multiple-id4ns-properties get" [
+export def "get-multiple-properties" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2591,7 +2591,7 @@ export def "multiple-id4ns-properties get" [
 #
 # POST /api/v1/organizations
 # operationId: createOrganization
-export def "organizations create" [
+export def "create-organization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2631,7 +2631,7 @@ export def "organizations create" [
 #
 # DELETE /api/v1/organizations/{organizationId}
 # operationId: deleteOrganization
-export def "organizations delete" [
+export def "delete-organization" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2667,7 +2667,7 @@ export def "organizations delete" [
 #
 # GET /api/v1/organizations/{organizationId}
 # operationId: findOrganization
-export def "organizations find" [
+export def "find-organization" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2704,7 +2704,7 @@ export def "organizations find" [
 #
 # PUT /api/v1/organizations/{organizationId}
 # operationId: updateOrganization
-export def "organizations update" [
+export def "update-organization" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2745,7 +2745,7 @@ export def "organizations update" [
 #
 # DELETE /api/v1/organizations/{organizationId}/addresses/billing
 # operationId: deleteOrganizationBillingAddress
-export def "organizations-addresses-billing delete-address" [
+export def "delete-organization-billing-address" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2781,7 +2781,7 @@ export def "organizations-addresses-billing delete-address" [
 #
 # GET /api/v1/organizations/{organizationId}/addresses/billing
 # operationId: findOrganizationBillingAddress
-export def "organizations-addresses-billing find-address" [
+export def "find-organization-billing-address" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2818,7 +2818,7 @@ export def "organizations-addresses-billing find-address" [
 #
 # PUT /api/v1/organizations/{organizationId}/addresses/billing
 # operationId: updateOrganizationBillingAddress
-export def "organizations-addresses-billing update-address" [
+export def "update-organization-billing-address" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2866,7 +2866,7 @@ export def "organizations-addresses-billing update-address" [
 #
 # GET /api/v1/organizations/{organizationId}/addresses/default
 # operationId: findOrganizationAddress
-export def "organizations-addresses-default find-address" [
+export def "find-organization-address" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2903,7 +2903,7 @@ export def "organizations-addresses-default find-address" [
 #
 # PUT /api/v1/organizations/{organizationId}/addresses/default
 # operationId: updateOrganizationAddress
-export def "organizations-addresses-default update-address" [
+export def "update-organization-address" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2951,7 +2951,7 @@ export def "organizations-addresses-default update-address" [
 #
 # GET /api/v1/organizations/{organizationId}/collections
 # operationId: getAllCollectionsOfOrganization
-export def "organizations-collections get-list" [
+export def "get-all-collections-of-organization" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2995,7 +2995,7 @@ export def "organizations-collections get-list" [
 #
 # DELETE /api/v1/organizations/{organizationId}/logo
 # operationId: deleteOrganizationLogo
-export def "organizations-logo delete" [
+export def "delete-organization-logo" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3031,7 +3031,7 @@ export def "organizations-logo delete" [
 #
 # POST /api/v1/organizations/{organizationId}/logo
 # operationId: setOrganizationLogo
-export def "organizations-logo update" [
+export def "set-organization-logo" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3073,7 +3073,7 @@ export def "organizations-logo update" [
 # GET /api/v1/organizations/{organizationId}/messaging
 #
 # operationId: getDefaultQueue
-export def "organizations-messaging get-default-queue" [
+export def "get-default-queue" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3109,7 +3109,7 @@ export def "organizations-messaging get-default-queue" [
 # PATCH /api/v1/organizations/{organizationId}/messaging
 #
 # operationId: patchDefaultQueue
-export def "organizations-messaging update-default-queue" [
+export def "patch-default-queue" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3151,7 +3151,7 @@ export def "organizations-messaging update-default-queue" [
 #
 # POST /api/v1/organizations/{organizationId}/messaging/enqueueCustomMessage
 # operationId: enqueueCustomMessage
-export def "organizations-messaging-enqueue-custom-message create" [
+export def "enqueue-custom-message" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3192,7 +3192,7 @@ export def "organizations-messaging-enqueue-custom-message create" [
 #
 # DELETE /api/v1/organizations/{organizationId}/partner
 # operationId: removePartnerOrganization
-export def "organizations-partner delete" [
+export def "remove-partner-organization" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3232,7 +3232,7 @@ export def "organizations-partner delete" [
 #
 # GET /api/v1/organizations/{organizationId}/partner
 # operationId: getPartnerOrganizations
-export def "organizations-partner get" [
+export def "get-partner-organizations" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3272,7 +3272,7 @@ export def "organizations-partner get" [
 #
 # PUT /api/v1/organizations/{organizationId}/partner
 # operationId: addPartnerOrganization
-export def "organizations-partner create" [
+export def "add-partner-organization" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3312,7 +3312,7 @@ export def "organizations-partner create" [
 #
 # GET /api/v1/organizations/{organizationId}/privileges
 # operationId: getOrganizationPrivileges
-export def "organizations-privileges get" [
+export def "get-organization-privileges" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3349,7 +3349,7 @@ export def "organizations-privileges get" [
 #
 # GET /api/v1/organizations/{organizationId}/roles
 # operationId: getAllOrganizationRoles
-export def "organizations-roles get-list" [
+export def "get-all-organization-roles" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3389,7 +3389,7 @@ export def "organizations-roles get-list" [
 #
 # GET /api/v1/organizations/{organizationId}/users
 # operationId: getUsersOfOrganization
-export def "organizations-users get" [
+export def "get-users-of-organization" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3430,7 +3430,7 @@ export def "organizations-users get" [
 # POST /api/v1/organizations/{organizationId}/users/invite
 # operationId: inviteUsers
 # --invitations item shape: {email?: string, roles: list<string>, userName?: string}
-export def "organizations-users-invite create" [
+export def "invite-users" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3470,7 +3470,7 @@ export def "organizations-users-invite create" [
 #
 # DELETE /api/v1/organizations/{organizationId}/users/{username}/roles
 # operationId: removeUserRoles
-export def "organizations-users-roles delete" [
+export def "remove-user-roles" [
   organization_id: string
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3512,7 +3512,7 @@ export def "organizations-users-roles delete" [
 #
 # GET /api/v1/organizations/{organizationId}/users/{username}/roles
 # operationId: getUserRoles
-export def "organizations-users-roles get" [
+export def "get-user-roles" [
   organization_id: string
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3554,7 +3554,7 @@ export def "organizations-users-roles get" [
 #
 # POST /api/v1/organizations/{organizationId}/users/{username}/roles
 # operationId: addUserRoles
-export def "organizations-users-roles create" [
+export def "add-user-roles" [
   organization_id: string
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3596,7 +3596,7 @@ export def "organizations-users-roles create" [
 #
 # GET /api/v1/public/documents/{id4n}
 # operationId: listAllPublicDocuments
-export def "public-documents list" [
+export def "list-all-public-documents" [
   id4n: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3638,7 +3638,7 @@ export def "public-documents list" [
 #
 # GET /api/v1/public/documents/{id4n}/{organizationId}/{fileName}
 # operationId: readPublicDocument
-export def "public-documents get" [
+export def "read-public-document" [
   id4n: string
   organization_id: string
   file_name: string
@@ -3679,7 +3679,7 @@ export def "public-documents get" [
 #
 # GET /api/v1/public/documents/{id4n}/{organizationId}/{fileName}/metadata
 # operationId: getPublicDocument
-export def "public-documents-metadata get" [
+export def "get-public-document" [
   id4n: string
   organization_id: string
   file_name: string
@@ -3720,7 +3720,7 @@ export def "public-documents-metadata get" [
 #
 # GET /api/v1/public/history/{id4n}
 # operationId: listPublicHistory
-export def "public-history list" [
+export def "list-public-history" [
   id4n: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3760,7 +3760,7 @@ export def "public-history list" [
 #
 # GET /api/v1/public/image/{imageID}
 # operationId: resolveImageUsingGET
-export def "public-image get-resolve-using" [
+export def "resolve-image-using-get" [
   image_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3797,7 +3797,7 @@ export def "public-image get-resolve-using" [
 #
 # GET /api/v1/public/organizations/{organizationId}
 # operationId: readOrganizationInfo
-export def "public-organizations get" [
+export def "read-organization-info" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3834,7 +3834,7 @@ export def "public-organizations get" [
 #
 # GET /api/v1/public/routes/{id4n}
 # operationId: getRoutes
-export def "public-routes get" [
+export def "get-routes" [
   id4n: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3874,7 +3874,7 @@ export def "public-routes get" [
 #
 # GET /api/v1/roles
 # operationId: listAllRoles
-export def "roles list" [
+export def "list-all-roles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3913,7 +3913,7 @@ export def "roles list" [
 #
 # GET /api/v1/routingfiles/{id4n}
 # operationId: getRoutingFile
-export def "routingfiles get-routing-file" [
+export def "get-routing-file" [
   id4n: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3953,7 +3953,7 @@ export def "routingfiles get-routing-file" [
 # PUT /api/v1/routingfiles/{id4n}
 # operationId: updateRoutingFile
 # --routing shape: {options?: record, routes: list}
-export def "routingfiles update-routing-file" [
+export def "update-routing-file" [
   id4n: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3994,7 +3994,7 @@ export def "routingfiles update-routing-file" [
 #
 # GET /api/v1/routingfiles/{id4n}/route/{type}
 # operationId: getRoute
-export def "routingfiles-route get" [
+export def "get-route" [
   id4n: string
   type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4037,7 +4037,7 @@ export def "routingfiles-route get" [
 #
 # GET /api/v1/routingfiles/{id4n}/routes/{type}
 # operationId: getAllRoutes
-export def "routingfiles-routes get-list" [
+export def "get-all-routes" [
   id4n: string
   type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4079,7 +4079,7 @@ export def "routingfiles-routes get-list" [
 #
 # GET /api/v1/search/guids
 # operationId: searchByAlias
-export def "search-guids list-by-alias" [
+export def "search-by-alias" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4119,7 +4119,7 @@ export def "search-guids list-by-alias" [
 #
 # GET /api/v1/search/guids/aliases/types
 # operationId: getGuidAliasTypes
-export def "search-guids-aliases-types get-alias" [
+export def "get-guid-alias-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4154,7 +4154,7 @@ export def "search-guids-aliases-types get-alias" [
 #
 # PUT /api/v1/transfers/{id4n}/receiveInfo
 # operationId: receive
-export def "transfers-receive-info receive" [
+export def "receive" [
   id4n: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4194,7 +4194,7 @@ export def "transfers-receive-info receive" [
 #
 # GET /api/v1/transfers/{id4n}/sendInfo
 # operationId: getSendInfo
-export def "transfers-send-info get" [
+export def "get-send-info" [
   id4n: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4231,7 +4231,7 @@ export def "transfers-send-info get" [
 #
 # PUT /api/v1/transfers/{id4n}/sendInfo
 # operationId: prepare
-export def "transfers-send-info update-prepare" [
+export def "prepare" [
   id4n: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4274,7 +4274,7 @@ export def "transfers-send-info update-prepare" [
 #
 # GET /api/v1/user/organizations
 # operationId: getOrganizationsOfUser
-export def "user-organizations get" [
+export def "get-organizations-of-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4313,7 +4313,7 @@ export def "user-organizations get" [
 #
 # GET /api/v1/users
 # operationId: findUsers
-export def "users list" [
+export def "find-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4352,7 +4352,7 @@ export def "users list" [
 #
 # GET /api/v1/users/{username}
 # operationId: findUserByUsername
-export def "users find" [
+export def "find-user-by-username" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4389,7 +4389,7 @@ export def "users find" [
 #
 # GET /go/{guid}
 # operationId: go
-export def "go get" [
+export def "go" [
   guid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4425,7 +4425,7 @@ export def "go get" [
 #
 # POST /login
 # operationId: login
-export def "login create" [
+export def "login" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4464,7 +4464,7 @@ export def "login create" [
 #
 # GET /whois/{id4n}
 # operationId: resolveWhoIsEntry
-export def "whois get-resolve-who-is-entry" [
+export def "resolve-who-is-entry" [
   id4n: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

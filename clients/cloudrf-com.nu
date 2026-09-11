@@ -106,7 +106,7 @@ def fmt-completer [] { ["kml" "kml" "kmzppa" "shp" "tiff"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "archive-delete delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -130,7 +130,7 @@ export def commands []: nothing -> table {
 #
 # GET /archive/delete
 # operationId: delete
-export def "archive-delete delete" [
+export def "delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -166,7 +166,7 @@ export def "archive-delete delete" [
 #
 # GET /archive/delete/network
 # operationId: deleteNetwork
-export def "archive-delete-network delete" [
+export def "delete-network" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -202,7 +202,7 @@ export def "archive-delete-network delete" [
 #
 # GET /archive/export
 # operationId: export
-export def "archive-export export" [
+export def "get-archive-export" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -239,7 +239,7 @@ export def "archive-export export" [
 #
 # GET /archive/list
 # operationId: list
-export def "archive-list list" [
+export def "list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -284,7 +284,7 @@ export def "archive-list list" [
 # --output shape: {ber?: int, col?: string, mod?: int, nf?: int, out?: int, rad?: float, res?: int, units?: "metric"|"imperial"}
 # --receiver shape: {alt?: float, lat?: float, lon?: float, rxg?: float, rxs?: float}
 # --transmitter shape: {alt?: float, bwi?: float, frq?: float, lat?: float, lon?: float, txw?: float}
-export def "area create" [
+export def "area" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -330,7 +330,7 @@ export def "area create" [
 # POST /clutter/add
 # operationId: addClutter
 # --features item shape: {geometry?: string, properties?: string, type?: string}
-export def "clutter-add create" [
+export def "add-clutter" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -370,7 +370,7 @@ export def "clutter-add create" [
 #
 # GET /interference
 # operationId: interference
-export def "interference get" [
+export def "interference" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -407,7 +407,7 @@ export def "interference get" [
 #
 # GET /mesh
 # operationId: mesh
-export def "mesh get" [
+export def "mesh" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -444,7 +444,7 @@ export def "mesh get" [
 #
 # GET /network
 # operationId: network
-export def "network get" [
+export def "network" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -491,7 +491,7 @@ export def "network get" [
 # --output shape: {ber?: int, col?: string, mod?: int, nf?: int, out?: int, rad?: float, res?: int, units?: "metric"|"imperial"}
 # --receiver shape: {alt?: float, lat?: float, lon?: float, rxg?: float, rxs?: float}
 # --transmitter shape: {alt?: float, bwi?: float, frq?: float, lat?: float, lon?: float, txw?: float}
-export def "path create" [
+export def "path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -543,7 +543,7 @@ export def "path create" [
 # --points item shape: {alt?: float, lat?: float, lon?: float}
 # --receiver shape: {alt?: float, lat?: float, lon?: float, rxg?: float, rxs?: float}
 # --transmitter shape: {alt?: float, bwi?: float, frq?: float, lat?: float, lon?: float, txw?: float}
-export def "points create" [
+export def "points" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

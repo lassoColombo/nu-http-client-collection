@@ -129,7 +129,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-api-management-service-backends list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "backend-list-by-service" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -153,7 +153,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/backends
 # operationId: Backend_ListByService
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-backends list" [
+export def "backend-list-by-service" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -198,7 +198,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/backends/{backendId}
 # operationId: Backend_Delete
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-backends delete" [
+export def "backend-delete" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -245,7 +245,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/backends/{backendId}
 # operationId: Backend_Get
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-backends get" [
+export def "backend-get" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -289,7 +289,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # HEAD /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/backends/{backendId}
 # operationId: Backend_GetEntityTag
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-backends get-entity-tag" [
+export def "backend-get-entity-tag" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -334,7 +334,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/backends/{backendId}
 # operationId: Backend_Update
 # --properties shape: {protocol?: "http"|"soap", url?: string, credentials?: any, description?: string, properties?: any, proxy?: any, resourceId?: string, title?: string, tls?: any}
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-backends update" [
+export def "backend-update" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -386,7 +386,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/backends/{backendId}
 # operationId: Backend_CreateOrUpdate
 # --properties shape: {protocol: "http"|"soap", url: string, credentials?: any, description?: string, properties?: any, proxy?: any, resourceId?: string, title?: string, tls?: any}
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-backends create-or-update" [
+export def "backend-create-or-update" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -438,7 +438,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/backends/{backendId}/reconnect
 # operationId: Backend_Reconnect
 # --properties shape: {after?: string}
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-backends-reconnect create" [
+export def "backend-reconnect" [
   subscription_id: string
   resource_group_name: string
   service_name: string

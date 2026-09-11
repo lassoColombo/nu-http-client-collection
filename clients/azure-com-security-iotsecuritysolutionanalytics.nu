@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-security-iot-security-solutions-analytics-models list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "iot-security-solution-analytics-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -128,7 +128,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Security/iotSecuritySolutions/{solutionName}/analyticsModels
 # operationId: IotSecuritySolutionAnalytics_List
-export def "subscriptions-resource-groups-providers-microsoft-security-iot-security-solutions-analytics-models list" [
+export def "iot-security-solution-analytics-list" [
   subscription_id: string
   resource_group_name: string
   solution_name: string
@@ -170,7 +170,7 @@ export def "subscriptions-resource-groups-providers-microsoft-security-iot-secur
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Security/iotSecuritySolutions/{solutionName}/analyticsModels/default
 # operationId: IotSecuritySolutionAnalytics_Get
-export def "subscriptions-resource-groups-providers-microsoft-security-iot-security-solutions-analytics-models-default get" [
+export def "iot-security-solution-analytics-get" [
   subscription_id: string
   resource_group_name: string
   solution_name: string
@@ -212,7 +212,7 @@ export def "subscriptions-resource-groups-providers-microsoft-security-iot-secur
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Security/iotSecuritySolutions/{solutionName}/analyticsModels/default/aggregatedAlerts
 # operationId: IotSecuritySolutionsAnalyticsAggregatedAlert_List
-export def "subscriptions-resource-groups-providers-microsoft-security-iot-security-solutions-analytics-models-default-aggregated-alerts list" [
+export def "iot-security-solutions-analytics-aggregated-alert-list" [
   subscription_id: string
   resource_group_name: string
   solution_name: string
@@ -255,7 +255,7 @@ export def "subscriptions-resource-groups-providers-microsoft-security-iot-secur
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Security/iotSecuritySolutions/{solutionName}/analyticsModels/default/aggregatedAlerts/{aggregatedAlertName}
 # operationId: IotSecuritySolutionsAnalyticsAggregatedAlert_Get
-export def "subscriptions-resource-groups-providers-microsoft-security-iot-security-solutions-analytics-models-default-aggregated-alerts get" [
+export def "iot-security-solutions-analytics-aggregated-alert-get" [
   subscription_id: string
   resource_group_name: string
   solution_name: string
@@ -299,7 +299,7 @@ export def "subscriptions-resource-groups-providers-microsoft-security-iot-secur
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Security/iotSecuritySolutions/{solutionName}/analyticsModels/default/aggregatedAlerts/{aggregatedAlertName}/dismiss
 # operationId: IotSecuritySolutionsAnalyticsAggregatedAlert_Dismiss
-export def "subscriptions-resource-groups-providers-microsoft-security-iot-security-solutions-analytics-models-default-aggregated-alerts-dismiss create" [
+export def "iot-security-solutions-analytics-aggregated-alert-dismiss" [
   subscription_id: string
   resource_group_name: string
   solution_name: string
@@ -343,7 +343,7 @@ export def "subscriptions-resource-groups-providers-microsoft-security-iot-secur
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Security/iotSecuritySolutions/{solutionName}/analyticsModels/default/aggregatedRecommendations
 # operationId: IotSecuritySolutionsAnalyticsRecommendation_List
-export def "subscriptions-resource-groups-providers-microsoft-security-iot-security-solutions-analytics-models-default-aggregated-recommendations list" [
+export def "iot-security-solutions-analytics-recommendation-list" [
   subscription_id: string
   resource_group_name: string
   solution_name: string
@@ -386,7 +386,7 @@ export def "subscriptions-resource-groups-providers-microsoft-security-iot-secur
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Security/iotSecuritySolutions/{solutionName}/analyticsModels/default/aggregatedRecommendations/{aggregatedRecommendationName}
 # operationId: IotSecuritySolutionsAnalyticsRecommendation_Get
-export def "subscriptions-resource-groups-providers-microsoft-security-iot-security-solutions-analytics-models-default-aggregated-recommendations get" [
+export def "iot-security-solutions-analytics-recommendation-get" [
   subscription_id: string
   resource_group_name: string
   solution_name: string

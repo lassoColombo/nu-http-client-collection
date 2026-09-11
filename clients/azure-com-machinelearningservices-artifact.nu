@@ -112,7 +112,7 @@ def accept-completer [] { ["application/json" "application/octet-stream"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "artifact-v2-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-artifacts-batch-metadata get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "artifacts-batch-get-by-id" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -136,7 +136,7 @@ export def commands []: nothing -> table {
 #
 # POST /artifact/v2.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/artifacts/batch/metadata
 # operationId: Artifacts_BatchGetById
-export def "artifact-v2-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-artifacts-batch-metadata get" [
+export def "artifacts-batch-get-by-id" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -181,7 +181,7 @@ export def "artifact-v2-0-subscriptions-resource-groups-providers-microsoft-mach
 # POST /artifact/v2.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/artifacts/metadata
 # operationId: Artifacts_Create
 # --dataPath shape: {dataStoreName?: string, relativePath?: string, sqlDataPath?: record}
-export def "artifact-v2-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-artifacts-metadata create" [
+export def "artifacts-create" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -230,7 +230,7 @@ export def "artifact-v2-0-subscriptions-resource-groups-providers-microsoft-mach
 # POST /artifact/v2.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/artifacts/register
 # operationId: Artifacts_Register
 # --dataPath shape: {dataStoreName?: string, relativePath?: string, sqlDataPath?: record}
-export def "artifact-v2-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-artifacts-register create" [
+export def "artifacts-register" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -278,7 +278,7 @@ export def "artifact-v2-0-subscriptions-resource-groups-providers-microsoft-mach
 #
 # POST /artifact/v2.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/artifacts/storageuri/batch/metadata
 # operationId: Artifacts_BatchGetStorageById
-export def "artifact-v2-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-artifacts-storageuri-batch-metadata get-storage" [
+export def "artifacts-batch-get-storage-by-id" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -322,7 +322,7 @@ export def "artifact-v2-0-subscriptions-resource-groups-providers-microsoft-mach
 #
 # GET /artifact/v2.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/artifacts/{origin}/{container}
 # operationId: Artifacts_ListInContainer
-export def "artifact-v2-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-artifacts list" [
+export def "artifacts-list-in-container" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -369,7 +369,7 @@ export def "artifact-v2-0-subscriptions-resource-groups-providers-microsoft-mach
 #
 # DELETE /artifact/v2.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/artifacts/{origin}/{container}/batch
 # operationId: Artifacts_DeleteMetaDataInContainer
-export def "artifact-v2-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-artifacts-batch delete-meta-data" [
+export def "artifacts-delete-meta-data-in-container" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -415,7 +415,7 @@ export def "artifact-v2-0-subscriptions-resource-groups-providers-microsoft-mach
 #
 # POST /artifact/v2.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/artifacts/{origin}/{container}/batch/ingest/containersas
 # operationId: Artifacts_BatchIngestFromSas
-export def "artifact-v2-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-artifacts-batch-ingest-containersas create-from-sas" [
+export def "artifacts-batch-ingest-from-sas" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -467,7 +467,7 @@ export def "artifact-v2-0-subscriptions-resource-groups-providers-microsoft-mach
 # POST /artifact/v2.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/artifacts/{origin}/{container}/batch/metadata
 # operationId: Artifacts_BatchCreateEmptyArtifacts
 # --paths item shape: {path: string}
-export def "artifact-v2-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-artifacts-batch-metadata create-empty" [
+export def "artifacts-batch-create-empty-artifacts" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -516,7 +516,7 @@ export def "artifact-v2-0-subscriptions-resource-groups-providers-microsoft-mach
 # POST /artifact/v2.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/artifacts/{origin}/{container}/batch/metadata:delete
 # operationId: Artifacts_DeleteBatchMetaData
 # --paths item shape: {path: string}
-export def "artifact-v2-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-artifacts-batch-metadata-delete delete-meta-data" [
+export def "artifacts-delete-batch-meta-data" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -566,7 +566,7 @@ export def "artifact-v2-0-subscriptions-resource-groups-providers-microsoft-mach
 #
 # GET /artifact/v2.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/artifacts/{origin}/{container}/content
 # operationId: Artifacts_Download
-export def "artifact-v2-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-artifacts-content download" [
+export def "artifacts-download" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -613,7 +613,7 @@ export def "artifact-v2-0-subscriptions-resource-groups-providers-microsoft-mach
 #
 # POST /artifact/v2.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/artifacts/{origin}/{container}/content
 # operationId: Artifacts_Upload
-export def "artifact-v2-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-artifacts-content upload" [
+export def "artifacts-upload" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -666,7 +666,7 @@ export def "artifact-v2-0-subscriptions-resource-groups-providers-microsoft-mach
 #
 # GET /artifact/v2.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/artifacts/{origin}/{container}/contentinfo
 # operationId: Artifacts_GetContentInformation
-export def "artifact-v2-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-artifacts-contentinfo get-content-information" [
+export def "artifacts-get-content-information" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -712,7 +712,7 @@ export def "artifact-v2-0-subscriptions-resource-groups-providers-microsoft-mach
 #
 # GET /artifact/v2.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/artifacts/{origin}/{container}/contentinfo/storageuri
 # operationId: Artifacts_GetStorageContentInformation
-export def "artifact-v2-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-artifacts-contentinfo-storageuri get-storage-content-information" [
+export def "artifacts-get-storage-content-information" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -758,7 +758,7 @@ export def "artifact-v2-0-subscriptions-resource-groups-providers-microsoft-mach
 #
 # DELETE /artifact/v2.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/artifacts/{origin}/{container}/metadata
 # operationId: Artifacts_DeleteMetaData
-export def "artifact-v2-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-artifacts-metadata delete-meta-data" [
+export def "artifacts-delete-meta-data" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -805,7 +805,7 @@ export def "artifact-v2-0-subscriptions-resource-groups-providers-microsoft-mach
 #
 # GET /artifact/v2.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/artifacts/{origin}/{container}/metadata
 # operationId: Artifacts_Get
-export def "artifact-v2-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-artifacts-metadata get" [
+export def "artifacts-get" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -851,7 +851,7 @@ export def "artifact-v2-0-subscriptions-resource-groups-providers-microsoft-mach
 #
 # GET /artifact/v2.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/artifacts/{origin}/{container}/prefix/contentinfo
 # operationId: Artifacts_ListSasByPrefix
-export def "artifact-v2-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-artifacts-prefix-contentinfo list-sas" [
+export def "artifacts-list-sas-by-prefix" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -898,7 +898,7 @@ export def "artifact-v2-0-subscriptions-resource-groups-providers-microsoft-mach
 #
 # GET /artifact/v2.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/artifacts/{origin}/{container}/prefix/contentinfo/storageuri
 # operationId: Artifacts_ListStorageUriByPrefix
-export def "artifact-v2-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-artifacts-prefix-contentinfo-storageuri list-storage-uri" [
+export def "artifacts-list-storage-uri-by-prefix" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -945,7 +945,7 @@ export def "artifact-v2-0-subscriptions-resource-groups-providers-microsoft-mach
 #
 # GET /artifact/v2.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/artifacts/{origin}/{container}/write
 # operationId: Artifacts_GetSas
-export def "artifact-v2-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-artifacts-write get-sas" [
+export def "artifacts-get-sas" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string

@@ -125,7 +125,7 @@ def entity-completer [] { ["account" "attachment" "call" "campaign" "case" "comm
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "application create-entity" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-application-entity" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -149,7 +149,7 @@ export def commands []: nothing -> table {
 #
 # POST /application
 # operationId: createApplicationEntity
-export def "application create-entity" [
+export def "create-application-entity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -193,7 +193,7 @@ export def "application create-entity" [
 #
 # GET /application/count
 # operationId: getApplicationCountCollection
-export def "application-count get-collection" [
+export def "get-application-count-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -238,7 +238,7 @@ export def "application-count get-collection" [
 # --phone item shape: {number?: string, type?: string}
 # --relation shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
 # --website item shape: {address?: string, type?: string}
-export def "application-entity-account create" [
+export def "create-account-entity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -301,7 +301,7 @@ export def "application-entity-account create" [
 #
 # GET /application/entity/account/aggregate
 # operationId: getAccountAggregate
-export def "application-entity-account-aggregate get" [
+export def "get-account-aggregate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -351,7 +351,7 @@ export def "application-entity-account-aggregate get" [
 #
 # DELETE /application/entity/account/bulk
 # operationId: deleteAccountCollectionBulk
-export def "application-entity-account-bulk delete-collection" [
+export def "delete-account-collection-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -393,7 +393,7 @@ export def "application-entity-account-bulk delete-collection" [
 #
 # POST /application/entity/account/bulk
 # operationId: createAccountEntityBulk
-export def "application-entity-account-bulk create" [
+export def "create-account-entity-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -437,7 +437,7 @@ export def "application-entity-account-bulk create" [
 #
 # PUT /application/entity/account/bulk
 # operationId: updateAccountEntityBulk
-export def "application-entity-account-bulk update" [
+export def "update-account-entity-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -481,7 +481,7 @@ export def "application-entity-account-bulk update" [
 #
 # GET /application/entity/account/count
 # operationId: getAccountCountCollection
-export def "application-entity-account-count get-collection" [
+export def "get-account-count-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -528,7 +528,7 @@ export def "application-entity-account-count get-collection" [
 #
 # GET /application/entity/account/describe
 # operationId: getAccountDescribe
-export def "application-entity-account-describe get" [
+export def "get-account-describe" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -574,7 +574,7 @@ export def "application-entity-account-describe get" [
 #
 # GET /application/entity/account/list
 # operationId: getAccountCollection
-export def "application-entity-account-list get-collection" [
+export def "get-account-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -629,7 +629,7 @@ export def "application-entity-account-list get-collection" [
 #
 # DELETE /application/entity/account/{account_id}
 # operationId: deleteAccountEntity
-export def "application-entity-account delete" [
+export def "delete-account-entity" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -669,7 +669,7 @@ export def "application-entity-account delete" [
 #
 # GET /application/entity/account/{account_id}
 # operationId: getAccountEntity
-export def "application-entity-account get" [
+export def "get-account-entity" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -727,7 +727,7 @@ export def "application-entity-account get" [
 # --phone item shape: {number?: string, type?: string}
 # --relation shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
 # --website item shape: {address?: string, type?: string}
-export def "application-entity-account update" [
+export def "update-account-entity" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -793,7 +793,7 @@ export def "application-entity-account update" [
 # POST /application/entity/attachment
 # operationId: createAttachmentEntity
 # --relation shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
-export def "application-entity-attachment create" [
+export def "create-attachment-entity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -845,7 +845,7 @@ export def "application-entity-attachment create" [
 #
 # GET /application/entity/attachment/aggregate
 # operationId: getAttachmentAggregate
-export def "application-entity-attachment-aggregate get" [
+export def "get-attachment-aggregate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -895,7 +895,7 @@ export def "application-entity-attachment-aggregate get" [
 #
 # DELETE /application/entity/attachment/bulk
 # operationId: deleteAttachmentCollectionBulk
-export def "application-entity-attachment-bulk delete-collection" [
+export def "delete-attachment-collection-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -937,7 +937,7 @@ export def "application-entity-attachment-bulk delete-collection" [
 #
 # POST /application/entity/attachment/bulk
 # operationId: createAttachmentEntityBulk
-export def "application-entity-attachment-bulk create" [
+export def "create-attachment-entity-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -981,7 +981,7 @@ export def "application-entity-attachment-bulk create" [
 #
 # PUT /application/entity/attachment/bulk
 # operationId: updateAttachmentEntityBulk
-export def "application-entity-attachment-bulk update" [
+export def "update-attachment-entity-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1025,7 +1025,7 @@ export def "application-entity-attachment-bulk update" [
 #
 # GET /application/entity/attachment/count
 # operationId: getAttachmentCountCollection
-export def "application-entity-attachment-count get-collection" [
+export def "get-attachment-count-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1072,7 +1072,7 @@ export def "application-entity-attachment-count get-collection" [
 #
 # GET /application/entity/attachment/describe
 # operationId: getAttachmentDescribe
-export def "application-entity-attachment-describe get" [
+export def "get-attachment-describe" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1118,7 +1118,7 @@ export def "application-entity-attachment-describe get" [
 #
 # GET /application/entity/attachment/list
 # operationId: getAttachmentCollection
-export def "application-entity-attachment-list get-collection" [
+export def "get-attachment-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1173,7 +1173,7 @@ export def "application-entity-attachment-list get-collection" [
 #
 # DELETE /application/entity/attachment/{attachment_id}
 # operationId: deleteAttachmentEntity
-export def "application-entity-attachment delete" [
+export def "delete-attachment-entity" [
   attachment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1213,7 +1213,7 @@ export def "application-entity-attachment delete" [
 #
 # GET /application/entity/attachment/{attachment_id}
 # operationId: getAttachmentEntity
-export def "application-entity-attachment get" [
+export def "get-attachment-entity" [
   attachment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1266,7 +1266,7 @@ export def "application-entity-attachment get" [
 # PUT /application/entity/attachment/{attachment_id}
 # operationId: updateAttachmentEntity
 # --relation shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
-export def "application-entity-attachment update" [
+export def "update-attachment-entity" [
   attachment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1321,7 +1321,7 @@ export def "application-entity-attachment update" [
 # POST /application/entity/call
 # operationId: createCallEntity
 # --relation shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
-export def "application-entity-call create" [
+export def "create-call-entity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1376,7 +1376,7 @@ export def "application-entity-call create" [
 #
 # GET /application/entity/call/aggregate
 # operationId: getCallAggregate
-export def "application-entity-call-aggregate get" [
+export def "get-call-aggregate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1426,7 +1426,7 @@ export def "application-entity-call-aggregate get" [
 #
 # DELETE /application/entity/call/bulk
 # operationId: deleteCallCollectionBulk
-export def "application-entity-call-bulk delete-collection" [
+export def "delete-call-collection-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1468,7 +1468,7 @@ export def "application-entity-call-bulk delete-collection" [
 #
 # POST /application/entity/call/bulk
 # operationId: createCallEntityBulk
-export def "application-entity-call-bulk create" [
+export def "create-call-entity-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1512,7 +1512,7 @@ export def "application-entity-call-bulk create" [
 #
 # PUT /application/entity/call/bulk
 # operationId: updateCallEntityBulk
-export def "application-entity-call-bulk update" [
+export def "update-call-entity-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1556,7 +1556,7 @@ export def "application-entity-call-bulk update" [
 #
 # GET /application/entity/call/count
 # operationId: getCallCountCollection
-export def "application-entity-call-count get-collection" [
+export def "get-call-count-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1603,7 +1603,7 @@ export def "application-entity-call-count get-collection" [
 #
 # GET /application/entity/call/describe
 # operationId: getCallDescribe
-export def "application-entity-call-describe get" [
+export def "get-call-describe" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1649,7 +1649,7 @@ export def "application-entity-call-describe get" [
 #
 # GET /application/entity/call/list
 # operationId: getCallCollection
-export def "application-entity-call-list get-collection" [
+export def "get-call-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1704,7 +1704,7 @@ export def "application-entity-call-list get-collection" [
 #
 # DELETE /application/entity/call/{call_id}
 # operationId: deleteCallEntity
-export def "application-entity-call delete" [
+export def "delete-call-entity" [
   call_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1744,7 +1744,7 @@ export def "application-entity-call delete" [
 #
 # GET /application/entity/call/{call_id}
 # operationId: getCallEntity
-export def "application-entity-call get" [
+export def "get-call-entity" [
   call_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1797,7 +1797,7 @@ export def "application-entity-call get" [
 # PUT /application/entity/call/{call_id}
 # operationId: updateCallEntity
 # --relation shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
-export def "application-entity-call update" [
+export def "update-call-entity" [
   call_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1856,7 +1856,7 @@ export def "application-entity-call update" [
 # operationId: createCampaignEntity
 # --currency shape: {code?: string}
 # --relation shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
-export def "application-entity-campaign create" [
+export def "create-campaign-entity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1919,7 +1919,7 @@ export def "application-entity-campaign create" [
 #
 # GET /application/entity/campaign/aggregate
 # operationId: getCampaignAggregate
-export def "application-entity-campaign-aggregate get" [
+export def "get-campaign-aggregate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1969,7 +1969,7 @@ export def "application-entity-campaign-aggregate get" [
 #
 # DELETE /application/entity/campaign/bulk
 # operationId: deleteCampaignCollectionBulk
-export def "application-entity-campaign-bulk delete-collection" [
+export def "delete-campaign-collection-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2011,7 +2011,7 @@ export def "application-entity-campaign-bulk delete-collection" [
 #
 # POST /application/entity/campaign/bulk
 # operationId: createCampaignEntityBulk
-export def "application-entity-campaign-bulk create" [
+export def "create-campaign-entity-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2055,7 +2055,7 @@ export def "application-entity-campaign-bulk create" [
 #
 # PUT /application/entity/campaign/bulk
 # operationId: updateCampaignEntityBulk
-export def "application-entity-campaign-bulk update" [
+export def "update-campaign-entity-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2099,7 +2099,7 @@ export def "application-entity-campaign-bulk update" [
 #
 # GET /application/entity/campaign/count
 # operationId: getCampaignCountCollection
-export def "application-entity-campaign-count get-collection" [
+export def "get-campaign-count-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2146,7 +2146,7 @@ export def "application-entity-campaign-count get-collection" [
 #
 # GET /application/entity/campaign/describe
 # operationId: getCampaignDescribe
-export def "application-entity-campaign-describe get" [
+export def "get-campaign-describe" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2192,7 +2192,7 @@ export def "application-entity-campaign-describe get" [
 #
 # GET /application/entity/campaign/list
 # operationId: getCampaignCollection
-export def "application-entity-campaign-list get-collection" [
+export def "get-campaign-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2247,7 +2247,7 @@ export def "application-entity-campaign-list get-collection" [
 #
 # DELETE /application/entity/campaign/{campaign_id}
 # operationId: deleteCampaignEntity
-export def "application-entity-campaign delete" [
+export def "delete-campaign-entity" [
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2287,7 +2287,7 @@ export def "application-entity-campaign delete" [
 #
 # GET /application/entity/campaign/{campaign_id}
 # operationId: getCampaignEntity
-export def "application-entity-campaign get" [
+export def "get-campaign-entity" [
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2341,7 +2341,7 @@ export def "application-entity-campaign get" [
 # operationId: updateCampaignEntity
 # --currency shape: {code?: string}
 # --relation shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
-export def "application-entity-campaign update" [
+export def "update-campaign-entity" [
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2407,7 +2407,7 @@ export def "application-entity-campaign update" [
 # POST /application/entity/case
 # operationId: createCaseEntity
 # --relation shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
-export def "application-entity-case create" [
+export def "create-case-entity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2471,7 +2471,7 @@ export def "application-entity-case create" [
 #
 # GET /application/entity/case/aggregate
 # operationId: getCaseAggregate
-export def "application-entity-case-aggregate get" [
+export def "get-case-aggregate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2521,7 +2521,7 @@ export def "application-entity-case-aggregate get" [
 #
 # DELETE /application/entity/case/bulk
 # operationId: deleteCaseCollectionBulk
-export def "application-entity-case-bulk delete-collection" [
+export def "delete-case-collection-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2563,7 +2563,7 @@ export def "application-entity-case-bulk delete-collection" [
 #
 # POST /application/entity/case/bulk
 # operationId: createCaseEntityBulk
-export def "application-entity-case-bulk create" [
+export def "create-case-entity-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2607,7 +2607,7 @@ export def "application-entity-case-bulk create" [
 #
 # PUT /application/entity/case/bulk
 # operationId: updateCaseEntityBulk
-export def "application-entity-case-bulk update" [
+export def "update-case-entity-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2651,7 +2651,7 @@ export def "application-entity-case-bulk update" [
 #
 # GET /application/entity/case/count
 # operationId: getCaseCountCollection
-export def "application-entity-case-count get-collection" [
+export def "get-case-count-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2698,7 +2698,7 @@ export def "application-entity-case-count get-collection" [
 #
 # GET /application/entity/case/describe
 # operationId: getCaseDescribe
-export def "application-entity-case-describe get" [
+export def "get-case-describe" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2744,7 +2744,7 @@ export def "application-entity-case-describe get" [
 #
 # GET /application/entity/case/list
 # operationId: getCaseCollection
-export def "application-entity-case-list get-collection" [
+export def "get-case-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2799,7 +2799,7 @@ export def "application-entity-case-list get-collection" [
 #
 # DELETE /application/entity/case/{case_id}
 # operationId: deleteCaseEntity
-export def "application-entity-case delete" [
+export def "delete-case-entity" [
   case_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2839,7 +2839,7 @@ export def "application-entity-case delete" [
 #
 # GET /application/entity/case/{case_id}
 # operationId: getCaseEntity
-export def "application-entity-case get" [
+export def "get-case-entity" [
   case_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2892,7 +2892,7 @@ export def "application-entity-case get" [
 # PUT /application/entity/case/{case_id}
 # operationId: updateCaseEntity
 # --relation shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
-export def "application-entity-case update" [
+export def "update-case-entity" [
   case_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2959,7 +2959,7 @@ export def "application-entity-case update" [
 # POST /application/entity/comment
 # operationId: createCommentEntity
 # --relation shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
-export def "application-entity-comment create" [
+export def "create-comment-entity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3007,7 +3007,7 @@ export def "application-entity-comment create" [
 #
 # GET /application/entity/comment/aggregate
 # operationId: getCommentAggregate
-export def "application-entity-comment-aggregate get" [
+export def "get-comment-aggregate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3057,7 +3057,7 @@ export def "application-entity-comment-aggregate get" [
 #
 # DELETE /application/entity/comment/bulk
 # operationId: deleteCommentCollectionBulk
-export def "application-entity-comment-bulk delete-collection" [
+export def "delete-comment-collection-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3099,7 +3099,7 @@ export def "application-entity-comment-bulk delete-collection" [
 #
 # POST /application/entity/comment/bulk
 # operationId: createCommentEntityBulk
-export def "application-entity-comment-bulk create" [
+export def "create-comment-entity-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3143,7 +3143,7 @@ export def "application-entity-comment-bulk create" [
 #
 # PUT /application/entity/comment/bulk
 # operationId: updateCommentEntityBulk
-export def "application-entity-comment-bulk update" [
+export def "update-comment-entity-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3187,7 +3187,7 @@ export def "application-entity-comment-bulk update" [
 #
 # GET /application/entity/comment/count
 # operationId: getCommentCountCollection
-export def "application-entity-comment-count get-collection" [
+export def "get-comment-count-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3234,7 +3234,7 @@ export def "application-entity-comment-count get-collection" [
 #
 # GET /application/entity/comment/describe
 # operationId: getCommentDescribe
-export def "application-entity-comment-describe get" [
+export def "get-comment-describe" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3280,7 +3280,7 @@ export def "application-entity-comment-describe get" [
 #
 # GET /application/entity/comment/list
 # operationId: getCommentCollection
-export def "application-entity-comment-list get-collection" [
+export def "get-comment-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3335,7 +3335,7 @@ export def "application-entity-comment-list get-collection" [
 #
 # DELETE /application/entity/comment/{comment_id}
 # operationId: deleteCommentEntity
-export def "application-entity-comment delete" [
+export def "delete-comment-entity" [
   comment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3375,7 +3375,7 @@ export def "application-entity-comment delete" [
 #
 # GET /application/entity/comment/{comment_id}
 # operationId: getCommentEntity
-export def "application-entity-comment get" [
+export def "get-comment-entity" [
   comment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3428,7 +3428,7 @@ export def "application-entity-comment get" [
 # PUT /application/entity/comment/{comment_id}
 # operationId: updateCommentEntity
 # --relation shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
-export def "application-entity-comment update" [
+export def "update-comment-entity" [
   comment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3484,7 +3484,7 @@ export def "application-entity-comment update" [
 # --phone item shape: {number?: string, type?: string}
 # --relation shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
 # --website item shape: {address?: string, type?: string}
-export def "application-entity-contact create" [
+export def "create-contact-entity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3549,7 +3549,7 @@ export def "application-entity-contact create" [
 #
 # GET /application/entity/contact/aggregate
 # operationId: getContactAggregate
-export def "application-entity-contact-aggregate get" [
+export def "get-contact-aggregate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3599,7 +3599,7 @@ export def "application-entity-contact-aggregate get" [
 #
 # DELETE /application/entity/contact/bulk
 # operationId: deleteContactCollectionBulk
-export def "application-entity-contact-bulk delete-collection" [
+export def "delete-contact-collection-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3641,7 +3641,7 @@ export def "application-entity-contact-bulk delete-collection" [
 #
 # POST /application/entity/contact/bulk
 # operationId: createContactEntityBulk
-export def "application-entity-contact-bulk create" [
+export def "create-contact-entity-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3685,7 +3685,7 @@ export def "application-entity-contact-bulk create" [
 #
 # PUT /application/entity/contact/bulk
 # operationId: updateContactEntityBulk
-export def "application-entity-contact-bulk update" [
+export def "update-contact-entity-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3729,7 +3729,7 @@ export def "application-entity-contact-bulk update" [
 #
 # GET /application/entity/contact/count
 # operationId: getContactCountCollection
-export def "application-entity-contact-count get-collection" [
+export def "get-contact-count-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3776,7 +3776,7 @@ export def "application-entity-contact-count get-collection" [
 #
 # GET /application/entity/contact/describe
 # operationId: getContactDescribe
-export def "application-entity-contact-describe get" [
+export def "get-contact-describe" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3822,7 +3822,7 @@ export def "application-entity-contact-describe get" [
 #
 # GET /application/entity/contact/list
 # operationId: getContactCollection
-export def "application-entity-contact-list get-collection" [
+export def "get-contact-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3877,7 +3877,7 @@ export def "application-entity-contact-list get-collection" [
 #
 # DELETE /application/entity/contact/{contact_id}
 # operationId: deleteContactEntity
-export def "application-entity-contact delete" [
+export def "delete-contact-entity" [
   contact_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3917,7 +3917,7 @@ export def "application-entity-contact delete" [
 #
 # GET /application/entity/contact/{contact_id}
 # operationId: getContactEntity
-export def "application-entity-contact get" [
+export def "get-contact-entity" [
   contact_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3975,7 +3975,7 @@ export def "application-entity-contact get" [
 # --phone item shape: {number?: string, type?: string}
 # --relation shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
 # --website item shape: {address?: string, type?: string}
-export def "application-entity-contact update" [
+export def "update-contact-entity" [
   contact_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4042,7 +4042,7 @@ export def "application-entity-contact update" [
 #
 # GET /application/entity/count
 # operationId: getEntityCountCollection
-export def "application-entity-count get-collection" [
+export def "get-entity-count-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4081,7 +4081,7 @@ export def "application-entity-count get-collection" [
 # POST /application/entity/email
 # operationId: createEmailEntity
 # --relation shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
-export def "application-entity-email create" [
+export def "create-email-entity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4137,7 +4137,7 @@ export def "application-entity-email create" [
 #
 # GET /application/entity/email/aggregate
 # operationId: getEmailAggregate
-export def "application-entity-email-aggregate get" [
+export def "get-email-aggregate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4187,7 +4187,7 @@ export def "application-entity-email-aggregate get" [
 #
 # DELETE /application/entity/email/bulk
 # operationId: deleteEmailCollectionBulk
-export def "application-entity-email-bulk delete-collection" [
+export def "delete-email-collection-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4229,7 +4229,7 @@ export def "application-entity-email-bulk delete-collection" [
 #
 # POST /application/entity/email/bulk
 # operationId: createEmailEntityBulk
-export def "application-entity-email-bulk create" [
+export def "create-email-entity-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4273,7 +4273,7 @@ export def "application-entity-email-bulk create" [
 #
 # PUT /application/entity/email/bulk
 # operationId: updateEmailEntityBulk
-export def "application-entity-email-bulk update" [
+export def "update-email-entity-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4317,7 +4317,7 @@ export def "application-entity-email-bulk update" [
 #
 # GET /application/entity/email/count
 # operationId: getEmailCountCollection
-export def "application-entity-email-count get-collection" [
+export def "get-email-count-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4364,7 +4364,7 @@ export def "application-entity-email-count get-collection" [
 #
 # GET /application/entity/email/describe
 # operationId: getEmailDescribe
-export def "application-entity-email-describe get" [
+export def "get-email-describe" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4410,7 +4410,7 @@ export def "application-entity-email-describe get" [
 #
 # GET /application/entity/email/list
 # operationId: getEmailCollection
-export def "application-entity-email-list get-collection" [
+export def "get-email-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4465,7 +4465,7 @@ export def "application-entity-email-list get-collection" [
 #
 # DELETE /application/entity/email/{email_id}
 # operationId: deleteEmailEntity
-export def "application-entity-email delete" [
+export def "delete-email-entity" [
   email_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4505,7 +4505,7 @@ export def "application-entity-email delete" [
 #
 # GET /application/entity/email/{email_id}
 # operationId: getEmailEntity
-export def "application-entity-email get" [
+export def "get-email-entity" [
   email_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4558,7 +4558,7 @@ export def "application-entity-email get" [
 # PUT /application/entity/email/{email_id}
 # operationId: updateEmailEntity
 # --relation shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
-export def "application-entity-email update" [
+export def "update-email-entity" [
   email_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4617,7 +4617,7 @@ export def "application-entity-email update" [
 # POST /application/entity/event
 # operationId: createEventEntity
 # --relation shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
-export def "application-entity-event create" [
+export def "create-event-entity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4671,7 +4671,7 @@ export def "application-entity-event create" [
 #
 # GET /application/entity/event/aggregate
 # operationId: getEventAggregate
-export def "application-entity-event-aggregate get" [
+export def "get-event-aggregate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4721,7 +4721,7 @@ export def "application-entity-event-aggregate get" [
 #
 # DELETE /application/entity/event/bulk
 # operationId: deleteEventCollectionBulk
-export def "application-entity-event-bulk delete-collection" [
+export def "delete-event-collection-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4763,7 +4763,7 @@ export def "application-entity-event-bulk delete-collection" [
 #
 # POST /application/entity/event/bulk
 # operationId: createEventEntityBulk
-export def "application-entity-event-bulk create" [
+export def "create-event-entity-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4807,7 +4807,7 @@ export def "application-entity-event-bulk create" [
 #
 # PUT /application/entity/event/bulk
 # operationId: updateEventEntityBulk
-export def "application-entity-event-bulk update" [
+export def "update-event-entity-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4851,7 +4851,7 @@ export def "application-entity-event-bulk update" [
 #
 # GET /application/entity/event/count
 # operationId: getEventCountCollection
-export def "application-entity-event-count get-collection" [
+export def "get-event-count-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4898,7 +4898,7 @@ export def "application-entity-event-count get-collection" [
 #
 # GET /application/entity/event/describe
 # operationId: getEventDescribe
-export def "application-entity-event-describe get" [
+export def "get-event-describe" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4944,7 +4944,7 @@ export def "application-entity-event-describe get" [
 #
 # GET /application/entity/event/list
 # operationId: getEventCollection
-export def "application-entity-event-list get-collection" [
+export def "get-event-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4999,7 +4999,7 @@ export def "application-entity-event-list get-collection" [
 #
 # DELETE /application/entity/event/{event_id}
 # operationId: deleteEventEntity
-export def "application-entity-event delete" [
+export def "delete-event-entity" [
   event_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5039,7 +5039,7 @@ export def "application-entity-event delete" [
 #
 # GET /application/entity/event/{event_id}
 # operationId: getEventEntity
-export def "application-entity-event get" [
+export def "get-event-entity" [
   event_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5092,7 +5092,7 @@ export def "application-entity-event get" [
 # PUT /application/entity/event/{event_id}
 # operationId: updateEventEntity
 # --relation shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
-export def "application-entity-event update" [
+export def "update-event-entity" [
   event_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5153,7 +5153,7 @@ export def "application-entity-event update" [
 # --discount item shape: {percent_value?: float, type?: string, value?: float}
 # --relation shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
 # --tax item shape: {percent_value?: float, type?: string, value?: float}
-export def "application-entity-invoice create" [
+export def "create-invoice-entity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5221,7 +5221,7 @@ export def "application-entity-invoice create" [
 #
 # GET /application/entity/invoice/aggregate
 # operationId: getInvoiceAggregate
-export def "application-entity-invoice-aggregate get" [
+export def "get-invoice-aggregate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5271,7 +5271,7 @@ export def "application-entity-invoice-aggregate get" [
 #
 # DELETE /application/entity/invoice/bulk
 # operationId: deleteInvoiceCollectionBulk
-export def "application-entity-invoice-bulk delete-collection" [
+export def "delete-invoice-collection-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5313,7 +5313,7 @@ export def "application-entity-invoice-bulk delete-collection" [
 #
 # POST /application/entity/invoice/bulk
 # operationId: createInvoiceEntityBulk
-export def "application-entity-invoice-bulk create" [
+export def "create-invoice-entity-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5357,7 +5357,7 @@ export def "application-entity-invoice-bulk create" [
 #
 # PUT /application/entity/invoice/bulk
 # operationId: updateInvoiceEntityBulk
-export def "application-entity-invoice-bulk update" [
+export def "update-invoice-entity-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5401,7 +5401,7 @@ export def "application-entity-invoice-bulk update" [
 #
 # GET /application/entity/invoice/count
 # operationId: getInvoiceCountCollection
-export def "application-entity-invoice-count get-collection" [
+export def "get-invoice-count-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5448,7 +5448,7 @@ export def "application-entity-invoice-count get-collection" [
 #
 # GET /application/entity/invoice/describe
 # operationId: getInvoiceDescribe
-export def "application-entity-invoice-describe get" [
+export def "get-invoice-describe" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5494,7 +5494,7 @@ export def "application-entity-invoice-describe get" [
 #
 # GET /application/entity/invoice/list
 # operationId: getInvoiceCollection
-export def "application-entity-invoice-list get-collection" [
+export def "get-invoice-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5549,7 +5549,7 @@ export def "application-entity-invoice-list get-collection" [
 #
 # DELETE /application/entity/invoice/{invoice_id}
 # operationId: deleteInvoiceEntity
-export def "application-entity-invoice delete" [
+export def "delete-invoice-entity" [
   invoice_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5589,7 +5589,7 @@ export def "application-entity-invoice delete" [
 #
 # GET /application/entity/invoice/{invoice_id}
 # operationId: getInvoiceEntity
-export def "application-entity-invoice get" [
+export def "get-invoice-entity" [
   invoice_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5646,7 +5646,7 @@ export def "application-entity-invoice get" [
 # --discount item shape: {percent_value?: float, type?: string, value?: float}
 # --relation shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
 # --tax item shape: {percent_value?: float, type?: string, value?: float}
-export def "application-entity-invoice update" [
+export def "update-invoice-entity" [
   invoice_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5719,7 +5719,7 @@ export def "application-entity-invoice update" [
 # --discount item shape: {percent_value?: float, type?: string, value?: float}
 # --relation shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
 # --tax item shape: {percent_value?: float, type?: string, value?: float}
-export def "application-entity-invoice-item create" [
+export def "create-invoice-item-entity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5776,7 +5776,7 @@ export def "application-entity-invoice-item create" [
 #
 # GET /application/entity/invoiceItem/aggregate
 # operationId: getInvoiceItemAggregate
-export def "application-entity-invoice-item-aggregate get" [
+export def "get-invoice-item-aggregate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5826,7 +5826,7 @@ export def "application-entity-invoice-item-aggregate get" [
 #
 # DELETE /application/entity/invoiceItem/bulk
 # operationId: deleteInvoiceItemCollectionBulk
-export def "application-entity-invoice-item-bulk delete-collection" [
+export def "delete-invoice-item-collection-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5868,7 +5868,7 @@ export def "application-entity-invoice-item-bulk delete-collection" [
 #
 # POST /application/entity/invoiceItem/bulk
 # operationId: createInvoiceItemEntityBulk
-export def "application-entity-invoice-item-bulk create" [
+export def "create-invoice-item-entity-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5912,7 +5912,7 @@ export def "application-entity-invoice-item-bulk create" [
 #
 # PUT /application/entity/invoiceItem/bulk
 # operationId: updateInvoiceItemEntityBulk
-export def "application-entity-invoice-item-bulk update" [
+export def "update-invoice-item-entity-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5956,7 +5956,7 @@ export def "application-entity-invoice-item-bulk update" [
 #
 # GET /application/entity/invoiceItem/count
 # operationId: getInvoiceItemCountCollection
-export def "application-entity-invoice-item-count get-collection" [
+export def "get-invoice-item-count-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6003,7 +6003,7 @@ export def "application-entity-invoice-item-count get-collection" [
 #
 # GET /application/entity/invoiceItem/describe
 # operationId: getInvoiceItemDescribe
-export def "application-entity-invoice-item-describe get" [
+export def "get-invoice-item-describe" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6049,7 +6049,7 @@ export def "application-entity-invoice-item-describe get" [
 #
 # GET /application/entity/invoiceItem/list
 # operationId: getInvoiceItemCollection
-export def "application-entity-invoice-item-list get-collection" [
+export def "get-invoice-item-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6104,7 +6104,7 @@ export def "application-entity-invoice-item-list get-collection" [
 #
 # DELETE /application/entity/invoiceItem/{invoiceItem_id}
 # operationId: deleteInvoiceItemEntity
-export def "application-entity-invoice-item delete" [
+export def "delete-invoice-item-entity" [
   invoice_item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6144,7 +6144,7 @@ export def "application-entity-invoice-item delete" [
 #
 # GET /application/entity/invoiceItem/{invoiceItem_id}
 # operationId: getInvoiceItemEntity
-export def "application-entity-invoice-item get" [
+export def "get-invoice-item-entity" [
   invoice_item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6199,7 +6199,7 @@ export def "application-entity-invoice-item get" [
 # --discount item shape: {percent_value?: float, type?: string, value?: float}
 # --relation shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
 # --tax item shape: {percent_value?: float, type?: string, value?: float}
-export def "application-entity-invoice-item update" [
+export def "update-invoice-item-entity" [
   invoice_item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6264,7 +6264,7 @@ export def "application-entity-invoice-item update" [
 # --phone item shape: {number?: string, type?: string}
 # --relation shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
 # --website item shape: {address?: string, type?: string}
-export def "application-entity-lead create" [
+export def "create-lead-entity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6335,7 +6335,7 @@ export def "application-entity-lead create" [
 #
 # GET /application/entity/lead/aggregate
 # operationId: getLeadAggregate
-export def "application-entity-lead-aggregate get" [
+export def "get-lead-aggregate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6385,7 +6385,7 @@ export def "application-entity-lead-aggregate get" [
 #
 # DELETE /application/entity/lead/bulk
 # operationId: deleteLeadCollectionBulk
-export def "application-entity-lead-bulk delete-collection" [
+export def "delete-lead-collection-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6427,7 +6427,7 @@ export def "application-entity-lead-bulk delete-collection" [
 #
 # POST /application/entity/lead/bulk
 # operationId: createLeadEntityBulk
-export def "application-entity-lead-bulk create" [
+export def "create-lead-entity-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6471,7 +6471,7 @@ export def "application-entity-lead-bulk create" [
 #
 # PUT /application/entity/lead/bulk
 # operationId: updateLeadEntityBulk
-export def "application-entity-lead-bulk update" [
+export def "update-lead-entity-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6515,7 +6515,7 @@ export def "application-entity-lead-bulk update" [
 #
 # GET /application/entity/lead/count
 # operationId: getLeadCountCollection
-export def "application-entity-lead-count get-collection" [
+export def "get-lead-count-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6562,7 +6562,7 @@ export def "application-entity-lead-count get-collection" [
 #
 # GET /application/entity/lead/describe
 # operationId: getLeadDescribe
-export def "application-entity-lead-describe get" [
+export def "get-lead-describe" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6608,7 +6608,7 @@ export def "application-entity-lead-describe get" [
 #
 # GET /application/entity/lead/list
 # operationId: getLeadCollection
-export def "application-entity-lead-list get-collection" [
+export def "get-lead-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6663,7 +6663,7 @@ export def "application-entity-lead-list get-collection" [
 #
 # DELETE /application/entity/lead/{lead_id}
 # operationId: deleteLeadEntity
-export def "application-entity-lead delete" [
+export def "delete-lead-entity" [
   lead_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6703,7 +6703,7 @@ export def "application-entity-lead delete" [
 #
 # GET /application/entity/lead/{lead_id}
 # operationId: getLeadEntity
-export def "application-entity-lead get" [
+export def "get-lead-entity" [
   lead_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6761,7 +6761,7 @@ export def "application-entity-lead get" [
 # --phone item shape: {number?: string, type?: string}
 # --relation shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
 # --website item shape: {address?: string, type?: string}
-export def "application-entity-lead update" [
+export def "update-lead-entity" [
   lead_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6834,7 +6834,7 @@ export def "application-entity-lead update" [
 #
 # GET /application/entity/list
 # operationId: getEntityCollection
-export def "application-entity-list get-collection" [
+export def "get-entity-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6880,7 +6880,7 @@ export def "application-entity-list get-collection" [
 # POST /application/entity/meeting
 # operationId: createMeetingEntity
 # --relation shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
-export def "application-entity-meeting create" [
+export def "create-meeting-entity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6934,7 +6934,7 @@ export def "application-entity-meeting create" [
 #
 # GET /application/entity/meeting/aggregate
 # operationId: getMeetingAggregate
-export def "application-entity-meeting-aggregate get" [
+export def "get-meeting-aggregate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6984,7 +6984,7 @@ export def "application-entity-meeting-aggregate get" [
 #
 # DELETE /application/entity/meeting/bulk
 # operationId: deleteMeetingCollectionBulk
-export def "application-entity-meeting-bulk delete-collection" [
+export def "delete-meeting-collection-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7026,7 +7026,7 @@ export def "application-entity-meeting-bulk delete-collection" [
 #
 # POST /application/entity/meeting/bulk
 # operationId: createMeetingEntityBulk
-export def "application-entity-meeting-bulk create" [
+export def "create-meeting-entity-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7070,7 +7070,7 @@ export def "application-entity-meeting-bulk create" [
 #
 # PUT /application/entity/meeting/bulk
 # operationId: updateMeetingEntityBulk
-export def "application-entity-meeting-bulk update" [
+export def "update-meeting-entity-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7114,7 +7114,7 @@ export def "application-entity-meeting-bulk update" [
 #
 # GET /application/entity/meeting/count
 # operationId: getMeetingCountCollection
-export def "application-entity-meeting-count get-collection" [
+export def "get-meeting-count-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7161,7 +7161,7 @@ export def "application-entity-meeting-count get-collection" [
 #
 # GET /application/entity/meeting/describe
 # operationId: getMeetingDescribe
-export def "application-entity-meeting-describe get" [
+export def "get-meeting-describe" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7207,7 +7207,7 @@ export def "application-entity-meeting-describe get" [
 #
 # GET /application/entity/meeting/list
 # operationId: getMeetingCollection
-export def "application-entity-meeting-list get-collection" [
+export def "get-meeting-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7262,7 +7262,7 @@ export def "application-entity-meeting-list get-collection" [
 #
 # DELETE /application/entity/meeting/{meeting_id}
 # operationId: deleteMeetingEntity
-export def "application-entity-meeting delete" [
+export def "delete-meeting-entity" [
   meeting_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7302,7 +7302,7 @@ export def "application-entity-meeting delete" [
 #
 # GET /application/entity/meeting/{meeting_id}
 # operationId: getMeetingEntity
-export def "application-entity-meeting get" [
+export def "get-meeting-entity" [
   meeting_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7355,7 +7355,7 @@ export def "application-entity-meeting get" [
 # PUT /application/entity/meeting/{meeting_id}
 # operationId: updateMeetingEntity
 # --relation shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
-export def "application-entity-meeting update" [
+export def "update-meeting-entity" [
   meeting_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7412,7 +7412,7 @@ export def "application-entity-meeting update" [
 # POST /application/entity/note
 # operationId: createNoteEntity
 # --relation shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
-export def "application-entity-note create" [
+export def "create-note-entity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7461,7 +7461,7 @@ export def "application-entity-note create" [
 #
 # GET /application/entity/note/aggregate
 # operationId: getNoteAggregate
-export def "application-entity-note-aggregate get" [
+export def "get-note-aggregate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7511,7 +7511,7 @@ export def "application-entity-note-aggregate get" [
 #
 # DELETE /application/entity/note/bulk
 # operationId: deleteNoteCollectionBulk
-export def "application-entity-note-bulk delete-collection" [
+export def "delete-note-collection-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7553,7 +7553,7 @@ export def "application-entity-note-bulk delete-collection" [
 #
 # POST /application/entity/note/bulk
 # operationId: createNoteEntityBulk
-export def "application-entity-note-bulk create" [
+export def "create-note-entity-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7597,7 +7597,7 @@ export def "application-entity-note-bulk create" [
 #
 # PUT /application/entity/note/bulk
 # operationId: updateNoteEntityBulk
-export def "application-entity-note-bulk update" [
+export def "update-note-entity-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7641,7 +7641,7 @@ export def "application-entity-note-bulk update" [
 #
 # GET /application/entity/note/count
 # operationId: getNoteCountCollection
-export def "application-entity-note-count get-collection" [
+export def "get-note-count-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7688,7 +7688,7 @@ export def "application-entity-note-count get-collection" [
 #
 # GET /application/entity/note/describe
 # operationId: getNoteDescribe
-export def "application-entity-note-describe get" [
+export def "get-note-describe" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7734,7 +7734,7 @@ export def "application-entity-note-describe get" [
 #
 # GET /application/entity/note/list
 # operationId: getNoteCollection
-export def "application-entity-note-list get-collection" [
+export def "get-note-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7789,7 +7789,7 @@ export def "application-entity-note-list get-collection" [
 #
 # DELETE /application/entity/note/{note_id}
 # operationId: deleteNoteEntity
-export def "application-entity-note delete" [
+export def "delete-note-entity" [
   note_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7829,7 +7829,7 @@ export def "application-entity-note delete" [
 #
 # GET /application/entity/note/{note_id}
 # operationId: getNoteEntity
-export def "application-entity-note get" [
+export def "get-note-entity" [
   note_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7882,7 +7882,7 @@ export def "application-entity-note get" [
 # PUT /application/entity/note/{note_id}
 # operationId: updateNoteEntity
 # --relation shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
-export def "application-entity-note update" [
+export def "update-note-entity" [
   note_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7935,7 +7935,7 @@ export def "application-entity-note update" [
 # operationId: createOpportunityEntity
 # --currency shape: {code?: string}
 # --relation shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
-export def "application-entity-opportunity create" [
+export def "create-opportunity-entity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7995,7 +7995,7 @@ export def "application-entity-opportunity create" [
 #
 # GET /application/entity/opportunity/aggregate
 # operationId: getOpportunityAggregate
-export def "application-entity-opportunity-aggregate get" [
+export def "get-opportunity-aggregate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8045,7 +8045,7 @@ export def "application-entity-opportunity-aggregate get" [
 #
 # DELETE /application/entity/opportunity/bulk
 # operationId: deleteOpportunityCollectionBulk
-export def "application-entity-opportunity-bulk delete-collection" [
+export def "delete-opportunity-collection-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8087,7 +8087,7 @@ export def "application-entity-opportunity-bulk delete-collection" [
 #
 # POST /application/entity/opportunity/bulk
 # operationId: createOpportunityEntityBulk
-export def "application-entity-opportunity-bulk create" [
+export def "create-opportunity-entity-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8131,7 +8131,7 @@ export def "application-entity-opportunity-bulk create" [
 #
 # PUT /application/entity/opportunity/bulk
 # operationId: updateOpportunityEntityBulk
-export def "application-entity-opportunity-bulk update" [
+export def "update-opportunity-entity-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8175,7 +8175,7 @@ export def "application-entity-opportunity-bulk update" [
 #
 # GET /application/entity/opportunity/count
 # operationId: getOpportunityCountCollection
-export def "application-entity-opportunity-count get-collection" [
+export def "get-opportunity-count-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8222,7 +8222,7 @@ export def "application-entity-opportunity-count get-collection" [
 #
 # GET /application/entity/opportunity/describe
 # operationId: getOpportunityDescribe
-export def "application-entity-opportunity-describe get" [
+export def "get-opportunity-describe" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8268,7 +8268,7 @@ export def "application-entity-opportunity-describe get" [
 #
 # GET /application/entity/opportunity/list
 # operationId: getOpportunityCollection
-export def "application-entity-opportunity-list get-collection" [
+export def "get-opportunity-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8323,7 +8323,7 @@ export def "application-entity-opportunity-list get-collection" [
 #
 # DELETE /application/entity/opportunity/{opportunity_id}
 # operationId: deleteOpportunityEntity
-export def "application-entity-opportunity delete" [
+export def "delete-opportunity-entity" [
   opportunity_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8363,7 +8363,7 @@ export def "application-entity-opportunity delete" [
 #
 # GET /application/entity/opportunity/{opportunity_id}
 # operationId: getOpportunityEntity
-export def "application-entity-opportunity get" [
+export def "get-opportunity-entity" [
   opportunity_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8417,7 +8417,7 @@ export def "application-entity-opportunity get" [
 # operationId: updateOpportunityEntity
 # --currency shape: {code?: string}
 # --relation shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
-export def "application-entity-opportunity update" [
+export def "update-opportunity-entity" [
   opportunity_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8483,7 +8483,7 @@ export def "application-entity-opportunity update" [
 # --discount item shape: {percent_value?: float, type?: string, value?: float}
 # --relation shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
 # --tax item shape: {percent_value?: float, type?: string, value?: float}
-export def "application-entity-opportunity-product create" [
+export def "create-opportunity-product-entity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8542,7 +8542,7 @@ export def "application-entity-opportunity-product create" [
 #
 # GET /application/entity/opportunityProduct/aggregate
 # operationId: getOpportunityProductAggregate
-export def "application-entity-opportunity-product-aggregate get" [
+export def "get-opportunity-product-aggregate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8592,7 +8592,7 @@ export def "application-entity-opportunity-product-aggregate get" [
 #
 # DELETE /application/entity/opportunityProduct/bulk
 # operationId: deleteOpportunityProductCollectionBulk
-export def "application-entity-opportunity-product-bulk delete-collection" [
+export def "delete-opportunity-product-collection-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8634,7 +8634,7 @@ export def "application-entity-opportunity-product-bulk delete-collection" [
 #
 # POST /application/entity/opportunityProduct/bulk
 # operationId: createOpportunityProductEntityBulk
-export def "application-entity-opportunity-product-bulk create" [
+export def "create-opportunity-product-entity-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8678,7 +8678,7 @@ export def "application-entity-opportunity-product-bulk create" [
 #
 # PUT /application/entity/opportunityProduct/bulk
 # operationId: updateOpportunityProductEntityBulk
-export def "application-entity-opportunity-product-bulk update" [
+export def "update-opportunity-product-entity-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8722,7 +8722,7 @@ export def "application-entity-opportunity-product-bulk update" [
 #
 # GET /application/entity/opportunityProduct/count
 # operationId: getOpportunityProductCountCollection
-export def "application-entity-opportunity-product-count get-collection" [
+export def "get-opportunity-product-count-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8769,7 +8769,7 @@ export def "application-entity-opportunity-product-count get-collection" [
 #
 # GET /application/entity/opportunityProduct/describe
 # operationId: getOpportunityProductDescribe
-export def "application-entity-opportunity-product-describe get" [
+export def "get-opportunity-product-describe" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8815,7 +8815,7 @@ export def "application-entity-opportunity-product-describe get" [
 #
 # GET /application/entity/opportunityProduct/list
 # operationId: getOpportunityProductCollection
-export def "application-entity-opportunity-product-list get-collection" [
+export def "get-opportunity-product-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8870,7 +8870,7 @@ export def "application-entity-opportunity-product-list get-collection" [
 #
 # DELETE /application/entity/opportunityProduct/{opportunityProduct_id}
 # operationId: deleteOpportunityProductEntity
-export def "application-entity-opportunity-product delete" [
+export def "delete-opportunity-product-entity" [
   opportunity_product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8910,7 +8910,7 @@ export def "application-entity-opportunity-product delete" [
 #
 # GET /application/entity/opportunityProduct/{opportunityProduct_id}
 # operationId: getOpportunityProductEntity
-export def "application-entity-opportunity-product get" [
+export def "get-opportunity-product-entity" [
   opportunity_product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8966,7 +8966,7 @@ export def "application-entity-opportunity-product get" [
 # --discount item shape: {percent_value?: float, type?: string, value?: float}
 # --relation shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
 # --tax item shape: {percent_value?: float, type?: string, value?: float}
-export def "application-entity-opportunity-product update" [
+export def "update-opportunity-product-entity" [
   opportunity_product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9028,7 +9028,7 @@ export def "application-entity-opportunity-product update" [
 # POST /application/entity/post
 # operationId: createPostEntity
 # --relation shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
-export def "application-entity-post create" [
+export def "create-post-entity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9076,7 +9076,7 @@ export def "application-entity-post create" [
 #
 # GET /application/entity/post/aggregate
 # operationId: getPostAggregate
-export def "application-entity-post-aggregate get" [
+export def "get-post-aggregate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9126,7 +9126,7 @@ export def "application-entity-post-aggregate get" [
 #
 # DELETE /application/entity/post/bulk
 # operationId: deletePostCollectionBulk
-export def "application-entity-post-bulk delete-collection" [
+export def "delete-post-collection-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9168,7 +9168,7 @@ export def "application-entity-post-bulk delete-collection" [
 #
 # POST /application/entity/post/bulk
 # operationId: createPostEntityBulk
-export def "application-entity-post-bulk create" [
+export def "create-post-entity-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9212,7 +9212,7 @@ export def "application-entity-post-bulk create" [
 #
 # PUT /application/entity/post/bulk
 # operationId: updatePostEntityBulk
-export def "application-entity-post-bulk update" [
+export def "update-post-entity-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9256,7 +9256,7 @@ export def "application-entity-post-bulk update" [
 #
 # GET /application/entity/post/count
 # operationId: getPostCountCollection
-export def "application-entity-post-count get-collection" [
+export def "get-post-count-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9303,7 +9303,7 @@ export def "application-entity-post-count get-collection" [
 #
 # GET /application/entity/post/describe
 # operationId: getPostDescribe
-export def "application-entity-post-describe get" [
+export def "get-post-describe" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9349,7 +9349,7 @@ export def "application-entity-post-describe get" [
 #
 # GET /application/entity/post/list
 # operationId: getPostCollection
-export def "application-entity-post-list get-collection" [
+export def "get-post-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9404,7 +9404,7 @@ export def "application-entity-post-list get-collection" [
 #
 # DELETE /application/entity/post/{post_id}
 # operationId: deletePostEntity
-export def "application-entity-post delete" [
+export def "delete-post-entity" [
   post_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9444,7 +9444,7 @@ export def "application-entity-post delete" [
 #
 # GET /application/entity/post/{post_id}
 # operationId: getPostEntity
-export def "application-entity-post get" [
+export def "get-post-entity" [
   post_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9497,7 +9497,7 @@ export def "application-entity-post get" [
 # PUT /application/entity/post/{post_id}
 # operationId: updatePostEntity
 # --relation shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
-export def "application-entity-post update" [
+export def "update-post-entity" [
   post_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9549,7 +9549,7 @@ export def "application-entity-post update" [
 # operationId: createPriceBookEntity
 # --currency shape: {code?: string}
 # --relation shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
-export def "application-entity-price-book create" [
+export def "create-price-book-entity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9602,7 +9602,7 @@ export def "application-entity-price-book create" [
 #
 # GET /application/entity/priceBook/aggregate
 # operationId: getPriceBookAggregate
-export def "application-entity-price-book-aggregate get" [
+export def "get-price-book-aggregate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9652,7 +9652,7 @@ export def "application-entity-price-book-aggregate get" [
 #
 # DELETE /application/entity/priceBook/bulk
 # operationId: deletePriceBookCollectionBulk
-export def "application-entity-price-book-bulk delete-collection" [
+export def "delete-price-book-collection-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9694,7 +9694,7 @@ export def "application-entity-price-book-bulk delete-collection" [
 #
 # POST /application/entity/priceBook/bulk
 # operationId: createPriceBookEntityBulk
-export def "application-entity-price-book-bulk create" [
+export def "create-price-book-entity-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9738,7 +9738,7 @@ export def "application-entity-price-book-bulk create" [
 #
 # PUT /application/entity/priceBook/bulk
 # operationId: updatePriceBookEntityBulk
-export def "application-entity-price-book-bulk update" [
+export def "update-price-book-entity-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9782,7 +9782,7 @@ export def "application-entity-price-book-bulk update" [
 #
 # GET /application/entity/priceBook/count
 # operationId: getPriceBookCountCollection
-export def "application-entity-price-book-count get-collection" [
+export def "get-price-book-count-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9829,7 +9829,7 @@ export def "application-entity-price-book-count get-collection" [
 #
 # GET /application/entity/priceBook/describe
 # operationId: getPriceBookDescribe
-export def "application-entity-price-book-describe get" [
+export def "get-price-book-describe" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9875,7 +9875,7 @@ export def "application-entity-price-book-describe get" [
 #
 # GET /application/entity/priceBook/list
 # operationId: getPriceBookCollection
-export def "application-entity-price-book-list get-collection" [
+export def "get-price-book-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9930,7 +9930,7 @@ export def "application-entity-price-book-list get-collection" [
 #
 # DELETE /application/entity/priceBook/{priceBook_id}
 # operationId: deletePriceBookEntity
-export def "application-entity-price-book delete" [
+export def "delete-price-book-entity" [
   price_book_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9970,7 +9970,7 @@ export def "application-entity-price-book delete" [
 #
 # GET /application/entity/priceBook/{priceBook_id}
 # operationId: getPriceBookEntity
-export def "application-entity-price-book get" [
+export def "get-price-book-entity" [
   price_book_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10024,7 +10024,7 @@ export def "application-entity-price-book get" [
 # operationId: updatePriceBookEntity
 # --currency shape: {code?: string}
 # --relation shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
-export def "application-entity-price-book update" [
+export def "update-price-book-entity" [
   price_book_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10081,7 +10081,7 @@ export def "application-entity-price-book update" [
 # operationId: createPriceBookItemEntity
 # --price item shape: {currency?: string, value?: float}
 # --relation shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
-export def "application-entity-price-book-item create" [
+export def "create-price-book-item-entity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10133,7 +10133,7 @@ export def "application-entity-price-book-item create" [
 #
 # GET /application/entity/priceBookItem/aggregate
 # operationId: getPriceBookItemAggregate
-export def "application-entity-price-book-item-aggregate get" [
+export def "get-price-book-item-aggregate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10183,7 +10183,7 @@ export def "application-entity-price-book-item-aggregate get" [
 #
 # DELETE /application/entity/priceBookItem/bulk
 # operationId: deletePriceBookItemCollectionBulk
-export def "application-entity-price-book-item-bulk delete-collection" [
+export def "delete-price-book-item-collection-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10225,7 +10225,7 @@ export def "application-entity-price-book-item-bulk delete-collection" [
 #
 # POST /application/entity/priceBookItem/bulk
 # operationId: createPriceBookItemEntityBulk
-export def "application-entity-price-book-item-bulk create" [
+export def "create-price-book-item-entity-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10269,7 +10269,7 @@ export def "application-entity-price-book-item-bulk create" [
 #
 # PUT /application/entity/priceBookItem/bulk
 # operationId: updatePriceBookItemEntityBulk
-export def "application-entity-price-book-item-bulk update" [
+export def "update-price-book-item-entity-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10313,7 +10313,7 @@ export def "application-entity-price-book-item-bulk update" [
 #
 # GET /application/entity/priceBookItem/count
 # operationId: getPriceBookItemCountCollection
-export def "application-entity-price-book-item-count get-collection" [
+export def "get-price-book-item-count-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10360,7 +10360,7 @@ export def "application-entity-price-book-item-count get-collection" [
 #
 # GET /application/entity/priceBookItem/describe
 # operationId: getPriceBookItemDescribe
-export def "application-entity-price-book-item-describe get" [
+export def "get-price-book-item-describe" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10406,7 +10406,7 @@ export def "application-entity-price-book-item-describe get" [
 #
 # GET /application/entity/priceBookItem/list
 # operationId: getPriceBookItemCollection
-export def "application-entity-price-book-item-list get-collection" [
+export def "get-price-book-item-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10461,7 +10461,7 @@ export def "application-entity-price-book-item-list get-collection" [
 #
 # DELETE /application/entity/priceBookItem/{priceBookItem_id}
 # operationId: deletePriceBookItemEntity
-export def "application-entity-price-book-item delete" [
+export def "delete-price-book-item-entity" [
   price_book_item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10501,7 +10501,7 @@ export def "application-entity-price-book-item delete" [
 #
 # GET /application/entity/priceBookItem/{priceBookItem_id}
 # operationId: getPriceBookItemEntity
-export def "application-entity-price-book-item get" [
+export def "get-price-book-item-entity" [
   price_book_item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10555,7 +10555,7 @@ export def "application-entity-price-book-item get" [
 # operationId: updatePriceBookItemEntity
 # --price item shape: {currency?: string, value?: float}
 # --relation shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
-export def "application-entity-price-book-item update" [
+export def "update-price-book-item-entity" [
   price_book_item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10613,7 +10613,7 @@ export def "application-entity-price-book-item update" [
 # --image item shape: {type?: string, url?: string}
 # --price item shape: {currency?: string, value?: float}
 # --relation shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
-export def "application-entity-product create" [
+export def "create-product-entity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10681,7 +10681,7 @@ export def "application-entity-product create" [
 #
 # GET /application/entity/product/aggregate
 # operationId: getProductAggregate
-export def "application-entity-product-aggregate get" [
+export def "get-product-aggregate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10731,7 +10731,7 @@ export def "application-entity-product-aggregate get" [
 #
 # DELETE /application/entity/product/bulk
 # operationId: deleteProductCollectionBulk
-export def "application-entity-product-bulk delete-collection" [
+export def "delete-product-collection-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10773,7 +10773,7 @@ export def "application-entity-product-bulk delete-collection" [
 #
 # POST /application/entity/product/bulk
 # operationId: createProductEntityBulk
-export def "application-entity-product-bulk create" [
+export def "create-product-entity-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10817,7 +10817,7 @@ export def "application-entity-product-bulk create" [
 #
 # PUT /application/entity/product/bulk
 # operationId: updateProductEntityBulk
-export def "application-entity-product-bulk update" [
+export def "update-product-entity-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10861,7 +10861,7 @@ export def "application-entity-product-bulk update" [
 #
 # GET /application/entity/product/count
 # operationId: getProductCountCollection
-export def "application-entity-product-count get-collection" [
+export def "get-product-count-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10908,7 +10908,7 @@ export def "application-entity-product-count get-collection" [
 #
 # GET /application/entity/product/describe
 # operationId: getProductDescribe
-export def "application-entity-product-describe get" [
+export def "get-product-describe" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10954,7 +10954,7 @@ export def "application-entity-product-describe get" [
 #
 # GET /application/entity/product/list
 # operationId: getProductCollection
-export def "application-entity-product-list get-collection" [
+export def "get-product-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11009,7 +11009,7 @@ export def "application-entity-product-list get-collection" [
 #
 # DELETE /application/entity/product/{product_id}
 # operationId: deleteProductEntity
-export def "application-entity-product delete" [
+export def "delete-product-entity" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11049,7 +11049,7 @@ export def "application-entity-product delete" [
 #
 # GET /application/entity/product/{product_id}
 # operationId: getProductEntity
-export def "application-entity-product get" [
+export def "get-product-entity" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11105,7 +11105,7 @@ export def "application-entity-product get" [
 # --image item shape: {type?: string, url?: string}
 # --price item shape: {currency?: string, value?: float}
 # --relation shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
-export def "application-entity-product update" [
+export def "update-product-entity" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11176,7 +11176,7 @@ export def "application-entity-product update" [
 # POST /application/entity/project
 # operationId: createProjectEntity
 # --relation shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
-export def "application-entity-project create" [
+export def "create-project-entity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11231,7 +11231,7 @@ export def "application-entity-project create" [
 #
 # GET /application/entity/project/aggregate
 # operationId: getProjectAggregate
-export def "application-entity-project-aggregate get" [
+export def "get-project-aggregate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11281,7 +11281,7 @@ export def "application-entity-project-aggregate get" [
 #
 # DELETE /application/entity/project/bulk
 # operationId: deleteProjectCollectionBulk
-export def "application-entity-project-bulk delete-collection" [
+export def "delete-project-collection-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11323,7 +11323,7 @@ export def "application-entity-project-bulk delete-collection" [
 #
 # POST /application/entity/project/bulk
 # operationId: createProjectEntityBulk
-export def "application-entity-project-bulk create" [
+export def "create-project-entity-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11367,7 +11367,7 @@ export def "application-entity-project-bulk create" [
 #
 # PUT /application/entity/project/bulk
 # operationId: updateProjectEntityBulk
-export def "application-entity-project-bulk update" [
+export def "update-project-entity-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11411,7 +11411,7 @@ export def "application-entity-project-bulk update" [
 #
 # GET /application/entity/project/count
 # operationId: getProjectCountCollection
-export def "application-entity-project-count get-collection" [
+export def "get-project-count-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11458,7 +11458,7 @@ export def "application-entity-project-count get-collection" [
 #
 # GET /application/entity/project/describe
 # operationId: getProjectDescribe
-export def "application-entity-project-describe get" [
+export def "get-project-describe" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11504,7 +11504,7 @@ export def "application-entity-project-describe get" [
 #
 # GET /application/entity/project/list
 # operationId: getProjectCollection
-export def "application-entity-project-list get-collection" [
+export def "get-project-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11559,7 +11559,7 @@ export def "application-entity-project-list get-collection" [
 #
 # DELETE /application/entity/project/{project_id}
 # operationId: deleteProjectEntity
-export def "application-entity-project delete" [
+export def "delete-project-entity" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11599,7 +11599,7 @@ export def "application-entity-project delete" [
 #
 # GET /application/entity/project/{project_id}
 # operationId: getProjectEntity
-export def "application-entity-project get" [
+export def "get-project-entity" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11652,7 +11652,7 @@ export def "application-entity-project get" [
 # PUT /application/entity/project/{project_id}
 # operationId: updateProjectEntity
 # --relation shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
-export def "application-entity-project update" [
+export def "update-project-entity" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11714,7 +11714,7 @@ export def "application-entity-project update" [
 # --discount item shape: {percent_value?: float, type?: string, value?: float}
 # --relation shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
 # --tax item shape: {percent_value?: float, type?: string, value?: float}
-export def "application-entity-quote create" [
+export def "create-quote-entity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11778,7 +11778,7 @@ export def "application-entity-quote create" [
 #
 # GET /application/entity/quote/aggregate
 # operationId: getQuoteAggregate
-export def "application-entity-quote-aggregate get" [
+export def "get-quote-aggregate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11828,7 +11828,7 @@ export def "application-entity-quote-aggregate get" [
 #
 # DELETE /application/entity/quote/bulk
 # operationId: deleteQuoteCollectionBulk
-export def "application-entity-quote-bulk delete-collection" [
+export def "delete-quote-collection-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11870,7 +11870,7 @@ export def "application-entity-quote-bulk delete-collection" [
 #
 # POST /application/entity/quote/bulk
 # operationId: createQuoteEntityBulk
-export def "application-entity-quote-bulk create" [
+export def "create-quote-entity-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11914,7 +11914,7 @@ export def "application-entity-quote-bulk create" [
 #
 # PUT /application/entity/quote/bulk
 # operationId: updateQuoteEntityBulk
-export def "application-entity-quote-bulk update" [
+export def "update-quote-entity-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11958,7 +11958,7 @@ export def "application-entity-quote-bulk update" [
 #
 # GET /application/entity/quote/count
 # operationId: getQuoteCountCollection
-export def "application-entity-quote-count get-collection" [
+export def "get-quote-count-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12005,7 +12005,7 @@ export def "application-entity-quote-count get-collection" [
 #
 # GET /application/entity/quote/describe
 # operationId: getQuoteDescribe
-export def "application-entity-quote-describe get" [
+export def "get-quote-describe" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12051,7 +12051,7 @@ export def "application-entity-quote-describe get" [
 #
 # GET /application/entity/quote/list
 # operationId: getQuoteCollection
-export def "application-entity-quote-list get-collection" [
+export def "get-quote-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12106,7 +12106,7 @@ export def "application-entity-quote-list get-collection" [
 #
 # DELETE /application/entity/quote/{quote_id}
 # operationId: deleteQuoteEntity
-export def "application-entity-quote delete" [
+export def "delete-quote-entity" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12146,7 +12146,7 @@ export def "application-entity-quote delete" [
 #
 # GET /application/entity/quote/{quote_id}
 # operationId: getQuoteEntity
-export def "application-entity-quote get" [
+export def "get-quote-entity" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12203,7 +12203,7 @@ export def "application-entity-quote get" [
 # --discount item shape: {percent_value?: float, type?: string, value?: float}
 # --relation shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
 # --tax item shape: {percent_value?: float, type?: string, value?: float}
-export def "application-entity-quote update" [
+export def "update-quote-entity" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12272,7 +12272,7 @@ export def "application-entity-quote update" [
 # --discount item shape: {percent_value?: float, type?: string, value?: float}
 # --relation shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
 # --tax item shape: {percent_value?: float, type?: string, value?: float}
-export def "application-entity-quote-item create" [
+export def "create-quote-item-entity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12329,7 +12329,7 @@ export def "application-entity-quote-item create" [
 #
 # GET /application/entity/quoteItem/aggregate
 # operationId: getQuoteItemAggregate
-export def "application-entity-quote-item-aggregate get" [
+export def "get-quote-item-aggregate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12379,7 +12379,7 @@ export def "application-entity-quote-item-aggregate get" [
 #
 # DELETE /application/entity/quoteItem/bulk
 # operationId: deleteQuoteItemCollectionBulk
-export def "application-entity-quote-item-bulk delete-collection" [
+export def "delete-quote-item-collection-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12421,7 +12421,7 @@ export def "application-entity-quote-item-bulk delete-collection" [
 #
 # POST /application/entity/quoteItem/bulk
 # operationId: createQuoteItemEntityBulk
-export def "application-entity-quote-item-bulk create" [
+export def "create-quote-item-entity-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12465,7 +12465,7 @@ export def "application-entity-quote-item-bulk create" [
 #
 # PUT /application/entity/quoteItem/bulk
 # operationId: updateQuoteItemEntityBulk
-export def "application-entity-quote-item-bulk update" [
+export def "update-quote-item-entity-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12509,7 +12509,7 @@ export def "application-entity-quote-item-bulk update" [
 #
 # GET /application/entity/quoteItem/count
 # operationId: getQuoteItemCountCollection
-export def "application-entity-quote-item-count get-collection" [
+export def "get-quote-item-count-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12556,7 +12556,7 @@ export def "application-entity-quote-item-count get-collection" [
 #
 # GET /application/entity/quoteItem/describe
 # operationId: getQuoteItemDescribe
-export def "application-entity-quote-item-describe get" [
+export def "get-quote-item-describe" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12602,7 +12602,7 @@ export def "application-entity-quote-item-describe get" [
 #
 # GET /application/entity/quoteItem/list
 # operationId: getQuoteItemCollection
-export def "application-entity-quote-item-list get-collection" [
+export def "get-quote-item-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12657,7 +12657,7 @@ export def "application-entity-quote-item-list get-collection" [
 #
 # DELETE /application/entity/quoteItem/{quoteItem_id}
 # operationId: deleteQuoteItemEntity
-export def "application-entity-quote-item delete" [
+export def "delete-quote-item-entity" [
   quote_item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12697,7 +12697,7 @@ export def "application-entity-quote-item delete" [
 #
 # GET /application/entity/quoteItem/{quoteItem_id}
 # operationId: getQuoteItemEntity
-export def "application-entity-quote-item get" [
+export def "get-quote-item-entity" [
   quote_item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12752,7 +12752,7 @@ export def "application-entity-quote-item get" [
 # --discount item shape: {percent_value?: float, type?: string, value?: float}
 # --relation shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
 # --tax item shape: {percent_value?: float, type?: string, value?: float}
-export def "application-entity-quote-item update" [
+export def "update-quote-item-entity" [
   quote_item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12812,7 +12812,7 @@ export def "application-entity-quote-item update" [
 # POST /application/entity/tag
 # operationId: createTagEntity
 # --relation shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
-export def "application-entity-tag create" [
+export def "create-tag-entity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12862,7 +12862,7 @@ export def "application-entity-tag create" [
 #
 # GET /application/entity/tag/aggregate
 # operationId: getTagAggregate
-export def "application-entity-tag-aggregate get" [
+export def "get-tag-aggregate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12912,7 +12912,7 @@ export def "application-entity-tag-aggregate get" [
 #
 # DELETE /application/entity/tag/bulk
 # operationId: deleteTagCollectionBulk
-export def "application-entity-tag-bulk delete-collection" [
+export def "delete-tag-collection-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12954,7 +12954,7 @@ export def "application-entity-tag-bulk delete-collection" [
 #
 # POST /application/entity/tag/bulk
 # operationId: createTagEntityBulk
-export def "application-entity-tag-bulk create" [
+export def "create-tag-entity-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12998,7 +12998,7 @@ export def "application-entity-tag-bulk create" [
 #
 # PUT /application/entity/tag/bulk
 # operationId: updateTagEntityBulk
-export def "application-entity-tag-bulk update" [
+export def "update-tag-entity-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13042,7 +13042,7 @@ export def "application-entity-tag-bulk update" [
 #
 # GET /application/entity/tag/count
 # operationId: getTagCountCollection
-export def "application-entity-tag-count get-collection" [
+export def "get-tag-count-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13089,7 +13089,7 @@ export def "application-entity-tag-count get-collection" [
 #
 # GET /application/entity/tag/describe
 # operationId: getTagDescribe
-export def "application-entity-tag-describe get" [
+export def "get-tag-describe" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13135,7 +13135,7 @@ export def "application-entity-tag-describe get" [
 #
 # GET /application/entity/tag/list
 # operationId: getTagCollection
-export def "application-entity-tag-list get-collection" [
+export def "get-tag-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13190,7 +13190,7 @@ export def "application-entity-tag-list get-collection" [
 #
 # DELETE /application/entity/tag/{tag_id}
 # operationId: deleteTagEntity
-export def "application-entity-tag delete" [
+export def "delete-tag-entity" [
   tag_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13230,7 +13230,7 @@ export def "application-entity-tag delete" [
 #
 # GET /application/entity/tag/{tag_id}
 # operationId: getTagEntity
-export def "application-entity-tag get" [
+export def "get-tag-entity" [
   tag_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13283,7 +13283,7 @@ export def "application-entity-tag get" [
 # PUT /application/entity/tag/{tag_id}
 # operationId: updateTagEntity
 # --relation shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
-export def "application-entity-tag update" [
+export def "update-tag-entity" [
   tag_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13336,7 +13336,7 @@ export def "application-entity-tag update" [
 # POST /application/entity/task
 # operationId: createTaskEntity
 # --relation shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
-export def "application-entity-task create" [
+export def "create-task-entity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13391,7 +13391,7 @@ export def "application-entity-task create" [
 #
 # GET /application/entity/task/aggregate
 # operationId: getTaskAggregate
-export def "application-entity-task-aggregate get" [
+export def "get-task-aggregate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13441,7 +13441,7 @@ export def "application-entity-task-aggregate get" [
 #
 # DELETE /application/entity/task/bulk
 # operationId: deleteTaskCollectionBulk
-export def "application-entity-task-bulk delete-collection" [
+export def "delete-task-collection-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13483,7 +13483,7 @@ export def "application-entity-task-bulk delete-collection" [
 #
 # POST /application/entity/task/bulk
 # operationId: createTaskEntityBulk
-export def "application-entity-task-bulk create" [
+export def "create-task-entity-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13527,7 +13527,7 @@ export def "application-entity-task-bulk create" [
 #
 # PUT /application/entity/task/bulk
 # operationId: updateTaskEntityBulk
-export def "application-entity-task-bulk update" [
+export def "update-task-entity-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13571,7 +13571,7 @@ export def "application-entity-task-bulk update" [
 #
 # GET /application/entity/task/count
 # operationId: getTaskCountCollection
-export def "application-entity-task-count get-collection" [
+export def "get-task-count-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13618,7 +13618,7 @@ export def "application-entity-task-count get-collection" [
 #
 # GET /application/entity/task/describe
 # operationId: getTaskDescribe
-export def "application-entity-task-describe get" [
+export def "get-task-describe" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13664,7 +13664,7 @@ export def "application-entity-task-describe get" [
 #
 # GET /application/entity/task/list
 # operationId: getTaskCollection
-export def "application-entity-task-list get-collection" [
+export def "get-task-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13719,7 +13719,7 @@ export def "application-entity-task-list get-collection" [
 #
 # DELETE /application/entity/task/{task_id}
 # operationId: deleteTaskEntity
-export def "application-entity-task delete" [
+export def "delete-task-entity" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13759,7 +13759,7 @@ export def "application-entity-task delete" [
 #
 # GET /application/entity/task/{task_id}
 # operationId: getTaskEntity
-export def "application-entity-task get" [
+export def "get-task-entity" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13812,7 +13812,7 @@ export def "application-entity-task get" [
 # PUT /application/entity/task/{task_id}
 # operationId: updateTaskEntity
 # --relation shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
-export def "application-entity-task update" [
+export def "update-task-entity" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13871,7 +13871,7 @@ export def "application-entity-task update" [
 # operationId: createTicketEntity
 # --email item shape: {address?: string, type?: string}
 # --relation shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
-export def "application-entity-ticket create" [
+export def "create-ticket-entity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13929,7 +13929,7 @@ export def "application-entity-ticket create" [
 #
 # GET /application/entity/ticket/aggregate
 # operationId: getTicketAggregate
-export def "application-entity-ticket-aggregate get" [
+export def "get-ticket-aggregate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13979,7 +13979,7 @@ export def "application-entity-ticket-aggregate get" [
 #
 # DELETE /application/entity/ticket/bulk
 # operationId: deleteTicketCollectionBulk
-export def "application-entity-ticket-bulk delete-collection" [
+export def "delete-ticket-collection-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14021,7 +14021,7 @@ export def "application-entity-ticket-bulk delete-collection" [
 #
 # POST /application/entity/ticket/bulk
 # operationId: createTicketEntityBulk
-export def "application-entity-ticket-bulk create" [
+export def "create-ticket-entity-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14065,7 +14065,7 @@ export def "application-entity-ticket-bulk create" [
 #
 # PUT /application/entity/ticket/bulk
 # operationId: updateTicketEntityBulk
-export def "application-entity-ticket-bulk update" [
+export def "update-ticket-entity-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14109,7 +14109,7 @@ export def "application-entity-ticket-bulk update" [
 #
 # GET /application/entity/ticket/count
 # operationId: getTicketCountCollection
-export def "application-entity-ticket-count get-collection" [
+export def "get-ticket-count-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14156,7 +14156,7 @@ export def "application-entity-ticket-count get-collection" [
 #
 # GET /application/entity/ticket/describe
 # operationId: getTicketDescribe
-export def "application-entity-ticket-describe get" [
+export def "get-ticket-describe" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14202,7 +14202,7 @@ export def "application-entity-ticket-describe get" [
 #
 # GET /application/entity/ticket/list
 # operationId: getTicketCollection
-export def "application-entity-ticket-list get-collection" [
+export def "get-ticket-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14257,7 +14257,7 @@ export def "application-entity-ticket-list get-collection" [
 #
 # DELETE /application/entity/ticket/{ticket_id}
 # operationId: deleteTicketEntity
-export def "application-entity-ticket delete" [
+export def "delete-ticket-entity" [
   ticket_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14297,7 +14297,7 @@ export def "application-entity-ticket delete" [
 #
 # GET /application/entity/ticket/{ticket_id}
 # operationId: getTicketEntity
-export def "application-entity-ticket get" [
+export def "get-ticket-entity" [
   ticket_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14351,7 +14351,7 @@ export def "application-entity-ticket get" [
 # operationId: updateTicketEntity
 # --email item shape: {address?: string, type?: string}
 # --relation shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
-export def "application-entity-ticket update" [
+export def "update-ticket-entity" [
   ticket_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14417,7 +14417,7 @@ export def "application-entity-ticket update" [
 # --phone item shape: {number?: string, type?: string}
 # --relation shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
 # --website item shape: {address?: string, type?: string}
-export def "application-entity-user create" [
+export def "create-user-entity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14481,7 +14481,7 @@ export def "application-entity-user create" [
 #
 # GET /application/entity/user/aggregate
 # operationId: getUserAggregate
-export def "application-entity-user-aggregate get" [
+export def "get-user-aggregate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14531,7 +14531,7 @@ export def "application-entity-user-aggregate get" [
 #
 # DELETE /application/entity/user/bulk
 # operationId: deleteUserCollectionBulk
-export def "application-entity-user-bulk delete-collection" [
+export def "delete-user-collection-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14573,7 +14573,7 @@ export def "application-entity-user-bulk delete-collection" [
 #
 # POST /application/entity/user/bulk
 # operationId: createUserEntityBulk
-export def "application-entity-user-bulk create" [
+export def "create-user-entity-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14617,7 +14617,7 @@ export def "application-entity-user-bulk create" [
 #
 # PUT /application/entity/user/bulk
 # operationId: updateUserEntityBulk
-export def "application-entity-user-bulk update" [
+export def "update-user-entity-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14661,7 +14661,7 @@ export def "application-entity-user-bulk update" [
 #
 # GET /application/entity/user/count
 # operationId: getUserCountCollection
-export def "application-entity-user-count get-collection" [
+export def "get-user-count-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14708,7 +14708,7 @@ export def "application-entity-user-count get-collection" [
 #
 # GET /application/entity/user/describe
 # operationId: getUserDescribe
-export def "application-entity-user-describe get" [
+export def "get-user-describe" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14754,7 +14754,7 @@ export def "application-entity-user-describe get" [
 #
 # GET /application/entity/user/list
 # operationId: getUserCollection
-export def "application-entity-user-list get-collection" [
+export def "get-user-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14809,7 +14809,7 @@ export def "application-entity-user-list get-collection" [
 #
 # DELETE /application/entity/user/{user_id}
 # operationId: deleteUserEntity
-export def "application-entity-user delete" [
+export def "delete-user-entity" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14849,7 +14849,7 @@ export def "application-entity-user delete" [
 #
 # GET /application/entity/user/{user_id}
 # operationId: getUserEntity
-export def "application-entity-user get" [
+export def "get-user-entity" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14907,7 +14907,7 @@ export def "application-entity-user get" [
 # --phone item shape: {number?: string, type?: string}
 # --relation shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
 # --website item shape: {address?: string, type?: string}
-export def "application-entity-user update" [
+export def "update-user-entity" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14973,7 +14973,7 @@ export def "application-entity-user update" [
 #
 # GET /application/entity/{entity_id}
 # operationId: getEntityEntity
-export def "application-entity list" [
+export def "get-entity-entity" [
   entity_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15018,7 +15018,7 @@ export def "application-entity list" [
 # POST /application/entity/{entity_id}
 # operationId: createEntityItemEntity
 # --relation shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
-export def "application-entity create-item" [
+export def "create-entity-item-entity" [
   entity_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15067,7 +15067,7 @@ export def "application-entity create-item" [
 #
 # GET /application/entity/{entity_id}/aggregate
 # operationId: getEntityItemAggregate
-export def "application-entity-aggregate get-item" [
+export def "get-entity-item-aggregate" [
   entity_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15119,7 +15119,7 @@ export def "application-entity-aggregate get-item" [
 #
 # DELETE /application/entity/{entity_id}/bulk
 # operationId: deleteEntityItemCollectionBulk
-export def "application-entity-bulk delete-item-collection" [
+export def "delete-entity-item-collection-bulk" [
   entity_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15163,7 +15163,7 @@ export def "application-entity-bulk delete-item-collection" [
 #
 # POST /application/entity/{entity_id}/bulk
 # operationId: createEntityItemEntityBulk
-export def "application-entity-bulk create-item" [
+export def "create-entity-item-entity-bulk" [
   entity_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15209,7 +15209,7 @@ export def "application-entity-bulk create-item" [
 #
 # PUT /application/entity/{entity_id}/bulk
 # operationId: updateEntityItemEntityBulk
-export def "application-entity-bulk update-item" [
+export def "update-entity-item-entity-bulk" [
   entity_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15255,7 +15255,7 @@ export def "application-entity-bulk update-item" [
 #
 # GET /application/entity/{entity_id}/count
 # operationId: getEntityItemCountCollection
-export def "application-entity-count get-item-collection" [
+export def "get-entity-item-count-collection" [
   entity_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15304,7 +15304,7 @@ export def "application-entity-count get-item-collection" [
 #
 # GET /application/entity/{entity_id}/describe
 # operationId: getEntityItemDescribe
-export def "application-entity-describe get-item" [
+export def "get-entity-item-describe" [
   entity_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15352,7 +15352,7 @@ export def "application-entity-describe get-item" [
 #
 # GET /application/entity/{entity_id}/list
 # operationId: getEntityItemCollection
-export def "application-entity-list get-item-collection" [
+export def "get-entity-item-collection" [
   entity_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15409,7 +15409,7 @@ export def "application-entity-list get-item-collection" [
 #
 # DELETE /application/entity/{entity_id}/{entity_item_id}
 # operationId: deleteEntityItemEntity
-export def "application-entity delete" [
+export def "delete-entity-item-entity" [
   entity_id: string
   entity_item_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -15451,7 +15451,7 @@ export def "application-entity delete" [
 #
 # GET /application/entity/{entity_id}/{entity_item_id}
 # operationId: getEntityItemEntity
-export def "application-entity get" [
+export def "get-entity-item-entity" [
   entity_id: string
   entity_item_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -15506,7 +15506,7 @@ export def "application-entity get" [
 # PUT /application/entity/{entity_id}/{entity_item_id}
 # operationId: updateEntityItemEntity
 # --relation shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
-export def "application-entity update" [
+export def "update-entity-item-entity" [
   entity_id: string
   entity_item_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -15557,7 +15557,7 @@ export def "application-entity update" [
 #
 # GET /application/field/count
 # operationId: getFieldCountCollection
-export def "application-field-count get-collection" [
+export def "get-field-count-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15595,7 +15595,7 @@ export def "application-field-count get-collection" [
 #
 # GET /application/field/list
 # operationId: getFieldCollection
-export def "application-field-list get-collection" [
+export def "get-field-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15639,7 +15639,7 @@ export def "application-field-list get-collection" [
 #
 # GET /application/field/{field_id}
 # operationId: getFieldEntity
-export def "application-field list" [
+export def "get-field-entity" [
   field_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15683,7 +15683,7 @@ export def "application-field list" [
 # POST /application/field/{field_id}
 # operationId: createFieldItemEntity
 # --relation shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
-export def "application-field create-item-entity" [
+export def "create-field-item-entity" [
   field_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15735,7 +15735,7 @@ export def "application-field create-item-entity" [
 #
 # GET /application/field/{field_id}/count
 # operationId: getFieldItemCountCollection
-export def "application-field-count get-item-collection" [
+export def "get-field-item-count-collection" [
   field_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15775,7 +15775,7 @@ export def "application-field-count get-item-collection" [
 #
 # GET /application/field/{field_id}/describe
 # operationId: getFieldItemDescribe
-export def "application-field-describe get-item" [
+export def "get-field-item-describe" [
   field_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15816,7 +15816,7 @@ export def "application-field-describe get-item" [
 #
 # GET /application/field/{field_id}/list
 # operationId: getFieldItemCollection
-export def "application-field-list get-item-collection" [
+export def "get-field-item-collection" [
   field_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15861,7 +15861,7 @@ export def "application-field-list get-item-collection" [
 #
 # DELETE /application/field/{field_id}/{field_item_id}
 # operationId: deleteFieldItemEntity
-export def "application-field delete-entity" [
+export def "delete-field-item-entity" [
   field_id: string
   field_item_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -15903,7 +15903,7 @@ export def "application-field delete-entity" [
 #
 # GET /application/field/{field_id}/{field_item_id}
 # operationId: getFieldItemEntity
-export def "application-field get-entity" [
+export def "get-field-item-entity" [
   field_id: string
   field_item_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -15949,7 +15949,7 @@ export def "application-field get-entity" [
 # PUT /application/field/{field_id}/{field_item_id}
 # operationId: updateFieldItemEntity
 # --relation shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
-export def "application-field update-entity" [
+export def "update-field-item-entity" [
   field_id: string
   field_item_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16003,7 +16003,7 @@ export def "application-field update-entity" [
 #
 # GET /application/list
 # operationId: getApplicationCollection
-export def "application-list get-collection" [
+export def "get-application-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -16047,7 +16047,7 @@ export def "application-list get-collection" [
 # POST /application/request
 # operationId: createRequestEntity
 # --header item shape: {name?: string, value?: string}
-export def "application-request create-entity" [
+export def "create-request-entity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -16092,7 +16092,7 @@ export def "application-request create-entity" [
 #
 # DELETE /application/{key}
 # operationId: deleteApplicationEntity
-export def "application delete-entity" [
+export def "delete-application-entity" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16131,7 +16131,7 @@ export def "application delete-entity" [
 #
 # GET /application/{key}
 # operationId: getApplicationEntity
-export def "application get-entity" [
+export def "get-application-entity" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16172,7 +16172,7 @@ export def "application get-entity" [
 #
 # PUT /application/{key}
 # operationId: updateApplicationEntity
-export def "application update-entity" [
+export def "update-application-entity" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16218,7 +16218,7 @@ export def "application update-entity" [
 #
 # GET /platform/list
 # operationId: getPlatformCollection
-export def "platform-list get-collection" [
+export def "get-platform-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -16260,7 +16260,7 @@ export def "platform-list get-collection" [
 #
 # GET /platform/{type}
 # operationId: getPlatformEntity
-export def "platform get-entity" [
+export def "get-platform-entity" [
   type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16301,7 +16301,7 @@ export def "platform get-entity" [
 #
 # POST /user
 # operationId: createInternalUserEntity
-export def "user create-internal-entity" [
+export def "create-internal-user-entity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -16353,7 +16353,7 @@ export def "user create-internal-entity" [
 #
 # GET /user/count
 # operationId: getInternalUserCountCollection
-export def "user-count get-internal-collection" [
+export def "get-internal-user-count-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -16392,7 +16392,7 @@ export def "user-count get-internal-collection" [
 #
 # GET /user/list
 # operationId: getInternalUserCollection
-export def "user-list get-internal-collection" [
+export def "get-internal-user-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -16437,7 +16437,7 @@ export def "user-list get-internal-collection" [
 #
 # DELETE /user/{internal_user_id}
 # operationId: deleteInternalUserEntity
-export def "user delete-entity" [
+export def "delete-internal-user-entity" [
   internal_user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16476,7 +16476,7 @@ export def "user delete-entity" [
 #
 # GET /user/{internal_user_id}
 # operationId: getInternalUserEntity
-export def "user get-entity" [
+export def "get-internal-user-entity" [
   internal_user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16519,7 +16519,7 @@ export def "user get-entity" [
 #
 # PUT /user/{internal_user_id}
 # operationId: updateInternalUserEntity
-export def "user update-entity" [
+export def "update-internal-user-entity" [
   internal_user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

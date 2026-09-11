@@ -99,7 +99,7 @@ def auth-scheme-completer [] { ["x-rapidapi-host" "x-rapidapi-key"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "welcome get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -122,7 +122,7 @@ export def commands []: nothing -> table {
 # Get Welcome
 #
 # GET /
-export def "welcome get" [
+export def "get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -155,7 +155,7 @@ export def "welcome get" [
 # Get Article Info
 #
 # GET /article/{article_id}
-export def "article get" [
+export def "get-article-article-id" [
   article_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -190,7 +190,7 @@ export def "article get" [
 # Get Article's Content
 #
 # GET /article/{article_id}/content
-export def "article-content get" [
+export def "get-article-article-id-content" [
   article_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -225,7 +225,7 @@ export def "article-content get" [
 # Get Article Fans
 #
 # GET /article/{article_id}/fans
-export def "article-fans get" [
+export def "get-article-article-id-fans" [
   article_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -260,7 +260,7 @@ export def "article-fans get" [
 # Get Article's Markdown
 #
 # GET /article/{article_id}/markdown
-export def "article-markdown get" [
+export def "get-article-article-id-markdown" [
   article_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -295,7 +295,7 @@ export def "article-markdown get" [
 # Get Related Articles
 #
 # GET /article/{article_id}/related
-export def "article-related get" [
+export def "get-article-article-id-related" [
   article_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -330,7 +330,7 @@ export def "article-related get" [
 # Get Article Responses
 #
 # GET /article/{article_id}/responses
-export def "article-responses get" [
+export def "get-article-article-id-responses" [
   article_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -365,7 +365,7 @@ export def "article-responses get" [
 # Get Latest Posts
 #
 # GET /latestposts/{topic_slug}
-export def "latestposts get" [
+export def "get-latestposts-topic-slug" [
   topic_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -400,7 +400,7 @@ export def "latestposts get" [
 # Get List Info
 #
 # GET /list/{list_id}
-export def "list get" [
+export def "get-list-list-id" [
   list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -435,7 +435,7 @@ export def "list get" [
 # Get List Articles
 #
 # GET /list/{list_id}/articles
-export def "list-articles get" [
+export def "get-list-list-id-articles" [
   list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -470,7 +470,7 @@ export def "list-articles get" [
 # Get List Responses
 #
 # GET /list/{list_id}/responses
-export def "list-responses get" [
+export def "get-list-list-id-responses" [
   list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -505,7 +505,7 @@ export def "list-responses get" [
 # Get Publication ID
 #
 # GET /publication/id_for/{publication_slug}
-export def "publication-id-for get" [
+export def "get-publication-id-for-publication-slug" [
   publication_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -540,7 +540,7 @@ export def "publication-id-for get" [
 # Get Publication Info
 #
 # GET /publication/{publication_id}
-export def "publication get" [
+export def "get-publication-publication-id" [
   publication_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -575,7 +575,7 @@ export def "publication get" [
 # Get Publication Articles
 #
 # GET /publication/{publication_id}/articles
-export def "publication-articles get" [
+export def "get-publication-publication-id-articles" [
   publication_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -612,7 +612,7 @@ export def "publication-articles get" [
 # Get Publication Newsletter
 #
 # GET /publication/{publication_id}/newsletter
-export def "publication-newsletter get" [
+export def "get-publication-publication-id-newsletter" [
   publication_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -647,7 +647,7 @@ export def "publication-newsletter get" [
 # Get Related Tags
 #
 # GET /related_tags/{tag}
-export def "related-tags get" [
+export def "get-related-tags-tag" [
   tag: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -682,7 +682,7 @@ export def "related-tags get" [
 # Search Articles
 #
 # GET /search/articles?query={query}
-export def "search-articles-queryquery get" [
+export def "get-search-articlesquery-query" [
   query: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -719,7 +719,7 @@ export def "search-articles-queryquery get" [
 # Search Lists
 #
 # GET /search/lists?query={query}
-export def "search-lists-queryquery get" [
+export def "get-search-listsquery-query" [
   query: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -756,7 +756,7 @@ export def "search-lists-queryquery get" [
 # Search Publications
 #
 # GET /search/publications?query={query}
-export def "search-publications-queryquery get" [
+export def "get-search-publicationsquery-query" [
   query: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -793,7 +793,7 @@ export def "search-publications-queryquery get" [
 # Search Tags
 #
 # GET /search/tags?query={query}
-export def "search-tags-queryquery get" [
+export def "get-search-tagsquery-query" [
   query: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -830,7 +830,7 @@ export def "search-tags-queryquery get" [
 # Search Users
 #
 # GET /search/users?query={query}
-export def "search-users-queryquery get" [
+export def "get-search-usersquery-query" [
   query: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -867,7 +867,7 @@ export def "search-users-queryquery get" [
 # Get Top Writers
 #
 # GET /top_writer/{topic_slug}
-export def "top-writer get" [
+export def "get-top-writer-topic-slug" [
   topic_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -904,7 +904,7 @@ export def "top-writer get" [
 # Get Topfeeds
 #
 # GET /topfeeds/{tag}/{mode}
-export def "topfeeds get" [
+export def "get-topfeeds-tag-mode" [
   tag: string
   mode: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -944,7 +944,7 @@ export def "topfeeds get" [
 # Get User ID
 #
 # GET /user/id_for/{username}
-export def "user-id-for get" [
+export def "get-user-id-for-username" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -979,7 +979,7 @@ export def "user-id-for get" [
 # Get User Info
 #
 # GET /user/{user_id}
-export def "user get" [
+export def "get-user-user-id" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1014,7 +1014,7 @@ export def "user get" [
 # Get User's Articles
 #
 # GET /user/{user_id}/articles
-export def "user-articles get" [
+export def "get-user-user-id-articles" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1049,7 +1049,7 @@ export def "user-articles get" [
 # Get User Followers
 #
 # GET /user/{user_id}/followers
-export def "user-followers get" [
+export def "get-user-user-id-followers" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1086,7 +1086,7 @@ export def "user-followers get" [
 # Get User Following
 #
 # GET /user/{user_id}/following
-export def "user-following get" [
+export def "get-user-user-id-following" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1123,7 +1123,7 @@ export def "user-following get" [
 # Get User's Interests
 #
 # GET /user/{user_id}/interests
-export def "user-interests get" [
+export def "get-user-user-id-interests" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1158,7 +1158,7 @@ export def "user-interests get" [
 # Get User's Lists
 #
 # GET /user/{user_id}/lists
-export def "user-lists get" [
+export def "get-user-user-id-lists" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1193,7 +1193,7 @@ export def "user-lists get" [
 # Get User's Publications
 #
 # GET /user/{user_id}/publications
-export def "user-publications get" [
+export def "get-user-user-id-publications" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1228,7 +1228,7 @@ export def "user-publications get" [
 # Get User's Top Articles
 #
 # GET /user/{user_id}/top_articles
-export def "user-top-articles get" [
+export def "get-user-user-id-top-articles" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

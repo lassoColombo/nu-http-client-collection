@@ -138,7 +138,7 @@ def order-by-completer-1 [] { ["a-z" "date-added" "release-year"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-account" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -162,7 +162,7 @@ export def commands []: nothing -> table {
 #
 # GET /account
 # operationId: getAccount
-export def "account get" [
+export def "get-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -200,7 +200,7 @@ export def "account get" [
 # PATCH /account
 # operationId: updateAccount
 # --address shape: {addressLine1?: string, addressLine2?: string, city?: string, country?: string, postcode?: string, state?: string}
-export def "account update" [
+export def "update-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -248,7 +248,7 @@ export def "account update" [
 #
 # GET /account/billing/methods
 # operationId: getPaymentMethods
-export def "account-billing-methods list" [
+export def "get-payment-methods" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -285,7 +285,7 @@ export def "account-billing-methods list" [
 #
 # POST /account/billing/methods
 # operationId: addPaymentMethod
-export def "account-billing-methods create-payment" [
+export def "add-payment-method" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -328,7 +328,7 @@ export def "account-billing-methods create-payment" [
 #
 # DELETE /account/billing/methods/{id}
 # operationId: removePaymentMethod
-export def "account-billing-methods delete-payment" [
+export def "remove-payment-method" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -367,7 +367,7 @@ export def "account-billing-methods delete-payment" [
 #
 # GET /account/billing/methods/{id}
 # operationId: getPaymentMethod
-export def "account-billing-methods get-payment" [
+export def "get-payment-method" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -406,7 +406,7 @@ export def "account-billing-methods get-payment" [
 #
 # GET /account/billing/purchases
 # operationId: getPurchases
-export def "account-billing-purchases get" [
+export def "get-purchases" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -443,7 +443,7 @@ export def "account-billing-purchases get" [
 #
 # POST /account/billing/purchases
 # operationId: makePurchase
-export def "account-billing-purchases create-make" [
+export def "make-purchase" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -487,7 +487,7 @@ export def "account-billing-purchases create-make" [
 #
 # DELETE /account/billing/subscriptions/{id}
 # operationId: cancelSubscription
-export def "account-billing-subscriptions cancel" [
+export def "cancel-subscription" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -526,7 +526,7 @@ export def "account-billing-subscriptions cancel" [
 #
 # PUT /account/billing/subscriptions/{id}
 # operationId: updateSubscription
-export def "account-billing-subscriptions update" [
+export def "update-subscription" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -566,7 +566,7 @@ export def "account-billing-subscriptions update" [
 #
 # GET /account/devices
 # operationId: getDevices
-export def "account-devices list" [
+export def "get-devices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -603,7 +603,7 @@ export def "account-devices list" [
 #
 # POST /account/devices
 # operationId: registerDevice
-export def "account-devices create" [
+export def "register-device" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -646,7 +646,7 @@ export def "account-devices create" [
 #
 # POST /account/devices/authorization
 # operationId: authorizeDevice
-export def "account-devices-authorization create-authorize" [
+export def "authorize-device" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -687,7 +687,7 @@ export def "account-devices-authorization create-authorize" [
 #
 # DELETE /account/devices/{id}
 # operationId: deregisterDevice
-export def "account-devices delete-deregister" [
+export def "deregister-device" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -726,7 +726,7 @@ export def "account-devices delete-deregister" [
 #
 # GET /account/devices/{id}
 # operationId: getDevice
-export def "account-devices get" [
+export def "get-device" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -765,7 +765,7 @@ export def "account-devices get" [
 #
 # PUT /account/devices/{id}/name
 # operationId: renameDevice
-export def "account-devices-name rename" [
+export def "rename-device" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -805,7 +805,7 @@ export def "account-devices-name rename" [
 #
 # GET /account/entitlements
 # operationId: getEntitlements
-export def "account-entitlements get" [
+export def "get-entitlements" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -842,7 +842,7 @@ export def "account-entitlements get" [
 #
 # GET /account/items/{id}/videos
 # operationId: getItemMediaFiles
-export def "account-items-videos get-media-files" [
+export def "get-item-media-files" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -887,7 +887,7 @@ export def "account-items-videos get-media-files" [
 #
 # GET /account/items/{id}/videos-guarded
 # operationId: getItemMediaFilesGuarded
-export def "account-items-videos-guarded get-media-files" [
+export def "get-item-media-files-guarded" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -932,7 +932,7 @@ export def "account-items-videos-guarded get-media-files" [
 #
 # GET /account/nonce
 # operationId: generateNonce
-export def "account-nonce generate" [
+export def "generate-nonce" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -969,7 +969,7 @@ export def "account-nonce generate" [
 #
 # PUT /account/password
 # operationId: changePassword
-export def "account-password update-change" [
+export def "change-password" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1011,7 +1011,7 @@ export def "account-password update-change" [
 #
 # PUT /account/pin
 # operationId: changePin
-export def "account-pin update-change" [
+export def "change-pin" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1052,7 +1052,7 @@ export def "account-pin update-change" [
 #
 # GET /account/profile
 # operationId: getProfile
-export def "account-profile get" [
+export def "get-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1089,7 +1089,7 @@ export def "account-profile get" [
 #
 # GET /account/profile/bookmarks
 # operationId: getBookmarks
-export def "account-profile-bookmarks get" [
+export def "get-bookmarks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1126,7 +1126,7 @@ export def "account-profile-bookmarks get" [
 #
 # GET /account/profile/bookmarks/list
 # operationId: getBookmarkList
-export def "account-profile-bookmarks-list get" [
+export def "get-bookmark-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1170,7 +1170,7 @@ export def "account-profile-bookmarks-list get" [
 #
 # DELETE /account/profile/bookmarks/{itemId}
 # operationId: deleteItemBookmark
-export def "account-profile-bookmarks delete-item" [
+export def "delete-item-bookmark" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1209,7 +1209,7 @@ export def "account-profile-bookmarks delete-item" [
 #
 # GET /account/profile/bookmarks/{itemId}
 # operationId: getItemBookmark
-export def "account-profile-bookmarks get-item" [
+export def "get-item-bookmark" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1248,7 +1248,7 @@ export def "account-profile-bookmarks get-item" [
 #
 # PUT /account/profile/bookmarks/{itemId}
 # operationId: bookmarkItem
-export def "account-profile-bookmarks update-item" [
+export def "bookmark-item" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1287,7 +1287,7 @@ export def "account-profile-bookmarks update-item" [
 #
 # GET /account/profile/continue-watching/list
 # operationId: getContinueWatchingList
-export def "account-profile-continue-watching-list get" [
+export def "get-continue-watching-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1332,7 +1332,7 @@ export def "account-profile-continue-watching-list get" [
 #
 # GET /account/profile/items/{itemId}/next
 # operationId: getNextPlaybackItem
-export def "account-profile-items-next get-playback" [
+export def "get-next-playback-item" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1376,7 +1376,7 @@ export def "account-profile-items-next get-playback" [
 #
 # GET /account/profile/ratings
 # operationId: getRatings
-export def "account-profile-ratings get" [
+export def "get-ratings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1413,7 +1413,7 @@ export def "account-profile-ratings get" [
 #
 # GET /account/profile/ratings/list
 # operationId: getRatingsList
-export def "account-profile-ratings-list get" [
+export def "get-ratings-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1458,7 +1458,7 @@ export def "account-profile-ratings-list get" [
 #
 # GET /account/profile/ratings/{itemId}
 # operationId: getItemRating
-export def "account-profile-ratings get-item" [
+export def "get-item-rating" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1497,7 +1497,7 @@ export def "account-profile-ratings get-item" [
 #
 # PUT /account/profile/ratings/{itemId}
 # operationId: rateItem
-export def "account-profile-ratings update-rate-item" [
+export def "rate-item" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1537,7 +1537,7 @@ export def "account-profile-ratings update-rate-item" [
 #
 # DELETE /account/profile/watched
 # operationId: deleteWatched
-export def "account-profile-watched delete" [
+export def "delete-watched" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1575,7 +1575,7 @@ export def "account-profile-watched delete" [
 #
 # GET /account/profile/watched
 # operationId: getWatched
-export def "account-profile-watched get" [
+export def "get-watched" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1612,7 +1612,7 @@ export def "account-profile-watched get" [
 #
 # GET /account/profile/watched/list
 # operationId: getWatchedList
-export def "account-profile-watched-list get" [
+export def "get-watched-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1658,7 +1658,7 @@ export def "account-profile-watched-list get" [
 #
 # GET /account/profile/watched/{itemId}
 # operationId: getItemWatchedStatus
-export def "account-profile-watched get-item-status" [
+export def "get-item-watched-status" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1697,7 +1697,7 @@ export def "account-profile-watched get-item-status" [
 #
 # PUT /account/profile/watched/{itemId}
 # operationId: setItemWatchedStatus
-export def "account-profile-watched update-item-status" [
+export def "set-item-watched-status" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1737,7 +1737,7 @@ export def "account-profile-watched update-item-status" [
 #
 # POST /account/profiles
 # operationId: createProfile
-export def "account-profiles create" [
+export def "create-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1782,7 +1782,7 @@ export def "account-profiles create" [
 #
 # DELETE /account/profiles/{id}
 # operationId: deleteProfileWithId
-export def "account-profiles delete" [
+export def "delete-profile-with-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1821,7 +1821,7 @@ export def "account-profiles delete" [
 #
 # GET /account/profiles/{id}
 # operationId: getProfileWithId
-export def "account-profiles get" [
+export def "get-profile-with-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1860,7 +1860,7 @@ export def "account-profiles get" [
 #
 # PATCH /account/profiles/{id}
 # operationId: updateProfileWithId
-export def "account-profiles update" [
+export def "update-profile-with-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1909,7 +1909,7 @@ export def "account-profiles update" [
 #
 # POST /account/request-email-verification
 # operationId: requestEmailVerification
-export def "account-request-email-verification request" [
+export def "request-email-verification" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1946,7 +1946,7 @@ export def "account-request-email-verification request" [
 #
 # DELETE /authorization
 # operationId: signOut
-export def "authorization delete-sign-out" [
+export def "sign-out" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1983,7 +1983,7 @@ export def "authorization delete-sign-out" [
 #
 # POST /authorization
 # operationId: getAccountToken
-export def "authorization get-account-token" [
+export def "get-account-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2027,7 +2027,7 @@ export def "authorization get-account-token" [
 #
 # POST /authorization/device
 # operationId: getAccountTokenByCode
-export def "authorization-device get-account-token-by-code" [
+export def "get-account-token-by-code" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2070,7 +2070,7 @@ export def "authorization-device get-account-token-by-code" [
 #
 # POST /authorization/device/code
 # operationId: generateDeviceAuthorizationCode
-export def "authorization-device-code generate" [
+export def "generate-device-authorization-code" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2113,7 +2113,7 @@ export def "authorization-device-code generate" [
 #
 # POST /authorization/profile
 # operationId: getProfileToken
-export def "authorization-profile get-token" [
+export def "get-profile-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2157,7 +2157,7 @@ export def "authorization-profile get-token" [
 #
 # POST /authorization/refresh
 # operationId: refreshToken
-export def "authorization-refresh refresh-token" [
+export def "refresh-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2199,7 +2199,7 @@ export def "authorization-refresh refresh-token" [
 #
 # POST /authorization/sso
 # operationId: singleSignOn
-export def "authorization-sso create-single-sign" [
+export def "single-sign-on" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2244,7 +2244,7 @@ export def "authorization-sso create-single-sign" [
 #
 # GET /bt/plan/{token}
 # operationId: getPlanByToken
-export def "bt-plan get" [
+export def "get-plan-by-token" [
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2282,7 +2282,7 @@ export def "bt-plan get" [
 #
 # GET /bt/plans
 # operationId: getPlans
-export def "bt-plans get" [
+export def "get-plans" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2318,7 +2318,7 @@ export def "bt-plans get" [
 #
 # POST /bt/token/assign
 # operationId: assignToken
-export def "bt-token-assign assign" [
+export def "assign-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2359,7 +2359,7 @@ export def "bt-token-assign assign" [
 #
 # GET /bt/token/validate
 # operationId: checkUserToken
-export def "bt-token-validate check-user" [
+export def "check-user-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2397,7 +2397,7 @@ export def "bt-token-validate check-user" [
 #
 # GET /check-subscription/{id}
 # operationId: getSubscriptionData
-export def "check-subscription get-data" [
+export def "get-subscription-data" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2433,7 +2433,7 @@ export def "check-subscription get-data" [
 #
 # GET /config
 # operationId: getAppConfig
-export def "config get-app" [
+export def "get-app-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2475,7 +2475,7 @@ export def "config get-app" [
 #
 # GET /ee-bt/eligibility
 # operationId: checkEeBtEligibility
-export def "ee-bt-eligibility check" [
+export def "check-ee-bt-eligibility" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2511,7 +2511,7 @@ export def "ee-bt-eligibility check" [
 #
 # POST /ee/msisdn
 # operationId: assignMsisdn
-export def "ee-msisdn assign" [
+export def "assign-msisdn" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2554,7 +2554,7 @@ export def "ee-msisdn assign" [
 #
 # POST /ee/offers
 # operationId: getEligibleOffers
-export def "ee-offers get-eligible" [
+export def "get-eligible-offers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2597,7 +2597,7 @@ export def "ee-offers get-eligible" [
 #
 # POST /ee/pin
 # operationId: validatePinRequest
-export def "ee-pin validate-request" [
+export def "validate-pin-request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2641,7 +2641,7 @@ export def "ee-pin validate-request" [
 #
 # PUT /ee/pin
 # operationId: createPinRequest
-export def "ee-pin create-request" [
+export def "create-pin-request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2683,7 +2683,7 @@ export def "ee-pin create-request" [
 # Returns all the plans available for EE flow including additional description data.
 #
 # GET /ee/plans
-export def "ee-plans list" [
+export def "get-ee-plans" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2719,7 +2719,7 @@ export def "ee-plans list" [
 #
 # GET /ee/plans/{id}
 # operationId: getPlan
-export def "ee-plans get" [
+export def "get-plan" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2757,7 +2757,7 @@ export def "ee-plans get" [
 #
 # GET /ee/token/create
 # operationId: createToken
-export def "ee-token-create create" [
+export def "create-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2791,7 +2791,7 @@ export def "ee-token-create create" [
 #
 # GET /items/{id}
 # operationId: getItem
-export def "items get" [
+export def "get-item" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2837,7 +2837,7 @@ export def "items get" [
 #
 # GET /items/{id}/children
 # operationId: getItemChildrenList
-export def "items-children get-list" [
+export def "get-item-children-list" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2883,7 +2883,7 @@ export def "items-children get-list" [
 #
 # GET /items/{id}/related
 # operationId: getItemRelatedList
-export def "items-related get-list" [
+export def "get-item-related-list" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2928,7 +2928,7 @@ export def "items-related get-list" [
 #
 # GET /items/{id}/videos
 # operationId: getPublicItemMediaFiles
-export def "items-videos get-public-media-files" [
+export def "get-public-item-media-files" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2973,7 +2973,7 @@ export def "items-videos get-public-media-files" [
 #
 # GET /items/{itemId}/next
 # operationId: getAnonNextPlaybackItem
-export def "items-next get-anon-playback" [
+export def "get-anon-next-playback-item" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3016,7 +3016,7 @@ export def "items-next get-anon-playback" [
 #
 # POST /itv/billinghistory/{platform}
 # operationId: getBillingHistory
-export def "itv-billinghistory get-billing-history" [
+export def "get-billing-history" [
   platform: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3058,7 +3058,7 @@ export def "itv-billinghistory get-billing-history" [
 #
 # POST /itv/cards/{platform}
 # operationId: getCardDetails
-export def "itv-cards get-details" [
+export def "get-card-details" [
   platform: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3100,7 +3100,7 @@ export def "itv-cards get-details" [
 #
 # PUT /itv/cards/{platform}
 # operationId: changeCardDetails
-export def "itv-cards update-change-details" [
+export def "change-card-details" [
   platform: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3143,7 +3143,7 @@ export def "itv-cards update-change-details" [
 #
 # POST /itv/changeemail
 # operationId: changeEmail
-export def "itv-changeemail create-change-email" [
+export def "change-email" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3185,7 +3185,7 @@ export def "itv-changeemail create-change-email" [
 #
 # POST /itv/changemarketing
 # operationId: changeMarketing
-export def "itv-changemarketing create-change-marketing" [
+export def "change-marketing" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3227,7 +3227,7 @@ export def "itv-changemarketing create-change-marketing" [
 #
 # POST /itv/deleteaccount
 # operationId: deleteAccount
-export def "itv-delete-account delete" [
+export def "delete-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3268,7 +3268,7 @@ export def "itv-delete-account delete" [
 #
 # GET /itv/entitlements/current
 # operationId: getCurrentEntitlement
-export def "itv-entitlements-current get" [
+export def "get-current-entitlement" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3304,7 +3304,7 @@ export def "itv-entitlements-current get" [
 #
 # GET /itv/entitlements/history
 # operationId: getEntitlementsHistory
-export def "itv-entitlements-history get" [
+export def "get-entitlements-history" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3340,7 +3340,7 @@ export def "itv-entitlements-history get" [
 #
 # GET /itv/featureFlag/{feature}
 # operationId: getFeatureFlag
-export def "itv-feature-flag get" [
+export def "get-feature-flag" [
   feature: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3378,7 +3378,7 @@ export def "itv-feature-flag get" [
 #
 # POST /itv/googlepay/subscription
 # operationId: googlePaySubscription
-export def "itv-googlepay-subscription create-google-pay" [
+export def "google-pay-subscription" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3419,7 +3419,7 @@ export def "itv-googlepay-subscription create-google-pay" [
 #
 # GET /itv/had/entitlements
 # operationId: checkPreviousEntitlements
-export def "itv-had-entitlements check-previous" [
+export def "check-previous-entitlements" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3455,7 +3455,7 @@ export def "itv-had-entitlements check-previous" [
 #
 # POST /itv/items/clips
 # operationId: getItemsMediaClipFiles
-export def "itv-items-clips get-media-files" [
+export def "get-items-media-clip-files" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3496,7 +3496,7 @@ export def "itv-items-clips get-media-files" [
 #
 # POST /itv/items/downloadable
 # operationId: getItemDownloadables
-export def "itv-items-downloadable get" [
+export def "get-item-downloadables" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3536,7 +3536,7 @@ export def "itv-items-downloadable get" [
 # Redirects to corresponding Axis Item details page.
 #
 # GET /itv/itemsummary/{externalId}
-export def "itv-itemsummary get" [
+export def "get-itv-itemsummary-external-id" [
   external_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3572,7 +3572,7 @@ export def "itv-itemsummary get" [
 #
 # GET /itv/page
 # operationId: getItvPage
-export def "itv-page get" [
+export def "get-itv-page" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3620,7 +3620,7 @@ export def "itv-page get" [
 #
 # POST /itv/pinauthorization
 # operationId: getAccountTokenWithPin
-export def "itv-pinauthorization get-account-token-with-pin" [
+export def "get-account-token-with-pin" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3663,7 +3663,7 @@ export def "itv-pinauthorization get-account-token-with-pin" [
 #
 # POST /itv/plan/{platform}
 # operationId: upgradePlan
-export def "itv-plan create-upgrade" [
+export def "upgrade-plan" [
   platform: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3704,7 +3704,7 @@ export def "itv-plan create-upgrade" [
 # Returns the plans available for specified payment platform.
 #
 # GET /itv/plans/{platform}
-export def "itv-plans get" [
+export def "get-itv-plans-platform" [
   platform: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3741,7 +3741,7 @@ export def "itv-plans get" [
 # Returns the ITV profile object.
 #
 # GET /itv/profile
-export def "itv-profile get" [
+export def "get-itv-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3777,7 +3777,7 @@ export def "itv-profile get" [
 #
 # PUT /itv/profile
 # operationId: updateProfile
-export def "itv-profile update" [
+export def "update-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3824,7 +3824,7 @@ export def "itv-profile update" [
 #
 # GET /itv/profile/recommendation/list
 # operationId: getRecommendedList
-export def "itv-profile-recommendation-list get-recommended" [
+export def "get-recommended-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3867,7 +3867,7 @@ export def "itv-profile-recommendation-list get-recommended" [
 #
 # POST /itv/profiletoken
 # operationId: getItvProfileToken
-export def "itv-profiletoken get-profile-token" [
+export def "get-itv-profile-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3906,7 +3906,7 @@ export def "itv-profiletoken get-profile-token" [
 # Cancel a plan subscription. A cancelled subscription will continue to be valid until the subscription expiry date or next renewal date.
 #
 # DELETE /itv/purchase/{platform}
-export def "itv-purchase delete" [
+export def "delete-itv-purchase-platform" [
   platform: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3948,7 +3948,7 @@ export def "itv-purchase delete" [
 #
 # GET /itv/purchase/{platform}
 # operationId: getCurrentSubscription
-export def "itv-purchase get-subscription" [
+export def "get-current-subscription" [
   platform: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3986,7 +3986,7 @@ export def "itv-purchase get-subscription" [
 #
 # POST /itv/purchase/{platform}
 # operationId: confirmPurchase
-export def "itv-purchase confirm" [
+export def "confirm-purchase" [
   platform: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4031,7 +4031,7 @@ export def "itv-purchase confirm" [
 #
 # POST /itv/purchase/{platform}/strong
 # operationId: confirmPurchaseStrong
-export def "itv-purchase-strong confirm" [
+export def "confirm-purchase-strong" [
   platform: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4077,7 +4077,7 @@ export def "itv-purchase-strong confirm" [
 #
 # POST /itv/purchase/{platform}/withoffer
 # operationId: confirmPurchaseWithOffer
-export def "itv-purchase-withoffer confirm-with-offer" [
+export def "confirm-purchase-with-offer" [
   platform: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4123,7 +4123,7 @@ export def "itv-purchase-withoffer confirm-with-offer" [
 #
 # POST /itv/resubscribe/{platform}
 # operationId: resubscribe
-export def "itv-resubscribe create" [
+export def "resubscribe" [
   platform: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4161,7 +4161,7 @@ export def "itv-resubscribe create" [
 # Gets available Roku plans.
 #
 # GET /itv/roku/plans
-export def "itv-roku-plans get" [
+export def "get-itv-roku-plans" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4197,7 +4197,7 @@ export def "itv-roku-plans get" [
 #
 # POST /itv/roku/transaction/{transactionid}
 # operationId: executeTransaction
-export def "itv-roku-transaction create-execute" [
+export def "execute-transaction" [
   transactionid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4239,7 +4239,7 @@ export def "itv-roku-transaction create-execute" [
 #
 # GET /itv/save-offer
 # operationId: getSaveOffer
-export def "itv-save-offer get" [
+export def "get-save-offer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4275,7 +4275,7 @@ export def "itv-save-offer get" [
 #
 # POST /itv/save-offer
 # operationId: activateSaveOffer
-export def "itv-save-offer create-activate" [
+export def "activate-save-offer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4315,7 +4315,7 @@ export def "itv-save-offer create-activate" [
 #
 # GET /itv/subscription/fullpricerenewal
 # operationId: getFullPriceRenewal
-export def "itv-subscription-fullpricerenewal get-full-price-renewal" [
+export def "get-full-price-renewal" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4351,7 +4351,7 @@ export def "itv-subscription-fullpricerenewal get-full-price-renewal" [
 #
 # GET /itv/subscription/status/{platform}
 # operationId: getSubscriptionStatus
-export def "itv-subscription-status get" [
+export def "get-subscription-status" [
   platform: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4389,7 +4389,7 @@ export def "itv-subscription-status get" [
 #
 # GET /itv/subscriptionstate
 # operationId: getSubscriptionState
-export def "itv-subscriptionstate get-subscription-state" [
+export def "get-subscription-state" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4425,7 +4425,7 @@ export def "itv-subscriptionstate get-subscription-state" [
 #
 # GET /itv/upcominginvoice
 # operationId: getUpcomingInvoice
-export def "itv-upcominginvoice get-upcoming-invoice" [
+export def "get-upcoming-invoice" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4461,7 +4461,7 @@ export def "itv-upcominginvoice get-upcoming-invoice" [
 #
 # PUT /itv/updateIntent/strong/{platform}
 # operationId: updatePaymentIntentStrong
-export def "itv-update-intent-strong update-payment" [
+export def "update-payment-intent-strong" [
   platform: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4505,7 +4505,7 @@ export def "itv-update-intent-strong update-payment" [
 #
 # PUT /itv/updatePayment/strong/{platform}
 # operationId: updatePaymentMethodStrong
-export def "itv-update-payment-strong update-method" [
+export def "update-payment-method-strong" [
   platform: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4549,7 +4549,7 @@ export def "itv-update-payment-strong update-method" [
 #
 # GET /itv/voucher/{planId}/{voucherId}
 # operationId: getVoucherById
-export def "itv-voucher get" [
+export def "get-voucher-by-id" [
   plan_id: string
   voucher_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4589,7 +4589,7 @@ export def "itv-voucher get" [
 #
 # POST /itv/voucher/{platform}
 # operationId: checkVoucher
-export def "itv-voucher check" [
+export def "check-voucher" [
   platform: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4631,7 +4631,7 @@ export def "itv-voucher check" [
 #
 # GET /lists
 # operationId: getLists
-export def "lists list" [
+export def "get-lists" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4677,7 +4677,7 @@ export def "lists list" [
 #
 # GET /lists/{id}
 # operationId: getList
-export def "lists get" [
+export def "get-list" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4726,7 +4726,7 @@ export def "lists get" [
 #
 # GET /page
 # operationId: getPage
-export def "page get" [
+export def "get-page" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4773,7 +4773,7 @@ export def "page get" [
 # Returns the details of a Plan with the specified id.
 #
 # GET /plans/{id}
-export def "plans get" [
+export def "get-plans-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4815,7 +4815,7 @@ export def "plans get" [
 #
 # POST /register
 # operationId: register
-export def "register create" [
+export def "register" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4863,7 +4863,7 @@ export def "register create" [
 #
 # POST /request-password-reset
 # operationId: forgotPassword
-export def "request-password-reset create-forgot" [
+export def "forgot-password" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4904,7 +4904,7 @@ export def "request-password-reset create-forgot" [
 #
 # POST /reset-password
 # operationId: resetPassword
-export def "reset-password reset" [
+export def "reset-password" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4946,7 +4946,7 @@ export def "reset-password reset" [
 #
 # GET /samsung-preview
 # operationId: getPublicPreview
-export def "samsung-preview get-public" [
+export def "get-public-preview" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4980,7 +4980,7 @@ export def "samsung-preview get-public" [
 #
 # GET /schedules
 # operationId: getSchedules
-export def "schedules get" [
+export def "get-schedules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5025,7 +5025,7 @@ export def "schedules get" [
 #
 # GET /search
 # operationId: search
-export def "search list" [
+export def "search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5070,7 +5070,7 @@ export def "search list" [
 #
 # POST /verify-email
 # operationId: verifyEmail
-export def "verify-email verify" [
+export def "verify-email" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -110,7 +110,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-hd-insight-clusters-execute-script-actions create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "clusters-execute-script-actions" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -135,7 +135,7 @@ export def commands []: nothing -> table {
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HDInsight/clusters/{clusterName}/executeScriptActions
 # operationId: Clusters_ExecuteScriptActions
 # --scriptActions item shape: {name: string, parameters?: string, roles: list<string>, uri: string}
-export def "subscriptions-resource-groups-providers-microsoft-hd-insight-clusters-execute-script-actions create" [
+export def "clusters-execute-script-actions" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -182,7 +182,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hd-insight-cluster
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HDInsight/clusters/{clusterName}/scriptActions
 # operationId: ScriptActions_ListByCluster
-export def "subscriptions-resource-groups-providers-microsoft-hd-insight-clusters-script-actions list" [
+export def "script-actions-list-by-cluster" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -224,7 +224,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hd-insight-cluster
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HDInsight/clusters/{clusterName}/scriptActions/{scriptName}
 # operationId: ScriptActions_Delete
-export def "subscriptions-resource-groups-providers-microsoft-hd-insight-clusters-script-actions delete" [
+export def "script-actions-delete" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -268,7 +268,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hd-insight-cluster
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HDInsight/clusters/{clusterName}/scriptExecutionHistory
 # operationId: ScriptExecutionHistory_ListByCluster
-export def "subscriptions-resource-groups-providers-microsoft-hd-insight-clusters-script-execution-history list" [
+export def "script-execution-history-list-by-cluster" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -310,7 +310,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hd-insight-cluster
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HDInsight/clusters/{clusterName}/scriptExecutionHistory/{scriptExecutionId}
 # operationId: ScriptActions_GetExecutionDetail
-export def "subscriptions-resource-groups-providers-microsoft-hd-insight-clusters-script-execution-history get-actions-detail" [
+export def "script-actions-get-execution-detail" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -354,7 +354,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hd-insight-cluster
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HDInsight/clusters/{clusterName}/scriptExecutionHistory/{scriptExecutionId}/promote
 # operationId: ScriptExecutionHistory_Promote
-export def "subscriptions-resource-groups-providers-microsoft-hd-insight-clusters-script-execution-history-promote create" [
+export def "script-execution-history-promote" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string

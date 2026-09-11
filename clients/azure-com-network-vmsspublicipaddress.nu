@@ -100,7 +100,7 @@ def api-version-completer [] { ["2017-03-30"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-compute-virtual-machine-scale-sets-publicipaddresses list-public-ip-addresses-public-ip-addresses" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "public-ip-addresses-list-virtual-machine-scale-set-public-ip-addresses" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -124,7 +124,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachineScaleSets/{virtualMachineScaleSetName}/publicipaddresses
 # operationId: PublicIPAddresses_ListVirtualMachineScaleSetPublicIPAddresses
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machine-scale-sets-publicipaddresses list-public-ip-addresses-public-ip-addresses" [
+export def "public-ip-addresses-list-virtual-machine-scale-set-public-ip-addresses" [
   subscription_id: string
   resource_group_name: string
   virtual_machine_scale_set_name: string
@@ -166,7 +166,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachineScaleSets/{virtualMachineScaleSetName}/virtualMachines/{virtualmachineIndex}/networkInterfaces/{networkInterfaceName}/ipconfigurations/{ipConfigurationName}/publicipaddresses
 # operationId: PublicIPAddresses_ListVirtualMachineScaleSetVMPublicIPAddresses
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machine-scale-sets-virtual-machines-network-interfaces-ipconfigurations-publicipaddresses list-public-ip-addresses-vm-public-ip-addresses" [
+export def "public-ip-addresses-list-virtual-machine-scale-set-vm-public-ip-addresses" [
   subscription_id: string
   resource_group_name: string
   virtual_machine_scale_set_name: string
@@ -214,7 +214,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachineScaleSets/{virtualMachineScaleSetName}/virtualMachines/{virtualmachineIndex}/networkInterfaces/{networkInterfaceName}/ipconfigurations/{ipConfigurationName}/publicipaddresses/{publicIpAddressName}
 # operationId: PublicIPAddresses_GetVirtualMachineScaleSetPublicIPAddress
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machine-scale-sets-virtual-machines-network-interfaces-ipconfigurations-publicipaddresses get-public-ip-addresses-public-ip-address" [
+export def "public-ip-addresses-get-virtual-machine-scale-set-public-ip-address" [
   subscription_id: string
   resource_group_name: string
   virtual_machine_scale_set_name: string

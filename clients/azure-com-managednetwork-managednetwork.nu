@@ -118,7 +118,7 @@ def kind-completer [] { ["Connectivity"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-managed-network-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -142,7 +142,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.ManagedNetwork/operations
 # operationId: Operations_List
-export def "providers-microsoft-managed-network-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -178,7 +178,7 @@ export def "providers-microsoft-managed-network-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.ManagedNetwork/managedNetworks
 # operationId: ManagedNetworks_ListBySubscription
-export def "subscriptions-providers-microsoft-managed-network-managed-networks list" [
+export def "managed-networks-list-by-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -218,7 +218,7 @@ export def "subscriptions-providers-microsoft-managed-network-managed-networks l
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ManagedNetwork/managedNetworks
 # operationId: ManagedNetworks_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-managed-network-managed-networks list" [
+export def "managed-networks-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -260,7 +260,7 @@ export def "subscriptions-resource-groups-providers-microsoft-managed-network-ma
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ManagedNetwork/managedNetworks/{managedNetworkName}
 # operationId: ManagedNetworks_Delete
-export def "subscriptions-resource-groups-providers-microsoft-managed-network-managed-networks delete" [
+export def "managed-networks-delete" [
   subscription_id: string
   resource_group_name: string
   managed_network_name: string
@@ -302,7 +302,7 @@ export def "subscriptions-resource-groups-providers-microsoft-managed-network-ma
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ManagedNetwork/managedNetworks/{managedNetworkName}
 # operationId: ManagedNetworks_Get
-export def "subscriptions-resource-groups-providers-microsoft-managed-network-managed-networks get" [
+export def "managed-networks-get" [
   subscription_id: string
   resource_group_name: string
   managed_network_name: string
@@ -344,7 +344,7 @@ export def "subscriptions-resource-groups-providers-microsoft-managed-network-ma
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ManagedNetwork/managedNetworks/{managedNetworkName}
 # operationId: ManagedNetworks_Update
-export def "subscriptions-resource-groups-providers-microsoft-managed-network-managed-networks update" [
+export def "managed-networks-update" [
   subscription_id: string
   resource_group_name: string
   managed_network_name: string
@@ -391,7 +391,7 @@ export def "subscriptions-resource-groups-providers-microsoft-managed-network-ma
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ManagedNetwork/managedNetworks/{managedNetworkName}
 # operationId: ManagedNetworks_CreateOrUpdate
 # --properties shape: {connectivity?: any, scope?: any}
-export def "subscriptions-resource-groups-providers-microsoft-managed-network-managed-networks create-or-update" [
+export def "managed-networks-create-or-update" [
   subscription_id: string
   resource_group_name: string
   managed_network_name: string
@@ -438,7 +438,7 @@ export def "subscriptions-resource-groups-providers-microsoft-managed-network-ma
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ManagedNetwork/managedNetworks/{managedNetworkName}/managedNetworkGroups
 # operationId: ManagedNetworkGroups_ListByManagedNetwork
-export def "subscriptions-resource-groups-providers-microsoft-managed-network-managed-networks-managed-network-groups list" [
+export def "managed-network-groups-list-by-managed-network" [
   subscription_id: string
   resource_group_name: string
   managed_network_name: string
@@ -482,7 +482,7 @@ export def "subscriptions-resource-groups-providers-microsoft-managed-network-ma
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ManagedNetwork/managedNetworks/{managedNetworkName}/managedNetworkGroups/{managedNetworkGroupName}
 # operationId: ManagedNetworkGroups_Delete
-export def "subscriptions-resource-groups-providers-microsoft-managed-network-managed-networks-managed-network-groups delete" [
+export def "managed-network-groups-delete" [
   subscription_id: string
   resource_group_name: string
   managed_network_name: string
@@ -526,7 +526,7 @@ export def "subscriptions-resource-groups-providers-microsoft-managed-network-ma
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ManagedNetwork/managedNetworks/{managedNetworkName}/managedNetworkGroups/{managedNetworkGroupName}
 # operationId: ManagedNetworkGroups_Get
-export def "subscriptions-resource-groups-providers-microsoft-managed-network-managed-networks-managed-network-groups get" [
+export def "managed-network-groups-get" [
   subscription_id: string
   resource_group_name: string
   managed_network_name: string
@@ -571,7 +571,7 @@ export def "subscriptions-resource-groups-providers-microsoft-managed-network-ma
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ManagedNetwork/managedNetworks/{managedNetworkName}/managedNetworkGroups/{managedNetworkGroupName}
 # operationId: ManagedNetworkGroups_CreateOrUpdate
 # --properties shape: {managementGroups?: list, subnets?: list, subscriptions?: list, virtualNetworks?: list}
-export def "subscriptions-resource-groups-providers-microsoft-managed-network-managed-networks-managed-network-groups create-or-update" [
+export def "managed-network-groups-create-or-update" [
   subscription_id: string
   resource_group_name: string
   managed_network_name: string
@@ -620,7 +620,7 @@ export def "subscriptions-resource-groups-providers-microsoft-managed-network-ma
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ManagedNetwork/managedNetworks/{managedNetworkName}/managedNetworkPeeringPolicies
 # operationId: ManagedNetworkPeeringPolicies_ListByManagedNetwork
-export def "subscriptions-resource-groups-providers-microsoft-managed-network-managed-networks-managed-network-peering-policies list" [
+export def "managed-network-peering-policies-list-by-managed-network" [
   subscription_id: string
   resource_group_name: string
   managed_network_name: string
@@ -664,7 +664,7 @@ export def "subscriptions-resource-groups-providers-microsoft-managed-network-ma
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ManagedNetwork/managedNetworks/{managedNetworkName}/managedNetworkPeeringPolicies/{managedNetworkPeeringPolicyName}
 # operationId: ManagedNetworkPeeringPolicies_Delete
-export def "subscriptions-resource-groups-providers-microsoft-managed-network-managed-networks-managed-network-peering-policies delete" [
+export def "managed-network-peering-policies-delete" [
   subscription_id: string
   resource_group_name: string
   managed_network_name: string
@@ -708,7 +708,7 @@ export def "subscriptions-resource-groups-providers-microsoft-managed-network-ma
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ManagedNetwork/managedNetworks/{managedNetworkName}/managedNetworkPeeringPolicies/{managedNetworkPeeringPolicyName}
 # operationId: ManagedNetworkPeeringPolicies_Get
-export def "subscriptions-resource-groups-providers-microsoft-managed-network-managed-networks-managed-network-peering-policies get" [
+export def "managed-network-peering-policies-get" [
   subscription_id: string
   resource_group_name: string
   managed_network_name: string
@@ -753,7 +753,7 @@ export def "subscriptions-resource-groups-providers-microsoft-managed-network-ma
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ManagedNetwork/managedNetworks/{managedNetworkName}/managedNetworkPeeringPolicies/{managedNetworkPeeringPolicyName}
 # operationId: ManagedNetworkPeeringPolicies_CreateOrUpdate
 # --properties shape: {hub?: any, mesh?: list, spokes?: list, type: "HubAndSpokeTopology"|"MeshTopology"}
-export def "subscriptions-resource-groups-providers-microsoft-managed-network-managed-networks-managed-network-peering-policies create-or-update" [
+export def "managed-network-peering-policies-create-or-update" [
   subscription_id: string
   resource_group_name: string
   managed_network_name: string
@@ -801,7 +801,7 @@ export def "subscriptions-resource-groups-providers-microsoft-managed-network-ma
 #
 # GET /{scope}/providers/Microsoft.ManagedNetwork/scopeAssignments
 # operationId: ScopeAssignments_List
-export def "providers-microsoft-managed-network-scope-assignments list" [
+export def "scope-assignments-list" [
   scope: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -839,7 +839,7 @@ export def "providers-microsoft-managed-network-scope-assignments list" [
 #
 # DELETE /{scope}/providers/Microsoft.ManagedNetwork/scopeAssignments/{scopeAssignmentName}
 # operationId: ScopeAssignments_Delete
-export def "providers-microsoft-managed-network-scope-assignments delete" [
+export def "scope-assignments-delete" [
   scope: string
   scope_assignment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -879,7 +879,7 @@ export def "providers-microsoft-managed-network-scope-assignments delete" [
 #
 # GET /{scope}/providers/Microsoft.ManagedNetwork/scopeAssignments/{scopeAssignmentName}
 # operationId: ScopeAssignments_Get
-export def "providers-microsoft-managed-network-scope-assignments get" [
+export def "scope-assignments-get" [
   scope: string
   scope_assignment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -920,7 +920,7 @@ export def "providers-microsoft-managed-network-scope-assignments get" [
 # PUT /{scope}/providers/Microsoft.ManagedNetwork/scopeAssignments/{scopeAssignmentName}
 # operationId: ScopeAssignments_CreateOrUpdate
 # --properties shape: {assignedManagedNetwork?: string}
-export def "providers-microsoft-managed-network-scope-assignments create-or-update" [
+export def "scope-assignments-create-or-update" [
   scope: string
   scope_assignment_name: string
   --base-url(-b): string@base-url-completer # API base URL

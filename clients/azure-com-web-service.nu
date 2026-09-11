@@ -127,7 +127,7 @@ def unauthenticated-client-action-completer [] { ["AllowAnonymous" "RedirectToLo
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-web-publishing-users-web get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "provider-get-publishing-user" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -151,7 +151,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.Web/publishingUsers/web
 # operationId: Provider_GetPublishingUser
-export def "providers-microsoft-web-publishing-users-web get" [
+export def "provider-get-publishing-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -189,7 +189,7 @@ export def "providers-microsoft-web-publishing-users-web get" [
 # PUT /providers/Microsoft.Web/publishingUsers/web
 # operationId: Provider_UpdatePublishingUser
 # --properties shape: {name?: string, publishingPassword?: string, publishingUserName?: string, scmUri?: string}
-export def "providers-microsoft-web-publishing-users-web update" [
+export def "provider-update-publishing-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -236,7 +236,7 @@ export def "providers-microsoft-web-publishing-users-web update" [
 #
 # GET /providers/Microsoft.Web/sourcecontrols
 # operationId: Provider_GetSourceControls
-export def "providers-microsoft-web-sourcecontrols get-source-controls" [
+export def "provider-get-source-controls" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -273,7 +273,7 @@ export def "providers-microsoft-web-sourcecontrols get-source-controls" [
 #
 # GET /providers/Microsoft.Web/sourcecontrols/{sourceControlType}
 # operationId: Provider_GetSourceControl
-export def "providers-microsoft-web-sourcecontrols get-source-control" [
+export def "provider-get-source-control" [
   source_control_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -313,7 +313,7 @@ export def "providers-microsoft-web-sourcecontrols get-source-control" [
 # PUT /providers/Microsoft.Web/sourcecontrols/{sourceControlType}
 # operationId: Provider_UpdateSourceControl
 # --properties shape: {expirationTime?: string, name?: string, refreshToken?: string, token?: string, tokenSecret?: string}
-export def "providers-microsoft-web-sourcecontrols update-source-control" [
+export def "provider-update-source-control" [
   source_control_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -362,7 +362,7 @@ export def "providers-microsoft-web-sourcecontrols update-source-control" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.CertificateRegistration/certificateOrders
 # operationId: GlobalCertificateOrder_GetAllCertificateOrders
-export def "subscriptions-providers-microsoft-certificate-registration-certificate-orders get-global-list" [
+export def "global-certificate-order-get-all-certificate-orders" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -402,7 +402,7 @@ export def "subscriptions-providers-microsoft-certificate-registration-certifica
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.CertificateRegistration/validateCertificateRegistrationInformation
 # operationId: GlobalCertificateOrder_ValidateCertificatePurchaseInformation
 # --properties shape: {autoRenew?: bool, certificates?: record, csr?: string, distinguishedName?: string, domainVerificationToken?: string, expirationTime?: string, intermediate?: record, keySize?: int, lastCertificateIssuanceTime?: string, productType?: "StandardDomainValidatedSsl"|"StandardDomainValidatedWildCardSsl", provisioningState?: "Succeeded"|"Failed"|"Canceled"|"InProgress"|"Deleting", root?: record, serialNumber?: string, signedCertificate?: record, ... (2 more fields)}
-export def "subscriptions-providers-microsoft-certificate-registration-validate-certificate-registration-information validate-global-order-purchase" [
+export def "global-certificate-order-validate-certificate-purchase-information" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -451,7 +451,7 @@ export def "subscriptions-providers-microsoft-certificate-registration-validate-
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.DomainRegistration/checkDomainAvailability
 # operationId: GlobalDomainRegistration_CheckDomainAvailability
-export def "subscriptions-providers-microsoft-domain-registration-check-domain-availability check-global" [
+export def "global-domain-registration-check-domain-availability" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -494,7 +494,7 @@ export def "subscriptions-providers-microsoft-domain-registration-check-domain-a
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.DomainRegistration/domains
 # operationId: GlobalDomainRegistration_GetAllDomains
-export def "subscriptions-providers-microsoft-domain-registration-domains get-global-list" [
+export def "global-domain-registration-get-all-domains" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -533,7 +533,7 @@ export def "subscriptions-providers-microsoft-domain-registration-domains get-gl
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.DomainRegistration/generateSsoRequest
 # operationId: GlobalDomainRegistration_GetDomainControlCenterSsoRequest
-export def "subscriptions-providers-microsoft-domain-registration-generate-sso-request get-global-control-center" [
+export def "global-domain-registration-get-domain-control-center-sso-request" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -572,7 +572,7 @@ export def "subscriptions-providers-microsoft-domain-registration-generate-sso-r
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.DomainRegistration/listDomainRecommendations
 # operationId: GlobalDomainRegistration_ListDomainRecommendations
-export def "subscriptions-providers-microsoft-domain-registration-list-domain-recommendations list-global" [
+export def "global-domain-registration-list-domain-recommendations" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -616,7 +616,7 @@ export def "subscriptions-providers-microsoft-domain-registration-list-domain-re
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.DomainRegistration/topLevelDomains
 # operationId: TopLevelDomains_GetGetTopLevelDomains
-export def "subscriptions-providers-microsoft-domain-registration-top-level-domains list" [
+export def "top-level-domains-get-get-top-level-domains" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -655,7 +655,7 @@ export def "subscriptions-providers-microsoft-domain-registration-top-level-doma
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.DomainRegistration/topLevelDomains/{name}
 # operationId: TopLevelDomains_GetTopLevelDomain
-export def "subscriptions-providers-microsoft-domain-registration-top-level-domains get" [
+export def "top-level-domains-get-top-level-domain" [
   subscription_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -696,7 +696,7 @@ export def "subscriptions-providers-microsoft-domain-registration-top-level-doma
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.DomainRegistration/topLevelDomains/{name}/listAgreements
 # operationId: TopLevelDomains_ListTopLevelDomainAgreements
-export def "subscriptions-providers-microsoft-domain-registration-top-level-domains-list-agreements top" [
+export def "top-level-domains-list-top-level-domain-agreements" [
   subscription_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -742,7 +742,7 @@ export def "subscriptions-providers-microsoft-domain-registration-top-level-doma
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.DomainRegistration/validateDomainRegistrationInformation
 # operationId: GlobalDomainRegistration_ValidateDomainPurchaseInformation
 # --properties shape: {autoRenew?: bool, consent?: record, contactAdmin?: record, contactBilling?: record, contactRegistrant?: record, contactTech?: record, createdTime?: string, domainNotRenewableReasons?: list<string>, expirationTime?: string, lastRenewedTime?: string, managedHostNames?: list, name?: string, nameServers?: list<string>, privacy?: bool, provisioningState?: "Succeeded"|"Failed"|"Canceled"|"InProgress"|"Deleting", readyForDnsRecordManagement?: bool, ... (1 more fields)}
-export def "subscriptions-providers-microsoft-domain-registration-validate-domain-registration-information validate-global-purchase" [
+export def "global-domain-registration-validate-domain-purchase-information" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -791,7 +791,7 @@ export def "subscriptions-providers-microsoft-domain-registration-validate-domai
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Web/certificates
 # operationId: Global_GetAllCertificates
-export def "subscriptions-providers-microsoft-web-certificates get-global-list" [
+export def "global-get-all-certificates" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -830,7 +830,7 @@ export def "subscriptions-providers-microsoft-web-certificates get-global-list" 
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Web/checknameavailability
 # operationId: Global_CheckNameAvailability
-export def "subscriptions-providers-microsoft-web-checknameavailability check-global-name-availability" [
+export def "global-check-name-availability" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -875,7 +875,7 @@ export def "subscriptions-providers-microsoft-web-checknameavailability check-gl
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Web/classicMobileServices
 # operationId: Global_GetAllClassicMobileServices
-export def "subscriptions-providers-microsoft-web-classic-mobile-services get-global-list" [
+export def "global-get-all-classic-mobile-services" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -914,7 +914,7 @@ export def "subscriptions-providers-microsoft-web-classic-mobile-services get-gl
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Web/geoRegions
 # operationId: Global_GetSubscriptionGeoRegions
-export def "subscriptions-providers-microsoft-web-geo-regions get-global" [
+export def "global-get-subscription-geo-regions" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -955,7 +955,7 @@ export def "subscriptions-providers-microsoft-web-geo-regions get-global" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Web/hostingEnvironments
 # operationId: Global_GetAllHostingEnvironments
-export def "subscriptions-providers-microsoft-web-hosting-environments get-global-list" [
+export def "global-get-all-hosting-environments" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -994,7 +994,7 @@ export def "subscriptions-providers-microsoft-web-hosting-environments get-globa
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Web/ishostingenvironmentnameavailable
 # operationId: Global_IsHostingEnvironmentNameAvailable
-export def "subscriptions-providers-microsoft-web-ishostingenvironmentnameavailable get-global-is-hosting-environment-name-available" [
+export def "global-is-hosting-environment-name-available" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1034,7 +1034,7 @@ export def "subscriptions-providers-microsoft-web-ishostingenvironmentnameavaila
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Web/ishostingenvironmentnameavailable/{name}
 # operationId: Global_IsHostingEnvironmentWithLegacyNameAvailable
-export def "subscriptions-providers-microsoft-web-ishostingenvironmentnameavailable get-global-is-hosting-environment-with-legacy-available" [
+export def "global-is-hosting-environment-with-legacy-name-available" [
   subscription_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1075,7 +1075,7 @@ export def "subscriptions-providers-microsoft-web-ishostingenvironmentnameavaila
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Web/managedHostingEnvironments
 # operationId: Global_GetAllManagedHostingEnvironments
-export def "subscriptions-providers-microsoft-web-managed-hosting-environments get-global-list" [
+export def "global-get-all-managed-hosting-environments" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1114,7 +1114,7 @@ export def "subscriptions-providers-microsoft-web-managed-hosting-environments g
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Web/premieraddonoffers
 # operationId: Global_ListPremierAddOnOffers
-export def "subscriptions-providers-microsoft-web-premieraddonoffers list-global-premier-create-on-offers" [
+export def "global-list-premier-add-on-offers" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1153,7 +1153,7 @@ export def "subscriptions-providers-microsoft-web-premieraddonoffers list-global
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Web/publishingCredentials
 # operationId: Global_GetSubscriptionPublishingCredentials
-export def "subscriptions-providers-microsoft-web-publishing-credentials get-global" [
+export def "global-get-subscription-publishing-credentials" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1193,7 +1193,7 @@ export def "subscriptions-providers-microsoft-web-publishing-credentials get-glo
 # PUT /subscriptions/{subscriptionId}/providers/Microsoft.Web/publishingCredentials
 # operationId: Global_UpdateSubscriptionPublishingCredentials
 # --properties shape: {name?: string, publishingPassword?: string, publishingUserName?: string, scmUri?: string}
-export def "subscriptions-providers-microsoft-web-publishing-credentials update-global" [
+export def "global-update-subscription-publishing-credentials" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1242,7 +1242,7 @@ export def "subscriptions-providers-microsoft-web-publishing-credentials update-
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Web/recommendations
 # operationId: Recommendations_GetRecommendationBySubscription
-export def "subscriptions-providers-microsoft-web-recommendations get" [
+export def "recommendations-get-recommendation-by-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1283,7 +1283,7 @@ export def "subscriptions-providers-microsoft-web-recommendations get" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Web/serverfarms
 # operationId: Global_GetAllServerFarms
-export def "subscriptions-providers-microsoft-web-serverfarms get-global-list-server-farms" [
+export def "global-get-all-server-farms" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1323,7 +1323,7 @@ export def "subscriptions-providers-microsoft-web-serverfarms get-global-list-se
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Web/sites
 # operationId: Global_GetAllSites
-export def "subscriptions-providers-microsoft-web-sites get-global-list" [
+export def "global-get-all-sites" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1361,7 +1361,7 @@ export def "subscriptions-providers-microsoft-web-sites get-global-list" [
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/moveResources
 #
 # operationId: GlobalResourceGroups_MoveResources
-export def "subscriptions-resource-groups-move-resources move-global" [
+export def "global-resource-groups-move-resources" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1406,7 +1406,7 @@ export def "subscriptions-resource-groups-move-resources move-global" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CertificateRegistration/certificateOrders
 # operationId: CertificateOrders_GetCertificateOrders
-export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders list" [
+export def "certificate-orders-get-certificate-orders" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1447,7 +1447,7 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CertificateRegistration/certificateOrders/{certificateOrderName}/certificates
 # operationId: CertificateOrders_GetCertificates
-export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders-certificates list" [
+export def "certificate-orders-get-certificates" [
   subscription_id: string
   resource_group_name: string
   certificate_order_name: string
@@ -1490,7 +1490,7 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CertificateRegistration/certificateOrders/{certificateOrderName}/certificates/{name}
 # operationId: CertificateOrders_DeleteCertificate
-export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders-certificates delete" [
+export def "certificate-orders-delete-certificate" [
   subscription_id: string
   resource_group_name: string
   certificate_order_name: string
@@ -1535,7 +1535,7 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CertificateRegistration/certificateOrders/{certificateOrderName}/certificates/{name}
 # operationId: CertificateOrders_GetCertificate
-export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders-certificates get" [
+export def "certificate-orders-get-certificate" [
   subscription_id: string
   resource_group_name: string
   certificate_order_name: string
@@ -1581,7 +1581,7 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CertificateRegistration/certificateOrders/{certificateOrderName}/certificates/{name}
 # operationId: CertificateOrders_UpdateCertificate
 # --properties shape: {keyVaultId?: string, keyVaultSecretName?: string, provisioningState?: "Initialized"|"WaitingOnCertificateOrder"|"Succeeded"|"CertificateOrderFailed"|"OperationNotPermittedOnKeyVault"|"AzureServiceUnauthorizedToAccessKeyVault"|"KeyVaultDoesNotExist"|"KeyVaultSecretDoesNotExist"|"UnknownError"|"Unknown"}
-export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders-certificates update" [
+export def "certificate-orders-update-certificate" [
   subscription_id: string
   resource_group_name: string
   certificate_order_name: string
@@ -1637,7 +1637,7 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CertificateRegistration/certificateOrders/{certificateOrderName}/certificates/{name}
 # operationId: CertificateOrders_CreateOrUpdateCertificate
 # --properties shape: {keyVaultId?: string, keyVaultSecretName?: string, provisioningState?: "Initialized"|"WaitingOnCertificateOrder"|"Succeeded"|"CertificateOrderFailed"|"OperationNotPermittedOnKeyVault"|"AzureServiceUnauthorizedToAccessKeyVault"|"KeyVaultDoesNotExist"|"KeyVaultSecretDoesNotExist"|"UnknownError"|"Unknown"}
-export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders-certificates create-or-update" [
+export def "certificate-orders-create-or-update-certificate" [
   subscription_id: string
   resource_group_name: string
   certificate_order_name: string
@@ -1692,7 +1692,7 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CertificateRegistration/certificateOrders/{name}
 # operationId: CertificateOrders_DeleteCertificateOrder
-export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders delete" [
+export def "certificate-orders-delete-certificate-order" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1735,7 +1735,7 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CertificateRegistration/certificateOrders/{name}
 # operationId: CertificateOrders_GetCertificateOrder
-export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders get" [
+export def "certificate-orders-get-certificate-order" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1779,7 +1779,7 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CertificateRegistration/certificateOrders/{name}
 # operationId: CertificateOrders_UpdateCertificateOrder
 # --properties shape: {autoRenew?: bool, certificates?: record, csr?: string, distinguishedName?: string, domainVerificationToken?: string, expirationTime?: string, intermediate?: record, keySize?: int, lastCertificateIssuanceTime?: string, productType?: "StandardDomainValidatedSsl"|"StandardDomainValidatedWildCardSsl", provisioningState?: "Succeeded"|"Failed"|"Canceled"|"InProgress"|"Deleting", root?: record, serialNumber?: string, signedCertificate?: record, ... (2 more fields)}
-export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders update" [
+export def "certificate-orders-update-certificate-order" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1833,7 +1833,7 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CertificateRegistration/certificateOrders/{name}
 # operationId: CertificateOrders_CreateOrUpdateCertificateOrder
 # --properties shape: {autoRenew?: bool, certificates?: record, csr?: string, distinguishedName?: string, domainVerificationToken?: string, expirationTime?: string, intermediate?: record, keySize?: int, lastCertificateIssuanceTime?: string, productType?: "StandardDomainValidatedSsl"|"StandardDomainValidatedWildCardSsl", provisioningState?: "Succeeded"|"Failed"|"Canceled"|"InProgress"|"Deleting", root?: record, serialNumber?: string, signedCertificate?: record, ... (2 more fields)}
-export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders create-or-update" [
+export def "certificate-orders-create-or-update-certificate-order" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1887,7 +1887,7 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CertificateRegistration/certificateOrders/{name}/reissue
 # operationId: CertificateOrders_ReissueCertificateOrder
 # --properties shape: {delayExistingRevokeInHours?: int, keySize?: int}
-export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders-reissue create" [
+export def "certificate-orders-reissue-certificate-order" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1941,7 +1941,7 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CertificateRegistration/certificateOrders/{name}/renew
 # operationId: CertificateOrders_RenewCertificateOrder
 # --properties shape: {keySize?: int}
-export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders-renew create" [
+export def "certificate-orders-renew-certificate-order" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1994,7 +1994,7 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CertificateRegistration/certificateOrders/{name}/resendEmail
 # operationId: CertificateOrders_ResendCertificateEmail
-export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders-resend-email resend" [
+export def "certificate-orders-resend-certificate-email" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -2037,7 +2037,7 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CertificateRegistration/certificateOrders/{name}/retrieveCertificateActions
 # operationId: CertificateOrders_RetrieveCertificateActions
-export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders-retrieve-certificate-actions get" [
+export def "certificate-orders-retrieve-certificate-actions" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -2080,7 +2080,7 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CertificateRegistration/certificateOrders/{name}/retrieveEmailHistory
 # operationId: CertificateOrders_RetrieveCertificateEmailHistory
-export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders-retrieve-email-history get" [
+export def "certificate-orders-retrieve-certificate-email-history" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -2123,7 +2123,7 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CertificateRegistration/certificateOrders/{name}/verifyDomainOwnership
 # operationId: CertificateOrders_VerifyDomainOwnership
-export def "subscriptions-resource-groups-providers-microsoft-certificate-registration-certificate-orders-verify-domain-ownership verify" [
+export def "certificate-orders-verify-domain-ownership" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -2166,7 +2166,7 @@ export def "subscriptions-resource-groups-providers-microsoft-certificate-regist
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DomainRegistration/domains
 # operationId: Domains_GetDomains
-export def "subscriptions-resource-groups-providers-microsoft-domain-registration-domains list" [
+export def "domains-get-domains" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2207,7 +2207,7 @@ export def "subscriptions-resource-groups-providers-microsoft-domain-registratio
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DomainRegistration/domains/{domainName}
 # operationId: Domains_DeleteDomain
-export def "subscriptions-resource-groups-providers-microsoft-domain-registration-domains delete" [
+export def "domains-delete-domain" [
   subscription_id: string
   resource_group_name: string
   domain_name: string
@@ -2251,7 +2251,7 @@ export def "subscriptions-resource-groups-providers-microsoft-domain-registratio
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DomainRegistration/domains/{domainName}
 # operationId: Domains_GetDomain
-export def "subscriptions-resource-groups-providers-microsoft-domain-registration-domains get" [
+export def "domains-get-domain" [
   subscription_id: string
   resource_group_name: string
   domain_name: string
@@ -2295,7 +2295,7 @@ export def "subscriptions-resource-groups-providers-microsoft-domain-registratio
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DomainRegistration/domains/{domainName}
 # operationId: Domains_UpdateDomain
 # --properties shape: {autoRenew?: bool, consent?: record, contactAdmin?: record, contactBilling?: record, contactRegistrant?: record, contactTech?: record, createdTime?: string, domainNotRenewableReasons?: list<string>, expirationTime?: string, lastRenewedTime?: string, managedHostNames?: list, nameServers?: list<string>, privacy?: bool, provisioningState?: "Succeeded"|"Failed"|"Canceled"|"InProgress"|"Deleting", readyForDnsRecordManagement?: bool, ... (1 more fields)}
-export def "subscriptions-resource-groups-providers-microsoft-domain-registration-domains update" [
+export def "domains-update-domain" [
   subscription_id: string
   resource_group_name: string
   domain_name: string
@@ -2349,7 +2349,7 @@ export def "subscriptions-resource-groups-providers-microsoft-domain-registratio
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DomainRegistration/domains/{domainName}
 # operationId: Domains_CreateOrUpdateDomain
 # --properties shape: {autoRenew?: bool, consent?: record, contactAdmin?: record, contactBilling?: record, contactRegistrant?: record, contactTech?: record, createdTime?: string, domainNotRenewableReasons?: list<string>, expirationTime?: string, lastRenewedTime?: string, managedHostNames?: list, nameServers?: list<string>, privacy?: bool, provisioningState?: "Succeeded"|"Failed"|"Canceled"|"InProgress"|"Deleting", readyForDnsRecordManagement?: bool, ... (1 more fields)}
-export def "subscriptions-resource-groups-providers-microsoft-domain-registration-domains create-or-update" [
+export def "domains-create-or-update-domain" [
   subscription_id: string
   resource_group_name: string
   domain_name: string
@@ -2402,7 +2402,7 @@ export def "subscriptions-resource-groups-providers-microsoft-domain-registratio
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DomainRegistration/domains/{domainName}/operationresults/{operationId}
 # operationId: Domains_GetDomainOperation
-export def "subscriptions-resource-groups-providers-microsoft-domain-registration-domains-operationresults get-operation" [
+export def "domains-get-domain-operation" [
   subscription_id: string
   resource_group_name: string
   domain_name: string
@@ -2447,7 +2447,7 @@ export def "subscriptions-resource-groups-providers-microsoft-domain-registratio
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web.Admin/environments/{environmentName}/usage
 # operationId: Usage_GetUsage
-export def "subscriptions-resource-groups-providers-microsoft-web-admin-environments-usage get" [
+export def "usage-get-usage" [
   subscription_id: string
   resource_group_name: string
   environment_name: string
@@ -2492,7 +2492,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-admin-environm
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/certificates
 # operationId: Certificates_GetCertificates
-export def "subscriptions-resource-groups-providers-microsoft-web-certificates list" [
+export def "certificates-get-certificates" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2533,7 +2533,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-certificates l
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/certificates/{name}
 # operationId: Certificates_DeleteCertificate
-export def "subscriptions-resource-groups-providers-microsoft-web-certificates delete" [
+export def "certificates-delete-certificate" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -2576,7 +2576,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-certificates d
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/certificates/{name}
 # operationId: Certificates_GetCertificate
-export def "subscriptions-resource-groups-providers-microsoft-web-certificates get" [
+export def "certificates-get-certificate" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -2620,7 +2620,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-certificates g
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/certificates/{name}
 # operationId: Certificates_UpdateCertificate
 # --properties shape: {cerBlob?: string, expirationDate?: string, friendlyName?: string, hostNames?: list<string>, hostingEnvironmentProfile?: record, issueDate?: string, issuer?: string, password?: string, pfxBlob?: string, publicKeyHash?: string, selfLink?: string, siteName?: string, subjectName?: string, thumbprint?: string, valid?: bool}
-export def "subscriptions-resource-groups-providers-microsoft-web-certificates update" [
+export def "certificates-update-certificate" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -2674,7 +2674,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-certificates u
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/certificates/{name}
 # operationId: Certificates_CreateOrUpdateCertificate
 # --properties shape: {cerBlob?: string, expirationDate?: string, friendlyName?: string, hostNames?: list<string>, hostingEnvironmentProfile?: record, issueDate?: string, issuer?: string, password?: string, pfxBlob?: string, publicKeyHash?: string, selfLink?: string, siteName?: string, subjectName?: string, thumbprint?: string, valid?: bool}
-export def "subscriptions-resource-groups-providers-microsoft-web-certificates create-or-update" [
+export def "certificates-create-or-update-certificate" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -2727,7 +2727,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-certificates c
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/classicMobileServices
 # operationId: ClassicMobileServices_GetClassicMobileServices
-export def "subscriptions-resource-groups-providers-microsoft-web-classic-mobile-services list" [
+export def "classic-mobile-services-get-classic-mobile-services" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2768,7 +2768,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-classic-mobile
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/classicMobileServices/{name}
 # operationId: ClassicMobileServices_DeleteClassicMobileService
-export def "subscriptions-resource-groups-providers-microsoft-web-classic-mobile-services delete" [
+export def "classic-mobile-services-delete-classic-mobile-service" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -2811,7 +2811,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-classic-mobile
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/classicMobileServices/{name}
 # operationId: ClassicMobileServices_GetClassicMobileService
-export def "subscriptions-resource-groups-providers-microsoft-web-classic-mobile-services get" [
+export def "classic-mobile-services-get-classic-mobile-service" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -2854,7 +2854,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-classic-mobile
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/csrs
 # operationId: Certificates_GetCsrs
-export def "subscriptions-resource-groups-providers-microsoft-web-csrs list" [
+export def "certificates-get-csrs" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2895,7 +2895,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-csrs list" [
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/csrs/{name}
 # operationId: Certificates_DeleteCsr
-export def "subscriptions-resource-groups-providers-microsoft-web-csrs delete-certificates" [
+export def "certificates-delete-csr" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -2938,7 +2938,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-csrs delete-ce
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/csrs/{name}
 # operationId: Certificates_GetCsr
-export def "subscriptions-resource-groups-providers-microsoft-web-csrs get-certificates" [
+export def "certificates-get-csr" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -2982,7 +2982,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-csrs get-certi
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/csrs/{name}
 # operationId: Certificates_UpdateCsr
 # --properties shape: {csrString?: string, distinguishedName?: string, hostingEnvironment?: string, name?: string, password?: string, pfxBlob?: string, publicKeyHash?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-csrs update-certificates" [
+export def "certificates-update-csr" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -3036,7 +3036,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-csrs update-ce
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/csrs/{name}
 # operationId: Certificates_CreateOrUpdateCsr
 # --properties shape: {csrString?: string, distinguishedName?: string, hostingEnvironment?: string, name?: string, password?: string, pfxBlob?: string, publicKeyHash?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-csrs create-certificates-or-update" [
+export def "certificates-create-or-update-csr" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -3089,7 +3089,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-csrs create-ce
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/deletedSites
 # operationId: Sites_GetDeletedSites
-export def "subscriptions-resource-groups-providers-microsoft-web-deleted-sites get" [
+export def "sites-get-deleted-sites" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3132,7 +3132,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-deleted-sites 
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments
 # operationId: HostingEnvironments_GetHostingEnvironments
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments list" [
+export def "hosting-environments-get-hosting-environments" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3173,7 +3173,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}
 # operationId: HostingEnvironments_DeleteHostingEnvironment
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments delete" [
+export def "hosting-environments-delete-hosting-environment" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -3217,7 +3217,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}
 # operationId: HostingEnvironments_GetHostingEnvironment
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments get" [
+export def "hosting-environments-get-hosting-environment" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -3261,7 +3261,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}
 # operationId: HostingEnvironments_CreateOrUpdateHostingEnvironment
 # --properties shape: {allowedMultiSizes?: string, allowedWorkerSizes?: string, apiManagementAccountId?: string, clusterSettings?: list, databaseEdition?: string, databaseServiceObjective?: string, dnsSuffix?: string, environmentCapacities?: list, environmentIsHealthy?: bool, environmentStatus?: string, internalLoadBalancingMode?: "None"|"Web"|"Publishing", ipsslAddressCount?: int, lastAction?: string, lastActionResult?: string, location?: string, maximumNumberOfMachines?: int, multiRoleCount?: int, multiSize?: string, ... (14 more fields)}
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments create-or-update" [
+export def "hosting-environments-create-or-update-hosting-environment" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -3314,7 +3314,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/capacities/compute
 # operationId: HostingEnvironments_GetHostingEnvironmentCapacities
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-capacities-compute get" [
+export def "hosting-environments-get-hosting-environment-capacities" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -3357,7 +3357,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/capacities/virtualip
 # operationId: HostingEnvironments_GetHostingEnvironmentVips
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-capacities-virtualip get-vips" [
+export def "hosting-environments-get-hosting-environment-vips" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -3400,7 +3400,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/diagnostics
 # operationId: HostingEnvironments_GetHostingEnvironmentDiagnostics
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-diagnostics get" [
+export def "hosting-environments-get-hosting-environment-diagnostics" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -3443,7 +3443,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/diagnostics/{diagnosticsName}
 # operationId: HostingEnvironments_GetHostingEnvironmentDiagnosticsItem
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-diagnostics get-item" [
+export def "hosting-environments-get-hosting-environment-diagnostics-item" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -3488,7 +3488,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/metricdefinitions
 # operationId: HostingEnvironments_GetHostingEnvironmentMetricDefinitions
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-metricdefinitions get-metric-definitions" [
+export def "hosting-environments-get-hosting-environment-metric-definitions" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -3531,7 +3531,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/metrics
 # operationId: HostingEnvironments_GetHostingEnvironmentMetrics
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-metrics get" [
+export def "hosting-environments-get-hosting-environment-metrics" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -3576,7 +3576,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/multiRolePools
 # operationId: HostingEnvironments_GetMultiRolePools
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-multi-role-pools get" [
+export def "hosting-environments-get-multi-role-pools" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -3619,7 +3619,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/multiRolePools/default
 # operationId: HostingEnvironments_GetMultiRolePool
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-multi-role-pools-default get" [
+export def "hosting-environments-get-multi-role-pool" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -3664,7 +3664,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 # operationId: HostingEnvironments_CreateOrUpdateMultiRolePool
 # --properties shape: {computeMode?: "Shared"|"Dedicated"|"Dynamic", instanceNames?: list<string>, workerCount?: int, workerSize?: string, workerSizeId?: int}
 # --sku shape: {capacity?: int, family?: string, name?: string, size?: string, tier?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-multi-role-pools-default create-or-update" [
+export def "hosting-environments-create-or-update-multi-role-pool" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -3718,7 +3718,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/multiRolePools/default/instances/{instance}/metricdefinitions
 # operationId: HostingEnvironments_GetMultiRolePoolInstanceMetricDefinitions
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-multi-role-pools-default-instances-metricdefinitions get-metric-definitions" [
+export def "hosting-environments-get-multi-role-pool-instance-metric-definitions" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -3763,7 +3763,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/multiRolePools/default/instances/{instance}/metrics
 # operationId: HostingEnvironments_GetMultiRolePoolInstanceMetrics
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-multi-role-pools-default-instances-metrics get" [
+export def "hosting-environments-get-multi-role-pool-instance-metrics" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -3809,7 +3809,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/multiRolePools/default/metricdefinitions
 # operationId: HostingEnvironments_GetHostingEnvironmentMultiRoleMetricDefinitions
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-multi-role-pools-default-metricdefinitions get-metric-definitions" [
+export def "hosting-environments-get-hosting-environment-multi-role-metric-definitions" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -3852,7 +3852,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/multiRolePools/default/metrics
 # operationId: HostingEnvironments_GetHostingEnvironmentMultiRoleMetrics
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-multi-role-pools-default-metrics get" [
+export def "hosting-environments-get-hosting-environment-multi-role-metrics" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -3900,7 +3900,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/multiRolePools/default/skus
 # operationId: HostingEnvironments_GetMultiRolePoolSkus
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-multi-role-pools-default-skus get" [
+export def "hosting-environments-get-multi-role-pool-skus" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -3943,7 +3943,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/multiRolePools/default/usages
 # operationId: HostingEnvironments_GetHostingEnvironmentMultiRoleUsages
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-multi-role-pools-default-usages get" [
+export def "hosting-environments-get-hosting-environment-multi-role-usages" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -3986,7 +3986,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/operations
 # operationId: HostingEnvironments_GetHostingEnvironmentOperations
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-operations list" [
+export def "hosting-environments-get-hosting-environment-operations" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -4029,7 +4029,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/operations/{operationId}
 # operationId: HostingEnvironments_GetHostingEnvironmentOperation
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-operations get" [
+export def "hosting-environments-get-hosting-environment-operation" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -4074,7 +4074,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/reboot
 # operationId: HostingEnvironments_RebootHostingEnvironment
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-reboot create" [
+export def "hosting-environments-reboot-hosting-environment" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -4117,7 +4117,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/resume
 # operationId: HostingEnvironments_ResumeHostingEnvironment
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-resume create" [
+export def "hosting-environments-resume-hosting-environment" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -4160,7 +4160,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/serverfarms
 # operationId: HostingEnvironments_GetHostingEnvironmentServerFarms
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-serverfarms get-server-farms" [
+export def "hosting-environments-get-hosting-environment-server-farms" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -4203,7 +4203,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/sites
 # operationId: HostingEnvironments_GetHostingEnvironmentSites
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-sites get" [
+export def "hosting-environments-get-hosting-environment-sites" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -4247,7 +4247,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/suspend
 # operationId: HostingEnvironments_SuspendHostingEnvironment
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-suspend create" [
+export def "hosting-environments-suspend-hosting-environment" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -4290,7 +4290,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/usages
 # operationId: HostingEnvironments_GetHostingEnvironmentUsages
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-usages get" [
+export def "hosting-environments-get-hosting-environment-usages" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -4334,7 +4334,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/webhostingplans
 # operationId: HostingEnvironments_GetHostingEnvironmentWebHostingPlans
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-webhostingplans get-plans" [
+export def "hosting-environments-get-hosting-environment-web-hosting-plans" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -4377,7 +4377,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/workerPools
 # operationId: HostingEnvironments_GetWorkerPools
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-worker-pools list" [
+export def "hosting-environments-get-worker-pools" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -4420,7 +4420,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/workerPools/{workerPoolName}
 # operationId: HostingEnvironments_GetWorkerPool
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-worker-pools get" [
+export def "hosting-environments-get-worker-pool" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -4467,7 +4467,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 # operationId: HostingEnvironments_CreateOrUpdateWorkerPool
 # --properties shape: {computeMode?: "Shared"|"Dedicated"|"Dynamic", instanceNames?: list<string>, workerCount?: int, workerSize?: string, workerSizeId?: int}
 # --sku shape: {capacity?: int, family?: string, name?: string, size?: string, tier?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-worker-pools create-or-update" [
+export def "hosting-environments-create-or-update-worker-pool" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -4523,7 +4523,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/workerPools/{workerPoolName}/instances/{instance}/metricdefinitions
 # operationId: HostingEnvironments_GetWorkerPoolInstanceMetricDefinitions
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-worker-pools-instances-metricdefinitions get-metric-definitions" [
+export def "hosting-environments-get-worker-pool-instance-metric-definitions" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -4570,7 +4570,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/workerPools/{workerPoolName}/instances/{instance}/metrics
 # operationId: HostingEnvironments_GetWorkerPoolInstanceMetrics
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-worker-pools-instances-metrics get" [
+export def "hosting-environments-get-worker-pool-instance-metrics" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -4619,7 +4619,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/workerPools/{workerPoolName}/metricdefinitions
 # operationId: HostingEnvironments_GetHostingEnvironmentWebWorkerMetricDefinitions
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-worker-pools-metricdefinitions get-metric-definitions" [
+export def "hosting-environments-get-hosting-environment-web-worker-metric-definitions" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -4664,7 +4664,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/workerPools/{workerPoolName}/metrics
 # operationId: HostingEnvironments_GetHostingEnvironmentWebWorkerMetrics
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-worker-pools-metrics get" [
+export def "hosting-environments-get-hosting-environment-web-worker-metrics" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -4711,7 +4711,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/workerPools/{workerPoolName}/skus
 # operationId: HostingEnvironments_GetWorkerPoolSkus
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-worker-pools-skus get" [
+export def "hosting-environments-get-worker-pool-skus" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -4756,7 +4756,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/workerPools/{workerPoolName}/usages
 # operationId: HostingEnvironments_GetHostingEnvironmentWebWorkerUsages
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-worker-pools-usages get" [
+export def "hosting-environments-get-hosting-environment-web-worker-usages" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -4801,7 +4801,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/managedHostingEnvironments
 # operationId: ManagedHostingEnvironments_GetManagedHostingEnvironments
-export def "subscriptions-resource-groups-providers-microsoft-web-managed-hosting-environments list" [
+export def "managed-hosting-environments-get-managed-hosting-environments" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4842,7 +4842,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-managed-hostin
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/managedHostingEnvironments/{name}
 # operationId: ManagedHostingEnvironments_DeleteManagedHostingEnvironment
-export def "subscriptions-resource-groups-providers-microsoft-web-managed-hosting-environments delete" [
+export def "managed-hosting-environments-delete-managed-hosting-environment" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -4886,7 +4886,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-managed-hostin
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/managedHostingEnvironments/{name}
 # operationId: ManagedHostingEnvironments_GetManagedHostingEnvironment
-export def "subscriptions-resource-groups-providers-microsoft-web-managed-hosting-environments get" [
+export def "managed-hosting-environments-get-managed-hosting-environment" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -4930,7 +4930,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-managed-hostin
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/managedHostingEnvironments/{name}
 # operationId: ManagedHostingEnvironments_CreateOrUpdateManagedHostingEnvironment
 # --properties shape: {allowedMultiSizes?: string, allowedWorkerSizes?: string, apiManagementAccountId?: string, clusterSettings?: list, databaseEdition?: string, databaseServiceObjective?: string, dnsSuffix?: string, environmentCapacities?: list, environmentIsHealthy?: bool, environmentStatus?: string, internalLoadBalancingMode?: "None"|"Web"|"Publishing", ipsslAddressCount?: int, lastAction?: string, lastActionResult?: string, location?: string, maximumNumberOfMachines?: int, multiRoleCount?: int, multiSize?: string, ... (14 more fields)}
-export def "subscriptions-resource-groups-providers-microsoft-web-managed-hosting-environments create-or-update" [
+export def "managed-hosting-environments-create-or-update-managed-hosting-environment" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -4983,7 +4983,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-managed-hostin
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/managedHostingEnvironments/{name}/capacities/virtualip
 # operationId: ManagedHostingEnvironments_GetManagedHostingEnvironmentVips
-export def "subscriptions-resource-groups-providers-microsoft-web-managed-hosting-environments-capacities-virtualip get-vips" [
+export def "managed-hosting-environments-get-managed-hosting-environment-vips" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -5026,7 +5026,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-managed-hostin
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/managedHostingEnvironments/{name}/operations/{operationId}
 # operationId: ManagedHostingEnvironments_GetManagedHostingEnvironmentOperation
-export def "subscriptions-resource-groups-providers-microsoft-web-managed-hosting-environments-operations get" [
+export def "managed-hosting-environments-get-managed-hosting-environment-operation" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -5071,7 +5071,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-managed-hostin
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/managedHostingEnvironments/{name}/serverfarms
 # operationId: ManagedHostingEnvironments_GetManagedHostingEnvironmentServerFarms
-export def "subscriptions-resource-groups-providers-microsoft-web-managed-hosting-environments-serverfarms get-server-farms" [
+export def "managed-hosting-environments-get-managed-hosting-environment-server-farms" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -5114,7 +5114,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-managed-hostin
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/managedHostingEnvironments/{name}/sites
 # operationId: ManagedHostingEnvironments_GetManagedHostingEnvironmentSites
-export def "subscriptions-resource-groups-providers-microsoft-web-managed-hosting-environments-sites get" [
+export def "managed-hosting-environments-get-managed-hosting-environment-sites" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -5158,7 +5158,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-managed-hostin
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/managedHostingEnvironments/{name}/webhostingplans
 # operationId: ManagedHostingEnvironments_GetManagedHostingEnvironmentWebHostingPlans
-export def "subscriptions-resource-groups-providers-microsoft-web-managed-hosting-environments-webhostingplans get-plans" [
+export def "managed-hosting-environments-get-managed-hosting-environment-web-hosting-plans" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -5201,7 +5201,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-managed-hostin
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/serverfarms
 # operationId: ServerFarms_GetServerFarms
-export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms get-server-farms-server-farms" [
+export def "server-farms-get-server-farms" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5242,7 +5242,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms ge
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/serverfarms/{name}
 # operationId: ServerFarms_DeleteServerFarm
-export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms delete-server-farms-server-farm" [
+export def "server-farms-delete-server-farm" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -5285,7 +5285,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms de
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/serverfarms/{name}
 # operationId: ServerFarms_GetServerFarm
-export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms get-server-farms-server-farm" [
+export def "server-farms-get-server-farm" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -5330,7 +5330,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms ge
 # operationId: ServerFarms_CreateOrUpdateServerFarm
 # --properties shape: {adminSiteName?: string, hostingEnvironmentProfile?: record, maximumNumberOfWorkers?: int, name?: string, perSiteScaling?: bool, reserved?: bool, workerTierName?: string}
 # --sku shape: {capacity?: int, family?: string, name?: string, size?: string, tier?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms create-server-farms-or-update-server-farm" [
+export def "server-farms-create-or-update-server-farm" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -5385,7 +5385,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms cr
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/serverfarms/{name}/metricdefinitions
 # operationId: ServerFarms_GetServerFarmMetricDefintions
-export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-metricdefinitions get-server-farms-server-farm-metric-defintions" [
+export def "server-farms-get-server-farm-metric-defintions" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -5428,7 +5428,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-me
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/serverfarms/{name}/metrics
 # operationId: ServerFarms_GetServerFarmMetrics
-export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-metrics get-server-farms-server-farm" [
+export def "server-farms-get-server-farm-metrics" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -5473,7 +5473,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-me
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/serverfarms/{name}/operationresults/{operationId}
 # operationId: ServerFarms_GetServerFarmOperation
-export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-operationresults get-server-farms-server-farm-operation" [
+export def "server-farms-get-server-farm-operation" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -5518,7 +5518,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-op
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/serverfarms/{name}/restartSites
 # operationId: ServerFarms_RestartSitesForServerFarm
-export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-restart-sites restart-server-farms-for-server-farm" [
+export def "server-farms-restart-sites-for-server-farm" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -5562,7 +5562,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-re
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/serverfarms/{name}/sites
 # operationId: ServerFarms_GetServerFarmSites
-export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-sites get-server-farms-server-farm" [
+export def "server-farms-get-server-farm-sites" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -5608,7 +5608,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-si
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/serverfarms/{name}/virtualNetworkConnections
 # operationId: ServerFarms_GetVnetsForServerFarm
-export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-virtual-network-connections get-server-farms-vnets-for-server-farm" [
+export def "server-farms-get-vnets-for-server-farm" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -5651,7 +5651,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-vi
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/serverfarms/{name}/virtualNetworkConnections/{vnetName}
 # operationId: ServerFarms_GetVnetFromServerFarm
-export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-virtual-network-connections get-server-farms-vnet-from-server-farm" [
+export def "server-farms-get-vnet-from-server-farm" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -5696,7 +5696,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-vi
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/serverfarms/{name}/virtualNetworkConnections/{vnetName}/gateways/{gatewayName}
 # operationId: ServerFarms_GetServerFarmVnetGateway
-export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-virtual-network-connections-gateways get-server-farms-server-farm-vnet" [
+export def "server-farms-get-server-farm-vnet-gateway" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -5744,7 +5744,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-vi
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/serverfarms/{name}/virtualNetworkConnections/{vnetName}/gateways/{gatewayName}
 # operationId: ServerFarms_UpdateServerFarmVnetGateway
 # --properties shape: {vnetName?: string, vpnPackageUri?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-virtual-network-connections-gateways update-server-farms-server-farm-vnet" [
+export def "server-farms-update-server-farm-vnet-gateway" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -5801,7 +5801,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-vi
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/serverfarms/{name}/virtualNetworkConnections/{vnetName}/routes
 # operationId: ServerFarms_GetRoutesForVnet
-export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-virtual-network-connections-routes list" [
+export def "server-farms-get-routes-for-vnet" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -5846,7 +5846,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-vi
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/serverfarms/{name}/virtualNetworkConnections/{vnetName}/routes/{routeName}
 # operationId: ServerFarms_DeleteVnetRoute
-export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-virtual-network-connections-routes delete-server-farms-vnet" [
+export def "server-farms-delete-vnet-route" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -5893,7 +5893,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-vi
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/serverfarms/{name}/virtualNetworkConnections/{vnetName}/routes/{routeName}
 # operationId: ServerFarms_GetRouteForVnet
-export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-virtual-network-connections-routes get-server-farms-for-vnet" [
+export def "server-farms-get-route-for-vnet" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -5941,7 +5941,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-vi
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/serverfarms/{name}/virtualNetworkConnections/{vnetName}/routes/{routeName}
 # operationId: ServerFarms_UpdateVnetRoute
 # --properties shape: {endAddress?: string, name?: string, routeType?: string, startAddress?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-virtual-network-connections-routes update-server-farms-vnet" [
+export def "server-farms-update-vnet-route" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -5999,7 +5999,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-vi
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/serverfarms/{name}/virtualNetworkConnections/{vnetName}/routes/{routeName}
 # operationId: ServerFarms_CreateOrUpdateVnetRoute
 # --properties shape: {endAddress?: string, name?: string, routeType?: string, startAddress?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-virtual-network-connections-routes create-server-farms-or-update-vnet" [
+export def "server-farms-create-or-update-vnet-route" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -6056,7 +6056,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-vi
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/serverfarms/{name}/workers/{workerName}/reboot
 # operationId: ServerFarms_RebootWorkerForServerFarm
-export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-workers-reboot create-server-farms-for-server-farm" [
+export def "server-farms-reboot-worker-for-server-farm" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -6101,7 +6101,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-serverfarms-wo
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites
 # operationId: Sites_GetSites
-export def "subscriptions-resource-groups-providers-microsoft-web-sites list" [
+export def "sites-get-sites" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6145,7 +6145,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites list" [
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}
 # operationId: Sites_DeleteSite
-export def "subscriptions-resource-groups-providers-microsoft-web-sites delete" [
+export def "sites-delete-site" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -6192,7 +6192,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites delete" 
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}
 # operationId: Sites_GetSite
-export def "subscriptions-resource-groups-providers-microsoft-web-sites get" [
+export def "sites-get-site" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -6237,7 +6237,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites get" [
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}
 # operationId: Sites_CreateOrUpdateSite
 # --properties shape: {clientAffinityEnabled?: bool, clientCertEnabled?: bool, cloningInfo?: record, containerSize?: int, enabled?: bool, gatewaySiteName?: string, hostNameSslStates?: list, hostNamesDisabled?: bool, hostingEnvironmentProfile?: record, maxNumberOfWorkers?: int, microService?: string, name?: string, scmSiteAlsoStopped?: bool, serverFarmId?: string, siteConfig?: record}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites create-or-update" [
+export def "sites-create-or-update-site" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -6294,7 +6294,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites create-o
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/applySlotConfig
 # operationId: Sites_ApplySlotConfigToProduction
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-apply-slot-config create-to-production" [
+export def "sites-apply-slot-config-to-production" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -6343,7 +6343,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-apply-sl
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/backup
 # operationId: Sites_BackupSite
 # --properties shape: {backupSchedule?: record, databases?: list, enabled?: bool, name?: string, storageAccountUrl?: string, type: "Default"|"Clone"|"Relocation"}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-backup create" [
+export def "sites-backup-site" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -6396,7 +6396,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-backup c
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/backups
 # operationId: Sites_ListSiteBackups
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-backups list" [
+export def "sites-list-site-backups" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -6440,7 +6440,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-backups 
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/backups/discover
 # operationId: Sites_DiscoverSiteRestore
 # --properties shape: {adjustConnectionStrings?: bool, blobName?: string, databases?: list, hostingEnvironment?: string, ignoreConflictingHostNames?: bool, operationType: "Default"|"Clone"|"Relocation", overwrite?: bool, siteName?: string, storageAccountUrl?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-backups-discover update-restore" [
+export def "sites-discover-site-restore" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -6493,7 +6493,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-backups-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/backups/{backupId}
 # operationId: Sites_DeleteBackup
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-backups delete" [
+export def "sites-delete-backup" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -6538,7 +6538,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-backups 
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/backups/{backupId}
 # operationId: Sites_GetSiteBackupStatus
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-backups get-status" [
+export def "sites-get-site-backup-status" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -6584,7 +6584,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-backups 
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/backups/{backupId}/list
 # operationId: Sites_GetSiteBackupStatusSecrets
 # --properties shape: {backupSchedule?: record, databases?: list, enabled?: bool, name?: string, storageAccountUrl?: string, type: "Default"|"Clone"|"Relocation"}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-backups-list get-status-secrets" [
+export def "sites-get-site-backup-status-secrets" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -6640,7 +6640,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-backups-
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/backups/{backupId}/restore
 # operationId: Sites_RestoreSite
 # --properties shape: {adjustConnectionStrings?: bool, blobName?: string, databases?: list, hostingEnvironment?: string, ignoreConflictingHostNames?: bool, operationType: "Default"|"Clone"|"Relocation", overwrite?: bool, siteName?: string, storageAccountUrl?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-backups-restore create" [
+export def "sites-restore-site" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -6695,7 +6695,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-backups-
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/config/appsettings
 # operationId: Sites_UpdateSiteAppSettings
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-appsettings update-app-settings" [
+export def "sites-update-site-app-settings" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -6748,7 +6748,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-a
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/config/appsettings/list
 # operationId: Sites_ListSiteAppSettings
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-appsettings-list list-app-settings" [
+export def "sites-list-site-app-settings" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -6791,7 +6791,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-a
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/config/authsettings
 # operationId: Sites_UpdateSiteAuthSettings
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-authsettings update-auth-settings" [
+export def "sites-update-site-auth-settings" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -6862,7 +6862,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-a
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/config/authsettings/list
 # operationId: Sites_ListSiteAuthSettings
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-authsettings-list list-auth-settings" [
+export def "sites-list-site-auth-settings" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -6906,7 +6906,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-a
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/config/backup
 # operationId: Sites_UpdateSiteBackupConfiguration
 # --properties shape: {backupSchedule?: record, databases?: list, enabled?: bool, name?: string, storageAccountUrl?: string, type: "Default"|"Clone"|"Relocation"}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-backup update-configuration" [
+export def "sites-update-site-backup-configuration" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -6959,7 +6959,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-b
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/config/backup/list
 # operationId: Sites_GetSiteBackupConfiguration
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-backup-list get-configuration" [
+export def "sites-get-site-backup-configuration" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -7002,7 +7002,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-b
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/config/connectionstrings
 # operationId: Sites_UpdateSiteConnectionStrings
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-connectionstrings update-connection-strings" [
+export def "sites-update-site-connection-strings" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -7055,7 +7055,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-c
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/config/connectionstrings/list
 # operationId: Sites_ListSiteConnectionStrings
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-connectionstrings-list list-connection-strings" [
+export def "sites-list-site-connection-strings" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -7098,7 +7098,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-c
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/config/logs
 # operationId: Sites_GetSiteLogsConfig
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-logs get" [
+export def "sites-get-site-logs-config" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -7142,7 +7142,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-l
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/config/logs
 # operationId: Sites_UpdateSiteLogsConfig
 # --properties shape: {applicationLogs?: record, detailedErrorMessages?: record, failedRequestsTracing?: record, httpLogs?: record}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-logs update" [
+export def "sites-update-site-logs-config" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -7195,7 +7195,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-l
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/config/metadata
 # operationId: Sites_UpdateSiteMetadata
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-metadata update" [
+export def "sites-update-site-metadata" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -7248,7 +7248,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-m
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/config/metadata/list
 # operationId: Sites_ListSiteMetadata
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-metadata-list list" [
+export def "sites-list-site-metadata" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -7291,7 +7291,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-m
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/config/publishingcredentials/list
 # operationId: Sites_ListSitePublishingCredentials
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-publishingcredentials-list list-publishing-credentials" [
+export def "sites-list-site-publishing-credentials" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -7334,7 +7334,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-p
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/config/slotConfigNames
 # operationId: Sites_GetSlotConfigNames
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-slot-config-names get" [
+export def "sites-get-slot-config-names" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -7378,7 +7378,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-s
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/config/slotConfigNames
 # operationId: Sites_UpdateSlotConfigNames
 # --properties shape: {appSettingNames?: list<string>, connectionStringNames?: list<string>}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-slot-config-names update" [
+export def "sites-update-slot-config-names" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -7431,7 +7431,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-s
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/config/web
 # operationId: Sites_GetSiteConfig
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-web get" [
+export def "sites-get-site-config" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -7475,7 +7475,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-w
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/config/web
 # operationId: Sites_UpdateSiteConfig
 # --properties shape: {alwaysOn?: bool, apiDefinition?: record, appCommandLine?: string, appSettings?: list, autoHealEnabled?: bool, autoHealRules?: record, autoSwapSlotName?: string, connectionStrings?: list, cors?: record, defaultDocuments?: list<string>, detailedErrorLoggingEnabled?: bool, documentRoot?: string, experiments?: record, handlerMappings?: list, httpLoggingEnabled?: bool, ipSecurityRestrictions?: list, javaContainer?: string, javaContainerVersion?: string, javaVersion?: string, limits?: record, ... (22 more fields)}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-web update" [
+export def "sites-update-site-config" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -7529,7 +7529,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-w
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/config/web
 # operationId: Sites_CreateOrUpdateSiteConfig
 # --properties shape: {alwaysOn?: bool, apiDefinition?: record, appCommandLine?: string, appSettings?: list, autoHealEnabled?: bool, autoHealRules?: record, autoSwapSlotName?: string, connectionStrings?: list, cors?: record, defaultDocuments?: list<string>, detailedErrorLoggingEnabled?: bool, documentRoot?: string, experiments?: record, handlerMappings?: list, httpLoggingEnabled?: bool, ipSecurityRestrictions?: list, javaContainer?: string, javaContainerVersion?: string, javaVersion?: string, limits?: record, ... (22 more fields)}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-web create-or-update" [
+export def "sites-create-or-update-site-config" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -7582,7 +7582,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-w
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/deployments
 # operationId: Sites_GetDeployments
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-deployments list" [
+export def "sites-get-deployments" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -7625,7 +7625,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-deployme
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/deployments/{id}
 # operationId: Sites_DeleteDeployment
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-deployments delete" [
+export def "sites-delete-deployment" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -7670,7 +7670,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-deployme
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/deployments/{id}
 # operationId: Sites_GetDeployment
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-deployments get" [
+export def "sites-get-deployment" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -7716,7 +7716,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-deployme
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/deployments/{id}
 # operationId: Sites_CreateDeployment
 # --properties shape: {active?: bool, author?: string, author_email?: string, deployer?: string, details?: string, end_time?: string, id?: string, message?: string, start_time?: string, status?: int}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-deployments create" [
+export def "sites-create-deployment" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -7771,7 +7771,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-deployme
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/hostNameBindings
 # operationId: Sites_GetSiteHostNameBindings
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-host-name-bindings list" [
+export def "sites-get-site-host-name-bindings" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -7814,7 +7814,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-host-nam
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/hostNameBindings/{hostName}
 # operationId: Sites_DeleteSiteHostNameBinding
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-host-name-bindings delete" [
+export def "sites-delete-site-host-name-binding" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -7859,7 +7859,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-host-nam
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/hostNameBindings/{hostName}
 # operationId: Sites_GetSiteHostNameBinding
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-host-name-bindings get" [
+export def "sites-get-site-host-name-binding" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -7905,7 +7905,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-host-nam
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/hostNameBindings/{hostName}
 # operationId: Sites_CreateOrUpdateSiteHostNameBinding
 # --properties shape: {azureResourceName?: string, azureResourceType?: "Website"|"TrafficManager", customHostNameDnsRecordType?: "CName"|"A", domainId?: string, hostNameType?: "Verified"|"Managed", name?: string, siteName?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-host-name-bindings create-or-update" [
+export def "sites-create-or-update-site-host-name-binding" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -7960,7 +7960,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-host-nam
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/hybridconnection
 # operationId: Sites_ListSiteRelayServiceConnections
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-hybridconnection list-relay-service-connections" [
+export def "sites-list-site-relay-service-connections" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -8003,7 +8003,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-hybridco
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/hybridconnection/{entityName}
 # operationId: Sites_DeleteSiteRelayServiceConnection
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-hybridconnection delete-relay-service-connection" [
+export def "sites-delete-site-relay-service-connection" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -8048,7 +8048,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-hybridco
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/hybridconnection/{entityName}
 # operationId: Sites_GetSiteRelayServiceConnection
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-hybridconnection get-relay-service-connection" [
+export def "sites-get-site-relay-service-connection" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -8094,7 +8094,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-hybridco
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/hybridconnection/{entityName}
 # operationId: Sites_UpdateSiteRelayServiceConnection
 # --properties shape: {biztalkUri?: string, entityConnectionString?: string, entityName?: string, hostname?: string, port?: int, resourceConnectionString?: string, resourceType?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-hybridconnection update-relay-service-connection" [
+export def "sites-update-site-relay-service-connection" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -8150,7 +8150,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-hybridco
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/hybridconnection/{entityName}
 # operationId: Sites_CreateOrUpdateSiteRelayServiceConnection
 # --properties shape: {biztalkUri?: string, entityConnectionString?: string, entityName?: string, hostname?: string, port?: int, resourceConnectionString?: string, resourceType?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-hybridconnection create-or-update-relay-service-connection" [
+export def "sites-create-or-update-site-relay-service-connection" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -8205,7 +8205,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-hybridco
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/instances
 # operationId: Sites_GetSiteInstanceIdentifiers
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-instances get-identifiers" [
+export def "sites-get-site-instance-identifiers" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -8248,7 +8248,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-instance
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/instances/{instanceId}/deployments
 # operationId: Sites_GetInstanceDeployments
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-instances-deployments list" [
+export def "sites-get-instance-deployments" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -8293,7 +8293,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-instance
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/instances/{instanceId}/deployments/{id}
 # operationId: Sites_DeleteInstanceDeployment
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-instances-deployments delete" [
+export def "sites-delete-instance-deployment" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -8340,7 +8340,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-instance
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/instances/{instanceId}/deployments/{id}
 # operationId: Sites_GetInstanceDeployment
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-instances-deployments get" [
+export def "sites-get-instance-deployment" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -8388,7 +8388,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-instance
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/instances/{instanceId}/deployments/{id}
 # operationId: Sites_CreateInstanceDeployment
 # --properties shape: {active?: bool, author?: string, author_email?: string, deployer?: string, details?: string, end_time?: string, id?: string, message?: string, start_time?: string, status?: int}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-instances-deployments create" [
+export def "sites-create-instance-deployment" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -8445,7 +8445,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-instance
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/iscloneable
 # operationId: Sites_IsSiteCloneable
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-iscloneable create-is-cloneable" [
+export def "sites-is-site-cloneable" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -8488,7 +8488,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-isclonea
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/metricdefinitions
 # operationId: Sites_GetSiteMetricDefinitions
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-metricdefinitions get-metric-definitions" [
+export def "sites-get-site-metric-definitions" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -8531,7 +8531,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-metricde
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/metrics
 # operationId: Sites_GetSiteMetrics
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-metrics get" [
+export def "sites-get-site-metrics" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -8576,7 +8576,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-metrics 
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/networkFeatures/{view}
 # operationId: Sites_GetSiteNetworkFeatures
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-network-features get" [
+export def "sites-get-site-network-features" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -8621,7 +8621,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-network-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/newpassword
 # operationId: Sites_GenerateNewSitePublishingPassword
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-newpassword generate-new-publishing-password" [
+export def "sites-generate-new-site-publishing-password" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -8664,7 +8664,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-newpassw
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/operationresults/{operationId}
 # operationId: Sites_GetSiteOperation
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-operationresults get-operation" [
+export def "sites-get-site-operation" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -8708,7 +8708,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-operatio
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/premieraddons
 #
 # operationId: Sites_ListSitePremierAddOns
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-premieraddons list-premier-create-ons" [
+export def "sites-list-site-premier-add-ons" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -8750,7 +8750,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-premiera
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/premieraddons/{premierAddOnName}
 #
 # operationId: Sites_DeleteSitePremierAddOn
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-premieraddons delete-premier-create" [
+export def "sites-delete-site-premier-add-on" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -8794,7 +8794,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-premiera
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/premieraddons/{premierAddOnName}
 #
 # operationId: Sites_GetSitePremierAddOn
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-premieraddons get-premier-create" [
+export def "sites-get-site-premier-add-on" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -8840,7 +8840,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-premiera
 # operationId: Sites_AddSitePremierAddOn
 # --plan shape: {name?: string, product?: string, promotionCode?: string, publisher?: string, version?: string}
 # --sku shape: {capacity?: int, family?: string, name?: string, size?: string, tier?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-premieraddons create-premier" [
+export def "sites-add-site-premier-add-on" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -8893,7 +8893,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-premiera
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/publishxml
 # operationId: Sites_ListSitePublishingProfileXml
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-publishxml list-publishing-profile-xml" [
+export def "sites-list-site-publishing-profile-xml" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -8940,7 +8940,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-publishx
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/recover
 # operationId: Sites_RecoverSite
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-recover create" [
+export def "sites-recover-site" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -8990,7 +8990,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-recover 
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/resetSlotConfig
 # operationId: Sites_ResetProductionSlotConfig
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-reset-slot-config reset-production" [
+export def "sites-reset-production-slot-config" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -9033,7 +9033,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-reset-sl
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/restart
 # operationId: Sites_RestartSite
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-restart restart" [
+export def "sites-restart-site" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -9078,7 +9078,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-restart 
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots
 # operationId: Sites_GetSiteSlots
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots list" [
+export def "sites-get-site-slots" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -9122,7 +9122,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots li
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}
 # operationId: Sites_DeleteSiteSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots delete" [
+export def "sites-delete-site-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -9171,7 +9171,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots de
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}
 # operationId: Sites_GetSiteSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots get" [
+export def "sites-get-site-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -9218,7 +9218,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots ge
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}
 # operationId: Sites_CreateOrUpdateSiteSlot
 # --properties shape: {clientAffinityEnabled?: bool, clientCertEnabled?: bool, cloningInfo?: record, containerSize?: int, enabled?: bool, gatewaySiteName?: string, hostNameSslStates?: list, hostNamesDisabled?: bool, hostingEnvironmentProfile?: record, maxNumberOfWorkers?: int, microService?: string, name?: string, scmSiteAlsoStopped?: bool, serverFarmId?: string, siteConfig?: record}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots create-or-update" [
+export def "sites-create-or-update-site-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -9277,7 +9277,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots cr
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/applySlotConfig
 # operationId: Sites_ApplySlotConfigSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-apply-slot-config create" [
+export def "sites-apply-slot-config-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -9328,7 +9328,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ap
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/backup
 # operationId: Sites_BackupSiteSlot
 # --properties shape: {backupSchedule?: record, databases?: list, enabled?: bool, name?: string, storageAccountUrl?: string, type: "Default"|"Clone"|"Relocation"}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-backup create" [
+export def "sites-backup-site-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -9383,7 +9383,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ba
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/backups
 # operationId: Sites_ListSiteBackupsSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-backups list" [
+export def "sites-list-site-backups-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -9429,7 +9429,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ba
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/backups/discover
 # operationId: Sites_DiscoverSiteRestoreSlot
 # --properties shape: {adjustConnectionStrings?: bool, blobName?: string, databases?: list, hostingEnvironment?: string, ignoreConflictingHostNames?: bool, operationType: "Default"|"Clone"|"Relocation", overwrite?: bool, siteName?: string, storageAccountUrl?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-backups-discover update-restore" [
+export def "sites-discover-site-restore-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -9484,7 +9484,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ba
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/backups/{backupId}
 # operationId: Sites_DeleteBackupSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-backups delete" [
+export def "sites-delete-backup-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -9531,7 +9531,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ba
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/backups/{backupId}
 # operationId: Sites_GetSiteBackupStatusSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-backups get-status" [
+export def "sites-get-site-backup-status-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -9579,7 +9579,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ba
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/backups/{backupId}/list
 # operationId: Sites_GetSiteBackupStatusSecretsSlot
 # --properties shape: {backupSchedule?: record, databases?: list, enabled?: bool, name?: string, storageAccountUrl?: string, type: "Default"|"Clone"|"Relocation"}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-backups-list get-status-secrets" [
+export def "sites-get-site-backup-status-secrets-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -9637,7 +9637,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ba
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/backups/{backupId}/restore
 # operationId: Sites_RestoreSiteSlot
 # --properties shape: {adjustConnectionStrings?: bool, blobName?: string, databases?: list, hostingEnvironment?: string, ignoreConflictingHostNames?: bool, operationType: "Default"|"Clone"|"Relocation", overwrite?: bool, siteName?: string, storageAccountUrl?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-backups-restore create" [
+export def "sites-restore-site-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -9694,7 +9694,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ba
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/appsettings
 # operationId: Sites_UpdateSiteAppSettingsSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config-appsettings update-app-settings" [
+export def "sites-update-site-app-settings-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -9749,7 +9749,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/appsettings/list
 # operationId: Sites_ListSiteAppSettingsSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config-appsettings-list list-app-settings" [
+export def "sites-list-site-app-settings-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -9794,7 +9794,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/authsettings
 # operationId: Sites_UpdateSiteAuthSettingsSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config-authsettings update-auth-settings" [
+export def "sites-update-site-auth-settings-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -9867,7 +9867,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/authsettings/list
 # operationId: Sites_ListSiteAuthSettingsSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config-authsettings-list list-auth-settings" [
+export def "sites-list-site-auth-settings-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -9913,7 +9913,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/backup
 # operationId: Sites_UpdateSiteBackupConfigurationSlot
 # --properties shape: {backupSchedule?: record, databases?: list, enabled?: bool, name?: string, storageAccountUrl?: string, type: "Default"|"Clone"|"Relocation"}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config-backup update-configuration" [
+export def "sites-update-site-backup-configuration-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -9968,7 +9968,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/backup/list
 # operationId: Sites_GetSiteBackupConfigurationSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config-backup-list get-configuration" [
+export def "sites-get-site-backup-configuration-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -10013,7 +10013,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/connectionstrings
 # operationId: Sites_UpdateSiteConnectionStringsSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config-connectionstrings update-connection-strings" [
+export def "sites-update-site-connection-strings-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -10068,7 +10068,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/connectionstrings/list
 # operationId: Sites_ListSiteConnectionStringsSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config-connectionstrings-list list-connection-strings" [
+export def "sites-list-site-connection-strings-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -10113,7 +10113,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/logs
 # operationId: Sites_GetSiteLogsConfigSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config-logs get" [
+export def "sites-get-site-logs-config-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -10159,7 +10159,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/logs
 # operationId: Sites_UpdateSiteLogsConfigSlot
 # --properties shape: {applicationLogs?: record, detailedErrorMessages?: record, failedRequestsTracing?: record, httpLogs?: record}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config-logs update" [
+export def "sites-update-site-logs-config-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -10214,7 +10214,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/metadata
 # operationId: Sites_UpdateSiteMetadataSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config-metadata update" [
+export def "sites-update-site-metadata-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -10269,7 +10269,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/metadata/list
 # operationId: Sites_ListSiteMetadataSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config-metadata-list list" [
+export def "sites-list-site-metadata-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -10314,7 +10314,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/publishingcredentials/list
 # operationId: Sites_ListSitePublishingCredentialsSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config-publishingcredentials-list list-publishing-credentials" [
+export def "sites-list-site-publishing-credentials-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -10359,7 +10359,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/web
 # operationId: Sites_GetSiteConfigSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config-web get" [
+export def "sites-get-site-config-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -10405,7 +10405,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/web
 # operationId: Sites_UpdateSiteConfigSlot
 # --properties shape: {alwaysOn?: bool, apiDefinition?: record, appCommandLine?: string, appSettings?: list, autoHealEnabled?: bool, autoHealRules?: record, autoSwapSlotName?: string, connectionStrings?: list, cors?: record, defaultDocuments?: list<string>, detailedErrorLoggingEnabled?: bool, documentRoot?: string, experiments?: record, handlerMappings?: list, httpLoggingEnabled?: bool, ipSecurityRestrictions?: list, javaContainer?: string, javaContainerVersion?: string, javaVersion?: string, limits?: record, ... (22 more fields)}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config-web update" [
+export def "sites-update-site-config-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -10461,7 +10461,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/web
 # operationId: Sites_CreateOrUpdateSiteConfigSlot
 # --properties shape: {alwaysOn?: bool, apiDefinition?: record, appCommandLine?: string, appSettings?: list, autoHealEnabled?: bool, autoHealRules?: record, autoSwapSlotName?: string, connectionStrings?: list, cors?: record, defaultDocuments?: list<string>, detailedErrorLoggingEnabled?: bool, documentRoot?: string, experiments?: record, handlerMappings?: list, httpLoggingEnabled?: bool, ipSecurityRestrictions?: list, javaContainer?: string, javaContainerVersion?: string, javaVersion?: string, limits?: record, ... (22 more fields)}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config-web create-or-update" [
+export def "sites-create-or-update-site-config-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -10516,7 +10516,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/deployments
 # operationId: Sites_GetDeploymentsSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-deployments list" [
+export def "sites-get-deployments-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -10561,7 +10561,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-de
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/deployments/{id}
 # operationId: Sites_DeleteDeploymentSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-deployments delete" [
+export def "sites-delete-deployment-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -10608,7 +10608,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-de
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/deployments/{id}
 # operationId: Sites_GetDeploymentSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-deployments get" [
+export def "sites-get-deployment-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -10656,7 +10656,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-de
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/deployments/{id}
 # operationId: Sites_CreateDeploymentSlot
 # --properties shape: {active?: bool, author?: string, author_email?: string, deployer?: string, details?: string, end_time?: string, id?: string, message?: string, start_time?: string, status?: int}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-deployments create" [
+export def "sites-create-deployment-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -10713,7 +10713,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-de
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hostNameBindings
 # operationId: Sites_GetSiteHostNameBindingsSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-host-name-bindings list" [
+export def "sites-get-site-host-name-bindings-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -10758,7 +10758,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ho
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hostNameBindings/{hostName}
 # operationId: Sites_DeleteSiteHostNameBindingSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-host-name-bindings delete" [
+export def "sites-delete-site-host-name-binding-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -10805,7 +10805,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ho
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hostNameBindings/{hostName}
 # operationId: Sites_GetSiteHostNameBindingSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-host-name-bindings get" [
+export def "sites-get-site-host-name-binding-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -10853,7 +10853,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ho
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hostNameBindings/{hostName}
 # operationId: Sites_CreateOrUpdateSiteHostNameBindingSlot
 # --properties shape: {azureResourceName?: string, azureResourceType?: "Website"|"TrafficManager", customHostNameDnsRecordType?: "CName"|"A", domainId?: string, hostNameType?: "Verified"|"Managed", name?: string, siteName?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-host-name-bindings create-or-update" [
+export def "sites-create-or-update-site-host-name-binding-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -10910,7 +10910,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ho
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hybridconnection
 # operationId: Sites_ListSiteRelayServiceConnectionsSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-hybridconnection list-relay-service-connections" [
+export def "sites-list-site-relay-service-connections-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -10955,7 +10955,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-hy
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hybridconnection/{entityName}
 # operationId: Sites_DeleteSiteRelayServiceConnectionSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-hybridconnection delete-relay-service-connection" [
+export def "sites-delete-site-relay-service-connection-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -11002,7 +11002,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-hy
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hybridconnection/{entityName}
 # operationId: Sites_GetSiteRelayServiceConnectionSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-hybridconnection get-relay-service-connection" [
+export def "sites-get-site-relay-service-connection-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -11050,7 +11050,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-hy
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hybridconnection/{entityName}
 # operationId: Sites_UpdateSiteRelayServiceConnectionSlot
 # --properties shape: {biztalkUri?: string, entityConnectionString?: string, entityName?: string, hostname?: string, port?: int, resourceConnectionString?: string, resourceType?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-hybridconnection update-relay-service-connection" [
+export def "sites-update-site-relay-service-connection-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -11108,7 +11108,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-hy
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hybridconnection/{entityName}
 # operationId: Sites_CreateOrUpdateSiteRelayServiceConnectionSlot
 # --properties shape: {biztalkUri?: string, entityConnectionString?: string, entityName?: string, hostname?: string, port?: int, resourceConnectionString?: string, resourceType?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-hybridconnection create-or-update-relay-service-connection" [
+export def "sites-create-or-update-site-relay-service-connection-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -11165,7 +11165,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-hy
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/instances
 # operationId: Sites_GetSiteInstanceIdentifiersSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-instances get-identifiers" [
+export def "sites-get-site-instance-identifiers-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -11210,7 +11210,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-in
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/instances/{instanceId}/deployments
 # operationId: Sites_GetInstanceDeploymentsSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-instances-deployments list" [
+export def "sites-get-instance-deployments-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -11257,7 +11257,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-in
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/instances/{instanceId}/deployments/{id}
 # operationId: Sites_DeleteInstanceDeploymentSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-instances-deployments delete" [
+export def "sites-delete-instance-deployment-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -11306,7 +11306,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-in
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/instances/{instanceId}/deployments/{id}
 # operationId: Sites_GetInstanceDeploymentSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-instances-deployments get" [
+export def "sites-get-instance-deployment-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -11356,7 +11356,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-in
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/instances/{instanceId}/deployments/{id}
 # operationId: Sites_CreateInstanceDeploymentSlot
 # --properties shape: {active?: bool, author?: string, author_email?: string, deployer?: string, details?: string, end_time?: string, id?: string, message?: string, start_time?: string, status?: int}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-instances-deployments create" [
+export def "sites-create-instance-deployment-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -11415,7 +11415,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-in
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/iscloneable
 # operationId: Sites_IsSiteCloneableSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-iscloneable create-is-cloneable" [
+export def "sites-is-site-cloneable-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -11460,7 +11460,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-is
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/metricdefinitions
 # operationId: Sites_GetSiteMetricDefinitionsSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-metricdefinitions get-metric-definitions" [
+export def "sites-get-site-metric-definitions-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -11505,7 +11505,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-me
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/metrics
 # operationId: Sites_GetSiteMetricsSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-metrics get" [
+export def "sites-get-site-metrics-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -11552,7 +11552,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-me
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/networkFeatures/{view}
 # operationId: Sites_GetSiteNetworkFeaturesSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-network-features get" [
+export def "sites-get-site-network-features-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -11599,7 +11599,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ne
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/newpassword
 # operationId: Sites_GenerateNewSitePublishingPasswordSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-newpassword generate-new-publishing-password" [
+export def "sites-generate-new-site-publishing-password-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -11644,7 +11644,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ne
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/operationresults/{operationId}
 # operationId: Sites_GetSiteOperationSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-operationresults get-operation" [
+export def "sites-get-site-operation-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -11690,7 +11690,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-op
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/premieraddons
 #
 # operationId: Sites_ListSitePremierAddOnsSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-premieraddons list-premier-create-ons" [
+export def "sites-list-site-premier-add-ons-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -11734,7 +11734,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-pr
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/premieraddons/{premierAddOnName}
 #
 # operationId: Sites_DeleteSitePremierAddOnSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-premieraddons delete-premier-create" [
+export def "sites-delete-site-premier-add-on-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -11780,7 +11780,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-pr
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/premieraddons/{premierAddOnName}
 #
 # operationId: Sites_GetSitePremierAddOnSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-premieraddons get-premier-create" [
+export def "sites-get-site-premier-add-on-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -11828,7 +11828,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-pr
 # operationId: Sites_AddSitePremierAddOnSlot
 # --plan shape: {name?: string, product?: string, promotionCode?: string, publisher?: string, version?: string}
 # --sku shape: {capacity?: int, family?: string, name?: string, size?: string, tier?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-premieraddons create-premier" [
+export def "sites-add-site-premier-add-on-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -11883,7 +11883,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-pr
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/publishxml
 # operationId: Sites_ListSitePublishingProfileXmlSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-publishxml list-publishing-profile-xml" [
+export def "sites-list-site-publishing-profile-xml-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -11932,7 +11932,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-pu
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/recover
 # operationId: Sites_RecoverSiteSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-recover create" [
+export def "sites-recover-site-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -11984,7 +11984,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-re
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/resetSlotConfig
 # operationId: Sites_ResetSlotConfigSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-reset-slot-config reset" [
+export def "sites-reset-slot-config-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -12029,7 +12029,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-re
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/restart
 # operationId: Sites_RestartSiteSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-restart restart" [
+export def "sites-restart-site-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -12076,7 +12076,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-re
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/slotsdiffs
 # operationId: Sites_GetSlotsDifferencesSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-slotsdiffs get-differences" [
+export def "sites-get-slots-differences-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -12126,7 +12126,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-sl
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/slotsswap
 # operationId: Sites_SwapSlotsSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-slotsswap create-swap" [
+export def "sites-swap-slots-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -12176,7 +12176,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-sl
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/snapshots
 # operationId: Sites_GetSiteSnapshotsSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-snapshots get" [
+export def "sites-get-site-snapshots-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -12221,7 +12221,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-sn
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/sourcecontrols/web
 # operationId: Sites_DeleteSiteSourceControlSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-sourcecontrols-web delete-source-control" [
+export def "sites-delete-site-source-control-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -12266,7 +12266,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-so
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/sourcecontrols/web
 # operationId: Sites_GetSiteSourceControlSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-sourcecontrols-web get-source-control" [
+export def "sites-get-site-source-control-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -12312,7 +12312,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-so
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/sourcecontrols/web
 # operationId: Sites_UpdateSiteSourceControlSlot
 # --properties shape: {branch?: string, deploymentRollbackEnabled?: bool, isManualIntegration?: bool, isMercurial?: bool, repoUrl?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-sourcecontrols-web update-source-control" [
+export def "sites-update-site-source-control-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -12368,7 +12368,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-so
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/sourcecontrols/web
 # operationId: Sites_CreateOrUpdateSiteSourceControlSlot
 # --properties shape: {branch?: string, deploymentRollbackEnabled?: bool, isManualIntegration?: bool, isMercurial?: bool, repoUrl?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-sourcecontrols-web create-or-update-source-control" [
+export def "sites-create-or-update-site-source-control-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -12423,7 +12423,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-so
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/start
 # operationId: Sites_StartSiteSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-start start" [
+export def "sites-start-site-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -12468,7 +12468,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-st
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/stop
 # operationId: Sites_StopSiteSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-stop stop" [
+export def "sites-stop-site-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -12512,7 +12512,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-st
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/sync
 #
 # operationId: Sites_SyncSiteRepositorySlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-sync sync-repository" [
+export def "sites-sync-site-repository-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -12557,7 +12557,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-sy
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/usages
 # operationId: Sites_GetSiteUsagesSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-usages get" [
+export def "sites-get-site-usages-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -12603,7 +12603,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-us
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/virtualNetworkConnections
 # operationId: Sites_GetSiteVNETConnectionsSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-virtual-network-connections list" [
+export def "sites-get-site-vnet-connections-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -12648,7 +12648,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-vi
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/virtualNetworkConnections/{vnetName}
 # operationId: Sites_DeleteSiteVNETConnectionSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-virtual-network-connections delete-vnet" [
+export def "sites-delete-site-vnet-connection-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -12695,7 +12695,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-vi
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/virtualNetworkConnections/{vnetName}
 # operationId: Sites_GetSiteVNETConnectionSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-virtual-network-connections get-vnet" [
+export def "sites-get-site-vnet-connection-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -12743,7 +12743,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-vi
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/virtualNetworkConnections/{vnetName}
 # operationId: Sites_UpdateSiteVNETConnectionSlot
 # --properties shape: {certBlob?: string, certThumbprint?: string, dnsServers?: string, resyncRequired?: bool, routes?: list, vnetResourceId?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-virtual-network-connections update-vnet" [
+export def "sites-update-site-vnet-connection-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -12801,7 +12801,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-vi
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/virtualNetworkConnections/{vnetName}
 # operationId: Sites_CreateOrUpdateSiteVNETConnectionSlot
 # --properties shape: {certBlob?: string, certThumbprint?: string, dnsServers?: string, resyncRequired?: bool, routes?: list, vnetResourceId?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-virtual-network-connections create-or-update-vnet" [
+export def "sites-create-or-update-site-vnet-connection-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -12858,7 +12858,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-vi
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/virtualNetworkConnections/{vnetName}/gateways/{gatewayName}
 # operationId: Sites_GetSiteVnetGatewaySlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-virtual-network-connections-gateways get-vnet" [
+export def "sites-get-site-vnet-gateway-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -12908,7 +12908,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-vi
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/virtualNetworkConnections/{vnetName}/gateways/{gatewayName}
 # operationId: Sites_UpdateSiteVNETConnectionGatewaySlot
 # --properties shape: {vnetName?: string, vpnPackageUri?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-virtual-network-connections-gateways update-vnet" [
+export def "sites-update-site-vnet-connection-gateway-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -12968,7 +12968,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-vi
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/virtualNetworkConnections/{vnetName}/gateways/{gatewayName}
 # operationId: Sites_CreateOrUpdateSiteVNETConnectionGatewaySlot
 # --properties shape: {vnetName?: string, vpnPackageUri?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-virtual-network-connections-gateways create-or-update-vnet" [
+export def "sites-create-or-update-site-vnet-connection-gateway-slot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -13027,7 +13027,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-vi
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slotsdiffs
 # operationId: Sites_GetSlotsDifferencesFromProduction
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slotsdiffs get-slots-differences-from-production" [
+export def "sites-get-slots-differences-from-production" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -13075,7 +13075,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slotsdif
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slotsswap
 # operationId: Sites_SwapSlotWithProduction
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slotsswap create-swap-slot-with-production" [
+export def "sites-swap-slot-with-production" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -13123,7 +13123,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slotsswa
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/snapshots
 # operationId: Sites_GetSiteSnapshots
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-snapshots get" [
+export def "sites-get-site-snapshots" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -13166,7 +13166,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-snapshot
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/sourcecontrols/web
 # operationId: Sites_DeleteSiteSourceControl
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-sourcecontrols-web delete-source-control" [
+export def "sites-delete-site-source-control" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -13209,7 +13209,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-sourceco
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/sourcecontrols/web
 # operationId: Sites_GetSiteSourceControl
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-sourcecontrols-web get-source-control" [
+export def "sites-get-site-source-control" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -13253,7 +13253,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-sourceco
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/sourcecontrols/web
 # operationId: Sites_UpdateSiteSourceControl
 # --properties shape: {branch?: string, deploymentRollbackEnabled?: bool, isManualIntegration?: bool, isMercurial?: bool, repoUrl?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-sourcecontrols-web update-source-control" [
+export def "sites-update-site-source-control" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -13307,7 +13307,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-sourceco
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/sourcecontrols/web
 # operationId: Sites_CreateOrUpdateSiteSourceControl
 # --properties shape: {branch?: string, deploymentRollbackEnabled?: bool, isManualIntegration?: bool, isMercurial?: bool, repoUrl?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-sourcecontrols-web create-or-update-source-control" [
+export def "sites-create-or-update-site-source-control" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -13360,7 +13360,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-sourceco
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/start
 # operationId: Sites_StartSite
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-start start" [
+export def "sites-start-site" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -13403,7 +13403,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-start st
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/stop
 # operationId: Sites_StopSite
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-stop stop" [
+export def "sites-stop-site" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -13445,7 +13445,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-stop sto
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/sync
 #
 # operationId: Sites_SyncSiteRepository
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-sync sync-repository" [
+export def "sites-sync-site-repository" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -13488,7 +13488,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-sync syn
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/usages
 # operationId: Sites_GetSiteUsages
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-usages get" [
+export def "sites-get-site-usages" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -13532,7 +13532,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-usages g
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/virtualNetworkConnections
 # operationId: Sites_GetSiteVNETConnections
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-virtual-network-connections list" [
+export def "sites-get-site-vnet-connections" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -13575,7 +13575,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-virtual-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/virtualNetworkConnections/{vnetName}
 # operationId: Sites_DeleteSiteVNETConnection
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-virtual-network-connections delete-vnet" [
+export def "sites-delete-site-vnet-connection" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -13620,7 +13620,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-virtual-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/virtualNetworkConnections/{vnetName}
 # operationId: Sites_GetSiteVNETConnection
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-virtual-network-connections get-vnet" [
+export def "sites-get-site-vnet-connection" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -13666,7 +13666,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-virtual-
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/virtualNetworkConnections/{vnetName}
 # operationId: Sites_UpdateSiteVNETConnection
 # --properties shape: {certBlob?: string, certThumbprint?: string, dnsServers?: string, resyncRequired?: bool, routes?: list, vnetResourceId?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-virtual-network-connections update-vnet" [
+export def "sites-update-site-vnet-connection" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -13722,7 +13722,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-virtual-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/virtualNetworkConnections/{vnetName}
 # operationId: Sites_CreateOrUpdateSiteVNETConnection
 # --properties shape: {certBlob?: string, certThumbprint?: string, dnsServers?: string, resyncRequired?: bool, routes?: list, vnetResourceId?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-virtual-network-connections create-or-update-vnet" [
+export def "sites-create-or-update-site-vnet-connection" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -13777,7 +13777,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-virtual-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/virtualNetworkConnections/{vnetName}/gateways/{gatewayName}
 # operationId: Sites_GetSiteVnetGateway
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-virtual-network-connections-gateways get-vnet" [
+export def "sites-get-site-vnet-gateway" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -13825,7 +13825,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-virtual-
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/virtualNetworkConnections/{vnetName}/gateways/{gatewayName}
 # operationId: Sites_UpdateSiteVNETConnectionGateway
 # --properties shape: {vnetName?: string, vpnPackageUri?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-virtual-network-connections-gateways update-vnet" [
+export def "sites-update-site-vnet-connection-gateway" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -13883,7 +13883,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-virtual-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/virtualNetworkConnections/{vnetName}/gateways/{gatewayName}
 # operationId: Sites_CreateOrUpdateSiteVNETConnectionGateway
 # --properties shape: {vnetName?: string, vpnPackageUri?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-virtual-network-connections-gateways create-or-update-vnet" [
+export def "sites-create-or-update-site-vnet-connection-gateway" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -13940,7 +13940,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-virtual-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{siteName}/recommendationHistory
 # operationId: Recommendations_GetRecommendationHistoryForSite
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-recommendation-history get" [
+export def "recommendations-get-recommendation-history-for-site" [
   subscription_id: string
   resource_group_name: string
   site_name: string
@@ -13985,7 +13985,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-recommen
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{siteName}/recommendations
 # operationId: Recommendations_GetRecommendedRulesForSite
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-recommendations get-recommended-rules" [
+export def "recommendations-get-recommended-rules-for-site" [
   subscription_id: string
   resource_group_name: string
   site_name: string
@@ -14031,7 +14031,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-recommen
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{siteName}/recommendations/{name}
 # operationId: Recommendations_GetRuleDetailsBySiteName
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-recommendations get-rule-details" [
+export def "recommendations-get-rule-details-by-site-name" [
   subscription_id: string
   resource_group_name: string
   site_name: string

@@ -99,7 +99,7 @@ def accept-completer [] { ["application/json" "text/json" "text/plain"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "facebook-posts-by-uri get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "facebook-posts-get-by-uri" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -123,7 +123,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/FacebookPosts/ByUri
 # operationId: FacebookPosts_GetByUri
-export def "facebook-posts-by-uri get" [
+export def "facebook-posts-get-by-uri" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -161,7 +161,7 @@ export def "facebook-posts-by-uri get" [
 #
 # GET /api/Home
 # operationId: Home_Get
-export def "home get" [
+export def "home-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -198,7 +198,7 @@ export def "home get" [
 #
 # GET /api/Ministries
 # operationId: Ministries_GetAll
-export def "ministries get-list" [
+export def "ministries-get-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -235,7 +235,7 @@ export def "ministries get-list" [
 #
 # GET /api/Ministries/{key}
 # operationId: Ministries_GetOne
-export def "ministries get-one" [
+export def "ministries-get-one" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -274,7 +274,7 @@ export def "ministries get-one" [
 #
 # GET /api/Ministries/{key}/Minister
 # operationId: Ministries_GetMinister
-export def "ministries-minister get" [
+export def "ministries-get-minister" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -313,7 +313,7 @@ export def "ministries-minister get" [
 #
 # GET /api/Newsletters
 # operationId: Newsletters_GetAll
-export def "newsletters get-list" [
+export def "newsletters-get-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -350,7 +350,7 @@ export def "newsletters get-list" [
 #
 # GET /api/Newsletters/Images/{guid}
 # operationId: Newsletters_GetImage
-export def "newsletters-images get" [
+export def "newsletters-get-image" [
   guid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -389,7 +389,7 @@ export def "newsletters-images get" [
 #
 # GET /api/Newsletters/{newsletterKey}
 # operationId: Newsletters_GetOne
-export def "newsletters get-one" [
+export def "newsletters-get-one" [
   newsletter_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -428,7 +428,7 @@ export def "newsletters get-one" [
 #
 # GET /api/Newsletters/{newsletterKey}/Editions/{editionKey}
 # operationId: Newsletters_GetEdition
-export def "newsletters-editions get" [
+export def "newsletters-get-edition" [
   newsletter_key: string
   edition_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -469,7 +469,7 @@ export def "newsletters-editions get" [
 #
 # GET /api/Newsletters/{newsletterKey}/Editions/{editionKey}/Articles/{articleKey}
 # operationId: Newsletters_GetArticle
-export def "newsletters-editions-articles get" [
+export def "newsletters-get-article" [
   newsletter_key: string
   edition_key: string
   article_key: string
@@ -512,7 +512,7 @@ export def "newsletters-editions-articles get" [
 #
 # GET /api/Posts
 # operationId: Posts_Get
-export def "posts get" [
+export def "posts-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -550,7 +550,7 @@ export def "posts get" [
 #
 # GET /api/Posts/Keys/{indexKind}/{indexKey}
 # operationId: Posts_GetAllKeys
-export def "posts-keys get-list" [
+export def "posts-get-all-keys" [
   index_kind: string
   index_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -594,7 +594,7 @@ export def "posts-keys get-list" [
 #
 # GET /api/Posts/Keys/{reference}
 # operationId: Posts_GetKeyFromReference
-export def "posts-keys get" [
+export def "posts-get-key-from-reference" [
   reference: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -633,7 +633,7 @@ export def "posts-keys get" [
 #
 # GET /api/Posts/Latest/{indexKind}/{indexKey}
 # operationId: Posts_GetLatest
-export def "posts-latest get" [
+export def "posts-get-latest" [
   index_kind: string
   index_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -677,7 +677,7 @@ export def "posts-latest get" [
 #
 # GET /api/Posts/LatestMediaUri/{mediaType}
 # operationId: Posts_GetLatestMediaUri
-export def "posts-latest-media-uri get" [
+export def "posts-get-latest-media-uri" [
   media_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -716,7 +716,7 @@ export def "posts-latest-media-uri get" [
 #
 # GET /api/Posts/{key}
 # operationId: Posts_GetOne
-export def "posts get-one" [
+export def "posts-get-one" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -755,7 +755,7 @@ export def "posts get-one" [
 #
 # GET /api/ResourceLinks
 # operationId: ResourceLinks_GetAll
-export def "resource-links get-list" [
+export def "resource-links-get-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -792,7 +792,7 @@ export def "resource-links get-list" [
 #
 # GET /api/Sectors
 # operationId: Sectors_GetAll
-export def "sectors get-list" [
+export def "sectors-get-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -829,7 +829,7 @@ export def "sectors get-list" [
 #
 # GET /api/Sectors/{key}
 # operationId: Sectors_GetOne
-export def "sectors get-one" [
+export def "sectors-get-one" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -868,7 +868,7 @@ export def "sectors get-one" [
 #
 # GET /api/Services
 # operationId: Services_GetAll
-export def "services get-list" [
+export def "services-get-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -905,7 +905,7 @@ export def "services get-list" [
 #
 # GET /api/Services/{key}
 # operationId: Services_GetOne
-export def "services get-one" [
+export def "services-get-one" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -944,7 +944,7 @@ export def "services get-one" [
 #
 # GET /api/Slides
 # operationId: Slides_GetAll
-export def "slides get-list" [
+export def "slides-get-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -981,7 +981,7 @@ export def "slides get-list" [
 #
 # GET /api/Slides/{id}
 # operationId: Slides_GetOne
-export def "slides get-one" [
+export def "slides-get-one" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1020,7 +1020,7 @@ export def "slides get-one" [
 #
 # GET /api/Tags
 # operationId: Tags_GetAll
-export def "tags get-list" [
+export def "tags-get-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1057,7 +1057,7 @@ export def "tags get-list" [
 #
 # GET /api/Tags/{key}
 # operationId: Tags_GetOne
-export def "tags get-one" [
+export def "tags-get-one" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1096,7 +1096,7 @@ export def "tags get-one" [
 #
 # GET /api/Themes
 # operationId: Themes_GetAll
-export def "themes get-list" [
+export def "themes-get-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1133,7 +1133,7 @@ export def "themes get-list" [
 #
 # GET /api/Themes/{key}
 # operationId: Themes_GetOne
-export def "themes get-one" [
+export def "themes-get-one" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

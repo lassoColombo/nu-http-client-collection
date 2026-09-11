@@ -134,7 +134,7 @@ def accept-completer [] { ["application/js" "application/json" "application/xml"
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "qrcode-business-card get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-qrcode-business-card" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -157,7 +157,7 @@ export def commands []: nothing -> table {
 # Get a QR Code image for a business card aka VCARD
 #
 # GET /qrcode/business_card
-export def "qrcode-business-card get" [
+export def "get-qrcode-business-card" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -207,7 +207,7 @@ export def "qrcode-business-card get" [
 # Decode a QR Code image and return the cotents if successful
 #
 # POST /qrcode/decode
-export def "qrcode-decode create" [
+export def "post-qrcode-decode" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -247,7 +247,7 @@ export def "qrcode-decode create" [
 # Get a QR Code image for an email
 #
 # GET /qrcode/email
-export def "qrcode-email get" [
+export def "get-qrcode-email" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -286,7 +286,7 @@ export def "qrcode-email get" [
 # Get a QR Code image for a phone number
 #
 # GET /qrcode/phone
-export def "qrcode-phone get" [
+export def "get-qrcode-phone" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -323,7 +323,7 @@ export def "qrcode-phone get" [
 # Get a QR Code image for a block of raw data
 #
 # GET /qrcode/raw
-export def "qrcode-raw get" [
+export def "get-qrcode-raw" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -360,7 +360,7 @@ export def "qrcode-raw get" [
 # Get a QR Code image for a skype user
 #
 # GET /qrcode/skype
-export def "qrcode-skype get" [
+export def "get-qrcode-skype" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -397,7 +397,7 @@ export def "qrcode-skype get" [
 # Get a QR Code image for a Phone number for SMS messaging
 #
 # GET /qrcode/sms
-export def "qrcode-sms get" [
+export def "get-qrcode-sms" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -434,7 +434,7 @@ export def "qrcode-sms get" [
 # Get a QR Code image for a block of text
 #
 # GET /qrcode/text
-export def "qrcode-text get" [
+export def "get-qrcode-text" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -471,7 +471,7 @@ export def "qrcode-text get" [
 # Get a QR Code image for a url
 #
 # GET /qrcode/url
-export def "qrcode-url get" [
+export def "get-qrcode-url" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

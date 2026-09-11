@@ -130,7 +130,7 @@ def visibility-completer [] { ["ANY" "PRIVATE" "PUBLIC"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "apis list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "search-apis" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -154,7 +154,7 @@ export def commands []: nothing -> table {
 #
 # GET /apis
 # operationId: searchApis
-export def "apis list" [
+export def "search-apis" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -195,7 +195,7 @@ export def "apis list" [
 #
 # GET /apis/{owner}
 # operationId: getOwnerApis
-export def "apis get" [
+export def "get-owner-apis" [
   owner: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -236,7 +236,7 @@ export def "apis get" [
 #
 # DELETE /apis/{owner}/{api}
 # operationId: deleteApi
-export def "apis delete-by-owner-api" [
+export def "delete-api" [
   owner: string
   api: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -274,7 +274,7 @@ export def "apis delete-by-owner-api" [
 #
 # GET /apis/{owner}/{api}
 # operationId: getApiVersions
-export def "apis get-versions" [
+export def "get-api-versions" [
   owner: string
   api: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -312,7 +312,7 @@ export def "apis get-versions" [
 #
 # POST /apis/{owner}/{api}
 # operationId: saveDefinition
-export def "apis create-save-definition" [
+export def "save-definition" [
   owner: string
   api: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -358,7 +358,7 @@ export def "apis create-save-definition" [
 #
 # POST /apis/{owner}/{api}/rename
 # operationId: renameApi
-export def "apis-rename rename" [
+export def "rename-api" [
   owner: string
   api: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -398,7 +398,7 @@ export def "apis-rename rename" [
 #
 # GET /apis/{owner}/{api}/settings/default
 # operationId: getApiDefaultVersion
-export def "apis-settings-default get-version" [
+export def "get-api-default-version" [
   owner: string
   api: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -436,7 +436,7 @@ export def "apis-settings-default get-version" [
 #
 # PUT /apis/{owner}/{api}/settings/default
 # operationId: setApiDefaultVersion
-export def "apis-settings-default update-version" [
+export def "set-api-default-version" [
   owner: string
   api: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -478,7 +478,7 @@ export def "apis-settings-default update-version" [
 #
 # DELETE /apis/{owner}/{api}/{version}
 # operationId: deleteApiVersion
-export def "apis delete-by-owner-api-version" [
+export def "delete-api-version" [
   owner: string
   api: string
   version: string
@@ -518,7 +518,7 @@ export def "apis delete-by-owner-api-version" [
 #
 # GET /apis/{owner}/{api}/{version}
 # operationId: getDefinition
-export def "apis get-definition" [
+export def "get-definition" [
   owner: string
   api: string
   version: string
@@ -562,7 +562,7 @@ export def "apis get-definition" [
 #
 # POST /apis/{owner}/{api}/{version}/clone
 # operationId: cloneApi
-export def "apis-clone clone" [
+export def "clone-api" [
   owner: string
   api: string
   version: string
@@ -607,7 +607,7 @@ export def "apis-clone clone" [
 #
 # GET /apis/{owner}/{api}/{version}/comments
 # operationId: getApiCommentsV2
-export def "apis-comments get" [
+export def "get-api-comments-v2" [
   owner: string
   api: string
   version: string
@@ -648,7 +648,7 @@ export def "apis-comments get" [
 # POST /apis/{owner}/{api}/{version}/comments
 # operationId: addApiCommentV2
 # --replies item shape: {body: string}
-export def "apis-comments create" [
+export def "add-api-comment-v2" [
   owner: string
   api: string
   version: string
@@ -695,7 +695,7 @@ export def "apis-comments create" [
 # POST /apis/{owner}/{api}/{version}/comments/batch
 # operationId: updateApiCommentsV2
 # --addComment item shape: {body: string, position: int, replies?: list}
-export def "apis-comments-batch update" [
+export def "update-api-comments-v2" [
   owner: string
   api: string
   version: string
@@ -745,7 +745,7 @@ export def "apis-comments-batch update" [
 #
 # DELETE /apis/{owner}/{api}/{version}/comments/{comment}
 # operationId: deleteApiCommentV2
-export def "apis-comments delete" [
+export def "delete-api-comment-v2" [
   owner: string
   api: string
   version: string
@@ -787,7 +787,7 @@ export def "apis-comments delete" [
 #
 # PATCH /apis/{owner}/{api}/{version}/comments/{comment}
 # operationId: updateApiCommentV2
-export def "apis-comments update" [
+export def "update-api-comment-v2" [
   owner: string
   api: string
   version: string
@@ -834,7 +834,7 @@ export def "apis-comments update" [
 #
 # POST /apis/{owner}/{api}/{version}/comments/{comment}/replies
 # operationId: addApiCommentReplyV2
-export def "apis-comments-replies create-reply" [
+export def "add-api-comment-reply-v2" [
   owner: string
   api: string
   version: string
@@ -880,7 +880,7 @@ export def "apis-comments-replies create-reply" [
 #
 # DELETE /apis/{owner}/{api}/{version}/comments/{comment}/replies/{reply}
 # operationId: deleteApiCommentReplyV2
-export def "apis-comments-replies delete" [
+export def "delete-api-comment-reply-v2" [
   owner: string
   api: string
   version: string
@@ -924,7 +924,7 @@ export def "apis-comments-replies delete" [
 #
 # PATCH /apis/{owner}/{api}/{version}/comments/{comment}/replies/{reply}
 # operationId: updateApiCommentReplyV2
-export def "apis-comments-replies update" [
+export def "update-api-comment-reply-v2" [
   owner: string
   api: string
   version: string
@@ -972,7 +972,7 @@ export def "apis-comments-replies update" [
 #
 # PUT /apis/{owner}/{api}/{version}/comments/{comment}/status/{status}
 # operationId: setApiCommentStatusV2
-export def "apis-comments-status update" [
+export def "set-api-comment-status-v2" [
   owner: string
   api: string
   version: string
@@ -1016,7 +1016,7 @@ export def "apis-comments-status update" [
 #
 # POST /apis/{owner}/{api}/{version}/fork
 # operationId: forkApi
-export def "apis-fork create" [
+export def "fork-api" [
   owner: string
   api: string
   version: string
@@ -1064,7 +1064,7 @@ export def "apis-fork create" [
 #
 # GET /apis/{owner}/{api}/{version}/integrations
 # operationId: getIntegrations
-export def "apis-integrations list" [
+export def "get-integrations" [
   owner: string
   api: string
   version: string
@@ -1104,7 +1104,7 @@ export def "apis-integrations list" [
 #
 # POST /apis/{owner}/{api}/{version}/integrations
 # operationId: createIntegration
-export def "apis-integrations create" [
+export def "create-integration" [
   owner: string
   api: string
   version: string
@@ -1148,7 +1148,7 @@ export def "apis-integrations create" [
 #
 # DELETE /apis/{owner}/{api}/{version}/integrations/{integrationId}
 # operationId: deleteIntegration
-export def "apis-integrations delete" [
+export def "delete-integration" [
   owner: string
   api: string
   version: string
@@ -1190,7 +1190,7 @@ export def "apis-integrations delete" [
 #
 # GET /apis/{owner}/{api}/{version}/integrations/{integrationId}
 # operationId: getIntegrationById
-export def "apis-integrations get" [
+export def "get-integration-by-id" [
   owner: string
   api: string
   version: string
@@ -1232,7 +1232,7 @@ export def "apis-integrations get" [
 #
 # PATCH /apis/{owner}/{api}/{version}/integrations/{integrationId}
 # operationId: patchIntegration
-export def "apis-integrations update-by-owner-api-version-integration-id" [
+export def "patch-integration" [
   owner: string
   api: string
   version: string
@@ -1278,7 +1278,7 @@ export def "apis-integrations update-by-owner-api-version-integration-id" [
 #
 # PUT /apis/{owner}/{api}/{version}/integrations/{integrationId}
 # operationId: updateIntegration
-export def "apis-integrations update-by-owner-api-version-integration-id-1" [
+export def "update-integration" [
   owner: string
   api: string
   version: string
@@ -1324,7 +1324,7 @@ export def "apis-integrations update-by-owner-api-version-integration-id-1" [
 #
 # POST /apis/{owner}/{api}/{version}/integrations/{integrationId}/execute
 # operationId: executeIntegration
-export def "apis-integrations-execute create" [
+export def "execute-integration" [
   owner: string
   api: string
   version: string
@@ -1368,7 +1368,7 @@ export def "apis-integrations-execute create" [
 #
 # GET /apis/{owner}/{api}/{version}/settings/lifecycle
 # operationId: getLifecycleSettings
-export def "apis-settings-lifecycle get" [
+export def "get-lifecycle-settings" [
   owner: string
   api: string
   version: string
@@ -1408,7 +1408,7 @@ export def "apis-settings-lifecycle get" [
 #
 # PUT /apis/{owner}/{api}/{version}/settings/lifecycle
 # operationId: setLifecycleSettings
-export def "apis-settings-lifecycle update" [
+export def "set-lifecycle-settings" [
   owner: string
   api: string
   version: string
@@ -1454,7 +1454,7 @@ export def "apis-settings-lifecycle update" [
 #
 # GET /apis/{owner}/{api}/{version}/settings/private
 # operationId: getPrivateSettings
-export def "apis-settings-private get" [
+export def "get-private-settings" [
   owner: string
   api: string
   version: string
@@ -1494,7 +1494,7 @@ export def "apis-settings-private get" [
 #
 # PUT /apis/{owner}/{api}/{version}/settings/private
 # operationId: setPrivateSettings
-export def "apis-settings-private update" [
+export def "set-private-settings" [
   owner: string
   api: string
   version: string
@@ -1538,7 +1538,7 @@ export def "apis-settings-private update" [
 #
 # GET /apis/{owner}/{api}/{version}/standardization
 # operationId: getStandardizationErrors
-export def "apis-standardization get-errors" [
+export def "get-standardization-errors" [
   owner: string
   api: string
   version: string
@@ -1578,7 +1578,7 @@ export def "apis-standardization get-errors" [
 #
 # GET /apis/{owner}/{api}/{version}/swagger.json
 # operationId: getJsonDefinition
-export def "apis-swagger-json get-definition" [
+export def "get-json-definition" [
   owner: string
   api: string
   version: string
@@ -1621,7 +1621,7 @@ export def "apis-swagger-json get-definition" [
 #
 # GET /apis/{owner}/{api}/{version}/swagger.yaml
 # operationId: getYamlDefinition
-export def "apis-swagger-yaml get-definition" [
+export def "get-yaml-definition" [
   owner: string
   api: string
   version: string
@@ -1666,7 +1666,7 @@ export def "apis-swagger-yaml get-definition" [
 # DEPRECATED
 # operationId: getValidation
 @deprecated
-export def "apis-validation get" [
+export def "get-validation" [
   owner: string
   api: string
   version: string
@@ -1706,7 +1706,7 @@ export def "apis-validation get" [
 #
 # GET /domains
 # operationId: searchDomains
-export def "domains list" [
+export def "search-domains" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1747,7 +1747,7 @@ export def "domains list" [
 #
 # GET /domains/{owner}
 # operationId: getOwnerDomains
-export def "domains get" [
+export def "get-owner-domains" [
   owner: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1788,7 +1788,7 @@ export def "domains get" [
 #
 # DELETE /domains/{owner}/{domain}
 # operationId: deleteDomain
-export def "domains delete-by-owner-domain" [
+export def "delete-domain" [
   owner: string
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1828,7 +1828,7 @@ export def "domains delete-by-owner-domain" [
 #
 # GET /domains/{owner}/{domain}
 # operationId: getDomainVersions
-export def "domains get-versions" [
+export def "get-domain-versions" [
   owner: string
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1866,7 +1866,7 @@ export def "domains get-versions" [
 #
 # POST /domains/{owner}/{domain}
 # operationId: saveDomainDefinition
-export def "domains create-save-definition" [
+export def "save-domain-definition" [
   owner: string
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1912,7 +1912,7 @@ export def "domains create-save-definition" [
 #
 # POST /domains/{owner}/{domain}/rename
 # operationId: renameDomain
-export def "domains-rename rename" [
+export def "rename-domain" [
   owner: string
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1953,7 +1953,7 @@ export def "domains-rename rename" [
 #
 # GET /domains/{owner}/{domain}/settings/default
 # operationId: getDomainDefaultVersion
-export def "domains-settings-default get-version" [
+export def "get-domain-default-version" [
   owner: string
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1991,7 +1991,7 @@ export def "domains-settings-default get-version" [
 #
 # PUT /domains/{owner}/{domain}/settings/default
 # operationId: setDomainDefaultVersion
-export def "domains-settings-default update-version" [
+export def "set-domain-default-version" [
   owner: string
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2033,7 +2033,7 @@ export def "domains-settings-default update-version" [
 #
 # DELETE /domains/{owner}/{domain}/{version}
 # operationId: deleteDomainVersion
-export def "domains delete-by-owner-domain-version" [
+export def "delete-domain-version" [
   owner: string
   domain: string
   version: string
@@ -2075,7 +2075,7 @@ export def "domains delete-by-owner-domain-version" [
 #
 # GET /domains/{owner}/{domain}/{version}
 # operationId: getDomainDefinition
-export def "domains get-definition" [
+export def "get-domain-definition" [
   owner: string
   domain: string
   version: string
@@ -2116,7 +2116,7 @@ export def "domains get-definition" [
 #
 # POST /domains/{owner}/{domain}/{version}/clone
 # operationId: cloneDomain
-export def "domains-clone clone" [
+export def "clone-domain" [
   owner: string
   domain: string
   version: string
@@ -2161,7 +2161,7 @@ export def "domains-clone clone" [
 #
 # GET /domains/{owner}/{domain}/{version}/comments
 # operationId: getDomainCommentsV2
-export def "domains-comments get" [
+export def "get-domain-comments-v2" [
   owner: string
   domain: string
   version: string
@@ -2202,7 +2202,7 @@ export def "domains-comments get" [
 # POST /domains/{owner}/{domain}/{version}/comments
 # operationId: addDomainCommentV2
 # --replies item shape: {body: string}
-export def "domains-comments create" [
+export def "add-domain-comment-v2" [
   owner: string
   domain: string
   version: string
@@ -2249,7 +2249,7 @@ export def "domains-comments create" [
 # POST /domains/{owner}/{domain}/{version}/comments/batch
 # operationId: updateDomainCommentsV2
 # --addComment item shape: {body: string, position: int, replies?: list}
-export def "domains-comments-batch update" [
+export def "update-domain-comments-v2" [
   owner: string
   domain: string
   version: string
@@ -2299,7 +2299,7 @@ export def "domains-comments-batch update" [
 #
 # DELETE /domains/{owner}/{domain}/{version}/comments/{comment}
 # operationId: deleteDomainCommentV2
-export def "domains-comments delete" [
+export def "delete-domain-comment-v2" [
   owner: string
   domain: string
   version: string
@@ -2341,7 +2341,7 @@ export def "domains-comments delete" [
 #
 # PATCH /domains/{owner}/{domain}/{version}/comments/{comment}
 # operationId: updateDomainCommentV2
-export def "domains-comments update" [
+export def "update-domain-comment-v2" [
   owner: string
   domain: string
   version: string
@@ -2388,7 +2388,7 @@ export def "domains-comments update" [
 #
 # POST /domains/{owner}/{domain}/{version}/comments/{comment}/replies
 # operationId: addDomainCommentReplyV2
-export def "domains-comments-replies create-reply" [
+export def "add-domain-comment-reply-v2" [
   owner: string
   domain: string
   version: string
@@ -2434,7 +2434,7 @@ export def "domains-comments-replies create-reply" [
 #
 # DELETE /domains/{owner}/{domain}/{version}/comments/{comment}/replies/{reply}
 # operationId: deleteDomainCommentReplyV2
-export def "domains-comments-replies delete" [
+export def "delete-domain-comment-reply-v2" [
   owner: string
   domain: string
   version: string
@@ -2478,7 +2478,7 @@ export def "domains-comments-replies delete" [
 #
 # PATCH /domains/{owner}/{domain}/{version}/comments/{comment}/replies/{reply}
 # operationId: updateDomainCommentReplyV2
-export def "domains-comments-replies update" [
+export def "update-domain-comment-reply-v2" [
   owner: string
   domain: string
   version: string
@@ -2526,7 +2526,7 @@ export def "domains-comments-replies update" [
 #
 # PUT /domains/{owner}/{domain}/{version}/comments/{comment}/status/{status}
 # operationId: setDomainCommentStatusV2
-export def "domains-comments-status update" [
+export def "set-domain-comment-status-v2" [
   owner: string
   domain: string
   version: string
@@ -2570,7 +2570,7 @@ export def "domains-comments-status update" [
 #
 # GET /domains/{owner}/{domain}/{version}/domain.json
 # operationId: getDomainJsonDefinition
-export def "domains-domain-json get-definition" [
+export def "get-domain-json-definition" [
   owner: string
   domain: string
   version: string
@@ -2610,7 +2610,7 @@ export def "domains-domain-json get-definition" [
 #
 # GET /domains/{owner}/{domain}/{version}/domain.yaml
 # operationId: getDomainYamlDefinition
-export def "domains-domain-yaml get-definition" [
+export def "get-domain-yaml-definition" [
   owner: string
   domain: string
   version: string
@@ -2650,7 +2650,7 @@ export def "domains-domain-yaml get-definition" [
 #
 # POST /domains/{owner}/{domain}/{version}/fork
 # operationId: forkDomain
-export def "domains-fork create" [
+export def "fork-domain" [
   owner: string
   domain: string
   version: string
@@ -2698,7 +2698,7 @@ export def "domains-fork create" [
 #
 # GET /domains/{owner}/{domain}/{version}/settings/lifecycle
 # operationId: getDomainLifecycleSettings
-export def "domains-settings-lifecycle get" [
+export def "get-domain-lifecycle-settings" [
   owner: string
   domain: string
   version: string
@@ -2738,7 +2738,7 @@ export def "domains-settings-lifecycle get" [
 #
 # PUT /domains/{owner}/{domain}/{version}/settings/lifecycle
 # operationId: setDomainLifecycleSettings
-export def "domains-settings-lifecycle update" [
+export def "set-domain-lifecycle-settings" [
   owner: string
   domain: string
   version: string
@@ -2784,7 +2784,7 @@ export def "domains-settings-lifecycle update" [
 #
 # GET /domains/{owner}/{domain}/{version}/settings/private
 # operationId: getDomainPrivateSettings
-export def "domains-settings-private get" [
+export def "get-domain-private-settings" [
   owner: string
   domain: string
   version: string
@@ -2824,7 +2824,7 @@ export def "domains-settings-private get" [
 #
 # PUT /domains/{owner}/{domain}/{version}/settings/private
 # operationId: setDomainPrivateSettings
-export def "domains-settings-private update" [
+export def "set-domain-private-settings" [
   owner: string
   domain: string
   version: string
@@ -2870,7 +2870,7 @@ export def "domains-settings-private update" [
 #
 # GET /projects
 # operationId: getUserProjects
-export def "projects get-user" [
+export def "get-user-projects" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2910,7 +2910,7 @@ export def "projects get-user" [
 #
 # GET /projects/{owner}
 # operationId: getOrgProjectsV2
-export def "projects get-org" [
+export def "get-org-projects-v2" [
   owner: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2951,7 +2951,7 @@ export def "projects get-org" [
 #
 # POST /projects/{owner}
 # operationId: createProject
-export def "projects create" [
+export def "create-project" [
   owner: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2994,7 +2994,7 @@ export def "projects create" [
 #
 # DELETE /projects/{owner}/{projectId}
 # operationId: deleteProjectV2
-export def "projects delete" [
+export def "delete-project-v2" [
   owner: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3032,7 +3032,7 @@ export def "projects delete" [
 #
 # GET /projects/{owner}/{projectId}
 # operationId: getProjectV2
-export def "projects get" [
+export def "get-project-v2" [
   owner: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3070,7 +3070,7 @@ export def "projects get" [
 #
 # PUT /projects/{owner}/{projectId}
 # operationId: saveProjectV2
-export def "projects update-save" [
+export def "save-project-v2" [
   owner: any
   project_id: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -3115,7 +3115,7 @@ export def "projects update-save" [
 #
 # GET /projects/{owner}/{projectId}/members
 # operationId: getProjectMembersV2
-export def "projects-members get" [
+export def "get-project-members-v2" [
   owner: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3154,7 +3154,7 @@ export def "projects-members get" [
 # PUT /projects/{owner}/{projectId}/members
 # operationId: updateProjectMembersV2
 # --members item shape: {name: string, type: "USER"|"TEAM"}
-export def "projects-members update" [
+export def "update-project-members-v2" [
   owner: any
   project_id: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -3196,7 +3196,7 @@ export def "projects-members update" [
 #
 # PUT /projects/{owner}/{projectId}/{specType}/{name}
 # operationId: addSpecToProjectV2
-export def "projects create-spec" [
+export def "add-spec-to-project-v2" [
   owner: string
   project_id: string
   spec_type: string
@@ -3238,7 +3238,7 @@ export def "projects create-spec" [
 #
 # GET /specs
 # operationId: searchApisAndDomains
-export def "specs list-and-domains" [
+export def "search-apis-and-domains" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3282,7 +3282,7 @@ export def "specs list-and-domains" [
 #
 # GET /templates
 # operationId: getTemplates
-export def "templates get" [
+export def "get-templates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3318,7 +3318,7 @@ export def "templates get" [
 #
 # DELETE /templates/{owner}/{templateId}
 # operationId: deleteTemplate
-export def "templates delete-by-owner-template-id" [
+export def "delete-template" [
   owner: string
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3356,7 +3356,7 @@ export def "templates delete-by-owner-template-id" [
 #
 # GET /templates/{owner}/{templateId}
 # operationId: getTemplateVersions
-export def "templates get-versions" [
+export def "get-template-versions" [
   owner: string
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3394,7 +3394,7 @@ export def "templates get-versions" [
 #
 # POST /templates/{owner}/{templateId}
 # operationId: saveTemplateDefinition
-export def "templates create-save-definition" [
+export def "save-template-definition" [
   owner: string
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3441,7 +3441,7 @@ export def "templates create-save-definition" [
 #
 # POST /templates/{owner}/{templateId}/rename
 # operationId: renameTemplate
-export def "templates-rename rename" [
+export def "rename-template" [
   owner: string
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3481,7 +3481,7 @@ export def "templates-rename rename" [
 #
 # DELETE /templates/{owner}/{templateId}/{version}
 # operationId: deleteTemplateVersion
-export def "templates delete-by-owner-template-id-version" [
+export def "delete-template-version" [
   owner: string
   template_id: string
   version: string
@@ -3521,7 +3521,7 @@ export def "templates delete-by-owner-template-id-version" [
 #
 # GET /templates/{owner}/{templateId}/{version}
 # operationId: getTemplateDefinition
-export def "templates get-definition" [
+export def "get-template-definition" [
   owner: string
   template_id: string
   version: string
@@ -3563,7 +3563,7 @@ export def "templates get-definition" [
 #
 # GET /templates/{owner}/{templateId}/{version}/comments
 # operationId: getTemplateComments
-export def "templates-comments get" [
+export def "get-template-comments" [
   owner: string
   template_id: string
   version: string
@@ -3604,7 +3604,7 @@ export def "templates-comments get" [
 # POST /templates/{owner}/{templateId}/{version}/comments/batch
 # operationId: updateTemplateComments
 # --addComment item shape: {body: string, position: int, replies?: list}
-export def "templates-comments-batch update" [
+export def "update-template-comments" [
   owner: string
   template_id: string
   version: string
@@ -3654,7 +3654,7 @@ export def "templates-comments-batch update" [
 #
 # POST /templates/{owner}/{templateId}/{version}/fork
 # operationId: forkTemplate
-export def "templates-fork create" [
+export def "fork-template" [
   owner: string
   template_id: string
   version: string
@@ -3702,7 +3702,7 @@ export def "templates-fork create" [
 #
 # GET /templates/{owner}/{templateId}/{version}/settings/lifecycle
 # operationId: getTemplateLifecycleSettings
-export def "templates-settings-lifecycle get" [
+export def "get-template-lifecycle-settings" [
   owner: string
   template_id: string
   version: string
@@ -3742,7 +3742,7 @@ export def "templates-settings-lifecycle get" [
 #
 # PUT /templates/{owner}/{templateId}/{version}/settings/lifecycle
 # operationId: setTemplateLifecycleSettings
-export def "templates-settings-lifecycle update" [
+export def "set-template-lifecycle-settings" [
   owner: string
   template_id: string
   version: string
@@ -3788,7 +3788,7 @@ export def "templates-settings-lifecycle update" [
 #
 # GET /templates/{owner}/{templateId}/{version}/settings/private
 # operationId: getTemplatePrivateSettings
-export def "templates-settings-private get" [
+export def "get-template-private-settings" [
   owner: string
   template_id: string
   version: string
@@ -3828,7 +3828,7 @@ export def "templates-settings-private get" [
 #
 # PUT /templates/{owner}/{templateId}/{version}/settings/private
 # operationId: setTemplatePrivateSettings
-export def "templates-settings-private update" [
+export def "set-template-private-settings" [
   owner: string
   template_id: string
   version: string

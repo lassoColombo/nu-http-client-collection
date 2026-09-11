@@ -103,7 +103,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "config get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "config-config-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -127,7 +127,7 @@ export def commands []: nothing -> table {
 #
 # GET /config
 # operationId: config_config_get
-export def "config get" [
+export def "config-config-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -164,7 +164,7 @@ export def "config get" [
 #
 # GET /discord
 # operationId: discord_get_discord_get
-export def "discord get" [
+export def "discord-get-discord-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -205,7 +205,7 @@ export def "discord get" [
 #
 # POST /discord
 # operationId: discord_post_discord_post
-export def "discord create" [
+export def "discord-post-discord-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -248,7 +248,7 @@ export def "discord create" [
 #
 # GET /slack
 # operationId: slack_get_slack_get
-export def "slack get" [
+export def "slack-get-slack-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -289,7 +289,7 @@ export def "slack get" [
 #
 # POST /slack
 # operationId: slack_post_slack_post
-export def "slack create" [
+export def "slack-post-slack-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -332,7 +332,7 @@ export def "slack create" [
 #
 # GET /sns
 # operationId: sns_get_sns_get
-export def "sns get" [
+export def "sns-get-sns-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -372,7 +372,7 @@ export def "sns get" [
 #
 # POST /sns
 # operationId: sns_post_sns_post
-export def "sns create" [
+export def "sns-post-sns-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -414,7 +414,7 @@ export def "sns create" [
 #
 # GET /topic/{topic_name}
 # operationId: topic_topic__topic_name__get
-export def "topic get" [
+export def "topic-topic-topic-name-get" [
   topic_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -456,7 +456,7 @@ export def "topic get" [
 #
 # GET /twilio
 # operationId: twilio_message_get_twilio_get
-export def "twilio get-message" [
+export def "twilio-message-get-twilio-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -497,7 +497,7 @@ export def "twilio get-message" [
 #
 # POST /twilio
 # operationId: twilio_message_post_twilio_post
-export def "twilio create-message" [
+export def "twilio-message-post-twilio-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

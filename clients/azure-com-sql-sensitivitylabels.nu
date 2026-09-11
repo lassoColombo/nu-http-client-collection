@@ -110,7 +110,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-current-sensitivity-labels list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "sensitivity-labels-list-current-by-database" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -134,7 +134,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/currentSensitivityLabels
 # operationId: SensitivityLabels_ListCurrentByDatabase
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-current-sensitivity-labels list" [
+export def "sensitivity-labels-list-current-by-database" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -179,7 +179,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/recommendedSensitivityLabels
 # operationId: SensitivityLabels_ListRecommendedByDatabase
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-recommended-sensitivity-labels list" [
+export def "sensitivity-labels-list-recommended-by-database" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -224,7 +224,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/schemas/{schemaName}/tables/{tableName}/columns/{columnName}/sensitivityLabels/{sensitivityLabelSource}
 # operationId: SensitivityLabels_Delete
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-schemas-tables-columns-sensitivity-labels delete" [
+export def "sensitivity-labels-delete" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -276,7 +276,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/schemas/{schemaName}/tables/{tableName}/columns/{columnName}/sensitivityLabels/{sensitivityLabelSource}
 # operationId: SensitivityLabels_Get
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-schemas-tables-columns-sensitivity-labels get" [
+export def "sensitivity-labels-get" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -329,7 +329,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/schemas/{schemaName}/tables/{tableName}/columns/{columnName}/sensitivityLabels/{sensitivityLabelSource}
 # operationId: SensitivityLabels_CreateOrUpdate
 # --properties shape: {informationType?: string, labelName?: string}
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-schemas-tables-columns-sensitivity-labels create-or-update" [
+export def "sensitivity-labels-create-or-update" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -385,7 +385,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/sensitivityLabels
 # operationId: SensitivityLabels_ListByDatabase
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-sensitivity-labels list" [
+export def "sensitivity-labels-list-by-database" [
   subscription_id: string
   resource_group_name: string
   server_name: string

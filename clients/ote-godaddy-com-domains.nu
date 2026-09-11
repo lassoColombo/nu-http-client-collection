@@ -128,7 +128,7 @@ def status-completer [] { ["ACTIVE" "CANCELLED"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "domains list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -152,7 +152,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/domains
 # operationId: list
-export def "domains list" [
+export def "list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -197,7 +197,7 @@ export def "domains list" [
 #
 # GET /v1/domains/agreements
 # operationId: getAgreement
-export def "domains-agreements get" [
+export def "get-agreement" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -239,7 +239,7 @@ export def "domains-agreements get" [
 #
 # GET /v1/domains/available
 # operationId: available
-export def "domains-available get" [
+export def "available" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -278,7 +278,7 @@ export def "domains-available get" [
 #
 # POST /v1/domains/available
 # operationId: availableBulk
-export def "domains-available create-bulk" [
+export def "available-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -324,7 +324,7 @@ export def "domains-available create-bulk" [
 # --contactPresence shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
 # --contactRegistrant shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
 # --contactTech shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
-export def "domains-contacts-validate validate" [
+export def "contacts-validate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -378,7 +378,7 @@ export def "domains-contacts-validate validate" [
 # --contactBilling shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
 # --contactRegistrant shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
 # --contactTech shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
-export def "domains-purchase create" [
+export def "purchase" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -429,7 +429,7 @@ export def "domains-purchase create" [
 #
 # GET /v1/domains/purchase/schema/{tld}
 # operationId: schema
-export def "domains-purchase-schema get" [
+export def "schema" [
   tld: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -471,7 +471,7 @@ export def "domains-purchase-schema get" [
 # --contactBilling shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
 # --contactRegistrant shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
 # --contactTech shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
-export def "domains-purchase-validate validate" [
+export def "validate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -518,7 +518,7 @@ export def "domains-purchase-validate validate" [
 #
 # GET /v1/domains/suggest
 # operationId: suggest
-export def "domains-suggest get" [
+export def "suggest" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -566,7 +566,7 @@ export def "domains-suggest get" [
 #
 # GET /v1/domains/tlds
 # operationId: tlds
-export def "domains-tlds get" [
+export def "tlds" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -601,7 +601,7 @@ export def "domains-tlds get" [
 #
 # DELETE /v1/domains/{domain}
 # operationId: cancel
-export def "domains cancel" [
+export def "cancel" [
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -637,7 +637,7 @@ export def "domains cancel" [
 #
 # GET /v1/domains/{domain}
 # operationId: get
-export def "domains get" [
+export def "get" [
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -678,7 +678,7 @@ export def "domains get" [
 # PATCH /v1/domains/{domain}
 # operationId: update
 # --consent shape: {agreedAt: string, agreedBy: string, agreementKeys: list<string>}
-export def "domains update" [
+export def "update" [
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -730,7 +730,7 @@ export def "domains update" [
 # --contactBilling shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
 # --contactRegistrant shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
 # --contactTech shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
-export def "domains-contacts update" [
+export def "update-contacts" [
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -776,7 +776,7 @@ export def "domains-contacts update" [
 #
 # DELETE /v1/domains/{domain}/privacy
 # operationId: cancelPrivacy
-export def "domains-privacy cancel" [
+export def "cancel-privacy" [
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -816,7 +816,7 @@ export def "domains-privacy cancel" [
 # POST /v1/domains/{domain}/privacy/purchase
 # operationId: purchasePrivacy
 # --consent shape: {agreedAt: string, agreedBy: string, agreementKeys: list<string>}
-export def "domains-privacy-purchase create" [
+export def "purchase-privacy" [
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -860,7 +860,7 @@ export def "domains-privacy-purchase create" [
 #
 # PATCH /v1/domains/{domain}/records
 # operationId: recordAdd
-export def "domains-records create" [
+export def "record-add" [
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -903,7 +903,7 @@ export def "domains-records create" [
 #
 # PUT /v1/domains/{domain}/records
 # operationId: recordReplace
-export def "domains-records update-by-domain" [
+export def "record-replace" [
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -946,7 +946,7 @@ export def "domains-records update-by-domain" [
 #
 # PUT /v1/domains/{domain}/records/{type}
 # operationId: recordReplaceType
-export def "domains-records update-by-domain-type" [
+export def "record-replace-type" [
   domain: string
   type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -991,7 +991,7 @@ export def "domains-records update-by-domain-type" [
 #
 # DELETE /v1/domains/{domain}/records/{type}/{name}
 # operationId: recordDeleteTypeName
-export def "domains-records delete" [
+export def "record-delete-type-name" [
   domain: string
   type: string
   name: string
@@ -1034,7 +1034,7 @@ export def "domains-records delete" [
 #
 # GET /v1/domains/{domain}/records/{type}/{name}
 # operationId: recordGet
-export def "domains-records get" [
+export def "record-get" [
   domain: string
   type: string
   name: string
@@ -1081,7 +1081,7 @@ export def "domains-records get" [
 #
 # PUT /v1/domains/{domain}/records/{type}/{name}
 # operationId: recordReplaceTypeName
-export def "domains-records update-by-domain-type-name" [
+export def "record-replace-type-name" [
   domain: string
   type: string
   name: string
@@ -1128,7 +1128,7 @@ export def "domains-records update-by-domain-type-name" [
 #
 # POST /v1/domains/{domain}/renew
 # operationId: renew
-export def "domains-renew create" [
+export def "renew" [
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1177,7 +1177,7 @@ export def "domains-renew create" [
 # --contactBilling shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
 # --contactRegistrant shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
 # --contactTech shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
-export def "domains-transfer create" [
+export def "transfer-in" [
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1229,7 +1229,7 @@ export def "domains-transfer create" [
 #
 # POST /v1/domains/{domain}/verifyRegistrantEmail
 # operationId: verifyEmail
-export def "domains-verify-registrant-email verify" [
+export def "verify-email" [
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1268,7 +1268,7 @@ export def "domains-verify-registrant-email verify" [
 #
 # DELETE /v2/customers/{customerId}/domains/forwards/{fqdn}
 # operationId: domainsForwardsDelete
-export def "customers-domains-forwards delete" [
+export def "domains-forwards-delete" [
   customer_id: string
   fqdn: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1306,7 +1306,7 @@ export def "customers-domains-forwards delete" [
 #
 # GET /v2/customers/{customerId}/domains/forwards/{fqdn}
 # operationId: domainsForwardsGet
-export def "customers-domains-forwards get" [
+export def "domains-forwards-get" [
   customer_id: string
   fqdn: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1347,7 +1347,7 @@ export def "customers-domains-forwards get" [
 # POST /v2/customers/{customerId}/domains/forwards/{fqdn}
 # operationId: domainsForwardsPost
 # --mask shape: {description?: string, keywords?: string, title?: string}
-export def "customers-domains-forwards create" [
+export def "domains-forwards-post" [
   customer_id: string
   fqdn: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1392,7 +1392,7 @@ export def "customers-domains-forwards create" [
 # PUT /v2/customers/{customerId}/domains/forwards/{fqdn}
 # operationId: domainsForwardsPut
 # --mask shape: {description?: string, keywords?: string, title?: string}
-export def "customers-domains-forwards update" [
+export def "domains-forwards-put" [
   customer_id: string
   fqdn: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1435,7 +1435,7 @@ export def "customers-domains-forwards update" [
 # Retrieve the next domain notification
 #
 # GET /v2/customers/{customerId}/domains/notifications
-export def "customers-domains-notifications get" [
+export def "get-v2-customers-customer-id-domains-notifications" [
   customer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1473,7 +1473,7 @@ export def "customers-domains-notifications get" [
 # Retrieve a list of notification types that are opted in
 #
 # GET /v2/customers/{customerId}/domains/notifications/optIn
-export def "customers-domains-notifications-opt-in get" [
+export def "get-v2-customers-customer-id-domains-notifications-opt-in" [
   customer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1511,7 +1511,7 @@ export def "customers-domains-notifications-opt-in get" [
 # Opt in to recieve notifications for the submitted notification types
 #
 # PUT /v2/customers/{customerId}/domains/notifications/optIn
-export def "customers-domains-notifications-opt-in update" [
+export def "put-v2-customers-customer-id-domains-notifications-opt-in" [
   customer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1551,7 +1551,7 @@ export def "customers-domains-notifications-opt-in update" [
 # Retrieve the schema for the notification data for the specified notification type
 #
 # GET /v2/customers/{customerId}/domains/notifications/schemas/{type}
-export def "customers-domains-notifications-schemas get" [
+export def "get-v2-customers-customer-id-domains-notifications-schemas-type" [
   customer_id: string
   type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1591,7 +1591,7 @@ export def "customers-domains-notifications-schemas get" [
 # Acknowledge a domain notification
 #
 # POST /v2/customers/{customerId}/domains/notifications/{notificationId}/acknowledge
-export def "customers-domains-notifications-acknowledge create" [
+export def "post-v2-customers-customer-id-domains-notifications-notification-id-acknowledge" [
   customer_id: string
   notification_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1631,7 +1631,7 @@ export def "customers-domains-notifications-acknowledge create" [
 # Retrieve details for the specified Domain
 #
 # GET /v2/customers/{customerId}/domains/{domain}
-export def "customers-domains get" [
+export def "get-v2-customers-customer-id-domains-domain" [
   customer_id: string
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1673,7 +1673,7 @@ export def "customers-domains get" [
 # Retrieves a list of the most recent actions for the specified domain
 #
 # GET /v2/customers/{customerId}/domains/{domain}/actions
-export def "customers-domains-actions list" [
+export def "get-v2-customers-customer-id-domains-domain-actions" [
   customer_id: string
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1713,7 +1713,7 @@ export def "customers-domains-actions list" [
 # Cancel the most recent user action for the specified domain
 #
 # DELETE /v2/customers/{customerId}/domains/{domain}/actions/{type}
-export def "customers-domains-actions delete" [
+export def "delete-v2-customers-customer-id-domains-domain-actions-type" [
   customer_id: string
   domain: string
   type: string
@@ -1755,7 +1755,7 @@ export def "customers-domains-actions delete" [
 # Retrieves the most recent action for the specified domain
 #
 # GET /v2/customers/{customerId}/domains/{domain}/actions/{type}
-export def "customers-domains-actions get" [
+export def "get-v2-customers-customer-id-domains-domain-actions-type" [
   customer_id: string
   domain: string
   type: string
@@ -1798,7 +1798,7 @@ export def "customers-domains-actions get" [
 #
 # POST /v2/customers/{customerId}/domains/{domain}/redeem
 # --consent shape: {agreedAt: string, agreedBy: string, currency: string, fee: int, price: int}
-export def "customers-domains-redeem create" [
+export def "post-v2-customers-customer-id-domains-domain-redeem" [
   customer_id: string
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1842,7 +1842,7 @@ export def "customers-domains-redeem create" [
 # Initiate transfer out to another registrar for a .uk domain.
 #
 # POST /v2/customers/{customerId}/domains/{domain}/transferOut
-export def "customers-domains-transfer-out create" [
+export def "post-v2-customers-customer-id-domains-domain-transfer-out" [
   customer_id: string
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1884,7 +1884,7 @@ export def "customers-domains-transfer-out create" [
 # Retrieve a list of upcoming system Maintenances
 #
 # GET /v2/domains/maintenances
-export def "domains-maintenances list" [
+export def "get-v2-domains-maintenances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1925,7 +1925,7 @@ export def "domains-maintenances list" [
 # Retrieve the details for an upcoming system Maintenances
 #
 # GET /v2/domains/maintenances/{maintenanceId}
-export def "domains-maintenances get" [
+export def "get-v2-domains-maintenances-maintenance-id" [
   maintenance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

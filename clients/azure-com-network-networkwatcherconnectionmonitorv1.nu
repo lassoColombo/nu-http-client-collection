@@ -122,7 +122,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-network-network-watchers-connection-monitors list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "connection-monitors-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkWatchers/{networkWatcherName}/connectionMonitors
 # operationId: ConnectionMonitors_List
-export def "subscriptions-resource-groups-providers-microsoft-network-network-watchers-connection-monitors list" [
+export def "connection-monitors-list" [
   subscription_id: string
   resource_group_name: string
   network_watcher_name: string
@@ -188,7 +188,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-wa
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkWatchers/{networkWatcherName}/connectionMonitors/{connectionMonitorName}
 # operationId: ConnectionMonitors_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-network-watchers-connection-monitors delete" [
+export def "connection-monitors-delete" [
   subscription_id: string
   resource_group_name: string
   network_watcher_name: string
@@ -232,7 +232,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-wa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkWatchers/{networkWatcherName}/connectionMonitors/{connectionMonitorName}
 # operationId: ConnectionMonitors_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-network-watchers-connection-monitors get" [
+export def "connection-monitors-get" [
   subscription_id: string
   resource_group_name: string
   network_watcher_name: string
@@ -276,7 +276,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-wa
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkWatchers/{networkWatcherName}/connectionMonitors/{connectionMonitorName}
 # operationId: ConnectionMonitors_UpdateTags
-export def "subscriptions-resource-groups-providers-microsoft-network-network-watchers-connection-monitors update-tags" [
+export def "connection-monitors-update-tags" [
   subscription_id: string
   resource_group_name: string
   network_watcher_name: string
@@ -325,7 +325,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-wa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkWatchers/{networkWatcherName}/connectionMonitors/{connectionMonitorName}
 # operationId: ConnectionMonitors_CreateOrUpdate
 # --properties shape: {autoStart?: bool, destination: any, monitoringIntervalInSeconds?: int, source: any}
-export def "subscriptions-resource-groups-providers-microsoft-network-network-watchers-connection-monitors create-or-update" [
+export def "connection-monitors-create-or-update" [
   subscription_id: string
   resource_group_name: string
   network_watcher_name: string
@@ -375,7 +375,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-wa
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkWatchers/{networkWatcherName}/connectionMonitors/{connectionMonitorName}/query
 # operationId: ConnectionMonitors_Query
-export def "subscriptions-resource-groups-providers-microsoft-network-network-watchers-connection-monitors-query list" [
+export def "connection-monitors-query" [
   subscription_id: string
   resource_group_name: string
   network_watcher_name: string
@@ -419,7 +419,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-wa
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkWatchers/{networkWatcherName}/connectionMonitors/{connectionMonitorName}/start
 # operationId: ConnectionMonitors_Start
-export def "subscriptions-resource-groups-providers-microsoft-network-network-watchers-connection-monitors-start start" [
+export def "connection-monitors-start" [
   subscription_id: string
   resource_group_name: string
   network_watcher_name: string
@@ -463,7 +463,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-wa
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkWatchers/{networkWatcherName}/connectionMonitors/{connectionMonitorName}/stop
 # operationId: ConnectionMonitors_Stop
-export def "subscriptions-resource-groups-providers-microsoft-network-network-watchers-connection-monitors-stop stop" [
+export def "connection-monitors-stop" [
   subscription_id: string
   resource_group_name: string
   network_watcher_name: string

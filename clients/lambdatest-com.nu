@@ -111,7 +111,7 @@ def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "start-screenshot-test start" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "start-screenshot-test" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -136,7 +136,7 @@ export def commands []: nothing -> table {
 # POST /
 # operationId: Start Screenshot Test
 # --configs shape: {macos mojave?: record, windows 10?: record}
-export def "start-screenshot-test start" [
+export def "start-screenshot-test" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,7 +184,7 @@ export def "start-screenshot-test start" [
 #
 # GET /devices
 # operationId: devices
-export def "devices get" [
+export def "devices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -220,7 +220,7 @@ export def "devices get" [
 #
 # GET /locations
 # operationId: Locations
-export def "locations get" [
+export def "locations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -254,7 +254,7 @@ export def "locations get" [
 #
 # GET /os-browsers
 # operationId: os-browsers
-export def "os-browsers get" [
+export def "os-browsers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -290,7 +290,7 @@ export def "os-browsers get" [
 #
 # GET /profiles
 # operationId: Profiles
-export def "profiles get" [
+export def "profiles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -324,7 +324,7 @@ export def "profiles get" [
 #
 # GET /resolutions
 # operationId: Resolutions
-export def "resolutions get" [
+export def "resolutions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -358,7 +358,7 @@ export def "resolutions get" [
 #
 # PUT /stop/{test_id}
 # operationId: stop screenshots test
-export def "stop stop-screenshots" [
+export def "stop-screenshots-test" [
   test_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -394,7 +394,7 @@ export def "stop stop-screenshots" [
 #
 # GET /{test_id}
 # operationId: screenshots
-export def "get-screenshots get" [
+export def "screenshots" [
   test_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -430,7 +430,7 @@ export def "get-screenshots get" [
 #
 # GET /{test_id}/zip
 # operationId: ZippedScreenshots
-export def "zip get-zipped-screenshots" [
+export def "zipped-screenshots" [
   test_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

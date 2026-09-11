@@ -135,7 +135,7 @@ def is-unpacking-required-completer [] { ["false" "true"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "apply-yara-rules create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "apply-yara-rules" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -159,7 +159,7 @@ export def commands []: nothing -> table {
 #
 # POST /apply-yara-rules
 # operationId: applyYaraRules
-export def "apply-yara-rules create" [
+export def "apply-yara-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -201,7 +201,7 @@ export def "apply-yara-rules create" [
 #
 # HEAD /clean
 # operationId: clean
-export def "clean head" [
+export def "clean" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -235,7 +235,7 @@ export def "clean head" [
 #
 # POST /emulation-output
 # operationId: emulationOutput
-export def "emulation-output create" [
+export def "emulation-output" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -275,7 +275,7 @@ export def "emulation-output create" [
 #
 # POST /generate-partial-yara-rules
 # operationId: generatePartialYaraRule
-export def "generate-partial-yara-rules generate" [
+export def "generate-partial-yara-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -318,7 +318,7 @@ export def "generate-partial-yara-rules generate" [
 #
 # POST /unpack
 # operationId: unpack
-export def "unpack create" [
+export def "unpack" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

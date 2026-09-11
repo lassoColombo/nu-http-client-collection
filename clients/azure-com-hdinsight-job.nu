@@ -113,7 +113,7 @@ def fields-completer [] { ["*"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "templeton-hive submit-job-job" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "job-submit-hive-job" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -137,7 +137,7 @@ export def commands []: nothing -> table {
 #
 # POST /templeton/v1/hive
 # operationId: Job_SubmitHiveJob
-export def "templeton-hive submit-job-job" [
+export def "job-submit-hive-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -177,7 +177,7 @@ export def "templeton-hive submit-job-job" [
 #
 # GET /templeton/v1/jobs
 # operationId: Job_List
-export def "templeton-jobs list" [
+export def "job-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -215,7 +215,7 @@ export def "templeton-jobs list" [
 #
 # DELETE /templeton/v1/jobs/{jobId}
 # operationId: Job_Kill
-export def "templeton-jobs kill" [
+export def "job-kill" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -253,7 +253,7 @@ export def "templeton-jobs kill" [
 #
 # GET /templeton/v1/jobs/{jobId}
 # operationId: Job_Get
-export def "templeton-jobs get" [
+export def "job-get" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -292,7 +292,7 @@ export def "templeton-jobs get" [
 #
 # GET /templeton/v1/jobs?op=LISTAFTERID
 # operationId: Job_ListAfterJobId
-export def "templeton-jobs-op-list-afterid list-job-after-job" [
+export def "job-list-after-job-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -332,7 +332,7 @@ export def "templeton-jobs-op-list-afterid list-job-after-job" [
 #
 # POST /templeton/v1/mapreduce/jar
 # operationId: Job_SubmitMapReduceJob
-export def "templeton-mapreduce-jar submit-job-map-reduce-job" [
+export def "job-submit-map-reduce-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -372,7 +372,7 @@ export def "templeton-mapreduce-jar submit-job-map-reduce-job" [
 #
 # POST /templeton/v1/mapreduce/streaming
 # operationId: Job_SubmitMapReduceStreamingJob
-export def "templeton-mapreduce-streaming submit-job-map-reduce-job" [
+export def "job-submit-map-reduce-streaming-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -412,7 +412,7 @@ export def "templeton-mapreduce-streaming submit-job-map-reduce-job" [
 #
 # POST /templeton/v1/pig
 # operationId: Job_SubmitPigJob
-export def "templeton-pig submit-job-job" [
+export def "job-submit-pig-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -452,7 +452,7 @@ export def "templeton-pig submit-job-job" [
 #
 # POST /templeton/v1/sqoop
 # operationId: Job_SubmitSqoopJob
-export def "templeton-sqoop submit-job-job" [
+export def "job-submit-sqoop-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -492,7 +492,7 @@ export def "templeton-sqoop submit-job-job" [
 #
 # GET /ws/v1/cluster/apps/{appId}/state
 # operationId: Job_GetAppState
-export def "ws-cluster-apps-state get-job" [
+export def "job-get-app-state" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

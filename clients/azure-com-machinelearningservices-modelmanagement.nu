@@ -122,7 +122,7 @@ def key-type-completer [] { ["Primary" "Secondary"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "modelmanagement-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-assets list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "assets-list-query" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # GET /modelmanagement/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/assets
 # operationId: Assets_ListQuery
-export def "modelmanagement-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-assets list" [
+export def "assets-list-query" [
   subscription_id: string
   resource_group: string
   workspace: string
@@ -195,7 +195,7 @@ export def "modelmanagement-v1-0-subscriptions-resource-groups-providers-microso
 # POST /modelmanagement/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/assets
 # operationId: Assets_Create
 # --artifacts item shape: {id?: string, prefix?: string}
-export def "modelmanagement-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-assets create" [
+export def "assets-create" [
   subscription_id: string
   resource_group: string
   workspace: string
@@ -246,7 +246,7 @@ export def "modelmanagement-v1-0-subscriptions-resource-groups-providers-microso
 #
 # DELETE /modelmanagement/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/assets/{id}
 # operationId: Assets_Delete
-export def "modelmanagement-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-assets delete" [
+export def "assets-delete" [
   subscription_id: string
   resource_group: string
   workspace: string
@@ -288,7 +288,7 @@ export def "modelmanagement-v1-0-subscriptions-resource-groups-providers-microso
 #
 # GET /modelmanagement/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/assets/{id}
 # operationId: Assets_QueryById
-export def "modelmanagement-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-assets list-1" [
+export def "assets-query-by-id" [
   subscription_id: string
   resource_group: string
   workspace: string
@@ -330,7 +330,7 @@ export def "modelmanagement-v1-0-subscriptions-resource-groups-providers-microso
 #
 # PATCH /modelmanagement/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/assets/{id}
 # operationId: Assets_Patch
-export def "modelmanagement-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-assets update" [
+export def "assets-patch" [
   subscription_id: string
   resource_group: string
   workspace: string
@@ -376,7 +376,7 @@ export def "modelmanagement-v1-0-subscriptions-resource-groups-providers-microso
 #
 # GET /modelmanagement/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/images/{imageId}/profiles
 # operationId: Profiles_ListQuery
-export def "modelmanagement-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-images-profiles list" [
+export def "profiles-list-query" [
   subscription_id: string
   resource_group: string
   workspace: string
@@ -426,7 +426,7 @@ export def "modelmanagement-v1-0-subscriptions-resource-groups-providers-microso
 #
 # POST /modelmanagement/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/images/{imageId}/profiles
 # operationId: Profiles_Create
-export def "modelmanagement-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-images-profiles create" [
+export def "profiles-create" [
   subscription_id: string
   resource_group: string
   workspace: string
@@ -476,7 +476,7 @@ export def "modelmanagement-v1-0-subscriptions-resource-groups-providers-microso
 #
 # GET /modelmanagement/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/images/{imageId}/profiles/{id}
 # operationId: Profiles_QueryById
-export def "modelmanagement-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-images-profiles list-1" [
+export def "profiles-query-by-id" [
   subscription_id: string
   resource_group: string
   workspace: string
@@ -520,7 +520,7 @@ export def "modelmanagement-v1-0-subscriptions-resource-groups-providers-microso
 #
 # GET /modelmanagement/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/models
 # operationId: MLModels_ListQuery
-export def "modelmanagement-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-models list" [
+export def "ml-models-list-query" [
   subscription_id: string
   resource_group: string
   workspace: string
@@ -571,7 +571,7 @@ export def "modelmanagement-v1-0-subscriptions-resource-groups-providers-microso
 # POST /modelmanagement/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/models
 # operationId: MLModels_Register
 # --datasets item shape: {id?: string, name?: string}
-export def "modelmanagement-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-models create-ml" [
+export def "ml-models-register" [
   subscription_id: string
   resource_group: string
   workspace: string
@@ -629,7 +629,7 @@ export def "modelmanagement-v1-0-subscriptions-resource-groups-providers-microso
 #
 # DELETE /modelmanagement/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/models/{id}
 # operationId: MLModels_Delete
-export def "modelmanagement-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-models delete-ml" [
+export def "ml-models-delete" [
   subscription_id: string
   resource_group: string
   workspace: string
@@ -671,7 +671,7 @@ export def "modelmanagement-v1-0-subscriptions-resource-groups-providers-microso
 #
 # GET /modelmanagement/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/models/{id}
 # operationId: MLModels_QueryById
-export def "modelmanagement-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-models list-ml" [
+export def "ml-models-query-by-id" [
   subscription_id: string
   resource_group: string
   workspace: string
@@ -713,7 +713,7 @@ export def "modelmanagement-v1-0-subscriptions-resource-groups-providers-microso
 #
 # PATCH /modelmanagement/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/models/{id}
 # operationId: MLModels_Patch
-export def "modelmanagement-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-models update-ml" [
+export def "ml-models-patch" [
   subscription_id: string
   resource_group: string
   workspace: string
@@ -759,7 +759,7 @@ export def "modelmanagement-v1-0-subscriptions-resource-groups-providers-microso
 #
 # GET /modelmanagement/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/models/{id}/metrics
 # operationId: MLModels_GetMetrics
-export def "modelmanagement-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-models-metrics get-ml" [
+export def "ml-models-get-metrics" [
   subscription_id: string
   resource_group: string
   workspace: string
@@ -804,7 +804,7 @@ export def "modelmanagement-v1-0-subscriptions-resource-groups-providers-microso
 #
 # GET /modelmanagement/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/operations/{id}
 # operationId: Operations_Get
-export def "modelmanagement-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-operations get" [
+export def "operations-get" [
   subscription_id: string
   resource_group: string
   workspace: string
@@ -846,7 +846,7 @@ export def "modelmanagement-v1-0-subscriptions-resource-groups-providers-microso
 #
 # GET /modelmanagement/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/services
 # operationId: Services_ListQuery
-export def "modelmanagement-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-services list" [
+export def "services-list-query" [
   subscription_id: string
   resource_group: string
   workspace: string
@@ -902,7 +902,7 @@ export def "modelmanagement-v1-0-subscriptions-resource-groups-providers-microso
 # operationId: Services_Create
 # --environmentImageRequest shape: {assets?: list, driverProgram?: string, environment?: record, modelIds?: list<string>}
 # --keys shape: {primaryKey?: string, secondaryKey?: string}
-export def "modelmanagement-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-services create" [
+export def "services-create" [
   subscription_id: string
   resource_group: string
   workspace: string
@@ -955,7 +955,7 @@ export def "modelmanagement-v1-0-subscriptions-resource-groups-providers-microso
 #
 # DELETE /modelmanagement/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/services/{id}
 # operationId: Services_Delete
-export def "modelmanagement-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-services delete" [
+export def "services-delete" [
   subscription_id: string
   resource_group: string
   workspace: string
@@ -997,7 +997,7 @@ export def "modelmanagement-v1-0-subscriptions-resource-groups-providers-microso
 #
 # GET /modelmanagement/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/services/{id}
 # operationId: Services_QueryById
-export def "modelmanagement-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-services list-1" [
+export def "services-query-by-id" [
   subscription_id: string
   resource_group: string
   workspace: string
@@ -1041,7 +1041,7 @@ export def "modelmanagement-v1-0-subscriptions-resource-groups-providers-microso
 #
 # PATCH /modelmanagement/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/services/{id}
 # operationId: Services_Patch
-export def "modelmanagement-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-services update" [
+export def "services-patch" [
   subscription_id: string
   resource_group: string
   workspace: string
@@ -1087,7 +1087,7 @@ export def "modelmanagement-v1-0-subscriptions-resource-groups-providers-microso
 #
 # POST /modelmanagement/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/services/{id}/listkeys
 # operationId: Services_ListServiceKeys
-export def "modelmanagement-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-services-listkeys list-keys" [
+export def "services-list-service-keys" [
   subscription_id: string
   resource_group: string
   workspace: string
@@ -1129,7 +1129,7 @@ export def "modelmanagement-v1-0-subscriptions-resource-groups-providers-microso
 #
 # POST /modelmanagement/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/services/{id}/regenerateKeys
 # operationId: Services_RegenerateServiceKeys
-export def "modelmanagement-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-services-regenerate-keys create" [
+export def "services-regenerate-service-keys" [
   subscription_id: string
   resource_group: string
   workspace: string
@@ -1176,7 +1176,7 @@ export def "modelmanagement-v1-0-subscriptions-resource-groups-providers-microso
 #
 # POST /modelmanagement/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/services/{id}/token
 # operationId: Services_GetServiceToken
-export def "modelmanagement-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-services-token get" [
+export def "services-get-service-token" [
   subscription_id: string
   resource_group: string
   workspace: string

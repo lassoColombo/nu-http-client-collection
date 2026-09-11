@@ -137,7 +137,7 @@ def x-amz-target-completer-36 [] { ["InspectorService.UpdateAssessmentTarget"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-attributes-to-findings" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "add-attributes-to-findings" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -161,7 +161,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AddAttributesToFindings
-export def "api create-attributes-to-findings" [
+export def "add-attributes-to-findings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -210,7 +210,7 @@ export def "api create-attributes-to-findings" [
 #
 # POST /
 # operationId: CreateAssessmentTarget
-export def "api create-assessment-target" [
+export def "create-assessment-target" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -259,7 +259,7 @@ export def "api create-assessment-target" [
 #
 # POST /
 # operationId: CreateAssessmentTemplate
-export def "api create-assessment-template" [
+export def "create-assessment-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -311,7 +311,7 @@ export def "api create-assessment-template" [
 #
 # POST /
 # operationId: CreateExclusionsPreview
-export def "api create-exclusions-preview" [
+export def "create-exclusions-preview" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -359,7 +359,7 @@ export def "api create-exclusions-preview" [
 #
 # POST /
 # operationId: CreateResourceGroup
-export def "api create-resource-group" [
+export def "create-resource-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -407,7 +407,7 @@ export def "api create-resource-group" [
 #
 # POST /
 # operationId: DeleteAssessmentRun
-export def "api delete-assessment-run" [
+export def "delete-assessment-run" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -455,7 +455,7 @@ export def "api delete-assessment-run" [
 #
 # POST /
 # operationId: DeleteAssessmentTarget
-export def "api delete-assessment-target" [
+export def "delete-assessment-target" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -503,7 +503,7 @@ export def "api delete-assessment-target" [
 #
 # POST /
 # operationId: DeleteAssessmentTemplate
-export def "api delete-assessment-template" [
+export def "delete-assessment-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -551,7 +551,7 @@ export def "api delete-assessment-template" [
 #
 # POST /
 # operationId: DescribeAssessmentRuns
-export def "api get-assessment-runs" [
+export def "describe-assessment-runs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -599,7 +599,7 @@ export def "api get-assessment-runs" [
 #
 # POST /
 # operationId: DescribeAssessmentTargets
-export def "api get-assessment-targets" [
+export def "describe-assessment-targets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -647,7 +647,7 @@ export def "api get-assessment-targets" [
 #
 # POST /
 # operationId: DescribeAssessmentTemplates
-export def "api get-assessment-templates" [
+export def "describe-assessment-templates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -695,7 +695,7 @@ export def "api get-assessment-templates" [
 #
 # POST /
 # operationId: DescribeCrossAccountAccessRole
-export def "api get-cross-account-access-role" [
+export def "describe-cross-account-access-role" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -739,7 +739,7 @@ export def "api get-cross-account-access-role" [
 #
 # POST /
 # operationId: DescribeExclusions
-export def "api get-exclusions" [
+export def "describe-exclusions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -788,7 +788,7 @@ export def "api get-exclusions" [
 #
 # POST /
 # operationId: DescribeFindings
-export def "api get-findings" [
+export def "describe-findings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -837,7 +837,7 @@ export def "api get-findings" [
 #
 # POST /
 # operationId: DescribeResourceGroups
-export def "api get-resource-groups" [
+export def "describe-resource-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -885,7 +885,7 @@ export def "api get-resource-groups" [
 #
 # POST /
 # operationId: DescribeRulesPackages
-export def "api get-rules-packages" [
+export def "describe-rules-packages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -934,7 +934,7 @@ export def "api get-rules-packages" [
 #
 # POST /
 # operationId: GetAssessmentReport
-export def "api get-assessment-report" [
+export def "get-assessment-report" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -984,7 +984,7 @@ export def "api get-assessment-report" [
 #
 # POST /
 # operationId: GetExclusionsPreview
-export def "api get-exclusions-preview" [
+export def "get-exclusions-preview" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1039,7 +1039,7 @@ export def "api get-exclusions-preview" [
 #
 # POST /
 # operationId: GetTelemetryMetadata
-export def "api get-telemetry-metadata" [
+export def "get-telemetry-metadata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1087,7 +1087,7 @@ export def "api get-telemetry-metadata" [
 #
 # POST /
 # operationId: ListAssessmentRunAgents
-export def "api list-assessment-run-agents" [
+export def "list-assessment-run-agents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1141,7 +1141,7 @@ export def "api list-assessment-run-agents" [
 #
 # POST /
 # operationId: ListAssessmentRuns
-export def "api list-assessment-runs" [
+export def "list-assessment-runs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1195,7 +1195,7 @@ export def "api list-assessment-runs" [
 #
 # POST /
 # operationId: ListAssessmentTargets
-export def "api list-assessment-targets" [
+export def "list-assessment-targets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1248,7 +1248,7 @@ export def "api list-assessment-targets" [
 #
 # POST /
 # operationId: ListAssessmentTemplates
-export def "api list-assessment-templates" [
+export def "list-assessment-templates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1302,7 +1302,7 @@ export def "api list-assessment-templates" [
 #
 # POST /
 # operationId: ListEventSubscriptions
-export def "api list-event-subscriptions" [
+export def "list-event-subscriptions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1355,7 +1355,7 @@ export def "api list-event-subscriptions" [
 #
 # POST /
 # operationId: ListExclusions
-export def "api list-exclusions" [
+export def "list-exclusions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1408,7 +1408,7 @@ export def "api list-exclusions" [
 #
 # POST /
 # operationId: ListFindings
-export def "api list-findings" [
+export def "list-findings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1462,7 +1462,7 @@ export def "api list-findings" [
 #
 # POST /
 # operationId: ListRulesPackages
-export def "api list-rules-packages" [
+export def "list-rules-packages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1514,7 +1514,7 @@ export def "api list-rules-packages" [
 #
 # POST /
 # operationId: ListTagsForResource
-export def "api list-tags-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1562,7 +1562,7 @@ export def "api list-tags-for-resource" [
 #
 # POST /
 # operationId: PreviewAgents
-export def "api create-preview-agents" [
+export def "preview-agents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1615,7 +1615,7 @@ export def "api create-preview-agents" [
 #
 # POST /
 # operationId: RegisterCrossAccountAccessRole
-export def "api create-cross-account-access-role" [
+export def "register-cross-account-access-role" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1663,7 +1663,7 @@ export def "api create-cross-account-access-role" [
 #
 # POST /
 # operationId: RemoveAttributesFromFindings
-export def "api delete-attributes-from-findings" [
+export def "remove-attributes-from-findings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1712,7 +1712,7 @@ export def "api delete-attributes-from-findings" [
 #
 # POST /
 # operationId: SetTagsForResource
-export def "api update-tags-for-resource" [
+export def "set-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1761,7 +1761,7 @@ export def "api update-tags-for-resource" [
 #
 # POST /
 # operationId: StartAssessmentRun
-export def "api start-assessment-run" [
+export def "start-assessment-run" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1810,7 +1810,7 @@ export def "api start-assessment-run" [
 #
 # POST /
 # operationId: StopAssessmentRun
-export def "api stop-assessment-run" [
+export def "stop-assessment-run" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1859,7 +1859,7 @@ export def "api stop-assessment-run" [
 #
 # POST /
 # operationId: SubscribeToEvent
-export def "api subscribe-to-event" [
+export def "subscribe-to-event" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1909,7 +1909,7 @@ export def "api subscribe-to-event" [
 #
 # POST /
 # operationId: UnsubscribeFromEvent
-export def "api unsubscribe-from-event" [
+export def "unsubscribe-from-event" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1959,7 +1959,7 @@ export def "api unsubscribe-from-event" [
 #
 # POST /
 # operationId: UpdateAssessmentTarget
-export def "api update-assessment-target" [
+export def "update-assessment-target" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

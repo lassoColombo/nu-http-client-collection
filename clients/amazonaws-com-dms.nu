@@ -169,7 +169,7 @@ def x-amz-target-completer-68 [] { ["AmazonDMSv20160101.UpdateSubscriptionsToEve
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-tags-to-resource" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "add-tags-to-resource" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -193,7 +193,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AddTagsToResource
-export def "api create-tags-to-resource" [
+export def "add-tags-to-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -242,7 +242,7 @@ export def "api create-tags-to-resource" [
 #
 # POST /
 # operationId: ApplyPendingMaintenanceAction
-export def "api create-apply-pending-maintenance-action" [
+export def "apply-pending-maintenance-action" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -292,7 +292,7 @@ export def "api create-apply-pending-maintenance-action" [
 #
 # POST /
 # operationId: BatchStartRecommendations
-export def "api start-batch-recommendations" [
+export def "batch-start-recommendations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -340,7 +340,7 @@ export def "api start-batch-recommendations" [
 #
 # POST /
 # operationId: CancelReplicationTaskAssessmentRun
-export def "api cancel-replication-task-assessment-run" [
+export def "cancel-replication-task-assessment-run" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -390,7 +390,7 @@ export def "api cancel-replication-task-assessment-run" [
 # operationId: CreateEndpoint
 # --RedshiftSettings shape: {AcceptAnyDate?: any, AfterConnectScript?: any, BucketFolder?: any, BucketName?: any, CaseSensitiveNames?: any, CompUpdate?: any, ConnectionTimeout?: any, DatabaseName?: any, DateFormat?: any, EmptyAsNull?: any, EncryptionMode?: any, ExplicitIds?: any, FileTransferUploadStreams?: any, LoadTimeout?: any, MaxFileSize?: any, Password?: any, Port?: any, RemoveQuotes?: any, ReplaceInvalidChars?: any, ReplaceChars?: any, ServerName?: any, ServiceAccessRoleArn?: any, ServerSideEncryptionKmsKeyId?: any, ... (8 more fields)}
 # --DocDbSettings shape: {Username?: any, Password?: any, ServerName?: any, Port?: any, DatabaseName?: any, NestingLevel?: any, ExtractDocId?: any, DocsToInvestigate?: any, KmsKeyId?: any, SecretsManagerAccessRoleArn?: any, SecretsManagerSecretId?: any}
-export def "api create-endpoint" [
+export def "create-endpoint" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -471,7 +471,7 @@ export def "api create-endpoint" [
 #
 # POST /
 # operationId: CreateEventSubscription
-export def "api create-event-subscription" [
+export def "create-event-subscription" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -525,7 +525,7 @@ export def "api create-event-subscription" [
 #
 # POST /
 # operationId: CreateFleetAdvisorCollector
-export def "api create-fleet-advisor-collector" [
+export def "create-fleet-advisor-collector" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -576,7 +576,7 @@ export def "api create-fleet-advisor-collector" [
 #
 # POST /
 # operationId: CreateReplicationInstance
-export def "api create-replication-instance" [
+export def "create-replication-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -639,7 +639,7 @@ export def "api create-replication-instance" [
 #
 # POST /
 # operationId: CreateReplicationSubnetGroup
-export def "api create-replication-subnet-group" [
+export def "create-replication-subnet-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -690,7 +690,7 @@ export def "api create-replication-subnet-group" [
 #
 # POST /
 # operationId: CreateReplicationTask
-export def "api create-replication-task" [
+export def "create-replication-task" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -750,7 +750,7 @@ export def "api create-replication-task" [
 #
 # POST /
 # operationId: DeleteCertificate
-export def "api delete-certificate" [
+export def "delete-certificate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -798,7 +798,7 @@ export def "api delete-certificate" [
 #
 # POST /
 # operationId: DeleteConnection
-export def "api delete-connection" [
+export def "delete-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -847,7 +847,7 @@ export def "api delete-connection" [
 #
 # POST /
 # operationId: DeleteEndpoint
-export def "api delete-endpoint" [
+export def "delete-endpoint" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -895,7 +895,7 @@ export def "api delete-endpoint" [
 #
 # POST /
 # operationId: DeleteEventSubscription
-export def "api delete-event-subscription" [
+export def "delete-event-subscription" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -943,7 +943,7 @@ export def "api delete-event-subscription" [
 #
 # POST /
 # operationId: DeleteFleetAdvisorCollector
-export def "api delete-fleet-advisor-collector" [
+export def "delete-fleet-advisor-collector" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -991,7 +991,7 @@ export def "api delete-fleet-advisor-collector" [
 #
 # POST /
 # operationId: DeleteFleetAdvisorDatabases
-export def "api delete-fleet-advisor-databases" [
+export def "delete-fleet-advisor-databases" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1039,7 +1039,7 @@ export def "api delete-fleet-advisor-databases" [
 #
 # POST /
 # operationId: DeleteReplicationInstance
-export def "api delete-replication-instance" [
+export def "delete-replication-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1087,7 +1087,7 @@ export def "api delete-replication-instance" [
 #
 # POST /
 # operationId: DeleteReplicationSubnetGroup
-export def "api delete-replication-subnet-group" [
+export def "delete-replication-subnet-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1135,7 +1135,7 @@ export def "api delete-replication-subnet-group" [
 #
 # POST /
 # operationId: DeleteReplicationTask
-export def "api delete-replication-task" [
+export def "delete-replication-task" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1183,7 +1183,7 @@ export def "api delete-replication-task" [
 #
 # POST /
 # operationId: DeleteReplicationTaskAssessmentRun
-export def "api delete-replication-task-assessment-run" [
+export def "delete-replication-task-assessment-run" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1231,7 +1231,7 @@ export def "api delete-replication-task-assessment-run" [
 #
 # POST /
 # operationId: DescribeAccountAttributes
-export def "api get-account-attributes" [
+export def "describe-account-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1279,7 +1279,7 @@ export def "api get-account-attributes" [
 #
 # POST /
 # operationId: DescribeApplicableIndividualAssessments
-export def "api get-applicable-individual-assessments" [
+export def "describe-applicable-individual-assessments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1336,7 +1336,7 @@ export def "api get-applicable-individual-assessments" [
 #
 # POST /
 # operationId: DescribeCertificates
-export def "api get-certificates" [
+export def "describe-certificates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1389,7 +1389,7 @@ export def "api get-certificates" [
 #
 # POST /
 # operationId: DescribeConnections
-export def "api get-connections" [
+export def "describe-connections" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1442,7 +1442,7 @@ export def "api get-connections" [
 #
 # POST /
 # operationId: DescribeEndpointSettings
-export def "api get-endpoint-settings" [
+export def "describe-endpoint-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1495,7 +1495,7 @@ export def "api get-endpoint-settings" [
 #
 # POST /
 # operationId: DescribeEndpointTypes
-export def "api get-endpoint-types" [
+export def "describe-endpoint-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1548,7 +1548,7 @@ export def "api get-endpoint-types" [
 #
 # POST /
 # operationId: DescribeEndpoints
-export def "api get-endpoints" [
+export def "describe-endpoints" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1601,7 +1601,7 @@ export def "api get-endpoints" [
 #
 # POST /
 # operationId: DescribeEventCategories
-export def "api get-event-categories" [
+export def "describe-event-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1650,7 +1650,7 @@ export def "api get-event-categories" [
 #
 # POST /
 # operationId: DescribeEventSubscriptions
-export def "api get-event-subscriptions" [
+export def "describe-event-subscriptions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1704,7 +1704,7 @@ export def "api get-event-subscriptions" [
 #
 # POST /
 # operationId: DescribeEvents
-export def "api get-events" [
+export def "describe-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1763,7 +1763,7 @@ export def "api get-events" [
 #
 # POST /
 # operationId: DescribeFleetAdvisorCollectors
-export def "api get-fleet-advisor-collectors" [
+export def "describe-fleet-advisor-collectors" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1816,7 +1816,7 @@ export def "api get-fleet-advisor-collectors" [
 #
 # POST /
 # operationId: DescribeFleetAdvisorDatabases
-export def "api get-fleet-advisor-databases" [
+export def "describe-fleet-advisor-databases" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1869,7 +1869,7 @@ export def "api get-fleet-advisor-databases" [
 #
 # POST /
 # operationId: DescribeFleetAdvisorLsaAnalysis
-export def "api get-fleet-advisor-lsa-analysis" [
+export def "describe-fleet-advisor-lsa-analysis" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1921,7 +1921,7 @@ export def "api get-fleet-advisor-lsa-analysis" [
 #
 # POST /
 # operationId: DescribeFleetAdvisorSchemaObjectSummary
-export def "api get-fleet-advisor-schema-object-summary" [
+export def "describe-fleet-advisor-schema-object-summary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1974,7 +1974,7 @@ export def "api get-fleet-advisor-schema-object-summary" [
 #
 # POST /
 # operationId: DescribeFleetAdvisorSchemas
-export def "api get-fleet-advisor-schemas" [
+export def "describe-fleet-advisor-schemas" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2027,7 +2027,7 @@ export def "api get-fleet-advisor-schemas" [
 #
 # POST /
 # operationId: DescribeOrderableReplicationInstances
-export def "api get-orderable-replication-instances" [
+export def "describe-orderable-replication-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2079,7 +2079,7 @@ export def "api get-orderable-replication-instances" [
 #
 # POST /
 # operationId: DescribePendingMaintenanceActions
-export def "api get-pending-maintenance-actions" [
+export def "describe-pending-maintenance-actions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2133,7 +2133,7 @@ export def "api get-pending-maintenance-actions" [
 #
 # POST /
 # operationId: DescribeRecommendationLimitations
-export def "api get-recommendation-limitations" [
+export def "describe-recommendation-limitations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2186,7 +2186,7 @@ export def "api get-recommendation-limitations" [
 #
 # POST /
 # operationId: DescribeRecommendations
-export def "api get-recommendations" [
+export def "describe-recommendations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2239,7 +2239,7 @@ export def "api get-recommendations" [
 #
 # POST /
 # operationId: DescribeRefreshSchemasStatus
-export def "api get-refresh-schemas-status" [
+export def "describe-refresh-schemas-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2287,7 +2287,7 @@ export def "api get-refresh-schemas-status" [
 #
 # POST /
 # operationId: DescribeReplicationInstanceTaskLogs
-export def "api get-replication-instance-task-logs" [
+export def "describe-replication-instance-task-logs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2340,7 +2340,7 @@ export def "api get-replication-instance-task-logs" [
 #
 # POST /
 # operationId: DescribeReplicationInstances
-export def "api get-replication-instances" [
+export def "describe-replication-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2393,7 +2393,7 @@ export def "api get-replication-instances" [
 #
 # POST /
 # operationId: DescribeReplicationSubnetGroups
-export def "api get-replication-subnet-groups" [
+export def "describe-replication-subnet-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2446,7 +2446,7 @@ export def "api get-replication-subnet-groups" [
 #
 # POST /
 # operationId: DescribeReplicationTaskAssessmentResults
-export def "api get-replication-task-assessment-results" [
+export def "describe-replication-task-assessment-results" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2499,7 +2499,7 @@ export def "api get-replication-task-assessment-results" [
 #
 # POST /
 # operationId: DescribeReplicationTaskAssessmentRuns
-export def "api get-replication-task-assessment-runs" [
+export def "describe-replication-task-assessment-runs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2552,7 +2552,7 @@ export def "api get-replication-task-assessment-runs" [
 #
 # POST /
 # operationId: DescribeReplicationTaskIndividualAssessments
-export def "api get-replication-task-individual-assessments" [
+export def "describe-replication-task-individual-assessments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2605,7 +2605,7 @@ export def "api get-replication-task-individual-assessments" [
 #
 # POST /
 # operationId: DescribeReplicationTasks
-export def "api get-replication-tasks" [
+export def "describe-replication-tasks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2659,7 +2659,7 @@ export def "api get-replication-tasks" [
 #
 # POST /
 # operationId: DescribeSchemas
-export def "api get-schemas" [
+export def "describe-schemas" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2712,7 +2712,7 @@ export def "api get-schemas" [
 #
 # POST /
 # operationId: DescribeTableStatistics
-export def "api get-table-statistics" [
+export def "describe-table-statistics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2766,7 +2766,7 @@ export def "api get-table-statistics" [
 #
 # POST /
 # operationId: ImportCertificate
-export def "api import-certificate" [
+export def "import-certificate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2817,7 +2817,7 @@ export def "api import-certificate" [
 #
 # POST /
 # operationId: ListTagsForResource
-export def "api list-tags-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2867,7 +2867,7 @@ export def "api list-tags-for-resource" [
 # POST /
 # operationId: ModifyEndpoint
 # --RedshiftSettings shape: {AcceptAnyDate?: any, AfterConnectScript?: any, BucketFolder?: any, BucketName?: any, CaseSensitiveNames?: any, CompUpdate?: any, ConnectionTimeout?: any, DatabaseName?: any, DateFormat?: any, EmptyAsNull?: any, EncryptionMode?: any, ExplicitIds?: any, FileTransferUploadStreams?: any, LoadTimeout?: any, MaxFileSize?: any, Password?: any, Port?: any, RemoveQuotes?: any, ReplaceInvalidChars?: any, ReplaceChars?: any, ServerName?: any, ServiceAccessRoleArn?: any, ServerSideEncryptionKmsKeyId?: any, ... (8 more fields)}
-export def "api create-modify-endpoint" [
+export def "modify-endpoint" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2947,7 +2947,7 @@ export def "api create-modify-endpoint" [
 #
 # POST /
 # operationId: ModifyEventSubscription
-export def "api create-modify-event-subscription" [
+export def "modify-event-subscription" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2999,7 +2999,7 @@ export def "api create-modify-event-subscription" [
 #
 # POST /
 # operationId: ModifyReplicationInstance
-export def "api create-modify-replication-instance" [
+export def "modify-replication-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3058,7 +3058,7 @@ export def "api create-modify-replication-instance" [
 #
 # POST /
 # operationId: ModifyReplicationSubnetGroup
-export def "api create-modify-replication-subnet-group" [
+export def "modify-replication-subnet-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3108,7 +3108,7 @@ export def "api create-modify-replication-subnet-group" [
 #
 # POST /
 # operationId: ModifyReplicationTask
-export def "api create-modify-replication-task" [
+export def "modify-replication-task" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3164,7 +3164,7 @@ export def "api create-modify-replication-task" [
 #
 # POST /
 # operationId: MoveReplicationTask
-export def "api move-replication-task" [
+export def "move-replication-task" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3213,7 +3213,7 @@ export def "api move-replication-task" [
 #
 # POST /
 # operationId: RebootReplicationInstance
-export def "api create-reboot-replication-instance" [
+export def "reboot-replication-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3263,7 +3263,7 @@ export def "api create-reboot-replication-instance" [
 #
 # POST /
 # operationId: RefreshSchemas
-export def "api refresh-schemas" [
+export def "refresh-schemas" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3312,7 +3312,7 @@ export def "api refresh-schemas" [
 #
 # POST /
 # operationId: ReloadTables
-export def "api reload-tables" [
+export def "reload-tables" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3362,7 +3362,7 @@ export def "api reload-tables" [
 #
 # POST /
 # operationId: RemoveTagsFromResource
-export def "api delete-tags-from-resource" [
+export def "remove-tags-from-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3411,7 +3411,7 @@ export def "api delete-tags-from-resource" [
 #
 # POST /
 # operationId: RunFleetAdvisorLsaAnalysis
-export def "api create-run-fleet-advisor-lsa-analysis" [
+export def "run-fleet-advisor-lsa-analysis" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3455,7 +3455,7 @@ export def "api create-run-fleet-advisor-lsa-analysis" [
 #
 # POST /
 # operationId: StartRecommendations
-export def "api start-recommendations" [
+export def "start-recommendations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3504,7 +3504,7 @@ export def "api start-recommendations" [
 #
 # POST /
 # operationId: StartReplicationTask
-export def "api start-replication-task" [
+export def "start-replication-task" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3556,7 +3556,7 @@ export def "api start-replication-task" [
 #
 # POST /
 # operationId: StartReplicationTaskAssessment
-export def "api start-replication-task-assessment" [
+export def "start-replication-task-assessment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3604,7 +3604,7 @@ export def "api start-replication-task-assessment" [
 #
 # POST /
 # operationId: StartReplicationTaskAssessmentRun
-export def "api start-replication-task-assessment-run" [
+export def "start-replication-task-assessment-run" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3660,7 +3660,7 @@ export def "api start-replication-task-assessment-run" [
 #
 # POST /
 # operationId: StopReplicationTask
-export def "api stop-replication-task" [
+export def "stop-replication-task" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3708,7 +3708,7 @@ export def "api stop-replication-task" [
 #
 # POST /
 # operationId: TestConnection
-export def "api test-connection" [
+export def "test-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3757,7 +3757,7 @@ export def "api test-connection" [
 #
 # POST /
 # operationId: UpdateSubscriptionsToEventBridge
-export def "api update-subscriptions-to-event-bridge" [
+export def "update-subscriptions-to-event-bridge" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

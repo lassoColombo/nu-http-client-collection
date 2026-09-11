@@ -113,7 +113,7 @@ def x-amz-target-completer-12 [] { ["Timestream_20181101.UpdateScheduledQuery"] 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api cancel-list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cancel-query" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -137,7 +137,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CancelQuery
-export def "api cancel-list" [
+export def "cancel-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -185,7 +185,7 @@ export def "api cancel-list" [
 #
 # POST /
 # operationId: CreateScheduledQuery
-export def "api create-scheduled-list" [
+export def "create-scheduled-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -242,7 +242,7 @@ export def "api create-scheduled-list" [
 #
 # POST /
 # operationId: DeleteScheduledQuery
-export def "api delete-scheduled-list" [
+export def "delete-scheduled-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -290,7 +290,7 @@ export def "api delete-scheduled-list" [
 #
 # POST /
 # operationId: DescribeEndpoints
-export def "api get-endpoints" [
+export def "describe-endpoints" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -338,7 +338,7 @@ export def "api get-endpoints" [
 #
 # POST /
 # operationId: DescribeScheduledQuery
-export def "api get-scheduled-list" [
+export def "describe-scheduled-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -386,7 +386,7 @@ export def "api get-scheduled-list" [
 #
 # POST /
 # operationId: ExecuteScheduledQuery
-export def "api list-execute-scheduled" [
+export def "execute-scheduled-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -436,7 +436,7 @@ export def "api list-execute-scheduled" [
 #
 # POST /
 # operationId: ListScheduledQueries
-export def "api list-scheduled-queries" [
+export def "list-scheduled-queries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -488,7 +488,7 @@ export def "api list-scheduled-queries" [
 #
 # POST /
 # operationId: ListTagsForResource
-export def "api list-tags-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -541,7 +541,7 @@ export def "api list-tags-for-resource" [
 #
 # POST /
 # operationId: PrepareQuery
-export def "api list-prepare" [
+export def "prepare-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -590,7 +590,7 @@ export def "api list-prepare" [
 #
 # POST /
 # operationId: Query
-export def "api list" [
+export def "query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -644,7 +644,7 @@ export def "api list" [
 #
 # POST /
 # operationId: TagResource
-export def "api tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -693,7 +693,7 @@ export def "api tag-resource" [
 #
 # POST /
 # operationId: UntagResource
-export def "api untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -742,7 +742,7 @@ export def "api untag-resource" [
 #
 # POST /
 # operationId: UpdateScheduledQuery
-export def "api update-scheduled-list" [
+export def "update-scheduled-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

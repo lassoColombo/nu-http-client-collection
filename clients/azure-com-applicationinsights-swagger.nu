@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resourcegroups-providers-microsoft-insights-components-events-metadata get-odata-metadata" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "events-get-odata-metadata" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -128,7 +128,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Insights/components/{applicationName}/events/$metadata
 # operationId: Events_GetOdataMetadata
-export def "subscriptions-resourcegroups-providers-microsoft-insights-components-events-metadata get-odata-metadata" [
+export def "events-get-odata-metadata" [
   subscription_id: string
   resource_group_name: string
   application_name: string
@@ -170,7 +170,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-insights-components
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Insights/components/{applicationName}/events/{eventType}
 # operationId: Events_GetByType
-export def "subscriptions-resourcegroups-providers-microsoft-insights-components-events get-by-type" [
+export def "events-get-by-type" [
   subscription_id: string
   resource_group_name: string
   application_name: string
@@ -224,7 +224,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-insights-components
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Insights/components/{applicationName}/events/{eventType}/{eventId}
 # operationId: Events_Get
-export def "subscriptions-resourcegroups-providers-microsoft-insights-components-events get" [
+export def "events-get" [
   subscription_id: string
   resource_group_name: string
   application_name: string
@@ -271,7 +271,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-insights-components
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Insights/components/{applicationName}/metrics/metadata
 # operationId: Metrics_GetMetadata
-export def "subscriptions-resourcegroups-providers-microsoft-insights-components-metrics-metadata get" [
+export def "metrics-get-metadata" [
   subscription_id: string
   resource_group_name: string
   application_name: string
@@ -313,7 +313,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-insights-components
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Insights/components/{applicationName}/metrics/{metricId}
 # operationId: Metrics_Get
-export def "subscriptions-resourcegroups-providers-microsoft-insights-components-metrics get" [
+export def "metrics-get" [
   subscription_id: string
   resource_group_name: string
   application_name: string
@@ -364,7 +364,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-insights-components
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Insights/components/{applicationName}/query
 # operationId: Query_Get
-export def "subscriptions-resourcegroups-providers-microsoft-insights-components-query get" [
+export def "query-get" [
   subscription_id: string
   resource_group_name: string
   application_name: string
@@ -408,7 +408,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-insights-components
 #
 # POST /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Insights/components/{applicationName}/query
 # operationId: Query_Execute
-export def "subscriptions-resourcegroups-providers-microsoft-insights-components-query list-execute" [
+export def "query-execute" [
   subscription_id: string
   resource_group_name: string
   application_name: string

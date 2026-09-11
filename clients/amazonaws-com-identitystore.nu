@@ -119,7 +119,7 @@ def x-amz-target-completer-18 [] { ["AWSIdentityStore.UpdateUser"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-group" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-group" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -143,7 +143,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CreateGroup
-export def "api create-group" [
+export def "create-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -193,7 +193,7 @@ export def "api create-group" [
 #
 # POST /
 # operationId: CreateGroupMembership
-export def "api create-group-membership" [
+export def "create-group-membership" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -243,7 +243,7 @@ export def "api create-group-membership" [
 #
 # POST /
 # operationId: CreateUser
-export def "api create-user" [
+export def "create-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -304,7 +304,7 @@ export def "api create-user" [
 #
 # POST /
 # operationId: DeleteGroup
-export def "api delete-group" [
+export def "delete-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -353,7 +353,7 @@ export def "api delete-group" [
 #
 # POST /
 # operationId: DeleteGroupMembership
-export def "api delete-group-membership" [
+export def "delete-group-membership" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -402,7 +402,7 @@ export def "api delete-group-membership" [
 #
 # POST /
 # operationId: DeleteUser
-export def "api delete-user" [
+export def "delete-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -451,7 +451,7 @@ export def "api delete-user" [
 #
 # POST /
 # operationId: DescribeGroup
-export def "api get-group" [
+export def "describe-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -500,7 +500,7 @@ export def "api get-group" [
 #
 # POST /
 # operationId: DescribeGroupMembership
-export def "api get-group-membership" [
+export def "describe-group-membership" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -549,7 +549,7 @@ export def "api get-group-membership" [
 #
 # POST /
 # operationId: DescribeUser
-export def "api get-user" [
+export def "describe-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -598,7 +598,7 @@ export def "api get-user" [
 #
 # POST /
 # operationId: GetGroupId
-export def "api get-group-1" [
+export def "get-group-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -647,7 +647,7 @@ export def "api get-group-1" [
 #
 # POST /
 # operationId: GetGroupMembershipId
-export def "api get-group-membership-1" [
+export def "get-group-membership-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -697,7 +697,7 @@ export def "api get-group-membership-1" [
 #
 # POST /
 # operationId: GetUserId
-export def "api get-user-1" [
+export def "get-user-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -746,7 +746,7 @@ export def "api get-user-1" [
 #
 # POST /
 # operationId: IsMemberInGroups
-export def "api create-is-member-in-groups" [
+export def "is-member-in-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -796,7 +796,7 @@ export def "api create-is-member-in-groups" [
 #
 # POST /
 # operationId: ListGroupMemberships
-export def "api list-group-memberships" [
+export def "list-group-memberships" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -850,7 +850,7 @@ export def "api list-group-memberships" [
 #
 # POST /
 # operationId: ListGroupMembershipsForMember
-export def "api list-group-memberships-for-member" [
+export def "list-group-memberships-for-member" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -904,7 +904,7 @@ export def "api list-group-memberships-for-member" [
 #
 # POST /
 # operationId: ListGroups
-export def "api list-groups" [
+export def "list-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -958,7 +958,7 @@ export def "api list-groups" [
 #
 # POST /
 # operationId: ListUsers
-export def "api list-users" [
+export def "list-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1012,7 +1012,7 @@ export def "api list-users" [
 #
 # POST /
 # operationId: UpdateGroup
-export def "api update-group" [
+export def "update-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1062,7 +1062,7 @@ export def "api update-group" [
 #
 # POST /
 # operationId: UpdateUser
-export def "api update-user" [
+export def "update-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -110,7 +110,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-authorization-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "authorization-operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -134,7 +134,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.Authorization/operations
 # operationId: AuthorizationOperations_List
-export def "providers-microsoft-authorization-operations list" [
+export def "authorization-operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -170,7 +170,7 @@ export def "providers-microsoft-authorization-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Authorization/locks
 # operationId: ManagementLocks_ListAtSubscriptionLevel
-export def "subscriptions-providers-microsoft-authorization-locks list-management-at-level" [
+export def "management-locks-list-at-subscription-level" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -209,7 +209,7 @@ export def "subscriptions-providers-microsoft-authorization-locks list-managemen
 #
 # DELETE /subscriptions/{subscriptionId}/providers/Microsoft.Authorization/locks/{lockName}
 # operationId: ManagementLocks_DeleteAtSubscriptionLevel
-export def "subscriptions-providers-microsoft-authorization-locks delete-management-at-level" [
+export def "management-locks-delete-at-subscription-level" [
   subscription_id: string
   lock_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -249,7 +249,7 @@ export def "subscriptions-providers-microsoft-authorization-locks delete-managem
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Authorization/locks/{lockName}
 # operationId: ManagementLocks_GetAtSubscriptionLevel
-export def "subscriptions-providers-microsoft-authorization-locks get-management-at-level" [
+export def "management-locks-get-at-subscription-level" [
   subscription_id: string
   lock_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -290,7 +290,7 @@ export def "subscriptions-providers-microsoft-authorization-locks get-management
 # PUT /subscriptions/{subscriptionId}/providers/Microsoft.Authorization/locks/{lockName}
 # operationId: ManagementLocks_CreateOrUpdateAtSubscriptionLevel
 # --properties shape: {level: "NotSpecified"|"CanNotDelete"|"ReadOnly", notes?: string, owners?: list}
-export def "subscriptions-providers-microsoft-authorization-locks create-management-or-update-at-level" [
+export def "management-locks-create-or-update-at-subscription-level" [
   subscription_id: string
   lock_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -334,7 +334,7 @@ export def "subscriptions-providers-microsoft-authorization-locks create-managem
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Authorization/locks
 # operationId: ManagementLocks_ListAtResourceGroupLevel
-export def "subscriptions-resource-groups-providers-microsoft-authorization-locks list-management-at-level" [
+export def "management-locks-list-at-resource-group-level" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -375,7 +375,7 @@ export def "subscriptions-resource-groups-providers-microsoft-authorization-lock
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Authorization/locks/{lockName}
 # operationId: ManagementLocks_DeleteAtResourceGroupLevel
-export def "subscriptions-resource-groups-providers-microsoft-authorization-locks delete-management-at-level" [
+export def "management-locks-delete-at-resource-group-level" [
   subscription_id: string
   resource_group_name: string
   lock_name: string
@@ -417,7 +417,7 @@ export def "subscriptions-resource-groups-providers-microsoft-authorization-lock
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Authorization/locks/{lockName}
 # operationId: ManagementLocks_GetAtResourceGroupLevel
-export def "subscriptions-resource-groups-providers-microsoft-authorization-locks get-management-at-level" [
+export def "management-locks-get-at-resource-group-level" [
   subscription_id: string
   resource_group_name: string
   lock_name: string
@@ -460,7 +460,7 @@ export def "subscriptions-resource-groups-providers-microsoft-authorization-lock
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Authorization/locks/{lockName}
 # operationId: ManagementLocks_CreateOrUpdateAtResourceGroupLevel
 # --properties shape: {level: "NotSpecified"|"CanNotDelete"|"ReadOnly", notes?: string, owners?: list}
-export def "subscriptions-resource-groups-providers-microsoft-authorization-locks create-management-or-update-at-level" [
+export def "management-locks-create-or-update-at-resource-group-level" [
   subscription_id: string
   resource_group_name: string
   lock_name: string
@@ -506,7 +506,7 @@ export def "subscriptions-resource-groups-providers-microsoft-authorization-lock
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/{resourceProviderNamespace}/{parentResourcePath}/{resourceType}/{resourceName}/providers/Microsoft.Authorization/locks
 # operationId: ManagementLocks_ListAtResourceLevel
-export def "subscriptions-resourcegroups-providers-providers-microsoft-authorization-locks list-management-at-resource-level" [
+export def "management-locks-list-at-resource-level" [
   subscription_id: string
   resource_group_name: string
   resource_provider_namespace: string
@@ -555,7 +555,7 @@ export def "subscriptions-resourcegroups-providers-providers-microsoft-authoriza
 #
 # DELETE /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/{resourceProviderNamespace}/{parentResourcePath}/{resourceType}/{resourceName}/providers/Microsoft.Authorization/locks/{lockName}
 # operationId: ManagementLocks_DeleteAtResourceLevel
-export def "subscriptions-resourcegroups-providers-providers-microsoft-authorization-locks delete-management-at-resource-level" [
+export def "management-locks-delete-at-resource-level" [
   subscription_id: string
   resource_group_name: string
   resource_provider_namespace: string
@@ -605,7 +605,7 @@ export def "subscriptions-resourcegroups-providers-providers-microsoft-authoriza
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/{resourceProviderNamespace}/{parentResourcePath}/{resourceType}/{resourceName}/providers/Microsoft.Authorization/locks/{lockName}
 # operationId: ManagementLocks_GetAtResourceLevel
-export def "subscriptions-resourcegroups-providers-providers-microsoft-authorization-locks get-management-at-resource-level" [
+export def "management-locks-get-at-resource-level" [
   subscription_id: string
   resource_group_name: string
   resource_provider_namespace: string
@@ -656,7 +656,7 @@ export def "subscriptions-resourcegroups-providers-providers-microsoft-authoriza
 # PUT /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/{resourceProviderNamespace}/{parentResourcePath}/{resourceType}/{resourceName}/providers/Microsoft.Authorization/locks/{lockName}
 # operationId: ManagementLocks_CreateOrUpdateAtResourceLevel
 # --properties shape: {level: "NotSpecified"|"CanNotDelete"|"ReadOnly", notes?: string, owners?: list}
-export def "subscriptions-resourcegroups-providers-providers-microsoft-authorization-locks create-management-or-update-at-resource-level" [
+export def "management-locks-create-or-update-at-resource-level" [
   subscription_id: string
   resource_group_name: string
   resource_provider_namespace: string
@@ -710,7 +710,7 @@ export def "subscriptions-resourcegroups-providers-providers-microsoft-authoriza
 #
 # GET /{scope}/providers/Microsoft.Authorization/locks
 # operationId: ManagementLocks_ListByScope
-export def "providers-microsoft-authorization-locks list-management" [
+export def "management-locks-list-by-scope" [
   scope: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -749,7 +749,7 @@ export def "providers-microsoft-authorization-locks list-management" [
 #
 # DELETE /{scope}/providers/Microsoft.Authorization/locks/{lockName}
 # operationId: ManagementLocks_DeleteByScope
-export def "providers-microsoft-authorization-locks delete-management" [
+export def "management-locks-delete-by-scope" [
   scope: string
   lock_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -789,7 +789,7 @@ export def "providers-microsoft-authorization-locks delete-management" [
 #
 # GET /{scope}/providers/Microsoft.Authorization/locks/{lockName}
 # operationId: ManagementLocks_GetByScope
-export def "providers-microsoft-authorization-locks get-management" [
+export def "management-locks-get-by-scope" [
   scope: string
   lock_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -830,7 +830,7 @@ export def "providers-microsoft-authorization-locks get-management" [
 # PUT /{scope}/providers/Microsoft.Authorization/locks/{lockName}
 # operationId: ManagementLocks_CreateOrUpdateByScope
 # --properties shape: {level: "NotSpecified"|"CanNotDelete"|"ReadOnly", notes?: string, owners?: list}
-export def "providers-microsoft-authorization-locks create-management-or-update" [
+export def "management-locks-create-or-update-by-scope" [
   scope: string
   lock_name: string
   --base-url(-b): string@base-url-completer # API base URL

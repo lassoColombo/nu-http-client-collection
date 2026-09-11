@@ -121,7 +121,7 @@ def color-completer [] { ["blue" "green" "grey" "purple" "red" "turqoise" "yello
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "bounces get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-bounces" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -145,7 +145,7 @@ export def commands []: nothing -> table {
 #
 # GET /bounces
 # operationId: getBounces
-export def "bounces get" [
+export def "get-bounces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -192,7 +192,7 @@ export def "bounces get" [
 #
 # GET /bounces/{bounceid}
 # operationId: getSingleBounce
-export def "bounces get-single" [
+export def "get-single-bounce" [
   bounceid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -231,7 +231,7 @@ export def "bounces get-single" [
 #
 # PUT /bounces/{bounceid}/activate
 # operationId: activateBounce
-export def "bounces-activate update" [
+export def "activate-bounce" [
   bounceid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -269,7 +269,7 @@ export def "bounces-activate update" [
 # Get bounce dump
 #
 # GET /bounces/{bounceid}/dump
-export def "bounces-dump get" [
+export def "get-bounces-bounceid-dump" [
   bounceid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -308,7 +308,7 @@ export def "bounces-dump get" [
 #
 # GET /deliverystats
 # operationId: getDeliveryStats
-export def "deliverystats get-delivery-stats" [
+export def "get-delivery-stats" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -347,7 +347,7 @@ export def "deliverystats get-delivery-stats" [
 # operationId: sendEmail
 # --Attachments item shape: {Content?: string, ContentID?: string, ContentType?: string, Name?: string}
 # --Headers item shape: {Name?: string, Value?: string}
-export def "email send" [
+export def "send-email" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -400,7 +400,7 @@ export def "email send" [
 #
 # POST /email/batch
 # operationId: sendEmailBatch
-export def "email-batch send" [
+export def "send-email-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -442,7 +442,7 @@ export def "email-batch send" [
 # POST /email/batchWithTemplates
 # operationId: sendEmailBatchWithTemplates
 # --Messages item shape: {Attachments?: list, Bcc?: string, Cc?: string, From: string, Headers?: list, InlineCss?: bool, ReplyTo?: string, Tag?: string, TemplateAlias: string, TemplateId: int, TemplateModel: record, To: string, TrackLinks?: "None"|"HtmlAndText"|"HtmlOnly"|"TextOnly", TrackOpens?: bool}
-export def "email-batch-with-templates send" [
+export def "send-email-batch-with-templates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -485,7 +485,7 @@ export def "email-batch-with-templates send" [
 # operationId: sendEmailWithTemplate
 # --Attachments item shape: {Content?: string, ContentID?: string, ContentType?: string, Name?: string}
 # --Headers item shape: {Name?: string, Value?: string}
-export def "email-with-template send" [
+export def "send-email-with-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -539,7 +539,7 @@ export def "email-with-template send" [
 #
 # GET /messages/inbound
 # operationId: searchInboundMessages
-export def "messages-inbound list" [
+export def "search-inbound-messages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -587,7 +587,7 @@ export def "messages-inbound list" [
 #
 # PUT /messages/inbound/{messageid}/bypass
 # operationId: bypassRulesForInboundMessage
-export def "messages-inbound-bypass update-rules" [
+export def "bypass-rules-for-inbound-message" [
   messageid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -626,7 +626,7 @@ export def "messages-inbound-bypass update-rules" [
 #
 # GET /messages/inbound/{messageid}/details
 # operationId: getInboundMessageDetails
-export def "messages-inbound-details get" [
+export def "get-inbound-message-details" [
   messageid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -665,7 +665,7 @@ export def "messages-inbound-details get" [
 #
 # PUT /messages/inbound/{messageid}/retry
 # operationId: retryInboundMessageProcessing
-export def "messages-inbound-retry update-processing" [
+export def "retry-inbound-message-processing" [
   messageid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -704,7 +704,7 @@ export def "messages-inbound-retry update-processing" [
 #
 # GET /messages/outbound
 # operationId: searchOutboundMessages
-export def "messages-outbound list" [
+export def "search-outbound-messages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -750,7 +750,7 @@ export def "messages-outbound list" [
 #
 # GET /messages/outbound/clicks
 # operationId: searchClicksForOutboundMessages
-export def "messages-outbound-clicks list" [
+export def "search-clicks-for-outbound-messages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -802,7 +802,7 @@ export def "messages-outbound-clicks list" [
 #
 # GET /messages/outbound/clicks/{messageid}
 # operationId: getClicksForSingleOutboundMessage
-export def "messages-outbound-clicks get-for-single" [
+export def "get-clicks-for-single-outbound-message" [
   messageid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -844,7 +844,7 @@ export def "messages-outbound-clicks get-for-single" [
 #
 # GET /messages/outbound/opens
 # operationId: searchOpensForOutboundMessages
-export def "messages-outbound-opens list" [
+export def "search-opens-for-outbound-messages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -896,7 +896,7 @@ export def "messages-outbound-opens list" [
 #
 # GET /messages/outbound/opens/{messageid}
 # operationId: getOpensForSingleOutboundMessage
-export def "messages-outbound-opens get-for-single" [
+export def "get-opens-for-single-outbound-message" [
   messageid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -938,7 +938,7 @@ export def "messages-outbound-opens get-for-single" [
 #
 # GET /messages/outbound/{messageid}/details
 # operationId: getOutboundMessageDetails
-export def "messages-outbound-details get" [
+export def "get-outbound-message-details" [
   messageid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -977,7 +977,7 @@ export def "messages-outbound-details get" [
 #
 # GET /messages/outbound/{messageid}/dump
 # operationId: getOutboundMessageDump
-export def "messages-outbound-dump get" [
+export def "get-outbound-message-dump" [
   messageid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1016,7 +1016,7 @@ export def "messages-outbound-dump get" [
 #
 # GET /server
 # operationId: getCurrentServerConfiguration
-export def "server get-configuration" [
+export def "get-current-server-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1053,7 +1053,7 @@ export def "server get-configuration" [
 #
 # PUT /server
 # operationId: editCurrentServerConfiguration
-export def "server get-edit-configuration" [
+export def "edit-current-server-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1107,7 +1107,7 @@ export def "server get-edit-configuration" [
 #
 # GET /stats/outbound
 # operationId: getOutboundOverviewStatistics
-export def "stats-outbound get-overview-statistics" [
+export def "get-outbound-overview-statistics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1148,7 +1148,7 @@ export def "stats-outbound get-overview-statistics" [
 #
 # GET /stats/outbound/bounces
 # operationId: getBounceCounts
-export def "stats-outbound-bounces get-counts" [
+export def "get-bounce-counts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1189,7 +1189,7 @@ export def "stats-outbound-bounces get-counts" [
 #
 # GET /stats/outbound/clicks
 # operationId: getOutboundClickCounts
-export def "stats-outbound-clicks get-counts" [
+export def "get-outbound-click-counts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1230,7 +1230,7 @@ export def "stats-outbound-clicks get-counts" [
 #
 # GET /stats/outbound/clicks/browserfamilies
 # operationId: getOutboundClickCountsByBrowserFamily
-export def "stats-outbound-clicks-browserfamilies get-counts-by-browser-family" [
+export def "get-outbound-click-counts-by-browser-family" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1271,7 +1271,7 @@ export def "stats-outbound-clicks-browserfamilies get-counts-by-browser-family" 
 #
 # GET /stats/outbound/clicks/location
 # operationId: getOutboundClickCountsByLocation
-export def "stats-outbound-clicks-location get-counts" [
+export def "get-outbound-click-counts-by-location" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1312,7 +1312,7 @@ export def "stats-outbound-clicks-location get-counts" [
 #
 # GET /stats/outbound/clicks/platforms
 # operationId: getOutboundClickCountsByPlatform
-export def "stats-outbound-clicks-platforms get-counts" [
+export def "get-outbound-click-counts-by-platform" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1353,7 +1353,7 @@ export def "stats-outbound-clicks-platforms get-counts" [
 #
 # GET /stats/outbound/opens
 # operationId: getOutboundOpenCounts
-export def "stats-outbound-opens get-counts" [
+export def "get-outbound-open-counts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1394,7 +1394,7 @@ export def "stats-outbound-opens get-counts" [
 #
 # GET /stats/outbound/opens/emailclients
 # operationId: getOutboundOpenCountsByEmailClient
-export def "stats-outbound-opens-emailclients get-counts-by-email-client" [
+export def "get-outbound-open-counts-by-email-client" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1435,7 +1435,7 @@ export def "stats-outbound-opens-emailclients get-counts-by-email-client" [
 #
 # GET /stats/outbound/opens/platforms
 # operationId: getOutboundOpenCountsByPlatform
-export def "stats-outbound-opens-platforms get-counts" [
+export def "get-outbound-open-counts-by-platform" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1476,7 +1476,7 @@ export def "stats-outbound-opens-platforms get-counts" [
 #
 # GET /stats/outbound/sends
 # operationId: getSentCounts
-export def "stats-outbound-sends get-sent-counts" [
+export def "get-sent-counts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1517,7 +1517,7 @@ export def "stats-outbound-sends get-sent-counts" [
 #
 # GET /stats/outbound/spam
 # operationId: getSpamComplaints
-export def "stats-outbound-spam get-complaints" [
+export def "get-spam-complaints" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1558,7 +1558,7 @@ export def "stats-outbound-spam get-complaints" [
 #
 # GET /stats/outbound/tracked
 # operationId: getTrackedEmailCounts
-export def "stats-outbound-tracked get-email-counts" [
+export def "get-tracked-email-counts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1599,7 +1599,7 @@ export def "stats-outbound-tracked get-email-counts" [
 #
 # GET /templates
 # operationId: listTemplates
-export def "templates list" [
+export def "list-templates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1638,7 +1638,7 @@ export def "templates list" [
 # Create a Template
 #
 # POST /templates
-export def "templates create" [
+export def "post-templates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1683,7 +1683,7 @@ export def "templates create" [
 #
 # POST /templates/validate
 # operationId: testTemplateContent
-export def "templates-validate test-content" [
+export def "test-template-content" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1728,7 +1728,7 @@ export def "templates-validate test-content" [
 #
 # DELETE /templates/{templateIdOrAlias}
 # operationId: deleteTemplate
-export def "templates delete" [
+export def "delete-template" [
   template_id_or_alias: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1767,7 +1767,7 @@ export def "templates delete" [
 #
 # GET /templates/{templateIdOrAlias}
 # operationId: getSingleTemplate
-export def "templates get-single" [
+export def "get-single-template" [
   template_id_or_alias: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1806,7 +1806,7 @@ export def "templates get-single" [
 #
 # PUT /templates/{templateIdOrAlias}
 # operationId: updateTemplate
-export def "templates update" [
+export def "update-template" [
   template_id_or_alias: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1853,7 +1853,7 @@ export def "templates update" [
 #
 # GET /triggers/inboundrules
 # operationId: listInboundRules
-export def "triggers-inboundrules list-inbound-rules" [
+export def "list-inbound-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1893,7 +1893,7 @@ export def "triggers-inboundrules list-inbound-rules" [
 #
 # POST /triggers/inboundrules
 # operationId: createInboundRule
-export def "triggers-inboundrules create-inbound-rule" [
+export def "create-inbound-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1934,7 +1934,7 @@ export def "triggers-inboundrules create-inbound-rule" [
 #
 # DELETE /triggers/inboundrules/{triggerid}
 # operationId: deleteInboundRule
-export def "triggers-inboundrules delete-inbound-rule" [
+export def "delete-inbound-rule" [
   triggerid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

@@ -112,7 +112,7 @@ def api-version-completer [] { ["2018-08-31-preview"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-workload-monitor-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -136,7 +136,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.WorkloadMonitor/operations
 # operationId: Operations_List
-export def "providers-microsoft-workload-monitor-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -173,7 +173,7 @@ export def "providers-microsoft-workload-monitor-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.WorkloadMonitor/componentsSummary
 # operationId: ComponentsSummary_List
-export def "subscriptions-providers-microsoft-workload-monitor-components-summary list" [
+export def "components-summary-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -218,7 +218,7 @@ export def "subscriptions-providers-microsoft-workload-monitor-components-summar
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.WorkloadMonitor/monitorInstancesSummary
 # operationId: MonitorInstancesSummary_List
-export def "subscriptions-providers-microsoft-workload-monitor-monitor-instances-summary list" [
+export def "monitor-instances-summary-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -263,7 +263,7 @@ export def "subscriptions-providers-microsoft-workload-monitor-monitor-instances
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/{resourceNamespace}/{resourceType}/{resourceName}/providers/Microsoft.WorkloadMonitor/components
 # operationId: Components_ListByResource
-export def "subscriptions-resource-groups-providers-providers-microsoft-workload-monitor-components list" [
+export def "components-list-by-resource" [
   subscription_id: string
   resource_group_name: string
   resource_namespace: string
@@ -316,7 +316,7 @@ export def "subscriptions-resource-groups-providers-providers-microsoft-workload
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/{resourceNamespace}/{resourceType}/{resourceName}/providers/Microsoft.WorkloadMonitor/components/{componentId}
 # operationId: Components_Get
-export def "subscriptions-resource-groups-providers-providers-microsoft-workload-monitor-components get" [
+export def "components-get" [
   subscription_id: string
   resource_group_name: string
   resource_namespace: string
@@ -366,7 +366,7 @@ export def "subscriptions-resource-groups-providers-providers-microsoft-workload
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/{resourceNamespace}/{resourceType}/{resourceName}/providers/Microsoft.WorkloadMonitor/monitorInstances
 # operationId: MonitorInstances_ListByResource
-export def "subscriptions-resource-groups-providers-providers-microsoft-workload-monitor-monitor-instances list" [
+export def "monitor-instances-list-by-resource" [
   subscription_id: string
   resource_group_name: string
   resource_namespace: string
@@ -419,7 +419,7 @@ export def "subscriptions-resource-groups-providers-providers-microsoft-workload
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/{resourceNamespace}/{resourceType}/{resourceName}/providers/Microsoft.WorkloadMonitor/monitorInstances/{monitorInstanceId}
 # operationId: MonitorInstances_Get
-export def "subscriptions-resource-groups-providers-providers-microsoft-workload-monitor-monitor-instances get" [
+export def "monitor-instances-get" [
   subscription_id: string
   resource_group_name: string
   resource_namespace: string
@@ -469,7 +469,7 @@ export def "subscriptions-resource-groups-providers-providers-microsoft-workload
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/{resourceNamespace}/{resourceType}/{resourceName}/providers/Microsoft.WorkloadMonitor/monitors
 # operationId: Monitors_ListByResource
-export def "subscriptions-resource-groups-providers-providers-microsoft-workload-monitor-monitors list" [
+export def "monitors-list-by-resource" [
   subscription_id: string
   resource_group_name: string
   resource_namespace: string
@@ -517,7 +517,7 @@ export def "subscriptions-resource-groups-providers-providers-microsoft-workload
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/{resourceNamespace}/{resourceType}/{resourceName}/providers/Microsoft.WorkloadMonitor/monitors/{monitorId}
 # operationId: Monitors_Get
-export def "subscriptions-resource-groups-providers-providers-microsoft-workload-monitor-monitors get" [
+export def "monitors-get" [
   subscription_id: string
   resource_group_name: string
   resource_namespace: string
@@ -565,7 +565,7 @@ export def "subscriptions-resource-groups-providers-providers-microsoft-workload
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/{resourceNamespace}/{resourceType}/{resourceName}/providers/Microsoft.WorkloadMonitor/monitors/{monitorId}
 # operationId: Monitors_Update
-export def "subscriptions-resource-groups-providers-providers-microsoft-workload-monitor-monitors update" [
+export def "monitors-update" [
   subscription_id: string
   resource_group_name: string
   resource_namespace: string
@@ -617,7 +617,7 @@ export def "subscriptions-resource-groups-providers-providers-microsoft-workload
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/{resourceNamespace}/{resourceType}/{resourceName}/providers/Microsoft.WorkloadMonitor/notificationSettings
 # operationId: NotificationSettings_ListByResource
-export def "subscriptions-resource-groups-providers-providers-microsoft-workload-monitor-notification-settings list" [
+export def "notification-settings-list-by-resource" [
   subscription_id: string
   resource_group_name: string
   resource_namespace: string
@@ -664,7 +664,7 @@ export def "subscriptions-resource-groups-providers-providers-microsoft-workload
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/{resourceNamespace}/{resourceType}/{resourceName}/providers/Microsoft.WorkloadMonitor/notificationSettings/{notificationSettingName}
 # operationId: NotificationSettings_Get
-export def "subscriptions-resource-groups-providers-providers-microsoft-workload-monitor-notification-settings get" [
+export def "notification-settings-get" [
   subscription_id: string
   resource_group_name: string
   resource_namespace: string
@@ -712,7 +712,7 @@ export def "subscriptions-resource-groups-providers-providers-microsoft-workload
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/{resourceNamespace}/{resourceType}/{resourceName}/providers/Microsoft.WorkloadMonitor/notificationSettings/{notificationSettingName}
 # operationId: NotificationSettings_Update
-export def "subscriptions-resource-groups-providers-providers-microsoft-workload-monitor-notification-settings update" [
+export def "notification-settings-update" [
   subscription_id: string
   resource_group_name: string
   resource_namespace: string

@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "payout list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-payouts" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -122,7 +122,7 @@ export def commands []: nothing -> table {
 #
 # GET /payout
 # operationId: getPayouts
-export def "payout list" [
+export def "get-payouts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -164,7 +164,7 @@ export def "payout list" [
 #
 # GET /payout/{payout_Id}
 # operationId: getPayout
-export def "payout get" [
+export def "get-payout" [
   payout_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -203,7 +203,7 @@ export def "payout get" [
 #
 # GET /payout_summary
 # operationId: getPayoutSummary
-export def "payout-summary get" [
+export def "get-payout-summary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -242,7 +242,7 @@ export def "payout-summary get" [
 #
 # GET /seller_funds_summary
 # operationId: getSellerFundsSummary
-export def "seller-funds-summary get" [
+export def "get-seller-funds-summary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -279,7 +279,7 @@ export def "seller-funds-summary get" [
 #
 # GET /transaction
 # operationId: getTransactions
-export def "transaction get" [
+export def "get-transactions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -321,7 +321,7 @@ export def "transaction get" [
 #
 # GET /transaction_summary
 # operationId: getTransactionSummary
-export def "transaction-summary get" [
+export def "get-transaction-summary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -360,7 +360,7 @@ export def "transaction-summary get" [
 #
 # GET /transfer/{transfer_Id}
 # operationId: getTransfer
-export def "transfer get" [
+export def "get-transfer" [
   transfer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

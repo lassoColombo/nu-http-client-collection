@@ -123,7 +123,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-api-management-service-groups list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "group-list-by-service" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -148,7 +148,7 @@ export def commands []: nothing -> table {
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/groups
 # Docs: https://docs.microsoft.com/en-us/azure/api-management/api-management-howto-create-groups
 # operationId: Group_ListByService
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-groups list" [
+export def "group-list-by-service" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -193,7 +193,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/groups/{groupId}
 # operationId: Group_Delete
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-groups delete" [
+export def "group-delete" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -240,7 +240,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/groups/{groupId}
 # operationId: Group_Get
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-groups get" [
+export def "group-get" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -284,7 +284,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # HEAD /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/groups/{groupId}
 # operationId: Group_GetEntityTag
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-groups get-entity-tag" [
+export def "group-get-entity-tag" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -329,7 +329,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/groups/{groupId}
 # operationId: Group_Update
 # --properties shape: {description?: string, displayName?: string, externalId?: string, type?: "custom"|"system"|"external"}
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-groups update" [
+export def "group-update" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -381,7 +381,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/groups/{groupId}
 # operationId: Group_CreateOrUpdate
 # --properties shape: {description?: string, displayName: string, externalId?: string, type?: "custom"|"system"|"external"}
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-groups create-or-update" [
+export def "group-create-or-update" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -432,7 +432,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/groups/{groupId}/users
 # operationId: GroupUser_List
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-groups-users list" [
+export def "group-user-list" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -479,7 +479,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/groups/{groupId}/users/{userId}
 # operationId: GroupUser_Delete
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-groups-users delete" [
+export def "group-user-delete" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -525,7 +525,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # HEAD /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/groups/{groupId}/users/{userId}
 # operationId: GroupUser_CheckEntityExists
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-groups-users check-entity-exists" [
+export def "group-user-check-entity-exists" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -571,7 +571,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/groups/{groupId}/users/{userId}
 # operationId: GroupUser_Create
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-groups-users create" [
+export def "group-user-create" [
   subscription_id: string
   resource_group_name: string
   service_name: string

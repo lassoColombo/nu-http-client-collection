@@ -99,7 +99,7 @@ def auth-scheme-completer [] { ["ocp-apim-subscription-key" "query-key"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "dfs-slates-by-date get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "dfs-slates-by-date" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -123,7 +123,7 @@ export def commands []: nothing -> table {
 #
 # GET /{format}/DfsSlatesByDate/{date}
 # operationId: DfsSlatesByDate
-export def "dfs-slates-by-date get" [
+export def "dfs-slates-by-date" [
   format: string
   date: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -161,7 +161,7 @@ export def "dfs-slates-by-date get" [
 #
 # GET /{format}/InjuredPlayers/{competition}
 # operationId: InjuredPlayersByCompetition
-export def "injured-players get" [
+export def "injured-players-by-competition" [
   format: string
   competition: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -199,7 +199,7 @@ export def "injured-players get" [
 #
 # GET /{format}/PlayerGameProjectionStatsByCompetition/{competition}/{date}
 # operationId: ProjectedPlayerGameStatsByCompetitionWDfsSalaries
-export def "player-game-projection-stats-by-competition stats-projected-w-dfs-salaries" [
+export def "projected-player-game-stats-by-competition-w-dfs-salaries" [
   format: string
   competition: string
   date: string
@@ -239,7 +239,7 @@ export def "player-game-projection-stats-by-competition stats-projected-w-dfs-sa
 #
 # GET /{format}/PlayerGameProjectionStatsByDate/{date}
 # operationId: ProjectedPlayerGameStatsByDateWDfsSalaries
-export def "player-game-projection-stats-by-date stats-projected-w-dfs-salaries" [
+export def "projected-player-game-stats-by-date-w-dfs-salaries" [
   format: string
   date: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -277,7 +277,7 @@ export def "player-game-projection-stats-by-date stats-projected-w-dfs-salaries"
 #
 # GET /{format}/PlayerGameProjectionStatsByPlayer/{date}/{playerid}
 # operationId: ProjectedPlayerGameStatsByPlayerWDfsSalaries
-export def "player-game-projection-stats-by-player stats-projected-w-dfs-salaries" [
+export def "projected-player-game-stats-by-player-w-dfs-salaries" [
   format: string
   date: string
   playerid: string
@@ -317,7 +317,7 @@ export def "player-game-projection-stats-by-player stats-projected-w-dfs-salarie
 #
 # GET /{format}/UpcomingDfsSlatesByCompetition/{competitionId}
 # operationId: UpcomingDfsSlatesByCompetition
-export def "upcoming-dfs-slates-by-competition get" [
+export def "upcoming-dfs-slates-by-competition" [
   format: string
   competition_id: string
   --base-url(-b): string@base-url-completer # API base URL

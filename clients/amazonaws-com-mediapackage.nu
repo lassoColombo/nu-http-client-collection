@@ -118,7 +118,7 @@ def origination-completer [] { ["ALLOW" "DENY"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "channels-configure-logs logs" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "configure-logs" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -144,7 +144,7 @@ export def commands []: nothing -> table {
 # operationId: ConfigureLogs
 # --egressAccessLogs shape: {LogGroupName?: any}
 # --ingressAccessLogs shape: {LogGroupName?: any}
-export def "channels-configure-logs logs" [
+export def "configure-logs" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -194,7 +194,7 @@ export def "channels-configure-logs logs" [
 #
 # POST /channels
 # operationId: CreateChannel
-export def "channels create" [
+export def "create-channel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -243,7 +243,7 @@ export def "channels create" [
 #
 # GET /channels
 # operationId: ListChannels
-export def "channels list" [
+export def "list-channels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -292,7 +292,7 @@ export def "channels list" [
 # POST /harvest_jobs
 # operationId: CreateHarvestJob
 # --s3Destination shape: {BucketName?: any, ManifestKey?: any, RoleArn?: any}
-export def "harvest-jobs create" [
+export def "create-harvest-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -343,7 +343,7 @@ export def "harvest-jobs create" [
 #
 # GET /harvest_jobs
 # operationId: ListHarvestJobs
-export def "harvest-jobs list" [
+export def "list-harvest-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -398,7 +398,7 @@ export def "harvest-jobs list" [
 # --dashPackage shape: {AdTriggers?: any, AdsOnDeliveryRestrictions?: any, Encryption?: any, IncludeIframeOnlyStream?: any, ManifestLayout?: any, ManifestWindowSeconds?: any, MinBufferTimeSeconds?: any, MinUpdatePeriodSeconds?: any, PeriodTriggers?: any, Profile?: any, SegmentDurationSeconds?: any, SegmentTemplateFormat?: any, StreamSelection?: any, SuggestedPresentationDelaySeconds?: any, UtcTiming?: any, UtcTimingUri?: any}
 # --hlsPackage shape: {AdMarkers?: any, AdTriggers?: any, AdsOnDeliveryRestrictions?: any, Encryption?: any, IncludeDvbSubtitles?: any, IncludeIframeOnlyStream?: any, PlaylistType?: any, PlaylistWindowSeconds?: any, ProgramDateTimeIntervalSeconds?: any, SegmentDurationSeconds?: any, StreamSelection?: any, UseAudioRenditionGroup?: any}
 # --mssPackage shape: {Encryption?: any, ManifestWindowSeconds?: any, SegmentDurationSeconds?: any, StreamSelection?: any}
-export def "origin-endpoints create" [
+export def "create-origin-endpoint" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -458,7 +458,7 @@ export def "origin-endpoints create" [
 #
 # GET /origin_endpoints
 # operationId: ListOriginEndpoints
-export def "origin-endpoints list" [
+export def "list-origin-endpoints" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -507,7 +507,7 @@ export def "origin-endpoints list" [
 #
 # DELETE /channels/{id}
 # operationId: DeleteChannel
-export def "channels delete" [
+export def "delete-channel" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -552,7 +552,7 @@ export def "channels delete" [
 #
 # GET /channels/{id}
 # operationId: DescribeChannel
-export def "channels get" [
+export def "describe-channel" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -597,7 +597,7 @@ export def "channels get" [
 #
 # PUT /channels/{id}
 # operationId: UpdateChannel
-export def "channels update" [
+export def "update-channel" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -646,7 +646,7 @@ export def "channels update" [
 #
 # DELETE /origin_endpoints/{id}
 # operationId: DeleteOriginEndpoint
-export def "origin-endpoints delete" [
+export def "delete-origin-endpoint" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -691,7 +691,7 @@ export def "origin-endpoints delete" [
 #
 # GET /origin_endpoints/{id}
 # operationId: DescribeOriginEndpoint
-export def "origin-endpoints get" [
+export def "describe-origin-endpoint" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -741,7 +741,7 @@ export def "origin-endpoints get" [
 # --dashPackage shape: {AdTriggers?: any, AdsOnDeliveryRestrictions?: any, Encryption?: any, IncludeIframeOnlyStream?: any, ManifestLayout?: any, ManifestWindowSeconds?: any, MinBufferTimeSeconds?: any, MinUpdatePeriodSeconds?: any, PeriodTriggers?: any, Profile?: any, SegmentDurationSeconds?: any, SegmentTemplateFormat?: any, StreamSelection?: any, SuggestedPresentationDelaySeconds?: any, UtcTiming?: any, UtcTimingUri?: any}
 # --hlsPackage shape: {AdMarkers?: any, AdTriggers?: any, AdsOnDeliveryRestrictions?: any, Encryption?: any, IncludeDvbSubtitles?: any, IncludeIframeOnlyStream?: any, PlaylistType?: any, PlaylistWindowSeconds?: any, ProgramDateTimeIntervalSeconds?: any, SegmentDurationSeconds?: any, StreamSelection?: any, UseAudioRenditionGroup?: any}
 # --mssPackage shape: {Encryption?: any, ManifestWindowSeconds?: any, SegmentDurationSeconds?: any, StreamSelection?: any}
-export def "origin-endpoints update" [
+export def "update-origin-endpoint" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -800,7 +800,7 @@ export def "origin-endpoints update" [
 #
 # GET /harvest_jobs/{id}
 # operationId: DescribeHarvestJob
-export def "harvest-jobs get" [
+export def "describe-harvest-job" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -844,7 +844,7 @@ export def "harvest-jobs get" [
 # GET /tags/{resource-arn}
 #
 # operationId: ListTagsForResource
-export def "tags list" [
+export def "list-tags-for-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -888,7 +888,7 @@ export def "tags list" [
 # POST /tags/{resource-arn}
 #
 # operationId: TagResource
-export def "tags tag" [
+export def "tag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -939,7 +939,7 @@ export def "tags tag" [
 # DEPRECATED
 # operationId: RotateChannelCredentials
 @deprecated
-export def "channels-credentials update-rotate" [
+export def "rotate-channel-credentials" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -984,7 +984,7 @@ export def "channels-credentials update-rotate" [
 #
 # PUT /channels/{id}/ingest_endpoints/{ingest_endpoint_id}/credentials
 # operationId: RotateIngestEndpointCredentials
-export def "channels-ingest-endpoints-credentials update-rotate" [
+export def "rotate-ingest-endpoint-credentials" [
   id: string
   ingest_endpoint_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1030,7 +1030,7 @@ export def "channels-ingest-endpoints-credentials update-rotate" [
 # DELETE /tags/{resource-arn}
 #
 # operationId: UntagResource
-export def "tags untag" [
+export def "untag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

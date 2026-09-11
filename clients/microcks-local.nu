@@ -146,7 +146,7 @@ def runner-type-completer [] { ["ASYNC_API_SCHEMA" "GRAPHQL_SCHEMA" "GRPC_PROTOB
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "artifact-upload upload" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "upload-artifact" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -170,7 +170,7 @@ export def commands []: nothing -> table {
 #
 # POST /artifact/upload
 # operationId: uploadArtifact
-export def "artifact-upload upload" [
+export def "upload-artifact" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -212,7 +212,7 @@ export def "artifact-upload upload" [
 #
 # GET /export
 # operationId: exportSnapshot
-export def "export export-snapshot" [
+export def "export-snapshot" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -248,7 +248,7 @@ export def "export export-snapshot" [
 #
 # GET /features/config
 # operationId: GetFeaturesConfiguration
-export def "features-config get-configuration" [
+export def "get-features-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -282,7 +282,7 @@ export def "features-config get-configuration" [
 #
 # POST /import
 # operationId: importSnapshot
-export def "import import-snapshot" [
+export def "import-snapshot" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -322,7 +322,7 @@ export def "import import-snapshot" [
 #
 # GET /jobs
 # operationId: GetImportJobs
-export def "jobs get-import" [
+export def "get-import-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -363,7 +363,7 @@ export def "jobs get-import" [
 # --metadata shape: {annotations?: record, createdOn: int, labels?: record, lastUpdate: int}
 # --secretRef shape: {name: string, secretId: string}
 # --serviceRefs item shape: {name: string, serviceId: string, version: string}
-export def "jobs create-import" [
+export def "create-import-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -414,7 +414,7 @@ export def "jobs create-import" [
 #
 # GET /jobs/count
 # operationId: GetImportJobCounter
-export def "jobs-count get-import-counter" [
+export def "get-import-job-counter" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -448,7 +448,7 @@ export def "jobs-count get-import-counter" [
 #
 # DELETE /jobs/{id}
 # operationId: DeleteImportJob
-export def "jobs delete-import" [
+export def "delete-import-job" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -483,7 +483,7 @@ export def "jobs delete-import" [
 # Get ImportJob
 #
 # GET /jobs/{id}
-export def "jobs get" [
+export def "get-jobs-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -521,7 +521,7 @@ export def "jobs get" [
 # --metadata shape: {annotations?: record, createdOn: int, labels?: record, lastUpdate: int}
 # --secretRef shape: {name: string, secretId: string}
 # --serviceRefs item shape: {name: string, serviceId: string, version: string}
-export def "jobs create" [
+export def "post-jobs-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -574,7 +574,7 @@ export def "jobs create" [
 #
 # PUT /jobs/{id}/activate
 # operationId: ActivateImportJob
-export def "jobs-activate import" [
+export def "activate-import-job" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -610,7 +610,7 @@ export def "jobs-activate import" [
 #
 # PUT /jobs/{id}/start
 # operationId: StartImportJob
-export def "jobs-start import" [
+export def "start-import-job" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -646,7 +646,7 @@ export def "jobs-start import" [
 #
 # PUT /jobs/{id}/stop
 # operationId: StopImportJob
-export def "jobs-stop import" [
+export def "stop-import-job" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -682,7 +682,7 @@ export def "jobs-stop import" [
 #
 # GET /keycloak/config
 # operationId: GetKeycloakConfig
-export def "keycloak-config get" [
+export def "get-keycloak-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -716,7 +716,7 @@ export def "keycloak-config get" [
 #
 # GET /metrics/conformance/aggregate
 # operationId: GetConformanceMetricsAggregation
-export def "metrics-conformance-aggregate get-aggregation" [
+export def "get-conformance-metrics-aggregation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -750,7 +750,7 @@ export def "metrics-conformance-aggregate get-aggregation" [
 #
 # GET /metrics/conformance/service/{serviceId}
 # operationId: GetServiceTestConformanceMetric
-export def "metrics-conformance-service get-test" [
+export def "get-service-test-conformance-metric" [
   service_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -786,7 +786,7 @@ export def "metrics-conformance-service get-test" [
 #
 # GET /metrics/invocations/global
 # operationId: GetAggregatedInvocationsStats
-export def "metrics-invocations-global get-aggregated-stats" [
+export def "get-aggregated-invocations-stats" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -822,7 +822,7 @@ export def "metrics-invocations-global get-aggregated-stats" [
 #
 # GET /metrics/invocations/global/latest
 # operationId: GetLatestAggregatedInvocationsStats
-export def "metrics-invocations-global-latest get-aggregated-stats" [
+export def "get-latest-aggregated-invocations-stats" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -858,7 +858,7 @@ export def "metrics-invocations-global-latest get-aggregated-stats" [
 #
 # GET /metrics/invocations/top
 # operationId: GetTopIvnocationsStatsByDay
-export def "metrics-invocations-top get-ivnocations-stats-by-day" [
+export def "get-top-ivnocations-stats-by-day" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -895,7 +895,7 @@ export def "metrics-invocations-top get-ivnocations-stats-by-day" [
 #
 # GET /metrics/invocations/{serviceName}/{serviceVersion}
 # operationId: GetInvocationStatsByService
-export def "metrics-invocations get-stats-by-service" [
+export def "get-invocation-stats-by-service" [
   service_name: string
   service_version: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -935,7 +935,7 @@ export def "metrics-invocations get-stats-by-service" [
 #
 # GET /metrics/tests/latest
 # operationId: GetLatestTestResults
-export def "metrics-tests-latest get-results" [
+export def "get-latest-test-results" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -971,7 +971,7 @@ export def "metrics-tests-latest get-results" [
 #
 # GET /resources/service/{serviceId}
 # operationId: GetResourcesByService
-export def "resources-service get" [
+export def "get-resources-by-service" [
   service_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1007,7 +1007,7 @@ export def "resources-service get" [
 #
 # GET /resources/{name}
 # operationId: GetResource
-export def "resources get" [
+export def "get-resource" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1043,7 +1043,7 @@ export def "resources get" [
 #
 # GET /secrets
 # operationId: GetSecrets
-export def "secrets list" [
+export def "get-secrets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1080,7 +1080,7 @@ export def "secrets list" [
 #
 # POST /secrets
 # operationId: CreateSecret
-export def "secrets create" [
+export def "create-secret" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1125,7 +1125,7 @@ export def "secrets create" [
 #
 # GET /secrets/count
 # operationId: GetSecretsCounter
-export def "secrets-count get-counter" [
+export def "get-secrets-counter" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1159,7 +1159,7 @@ export def "secrets-count get-counter" [
 #
 # DELETE /secrets/{id}
 # operationId: DeleteSecret
-export def "secrets delete" [
+export def "delete-secret" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1195,7 +1195,7 @@ export def "secrets delete" [
 #
 # GET /secrets/{id}
 # operationId: GetSecret
-export def "secrets get" [
+export def "get-secret" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1231,7 +1231,7 @@ export def "secrets get" [
 #
 # PUT /secrets/{id}
 # operationId: UpdateSecret
-export def "secrets update" [
+export def "update-secret" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1267,7 +1267,7 @@ export def "secrets update" [
 #
 # GET /services
 # operationId: GetServices
-export def "services list" [
+export def "get-services" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1304,7 +1304,7 @@ export def "services list" [
 #
 # GET /services/count
 # operationId: GetServicesCounter
-export def "services-count get-counter" [
+export def "get-services-counter" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1338,7 +1338,7 @@ export def "services-count get-counter" [
 #
 # GET /services/labels
 # operationId: GetServicesLabels
-export def "services-labels get" [
+export def "get-services-labels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1372,7 +1372,7 @@ export def "services-labels get" [
 #
 # GET /services/search
 # operationId: SearchServices
-export def "services-search list" [
+export def "search-services" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1408,7 +1408,7 @@ export def "services-search list" [
 #
 # DELETE /services/{id}
 # operationId: DeleteService
-export def "services delete" [
+export def "delete-service" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1444,7 +1444,7 @@ export def "services delete" [
 #
 # GET /services/{id}
 # operationId: GetService
-export def "services get" [
+export def "get-service" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1482,7 +1482,7 @@ export def "services get" [
 #
 # PUT /services/{id}/metadata
 # operationId: UpdateServiceMetadata
-export def "services-metadata update" [
+export def "update-service-metadata" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1526,7 +1526,7 @@ export def "services-metadata update" [
 # PUT /services/{id}/operation
 # operationId: OverrideServiceOperation
 # --parameterConstraints item shape: {in?: "path"|"query"|"header", mustMatchRegexp?: string, name: string, recopy?: bool, required?: bool}
-export def "services-operation update-override" [
+export def "override-service-operation" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1571,7 +1571,7 @@ export def "services-operation update-override" [
 #
 # POST /tests
 # operationId: CreateTest
-export def "tests create" [
+export def "create-test" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1615,7 +1615,7 @@ export def "tests create" [
 #
 # GET /tests/service/{serviceId}
 # operationId: GetTestResultsByService
-export def "tests-service get-results" [
+export def "get-test-results-by-service" [
   service_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1651,7 +1651,7 @@ export def "tests-service get-results" [
 #
 # GET /tests/service/{serviceId}/count
 # operationId: GetTestResultsByServiceCounter
-export def "tests-service-count get-results-by-counter" [
+export def "get-test-results-by-service-counter" [
   service_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1687,7 +1687,7 @@ export def "tests-service-count get-results-by-counter" [
 #
 # GET /tests/{id}
 # operationId: GetTestResult
-export def "tests get-result" [
+export def "get-test-result" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1723,7 +1723,7 @@ export def "tests get-result" [
 #
 # GET /tests/{id}/events/{testCaseId}
 # operationId: GetEventsByTestCase
-export def "tests-events get-by-case" [
+export def "get-events-by-test-case" [
   id: string
   test_case_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1761,7 +1761,7 @@ export def "tests-events get-by-case" [
 #
 # GET /tests/{id}/messages/{testCaseId}
 # operationId: GetMessagesByTestCase
-export def "tests-messages get-by-case" [
+export def "get-messages-by-test-case" [
   id: string
   test_case_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1799,7 +1799,7 @@ export def "tests-messages get-by-case" [
 #
 # POST /tests/{id}/testCaseResult
 # operationId: ReportTestCaseResult
-export def "tests-test-case-result test-report" [
+export def "report-test-case-result" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

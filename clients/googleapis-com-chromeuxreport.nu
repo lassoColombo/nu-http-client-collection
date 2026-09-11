@@ -102,7 +102,7 @@ def form-factor-completer [] { ["ALL_FORM_FACTORS" "DESKTOP" "PHONE" "TABLET"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "records-query-history-record list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "chromeuxreport-records-query-history-record" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -126,7 +126,7 @@ export def commands []: nothing -> table {
 #
 # POST /v1/records:queryHistoryRecord
 # operationId: chromeuxreport.records.queryHistoryRecord
-export def "records-query-history-record list" [
+export def "chromeuxreport-records-query-history-record" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -179,7 +179,7 @@ export def "records-query-history-record list" [
 #
 # POST /v1/records:queryRecord
 # operationId: chromeuxreport.records.queryRecord
-export def "records-query-record list" [
+export def "chromeuxreport-records-query-record" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

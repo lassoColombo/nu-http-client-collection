@@ -137,7 +137,7 @@ def output-version-format-completer [] { ["V1" "V2" "VERSION_FORMAT_UNSPECIFIED"
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "entries-copy copy" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "logging-entries-copy" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -161,7 +161,7 @@ export def commands []: nothing -> table {
 #
 # POST /v2/entries:copy
 # operationId: logging.entries.copy
-export def "entries-copy copy" [
+export def "logging-entries-copy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -213,7 +213,7 @@ export def "entries-copy copy" [
 #
 # POST /v2/entries:list
 # operationId: logging.entries.list
-export def "entries-list list" [
+export def "logging-entries-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -268,7 +268,7 @@ export def "entries-list list" [
 #
 # POST /v2/entries:tail
 # operationId: logging.entries.tail
-export def "entries-tail create" [
+export def "logging-entries-tail" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -322,7 +322,7 @@ export def "entries-tail create" [
 # operationId: logging.entries.write
 # --entries item shape: {httpRequest?: record, insertId?: string, jsonPayload?: record, labels?: record, logName?: string, metadata?: record, operation?: record, protoPayload?: record, resource?: record, severity?: "DEFAULT"|"DEBUG"|"INFO"|"NOTICE"|"WARNING"|"ERROR"|"CRITICAL"|"ALERT"|"EMERGENCY", sourceLocation?: record, spanId?: string, split?: record, textPayload?: string, timestamp?: string, trace?: string, traceSampled?: bool}
 # --resource shape: {labels?: record, type?: string}
-export def "entries-write create" [
+export def "logging-entries-write" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -377,7 +377,7 @@ export def "entries-write create" [
 #
 # GET /v2/monitoredResourceDescriptors
 # operationId: logging.monitoredResourceDescriptors.list
-export def "monitored-resource-descriptors list" [
+export def "logging-monitored-resource-descriptors-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -425,7 +425,7 @@ export def "monitored-resource-descriptors list" [
 #
 # DELETE /v2/{logName}
 # operationId: logging.projects.logs.delete
-export def "projects delete-by-log-name" [
+export def "logging-projects-logs-delete" [
   log_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -473,7 +473,7 @@ export def "projects delete-by-log-name" [
 #
 # DELETE /v2/{metricName}
 # operationId: logging.projects.metrics.delete
-export def "projects delete-by-metric-name" [
+export def "logging-projects-metrics-delete" [
   metric_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -521,7 +521,7 @@ export def "projects delete-by-metric-name" [
 #
 # GET /v2/{metricName}
 # operationId: logging.projects.metrics.get
-export def "projects get-by-metric-name" [
+export def "logging-projects-metrics-get" [
   metric_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -571,7 +571,7 @@ export def "projects get-by-metric-name" [
 # operationId: logging.projects.metrics.update
 # --bucketOptions shape: {explicitBuckets?: record, exponentialBuckets?: record, linearBuckets?: record}
 # --metricDescriptor shape: {description?: string, displayName?: string, labels?: list, launchStage?: "LAUNCH_STAGE_UNSPECIFIED"|"UNIMPLEMENTED"|"PRELAUNCH"|"EARLY_ACCESS"|"ALPHA"|"BETA"|"GA"|"DEPRECATED", metadata?: record, metricKind?: "METRIC_KIND_UNSPECIFIED"|"GAUGE"|"DELTA"|"CUMULATIVE", monitoredResourceTypes?: list<string>, name?: string, type?: string, unit?: string, valueType?: "VALUE_TYPE_UNSPECIFIED"|"BOOL"|"INT64"|"DOUBLE"|"STRING"|"DISTRIBUTION"|"MONEY"}
-export def "projects update-by-metric-name" [
+export def "logging-projects-metrics-update" [
   metric_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -632,7 +632,7 @@ export def "projects update-by-metric-name" [
 #
 # DELETE /v2/{name}
 # operationId: logging.projects.locations.buckets.views.delete
-export def "projects delete-by-name" [
+export def "logging-projects-locations-buckets-views-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -680,7 +680,7 @@ export def "projects delete-by-name" [
 #
 # GET /v2/{name}
 # operationId: logging.projects.locations.operations.get
-export def "projects get-by-name" [
+export def "logging-projects-locations-operations-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -728,7 +728,7 @@ export def "projects get-by-name" [
 #
 # PATCH /v2/{name}
 # operationId: logging.projects.locations.buckets.views.patch
-export def "projects update-by-name" [
+export def "logging-projects-locations-buckets-views-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -783,7 +783,7 @@ export def "projects update-by-name" [
 #
 # GET /v2/{name}/cmekSettings
 # operationId: logging.getCmekSettings
-export def "cmek-settings get" [
+export def "logging-get-cmek-settings" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -831,7 +831,7 @@ export def "cmek-settings get" [
 #
 # PATCH /v2/{name}/cmekSettings
 # operationId: logging.updateCmekSettings
-export def "cmek-settings update" [
+export def "logging-update-cmek-settings" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -885,7 +885,7 @@ export def "cmek-settings update" [
 #
 # GET /v2/{name}/locations
 # operationId: logging.projects.locations.list
-export def "locations list" [
+export def "logging-projects-locations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -936,7 +936,7 @@ export def "locations list" [
 #
 # GET /v2/{name}/operations
 # operationId: logging.projects.locations.operations.list
-export def "operations list" [
+export def "logging-projects-locations-operations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -987,7 +987,7 @@ export def "operations list" [
 #
 # GET /v2/{name}/settings
 # operationId: logging.getSettings
-export def "settings get" [
+export def "logging-get-settings" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1035,7 +1035,7 @@ export def "settings get" [
 #
 # PATCH /v2/{name}/settings
 # operationId: logging.updateSettings
-export def "settings update" [
+export def "logging-update-settings" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1090,7 +1090,7 @@ export def "settings update" [
 #
 # POST /v2/{name}:cancel
 # operationId: logging.projects.locations.operations.cancel
-export def "projects cancel" [
+export def "logging-projects-locations-operations-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1142,7 +1142,7 @@ export def "projects cancel" [
 #
 # POST /v2/{name}:undelete
 # operationId: logging.projects.locations.buckets.undelete
-export def "projects create-undelete" [
+export def "logging-projects-locations-buckets-undelete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1196,7 +1196,7 @@ export def "projects create-undelete" [
 # operationId: logging.projects.locations.buckets.updateAsync
 # --cmekSettings shape: {kmsKeyName?: string, kmsKeyVersionName?: string}
 # --indexConfigs item shape: {fieldPath?: string, type?: "INDEX_TYPE_UNSPECIFIED"|"INDEX_TYPE_STRING"|"INDEX_TYPE_INTEGER"}
-export def "projects update-async" [
+export def "logging-projects-locations-buckets-update-async" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1255,7 +1255,7 @@ export def "projects update-async" [
 #
 # GET /v2/{parent}/buckets
 # operationId: logging.projects.locations.buckets.list
-export def "buckets list" [
+export def "logging-projects-locations-buckets-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1307,7 +1307,7 @@ export def "buckets list" [
 # operationId: logging.projects.locations.buckets.create
 # --cmekSettings shape: {kmsKeyName?: string, kmsKeyVersionName?: string}
 # --indexConfigs item shape: {fieldPath?: string, type?: "INDEX_TYPE_UNSPECIFIED"|"INDEX_TYPE_STRING"|"INDEX_TYPE_INTEGER"}
-export def "buckets create" [
+export def "logging-projects-locations-buckets-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1368,7 +1368,7 @@ export def "buckets create" [
 # operationId: logging.projects.locations.buckets.createAsync
 # --cmekSettings shape: {kmsKeyName?: string, kmsKeyVersionName?: string}
 # --indexConfigs item shape: {fieldPath?: string, type?: "INDEX_TYPE_UNSPECIFIED"|"INDEX_TYPE_STRING"|"INDEX_TYPE_INTEGER"}
-export def "buckets-create-async create" [
+export def "logging-projects-locations-buckets-create-async" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1427,7 +1427,7 @@ export def "buckets-create-async create" [
 #
 # GET /v2/{parent}/exclusions
 # operationId: logging.projects.exclusions.list
-export def "exclusions list" [
+export def "logging-projects-exclusions-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1477,7 +1477,7 @@ export def "exclusions list" [
 #
 # POST /v2/{parent}/exclusions
 # operationId: logging.projects.exclusions.create
-export def "exclusions create" [
+export def "logging-projects-exclusions-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1532,7 +1532,7 @@ export def "exclusions create" [
 #
 # GET /v2/{parent}/links
 # operationId: logging.projects.locations.buckets.links.list
-export def "links list" [
+export def "logging-projects-locations-buckets-links-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1582,7 +1582,7 @@ export def "links list" [
 #
 # POST /v2/{parent}/links
 # operationId: logging.projects.locations.buckets.links.create
-export def "links create" [
+export def "logging-projects-locations-buckets-links-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1637,7 +1637,7 @@ export def "links create" [
 #
 # GET /v2/{parent}/logs
 # operationId: logging.projects.logs.list
-export def "logs list" [
+export def "logging-projects-logs-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1688,7 +1688,7 @@ export def "logs list" [
 #
 # GET /v2/{parent}/metrics
 # operationId: logging.projects.metrics.list
-export def "metrics list" [
+export def "logging-projects-metrics-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1740,7 +1740,7 @@ export def "metrics list" [
 # operationId: logging.projects.metrics.create
 # --bucketOptions shape: {explicitBuckets?: record, exponentialBuckets?: record, linearBuckets?: record}
 # --metricDescriptor shape: {description?: string, displayName?: string, labels?: list, launchStage?: "LAUNCH_STAGE_UNSPECIFIED"|"UNIMPLEMENTED"|"PRELAUNCH"|"EARLY_ACCESS"|"ALPHA"|"BETA"|"GA"|"DEPRECATED", metadata?: record, metricKind?: "METRIC_KIND_UNSPECIFIED"|"GAUGE"|"DELTA"|"CUMULATIVE", monitoredResourceTypes?: list<string>, name?: string, type?: string, unit?: string, valueType?: "VALUE_TYPE_UNSPECIFIED"|"BOOL"|"INT64"|"DOUBLE"|"STRING"|"DISTRIBUTION"|"MONEY"}
-export def "metrics create" [
+export def "logging-projects-metrics-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1801,7 +1801,7 @@ export def "metrics create" [
 #
 # GET /v2/{parent}/sinks
 # operationId: logging.sinks.list
-export def "sinks list" [
+export def "logging-sinks-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1853,7 +1853,7 @@ export def "sinks list" [
 # operationId: logging.sinks.create
 # --bigqueryOptions shape: {usePartitionedTables?: bool}
 # --exclusions item shape: {description?: string, disabled?: bool, filter?: string, name?: string}
-export def "sinks create" [
+export def "logging-sinks-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1914,7 +1914,7 @@ export def "sinks create" [
 #
 # GET /v2/{parent}/views
 # operationId: logging.projects.locations.buckets.views.list
-export def "views list" [
+export def "logging-projects-locations-buckets-views-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1964,7 +1964,7 @@ export def "views list" [
 #
 # POST /v2/{parent}/views
 # operationId: logging.projects.locations.buckets.views.create
-export def "views create" [
+export def "logging-projects-locations-buckets-views-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2019,7 +2019,7 @@ export def "views create" [
 #
 # DELETE /v2/{sinkName}
 # operationId: logging.sinks.delete
-export def "sinks delete" [
+export def "logging-sinks-delete" [
   sink_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2067,7 +2067,7 @@ export def "sinks delete" [
 #
 # GET /v2/{sinkName}
 # operationId: logging.sinks.get
-export def "sinks get" [
+export def "logging-sinks-get" [
   sink_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2117,7 +2117,7 @@ export def "sinks get" [
 # operationId: logging.projects.sinks.patch
 # --bigqueryOptions shape: {usePartitionedTables?: bool}
 # --exclusions item shape: {description?: string, disabled?: bool, filter?: string, name?: string}
-export def "projects update-by-sink-name" [
+export def "logging-projects-sinks-patch" [
   sink_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2181,7 +2181,7 @@ export def "projects update-by-sink-name" [
 # operationId: logging.sinks.update
 # --bigqueryOptions shape: {usePartitionedTables?: bool}
 # --exclusions item shape: {description?: string, disabled?: bool, filter?: string, name?: string}
-export def "sinks update" [
+export def "logging-sinks-update" [
   sink_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

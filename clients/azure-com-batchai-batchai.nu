@@ -122,7 +122,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-batch-ai-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.BatchAI/operations
 # operationId: Operations_List
-export def "providers-microsoft-batch-ai-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -182,7 +182,7 @@ export def "providers-microsoft-batch-ai-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.BatchAI/locations/{location}/usages
 # operationId: Usages_List
-export def "subscriptions-providers-microsoft-batch-ai-locations-usages list" [
+export def "usages-list" [
   subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -222,7 +222,7 @@ export def "subscriptions-providers-microsoft-batch-ai-locations-usages list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.BatchAI/workspaces
 # operationId: Workspaces_List
-export def "subscriptions-providers-microsoft-batch-ai-workspaces list" [
+export def "workspaces-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -261,7 +261,7 @@ export def "subscriptions-providers-microsoft-batch-ai-workspaces list" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BatchAI/workspaces
 # operationId: Workspaces_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces list" [
+export def "workspaces-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -302,7 +302,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BatchAI/workspaces/{workspaceName}
 # operationId: Workspaces_Delete
-export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces delete" [
+export def "workspaces-delete" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -344,7 +344,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BatchAI/workspaces/{workspaceName}
 # operationId: Workspaces_Get
-export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces get" [
+export def "workspaces-get" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -386,7 +386,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BatchAI/workspaces/{workspaceName}
 # operationId: Workspaces_Update
-export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces update" [
+export def "workspaces-update" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -432,7 +432,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BatchAI/workspaces/{workspaceName}
 # operationId: Workspaces_Create
-export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces create" [
+export def "workspaces-create" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -479,7 +479,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BatchAI/workspaces/{workspaceName}/clusters
 # operationId: Clusters_ListByWorkspace
-export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces-clusters list" [
+export def "clusters-list-by-workspace" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -522,7 +522,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BatchAI/workspaces/{workspaceName}/clusters/{clusterName}
 # operationId: Clusters_Delete
-export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces-clusters delete" [
+export def "clusters-delete" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -566,7 +566,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BatchAI/workspaces/{workspaceName}/clusters/{clusterName}
 # operationId: Clusters_Get
-export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces-clusters get" [
+export def "clusters-get" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -611,7 +611,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BatchAI/workspaces/{workspaceName}/clusters/{clusterName}
 # operationId: Clusters_Update
 # --properties shape: {scaleSettings?: any}
-export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces-clusters update" [
+export def "clusters-update" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -660,7 +660,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BatchAI/workspaces/{workspaceName}/clusters/{clusterName}
 # operationId: Clusters_Create
 # --properties shape: {nodeSetup?: any, scaleSettings?: any, subnet?: any, userAccountSettings: any, virtualMachineConfiguration?: any, vmPriority?: "dedicated"|"lowpriority", vmSize: string}
-export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces-clusters create" [
+export def "clusters-create" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -708,7 +708,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BatchAI/workspaces/{workspaceName}/clusters/{clusterName}/listRemoteLoginInformation
 # operationId: Clusters_ListRemoteLoginInformation
-export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces-clusters-list-remote-login-information list" [
+export def "clusters-list-remote-login-information" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -752,7 +752,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BatchAI/workspaces/{workspaceName}/experiments
 # operationId: Experiments_ListByWorkspace
-export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces-experiments list" [
+export def "experiments-list-by-workspace" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -795,7 +795,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BatchAI/workspaces/{workspaceName}/experiments/{experimentName}
 # operationId: Experiments_Delete
-export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces-experiments delete" [
+export def "experiments-delete" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -839,7 +839,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BatchAI/workspaces/{workspaceName}/experiments/{experimentName}
 # operationId: Experiments_Get
-export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces-experiments get" [
+export def "experiments-get" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -883,7 +883,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BatchAI/workspaces/{workspaceName}/experiments/{experimentName}
 # operationId: Experiments_Create
-export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces-experiments create" [
+export def "experiments-create" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -927,7 +927,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BatchAI/workspaces/{workspaceName}/experiments/{experimentName}/jobs
 # operationId: Jobs_ListByExperiment
-export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces-experiments-jobs list" [
+export def "jobs-list-by-experiment" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -972,7 +972,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BatchAI/workspaces/{workspaceName}/experiments/{experimentName}/jobs/{jobName}
 # operationId: Jobs_Delete
-export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces-experiments-jobs delete" [
+export def "jobs-delete" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -1018,7 +1018,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BatchAI/workspaces/{workspaceName}/experiments/{experimentName}/jobs/{jobName}
 # operationId: Jobs_Get
-export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces-experiments-jobs get" [
+export def "jobs-get" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -1065,7 +1065,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BatchAI/workspaces/{workspaceName}/experiments/{experimentName}/jobs/{jobName}
 # operationId: Jobs_Create
 # --properties shape: {caffe2Settings?: any, caffeSettings?: any, chainerSettings?: any, cluster: any, cntkSettings?: any, constraints?: any, containerSettings?: any, customMpiSettings?: any, customToolkitSettings?: any, environmentVariables?: list, horovodSettings?: any, inputDirectories?: list, jobPreparation?: any, mountVolumes?: any, nodeCount: int, outputDirectories?: list, pyTorchSettings?: any, schedulingPriority?: "low"|"normal"|"high", secrets?: list, stdOutErrPathPrefix: string, tensorFlowSettings?: any}
-export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces-experiments-jobs create" [
+export def "jobs-create" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -1115,7 +1115,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BatchAI/workspaces/{workspaceName}/experiments/{experimentName}/jobs/{jobName}/listOutputFiles
 # operationId: Jobs_ListOutputFiles
-export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces-experiments-jobs-list-output-files list" [
+export def "jobs-list-output-files" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -1165,7 +1165,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BatchAI/workspaces/{workspaceName}/experiments/{experimentName}/jobs/{jobName}/listRemoteLoginInformation
 # operationId: Jobs_ListRemoteLoginInformation
-export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces-experiments-jobs-list-remote-login-information list" [
+export def "jobs-list-remote-login-information" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -1211,7 +1211,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BatchAI/workspaces/{workspaceName}/experiments/{experimentName}/jobs/{jobName}/terminate
 # operationId: Jobs_Terminate
-export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces-experiments-jobs-terminate create" [
+export def "jobs-terminate" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -1257,7 +1257,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BatchAI/workspaces/{workspaceName}/fileServers
 # operationId: FileServers_ListByWorkspace
-export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces-file-servers list" [
+export def "file-servers-list-by-workspace" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -1300,7 +1300,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BatchAI/workspaces/{workspaceName}/fileServers/{fileServerName}
 # operationId: FileServers_Delete
-export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces-file-servers delete" [
+export def "file-servers-delete" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -1344,7 +1344,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BatchAI/workspaces/{workspaceName}/fileServers/{fileServerName}
 # operationId: FileServers_Get
-export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces-file-servers get" [
+export def "file-servers-get" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -1389,7 +1389,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BatchAI/workspaces/{workspaceName}/fileServers/{fileServerName}
 # operationId: FileServers_Create
 # --properties shape: {dataDisks: any, sshConfiguration: any, subnet?: any, vmSize: string}
-export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces-file-servers create" [
+export def "file-servers-create" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string

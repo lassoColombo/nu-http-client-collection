@@ -128,7 +128,7 @@ def format-completer [] { ["CSV"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "reports create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-reports" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -151,7 +151,7 @@ export def commands []: nothing -> table {
 # Post a report to the data hub
 #
 # POST /reports
-export def "reports create" [
+export def "post-reports" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -193,7 +193,7 @@ export def "reports create" [
 # The settings for all organizations of the system. Must have admin access.
 #
 # GET /settings/organizations
-export def "settings-organizations list" [
+export def "get-settings-organizations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -226,7 +226,7 @@ export def "settings-organizations list" [
 # Retrived the last modified for all settings of the system. Must have admin access.
 #
 # HEAD /settings/organizations
-export def "settings-organizations head" [
+export def "head-settings-organizations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -259,7 +259,7 @@ export def "settings-organizations head" [
 # Delete an organization (and the associated receivers and senders)
 #
 # DELETE /settings/organizations/{organizationName}
-export def "settings-organizations delete" [
+export def "delete-settings-organizations-organization-name" [
   organization_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -294,7 +294,7 @@ export def "settings-organizations delete" [
 # A single organization settings
 #
 # GET /settings/organizations/{organizationName}
-export def "settings-organizations get" [
+export def "get-settings-organizations-organization-name" [
   organization_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -329,7 +329,7 @@ export def "settings-organizations get" [
 # Create or update the direct settings associated with an organization
 #
 # PUT /settings/organizations/{organizationName}
-export def "settings-organizations update" [
+export def "put-settings-organizations-organization-name" [
   organization_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -373,7 +373,7 @@ export def "settings-organizations update" [
 # A list of receivers and their current settings
 #
 # GET /settings/organizations/{organizationName}/receivers
-export def "settings-organizations-receivers list" [
+export def "get-settings-organizations-organization-name-receivers" [
   organization_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -408,7 +408,7 @@ export def "settings-organizations-receivers list" [
 # Delete a receiver
 #
 # DELETE /settings/organizations/{organizationName}/receivers/{receiverName}
-export def "settings-organizations-receivers delete" [
+export def "delete-settings-organizations-organization-name-receivers-receiver-name" [
   organization_name: string
   receiver_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -445,7 +445,7 @@ export def "settings-organizations-receivers delete" [
 # The settings of a single of receiver
 #
 # GET /settings/organizations/{organizationName}/receivers/{receiverName}
-export def "settings-organizations-receivers get" [
+export def "get-settings-organizations-organization-name-receivers-receiver-name" [
   organization_name: string
   receiver_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -484,7 +484,7 @@ export def "settings-organizations-receivers get" [
 # PUT /settings/organizations/{organizationName}/receivers/{receiverName}
 # --jurisdictionalFilters item shape: {doesNotMatch?: bool, matchFields?: "FACILITY_OR_PATIENT_ADDRESS"|"FACILITY_ADDRESS"|"FACILITY_NAME"|"ABNORMAL_VALUE", matchValues?: list<string>}
 # --timing shape: {dailyAt?: float, frequency: "REAL_TIME"|"HOURLY"|"DAILY"}
-export def "settings-organizations-receivers update" [
+export def "put-settings-organizations-organization-name-receivers-receiver-name" [
   organization_name: string
   receiver_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -531,7 +531,7 @@ export def "settings-organizations-receivers update" [
 # A list of senders
 #
 # GET /settings/organizations/{organizationName}/senders
-export def "settings-organizations-senders list" [
+export def "get-settings-organizations-organization-name-senders" [
   organization_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -566,7 +566,7 @@ export def "settings-organizations-senders list" [
 # Delete a sender
 #
 # DELETE /settings/organizations/{organizationName}/senders/{senderName}
-export def "settings-organizations-senders delete" [
+export def "delete-settings-organizations-organization-name-senders-sender-name" [
   organization_name: string
   sender_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -603,7 +603,7 @@ export def "settings-organizations-senders delete" [
 # The settings of a single of sender
 #
 # GET /settings/organizations/{organizationName}/senders/{senderName}
-export def "settings-organizations-senders get" [
+export def "get-settings-organizations-organization-name-senders-sender-name" [
   organization_name: string
   sender_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -640,7 +640,7 @@ export def "settings-organizations-senders get" [
 # Update a single sender
 #
 # PUT /settings/organizations/{organizationName}/senders/{senderName}
-export def "settings-organizations-senders update" [
+export def "put-settings-organizations-organization-name-senders-sender-name" [
   organization_name: string
   sender_name: string
   --base-url(-b): string@base-url-completer # API base URL

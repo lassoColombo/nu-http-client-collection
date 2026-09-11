@@ -122,7 +122,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-sql-managed-instances-databases list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "managed-databases-list-by-instance" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/managedInstances/{managedInstanceName}/databases
 # operationId: ManagedDatabases_ListByInstance
-export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instances-databases list" [
+export def "managed-databases-list-by-instance" [
   subscription_id: string
   resource_group_name: string
   managed_instance_name: string
@@ -188,7 +188,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instan
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/managedInstances/{managedInstanceName}/databases/{databaseName}
 # operationId: ManagedDatabases_Delete
-export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instances-databases delete" [
+export def "managed-databases-delete" [
   subscription_id: string
   resource_group_name: string
   managed_instance_name: string
@@ -232,7 +232,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instan
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/managedInstances/{managedInstanceName}/databases/{databaseName}
 # operationId: ManagedDatabases_Get
-export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instances-databases get" [
+export def "managed-databases-get" [
   subscription_id: string
   resource_group_name: string
   managed_instance_name: string
@@ -277,7 +277,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instan
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/managedInstances/{managedInstanceName}/databases/{databaseName}
 # operationId: ManagedDatabases_Update
 # --properties shape: {catalogCollation?: "DATABASE_DEFAULT"|"SQL_Latin1_General_CP1_CI_AS", collation?: string, createMode?: "Default"|"RestoreExternalBackup"|"PointInTimeRestore"|"Recovery", recoverableDatabaseId?: string, restorableDroppedDatabaseId?: string, restorePointInTime?: string, sourceDatabaseId?: string, storageContainerSasToken?: string, storageContainerUri?: string}
-export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instances-databases update" [
+export def "managed-databases-update" [
   subscription_id: string
   resource_group_name: string
   managed_instance_name: string
@@ -327,7 +327,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instan
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/managedInstances/{managedInstanceName}/databases/{databaseName}
 # operationId: ManagedDatabases_CreateOrUpdate
 # --properties shape: {catalogCollation?: "DATABASE_DEFAULT"|"SQL_Latin1_General_CP1_CI_AS", collation?: string, createMode?: "Default"|"RestoreExternalBackup"|"PointInTimeRestore"|"Recovery", recoverableDatabaseId?: string, restorableDroppedDatabaseId?: string, restorePointInTime?: string, sourceDatabaseId?: string, storageContainerSasToken?: string, storageContainerUri?: string}
-export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instances-databases create-or-update" [
+export def "managed-databases-create-or-update" [
   subscription_id: string
   resource_group_name: string
   managed_instance_name: string
@@ -377,7 +377,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instan
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/managedInstances/{managedInstanceName}/databases/{databaseName}/completeRestore
 # operationId: ManagedDatabases_CompleteRestore
-export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instances-databases-complete-restore complete" [
+export def "managed-databases-complete-restore" [
   subscription_id: string
   resource_group_name: string
   managed_instance_name: string
@@ -425,7 +425,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instan
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/managedInstances/{managedInstanceName}/databases/{databaseName}/restoreDetails/{restoreDetailsName}
 # operationId: ManagedDatabaseRestoreDetails_Get
-export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instances-databases-restore-details get" [
+export def "managed-database-restore-details-get" [
   subscription_id: string
   resource_group_name: string
   managed_instance_name: string

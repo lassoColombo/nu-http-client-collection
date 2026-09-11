@@ -137,7 +137,7 @@ def deletion-type-completer [] { ["cancel" "deletion_type_undefined" "transfer_t
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "apps-reseller-customers create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "reseller-customers-insert" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -163,7 +163,7 @@ export def commands []: nothing -> table {
 # operationId: reseller.customers.insert
 # --postalAddress shape: {addressLine1?: string, addressLine2?: string, addressLine3?: string, contactName?: string, countryCode?: string, kind?: string, locality?: string, organizationName?: string, postalCode?: string, region?: string}
 # --primaryAdmin shape: {primaryEmail?: string}
-export def "apps-reseller-customers create" [
+export def "reseller-customers-insert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -223,7 +223,7 @@ export def "apps-reseller-customers create" [
 #
 # GET /apps/reseller/v1/customers/{customerId}
 # operationId: reseller.customers.get
-export def "apps-reseller-customers get" [
+export def "reseller-customers-get" [
   customer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -273,7 +273,7 @@ export def "apps-reseller-customers get" [
 # operationId: reseller.customers.patch
 # --postalAddress shape: {addressLine1?: string, addressLine2?: string, addressLine3?: string, contactName?: string, countryCode?: string, kind?: string, locality?: string, organizationName?: string, postalCode?: string, region?: string}
 # --primaryAdmin shape: {primaryEmail?: string}
-export def "apps-reseller-customers update-by-customer-id" [
+export def "reseller-customers-patch" [
   customer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -336,7 +336,7 @@ export def "apps-reseller-customers update-by-customer-id" [
 # operationId: reseller.customers.update
 # --postalAddress shape: {addressLine1?: string, addressLine2?: string, addressLine3?: string, contactName?: string, countryCode?: string, kind?: string, locality?: string, organizationName?: string, postalCode?: string, region?: string}
 # --primaryAdmin shape: {primaryEmail?: string}
-export def "apps-reseller-customers update-by-customer-id-1" [
+export def "reseller-customers-update" [
   customer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -402,7 +402,7 @@ export def "apps-reseller-customers update-by-customer-id-1" [
 # --seats shape: {kind?: string, licensedNumberOfSeats?: int, maximumNumberOfSeats?: int, numberOfSeats?: int}
 # --transferInfo shape: {currentLegacySkuId?: string, minimumTransferableSeats?: int, transferabilityExpirationTime?: string}
 # --trialSettings shape: {isInTrial?: bool, trialEndTime?: string}
-export def "apps-reseller-customers-subscriptions create" [
+export def "reseller-subscriptions-insert" [
   customer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -472,7 +472,7 @@ export def "apps-reseller-customers-subscriptions create" [
 #
 # DELETE /apps/reseller/v1/customers/{customerId}/subscriptions/{subscriptionId}
 # operationId: reseller.subscriptions.delete
-export def "apps-reseller-customers-subscriptions delete" [
+export def "reseller-subscriptions-delete" [
   customer_id: string
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -523,7 +523,7 @@ export def "apps-reseller-customers-subscriptions delete" [
 #
 # GET /apps/reseller/v1/customers/{customerId}/subscriptions/{subscriptionId}
 # operationId: reseller.subscriptions.get
-export def "apps-reseller-customers-subscriptions get" [
+export def "reseller-subscriptions-get" [
   customer_id: string
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -573,7 +573,7 @@ export def "apps-reseller-customers-subscriptions get" [
 #
 # POST /apps/reseller/v1/customers/{customerId}/subscriptions/{subscriptionId}/activate
 # operationId: reseller.subscriptions.activate
-export def "apps-reseller-customers-subscriptions-activate create" [
+export def "reseller-subscriptions-activate" [
   customer_id: string
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -624,7 +624,7 @@ export def "apps-reseller-customers-subscriptions-activate create" [
 # POST /apps/reseller/v1/customers/{customerId}/subscriptions/{subscriptionId}/changePlan
 # operationId: reseller.subscriptions.changePlan
 # --seats shape: {kind?: string, licensedNumberOfSeats?: int, maximumNumberOfSeats?: int, numberOfSeats?: int}
-export def "apps-reseller-customers-subscriptions-change-plan create" [
+export def "reseller-subscriptions-change-plan" [
   customer_id: string
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -682,7 +682,7 @@ export def "apps-reseller-customers-subscriptions-change-plan create" [
 #
 # POST /apps/reseller/v1/customers/{customerId}/subscriptions/{subscriptionId}/changeRenewalSettings
 # operationId: reseller.subscriptions.changeRenewalSettings
-export def "apps-reseller-customers-subscriptions-change-renewal-settings create" [
+export def "reseller-subscriptions-change-renewal-settings" [
   customer_id: string
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -737,7 +737,7 @@ export def "apps-reseller-customers-subscriptions-change-renewal-settings create
 #
 # POST /apps/reseller/v1/customers/{customerId}/subscriptions/{subscriptionId}/changeSeats
 # operationId: reseller.subscriptions.changeSeats
-export def "apps-reseller-customers-subscriptions-change-seats create" [
+export def "reseller-subscriptions-change-seats" [
   customer_id: string
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -794,7 +794,7 @@ export def "apps-reseller-customers-subscriptions-change-seats create" [
 #
 # POST /apps/reseller/v1/customers/{customerId}/subscriptions/{subscriptionId}/startPaidService
 # operationId: reseller.subscriptions.startPaidService
-export def "apps-reseller-customers-subscriptions-start-paid-service start" [
+export def "reseller-subscriptions-start-paid-service" [
   customer_id: string
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -844,7 +844,7 @@ export def "apps-reseller-customers-subscriptions-start-paid-service start" [
 #
 # POST /apps/reseller/v1/customers/{customerId}/subscriptions/{subscriptionId}/suspend
 # operationId: reseller.subscriptions.suspend
-export def "apps-reseller-customers-subscriptions-suspend create" [
+export def "reseller-subscriptions-suspend" [
   customer_id: string
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -894,7 +894,7 @@ export def "apps-reseller-customers-subscriptions-suspend create" [
 #
 # GET /apps/reseller/v1/resellernotify/getwatchdetails
 # operationId: reseller.resellernotify.getwatchdetails
-export def "apps-reseller-resellernotify-get-watchdetails get" [
+export def "reseller-resellernotify-getwatchdetails" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -940,7 +940,7 @@ export def "apps-reseller-resellernotify-get-watchdetails get" [
 #
 # POST /apps/reseller/v1/resellernotify/register
 # operationId: reseller.resellernotify.register
-export def "apps-reseller-resellernotify-register create" [
+export def "reseller-resellernotify-register" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -987,7 +987,7 @@ export def "apps-reseller-resellernotify-register create" [
 #
 # POST /apps/reseller/v1/resellernotify/unregister
 # operationId: reseller.resellernotify.unregister
-export def "apps-reseller-resellernotify-unregister delete" [
+export def "reseller-resellernotify-unregister" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1034,7 +1034,7 @@ export def "apps-reseller-resellernotify-unregister delete" [
 #
 # GET /apps/reseller/v1/subscriptions
 # operationId: reseller.subscriptions.list
-export def "apps-reseller-subscriptions list" [
+export def "reseller-subscriptions-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)

@@ -131,7 +131,7 @@ def perimeter-type-completer [] { ["PERIMETER_TYPE_BRIDGE" "PERIMETER_TYPE_REGUL
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta-access-policies list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accesscontextmanager-access-policies-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -155,7 +155,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1beta/accessPolicies
 # operationId: accesscontextmanager.accessPolicies.list
-export def "v1beta-access-policies list" [
+export def "accesscontextmanager-access-policies-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -204,7 +204,7 @@ export def "v1beta-access-policies list" [
 #
 # POST /v1beta/accessPolicies
 # operationId: accesscontextmanager.accessPolicies.create
-export def "v1beta-access-policies create" [
+export def "accesscontextmanager-access-policies-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -256,7 +256,7 @@ export def "v1beta-access-policies create" [
 #
 # DELETE /v1beta/{name}
 # operationId: accesscontextmanager.accessPolicies.servicePerimeters.delete
-export def "v1beta delete" [
+export def "accesscontextmanager-access-policies-service-perimeters-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -304,7 +304,7 @@ export def "v1beta delete" [
 #
 # GET /v1beta/{name}
 # operationId: accesscontextmanager.operations.get
-export def "v1beta get" [
+export def "accesscontextmanager-operations-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -354,7 +354,7 @@ export def "v1beta get" [
 # PATCH /v1beta/{name}
 # operationId: accesscontextmanager.accessPolicies.servicePerimeters.patch
 # --status shape: {accessLevels?: list<string>, resources?: list<string>, restrictedServices?: list<string>, unrestrictedServices?: list<string>, vpcAccessibleServices?: record}
-export def "v1beta update" [
+export def "accesscontextmanager-access-policies-service-perimeters-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -411,7 +411,7 @@ export def "v1beta update" [
 #
 # GET /v1beta/{parent}/accessLevels
 # operationId: accesscontextmanager.accessPolicies.accessLevels.list
-export def "v1beta-access-levels list" [
+export def "accesscontextmanager-access-policies-access-levels-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -464,7 +464,7 @@ export def "v1beta-access-levels list" [
 # operationId: accesscontextmanager.accessPolicies.accessLevels.create
 # --basic shape: {combiningFunction?: "AND"|"OR", conditions?: list}
 # --custom shape: {expr?: record}
-export def "v1beta-access-levels create" [
+export def "accesscontextmanager-access-policies-access-levels-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -520,7 +520,7 @@ export def "v1beta-access-levels create" [
 #
 # GET /v1beta/{parent}/servicePerimeters
 # operationId: accesscontextmanager.accessPolicies.servicePerimeters.list
-export def "v1beta-service-perimeters list" [
+export def "accesscontextmanager-access-policies-service-perimeters-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -571,7 +571,7 @@ export def "v1beta-service-perimeters list" [
 # POST /v1beta/{parent}/servicePerimeters
 # operationId: accesscontextmanager.accessPolicies.servicePerimeters.create
 # --status shape: {accessLevels?: list<string>, resources?: list<string>, restrictedServices?: list<string>, unrestrictedServices?: list<string>, vpcAccessibleServices?: record}
-export def "v1beta-service-perimeters create" [
+export def "accesscontextmanager-access-policies-service-perimeters-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

@@ -121,7 +121,7 @@ def language-completer [] { ["en" "en-UK" "en-US" "es" "fr"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "bundles list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-v1-bundles" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -144,7 +144,7 @@ export def commands []: nothing -> table {
 # List bundles
 #
 # GET /v1/bundles
-export def "bundles list" [
+export def "get-v1-bundles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -181,7 +181,7 @@ export def "bundles list" [
 # Create a bundle
 #
 # POST /v1/bundles
-export def "bundles create" [
+export def "post-v1-bundles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -228,7 +228,7 @@ export def "bundles create" [
 # Delete a bundle
 #
 # DELETE /v1/bundles/{bundle_id}
-export def "bundles delete" [
+export def "delete-v1-bundles-bundle-id" [
   bundle_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -263,7 +263,7 @@ export def "bundles delete" [
 # Get a bundle
 #
 # GET /v1/bundles/{bundle_id}
-export def "bundles get" [
+export def "get-v1-bundles-bundle-id" [
   bundle_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -300,7 +300,7 @@ export def "bundles get" [
 # Update a bundle
 #
 # PUT /v1/bundles/{bundle_id}
-export def "bundles update" [
+export def "put-v1-bundles-bundle-id" [
   bundle_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -343,7 +343,7 @@ export def "bundles update" [
 # Get bundle insights
 #
 # GET /v1/bundles/{bundle_id}/insights
-export def "bundles-insights get" [
+export def "get-v1-bundles-bundle-id-insights" [
   bundle_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -378,7 +378,7 @@ export def "bundles-insights get" [
 # Request an insight to be run
 #
 # POST /v1/bundles/{bundle_id}/insights
-export def "bundles-insights create" [
+export def "post-v1-bundles-bundle-id-insights" [
   bundle_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -419,7 +419,7 @@ export def "bundles-insights create" [
 #
 # GET /v1/bundles/{bundle_id}/insights/{insight_id}
 # operationId: v1bundlesbundle_idinsightsinsight_id
-export def "bundles-insights get-v1bundlesbundle-idinsightsinsight" [
+export def "v1bundlesbundle-idinsightsinsight-id" [
   bundle_id: string
   insight_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -456,7 +456,7 @@ export def "bundles-insights get-v1bundlesbundle-idinsightsinsight" [
 # Delete bundle metadata
 #
 # DELETE /v1/bundles/{bundle_id}/metadata
-export def "bundles-metadata delete" [
+export def "delete-v1-bundles-bundle-id-metadata" [
   bundle_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -491,7 +491,7 @@ export def "bundles-metadata delete" [
 # Get bundle metadata
 #
 # GET /v1/bundles/{bundle_id}/metadata
-export def "bundles-metadata get" [
+export def "get-v1-bundles-bundle-id-metadata" [
   bundle_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -526,7 +526,7 @@ export def "bundles-metadata get" [
 # Update bundle metadata
 #
 # PUT /v1/bundles/{bundle_id}/metadata
-export def "bundles-metadata update" [
+export def "put-v1-bundles-bundle-id-metadata" [
   bundle_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -567,7 +567,7 @@ export def "bundles-metadata update" [
 # Delete bundle tracks
 #
 # DELETE /v1/bundles/{bundle_id}/tracks
-export def "bundles-tracks delete-by-bundle-id" [
+export def "delete-v1-bundles-bundle-id-tracks" [
   bundle_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -602,7 +602,7 @@ export def "bundles-tracks delete-by-bundle-id" [
 # Get bundle tracks
 #
 # GET /v1/bundles/{bundle_id}/tracks
-export def "bundles-tracks list" [
+export def "get-v1-bundles-bundle-id-tracks" [
   bundle_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -637,7 +637,7 @@ export def "bundles-tracks list" [
 # Add a track for a bundle
 #
 # POST /v1/bundles/{bundle_id}/tracks
-export def "bundles-tracks create" [
+export def "post-v1-bundles-bundle-id-tracks" [
   bundle_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -684,7 +684,7 @@ export def "bundles-tracks create" [
 # Update a tracks for a bundle
 #
 # PUT /v1/bundles/{bundle_id}/tracks
-export def "bundles-tracks update-by-bundle-id" [
+export def "put-v1-bundles-bundle-id-tracks" [
   bundle_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -725,7 +725,7 @@ export def "bundles-tracks update-by-bundle-id" [
 # Delete a bundle track
 #
 # DELETE /v1/bundles/{bundle_id}/tracks/{track_id}
-export def "bundles-tracks delete-by-bundle-id-track-id" [
+export def "delete-v1-bundles-bundle-id-tracks-track-id" [
   bundle_id: string
   track_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -762,7 +762,7 @@ export def "bundles-tracks delete-by-bundle-id-track-id" [
 # Get bundle track
 #
 # GET /v1/bundles/{bundle_id}/tracks/{track_id}
-export def "bundles-tracks get" [
+export def "get-v1-bundles-bundle-id-tracks-track-id" [
   bundle_id: string
   track_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -799,7 +799,7 @@ export def "bundles-tracks get" [
 # Add media to a track
 #
 # PUT /v1/bundles/{bundle_id}/tracks/{track_id}
-export def "bundles-tracks update-by-bundle-id-track-id" [
+export def "put-v1-bundles-bundle-id-tracks-track-id" [
   bundle_id: string
   track_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -847,7 +847,7 @@ export def "bundles-tracks update-by-bundle-id-track-id" [
 #
 # GET /v1/reports/scores
 # operationId: v1reportsscores
-export def "reports-scores get-v1reportsscores" [
+export def "v1reportsscores" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -887,7 +887,7 @@ export def "reports-scores get-v1reportsscores" [
 #
 # GET /v1/reports/trends
 # operationId: v1reportstrends
-export def "reports-trends get-v1reportstrends" [
+export def "v1reportstrends" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -926,7 +926,7 @@ export def "reports-trends get-v1reportstrends" [
 #
 # GET /v1/search
 # operationId: v1search
-export def "search get-v1search" [
+export def "v1search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

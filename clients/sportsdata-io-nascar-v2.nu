@@ -99,7 +99,7 @@ def auth-scheme-completer [] { ["ocp-apim-subscription-key" "query-key"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "driver-race-projections list-entry" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "driver-race-projections-entry-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -123,7 +123,7 @@ export def commands []: nothing -> table {
 #
 # GET /{format}/DriverRaceProjections/{raceid}
 # operationId: DriverRaceProjectionsEntryList
-export def "driver-race-projections list-entry" [
+export def "driver-race-projections-entry-list" [
   format: string
   raceid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -161,7 +161,7 @@ export def "driver-race-projections list-entry" [
 #
 # GET /{format}/driver/{driverid}
 # operationId: DriverDetails
-export def "driver get-details" [
+export def "driver-details" [
   format: string
   driverid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -199,7 +199,7 @@ export def "driver get-details" [
 #
 # GET /{format}/drivers
 # operationId: Drivers
-export def "drivers get" [
+export def "drivers" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -235,7 +235,7 @@ export def "drivers get" [
 #
 # GET /{format}/raceresult/{raceid}
 # operationId: RaceResults
-export def "raceresult get-race-results" [
+export def "race-results" [
   format: string
   raceid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -273,7 +273,7 @@ export def "raceresult get-race-results" [
 #
 # GET /{format}/races/{season}
 # operationId: RacesSchedule
-export def "races get-schedule" [
+export def "races-schedule" [
   format: string
   season: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -311,7 +311,7 @@ export def "races get-schedule" [
 #
 # GET /{format}/series
 # operationId: Series
-export def "series get" [
+export def "series" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

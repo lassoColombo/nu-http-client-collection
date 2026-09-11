@@ -259,7 +259,7 @@ def x-amz-target-completer-158 [] { ["Lightsail_20161128.UpdateRelationalDatabas
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-allocate-static-ip" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "allocate-static-ip" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -283,7 +283,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AllocateStaticIp
-export def "api create-allocate-static-ip" [
+export def "allocate-static-ip" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -331,7 +331,7 @@ export def "api create-allocate-static-ip" [
 #
 # POST /
 # operationId: AttachCertificateToDistribution
-export def "api attach-certificate-to-distribution" [
+export def "attach-certificate-to-distribution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -380,7 +380,7 @@ export def "api attach-certificate-to-distribution" [
 #
 # POST /
 # operationId: AttachDisk
-export def "api attach-disk" [
+export def "attach-disk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -431,7 +431,7 @@ export def "api attach-disk" [
 #
 # POST /
 # operationId: AttachInstancesToLoadBalancer
-export def "api attach-instances-to-load-balancer" [
+export def "attach-instances-to-load-balancer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -480,7 +480,7 @@ export def "api attach-instances-to-load-balancer" [
 #
 # POST /
 # operationId: AttachLoadBalancerTlsCertificate
-export def "api attach-load-balancer-tls-certificate" [
+export def "attach-load-balancer-tls-certificate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -529,7 +529,7 @@ export def "api attach-load-balancer-tls-certificate" [
 #
 # POST /
 # operationId: AttachStaticIp
-export def "api attach-static-ip" [
+export def "attach-static-ip" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -578,7 +578,7 @@ export def "api attach-static-ip" [
 #
 # POST /
 # operationId: CloseInstancePublicPorts
-export def "api close-instance-public-ports" [
+export def "close-instance-public-ports" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -627,7 +627,7 @@ export def "api close-instance-public-ports" [
 #
 # POST /
 # operationId: CopySnapshot
-export def "api copy-snapshot" [
+export def "copy-snapshot" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -680,7 +680,7 @@ export def "api copy-snapshot" [
 #
 # POST /
 # operationId: CreateBucket
-export def "api create-bucket" [
+export def "create-bucket" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -731,7 +731,7 @@ export def "api create-bucket" [
 #
 # POST /
 # operationId: CreateBucketAccessKey
-export def "api create-bucket-access-key" [
+export def "create-bucket-access-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -779,7 +779,7 @@ export def "api create-bucket-access-key" [
 #
 # POST /
 # operationId: CreateCertificate
-export def "api create-certificate" [
+export def "create-certificate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -830,7 +830,7 @@ export def "api create-certificate" [
 #
 # POST /
 # operationId: CreateCloudFormationStack
-export def "api create-cloud-formation-stack" [
+export def "create-cloud-formation-stack" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -878,7 +878,7 @@ export def "api create-cloud-formation-stack" [
 #
 # POST /
 # operationId: CreateContactMethod
-export def "api create-contact-method" [
+export def "create-contact-method" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -927,7 +927,7 @@ export def "api create-contact-method" [
 #
 # POST /
 # operationId: CreateContainerService
-export def "api create-container-service" [
+export def "create-container-service" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -981,7 +981,7 @@ export def "api create-container-service" [
 #
 # POST /
 # operationId: CreateContainerServiceDeployment
-export def "api create-container-service-deployment" [
+export def "create-container-service-deployment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1031,7 +1031,7 @@ export def "api create-container-service-deployment" [
 #
 # POST /
 # operationId: CreateContainerServiceRegistryLogin
-export def "api create-container-service-registry-login" [
+export def "create-container-service-registry-login" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1079,7 +1079,7 @@ export def "api create-container-service-registry-login" [
 #
 # POST /
 # operationId: CreateDisk
-export def "api create-disk" [
+export def "create-disk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1131,7 +1131,7 @@ export def "api create-disk" [
 #
 # POST /
 # operationId: CreateDiskFromSnapshot
-export def "api create-disk-from-snapshot" [
+export def "create-disk-from-snapshot" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1187,7 +1187,7 @@ export def "api create-disk-from-snapshot" [
 #
 # POST /
 # operationId: CreateDiskSnapshot
-export def "api create-disk-snapshot" [
+export def "create-disk-snapshot" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1238,7 +1238,7 @@ export def "api create-disk-snapshot" [
 #
 # POST /
 # operationId: CreateDistribution
-export def "api create-distribution" [
+export def "create-distribution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1293,7 +1293,7 @@ export def "api create-distribution" [
 #
 # POST /
 # operationId: CreateDomain
-export def "api create-domain" [
+export def "create-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1342,7 +1342,7 @@ export def "api create-domain" [
 #
 # POST /
 # operationId: CreateDomainEntry
-export def "api create-domain-entry" [
+export def "create-domain-entry" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1391,7 +1391,7 @@ export def "api create-domain-entry" [
 #
 # POST /
 # operationId: CreateGUISessionAccessDetails
-export def "api create-gui-session-access-details" [
+export def "create-gui-session-access-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1439,7 +1439,7 @@ export def "api create-gui-session-access-details" [
 #
 # POST /
 # operationId: CreateInstanceSnapshot
-export def "api create-instance-snapshot" [
+export def "create-instance-snapshot" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1489,7 +1489,7 @@ export def "api create-instance-snapshot" [
 #
 # POST /
 # operationId: CreateInstances
-export def "api create-instances" [
+export def "create-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1546,7 +1546,7 @@ export def "api create-instances" [
 #
 # POST /
 # operationId: CreateInstancesFromSnapshot
-export def "api create-instances-from-snapshot" [
+export def "create-instances-from-snapshot" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1606,7 +1606,7 @@ export def "api create-instances-from-snapshot" [
 #
 # POST /
 # operationId: CreateKeyPair
-export def "api create-key-pair" [
+export def "create-key-pair" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1655,7 +1655,7 @@ export def "api create-key-pair" [
 #
 # POST /
 # operationId: CreateLoadBalancer
-export def "api create-load-balancer" [
+export def "create-load-balancer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1711,7 +1711,7 @@ export def "api create-load-balancer" [
 #
 # POST /
 # operationId: CreateLoadBalancerTlsCertificate
-export def "api create-load-balancer-tls-certificate" [
+export def "create-load-balancer-tls-certificate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1763,7 +1763,7 @@ export def "api create-load-balancer-tls-certificate" [
 #
 # POST /
 # operationId: CreateRelationalDatabase
-export def "api create-relational-database" [
+export def "create-relational-database" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1821,7 +1821,7 @@ export def "api create-relational-database" [
 #
 # POST /
 # operationId: CreateRelationalDatabaseFromSnapshot
-export def "api create-relational-database-from-snapshot" [
+export def "create-relational-database-from-snapshot" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1877,7 +1877,7 @@ export def "api create-relational-database-from-snapshot" [
 #
 # POST /
 # operationId: CreateRelationalDatabaseSnapshot
-export def "api create-relational-database-snapshot" [
+export def "create-relational-database-snapshot" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1927,7 +1927,7 @@ export def "api create-relational-database-snapshot" [
 #
 # POST /
 # operationId: DeleteAlarm
-export def "api delete-alarm" [
+export def "delete-alarm" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1975,7 +1975,7 @@ export def "api delete-alarm" [
 #
 # POST /
 # operationId: DeleteAutoSnapshot
-export def "api delete-auto-snapshot" [
+export def "delete-auto-snapshot" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2024,7 +2024,7 @@ export def "api delete-auto-snapshot" [
 #
 # POST /
 # operationId: DeleteBucket
-export def "api delete-bucket" [
+export def "delete-bucket" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2073,7 +2073,7 @@ export def "api delete-bucket" [
 #
 # POST /
 # operationId: DeleteBucketAccessKey
-export def "api delete-bucket-access-key" [
+export def "delete-bucket-access-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2122,7 +2122,7 @@ export def "api delete-bucket-access-key" [
 #
 # POST /
 # operationId: DeleteCertificate
-export def "api delete-certificate" [
+export def "delete-certificate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2170,7 +2170,7 @@ export def "api delete-certificate" [
 #
 # POST /
 # operationId: DeleteContactMethod
-export def "api delete-contact-method" [
+export def "delete-contact-method" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2218,7 +2218,7 @@ export def "api delete-contact-method" [
 #
 # POST /
 # operationId: DeleteContainerImage
-export def "api delete-container-image" [
+export def "delete-container-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2267,7 +2267,7 @@ export def "api delete-container-image" [
 #
 # POST /
 # operationId: DeleteContainerService
-export def "api delete-container-service" [
+export def "delete-container-service" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2315,7 +2315,7 @@ export def "api delete-container-service" [
 #
 # POST /
 # operationId: DeleteDisk
-export def "api delete-disk" [
+export def "delete-disk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2364,7 +2364,7 @@ export def "api delete-disk" [
 #
 # POST /
 # operationId: DeleteDiskSnapshot
-export def "api delete-disk-snapshot" [
+export def "delete-disk-snapshot" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2412,7 +2412,7 @@ export def "api delete-disk-snapshot" [
 #
 # POST /
 # operationId: DeleteDistribution
-export def "api delete-distribution" [
+export def "delete-distribution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2460,7 +2460,7 @@ export def "api delete-distribution" [
 #
 # POST /
 # operationId: DeleteDomain
-export def "api delete-domain" [
+export def "delete-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2508,7 +2508,7 @@ export def "api delete-domain" [
 #
 # POST /
 # operationId: DeleteDomainEntry
-export def "api delete-domain-entry" [
+export def "delete-domain-entry" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2557,7 +2557,7 @@ export def "api delete-domain-entry" [
 #
 # POST /
 # operationId: DeleteInstance
-export def "api delete-instance" [
+export def "delete-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2606,7 +2606,7 @@ export def "api delete-instance" [
 #
 # POST /
 # operationId: DeleteInstanceSnapshot
-export def "api delete-instance-snapshot" [
+export def "delete-instance-snapshot" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2654,7 +2654,7 @@ export def "api delete-instance-snapshot" [
 #
 # POST /
 # operationId: DeleteKeyPair
-export def "api delete-key-pair" [
+export def "delete-key-pair" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2703,7 +2703,7 @@ export def "api delete-key-pair" [
 #
 # POST /
 # operationId: DeleteKnownHostKeys
-export def "api delete-known-host-keys" [
+export def "delete-known-host-keys" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2751,7 +2751,7 @@ export def "api delete-known-host-keys" [
 #
 # POST /
 # operationId: DeleteLoadBalancer
-export def "api delete-load-balancer" [
+export def "delete-load-balancer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2799,7 +2799,7 @@ export def "api delete-load-balancer" [
 #
 # POST /
 # operationId: DeleteLoadBalancerTlsCertificate
-export def "api delete-load-balancer-tls-certificate" [
+export def "delete-load-balancer-tls-certificate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2849,7 +2849,7 @@ export def "api delete-load-balancer-tls-certificate" [
 #
 # POST /
 # operationId: DeleteRelationalDatabase
-export def "api delete-relational-database" [
+export def "delete-relational-database" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2899,7 +2899,7 @@ export def "api delete-relational-database" [
 #
 # POST /
 # operationId: DeleteRelationalDatabaseSnapshot
-export def "api delete-relational-database-snapshot" [
+export def "delete-relational-database-snapshot" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2947,7 +2947,7 @@ export def "api delete-relational-database-snapshot" [
 #
 # POST /
 # operationId: DetachCertificateFromDistribution
-export def "api create-detach-certificate-from-distribution" [
+export def "detach-certificate-from-distribution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2995,7 +2995,7 @@ export def "api create-detach-certificate-from-distribution" [
 #
 # POST /
 # operationId: DetachDisk
-export def "api create-detach-disk" [
+export def "detach-disk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3043,7 +3043,7 @@ export def "api create-detach-disk" [
 #
 # POST /
 # operationId: DetachInstancesFromLoadBalancer
-export def "api create-detach-instances-from-load-balancer" [
+export def "detach-instances-from-load-balancer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3092,7 +3092,7 @@ export def "api create-detach-instances-from-load-balancer" [
 #
 # POST /
 # operationId: DetachStaticIp
-export def "api create-detach-static-ip" [
+export def "detach-static-ip" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3140,7 +3140,7 @@ export def "api create-detach-static-ip" [
 #
 # POST /
 # operationId: DisableAddOn
-export def "api disable-create" [
+export def "disable-add-on" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3189,7 +3189,7 @@ export def "api disable-create" [
 #
 # POST /
 # operationId: DownloadDefaultKeyPair
-export def "api download-default-key-pair" [
+export def "download-default-key-pair" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3237,7 +3237,7 @@ export def "api download-default-key-pair" [
 #
 # POST /
 # operationId: EnableAddOn
-export def "api enable-create" [
+export def "enable-add-on" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3286,7 +3286,7 @@ export def "api enable-create" [
 #
 # POST /
 # operationId: ExportSnapshot
-export def "api export-snapshot" [
+export def "export-snapshot" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3334,7 +3334,7 @@ export def "api export-snapshot" [
 #
 # POST /
 # operationId: GetActiveNames
-export def "api get-active-names" [
+export def "get-active-names" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3382,7 +3382,7 @@ export def "api get-active-names" [
 #
 # POST /
 # operationId: GetAlarms
-export def "api get-alarms" [
+export def "get-alarms" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3432,7 +3432,7 @@ export def "api get-alarms" [
 #
 # POST /
 # operationId: GetAutoSnapshots
-export def "api get-auto-snapshots" [
+export def "get-auto-snapshots" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3480,7 +3480,7 @@ export def "api get-auto-snapshots" [
 #
 # POST /
 # operationId: GetBlueprints
-export def "api get-blueprints" [
+export def "get-blueprints" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3530,7 +3530,7 @@ export def "api get-blueprints" [
 #
 # POST /
 # operationId: GetBucketAccessKeys
-export def "api get-bucket-access-keys" [
+export def "get-bucket-access-keys" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3578,7 +3578,7 @@ export def "api get-bucket-access-keys" [
 #
 # POST /
 # operationId: GetBucketBundles
-export def "api get-bucket-bundles" [
+export def "get-bucket-bundles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3626,7 +3626,7 @@ export def "api get-bucket-bundles" [
 #
 # POST /
 # operationId: GetBucketMetricData
-export def "api get-bucket-metric-data" [
+export def "get-bucket-metric-data" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3680,7 +3680,7 @@ export def "api get-bucket-metric-data" [
 #
 # POST /
 # operationId: GetBuckets
-export def "api get-buckets" [
+export def "get-buckets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3730,7 +3730,7 @@ export def "api get-buckets" [
 #
 # POST /
 # operationId: GetBundles
-export def "api get-bundles" [
+export def "get-bundles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3780,7 +3780,7 @@ export def "api get-bundles" [
 #
 # POST /
 # operationId: GetCertificates
-export def "api get-certificates" [
+export def "get-certificates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3830,7 +3830,7 @@ export def "api get-certificates" [
 #
 # POST /
 # operationId: GetCloudFormationStackRecords
-export def "api get-cloud-formation-stack-records" [
+export def "get-cloud-formation-stack-records" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3878,7 +3878,7 @@ export def "api get-cloud-formation-stack-records" [
 #
 # POST /
 # operationId: GetContactMethods
-export def "api get-contact-methods" [
+export def "get-contact-methods" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3926,7 +3926,7 @@ export def "api get-contact-methods" [
 #
 # POST /
 # operationId: GetContainerAPIMetadata
-export def "api get-container-metadata" [
+export def "get-container-api-metadata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3974,7 +3974,7 @@ export def "api get-container-metadata" [
 #
 # POST /
 # operationId: GetContainerImages
-export def "api get-container-images" [
+export def "get-container-images" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4022,7 +4022,7 @@ export def "api get-container-images" [
 #
 # POST /
 # operationId: GetContainerLog
-export def "api get-container-log" [
+export def "get-container-log" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4075,7 +4075,7 @@ export def "api get-container-log" [
 #
 # POST /
 # operationId: GetContainerServiceDeployments
-export def "api get-container-service-deployments" [
+export def "get-container-service-deployments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4123,7 +4123,7 @@ export def "api get-container-service-deployments" [
 #
 # POST /
 # operationId: GetContainerServiceMetricData
-export def "api get-container-service-metric-data" [
+export def "get-container-service-metric-data" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4176,7 +4176,7 @@ export def "api get-container-service-metric-data" [
 #
 # POST /
 # operationId: GetContainerServicePowers
-export def "api get-container-service-powers" [
+export def "get-container-service-powers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4224,7 +4224,7 @@ export def "api get-container-service-powers" [
 #
 # POST /
 # operationId: GetContainerServices
-export def "api get-container-services" [
+export def "get-container-services" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4272,7 +4272,7 @@ export def "api get-container-services" [
 #
 # POST /
 # operationId: GetCostEstimate
-export def "api get-cost-estimate" [
+export def "get-cost-estimate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4322,7 +4322,7 @@ export def "api get-cost-estimate" [
 #
 # POST /
 # operationId: GetDisk
-export def "api get-disk" [
+export def "get-disk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4370,7 +4370,7 @@ export def "api get-disk" [
 #
 # POST /
 # operationId: GetDiskSnapshot
-export def "api get-disk-snapshot" [
+export def "get-disk-snapshot" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4418,7 +4418,7 @@ export def "api get-disk-snapshot" [
 #
 # POST /
 # operationId: GetDiskSnapshots
-export def "api get-disk-snapshots" [
+export def "get-disk-snapshots" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4466,7 +4466,7 @@ export def "api get-disk-snapshots" [
 #
 # POST /
 # operationId: GetDisks
-export def "api get-disks" [
+export def "get-disks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4514,7 +4514,7 @@ export def "api get-disks" [
 #
 # POST /
 # operationId: GetDistributionBundles
-export def "api get-distribution-bundles" [
+export def "get-distribution-bundles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4562,7 +4562,7 @@ export def "api get-distribution-bundles" [
 #
 # POST /
 # operationId: GetDistributionLatestCacheReset
-export def "api get-distribution-latest-cache-reset" [
+export def "get-distribution-latest-cache-reset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4610,7 +4610,7 @@ export def "api get-distribution-latest-cache-reset" [
 #
 # POST /
 # operationId: GetDistributionMetricData
-export def "api get-distribution-metric-data" [
+export def "get-distribution-metric-data" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4664,7 +4664,7 @@ export def "api get-distribution-metric-data" [
 #
 # POST /
 # operationId: GetDistributions
-export def "api get-distributions" [
+export def "get-distributions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4713,7 +4713,7 @@ export def "api get-distributions" [
 #
 # POST /
 # operationId: GetDomain
-export def "api get-domain" [
+export def "get-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4761,7 +4761,7 @@ export def "api get-domain" [
 #
 # POST /
 # operationId: GetDomains
-export def "api get-domains" [
+export def "get-domains" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4809,7 +4809,7 @@ export def "api get-domains" [
 #
 # POST /
 # operationId: GetExportSnapshotRecords
-export def "api get-export-snapshot-records" [
+export def "get-export-snapshot-records" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4857,7 +4857,7 @@ export def "api get-export-snapshot-records" [
 #
 # POST /
 # operationId: GetInstance
-export def "api get-instance" [
+export def "get-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4905,7 +4905,7 @@ export def "api get-instance" [
 #
 # POST /
 # operationId: GetInstanceAccessDetails
-export def "api get-instance-access-details" [
+export def "get-instance-access-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4954,7 +4954,7 @@ export def "api get-instance-access-details" [
 #
 # POST /
 # operationId: GetInstanceMetricData
-export def "api get-instance-metric-data" [
+export def "get-instance-metric-data" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5008,7 +5008,7 @@ export def "api get-instance-metric-data" [
 #
 # POST /
 # operationId: GetInstancePortStates
-export def "api get-instance-port-states" [
+export def "get-instance-port-states" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5056,7 +5056,7 @@ export def "api get-instance-port-states" [
 #
 # POST /
 # operationId: GetInstanceSnapshot
-export def "api get-instance-snapshot" [
+export def "get-instance-snapshot" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5104,7 +5104,7 @@ export def "api get-instance-snapshot" [
 #
 # POST /
 # operationId: GetInstanceSnapshots
-export def "api get-instance-snapshots" [
+export def "get-instance-snapshots" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5152,7 +5152,7 @@ export def "api get-instance-snapshots" [
 #
 # POST /
 # operationId: GetInstanceState
-export def "api get-instance-state" [
+export def "get-instance-state" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5200,7 +5200,7 @@ export def "api get-instance-state" [
 #
 # POST /
 # operationId: GetInstances
-export def "api get-instances" [
+export def "get-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5248,7 +5248,7 @@ export def "api get-instances" [
 #
 # POST /
 # operationId: GetKeyPair
-export def "api get-key-pair" [
+export def "get-key-pair" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5296,7 +5296,7 @@ export def "api get-key-pair" [
 #
 # POST /
 # operationId: GetKeyPairs
-export def "api get-key-pairs" [
+export def "get-key-pairs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5345,7 +5345,7 @@ export def "api get-key-pairs" [
 #
 # POST /
 # operationId: GetLoadBalancer
-export def "api get-load-balancer" [
+export def "get-load-balancer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5393,7 +5393,7 @@ export def "api get-load-balancer" [
 #
 # POST /
 # operationId: GetLoadBalancerMetricData
-export def "api get-load-balancer-metric-data" [
+export def "get-load-balancer-metric-data" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5447,7 +5447,7 @@ export def "api get-load-balancer-metric-data" [
 #
 # POST /
 # operationId: GetLoadBalancerTlsCertificates
-export def "api get-load-balancer-tls-certificates" [
+export def "get-load-balancer-tls-certificates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5495,7 +5495,7 @@ export def "api get-load-balancer-tls-certificates" [
 #
 # POST /
 # operationId: GetLoadBalancerTlsPolicies
-export def "api get-load-balancer-tls-policies" [
+export def "get-load-balancer-tls-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5543,7 +5543,7 @@ export def "api get-load-balancer-tls-policies" [
 #
 # POST /
 # operationId: GetLoadBalancers
-export def "api get-load-balancers" [
+export def "get-load-balancers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5591,7 +5591,7 @@ export def "api get-load-balancers" [
 #
 # POST /
 # operationId: GetOperation
-export def "api get-operation" [
+export def "get-operation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5639,7 +5639,7 @@ export def "api get-operation" [
 #
 # POST /
 # operationId: GetOperations
-export def "api get-operations" [
+export def "get-operations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5687,7 +5687,7 @@ export def "api get-operations" [
 #
 # POST /
 # operationId: GetOperationsForResource
-export def "api get-operations-for-resource" [
+export def "get-operations-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5736,7 +5736,7 @@ export def "api get-operations-for-resource" [
 #
 # POST /
 # operationId: GetRegions
-export def "api get-regions" [
+export def "get-regions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5785,7 +5785,7 @@ export def "api get-regions" [
 #
 # POST /
 # operationId: GetRelationalDatabase
-export def "api get-relational-database" [
+export def "get-relational-database" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5833,7 +5833,7 @@ export def "api get-relational-database" [
 #
 # POST /
 # operationId: GetRelationalDatabaseBlueprints
-export def "api get-relational-database-blueprints" [
+export def "get-relational-database-blueprints" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5881,7 +5881,7 @@ export def "api get-relational-database-blueprints" [
 #
 # POST /
 # operationId: GetRelationalDatabaseBundles
-export def "api get-relational-database-bundles" [
+export def "get-relational-database-bundles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5930,7 +5930,7 @@ export def "api get-relational-database-bundles" [
 #
 # POST /
 # operationId: GetRelationalDatabaseEvents
-export def "api get-relational-database-events" [
+export def "get-relational-database-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5980,7 +5980,7 @@ export def "api get-relational-database-events" [
 #
 # POST /
 # operationId: GetRelationalDatabaseLogEvents
-export def "api get-relational-database-log-events" [
+export def "get-relational-database-log-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6033,7 +6033,7 @@ export def "api get-relational-database-log-events" [
 #
 # POST /
 # operationId: GetRelationalDatabaseLogStreams
-export def "api get-relational-database-log-streams" [
+export def "get-relational-database-log-streams" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6081,7 +6081,7 @@ export def "api get-relational-database-log-streams" [
 #
 # POST /
 # operationId: GetRelationalDatabaseMasterUserPassword
-export def "api get-relational-database-master-user-password" [
+export def "get-relational-database-master-user-password" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6130,7 +6130,7 @@ export def "api get-relational-database-master-user-password" [
 #
 # POST /
 # operationId: GetRelationalDatabaseMetricData
-export def "api get-relational-database-metric-data" [
+export def "get-relational-database-metric-data" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6184,7 +6184,7 @@ export def "api get-relational-database-metric-data" [
 #
 # POST /
 # operationId: GetRelationalDatabaseParameters
-export def "api get-relational-database-parameters" [
+export def "get-relational-database-parameters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6233,7 +6233,7 @@ export def "api get-relational-database-parameters" [
 #
 # POST /
 # operationId: GetRelationalDatabaseSnapshot
-export def "api get-relational-database-snapshot" [
+export def "get-relational-database-snapshot" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6281,7 +6281,7 @@ export def "api get-relational-database-snapshot" [
 #
 # POST /
 # operationId: GetRelationalDatabaseSnapshots
-export def "api get-relational-database-snapshots" [
+export def "get-relational-database-snapshots" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6329,7 +6329,7 @@ export def "api get-relational-database-snapshots" [
 #
 # POST /
 # operationId: GetRelationalDatabases
-export def "api get-relational-databases" [
+export def "get-relational-databases" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6377,7 +6377,7 @@ export def "api get-relational-databases" [
 #
 # POST /
 # operationId: GetStaticIp
-export def "api get-static-ip" [
+export def "get-static-ip" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6425,7 +6425,7 @@ export def "api get-static-ip" [
 #
 # POST /
 # operationId: GetStaticIps
-export def "api get-static-ips" [
+export def "get-static-ips" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6473,7 +6473,7 @@ export def "api get-static-ips" [
 #
 # POST /
 # operationId: ImportKeyPair
-export def "api import-key-pair" [
+export def "import-key-pair" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6522,7 +6522,7 @@ export def "api import-key-pair" [
 #
 # POST /
 # operationId: IsVpcPeered
-export def "api create-is-vpc-peered" [
+export def "is-vpc-peered" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6570,7 +6570,7 @@ export def "api create-is-vpc-peered" [
 #
 # POST /
 # operationId: OpenInstancePublicPorts
-export def "api open-instance-public-ports" [
+export def "open-instance-public-ports" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6619,7 +6619,7 @@ export def "api open-instance-public-ports" [
 #
 # POST /
 # operationId: PeerVpc
-export def "api create-peer-vpc" [
+export def "peer-vpc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6667,7 +6667,7 @@ export def "api create-peer-vpc" [
 #
 # POST /
 # operationId: PutAlarm
-export def "api update-alarm" [
+export def "put-alarm" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6725,7 +6725,7 @@ export def "api update-alarm" [
 #
 # POST /
 # operationId: PutInstancePublicPorts
-export def "api update-instance-public-ports" [
+export def "put-instance-public-ports" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6774,7 +6774,7 @@ export def "api update-instance-public-ports" [
 #
 # POST /
 # operationId: RebootInstance
-export def "api create-reboot-instance" [
+export def "reboot-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6822,7 +6822,7 @@ export def "api create-reboot-instance" [
 #
 # POST /
 # operationId: RebootRelationalDatabase
-export def "api create-reboot-relational-database" [
+export def "reboot-relational-database" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6870,7 +6870,7 @@ export def "api create-reboot-relational-database" [
 #
 # POST /
 # operationId: RegisterContainerImage
-export def "api create-container-image" [
+export def "register-container-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6920,7 +6920,7 @@ export def "api create-container-image" [
 #
 # POST /
 # operationId: ReleaseStaticIp
-export def "api create-release-static-ip" [
+export def "release-static-ip" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6968,7 +6968,7 @@ export def "api create-release-static-ip" [
 #
 # POST /
 # operationId: ResetDistributionCache
-export def "api reset-distribution-cache" [
+export def "reset-distribution-cache" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7016,7 +7016,7 @@ export def "api reset-distribution-cache" [
 #
 # POST /
 # operationId: SendContactMethodVerification
-export def "api send-contact-method-verification" [
+export def "send-contact-method-verification" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7064,7 +7064,7 @@ export def "api send-contact-method-verification" [
 #
 # POST /
 # operationId: SetIpAddressType
-export def "api update-ip-address-type" [
+export def "set-ip-address-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7114,7 +7114,7 @@ export def "api update-ip-address-type" [
 #
 # POST /
 # operationId: SetResourceAccessForBucket
-export def "api update-resource-access-for-bucket" [
+export def "set-resource-access-for-bucket" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7164,7 +7164,7 @@ export def "api update-resource-access-for-bucket" [
 #
 # POST /
 # operationId: StartGUISession
-export def "api start-gui-session" [
+export def "start-gui-session" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7212,7 +7212,7 @@ export def "api start-gui-session" [
 #
 # POST /
 # operationId: StartInstance
-export def "api start-instance" [
+export def "start-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7260,7 +7260,7 @@ export def "api start-instance" [
 #
 # POST /
 # operationId: StartRelationalDatabase
-export def "api start-relational-database" [
+export def "start-relational-database" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7308,7 +7308,7 @@ export def "api start-relational-database" [
 #
 # POST /
 # operationId: StopGUISession
-export def "api stop-gui-session" [
+export def "stop-gui-session" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7356,7 +7356,7 @@ export def "api stop-gui-session" [
 #
 # POST /
 # operationId: StopInstance
-export def "api stop-instance" [
+export def "stop-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7405,7 +7405,7 @@ export def "api stop-instance" [
 #
 # POST /
 # operationId: StopRelationalDatabase
-export def "api stop-relational-database" [
+export def "stop-relational-database" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7454,7 +7454,7 @@ export def "api stop-relational-database" [
 #
 # POST /
 # operationId: TagResource
-export def "api tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7504,7 +7504,7 @@ export def "api tag-resource" [
 #
 # POST /
 # operationId: TestAlarm
-export def "api test-alarm" [
+export def "test-alarm" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7553,7 +7553,7 @@ export def "api test-alarm" [
 #
 # POST /
 # operationId: UnpeerVpc
-export def "api create-unpeer-vpc" [
+export def "unpeer-vpc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7601,7 +7601,7 @@ export def "api create-unpeer-vpc" [
 #
 # POST /
 # operationId: UntagResource
-export def "api untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7651,7 +7651,7 @@ export def "api untag-resource" [
 #
 # POST /
 # operationId: UpdateBucket
-export def "api update-bucket" [
+export def "update-bucket" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7703,7 +7703,7 @@ export def "api update-bucket" [
 #
 # POST /
 # operationId: UpdateBucketBundle
-export def "api update-bucket-bundle" [
+export def "update-bucket-bundle" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7752,7 +7752,7 @@ export def "api update-bucket-bundle" [
 #
 # POST /
 # operationId: UpdateContainerService
-export def "api update-container-service" [
+export def "update-container-service" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7805,7 +7805,7 @@ export def "api update-container-service" [
 #
 # POST /
 # operationId: UpdateDistribution
-export def "api update-distribution" [
+export def "update-distribution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7858,7 +7858,7 @@ export def "api update-distribution" [
 #
 # POST /
 # operationId: UpdateDistributionBundle
-export def "api update-distribution-bundle" [
+export def "update-distribution-bundle" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7907,7 +7907,7 @@ export def "api update-distribution-bundle" [
 #
 # POST /
 # operationId: UpdateDomainEntry
-export def "api update-domain-entry" [
+export def "update-domain-entry" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7956,7 +7956,7 @@ export def "api update-domain-entry" [
 #
 # POST /
 # operationId: UpdateInstanceMetadataOptions
-export def "api update-instance-metadata-options" [
+export def "update-instance-metadata-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8008,7 +8008,7 @@ export def "api update-instance-metadata-options" [
 #
 # POST /
 # operationId: UpdateLoadBalancerAttribute
-export def "api update-load-balancer-attribute" [
+export def "update-load-balancer-attribute" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8058,7 +8058,7 @@ export def "api update-load-balancer-attribute" [
 #
 # POST /
 # operationId: UpdateRelationalDatabase
-export def "api update-relational-database" [
+export def "update-relational-database" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8115,7 +8115,7 @@ export def "api update-relational-database" [
 #
 # POST /
 # operationId: UpdateRelationalDatabaseParameters
-export def "api update-relational-database-parameters" [
+export def "update-relational-database-parameters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

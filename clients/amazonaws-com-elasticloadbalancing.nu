@@ -135,7 +135,7 @@ def action-completer-28 [] { ["SetLoadBalancerPoliciesOfListener"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api get-create-tags" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-add-tags" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -159,7 +159,7 @@ export def commands []: nothing -> table {
 #
 # GET /
 # operationId: GET_AddTags
-export def "api get-create-tags" [
+export def "get-add-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -207,7 +207,7 @@ export def "api get-create-tags" [
 #
 # POST /
 # operationId: POST_AddTags
-export def "api create-tags" [
+export def "post-add-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -257,7 +257,7 @@ export def "api create-tags" [
 #
 # GET /
 # operationId: GET_ApplySecurityGroupsToLoadBalancer
-export def "api get-apply-security-groups-to-load-balancer" [
+export def "get-apply-security-groups-to-load-balancer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -305,7 +305,7 @@ export def "api get-apply-security-groups-to-load-balancer" [
 #
 # POST /
 # operationId: POST_ApplySecurityGroupsToLoadBalancer
-export def "api create-apply-security-groups-to-load-balancer" [
+export def "post-apply-security-groups-to-load-balancer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -355,7 +355,7 @@ export def "api create-apply-security-groups-to-load-balancer" [
 #
 # GET /
 # operationId: GET_AttachLoadBalancerToSubnets
-export def "api get-attach-load-balancer-to-subnets" [
+export def "get-attach-load-balancer-to-subnets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -403,7 +403,7 @@ export def "api get-attach-load-balancer-to-subnets" [
 #
 # POST /
 # operationId: POST_AttachLoadBalancerToSubnets
-export def "api create-attach-load-balancer-to-subnets" [
+export def "post-attach-load-balancer-to-subnets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -453,7 +453,7 @@ export def "api create-attach-load-balancer-to-subnets" [
 #
 # GET /
 # operationId: GET_ConfigureHealthCheck
-export def "api get-configure-health-check" [
+export def "get-configure-health-check" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -501,7 +501,7 @@ export def "api get-configure-health-check" [
 #
 # POST /
 # operationId: POST_ConfigureHealthCheck
-export def "api create-configure-health-check" [
+export def "post-configure-health-check" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -551,7 +551,7 @@ export def "api create-configure-health-check" [
 #
 # GET /
 # operationId: GET_CreateAppCookieStickinessPolicy
-export def "api get-create-app-cookie-stickiness-policy" [
+export def "get-create-app-cookie-stickiness-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -600,7 +600,7 @@ export def "api get-create-app-cookie-stickiness-policy" [
 #
 # POST /
 # operationId: POST_CreateAppCookieStickinessPolicy
-export def "api create-app-cookie-stickiness-policy" [
+export def "post-create-app-cookie-stickiness-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -650,7 +650,7 @@ export def "api create-app-cookie-stickiness-policy" [
 #
 # GET /
 # operationId: GET_CreateLBCookieStickinessPolicy
-export def "api get-create-lb-cookie-stickiness-policy" [
+export def "get-create-lb-cookie-stickiness-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -699,7 +699,7 @@ export def "api get-create-lb-cookie-stickiness-policy" [
 #
 # POST /
 # operationId: POST_CreateLBCookieStickinessPolicy
-export def "api create-lb-cookie-stickiness-policy" [
+export def "post-create-lb-cookie-stickiness-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -749,7 +749,7 @@ export def "api create-lb-cookie-stickiness-policy" [
 #
 # GET /
 # operationId: GET_CreateLoadBalancer
-export def "api get-create-load-balancer" [
+export def "get-create-load-balancer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -802,7 +802,7 @@ export def "api get-create-load-balancer" [
 #
 # POST /
 # operationId: POST_CreateLoadBalancer
-export def "api create-load-balancer" [
+export def "post-create-load-balancer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -852,7 +852,7 @@ export def "api create-load-balancer" [
 #
 # GET /
 # operationId: GET_CreateLoadBalancerListeners
-export def "api get-create-load-balancer-list-eners" [
+export def "get-create-load-balancer-listeners" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -900,7 +900,7 @@ export def "api get-create-load-balancer-list-eners" [
 #
 # POST /
 # operationId: POST_CreateLoadBalancerListeners
-export def "api create-load-balancer-list-eners" [
+export def "post-create-load-balancer-listeners" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -950,7 +950,7 @@ export def "api create-load-balancer-list-eners" [
 #
 # GET /
 # operationId: GET_CreateLoadBalancerPolicy
-export def "api get-create-load-balancer-policy" [
+export def "get-create-load-balancer-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1000,7 +1000,7 @@ export def "api get-create-load-balancer-policy" [
 #
 # POST /
 # operationId: POST_CreateLoadBalancerPolicy
-export def "api create-load-balancer-policy" [
+export def "post-create-load-balancer-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1050,7 +1050,7 @@ export def "api create-load-balancer-policy" [
 #
 # GET /
 # operationId: GET_DeleteLoadBalancer
-export def "api get-delete-load-balancer" [
+export def "get-delete-load-balancer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1097,7 +1097,7 @@ export def "api get-delete-load-balancer" [
 #
 # POST /
 # operationId: POST_DeleteLoadBalancer
-export def "api create-delete-load-balancer" [
+export def "post-delete-load-balancer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1147,7 +1147,7 @@ export def "api create-delete-load-balancer" [
 #
 # GET /
 # operationId: GET_DeleteLoadBalancerListeners
-export def "api get-delete-load-balancer-list-eners" [
+export def "get-delete-load-balancer-listeners" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1195,7 +1195,7 @@ export def "api get-delete-load-balancer-list-eners" [
 #
 # POST /
 # operationId: POST_DeleteLoadBalancerListeners
-export def "api create-delete-load-balancer-list-eners" [
+export def "post-delete-load-balancer-listeners" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1245,7 +1245,7 @@ export def "api create-delete-load-balancer-list-eners" [
 #
 # GET /
 # operationId: GET_DeleteLoadBalancerPolicy
-export def "api get-delete-load-balancer-policy" [
+export def "get-delete-load-balancer-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1293,7 +1293,7 @@ export def "api get-delete-load-balancer-policy" [
 #
 # POST /
 # operationId: POST_DeleteLoadBalancerPolicy
-export def "api create-delete-load-balancer-policy" [
+export def "post-delete-load-balancer-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1343,7 +1343,7 @@ export def "api create-delete-load-balancer-policy" [
 #
 # GET /
 # operationId: GET_DeregisterInstancesFromLoadBalancer
-export def "api get-deregister-instances-from-load-balancer" [
+export def "get-deregister-instances-from-load-balancer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1391,7 +1391,7 @@ export def "api get-deregister-instances-from-load-balancer" [
 #
 # POST /
 # operationId: POST_DeregisterInstancesFromLoadBalancer
-export def "api create-deregister-instances-from-load-balancer" [
+export def "post-deregister-instances-from-load-balancer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1441,7 +1441,7 @@ export def "api create-deregister-instances-from-load-balancer" [
 #
 # GET /
 # operationId: GET_DescribeAccountLimits
-export def "api get-account-limits" [
+export def "get-describe-account-limits" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1489,7 +1489,7 @@ export def "api get-account-limits" [
 #
 # POST /
 # operationId: POST_DescribeAccountLimits
-export def "api create-get-account-limits" [
+export def "post-describe-account-limits" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1539,7 +1539,7 @@ export def "api create-get-account-limits" [
 #
 # GET /
 # operationId: GET_DescribeInstanceHealth
-export def "api get-instance-health" [
+export def "get-describe-instance-health" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1587,7 +1587,7 @@ export def "api get-instance-health" [
 #
 # POST /
 # operationId: POST_DescribeInstanceHealth
-export def "api create-get-instance-health" [
+export def "post-describe-instance-health" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1637,7 +1637,7 @@ export def "api create-get-instance-health" [
 #
 # GET /
 # operationId: GET_DescribeLoadBalancerAttributes
-export def "api get-load-balancer-attributes" [
+export def "get-describe-load-balancer-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1684,7 +1684,7 @@ export def "api get-load-balancer-attributes" [
 #
 # POST /
 # operationId: POST_DescribeLoadBalancerAttributes
-export def "api create-get-load-balancer-attributes" [
+export def "post-describe-load-balancer-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1734,7 +1734,7 @@ export def "api create-get-load-balancer-attributes" [
 #
 # GET /
 # operationId: GET_DescribeLoadBalancerPolicies
-export def "api get-load-balancer-policies" [
+export def "get-describe-load-balancer-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1782,7 +1782,7 @@ export def "api get-load-balancer-policies" [
 #
 # POST /
 # operationId: POST_DescribeLoadBalancerPolicies
-export def "api create-get-load-balancer-policies" [
+export def "post-describe-load-balancer-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1832,7 +1832,7 @@ export def "api create-get-load-balancer-policies" [
 #
 # GET /
 # operationId: GET_DescribeLoadBalancerPolicyTypes
-export def "api get-load-balancer-policy-types" [
+export def "get-describe-load-balancer-policy-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1879,7 +1879,7 @@ export def "api get-load-balancer-policy-types" [
 #
 # POST /
 # operationId: POST_DescribeLoadBalancerPolicyTypes
-export def "api create-get-load-balancer-policy-types" [
+export def "post-describe-load-balancer-policy-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1929,7 +1929,7 @@ export def "api create-get-load-balancer-policy-types" [
 #
 # GET /
 # operationId: GET_DescribeLoadBalancers
-export def "api get-load-balancers" [
+export def "get-describe-load-balancers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1978,7 +1978,7 @@ export def "api get-load-balancers" [
 #
 # POST /
 # operationId: POST_DescribeLoadBalancers
-export def "api create-get-load-balancers" [
+export def "post-describe-load-balancers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2029,7 +2029,7 @@ export def "api create-get-load-balancers" [
 #
 # GET /
 # operationId: GET_DescribeTags
-export def "api get-tags" [
+export def "get-describe-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2076,7 +2076,7 @@ export def "api get-tags" [
 #
 # POST /
 # operationId: POST_DescribeTags
-export def "api create-get-tags" [
+export def "post-describe-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2126,7 +2126,7 @@ export def "api create-get-tags" [
 #
 # GET /
 # operationId: GET_DetachLoadBalancerFromSubnets
-export def "api get-detach-load-balancer-from-subnets" [
+export def "get-detach-load-balancer-from-subnets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2174,7 +2174,7 @@ export def "api get-detach-load-balancer-from-subnets" [
 #
 # POST /
 # operationId: POST_DetachLoadBalancerFromSubnets
-export def "api create-detach-load-balancer-from-subnets" [
+export def "post-detach-load-balancer-from-subnets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2224,7 +2224,7 @@ export def "api create-detach-load-balancer-from-subnets" [
 #
 # GET /
 # operationId: GET_DisableAvailabilityZonesForLoadBalancer
-export def "api get-disable-availability-zones-for-load-balancer" [
+export def "get-disable-availability-zones-for-load-balancer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2272,7 +2272,7 @@ export def "api get-disable-availability-zones-for-load-balancer" [
 #
 # POST /
 # operationId: POST_DisableAvailabilityZonesForLoadBalancer
-export def "api create-disable-availability-zones-for-load-balancer" [
+export def "post-disable-availability-zones-for-load-balancer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2322,7 +2322,7 @@ export def "api create-disable-availability-zones-for-load-balancer" [
 #
 # GET /
 # operationId: GET_EnableAvailabilityZonesForLoadBalancer
-export def "api get-enable-availability-zones-for-load-balancer" [
+export def "get-enable-availability-zones-for-load-balancer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2370,7 +2370,7 @@ export def "api get-enable-availability-zones-for-load-balancer" [
 #
 # POST /
 # operationId: POST_EnableAvailabilityZonesForLoadBalancer
-export def "api create-enable-availability-zones-for-load-balancer" [
+export def "post-enable-availability-zones-for-load-balancer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2420,7 +2420,7 @@ export def "api create-enable-availability-zones-for-load-balancer" [
 #
 # GET /
 # operationId: GET_ModifyLoadBalancerAttributes
-export def "api get-modify-load-balancer-attributes" [
+export def "get-modify-load-balancer-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2468,7 +2468,7 @@ export def "api get-modify-load-balancer-attributes" [
 #
 # POST /
 # operationId: POST_ModifyLoadBalancerAttributes
-export def "api create-modify-load-balancer-attributes" [
+export def "post-modify-load-balancer-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2518,7 +2518,7 @@ export def "api create-modify-load-balancer-attributes" [
 #
 # GET /
 # operationId: GET_RegisterInstancesWithLoadBalancer
-export def "api get-create-instances-with-load-balancer" [
+export def "get-register-instances-with-load-balancer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2566,7 +2566,7 @@ export def "api get-create-instances-with-load-balancer" [
 #
 # POST /
 # operationId: POST_RegisterInstancesWithLoadBalancer
-export def "api create-instances-with-load-balancer" [
+export def "post-register-instances-with-load-balancer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2616,7 +2616,7 @@ export def "api create-instances-with-load-balancer" [
 #
 # GET /
 # operationId: GET_RemoveTags
-export def "api get-delete-tags" [
+export def "get-remove-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2664,7 +2664,7 @@ export def "api get-delete-tags" [
 #
 # POST /
 # operationId: POST_RemoveTags
-export def "api create-delete-tags" [
+export def "post-remove-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2714,7 +2714,7 @@ export def "api create-delete-tags" [
 #
 # GET /
 # operationId: GET_SetLoadBalancerListenerSSLCertificate
-export def "api get-update-load-balancer-listener-ssl-certificate" [
+export def "get-set-load-balancer-listener-ssl-certificate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2763,7 +2763,7 @@ export def "api get-update-load-balancer-listener-ssl-certificate" [
 #
 # POST /
 # operationId: POST_SetLoadBalancerListenerSSLCertificate
-export def "api create-update-load-balancer-listener-ssl-certificate" [
+export def "post-set-load-balancer-listener-ssl-certificate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2813,7 +2813,7 @@ export def "api create-update-load-balancer-listener-ssl-certificate" [
 #
 # GET /
 # operationId: GET_SetLoadBalancerPoliciesForBackendServer
-export def "api get-update-load-balancer-policies-for-backend-server" [
+export def "get-set-load-balancer-policies-for-backend-server" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2862,7 +2862,7 @@ export def "api get-update-load-balancer-policies-for-backend-server" [
 #
 # POST /
 # operationId: POST_SetLoadBalancerPoliciesForBackendServer
-export def "api create-update-load-balancer-policies-for-backend-server" [
+export def "post-set-load-balancer-policies-for-backend-server" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2912,7 +2912,7 @@ export def "api create-update-load-balancer-policies-for-backend-server" [
 #
 # GET /
 # operationId: GET_SetLoadBalancerPoliciesOfListener
-export def "api get-update-load-balancer-policies-of-listener" [
+export def "get-set-load-balancer-policies-of-listener" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2961,7 +2961,7 @@ export def "api get-update-load-balancer-policies-of-listener" [
 #
 # POST /
 # operationId: POST_SetLoadBalancerPoliciesOfListener
-export def "api create-update-load-balancer-policies-of-listener" [
+export def "post-set-load-balancer-policies-of-listener" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

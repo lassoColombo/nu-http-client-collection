@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "employees list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-employees" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -128,7 +128,7 @@ export def commands []: nothing -> table {
 #
 # GET /Employees
 # operationId: getEmployees
-export def "employees list" [
+export def "get-employees" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -170,7 +170,7 @@ export def "employees list" [
 #
 # POST /Employees
 # operationId: createEmployee
-export def "employees create" [
+export def "create-employee" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -211,7 +211,7 @@ export def "employees create" [
 #
 # GET /Employees/{EmployeeID}
 # operationId: getEmployee
-export def "employees get" [
+export def "get-employee" [
   employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -250,7 +250,7 @@ export def "employees get" [
 #
 # POST /Employees/{EmployeeID}
 # operationId: updateEmployee
-export def "employees update" [
+export def "update-employee" [
   employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -293,7 +293,7 @@ export def "employees update" [
 #
 # GET /LeaveApplications
 # operationId: getLeaveApplications
-export def "leave-applications list" [
+export def "get-leave-applications" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -335,7 +335,7 @@ export def "leave-applications list" [
 #
 # POST /LeaveApplications
 # operationId: createLeaveApplication
-export def "leave-applications create" [
+export def "create-leave-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -376,7 +376,7 @@ export def "leave-applications create" [
 #
 # GET /LeaveApplications/{LeaveApplicationID}
 # operationId: getLeaveApplication
-export def "leave-applications get" [
+export def "get-leave-application" [
   leave_application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -415,7 +415,7 @@ export def "leave-applications get" [
 #
 # POST /LeaveApplications/{LeaveApplicationID}
 # operationId: updateLeaveApplication
-export def "leave-applications update" [
+export def "update-leave-application" [
   leave_application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -458,7 +458,7 @@ export def "leave-applications update" [
 #
 # GET /PayItems
 # operationId: getPayItems
-export def "pay-items get" [
+export def "get-pay-items" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -504,7 +504,7 @@ export def "pay-items get" [
 # --EarningsRates item shape: {AccountCode?: string, AccrueLeave?: bool, AllowanceType?: "CAR"|"TRANSPORT"|"TRAVEL"|"LAUNDRY"|"MEALS"|"JOBKEEPER"|"OTHER", Amount?: float, CurrentRecord?: bool, EarningsRateID?: string, EarningsType?: "FIXED"|"ORDINARYTIMEEARNINGS"|"OVERTIMEEARNINGS"|"ALLOWANCE"|"LUMPSUMD"|"EMPLOYMENTTERMINATIONPAYMENT"|"LUMPSUMA"|"LUMPSUMB"|"BONUSESANDCOMMISSIONS"|"LUMPSUME", EmploymentTerminationPaymentType?: "O"|"R", IsExemptFromSuper?: bool, IsExemptFromTax?: bool, IsReportableAsW1?: bool, ... (5 more fields)}
 # --LeaveTypes item shape: {CurrentRecord?: bool, IsPaidLeave?: bool, LeaveLoadingRate?: float, LeaveTypeID?: string, Name?: string, NormalEntitlement?: float, ShowOnPayslip?: bool, TypeOfUnits?: string}
 # --ReimbursementTypes item shape: {AccountCode?: string, CurrentRecord?: bool, Name?: string, ReimbursementTypeID?: string}
-export def "pay-items create" [
+export def "create-pay-item" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -548,7 +548,7 @@ export def "pay-items create" [
 #
 # GET /PayRuns
 # operationId: getPayRuns
-export def "pay-runs list" [
+export def "get-pay-runs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -590,7 +590,7 @@ export def "pay-runs list" [
 #
 # POST /PayRuns
 # operationId: createPayRun
-export def "pay-runs create" [
+export def "create-pay-run" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -631,7 +631,7 @@ export def "pay-runs create" [
 #
 # GET /PayRuns/{PayRunID}
 # operationId: getPayRun
-export def "pay-runs get" [
+export def "get-pay-run" [
   pay_run_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -670,7 +670,7 @@ export def "pay-runs get" [
 #
 # POST /PayRuns/{PayRunID}
 # operationId: updatePayRun
-export def "pay-runs update" [
+export def "update-pay-run" [
   pay_run_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -713,7 +713,7 @@ export def "pay-runs update" [
 #
 # GET /PayrollCalendars
 # operationId: getPayrollCalendars
-export def "payroll-calendars list" [
+export def "get-payroll-calendars" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -755,7 +755,7 @@ export def "payroll-calendars list" [
 #
 # POST /PayrollCalendars
 # operationId: createPayrollCalendar
-export def "payroll-calendars create" [
+export def "create-payroll-calendar" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -796,7 +796,7 @@ export def "payroll-calendars create" [
 #
 # GET /PayrollCalendars/{PayrollCalendarID}
 # operationId: getPayrollCalendar
-export def "payroll-calendars get" [
+export def "get-payroll-calendar" [
   payroll_calendar_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -835,7 +835,7 @@ export def "payroll-calendars get" [
 #
 # GET /Payslip/{PayslipID}
 # operationId: getPayslip
-export def "payslip get" [
+export def "get-payslip" [
   payslip_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -874,7 +874,7 @@ export def "payslip get" [
 #
 # POST /Payslip/{PayslipID}
 # operationId: updatePayslip
-export def "payslip update" [
+export def "update-payslip" [
   payslip_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -917,7 +917,7 @@ export def "payslip update" [
 #
 # GET /Settings
 # operationId: getSettings
-export def "settings get" [
+export def "get-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -954,7 +954,7 @@ export def "settings get" [
 #
 # GET /SuperfundProducts
 # operationId: getSuperfundProducts
-export def "superfund-products get" [
+export def "get-superfund-products" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -994,7 +994,7 @@ export def "superfund-products get" [
 #
 # GET /Superfunds
 # operationId: getSuperfunds
-export def "superfunds list" [
+export def "get-superfunds" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1036,7 +1036,7 @@ export def "superfunds list" [
 #
 # POST /Superfunds
 # operationId: createSuperfund
-export def "superfunds create" [
+export def "create-superfund" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1077,7 +1077,7 @@ export def "superfunds create" [
 #
 # GET /Superfunds/{SuperFundID}
 # operationId: getSuperfund
-export def "superfunds get" [
+export def "get-superfund" [
   super_fund_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1116,7 +1116,7 @@ export def "superfunds get" [
 #
 # POST /Superfunds/{SuperFundID}
 # operationId: updateSuperfund
-export def "superfunds update" [
+export def "update-superfund" [
   super_fund_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1159,7 +1159,7 @@ export def "superfunds update" [
 #
 # GET /Timesheets
 # operationId: getTimesheets
-export def "timesheets list" [
+export def "get-timesheets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1201,7 +1201,7 @@ export def "timesheets list" [
 #
 # POST /Timesheets
 # operationId: createTimesheet
-export def "timesheets create" [
+export def "create-timesheet" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1242,7 +1242,7 @@ export def "timesheets create" [
 #
 # GET /Timesheets/{TimesheetID}
 # operationId: getTimesheet
-export def "timesheets get" [
+export def "get-timesheet" [
   timesheet_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1281,7 +1281,7 @@ export def "timesheets get" [
 #
 # POST /Timesheets/{TimesheetID}
 # operationId: updateTimesheet
-export def "timesheets update" [
+export def "update-timesheet" [
   timesheet_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

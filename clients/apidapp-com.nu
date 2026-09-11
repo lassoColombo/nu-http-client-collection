@@ -115,7 +115,7 @@ def auth-scheme-completer [] { ["x-api-key"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api options" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "options" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -136,7 +136,7 @@ export def commands []: nothing -> table {
 }
 
 # OPTIONS /
-export def "api options" [
+export def "options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -167,7 +167,7 @@ export def "api options" [
 }
 
 # OPTIONS /account
-export def "account options" [
+export def "options-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -200,7 +200,7 @@ export def "account options" [
 # Create new account
 #
 # POST /account
-export def "account create" [
+export def "post-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -233,7 +233,7 @@ export def "account create" [
 # Get account balance
 #
 # GET /account/{id}
-export def "account get" [
+export def "get-account-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -266,7 +266,7 @@ export def "account get" [
 }
 
 # OPTIONS /account/{id}
-export def "account options-by-id" [
+export def "options-account-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -301,7 +301,7 @@ export def "account options-by-id" [
 # Access detailed block information
 #
 # GET /block
-export def "block list" [
+export def "get-block" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -332,7 +332,7 @@ export def "block list" [
 }
 
 # OPTIONS /block
-export def "block options" [
+export def "options-block" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -365,7 +365,7 @@ export def "block options" [
 # Get information about particular block
 #
 # GET /block/{id}
-export def "block get" [
+export def "get-block-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -398,7 +398,7 @@ export def "block get" [
 }
 
 # OPTIONS /block/{id}
-export def "block options-by-id" [
+export def "options-block-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -433,7 +433,7 @@ export def "block options-by-id" [
 # Get transaction count within block
 #
 # GET /block/{id}/transaction
-export def "block-transaction list" [
+export def "get-block-id-transaction" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -466,7 +466,7 @@ export def "block-transaction list" [
 }
 
 # OPTIONS /block/{id}/transaction
-export def "block-transaction options-by-id" [
+export def "options-block-id-transaction" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -501,7 +501,7 @@ export def "block-transaction options-by-id" [
 # Get information about particular transaction within block
 #
 # GET /block/{id}/transaction/{index}
-export def "block-transaction get" [
+export def "get-block-id-transaction-index" [
   id: string
   index: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -536,7 +536,7 @@ export def "block-transaction get" [
 }
 
 # OPTIONS /block/{id}/transaction/{index}
-export def "block-transaction options-by-id-index" [
+export def "options-block-id-transaction-index" [
   id: string
   index: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -573,7 +573,7 @@ export def "block-transaction options-by-id-index" [
 # Get a list of supported blockchains
 #
 # GET /blockchain
-export def "blockchain list" [
+export def "get-blockchain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -604,7 +604,7 @@ export def "blockchain list" [
 }
 
 # OPTIONS /blockchain
-export def "blockchain options" [
+export def "options-blockchain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -637,7 +637,7 @@ export def "blockchain options" [
 # Get information about blockchain woth given id
 #
 # GET /blockchain/{id}
-export def "blockchain get" [
+export def "get-blockchain-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -670,7 +670,7 @@ export def "blockchain get" [
 }
 
 # OPTIONS /blockchain/{id}
-export def "blockchain options-by-id" [
+export def "options-blockchain-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -703,7 +703,7 @@ export def "blockchain options-by-id" [
 }
 
 # OPTIONS /contract
-export def "contract options" [
+export def "options-contract" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -736,7 +736,7 @@ export def "contract options" [
 # Create a new smart contract
 #
 # POST /contract
-export def "contract create" [
+export def "post-contract" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -769,7 +769,7 @@ export def "contract create" [
 # Get contract balance
 #
 # GET /contract/{id}
-export def "contract get" [
+export def "get-contract-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -802,7 +802,7 @@ export def "contract get" [
 }
 
 # OPTIONS /contract/{id}
-export def "contract options-by-id" [
+export def "options-contract-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -837,7 +837,7 @@ export def "contract options-by-id" [
 # Call the contract
 #
 # POST /contract/{id}
-export def "contract create-by-id" [
+export def "post-contract-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -870,7 +870,7 @@ export def "contract create-by-id" [
 }
 
 # OPTIONS /echo
-export def "echo options" [
+export def "options-echo" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -903,7 +903,7 @@ export def "echo options" [
 # Get token information such as name, total amount in circulation, etc
 #
 # GET /erc20
-export def "erc20 list" [
+export def "get-erc20" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -934,7 +934,7 @@ export def "erc20 list" [
 }
 
 # OPTIONS /erc20
-export def "erc20 options" [
+export def "options-erc20" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -965,7 +965,7 @@ export def "erc20 options" [
 }
 
 # POST /erc20
-export def "erc20 create" [
+export def "post-erc20" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -998,7 +998,7 @@ export def "erc20 create" [
 # Get information amout token balance in the account
 #
 # GET /erc20/{address}
-export def "erc20 get" [
+export def "get-erc20-address" [
   address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1031,7 +1031,7 @@ export def "erc20 get" [
 }
 
 # OPTIONS /erc20/{address}
-export def "erc20 options-by-address" [
+export def "options-erc20-address" [
   address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1066,7 +1066,7 @@ export def "erc20 options-by-address" [
 # Transfer tokens to another account
 #
 # POST /erc20/{address}
-export def "erc20 create-by-address" [
+export def "post-erc20-address" [
   address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1099,7 +1099,7 @@ export def "erc20 create-by-address" [
 }
 
 # GET /key
-export def "key get" [
+export def "get-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1132,7 +1132,7 @@ export def "key get" [
 }
 
 # OPTIONS /key
-export def "key options" [
+export def "options-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1163,7 +1163,7 @@ export def "key options" [
 }
 
 # POST /key
-export def "key create" [
+export def "post-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1194,7 +1194,7 @@ export def "key create" [
 }
 
 # DELETE /key/{key}
-export def "key delete" [
+export def "delete-key-key" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1227,7 +1227,7 @@ export def "key delete" [
 }
 
 # OPTIONS /key/{key}
-export def "key options-by-key" [
+export def "options-key-key" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1260,7 +1260,7 @@ export def "key options-by-key" [
 }
 
 # OPTIONS /transaction
-export def "transaction options" [
+export def "options-transaction" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1293,7 +1293,7 @@ export def "transaction options" [
 # Create a new transaction. Transfer Ether between accounts
 #
 # POST /transaction
-export def "transaction create" [
+export def "post-transaction" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1326,7 +1326,7 @@ export def "transaction create" [
 # Get information about transaction by the transaction hash value
 #
 # GET /transaction/{hash}
-export def "transaction get" [
+export def "get-transaction-hash" [
   hash: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1359,7 +1359,7 @@ export def "transaction get" [
 }
 
 # OPTIONS /transaction/{hash}
-export def "transaction options-by-hash" [
+export def "options-transaction-hash" [
   hash: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1394,7 +1394,7 @@ export def "transaction options-by-hash" [
 # Get receipt detail information
 #
 # GET /transaction/{hash}/receipt
-export def "transaction-receipt get" [
+export def "get-transaction-hash-receipt" [
   hash: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1427,7 +1427,7 @@ export def "transaction-receipt get" [
 }
 
 # OPTIONS /transaction/{hash}/receipt
-export def "transaction-receipt options" [
+export def "options-transaction-hash-receipt" [
   hash: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1462,7 +1462,7 @@ export def "transaction-receipt options" [
 # Get API version info
 #
 # GET /version
-export def "version get" [
+export def "get-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1493,7 +1493,7 @@ export def "version get" [
 }
 
 # OPTIONS /version
-export def "version options" [
+export def "options-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1526,7 +1526,7 @@ export def "version options" [
 # Get current account balance
 #
 # GET /wallet
-export def "wallet get" [
+export def "get-wallet" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1557,7 +1557,7 @@ export def "wallet get" [
 }
 
 # OPTIONS /wallet
-export def "wallet options" [
+export def "options-wallet" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1590,7 +1590,7 @@ export def "wallet options" [
 # Create personal wallet
 #
 # POST /wallet
-export def "wallet create" [
+export def "post-wallet" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1621,7 +1621,7 @@ export def "wallet create" [
 }
 
 # GET /wallet/account
-export def "wallet-account list" [
+export def "get-wallet-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1652,7 +1652,7 @@ export def "wallet-account list" [
 }
 
 # OPTIONS /wallet/account
-export def "wallet-account options" [
+export def "options-wallet-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1683,7 +1683,7 @@ export def "wallet-account options" [
 }
 
 # POST /wallet/account
-export def "wallet-account create" [
+export def "post-wallet-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1716,7 +1716,7 @@ export def "wallet-account create" [
 # Get account balance
 #
 # GET /wallet/account/{id}
-export def "wallet-account get" [
+export def "get-wallet-account-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1749,7 +1749,7 @@ export def "wallet-account get" [
 }
 
 # OPTIONS /wallet/account/{id}
-export def "wallet-account options-by-id" [
+export def "options-wallet-account-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1782,7 +1782,7 @@ export def "wallet-account options-by-id" [
 }
 
 # POST /wallet/account/{id}/contract
-export def "wallet-account-contract create" [
+export def "post-wallet-account-id-contract" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1815,7 +1815,7 @@ export def "wallet-account-contract create" [
 }
 
 # POST /wallet/account/{id}/erc20
-export def "wallet-account-erc20 create" [
+export def "post-wallet-account-id-erc20" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1848,7 +1848,7 @@ export def "wallet-account-erc20 create" [
 }
 
 # OPTIONS /wallet/account/{id}/pay
-export def "wallet-account-pay options" [
+export def "options-wallet-account-id-pay" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1883,7 +1883,7 @@ export def "wallet-account-pay options" [
 # Send payment from the account held within the wallet
 #
 # POST /wallet/account/{id}/pay
-export def "wallet-account-pay create" [
+export def "post-wallet-account-id-pay" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

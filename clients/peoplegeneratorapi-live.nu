@@ -97,7 +97,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "address generate" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "generate-address" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -120,7 +120,7 @@ export def commands []: nothing -> table {
 # GET /api/address
 #
 # operationId: generateAddress
-export def "address generate" [
+export def "generate-address" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -153,7 +153,7 @@ export def "address generate" [
 # GET /api/address/
 #
 # operationId: generateAddress_1
-export def "address generate-1" [
+export def "generate-address-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -186,7 +186,7 @@ export def "address generate-1" [
 # GET /api/lifestory
 #
 # operationId: generateLifeStory_1
-export def "lifestory generate-life-story" [
+export def "generate-life-story-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -219,7 +219,7 @@ export def "lifestory generate-life-story" [
 # GET /api/lifestory/
 #
 # operationId: generateLifeStory
-export def "lifestory generate-life-story-1" [
+export def "generate-life-story" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -252,7 +252,7 @@ export def "lifestory generate-life-story-1" [
 # GET /api/person
 #
 # operationId: getPerson_1
-export def "person get" [
+export def "get-person-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -285,7 +285,7 @@ export def "person get" [
 # GET /api/person/
 #
 # operationId: getPerson
-export def "person get-1" [
+export def "get-person" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -318,7 +318,7 @@ export def "person get-1" [
 # GET /api/person/age
 #
 # operationId: age_1
-export def "person-age get" [
+export def "age-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -351,7 +351,7 @@ export def "person-age get" [
 # GET /api/person/age/
 #
 # operationId: age
-export def "person-age get-1" [
+export def "age" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -384,7 +384,7 @@ export def "person-age get-1" [
 # GET /api/person/bloodtype
 #
 # operationId: bloodtype_1
-export def "person-bloodtype get" [
+export def "bloodtype-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -417,7 +417,7 @@ export def "person-bloodtype get" [
 # GET /api/person/bloodtype/
 #
 # operationId: bloodtype
-export def "person-bloodtype get-1" [
+export def "bloodtype" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -450,7 +450,7 @@ export def "person-bloodtype get-1" [
 # GET /api/person/creditcardnumber
 #
 # operationId: creditcardnumber
-export def "person-creditcardnumber get" [
+export def "creditcardnumber" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -483,7 +483,7 @@ export def "person-creditcardnumber get" [
 # GET /api/person/creditcardnumber/
 #
 # operationId: creditcardnumber_1
-export def "person-creditcardnumber get-1" [
+export def "creditcardnumber-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -516,7 +516,7 @@ export def "person-creditcardnumber get-1" [
 # GET /api/person/creditscore
 #
 # operationId: creditscore_1
-export def "person-creditscore get" [
+export def "creditscore-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -549,7 +549,7 @@ export def "person-creditscore get" [
 # GET /api/person/creditscore/
 #
 # operationId: creditscore
-export def "person-creditscore get-1" [
+export def "creditscore" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -582,7 +582,7 @@ export def "person-creditscore get-1" [
 # GET /api/person/email
 #
 # operationId: email
-export def "person-email get" [
+export def "email" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -615,7 +615,7 @@ export def "person-email get" [
 # GET /api/person/email/
 #
 # operationId: email_1
-export def "person-email get-1" [
+export def "email-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -648,7 +648,7 @@ export def "person-email get-1" [
 # GET /api/person/eyecolor
 #
 # operationId: eyecolor_1
-export def "person-eyecolor get" [
+export def "eyecolor-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -681,7 +681,7 @@ export def "person-eyecolor get" [
 # GET /api/person/eyecolor/
 #
 # operationId: eyecolor
-export def "person-eyecolor get-1" [
+export def "eyecolor" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -714,7 +714,7 @@ export def "person-eyecolor get-1" [
 # GET /api/person/gender
 #
 # operationId: gender
-export def "person-gender get" [
+export def "gender" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -747,7 +747,7 @@ export def "person-gender get" [
 # GET /api/person/gender/
 #
 # operationId: gender_1
-export def "person-gender get-1" [
+export def "gender-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -780,7 +780,7 @@ export def "person-gender get-1" [
 # GET /api/person/gpa
 #
 # operationId: gpa
-export def "person-gpa get" [
+export def "gpa" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -813,7 +813,7 @@ export def "person-gpa get" [
 # GET /api/person/gpa/
 #
 # operationId: gpa_1
-export def "person-gpa get-1" [
+export def "gpa-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -846,7 +846,7 @@ export def "person-gpa get-1" [
 # GET /api/person/haschildren
 #
 # operationId: haschildren_1
-export def "person-haschildren get" [
+export def "haschildren-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -879,7 +879,7 @@ export def "person-haschildren get" [
 # GET /api/person/haschildren/
 #
 # operationId: haschildren
-export def "person-haschildren get-1" [
+export def "haschildren" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -912,7 +912,7 @@ export def "person-haschildren get-1" [
 # GET /api/person/hasdegree
 #
 # operationId: hasdegree
-export def "person-hasdegree get" [
+export def "hasdegree" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -945,7 +945,7 @@ export def "person-hasdegree get" [
 # GET /api/person/hasdegree/
 #
 # operationId: hasdegree_1
-export def "person-hasdegree get-1" [
+export def "hasdegree-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -978,7 +978,7 @@ export def "person-hasdegree get-1" [
 # GET /api/person/height
 #
 # operationId: height
-export def "person-height get" [
+export def "height" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1011,7 +1011,7 @@ export def "person-height get" [
 # GET /api/person/height/
 #
 # operationId: height_1
-export def "person-height get-1" [
+export def "height-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1044,7 +1044,7 @@ export def "person-height get-1" [
 # GET /api/person/income
 #
 # operationId: income
-export def "person-income get" [
+export def "income" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1077,7 +1077,7 @@ export def "person-income get" [
 # GET /api/person/income/
 #
 # operationId: income_1
-export def "person-income get-1" [
+export def "income-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1110,7 +1110,7 @@ export def "person-income get-1" [
 # GET /api/person/job
 #
 # operationId: job
-export def "person-job get" [
+export def "job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1143,7 +1143,7 @@ export def "person-job get" [
 # GET /api/person/job/
 #
 # operationId: job_1
-export def "person-job get-1" [
+export def "job-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1176,7 +1176,7 @@ export def "person-job get-1" [
 # GET /api/person/maritalstatus
 #
 # operationId: maritalstatus_1
-export def "person-maritalstatus get" [
+export def "maritalstatus-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1209,7 +1209,7 @@ export def "person-maritalstatus get" [
 # GET /api/person/maritalstatus/
 #
 # operationId: maritalstatus
-export def "person-maritalstatus get-1" [
+export def "maritalstatus" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1242,7 +1242,7 @@ export def "person-maritalstatus get-1" [
 # GET /api/person/name
 #
 # operationId: name_1
-export def "person-name get" [
+export def "name-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1275,7 +1275,7 @@ export def "person-name get" [
 # GET /api/person/name/
 #
 # operationId: name
-export def "person-name get-1" [
+export def "name" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1308,7 +1308,7 @@ export def "person-name get-1" [
 # GET /api/person/politicalleaning
 #
 # operationId: politicalLeaning
-export def "person-politicalleaning get-political-leaning" [
+export def "political-leaning" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1341,7 +1341,7 @@ export def "person-politicalleaning get-political-leaning" [
 # GET /api/person/politicalleaning/
 #
 # operationId: politicalLeaning_1
-export def "person-politicalleaning get-political-leaning-1" [
+export def "political-leaning-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1374,7 +1374,7 @@ export def "person-politicalleaning get-political-leaning-1" [
 # GET /api/person/religion
 #
 # operationId: religion_1
-export def "person-religion get" [
+export def "religion-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1407,7 +1407,7 @@ export def "person-religion get" [
 # GET /api/person/religion/
 #
 # operationId: religion
-export def "person-religion get-1" [
+export def "religion" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1440,7 +1440,7 @@ export def "person-religion get-1" [
 # GET /api/person/username
 #
 # operationId: username_1
-export def "person-username get" [
+export def "username-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1473,7 +1473,7 @@ export def "person-username get" [
 # GET /api/person/username/
 #
 # operationId: username
-export def "person-username get-1" [
+export def "username" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1506,7 +1506,7 @@ export def "person-username get-1" [
 # GET /api/person/weight
 #
 # operationId: weight
-export def "person-weight get" [
+export def "weight" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1539,7 +1539,7 @@ export def "person-weight get" [
 # GET /api/person/weight/
 #
 # operationId: weight_1
-export def "person-weight get-1" [
+export def "weight-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1572,7 +1572,7 @@ export def "person-weight get-1" [
 # GET /api/person/{number}
 #
 # operationId: getCompressedPerson_1
-export def "person get-compressed-by-number" [
+export def "get-compressed-person-1" [
   number: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1607,7 +1607,7 @@ export def "person get-compressed-by-number" [
 # GET /api/person/{number}/
 #
 # operationId: getCompressedPerson
-export def "person get-compressed" [
+export def "get-compressed-person" [
   number: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

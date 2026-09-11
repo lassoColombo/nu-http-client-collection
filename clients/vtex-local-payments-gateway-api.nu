@@ -127,7 +127,7 @@ def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "pub-transactions-payments send-public" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "2-send-payments-public" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -151,7 +151,7 @@ export def commands []: nothing -> table {
 #
 # POST /api/pub/transactions/{transactionId}/payments
 # operationId: 2.SendPaymentsPublic
-export def "pub-transactions-payments send-public" [
+export def "2-send-payments-public" [
   transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -201,7 +201,7 @@ export def "pub-transactions-payments send-public" [
 #
 # GET /api/pvt/affiliations
 # operationId: Affiliations
-export def "pvt-affiliations list" [
+export def "affiliations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -242,7 +242,7 @@ export def "pvt-affiliations list" [
 # POST /api/pvt/affiliations
 # operationId: InsertAffiliation
 # --configuration item shape: {name: string, value: string}
-export def "pvt-affiliations create" [
+export def "insert-affiliation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -292,7 +292,7 @@ export def "pvt-affiliations create" [
 #
 # GET /api/pvt/affiliations/{affiliationId}
 # operationId: AffiliationById
-export def "pvt-affiliations get" [
+export def "affiliation-by-id" [
   affiliation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -335,7 +335,7 @@ export def "pvt-affiliations get" [
 # PUT /api/pvt/affiliations/{affiliationId}
 # operationId: UpdateAffiliation
 # --configuration item shape: {name: string, value: string}
-export def "pvt-affiliations update" [
+export def "update-affiliation" [
   affiliation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -388,7 +388,7 @@ export def "pvt-affiliations update" [
 #
 # GET /api/pvt/installments
 # operationId: Installmentsoptions
-export def "pvt-installments get-installmentsoptions" [
+export def "installmentsoptions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -434,7 +434,7 @@ export def "pvt-installments get-installmentsoptions" [
 #
 # GET /api/pvt/merchants/payment-systems
 # operationId: AvailablePaymentMethods
-export def "pvt-merchants-payment-systems get-available-methods" [
+export def "available-payment-methods" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -474,7 +474,7 @@ export def "pvt-merchants-payment-systems get-available-methods" [
 #
 # GET /api/pvt/rules
 # operationId: Rules
-export def "pvt-rules list" [
+export def "rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -519,7 +519,7 @@ export def "pvt-rules list" [
 # --issuer shape: {name: string}
 # --paymentSystem shape: {id: int, implementation: string, name: string}
 # --salesChannels item shape: {id: string}
-export def "pvt-rules create" [
+export def "insert-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -582,7 +582,7 @@ export def "pvt-rules create" [
 #
 # DELETE /api/pvt/rules/{ruleId}
 # operationId: Rule
-export def "pvt-rules delete" [
+export def "rule" [
   rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -624,7 +624,7 @@ export def "pvt-rules delete" [
 #
 # GET /api/pvt/rules/{ruleId}
 # operationId: RuleById
-export def "pvt-rules get" [
+export def "rule-by-id" [
   rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -672,7 +672,7 @@ export def "pvt-rules get" [
 # --issuer shape: {name: string}
 # --paymentSystem shape: {id: int, implementation: string, name: string}
 # --salesChannels item shape: {id: string}
-export def "pvt-rules update" [
+export def "put-rule-by-id" [
   rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -736,7 +736,7 @@ export def "pvt-rules update" [
 #
 # POST /api/pvt/transactions
 # operationId: 1.Createanewtransaction
-export def "pvt-transactions create-anewtransaction" [
+export def "1-createanewtransaction" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -786,7 +786,7 @@ export def "pvt-transactions create-anewtransaction" [
 #
 # GET /api/pvt/transactions/{transactionId}
 # operationId: TransactionDetails
-export def "pvt-transactions get-details" [
+export def "transaction-details" [
   transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -828,7 +828,7 @@ export def "pvt-transactions get-details" [
 #
 # POST /api/pvt/transactions/{transactionId}/additional-data
 # operationId: 3.SendAdditionalData
-export def "pvt-transactions-additional-data send" [
+export def "3-send-additional-data" [
   transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -877,7 +877,7 @@ export def "pvt-transactions-additional-data send" [
 #
 # POST /api/pvt/transactions/{transactionId}/authorization-request
 # operationId: 4.Doauthorization
-export def "pvt-transactions-authorization-request create-doauthorization" [
+export def "4-doauthorization" [
   transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -928,7 +928,7 @@ export def "pvt-transactions-authorization-request create-doauthorization" [
 # POST /api/pvt/transactions/{transactionId}/cancellation-request
 # operationId: Cancelthetransaction
 # --minicart shape: {freight?: int, items?: list, tax?: int}
-export def "pvt-transactions-cancellation-request create-cancelthetransaction" [
+export def "cancelthetransaction" [
   transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -977,7 +977,7 @@ export def "pvt-transactions-cancellation-request create-cancelthetransaction" [
 #
 # POST /api/pvt/transactions/{transactionId}/payments
 # operationId: 2.SendPaymentsWithSavedCreditCard
-export def "pvt-transactions-payments send-with-saved-credit-card" [
+export def "2-send-payments-with-saved-credit-card" [
   transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -1025,7 +1025,7 @@ export def "pvt-transactions-payments send-with-saved-credit-card" [
 #
 # GET /api/pvt/transactions/{transactionId}/payments/{paymentId}
 # operationId: PaymentDetails
-export def "pvt-transactions-payments get-details" [
+export def "payment-details" [
   transaction_id: string
   payment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1070,7 +1070,7 @@ export def "pvt-transactions-payments get-details" [
 # POST /api/pvt/transactions/{transactionId}/refunding-request
 # operationId: Refundthetransaction
 # --minicart shape: {freight?: int, items?: list, tax?: int}
-export def "pvt-transactions-refunding-request create-refundthetransaction" [
+export def "refundthetransaction" [
   transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -1119,7 +1119,7 @@ export def "pvt-transactions-refunding-request create-refundthetransaction" [
 #
 # POST /api/pvt/transactions/{transactionId}/settlement-request
 # operationId: Settlethetransaction
-export def "pvt-transactions-settlement-request create-settlethetransaction" [
+export def "settlethetransaction" [
   transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -1167,7 +1167,7 @@ export def "pvt-transactions-settlement-request create-settlethetransaction" [
 #
 # GET /api/pvt/transactions/{transactionId}/settlements
 # operationId: TransactionSettlementDetails
-export def "pvt-transactions-settlements get-details" [
+export def "transaction-settlement-details" [
   transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)

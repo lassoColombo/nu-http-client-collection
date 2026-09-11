@@ -124,7 +124,7 @@ def api-version-completer [] { ["2018-06-01-preview"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-blockchain-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -148,7 +148,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.Blockchain/operations
 # operationId: Operations_List
-export def "providers-microsoft-blockchain-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,7 +184,7 @@ export def "providers-microsoft-blockchain-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Blockchain/blockchainMembers
 # operationId: BlockchainMembers_ListAll
-export def "subscriptions-providers-microsoft-blockchain-blockchain-members list" [
+export def "blockchain-members-list-all" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -222,7 +222,7 @@ export def "subscriptions-providers-microsoft-blockchain-blockchain-members list
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Blockchain/locations/{locationName}/blockchainMemberOperationResults/{operationId}
 # operationId: BlockchainMemberOperationResults_Get
-export def "subscriptions-providers-microsoft-blockchain-locations-blockchain-member-operation-results get" [
+export def "blockchain-member-operation-results-get" [
   subscription_id: string
   location_name: string
   operation_id: string
@@ -264,7 +264,7 @@ export def "subscriptions-providers-microsoft-blockchain-locations-blockchain-me
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Blockchain/locations/{locationName}/checkNameAvailability
 # operationId: Locations_CheckNameAvailability
-export def "subscriptions-providers-microsoft-blockchain-locations-check-name-availability check" [
+export def "locations-check-name-availability" [
   subscription_id: string
   location_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -309,7 +309,7 @@ export def "subscriptions-providers-microsoft-blockchain-locations-check-name-av
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Blockchain/locations/{locationName}/listConsortiums
 # operationId: Locations_ListConsortiums
-export def "subscriptions-providers-microsoft-blockchain-locations-list-consortiums list" [
+export def "locations-list-consortiums" [
   subscription_id: string
   location_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -349,7 +349,7 @@ export def "subscriptions-providers-microsoft-blockchain-locations-list-consorti
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Blockchain/skus
 # operationId: Skus_List
-export def "subscriptions-providers-microsoft-blockchain-skus list" [
+export def "skus-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -387,7 +387,7 @@ export def "subscriptions-providers-microsoft-blockchain-skus list" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Blockchain/blockchainMembers
 # operationId: BlockchainMembers_List
-export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockchain-members list" [
+export def "blockchain-members-list" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -427,7 +427,7 @@ export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockch
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Blockchain/blockchainMembers/{blockchainMemberName}
 # operationId: BlockchainMembers_Delete
-export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockchain-members delete" [
+export def "blockchain-members-delete" [
   subscription_id: string
   resource_group_name: string
   blockchain_member_name: string
@@ -469,7 +469,7 @@ export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockch
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Blockchain/blockchainMembers/{blockchainMemberName}
 # operationId: BlockchainMembers_Get
-export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockchain-members get" [
+export def "blockchain-members-get" [
   subscription_id: string
   resource_group_name: string
   blockchain_member_name: string
@@ -512,7 +512,7 @@ export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockch
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Blockchain/blockchainMembers/{blockchainMemberName}
 # operationId: BlockchainMembers_Update
 # --properties shape: {consortiumManagementAccountPassword?: string, firewallRules?: list, password?: string}
-export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockchain-members update" [
+export def "blockchain-members-update" [
   subscription_id: string
   resource_group_name: string
   blockchain_member_name: string
@@ -561,7 +561,7 @@ export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockch
 # operationId: BlockchainMembers_Create
 # --properties shape: {consortium?: string, consortiumManagementAccountPassword?: string, consortiumMemberDisplayName?: string, consortiumRole?: string, firewallRules?: list, password?: string, protocol?: "NotSpecified"|"Parity"|"Quorum"|"Corda", validatorNodesSku?: record}
 # --sku shape: {name?: string, tier?: string}
-export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockchain-members create" [
+export def "blockchain-members-create" [
   subscription_id: string
   resource_group_name: string
   blockchain_member_name: string
@@ -610,7 +610,7 @@ export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockch
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Blockchain/blockchainMembers/{blockchainMemberName}/consortiumMembers
 # operationId: BlockchainMembers_ListConsortiumMembers
-export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockchain-members-consortium-members list" [
+export def "blockchain-members-list-consortium-members" [
   subscription_id: string
   resource_group_name: string
   blockchain_member_name: string
@@ -652,7 +652,7 @@ export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockch
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Blockchain/blockchainMembers/{blockchainMemberName}/listApiKeys
 # operationId: BlockchainMembers_ListApiKeys
-export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockchain-members-list-api-keys list" [
+export def "blockchain-members-list-api-keys" [
   subscription_id: string
   resource_group_name: string
   blockchain_member_name: string
@@ -694,7 +694,7 @@ export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockch
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Blockchain/blockchainMembers/{blockchainMemberName}/regenerateApiKeys
 # operationId: BlockchainMembers_ListRegenerateApiKeys
-export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockchain-members-regenerate-api-keys list" [
+export def "blockchain-members-list-regenerate-api-keys" [
   subscription_id: string
   resource_group_name: string
   blockchain_member_name: string
@@ -741,7 +741,7 @@ export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockch
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Blockchain/blockchainMembers/{blockchainMemberName}/transactionNodes
 # operationId: TransactionNodes_List
-export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockchain-members-transaction-nodes list" [
+export def "transaction-nodes-list" [
   subscription_id: string
   resource_group_name: string
   blockchain_member_name: string
@@ -783,7 +783,7 @@ export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockch
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Blockchain/blockchainMembers/{blockchainMemberName}/transactionNodes/{transactionNodeName}
 # operationId: TransactionNodes_Delete
-export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockchain-members-transaction-nodes delete" [
+export def "transaction-nodes-delete" [
   subscription_id: string
   resource_group_name: string
   blockchain_member_name: string
@@ -827,7 +827,7 @@ export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockch
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Blockchain/blockchainMembers/{blockchainMemberName}/transactionNodes/{transactionNodeName}
 # operationId: TransactionNodes_Get
-export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockchain-members-transaction-nodes get" [
+export def "transaction-nodes-get" [
   subscription_id: string
   resource_group_name: string
   blockchain_member_name: string
@@ -872,7 +872,7 @@ export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockch
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Blockchain/blockchainMembers/{blockchainMemberName}/transactionNodes/{transactionNodeName}
 # operationId: TransactionNodes_Update
 # --properties shape: {firewallRules?: list, password?: string}
-export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockchain-members-transaction-nodes update" [
+export def "transaction-nodes-update" [
   subscription_id: string
   resource_group_name: string
   blockchain_member_name: string
@@ -921,7 +921,7 @@ export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockch
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Blockchain/blockchainMembers/{blockchainMemberName}/transactionNodes/{transactionNodeName}
 # operationId: TransactionNodes_Create
 # --properties shape: {firewallRules?: list, password?: string}
-export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockchain-members-transaction-nodes create" [
+export def "transaction-nodes-create" [
   subscription_id: string
   resource_group_name: string
   blockchain_member_name: string
@@ -970,7 +970,7 @@ export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockch
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Blockchain/blockchainMembers/{blockchainMemberName}/transactionNodes/{transactionNodeName}/listApiKeys
 # operationId: TransactionNodes_ListApiKeys
-export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockchain-members-transaction-nodes-list-api-keys list" [
+export def "transaction-nodes-list-api-keys" [
   subscription_id: string
   resource_group_name: string
   blockchain_member_name: string
@@ -1014,7 +1014,7 @@ export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockch
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Blockchain/blockchainMembers/{blockchainMemberName}/transactionNodes/{transactionNodeName}/regenerateApiKeys
 # operationId: TransactionNodes_ListRegenerateApiKeys
-export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockchain-members-transaction-nodes-regenerate-api-keys list" [
+export def "transaction-nodes-list-regenerate-api-keys" [
   subscription_id: string
   resource_group_name: string
   blockchain_member_name: string

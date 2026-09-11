@@ -103,7 +103,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "iatu-balance get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-iatu-balance" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -126,7 +126,7 @@ export def commands []: nothing -> table {
 # Account balance
 #
 # GET /iatu/balance
-export def "iatu-balance get" [
+export def "get-iatu-balance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -163,7 +163,7 @@ export def "iatu-balance get" [
 # List of account charges in JSON
 #
 # GET /iatu/charges/reports/all
-export def "iatu-charges-reports-all get" [
+export def "get-iatu-charges-reports-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -203,7 +203,7 @@ export def "iatu-charges-reports-all get" [
 # List of account charges in CSV
 #
 # GET /iatu/charges/reports/all.csv
-export def "iatu-charges-reports-all-csv get" [
+export def "get-iatu-charges-reports-all-csv" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -243,7 +243,7 @@ export def "iatu-charges-reports-all-csv get" [
 # Mobile number validation
 #
 # GET /iatu/number-validator
-export def "iatu-number-validator get" [
+export def "get-iatu-number-validator" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -283,7 +283,7 @@ export def "iatu-number-validator get" [
 # Current promotions
 #
 # GET /iatu/products/promotions
-export def "iatu-products-promotions get" [
+export def "get-iatu-products-promotions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -320,7 +320,7 @@ export def "iatu-products-promotions get" [
 # Get a list of products in JSON format
 #
 # GET /iatu/products/reports/all
-export def "iatu-products-reports-all get" [
+export def "get-iatu-products-reports-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -357,7 +357,7 @@ export def "iatu-products-reports-all get" [
 # Get a list of products in CSV format
 #
 # GET /iatu/products/reports/all.csv
-export def "iatu-products-reports-all-csv get" [
+export def "get-iatu-products-reports-all-csv" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -394,7 +394,7 @@ export def "iatu-products-reports-all-csv get" [
 # Get the estimated Local Value of a product
 #
 # GET /iatu/products/reports/local-value
-export def "iatu-products-reports-local-value get" [
+export def "get-iatu-products-reports-local-value" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -436,7 +436,7 @@ export def "iatu-products-reports-local-value get" [
 # Topup a mobile phone
 #
 # POST /iatu/topups
-export def "iatu-topups create" [
+export def "post-iatu-topups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -484,7 +484,7 @@ export def "iatu-topups create" [
 # Search topups transactions
 #
 # POST /iatu/topups/reports
-export def "iatu-topups-reports create" [
+export def "post-iatu-topups-reports" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -529,7 +529,7 @@ export def "iatu-topups-reports create" [
 # List of account topups in JSON
 #
 # GET /iatu/topups/reports/all
-export def "iatu-topups-reports-all get" [
+export def "get-iatu-topups-reports-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -569,7 +569,7 @@ export def "iatu-topups-reports-all get" [
 # List of account topups in CSV
 #
 # GET /iatu/topups/reports/all.csv
-export def "iatu-topups-reports-all-csv get" [
+export def "get-iatu-topups-reports-all-csv" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -609,7 +609,7 @@ export def "iatu-topups-reports-all-csv get" [
 # Summary of account topups in JSON
 #
 # GET /iatu/topups/reports/totals
-export def "iatu-topups-reports-totals get" [
+export def "get-iatu-topups-reports-totals" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -649,7 +649,7 @@ export def "iatu-topups-reports-totals get" [
 # Reversal of a Topup
 #
 # POST /iatu/topups/reverse
-export def "iatu-topups-reverse create" [
+export def "post-iatu-topups-reverse" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -691,7 +691,7 @@ export def "iatu-topups-reverse create" [
 # Status check
 #
 # GET /status
-export def "status get" [
+export def "get-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

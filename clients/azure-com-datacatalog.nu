@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-data-catalog-operations list-adc" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "adc-operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.DataCatalog/operations
 # operationId: ADCOperations_List
-export def "providers-microsoft-data-catalog-operations list-adc" [
+export def "adc-operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -176,7 +176,7 @@ export def "providers-microsoft-data-catalog-operations list-adc" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataCatalog/catalogs
 # operationId: ADCCatalogs_ListtByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-data-catalog-catalogs get-adc-listt" [
+export def "adc-catalogs-listt-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -216,7 +216,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-catalog-catal
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataCatalog/catalogs/{catalogName}
 # operationId: ADCCatalogs_Delete
-export def "subscriptions-resource-groups-providers-microsoft-data-catalog-catalogs delete-adc" [
+export def "adc-catalogs-delete" [
   subscription_id: string
   resource_group_name: string
   catalog_name: string
@@ -258,7 +258,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-catalog-catal
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataCatalog/catalogs/{catalogName}
 # operationId: ADCCatalogs_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-catalog-catalogs get-adc" [
+export def "adc-catalogs-get" [
   subscription_id: string
   resource_group_name: string
   catalog_name: string
@@ -301,7 +301,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-catalog-catal
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataCatalog/catalogs/{catalogName}
 # operationId: ADCCatalogs_Update
 # --properties shape: {admins?: list, enableAutomaticUnitAdjustment?: bool, sku?: "Free"|"Standard", successfullyProvisioned?: bool, units?: int, users?: list}
-export def "subscriptions-resource-groups-providers-microsoft-data-catalog-catalogs update-adc" [
+export def "adc-catalogs-update" [
   subscription_id: string
   resource_group_name: string
   catalog_name: string
@@ -351,7 +351,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-catalog-catal
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataCatalog/catalogs/{catalogName}
 # operationId: ADCCatalogs_CreateOrUpdate
 # --properties shape: {admins?: list, enableAutomaticUnitAdjustment?: bool, sku?: "Free"|"Standard", successfullyProvisioned?: bool, units?: int, users?: list}
-export def "subscriptions-resource-groups-providers-microsoft-data-catalog-catalogs create-adc-or-update" [
+export def "adc-catalogs-create-or-update" [
   subscription_id: string
   resource_group_name: string
   catalog_name: string

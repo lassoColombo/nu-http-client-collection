@@ -134,7 +134,7 @@ def accept-completer-1 [] { ["application/xml; charset=utf-8" "text/plain; chars
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "about get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-about" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -157,7 +157,7 @@ export def commands []: nothing -> table {
 # Get information about API.
 #
 # GET /about
-export def "about get" [
+export def "get-about" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -190,7 +190,7 @@ export def "about get" [
 # List all known architectures.
 #
 # GET /architectures
-export def "architectures list" [
+export def "get-architectures" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -223,7 +223,7 @@ export def "architectures list" [
 # Show one architecture.
 #
 # GET /architectures/{architecture_name}
-export def "architectures get" [
+export def "get-architectures-architecture-name" [
   architecture_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -258,7 +258,7 @@ export def "architectures get" [
 # List all attribute namespaces.
 #
 # GET /attribute
-export def "attribute list" [
+export def "get-attribute" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -291,7 +291,7 @@ export def "attribute list" [
 # Delete an attribute namespace and all attributes below.
 #
 # DELETE /attribute/{namespace}
-export def "attribute delete-by-namespace" [
+export def "delete-attribute-namespace" [
   namespace: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -326,7 +326,7 @@ export def "attribute delete-by-namespace" [
 # List all attributes below a namespace.
 #
 # GET /attribute/{namespace}
-export def "attribute get" [
+export def "get-attribute-namespace" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -361,7 +361,7 @@ export def "attribute get" [
 # Delete an attribute namespace and all attributes below.
 #
 # DELETE /attribute/{namespace}/_meta
-export def "attribute-meta delete-by-namespace" [
+export def "delete-attribute-namespace-meta" [
   namespace: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -396,7 +396,7 @@ export def "attribute-meta delete-by-namespace" [
 # Show attribute namespace.
 #
 # GET /attribute/{namespace}/_meta
-export def "attribute-meta list" [
+export def "get-attribute-namespace-meta" [
   namespace: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -431,7 +431,7 @@ export def "attribute-meta list" [
 # Change attribute namespace. Create an attribute namespace if it doesn't exist.
 #
 # POST /attribute/{namespace}/_meta
-export def "attribute-meta create-by-namespace" [
+export def "post-attribute-namespace-meta" [
   namespace: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -470,7 +470,7 @@ export def "attribute-meta create-by-namespace" [
 # Change attribute namespace. Create an attribute namespace if it doesn't exist.
 #
 # PUT /attribute/{namespace}/_meta
-export def "attribute-meta update-by-namespace" [
+export def "put-attribute-namespace-meta" [
   namespace: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -509,7 +509,7 @@ export def "attribute-meta update-by-namespace" [
 # Delete an attribute and all its values in projects or packages.
 #
 # DELETE /attribute/{namespace}/{attribute_name}
-export def "attribute delete-by-namespace-attribute-name" [
+export def "delete-attribute-namespace-attribute-name" [
   namespace: any
   attribute_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -546,7 +546,7 @@ export def "attribute delete-by-namespace-attribute-name" [
 # Delete an attribute and all its values in projects or packages.
 #
 # DELETE /attribute/{namespace}/{attribute_name}/_meta
-export def "attribute-meta delete-by-namespace-attribute-name" [
+export def "delete-attribute-namespace-attribute-name-meta" [
   namespace: any
   attribute_name: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -583,7 +583,7 @@ export def "attribute-meta delete-by-namespace-attribute-name" [
 # Shows attribute.
 #
 # GET /attribute/{namespace}/{attribute_name}/_meta
-export def "attribute-meta get" [
+export def "get-attribute-namespace-attribute-name-meta" [
   namespace: any
   attribute_name: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -620,7 +620,7 @@ export def "attribute-meta get" [
 # Change attribute data. Create an attribute if it doesn't exist.
 #
 # POST /attribute/{namespace}/{attribute_name}/_meta
-export def "attribute-meta create-by-namespace-attribute-name" [
+export def "post-attribute-namespace-attribute-name-meta" [
   namespace: any
   attribute_name: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -661,7 +661,7 @@ export def "attribute-meta create-by-namespace-attribute-name" [
 # Change attribute data. Create an attribute if it doesn't exist.
 #
 # PUT /attribute/{namespace}/{attribute_name}/_meta
-export def "attribute-meta update-by-namespace-attribute-name" [
+export def "put-attribute-namespace-attribute-name-meta" [
   namespace: any
   attribute_name: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -702,7 +702,7 @@ export def "attribute-meta update-by-namespace-attribute-name" [
 # Get a simple directory listing of all projects
 #
 # GET /build
-export def "build get" [
+export def "get-build" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -735,7 +735,7 @@ export def "build get" [
 # Get a simple directory listing of all repositories for the specified project
 #
 # GET /build/{project_name}
-export def "build get-by-project-name" [
+export def "get-build-project-name" [
   project_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -770,7 +770,7 @@ export def "build get-by-project-name" [
 # Apply different actions on builds/build processes of the specified project
 #
 # POST /build/{project_name}
-export def "build create" [
+export def "post-build-project-name" [
   project_name: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -810,7 +810,7 @@ export def "build create" [
 # Get the build results for packages, architectures and repositories of the specified project.
 #
 # GET /build/{project_name}/_result
-export def "build-result get" [
+export def "get-build-project-name-result" [
   project_name: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -853,7 +853,7 @@ export def "build-result get" [
 # List of all architectures the specified project builds against a given repository.
 #
 # GET /build/{project_name}/{repository_name}
-export def "build get-by-project-name-repository-name" [
+export def "get-build-project-name-repository-name" [
   project_name: any
   repository_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -890,7 +890,7 @@ export def "build get-by-project-name-repository-name" [
 # Show the build configuration for the specified repository.
 #
 # GET /build/{project_name}/{repository_name}/_buildconfig
-export def "build-buildconfig get" [
+export def "get-build-project-name-repository-name-buildconfig" [
   project_name: any
   repository_name: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -927,7 +927,7 @@ export def "build-buildconfig get" [
 # Show the build dependencies of packages that are part of the project.
 #
 # GET /build/{project_name}/{repository_name}/{architecture_name}/_builddepinfo
-export def "build-builddepinfo get" [
+export def "get-build-project-name-repository-name-architecture-name-builddepinfo" [
   project_name: any
   repository_name: any
   architecture_name: any
@@ -969,7 +969,7 @@ export def "build-builddepinfo get" [
 # List all binaries (produced by all packages of the given project).
 #
 # GET /build/{project_name}/{repository_name}/{architecture_name}/_repository
-export def "build-repository get" [
+export def "get-build-project-name-repository-name-architecture-name-repository" [
   project_name: any
   repository_name: any
   architecture_name: any
@@ -1008,7 +1008,7 @@ export def "build-repository get" [
 # List binaries built by the sources of the specified package.
 #
 # GET /build/{project_name}/{repository_name}/{architecture_name}/{package_name}
-export def "build get-by-project-name-repository-name-architecture-name-package-name" [
+export def "get-build-project-name-repository-name-architecture-name-package-name" [
   project_name: any
   repository_name: any
   architecture_name: any
@@ -1050,7 +1050,7 @@ export def "build get-by-project-name-repository-name-architecture-name-package-
 #
 # GET /build/{project_name}/{repository_name}/{architecture_name}/{package_name}/_buildinfo
 # operationId: getBuildProjectRepositoryArchPackageBuildinfo
-export def "build-buildinfo get-arch" [
+export def "get-build-project-repository-arch-package-buildinfo" [
   project_name: any
   repository_name: any
   architecture_name: any
@@ -1092,7 +1092,7 @@ export def "build-buildinfo get-arch" [
 #
 # GET /build/{project_name}/{repository_name}/{architecture_name}/{package_name}/_history
 # operationId: getBuildProjectRepositoryArchPackageHistory
-export def "build-history get-arch" [
+export def "get-build-project-repository-arch-package-history" [
   project_name: any
   repository_name: any
   architecture_name: any
@@ -1133,7 +1133,7 @@ export def "build-history get-arch" [
 # Show the build status of a currently running build job.
 #
 # GET /build/{project_name}/{repository_name}/{architecture_name}/{package_name}/_jobstatus
-export def "build-jobstatus get" [
+export def "get-build-project-name-repository-name-architecture-name-package-name-jobstatus" [
   project_name: any
   repository_name: any
   architecture_name: any
@@ -1175,7 +1175,7 @@ export def "build-jobstatus get" [
 #
 # GET /build/{project_name}/{repository_name}/{architecture_name}/{package_name}/_log
 # operationId: getBuildProjectRepositoryArchPackageLog
-export def "build-log get-arch" [
+export def "get-build-project-repository-arch-package-log" [
   project_name: any
   repository_name: any
   architecture_name: any
@@ -1216,7 +1216,7 @@ export def "build-log get-arch" [
 # Show the reason for the lastly triggered build.
 #
 # GET /build/{project_name}/{repository_name}/{architecture_name}/{package_name}/_reason
-export def "build-reason get" [
+export def "get-build-project-name-repository-name-architecture-name-package-name-reason" [
   project_name: any
   repository_name: any
   architecture_name: any
@@ -1258,7 +1258,7 @@ export def "build-reason get" [
 #
 # GET /build/{project_name}/{repository_name}/{architecture_name}/{package_name}/_status
 # operationId: getBuildProjectRepositoryArchPackageStatus
-export def "build-status get-arch" [
+export def "get-build-project-repository-arch-package-status" [
   project_name: any
   repository_name: any
   architecture_name: any
@@ -1300,7 +1300,7 @@ export def "build-status get-arch" [
 #
 # GET /build/{project_name}/{repository_name}/{architecture_name}/{package_name}/{file_name}
 # operationId: getBuildProjectRepositoryArchitecturePackageFile
-export def "build get-by-project-name-repository-name-architecture-name-package-name-file-name" [
+export def "get-build-project-repository-architecture-package-file" [
   project_name: any
   repository_name: any
   architecture_name: any
@@ -1344,7 +1344,7 @@ export def "build get-by-project-name-repository-name-architecture-name-package-
 #
 # PUT /build/{project_name}/{repository_name}/{architecture_name}/{package_name}/{file_name}
 # operationId: putBuildProjectRepositoryArchitecturePackageFile
-export def "build update" [
+export def "put-build-project-repository-architecture-package-file" [
   project_name: any
   repository_name: any
   architecture_name: any
@@ -1392,7 +1392,7 @@ export def "build update" [
 #
 # GET /build/{project_name}/{repository_name}/{architecture_name}/{package_name}/{file_name}?view=fileinfo
 # operationId: getBuildProjectRepositoryArchitecturePackageFileViewFileinfo
-export def "build get-view-fileinfo" [
+export def "get-build-project-repository-architecture-package-file-view-fileinfo" [
   project_name: any
   repository_name: any
   architecture_name: any
@@ -1437,7 +1437,7 @@ export def "build get-view-fileinfo" [
 # Display the configuration of this Open Build Service instance
 #
 # GET /configuration
-export def "configuration get" [
+export def "get-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1470,7 +1470,7 @@ export def "configuration get" [
 # Update the configuration of this Open Build Service instance
 #
 # PUT /configuration
-export def "configuration update" [
+export def "put-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1507,7 +1507,7 @@ export def "configuration update" [
 # List all distributions.
 #
 # GET /distributions
-export def "distributions list" [
+export def "get-distributions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1540,7 +1540,7 @@ export def "distributions list" [
 # Create a distribution.
 #
 # POST /distributions
-export def "distributions create" [
+export def "post-distributions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1577,7 +1577,7 @@ export def "distributions create" [
 # Bulk replace all distributions.
 #
 # PUT /distributions/bulk_replace
-export def "distributions-bulk-replace update" [
+export def "put-distributions-bulk-replace" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1614,7 +1614,7 @@ export def "distributions-bulk-replace update" [
 # List all distributions including remote.
 #
 # GET /distributions/include_remotes
-export def "distributions-include-remotes get" [
+export def "get-distributions-include-remotes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1647,7 +1647,7 @@ export def "distributions-include-remotes get" [
 # Delete a distribution.
 #
 # DELETE /distributions/{distribution_id}
-export def "distributions delete" [
+export def "delete-distributions-distribution-id" [
   distribution_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1682,7 +1682,7 @@ export def "distributions delete" [
 # Show a distribution.
 #
 # GET /distributions/{distribution_id}
-export def "distributions get" [
+export def "get-distributions-distribution-id" [
   distribution_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1717,7 +1717,7 @@ export def "distributions get" [
 # Update a distribution.
 #
 # PUT /distributions/{distribution_id}
-export def "distributions update" [
+export def "put-distributions-distribution-id" [
   distribution_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1756,7 +1756,7 @@ export def "distributions update" [
 # List available groups.
 #
 # GET /group
-export def "group list" [
+export def "get-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1789,7 +1789,7 @@ export def "group list" [
 # Delete a group.
 #
 # DELETE /group/{group_title}
-export def "group delete" [
+export def "delete-group-group-title" [
   group_title: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1824,7 +1824,7 @@ export def "group delete" [
 # Read group data.
 #
 # GET /group/{group_title}
-export def "group get" [
+export def "get-group-group-title" [
   group_title: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1859,7 +1859,7 @@ export def "group get" [
 # Modify group data.
 #
 # POST /group/{group_title}
-export def "group create" [
+export def "post-group-group-title" [
   group_title: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1898,7 +1898,7 @@ export def "group create" [
 # Write group data.
 #
 # PUT /group/{group_title}
-export def "group update" [
+export def "put-group-group-title" [
   group_title: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1937,7 +1937,7 @@ export def "group update" [
 # Get the list of issue trackers.
 #
 # GET /issue_trackers
-export def "issue-trackers list" [
+export def "get-issue-trackers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1970,7 +1970,7 @@ export def "issue-trackers list" [
 # Create an issue tracker.
 #
 # POST /issue_trackers
-export def "issue-trackers create" [
+export def "post-issue-trackers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2007,7 +2007,7 @@ export def "issue-trackers create" [
 # Delete an issue tracker.
 #
 # DELETE /issue_trackers/{issue_tracker_name}
-export def "issue-trackers delete" [
+export def "delete-issue-trackers-issue-tracker-name" [
   issue_tracker_name: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2042,7 +2042,7 @@ export def "issue-trackers delete" [
 # Show an issue tracker.
 #
 # GET /issue_trackers/{issue_tracker_name}
-export def "issue-trackers get" [
+export def "get-issue-trackers-issue-tracker-name" [
   issue_tracker_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2077,7 +2077,7 @@ export def "issue-trackers get" [
 # Update or create an issue tracker.
 #
 # PUT /issue_trackers/{issue_tracker_name}
-export def "issue-trackers update" [
+export def "put-issue-trackers-issue-tracker-name" [
   issue_tracker_name: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2116,7 +2116,7 @@ export def "issue-trackers update" [
 # Show an issue of an issue tracker.
 #
 # GET /issue_trackers/{issue_tracker_name}/issues/{issue_name}
-export def "issue-trackers-issues get" [
+export def "get-issue-trackers-issue-tracker-name-issues-issue-name" [
   issue_tracker_name: any
   issue_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2153,7 +2153,7 @@ export def "issue-trackers-issues get" [
 # List all people.
 #
 # GET /person
-export def "person list" [
+export def "get-person" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2188,7 +2188,7 @@ export def "person list" [
 # Executes a command on the person endpoint.
 #
 # POST /person
-export def "person create" [
+export def "post-person" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2227,7 +2227,7 @@ export def "person create" [
 # Registers a new person
 #
 # POST /person/register
-export def "person-register create" [
+export def "post-person-register" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2264,7 +2264,7 @@ export def "person-register create" [
 # Get details about a person
 #
 # GET /person/{login}
-export def "person get" [
+export def "get-person-login" [
   login: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2299,7 +2299,7 @@ export def "person get" [
 # Perform changes on a registered person
 #
 # POST /person/{login}
-export def "person create-by-login" [
+export def "post-person-login" [
   login: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2340,7 +2340,7 @@ export def "person create-by-login" [
 # Update person
 #
 # PUT /person/{login}
-export def "person update" [
+export def "put-person-login" [
   login: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2379,7 +2379,7 @@ export def "person update" [
 # List the groups of a person
 #
 # GET /person/{login}/group
-export def "person-group get" [
+export def "get-person-login-group" [
   login: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2414,7 +2414,7 @@ export def "person-group get" [
 # List the authentication tokens of a person.
 #
 # GET /person/{login}/token
-export def "person-token get" [
+export def "get-person-login-token" [
   login: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2449,7 +2449,7 @@ export def "person-token get" [
 # Create a new authentication token for a person.
 #
 # POST /person/{login}/token
-export def "person-token create" [
+export def "post-person-login-token" [
   login: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2489,7 +2489,7 @@ export def "person-token create" [
 # Delete a token of a person.
 #
 # DELETE /person/{login}/token/{id}
-export def "person-token delete" [
+export def "delete-person-login-token-id" [
   login: any
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2526,7 +2526,7 @@ export def "person-token delete" [
 # List all the published projects.
 #
 # GET /published
-export def "published get" [
+export def "get-published" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2559,7 +2559,7 @@ export def "published get" [
 # List the repositories of a project with published binaries
 #
 # GET /published/{project_name}
-export def "published get-by-project-name" [
+export def "get-published-project-name" [
   project_name: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2594,7 +2594,7 @@ export def "published get-by-project-name" [
 # List the content of the directory tree where the binaries are published at the level project/repository.
 #
 # GET /published/{project_name}/{repository_name}
-export def "published get-by-project-name-repository-name" [
+export def "get-published-project-name-repository-name" [
   project_name: any
   repository_name: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -2631,7 +2631,7 @@ export def "published get-by-project-name-repository-name" [
 # List the content of the directory tree where the binaries are published at the level project/repository/architecture.
 #
 # GET /published/{project_name}/{repository_name}/{architecture_name}
-export def "published get-by-project-name-repository-name-architecture-name" [
+export def "get-published-project-name-repository-name-architecture-name" [
   project_name: any
   repository_name: any
   architecture_name: any
@@ -2670,7 +2670,7 @@ export def "published get-by-project-name-repository-name-architecture-name" [
 # Return the binary file itself.
 #
 # GET /published/{project_name}/{repository_name}/{architecture_name}/{binary_filename}
-export def "published get-by-project-name-repository-name-architecture-name-binary-filename" [
+export def "get-published-project-name-repository-name-architecture-name-binary-filename" [
   project_name: any
   repository_name: any
   architecture_name: any
@@ -2712,7 +2712,7 @@ export def "published get-by-project-name-repository-name-architecture-name-bina
 # Generate a ymp pattern that includes the needed repositories to install the given binary.
 #
 # GET /published/{project_name}/{repository_name}/{architecture_name}/{binary_filename}?view=ymp
-export def "published get-by-project-name-repository-name-architecture-name-binary-filename-1" [
+export def "get-published-project-name-repository-name-architecture-name-binary-filename-viewymp" [
   project_name: any
   repository_name: any
   architecture_name: any
@@ -2753,7 +2753,7 @@ export def "published get-by-project-name-repository-name-architecture-name-bina
 # Present information about the last publication of the pair project and repository.
 #
 # GET /published/{project_name}/{repository_name}?view=status
-export def "published get-by-project-name-repository-name-1" [
+export def "get-published-project-name-repository-name-viewstatus" [
   project_name: any
   repository_name: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -2792,7 +2792,7 @@ export def "published get-by-project-name-repository-name-1" [
 # Get a simple directory listing of all requests
 #
 # GET /request
-export def "request list" [
+export def "get-request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2825,7 +2825,7 @@ export def "request list" [
 # Create a request
 #
 # POST /request
-export def "request create" [
+export def "post-request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2867,7 +2867,7 @@ export def "request create" [
 # Delete a given request.
 #
 # DELETE /request/{id}
-export def "request delete" [
+export def "delete-request-id" [
   id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2902,7 +2902,7 @@ export def "request delete" [
 # Show details about a specified request.
 #
 # GET /request/{id}
-export def "request get" [
+export def "get-request-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2940,7 +2940,7 @@ export def "request get" [
 # Apply certain actions on a specified request.
 #
 # POST /request/{id}
-export def "request create-by-id" [
+export def "post-request-id" [
   id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2986,7 +2986,7 @@ export def "request create-by-id" [
 # Modify a given request.
 #
 # PUT /request/{id}
-export def "request update" [
+export def "put-request-id" [
   id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3025,7 +3025,7 @@ export def "request update" [
 # Get the diff for all packages affected by the request.
 #
 # POST /request/{id}?cmd=diff
-export def "request create-by-id-1" [
+export def "post-request-id-cmddiff" [
   id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3065,7 +3065,7 @@ export def "request create-by-id-1" [
 # Get a collection of requests for a specified target
 #
 # GET /request?view=collection
-export def "request-viewcollection get" [
+export def "get-requestviewcollection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3109,7 +3109,7 @@ export def "request-viewcollection get" [
 # Lists status of workers, jobs, backend services and general statistics.
 #
 # GET /worker/status
-export def "worker-status get" [
+export def "get-worker-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3142,7 +3142,7 @@ export def "worker-status get" [
 # Lists capabilites of a worker.
 #
 # GET /worker/{architecture_name}:{worker_id}
-export def "worker get" [
+export def "get-worker-architecture-name-worker-id" [
   architecture_name: any
   worker_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3179,7 +3179,7 @@ export def "worker get" [
 # Lists workers which match a constraints filter.
 #
 # POST /worker?cmd=checkconstraints
-export def "worker-cmdcheckconstraints create" [
+export def "post-workercmdcheckconstraints" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

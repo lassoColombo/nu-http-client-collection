@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-solutions-applications list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "applications-list-by-subscription" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Solutions/applications
 # operationId: Applications_ListBySubscription
-export def "subscriptions-providers-microsoft-solutions-applications list" [
+export def "applications-list-by-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -178,7 +178,7 @@ export def "subscriptions-providers-microsoft-solutions-applications list" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Solutions/applicationDefinitions
 # operationId: ApplicationDefinitions_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-solutions-application-definitions list" [
+export def "application-definitions-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -218,7 +218,7 @@ export def "subscriptions-resource-groups-providers-microsoft-solutions-applicat
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Solutions/applicationDefinitions/{applicationDefinitionName}
 # operationId: ApplicationDefinitions_Delete
-export def "subscriptions-resource-groups-providers-microsoft-solutions-application-definitions delete" [
+export def "application-definitions-delete" [
   subscription_id: string
   resource_group_name: string
   application_definition_name: string
@@ -260,7 +260,7 @@ export def "subscriptions-resource-groups-providers-microsoft-solutions-applicat
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Solutions/applicationDefinitions/{applicationDefinitionName}
 # operationId: ApplicationDefinitions_Get
-export def "subscriptions-resource-groups-providers-microsoft-solutions-application-definitions get" [
+export def "application-definitions-get" [
   subscription_id: string
   resource_group_name: string
   application_definition_name: string
@@ -305,7 +305,7 @@ export def "subscriptions-resource-groups-providers-microsoft-solutions-applicat
 # --properties shape: {artifacts?: list, authorizations: list, createUiDefinition?: record, description?: string, displayName?: string, isEnabled?: string, lockLevel: "CanNotDelete"|"ReadOnly"|"None", mainTemplate?: record, packageFileUri?: string}
 # --identity shape: {type?: "SystemAssigned"}
 # --sku shape: {capacity?: int, family?: string, model?: string, name: string, size?: string, tier?: string}
-export def "subscriptions-resource-groups-providers-microsoft-solutions-application-definitions create-or-update" [
+export def "application-definitions-create-or-update" [
   subscription_id: string
   resource_group_name: string
   application_definition_name: string
@@ -354,7 +354,7 @@ export def "subscriptions-resource-groups-providers-microsoft-solutions-applicat
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Solutions/applications
 # operationId: Applications_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-solutions-applications list" [
+export def "applications-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -394,7 +394,7 @@ export def "subscriptions-resource-groups-providers-microsoft-solutions-applicat
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Solutions/applications/{applicationName}
 # operationId: Applications_Delete
-export def "subscriptions-resource-groups-providers-microsoft-solutions-applications delete" [
+export def "applications-delete" [
   subscription_id: string
   resource_group_name: string
   application_name: string
@@ -436,7 +436,7 @@ export def "subscriptions-resource-groups-providers-microsoft-solutions-applicat
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Solutions/applications/{applicationName}
 # operationId: Applications_Get
-export def "subscriptions-resource-groups-providers-microsoft-solutions-applications get" [
+export def "applications-get" [
   subscription_id: string
   resource_group_name: string
   application_name: string
@@ -482,7 +482,7 @@ export def "subscriptions-resource-groups-providers-microsoft-solutions-applicat
 # --properties shape: {applicationDefinitionId?: string, managedResourceGroupId: string, parameters?: record}
 # --identity shape: {type?: "SystemAssigned"}
 # --sku shape: {capacity?: int, family?: string, model?: string, name: string, size?: string, tier?: string}
-export def "subscriptions-resource-groups-providers-microsoft-solutions-applications update" [
+export def "applications-update" [
   subscription_id: string
   resource_group_name: string
   application_name: string
@@ -537,7 +537,7 @@ export def "subscriptions-resource-groups-providers-microsoft-solutions-applicat
 # --properties shape: {applicationDefinitionId?: string, managedResourceGroupId: string, parameters?: record}
 # --identity shape: {type?: "SystemAssigned"}
 # --sku shape: {capacity?: int, family?: string, model?: string, name: string, size?: string, tier?: string}
-export def "subscriptions-resource-groups-providers-microsoft-solutions-applications create-or-update" [
+export def "applications-create-or-update" [
   subscription_id: string
   resource_group_name: string
   application_name: string
@@ -588,7 +588,7 @@ export def "subscriptions-resource-groups-providers-microsoft-solutions-applicat
 #
 # DELETE /{applicationId}
 # operationId: Applications_DeleteById
-export def "applications delete" [
+export def "applications-delete-by-id" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -626,7 +626,7 @@ export def "applications delete" [
 #
 # GET /{applicationId}
 # operationId: Applications_GetById
-export def "applications get" [
+export def "applications-get-by-id" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -668,7 +668,7 @@ export def "applications get" [
 # --properties shape: {applicationDefinitionId?: string, managedResourceGroupId: string, parameters?: record}
 # --identity shape: {type?: "SystemAssigned"}
 # --sku shape: {capacity?: int, family?: string, model?: string, name: string, size?: string, tier?: string}
-export def "applications update" [
+export def "applications-update-by-id" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -719,7 +719,7 @@ export def "applications update" [
 # --properties shape: {applicationDefinitionId?: string, managedResourceGroupId: string, parameters?: record}
 # --identity shape: {type?: "SystemAssigned"}
 # --sku shape: {capacity?: int, family?: string, model?: string, name: string, size?: string, tier?: string}
-export def "applications create-or-update" [
+export def "applications-create-or-update-by-id" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

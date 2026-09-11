@@ -124,7 +124,7 @@ def accept-completer [] { ["application/json" "text/json"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-network-network-interfaces list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "network-interfaces-list-all" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -148,7 +148,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/networkInterfaces
 # operationId: NetworkInterfaces_ListAll
-export def "subscriptions-providers-microsoft-network-network-interfaces list" [
+export def "network-interfaces-list-all" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -187,7 +187,7 @@ export def "subscriptions-providers-microsoft-network-network-interfaces list" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkInterfaces
 # operationId: NetworkInterfaces_List
-export def "subscriptions-resource-groups-providers-microsoft-network-network-interfaces list" [
+export def "network-interfaces-list" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -228,7 +228,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-in
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkInterfaces/{networkInterfaceName}
 # operationId: NetworkInterfaces_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-network-interfaces delete" [
+export def "network-interfaces-delete" [
   subscription_id: string
   resource_group_name: string
   network_interface_name: string
@@ -271,7 +271,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-in
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkInterfaces/{networkInterfaceName}
 # operationId: NetworkInterfaces_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-network-interfaces get" [
+export def "network-interfaces-get" [
   subscription_id: string
   resource_group_name: string
   network_interface_name: string
@@ -315,7 +315,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-in
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkInterfaces/{networkInterfaceName}
 # operationId: NetworkInterfaces_UpdateTags
-export def "subscriptions-resource-groups-providers-microsoft-network-network-interfaces update-tags" [
+export def "network-interfaces-update-tags" [
   subscription_id: string
   resource_group_name: string
   network_interface_name: string
@@ -363,7 +363,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-in
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkInterfaces/{networkInterfaceName}
 # operationId: NetworkInterfaces_CreateOrUpdate
 # --properties shape: {dnsSettings?: any, enableAcceleratedNetworking?: bool, enableIPForwarding?: bool, ipConfigurations?: list, macAddress?: string, networkSecurityGroup?: any, primary?: bool, provisioningState?: string, resourceGuid?: string, virtualMachine?: any}
-export def "subscriptions-resource-groups-providers-microsoft-network-network-interfaces create-or-update" [
+export def "network-interfaces-create-or-update" [
   subscription_id: string
   resource_group_name: string
   network_interface_name: string
@@ -414,7 +414,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-in
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkInterfaces/{networkInterfaceName}/effectiveNetworkSecurityGroups
 # operationId: NetworkInterfaces_ListEffectiveNetworkSecurityGroups
-export def "subscriptions-resource-groups-providers-microsoft-network-network-interfaces-effective-network-security-groups list" [
+export def "network-interfaces-list-effective-network-security-groups" [
   subscription_id: string
   resource_group_name: string
   network_interface_name: string
@@ -457,7 +457,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-in
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkInterfaces/{networkInterfaceName}/effectiveRouteTable
 # operationId: NetworkInterfaces_GetEffectiveRouteTable
-export def "subscriptions-resource-groups-providers-microsoft-network-network-interfaces-effective-route-table get" [
+export def "network-interfaces-get-effective-route-table" [
   subscription_id: string
   resource_group_name: string
   network_interface_name: string
@@ -500,7 +500,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-in
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkInterfaces/{networkInterfaceName}/ipConfigurations
 # operationId: NetworkInterfaceIPConfigurations_List
-export def "subscriptions-resource-groups-providers-microsoft-network-network-interfaces-ip-configurations list" [
+export def "network-interface-ip-configurations-list" [
   subscription_id: string
   resource_group_name: string
   network_interface_name: string
@@ -543,7 +543,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-in
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkInterfaces/{networkInterfaceName}/ipConfigurations/{ipConfigurationName}
 # operationId: NetworkInterfaceIPConfigurations_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-network-interfaces-ip-configurations get" [
+export def "network-interface-ip-configurations-get" [
   subscription_id: string
   resource_group_name: string
   network_interface_name: string
@@ -588,7 +588,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-in
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkInterfaces/{networkInterfaceName}/loadBalancers
 # operationId: NetworkInterfaceLoadBalancers_List
-export def "subscriptions-resource-groups-providers-microsoft-network-network-interfaces-load-balancers list" [
+export def "network-interface-load-balancers-list" [
   subscription_id: string
   resource_group_name: string
   network_interface_name: string

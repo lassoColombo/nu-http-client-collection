@@ -124,7 +124,7 @@ def authentication-method-completer [] { ["EAPMSCHAPv2" "EAPTLS"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-network-p2svpn-gateways list-p2s-vpn" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "p2s-vpn-gateways-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -148,7 +148,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/p2svpnGateways
 # operationId: P2sVpnGateways_List
-export def "subscriptions-providers-microsoft-network-p2svpn-gateways list-p2s-vpn" [
+export def "p2s-vpn-gateways-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -186,7 +186,7 @@ export def "subscriptions-providers-microsoft-network-p2svpn-gateways list-p2s-v
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/virtualHubs
 # operationId: VirtualHubs_List
-export def "subscriptions-providers-microsoft-network-virtual-hubs list" [
+export def "virtual-hubs-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -224,7 +224,7 @@ export def "subscriptions-providers-microsoft-network-virtual-hubs list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/virtualWans
 # operationId: VirtualWans_List
-export def "subscriptions-providers-microsoft-network-virtual-wans list" [
+export def "virtual-wans-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -262,7 +262,7 @@ export def "subscriptions-providers-microsoft-network-virtual-wans list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/vpnGateways
 # operationId: VpnGateways_List
-export def "subscriptions-providers-microsoft-network-vpn-gateways list" [
+export def "vpn-gateways-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -300,7 +300,7 @@ export def "subscriptions-providers-microsoft-network-vpn-gateways list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/vpnSites
 # operationId: VpnSites_List
-export def "subscriptions-providers-microsoft-network-vpn-sites list" [
+export def "vpn-sites-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -338,7 +338,7 @@ export def "subscriptions-providers-microsoft-network-vpn-sites list" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/p2svpnGateways
 # operationId: P2sVpnGateways_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-network-p2svpn-gateways list-p2s-vpn" [
+export def "p2s-vpn-gateways-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -378,7 +378,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-p2svpn-gat
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/p2svpnGateways/{gatewayName}
 # operationId: P2sVpnGateways_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-p2svpn-gateways delete-p2s-vpn" [
+export def "p2s-vpn-gateways-delete" [
   subscription_id: string
   resource_group_name: string
   gateway_name: string
@@ -420,7 +420,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-p2svpn-gat
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/p2svpnGateways/{gatewayName}
 # operationId: P2sVpnGateways_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-p2svpn-gateways get-p2s-vpn" [
+export def "p2s-vpn-gateways-get" [
   subscription_id: string
   resource_group_name: string
   gateway_name: string
@@ -462,7 +462,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-p2svpn-gat
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/p2svpnGateways/{gatewayName}
 # operationId: P2sVpnGateways_UpdateTags
-export def "subscriptions-resource-groups-providers-microsoft-network-p2svpn-gateways update-p2s-vpn-tags" [
+export def "p2s-vpn-gateways-update-tags" [
   subscription_id: string
   resource_group_name: string
   gateway_name: string
@@ -509,7 +509,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-p2svpn-gat
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/p2svpnGateways/{gatewayName}
 # operationId: P2sVpnGateways_CreateOrUpdate
 # --properties shape: {customRoutes?: any, p2SVpnServerConfiguration?: any, virtualHub?: any, vpnClientAddressPool?: any, vpnClientConnectionHealth?: any, vpnGatewayScaleUnit?: int}
-export def "subscriptions-resource-groups-providers-microsoft-network-p2svpn-gateways create-p2s-vpn-or-update" [
+export def "p2s-vpn-gateways-create-or-update" [
   subscription_id: string
   resource_group_name: string
   gateway_name: string
@@ -558,7 +558,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-p2svpn-gat
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/p2svpnGateways/{gatewayName}/generatevpnprofile
 # operationId: P2sVpnGateways_GenerateVpnProfile
-export def "subscriptions-resource-groups-providers-microsoft-network-p2svpn-gateways-generatevpnprofile generate-p2s-vpn-vpn-profile" [
+export def "p2s-vpn-gateways-generate-vpn-profile" [
   subscription_id: string
   resource_group_name: string
   gateway_name: string
@@ -604,7 +604,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-p2svpn-gat
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/p2svpnGateways/{gatewayName}/getP2sVpnConnectionHealth
 # operationId: P2sVpnGateways_GetP2sVpnConnectionHealth
-export def "subscriptions-resource-groups-providers-microsoft-network-p2svpn-gateways-get-p2s-vpn-connection-health get" [
+export def "p2s-vpn-gateways-get-p2s-vpn-connection-health" [
   subscription_id: string
   resource_group_name: string
   gateway_name: string
@@ -646,7 +646,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-p2svpn-gat
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualHubs
 # operationId: VirtualHubs_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-hubs list" [
+export def "virtual-hubs-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -686,7 +686,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-hu
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualHubs/{virtualHubName}
 # operationId: VirtualHubs_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-hubs delete" [
+export def "virtual-hubs-delete" [
   subscription_id: string
   resource_group_name: string
   virtual_hub_name: string
@@ -728,7 +728,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-hu
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualHubs/{virtualHubName}
 # operationId: VirtualHubs_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-hubs get" [
+export def "virtual-hubs-get" [
   subscription_id: string
   resource_group_name: string
   virtual_hub_name: string
@@ -770,7 +770,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-hu
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualHubs/{virtualHubName}
 # operationId: VirtualHubs_UpdateTags
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-hubs update-tags" [
+export def "virtual-hubs-update-tags" [
   subscription_id: string
   resource_group_name: string
   virtual_hub_name: string
@@ -817,7 +817,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-hu
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualHubs/{virtualHubName}
 # operationId: VirtualHubs_CreateOrUpdate
 # --properties shape: {addressPrefix?: string, expressRouteGateway?: any, p2SVpnGateway?: any, routeTable?: any, virtualNetworkConnections?: list, virtualWan?: any, vpnGateway?: any}
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-hubs create-or-update" [
+export def "virtual-hubs-create-or-update" [
   subscription_id: string
   resource_group_name: string
   virtual_hub_name: string
@@ -866,7 +866,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-hu
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualHubs/{virtualHubName}/hubVirtualNetworkConnections
 # operationId: HubVirtualNetworkConnections_List
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-hubs-hub-virtual-network-connections list" [
+export def "hub-virtual-network-connections-list" [
   subscription_id: string
   resource_group_name: string
   virtual_hub_name: string
@@ -908,7 +908,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-hu
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualHubs/{virtualHubName}/hubVirtualNetworkConnections/{connectionName}
 # operationId: HubVirtualNetworkConnections_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-hubs-hub-virtual-network-connections get" [
+export def "hub-virtual-network-connections-get" [
   subscription_id: string
   resource_group_name: string
   virtual_hub_name: string
@@ -952,7 +952,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-hu
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualWans
 # operationId: VirtualWans_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wans list" [
+export def "virtual-wans-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -992,7 +992,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wa
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualWans/{VirtualWANName}
 # operationId: VirtualWans_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wans delete" [
+export def "virtual-wans-delete" [
   subscription_id: string
   resource_group_name: string
   virtual_wan_name: string
@@ -1034,7 +1034,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualWans/{VirtualWANName}
 # operationId: VirtualWans_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wans get" [
+export def "virtual-wans-get" [
   subscription_id: string
   resource_group_name: string
   virtual_wan_name: string
@@ -1076,7 +1076,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wa
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualWans/{VirtualWANName}
 # operationId: VirtualWans_UpdateTags
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wans update-tags" [
+export def "virtual-wans-update-tags" [
   subscription_id: string
   resource_group_name: string
   virtual_wan_name: string
@@ -1123,7 +1123,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualWans/{VirtualWANName}
 # operationId: VirtualWans_CreateOrUpdate
 # --properties shape: {allowBranchToBranchTraffic?: bool, allowVnetToVnetTraffic?: bool, disableVpnEncryption?: bool, p2SVpnServerConfigurations?: list, securityProviderName?: string}
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wans create-or-update" [
+export def "virtual-wans-create-or-update" [
   subscription_id: string
   resource_group_name: string
   virtual_wan_name: string
@@ -1172,7 +1172,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualWans/{virtualWANName}/supportedSecurityProviders
 # operationId: SupportedSecurityProviders
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wans-supported-security-providers get" [
+export def "supported-security-providers" [
   subscription_id: string
   resource_group_name: string
   virtual_wan_name: string
@@ -1214,7 +1214,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wa
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualWans/{virtualWANName}/vpnConfiguration
 # operationId: VpnSitesConfiguration_Download
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wans-vpn-configuration download-sites" [
+export def "vpn-sites-configuration-download" [
   subscription_id: string
   resource_group_name: string
   virtual_wan_name: string
@@ -1261,7 +1261,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualWans/{virtualWanName}/p2sVpnServerConfigurations
 # operationId: P2sVpnServerConfigurations_ListByVirtualWan
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wans-p2s-vpn-server-configurations list" [
+export def "p2s-vpn-server-configurations-list-by-virtual-wan" [
   subscription_id: string
   resource_group_name: string
   virtual_wan_name: string
@@ -1303,7 +1303,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wa
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualWans/{virtualWanName}/p2sVpnServerConfigurations/{p2SVpnServerConfigurationName}
 # operationId: P2sVpnServerConfigurations_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wans-p2s-vpn-server-configurations delete" [
+export def "p2s-vpn-server-configurations-delete" [
   subscription_id: string
   resource_group_name: string
   virtual_wan_name: string
@@ -1347,7 +1347,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualWans/{virtualWanName}/p2sVpnServerConfigurations/{p2SVpnServerConfigurationName}
 # operationId: P2sVpnServerConfigurations_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wans-p2s-vpn-server-configurations get" [
+export def "p2s-vpn-server-configurations-get" [
   subscription_id: string
   resource_group_name: string
   virtual_wan_name: string
@@ -1392,7 +1392,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualWans/{virtualWanName}/p2sVpnServerConfigurations/{p2SVpnServerConfigurationName}
 # operationId: P2sVpnServerConfigurations_CreateOrUpdate
 # --properties shape: {etag?: string, name?: string, p2SVpnServerConfigRadiusClientRootCertificates?: list, p2SVpnServerConfigRadiusServerRootCertificates?: list, p2SVpnServerConfigVpnClientRevokedCertificates?: list, p2SVpnServerConfigVpnClientRootCertificates?: list, radiusServerAddress?: string, radiusServerSecret?: string, vpnClientIpsecPolicies?: list, vpnProtocols?: list<string>}
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wans-p2s-vpn-server-configurations create-or-update" [
+export def "p2s-vpn-server-configurations-create-or-update" [
   subscription_id: string
   resource_group_name: string
   virtual_wan_name: string
@@ -1442,7 +1442,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/vpnGateways
 # operationId: VpnGateways_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gateways list" [
+export def "vpn-gateways-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1482,7 +1482,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gatewa
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/vpnGateways/{gatewayName}
 # operationId: VpnGateways_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gateways delete" [
+export def "vpn-gateways-delete" [
   subscription_id: string
   resource_group_name: string
   gateway_name: string
@@ -1524,7 +1524,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gatewa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/vpnGateways/{gatewayName}
 # operationId: VpnGateways_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gateways get" [
+export def "vpn-gateways-get" [
   subscription_id: string
   resource_group_name: string
   gateway_name: string
@@ -1566,7 +1566,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gatewa
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/vpnGateways/{gatewayName}
 # operationId: VpnGateways_UpdateTags
-export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gateways update-tags" [
+export def "vpn-gateways-update-tags" [
   subscription_id: string
   resource_group_name: string
   gateway_name: string
@@ -1613,7 +1613,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gatewa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/vpnGateways/{gatewayName}
 # operationId: VpnGateways_CreateOrUpdate
 # --properties shape: {bgpSettings?: any, connections?: list, virtualHub?: any, vpnGatewayScaleUnit?: int}
-export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gateways create-or-update" [
+export def "vpn-gateways-create-or-update" [
   subscription_id: string
   resource_group_name: string
   gateway_name: string
@@ -1662,7 +1662,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gatewa
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/vpnGateways/{gatewayName}/reset
 # operationId: VpnGateways_Reset
-export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gateways-reset reset" [
+export def "vpn-gateways-reset" [
   subscription_id: string
   resource_group_name: string
   gateway_name: string
@@ -1704,7 +1704,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gatewa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/vpnGateways/{gatewayName}/vpnConnections
 # operationId: VpnConnections_ListByVpnGateway
-export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gateways-vpn-connections list" [
+export def "vpn-connections-list-by-vpn-gateway" [
   subscription_id: string
   resource_group_name: string
   gateway_name: string
@@ -1746,7 +1746,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gatewa
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/vpnGateways/{gatewayName}/vpnConnections/{connectionName}
 # operationId: VpnConnections_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gateways-vpn-connections delete" [
+export def "vpn-connections-delete" [
   subscription_id: string
   resource_group_name: string
   gateway_name: string
@@ -1790,7 +1790,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gatewa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/vpnGateways/{gatewayName}/vpnConnections/{connectionName}
 # operationId: VpnConnections_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gateways-vpn-connections get" [
+export def "vpn-connections-get" [
   subscription_id: string
   resource_group_name: string
   gateway_name: string
@@ -1835,7 +1835,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gatewa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/vpnGateways/{gatewayName}/vpnConnections/{connectionName}
 # operationId: VpnConnections_CreateOrUpdate
 # --properties shape: {connectionBandwidth?: int, enableBgp?: bool, enableInternetSecurity?: bool, enableRateLimiting?: bool, ipsecPolicies?: list, remoteVpnSite?: any, routingWeight?: int, sharedKey?: string, useLocalAzureIpAddress?: bool, usePolicyBasedTrafficSelectors?: bool, vpnConnectionProtocolType?: "IKEv2"|"IKEv1", vpnLinkConnections?: list}
-export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gateways-vpn-connections create-or-update" [
+export def "vpn-connections-create-or-update" [
   subscription_id: string
   resource_group_name: string
   gateway_name: string
@@ -1885,7 +1885,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gatewa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/vpnGateways/{gatewayName}/vpnConnections/{connectionName}/vpnLinkConnections
 # operationId: VpnLinkConnections_ListByVpnConnection
-export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gateways-vpn-connections-vpn-link-connections list" [
+export def "vpn-link-connections-list-by-vpn-connection" [
   subscription_id: string
   resource_group_name: string
   gateway_name: string
@@ -1929,7 +1929,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gatewa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/vpnGateways/{gatewayName}/vpnConnections/{connectionName}/vpnLinkConnections/{linkConnectionName}
 # operationId: VpnSiteLinkConnections_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gateways-vpn-connections-vpn-link-connections get-site" [
+export def "vpn-site-link-connections-get" [
   subscription_id: string
   resource_group_name: string
   gateway_name: string
@@ -1975,7 +1975,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gatewa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/vpnSites
 # operationId: VpnSites_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-network-vpn-sites list" [
+export def "vpn-sites-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2015,7 +2015,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-vpn-sites 
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/vpnSites/{vpnSiteName}
 # operationId: VpnSites_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-vpn-sites delete" [
+export def "vpn-sites-delete" [
   subscription_id: string
   resource_group_name: string
   vpn_site_name: string
@@ -2057,7 +2057,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-vpn-sites 
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/vpnSites/{vpnSiteName}
 # operationId: VpnSites_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-vpn-sites get" [
+export def "vpn-sites-get" [
   subscription_id: string
   resource_group_name: string
   vpn_site_name: string
@@ -2099,7 +2099,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-vpn-sites 
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/vpnSites/{vpnSiteName}
 # operationId: VpnSites_UpdateTags
-export def "subscriptions-resource-groups-providers-microsoft-network-vpn-sites update-tags" [
+export def "vpn-sites-update-tags" [
   subscription_id: string
   resource_group_name: string
   vpn_site_name: string
@@ -2146,7 +2146,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-vpn-sites 
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/vpnSites/{vpnSiteName}
 # operationId: VpnSites_CreateOrUpdate
 # --properties shape: {addressSpace?: any, bgpProperties?: any, deviceProperties?: any, ipAddress?: string, isSecuritySite?: bool, siteKey?: string, virtualWan?: any, vpnSiteLinks?: list}
-export def "subscriptions-resource-groups-providers-microsoft-network-vpn-sites create-or-update" [
+export def "vpn-sites-create-or-update" [
   subscription_id: string
   resource_group_name: string
   vpn_site_name: string
@@ -2195,7 +2195,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-vpn-sites 
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/vpnSites/{vpnSiteName}/vpnSiteLinks
 # operationId: VpnSiteLinks_ListByVpnSite
-export def "subscriptions-resource-groups-providers-microsoft-network-vpn-sites-vpn-site-links list" [
+export def "vpn-site-links-list-by-vpn-site" [
   subscription_id: string
   resource_group_name: string
   vpn_site_name: string
@@ -2237,7 +2237,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-vpn-sites-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/vpnSites/{vpnSiteName}/vpnSiteLinks/{vpnSiteLinkName}
 # operationId: VpnSiteLinks_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-vpn-sites-vpn-site-links get" [
+export def "vpn-site-links-get" [
   subscription_id: string
   resource_group_name: string
   vpn_site_name: string

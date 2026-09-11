@@ -132,7 +132,7 @@ def key-kind-completer [] { ["primary" "primaryReadonly" "secondary" "secondaryR
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-document-db-database-account-names check-exists" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "database-accounts-check-name-exists" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -156,7 +156,7 @@ export def commands []: nothing -> table {
 #
 # HEAD /providers/Microsoft.DocumentDB/databaseAccountNames/{accountName}
 # operationId: DatabaseAccounts_CheckNameExists
-export def "providers-microsoft-document-db-database-account-names check-exists" [
+export def "database-accounts-check-name-exists" [
   account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -194,7 +194,7 @@ export def "providers-microsoft-document-db-database-account-names check-exists"
 #
 # GET /providers/Microsoft.DocumentDB/operations
 # operationId: Operations_List
-export def "providers-microsoft-document-db-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -230,7 +230,7 @@ export def "providers-microsoft-document-db-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.DocumentDB/databaseAccounts
 # operationId: DatabaseAccounts_List
-export def "subscriptions-providers-microsoft-document-db-database-accounts list" [
+export def "database-accounts-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -268,7 +268,7 @@ export def "subscriptions-providers-microsoft-document-db-database-accounts list
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts
 # operationId: DatabaseAccounts_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts list" [
+export def "database-accounts-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -308,7 +308,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}
 # operationId: DatabaseAccounts_Delete
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts delete" [
+export def "database-accounts-delete" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -350,7 +350,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}
 # operationId: DatabaseAccounts_Get
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts get" [
+export def "database-accounts-get" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -393,7 +393,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}
 # operationId: DatabaseAccounts_Update
 # --properties shape: {capabilities?: list, connectorOffer?: "Small", consistencyPolicy?: record, disableKeyBasedMetadataWriteAccess?: bool, enableAutomaticFailover?: bool, enableCassandraConnector?: bool, enableMultipleWriteLocations?: bool, ipRangeFilter?: string, isVirtualNetworkFilterEnabled?: bool, locations?: list, virtualNetworkRules?: list}
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts update" [
+export def "database-accounts-update" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -442,7 +442,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}
 # operationId: DatabaseAccounts_CreateOrUpdate
 # --properties shape: {capabilities?: list, connectorOffer?: "Small", consistencyPolicy?: record, databaseAccountOfferType: "Standard", disableKeyBasedMetadataWriteAccess?: bool, enableAutomaticFailover?: bool, enableCassandraConnector?: bool, enableMultipleWriteLocations?: bool, ipRangeFilter?: string, isVirtualNetworkFilterEnabled?: bool, locations: list, virtualNetworkRules?: list}
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts create-or-update" [
+export def "database-accounts-create-or-update" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -491,7 +491,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/cassandraKeyspaces
 # operationId: CassandraResources_ListCassandraKeyspaces
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-cassandra-keyspaces list" [
+export def "cassandra-resources-list-cassandra-keyspaces" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -533,7 +533,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/cassandraKeyspaces/{keyspaceName}
 # operationId: CassandraResources_DeleteCassandraKeyspace
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-cassandra-keyspaces delete" [
+export def "cassandra-resources-delete-cassandra-keyspace" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -577,7 +577,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/cassandraKeyspaces/{keyspaceName}
 # operationId: CassandraResources_GetCassandraKeyspace
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-cassandra-keyspaces get" [
+export def "cassandra-resources-get-cassandra-keyspace" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -622,7 +622,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/cassandraKeyspaces/{keyspaceName}
 # operationId: CassandraResources_CreateUpdateCassandraKeyspace
 # --properties shape: {options: record, resource: record}
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-cassandra-keyspaces create-update" [
+export def "cassandra-resources-create-update-cassandra-keyspace" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -672,7 +672,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/cassandraKeyspaces/{keyspaceName}/tables
 # operationId: CassandraResources_ListCassandraTables
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-cassandra-keyspaces-tables list" [
+export def "cassandra-resources-list-cassandra-tables" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -716,7 +716,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/cassandraKeyspaces/{keyspaceName}/tables/{tableName}
 # operationId: CassandraResources_DeleteCassandraTable
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-cassandra-keyspaces-tables delete" [
+export def "cassandra-resources-delete-cassandra-table" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -762,7 +762,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/cassandraKeyspaces/{keyspaceName}/tables/{tableName}
 # operationId: CassandraResources_GetCassandraTable
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-cassandra-keyspaces-tables get" [
+export def "cassandra-resources-get-cassandra-table" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -809,7 +809,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/cassandraKeyspaces/{keyspaceName}/tables/{tableName}
 # operationId: CassandraResources_CreateUpdateCassandraTable
 # --properties shape: {options: record, resource: record}
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-cassandra-keyspaces-tables create-update" [
+export def "cassandra-resources-create-update-cassandra-table" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -861,7 +861,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/cassandraKeyspaces/{keyspaceName}/tables/{tableName}/throughputSettings/default
 # operationId: CassandraResources_GetCassandraTableThroughput
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-cassandra-keyspaces-tables-throughput-settings-default get" [
+export def "cassandra-resources-get-cassandra-table-throughput" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -908,7 +908,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/cassandraKeyspaces/{keyspaceName}/tables/{tableName}/throughputSettings/default
 # operationId: CassandraResources_UpdateCassandraTableThroughput
 # --properties shape: {resource: record}
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-cassandra-keyspaces-tables-throughput-settings-default update" [
+export def "cassandra-resources-update-cassandra-table-throughput" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -960,7 +960,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/cassandraKeyspaces/{keyspaceName}/throughputSettings/default
 # operationId: CassandraResources_GetCassandraKeyspaceThroughput
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-cassandra-keyspaces-throughput-settings-default get" [
+export def "cassandra-resources-get-cassandra-keyspace-throughput" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1005,7 +1005,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/cassandraKeyspaces/{keyspaceName}/throughputSettings/default
 # operationId: CassandraResources_UpdateCassandraKeyspaceThroughput
 # --properties shape: {resource: record}
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-cassandra-keyspaces-throughput-settings-default update" [
+export def "cassandra-resources-update-cassandra-keyspace-throughput" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1055,7 +1055,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/databases/{databaseRid}/collections/{collectionRid}/metricDefinitions
 # operationId: Collection_ListMetricDefinitions
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-databases-collections-metric-definitions list" [
+export def "collection-list-metric-definitions" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1101,7 +1101,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/databases/{databaseRid}/collections/{collectionRid}/metrics
 # operationId: Collection_ListMetrics
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-databases-collections-metrics list" [
+export def "collection-list-metrics" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1148,7 +1148,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/databases/{databaseRid}/collections/{collectionRid}/partitionKeyRangeId/{partitionKeyRangeId}/metrics
 # operationId: PartitionKeyRangeId_ListMetrics
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-databases-collections-partition-key-range-id-metrics list" [
+export def "partition-key-range-id-list-metrics" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1197,7 +1197,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/databases/{databaseRid}/collections/{collectionRid}/partitions/metrics
 # operationId: CollectionPartition_ListMetrics
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-databases-collections-partitions-metrics list" [
+export def "collection-partition-list-metrics" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1244,7 +1244,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/databases/{databaseRid}/collections/{collectionRid}/partitions/usages
 # operationId: CollectionPartition_ListUsages
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-databases-collections-partitions-usages list" [
+export def "collection-partition-list-usages" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1291,7 +1291,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/databases/{databaseRid}/collections/{collectionRid}/usages
 # operationId: Collection_ListUsages
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-databases-collections-usages list" [
+export def "collection-list-usages" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1338,7 +1338,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/databases/{databaseRid}/metricDefinitions
 # operationId: Database_ListMetricDefinitions
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-databases-metric-definitions list" [
+export def "database-list-metric-definitions" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1382,7 +1382,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/databases/{databaseRid}/metrics
 # operationId: Database_ListMetrics
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-databases-metrics list" [
+export def "database-list-metrics" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1427,7 +1427,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/databases/{databaseRid}/usages
 # operationId: Database_ListUsages
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-databases-usages list" [
+export def "database-list-usages" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1473,7 +1473,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/failoverPriorityChange
 # operationId: DatabaseAccounts_FailoverPriorityChange
 # --failoverPolicies item shape: {failoverPriority?: int, locationName?: string}
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-failover-priority-change create" [
+export def "database-accounts-failover-priority-change" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1519,7 +1519,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/gremlinDatabases
 # operationId: GremlinResources_ListGremlinDatabases
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-gremlin-databases list" [
+export def "gremlin-resources-list-gremlin-databases" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1561,7 +1561,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/gremlinDatabases/{databaseName}
 # operationId: GremlinResources_DeleteGremlinDatabase
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-gremlin-databases delete" [
+export def "gremlin-resources-delete-gremlin-database" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1605,7 +1605,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/gremlinDatabases/{databaseName}
 # operationId: GremlinResources_GetGremlinDatabase
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-gremlin-databases get" [
+export def "gremlin-resources-get-gremlin-database" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1650,7 +1650,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/gremlinDatabases/{databaseName}
 # operationId: GremlinResources_CreateUpdateGremlinDatabase
 # --properties shape: {options: record, resource: record}
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-gremlin-databases create-update" [
+export def "gremlin-resources-create-update-gremlin-database" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1700,7 +1700,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/gremlinDatabases/{databaseName}/graphs
 # operationId: GremlinResources_ListGremlinGraphs
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-gremlin-databases-graphs list" [
+export def "gremlin-resources-list-gremlin-graphs" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1744,7 +1744,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/gremlinDatabases/{databaseName}/graphs/{graphName}
 # operationId: GremlinResources_DeleteGremlinGraph
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-gremlin-databases-graphs delete" [
+export def "gremlin-resources-delete-gremlin-graph" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1790,7 +1790,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/gremlinDatabases/{databaseName}/graphs/{graphName}
 # operationId: GremlinResources_GetGremlinGraph
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-gremlin-databases-graphs get" [
+export def "gremlin-resources-get-gremlin-graph" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1837,7 +1837,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/gremlinDatabases/{databaseName}/graphs/{graphName}
 # operationId: GremlinResources_CreateUpdateGremlinGraph
 # --properties shape: {options: record, resource: record}
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-gremlin-databases-graphs create-update" [
+export def "gremlin-resources-create-update-gremlin-graph" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1889,7 +1889,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/gremlinDatabases/{databaseName}/graphs/{graphName}/throughputSettings/default
 # operationId: GremlinResources_GetGremlinGraphThroughput
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-gremlin-databases-graphs-throughput-settings-default get" [
+export def "gremlin-resources-get-gremlin-graph-throughput" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1936,7 +1936,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/gremlinDatabases/{databaseName}/graphs/{graphName}/throughputSettings/default
 # operationId: GremlinResources_UpdateGremlinGraphThroughput
 # --properties shape: {resource: record}
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-gremlin-databases-graphs-throughput-settings-default update" [
+export def "gremlin-resources-update-gremlin-graph-throughput" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1988,7 +1988,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/gremlinDatabases/{databaseName}/throughputSettings/default
 # operationId: GremlinResources_GetGremlinDatabaseThroughput
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-gremlin-databases-throughput-settings-default get" [
+export def "gremlin-resources-get-gremlin-database-throughput" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -2033,7 +2033,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/gremlinDatabases/{databaseName}/throughputSettings/default
 # operationId: GremlinResources_UpdateGremlinDatabaseThroughput
 # --properties shape: {resource: record}
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-gremlin-databases-throughput-settings-default update" [
+export def "gremlin-resources-update-gremlin-database-throughput" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -2083,7 +2083,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/listConnectionStrings
 # operationId: DatabaseAccounts_ListConnectionStrings
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-list-connection-strings list" [
+export def "database-accounts-list-connection-strings" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -2125,7 +2125,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/listKeys
 # operationId: DatabaseAccounts_ListKeys
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-list-keys list" [
+export def "database-accounts-list-keys" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -2167,7 +2167,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/metricDefinitions
 # operationId: DatabaseAccounts_ListMetricDefinitions
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-metric-definitions list" [
+export def "database-accounts-list-metric-definitions" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -2209,7 +2209,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/metrics
 # operationId: DatabaseAccounts_ListMetrics
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-metrics list" [
+export def "database-accounts-list-metrics" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -2252,7 +2252,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/mongodbDatabases
 # operationId: MongoDBResources_ListMongoDBDatabases
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-mongodb-databases list-mongo-mongo" [
+export def "mongo-db-resources-list-mongo-db-databases" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -2294,7 +2294,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/mongodbDatabases/{databaseName}
 # operationId: MongoDBResources_DeleteMongoDBDatabase
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-mongodb-databases delete-mongo-mongo" [
+export def "mongo-db-resources-delete-mongo-db-database" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -2338,7 +2338,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/mongodbDatabases/{databaseName}
 # operationId: MongoDBResources_GetMongoDBDatabase
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-mongodb-databases get-mongo-mongo" [
+export def "mongo-db-resources-get-mongo-db-database" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -2383,7 +2383,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/mongodbDatabases/{databaseName}
 # operationId: MongoDBResources_CreateUpdateMongoDBDatabase
 # --properties shape: {options: record, resource: record}
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-mongodb-databases create-mongo-update-mongo" [
+export def "mongo-db-resources-create-update-mongo-db-database" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -2433,7 +2433,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/mongodbDatabases/{databaseName}/collections
 # operationId: MongoDBResources_ListMongoDBCollections
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-mongodb-databases-collections list-mongo-mongo" [
+export def "mongo-db-resources-list-mongo-db-collections" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -2477,7 +2477,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/mongodbDatabases/{databaseName}/collections/{collectionName}
 # operationId: MongoDBResources_DeleteMongoDBCollection
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-mongodb-databases-collections delete-mongo-mongo" [
+export def "mongo-db-resources-delete-mongo-db-collection" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -2523,7 +2523,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/mongodbDatabases/{databaseName}/collections/{collectionName}
 # operationId: MongoDBResources_GetMongoDBCollection
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-mongodb-databases-collections get-mongo-mongo" [
+export def "mongo-db-resources-get-mongo-db-collection" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -2570,7 +2570,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/mongodbDatabases/{databaseName}/collections/{collectionName}
 # operationId: MongoDBResources_CreateUpdateMongoDBCollection
 # --properties shape: {options: record, resource: record}
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-mongodb-databases-collections create-mongo-update-mongo" [
+export def "mongo-db-resources-create-update-mongo-db-collection" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -2622,7 +2622,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/mongodbDatabases/{databaseName}/collections/{collectionName}/throughputSettings/default
 # operationId: MongoDBResources_GetMongoDBCollectionThroughput
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-mongodb-databases-collections-throughput-settings-default get-mongo-mongo" [
+export def "mongo-db-resources-get-mongo-db-collection-throughput" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -2669,7 +2669,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/mongodbDatabases/{databaseName}/collections/{collectionName}/throughputSettings/default
 # operationId: MongoDBResources_UpdateMongoDBCollectionThroughput
 # --properties shape: {resource: record}
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-mongodb-databases-collections-throughput-settings-default update-mongo-mongo" [
+export def "mongo-db-resources-update-mongo-db-collection-throughput" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -2721,7 +2721,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/mongodbDatabases/{databaseName}/throughputSettings/default
 # operationId: MongoDBResources_GetMongoDBDatabaseThroughput
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-mongodb-databases-throughput-settings-default get-mongo-mongo" [
+export def "mongo-db-resources-get-mongo-db-database-throughput" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -2766,7 +2766,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/mongodbDatabases/{databaseName}/throughputSettings/default
 # operationId: MongoDBResources_UpdateMongoDBDatabaseThroughput
 # --properties shape: {resource: record}
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-mongodb-databases-throughput-settings-default update-mongo-mongo" [
+export def "mongo-db-resources-update-mongo-db-database-throughput" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -2816,7 +2816,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/offlineRegion
 # operationId: DatabaseAccounts_OfflineRegion
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-offline-region create" [
+export def "database-accounts-offline-region" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -2862,7 +2862,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/onlineRegion
 # operationId: DatabaseAccounts_OnlineRegion
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-online-region create" [
+export def "database-accounts-online-region" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -2908,7 +2908,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/percentile/metrics
 # operationId: Percentile_ListMetrics
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-percentile-metrics list" [
+export def "percentile-list-metrics" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -2951,7 +2951,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/readonlykeys
 # operationId: DatabaseAccounts_GetReadOnlyKeys
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-readonlykeys get-only-keys" [
+export def "database-accounts-get-read-only-keys" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -2993,7 +2993,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/readonlykeys
 # operationId: DatabaseAccounts_ListReadOnlyKeys
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-readonlykeys list-get-only-keys" [
+export def "database-accounts-list-read-only-keys" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -3035,7 +3035,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/regenerateKey
 # operationId: DatabaseAccounts_RegenerateKey
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-regenerate-key create" [
+export def "database-accounts-regenerate-key" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -3081,7 +3081,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/region/{region}/databases/{databaseRid}/collections/{collectionRid}/metrics
 # operationId: CollectionRegion_ListMetrics
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-region-databases-collections-metrics list" [
+export def "collection-region-list-metrics" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -3130,7 +3130,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/region/{region}/databases/{databaseRid}/collections/{collectionRid}/partitionKeyRangeId/{partitionKeyRangeId}/metrics
 # operationId: PartitionKeyRangeIdRegion_ListMetrics
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-region-databases-collections-partition-key-range-id-metrics list" [
+export def "partition-key-range-id-region-list-metrics" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -3181,7 +3181,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/region/{region}/databases/{databaseRid}/collections/{collectionRid}/partitions/metrics
 # operationId: CollectionPartitionRegion_ListMetrics
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-region-databases-collections-partitions-metrics list" [
+export def "collection-partition-region-list-metrics" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -3230,7 +3230,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/region/{region}/metrics
 # operationId: DatabaseAccountRegion_ListMetrics
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-region-metrics list" [
+export def "database-account-region-list-metrics" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -3275,7 +3275,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/sourceRegion/{sourceRegion}/targetRegion/{targetRegion}/percentile/metrics
 # operationId: PercentileSourceTarget_ListMetrics
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-source-region-target-region-percentile-metrics list" [
+export def "percentile-source-target-list-metrics" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -3322,7 +3322,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/sqlDatabases
 # operationId: SqlResources_ListSqlDatabases
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases list" [
+export def "sql-resources-list-sql-databases" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -3364,7 +3364,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/sqlDatabases/{databaseName}
 # operationId: SqlResources_DeleteSqlDatabase
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases delete" [
+export def "sql-resources-delete-sql-database" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -3408,7 +3408,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/sqlDatabases/{databaseName}
 # operationId: SqlResources_GetSqlDatabase
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases get" [
+export def "sql-resources-get-sql-database" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -3453,7 +3453,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/sqlDatabases/{databaseName}
 # operationId: SqlResources_CreateUpdateSqlDatabase
 # --properties shape: {options: record, resource: record}
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases create-update" [
+export def "sql-resources-create-update-sql-database" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -3503,7 +3503,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/sqlDatabases/{databaseName}/containers
 # operationId: SqlResources_ListSqlContainers
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases-containers list" [
+export def "sql-resources-list-sql-containers" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -3547,7 +3547,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/sqlDatabases/{databaseName}/containers/{containerName}
 # operationId: SqlResources_DeleteSqlContainer
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases-containers delete" [
+export def "sql-resources-delete-sql-container" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -3593,7 +3593,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/sqlDatabases/{databaseName}/containers/{containerName}
 # operationId: SqlResources_GetSqlContainer
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases-containers get" [
+export def "sql-resources-get-sql-container" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -3640,7 +3640,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/sqlDatabases/{databaseName}/containers/{containerName}
 # operationId: SqlResources_CreateUpdateSqlContainer
 # --properties shape: {options: record, resource: record}
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases-containers create-update" [
+export def "sql-resources-create-update-sql-container" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -3692,7 +3692,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/sqlDatabases/{databaseName}/containers/{containerName}/storedProcedures
 # operationId: SqlResources_ListSqlStoredProcedures
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases-containers-stored-procedures list" [
+export def "sql-resources-list-sql-stored-procedures" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -3738,7 +3738,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/sqlDatabases/{databaseName}/containers/{containerName}/storedProcedures/{storedProcedureName}
 # operationId: SqlResources_DeleteSqlStoredProcedure
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases-containers-stored-procedures delete" [
+export def "sql-resources-delete-sql-stored-procedure" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -3786,7 +3786,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/sqlDatabases/{databaseName}/containers/{containerName}/storedProcedures/{storedProcedureName}
 # operationId: SqlResources_GetSqlStoredProcedure
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases-containers-stored-procedures get" [
+export def "sql-resources-get-sql-stored-procedure" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -3835,7 +3835,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/sqlDatabases/{databaseName}/containers/{containerName}/storedProcedures/{storedProcedureName}
 # operationId: SqlResources_CreateUpdateSqlStoredProcedure
 # --properties shape: {options: record, resource: record}
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases-containers-stored-procedures create-update" [
+export def "sql-resources-create-update-sql-stored-procedure" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -3889,7 +3889,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/sqlDatabases/{databaseName}/containers/{containerName}/throughputSettings/default
 # operationId: SqlResources_GetSqlContainerThroughput
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases-containers-throughput-settings-default get" [
+export def "sql-resources-get-sql-container-throughput" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -3936,7 +3936,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/sqlDatabases/{databaseName}/containers/{containerName}/throughputSettings/default
 # operationId: SqlResources_UpdateSqlContainerThroughput
 # --properties shape: {resource: record}
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases-containers-throughput-settings-default update" [
+export def "sql-resources-update-sql-container-throughput" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -3988,7 +3988,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/sqlDatabases/{databaseName}/containers/{containerName}/triggers
 # operationId: SqlResources_ListSqlTriggers
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases-containers-triggers list" [
+export def "sql-resources-list-sql-triggers" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -4034,7 +4034,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/sqlDatabases/{databaseName}/containers/{containerName}/triggers/{triggerName}
 # operationId: SqlResources_DeleteSqlTrigger
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases-containers-triggers delete" [
+export def "sql-resources-delete-sql-trigger" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -4082,7 +4082,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/sqlDatabases/{databaseName}/containers/{containerName}/triggers/{triggerName}
 # operationId: SqlResources_GetSqlTrigger
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases-containers-triggers get" [
+export def "sql-resources-get-sql-trigger" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -4131,7 +4131,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/sqlDatabases/{databaseName}/containers/{containerName}/triggers/{triggerName}
 # operationId: SqlResources_CreateUpdateSqlTrigger
 # --properties shape: {options: record, resource: record}
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases-containers-triggers create-update" [
+export def "sql-resources-create-update-sql-trigger" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -4185,7 +4185,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/sqlDatabases/{databaseName}/containers/{containerName}/userDefinedFunctions
 # operationId: SqlResources_ListSqlUserDefinedFunctions
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases-containers-user-defined-functions list" [
+export def "sql-resources-list-sql-user-defined-functions" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -4231,7 +4231,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/sqlDatabases/{databaseName}/containers/{containerName}/userDefinedFunctions/{userDefinedFunctionName}
 # operationId: SqlResources_DeleteSqlUserDefinedFunction
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases-containers-user-defined-functions delete" [
+export def "sql-resources-delete-sql-user-defined-function" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -4279,7 +4279,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/sqlDatabases/{databaseName}/containers/{containerName}/userDefinedFunctions/{userDefinedFunctionName}
 # operationId: SqlResources_GetSqlUserDefinedFunction
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases-containers-user-defined-functions get" [
+export def "sql-resources-get-sql-user-defined-function" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -4328,7 +4328,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/sqlDatabases/{databaseName}/containers/{containerName}/userDefinedFunctions/{userDefinedFunctionName}
 # operationId: SqlResources_CreateUpdateSqlUserDefinedFunction
 # --properties shape: {options: record, resource: record}
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases-containers-user-defined-functions create-update" [
+export def "sql-resources-create-update-sql-user-defined-function" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -4382,7 +4382,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/sqlDatabases/{databaseName}/throughputSettings/default
 # operationId: SqlResources_GetSqlDatabaseThroughput
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases-throughput-settings-default get" [
+export def "sql-resources-get-sql-database-throughput" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -4427,7 +4427,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/sqlDatabases/{databaseName}/throughputSettings/default
 # operationId: SqlResources_UpdateSqlDatabaseThroughput
 # --properties shape: {resource: record}
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-sql-databases-throughput-settings-default update" [
+export def "sql-resources-update-sql-database-throughput" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -4477,7 +4477,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/tables
 # operationId: TableResources_ListTables
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-tables list" [
+export def "table-resources-list-tables" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -4519,7 +4519,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/tables/{tableName}
 # operationId: TableResources_DeleteTable
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-tables delete" [
+export def "table-resources-delete-table" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -4563,7 +4563,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/tables/{tableName}
 # operationId: TableResources_GetTable
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-tables get" [
+export def "table-resources-get-table" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -4608,7 +4608,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/tables/{tableName}
 # operationId: TableResources_CreateUpdateTable
 # --properties shape: {options: record, resource: record}
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-tables create-update" [
+export def "table-resources-create-update-table" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -4658,7 +4658,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/tables/{tableName}/throughputSettings/default
 # operationId: TableResources_GetTableThroughput
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-tables-throughput-settings-default get" [
+export def "table-resources-get-table-throughput" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -4703,7 +4703,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/tables/{tableName}/throughputSettings/default
 # operationId: TableResources_UpdateTableThroughput
 # --properties shape: {resource: record}
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-tables-throughput-settings-default update" [
+export def "table-resources-update-table-throughput" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -4753,7 +4753,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/targetRegion/{targetRegion}/percentile/metrics
 # operationId: PercentileTarget_ListMetrics
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-target-region-percentile-metrics list" [
+export def "percentile-target-list-metrics" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -4798,7 +4798,7 @@ export def "subscriptions-resource-groups-providers-microsoft-document-db-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DocumentDB/databaseAccounts/{accountName}/usages
 # operationId: DatabaseAccounts_ListUsages
-export def "subscriptions-resource-groups-providers-microsoft-document-db-database-accounts-usages list" [
+export def "database-accounts-list-usages" [
   subscription_id: string
   resource_group_name: string
   account_name: string

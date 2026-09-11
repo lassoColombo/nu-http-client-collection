@@ -129,7 +129,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "workflows-projects-locations-workflows-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -153,7 +153,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1beta/{name}
 # operationId: workflows.projects.locations.workflows.delete
-export def "v1beta delete" [
+export def "workflows-projects-locations-workflows-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -201,7 +201,7 @@ export def "v1beta delete" [
 #
 # GET /v1beta/{name}
 # operationId: workflows.projects.locations.workflows.get
-export def "v1beta get" [
+export def "workflows-projects-locations-workflows-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -249,7 +249,7 @@ export def "v1beta get" [
 #
 # PATCH /v1beta/{name}
 # operationId: workflows.projects.locations.workflows.patch
-export def "v1beta update" [
+export def "workflows-projects-locations-workflows-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -306,7 +306,7 @@ export def "v1beta update" [
 #
 # GET /v1beta/{name}/locations
 # operationId: workflows.projects.locations.list
-export def "v1beta-locations list" [
+export def "workflows-projects-locations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -357,7 +357,7 @@ export def "v1beta-locations list" [
 #
 # GET /v1beta/{name}/operations
 # operationId: workflows.projects.locations.operations.list
-export def "v1beta-operations list" [
+export def "workflows-projects-locations-operations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -408,7 +408,7 @@ export def "v1beta-operations list" [
 #
 # GET /v1beta/{parent}/workflows
 # operationId: workflows.projects.locations.workflows.list
-export def "v1beta-workflows list" [
+export def "workflows-projects-locations-workflows-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -460,7 +460,7 @@ export def "v1beta-workflows list" [
 #
 # POST /v1beta/{parent}/workflows
 # operationId: workflows.projects.locations.workflows.create
-export def "v1beta-workflows create" [
+export def "workflows-projects-locations-workflows-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

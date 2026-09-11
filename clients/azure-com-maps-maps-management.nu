@@ -124,7 +124,7 @@ def key-type-completer [] { ["primary" "secondary"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-maps-operations list-accounts" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts-list-operations" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -148,7 +148,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.Maps/operations
 # operationId: Accounts_ListOperations
-export def "providers-microsoft-maps-operations list-accounts" [
+export def "accounts-list-operations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,7 +184,7 @@ export def "providers-microsoft-maps-operations list-accounts" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Maps/accounts
 # operationId: Accounts_ListBySubscription
-export def "subscriptions-providers-microsoft-maps-accounts list" [
+export def "accounts-list-by-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -222,7 +222,7 @@ export def "subscriptions-providers-microsoft-maps-accounts list" [
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/moveResources
 # operationId: Accounts_Move
-export def "subscriptions-resource-groups-move-resources move-accounts" [
+export def "accounts-move" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -267,7 +267,7 @@ export def "subscriptions-resource-groups-move-resources move-accounts" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Maps/accounts
 # operationId: Accounts_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-maps-accounts list" [
+export def "accounts-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -307,7 +307,7 @@ export def "subscriptions-resource-groups-providers-microsoft-maps-accounts list
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Maps/accounts/{accountName}
 # operationId: Accounts_Delete
-export def "subscriptions-resource-groups-providers-microsoft-maps-accounts delete" [
+export def "accounts-delete" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -349,7 +349,7 @@ export def "subscriptions-resource-groups-providers-microsoft-maps-accounts dele
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Maps/accounts/{accountName}
 # operationId: Accounts_Get
-export def "subscriptions-resource-groups-providers-microsoft-maps-accounts get" [
+export def "accounts-get" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -392,7 +392,7 @@ export def "subscriptions-resource-groups-providers-microsoft-maps-accounts get"
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Maps/accounts/{accountName}
 # operationId: Accounts_Update
 # --sku shape: {name: string}
-export def "subscriptions-resource-groups-providers-microsoft-maps-accounts update" [
+export def "accounts-update" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -440,7 +440,7 @@ export def "subscriptions-resource-groups-providers-microsoft-maps-accounts upda
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Maps/accounts/{accountName}
 # operationId: Accounts_CreateOrUpdate
 # --sku shape: {name: string}
-export def "subscriptions-resource-groups-providers-microsoft-maps-accounts create-or-update" [
+export def "accounts-create-or-update" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -488,7 +488,7 @@ export def "subscriptions-resource-groups-providers-microsoft-maps-accounts crea
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Maps/accounts/{accountName}/listKeys
 # operationId: Accounts_ListKeys
-export def "subscriptions-resource-groups-providers-microsoft-maps-accounts-list-keys list" [
+export def "accounts-list-keys" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -530,7 +530,7 @@ export def "subscriptions-resource-groups-providers-microsoft-maps-accounts-list
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Maps/accounts/{accountName}/regenerateKey
 # operationId: Accounts_RegenerateKeys
-export def "subscriptions-resource-groups-providers-microsoft-maps-accounts-regenerate-key create" [
+export def "accounts-regenerate-keys" [
   subscription_id: string
   resource_group_name: string
   account_name: string

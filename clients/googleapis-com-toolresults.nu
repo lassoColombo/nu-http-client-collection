@@ -125,7 +125,7 @@ def state-completer [] { ["complete" "inProgress" "pending" "unknownState"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "toolresults-v1beta3-projects-histories list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "toolresults-projects-histories-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -149,7 +149,7 @@ export def commands []: nothing -> table {
 #
 # GET /toolresults/v1beta3/projects/{projectId}/histories
 # operationId: toolresults.projects.histories.list
-export def "toolresults-v1beta3-projects-histories list" [
+export def "toolresults-projects-histories-list" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -200,7 +200,7 @@ export def "toolresults-v1beta3-projects-histories list" [
 #
 # POST /toolresults/v1beta3/projects/{projectId}/histories
 # operationId: toolresults.projects.histories.create
-export def "toolresults-v1beta3-projects-histories create" [
+export def "toolresults-projects-histories-create" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -256,7 +256,7 @@ export def "toolresults-v1beta3-projects-histories create" [
 #
 # GET /toolresults/v1beta3/projects/{projectId}/histories/{historyId}
 # operationId: toolresults.projects.histories.get
-export def "toolresults-v1beta3-projects-histories get" [
+export def "toolresults-projects-histories-get" [
   project_id: string
   history_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -306,7 +306,7 @@ export def "toolresults-v1beta3-projects-histories get" [
 #
 # GET /toolresults/v1beta3/projects/{projectId}/histories/{historyId}/executions
 # operationId: toolresults.projects.histories.executions.list
-export def "toolresults-v1beta3-projects-histories-executions list" [
+export def "toolresults-projects-histories-executions-list" [
   project_id: string
   history_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -362,7 +362,7 @@ export def "toolresults-v1beta3-projects-histories-executions list" [
 # --creationTime shape: {nanos?: int, seconds?: string}
 # --outcome shape: {failureDetail?: record, inconclusiveDetail?: record, skippedDetail?: record, successDetail?: record, summary?: "unset"|"success"|"failure"|"inconclusive"|"skipped"|"flaky"}
 # --specification shape: {androidTest?: record, iosTest?: record}
-export def "toolresults-v1beta3-projects-histories-executions create" [
+export def "toolresults-projects-histories-executions-create" [
   project_id: string
   history_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -424,7 +424,7 @@ export def "toolresults-v1beta3-projects-histories-executions create" [
 #
 # GET /toolresults/v1beta3/projects/{projectId}/histories/{historyId}/executions/{executionId}
 # operationId: toolresults.projects.histories.executions.get
-export def "toolresults-v1beta3-projects-histories-executions get" [
+export def "toolresults-projects-histories-executions-get" [
   project_id: string
   history_id: string
   execution_id: string
@@ -480,7 +480,7 @@ export def "toolresults-v1beta3-projects-histories-executions get" [
 # --creationTime shape: {nanos?: int, seconds?: string}
 # --outcome shape: {failureDetail?: record, inconclusiveDetail?: record, skippedDetail?: record, successDetail?: record, summary?: "unset"|"success"|"failure"|"inconclusive"|"skipped"|"flaky"}
 # --specification shape: {androidTest?: record, iosTest?: record}
-export def "toolresults-v1beta3-projects-histories-executions update" [
+export def "toolresults-projects-histories-executions-patch" [
   project_id: string
   history_id: string
   execution_id: string
@@ -544,7 +544,7 @@ export def "toolresults-v1beta3-projects-histories-executions update" [
 #
 # GET /toolresults/v1beta3/projects/{projectId}/histories/{historyId}/executions/{executionId}/clusters
 # operationId: toolresults.projects.histories.executions.clusters.list
-export def "toolresults-v1beta3-projects-histories-executions-clusters list" [
+export def "toolresults-projects-histories-executions-clusters-list" [
   project_id: string
   history_id: string
   execution_id: string
@@ -596,7 +596,7 @@ export def "toolresults-v1beta3-projects-histories-executions-clusters list" [
 #
 # GET /toolresults/v1beta3/projects/{projectId}/histories/{historyId}/executions/{executionId}/clusters/{clusterId}
 # operationId: toolresults.projects.histories.executions.clusters.get
-export def "toolresults-v1beta3-projects-histories-executions-clusters get" [
+export def "toolresults-projects-histories-executions-clusters-get" [
   project_id: string
   history_id: string
   execution_id: string
@@ -650,7 +650,7 @@ export def "toolresults-v1beta3-projects-histories-executions-clusters get" [
 #
 # GET /toolresults/v1beta3/projects/{projectId}/histories/{historyId}/executions/{executionId}/environments
 # operationId: toolresults.projects.histories.executions.environments.list
-export def "toolresults-v1beta3-projects-histories-executions-environments list" [
+export def "toolresults-projects-histories-executions-environments-list" [
   project_id: string
   history_id: string
   execution_id: string
@@ -704,7 +704,7 @@ export def "toolresults-v1beta3-projects-histories-executions-environments list"
 #
 # GET /toolresults/v1beta3/projects/{projectId}/histories/{historyId}/executions/{executionId}/environments/{environmentId}
 # operationId: toolresults.projects.histories.executions.environments.get
-export def "toolresults-v1beta3-projects-histories-executions-environments get" [
+export def "toolresults-projects-histories-executions-environments-get" [
   project_id: string
   history_id: string
   execution_id: string
@@ -758,7 +758,7 @@ export def "toolresults-v1beta3-projects-histories-executions-environments get" 
 #
 # GET /toolresults/v1beta3/projects/{projectId}/histories/{historyId}/executions/{executionId}/steps
 # operationId: toolresults.projects.histories.executions.steps.list
-export def "toolresults-v1beta3-projects-histories-executions-steps list" [
+export def "toolresults-projects-histories-executions-steps-list" [
   project_id: string
   history_id: string
   execution_id: string
@@ -822,7 +822,7 @@ export def "toolresults-v1beta3-projects-histories-executions-steps list" [
 # --runDuration shape: {nanos?: int, seconds?: string}
 # --testExecutionStep shape: {testIssues?: list, testSuiteOverviews?: list, testTiming?: record, toolExecution?: record}
 # --toolExecutionStep shape: {toolExecution?: record}
-export def "toolresults-v1beta3-projects-histories-executions-steps create" [
+export def "toolresults-projects-histories-executions-steps-create" [
   project_id: string
   history_id: string
   execution_id: string
@@ -893,7 +893,7 @@ export def "toolresults-v1beta3-projects-histories-executions-steps create" [
 #
 # GET /toolresults/v1beta3/projects/{projectId}/histories/{historyId}/executions/{executionId}/steps/{stepId}
 # operationId: toolresults.projects.histories.executions.steps.get
-export def "toolresults-v1beta3-projects-histories-executions-steps get" [
+export def "toolresults-projects-histories-executions-steps-get" [
   project_id: string
   history_id: string
   execution_id: string
@@ -957,7 +957,7 @@ export def "toolresults-v1beta3-projects-histories-executions-steps get" [
 # --runDuration shape: {nanos?: int, seconds?: string}
 # --testExecutionStep shape: {testIssues?: list, testSuiteOverviews?: list, testTiming?: record, toolExecution?: record}
 # --toolExecutionStep shape: {toolExecution?: record}
-export def "toolresults-v1beta3-projects-histories-executions-steps update" [
+export def "toolresults-projects-histories-executions-steps-patch" [
   project_id: string
   history_id: string
   execution_id: string
@@ -1030,7 +1030,7 @@ export def "toolresults-v1beta3-projects-histories-executions-steps update" [
 #
 # GET /toolresults/v1beta3/projects/{projectId}/histories/{historyId}/executions/{executionId}/steps/{stepId}/perfMetricsSummary
 # operationId: toolresults.projects.histories.executions.steps.getPerfMetricsSummary
-export def "toolresults-v1beta3-projects-histories-executions-steps-perf-metrics-summary get" [
+export def "toolresults-projects-histories-executions-steps-get-perf-metrics-summary" [
   project_id: string
   history_id: string
   execution_id: string
@@ -1087,7 +1087,7 @@ export def "toolresults-v1beta3-projects-histories-executions-steps-perf-metrics
 # --appStartTime shape: {fullyDrawnTime?: record, initialDisplayTime?: record}
 # --graphicsStats shape: {buckets?: list, highInputLatencyCount?: string, jankyFrames?: string, missedVsyncCount?: string, p50Millis?: string, p90Millis?: string, p95Millis?: string, p99Millis?: string, slowBitmapUploadCount?: string, slowDrawCount?: string, slowUiThreadCount?: string, totalFrames?: string}
 # --perfEnvironment shape: {cpuInfo?: record, memoryInfo?: record}
-export def "toolresults-v1beta3-projects-histories-executions-steps-perf-metrics-summary create" [
+export def "toolresults-projects-histories-executions-steps-perf-metrics-summary-create" [
   project_id: string
   history_id: string
   execution_id: string
@@ -1152,7 +1152,7 @@ export def "toolresults-v1beta3-projects-histories-executions-steps-perf-metrics
 #
 # GET /toolresults/v1beta3/projects/{projectId}/histories/{historyId}/executions/{executionId}/steps/{stepId}/perfSampleSeries
 # operationId: toolresults.projects.histories.executions.steps.perfSampleSeries.list
-export def "toolresults-v1beta3-projects-histories-executions-steps-perf-sample-series list" [
+export def "toolresults-projects-histories-executions-steps-perf-sample-series-list" [
   project_id: string
   history_id: string
   execution_id: string
@@ -1208,7 +1208,7 @@ export def "toolresults-v1beta3-projects-histories-executions-steps-perf-sample-
 # POST /toolresults/v1beta3/projects/{projectId}/histories/{historyId}/executions/{executionId}/steps/{stepId}/perfSampleSeries
 # operationId: toolresults.projects.histories.executions.steps.perfSampleSeries.create
 # --basicPerfSampleSeries shape: {perfMetricType?: "perfMetricTypeUnspecified"|"memory"|"cpu"|"network"|"graphics", perfUnit?: "perfUnitUnspecified"|"kibibyte"|"percent"|"bytesPerSecond"|"framesPerSecond"|"byte", sampleSeriesLabel?: "sampleSeriesTypeUnspecified"|"memoryRssPrivate"|"memoryRssShared"|"memoryRssTotal"|"memoryTotal"|"cpuUser"|"cpuKernel"|"cpuTotal"|"ntBytesTransferred"|"ntBytesReceived"|"networkSent"|"networkReceived"|"graphicsFrameRate"}
-export def "toolresults-v1beta3-projects-histories-executions-steps-perf-sample-series create" [
+export def "toolresults-projects-histories-executions-steps-perf-sample-series-create" [
   project_id: string
   history_id: string
   execution_id: string
@@ -1271,7 +1271,7 @@ export def "toolresults-v1beta3-projects-histories-executions-steps-perf-sample-
 #
 # GET /toolresults/v1beta3/projects/{projectId}/histories/{historyId}/executions/{executionId}/steps/{stepId}/perfSampleSeries/{sampleSeriesId}
 # operationId: toolresults.projects.histories.executions.steps.perfSampleSeries.get
-export def "toolresults-v1beta3-projects-histories-executions-steps-perf-sample-series get" [
+export def "toolresults-projects-histories-executions-steps-perf-sample-series-get" [
   project_id: string
   history_id: string
   execution_id: string
@@ -1327,7 +1327,7 @@ export def "toolresults-v1beta3-projects-histories-executions-steps-perf-sample-
 #
 # GET /toolresults/v1beta3/projects/{projectId}/histories/{historyId}/executions/{executionId}/steps/{stepId}/perfSampleSeries/{sampleSeriesId}/samples
 # operationId: toolresults.projects.histories.executions.steps.perfSampleSeries.samples.list
-export def "toolresults-v1beta3-projects-histories-executions-steps-perf-sample-series-samples list" [
+export def "toolresults-projects-histories-executions-steps-perf-sample-series-samples-list" [
   project_id: string
   history_id: string
   execution_id: string
@@ -1386,7 +1386,7 @@ export def "toolresults-v1beta3-projects-histories-executions-steps-perf-sample-
 # POST /toolresults/v1beta3/projects/{projectId}/histories/{historyId}/executions/{executionId}/steps/{stepId}/perfSampleSeries/{sampleSeriesId}/samples:batchCreate
 # operationId: toolresults.projects.histories.executions.steps.perfSampleSeries.samples.batchCreate
 # --perfSamples item shape: {sampleTime?: record, value?: float}
-export def "toolresults-v1beta3-projects-histories-executions-steps-perf-sample-series-samples-batch-create create" [
+export def "toolresults-projects-histories-executions-steps-perf-sample-series-samples-batch-create" [
   project_id: string
   history_id: string
   execution_id: string
@@ -1446,7 +1446,7 @@ export def "toolresults-v1beta3-projects-histories-executions-steps-perf-sample-
 #
 # GET /toolresults/v1beta3/projects/{projectId}/histories/{historyId}/executions/{executionId}/steps/{stepId}/testCases
 # operationId: toolresults.projects.histories.executions.steps.testCases.list
-export def "toolresults-v1beta3-projects-histories-executions-steps-test-cases list" [
+export def "toolresults-projects-histories-executions-steps-test-cases-list" [
   project_id: string
   history_id: string
   execution_id: string
@@ -1502,7 +1502,7 @@ export def "toolresults-v1beta3-projects-histories-executions-steps-test-cases l
 #
 # GET /toolresults/v1beta3/projects/{projectId}/histories/{historyId}/executions/{executionId}/steps/{stepId}/testCases/{testCaseId}
 # operationId: toolresults.projects.histories.executions.steps.testCases.get
-export def "toolresults-v1beta3-projects-histories-executions-steps-test-cases get" [
+export def "toolresults-projects-histories-executions-steps-test-cases-get" [
   project_id: string
   history_id: string
   execution_id: string
@@ -1558,7 +1558,7 @@ export def "toolresults-v1beta3-projects-histories-executions-steps-test-cases g
 #
 # GET /toolresults/v1beta3/projects/{projectId}/histories/{historyId}/executions/{executionId}/steps/{stepId}/thumbnails
 # operationId: toolresults.projects.histories.executions.steps.thumbnails.list
-export def "toolresults-v1beta3-projects-histories-executions-steps-thumbnails list" [
+export def "toolresults-projects-histories-executions-steps-thumbnails-list" [
   project_id: string
   history_id: string
   execution_id: string
@@ -1615,7 +1615,7 @@ export def "toolresults-v1beta3-projects-histories-executions-steps-thumbnails l
 # POST /toolresults/v1beta3/projects/{projectId}/histories/{historyId}/executions/{executionId}/steps/{stepId}:publishXunitXmlFiles
 # operationId: toolresults.projects.histories.executions.steps.publishXunitXmlFiles
 # --xunitXmlFiles item shape: {fileUri?: string}
-export def "toolresults-v1beta3-projects-histories-executions-steps publish-xunit-xml-files" [
+export def "toolresults-projects-histories-executions-steps-publish-xunit-xml-files" [
   project_id: string
   history_id: string
   execution_id: string
@@ -1673,7 +1673,7 @@ export def "toolresults-v1beta3-projects-histories-executions-steps publish-xuni
 #
 # GET /toolresults/v1beta3/projects/{projectId}/settings
 # operationId: toolresults.projects.getSettings
-export def "toolresults-v1beta3-projects-settings get" [
+export def "toolresults-projects-get-settings" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1721,7 +1721,7 @@ export def "toolresults-v1beta3-projects-settings get" [
 #
 # POST /toolresults/v1beta3/projects/{projectId}:initializeSettings
 # operationId: toolresults.projects.initializeSettings
-export def "toolresults-v1beta3-projects create-initialize-settings" [
+export def "toolresults-projects-initialize-settings" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1769,7 +1769,7 @@ export def "toolresults-v1beta3-projects create-initialize-settings" [
 #
 # GET /toolresults/v1beta3/{name}:accessibilityClusters
 # operationId: toolresults.projects.histories.executions.steps.accessibilityClusters
-export def "toolresults-v1beta3 get-accessibility-clusters" [
+export def "toolresults-projects-histories-executions-steps-accessibility-clusters" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

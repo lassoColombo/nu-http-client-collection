@@ -119,7 +119,7 @@ def kind-completer [] { ["shared" "user"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-group-providers-microsoft-insights-workbooks list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "workbooks-list-by-resource-group" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -143,7 +143,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroup/{resourceGroupName}/providers/microsoft.insights/workbooks
 # operationId: Workbooks_ListByResourceGroup
-export def "subscriptions-resource-group-providers-microsoft-insights-workbooks list" [
+export def "workbooks-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -187,7 +187,7 @@ export def "subscriptions-resource-group-providers-microsoft-insights-workbooks 
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroup/{resourceGroupName}/providers/microsoft.insights/workbooks/{resourceName}
 # operationId: Workbooks_Delete
-export def "subscriptions-resource-group-providers-microsoft-insights-workbooks delete" [
+export def "workbooks-delete" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -229,7 +229,7 @@ export def "subscriptions-resource-group-providers-microsoft-insights-workbooks 
 #
 # GET /subscriptions/{subscriptionId}/resourceGroup/{resourceGroupName}/providers/microsoft.insights/workbooks/{resourceName}
 # operationId: Workbooks_Get
-export def "subscriptions-resource-group-providers-microsoft-insights-workbooks get" [
+export def "workbooks-get" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -272,7 +272,7 @@ export def "subscriptions-resource-group-providers-microsoft-insights-workbooks 
 # PATCH /subscriptions/{subscriptionId}/resourceGroup/{resourceGroupName}/providers/microsoft.insights/workbooks/{resourceName}
 # operationId: Workbooks_Update
 # --properties shape: {category?: string, displayName?: string, serializedData?: string, tags?: list<string>}
-export def "subscriptions-resource-group-providers-microsoft-insights-workbooks update" [
+export def "workbooks-update" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -322,7 +322,7 @@ export def "subscriptions-resource-group-providers-microsoft-insights-workbooks 
 # PUT /subscriptions/{subscriptionId}/resourceGroup/{resourceGroupName}/providers/microsoft.insights/workbooks/{resourceName}
 # operationId: Workbooks_CreateOrUpdate
 # --properties shape: {category: string, displayName: string, serializedData: string, tags?: list<string>, userId: string, version?: string}
-export def "subscriptions-resource-group-providers-microsoft-insights-workbooks create-or-update" [
+export def "workbooks-create-or-update" [
   subscription_id: string
   resource_group_name: string
   resource_name: string

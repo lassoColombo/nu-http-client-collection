@@ -119,7 +119,7 @@ def accept-completer-2 [] { ["application/json" "application/zip"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "changes delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "delete-changes" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -142,7 +142,7 @@ export def commands []: nothing -> table {
 # Clear changes
 #
 # DELETE /changes
-export def "changes delete" [
+export def "delete-changes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -175,7 +175,7 @@ export def "changes delete" [
 # List changes
 #
 # GET /changes
-export def "changes get" [
+export def "get-changes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -211,7 +211,7 @@ export def "changes get" [
 # Clear exports
 #
 # DELETE /exports
-export def "exports delete" [
+export def "delete-exports" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -244,7 +244,7 @@ export def "exports delete" [
 # List exports
 #
 # GET /exports
-export def "exports get" [
+export def "get-exports" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -280,7 +280,7 @@ export def "exports get" [
 # List the available instances
 #
 # GET /instances
-export def "instances list" [
+export def "get-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -320,7 +320,7 @@ export def "instances list" [
 # Upload DICOM instances
 #
 # POST /instances
-export def "instances create" [
+export def "post-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -357,7 +357,7 @@ export def "instances create" [
 # Delete some instance
 #
 # DELETE /instances/{id}
-export def "instances delete" [
+export def "delete-instances-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -392,7 +392,7 @@ export def "instances delete" [
 # Get information about some instance
 #
 # GET /instances/{id}
-export def "instances get" [
+export def "get-instances-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -431,7 +431,7 @@ export def "instances get" [
 # Anonymize instance
 #
 # POST /instances/{id}/anonymize
-export def "instances-anonymize create" [
+export def "post-instances-id-anonymize" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -478,7 +478,7 @@ export def "instances-anonymize create" [
 # List attachments
 #
 # GET /instances/{id}/attachments
-export def "instances-attachments list" [
+export def "get-instances-id-attachments" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -515,7 +515,7 @@ export def "instances-attachments list" [
 # Delete attachment
 #
 # DELETE /instances/{id}/attachments/{name}
-export def "instances-attachments delete" [
+export def "delete-instances-id-attachments-name" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -555,7 +555,7 @@ export def "instances-attachments delete" [
 # List operations on attachments
 #
 # GET /instances/{id}/attachments/{name}
-export def "instances-attachments get" [
+export def "get-instances-id-attachments-name" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -595,7 +595,7 @@ export def "instances-attachments get" [
 # Set attachment
 #
 # PUT /instances/{id}/attachments/{name}
-export def "instances-attachments update" [
+export def "put-instances-id-attachments-name" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -639,7 +639,7 @@ export def "instances-attachments update" [
 # Compress attachment
 #
 # POST /instances/{id}/attachments/{name}/compress
-export def "instances-attachments-compress create" [
+export def "post-instances-id-attachments-name-compress" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -676,7 +676,7 @@ export def "instances-attachments-compress create" [
 # Get attachment (no decompression)
 #
 # GET /instances/{id}/attachments/{name}/compressed-data
-export def "instances-attachments-compressed-data get" [
+export def "get-instances-id-attachments-name-compressed-data" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -716,7 +716,7 @@ export def "instances-attachments-compressed-data get" [
 # Get MD5 of attachment on disk
 #
 # GET /instances/{id}/attachments/{name}/compressed-md5
-export def "instances-attachments-compressed-md5 get" [
+export def "get-instances-id-attachments-name-compressed-md5" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -756,7 +756,7 @@ export def "instances-attachments-compressed-md5 get" [
 # Get size of attachment on disk
 #
 # GET /instances/{id}/attachments/{name}/compressed-size
-export def "instances-attachments-compressed-size get" [
+export def "get-instances-id-attachments-name-compressed-size" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -796,7 +796,7 @@ export def "instances-attachments-compressed-size get" [
 # Get attachment
 #
 # GET /instances/{id}/attachments/{name}/data
-export def "instances-attachments-data get" [
+export def "get-instances-id-attachments-name-data" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -836,7 +836,7 @@ export def "instances-attachments-data get" [
 # Get info about the attachment
 #
 # GET /instances/{id}/attachments/{name}/info
-export def "instances-attachments-info get" [
+export def "get-instances-id-attachments-name-info" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -876,7 +876,7 @@ export def "instances-attachments-info get" [
 # Is attachment compressed?
 #
 # GET /instances/{id}/attachments/{name}/is-compressed
-export def "instances-attachments-is-compressed get" [
+export def "get-instances-id-attachments-name-is-compressed" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -916,7 +916,7 @@ export def "instances-attachments-is-compressed get" [
 # Get MD5 of attachment
 #
 # GET /instances/{id}/attachments/{name}/md5
-export def "instances-attachments-md5 get" [
+export def "get-instances-id-attachments-name-md5" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -956,7 +956,7 @@ export def "instances-attachments-md5 get" [
 # Get size of attachment
 #
 # GET /instances/{id}/attachments/{name}/size
-export def "instances-attachments-size get" [
+export def "get-instances-id-attachments-name-size" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -996,7 +996,7 @@ export def "instances-attachments-size get" [
 # Uncompress attachment
 #
 # POST /instances/{id}/attachments/{name}/uncompress
-export def "instances-attachments-uncompress create" [
+export def "post-instances-id-attachments-name-uncompress" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1033,7 +1033,7 @@ export def "instances-attachments-uncompress create" [
 # Verify attachment
 #
 # POST /instances/{id}/attachments/{name}/verify-md5
-export def "instances-attachments-verify-md5 create" [
+export def "post-instances-id-attachments-name-verify-md5" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1070,7 +1070,7 @@ export def "instances-attachments-verify-md5 create" [
 # Get raw tag
 #
 # GET /instances/{id}/content
-export def "instances-content get" [
+export def "get-instances-id-content" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1107,7 +1107,7 @@ export def "instances-content get" [
 # Write DICOM onto filesystem
 #
 # POST /instances/{id}/export
-export def "instances-export create" [
+export def "post-instances-id-export" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1146,7 +1146,7 @@ export def "instances-export create" [
 # Download DICOM
 #
 # GET /instances/{id}/file
-export def "instances-file get" [
+export def "get-instances-id-file" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1185,7 +1185,7 @@ export def "instances-file get" [
 # List available frames
 #
 # GET /instances/{id}/frames
-export def "instances-frames list" [
+export def "get-instances-id-frames" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1220,7 +1220,7 @@ export def "instances-frames list" [
 # List operations
 #
 # GET /instances/{id}/frames/{frame}
-export def "instances-frames get" [
+export def "get-instances-id-frames-frame" [
   id: string
   frame: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1257,7 +1257,7 @@ export def "instances-frames get" [
 # Decode a frame (int16)
 #
 # GET /instances/{id}/frames/{frame}/image-int16
-export def "instances-frames-image-int16 get" [
+export def "get-instances-id-frames-frame-image-int16" [
   id: string
   frame: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -1301,7 +1301,7 @@ export def "instances-frames-image-int16 get" [
 # Decode a frame (uint16)
 #
 # GET /instances/{id}/frames/{frame}/image-uint16
-export def "instances-frames-image-uint16 get" [
+export def "get-instances-id-frames-frame-image-uint16" [
   id: string
   frame: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -1345,7 +1345,7 @@ export def "instances-frames-image-uint16 get" [
 # Decode a frame (uint8)
 #
 # GET /instances/{id}/frames/{frame}/image-uint8
-export def "instances-frames-image-uint8 get" [
+export def "get-instances-id-frames-frame-image-uint8" [
   id: string
   frame: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -1389,7 +1389,7 @@ export def "instances-frames-image-uint8 get" [
 # Decode frame for Matlab
 #
 # GET /instances/{id}/frames/{frame}/matlab
-export def "instances-frames-matlab get" [
+export def "get-instances-id-frames-frame-matlab" [
   id: string
   frame: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -1426,7 +1426,7 @@ export def "instances-frames-matlab get" [
 # Decode frame for numpy
 #
 # GET /instances/{id}/frames/{frame}/numpy
-export def "instances-frames-numpy get" [
+export def "get-instances-id-frames-frame-numpy" [
   id: string
   frame: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -1466,7 +1466,7 @@ export def "instances-frames-numpy get" [
 # Decode a frame (preview)
 #
 # GET /instances/{id}/frames/{frame}/preview
-export def "instances-frames-preview get" [
+export def "get-instances-id-frames-frame-preview" [
   id: string
   frame: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -1510,7 +1510,7 @@ export def "instances-frames-preview get" [
 # Access raw frame
 #
 # GET /instances/{id}/frames/{frame}/raw
-export def "instances-frames-raw get" [
+export def "get-instances-id-frames-frame-raw" [
   id: string
   frame: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -1547,7 +1547,7 @@ export def "instances-frames-raw get" [
 # Access raw frame (compressed)
 #
 # GET /instances/{id}/frames/{frame}/raw.gz
-export def "instances-frames-raw-gz get" [
+export def "get-instances-id-frames-frame-raw-gz" [
   id: string
   frame: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -1584,7 +1584,7 @@ export def "instances-frames-raw-gz get" [
 # Render a frame
 #
 # GET /instances/{id}/frames/{frame}/rendered
-export def "instances-frames-rendered get" [
+export def "get-instances-id-frames-frame-rendered" [
   id: string
   frame: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -1633,7 +1633,7 @@ export def "instances-frames-rendered get" [
 # Get DICOM meta-header
 #
 # GET /instances/{id}/header
-export def "instances-header get" [
+export def "get-instances-id-header" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1671,7 +1671,7 @@ export def "instances-header get" [
 # Decode an image (int16)
 #
 # GET /instances/{id}/image-int16
-export def "instances-image-int16 get" [
+export def "get-instances-id-image-int16" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1713,7 +1713,7 @@ export def "instances-image-int16 get" [
 # Decode an image (uint16)
 #
 # GET /instances/{id}/image-uint16
-export def "instances-image-uint16 get" [
+export def "get-instances-id-image-uint16" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1755,7 +1755,7 @@ export def "instances-image-uint16 get" [
 # Decode an image (uint8)
 #
 # GET /instances/{id}/image-uint8
-export def "instances-image-uint8 get" [
+export def "get-instances-id-image-uint8" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1797,7 +1797,7 @@ export def "instances-image-uint8 get" [
 # Decode frame for Matlab
 #
 # GET /instances/{id}/matlab
-export def "instances-matlab get" [
+export def "get-instances-id-matlab" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1832,7 +1832,7 @@ export def "instances-matlab get" [
 # List metadata
 #
 # GET /instances/{id}/metadata
-export def "instances-metadata list" [
+export def "get-instances-id-metadata" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1869,7 +1869,7 @@ export def "instances-metadata list" [
 # Delete metadata
 #
 # DELETE /instances/{id}/metadata/{name}
-export def "instances-metadata delete" [
+export def "delete-instances-id-metadata-name" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1909,7 +1909,7 @@ export def "instances-metadata delete" [
 # Get metadata
 #
 # GET /instances/{id}/metadata/{name}
-export def "instances-metadata get" [
+export def "get-instances-id-metadata-name" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1949,7 +1949,7 @@ export def "instances-metadata get" [
 # Set metadata
 #
 # PUT /instances/{id}/metadata/{name}
-export def "instances-metadata update" [
+export def "put-instances-id-metadata-name" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1993,7 +1993,7 @@ export def "instances-metadata update" [
 # Modify instance
 #
 # POST /instances/{id}/modify
-export def "instances-modify create" [
+export def "post-instances-id-modify" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2039,7 +2039,7 @@ export def "instances-modify create" [
 # Get instance module
 #
 # GET /instances/{id}/module
-export def "instances-module get" [
+export def "get-instances-id-module" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2078,7 +2078,7 @@ export def "instances-module get" [
 # Decode instance for numpy
 #
 # GET /instances/{id}/numpy
-export def "instances-numpy get" [
+export def "get-instances-id-numpy" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2116,7 +2116,7 @@ export def "instances-numpy get" [
 # Get parent patient
 #
 # GET /instances/{id}/patient
-export def "instances-patient get" [
+export def "get-instances-id-patient" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2155,7 +2155,7 @@ export def "instances-patient get" [
 # Get embedded PDF
 #
 # GET /instances/{id}/pdf
-export def "instances-pdf get" [
+export def "get-instances-id-pdf" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2190,7 +2190,7 @@ export def "instances-pdf get" [
 # Decode an image (preview)
 #
 # GET /instances/{id}/preview
-export def "instances-preview get" [
+export def "get-instances-id-preview" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2232,7 +2232,7 @@ export def "instances-preview get" [
 # Reconstruct tags & optionally files of instance
 #
 # POST /instances/{id}/reconstruct
-export def "instances-reconstruct create" [
+export def "post-instances-id-reconstruct" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2271,7 +2271,7 @@ export def "instances-reconstruct create" [
 # Render an image
 #
 # GET /instances/{id}/rendered
-export def "instances-rendered get" [
+export def "get-instances-id-rendered" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2318,7 +2318,7 @@ export def "instances-rendered get" [
 # Get parent series
 #
 # GET /instances/{id}/series
-export def "instances-series get" [
+export def "get-instances-id-series" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2357,7 +2357,7 @@ export def "instances-series get" [
 # Get human-readable tags
 #
 # GET /instances/{id}/simplified-tags
-export def "instances-simplified-tags get" [
+export def "get-instances-id-simplified-tags" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2394,7 +2394,7 @@ export def "instances-simplified-tags get" [
 # Get instance statistics
 #
 # GET /instances/{id}/statistics
-export def "instances-statistics get" [
+export def "get-instances-id-statistics" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2429,7 +2429,7 @@ export def "instances-statistics get" [
 # Get parent study
 #
 # GET /instances/{id}/study
-export def "instances-study get" [
+export def "get-instances-id-study" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2468,7 +2468,7 @@ export def "instances-study get" [
 # Get DICOM tags
 #
 # GET /instances/{id}/tags
-export def "instances-tags get" [
+export def "get-instances-id-tags" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2507,7 +2507,7 @@ export def "instances-tags get" [
 # List jobs
 #
 # GET /jobs
-export def "jobs get" [
+export def "get-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2542,7 +2542,7 @@ export def "jobs get" [
 # Get job
 #
 # GET /jobs/{id}
-export def "jobs get-by-id" [
+export def "get-jobs-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2577,7 +2577,7 @@ export def "jobs get-by-id" [
 # Cancel job
 #
 # POST /jobs/{id}/cancel
-export def "jobs-cancel create" [
+export def "post-jobs-id-cancel" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2612,7 +2612,7 @@ export def "jobs-cancel create" [
 # Pause job
 #
 # POST /jobs/{id}/pause
-export def "jobs-pause create" [
+export def "post-jobs-id-pause" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2647,7 +2647,7 @@ export def "jobs-pause create" [
 # Resubmit job
 #
 # POST /jobs/{id}/resubmit
-export def "jobs-resubmit create" [
+export def "post-jobs-id-resubmit" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2682,7 +2682,7 @@ export def "jobs-resubmit create" [
 # Resume job
 #
 # POST /jobs/{id}/resume
-export def "jobs-resume create" [
+export def "post-jobs-id-resume" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2717,7 +2717,7 @@ export def "jobs-resume create" [
 # Get job output
 #
 # GET /jobs/{id}/{key}
-export def "jobs get-by-id-key" [
+export def "get-jobs-id-key" [
   id: string
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2754,7 +2754,7 @@ export def "jobs get-by-id-key" [
 # List DICOM modalities
 #
 # GET /modalities
-export def "modalities list" [
+export def "get-modalities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2789,7 +2789,7 @@ export def "modalities list" [
 # Delete DICOM modality
 #
 # DELETE /modalities/{id}
-export def "modalities delete" [
+export def "delete-modalities-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2824,7 +2824,7 @@ export def "modalities delete" [
 # List operations on modality
 #
 # GET /modalities/{id}
-export def "modalities get" [
+export def "get-modalities-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2859,7 +2859,7 @@ export def "modalities get" [
 # Update DICOM modality
 #
 # PUT /modalities/{id}
-export def "modalities update" [
+export def "put-modalities-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2910,7 +2910,7 @@ export def "modalities update" [
 # Get modality configuration
 #
 # GET /modalities/{id}/configuration
-export def "modalities-configuration get" [
+export def "get-modalities-id-configuration" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2945,7 +2945,7 @@ export def "modalities-configuration get" [
 # Trigger C-ECHO SCU
 #
 # POST /modalities/{id}/echo
-export def "modalities-echo create" [
+export def "post-modalities-id-echo" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2987,7 +2987,7 @@ export def "modalities-echo create" [
 # POST /modalities/{id}/find
 # DEPRECATED
 @deprecated
-export def "modalities-find create" [
+export def "post-modalities-id-find" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3028,7 +3028,7 @@ export def "modalities-find create" [
 # POST /modalities/{id}/find-instance
 # DEPRECATED
 @deprecated
-export def "modalities-find-instance create" [
+export def "post-modalities-id-find-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3069,7 +3069,7 @@ export def "modalities-find-instance create" [
 # POST /modalities/{id}/find-patient
 # DEPRECATED
 @deprecated
-export def "modalities-find-patient create" [
+export def "post-modalities-id-find-patient" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3110,7 +3110,7 @@ export def "modalities-find-patient create" [
 # POST /modalities/{id}/find-series
 # DEPRECATED
 @deprecated
-export def "modalities-find-series create" [
+export def "post-modalities-id-find-series" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3151,7 +3151,7 @@ export def "modalities-find-series create" [
 # POST /modalities/{id}/find-study
 # DEPRECATED
 @deprecated
-export def "modalities-find-study create" [
+export def "post-modalities-id-find-study" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3190,7 +3190,7 @@ export def "modalities-find-study create" [
 # C-FIND SCU for worklist
 #
 # POST /modalities/{id}/find-worklist
-export def "modalities-find-worklist create" [
+export def "post-modalities-id-find-worklist" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3231,7 +3231,7 @@ export def "modalities-find-worklist create" [
 # Trigger C-MOVE SCU
 #
 # POST /modalities/{id}/move
-export def "modalities-move create" [
+export def "post-modalities-id-move" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3278,7 +3278,7 @@ export def "modalities-move create" [
 # Trigger C-FIND SCU
 #
 # POST /modalities/{id}/query
-export def "modalities-query create" [
+export def "post-modalities-id-query" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3321,7 +3321,7 @@ export def "modalities-query create" [
 # Trigger storage commitment request
 #
 # POST /modalities/{id}/storage-commitment
-export def "modalities-storage-commitment create" [
+export def "post-modalities-id-storage-commitment" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3362,7 +3362,7 @@ export def "modalities-storage-commitment create" [
 # Trigger C-STORE SCU
 #
 # POST /modalities/{id}/store
-export def "modalities-store create" [
+export def "post-modalities-id-store" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3413,7 +3413,7 @@ export def "modalities-store create" [
 # Straight C-STORE SCU
 #
 # POST /modalities/{id}/store-straight
-export def "modalities-store-straight create" [
+export def "post-modalities-id-store-straight" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3452,7 +3452,7 @@ export def "modalities-store-straight create" [
 # List the available patients
 #
 # GET /patients
-export def "patients list" [
+export def "get-patients" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3492,7 +3492,7 @@ export def "patients list" [
 # Delete some patient
 #
 # DELETE /patients/{id}
-export def "patients delete" [
+export def "delete-patients-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3527,7 +3527,7 @@ export def "patients delete" [
 # Get information about some patient
 #
 # GET /patients/{id}
-export def "patients get" [
+export def "get-patients-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3566,7 +3566,7 @@ export def "patients get" [
 # Anonymize patient
 #
 # POST /patients/{id}/anonymize
-export def "patients-anonymize create" [
+export def "post-patients-id-anonymize" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3617,7 +3617,7 @@ export def "patients-anonymize create" [
 # Create ZIP archive
 #
 # GET /patients/{id}/archive
-export def "patients-archive get" [
+export def "get-patients-id-archive" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3655,7 +3655,7 @@ export def "patients-archive get" [
 # Create ZIP archive
 #
 # POST /patients/{id}/archive
-export def "patients-archive create" [
+export def "post-patients-id-archive" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3698,7 +3698,7 @@ export def "patients-archive create" [
 # List attachments
 #
 # GET /patients/{id}/attachments
-export def "patients-attachments list" [
+export def "get-patients-id-attachments" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3735,7 +3735,7 @@ export def "patients-attachments list" [
 # Delete attachment
 #
 # DELETE /patients/{id}/attachments/{name}
-export def "patients-attachments delete" [
+export def "delete-patients-id-attachments-name" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3775,7 +3775,7 @@ export def "patients-attachments delete" [
 # List operations on attachments
 #
 # GET /patients/{id}/attachments/{name}
-export def "patients-attachments get" [
+export def "get-patients-id-attachments-name" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3815,7 +3815,7 @@ export def "patients-attachments get" [
 # Set attachment
 #
 # PUT /patients/{id}/attachments/{name}
-export def "patients-attachments update" [
+export def "put-patients-id-attachments-name" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3859,7 +3859,7 @@ export def "patients-attachments update" [
 # Compress attachment
 #
 # POST /patients/{id}/attachments/{name}/compress
-export def "patients-attachments-compress create" [
+export def "post-patients-id-attachments-name-compress" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3896,7 +3896,7 @@ export def "patients-attachments-compress create" [
 # Get attachment (no decompression)
 #
 # GET /patients/{id}/attachments/{name}/compressed-data
-export def "patients-attachments-compressed-data get" [
+export def "get-patients-id-attachments-name-compressed-data" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3936,7 +3936,7 @@ export def "patients-attachments-compressed-data get" [
 # Get MD5 of attachment on disk
 #
 # GET /patients/{id}/attachments/{name}/compressed-md5
-export def "patients-attachments-compressed-md5 get" [
+export def "get-patients-id-attachments-name-compressed-md5" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3976,7 +3976,7 @@ export def "patients-attachments-compressed-md5 get" [
 # Get size of attachment on disk
 #
 # GET /patients/{id}/attachments/{name}/compressed-size
-export def "patients-attachments-compressed-size get" [
+export def "get-patients-id-attachments-name-compressed-size" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4016,7 +4016,7 @@ export def "patients-attachments-compressed-size get" [
 # Get attachment
 #
 # GET /patients/{id}/attachments/{name}/data
-export def "patients-attachments-data get" [
+export def "get-patients-id-attachments-name-data" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4056,7 +4056,7 @@ export def "patients-attachments-data get" [
 # Get info about the attachment
 #
 # GET /patients/{id}/attachments/{name}/info
-export def "patients-attachments-info get" [
+export def "get-patients-id-attachments-name-info" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4096,7 +4096,7 @@ export def "patients-attachments-info get" [
 # Is attachment compressed?
 #
 # GET /patients/{id}/attachments/{name}/is-compressed
-export def "patients-attachments-is-compressed get" [
+export def "get-patients-id-attachments-name-is-compressed" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4136,7 +4136,7 @@ export def "patients-attachments-is-compressed get" [
 # Get MD5 of attachment
 #
 # GET /patients/{id}/attachments/{name}/md5
-export def "patients-attachments-md5 get" [
+export def "get-patients-id-attachments-name-md5" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4176,7 +4176,7 @@ export def "patients-attachments-md5 get" [
 # Get size of attachment
 #
 # GET /patients/{id}/attachments/{name}/size
-export def "patients-attachments-size get" [
+export def "get-patients-id-attachments-name-size" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4216,7 +4216,7 @@ export def "patients-attachments-size get" [
 # Uncompress attachment
 #
 # POST /patients/{id}/attachments/{name}/uncompress
-export def "patients-attachments-uncompress create" [
+export def "post-patients-id-attachments-name-uncompress" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4253,7 +4253,7 @@ export def "patients-attachments-uncompress create" [
 # Verify attachment
 #
 # POST /patients/{id}/attachments/{name}/verify-md5
-export def "patients-attachments-verify-md5 create" [
+export def "post-patients-id-attachments-name-verify-md5" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4290,7 +4290,7 @@ export def "patients-attachments-verify-md5 create" [
 # Get child instances
 #
 # GET /patients/{id}/instances
-export def "patients-instances get" [
+export def "get-patients-id-instances" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4329,7 +4329,7 @@ export def "patients-instances get" [
 # Get tags of instances
 #
 # GET /patients/{id}/instances-tags
-export def "patients-instances-tags get" [
+export def "get-patients-id-instances-tags" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4368,7 +4368,7 @@ export def "patients-instances-tags get" [
 # Create DICOMDIR media
 #
 # GET /patients/{id}/media
-export def "patients-media get" [
+export def "get-patients-id-media" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4407,7 +4407,7 @@ export def "patients-media get" [
 # Create DICOMDIR media
 #
 # POST /patients/{id}/media
-export def "patients-media create" [
+export def "post-patients-id-media" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4451,7 +4451,7 @@ export def "patients-media create" [
 # List metadata
 #
 # GET /patients/{id}/metadata
-export def "patients-metadata list" [
+export def "get-patients-id-metadata" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4488,7 +4488,7 @@ export def "patients-metadata list" [
 # Delete metadata
 #
 # DELETE /patients/{id}/metadata/{name}
-export def "patients-metadata delete" [
+export def "delete-patients-id-metadata-name" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4528,7 +4528,7 @@ export def "patients-metadata delete" [
 # Get metadata
 #
 # GET /patients/{id}/metadata/{name}
-export def "patients-metadata get" [
+export def "get-patients-id-metadata-name" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4568,7 +4568,7 @@ export def "patients-metadata get" [
 # Set metadata
 #
 # PUT /patients/{id}/metadata/{name}
-export def "patients-metadata update" [
+export def "put-patients-id-metadata-name" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4612,7 +4612,7 @@ export def "patients-metadata update" [
 # Modify patient
 #
 # POST /patients/{id}/modify
-export def "patients-modify create" [
+export def "post-patients-id-modify" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4662,7 +4662,7 @@ export def "patients-modify create" [
 # Get patient module
 #
 # GET /patients/{id}/module
-export def "patients-module get" [
+export def "get-patients-id-module" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4701,7 +4701,7 @@ export def "patients-module get" [
 # Is the patient protected against recycling?
 #
 # GET /patients/{id}/protected
-export def "patients-protected get" [
+export def "get-patients-id-protected" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4736,7 +4736,7 @@ export def "patients-protected get" [
 # Protect one patient against recycling
 #
 # PUT /patients/{id}/protected
-export def "patients-protected update" [
+export def "put-patients-id-protected" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4771,7 +4771,7 @@ export def "patients-protected update" [
 # Reconstruct tags & optionally files of patient
 #
 # POST /patients/{id}/reconstruct
-export def "patients-reconstruct create" [
+export def "post-patients-id-reconstruct" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4810,7 +4810,7 @@ export def "patients-reconstruct create" [
 # Get child series
 #
 # GET /patients/{id}/series
-export def "patients-series get" [
+export def "get-patients-id-series" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4849,7 +4849,7 @@ export def "patients-series get" [
 # Get shared tags
 #
 # GET /patients/{id}/shared-tags
-export def "patients-shared-tags get" [
+export def "get-patients-id-shared-tags" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4887,7 +4887,7 @@ export def "patients-shared-tags get" [
 # Get patient statistics
 #
 # GET /patients/{id}/statistics
-export def "patients-statistics get" [
+export def "get-patients-id-statistics" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4922,7 +4922,7 @@ export def "patients-statistics get" [
 # Get child studies
 #
 # GET /patients/{id}/studies
-export def "patients-studies get" [
+export def "get-patients-id-studies" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4961,7 +4961,7 @@ export def "patients-studies get" [
 # List Orthanc peers
 #
 # GET /peers
-export def "peers list" [
+export def "get-peers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4996,7 +4996,7 @@ export def "peers list" [
 # Delete Orthanc peer
 #
 # DELETE /peers/{id}
-export def "peers delete" [
+export def "delete-peers-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5031,7 +5031,7 @@ export def "peers delete" [
 # List operations on peer
 #
 # GET /peers/{id}
-export def "peers get" [
+export def "get-peers-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5066,7 +5066,7 @@ export def "peers get" [
 # Update Orthanc peer
 #
 # PUT /peers/{id}
-export def "peers update" [
+export def "put-peers-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5111,7 +5111,7 @@ export def "peers update" [
 # Get peer configuration
 #
 # GET /peers/{id}/configuration
-export def "peers-configuration get" [
+export def "get-peers-id-configuration" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5146,7 +5146,7 @@ export def "peers-configuration get" [
 # Send to Orthanc peer
 #
 # POST /peers/{id}/store
-export def "peers-store create" [
+export def "post-peers-id-store" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5191,7 +5191,7 @@ export def "peers-store create" [
 # Straight store to peer
 #
 # POST /peers/{id}/store-straight
-export def "peers-store-straight create" [
+export def "post-peers-id-store-straight" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5230,7 +5230,7 @@ export def "peers-store-straight create" [
 # Get peer system information
 #
 # GET /peers/{id}/system
-export def "peers-system get" [
+export def "get-peers-id-system" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5265,7 +5265,7 @@ export def "peers-system get" [
 # List plugins
 #
 # GET /plugins
-export def "plugins list" [
+export def "get-plugins" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5298,7 +5298,7 @@ export def "plugins list" [
 # JavaScript extensions to Orthanc Explorer
 #
 # GET /plugins/explorer.js
-export def "plugins-explorer-js get" [
+export def "get-plugins-explorer-js" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5331,7 +5331,7 @@ export def "plugins-explorer-js get" [
 # Get plugin
 #
 # GET /plugins/{id}
-export def "plugins get" [
+export def "get-plugins-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5366,7 +5366,7 @@ export def "plugins get" [
 # List query/retrieve operations
 #
 # GET /queries
-export def "queries list" [
+export def "get-queries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5399,7 +5399,7 @@ export def "queries list" [
 # Delete a query
 #
 # DELETE /queries/{id}
-export def "queries delete" [
+export def "delete-queries-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5434,7 +5434,7 @@ export def "queries delete" [
 # List operations on a query
 #
 # GET /queries/{id}
-export def "queries get" [
+export def "get-queries-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5469,7 +5469,7 @@ export def "queries get" [
 # List answers to a query
 #
 # GET /queries/{id}/answers
-export def "queries-answers list" [
+export def "get-queries-id-answers" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5508,7 +5508,7 @@ export def "queries-answers list" [
 # List operations on an answer
 #
 # GET /queries/{id}/answers/{index}
-export def "queries-answers get" [
+export def "get-queries-id-answers-index" [
   id: string
   index: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5545,7 +5545,7 @@ export def "queries-answers get" [
 # Get one answer
 #
 # GET /queries/{id}/answers/{index}/content
-export def "queries-answers-content get" [
+export def "get-queries-id-answers-index-content" [
   id: string
   index: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5585,7 +5585,7 @@ export def "queries-answers-content get" [
 # Query the child instances of an answer
 #
 # POST /queries/{id}/answers/{index}/query-instances
-export def "queries-answers-query-instances create" [
+export def "post-queries-id-answers-index-query-instances" [
   id: string
   index: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5627,7 +5627,7 @@ export def "queries-answers-query-instances create" [
 # Query the child series of an answer
 #
 # POST /queries/{id}/answers/{index}/query-series
-export def "queries-answers-query-series create" [
+export def "post-queries-id-answers-index-query-series" [
   id: string
   index: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5669,7 +5669,7 @@ export def "queries-answers-query-series create" [
 # Query the child studies of an answer
 #
 # POST /queries/{id}/answers/{index}/query-studies
-export def "queries-answers-query-studies create" [
+export def "post-queries-id-answers-index-query-studies" [
   id: string
   index: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5711,7 +5711,7 @@ export def "queries-answers-query-studies create" [
 # Retrieve one answer
 #
 # POST /queries/{id}/answers/{index}/retrieve
-export def "queries-answers-retrieve create" [
+export def "post-queries-id-answers-index-retrieve" [
   id: string
   index: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5759,7 +5759,7 @@ export def "queries-answers-retrieve create" [
 # Get level of original query
 #
 # GET /queries/{id}/level
-export def "queries-level get" [
+export def "get-queries-id-level" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5794,7 +5794,7 @@ export def "queries-level get" [
 # Get modality of original query
 #
 # GET /queries/{id}/modality
-export def "queries-modality get" [
+export def "get-queries-id-modality" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5829,7 +5829,7 @@ export def "queries-modality get" [
 # Get original query arguments
 #
 # GET /queries/{id}/query
-export def "queries-query get" [
+export def "get-queries-id-query" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5867,7 +5867,7 @@ export def "queries-query get" [
 # Retrieve all answers
 #
 # POST /queries/{id}/retrieve
-export def "queries-retrieve create" [
+export def "post-queries-id-retrieve" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5913,7 +5913,7 @@ export def "queries-retrieve create" [
 # List the available series
 #
 # GET /series
-export def "series list" [
+export def "get-series" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5953,7 +5953,7 @@ export def "series list" [
 # Delete some series
 #
 # DELETE /series/{id}
-export def "series delete" [
+export def "delete-series-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5988,7 +5988,7 @@ export def "series delete" [
 # Get information about some series
 #
 # GET /series/{id}
-export def "series get" [
+export def "get-series-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6027,7 +6027,7 @@ export def "series get" [
 # Anonymize series
 #
 # POST /series/{id}/anonymize
-export def "series-anonymize create" [
+export def "post-series-id-anonymize" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6078,7 +6078,7 @@ export def "series-anonymize create" [
 # Create ZIP archive
 #
 # GET /series/{id}/archive
-export def "series-archive get" [
+export def "get-series-id-archive" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6116,7 +6116,7 @@ export def "series-archive get" [
 # Create ZIP archive
 #
 # POST /series/{id}/archive
-export def "series-archive create" [
+export def "post-series-id-archive" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6159,7 +6159,7 @@ export def "series-archive create" [
 # List attachments
 #
 # GET /series/{id}/attachments
-export def "series-attachments list" [
+export def "get-series-id-attachments" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6196,7 +6196,7 @@ export def "series-attachments list" [
 # Delete attachment
 #
 # DELETE /series/{id}/attachments/{name}
-export def "series-attachments delete" [
+export def "delete-series-id-attachments-name" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6236,7 +6236,7 @@ export def "series-attachments delete" [
 # List operations on attachments
 #
 # GET /series/{id}/attachments/{name}
-export def "series-attachments get" [
+export def "get-series-id-attachments-name" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6276,7 +6276,7 @@ export def "series-attachments get" [
 # Set attachment
 #
 # PUT /series/{id}/attachments/{name}
-export def "series-attachments update" [
+export def "put-series-id-attachments-name" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6320,7 +6320,7 @@ export def "series-attachments update" [
 # Compress attachment
 #
 # POST /series/{id}/attachments/{name}/compress
-export def "series-attachments-compress create" [
+export def "post-series-id-attachments-name-compress" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6357,7 +6357,7 @@ export def "series-attachments-compress create" [
 # Get attachment (no decompression)
 #
 # GET /series/{id}/attachments/{name}/compressed-data
-export def "series-attachments-compressed-data get" [
+export def "get-series-id-attachments-name-compressed-data" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6397,7 +6397,7 @@ export def "series-attachments-compressed-data get" [
 # Get MD5 of attachment on disk
 #
 # GET /series/{id}/attachments/{name}/compressed-md5
-export def "series-attachments-compressed-md5 get" [
+export def "get-series-id-attachments-name-compressed-md5" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6437,7 +6437,7 @@ export def "series-attachments-compressed-md5 get" [
 # Get size of attachment on disk
 #
 # GET /series/{id}/attachments/{name}/compressed-size
-export def "series-attachments-compressed-size get" [
+export def "get-series-id-attachments-name-compressed-size" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6477,7 +6477,7 @@ export def "series-attachments-compressed-size get" [
 # Get attachment
 #
 # GET /series/{id}/attachments/{name}/data
-export def "series-attachments-data get" [
+export def "get-series-id-attachments-name-data" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6517,7 +6517,7 @@ export def "series-attachments-data get" [
 # Get info about the attachment
 #
 # GET /series/{id}/attachments/{name}/info
-export def "series-attachments-info get" [
+export def "get-series-id-attachments-name-info" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6557,7 +6557,7 @@ export def "series-attachments-info get" [
 # Is attachment compressed?
 #
 # GET /series/{id}/attachments/{name}/is-compressed
-export def "series-attachments-is-compressed get" [
+export def "get-series-id-attachments-name-is-compressed" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6597,7 +6597,7 @@ export def "series-attachments-is-compressed get" [
 # Get MD5 of attachment
 #
 # GET /series/{id}/attachments/{name}/md5
-export def "series-attachments-md5 get" [
+export def "get-series-id-attachments-name-md5" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6637,7 +6637,7 @@ export def "series-attachments-md5 get" [
 # Get size of attachment
 #
 # GET /series/{id}/attachments/{name}/size
-export def "series-attachments-size get" [
+export def "get-series-id-attachments-name-size" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6677,7 +6677,7 @@ export def "series-attachments-size get" [
 # Uncompress attachment
 #
 # POST /series/{id}/attachments/{name}/uncompress
-export def "series-attachments-uncompress create" [
+export def "post-series-id-attachments-name-uncompress" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6714,7 +6714,7 @@ export def "series-attachments-uncompress create" [
 # Verify attachment
 #
 # POST /series/{id}/attachments/{name}/verify-md5
-export def "series-attachments-verify-md5 create" [
+export def "post-series-id-attachments-name-verify-md5" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6751,7 +6751,7 @@ export def "series-attachments-verify-md5 create" [
 # Get child instances
 #
 # GET /series/{id}/instances
-export def "series-instances get" [
+export def "get-series-id-instances" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6790,7 +6790,7 @@ export def "series-instances get" [
 # Get tags of instances
 #
 # GET /series/{id}/instances-tags
-export def "series-instances-tags get" [
+export def "get-series-id-instances-tags" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6829,7 +6829,7 @@ export def "series-instances-tags get" [
 # Create DICOMDIR media
 #
 # GET /series/{id}/media
-export def "series-media get" [
+export def "get-series-id-media" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6868,7 +6868,7 @@ export def "series-media get" [
 # Create DICOMDIR media
 #
 # POST /series/{id}/media
-export def "series-media create" [
+export def "post-series-id-media" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6912,7 +6912,7 @@ export def "series-media create" [
 # List metadata
 #
 # GET /series/{id}/metadata
-export def "series-metadata list" [
+export def "get-series-id-metadata" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6949,7 +6949,7 @@ export def "series-metadata list" [
 # Delete metadata
 #
 # DELETE /series/{id}/metadata/{name}
-export def "series-metadata delete" [
+export def "delete-series-id-metadata-name" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6989,7 +6989,7 @@ export def "series-metadata delete" [
 # Get metadata
 #
 # GET /series/{id}/metadata/{name}
-export def "series-metadata get" [
+export def "get-series-id-metadata-name" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7029,7 +7029,7 @@ export def "series-metadata get" [
 # Set metadata
 #
 # PUT /series/{id}/metadata/{name}
-export def "series-metadata update" [
+export def "put-series-id-metadata-name" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7073,7 +7073,7 @@ export def "series-metadata update" [
 # Modify series
 #
 # POST /series/{id}/modify
-export def "series-modify create" [
+export def "post-series-id-modify" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7123,7 +7123,7 @@ export def "series-modify create" [
 # Get series module
 #
 # GET /series/{id}/module
-export def "series-module get" [
+export def "get-series-id-module" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7162,7 +7162,7 @@ export def "series-module get" [
 # Decode series for numpy
 #
 # GET /series/{id}/numpy
-export def "series-numpy get" [
+export def "get-series-id-numpy" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7202,7 +7202,7 @@ export def "series-numpy get" [
 # GET /series/{id}/ordered-slices
 # DEPRECATED
 @deprecated
-export def "series-ordered-slices get" [
+export def "get-series-id-ordered-slices" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7237,7 +7237,7 @@ export def "series-ordered-slices get" [
 # Get parent patient
 #
 # GET /series/{id}/patient
-export def "series-patient get" [
+export def "get-series-id-patient" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7276,7 +7276,7 @@ export def "series-patient get" [
 # Reconstruct tags & optionally files of series
 #
 # POST /series/{id}/reconstruct
-export def "series-reconstruct create" [
+export def "post-series-id-reconstruct" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7315,7 +7315,7 @@ export def "series-reconstruct create" [
 # Get shared tags
 #
 # GET /series/{id}/shared-tags
-export def "series-shared-tags get" [
+export def "get-series-id-shared-tags" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7353,7 +7353,7 @@ export def "series-shared-tags get" [
 # Get series statistics
 #
 # GET /series/{id}/statistics
-export def "series-statistics get" [
+export def "get-series-id-statistics" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7388,7 +7388,7 @@ export def "series-statistics get" [
 # Get parent study
 #
 # GET /series/{id}/study
-export def "series-study get" [
+export def "get-series-id-study" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7427,7 +7427,7 @@ export def "series-study get" [
 # Get database statistics
 #
 # GET /statistics
-export def "statistics get" [
+export def "get-statistics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7460,7 +7460,7 @@ export def "statistics get" [
 # Get storage commitment report
 #
 # GET /storage-commitment/{id}
-export def "storage-commitment get" [
+export def "get-storage-commitment-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7495,7 +7495,7 @@ export def "storage-commitment get" [
 # Remove after storage commitment
 #
 # POST /storage-commitment/{id}/remove
-export def "storage-commitment-remove create" [
+export def "post-storage-commitment-id-remove" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7530,7 +7530,7 @@ export def "storage-commitment-remove create" [
 # List the available studies
 #
 # GET /studies
-export def "studies list" [
+export def "get-studies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7570,7 +7570,7 @@ export def "studies list" [
 # Delete some study
 #
 # DELETE /studies/{id}
-export def "studies delete" [
+export def "delete-studies-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7605,7 +7605,7 @@ export def "studies delete" [
 # Get information about some study
 #
 # GET /studies/{id}
-export def "studies get" [
+export def "get-studies-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7644,7 +7644,7 @@ export def "studies get" [
 # Anonymize study
 #
 # POST /studies/{id}/anonymize
-export def "studies-anonymize create" [
+export def "post-studies-id-anonymize" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7695,7 +7695,7 @@ export def "studies-anonymize create" [
 # Create ZIP archive
 #
 # GET /studies/{id}/archive
-export def "studies-archive get" [
+export def "get-studies-id-archive" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7733,7 +7733,7 @@ export def "studies-archive get" [
 # Create ZIP archive
 #
 # POST /studies/{id}/archive
-export def "studies-archive create" [
+export def "post-studies-id-archive" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7776,7 +7776,7 @@ export def "studies-archive create" [
 # List attachments
 #
 # GET /studies/{id}/attachments
-export def "studies-attachments list" [
+export def "get-studies-id-attachments" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7813,7 +7813,7 @@ export def "studies-attachments list" [
 # Delete attachment
 #
 # DELETE /studies/{id}/attachments/{name}
-export def "studies-attachments delete" [
+export def "delete-studies-id-attachments-name" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7853,7 +7853,7 @@ export def "studies-attachments delete" [
 # List operations on attachments
 #
 # GET /studies/{id}/attachments/{name}
-export def "studies-attachments get" [
+export def "get-studies-id-attachments-name" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7893,7 +7893,7 @@ export def "studies-attachments get" [
 # Set attachment
 #
 # PUT /studies/{id}/attachments/{name}
-export def "studies-attachments update" [
+export def "put-studies-id-attachments-name" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7937,7 +7937,7 @@ export def "studies-attachments update" [
 # Compress attachment
 #
 # POST /studies/{id}/attachments/{name}/compress
-export def "studies-attachments-compress create" [
+export def "post-studies-id-attachments-name-compress" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7974,7 +7974,7 @@ export def "studies-attachments-compress create" [
 # Get attachment (no decompression)
 #
 # GET /studies/{id}/attachments/{name}/compressed-data
-export def "studies-attachments-compressed-data get" [
+export def "get-studies-id-attachments-name-compressed-data" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8014,7 +8014,7 @@ export def "studies-attachments-compressed-data get" [
 # Get MD5 of attachment on disk
 #
 # GET /studies/{id}/attachments/{name}/compressed-md5
-export def "studies-attachments-compressed-md5 get" [
+export def "get-studies-id-attachments-name-compressed-md5" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8054,7 +8054,7 @@ export def "studies-attachments-compressed-md5 get" [
 # Get size of attachment on disk
 #
 # GET /studies/{id}/attachments/{name}/compressed-size
-export def "studies-attachments-compressed-size get" [
+export def "get-studies-id-attachments-name-compressed-size" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8094,7 +8094,7 @@ export def "studies-attachments-compressed-size get" [
 # Get attachment
 #
 # GET /studies/{id}/attachments/{name}/data
-export def "studies-attachments-data get" [
+export def "get-studies-id-attachments-name-data" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8134,7 +8134,7 @@ export def "studies-attachments-data get" [
 # Get info about the attachment
 #
 # GET /studies/{id}/attachments/{name}/info
-export def "studies-attachments-info get" [
+export def "get-studies-id-attachments-name-info" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8174,7 +8174,7 @@ export def "studies-attachments-info get" [
 # Is attachment compressed?
 #
 # GET /studies/{id}/attachments/{name}/is-compressed
-export def "studies-attachments-is-compressed get" [
+export def "get-studies-id-attachments-name-is-compressed" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8214,7 +8214,7 @@ export def "studies-attachments-is-compressed get" [
 # Get MD5 of attachment
 #
 # GET /studies/{id}/attachments/{name}/md5
-export def "studies-attachments-md5 get" [
+export def "get-studies-id-attachments-name-md5" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8254,7 +8254,7 @@ export def "studies-attachments-md5 get" [
 # Get size of attachment
 #
 # GET /studies/{id}/attachments/{name}/size
-export def "studies-attachments-size get" [
+export def "get-studies-id-attachments-name-size" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8294,7 +8294,7 @@ export def "studies-attachments-size get" [
 # Uncompress attachment
 #
 # POST /studies/{id}/attachments/{name}/uncompress
-export def "studies-attachments-uncompress create" [
+export def "post-studies-id-attachments-name-uncompress" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8331,7 +8331,7 @@ export def "studies-attachments-uncompress create" [
 # Verify attachment
 #
 # POST /studies/{id}/attachments/{name}/verify-md5
-export def "studies-attachments-verify-md5 create" [
+export def "post-studies-id-attachments-name-verify-md5" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8368,7 +8368,7 @@ export def "studies-attachments-verify-md5 create" [
 # Get child instances
 #
 # GET /studies/{id}/instances
-export def "studies-instances get" [
+export def "get-studies-id-instances" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8407,7 +8407,7 @@ export def "studies-instances get" [
 # Get tags of instances
 #
 # GET /studies/{id}/instances-tags
-export def "studies-instances-tags get" [
+export def "get-studies-id-instances-tags" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8446,7 +8446,7 @@ export def "studies-instances-tags get" [
 # Create DICOMDIR media
 #
 # GET /studies/{id}/media
-export def "studies-media get" [
+export def "get-studies-id-media" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8485,7 +8485,7 @@ export def "studies-media get" [
 # Create DICOMDIR media
 #
 # POST /studies/{id}/media
-export def "studies-media create" [
+export def "post-studies-id-media" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8529,7 +8529,7 @@ export def "studies-media create" [
 # Merge study
 #
 # POST /studies/{id}/merge
-export def "studies-merge create" [
+export def "post-studies-id-merge" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8573,7 +8573,7 @@ export def "studies-merge create" [
 # List metadata
 #
 # GET /studies/{id}/metadata
-export def "studies-metadata list" [
+export def "get-studies-id-metadata" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8610,7 +8610,7 @@ export def "studies-metadata list" [
 # Delete metadata
 #
 # DELETE /studies/{id}/metadata/{name}
-export def "studies-metadata delete" [
+export def "delete-studies-id-metadata-name" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8650,7 +8650,7 @@ export def "studies-metadata delete" [
 # Get metadata
 #
 # GET /studies/{id}/metadata/{name}
-export def "studies-metadata get" [
+export def "get-studies-id-metadata-name" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8690,7 +8690,7 @@ export def "studies-metadata get" [
 # Set metadata
 #
 # PUT /studies/{id}/metadata/{name}
-export def "studies-metadata update" [
+export def "put-studies-id-metadata-name" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8734,7 +8734,7 @@ export def "studies-metadata update" [
 # Modify study
 #
 # POST /studies/{id}/modify
-export def "studies-modify create" [
+export def "post-studies-id-modify" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8784,7 +8784,7 @@ export def "studies-modify create" [
 # Get study module
 #
 # GET /studies/{id}/module
-export def "studies-module get" [
+export def "get-studies-id-module" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8823,7 +8823,7 @@ export def "studies-module get" [
 # Get patient module of study
 #
 # GET /studies/{id}/module-patient
-export def "studies-module-patient get" [
+export def "get-studies-id-module-patient" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8862,7 +8862,7 @@ export def "studies-module-patient get" [
 # Get parent patient
 #
 # GET /studies/{id}/patient
-export def "studies-patient get" [
+export def "get-studies-id-patient" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8901,7 +8901,7 @@ export def "studies-patient get" [
 # Reconstruct tags & optionally files of study
 #
 # POST /studies/{id}/reconstruct
-export def "studies-reconstruct create" [
+export def "post-studies-id-reconstruct" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8940,7 +8940,7 @@ export def "studies-reconstruct create" [
 # Get child series
 #
 # GET /studies/{id}/series
-export def "studies-series get" [
+export def "get-studies-id-series" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8979,7 +8979,7 @@ export def "studies-series get" [
 # Get shared tags
 #
 # GET /studies/{id}/shared-tags
-export def "studies-shared-tags get" [
+export def "get-studies-id-shared-tags" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9017,7 +9017,7 @@ export def "studies-shared-tags get" [
 # Split study
 #
 # POST /studies/{id}/split
-export def "studies-split create" [
+export def "post-studies-id-split" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9064,7 +9064,7 @@ export def "studies-split create" [
 # Get study statistics
 #
 # GET /studies/{id}/statistics
-export def "studies-statistics get" [
+export def "get-studies-id-statistics" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9099,7 +9099,7 @@ export def "studies-statistics get" [
 # Get system information
 #
 # GET /system
-export def "system get" [
+export def "get-system" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9132,7 +9132,7 @@ export def "system get" [
 # List operations
 #
 # GET /tools
-export def "tools get" [
+export def "get-tools" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9165,7 +9165,7 @@ export def "tools get" [
 # Get accepted transfer syntaxes
 #
 # GET /tools/accepted-transfer-syntaxes
-export def "tools-accepted-transfer-syntaxes get" [
+export def "get-tools-accepted-transfer-syntaxes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9198,7 +9198,7 @@ export def "tools-accepted-transfer-syntaxes get" [
 # Set accepted transfer syntaxes
 #
 # PUT /tools/accepted-transfer-syntaxes
-export def "tools-accepted-transfer-syntaxes update" [
+export def "put-tools-accepted-transfer-syntaxes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9235,7 +9235,7 @@ export def "tools-accepted-transfer-syntaxes update" [
 # Anonymize a set of resources
 #
 # POST /tools/bulk-anonymize
-export def "tools-bulk-anonymize create" [
+export def "post-tools-bulk-anonymize" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9285,7 +9285,7 @@ export def "tools-bulk-anonymize create" [
 # Describe a set of resources
 #
 # POST /tools/bulk-content
-export def "tools-bulk-content create" [
+export def "post-tools-bulk-content" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9326,7 +9326,7 @@ export def "tools-bulk-content create" [
 # Delete a set of resources
 #
 # POST /tools/bulk-delete
-export def "tools-bulk-delete create" [
+export def "post-tools-bulk-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9363,7 +9363,7 @@ export def "tools-bulk-delete create" [
 # Modify a set of resources
 #
 # POST /tools/bulk-modify
-export def "tools-bulk-modify create" [
+export def "post-tools-bulk-modify" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9413,7 +9413,7 @@ export def "tools-bulk-modify create" [
 # Create ZIP archive
 #
 # POST /tools/create-archive
-export def "tools-create-archive create" [
+export def "post-tools-create-archive" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9455,7 +9455,7 @@ export def "tools-create-archive create" [
 # Create one DICOM instance
 #
 # POST /tools/create-dicom
-export def "tools-create-dicom create" [
+export def "post-tools-create-dicom" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9497,7 +9497,7 @@ export def "tools-create-dicom create" [
 # Create DICOMDIR media
 #
 # POST /tools/create-media
-export def "tools-create-media create" [
+export def "post-tools-create-media" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9540,7 +9540,7 @@ export def "tools-create-media create" [
 # Create DICOMDIR media
 #
 # POST /tools/create-media-extended
-export def "tools-create-media-extended create" [
+export def "post-tools-create-media-extended" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9583,7 +9583,7 @@ export def "tools-create-media-extended create" [
 # Get default encoding
 #
 # GET /tools/default-encoding
-export def "tools-default-encoding get" [
+export def "get-tools-default-encoding" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9616,7 +9616,7 @@ export def "tools-default-encoding get" [
 # Set default encoding
 #
 # PUT /tools/default-encoding
-export def "tools-default-encoding update" [
+export def "put-tools-default-encoding" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9653,7 +9653,7 @@ export def "tools-default-encoding update" [
 # Get DICOM conformance
 #
 # GET /tools/dicom-conformance
-export def "tools-dicom-conformance get" [
+export def "get-tools-dicom-conformance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9686,7 +9686,7 @@ export def "tools-dicom-conformance get" [
 # Trigger C-ECHO SCU
 #
 # POST /tools/dicom-echo
-export def "tools-dicom-echo create" [
+export def "post-tools-dicom-echo" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9729,7 +9729,7 @@ export def "tools-dicom-echo create" [
 # Execute Lua script
 #
 # POST /tools/execute-script
-export def "tools-execute-script create" [
+export def "post-tools-execute-script" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9766,7 +9766,7 @@ export def "tools-execute-script create" [
 # Look for local resources
 #
 # POST /tools/find
-export def "tools-find create" [
+export def "post-tools-find" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9811,7 +9811,7 @@ export def "tools-find create" [
 # Generate an identifier
 #
 # GET /tools/generate-uid
-export def "tools-generate-uid get" [
+export def "get-tools-generate-uid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9846,7 +9846,7 @@ export def "tools-generate-uid get" [
 # Invalidate DICOM-as-JSON summaries
 #
 # POST /tools/invalidate-tags
-export def "tools-invalidate-tags create" [
+export def "post-tools-invalidate-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9879,7 +9879,7 @@ export def "tools-invalidate-tags create" [
 # Get main log level
 #
 # GET /tools/log-level
-export def "tools-log-level get" [
+export def "get-tools-log-level" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9912,7 +9912,7 @@ export def "tools-log-level get" [
 # Set main log level
 #
 # PUT /tools/log-level
-export def "tools-log-level update" [
+export def "put-tools-log-level" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9949,7 +9949,7 @@ export def "tools-log-level update" [
 # Get log level for `dicom`
 #
 # GET /tools/log-level-dicom
-export def "tools-log-level-dicom get" [
+export def "get-tools-log-level-dicom" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9982,7 +9982,7 @@ export def "tools-log-level-dicom get" [
 # Set log level for `dicom`
 #
 # PUT /tools/log-level-dicom
-export def "tools-log-level-dicom update" [
+export def "put-tools-log-level-dicom" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10019,7 +10019,7 @@ export def "tools-log-level-dicom update" [
 # Get log level for `generic`
 #
 # GET /tools/log-level-generic
-export def "tools-log-level-generic get" [
+export def "get-tools-log-level-generic" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10052,7 +10052,7 @@ export def "tools-log-level-generic get" [
 # Set log level for `generic`
 #
 # PUT /tools/log-level-generic
-export def "tools-log-level-generic update" [
+export def "put-tools-log-level-generic" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10089,7 +10089,7 @@ export def "tools-log-level-generic update" [
 # Get log level for `http`
 #
 # GET /tools/log-level-http
-export def "tools-log-level-http get" [
+export def "get-tools-log-level-http" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10122,7 +10122,7 @@ export def "tools-log-level-http get" [
 # Set log level for `http`
 #
 # PUT /tools/log-level-http
-export def "tools-log-level-http update" [
+export def "put-tools-log-level-http" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10159,7 +10159,7 @@ export def "tools-log-level-http update" [
 # Get log level for `jobs`
 #
 # GET /tools/log-level-jobs
-export def "tools-log-level-jobs get" [
+export def "get-tools-log-level-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10192,7 +10192,7 @@ export def "tools-log-level-jobs get" [
 # Set log level for `jobs`
 #
 # PUT /tools/log-level-jobs
-export def "tools-log-level-jobs update" [
+export def "put-tools-log-level-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10229,7 +10229,7 @@ export def "tools-log-level-jobs update" [
 # Get log level for `lua`
 #
 # GET /tools/log-level-lua
-export def "tools-log-level-lua get" [
+export def "get-tools-log-level-lua" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10262,7 +10262,7 @@ export def "tools-log-level-lua get" [
 # Set log level for `lua`
 #
 # PUT /tools/log-level-lua
-export def "tools-log-level-lua update" [
+export def "put-tools-log-level-lua" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10299,7 +10299,7 @@ export def "tools-log-level-lua update" [
 # Get log level for `plugins`
 #
 # GET /tools/log-level-plugins
-export def "tools-log-level-plugins get" [
+export def "get-tools-log-level-plugins" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10332,7 +10332,7 @@ export def "tools-log-level-plugins get" [
 # Set log level for `plugins`
 #
 # PUT /tools/log-level-plugins
-export def "tools-log-level-plugins update" [
+export def "put-tools-log-level-plugins" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10369,7 +10369,7 @@ export def "tools-log-level-plugins update" [
 # Get log level for `sqlite`
 #
 # GET /tools/log-level-sqlite
-export def "tools-log-level-sqlite get" [
+export def "get-tools-log-level-sqlite" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10402,7 +10402,7 @@ export def "tools-log-level-sqlite get" [
 # Set log level for `sqlite`
 #
 # PUT /tools/log-level-sqlite
-export def "tools-log-level-sqlite update" [
+export def "put-tools-log-level-sqlite" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10439,7 +10439,7 @@ export def "tools-log-level-sqlite update" [
 # Look for DICOM identifiers
 #
 # POST /tools/lookup
-export def "tools-lookup create" [
+export def "post-tools-lookup" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10476,7 +10476,7 @@ export def "tools-lookup create" [
 # Are metrics collected?
 #
 # GET /tools/metrics
-export def "tools-metrics get" [
+export def "get-tools-metrics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10509,7 +10509,7 @@ export def "tools-metrics get" [
 # Enable collection of metrics
 #
 # PUT /tools/metrics
-export def "tools-metrics update" [
+export def "put-tools-metrics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10546,7 +10546,7 @@ export def "tools-metrics update" [
 # Get usage metrics
 #
 # GET /tools/metrics-prometheus
-export def "tools-metrics-prometheus get" [
+export def "get-tools-metrics-prometheus" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10579,7 +10579,7 @@ export def "tools-metrics-prometheus get" [
 # Get UTC time
 #
 # GET /tools/now
-export def "tools-now get" [
+export def "get-tools-now" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10612,7 +10612,7 @@ export def "tools-now get" [
 # Get local time
 #
 # GET /tools/now-local
-export def "tools-now-local get" [
+export def "get-tools-now-local" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10645,7 +10645,7 @@ export def "tools-now-local get" [
 # Reconstruct all the index
 #
 # POST /tools/reconstruct
-export def "tools-reconstruct create" [
+export def "post-tools-reconstruct" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10682,7 +10682,7 @@ export def "tools-reconstruct create" [
 # Restart Orthanc
 #
 # POST /tools/reset
-export def "tools-reset create" [
+export def "post-tools-reset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10715,7 +10715,7 @@ export def "tools-reset create" [
 # Shutdown Orthanc
 #
 # POST /tools/shutdown
-export def "tools-shutdown create" [
+export def "post-tools-shutdown" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10748,7 +10748,7 @@ export def "tools-shutdown create" [
 # Is unknown SOP class accepted?
 #
 # GET /tools/unknown-sop-class-accepted
-export def "tools-unknown-sop-class-accepted get" [
+export def "get-tools-unknown-sop-class-accepted" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10781,7 +10781,7 @@ export def "tools-unknown-sop-class-accepted get" [
 # Set unknown SOP class accepted
 #
 # PUT /tools/unknown-sop-class-accepted
-export def "tools-unknown-sop-class-accepted update" [
+export def "put-tools-unknown-sop-class-accepted" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

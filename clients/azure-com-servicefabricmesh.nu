@@ -118,7 +118,7 @@ def api-version-completer [] { ["2018-09-01-preview"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-service-fabric-mesh-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -142,7 +142,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.ServiceFabricMesh/operations
 # operationId: Operations_List
-export def "providers-microsoft-service-fabric-mesh-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -178,7 +178,7 @@ export def "providers-microsoft-service-fabric-mesh-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.ServiceFabricMesh/applications
 # operationId: Application_ListBySubscription
-export def "subscriptions-providers-microsoft-service-fabric-mesh-applications list" [
+export def "application-list-by-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -216,7 +216,7 @@ export def "subscriptions-providers-microsoft-service-fabric-mesh-applications l
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.ServiceFabricMesh/gateways
 # operationId: Gateway_ListBySubscription
-export def "subscriptions-providers-microsoft-service-fabric-mesh-gateways list" [
+export def "gateway-list-by-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -254,7 +254,7 @@ export def "subscriptions-providers-microsoft-service-fabric-mesh-gateways list"
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.ServiceFabricMesh/networks
 # operationId: Network_ListBySubscription
-export def "subscriptions-providers-microsoft-service-fabric-mesh-networks list" [
+export def "network-list-by-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -292,7 +292,7 @@ export def "subscriptions-providers-microsoft-service-fabric-mesh-networks list"
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.ServiceFabricMesh/secrets
 # operationId: Secret_ListBySubscription
-export def "subscriptions-providers-microsoft-service-fabric-mesh-secrets list" [
+export def "secret-list-by-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -330,7 +330,7 @@ export def "subscriptions-providers-microsoft-service-fabric-mesh-secrets list" 
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.ServiceFabricMesh/volumes
 # operationId: Volume_ListBySubscription
-export def "subscriptions-providers-microsoft-service-fabric-mesh-volumes list" [
+export def "volume-list-by-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -368,7 +368,7 @@ export def "subscriptions-providers-microsoft-service-fabric-mesh-volumes list" 
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/applications
 # operationId: Application_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-applications list" [
+export def "application-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -408,7 +408,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/applications/{applicationResourceName}
 # operationId: Application_Delete
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-applications delete" [
+export def "application-delete" [
   subscription_id: string
   resource_group_name: string
   application_resource_name: string
@@ -450,7 +450,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/applications/{applicationResourceName}
 # operationId: Application_Get
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-applications get" [
+export def "application-get" [
   subscription_id: string
   resource_group_name: string
   application_resource_name: string
@@ -492,7 +492,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/applications/{applicationResourceName}
 # operationId: Application_Create
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-applications create" [
+export def "application-create" [
   subscription_id: string
   resource_group_name: string
   application_resource_name: string
@@ -540,7 +540,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/applications/{applicationResourceName}/services
 # operationId: Service_List
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-applications-services list" [
+export def "service-list" [
   subscription_id: string
   resource_group_name: string
   application_resource_name: string
@@ -582,7 +582,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/applications/{applicationResourceName}/services/{serviceResourceName}
 # operationId: Service_Get
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-applications-services get" [
+export def "service-get" [
   subscription_id: string
   resource_group_name: string
   application_resource_name: string
@@ -626,7 +626,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/applications/{applicationResourceName}/services/{serviceResourceName}/replicas
 # operationId: ServiceReplica_List
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-applications-services-replicas list" [
+export def "service-replica-list" [
   subscription_id: string
   resource_group_name: string
   application_resource_name: string
@@ -670,7 +670,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/applications/{applicationResourceName}/services/{serviceResourceName}/replicas/{replicaName}
 # operationId: ServiceReplica_Get
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-applications-services-replicas get" [
+export def "service-replica-get" [
   subscription_id: string
   resource_group_name: string
   application_resource_name: string
@@ -716,7 +716,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/applications/{applicationResourceName}/services/{serviceResourceName}/replicas/{replicaName}/codePackages/{codePackageName}/logs
 # operationId: CodePackage_GetContainerLogs
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-applications-services-replicas-code-packages-logs get-container" [
+export def "code-package-get-container-logs" [
   subscription_id: string
   resource_group_name: string
   application_resource_name: string
@@ -765,7 +765,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/gateways
 # operationId: Gateway_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-gateways list" [
+export def "gateway-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -805,7 +805,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/gateways/{gatewayResourceName}
 # operationId: Gateway_Delete
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-gateways delete" [
+export def "gateway-delete" [
   subscription_id: string
   resource_group_name: string
   gateway_resource_name: string
@@ -847,7 +847,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/gateways/{gatewayResourceName}
 # operationId: Gateway_Get
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-gateways get" [
+export def "gateway-get" [
   subscription_id: string
   resource_group_name: string
   gateway_resource_name: string
@@ -889,7 +889,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/gateways/{gatewayResourceName}
 # operationId: Gateway_Create
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-gateways create" [
+export def "gateway-create" [
   subscription_id: string
   resource_group_name: string
   gateway_resource_name: string
@@ -937,7 +937,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/networks
 # operationId: Network_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-networks list" [
+export def "network-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -977,7 +977,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/networks/{networkResourceName}
 # operationId: Network_Delete
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-networks delete" [
+export def "network-delete" [
   subscription_id: string
   resource_group_name: string
   network_resource_name: string
@@ -1019,7 +1019,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/networks/{networkResourceName}
 # operationId: Network_Get
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-networks get" [
+export def "network-get" [
   subscription_id: string
   resource_group_name: string
   network_resource_name: string
@@ -1062,7 +1062,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/networks/{networkResourceName}
 # operationId: Network_Create
 # --properties shape: {description?: string, status?: "Unknown"|"Ready"|"Upgrading"|"Creating"|"Deleting"|"Failed", kind: "Local"}
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-networks create" [
+export def "network-create" [
   subscription_id: string
   resource_group_name: string
   network_resource_name: string
@@ -1110,7 +1110,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/secrets
 # operationId: Secret_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-secrets list" [
+export def "secret-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1150,7 +1150,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/secrets/{secretResourceName}
 # operationId: Secret_Delete
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-secrets delete" [
+export def "secret-delete" [
   subscription_id: string
   resource_group_name: string
   secret_resource_name: string
@@ -1192,7 +1192,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/secrets/{secretResourceName}
 # operationId: Secret_Get
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-secrets get" [
+export def "secret-get" [
   subscription_id: string
   resource_group_name: string
   secret_resource_name: string
@@ -1235,7 +1235,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/secrets/{secretResourceName}
 # operationId: Secret_Create
 # --properties shape: {contentType?: string, description?: string, status?: "Unknown"|"Ready"|"Upgrading"|"Creating"|"Deleting"|"Failed", kind: "inlinedValue"}
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-secrets create" [
+export def "secret-create" [
   subscription_id: string
   resource_group_name: string
   secret_resource_name: string
@@ -1283,7 +1283,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/secrets/{secretResourceName}/values
 # operationId: SecretValue_List
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-secrets-values list" [
+export def "secret-value-list" [
   subscription_id: string
   resource_group_name: string
   secret_resource_name: string
@@ -1325,7 +1325,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/secrets/{secretResourceName}/values/{secretValueResourceName}
 # operationId: SecretValue_Delete
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-secrets-values delete" [
+export def "secret-value-delete" [
   subscription_id: string
   resource_group_name: string
   secret_resource_name: string
@@ -1369,7 +1369,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/secrets/{secretResourceName}/values/{secretValueResourceName}
 # operationId: SecretValue_Get
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-secrets-values get" [
+export def "secret-value-get" [
   subscription_id: string
   resource_group_name: string
   secret_resource_name: string
@@ -1413,7 +1413,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/secrets/{secretResourceName}/values/{secretValueResourceName}
 # operationId: SecretValue_Create
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-secrets-values create" [
+export def "secret-value-create" [
   subscription_id: string
   resource_group_name: string
   secret_resource_name: string
@@ -1463,7 +1463,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/secrets/{secretResourceName}/values/{secretValueResourceName}/list_value
 # operationId: SecretValue_ListValue
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-secrets-values-list-value list" [
+export def "secret-value-list-value" [
   subscription_id: string
   resource_group_name: string
   secret_resource_name: string
@@ -1507,7 +1507,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/volumes
 # operationId: Volume_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-volumes list" [
+export def "volume-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1547,7 +1547,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/volumes/{volumeResourceName}
 # operationId: Volume_Delete
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-volumes delete" [
+export def "volume-delete" [
   subscription_id: string
   resource_group_name: string
   volume_resource_name: string
@@ -1589,7 +1589,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/volumes/{volumeResourceName}
 # operationId: Volume_Get
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-volumes get" [
+export def "volume-get" [
   subscription_id: string
   resource_group_name: string
   volume_resource_name: string
@@ -1631,7 +1631,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceFabricMesh/volumes/{volumeResourceName}
 # operationId: Volume_Create
-export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mesh-volumes create" [
+export def "volume-create" [
   subscription_id: string
   resource_group_name: string
   volume_resource_name: string

@@ -122,7 +122,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-hana-on-azure-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.HanaOnAzure/operations
 # operationId: Operations_List
-export def "providers-microsoft-hana-on-azure-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -182,7 +182,7 @@ export def "providers-microsoft-hana-on-azure-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.HanaOnAzure/hanaInstances
 # operationId: HanaInstances_List
-export def "subscriptions-providers-microsoft-hana-on-azure-hana-instances list" [
+export def "hana-instances-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -220,7 +220,7 @@ export def "subscriptions-providers-microsoft-hana-on-azure-hana-instances list"
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.HanaOnAzure/sapMonitors
 # operationId: SapMonitors_List
-export def "subscriptions-providers-microsoft-hana-on-azure-sap-monitors list" [
+export def "sap-monitors-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -258,7 +258,7 @@ export def "subscriptions-providers-microsoft-hana-on-azure-sap-monitors list" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HanaOnAzure/hanaInstances
 # operationId: HanaInstances_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-hana-instances list" [
+export def "hana-instances-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -298,7 +298,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-hana
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HanaOnAzure/hanaInstances/{hanaInstanceName}
 # operationId: HanaInstances_Delete
-export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-hana-instances delete" [
+export def "hana-instances-delete" [
   subscription_id: string
   resource_group_name: string
   hana_instance_name: string
@@ -340,7 +340,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-hana
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HanaOnAzure/hanaInstances/{hanaInstanceName}
 # operationId: HanaInstances_Get
-export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-hana-instances get" [
+export def "hana-instances-get" [
   subscription_id: string
   resource_group_name: string
   hana_instance_name: string
@@ -382,7 +382,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-hana
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HanaOnAzure/hanaInstances/{hanaInstanceName}
 # operationId: HanaInstances_Update
-export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-hana-instances update" [
+export def "hana-instances-update" [
   subscription_id: string
   resource_group_name: string
   hana_instance_name: string
@@ -429,7 +429,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-hana
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HanaOnAzure/hanaInstances/{hanaInstanceName}
 # operationId: HanaInstances_Create
 # --properties shape: {hardwareProfile?: any, networkProfile?: any, osProfile?: any, partnerNodeId?: string, storageProfile?: any}
-export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-hana-instances create" [
+export def "hana-instances-create" [
   subscription_id: string
   resource_group_name: string
   hana_instance_name: string
@@ -476,7 +476,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-hana
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HanaOnAzure/hanaInstances/{hanaInstanceName}/restart
 # operationId: HanaInstances_Restart
-export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-hana-instances-restart restart" [
+export def "hana-instances-restart" [
   subscription_id: string
   resource_group_name: string
   hana_instance_name: string
@@ -518,7 +518,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-hana
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HanaOnAzure/hanaInstances/{hanaInstanceName}/shutdown
 # operationId: HanaInstances_Shutdown
-export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-hana-instances-shutdown create" [
+export def "hana-instances-shutdown" [
   subscription_id: string
   resource_group_name: string
   hana_instance_name: string
@@ -560,7 +560,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-hana
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HanaOnAzure/hanaInstances/{hanaInstanceName}/start
 # operationId: HanaInstances_Start
-export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-hana-instances-start start" [
+export def "hana-instances-start" [
   subscription_id: string
   resource_group_name: string
   hana_instance_name: string
@@ -602,7 +602,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-hana
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HanaOnAzure/sapMonitors/{sapMonitorName}
 # operationId: SapMonitors_Delete
-export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-sap-monitors delete" [
+export def "sap-monitors-delete" [
   subscription_id: string
   resource_group_name: string
   sap_monitor_name: string
@@ -644,7 +644,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-sap-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HanaOnAzure/sapMonitors/{sapMonitorName}
 # operationId: SapMonitors_Get
-export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-sap-monitors get" [
+export def "sap-monitors-get" [
   subscription_id: string
   resource_group_name: string
   sap_monitor_name: string
@@ -686,7 +686,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-sap-
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HanaOnAzure/sapMonitors/{sapMonitorName}
 # operationId: SapMonitors_Update
-export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-sap-monitors update" [
+export def "sap-monitors-update" [
   subscription_id: string
   resource_group_name: string
   sap_monitor_name: string
@@ -733,7 +733,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-sap-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HanaOnAzure/sapMonitors/{sapMonitorName}
 # operationId: SapMonitors_Create
 # --properties shape: {enableCustomerAnalytics?: bool, hanaDbCredentialsMsiId?: string, hanaDbName?: string, hanaDbPassword?: string, hanaDbPasswordKeyVaultUrl?: string, hanaDbSqlPort?: int, hanaDbUsername?: string, hanaHostname?: string, hanaSubnet?: string, keyVaultId?: string, logAnalyticsWorkspaceArmId?: string, logAnalyticsWorkspaceId?: string, logAnalyticsWorkspaceSharedKey?: string}
-export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-sap-monitors create" [
+export def "sap-monitors-create" [
   subscription_id: string
   resource_group_name: string
   sap_monitor_name: string

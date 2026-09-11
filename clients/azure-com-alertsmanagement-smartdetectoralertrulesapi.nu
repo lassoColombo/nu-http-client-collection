@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-alerts-management-smart-detector-alert-rules list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "smart-detector-alert-rules-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/microsoft.alertsManagement/smartDetectorAlertRules
 # operationId: SmartDetectorAlertRules_List
-export def "subscriptions-providers-microsoft-alerts-management-smart-detector-alert-rules list" [
+export def "smart-detector-alert-rules-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -179,7 +179,7 @@ export def "subscriptions-providers-microsoft-alerts-management-smart-detector-a
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/microsoft.alertsManagement/smartDetectorAlertRules
 # operationId: SmartDetectorAlertRules_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-alerts-management-smart-detector-alert-rules list" [
+export def "smart-detector-alert-rules-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -220,7 +220,7 @@ export def "subscriptions-resource-groups-providers-microsoft-alerts-management-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/microsoft.alertsManagement/smartDetectorAlertRules/{alertRuleName}
 # operationId: SmartDetectorAlertRules_Delete
-export def "subscriptions-resource-groups-providers-microsoft-alerts-management-smart-detector-alert-rules delete" [
+export def "smart-detector-alert-rules-delete" [
   subscription_id: string
   resource_group_name: string
   alert_rule_name: string
@@ -262,7 +262,7 @@ export def "subscriptions-resource-groups-providers-microsoft-alerts-management-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/microsoft.alertsManagement/smartDetectorAlertRules/{alertRuleName}
 # operationId: SmartDetectorAlertRules_Get
-export def "subscriptions-resource-groups-providers-microsoft-alerts-management-smart-detector-alert-rules get" [
+export def "smart-detector-alert-rules-get" [
   subscription_id: string
   resource_group_name: string
   alert_rule_name: string
@@ -306,7 +306,7 @@ export def "subscriptions-resource-groups-providers-microsoft-alerts-management-
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/microsoft.alertsManagement/smartDetectorAlertRules/{alertRuleName}
 # operationId: SmartDetectorAlertRules_Patch
 # --properties shape: {actionGroups?: any, description?: string, frequency?: string, severity?: "Sev0"|"Sev1"|"Sev2"|"Sev3"|"Sev4", state?: "Enabled"|"Disabled", throttling?: any}
-export def "subscriptions-resource-groups-providers-microsoft-alerts-management-smart-detector-alert-rules update" [
+export def "smart-detector-alert-rules-patch" [
   subscription_id: string
   resource_group_name: string
   alert_rule_name: string
@@ -354,7 +354,7 @@ export def "subscriptions-resource-groups-providers-microsoft-alerts-management-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/microsoft.alertsManagement/smartDetectorAlertRules/{alertRuleName}
 # operationId: SmartDetectorAlertRules_CreateOrUpdate
 # --properties shape: {actionGroups: any, description?: string, detector: any, frequency: string, scope: list<string>, severity: "Sev0"|"Sev1"|"Sev2"|"Sev3"|"Sev4", state: "Enabled"|"Disabled", throttling?: any}
-export def "subscriptions-resource-groups-providers-microsoft-alerts-management-smart-detector-alert-rules create-or-update" [
+export def "smart-detector-alert-rules-create-or-update" [
   subscription_id: string
   resource_group_name: string
   alert_rule_name: string

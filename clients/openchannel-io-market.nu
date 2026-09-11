@@ -148,7 +148,7 @@ def modified-by-completer [] { ["administrator" "developer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "apps list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-apps" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -171,7 +171,7 @@ export def commands []: nothing -> table {
 # Returns a paginated list of APPROVED or SUSPENDED apps
 #
 # GET /apps
-export def "apps list" [
+export def "get-apps" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -211,7 +211,7 @@ export def "apps list" [
 # Adds a new app for this developer
 #
 # POST /apps
-export def "apps create" [
+export def "post-apps" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -254,7 +254,7 @@ export def "apps create" [
 # Returns a single APPROVED or SUSPENDED app
 #
 # GET /apps/bySafeName/{safeName}
-export def "apps-by-safe-name get" [
+export def "get-apps-by-safe-name-safe-name" [
   safe_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -292,7 +292,7 @@ export def "apps-by-safe-name get" [
 # Searches through the text of fields to find APPROVED or SUSPENDED apps
 #
 # GET /apps/textSearch
-export def "apps-text-search get" [
+export def "get-apps-text-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -333,7 +333,7 @@ export def "apps-text-search get" [
 # Returns a paginated list of AppVersions
 #
 # GET /apps/versions
-export def "apps-versions get" [
+export def "get-apps-versions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -372,7 +372,7 @@ export def "apps-versions get" [
 # Removes app and all versions
 #
 # DELETE /apps/{appId}
-export def "apps delete" [
+export def "delete-apps-app-id" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -409,7 +409,7 @@ export def "apps delete" [
 # Returns a single APPROVED or SUSPENDED app
 #
 # GET /apps/{appId}
-export def "apps get" [
+export def "get-apps-app-id" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -447,7 +447,7 @@ export def "apps get" [
 # Change the live app to another, previously approved version
 #
 # POST /apps/{appId}/live
-export def "apps-live create" [
+export def "post-apps-app-id-live" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -485,7 +485,7 @@ export def "apps-live create" [
 # Publishes the current working version of the app to the marketplace
 #
 # POST /apps/{appId}/publish
-export def "apps-publish create" [
+export def "post-apps-app-id-publish" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -524,7 +524,7 @@ export def "apps-publish create" [
 # Removes AppVersion
 #
 # DELETE /apps/{appId}/versions/{version}
-export def "apps-versions delete" [
+export def "delete-apps-app-id-versions-version" [
   app_id: string
   version: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -563,7 +563,7 @@ export def "apps-versions delete" [
 # Returns a single AppVersion
 #
 # GET /apps/{appId}/versions/{version}
-export def "apps-versions get-by-app-id-version" [
+export def "get-apps-app-id-versions-version" [
   app_id: string
   version: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -602,7 +602,7 @@ export def "apps-versions get-by-app-id-version" [
 # Updates the app fields or creates a new version
 #
 # PATCH /apps/{appId}/versions/{version}
-export def "apps-versions update" [
+export def "patch-apps-app-id-versions-version" [
   app_id: string
   version: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -650,7 +650,7 @@ export def "apps-versions update" [
 # Updates the app or creates a new version
 #
 # POST /apps/{appId}/versions/{version}
-export def "apps-versions create" [
+export def "post-apps-app-id-versions-version" [
   app_id: string
   version: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -698,7 +698,7 @@ export def "apps-versions create" [
 # Allows a developer or administrator to change the status of apps
 #
 # POST /apps/{appId}/versions/{version}/status
-export def "apps-versions-status create" [
+export def "post-apps-app-id-versions-version-status" [
   app_id: string
   version: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -740,7 +740,7 @@ export def "apps-versions-status create" [
 # Adds a payment for an app on behalf of a user
 #
 # POST /custom-gateway/payment/{ownershipId}
-export def "custom-gateway-payment create" [
+export def "post-custom-gateway-payment-ownership-id" [
   ownership_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -782,7 +782,7 @@ export def "custom-gateway-payment create" [
 # Fully or partially refund payment for an app on behalf of a user
 #
 # POST /custom-gateway/refund/{ownershipId}
-export def "custom-gateway-refund create" [
+export def "post-custom-gateway-refund-ownership-id" [
   ownership_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -824,7 +824,7 @@ export def "custom-gateway-refund create" [
 # Returns a paginated list of developerAccounts
 #
 # GET /developerAccounts
-export def "developer-accounts list" [
+export def "get-developer-accounts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -862,7 +862,7 @@ export def "developer-accounts list" [
 # Removes the developer account
 #
 # DELETE /developerAccounts/{developerAccountId}
-export def "developer-accounts delete" [
+export def "delete-developer-accounts-developer-account-id" [
   developer_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -897,7 +897,7 @@ export def "developer-accounts delete" [
 # Returns a single developer account
 #
 # GET /developerAccounts/{developerAccountId}
-export def "developer-accounts get" [
+export def "get-developer-accounts-developer-account-id" [
   developer_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -932,7 +932,7 @@ export def "developer-accounts get" [
 # Updates the developer account fields
 #
 # PATCH /developerAccounts/{developerAccountId}
-export def "developer-accounts update" [
+export def "patch-developer-accounts-developer-account-id" [
   developer_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -972,7 +972,7 @@ export def "developer-accounts update" [
 # Updates the developer account or adds the developer account if it doesn't exist
 #
 # POST /developerAccounts/{developerAccountId}
-export def "developer-accounts create" [
+export def "post-developer-accounts-developer-account-id" [
   developer_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1012,7 +1012,7 @@ export def "developer-accounts create" [
 # Returns a paginated list of developers
 #
 # GET /developers
-export def "developers list" [
+export def "get-developers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1050,7 +1050,7 @@ export def "developers list" [
 # Removes a single developer
 #
 # DELETE /developers/{developerId}
-export def "developers delete" [
+export def "delete-developers-developer-id" [
   developer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1085,7 +1085,7 @@ export def "developers delete" [
 # Returns a single developer
 #
 # GET /developers/{developerId}
-export def "developers get" [
+export def "get-developers-developer-id" [
   developer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1120,7 +1120,7 @@ export def "developers get" [
 # Updates the developer fields
 #
 # PATCH /developers/{developerId}
-export def "developers update" [
+export def "patch-developers-developer-id" [
   developer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1161,7 +1161,7 @@ export def "developers update" [
 # Updates the developer record or adds the developer if it doesn't exist
 #
 # POST /developers/{developerId}
-export def "developers create" [
+export def "post-developers-developer-id" [
   developer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1202,7 +1202,7 @@ export def "developers create" [
 # Returns an event
 #
 # GET /events/{eventId}
-export def "events get" [
+export def "get-events-event-id" [
   event_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1237,7 +1237,7 @@ export def "events get" [
 # Returns a paginated list of files
 #
 # GET /files
-export def "files get" [
+export def "get-files" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1275,7 +1275,7 @@ export def "files get" [
 # Uploads a file.
 #
 # POST /files
-export def "files create" [
+export def "post-files" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1317,7 +1317,7 @@ export def "files create" [
 # Get the details for a file.
 #
 # GET /files/byIdOrUrl
-export def "files-by-id-or-url get" [
+export def "get-files-by-id-or-url" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1352,7 +1352,7 @@ export def "files-by-id-or-url get" [
 # A signed URL for downloading a private file can be returned by providing the fileId.
 #
 # GET /files/download
-export def "files-download get" [
+export def "get-files-download" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1388,7 +1388,7 @@ export def "files-download get" [
 # Uploads a file from a URL
 #
 # POST /files/url
-export def "files-url create" [
+export def "post-files-url" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1424,7 +1424,7 @@ export def "files-url create" [
 # Returns the current marketplace
 #
 # GET /markets/this
-export def "markets-this get" [
+export def "get-markets-this" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1457,7 +1457,7 @@ export def "markets-this get" [
 # Returns a paginated list of app licenses
 #
 # GET /ownership
-export def "ownership list" [
+export def "get-ownership" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1495,7 +1495,7 @@ export def "ownership list" [
 # Aquires an app license for a user (installs app)
 #
 # POST /ownership/install
-export def "ownership-install create" [
+export def "post-ownership-install" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1534,7 +1534,7 @@ export def "ownership-install create" [
 # Uninstalls a license for a particular user and app (uninstalls app)
 #
 # POST /ownership/uninstall/{ownershipId}
-export def "ownership-uninstall create" [
+export def "post-ownership-uninstall-ownership-id" [
   ownership_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1573,7 +1573,7 @@ export def "ownership-uninstall create" [
 # Returns an ownership record
 #
 # GET /ownership/{ownershipId}
-export def "ownership get" [
+export def "get-ownership-ownership-id" [
   ownership_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1608,7 +1608,7 @@ export def "ownership get" [
 # Updates ownership fields
 #
 # PATCH /ownership/{ownershipId}
-export def "ownership update" [
+export def "patch-ownership-ownership-id" [
   ownership_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1646,7 +1646,7 @@ export def "ownership update" [
 # Updates an ownership record
 #
 # POST /ownership/{ownershipId}
-export def "ownership create" [
+export def "post-ownership-ownership-id" [
   ownership_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1684,7 +1684,7 @@ export def "ownership create" [
 # Removes permission that allows the app to access this user's data
 #
 # DELETE /permission/apps/{appId}
-export def "permission-apps delete" [
+export def "delete-permission-apps-app-id" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1721,7 +1721,7 @@ export def "permission-apps delete" [
 # Returns permission that allows the app to access this user's data
 #
 # GET /permission/apps/{appId}
-export def "permission-apps get" [
+export def "get-permission-apps-app-id" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1758,7 +1758,7 @@ export def "permission-apps get" [
 # Adds permission to allow the app to access this user's data
 #
 # POST /permission/apps/{appId}
-export def "permission-apps create" [
+export def "post-permission-apps-app-id" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1797,7 +1797,7 @@ export def "permission-apps create" [
 # Find reviews for a particular App and marketplace. Results are automatically paginated when limit is set
 #
 # GET /reviews
-export def "reviews list" [
+export def "get-reviews" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1835,7 +1835,7 @@ export def "reviews list" [
 # Post a review from a User and returns the new post
 #
 # POST /reviews
-export def "reviews create" [
+export def "post-reviews" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1879,7 +1879,7 @@ export def "reviews create" [
 # Remove a review
 #
 # DELETE /reviews/{reviewId}
-export def "reviews delete" [
+export def "delete-reviews-review-id" [
   review_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1917,7 +1917,7 @@ export def "reviews delete" [
 # Find a Review within a particular App and marketplace
 #
 # GET /reviews/{reviewId}
-export def "reviews get" [
+export def "get-reviews-review-id" [
   review_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1952,7 +1952,7 @@ export def "reviews get" [
 # Update a review fields
 #
 # PATCH /reviews/{reviewId}
-export def "reviews update" [
+export def "patch-reviews-review-id" [
   review_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1994,7 +1994,7 @@ export def "reviews update" [
 # Update a review from a User and returns the new post
 #
 # POST /reviews/{reviewId}
-export def "reviews create-by-review-id" [
+export def "post-reviews-review-id" [
   review_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2036,7 +2036,7 @@ export def "reviews create-by-review-id" [
 # Increments a statistics field
 #
 # POST /stats/increment/{field}
-export def "stats-increment create" [
+export def "post-stats-increment-field" [
   field: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2076,7 +2076,7 @@ export def "stats-increment create" [
 # Return a timeseries for a particular field
 #
 # GET /stats/series/{period}/{fields}
-export def "stats-series get" [
+export def "get-stats-series-period-fields" [
   period: string
   fields: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2117,7 +2117,7 @@ export def "stats-series get" [
 # Returns the total number of events for a particular field.
 #
 # GET /stats/total
-export def "stats-total get" [
+export def "get-stats-total" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2155,7 +2155,7 @@ export def "stats-total get" [
 # Returns a developers connected Stripe accounts
 #
 # GET /stripe-gateway/developer/{developerId}/accounts
-export def "stripe-gateway-developer-accounts get" [
+export def "get-stripe-gateway-developer-developer-id-accounts" [
   developer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2190,7 +2190,7 @@ export def "stripe-gateway-developer-accounts get" [
 # Generate a temporary URL to allow a developer to connect their Stripe account
 #
 # POST /stripe-gateway/developer/{developerId}/accounts
-export def "stripe-gateway-developer-accounts create" [
+export def "post-stripe-gateway-developer-developer-id-accounts" [
   developer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2227,7 +2227,7 @@ export def "stripe-gateway-developer-accounts create" [
 # Disconnects a developer's Stripe account
 #
 # DELETE /stripe-gateway/developer/{developerId}/accounts/{stripeId}
-export def "stripe-gateway-developer-accounts delete" [
+export def "delete-stripe-gateway-developer-developer-id-accounts-stripe-id" [
   developer_id: string
   stripe_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2264,7 +2264,7 @@ export def "stripe-gateway-developer-accounts delete" [
 # Returns credit cards for this user
 #
 # GET /stripe-gateway/user/{userId}/cards
-export def "stripe-gateway-user-cards get" [
+export def "get-stripe-gateway-user-user-id-cards" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2299,7 +2299,7 @@ export def "stripe-gateway-user-cards get" [
 # Adds credit card for this user
 #
 # POST /stripe-gateway/user/{userId}/cards
-export def "stripe-gateway-user-cards create-by-user-id" [
+export def "post-stripe-gateway-user-user-id-cards" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2337,7 +2337,7 @@ export def "stripe-gateway-user-cards create-by-user-id" [
 # Removes a credit card for a user
 #
 # DELETE /stripe-gateway/user/{userId}/cards/{cardId}
-export def "stripe-gateway-user-cards delete" [
+export def "delete-stripe-gateway-user-user-id-cards-card-id" [
   user_id: string
   card_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2374,7 +2374,7 @@ export def "stripe-gateway-user-cards delete" [
 # Updates a credit card for this user
 #
 # POST /stripe-gateway/user/{userId}/cards/{cardId}
-export def "stripe-gateway-user-cards create-by-user-id-card-id" [
+export def "post-stripe-gateway-user-user-id-cards-card-id" [
   user_id: string
   card_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2419,7 +2419,7 @@ export def "stripe-gateway-user-cards create-by-user-id-card-id" [
 # Returns a paginated list of transactions
 #
 # GET /transactions
-export def "transactions list" [
+export def "get-transactions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2457,7 +2457,7 @@ export def "transactions list" [
 # Deleted a transaction
 #
 # DELETE /transactions/{transactionId}
-export def "transactions delete" [
+export def "delete-transactions-transaction-id" [
   transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2492,7 +2492,7 @@ export def "transactions delete" [
 # Returns a transaction
 #
 # GET /transactions/{transactionId}
-export def "transactions get" [
+export def "get-transactions-transaction-id" [
   transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2527,7 +2527,7 @@ export def "transactions get" [
 # Updates a transaction
 #
 # POST /transactions/{transactionId}
-export def "transactions create" [
+export def "post-transactions-transaction-id" [
   transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2564,7 +2564,7 @@ export def "transactions create" [
 # Returns a paginated list of userAccounts
 #
 # GET /userAccounts
-export def "user-accounts list" [
+export def "get-user-accounts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2602,7 +2602,7 @@ export def "user-accounts list" [
 # Removes the user account
 #
 # DELETE /userAccounts/{userAccountId}
-export def "user-accounts delete" [
+export def "delete-user-accounts-user-account-id" [
   user_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2637,7 +2637,7 @@ export def "user-accounts delete" [
 # Returns a single user account
 #
 # GET /userAccounts/{userAccountId}
-export def "user-accounts get" [
+export def "get-user-accounts-user-account-id" [
   user_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2672,7 +2672,7 @@ export def "user-accounts get" [
 # Updates the user account fields
 #
 # PATCH /userAccounts/{userAccountId}
-export def "user-accounts update" [
+export def "patch-user-accounts-user-account-id" [
   user_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2712,7 +2712,7 @@ export def "user-accounts update" [
 # Updates the user account or adds the user account if it doesn't exist
 #
 # POST /userAccounts/{userAccountId}
-export def "user-accounts create" [
+export def "post-user-accounts-user-account-id" [
   user_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2752,7 +2752,7 @@ export def "user-accounts create" [
 # Returns a paginated list of users
 #
 # GET /users
-export def "users list" [
+export def "get-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2790,7 +2790,7 @@ export def "users list" [
 # Removes a single user
 #
 # DELETE /users/{userId}
-export def "users delete" [
+export def "delete-users-user-id" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2825,7 +2825,7 @@ export def "users delete" [
 # Return a single user
 #
 # GET /users/{userId}
-export def "users get" [
+export def "get-users-user-id" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2860,7 +2860,7 @@ export def "users get" [
 # Updates user fields
 #
 # PATCH /users/{userId}
-export def "users update" [
+export def "patch-users-user-id" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2901,7 +2901,7 @@ export def "users update" [
 # Updates a single user or adds the user if they don't exist
 #
 # POST /users/{userId}
-export def "users create" [
+export def "post-users-user-id" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

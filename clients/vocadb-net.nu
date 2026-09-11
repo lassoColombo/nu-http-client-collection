@@ -172,7 +172,7 @@ def distance-unit-completer [] { ["Kilometers" "Miles"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "activity-entries get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-api-activity-entries" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -193,7 +193,7 @@ export def commands []: nothing -> table {
 }
 
 # GET /api/activityEntries
-export def "activity-entries get" [
+export def "get-api-activity-entries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -237,7 +237,7 @@ export def "activity-entries get" [
 }
 
 # GET /api/albums
-export def "albums list" [
+export def "get-api-albums" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -293,7 +293,7 @@ export def "albums list" [
 }
 
 # DELETE /api/albums/comments/{commentId}
-export def "albums-comments delete" [
+export def "delete-api-albums-comments-comment-id" [
   comment_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -329,7 +329,7 @@ export def "albums-comments delete" [
 #
 # --author shape: {active?: bool, groupId?: "Nothing"|"Limited"|"Regular"|"Trusted"|"Moderator"|"Admin", id?: int, knownLanguages?: list, mainPicture?: record, memberSince?: string, name?: string, oldUsernames?: list, verifiedArtist?: bool}
 # --entry shape: {activityDate?: string, additionalNames?: string, artistString?: string, artistType?: "Unknown"|"Circle"|"Label"|"Producer"|"Animator"|"Illustrator"|"Lyricist"|"Vocaloid"|"UTAU"|"CeVIO"|"OtherVoiceSynthesizer"|"OtherVocalist"|"OtherGroup"|"OtherIndividual"|"Utaite"|"Band"|"Vocalist"|"Character"|"SynthesizerV"|"CoverArtist", createDate?: string, defaultName?: string, defaultNameLanguage?: "Unspecified"|"Japanese"|"Romaji"|"English", description?: string, ... (17 more fields)}
-export def "albums-comments create-by-comment-id" [
+export def "post-api-albums-comments-comment-id" [
   comment_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -371,7 +371,7 @@ export def "albums-comments create-by-comment-id" [
 }
 
 # GET /api/albums/names
-export def "albums-names get" [
+export def "get-api-albums-names" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -407,7 +407,7 @@ export def "albums-names get" [
 }
 
 # GET /api/albums/new
-export def "albums-new get" [
+export def "get-api-albums-new" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -442,7 +442,7 @@ export def "albums-new get" [
 }
 
 # GET /api/albums/top
-export def "albums-top get" [
+export def "get-api-albums-top" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -478,7 +478,7 @@ export def "albums-top get" [
 }
 
 # DELETE /api/albums/{id}
-export def "albums delete" [
+export def "delete-api-albums-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -513,7 +513,7 @@ export def "albums delete" [
 }
 
 # GET /api/albums/{id}
-export def "albums get" [
+export def "get-api-albums-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -551,7 +551,7 @@ export def "albums get" [
 }
 
 # GET /api/albums/{id}/comments
-export def "albums-comments get" [
+export def "get-api-albums-id-comments" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -588,7 +588,7 @@ export def "albums-comments get" [
 #
 # --author shape: {active?: bool, groupId?: "Nothing"|"Limited"|"Regular"|"Trusted"|"Moderator"|"Admin", id?: int, knownLanguages?: list, mainPicture?: record, memberSince?: string, name?: string, oldUsernames?: list, verifiedArtist?: bool}
 # --entry shape: {activityDate?: string, additionalNames?: string, artistString?: string, artistType?: "Unknown"|"Circle"|"Label"|"Producer"|"Animator"|"Illustrator"|"Lyricist"|"Vocaloid"|"UTAU"|"CeVIO"|"OtherVoiceSynthesizer"|"OtherVocalist"|"OtherGroup"|"OtherIndividual"|"Utaite"|"Band"|"Vocalist"|"Character"|"SynthesizerV"|"CoverArtist", createDate?: string, defaultName?: string, defaultNameLanguage?: "Unspecified"|"Japanese"|"Romaji"|"English", description?: string, ... (17 more fields)}
-export def "albums-comments create-by-id" [
+export def "post-api-albums-id-comments" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -631,7 +631,7 @@ export def "albums-comments create-by-id" [
 }
 
 # GET /api/albums/{id}/reviews
-export def "albums-reviews get" [
+export def "get-api-albums-id-reviews" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -669,7 +669,7 @@ export def "albums-reviews get" [
 # POST /api/albums/{id}/reviews
 #
 # --user shape: {active?: bool, groupId?: "Nothing"|"Limited"|"Regular"|"Trusted"|"Moderator"|"Admin", id?: int, knownLanguages?: list, mainPicture?: record, memberSince?: string, name?: string, oldUsernames?: list, verifiedArtist?: bool}
-export def "albums-reviews create" [
+export def "post-api-albums-id-reviews" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -713,7 +713,7 @@ export def "albums-reviews create" [
 }
 
 # DELETE /api/albums/{id}/reviews/{reviewId}
-export def "albums-reviews delete" [
+export def "delete-api-albums-id-reviews-review-id" [
   id: string
   review_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -748,7 +748,7 @@ export def "albums-reviews delete" [
 }
 
 # GET /api/albums/{id}/tracks
-export def "albums-tracks get" [
+export def "get-api-albums-id-tracks" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -785,7 +785,7 @@ export def "albums-tracks get" [
 }
 
 # GET /api/albums/{id}/tracks/fields
-export def "albums-tracks-fields get" [
+export def "get-api-albums-id-tracks-fields" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -823,7 +823,7 @@ export def "albums-tracks-fields get" [
 }
 
 # GET /api/albums/{id}/user-collections
-export def "albums-user-collections get" [
+export def "get-api-albums-id-user-collections" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -859,7 +859,7 @@ export def "albums-user-collections get" [
 }
 
 # GET /api/artists
-export def "artists list" [
+export def "get-api-artists" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -909,7 +909,7 @@ export def "artists list" [
 }
 
 # DELETE /api/artists/comments/{commentId}
-export def "artists-comments delete" [
+export def "delete-api-artists-comments-comment-id" [
   comment_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -945,7 +945,7 @@ export def "artists-comments delete" [
 #
 # --author shape: {active?: bool, groupId?: "Nothing"|"Limited"|"Regular"|"Trusted"|"Moderator"|"Admin", id?: int, knownLanguages?: list, mainPicture?: record, memberSince?: string, name?: string, oldUsernames?: list, verifiedArtist?: bool}
 # --entry shape: {activityDate?: string, additionalNames?: string, artistString?: string, artistType?: "Unknown"|"Circle"|"Label"|"Producer"|"Animator"|"Illustrator"|"Lyricist"|"Vocaloid"|"UTAU"|"CeVIO"|"OtherVoiceSynthesizer"|"OtherVocalist"|"OtherGroup"|"OtherIndividual"|"Utaite"|"Band"|"Vocalist"|"Character"|"SynthesizerV"|"CoverArtist", createDate?: string, defaultName?: string, defaultNameLanguage?: "Unspecified"|"Japanese"|"Romaji"|"English", description?: string, ... (17 more fields)}
-export def "artists-comments create-by-comment-id" [
+export def "post-api-artists-comments-comment-id" [
   comment_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -987,7 +987,7 @@ export def "artists-comments create-by-comment-id" [
 }
 
 # GET /api/artists/names
-export def "artists-names get" [
+export def "get-api-artists-names" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1023,7 +1023,7 @@ export def "artists-names get" [
 }
 
 # DELETE /api/artists/{id}
-export def "artists delete" [
+export def "delete-api-artists-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1058,7 +1058,7 @@ export def "artists delete" [
 }
 
 # GET /api/artists/{id}
-export def "artists get" [
+export def "get-api-artists-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1096,7 +1096,7 @@ export def "artists get" [
 }
 
 # GET /api/artists/{id}/comments
-export def "artists-comments get" [
+export def "get-api-artists-id-comments" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1133,7 +1133,7 @@ export def "artists-comments get" [
 #
 # --author shape: {active?: bool, groupId?: "Nothing"|"Limited"|"Regular"|"Trusted"|"Moderator"|"Admin", id?: int, knownLanguages?: list, mainPicture?: record, memberSince?: string, name?: string, oldUsernames?: list, verifiedArtist?: bool}
 # --entry shape: {activityDate?: string, additionalNames?: string, artistString?: string, artistType?: "Unknown"|"Circle"|"Label"|"Producer"|"Animator"|"Illustrator"|"Lyricist"|"Vocaloid"|"UTAU"|"CeVIO"|"OtherVoiceSynthesizer"|"OtherVocalist"|"OtherGroup"|"OtherIndividual"|"Utaite"|"Band"|"Vocalist"|"Character"|"SynthesizerV"|"CoverArtist", createDate?: string, defaultName?: string, defaultNameLanguage?: "Unspecified"|"Japanese"|"Romaji"|"English", description?: string, ... (17 more fields)}
-export def "artists-comments create-by-id" [
+export def "post-api-artists-id-comments" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1176,7 +1176,7 @@ export def "artists-comments create-by-id" [
 }
 
 # GET /api/comments
-export def "comments list" [
+export def "get-api-comments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1219,7 +1219,7 @@ export def "comments list" [
 }
 
 # GET /api/comments/{entryType}-comments
-export def "comments get" [
+export def "get-api-comments-entry-type-comments" [
   entry_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1258,7 +1258,7 @@ export def "comments get" [
 #
 # --author shape: {active?: bool, groupId?: "Nothing"|"Limited"|"Regular"|"Trusted"|"Moderator"|"Admin", id?: int, knownLanguages?: list, mainPicture?: record, memberSince?: string, name?: string, oldUsernames?: list, verifiedArtist?: bool}
 # --entry shape: {activityDate?: string, additionalNames?: string, artistString?: string, artistType?: "Unknown"|"Circle"|"Label"|"Producer"|"Animator"|"Illustrator"|"Lyricist"|"Vocaloid"|"UTAU"|"CeVIO"|"OtherVoiceSynthesizer"|"OtherVocalist"|"OtherGroup"|"OtherIndividual"|"Utaite"|"Band"|"Vocalist"|"Character"|"SynthesizerV"|"CoverArtist", createDate?: string, defaultName?: string, defaultNameLanguage?: "Unspecified"|"Japanese"|"Romaji"|"English", description?: string, ... (17 more fields)}
-export def "comments create-by-entry-type" [
+export def "post-api-comments-entry-type-comments" [
   entry_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1301,7 +1301,7 @@ export def "comments create-by-entry-type" [
 }
 
 # DELETE /api/comments/{entryType}-comments/{commentId}
-export def "comments delete" [
+export def "delete-api-comments-entry-type-comments-comment-id" [
   entry_type: string
   comment_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1339,7 +1339,7 @@ export def "comments delete" [
 #
 # --author shape: {active?: bool, groupId?: "Nothing"|"Limited"|"Regular"|"Trusted"|"Moderator"|"Admin", id?: int, knownLanguages?: list, mainPicture?: record, memberSince?: string, name?: string, oldUsernames?: list, verifiedArtist?: bool}
 # --entry shape: {activityDate?: string, additionalNames?: string, artistString?: string, artistType?: "Unknown"|"Circle"|"Label"|"Producer"|"Animator"|"Illustrator"|"Lyricist"|"Vocaloid"|"UTAU"|"CeVIO"|"OtherVoiceSynthesizer"|"OtherVocalist"|"OtherGroup"|"OtherIndividual"|"Utaite"|"Band"|"Vocalist"|"Character"|"SynthesizerV"|"CoverArtist", createDate?: string, defaultName?: string, defaultNameLanguage?: "Unspecified"|"Japanese"|"Romaji"|"English", description?: string, ... (17 more fields)}
-export def "comments create-by-entry-type-comment-id" [
+export def "post-api-comments-entry-type-comments-comment-id" [
   entry_type: string
   comment_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1383,7 +1383,7 @@ export def "comments create-by-entry-type-comment-id" [
 }
 
 # DELETE /api/discussions/comments/{commentId}
-export def "discussions-comments delete" [
+export def "delete-api-discussions-comments-comment-id" [
   comment_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1419,7 +1419,7 @@ export def "discussions-comments delete" [
 #
 # --author shape: {active?: bool, groupId?: "Nothing"|"Limited"|"Regular"|"Trusted"|"Moderator"|"Admin", id?: int, knownLanguages?: list, mainPicture?: record, memberSince?: string, name?: string, oldUsernames?: list, verifiedArtist?: bool}
 # --entry shape: {activityDate?: string, additionalNames?: string, artistString?: string, artistType?: "Unknown"|"Circle"|"Label"|"Producer"|"Animator"|"Illustrator"|"Lyricist"|"Vocaloid"|"UTAU"|"CeVIO"|"OtherVoiceSynthesizer"|"OtherVocalist"|"OtherGroup"|"OtherIndividual"|"Utaite"|"Band"|"Vocalist"|"Character"|"SynthesizerV"|"CoverArtist", createDate?: string, defaultName?: string, defaultNameLanguage?: "Unspecified"|"Japanese"|"Romaji"|"English", description?: string, ... (17 more fields)}
-export def "discussions-comments create" [
+export def "post-api-discussions-comments-comment-id" [
   comment_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1461,7 +1461,7 @@ export def "discussions-comments create" [
 }
 
 # GET /api/discussions/folders
-export def "discussions-folders get" [
+export def "get-api-discussions-folders" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1497,7 +1497,7 @@ export def "discussions-folders get" [
 # POST /api/discussions/folders
 #
 # --lastTopicAuthor shape: {active?: bool, groupId?: "Nothing"|"Limited"|"Regular"|"Trusted"|"Moderator"|"Admin", id?: int, knownLanguages?: list, mainPicture?: record, memberSince?: string, name?: string, oldUsernames?: list, verifiedArtist?: bool}
-export def "discussions-folders create" [
+export def "post-api-discussions-folders" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1541,7 +1541,7 @@ export def "discussions-folders create" [
 #
 # DEPRECATED
 @deprecated
-export def "discussions-folders-topics get" [
+export def "get-api-discussions-folders-folder-id-topics" [
   folder_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1581,7 +1581,7 @@ export def "discussions-folders-topics get" [
 # --author shape: {active?: bool, groupId?: "Nothing"|"Limited"|"Regular"|"Trusted"|"Moderator"|"Admin", id?: int, knownLanguages?: list, mainPicture?: record, memberSince?: string, name?: string, oldUsernames?: list, verifiedArtist?: bool}
 # --comments item shape: {author?: record, authorName?: string, created?: string, entry?: record, id?: int, message?: string}
 # --lastComment shape: {author?: record, authorName?: string, created?: string, entry?: record, id?: int, message?: string}
-export def "discussions-folders-topics create" [
+export def "post-api-discussions-folders-folder-id-topics" [
   folder_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1628,7 +1628,7 @@ export def "discussions-folders-topics create" [
 }
 
 # GET /api/discussions/topics
-export def "discussions-topics list" [
+export def "get-api-discussions-topics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1667,7 +1667,7 @@ export def "discussions-topics list" [
 }
 
 # DELETE /api/discussions/topics/{topicId}
-export def "discussions-topics delete" [
+export def "delete-api-discussions-topics-topic-id" [
   topic_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1700,7 +1700,7 @@ export def "discussions-topics delete" [
 }
 
 # GET /api/discussions/topics/{topicId}
-export def "discussions-topics get" [
+export def "get-api-discussions-topics-topic-id" [
   topic_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1740,7 +1740,7 @@ export def "discussions-topics get" [
 # --author shape: {active?: bool, groupId?: "Nothing"|"Limited"|"Regular"|"Trusted"|"Moderator"|"Admin", id?: int, knownLanguages?: list, mainPicture?: record, memberSince?: string, name?: string, oldUsernames?: list, verifiedArtist?: bool}
 # --comments item shape: {author?: record, authorName?: string, created?: string, entry?: record, id?: int, message?: string}
 # --lastComment shape: {author?: record, authorName?: string, created?: string, entry?: record, id?: int, message?: string}
-export def "discussions-topics create" [
+export def "post-api-discussions-topics-topic-id" [
   topic_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1789,7 +1789,7 @@ export def "discussions-topics create" [
 #
 # --author shape: {active?: bool, groupId?: "Nothing"|"Limited"|"Regular"|"Trusted"|"Moderator"|"Admin", id?: int, knownLanguages?: list, mainPicture?: record, memberSince?: string, name?: string, oldUsernames?: list, verifiedArtist?: bool}
 # --entry shape: {activityDate?: string, additionalNames?: string, artistString?: string, artistType?: "Unknown"|"Circle"|"Label"|"Producer"|"Animator"|"Illustrator"|"Lyricist"|"Vocaloid"|"UTAU"|"CeVIO"|"OtherVoiceSynthesizer"|"OtherVocalist"|"OtherGroup"|"OtherIndividual"|"Utaite"|"Band"|"Vocalist"|"Character"|"SynthesizerV"|"CoverArtist", createDate?: string, defaultName?: string, defaultNameLanguage?: "Unspecified"|"Japanese"|"Romaji"|"English", description?: string, ... (17 more fields)}
-export def "discussions-topics-comments create" [
+export def "post-api-discussions-topics-topic-id-comments" [
   topic_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1832,7 +1832,7 @@ export def "discussions-topics-comments create" [
 }
 
 # GET /api/entries
-export def "entries get" [
+export def "get-api-entries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1878,7 +1878,7 @@ export def "entries get" [
 }
 
 # GET /api/entries/names
-export def "entries-names get" [
+export def "get-api-entries-names" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1914,7 +1914,7 @@ export def "entries-names get" [
 }
 
 # GET /api/entry-types/{entryType}/{subType}/tag
-export def "entry-types-tag get" [
+export def "get-api-entry-types-entry-type-sub-type-tag" [
   entry_type: string
   sub_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1952,7 +1952,7 @@ export def "entry-types-tag get" [
 }
 
 # GET /api/pvs/for-songs
-export def "pvs-for-songs get" [
+export def "get-api-pvs-for-songs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1991,7 +1991,7 @@ export def "pvs-for-songs get" [
 }
 
 # GET /api/releaseEventSeries
-export def "release-event-series list" [
+export def "get-api-release-event-series" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2031,7 +2031,7 @@ export def "release-event-series list" [
 }
 
 # DELETE /api/releaseEventSeries/{id}
-export def "release-event-series delete" [
+export def "delete-api-release-event-series-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2067,7 +2067,7 @@ export def "release-event-series delete" [
 }
 
 # GET /api/releaseEventSeries/{id}
-export def "release-event-series get" [
+export def "get-api-release-event-series-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2104,7 +2104,7 @@ export def "release-event-series get" [
 }
 
 # GET /api/releaseEventSeries/{id}/for-edit
-export def "release-event-series-for-edit get" [
+export def "get-api-release-event-series-id-for-edit" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2138,7 +2138,7 @@ export def "release-event-series-for-edit get" [
 }
 
 # GET /api/releaseEvents
-export def "release-events list" [
+export def "get-api-release-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2191,7 +2191,7 @@ export def "release-events list" [
 }
 
 # GET /api/releaseEvents/names
-export def "release-events-names get" [
+export def "get-api-release-events-names" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2226,7 +2226,7 @@ export def "release-events-names get" [
 }
 
 # GET /api/releaseEvents/{eventId}/albums
-export def "release-events-albums get" [
+export def "get-api-release-events-event-id-albums" [
   event_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2263,7 +2263,7 @@ export def "release-events-albums get" [
 }
 
 # GET /api/releaseEvents/{eventId}/published-songs
-export def "release-events-published-songs get" [
+export def "get-api-release-events-event-id-published-songs" [
   event_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2300,7 +2300,7 @@ export def "release-events-published-songs get" [
 }
 
 # POST /api/releaseEvents/{eventId}/reports
-export def "release-events-reports create" [
+export def "post-api-release-events-event-id-reports" [
   event_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2337,7 +2337,7 @@ export def "release-events-reports create" [
 }
 
 # DELETE /api/releaseEvents/{id}
-export def "release-events delete" [
+export def "delete-api-release-events-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2373,7 +2373,7 @@ export def "release-events delete" [
 }
 
 # GET /api/releaseEvents/{id}
-export def "release-events get" [
+export def "get-api-release-events-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2410,7 +2410,7 @@ export def "release-events get" [
 }
 
 # GET /api/resources/{cultureCode}
-export def "resources get" [
+export def "get-api-resources-culture-code" [
   culture_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2449,7 +2449,7 @@ export def "resources get" [
 #
 # --mainPicture shape: {mime?: string, name?: string, urlOriginal?: string, urlSmallThumb?: string, urlThumb?: string, urlTinyThumb?: string}
 # --songLinks item shape: {notes?: string, order?: int, song?: record, songInListId?: int}
-export def "song-lists create" [
+export def "post-api-song-lists" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2494,7 +2494,7 @@ export def "song-lists create" [
 }
 
 # DELETE /api/songLists/comments/{commentId}
-export def "song-lists-comments delete" [
+export def "delete-api-song-lists-comments-comment-id" [
   comment_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2530,7 +2530,7 @@ export def "song-lists-comments delete" [
 #
 # --author shape: {active?: bool, groupId?: "Nothing"|"Limited"|"Regular"|"Trusted"|"Moderator"|"Admin", id?: int, knownLanguages?: list, mainPicture?: record, memberSince?: string, name?: string, oldUsernames?: list, verifiedArtist?: bool}
 # --entry shape: {activityDate?: string, additionalNames?: string, artistString?: string, artistType?: "Unknown"|"Circle"|"Label"|"Producer"|"Animator"|"Illustrator"|"Lyricist"|"Vocaloid"|"UTAU"|"CeVIO"|"OtherVoiceSynthesizer"|"OtherVocalist"|"OtherGroup"|"OtherIndividual"|"Utaite"|"Band"|"Vocalist"|"Character"|"SynthesizerV"|"CoverArtist", createDate?: string, defaultName?: string, defaultNameLanguage?: "Unspecified"|"Japanese"|"Romaji"|"English", description?: string, ... (17 more fields)}
-export def "song-lists-comments create-by-comment-id" [
+export def "post-api-song-lists-comments-comment-id" [
   comment_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2572,7 +2572,7 @@ export def "song-lists-comments create-by-comment-id" [
 }
 
 # GET /api/songLists/featured
-export def "song-lists-featured get" [
+export def "get-api-song-lists-featured" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2616,7 +2616,7 @@ export def "song-lists-featured get" [
 }
 
 # GET /api/songLists/featured/names
-export def "song-lists-featured-names get" [
+export def "get-api-song-lists-featured-names" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2653,7 +2653,7 @@ export def "song-lists-featured-names get" [
 }
 
 # DELETE /api/songLists/{id}
-export def "song-lists delete" [
+export def "delete-api-song-lists-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2689,7 +2689,7 @@ export def "song-lists delete" [
 }
 
 # GET /api/songLists/{listId}/comments
-export def "song-lists-comments get" [
+export def "get-api-song-lists-list-id-comments" [
   list_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2726,7 +2726,7 @@ export def "song-lists-comments get" [
 #
 # --author shape: {active?: bool, groupId?: "Nothing"|"Limited"|"Regular"|"Trusted"|"Moderator"|"Admin", id?: int, knownLanguages?: list, mainPicture?: record, memberSince?: string, name?: string, oldUsernames?: list, verifiedArtist?: bool}
 # --entry shape: {activityDate?: string, additionalNames?: string, artistString?: string, artistType?: "Unknown"|"Circle"|"Label"|"Producer"|"Animator"|"Illustrator"|"Lyricist"|"Vocaloid"|"UTAU"|"CeVIO"|"OtherVoiceSynthesizer"|"OtherVocalist"|"OtherGroup"|"OtherIndividual"|"Utaite"|"Band"|"Vocalist"|"Character"|"SynthesizerV"|"CoverArtist", createDate?: string, defaultName?: string, defaultNameLanguage?: "Unspecified"|"Japanese"|"Romaji"|"English", description?: string, ... (17 more fields)}
-export def "song-lists-comments create-by-list-id" [
+export def "post-api-song-lists-list-id-comments" [
   list_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2769,7 +2769,7 @@ export def "song-lists-comments create-by-list-id" [
 }
 
 # GET /api/songLists/{listId}/songs
-export def "song-lists-songs get" [
+export def "get-api-song-lists-list-id-songs" [
   list_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2818,7 +2818,7 @@ export def "song-lists-songs get" [
 }
 
 # GET /api/songs
-export def "songs list" [
+export def "get-api-songs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2884,7 +2884,7 @@ export def "songs list" [
 }
 
 # GET /api/songs/byPv
-export def "songs-by-pv get" [
+export def "get-api-songs-by-pv" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2921,7 +2921,7 @@ export def "songs-by-pv get" [
 }
 
 # DELETE /api/songs/comments/{commentId}
-export def "songs-comments delete" [
+export def "delete-api-songs-comments-comment-id" [
   comment_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2957,7 +2957,7 @@ export def "songs-comments delete" [
 #
 # --author shape: {active?: bool, groupId?: "Nothing"|"Limited"|"Regular"|"Trusted"|"Moderator"|"Admin", id?: int, knownLanguages?: list, mainPicture?: record, memberSince?: string, name?: string, oldUsernames?: list, verifiedArtist?: bool}
 # --entry shape: {activityDate?: string, additionalNames?: string, artistString?: string, artistType?: "Unknown"|"Circle"|"Label"|"Producer"|"Animator"|"Illustrator"|"Lyricist"|"Vocaloid"|"UTAU"|"CeVIO"|"OtherVoiceSynthesizer"|"OtherVocalist"|"OtherGroup"|"OtherIndividual"|"Utaite"|"Band"|"Vocalist"|"Character"|"SynthesizerV"|"CoverArtist", createDate?: string, defaultName?: string, defaultNameLanguage?: "Unspecified"|"Japanese"|"Romaji"|"English", description?: string, ... (17 more fields)}
-export def "songs-comments create-by-comment-id" [
+export def "post-api-songs-comments-comment-id" [
   comment_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2999,7 +2999,7 @@ export def "songs-comments create-by-comment-id" [
 }
 
 # GET /api/songs/highlighted
-export def "songs-highlighted get" [
+export def "get-api-songs-highlighted" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3034,7 +3034,7 @@ export def "songs-highlighted get" [
 }
 
 # GET /api/songs/lyrics/{lyricsId}
-export def "songs-lyrics get" [
+export def "get-api-songs-lyrics-lyrics-id" [
   lyrics_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3068,7 +3068,7 @@ export def "songs-lyrics get" [
 }
 
 # GET /api/songs/names
-export def "songs-names get" [
+export def "get-api-songs-names" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3104,7 +3104,7 @@ export def "songs-names get" [
 }
 
 # GET /api/songs/top-rated
-export def "songs-top-rated get" [
+export def "get-api-songs-top-rated" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3144,7 +3144,7 @@ export def "songs-top-rated get" [
 }
 
 # DELETE /api/songs/{id}
-export def "songs delete" [
+export def "delete-api-songs-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3179,7 +3179,7 @@ export def "songs delete" [
 }
 
 # GET /api/songs/{id}
-export def "songs get" [
+export def "get-api-songs-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3216,7 +3216,7 @@ export def "songs get" [
 }
 
 # GET /api/songs/{id}/comments
-export def "songs-comments get" [
+export def "get-api-songs-id-comments" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3253,7 +3253,7 @@ export def "songs-comments get" [
 #
 # --author shape: {active?: bool, groupId?: "Nothing"|"Limited"|"Regular"|"Trusted"|"Moderator"|"Admin", id?: int, knownLanguages?: list, mainPicture?: record, memberSince?: string, name?: string, oldUsernames?: list, verifiedArtist?: bool}
 # --entry shape: {activityDate?: string, additionalNames?: string, artistString?: string, artistType?: "Unknown"|"Circle"|"Label"|"Producer"|"Animator"|"Illustrator"|"Lyricist"|"Vocaloid"|"UTAU"|"CeVIO"|"OtherVoiceSynthesizer"|"OtherVocalist"|"OtherGroup"|"OtherIndividual"|"Utaite"|"Band"|"Vocalist"|"Character"|"SynthesizerV"|"CoverArtist", createDate?: string, defaultName?: string, defaultNameLanguage?: "Unspecified"|"Japanese"|"Romaji"|"English", description?: string, ... (17 more fields)}
-export def "songs-comments create-by-id" [
+export def "post-api-songs-id-comments" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3296,7 +3296,7 @@ export def "songs-comments create-by-id" [
 }
 
 # GET /api/songs/{id}/derived
-export def "songs-derived get" [
+export def "get-api-songs-id-derived" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3333,7 +3333,7 @@ export def "songs-derived get" [
 }
 
 # GET /api/songs/{id}/ratings
-export def "songs-ratings get" [
+export def "get-api-songs-id-ratings" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3370,7 +3370,7 @@ export def "songs-ratings get" [
 }
 
 # POST /api/songs/{id}/ratings
-export def "songs-ratings create" [
+export def "post-api-songs-id-ratings" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3407,7 +3407,7 @@ export def "songs-ratings create" [
 }
 
 # GET /api/songs/{id}/related
-export def "songs-related get" [
+export def "get-api-songs-id-related" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3444,7 +3444,7 @@ export def "songs-related get" [
 }
 
 # GET /api/tags
-export def "tags list" [
+export def "get-api-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3489,7 +3489,7 @@ export def "tags list" [
 }
 
 # POST /api/tags
-export def "tags create" [
+export def "post-api-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3526,7 +3526,7 @@ export def "tags create" [
 #
 # DEPRECATED
 @deprecated
-export def "tags-by-name get" [
+export def "get-api-tags-by-name-name" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3563,7 +3563,7 @@ export def "tags-by-name get" [
 }
 
 # GET /api/tags/categoryNames
-export def "tags-category-names get" [
+export def "get-api-tags-category-names" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3598,7 +3598,7 @@ export def "tags-category-names get" [
 }
 
 # DELETE /api/tags/comments/{commentId}
-export def "tags-comments delete" [
+export def "delete-api-tags-comments-comment-id" [
   comment_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3634,7 +3634,7 @@ export def "tags-comments delete" [
 #
 # --author shape: {active?: bool, groupId?: "Nothing"|"Limited"|"Regular"|"Trusted"|"Moderator"|"Admin", id?: int, knownLanguages?: list, mainPicture?: record, memberSince?: string, name?: string, oldUsernames?: list, verifiedArtist?: bool}
 # --entry shape: {activityDate?: string, additionalNames?: string, artistString?: string, artistType?: "Unknown"|"Circle"|"Label"|"Producer"|"Animator"|"Illustrator"|"Lyricist"|"Vocaloid"|"UTAU"|"CeVIO"|"OtherVoiceSynthesizer"|"OtherVocalist"|"OtherGroup"|"OtherIndividual"|"Utaite"|"Band"|"Vocalist"|"Character"|"SynthesizerV"|"CoverArtist", createDate?: string, defaultName?: string, defaultNameLanguage?: "Unspecified"|"Japanese"|"Romaji"|"English", description?: string, ... (17 more fields)}
-export def "tags-comments create-by-comment-id" [
+export def "post-api-tags-comments-comment-id" [
   comment_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3676,7 +3676,7 @@ export def "tags-comments create-by-comment-id" [
 }
 
 # GET /api/tags/names
-export def "tags-names get" [
+export def "get-api-tags-names" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3712,7 +3712,7 @@ export def "tags-names get" [
 }
 
 # GET /api/tags/top
-export def "tags-top get" [
+export def "get-api-tags-top" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3749,7 +3749,7 @@ export def "tags-top get" [
 }
 
 # DELETE /api/tags/{id}
-export def "tags delete" [
+export def "delete-api-tags-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3785,7 +3785,7 @@ export def "tags delete" [
 }
 
 # GET /api/tags/{id}
-export def "tags get" [
+export def "get-api-tags-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3822,7 +3822,7 @@ export def "tags get" [
 }
 
 # GET /api/tags/{tagId}/children
-export def "tags-children get" [
+export def "get-api-tags-tag-id-children" [
   tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3859,7 +3859,7 @@ export def "tags-children get" [
 }
 
 # GET /api/tags/{tagId}/comments
-export def "tags-comments get" [
+export def "get-api-tags-tag-id-comments" [
   tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3896,7 +3896,7 @@ export def "tags-comments get" [
 #
 # --author shape: {active?: bool, groupId?: "Nothing"|"Limited"|"Regular"|"Trusted"|"Moderator"|"Admin", id?: int, knownLanguages?: list, mainPicture?: record, memberSince?: string, name?: string, oldUsernames?: list, verifiedArtist?: bool}
 # --entry shape: {activityDate?: string, additionalNames?: string, artistString?: string, artistType?: "Unknown"|"Circle"|"Label"|"Producer"|"Animator"|"Illustrator"|"Lyricist"|"Vocaloid"|"UTAU"|"CeVIO"|"OtherVoiceSynthesizer"|"OtherVocalist"|"OtherGroup"|"OtherIndividual"|"Utaite"|"Band"|"Vocalist"|"Character"|"SynthesizerV"|"CoverArtist", createDate?: string, defaultName?: string, defaultNameLanguage?: "Unspecified"|"Japanese"|"Romaji"|"English", description?: string, ... (17 more fields)}
-export def "tags-comments create-by-tag-id" [
+export def "post-api-tags-tag-id-comments" [
   tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3939,7 +3939,7 @@ export def "tags-comments create-by-tag-id" [
 }
 
 # POST /api/tags/{tagId}/reports
-export def "tags-reports create" [
+export def "post-api-tags-tag-id-reports" [
   tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3976,7 +3976,7 @@ export def "tags-reports create" [
 }
 
 # GET /api/users
-export def "users list" [
+export def "get-api-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4022,7 +4022,7 @@ export def "users list" [
 }
 
 # GET /api/users/current
-export def "users-current get" [
+export def "get-api-users-current" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4056,7 +4056,7 @@ export def "users-current get" [
 }
 
 # GET /api/users/current/album-collection-statuses/{albumId}
-export def "users-current-album-collection-statuses get" [
+export def "get-api-users-current-album-collection-statuses-album-id" [
   album_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4090,7 +4090,7 @@ export def "users-current-album-collection-statuses get" [
 }
 
 # POST /api/users/current/albums/{albumId}
-export def "users-current-albums create" [
+export def "post-api-users-current-albums-album-id" [
   album_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4128,7 +4128,7 @@ export def "users-current-albums create" [
 }
 
 # GET /api/users/current/followedArtists/{artistId}
-export def "users-current-followed-artists get" [
+export def "get-api-users-current-followed-artists-artist-id" [
   artist_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4162,7 +4162,7 @@ export def "users-current-followed-artists get" [
 }
 
 # DELETE /api/users/current/followedTags/{tagId}
-export def "users-current-followed-tags delete" [
+export def "delete-api-users-current-followed-tags-tag-id" [
   tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4195,7 +4195,7 @@ export def "users-current-followed-tags delete" [
 }
 
 # POST /api/users/current/followedTags/{tagId}
-export def "users-current-followed-tags create" [
+export def "post-api-users-current-followed-tags-tag-id" [
   tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4228,7 +4228,7 @@ export def "users-current-followed-tags create" [
 }
 
 # GET /api/users/current/ratedSongs/{songId}
-export def "users-current-rated-songs get" [
+export def "get-api-users-current-rated-songs-song-id" [
   song_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4262,7 +4262,7 @@ export def "users-current-rated-songs get" [
 }
 
 # POST /api/users/current/refreshEntryEdit
-export def "users-current-refresh-entry-edit create" [
+export def "post-api-users-current-refresh-entry-edit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4297,7 +4297,7 @@ export def "users-current-refresh-entry-edit create" [
 }
 
 # POST /api/users/current/songTags/{songId}
-export def "users-current-song-tags create" [
+export def "post-api-users-current-song-tags-song-id" [
   song_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4330,7 +4330,7 @@ export def "users-current-song-tags create" [
 }
 
 # GET /api/users/messages/{messageId}
-export def "users-messages get-by-message-id" [
+export def "get-api-users-messages-message-id" [
   message_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4364,7 +4364,7 @@ export def "users-messages get-by-message-id" [
 }
 
 # GET /api/users/names
-export def "users-names get" [
+export def "get-api-users-names" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4401,7 +4401,7 @@ export def "users-names get" [
 }
 
 # DELETE /api/users/profileComments/{commentId}
-export def "users-profile-comments delete" [
+export def "delete-api-users-profile-comments-comment-id" [
   comment_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4437,7 +4437,7 @@ export def "users-profile-comments delete" [
 #
 # --author shape: {active?: bool, groupId?: "Nothing"|"Limited"|"Regular"|"Trusted"|"Moderator"|"Admin", id?: int, knownLanguages?: list, mainPicture?: record, memberSince?: string, name?: string, oldUsernames?: list, verifiedArtist?: bool}
 # --entry shape: {activityDate?: string, additionalNames?: string, artistString?: string, artistType?: "Unknown"|"Circle"|"Label"|"Producer"|"Animator"|"Illustrator"|"Lyricist"|"Vocaloid"|"UTAU"|"CeVIO"|"OtherVoiceSynthesizer"|"OtherVocalist"|"OtherGroup"|"OtherIndividual"|"Utaite"|"Band"|"Vocalist"|"Character"|"SynthesizerV"|"CoverArtist", createDate?: string, defaultName?: string, defaultNameLanguage?: "Unspecified"|"Japanese"|"Romaji"|"English", description?: string, ... (17 more fields)}
-export def "users-profile-comments create-by-comment-id" [
+export def "post-api-users-profile-comments-comment-id" [
   comment_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4479,7 +4479,7 @@ export def "users-profile-comments create-by-comment-id" [
 }
 
 # GET /api/users/{id}
-export def "users get" [
+export def "get-api-users-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4515,7 +4515,7 @@ export def "users get" [
 }
 
 # GET /api/users/{id}/album-collection-statuses/{albumId}
-export def "users-album-collection-statuses get" [
+export def "get-api-users-id-album-collection-statuses-album-id" [
   id: int
   album_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4551,7 +4551,7 @@ export def "users-album-collection-statuses get" [
 }
 
 # GET /api/users/{id}/albums
-export def "users-albums get" [
+export def "get-api-users-id-albums" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4602,7 +4602,7 @@ export def "users-albums get" [
 }
 
 # GET /api/users/{id}/events
-export def "users-events get" [
+export def "get-api-users-id-events" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4638,7 +4638,7 @@ export def "users-events get" [
 }
 
 # GET /api/users/{id}/followedArtists
-export def "users-followed-artists list" [
+export def "get-api-users-id-followed-artists" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4683,7 +4683,7 @@ export def "users-followed-artists list" [
 }
 
 # GET /api/users/{id}/followedArtists/{artistId}
-export def "users-followed-artists get" [
+export def "get-api-users-id-followed-artists-artist-id" [
   id: int
   artist_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4719,7 +4719,7 @@ export def "users-followed-artists get" [
 }
 
 # DELETE /api/users/{id}/messages
-export def "users-messages delete" [
+export def "delete-api-users-id-messages" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4754,7 +4754,7 @@ export def "users-messages delete" [
 }
 
 # GET /api/users/{id}/messages
-export def "users-messages get-by-id" [
+export def "get-api-users-id-messages" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4798,7 +4798,7 @@ export def "users-messages get-by-id" [
 #
 # --receiver shape: {active?: bool, groupId?: "Nothing"|"Limited"|"Regular"|"Trusted"|"Moderator"|"Admin", id?: int, knownLanguages?: list, mainPicture?: record, memberSince?: string, name?: string, oldUsernames?: list, verifiedArtist?: bool}
 # --sender shape: {active?: bool, groupId?: "Nothing"|"Limited"|"Regular"|"Trusted"|"Moderator"|"Admin", id?: int, knownLanguages?: list, mainPicture?: record, memberSince?: string, name?: string, oldUsernames?: list, verifiedArtist?: bool}
-export def "users-messages create" [
+export def "post-api-users-id-messages" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4844,7 +4844,7 @@ export def "users-messages create" [
 }
 
 # GET /api/users/{id}/profileComments
-export def "users-profile-comments get" [
+export def "get-api-users-id-profile-comments" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4885,7 +4885,7 @@ export def "users-profile-comments get" [
 #
 # --author shape: {active?: bool, groupId?: "Nothing"|"Limited"|"Regular"|"Trusted"|"Moderator"|"Admin", id?: int, knownLanguages?: list, mainPicture?: record, memberSince?: string, name?: string, oldUsernames?: list, verifiedArtist?: bool}
 # --entry shape: {activityDate?: string, additionalNames?: string, artistString?: string, artistType?: "Unknown"|"Circle"|"Label"|"Producer"|"Animator"|"Illustrator"|"Lyricist"|"Vocaloid"|"UTAU"|"CeVIO"|"OtherVoiceSynthesizer"|"OtherVocalist"|"OtherGroup"|"OtherIndividual"|"Utaite"|"Band"|"Vocalist"|"Character"|"SynthesizerV"|"CoverArtist", createDate?: string, defaultName?: string, defaultNameLanguage?: "Unspecified"|"Japanese"|"Romaji"|"English", description?: string, ... (17 more fields)}
-export def "users-profile-comments create-by-id" [
+export def "post-api-users-id-profile-comments" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4928,7 +4928,7 @@ export def "users-profile-comments create-by-id" [
 }
 
 # GET /api/users/{id}/ratedSongs
-export def "users-rated-songs list" [
+export def "get-api-users-id-rated-songs" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4981,7 +4981,7 @@ export def "users-rated-songs list" [
 }
 
 # GET /api/users/{id}/ratedSongs/{songId}
-export def "users-rated-songs get" [
+export def "get-api-users-id-rated-songs-song-id" [
   id: int
   song_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5017,7 +5017,7 @@ export def "users-rated-songs get" [
 }
 
 # POST /api/users/{id}/reports
-export def "users-reports create" [
+export def "post-api-users-id-reports" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5056,7 +5056,7 @@ export def "users-reports create" [
 }
 
 # POST /api/users/{id}/settings/{settingName}
-export def "users-settings create" [
+export def "post-api-users-id-settings-setting-name" [
   id: int
   setting_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5095,7 +5095,7 @@ export def "users-settings create" [
 }
 
 # GET /api/users/{id}/songLists
-export def "users-song-lists get" [
+export def "get-api-users-id-song-lists" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5139,7 +5139,7 @@ export def "users-song-lists get" [
 }
 
 # GET /api/venues
-export def "venues get" [
+export def "get-api-venues" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5184,7 +5184,7 @@ export def "venues get" [
 }
 
 # DELETE /api/venues/{id}
-export def "venues delete" [
+export def "delete-api-venues-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5220,7 +5220,7 @@ export def "venues delete" [
 }
 
 # POST /api/venues/{id}/reports
-export def "venues-reports create" [
+export def "post-api-venues-id-reports" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

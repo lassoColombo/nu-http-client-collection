@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-insights-components-default-work-item-config get-configurations" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "work-item-configurations-get-default" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/components/{resourceName}/DefaultWorkItemConfig
 # operationId: WorkItemConfigurations_GetDefault
-export def "subscriptions-resource-groups-providers-microsoft-insights-components-default-work-item-config get-configurations" [
+export def "work-item-configurations-get-default" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -182,7 +182,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/components/{resourceName}/WorkItemConfigs
 # operationId: WorkItemConfigurations_List
-export def "subscriptions-resource-groups-providers-microsoft-insights-components-work-item-configs list-configurations" [
+export def "work-item-configurations-list" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -224,7 +224,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/components/{resourceName}/WorkItemConfigs
 # operationId: WorkItemConfigurations_Create
-export def "subscriptions-resource-groups-providers-microsoft-insights-components-work-item-configs create-configurations" [
+export def "work-item-configurations-create" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -273,7 +273,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/components/{resourceName}/WorkItemConfigs/{workItemConfigId}
 # operationId: WorkItemConfigurations_Delete
-export def "subscriptions-resource-groups-providers-microsoft-insights-components-work-item-configs delete-configurations" [
+export def "work-item-configurations-delete" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -317,7 +317,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/components/{resourceName}/WorkItemConfigs/{workItemConfigId}
 # operationId: WorkItemConfigurations_GetItem
-export def "subscriptions-resource-groups-providers-microsoft-insights-components-work-item-configs get-configurations" [
+export def "work-item-configurations-get-item" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -361,7 +361,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/components/{resourceName}/WorkItemConfigs/{workItemConfigId}
 # operationId: WorkItemConfigurations_UpdateItem
-export def "subscriptions-resource-groups-providers-microsoft-insights-components-work-item-configs update-configurations" [
+export def "work-item-configurations-update-item" [
   subscription_id: string
   resource_group_name: string
   resource_name: string

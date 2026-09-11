@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "checkout-pub-order-forms-simulation create-fulfillment-external-marketplace" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "fulfillment-simulation-external-marketplace" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -143,7 +143,7 @@ export def commands []: nothing -> table {
 # --clientProfileData shape: {corporateDocument?: string, corporateName?: string, corporatePhone?: string, customerClass?: string, document?: string, documentType?: string, email?: string, firstName?: string, isCorporate?: bool, lastName?: string, phone?: string, profileCompleteOnLoading?: bool, profileErrorOnLoading?: bool, stateInscription?: string, tradeName?: string}
 # --items item shape: {id?: string, quantity?: int, seller?: string}
 # --marketingData shape: {coupon?: string, utmCampaign?: string, utmMedium?: string, utmSource?: string, utmiCampaign?: string, utmiPage?: string, utmiPart?: string}
-export def "checkout-pub-order-forms-simulation create-fulfillment-external-marketplace" [
+export def "fulfillment-simulation-external-marketplace" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -199,7 +199,7 @@ export def "checkout-pub-order-forms-simulation create-fulfillment-external-mark
 # POST /portal.vtexcommercestable.com.br/api/mkp-category-mapper/categories/marketplace/{id}
 # operationId: send-category-mapping-vtex-mapper
 # --categories item shape: {children?: list, id?: string, name?: string}
-export def "portal-vtexcommercestable-com-br-mkp-category-mapper-categories-marketplace send-mapping-vtex" [
+export def "send-category-mapping-vtex-mapper" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -245,7 +245,7 @@ export def "portal-vtexcommercestable-com-br-mkp-category-mapper-categories-mark
 #
 # POST /portal.vtexcommercestable.com.br/api/mkp-category-mapper/connector/register
 # operationId: vtex-mapper-registration
-export def "portal-vtexcommercestable-com-br-mkp-category-mapper-connector-register create-vtex-registration" [
+export def "vtex-mapper-registration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -300,7 +300,7 @@ export def "portal-vtexcommercestable-com-br-mkp-category-mapper-connector-regis
 # --invoiceData shape: {userPaymentInfo: record}
 # --items item shape: {id: string, price: int, quantity: int}
 # --shippingData shape: {isFob: bool, isMarketplaceFulfillment: bool, logisticsInfo: list, selectedAddresses: list}
-export def "order-integration-orders create-enqueue-new" [
+export def "enqueue-new-order" [
   account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -360,7 +360,7 @@ export def "order-integration-orders create-enqueue-new" [
 #
 # PUT /{accountName}.vtexcommercestable.com.br/api/order-integration/orders/status
 # operationId: UpdateOrderStatus
-export def "order-integration-orders-status update" [
+export def "update-order-status" [
   account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -415,7 +415,7 @@ export def "order-integration-orders-status update" [
 # --items item shape: {attachments?: list<string>, bundleItems?: list, commission?: int, freightCommission?: int, id: string, isGift?: bool, itemAttachment?: record, measurementUnit?: string, price?: int, priceTags?: list, quantity: int, seller: string, unitMultiplier?: int}
 # --marketingData shape: {utmCampaign?: string, utmMedium?: string, utmSource?: string, utmiCampaign?: string, utmiPage?: string, utmiPart?: string}
 # --shippingData shape: {address?: record, logisticsInfo?: list, updateStatus?: string}
-export def "fulfillment-pvt-orders create-place" [
+export def "place-fulfillment-order" [
   account_name: string
   environment: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -475,7 +475,7 @@ export def "fulfillment-pvt-orders create-place" [
 #
 # POST /{accountName}.{environment}.com.br/api/fulfillment/pvt/orders/{orderId}/fulfill
 # operationId: AuthorizeDispatchForFulfillmentOrder
-export def "fulfillment-pvt-orders-fulfill create-authorize-dispatch" [
+export def "authorize-dispatch-for-fulfillment-order" [
   account_name: string
   environment: string
   order_id: string
@@ -529,7 +529,7 @@ export def "fulfillment-pvt-orders-fulfill create-authorize-dispatch" [
 # POST /{fulfillmentEndpoint}/pvt/orderForms/simulation
 # operationId: fulfillment-simulation
 # --items item shape: {id: string, quantity: int, seller: string}
-export def "pvt-order-forms-simulation create-fulfillment" [
+export def "fulfillment-simulation" [
   fulfillment_endpoint: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -583,7 +583,7 @@ export def "pvt-order-forms-simulation create-fulfillment" [
 # --items item shape: {attachments?: list, bundleItems?: list, commission?: int, freightCommission?: int, id?: string, isGift?: bool, itemsAttachment?: list, measurementUnit?: string, price?: int, priceTags?: list, quantity?: int, seller?: string, unitMultiplier?: int}
 # --marketingData shape: {utmCampaign?: string, utmMedium?: string, utmSource?: string, utmiCampaign?: string, utmiPage?: string, utmiPart?: string}
 # --shippingData shape: {address?: record, logisticsInfo?: list, updateStatus?: string}
-export def "pvt-orders create-placement" [
+export def "order-placement" [
   fulfillment_endpoint: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -647,7 +647,7 @@ export def "pvt-orders create-placement" [
 #
 # POST /{fulfillmentEndpoint}/pvt/orders/{orderId}/cancel
 # operationId: mkp-order-cancellation
-export def "pvt-orders-cancel create-mkp-cancellation" [
+export def "mkp-order-cancellation" [
   fulfillment_endpoint: string
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -695,7 +695,7 @@ export def "pvt-orders-cancel create-mkp-cancellation" [
 #
 # POST /{fulfillmentEndpoint}/pvt/orders/{sellerOrderId}/fulfill
 # operationId: authorize-fulfillment
-export def "pvt-orders-fulfill create-authorize-fulfillment" [
+export def "authorize-fulfillment" [
   fulfillment_endpoint: string
   seller_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -743,7 +743,7 @@ export def "pvt-orders-fulfill create-authorize-fulfillment" [
 #
 # POST /{marketplaceServicesEndpoint}/pvt/orders/{marketplaceOrderId}/cancel
 # operationId: cancel-order-in-marketplace
-export def "pvt-orders-cancel cancel-in-marketplace" [
+export def "cancel-order-in-marketplace" [
   marketplace_services_endpoint: string
   marketplace_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -792,7 +792,7 @@ export def "pvt-orders-cancel cancel-in-marketplace" [
 # POST /{marketplaceServicesEndpoint}/pvt/orders/{marketplaceOrderId}/invoice
 # operationId: send-invoice
 # --items item shape: {id: string, price: int, quantity: int}
-export def "pvt-orders-invoice send" [
+export def "send-invoice" [
   marketplace_services_endpoint: string
   marketplace_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -847,7 +847,7 @@ export def "pvt-orders-invoice send" [
 #
 # POST /{marketplaceServicesEndpoint}/pvt/orders/{marketplaceOrderId}/invoice/{invoiceNumber}
 # operationId: send-tracking-information
-export def "pvt-orders-invoice send-tracking-information" [
+export def "send-tracking-information" [
   marketplace_services_endpoint: string
   marketplace_order_id: string
   invoice_number: string
@@ -901,7 +901,7 @@ export def "pvt-orders-invoice send-tracking-information" [
 # POST /{marketplaceServicesEndpoint}/pvt/orders/{marketplaceOrderId}/invoice/{invoiceNumber}/tracking
 # operationId: update-tracking-status
 # --events item shape: {city?: string, date?: string, description?: string, state?: string}
-export def "pvt-orders-invoice-tracking update-status" [
+export def "update-tracking-status" [
   marketplace_services_endpoint: string
   marketplace_order_id: string
   invoice_number: string

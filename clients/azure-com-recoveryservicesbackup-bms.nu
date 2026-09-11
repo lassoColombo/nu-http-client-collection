@@ -118,7 +118,7 @@ def resource-type-completer [] { ["AzureFileShare" "AzureSqlDb" "Client" "Exchan
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-recovery-services-locations-backup-pre-validate-protection validate-intent" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "protection-intent-validate" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -142,7 +142,7 @@ export def commands []: nothing -> table {
 #
 # POST /Subscriptions/{subscriptionId}/providers/Microsoft.RecoveryServices/locations/{azureRegion}/backupPreValidateProtection
 # operationId: ProtectionIntent_Validate
-export def "subscriptions-providers-microsoft-recovery-services-locations-backup-pre-validate-protection validate-intent" [
+export def "protection-intent-validate" [
   subscription_id: string
   azure_region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -189,7 +189,7 @@ export def "subscriptions-providers-microsoft-recovery-services-locations-backup
 #
 # POST /Subscriptions/{subscriptionId}/providers/Microsoft.RecoveryServices/locations/{azureRegion}/backupStatus
 # operationId: BackupStatus_Get
-export def "subscriptions-providers-microsoft-recovery-services-locations-backup-status get" [
+export def "backup-status-get" [
   subscription_id: string
   azure_region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -236,7 +236,7 @@ export def "subscriptions-providers-microsoft-recovery-services-locations-backup
 # POST /Subscriptions/{subscriptionId}/providers/Microsoft.RecoveryServices/locations/{azureRegion}/backupValidateFeatures
 # Discriminator (request): featureType
 # operationId: FeatureSupport_Validate
-export def "subscriptions-providers-microsoft-recovery-services-locations-backup-validate-features validate-support" [
+export def "feature-support-validate" [
   subscription_id: string
   azure_region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -280,7 +280,7 @@ export def "subscriptions-providers-microsoft-recovery-services-locations-backup
 #
 # DELETE /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{vaultName}/backupFabrics/{fabricName}/backupProtectionIntent/{intentObjectName}
 # operationId: ProtectionIntent_Delete
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-backup-fabrics-backup-protection-intent delete" [
+export def "protection-intent-delete" [
   subscription_id: string
   resource_group_name: string
   vault_name: string
@@ -326,7 +326,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{vaultName}/backupFabrics/{fabricName}/backupProtectionIntent/{intentObjectName}
 # operationId: ProtectionIntent_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-backup-fabrics-backup-protection-intent get" [
+export def "protection-intent-get" [
   subscription_id: string
   resource_group_name: string
   vault_name: string
@@ -373,7 +373,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # PUT /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{vaultName}/backupFabrics/{fabricName}/backupProtectionIntent/{intentObjectName}
 # operationId: ProtectionIntent_CreateOrUpdate
 # --properties shape: {backupManagementType?: "Invalid"|"AzureIaasVM"|"MAB"|"DPM"|"AzureBackupServer"|"AzureSql"|"AzureStorage"|"AzureWorkload"|"DefaultBackup", itemId?: string, policyId?: string, protectionIntentItemType: string, protectionState?: "Invalid"|"NotProtected"|"Protecting"|"Protected"|"ProtectionFailed", sourceResourceId?: string}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-backup-fabrics-backup-protection-intent create-or-update" [
+export def "protection-intent-create-or-update" [
   subscription_id: string
   resource_group_name: string
   vault_name: string
@@ -426,7 +426,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{vaultName}/backupProtectionIntents
 # operationId: BackupProtectionIntent_List
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-backup-protection-intents list" [
+export def "backup-protection-intent-list" [
   subscription_id: string
   resource_group_name: string
   vault_name: string
@@ -470,7 +470,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{vaultName}/backupUsageSummaries
 # operationId: BackupUsageSummaries_List
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-backup-usage-summaries list" [
+export def "backup-usage-summaries-list" [
   subscription_id: string
   resource_group_name: string
   vault_name: string

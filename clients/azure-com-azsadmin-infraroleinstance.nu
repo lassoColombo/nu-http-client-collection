@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-fabric-admin-fabric-locations-infra-role-instances list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "infra-role-instances-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -128,7 +128,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Fabric.Admin/fabricLocations/{location}/infraRoleInstances
 # operationId: InfraRoleInstances_List
-export def "subscriptions-resource-groups-providers-microsoft-fabric-admin-fabric-locations-infra-role-instances list" [
+export def "infra-role-instances-list" [
   subscription_id: string
   resource_group_name: string
   location: string
@@ -171,7 +171,7 @@ export def "subscriptions-resource-groups-providers-microsoft-fabric-admin-fabri
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Fabric.Admin/fabricLocations/{location}/infraRoleInstances/{infraRoleInstance}
 # operationId: InfraRoleInstances_Get
-export def "subscriptions-resource-groups-providers-microsoft-fabric-admin-fabric-locations-infra-role-instances get" [
+export def "infra-role-instances-get" [
   subscription_id: string
   resource_group_name: string
   location: string
@@ -215,7 +215,7 @@ export def "subscriptions-resource-groups-providers-microsoft-fabric-admin-fabri
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Fabric.Admin/fabricLocations/{location}/infraRoleInstances/{infraRoleInstance}/PowerOff
 # operationId: InfraRoleInstances_PowerOff
-export def "subscriptions-resource-groups-providers-microsoft-fabric-admin-fabric-locations-infra-role-instances-power-off create" [
+export def "infra-role-instances-power-off" [
   subscription_id: string
   resource_group_name: string
   location: string
@@ -259,7 +259,7 @@ export def "subscriptions-resource-groups-providers-microsoft-fabric-admin-fabri
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Fabric.Admin/fabricLocations/{location}/infraRoleInstances/{infraRoleInstance}/PowerOn
 # operationId: InfraRoleInstances_PowerOn
-export def "subscriptions-resource-groups-providers-microsoft-fabric-admin-fabric-locations-infra-role-instances-power-on create" [
+export def "infra-role-instances-power-on" [
   subscription_id: string
   resource_group_name: string
   location: string
@@ -303,7 +303,7 @@ export def "subscriptions-resource-groups-providers-microsoft-fabric-admin-fabri
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Fabric.Admin/fabricLocations/{location}/infraRoleInstances/{infraRoleInstance}/Reboot
 # operationId: InfraRoleInstances_Reboot
-export def "subscriptions-resource-groups-providers-microsoft-fabric-admin-fabric-locations-infra-role-instances-reboot create" [
+export def "infra-role-instances-reboot" [
   subscription_id: string
   resource_group_name: string
   location: string
@@ -347,7 +347,7 @@ export def "subscriptions-resource-groups-providers-microsoft-fabric-admin-fabri
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Fabric.Admin/fabricLocations/{location}/infraRoleInstances/{infraRoleInstance}/Shutdown
 # operationId: InfraRoleInstances_Shutdown
-export def "subscriptions-resource-groups-providers-microsoft-fabric-admin-fabric-locations-infra-role-instances-shutdown create" [
+export def "infra-role-instances-shutdown" [
   subscription_id: string
   resource_group_name: string
   location: string

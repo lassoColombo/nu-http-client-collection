@@ -118,7 +118,7 @@ def address-country-completer [] { ["AT" "BE" "BG" "CY" "CZ" "DE" "DK" "EE" "ES"
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts-premium-transactions get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "retrieve-account-transactions-v2" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -142,7 +142,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/v2/accounts/premium/{id}/transactions/
 # operationId: retrieve account transactions v2
-export def "accounts-premium-transactions get" [
+export def "retrieve-account-transactions-v2" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -182,7 +182,7 @@ export def "accounts-premium-transactions get" [
 #
 # GET /api/v2/accounts/{id}/
 # operationId: retrieve account metadata
-export def "accounts get-metadata" [
+export def "retrieve-account-metadata" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -218,7 +218,7 @@ export def "accounts get-metadata" [
 #
 # GET /api/v2/accounts/{id}/balances/
 # operationId: accounts_balances_retrieve
-export def "accounts-balances get" [
+export def "accounts-balances-retrieve" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -254,7 +254,7 @@ export def "accounts-balances get" [
 #
 # GET /api/v2/accounts/{id}/details/
 # operationId: accounts_details_retrieve
-export def "accounts-details get" [
+export def "accounts-details-retrieve" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -290,7 +290,7 @@ export def "accounts-details get" [
 #
 # GET /api/v2/accounts/{id}/transactions/
 # operationId: accounts_transactions_retrieve
-export def "accounts-transactions get" [
+export def "accounts-transactions-retrieve" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -329,7 +329,7 @@ export def "accounts-transactions get" [
 #
 # GET /api/v2/agreements/enduser/
 # operationId: retrieve all EUAs for an end user v2
-export def "agreements-enduser get-list-eu-as-for-end-user" [
+export def "retrieve-all-eu-as-for-an-end-user-v2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -366,7 +366,7 @@ export def "agreements-enduser get-list-eu-as-for-end-user" [
 #
 # POST /api/v2/agreements/enduser/
 # operationId: create EUA v2
-export def "agreements-enduser create-eua" [
+export def "create-eua-v2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -407,7 +407,7 @@ export def "agreements-enduser create-eua" [
 #
 # DELETE /api/v2/agreements/enduser/{id}/
 # operationId: delete EUA by id v2
-export def "agreements-enduser delete-eua" [
+export def "delete-eua-by-id-v2" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -443,7 +443,7 @@ export def "agreements-enduser delete-eua" [
 #
 # GET /api/v2/agreements/enduser/{id}/
 # operationId: retrieve EUA by id v2
-export def "agreements-enduser get-eua" [
+export def "retrieve-eua-by-id-v2" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -479,7 +479,7 @@ export def "agreements-enduser get-eua" [
 #
 # PUT /api/v2/agreements/enduser/{id}/accept/
 # operationId: accept EUA
-export def "agreements-enduser-accept update-eua" [
+export def "accept-eua" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -520,7 +520,7 @@ export def "agreements-enduser-accept update-eua" [
 #
 # GET /api/v2/institutions/
 # operationId: retrieve all supported Institutions in a given country
-export def "institutions get-list-supported-in-given-country" [
+export def "retrieve-all-supported-institutions-in-a-given-country" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -557,7 +557,7 @@ export def "institutions get-list-supported-in-given-country" [
 #
 # GET /api/v2/institutions/{id}/
 # operationId: retrieve institution
-export def "institutions get" [
+export def "retrieve-institution" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -593,7 +593,7 @@ export def "institutions get" [
 #
 # GET /api/v2/payments/
 # operationId: list payments
-export def "payments list" [
+export def "list-payments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -631,7 +631,7 @@ export def "payments list" [
 # POST /api/v2/payments/
 # operationId: create payment
 # --periodic_payment shape: {day_of_execution?: string, end_date?: string, execution_rule?: any, frequency?: any, start_date: string}
-export def "payments create" [
+export def "create-payment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -678,7 +678,7 @@ export def "payments create" [
 #
 # GET /api/v2/payments/account/
 # operationId: retrieve all payment creditor accounts
-export def "payments-account get-list-creditor" [
+export def "retrieve-all-payment-creditor-accounts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -712,7 +712,7 @@ export def "payments-account get-list-creditor" [
 #
 # GET /api/v2/payments/creditors/
 # operationId: payments_creditors_list
-export def "payments-creditors list" [
+export def "payments-creditors-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -755,7 +755,7 @@ export def "payments-creditors list" [
 #
 # POST /api/v2/payments/creditors/
 # operationId: payments_creditors_create
-export def "payments-creditors create" [
+export def "payments-creditors-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -802,7 +802,7 @@ export def "payments-creditors create" [
 #
 # DELETE /api/v2/payments/creditors/{id}/
 # operationId: payments_creditors_destroy
-export def "payments-creditors delete" [
+export def "payments-creditors-destroy" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -838,7 +838,7 @@ export def "payments-creditors delete" [
 #
 # GET /api/v2/payments/creditors/{id}/
 # operationId: payments_creditors_retrieve
-export def "payments-creditors get" [
+export def "payments-creditors-retrieve" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -874,7 +874,7 @@ export def "payments-creditors get" [
 #
 # GET /api/v2/payments/fields/{institution_id}/
 # operationId: list minimum required fields for institution
-export def "payments-fields list-minimum-required" [
+export def "list-minimum-required-fields-for-institution" [
   institution_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -910,7 +910,7 @@ export def "payments-fields list-minimum-required" [
 #
 # DELETE /api/v2/payments/{id}/
 # operationId: delete periodic payment
-export def "payments delete-periodic" [
+export def "delete-periodic-payment" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -946,7 +946,7 @@ export def "payments delete-periodic" [
 #
 # GET /api/v2/payments/{id}/
 # operationId: retrieve payment
-export def "payments get" [
+export def "retrieve-payment" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -982,7 +982,7 @@ export def "payments get" [
 #
 # GET /api/v2/requisitions/
 # operationId: retrieve all requisitions
-export def "requisitions get-list" [
+export def "retrieve-all-requisitions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1019,7 +1019,7 @@ export def "requisitions get-list" [
 #
 # POST /api/v2/requisitions/
 # operationId: requisition created
-export def "requisitions create-created" [
+export def "requisition-created" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1064,7 +1064,7 @@ export def "requisitions create-created" [
 #
 # DELETE /api/v2/requisitions/{id}/
 # operationId: delete requisition by id v2
-export def "requisitions delete" [
+export def "delete-requisition-by-id-v2" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1100,7 +1100,7 @@ export def "requisitions delete" [
 #
 # GET /api/v2/requisitions/{id}/
 # operationId: requisition by id
-export def "requisitions get" [
+export def "requisition-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1136,7 +1136,7 @@ export def "requisitions get" [
 #
 # POST /api/v2/token/new/
 # operationId: JWT Obtain
-export def "token-new create-jwt-obtain" [
+export def "jwt-obtain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1175,7 +1175,7 @@ export def "token-new create-jwt-obtain" [
 #
 # POST /api/v2/token/refresh/
 # operationId: JWT Refresh
-export def "token-refresh refresh-jwt" [
+export def "jwt-refresh" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

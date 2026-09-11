@@ -126,7 +126,7 @@ def tool-completer [] { ["Carbonite" "Cloudamize" "CorentTech" "DataMigrationAss
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-migrate-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -150,7 +150,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.Migrate/operations
 # operationId: Operations_List
-export def "providers-microsoft-migrate-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,7 +184,7 @@ export def "providers-microsoft-migrate-operations list" [
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Migrate/migrateProjects/{migrateProjectName}
 # operationId: MigrateProjects_DeleteMigrateProject
-export def "subscriptions-resource-groups-providers-microsoft-migrate-migrate-projects delete" [
+export def "migrate-projects-delete-migrate-project" [
   subscription_id: string
   resource_group_name: string
   migrate_project_name: string
@@ -229,7 +229,7 @@ export def "subscriptions-resource-groups-providers-microsoft-migrate-migrate-pr
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Migrate/migrateProjects/{migrateProjectName}
 # operationId: MigrateProjects_GetMigrateProject
-export def "subscriptions-resource-groups-providers-microsoft-migrate-migrate-projects get" [
+export def "migrate-projects-get-migrate-project" [
   subscription_id: string
   resource_group_name: string
   migrate_project_name: string
@@ -273,7 +273,7 @@ export def "subscriptions-resource-groups-providers-microsoft-migrate-migrate-pr
 # operationId: MigrateProjects_PatchMigrateProject
 # --properties shape: {provisioningState?: "Accepted"|"Creating"|"Deleting"|"Failed"|"Moving"|"Succeeded", registeredTools?: list<string>}
 # --tags shape: {additionalProperties?: string}
-export def "subscriptions-resource-groups-providers-microsoft-migrate-migrate-projects update-by-subscription-id-resource-group-name-migrate-project-name" [
+export def "migrate-projects-patch-migrate-project" [
   subscription_id: string
   resource_group_name: string
   migrate_project_name: string
@@ -327,7 +327,7 @@ export def "subscriptions-resource-groups-providers-microsoft-migrate-migrate-pr
 # operationId: MigrateProjects_PutMigrateProject
 # --properties shape: {provisioningState?: "Accepted"|"Creating"|"Deleting"|"Failed"|"Moving"|"Succeeded", registeredTools?: list<string>}
 # --tags shape: {additionalProperties?: string}
-export def "subscriptions-resource-groups-providers-microsoft-migrate-migrate-projects update-by-subscription-id-resource-group-name-migrate-project-name-1" [
+export def "migrate-projects-put-migrate-project" [
   subscription_id: string
   resource_group_name: string
   migrate_project_name: string
@@ -379,7 +379,7 @@ export def "subscriptions-resource-groups-providers-microsoft-migrate-migrate-pr
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Migrate/migrateProjects/{migrateProjectName}/databaseInstances
 # operationId: DatabaseInstances_EnumerateDatabaseInstances
-export def "subscriptions-resource-groups-providers-microsoft-migrate-migrate-projects-database-instances get-enumerate" [
+export def "database-instances-enumerate-database-instances" [
   subscription_id: string
   resource_group_name: string
   migrate_project_name: string
@@ -426,7 +426,7 @@ export def "subscriptions-resource-groups-providers-microsoft-migrate-migrate-pr
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Migrate/migrateProjects/{migrateProjectName}/databaseInstances/{databaseInstanceName}
 # operationId: DatabaseInstances_GetDatabaseInstance
-export def "subscriptions-resource-groups-providers-microsoft-migrate-migrate-projects-database-instances get" [
+export def "database-instances-get-database-instance" [
   subscription_id: string
   resource_group_name: string
   migrate_project_name: string
@@ -473,7 +473,7 @@ export def "subscriptions-resource-groups-providers-microsoft-migrate-migrate-pr
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Migrate/migrateProjects/{migrateProjectName}/databases
 # operationId: Databases_EnumerateDatabases
-export def "subscriptions-resource-groups-providers-microsoft-migrate-migrate-projects-databases get-enumerate" [
+export def "databases-enumerate-databases" [
   subscription_id: string
   resource_group_name: string
   migrate_project_name: string
@@ -520,7 +520,7 @@ export def "subscriptions-resource-groups-providers-microsoft-migrate-migrate-pr
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Migrate/migrateProjects/{migrateProjectName}/databases/{databaseName}
 # operationId: Databases_GetDatabase
-export def "subscriptions-resource-groups-providers-microsoft-migrate-migrate-projects-databases get" [
+export def "databases-get-database" [
   subscription_id: string
   resource_group_name: string
   migrate_project_name: string
@@ -567,7 +567,7 @@ export def "subscriptions-resource-groups-providers-microsoft-migrate-migrate-pr
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Migrate/migrateProjects/{migrateProjectName}/machines
 # operationId: Machines_EnumerateMachines
-export def "subscriptions-resource-groups-providers-microsoft-migrate-migrate-projects-machines get-enumerate" [
+export def "machines-enumerate-machines" [
   subscription_id: string
   resource_group_name: string
   migrate_project_name: string
@@ -611,7 +611,7 @@ export def "subscriptions-resource-groups-providers-microsoft-migrate-migrate-pr
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Migrate/migrateProjects/{migrateProjectName}/machines/{machineName}
 # operationId: Machines_GetMachine
-export def "subscriptions-resource-groups-providers-microsoft-migrate-migrate-projects-machines get" [
+export def "machines-get-machine" [
   subscription_id: string
   resource_group_name: string
   migrate_project_name: string
@@ -655,7 +655,7 @@ export def "subscriptions-resource-groups-providers-microsoft-migrate-migrate-pr
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Migrate/migrateProjects/{migrateProjectName}/migrateEvents
 # operationId: Events_EnumerateEvents
-export def "subscriptions-resource-groups-providers-microsoft-migrate-migrate-projects-migrate-events get-enumerate" [
+export def "events-enumerate-events" [
   subscription_id: string
   resource_group_name: string
   migrate_project_name: string
@@ -702,7 +702,7 @@ export def "subscriptions-resource-groups-providers-microsoft-migrate-migrate-pr
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Migrate/migrateProjects/{migrateProjectName}/migrateEvents/{eventName}
 # operationId: Events_DeleteEvent
-export def "subscriptions-resource-groups-providers-microsoft-migrate-migrate-projects-migrate-events delete" [
+export def "events-delete-event" [
   subscription_id: string
   resource_group_name: string
   migrate_project_name: string
@@ -746,7 +746,7 @@ export def "subscriptions-resource-groups-providers-microsoft-migrate-migrate-pr
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Migrate/migrateProjects/{migrateProjectName}/migrateEvents/{eventName}
 # operationId: Events_GetEvent
-export def "subscriptions-resource-groups-providers-microsoft-migrate-migrate-projects-migrate-events get" [
+export def "events-get-event" [
   subscription_id: string
   resource_group_name: string
   migrate_project_name: string
@@ -790,7 +790,7 @@ export def "subscriptions-resource-groups-providers-microsoft-migrate-migrate-pr
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Migrate/migrateProjects/{migrateProjectName}/refreshSummary
 # operationId: MigrateProjects_RefreshMigrateProjectSummary
-export def "subscriptions-resource-groups-providers-microsoft-migrate-migrate-projects-refresh-summary refresh" [
+export def "migrate-projects-refresh-migrate-project-summary" [
   subscription_id: string
   resource_group_name: string
   migrate_project_name: string
@@ -836,7 +836,7 @@ export def "subscriptions-resource-groups-providers-microsoft-migrate-migrate-pr
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Migrate/migrateProjects/{migrateProjectName}/registerTool
 # operationId: MigrateProjects_RegisterTool
-export def "subscriptions-resource-groups-providers-microsoft-migrate-migrate-projects-register-tool create" [
+export def "migrate-projects-register-tool" [
   subscription_id: string
   resource_group_name: string
   migrate_project_name: string
@@ -885,7 +885,7 @@ export def "subscriptions-resource-groups-providers-microsoft-migrate-migrate-pr
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Migrate/migrateProjects/{migrateProjectName}/solutions
 # operationId: Solutions_EnumerateSolutions
-export def "subscriptions-resource-groups-providers-microsoft-migrate-migrate-projects-solutions get-enumerate" [
+export def "solutions-enumerate-solutions" [
   subscription_id: string
   resource_group_name: string
   migrate_project_name: string
@@ -927,7 +927,7 @@ export def "subscriptions-resource-groups-providers-microsoft-migrate-migrate-pr
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Migrate/migrateProjects/{migrateProjectName}/solutions/{solutionName}
 # operationId: Solutions_DeleteSolution
-export def "subscriptions-resource-groups-providers-microsoft-migrate-migrate-projects-solutions delete" [
+export def "solutions-delete-solution" [
   subscription_id: string
   resource_group_name: string
   migrate_project_name: string
@@ -974,7 +974,7 @@ export def "subscriptions-resource-groups-providers-microsoft-migrate-migrate-pr
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Migrate/migrateProjects/{migrateProjectName}/solutions/{solutionName}
 # operationId: Solutions_GetSolution
-export def "subscriptions-resource-groups-providers-microsoft-migrate-migrate-projects-solutions get" [
+export def "solutions-get-solution" [
   subscription_id: string
   resource_group_name: string
   migrate_project_name: string
@@ -1019,7 +1019,7 @@ export def "subscriptions-resource-groups-providers-microsoft-migrate-migrate-pr
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Migrate/migrateProjects/{migrateProjectName}/solutions/{solutionName}
 # operationId: Solutions_PatchSolution
 # --properties shape: {cleanupState?: "None"|"Started"|"InProgress"|"Completed"|"Failed", details?: record, goal?: "Servers"|"Databases", purpose?: "Discovery"|"Assessment"|"Migration", status?: "Inactive"|"Active", summary?: record, tool?: "ServerDiscovery"|"ServerAssessment"|"ServerMigration"|"Cloudamize"|"Turbonomic"|"Zerto"|"CorentTech"|"ServerAssessmentV1"|"ServerMigration_Replication"|"Carbonite"|"DataMigrationAssistant"|"DatabaseMigrationService"}
-export def "subscriptions-resource-groups-providers-microsoft-migrate-migrate-projects-solutions update-by-subscription-id-resource-group-name-migrate-project-name-solution-name" [
+export def "solutions-patch-solution" [
   subscription_id: string
   resource_group_name: string
   migrate_project_name: string
@@ -1069,7 +1069,7 @@ export def "subscriptions-resource-groups-providers-microsoft-migrate-migrate-pr
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Migrate/migrateProjects/{migrateProjectName}/solutions/{solutionName}
 # operationId: Solutions_PutSolution
 # --properties shape: {cleanupState?: "None"|"Started"|"InProgress"|"Completed"|"Failed", details?: record, goal?: "Servers"|"Databases", purpose?: "Discovery"|"Assessment"|"Migration", status?: "Inactive"|"Active", summary?: record, tool?: "ServerDiscovery"|"ServerAssessment"|"ServerMigration"|"Cloudamize"|"Turbonomic"|"Zerto"|"CorentTech"|"ServerAssessmentV1"|"ServerMigration_Replication"|"Carbonite"|"DataMigrationAssistant"|"DatabaseMigrationService"}
-export def "subscriptions-resource-groups-providers-microsoft-migrate-migrate-projects-solutions update-by-subscription-id-resource-group-name-migrate-project-name-solution-name-1" [
+export def "solutions-put-solution" [
   subscription_id: string
   resource_group_name: string
   migrate_project_name: string
@@ -1118,7 +1118,7 @@ export def "subscriptions-resource-groups-providers-microsoft-migrate-migrate-pr
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Migrate/migrateProjects/{migrateProjectName}/solutions/{solutionName}/cleanupData
 # operationId: Solutions_CleanupSolutionData
-export def "subscriptions-resource-groups-providers-microsoft-migrate-migrate-projects-solutions-cleanup-data create" [
+export def "solutions-cleanup-solution-data" [
   subscription_id: string
   resource_group_name: string
   migrate_project_name: string
@@ -1162,7 +1162,7 @@ export def "subscriptions-resource-groups-providers-microsoft-migrate-migrate-pr
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Migrate/migrateProjects/{migrateProjectName}/solutions/{solutionName}/getConfig
 # operationId: Solutions_GetConfig
-export def "subscriptions-resource-groups-providers-microsoft-migrate-migrate-projects-solutions-get-config get" [
+export def "solutions-get-config" [
   subscription_id: string
   resource_group_name: string
   migrate_project_name: string

@@ -131,7 +131,7 @@ def type-completer [] { ["PIPELINE_TYPE_BATCH" "PIPELINE_TYPE_STREAMING" "PIPELI
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "datapipelines-projects-locations-pipelines-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -155,7 +155,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1/{name}
 # operationId: datapipelines.projects.locations.pipelines.delete
-export def "projects delete" [
+export def "datapipelines-projects-locations-pipelines-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -203,7 +203,7 @@ export def "projects delete" [
 #
 # GET /v1/{name}
 # operationId: datapipelines.projects.locations.pipelines.get
-export def "projects get" [
+export def "datapipelines-projects-locations-pipelines-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -253,7 +253,7 @@ export def "projects get" [
 # operationId: datapipelines.projects.locations.pipelines.patch
 # --scheduleInfo shape: {schedule?: string, timeZone?: string}
 # --workload shape: {dataflowFlexTemplateRequest?: record, dataflowLaunchTemplateRequest?: record}
-export def "projects update" [
+export def "datapipelines-projects-locations-pipelines-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -313,7 +313,7 @@ export def "projects update" [
 #
 # POST /v1/{name}:run
 # operationId: datapipelines.projects.locations.pipelines.run
-export def "projects create-run" [
+export def "datapipelines-projects-locations-pipelines-run" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -365,7 +365,7 @@ export def "projects create-run" [
 #
 # POST /v1/{name}:stop
 # operationId: datapipelines.projects.locations.pipelines.stop
-export def "projects stop" [
+export def "datapipelines-projects-locations-pipelines-stop" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -417,7 +417,7 @@ export def "projects stop" [
 #
 # GET /v1/{parent}/jobs
 # operationId: datapipelines.projects.locations.pipelines.jobs.list
-export def "jobs list" [
+export def "datapipelines-projects-locations-pipelines-jobs-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -467,7 +467,7 @@ export def "jobs list" [
 #
 # GET /v1/{parent}/pipelines
 # operationId: datapipelines.projects.locations.pipelines.list
-export def "pipelines list" [
+export def "datapipelines-projects-locations-pipelines-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -520,7 +520,7 @@ export def "pipelines list" [
 # operationId: datapipelines.projects.locations.pipelines.create
 # --scheduleInfo shape: {schedule?: string, timeZone?: string}
 # --workload shape: {dataflowFlexTemplateRequest?: record, dataflowLaunchTemplateRequest?: record}
-export def "pipelines create" [
+export def "datapipelines-projects-locations-pipelines-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

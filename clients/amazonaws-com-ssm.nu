@@ -238,7 +238,7 @@ def x-amz-target-completer-137 [] { ["AmazonSSM.UpdateServiceSetting"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-tags-to-resource" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "add-tags-to-resource" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -262,7 +262,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AddTagsToResource
-export def "api create-tags-to-resource" [
+export def "add-tags-to-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -312,7 +312,7 @@ export def "api create-tags-to-resource" [
 #
 # POST /
 # operationId: AssociateOpsItemRelatedItem
-export def "api create-associate-ops-item-related-item" [
+export def "associate-ops-item-related-item" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -363,7 +363,7 @@ export def "api create-associate-ops-item-related-item" [
 #
 # POST /
 # operationId: CancelCommand
-export def "api cancel-command" [
+export def "cancel-command" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -412,7 +412,7 @@ export def "api cancel-command" [
 #
 # POST /
 # operationId: CancelMaintenanceWindowExecution
-export def "api cancel-maintenance-window-execution" [
+export def "cancel-maintenance-window-execution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -460,7 +460,7 @@ export def "api cancel-maintenance-window-execution" [
 #
 # POST /
 # operationId: CreateActivation
-export def "api create-activation" [
+export def "create-activation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -515,7 +515,7 @@ export def "api create-activation" [
 # POST /
 # operationId: CreateAssociation
 # --AlarmConfiguration shape: {IgnorePollAlarmFailure?: any, Alarms: any}
-export def "api create-association" [
+export def "create-association" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -582,7 +582,7 @@ export def "api create-association" [
 #
 # POST /
 # operationId: CreateAssociationBatch
-export def "api create-association-batch" [
+export def "create-association-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -630,7 +630,7 @@ export def "api create-association-batch" [
 #
 # POST /
 # operationId: CreateDocument
-export def "api create-document" [
+export def "create-document" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -687,7 +687,7 @@ export def "api create-document" [
 #
 # POST /
 # operationId: CreateMaintenanceWindow
-export def "api create-maintenance-window" [
+export def "create-maintenance-window" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -746,7 +746,7 @@ export def "api create-maintenance-window" [
 #
 # POST /
 # operationId: CreateOpsItem
-export def "api create-ops-item" [
+export def "create-ops-item" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -809,7 +809,7 @@ export def "api create-ops-item" [
 #
 # POST /
 # operationId: CreateOpsMetadata
-export def "api create-ops-metadata" [
+export def "create-ops-metadata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -859,7 +859,7 @@ export def "api create-ops-metadata" [
 #
 # POST /
 # operationId: CreatePatchBaseline
-export def "api create-update-baseline" [
+export def "create-patch-baseline" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -919,7 +919,7 @@ export def "api create-update-baseline" [
 #
 # POST /
 # operationId: CreateResourceDataSync
-export def "api create-resource-data-sync" [
+export def "create-resource-data-sync" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -970,7 +970,7 @@ export def "api create-resource-data-sync" [
 #
 # POST /
 # operationId: DeleteActivation
-export def "api delete-activation" [
+export def "delete-activation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1018,7 +1018,7 @@ export def "api delete-activation" [
 #
 # POST /
 # operationId: DeleteAssociation
-export def "api delete-association" [
+export def "delete-association" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1068,7 +1068,7 @@ export def "api delete-association" [
 #
 # POST /
 # operationId: DeleteDocument
-export def "api delete-document" [
+export def "delete-document" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1119,7 +1119,7 @@ export def "api delete-document" [
 #
 # POST /
 # operationId: DeleteInventory
-export def "api delete-inventory" [
+export def "delete-inventory" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1170,7 +1170,7 @@ export def "api delete-inventory" [
 #
 # POST /
 # operationId: DeleteMaintenanceWindow
-export def "api delete-maintenance-window" [
+export def "delete-maintenance-window" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1218,7 +1218,7 @@ export def "api delete-maintenance-window" [
 #
 # POST /
 # operationId: DeleteOpsMetadata
-export def "api delete-ops-metadata" [
+export def "delete-ops-metadata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1266,7 +1266,7 @@ export def "api delete-ops-metadata" [
 #
 # POST /
 # operationId: DeleteParameter
-export def "api delete-parameter" [
+export def "delete-parameter" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1314,7 +1314,7 @@ export def "api delete-parameter" [
 #
 # POST /
 # operationId: DeleteParameters
-export def "api delete-parameters" [
+export def "delete-parameters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1362,7 +1362,7 @@ export def "api delete-parameters" [
 #
 # POST /
 # operationId: DeletePatchBaseline
-export def "api delete-update-baseline" [
+export def "delete-patch-baseline" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1410,7 +1410,7 @@ export def "api delete-update-baseline" [
 #
 # POST /
 # operationId: DeleteResourceDataSync
-export def "api delete-resource-data-sync" [
+export def "delete-resource-data-sync" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1459,7 +1459,7 @@ export def "api delete-resource-data-sync" [
 #
 # POST /
 # operationId: DeleteResourcePolicy
-export def "api delete-resource-policy" [
+export def "delete-resource-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1509,7 +1509,7 @@ export def "api delete-resource-policy" [
 #
 # POST /
 # operationId: DeregisterManagedInstance
-export def "api create-deregister-managed-instance" [
+export def "deregister-managed-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1557,7 +1557,7 @@ export def "api create-deregister-managed-instance" [
 #
 # POST /
 # operationId: DeregisterPatchBaselineForPatchGroup
-export def "api update-deregister-baseline-for-group" [
+export def "deregister-patch-baseline-for-patch-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1606,7 +1606,7 @@ export def "api update-deregister-baseline-for-group" [
 #
 # POST /
 # operationId: DeregisterTargetFromMaintenanceWindow
-export def "api create-deregister-target-from-maintenance-window" [
+export def "deregister-target-from-maintenance-window" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1656,7 +1656,7 @@ export def "api create-deregister-target-from-maintenance-window" [
 #
 # POST /
 # operationId: DeregisterTaskFromMaintenanceWindow
-export def "api create-deregister-task-from-maintenance-window" [
+export def "deregister-task-from-maintenance-window" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1705,7 +1705,7 @@ export def "api create-deregister-task-from-maintenance-window" [
 #
 # POST /
 # operationId: DescribeActivations
-export def "api get-activations" [
+export def "describe-activations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1758,7 +1758,7 @@ export def "api get-activations" [
 #
 # POST /
 # operationId: DescribeAssociation
-export def "api get-association" [
+export def "describe-association" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1809,7 +1809,7 @@ export def "api get-association" [
 #
 # POST /
 # operationId: DescribeAssociationExecutionTargets
-export def "api get-association-execution-targets" [
+export def "describe-association-execution-targets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1864,7 +1864,7 @@ export def "api get-association-execution-targets" [
 #
 # POST /
 # operationId: DescribeAssociationExecutions
-export def "api get-association-executions" [
+export def "describe-association-executions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1918,7 +1918,7 @@ export def "api get-association-executions" [
 #
 # POST /
 # operationId: DescribeAutomationExecutions
-export def "api get-automation-executions" [
+export def "describe-automation-executions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1971,7 +1971,7 @@ export def "api get-automation-executions" [
 #
 # POST /
 # operationId: DescribeAutomationStepExecutions
-export def "api get-automation-step-executions" [
+export def "describe-automation-step-executions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2026,7 +2026,7 @@ export def "api get-automation-step-executions" [
 #
 # POST /
 # operationId: DescribeAvailablePatches
-export def "api get-available-patches" [
+export def "describe-available-patches" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2079,7 +2079,7 @@ export def "api get-available-patches" [
 #
 # POST /
 # operationId: DescribeDocument
-export def "api get-document" [
+export def "describe-document" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2129,7 +2129,7 @@ export def "api get-document" [
 #
 # POST /
 # operationId: DescribeDocumentPermission
-export def "api get-document-permission" [
+export def "describe-document-permission" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2180,7 +2180,7 @@ export def "api get-document-permission" [
 #
 # POST /
 # operationId: DescribeEffectiveInstanceAssociations
-export def "api get-effective-instance-associations" [
+export def "describe-effective-instance-associations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2233,7 +2233,7 @@ export def "api get-effective-instance-associations" [
 #
 # POST /
 # operationId: DescribeEffectivePatchesForPatchBaseline
-export def "api get-effective-patches-for-update-baseline" [
+export def "describe-effective-patches-for-patch-baseline" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2286,7 +2286,7 @@ export def "api get-effective-patches-for-update-baseline" [
 #
 # POST /
 # operationId: DescribeInstanceAssociationsStatus
-export def "api get-instance-associations-status" [
+export def "describe-instance-associations-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2339,7 +2339,7 @@ export def "api get-instance-associations-status" [
 #
 # POST /
 # operationId: DescribeInstanceInformation
-export def "api get-instance-information" [
+export def "describe-instance-information" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2393,7 +2393,7 @@ export def "api get-instance-information" [
 #
 # POST /
 # operationId: DescribeInstancePatchStates
-export def "api get-instance-update-states" [
+export def "describe-instance-patch-states" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2446,7 +2446,7 @@ export def "api get-instance-update-states" [
 #
 # POST /
 # operationId: DescribeInstancePatchStatesForPatchGroup
-export def "api get-instance-update-states-for-group" [
+export def "describe-instance-patch-states-for-patch-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2500,7 +2500,7 @@ export def "api get-instance-update-states-for-group" [
 #
 # POST /
 # operationId: DescribeInstancePatches
-export def "api get-instance-patches" [
+export def "describe-instance-patches" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2554,7 +2554,7 @@ export def "api get-instance-patches" [
 #
 # POST /
 # operationId: DescribeInventoryDeletions
-export def "api get-inventory-deletions" [
+export def "describe-inventory-deletions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2607,7 +2607,7 @@ export def "api get-inventory-deletions" [
 #
 # POST /
 # operationId: DescribeMaintenanceWindowExecutionTaskInvocations
-export def "api get-maintenance-window-execution-task-invocations" [
+export def "describe-maintenance-window-execution-task-invocations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2662,7 +2662,7 @@ export def "api get-maintenance-window-execution-task-invocations" [
 #
 # POST /
 # operationId: DescribeMaintenanceWindowExecutionTasks
-export def "api get-maintenance-window-execution-tasks" [
+export def "describe-maintenance-window-execution-tasks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2716,7 +2716,7 @@ export def "api get-maintenance-window-execution-tasks" [
 #
 # POST /
 # operationId: DescribeMaintenanceWindowExecutions
-export def "api get-maintenance-window-executions" [
+export def "describe-maintenance-window-executions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2770,7 +2770,7 @@ export def "api get-maintenance-window-executions" [
 #
 # POST /
 # operationId: DescribeMaintenanceWindowSchedule
-export def "api get-maintenance-window-schedule" [
+export def "describe-maintenance-window-schedule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2826,7 +2826,7 @@ export def "api get-maintenance-window-schedule" [
 #
 # POST /
 # operationId: DescribeMaintenanceWindowTargets
-export def "api get-maintenance-window-targets" [
+export def "describe-maintenance-window-targets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2880,7 +2880,7 @@ export def "api get-maintenance-window-targets" [
 #
 # POST /
 # operationId: DescribeMaintenanceWindowTasks
-export def "api get-maintenance-window-tasks" [
+export def "describe-maintenance-window-tasks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2934,7 +2934,7 @@ export def "api get-maintenance-window-tasks" [
 #
 # POST /
 # operationId: DescribeMaintenanceWindows
-export def "api get-maintenance-windows" [
+export def "describe-maintenance-windows" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2987,7 +2987,7 @@ export def "api get-maintenance-windows" [
 #
 # POST /
 # operationId: DescribeMaintenanceWindowsForTarget
-export def "api get-maintenance-windows-for-target" [
+export def "describe-maintenance-windows-for-target" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3041,7 +3041,7 @@ export def "api get-maintenance-windows-for-target" [
 #
 # POST /
 # operationId: DescribeOpsItems
-export def "api get-ops-items" [
+export def "describe-ops-items" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3094,7 +3094,7 @@ export def "api get-ops-items" [
 #
 # POST /
 # operationId: DescribeParameters
-export def "api get-parameters" [
+export def "describe-parameters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3148,7 +3148,7 @@ export def "api get-parameters" [
 #
 # POST /
 # operationId: DescribePatchBaselines
-export def "api get-update-baselines" [
+export def "describe-patch-baselines" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3201,7 +3201,7 @@ export def "api get-update-baselines" [
 #
 # POST /
 # operationId: DescribePatchGroupState
-export def "api get-update-group-state" [
+export def "describe-patch-group-state" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3249,7 +3249,7 @@ export def "api get-update-group-state" [
 #
 # POST /
 # operationId: DescribePatchGroups
-export def "api get-update-groups" [
+export def "describe-patch-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3302,7 +3302,7 @@ export def "api get-update-groups" [
 #
 # POST /
 # operationId: DescribePatchProperties
-export def "api get-update-properties" [
+export def "describe-patch-properties" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3357,7 +3357,7 @@ export def "api get-update-properties" [
 #
 # POST /
 # operationId: DescribeSessions
-export def "api get-sessions" [
+export def "describe-sessions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3411,7 +3411,7 @@ export def "api get-sessions" [
 #
 # POST /
 # operationId: DisassociateOpsItemRelatedItem
-export def "api create-disassociate-ops-item-related-item" [
+export def "disassociate-ops-item-related-item" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3460,7 +3460,7 @@ export def "api create-disassociate-ops-item-related-item" [
 #
 # POST /
 # operationId: GetAutomationExecution
-export def "api get-automation-execution" [
+export def "get-automation-execution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3508,7 +3508,7 @@ export def "api get-automation-execution" [
 #
 # POST /
 # operationId: GetCalendarState
-export def "api get-calendar-state" [
+export def "get-calendar-state" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3557,7 +3557,7 @@ export def "api get-calendar-state" [
 #
 # POST /
 # operationId: GetCommandInvocation
-export def "api get-command-invocation" [
+export def "get-command-invocation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3607,7 +3607,7 @@ export def "api get-command-invocation" [
 #
 # POST /
 # operationId: GetConnectionStatus
-export def "api get-connection-status" [
+export def "get-connection-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3655,7 +3655,7 @@ export def "api get-connection-status" [
 #
 # POST /
 # operationId: GetDefaultPatchBaseline
-export def "api get-default-update-baseline" [
+export def "get-default-patch-baseline" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3703,7 +3703,7 @@ export def "api get-default-update-baseline" [
 #
 # POST /
 # operationId: GetDeployablePatchSnapshotForInstance
-export def "api get-deployable-update-snapshot-for-instance" [
+export def "get-deployable-patch-snapshot-for-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3753,7 +3753,7 @@ export def "api get-deployable-update-snapshot-for-instance" [
 #
 # POST /
 # operationId: GetDocument
-export def "api get-document-1" [
+export def "get-document" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3804,7 +3804,7 @@ export def "api get-document-1" [
 #
 # POST /
 # operationId: GetInventory
-export def "api get-inventory" [
+export def "get-inventory" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3859,7 +3859,7 @@ export def "api get-inventory" [
 #
 # POST /
 # operationId: GetInventorySchema
-export def "api get-inventory-schema" [
+export def "get-inventory-schema" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3914,7 +3914,7 @@ export def "api get-inventory-schema" [
 #
 # POST /
 # operationId: GetMaintenanceWindow
-export def "api get-maintenance-window" [
+export def "get-maintenance-window" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3962,7 +3962,7 @@ export def "api get-maintenance-window" [
 #
 # POST /
 # operationId: GetMaintenanceWindowExecution
-export def "api get-maintenance-window-execution" [
+export def "get-maintenance-window-execution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4010,7 +4010,7 @@ export def "api get-maintenance-window-execution" [
 #
 # POST /
 # operationId: GetMaintenanceWindowExecutionTask
-export def "api get-maintenance-window-execution-task" [
+export def "get-maintenance-window-execution-task" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4059,7 +4059,7 @@ export def "api get-maintenance-window-execution-task" [
 #
 # POST /
 # operationId: GetMaintenanceWindowExecutionTaskInvocation
-export def "api get-maintenance-window-execution-task-invocation" [
+export def "get-maintenance-window-execution-task-invocation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4109,7 +4109,7 @@ export def "api get-maintenance-window-execution-task-invocation" [
 #
 # POST /
 # operationId: GetMaintenanceWindowTask
-export def "api get-maintenance-window-task" [
+export def "get-maintenance-window-task" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4158,7 +4158,7 @@ export def "api get-maintenance-window-task" [
 #
 # POST /
 # operationId: GetOpsItem
-export def "api get-ops-item" [
+export def "get-ops-item" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4207,7 +4207,7 @@ export def "api get-ops-item" [
 #
 # POST /
 # operationId: GetOpsMetadata
-export def "api get-ops-metadata" [
+export def "get-ops-metadata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4257,7 +4257,7 @@ export def "api get-ops-metadata" [
 #
 # POST /
 # operationId: GetOpsSummary
-export def "api get-ops-summary" [
+export def "get-ops-summary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4313,7 +4313,7 @@ export def "api get-ops-summary" [
 #
 # POST /
 # operationId: GetParameter
-export def "api get-parameter" [
+export def "get-parameter" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4362,7 +4362,7 @@ export def "api get-parameter" [
 #
 # POST /
 # operationId: GetParameterHistory
-export def "api get-parameter-history" [
+export def "get-parameter-history" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4416,7 +4416,7 @@ export def "api get-parameter-history" [
 #
 # POST /
 # operationId: GetParameters
-export def "api get-parameters-1" [
+export def "get-parameters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4465,7 +4465,7 @@ export def "api get-parameters-1" [
 #
 # POST /
 # operationId: GetParametersByPath
-export def "api get-parameters-by-path" [
+export def "get-parameters-by-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4521,7 +4521,7 @@ export def "api get-parameters-by-path" [
 #
 # POST /
 # operationId: GetPatchBaseline
-export def "api get-update-baseline" [
+export def "get-patch-baseline" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4569,7 +4569,7 @@ export def "api get-update-baseline" [
 #
 # POST /
 # operationId: GetPatchBaselineForPatchGroup
-export def "api get-update-baseline-for-group" [
+export def "get-patch-baseline-for-patch-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4618,7 +4618,7 @@ export def "api get-update-baseline-for-group" [
 #
 # POST /
 # operationId: GetResourcePolicies
-export def "api get-resource-policies" [
+export def "get-resource-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4671,7 +4671,7 @@ export def "api get-resource-policies" [
 #
 # POST /
 # operationId: GetServiceSetting
-export def "api get-service-setting" [
+export def "get-service-setting" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4719,7 +4719,7 @@ export def "api get-service-setting" [
 #
 # POST /
 # operationId: LabelParameterVersion
-export def "api version-label-parameter" [
+export def "label-parameter-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4769,7 +4769,7 @@ export def "api version-label-parameter" [
 #
 # POST /
 # operationId: ListAssociationVersions
-export def "api list-association-versions" [
+export def "list-association-versions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4822,7 +4822,7 @@ export def "api list-association-versions" [
 #
 # POST /
 # operationId: ListAssociations
-export def "api list-associations" [
+export def "list-associations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4875,7 +4875,7 @@ export def "api list-associations" [
 #
 # POST /
 # operationId: ListCommandInvocations
-export def "api list-command-invocations" [
+export def "list-command-invocations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4931,7 +4931,7 @@ export def "api list-command-invocations" [
 #
 # POST /
 # operationId: ListCommands
-export def "api list-commands" [
+export def "list-commands" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4986,7 +4986,7 @@ export def "api list-commands" [
 #
 # POST /
 # operationId: ListComplianceItems
-export def "api list-compliance-items" [
+export def "list-compliance-items" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5041,7 +5041,7 @@ export def "api list-compliance-items" [
 #
 # POST /
 # operationId: ListComplianceSummaries
-export def "api list-compliance-summaries" [
+export def "list-compliance-summaries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5094,7 +5094,7 @@ export def "api list-compliance-summaries" [
 #
 # POST /
 # operationId: ListDocumentMetadataHistory
-export def "api list-document-metadata-history" [
+export def "list-document-metadata-history" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5146,7 +5146,7 @@ export def "api list-document-metadata-history" [
 #
 # POST /
 # operationId: ListDocumentVersions
-export def "api list-document-versions" [
+export def "list-document-versions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5199,7 +5199,7 @@ export def "api list-document-versions" [
 #
 # POST /
 # operationId: ListDocuments
-export def "api list-documents" [
+export def "list-documents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5253,7 +5253,7 @@ export def "api list-documents" [
 #
 # POST /
 # operationId: ListInventoryEntries
-export def "api list-inventory-entries" [
+export def "list-inventory-entries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5305,7 +5305,7 @@ export def "api list-inventory-entries" [
 #
 # POST /
 # operationId: ListOpsItemEvents
-export def "api list-ops-item-events" [
+export def "list-ops-item-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5358,7 +5358,7 @@ export def "api list-ops-item-events" [
 #
 # POST /
 # operationId: ListOpsItemRelatedItems
-export def "api list-ops-item-related-items" [
+export def "list-ops-item-related-items" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5412,7 +5412,7 @@ export def "api list-ops-item-related-items" [
 #
 # POST /
 # operationId: ListOpsMetadata
-export def "api list-ops-metadata" [
+export def "list-ops-metadata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5465,7 +5465,7 @@ export def "api list-ops-metadata" [
 #
 # POST /
 # operationId: ListResourceComplianceSummaries
-export def "api list-resource-compliance-summaries" [
+export def "list-resource-compliance-summaries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5518,7 +5518,7 @@ export def "api list-resource-compliance-summaries" [
 #
 # POST /
 # operationId: ListResourceDataSync
-export def "api list-resource-data-sync" [
+export def "list-resource-data-sync" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5571,7 +5571,7 @@ export def "api list-resource-data-sync" [
 #
 # POST /
 # operationId: ListTagsForResource
-export def "api list-tags-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5620,7 +5620,7 @@ export def "api list-tags-for-resource" [
 #
 # POST /
 # operationId: ModifyDocumentPermission
-export def "api create-modify-document-permission" [
+export def "modify-document-permission" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5672,7 +5672,7 @@ export def "api create-modify-document-permission" [
 #
 # POST /
 # operationId: PutComplianceItems
-export def "api update-compliance-items" [
+export def "put-compliance-items" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5726,7 +5726,7 @@ export def "api update-compliance-items" [
 #
 # POST /
 # operationId: PutInventory
-export def "api update-inventory" [
+export def "put-inventory" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5775,7 +5775,7 @@ export def "api update-inventory" [
 #
 # POST /
 # operationId: PutParameter
-export def "api update-parameter" [
+export def "put-parameter" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5833,7 +5833,7 @@ export def "api update-parameter" [
 #
 # POST /
 # operationId: PutResourcePolicy
-export def "api update-resource-policy" [
+export def "put-resource-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5884,7 +5884,7 @@ export def "api update-resource-policy" [
 #
 # POST /
 # operationId: RegisterDefaultPatchBaseline
-export def "api create-default-update-baseline" [
+export def "register-default-patch-baseline" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5932,7 +5932,7 @@ export def "api create-default-update-baseline" [
 #
 # POST /
 # operationId: RegisterPatchBaselineForPatchGroup
-export def "api create-update-baseline-for-group" [
+export def "register-patch-baseline-for-patch-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5981,7 +5981,7 @@ export def "api create-update-baseline-for-group" [
 #
 # POST /
 # operationId: RegisterTargetWithMaintenanceWindow
-export def "api create-target-with-maintenance-window" [
+export def "register-target-with-maintenance-window" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6035,7 +6035,7 @@ export def "api create-target-with-maintenance-window" [
 #
 # POST /
 # operationId: RegisterTaskWithMaintenanceWindow
-export def "api create-task-with-maintenance-window" [
+export def "register-task-with-maintenance-window" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6098,7 +6098,7 @@ export def "api create-task-with-maintenance-window" [
 #
 # POST /
 # operationId: RemoveTagsFromResource
-export def "api delete-tags-from-resource" [
+export def "remove-tags-from-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6148,7 +6148,7 @@ export def "api delete-tags-from-resource" [
 #
 # POST /
 # operationId: ResetServiceSetting
-export def "api reset-service-setting" [
+export def "reset-service-setting" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6196,7 +6196,7 @@ export def "api reset-service-setting" [
 #
 # POST /
 # operationId: ResumeSession
-export def "api create-resume-session" [
+export def "resume-session" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6244,7 +6244,7 @@ export def "api create-resume-session" [
 #
 # POST /
 # operationId: SendAutomationSignal
-export def "api send-automation-signal" [
+export def "send-automation-signal" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6294,7 +6294,7 @@ export def "api send-automation-signal" [
 #
 # POST /
 # operationId: SendCommand
-export def "api send-command" [
+export def "send-command" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6359,7 +6359,7 @@ export def "api send-command" [
 #
 # POST /
 # operationId: StartAssociationsOnce
-export def "api start-associations-once" [
+export def "start-associations-once" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6407,7 +6407,7 @@ export def "api start-associations-once" [
 #
 # POST /
 # operationId: StartAutomationExecution
-export def "api start-automation-execution" [
+export def "start-automation-execution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6467,7 +6467,7 @@ export def "api start-automation-execution" [
 #
 # POST /
 # operationId: StartChangeRequestExecution
-export def "api start-change-request-execution" [
+export def "start-change-request-execution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6525,7 +6525,7 @@ export def "api start-change-request-execution" [
 #
 # POST /
 # operationId: StartSession
-export def "api start-session" [
+export def "start-session" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6576,7 +6576,7 @@ export def "api start-session" [
 #
 # POST /
 # operationId: StopAutomationExecution
-export def "api stop-automation-execution" [
+export def "stop-automation-execution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6625,7 +6625,7 @@ export def "api stop-automation-execution" [
 #
 # POST /
 # operationId: TerminateSession
-export def "api create-terminate-session" [
+export def "terminate-session" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6673,7 +6673,7 @@ export def "api create-terminate-session" [
 #
 # POST /
 # operationId: UnlabelParameterVersion
-export def "api version-unlabel-parameter" [
+export def "unlabel-parameter-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6724,7 +6724,7 @@ export def "api version-unlabel-parameter" [
 # POST /
 # operationId: UpdateAssociation
 # --AlarmConfiguration shape: {IgnorePollAlarmFailure?: any, Alarms: any}
-export def "api update-association" [
+export def "update-association" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6791,7 +6791,7 @@ export def "api update-association" [
 #
 # POST /
 # operationId: UpdateAssociationStatus
-export def "api update-association-status" [
+export def "update-association-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6841,7 +6841,7 @@ export def "api update-association-status" [
 #
 # POST /
 # operationId: UpdateDocument
-export def "api update-document" [
+export def "update-document" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6896,7 +6896,7 @@ export def "api update-document" [
 #
 # POST /
 # operationId: UpdateDocumentDefaultVersion
-export def "api update-document-default-version" [
+export def "update-document-default-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6945,7 +6945,7 @@ export def "api update-document-default-version" [
 #
 # POST /
 # operationId: UpdateDocumentMetadata
-export def "api update-document-metadata" [
+export def "update-document-metadata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6995,7 +6995,7 @@ export def "api update-document-metadata" [
 #
 # POST /
 # operationId: UpdateMaintenanceWindow
-export def "api update-maintenance-window" [
+export def "update-maintenance-window" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7055,7 +7055,7 @@ export def "api update-maintenance-window" [
 #
 # POST /
 # operationId: UpdateMaintenanceWindowTarget
-export def "api update-maintenance-window-target" [
+export def "update-maintenance-window-target" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7109,7 +7109,7 @@ export def "api update-maintenance-window-target" [
 #
 # POST /
 # operationId: UpdateMaintenanceWindowTask
-export def "api update-maintenance-window-task" [
+export def "update-maintenance-window-task" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7172,7 +7172,7 @@ export def "api update-maintenance-window-task" [
 #
 # POST /
 # operationId: UpdateManagedInstanceRole
-export def "api update-managed-instance-role" [
+export def "update-managed-instance-role" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7221,7 +7221,7 @@ export def "api update-managed-instance-role" [
 #
 # POST /
 # operationId: UpdateOpsItem
-export def "api update-ops-item" [
+export def "update-ops-item" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7284,7 +7284,7 @@ export def "api update-ops-item" [
 #
 # POST /
 # operationId: UpdateOpsMetadata
-export def "api update-ops-metadata" [
+export def "update-ops-metadata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7334,7 +7334,7 @@ export def "api update-ops-metadata" [
 #
 # POST /
 # operationId: UpdatePatchBaseline
-export def "api update-baseline" [
+export def "update-patch-baseline" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7393,7 +7393,7 @@ export def "api update-baseline" [
 #
 # POST /
 # operationId: UpdateResourceDataSync
-export def "api update-resource-data-sync" [
+export def "update-resource-data-sync" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7443,7 +7443,7 @@ export def "api update-resource-data-sync" [
 #
 # POST /
 # operationId: UpdateServiceSetting
-export def "api update-service-setting" [
+export def "update-service-setting" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

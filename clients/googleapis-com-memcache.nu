@@ -131,7 +131,7 @@ def memcache-version-completer [] { ["MEMCACHE_1_5" "MEMCACHE_VERSION_UNSPECIFIE
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta2 update-apply-software" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "memcache-projects-locations-instances-apply-software-update" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -155,7 +155,7 @@ export def commands []: nothing -> table {
 #
 # POST /v1beta2/{instance}:applySoftwareUpdate
 # operationId: memcache.projects.locations.instances.applySoftwareUpdate
-export def "v1beta2 update-apply-software" [
+export def "memcache-projects-locations-instances-apply-software-update" [
   instance: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -208,7 +208,7 @@ export def "v1beta2 update-apply-software" [
 #
 # POST /v1beta2/{instance}:rescheduleMaintenance
 # operationId: memcache.projects.locations.instances.rescheduleMaintenance
-export def "v1beta2 create-reschedule-maintenance" [
+export def "memcache-projects-locations-instances-reschedule-maintenance" [
   instance: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -261,7 +261,7 @@ export def "v1beta2 create-reschedule-maintenance" [
 #
 # DELETE /v1beta2/{name}
 # operationId: memcache.projects.locations.operations.delete
-export def "v1beta2 delete" [
+export def "memcache-projects-locations-operations-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -309,7 +309,7 @@ export def "v1beta2 delete" [
 #
 # GET /v1beta2/{name}
 # operationId: memcache.projects.locations.operations.get
-export def "v1beta2 get" [
+export def "memcache-projects-locations-operations-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -362,7 +362,7 @@ export def "v1beta2 get" [
 # --memcacheNodes item shape: {parameters?: record}
 # --nodeConfig shape: {cpuCount?: int, memorySizeMb?: int}
 # --parameters shape: {params?: record}
-export def "v1beta2 update" [
+export def "memcache-projects-locations-instances-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -426,7 +426,7 @@ export def "v1beta2 update" [
 #
 # GET /v1beta2/{name}/locations
 # operationId: memcache.projects.locations.list
-export def "v1beta2-locations list" [
+export def "memcache-projects-locations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -477,7 +477,7 @@ export def "v1beta2-locations list" [
 #
 # GET /v1beta2/{name}/operations
 # operationId: memcache.projects.locations.operations.list
-export def "v1beta2-operations list" [
+export def "memcache-projects-locations-operations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -528,7 +528,7 @@ export def "v1beta2-operations list" [
 #
 # POST /v1beta2/{name}:applyParameters
 # operationId: memcache.projects.locations.instances.applyParameters
-export def "v1beta2 create-apply-parameters" [
+export def "memcache-projects-locations-instances-apply-parameters" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -581,7 +581,7 @@ export def "v1beta2 create-apply-parameters" [
 #
 # POST /v1beta2/{name}:cancel
 # operationId: memcache.projects.locations.operations.cancel
-export def "v1beta2 cancel" [
+export def "memcache-projects-locations-operations-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -634,7 +634,7 @@ export def "v1beta2 cancel" [
 # PATCH /v1beta2/{name}:updateParameters
 # operationId: memcache.projects.locations.instances.updateParameters
 # --parameters shape: {params?: record}
-export def "v1beta2 update-parameters" [
+export def "memcache-projects-locations-instances-update-parameters" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -687,7 +687,7 @@ export def "v1beta2 update-parameters" [
 #
 # GET /v1beta2/{parent}/instances
 # operationId: memcache.projects.locations.instances.list
-export def "v1beta2-instances list" [
+export def "memcache-projects-locations-instances-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -744,7 +744,7 @@ export def "v1beta2-instances list" [
 # --memcacheNodes item shape: {parameters?: record}
 # --nodeConfig shape: {cpuCount?: int, memorySizeMb?: int}
 # --parameters shape: {params?: record}
-export def "v1beta2-instances create" [
+export def "memcache-projects-locations-instances-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

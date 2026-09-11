@@ -101,7 +101,7 @@ def date-format-completer [] { ["DD-MM-YYYY" "MM-DD-YYYY" "YYYY-DD-MM" "YYYY-MM-
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "country get-latest-data-by-name" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-latest-country-data-by-name" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -125,7 +125,7 @@ export def commands []: nothing -> table {
 #
 # GET /country
 # operationId: getLatestCountryDataByName
-export def "country get-latest-data-by-name" [
+export def "get-latest-country-data-by-name" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -163,7 +163,7 @@ export def "country get-latest-data-by-name" [
 #
 # GET /country/all
 # operationId: getLatestAllCountries
-export def "country-all get-latest-countries" [
+export def "get-latest-all-countries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -200,7 +200,7 @@ export def "country-all get-latest-countries" [
 #
 # GET /country/code
 # operationId: getLatestCountryDataByCode
-export def "country-code get-latest-data" [
+export def "get-latest-country-data-by-code" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -238,7 +238,7 @@ export def "country-code get-latest-data" [
 #
 # GET /help/countries
 # operationId: getListOfCountries
-export def "help-countries get-list" [
+export def "get-list-of-countries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -275,7 +275,7 @@ export def "help-countries get-list" [
 #
 # GET /report/country/all
 # operationId: getDailyReportAllCountries
-export def "report-country-all get-daily-countries" [
+export def "get-daily-report-all-countries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -314,7 +314,7 @@ export def "report-country-all get-daily-countries" [
 #
 # GET /report/country/code
 # operationId: getDailyReportByCountryCode
-export def "report-country-code get-daily" [
+export def "get-daily-report-by-country-code" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -354,7 +354,7 @@ export def "report-country-code get-daily" [
 #
 # GET /report/country/name
 # operationId: getDailyReportByCountryName
-export def "report-country-name get-daily" [
+export def "get-daily-report-by-country-name" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -394,7 +394,7 @@ export def "report-country-name get-daily" [
 #
 # GET /report/totals
 # operationId: getDailyReportTotals
-export def "report-totals get-daily" [
+export def "get-daily-report-totals" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -433,7 +433,7 @@ export def "report-totals get-daily" [
 #
 # GET /totals
 # operationId: getLatestTotals
-export def "totals get-latest" [
+export def "get-latest-totals" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

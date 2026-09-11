@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["query-apiKey"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "companies get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-v1-companies" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -121,7 +121,7 @@ export def commands []: nothing -> table {
 # Available Companies
 #
 # GET /v1/companies
-export def "companies get" [
+export def "get-v1-companies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -158,7 +158,7 @@ export def "companies get" [
 # Available Currencies
 #
 # GET /v1/currencies
-export def "currencies get" [
+export def "get-v1-currencies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -191,7 +191,7 @@ export def "currencies get" [
 # Historic Aggregates
 #
 # GET /v1/historic/agg/{size}/{symbol}/{date}
-export def "historic-agg get" [
+export def "get-v1-historic-agg-size-symbol-date" [
   size: string
   symbol: string
   date: string
@@ -233,7 +233,7 @@ export def "historic-agg get" [
 # Historic Forex Ticks
 #
 # GET /v1/historic/forex/{from}/{to}/{date}
-export def "historic-forex get" [
+export def "get-v1-historic-forex-from-to-date" [
   from: string
   to: string
   date: string
@@ -275,7 +275,7 @@ export def "historic-forex get" [
 # Historic Quotes
 #
 # GET /v1/historic/quotes/{symbol}/{date}
-export def "historic-quotes get" [
+export def "get-v1-historic-quotes-symbol-date" [
   symbol: string
   date: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -315,7 +315,7 @@ export def "historic-quotes get" [
 # Historic Trades
 #
 # GET /v1/historic/trades/{symbol}/{date}
-export def "historic-trades get" [
+export def "get-v1-historic-trades-symbol-date" [
   symbol: string
   date: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -355,7 +355,7 @@ export def "historic-trades get" [
 # Last Trade for a Currency Pair
 #
 # GET /v1/last/currencies/{from}/{to}
-export def "last-currencies get" [
+export def "get-v1-last-currencies-from-to" [
   from: string
   to: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -392,7 +392,7 @@ export def "last-currencies get" [
 # Last Trade for a Symbol
 #
 # GET /v1/last/stocks/{symbol}
-export def "last-stocks get" [
+export def "get-v1-last-stocks-symbol" [
   symbol: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -427,7 +427,7 @@ export def "last-stocks get" [
 # Last Quote for a Currency Pair
 #
 # GET /v1/last_quote/currencies/{from}/{to}
-export def "last-quote-currencies get" [
+export def "get-v1-last-quote-currencies-from-to" [
   from: string
   to: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -464,7 +464,7 @@ export def "last-quote-currencies get" [
 # Last Quote for a Symbol
 #
 # GET /v1/last_quote/stocks/{symbol}
-export def "last-quote-stocks get" [
+export def "get-v1-last-quote-stocks-symbol" [
   symbol: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

@@ -131,7 +131,7 @@ def format-completer [] { ["APT" "DOCKER" "FORMAT_UNSPECIFIED" "MAVEN" "NPM" "PY
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta2 delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "artifactregistry-projects-locations-repositories-packages-versions-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -155,7 +155,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1beta2/{name}
 # operationId: artifactregistry.projects.locations.repositories.packages.versions.delete
-export def "v1beta2 delete" [
+export def "artifactregistry-projects-locations-repositories-packages-versions-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -204,7 +204,7 @@ export def "v1beta2 delete" [
 #
 # GET /v1beta2/{name}
 # operationId: artifactregistry.projects.locations.repositories.packages.versions.get
-export def "v1beta2 get" [
+export def "artifactregistry-projects-locations-repositories-packages-versions-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -253,7 +253,7 @@ export def "v1beta2 get" [
 #
 # PATCH /v1beta2/{name}
 # operationId: artifactregistry.projects.locations.repositories.packages.tags.patch
-export def "v1beta2 update" [
+export def "artifactregistry-projects-locations-repositories-packages-tags-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -307,7 +307,7 @@ export def "v1beta2 update" [
 #
 # GET /v1beta2/{name}/locations
 # operationId: artifactregistry.projects.locations.list
-export def "v1beta2-locations list" [
+export def "artifactregistry-projects-locations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -358,7 +358,7 @@ export def "v1beta2-locations list" [
 #
 # POST /v1beta2/{parent}/aptArtifacts:create
 # operationId: artifactregistry.projects.locations.repositories.aptArtifacts.upload
-export def "v1beta2-apt-artifacts-create upload" [
+export def "artifactregistry-projects-locations-repositories-apt-artifacts-upload" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -411,7 +411,7 @@ export def "v1beta2-apt-artifacts-create upload" [
 # POST /v1beta2/{parent}/aptArtifacts:import
 # operationId: artifactregistry.projects.locations.repositories.aptArtifacts.import
 # --gcsSource shape: {uris?: list<string>, useWildcards?: bool}
-export def "v1beta2-apt-artifacts-import import" [
+export def "artifactregistry-projects-locations-repositories-apt-artifacts-import" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -463,7 +463,7 @@ export def "v1beta2-apt-artifacts-import import" [
 #
 # GET /v1beta2/{parent}/files
 # operationId: artifactregistry.projects.locations.repositories.files.list
-export def "v1beta2-files list" [
+export def "artifactregistry-projects-locations-repositories-files-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -514,7 +514,7 @@ export def "v1beta2-files list" [
 #
 # GET /v1beta2/{parent}/packages
 # operationId: artifactregistry.projects.locations.repositories.packages.list
-export def "v1beta2-packages list" [
+export def "artifactregistry-projects-locations-repositories-packages-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -564,7 +564,7 @@ export def "v1beta2-packages list" [
 #
 # GET /v1beta2/{parent}/repositories
 # operationId: artifactregistry.projects.locations.repositories.list
-export def "v1beta2-repositories list" [
+export def "artifactregistry-projects-locations-repositories-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -615,7 +615,7 @@ export def "v1beta2-repositories list" [
 # POST /v1beta2/{parent}/repositories
 # operationId: artifactregistry.projects.locations.repositories.create
 # --mavenConfig shape: {allowSnapshotOverwrites?: bool, versionPolicy?: "VERSION_POLICY_UNSPECIFIED"|"RELEASE"|"SNAPSHOT"}
-export def "v1beta2-repositories create" [
+export def "artifactregistry-projects-locations-repositories-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -673,7 +673,7 @@ export def "v1beta2-repositories create" [
 #
 # GET /v1beta2/{parent}/tags
 # operationId: artifactregistry.projects.locations.repositories.packages.tags.list
-export def "v1beta2-tags list" [
+export def "artifactregistry-projects-locations-repositories-packages-tags-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -724,7 +724,7 @@ export def "v1beta2-tags list" [
 #
 # POST /v1beta2/{parent}/tags
 # operationId: artifactregistry.projects.locations.repositories.packages.tags.create
-export def "v1beta2-tags create" [
+export def "artifactregistry-projects-locations-repositories-packages-tags-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -778,7 +778,7 @@ export def "v1beta2-tags create" [
 #
 # GET /v1beta2/{parent}/versions
 # operationId: artifactregistry.projects.locations.repositories.packages.versions.list
-export def "v1beta2-versions list" [
+export def "artifactregistry-projects-locations-repositories-packages-versions-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -830,7 +830,7 @@ export def "v1beta2-versions list" [
 #
 # POST /v1beta2/{parent}/yumArtifacts:create
 # operationId: artifactregistry.projects.locations.repositories.yumArtifacts.upload
-export def "v1beta2-yum-artifacts-create upload" [
+export def "artifactregistry-projects-locations-repositories-yum-artifacts-upload" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -883,7 +883,7 @@ export def "v1beta2-yum-artifacts-create upload" [
 # POST /v1beta2/{parent}/yumArtifacts:import
 # operationId: artifactregistry.projects.locations.repositories.yumArtifacts.import
 # --gcsSource shape: {uris?: list<string>, useWildcards?: bool}
-export def "v1beta2-yum-artifacts-import import" [
+export def "artifactregistry-projects-locations-repositories-yum-artifacts-import" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -935,7 +935,7 @@ export def "v1beta2-yum-artifacts-import import" [
 #
 # GET /v1beta2/{resource}:getIamPolicy
 # operationId: artifactregistry.projects.locations.repositories.getIamPolicy
-export def "v1beta2 get-iam-policy" [
+export def "artifactregistry-projects-locations-repositories-get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -985,7 +985,7 @@ export def "v1beta2 get-iam-policy" [
 # POST /v1beta2/{resource}:setIamPolicy
 # operationId: artifactregistry.projects.locations.repositories.setIamPolicy
 # --policy shape: {bindings?: list, etag?: string, version?: int}
-export def "v1beta2 update-iam-policy" [
+export def "artifactregistry-projects-locations-repositories-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1037,7 +1037,7 @@ export def "v1beta2 update-iam-policy" [
 #
 # POST /v1beta2/{resource}:testIamPermissions
 # operationId: artifactregistry.projects.locations.repositories.testIamPermissions
-export def "v1beta2 test-iam-permissions" [
+export def "artifactregistry-projects-locations-repositories-test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

@@ -125,7 +125,7 @@ def operation-type-completer [] { ["create" "link" "unknown" "update"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-visualstudio-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -149,7 +149,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/microsoft.visualstudio/operations
 # operationId: Operations_List
-export def "providers-microsoft-visualstudio-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -183,7 +183,7 @@ export def "providers-microsoft-visualstudio-operations list" [
 #
 # POST /subscriptions/{subscriptionId}/providers/microsoft.visualstudio/checkNameAvailability
 # operationId: Accounts_CheckNameAvailability
-export def "subscriptions-providers-microsoft-visualstudio-check-name-availability check-accounts" [
+export def "accounts-check-name-availability" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -228,7 +228,7 @@ export def "subscriptions-providers-microsoft-visualstudio-check-name-availabili
 # DEPRECATED
 # operationId: Project_ListByAccountResource
 @deprecated
-export def "subscriptions-resource-groups-providers-microsoft-visualstudio-account-project list" [
+export def "project-list-by-account-resource" [
   subscription_id: string
   resource_group_name: string
   root_resource_name: string
@@ -272,7 +272,7 @@ export def "subscriptions-resource-groups-providers-microsoft-visualstudio-accou
 # DEPRECATED
 # operationId: Projects_Get
 @deprecated
-export def "subscriptions-resource-groups-providers-microsoft-visualstudio-account-project get" [
+export def "projects-get" [
   subscription_id: string
   resource_group_name: string
   root_resource_name: string
@@ -318,7 +318,7 @@ export def "subscriptions-resource-groups-providers-microsoft-visualstudio-accou
 # DEPRECATED
 # operationId: Projects_Update
 @deprecated
-export def "subscriptions-resource-groups-providers-microsoft-visualstudio-account-project update" [
+export def "projects-update" [
   subscription_id: string
   resource_group_name: string
   root_resource_name: string
@@ -369,7 +369,7 @@ export def "subscriptions-resource-groups-providers-microsoft-visualstudio-accou
 # operationId: Projects_Create
 # --properties shape: {bootstrapPipelineTemplate?: record, ownerUpn?: string, processTemplateId?: "Scrum"|"Agile"|"Cmmi", versionControlOption?: "Git"|"Tfvc"}
 @deprecated
-export def "subscriptions-resource-groups-providers-microsoft-visualstudio-account-project create" [
+export def "projects-create" [
   subscription_id: string
   resource_group_name: string
   root_resource_name: string
@@ -421,7 +421,7 @@ export def "subscriptions-resource-groups-providers-microsoft-visualstudio-accou
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/microsoft.visualstudio/account
 # operationId: Accounts_ListByResourceGroup
-export def "subscriptions-resourcegroups-providers-microsoft-visualstudio-account list-by-resource-group" [
+export def "accounts-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -461,7 +461,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-visualstudio-accoun
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/microsoft.visualstudio/account/{accountResourceName}/extension
 # operationId: Extensions_ListByAccount
-export def "subscriptions-resourcegroups-providers-microsoft-visualstudio-account-extension list" [
+export def "extensions-list-by-account" [
   subscription_id: string
   resource_group_name: string
   account_resource_name: string
@@ -503,7 +503,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-visualstudio-accoun
 #
 # DELETE /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/microsoft.visualstudio/account/{accountResourceName}/extension/{extensionResourceName}
 # operationId: Extensions_Delete
-export def "subscriptions-resourcegroups-providers-microsoft-visualstudio-account-extension delete" [
+export def "extensions-delete" [
   subscription_id: string
   resource_group_name: string
   account_resource_name: string
@@ -547,7 +547,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-visualstudio-accoun
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/microsoft.visualstudio/account/{accountResourceName}/extension/{extensionResourceName}
 # operationId: Extensions_Get
-export def "subscriptions-resourcegroups-providers-microsoft-visualstudio-account-extension get" [
+export def "extensions-get" [
   subscription_id: string
   resource_group_name: string
   account_resource_name: string
@@ -592,7 +592,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-visualstudio-accoun
 # PATCH /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/microsoft.visualstudio/account/{accountResourceName}/extension/{extensionResourceName}
 # operationId: Extensions_Update
 # --plan shape: {name?: string, product?: string, promotionCode?: string, publisher?: string, version?: string}
-export def "subscriptions-resourcegroups-providers-microsoft-visualstudio-account-extension update" [
+export def "extensions-update" [
   subscription_id: string
   resource_group_name: string
   account_resource_name: string
@@ -644,7 +644,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-visualstudio-accoun
 # PUT /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/microsoft.visualstudio/account/{accountResourceName}/extension/{extensionResourceName}
 # operationId: Extensions_Create
 # --plan shape: {name?: string, product?: string, promotionCode?: string, publisher?: string, version?: string}
-export def "subscriptions-resourcegroups-providers-microsoft-visualstudio-account-extension create" [
+export def "extensions-create" [
   subscription_id: string
   resource_group_name: string
   account_resource_name: string
@@ -695,7 +695,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-visualstudio-accoun
 #
 # DELETE /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/microsoft.visualstudio/account/{resourceName}
 # operationId: Accounts_Delete
-export def "subscriptions-resourcegroups-providers-microsoft-visualstudio-account delete" [
+export def "accounts-delete" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -737,7 +737,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-visualstudio-accoun
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/microsoft.visualstudio/account/{resourceName}
 # operationId: Accounts_Get
-export def "subscriptions-resourcegroups-providers-microsoft-visualstudio-account get" [
+export def "accounts-get" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -779,7 +779,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-visualstudio-accoun
 #
 # PUT /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/microsoft.visualstudio/account/{resourceName}
 # operationId: Accounts_CreateOrUpdate
-export def "subscriptions-resourcegroups-providers-microsoft-visualstudio-account create-or-update" [
+export def "accounts-create-or-update" [
   subscription_id: string
   resource_group_name: string
   resource_name: string

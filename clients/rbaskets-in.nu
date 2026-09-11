@@ -118,7 +118,7 @@ def in-param-completer [] { ["any" "body" "headers" "query"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "baskets get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-api-baskets" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -141,7 +141,7 @@ export def commands []: nothing -> table {
 # Get baskets
 #
 # GET /api/baskets
-export def "baskets get" [
+export def "get-api-baskets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -178,7 +178,7 @@ export def "baskets get" [
 # Delete basket
 #
 # DELETE /api/baskets/{name}
-export def "baskets delete-by-name" [
+export def "delete-api-baskets-name" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -213,7 +213,7 @@ export def "baskets delete-by-name" [
 # Get basket settings
 #
 # GET /api/baskets/{name}
-export def "baskets get-by-name" [
+export def "get-api-baskets-name" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -248,7 +248,7 @@ export def "baskets get-by-name" [
 # Create new basket
 #
 # POST /api/baskets/{name}
-export def "baskets create-by-name" [
+export def "post-api-baskets-name" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -291,7 +291,7 @@ export def "baskets create-by-name" [
 # Update basket settings
 #
 # PUT /api/baskets/{name}
-export def "baskets update-by-name" [
+export def "put-api-baskets-name" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -334,7 +334,7 @@ export def "baskets update-by-name" [
 # Delete all requests
 #
 # DELETE /api/baskets/{name}/requests
-export def "baskets-requests delete-by-name" [
+export def "delete-api-baskets-name-requests" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -369,7 +369,7 @@ export def "baskets-requests delete-by-name" [
 # Get collected requests
 #
 # GET /api/baskets/{name}/requests
-export def "baskets-requests get-by-name" [
+export def "get-api-baskets-name-requests" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -409,7 +409,7 @@ export def "baskets-requests get-by-name" [
 # Get response settings
 #
 # GET /api/baskets/{name}/responses/{method}
-export def "baskets-responses get-by-name-method" [
+export def "get-api-baskets-name-responses-method" [
   name: string
   method: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -446,7 +446,7 @@ export def "baskets-responses get-by-name-method" [
 # Update response settings
 #
 # PUT /api/baskets/{name}/responses/{method}
-export def "baskets-responses update-by-name-method" [
+export def "put-api-baskets-name-responses-method" [
   name: string
   method: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -490,7 +490,7 @@ export def "baskets-responses update-by-name-method" [
 # Get baskets statistics
 #
 # GET /api/stats
-export def "stats get" [
+export def "get-api-stats" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -525,7 +525,7 @@ export def "stats get" [
 # Get service version
 #
 # GET /api/version
-export def "version get" [
+export def "get-api-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -560,7 +560,7 @@ export def "version get" [
 # GET /baskets
 # DEPRECATED
 @deprecated
-export def "baskets get-1" [
+export def "get-baskets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -599,7 +599,7 @@ export def "baskets get-1" [
 # DELETE /baskets/{name}
 # DEPRECATED
 @deprecated
-export def "baskets delete-by-name-1" [
+export def "delete-baskets-name" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -636,7 +636,7 @@ export def "baskets delete-by-name-1" [
 # GET /baskets/{name}
 # DEPRECATED
 @deprecated
-export def "baskets get-by-name-1" [
+export def "get-baskets-name" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -673,7 +673,7 @@ export def "baskets get-by-name-1" [
 # POST /baskets/{name}
 # DEPRECATED
 @deprecated
-export def "baskets create-by-name-1" [
+export def "post-baskets-name" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -718,7 +718,7 @@ export def "baskets create-by-name-1" [
 # PUT /baskets/{name}
 # DEPRECATED
 @deprecated
-export def "baskets update-by-name-1" [
+export def "put-baskets-name" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -763,7 +763,7 @@ export def "baskets update-by-name-1" [
 # DELETE /baskets/{name}/requests
 # DEPRECATED
 @deprecated
-export def "baskets-requests delete-by-name-1" [
+export def "delete-baskets-name-requests" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -800,7 +800,7 @@ export def "baskets-requests delete-by-name-1" [
 # GET /baskets/{name}/requests
 # DEPRECATED
 @deprecated
-export def "baskets-requests get-by-name-1" [
+export def "get-baskets-name-requests" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -842,7 +842,7 @@ export def "baskets-requests get-by-name-1" [
 # GET /baskets/{name}/responses/{method}
 # DEPRECATED
 @deprecated
-export def "baskets-responses get-by-name-method-1" [
+export def "get-baskets-name-responses-method" [
   name: string
   method: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -881,7 +881,7 @@ export def "baskets-responses get-by-name-method-1" [
 # PUT /baskets/{name}/responses/{method}
 # DEPRECATED
 @deprecated
-export def "baskets-responses update-by-name-method-1" [
+export def "put-baskets-name-responses-method" [
   name: string
   method: string
   --base-url(-b): string@base-url-completer # API base URL

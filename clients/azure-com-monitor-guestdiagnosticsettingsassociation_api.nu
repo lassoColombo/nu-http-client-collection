@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-insights-guest-diagnostic-settings-associations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "guest-diagnostics-settings-association-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/microsoft.insights/guestDiagnosticSettingsAssociations
 # operationId: GuestDiagnosticsSettingsAssociation_List
-export def "subscriptions-providers-microsoft-insights-guest-diagnostic-settings-associations list" [
+export def "guest-diagnostics-settings-association-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -178,7 +178,7 @@ export def "subscriptions-providers-microsoft-insights-guest-diagnostic-settings
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/microsoft.insights/guestDiagnosticSettingsAssociations
 # operationId: GuestDiagnosticsSettingsAssociation_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-insights-guest-diagnostic-settings-associations list" [
+export def "guest-diagnostics-settings-association-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -218,7 +218,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-guest-dia
 #
 # DELETE /{resourceUri}/providers/microsoft.insights/guestDiagnosticSettingsAssociation/{associationName}
 # operationId: GuestDiagnosticsSettingsAssociation_Delete
-export def "providers-microsoft-insights-guest-diagnostic-settings-association delete" [
+export def "guest-diagnostics-settings-association-delete" [
   resource_uri: string
   association_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -258,7 +258,7 @@ export def "providers-microsoft-insights-guest-diagnostic-settings-association d
 #
 # GET /{resourceUri}/providers/microsoft.insights/guestDiagnosticSettingsAssociation/{associationName}
 # operationId: GuestDiagnosticsSettingsAssociation_Get
-export def "providers-microsoft-insights-guest-diagnostic-settings-association get" [
+export def "guest-diagnostics-settings-association-get" [
   resource_uri: string
   association_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -299,7 +299,7 @@ export def "providers-microsoft-insights-guest-diagnostic-settings-association g
 # PATCH /{resourceUri}/providers/microsoft.insights/guestDiagnosticSettingsAssociation/{associationName}
 # operationId: GuestDiagnosticsSettingsAssociation_Update
 # --properties shape: {guestDiagnosticSettingsName: string}
-export def "providers-microsoft-insights-guest-diagnostic-settings-association update" [
+export def "guest-diagnostics-settings-association-update" [
   resource_uri: string
   association_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -345,7 +345,7 @@ export def "providers-microsoft-insights-guest-diagnostic-settings-association u
 # PUT /{resourceUri}/providers/microsoft.insights/guestDiagnosticSettingsAssociation/{associationName}
 # operationId: GuestDiagnosticsSettingsAssociation_CreateOrUpdate
 # --properties shape: {guestDiagnosticSettingsName: string}
-export def "providers-microsoft-insights-guest-diagnostic-settings-association create-or-update" [
+export def "guest-diagnostics-settings-association-create-or-update" [
   resource_uri: string
   association_name: string
   --base-url(-b): string@base-url-completer # API base URL

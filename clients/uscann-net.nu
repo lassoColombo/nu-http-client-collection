@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "authentication-forgot-password create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "forgot-password" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -122,7 +122,7 @@ export def commands []: nothing -> table {
 #
 # POST /authentication/forgotPassword
 # operationId: forgotPassword
-export def "authentication-forgot-password create" [
+export def "forgot-password" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -165,7 +165,7 @@ export def "authentication-forgot-password create" [
 #
 # POST /authentication/register
 # operationId: register
-export def "authentication-register create" [
+export def "register" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -230,7 +230,7 @@ export def "authentication-register create" [
 #
 # POST /authentication/setForgotPassword
 # operationId: setForgotPassword
-export def "authentication-set-forgot-password update" [
+export def "set-forgot-password" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -275,7 +275,7 @@ export def "authentication-set-forgot-password update" [
 #
 # POST /authentication/token
 # operationId: authenticateUser
-export def "authentication-token create-authenticate-user" [
+export def "authenticate-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -319,7 +319,7 @@ export def "authentication-token create-authenticate-user" [
 #
 # POST /authentication/validateMailToken
 # operationId: validateMailToken
-export def "authentication-validate-mail-token validate" [
+export def "validate-mail-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

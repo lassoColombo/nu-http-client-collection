@@ -111,7 +111,7 @@ def accept-completer [] { ["application/json" "text/xml"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "advanced-async get-number-insight" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-number-insight-async" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -136,7 +136,7 @@ export def commands []: nothing -> table {
 # GET /advanced/async/{format}
 # operationId: getNumberInsightAsync
 @deprecated --flag ip
-export def "advanced-async get-number-insight" [
+export def "get-number-insight-async" [
   format: any
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (api_key)
@@ -180,7 +180,7 @@ export def "advanced-async get-number-insight" [
 # GET /advanced/{format}
 # operationId: getNumberInsightAdvanced
 @deprecated --flag ip
-export def "advanced get-number-insight" [
+export def "get-number-insight-advanced" [
   format: any
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (api_key)
@@ -223,7 +223,7 @@ export def "advanced get-number-insight" [
 #
 # GET /basic/{format}
 # operationId: getNumberInsightBasic
-export def "basic get-number-insight" [
+export def "get-number-insight-basic" [
   format: any
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (api_key)
@@ -263,7 +263,7 @@ export def "basic get-number-insight" [
 #
 # GET /standard/{format}
 # operationId: getNumberInsightStandard
-export def "standard get-number-insight" [
+export def "get-number-insight-standard" [
   format: any
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (api_key)

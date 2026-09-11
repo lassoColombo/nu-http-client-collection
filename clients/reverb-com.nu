@@ -127,7 +127,7 @@ def topic-completer [] { ["app/uninstalled" "listings/bumps-ran-out" "listings/p
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "articles get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-articles" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -148,7 +148,7 @@ export def commands []: nothing -> table {
 }
 
 # GET /articles
-export def "articles get" [
+export def "get-articles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -187,7 +187,7 @@ export def "articles get" [
 # List of all article categories
 #
 # GET /articles/categories
-export def "articles-categories get" [
+export def "get-articles-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -220,7 +220,7 @@ export def "articles-categories get" [
 # List of supported product categories
 #
 # GET /categories
-export def "categories get" [
+export def "get-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -251,7 +251,7 @@ export def "categories get" [
 }
 
 # GET /categories/flat
-export def "categories-flat get" [
+export def "get-categories-flat" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -284,7 +284,7 @@ export def "categories-flat get" [
 # Full taxonomy tree of categories including middle categories
 #
 # GET /categories/taxonomy
-export def "categories-taxonomy get" [
+export def "get-categories-taxonomy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -317,7 +317,7 @@ export def "categories-taxonomy get" [
 # Get subcategory details
 #
 # GET /categories/{product_type}/{category}
-export def "categories get-by-product-type-category" [
+export def "get-categories-product-type-category" [
   product_type: string
   category: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -354,7 +354,7 @@ export def "categories get-by-product-type-category" [
 # Get category details
 #
 # GET /categories/{uuid}
-export def "categories get-by-uuid" [
+export def "get-categories-uuid" [
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -389,7 +389,7 @@ export def "categories get-by-uuid" [
 # Returns a set of comparison shopping pages based on the current params
 #
 # GET /comparison_shopping_pages
-export def "comparison-shopping-pages list" [
+export def "get-comparison-shopping-pages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -422,7 +422,7 @@ export def "comparison-shopping-pages list" [
 # Show comparison shopping page
 #
 # GET /comparison_shopping_pages/find
-export def "comparison-shopping-pages-find get" [
+export def "get-comparison-shopping-pages-find" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -456,7 +456,7 @@ export def "comparison-shopping-pages-find get" [
 }
 
 # GET /comparison_shopping_pages/{id}
-export def "comparison-shopping-pages get" [
+export def "get-comparison-shopping-pages-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -491,7 +491,7 @@ export def "comparison-shopping-pages get" [
 # Return new or used listings for a comparison shopping page
 #
 # GET /comparison_shopping_pages/{id}/listings
-export def "comparison-shopping-pages-listings get" [
+export def "get-comparison-shopping-pages-id-listings" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -531,7 +531,7 @@ export def "comparison-shopping-pages-listings get" [
 # View reviews of a comparison shopping page
 #
 # GET /comparison_shopping_pages/{id}/reviews
-export def "comparison-shopping-pages-reviews get" [
+export def "get-comparison-shopping-pages-id-reviews" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -569,7 +569,7 @@ export def "comparison-shopping-pages-reviews get" [
 # --offer_items item shape: {listing_id: string, price: string, shipping_price: string}
 # --price shape: {amount: string, currency: "USD"|"CAD"|"EUR"|"GBP"|"AUD"|"JPY"|"NZD"|"MXN"}
 # --shipping_price shape: {amount: string, currency: "USD"|"CAD"|"EUR"|"GBP"|"AUD"|"JPY"|"NZD"|"MXN"}
-export def "conversations-offer create-by-conversation-id" [
+export def "post-conversations-conversation-id-offer" [
   conversation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -616,7 +616,7 @@ export def "conversations-offer create-by-conversation-id" [
 # Make an offer to the other participant in the conversation
 #
 # POST /conversations/{id}/offer
-export def "conversations-offer create-by-id" [
+export def "post-conversations-id-offer" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -657,7 +657,7 @@ export def "conversations-offer create-by-id" [
 # Retrieve a list of country codes with corresponding subregions
 #
 # GET /countries
-export def "countries get" [
+export def "get-countries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -690,7 +690,7 @@ export def "countries get" [
 # Returns a set of comparison shopping pages based on the current params
 #
 # GET /csps
-export def "csps list" [
+export def "get-csps" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -721,7 +721,7 @@ export def "csps list" [
 }
 
 # GET /csps/categories
-export def "csps-categories get" [
+export def "get-csps-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -754,7 +754,7 @@ export def "csps-categories get" [
 # Show comparison shopping page
 #
 # GET /csps/find
-export def "csps-find get" [
+export def "get-csps-find" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -788,7 +788,7 @@ export def "csps-find get" [
 }
 
 # GET /csps/{id}
-export def "csps get" [
+export def "get-csps-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -821,7 +821,7 @@ export def "csps get" [
 }
 
 # GET /curated_sets/{slug}
-export def "curated-sets get" [
+export def "get-curated-sets-slug" [
   slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -856,7 +856,7 @@ export def "curated-sets get" [
 # List of supported display currencies for browsing listings
 #
 # GET /currencies/display
-export def "currencies-display get" [
+export def "get-currencies-display" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -889,7 +889,7 @@ export def "currencies-display get" [
 # List of supported listing currencies for shops
 #
 # GET /currencies/listing
-export def "currencies-listing get" [
+export def "get-currencies-listing" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -922,7 +922,7 @@ export def "currencies-listing get" [
 # Feedback details
 #
 # GET /feedback/{feedback_id}
-export def "feedback get" [
+export def "get-feedback-feedback-id" [
   feedback_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -957,7 +957,7 @@ export def "feedback get" [
 # Get results from a handpicked collection
 #
 # GET /handpicked/{slug}
-export def "handpicked get" [
+export def "get-handpicked-slug" [
   slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1027,7 +1027,7 @@ export def "handpicked get" [
 # List of supported product conditions
 #
 # GET /listing_conditions
-export def "listing-conditions get" [
+export def "get-listing-conditions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1060,7 +1060,7 @@ export def "listing-conditions get" [
 # Default search of listings includes only used & handmade. Add a filter to view all listings or use the /listings/all endpoint.
 #
 # GET /listings
-export def "listings list" [
+export def "get-listings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1136,7 +1136,7 @@ export def "listings list" [
 # --seller shape: {paypal_email?: string}
 # --shipping shape: {local?: bool, rates?: list}
 # --videos item shape: {link: string}
-export def "listings create" [
+export def "post-listings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1204,7 +1204,7 @@ export def "listings create" [
 # All listings including used, handmade, and brand new
 #
 # GET /listings/all
-export def "listings-all get" [
+export def "get-listings-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1272,7 +1272,7 @@ export def "listings-all get" [
 # Individual facets
 #
 # GET /listings/facets/seller_location
-export def "listings-facets-seller-location get" [
+export def "get-listings-facets-seller-location" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1305,7 +1305,7 @@ export def "listings-facets-seller-location get" [
 # Returns the latest negotiation for the requesting user given a listing id
 #
 # GET /listings/{id}/negotiation
-export def "listings-negotiation get" [
+export def "get-listings-id-negotiation" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1340,7 +1340,7 @@ export def "listings-negotiation get" [
 # Make an offer to the seller of a listing
 #
 # POST /listings/{id}/offer
-export def "listings-offer create" [
+export def "post-listings-id-offer" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1381,7 +1381,7 @@ export def "listings-offer create" [
 # View available bump tiers and stats for a listing
 #
 # GET /listings/{listing_id}/bump
-export def "listings-bump get" [
+export def "get-listings-listing-id-bump" [
   listing_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1416,7 +1416,7 @@ export def "listings-bump get" [
 # Bump a listing
 #
 # POST /listings/{listing_id}/bump/{budget_type}
-export def "listings-bump create" [
+export def "post-listings-listing-id-bump-budget-type" [
   listing_id: string
   budget_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1453,7 +1453,7 @@ export def "listings-bump create" [
 # Start a conversation with a seller
 #
 # POST /listings/{listing_id}/conversations
-export def "listings-conversations create" [
+export def "post-listings-listing-id-conversations" [
   listing_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1492,7 +1492,7 @@ export def "listings-conversations create" [
 # View the images associated with a particular listing
 #
 # GET /listings/{listing_id}/images
-export def "listings-images get" [
+export def "get-listings-listing-id-images" [
   listing_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1527,7 +1527,7 @@ export def "listings-images get" [
 # Delete an image from a listing
 #
 # DELETE /listings/{listing_id}/images/{image_id}
-export def "listings-images delete" [
+export def "delete-listings-listing-id-images-image-id" [
   listing_id: string
   image_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1564,7 +1564,7 @@ export def "listings-images delete" [
 # See all sales that include a listing.
 #
 # GET /listings/{listing_id}/sales
-export def "listings-sales get" [
+export def "get-listings-listing-id-sales" [
   listing_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1599,7 +1599,7 @@ export def "listings-sales get" [
 # Delete a draft listing. Cannot be used on non-drafts.
 #
 # DELETE /listings/{slug}
-export def "listings delete" [
+export def "delete-listings-slug" [
   slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1634,7 +1634,7 @@ export def "listings delete" [
 # Listing details
 #
 # GET /listings/{slug}
-export def "listings get" [
+export def "get-listings-slug" [
   slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1677,7 +1677,7 @@ export def "listings get" [
 # --seller shape: {paypal_email?: string}
 # --shipping shape: {local?: bool, rates?: list}
 # --videos item shape: {link: string}
-export def "listings update" [
+export def "put-listings-slug" [
   slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1747,7 +1747,7 @@ export def "listings update" [
 # Edit listing.
 #
 # GET /listings/{slug}/edit
-export def "listings-edit get" [
+export def "get-listings-slug-edit" [
   slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1782,7 +1782,7 @@ export def "listings-edit get" [
 # Flag a listing for inappropriate content or fraud
 #
 # POST /listings/{slug}/flag
-export def "listings-flag create" [
+export def "post-listings-slug-flag" [
   slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1822,7 +1822,7 @@ export def "listings-flag create" [
 # View reviews of a listing
 #
 # GET /listings/{slug}/reviews
-export def "listings-reviews get" [
+export def "get-listings-slug-reviews" [
   slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1857,7 +1857,7 @@ export def "listings-reviews get" [
 # Create a review for a listing
 #
 # POST /listings/{slug}/reviews
-export def "listings-reviews create" [
+export def "post-listings-slug-reviews" [
   slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1892,7 +1892,7 @@ export def "listings-reviews create" [
 # Listing details
 #
 # GET /listings/{slug}/similar_listings
-export def "listings-similar-listings get" [
+export def "get-listings-slug-similar-listings" [
   slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1927,7 +1927,7 @@ export def "listings-similar-listings get" [
 # Get account details
 #
 # GET /my/account
-export def "my-account get" [
+export def "get-my-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1960,7 +1960,7 @@ export def "my-account get" [
 # Update account details
 #
 # PUT /my/account
-export def "my-account update" [
+export def "put-my-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2002,7 +2002,7 @@ export def "my-account update" [
 # See all addresses in your address book
 #
 # GET /my/addresses
-export def "my-addresses get" [
+export def "get-my-addresses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2035,7 +2035,7 @@ export def "my-addresses get" [
 # Create a new address in your address book
 #
 # POST /my/addresses
-export def "my-addresses create" [
+export def "post-my-addresses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2068,7 +2068,7 @@ export def "my-addresses create" [
 # Delete an existing address in your address book
 #
 # DELETE /my/addresses/{address_id}
-export def "my-addresses delete" [
+export def "delete-my-addresses-address-id" [
   address_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2103,7 +2103,7 @@ export def "my-addresses delete" [
 # Update an existing address in your address book
 #
 # PUT /my/addresses/{address_id}
-export def "my-addresses update" [
+export def "put-my-addresses-address-id" [
   address_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2138,7 +2138,7 @@ export def "my-addresses update" [
 # Get a list of your conversations
 #
 # GET /my/conversations
-export def "my-conversations list" [
+export def "get-my-conversations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2177,7 +2177,7 @@ export def "my-conversations list" [
 # Start a conversation
 #
 # POST /my/conversations
-export def "my-conversations create" [
+export def "post-my-conversations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2219,7 +2219,7 @@ export def "my-conversations create" [
 # Send a message
 #
 # POST /my/conversations/{conversation_id}/messages
-export def "my-conversations-messages create" [
+export def "post-my-conversations-conversation-id-messages" [
   conversation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2258,7 +2258,7 @@ export def "my-conversations-messages create" [
 # Display conversation details with messages in natural time order (oldest to newest)
 #
 # GET /my/conversations/{id}
-export def "my-conversations get" [
+export def "get-my-conversations-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2293,7 +2293,7 @@ export def "my-conversations get" [
 # Mark a conversation read/unread
 #
 # PUT /my/conversations/{id}
-export def "my-conversations update" [
+export def "put-my-conversations-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2332,7 +2332,7 @@ export def "my-conversations update" [
 # Get your actionable status counts
 #
 # GET /my/counts
-export def "my-counts get" [
+export def "get-my-counts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2363,7 +2363,7 @@ export def "my-counts get" [
 }
 
 # DELETE /my/curated_set/product/{product_id}
-export def "my-curated-set-product delete" [
+export def "delete-my-curated-set-product-product-id" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2396,7 +2396,7 @@ export def "my-curated-set-product delete" [
 }
 
 # POST /my/curated_set/product/{product_id}
-export def "my-curated-set-product create" [
+export def "post-my-curated-set-product-product-id" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2431,7 +2431,7 @@ export def "my-curated-set-product create" [
 # Get listings from your feed
 #
 # GET /my/feed
-export def "my-feed get" [
+export def "get-my-feed" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2464,7 +2464,7 @@ export def "my-feed get" [
 # get your feed customization options
 #
 # GET /my/feed/customize
-export def "my-feed-customize get" [
+export def "get-my-feed-customize" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2497,7 +2497,7 @@ export def "my-feed-customize get" [
 # get your feed
 #
 # GET /my/feed/grid
-export def "my-feed-grid get" [
+export def "get-my-feed-grid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2530,7 +2530,7 @@ export def "my-feed-grid get" [
 # List of received feedback
 #
 # GET /my/feedback/received
-export def "my-feedback-received get" [
+export def "get-my-feedback-received" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2563,7 +2563,7 @@ export def "my-feedback-received get" [
 # List of sent feedback
 #
 # GET /my/feedback/sent
-export def "my-feedback-sent get" [
+export def "get-my-feedback-sent" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2596,7 +2596,7 @@ export def "my-feedback-sent get" [
 # See what the user is following
 #
 # GET /my/follows
-export def "my-follows get" [
+export def "get-my-follows" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2629,7 +2629,7 @@ export def "my-follows get" [
 # Returns a user's ArticleCategoryFollows
 #
 # GET /my/follows/articles
-export def "my-follows-articles get" [
+export def "get-my-follows-articles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2662,7 +2662,7 @@ export def "my-follows-articles get" [
 # Set a user's ArticleCategoryFollows
 #
 # POST /my/follows/articles
-export def "my-follows-articles create" [
+export def "post-my-follows-articles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2699,7 +2699,7 @@ export def "my-follows-articles create" [
 # Unfollow a brand
 #
 # DELETE /my/follows/brands/{slug}
-export def "my-follows-brands delete" [
+export def "delete-my-follows-brands-slug" [
   slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2734,7 +2734,7 @@ export def "my-follows-brands delete" [
 # Follow status for a brand
 #
 # GET /my/follows/brands/{slug}
-export def "my-follows-brands get" [
+export def "get-my-follows-brands-slug" [
   slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2769,7 +2769,7 @@ export def "my-follows-brands get" [
 # Follow a brand
 #
 # POST /my/follows/brands/{slug}
-export def "my-follows-brands create" [
+export def "post-my-follows-brands-slug" [
   slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2804,7 +2804,7 @@ export def "my-follows-brands create" [
 # Unfollow a subcategory
 #
 # DELETE /my/follows/categories/{category}/{subcategory}
-export def "my-follows-categories delete-by-category-subcategory" [
+export def "delete-my-follows-categories-category-subcategory" [
   category: string
   subcategory: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2841,7 +2841,7 @@ export def "my-follows-categories delete-by-category-subcategory" [
 # Follow status for a subcategory
 #
 # GET /my/follows/categories/{category}/{subcategory}
-export def "my-follows-categories get" [
+export def "get-my-follows-categories-category-subcategory" [
   category: string
   subcategory: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2878,7 +2878,7 @@ export def "my-follows-categories get" [
 # Follow a subcategory
 #
 # POST /my/follows/categories/{category}/{subcategory}
-export def "my-follows-categories create-by-category-subcategory" [
+export def "post-my-follows-categories-category-subcategory" [
   category: string
   subcategory: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2915,7 +2915,7 @@ export def "my-follows-categories create-by-category-subcategory" [
 # Unfollow a category
 #
 # DELETE /my/follows/categories/{identifier}
-export def "my-follows-categories delete-by-identifier" [
+export def "delete-my-follows-categories-identifier" [
   identifier: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2950,7 +2950,7 @@ export def "my-follows-categories delete-by-identifier" [
 # Follow status for a category
 #
 # GET /my/follows/categories/{identifier}
-export def "my-follows-categories list" [
+export def "get-my-follows-categories-identifier" [
   identifier: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2985,7 +2985,7 @@ export def "my-follows-categories list" [
 # Follow a category
 #
 # POST /my/follows/categories/{identifier}
-export def "my-follows-categories create-by-identifier" [
+export def "post-my-follows-categories-identifier" [
   identifier: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3020,7 +3020,7 @@ export def "my-follows-categories create-by-identifier" [
 # Follow a category
 #
 # POST /my/follows/categories/{uuid}
-export def "my-follows-categories create-by-uuid" [
+export def "post-my-follows-categories-uuid" [
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3055,7 +3055,7 @@ export def "my-follows-categories create-by-uuid" [
 # Unfollow a collection
 #
 # DELETE /my/follows/collections/{slug}
-export def "my-follows-collections delete" [
+export def "delete-my-follows-collections-slug" [
   slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3090,7 +3090,7 @@ export def "my-follows-collections delete" [
 # Follow status for a collection
 #
 # GET /my/follows/collections/{slug}
-export def "my-follows-collections get" [
+export def "get-my-follows-collections-slug" [
   slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3125,7 +3125,7 @@ export def "my-follows-collections get" [
 # Follow a collection
 #
 # POST /my/follows/collections/{slug}
-export def "my-follows-collections create" [
+export def "post-my-follows-collections-slug" [
   slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3160,7 +3160,7 @@ export def "my-follows-collections create" [
 # Unfollow a handpicked collection
 #
 # DELETE /my/follows/handpicked/{slug}
-export def "my-follows-handpicked delete" [
+export def "delete-my-follows-handpicked-slug" [
   slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3195,7 +3195,7 @@ export def "my-follows-handpicked delete" [
 # Follow status for a handpicked collection
 #
 # GET /my/follows/handpicked/{slug}
-export def "my-follows-handpicked get" [
+export def "get-my-follows-handpicked-slug" [
   slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3230,7 +3230,7 @@ export def "my-follows-handpicked get" [
 # Follow a handpicked collection
 #
 # POST /my/follows/handpicked/{slug}
-export def "my-follows-handpicked create" [
+export def "post-my-follows-handpicked-slug" [
   slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3265,7 +3265,7 @@ export def "my-follows-handpicked create" [
 # Follow status for a search
 #
 # GET /my/follows/search
-export def "my-follows-search get" [
+export def "get-my-follows-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3298,7 +3298,7 @@ export def "my-follows-search get" [
 # Follow a search
 #
 # POST /my/follows/search
-export def "my-follows-search create" [
+export def "post-my-follows-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3365,7 +3365,7 @@ export def "my-follows-search create" [
 # Unfollow a shop
 #
 # DELETE /my/follows/shops/{slug}
-export def "my-follows-shops delete" [
+export def "delete-my-follows-shops-slug" [
   slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3400,7 +3400,7 @@ export def "my-follows-shops delete" [
 # Follow status for a shop
 #
 # GET /my/follows/shops/{slug}
-export def "my-follows-shops get" [
+export def "get-my-follows-shops-slug" [
   slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3435,7 +3435,7 @@ export def "my-follows-shops get" [
 # Follow a shop
 #
 # POST /my/follows/shops/{slug}
-export def "my-follows-shops create" [
+export def "post-my-follows-shops-slug" [
   slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3470,7 +3470,7 @@ export def "my-follows-shops create" [
 # Delete a follow
 #
 # DELETE /my/follows/{follow_id}
-export def "my-follows delete" [
+export def "delete-my-follows-follow-id" [
   follow_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3503,7 +3503,7 @@ export def "my-follows delete" [
 }
 
 # DELETE /my/follows/{follow_id}/alert
-export def "my-follows-alert delete" [
+export def "delete-my-follows-follow-id-alert" [
   follow_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3536,7 +3536,7 @@ export def "my-follows-alert delete" [
 }
 
 # POST /my/follows/{follow_id}/alert
-export def "my-follows-alert create" [
+export def "post-my-follows-follow-id-alert" [
   follow_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3571,7 +3571,7 @@ export def "my-follows-alert create" [
 # Retrieve a list of live listings for the seller. To search all listings specify state=all
 #
 # GET /my/listings
-export def "my-listings get" [
+export def "get-my-listings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3638,7 +3638,7 @@ export def "my-listings get" [
 # Retrieve a list your draft listings
 #
 # GET /my/listings/drafts
-export def "my-listings-drafts get" [
+export def "get-my-listings-drafts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3703,7 +3703,7 @@ export def "my-listings-drafts get" [
 # Get a list of active negotiations as a seller
 #
 # GET /my/listings/negotiations
-export def "my-listings-negotiations get" [
+export def "get-my-listings-negotiations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3740,7 +3740,7 @@ export def "my-listings-negotiations get" [
 # End a listing
 #
 # PUT /my/listings/{slug}/state/end
-export def "my-listings-state-end update" [
+export def "put-my-listings-slug-state-end" [
   slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3779,7 +3779,7 @@ export def "my-listings-state-end update" [
 # Get a list of your lists (wishlist, watch list, etc)
 #
 # GET /my/lists
-export def "my-lists get" [
+export def "get-my-lists" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3812,7 +3812,7 @@ export def "my-lists get" [
 # Get a list of active negotiations as a buyer
 #
 # GET /my/negotiations/buying
-export def "my-negotiations-buying get" [
+export def "get-my-negotiations-buying" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3849,7 +3849,7 @@ export def "my-negotiations-buying get" [
 # Get offer details
 #
 # GET /my/negotiations/{id}
-export def "my-negotiations get" [
+export def "get-my-negotiations-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3884,7 +3884,7 @@ export def "my-negotiations get" [
 # Accept an offer
 #
 # POST /my/negotiations/{id}/accept
-export def "my-negotiations-accept create" [
+export def "post-my-negotiations-id-accept" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3926,7 +3926,7 @@ export def "my-negotiations-accept create" [
 # --offer_items item shape: {listing_id: string, price: string, shipping_price: string}
 # --price shape: {amount: string, currency: "USD"|"CAD"|"EUR"|"GBP"|"AUD"|"JPY"|"NZD"|"MXN"}
 # --shipping_price shape: {amount: string, currency: "USD"|"CAD"|"EUR"|"GBP"|"AUD"|"JPY"|"NZD"|"MXN"}
-export def "my-negotiations-counter create" [
+export def "post-my-negotiations-id-counter" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3973,7 +3973,7 @@ export def "my-negotiations-counter create" [
 # Decline an offer
 #
 # POST /my/negotiations/{id}/decline
-export def "my-negotiations-decline create" [
+export def "post-my-negotiations-id-decline" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4008,7 +4008,7 @@ export def "my-negotiations-decline create" [
 # List of orders that need feedback
 #
 # GET /my/orders/awaiting_feedback
-export def "my-orders-awaiting-feedback get" [
+export def "get-my-orders-awaiting-feedback" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4041,7 +4041,7 @@ export def "my-orders-awaiting-feedback get" [
 # Returns all orders, newest first.
 #
 # GET /my/orders/buying/all
-export def "my-orders-buying-all get" [
+export def "get-my-orders-buying-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4072,7 +4072,7 @@ export def "my-orders-buying-all get" [
 }
 
 # GET /my/orders/buying/by_uuid/{uuid}
-export def "my-orders-buying-by-uuid get" [
+export def "get-my-orders-buying-by-uuid-uuid" [
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4107,7 +4107,7 @@ export def "my-orders-buying-by-uuid get" [
 # Returns unpaid orders, newest first.
 #
 # GET /my/orders/buying/unpaid
-export def "my-orders-buying-unpaid get" [
+export def "get-my-orders-buying-unpaid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4140,7 +4140,7 @@ export def "my-orders-buying-unpaid get" [
 # Returns order details for a buyer
 #
 # GET /my/orders/buying/{id}
-export def "my-orders-buying get" [
+export def "get-my-orders-buying-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4175,7 +4175,7 @@ export def "my-orders-buying get" [
 # Marks an order as received by the buyer
 #
 # POST /my/orders/buying/{id}/mark_received
-export def "my-orders-buying-mark-received create" [
+export def "post-my-orders-buying-id-mark-received" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4210,7 +4210,7 @@ export def "my-orders-buying-mark-received create" [
 # Get all seller orders, newest first.
 #
 # GET /my/orders/selling/all
-export def "my-orders-selling-all get" [
+export def "get-my-orders-selling-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4243,7 +4243,7 @@ export def "my-orders-selling-all get" [
 # Get unpaid seller orders, newest first.
 #
 # GET /my/orders/selling/awaiting_shipment
-export def "my-orders-selling-awaiting-shipment get" [
+export def "get-my-orders-selling-awaiting-shipment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4276,7 +4276,7 @@ export def "my-orders-selling-awaiting-shipment get" [
 # See previous orders from buyer
 #
 # GET /my/orders/selling/buyer_history/{buyer_id}
-export def "my-orders-selling-buyer-history get" [
+export def "get-my-orders-selling-buyer-history-buyer-id" [
   buyer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4309,7 +4309,7 @@ export def "my-orders-selling-buyer-history get" [
 }
 
 # GET /my/orders/selling/by_uuid/{uuid}
-export def "my-orders-selling-by-uuid get" [
+export def "get-my-orders-selling-by-uuid-uuid" [
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4344,7 +4344,7 @@ export def "my-orders-selling-by-uuid get" [
 # Get unpaid seller orders, newest first.
 #
 # GET /my/orders/selling/unpaid
-export def "my-orders-selling-unpaid get" [
+export def "get-my-orders-selling-unpaid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4377,7 +4377,7 @@ export def "my-orders-selling-unpaid get" [
 # Returns order details for a seller
 #
 # GET /my/orders/selling/{id}
-export def "my-orders-selling get" [
+export def "get-my-orders-selling-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4412,7 +4412,7 @@ export def "my-orders-selling get" [
 # Marks an order as picked up
 #
 # POST /my/orders/selling/{id}/mark_picked_up
-export def "my-orders-selling-mark-picked-up create" [
+export def "post-my-orders-selling-id-mark-picked-up" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4451,7 +4451,7 @@ export def "my-orders-selling-mark-picked-up create" [
 # Marks an order as shipped
 #
 # POST /my/orders/selling/{id}/ship
-export def "my-orders-selling-ship create" [
+export def "post-my-orders-selling-id-ship" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4492,7 +4492,7 @@ export def "my-orders-selling-ship create" [
 # Initiate a refund for a sold order
 #
 # POST /my/orders/selling/{order_id}/refund_requests
-export def "my-orders-selling-refund-requests create" [
+export def "post-my-orders-selling-order-id-refund-requests" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4527,7 +4527,7 @@ export def "my-orders-selling-refund-requests create" [
 # Get payments
 #
 # GET /my/payments/selling
-export def "my-payments-selling list" [
+export def "get-my-payments-selling" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4569,7 +4569,7 @@ export def "my-payments-selling list" [
 # Get payment
 #
 # GET /my/payments/selling/{id}
-export def "my-payments-selling get" [
+export def "get-my-payments-selling-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4604,7 +4604,7 @@ export def "my-payments-selling get" [
 # Get a list of payouts
 #
 # GET /my/payouts
-export def "my-payouts get" [
+export def "get-my-payouts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4637,7 +4637,7 @@ export def "my-payouts get" [
 # Read the line items of a payout
 #
 # GET /my/payouts/{id}/line_items
-export def "my-payouts-line-items get" [
+export def "get-my-payouts-id-line-items" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4672,7 +4672,7 @@ export def "my-payouts-line-items get" [
 # Get a list of refund requests as a seller
 #
 # GET /my/refund_requests/selling
-export def "my-refund-requests-selling get" [
+export def "get-my-refund-requests-selling" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4705,7 +4705,7 @@ export def "my-refund-requests-selling get" [
 # Update a refund request for a sold order
 #
 # PUT /my/refund_requests/selling/{id}
-export def "my-refund-requests-selling update" [
+export def "put-my-refund-requests-selling-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4740,7 +4740,7 @@ export def "my-refund-requests-selling update" [
 # Get a list of your recently viewed listings.
 #
 # GET /my/viewed_listings
-export def "my-viewed-listings get" [
+export def "get-my-viewed-listings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4773,7 +4773,7 @@ export def "my-viewed-listings get" [
 # Get a list of wishlisted items
 #
 # GET /my/wishlist
-export def "my-wishlist get" [
+export def "get-my-wishlist" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4806,7 +4806,7 @@ export def "my-wishlist get" [
 # Remove a listing from your wishlist
 #
 # DELETE /my/wishlist/{id}
-export def "my-wishlist delete" [
+export def "delete-my-wishlist-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4841,7 +4841,7 @@ export def "my-wishlist delete" [
 # Add a listing to your wishlist
 #
 # PUT /my/wishlist/{id}
-export def "my-wishlist update" [
+export def "put-my-wishlist-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4876,7 +4876,7 @@ export def "my-wishlist update" [
 # Feedback details for an order's buyer
 #
 # GET /orders/{order_id}/feedback/buyer
-export def "orders-feedback-buyer get" [
+export def "get-orders-order-id-feedback-buyer" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4911,7 +4911,7 @@ export def "orders-feedback-buyer get" [
 # Add feedback about an order's buyer
 #
 # POST /orders/{order_id}/feedback/buyer
-export def "orders-feedback-buyer create" [
+export def "post-orders-order-id-feedback-buyer" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4946,7 +4946,7 @@ export def "orders-feedback-buyer create" [
 # Feedback details for an order's seller
 #
 # GET /orders/{order_id}/feedback/seller
-export def "orders-feedback-seller get" [
+export def "get-orders-order-id-feedback-seller" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4981,7 +4981,7 @@ export def "orders-feedback-seller get" [
 # Add feedback about an order's seller
 #
 # POST /orders/{order_id}/feedback/seller
-export def "orders-feedback-seller create" [
+export def "post-orders-order-id-feedback-seller" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5016,7 +5016,7 @@ export def "orders-feedback-seller create" [
 # Get list of payment methods
 #
 # GET /payment_methods
-export def "payment-methods get" [
+export def "get-payment-methods" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5049,7 +5049,7 @@ export def "payment-methods get" [
 # Get a summary of transactions for a given price guide
 #
 # GET /priceguide/{id}/transactions/summary
-export def "priceguide-transactions-summary get" [
+export def "get-priceguide-id-transactions-summary" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5087,7 +5087,7 @@ export def "priceguide-transactions-summary get" [
 # View a review
 #
 # GET /products/reviews/{id}
-export def "products-reviews get-by-id" [
+export def "get-products-reviews-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5122,7 +5122,7 @@ export def "products-reviews get-by-id" [
 # Update a review
 #
 # PUT /products/reviews/{id}
-export def "products-reviews update" [
+export def "put-products-reviews-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5163,7 +5163,7 @@ export def "products-reviews update" [
 # View reviews of a comparison shopping page
 #
 # GET /products/{slug}/reviews
-export def "products-reviews get-by-slug" [
+export def "get-products-slug-reviews" [
   slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5198,7 +5198,7 @@ export def "products-reviews get-by-slug" [
 # Create a review for a product
 #
 # POST /products/{slug}/reviews
-export def "products-reviews create" [
+export def "post-products-slug-reviews" [
   slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5233,7 +5233,7 @@ export def "products-reviews create" [
 # View upcoming and live Reverb official sales.
 #
 # GET /sales/reverb
-export def "sales-reverb get" [
+export def "get-sales-reverb" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5266,7 +5266,7 @@ export def "sales-reverb get" [
 # View your created sales.
 #
 # GET /sales/seller
-export def "sales-seller get" [
+export def "get-sales-seller" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5299,7 +5299,7 @@ export def "sales-seller get" [
 # Remove a listing from a sale
 #
 # DELETE /sales/{sale_id}/listings
-export def "sales-listings delete" [
+export def "delete-sales-sale-id-listings" [
   sale_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5334,7 +5334,7 @@ export def "sales-listings delete" [
 # Add listings to a sale
 #
 # POST /sales/{sale_id}/listings
-export def "sales-listings create" [
+export def "post-sales-sale-id-listings" [
   sale_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5367,7 +5367,7 @@ export def "sales-listings create" [
 }
 
 # GET /sales/{slug}
-export def "sales get" [
+export def "get-sales-slug" [
   slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5402,7 +5402,7 @@ export def "sales get" [
 # List of supported shipping providers
 #
 # GET /shipping/providers
-export def "shipping-providers get" [
+export def "get-shipping-providers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5433,7 +5433,7 @@ export def "shipping-providers get" [
 }
 
 # GET /shipping/regions
-export def "shipping-regions get" [
+export def "get-shipping-regions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5466,7 +5466,7 @@ export def "shipping-regions get" [
 # Get your own shop details
 #
 # GET /shop
-export def "shop get" [
+export def "get-shop" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5500,7 +5500,7 @@ export def "shop get" [
 #
 # PUT /shop
 # --address shape: {country_code?: string, extended_address?: string, locality?: string, name?: string, phone?: string, postal_code?: string, region?: string, street_address?: string}
-export def "shop update" [
+export def "put-shop" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5547,7 +5547,7 @@ export def "shop update" [
 # List of supported product conditions
 #
 # GET /shop/listing_conditions
-export def "shop-listing-conditions get" [
+export def "get-shop-listing-conditions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5580,7 +5580,7 @@ export def "shop-listing-conditions get" [
 # Get accepted payment methods
 #
 # GET /shop/payment_methods
-export def "shop-payment-methods get" [
+export def "get-shop-payment-methods" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5613,7 +5613,7 @@ export def "shop-payment-methods get" [
 # Disable vacation mode. All listings will be re-enabled.
 #
 # DELETE /shop/vacation
-export def "shop-vacation delete" [
+export def "delete-shop-vacation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5646,7 +5646,7 @@ export def "shop-vacation delete" [
 # Returns shop vacation status
 #
 # GET /shop/vacation
-export def "shop-vacation get" [
+export def "get-shop-vacation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5679,7 +5679,7 @@ export def "shop-vacation get" [
 # Enable vacation mode. All listings will be unavailable until vacation mode is turned off.
 #
 # POST /shop/vacation
-export def "shop-vacation create" [
+export def "post-shop-vacation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5712,7 +5712,7 @@ export def "shop-vacation create" [
 # Get storefront details on a shop.
 #
 # GET /shops/{id}/storefronts
-export def "shops-storefronts get" [
+export def "get-shops-id-storefronts" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5747,7 +5747,7 @@ export def "shops-storefronts get" [
 # List of shipping profiles for your shop
 #
 # GET /shops/{shop_id}/shipping_profiles
-export def "shops-shipping-profiles get" [
+export def "get-shops-shop-id-shipping-profiles" [
   shop_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5782,7 +5782,7 @@ export def "shops-shipping-profiles get" [
 # Get details on a shop.
 #
 # GET /shops/{slug}
-export def "shops get" [
+export def "get-shops-slug" [
   slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5819,7 +5819,7 @@ export def "shops get" [
 # Get seller's feedback
 #
 # GET /shops/{slug}/feedback
-export def "shops-feedback get" [
+export def "get-shops-slug-feedback" [
   slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5854,7 +5854,7 @@ export def "shops-feedback get" [
 # Get seller's feedback as a buyer
 #
 # GET /shops/{slug}/feedback/buyer
-export def "shops-feedback-buyer get" [
+export def "get-shops-slug-feedback-buyer" [
   slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5889,7 +5889,7 @@ export def "shops-feedback-buyer get" [
 # Get seller's feedback as a seller
 #
 # GET /shops/{slug}/feedback/seller
-export def "shops-feedback-seller get" [
+export def "get-shops-slug-feedback-seller" [
   slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5924,7 +5924,7 @@ export def "shops-feedback-seller get" [
 # A list of wanted items by the user
 #
 # GET /wants
-export def "wants get" [
+export def "get-wants" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5957,7 +5957,7 @@ export def "wants get" [
 # Unmark an item wanted.
 #
 # DELETE /wants/{id}
-export def "wants delete" [
+export def "delete-wants-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5992,7 +5992,7 @@ export def "wants delete" [
 # Mark an item wanted. Returns 200 on success or 422 on failure.
 #
 # PUT /wants/{id}
-export def "wants update" [
+export def "put-wants-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6027,7 +6027,7 @@ export def "wants update" [
 # Get webhook registrations
 #
 # GET /webhooks/registrations
-export def "webhooks-registrations list" [
+export def "get-webhooks-registrations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6060,7 +6060,7 @@ export def "webhooks-registrations list" [
 # Register a webhook
 #
 # POST /webhooks/registrations
-export def "webhooks-registrations create" [
+export def "post-webhooks-registrations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6098,7 +6098,7 @@ export def "webhooks-registrations create" [
 # Remove a webhook
 #
 # DELETE /webhooks/registrations/{id}
-export def "webhooks-registrations delete" [
+export def "delete-webhooks-registrations-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6133,7 +6133,7 @@ export def "webhooks-registrations delete" [
 # Get details of a webhook registration
 #
 # GET /webhooks/registrations/{id}
-export def "webhooks-registrations get" [
+export def "get-webhooks-registrations-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

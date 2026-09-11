@@ -142,7 +142,7 @@ def version-completer [] { ["DSTU2" "R4" "STU3" "VERSION_UNSPECIFIED"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta1 check-data-access" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "healthcare-projects-locations-datasets-consent-stores-check-data-access" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -167,7 +167,7 @@ export def commands []: nothing -> table {
 # POST /v1beta1/{consentStore}:checkDataAccess
 # operationId: healthcare.projects.locations.datasets.consentStores.checkDataAccess
 # --consentList shape: {consents?: list<string>}
-export def "v1beta1 check-data-access" [
+export def "healthcare-projects-locations-datasets-consent-stores-check-data-access" [
   consent_store: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -223,7 +223,7 @@ export def "v1beta1 check-data-access" [
 # POST /v1beta1/{consentStore}:evaluateUserConsents
 # operationId: healthcare.projects.locations.datasets.consentStores.evaluateUserConsents
 # --consentList shape: {consents?: list<string>}
-export def "v1beta1 create-evaluate-user-consents" [
+export def "healthcare-projects-locations-datasets-consent-stores-evaluate-user-consents" [
   consent_store: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -282,7 +282,7 @@ export def "v1beta1 create-evaluate-user-consents" [
 # POST /v1beta1/{consentStore}:queryAccessibleData
 # operationId: healthcare.projects.locations.datasets.consentStores.queryAccessibleData
 # --gcsDestination shape: {uriPrefix?: string}
-export def "v1beta1 list-accessible-data" [
+export def "healthcare-projects-locations-datasets-consent-stores-query-accessible-data" [
   consent_store: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -336,7 +336,7 @@ export def "v1beta1 list-accessible-data" [
 #
 # DELETE /v1beta1/{name}
 # operationId: healthcare.projects.locations.datasets.hl7V2Stores.messages.delete
-export def "v1beta1 delete-by-name" [
+export def "healthcare-projects-locations-datasets-hl7-v2-stores-messages-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -384,7 +384,7 @@ export def "v1beta1 delete-by-name" [
 #
 # GET /v1beta1/{name}
 # operationId: healthcare.projects.locations.datasets.operations.get
-export def "v1beta1 get" [
+export def "healthcare-projects-locations-datasets-operations-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -436,7 +436,7 @@ export def "v1beta1 get" [
 # --parsedData shape: {segments?: list}
 # --patientIds item shape: {type?: string, value?: string}
 # --schematizedData shape: {data?: string, error?: string}
-export def "v1beta1 update-by-name" [
+export def "healthcare-projects-locations-datasets-hl7-v2-stores-messages-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -497,7 +497,7 @@ export def "v1beta1 update-by-name" [
 #
 # PUT /v1beta1/{name}
 # operationId: healthcare.projects.locations.datasets.fhirStores.fhir.update
-export def "v1beta1 update-by-name-1" [
+export def "healthcare-projects-locations-datasets-fhir-stores-fhir-update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -551,7 +551,7 @@ export def "v1beta1 update-by-name-1" [
 #
 # GET /v1beta1/{name}/$everything
 # operationId: healthcare.projects.locations.datasets.fhirStores.fhir.Patient-everything
-export def "v1beta1-everything get-patient-everything" [
+export def "healthcare-projects-locations-datasets-fhir-stores-fhir-patient-everything" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -605,7 +605,7 @@ export def "v1beta1-everything get-patient-everything" [
 #
 # DELETE /v1beta1/{name}/$purge
 # operationId: healthcare.projects.locations.datasets.fhirStores.fhir.Resource-purge
-export def "v1beta1-purge delete-resource-purge" [
+export def "healthcare-projects-locations-datasets-fhir-stores-fhir-resource-purge" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -653,7 +653,7 @@ export def "v1beta1-purge delete-resource-purge" [
 #
 # GET /v1beta1/{name}/$translate
 # operationId: healthcare.projects.locations.datasets.fhirStores.fhir.ConceptMap-translate
-export def "v1beta1-translate get-concept-map-translate" [
+export def "healthcare-projects-locations-datasets-fhir-stores-fhir-concept-map-translate" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -704,7 +704,7 @@ export def "v1beta1-translate get-concept-map-translate" [
 #
 # GET /v1beta1/{name}/_history
 # operationId: healthcare.projects.locations.datasets.fhirStores.fhir.history
-export def "v1beta1-history get" [
+export def "healthcare-projects-locations-datasets-fhir-stores-fhir-history" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -756,7 +756,7 @@ export def "v1beta1-history get" [
 #
 # GET /v1beta1/{name}/fhir/metadata
 # operationId: healthcare.projects.locations.datasets.fhirStores.fhir.capabilities
-export def "v1beta1-fhir-metadata get-capabilities" [
+export def "healthcare-projects-locations-datasets-fhir-stores-fhir-capabilities" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -804,7 +804,7 @@ export def "v1beta1-fhir-metadata get-capabilities" [
 #
 # GET /v1beta1/{name}/locations
 # operationId: healthcare.projects.locations.list
-export def "v1beta1-locations list" [
+export def "healthcare-projects-locations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -855,7 +855,7 @@ export def "v1beta1-locations list" [
 #
 # GET /v1beta1/{name}/operations
 # operationId: healthcare.projects.locations.datasets.operations.list
-export def "v1beta1-operations list" [
+export def "healthcare-projects-locations-datasets-operations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -906,7 +906,7 @@ export def "v1beta1-operations list" [
 #
 # POST /v1beta1/{name}:activate
 # operationId: healthcare.projects.locations.datasets.consentStores.consents.activate
-export def "v1beta1 create-activate" [
+export def "healthcare-projects-locations-datasets-consent-stores-consents-activate" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -960,7 +960,7 @@ export def "v1beta1 create-activate" [
 #
 # POST /v1beta1/{name}:archive
 # operationId: healthcare.projects.locations.datasets.consentStores.userDataMappings.archive
-export def "v1beta1 archive" [
+export def "healthcare-projects-locations-datasets-consent-stores-user-data-mappings-archive" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1012,7 +1012,7 @@ export def "v1beta1 archive" [
 #
 # POST /v1beta1/{name}:cancel
 # operationId: healthcare.projects.locations.datasets.operations.cancel
-export def "v1beta1 cancel" [
+export def "healthcare-projects-locations-datasets-operations-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1064,7 +1064,7 @@ export def "v1beta1 cancel" [
 #
 # POST /v1beta1/{name}:configureSearch
 # operationId: healthcare.projects.locations.datasets.fhirStores.configureSearch
-export def "v1beta1 list-configure" [
+export def "healthcare-projects-locations-datasets-fhir-stores-configure-search" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1117,7 +1117,7 @@ export def "v1beta1 list-configure" [
 #
 # DELETE /v1beta1/{name}:deleteRevision
 # operationId: healthcare.projects.locations.datasets.consentStores.consents.deleteRevision
-export def "v1beta1 delete-revision" [
+export def "healthcare-projects-locations-datasets-consent-stores-consents-delete-revision" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1167,7 +1167,7 @@ export def "v1beta1 delete-revision" [
 # operationId: healthcare.projects.locations.datasets.annotationStores.evaluate
 # --bigqueryDestination shape: {force?: bool, schemaType?: "SCHEMA_TYPE_UNSPECIFIED"|"SIMPLE", tableUri?: string, writeDisposition?: "WRITE_DISPOSITION_UNSPECIFIED"|"WRITE_EMPTY"|"WRITE_TRUNCATE"|"WRITE_APPEND"}
 # --infoTypeConfig shape: {evaluateList?: record, ignoreList?: record, strictMatching?: bool}
-export def "v1beta1 create-evaluate" [
+export def "healthcare-projects-locations-datasets-annotation-stores-evaluate" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1224,7 +1224,7 @@ export def "v1beta1 create-evaluate" [
 # POST /v1beta1/{name}:export
 # operationId: healthcare.projects.locations.datasets.hl7V2Stores.export
 # --gcsDestination shape: {contentStructure?: "CONTENT_STRUCTURE_UNSPECIFIED"|"MESSAGE_JSON", messageView?: "MESSAGE_VIEW_UNSPECIFIED"|"RAW_ONLY"|"PARSED_ONLY"|"FULL"|"SCHEMATIZED_ONLY"|"BASIC", uriPrefix?: string}
-export def "v1beta1 export" [
+export def "healthcare-projects-locations-datasets-hl7-v2-stores-export" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1278,7 +1278,7 @@ export def "v1beta1 export" [
 #
 # GET /v1beta1/{name}:getFHIRStoreMetrics
 # operationId: healthcare.projects.locations.datasets.fhirStores.getFHIRStoreMetrics
-export def "v1beta1 get-fhir-store-metrics" [
+export def "healthcare-projects-locations-datasets-fhir-stores-get-fhir-store-metrics" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1327,7 +1327,7 @@ export def "v1beta1 get-fhir-store-metrics" [
 # POST /v1beta1/{name}:import
 # operationId: healthcare.projects.locations.datasets.hl7V2Stores.import
 # --gcsSource shape: {uri?: string}
-export def "v1beta1 import" [
+export def "healthcare-projects-locations-datasets-hl7-v2-stores-import" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1379,7 +1379,7 @@ export def "v1beta1 import" [
 #
 # GET /v1beta1/{name}:listRevisions
 # operationId: healthcare.projects.locations.datasets.consentStores.consents.listRevisions
-export def "v1beta1 list-revisions" [
+export def "healthcare-projects-locations-datasets-consent-stores-consents-list-revisions" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1430,7 +1430,7 @@ export def "v1beta1 list-revisions" [
 #
 # POST /v1beta1/{name}:reject
 # operationId: healthcare.projects.locations.datasets.consentStores.consents.reject
-export def "v1beta1 reject" [
+export def "healthcare-projects-locations-datasets-consent-stores-consents-reject" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1482,7 +1482,7 @@ export def "v1beta1 reject" [
 #
 # POST /v1beta1/{name}:revoke
 # operationId: healthcare.projects.locations.datasets.consentStores.consents.revoke
-export def "v1beta1 delete-by-name-1" [
+export def "healthcare-projects-locations-datasets-consent-stores-consents-revoke" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1534,7 +1534,7 @@ export def "v1beta1 delete-by-name-1" [
 #
 # POST /v1beta1/{nlpService}:analyzeEntities
 # operationId: healthcare.projects.locations.services.nlp.analyzeEntities
-export def "v1beta1 create-analyze-entities" [
+export def "healthcare-projects-locations-services-nlp-analyze-entities" [
   nlp_service: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1587,7 +1587,7 @@ export def "v1beta1 create-analyze-entities" [
 #
 # GET /v1beta1/{parent}/annotationStores
 # operationId: healthcare.projects.locations.datasets.annotationStores.list
-export def "v1beta1-annotation-stores list" [
+export def "healthcare-projects-locations-datasets-annotation-stores-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1638,7 +1638,7 @@ export def "v1beta1-annotation-stores list" [
 #
 # POST /v1beta1/{parent}/annotationStores
 # operationId: healthcare.projects.locations.datasets.annotationStores.create
-export def "v1beta1-annotation-stores create" [
+export def "healthcare-projects-locations-datasets-annotation-stores-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1692,7 +1692,7 @@ export def "v1beta1-annotation-stores create" [
 #
 # GET /v1beta1/{parent}/annotations
 # operationId: healthcare.projects.locations.datasets.annotationStores.annotations.list
-export def "v1beta1-annotations list" [
+export def "healthcare-projects-locations-datasets-annotation-stores-annotations-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1748,7 +1748,7 @@ export def "v1beta1-annotations list" [
 # --imageAnnotation shape: {boundingPolys?: list, frameIndex?: int}
 # --resourceAnnotation shape: {label?: string}
 # --textAnnotation shape: {details?: record}
-export def "v1beta1-annotations create" [
+export def "healthcare-projects-locations-datasets-annotation-stores-annotations-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1805,7 +1805,7 @@ export def "v1beta1-annotations create" [
 #
 # GET /v1beta1/{parent}/attributeDefinitions
 # operationId: healthcare.projects.locations.datasets.consentStores.attributeDefinitions.list
-export def "v1beta1-attribute-definitions list" [
+export def "healthcare-projects-locations-datasets-consent-stores-attribute-definitions-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1856,7 +1856,7 @@ export def "v1beta1-attribute-definitions list" [
 #
 # POST /v1beta1/{parent}/attributeDefinitions
 # operationId: healthcare.projects.locations.datasets.consentStores.attributeDefinitions.create
-export def "v1beta1-attribute-definitions create" [
+export def "healthcare-projects-locations-datasets-consent-stores-attribute-definitions-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1914,7 +1914,7 @@ export def "v1beta1-attribute-definitions create" [
 #
 # GET /v1beta1/{parent}/consentArtifacts
 # operationId: healthcare.projects.locations.datasets.consentStores.consentArtifacts.list
-export def "v1beta1-consent-artifacts list" [
+export def "healthcare-projects-locations-datasets-consent-stores-consent-artifacts-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1969,7 +1969,7 @@ export def "v1beta1-consent-artifacts list" [
 # --guardianSignature shape: {image?: record, metadata?: record, signatureTime?: string, userId?: string}
 # --userSignature shape: {image?: record, metadata?: record, signatureTime?: string, userId?: string}
 # --witnessSignature shape: {image?: record, metadata?: record, signatureTime?: string, userId?: string}
-export def "v1beta1-consent-artifacts create" [
+export def "healthcare-projects-locations-datasets-consent-stores-consent-artifacts-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2028,7 +2028,7 @@ export def "v1beta1-consent-artifacts create" [
 #
 # GET /v1beta1/{parent}/consentStores
 # operationId: healthcare.projects.locations.datasets.consentStores.list
-export def "v1beta1-consent-stores list" [
+export def "healthcare-projects-locations-datasets-consent-stores-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2079,7 +2079,7 @@ export def "v1beta1-consent-stores list" [
 #
 # POST /v1beta1/{parent}/consentStores
 # operationId: healthcare.projects.locations.datasets.consentStores.create
-export def "v1beta1-consent-stores create" [
+export def "healthcare-projects-locations-datasets-consent-stores-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2135,7 +2135,7 @@ export def "v1beta1-consent-stores create" [
 #
 # GET /v1beta1/{parent}/consents
 # operationId: healthcare.projects.locations.datasets.consentStores.consents.list
-export def "v1beta1-consents list" [
+export def "healthcare-projects-locations-datasets-consent-stores-consents-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2187,7 +2187,7 @@ export def "v1beta1-consents list" [
 # POST /v1beta1/{parent}/consents
 # operationId: healthcare.projects.locations.datasets.consentStores.consents.create
 # --policies item shape: {authorizationRule?: record, resourceAttributes?: list}
-export def "v1beta1-consents create" [
+export def "healthcare-projects-locations-datasets-consent-stores-consents-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2246,7 +2246,7 @@ export def "v1beta1-consents create" [
 #
 # GET /v1beta1/{parent}/datasets
 # operationId: healthcare.projects.locations.datasets.list
-export def "v1beta1-datasets list" [
+export def "healthcare-projects-locations-datasets-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2296,7 +2296,7 @@ export def "v1beta1-datasets list" [
 #
 # POST /v1beta1/{parent}/datasets
 # operationId: healthcare.projects.locations.datasets.create
-export def "v1beta1-datasets create" [
+export def "healthcare-projects-locations-datasets-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2350,7 +2350,7 @@ export def "v1beta1-datasets create" [
 #
 # GET /v1beta1/{parent}/dicomStores
 # operationId: healthcare.projects.locations.datasets.dicomStores.list
-export def "v1beta1-dicom-stores list" [
+export def "healthcare-projects-locations-datasets-dicom-stores-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2403,7 +2403,7 @@ export def "v1beta1-dicom-stores list" [
 # operationId: healthcare.projects.locations.datasets.dicomStores.create
 # --notificationConfig shape: {pubsubTopic?: string, sendForBulkImport?: bool}
 # --streamConfigs item shape: {bigqueryDestination?: record}
-export def "v1beta1-dicom-stores create" [
+export def "healthcare-projects-locations-datasets-dicom-stores-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2459,7 +2459,7 @@ export def "v1beta1-dicom-stores create" [
 #
 # DELETE /v1beta1/{parent}/dicomWeb/{dicomWebPath}
 # operationId: healthcare.projects.locations.datasets.dicomStores.studies.series.instances.delete
-export def "v1beta1-dicom-web delete" [
+export def "healthcare-projects-locations-datasets-dicom-stores-studies-series-instances-delete" [
   parent: string
   dicom_web_path: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2509,7 +2509,7 @@ export def "v1beta1-dicom-web delete" [
 #
 # GET /v1beta1/{parent}/dicomWeb/{dicomWebPath}
 # operationId: healthcare.projects.locations.datasets.dicomStores.studies.series.instances.frames.retrieveRendered
-export def "v1beta1-dicom-web get-rendered" [
+export def "healthcare-projects-locations-datasets-dicom-stores-studies-series-instances-frames-retrieve-rendered" [
   parent: string
   dicom_web_path: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2559,7 +2559,7 @@ export def "v1beta1-dicom-web get-rendered" [
 #
 # POST /v1beta1/{parent}/dicomWeb/{dicomWebPath}
 # operationId: healthcare.projects.locations.datasets.dicomStores.studies.storeInstances
-export def "v1beta1-dicom-web create-store-instances" [
+export def "healthcare-projects-locations-datasets-dicom-stores-studies-store-instances" [
   parent: string
   dicom_web_path: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2615,7 +2615,7 @@ export def "v1beta1-dicom-web create-store-instances" [
 #
 # POST /v1beta1/{parent}/fhir
 # operationId: healthcare.projects.locations.datasets.fhirStores.fhir.executeBundle
-export def "v1beta1-fhir create-execute-bundle" [
+export def "healthcare-projects-locations-datasets-fhir-stores-fhir-execute-bundle" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2669,7 +2669,7 @@ export def "v1beta1-fhir create-execute-bundle" [
 #
 # GET /v1beta1/{parent}/fhir/$references
 # operationId: healthcare.projects.locations.datasets.fhirStores.fhir.Resource-incoming-references
-export def "v1beta1-fhir-references get-resource-incoming-references" [
+export def "healthcare-projects-locations-datasets-fhir-stores-fhir-resource-incoming-references" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2722,7 +2722,7 @@ export def "v1beta1-fhir-references get-resource-incoming-references" [
 #
 # GET /v1beta1/{parent}/fhir/ConceptMap/$translate
 # operationId: healthcare.projects.locations.datasets.fhirStores.fhir.ConceptMap-search-translate
-export def "v1beta1-fhir-concept-map-translate list-translate" [
+export def "healthcare-projects-locations-datasets-fhir-stores-fhir-concept-map-search-translate" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2776,7 +2776,7 @@ export def "v1beta1-fhir-concept-map-translate list-translate" [
 #
 # GET /v1beta1/{parent}/fhir/Observation/$lastn
 # operationId: healthcare.projects.locations.datasets.fhirStores.fhir.Observation-lastn
-export def "v1beta1-fhir-observation-lastn get-lastn" [
+export def "healthcare-projects-locations-datasets-fhir-stores-fhir-observation-lastn" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2824,7 +2824,7 @@ export def "v1beta1-fhir-observation-lastn get-lastn" [
 #
 # POST /v1beta1/{parent}/fhir/_search
 # operationId: healthcare.projects.locations.datasets.fhirStores.fhir.search
-export def "v1beta1-fhir-search list" [
+export def "healthcare-projects-locations-datasets-fhir-stores-fhir-search" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2876,7 +2876,7 @@ export def "v1beta1-fhir-search list" [
 #
 # POST /v1beta1/{parent}/fhir/{resourceType}/_search
 # operationId: healthcare.projects.locations.datasets.fhirStores.fhir.search-type
-export def "v1beta1-fhir-search list-type" [
+export def "healthcare-projects-locations-datasets-fhir-stores-fhir-search-type" [
   parent: string
   resource_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2930,7 +2930,7 @@ export def "v1beta1-fhir-search list-type" [
 #
 # DELETE /v1beta1/{parent}/fhir/{type}
 # operationId: healthcare.projects.locations.datasets.fhirStores.fhir.conditionalDelete
-export def "v1beta1-fhir delete-conditional" [
+export def "healthcare-projects-locations-datasets-fhir-stores-fhir-conditional-delete" [
   parent: string
   type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2980,7 +2980,7 @@ export def "v1beta1-fhir delete-conditional" [
 #
 # PATCH /v1beta1/{parent}/fhir/{type}
 # operationId: healthcare.projects.locations.datasets.fhirStores.fhir.conditionalPatch
-export def "v1beta1-fhir update-conditional-by-parent-type" [
+export def "healthcare-projects-locations-datasets-fhir-stores-fhir-conditional-patch" [
   parent: string
   type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3036,7 +3036,7 @@ export def "v1beta1-fhir update-conditional-by-parent-type" [
 #
 # POST /v1beta1/{parent}/fhir/{type}
 # operationId: healthcare.projects.locations.datasets.fhirStores.fhir.create
-export def "v1beta1-fhir create" [
+export def "healthcare-projects-locations-datasets-fhir-stores-fhir-create" [
   parent: string
   type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3092,7 +3092,7 @@ export def "v1beta1-fhir create" [
 #
 # PUT /v1beta1/{parent}/fhir/{type}
 # operationId: healthcare.projects.locations.datasets.fhirStores.fhir.conditionalUpdate
-export def "v1beta1-fhir update-conditional-by-parent-type-1" [
+export def "healthcare-projects-locations-datasets-fhir-stores-fhir-conditional-update" [
   parent: string
   type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3148,7 +3148,7 @@ export def "v1beta1-fhir update-conditional-by-parent-type-1" [
 #
 # POST /v1beta1/{parent}/fhir/{type}/$validate
 # operationId: healthcare.projects.locations.datasets.fhirStores.fhir.Resource-validate
-export def "v1beta1-fhir-validate validate-resource" [
+export def "healthcare-projects-locations-datasets-fhir-stores-fhir-resource-validate" [
   parent: string
   type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3205,7 +3205,7 @@ export def "v1beta1-fhir-validate validate-resource" [
 #
 # GET /v1beta1/{parent}/fhirStores
 # operationId: healthcare.projects.locations.datasets.fhirStores.list
-export def "v1beta1-fhir-stores list" [
+export def "healthcare-projects-locations-datasets-fhir-stores-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3261,7 +3261,7 @@ export def "v1beta1-fhir-stores list" [
 # --searchConfig shape: {searchParameters?: list}
 # --streamConfigs item shape: {bigqueryDestination?: record, deidentifiedStoreDestination?: record, resourceTypes?: list<string>}
 # --validationConfig shape: {disableFhirpathValidation?: bool, disableProfileValidation?: bool, disableReferenceTypeValidation?: bool, disableRequiredFieldValidation?: bool, enabledImplementationGuides?: list<string>}
-export def "v1beta1-fhir-stores create" [
+export def "healthcare-projects-locations-datasets-fhir-stores-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3326,7 +3326,7 @@ export def "v1beta1-fhir-stores create" [
 #
 # GET /v1beta1/{parent}/hl7V2Stores
 # operationId: healthcare.projects.locations.datasets.hl7V2Stores.list
-export def "v1beta1-hl7-v2-stores list" [
+export def "healthcare-projects-locations-datasets-hl7-v2-stores-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3380,7 +3380,7 @@ export def "v1beta1-hl7-v2-stores list" [
 # --notificationConfig shape: {pubsubTopic?: string, sendForBulkImport?: bool}
 # --notificationConfigs item shape: {filter?: string, pubsubTopic?: string}
 # --parserConfig shape: {allowNullHeader?: bool, schema?: record, segmentTerminator?: string, version?: "PARSER_VERSION_UNSPECIFIED"|"V1"|"V2"|"V3"}
-export def "v1beta1-hl7-v2-stores create" [
+export def "healthcare-projects-locations-datasets-hl7-v2-stores-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3438,7 +3438,7 @@ export def "v1beta1-hl7-v2-stores create" [
 #
 # GET /v1beta1/{parent}/messages
 # operationId: healthcare.projects.locations.datasets.hl7V2Stores.messages.list
-export def "v1beta1-messages list" [
+export def "healthcare-projects-locations-datasets-hl7-v2-stores-messages-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3492,7 +3492,7 @@ export def "v1beta1-messages list" [
 # POST /v1beta1/{parent}/messages
 # operationId: healthcare.projects.locations.datasets.hl7V2Stores.messages.create
 # --message shape: {data?: string, labels?: record, messageType?: string, name?: string, parsedData?: record, patientIds?: list, schematizedData?: record, sendFacility?: string, sendTime?: string}
-export def "v1beta1-messages create" [
+export def "healthcare-projects-locations-datasets-hl7-v2-stores-messages-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3544,7 +3544,7 @@ export def "v1beta1-messages create" [
 #
 # GET /v1beta1/{parent}/messages:batchGet
 # operationId: healthcare.projects.locations.datasets.hl7V2Stores.messages.batchGet
-export def "v1beta1-messages-batch-get get" [
+export def "healthcare-projects-locations-datasets-hl7-v2-stores-messages-batch-get" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3595,7 +3595,7 @@ export def "v1beta1-messages-batch-get get" [
 # POST /v1beta1/{parent}/messages:ingest
 # operationId: healthcare.projects.locations.datasets.hl7V2Stores.messages.ingest
 # --message shape: {data?: string, labels?: record, messageType?: string, name?: string, parsedData?: record, patientIds?: list, schematizedData?: record, sendFacility?: string, sendTime?: string}
-export def "v1beta1-messages-ingest create" [
+export def "healthcare-projects-locations-datasets-hl7-v2-stores-messages-ingest" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3647,7 +3647,7 @@ export def "v1beta1-messages-ingest create" [
 #
 # GET /v1beta1/{parent}/userDataMappings
 # operationId: healthcare.projects.locations.datasets.consentStores.userDataMappings.list
-export def "v1beta1-user-data-mappings list" [
+export def "healthcare-projects-locations-datasets-consent-stores-user-data-mappings-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3699,7 +3699,7 @@ export def "v1beta1-user-data-mappings list" [
 # POST /v1beta1/{parent}/userDataMappings
 # operationId: healthcare.projects.locations.datasets.consentStores.userDataMappings.create
 # --resourceAttributes item shape: {attributeDefinitionId?: string, values?: list<string>}
-export def "v1beta1-user-data-mappings create" [
+export def "healthcare-projects-locations-datasets-consent-stores-user-data-mappings-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3754,7 +3754,7 @@ export def "v1beta1-user-data-mappings create" [
 #
 # GET /v1beta1/{resource}:getIamPolicy
 # operationId: healthcare.projects.locations.datasets.hl7V2Stores.getIamPolicy
-export def "v1beta1 get-iam-policy" [
+export def "healthcare-projects-locations-datasets-hl7-v2-stores-get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3804,7 +3804,7 @@ export def "v1beta1 get-iam-policy" [
 # POST /v1beta1/{resource}:setIamPolicy
 # operationId: healthcare.projects.locations.datasets.hl7V2Stores.setIamPolicy
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
-export def "v1beta1 update-iam-policy" [
+export def "healthcare-projects-locations-datasets-hl7-v2-stores-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3857,7 +3857,7 @@ export def "v1beta1 update-iam-policy" [
 #
 # POST /v1beta1/{resource}:testIamPermissions
 # operationId: healthcare.projects.locations.datasets.hl7V2Stores.testIamPermissions
-export def "v1beta1 test-iam-permissions" [
+export def "healthcare-projects-locations-datasets-hl7-v2-stores-test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3910,7 +3910,7 @@ export def "v1beta1 test-iam-permissions" [
 # POST /v1beta1/{sourceDataset}:deidentify
 # operationId: healthcare.projects.locations.datasets.deidentify
 # --config shape: {annotation?: record, dicom?: record, dicomTagConfig?: record, fhir?: record, fhirFieldConfig?: record, image?: record, operationMetadata?: record, text?: record}
-export def "v1beta1 create-deidentify-by-source-dataset" [
+export def "healthcare-projects-locations-datasets-deidentify" [
   source_dataset: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3966,7 +3966,7 @@ export def "v1beta1 create-deidentify-by-source-dataset" [
 # operationId: healthcare.projects.locations.datasets.fhirStores.deidentify
 # --config shape: {annotation?: record, dicom?: record, dicomTagConfig?: record, fhir?: record, fhirFieldConfig?: record, image?: record, operationMetadata?: record, text?: record}
 # --resourceFilter shape: {resources?: record}
-export def "v1beta1 create-deidentify-by-source-store" [
+export def "healthcare-projects-locations-datasets-fhir-stores-deidentify" [
   source_store: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

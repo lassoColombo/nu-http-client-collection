@@ -97,7 +97,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "vversion-areas list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "areas-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -121,7 +121,7 @@ export def commands []: nothing -> table {
 #
 # GET /v{version}/areas
 # operationId: Areas_Get
-export def "vversion-areas list" [
+export def "areas-get" [
   version: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -156,7 +156,7 @@ export def "vversion-areas list" [
 # Returns details of selected area
 #
 # GET /v{version}/areas/{area_Ids}
-export def "vversion-areas get" [
+export def "get-v-version-areas-area-ids" [
   version: string
   area_ids: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -194,7 +194,7 @@ export def "vversion-areas get" [
 #
 # GET /v{version}/quality/daily
 # operationId: Quality_GetDailyDataQualityForSite
-export def "vversion-quality-daily get-data-for-site" [
+export def "quality-get-daily-data-quality-for-site" [
   version: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -234,7 +234,7 @@ export def "vversion-quality-daily get-data-for-site" [
 #
 # GET /v{version}/quality/overall
 # operationId: Quality_GetOverallDataQualityForSites
-export def "vversion-quality-overall get-data-for-sites" [
+export def "quality-get-overall-data-quality-for-sites" [
   version: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -274,7 +274,7 @@ export def "vversion-quality-overall get-data-for-sites" [
 #
 # GET /v{version}/reports/{report_type}
 # operationId: Reports_Index
-export def "vversion-reports get-index" [
+export def "reports-index" [
   version: string
   report_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -318,7 +318,7 @@ export def "vversion-reports get-index" [
 # Gets the daily report.
 #
 # GET /v{version}/reports/{start_date}/to/{end_date}/{report_type}
-export def "vversion-reports-to get" [
+export def "get-v-version-reports-start-date-to-end-date-report-type" [
   version: string
   start_date: string
   end_date: string
@@ -365,7 +365,7 @@ export def "vversion-reports-to get" [
 #
 # GET /v{version}/sites
 # operationId: Sites_Index
-export def "vversion-sites get-index" [
+export def "sites-index" [
   version: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -400,7 +400,7 @@ export def "vversion-sites get-index" [
 # Get selected sites
 #
 # GET /v{version}/sites/{site_Ids}
-export def "vversion-sites get" [
+export def "get-v-version-sites-site-ids" [
   version: string
   site_ids: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -438,7 +438,7 @@ export def "vversion-sites get" [
 #
 # GET /v{version}/sitetypes
 # operationId: SiteTypes_Index
-export def "vversion-sitetypes get-site-types-index" [
+export def "site-types-index" [
   version: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -474,7 +474,7 @@ export def "vversion-sitetypes get-site-types-index" [
 #
 # GET /v{version}/sitetypes/{siteType_Id}/sites
 # operationId: SiteTypes_GetSitesForPublicFacingAPI
-export def "vversion-sitetypes-sites get-types-for-public-facing" [
+export def "site-types-get-sites-for-public-facing-api" [
   version: string
   site_type_id: int
   --base-url(-b): string@base-url-completer # API base URL

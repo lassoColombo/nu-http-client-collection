@@ -118,7 +118,7 @@ def type-completer [] { ["PullRequest" "RepositoryAnalysis"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associations create-associate-repository" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associate-repository" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -144,7 +144,7 @@ export def commands []: nothing -> table {
 # operationId: AssociateRepository
 # --Repository shape: {CodeCommit?: any, Bitbucket?: any, GitHubEnterpriseServer?: any, S3Bucket?: record}
 # --KMSKeyDetails shape: {KMSKeyId?: any, EncryptionOption?: any}
-export def "associations create-associate-repository" [
+export def "associate-repository" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -194,7 +194,7 @@ export def "associations create-associate-repository" [
 #
 # GET /associations
 # operationId: ListRepositoryAssociations
-export def "associations list-repository" [
+export def "list-repository-associations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -245,7 +245,7 @@ export def "associations list-repository" [
 # POST /codereviews
 # operationId: CreateCodeReview
 # --Type shape: {RepositoryAnalysis?: any, AnalysisTypes?: any}
-export def "codereviews create-code-review" [
+export def "create-code-review" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -295,7 +295,7 @@ export def "codereviews create-code-review" [
 #
 # GET /codereviews/{CodeReviewArn}
 # operationId: DescribeCodeReview
-export def "codereviews get-code-review" [
+export def "describe-code-review" [
   code_review_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -340,7 +340,7 @@ export def "codereviews get-code-review" [
 #
 # GET /feedback/{CodeReviewArn}
 # operationId: DescribeRecommendationFeedback
-export def "feedback get-recommendation" [
+export def "describe-recommendation-feedback" [
   code_review_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -388,7 +388,7 @@ export def "feedback get-recommendation" [
 #
 # GET /associations/{AssociationArn}
 # operationId: DescribeRepositoryAssociation
-export def "associations get-repository" [
+export def "describe-repository-association" [
   association_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -433,7 +433,7 @@ export def "associations get-repository" [
 #
 # DELETE /associations/{AssociationArn}
 # operationId: DisassociateRepository
-export def "associations delete-disassociate-repository" [
+export def "disassociate-repository" [
   association_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -478,7 +478,7 @@ export def "associations delete-disassociate-repository" [
 #
 # GET /codereviews
 # operationId: ListCodeReviews
-export def "codereviews list-code-reviews" [
+export def "list-code-reviews" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -528,7 +528,7 @@ export def "codereviews list-code-reviews" [
 #
 # GET /feedback/{CodeReviewArn}/RecommendationFeedback
 # operationId: ListRecommendationFeedback
-export def "feedback-recommendation-feedback list" [
+export def "list-recommendation-feedback" [
   code_review_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -578,7 +578,7 @@ export def "feedback-recommendation-feedback list" [
 #
 # GET /codereviews/{CodeReviewArn}/Recommendations
 # operationId: ListRecommendations
-export def "codereviews-recommendations list" [
+export def "list-recommendations" [
   code_review_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -626,7 +626,7 @@ export def "codereviews-recommendations list" [
 #
 # GET /tags/{resourceArn}
 # operationId: ListTagsForResource
-export def "tags list-for-resource" [
+export def "list-tags-for-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -671,7 +671,7 @@ export def "tags list-for-resource" [
 #
 # POST /tags/{resourceArn}
 # operationId: TagResource
-export def "tags tag-resource" [
+export def "tag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -720,7 +720,7 @@ export def "tags tag-resource" [
 #
 # PUT /feedback
 # operationId: PutRecommendationFeedback
-export def "feedback update-recommendation" [
+export def "put-recommendation-feedback" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -769,7 +769,7 @@ export def "feedback update-recommendation" [
 #
 # DELETE /tags/{resourceArn}
 # operationId: UntagResource
-export def "tags untag-resource" [
+export def "untag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

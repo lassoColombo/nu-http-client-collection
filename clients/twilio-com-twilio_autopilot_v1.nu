@@ -111,7 +111,7 @@ def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "assistants list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-assistant" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -134,7 +134,7 @@ export def commands []: nothing -> table {
 # GET /v1/Assistants
 #
 # operationId: ListAssistant
-export def "assistants list" [
+export def "list-assistant" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -171,7 +171,7 @@ export def "assistants list" [
 # POST /v1/Assistants
 #
 # operationId: CreateAssistant
-export def "assistants create" [
+export def "create-assistant" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -215,7 +215,7 @@ export def "assistants create" [
 # POST /v1/Assistants/Restore
 #
 # operationId: UpdateRestoreAssistant
-export def "assistants-restore update" [
+export def "update-restore-assistant" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -253,7 +253,7 @@ export def "assistants-restore update" [
 # GET /v1/Assistants/{AssistantSid}/Defaults
 #
 # operationId: FetchDefaults
-export def "assistants-defaults get" [
+export def "fetch-defaults" [
   assistant_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -288,7 +288,7 @@ export def "assistants-defaults get" [
 # POST /v1/Assistants/{AssistantSid}/Defaults
 #
 # operationId: UpdateDefaults
-export def "assistants-defaults update" [
+export def "update-defaults" [
   assistant_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -328,7 +328,7 @@ export def "assistants-defaults update" [
 # GET /v1/Assistants/{AssistantSid}/Dialogues/{Sid}
 #
 # operationId: FetchDialogue
-export def "assistants-dialogues get" [
+export def "fetch-dialogue" [
   assistant_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -365,7 +365,7 @@ export def "assistants-dialogues get" [
 # GET /v1/Assistants/{AssistantSid}/FieldTypes
 #
 # operationId: ListFieldType
-export def "assistants-field-types list" [
+export def "list-field-type" [
   assistant_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -404,7 +404,7 @@ export def "assistants-field-types list" [
 # POST /v1/Assistants/{AssistantSid}/FieldTypes
 #
 # operationId: CreateFieldType
-export def "assistants-field-types create" [
+export def "create-field-type" [
   assistant_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -445,7 +445,7 @@ export def "assistants-field-types create" [
 # GET /v1/Assistants/{AssistantSid}/FieldTypes/{FieldTypeSid}/FieldValues
 #
 # operationId: ListFieldValue
-export def "assistants-field-types-field-values list" [
+export def "list-field-value" [
   assistant_sid: string
   field_type_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -487,7 +487,7 @@ export def "assistants-field-types-field-values list" [
 # POST /v1/Assistants/{AssistantSid}/FieldTypes/{FieldTypeSid}/FieldValues
 #
 # operationId: CreateFieldValue
-export def "assistants-field-types-field-values create" [
+export def "create-field-value" [
   assistant_sid: string
   field_type_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -531,7 +531,7 @@ export def "assistants-field-types-field-values create" [
 # DELETE /v1/Assistants/{AssistantSid}/FieldTypes/{FieldTypeSid}/FieldValues/{Sid}
 #
 # operationId: DeleteFieldValue
-export def "assistants-field-types-field-values delete" [
+export def "delete-field-value" [
   assistant_sid: string
   field_type_sid: string
   sid: string
@@ -570,7 +570,7 @@ export def "assistants-field-types-field-values delete" [
 # GET /v1/Assistants/{AssistantSid}/FieldTypes/{FieldTypeSid}/FieldValues/{Sid}
 #
 # operationId: FetchFieldValue
-export def "assistants-field-types-field-values get" [
+export def "fetch-field-value" [
   assistant_sid: string
   field_type_sid: string
   sid: string
@@ -609,7 +609,7 @@ export def "assistants-field-types-field-values get" [
 # DELETE /v1/Assistants/{AssistantSid}/FieldTypes/{Sid}
 #
 # operationId: DeleteFieldType
-export def "assistants-field-types delete" [
+export def "delete-field-type" [
   assistant_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -646,7 +646,7 @@ export def "assistants-field-types delete" [
 # GET /v1/Assistants/{AssistantSid}/FieldTypes/{Sid}
 #
 # operationId: FetchFieldType
-export def "assistants-field-types get" [
+export def "fetch-field-type" [
   assistant_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -683,7 +683,7 @@ export def "assistants-field-types get" [
 # POST /v1/Assistants/{AssistantSid}/FieldTypes/{Sid}
 #
 # operationId: UpdateFieldType
-export def "assistants-field-types update" [
+export def "update-field-type" [
   assistant_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -726,7 +726,7 @@ export def "assistants-field-types update" [
 # GET /v1/Assistants/{AssistantSid}/ModelBuilds
 #
 # operationId: ListModelBuild
-export def "assistants-model-builds list" [
+export def "list-model-build" [
   assistant_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -765,7 +765,7 @@ export def "assistants-model-builds list" [
 # POST /v1/Assistants/{AssistantSid}/ModelBuilds
 #
 # operationId: CreateModelBuild
-export def "assistants-model-builds create" [
+export def "create-model-build" [
   assistant_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -806,7 +806,7 @@ export def "assistants-model-builds create" [
 # DELETE /v1/Assistants/{AssistantSid}/ModelBuilds/{Sid}
 #
 # operationId: DeleteModelBuild
-export def "assistants-model-builds delete" [
+export def "delete-model-build" [
   assistant_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -843,7 +843,7 @@ export def "assistants-model-builds delete" [
 # GET /v1/Assistants/{AssistantSid}/ModelBuilds/{Sid}
 #
 # operationId: FetchModelBuild
-export def "assistants-model-builds get" [
+export def "fetch-model-build" [
   assistant_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -880,7 +880,7 @@ export def "assistants-model-builds get" [
 # POST /v1/Assistants/{AssistantSid}/ModelBuilds/{Sid}
 #
 # operationId: UpdateModelBuild
-export def "assistants-model-builds update" [
+export def "update-model-build" [
   assistant_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -922,7 +922,7 @@ export def "assistants-model-builds update" [
 # GET /v1/Assistants/{AssistantSid}/Queries
 #
 # operationId: ListQuery
-export def "assistants-queries list" [
+export def "list-query" [
   assistant_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -965,7 +965,7 @@ export def "assistants-queries list" [
 # POST /v1/Assistants/{AssistantSid}/Queries
 #
 # operationId: CreateQuery
-export def "assistants-queries create-list" [
+export def "create-query" [
   assistant_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1008,7 +1008,7 @@ export def "assistants-queries create-list" [
 # DELETE /v1/Assistants/{AssistantSid}/Queries/{Sid}
 #
 # operationId: DeleteQuery
-export def "assistants-queries delete-list" [
+export def "delete-query" [
   assistant_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1045,7 +1045,7 @@ export def "assistants-queries delete-list" [
 # GET /v1/Assistants/{AssistantSid}/Queries/{Sid}
 #
 # operationId: FetchQuery
-export def "assistants-queries get-list" [
+export def "fetch-query" [
   assistant_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1082,7 +1082,7 @@ export def "assistants-queries get-list" [
 # POST /v1/Assistants/{AssistantSid}/Queries/{Sid}
 #
 # operationId: UpdateQuery
-export def "assistants-queries update-list" [
+export def "update-query" [
   assistant_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1126,7 +1126,7 @@ export def "assistants-queries update-list" [
 #
 # GET /v1/Assistants/{AssistantSid}/StyleSheet
 # operationId: FetchStyleSheet
-export def "assistants-style-sheet get" [
+export def "fetch-style-sheet" [
   assistant_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1162,7 +1162,7 @@ export def "assistants-style-sheet get" [
 #
 # POST /v1/Assistants/{AssistantSid}/StyleSheet
 # operationId: UpdateStyleSheet
-export def "assistants-style-sheet update" [
+export def "update-style-sheet" [
   assistant_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1202,7 +1202,7 @@ export def "assistants-style-sheet update" [
 # GET /v1/Assistants/{AssistantSid}/Tasks
 #
 # operationId: ListTask
-export def "assistants-tasks list" [
+export def "list-task" [
   assistant_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1241,7 +1241,7 @@ export def "assistants-tasks list" [
 # POST /v1/Assistants/{AssistantSid}/Tasks
 #
 # operationId: CreateTask
-export def "assistants-tasks create" [
+export def "create-task" [
   assistant_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1284,7 +1284,7 @@ export def "assistants-tasks create" [
 # DELETE /v1/Assistants/{AssistantSid}/Tasks/{Sid}
 #
 # operationId: DeleteTask
-export def "assistants-tasks delete" [
+export def "delete-task" [
   assistant_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1321,7 +1321,7 @@ export def "assistants-tasks delete" [
 # GET /v1/Assistants/{AssistantSid}/Tasks/{Sid}
 #
 # operationId: FetchTask
-export def "assistants-tasks get" [
+export def "fetch-task" [
   assistant_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1358,7 +1358,7 @@ export def "assistants-tasks get" [
 # POST /v1/Assistants/{AssistantSid}/Tasks/{Sid}
 #
 # operationId: UpdateTask
-export def "assistants-tasks update" [
+export def "update-task" [
   assistant_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1404,7 +1404,7 @@ export def "assistants-tasks update" [
 #
 # GET /v1/Assistants/{AssistantSid}/Tasks/{TaskSid}/Actions
 # operationId: FetchTaskActions
-export def "assistants-tasks-actions get" [
+export def "fetch-task-actions" [
   assistant_sid: string
   task_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1442,7 +1442,7 @@ export def "assistants-tasks-actions get" [
 #
 # POST /v1/Assistants/{AssistantSid}/Tasks/{TaskSid}/Actions
 # operationId: UpdateTaskActions
-export def "assistants-tasks-actions update" [
+export def "update-task-actions" [
   assistant_sid: string
   task_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1484,7 +1484,7 @@ export def "assistants-tasks-actions update" [
 # GET /v1/Assistants/{AssistantSid}/Tasks/{TaskSid}/Fields
 #
 # operationId: ListField
-export def "assistants-tasks-fields list" [
+export def "list-field" [
   assistant_sid: string
   task_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1525,7 +1525,7 @@ export def "assistants-tasks-fields list" [
 # POST /v1/Assistants/{AssistantSid}/Tasks/{TaskSid}/Fields
 #
 # operationId: CreateField
-export def "assistants-tasks-fields create" [
+export def "create-field" [
   assistant_sid: string
   task_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1568,7 +1568,7 @@ export def "assistants-tasks-fields create" [
 # DELETE /v1/Assistants/{AssistantSid}/Tasks/{TaskSid}/Fields/{Sid}
 #
 # operationId: DeleteField
-export def "assistants-tasks-fields delete" [
+export def "delete-field" [
   assistant_sid: string
   task_sid: string
   sid: string
@@ -1607,7 +1607,7 @@ export def "assistants-tasks-fields delete" [
 # GET /v1/Assistants/{AssistantSid}/Tasks/{TaskSid}/Fields/{Sid}
 #
 # operationId: FetchField
-export def "assistants-tasks-fields get" [
+export def "fetch-field" [
   assistant_sid: string
   task_sid: string
   sid: string
@@ -1646,7 +1646,7 @@ export def "assistants-tasks-fields get" [
 # GET /v1/Assistants/{AssistantSid}/Tasks/{TaskSid}/Samples
 #
 # operationId: ListSample
-export def "assistants-tasks-samples list" [
+export def "list-sample" [
   assistant_sid: string
   task_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1688,7 +1688,7 @@ export def "assistants-tasks-samples list" [
 # POST /v1/Assistants/{AssistantSid}/Tasks/{TaskSid}/Samples
 #
 # operationId: CreateSample
-export def "assistants-tasks-samples create" [
+export def "create-sample" [
   assistant_sid: string
   task_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1732,7 +1732,7 @@ export def "assistants-tasks-samples create" [
 # DELETE /v1/Assistants/{AssistantSid}/Tasks/{TaskSid}/Samples/{Sid}
 #
 # operationId: DeleteSample
-export def "assistants-tasks-samples delete" [
+export def "delete-sample" [
   assistant_sid: string
   task_sid: string
   sid: string
@@ -1771,7 +1771,7 @@ export def "assistants-tasks-samples delete" [
 # GET /v1/Assistants/{AssistantSid}/Tasks/{TaskSid}/Samples/{Sid}
 #
 # operationId: FetchSample
-export def "assistants-tasks-samples get" [
+export def "fetch-sample" [
   assistant_sid: string
   task_sid: string
   sid: string
@@ -1810,7 +1810,7 @@ export def "assistants-tasks-samples get" [
 # POST /v1/Assistants/{AssistantSid}/Tasks/{TaskSid}/Samples/{Sid}
 #
 # operationId: UpdateSample
-export def "assistants-tasks-samples update" [
+export def "update-sample" [
   assistant_sid: string
   task_sid: string
   sid: string
@@ -1856,7 +1856,7 @@ export def "assistants-tasks-samples update" [
 # GET /v1/Assistants/{AssistantSid}/Tasks/{TaskSid}/Statistics
 #
 # operationId: FetchTaskStatistics
-export def "assistants-tasks-statistics get" [
+export def "fetch-task-statistics" [
   assistant_sid: string
   task_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1893,7 +1893,7 @@ export def "assistants-tasks-statistics get" [
 # GET /v1/Assistants/{AssistantSid}/Webhooks
 #
 # operationId: ListWebhook
-export def "assistants-webhooks list" [
+export def "list-webhook" [
   assistant_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1932,7 +1932,7 @@ export def "assistants-webhooks list" [
 # POST /v1/Assistants/{AssistantSid}/Webhooks
 #
 # operationId: CreateWebhook
-export def "assistants-webhooks create" [
+export def "create-webhook" [
   assistant_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1975,7 +1975,7 @@ export def "assistants-webhooks create" [
 # DELETE /v1/Assistants/{AssistantSid}/Webhooks/{Sid}
 #
 # operationId: DeleteWebhook
-export def "assistants-webhooks delete" [
+export def "delete-webhook" [
   assistant_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2012,7 +2012,7 @@ export def "assistants-webhooks delete" [
 # GET /v1/Assistants/{AssistantSid}/Webhooks/{Sid}
 #
 # operationId: FetchWebhook
-export def "assistants-webhooks get" [
+export def "fetch-webhook" [
   assistant_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2049,7 +2049,7 @@ export def "assistants-webhooks get" [
 # POST /v1/Assistants/{AssistantSid}/Webhooks/{Sid}
 #
 # operationId: UpdateWebhook
-export def "assistants-webhooks update" [
+export def "update-webhook" [
   assistant_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2094,7 +2094,7 @@ export def "assistants-webhooks update" [
 # DELETE /v1/Assistants/{Sid}
 #
 # operationId: DeleteAssistant
-export def "assistants delete" [
+export def "delete-assistant" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2129,7 +2129,7 @@ export def "assistants delete" [
 # GET /v1/Assistants/{Sid}
 #
 # operationId: FetchAssistant
-export def "assistants get" [
+export def "fetch-assistant" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2164,7 +2164,7 @@ export def "assistants get" [
 # POST /v1/Assistants/{Sid}
 #
 # operationId: UpdateAssistant
-export def "assistants update" [
+export def "update-assistant" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

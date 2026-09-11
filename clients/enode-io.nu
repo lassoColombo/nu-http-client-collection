@@ -121,7 +121,7 @@ def properties-completer [] { ["BATTERY_LEVEL" "IS_CHARGING" "IS_CHARGING_REASON
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "chargers list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-chargers" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -145,7 +145,7 @@ export def commands []: nothing -> table {
 #
 # GET /chargers
 # operationId: getChargers
-export def "chargers list" [
+export def "get-chargers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -181,7 +181,7 @@ export def "chargers list" [
 #
 # GET /chargers/{chargerId}
 # operationId: getCharger
-export def "chargers get" [
+export def "get-charger" [
   charger_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -219,7 +219,7 @@ export def "chargers get" [
 #
 # POST /chargers/{chargerId}/charging
 # operationId: controlChargerCharging
-export def "chargers-charging create-control" [
+export def "control-charger-charging" [
   charger_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -259,7 +259,7 @@ export def "chargers-charging create-control" [
 #
 # GET /charging-locations
 # operationId: getCharginglocations
-export def "charging-locations list" [
+export def "get-charginglocations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -293,7 +293,7 @@ export def "charging-locations list" [
 #
 # POST /charging-locations
 # operationId: postCharginglocations
-export def "charging-locations create-charginglocations" [
+export def "post-charginglocations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -333,7 +333,7 @@ export def "charging-locations create-charginglocations" [
 #
 # DELETE /charging-locations/{chargingLocationId}
 # operationId: deleteCharginglocationsCharginglocationid
-export def "charging-locations delete-charginglocations" [
+export def "delete-charginglocations-charginglocationid" [
   charging_location_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -369,7 +369,7 @@ export def "charging-locations delete-charginglocations" [
 #
 # GET /charging-locations/{chargingLocationId}
 # operationId: getCharginglocationsCharginglocationid
-export def "charging-locations get-charginglocations" [
+export def "get-charginglocations-charginglocationid" [
   charging_location_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -405,7 +405,7 @@ export def "charging-locations get-charginglocations" [
 #
 # PUT /charging-locations/{chargingLocationId}
 # operationId: putCharginglocationsCharginglocationid
-export def "charging-locations update-charginglocations" [
+export def "put-charginglocations-charginglocationid" [
   charging_location_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -447,7 +447,7 @@ export def "charging-locations update-charginglocations" [
 #
 # GET /health/ready
 # operationId: getHealthReady
-export def "health-ready get" [
+export def "get-health-ready" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -481,7 +481,7 @@ export def "health-ready get" [
 #
 # GET /health/vendors
 # operationId: getHealthVendors
-export def "health-vendors get" [
+export def "get-health-vendors" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -515,7 +515,7 @@ export def "health-vendors get" [
 #
 # GET /me
 # operationId: getMe
-export def "me get" [
+export def "get-me" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -549,7 +549,7 @@ export def "me get" [
 #
 # DELETE /me/vendors/{vendor}
 # operationId: disconnectVendor
-export def "me-vendors delete-disconnect" [
+export def "disconnect-vendor" [
   vendor: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -585,7 +585,7 @@ export def "me-vendors delete-disconnect" [
 #
 # GET /statistics/charging
 # operationId: getStatisticsCharging
-export def "statistics-charging get" [
+export def "get-statistics-charging" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -625,7 +625,7 @@ export def "statistics-charging get" [
 #
 # DELETE /users/{userId}
 # operationId: deleteUsersUserid
-export def "users delete" [
+export def "delete-users-userid" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -661,7 +661,7 @@ export def "users delete" [
 #
 # DELETE /users/{userId}/authorization
 # operationId: deleteUsersUseridAuthorization
-export def "users-authorization delete" [
+export def "delete-users-userid-authorization" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -697,7 +697,7 @@ export def "users-authorization delete" [
 #
 # POST /users/{userId}/link
 # operationId: postUsersUseridLink
-export def "users-link create" [
+export def "post-users-userid-link" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -741,7 +741,7 @@ export def "users-link create" [
 #
 # GET /vehicles
 # operationId: getVehicles
-export def "vehicles list" [
+export def "get-vehicles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -777,7 +777,7 @@ export def "vehicles list" [
 #
 # GET /vehicles/{vehicleId}
 # operationId: getVehiclesVehicleid
-export def "vehicles get" [
+export def "get-vehicles-vehicleid" [
   vehicle_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -815,7 +815,7 @@ export def "vehicles get" [
 #
 # GET /vehicles/{vehicleId}/charge-state
 # operationId: getVehicleChargestate
-export def "vehicles-charge-state get-chargestate" [
+export def "get-vehicle-chargestate" [
   vehicle_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -851,7 +851,7 @@ export def "vehicles-charge-state get-chargestate" [
 #
 # POST /vehicles/{vehicleId}/charging
 # operationId: postVehiclesVehicleidCharging
-export def "vehicles-charging create" [
+export def "post-vehicles-vehicleid-charging" [
   vehicle_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -887,7 +887,7 @@ export def "vehicles-charging create" [
 #
 # GET /vehicles/{vehicleId}/information
 # operationId: getVehiclesVehicleidInformation
-export def "vehicles-information get" [
+export def "get-vehicles-vehicleid-information" [
   vehicle_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -923,7 +923,7 @@ export def "vehicles-information get" [
 #
 # GET /vehicles/{vehicleId}/location
 # operationId: getVehiclesVehicleidLocation
-export def "vehicles-location get" [
+export def "get-vehicles-vehicleid-location" [
   vehicle_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -959,7 +959,7 @@ export def "vehicles-location get" [
 #
 # GET /vehicles/{vehicleId}/odometer
 # operationId: getVehiclesVehicleidOdometer
-export def "vehicles-odometer get" [
+export def "get-vehicles-vehicleid-odometer" [
   vehicle_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -995,7 +995,7 @@ export def "vehicles-odometer get" [
 #
 # GET /vehicles/{vehicleId}/smart-charging-policy
 # operationId: getVehiclesVehicleidSmartchargingpolicy
-export def "vehicles-smart-charging-policy get-smartchargingpolicy" [
+export def "get-vehicles-vehicleid-smartchargingpolicy" [
   vehicle_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1031,7 +1031,7 @@ export def "vehicles-smart-charging-policy get-smartchargingpolicy" [
 #
 # PUT /vehicles/{vehicleId}/smart-charging-policy
 # operationId: putVehiclesVehicleidSmartchargingpolicy
-export def "vehicles-smart-charging-policy update-smartchargingpolicy" [
+export def "put-vehicles-vehicleid-smartchargingpolicy" [
   vehicle_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1072,7 +1072,7 @@ export def "vehicles-smart-charging-policy update-smartchargingpolicy" [
 #
 # POST /vehicles/{vehicleId}/watch
 # operationId: postVehiclesVehicleidWatch
-export def "vehicles-watch create" [
+export def "post-vehicles-vehicleid-watch" [
   vehicle_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1112,7 +1112,7 @@ export def "vehicles-watch create" [
 #
 # PUT /webhooks/firehose
 # operationId: putWebhooksFirehose
-export def "webhooks-firehose update" [
+export def "put-webhooks-firehose" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1151,7 +1151,7 @@ export def "webhooks-firehose update" [
 #
 # POST /webhooks/firehose/test
 # operationId: postWebhooksFirehoseTest
-export def "webhooks-firehose-test create" [
+export def "post-webhooks-firehose-test" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-fabric-admin-fabric-locations-ip-pools list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "ip-pools-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -128,7 +128,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Fabric.Admin/fabricLocations/{location}/ipPools
 # operationId: IpPools_List
-export def "subscriptions-resource-groups-providers-microsoft-fabric-admin-fabric-locations-ip-pools list" [
+export def "ip-pools-list" [
   subscription_id: string
   resource_group_name: string
   location: string
@@ -171,7 +171,7 @@ export def "subscriptions-resource-groups-providers-microsoft-fabric-admin-fabri
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Fabric.Admin/fabricLocations/{location}/ipPools/{ipPool}
 # operationId: IpPools_Get
-export def "subscriptions-resource-groups-providers-microsoft-fabric-admin-fabric-locations-ip-pools get" [
+export def "ip-pools-get" [
   subscription_id: string
   resource_group_name: string
   location: string
@@ -216,7 +216,7 @@ export def "subscriptions-resource-groups-providers-microsoft-fabric-admin-fabri
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Fabric.Admin/fabricLocations/{location}/ipPools/{ipPool}
 # operationId: IpPools_CreateOrUpdate
 # --properties shape: {addressPrefix?: string, endIpAddress?: string, numberOfAllocatedIpAddresses?: int, numberOfIpAddresses?: int, numberOfIpAddressesInTransition?: int, startIpAddress?: string}
-export def "subscriptions-resource-groups-providers-microsoft-fabric-admin-fabric-locations-ip-pools create-or-update" [
+export def "ip-pools-create-or-update" [
   subscription_id: string
   resource_group_name: string
   location: string

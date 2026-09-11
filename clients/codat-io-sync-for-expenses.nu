@@ -132,7 +132,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "companies-sync-expenses-config get-company-configuration" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-company-configuration" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -156,7 +156,7 @@ export def commands []: nothing -> table {
 #
 # GET /companies/{companyId}/sync/expenses/config
 # operationId: get-company-configuration
-export def "companies-sync-expenses-config get-company-configuration" [
+export def "get-company-configuration" [
   company_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -195,7 +195,7 @@ export def "companies-sync-expenses-config get-company-configuration" [
 # --bankAccount shape: {id?: string}
 # --customer shape: {id?: string}
 # --supplier shape: {id?: string}
-export def "companies-sync-expenses-config create-save-company-configuration" [
+export def "save-company-configuration" [
   company_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -237,7 +237,7 @@ export def "companies-sync-expenses-config create-save-company-configuration" [
 #
 # POST /companies/{companyId}/sync/expenses/connections/partnerExpense
 # operationId: create-partner-expense-connection
-export def "companies-sync-expenses-connections-partner-expense create" [
+export def "create-partner-expense-connection" [
   company_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -274,7 +274,7 @@ export def "companies-sync-expenses-connections-partner-expense create" [
 # POST /companies/{companyId}/sync/expenses/data/expense-transactions
 # operationId: create-expense-dataset
 # --items item shape: {currency: string, currencyRate?: float, id: string, issueDate: string, lines?: list, merchantName?: string, notes?: string, type: "Payment"|"Refund"|"Reward"|"Chargeback"|"TransferIn"|"TransferOut"|"AdjustmentIn"|"AdjustmentOut"}
-export def "companies-sync-expenses-data-expense-transactions create-dataset" [
+export def "create-expense-dataset" [
   company_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -314,7 +314,7 @@ export def "companies-sync-expenses-data-expense-transactions create-dataset" [
 #
 # GET /companies/{companyId}/sync/expenses/mappingOptions
 # operationId: get-mapping-options
-export def "companies-sync-expenses-mapping-options get" [
+export def "get-mapping-options" [
   company_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -350,7 +350,7 @@ export def "companies-sync-expenses-mapping-options get" [
 #
 # POST /companies/{companyId}/sync/expenses/syncs
 # operationId: intiate-sync
-export def "companies-sync-expenses-syncs sync-intiate" [
+export def "intiate-sync" [
   company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -390,7 +390,7 @@ export def "companies-sync-expenses-syncs sync-intiate" [
 #
 # GET /companies/{companyId}/sync/expenses/syncs/lastSuccessful/status
 # operationId: get-last-successful-sync
-export def "companies-sync-expenses-syncs-last-successful-status get" [
+export def "get-last-successful-sync" [
   company_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -426,7 +426,7 @@ export def "companies-sync-expenses-syncs-last-successful-status get" [
 #
 # GET /companies/{companyId}/sync/expenses/syncs/latest/status
 # operationId: get-latest-sync
-export def "companies-sync-expenses-syncs-latest-status get" [
+export def "get-latest-sync" [
   company_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -462,7 +462,7 @@ export def "companies-sync-expenses-syncs-latest-status get" [
 #
 # GET /companies/{companyId}/sync/expenses/syncs/list/status
 # operationId: list-syncs
-export def "companies-sync-expenses-syncs-list-status list" [
+export def "list-syncs" [
   company_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -498,7 +498,7 @@ export def "companies-sync-expenses-syncs-list-status list" [
 #
 # GET /companies/{companyId}/sync/expenses/syncs/{syncId}/status
 # operationId: get-sync-by-id
-export def "companies-sync-expenses-syncs-status get" [
+export def "get-sync-by-id" [
   company_id: any
   sync_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -536,7 +536,7 @@ export def "companies-sync-expenses-syncs-status get" [
 #
 # GET /companies/{companyId}/sync/expenses/syncs/{syncId}/transactions
 # operationId: list-sync-transactions
-export def "companies-sync-expenses-syncs-transactions list" [
+export def "list-sync-transactions" [
   company_id: any
   sync_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -577,7 +577,7 @@ export def "companies-sync-expenses-syncs-transactions list" [
 #
 # GET /companies/{companyId}/sync/expenses/syncs/{syncId}/transactions/{transactionId}
 # operationId: get-sync-transaction
-export def "companies-sync-expenses-syncs-transactions get" [
+export def "get-sync-transaction" [
   company_id: any
   sync_id: string
   transaction_id: string
@@ -617,7 +617,7 @@ export def "companies-sync-expenses-syncs-transactions get" [
 #
 # POST /companies/{companyId}/sync/expenses/syncs/{syncId}/transactions/{transactionId}/attachments
 # operationId: upload-attachment
-export def "companies-sync-expenses-syncs-transactions-attachments upload" [
+export def "upload-attachment" [
   company_id: any
   sync_id: string
   transaction_id: string

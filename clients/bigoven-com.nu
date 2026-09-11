@@ -120,7 +120,7 @@ def accept-completer [] { ["application/json" "application/xml" "text/json" "tex
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "collection get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "collection-get-collection" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -144,7 +144,7 @@ export def commands []: nothing -> table {
 #
 # GET /collection/{id}
 # operationId: Collection_GetCollection
-export def "collection get" [
+export def "collection-get-collection" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -186,7 +186,7 @@ export def "collection get" [
 #
 # GET /collection/{id}/meta
 # operationId: Collection_GetCollectionMeta
-export def "collection-meta get" [
+export def "collection-get-collection-meta" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -223,7 +223,7 @@ export def "collection-meta get" [
 #
 # GET /collections
 # operationId: Collection_Collections
-export def "collections get" [
+export def "collection-collections" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -260,7 +260,7 @@ export def "collections get" [
 #
 # DELETE /grocerylist
 # operationId: GroceryList_Delete
-export def "grocerylist list-grocery-delete" [
+export def "grocery-list-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -295,7 +295,7 @@ export def "grocerylist list-grocery-delete" [
 #
 # GET /grocerylist
 # operationId: GroceryList_Get
-export def "grocerylist list-grocery-get" [
+export def "grocery-list-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -330,7 +330,7 @@ export def "grocerylist list-grocery-get" [
 #
 # POST /grocerylist/clearcheckedlines
 # operationId: GroceryList_GroceryListRemoveMarkedItems
-export def "grocerylist-clearcheckedlines list-grocery-grocery-delete-marked-items" [
+export def "grocery-list-grocery-list-remove-marked-items" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -365,7 +365,7 @@ export def "grocerylist-clearcheckedlines list-grocery-grocery-delete-marked-ite
 #
 # POST /grocerylist/department
 # operationId: GroceryList_Department
-export def "grocerylist-department list-grocery" [
+export def "grocery-list-department" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -403,7 +403,7 @@ export def "grocerylist-department list-grocery" [
 # Add a single line item to the grocery list
 #
 # POST /grocerylist/item
-export def "grocerylist-item create" [
+export def "post-grocerylist-item" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -446,7 +446,7 @@ export def "grocerylist-item create" [
 #
 # DELETE /grocerylist/item/{guid}
 # operationId: GroceryList_DeleteItemByGuid
-export def "grocerylist-item list-grocery-delete" [
+export def "grocery-list-delete-item-by-guid" [
   guid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -483,7 +483,7 @@ export def "grocerylist-item list-grocery-delete" [
 #
 # PUT /grocerylist/item/{guid}
 # operationId: GroceryList_GroceryListItemGuid
-export def "grocerylist-item list-grocery-grocery" [
+export def "grocery-list-grocery-list-item-guid" [
   guid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -530,7 +530,7 @@ export def "grocerylist-item list-grocery-grocery" [
 #
 # POST /grocerylist/line
 # operationId: GroceryList_Post
-export def "grocerylist-line list-grocery-create" [
+export def "grocery-list-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -569,7 +569,7 @@ export def "grocerylist-line list-grocery-create" [
 #
 # POST /grocerylist/recipe
 # operationId: GroceryList_AddRecipe
-export def "grocerylist-recipe list-grocery-create" [
+export def "grocery-list-add-recipe" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -611,7 +611,7 @@ export def "grocerylist-recipe list-grocery-create" [
 # POST /grocerylist/sync
 # operationId: GroceryList_PostGroceryListSync
 # --list shape: {Items?: list, LastModified?: string, Recipes?: list, VersionGuid?: string}
-export def "grocerylist-sync list-grocery-create-grocery" [
+export def "grocery-list-post-grocery-list-sync" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -651,7 +651,7 @@ export def "grocerylist-sync list-grocery-create-grocery" [
 #
 # POST /image/avatar
 # operationId: Images_UploadUserAvatar
-export def "image-avatar upload-user" [
+export def "images-upload-user-avatar" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -686,7 +686,7 @@ export def "image-avatar upload-user" [
 #
 # GET /me
 # operationId: Me_Index
-export def "me get-index" [
+export def "me-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -725,7 +725,7 @@ export def "me get-index" [
 # --Personal shape: {Email?: string, Location?: record}
 # --Preferences shape: {EatingStyle?: string}
 # --Profile shape: {AboutMe?: string, BackgroundUrl?: string, Counts?: record, FirstName?: string, FullName?: string, HomeUrl?: string, LastName?: string, PhotoUrl?: string, UserID?: int, UserName?: string}
-export def "me update" [
+export def "me-put-me" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -770,7 +770,7 @@ export def "me update" [
 # PUT /me/personal
 # operationId: Me_PutMePersonal
 # --Location shape: {City?: string, Country?: string, DMA?: int}
-export def "me-personal update" [
+export def "me-put-me-personal" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -810,7 +810,7 @@ export def "me-personal update" [
 #
 # PUT /me/preferences
 # operationId: Me_PutMePreferences
-export def "me-preferences update" [
+export def "me-put-me-preferences" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -849,7 +849,7 @@ export def "me-preferences update" [
 #
 # GET /me/preferences/options
 # operationId: Me_GetOptions
-export def "me-preferences-options get" [
+export def "me-get-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -884,7 +884,7 @@ export def "me-preferences-options get" [
 #
 # PUT /me/profile
 # --Counts shape: {AddedCount?: int, FollowersCount?: int, FollowingCount?: int, PrivateRecipeCount?: int, PublicRecipeCount?: int, TotalRecipes?: int}
-export def "me-profile update" [
+export def "put-me-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -932,7 +932,7 @@ export def "me-profile update" [
 #
 # GET /me/skinny
 # operationId: Me_Skinny
-export def "me-skinny get" [
+export def "me-skinny" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -970,7 +970,7 @@ export def "me-skinny get" [
 # --Ingredients item shape: {DisplayIndex?: int, DisplayQuantity?: string, HTMLName?: string, IngredientID?: int, IngredientInfo?: record, IsHeading?: bool, IsLinked?: bool, MetricDisplayQuantity?: string, MetricQuantity?: float, MetricUnit?: string, Name?: string, PreparationNotes?: string, Quantity?: float, Unit?: string}
 # --NutritionInfo shape: {CaloriesFromFat?: float, Cholesterol?: float, CholesterolPct?: float, DietaryFiber?: float, DietaryFiberPct?: float, MonoFat?: float, PolyFat?: float, Potassium?: float, PotassiumPct?: float, Protein?: float, ProteinPct?: float, SatFat?: float, SatFatPct?: float, SingularYieldUnit?: string, Sodium?: float, SodiumPct?: float, Sugar?: float, TotalCalories?: float, TotalCarbs?: float, TotalCarbsPct?: float, TotalFat?: float, TotalFatPct?: float, TransFat?: float}
 # --Poster shape: {FirstName?: string, ImageUrl48?: string, IsKitchenHelper?: bool, IsPremium?: bool, IsUsingRecurly?: bool, LastName?: string, MemberSince?: string, PhotoUrl?: string, PremiumExpiryDate?: string, UserID?: int, UserName?: string}
-export def "recipe create" [
+export def "recipe-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1056,7 +1056,7 @@ export def "recipe create" [
 # --Ingredients item shape: {DisplayIndex?: int, DisplayQuantity?: string, HTMLName?: string, IngredientID?: int, IngredientInfo?: record, IsHeading?: bool, IsLinked?: bool, MetricDisplayQuantity?: string, MetricQuantity?: float, MetricUnit?: string, Name?: string, PreparationNotes?: string, Quantity?: float, Unit?: string}
 # --NutritionInfo shape: {CaloriesFromFat?: float, Cholesterol?: float, CholesterolPct?: float, DietaryFiber?: float, DietaryFiberPct?: float, MonoFat?: float, PolyFat?: float, Potassium?: float, PotassiumPct?: float, Protein?: float, ProteinPct?: float, SatFat?: float, SatFatPct?: float, SingularYieldUnit?: string, Sodium?: float, SodiumPct?: float, Sugar?: float, TotalCalories?: float, TotalCarbs?: float, TotalCarbsPct?: float, TotalFat?: float, TotalFatPct?: float, TransFat?: float}
 # --Poster shape: {FirstName?: string, ImageUrl48?: string, IsKitchenHelper?: bool, IsPremium?: bool, IsUsingRecurly?: bool, LastName?: string, MemberSince?: string, PhotoUrl?: string, PremiumExpiryDate?: string, UserID?: int, UserName?: string}
-export def "recipe update" [
+export def "recipe-put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1139,7 +1139,7 @@ export def "recipe update" [
 #
 # GET /recipe/autocomplete
 # operationId: Recipe_AutoComplete
-export def "recipe-autocomplete complete-auto" [
+export def "recipe-auto-complete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1177,7 +1177,7 @@ export def "recipe-autocomplete complete-auto" [
 #
 # GET /recipe/autocomplete/all
 # operationId: Recipe_AutoCompleteAllRecipes
-export def "recipe-autocomplete-all complete-auto" [
+export def "recipe-auto-complete-all-recipes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1215,7 +1215,7 @@ export def "recipe-autocomplete-all complete-auto" [
 #
 # GET /recipe/autocomplete/mine
 # operationId: Recipe_AutoCompleteMyRecipes
-export def "recipe-autocomplete-mine complete-auto-my" [
+export def "recipe-auto-complete-my-recipes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1253,7 +1253,7 @@ export def "recipe-autocomplete-mine complete-auto-my" [
 #
 # GET /recipe/categories
 # operationId: Recipe_Categories
-export def "recipe-categories get" [
+export def "recipe-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1288,7 +1288,7 @@ export def "recipe-categories get" [
 #
 # GET /recipe/get/active/recipe
 # operationId: Recipe_GetActiveRecipe
-export def "recipe-get-active-recipe get" [
+export def "recipe-get-active-recipe" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1325,7 +1325,7 @@ export def "recipe-get-active-recipe get" [
 #
 # POST /recipe/get/saved/step
 # operationId: Recipe_GetStep
-export def "recipe-get-saved-step get" [
+export def "recipe-get-step" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1364,7 +1364,7 @@ export def "recipe-get-saved-step get" [
 #
 # POST /recipe/get/step/number
 # operationId: Recipe_GetStepNumber
-export def "recipe-get-step-number get" [
+export def "recipe-get-step-number" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1402,7 +1402,7 @@ export def "recipe-get-step-number get" [
 #
 # GET /recipe/photos/pending
 # operationId: Images_GetPendingByUser
-export def "recipe-photos-pending get-images-by-user" [
+export def "images-get-pending-by-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1437,7 +1437,7 @@ export def "recipe-photos-pending get-images-by-user" [
 #
 # POST /recipe/post/step
 # operationId: Recipe_GetSteps
-export def "recipe-post-step get" [
+export def "recipe-get-steps" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1476,7 +1476,7 @@ export def "recipe-post-step get" [
 #
 # DELETE /recipe/review/replies/{replyId}
 # operationId: Review_DeleteReply
-export def "recipe-review-replies delete-reply" [
+export def "review-delete-reply" [
   reply_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1513,7 +1513,7 @@ export def "recipe-review-replies delete-reply" [
 #
 # PUT /recipe/review/replies/{replyId}
 # operationId: Review_PutReply
-export def "recipe-review-replies update-reply" [
+export def "review-put-reply" [
   reply_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1553,7 +1553,7 @@ export def "recipe-review-replies update-reply" [
 # Get a given review by string-style ID. This will return a payload with FeaturedReply, ReplyCount. Recommended display is to list top-level reviews with one featured reply underneath. Currently, the FeaturedReply is the most recent one for that rating.
 #
 # GET /recipe/review/{reviewId}
-export def "recipe-review get-by-review-id" [
+export def "get-recipe-review-review-id" [
   review_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1590,7 +1590,7 @@ export def "recipe-review get-by-review-id" [
 #
 # PUT /recipe/review/{reviewId}
 # operationId: Review_Put
-export def "recipe-review update" [
+export def "review-put" [
   review_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1635,7 +1635,7 @@ export def "recipe-review update" [
 #
 # GET /recipe/review/{reviewId}/replies
 # operationId: Review_GetReplies
-export def "recipe-review-replies get" [
+export def "review-get-replies" [
   review_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1675,7 +1675,7 @@ export def "recipe-review-replies get" [
 #
 # POST /recipe/review/{reviewId}/replies
 # operationId: Review_PostReply
-export def "recipe-review-replies create-reply" [
+export def "review-post-reply" [
   review_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1716,7 +1716,7 @@ export def "recipe-review-replies create-reply" [
 #
 # POST /recipe/scan
 # operationId: Recipe_Scan
-export def "recipe-scan create" [
+export def "recipe-scan" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1755,7 +1755,7 @@ export def "recipe-scan create" [
 #
 # GET /recipe/steps/{id}
 # operationId: Recipe_GetRecipeWithSteps
-export def "recipe-steps get" [
+export def "recipe-get-recipe-with-steps" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1794,7 +1794,7 @@ export def "recipe-steps get" [
 #
 # DELETE /recipe/{id}
 # operationId: Recipe_Delete
-export def "recipe delete" [
+export def "recipe-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1831,7 +1831,7 @@ export def "recipe delete" [
 #
 # GET /recipe/{id}
 # operationId: Recipe_Get
-export def "recipe get" [
+export def "recipe-get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1870,7 +1870,7 @@ export def "recipe get" [
 #
 # GET /recipe/{id}/zap
 # operationId: Recipe_ZapRecipe
-export def "recipe-zap get" [
+export def "recipe-zap-recipe" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1907,7 +1907,7 @@ export def "recipe-zap get" [
 #
 # POST /recipe/{recipeId}/feedback
 # operationId: Recipe_Feedback
-export def "recipe-feedback create" [
+export def "recipe-feedback" [
   recipe_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1948,7 +1948,7 @@ export def "recipe-feedback create" [
 #
 # POST /recipe/{recipeId}/image
 # operationId: Images_UploadRecipeImage
-export def "recipe-image upload" [
+export def "images-upload-recipe-image" [
   recipe_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1989,7 +1989,7 @@ export def "recipe-image upload" [
 #
 # GET /recipe/{recipeId}/images
 # operationId: Images_Get
-export def "recipe-images get" [
+export def "images-get" [
   recipe_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2026,7 +2026,7 @@ export def "recipe-images get" [
 #
 # POST /recipe/{recipeId}/note
 # operationId: Note_Post
-export def "recipe-note create" [
+export def "note-post" [
   recipe_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2076,7 +2076,7 @@ export def "recipe-note create" [
 #
 # DELETE /recipe/{recipeId}/note/{noteId}
 # operationId: Note_Delete
-export def "recipe-note delete" [
+export def "note-delete" [
   recipe_id: int
   note_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2115,7 +2115,7 @@ export def "recipe-note delete" [
 #
 # GET /recipe/{recipeId}/note/{noteId}
 # operationId: Note_Get
-export def "recipe-note get" [
+export def "note-get" [
   recipe_id: int
   note_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2154,7 +2154,7 @@ export def "recipe-note get" [
 #
 # PUT /recipe/{recipeId}/note/{noteId}
 # operationId: Note_Put
-export def "recipe-note update" [
+export def "note-put" [
   recipe_id: int
   note_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2206,7 +2206,7 @@ export def "recipe-note update" [
 #
 # GET /recipe/{recipeId}/notes
 # operationId: Note_GetNotes
-export def "recipe-notes get" [
+export def "note-get-notes" [
   recipe_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2246,7 +2246,7 @@ export def "recipe-notes get" [
 #
 # GET /recipe/{recipeId}/photos
 # operationId: Images_GetRecipePhotos
-export def "recipe-photos get-images" [
+export def "images-get-recipe-photos" [
   recipe_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2286,7 +2286,7 @@ export def "recipe-photos get-images" [
 #
 # GET /recipe/{recipeId}/related
 # operationId: Recipe_Related
-export def "recipe-related get" [
+export def "recipe-related" [
   recipe_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2325,7 +2325,7 @@ export def "recipe-related get" [
 # Get *my* review for the recipe {recipeId}, where "me" is determined by standard authentication headers
 #
 # GET /recipe/{recipeId}/review
-export def "recipe-review get-by-recipe-id" [
+export def "get-recipe-recipe-id-review" [
   recipe_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2362,7 +2362,7 @@ export def "recipe-review get-by-recipe-id" [
 #
 # POST /recipe/{recipeId}/review
 # operationId: Review_Post
-export def "recipe-review create" [
+export def "review-post" [
   recipe_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2407,7 +2407,7 @@ export def "recipe-review create" [
 #
 # DELETE /recipe/{recipeId}/review/{reviewId}
 # operationId: Review_Delete
-export def "recipe-review delete" [
+export def "review-delete" [
   recipe_id: int
   review_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2446,7 +2446,7 @@ export def "recipe-review delete" [
 #
 # GET /recipe/{recipeId}/review/{reviewId}
 # operationId: Review_Get
-export def "recipe-review get-by-recipe-id-review-id" [
+export def "review-get" [
   recipe_id: int
   review_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2485,7 +2485,7 @@ export def "recipe-review get-by-recipe-id-review-id" [
 #
 # PUT /recipe/{recipeId}/review/{reviewId}
 # operationId: Review_PutLegacy
-export def "recipe-review update-legacy" [
+export def "review-put-legacy" [
   recipe_id: int
   review_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2534,7 +2534,7 @@ export def "recipe-review update-legacy" [
 #
 # GET /recipe/{recipeId}/reviews
 # operationId: Review_GetReviews
-export def "recipe-reviews get" [
+export def "review-get-reviews" [
   recipe_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2574,7 +2574,7 @@ export def "recipe-reviews get" [
 #
 # GET /recipe/{recipeId}/scans
 # operationId: Images_GetScanImages
-export def "recipe-scans get-images-images" [
+export def "images-get-scan-images" [
   recipe_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2611,7 +2611,7 @@ export def "recipe-scans get-images-images" [
 #
 # GET /recipes
 # operationId: Recipe_RecipeSearch
-export def "recipes list" [
+export def "recipe-recipe-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2686,7 +2686,7 @@ export def "recipes list" [
 #
 # GET /recipes/random
 # operationId: Recipe_GetRandomRecipe
-export def "recipes-random get" [
+export def "recipe-get-random-recipe" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2721,7 +2721,7 @@ export def "recipes-random get" [
 #
 # GET /recipes/raves
 # operationId: Recipe_Raves
-export def "recipes-raves get" [
+export def "recipe-raves" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2759,7 +2759,7 @@ export def "recipes-raves get" [
 #
 # GET /recipes/recentviews
 # operationId: Recipe_RecentViews
-export def "recipes-recentviews get-recent-views" [
+export def "recipe-recent-views" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2797,7 +2797,7 @@ export def "recipes-recentviews get-recent-views" [
 #
 # GET /recipes/top25random
 # operationId: Recipe_RecipeSearchRandom
-export def "recipes-top25random list-random" [
+export def "recipe-recipe-search-random" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2870,7 +2870,7 @@ export def "recipes-top25random list-random" [
 #
 # GET /recipes/{id}
 # operationId: Recipe_GetV2
-export def "recipes get" [
+export def "recipe-get-v2" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

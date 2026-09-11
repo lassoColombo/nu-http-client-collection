@@ -125,7 +125,7 @@ def key-type-completer [] { ["Primary" "Secondary"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-app-platform-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -149,7 +149,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.AppPlatform/operations
 # operationId: Operations_List
-export def "providers-microsoft-app-platform-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -185,7 +185,7 @@ export def "providers-microsoft-app-platform-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.AppPlatform/Spring
 # operationId: Services_ListBySubscription
-export def "subscriptions-providers-microsoft-app-platform-spring list-services" [
+export def "services-list-by-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -223,7 +223,7 @@ export def "subscriptions-providers-microsoft-app-platform-spring list-services"
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.AppPlatform/locations/{location}/checkNameAvailability
 # operationId: Services_CheckNameAvailability
-export def "subscriptions-providers-microsoft-app-platform-locations-check-name-availability check-services" [
+export def "services-check-name-availability" [
   subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -268,7 +268,7 @@ export def "subscriptions-providers-microsoft-app-platform-locations-check-name-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppPlatform/Spring
 # operationId: Services_List
-export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring list-services" [
+export def "services-list" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -308,7 +308,7 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppPlatform/Spring/{serviceName}
 # operationId: Services_Delete
-export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring delete-services" [
+export def "services-delete" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -350,7 +350,7 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppPlatform/Spring/{serviceName}
 # operationId: Services_Get
-export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring get-services" [
+export def "services-get" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -393,7 +393,7 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppPlatform/Spring/{serviceName}
 # operationId: Services_Update
 # --properties shape: {configServerProperties?: record, trace?: record}
-export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring update-services" [
+export def "services-update" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -442,7 +442,7 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppPlatform/Spring/{serviceName}
 # operationId: Services_CreateOrUpdate
 # --properties shape: {configServerProperties?: record, trace?: record}
-export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring create-services-or-update" [
+export def "services-create-or-update" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -490,7 +490,7 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppPlatform/Spring/{serviceName}/apps
 # operationId: Apps_List
-export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-apps list" [
+export def "apps-list" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -532,7 +532,7 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppPlatform/Spring/{serviceName}/apps/{appName}
 # operationId: Apps_Delete
-export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-apps delete" [
+export def "apps-delete" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -576,7 +576,7 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppPlatform/Spring/{serviceName}/apps/{appName}
 # operationId: Apps_Get
-export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-apps get" [
+export def "apps-get" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -622,7 +622,7 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppPlatform/Spring/{serviceName}/apps/{appName}
 # operationId: Apps_Update
 # --properties shape: {activeDeploymentName?: string, persistentDisk?: record, public?: bool, temporaryDisk?: record}
-export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-apps update" [
+export def "apps-update" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -671,7 +671,7 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppPlatform/Spring/{serviceName}/apps/{appName}
 # operationId: Apps_CreateOrUpdate
 # --properties shape: {activeDeploymentName?: string, persistentDisk?: record, public?: bool, temporaryDisk?: record}
-export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-apps create-or-update" [
+export def "apps-create-or-update" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -719,7 +719,7 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppPlatform/Spring/{serviceName}/apps/{appName}/bindings
 # operationId: Bindings_List
-export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-apps-bindings list" [
+export def "bindings-list" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -763,7 +763,7 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppPlatform/Spring/{serviceName}/apps/{appName}/bindings/{bindingName}
 # operationId: Bindings_Delete
-export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-apps-bindings delete" [
+export def "bindings-delete" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -809,7 +809,7 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppPlatform/Spring/{serviceName}/apps/{appName}/bindings/{bindingName}
 # operationId: Bindings_Get
-export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-apps-bindings get" [
+export def "bindings-get" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -856,7 +856,7 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppPlatform/Spring/{serviceName}/apps/{appName}/bindings/{bindingName}
 # operationId: Bindings_Update
 # --properties shape: {bindingParameters?: record, key?: string, resourceId?: string, resourceName?: string, resourceType?: string}
-export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-apps-bindings update" [
+export def "bindings-update" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -907,7 +907,7 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppPlatform/Spring/{serviceName}/apps/{appName}/bindings/{bindingName}
 # operationId: Bindings_CreateOrUpdate
 # --properties shape: {bindingParameters?: record, key?: string, resourceId?: string, resourceName?: string, resourceType?: string}
-export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-apps-bindings create-or-update" [
+export def "bindings-create-or-update" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -957,7 +957,7 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppPlatform/Spring/{serviceName}/apps/{appName}/deployments
 # operationId: Deployments_List
-export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-apps-deployments list" [
+export def "deployments-list" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -1002,7 +1002,7 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppPlatform/Spring/{serviceName}/apps/{appName}/deployments/{deploymentName}
 # operationId: Deployments_Delete
-export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-apps-deployments delete" [
+export def "deployments-delete" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -1048,7 +1048,7 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppPlatform/Spring/{serviceName}/apps/{appName}/deployments/{deploymentName}
 # operationId: Deployments_Get
-export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-apps-deployments get" [
+export def "deployments-get" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -1095,7 +1095,7 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppPlatform/Spring/{serviceName}/apps/{appName}/deployments/{deploymentName}
 # operationId: Deployments_Update
 # --properties shape: {deploymentSettings?: record, source?: record}
-export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-apps-deployments update" [
+export def "deployments-update" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -1146,7 +1146,7 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppPlatform/Spring/{serviceName}/apps/{appName}/deployments/{deploymentName}
 # operationId: Deployments_CreateOrUpdate
 # --properties shape: {deploymentSettings?: record, source?: record}
-export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-apps-deployments create-or-update" [
+export def "deployments-create-or-update" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -1196,7 +1196,7 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppPlatform/Spring/{serviceName}/apps/{appName}/deployments/{deploymentName}/getLogFileUrl
 # operationId: Deployments_GetLogFileUrl
-export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-apps-deployments-get-log-file-url get" [
+export def "deployments-get-log-file-url" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -1242,7 +1242,7 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppPlatform/Spring/{serviceName}/apps/{appName}/deployments/{deploymentName}/restart
 # operationId: Deployments_Restart
-export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-apps-deployments-restart restart" [
+export def "deployments-restart" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -1288,7 +1288,7 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppPlatform/Spring/{serviceName}/apps/{appName}/deployments/{deploymentName}/start
 # operationId: Deployments_Start
-export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-apps-deployments-start start" [
+export def "deployments-start" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -1334,7 +1334,7 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppPlatform/Spring/{serviceName}/apps/{appName}/deployments/{deploymentName}/stop
 # operationId: Deployments_Stop
-export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-apps-deployments-stop stop" [
+export def "deployments-stop" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -1380,7 +1380,7 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppPlatform/Spring/{serviceName}/apps/{appName}/getResourceUploadUrl
 # operationId: Apps_GetResourceUploadUrl
-export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-apps-get-resource-upload-url get" [
+export def "apps-get-resource-upload-url" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -1424,7 +1424,7 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppPlatform/Spring/{serviceName}/deployments
 # operationId: Deployments_ListClusterAllDeployments
-export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-deployments list" [
+export def "deployments-list-cluster-all-deployments" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -1466,7 +1466,7 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppPlatform/Spring/{serviceName}/disableTestEndpoint
 #
 # operationId: Services_DisableTestEndpoint
-export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-disable-test-endpoint disable-services" [
+export def "services-disable-test-endpoint" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -1507,7 +1507,7 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppPlatform/Spring/{serviceName}/enableTestEndpoint
 #
 # operationId: Services_EnableTestEndpoint
-export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-enable-test-endpoint enable-services" [
+export def "services-enable-test-endpoint" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -1549,7 +1549,7 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppPlatform/Spring/{serviceName}/listTestKeys
 # operationId: Services_ListTestKeys
-export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-list-test-keys list-services" [
+export def "services-list-test-keys" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -1591,7 +1591,7 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppPlatform/Spring/{serviceName}/regenerateTestKey
 # operationId: Services_RegenerateTestKey
-export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-regenerate-test-key test-services" [
+export def "services-regenerate-test-key" [
   subscription_id: string
   resource_group_name: string
   service_name: string

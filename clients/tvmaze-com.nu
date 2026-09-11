@@ -129,7 +129,7 @@ def embed-completer-4 [] { ["webchannel"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "auth-poll create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-auth-poll" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -152,7 +152,7 @@ export def commands []: nothing -> table {
 # Poll whether an authentication request was confirmed
 #
 # POST /auth/poll
-export def "auth-poll create" [
+export def "post-auth-poll" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -189,7 +189,7 @@ export def "auth-poll create" [
 # Start an authentication request
 #
 # POST /auth/start
-export def "auth-start create" [
+export def "post-auth-start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -227,7 +227,7 @@ export def "auth-start create" [
 # Validate your authentication credentials
 #
 # GET /auth/validate
-export def "auth-validate get" [
+export def "get-auth-validate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -260,7 +260,7 @@ export def "auth-validate get" [
 # Mark episodes as acquired or watched based on their IDs
 #
 # POST /scrobble/episodes
-export def "scrobble-episodes create" [
+export def "post-scrobble-episodes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -298,7 +298,7 @@ export def "scrobble-episodes create" [
 #
 # PUT /scrobble/episodes/{episode_id}
 # --_embedded shape: {episode?: record}
-export def "scrobble-episodes update" [
+export def "put-scrobble-episodes-episode-id" [
   episode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -339,7 +339,7 @@ export def "scrobble-episodes update" [
 # Mark episodes within a show as acquired or watched based on their attributes
 #
 # POST /scrobble/shows
-export def "scrobble-shows create" [
+export def "post-scrobble-shows" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -380,7 +380,7 @@ export def "scrobble-shows create" [
 # List watched and acquired episodes for a show
 #
 # GET /scrobble/shows/{show_id}
-export def "scrobble-shows get" [
+export def "get-scrobble-shows-show-id" [
   show_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -417,7 +417,7 @@ export def "scrobble-shows get" [
 # List the marked episodes
 #
 # GET /user/episodes
-export def "user-episodes list" [
+export def "get-user-episodes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -452,7 +452,7 @@ export def "user-episodes list" [
 # Unmark an episode
 #
 # DELETE /user/episodes/{episode_id}
-export def "user-episodes delete" [
+export def "delete-user-episodes-episode-id" [
   episode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -487,7 +487,7 @@ export def "user-episodes delete" [
 # Check if an episode is marked
 #
 # GET /user/episodes/{episode_id}
-export def "user-episodes get" [
+export def "get-user-episodes-episode-id" [
   episode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -523,7 +523,7 @@ export def "user-episodes get" [
 #
 # PUT /user/episodes/{episode_id}
 # --_embedded shape: {episode?: record}
-export def "user-episodes update" [
+export def "put-user-episodes-episode-id" [
   episode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -564,7 +564,7 @@ export def "user-episodes update" [
 # List the followed networks
 #
 # GET /user/follows/networks
-export def "user-follows-networks list" [
+export def "get-user-follows-networks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -599,7 +599,7 @@ export def "user-follows-networks list" [
 # Unfollow a network
 #
 # DELETE /user/follows/networks/{network_id}
-export def "user-follows-networks delete" [
+export def "delete-user-follows-networks-network-id" [
   network_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -634,7 +634,7 @@ export def "user-follows-networks delete" [
 # Check if a network is followed
 #
 # GET /user/follows/networks/{network_id}
-export def "user-follows-networks get" [
+export def "get-user-follows-networks-network-id" [
   network_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -669,7 +669,7 @@ export def "user-follows-networks get" [
 # Follow a network
 #
 # PUT /user/follows/networks/{network_id}
-export def "user-follows-networks update" [
+export def "put-user-follows-networks-network-id" [
   network_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -704,7 +704,7 @@ export def "user-follows-networks update" [
 # List the followed people
 #
 # GET /user/follows/people
-export def "user-follows-people list" [
+export def "get-user-follows-people" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -739,7 +739,7 @@ export def "user-follows-people list" [
 # Unfollow a person
 #
 # DELETE /user/follows/people/{person_id}
-export def "user-follows-people delete" [
+export def "delete-user-follows-people-person-id" [
   person_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -774,7 +774,7 @@ export def "user-follows-people delete" [
 # Check if a person is followed
 #
 # GET /user/follows/people/{person_id}
-export def "user-follows-people get" [
+export def "get-user-follows-people-person-id" [
   person_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -809,7 +809,7 @@ export def "user-follows-people get" [
 # Follow a person
 #
 # PUT /user/follows/people/{person_id}
-export def "user-follows-people update" [
+export def "put-user-follows-people-person-id" [
   person_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -844,7 +844,7 @@ export def "user-follows-people update" [
 # List the followed shows
 #
 # GET /user/follows/shows
-export def "user-follows-shows list" [
+export def "get-user-follows-shows" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -879,7 +879,7 @@ export def "user-follows-shows list" [
 # Unfollow a show
 #
 # DELETE /user/follows/shows/{show_id}
-export def "user-follows-shows delete" [
+export def "delete-user-follows-shows-show-id" [
   show_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -914,7 +914,7 @@ export def "user-follows-shows delete" [
 # Check if a show is followed
 #
 # GET /user/follows/shows/{show_id}
-export def "user-follows-shows get" [
+export def "get-user-follows-shows-show-id" [
   show_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -949,7 +949,7 @@ export def "user-follows-shows get" [
 # Follow a show
 #
 # PUT /user/follows/shows/{show_id}
-export def "user-follows-shows update" [
+export def "put-user-follows-shows-show-id" [
   show_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -984,7 +984,7 @@ export def "user-follows-shows update" [
 # List the followed webchannels
 #
 # GET /user/follows/webchannels
-export def "user-follows-webchannels list" [
+export def "get-user-follows-webchannels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1019,7 +1019,7 @@ export def "user-follows-webchannels list" [
 # Unfollow a webchannel
 #
 # DELETE /user/follows/webchannels/{webchannel_id}
-export def "user-follows-webchannels delete" [
+export def "delete-user-follows-webchannels-webchannel-id" [
   webchannel_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1054,7 +1054,7 @@ export def "user-follows-webchannels delete" [
 # Check if a webchannel is followed
 #
 # GET /user/follows/webchannels/{webchannel_id}
-export def "user-follows-webchannels get" [
+export def "get-user-follows-webchannels-webchannel-id" [
   webchannel_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1089,7 +1089,7 @@ export def "user-follows-webchannels get" [
 # Follow a webchannel
 #
 # PUT /user/follows/webchannels/{webchannel_id}
-export def "user-follows-webchannels update" [
+export def "put-user-follows-webchannels-webchannel-id" [
   webchannel_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1124,7 +1124,7 @@ export def "user-follows-webchannels update" [
 # List all tags
 #
 # GET /user/tags
-export def "user-tags get" [
+export def "get-user-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1157,7 +1157,7 @@ export def "user-tags get" [
 # Create a new tag
 #
 # POST /user/tags
-export def "user-tags create" [
+export def "post-user-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1194,7 +1194,7 @@ export def "user-tags create" [
 # Delete a specific tag
 #
 # DELETE /user/tags/{tag_id}
-export def "user-tags delete" [
+export def "delete-user-tags-tag-id" [
   tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1229,7 +1229,7 @@ export def "user-tags delete" [
 # Update a specific tag
 #
 # PATCH /user/tags/{tag_id}
-export def "user-tags update" [
+export def "patch-user-tags-tag-id" [
   tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1268,7 +1268,7 @@ export def "user-tags update" [
 # List all shows under this tag
 #
 # GET /user/tags/{tag_id}/shows
-export def "user-tags-shows get" [
+export def "get-user-tags-tag-id-shows" [
   tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1305,7 +1305,7 @@ export def "user-tags-shows get" [
 # Untag a show
 #
 # DELETE /user/tags/{tag_id}/shows/{show_id}
-export def "user-tags-shows delete" [
+export def "delete-user-tags-tag-id-shows-show-id" [
   tag_id: int
   show_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1342,7 +1342,7 @@ export def "user-tags-shows delete" [
 # Tag a show
 #
 # PUT /user/tags/{tag_id}/shows/{show_id}
-export def "user-tags-shows update" [
+export def "put-user-tags-tag-id-shows-show-id" [
   tag_id: int
   show_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1379,7 +1379,7 @@ export def "user-tags-shows update" [
 # List the episodes voted for
 #
 # GET /user/votes/episodes
-export def "user-votes-episodes list" [
+export def "get-user-votes-episodes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1412,7 +1412,7 @@ export def "user-votes-episodes list" [
 # Remove an episode vote
 #
 # DELETE /user/votes/episodes/{episode_id}
-export def "user-votes-episodes delete" [
+export def "delete-user-votes-episodes-episode-id" [
   episode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1447,7 +1447,7 @@ export def "user-votes-episodes delete" [
 # Check if an episode is voted for
 #
 # GET /user/votes/episodes/{episode_id}
-export def "user-votes-episodes get" [
+export def "get-user-votes-episodes-episode-id" [
   episode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1482,7 +1482,7 @@ export def "user-votes-episodes get" [
 # Vote for an episode
 #
 # PUT /user/votes/episodes/{episode_id}
-export def "user-votes-episodes update" [
+export def "put-user-votes-episodes-episode-id" [
   episode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1521,7 +1521,7 @@ export def "user-votes-episodes update" [
 # List the shows voted for
 #
 # GET /user/votes/shows
-export def "user-votes-shows list" [
+export def "get-user-votes-shows" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1556,7 +1556,7 @@ export def "user-votes-shows list" [
 # Remove a show vote
 #
 # DELETE /user/votes/shows/{show_id}
-export def "user-votes-shows delete" [
+export def "delete-user-votes-shows-show-id" [
   show_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1591,7 +1591,7 @@ export def "user-votes-shows delete" [
 # Check if a show is voted for
 #
 # GET /user/votes/shows/{show_id}
-export def "user-votes-shows get" [
+export def "get-user-votes-shows-show-id" [
   show_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1626,7 +1626,7 @@ export def "user-votes-shows get" [
 # Vote for a show
 #
 # PUT /user/votes/shows/{show_id}
-export def "user-votes-shows update" [
+export def "put-user-votes-shows-show-id" [
   show_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

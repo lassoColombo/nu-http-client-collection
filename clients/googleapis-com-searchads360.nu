@@ -118,7 +118,7 @@ def summary-row-setting-completer [] { ["NO_SUMMARY_ROW" "SUMMARY_ROW_ONLY" "SUM
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "customers-custom-columns list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "searchads360-customers-custom-columns-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -142,7 +142,7 @@ export def commands []: nothing -> table {
 #
 # GET /v0/customers/{customerId}/customColumns
 # operationId: searchads360.customers.customColumns.list
-export def "customers-custom-columns list" [
+export def "searchads360-customers-custom-columns-list" [
   customer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -190,7 +190,7 @@ export def "customers-custom-columns list" [
 #
 # POST /v0/customers/{customerId}/searchAds360:search
 # operationId: searchads360.customers.searchAds360.search
-export def "customers-search-ads360-search list" [
+export def "searchads360-customers-search-ads360-search" [
   customer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -247,7 +247,7 @@ export def "customers-search-ads360-search list" [
 #
 # POST /v0/customers/{customerId}/searchAds360:searchStream
 # operationId: searchads360.customers.searchAds360.searchStream
-export def "customers-search-ads360-search-stream list" [
+export def "searchads360-customers-search-ads360-search-stream" [
   customer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -301,7 +301,7 @@ export def "customers-search-ads360-search-stream list" [
 #
 # POST /v0/searchAds360Fields:search
 # operationId: searchads360.searchAds360Fields.search
-export def "search-ads360-fields-search list" [
+export def "searchads360-search-ads360-fields-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -353,7 +353,7 @@ export def "search-ads360-fields-search list" [
 #
 # GET /v0/{resourceName}
 # operationId: searchads360.searchAds360Fields.get
-export def "search-ads360-fields get" [
+export def "searchads360-search-ads360-fields-get" [
   resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

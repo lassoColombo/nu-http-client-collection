@@ -118,7 +118,7 @@ def accept-completer [] { ["application/javascript" "application/json" "applicat
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "shoppers-subaccount create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-subaccount" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -142,7 +142,7 @@ export def commands []: nothing -> table {
 #
 # POST /v1/shoppers/subaccount
 # operationId: createSubaccount
-export def "shoppers-subaccount create" [
+export def "create-subaccount" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -186,7 +186,7 @@ export def "shoppers-subaccount create" [
 #
 # DELETE /v1/shoppers/{shopperId}
 # operationId: delete
-export def "shoppers delete" [
+export def "delete" [
   shopper_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -224,7 +224,7 @@ export def "shoppers delete" [
 #
 # GET /v1/shoppers/{shopperId}
 # operationId: get
-export def "shoppers get" [
+export def "get" [
   shopper_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -263,7 +263,7 @@ export def "shoppers get" [
 #
 # POST /v1/shoppers/{shopperId}
 # operationId: update
-export def "shoppers update" [
+export def "update" [
   shopper_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -308,7 +308,7 @@ export def "shoppers update" [
 #
 # PUT /v1/shoppers/{shopperId}/factors/password
 # operationId: changePassword
-export def "shoppers-factors-password update-change" [
+export def "change-password" [
   shopper_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -348,7 +348,7 @@ export def "shoppers-factors-password update-change" [
 #
 # GET /v1/shoppers/{shopperId}/status
 # operationId: getStatus
-export def "shoppers-status get" [
+export def "get-status" [
   shopper_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

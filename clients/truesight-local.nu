@@ -123,7 +123,7 @@ def basis-completer [] { ["DAILY" "HOURLY" "MONTHLY"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "hardware-actions-collect-now create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "collect-now" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -147,7 +147,7 @@ export def commands []: nothing -> table {
 #
 # POST /hardware/actions/{deviceId}/collect-now
 # operationId: collectNow
-export def "hardware-actions-collect-now create" [
+export def "collect-now" [
   device_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -185,7 +185,7 @@ export def "hardware-actions-collect-now create" [
 #
 # POST /hardware/actions/{deviceId}/rediscover
 # operationId: rediscover
-export def "hardware-actions-rediscover create" [
+export def "rediscover" [
   device_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -221,7 +221,7 @@ export def "hardware-actions-rediscover create" [
 #
 # POST /hardware/actions/{deviceId}/reinitialize
 # operationId: reinitialize
-export def "hardware-actions-reinitialize create" [
+export def "reinitialize" [
   device_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -269,7 +269,7 @@ export def "hardware-actions-reinitialize create" [
 #
 # POST /hardware/actions/{deviceId}/remove
 # operationId: remove
-export def "hardware-actions-remove delete" [
+export def "remove" [
   device_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -308,7 +308,7 @@ export def "hardware-actions-remove delete" [
 #
 # POST /hardware/actions/{deviceId}/reset-error-count
 # operationId: reset
-export def "hardware-actions-reset-error-count reset" [
+export def "reset" [
   device_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -347,7 +347,7 @@ export def "hardware-actions-reset-error-count reset" [
 #
 # GET /hardware/applications
 # operationId: getApplications
-export def "hardware-applications get" [
+export def "get-applications" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -386,7 +386,7 @@ export def "hardware-applications get" [
 #
 # GET /hardware/applications/{applicationId}
 # operationId: getOneApplication
-export def "hardware-applications get-one" [
+export def "get-one-application" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -422,7 +422,7 @@ export def "hardware-applications get-one" [
 #
 # GET /hardware/device-monitors/{deviceId}
 # operationId: getDeviceMonitors
-export def "hardware-device-monitors get" [
+export def "get-device-monitors" [
   device_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -458,7 +458,7 @@ export def "hardware-device-monitors get" [
 #
 # GET /hardware/devices
 # operationId: getDevices
-export def "hardware-devices list" [
+export def "get-devices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -500,7 +500,7 @@ export def "hardware-devices list" [
 #
 # GET /hardware/devices-summary
 # operationId: getDevicesSummary
-export def "hardware-devices-summary get" [
+export def "get-devices-summary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -534,7 +534,7 @@ export def "hardware-devices-summary get" [
 #
 # GET /hardware/devices/{deviceId}
 # operationId: getDevice
-export def "hardware-devices get" [
+export def "get-device" [
   device_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -570,7 +570,7 @@ export def "hardware-devices get" [
 #
 # GET /hardware/devices/{deviceId}/agent
 # operationId: getDeviceAgent
-export def "hardware-devices-agent get" [
+export def "get-device-agent" [
   device_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -606,7 +606,7 @@ export def "hardware-devices-agent get" [
 #
 # GET /hardware/devices/{deviceId}/agent-devices
 # operationId: getAgentDevices
-export def "hardware-devices-agent-devices get" [
+export def "get-agent-devices" [
   device_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -642,7 +642,7 @@ export def "hardware-devices-agent-devices get" [
 #
 # GET /hardware/devices/{deviceId}/parameter-history
 # operationId: getDeviceParameterHistory
-export def "hardware-devices-parameter-history get" [
+export def "get-device-parameter-history" [
   device_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -684,7 +684,7 @@ export def "hardware-devices-parameter-history get" [
 #
 # GET /hardware/energy-usage/{deviceId}
 # operationId: getDeviceEnergyUsage
-export def "hardware-energy-usage get-device" [
+export def "get-device-energy-usage" [
   device_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -723,7 +723,7 @@ export def "hardware-energy-usage get-device" [
 #
 # GET /hardware/groups
 # operationId: getGroups
-export def "hardware-groups get" [
+export def "get-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -762,7 +762,7 @@ export def "hardware-groups get" [
 #
 # GET /hardware/groups/{groupId}
 # operationId: getOneGroup
-export def "hardware-groups get-one" [
+export def "get-one-group" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -798,7 +798,7 @@ export def "hardware-groups get-one" [
 #
 # PUT /hardware/groups/{groupId}
 # operationId: updateEnergyCost
-export def "hardware-groups update-energy-cost" [
+export def "update-energy-cost" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -840,7 +840,7 @@ export def "hardware-groups update-energy-cost" [
 #
 # GET /hardware/heating-margin-devices
 # operationId: getHeatingMarginCoverage
-export def "hardware-heating-margin-devices get-coverage" [
+export def "get-heating-margin-coverage" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -883,7 +883,7 @@ export def "hardware-heating-margin-devices get-coverage" [
 #
 # GET /hardware/history
 # operationId: getHistory
-export def "hardware-history get" [
+export def "get-history" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -923,7 +923,7 @@ export def "hardware-history get" [
 #
 # GET /hardware/search-devices
 # operationId: searchDevices
-export def "hardware-search-devices list" [
+export def "search-devices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -964,7 +964,7 @@ export def "hardware-search-devices list" [
 #
 # GET /hardware/services
 # operationId: getServices
-export def "hardware-services get" [
+export def "get-services" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1003,7 +1003,7 @@ export def "hardware-services get" [
 #
 # GET /hardware/services/{serviceId}
 # operationId: getOneService
-export def "hardware-services get-one" [
+export def "get-one-service" [
   service_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

@@ -137,7 +137,7 @@ def job-state-matcher-completer [] { ["ACTIVE" "ALL" "NON_ACTIVE"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects-regions-clusters list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "dataproc-projects-regions-clusters-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -161,7 +161,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/projects/{projectId}/regions/{region}/clusters
 # operationId: dataproc.projects.regions.clusters.list
-export def "projects-regions-clusters list" [
+export def "dataproc-projects-regions-clusters-list" [
   project_id: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -217,7 +217,7 @@ export def "projects-regions-clusters list" [
 # --config shape: {autoscalingConfig?: record, auxiliaryNodeGroups?: list, configBucket?: string, dataprocMetricConfig?: record, encryptionConfig?: record, endpointConfig?: record, gceClusterConfig?: record, gkeClusterConfig?: record, initializationActions?: list, lifecycleConfig?: record, masterConfig?: record, metastoreConfig?: record, secondaryWorkerConfig?: record, securityConfig?: record, softwareConfig?: record, tempBucket?: string, workerConfig?: record}
 # --metrics shape: {hdfsMetrics?: record, yarnMetrics?: record}
 # --virtualClusterConfig shape: {auxiliaryServicesConfig?: record, kubernetesClusterConfig?: record, stagingBucket?: string}
-export def "projects-regions-clusters create" [
+export def "dataproc-projects-regions-clusters-create" [
   project_id: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -279,7 +279,7 @@ export def "projects-regions-clusters create" [
 #
 # DELETE /v1/projects/{projectId}/regions/{region}/clusters/{clusterName}
 # operationId: dataproc.projects.regions.clusters.delete
-export def "projects-regions-clusters delete" [
+export def "dataproc-projects-regions-clusters-delete" [
   project_id: string
   region: string
   cluster_name: string
@@ -333,7 +333,7 @@ export def "projects-regions-clusters delete" [
 #
 # GET /v1/projects/{projectId}/regions/{region}/clusters/{clusterName}
 # operationId: dataproc.projects.regions.clusters.get
-export def "projects-regions-clusters get" [
+export def "dataproc-projects-regions-clusters-get" [
   project_id: string
   region: string
   cluster_name: string
@@ -388,7 +388,7 @@ export def "projects-regions-clusters get" [
 # --config shape: {autoscalingConfig?: record, auxiliaryNodeGroups?: list, configBucket?: string, dataprocMetricConfig?: record, encryptionConfig?: record, endpointConfig?: record, gceClusterConfig?: record, gkeClusterConfig?: record, initializationActions?: list, lifecycleConfig?: record, masterConfig?: record, metastoreConfig?: record, secondaryWorkerConfig?: record, securityConfig?: record, softwareConfig?: record, tempBucket?: string, workerConfig?: record}
 # --metrics shape: {hdfsMetrics?: record, yarnMetrics?: record}
 # --virtualClusterConfig shape: {auxiliaryServicesConfig?: record, kubernetesClusterConfig?: record, stagingBucket?: string}
-export def "projects-regions-clusters update" [
+export def "dataproc-projects-regions-clusters-patch" [
   project_id: string
   region: string
   cluster_name: string
@@ -454,7 +454,7 @@ export def "projects-regions-clusters update" [
 # POST /v1/projects/{projectId}/regions/{region}/clusters/{clusterName}:diagnose
 # operationId: dataproc.projects.regions.clusters.diagnose
 # --diagnosisInterval shape: {endTime?: string, startTime?: string}
-export def "projects-regions-clusters create-diagnose" [
+export def "dataproc-projects-regions-clusters-diagnose" [
   project_id: string
   region: string
   cluster_name: string
@@ -515,7 +515,7 @@ export def "projects-regions-clusters create-diagnose" [
 # POST /v1/projects/{projectId}/regions/{region}/clusters/{clusterName}:repair
 # operationId: dataproc.projects.regions.clusters.repair
 # --nodePools item shape: {id?: string, instanceNames?: list<string>, repairAction?: "REPAIR_ACTION_UNSPECIFIED"|"DELETE"}
-export def "projects-regions-clusters create-repair" [
+export def "dataproc-projects-regions-clusters-repair" [
   project_id: string
   region: string
   cluster_name: string
@@ -575,7 +575,7 @@ export def "projects-regions-clusters create-repair" [
 #
 # POST /v1/projects/{projectId}/regions/{region}/clusters/{clusterName}:start
 # operationId: dataproc.projects.regions.clusters.start
-export def "projects-regions-clusters start" [
+export def "dataproc-projects-regions-clusters-start" [
   project_id: string
   region: string
   cluster_name: string
@@ -632,7 +632,7 @@ export def "projects-regions-clusters start" [
 #
 # POST /v1/projects/{projectId}/regions/{region}/clusters/{clusterName}:stop
 # operationId: dataproc.projects.regions.clusters.stop
-export def "projects-regions-clusters stop" [
+export def "dataproc-projects-regions-clusters-stop" [
   project_id: string
   region: string
   cluster_name: string
@@ -689,7 +689,7 @@ export def "projects-regions-clusters stop" [
 #
 # GET /v1/projects/{projectId}/regions/{region}/jobs
 # operationId: dataproc.projects.regions.jobs.list
-export def "projects-regions-jobs list" [
+export def "dataproc-projects-regions-jobs-list" [
   project_id: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -744,7 +744,7 @@ export def "projects-regions-jobs list" [
 #
 # DELETE /v1/projects/{projectId}/regions/{region}/jobs/{jobId}
 # operationId: dataproc.projects.regions.jobs.delete
-export def "projects-regions-jobs delete" [
+export def "dataproc-projects-regions-jobs-delete" [
   project_id: string
   region: string
   job_id: string
@@ -796,7 +796,7 @@ export def "projects-regions-jobs delete" [
 #
 # GET /v1/projects/{projectId}/regions/{region}/jobs/{jobId}
 # operationId: dataproc.projects.regions.jobs.get
-export def "projects-regions-jobs get" [
+export def "dataproc-projects-regions-jobs-get" [
   project_id: string
   region: string
   job_id: string
@@ -862,7 +862,7 @@ export def "projects-regions-jobs get" [
 # --sparkSqlJob shape: {jarFileUris?: list<string>, loggingConfig?: record, properties?: record, queryFileUri?: string, queryList?: record, scriptVariables?: record}
 # --trinoJob shape: {clientTags?: list<string>, continueOnFailure?: bool, loggingConfig?: record, outputFormat?: string, properties?: record, queryFileUri?: string, queryList?: record}
 # --yarnApplications item shape: {name?: string, progress?: float, state?: "STATE_UNSPECIFIED"|"NEW"|"NEW_SAVING"|"SUBMITTED"|"ACCEPTED"|"RUNNING"|"FINISHED"|"FAILED"|"KILLED", trackingUrl?: string}
-export def "projects-regions-jobs update" [
+export def "dataproc-projects-regions-jobs-patch" [
   project_id: string
   region: string
   job_id: string
@@ -933,7 +933,7 @@ export def "projects-regions-jobs update" [
 #
 # POST /v1/projects/{projectId}/regions/{region}/jobs/{jobId}:cancel
 # operationId: dataproc.projects.regions.jobs.cancel
-export def "projects-regions-jobs cancel" [
+export def "dataproc-projects-regions-jobs-cancel" [
   project_id: string
   region: string
   job_id: string
@@ -990,7 +990,7 @@ export def "projects-regions-jobs cancel" [
 # POST /v1/projects/{projectId}/regions/{region}/jobs:submit
 # operationId: dataproc.projects.regions.jobs.submit
 # --job shape: {driverSchedulingConfig?: record, hadoopJob?: record, hiveJob?: record, labels?: record, pigJob?: record, placement?: record, prestoJob?: record, pysparkJob?: record, reference?: record, scheduling?: record, sparkJob?: record, sparkRJob?: record, sparkSqlJob?: record, status?: record, trinoJob?: record}
-export def "projects-regions-jobs-submit submit" [
+export def "dataproc-projects-regions-jobs-submit" [
   project_id: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1046,7 +1046,7 @@ export def "projects-regions-jobs-submit submit" [
 # POST /v1/projects/{projectId}/regions/{region}/jobs:submitAsOperation
 # operationId: dataproc.projects.regions.jobs.submitAsOperation
 # --job shape: {driverSchedulingConfig?: record, hadoopJob?: record, hiveJob?: record, labels?: record, pigJob?: record, placement?: record, prestoJob?: record, pysparkJob?: record, reference?: record, scheduling?: record, sparkJob?: record, sparkRJob?: record, sparkSqlJob?: record, status?: record, trinoJob?: record}
-export def "projects-regions-jobs-submit-as-operation submit" [
+export def "dataproc-projects-regions-jobs-submit-as-operation" [
   project_id: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1101,7 +1101,7 @@ export def "projects-regions-jobs-submit-as-operation submit" [
 #
 # DELETE /v1/{name}
 # operationId: dataproc.projects.regions.workflowTemplates.delete
-export def "projects delete" [
+export def "dataproc-projects-regions-workflow-templates-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1150,7 +1150,7 @@ export def "projects delete" [
 #
 # GET /v1/{name}
 # operationId: dataproc.projects.regions.workflowTemplates.get
-export def "projects get" [
+export def "dataproc-projects-regions-workflow-templates-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1204,7 +1204,7 @@ export def "projects get" [
 # --jobs item shape: {hadoopJob?: record, hiveJob?: record, labels?: record, pigJob?: record, prerequisiteStepIds?: list<string>, prestoJob?: record, pysparkJob?: record, scheduling?: record, sparkJob?: record, sparkRJob?: record, sparkSqlJob?: record, stepId?: string, trinoJob?: record}
 # --parameters item shape: {description?: string, fields?: list<string>, name?: string, validation?: record}
 # --placement shape: {clusterSelector?: record, managedCluster?: record}
-export def "projects update" [
+export def "dataproc-projects-regions-workflow-templates-update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1262,7 +1262,7 @@ export def "projects update" [
 #
 # POST /v1/{name}:cancel
 # operationId: dataproc.projects.regions.operations.cancel
-export def "projects cancel" [
+export def "dataproc-projects-regions-operations-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1310,7 +1310,7 @@ export def "projects cancel" [
 #
 # POST /v1/{name}:instantiate
 # operationId: dataproc.projects.regions.workflowTemplates.instantiate
-export def "projects create-instantiate" [
+export def "dataproc-projects-regions-workflow-templates-instantiate" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1364,7 +1364,7 @@ export def "projects create-instantiate" [
 #
 # POST /v1/{name}:resize
 # operationId: dataproc.projects.regions.clusters.nodeGroups.resize
-export def "projects resize" [
+export def "dataproc-projects-regions-clusters-node-groups-resize" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1418,7 +1418,7 @@ export def "projects resize" [
 #
 # GET /v1/{parent}/autoscalingPolicies
 # operationId: dataproc.projects.regions.autoscalingPolicies.list
-export def "autoscaling-policies list" [
+export def "dataproc-projects-regions-autoscaling-policies-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1471,7 +1471,7 @@ export def "autoscaling-policies list" [
 # --basicAlgorithm shape: {cooldownPeriod?: string, sparkStandaloneConfig?: record, yarnConfig?: record}
 # --secondaryWorkerConfig shape: {maxInstances?: int, minInstances?: int, weight?: int}
 # --workerConfig shape: {maxInstances?: int, minInstances?: int, weight?: int}
-export def "autoscaling-policies create" [
+export def "dataproc-projects-regions-autoscaling-policies-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1527,7 +1527,7 @@ export def "autoscaling-policies create" [
 #
 # GET /v1/{parent}/batches
 # operationId: dataproc.projects.locations.batches.list
-export def "batches list" [
+export def "dataproc-projects-locations-batches-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1586,7 +1586,7 @@ export def "batches list" [
 # --sparkBatch shape: {archiveUris?: list<string>, args?: list<string>, fileUris?: list<string>, jarFileUris?: list<string>, mainClass?: string, mainJarFileUri?: string}
 # --sparkRBatch shape: {archiveUris?: list<string>, args?: list<string>, fileUris?: list<string>, mainRFileUri?: string}
 # --sparkSqlBatch shape: {jarFileUris?: list<string>, queryFileUri?: string, queryVariables?: record}
-export def "batches create" [
+export def "dataproc-projects-locations-batches-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1648,7 +1648,7 @@ export def "batches create" [
 # POST /v1/{parent}/nodeGroups
 # operationId: dataproc.projects.regions.clusters.nodeGroups.create
 # --nodeGroupConfig shape: {accelerators?: list, diskConfig?: record, imageUri?: string, machineTypeUri?: string, managedGroupConfig?: record, minCpuPlatform?: string, numInstances?: int, preemptibility?: "PREEMPTIBILITY_UNSPECIFIED"|"NON_PREEMPTIBLE"|"PREEMPTIBLE"|"SPOT"}
-export def "node-groups create" [
+export def "dataproc-projects-regions-clusters-node-groups-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1705,7 +1705,7 @@ export def "node-groups create" [
 #
 # GET /v1/{parent}/workflowTemplates
 # operationId: dataproc.projects.regions.workflowTemplates.list
-export def "workflow-templates list" [
+export def "dataproc-projects-regions-workflow-templates-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1758,7 +1758,7 @@ export def "workflow-templates list" [
 # --jobs item shape: {hadoopJob?: record, hiveJob?: record, labels?: record, pigJob?: record, prerequisiteStepIds?: list<string>, prestoJob?: record, pysparkJob?: record, scheduling?: record, sparkJob?: record, sparkRJob?: record, sparkSqlJob?: record, stepId?: string, trinoJob?: record}
 # --parameters item shape: {description?: string, fields?: list<string>, name?: string, validation?: record}
 # --placement shape: {clusterSelector?: record, managedCluster?: record}
-export def "workflow-templates create" [
+export def "dataproc-projects-regions-workflow-templates-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1819,7 +1819,7 @@ export def "workflow-templates create" [
 # --jobs item shape: {hadoopJob?: record, hiveJob?: record, labels?: record, pigJob?: record, prerequisiteStepIds?: list<string>, prestoJob?: record, pysparkJob?: record, scheduling?: record, sparkJob?: record, sparkRJob?: record, sparkSqlJob?: record, stepId?: string, trinoJob?: record}
 # --parameters item shape: {description?: string, fields?: list<string>, name?: string, validation?: record}
 # --placement shape: {clusterSelector?: record, managedCluster?: record}
-export def "workflow-templates-instantiate-inline create" [
+export def "dataproc-projects-regions-workflow-templates-instantiate-inline" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1878,7 +1878,7 @@ export def "workflow-templates-instantiate-inline create" [
 #
 # POST /v1/{project}/{region}/{cluster}:injectCredentials
 # operationId: dataproc.projects.regions.clusters.injectCredentials
-export def "projects create-inject-credentials" [
+export def "dataproc-projects-regions-clusters-inject-credentials" [
   project: string
   region: string
   cluster: string
@@ -1936,7 +1936,7 @@ export def "projects create-inject-credentials" [
 # POST /v1/{resource}:getIamPolicy
 # operationId: dataproc.projects.regions.workflowTemplates.getIamPolicy
 # --options shape: {requestedPolicyVersion?: int}
-export def "projects get-iam-policy" [
+export def "dataproc-projects-regions-workflow-templates-get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1989,7 +1989,7 @@ export def "projects get-iam-policy" [
 # POST /v1/{resource}:setIamPolicy
 # operationId: dataproc.projects.regions.workflowTemplates.setIamPolicy
 # --policy shape: {bindings?: list, etag?: string, version?: int}
-export def "projects update-iam-policy" [
+export def "dataproc-projects-regions-workflow-templates-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2041,7 +2041,7 @@ export def "projects update-iam-policy" [
 #
 # POST /v1/{resource}:testIamPermissions
 # operationId: dataproc.projects.regions.workflowTemplates.testIamPermissions
-export def "projects test-iam-permissions" [
+export def "dataproc-projects-regions-workflow-templates-test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

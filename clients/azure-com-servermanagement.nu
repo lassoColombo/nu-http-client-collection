@@ -126,7 +126,7 @@ def expand-completer-1 [] { ["output"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-server-management-gateways list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "gateway-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -150,7 +150,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.ServerManagement/gateways
 # operationId: Gateway_List
-export def "subscriptions-providers-microsoft-server-management-gateways list" [
+export def "gateway-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -189,7 +189,7 @@ export def "subscriptions-providers-microsoft-server-management-gateways list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.ServerManagement/nodes
 # operationId: Node_List
-export def "subscriptions-providers-microsoft-server-management-nodes list" [
+export def "node-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -228,7 +228,7 @@ export def "subscriptions-providers-microsoft-server-management-nodes list" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServerManagement/gateways
 # operationId: Gateway_ListForResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-server-management-gateways list" [
+export def "gateway-list-for-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -269,7 +269,7 @@ export def "subscriptions-resource-groups-providers-microsoft-server-management-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServerManagement/gateways/{gatewayName}
 # operationId: Gateway_Delete
-export def "subscriptions-resource-groups-providers-microsoft-server-management-gateways delete" [
+export def "gateway-delete" [
   subscription_id: string
   resource_group_name: string
   gateway_name: string
@@ -312,7 +312,7 @@ export def "subscriptions-resource-groups-providers-microsoft-server-management-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServerManagement/gateways/{gatewayName}
 # operationId: Gateway_Get
-export def "subscriptions-resource-groups-providers-microsoft-server-management-gateways get" [
+export def "gateway-get" [
   subscription_id: string
   resource_group_name: string
   gateway_name: string
@@ -357,7 +357,7 @@ export def "subscriptions-resource-groups-providers-microsoft-server-management-
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServerManagement/gateways/{gatewayName}
 # operationId: Gateway_Update
 # --properties shape: {upgradeMode?: "Manual"|"Automatic"}
-export def "subscriptions-resource-groups-providers-microsoft-server-management-gateways update" [
+export def "gateway-update" [
   subscription_id: string
   resource_group_name: string
   gateway_name: string
@@ -407,7 +407,7 @@ export def "subscriptions-resource-groups-providers-microsoft-server-management-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServerManagement/gateways/{gatewayName}
 # operationId: Gateway_Create
 # --properties shape: {upgradeMode?: "Manual"|"Automatic"}
-export def "subscriptions-resource-groups-providers-microsoft-server-management-gateways create" [
+export def "gateway-create" [
   subscription_id: string
   resource_group_name: string
   gateway_name: string
@@ -456,7 +456,7 @@ export def "subscriptions-resource-groups-providers-microsoft-server-management-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServerManagement/gateways/{gatewayName}/profile
 # operationId: Gateway_GetProfile
-export def "subscriptions-resource-groups-providers-microsoft-server-management-gateways-profile get" [
+export def "gateway-get-profile" [
   subscription_id: string
   resource_group_name: string
   gateway_name: string
@@ -499,7 +499,7 @@ export def "subscriptions-resource-groups-providers-microsoft-server-management-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServerManagement/gateways/{gatewayName}/regenerateprofile
 # operationId: Gateway_RegenerateProfile
-export def "subscriptions-resource-groups-providers-microsoft-server-management-gateways-regenerateprofile create-regenerate-profile" [
+export def "gateway-regenerate-profile" [
   subscription_id: string
   resource_group_name: string
   gateway_name: string
@@ -542,7 +542,7 @@ export def "subscriptions-resource-groups-providers-microsoft-server-management-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServerManagement/gateways/{gatewayName}/upgradetolatest
 # operationId: Gateway_Upgrade
-export def "subscriptions-resource-groups-providers-microsoft-server-management-gateways-upgradetolatest create-upgrade" [
+export def "gateway-upgrade" [
   subscription_id: string
   resource_group_name: string
   gateway_name: string
@@ -585,7 +585,7 @@ export def "subscriptions-resource-groups-providers-microsoft-server-management-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServerManagement/nodes
 # operationId: Node_ListForResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-server-management-nodes list" [
+export def "node-list-for-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -626,7 +626,7 @@ export def "subscriptions-resource-groups-providers-microsoft-server-management-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServerManagement/nodes/{nodeName}
 # operationId: Node_Delete
-export def "subscriptions-resource-groups-providers-microsoft-server-management-nodes delete" [
+export def "node-delete" [
   subscription_id: string
   resource_group_name: string
   node_name: string
@@ -669,7 +669,7 @@ export def "subscriptions-resource-groups-providers-microsoft-server-management-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServerManagement/nodes/{nodeName}
 # operationId: Node_Get
-export def "subscriptions-resource-groups-providers-microsoft-server-management-nodes get" [
+export def "node-get" [
   subscription_id: string
   resource_group_name: string
   node_name: string
@@ -713,7 +713,7 @@ export def "subscriptions-resource-groups-providers-microsoft-server-management-
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServerManagement/nodes/{nodeName}
 # operationId: Node_Update
 # --properties shape: {connectionName?: string, gatewayId?: string, password?: string, userName?: string}
-export def "subscriptions-resource-groups-providers-microsoft-server-management-nodes update" [
+export def "node-update" [
   subscription_id: string
   resource_group_name: string
   node_name: string
@@ -763,7 +763,7 @@ export def "subscriptions-resource-groups-providers-microsoft-server-management-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServerManagement/nodes/{nodeName}
 # operationId: Node_Create
 # --properties shape: {connectionName?: string, gatewayId?: string, password?: string, userName?: string}
-export def "subscriptions-resource-groups-providers-microsoft-server-management-nodes create" [
+export def "node-create" [
   subscription_id: string
   resource_group_name: string
   node_name: string
@@ -812,7 +812,7 @@ export def "subscriptions-resource-groups-providers-microsoft-server-management-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServerManagement/nodes/{nodeName}/sessions/{session}
 # operationId: Session_Delete
-export def "subscriptions-resource-groups-providers-microsoft-server-management-nodes-sessions delete" [
+export def "session-delete" [
   subscription_id: string
   resource_group_name: string
   node_name: string
@@ -857,7 +857,7 @@ export def "subscriptions-resource-groups-providers-microsoft-server-management-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServerManagement/nodes/{nodeName}/sessions/{session}
 # operationId: Session_Get
-export def "subscriptions-resource-groups-providers-microsoft-server-management-nodes-sessions get" [
+export def "session-get" [
   subscription_id: string
   resource_group_name: string
   node_name: string
@@ -903,7 +903,7 @@ export def "subscriptions-resource-groups-providers-microsoft-server-management-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServerManagement/nodes/{nodeName}/sessions/{session}
 # operationId: Session_Create
 # --properties shape: {EncryptionCertificateThumbprint?: string, credentialDataFormat?: "RsaEncrypted", password?: string, retentionPeriod?: "Session"|"Persistent", userName?: string}
-export def "subscriptions-resource-groups-providers-microsoft-server-management-nodes-sessions create" [
+export def "session-create" [
   subscription_id: string
   resource_group_name: string
   node_name: string
@@ -952,7 +952,7 @@ export def "subscriptions-resource-groups-providers-microsoft-server-management-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServerManagement/nodes/{nodeName}/sessions/{session}/features/powerShellConsole/pssessions
 # operationId: PowerShell_ListSession
-export def "subscriptions-resource-groups-providers-microsoft-server-management-nodes-sessions-features-power-shell-console-pssessions list" [
+export def "power-shell-list-session" [
   subscription_id: string
   resource_group_name: string
   node_name: string
@@ -997,7 +997,7 @@ export def "subscriptions-resource-groups-providers-microsoft-server-management-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServerManagement/nodes/{nodeName}/sessions/{session}/features/powerShellConsole/pssessions/{pssession}
 # operationId: PowerShell_GetCommandStatus
-export def "subscriptions-resource-groups-providers-microsoft-server-management-nodes-sessions-features-power-shell-console-pssessions get-command-status" [
+export def "power-shell-get-command-status" [
   subscription_id: string
   resource_group_name: string
   node_name: string
@@ -1045,7 +1045,7 @@ export def "subscriptions-resource-groups-providers-microsoft-server-management-
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServerManagement/nodes/{nodeName}/sessions/{session}/features/powerShellConsole/pssessions/{pssession}
 # operationId: PowerShell_UpdateCommand
-export def "subscriptions-resource-groups-providers-microsoft-server-management-nodes-sessions-features-power-shell-console-pssessions update-command" [
+export def "power-shell-update-command" [
   subscription_id: string
   resource_group_name: string
   node_name: string
@@ -1092,7 +1092,7 @@ export def "subscriptions-resource-groups-providers-microsoft-server-management-
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServerManagement/nodes/{nodeName}/sessions/{session}/features/powerShellConsole/pssessions/{pssession}
 # operationId: PowerShell_CreateSession
-export def "subscriptions-resource-groups-providers-microsoft-server-management-nodes-sessions-features-power-shell-console-pssessions create" [
+export def "power-shell-create-session" [
   subscription_id: string
   resource_group_name: string
   node_name: string
@@ -1139,7 +1139,7 @@ export def "subscriptions-resource-groups-providers-microsoft-server-management-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServerManagement/nodes/{nodeName}/sessions/{session}/features/powerShellConsole/pssessions/{pssession}/cancel
 # operationId: PowerShell_CancelCommand
-export def "subscriptions-resource-groups-providers-microsoft-server-management-nodes-sessions-features-power-shell-console-pssessions-cancel cancel-command" [
+export def "power-shell-cancel-command" [
   subscription_id: string
   resource_group_name: string
   node_name: string
@@ -1187,7 +1187,7 @@ export def "subscriptions-resource-groups-providers-microsoft-server-management-
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServerManagement/nodes/{nodeName}/sessions/{session}/features/powerShellConsole/pssessions/{pssession}/invokeCommand
 # operationId: PowerShell_InvokeCommand
 # --properties shape: {command?: string}
-export def "subscriptions-resource-groups-providers-microsoft-server-management-nodes-sessions-features-power-shell-console-pssessions-invoke-command create" [
+export def "power-shell-invoke-command" [
   subscription_id: string
   resource_group_name: string
   node_name: string
@@ -1238,7 +1238,7 @@ export def "subscriptions-resource-groups-providers-microsoft-server-management-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServerManagement/nodes/{nodeName}/sessions/{session}/features/powerShellConsole/pssessions/{pssession}/tab
 # operationId: PowerShell_TabCompletion
-export def "subscriptions-resource-groups-providers-microsoft-server-management-nodes-sessions-features-power-shell-console-pssessions-tab create-completion" [
+export def "power-shell-tab-completion" [
   subscription_id: string
   resource_group_name: string
   node_name: string

@@ -123,7 +123,7 @@ def notification-type-completer [] { ["ALERT" "EVENT" "FUNCTION" "RESULT"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "business-international-profile create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "international-business-profile" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -147,7 +147,7 @@ export def commands []: nothing -> table {
 #
 # POST /business/international/profile
 # operationId: InternationalBusinessProfile
-export def "business-international-profile create" [
+export def "international-business-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -190,7 +190,7 @@ export def "business-international-profile create" [
 #
 # POST /business/international/search
 # operationId: InternationalBusinessSearch
-export def "business-international-search list" [
+export def "international-business-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -235,7 +235,7 @@ export def "business-international-search list" [
 # POST /business/ownership/query
 # operationId: BusinessOwnershipQuery
 # --organisation shape: {addresses?: list, dateOfBirth?: record, entityId?: string, entityProfile?: string, entityType?: "INDIVIDUAL"|"TRUST"|"ORGANISATION", extraData?: list, flags?: list, gender?: "U"|"F"|"M"|"O", identityDocs?: list, name?: record, organisationData?: record}
-export def "business-ownership-query list" [
+export def "business-ownership-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -292,7 +292,7 @@ export def "business-ownership-query list" [
 # --identityDocs item shape: {country: string, docScan?: list, documentId?: string, documentStatus?: "INITIALISING"|"SCAN_IN_PROGRESS"|"DOC_SCANNED"|"DOC_CHECKED", extraData?: list, idExpiry?: string, idIssued?: string, idNumber?: string, idSubType?: string, ... (2 more fields)}
 # --name shape: {displayName?: string, familyName: string, givenName?: string, honourific?: string, middleName?: string}
 # --organisationData shape: {adverseCreditDataPresent?: bool, class?: record, disclosingEntityIndicator?: bool, includesNonBeneficiallyHeld?: bool, kycCustomerType?: string, lastCheckDate?: string, ownershipResolved?: bool, registeredName?: string, registration?: record, shareStructure?: list, startDate?: string, status?: record, subclass?: record, type?: record}
-export def "business-reports create-run" [
+export def "run-business-reports" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -346,7 +346,7 @@ export def "business-reports create-run" [
 #
 # POST /business/{entityId}/verify
 # operationId: CheckOrganisation
-export def "business-verify check-organisation" [
+export def "check-organisation" [
   entity_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -393,7 +393,7 @@ export def "business-verify check-organisation" [
 # operationId: CreateDocument
 # --docScan item shape: {ScanDelete?: bool, scanCreated?: string, scanData?: string, scanDataRetrievalState?: "NORMAL"|"EXCLUDED"|"FAILED", scanDocId?: string, scanFilename?: string, ... (4 more fields)}
 # --extraData item shape: {kvpKey?: string, ... (2 more fields)}
-export def "document create" [
+export def "create-document" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -447,7 +447,7 @@ export def "document create" [
 # operationId: CompareDocument
 # --compareDocument shape: {country: string, docScan?: list, documentId?: string, documentStatus?: "INITIALISING"|"SCAN_IN_PROGRESS"|"DOC_SCANNED"|"DOC_CHECKED", extraData?: list, idExpiry?: string, idIssued?: string, idNumber?: string, idSubType?: string, ... (2 more fields)}
 # --toDocument shape: {country: string, docScan?: list, documentId?: string, documentStatus?: "INITIALISING"|"SCAN_IN_PROGRESS"|"DOC_SCANNED"|"DOC_CHECKED", extraData?: list, idExpiry?: string, idIssued?: string, idNumber?: string, idSubType?: string, ... (2 more fields)}
-export def "document-new-compare create" [
+export def "compare-document" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -493,7 +493,7 @@ export def "document-new-compare create" [
 # operationId: CreateScanDocument
 # --docScan item shape: {ScanDelete?: bool, scanCreated?: string, scanData?: string, scanDataRetrievalState?: "NORMAL"|"EXCLUDED"|"FAILED", scanDocId?: string, scanFilename?: string, ... (4 more fields)}
 # --extraData item shape: {kvpKey?: string, ... (2 more fields)}
-export def "document-new-scan create" [
+export def "create-scan-document" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -548,7 +548,7 @@ export def "document-new-scan create" [
 # operationId: CreateProcessIndustryUtilityDocument
 # --docScan item shape: {ScanDelete?: bool, scanCreated?: string, scanData?: string, scanDataRetrievalState?: "NORMAL"|"EXCLUDED"|"FAILED", scanDocId?: string, scanFilename?: string, ... (4 more fields)}
 # --extraData item shape: {kvpKey?: string, ... (2 more fields)}
-export def "document-new-utility-process-compare create-industry" [
+export def "create-process-industry-utility-document" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -605,7 +605,7 @@ export def "document-new-utility-process-compare create-industry" [
 # operationId: VerifyDocument
 # --document shape: {country: string, docScan?: list, documentId?: string, documentStatus?: "INITIALISING"|"SCAN_IN_PROGRESS"|"DOC_SCANNED"|"DOC_CHECKED", extraData?: list, idExpiry?: string, idIssued?: string, idNumber?: string, idSubType?: string, ... (2 more fields)}
 # --entityData shape: {addresses?: list, dateOfBirth?: record, entityId?: string, entityProfile?: string, entityType?: "INDIVIDUAL"|"TRUST"|"ORGANISATION", extraData?: list, flags?: list, gender?: "U"|"F"|"M"|"O", identityDocs?: list, name?: record, organisationData?: record}
-export def "document-new-verify verify" [
+export def "verify-document" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -651,7 +651,7 @@ export def "document-new-verify verify" [
 # operationId: SearchDocument
 # --docScan item shape: {ScanDelete?: bool, scanCreated?: string, scanData?: string, scanDataRetrievalState?: "NORMAL"|"EXCLUDED"|"FAILED", scanDocId?: string, scanFilename?: string, ... (4 more fields)}
 # --extraData item shape: {kvpKey?: string, ... (2 more fields)}
-export def "document-search list" [
+export def "search-document" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -703,7 +703,7 @@ export def "document-search list" [
 #
 # DELETE /document/{documentId}
 # operationId: DeleteDocument
-export def "document delete" [
+export def "delete-document" [
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -744,7 +744,7 @@ export def "document delete" [
 #
 # GET /document/{documentId}
 # operationId: QueryDocument
-export def "document list" [
+export def "query-document" [
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -786,7 +786,7 @@ export def "document list" [
 # operationId: UpdateDocument
 # --docScan item shape: {ScanDelete?: bool, scanCreated?: string, scanData?: string, scanDataRetrievalState?: "NORMAL"|"EXCLUDED"|"FAILED", scanDocId?: string, scanFilename?: string, ... (4 more fields)}
 # --extraData item shape: {kvpKey?: string, ... (2 more fields)}
-export def "document update" [
+export def "update-document" [
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -843,7 +843,7 @@ export def "document update" [
 #
 # GET /document/{documentId}/checks
 # operationId: QueryDocumentChecks
-export def "document-checks list" [
+export def "query-document-checks" [
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -886,7 +886,7 @@ export def "document-checks list" [
 # operationId: UpdateCompareDocument
 # --compareDocument shape: {country: string, docScan?: list, documentId?: string, documentStatus?: "INITIALISING"|"SCAN_IN_PROGRESS"|"DOC_SCANNED"|"DOC_CHECKED", extraData?: list, idExpiry?: string, idIssued?: string, idNumber?: string, idSubType?: string, ... (2 more fields)}
 # --toDocument shape: {country: string, docScan?: list, documentId?: string, documentStatus?: "INITIALISING"|"SCAN_IN_PROGRESS"|"DOC_SCANNED"|"DOC_CHECKED", extraData?: list, idExpiry?: string, idIssued?: string, idNumber?: string, idSubType?: string, ... (2 more fields)}
-export def "document-compare update" [
+export def "update-compare-document" [
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -932,7 +932,7 @@ export def "document-compare update" [
 #
 # GET /document/{documentId}/full
 # operationId: QueryDocumentFull
-export def "document-full list" [
+export def "query-document-full" [
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -974,7 +974,7 @@ export def "document-full list" [
 # operationId: UpdateScanDocument
 # --docScan item shape: {ScanDelete?: bool, scanCreated?: string, scanData?: string, scanDataRetrievalState?: "NORMAL"|"EXCLUDED"|"FAILED", scanDocId?: string, scanFilename?: string, ... (4 more fields)}
 # --extraData item shape: {kvpKey?: string, ... (2 more fields)}
-export def "document-scan update" [
+export def "update-scan-document" [
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1031,7 +1031,7 @@ export def "document-scan update" [
 # operationId: UpdateProcessIndustryUtilityDocument
 # --docScan item shape: {ScanDelete?: bool, scanCreated?: string, scanData?: string, scanDataRetrievalState?: "NORMAL"|"EXCLUDED"|"FAILED", scanDocId?: string, scanFilename?: string, ... (4 more fields)}
 # --extraData item shape: {kvpKey?: string, ... (2 more fields)}
-export def "document-utility-process-compare update-industry" [
+export def "update-process-industry-utility-document" [
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1089,7 +1089,7 @@ export def "document-utility-process-compare update-industry" [
 # POST /document/{documentId}/utility/process/consent
 # operationId: UpdateProcessIndustryUtilityDocumentConsent
 # --details shape: {concessionCard?: record, vulnerabilities?: record}
-export def "document-utility-process-consent update-industry" [
+export def "update-process-industry-utility-document-consent" [
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1137,7 +1137,7 @@ export def "document-utility-process-consent update-industry" [
 # POST /document/{documentId}/utility/process/switch
 # operationId: UpdateProcessIndustryUtilityDocumentSwitch
 # --details shape: {customerDetails: record}
-export def "document-utility-process-switch update-industry" [
+export def "update-process-industry-utility-document-switch" [
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1186,7 +1186,7 @@ export def "document-utility-process-switch update-industry" [
 # operationId: UpdateVerifyDocument
 # --document shape: {country: string, docScan?: list, documentId?: string, documentStatus?: "INITIALISING"|"SCAN_IN_PROGRESS"|"DOC_SCANNED"|"DOC_CHECKED", extraData?: list, idExpiry?: string, idIssued?: string, idNumber?: string, idSubType?: string, ... (2 more fields)}
 # --entityData shape: {addresses?: list, dateOfBirth?: record, entityId?: string, entityProfile?: string, entityType?: "INDIVIDUAL"|"TRUST"|"ORGANISATION", extraData?: list, flags?: list, gender?: "U"|"F"|"M"|"O", identityDocs?: list, name?: record, organisationData?: record}
-export def "document-verify update" [
+export def "update-verify-document" [
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1239,7 +1239,7 @@ export def "document-verify update" [
 # --identityDocs item shape: {country: string, docScan?: list, documentId?: string, documentStatus?: "INITIALISING"|"SCAN_IN_PROGRESS"|"DOC_SCANNED"|"DOC_CHECKED", extraData?: list, idExpiry?: string, idIssued?: string, idNumber?: string, idSubType?: string, ... (2 more fields)}
 # --name shape: {displayName?: string, familyName: string, givenName?: string, honourific?: string, middleName?: string}
 # --organisationData shape: {adverseCreditDataPresent?: bool, class?: record, disclosingEntityIndicator?: bool, includesNonBeneficiallyHeld?: bool, kycCustomerType?: string, lastCheckDate?: string, ownershipResolved?: bool, registeredName?: string, registration?: record, shareStructure?: list, startDate?: string, status?: record, subclass?: record, type?: record}
-export def "entity create" [
+export def "create-entity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1292,7 +1292,7 @@ export def "entity create" [
 # POST /entity/new/idvalidate/getToken
 # operationId: CreateEntityGetIDVToken
 # --entity shape: {addresses?: list, dateOfBirth?: record, entityId?: string, entityProfile?: string, entityType?: "INDIVIDUAL"|"TRUST"|"ORGANISATION", extraData?: list, flags?: list, gender?: "U"|"F"|"M"|"O", identityDocs?: list, name?: record, organisationData?: record}
-export def "entity-new-idvalidate-get-token create-idv" [
+export def "create-entity-get-idv-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1339,7 +1339,7 @@ export def "entity-new-idvalidate-get-token create-idv" [
 # operationId: CreateCheckEntityPushToMobile
 # --deviceCheckDetails item shape: {activityType?: "SIGNUP"|"LOGIN"|"PAYMENT"|"CONFIRMATION"|"_<Vendor Specific List>", additionalData?: list, checkSessionKey?: string, checkType?: "DEVICE"|"BIOMETRIC"}
 # --entity shape: {addresses?: list, dateOfBirth?: record, entityId?: string, entityProfile?: string, entityType?: "INDIVIDUAL"|"TRUST"|"ORGANISATION", extraData?: list, flags?: list, gender?: "U"|"F"|"M"|"O", identityDocs?: list, name?: record, organisationData?: record}
-export def "entity-new-verify-push-to-mobile create-check" [
+export def "create-check-entity-push-to-mobile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1387,7 +1387,7 @@ export def "entity-new-verify-push-to-mobile create-check" [
 # operationId: CreateCheckEntity
 # --deviceCheckDetails item shape: {activityType?: "SIGNUP"|"LOGIN"|"PAYMENT"|"CONFIRMATION"|"_<Vendor Specific List>", additionalData?: list, checkSessionKey?: string, checkType?: "DEVICE"|"BIOMETRIC"}
 # --entity shape: {addresses?: list, dateOfBirth?: record, entityId?: string, entityProfile?: string, entityType?: "INDIVIDUAL"|"TRUST"|"ORGANISATION", extraData?: list, flags?: list, gender?: "U"|"F"|"M"|"O", identityDocs?: list, name?: record, organisationData?: record}
-export def "entity-new-verify create-check" [
+export def "create-check-entity" [
   check_type: string
   result_level: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1442,7 +1442,7 @@ export def "entity-new-verify create-check" [
 # --identityDocs item shape: {country: string, docScan?: list, documentId?: string, documentStatus?: "INITIALISING"|"SCAN_IN_PROGRESS"|"DOC_SCANNED"|"DOC_CHECKED", extraData?: list, idExpiry?: string, idIssued?: string, idNumber?: string, idSubType?: string, ... (2 more fields)}
 # --name shape: {displayName?: string, familyName: string, givenName?: string, honourific?: string, middleName?: string}
 # --organisationData shape: {adverseCreditDataPresent?: bool, class?: record, disclosingEntityIndicator?: bool, includesNonBeneficiallyHeld?: bool, kycCustomerType?: string, lastCheckDate?: string, ownershipResolved?: bool, registeredName?: string, registration?: record, shareStructure?: list, startDate?: string, status?: record, subclass?: record, type?: record}
-export def "entity-search list" [
+export def "search-entity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1494,7 +1494,7 @@ export def "entity-search list" [
 #
 # DELETE /entity/{entityId}
 # operationId: DeleteEntity
-export def "entity delete" [
+export def "delete-entity" [
   entity_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1535,7 +1535,7 @@ export def "entity delete" [
 #
 # GET /entity/{entityId}
 # operationId: QueryEntity
-export def "entity list" [
+export def "query-entity" [
   entity_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1582,7 +1582,7 @@ export def "entity list" [
 # --identityDocs item shape: {country: string, docScan?: list, documentId?: string, documentStatus?: "INITIALISING"|"SCAN_IN_PROGRESS"|"DOC_SCANNED"|"DOC_CHECKED", extraData?: list, idExpiry?: string, idIssued?: string, idNumber?: string, idSubType?: string, ... (2 more fields)}
 # --name shape: {displayName?: string, familyName: string, givenName?: string, honourific?: string, middleName?: string}
 # --organisationData shape: {adverseCreditDataPresent?: bool, class?: record, disclosingEntityIndicator?: bool, includesNonBeneficiallyHeld?: bool, kycCustomerType?: string, lastCheckDate?: string, ownershipResolved?: bool, registeredName?: string, registration?: record, shareStructure?: list, startDate?: string, status?: record, subclass?: record, type?: record}
-export def "entity update" [
+export def "update-entity" [
   entity_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1639,7 +1639,7 @@ export def "entity update" [
 #
 # POST /entity/{entityId}/check/{checkId}/{checkClass}
 # operationId: UpdateCheckClassResults
-export def "entity-check update-class-results" [
+export def "update-check-class-results" [
   entity_id: string
   check_id: string
   check_class: string
@@ -1689,7 +1689,7 @@ export def "entity-check update-class-results" [
 #
 # POST /entity/{entityId}/check/{checkId}/{checkClass}/{checkClassId}
 # operationId: UpdateCheckClassResult
-export def "entity-check update-class-result" [
+export def "update-check-class-result" [
   entity_id: string
   check_id: string
   check_class: string
@@ -1738,7 +1738,7 @@ export def "entity-check update-class-result" [
 #
 # GET /entity/{entityId}/checks
 # operationId: QueryEntityChecks
-export def "entity-checks list" [
+export def "query-entity-checks" [
   entity_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1780,7 +1780,7 @@ export def "entity-checks list" [
 #
 # POST /entity/{entityId}/flag/blacklist
 # operationId: BlacklistEntity
-export def "entity-flag-blacklist create" [
+export def "blacklist-entity" [
   entity_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1826,7 +1826,7 @@ export def "entity-flag-blacklist create" [
 #
 # POST /entity/{entityId}/flag/duplicate/{otherId}
 # operationId: FlagDuplicateEntity
-export def "entity-flag-duplicate create" [
+export def "flag-duplicate-entity" [
   entity_id: string
   other_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1870,7 +1870,7 @@ export def "entity-flag-duplicate create" [
 #
 # POST /entity/{entityId}/flag/monitor
 # operationId: EntityMonitoring
-export def "entity-flag-monitor create-monitoring" [
+export def "entity-monitoring" [
   entity_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1912,7 +1912,7 @@ export def "entity-flag-monitor create-monitoring" [
 #
 # POST /entity/{entityId}/flag/watchlist
 # operationId: WatchlistEntity
-export def "entity-flag-watchlist create" [
+export def "watchlist-entity" [
   entity_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1956,7 +1956,7 @@ export def "entity-flag-watchlist create" [
 #
 # GET /entity/{entityId}/full
 # operationId: QueryEntityFull
-export def "entity-full list" [
+export def "query-entity-full" [
   entity_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1997,7 +1997,7 @@ export def "entity-full list" [
 # POST /entity/{entityId}/idvalidate/getToken
 # operationId: UpdateEntityGetIDVToken
 # --entity shape: {addresses?: list, dateOfBirth?: record, entityId?: string, entityProfile?: string, entityType?: "INDIVIDUAL"|"TRUST"|"ORGANISATION", extraData?: list, flags?: list, gender?: "U"|"F"|"M"|"O", identityDocs?: list, name?: record, organisationData?: record}
-export def "entity-idvalidate-get-token update-idv" [
+export def "update-entity-get-idv-token" [
   entity_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2046,7 +2046,7 @@ export def "entity-idvalidate-get-token update-idv" [
 # operationId: UpdateEntityInitIDVProcess
 # --deviceCheckDetails item shape: {activityType?: "SIGNUP"|"LOGIN"|"PAYMENT"|"CONFIRMATION"|"_<Vendor Specific List>", additionalData?: list, checkSessionKey?: string, checkType?: "DEVICE"|"BIOMETRIC"}
 # --entity shape: {addresses?: list, dateOfBirth?: record, entityId?: string, entityProfile?: string, entityType?: "INDIVIDUAL"|"TRUST"|"ORGANISATION", extraData?: list, flags?: list, gender?: "U"|"F"|"M"|"O", identityDocs?: list, name?: record, organisationData?: record}
-export def "entity-idvalidate-init-process update-idv" [
+export def "update-entity-init-idv-process" [
   entity_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2091,7 +2091,7 @@ export def "entity-idvalidate-init-process update-idv" [
 #
 # POST /entity/{entityId}/status
 # operationId: UpdateEntityState
-export def "entity-status update-state" [
+export def "update-entity-state" [
   entity_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2137,7 +2137,7 @@ export def "entity-status update-state" [
 # operationId: UpdateCheckEntityPushToMobile
 # --deviceCheckDetails item shape: {activityType?: "SIGNUP"|"LOGIN"|"PAYMENT"|"CONFIRMATION"|"_<Vendor Specific List>", additionalData?: list, checkSessionKey?: string, checkType?: "DEVICE"|"BIOMETRIC"}
 # --entity shape: {addresses?: list, dateOfBirth?: record, entityId?: string, entityProfile?: string, entityType?: "INDIVIDUAL"|"TRUST"|"ORGANISATION", extraData?: list, flags?: list, gender?: "U"|"F"|"M"|"O", identityDocs?: list, name?: record, organisationData?: record}
-export def "entity-verify-push-to-mobile update-check" [
+export def "update-check-entity-push-to-mobile" [
   entity_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2188,7 +2188,7 @@ export def "entity-verify-push-to-mobile update-check" [
 # operationId: UpdateCheckEntity
 # --deviceCheckDetails item shape: {activityType?: "SIGNUP"|"LOGIN"|"PAYMENT"|"CONFIRMATION"|"_<Vendor Specific List>", additionalData?: list, checkSessionKey?: string, checkType?: "DEVICE"|"BIOMETRIC"}
 # --entity shape: {addresses?: list, dateOfBirth?: record, entityId?: string, entityProfile?: string, entityType?: "INDIVIDUAL"|"TRUST"|"ORGANISATION", extraData?: list, flags?: list, gender?: "U"|"F"|"M"|"O", identityDocs?: list, name?: record, organisationData?: record}
-export def "entity-verify update-check" [
+export def "update-check-entity" [
   entity_id: string
   check_type: string
   result_level: string
@@ -2241,7 +2241,7 @@ export def "entity-verify update-check" [
 #
 # GET /retrieve/response/{requestId}
 # operationId: RetrieveResult
-export def "retrieve-response get-result" [
+export def "retrieve-result" [
   request_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2283,7 +2283,7 @@ export def "retrieve-response get-result" [
 #
 # GET /ruok
 # operationId: StatusCheck
-export def "ruok check-status" [
+export def "status-check" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2319,7 +2319,7 @@ export def "ruok check-status" [
 #
 # POST /your/configured/path/{requestId}
 # operationId: notifyResult
-export def "your-configured-path notify-result" [
+export def "notify-result" [
   request_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

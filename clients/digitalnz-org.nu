@@ -105,7 +105,7 @@ def direction-completer [] { ["asc" "desc"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "records-format get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-records-format" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -128,7 +128,7 @@ export def commands []: nothing -> table {
 # Run queries against DigitalNZ metadata search service.
 #
 # GET /records.{format}
-export def "records-format get" [
+export def "get-records-format" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -198,7 +198,7 @@ export def "records-format get" [
 # View metadata associated with a single record.
 #
 # GET /records/{record_id}.{format}
-export def "records get" [
+export def "get-records-record-id-format" [
   record_id: int
   format: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -240,7 +240,7 @@ export def "records get" [
 # The "More Like This" call returns similar records to the specified ID.
 #
 # GET /records/{record_id}/more_like_this.{format}
-export def "records-more-like-this-format get" [
+export def "get-records-record-id-more-like-this-format" [
   record_id: int
   format: string
   --base-url(-b): string@base-url-completer # API base URL

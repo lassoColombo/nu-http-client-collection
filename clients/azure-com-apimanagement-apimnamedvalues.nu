@@ -129,7 +129,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-api-management-service-named-values list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "named-value-list-by-service" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -154,7 +154,7 @@ export def commands []: nothing -> table {
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/namedValues
 # Docs: https://docs.microsoft.com/en-us/azure/api-management/api-management-howto-properties
 # operationId: NamedValue_ListByService
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-named-values list" [
+export def "named-value-list-by-service" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -199,7 +199,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/namedValues/{namedValueId}
 # operationId: NamedValue_Delete
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-named-values delete" [
+export def "named-value-delete" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -246,7 +246,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/namedValues/{namedValueId}
 # operationId: NamedValue_Get
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-named-values get" [
+export def "named-value-get" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -290,7 +290,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # HEAD /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/namedValues/{namedValueId}
 # operationId: NamedValue_GetEntityTag
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-named-values get-entity-tag" [
+export def "named-value-get-entity-tag" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -335,7 +335,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/namedValues/{namedValueId}
 # operationId: NamedValue_Update
 # --properties shape: {displayName?: string, value?: string, secret?: bool, tags?: list<string>}
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-named-values update" [
+export def "named-value-update" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -387,7 +387,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/namedValues/{namedValueId}
 # operationId: NamedValue_CreateOrUpdate
 # --properties shape: {displayName: string, value: string, secret?: bool, tags?: list<string>}
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-named-values create-or-update" [
+export def "named-value-create-or-update" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -438,7 +438,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/namedValues/{namedValueId}/listValue
 # operationId: NamedValue_ListValue
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-named-values-list-value list" [
+export def "named-value-list-value" [
   subscription_id: string
   resource_group_name: string
   service_name: string

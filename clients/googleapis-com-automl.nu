@@ -130,7 +130,7 @@ def deployment-state-completer [] { ["DEPLOYED" "DEPLOYMENT_STATE_UNSPECIFIED" "
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta1 delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "automl-projects-locations-operations-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -154,7 +154,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1beta1/{name}
 # operationId: automl.projects.locations.operations.delete
-export def "v1beta1 delete" [
+export def "automl-projects-locations-operations-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -202,7 +202,7 @@ export def "v1beta1 delete" [
 #
 # GET /v1beta1/{name}
 # operationId: automl.projects.locations.operations.get
-export def "v1beta1 get" [
+export def "automl-projects-locations-operations-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -254,7 +254,7 @@ export def "v1beta1 get" [
 # --dataStats shape: {arrayStats?: record, categoryStats?: record, distinctValueCount?: string, float64Stats?: record, nullValueCount?: string, stringStats?: record, structStats?: record, timestampStats?: record, validValueCount?: string}
 # --dataType shape: {listElementType?: record, nullable?: bool, structType?: record, timeFormat?: string, typeCode?: "TYPE_CODE_UNSPECIFIED"|"FLOAT64"|"TIMESTAMP"|"STRING"|"ARRAY"|"STRUCT"|"CATEGORY"}
 # --topCorrelatedColumns item shape: {columnSpecId?: string, correlationStats?: record}
-export def "v1beta1 update" [
+export def "automl-projects-locations-datasets-table-specs-column-specs-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -312,7 +312,7 @@ export def "v1beta1 update" [
 #
 # GET /v1beta1/{name}/locations
 # operationId: automl.projects.locations.list
-export def "v1beta1-locations list" [
+export def "automl-projects-locations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -363,7 +363,7 @@ export def "v1beta1-locations list" [
 #
 # GET /v1beta1/{name}/operations
 # operationId: automl.projects.locations.operations.list
-export def "v1beta1-operations list" [
+export def "automl-projects-locations-operations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -416,7 +416,7 @@ export def "v1beta1-operations list" [
 # operationId: automl.projects.locations.models.batchPredict
 # --inputConfig shape: {bigquerySource?: record, gcsSource?: record}
 # --outputConfig shape: {bigqueryDestination?: record, gcsDestination?: record}
-export def "v1beta1 create-batch-predict" [
+export def "automl-projects-locations-models-batch-predict" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -470,7 +470,7 @@ export def "v1beta1 create-batch-predict" [
 #
 # POST /v1beta1/{name}:cancel
 # operationId: automl.projects.locations.operations.cancel
-export def "v1beta1 cancel" [
+export def "automl-projects-locations-operations-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -524,7 +524,7 @@ export def "v1beta1 cancel" [
 # operationId: automl.projects.locations.models.deploy
 # --imageClassificationModelDeploymentMetadata shape: {nodeCount?: string}
 # --imageObjectDetectionModelDeploymentMetadata shape: {nodeCount?: string}
-export def "v1beta1 create-deploy" [
+export def "automl-projects-locations-models-deploy" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -578,7 +578,7 @@ export def "v1beta1 create-deploy" [
 # POST /v1beta1/{name}:export
 # operationId: automl.projects.locations.models.export
 # --outputConfig shape: {gcrDestination?: record, gcsDestination?: record, modelFormat?: string, params?: record}
-export def "v1beta1 export" [
+export def "automl-projects-locations-models-export" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -631,7 +631,7 @@ export def "v1beta1 export" [
 # POST /v1beta1/{name}:exportData
 # operationId: automl.projects.locations.datasets.exportData
 # --outputConfig shape: {bigqueryDestination?: record, gcsDestination?: record}
-export def "v1beta1 export-data" [
+export def "automl-projects-locations-datasets-export-data" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -684,7 +684,7 @@ export def "v1beta1 export-data" [
 # POST /v1beta1/{name}:exportEvaluatedExamples
 # operationId: automl.projects.locations.models.exportEvaluatedExamples
 # --outputConfig shape: {bigqueryDestination?: record}
-export def "v1beta1 export-evaluated-examples" [
+export def "automl-projects-locations-models-export-evaluated-examples" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -737,7 +737,7 @@ export def "v1beta1 export-evaluated-examples" [
 # POST /v1beta1/{name}:importData
 # operationId: automl.projects.locations.datasets.importData
 # --inputConfig shape: {bigquerySource?: record, gcsSource?: record, params?: record}
-export def "v1beta1 import-data" [
+export def "automl-projects-locations-datasets-import-data" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -790,7 +790,7 @@ export def "v1beta1 import-data" [
 # POST /v1beta1/{name}:predict
 # operationId: automl.projects.locations.models.predict
 # --payload shape: {document?: record, image?: record, row?: record, textSnippet?: record}
-export def "v1beta1 create-predict" [
+export def "automl-projects-locations-models-predict" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -843,7 +843,7 @@ export def "v1beta1 create-predict" [
 #
 # POST /v1beta1/{name}:undeploy
 # operationId: automl.projects.locations.models.undeploy
-export def "v1beta1 create-undeploy" [
+export def "automl-projects-locations-models-undeploy" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -895,7 +895,7 @@ export def "v1beta1 create-undeploy" [
 #
 # POST /v1beta1/{name}:wait
 # operationId: automl.projects.locations.operations.wait
-export def "v1beta1 wait" [
+export def "automl-projects-locations-operations-wait" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -947,7 +947,7 @@ export def "v1beta1 wait" [
 #
 # GET /v1beta1/{parent}/columnSpecs
 # operationId: automl.projects.locations.datasets.tableSpecs.columnSpecs.list
-export def "v1beta1-column-specs list" [
+export def "automl-projects-locations-datasets-table-specs-column-specs-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -999,7 +999,7 @@ export def "v1beta1-column-specs list" [
 #
 # GET /v1beta1/{parent}/datasets
 # operationId: automl.projects.locations.datasets.list
-export def "v1beta1-datasets list" [
+export def "automl-projects-locations-datasets-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1055,7 +1055,7 @@ export def "v1beta1-datasets list" [
 # --textClassificationDatasetMetadata shape: {classificationType?: "CLASSIFICATION_TYPE_UNSPECIFIED"|"MULTICLASS"|"MULTILABEL"}
 # --textSentimentDatasetMetadata shape: {sentimentMax?: int}
 # --translationDatasetMetadata shape: {sourceLanguageCode?: string, targetLanguageCode?: string}
-export def "v1beta1-datasets create" [
+export def "automl-projects-locations-datasets-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1121,7 +1121,7 @@ export def "v1beta1-datasets create" [
 #
 # GET /v1beta1/{parent}/modelEvaluations
 # operationId: automl.projects.locations.models.modelEvaluations.list
-export def "v1beta1-model-evaluations list" [
+export def "automl-projects-locations-models-model-evaluations-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1172,7 +1172,7 @@ export def "v1beta1-model-evaluations list" [
 #
 # GET /v1beta1/{parent}/models
 # operationId: automl.projects.locations.models.list
-export def "v1beta1-models list" [
+export def "automl-projects-locations-models-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1229,7 +1229,7 @@ export def "v1beta1-models list" [
 # --textClassificationModelMetadata shape: {classificationType?: "CLASSIFICATION_TYPE_UNSPECIFIED"|"MULTICLASS"|"MULTILABEL"}
 # --textExtractionModelMetadata shape: {modelHint?: string}
 # --translationModelMetadata shape: {baseModel?: string, sourceLanguageCode?: string, targetLanguageCode?: string}
-export def "v1beta1-models create" [
+export def "automl-projects-locations-models-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1295,7 +1295,7 @@ export def "v1beta1-models create" [
 #
 # GET /v1beta1/{parent}/tableSpecs
 # operationId: automl.projects.locations.datasets.tableSpecs.list
-export def "v1beta1-table-specs list" [
+export def "automl-projects-locations-datasets-table-specs-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1347,7 +1347,7 @@ export def "v1beta1-table-specs list" [
 #
 # GET /v1beta1/{resource}:getIamPolicy
 # operationId: automl.projects.locations.models.getIamPolicy
-export def "v1beta1 get-iam-policy" [
+export def "automl-projects-locations-models-get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1397,7 +1397,7 @@ export def "v1beta1 get-iam-policy" [
 # POST /v1beta1/{resource}:setIamPolicy
 # operationId: automl.projects.locations.models.setIamPolicy
 # --policy shape: {bindings?: list, etag?: string, version?: int}
-export def "v1beta1 update-iam-policy" [
+export def "automl-projects-locations-models-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1449,7 +1449,7 @@ export def "v1beta1 update-iam-policy" [
 #
 # POST /v1beta1/{resource}:testIamPermissions
 # operationId: automl.projects.locations.testIamPermissions
-export def "v1beta1 test-iam-permissions" [
+export def "automl-projects-locations-test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

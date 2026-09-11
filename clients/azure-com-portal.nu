@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-portal-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.Portal/operations
 # operationId: Operations_List
-export def "providers-microsoft-portal-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -176,7 +176,7 @@ export def "providers-microsoft-portal-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Portal/dashboards
 # operationId: Dashboards_ListBySubscription
-export def "subscriptions-providers-microsoft-portal-dashboards list" [
+export def "dashboards-list-by-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -214,7 +214,7 @@ export def "subscriptions-providers-microsoft-portal-dashboards list" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Portal/dashboards
 # operationId: Dashboards_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-portal-dashboards list" [
+export def "dashboards-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -254,7 +254,7 @@ export def "subscriptions-resource-groups-providers-microsoft-portal-dashboards 
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Portal/dashboards/{dashboardName}
 # operationId: Dashboards_Delete
-export def "subscriptions-resource-groups-providers-microsoft-portal-dashboards delete" [
+export def "dashboards-delete" [
   subscription_id: string
   resource_group_name: string
   dashboard_name: string
@@ -296,7 +296,7 @@ export def "subscriptions-resource-groups-providers-microsoft-portal-dashboards 
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Portal/dashboards/{dashboardName}
 # operationId: Dashboards_Get
-export def "subscriptions-resource-groups-providers-microsoft-portal-dashboards get" [
+export def "dashboards-get" [
   subscription_id: string
   resource_group_name: string
   dashboard_name: string
@@ -339,7 +339,7 @@ export def "subscriptions-resource-groups-providers-microsoft-portal-dashboards 
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Portal/dashboards/{dashboardName}
 # operationId: Dashboards_Update
 # --properties shape: {lenses?: record, metadata?: record}
-export def "subscriptions-resource-groups-providers-microsoft-portal-dashboards update" [
+export def "dashboards-update" [
   subscription_id: string
   resource_group_name: string
   dashboard_name: string
@@ -387,7 +387,7 @@ export def "subscriptions-resource-groups-providers-microsoft-portal-dashboards 
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Portal/dashboards/{dashboardName}
 # operationId: Dashboards_CreateOrUpdate
 # --properties shape: {lenses?: record, metadata?: record}
-export def "subscriptions-resource-groups-providers-microsoft-portal-dashboards create-or-update" [
+export def "dashboards-create-or-update" [
   subscription_id: string
   resource_group_name: string
   dashboard_name: string

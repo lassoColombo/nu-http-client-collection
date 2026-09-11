@@ -140,7 +140,7 @@ def type-completer-3 [] { ["option_type_checkbox" "option_type_date" "option_typ
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account-cart-add-json create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account-cart-add" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -165,7 +165,7 @@ export def commands []: nothing -> table {
 # POST /account.cart.add.json
 # operationId: AccountCartAdd
 # --hybris_websites item shape: {storeIds: list<string>, uid: string, url: string}
-export def "account-cart-add-json create" [
+export def "account-cart-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -301,7 +301,7 @@ export def "account-cart-add-json create" [
 #
 # GET /account.cart.list.json
 # operationId: AccountCartList
-export def "account-cart-list-json list" [
+export def "account-cart-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -342,7 +342,7 @@ export def "account-cart-list-json list" [
 #
 # PUT /account.config.update.json
 # operationId: AccountConfigUpdate
-export def "account-config-update-json update" [
+export def "account-config-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -467,7 +467,7 @@ export def "account-config-update-json update" [
 #
 # GET /account.failed_webhooks.json
 # operationId: AccountFailedWebhooks
-export def "account-failed-webhooks-json get" [
+export def "account-failed-webhooks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -505,7 +505,7 @@ export def "account-failed-webhooks-json get" [
 #
 # GET /account.supported_platforms.json
 # operationId: AccountSupportedPlatforms
-export def "account-supported-platforms-json get" [
+export def "account-supported-platforms" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -539,7 +539,7 @@ export def "account-supported-platforms-json get" [
 #
 # POST /attribute.add.json
 # operationId: AttributeAdd
-export def "attribute-add-json create" [
+export def "attribute-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -595,7 +595,7 @@ export def "attribute-add-json create" [
 #
 # POST /attribute.assign.group.json
 # operationId: AttributeAssignGroup
-export def "attribute-assign-group-json assign" [
+export def "attribute-assign-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -633,7 +633,7 @@ export def "attribute-assign-group-json assign" [
 #
 # POST /attribute.assign.set.json
 # operationId: AttributeAssignSet
-export def "attribute-assign-set-json assign" [
+export def "attribute-assign-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -671,7 +671,7 @@ export def "attribute-assign-set-json assign" [
 #
 # GET /attribute.attributeset.list.json
 # operationId: AttributeAttributesetList
-export def "attribute-attributeset-list-json list" [
+export def "attribute-attributeset-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -711,7 +711,7 @@ export def "attribute-attributeset-list-json list" [
 #
 # GET /attribute.count.json
 # operationId: AttributeCount
-export def "attribute-count-json get" [
+export def "attribute-count" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -752,7 +752,7 @@ export def "attribute-count-json get" [
 #
 # DELETE /attribute.delete.json
 # operationId: AttributeDelete
-export def "attribute-delete-json delete" [
+export def "attribute-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -789,7 +789,7 @@ export def "attribute-delete-json delete" [
 #
 # GET /attribute.group.list.json
 # operationId: AttributeGroupList
-export def "attribute-group-list-json list" [
+export def "attribute-group-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -831,7 +831,7 @@ export def "attribute-group-list-json list" [
 #
 # GET /attribute.info.json
 # operationId: AttributeInfo
-export def "attribute-info-json get" [
+export def "attribute-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -872,7 +872,7 @@ export def "attribute-info-json get" [
 #
 # GET /attribute.list.json
 # operationId: AttributeList
-export def "attribute-list-json list" [
+export def "attribute-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -919,7 +919,7 @@ export def "attribute-list-json list" [
 #
 # GET /attribute.type.list.json
 # operationId: AttributeTypeList
-export def "attribute-type-list-json list" [
+export def "attribute-type-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -953,7 +953,7 @@ export def "attribute-type-list-json list" [
 #
 # POST /attribute.unassign.group.json
 # operationId: AttributeUnassignGroup
-export def "attribute-unassign-group-json create" [
+export def "attribute-unassign-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -990,7 +990,7 @@ export def "attribute-unassign-group-json create" [
 #
 # POST /attribute.unassign.set.json
 # operationId: AttributeUnassignSet
-export def "attribute-unassign-set-json update" [
+export def "attribute-unassign-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -1027,7 +1027,7 @@ export def "attribute-unassign-set-json update" [
 #
 # POST /attribute.update.json
 # operationId: AttributeUpdate
-export def "attribute-update-json update" [
+export def "attribute-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -1066,7 +1066,7 @@ export def "attribute-update-json update" [
 #
 # GET /basket.info.json
 # operationId: BasketInfo
-export def "basket-info-json get" [
+export def "basket-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -1106,7 +1106,7 @@ export def "basket-info-json get" [
 #
 # POST /basket.item.add.json
 # operationId: BasketItemAdd
-export def "basket-item-add-json create" [
+export def "basket-item-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -1146,7 +1146,7 @@ export def "basket-item-add-json create" [
 #
 # POST /basket.live_shipping_service.create.json
 # operationId: BasketLiveShippingServiceCreate
-export def "basket-live-shipping-service-create-json create" [
+export def "basket-live-shipping-service-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -1184,7 +1184,7 @@ export def "basket-live-shipping-service-create-json create" [
 #
 # DELETE /basket.live_shipping_service.delete.json
 # operationId: BasketLiveShippingServiceDelete
-export def "basket-live-shipping-service-delete-json delete" [
+export def "basket-live-shipping-service-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -1220,7 +1220,7 @@ export def "basket-live-shipping-service-delete-json delete" [
 #
 # GET /basket.live_shipping_service.list.json
 # operationId: BasketLiveShippingServiceList
-export def "basket-live-shipping-service-list-json list" [
+export def "basket-live-shipping-service-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -1258,7 +1258,7 @@ export def "basket-live-shipping-service-list-json list" [
 #
 # POST /bridge.delete.json
 # operationId: BridgeDelete
-export def "bridge-delete-json delete" [
+export def "bridge-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -1292,7 +1292,7 @@ export def "bridge-delete-json delete" [
 #
 # GET /bridge.download.file
 # operationId: BridgeDownload
-export def "bridge-download-file download" [
+export def "bridge-download" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -1328,7 +1328,7 @@ export def "bridge-download-file download" [
 #
 # POST /bridge.update.json
 # operationId: BridgeUpdate
-export def "bridge-update-json update" [
+export def "bridge-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -1362,7 +1362,7 @@ export def "bridge-update-json update" [
 #
 # GET /cart.bridge.json
 # operationId: CartBridge
-export def "cart-bridge-json get" [
+export def "cart-bridge" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1396,7 +1396,7 @@ export def "cart-bridge-json get" [
 #
 # GET /cart.catalog_price_rules.count.json
 # operationId: CartCatalogPriceRulesCount
-export def "cart-catalog-price-rules-count-json get" [
+export def "cart-catalog-price-rules-count" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -1430,7 +1430,7 @@ export def "cart-catalog-price-rules-count-json get" [
 #
 # GET /cart.catalog_price_rules.list.json
 # operationId: CartCatalogPriceRulesList
-export def "cart-catalog-price-rules-list-json list" [
+export def "cart-catalog-price-rules-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -1472,7 +1472,7 @@ export def "cart-catalog-price-rules-list-json list" [
 #
 # POST /cart.clear_cache.json
 # operationId: CartClearCache
-export def "cart-clear-cache-json create" [
+export def "cart-clear-cache" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -1508,7 +1508,7 @@ export def "cart-clear-cache-json create" [
 #
 # GET /cart.config.json
 # operationId: CartConfig
-export def "cart-config-json get" [
+export def "cart-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -1547,7 +1547,7 @@ export def "cart-config-json get" [
 # DEPRECATED
 # operationId: CartConfigUpdate
 @deprecated
-export def "cart-config-update-json update" [
+export def "cart-config-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -1587,7 +1587,7 @@ export def "cart-config-update-json update" [
 #
 # POST /cart.coupon.add.json
 # operationId: CartCouponAdd
-export def "cart-coupon-add-json create" [
+export def "cart-coupon-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -1640,7 +1640,7 @@ export def "cart-coupon-add-json create" [
 #
 # POST /cart.coupon.condition.add.json
 # operationId: CartCouponConditionAdd
-export def "cart-coupon-condition-add-json create" [
+export def "cart-coupon-condition-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -1682,7 +1682,7 @@ export def "cart-coupon-condition-add-json create" [
 #
 # GET /cart.coupon.count.json
 # operationId: CartCouponCount
-export def "cart-coupon-count-json get" [
+export def "cart-coupon-count" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -1723,7 +1723,7 @@ export def "cart-coupon-count-json get" [
 #
 # DELETE /cart.coupon.delete.json
 # operationId: CartCouponDelete
-export def "cart-coupon-delete-json delete" [
+export def "cart-coupon-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -1760,7 +1760,7 @@ export def "cart-coupon-delete-json delete" [
 #
 # GET /cart.coupon.list.json
 # operationId: CartCouponList
-export def "cart-coupon-list-json list" [
+export def "cart-coupon-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -1811,7 +1811,7 @@ export def "cart-coupon-list-json list" [
 # DEPRECATED
 # operationId: CartCreate
 @deprecated
-export def "cart-create-json create" [
+export def "cart-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1940,7 +1940,7 @@ export def "cart-create-json create" [
 #
 # DELETE /cart.delete.json
 # operationId: CartDelete
-export def "cart-delete-json delete" [
+export def "cart-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -1978,7 +1978,7 @@ export def "cart-delete-json delete" [
 # DEPRECATED
 # operationId: CartDisconnect
 @deprecated
-export def "cart-disconnect-json get" [
+export def "cart-disconnect" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -2014,7 +2014,7 @@ export def "cart-disconnect-json get" [
 #
 # POST /cart.giftcard.add.json
 # operationId: CartGiftcardAdd
-export def "cart-giftcard-add-json create" [
+export def "cart-giftcard-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -2053,7 +2053,7 @@ export def "cart-giftcard-add-json create" [
 #
 # GET /cart.giftcard.count.json
 # operationId: CartGiftcardCount
-export def "cart-giftcard-count-json get" [
+export def "cart-giftcard-count" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -2089,7 +2089,7 @@ export def "cart-giftcard-count-json get" [
 #
 # GET /cart.giftcard.list.json
 # operationId: CartGiftcardList
-export def "cart-giftcard-list-json list" [
+export def "cart-giftcard-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -2131,7 +2131,7 @@ export def "cart-giftcard-list-json list" [
 #
 # GET /cart.info.json
 # operationId: CartInfo
-export def "cart-info-json get" [
+export def "cart-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -2172,7 +2172,7 @@ export def "cart-info-json get" [
 # DEPRECATED
 # operationId: CartList
 @deprecated
-export def "cart-list-json list" [
+export def "cart-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2206,7 +2206,7 @@ export def "cart-list-json list" [
 #
 # GET /cart.meta_data.list.json
 # operationId: CartMetaDataList
-export def "cart-meta-data-list-json list" [
+export def "cart-meta-data-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -2250,7 +2250,7 @@ export def "cart-meta-data-list-json list" [
 #
 # POST /cart.meta_data.set.json
 # operationId: CartMetaDataSet
-export def "cart-meta-data-set-json update" [
+export def "cart-meta-data-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -2291,7 +2291,7 @@ export def "cart-meta-data-set-json update" [
 #
 # DELETE /cart.meta_data.unset.json
 # operationId: CartMetaDataUnset
-export def "cart-meta-data-unset-json delete" [
+export def "cart-meta-data-unset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -2331,7 +2331,7 @@ export def "cart-meta-data-unset-json delete" [
 #
 # GET /cart.methods.json
 # operationId: CartMethods
-export def "cart-methods-json get" [
+export def "cart-methods" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -2365,7 +2365,7 @@ export def "cart-methods-json get" [
 #
 # GET /cart.plugin.list.json
 # operationId: CartPluginList
-export def "cart-plugin-list-json list" [
+export def "cart-plugin-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -2404,7 +2404,7 @@ export def "cart-plugin-list-json list" [
 #
 # POST /cart.script.add.json
 # operationId: CartScriptAdd
-export def "cart-script-add-json create" [
+export def "cart-script-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -2446,7 +2446,7 @@ export def "cart-script-add-json create" [
 #
 # DELETE /cart.script.delete.json
 # operationId: CartScriptDelete
-export def "cart-script-delete-json delete" [
+export def "cart-script-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -2483,7 +2483,7 @@ export def "cart-script-delete-json delete" [
 #
 # GET /cart.script.list.json
 # operationId: CartScriptList
-export def "cart-script-list-json list" [
+export def "cart-script-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -2530,7 +2530,7 @@ export def "cart-script-list-json list" [
 #
 # GET /cart.shipping_zones.list.json
 # operationId: CartShippingZonesList
-export def "cart-shipping-zones-list-json list" [
+export def "cart-shipping-zones-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -2571,7 +2571,7 @@ export def "cart-shipping-zones-list-json list" [
 #
 # GET /cart.validate.json
 # operationId: CartValidate
-export def "cart-validate-json validate" [
+export def "cart-validate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -2607,7 +2607,7 @@ export def "cart-validate-json validate" [
 #
 # POST /category.add.json
 # operationId: CategoryAdd
-export def "category-add-json create" [
+export def "category-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -2656,7 +2656,7 @@ export def "category-add-json create" [
 #
 # POST /category.assign.json
 # operationId: CategoryAssign
-export def "category-assign-json assign" [
+export def "category-assign" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -2694,7 +2694,7 @@ export def "category-assign-json assign" [
 #
 # GET /category.count.json
 # operationId: CategoryCount
-export def "category-count-json get" [
+export def "category-count" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -2737,7 +2737,7 @@ export def "category-count-json get" [
 #
 # DELETE /category.delete.json
 # operationId: CategoryDelete
-export def "category-delete-json delete" [
+export def "category-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -2773,7 +2773,7 @@ export def "category-delete-json delete" [
 #
 # GET /category.find.json
 # operationId: CategoryFind
-export def "category-find-json find" [
+export def "category-find" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -2813,7 +2813,7 @@ export def "category-find-json find" [
 #
 # POST /category.image.add.json
 # operationId: CategoryImageAdd
-export def "category-image-add-json create" [
+export def "category-image-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -2856,7 +2856,7 @@ export def "category-image-add-json create" [
 #
 # DELETE /category.image.delete.json
 # operationId: CategoryImageDelete
-export def "category-image-delete-json delete" [
+export def "category-image-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -2894,7 +2894,7 @@ export def "category-image-delete-json delete" [
 #
 # GET /category.info.json
 # operationId: CategoryInfo
-export def "category-info-json get" [
+export def "category-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -2935,7 +2935,7 @@ export def "category-info-json get" [
 #
 # GET /category.list.json
 # operationId: CategoryList
-export def "category-list-json list" [
+export def "category-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -2984,7 +2984,7 @@ export def "category-list-json list" [
 #
 # POST /category.unassign.json
 # operationId: CategoryUnassign
-export def "category-unassign-json create" [
+export def "category-unassign" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -3022,7 +3022,7 @@ export def "category-unassign-json create" [
 #
 # PUT /category.update.json
 # operationId: CategoryUpdate
-export def "category-update-json update" [
+export def "category-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -3072,7 +3072,7 @@ export def "category-update-json update" [
 # POST /customer.add.json
 # operationId: CustomerAdd
 # --address item shape: {address_book_address1?: string, address_book_address2?: string, address_book_city?: string, address_book_company?: string, address_book_country?: string, address_book_default?: bool, address_book_fax?: string, address_book_first_name?: string, address_book_gender?: string, address_book_last_name?: string, address_book_phone?: string, address_book_postcode?: string, address_book_region?: string, address_book_state?: string, address_book_type?: string, address_book_website?: string}
-export def "customer-add-json create" [
+export def "customer-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -3128,7 +3128,7 @@ export def "customer-add-json create" [
 #
 # GET /customer.attribute.list.json
 # operationId: CustomerAttributeList
-export def "customer-attribute-list-json list" [
+export def "customer-attribute-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -3171,7 +3171,7 @@ export def "customer-attribute-list-json list" [
 #
 # GET /customer.count.json
 # operationId: CustomerCount
-export def "customer-count-json get" [
+export def "customer-count" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -3214,7 +3214,7 @@ export def "customer-count-json get" [
 #
 # GET /customer.find.json
 # operationId: CustomerFind
-export def "customer-find-json find" [
+export def "customer-find" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -3253,7 +3253,7 @@ export def "customer-find-json find" [
 #
 # POST /customer.group.add.json
 # operationId: CustomerGroupAdd
-export def "customer-group-add-json create" [
+export def "customer-group-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -3291,7 +3291,7 @@ export def "customer-group-add-json create" [
 #
 # GET /customer.group.list.json
 # operationId: CustomerGroupList
-export def "customer-group-list-json list" [
+export def "customer-group-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -3335,7 +3335,7 @@ export def "customer-group-list-json list" [
 #
 # GET /customer.info.json
 # operationId: CustomerInfo
-export def "customer-info-json get" [
+export def "customer-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -3375,7 +3375,7 @@ export def "customer-info-json get" [
 #
 # GET /customer.list.json
 # operationId: CustomerList
-export def "customer-list-json list" [
+export def "customer-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -3424,7 +3424,7 @@ export def "customer-list-json list" [
 #
 # PUT /customer.update.json
 # operationId: CustomerUpdate
-export def "customer-update-json update" [
+export def "customer-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -3477,7 +3477,7 @@ export def "customer-update-json update" [
 #
 # GET /order.abandoned.list.json
 # operationId: OrderAbandonedList
-export def "order-abandoned-list-json list" [
+export def "order-abandoned-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -3528,7 +3528,7 @@ export def "order-abandoned-list-json list" [
 # operationId: OrderAdd
 # --note_attributes item shape: {name?: string, value?: string}
 # --order_item item shape: {order_item_allow_refund_items_separately?: bool, order_item_allow_ship_items_separately?: bool, order_item_id: string, order_item_model?: string, order_item_name: string, order_item_option?: list, order_item_parent?: int, order_item_parent_option_name?: string, order_item_price: float, order_item_price_includes_tax?: bool, order_item_property?: list, order_item_quantity: int, order_item_tax?: float, order_item_variant_id?: string, order_item_weight?: float}
-export def "order-add-json create" [
+export def "order-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -3631,7 +3631,7 @@ export def "order-add-json create" [
 #
 # GET /order.count.json
 # operationId: OrderCount
-export def "order-count-json get" [
+export def "order-count" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -3683,7 +3683,7 @@ export def "order-count-json get" [
 #
 # GET /order.financial_status.list.json
 # operationId: OrderFinancialStatusList
-export def "order-financial-status-list-json list" [
+export def "order-financial-status-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -3719,7 +3719,7 @@ export def "order-financial-status-list-json list" [
 # DEPRECATED
 # operationId: OrderFind
 @deprecated
-export def "order-find-json find" [
+export def "order-find" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -3766,7 +3766,7 @@ export def "order-find-json find" [
 #
 # GET /order.fulfillment_status.list.json
 # operationId: OrderFulfillmentStatusList
-export def "order-fulfillment-status-list-json list" [
+export def "order-fulfillment-status-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -3800,7 +3800,7 @@ export def "order-fulfillment-status-list-json list" [
 #
 # GET /order.info.json
 # operationId: OrderInfo
-export def "order-info-json get" [
+export def "order-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -3842,7 +3842,7 @@ export def "order-info-json get" [
 #
 # GET /order.list.json
 # operationId: OrderList
-export def "order-list-json list" [
+export def "order-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -3911,7 +3911,7 @@ export def "order-list-json list" [
 # POST /order.preestimate_shipping.list.json
 # operationId: OrderPreestimateShippingList
 # --order_item item shape: {order_item_id: string, order_item_model?: string, order_item_option?: list, order_item_quantity: int, order_item_variant_id?: string, order_item_weight?: float}
-export def "order-preestimate-shipping-list-json list" [
+export def "order-preestimate-shipping-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -3961,7 +3961,7 @@ export def "order-preestimate-shipping-list-json list" [
 # POST /order.refund.add.json
 # operationId: OrderRefundAdd
 # --items item shape: {order_product_id?: string, price?: float, quantity?: int}
-export def "order-refund-add-json create" [
+export def "order-refund-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -4010,7 +4010,7 @@ export def "order-refund-add-json create" [
 # operationId: OrderShipmentAdd
 # --items item shape: {order_product_id?: string, quantity?: float}
 # --tracking_numbers item shape: {carrier_id?: string, tracking_number?: string}
-export def "order-shipment-add-json create" [
+export def "order-shipment-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -4059,7 +4059,7 @@ export def "order-shipment-add-json create" [
 #
 # DELETE /order.shipment.delete.json
 # operationId: OrderShipmentDelete
-export def "order-shipment-delete-json delete" [
+export def "order-shipment-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -4097,7 +4097,7 @@ export def "order-shipment-delete-json delete" [
 #
 # GET /order.shipment.info.json
 # operationId: OrderShipmentInfo
-export def "order-shipment-info-json get" [
+export def "order-shipment-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -4139,7 +4139,7 @@ export def "order-shipment-info-json get" [
 #
 # GET /order.shipment.list.json
 # operationId: OrderShipmentList
-export def "order-shipment-list-json list" [
+export def "order-shipment-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -4186,7 +4186,7 @@ export def "order-shipment-list-json list" [
 #
 # POST /order.shipment.tracking.add.json
 # operationId: OrderShipmentTrackingAdd
-export def "order-shipment-tracking-add-json create" [
+export def "order-shipment-tracking-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -4232,7 +4232,7 @@ export def "order-shipment-tracking-add-json create" [
 # PUT /order.shipment.update.json
 # operationId: OrderShipmentUpdate
 # --tracking_numbers item shape: {carrier_id?: string, tracking_number?: string}
-export def "order-shipment-update-json update" [
+export def "order-shipment-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -4276,7 +4276,7 @@ export def "order-shipment-update-json update" [
 #
 # GET /order.status.list.json
 # operationId: OrderStatusList
-export def "order-status-list-json list" [
+export def "order-status-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -4312,7 +4312,7 @@ export def "order-status-list-json list" [
 #
 # GET /order.transaction.list.json
 # operationId: OrderTransactionList
-export def "order-transaction-list-json list" [
+export def "order-transaction-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -4354,7 +4354,7 @@ export def "order-transaction-list-json list" [
 #
 # PUT /order.update.json
 # operationId: OrderUpdate
-export def "order-update-json update" [
+export def "order-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -4406,7 +4406,7 @@ export def "order-update-json update" [
 # --seller_profiles shape: {payment_profile_id?: string, return_profile_id?: string, shipping_profile_id?: string}
 # --shipping_details item shape: {shipping_cost?: float, shipping_service?: string, shipping_type?: string}
 # --tier_prices item shape: {price?: float, quantity?: float}
-export def "product-add-json create" [
+export def "product-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -4522,7 +4522,7 @@ export def "product-add-json create" [
 #
 # GET /product.attribute.list.json
 # operationId: ProductAttributeList
-export def "product-attribute-list-json list" [
+export def "product-attribute-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -4572,7 +4572,7 @@ export def "product-attribute-list-json list" [
 #
 # POST /product.attribute.value.set.json
 # operationId: ProductAttributeValueSet
-export def "product-attribute-value-set-json update" [
+export def "product-attribute-value-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -4615,7 +4615,7 @@ export def "product-attribute-value-set-json update" [
 #
 # POST /product.attribute.value.unset.json
 # operationId: ProductAttributeValueUnset
-export def "product-attribute-value-unset-json create" [
+export def "product-attribute-value-unset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -4656,7 +4656,7 @@ export def "product-attribute-value-unset-json create" [
 #
 # GET /product.brand.list.json
 # operationId: ProductBrandList
-export def "product-brand-list-json list" [
+export def "product-brand-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -4703,7 +4703,7 @@ export def "product-brand-list-json list" [
 #
 # GET /product.child_item.find.json
 # operationId: ProductChildItemFind
-export def "product-child-item-find-json find" [
+export def "product-child-item-find" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -4742,7 +4742,7 @@ export def "product-child-item-find-json find" [
 #
 # GET /product.child_item.info.json
 # operationId: ProductChildItemInfo
-export def "product-child-item-info-json get" [
+export def "product-child-item-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -4785,7 +4785,7 @@ export def "product-child-item-info-json get" [
 #
 # GET /product.child_item.list.json
 # operationId: ProductChildItemList
-export def "product-child-item-list-json list" [
+export def "product-child-item-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -4838,7 +4838,7 @@ export def "product-child-item-list-json list" [
 #
 # GET /product.count.json
 # operationId: ProductCount
-export def "product-count-json get" [
+export def "product-count" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -4889,7 +4889,7 @@ export def "product-count-json get" [
 #
 # POST /product.currency.add.json
 # operationId: ProductCurrencyAdd
-export def "product-currency-add-json create" [
+export def "product-currency-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -4931,7 +4931,7 @@ export def "product-currency-add-json create" [
 #
 # GET /product.currency.list.json
 # operationId: ProductCurrencyList
-export def "product-currency-list-json list" [
+export def "product-currency-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -4974,7 +4974,7 @@ export def "product-currency-list-json list" [
 #
 # DELETE /product.delete.json
 # operationId: ProductDelete
-export def "product-delete-json delete" [
+export def "product-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -5010,7 +5010,7 @@ export def "product-delete-json delete" [
 #
 # GET /product.fields.json
 # operationId: ProductFields
-export def "product-fields-json get" [
+export def "product-fields" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -5044,7 +5044,7 @@ export def "product-fields-json get" [
 #
 # GET /product.find.json
 # operationId: ProductFind
-export def "product-find-json find" [
+export def "product-find" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -5085,7 +5085,7 @@ export def "product-find-json find" [
 #
 # POST /product.image.add.json
 # operationId: ProductImageAdd
-export def "product-image-add-json create" [
+export def "product-image-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -5134,7 +5134,7 @@ export def "product-image-add-json create" [
 #
 # DELETE /product.image.delete.json
 # operationId: ProductImageDelete
-export def "product-image-delete-json delete" [
+export def "product-image-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -5172,7 +5172,7 @@ export def "product-image-delete-json delete" [
 #
 # PUT /product.image.update.json
 # operationId: ProductImageUpdate
-export def "product-image-update-json update" [
+export def "product-image-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -5216,7 +5216,7 @@ export def "product-image-update-json update" [
 #
 # GET /product.info.json
 # operationId: ProductInfo
-export def "product-info-json get" [
+export def "product-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -5260,7 +5260,7 @@ export def "product-info-json get" [
 #
 # GET /product.list.json
 # operationId: ProductList
-export def "product-list-json list" [
+export def "product-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -5323,7 +5323,7 @@ export def "product-list-json list" [
 #
 # POST /product.manufacturer.add.json
 # operationId: ProductManufacturerAdd
-export def "product-manufacturer-add-json create" [
+export def "product-manufacturer-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -5360,7 +5360,7 @@ export def "product-manufacturer-add-json create" [
 #
 # POST /product.option.add.json
 # operationId: ProductOptionAdd
-export def "product-option-add-json create" [
+export def "product-option-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -5405,7 +5405,7 @@ export def "product-option-add-json create" [
 #
 # POST /product.option.assign.json
 # operationId: ProductOptionAssign
-export def "product-option-assign-json assign" [
+export def "product-option-assign" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -5446,7 +5446,7 @@ export def "product-option-assign-json assign" [
 #
 # GET /product.option.list.json
 # operationId: ProductOptionList
-export def "product-option-list-json list" [
+export def "product-option-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -5489,7 +5489,7 @@ export def "product-option-list-json list" [
 #
 # POST /product.option.value.add.json
 # operationId: ProductOptionValueAdd
-export def "product-option-value-add-json create" [
+export def "product-option-value-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -5529,7 +5529,7 @@ export def "product-option-value-add-json create" [
 #
 # POST /product.option.value.assign.json
 # operationId: ProductOptionValueAssign
-export def "product-option-value-assign-json assign" [
+export def "product-option-value-assign" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -5567,7 +5567,7 @@ export def "product-option-value-assign-json assign" [
 #
 # PUT /product.option.value.update.json
 # operationId: ProductOptionValueUpdate
-export def "product-option-value-update-json update" [
+export def "product-option-value-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -5610,7 +5610,7 @@ export def "product-option-value-update-json update" [
 # POST /product.price.add.json
 # operationId: ProductPriceAdd
 # --group_prices item shape: {group_id?: string, price?: float}
-export def "product-price-add-json create" [
+export def "product-price-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -5649,7 +5649,7 @@ export def "product-price-add-json create" [
 #
 # DELETE /product.price.delete.json
 # operationId: ProductPriceDelete
-export def "product-price-delete-json delete" [
+export def "product-price-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -5687,7 +5687,7 @@ export def "product-price-delete-json delete" [
 # PUT /product.price.update.json
 # operationId: ProductPriceUpdate
 # --group_prices item shape: {group_id?: string, id?: int, price?: float}
-export def "product-price-update-json update" [
+export def "product-price-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -5726,7 +5726,7 @@ export def "product-price-update-json update" [
 #
 # GET /product.review.list.json
 # operationId: ProductReviewList
-export def "product-review-list-json list" [
+export def "product-review-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -5771,7 +5771,7 @@ export def "product-review-list-json list" [
 #
 # POST /product.store.assign.json
 # operationId: ProductStoreAssign
-export def "product-store-assign-json assign" [
+export def "product-store-assign" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -5809,7 +5809,7 @@ export def "product-store-assign-json assign" [
 # POST /product.tax.add.json
 # operationId: ProductTaxAdd
 # --tax_rates item shape: {name?: string, type?: string, value?: float}
-export def "product-tax-add-json create" [
+export def "product-tax-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -5849,7 +5849,7 @@ export def "product-tax-add-json create" [
 #
 # PUT /product.update.json
 # operationId: ProductUpdate
-export def "product-update-json update" [
+export def "product-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -5933,7 +5933,7 @@ export def "product-update-json update" [
 # POST /product.variant.add.json
 # operationId: ProductVariantAdd
 # --attributes item shape: {attribute_name?: string, attribute_price?: float, attribute_value?: string}
-export def "product-variant-add-json create" [
+export def "product-variant-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -6007,7 +6007,7 @@ export def "product-variant-add-json create" [
 #
 # GET /product.variant.count.json
 # operationId: ProductVariantCount
-export def "product-variant-count-json get" [
+export def "product-variant-count" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -6049,7 +6049,7 @@ export def "product-variant-count-json get" [
 #
 # DELETE /product.variant.delete.json
 # operationId: ProductVariantDelete
-export def "product-variant-delete-json delete" [
+export def "product-variant-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -6086,7 +6086,7 @@ export def "product-variant-delete-json delete" [
 #
 # POST /product.variant.image.add.json
 # operationId: ProductVariantImageAdd
-export def "product-variant-image-add-json create" [
+export def "product-variant-image-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -6134,7 +6134,7 @@ export def "product-variant-image-add-json create" [
 #
 # DELETE /product.variant.image.delete.json
 # operationId: ProductVariantImageDelete
-export def "product-variant-image-delete-json delete" [
+export def "product-variant-image-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -6173,7 +6173,7 @@ export def "product-variant-image-delete-json delete" [
 #
 # GET /product.variant.info.json
 # operationId: ProductVariantInfo
-export def "product-variant-info-json get" [
+export def "product-variant-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -6212,7 +6212,7 @@ export def "product-variant-info-json get" [
 #
 # GET /product.variant.list.json
 # operationId: ProductVariantList
-export def "product-variant-list-json list" [
+export def "product-variant-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -6259,7 +6259,7 @@ export def "product-variant-list-json list" [
 # POST /product.variant.price.add.json
 # operationId: ProductVariantPriceAdd
 # --group_prices item shape: {group_id?: string, price?: float}
-export def "product-variant-price-add-json create" [
+export def "product-variant-price-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -6298,7 +6298,7 @@ export def "product-variant-price-add-json create" [
 #
 # DELETE /product.variant.price.delete.json
 # operationId: ProductVariantPriceDelete
-export def "product-variant-price-delete-json delete" [
+export def "product-variant-price-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -6336,7 +6336,7 @@ export def "product-variant-price-delete-json delete" [
 # PUT /product.variant.price.update.json
 # operationId: ProductVariantPriceUpdate
 # --group_prices item shape: {group_id?: string, id?: int, price?: float}
-export def "product-variant-price-update-json update" [
+export def "product-variant-price-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -6375,7 +6375,7 @@ export def "product-variant-price-update-json update" [
 #
 # PUT /product.variant.update.json
 # operationId: ProductVariantUpdate
-export def "product-variant-update-json update" [
+export def "product-variant-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -6452,7 +6452,7 @@ export def "product-variant-update-json update" [
 #
 # GET /subscriber.list.json
 # operationId: SubscriberList
-export def "subscriber-list-json list" [
+export def "subscriber-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -6500,7 +6500,7 @@ export def "subscriber-list-json list" [
 #
 # GET /tax.class.info.json
 # operationId: TaxClassInfo
-export def "tax-class-info-json get" [
+export def "tax-class-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -6541,7 +6541,7 @@ export def "tax-class-info-json get" [
 #
 # GET /webhook.count.json
 # operationId: WebhookCount
-export def "webhook-count-json get" [
+export def "webhook-count" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -6579,7 +6579,7 @@ export def "webhook-count-json get" [
 #
 # POST /webhook.create.json
 # operationId: WebhookCreate
-export def "webhook-create-json create" [
+export def "webhook-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -6621,7 +6621,7 @@ export def "webhook-create-json create" [
 #
 # DELETE /webhook.delete.json
 # operationId: WebhookDelete
-export def "webhook-delete-json delete" [
+export def "webhook-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -6657,7 +6657,7 @@ export def "webhook-delete-json delete" [
 #
 # GET /webhook.events.json
 # operationId: WebhookEvents
-export def "webhook-events-json get" [
+export def "webhook-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -6691,7 +6691,7 @@ export def "webhook-events-json get" [
 #
 # GET /webhook.list.json
 # operationId: WebhookList
-export def "webhook-list-json list" [
+export def "webhook-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)
@@ -6733,7 +6733,7 @@ export def "webhook-list-json list" [
 #
 # PUT /webhook.update.json
 # operationId: WebhookUpdate
-export def "webhook-update-json update" [
+export def "webhook-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-storekey: string # Auth token for store_key (x-store-key)

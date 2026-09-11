@@ -134,7 +134,7 @@ def type-completer [] { ["ALL_OF" "ANY_OF" "PHRASE_MATCHER_TYPE_UNSPECIFIED"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects stats-calculate-issue-model" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "contactcenterinsights-projects-locations-issue-models-calculate-issue-model-stats" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -158,7 +158,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/{issueModel}:calculateIssueModelStats
 # operationId: contactcenterinsights.projects.locations.issueModels.calculateIssueModelStats
-export def "projects stats-calculate-issue-model" [
+export def "contactcenterinsights-projects-locations-issue-models-calculate-issue-model-stats" [
   issue_model: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -206,7 +206,7 @@ export def "projects stats-calculate-issue-model" [
 #
 # GET /v1/{location}/conversations:calculateStats
 # operationId: contactcenterinsights.projects.locations.conversations.calculateStats
-export def "conversations-calculate-stats stats" [
+export def "contactcenterinsights-projects-locations-conversations-calculate-stats" [
   location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -255,7 +255,7 @@ export def "conversations-calculate-stats stats" [
 #
 # DELETE /v1/{name}
 # operationId: contactcenterinsights.projects.locations.views.delete
-export def "projects delete" [
+export def "contactcenterinsights-projects-locations-views-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -304,7 +304,7 @@ export def "projects delete" [
 #
 # GET /v1/{name}
 # operationId: contactcenterinsights.projects.locations.views.get
-export def "projects get" [
+export def "contactcenterinsights-projects-locations-views-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -353,7 +353,7 @@ export def "projects get" [
 #
 # PATCH /v1/{name}
 # operationId: contactcenterinsights.projects.locations.views.patch
-export def "projects update" [
+export def "contactcenterinsights-projects-locations-views-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -408,7 +408,7 @@ export def "projects update" [
 #
 # GET /v1/{name}/operations
 # operationId: contactcenterinsights.projects.locations.operations.list
-export def "operations list" [
+export def "contactcenterinsights-projects-locations-operations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -459,7 +459,7 @@ export def "operations list" [
 #
 # POST /v1/{name}:cancel
 # operationId: contactcenterinsights.projects.locations.operations.cancel
-export def "projects cancel" [
+export def "contactcenterinsights-projects-locations-operations-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -507,7 +507,7 @@ export def "projects cancel" [
 #
 # POST /v1/{name}:deploy
 # operationId: contactcenterinsights.projects.locations.issueModels.deploy
-export def "projects create-deploy" [
+export def "contactcenterinsights-projects-locations-issue-models-deploy" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -559,7 +559,7 @@ export def "projects create-deploy" [
 #
 # POST /v1/{name}:undeploy
 # operationId: contactcenterinsights.projects.locations.issueModels.undeploy
-export def "projects create-undeploy" [
+export def "contactcenterinsights-projects-locations-issue-models-undeploy" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -611,7 +611,7 @@ export def "projects create-undeploy" [
 #
 # GET /v1/{parent}/analyses
 # operationId: contactcenterinsights.projects.locations.conversations.analyses.list
-export def "analyses list" [
+export def "contactcenterinsights-projects-locations-conversations-analyses-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -664,7 +664,7 @@ export def "analyses list" [
 # operationId: contactcenterinsights.projects.locations.conversations.analyses.create
 # --analysisResult shape: {callAnalysisMetadata?: record, endTime?: string}
 # --annotatorSelector shape: {issueModels?: list<string>, phraseMatchers?: list<string>, runEntityAnnotator?: bool, runIntentAnnotator?: bool, runInterruptionAnnotator?: bool, runIssueModelAnnotator?: bool, runPhraseMatcherAnnotator?: bool, runSentimentAnnotator?: bool, runSilenceAnnotator?: bool}
-export def "analyses create" [
+export def "contactcenterinsights-projects-locations-conversations-analyses-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -718,7 +718,7 @@ export def "analyses create" [
 #
 # GET /v1/{parent}/conversations
 # operationId: contactcenterinsights.projects.locations.conversations.list
-export def "conversations list" [
+export def "contactcenterinsights-projects-locations-conversations-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -775,7 +775,7 @@ export def "conversations list" [
 # --latestAnalysis shape: {analysisResult?: record, annotatorSelector?: record, name?: string}
 # --runtimeAnnotations item shape: {annotationId?: string, answerFeedback?: record, articleSuggestion?: record, createTime?: string, dialogflowInteraction?: record, endBoundary?: record, faqAnswer?: record, smartComposeSuggestion?: record, smartReply?: record, startBoundary?: record}
 # --transcript shape: {transcriptSegments?: list}
-export def "conversations create" [
+export def "contactcenterinsights-projects-locations-conversations-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -841,7 +841,7 @@ export def "conversations create" [
 # POST /v1/{parent}/conversations:bulkAnalyze
 # operationId: contactcenterinsights.projects.locations.conversations.bulkAnalyze
 # --annotatorSelector shape: {issueModels?: list<string>, phraseMatchers?: list<string>, runEntityAnnotator?: bool, runIntentAnnotator?: bool, runInterruptionAnnotator?: bool, runIssueModelAnnotator?: bool, runPhraseMatcherAnnotator?: bool, runSentimentAnnotator?: bool, runSilenceAnnotator?: bool}
-export def "conversations-bulk-analyze create" [
+export def "contactcenterinsights-projects-locations-conversations-bulk-analyze" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -899,7 +899,7 @@ export def "conversations-bulk-analyze create" [
 # --conversationConfig shape: {agentId?: string}
 # --gcsSource shape: {bucketUri?: string}
 # --transcriptObjectConfig shape: {medium?: "MEDIUM_UNSPECIFIED"|"PHONE_CALL"|"CHAT"}
-export def "conversations-ingest create" [
+export def "contactcenterinsights-projects-locations-conversations-ingest" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -956,7 +956,7 @@ export def "conversations-ingest create" [
 # operationId: contactcenterinsights.projects.locations.conversations.upload
 # --conversation shape: {agentId?: string, callMetadata?: record, dataSource?: record, expireTime?: string, labels?: record, languageCode?: string, latestAnalysis?: record, medium?: "MEDIUM_UNSPECIFIED"|"PHONE_CALL"|"CHAT", name?: string, obfuscatedUserId?: string, startTime?: string, transcript?: record, ttl?: string}
 # --redactionConfig shape: {deidentifyTemplate?: string, inspectTemplate?: string}
-export def "conversations-upload upload" [
+export def "contactcenterinsights-projects-locations-conversations-upload" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1012,7 +1012,7 @@ export def "conversations-upload upload" [
 # POST /v1/{parent}/insightsdata:export
 # operationId: contactcenterinsights.projects.locations.insightsdata.export
 # --bigQueryDestination shape: {dataset?: string, projectId?: string, table?: string}
-export def "insightsdata-export export" [
+export def "contactcenterinsights-projects-locations-insightsdata-export" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1068,7 +1068,7 @@ export def "insightsdata-export export" [
 #
 # GET /v1/{parent}/issueModels
 # operationId: contactcenterinsights.projects.locations.issueModels.list
-export def "issue-models list" [
+export def "contactcenterinsights-projects-locations-issue-models-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1118,7 +1118,7 @@ export def "issue-models list" [
 # operationId: contactcenterinsights.projects.locations.issueModels.create
 # --inputDataConfig shape: {filter?: string, medium?: "MEDIUM_UNSPECIFIED"|"PHONE_CALL"|"CHAT"}
 # --trainingStats shape: {analyzedConversationsCount?: string, issueStats?: record, unclassifiedConversationsCount?: string}
-export def "issue-models create" [
+export def "contactcenterinsights-projects-locations-issue-models-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1173,7 +1173,7 @@ export def "issue-models create" [
 #
 # GET /v1/{parent}/issues
 # operationId: contactcenterinsights.projects.locations.issueModels.issues.list
-export def "issues list" [
+export def "contactcenterinsights-projects-locations-issue-models-issues-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1221,7 +1221,7 @@ export def "issues list" [
 #
 # GET /v1/{parent}/phraseMatchers
 # operationId: contactcenterinsights.projects.locations.phraseMatchers.list
-export def "phrase-matchers list" [
+export def "contactcenterinsights-projects-locations-phrase-matchers-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1273,7 +1273,7 @@ export def "phrase-matchers list" [
 # POST /v1/{parent}/phraseMatchers
 # operationId: contactcenterinsights.projects.locations.phraseMatchers.create
 # --phraseMatchRuleGroups item shape: {phraseMatchRules?: list, type?: "PHRASE_MATCH_RULE_GROUP_TYPE_UNSPECIFIED"|"ALL_OF"|"ANY_OF"}
-export def "phrase-matchers create" [
+export def "contactcenterinsights-projects-locations-phrase-matchers-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1331,7 +1331,7 @@ export def "phrase-matchers create" [
 #
 # GET /v1/{parent}/views
 # operationId: contactcenterinsights.projects.locations.views.list
-export def "views list" [
+export def "contactcenterinsights-projects-locations-views-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1381,7 +1381,7 @@ export def "views list" [
 #
 # POST /v1/{parent}/views
 # operationId: contactcenterinsights.projects.locations.views.create
-export def "views create" [
+export def "contactcenterinsights-projects-locations-views-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

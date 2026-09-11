@@ -122,7 +122,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-network-dnszones list-zones" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "zones-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/dnszones
 # operationId: Zones_List
-export def "subscriptions-providers-microsoft-network-dnszones list-zones" [
+export def "zones-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -186,7 +186,7 @@ export def "subscriptions-providers-microsoft-network-dnszones list-zones" [
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Network/getDnsResourceReference
 # operationId: DnsResourceReference_GetByTargetResources
 # --properties shape: {targetResources?: list}
-export def "subscriptions-providers-microsoft-network-get-dns-resource-reference get-by-target" [
+export def "dns-resource-reference-get-by-target-resources" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -228,7 +228,7 @@ export def "subscriptions-providers-microsoft-network-get-dns-resource-reference
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/dnsZones
 # operationId: Zones_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-network-dns-zones list" [
+export def "zones-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -269,7 +269,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-dns-zones 
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/dnsZones/{zoneName}
 # operationId: Zones_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-dns-zones delete" [
+export def "zones-delete" [
   subscription_id: string
   resource_group_name: string
   zone_name: string
@@ -314,7 +314,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-dns-zones 
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/dnsZones/{zoneName}
 # operationId: Zones_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-dns-zones get" [
+export def "zones-get" [
   subscription_id: string
   resource_group_name: string
   zone_name: string
@@ -356,7 +356,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-dns-zones 
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/dnsZones/{zoneName}
 # operationId: Zones_Update
-export def "subscriptions-resource-groups-providers-microsoft-network-dns-zones update" [
+export def "zones-update" [
   subscription_id: string
   resource_group_name: string
   zone_name: string
@@ -406,7 +406,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-dns-zones 
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/dnsZones/{zoneName}
 # operationId: Zones_CreateOrUpdate
 # --properties shape: {registrationVirtualNetworks?: list, resolutionVirtualNetworks?: list, zoneType?: "Public"|"Private"}
-export def "subscriptions-resource-groups-providers-microsoft-network-dns-zones create-or-update" [
+export def "zones-create-or-update" [
   subscription_id: string
   resource_group_name: string
   zone_name: string
@@ -459,7 +459,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-dns-zones 
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/dnsZones/{zoneName}/all
 # operationId: RecordSets_ListAllByDnsZone
-export def "subscriptions-resource-groups-providers-microsoft-network-dns-zones-all list-record-sets" [
+export def "record-sets-list-all-by-dns-zone" [
   subscription_id: string
   resource_group_name: string
   zone_name: string
@@ -503,7 +503,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-dns-zones-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/dnsZones/{zoneName}/recordsets
 # operationId: RecordSets_ListByDnsZone
-export def "subscriptions-resource-groups-providers-microsoft-network-dns-zones-recordsets list-record-sets" [
+export def "record-sets-list-by-dns-zone" [
   subscription_id: string
   resource_group_name: string
   zone_name: string
@@ -547,7 +547,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-dns-zones-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/dnsZones/{zoneName}/{recordType}
 # operationId: RecordSets_ListByType
-export def "subscriptions-resource-groups-providers-microsoft-network-dns-zones list-record-sets-by-type" [
+export def "record-sets-list-by-type" [
   subscription_id: string
   resource_group_name: string
   zone_name: string
@@ -593,7 +593,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-dns-zones 
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/dnsZones/{zoneName}/{recordType}/{relativeRecordSetName}
 # operationId: RecordSets_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-dns-zones delete-record-sets" [
+export def "record-sets-delete" [
   subscription_id: string
   resource_group_name: string
   zone_name: string
@@ -642,7 +642,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-dns-zones 
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/dnsZones/{zoneName}/{recordType}/{relativeRecordSetName}
 # operationId: RecordSets_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-dns-zones get-record-sets" [
+export def "record-sets-get" [
   subscription_id: string
   resource_group_name: string
   zone_name: string
@@ -689,7 +689,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-dns-zones 
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/dnsZones/{zoneName}/{recordType}/{relativeRecordSetName}
 # operationId: RecordSets_Update
 # --properties shape: {AAAARecords?: list, ARecords?: list, CNAMERecord?: any, MXRecords?: list, NSRecords?: list, PTRRecords?: list, SOARecord?: any, SRVRecords?: list, TTL?: int, TXTRecords?: list, caaRecords?: list, metadata?: record, targetResource?: any}
-export def "subscriptions-resource-groups-providers-microsoft-network-dns-zones update-record-sets" [
+export def "record-sets-update" [
   subscription_id: string
   resource_group_name: string
   zone_name: string
@@ -744,7 +744,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-dns-zones 
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/dnsZones/{zoneName}/{recordType}/{relativeRecordSetName}
 # operationId: RecordSets_CreateOrUpdate
 # --properties shape: {AAAARecords?: list, ARecords?: list, CNAMERecord?: any, MXRecords?: list, NSRecords?: list, PTRRecords?: list, SOARecord?: any, SRVRecords?: list, TTL?: int, TXTRecords?: list, caaRecords?: list, metadata?: record, targetResource?: any}
-export def "subscriptions-resource-groups-providers-microsoft-network-dns-zones create-record-sets-or-update" [
+export def "record-sets-create-or-update" [
   subscription_id: string
   resource_group_name: string
   zone_name: string

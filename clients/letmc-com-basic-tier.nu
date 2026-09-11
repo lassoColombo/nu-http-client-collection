@@ -109,7 +109,7 @@ def alert-tenant-type-completer [] { ["Company" "Council" "Employed" "OwnMeans" 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "tier2-area-areas list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-v2-tier2-short-name-area-areas" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -132,7 +132,7 @@ export def commands []: nothing -> table {
 # A collection of all the areas for a company
 #
 # GET /v2/tier2/{shortName}/area/areas
-export def "tier2-area-areas list" [
+export def "get-v2-tier2-short-name-area-areas" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -171,7 +171,7 @@ export def "tier2-area-areas list" [
 # Get a specific area given its unique Object ID (OID)
 #
 # GET /v2/tier2/{shortName}/area/areas/{areaID}
-export def "tier2-area-areas get" [
+export def "get-v2-tier2-short-name-area-areas-area-id" [
   short_name: string
   area_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -209,7 +209,7 @@ export def "tier2-area-areas get" [
 # All branches defined for a company
 #
 # GET /v2/tier2/{shortName}/branch/branches
-export def "tier2-branch-branches list" [
+export def "get-v2-tier2-short-name-branch-branches" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -248,7 +248,7 @@ export def "tier2-branch-branches list" [
 # Get a specific branch given its unique Object ID (OID)
 #
 # GET /v2/tier2/{shortName}/branch/branches/{branchID}
-export def "tier2-branch-branches get" [
+export def "get-v2-tier2-short-name-branch-branches-branch-id" [
   short_name: string
   branch_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -287,7 +287,7 @@ export def "tier2-branch-branches get" [
 #
 # GET /v2/tier2/{shortName}/company
 # operationId: CompanyController_GetCompany
-export def "tier2-company get-controller" [
+export def "company-controller-get-company" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -323,7 +323,7 @@ export def "tier2-company get-controller" [
 # A collection of all counties available for a company
 #
 # GET /v2/tier2/{shortName}/county/counties
-export def "tier2-county-counties list" [
+export def "get-v2-tier2-short-name-county-counties" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -362,7 +362,7 @@ export def "tier2-county-counties list" [
 # Get a specific county given its unique Object ID (OID)
 #
 # GET /v2/tier2/{shortName}/county/counties/{countyID}
-export def "tier2-county-counties get" [
+export def "get-v2-tier2-short-name-county-counties-county-id" [
   short_name: string
   county_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -401,7 +401,7 @@ export def "tier2-county-counties get" [
 #
 # GET /v2/tier2/{shortName}/county/counties/{countyID}/branches
 # operationId: CountyController_GetCountiesBranches
-export def "tier2-county-counties-branches get-controller" [
+export def "county-controller-get-counties-branches" [
   short_name: string
   county_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -442,7 +442,7 @@ export def "tier2-county-counties-branches get-controller" [
 # A collection of all diary allocations
 #
 # GET /v2/tier2/{shortName}/diary/allocations
-export def "tier2-diary-allocations list" [
+export def "get-v2-tier2-short-name-diary-allocations" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -481,7 +481,7 @@ export def "tier2-diary-allocations list" [
 # Get a specific diary allocation given its unique Object ID (OID)
 #
 # GET /v2/tier2/{shortName}/diary/allocations/{diaryAllocationID}
-export def "tier2-diary-allocations get" [
+export def "get-v2-tier2-short-name-diary-allocations-diary-allocation-id" [
   short_name: string
   diary_allocation_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -519,7 +519,7 @@ export def "tier2-diary-allocations get" [
 # A collection of all diary appointments
 #
 # GET /v2/tier2/{shortName}/diary/appointments
-export def "tier2-diary-appointments list" [
+export def "get-v2-tier2-short-name-diary-appointments" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -558,7 +558,7 @@ export def "tier2-diary-appointments list" [
 # Get a specific diary appointment given its unique Object ID (OID)
 #
 # GET /v2/tier2/{shortName}/diary/appointments/{diaryAppointmentID}
-export def "tier2-diary-appointments get" [
+export def "get-v2-tier2-short-name-diary-appointments-diary-appointment-id" [
   short_name: string
   diary_appointment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -596,7 +596,7 @@ export def "tier2-diary-appointments get" [
 # A collection of all diary appointment types
 #
 # GET /v2/tier2/{shortName}/diary/appointmenttypes
-export def "tier2-diary-appointmenttypes list" [
+export def "get-v2-tier2-short-name-diary-appointmenttypes" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -635,7 +635,7 @@ export def "tier2-diary-appointmenttypes list" [
 # Get a specific diary appointment type given its unique Object ID (OID)
 #
 # GET /v2/tier2/{shortName}/diary/appointmenttypes/{diaryAppointmentTypeID}
-export def "tier2-diary-appointmenttypes get" [
+export def "get-v2-tier2-short-name-diary-appointmenttypes-diary-appointment-type-id" [
   short_name: string
   diary_appointment_type_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -674,7 +674,7 @@ export def "tier2-diary-appointmenttypes get" [
 #
 # GET /v2/tier2/{shortName}/lettings/advertised
 # operationId: LettingsController_GetAdvertised
-export def "tier2-lettings-advertised get-controller" [
+export def "lettings-controller-get-advertised" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -721,7 +721,7 @@ export def "tier2-lettings-advertised get-controller" [
 #
 # GET /v2/tier2/{shortName}/lettings/advertisedbetweendates
 # operationId: LettingsController_GetAdvertisedBetweenDates
-export def "tier2-lettings-advertisedbetweendates get-controller-advertised-between-dates" [
+export def "lettings-controller-get-advertised-between-dates" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -769,7 +769,7 @@ export def "tier2-lettings-advertisedbetweendates get-controller-advertised-betw
 # A collection of all the company's tenancies
 #
 # GET /v2/tier2/{shortName}/lettings/tenancies
-export def "tier2-lettings-tenancies list" [
+export def "get-v2-tier2-short-name-lettings-tenancies" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -808,7 +808,7 @@ export def "tier2-lettings-tenancies list" [
 # Get a specific tenancy given its unique Object ID (OID)
 #
 # GET /v2/tier2/{shortName}/lettings/tenancies/{tenancyID}
-export def "tier2-lettings-tenancies get" [
+export def "get-v2-tier2-short-name-lettings-tenancies-tenancy-id" [
   short_name: string
   tenancy_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -847,7 +847,7 @@ export def "tier2-lettings-tenancies get" [
 #
 # GET /v2/tier2/{shortName}/lettings/tenancies/{tenancyID}/brochure
 # operationId: LettingsController_GetTenancyBrochure
-export def "tier2-lettings-tenancies-brochure get-controller-tenancy" [
+export def "lettings-controller-get-tenancy-brochure" [
   short_name: string
   tenancy_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -885,7 +885,7 @@ export def "tier2-lettings-tenancies-brochure get-controller-tenancy" [
 # A collection of all photos in the company
 #
 # GET /v2/tier2/{shortName}/photo/photos
-export def "tier2-photo-photos list" [
+export def "get-v2-tier2-short-name-photo-photos" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -924,7 +924,7 @@ export def "tier2-photo-photos list" [
 # Get a specific photo given its unique Object ID (OID)
 #
 # GET /v2/tier2/{shortName}/photo/photos/{photoID}
-export def "tier2-photo-photos get" [
+export def "get-v2-tier2-short-name-photo-photos-photo-id" [
   short_name: string
   photo_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -963,7 +963,7 @@ export def "tier2-photo-photos get" [
 #
 # GET /v2/tier2/{shortName}/photos/photo/{photoID}/download
 # operationId: PhotoController_GetPhotoDownload
-export def "tier2-photos-photo-download get-controller" [
+export def "photo-controller-get-photo-download" [
   short_name: string
   photo_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1004,7 +1004,7 @@ export def "tier2-photos-photo-download get-controller" [
 # A collection of all properties within a company
 #
 # GET /v2/tier2/{shortName}/property/properties
-export def "tier2-property-properties list" [
+export def "get-v2-tier2-short-name-property-properties" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1043,7 +1043,7 @@ export def "tier2-property-properties list" [
 # Get a specific property given its unique Object ID (OID)
 #
 # GET /v2/tier2/{shortName}/property/properties/{propertyID}
-export def "tier2-property-properties get" [
+export def "get-v2-tier2-short-name-property-properties-property-id" [
   short_name: string
   property_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1082,7 +1082,7 @@ export def "tier2-property-properties get" [
 #
 # GET /v2/tier2/{shortName}/property/properties/{propertyID}/facilities
 # operationId: PropertyController_GetPropertiesFacilities
-export def "tier2-property-properties-facilities get-controller" [
+export def "property-controller-get-properties-facilities" [
   short_name: string
   property_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1124,7 +1124,7 @@ export def "tier2-property-properties-facilities get-controller" [
 #
 # GET /v2/tier2/{shortName}/property/properties/{propertyID}/photos
 # operationId: PropertyController_GetPropertiesPhotos
-export def "tier2-property-properties-photos get-controller" [
+export def "property-controller-get-properties-photos" [
   short_name: string
   property_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1166,7 +1166,7 @@ export def "tier2-property-properties-photos get-controller" [
 #
 # GET /v2/tier2/{shortName}/property/properties/{propertyID}/rooms
 # operationId: PropertyController_GetPropertiesRooms
-export def "tier2-property-properties-rooms get-controller" [
+export def "property-controller-get-properties-rooms" [
   short_name: string
   property_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1208,7 +1208,7 @@ export def "tier2-property-properties-rooms get-controller" [
 #
 # GET /v2/tier2/{shortName}/property/properties/{propertyID}/tenancies
 # operationId: PropertyController_GetPropertiesTenancies
-export def "tier2-property-properties-tenancies get-controller" [
+export def "property-controller-get-properties-tenancies" [
   short_name: string
   property_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1250,7 +1250,7 @@ export def "tier2-property-properties-tenancies get-controller" [
 #
 # GET /v2/tier2/{shortName}/property/structures/{propertyStructureID}/reports/eer
 # operationId: PropertyController_GetPropertyEERDownload
-export def "tier2-property-structures-reports-eer get-controller-download" [
+export def "property-controller-get-property-eer-download" [
   short_name: string
   property_structure_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1289,7 +1289,7 @@ export def "tier2-property-structures-reports-eer get-controller-download" [
 #
 # GET /v2/tier2/{shortName}/property/structures/{propertyStructureID}/reports/eir
 # operationId: PropertyController_GetPropertyEIRDownload
-export def "tier2-property-structures-reports-eir get-controller-download" [
+export def "property-controller-get-property-eir-download" [
   short_name: string
   property_structure_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1328,7 +1328,7 @@ export def "tier2-property-structures-reports-eir get-controller-download" [
 #
 # GET /v2/tier2/{shortName}/sales/advertisedsales
 # operationId: SalesController_GetAdvertisedSales
-export def "tier2-sales-advertisedsales get-controller-advertised" [
+export def "sales-controller-get-advertised-sales" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1378,7 +1378,7 @@ export def "tier2-sales-advertisedsales get-controller-advertised" [
 #
 # GET /v2/tier2/{shortName}/sales/reports/eer/{salesInstructionID}
 # operationId: SalesController_GetEER
-export def "tier2-sales-reports-eer get-controller" [
+export def "sales-controller-get-eer" [
   short_name: string
   sales_instruction_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1417,7 +1417,7 @@ export def "tier2-sales-reports-eer get-controller" [
 #
 # GET /v2/tier2/{shortName}/sales/reports/eir/{salesInstructionID}
 # operationId: SalesController_GetEIR
-export def "tier2-sales-reports-eir get-controller" [
+export def "sales-controller-get-eir" [
   short_name: string
   sales_instruction_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1455,7 +1455,7 @@ export def "tier2-sales-reports-eir get-controller" [
 # A collection of all sales feature types linked to a company
 #
 # GET /v2/tier2/{shortName}/sales/salesfeaturetypes
-export def "tier2-sales-salesfeaturetypes list" [
+export def "get-v2-tier2-short-name-sales-salesfeaturetypes" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1494,7 +1494,7 @@ export def "tier2-sales-salesfeaturetypes list" [
 # Get a specific sales feature type given its unique Object ID (OID)
 #
 # GET /v2/tier2/{shortName}/sales/salesfeaturetypes/{salesFeatureTypeID}
-export def "tier2-sales-salesfeaturetypes get" [
+export def "get-v2-tier2-short-name-sales-salesfeaturetypes-sales-feature-type-id" [
   short_name: string
   sales_feature_type_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1532,7 +1532,7 @@ export def "tier2-sales-salesfeaturetypes get" [
 # A collection of all sales instructions linked to a company
 #
 # GET /v2/tier2/{shortName}/sales/salesinstructions
-export def "tier2-sales-salesinstructions list" [
+export def "get-v2-tier2-short-name-sales-salesinstructions" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1571,7 +1571,7 @@ export def "tier2-sales-salesinstructions list" [
 # Get a specific sales instruction given its unique Object ID (OID)
 #
 # GET /v2/tier2/{shortName}/sales/salesinstructions/{salesInstructionID}
-export def "tier2-sales-salesinstructions get" [
+export def "get-v2-tier2-short-name-sales-salesinstructions-sales-instruction-id" [
   short_name: string
   sales_instruction_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1610,7 +1610,7 @@ export def "tier2-sales-salesinstructions get" [
 #
 # GET /v2/tier2/{shortName}/sales/salesinstructions/{salesInstructionID}/features
 # operationId: SalesController_GetSalesInstructionsFeatures
-export def "tier2-sales-salesinstructions-features get-controller-instructions" [
+export def "sales-controller-get-sales-instructions-features" [
   short_name: string
   sales_instruction_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1652,7 +1652,7 @@ export def "tier2-sales-salesinstructions-features get-controller-instructions" 
 #
 # GET /v2/tier2/{shortName}/sales/salesinstructions/{salesInstructionID}/floorplans
 # operationId: SalesController_GetSalesInstructionsFloorPlans
-export def "tier2-sales-salesinstructions-floorplans get-controller-instructions-floor-plans" [
+export def "sales-controller-get-sales-instructions-floor-plans" [
   short_name: string
   sales_instruction_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1694,7 +1694,7 @@ export def "tier2-sales-salesinstructions-floorplans get-controller-instructions
 #
 # GET /v2/tier2/{shortName}/sales/salesinstructions/{salesInstructionID}/photos
 # operationId: SalesController_GetSalesInstructionsPhotos
-export def "tier2-sales-salesinstructions-photos get-controller-instructions" [
+export def "sales-controller-get-sales-instructions-photos" [
   short_name: string
   sales_instruction_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1736,7 +1736,7 @@ export def "tier2-sales-salesinstructions-photos get-controller-instructions" [
 #
 # GET /v2/tier2/{shortName}/sales/salesinstructions/{salesInstructionID}/rooms
 # operationId: SalesController_GetSalesInstructionsRooms
-export def "tier2-sales-salesinstructions-rooms get-controller-instructions" [
+export def "sales-controller-get-sales-instructions-rooms" [
   short_name: string
   sales_instruction_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1777,7 +1777,7 @@ export def "tier2-sales-salesinstructions-rooms get-controller-instructions" [
 # A collection of all the staff members linked to a specific company
 #
 # GET /v2/tier2/{shortName}/staff/staff
-export def "tier2-staff-staff list" [
+export def "get-v2-tier2-short-name-staff-staff" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1816,7 +1816,7 @@ export def "tier2-staff-staff list" [
 # Get a specific application staff given its unique Object ID (OID)
 #
 # GET /v2/tier2/{shortName}/staff/staff/{applicationStaffID}
-export def "tier2-staff-staff get" [
+export def "get-v2-tier2-short-name-staff-staff-application-staff-id" [
   short_name: string
   application_staff_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1855,7 +1855,7 @@ export def "tier2-staff-staff get" [
 #
 # GET /v2/tier2/{shortName}/viewing/bookings
 # operationId: ViewingController_GetBookings
-export def "tier2-viewing-bookings get-controller" [
+export def "viewing-controller-get-bookings" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1895,7 +1895,7 @@ export def "tier2-viewing-bookings get-controller" [
 #
 # POST /v2/tier2/{shortName}/viewing/bookings
 # operationId: ViewingController_MakeBooking
-export def "tier2-viewing-bookings create-controller-make" [
+export def "viewing-controller-make-booking" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

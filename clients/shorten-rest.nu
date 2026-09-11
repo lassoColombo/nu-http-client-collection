@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["x-api-key"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "aliases delete-alias" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "delete-alias" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /aliases
 # operationId: DeleteAlias
-export def "aliases delete-alias" [
+export def "delete-alias" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -177,7 +177,7 @@ export def "aliases delete-alias" [
 #
 # GET /aliases
 # operationId: GetAlias
-export def "aliases get-alias" [
+export def "get-alias" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -217,7 +217,7 @@ export def "aliases get-alias" [
 # --destinations item shape: {country?: string, os?: string, url: string}
 # --metatags item shape: {content: string, name: string}
 # --snippets item shape: {id: string, parameters?: record}
-export def "aliases create-alias" [
+export def "create-alias" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -263,7 +263,7 @@ export def "aliases create-alias" [
 # --destinations item shape: {country?: string, os?: string, url: string}
 # --metatags item shape: {content: string, name: string}
 # --snippets item shape: {id: string, parameters?: record}
-export def "aliases update-alias" [
+export def "update-alias" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -306,7 +306,7 @@ export def "aliases update-alias" [
 #
 # GET /aliases/all
 # operationId: GetAliases
-export def "aliases-all get" [
+export def "get-aliases" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -344,7 +344,7 @@ export def "aliases-all get" [
 #
 # GET /clicks
 # operationId: GetClicks
-export def "clicks get" [
+export def "get-clicks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -381,7 +381,7 @@ export def "clicks get" [
 #
 # POST /clicks/pg
 # operationId: GetStatistics
-export def "clicks-pg get-statistics" [
+export def "get-statistics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

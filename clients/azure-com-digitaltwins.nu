@@ -125,7 +125,7 @@ def type-completer [] { ["Microsoft.DigitalTwins/digitalTwinsInstances"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-digital-twins-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -149,7 +149,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.DigitalTwins/operations
 # operationId: Operations_List
-export def "providers-microsoft-digital-twins-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -185,7 +185,7 @@ export def "providers-microsoft-digital-twins-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.DigitalTwins/digitalTwinsInstances
 # operationId: DigitalTwins_List
-export def "subscriptions-providers-microsoft-digital-twins-digital-twins-instances list" [
+export def "digital-twins-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -223,7 +223,7 @@ export def "subscriptions-providers-microsoft-digital-twins-digital-twins-instan
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.DigitalTwins/locations/{location}/checkNameAvailability
 # operationId: DigitalTwins_CheckNameAvailability
-export def "subscriptions-providers-microsoft-digital-twins-locations-check-name-availability check" [
+export def "digital-twins-check-name-availability" [
   subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -268,7 +268,7 @@ export def "subscriptions-providers-microsoft-digital-twins-locations-check-name
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DigitalTwins/digitalTwinsInstances
 # operationId: DigitalTwins_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-digital-twins-digital-twins-instances list" [
+export def "digital-twins-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -308,7 +308,7 @@ export def "subscriptions-resource-groups-providers-microsoft-digital-twins-digi
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DigitalTwins/digitalTwinsInstances/{resourceName}
 # operationId: DigitalTwins_Delete
-export def "subscriptions-resource-groups-providers-microsoft-digital-twins-digital-twins-instances delete" [
+export def "digital-twins-delete" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -350,7 +350,7 @@ export def "subscriptions-resource-groups-providers-microsoft-digital-twins-digi
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DigitalTwins/digitalTwinsInstances/{resourceName}
 # operationId: DigitalTwins_Get
-export def "subscriptions-resource-groups-providers-microsoft-digital-twins-digital-twins-instances get" [
+export def "digital-twins-get" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -392,7 +392,7 @@ export def "subscriptions-resource-groups-providers-microsoft-digital-twins-digi
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DigitalTwins/digitalTwinsInstances/{resourceName}
 # operationId: DigitalTwins_Update
-export def "subscriptions-resource-groups-providers-microsoft-digital-twins-digital-twins-instances update" [
+export def "digital-twins-update" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -439,7 +439,7 @@ export def "subscriptions-resource-groups-providers-microsoft-digital-twins-digi
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DigitalTwins/digitalTwinsInstances/{resourceName}
 # operationId: DigitalTwins_CreateOrUpdate
 # --sku shape: {name: "F1"}
-export def "subscriptions-resource-groups-providers-microsoft-digital-twins-digital-twins-instances create-or-update" [
+export def "digital-twins-create-or-update" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -488,7 +488,7 @@ export def "subscriptions-resource-groups-providers-microsoft-digital-twins-digi
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DigitalTwins/digitalTwinsInstances/{resourceName}/endpoints
 # operationId: DigitalTwinsEndpoint_List
-export def "subscriptions-resource-groups-providers-microsoft-digital-twins-digital-twins-instances-endpoints list" [
+export def "digital-twins-endpoint-list" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -530,7 +530,7 @@ export def "subscriptions-resource-groups-providers-microsoft-digital-twins-digi
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DigitalTwins/digitalTwinsInstances/{resourceName}/endpoints/{endpointName}
 # operationId: DigitalTwinsEndpoint_Delete
-export def "subscriptions-resource-groups-providers-microsoft-digital-twins-digital-twins-instances-endpoints delete" [
+export def "digital-twins-endpoint-delete" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -574,7 +574,7 @@ export def "subscriptions-resource-groups-providers-microsoft-digital-twins-digi
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DigitalTwins/digitalTwinsInstances/{resourceName}/endpoints/{endpointName}
 # operationId: DigitalTwinsEndpoint_Get
-export def "subscriptions-resource-groups-providers-microsoft-digital-twins-digital-twins-instances-endpoints get" [
+export def "digital-twins-endpoint-get" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -619,7 +619,7 @@ export def "subscriptions-resource-groups-providers-microsoft-digital-twins-digi
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DigitalTwins/digitalTwinsInstances/{resourceName}/endpoints/{endpointName}
 # operationId: DigitalTwinsEndpoint_CreateOrUpdate
 # --properties shape: {endpointType: "EventHub"|"EventGrid"|"ServiceBus", tags?: record}
-export def "subscriptions-resource-groups-providers-microsoft-digital-twins-digital-twins-instances-endpoints create-or-update" [
+export def "digital-twins-endpoint-create-or-update" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -667,7 +667,7 @@ export def "subscriptions-resource-groups-providers-microsoft-digital-twins-digi
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DigitalTwins/digitalTwinsInstances/{resourceName}/integrationResources
 # operationId: DigitalTwinsIoTHubs_List
-export def "subscriptions-resource-groups-providers-microsoft-digital-twins-digital-twins-instances-integration-resources list-io-t-hubs" [
+export def "digital-twins-io-t-hubs-list" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -709,7 +709,7 @@ export def "subscriptions-resource-groups-providers-microsoft-digital-twins-digi
 #
 # DELETE /{scope}/providers/Microsoft.DigitalTwins/integrationResources/{integrationResourceName}
 # operationId: IoTHub_Delete
-export def "providers-microsoft-digital-twins-integration-resources delete-io-t-hub" [
+export def "io-t-hub-delete" [
   scope: string
   integration_resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -747,7 +747,7 @@ export def "providers-microsoft-digital-twins-integration-resources delete-io-t-
 #
 # GET /{scope}/providers/Microsoft.DigitalTwins/integrationResources/{integrationResourceName}
 # operationId: IoTHub_Get
-export def "providers-microsoft-digital-twins-integration-resources get-io-t-hub" [
+export def "io-t-hub-get" [
   scope: string
   integration_resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -786,7 +786,7 @@ export def "providers-microsoft-digital-twins-integration-resources get-io-t-hub
 # PUT /{scope}/providers/Microsoft.DigitalTwins/integrationResources/{integrationResourceName}
 # operationId: IoTHub_CreateOrUpdate
 # --properties shape: {resourceId?: string}
-export def "providers-microsoft-digital-twins-integration-resources create-io-t-hub-or-update" [
+export def "io-t-hub-create-or-update" [
   scope: string
   integration_resource_name: string
   --base-url(-b): string@base-url-completer # API base URL

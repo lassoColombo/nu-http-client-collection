@@ -110,7 +110,7 @@ def auth-scheme-completer [] { ["apikey"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "path update-benefits-document-upload" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "put-benefits-document-upload" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -134,7 +134,7 @@ export def commands []: nothing -> table {
 #
 # PUT /path
 # operationId: putBenefitsDocumentUpload
-export def "path update-benefits-document-upload" [
+export def "put-benefits-document-upload" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -171,7 +171,7 @@ export def "path update-benefits-document-upload" [
 #
 # POST /uploads
 # operationId: postBenefitsDocumentUpload
-export def "uploads create-benefits-document" [
+export def "post-benefits-document-upload" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -205,7 +205,7 @@ export def "uploads create-benefits-document" [
 #
 # POST /uploads/report
 # operationId: getBenefitsDocumentUploadStatusReport
-export def "uploads-report get-benefits-document-status" [
+export def "get-benefits-document-upload-status-report" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -243,7 +243,7 @@ export def "uploads-report get-benefits-document-status" [
 #
 # POST /uploads/validate_document
 # operationId: postBenefitsDocumentUploadValidateDocument
-export def "uploads-validate-document create-benefits" [
+export def "post-benefits-document-upload-validate-document" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -277,7 +277,7 @@ export def "uploads-validate-document create-benefits" [
 #
 # GET /uploads/{id}
 # operationId: getBenefitsDocumentUploadStatus
-export def "uploads get-benefits-document-status" [
+export def "get-benefits-document-upload-status" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -313,7 +313,7 @@ export def "uploads get-benefits-document-status" [
 #
 # GET /uploads/{id}/download
 # operationId: getBenefitsDocumentUploadDownload
-export def "uploads-download get-benefits-document" [
+export def "get-benefits-document-upload-download" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

@@ -128,7 +128,7 @@ def emoji-completer [] { ["⚽" "🎯" "🎰" "🎲" "🏀"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "add-sticker-to-set create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-add-sticker-to-set" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -153,7 +153,7 @@ export def commands []: nothing -> table {
 # POST /addStickerToSet
 # Docs: https://core.telegram.org/bots/api/#addstickertoset
 # --mask_position shape: {point: "forehead"|"eyes"|"mouth"|"chin", scale: float, x_shift: float, y_shift: float}
-export def "add-sticker-to-set create" [
+export def "post-add-sticker-to-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -198,7 +198,7 @@ export def "add-sticker-to-set create" [
 #
 # POST /answerCallbackQuery
 # Docs: https://core.telegram.org/bots/api/#answercallbackquery
-export def "answer-callback-query create" [
+export def "post-answer-callback-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -240,7 +240,7 @@ export def "answer-callback-query create" [
 #
 # POST /answerInlineQuery
 # Docs: https://core.telegram.org/bots/api/#answerinlinequery
-export def "answer-inline-query create" [
+export def "post-answer-inline-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -284,7 +284,7 @@ export def "answer-inline-query create" [
 #
 # POST /answerPreCheckoutQuery
 # Docs: https://core.telegram.org/bots/api/#answerprecheckoutquery
-export def "answer-pre-checkout-query create" [
+export def "post-answer-pre-checkout-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -325,7 +325,7 @@ export def "answer-pre-checkout-query create" [
 # POST /answerShippingQuery
 # Docs: https://core.telegram.org/bots/api/#answershippingquery
 # --shipping_options item shape: {id: string, prices: list, title: string}
-export def "answer-shipping-query create" [
+export def "post-answer-shipping-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -366,7 +366,7 @@ export def "answer-shipping-query create" [
 #
 # POST /close
 # Docs: https://core.telegram.org/bots/api/#close
-export def "close create" [
+export def "post-close" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -401,7 +401,7 @@ export def "close create" [
 # POST /copyMessage
 # Docs: https://core.telegram.org/bots/api/#copymessage
 # --caption_entities item shape: {language?: string, length: int, offset: int, type: "mention"|"hashtag"|"cashtag"|"bot_command"|"url"|"email"|"phone_number"|"bold"|"italic"|"underline"|"strikethrough"|"code"|"pre"|"text_link"|"text_mention", url?: string, user?: record}
-export def "copy-message create" [
+export def "post-copy-message" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -449,7 +449,7 @@ export def "copy-message create" [
 # POST /createNewStickerSet
 # Docs: https://core.telegram.org/bots/api/#createnewstickerset
 # --mask_position shape: {point: "forehead"|"eyes"|"mouth"|"chin", scale: float, x_shift: float, y_shift: float}
-export def "create-new-sticker-set create" [
+export def "post-create-new-sticker-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -496,7 +496,7 @@ export def "create-new-sticker-set create" [
 #
 # POST /deleteChatPhoto
 # Docs: https://core.telegram.org/bots/api/#deletechatphoto
-export def "delete-chat-photo create" [
+export def "post-delete-chat-photo" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -534,7 +534,7 @@ export def "delete-chat-photo create" [
 #
 # POST /deleteChatStickerSet
 # Docs: https://core.telegram.org/bots/api/#deletechatstickerset
-export def "delete-chat-sticker-set create" [
+export def "post-delete-chat-sticker-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -572,7 +572,7 @@ export def "delete-chat-sticker-set create" [
 #
 # POST /deleteMessage
 # Docs: https://core.telegram.org/bots/api/#deletemessage
-export def "delete-message create" [
+export def "post-delete-message" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -611,7 +611,7 @@ export def "delete-message create" [
 #
 # POST /deleteStickerFromSet
 # Docs: https://core.telegram.org/bots/api/#deletestickerfromset
-export def "delete-sticker-from-set create" [
+export def "post-delete-sticker-from-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -649,7 +649,7 @@ export def "delete-sticker-from-set create" [
 #
 # POST /deleteWebhook
 # Docs: https://core.telegram.org/bots/api/#deletewebhook
-export def "delete-webhook create" [
+export def "post-delete-webhook" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -689,7 +689,7 @@ export def "delete-webhook create" [
 # Docs: https://core.telegram.org/bots/api/#editmessagecaption
 # --caption_entities item shape: {language?: string, length: int, offset: int, type: "mention"|"hashtag"|"cashtag"|"bot_command"|"url"|"email"|"phone_number"|"bold"|"italic"|"underline"|"strikethrough"|"code"|"pre"|"text_link"|"text_mention", url?: string, user?: record}
 # --reply_markup shape: {inline_keyboard: list}
-export def "edit-message-caption create" [
+export def "post-edit-message-caption" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -734,7 +734,7 @@ export def "edit-message-caption create" [
 # POST /editMessageLiveLocation
 # Docs: https://core.telegram.org/bots/api/#editmessagelivelocation
 # --reply_markup shape: {inline_keyboard: list}
-export def "edit-message-live-location create" [
+export def "post-edit-message-live-location" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -781,7 +781,7 @@ export def "edit-message-live-location create" [
 # POST /editMessageMedia
 # Docs: https://core.telegram.org/bots/api/#editmessagemedia
 # --reply_markup shape: {inline_keyboard: list}
-export def "edit-message-media create" [
+export def "post-edit-message-media" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -826,7 +826,7 @@ export def "edit-message-media create" [
 # POST /editMessageReplyMarkup
 # Docs: https://core.telegram.org/bots/api/#editmessagereplymarkup
 # --reply_markup shape: {inline_keyboard: list}
-export def "edit-message-reply-markup create" [
+export def "post-edit-message-reply-markup" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -869,7 +869,7 @@ export def "edit-message-reply-markup create" [
 # Docs: https://core.telegram.org/bots/api/#editmessagetext
 # --entities item shape: {language?: string, length: int, offset: int, type: "mention"|"hashtag"|"cashtag"|"bot_command"|"url"|"email"|"phone_number"|"bold"|"italic"|"underline"|"strikethrough"|"code"|"pre"|"text_link"|"text_mention", url?: string, user?: record}
 # --reply_markup shape: {inline_keyboard: list}
-export def "edit-message-text create" [
+export def "post-edit-message-text" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -914,7 +914,7 @@ export def "edit-message-text create" [
 #
 # POST /exportChatInviteLink
 # Docs: https://core.telegram.org/bots/api/#exportchatinvitelink
-export def "export-chat-invite-link create" [
+export def "post-export-chat-invite-link" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -952,7 +952,7 @@ export def "export-chat-invite-link create" [
 #
 # POST /forwardMessage
 # Docs: https://core.telegram.org/bots/api/#forwardmessage
-export def "forward-message create" [
+export def "post-forward-message" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -993,7 +993,7 @@ export def "forward-message create" [
 #
 # POST /getChat
 # Docs: https://core.telegram.org/bots/api/#getchat
-export def "get-chat create" [
+export def "post-get-chat" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1031,7 +1031,7 @@ export def "get-chat create" [
 #
 # POST /getChatAdministrators
 # Docs: https://core.telegram.org/bots/api/#getchatadministrators
-export def "get-chat-administrators create" [
+export def "post-get-chat-administrators" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1069,7 +1069,7 @@ export def "get-chat-administrators create" [
 #
 # POST /getChatMember
 # Docs: https://core.telegram.org/bots/api/#getchatmember
-export def "get-chat-member create" [
+export def "post-get-chat-member" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1108,7 +1108,7 @@ export def "get-chat-member create" [
 #
 # POST /getChatMembersCount
 # Docs: https://core.telegram.org/bots/api/#getchatmemberscount
-export def "get-chat-members-count create" [
+export def "post-get-chat-members-count" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1146,7 +1146,7 @@ export def "get-chat-members-count create" [
 #
 # POST /getFile
 # Docs: https://core.telegram.org/bots/api/#getfile
-export def "get-file create" [
+export def "post-get-file" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1184,7 +1184,7 @@ export def "get-file create" [
 #
 # POST /getGameHighScores
 # Docs: https://core.telegram.org/bots/api/#getgamehighscores
-export def "get-game-high-scores create" [
+export def "post-get-game-high-scores" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1225,7 +1225,7 @@ export def "get-game-high-scores create" [
 #
 # POST /getMe
 # Docs: https://core.telegram.org/bots/api/#getme
-export def "get-me create" [
+export def "post-get-me" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1259,7 +1259,7 @@ export def "get-me create" [
 #
 # POST /getMyCommands
 # Docs: https://core.telegram.org/bots/api/#getmycommands
-export def "get-my-commands create" [
+export def "post-get-my-commands" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1293,7 +1293,7 @@ export def "get-my-commands create" [
 #
 # POST /getStickerSet
 # Docs: https://core.telegram.org/bots/api/#getstickerset
-export def "get-sticker-set create" [
+export def "post-get-sticker-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1331,7 +1331,7 @@ export def "get-sticker-set create" [
 #
 # POST /getUpdates
 # Docs: https://core.telegram.org/bots/api/#getupdates
-export def "get-updates create" [
+export def "post-get-updates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1372,7 +1372,7 @@ export def "get-updates create" [
 #
 # POST /getUserProfilePhotos
 # Docs: https://core.telegram.org/bots/api/#getuserprofilephotos
-export def "get-user-profile-photos create" [
+export def "post-get-user-profile-photos" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1412,7 +1412,7 @@ export def "get-user-profile-photos create" [
 #
 # POST /getWebhookInfo
 # Docs: https://core.telegram.org/bots/api/#getwebhookinfo
-export def "get-webhook-info create" [
+export def "post-get-webhook-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1446,7 +1446,7 @@ export def "get-webhook-info create" [
 #
 # POST /kickChatMember
 # Docs: https://core.telegram.org/bots/api/#kickchatmember
-export def "kick-chat-member create" [
+export def "post-kick-chat-member" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1486,7 +1486,7 @@ export def "kick-chat-member create" [
 #
 # POST /leaveChat
 # Docs: https://core.telegram.org/bots/api/#leavechat
-export def "leave-chat create" [
+export def "post-leave-chat" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1524,7 +1524,7 @@ export def "leave-chat create" [
 #
 # POST /logOut
 # Docs: https://core.telegram.org/bots/api/#logout
-export def "log-out create" [
+export def "post-log-out" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1558,7 +1558,7 @@ export def "log-out create" [
 #
 # POST /pinChatMessage
 # Docs: https://core.telegram.org/bots/api/#pinchatmessage
-export def "pin-chat-message create" [
+export def "post-pin-chat-message" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1598,7 +1598,7 @@ export def "pin-chat-message create" [
 #
 # POST /promoteChatMember
 # Docs: https://core.telegram.org/bots/api/#promotechatmember
-export def "promote-chat-member create" [
+export def "post-promote-chat-member" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1647,7 +1647,7 @@ export def "promote-chat-member create" [
 # POST /restrictChatMember
 # Docs: https://core.telegram.org/bots/api/#restrictchatmember
 # --permissions shape: {can_add_web_page_previews?: bool, can_change_info?: bool, can_invite_users?: bool, can_pin_messages?: bool, can_send_media_messages?: bool, can_send_messages?: bool, can_send_other_messages?: bool, can_send_polls?: bool}
-export def "restrict-chat-member create" [
+export def "post-restrict-chat-member" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1689,7 +1689,7 @@ export def "restrict-chat-member create" [
 # POST /sendAnimation
 # Docs: https://core.telegram.org/bots/api/#sendanimation
 # --caption_entities item shape: {language?: string, length: int, offset: int, type: "mention"|"hashtag"|"cashtag"|"bot_command"|"url"|"email"|"phone_number"|"bold"|"italic"|"underline"|"strikethrough"|"code"|"pre"|"text_link"|"text_mention", url?: string, user?: record}
-export def "send-animation create" [
+export def "post-send-animation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1742,7 +1742,7 @@ export def "send-animation create" [
 # POST /sendAudio
 # Docs: https://core.telegram.org/bots/api/#sendaudio
 # --caption_entities item shape: {language?: string, length: int, offset: int, type: "mention"|"hashtag"|"cashtag"|"bot_command"|"url"|"email"|"phone_number"|"bold"|"italic"|"underline"|"strikethrough"|"code"|"pre"|"text_link"|"text_mention", url?: string, user?: record}
-export def "send-audio create" [
+export def "post-send-audio" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1794,7 +1794,7 @@ export def "send-audio create" [
 #
 # POST /sendChatAction
 # Docs: https://core.telegram.org/bots/api/#sendchataction
-export def "send-chat-action create" [
+export def "post-send-chat-action" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1833,7 +1833,7 @@ export def "send-chat-action create" [
 #
 # POST /sendContact
 # Docs: https://core.telegram.org/bots/api/#sendcontact
-export def "send-contact create" [
+export def "post-send-contact" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1879,7 +1879,7 @@ export def "send-contact create" [
 #
 # POST /sendDice
 # Docs: https://core.telegram.org/bots/api/#senddice
-export def "send-dice create" [
+export def "post-send-dice" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1923,7 +1923,7 @@ export def "send-dice create" [
 # POST /sendDocument
 # Docs: https://core.telegram.org/bots/api/#senddocument
 # --caption_entities item shape: {language?: string, length: int, offset: int, type: "mention"|"hashtag"|"cashtag"|"bot_command"|"url"|"email"|"phone_number"|"bold"|"italic"|"underline"|"strikethrough"|"code"|"pre"|"text_link"|"text_mention", url?: string, user?: record}
-export def "send-document create" [
+export def "post-send-document" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1974,7 +1974,7 @@ export def "send-document create" [
 # POST /sendGame
 # Docs: https://core.telegram.org/bots/api/#sendgame
 # --reply_markup shape: {inline_keyboard: list}
-export def "send-game create" [
+export def "post-send-game" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2019,7 +2019,7 @@ export def "send-game create" [
 # Docs: https://core.telegram.org/bots/api/#sendinvoice
 # --prices item shape: {amount: int, label: string}
 # --reply_markup shape: {inline_keyboard: list}
-export def "send-invoice create" [
+export def "post-send-invoice" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2080,7 +2080,7 @@ export def "send-invoice create" [
 #
 # POST /sendLocation
 # Docs: https://core.telegram.org/bots/api/#sendlocation
-export def "send-location create" [
+export def "post-send-location" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2128,7 +2128,7 @@ export def "send-location create" [
 #
 # POST /sendMediaGroup
 # Docs: https://core.telegram.org/bots/api/#sendmediagroup
-export def "send-media-group create" [
+export def "post-send-media-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2173,7 +2173,7 @@ export def "send-media-group create" [
 # POST /sendMessage
 # Docs: https://core.telegram.org/bots/api/#sendmessage
 # --entities item shape: {language?: string, length: int, offset: int, type: "mention"|"hashtag"|"cashtag"|"bot_command"|"url"|"email"|"phone_number"|"bold"|"italic"|"underline"|"strikethrough"|"code"|"pre"|"text_link"|"text_mention", url?: string, user?: record}
-export def "send-message create" [
+export def "post-send-message" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2220,7 +2220,7 @@ export def "send-message create" [
 # POST /sendPhoto
 # Docs: https://core.telegram.org/bots/api/#sendphoto
 # --caption_entities item shape: {language?: string, length: int, offset: int, type: "mention"|"hashtag"|"cashtag"|"bot_command"|"url"|"email"|"phone_number"|"bold"|"italic"|"underline"|"strikethrough"|"code"|"pre"|"text_link"|"text_mention", url?: string, user?: record}
-export def "send-photo create" [
+export def "post-send-photo" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2269,7 +2269,7 @@ export def "send-photo create" [
 # POST /sendPoll
 # Docs: https://core.telegram.org/bots/api/#sendpoll
 # --explanation_entities item shape: {language?: string, length: int, offset: int, type: "mention"|"hashtag"|"cashtag"|"bot_command"|"url"|"email"|"phone_number"|"bold"|"italic"|"underline"|"strikethrough"|"code"|"pre"|"text_link"|"text_mention", url?: string, user?: record}
-export def "send-poll create" [
+export def "post-send-poll" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2323,7 +2323,7 @@ export def "send-poll create" [
 #
 # POST /sendSticker
 # Docs: https://core.telegram.org/bots/api/#sendsticker
-export def "send-sticker create" [
+export def "post-send-sticker" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2368,7 +2368,7 @@ export def "send-sticker create" [
 #
 # POST /sendVenue
 # Docs: https://core.telegram.org/bots/api/#sendvenue
-export def "send-venue create" [
+export def "post-send-venue" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2419,7 +2419,7 @@ export def "send-venue create" [
 # POST /sendVideo
 # Docs: https://core.telegram.org/bots/api/#sendvideo
 # --caption_entities item shape: {language?: string, length: int, offset: int, type: "mention"|"hashtag"|"cashtag"|"bot_command"|"url"|"email"|"phone_number"|"bold"|"italic"|"underline"|"strikethrough"|"code"|"pre"|"text_link"|"text_mention", url?: string, user?: record}
-export def "send-video create" [
+export def "post-send-video" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2472,7 +2472,7 @@ export def "send-video create" [
 #
 # POST /sendVideoNote
 # Docs: https://core.telegram.org/bots/api/#sendvideonote
-export def "send-video-note create" [
+export def "post-send-video-note" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2521,7 +2521,7 @@ export def "send-video-note create" [
 # POST /sendVoice
 # Docs: https://core.telegram.org/bots/api/#sendvoice
 # --caption_entities item shape: {language?: string, length: int, offset: int, type: "mention"|"hashtag"|"cashtag"|"bot_command"|"url"|"email"|"phone_number"|"bold"|"italic"|"underline"|"strikethrough"|"code"|"pre"|"text_link"|"text_mention", url?: string, user?: record}
-export def "send-voice create" [
+export def "post-send-voice" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2570,7 +2570,7 @@ export def "send-voice create" [
 #
 # POST /setChatAdministratorCustomTitle
 # Docs: https://core.telegram.org/bots/api/#setchatadministratorcustomtitle
-export def "set-chat-administrator-custom-title create" [
+export def "post-set-chat-administrator-custom-title" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2610,7 +2610,7 @@ export def "set-chat-administrator-custom-title create" [
 #
 # POST /setChatDescription
 # Docs: https://core.telegram.org/bots/api/#setchatdescription
-export def "set-chat-description create" [
+export def "post-set-chat-description" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2650,7 +2650,7 @@ export def "set-chat-description create" [
 # POST /setChatPermissions
 # Docs: https://core.telegram.org/bots/api/#setchatpermissions
 # --permissions shape: {can_add_web_page_previews?: bool, can_change_info?: bool, can_invite_users?: bool, can_pin_messages?: bool, can_send_media_messages?: bool, can_send_messages?: bool, can_send_other_messages?: bool, can_send_polls?: bool}
-export def "set-chat-permissions create" [
+export def "post-set-chat-permissions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2689,7 +2689,7 @@ export def "set-chat-permissions create" [
 #
 # POST /setChatPhoto
 # Docs: https://core.telegram.org/bots/api/#setchatphoto
-export def "set-chat-photo create" [
+export def "post-set-chat-photo" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2730,7 +2730,7 @@ export def "set-chat-photo create" [
 #
 # POST /setChatStickerSet
 # Docs: https://core.telegram.org/bots/api/#setchatstickerset
-export def "set-chat-sticker-set create" [
+export def "post-set-chat-sticker-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2769,7 +2769,7 @@ export def "set-chat-sticker-set create" [
 #
 # POST /setChatTitle
 # Docs: https://core.telegram.org/bots/api/#setchattitle
-export def "set-chat-title create" [
+export def "post-set-chat-title" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2808,7 +2808,7 @@ export def "set-chat-title create" [
 #
 # POST /setGameScore
 # Docs: https://core.telegram.org/bots/api/#setgamescore
-export def "set-game-score create" [
+export def "post-set-game-score" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2853,7 +2853,7 @@ export def "set-game-score create" [
 # POST /setMyCommands
 # Docs: https://core.telegram.org/bots/api/#setmycommands
 # --commands item shape: {command: string, description: string}
-export def "set-my-commands create" [
+export def "post-set-my-commands" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2891,7 +2891,7 @@ export def "set-my-commands create" [
 #
 # POST /setPassportDataErrors
 # Docs: https://core.telegram.org/bots/api/#setpassportdataerrors
-export def "set-passport-data-errors create" [
+export def "post-set-passport-data-errors" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2930,7 +2930,7 @@ export def "set-passport-data-errors create" [
 #
 # POST /setStickerPositionInSet
 # Docs: https://core.telegram.org/bots/api/#setstickerpositioninset
-export def "set-sticker-position-in-set create" [
+export def "post-set-sticker-position-in-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2969,7 +2969,7 @@ export def "set-sticker-position-in-set create" [
 #
 # POST /setStickerSetThumb
 # Docs: https://core.telegram.org/bots/api/#setstickersetthumb
-export def "set-sticker-set-thumb create" [
+export def "post-set-sticker-set-thumb" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3011,7 +3011,7 @@ export def "set-sticker-set-thumb create" [
 #
 # POST /setWebhook
 # Docs: https://core.telegram.org/bots/api/#setwebhook
-export def "set-webhook create" [
+export def "post-set-webhook" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3057,7 +3057,7 @@ export def "set-webhook create" [
 # POST /stopMessageLiveLocation
 # Docs: https://core.telegram.org/bots/api/#stopmessagelivelocation
 # --reply_markup shape: {inline_keyboard: list}
-export def "stop-message-live-location create" [
+export def "post-stop-message-live-location" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3099,7 +3099,7 @@ export def "stop-message-live-location create" [
 # POST /stopPoll
 # Docs: https://core.telegram.org/bots/api/#stoppoll
 # --reply_markup shape: {inline_keyboard: list}
-export def "stop-poll create" [
+export def "post-stop-poll" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3139,7 +3139,7 @@ export def "stop-poll create" [
 #
 # POST /unbanChatMember
 # Docs: https://core.telegram.org/bots/api/#unbanchatmember
-export def "unban-chat-member create" [
+export def "post-unban-chat-member" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3179,7 +3179,7 @@ export def "unban-chat-member create" [
 #
 # POST /unpinAllChatMessages
 # Docs: https://core.telegram.org/bots/api/#unpinallchatmessages
-export def "unpin-all-chat-messages create" [
+export def "post-unpin-all-chat-messages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3217,7 +3217,7 @@ export def "unpin-all-chat-messages create" [
 #
 # POST /unpinChatMessage
 # Docs: https://core.telegram.org/bots/api/#unpinchatmessage
-export def "unpin-chat-message create" [
+export def "post-unpin-chat-message" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3256,7 +3256,7 @@ export def "unpin-chat-message create" [
 #
 # POST /uploadStickerFile
 # Docs: https://core.telegram.org/bots/api/#uploadstickerfile
-export def "upload-sticker-file create" [
+export def "post-upload-sticker-file" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -125,7 +125,7 @@ def span-completer [] { ["D" "H" "M" "Wmo" "Wsu" "Y"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account-change-password create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account-change-password" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -149,7 +149,7 @@ export def commands []: nothing -> table {
 #
 # POST /account/change-password
 # operationId: Account.changePassword
-export def "account-change-password create" [
+export def "account-change-password" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -188,7 +188,7 @@ export def "account-change-password create" [
 #
 # GET /account/places
 # operationId: Account.places
-export def "account-places get" [
+export def "account-places" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -222,7 +222,7 @@ export def "account-places get" [
 #
 # POST /account/places
 # operationId: Account.newPlace
-export def "account-places create-new" [
+export def "account-new-place" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -264,7 +264,7 @@ export def "account-places create-new" [
 #
 # GET /account/tokens
 # operationId: Account.tokens
-export def "account-tokens get" [
+export def "account-tokens" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -298,7 +298,7 @@ export def "account-tokens get" [
 #
 # DELETE /account/tokens/{tokenId}
 # operationId: Account.revokeToken
-export def "account-tokens delete" [
+export def "account-revoke-token" [
   token_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -334,7 +334,7 @@ export def "account-tokens delete" [
 #
 # GET /account/users
 # operationId: Account.users
-export def "account-users list" [
+export def "account-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -370,7 +370,7 @@ export def "account-users list" [
 #
 # POST /account/users
 # operationId: Account.newUser
-export def "account-users create-new" [
+export def "account-new-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -412,7 +412,7 @@ export def "account-users create-new" [
 #
 # DELETE /account/users/{userId}
 # operationId: Account.deleteUser
-export def "account-users delete" [
+export def "account-delete-user" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -448,7 +448,7 @@ export def "account-users delete" [
 #
 # GET /account/users/{userId}
 # operationId: Account.getUser
-export def "account-users get" [
+export def "account-get-user" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -484,7 +484,7 @@ export def "account-users get" [
 #
 # PATCH /account/users/{userId}
 # operationId: Account.patchUser
-export def "account-users update" [
+export def "account-patch-user" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -527,7 +527,7 @@ export def "account-users update" [
 #
 # GET /account/users/{userId}/metadata
 # operationId: User.getMetadata
-export def "account-users-metadata get" [
+export def "user-get-metadata" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -563,7 +563,7 @@ export def "account-users-metadata get" [
 #
 # PATCH /account/users/{userId}/metadata
 # operationId: User.patchMetadata
-export def "account-users-metadata update" [
+export def "user-patch-metadata" [
   user_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -604,7 +604,7 @@ export def "account-users-metadata update" [
 #
 # POST /auth/login
 # operationId: AuthAccountLogin
-export def "auth-login create-account" [
+export def "auth-account-login" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -645,7 +645,7 @@ export def "auth-login create-account" [
 #
 # POST /auth/refresh
 # operationId: AuthRefreshToken
-export def "auth-refresh refresh-token" [
+export def "auth-refresh-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -684,7 +684,7 @@ export def "auth-refresh refresh-token" [
 #
 # POST /auth/reset-password
 # operationId: AuthResetPassword
-export def "auth-reset-password reset" [
+export def "auth-reset-password" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -724,7 +724,7 @@ export def "auth-reset-password reset" [
 #
 # POST /auth/revoke
 # operationId: AuthRevokeToken
-export def "auth-revoke delete-token" [
+export def "auth-revoke-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -758,7 +758,7 @@ export def "auth-revoke delete-token" [
 #
 # GET /devices/{deviceId}
 # operationId: Devices.get
-export def "devices get" [
+export def "devices-get" [
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -794,7 +794,7 @@ export def "devices get" [
 #
 # PATCH /devices/{deviceId}
 # operationId: Devices.patch
-export def "devices update" [
+export def "devices-patch" [
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -834,7 +834,7 @@ export def "devices update" [
 #
 # POST /devices/{deviceId}/functionalities
 # operationId: Device.addFunctionality
-export def "devices-functionalities create-functionality" [
+export def "device-add-functionality" [
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -876,7 +876,7 @@ export def "devices-functionalities create-functionality" [
 #
 # GET /devices/{deviceId}/metadata
 # operationId: Device.getMetadata
-export def "devices-metadata get" [
+export def "device-get-metadata" [
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -912,7 +912,7 @@ export def "devices-metadata get" [
 #
 # PATCH /devices/{deviceId}/metadata
 # operationId: Device.patchMetadata
-export def "devices-metadata update" [
+export def "device-patch-metadata" [
   device_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -953,7 +953,7 @@ export def "devices-metadata update" [
 #
 # POST /devices/{deviceId}/run/{action}
 # operationId: Device.run
-export def "devices-run create" [
+export def "device-run" [
   device_id: string
   action: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -997,7 +997,7 @@ export def "devices-run create" [
 #
 # GET /devices/{deviceId}/tags
 # operationId: Device.getTags
-export def "devices-tags get" [
+export def "device-get-tags" [
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1033,7 +1033,7 @@ export def "devices-tags get" [
 #
 # PATCH /devices/{deviceId}/tags
 # operationId: Device.patchTags
-export def "devices-tags update" [
+export def "device-patch-tags" [
   device_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1074,7 +1074,7 @@ export def "devices-tags update" [
 #
 # GET /functionalities/{functionalityId}
 # operationId: Functionalities.get
-export def "functionalities get" [
+export def "functionalities-get" [
   functionality_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1110,7 +1110,7 @@ export def "functionalities get" [
 #
 # PATCH /functionalities/{functionalityId}
 # operationId: Functionality.patch
-export def "functionalities update" [
+export def "functionality-patch" [
   functionality_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1150,7 +1150,7 @@ export def "functionalities update" [
 #
 # GET /functionalities/{functionalityId}/attributes
 # operationId: Functionality.values
-export def "functionalities-attributes get-values" [
+export def "functionality-values" [
   functionality_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1191,7 +1191,7 @@ export def "functionalities-attributes get-values" [
 #
 # GET /functionalities/{functionalityId}/attributes/{attributeName}
 # operationId: Functionality.value
-export def "functionalities-attributes get-value" [
+export def "functionality-value" [
   functionality_id: string
   attribute_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1229,7 +1229,7 @@ export def "functionalities-attributes get-value" [
 #
 # PUT /functionalities/{functionalityId}/attributes/{attributeName}
 # operationId: Functionality.set
-export def "functionalities-attributes update" [
+export def "functionality-set" [
   functionality_id: string
   attribute_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1271,7 +1271,7 @@ export def "functionalities-attributes update" [
 #
 # GET /functionalities/{functionalityId}/metadata
 # operationId: Functionality.getMetadata
-export def "functionalities-metadata get" [
+export def "functionality-get-metadata" [
   functionality_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1307,7 +1307,7 @@ export def "functionalities-metadata get" [
 #
 # PATCH /functionalities/{functionalityId}/metadata
 # operationId: Functionality.patchMetadata
-export def "functionalities-metadata update" [
+export def "functionality-patch-metadata" [
   functionality_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1348,7 +1348,7 @@ export def "functionalities-metadata update" [
 #
 # POST /functionalities/{functionalityId}/run/{action}
 # operationId: Functionality.run
-export def "functionalities-run create" [
+export def "functionality-run" [
   functionality_id: string
   action: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1390,7 +1390,7 @@ export def "functionalities-run create" [
 #
 # GET /functionalities/{functionalityId}/tags
 # operationId: Functionality.getTags
-export def "functionalities-tags get" [
+export def "functionality-get-tags" [
   functionality_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1426,7 +1426,7 @@ export def "functionalities-tags get" [
 #
 # PATCH /functionalities/{functionalityId}/tags
 # operationId: Functionality.patchTags
-export def "functionalities-tags update" [
+export def "functionality-patch-tags" [
   functionality_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1467,7 +1467,7 @@ export def "functionalities-tags update" [
 #
 # GET /me
 # operationId: Me.get
-export def "me get" [
+export def "me-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1501,7 +1501,7 @@ export def "me get" [
 #
 # PATCH /me
 # operationId: Me.patch
-export def "me update" [
+export def "me-patch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1539,7 +1539,7 @@ export def "me update" [
 #
 # DELETE /notifications/{notificationId}
 # operationId: Notification.delete
-export def "notifications delete" [
+export def "notification-delete" [
   notification_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1575,7 +1575,7 @@ export def "notifications delete" [
 #
 # GET /notifications/{notificationId}
 # operationId: Notifications.get
-export def "notifications get" [
+export def "notifications-get" [
   notification_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1611,7 +1611,7 @@ export def "notifications get" [
 #
 # PATCH /notifications/{notificationId}
 # operationId: Notification.patch
-export def "notifications update" [
+export def "notification-patch" [
   notification_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1653,7 +1653,7 @@ export def "notifications update" [
 #
 # GET /notifications/{notificationId}/metadata
 # operationId: Notification.getMetadata
-export def "notifications-metadata get" [
+export def "notification-get-metadata" [
   notification_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1689,7 +1689,7 @@ export def "notifications-metadata get" [
 #
 # PATCH /notifications/{notificationId}/metadata
 # operationId: Notification.patchMetadata
-export def "notifications-metadata update" [
+export def "notification-patch-metadata" [
   notification_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1730,7 +1730,7 @@ export def "notifications-metadata update" [
 #
 # GET /places
 # operationId: Me.places
-export def "places list" [
+export def "me-places" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1766,7 +1766,7 @@ export def "places list" [
 #
 # GET /places/{placeId}
 # operationId: Places.get
-export def "places get" [
+export def "places-get" [
   place_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1802,7 +1802,7 @@ export def "places get" [
 #
 # PATCH /places/{placeId}
 # operationId: Place.patch
-export def "places update" [
+export def "place-patch" [
   place_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1845,7 +1845,7 @@ export def "places update" [
 #
 # GET /places/{placeId}/buses
 # operationId: Place.buses
-export def "places-buses get" [
+export def "place-buses" [
   place_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1883,7 +1883,7 @@ export def "places-buses get" [
 #
 # GET /places/{placeId}/buses/{busId}/pairing
 # operationId: Place.pairing
-export def "places-buses-pairing get" [
+export def "place-pairing" [
   place_id: string
   bus_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1921,7 +1921,7 @@ export def "places-buses-pairing get" [
 #
 # PUT /places/{placeId}/buses/{busId}/pairing
 # operationId: Place.openPairing
-export def "places-buses-pairing open" [
+export def "place-open-pairing" [
   place_id: string
   bus_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1964,7 +1964,7 @@ export def "places-buses-pairing open" [
 #
 # GET /places/{placeId}/devices
 # operationId: Place.devices
-export def "places-devices get" [
+export def "place-devices" [
   place_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2003,7 +2003,7 @@ export def "places-devices get" [
 #
 # GET /places/{placeId}/electricity/autonomy
 # operationId: Place.Electricity.autonomy
-export def "places-electricity-autonomy get" [
+export def "place-electricity-autonomy" [
   place_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2042,7 +2042,7 @@ export def "places-electricity-autonomy get" [
 #
 # GET /places/{placeId}/electricity/flows
 # operationId: Place.Electricity.getFlows
-export def "places-electricity-flows get" [
+export def "place-electricity-get-flows" [
   place_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2080,7 +2080,7 @@ export def "places-electricity-flows get" [
 #
 # GET /places/{placeId}/electricity/flows/setup
 # operationId: Place.Electricity.getFlowsSetup
-export def "places-electricity-flows-setup get" [
+export def "place-electricity-get-flows-setup" [
   place_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2116,7 +2116,7 @@ export def "places-electricity-flows-setup get" [
 #
 # GET /places/{placeId}/electricity/self-consumption
 # operationId: Place.Electricity.selfConsumption
-export def "places-electricity-self-consumption get" [
+export def "place-electricity-self-consumption" [
   place_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2155,7 +2155,7 @@ export def "places-electricity-self-consumption get" [
 #
 # GET /places/{placeId}/functionalities
 # operationId: Place.functionalities
-export def "places-functionalities get" [
+export def "place-functionalities" [
   place_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2193,7 +2193,7 @@ export def "places-functionalities get" [
 #
 # GET /places/{placeId}/metadata
 # operationId: Place.getMetadata
-export def "places-metadata get" [
+export def "place-get-metadata" [
   place_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2229,7 +2229,7 @@ export def "places-metadata get" [
 #
 # PATCH /places/{placeId}/metadata
 # operationId: Place.patchMetadata
-export def "places-metadata update" [
+export def "place-patch-metadata" [
   place_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2270,7 +2270,7 @@ export def "places-metadata update" [
 #
 # GET /places/{placeId}/notifications
 # operationId: Place.notifications
-export def "places-notifications get" [
+export def "place-notifications" [
   place_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2308,7 +2308,7 @@ export def "places-notifications get" [
 #
 # POST /places/{placeId}/notifications
 # operationId: Place.newNotification
-export def "places-notifications create-new" [
+export def "place-new-notification" [
   place_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2351,7 +2351,7 @@ export def "places-notifications create-new" [
 #
 # GET /places/{placeId}/programs
 # operationId: Place.programs
-export def "places-programs get" [
+export def "place-programs" [
   place_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2389,7 +2389,7 @@ export def "places-programs get" [
 #
 # POST /places/{placeId}/programs
 # operationId: Place.newProgram
-export def "places-programs create-new" [
+export def "place-new-program" [
   place_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2432,7 +2432,7 @@ export def "places-programs create-new" [
 #
 # POST /places/{placeId}/run/{action}
 # operationId: Place.run
-export def "places-run create" [
+export def "place-run" [
   place_id: string
   action: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2477,7 +2477,7 @@ export def "places-run create" [
 #
 # DELETE /programs/{programId}
 # operationId: Program.delete
-export def "programs delete" [
+export def "program-delete" [
   program_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2513,7 +2513,7 @@ export def "programs delete" [
 #
 # GET /programs/{programId}
 # operationId: Programs.get
-export def "programs get" [
+export def "programs-get" [
   program_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2549,7 +2549,7 @@ export def "programs get" [
 #
 # PATCH /programs/{programId}
 # operationId: Program.patch
-export def "programs update" [
+export def "program-patch" [
   program_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2591,7 +2591,7 @@ export def "programs update" [
 #
 # GET /programs/{programId}/log
 # operationId: Program.log
-export def "programs-log get" [
+export def "program-log" [
   program_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2630,7 +2630,7 @@ export def "programs-log get" [
 #
 # GET /programs/{programId}/metadata
 # operationId: Program.getMetadata
-export def "programs-metadata get" [
+export def "program-get-metadata" [
   program_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2666,7 +2666,7 @@ export def "programs-metadata get" [
 #
 # PATCH /programs/{programId}/metadata
 # operationId: Program.patchMetadata
-export def "programs-metadata update" [
+export def "program-patch-metadata" [
   program_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2707,7 +2707,7 @@ export def "programs-metadata update" [
 #
 # POST /programs/{programId}/run
 # operationId: Program.run
-export def "programs-run create" [
+export def "program-run" [
   program_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

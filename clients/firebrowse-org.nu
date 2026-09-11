@@ -112,7 +112,7 @@ def sort-by-completer-10 [] { ["cohort" "mir" "sample_type" "tcga_participant_ba
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "analyses-copy-number-genes-all list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "all" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -136,7 +136,7 @@ export def commands []: nothing -> table {
 #
 # GET /Analyses/CopyNumber/Genes/All
 # operationId: All
-export def "analyses-copy-number-genes-all list" [
+export def "all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -179,7 +179,7 @@ export def "analyses-copy-number-genes-all list" [
 #
 # GET /Analyses/CopyNumber/Genes/Amplified
 # operationId: Amplified
-export def "analyses-copy-number-genes-amplified get" [
+export def "amplified" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -222,7 +222,7 @@ export def "analyses-copy-number-genes-amplified get" [
 #
 # GET /Analyses/CopyNumber/Genes/Deleted
 # operationId: Deleted
-export def "analyses-copy-number-genes-deleted get" [
+export def "deleted" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -265,7 +265,7 @@ export def "analyses-copy-number-genes-deleted get" [
 #
 # GET /Analyses/CopyNumber/Genes/Focal
 # operationId: Focal
-export def "analyses-copy-number-genes-focal get" [
+export def "focal" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -308,7 +308,7 @@ export def "analyses-copy-number-genes-focal get" [
 #
 # GET /Analyses/CopyNumber/Genes/Thresholded
 # operationId: Thresholded
-export def "analyses-copy-number-genes-thresholded get" [
+export def "thresholded" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -351,7 +351,7 @@ export def "analyses-copy-number-genes-thresholded get" [
 #
 # GET /Analyses/FeatureTable
 # operationId: FeatureTable
-export def "analyses-feature-table get" [
+export def "feature-table" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -393,7 +393,7 @@ export def "analyses-feature-table get" [
 #
 # GET /Analyses/Mutation/MAF
 # operationId: MAF
-export def "analyses-mutation-maf get" [
+export def "maf" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -438,7 +438,7 @@ export def "analyses-mutation-maf get" [
 #
 # GET /Analyses/Mutation/SMG
 # operationId: SMG
-export def "analyses-mutation-smg get" [
+export def "smg" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -483,7 +483,7 @@ export def "analyses-mutation-smg get" [
 #
 # GET /Analyses/Reports
 # operationId: Reports
-export def "analyses-reports get" [
+export def "reports" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -527,7 +527,7 @@ export def "analyses-reports get" [
 #
 # GET /Analyses/mRNASeq/Quartiles
 # operationId: mRNASeq/Quartiles
-export def "analyses-m-rna-seq-quartiles get" [
+export def "m-rna-seq-quartiles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -569,7 +569,7 @@ export def "analyses-m-rna-seq-quartiles get" [
 #
 # GET /Archives/StandardData
 # operationId: StandardData
-export def "archives-standard-data get" [
+export def "standard-data" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -617,7 +617,7 @@ export def "archives-standard-data get" [
 #
 # GET /Metadata/Centers
 # operationId: Centers
-export def "metadata-centers get" [
+export def "centers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -655,7 +655,7 @@ export def "metadata-centers get" [
 #
 # GET /Metadata/ClinicalNames
 # operationId: ClinicalNames
-export def "metadata-clinical-names get" [
+export def "clinical-names" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -692,7 +692,7 @@ export def "metadata-clinical-names get" [
 #
 # GET /Metadata/ClinicalNames_FH
 # operationId: ClinicalNames_FH
-export def "metadata-clinical-names-fh get" [
+export def "clinical-names-fh" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -729,7 +729,7 @@ export def "metadata-clinical-names-fh get" [
 #
 # GET /Metadata/Cohorts
 # operationId: Cohorts
-export def "metadata-cohorts get" [
+export def "cohorts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -767,7 +767,7 @@ export def "metadata-cohorts get" [
 #
 # GET /Metadata/Counts
 # operationId: Counts
-export def "metadata-counts get" [
+export def "counts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -810,7 +810,7 @@ export def "metadata-counts get" [
 #
 # GET /Metadata/Dates
 # operationId: Dates
-export def "metadata-dates get" [
+export def "dates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -847,7 +847,7 @@ export def "metadata-dates get" [
 #
 # GET /Metadata/HeartBeat
 # operationId: HeartBeat
-export def "metadata-heart-beat get" [
+export def "heart-beat" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -884,7 +884,7 @@ export def "metadata-heart-beat get" [
 #
 # GET /Metadata/MAFColNames
 # operationId: MAFColNames
-export def "metadata-maf-col-names get" [
+export def "maf-col-names" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -921,7 +921,7 @@ export def "metadata-maf-col-names get" [
 #
 # GET /Metadata/Patients
 # operationId: Patients
-export def "metadata-patients get" [
+export def "patients" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -962,7 +962,7 @@ export def "metadata-patients get" [
 #
 # GET /Metadata/Platforms
 # operationId: Platforms
-export def "metadata-platforms get" [
+export def "platforms" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1000,7 +1000,7 @@ export def "metadata-platforms get" [
 #
 # GET /Metadata/SampleType/Barcode/{TCGA_Barcode}
 # operationId: Barcode
-export def "metadata-sample-type-barcode get" [
+export def "barcode" [
   tcga_barcode: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1039,7 +1039,7 @@ export def "metadata-sample-type-barcode get" [
 #
 # GET /Metadata/SampleType/Code/{code}
 # operationId: Code
-export def "metadata-sample-type-code get" [
+export def "code" [
   code: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1078,7 +1078,7 @@ export def "metadata-sample-type-code get" [
 #
 # GET /Metadata/SampleType/ShortLetterCode/{short_letter_code}
 # operationId: ShortLetterCode
-export def "metadata-sample-type-short-letter-code get" [
+export def "short-letter-code" [
   short_letter_code: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1117,7 +1117,7 @@ export def "metadata-sample-type-short-letter-code get" [
 #
 # GET /Metadata/SampleTypes
 # operationId: SampleTypes
-export def "metadata-sample-types get" [
+export def "sample-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1154,7 +1154,7 @@ export def "metadata-sample-types get" [
 #
 # GET /Metadata/TSSites
 # operationId: TSSites
-export def "metadata-ts-sites get" [
+export def "ts-sites" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1192,7 +1192,7 @@ export def "metadata-ts-sites get" [
 #
 # GET /Samples/Clinical
 # operationId: Clinical
-export def "samples-clinical get" [
+export def "clinical" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1235,7 +1235,7 @@ export def "samples-clinical get" [
 #
 # GET /Samples/Clinical_FH
 # operationId: Clinical_FH
-export def "samples-clinical-fh get" [
+export def "clinical-fh" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1278,7 +1278,7 @@ export def "samples-clinical-fh get" [
 #
 # GET /Samples/mRNASeq
 # operationId: mRNASeq
-export def "samples-m-rna-seq get" [
+export def "m-rna-seq" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1323,7 +1323,7 @@ export def "samples-m-rna-seq get" [
 #
 # GET /Samples/miRSeq
 # operationId: miRSeq
-export def "samples-mi-r-seq get" [
+export def "mi-r-seq" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

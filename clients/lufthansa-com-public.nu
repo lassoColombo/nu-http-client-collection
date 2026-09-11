@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cargo-get-route get-from-date-product-code-by-and" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cargo-get-route-from-date-product-code-by-origin-and-destination-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -122,7 +122,7 @@ export def commands []: nothing -> table {
 #
 # GET /cargo/getRoute/{origin}-{destination}/{fromDate}/{productCode}
 # operationId: CargoGetRouteFromDateProductCodeByOriginAndDestinationGet
-export def "cargo-get-route get-from-date-product-code-by-and" [
+export def "cargo-get-route-from-date-product-code-by-origin-and-destination-get" [
   origin: string
   destination: string
   from_date: string
@@ -167,7 +167,7 @@ export def "cargo-get-route get-from-date-product-code-by-and" [
 #
 # GET /cargo/shipmentTracking/{aWBPrefix}-{aWBNumber}
 # operationId: CargoShipmentTrackingByAWBPrefixAndAWBNumberGet
-export def "cargo-shipment-tracking get-by-awb-prefix-and-awb-number" [
+export def "cargo-shipment-tracking-by-awb-prefix-and-awb-number-get" [
   a_wb_prefix: string
   a_wb_number: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -208,7 +208,7 @@ export def "cargo-shipment-tracking get-by-awb-prefix-and-awb-number" [
 #
 # GET /offers/lounges/{location}
 # operationId: OffersLoungesByLocationGet
-export def "offers-lounges get-by" [
+export def "offers-lounges-by-location-get" [
   location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -251,7 +251,7 @@ export def "offers-lounges get-by" [
 #
 # GET /offers/seatmaps/{flightNumber}/{origin}/{destination}/{date}/{cabinClass}
 # operationId: OffersSeatmapsDestinationDateCabinClassByFlightNumberAndOriginGet
-export def "offers-seatmaps get-cabin-class-by-flight-number-and" [
+export def "offers-seatmaps-destination-date-cabin-class-by-flight-number-and-origin-get" [
   flight_number: string
   origin: string
   destination: string
@@ -298,7 +298,7 @@ export def "offers-seatmaps get-cabin-class-by-flight-number-and" [
 #
 # GET /operations/flightstatus/arrivals/{airportCode}/{fromDateTime}
 # operationId: OperationsFlightstatusArrivalsByAirportCodeAndFromDateTimeGet
-export def "operations-flightstatus-arrivals get-by-airport-code-and-from-date-time" [
+export def "operations-flightstatus-arrivals-by-airport-code-and-from-date-time-get" [
   airport_code: string
   from_date_time: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -342,7 +342,7 @@ export def "operations-flightstatus-arrivals get-by-airport-code-and-from-date-t
 #
 # GET /operations/flightstatus/departures/{airportCode}/{fromDateTime}
 # operationId: OperationsFlightstatusDeparturesByAirportCodeAndFromDateTimeGet
-export def "operations-flightstatus-departures get-by-airport-code-and-from-date-time" [
+export def "operations-flightstatus-departures-by-airport-code-and-from-date-time-get" [
   airport_code: string
   from_date_time: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -386,7 +386,7 @@ export def "operations-flightstatus-departures get-by-airport-code-and-from-date
 #
 # GET /operations/flightstatus/route/{origin}/{destination}/{date}
 # operationId: OperationsFlightstatusRouteDateByOriginAndDestinationGet
-export def "operations-flightstatus-route get-by-and" [
+export def "operations-flightstatus-route-date-by-origin-and-destination-get" [
   origin: string
   destination: string
   date: string
@@ -432,7 +432,7 @@ export def "operations-flightstatus-route get-by-and" [
 #
 # GET /operations/flightstatus/{flightNumber}/{date}
 # operationId: OperationsFlightstatusByFlightNumberAndDateGet
-export def "operations-flightstatus get-by-flight-number-and" [
+export def "operations-flightstatus-by-flight-number-and-date-get" [
   flight_number: string
   date: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -476,7 +476,7 @@ export def "operations-flightstatus get-by-flight-number-and" [
 #
 # GET /operations/schedules/{origin}/{destination}/{fromDateTime}
 # operationId: OperationsSchedulesFromDateTimeByOriginAndDestinationGet
-export def "operations-schedules get-from-date-time-by-and" [
+export def "operations-schedules-from-date-time-by-origin-and-destination-get" [
   origin: string
   destination: string
   from_date_time: string
@@ -523,7 +523,7 @@ export def "operations-schedules get-from-date-time-by-and" [
 #
 # GET /references/aircraft/{aircraftCode}
 # operationId: ReferencesAircraftByAircraftCodeGet
-export def "references-aircraft get-by-code" [
+export def "references-aircraft-by-aircraft-code-get" [
   aircraft_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -565,7 +565,7 @@ export def "references-aircraft get-by-code" [
 #
 # GET /references/airlines/{airlineCode}
 # operationId: ReferencesAirlinesByAirlineCodeGet
-export def "references-airlines get-by-code" [
+export def "references-airlines-by-airline-code-get" [
   airline_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -607,7 +607,7 @@ export def "references-airlines get-by-code" [
 #
 # GET /references/airports/nearest/{latitude},{longitude}
 # operationId: ReferencesAirportsNearestByLatitudeAndLongitudeGet
-export def "references-airports-nearest get-by-and" [
+export def "references-airports-nearest-by-latitude-and-longitude-get" [
   latitude: int
   longitude: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -650,7 +650,7 @@ export def "references-airports-nearest get-by-and" [
 #
 # GET /references/airports/{airportCode}
 # operationId: ReferencesAirportsByAirportCodeGet
-export def "references-airports get-by-code" [
+export def "references-airports-by-airport-code-get" [
   airport_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -694,7 +694,7 @@ export def "references-airports get-by-code" [
 #
 # GET /references/cities/{cityCode}
 # operationId: ReferencesCitiesByCityCodeGet
-export def "references-cities get-by-city-code" [
+export def "references-cities-by-city-code-get" [
   city_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -737,7 +737,7 @@ export def "references-cities get-by-city-code" [
 #
 # GET /references/countries/{countryCode}
 # operationId: ReferencesCountriesByCountryCodeGet
-export def "references-countries get-by-country-code" [
+export def "references-countries-by-country-code-get" [
   country_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

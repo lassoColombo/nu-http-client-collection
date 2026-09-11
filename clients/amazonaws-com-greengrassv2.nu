@@ -122,7 +122,7 @@ def topology-filter-completer [] { ["ALL" "ROOT"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "greengrass-servicerole update-associate-service-role-to-account" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associate-service-role-to-account" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # PUT /greengrass/servicerole
 # operationId: AssociateServiceRoleToAccount
-export def "greengrass-servicerole update-associate-service-role-to-account" [
+export def "associate-service-role-to-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -193,7 +193,7 @@ export def "greengrass-servicerole update-associate-service-role-to-account" [
 #
 # DELETE /greengrass/servicerole
 # operationId: DisassociateServiceRoleFromAccount
-export def "greengrass-servicerole delete-disassociate-service-role-from-account" [
+export def "disassociate-service-role-from-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -236,7 +236,7 @@ export def "greengrass-servicerole delete-disassociate-service-role-from-account
 #
 # GET /greengrass/servicerole
 # operationId: GetServiceRoleForAccount
-export def "greengrass-servicerole get-service-role-for-account" [
+export def "get-service-role-for-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -280,7 +280,7 @@ export def "greengrass-servicerole get-service-role-for-account" [
 # POST /greengrass/v2/coreDevices/{coreDeviceThingName}/associateClientDevices
 # operationId: BatchAssociateClientDeviceWithCoreDevice
 # --entries item shape: {thingName: any}
-export def "greengrass-core-devices-associate-client-devices create-batch" [
+export def "batch-associate-client-device-with-core-device" [
   core_device_thing_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -330,7 +330,7 @@ export def "greengrass-core-devices-associate-client-devices create-batch" [
 # POST /greengrass/v2/coreDevices/{coreDeviceThingName}/disassociateClientDevices
 # operationId: BatchDisassociateClientDeviceFromCoreDevice
 # --entries item shape: {thingName: any}
-export def "greengrass-core-devices-disassociate-client-devices create-batch" [
+export def "batch-disassociate-client-device-from-core-device" [
   core_device_thing_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -379,7 +379,7 @@ export def "greengrass-core-devices-disassociate-client-devices create-batch" [
 #
 # POST /greengrass/v2/deployments/{deploymentId}/cancel
 # operationId: CancelDeployment
-export def "greengrass-deployments-cancel cancel" [
+export def "cancel-deployment" [
   deployment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -425,7 +425,7 @@ export def "greengrass-deployments-cancel cancel" [
 # POST /greengrass/v2/createComponentVersion
 # operationId: CreateComponentVersion
 # --lambdaFunction shape: {lambdaArn?: any, componentName?: any, componentVersion?: any, componentPlatforms?: any, componentDependencies?: any, componentLambdaParameters?: any}
-export def "greengrass-create-component-version create" [
+export def "create-component-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -477,7 +477,7 @@ export def "greengrass-create-component-version create" [
 # operationId: CreateDeployment
 # --iotJobConfiguration shape: {jobExecutionsRolloutConfig?: any, abortConfig?: any, timeoutConfig?: any}
 # --deploymentPolicies shape: {failureHandlingPolicy?: any, componentUpdatePolicy?: any, configurationValidationPolicy?: any}
-export def "greengrass-deployments create" [
+export def "create-deployment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -531,7 +531,7 @@ export def "greengrass-deployments create" [
 #
 # GET /greengrass/v2/deployments
 # operationId: ListDeployments
-export def "greengrass-deployments list" [
+export def "list-deployments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -580,7 +580,7 @@ export def "greengrass-deployments list" [
 #
 # DELETE /greengrass/v2/components/{arn}
 # operationId: DeleteComponent
-export def "greengrass-components delete" [
+export def "delete-component" [
   arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -625,7 +625,7 @@ export def "greengrass-components delete" [
 #
 # GET /greengrass/v2/components/{arn}
 # operationId: GetComponent
-export def "greengrass-components get" [
+export def "get-component" [
   arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -672,7 +672,7 @@ export def "greengrass-components get" [
 #
 # DELETE /greengrass/v2/coreDevices/{coreDeviceThingName}
 # operationId: DeleteCoreDevice
-export def "greengrass-core-devices delete" [
+export def "delete-core-device" [
   core_device_thing_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -717,7 +717,7 @@ export def "greengrass-core-devices delete" [
 #
 # GET /greengrass/v2/coreDevices/{coreDeviceThingName}
 # operationId: GetCoreDevice
-export def "greengrass-core-devices get" [
+export def "get-core-device" [
   core_device_thing_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -762,7 +762,7 @@ export def "greengrass-core-devices get" [
 #
 # DELETE /greengrass/v2/deployments/{deploymentId}
 # operationId: DeleteDeployment
-export def "greengrass-deployments delete" [
+export def "delete-deployment" [
   deployment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -807,7 +807,7 @@ export def "greengrass-deployments delete" [
 #
 # GET /greengrass/v2/deployments/{deploymentId}
 # operationId: GetDeployment
-export def "greengrass-deployments get" [
+export def "get-deployment" [
   deployment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -852,7 +852,7 @@ export def "greengrass-deployments get" [
 #
 # GET /greengrass/v2/components/{arn}/metadata
 # operationId: DescribeComponent
-export def "greengrass-components-metadata get" [
+export def "describe-component" [
   arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -897,7 +897,7 @@ export def "greengrass-components-metadata get" [
 #
 # GET /greengrass/v2/components/{arn}/artifacts/{artifactName}
 # operationId: GetComponentVersionArtifact
-export def "greengrass-components-artifacts get-version" [
+export def "get-component-version-artifact" [
   arn: string
   artifact_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -944,7 +944,7 @@ export def "greengrass-components-artifacts get-version" [
 #
 # GET /greengrass/things/{thingName}/connectivityInfo
 # operationId: GetConnectivityInfo
-export def "greengrass-things-connectivity-info get" [
+export def "get-connectivity-info" [
   thing_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -990,7 +990,7 @@ export def "greengrass-things-connectivity-info get" [
 # PUT /greengrass/things/{thingName}/connectivityInfo
 # operationId: UpdateConnectivityInfo
 # --ConnectivityInfo item shape: {id?: any, hostAddress?: any, portNumber?: any, metadata?: any}
-export def "greengrass-things-connectivity-info update" [
+export def "update-connectivity-info" [
   thing_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1039,7 +1039,7 @@ export def "greengrass-things-connectivity-info update" [
 #
 # GET /greengrass/v2/coreDevices/{coreDeviceThingName}/associatedClientDevices
 # operationId: ListClientDevicesAssociatedWithCoreDevice
-export def "greengrass-core-devices-associated-client-devices list" [
+export def "list-client-devices-associated-with-core-device" [
   core_device_thing_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1087,7 +1087,7 @@ export def "greengrass-core-devices-associated-client-devices list" [
 #
 # GET /greengrass/v2/components/{arn}/versions
 # operationId: ListComponentVersions
-export def "greengrass-components-versions list" [
+export def "list-component-versions" [
   arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1135,7 +1135,7 @@ export def "greengrass-components-versions list" [
 #
 # GET /greengrass/v2/components
 # operationId: ListComponents
-export def "greengrass-components list" [
+export def "list-components" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1182,7 +1182,7 @@ export def "greengrass-components list" [
 #
 # GET /greengrass/v2/coreDevices
 # operationId: ListCoreDevices
-export def "greengrass-core-devices list" [
+export def "list-core-devices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1230,7 +1230,7 @@ export def "greengrass-core-devices list" [
 #
 # GET /greengrass/v2/coreDevices/{coreDeviceThingName}/effectiveDeployments
 # operationId: ListEffectiveDeployments
-export def "greengrass-core-devices-effective-deployments list" [
+export def "list-effective-deployments" [
   core_device_thing_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1278,7 +1278,7 @@ export def "greengrass-core-devices-effective-deployments list" [
 #
 # GET /greengrass/v2/coreDevices/{coreDeviceThingName}/installedComponents
 # operationId: ListInstalledComponents
-export def "greengrass-core-devices-installed-components list" [
+export def "list-installed-components" [
   core_device_thing_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1327,7 +1327,7 @@ export def "greengrass-core-devices-installed-components list" [
 #
 # GET /tags/{resourceArn}
 # operationId: ListTagsForResource
-export def "tags list-for-resource" [
+export def "list-tags-for-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1372,7 +1372,7 @@ export def "tags list-for-resource" [
 #
 # POST /tags/{resourceArn}
 # operationId: TagResource
-export def "tags tag-resource" [
+export def "tag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1423,7 +1423,7 @@ export def "tags tag-resource" [
 # operationId: ResolveComponentCandidates
 # --platform shape: {name?: any, attributes?: any}
 # --componentCandidates item shape: {componentName?: any, componentVersion?: any, versionRequirements?: any}
-export def "greengrass-resolve-component-candidates create" [
+export def "resolve-component-candidates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1471,7 +1471,7 @@ export def "greengrass-resolve-component-candidates create" [
 #
 # DELETE /tags/{resourceArn}
 # operationId: UntagResource
-export def "tags untag-resource" [
+export def "untag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

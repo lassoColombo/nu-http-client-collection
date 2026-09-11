@@ -97,7 +97,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-arrivals-and-departures-by-crs get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-arrivals-and-departures-by-crs" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -121,7 +121,7 @@ export def commands []: nothing -> table {
 #
 # GET /getArrivalsAndDeparturesByCRS/{CRS}
 # operationId: getArrivalsAndDeparturesByCRS
-export def "get-arrivals-and-departures-by-crs get" [
+export def "get-arrivals-and-departures-by-crs" [
   crs: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -165,7 +165,7 @@ export def "get-arrivals-and-departures-by-crs get" [
 #
 # GET /getArrivalsByCRS/{CRS}
 # operationId: getArrivalsByCRS
-export def "get-arrivals-by-crs get" [
+export def "get-arrivals-by-crs" [
   crs: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -208,7 +208,7 @@ export def "get-arrivals-by-crs get" [
 #
 # GET /getDeparturesByCRS/{CRS}
 # operationId: getDeparturesByCRS
-export def "get-departures-by-crs get" [
+export def "get-departures-by-crs" [
   crs: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -251,7 +251,7 @@ export def "get-departures-by-crs get" [
 #
 # GET /getFastestDeparturesByCRS/{CRS}
 # operationId: getFastestDeparturesByCRS
-export def "get-fastest-departures-by-crs get" [
+export def "get-fastest-departures-by-crs" [
   crs: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -293,7 +293,7 @@ export def "get-fastest-departures-by-crs get" [
 #
 # GET /getNextDeparturesByCRS/{CRS}
 # operationId: getNextDeparturesByCRS
-export def "get-next-departures-by-crs get" [
+export def "get-next-departures-by-crs" [
   crs: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -335,7 +335,7 @@ export def "get-next-departures-by-crs get" [
 #
 # GET /getServiceDetailsByID/{serviceID}
 # operationId: getServiceDetailsByID
-export def "get-service-details-by-id get" [
+export def "get-service-details-by-id" [
   service_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

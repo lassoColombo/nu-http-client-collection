@@ -129,7 +129,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta1 delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "dataform-projects-locations-repositories-workspaces-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -153,7 +153,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1beta1/{name}
 # operationId: dataform.projects.locations.repositories.workspaces.delete
-export def "v1beta1 delete" [
+export def "dataform-projects-locations-repositories-workspaces-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -202,7 +202,7 @@ export def "v1beta1 delete" [
 #
 # GET /v1beta1/{name}
 # operationId: dataform.projects.locations.repositories.workspaces.get
-export def "v1beta1 get" [
+export def "dataform-projects-locations-repositories-workspaces-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -252,7 +252,7 @@ export def "v1beta1 get" [
 # operationId: dataform.projects.locations.repositories.workflowConfigs.patch
 # --invocationConfig shape: {fullyRefreshIncrementalTablesEnabled?: bool, includedTags?: list<string>, includedTargets?: list, transitiveDependenciesIncluded?: bool, transitiveDependentsIncluded?: bool}
 # --recentScheduledExecutionRecords item shape: {errorStatus?: record, executionTime?: string, workflowInvocation?: string}
-export def "v1beta1 update" [
+export def "dataform-projects-locations-repositories-workflow-configs-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -308,7 +308,7 @@ export def "v1beta1 update" [
 #
 # GET /v1beta1/{name}/locations
 # operationId: dataform.projects.locations.list
-export def "v1beta1-locations list" [
+export def "dataform-projects-locations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -359,7 +359,7 @@ export def "v1beta1-locations list" [
 #
 # POST /v1beta1/{name}:cancel
 # operationId: dataform.projects.locations.repositories.workflowInvocations.cancel
-export def "v1beta1 cancel" [
+export def "dataform-projects-locations-repositories-workflow-invocations-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -412,7 +412,7 @@ export def "v1beta1 cancel" [
 # POST /v1beta1/{name}:commit
 # operationId: dataform.projects.locations.repositories.workspaces.commit
 # --author shape: {emailAddress?: string, name?: string}
-export def "v1beta1 commit" [
+export def "dataform-projects-locations-repositories-workspaces-commit" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -466,7 +466,7 @@ export def "v1beta1 commit" [
 #
 # GET /v1beta1/{name}:fetchFileGitStatuses
 # operationId: dataform.projects.locations.repositories.workspaces.fetchFileGitStatuses
-export def "v1beta1 get-file-git-statuses" [
+export def "dataform-projects-locations-repositories-workspaces-fetch-file-git-statuses" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -514,7 +514,7 @@ export def "v1beta1 get-file-git-statuses" [
 #
 # GET /v1beta1/{name}:fetchGitAheadBehind
 # operationId: dataform.projects.locations.repositories.workspaces.fetchGitAheadBehind
-export def "v1beta1 get-git-ahead-behind" [
+export def "dataform-projects-locations-repositories-workspaces-fetch-git-ahead-behind" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -563,7 +563,7 @@ export def "v1beta1 get-git-ahead-behind" [
 #
 # GET /v1beta1/{name}:fetchRemoteBranches
 # operationId: dataform.projects.locations.repositories.fetchRemoteBranches
-export def "v1beta1 get-remote-branches" [
+export def "dataform-projects-locations-repositories-fetch-remote-branches" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -612,7 +612,7 @@ export def "v1beta1 get-remote-branches" [
 # POST /v1beta1/{name}:pull
 # operationId: dataform.projects.locations.repositories.workspaces.pull
 # --author shape: {emailAddress?: string, name?: string}
-export def "v1beta1 pull" [
+export def "dataform-projects-locations-repositories-workspaces-pull" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -665,7 +665,7 @@ export def "v1beta1 pull" [
 #
 # POST /v1beta1/{name}:push
 # operationId: dataform.projects.locations.repositories.workspaces.push
-export def "v1beta1 push" [
+export def "dataform-projects-locations-repositories-workspaces-push" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -717,7 +717,7 @@ export def "v1beta1 push" [
 #
 # GET /v1beta1/{name}:query
 # operationId: dataform.projects.locations.repositories.workflowInvocations.query
-export def "v1beta1 list" [
+export def "dataform-projects-locations-repositories-workflow-invocations-query" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -767,7 +767,7 @@ export def "v1beta1 list" [
 #
 # POST /v1beta1/{name}:reset
 # operationId: dataform.projects.locations.repositories.workspaces.reset
-export def "v1beta1 reset" [
+export def "dataform-projects-locations-repositories-workspaces-reset" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -820,7 +820,7 @@ export def "v1beta1 reset" [
 #
 # GET /v1beta1/{parent}/compilationResults
 # operationId: dataform.projects.locations.repositories.compilationResults.list
-export def "v1beta1-compilation-results list" [
+export def "dataform-projects-locations-repositories-compilation-results-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -872,7 +872,7 @@ export def "v1beta1-compilation-results list" [
 # operationId: dataform.projects.locations.repositories.compilationResults.create
 # --codeCompilationConfig shape: {assertionSchema?: string, databaseSuffix?: string, defaultDatabase?: string, defaultLocation?: string, defaultSchema?: string, schemaSuffix?: string, tablePrefix?: string, vars?: record}
 # --compilationErrors item shape: {actionTarget?: record}
-export def "v1beta1-compilation-results create" [
+export def "dataform-projects-locations-repositories-compilation-results-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -927,7 +927,7 @@ export def "v1beta1-compilation-results create" [
 #
 # GET /v1beta1/{parent}/releaseConfigs
 # operationId: dataform.projects.locations.repositories.releaseConfigs.list
-export def "v1beta1-release-configs list" [
+export def "dataform-projects-locations-repositories-release-configs-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -979,7 +979,7 @@ export def "v1beta1-release-configs list" [
 # operationId: dataform.projects.locations.repositories.releaseConfigs.create
 # --codeCompilationConfig shape: {assertionSchema?: string, databaseSuffix?: string, defaultDatabase?: string, defaultLocation?: string, defaultSchema?: string, schemaSuffix?: string, tablePrefix?: string, vars?: record}
 # --recentScheduledReleaseRecords item shape: {compilationResult?: string, errorStatus?: record, releaseTime?: string}
-export def "v1beta1-release-configs create" [
+export def "dataform-projects-locations-repositories-release-configs-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1036,7 +1036,7 @@ export def "v1beta1-release-configs create" [
 #
 # GET /v1beta1/{parent}/repositories
 # operationId: dataform.projects.locations.repositories.list
-export def "v1beta1-repositories list" [
+export def "dataform-projects-locations-repositories-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1090,7 +1090,7 @@ export def "v1beta1-repositories list" [
 # operationId: dataform.projects.locations.repositories.create
 # --gitRemoteSettings shape: {authenticationTokenSecretVersion?: string, defaultBranch?: string, url?: string}
 # --workspaceCompilationOverrides shape: {defaultDatabase?: string, schemaSuffix?: string, tablePrefix?: string}
-export def "v1beta1-repositories create" [
+export def "dataform-projects-locations-repositories-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1145,7 +1145,7 @@ export def "v1beta1-repositories create" [
 #
 # GET /v1beta1/{parent}/workflowConfigs
 # operationId: dataform.projects.locations.repositories.workflowConfigs.list
-export def "v1beta1-workflow-configs list" [
+export def "dataform-projects-locations-repositories-workflow-configs-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1197,7 +1197,7 @@ export def "v1beta1-workflow-configs list" [
 # operationId: dataform.projects.locations.repositories.workflowConfigs.create
 # --invocationConfig shape: {fullyRefreshIncrementalTablesEnabled?: bool, includedTags?: list<string>, includedTargets?: list, transitiveDependenciesIncluded?: bool, transitiveDependentsIncluded?: bool}
 # --recentScheduledExecutionRecords item shape: {errorStatus?: record, executionTime?: string, workflowInvocation?: string}
-export def "v1beta1-workflow-configs create" [
+export def "dataform-projects-locations-repositories-workflow-configs-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1253,7 +1253,7 @@ export def "v1beta1-workflow-configs create" [
 #
 # GET /v1beta1/{parent}/workflowInvocations
 # operationId: dataform.projects.locations.repositories.workflowInvocations.list
-export def "v1beta1-workflow-invocations list" [
+export def "dataform-projects-locations-repositories-workflow-invocations-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1307,7 +1307,7 @@ export def "v1beta1-workflow-invocations list" [
 # operationId: dataform.projects.locations.repositories.workflowInvocations.create
 # --invocationConfig shape: {fullyRefreshIncrementalTablesEnabled?: bool, includedTags?: list<string>, includedTargets?: list, transitiveDependenciesIncluded?: bool, transitiveDependentsIncluded?: bool}
 # --invocationTiming shape: {endTime?: string, startTime?: string}
-export def "v1beta1-workflow-invocations create" [
+export def "dataform-projects-locations-repositories-workflow-invocations-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1362,7 +1362,7 @@ export def "v1beta1-workflow-invocations create" [
 #
 # GET /v1beta1/{parent}/workspaces
 # operationId: dataform.projects.locations.repositories.workspaces.list
-export def "v1beta1-workspaces list" [
+export def "dataform-projects-locations-repositories-workspaces-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1414,7 +1414,7 @@ export def "v1beta1-workspaces list" [
 #
 # POST /v1beta1/{parent}/workspaces
 # operationId: dataform.projects.locations.repositories.workspaces.create
-export def "v1beta1-workspaces create" [
+export def "dataform-projects-locations-repositories-workspaces-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1467,7 +1467,7 @@ export def "v1beta1-workspaces create" [
 #
 # GET /v1beta1/{resource}:getIamPolicy
 # operationId: dataform.projects.locations.repositories.workspaces.getIamPolicy
-export def "v1beta1 get-iam-policy" [
+export def "dataform-projects-locations-repositories-workspaces-get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1517,7 +1517,7 @@ export def "v1beta1 get-iam-policy" [
 # POST /v1beta1/{resource}:setIamPolicy
 # operationId: dataform.projects.locations.repositories.workspaces.setIamPolicy
 # --policy shape: {bindings?: list, etag?: string, version?: int}
-export def "v1beta1 update-iam-policy" [
+export def "dataform-projects-locations-repositories-workspaces-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1569,7 +1569,7 @@ export def "v1beta1 update-iam-policy" [
 #
 # POST /v1beta1/{resource}:testIamPermissions
 # operationId: dataform.projects.locations.repositories.workspaces.testIamPermissions
-export def "v1beta1 test-iam-permissions" [
+export def "dataform-projects-locations-repositories-workspaces-test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1621,7 +1621,7 @@ export def "v1beta1 test-iam-permissions" [
 #
 # GET /v1beta1/{workspace}:fetchFileDiff
 # operationId: dataform.projects.locations.repositories.workspaces.fetchFileDiff
-export def "v1beta1 get-file-diff" [
+export def "dataform-projects-locations-repositories-workspaces-fetch-file-diff" [
   workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1670,7 +1670,7 @@ export def "v1beta1 get-file-diff" [
 #
 # POST /v1beta1/{workspace}:installNpmPackages
 # operationId: dataform.projects.locations.repositories.workspaces.installNpmPackages
-export def "v1beta1 create-install-npm-packages" [
+export def "dataform-projects-locations-repositories-workspaces-install-npm-packages" [
   workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1722,7 +1722,7 @@ export def "v1beta1 create-install-npm-packages" [
 #
 # POST /v1beta1/{workspace}:makeDirectory
 # operationId: dataform.projects.locations.repositories.workspaces.makeDirectory
-export def "v1beta1 create-make-directory" [
+export def "dataform-projects-locations-repositories-workspaces-make-directory" [
   workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1774,7 +1774,7 @@ export def "v1beta1 create-make-directory" [
 #
 # POST /v1beta1/{workspace}:moveDirectory
 # operationId: dataform.projects.locations.repositories.workspaces.moveDirectory
-export def "v1beta1 move-directory" [
+export def "dataform-projects-locations-repositories-workspaces-move-directory" [
   workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1827,7 +1827,7 @@ export def "v1beta1 move-directory" [
 #
 # POST /v1beta1/{workspace}:moveFile
 # operationId: dataform.projects.locations.repositories.workspaces.moveFile
-export def "v1beta1 move-file" [
+export def "dataform-projects-locations-repositories-workspaces-move-file" [
   workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1880,7 +1880,7 @@ export def "v1beta1 move-file" [
 #
 # GET /v1beta1/{workspace}:queryDirectoryContents
 # operationId: dataform.projects.locations.repositories.workspaces.queryDirectoryContents
-export def "v1beta1 list-directory-contents" [
+export def "dataform-projects-locations-repositories-workspaces-query-directory-contents" [
   workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1931,7 +1931,7 @@ export def "v1beta1 list-directory-contents" [
 #
 # GET /v1beta1/{workspace}:readFile
 # operationId: dataform.projects.locations.repositories.workspaces.readFile
-export def "v1beta1 get-file" [
+export def "dataform-projects-locations-repositories-workspaces-read-file" [
   workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1980,7 +1980,7 @@ export def "v1beta1 get-file" [
 #
 # POST /v1beta1/{workspace}:removeDirectory
 # operationId: dataform.projects.locations.repositories.workspaces.removeDirectory
-export def "v1beta1 delete-directory" [
+export def "dataform-projects-locations-repositories-workspaces-remove-directory" [
   workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2032,7 +2032,7 @@ export def "v1beta1 delete-directory" [
 #
 # POST /v1beta1/{workspace}:removeFile
 # operationId: dataform.projects.locations.repositories.workspaces.removeFile
-export def "v1beta1 delete-file" [
+export def "dataform-projects-locations-repositories-workspaces-remove-file" [
   workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2084,7 +2084,7 @@ export def "v1beta1 delete-file" [
 #
 # POST /v1beta1/{workspace}:writeFile
 # operationId: dataform.projects.locations.repositories.workspaces.writeFile
-export def "v1beta1 create-write-file" [
+export def "dataform-projects-locations-repositories-workspaces-write-file" [
   workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

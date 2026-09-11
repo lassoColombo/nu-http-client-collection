@@ -110,7 +110,7 @@ def service-objective-name-completer [] { ["Basic" "DS100" "DS1000" "DS1200" "DS
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-export export" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "databases-export" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -134,7 +134,7 @@ export def commands []: nothing -> table {
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/export
 # operationId: Databases_Export
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-export export" [
+export def "databases-export" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -188,7 +188,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/extensions/{extensionName}
 # operationId: Databases_CreateImportOperation
 # --properties shape: {operationMode: "Import", administratorLogin: string, administratorLoginPassword: string, authenticationType?: "SQL"|"ADPassword", storageKey: string, storageKeyType: "StorageAccessKey"|"SharedAccessKey", storageUri: string}
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-extensions create-import-operation" [
+export def "databases-create-import-operation" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -240,7 +240,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/import
 # operationId: Databases_Import
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-import import-databases" [
+export def "databases-import" [
   subscription_id: string
   resource_group_name: string
   server_name: string

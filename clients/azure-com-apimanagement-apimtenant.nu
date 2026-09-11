@@ -117,7 +117,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-api-management-service-tenant get-access" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "tenant-access-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -141,7 +141,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/tenant/{accessName}
 # operationId: TenantAccess_Get
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-tenant get-access" [
+export def "tenant-access-get" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -185,7 +185,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # HEAD /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/tenant/{accessName}
 # operationId: TenantAccess_GetEntityTag
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-tenant get-access-entity-tag" [
+export def "tenant-access-get-entity-tag" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -230,7 +230,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/tenant/{accessName}
 # operationId: TenantAccess_Update
 # --properties shape: {enabled?: bool}
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-tenant update-access" [
+export def "tenant-access-update" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -281,7 +281,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/tenant/{accessName}/git
 # operationId: TenantAccessGit_Get
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-tenant-git get-access" [
+export def "tenant-access-git-get" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -325,7 +325,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/tenant/{accessName}/git/regeneratePrimaryKey
 # operationId: TenantAccessGit_RegeneratePrimaryKey
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-tenant-git-regenerate-primary-key create-access" [
+export def "tenant-access-git-regenerate-primary-key" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -369,7 +369,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/tenant/{accessName}/git/regenerateSecondaryKey
 # operationId: TenantAccessGit_RegenerateSecondaryKey
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-tenant-git-regenerate-secondary-key create-access" [
+export def "tenant-access-git-regenerate-secondary-key" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -413,7 +413,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/tenant/{accessName}/regeneratePrimaryKey
 # operationId: TenantAccess_RegeneratePrimaryKey
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-tenant-regenerate-primary-key create-access" [
+export def "tenant-access-regenerate-primary-key" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -457,7 +457,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/tenant/{accessName}/regenerateSecondaryKey
 # operationId: TenantAccess_RegenerateSecondaryKey
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-tenant-regenerate-secondary-key create-access" [
+export def "tenant-access-regenerate-secondary-key" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -503,7 +503,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 # Docs: https://azure.microsoft.com/en-us/documentation/articles/api-management-configuration-repository-git/#to-deploy-any-service-configuration-changes-to-the-api-management-service-instance — To deploy any service configuration changes to the API Management service instance
 # operationId: TenantConfiguration_Deploy
 # --properties shape: {branch: string, force?: bool}
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-tenant-deploy create-configuration" [
+export def "tenant-configuration-deploy" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -553,7 +553,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 # Docs: https://azure.microsoft.com/en-us/documentation/articles/api-management-configuration-repository-git/#to-save-the-service-configuration-to-the-git-repository — To save the service configuration to the Git repository
 # operationId: TenantConfiguration_Save
 # --properties shape: {branch: string, force?: bool}
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-tenant-save create-configuration" [
+export def "tenant-configuration-save" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -601,7 +601,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/tenant/{configurationName}/syncState
 # operationId: TenantConfiguration_GetSyncState
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-tenant-sync-state get-configuration" [
+export def "tenant-configuration-get-sync-state" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -646,7 +646,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/tenant/{configurationName}/validate
 # operationId: TenantConfiguration_Validate
 # --properties shape: {branch: string, force?: bool}
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-tenant-validate validate-configuration" [
+export def "tenant-configuration-validate" [
   subscription_id: string
   resource_group_name: string
   service_name: string

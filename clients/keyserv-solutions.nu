@@ -121,7 +121,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "keys-api-current get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "keys-api-current" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -144,7 +144,7 @@ export def commands []: nothing -> table {
 # GET /v1/KeysApi/Current/{serial}
 #
 # operationId: KeysApi_Current
-export def "keys-api-current get" [
+export def "keys-api-current" [
   serial: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -179,7 +179,7 @@ export def "keys-api-current get" [
 # GET /v1/KeysApi/Custom/{serial}
 #
 # operationId: KeysApi_Custom
-export def "keys-api-custom get" [
+export def "keys-api-custom" [
   serial: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -214,7 +214,7 @@ export def "keys-api-custom get" [
 # GET /v1/KeysApi/Expiry/{serial}
 #
 # operationId: KeysApi_Expiry
-export def "keys-api-expiry get" [
+export def "keys-api-expiry" [
   serial: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -249,7 +249,7 @@ export def "keys-api-expiry get" [
 # GET /v1/KeysApi/Find/{serial}
 #
 # operationId: KeysApi_Find
-export def "keys-api-find find" [
+export def "keys-api-find" [
   serial: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -284,7 +284,7 @@ export def "keys-api-find find" [
 # PATCH /v1/ProductsApi
 #
 # operationId: ProductsApi_PatchProduct
-export def "products-api update" [
+export def "products-api-patch-product" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -324,7 +324,7 @@ export def "products-api update" [
 # POST /v1/ProductsApi
 #
 # operationId: ProductsApi_PatchProduct2
-export def "products-api update-product2" [
+export def "products-api-patch-product2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -364,7 +364,7 @@ export def "products-api update-product2" [
 # POST /v1/ProductsApi/Count
 #
 # operationId: ProductsApi_Count
-export def "products-api-count create" [
+export def "products-api-count" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -401,7 +401,7 @@ export def "products-api-count create" [
 # POST /v1/ProductsApi/Find
 #
 # operationId: ProductsApi_Find
-export def "products-api-find find" [
+export def "products-api-find" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -441,7 +441,7 @@ export def "products-api-find find" [
 # POST /v1/ProductsApi/List
 #
 # operationId: ProductsApi_List
-export def "products-api-list list" [
+export def "products-api-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -480,7 +480,7 @@ export def "products-api-list list" [
 # POST /v1/ProductsApi/Save
 #
 # operationId: ProductsApi_Save
-export def "products-api-save create" [
+export def "products-api-save" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -520,7 +520,7 @@ export def "products-api-save create" [
 # DELETE /v1/ProductsApi/{serial}
 #
 # operationId: ProductsApi_DeleteProduct
-export def "products-api delete" [
+export def "products-api-delete-product" [
   serial: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -558,7 +558,7 @@ export def "products-api delete" [
 # POST /v1/ProductsApi/{serial}
 #
 # operationId: ProductsApi_DeleteProduct2
-export def "products-api delete-product2" [
+export def "products-api-delete-product2" [
   serial: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -596,7 +596,7 @@ export def "products-api delete-product2" [
 # POST /v1/SubscriptionsApi
 #
 # operationId: SubscriptionsApi_PutSubscription2
-export def "subscriptions-api update-subscription2" [
+export def "subscriptions-api-put-subscription2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -641,7 +641,7 @@ export def "subscriptions-api update-subscription2" [
 # PUT /v1/SubscriptionsApi
 #
 # operationId: SubscriptionsApi_PutSubscription
-export def "subscriptions-api update" [
+export def "subscriptions-api-put-subscription" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -686,7 +686,7 @@ export def "subscriptions-api update" [
 # POST /v1/SubscriptionsApi/Count
 #
 # operationId: SubscriptionsApi_Count
-export def "subscriptions-api-count create" [
+export def "subscriptions-api-count" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -724,7 +724,7 @@ export def "subscriptions-api-count create" [
 # PATCH /v1/SubscriptionsApi/Disable
 #
 # operationId: SubscriptionsApi_Disable
-export def "subscriptions-api-disable disable" [
+export def "subscriptions-api-disable" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -762,7 +762,7 @@ export def "subscriptions-api-disable disable" [
 # POST /v1/SubscriptionsApi/Disable
 #
 # operationId: SubscriptionsApi_Disable2
-export def "subscriptions-api-disable create-disable2" [
+export def "subscriptions-api-disable2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -800,7 +800,7 @@ export def "subscriptions-api-disable create-disable2" [
 # PATCH /v1/SubscriptionsApi/Enable
 #
 # operationId: SubscriptionsApi_Enable
-export def "subscriptions-api-enable enable" [
+export def "subscriptions-api-enable" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -838,7 +838,7 @@ export def "subscriptions-api-enable enable" [
 # POST /v1/SubscriptionsApi/Enable
 #
 # operationId: SubscriptionsApi_Enable2
-export def "subscriptions-api-enable create-enable2" [
+export def "subscriptions-api-enable2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -876,7 +876,7 @@ export def "subscriptions-api-enable create-enable2" [
 # POST /v1/SubscriptionsApi/Find
 #
 # operationId: SubscriptionsApi_Find
-export def "subscriptions-api-find find" [
+export def "subscriptions-api-find" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -914,7 +914,7 @@ export def "subscriptions-api-find find" [
 # POST /v1/SubscriptionsApi/List
 #
 # operationId: SubscriptionsApi_List
-export def "subscriptions-api-list list" [
+export def "subscriptions-api-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -954,7 +954,7 @@ export def "subscriptions-api-list list" [
 # POST /v1/SubscriptionsApi/Save
 #
 # operationId: SubscriptionsApi_Save
-export def "subscriptions-api-save create" [
+export def "subscriptions-api-save" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -999,7 +999,7 @@ export def "subscriptions-api-save create" [
 # DELETE /v1/SubscriptionsApi/{serial}
 #
 # operationId: SubscriptionsApi_DeleteSubscription
-export def "subscriptions-api delete" [
+export def "subscriptions-api-delete-subscription" [
   serial: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1039,7 +1039,7 @@ export def "subscriptions-api delete" [
 # POST /v1/SubscriptionsApi/{serial}
 #
 # operationId: SubscriptionsApi_DeleteSubscription2
-export def "subscriptions-api delete-subscription2" [
+export def "subscriptions-api-delete-subscription2" [
   serial: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

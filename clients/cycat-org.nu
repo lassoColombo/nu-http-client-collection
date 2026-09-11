@@ -103,7 +103,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "child get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-child" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -127,7 +127,7 @@ export def commands []: nothing -> table {
 #
 # GET /child/{uuid}
 # operationId: get_child
-export def "child get" [
+export def "get-child" [
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -163,7 +163,7 @@ export def "child get" [
 #
 # GET /generate/uuid
 # operationId: get_generate_uuid
-export def "generate-uuid get" [
+export def "get-generate-uuid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -197,7 +197,7 @@ export def "generate-uuid get" [
 #
 # GET /info
 # operationId: get_info
-export def "info get" [
+export def "get-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -231,7 +231,7 @@ export def "info get" [
 #
 # GET /list/project/{start}/{end}
 # operationId: get_list_project
-export def "list-project get" [
+export def "get-list-project" [
   start: int
   end: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -269,7 +269,7 @@ export def "list-project get" [
 #
 # GET /list/publisher/{start}/{end}
 # operationId: get_list_publisher
-export def "list-publisher get" [
+export def "get-list-publisher" [
   start: int
   end: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -307,7 +307,7 @@ export def "list-publisher get" [
 #
 # GET /lookup/{uuid}
 # operationId: get_lookup
-export def "lookup get" [
+export def "get-lookup" [
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -343,7 +343,7 @@ export def "lookup get" [
 #
 # GET /namespace/finduuid/{namespace}/{namespaceid}
 # operationId: get_namespacefinduuid
-export def "namespace-finduuid get-namespacefinduuid" [
+export def "get-namespacefinduuid" [
   namespace: string
   namespaceid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -381,7 +381,7 @@ export def "namespace-finduuid get-namespacefinduuid" [
 #
 # GET /namespace/getall
 # operationId: get_namespacegetall
-export def "namespace-getall get-namespacegetall" [
+export def "get-namespacegetall" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -415,7 +415,7 @@ export def "namespace-getall get-namespacegetall" [
 #
 # GET /namespace/getid/{namespace}
 # operationId: get_namespacegetid
-export def "namespace-getid get-namespacegetid" [
+export def "get-namespacegetid" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -451,7 +451,7 @@ export def "namespace-getid get-namespacegetid" [
 #
 # GET /parent/{uuid}
 # operationId: get_parent
-export def "parent get" [
+export def "get-parent" [
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -487,7 +487,7 @@ export def "parent get" [
 #
 # POST /propose
 # operationId: post_propose
-export def "propose create" [
+export def "post-propose" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -521,7 +521,7 @@ export def "propose create" [
 #
 # GET /relationships/expanded/{uuid}
 # operationId: get_relationshipsexpanded
-export def "relationships-expanded get-relationshipsexpanded" [
+export def "get-relationshipsexpanded" [
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -557,7 +557,7 @@ export def "relationships-expanded get-relationshipsexpanded" [
 #
 # GET /relationships/{uuid}
 # operationId: get_relationships
-export def "relationships get" [
+export def "get-relationships" [
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -593,7 +593,7 @@ export def "relationships get" [
 #
 # GET /search/{searchquery}
 # operationId: get_search
-export def "search get" [
+export def "get-search" [
   searchquery: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

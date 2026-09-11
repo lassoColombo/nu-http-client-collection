@@ -122,7 +122,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-sql-servers-databases list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "databases-list-by-server" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases
 # operationId: Databases_ListByServer
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases list" [
+export def "databases-list-by-server" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -188,7 +188,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}
 # operationId: Databases_Delete
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases delete" [
+export def "databases-delete" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -232,7 +232,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}
 # operationId: Databases_Get
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases get" [
+export def "databases-get" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -278,7 +278,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 # operationId: Databases_Update
 # --properties shape: {autoPauseDelay?: int, catalogCollation?: "DATABASE_DEFAULT"|"SQL_Latin1_General_CP1_CI_AS", collation?: string, createMode?: "Default"|"Copy"|"Secondary"|"PointInTimeRestore"|"Restore"|"Recovery"|"RestoreExternalBackup"|"RestoreExternalBackupSecondary"|"RestoreLongTermRetentionBackup"|"OnlineSecondary", currentSku?: record, elasticPoolId?: string, licenseType?: "LicenseIncluded"|"BasePrice", longTermRetentionBackupResourceId?: string, maxSizeBytes?: int, minCapacity?: float, ... (10 more fields)}
 # --sku shape: {capacity?: int, family?: string, name: string, size?: string, tier?: string}
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases update" [
+export def "databases-update" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -330,7 +330,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 # operationId: Databases_CreateOrUpdate
 # --properties shape: {autoPauseDelay?: int, catalogCollation?: "DATABASE_DEFAULT"|"SQL_Latin1_General_CP1_CI_AS", collation?: string, createMode?: "Default"|"Copy"|"Secondary"|"PointInTimeRestore"|"Restore"|"Recovery"|"RestoreExternalBackup"|"RestoreExternalBackupSecondary"|"RestoreLongTermRetentionBackup"|"OnlineSecondary", currentSku?: record, elasticPoolId?: string, licenseType?: "LicenseIncluded"|"BasePrice", longTermRetentionBackupResourceId?: string, maxSizeBytes?: int, minCapacity?: float, ... (10 more fields)}
 # --sku shape: {capacity?: int, family?: string, name: string, size?: string, tier?: string}
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases create-or-update" [
+export def "databases-create-or-update" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -381,7 +381,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/move
 # operationId: Databases_Rename
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-move rename" [
+export def "databases-rename" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -429,7 +429,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/pause
 # operationId: Databases_Pause
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-pause pause" [
+export def "databases-pause" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -473,7 +473,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/resume
 # operationId: Databases_Resume
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-resume create" [
+export def "databases-resume" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -517,7 +517,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/upgradeDataWarehouse
 # operationId: Databases_UpgradeDataWarehouse
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-upgrade-data-warehouse create" [
+export def "databases-upgrade-data-warehouse" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -561,7 +561,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/elasticPools/{elasticPoolName}/databases
 # operationId: Databases_ListByElasticPool
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-elastic-pools-databases list" [
+export def "databases-list-by-elastic-pool" [
   subscription_id: string
   resource_group_name: string
   server_name: string

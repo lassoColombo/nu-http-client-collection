@@ -119,7 +119,7 @@ def section-type-completer [] { ["SECTION_TYPE_SIM_LOCK" "SECTION_TYPE_UNSPECIFI
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "customers list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "androiddeviceprovisioning-customers-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -143,7 +143,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/customers
 # operationId: androiddeviceprovisioning.customers.list
-export def "customers list" [
+export def "androiddeviceprovisioning-customers-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -192,7 +192,7 @@ export def "customers list" [
 # POST /v1/partners/{metadataOwnerId}/devices/{deviceId}/metadata
 # operationId: androiddeviceprovisioning.partners.devices.metadata
 # --deviceMetadata shape: {entries?: record}
-export def "partners-devices-metadata create" [
+export def "androiddeviceprovisioning-partners-devices-metadata" [
   metadata_owner_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -246,7 +246,7 @@ export def "partners-devices-metadata create" [
 #
 # GET /v1/partners/{partnerId}/customers
 # operationId: androiddeviceprovisioning.partners.customers.list
-export def "partners-customers list" [
+export def "androiddeviceprovisioning-partners-customers-list" [
   partner_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -298,7 +298,7 @@ export def "partners-customers list" [
 # operationId: androiddeviceprovisioning.partners.devices.claim
 # --deviceIdentifier shape: {chromeOsAttestedDeviceId?: string, deviceType?: "DEVICE_TYPE_UNSPECIFIED"|"DEVICE_TYPE_ANDROID"|"DEVICE_TYPE_CHROME_OS", imei?: string, manufacturer?: string, meid?: string, model?: string, serialNumber?: string}
 # --deviceMetadata shape: {entries?: record}
-export def "partners-devices-claim create" [
+export def "androiddeviceprovisioning-partners-devices-claim" [
   partner_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -357,7 +357,7 @@ export def "partners-devices-claim create" [
 # POST /v1/partners/{partnerId}/devices:claimAsync
 # operationId: androiddeviceprovisioning.partners.devices.claimAsync
 # --claims item shape: {customerId?: string, deviceIdentifier?: record, deviceMetadata?: record, googleWorkspaceCustomerId?: string, preProvisioningToken?: string, sectionType?: "SECTION_TYPE_UNSPECIFIED"|"SECTION_TYPE_SIM_LOCK"|"SECTION_TYPE_ZERO_TOUCH", simlockProfileId?: string}
-export def "partners-devices-claim-async create" [
+export def "androiddeviceprovisioning-partners-devices-claim-async" [
   partner_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -410,7 +410,7 @@ export def "partners-devices-claim-async create" [
 # POST /v1/partners/{partnerId}/devices:findByIdentifier
 # operationId: androiddeviceprovisioning.partners.devices.findByIdentifier
 # --deviceIdentifier shape: {chromeOsAttestedDeviceId?: string, deviceType?: "DEVICE_TYPE_UNSPECIFIED"|"DEVICE_TYPE_ANDROID"|"DEVICE_TYPE_CHROME_OS", imei?: string, manufacturer?: string, meid?: string, model?: string, serialNumber?: string}
-export def "partners-devices-find-by-identifier find" [
+export def "androiddeviceprovisioning-partners-devices-find-by-identifier" [
   partner_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -464,7 +464,7 @@ export def "partners-devices-find-by-identifier find" [
 #
 # POST /v1/partners/{partnerId}/devices:findByOwner
 # operationId: androiddeviceprovisioning.partners.devices.findByOwner
-export def "partners-devices-find-by-owner find" [
+export def "androiddeviceprovisioning-partners-devices-find-by-owner" [
   partner_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -521,7 +521,7 @@ export def "partners-devices-find-by-owner find" [
 # POST /v1/partners/{partnerId}/devices:unclaim
 # operationId: androiddeviceprovisioning.partners.devices.unclaim
 # --deviceIdentifier shape: {chromeOsAttestedDeviceId?: string, deviceType?: "DEVICE_TYPE_UNSPECIFIED"|"DEVICE_TYPE_ANDROID"|"DEVICE_TYPE_CHROME_OS", imei?: string, manufacturer?: string, meid?: string, model?: string, serialNumber?: string}
-export def "partners-devices-unclaim create" [
+export def "androiddeviceprovisioning-partners-devices-unclaim" [
   partner_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -578,7 +578,7 @@ export def "partners-devices-unclaim create" [
 # POST /v1/partners/{partnerId}/devices:unclaimAsync
 # operationId: androiddeviceprovisioning.partners.devices.unclaimAsync
 # --unclaims item shape: {deviceId?: string, deviceIdentifier?: record, sectionType?: "SECTION_TYPE_UNSPECIFIED"|"SECTION_TYPE_SIM_LOCK"|"SECTION_TYPE_ZERO_TOUCH", vacationModeDays?: int, vacationModeExpireTime?: string}
-export def "partners-devices-unclaim-async create" [
+export def "androiddeviceprovisioning-partners-devices-unclaim-async" [
   partner_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -631,7 +631,7 @@ export def "partners-devices-unclaim-async create" [
 # POST /v1/partners/{partnerId}/devices:updateMetadataAsync
 # operationId: androiddeviceprovisioning.partners.devices.updateMetadataAsync
 # --updates item shape: {deviceId?: string, deviceIdentifier?: record, deviceMetadata?: record}
-export def "partners-devices-update-metadata-async update" [
+export def "androiddeviceprovisioning-partners-devices-update-metadata-async" [
   partner_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -683,7 +683,7 @@ export def "partners-devices-update-metadata-async update" [
 #
 # DELETE /v1/{name}
 # operationId: androiddeviceprovisioning.customers.configurations.delete
-export def "customers delete" [
+export def "androiddeviceprovisioning-customers-configurations-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -731,7 +731,7 @@ export def "customers delete" [
 #
 # GET /v1/{name}
 # operationId: androiddeviceprovisioning.partners.devices.get
-export def "partners get" [
+export def "androiddeviceprovisioning-partners-devices-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -779,7 +779,7 @@ export def "partners get" [
 #
 # PATCH /v1/{name}
 # operationId: androiddeviceprovisioning.customers.configurations.patch
-export def "customers update" [
+export def "androiddeviceprovisioning-customers-configurations-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -839,7 +839,7 @@ export def "customers update" [
 #
 # GET /v1/{parent}/configurations
 # operationId: androiddeviceprovisioning.customers.configurations.list
-export def "configurations list" [
+export def "androiddeviceprovisioning-customers-configurations-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -887,7 +887,7 @@ export def "configurations list" [
 #
 # POST /v1/{parent}/configurations
 # operationId: androiddeviceprovisioning.customers.configurations.create
-export def "configurations create" [
+export def "androiddeviceprovisioning-customers-configurations-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -946,7 +946,7 @@ export def "configurations create" [
 #
 # GET /v1/{parent}/customers
 # operationId: androiddeviceprovisioning.partners.vendors.customers.list
-export def "customers list-1" [
+export def "androiddeviceprovisioning-partners-vendors-customers-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -997,7 +997,7 @@ export def "customers list-1" [
 # POST /v1/{parent}/customers
 # operationId: androiddeviceprovisioning.partners.customers.create
 # --customer shape: {adminEmails?: list<string>, companyName?: string, googleWorkspaceAccount?: record, languageCode?: string, ownerEmails?: list<string>, skipWelcomeEmail?: bool}
-export def "customers create" [
+export def "androiddeviceprovisioning-partners-customers-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1049,7 +1049,7 @@ export def "customers create" [
 #
 # GET /v1/{parent}/devices
 # operationId: androiddeviceprovisioning.customers.devices.list
-export def "devices list" [
+export def "androiddeviceprovisioning-customers-devices-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1100,7 +1100,7 @@ export def "devices list" [
 # POST /v1/{parent}/devices:applyConfiguration
 # operationId: androiddeviceprovisioning.customers.devices.applyConfiguration
 # --device shape: {deviceId?: string, deviceIdentifier?: record}
-export def "devices-apply-configuration create" [
+export def "androiddeviceprovisioning-customers-devices-apply-configuration" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1154,7 +1154,7 @@ export def "devices-apply-configuration create" [
 # POST /v1/{parent}/devices:removeConfiguration
 # operationId: androiddeviceprovisioning.customers.devices.removeConfiguration
 # --device shape: {deviceId?: string, deviceIdentifier?: record}
-export def "devices-remove-configuration delete" [
+export def "androiddeviceprovisioning-customers-devices-remove-configuration" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1207,7 +1207,7 @@ export def "devices-remove-configuration delete" [
 # POST /v1/{parent}/devices:unclaim
 # operationId: androiddeviceprovisioning.customers.devices.unclaim
 # --device shape: {deviceId?: string, deviceIdentifier?: record}
-export def "devices-unclaim create" [
+export def "androiddeviceprovisioning-customers-devices-unclaim" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1259,7 +1259,7 @@ export def "devices-unclaim create" [
 #
 # GET /v1/{parent}/dpcs
 # operationId: androiddeviceprovisioning.customers.dpcs.list
-export def "dpcs list" [
+export def "androiddeviceprovisioning-customers-dpcs-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1307,7 +1307,7 @@ export def "dpcs list" [
 #
 # GET /v1/{parent}/vendors
 # operationId: androiddeviceprovisioning.partners.vendors.list
-export def "vendors list" [
+export def "androiddeviceprovisioning-partners-vendors-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

@@ -147,7 +147,7 @@ def orientation-completer [] { ["landscape" "portrait"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "designer-templates list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-templates-designer-templates-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -171,7 +171,7 @@ export def commands []: nothing -> table {
 #
 # GET /designer/templates/
 # operationId: list_templates_designer_templates__get
-export def "designer-templates list" [
+export def "list-templates-designer-templates-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -208,7 +208,7 @@ export def "designer-templates list" [
 #
 # POST /designer/templates/
 # operationId: create_template_designer_templates__post
-export def "designer-templates create" [
+export def "create-template-designer-templates-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -254,7 +254,7 @@ export def "designer-templates create" [
 #
 # POST /designer/templates/preview
 # operationId: preview_designer_templates_preview_post
-export def "designer-templates-preview create" [
+export def "preview-designer-templates-preview-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -296,7 +296,7 @@ export def "designer-templates-preview create" [
 #
 # DELETE /designer/templates/{id}
 # operationId: delete_designer_templates__id__delete
-export def "designer-templates delete" [
+export def "delete-designer-templates-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -332,7 +332,7 @@ export def "designer-templates delete" [
 #
 # GET /designer/templates/{id}
 # operationId: list_templates_designer_templates__id__get
-export def "designer-templates list-get" [
+export def "list-templates-designer-templates-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -368,7 +368,7 @@ export def "designer-templates list-get" [
 #
 # PUT /designer/templates/{id}
 # operationId: update_template_designer_templates__id__put
-export def "designer-templates update" [
+export def "update-template-designer-templates-id-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -416,7 +416,7 @@ export def "designer-templates update" [
 #
 # POST /designer/templates/{id}/generate
 # operationId: generate_pdf_designer_templates__id__generate_post
-export def "designer-templates-generate create-pdf" [
+export def "generate-pdf-designer-templates-id-generate-post" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -456,7 +456,7 @@ export def "designer-templates-generate create-pdf" [
 #
 # GET /templates
 # operationId: list
-export def "templates list" [
+export def "list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -493,7 +493,7 @@ export def "templates list" [
 #
 # POST /templates
 # operationId: create
-export def "templates create" [
+export def "create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -533,7 +533,7 @@ export def "templates create" [
 #
 # DELETE /templates/{id}
 # operationId: delete__templates__id__delete
-export def "templates delete" [
+export def "delete-templates-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -569,7 +569,7 @@ export def "templates delete" [
 #
 # GET /templates/{id}
 # operationId: get
-export def "templates get" [
+export def "get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -605,7 +605,7 @@ export def "templates get" [
 #
 # PUT /templates/{id}
 # operationId: update
-export def "templates update" [
+export def "update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -646,7 +646,7 @@ export def "templates update" [
 #
 # GET /templates/{id}/file
 # operationId: get_file_templates__id__file_get
-export def "templates-file get" [
+export def "get-file-templates-id-file-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -682,7 +682,7 @@ export def "templates-file get" [
 #
 # POST /templates/{id}/fill
 # operationId: fill
-export def "templates-fill create" [
+export def "fill" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

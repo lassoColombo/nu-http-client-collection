@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-resource-graph-queries list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "graph-query-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ResourceGraph/queries
 # operationId: GraphQuery_List
-export def "subscriptions-resource-groups-providers-microsoft-resource-graph-queries list" [
+export def "graph-query-list" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -180,7 +180,7 @@ export def "subscriptions-resource-groups-providers-microsoft-resource-graph-que
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ResourceGraph/queries/{resourceName}
 # operationId: GraphQuery_Delete
-export def "subscriptions-resource-groups-providers-microsoft-resource-graph-queries list-delete" [
+export def "graph-query-delete" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -222,7 +222,7 @@ export def "subscriptions-resource-groups-providers-microsoft-resource-graph-que
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ResourceGraph/queries/{resourceName}
 # operationId: GraphQuery_Get
-export def "subscriptions-resource-groups-providers-microsoft-resource-graph-queries list-get" [
+export def "graph-query-get" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -265,7 +265,7 @@ export def "subscriptions-resource-groups-providers-microsoft-resource-graph-que
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ResourceGraph/queries/{resourceName}
 # operationId: GraphQuery_Update
 # --properties shape: {description?: string, query?: string}
-export def "subscriptions-resource-groups-providers-microsoft-resource-graph-queries list-update" [
+export def "graph-query-update" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -314,7 +314,7 @@ export def "subscriptions-resource-groups-providers-microsoft-resource-graph-que
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ResourceGraph/queries/{resourceName}
 # operationId: GraphQuery_CreateOrUpdate
 # --properties shape: {description?: string, query: string}
-export def "subscriptions-resource-groups-providers-microsoft-resource-graph-queries list-create-or-update" [
+export def "graph-query-create-or-update" [
   subscription_id: string
   resource_group_name: string
   resource_name: string

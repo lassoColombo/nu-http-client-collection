@@ -119,7 +119,7 @@ def state-completer-1 [] { ["DISABLED" "ENABLED" "ERROR"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "policies create-lifecycle-policy" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-lifecycle-policy" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -144,7 +144,7 @@ export def commands []: nothing -> table {
 # POST /policies
 # operationId: CreateLifecyclePolicy
 # --PolicyDetails shape: {PolicyType?: any, ResourceTypes?: any, ResourceLocations?: any, TargetTags?: any, Schedules?: any, Parameters?: any, EventSource?: any, Actions?: any}
-export def "policies create-lifecycle-policy" [
+export def "create-lifecycle-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -195,7 +195,7 @@ export def "policies create-lifecycle-policy" [
 #
 # GET /policies
 # operationId: GetLifecyclePolicies
-export def "policies get-lifecycle" [
+export def "get-lifecycle-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -244,7 +244,7 @@ export def "policies get-lifecycle" [
 #
 # DELETE /policies/{policyId}/
 # operationId: DeleteLifecyclePolicy
-export def "policies delete-lifecycle-policy" [
+export def "delete-lifecycle-policy" [
   policy_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -289,7 +289,7 @@ export def "policies delete-lifecycle-policy" [
 #
 # GET /policies/{policyId}/
 # operationId: GetLifecyclePolicy
-export def "policies get-lifecycle-policy" [
+export def "get-lifecycle-policy" [
   policy_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -334,7 +334,7 @@ export def "policies get-lifecycle-policy" [
 #
 # GET /tags/{resourceArn}
 # operationId: ListTagsForResource
-export def "tags list-for-resource" [
+export def "list-tags-for-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -379,7 +379,7 @@ export def "tags list-for-resource" [
 #
 # POST /tags/{resourceArn}
 # operationId: TagResource
-export def "tags tag-resource" [
+export def "tag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -428,7 +428,7 @@ export def "tags tag-resource" [
 #
 # DELETE /tags/{resourceArn}
 # operationId: UntagResource
-export def "tags untag-resource" [
+export def "untag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -476,7 +476,7 @@ export def "tags untag-resource" [
 # PATCH /policies/{policyId}
 # operationId: UpdateLifecyclePolicy
 # --PolicyDetails shape: {PolicyType?: any, ResourceTypes?: any, ResourceLocations?: any, TargetTags?: any, Schedules?: any, Parameters?: any, EventSource?: any, Actions?: any}
-export def "policies update-lifecycle-policy" [
+export def "update-lifecycle-policy" [
   policy_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

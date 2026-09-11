@@ -97,7 +97,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "conversion-rate get-detail-using" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-conversion-detail-using-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -121,7 +121,7 @@ export def commands []: nothing -> table {
 #
 # GET /conversion-rate
 # operationId: getConversionDetailUsingGET
-export def "conversion-rate get-detail-using" [
+export def "get-conversion-detail-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -161,7 +161,7 @@ export def "conversion-rate get-detail-using" [
 #
 # GET /conversion-rate-issued
 # operationId: isRateIssuedUsingGET
-export def "conversion-rate-issued get-is-using" [
+export def "is-rate-issued-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -197,7 +197,7 @@ export def "conversion-rate-issued get-is-using" [
 #
 # GET /settlement-currencies
 # operationId: getCurrencyRateDataUsingGET
-export def "settlement-currencies get-currency-rate-data-using" [
+export def "get-currency-rate-data-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

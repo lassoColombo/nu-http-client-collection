@@ -118,7 +118,7 @@ def source-completer [] { ["android" "iOS" "web"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "change-password create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-change-password" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -141,7 +141,7 @@ export def commands []: nothing -> table {
 # Used for changing your password
 #
 # POST /changePassword
-export def "change-password create" [
+export def "post-change-password" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -179,7 +179,7 @@ export def "change-password create" [
 # Log in to get an API token
 #
 # POST /login
-export def "login create" [
+export def "post-login" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -218,7 +218,7 @@ export def "login create" [
 # Log out
 #
 # POST /logout
-export def "logout create" [
+export def "post-logout" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -251,7 +251,7 @@ export def "logout create" [
 # Used for requesting a password reset code
 #
 # POST /requestPasswordReset
-export def "request-password-reset create" [
+export def "post-request-password-reset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -288,7 +288,7 @@ export def "request-password-reset create" [
 # Create a new signin record
 #
 # POST /signin
-export def "signin create" [
+export def "post-signin" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -329,7 +329,7 @@ export def "signin create" [
 # Delete a signin record
 #
 # DELETE /signin/{signinId}
-export def "signin delete" [
+export def "delete-signin-signin-id" [
   signin_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -364,7 +364,7 @@ export def "signin delete" [
 # Retrieve the information associated with a signin record
 #
 # GET /signin/{signinId}
-export def "signin get" [
+export def "get-signin-signin-id" [
   signin_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -399,7 +399,7 @@ export def "signin get" [
 # Update a signin record
 #
 # PUT /signin/{signinId}
-export def "signin update" [
+export def "put-signin-signin-id" [
   signin_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -442,7 +442,7 @@ export def "signin update" [
 # Get signin info
 #
 # GET /signins
-export def "signins get" [
+export def "get-signins" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -478,7 +478,7 @@ export def "signins get" [
 # Create a user
 #
 # POST /user
-export def "user create" [
+export def "post-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -518,7 +518,7 @@ export def "user create" [
 # Delete a team member's user record
 #
 # DELETE /user/{userId}
-export def "user delete" [
+export def "delete-user-user-id" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -553,7 +553,7 @@ export def "user delete" [
 # Retrieve the information associated with a team member's user record
 #
 # GET /user/{userId}
-export def "user get" [
+export def "get-user-user-id" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -588,7 +588,7 @@ export def "user get" [
 # Retrieve the information associated with all team members' user records
 #
 # GET /users
-export def "users get" [
+export def "get-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -621,7 +621,7 @@ export def "users get" [
 # Used for resetting your password when you forgot it
 #
 # POST /verifyPasswordChange
-export def "verify-password-change create" [
+export def "post-verify-password-change" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

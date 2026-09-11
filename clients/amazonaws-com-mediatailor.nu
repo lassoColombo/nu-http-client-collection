@@ -119,7 +119,7 @@ def tier-completer [] { ["BASIC" "STANDARD"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "configure-logs-channel logs" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "configure-logs-for-channel" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -143,7 +143,7 @@ export def commands []: nothing -> table {
 #
 # PUT /configureLogs/channel
 # operationId: ConfigureLogsForChannel
-export def "configure-logs-channel logs" [
+export def "configure-logs-for-channel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -191,7 +191,7 @@ export def "configure-logs-channel logs" [
 #
 # PUT /configureLogs/playbackConfiguration
 # operationId: ConfigureLogsForPlaybackConfiguration
-export def "configure-logs-playback-configuration logs" [
+export def "configure-logs-for-playback-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -241,7 +241,7 @@ export def "configure-logs-playback-configuration logs" [
 # operationId: CreateChannel
 # --FillerSlate shape: {SourceLocationName?: any, VodSourceName?: any}
 # --Outputs item shape: {DashPlaylistSettings?: any, HlsPlaylistSettings?: any, ManifestName: any, SourceGroup: any}
-export def "channel create" [
+export def "create-channel" [
   channel_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -294,7 +294,7 @@ export def "channel create" [
 #
 # DELETE /channel/{ChannelName}
 # operationId: DeleteChannel
-export def "channel delete" [
+export def "delete-channel" [
   channel_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -339,7 +339,7 @@ export def "channel delete" [
 #
 # GET /channel/{ChannelName}
 # operationId: DescribeChannel
-export def "channel get" [
+export def "describe-channel" [
   channel_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -386,7 +386,7 @@ export def "channel get" [
 # operationId: UpdateChannel
 # --FillerSlate shape: {SourceLocationName?: any, VodSourceName?: any}
 # --Outputs item shape: {DashPlaylistSettings?: any, HlsPlaylistSettings?: any, ManifestName: any, SourceGroup: any}
-export def "channel update" [
+export def "update-channel" [
   channel_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -437,7 +437,7 @@ export def "channel update" [
 # POST /sourceLocation/{SourceLocationName}/liveSource/{LiveSourceName}
 # operationId: CreateLiveSource
 # --HttpPackageConfigurations item shape: {Path: any, SourceGroup: any, Type: any}
-export def "source-location-live-source create" [
+export def "create-live-source" [
   source_location_name: string
   live_source_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -489,7 +489,7 @@ export def "source-location-live-source create" [
 #
 # DELETE /sourceLocation/{SourceLocationName}/liveSource/{LiveSourceName}
 # operationId: DeleteLiveSource
-export def "source-location-live-source delete" [
+export def "delete-live-source" [
   source_location_name: string
   live_source_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -536,7 +536,7 @@ export def "source-location-live-source delete" [
 #
 # GET /sourceLocation/{SourceLocationName}/liveSource/{LiveSourceName}
 # operationId: DescribeLiveSource
-export def "source-location-live-source get" [
+export def "describe-live-source" [
   source_location_name: string
   live_source_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -584,7 +584,7 @@ export def "source-location-live-source get" [
 # PUT /sourceLocation/{SourceLocationName}/liveSource/{LiveSourceName}
 # operationId: UpdateLiveSource
 # --HttpPackageConfigurations item shape: {Path: any, SourceGroup: any, Type: any}
-export def "source-location-live-source update" [
+export def "update-live-source" [
   source_location_name: string
   live_source_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -637,7 +637,7 @@ export def "source-location-live-source update" [
 # operationId: CreatePrefetchSchedule
 # --Consumption shape: {AvailMatchingCriteria?: any, EndTime?: any, StartTime?: any}
 # --Retrieval shape: {DynamicVariables?: any, EndTime?: any, StartTime?: any}
-export def "prefetch-schedule create" [
+export def "create-prefetch-schedule" [
   playback_configuration_name: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -690,7 +690,7 @@ export def "prefetch-schedule create" [
 #
 # DELETE /prefetchSchedule/{PlaybackConfigurationName}/{Name}
 # operationId: DeletePrefetchSchedule
-export def "prefetch-schedule delete" [
+export def "delete-prefetch-schedule" [
   playback_configuration_name: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -737,7 +737,7 @@ export def "prefetch-schedule delete" [
 #
 # GET /prefetchSchedule/{PlaybackConfigurationName}/{Name}
 # operationId: GetPrefetchSchedule
-export def "prefetch-schedule get" [
+export def "get-prefetch-schedule" [
   playback_configuration_name: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -786,7 +786,7 @@ export def "prefetch-schedule get" [
 # operationId: CreateProgram
 # --AdBreaks item shape: {MessageType?: any, OffsetMillis?: any, Slate?: any, SpliceInsertMessage?: any, TimeSignalMessage?: any}
 # --ScheduleConfiguration shape: {ClipRange?: any, Transition?: any}
-export def "channel-program create" [
+export def "create-program" [
   channel_name: string
   program_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -841,7 +841,7 @@ export def "channel-program create" [
 #
 # DELETE /channel/{ChannelName}/program/{ProgramName}
 # operationId: DeleteProgram
-export def "channel-program delete" [
+export def "delete-program" [
   channel_name: string
   program_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -888,7 +888,7 @@ export def "channel-program delete" [
 #
 # GET /channel/{ChannelName}/program/{ProgramName}
 # operationId: DescribeProgram
-export def "channel-program get" [
+export def "describe-program" [
   channel_name: string
   program_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -937,7 +937,7 @@ export def "channel-program get" [
 # operationId: UpdateProgram
 # --AdBreaks item shape: {MessageType?: any, OffsetMillis?: any, Slate?: any, SpliceInsertMessage?: any, TimeSignalMessage?: any}
 # --ScheduleConfiguration shape: {ClipRange?: any, Transition?: any}
-export def "channel-program update" [
+export def "update-program" [
   channel_name: string
   program_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -993,7 +993,7 @@ export def "channel-program update" [
 # --DefaultSegmentDeliveryConfiguration shape: {BaseUrl?: any}
 # --HttpConfiguration shape: {BaseUrl?: any}
 # --SegmentDeliveryConfigurations item shape: {BaseUrl?: any, Name?: any}
-export def "source-location create" [
+export def "create-source-location" [
   source_location_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1046,7 +1046,7 @@ export def "source-location create" [
 #
 # DELETE /sourceLocation/{SourceLocationName}
 # operationId: DeleteSourceLocation
-export def "source-location delete" [
+export def "delete-source-location" [
   source_location_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1091,7 +1091,7 @@ export def "source-location delete" [
 #
 # GET /sourceLocation/{SourceLocationName}
 # operationId: DescribeSourceLocation
-export def "source-location get" [
+export def "describe-source-location" [
   source_location_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1140,7 +1140,7 @@ export def "source-location get" [
 # --DefaultSegmentDeliveryConfiguration shape: {BaseUrl?: any}
 # --HttpConfiguration shape: {BaseUrl?: any}
 # --SegmentDeliveryConfigurations item shape: {BaseUrl?: any, Name?: any}
-export def "source-location update" [
+export def "update-source-location" [
   source_location_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1193,7 +1193,7 @@ export def "source-location update" [
 # POST /sourceLocation/{SourceLocationName}/vodSource/{VodSourceName}
 # operationId: CreateVodSource
 # --HttpPackageConfigurations item shape: {Path: any, SourceGroup: any, Type: any}
-export def "source-location-vod-source create" [
+export def "create-vod-source" [
   source_location_name: string
   vod_source_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1245,7 +1245,7 @@ export def "source-location-vod-source create" [
 #
 # DELETE /sourceLocation/{SourceLocationName}/vodSource/{VodSourceName}
 # operationId: DeleteVodSource
-export def "source-location-vod-source delete" [
+export def "delete-vod-source" [
   source_location_name: string
   vod_source_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1292,7 +1292,7 @@ export def "source-location-vod-source delete" [
 #
 # GET /sourceLocation/{SourceLocationName}/vodSource/{VodSourceName}
 # operationId: DescribeVodSource
-export def "source-location-vod-source get" [
+export def "describe-vod-source" [
   source_location_name: string
   vod_source_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1340,7 +1340,7 @@ export def "source-location-vod-source get" [
 # PUT /sourceLocation/{SourceLocationName}/vodSource/{VodSourceName}
 # operationId: UpdateVodSource
 # --HttpPackageConfigurations item shape: {Path: any, SourceGroup: any, Type: any}
-export def "source-location-vod-source update" [
+export def "update-vod-source" [
   source_location_name: string
   vod_source_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1391,7 +1391,7 @@ export def "source-location-vod-source update" [
 #
 # DELETE /channel/{ChannelName}/policy
 # operationId: DeleteChannelPolicy
-export def "channel-policy delete" [
+export def "delete-channel-policy" [
   channel_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1436,7 +1436,7 @@ export def "channel-policy delete" [
 #
 # GET /channel/{ChannelName}/policy
 # operationId: GetChannelPolicy
-export def "channel-policy get" [
+export def "get-channel-policy" [
   channel_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1481,7 +1481,7 @@ export def "channel-policy get" [
 #
 # PUT /channel/{ChannelName}/policy
 # operationId: PutChannelPolicy
-export def "channel-policy update" [
+export def "put-channel-policy" [
   channel_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1530,7 +1530,7 @@ export def "channel-policy update" [
 #
 # DELETE /playbackConfiguration/{Name}
 # operationId: DeletePlaybackConfiguration
-export def "playback-configuration delete" [
+export def "delete-playback-configuration" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1575,7 +1575,7 @@ export def "playback-configuration delete" [
 #
 # GET /playbackConfiguration/{Name}
 # operationId: GetPlaybackConfiguration
-export def "playback-configuration get" [
+export def "get-playback-configuration" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1620,7 +1620,7 @@ export def "playback-configuration get" [
 #
 # GET /channel/{ChannelName}/schedule
 # operationId: GetChannelSchedule
-export def "channel-schedule get" [
+export def "get-channel-schedule" [
   channel_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1671,7 +1671,7 @@ export def "channel-schedule get" [
 #
 # GET /alerts
 # operationId: ListAlerts
-export def "alerts list" [
+export def "list-alerts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1720,7 +1720,7 @@ export def "alerts list" [
 #
 # GET /channels
 # operationId: ListChannels
-export def "channels list" [
+export def "list-channels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1768,7 +1768,7 @@ export def "channels list" [
 #
 # GET /sourceLocation/{SourceLocationName}/liveSources
 # operationId: ListLiveSources
-export def "source-location-live-sources list" [
+export def "list-live-sources" [
   source_location_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1818,7 +1818,7 @@ export def "source-location-live-sources list" [
 #
 # GET /playbackConfigurations
 # operationId: ListPlaybackConfigurations
-export def "playback-configurations list" [
+export def "list-playback-configurations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1864,7 +1864,7 @@ export def "playback-configurations list" [
 #
 # POST /prefetchSchedule/{PlaybackConfigurationName}
 # operationId: ListPrefetchSchedules
-export def "prefetch-schedule list" [
+export def "list-prefetch-schedules" [
   playback_configuration_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1918,7 +1918,7 @@ export def "prefetch-schedule list" [
 #
 # GET /sourceLocations
 # operationId: ListSourceLocations
-export def "source-locations list" [
+export def "list-source-locations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1966,7 +1966,7 @@ export def "source-locations list" [
 #
 # GET /tags/{ResourceArn}
 # operationId: ListTagsForResource
-export def "tags list-for-resource" [
+export def "list-tags-for-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2011,7 +2011,7 @@ export def "tags list-for-resource" [
 #
 # POST /tags/{ResourceArn}
 # operationId: TagResource
-export def "tags tag-resource" [
+export def "tag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2060,7 +2060,7 @@ export def "tags tag-resource" [
 #
 # GET /sourceLocation/{SourceLocationName}/vodSources
 # operationId: ListVodSources
-export def "source-location-vod-sources list" [
+export def "list-vod-sources" [
   source_location_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2116,7 +2116,7 @@ export def "source-location-vod-sources list" [
 # --DashConfiguration shape: {MpdLocation?: any, OriginManifestType?: any}
 # --LivePreRollConfiguration shape: {AdDecisionServerUrl?: any, MaxDurationSeconds?: any}
 # --ManifestProcessingRules shape: {AdMarkerPassthrough?: any}
-export def "playback-configuration update" [
+export def "put-playback-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2176,7 +2176,7 @@ export def "playback-configuration update" [
 #
 # PUT /channel/{ChannelName}/start
 # operationId: StartChannel
-export def "channel-start start" [
+export def "start-channel" [
   channel_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2221,7 +2221,7 @@ export def "channel-start start" [
 #
 # PUT /channel/{ChannelName}/stop
 # operationId: StopChannel
-export def "channel-stop stop" [
+export def "stop-channel" [
   channel_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2266,7 +2266,7 @@ export def "channel-stop stop" [
 #
 # DELETE /tags/{ResourceArn}
 # operationId: UntagResource
-export def "tags untag-resource" [
+export def "untag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

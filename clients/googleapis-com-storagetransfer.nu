@@ -130,7 +130,7 @@ def status-completer [] { ["DELETED" "DISABLED" "ENABLED" "STATUS_UNSPECIFIED"] 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "google-service-accounts get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "storagetransfer-google-service-accounts-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -154,7 +154,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/googleServiceAccounts/{projectId}
 # operationId: storagetransfer.googleServiceAccounts.get
-export def "google-service-accounts get" [
+export def "storagetransfer-google-service-accounts-get" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -202,7 +202,7 @@ export def "google-service-accounts get" [
 #
 # GET /v1/projects/{projectId}/agentPools
 # operationId: storagetransfer.projects.agentPools.list
-export def "projects-agent-pools list" [
+export def "storagetransfer-projects-agent-pools-list" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -254,7 +254,7 @@ export def "projects-agent-pools list" [
 # POST /v1/projects/{projectId}/agentPools
 # operationId: storagetransfer.projects.agentPools.create
 # --bandwidthLimit shape: {limitMbps?: string}
-export def "projects-agent-pools create" [
+export def "storagetransfer-projects-agent-pools-create" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -309,7 +309,7 @@ export def "projects-agent-pools create" [
 #
 # GET /v1/transferJobs
 # operationId: storagetransfer.transferJobs.list
-export def "transfer-jobs list" [
+export def "storagetransfer-transfer-jobs-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -363,7 +363,7 @@ export def "transfer-jobs list" [
 # --notificationConfig shape: {eventTypes?: list<string>, payloadFormat?: "PAYLOAD_FORMAT_UNSPECIFIED"|"NONE"|"JSON", pubsubTopic?: string}
 # --schedule shape: {endTimeOfDay?: record, repeatInterval?: string, scheduleEndDate?: record, scheduleStartDate?: record, startTimeOfDay?: record}
 # --transferSpec shape: {awsS3CompatibleDataSource?: record, awsS3DataSource?: record, azureBlobStorageDataSource?: record, gcsDataSink?: record, gcsDataSource?: record, gcsIntermediateDataLocation?: record, httpDataSource?: record, objectConditions?: record, posixDataSink?: record, posixDataSource?: record, sinkAgentPoolName?: string, sourceAgentPoolName?: string, transferManifest?: record, transferOptions?: record}
-export def "transfer-jobs create" [
+export def "storagetransfer-transfer-jobs-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -422,7 +422,7 @@ export def "transfer-jobs create" [
 #
 # DELETE /v1/{jobName}
 # operationId: storagetransfer.transferJobs.delete
-export def "transfer-jobs delete" [
+export def "storagetransfer-transfer-jobs-delete" [
   job_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -471,7 +471,7 @@ export def "transfer-jobs delete" [
 #
 # GET /v1/{jobName}
 # operationId: storagetransfer.transferJobs.get
-export def "transfer-jobs get" [
+export def "storagetransfer-transfer-jobs-get" [
   job_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -521,7 +521,7 @@ export def "transfer-jobs get" [
 # PATCH /v1/{jobName}
 # operationId: storagetransfer.transferJobs.patch
 # --transferJob shape: {description?: string, eventStream?: record, latestOperationName?: string, loggingConfig?: record, name?: string, notificationConfig?: record, projectId?: string, schedule?: record, status?: "STATUS_UNSPECIFIED"|"ENABLED"|"DISABLED"|"DELETED", transferSpec?: record}
-export def "transfer-jobs update" [
+export def "storagetransfer-transfer-jobs-patch" [
   job_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -575,7 +575,7 @@ export def "transfer-jobs update" [
 #
 # POST /v1/{jobName}:run
 # operationId: storagetransfer.transferJobs.run
-export def "transfer-jobs create-run" [
+export def "storagetransfer-transfer-jobs-run" [
   job_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -627,7 +627,7 @@ export def "transfer-jobs create-run" [
 #
 # DELETE /v1/{name}
 # operationId: storagetransfer.projects.agentPools.delete
-export def "projects delete" [
+export def "storagetransfer-projects-agent-pools-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -675,7 +675,7 @@ export def "projects delete" [
 #
 # GET /v1/{name}
 # operationId: storagetransfer.transferOperations.list
-export def "transfer-operations list" [
+export def "storagetransfer-transfer-operations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -727,7 +727,7 @@ export def "transfer-operations list" [
 # PATCH /v1/{name}
 # operationId: storagetransfer.projects.agentPools.patch
 # --bandwidthLimit shape: {limitMbps?: string}
-export def "projects update" [
+export def "storagetransfer-projects-agent-pools-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -782,7 +782,7 @@ export def "projects update" [
 #
 # POST /v1/{name}:cancel
 # operationId: storagetransfer.transferOperations.cancel
-export def "transfer-operations cancel" [
+export def "storagetransfer-transfer-operations-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -834,7 +834,7 @@ export def "transfer-operations cancel" [
 #
 # POST /v1/{name}:pause
 # operationId: storagetransfer.transferOperations.pause
-export def "transfer-operations pause" [
+export def "storagetransfer-transfer-operations-pause" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -886,7 +886,7 @@ export def "transfer-operations pause" [
 #
 # POST /v1/{name}:resume
 # operationId: storagetransfer.transferOperations.resume
-export def "transfer-operations create-resume" [
+export def "storagetransfer-transfer-operations-resume" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

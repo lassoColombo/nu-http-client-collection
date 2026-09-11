@@ -113,7 +113,7 @@ def accept-completer-1 [] { ["application/vnd.rev.transcript.v1.0+json" "text/pl
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-account" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -137,7 +137,7 @@ export def commands []: nothing -> table {
 #
 # GET /account
 # operationId: GetAccount
-export def "account get" [
+export def "get-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -171,7 +171,7 @@ export def "account get" [
 #
 # GET /jobs
 # operationId: GetListOfJobs
-export def "jobs get-list" [
+export def "get-list-of-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -208,7 +208,7 @@ export def "jobs get-list" [
 #
 # POST /jobs
 # operationId: SubmitTranscriptionJob
-export def "jobs submit-transcription" [
+export def "submit-transcription-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -246,7 +246,7 @@ export def "jobs submit-transcription" [
 #
 # DELETE /jobs/{id}
 # operationId: DeleteJobById
-export def "jobs delete" [
+export def "delete-job-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -282,7 +282,7 @@ export def "jobs delete" [
 #
 # GET /jobs/{id}
 # operationId: GetJobById
-export def "jobs get" [
+export def "get-job-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -318,7 +318,7 @@ export def "jobs get" [
 #
 # GET /jobs/{id}/captions
 # operationId: GetCaptions
-export def "jobs-captions get" [
+export def "get-captions" [
   id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -360,7 +360,7 @@ export def "jobs-captions get" [
 #
 # GET /jobs/{id}/transcript
 # operationId: GetTranscriptById
-export def "jobs-transcript get" [
+export def "get-transcript-by-id" [
   id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

@@ -122,7 +122,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-network-check-traffic-manager-name-availability check-profiles-relative-dns" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "profiles-check-traffic-manager-relative-dns-name-availability" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # POST /providers/Microsoft.Network/checkTrafficManagerNameAvailability
 # operationId: Profiles_CheckTrafficManagerRelativeDnsNameAvailability
-export def "providers-microsoft-network-check-traffic-manager-name-availability check-profiles-relative-dns" [
+export def "profiles-check-traffic-manager-relative-dns-name-availability" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -187,7 +187,7 @@ export def "providers-microsoft-network-check-traffic-manager-name-availability 
 #
 # GET /providers/Microsoft.Network/trafficManagerGeographicHierarchies/default
 # operationId: GeographicHierarchies_GetDefault
-export def "providers-microsoft-network-traffic-manager-geographic-hierarchies-default get" [
+export def "geographic-hierarchies-get-default" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -223,7 +223,7 @@ export def "providers-microsoft-network-traffic-manager-geographic-hierarchies-d
 #
 # DELETE /subscriptions/{subscriptionId}/providers/Microsoft.Network/trafficManagerUserMetricsKeys/default
 # operationId: TrafficManagerUserMetricsKeys_Delete
-export def "subscriptions-providers-microsoft-network-traffic-manager-user-metrics-keys-default delete" [
+export def "traffic-manager-user-metrics-keys-delete" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -261,7 +261,7 @@ export def "subscriptions-providers-microsoft-network-traffic-manager-user-metri
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/trafficManagerUserMetricsKeys/default
 # operationId: TrafficManagerUserMetricsKeys_Get
-export def "subscriptions-providers-microsoft-network-traffic-manager-user-metrics-keys-default get" [
+export def "traffic-manager-user-metrics-keys-get" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -299,7 +299,7 @@ export def "subscriptions-providers-microsoft-network-traffic-manager-user-metri
 #
 # PUT /subscriptions/{subscriptionId}/providers/Microsoft.Network/trafficManagerUserMetricsKeys/default
 # operationId: TrafficManagerUserMetricsKeys_CreateOrUpdate
-export def "subscriptions-providers-microsoft-network-traffic-manager-user-metrics-keys-default create-or-update" [
+export def "traffic-manager-user-metrics-keys-create-or-update" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -337,7 +337,7 @@ export def "subscriptions-providers-microsoft-network-traffic-manager-user-metri
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/trafficmanagerprofiles
 # operationId: Profiles_ListBySubscription
-export def "subscriptions-providers-microsoft-network-trafficmanagerprofiles list-profiles" [
+export def "profiles-list-by-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -375,7 +375,7 @@ export def "subscriptions-providers-microsoft-network-trafficmanagerprofiles lis
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/trafficmanagerprofiles
 # operationId: Profiles_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-network-trafficmanagerprofiles list-profiles" [
+export def "profiles-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -415,7 +415,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-trafficman
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/trafficmanagerprofiles/{profileName}
 # operationId: Profiles_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-trafficmanagerprofiles delete-profiles" [
+export def "profiles-delete" [
   subscription_id: string
   resource_group_name: string
   profile_name: string
@@ -457,7 +457,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-trafficman
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/trafficmanagerprofiles/{profileName}
 # operationId: Profiles_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-trafficmanagerprofiles get-profiles" [
+export def "profiles-get" [
   subscription_id: string
   resource_group_name: string
   profile_name: string
@@ -500,7 +500,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-trafficman
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/trafficmanagerprofiles/{profileName}
 # operationId: Profiles_Update
 # --properties shape: {dnsConfig?: any, endpoints?: list, maxReturn?: int, monitorConfig?: any, profileStatus?: "Enabled"|"Disabled", trafficRoutingMethod?: "Performance"|"Priority"|"Weighted"|"Geographic"|"MultiValue"|"Subnet", trafficViewEnrollmentStatus?: "Enabled"|"Disabled"}
-export def "subscriptions-resource-groups-providers-microsoft-network-trafficmanagerprofiles update-profiles" [
+export def "profiles-update" [
   subscription_id: string
   resource_group_name: string
   profile_name: string
@@ -549,7 +549,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-trafficman
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/trafficmanagerprofiles/{profileName}
 # operationId: Profiles_CreateOrUpdate
 # --properties shape: {dnsConfig?: any, endpoints?: list, maxReturn?: int, monitorConfig?: any, profileStatus?: "Enabled"|"Disabled", trafficRoutingMethod?: "Performance"|"Priority"|"Weighted"|"Geographic"|"MultiValue"|"Subnet", trafficViewEnrollmentStatus?: "Enabled"|"Disabled"}
-export def "subscriptions-resource-groups-providers-microsoft-network-trafficmanagerprofiles create-profiles-or-update" [
+export def "profiles-create-or-update" [
   subscription_id: string
   resource_group_name: string
   profile_name: string
@@ -597,7 +597,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-trafficman
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/trafficmanagerprofiles/{profileName}/heatMaps/{heatMapType}
 # operationId: HeatMap_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-trafficmanagerprofiles-heat-maps get" [
+export def "heat-map-get" [
   subscription_id: string
   resource_group_name: string
   profile_name: string
@@ -643,7 +643,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-trafficman
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/trafficmanagerprofiles/{profileName}/{endpointType}/{endpointName}
 # operationId: Endpoints_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-trafficmanagerprofiles delete-endpoints" [
+export def "endpoints-delete" [
   subscription_id: string
   resource_group_name: string
   profile_name: string
@@ -689,7 +689,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-trafficman
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/trafficmanagerprofiles/{profileName}/{endpointType}/{endpointName}
 # operationId: Endpoints_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-trafficmanagerprofiles get-endpoints" [
+export def "endpoints-get" [
   subscription_id: string
   resource_group_name: string
   profile_name: string
@@ -736,7 +736,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-trafficman
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/trafficmanagerprofiles/{profileName}/{endpointType}/{endpointName}
 # operationId: Endpoints_Update
 # --properties shape: {customHeaders?: list, endpointLocation?: string, endpointMonitorStatus?: "CheckingEndpoint"|"Online"|"Degraded"|"Disabled"|"Inactive"|"Stopped", endpointStatus?: "Enabled"|"Disabled", geoMapping?: list<string>, minChildEndpoints?: int, priority?: int, subnets?: list, target?: string, targetResourceId?: string, weight?: int}
-export def "subscriptions-resource-groups-providers-microsoft-network-trafficmanagerprofiles update-endpoints" [
+export def "endpoints-update" [
   subscription_id: string
   resource_group_name: string
   profile_name: string
@@ -787,7 +787,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-trafficman
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/trafficmanagerprofiles/{profileName}/{endpointType}/{endpointName}
 # operationId: Endpoints_CreateOrUpdate
 # --properties shape: {customHeaders?: list, endpointLocation?: string, endpointMonitorStatus?: "CheckingEndpoint"|"Online"|"Degraded"|"Disabled"|"Inactive"|"Stopped", endpointStatus?: "Enabled"|"Disabled", geoMapping?: list<string>, minChildEndpoints?: int, priority?: int, subnets?: list, target?: string, targetResourceId?: string, weight?: int}
-export def "subscriptions-resource-groups-providers-microsoft-network-trafficmanagerprofiles create-endpoints-or-update" [
+export def "endpoints-create-or-update" [
   subscription_id: string
   resource_group_name: string
   profile_name: string

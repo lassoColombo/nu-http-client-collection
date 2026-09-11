@@ -104,7 +104,7 @@ def x-amz-target-completer-3 [] { ["AWSMPMeteringService.ResolveCustomer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-batch-meter-usage" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "batch-meter-usage" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -128,7 +128,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: BatchMeterUsage
-export def "api create-batch-meter-usage" [
+export def "batch-meter-usage" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -177,7 +177,7 @@ export def "api create-batch-meter-usage" [
 #
 # POST /
 # operationId: MeterUsage
-export def "api create-meter-usage" [
+export def "meter-usage" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -230,7 +230,7 @@ export def "api create-meter-usage" [
 #
 # POST /
 # operationId: RegisterUsage
-export def "api create-usage" [
+export def "register-usage" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -280,7 +280,7 @@ export def "api create-usage" [
 #
 # POST /
 # operationId: ResolveCustomer
-export def "api create-resolve-customer" [
+export def "resolve-customer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

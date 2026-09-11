@@ -121,7 +121,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "query-api create-simple" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-simple-query" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -145,7 +145,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: postSimpleQuery
-export def "query-api create-simple" [
+export def "post-simple-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -186,7 +186,7 @@ export def "query-api create-simple" [
 # GET /health
 # Docs: https://www.openpolicyagent.org/docs/latest/management/#bundles — Bundles
 # operationId: getHealth
-export def "health get" [
+export def "get-health" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -223,7 +223,7 @@ export def "health get" [
 #
 # POST /v0/data/{path}
 # operationId: getDocumentWithWebHook
-export def "data get-document-with-web-hook" [
+export def "get-document-with-web-hook" [
   path: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -266,7 +266,7 @@ export def "data get-document-with-web-hook" [
 # POST /v1/compile
 # Docs: https://blog.openpolicyagent.org/partial-evaluation-162750eaf422 — Partial evaluation article
 # operationId: postCompile
-export def "compile create" [
+export def "post-compile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -309,7 +309,7 @@ export def "compile create" [
 #
 # GET /v1/config
 # operationId: getConfig
-export def "config get" [
+export def "get-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -345,7 +345,7 @@ export def "config get" [
 #
 # DELETE /v1/data/{path}
 # operationId: deleteDocument
-export def "data delete-document" [
+export def "delete-document" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -381,7 +381,7 @@ export def "data delete-document" [
 #
 # GET /v1/data/{path}
 # operationId: getDocument
-export def "data get-document-by-path" [
+export def "get-document" [
   path: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -424,7 +424,7 @@ export def "data get-document-by-path" [
 #
 # PATCH /v1/data/{path}
 # operationId: patchDocument
-export def "data update-document-by-path" [
+export def "patch-document" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -464,7 +464,7 @@ export def "data update-document-by-path" [
 #
 # POST /v1/data/{path}
 # operationId: getDocumentWithPath
-export def "data get-document-by-path-1" [
+export def "get-document-with-path" [
   path: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -510,7 +510,7 @@ export def "data get-document-by-path-1" [
 #
 # PUT /v1/data/{path}
 # operationId: putDocument
-export def "data update-document-by-path-1" [
+export def "put-document" [
   path: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -553,7 +553,7 @@ export def "data update-document-by-path-1" [
 #
 # GET /v1/policies
 # operationId: getPolicies
-export def "policies get" [
+export def "get-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -589,7 +589,7 @@ export def "policies get" [
 #
 # DELETE /v1/policies/{id}
 # operationId: deletePolicyModule
-export def "policies delete-policy-module" [
+export def "delete-policy-module" [
   id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -627,7 +627,7 @@ export def "policies delete-policy-module" [
 #
 # GET /v1/policies/{id}
 # operationId: getPolicyModule
-export def "policies get-policy-module" [
+export def "get-policy-module" [
   id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -665,7 +665,7 @@ export def "policies get-policy-module" [
 #
 # PUT /v1/policies/{id}
 # operationId: putPolicyModule
-export def "policies update-policy-module" [
+export def "put-policy-module" [
   id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -708,7 +708,7 @@ export def "policies update-policy-module" [
 #
 # GET /v1/query
 # operationId: getQuery
-export def "query get" [
+export def "get-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -747,7 +747,7 @@ export def "query get" [
 #
 # POST /v1/query
 # operationId: postQuery
-export def "query create" [
+export def "post-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

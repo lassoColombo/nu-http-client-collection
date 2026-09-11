@@ -129,7 +129,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta1 delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "networkmanagement-projects-locations-global-operations-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -153,7 +153,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1beta1/{name}
 # operationId: networkmanagement.projects.locations.global.operations.delete
-export def "v1beta1 delete" [
+export def "networkmanagement-projects-locations-global-operations-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -201,7 +201,7 @@ export def "v1beta1 delete" [
 #
 # GET /v1beta1/{name}
 # operationId: networkmanagement.projects.locations.global.operations.get
-export def "v1beta1 get" [
+export def "networkmanagement-projects-locations-global-operations-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -253,7 +253,7 @@ export def "v1beta1 get" [
 # --probingDetails shape: {abortCause?: "PROBING_ABORT_CAUSE_UNSPECIFIED"|"PERMISSION_DENIED"|"NO_SOURCE_LOCATION", destinationEgressLocation?: record, endpointInfo?: record, error?: record, probingLatency?: record, result?: "PROBING_RESULT_UNSPECIFIED"|"REACHABLE"|"UNREACHABLE"|"REACHABILITY_INCONSISTENT"|"UNDETERMINED", sentProbeCount?: int, successfulProbeCount?: int, verifyTime?: string}
 # --reachabilityDetails shape: {error?: record, result?: "RESULT_UNSPECIFIED"|"REACHABLE"|"UNREACHABLE"|"AMBIGUOUS"|"UNDETERMINED", traces?: list, verifyTime?: string}
 # --source shape: {appEngineVersion?: record, cloudFunction?: record, cloudRunRevision?: record, cloudSqlInstance?: string, forwardingRule?: string, gkeMasterCluster?: string, instance?: string, ipAddress?: string, network?: string, networkType?: "NETWORK_TYPE_UNSPECIFIED"|"GCP_NETWORK"|"NON_GCP_NETWORK", port?: int, projectId?: string}
-export def "v1beta1 update" [
+export def "networkmanagement-projects-locations-global-connectivity-tests-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -314,7 +314,7 @@ export def "v1beta1 update" [
 #
 # GET /v1beta1/{name}/locations
 # operationId: networkmanagement.projects.locations.list
-export def "v1beta1-locations list" [
+export def "networkmanagement-projects-locations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -365,7 +365,7 @@ export def "v1beta1-locations list" [
 #
 # GET /v1beta1/{name}/operations
 # operationId: networkmanagement.projects.locations.global.operations.list
-export def "v1beta1-operations list" [
+export def "networkmanagement-projects-locations-global-operations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -416,7 +416,7 @@ export def "v1beta1-operations list" [
 #
 # POST /v1beta1/{name}:cancel
 # operationId: networkmanagement.projects.locations.global.operations.cancel
-export def "v1beta1 cancel" [
+export def "networkmanagement-projects-locations-global-operations-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -468,7 +468,7 @@ export def "v1beta1 cancel" [
 #
 # POST /v1beta1/{name}:rerun
 # operationId: networkmanagement.projects.locations.global.connectivityTests.rerun
-export def "v1beta1 create-rerun" [
+export def "networkmanagement-projects-locations-global-connectivity-tests-rerun" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -520,7 +520,7 @@ export def "v1beta1 create-rerun" [
 #
 # GET /v1beta1/{parent}/connectivityTests
 # operationId: networkmanagement.projects.locations.global.connectivityTests.list
-export def "v1beta1-connectivity-tests list" [
+export def "networkmanagement-projects-locations-global-connectivity-tests-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -576,7 +576,7 @@ export def "v1beta1-connectivity-tests list" [
 # --probingDetails shape: {abortCause?: "PROBING_ABORT_CAUSE_UNSPECIFIED"|"PERMISSION_DENIED"|"NO_SOURCE_LOCATION", destinationEgressLocation?: record, endpointInfo?: record, error?: record, probingLatency?: record, result?: "PROBING_RESULT_UNSPECIFIED"|"REACHABLE"|"UNREACHABLE"|"REACHABILITY_INCONSISTENT"|"UNDETERMINED", sentProbeCount?: int, successfulProbeCount?: int, verifyTime?: string}
 # --reachabilityDetails shape: {error?: record, result?: "RESULT_UNSPECIFIED"|"REACHABLE"|"UNREACHABLE"|"AMBIGUOUS"|"UNDETERMINED", traces?: list, verifyTime?: string}
 # --source shape: {appEngineVersion?: record, cloudFunction?: record, cloudRunRevision?: record, cloudSqlInstance?: string, forwardingRule?: string, gkeMasterCluster?: string, instance?: string, ipAddress?: string, network?: string, networkType?: "NETWORK_TYPE_UNSPECIFIED"|"GCP_NETWORK"|"NON_GCP_NETWORK", port?: int, projectId?: string}
-export def "v1beta1-connectivity-tests create" [
+export def "networkmanagement-projects-locations-global-connectivity-tests-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -637,7 +637,7 @@ export def "v1beta1-connectivity-tests create" [
 #
 # GET /v1beta1/{resource}:getIamPolicy
 # operationId: networkmanagement.projects.locations.global.connectivityTests.getIamPolicy
-export def "v1beta1 get-iam-policy" [
+export def "networkmanagement-projects-locations-global-connectivity-tests-get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -687,7 +687,7 @@ export def "v1beta1 get-iam-policy" [
 # POST /v1beta1/{resource}:setIamPolicy
 # operationId: networkmanagement.projects.locations.global.connectivityTests.setIamPolicy
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
-export def "v1beta1 update-iam-policy" [
+export def "networkmanagement-projects-locations-global-connectivity-tests-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -740,7 +740,7 @@ export def "v1beta1 update-iam-policy" [
 #
 # POST /v1beta1/{resource}:testIamPermissions
 # operationId: networkmanagement.projects.locations.global.connectivityTests.testIamPermissions
-export def "v1beta1 test-iam-permissions" [
+export def "networkmanagement-projects-locations-global-connectivity-tests-test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

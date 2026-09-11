@@ -155,7 +155,7 @@ def upload-type-completer [] { ["avatar" "card_background" "composer" "custom_em
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "admin-backups-json get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-backups" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -179,7 +179,7 @@ export def commands []: nothing -> table {
 #
 # GET /admin/backups.json
 # operationId: getBackups
-export def "admin-backups-json get" [
+export def "get-backups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -213,7 +213,7 @@ export def "admin-backups-json get" [
 #
 # POST /admin/backups.json
 # operationId: createBackup
-export def "admin-backups-json create" [
+export def "create-backup" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -251,7 +251,7 @@ export def "admin-backups-json create" [
 #
 # GET /admin/backups/{filename}
 # operationId: downloadBackup
-export def "admin-backups download" [
+export def "download-backup" [
   filename: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -289,7 +289,7 @@ export def "admin-backups download" [
 #
 # PUT /admin/backups/{filename}
 # operationId: sendDownloadBackupEmail
-export def "admin-backups send-download-email" [
+export def "send-download-backup-email" [
   filename: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -325,7 +325,7 @@ export def "admin-backups send-download-email" [
 #
 # GET /admin/badges.json
 # operationId: adminListBadges
-export def "admin-badges-json list" [
+export def "admin-list-badges" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -359,7 +359,7 @@ export def "admin-badges-json list" [
 #
 # POST /admin/badges.json
 # operationId: createBadge
-export def "admin-badges-json create" [
+export def "create-badge" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -398,7 +398,7 @@ export def "admin-badges-json create" [
 #
 # DELETE /admin/badges/{id}.json
 # operationId: deleteBadge
-export def "admin-badges delete" [
+export def "delete-badge" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -434,7 +434,7 @@ export def "admin-badges delete" [
 #
 # PUT /admin/badges/{id}.json
 # operationId: updateBadge
-export def "admin-badges update" [
+export def "update-badge" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -476,7 +476,7 @@ export def "admin-badges update" [
 # POST /admin/groups.json
 # operationId: createGroup
 # --group shape: {automatic_membership_email_domains?: string, bio_raw?: string, default_notification_level?: int, flair_bg_color?: string, flair_icon?: string, flair_upload_id?: int, full_name?: string, muted_category_ids?: list<int>, name: string, owner_usernames?: string, primary_group?: bool, public_admission?: bool, public_exit?: bool, regular_category_ids?: list<int>, tracking_category_ids?: list<int>, usernames?: string, visibility_level?: int, watching_category_ids?: list<int>, ... (1 more fields)}
-export def "admin-groups-json create" [
+export def "create-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -514,7 +514,7 @@ export def "admin-groups-json create" [
 #
 # DELETE /admin/groups/{id}.json
 # operationId: deleteGroup
-export def "admin-groups delete" [
+export def "delete-group" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -550,7 +550,7 @@ export def "admin-groups delete" [
 #
 # GET /admin/users/list/{flag}.json
 # operationId: adminListUsers
-export def "admin-users-list list" [
+export def "admin-list-users" [
   flag: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -591,7 +591,7 @@ export def "admin-users-list list" [
 #
 # DELETE /admin/users/{id}.json
 # operationId: deleteUser
-export def "admin-users delete" [
+export def "delete-user" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -634,7 +634,7 @@ export def "admin-users delete" [
 #
 # GET /admin/users/{id}.json
 # operationId: adminGetUser
-export def "admin-users get" [
+export def "admin-get-user" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -670,7 +670,7 @@ export def "admin-users get" [
 #
 # PUT /admin/users/{id}/anonymize.json
 # operationId: anonymizeUser
-export def "admin-users-anonymize-json update" [
+export def "anonymize-user" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -706,7 +706,7 @@ export def "admin-users-anonymize-json update" [
 #
 # POST /admin/users/{id}/log_out.json
 # operationId: logOutUser
-export def "admin-users-log-out-json create" [
+export def "log-out-user" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -742,7 +742,7 @@ export def "admin-users-log-out-json create" [
 #
 # PUT /admin/users/{id}/silence.json
 # operationId: silenceUser
-export def "admin-users-silence-json update" [
+export def "silence-user" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -785,7 +785,7 @@ export def "admin-users-silence-json update" [
 #
 # PUT /admin/users/{id}/suspend.json
 # operationId: suspendUser
-export def "admin-users-suspend-json update" [
+export def "suspend-user" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -828,7 +828,7 @@ export def "admin-users-suspend-json update" [
 #
 # GET /c/{id}/show.json
 # operationId: getCategory
-export def "c-show-json get-category" [
+export def "get-category" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -864,7 +864,7 @@ export def "c-show-json get-category" [
 #
 # GET /c/{slug}/{id}.json
 # operationId: listCategoryTopics
-export def "c list-category-topics" [
+export def "list-category-topics" [
   slug: string
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -902,7 +902,7 @@ export def "c list-category-topics" [
 #
 # GET /categories.json
 # operationId: listCategories
-export def "categories-json list" [
+export def "list-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -939,7 +939,7 @@ export def "categories-json list" [
 # POST /categories.json
 # operationId: createCategory
 # --permissions shape: {everyone?: int, staff?: int}
-export def "categories-json create-category" [
+export def "create-category" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -987,7 +987,7 @@ export def "categories-json create-category" [
 # PUT /categories/{id}.json
 # operationId: updateCategory
 # --permissions shape: {everyone?: int, staff?: int}
-export def "categories update-category" [
+export def "update-category" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1036,7 +1036,7 @@ export def "categories update-category" [
 #
 # GET /directory_items.json
 # operationId: listUsersPublic
-export def "directory-items-json list-users-public" [
+export def "list-users-public" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1075,7 +1075,7 @@ export def "directory-items-json list-users-public" [
 #
 # GET /groups.json
 # operationId: listGroups
-export def "groups-json list" [
+export def "list-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1109,7 +1109,7 @@ export def "groups-json list" [
 #
 # GET /groups/{id}.json
 # operationId: getGroup
-export def "groups get" [
+export def "get-group" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1146,7 +1146,7 @@ export def "groups get" [
 # PUT /groups/{id}.json
 # operationId: updateGroup
 # --group shape: {automatic_membership_email_domains?: string, bio_raw?: string, default_notification_level?: int, flair_bg_color?: string, flair_icon?: string, flair_upload_id?: int, full_name?: string, muted_category_ids?: list<int>, name: string, owner_usernames?: string, primary_group?: bool, public_admission?: bool, public_exit?: bool, regular_category_ids?: list<int>, tracking_category_ids?: list<int>, usernames?: string, visibility_level?: int, watching_category_ids?: list<int>, ... (1 more fields)}
-export def "groups update" [
+export def "update-group" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1186,7 +1186,7 @@ export def "groups update" [
 #
 # DELETE /groups/{id}/members.json
 # operationId: removeGroupMembers
-export def "groups-members-json delete" [
+export def "remove-group-members" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1226,7 +1226,7 @@ export def "groups-members-json delete" [
 #
 # GET /groups/{id}/members.json
 # operationId: listGroupMembers
-export def "groups-members-json list" [
+export def "list-group-members" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1262,7 +1262,7 @@ export def "groups-members-json list" [
 #
 # PUT /groups/{id}/members.json
 # operationId: addGroupMembers
-export def "groups-members-json create" [
+export def "add-group-members" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1302,7 +1302,7 @@ export def "groups-members-json create" [
 #
 # POST /invites.json
 # operationId: createInvite
-export def "invites-json create" [
+export def "create-invite" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1351,7 +1351,7 @@ export def "invites-json create" [
 #
 # GET /latest.json
 # operationId: listLatestTopics
-export def "latest-json list-topics" [
+export def "list-latest-topics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1392,7 +1392,7 @@ export def "latest-json list-topics" [
 #
 # GET /notifications.json
 # operationId: getNotifications
-export def "notifications-json get" [
+export def "get-notifications" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1426,7 +1426,7 @@ export def "notifications-json get" [
 #
 # PUT /notifications/mark-read.json
 # operationId: markNotificationsAsRead
-export def "notifications-mark-read-json get" [
+export def "mark-notifications-as-read" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1464,7 +1464,7 @@ export def "notifications-mark-read-json get" [
 #
 # POST /post_actions.json
 # operationId: performPostAction
-export def "post-actions-json create-perform" [
+export def "perform-post-action" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1508,7 +1508,7 @@ export def "post-actions-json create-perform" [
 #
 # GET /posts.json
 # operationId: listPosts
-export def "posts-json list" [
+export def "list-posts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1549,7 +1549,7 @@ export def "posts-json list" [
 # POST /posts.json
 # operationId: createTopicPostPM
 @deprecated --flag target-usernames
-export def "posts-json create-topic-pm" [
+export def "create-topic-post-pm" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1596,7 +1596,7 @@ export def "posts-json create-topic-pm" [
 #
 # DELETE /posts/{id}.json
 # operationId: deletePost
-export def "posts delete" [
+export def "delete-post" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1636,7 +1636,7 @@ export def "posts delete" [
 #
 # GET /posts/{id}.json
 # operationId: getPost
-export def "posts get" [
+export def "get-post" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1677,7 +1677,7 @@ export def "posts get" [
 # PUT /posts/{id}.json
 # operationId: updatePost
 # --post shape: {edit_reason?: string, raw: string}
-export def "posts update" [
+export def "update-post" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1721,7 +1721,7 @@ export def "posts update" [
 #
 # PUT /posts/{id}/locked.json
 # operationId: lockPost
-export def "posts-locked-json lock" [
+export def "lock-post" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1765,7 +1765,7 @@ export def "posts-locked-json lock" [
 #
 # GET /posts/{id}/replies.json
 # operationId: postReplies
-export def "posts-replies-json create" [
+export def "post-replies" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1801,7 +1801,7 @@ export def "posts-replies-json create" [
 #
 # GET /search.json
 # operationId: search
-export def "search-json list" [
+export def "search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1838,7 +1838,7 @@ export def "search-json list" [
 #
 # POST /session/forgot_password.json
 # operationId: sendPasswordResetEmail
-export def "session-forgot-password-json send-reset-email" [
+export def "send-password-reset-email" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1876,7 +1876,7 @@ export def "session-forgot-password-json send-reset-email" [
 #
 # GET /site.json
 # operationId: getSite
-export def "site-json get" [
+export def "get-site" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1911,7 +1911,7 @@ export def "site-json get" [
 # PUT /t/-/{id}.json
 # operationId: updateTopic
 # --topic shape: {category_id?: int, title?: string}
-export def "t update-topic" [
+export def "update-topic" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1955,7 +1955,7 @@ export def "t update-topic" [
 #
 # GET /t/external_id/{external_id}.json
 # operationId: getTopicByExternalId
-export def "t-external-id get-topic" [
+export def "get-topic-by-external-id" [
   external_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1991,7 +1991,7 @@ export def "t-external-id get-topic" [
 #
 # DELETE /t/{id}.json
 # operationId: removeTopic
-export def "t delete-topic" [
+export def "remove-topic" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2031,7 +2031,7 @@ export def "t delete-topic" [
 #
 # GET /t/{id}.json
 # operationId: getTopic
-export def "t get-topic" [
+export def "get-topic" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2071,7 +2071,7 @@ export def "t get-topic" [
 #
 # PUT /t/{id}/bookmark.json
 # operationId: bookmarkTopic
-export def "t-bookmark-json update-topic" [
+export def "bookmark-topic" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2111,7 +2111,7 @@ export def "t-bookmark-json update-topic" [
 #
 # PUT /t/{id}/change-timestamp.json
 # operationId: updateTopicTimestamp
-export def "t-change-timestamp-json update-topic" [
+export def "update-topic-timestamp" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2155,7 +2155,7 @@ export def "t-change-timestamp-json update-topic" [
 #
 # POST /t/{id}/invite.json
 # operationId: inviteToTopic
-export def "t-invite-json create-to-topic" [
+export def "invite-to-topic" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2200,7 +2200,7 @@ export def "t-invite-json create-to-topic" [
 #
 # POST /t/{id}/notifications.json
 # operationId: setNotificationLevel
-export def "t-notifications-json update-level" [
+export def "set-notification-level" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2244,7 +2244,7 @@ export def "t-notifications-json update-level" [
 #
 # GET /t/{id}/posts.json
 # operationId: getSpecificPostsFromTopic
-export def "t-posts-json get-specific-from-topic" [
+export def "get-specific-posts-from-topic" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2284,7 +2284,7 @@ export def "t-posts-json get-specific-from-topic" [
 #
 # PUT /t/{id}/status.json
 # operationId: updateTopicStatus
-export def "t-status-json update-topic" [
+export def "update-topic-status" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2330,7 +2330,7 @@ export def "t-status-json update-topic" [
 #
 # POST /t/{id}/timer.json
 # operationId: createTopicTimer
-export def "t-timer-json create-topic" [
+export def "create-topic-timer" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2377,7 +2377,7 @@ export def "t-timer-json create-topic" [
 #
 # GET /tag/{name}.json
 # operationId: getTag
-export def "tag get" [
+export def "get-tag" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2413,7 +2413,7 @@ export def "tag get" [
 #
 # GET /tag_groups.json
 # operationId: listTagGroups
-export def "tag-groups-json list" [
+export def "list-tag-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2447,7 +2447,7 @@ export def "tag-groups-json list" [
 #
 # POST /tag_groups.json
 # operationId: createTagGroup
-export def "tag-groups-json create" [
+export def "create-tag-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2485,7 +2485,7 @@ export def "tag-groups-json create" [
 #
 # GET /tag_groups/{id}.json
 # operationId: getTagGroup
-export def "tag-groups get" [
+export def "get-tag-group" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2521,7 +2521,7 @@ export def "tag-groups get" [
 #
 # PUT /tag_groups/{id}.json
 # operationId: updateTagGroup
-export def "tag-groups update" [
+export def "update-tag-group" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2561,7 +2561,7 @@ export def "tag-groups update" [
 #
 # GET /tags.json
 # operationId: listTags
-export def "tags-json list" [
+export def "list-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2595,7 +2595,7 @@ export def "tags-json list" [
 #
 # GET /top.json
 # operationId: listTopTopics
-export def "top-json list-topics" [
+export def "list-top-topics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2635,7 +2635,7 @@ export def "top-json list-topics" [
 #
 # GET /topics/private-messages-sent/{username}.json
 # operationId: getUserSentPrivateMessages
-export def "topics-private-messages-sent get-user" [
+export def "get-user-sent-private-messages" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2671,7 +2671,7 @@ export def "topics-private-messages-sent get-user" [
 #
 # GET /topics/private-messages/{username}.json
 # operationId: listUserPrivateMessages
-export def "topics-private-messages list-user" [
+export def "list-user-private-messages" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2707,7 +2707,7 @@ export def "topics-private-messages list-user" [
 #
 # GET /u/by-external/{external_id}.json
 # operationId: getUserExternalId
-export def "u-by-external get-user" [
+export def "get-user-external-id" [
   external_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2747,7 +2747,7 @@ export def "u-by-external get-user" [
 #
 # GET /u/by-external/{provider}/{external_id}.json
 # operationId: getUserIdentiyProviderExternalId
-export def "u-by-external get-user-identiy" [
+export def "get-user-identiy-provider-external-id" [
   provider: string
   external_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2789,7 +2789,7 @@ export def "u-by-external get-user-identiy" [
 #
 # GET /u/{username}.json
 # operationId: getUser
-export def "u get-user" [
+export def "get-user" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2829,7 +2829,7 @@ export def "u get-user" [
 #
 # PUT /u/{username}.json
 # operationId: updateUser
-export def "u update-user" [
+export def "update-user" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2876,7 +2876,7 @@ export def "u update-user" [
 #
 # GET /u/{username}/emails.json
 # operationId: getUserEmails
-export def "u-emails-json get-user" [
+export def "get-user-emails" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2912,7 +2912,7 @@ export def "u-emails-json get-user" [
 #
 # PUT /u/{username}/preferences/avatar/pick.json
 # operationId: updateAvatar
-export def "u-preferences-avatar-pick-json update" [
+export def "update-avatar" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2953,7 +2953,7 @@ export def "u-preferences-avatar-pick-json update" [
 #
 # PUT /u/{username}/preferences/email.json
 # operationId: updateEmail
-export def "u-preferences-email-json update" [
+export def "update-email" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2993,7 +2993,7 @@ export def "u-preferences-email-json update" [
 #
 # PUT /u/{username}/preferences/username.json
 # operationId: updateUsername
-export def "u-preferences-username-json update" [
+export def "update-username" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3033,7 +3033,7 @@ export def "u-preferences-username-json update" [
 #
 # POST /uploads.json
 # operationId: createUpload
-export def "uploads-json create" [
+export def "create-upload" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3076,7 +3076,7 @@ export def "uploads-json create" [
 #
 # POST /uploads/abort-multipart.json
 # operationId: abortMultipart
-export def "uploads-abort-multipart-json abort" [
+export def "abort-multipart" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3114,7 +3114,7 @@ export def "uploads-abort-multipart-json abort" [
 #
 # POST /uploads/batch-presign-multipart-parts.json
 # operationId: batchPresignMultipartParts
-export def "uploads-batch-presign-multipart-parts-json create" [
+export def "batch-presign-multipart-parts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3153,7 +3153,7 @@ export def "uploads-batch-presign-multipart-parts-json create" [
 #
 # POST /uploads/complete-external-upload.json
 # operationId: completeExternalUpload
-export def "uploads-complete-external-upload-json complete" [
+export def "complete-external-upload" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3194,7 +3194,7 @@ export def "uploads-complete-external-upload-json complete" [
 #
 # POST /uploads/complete-multipart.json
 # operationId: completeMultipart
-export def "uploads-complete-multipart-json complete" [
+export def "complete-multipart" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3234,7 +3234,7 @@ export def "uploads-complete-multipart-json complete" [
 # POST /uploads/create-multipart.json
 # operationId: createMultipartUpload
 # --metadata shape: {sha1-checksum?: string}
-export def "uploads-create-multipart-json create" [
+export def "create-multipart-upload" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3276,7 +3276,7 @@ export def "uploads-create-multipart-json create" [
 # POST /uploads/generate-presigned-put.json
 # operationId: generatePresignedPut
 # --metadata shape: {sha1-checksum?: string}
-export def "uploads-generate-presigned-put-json generate" [
+export def "generate-presigned-put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3317,7 +3317,7 @@ export def "uploads-generate-presigned-put-json generate" [
 #
 # GET /user-badges/{username}.json
 # operationId: listUserBadges
-export def "user-badges list" [
+export def "list-user-badges" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3353,7 +3353,7 @@ export def "user-badges list" [
 #
 # GET /user_actions.json
 # operationId: listUserActions
-export def "user-actions-json list" [
+export def "list-user-actions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3391,7 +3391,7 @@ export def "user-actions-json list" [
 #
 # POST /user_avatar/{username}/refresh_gravatar.json
 # operationId: refreshGravatar
-export def "user-avatar-refresh-gravatar-json refresh" [
+export def "refresh-gravatar" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3427,7 +3427,7 @@ export def "user-avatar-refresh-gravatar-json refresh" [
 #
 # POST /users.json
 # operationId: createUser
-export def "users-json create" [
+export def "create-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3476,7 +3476,7 @@ export def "users-json create" [
 #
 # PUT /users/password-reset/{token}.json
 # operationId: changePassword
-export def "users-password-reset update-change" [
+export def "change-password" [
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

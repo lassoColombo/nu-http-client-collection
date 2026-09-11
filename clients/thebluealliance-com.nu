@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["x-tba-auth-key"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "district-events get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-district-events" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -122,7 +122,7 @@ export def commands []: nothing -> table {
 #
 # GET /district/{district_key}/events
 # operationId: getDistrictEvents
-export def "district-events get" [
+export def "get-district-events" [
   district_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -161,7 +161,7 @@ export def "district-events get" [
 #
 # GET /district/{district_key}/events/keys
 # operationId: getDistrictEventsKeys
-export def "district-events-keys get" [
+export def "get-district-events-keys" [
   district_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -200,7 +200,7 @@ export def "district-events-keys get" [
 #
 # GET /district/{district_key}/events/simple
 # operationId: getDistrictEventsSimple
-export def "district-events-simple get" [
+export def "get-district-events-simple" [
   district_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -239,7 +239,7 @@ export def "district-events-simple get" [
 #
 # GET /district/{district_key}/rankings
 # operationId: getDistrictRankings
-export def "district-rankings get" [
+export def "get-district-rankings" [
   district_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -278,7 +278,7 @@ export def "district-rankings get" [
 #
 # GET /district/{district_key}/teams
 # operationId: getDistrictTeams
-export def "district-teams get" [
+export def "get-district-teams" [
   district_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -317,7 +317,7 @@ export def "district-teams get" [
 #
 # GET /district/{district_key}/teams/keys
 # operationId: getDistrictTeamsKeys
-export def "district-teams-keys get" [
+export def "get-district-teams-keys" [
   district_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -356,7 +356,7 @@ export def "district-teams-keys get" [
 #
 # GET /district/{district_key}/teams/simple
 # operationId: getDistrictTeamsSimple
-export def "district-teams-simple get" [
+export def "get-district-teams-simple" [
   district_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -395,7 +395,7 @@ export def "district-teams-simple get" [
 #
 # GET /districts/{year}
 # operationId: getDistrictsByYear
-export def "districts get" [
+export def "get-districts-by-year" [
   year: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -434,7 +434,7 @@ export def "districts get" [
 #
 # GET /event/{event_key}
 # operationId: getEvent
-export def "event get" [
+export def "get-event" [
   event_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -473,7 +473,7 @@ export def "event get" [
 #
 # GET /event/{event_key}/alliances
 # operationId: getEventAlliances
-export def "event-alliances get" [
+export def "get-event-alliances" [
   event_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -512,7 +512,7 @@ export def "event-alliances get" [
 #
 # GET /event/{event_key}/awards
 # operationId: getEventAwards
-export def "event-awards get" [
+export def "get-event-awards" [
   event_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -551,7 +551,7 @@ export def "event-awards get" [
 #
 # GET /event/{event_key}/district_points
 # operationId: getEventDistrictPoints
-export def "event-district-points get" [
+export def "get-event-district-points" [
   event_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -590,7 +590,7 @@ export def "event-district-points get" [
 #
 # GET /event/{event_key}/insights
 # operationId: getEventInsights
-export def "event-insights get" [
+export def "get-event-insights" [
   event_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -629,7 +629,7 @@ export def "event-insights get" [
 #
 # GET /event/{event_key}/matches
 # operationId: getEventMatches
-export def "event-matches get" [
+export def "get-event-matches" [
   event_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -668,7 +668,7 @@ export def "event-matches get" [
 #
 # GET /event/{event_key}/matches/keys
 # operationId: getEventMatchesKeys
-export def "event-matches-keys get" [
+export def "get-event-matches-keys" [
   event_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -707,7 +707,7 @@ export def "event-matches-keys get" [
 #
 # GET /event/{event_key}/matches/simple
 # operationId: getEventMatchesSimple
-export def "event-matches-simple get" [
+export def "get-event-matches-simple" [
   event_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -746,7 +746,7 @@ export def "event-matches-simple get" [
 #
 # GET /event/{event_key}/matches/timeseries
 # operationId: getEventMatchTimeseries
-export def "event-matches-timeseries get-match" [
+export def "get-event-match-timeseries" [
   event_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -785,7 +785,7 @@ export def "event-matches-timeseries get-match" [
 #
 # GET /event/{event_key}/oprs
 # operationId: getEventOPRs
-export def "event-oprs get-op-rs" [
+export def "get-event-op-rs" [
   event_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -824,7 +824,7 @@ export def "event-oprs get-op-rs" [
 #
 # GET /event/{event_key}/predictions
 # operationId: getEventPredictions
-export def "event-predictions get" [
+export def "get-event-predictions" [
   event_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -863,7 +863,7 @@ export def "event-predictions get" [
 #
 # GET /event/{event_key}/rankings
 # operationId: getEventRankings
-export def "event-rankings get" [
+export def "get-event-rankings" [
   event_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -902,7 +902,7 @@ export def "event-rankings get" [
 #
 # GET /event/{event_key}/simple
 # operationId: getEventSimple
-export def "event-simple get" [
+export def "get-event-simple" [
   event_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -941,7 +941,7 @@ export def "event-simple get" [
 #
 # GET /event/{event_key}/teams
 # operationId: getEventTeams
-export def "event-teams get" [
+export def "get-event-teams" [
   event_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -980,7 +980,7 @@ export def "event-teams get" [
 #
 # GET /event/{event_key}/teams/keys
 # operationId: getEventTeamsKeys
-export def "event-teams-keys get" [
+export def "get-event-teams-keys" [
   event_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1019,7 +1019,7 @@ export def "event-teams-keys get" [
 #
 # GET /event/{event_key}/teams/simple
 # operationId: getEventTeamsSimple
-export def "event-teams-simple get" [
+export def "get-event-teams-simple" [
   event_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1058,7 +1058,7 @@ export def "event-teams-simple get" [
 #
 # GET /event/{event_key}/teams/statuses
 # operationId: getEventTeamsStatuses
-export def "event-teams-statuses get" [
+export def "get-event-teams-statuses" [
   event_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1097,7 +1097,7 @@ export def "event-teams-statuses get" [
 #
 # GET /events/{year}
 # operationId: getEventsByYear
-export def "events get" [
+export def "get-events-by-year" [
   year: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1136,7 +1136,7 @@ export def "events get" [
 #
 # GET /events/{year}/keys
 # operationId: getEventsByYearKeys
-export def "events-keys get" [
+export def "get-events-by-year-keys" [
   year: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1175,7 +1175,7 @@ export def "events-keys get" [
 #
 # GET /events/{year}/simple
 # operationId: getEventsByYearSimple
-export def "events-simple get" [
+export def "get-events-by-year-simple" [
   year: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1214,7 +1214,7 @@ export def "events-simple get" [
 #
 # GET /match/{match_key}
 # operationId: getMatch
-export def "match get" [
+export def "get-match" [
   match_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1253,7 +1253,7 @@ export def "match get" [
 #
 # GET /match/{match_key}/simple
 # operationId: getMatchSimple
-export def "match-simple get" [
+export def "get-match-simple" [
   match_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1292,7 +1292,7 @@ export def "match-simple get" [
 #
 # GET /match/{match_key}/timeseries
 # operationId: getMatchTimeseries
-export def "match-timeseries get" [
+export def "get-match-timeseries" [
   match_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1331,7 +1331,7 @@ export def "match-timeseries get" [
 #
 # GET /match/{match_key}/zebra_motionworks
 # operationId: getMatchZebra
-export def "match-zebra-motionworks get" [
+export def "get-match-zebra" [
   match_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1370,7 +1370,7 @@ export def "match-zebra-motionworks get" [
 #
 # GET /status
 # operationId: getStatus
-export def "status get" [
+export def "get-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1407,7 +1407,7 @@ export def "status get" [
 #
 # GET /team/{team_key}
 # operationId: getTeam
-export def "team get" [
+export def "get-team" [
   team_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1446,7 +1446,7 @@ export def "team get" [
 #
 # GET /team/{team_key}/awards
 # operationId: getTeamAwards
-export def "team-awards list" [
+export def "get-team-awards" [
   team_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1485,7 +1485,7 @@ export def "team-awards list" [
 #
 # GET /team/{team_key}/awards/{year}
 # operationId: getTeamAwardsByYear
-export def "team-awards get" [
+export def "get-team-awards-by-year" [
   team_key: string
   year: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1526,7 +1526,7 @@ export def "team-awards get" [
 #
 # GET /team/{team_key}/districts
 # operationId: getTeamDistricts
-export def "team-districts get" [
+export def "get-team-districts" [
   team_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1565,7 +1565,7 @@ export def "team-districts get" [
 #
 # GET /team/{team_key}/event/{event_key}/awards
 # operationId: getTeamEventAwards
-export def "team-event-awards get" [
+export def "get-team-event-awards" [
   team_key: string
   event_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1606,7 +1606,7 @@ export def "team-event-awards get" [
 #
 # GET /team/{team_key}/event/{event_key}/matches
 # operationId: getTeamEventMatches
-export def "team-event-matches get" [
+export def "get-team-event-matches" [
   team_key: string
   event_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1647,7 +1647,7 @@ export def "team-event-matches get" [
 #
 # GET /team/{team_key}/event/{event_key}/matches/keys
 # operationId: getTeamEventMatchesKeys
-export def "team-event-matches-keys get" [
+export def "get-team-event-matches-keys" [
   team_key: string
   event_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1688,7 +1688,7 @@ export def "team-event-matches-keys get" [
 #
 # GET /team/{team_key}/event/{event_key}/matches/simple
 # operationId: getTeamEventMatchesSimple
-export def "team-event-matches-simple get" [
+export def "get-team-event-matches-simple" [
   team_key: string
   event_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1729,7 +1729,7 @@ export def "team-event-matches-simple get" [
 #
 # GET /team/{team_key}/event/{event_key}/status
 # operationId: getTeamEventStatus
-export def "team-event-status get" [
+export def "get-team-event-status" [
   team_key: string
   event_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1770,7 +1770,7 @@ export def "team-event-status get" [
 #
 # GET /team/{team_key}/events
 # operationId: getTeamEvents
-export def "team-events list" [
+export def "get-team-events" [
   team_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1809,7 +1809,7 @@ export def "team-events list" [
 #
 # GET /team/{team_key}/events/keys
 # operationId: getTeamEventsKeys
-export def "team-events-keys list" [
+export def "get-team-events-keys" [
   team_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1848,7 +1848,7 @@ export def "team-events-keys list" [
 #
 # GET /team/{team_key}/events/simple
 # operationId: getTeamEventsSimple
-export def "team-events-simple list" [
+export def "get-team-events-simple" [
   team_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1887,7 +1887,7 @@ export def "team-events-simple list" [
 #
 # GET /team/{team_key}/events/{year}
 # operationId: getTeamEventsByYear
-export def "team-events get" [
+export def "get-team-events-by-year" [
   team_key: string
   year: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1928,7 +1928,7 @@ export def "team-events get" [
 #
 # GET /team/{team_key}/events/{year}/keys
 # operationId: getTeamEventsByYearKeys
-export def "team-events-keys get" [
+export def "get-team-events-by-year-keys" [
   team_key: string
   year: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1969,7 +1969,7 @@ export def "team-events-keys get" [
 #
 # GET /team/{team_key}/events/{year}/simple
 # operationId: getTeamEventsByYearSimple
-export def "team-events-simple get" [
+export def "get-team-events-by-year-simple" [
   team_key: string
   year: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2010,7 +2010,7 @@ export def "team-events-simple get" [
 #
 # GET /team/{team_key}/events/{year}/statuses
 # operationId: getTeamEventsStatusesByYear
-export def "team-events-statuses get" [
+export def "get-team-events-statuses-by-year" [
   team_key: string
   year: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2051,7 +2051,7 @@ export def "team-events-statuses get" [
 #
 # GET /team/{team_key}/matches/{year}
 # operationId: getTeamMatchesByYear
-export def "team-matches get" [
+export def "get-team-matches-by-year" [
   team_key: string
   year: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2092,7 +2092,7 @@ export def "team-matches get" [
 #
 # GET /team/{team_key}/matches/{year}/keys
 # operationId: getTeamMatchesByYearKeys
-export def "team-matches-keys get" [
+export def "get-team-matches-by-year-keys" [
   team_key: string
   year: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2133,7 +2133,7 @@ export def "team-matches-keys get" [
 #
 # GET /team/{team_key}/matches/{year}/simple
 # operationId: getTeamMatchesByYearSimple
-export def "team-matches-simple get" [
+export def "get-team-matches-by-year-simple" [
   team_key: string
   year: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2174,7 +2174,7 @@ export def "team-matches-simple get" [
 #
 # GET /team/{team_key}/media/tag/{media_tag}
 # operationId: getTeamMediaByTag
-export def "team-media-tag list" [
+export def "get-team-media-by-tag" [
   team_key: string
   media_tag: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2215,7 +2215,7 @@ export def "team-media-tag list" [
 #
 # GET /team/{team_key}/media/tag/{media_tag}/{year}
 # operationId: getTeamMediaByTagYear
-export def "team-media-tag get" [
+export def "get-team-media-by-tag-year" [
   team_key: string
   media_tag: string
   year: int
@@ -2258,7 +2258,7 @@ export def "team-media-tag get" [
 #
 # GET /team/{team_key}/media/{year}
 # operationId: getTeamMediaByYear
-export def "team-media get" [
+export def "get-team-media-by-year" [
   team_key: string
   year: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2299,7 +2299,7 @@ export def "team-media get" [
 #
 # GET /team/{team_key}/robots
 # operationId: getTeamRobots
-export def "team-robots get" [
+export def "get-team-robots" [
   team_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2338,7 +2338,7 @@ export def "team-robots get" [
 #
 # GET /team/{team_key}/simple
 # operationId: getTeamSimple
-export def "team-simple get" [
+export def "get-team-simple" [
   team_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2377,7 +2377,7 @@ export def "team-simple get" [
 #
 # GET /team/{team_key}/social_media
 # operationId: getTeamSocialMedia
-export def "team-social-media get" [
+export def "get-team-social-media" [
   team_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2416,7 +2416,7 @@ export def "team-social-media get" [
 #
 # GET /team/{team_key}/years_participated
 # operationId: getTeamYearsParticipated
-export def "team-years-participated get" [
+export def "get-team-years-participated" [
   team_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2455,7 +2455,7 @@ export def "team-years-participated get" [
 #
 # GET /teams/{page_num}
 # operationId: getTeams
-export def "teams list" [
+export def "get-teams" [
   page_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2494,7 +2494,7 @@ export def "teams list" [
 #
 # GET /teams/{page_num}/keys
 # operationId: getTeamsKeys
-export def "teams-keys list" [
+export def "get-teams-keys" [
   page_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2533,7 +2533,7 @@ export def "teams-keys list" [
 #
 # GET /teams/{page_num}/simple
 # operationId: getTeamsSimple
-export def "teams-simple list" [
+export def "get-teams-simple" [
   page_num: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2572,7 +2572,7 @@ export def "teams-simple list" [
 #
 # GET /teams/{year}/{page_num}
 # operationId: getTeamsByYear
-export def "teams get" [
+export def "get-teams-by-year" [
   year: int
   page_num: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2613,7 +2613,7 @@ export def "teams get" [
 #
 # GET /teams/{year}/{page_num}/keys
 # operationId: getTeamsByYearKeys
-export def "teams-keys get" [
+export def "get-teams-by-year-keys" [
   year: int
   page_num: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2654,7 +2654,7 @@ export def "teams-keys get" [
 #
 # GET /teams/{year}/{page_num}/simple
 # operationId: getTeamsByYearSimple
-export def "teams-simple get" [
+export def "get-teams-by-year-simple" [
   year: int
   page_num: int
   --base-url(-b): string@base-url-completer # API base URL

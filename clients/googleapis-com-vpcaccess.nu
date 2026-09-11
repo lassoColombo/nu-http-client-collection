@@ -129,7 +129,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "vpcaccess-projects-locations-connectors-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -153,7 +153,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1/{name}
 # operationId: vpcaccess.projects.locations.connectors.delete
-export def "projects delete" [
+export def "vpcaccess-projects-locations-connectors-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -201,7 +201,7 @@ export def "projects delete" [
 #
 # GET /v1/{name}
 # operationId: vpcaccess.projects.locations.operations.get
-export def "projects get" [
+export def "vpcaccess-projects-locations-operations-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -250,7 +250,7 @@ export def "projects get" [
 # PATCH /v1/{name}
 # operationId: vpcaccess.projects.locations.connectors.patch
 # --subnet shape: {name?: string, projectId?: string}
-export def "projects update" [
+export def "vpcaccess-projects-locations-connectors-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -311,7 +311,7 @@ export def "projects update" [
 #
 # GET /v1/{name}/locations
 # operationId: vpcaccess.projects.locations.list
-export def "locations list" [
+export def "vpcaccess-projects-locations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -362,7 +362,7 @@ export def "locations list" [
 #
 # GET /v1/{name}/operations
 # operationId: vpcaccess.projects.locations.operations.list
-export def "operations list" [
+export def "vpcaccess-projects-locations-operations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -413,7 +413,7 @@ export def "operations list" [
 #
 # GET /v1/{parent}/connectors
 # operationId: vpcaccess.projects.locations.connectors.list
-export def "connectors list" [
+export def "vpcaccess-projects-locations-connectors-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -464,7 +464,7 @@ export def "connectors list" [
 # POST /v1/{parent}/connectors
 # operationId: vpcaccess.projects.locations.connectors.create
 # --subnet shape: {name?: string, projectId?: string}
-export def "connectors create" [
+export def "vpcaccess-projects-locations-connectors-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

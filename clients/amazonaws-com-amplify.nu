@@ -114,7 +114,7 @@ def job-type-completer [] { ["MANUAL" "RELEASE" "RETRY" "WEB_HOOK"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "apps create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-app" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 # operationId: CreateApp
 # --customRules item shape: {source: any, target: any, status?: any, condition?: any}
 # --autoBranchCreationConfig shape: {stage?: any, framework?: any, enableAutoBuild?: any, environmentVariables?: any, basicAuthCredentials?: any, enableBasicAuth?: any, enablePerformanceMode?: any, buildSpec?: any, enablePullRequestPreview?: any, pullRequestEnvironmentName?: any}
-export def "apps create" [
+export def "create-app" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -205,7 +205,7 @@ export def "apps create" [
 #
 # GET /apps
 # operationId: ListApps
-export def "apps list" [
+export def "list-apps" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -251,7 +251,7 @@ export def "apps list" [
 #
 # POST /apps/{appId}/backendenvironments
 # operationId: CreateBackendEnvironment
-export def "apps-backendenvironments create-backend-environment" [
+export def "create-backend-environment" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -302,7 +302,7 @@ export def "apps-backendenvironments create-backend-environment" [
 #
 # GET /apps/{appId}/backendenvironments
 # operationId: ListBackendEnvironments
-export def "apps-backendenvironments list-backend-environments" [
+export def "list-backend-environments" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -351,7 +351,7 @@ export def "apps-backendenvironments list-backend-environments" [
 #
 # POST /apps/{appId}/branches
 # operationId: CreateBranch
-export def "apps-branches create-branch" [
+export def "create-branch" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -416,7 +416,7 @@ export def "apps-branches create-branch" [
 #
 # GET /apps/{appId}/branches
 # operationId: ListBranches
-export def "apps-branches list" [
+export def "list-branches" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -464,7 +464,7 @@ export def "apps-branches list" [
 #
 # POST /apps/{appId}/branches/{branchName}/deployments
 # operationId: CreateDeployment
-export def "apps-branches-deployments create" [
+export def "create-deployment" [
   app_id: string
   branch_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -516,7 +516,7 @@ export def "apps-branches-deployments create" [
 # POST /apps/{appId}/domains
 # operationId: CreateDomainAssociation
 # --subDomainSettings item shape: {prefix: any, branchName: any}
-export def "apps-domains create-association" [
+export def "create-domain-association" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -569,7 +569,7 @@ export def "apps-domains create-association" [
 #
 # GET /apps/{appId}/domains
 # operationId: ListDomainAssociations
-export def "apps-domains list-associations" [
+export def "list-domain-associations" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -617,7 +617,7 @@ export def "apps-domains list-associations" [
 #
 # POST /apps/{appId}/webhooks
 # operationId: CreateWebhook
-export def "apps-webhooks create" [
+export def "create-webhook" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -667,7 +667,7 @@ export def "apps-webhooks create" [
 #
 # GET /apps/{appId}/webhooks
 # operationId: ListWebhooks
-export def "apps-webhooks list" [
+export def "list-webhooks" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -715,7 +715,7 @@ export def "apps-webhooks list" [
 #
 # DELETE /apps/{appId}
 # operationId: DeleteApp
-export def "apps delete" [
+export def "delete-app" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -760,7 +760,7 @@ export def "apps delete" [
 #
 # GET /apps/{appId}
 # operationId: GetApp
-export def "apps get" [
+export def "get-app" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -807,7 +807,7 @@ export def "apps get" [
 # operationId: UpdateApp
 # --customRules item shape: {source: any, target: any, status?: any, condition?: any}
 # --autoBranchCreationConfig shape: {stage?: any, framework?: any, enableAutoBuild?: any, environmentVariables?: any, basicAuthCredentials?: any, enableBasicAuth?: any, enablePerformanceMode?: any, buildSpec?: any, enablePullRequestPreview?: any, pullRequestEnvironmentName?: any}
-export def "apps update" [
+export def "update-app" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -873,7 +873,7 @@ export def "apps update" [
 #
 # DELETE /apps/{appId}/backendenvironments/{environmentName}
 # operationId: DeleteBackendEnvironment
-export def "apps-backendenvironments delete-backend-environment" [
+export def "delete-backend-environment" [
   app_id: string
   environment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -920,7 +920,7 @@ export def "apps-backendenvironments delete-backend-environment" [
 #
 # GET /apps/{appId}/backendenvironments/{environmentName}
 # operationId: GetBackendEnvironment
-export def "apps-backendenvironments get-backend-environment" [
+export def "get-backend-environment" [
   app_id: string
   environment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -967,7 +967,7 @@ export def "apps-backendenvironments get-backend-environment" [
 #
 # DELETE /apps/{appId}/branches/{branchName}
 # operationId: DeleteBranch
-export def "apps-branches delete-branch" [
+export def "delete-branch" [
   app_id: string
   branch_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1014,7 +1014,7 @@ export def "apps-branches delete-branch" [
 #
 # GET /apps/{appId}/branches/{branchName}
 # operationId: GetBranch
-export def "apps-branches get-branch" [
+export def "get-branch" [
   app_id: string
   branch_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1061,7 +1061,7 @@ export def "apps-branches get-branch" [
 #
 # POST /apps/{appId}/branches/{branchName}
 # operationId: UpdateBranch
-export def "apps-branches update-branch" [
+export def "update-branch" [
   app_id: string
   branch_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1126,7 +1126,7 @@ export def "apps-branches update-branch" [
 #
 # DELETE /apps/{appId}/domains/{domainName}
 # operationId: DeleteDomainAssociation
-export def "apps-domains delete-association" [
+export def "delete-domain-association" [
   app_id: string
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1173,7 +1173,7 @@ export def "apps-domains delete-association" [
 #
 # GET /apps/{appId}/domains/{domainName}
 # operationId: GetDomainAssociation
-export def "apps-domains get-association" [
+export def "get-domain-association" [
   app_id: string
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1221,7 +1221,7 @@ export def "apps-domains get-association" [
 # POST /apps/{appId}/domains/{domainName}
 # operationId: UpdateDomainAssociation
 # --subDomainSettings item shape: {prefix: any, branchName: any}
-export def "apps-domains update-association" [
+export def "update-domain-association" [
   app_id: string
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1275,7 +1275,7 @@ export def "apps-domains update-association" [
 #
 # DELETE /apps/{appId}/branches/{branchName}/jobs/{jobId}
 # operationId: DeleteJob
-export def "apps-branches-jobs delete" [
+export def "delete-job" [
   app_id: string
   branch_name: string
   job_id: string
@@ -1324,7 +1324,7 @@ export def "apps-branches-jobs delete" [
 #
 # GET /apps/{appId}/branches/{branchName}/jobs/{jobId}
 # operationId: GetJob
-export def "apps-branches-jobs get" [
+export def "get-job" [
   app_id: string
   branch_name: string
   job_id: string
@@ -1373,7 +1373,7 @@ export def "apps-branches-jobs get" [
 #
 # DELETE /webhooks/{webhookId}
 # operationId: DeleteWebhook
-export def "webhooks delete" [
+export def "delete-webhook" [
   webhook_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1418,7 +1418,7 @@ export def "webhooks delete" [
 #
 # GET /webhooks/{webhookId}
 # operationId: GetWebhook
-export def "webhooks get" [
+export def "get-webhook" [
   webhook_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1463,7 +1463,7 @@ export def "webhooks get" [
 #
 # POST /webhooks/{webhookId}
 # operationId: UpdateWebhook
-export def "webhooks update" [
+export def "update-webhook" [
   webhook_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1513,7 +1513,7 @@ export def "webhooks update" [
 #
 # POST /apps/{appId}/accesslogs
 # operationId: GenerateAccessLogs
-export def "apps-accesslogs generate-access-logs" [
+export def "generate-access-logs" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1564,7 +1564,7 @@ export def "apps-accesslogs generate-access-logs" [
 #
 # GET /artifacts/{artifactId}
 # operationId: GetArtifactUrl
-export def "artifacts get-url" [
+export def "get-artifact-url" [
   artifact_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1609,7 +1609,7 @@ export def "artifacts get-url" [
 #
 # GET /apps/{appId}/branches/{branchName}/jobs/{jobId}/artifacts
 # operationId: ListArtifacts
-export def "apps-branches-jobs-artifacts list" [
+export def "list-artifacts" [
   app_id: string
   branch_name: string
   job_id: string
@@ -1661,7 +1661,7 @@ export def "apps-branches-jobs-artifacts list" [
 #
 # GET /apps/{appId}/branches/{branchName}/jobs
 # operationId: ListJobs
-export def "apps-branches-jobs list" [
+export def "list-jobs" [
   app_id: string
   branch_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1711,7 +1711,7 @@ export def "apps-branches-jobs list" [
 #
 # POST /apps/{appId}/branches/{branchName}/jobs
 # operationId: StartJob
-export def "apps-branches-jobs start" [
+export def "start-job" [
   app_id: string
   branch_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1767,7 +1767,7 @@ export def "apps-branches-jobs start" [
 #
 # GET /tags/{resourceArn}
 # operationId: ListTagsForResource
-export def "tags list-for-resource" [
+export def "list-tags-for-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1812,7 +1812,7 @@ export def "tags list-for-resource" [
 #
 # POST /tags/{resourceArn}
 # operationId: TagResource
-export def "tags tag-resource" [
+export def "tag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1861,7 +1861,7 @@ export def "tags tag-resource" [
 #
 # POST /apps/{appId}/branches/{branchName}/deployments/start
 # operationId: StartDeployment
-export def "apps-branches-deployments-start start" [
+export def "start-deployment" [
   app_id: string
   branch_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1913,7 +1913,7 @@ export def "apps-branches-deployments-start start" [
 #
 # DELETE /apps/{appId}/branches/{branchName}/jobs/{jobId}/stop
 # operationId: StopJob
-export def "apps-branches-jobs-stop stop" [
+export def "stop-job" [
   app_id: string
   branch_name: string
   job_id: string
@@ -1962,7 +1962,7 @@ export def "apps-branches-jobs-stop stop" [
 #
 # DELETE /tags/{resourceArn}
 # operationId: UntagResource
-export def "tags untag-resource" [
+export def "untag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

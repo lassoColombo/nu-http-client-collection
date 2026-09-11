@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "advertising-eligibility get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-advertising-eligibility" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # GET /advertising_eligibility
 # operationId: getAdvertisingEligibility
-export def "advertising-eligibility get" [
+export def "get-advertising-eligibility" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -179,7 +179,7 @@ export def "advertising-eligibility get" [
 #
 # GET /custom_policy/
 # operationId: getCustomPolicies
-export def "custom-policy get-policies" [
+export def "get-custom-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -218,7 +218,7 @@ export def "custom-policy get-policies" [
 #
 # POST /custom_policy/
 # operationId: createCustomPolicy
-export def "custom-policy create" [
+export def "create-custom-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -262,7 +262,7 @@ export def "custom-policy create" [
 #
 # GET /custom_policy/{custom_policy_id}
 # operationId: getCustomPolicy
-export def "custom-policy get" [
+export def "get-custom-policy" [
   custom_policy_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -301,7 +301,7 @@ export def "custom-policy get" [
 #
 # PUT /custom_policy/{custom_policy_id}
 # operationId: updateCustomPolicy
-export def "custom-policy update" [
+export def "update-custom-policy" [
   custom_policy_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -346,7 +346,7 @@ export def "custom-policy update" [
 #
 # GET /fulfillment_policy
 # operationId: getFulfillmentPolicies
-export def "fulfillment-policy get-policies" [
+export def "get-fulfillment-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -386,7 +386,7 @@ export def "fulfillment-policy get-policies" [
 # --handlingTime shape: {unit?: string, value?: int}
 # --shipToLocations shape: {regionExcluded?: list, regionIncluded?: list}
 # --shippingOptions item shape: {costType?: string, insuranceFee?: record, insuranceOffered?: bool, optionType?: string, packageHandlingCost?: record, rateTableId?: string, shippingDiscountProfileId?: string, shippingPromotionOffered?: bool, shippingServices?: list}
-export def "fulfillment-policy create" [
+export def "create-fulfillment-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -434,7 +434,7 @@ export def "fulfillment-policy create" [
 #
 # GET /fulfillment_policy/get_by_policy_name
 # operationId: getFulfillmentPolicyByName
-export def "fulfillment-policy-get-by-policy-name get" [
+export def "get-fulfillment-policy-by-name" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -471,7 +471,7 @@ export def "fulfillment-policy-get-by-policy-name get" [
 #
 # DELETE /fulfillment_policy/{fulfillmentPolicyId}
 # operationId: deleteFulfillmentPolicy
-export def "fulfillment-policy delete" [
+export def "delete-fulfillment-policy" [
   fulfillment_policy_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -507,7 +507,7 @@ export def "fulfillment-policy delete" [
 #
 # GET /fulfillment_policy/{fulfillmentPolicyId}
 # operationId: getFulfillmentPolicy
-export def "fulfillment-policy get" [
+export def "get-fulfillment-policy" [
   fulfillment_policy_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -547,7 +547,7 @@ export def "fulfillment-policy get" [
 # --handlingTime shape: {unit?: string, value?: int}
 # --shipToLocations shape: {regionExcluded?: list, regionIncluded?: list}
 # --shippingOptions item shape: {costType?: string, insuranceFee?: record, insuranceOffered?: bool, optionType?: string, packageHandlingCost?: record, rateTableId?: string, shippingDiscountProfileId?: string, shippingPromotionOffered?: bool, shippingServices?: list}
-export def "fulfillment-policy update" [
+export def "update-fulfillment-policy" [
   fulfillment_policy_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -597,7 +597,7 @@ export def "fulfillment-policy update" [
 #
 # GET /kyc
 # operationId: getKYC
-export def "kyc get" [
+export def "get-kyc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -631,7 +631,7 @@ export def "kyc get" [
 #
 # GET /payment_policy
 # operationId: getPaymentPolicies
-export def "payment-policy get-policies" [
+export def "get-payment-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -671,7 +671,7 @@ export def "payment-policy get-policies" [
 # --deposit shape: {amount?: record, dueIn?: record, paymentMethods?: list}
 # --fullPaymentDueIn shape: {unit?: string, value?: int}
 # --paymentMethods item shape: {brands?: list<string>, paymentMethodType?: string, recipientAccountReference?: record}
-export def "payment-policy create" [
+export def "create-payment-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -717,7 +717,7 @@ export def "payment-policy create" [
 #
 # GET /payment_policy/get_by_policy_name
 # operationId: getPaymentPolicyByName
-export def "payment-policy-get-by-policy-name get" [
+export def "get-payment-policy-by-name" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -754,7 +754,7 @@ export def "payment-policy-get-by-policy-name get" [
 #
 # DELETE /payment_policy/{payment_policy_id}
 # operationId: deletePaymentPolicy
-export def "payment-policy delete" [
+export def "delete-payment-policy" [
   payment_policy_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -790,7 +790,7 @@ export def "payment-policy delete" [
 #
 # GET /payment_policy/{payment_policy_id}
 # operationId: getPaymentPolicy
-export def "payment-policy get" [
+export def "get-payment-policy" [
   payment_policy_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -830,7 +830,7 @@ export def "payment-policy get" [
 # --deposit shape: {amount?: record, dueIn?: record, paymentMethods?: list}
 # --fullPaymentDueIn shape: {unit?: string, value?: int}
 # --paymentMethods item shape: {brands?: list<string>, paymentMethodType?: string, recipientAccountReference?: record}
-export def "payment-policy update" [
+export def "update-payment-policy" [
   payment_policy_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -878,7 +878,7 @@ export def "payment-policy update" [
 #
 # GET /payments_program/{marketplace_id}/{payments_program_type}
 # operationId: getPaymentsProgram
-export def "payments-program get" [
+export def "get-payments-program" [
   marketplace_id: string
   payments_program_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -916,7 +916,7 @@ export def "payments-program get" [
 #
 # GET /payments_program/{marketplace_id}/{payments_program_type}/onboarding
 # operationId: getPaymentsProgramOnboarding
-export def "payments-program-onboarding get" [
+export def "get-payments-program-onboarding" [
   marketplace_id: string
   payments_program_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -954,7 +954,7 @@ export def "payments-program-onboarding get" [
 #
 # GET /privilege
 # operationId: getPrivileges
-export def "privilege get" [
+export def "get-privileges" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -988,7 +988,7 @@ export def "privilege get" [
 #
 # GET /program/get_opted_in_programs
 # operationId: getOptedInPrograms
-export def "program-get-opted-in-programs get" [
+export def "get-opted-in-programs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1022,7 +1022,7 @@ export def "program-get-opted-in-programs get" [
 #
 # POST /program/opt_in
 # operationId: optInToProgram
-export def "program-opt-in create" [
+export def "opt-in-to-program" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1060,7 +1060,7 @@ export def "program-opt-in create" [
 #
 # POST /program/opt_out
 # operationId: optOutOfProgram
-export def "program-opt-out create" [
+export def "opt-out-of-program" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1098,7 +1098,7 @@ export def "program-opt-out create" [
 #
 # GET /rate_table
 # operationId: getRateTables
-export def "rate-table get" [
+export def "get-rate-tables" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1134,7 +1134,7 @@ export def "rate-table get" [
 #
 # GET /return_policy
 # operationId: getReturnPolicies
-export def "return-policy get-policies" [
+export def "get-return-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1173,7 +1173,7 @@ export def "return-policy get-policies" [
 # --categoryTypes item shape: {default?: bool, name?: string}
 # --internationalOverride shape: {returnMethod?: string, returnPeriod?: record, returnShippingCostPayer?: string, returnsAccepted?: bool}
 # --returnPeriod shape: {unit?: string, value?: int}
-export def "return-policy create" [
+export def "create-return-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1223,7 +1223,7 @@ export def "return-policy create" [
 #
 # GET /return_policy/get_by_policy_name
 # operationId: getReturnPolicyByName
-export def "return-policy-get-by-policy-name get" [
+export def "get-return-policy-by-name" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1260,7 +1260,7 @@ export def "return-policy-get-by-policy-name get" [
 #
 # DELETE /return_policy/{return_policy_id}
 # operationId: deleteReturnPolicy
-export def "return-policy delete" [
+export def "delete-return-policy" [
   return_policy_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1296,7 +1296,7 @@ export def "return-policy delete" [
 #
 # GET /return_policy/{return_policy_id}
 # operationId: getReturnPolicy
-export def "return-policy get" [
+export def "get-return-policy" [
   return_policy_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1335,7 +1335,7 @@ export def "return-policy get" [
 # --categoryTypes item shape: {default?: bool, name?: string}
 # --internationalOverride shape: {returnMethod?: string, returnPeriod?: record, returnShippingCostPayer?: string, returnsAccepted?: bool}
 # --returnPeriod shape: {unit?: string, value?: int}
-export def "return-policy update" [
+export def "update-return-policy" [
   return_policy_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1387,7 +1387,7 @@ export def "return-policy update" [
 #
 # GET /sales_tax
 # operationId: getSalesTaxes
-export def "sales-tax get-taxes" [
+export def "get-sales-taxes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1423,7 +1423,7 @@ export def "sales-tax get-taxes" [
 #
 # DELETE /sales_tax/{countryCode}/{jurisdictionId}
 # operationId: deleteSalesTax
-export def "sales-tax delete" [
+export def "delete-sales-tax" [
   country_code: string
   jurisdiction_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1461,7 +1461,7 @@ export def "sales-tax delete" [
 #
 # GET /sales_tax/{countryCode}/{jurisdictionId}
 # operationId: getSalesTax
-export def "sales-tax get" [
+export def "get-sales-tax" [
   country_code: string
   jurisdiction_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1499,7 +1499,7 @@ export def "sales-tax get" [
 #
 # PUT /sales_tax/{countryCode}/{jurisdictionId}
 # operationId: createOrReplaceSalesTax
-export def "sales-tax create-or-update" [
+export def "create-or-replace-sales-tax" [
   country_code: string
   jurisdiction_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1542,7 +1542,7 @@ export def "sales-tax create-or-update" [
 #
 # GET /subscription
 # operationId: getSubscription
-export def "subscription get" [
+export def "get-subscription" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

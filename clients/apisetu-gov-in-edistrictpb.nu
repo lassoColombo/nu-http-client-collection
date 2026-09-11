@@ -112,7 +112,7 @@ def format-completer [] { ["pdf"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "btcer-certificate create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "btcer" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -138,7 +138,7 @@ export def commands []: nothing -> table {
 # operationId: btcer
 # --certificateParameters shape: {DOB: string, RegistrationID: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "btcer-certificate create" [
+export def "btcer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -181,7 +181,7 @@ export def "btcer-certificate create" [
 # operationId: dtcer
 # --certificateParameters shape: {DOB: string, RegistrationID: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "dtcer-certificate create" [
+export def "dtcer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -224,7 +224,7 @@ export def "dtcer-certificate create" [
 # operationId: ewcer
 # --certificateParameters shape: {DOB: string, DSN: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "ewcer-certificate create" [
+export def "ewcer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -267,7 +267,7 @@ export def "ewcer-certificate create" [
 # operationId: obcer
 # --certificateParameters shape: {DOB: string, DSNNo: string, Father: string, FullName: string, UID: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "obcer-certificate create" [
+export def "obcer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -310,7 +310,7 @@ export def "obcer-certificate create" [
 # operationId: racer
 # --certificateParameters shape: {DOB: string, DSN: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "racer-certificate create" [
+export def "racer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -353,7 +353,7 @@ export def "racer-certificate create" [
 # operationId: rscer
 # --certificateParameters shape: {DOB: string, DSNNo: string, FatherName: string, FullName: string, UID: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "rscer-certificate create" [
+export def "rscer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -396,7 +396,7 @@ export def "rscer-certificate create" [
 # operationId: shcer
 # --certificateParameters shape: {DOB: string, DSNNo: string, Father: string, FullName: string, UID: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "shcer-certificate create" [
+export def "shcer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)

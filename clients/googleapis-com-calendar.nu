@@ -137,7 +137,7 @@ def min-access-role-completer [] { ["freeBusyReader" "owner" "reader" "writer"] 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "calendars create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "calendar-calendars-insert" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -162,7 +162,7 @@ export def commands []: nothing -> table {
 # POST /calendars
 # operationId: calendar.calendars.insert
 # --conferenceProperties shape: {allowedConferenceSolutionTypes?: list<string>}
-export def "calendars create" [
+export def "calendar-calendars-insert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -215,7 +215,7 @@ export def "calendars create" [
 #
 # DELETE /calendars/{calendarId}
 # operationId: calendar.calendars.delete
-export def "calendars delete" [
+export def "calendar-calendars-delete" [
   calendar_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -259,7 +259,7 @@ export def "calendars delete" [
 #
 # GET /calendars/{calendarId}
 # operationId: calendar.calendars.get
-export def "calendars get" [
+export def "calendar-calendars-get" [
   calendar_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -304,7 +304,7 @@ export def "calendars get" [
 # PATCH /calendars/{calendarId}
 # operationId: calendar.calendars.patch
 # --conferenceProperties shape: {allowedConferenceSolutionTypes?: list<string>}
-export def "calendars update-by-calendar-id" [
+export def "calendar-calendars-patch" [
   calendar_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -360,7 +360,7 @@ export def "calendars update-by-calendar-id" [
 # PUT /calendars/{calendarId}
 # operationId: calendar.calendars.update
 # --conferenceProperties shape: {allowedConferenceSolutionTypes?: list<string>}
-export def "calendars update-by-calendar-id-1" [
+export def "calendar-calendars-update" [
   calendar_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -415,7 +415,7 @@ export def "calendars update-by-calendar-id-1" [
 #
 # GET /calendars/{calendarId}/acl
 # operationId: calendar.acl.list
-export def "calendars-acl list" [
+export def "calendar-acl-list" [
   calendar_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -464,7 +464,7 @@ export def "calendars-acl list" [
 # POST /calendars/{calendarId}/acl
 # operationId: calendar.acl.insert
 # --scope shape: {type?: string, value?: string}
-export def "calendars-acl create" [
+export def "calendar-acl-insert" [
   calendar_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -517,7 +517,7 @@ export def "calendars-acl create" [
 #
 # POST /calendars/{calendarId}/acl/watch
 # operationId: calendar.acl.watch
-export def "calendars-acl-watch watch" [
+export def "calendar-acl-watch" [
   calendar_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -578,7 +578,7 @@ export def "calendars-acl-watch watch" [
 #
 # DELETE /calendars/{calendarId}/acl/{ruleId}
 # operationId: calendar.acl.delete
-export def "calendars-acl delete" [
+export def "calendar-acl-delete" [
   calendar_id: string
   rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -624,7 +624,7 @@ export def "calendars-acl delete" [
 #
 # GET /calendars/{calendarId}/acl/{ruleId}
 # operationId: calendar.acl.get
-export def "calendars-acl get" [
+export def "calendar-acl-get" [
   calendar_id: string
   rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -671,7 +671,7 @@ export def "calendars-acl get" [
 # PATCH /calendars/{calendarId}/acl/{ruleId}
 # operationId: calendar.acl.patch
 # --scope shape: {type?: string, value?: string}
-export def "calendars-acl update-by-calendar-id-rule-id" [
+export def "calendar-acl-patch" [
   calendar_id: string
   rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -727,7 +727,7 @@ export def "calendars-acl update-by-calendar-id-rule-id" [
 # PUT /calendars/{calendarId}/acl/{ruleId}
 # operationId: calendar.acl.update
 # --scope shape: {type?: string, value?: string}
-export def "calendars-acl update-by-calendar-id-rule-id-1" [
+export def "calendar-acl-update" [
   calendar_id: string
   rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -782,7 +782,7 @@ export def "calendars-acl update-by-calendar-id-rule-id-1" [
 #
 # POST /calendars/{calendarId}/clear
 # operationId: calendar.calendars.clear
-export def "calendars-clear create" [
+export def "calendar-calendars-clear" [
   calendar_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -826,7 +826,7 @@ export def "calendars-clear create" [
 #
 # GET /calendars/{calendarId}/events
 # operationId: calendar.events.list
-export def "calendars-events list" [
+export def "calendar-events-list" [
   calendar_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -901,7 +901,7 @@ export def "calendars-events list" [
 # --source shape: {title?: string, url?: string}
 # --start shape: {date?: string, dateTime?: string, timeZone?: string}
 # --workingLocationProperties shape: {customLocation?: record, homeOffice?: any, officeLocation?: record}
-export def "calendars-events create" [
+export def "calendar-events-insert" [
   calendar_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1006,7 +1006,7 @@ export def "calendars-events create" [
 # --source shape: {title?: string, url?: string}
 # --start shape: {date?: string, dateTime?: string, timeZone?: string}
 # --workingLocationProperties shape: {customLocation?: record, homeOffice?: any, officeLocation?: record}
-export def "calendars-events-import import" [
+export def "calendar-events-import" [
   calendar_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1095,7 +1095,7 @@ export def "calendars-events-import import" [
 #
 # POST /calendars/{calendarId}/events/quickAdd
 # operationId: calendar.events.quickAdd
-export def "calendars-events-quick-add create" [
+export def "calendar-events-quick-add" [
   calendar_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1142,7 +1142,7 @@ export def "calendars-events-quick-add create" [
 #
 # POST /calendars/{calendarId}/events/watch
 # operationId: calendar.events.watch
-export def "calendars-events-watch watch" [
+export def "calendar-events-watch" [
   calendar_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1217,7 +1217,7 @@ export def "calendars-events-watch watch" [
 #
 # DELETE /calendars/{calendarId}/events/{eventId}
 # operationId: calendar.events.delete
-export def "calendars-events delete" [
+export def "calendar-events-delete" [
   calendar_id: string
   event_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1265,7 +1265,7 @@ export def "calendars-events delete" [
 #
 # GET /calendars/{calendarId}/events/{eventId}
 # operationId: calendar.events.get
-export def "calendars-events get" [
+export def "calendar-events-get" [
   calendar_id: string
   event_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1327,7 +1327,7 @@ export def "calendars-events get" [
 # --source shape: {title?: string, url?: string}
 # --start shape: {date?: string, dateTime?: string, timeZone?: string}
 # --workingLocationProperties shape: {customLocation?: record, homeOffice?: any, officeLocation?: record}
-export def "calendars-events update-by-calendar-id-event-id" [
+export def "calendar-events-patch" [
   calendar_id: string
   event_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1435,7 +1435,7 @@ export def "calendars-events update-by-calendar-id-event-id" [
 # --source shape: {title?: string, url?: string}
 # --start shape: {date?: string, dateTime?: string, timeZone?: string}
 # --workingLocationProperties shape: {customLocation?: record, homeOffice?: any, officeLocation?: record}
-export def "calendars-events update-by-calendar-id-event-id-1" [
+export def "calendar-events-update" [
   calendar_id: string
   event_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1530,7 +1530,7 @@ export def "calendars-events update-by-calendar-id-event-id-1" [
 #
 # GET /calendars/{calendarId}/events/{eventId}/instances
 # operationId: calendar.events.instances
-export def "calendars-events-instances get" [
+export def "calendar-events-instances" [
   calendar_id: string
   event_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1585,7 +1585,7 @@ export def "calendars-events-instances get" [
 #
 # POST /calendars/{calendarId}/events/{eventId}/move
 # operationId: calendar.events.move
-export def "calendars-events-move move" [
+export def "calendar-events-move" [
   calendar_id: string
   event_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1634,7 +1634,7 @@ export def "calendars-events-move move" [
 #
 # POST /channels/stop
 # operationId: calendar.channels.stop
-export def "channels-stop stop" [
+export def "calendar-channels-stop" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1689,7 +1689,7 @@ export def "channels-stop stop" [
 #
 # GET /colors
 # operationId: calendar.colors.get
-export def "colors get" [
+export def "calendar-colors-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1732,7 +1732,7 @@ export def "colors get" [
 # POST /freeBusy
 # operationId: calendar.freebusy.query
 # --items item shape: {id?: string}
-export def "free-busy list" [
+export def "calendar-freebusy-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1783,7 +1783,7 @@ export def "free-busy list" [
 #
 # GET /users/me/calendarList
 # operationId: calendar.calendarList.list
-export def "users-me-calendar-list list" [
+export def "calendar-calendar-list-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1834,7 +1834,7 @@ export def "users-me-calendar-list list" [
 # --conferenceProperties shape: {allowedConferenceSolutionTypes?: list<string>}
 # --defaultReminders item shape: {method?: string, minutes?: int}
 # --notificationSettings shape: {notifications?: list}
-export def "users-me-calendar-list create" [
+export def "calendar-calendar-list-insert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1899,7 +1899,7 @@ export def "users-me-calendar-list create" [
 #
 # POST /users/me/calendarList/watch
 # operationId: calendar.calendarList.watch
-export def "users-me-calendar-list-watch watch" [
+export def "calendar-calendar-list-watch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1960,7 +1960,7 @@ export def "users-me-calendar-list-watch watch" [
 #
 # DELETE /users/me/calendarList/{calendarId}
 # operationId: calendar.calendarList.delete
-export def "users-me-calendar-list delete" [
+export def "calendar-calendar-list-delete" [
   calendar_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2004,7 +2004,7 @@ export def "users-me-calendar-list delete" [
 #
 # GET /users/me/calendarList/{calendarId}
 # operationId: calendar.calendarList.get
-export def "users-me-calendar-list get" [
+export def "calendar-calendar-list-get" [
   calendar_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2051,7 +2051,7 @@ export def "users-me-calendar-list get" [
 # --conferenceProperties shape: {allowedConferenceSolutionTypes?: list<string>}
 # --defaultReminders item shape: {method?: string, minutes?: int}
 # --notificationSettings shape: {notifications?: list}
-export def "users-me-calendar-list update-by-calendar-id" [
+export def "calendar-calendar-list-patch" [
   calendar_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2121,7 +2121,7 @@ export def "users-me-calendar-list update-by-calendar-id" [
 # --conferenceProperties shape: {allowedConferenceSolutionTypes?: list<string>}
 # --defaultReminders item shape: {method?: string, minutes?: int}
 # --notificationSettings shape: {notifications?: list}
-export def "users-me-calendar-list update-by-calendar-id-1" [
+export def "calendar-calendar-list-update" [
   calendar_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2188,7 +2188,7 @@ export def "users-me-calendar-list update-by-calendar-id-1" [
 #
 # GET /users/me/settings
 # operationId: calendar.settings.list
-export def "users-me-settings list" [
+export def "calendar-settings-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -2233,7 +2233,7 @@ export def "users-me-settings list" [
 #
 # POST /users/me/settings/watch
 # operationId: calendar.settings.watch
-export def "users-me-settings-watch watch" [
+export def "calendar-settings-watch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -2291,7 +2291,7 @@ export def "users-me-settings-watch watch" [
 #
 # GET /users/me/settings/{setting}
 # operationId: calendar.settings.get
-export def "users-me-settings get" [
+export def "calendar-settings-get" [
   setting: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

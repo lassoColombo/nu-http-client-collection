@@ -120,7 +120,7 @@ def status-completer-3 [] { ["connected" "disconnected"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "composition-hooks list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-composition-hook" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -144,7 +144,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/CompositionHooks
 # operationId: ListCompositionHook
-export def "composition-hooks list" [
+export def "list-composition-hook" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -185,7 +185,7 @@ export def "composition-hooks list" [
 # POST /v1/CompositionHooks
 #
 # operationId: CreateCompositionHook
-export def "composition-hooks create" [
+export def "create-composition-hook" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -233,7 +233,7 @@ export def "composition-hooks create" [
 #
 # DELETE /v1/CompositionHooks/{Sid}
 # operationId: DeleteCompositionHook
-export def "composition-hooks delete" [
+export def "delete-composition-hook" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -269,7 +269,7 @@ export def "composition-hooks delete" [
 #
 # GET /v1/CompositionHooks/{Sid}
 # operationId: FetchCompositionHook
-export def "composition-hooks get" [
+export def "fetch-composition-hook" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -304,7 +304,7 @@ export def "composition-hooks get" [
 # POST /v1/CompositionHooks/{Sid}
 #
 # operationId: UpdateCompositionHook
-export def "composition-hooks update" [
+export def "update-composition-hook" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -353,7 +353,7 @@ export def "composition-hooks update" [
 # GET /v1/CompositionSettings/Default
 #
 # operationId: FetchCompositionSettings
-export def "composition-settings-default get" [
+export def "fetch-composition-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -386,7 +386,7 @@ export def "composition-settings-default get" [
 # POST /v1/CompositionSettings/Default
 #
 # operationId: CreateCompositionSettings
-export def "composition-settings-default create" [
+export def "create-composition-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -430,7 +430,7 @@ export def "composition-settings-default create" [
 #
 # GET /v1/Compositions
 # operationId: ListComposition
-export def "compositions list" [
+export def "list-composition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -471,7 +471,7 @@ export def "compositions list" [
 # POST /v1/Compositions
 #
 # operationId: CreateComposition
-export def "compositions create" [
+export def "create-composition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -518,7 +518,7 @@ export def "compositions create" [
 #
 # DELETE /v1/Compositions/{Sid}
 # operationId: DeleteComposition
-export def "compositions delete" [
+export def "delete-composition" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -554,7 +554,7 @@ export def "compositions delete" [
 #
 # GET /v1/Compositions/{Sid}
 # operationId: FetchComposition
-export def "compositions get" [
+export def "fetch-composition" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -589,7 +589,7 @@ export def "compositions get" [
 # GET /v1/RecordingSettings/Default
 #
 # operationId: FetchRecordingSettings
-export def "recording-settings-default get" [
+export def "fetch-recording-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -622,7 +622,7 @@ export def "recording-settings-default get" [
 # POST /v1/RecordingSettings/Default
 #
 # operationId: CreateRecordingSettings
-export def "recording-settings-default create" [
+export def "create-recording-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -666,7 +666,7 @@ export def "recording-settings-default create" [
 #
 # GET /v1/Recordings
 # operationId: ListRecording
-export def "recordings list" [
+export def "list-recording" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -710,7 +710,7 @@ export def "recordings list" [
 #
 # DELETE /v1/Recordings/{Sid}
 # operationId: DeleteRecording
-export def "recordings delete" [
+export def "delete-recording" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -746,7 +746,7 @@ export def "recordings delete" [
 #
 # GET /v1/Recordings/{Sid}
 # operationId: FetchRecording
-export def "recordings get" [
+export def "fetch-recording" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -781,7 +781,7 @@ export def "recordings get" [
 # GET /v1/Rooms
 #
 # operationId: ListRoom
-export def "rooms list" [
+export def "list-room" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -822,7 +822,7 @@ export def "rooms list" [
 # POST /v1/Rooms
 #
 # operationId: CreateRoom
-export def "rooms create" [
+export def "create-room" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -874,7 +874,7 @@ export def "rooms create" [
 # GET /v1/Rooms/{RoomSid}/Participants
 #
 # operationId: ListRoomParticipant
-export def "rooms-participants list" [
+export def "list-room-participant" [
   room_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -918,7 +918,7 @@ export def "rooms-participants list" [
 #
 # GET /v1/Rooms/{RoomSid}/Participants/{ParticipantSid}/PublishedTracks
 # operationId: ListRoomParticipantPublishedTrack
-export def "rooms-participants-published-tracks list" [
+export def "list-room-participant-published-track" [
   room_sid: string
   participant_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -960,7 +960,7 @@ export def "rooms-participants-published-tracks list" [
 #
 # GET /v1/Rooms/{RoomSid}/Participants/{ParticipantSid}/PublishedTracks/{Sid}
 # operationId: FetchRoomParticipantPublishedTrack
-export def "rooms-participants-published-tracks get" [
+export def "fetch-room-participant-published-track" [
   room_sid: string
   participant_sid: string
   sid: string
@@ -1000,7 +1000,7 @@ export def "rooms-participants-published-tracks get" [
 #
 # GET /v1/Rooms/{RoomSid}/Participants/{ParticipantSid}/SubscribeRules
 # operationId: FetchRoomParticipantSubscribeRule
-export def "rooms-participants-subscribe-rules get" [
+export def "fetch-room-participant-subscribe-rule" [
   room_sid: string
   participant_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1038,7 +1038,7 @@ export def "rooms-participants-subscribe-rules get" [
 #
 # POST /v1/Rooms/{RoomSid}/Participants/{ParticipantSid}/SubscribeRules
 # operationId: UpdateRoomParticipantSubscribeRule
-export def "rooms-participants-subscribe-rules update" [
+export def "update-room-participant-subscribe-rule" [
   room_sid: string
   participant_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1081,7 +1081,7 @@ export def "rooms-participants-subscribe-rules update" [
 #
 # GET /v1/Rooms/{RoomSid}/Participants/{ParticipantSid}/SubscribedTracks
 # operationId: ListRoomParticipantSubscribedTrack
-export def "rooms-participants-subscribed-tracks list" [
+export def "list-room-participant-subscribed-track" [
   room_sid: string
   participant_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1123,7 +1123,7 @@ export def "rooms-participants-subscribed-tracks list" [
 #
 # GET /v1/Rooms/{RoomSid}/Participants/{ParticipantSid}/SubscribedTracks/{Sid}
 # operationId: FetchRoomParticipantSubscribedTrack
-export def "rooms-participants-subscribed-tracks get" [
+export def "fetch-room-participant-subscribed-track" [
   room_sid: string
   participant_sid: string
   sid: string
@@ -1162,7 +1162,7 @@ export def "rooms-participants-subscribed-tracks get" [
 # GET /v1/Rooms/{RoomSid}/Participants/{Sid}
 #
 # operationId: FetchRoomParticipant
-export def "rooms-participants get" [
+export def "fetch-room-participant" [
   room_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1199,7 +1199,7 @@ export def "rooms-participants get" [
 # POST /v1/Rooms/{RoomSid}/Participants/{Sid}
 #
 # operationId: UpdateRoomParticipant
-export def "rooms-participants update" [
+export def "update-room-participant" [
   room_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1241,7 +1241,7 @@ export def "rooms-participants update" [
 # POST /v1/Rooms/{RoomSid}/Participants/{Sid}/Anonymize
 #
 # operationId: UpdateRoomParticipantAnonymize
-export def "rooms-participants-anonymize update" [
+export def "update-room-participant-anonymize" [
   room_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1279,7 +1279,7 @@ export def "rooms-participants-anonymize update" [
 #
 # GET /v1/Rooms/{RoomSid}/RecordingRules
 # operationId: FetchRoomRecordingRule
-export def "rooms-recording-rules get" [
+export def "fetch-room-recording-rule" [
   room_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1315,7 +1315,7 @@ export def "rooms-recording-rules get" [
 #
 # POST /v1/Rooms/{RoomSid}/RecordingRules
 # operationId: UpdateRoomRecordingRule
-export def "rooms-recording-rules update" [
+export def "update-room-recording-rule" [
   room_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1355,7 +1355,7 @@ export def "rooms-recording-rules update" [
 # GET /v1/Rooms/{RoomSid}/Recordings
 #
 # operationId: ListRoomRecording
-export def "rooms-recordings list" [
+export def "list-room-recording" [
   room_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1398,7 +1398,7 @@ export def "rooms-recordings list" [
 # DELETE /v1/Rooms/{RoomSid}/Recordings/{Sid}
 #
 # operationId: DeleteRoomRecording
-export def "rooms-recordings delete" [
+export def "delete-room-recording" [
   room_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1435,7 +1435,7 @@ export def "rooms-recordings delete" [
 # GET /v1/Rooms/{RoomSid}/Recordings/{Sid}
 #
 # operationId: FetchRoomRecording
-export def "rooms-recordings get" [
+export def "fetch-room-recording" [
   room_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1472,7 +1472,7 @@ export def "rooms-recordings get" [
 # GET /v1/Rooms/{Sid}
 #
 # operationId: FetchRoom
-export def "rooms get" [
+export def "fetch-room" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1507,7 +1507,7 @@ export def "rooms get" [
 # POST /v1/Rooms/{Sid}
 #
 # operationId: UpdateRoom
-export def "rooms update" [
+export def "update-room" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

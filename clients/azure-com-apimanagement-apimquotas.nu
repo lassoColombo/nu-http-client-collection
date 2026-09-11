@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-api-management-service-quotas list-by-counter-keys" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "quota-by-counter-keys-list-by-service" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -129,7 +129,7 @@ export def commands []: nothing -> table {
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/quotas/{quotaCounterKey}
 # Docs: https://docs.microsoft.com/en-us/azure/api-management/api-management-howto-product-with-rules#a-namepolicies-ato-configure-call-rate-limit-and-quota-policies — Document describing how to configure the quota policies.
 # operationId: QuotaByCounterKeys_ListByService
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-quotas list-by-counter-keys" [
+export def "quota-by-counter-keys-list-by-service" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -173,7 +173,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/quotas/{quotaCounterKey}
 # operationId: QuotaByCounterKeys_Update
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-quotas update-by-counter-keys" [
+export def "quota-by-counter-keys-update" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -223,7 +223,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/quotas/{quotaCounterKey}/periods/{quotaPeriodKey}
 # Docs: https://docs.microsoft.com/en-us/azure/api-management/api-management-howto-product-with-rules#a-namepolicies-ato-configure-call-rate-limit-and-quota-policies — Document describing how to configure the quota policies.
 # operationId: QuotaByPeriodKeys_Get
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-quotas-periods get-by-keys" [
+export def "quota-by-period-keys-get" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -269,7 +269,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/quotas/{quotaCounterKey}/periods/{quotaPeriodKey}
 # operationId: QuotaByPeriodKeys_Update
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-quotas-periods update-by-keys" [
+export def "quota-by-period-keys-update" [
   subscription_id: string
   resource_group_name: string
   service_name: string

@@ -123,7 +123,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta1 delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "ondemandscanning-projects-locations-operations-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -147,7 +147,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1beta1/{name}
 # operationId: ondemandscanning.projects.locations.operations.delete
-export def "v1beta1 delete" [
+export def "ondemandscanning-projects-locations-operations-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -195,7 +195,7 @@ export def "v1beta1 delete" [
 #
 # GET /v1beta1/{name}
 # operationId: ondemandscanning.projects.locations.operations.get
-export def "v1beta1 get" [
+export def "ondemandscanning-projects-locations-operations-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -243,7 +243,7 @@ export def "v1beta1 get" [
 #
 # GET /v1beta1/{name}/operations
 # operationId: ondemandscanning.projects.locations.operations.list
-export def "v1beta1-operations list" [
+export def "ondemandscanning-projects-locations-operations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -294,7 +294,7 @@ export def "v1beta1-operations list" [
 #
 # POST /v1beta1/{name}:cancel
 # operationId: ondemandscanning.projects.locations.operations.cancel
-export def "v1beta1 cancel" [
+export def "ondemandscanning-projects-locations-operations-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -342,7 +342,7 @@ export def "v1beta1 cancel" [
 #
 # POST /v1beta1/{name}:wait
 # operationId: ondemandscanning.projects.locations.operations.wait
-export def "v1beta1 wait" [
+export def "ondemandscanning-projects-locations-operations-wait" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -392,7 +392,7 @@ export def "v1beta1 wait" [
 # POST /v1beta1/{parent}/scans:analyzePackages
 # operationId: ondemandscanning.projects.locations.scans.analyzePackages
 # --packages item shape: {architecture?: string, binary?: record, cpeUri?: string, dependencyChain?: list, fileLocation?: list, hashDigest?: string, maintainer?: record, os?: string, osVersion?: string, package?: string, packageType?: "PACKAGE_TYPE_UNSPECIFIED"|"OS"|"MAVEN"|"GO"|"GO_STDLIB"|"PYPI"|"NPM", patchedCve?: list<string>, unused?: string, version?: string}
-export def "v1beta1-scans-analyze-packages create" [
+export def "ondemandscanning-projects-locations-scans-analyze-packages" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -445,7 +445,7 @@ export def "v1beta1-scans-analyze-packages create" [
 #
 # GET /v1beta1/{parent}/vulnerabilities
 # operationId: ondemandscanning.projects.locations.scans.vulnerabilities.list
-export def "v1beta1-vulnerabilities list" [
+export def "ondemandscanning-projects-locations-scans-vulnerabilities-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

@@ -125,7 +125,7 @@ def kind-completer-1 [] { ["approve" "comment" "decline"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "root get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-root" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -149,7 +149,7 @@ export def commands []: nothing -> table {
 #
 # GET /
 # operationId: getRoot
-export def "root get" [
+export def "get-root" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -183,7 +183,7 @@ export def "root get" [
 #
 # GET /account/relay-auto-configs
 # operationId: getRelayProxyConfigs
-export def "account-relay-auto-configs list" [
+export def "get-relay-proxy-configs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -218,7 +218,7 @@ export def "account-relay-auto-configs list" [
 # POST /account/relay-auto-configs
 # operationId: postRelayAutoConfig
 # --policy item shape: {actions?: list<string>, effect?: string, notActions?: list<string>, notResources?: list<string>, resources?: list<string>}
-export def "account-relay-auto-configs create" [
+export def "post-relay-auto-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -257,7 +257,7 @@ export def "account-relay-auto-configs create" [
 #
 # DELETE /account/relay-auto-configs/{id}
 # operationId: deleteRelayProxyConfig
-export def "account-relay-auto-configs delete-proxy" [
+export def "delete-relay-proxy-config" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -293,7 +293,7 @@ export def "account-relay-auto-configs delete-proxy" [
 #
 # GET /account/relay-auto-configs/{id}
 # operationId: getRelayProxyConfig
-export def "account-relay-auto-configs get-proxy" [
+export def "get-relay-proxy-config" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -329,7 +329,7 @@ export def "account-relay-auto-configs get-proxy" [
 #
 # PATCH /account/relay-auto-configs/{id}
 # operationId: patchRelayProxyConfig
-export def "account-relay-auto-configs update-proxy" [
+export def "patch-relay-proxy-config" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -369,7 +369,7 @@ export def "account-relay-auto-configs update-proxy" [
 #
 # POST /account/relay-auto-configs/{id}/reset
 # operationId: resetRelayProxyConfig
-export def "account-relay-auto-configs-reset reset-proxy" [
+export def "reset-relay-proxy-config" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -407,7 +407,7 @@ export def "account-relay-auto-configs-reset reset-proxy" [
 #
 # GET /auditlog
 # operationId: getAuditLogEntries
-export def "auditlog get-audit-log-entries" [
+export def "get-audit-log-entries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -447,7 +447,7 @@ export def "auditlog get-audit-log-entries" [
 #
 # GET /auditlog/{resourceId}
 # operationId: getAuditLogEntry
-export def "auditlog get-audit-log-entry" [
+export def "get-audit-log-entry" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -483,7 +483,7 @@ export def "auditlog get-audit-log-entry" [
 #
 # GET /destinations
 # operationId: getDestinations
-export def "destinations get" [
+export def "get-destinations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -517,7 +517,7 @@ export def "destinations get" [
 #
 # POST /destinations/{projectKey}/{environmentKey}
 # operationId: postDestination
-export def "destinations create" [
+export def "post-destination" [
   project_key: string
   environment_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -562,7 +562,7 @@ export def "destinations create" [
 #
 # DELETE /destinations/{projectKey}/{environmentKey}/{destinationId}
 # operationId: deleteDestination
-export def "destinations delete" [
+export def "delete-destination" [
   project_key: string
   environment_key: string
   destination_id: string
@@ -602,7 +602,7 @@ export def "destinations delete" [
 #
 # GET /destinations/{projectKey}/{environmentKey}/{destinationId}
 # operationId: getDestination
-export def "destinations get-by-project-key-environment-key-destination-id" [
+export def "get-destination" [
   project_key: string
   environment_key: string
   destination_id: string
@@ -642,7 +642,7 @@ export def "destinations get-by-project-key-environment-key-destination-id" [
 #
 # PATCH /destinations/{projectKey}/{environmentKey}/{destinationId}
 # operationId: patchDestination
-export def "destinations update" [
+export def "patch-destination" [
   project_key: string
   environment_key: string
   destination_id: string
@@ -686,7 +686,7 @@ export def "destinations update" [
 #
 # GET /flag-status/{projectKey}/{featureFlagKey}
 # operationId: getFeatureFlagStatusAcrossEnvironments
-export def "flag-status get-feature-across-environments" [
+export def "get-feature-flag-status-across-environments" [
   project_key: string
   feature_flag_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -724,7 +724,7 @@ export def "flag-status get-feature-across-environments" [
 #
 # GET /flag-statuses/{projectKey}/{environmentKey}
 # operationId: getFeatureFlagStatuses
-export def "flag-statuses get-feature" [
+export def "get-feature-flag-statuses" [
   project_key: string
   environment_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -762,7 +762,7 @@ export def "flag-statuses get-feature" [
 #
 # GET /flag-statuses/{projectKey}/{environmentKey}/{featureFlagKey}
 # operationId: getFeatureFlagStatus
-export def "flag-statuses get-feature-status" [
+export def "get-feature-flag-status" [
   project_key: string
   environment_key: string
   feature_flag_key: string
@@ -802,7 +802,7 @@ export def "flag-statuses get-feature-status" [
 #
 # GET /flags/{projectKey}
 # operationId: getFeatureFlags
-export def "flags list" [
+export def "get-feature-flags" [
   project_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -850,7 +850,7 @@ export def "flags list" [
 # --clientSideAvailability shape: {usingEnvironmentId?: bool, usingMobileKey?: bool}
 # --defaults shape: {offVariation: int, onVariation: int}
 # --variations item shape: {_id?: string, description?: string, name?: string, value: record}
-export def "flags create-feature" [
+export def "post-feature-flag" [
   project_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -899,7 +899,7 @@ export def "flags create-feature" [
 # Get dependent flags for the flag in the environment specified in path parameters
 #
 # GET /flags/{projectKey}/{environmentKey}/{featureFlagKey}/dependent-flags
-export def "flags-dependent-flags get" [
+export def "get-flags-project-key-environment-key-feature-flag-key-dependent-flags" [
   project_key: string
   environment_key: string
   feature_flag_key: string
@@ -939,7 +939,7 @@ export def "flags-dependent-flags get" [
 #
 # DELETE /flags/{projectKey}/{featureFlagKey}
 # operationId: deleteFeatureFlag
-export def "flags delete-feature" [
+export def "delete-feature-flag" [
   project_key: string
   feature_flag_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -977,7 +977,7 @@ export def "flags delete-feature" [
 #
 # GET /flags/{projectKey}/{featureFlagKey}
 # operationId: getFeatureFlag
-export def "flags get-feature" [
+export def "get-feature-flag" [
   project_key: string
   feature_flag_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1018,7 +1018,7 @@ export def "flags get-feature" [
 # PATCH /flags/{projectKey}/{featureFlagKey}
 # operationId: patchFeatureFlag
 # --patch item shape: {op: string, path: string, value: record}
-export def "flags update-feature" [
+export def "patch-feature-flag" [
   project_key: string
   feature_flag_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1063,7 +1063,7 @@ export def "flags update-feature" [
 # operationId: copyFeatureFlag
 # --source shape: {currentVersion?: int, key: string}
 # --target shape: {currentVersion?: int, key: string}
-export def "flags-copy copy-feature" [
+export def "copy-feature-flag" [
   project_key: string
   feature_flag_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1108,7 +1108,7 @@ export def "flags-copy copy-feature" [
 # Get dependent flags across all environments for the flag specified in the path parameters
 #
 # GET /flags/{projectKey}/{featureFlagKey}/dependent-flags
-export def "flags-dependent-flags list" [
+export def "get-flags-project-key-feature-flag-key-dependent-flags" [
   project_key: string
   feature_flag_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1146,7 +1146,7 @@ export def "flags-dependent-flags list" [
 #
 # GET /flags/{projectKey}/{featureFlagKey}/expiring-user-targets/{environmentKey}
 # operationId: getExpiringUserTargets
-export def "flags-expiring-user-targets get" [
+export def "get-expiring-user-targets" [
   project_key: string
   feature_flag_key: string
   environment_key: string
@@ -1186,7 +1186,7 @@ export def "flags-expiring-user-targets get" [
 #
 # PATCH /flags/{projectKey}/{featureFlagKey}/expiring-user-targets/{environmentKey}
 # operationId: patchExpiringUserTargets
-export def "flags-expiring-user-targets update" [
+export def "patch-expiring-user-targets" [
   project_key: string
   feature_flag_key: string
   environment_key: string
@@ -1230,7 +1230,7 @@ export def "flags-expiring-user-targets update" [
 #
 # GET /integrations
 # operationId: getIntegrations
-export def "integrations get" [
+export def "get-integrations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1264,7 +1264,7 @@ export def "integrations get" [
 #
 # GET /integrations/{integrationKey}
 # operationId: getIntegrationSubscriptions
-export def "integrations get-subscriptions" [
+export def "get-integration-subscriptions" [
   integration_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1301,7 +1301,7 @@ export def "integrations get-subscriptions" [
 # POST /integrations/{integrationKey}
 # operationId: postIntegrationSubscription
 # --statements item shape: {actions?: list<string>, effect?: "allow"|"deny", notActions?: list<string>, notResources?: list<string>, resources?: list<string>}
-export def "integrations create-subscription" [
+export def "post-integration-subscription" [
   integration_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1345,7 +1345,7 @@ export def "integrations create-subscription" [
 #
 # DELETE /integrations/{integrationKey}/{integrationId}
 # operationId: deleteIntegrationSubscription
-export def "integrations delete-subscription" [
+export def "delete-integration-subscription" [
   integration_key: string
   integration_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1383,7 +1383,7 @@ export def "integrations delete-subscription" [
 #
 # GET /integrations/{integrationKey}/{integrationId}
 # operationId: getIntegrationSubscription
-export def "integrations get-subscription" [
+export def "get-integration-subscription" [
   integration_key: string
   integration_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1421,7 +1421,7 @@ export def "integrations get-subscription" [
 #
 # PATCH /integrations/{integrationKey}/{integrationId}
 # operationId: patchIntegrationSubscription
-export def "integrations update-subscription" [
+export def "patch-integration-subscription" [
   integration_key: string
   integration_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1463,7 +1463,7 @@ export def "integrations update-subscription" [
 #
 # GET /members
 # operationId: getMembers
-export def "members list" [
+export def "get-members" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1502,7 +1502,7 @@ export def "members list" [
 #
 # POST /members
 # operationId: postMembers
-export def "members create" [
+export def "post-members" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1540,7 +1540,7 @@ export def "members create" [
 #
 # GET /members/me
 # operationId: getMe
-export def "members-me get" [
+export def "get-me" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1574,7 +1574,7 @@ export def "members-me get" [
 #
 # DELETE /members/{memberId}
 # operationId: deleteMember
-export def "members delete" [
+export def "delete-member" [
   member_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1610,7 +1610,7 @@ export def "members delete" [
 #
 # GET /members/{memberId}
 # operationId: getMember
-export def "members get" [
+export def "get-member" [
   member_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1646,7 +1646,7 @@ export def "members get" [
 #
 # PATCH /members/{memberId}
 # operationId: patchMember
-export def "members update" [
+export def "patch-member" [
   member_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1686,7 +1686,7 @@ export def "members update" [
 #
 # GET /projects
 # operationId: getProjects
-export def "projects list" [
+export def "get-projects" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1722,7 +1722,7 @@ export def "projects list" [
 # operationId: postProject
 # --defaultClientSideAvailability shape: {usingEnvironmentId?: bool, usingMobileKey?: bool}
 # --environments item shape: {color: string, confirmChanges?: bool, defaultTrackEvents?: bool, defaultTtl?: float, key: string, name: string, requireComments?: bool, secureMode?: bool, tags?: list<string>}
-export def "projects create" [
+export def "post-project" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1765,7 +1765,7 @@ export def "projects create" [
 #
 # DELETE /projects/{projectKey}
 # operationId: deleteProject
-export def "projects delete" [
+export def "delete-project" [
   project_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1801,7 +1801,7 @@ export def "projects delete" [
 #
 # GET /projects/{projectKey}
 # operationId: getProject
-export def "projects get" [
+export def "get-project" [
   project_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1837,7 +1837,7 @@ export def "projects get" [
 #
 # PATCH /projects/{projectKey}
 # operationId: patchProject
-export def "projects update" [
+export def "patch-project" [
   project_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1877,7 +1877,7 @@ export def "projects update" [
 #
 # POST /projects/{projectKey}/environments
 # operationId: postEnvironment
-export def "projects-environments create" [
+export def "post-environment" [
   project_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1925,7 +1925,7 @@ export def "projects-environments create" [
 #
 # DELETE /projects/{projectKey}/environments/{environmentKey}
 # operationId: deleteEnvironment
-export def "projects-environments delete" [
+export def "delete-environment" [
   project_key: string
   environment_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1963,7 +1963,7 @@ export def "projects-environments delete" [
 #
 # GET /projects/{projectKey}/environments/{environmentKey}
 # operationId: getEnvironment
-export def "projects-environments get" [
+export def "get-environment" [
   project_key: string
   environment_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2001,7 +2001,7 @@ export def "projects-environments get" [
 #
 # PATCH /projects/{projectKey}/environments/{environmentKey}
 # operationId: patchEnvironment
-export def "projects-environments update" [
+export def "patch-environment" [
   project_key: string
   environment_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2043,7 +2043,7 @@ export def "projects-environments update" [
 #
 # POST /projects/{projectKey}/environments/{environmentKey}/apiKey
 # operationId: resetEnvironmentSDKKey
-export def "projects-environments-api-key reset-sdk" [
+export def "reset-environment-sdk-key" [
   project_key: string
   environment_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2083,7 +2083,7 @@ export def "projects-environments-api-key reset-sdk" [
 #
 # POST /projects/{projectKey}/environments/{environmentKey}/mobileKey
 # operationId: resetEnvironmentMobileKey
-export def "projects-environments-mobile-key reset" [
+export def "reset-environment-mobile-key" [
   project_key: string
   environment_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2123,7 +2123,7 @@ export def "projects-environments-mobile-key reset" [
 #
 # GET /projects/{projectKey}/flags/{featureFlagKey}/environments/{environmentKey}/approval-requests
 # operationId: getApprovalRequests
-export def "projects-flags-environments-approval-requests list" [
+export def "get-approval-requests" [
   project_key: string
   feature_flag_key: string
   environment_key: string
@@ -2164,7 +2164,7 @@ export def "projects-flags-environments-approval-requests list" [
 # DELETE /projects/{projectKey}/flags/{featureFlagKey}/environments/{environmentKey}/approval-requests/{approvalRequestId}
 # operationId: deleteApprovalRequest
 # --instructions item shape: {kind?: string}
-export def "projects-flags-environments-approval-requests delete" [
+export def "delete-approval-request" [
   project_key: string
   feature_flag_key: string
   environment_key: string
@@ -2215,7 +2215,7 @@ export def "projects-flags-environments-approval-requests delete" [
 #
 # GET /projects/{projectKey}/flags/{featureFlagKey}/environments/{environmentKey}/approval-requests/{approvalRequestId}
 # operationId: getApprovalRequest
-export def "projects-flags-environments-approval-requests get" [
+export def "get-approval-request" [
   project_key: string
   feature_flag_key: string
   environment_key: string
@@ -2258,7 +2258,7 @@ export def "projects-flags-environments-approval-requests get" [
 # POST /projects/{projectKey}/flags/{featureFlagKey}/environments/{environmentKey}/approval-requests/{approvalRequestId}
 # operationId: postApprovalRequest
 # --instructions item shape: {kind?: string}
-export def "projects-flags-environments-approval-requests create" [
+export def "post-approval-request" [
   project_key: string
   feature_flag_key: string
   environment_key: string
@@ -2309,7 +2309,7 @@ export def "projects-flags-environments-approval-requests create" [
 #
 # POST /projects/{projectKey}/flags/{featureFlagKey}/environments/{environmentKey}/approval-requests/{approvalRequestId}/apply
 # operationId: postApplyApprovalRequest
-export def "projects-flags-environments-approval-requests-apply create" [
+export def "post-apply-approval-request" [
   project_key: string
   feature_flag_key: string
   environment_key: string
@@ -2355,7 +2355,7 @@ export def "projects-flags-environments-approval-requests-apply create" [
 #
 # POST /projects/{projectKey}/flags/{featureFlagKey}/environments/{environmentKey}/approval-requests/{approvalRequestId}/review
 # operationId: postReviewApprovalRequest
-export def "projects-flags-environments-approval-requests-review create" [
+export def "post-review-approval-request" [
   project_key: string
   feature_flag_key: string
   environment_key: string
@@ -2402,7 +2402,7 @@ export def "projects-flags-environments-approval-requests-review create" [
 #
 # GET /projects/{projectKey}/flags/{featureFlagKey}/environments/{environmentKey}/scheduled-changes
 # operationId: getFlagConfigScheduledChanges
-export def "projects-flags-environments-scheduled-changes list" [
+export def "get-flag-config-scheduled-changes" [
   project_key: string
   feature_flag_key: string
   environment_key: string
@@ -2443,7 +2443,7 @@ export def "projects-flags-environments-scheduled-changes list" [
 # POST /projects/{projectKey}/flags/{featureFlagKey}/environments/{environmentKey}/scheduled-changes
 # operationId: postFlagConfigScheduledChanges
 # --instructions item shape: {kind?: string}
-export def "projects-flags-environments-scheduled-changes create-config" [
+export def "post-flag-config-scheduled-changes" [
   project_key: string
   feature_flag_key: string
   environment_key: string
@@ -2490,7 +2490,7 @@ export def "projects-flags-environments-scheduled-changes create-config" [
 # POST /projects/{projectKey}/flags/{featureFlagKey}/environments/{environmentKey}/scheduled-changes-conflicts
 # operationId: getFlagConfigScheduledChangesConflicts
 # --instructions item shape: {kind?: string}
-export def "projects-flags-environments-scheduled-changes-conflicts get-config" [
+export def "get-flag-config-scheduled-changes-conflicts" [
   project_key: string
   feature_flag_key: string
   environment_key: string
@@ -2535,7 +2535,7 @@ export def "projects-flags-environments-scheduled-changes-conflicts get-config" 
 #
 # DELETE /projects/{projectKey}/flags/{featureFlagKey}/environments/{environmentKey}/scheduled-changes/{scheduledChangeId}
 # operationId: deleteFlagConfigScheduledChanges
-export def "projects-flags-environments-scheduled-changes delete-config" [
+export def "delete-flag-config-scheduled-changes" [
   project_key: string
   feature_flag_key: string
   environment_key: string
@@ -2577,7 +2577,7 @@ export def "projects-flags-environments-scheduled-changes delete-config" [
 #
 # GET /projects/{projectKey}/flags/{featureFlagKey}/environments/{environmentKey}/scheduled-changes/{scheduledChangeId}
 # operationId: getFlagConfigScheduledChange
-export def "projects-flags-environments-scheduled-changes get-config" [
+export def "get-flag-config-scheduled-change" [
   project_key: string
   feature_flag_key: string
   environment_key: string
@@ -2620,7 +2620,7 @@ export def "projects-flags-environments-scheduled-changes get-config" [
 # PATCH /projects/{projectKey}/flags/{featureFlagKey}/environments/{environmentKey}/scheduled-changes/{scheduledChangeId}
 # operationId: patchFlagConfigScheduledChange
 # --instructions item shape: {kind?: string}
-export def "projects-flags-environments-scheduled-changes update-config" [
+export def "patch-flag-config-scheduled-change" [
   project_key: string
   feature_flag_key: string
   environment_key: string
@@ -2667,7 +2667,7 @@ export def "projects-flags-environments-scheduled-changes update-config" [
 #
 # GET /roles
 # operationId: getCustomRoles
-export def "roles list" [
+export def "get-custom-roles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2702,7 +2702,7 @@ export def "roles list" [
 # POST /roles
 # operationId: postCustomRole
 # --policy item shape: {actions?: list<string>, effect?: string, notActions?: list<string>, notResources?: list<string>, resources?: list<string>}
-export def "roles create-custom" [
+export def "post-custom-role" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2743,7 +2743,7 @@ export def "roles create-custom" [
 #
 # DELETE /roles/{customRoleKey}
 # operationId: deleteCustomRole
-export def "roles delete-custom" [
+export def "delete-custom-role" [
   custom_role_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2779,7 +2779,7 @@ export def "roles delete-custom" [
 #
 # GET /roles/{customRoleKey}
 # operationId: getCustomRole
-export def "roles get-custom" [
+export def "get-custom-role" [
   custom_role_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2815,7 +2815,7 @@ export def "roles get-custom" [
 #
 # PATCH /roles/{customRoleKey}
 # operationId: patchCustomRole
-export def "roles update-custom" [
+export def "patch-custom-role" [
   custom_role_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2855,7 +2855,7 @@ export def "roles update-custom" [
 #
 # GET /segments/{projectKey}/{environmentKey}
 # operationId: getUserSegments
-export def "segments list" [
+export def "get-user-segments" [
   project_key: string
   environment_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2895,7 +2895,7 @@ export def "segments list" [
 #
 # POST /segments/{projectKey}/{environmentKey}
 # operationId: postUserSegment
-export def "segments create-user" [
+export def "post-user-segment" [
   project_key: string
   environment_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2941,7 +2941,7 @@ export def "segments create-user" [
 #
 # DELETE /segments/{projectKey}/{environmentKey}/{userSegmentKey}
 # operationId: deleteUserSegment
-export def "segments delete-user" [
+export def "delete-user-segment" [
   project_key: string
   environment_key: string
   user_segment_key: string
@@ -2981,7 +2981,7 @@ export def "segments delete-user" [
 #
 # GET /segments/{projectKey}/{environmentKey}/{userSegmentKey}
 # operationId: getUserSegment
-export def "segments get-user" [
+export def "get-user-segment" [
   project_key: string
   environment_key: string
   user_segment_key: string
@@ -3021,7 +3021,7 @@ export def "segments get-user" [
 #
 # PATCH /segments/{projectKey}/{environmentKey}/{userSegmentKey}
 # operationId: patchUserSegment
-export def "segments update-user" [
+export def "patch-user-segment" [
   project_key: string
   environment_key: string
   user_segment_key: string
@@ -3067,7 +3067,7 @@ export def "segments update-user" [
 # operationId: updateBigSegmentTargets
 # --excluded shape: {add?: list<string>, remove?: list<string>}
 # --included shape: {add?: list<string>, remove?: list<string>}
-export def "segments-users update-big-targets" [
+export def "update-big-segment-targets" [
   project_key: string
   environment_key: string
   user_segment_key: string
@@ -3112,7 +3112,7 @@ export def "segments-users update-big-targets" [
 #
 # GET /segments/{projectKey}/{userSegmentKey}/expiring-user-targets/{environmentKey}
 # operationId: getExpiringUserTargetsOnSegment
-export def "segments-expiring-user-targets get" [
+export def "get-expiring-user-targets-on-segment" [
   project_key: string
   user_segment_key: string
   environment_key: string
@@ -3152,7 +3152,7 @@ export def "segments-expiring-user-targets get" [
 #
 # PATCH /segments/{projectKey}/{userSegmentKey}/expiring-user-targets/{environmentKey}
 # operationId: patchExpiringUserTargetsOnSegment
-export def "segments-expiring-user-targets update" [
+export def "patch-expiring-user-targets-on-segment" [
   project_key: string
   user_segment_key: string
   environment_key: string
@@ -3196,7 +3196,7 @@ export def "segments-expiring-user-targets update" [
 #
 # GET /tokens
 # operationId: getTokens
-export def "tokens list" [
+export def "get-tokens" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3233,7 +3233,7 @@ export def "tokens list" [
 # POST /tokens
 # operationId: postToken
 # --inlineRole item shape: {actions?: list<string>, effect?: "allow"|"deny", notActions?: list<string>, notResources?: list<string>, resources?: list<string>}
-export def "tokens create" [
+export def "post-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3276,7 +3276,7 @@ export def "tokens create" [
 #
 # DELETE /tokens/{tokenId}
 # operationId: deleteToken
-export def "tokens delete" [
+export def "delete-token" [
   token_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3312,7 +3312,7 @@ export def "tokens delete" [
 #
 # GET /tokens/{tokenId}
 # operationId: getToken
-export def "tokens get" [
+export def "get-token" [
   token_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3348,7 +3348,7 @@ export def "tokens get" [
 #
 # PATCH /tokens/{tokenId}
 # operationId: patchToken
-export def "tokens update" [
+export def "patch-token" [
   token_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3388,7 +3388,7 @@ export def "tokens update" [
 #
 # POST /tokens/{tokenId}/reset
 # operationId: resetToken
-export def "tokens-reset reset" [
+export def "reset-token" [
   token_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3426,7 +3426,7 @@ export def "tokens-reset reset" [
 #
 # GET /usage
 # operationId: getUsage
-export def "usage get" [
+export def "get-usage" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3460,7 +3460,7 @@ export def "usage get" [
 #
 # GET /usage/evaluations/{envId}/{flagKey}
 # operationId: getEvaluations
-export def "usage-evaluations get" [
+export def "get-evaluations" [
   env_id: string
   flag_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3498,7 +3498,7 @@ export def "usage-evaluations get" [
 #
 # GET /usage/events
 # operationId: getEvents
-export def "usage-events list" [
+export def "get-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3532,7 +3532,7 @@ export def "usage-events list" [
 #
 # GET /usage/events/{type}
 # operationId: getEvent
-export def "usage-events get" [
+export def "get-event" [
   type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3568,7 +3568,7 @@ export def "usage-events get" [
 #
 # GET /usage/mau
 # operationId: getMAU
-export def "usage-mau get" [
+export def "get-mau" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3602,7 +3602,7 @@ export def "usage-mau get" [
 #
 # GET /usage/mau/bycategory
 # operationId: getMAUByCategory
-export def "usage-mau-bycategory get-by-category" [
+export def "get-mau-by-category" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3636,7 +3636,7 @@ export def "usage-mau-bycategory get-by-category" [
 #
 # GET /usage/streams
 # operationId: getStreams
-export def "usage-streams list" [
+export def "get-streams" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3670,7 +3670,7 @@ export def "usage-streams list" [
 #
 # GET /usage/streams/{source}
 # operationId: getStream
-export def "usage-streams get" [
+export def "get-stream" [
   source: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3706,7 +3706,7 @@ export def "usage-streams get" [
 #
 # GET /usage/streams/{source}/bysdkversion
 # operationId: getStreamBySDK
-export def "usage-streams-bysdkversion get-by-sdk" [
+export def "get-stream-by-sdk" [
   source: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3742,7 +3742,7 @@ export def "usage-streams-bysdkversion get-by-sdk" [
 #
 # GET /usage/streams/{source}/sdkversions
 # operationId: getStreamSDKVersion
-export def "usage-streams-sdkversions get-sdk-version" [
+export def "get-stream-sdk-version" [
   source: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3778,7 +3778,7 @@ export def "usage-streams-sdkversions get-sdk-version" [
 #
 # GET /user-search/{projectKey}/{environmentKey}
 # operationId: getSearchUsers
-export def "user-search get" [
+export def "get-search-users" [
   project_key: string
   environment_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3821,7 +3821,7 @@ export def "user-search get" [
 #
 # GET /users/{projectKey}/{environmentKey}
 # operationId: getUsers
-export def "users list" [
+export def "get-users" [
   project_key: string
   environment_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3863,7 +3863,7 @@ export def "users list" [
 #
 # DELETE /users/{projectKey}/{environmentKey}/{userKey}
 # operationId: deleteUser
-export def "users delete" [
+export def "delete-user" [
   project_key: string
   environment_key: string
   user_key: string
@@ -3903,7 +3903,7 @@ export def "users delete" [
 #
 # GET /users/{projectKey}/{environmentKey}/{userKey}
 # operationId: getUser
-export def "users get" [
+export def "get-user" [
   project_key: string
   environment_key: string
   user_key: string
@@ -3943,7 +3943,7 @@ export def "users get" [
 #
 # GET /users/{projectKey}/{environmentKey}/{userKey}/flags
 # operationId: getUserFlagSettings
-export def "users-flags get-settings" [
+export def "get-user-flag-settings" [
   project_key: string
   environment_key: string
   user_key: string
@@ -3983,7 +3983,7 @@ export def "users-flags get-settings" [
 #
 # GET /users/{projectKey}/{environmentKey}/{userKey}/flags/{featureFlagKey}
 # operationId: getUserFlagSetting
-export def "users-flags get-setting" [
+export def "get-user-flag-setting" [
   project_key: string
   environment_key: string
   user_key: string
@@ -4025,7 +4025,7 @@ export def "users-flags get-setting" [
 #
 # PUT /users/{projectKey}/{environmentKey}/{userKey}/flags/{featureFlagKey}
 # operationId: putFlagSetting
-export def "users-flags update-setting" [
+export def "put-flag-setting" [
   project_key: string
   environment_key: string
   user_key: string
@@ -4071,7 +4071,7 @@ export def "users-flags update-setting" [
 #
 # GET /users/{projectKey}/{userKey}/expiring-user-targets/{environmentKey}
 # operationId: getExpiringUserTargetsForUser
-export def "users-expiring-user-targets get" [
+export def "get-expiring-user-targets-for-user" [
   project_key: string
   user_key: string
   environment_key: string
@@ -4111,7 +4111,7 @@ export def "users-expiring-user-targets get" [
 #
 # PATCH /users/{projectKey}/{userKey}/expiring-user-targets/{environmentKey}
 # operationId: patchExpiringUserTargetsForFlags
-export def "users-expiring-user-targets update-for-flags" [
+export def "patch-expiring-user-targets-for-flags" [
   project_key: string
   user_key: string
   environment_key: string
@@ -4155,7 +4155,7 @@ export def "users-expiring-user-targets update-for-flags" [
 #
 # GET /webhooks
 # operationId: getWebhooks
-export def "webhooks list" [
+export def "get-webhooks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4190,7 +4190,7 @@ export def "webhooks list" [
 # POST /webhooks
 # operationId: postWebhook
 # --statements item shape: {actions?: list<string>, effect?: "allow"|"deny", notActions?: list<string>, notResources?: list<string>, resources?: list<string>}
-export def "webhooks create" [
+export def "post-webhook" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4234,7 +4234,7 @@ export def "webhooks create" [
 #
 # DELETE /webhooks/{resourceId}
 # operationId: deleteWebhook
-export def "webhooks delete" [
+export def "delete-webhook" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4270,7 +4270,7 @@ export def "webhooks delete" [
 #
 # GET /webhooks/{resourceId}
 # operationId: getWebhook
-export def "webhooks get" [
+export def "get-webhook" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4306,7 +4306,7 @@ export def "webhooks get" [
 #
 # PATCH /webhooks/{resourceId}
 # operationId: patchWebhook
-export def "webhooks update" [
+export def "patch-webhook" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

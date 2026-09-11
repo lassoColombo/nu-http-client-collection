@@ -115,7 +115,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "rest-service-auth-v1-login get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "login" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -139,7 +139,7 @@ export def commands []: nothing -> table {
 #
 # GET /rest-service/auth-v1/login
 # operationId: login
-export def "rest-service-auth-v1-login get" [
+export def "login" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -176,7 +176,7 @@ export def "rest-service-auth-v1-login get" [
 #
 # POST /rest-service/auth-v1/login
 # operationId: loginPost
-export def "rest-service-auth-v1-login create" [
+export def "login-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -210,7 +210,7 @@ export def "rest-service-auth-v1-login create" [
 #
 # GET /rest-service/projects-v1
 # operationId: getAllProjects
-export def "rest-service-projects-v1 get-list" [
+export def "get-all-projects" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -246,7 +246,7 @@ export def "rest-service-projects-v1 get-list" [
 #
 # GET /rest-service/projects-v1/{key}
 # operationId: getProject
-export def "rest-service-projects-v1 get" [
+export def "get-project" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -284,7 +284,7 @@ export def "rest-service-projects-v1 get" [
 #
 # GET /rest-service/repositories-v1
 # operationId: getAllRepositories
-export def "rest-service-repositories-v1 get-list" [
+export def "get-all-repositories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -324,7 +324,7 @@ export def "rest-service-repositories-v1 get-list" [
 #
 # GET /rest-service/repositories-v1/browse/{repository}/{path}
 # operationId: browse
-export def "rest-service-repositories-v1-browse get" [
+export def "browse" [
   repository: string
   path: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -362,7 +362,7 @@ export def "rest-service-repositories-v1-browse get" [
 #
 # GET /rest-service/repositories-v1/change/{repository}/{revision}
 # operationId: change
-export def "rest-service-repositories-v1-change get" [
+export def "change" [
   repository: string
   revision: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -400,7 +400,7 @@ export def "rest-service-repositories-v1-change get" [
 #
 # GET /rest-service/repositories-v1/changes/{repository}/{path}
 # operationId: changes
-export def "rest-service-repositories-v1-changes changes" [
+export def "changes" [
   repository: string
   path: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -444,7 +444,7 @@ export def "rest-service-repositories-v1-changes changes" [
 #
 # GET /rest-service/repositories-v1/content/{repository}/{revision}/{path}
 # operationId: getContents
-export def "rest-service-repositories-v1-content get" [
+export def "get-contents" [
   repository: string
   revision: string
   path: string
@@ -484,7 +484,7 @@ export def "rest-service-repositories-v1-content get" [
 #
 # GET /rest-service/repositories-v1/history/{repository}/{revision}/{path}
 # operationId: history
-export def "rest-service-repositories-v1-history get" [
+export def "history" [
   repository: string
   revision: string
   path: string
@@ -523,7 +523,7 @@ export def "rest-service-repositories-v1-history get" [
 # GET /rest-service/repositories-v1/{repository}
 #
 # operationId: getRepositoryDetails
-export def "rest-service-repositories-v1 get-details-by-repository" [
+export def "get-repository-details" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -559,7 +559,7 @@ export def "rest-service-repositories-v1 get-details-by-repository" [
 #
 # GET /rest-service/repositories-v1/{repository}/svn
 # operationId: getSvnRepositoryDetails
-export def "rest-service-repositories-v1-svn get-details" [
+export def "get-svn-repository-details" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -594,7 +594,7 @@ export def "rest-service-repositories-v1-svn get-details" [
 # GET /rest-service/repositories-v1/{repository}/{revision}/{path}
 #
 # operationId: details
-export def "rest-service-repositories-v1 get-details-by-repository-revision-path" [
+export def "details" [
   repository: string
   revision: string
   path: string
@@ -633,7 +633,7 @@ export def "rest-service-repositories-v1 get-details-by-repository-revision-path
 # GET /rest-service/reviews-v1
 #
 # operationId: getAllReviews
-export def "rest-service-reviews-v1 get-list" [
+export def "get-all-reviews" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -668,7 +668,7 @@ export def "rest-service-reviews-v1 get-list" [
 # POST /rest-service/reviews-v1
 #
 # operationId: createReview
-export def "rest-service-reviews-v1 create" [
+export def "create-review" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -702,7 +702,7 @@ export def "rest-service-reviews-v1 create" [
 #
 # GET /rest-service/reviews-v1/details
 # operationId: getAllDetailedReviews
-export def "rest-service-reviews-v1-details get-list-detailed" [
+export def "get-all-detailed-reviews" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -738,7 +738,7 @@ export def "rest-service-reviews-v1-details get-list-detailed" [
 #
 # GET /rest-service/reviews-v1/filter
 # operationId: getCustomFilterReviews
-export def "rest-service-reviews-v1-filter get-custom" [
+export def "get-custom-filter-reviews" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -785,7 +785,7 @@ export def "rest-service-reviews-v1-filter get-custom" [
 #
 # POST /rest-service/reviews-v1/filter
 # operationId: postCustomFilterReviews
-export def "rest-service-reviews-v1-filter create-custom" [
+export def "post-custom-filter-reviews" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -819,7 +819,7 @@ export def "rest-service-reviews-v1-filter create-custom" [
 #
 # GET /rest-service/reviews-v1/filter/details
 # operationId: getDetailedCustomFilterReviews
-export def "rest-service-reviews-v1-filter-details get-detailed-custom" [
+export def "get-detailed-custom-filter-reviews" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -866,7 +866,7 @@ export def "rest-service-reviews-v1-filter-details get-detailed-custom" [
 #
 # POST /rest-service/reviews-v1/filter/details
 # operationId: postDetailedCustomFilterReviews
-export def "rest-service-reviews-v1-filter-details create-detailed-custom" [
+export def "post-detailed-custom-filter-reviews" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -900,7 +900,7 @@ export def "rest-service-reviews-v1-filter-details create-detailed-custom" [
 #
 # GET /rest-service/reviews-v1/filter/{filter}
 # operationId: getFilteredReviewsForUser
-export def "rest-service-reviews-v1-filter get-filtered-for-user" [
+export def "get-filtered-reviews-for-user" [
   filter: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -936,7 +936,7 @@ export def "rest-service-reviews-v1-filter get-filtered-for-user" [
 #
 # GET /rest-service/reviews-v1/filter/{filter}/details
 # operationId: getDetailedFilteredReviewsForUser
-export def "rest-service-reviews-v1-filter-details get-detailed-filtered-for-user" [
+export def "get-detailed-filtered-reviews-for-user" [
   filter: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -972,7 +972,7 @@ export def "rest-service-reviews-v1-filter-details get-detailed-filtered-for-use
 #
 # GET /rest-service/reviews-v1/metrics/{version}
 # operationId: getMetrics
-export def "rest-service-reviews-v1-metrics get" [
+export def "get-metrics" [
   version: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1008,7 +1008,7 @@ export def "rest-service-reviews-v1-metrics get" [
 #
 # GET /rest-service/reviews-v1/search/{repository}
 # operationId: getReviewsForPath
-export def "rest-service-reviews-v1-search get-for-path" [
+export def "get-reviews-for-path" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1046,7 +1046,7 @@ export def "rest-service-reviews-v1-search get-for-path" [
 #
 # GET /rest-service/reviews-v1/search/{repository}/details
 # operationId: getReviewsDetailsForPath
-export def "rest-service-reviews-v1-search-details get-for-path" [
+export def "get-reviews-details-for-path" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1084,7 +1084,7 @@ export def "rest-service-reviews-v1-search-details get-for-path" [
 #
 # GET /rest-service/reviews-v1/versionInfo
 # operationId: getVersionInfo
-export def "rest-service-reviews-v1-version-info get" [
+export def "get-version-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1118,7 +1118,7 @@ export def "rest-service-reviews-v1-version-info get" [
 #
 # DELETE /rest-service/reviews-v1/{id}
 # operationId: deleteReview
-export def "rest-service-reviews-v1 delete" [
+export def "delete-review" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1154,7 +1154,7 @@ export def "rest-service-reviews-v1 delete" [
 #
 # GET /rest-service/reviews-v1/{id}
 # operationId: getReview
-export def "rest-service-reviews-v1 get" [
+export def "get-review" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1190,7 +1190,7 @@ export def "rest-service-reviews-v1 get" [
 #
 # GET /rest-service/reviews-v1/{id}/actions
 # operationId: getAvailableActions
-export def "rest-service-reviews-v1-actions get-available" [
+export def "get-available-actions" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1225,7 +1225,7 @@ export def "rest-service-reviews-v1-actions get-available" [
 # POST /rest-service/reviews-v1/{id}/addChangeset
 #
 # operationId: addChangesetToReview
-export def "rest-service-reviews-v1-add-changeset create" [
+export def "add-changeset-to-review" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1260,7 +1260,7 @@ export def "rest-service-reviews-v1-add-changeset create" [
 # POST /rest-service/reviews-v1/{id}/addFile
 #
 # operationId: addFile
-export def "rest-service-reviews-v1-add-file create" [
+export def "add-file" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1296,7 +1296,7 @@ export def "rest-service-reviews-v1-add-file create" [
 #
 # POST /rest-service/reviews-v1/{id}/addPatch
 # operationId: addPatchReview0
-export def "rest-service-reviews-v1-add-patch create-review0" [
+export def "add-patch-review0" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1332,7 +1332,7 @@ export def "rest-service-reviews-v1-add-patch create-review0" [
 #
 # POST /rest-service/reviews-v1/{id}/close
 # operationId: closeReviewWithComment
-export def "rest-service-reviews-v1-close close-with-comment" [
+export def "close-review-with-comment" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1368,7 +1368,7 @@ export def "rest-service-reviews-v1-close close-with-comment" [
 #
 # GET /rest-service/reviews-v1/{id}/comments
 # operationId: getAllComments
-export def "rest-service-reviews-v1-comments get-list" [
+export def "get-all-comments" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1406,7 +1406,7 @@ export def "rest-service-reviews-v1-comments get-list" [
 #
 # POST /rest-service/reviews-v1/{id}/comments
 # operationId: addGeneralComment
-export def "rest-service-reviews-v1-comments create-general" [
+export def "add-general-comment" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1441,7 +1441,7 @@ export def "rest-service-reviews-v1-comments create-general" [
 # GET /rest-service/reviews-v1/{id}/comments/general
 #
 # operationId: getGeneralComments
-export def "rest-service-reviews-v1-comments-general get" [
+export def "get-general-comments" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1479,7 +1479,7 @@ export def "rest-service-reviews-v1-comments-general get" [
 #
 # POST /rest-service/reviews-v1/{id}/comments/markAllAsRead
 # operationId: markAllCommentsAsRead
-export def "rest-service-reviews-v1-comments-mark-all-as-read list" [
+export def "mark-all-comments-as-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1514,7 +1514,7 @@ export def "rest-service-reviews-v1-comments-mark-all-as-read list" [
 # GET /rest-service/reviews-v1/{id}/comments/versioned
 #
 # operationId: getVersionedComments
-export def "rest-service-reviews-v1-comments-versioned get" [
+export def "get-versioned-comments" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1552,7 +1552,7 @@ export def "rest-service-reviews-v1-comments-versioned get" [
 #
 # DELETE /rest-service/reviews-v1/{id}/comments/{cId}
 # operationId: removeComment
-export def "rest-service-reviews-v1-comments delete" [
+export def "remove-comment" [
   id: string
   c_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1590,7 +1590,7 @@ export def "rest-service-reviews-v1-comments delete" [
 #
 # GET /rest-service/reviews-v1/{id}/comments/{cId}
 # operationId: getComment
-export def "rest-service-reviews-v1-comments get" [
+export def "get-comment" [
   id: string
   c_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1630,7 +1630,7 @@ export def "rest-service-reviews-v1-comments get" [
 #
 # POST /rest-service/reviews-v1/{id}/comments/{cId}
 # operationId: updateComment
-export def "rest-service-reviews-v1-comments update" [
+export def "update-comment" [
   id: string
   c_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1668,7 +1668,7 @@ export def "rest-service-reviews-v1-comments update" [
 #
 # POST /rest-service/reviews-v1/{id}/comments/{cId}/markAsLeaveUnread
 # operationId: markCommentAsLeaveUnread
-export def "rest-service-reviews-v1-comments-mark-as-leave-unread create" [
+export def "mark-comment-as-leave-unread" [
   id: string
   c_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1706,7 +1706,7 @@ export def "rest-service-reviews-v1-comments-mark-as-leave-unread create" [
 #
 # POST /rest-service/reviews-v1/{id}/comments/{cId}/markAsRead
 # operationId: markCommentAsRead
-export def "rest-service-reviews-v1-comments-mark-as-read get" [
+export def "mark-comment-as-read" [
   id: string
   c_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1744,7 +1744,7 @@ export def "rest-service-reviews-v1-comments-mark-as-read get" [
 #
 # GET /rest-service/reviews-v1/{id}/comments/{cId}/replies
 # operationId: getReplies
-export def "rest-service-reviews-v1-comments-replies get" [
+export def "get-replies" [
   id: string
   c_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1784,7 +1784,7 @@ export def "rest-service-reviews-v1-comments-replies get" [
 #
 # POST /rest-service/reviews-v1/{id}/comments/{cId}/replies
 # operationId: addReply
-export def "rest-service-reviews-v1-comments-replies create-reply" [
+export def "add-reply" [
   id: string
   c_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1822,7 +1822,7 @@ export def "rest-service-reviews-v1-comments-replies create-reply" [
 #
 # DELETE /rest-service/reviews-v1/{id}/comments/{cId}/replies/{rId}
 # operationId: removeReply
-export def "rest-service-reviews-v1-comments-replies delete-reply" [
+export def "remove-reply" [
   id: string
   c_id: string
   r_id: string
@@ -1862,7 +1862,7 @@ export def "rest-service-reviews-v1-comments-replies delete-reply" [
 #
 # POST /rest-service/reviews-v1/{id}/comments/{cId}/replies/{rId}
 # operationId: updateReply
-export def "rest-service-reviews-v1-comments-replies update-reply" [
+export def "update-reply" [
   id: string
   c_id: string
   r_id: string
@@ -1902,7 +1902,7 @@ export def "rest-service-reviews-v1-comments-replies update-reply" [
 #
 # POST /rest-service/reviews-v1/{id}/complete
 # operationId: completeReview
-export def "rest-service-reviews-v1-complete complete" [
+export def "complete-review" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1940,7 +1940,7 @@ export def "rest-service-reviews-v1-complete complete" [
 #
 # GET /rest-service/reviews-v1/{id}/details
 # operationId: getDetailedReview
-export def "rest-service-reviews-v1-details get-detailed" [
+export def "get-detailed-review" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1976,7 +1976,7 @@ export def "rest-service-reviews-v1-details get-detailed" [
 #
 # GET /rest-service/reviews-v1/{id}/patch
 # operationId: getReviewPatches
-export def "rest-service-reviews-v1-patch get-patches" [
+export def "get-review-patches" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2012,7 +2012,7 @@ export def "rest-service-reviews-v1-patch get-patches" [
 #
 # POST /rest-service/reviews-v1/{id}/patch
 # operationId: addPatchToReview
-export def "rest-service-reviews-v1-patch create" [
+export def "add-patch-to-review" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2048,7 +2048,7 @@ export def "rest-service-reviews-v1-patch create" [
 #
 # DELETE /rest-service/reviews-v1/{id}/patch/{patchId}
 # operationId: removePatch
-export def "rest-service-reviews-v1-patch delete" [
+export def "remove-patch" [
   id: string
   patch_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2086,7 +2086,7 @@ export def "rest-service-reviews-v1-patch delete" [
 #
 # POST /rest-service/reviews-v1/{id}/publish
 # operationId: publishAllComments
-export def "rest-service-reviews-v1-publish list-comments" [
+export def "publish-all-comments" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2122,7 +2122,7 @@ export def "rest-service-reviews-v1-publish list-comments" [
 #
 # POST /rest-service/reviews-v1/{id}/publish/{cId}
 # operationId: publishComment
-export def "rest-service-reviews-v1-publish publish-comment" [
+export def "publish-comment" [
   id: string
   c_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2160,7 +2160,7 @@ export def "rest-service-reviews-v1-publish publish-comment" [
 #
 # POST /rest-service/reviews-v1/{id}/remind
 # operationId: remindIncompleteReviewers
-export def "rest-service-reviews-v1-remind create-incomplete-reviewers" [
+export def "remind-incomplete-reviewers" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2196,7 +2196,7 @@ export def "rest-service-reviews-v1-remind create-incomplete-reviewers" [
 #
 # GET /rest-service/reviews-v1/{id}/reviewers
 # operationId: getReviewers
-export def "rest-service-reviews-v1-reviewers get" [
+export def "get-reviewers" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2232,7 +2232,7 @@ export def "rest-service-reviews-v1-reviewers get" [
 #
 # POST /rest-service/reviews-v1/{id}/reviewers
 # operationId: addReviewers
-export def "rest-service-reviews-v1-reviewers create" [
+export def "add-reviewers" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2268,7 +2268,7 @@ export def "rest-service-reviews-v1-reviewers create" [
 #
 # GET /rest-service/reviews-v1/{id}/reviewers/completed
 # operationId: getCompletedReviewers
-export def "rest-service-reviews-v1-reviewers-completed get" [
+export def "get-completed-reviewers" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2304,7 +2304,7 @@ export def "rest-service-reviews-v1-reviewers-completed get" [
 #
 # GET /rest-service/reviews-v1/{id}/reviewers/uncompleted
 # operationId: getUncompletedReviewers
-export def "rest-service-reviews-v1-reviewers-uncompleted get" [
+export def "get-uncompleted-reviewers" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2340,7 +2340,7 @@ export def "rest-service-reviews-v1-reviewers-uncompleted get" [
 #
 # DELETE /rest-service/reviews-v1/{id}/reviewers/{username}
 # operationId: removeReviewer
-export def "rest-service-reviews-v1-reviewers delete" [
+export def "remove-reviewer" [
   id: string
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2378,7 +2378,7 @@ export def "rest-service-reviews-v1-reviewers delete" [
 #
 # GET /rest-service/reviews-v1/{id}/reviewitems
 # operationId: getReviewItemsForReview
-export def "rest-service-reviews-v1-reviewitems get-items" [
+export def "get-review-items-for-review" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2414,7 +2414,7 @@ export def "rest-service-reviews-v1-reviewitems get-items" [
 #
 # POST /rest-service/reviews-v1/{id}/reviewitems
 # operationId: addFisheyeReviewItem
-export def "rest-service-reviews-v1-reviewitems create-fisheye-item" [
+export def "add-fisheye-review-item" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2450,7 +2450,7 @@ export def "rest-service-reviews-v1-reviewitems create-fisheye-item" [
 #
 # POST /rest-service/reviews-v1/{id}/reviewitems/details
 # operationId: addReviewItem
-export def "rest-service-reviews-v1-reviewitems-details create-item" [
+export def "add-review-item" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2486,7 +2486,7 @@ export def "rest-service-reviews-v1-reviewitems-details create-item" [
 #
 # POST /rest-service/reviews-v1/{id}/reviewitems/revisions
 # operationId: addReviewItems
-export def "rest-service-reviews-v1-reviewitems-revisions create-items" [
+export def "add-review-items" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2522,7 +2522,7 @@ export def "rest-service-reviews-v1-reviewitems-revisions create-items" [
 #
 # DELETE /rest-service/reviews-v1/{id}/reviewitems/{riId}
 # operationId: removeReviewItem
-export def "rest-service-reviews-v1-reviewitems delete-item" [
+export def "remove-review-item" [
   id: string
   ri_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2560,7 +2560,7 @@ export def "rest-service-reviews-v1-reviewitems delete-item" [
 #
 # GET /rest-service/reviews-v1/{id}/reviewitems/{riId}
 # operationId: getReviewItem
-export def "rest-service-reviews-v1-reviewitems get-item" [
+export def "get-review-item" [
   id: string
   ri_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2597,7 +2597,7 @@ export def "rest-service-reviews-v1-reviewitems get-item" [
 # GET /rest-service/reviews-v1/{id}/reviewitems/{riId}/comments
 #
 # operationId: getReviewItemsComments
-export def "rest-service-reviews-v1-reviewitems-comments get-items" [
+export def "get-review-items-comments" [
   id: string
   ri_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2637,7 +2637,7 @@ export def "rest-service-reviews-v1-reviewitems-comments get-items" [
 #
 # POST /rest-service/reviews-v1/{id}/reviewitems/{riId}/comments
 # operationId: addVersionedComment
-export def "rest-service-reviews-v1-reviewitems-comments create-versioned" [
+export def "add-versioned-comment" [
   id: string
   ri_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2675,7 +2675,7 @@ export def "rest-service-reviews-v1-reviewitems-comments create-versioned" [
 #
 # PUT /rest-service/reviews-v1/{id}/reviewitems/{riId}/details
 # operationId: setReviewItem
-export def "rest-service-reviews-v1-reviewitems-details update-item" [
+export def "set-review-item" [
   id: string
   ri_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2713,7 +2713,7 @@ export def "rest-service-reviews-v1-reviewitems-details update-item" [
 #
 # DELETE /rest-service/reviews-v1/{id}/reviewitems/{riId}/revisions
 # operationId: removeReviewItemRevisions
-export def "rest-service-reviews-v1-reviewitems-revisions delete-item" [
+export def "remove-review-item-revisions" [
   id: string
   ri_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2753,7 +2753,7 @@ export def "rest-service-reviews-v1-reviewitems-revisions delete-item" [
 #
 # POST /rest-service/reviews-v1/{id}/reviewitems/{riId}/revisions
 # operationId: addReviewItemRevisions
-export def "rest-service-reviews-v1-reviewitems-revisions create-item" [
+export def "add-review-item-revisions" [
   id: string
   ri_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2793,7 +2793,7 @@ export def "rest-service-reviews-v1-reviewitems-revisions create-item" [
 #
 # POST /rest-service/reviews-v1/{id}/transition
 # operationId: changeState
-export def "rest-service-reviews-v1-transition create-change-state" [
+export def "change-state" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2832,7 +2832,7 @@ export def "rest-service-reviews-v1-transition create-change-state" [
 #
 # GET /rest-service/reviews-v1/{id}/transitions
 # operationId: getAvailableTransitions
-export def "rest-service-reviews-v1-transitions get-available" [
+export def "get-available-transitions" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2868,7 +2868,7 @@ export def "rest-service-reviews-v1-transitions get-available" [
 #
 # POST /rest-service/reviews-v1/{id}/uncomplete
 # operationId: uncompleteReview
-export def "rest-service-reviews-v1-uncomplete create" [
+export def "uncomplete-review" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2906,7 +2906,7 @@ export def "rest-service-reviews-v1-uncomplete create" [
 #
 # GET /rest-service/search-v1/reviews
 # operationId: getReviewsForTerm
-export def "rest-service-search-v1-reviews get-for-term" [
+export def "get-reviews-for-term" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2943,7 +2943,7 @@ export def "rest-service-search-v1-reviews get-for-term" [
 #
 # GET /rest-service/search-v1/reviewsForIssue
 # operationId: getReviewsForIssueKey
-export def "rest-service-search-v1-reviews-for-issue get-key" [
+export def "get-reviews-for-issue-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2980,7 +2980,7 @@ export def "rest-service-search-v1-reviews-for-issue get-key" [
 #
 # GET /rest-service/users-v1
 # operationId: getUsers
-export def "rest-service-users-v1 get" [
+export def "get-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3016,7 +3016,7 @@ export def "rest-service-users-v1 get" [
 #
 # GET /rest-service/users-v1/{repository}/{username}
 # operationId: getMappedUser
-export def "rest-service-users-v1 get-mapped" [
+export def "get-mapped-user" [
   repository: string
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3054,7 +3054,7 @@ export def "rest-service-users-v1 get-mapped" [
 #
 # GET /rest-service/users-v1/{username}
 # operationId: getUserProfile
-export def "rest-service-users-v1 get-profile" [
+export def "get-user-profile" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

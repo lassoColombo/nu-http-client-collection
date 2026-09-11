@@ -101,7 +101,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v3-log-impressions create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "playablelocations-log-impressions" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -127,7 +127,7 @@ export def commands []: nothing -> table {
 # operationId: playablelocations.logImpressions
 # --clientInfo shape: {apiClient?: string, applicationId?: string, applicationVersion?: string, deviceModel?: string, languageCode?: string, operatingSystem?: string, operatingSystemBuild?: string, platform?: "PLATFORM_UNSPECIFIED"|"EDITOR"|"MAC_OS"|"WINDOWS"|"LINUX"|"ANDROID"|"IOS"|"WEB_GL"}
 # --impressions item shape: {gameObjectType?: int, impressionType?: "IMPRESSION_TYPE_UNSPECIFIED"|"PRESENTED"|"INTERACTED", locationName?: string}
-export def "v3-log-impressions create" [
+export def "playablelocations-log-impressions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -181,7 +181,7 @@ export def "v3-log-impressions create" [
 # operationId: playablelocations.logPlayerReports
 # --clientInfo shape: {apiClient?: string, applicationId?: string, applicationVersion?: string, deviceModel?: string, languageCode?: string, operatingSystem?: string, operatingSystemBuild?: string, platform?: "PLATFORM_UNSPECIFIED"|"EDITOR"|"MAC_OS"|"WINDOWS"|"LINUX"|"ANDROID"|"IOS"|"WEB_GL"}
 # --playerReports item shape: {languageCode?: string, locationName?: string, reasonDetails?: string, reasons?: list<string>}
-export def "v3-log-player-reports create" [
+export def "playablelocations-log-player-reports" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -235,7 +235,7 @@ export def "v3-log-player-reports create" [
 # operationId: playablelocations.samplePlayableLocations
 # --areaFilter shape: {s2CellId?: string}
 # --criteria item shape: {fieldsToReturn?: string, filter?: record, gameObjectType?: int}
-export def "v3-sample-playable-locations create" [
+export def "playablelocations-sample-playable-locations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

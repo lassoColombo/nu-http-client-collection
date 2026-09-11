@@ -117,7 +117,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "enterprises get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "smartdevicemanagement-enterprises-structures-rooms-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -141,7 +141,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/{name}
 # operationId: smartdevicemanagement.enterprises.structures.rooms.get
-export def "enterprises get" [
+export def "smartdevicemanagement-enterprises-structures-rooms-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -189,7 +189,7 @@ export def "enterprises get" [
 #
 # POST /v1/{name}:executeCommand
 # operationId: smartdevicemanagement.enterprises.devices.executeCommand
-export def "enterprises create-execute-command" [
+export def "smartdevicemanagement-enterprises-devices-execute-command" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -242,7 +242,7 @@ export def "enterprises create-execute-command" [
 #
 # GET /v1/{parent}/devices
 # operationId: smartdevicemanagement.enterprises.devices.list
-export def "devices list" [
+export def "smartdevicemanagement-enterprises-devices-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -293,7 +293,7 @@ export def "devices list" [
 #
 # GET /v1/{parent}/rooms
 # operationId: smartdevicemanagement.enterprises.structures.rooms.list
-export def "rooms list" [
+export def "smartdevicemanagement-enterprises-structures-rooms-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -343,7 +343,7 @@ export def "rooms list" [
 #
 # GET /v1/{parent}/structures
 # operationId: smartdevicemanagement.enterprises.structures.list
-export def "structures list" [
+export def "smartdevicemanagement-enterprises-structures-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

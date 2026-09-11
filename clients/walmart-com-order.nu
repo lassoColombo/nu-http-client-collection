@@ -107,7 +107,7 @@ def wm-consumer-channel-type-completer [] { ["SWAGGER_CHANNEL_TYPE"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "orders get-list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-all-orders" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -131,7 +131,7 @@ export def commands []: nothing -> table {
 #
 # GET /v3/orders
 # operationId: getAllOrders
-export def "orders get-list" [
+export def "get-all-orders" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -187,7 +187,7 @@ export def "orders get-list" [
 #
 # GET /v3/orders/released
 # operationId: getReleasedOrders
-export def "orders-released get" [
+export def "get-released-orders" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -236,7 +236,7 @@ export def "orders-released get" [
 #
 # GET /v3/orders/released{nextCursor}
 # operationId: getNextCursorReleasedOrders
-export def "orders-releasednext-cursor get-next-released" [
+export def "get-next-cursor-released-orders" [
   next_cursor: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -283,7 +283,7 @@ export def "orders-releasednext-cursor get-next-released" [
 #
 # GET /v3/orders/{purchaseOrderId}
 # operationId: getOrderByPurchaseOrderId
-export def "orders get-by-purchase" [
+export def "get-order-by-purchase-order-id" [
   purchase_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -332,7 +332,7 @@ export def "orders get-by-purchase" [
 #
 # POST /v3/orders/{purchaseOrderId}/acknowledge
 # operationId: acknowledgeOrders
-export def "orders-acknowledge create" [
+export def "acknowledge-orders" [
   purchase_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -381,7 +381,7 @@ export def "orders-acknowledge create" [
 #
 # POST /v3/orders/{purchaseOrderId}/cancel
 # operationId: cancelOrder
-export def "orders-cancel cancel" [
+export def "cancel-order" [
   purchase_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -436,7 +436,7 @@ export def "orders-cancel cancel" [
 #
 # POST /v3/orders/{purchaseOrderId}/refund
 # operationId: refundOrder
-export def "orders-refund create" [
+export def "refund-order" [
   purchase_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -491,7 +491,7 @@ export def "orders-refund create" [
 #
 # POST /v3/orders/{purchaseOrderId}/shipping
 # operationId: shippingOrder
-export def "orders-shipping create" [
+export def "shipping-order" [
   purchase_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -546,7 +546,7 @@ export def "orders-shipping create" [
 #
 # GET /v3/orders{nextCursor}
 # operationId: getAllOrdersNext
-export def "ordersnext-cursor get-list-orders-next" [
+export def "get-all-orders-next" [
   next_cursor: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

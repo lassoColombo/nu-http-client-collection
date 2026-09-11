@@ -121,7 +121,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "catalog-usql-acl list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "catalog-list-acls" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -145,7 +145,7 @@ export def commands []: nothing -> table {
 #
 # GET /catalog/usql/acl
 # operationId: Catalog_ListAcls
-export def "catalog-usql-acl list" [
+export def "catalog-list-acls" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -187,7 +187,7 @@ export def "catalog-usql-acl list" [
 #
 # GET /catalog/usql/databases
 # operationId: Catalog_ListDatabases
-export def "catalog-usql-databases list" [
+export def "catalog-list-databases" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -229,7 +229,7 @@ export def "catalog-usql-databases list" [
 #
 # GET /catalog/usql/databases/{databaseName}
 # operationId: Catalog_GetDatabase
-export def "catalog-usql-databases get" [
+export def "catalog-get-database" [
   database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -267,7 +267,7 @@ export def "catalog-usql-databases get" [
 #
 # GET /catalog/usql/databases/{databaseName}/acl
 # operationId: Catalog_ListAclsByDatabase
-export def "catalog-usql-databases-acl list" [
+export def "catalog-list-acls-by-database" [
   database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -311,7 +311,7 @@ export def "catalog-usql-databases-acl list" [
 #
 # GET /catalog/usql/databases/{databaseName}/assemblies
 # operationId: Catalog_ListAssemblies
-export def "catalog-usql-databases-assemblies list" [
+export def "catalog-list-assemblies" [
   database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -355,7 +355,7 @@ export def "catalog-usql-databases-assemblies list" [
 #
 # GET /catalog/usql/databases/{databaseName}/assemblies/{assemblyName}
 # operationId: Catalog_GetAssembly
-export def "catalog-usql-databases-assemblies get-assembly" [
+export def "catalog-get-assembly" [
   database_name: string
   assembly_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -395,7 +395,7 @@ export def "catalog-usql-databases-assemblies get-assembly" [
 #
 # GET /catalog/usql/databases/{databaseName}/credentials
 # operationId: Catalog_ListCredentials
-export def "catalog-usql-databases-credentials list" [
+export def "catalog-list-credentials" [
   database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -439,7 +439,7 @@ export def "catalog-usql-databases-credentials list" [
 #
 # GET /catalog/usql/databases/{databaseName}/credentials/{credentialName}
 # operationId: Catalog_GetCredential
-export def "catalog-usql-databases-credentials get" [
+export def "catalog-get-credential" [
   database_name: string
   credential_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -479,7 +479,7 @@ export def "catalog-usql-databases-credentials get" [
 #
 # PATCH /catalog/usql/databases/{databaseName}/credentials/{credentialName}
 # operationId: Catalog_UpdateCredential
-export def "catalog-usql-databases-credentials update" [
+export def "catalog-update-credential" [
   database_name: string
   credential_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -526,7 +526,7 @@ export def "catalog-usql-databases-credentials update" [
 #
 # POST /catalog/usql/databases/{databaseName}/credentials/{credentialName}
 # operationId: Catalog_DeleteCredential
-export def "catalog-usql-databases-credentials delete" [
+export def "catalog-delete-credential" [
   database_name: string
   credential_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -571,7 +571,7 @@ export def "catalog-usql-databases-credentials delete" [
 #
 # PUT /catalog/usql/databases/{databaseName}/credentials/{credentialName}
 # operationId: Catalog_CreateCredential
-export def "catalog-usql-databases-credentials create" [
+export def "catalog-create-credential" [
   database_name: string
   credential_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -617,7 +617,7 @@ export def "catalog-usql-databases-credentials create" [
 #
 # GET /catalog/usql/databases/{databaseName}/externaldatasources
 # operationId: Catalog_ListExternalDataSources
-export def "catalog-usql-databases-externaldatasources list-external-data-sources" [
+export def "catalog-list-external-data-sources" [
   database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -661,7 +661,7 @@ export def "catalog-usql-databases-externaldatasources list-external-data-source
 #
 # GET /catalog/usql/databases/{databaseName}/externaldatasources/{externalDataSourceName}
 # operationId: Catalog_GetExternalDataSource
-export def "catalog-usql-databases-externaldatasources get-external-data-source" [
+export def "catalog-get-external-data-source" [
   database_name: string
   external_data_source_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -701,7 +701,7 @@ export def "catalog-usql-databases-externaldatasources get-external-data-source"
 #
 # GET /catalog/usql/databases/{databaseName}/schemas
 # operationId: Catalog_ListSchemas
-export def "catalog-usql-databases-schemas list" [
+export def "catalog-list-schemas" [
   database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -745,7 +745,7 @@ export def "catalog-usql-databases-schemas list" [
 #
 # GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}
 # operationId: Catalog_GetSchema
-export def "catalog-usql-databases-schemas get" [
+export def "catalog-get-schema" [
   database_name: string
   schema_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -785,7 +785,7 @@ export def "catalog-usql-databases-schemas get" [
 #
 # GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}/packages
 # operationId: Catalog_ListPackages
-export def "catalog-usql-databases-schemas-packages list" [
+export def "catalog-list-packages" [
   database_name: string
   schema_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -831,7 +831,7 @@ export def "catalog-usql-databases-schemas-packages list" [
 #
 # GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}/packages/{packageName}
 # operationId: Catalog_GetPackage
-export def "catalog-usql-databases-schemas-packages get" [
+export def "catalog-get-package" [
   database_name: string
   schema_name: string
   package_name: string
@@ -873,7 +873,7 @@ export def "catalog-usql-databases-schemas-packages get" [
 #
 # GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}/procedures
 # operationId: Catalog_ListProcedures
-export def "catalog-usql-databases-schemas-procedures list" [
+export def "catalog-list-procedures" [
   database_name: string
   schema_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -919,7 +919,7 @@ export def "catalog-usql-databases-schemas-procedures list" [
 #
 # GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}/procedures/{procedureName}
 # operationId: Catalog_GetProcedure
-export def "catalog-usql-databases-schemas-procedures get" [
+export def "catalog-get-procedure" [
   database_name: string
   schema_name: string
   procedure_name: string
@@ -961,7 +961,7 @@ export def "catalog-usql-databases-schemas-procedures get" [
 #
 # GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}/statistics
 # operationId: Catalog_ListTableStatisticsByDatabaseAndSchema
-export def "catalog-usql-databases-schemas-statistics list-table-by-and" [
+export def "catalog-list-table-statistics-by-database-and-schema" [
   database_name: string
   schema_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1007,7 +1007,7 @@ export def "catalog-usql-databases-schemas-statistics list-table-by-and" [
 #
 # GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}/tables
 # operationId: Catalog_ListTables
-export def "catalog-usql-databases-schemas-tables list" [
+export def "catalog-list-tables" [
   database_name: string
   schema_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1054,7 +1054,7 @@ export def "catalog-usql-databases-schemas-tables list" [
 #
 # GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}/tables/{tableName}
 # operationId: Catalog_GetTable
-export def "catalog-usql-databases-schemas-tables get" [
+export def "catalog-get-table" [
   database_name: string
   schema_name: string
   table_name: string
@@ -1096,7 +1096,7 @@ export def "catalog-usql-databases-schemas-tables get" [
 #
 # GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}/tables/{tableName}/partitions
 # operationId: Catalog_ListTablePartitions
-export def "catalog-usql-databases-schemas-tables-partitions list" [
+export def "catalog-list-table-partitions" [
   database_name: string
   schema_name: string
   table_name: string
@@ -1144,7 +1144,7 @@ export def "catalog-usql-databases-schemas-tables-partitions list" [
 #
 # GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}/tables/{tableName}/partitions/{partitionName}
 # operationId: Catalog_GetTablePartition
-export def "catalog-usql-databases-schemas-tables-partitions get" [
+export def "catalog-get-table-partition" [
   database_name: string
   schema_name: string
   table_name: string
@@ -1188,7 +1188,7 @@ export def "catalog-usql-databases-schemas-tables-partitions get" [
 #
 # GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}/tables/{tableName}/partitions/{partitionName}/previewrows
 # operationId: Catalog_PreviewTablePartition
-export def "catalog-usql-databases-schemas-tables-partitions-previewrows get-preview" [
+export def "catalog-preview-table-partition" [
   database_name: string
   schema_name: string
   table_name: string
@@ -1234,7 +1234,7 @@ export def "catalog-usql-databases-schemas-tables-partitions-previewrows get-pre
 #
 # GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}/tables/{tableName}/previewrows
 # operationId: Catalog_PreviewTable
-export def "catalog-usql-databases-schemas-tables-previewrows get-preview" [
+export def "catalog-preview-table" [
   database_name: string
   schema_name: string
   table_name: string
@@ -1278,7 +1278,7 @@ export def "catalog-usql-databases-schemas-tables-previewrows get-preview" [
 #
 # GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}/tables/{tableName}/statistics
 # operationId: Catalog_ListTableStatistics
-export def "catalog-usql-databases-schemas-tables-statistics list" [
+export def "catalog-list-table-statistics" [
   database_name: string
   schema_name: string
   table_name: string
@@ -1326,7 +1326,7 @@ export def "catalog-usql-databases-schemas-tables-statistics list" [
 #
 # GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}/tables/{tableName}/statistics/{statisticsName}
 # operationId: Catalog_GetTableStatistic
-export def "catalog-usql-databases-schemas-tables-statistics get" [
+export def "catalog-get-table-statistic" [
   database_name: string
   schema_name: string
   table_name: string
@@ -1370,7 +1370,7 @@ export def "catalog-usql-databases-schemas-tables-statistics get" [
 #
 # GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}/tables/{tableName}/tablefragments
 # operationId: Catalog_ListTableFragments
-export def "catalog-usql-databases-schemas-tables-tablefragments list-fragments" [
+export def "catalog-list-table-fragments" [
   database_name: string
   schema_name: string
   table_name: string
@@ -1418,7 +1418,7 @@ export def "catalog-usql-databases-schemas-tables-tablefragments list-fragments"
 #
 # GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}/tabletypes
 # operationId: Catalog_ListTableTypes
-export def "catalog-usql-databases-schemas-tabletypes list-table-types" [
+export def "catalog-list-table-types" [
   database_name: string
   schema_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1464,7 +1464,7 @@ export def "catalog-usql-databases-schemas-tabletypes list-table-types" [
 #
 # GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}/tabletypes/{tableTypeName}
 # operationId: Catalog_GetTableType
-export def "catalog-usql-databases-schemas-tabletypes get-table-type" [
+export def "catalog-get-table-type" [
   database_name: string
   schema_name: string
   table_type_name: string
@@ -1506,7 +1506,7 @@ export def "catalog-usql-databases-schemas-tabletypes get-table-type" [
 #
 # GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}/tablevaluedfunctions
 # operationId: Catalog_ListTableValuedFunctions
-export def "catalog-usql-databases-schemas-tablevaluedfunctions list-table-valued-functions" [
+export def "catalog-list-table-valued-functions" [
   database_name: string
   schema_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1552,7 +1552,7 @@ export def "catalog-usql-databases-schemas-tablevaluedfunctions list-table-value
 #
 # GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}/tablevaluedfunctions/{tableValuedFunctionName}
 # operationId: Catalog_GetTableValuedFunction
-export def "catalog-usql-databases-schemas-tablevaluedfunctions get-table-valued-function" [
+export def "catalog-get-table-valued-function" [
   database_name: string
   schema_name: string
   table_valued_function_name: string
@@ -1594,7 +1594,7 @@ export def "catalog-usql-databases-schemas-tablevaluedfunctions get-table-valued
 #
 # GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}/types
 # operationId: Catalog_ListTypes
-export def "catalog-usql-databases-schemas-types list" [
+export def "catalog-list-types" [
   database_name: string
   schema_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1640,7 +1640,7 @@ export def "catalog-usql-databases-schemas-types list" [
 #
 # GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}/views
 # operationId: Catalog_ListViews
-export def "catalog-usql-databases-schemas-views list" [
+export def "catalog-list-views" [
   database_name: string
   schema_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1686,7 +1686,7 @@ export def "catalog-usql-databases-schemas-views list" [
 #
 # GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}/views/{viewName}
 # operationId: Catalog_GetView
-export def "catalog-usql-databases-schemas-views get" [
+export def "catalog-get-view" [
   database_name: string
   schema_name: string
   view_name: string
@@ -1730,7 +1730,7 @@ export def "catalog-usql-databases-schemas-views get" [
 # DEPRECATED
 # operationId: Catalog_DeleteAllSecrets
 @deprecated
-export def "catalog-usql-databases-secrets delete-list" [
+export def "catalog-delete-all-secrets" [
   database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1770,7 +1770,7 @@ export def "catalog-usql-databases-secrets delete-list" [
 # DEPRECATED
 # operationId: Catalog_DeleteSecret
 @deprecated
-export def "catalog-usql-databases-secrets delete" [
+export def "catalog-delete-secret" [
   database_name: string
   secret_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1812,7 +1812,7 @@ export def "catalog-usql-databases-secrets delete" [
 # DEPRECATED
 # operationId: Catalog_GetSecret
 @deprecated
-export def "catalog-usql-databases-secrets get" [
+export def "catalog-get-secret" [
   database_name: string
   secret_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1854,7 +1854,7 @@ export def "catalog-usql-databases-secrets get" [
 # DEPRECATED
 # operationId: Catalog_UpdateSecret
 @deprecated
-export def "catalog-usql-databases-secrets update" [
+export def "catalog-update-secret" [
   database_name: string
   secret_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1901,7 +1901,7 @@ export def "catalog-usql-databases-secrets update" [
 # DEPRECATED
 # operationId: Catalog_CreateSecret
 @deprecated
-export def "catalog-usql-databases-secrets create" [
+export def "catalog-create-secret" [
   database_name: string
   secret_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1946,7 +1946,7 @@ export def "catalog-usql-databases-secrets create" [
 #
 # GET /catalog/usql/databases/{databaseName}/statistics
 # operationId: Catalog_ListTableStatisticsByDatabase
-export def "catalog-usql-databases-statistics list-table" [
+export def "catalog-list-table-statistics-by-database" [
   database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1990,7 +1990,7 @@ export def "catalog-usql-databases-statistics list-table" [
 #
 # GET /catalog/usql/databases/{databaseName}/tables
 # operationId: Catalog_ListTablesByDatabase
-export def "catalog-usql-databases-tables list" [
+export def "catalog-list-tables-by-database" [
   database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2035,7 +2035,7 @@ export def "catalog-usql-databases-tables list" [
 #
 # GET /catalog/usql/databases/{databaseName}/tablevaluedfunctions
 # operationId: Catalog_ListTableValuedFunctionsByDatabase
-export def "catalog-usql-databases-tablevaluedfunctions list-table-valued-functions" [
+export def "catalog-list-table-valued-functions-by-database" [
   database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2079,7 +2079,7 @@ export def "catalog-usql-databases-tablevaluedfunctions list-table-valued-functi
 #
 # GET /catalog/usql/databases/{databaseName}/views
 # operationId: Catalog_ListViewsByDatabase
-export def "catalog-usql-databases-views list" [
+export def "catalog-list-views-by-database" [
   database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

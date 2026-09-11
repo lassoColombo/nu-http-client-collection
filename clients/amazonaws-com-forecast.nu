@@ -163,7 +163,7 @@ def x-amz-target-completer-62 [] { ["AmazonForecast.UpdateDatasetGroup"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-auto-predictor" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-auto-predictor" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -188,7 +188,7 @@ export def commands []: nothing -> table {
 # POST /
 # operationId: CreateAutoPredictor
 # --EncryptionConfig shape: {RoleArn: any, KMSKeyArn: any}
-export def "api create-auto-predictor" [
+export def "create-auto-predictor" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -248,7 +248,7 @@ export def "api create-auto-predictor" [
 #
 # POST /
 # operationId: CreateDataset
-export def "api create-dataset" [
+export def "create-dataset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -302,7 +302,7 @@ export def "api create-dataset" [
 #
 # POST /
 # operationId: CreateDatasetGroup
-export def "api create-dataset-group" [
+export def "create-dataset-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -353,7 +353,7 @@ export def "api create-dataset-group" [
 #
 # POST /
 # operationId: CreateDatasetImportJob
-export def "api create-dataset-import-job" [
+export def "create-dataset-import-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -412,7 +412,7 @@ export def "api create-dataset-import-job" [
 # operationId: CreateExplainability
 # --DataSource shape: {S3Config: any}
 # --Schema shape: {Attributes?: any}
-export def "api create-explainability" [
+export def "create-explainability" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -469,7 +469,7 @@ export def "api create-explainability" [
 # POST /
 # operationId: CreateExplainabilityExport
 # --Destination shape: {S3Config: any}
-export def "api create-explainability-export" [
+export def "create-explainability-export" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -521,7 +521,7 @@ export def "api create-explainability-export" [
 #
 # POST /
 # operationId: CreateForecast
-export def "api create-forecast" [
+export def "create-forecast" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -573,7 +573,7 @@ export def "api create-forecast" [
 #
 # POST /
 # operationId: CreateForecastExportJob
-export def "api create-forecast-export-job" [
+export def "create-forecast-export-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -625,7 +625,7 @@ export def "api create-forecast-export-job" [
 #
 # POST /
 # operationId: CreateMonitor
-export def "api create-monitor" [
+export def "create-monitor" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -675,7 +675,7 @@ export def "api create-monitor" [
 #
 # POST /
 # operationId: CreatePredictor
-export def "api create-predictor" [
+export def "create-predictor" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -738,7 +738,7 @@ export def "api create-predictor" [
 # POST /
 # operationId: CreatePredictorBacktestExportJob
 # --Destination shape: {S3Config: any}
-export def "api create-predictor-backtest-export-job" [
+export def "create-predictor-backtest-export-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -790,7 +790,7 @@ export def "api create-predictor-backtest-export-job" [
 #
 # POST /
 # operationId: CreateWhatIfAnalysis
-export def "api create-what-if-analysis" [
+export def "create-what-if-analysis" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -841,7 +841,7 @@ export def "api create-what-if-analysis" [
 #
 # POST /
 # operationId: CreateWhatIfForecast
-export def "api create-what-if-forecast" [
+export def "create-what-if-forecast" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -893,7 +893,7 @@ export def "api create-what-if-forecast" [
 #
 # POST /
 # operationId: CreateWhatIfForecastExport
-export def "api create-what-if-forecast-export" [
+export def "create-what-if-forecast-export" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -945,7 +945,7 @@ export def "api create-what-if-forecast-export" [
 #
 # POST /
 # operationId: DeleteDataset
-export def "api delete-dataset" [
+export def "delete-dataset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -993,7 +993,7 @@ export def "api delete-dataset" [
 #
 # POST /
 # operationId: DeleteDatasetGroup
-export def "api delete-dataset-group" [
+export def "delete-dataset-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1041,7 +1041,7 @@ export def "api delete-dataset-group" [
 #
 # POST /
 # operationId: DeleteDatasetImportJob
-export def "api delete-dataset-import-job" [
+export def "delete-dataset-import-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1089,7 +1089,7 @@ export def "api delete-dataset-import-job" [
 #
 # POST /
 # operationId: DeleteExplainability
-export def "api delete-explainability" [
+export def "delete-explainability" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1137,7 +1137,7 @@ export def "api delete-explainability" [
 #
 # POST /
 # operationId: DeleteExplainabilityExport
-export def "api delete-explainability-export" [
+export def "delete-explainability-export" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1185,7 +1185,7 @@ export def "api delete-explainability-export" [
 #
 # POST /
 # operationId: DeleteForecast
-export def "api delete-forecast" [
+export def "delete-forecast" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1233,7 +1233,7 @@ export def "api delete-forecast" [
 #
 # POST /
 # operationId: DeleteForecastExportJob
-export def "api delete-forecast-export-job" [
+export def "delete-forecast-export-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1281,7 +1281,7 @@ export def "api delete-forecast-export-job" [
 #
 # POST /
 # operationId: DeleteMonitor
-export def "api delete-monitor" [
+export def "delete-monitor" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1329,7 +1329,7 @@ export def "api delete-monitor" [
 #
 # POST /
 # operationId: DeletePredictor
-export def "api delete-predictor" [
+export def "delete-predictor" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1377,7 +1377,7 @@ export def "api delete-predictor" [
 #
 # POST /
 # operationId: DeletePredictorBacktestExportJob
-export def "api delete-predictor-backtest-export-job" [
+export def "delete-predictor-backtest-export-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1425,7 +1425,7 @@ export def "api delete-predictor-backtest-export-job" [
 #
 # POST /
 # operationId: DeleteResourceTree
-export def "api delete-resource-tree" [
+export def "delete-resource-tree" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1473,7 +1473,7 @@ export def "api delete-resource-tree" [
 #
 # POST /
 # operationId: DeleteWhatIfAnalysis
-export def "api delete-what-if-analysis" [
+export def "delete-what-if-analysis" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1521,7 +1521,7 @@ export def "api delete-what-if-analysis" [
 #
 # POST /
 # operationId: DeleteWhatIfForecast
-export def "api delete-what-if-forecast" [
+export def "delete-what-if-forecast" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1569,7 +1569,7 @@ export def "api delete-what-if-forecast" [
 #
 # POST /
 # operationId: DeleteWhatIfForecastExport
-export def "api delete-what-if-forecast-export" [
+export def "delete-what-if-forecast-export" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1617,7 +1617,7 @@ export def "api delete-what-if-forecast-export" [
 #
 # POST /
 # operationId: DescribeAutoPredictor
-export def "api get-auto-predictor" [
+export def "describe-auto-predictor" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1665,7 +1665,7 @@ export def "api get-auto-predictor" [
 #
 # POST /
 # operationId: DescribeDataset
-export def "api get-dataset" [
+export def "describe-dataset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1713,7 +1713,7 @@ export def "api get-dataset" [
 #
 # POST /
 # operationId: DescribeDatasetGroup
-export def "api get-dataset-group" [
+export def "describe-dataset-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1761,7 +1761,7 @@ export def "api get-dataset-group" [
 #
 # POST /
 # operationId: DescribeDatasetImportJob
-export def "api get-dataset-import-job" [
+export def "describe-dataset-import-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1809,7 +1809,7 @@ export def "api get-dataset-import-job" [
 #
 # POST /
 # operationId: DescribeExplainability
-export def "api get-explainability" [
+export def "describe-explainability" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1857,7 +1857,7 @@ export def "api get-explainability" [
 #
 # POST /
 # operationId: DescribeExplainabilityExport
-export def "api get-explainability-export" [
+export def "describe-explainability-export" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1905,7 +1905,7 @@ export def "api get-explainability-export" [
 #
 # POST /
 # operationId: DescribeForecast
-export def "api get-forecast" [
+export def "describe-forecast" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1953,7 +1953,7 @@ export def "api get-forecast" [
 #
 # POST /
 # operationId: DescribeForecastExportJob
-export def "api get-forecast-export-job" [
+export def "describe-forecast-export-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2001,7 +2001,7 @@ export def "api get-forecast-export-job" [
 #
 # POST /
 # operationId: DescribeMonitor
-export def "api get-monitor" [
+export def "describe-monitor" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2049,7 +2049,7 @@ export def "api get-monitor" [
 #
 # POST /
 # operationId: DescribePredictor
-export def "api get-predictor" [
+export def "describe-predictor" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2097,7 +2097,7 @@ export def "api get-predictor" [
 #
 # POST /
 # operationId: DescribePredictorBacktestExportJob
-export def "api get-predictor-backtest-export-job" [
+export def "describe-predictor-backtest-export-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2145,7 +2145,7 @@ export def "api get-predictor-backtest-export-job" [
 #
 # POST /
 # operationId: DescribeWhatIfAnalysis
-export def "api get-what-if-analysis" [
+export def "describe-what-if-analysis" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2193,7 +2193,7 @@ export def "api get-what-if-analysis" [
 #
 # POST /
 # operationId: DescribeWhatIfForecast
-export def "api get-what-if-forecast" [
+export def "describe-what-if-forecast" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2241,7 +2241,7 @@ export def "api get-what-if-forecast" [
 #
 # POST /
 # operationId: DescribeWhatIfForecastExport
-export def "api get-what-if-forecast-export" [
+export def "describe-what-if-forecast-export" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2289,7 +2289,7 @@ export def "api get-what-if-forecast-export" [
 #
 # POST /
 # operationId: GetAccuracyMetrics
-export def "api get-accuracy-metrics" [
+export def "get-accuracy-metrics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2337,7 +2337,7 @@ export def "api get-accuracy-metrics" [
 #
 # POST /
 # operationId: ListDatasetGroups
-export def "api list-dataset-groups" [
+export def "list-dataset-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2389,7 +2389,7 @@ export def "api list-dataset-groups" [
 #
 # POST /
 # operationId: ListDatasetImportJobs
-export def "api list-dataset-import-jobs" [
+export def "list-dataset-import-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2442,7 +2442,7 @@ export def "api list-dataset-import-jobs" [
 #
 # POST /
 # operationId: ListDatasets
-export def "api list-datasets" [
+export def "list-datasets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2494,7 +2494,7 @@ export def "api list-datasets" [
 #
 # POST /
 # operationId: ListExplainabilities
-export def "api list-explainabilities" [
+export def "list-explainabilities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2547,7 +2547,7 @@ export def "api list-explainabilities" [
 #
 # POST /
 # operationId: ListExplainabilityExports
-export def "api list-explainability-exports" [
+export def "list-explainability-exports" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2600,7 +2600,7 @@ export def "api list-explainability-exports" [
 #
 # POST /
 # operationId: ListForecastExportJobs
-export def "api list-forecast-export-jobs" [
+export def "list-forecast-export-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2653,7 +2653,7 @@ export def "api list-forecast-export-jobs" [
 #
 # POST /
 # operationId: ListForecasts
-export def "api list-forecasts" [
+export def "list-forecasts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2706,7 +2706,7 @@ export def "api list-forecasts" [
 #
 # POST /
 # operationId: ListMonitorEvaluations
-export def "api list-monitor-evaluations" [
+export def "list-monitor-evaluations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2760,7 +2760,7 @@ export def "api list-monitor-evaluations" [
 #
 # POST /
 # operationId: ListMonitors
-export def "api list-monitors" [
+export def "list-monitors" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2813,7 +2813,7 @@ export def "api list-monitors" [
 #
 # POST /
 # operationId: ListPredictorBacktestExportJobs
-export def "api list-predictor-backtest-export-jobs" [
+export def "list-predictor-backtest-export-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2866,7 +2866,7 @@ export def "api list-predictor-backtest-export-jobs" [
 #
 # POST /
 # operationId: ListPredictors
-export def "api list-predictors" [
+export def "list-predictors" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2919,7 +2919,7 @@ export def "api list-predictors" [
 #
 # POST /
 # operationId: ListTagsForResource
-export def "api list-tags-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2967,7 +2967,7 @@ export def "api list-tags-for-resource" [
 #
 # POST /
 # operationId: ListWhatIfAnalyses
-export def "api list-what-if-analyses" [
+export def "list-what-if-analyses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3020,7 +3020,7 @@ export def "api list-what-if-analyses" [
 #
 # POST /
 # operationId: ListWhatIfForecastExports
-export def "api list-what-if-forecast-exports" [
+export def "list-what-if-forecast-exports" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3073,7 +3073,7 @@ export def "api list-what-if-forecast-exports" [
 #
 # POST /
 # operationId: ListWhatIfForecasts
-export def "api list-what-if-forecasts" [
+export def "list-what-if-forecasts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3126,7 +3126,7 @@ export def "api list-what-if-forecasts" [
 #
 # POST /
 # operationId: ResumeResource
-export def "api create-resume-resource" [
+export def "resume-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3174,7 +3174,7 @@ export def "api create-resume-resource" [
 #
 # POST /
 # operationId: StopResource
-export def "api stop-resource" [
+export def "stop-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3222,7 +3222,7 @@ export def "api stop-resource" [
 #
 # POST /
 # operationId: TagResource
-export def "api tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3271,7 +3271,7 @@ export def "api tag-resource" [
 #
 # POST /
 # operationId: UntagResource
-export def "api untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3320,7 +3320,7 @@ export def "api untag-resource" [
 #
 # POST /
 # operationId: UpdateDatasetGroup
-export def "api update-dataset-group" [
+export def "update-dataset-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

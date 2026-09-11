@@ -165,7 +165,7 @@ def protocol-completer [] { ["TCP" "UDP"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "auth-login create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "login" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -194,7 +194,7 @@ export def commands []: nothing -> table {
 @deprecated
 @deprecated --flag language
 @deprecated --flag login
-export def "auth-login create" [
+export def "login" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -242,7 +242,7 @@ export def "auth-login create" [
 # operationId: initiateOpenIdLogin
 @deprecated
 @deprecated --flag language
-export def "auth-openid-login open-initiate" [
+export def "initiate-open-id-login" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -284,7 +284,7 @@ export def "auth-openid-login open-initiate" [
 # Docs: http://openid.net/developers/specs — OpenID Specifications
 # operationId: completeOpenIdLogin
 @deprecated
-export def "auth-openid-login complete-open" [
+export def "complete-open-id-login" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -322,7 +322,7 @@ export def "auth-openid-login complete-open" [
 #
 # GET /v4/auth/ping
 # operationId: ping
-export def "auth-ping ping" [
+export def "ping" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -356,7 +356,7 @@ export def "auth-ping ping" [
 #
 # POST /v4/auth/recover_username
 # operationId: recoverUserName
-export def "auth-recover-username create-user-name" [
+export def "recover-user-name" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -397,7 +397,7 @@ export def "auth-recover-username create-user-name" [
 # operationId: requestPasswordReset
 @deprecated --flag language
 @deprecated --flag login
-export def "auth-reset-password request" [
+export def "request-password-reset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -438,7 +438,7 @@ export def "auth-reset-password request" [
 #
 # GET /v4/auth/reset_password/{token}
 # operationId: validateResetPasswordToken
-export def "auth-reset-password validate" [
+export def "validate-reset-password-token" [
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -474,7 +474,7 @@ export def "auth-reset-password validate" [
 #
 # PUT /v4/auth/reset_password/{token}
 # operationId: resetPassword
-export def "auth-reset-password reset" [
+export def "reset-password" [
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -515,7 +515,7 @@ export def "auth-reset-password reset" [
 # GET /v4/config/info/defaults
 # Docs: https://tools.ietf.org/html/rfc5646 — Tags for Identifying Languages
 # operationId: requestSystemDefaultsInfo
-export def "config-info-defaults request-system" [
+export def "request-system-defaults-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -552,7 +552,7 @@ export def "config-info-defaults request-system" [
 #
 # GET /v4/config/info/general
 # operationId: requestGeneralSettingsInfo
-export def "config-info-general request-settings" [
+export def "request-general-settings-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -589,7 +589,7 @@ export def "config-info-general request-settings" [
 #
 # GET /v4/config/info/infrastructure
 # operationId: requestInfrastructurePropertiesInfo
-export def "config-info-infrastructure request-properties" [
+export def "request-infrastructure-properties-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -626,7 +626,7 @@ export def "config-info-infrastructure request-properties" [
 #
 # GET /v4/config/info/notifications/channels
 # operationId: requestNotificationChannelsInfo
-export def "config-info-notifications-channels request" [
+export def "request-notification-channels-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -663,7 +663,7 @@ export def "config-info-notifications-channels request" [
 #
 # GET /v4/config/info/policies/algorithms
 # operationId: requestAlgorithms
-export def "config-info-policies-algorithms request" [
+export def "request-algorithms" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -700,7 +700,7 @@ export def "config-info-policies-algorithms request" [
 #
 # GET /v4/config/info/policies/classifications
 # operationId: requestClassificationPoliciesConfigInfo
-export def "config-info-policies-classifications request" [
+export def "request-classification-policies-config-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -737,7 +737,7 @@ export def "config-info-policies-classifications request" [
 #
 # GET /v4/config/info/policies/guest_users
 # operationId: requestGuestUsersPoliciesConfigInfo
-export def "config-info-policies-guest-users request" [
+export def "request-guest-users-policies-config-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -774,7 +774,7 @@ export def "config-info-policies-guest-users request" [
 #
 # GET /v4/config/info/policies/passwords
 # operationId: requestPasswordPoliciesConfigInfo
-export def "config-info-policies-passwords request" [
+export def "request-password-policies-config-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -811,7 +811,7 @@ export def "config-info-policies-passwords request" [
 #
 # GET /v4/config/info/product_packages
 # operationId: requestProductPackages
-export def "config-info-product-packages request" [
+export def "request-product-packages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -848,7 +848,7 @@ export def "config-info-product-packages request" [
 #
 # GET /v4/config/info/product_packages/current
 # operationId: requestCurrentProductPackages
-export def "config-info-product-packages-current request" [
+export def "request-current-product-packages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -885,7 +885,7 @@ export def "config-info-product-packages-current request" [
 #
 # GET /v4/config/info/s3_tags
 # operationId: requestS3TagsInfo
-export def "config-info-s3-tags request" [
+export def "request-s3-tags-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -924,7 +924,7 @@ export def "config-info-s3-tags request" [
 # DEPRECATED
 # operationId: requestSystemSettings
 @deprecated
-export def "config-settings request-system" [
+export def "request-system-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -964,7 +964,7 @@ export def "config-settings request-system" [
 # operationId: updateSystemSettings
 # --items item shape: {key: string, value: string}
 @deprecated
-export def "config-settings update-system" [
+export def "update-system-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1005,7 +1005,7 @@ export def "config-settings update-system" [
 #
 # GET /v4/downloads/avatar/{user_id}/{uuid}
 # operationId: downloadAvatar
-export def "downloads-avatar download" [
+export def "download-avatar" [
   user_id: int
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1043,7 +1043,7 @@ export def "downloads-avatar download" [
 #
 # GET /v4/downloads/zip/{token}
 # operationId: downloadZipArchiveViaToken
-export def "downloads-zip archive-via" [
+export def "download-zip-archive-via-token" [
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1080,7 +1080,7 @@ export def "downloads-zip archive-via" [
 # GET /v4/downloads/{token}
 # Docs: https://tools.ietf.org/html/rfc7233 — Range Requests
 # operationId: downloadFileViaToken
-export def "downloads download-file-via" [
+export def "download-file-via-token" [
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1123,7 +1123,7 @@ export def "downloads download-file-via" [
 # HEAD /v4/downloads/{token}
 # Docs: https://tools.ietf.org/html/rfc7233 — Range Requests
 # operationId: downloadFileViaToken_1
-export def "downloads download-file-via-by-token" [
+export def "download-file-via-token-1" [
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1165,7 +1165,7 @@ export def "downloads download-file-via-by-token" [
 #
 # GET /v4/eventlog/audits/node_info
 # operationId: requestAuditNodeInfo
-export def "eventlog-audits-node-info request" [
+export def "request-audit-node-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1210,7 +1210,7 @@ export def "eventlog-audits-node-info request" [
 # DEPRECATED
 # operationId: requestAuditNodeUserData
 @deprecated
-export def "eventlog-audits-nodes request-user-data" [
+export def "request-audit-node-user-data" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1253,7 +1253,7 @@ export def "eventlog-audits-nodes request-user-data" [
 #
 # GET /v4/eventlog/events
 # operationId: requestLogEventsAsJson
-export def "eventlog-events request-log-as-json" [
+export def "request-log-events-as-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1301,7 +1301,7 @@ export def "eventlog-events request-log-as-json" [
 #
 # GET /v4/eventlog/operations
 # operationId: requestLogOperations
-export def "eventlog-operations request-log" [
+export def "request-log-operations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1340,7 +1340,7 @@ export def "eventlog-operations request-log" [
 #
 # GET /v4/groups
 # operationId: requestGroups
-export def "groups list" [
+export def "request-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1384,7 +1384,7 @@ export def "groups list" [
 # POST /v4/groups
 # operationId: createGroup
 # --expiration shape: {enableExpiration: bool, expireAt?: string}
-export def "groups create" [
+export def "create-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1427,7 +1427,7 @@ export def "groups create" [
 #
 # DELETE /v4/groups/{group_id}
 # operationId: removeGroup
-export def "groups delete" [
+export def "remove-group" [
   group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1466,7 +1466,7 @@ export def "groups delete" [
 #
 # GET /v4/groups/{group_id}
 # operationId: requestGroup
-export def "groups request" [
+export def "request-group" [
   group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1507,7 +1507,7 @@ export def "groups request" [
 # PUT /v4/groups/{group_id}
 # operationId: updateGroup
 # --expiration shape: {enableExpiration: bool, expireAt?: string}
-export def "groups update" [
+export def "update-group" [
   group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1552,7 +1552,7 @@ export def "groups update" [
 #
 # GET /v4/groups/{group_id}/last_admin_rooms
 # operationId: requestLastAdminRoomsGroups
-export def "groups-last-admin-rooms request" [
+export def "request-last-admin-rooms-groups" [
   group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1591,7 +1591,7 @@ export def "groups-last-admin-rooms request" [
 #
 # GET /v4/groups/{group_id}/roles
 # operationId: requestGroupRoles
-export def "groups-roles request" [
+export def "request-group-roles" [
   group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1632,7 +1632,7 @@ export def "groups-roles request" [
 # DEPRECATED
 # operationId: requestGroupRooms
 @deprecated
-export def "groups-rooms request" [
+export def "request-group-rooms" [
   group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1676,7 +1676,7 @@ export def "groups-rooms request" [
 #
 # DELETE /v4/groups/{group_id}/users
 # operationId: removeGroupMembers
-export def "groups-users delete-members" [
+export def "remove-group-members" [
   group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1720,7 +1720,7 @@ export def "groups-users delete-members" [
 #
 # GET /v4/groups/{group_id}/users
 # operationId: requestGroupMembers
-export def "groups-users request-members" [
+export def "request-group-members" [
   group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1763,7 +1763,7 @@ export def "groups-users request-members" [
 #
 # POST /v4/groups/{group_id}/users
 # operationId: addGroupMembers
-export def "groups-users create-members" [
+export def "add-group-members" [
   group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1807,7 +1807,7 @@ export def "groups-users create-members" [
 #
 # GET /v4/internal/tenant/subscription_plan
 # operationId: internalRequestSubscriptionPlan
-export def "internal-tenant-subscription-plan request" [
+export def "internal-request-subscription-plan" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1844,7 +1844,7 @@ export def "internal-tenant-subscription-plan request" [
 #
 # PUT /v4/internal/tenant/subscription_plan
 # operationId: internalSetSubscriptionPlan
-export def "internal-tenant-subscription-plan update" [
+export def "internal-set-subscription-plan" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1885,7 +1885,7 @@ export def "internal-tenant-subscription-plan update" [
 #
 # DELETE /v4/nodes
 # operationId: removeNodes
-export def "nodes delete" [
+export def "remove-nodes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1927,7 +1927,7 @@ export def "nodes delete" [
 # GET /v4/nodes
 # operationId: requestNodes
 @deprecated --flag depth-level
-export def "nodes list" [
+export def "request-nodes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1973,7 +1973,7 @@ export def "nodes list" [
 #
 # DELETE /v4/nodes/comments/{comment_id}
 # operationId: removeNodeComment
-export def "nodes-comments delete" [
+export def "remove-node-comment" [
   comment_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2012,7 +2012,7 @@ export def "nodes-comments delete" [
 #
 # PUT /v4/nodes/comments/{comment_id}
 # operationId: updateNodeComment
-export def "nodes-comments update" [
+export def "update-node-comment" [
   comment_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2056,7 +2056,7 @@ export def "nodes-comments update" [
 #
 # DELETE /v4/nodes/deleted_nodes
 # operationId: removeDeletedNodes
-export def "nodes-deleted-nodes delete" [
+export def "remove-deleted-nodes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2097,7 +2097,7 @@ export def "nodes-deleted-nodes delete" [
 #
 # POST /v4/nodes/deleted_nodes/actions/restore
 # operationId: restoreNodes
-export def "nodes-deleted-nodes-actions-restore create" [
+export def "restore-nodes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2141,7 +2141,7 @@ export def "nodes-deleted-nodes-actions-restore create" [
 #
 # GET /v4/nodes/deleted_nodes/{deleted_node_id}
 # operationId: requestDeletedNode
-export def "nodes-deleted-nodes request" [
+export def "request-deleted-node" [
   deleted_node_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2181,7 +2181,7 @@ export def "nodes-deleted-nodes request" [
 #
 # PUT /v4/nodes/favorites
 # operationId: updateFavorites
-export def "nodes-favorites update" [
+export def "update-favorites" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2224,7 +2224,7 @@ export def "nodes-favorites update" [
 # PUT /v4/nodes/files
 # operationId: updateFiles
 # --expiration shape: {enableExpiration: bool, expireAt?: string}
-export def "nodes-files update" [
+export def "update-files" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2268,7 +2268,7 @@ export def "nodes-files update" [
 # POST /v4/nodes/files/keys
 # operationId: setUserFileKeys
 # --items item shape: {fileId: int, fileKey: record, userId: int}
-export def "nodes-files-keys update-user" [
+export def "set-user-file-keys" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2310,7 +2310,7 @@ export def "nodes-files-keys update-user" [
 # POST /v4/nodes/files/uploads
 # operationId: createFileUploadChannel
 # --expiration shape: {enableExpiration: bool, expireAt?: string}
-export def "nodes-files-uploads create-channel" [
+export def "create-file-upload-channel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2359,7 +2359,7 @@ export def "nodes-files-uploads create-channel" [
 #
 # DELETE /v4/nodes/files/uploads/{upload_id}
 # operationId: cancelFileUpload
-export def "nodes-files-uploads cancel" [
+export def "cancel-file-upload" [
   upload_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2398,7 +2398,7 @@ export def "nodes-files-uploads cancel" [
 #
 # GET /v4/nodes/files/uploads/{upload_id}
 # operationId: requestUploadStatusFiles
-export def "nodes-files-uploads request-status" [
+export def "request-upload-status-files" [
   upload_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2441,7 +2441,7 @@ export def "nodes-files-uploads request-status" [
 # Docs: https://tools.ietf.org/html/rfc7233 — Range Requests
 # operationId: uploadFileAsMultipart
 @deprecated
-export def "nodes-files-uploads upload-as-multipart" [
+export def "upload-file-as-multipart" [
   upload_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2492,7 +2492,7 @@ export def "nodes-files-uploads upload-as-multipart" [
 # --userFileKeyList shape: {items?: list}
 @deprecated
 @deprecated --flag user-file-key-list
-export def "nodes-files-uploads complete" [
+export def "complete-file-upload" [
   upload_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2542,7 +2542,7 @@ export def "nodes-files-uploads complete" [
 # operationId: completeS3FileUpload
 # --fileKey shape: {iv: string, key: string, tag: string, version: string}
 # --parts item shape: {partEtag: string, partNumber: int}
-export def "nodes-files-uploads-s3 complete" [
+export def "complete-s3-file-upload" [
   upload_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2589,7 +2589,7 @@ export def "nodes-files-uploads-s3 complete" [
 #
 # POST /v4/nodes/files/uploads/{upload_id}/s3_urls
 # operationId: generatePresignedUrlsFiles
-export def "nodes-files-uploads-s3-urls generate-presigned" [
+export def "generate-presigned-urls-files" [
   upload_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2634,7 +2634,7 @@ export def "nodes-files-uploads-s3-urls generate-presigned" [
 #
 # GET /v4/nodes/files/versions/{reference_id}
 # operationId: requestFileVersionList
-export def "nodes-files-versions request-list" [
+export def "request-file-version-list" [
   reference_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2678,7 +2678,7 @@ export def "nodes-files-versions request-list" [
 # PUT /v4/nodes/files/{file_id}
 # operationId: updateFile
 # --expiration shape: {enableExpiration: bool, expireAt?: string}
-export def "nodes-files update-by-file-id" [
+export def "update-file" [
   file_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2729,7 +2729,7 @@ export def "nodes-files update-by-file-id" [
 # DEPRECATED
 # operationId: requestRoomRescueKey
 @deprecated
-export def "nodes-files-data-room-file-key request-rescue" [
+export def "request-room-rescue-key" [
   file_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2772,7 +2772,7 @@ export def "nodes-files-data-room-file-key request-rescue" [
 # DEPRECATED
 # operationId: requestSystemRescueKey
 @deprecated
-export def "nodes-files-data-space-file-key request-system-rescue" [
+export def "request-system-rescue-key" [
   file_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2813,7 +2813,7 @@ export def "nodes-files-data-space-file-key request-system-rescue" [
 #
 # POST /v4/nodes/files/{file_id}/downloads
 # operationId: generateDownloadUrl
-export def "nodes-files-downloads generate-url" [
+export def "generate-download-url" [
   file_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2852,7 +2852,7 @@ export def "nodes-files-downloads generate-url" [
 #
 # GET /v4/nodes/files/{file_id}/user_file_key
 # operationId: requestUserFileKey
-export def "nodes-files-user-file-key request" [
+export def "request-user-file-key" [
   file_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2893,7 +2893,7 @@ export def "nodes-files-user-file-key request" [
 #
 # POST /v4/nodes/folders
 # operationId: createFolder
-export def "nodes-folders create" [
+export def "create-folder" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2940,7 +2940,7 @@ export def "nodes-folders create" [
 #
 # PUT /v4/nodes/folders/{folder_id}
 # operationId: updateFolder
-export def "nodes-folders update" [
+export def "update-folder" [
   folder_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2988,7 +2988,7 @@ export def "nodes-folders update" [
 #
 # GET /v4/nodes/missingFileKeys
 # operationId: requestMissingFileKeys
-export def "nodes-missing-file-keys request" [
+export def "request-missing-file-keys" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3033,7 +3033,7 @@ export def "nodes-missing-file-keys request" [
 # POST /v4/nodes/rooms
 # operationId: createRoom
 @deprecated --flag has-recycle-bin
-export def "nodes-rooms create" [
+export def "create-room" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3088,7 +3088,7 @@ export def "nodes-rooms create" [
 #
 # GET /v4/nodes/rooms/pending
 # operationId: requestPendingAssignments
-export def "nodes-rooms-pending request-assignments" [
+export def "request-pending-assignments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3131,7 +3131,7 @@ export def "nodes-rooms-pending request-assignments" [
 # PUT /v4/nodes/rooms/pending
 # operationId: changePendingAssignments
 # --items item shape: {groupId: int, roomId: int, roomName: string, state: "ACCEPTED"|"DENIED"|"WAITING", userId: int}
-export def "nodes-rooms-pending update-change-assignments" [
+export def "change-pending-assignments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3172,7 +3172,7 @@ export def "nodes-rooms-pending update-change-assignments" [
 #
 # PUT /v4/nodes/rooms/{room_id}
 # operationId: updateRoom
-export def "nodes-rooms update" [
+export def "update-room" [
   room_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3220,7 +3220,7 @@ export def "nodes-rooms update" [
 #
 # PUT /v4/nodes/rooms/{room_id}/config
 # operationId: configureRoom
-export def "nodes-rooms-config update-configure" [
+export def "configure-room" [
   room_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3272,7 +3272,7 @@ export def "nodes-rooms-config update-configure" [
 # PUT /v4/nodes/rooms/{room_id}/encrypt
 # operationId: encryptRoom
 # --dataRoomRescueKey shape: {privateKeyContainer: record, publicKeyContainer: record}
-export def "nodes-rooms-encrypt update" [
+export def "encrypt-room" [
   room_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3318,7 +3318,7 @@ export def "nodes-rooms-encrypt update" [
 #
 # GET /v4/nodes/rooms/{room_id}/events
 # operationId: requestRoomActivitiesLogAsJson
-export def "nodes-rooms-events request-activities-log-as-json" [
+export def "request-room-activities-log-as-json" [
   room_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3367,7 +3367,7 @@ export def "nodes-rooms-events request-activities-log-as-json" [
 #
 # DELETE /v4/nodes/rooms/{room_id}/groups
 # operationId: revokeRoomGroups
-export def "nodes-rooms-groups delete" [
+export def "revoke-room-groups" [
   room_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3411,7 +3411,7 @@ export def "nodes-rooms-groups delete" [
 #
 # GET /v4/nodes/rooms/{room_id}/groups
 # operationId: requestRoomGroups
-export def "nodes-rooms-groups request" [
+export def "request-room-groups" [
   room_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3456,7 +3456,7 @@ export def "nodes-rooms-groups request" [
 # PUT /v4/nodes/rooms/{room_id}/groups
 # operationId: updateRoomGroups
 # --items item shape: {id: int, newGroupMemberAcceptance?: "autoallow"|"pending", permissions: record}
-export def "nodes-rooms-groups update" [
+export def "update-room-groups" [
   room_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3500,7 +3500,7 @@ export def "nodes-rooms-groups update" [
 # PUT /v4/nodes/rooms/{room_id}/guest_users
 # operationId: addRoomGuestUsers
 # --roomGuestInvitations item shape: {email: string, firstName: string, lastName: string}
-export def "nodes-rooms-guest-users create" [
+export def "add-room-guest-users" [
   room_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3543,7 +3543,7 @@ export def "nodes-rooms-guest-users create" [
 #
 # DELETE /v4/nodes/rooms/{room_id}/keypair
 # operationId: removeRoomRescueKeyPair
-export def "nodes-rooms-keypair delete-rescue-key-pair" [
+export def "remove-room-rescue-key-pair" [
   room_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3584,7 +3584,7 @@ export def "nodes-rooms-keypair delete-rescue-key-pair" [
 #
 # GET /v4/nodes/rooms/{room_id}/keypair
 # operationId: requestRoomRescueKeyPair
-export def "nodes-rooms-keypair request-rescue-key-pair" [
+export def "request-room-rescue-key-pair" [
   room_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3628,7 +3628,7 @@ export def "nodes-rooms-keypair request-rescue-key-pair" [
 # operationId: setRoomRescueKeyPair
 # --privateKeyContainer shape: {createdAt?: string, createdBy?: int, privateKey: string, version: string}
 # --publicKeyContainer shape: {createdAt?: string, createdBy?: int, publicKey: string, version: string}
-export def "nodes-rooms-keypair update-rescue-key-pair" [
+export def "set-room-rescue-key-pair" [
   room_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3672,7 +3672,7 @@ export def "nodes-rooms-keypair update-rescue-key-pair" [
 #
 # GET /v4/nodes/rooms/{room_id}/keypairs
 # operationId: requestRoomRescueKeyPairs
-export def "nodes-rooms-keypairs request-rescue-key-pairs" [
+export def "request-room-rescue-key-pairs" [
   room_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3715,7 +3715,7 @@ export def "nodes-rooms-keypairs request-rescue-key-pairs" [
 # --previousPrivateKey shape: {createdAt?: string, createdBy?: int, privateKey: string, version: string}
 # --privateKeyContainer shape: {createdAt?: string, createdBy?: int, privateKey: string, version: string}
 # --publicKeyContainer shape: {createdAt?: string, createdBy?: int, publicKey: string, version: string}
-export def "nodes-rooms-keypairs create-and-preserve-rescue-key-pair" [
+export def "create-and-preserve-room-rescue-key-pair" [
   room_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3760,7 +3760,7 @@ export def "nodes-rooms-keypairs create-and-preserve-rescue-key-pair" [
 #
 # GET /v4/nodes/rooms/{room_id}/policies
 # operationId: requestRoomPolicies
-export def "nodes-rooms-policies request" [
+export def "request-room-policies" [
   room_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3799,7 +3799,7 @@ export def "nodes-rooms-policies request" [
 #
 # PUT /v4/nodes/rooms/{room_id}/policies
 # operationId: setRoomPolicies
-export def "nodes-rooms-policies update" [
+export def "set-room-policies" [
   room_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3842,7 +3842,7 @@ export def "nodes-rooms-policies update" [
 #
 # GET /v4/nodes/rooms/{room_id}/s3_tags
 # operationId: requestRoomS3Tags
-export def "nodes-rooms-s3-tags request" [
+export def "request-room-s3-tags" [
   room_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3881,7 +3881,7 @@ export def "nodes-rooms-s3-tags request" [
 #
 # POST /v4/nodes/rooms/{room_id}/s3_tags
 # operationId: setRoomS3Tags
-export def "nodes-rooms-s3-tags update" [
+export def "set-room-s3-tags" [
   room_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3924,7 +3924,7 @@ export def "nodes-rooms-s3-tags update" [
 #
 # DELETE /v4/nodes/rooms/{room_id}/users
 # operationId: revokeRoomUsers
-export def "nodes-rooms-users delete" [
+export def "revoke-room-users" [
   room_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3967,7 +3967,7 @@ export def "nodes-rooms-users delete" [
 #
 # GET /v4/nodes/rooms/{room_id}/users
 # operationId: requestRoomUsers
-export def "nodes-rooms-users request" [
+export def "request-room-users" [
   room_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4012,7 +4012,7 @@ export def "nodes-rooms-users request" [
 # PUT /v4/nodes/rooms/{room_id}/users
 # operationId: updateRoomUsers
 # --items item shape: {id: int, permissions: record}
-export def "nodes-rooms-users update" [
+export def "update-room-users" [
   room_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4055,7 +4055,7 @@ export def "nodes-rooms-users update" [
 #
 # GET /v4/nodes/rooms/{room_id}/webhooks
 # operationId: requestListOfWebhooksForRoom
-export def "nodes-rooms-webhooks request-list-of" [
+export def "request-list-of-webhooks-for-room" [
   room_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4100,7 +4100,7 @@ export def "nodes-rooms-webhooks request-list-of" [
 # PUT /v4/nodes/rooms/{room_id}/webhooks
 # operationId: handleRoomWebhookAssignments
 # --items item shape: {isAssigned: bool, webhookId: int}
-export def "nodes-rooms-webhooks update-handle-assignments" [
+export def "handle-room-webhook-assignments" [
   room_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4144,7 +4144,7 @@ export def "nodes-rooms-webhooks update-handle-assignments" [
 #
 # GET /v4/nodes/search
 # operationId: searchNodes
-export def "nodes-search list" [
+export def "search-nodes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4190,7 +4190,7 @@ export def "nodes-search list" [
 #
 # POST /v4/nodes/zip
 # operationId: generateDownloadUrlForZipArchive
-export def "nodes-zip generate-download-url-for-archive" [
+export def "generate-download-url-for-zip-archive" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4231,7 +4231,7 @@ export def "nodes-zip generate-download-url-for-archive" [
 #
 # POST /v4/nodes/zip/download
 # operationId: downloadZipArchive
-export def "nodes-zip-download archive" [
+export def "download-zip-archive" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4272,7 +4272,7 @@ export def "nodes-zip-download archive" [
 #
 # DELETE /v4/nodes/{node_id}
 # operationId: removeNode
-export def "nodes delete-by-node-id" [
+export def "remove-node" [
   node_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4311,7 +4311,7 @@ export def "nodes delete-by-node-id" [
 #
 # GET /v4/nodes/{node_id}
 # operationId: requestNode
-export def "nodes request" [
+export def "request-node" [
   node_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4351,7 +4351,7 @@ export def "nodes request" [
 #
 # GET /v4/nodes/{node_id}/comments
 # operationId: requestNodeComments
-export def "nodes-comments request" [
+export def "request-node-comments" [
   node_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4395,7 +4395,7 @@ export def "nodes-comments request" [
 #
 # POST /v4/nodes/{node_id}/comments
 # operationId: createNodeComment
-export def "nodes-comments create" [
+export def "create-node-comment" [
   node_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4441,7 +4441,7 @@ export def "nodes-comments create" [
 # operationId: copyNodes
 # --items item shape: {id: int, name?: string, timestampCreation?: string, timestampModification?: string}
 @deprecated --flag node-ids
-export def "nodes-copy-to copy" [
+export def "copy-nodes" [
   node_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4488,7 +4488,7 @@ export def "nodes-copy-to copy" [
 #
 # DELETE /v4/nodes/{node_id}/deleted_nodes
 # operationId: emptyDeletedNodes
-export def "nodes-deleted-nodes delete-empty" [
+export def "empty-deleted-nodes" [
   node_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4527,7 +4527,7 @@ export def "nodes-deleted-nodes delete-empty" [
 #
 # GET /v4/nodes/{node_id}/deleted_nodes
 # operationId: requestDeletedNodesSummary
-export def "nodes-deleted-nodes request-summary" [
+export def "request-deleted-nodes-summary" [
   node_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4572,7 +4572,7 @@ export def "nodes-deleted-nodes request-summary" [
 #
 # GET /v4/nodes/{node_id}/deleted_nodes/versions
 # operationId: requestDeletedNodeVersions
-export def "nodes-deleted-nodes-versions request" [
+export def "request-deleted-node-versions" [
   node_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4618,7 +4618,7 @@ export def "nodes-deleted-nodes-versions request" [
 #
 # DELETE /v4/nodes/{node_id}/favorite
 # operationId: removeFavorite
-export def "nodes-favorite delete" [
+export def "remove-favorite" [
   node_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4657,7 +4657,7 @@ export def "nodes-favorite delete" [
 #
 # POST /v4/nodes/{node_id}/favorite
 # operationId: addFavorite
-export def "nodes-favorite create" [
+export def "add-favorite" [
   node_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4699,7 +4699,7 @@ export def "nodes-favorite create" [
 # operationId: moveNodes
 # --items item shape: {id: int, name?: string, timestampCreation?: string, timestampModification?: string}
 @deprecated --flag node-ids
-export def "nodes-move-to move" [
+export def "move-nodes" [
   node_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4746,7 +4746,7 @@ export def "nodes-move-to move" [
 #
 # GET /v4/nodes/{node_id}/parents
 # operationId: requestNodeParents
-export def "nodes-parents request" [
+export def "request-node-parents" [
   node_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4785,7 +4785,7 @@ export def "nodes-parents request" [
 #
 # GET /v4/provisioning/customers
 # operationId: requestCustomers
-export def "provisioning-customers list" [
+export def "request-customers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4833,7 +4833,7 @@ export def "provisioning-customers list" [
 # --firstAdminUser shape: {authData?: record, authMethods?: list, email?: string, firstName: string, gender?: string, language?: string, lastName: string, login?: string, needsToChangePassword?: bool, needsToChangeUserName?: bool, notifyUser?: bool, password?: string, phone?: string, receiverLanguage?: string, title?: string, userName?: string}
 @deprecated --flag activation-code
 @deprecated --flag lock-status
-export def "provisioning-customers create" [
+export def "create-customer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4886,7 +4886,7 @@ export def "provisioning-customers create" [
 #
 # DELETE /v4/provisioning/customers/{customer_id}
 # operationId: removeCustomer
-export def "provisioning-customers delete" [
+export def "remove-customer" [
   customer_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4925,7 +4925,7 @@ export def "provisioning-customers delete" [
 #
 # GET /v4/provisioning/customers/{customer_id}
 # operationId: requestCustomer
-export def "provisioning-customers request" [
+export def "request-customer" [
   customer_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4968,7 +4968,7 @@ export def "provisioning-customers request" [
 # PUT /v4/provisioning/customers/{customer_id}
 # operationId: updateCustomer
 @deprecated --flag lock-status
-export def "provisioning-customers update" [
+export def "update-customer" [
   customer_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5019,7 +5019,7 @@ export def "provisioning-customers update" [
 #
 # GET /v4/provisioning/customers/{customer_id}/customerAttributes
 # operationId: requestCustomerAttributes
-export def "provisioning-customers-customer-attributes request" [
+export def "request-customer-attributes" [
   customer_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5066,7 +5066,7 @@ export def "provisioning-customers-customer-attributes request" [
 # operationId: setCustomerAttributes
 # --items item shape: {key: string, value: string}
 @deprecated
-export def "provisioning-customers-customer-attributes update-by-customer-id" [
+export def "set-customer-attributes" [
   customer_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5111,7 +5111,7 @@ export def "provisioning-customers-customer-attributes update-by-customer-id" [
 # PUT /v4/provisioning/customers/{customer_id}/customerAttributes
 # operationId: updateCustomerAttributes
 # --items item shape: {key: string, value: string}
-export def "provisioning-customers-customer-attributes update-by-customer-id-1" [
+export def "update-customer-attributes" [
   customer_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5155,7 +5155,7 @@ export def "provisioning-customers-customer-attributes update-by-customer-id-1" 
 #
 # DELETE /v4/provisioning/customers/{customer_id}/customerAttributes/{key}
 # operationId: removeCustomerAttribute
-export def "provisioning-customers-customer-attributes delete" [
+export def "remove-customer-attribute" [
   customer_id: int
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5196,7 +5196,7 @@ export def "provisioning-customers-customer-attributes delete" [
 #
 # GET /v4/provisioning/customers/{customer_id}/users
 # operationId: requestCustomerUsers
-export def "provisioning-customers-users request" [
+export def "request-customer-users" [
   customer_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5244,7 +5244,7 @@ export def "provisioning-customers-users request" [
 #
 # GET /v4/provisioning/webhooks
 # operationId: requestListOfTenantWebhooks
-export def "provisioning-webhooks request-list-of-tenant" [
+export def "request-list-of-tenant-webhooks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5287,7 +5287,7 @@ export def "provisioning-webhooks request-list-of-tenant" [
 #
 # POST /v4/provisioning/webhooks
 # operationId: createTenantWebhook
-export def "provisioning-webhooks create-tenant" [
+export def "create-tenant-webhook" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5334,7 +5334,7 @@ export def "provisioning-webhooks create-tenant" [
 #
 # GET /v4/provisioning/webhooks/event_types
 # operationId: requestListOfEventTypesForTenant
-export def "provisioning-webhooks-event-types request-list-of-for-tenant" [
+export def "request-list-of-event-types-for-tenant" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5371,7 +5371,7 @@ export def "provisioning-webhooks-event-types request-list-of-for-tenant" [
 #
 # DELETE /v4/provisioning/webhooks/{webhook_id}
 # operationId: removeTenantWebhook
-export def "provisioning-webhooks delete-tenant" [
+export def "remove-tenant-webhook" [
   webhook_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5410,7 +5410,7 @@ export def "provisioning-webhooks delete-tenant" [
 #
 # GET /v4/provisioning/webhooks/{webhook_id}
 # operationId: requestTenantWebhook
-export def "provisioning-webhooks request-tenant" [
+export def "request-tenant-webhook" [
   webhook_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5450,7 +5450,7 @@ export def "provisioning-webhooks request-tenant" [
 #
 # PUT /v4/provisioning/webhooks/{webhook_id}
 # operationId: updateTenantWebhook
-export def "provisioning-webhooks update-tenant" [
+export def "update-tenant-webhook" [
   webhook_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5499,7 +5499,7 @@ export def "provisioning-webhooks update-tenant" [
 #
 # POST /v4/provisioning/webhooks/{webhook_id}/reset_lifetime
 # operationId: resetTenantWebhookLifetime
-export def "provisioning-webhooks-reset-lifetime reset-tenant" [
+export def "reset-tenant-webhook-lifetime" [
   webhook_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5539,7 +5539,7 @@ export def "provisioning-webhooks-reset-lifetime reset-tenant" [
 #
 # GET /v4/public/shares/downloads/{access_key}
 # operationId: requestPublicDownloadShareInfo
-export def "public-shares-downloads request-get" [
+export def "request-public-download-share-info" [
   access_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5578,7 +5578,7 @@ export def "public-shares-downloads request-get" [
 #
 # HEAD /v4/public/shares/downloads/{access_key}
 # operationId: checkPublicDownloadSharePassword
-export def "public-shares-downloads check-password" [
+export def "check-public-download-share-password" [
   access_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5616,7 +5616,7 @@ export def "public-shares-downloads check-password" [
 #
 # POST /v4/public/shares/downloads/{access_key}
 # operationId: generateDownloadUrlPublic
-export def "public-shares-downloads generate-url" [
+export def "generate-download-url-public" [
   access_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5657,7 +5657,7 @@ export def "public-shares-downloads generate-url" [
 # GET /v4/public/shares/downloads/{access_key}/{token}
 # Docs: https://tools.ietf.org/html/rfc7233 — Range Requests
 # operationId: downloadFileViaTokenPublic
-export def "public-shares-downloads download-file-via" [
+export def "download-file-via-token-public" [
   access_key: string
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5702,7 +5702,7 @@ export def "public-shares-downloads download-file-via" [
 # HEAD /v4/public/shares/downloads/{access_key}/{token}
 # Docs: https://tools.ietf.org/html/rfc7233 — Range Requests
 # operationId: downloadFileViaTokenPublic_1
-export def "public-shares-downloads download-file-via-by-access-key-token" [
+export def "download-file-via-token-public-1" [
   access_key: string
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5746,7 +5746,7 @@ export def "public-shares-downloads download-file-via-by-access-key-token" [
 #
 # GET /v4/public/shares/uploads/{access_key}
 # operationId: requestPublicUploadShareInfo
-export def "public-shares-uploads request-get" [
+export def "request-public-upload-share-info" [
   access_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5786,7 +5786,7 @@ export def "public-shares-uploads request-get" [
 #
 # POST /v4/public/shares/uploads/{access_key}
 # operationId: createShareUploadChannel
-export def "public-shares-uploads create-channel" [
+export def "create-share-upload-channel" [
   access_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5831,7 +5831,7 @@ export def "public-shares-uploads create-channel" [
 #
 # DELETE /v4/public/shares/uploads/{access_key}/{upload_id}
 # operationId: cancelFileUploadViaShare
-export def "public-shares-uploads cancel-file-via" [
+export def "cancel-file-upload-via-share" [
   access_key: string
   upload_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5869,7 +5869,7 @@ export def "public-shares-uploads cancel-file-via" [
 #
 # GET /v4/public/shares/uploads/{access_key}/{upload_id}
 # operationId: requestUploadStatusPublic
-export def "public-shares-uploads request-status" [
+export def "request-upload-status-public" [
   access_key: string
   upload_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5908,7 +5908,7 @@ export def "public-shares-uploads request-status" [
 # POST /v4/public/shares/uploads/{access_key}/{upload_id}
 # Docs: https://tools.ietf.org/html/rfc7233 — Range Requests
 # operationId: uploadFileAsMultipartPublic_1
-export def "public-shares-uploads upload-file-as-multipart-by-access-key-upload-id" [
+export def "upload-file-as-multipart-public-1" [
   access_key: string
   upload_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5958,7 +5958,7 @@ export def "public-shares-uploads upload-file-as-multipart-by-access-key-upload-
 # Docs: https://tools.ietf.org/html/rfc7233 — Range Requests
 # operationId: completeFileUploadViaShare
 # --items item shape: {fileKey: record, userId: int}
-export def "public-shares-uploads complete-file-via" [
+export def "complete-file-upload-via-share" [
   access_key: string
   upload_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6005,7 +6005,7 @@ export def "public-shares-uploads complete-file-via" [
 # operationId: completeS3FileUploadViaShare
 # --parts item shape: {partEtag: string, partNumber: int}
 # --userFileKeyList item shape: {fileKey: record, userId: int}
-export def "public-shares-uploads-s3 complete-file-via" [
+export def "complete-s3-file-upload-via-share" [
   access_key: string
   upload_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6048,7 +6048,7 @@ export def "public-shares-uploads-s3 complete-file-via" [
 #
 # POST /v4/public/shares/uploads/{access_key}/{upload_id}/s3_urls
 # operationId: generatePresignedUrlsPublic
-export def "public-shares-uploads-s3-urls generate-presigned" [
+export def "generate-presigned-urls-public" [
   access_key: string
   upload_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6095,7 +6095,7 @@ export def "public-shares-uploads-s3-urls generate-presigned" [
 #
 # GET /v4/public/software/third_party_dependencies
 # operationId: requestThirdPartyDependencies
-export def "public-software-third-party-dependencies request" [
+export def "request-third-party-dependencies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6129,7 +6129,7 @@ export def "public-software-third-party-dependencies request" [
 #
 # GET /v4/public/software/version
 # operationId: requestSoftwareVersion
-export def "public-software-version request" [
+export def "request-software-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6167,7 +6167,7 @@ export def "public-software-version request" [
 # GET /v4/public/system/info
 # Docs: https://tools.ietf.org/html/rfc5646 — Tags for Identifying Languages
 # operationId: requestSystemInfo
-export def "public-system-info request" [
+export def "request-system-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6203,7 +6203,7 @@ export def "public-system-info request" [
 #
 # GET /v4/public/system/info/auth/ad
 # operationId: requestActiveDirectoryAuthInfo
-export def "public-system-info-auth-ad request-active-directory" [
+export def "request-active-directory-auth-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6239,7 +6239,7 @@ export def "public-system-info-auth-ad request-active-directory" [
 #
 # GET /v4/public/system/info/auth/openid
 # operationId: requestOpenIdAuthInfo
-export def "public-system-info-auth-openid request-open" [
+export def "request-open-id-auth-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6275,7 +6275,7 @@ export def "public-system-info-auth-openid request-open" [
 #
 # GET /v4/public/time
 # operationId: requestSystemTime
-export def "public-time request-system" [
+export def "request-system-time" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6312,7 +6312,7 @@ export def "public-time request-system" [
 #
 # GET /v4/resources/user/notifications/scopes
 # operationId: requestSubscriptionScopes
-export def "resources-user-notifications-scopes request-subscription" [
+export def "request-subscription-scopes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6346,7 +6346,7 @@ export def "resources-user-notifications-scopes request-subscription" [
 #
 # GET /v4/resources/users/{user_id}/avatar/{uuid}
 # operationId: requestUserAvatar
-export def "resources-users-avatar request" [
+export def "request-user-avatar" [
   user_id: int
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6384,7 +6384,7 @@ export def "resources-users-avatar request" [
 #
 # GET /v4/roles
 # operationId: requestRoles
-export def "roles request" [
+export def "request-roles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6421,7 +6421,7 @@ export def "roles request" [
 #
 # DELETE /v4/roles/{role_id}/groups
 # operationId: revokeRoleGroups
-export def "roles-groups delete" [
+export def "revoke-role-groups" [
   role_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6464,7 +6464,7 @@ export def "roles-groups delete" [
 #
 # GET /v4/roles/{role_id}/groups
 # operationId: requestRoleGroups
-export def "roles-groups request" [
+export def "request-role-groups" [
   role_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6507,7 +6507,7 @@ export def "roles-groups request" [
 #
 # POST /v4/roles/{role_id}/groups
 # operationId: addRoleGroups
-export def "roles-groups create" [
+export def "add-role-groups" [
   role_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6550,7 +6550,7 @@ export def "roles-groups create" [
 #
 # DELETE /v4/roles/{role_id}/users
 # operationId: revokeRoleUsers
-export def "roles-users delete" [
+export def "revoke-role-users" [
   role_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6593,7 +6593,7 @@ export def "roles-users delete" [
 #
 # GET /v4/roles/{role_id}/users
 # operationId: requestRoleUsers
-export def "roles-users request" [
+export def "request-role-users" [
   role_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6636,7 +6636,7 @@ export def "roles-users request" [
 #
 # POST /v4/roles/{role_id}/users
 # operationId: addRoleUsers
-export def "roles-users create" [
+export def "add-role-users" [
   role_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6679,7 +6679,7 @@ export def "roles-users create" [
 #
 # GET /v4/settings
 # operationId: requestSettings
-export def "settings request" [
+export def "request-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6716,7 +6716,7 @@ export def "settings request" [
 #
 # PUT /v4/settings
 # operationId: setSettings
-export def "settings update" [
+export def "set-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6759,7 +6759,7 @@ export def "settings update" [
 #
 # DELETE /v4/settings/keypair
 # operationId: removeSystemRescueKeyPair
-export def "settings-keypair delete-system-rescue-key-pair" [
+export def "remove-system-rescue-key-pair" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6798,7 +6798,7 @@ export def "settings-keypair delete-system-rescue-key-pair" [
 #
 # GET /v4/settings/keypair
 # operationId: requestSystemRescueKeyPair
-export def "settings-keypair request-system-rescue-key-pair" [
+export def "request-system-rescue-key-pair" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6840,7 +6840,7 @@ export def "settings-keypair request-system-rescue-key-pair" [
 # operationId: setSystemRescueKeyPair
 # --privateKeyContainer shape: {createdAt?: string, createdBy?: int, privateKey: string, version: string}
 # --publicKeyContainer shape: {createdAt?: string, createdBy?: int, publicKey: string, version: string}
-export def "settings-keypair update-system-rescue-key-pair" [
+export def "set-system-rescue-key-pair" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6882,7 +6882,7 @@ export def "settings-keypair update-system-rescue-key-pair" [
 #
 # GET /v4/settings/keypairs
 # operationId: requestAllSystemRescueKeyPairs
-export def "settings-keypairs request-list-system-rescue-key-pairs" [
+export def "request-all-system-rescue-key-pairs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6923,7 +6923,7 @@ export def "settings-keypairs request-list-system-rescue-key-pairs" [
 # --previousPrivateKey shape: {createdAt?: string, createdBy?: int, privateKey: string, version: string}
 # --privateKeyContainer shape: {createdAt?: string, createdBy?: int, privateKey: string, version: string}
 # --publicKeyContainer shape: {createdAt?: string, createdBy?: int, publicKey: string, version: string}
-export def "settings-keypairs create-and-preserve-key-pair" [
+export def "create-and-preserve-key-pair" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6966,7 +6966,7 @@ export def "settings-keypairs create-and-preserve-key-pair" [
 #
 # GET /v4/settings/notifications/channels
 # operationId: requestNotificationChannels
-export def "settings-notifications-channels request" [
+export def "request-notification-channels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7003,7 +7003,7 @@ export def "settings-notifications-channels request" [
 #
 # PUT /v4/settings/notifications/channels
 # operationId: toggleNotificationChannels
-export def "settings-notifications-channels update-toggle" [
+export def "toggle-notification-channels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7045,7 +7045,7 @@ export def "settings-notifications-channels update-toggle" [
 #
 # GET /v4/settings/webhooks
 # operationId: requestListOfWebhooks
-export def "settings-webhooks request-list" [
+export def "request-list-of-webhooks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7088,7 +7088,7 @@ export def "settings-webhooks request-list" [
 #
 # POST /v4/settings/webhooks
 # operationId: createWebhook
-export def "settings-webhooks create" [
+export def "create-webhook" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7135,7 +7135,7 @@ export def "settings-webhooks create" [
 #
 # GET /v4/settings/webhooks/event_types
 # operationId: requestListOfEventTypesForConfigManager
-export def "settings-webhooks-event-types request-list-of-for-config-manager" [
+export def "request-list-of-event-types-for-config-manager" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7172,7 +7172,7 @@ export def "settings-webhooks-event-types request-list-of-for-config-manager" [
 #
 # DELETE /v4/settings/webhooks/{webhook_id}
 # operationId: removeWebhook
-export def "settings-webhooks delete" [
+export def "remove-webhook" [
   webhook_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7211,7 +7211,7 @@ export def "settings-webhooks delete" [
 #
 # GET /v4/settings/webhooks/{webhook_id}
 # operationId: requestWebhook
-export def "settings-webhooks request" [
+export def "request-webhook" [
   webhook_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7251,7 +7251,7 @@ export def "settings-webhooks request" [
 #
 # PUT /v4/settings/webhooks/{webhook_id}
 # operationId: updateWebhook
-export def "settings-webhooks update" [
+export def "update-webhook" [
   webhook_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7300,7 +7300,7 @@ export def "settings-webhooks update" [
 #
 # POST /v4/settings/webhooks/{webhook_id}/reset_lifetime
 # operationId: resetWebhookLifetime
-export def "settings-webhooks-reset-lifetime reset" [
+export def "reset-webhook-lifetime" [
   webhook_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7340,7 +7340,7 @@ export def "settings-webhooks-reset-lifetime reset" [
 #
 # DELETE /v4/shares/downloads
 # operationId: deleteDownloadShares
-export def "shares-downloads delete" [
+export def "delete-download-shares" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7381,7 +7381,7 @@ export def "shares-downloads delete" [
 #
 # GET /v4/shares/downloads
 # operationId: requestDownloadShares
-export def "shares-downloads list" [
+export def "request-download-shares" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7435,7 +7435,7 @@ export def "shares-downloads list" [
 @deprecated --flag send-mail
 @deprecated --flag send-sms
 @deprecated --flag sms-recipients
-export def "shares-downloads create" [
+export def "create-download-share" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7498,7 +7498,7 @@ export def "shares-downloads create" [
 # PUT /v4/shares/downloads
 # operationId: updateDownloadShares
 # --expiration shape: {enableExpiration: bool, expireAt?: string}
-export def "shares-downloads update" [
+export def "update-download-shares" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7544,7 +7544,7 @@ export def "shares-downloads update" [
 #
 # DELETE /v4/shares/downloads/{share_id}
 # operationId: removeDownloadShare
-export def "shares-downloads delete-by-share-id" [
+export def "remove-download-share" [
   share_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7583,7 +7583,7 @@ export def "shares-downloads delete-by-share-id" [
 #
 # GET /v4/shares/downloads/{share_id}
 # operationId: requestDownloadShare
-export def "shares-downloads request" [
+export def "request-download-share" [
   share_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7625,7 +7625,7 @@ export def "shares-downloads request" [
 # operationId: updateDownloadShare
 # --expiration shape: {enableExpiration: bool, expireAt?: string}
 @deprecated --flag notify-creator
-export def "shares-downloads update-by-share-id" [
+export def "update-download-share" [
   share_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7682,7 +7682,7 @@ export def "shares-downloads update-by-share-id" [
 #
 # POST /v4/shares/downloads/{share_id}/email
 # operationId: sendDownloadShareLinkViaEmail
-export def "shares-downloads-email send-link-via" [
+export def "send-download-share-link-via-email" [
   share_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7727,7 +7727,7 @@ export def "shares-downloads-email send-link-via" [
 #
 # GET /v4/shares/downloads/{share_id}/qr
 # operationId: requestDownloadShareQr
-export def "shares-downloads-qr request" [
+export def "request-download-share-qr" [
   share_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7767,7 +7767,7 @@ export def "shares-downloads-qr request" [
 #
 # DELETE /v4/shares/uploads
 # operationId: deleteUploadShares
-export def "shares-uploads delete" [
+export def "delete-upload-shares" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7808,7 +7808,7 @@ export def "shares-uploads delete" [
 #
 # GET /v4/shares/uploads
 # operationId: requestUploadShares
-export def "shares-uploads list" [
+export def "request-upload-shares" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7860,7 +7860,7 @@ export def "shares-uploads list" [
 @deprecated --flag send-mail
 @deprecated --flag send-sms
 @deprecated --flag sms-recipients
-export def "shares-uploads create" [
+export def "create-upload-share" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7924,7 +7924,7 @@ export def "shares-uploads create" [
 # PUT /v4/shares/uploads
 # operationId: updateUploadShares
 # --expiration shape: {enableExpiration: bool, expireAt?: string}
-export def "shares-uploads update" [
+export def "update-upload-shares" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7976,7 +7976,7 @@ export def "shares-uploads update" [
 #
 # DELETE /v4/shares/uploads/{share_id}
 # operationId: removeUploadShare
-export def "shares-uploads delete-by-share-id" [
+export def "remove-upload-share" [
   share_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8015,7 +8015,7 @@ export def "shares-uploads delete-by-share-id" [
 #
 # GET /v4/shares/uploads/{share_id}
 # operationId: requestUploadShare
-export def "shares-uploads request" [
+export def "request-upload-share" [
   share_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8057,7 +8057,7 @@ export def "shares-uploads request" [
 # operationId: updateUploadShare
 # --expiration shape: {enableExpiration: bool, expireAt?: string}
 @deprecated --flag notify-creator
-export def "shares-uploads update-by-share-id" [
+export def "update-upload-share" [
   share_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8119,7 +8119,7 @@ export def "shares-uploads update-by-share-id" [
 #
 # POST /v4/shares/uploads/{share_id}/email
 # operationId: sendUploadShareLinkViaEmail
-export def "shares-uploads-email send-link-via" [
+export def "send-upload-share-link-via-email" [
   share_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8164,7 +8164,7 @@ export def "shares-uploads-email send-link-via" [
 #
 # GET /v4/shares/uploads/{share_id}/qr
 # operationId: requestUploadShareQr
-export def "shares-uploads-qr request" [
+export def "request-upload-share-qr" [
   share_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8204,7 +8204,7 @@ export def "shares-uploads-qr request" [
 #
 # POST /v4/system/config/actions/test/ad
 # operationId: testAdConfig
-export def "system-config-actions-test-ad test" [
+export def "test-ad-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8251,7 +8251,7 @@ export def "system-config-actions-test-ad test" [
 #
 # POST /v4/system/config/actions/test/radius
 # operationId: testRadiusConfig
-export def "system-config-actions-test-radius test" [
+export def "test-radius-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8288,7 +8288,7 @@ export def "system-config-actions-test-radius test" [
 #
 # GET /v4/system/config/auth/ads
 # operationId: requestAdConfigs
-export def "system-config-auth-ads list" [
+export def "request-ad-configs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8325,7 +8325,7 @@ export def "system-config-auth-ads list" [
 #
 # POST /v4/system/config/auth/ads
 # operationId: createAdConfig
-export def "system-config-auth-ads create" [
+export def "create-ad-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8379,7 +8379,7 @@ export def "system-config-auth-ads create" [
 #
 # DELETE /v4/system/config/auth/ads/{ad_id}
 # operationId: removeAdConfig
-export def "system-config-auth-ads delete" [
+export def "remove-ad-config" [
   ad_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8418,7 +8418,7 @@ export def "system-config-auth-ads delete" [
 #
 # GET /v4/system/config/auth/ads/{ad_id}
 # operationId: requestAdConfig
-export def "system-config-auth-ads request" [
+export def "request-ad-config" [
   ad_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8457,7 +8457,7 @@ export def "system-config-auth-ads request" [
 #
 # PUT /v4/system/config/auth/ads/{ad_id}
 # operationId: updateAdConfig
-export def "system-config-auth-ads update" [
+export def "update-ad-config" [
   ad_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8514,7 +8514,7 @@ export def "system-config-auth-ads update" [
 # GET /v4/system/config/auth/openid/idps
 # Docs: http://openid.net/developers/specs — OpenID Specifications
 # operationId: requestOpenIdIdpConfigs
-export def "system-config-auth-openid-idps list" [
+export def "request-open-id-idp-configs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8552,7 +8552,7 @@ export def "system-config-auth-openid-idps list" [
 # POST /v4/system/config/auth/openid/idps
 # Docs: http://openid.net/developers/specs — OpenID Specifications
 # operationId: createOpenIdIdpConfig
-export def "system-config-auth-openid-idps create-open" [
+export def "create-open-id-idp-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8613,7 +8613,7 @@ export def "system-config-auth-openid-idps create-open" [
 # DELETE /v4/system/config/auth/openid/idps/{idp_id}
 # Docs: http://openid.net/developers/specs — OpenID Specifications
 # operationId: removeOpenIdIdpConfig
-export def "system-config-auth-openid-idps delete-open" [
+export def "remove-open-id-idp-config" [
   idp_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8653,7 +8653,7 @@ export def "system-config-auth-openid-idps delete-open" [
 # GET /v4/system/config/auth/openid/idps/{idp_id}
 # Docs: http://openid.net/developers/specs — OpenID Specifications
 # operationId: requestOpenIdIdpConfig
-export def "system-config-auth-openid-idps request-open" [
+export def "request-open-id-idp-config" [
   idp_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8693,7 +8693,7 @@ export def "system-config-auth-openid-idps request-open" [
 # PUT /v4/system/config/auth/openid/idps/{idp_id}
 # Docs: http://openid.net/developers/specs — OpenID Specifications
 # operationId: updateOpenIdIdpConfig
-export def "system-config-auth-openid-idps update-open" [
+export def "update-open-id-idp-config" [
   idp_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8756,7 +8756,7 @@ export def "system-config-auth-openid-idps update-open" [
 #
 # DELETE /v4/system/config/auth/radius
 # operationId: removeRadiusConfig
-export def "system-config-auth-radius delete" [
+export def "remove-radius-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8793,7 +8793,7 @@ export def "system-config-auth-radius delete" [
 #
 # GET /v4/system/config/auth/radius
 # operationId: requestRadiusConfig
-export def "system-config-auth-radius request" [
+export def "request-radius-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8831,7 +8831,7 @@ export def "system-config-auth-radius request" [
 # POST /v4/system/config/auth/radius
 # operationId: createRadiusConfig
 # --failoverServer shape: {failoverEnabled: bool, failoverIpAddress: string, failoverPort: int}
-export def "system-config-auth-radius create" [
+export def "create-radius-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8877,7 +8877,7 @@ export def "system-config-auth-radius create" [
 # PUT /v4/system/config/auth/radius
 # operationId: updateRadiusConfig
 # --failoverServer shape: {failoverEnabled: bool, failoverIpAddress: string, failoverPort: int}
-export def "system-config-auth-radius update" [
+export def "update-radius-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8922,7 +8922,7 @@ export def "system-config-auth-radius update" [
 #
 # GET /v4/system/config/oauth/clients
 # operationId: requestOAuthClients
-export def "system-config-oauth-clients list" [
+export def "request-o-auth-clients" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8962,7 +8962,7 @@ export def "system-config-oauth-clients list" [
 #
 # POST /v4/system/config/oauth/clients
 # operationId: createOAuthClient
-export def "system-config-oauth-clients create-o-auth" [
+export def "create-o-auth-client" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9011,7 +9011,7 @@ export def "system-config-oauth-clients create-o-auth" [
 #
 # DELETE /v4/system/config/oauth/clients/{client_id}
 # operationId: removeOAuthClient
-export def "system-config-oauth-clients delete-o-auth" [
+export def "remove-o-auth-client" [
   client_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9050,7 +9050,7 @@ export def "system-config-oauth-clients delete-o-auth" [
 #
 # GET /v4/system/config/oauth/clients/{client_id}
 # operationId: requestOAuthClient
-export def "system-config-oauth-clients request-o-auth" [
+export def "request-o-auth-client" [
   client_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9089,7 +9089,7 @@ export def "system-config-oauth-clients request-o-auth" [
 #
 # PUT /v4/system/config/oauth/clients/{client_id}
 # operationId: updateOAuthClient
-export def "system-config-oauth-clients update-o-auth" [
+export def "update-o-auth-client" [
   client_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9140,7 +9140,7 @@ export def "system-config-oauth-clients update-o-auth" [
 #
 # GET /v4/system/config/policies/classifications
 # operationId: requestClassificationPoliciesConfig
-export def "system-config-policies-classifications request" [
+export def "request-classification-policies-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9178,7 +9178,7 @@ export def "system-config-policies-classifications request" [
 # PUT /v4/system/config/policies/classifications
 # operationId: changeClassificationPoliciesConfig
 # --shareClassificationPolicies shape: {classificationRequiresSharePassword?: "0"|"1"|"2"|"3"|"4"}
-export def "system-config-policies-classifications update-change" [
+export def "change-classification-policies-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9219,7 +9219,7 @@ export def "system-config-policies-classifications update-change" [
 #
 # GET /v4/system/config/policies/guest_users
 # operationId: requestGuestUsersPoliciesConfig
-export def "system-config-policies-guest-users request" [
+export def "request-guest-users-policies-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9256,7 +9256,7 @@ export def "system-config-policies-guest-users request" [
 #
 # PUT /v4/system/config/policies/guest_users
 # operationId: changeGuestUsersPoliciesConfig
-export def "system-config-policies-guest-users update-change" [
+export def "change-guest-users-policies-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9297,7 +9297,7 @@ export def "system-config-policies-guest-users update-change" [
 #
 # GET /v4/system/config/policies/mfa
 # operationId: requestMfaPoliciesConfig
-export def "system-config-policies-mfa request" [
+export def "request-mfa-policies-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9334,7 +9334,7 @@ export def "system-config-policies-mfa request" [
 #
 # PUT /v4/system/config/policies/mfa
 # operationId: changeMfaPoliciesConfig
-export def "system-config-policies-mfa update-change" [
+export def "change-mfa-policies-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9375,7 +9375,7 @@ export def "system-config-policies-mfa update-change" [
 #
 # GET /v4/system/config/policies/passwords
 # operationId: requestPasswordPoliciesConfig
-export def "system-config-policies-passwords list" [
+export def "request-password-policies-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9415,7 +9415,7 @@ export def "system-config-policies-passwords list" [
 # --encryptionPasswordPolicies shape: {characterRules?: record, minLength?: int, rejectKeyboardPatterns?: bool, rejectUserInfo?: bool}
 # --loginPasswordPolicies shape: {characterRules?: record, enforceLoginPasswordChange?: bool, minLength?: int, numberOfArchivedPasswords?: int, passwordExpiration?: record, rejectDictionaryWords?: bool, rejectKeyboardPatterns?: bool, rejectUserInfo?: bool, userLockout?: record}
 # --sharesPasswordPolicies shape: {characterRules?: record, minLength?: int, rejectDictionaryWords?: bool, rejectKeyboardPatterns?: bool, rejectUserInfo?: bool}
-export def "system-config-policies-passwords update-change" [
+export def "change-password-policies-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9458,7 +9458,7 @@ export def "system-config-policies-passwords update-change" [
 #
 # POST /v4/system/config/policies/passwords/enforce_change
 # operationId: enforceLoginPasswordChange
-export def "system-config-policies-passwords-enforce-change create-login" [
+export def "enforce-login-password-change" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9495,7 +9495,7 @@ export def "system-config-policies-passwords-enforce-change create-login" [
 #
 # GET /v4/system/config/policies/passwords/{password_type}
 # operationId: requestPasswordPoliciesForPasswordType
-export def "system-config-policies-passwords request" [
+export def "request-password-policies-for-password-type" [
   password_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9534,7 +9534,7 @@ export def "system-config-policies-passwords request" [
 #
 # GET /v4/system/config/settings/auth
 # operationId: requestAuthConfig
-export def "system-config-settings-auth request" [
+export def "request-auth-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9572,7 +9572,7 @@ export def "system-config-settings-auth request" [
 # PUT /v4/system/config/settings/auth
 # operationId: updateAuthConfig
 # --authMethods item shape: {isEnabled: bool, name: string, priority: int}
-export def "system-config-settings-auth update" [
+export def "update-auth-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9614,7 +9614,7 @@ export def "system-config-settings-auth update" [
 # GET /v4/system/config/settings/defaults
 # Docs: https://tools.ietf.org/html/rfc5646 — Tags for Identifying Languages
 # operationId: requestSystemDefaults
-export def "system-config-settings-defaults request" [
+export def "request-system-defaults" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9652,7 +9652,7 @@ export def "system-config-settings-defaults request" [
 # PUT /v4/system/config/settings/defaults
 # Docs: https://tools.ietf.org/html/rfc5646 — Tags for Identifying Languages
 # operationId: updateSystemDefaults
-export def "system-config-settings-defaults update" [
+export def "update-system-defaults" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9697,7 +9697,7 @@ export def "system-config-settings-defaults update" [
 #
 # GET /v4/system/config/settings/eventlog
 # operationId: requestEventlogConfig
-export def "system-config-settings-eventlog request" [
+export def "request-eventlog-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9734,7 +9734,7 @@ export def "system-config-settings-eventlog request" [
 #
 # PUT /v4/system/config/settings/eventlog
 # operationId: updateEventlogConfig
-export def "system-config-settings-eventlog update" [
+export def "update-eventlog-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9777,7 +9777,7 @@ export def "system-config-settings-eventlog update" [
 #
 # GET /v4/system/config/settings/general
 # operationId: requestGeneralSettings
-export def "system-config-settings-general request" [
+export def "request-general-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9818,7 +9818,7 @@ export def "system-config-settings-general request" [
 @deprecated --flag hide-login-input-fields
 @deprecated --flag media-server-enabled
 @deprecated --flag weak-password-enabled
-export def "system-config-settings-general update" [
+export def "update-general-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9867,7 +9867,7 @@ export def "system-config-settings-general update" [
 #
 # GET /v4/system/config/settings/infrastructure
 # operationId: requestInfrastructureProperties
-export def "system-config-settings-infrastructure request-properties" [
+export def "request-infrastructure-properties" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9904,7 +9904,7 @@ export def "system-config-settings-infrastructure request-properties" [
 #
 # GET /v4/system/config/settings/syslog
 # operationId: requestSyslogConfig
-export def "system-config-settings-syslog request" [
+export def "request-syslog-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9941,7 +9941,7 @@ export def "system-config-settings-syslog request" [
 #
 # PUT /v4/system/config/settings/syslog
 # operationId: updateSyslogConfig
-export def "system-config-settings-syslog update" [
+export def "update-syslog-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9986,7 +9986,7 @@ export def "system-config-settings-syslog update" [
 #
 # GET /v4/system/config/storage/s3
 # operationId: request3Config
-export def "system-config-storage-s3 get-request3" [
+export def "request3-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10025,7 +10025,7 @@ export def "system-config-storage-s3 get-request3" [
 # operationId: createS3Config
 @deprecated --flag bucket-name
 @deprecated --flag endpoint-url
-export def "system-config-storage-s3 create" [
+export def "create-s3-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10073,7 +10073,7 @@ export def "system-config-storage-s3 create" [
 # operationId: updateS3Config
 @deprecated --flag bucket-name
 @deprecated --flag endpoint-url
-export def "system-config-storage-s3 update" [
+export def "update-s3-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10119,7 +10119,7 @@ export def "system-config-storage-s3 update" [
 #
 # GET /v4/system/config/storage/s3/tags
 # operationId: requestS3TagList
-export def "system-config-storage-s3-tags request-list" [
+export def "request-s3-tag-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10156,7 +10156,7 @@ export def "system-config-storage-s3-tags request-list" [
 #
 # POST /v4/system/config/storage/s3/tags
 # operationId: createS3Tag
-export def "system-config-storage-s3-tags create" [
+export def "create-s3-tag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10199,7 +10199,7 @@ export def "system-config-storage-s3-tags create" [
 #
 # DELETE /v4/system/config/storage/s3/tags/{id}
 # operationId: removeS3Tag
-export def "system-config-storage-s3-tags delete" [
+export def "remove-s3-tag" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10238,7 +10238,7 @@ export def "system-config-storage-s3-tags delete" [
 #
 # GET /v4/system/config/storage/s3/tags/{id}
 # operationId: requestS3Tag
-export def "system-config-storage-s3-tags request" [
+export def "request-s3-tag" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10277,7 +10277,7 @@ export def "system-config-storage-s3-tags request" [
 #
 # DELETE /v4/uploads/{token}
 # operationId: cancelFileUploadByToken
-export def "uploads cancel-file" [
+export def "cancel-file-upload-by-token" [
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10314,7 +10314,7 @@ export def "uploads cancel-file" [
 # POST /v4/uploads/{token}
 # Docs: https://tools.ietf.org/html/rfc7233 — Range Requests
 # operationId: uploadFileByTokenAsMultipart_1
-export def "uploads upload-file-by-as-multipart-by-token" [
+export def "upload-file-by-token-as-multipart-1" [
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10362,7 +10362,7 @@ export def "uploads upload-file-by-as-multipart-by-token" [
 # --fileKey shape: {iv: string, key: string, tag: string, version: string}
 # --userFileKeyList shape: {items?: list}
 @deprecated --flag user-file-key-list
-export def "uploads complete-file" [
+export def "complete-file-upload-by-token" [
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10409,7 +10409,7 @@ export def "uploads complete-file" [
 #
 # GET /v4/user/account
 # operationId: requestUserInfo
-export def "user-account request-get" [
+export def "request-user-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10452,7 +10452,7 @@ export def "user-account request-get" [
 @deprecated --flag gender
 @deprecated --flag login
 @deprecated --flag title
-export def "user-account update" [
+export def "update-user-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10503,7 +10503,7 @@ export def "user-account update" [
 #
 # DELETE /v4/user/account/avatar
 # operationId: resetAvatar
-export def "user-account-avatar reset" [
+export def "reset-avatar" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10540,7 +10540,7 @@ export def "user-account-avatar reset" [
 #
 # GET /v4/user/account/avatar
 # operationId: requestAvatar
-export def "user-account-avatar request" [
+export def "request-avatar" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10577,7 +10577,7 @@ export def "user-account-avatar request" [
 #
 # POST /v4/user/account/avatar
 # operationId: uploadAvatarAsMultipart
-export def "user-account-avatar upload-as-multipart" [
+export def "upload-avatar-as-multipart" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10620,7 +10620,7 @@ export def "user-account-avatar upload-as-multipart" [
 #
 # GET /v4/user/account/customer
 # operationId: requestCustomerInfo
-export def "user-account-customer request-get" [
+export def "request-customer-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10660,7 +10660,7 @@ export def "user-account-customer request-get" [
 # operationId: enableCustomerEncryption
 # --dataSpaceRescueKey shape: {privateKeyContainer: record, publicKeyContainer: record}
 @deprecated
-export def "user-account-customer enable-encryption" [
+export def "enable-customer-encryption" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10704,7 +10704,7 @@ export def "user-account-customer enable-encryption" [
 # DEPRECATED
 # operationId: requestCustomerKeyPair
 @deprecated
-export def "user-account-customer-keypair request-key-pair" [
+export def "request-customer-key-pair" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10741,7 +10741,7 @@ export def "user-account-customer-keypair request-key-pair" [
 #
 # DELETE /v4/user/account/keypair
 # operationId: removeUserKeyPair
-export def "user-account-keypair delete-key-pair" [
+export def "remove-user-key-pair" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10780,7 +10780,7 @@ export def "user-account-keypair delete-key-pair" [
 #
 # GET /v4/user/account/keypair
 # operationId: requestUserKeyPair
-export def "user-account-keypair request-key-pair" [
+export def "request-user-key-pair" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10822,7 +10822,7 @@ export def "user-account-keypair request-key-pair" [
 # operationId: setUserKeyPair
 # --privateKeyContainer shape: {createdAt?: string, createdBy?: int, privateKey: string, version: string}
 # --publicKeyContainer shape: {createdAt?: string, createdBy?: int, publicKey: string, version: string}
-export def "user-account-keypair update-key-pair" [
+export def "set-user-key-pair" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10864,7 +10864,7 @@ export def "user-account-keypair update-key-pair" [
 #
 # GET /v4/user/account/keypairs
 # operationId: requestUserKeyPairs
-export def "user-account-keypairs request-key-pairs" [
+export def "request-user-key-pairs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10905,7 +10905,7 @@ export def "user-account-keypairs request-key-pairs" [
 # --previousPrivateKey shape: {createdAt?: string, createdBy?: int, privateKey: string, version: string}
 # --privateKeyContainer shape: {createdAt?: string, createdBy?: int, privateKey: string, version: string}
 # --publicKeyContainer shape: {createdAt?: string, createdBy?: int, publicKey: string, version: string}
-export def "user-account-keypairs create-and-preserve-key-pair" [
+export def "create-and-preserve-user-key-pair" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10948,7 +10948,7 @@ export def "user-account-keypairs create-and-preserve-key-pair" [
 #
 # DELETE /v4/user/account/mfa
 # operationId: useEmergencyCode
-export def "user-account-mfa delete-use-emergency-code" [
+export def "use-emergency-code" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10987,7 +10987,7 @@ export def "user-account-mfa delete-use-emergency-code" [
 #
 # GET /v4/user/account/mfa
 # operationId: getMfaStatusForUser
-export def "user-account-mfa get-status" [
+export def "get-mfa-status-for-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11024,7 +11024,7 @@ export def "user-account-mfa get-status" [
 #
 # GET /v4/user/account/mfa/totp
 # operationId: getTotpSetupInformation
-export def "user-account-mfa-totp get-setup-information" [
+export def "get-totp-setup-information" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11061,7 +11061,7 @@ export def "user-account-mfa-totp get-setup-information" [
 #
 # POST /v4/user/account/mfa/totp
 # operationId: confirmTotpSetup
-export def "user-account-mfa-totp confirm-setup" [
+export def "confirm-totp-setup" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11103,7 +11103,7 @@ export def "user-account-mfa-totp confirm-setup" [
 #
 # DELETE /v4/user/account/mfa/totp/{id}
 # operationId: deleteMfaTotpSetup
-export def "user-account-mfa-totp delete-setup" [
+export def "delete-mfa-totp-setup" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11144,7 +11144,7 @@ export def "user-account-mfa-totp delete-setup" [
 #
 # PUT /v4/user/account/password
 # operationId: changeUserPassword
-export def "user-account-password update-change" [
+export def "change-user-password" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11188,7 +11188,7 @@ export def "user-account-password update-change" [
 # DEPRECATED
 # operationId: logout
 @deprecated
-export def "user-logout create" [
+export def "logout" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11227,7 +11227,7 @@ export def "user-logout create" [
 #
 # GET /v4/user/notifications/config
 # operationId: requestListOfNotificationConfigs
-export def "user-notifications-config request-list" [
+export def "request-list-of-notification-configs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11264,7 +11264,7 @@ export def "user-notifications-config request-list" [
 #
 # PUT /v4/user/notifications/config/{id}
 # operationId: updateNotificationConfig
-export def "user-notifications-config update" [
+export def "update-notification-config" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11307,7 +11307,7 @@ export def "user-notifications-config update" [
 #
 # GET /v4/user/oauth/approvals
 # operationId: requestOAuthApprovals
-export def "user-oauth-approvals request-o-auth" [
+export def "request-o-auth-approvals" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11347,7 +11347,7 @@ export def "user-oauth-approvals request-o-auth" [
 #
 # DELETE /v4/user/oauth/approvals/{client_id}
 # operationId: removeOAuthApproval
-export def "user-oauth-approvals delete-o-auth" [
+export def "remove-o-auth-approval" [
   client_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11386,7 +11386,7 @@ export def "user-oauth-approvals delete-o-auth" [
 #
 # GET /v4/user/oauth/authorizations
 # operationId: requestOAuthAuthorizations
-export def "user-oauth-authorizations request-o-auth" [
+export def "request-o-auth-authorizations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11427,7 +11427,7 @@ export def "user-oauth-authorizations request-o-auth" [
 #
 # DELETE /v4/user/oauth/authorizations/{client_id}
 # operationId: removeOAuthAuthorizations
-export def "user-oauth-authorizations delete-o-auth-by-client-id" [
+export def "remove-o-auth-authorizations" [
   client_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11466,7 +11466,7 @@ export def "user-oauth-authorizations delete-o-auth-by-client-id" [
 #
 # DELETE /v4/user/oauth/authorizations/{client_id}/{authorization_id}
 # operationId: removeOAuthAuthorization
-export def "user-oauth-authorizations delete-o-auth-by-client-id-authorization-id" [
+export def "remove-o-auth-authorization" [
   client_id: string
   authorization_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -11507,7 +11507,7 @@ export def "user-oauth-authorizations delete-o-auth-by-client-id-authorization-i
 #
 # GET /v4/user/ping
 # operationId: pingUser
-export def "user-ping ping" [
+export def "ping-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11544,7 +11544,7 @@ export def "user-ping ping" [
 #
 # GET /v4/user/profileAttributes
 # operationId: requestProfileAttributes
-export def "user-profile-attributes request" [
+export def "request-profile-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11589,7 +11589,7 @@ export def "user-profile-attributes request" [
 # operationId: setProfileAttributes
 # --items item shape: {key: string, value: string}
 @deprecated
-export def "user-profile-attributes update" [
+export def "set-profile-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11631,7 +11631,7 @@ export def "user-profile-attributes update" [
 # PUT /v4/user/profileAttributes
 # operationId: updateProfileAttributes
 # --items item shape: {key: string, value: string}
-export def "user-profile-attributes update-1" [
+export def "update-profile-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11672,7 +11672,7 @@ export def "user-profile-attributes update-1" [
 #
 # DELETE /v4/user/profileAttributes/{key}
 # operationId: removeProfileAttribute
-export def "user-profile-attributes delete" [
+export def "remove-profile-attribute" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11711,7 +11711,7 @@ export def "user-profile-attributes delete" [
 #
 # GET /v4/user/subscriptions/download_shares
 # operationId: listDownloadShareSubscriptions
-export def "user-subscriptions-download-shares list" [
+export def "list-download-share-subscriptions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11753,7 +11753,7 @@ export def "user-subscriptions-download-shares list" [
 #
 # PUT /v4/user/subscriptions/download_shares
 # operationId: subscribeDownloadShares
-export def "user-subscriptions-download-shares subscribe" [
+export def "subscribe-download-shares" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11795,7 +11795,7 @@ export def "user-subscriptions-download-shares subscribe" [
 #
 # DELETE /v4/user/subscriptions/download_shares/{share_id}
 # operationId: unsubscribeDownloadShare
-export def "user-subscriptions-download-shares unsubscribe" [
+export def "unsubscribe-download-share" [
   share_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11834,7 +11834,7 @@ export def "user-subscriptions-download-shares unsubscribe" [
 #
 # POST /v4/user/subscriptions/download_shares/{share_id}
 # operationId: subscribeDownloadShare
-export def "user-subscriptions-download-shares subscribe-by-share-id" [
+export def "subscribe-download-share" [
   share_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11873,7 +11873,7 @@ export def "user-subscriptions-download-shares subscribe-by-share-id" [
 #
 # GET /v4/user/subscriptions/nodes
 # operationId: listNodeSubscriptions
-export def "user-subscriptions-nodes list" [
+export def "list-node-subscriptions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11915,7 +11915,7 @@ export def "user-subscriptions-nodes list" [
 #
 # PUT /v4/user/subscriptions/nodes
 # operationId: updateNodeSubscriptions
-export def "user-subscriptions-nodes update" [
+export def "update-node-subscriptions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11957,7 +11957,7 @@ export def "user-subscriptions-nodes update" [
 #
 # DELETE /v4/user/subscriptions/nodes/{node_id}
 # operationId: unsubscribeNode
-export def "user-subscriptions-nodes unsubscribe" [
+export def "unsubscribe-node" [
   node_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11996,7 +11996,7 @@ export def "user-subscriptions-nodes unsubscribe" [
 #
 # POST /v4/user/subscriptions/nodes/{node_id}
 # operationId: subscribeNode
-export def "user-subscriptions-nodes subscribe" [
+export def "subscribe-node" [
   node_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12035,7 +12035,7 @@ export def "user-subscriptions-nodes subscribe" [
 #
 # GET /v4/user/subscriptions/upload_shares
 # operationId: listUploadShareSubscriptions
-export def "user-subscriptions-upload-shares list" [
+export def "list-upload-share-subscriptions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12077,7 +12077,7 @@ export def "user-subscriptions-upload-shares list" [
 #
 # PUT /v4/user/subscriptions/upload_shares
 # operationId: subscribeUploadShares
-export def "user-subscriptions-upload-shares subscribe" [
+export def "subscribe-upload-shares" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12119,7 +12119,7 @@ export def "user-subscriptions-upload-shares subscribe" [
 #
 # DELETE /v4/user/subscriptions/upload_shares/{share_id}
 # operationId: unsubscribeUploadShare
-export def "user-subscriptions-upload-shares unsubscribe" [
+export def "unsubscribe-upload-share" [
   share_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12158,7 +12158,7 @@ export def "user-subscriptions-upload-shares unsubscribe" [
 #
 # POST /v4/user/subscriptions/upload_shares/{share_id}
 # operationId: subscribeUploadShare
-export def "user-subscriptions-upload-shares subscribe-by-share-id" [
+export def "subscribe-upload-share" [
   share_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12197,7 +12197,7 @@ export def "user-subscriptions-upload-shares subscribe-by-share-id" [
 #
 # GET /v4/users
 # operationId: requestUsers
-export def "users list" [
+export def "request-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12253,7 +12253,7 @@ export def "users list" [
 @deprecated --flag needs-to-change-password
 @deprecated --flag password
 @deprecated --flag title
-export def "users create" [
+export def "create-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12311,7 +12311,7 @@ export def "users create" [
 #
 # DELETE /v4/users/{user_id}
 # operationId: removeUser
-export def "users delete" [
+export def "remove-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12350,7 +12350,7 @@ export def "users delete" [
 #
 # GET /v4/users/{user_id}
 # operationId: requestUser
-export def "users request" [
+export def "request-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12400,7 +12400,7 @@ export def "users request" [
 @deprecated --flag gender
 @deprecated --flag lock-status
 @deprecated --flag title
-export def "users update" [
+export def "update-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12457,7 +12457,7 @@ export def "users update" [
 #
 # GET /v4/users/{user_id}/groups
 # operationId: requestUserGroups
-export def "users-groups request" [
+export def "request-user-groups" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12500,7 +12500,7 @@ export def "users-groups request" [
 #
 # GET /v4/users/{user_id}/last_admin_rooms
 # operationId: requestLastAdminRoomsUsers
-export def "users-last-admin-rooms request" [
+export def "request-last-admin-rooms-users" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12539,7 +12539,7 @@ export def "users-last-admin-rooms request" [
 #
 # POST /v4/users/{user_id}/mfa/emergency_code
 # operationId: requestEmergencyMfaCode
-export def "users-mfa-emergency-code request" [
+export def "request-emergency-mfa-code" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12578,7 +12578,7 @@ export def "users-mfa-emergency-code request" [
 #
 # GET /v4/users/{user_id}/roles
 # operationId: requestUserRoles
-export def "users-roles request" [
+export def "request-user-roles" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12619,7 +12619,7 @@ export def "users-roles request" [
 # DEPRECATED
 # operationId: requestUsersRooms
 @deprecated
-export def "users-rooms request" [
+export def "request-users-rooms" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12663,7 +12663,7 @@ export def "users-rooms request" [
 #
 # GET /v4/users/{user_id}/userAttributes
 # operationId: requestUserAttributes
-export def "users-user-attributes request" [
+export def "request-user-attributes" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12710,7 +12710,7 @@ export def "users-user-attributes request" [
 # operationId: setUserAttributes
 # --items item shape: {key: string, value: string}
 @deprecated
-export def "users-user-attributes update-by-user-id" [
+export def "set-user-attributes" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12755,7 +12755,7 @@ export def "users-user-attributes update-by-user-id" [
 # PUT /v4/users/{user_id}/userAttributes
 # operationId: updateUserAttributes
 # --items item shape: {key: string, value: string}
-export def "users-user-attributes update-by-user-id-1" [
+export def "update-user-attributes" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12799,7 +12799,7 @@ export def "users-user-attributes update-by-user-id-1" [
 #
 # DELETE /v4/users/{user_id}/userAttributes/{key}
 # operationId: removeUserAttribute
-export def "users-user-attributes delete" [
+export def "remove-user-attribute" [
   user_id: int
   key: string
   --base-url(-b): string@base-url-completer # API base URL

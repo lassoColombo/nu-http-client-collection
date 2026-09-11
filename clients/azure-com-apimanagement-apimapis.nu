@@ -127,7 +127,7 @@ def accept-completer-1 [] { ["application/json" "application/vnd.ms-azure-apim.p
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-api-management-service-apis list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api-list-by-service" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -152,7 +152,7 @@ export def commands []: nothing -> table {
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis
 # Docs: https://docs.microsoft.com/en-us/azure/api-management/api-management-howto-create-apis
 # operationId: Api_ListByService
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis list" [
+export def "api-list-by-service" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -199,7 +199,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}
 # operationId: Api_Delete
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis delete" [
+export def "api-delete" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -247,7 +247,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}
 # operationId: Api_Get
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis get" [
+export def "api-get" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -292,7 +292,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # HEAD /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}
 # operationId: Api_GetEntityTag
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis get-entity-tag" [
+export def "api-get-entity-tag" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -337,7 +337,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}
 # operationId: Api_Update
 # --properties shape: {displayName?: string, path?: string, protocols?: list<string>, serviceUrl?: string, apiRevision?: string, apiRevisionDescription?: string, apiVersion?: string, apiVersionDescription?: string, apiVersionSetId?: string, authenticationSettings?: any, description?: string, isCurrent?: bool, subscriptionKeyParameterNames?: any, subscriptionRequired?: bool, type?: "http"|"soap"}
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis update" [
+export def "api-update" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -389,7 +389,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}
 # operationId: Api_CreateOrUpdate
 # --properties shape: {apiType?: "http"|"soap", format?: "wadl-xml"|"wadl-link-json"|"swagger-json"|"swagger-link-json"|"wsdl"|"wsdl-link"|"openapi"|"openapi+json"|"openapi-link"|"openapi+json-link", value?: string, wsdlSelector?: record, apiVersionSet?: any, displayName?: string, path: string, protocols?: list<string>, serviceUrl?: string, sourceApiId?: string}
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis create-or-update" [
+export def "api-create-or-update" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -440,7 +440,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/diagnostics
 # operationId: ApiDiagnostic_ListByService
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-diagnostics list" [
+export def "api-diagnostic-list-by-service" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -487,7 +487,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/diagnostics/{diagnosticId}
 # operationId: ApiDiagnostic_Delete
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-diagnostics delete" [
+export def "api-diagnostic-delete" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -536,7 +536,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/diagnostics/{diagnosticId}
 # operationId: ApiDiagnostic_Get
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-diagnostics get" [
+export def "api-diagnostic-get" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -582,7 +582,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # HEAD /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/diagnostics/{diagnosticId}
 # operationId: ApiDiagnostic_GetEntityTag
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-diagnostics get-entity-tag" [
+export def "api-diagnostic-get-entity-tag" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -629,7 +629,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/diagnostics/{diagnosticId}
 # operationId: ApiDiagnostic_Update
 # --properties shape: {alwaysLog?: "allErrors", backend?: any, frontend?: any, httpCorrelationProtocol?: "None"|"Legacy"|"W3C", logClientIp?: bool, loggerId: string, sampling?: any, verbosity?: "verbose"|"information"|"error"}
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-diagnostics update" [
+export def "api-diagnostic-update" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -683,7 +683,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/diagnostics/{diagnosticId}
 # operationId: ApiDiagnostic_CreateOrUpdate
 # --properties shape: {alwaysLog?: "allErrors", backend?: any, frontend?: any, httpCorrelationProtocol?: "None"|"Legacy"|"W3C", logClientIp?: bool, loggerId: string, sampling?: any, verbosity?: "verbose"|"information"|"error"}
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-diagnostics create-or-update" [
+export def "api-diagnostic-create-or-update" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -736,7 +736,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/issues
 # operationId: ApiIssue_ListByService
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-issues list" [
+export def "api-issue-list-by-service" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -784,7 +784,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/issues/{issueId}
 # operationId: ApiIssue_Delete
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-issues delete" [
+export def "api-issue-delete" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -833,7 +833,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/issues/{issueId}
 # operationId: ApiIssue_Get
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-issues get" [
+export def "api-issue-get" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -880,7 +880,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # HEAD /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/issues/{issueId}
 # operationId: ApiIssue_GetEntityTag
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-issues get-entity-tag" [
+export def "api-issue-get-entity-tag" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -927,7 +927,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/issues/{issueId}
 # operationId: ApiIssue_Update
 # --properties shape: {description?: string, title?: string, userId?: string, apiId?: string, createdDate?: string, state?: "proposed"|"open"|"removed"|"resolved"|"closed"}
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-issues update" [
+export def "api-issue-update" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -981,7 +981,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/issues/{issueId}
 # operationId: ApiIssue_CreateOrUpdate
 # --properties shape: {description: string, title: string, userId: string, apiId?: string, createdDate?: string, state?: "proposed"|"open"|"removed"|"resolved"|"closed"}
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-issues create-or-update" [
+export def "api-issue-create-or-update" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -1034,7 +1034,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/issues/{issueId}/attachments
 # operationId: ApiIssueAttachment_ListByService
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-issues-attachments list" [
+export def "api-issue-attachment-list-by-service" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -1083,7 +1083,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/issues/{issueId}/attachments/{attachmentId}
 # operationId: ApiIssueAttachment_Delete
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-issues-attachments delete" [
+export def "api-issue-attachment-delete" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -1134,7 +1134,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/issues/{issueId}/attachments/{attachmentId}
 # operationId: ApiIssueAttachment_Get
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-issues-attachments get" [
+export def "api-issue-attachment-get" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -1182,7 +1182,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # HEAD /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/issues/{issueId}/attachments/{attachmentId}
 # operationId: ApiIssueAttachment_GetEntityTag
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-issues-attachments get-entity-tag" [
+export def "api-issue-attachment-get-entity-tag" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -1231,7 +1231,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/issues/{issueId}/attachments/{attachmentId}
 # operationId: ApiIssueAttachment_CreateOrUpdate
 # --properties shape: {content: string, contentFormat: string, title: string}
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-issues-attachments create-or-update" [
+export def "api-issue-attachment-create-or-update" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -1286,7 +1286,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/issues/{issueId}/comments
 # operationId: ApiIssueComment_ListByService
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-issues-comments list" [
+export def "api-issue-comment-list-by-service" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -1335,7 +1335,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/issues/{issueId}/comments/{commentId}
 # operationId: ApiIssueComment_Delete
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-issues-comments delete" [
+export def "api-issue-comment-delete" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -1386,7 +1386,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/issues/{issueId}/comments/{commentId}
 # operationId: ApiIssueComment_Get
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-issues-comments get" [
+export def "api-issue-comment-get" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -1434,7 +1434,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # HEAD /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/issues/{issueId}/comments/{commentId}
 # operationId: ApiIssueComment_GetEntityTag
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-issues-comments get-entity-tag" [
+export def "api-issue-comment-get-entity-tag" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -1483,7 +1483,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/issues/{issueId}/comments/{commentId}
 # operationId: ApiIssueComment_CreateOrUpdate
 # --properties shape: {createdDate?: string, text: string, userId: string}
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-issues-comments create-or-update" [
+export def "api-issue-comment-create-or-update" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -1538,7 +1538,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/operations
 # operationId: ApiOperation_ListByApi
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-operations list" [
+export def "api-operation-list-by-api" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -1586,7 +1586,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/operations/{operationId}
 # operationId: ApiOperation_Delete
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-operations delete" [
+export def "api-operation-delete" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -1635,7 +1635,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/operations/{operationId}
 # operationId: ApiOperation_Get
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-operations get" [
+export def "api-operation-get" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -1681,7 +1681,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # HEAD /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/operations/{operationId}
 # operationId: ApiOperation_GetEntityTag
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-operations get-entity-tag" [
+export def "api-operation-get-entity-tag" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -1728,7 +1728,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/operations/{operationId}
 # operationId: ApiOperation_Update
 # --properties shape: {displayName?: string, method?: string, urlTemplate?: string, description?: string, policies?: string, request?: any, responses?: list, templateParameters?: list}
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-operations update" [
+export def "api-operation-update" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -1782,7 +1782,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/operations/{operationId}
 # operationId: ApiOperation_CreateOrUpdate
 # --properties shape: {displayName: string, method: string, urlTemplate: string, description?: string, policies?: string, request?: any, responses?: list, templateParameters?: list}
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-operations create-or-update" [
+export def "api-operation-create-or-update" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -1835,7 +1835,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/operations/{operationId}/policies
 # operationId: ApiOperationPolicy_ListByOperation
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-operations-policies list-policy" [
+export def "api-operation-policy-list-by-operation" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -1881,7 +1881,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/operations/{operationId}/policies/{policyId}
 # operationId: ApiOperationPolicy_Delete
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-operations-policies delete-policy" [
+export def "api-operation-policy-delete" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -1932,7 +1932,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/operations/{operationId}/policies/{policyId}
 # operationId: ApiOperationPolicy_Get
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-operations-policies get-policy" [
+export def "api-operation-policy-get" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -1981,7 +1981,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # HEAD /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/operations/{operationId}/policies/{policyId}
 # operationId: ApiOperationPolicy_GetEntityTag
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-operations-policies get-policy-entity-tag" [
+export def "api-operation-policy-get-entity-tag" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -2030,7 +2030,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/operations/{operationId}/policies/{policyId}
 # operationId: ApiOperationPolicy_CreateOrUpdate
 # --properties shape: {format?: "xml"|"xml-link"|"rawxml"|"rawxml-link", value: string}
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-operations-policies create-policy-or-update" [
+export def "api-operation-policy-create-or-update" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -2085,7 +2085,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/operations/{operationId}/tags
 # operationId: Tag_ListByOperation
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-operations-tags list" [
+export def "tag-list-by-operation" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -2134,7 +2134,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/operations/{operationId}/tags/{tagId}
 # operationId: Tag_DetachFromOperation
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-operations-tags tag-detach" [
+export def "tag-detach-from-operation" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -2182,7 +2182,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/operations/{operationId}/tags/{tagId}
 # operationId: Tag_GetByOperation
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-operations-tags get" [
+export def "tag-get-by-operation" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -2230,7 +2230,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # HEAD /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/operations/{operationId}/tags/{tagId}
 # operationId: Tag_GetEntityStateByOperation
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-operations-tags get-entity-state" [
+export def "tag-get-entity-state-by-operation" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -2278,7 +2278,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/operations/{operationId}/tags/{tagId}
 # operationId: Tag_AssignToOperation
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-operations-tags assign" [
+export def "tag-assign-to-operation" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -2326,7 +2326,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/operationsByTags
 # operationId: Operation_ListByTags
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-operations-by-tags list" [
+export def "operation-list-by-tags" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -2374,7 +2374,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/policies
 # operationId: ApiPolicy_ListByApi
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-policies list-policy" [
+export def "api-policy-list-by-api" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -2418,7 +2418,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/policies/{policyId}
 # operationId: ApiPolicy_Delete
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-policies delete-policy" [
+export def "api-policy-delete" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -2467,7 +2467,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/policies/{policyId}
 # operationId: ApiPolicy_Get
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-policies get-policy" [
+export def "api-policy-get" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -2515,7 +2515,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # HEAD /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/policies/{policyId}
 # operationId: ApiPolicy_GetEntityTag
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-policies get-policy-entity-tag" [
+export def "api-policy-get-entity-tag" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -2562,7 +2562,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/policies/{policyId}
 # operationId: ApiPolicy_CreateOrUpdate
 # --properties shape: {format?: "xml"|"xml-link"|"rawxml"|"rawxml-link", value: string}
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-policies create-policy-or-update" [
+export def "api-policy-create-or-update" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -2615,7 +2615,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/products
 # operationId: ApiProduct_ListByApis
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-products list" [
+export def "api-product-list-by-apis" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -2662,7 +2662,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/releases
 # operationId: ApiRelease_ListByService
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-releases list" [
+export def "api-release-list-by-service" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -2709,7 +2709,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/releases/{releaseId}
 # operationId: ApiRelease_Delete
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-releases delete" [
+export def "api-release-delete" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -2758,7 +2758,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/releases/{releaseId}
 # operationId: ApiRelease_Get
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-releases get" [
+export def "api-release-get" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -2804,7 +2804,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # HEAD /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/releases/{releaseId}
 # operationId: ApiRelease_GetEntityTag
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-releases get-entity-tag" [
+export def "api-release-get-entity-tag" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -2851,7 +2851,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/releases/{releaseId}
 # operationId: ApiRelease_Update
 # --properties shape: {apiId?: string, notes?: string}
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-releases update" [
+export def "api-release-update" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -2905,7 +2905,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/releases/{releaseId}
 # operationId: ApiRelease_CreateOrUpdate
 # --properties shape: {apiId?: string, notes?: string}
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-releases create-or-update" [
+export def "api-release-create-or-update" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -2958,7 +2958,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/revisions
 # operationId: ApiRevision_ListByService
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-revisions list" [
+export def "api-revision-list-by-service" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -3005,7 +3005,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/schemas
 # operationId: ApiSchema_ListByApi
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-schemas list" [
+export def "api-schema-list-by-api" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -3052,7 +3052,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/schemas/{schemaId}
 # operationId: ApiSchema_Delete
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-schemas delete" [
+export def "api-schema-delete" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -3102,7 +3102,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/schemas/{schemaId}
 # operationId: ApiSchema_Get
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-schemas get" [
+export def "api-schema-get" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -3148,7 +3148,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # HEAD /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/schemas/{schemaId}
 # operationId: ApiSchema_GetEntityTag
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-schemas get-entity-tag" [
+export def "api-schema-get-entity-tag" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -3195,7 +3195,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/schemas/{schemaId}
 # operationId: ApiSchema_CreateOrUpdate
 # --properties shape: {contentType: string, document?: any}
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-schemas create-or-update" [
+export def "api-schema-create-or-update" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -3248,7 +3248,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/tagDescriptions
 # operationId: ApiTagDescription_ListByService
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-tag-descriptions list" [
+export def "api-tag-description-list-by-service" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -3295,7 +3295,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/tagDescriptions/{tagDescriptionId}
 # operationId: ApiTagDescription_Delete
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-tag-descriptions delete" [
+export def "api-tag-description-delete" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -3344,7 +3344,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/tagDescriptions/{tagDescriptionId}
 # operationId: ApiTagDescription_Get
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-tag-descriptions get" [
+export def "api-tag-description-get" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -3390,7 +3390,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # HEAD /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/tagDescriptions/{tagDescriptionId}
 # operationId: ApiTagDescription_GetEntityTag
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-tag-descriptions get-entity" [
+export def "api-tag-description-get-entity-tag" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -3437,7 +3437,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/tagDescriptions/{tagDescriptionId}
 # operationId: ApiTagDescription_CreateOrUpdate
 # --properties shape: {description?: string, externalDocsDescription?: string, externalDocsUrl?: string}
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-tag-descriptions create-or-update" [
+export def "api-tag-description-create-or-update" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -3490,7 +3490,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/tags
 # operationId: Tag_ListByApi
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-tags list" [
+export def "tag-list-by-api" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -3537,7 +3537,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/tags/{tagId}
 # operationId: Tag_DetachFromApi
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-tags tag-detach" [
+export def "tag-detach-from-api" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -3583,7 +3583,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/tags/{tagId}
 # operationId: Tag_GetByApi
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-tags get" [
+export def "tag-get-by-api" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -3629,7 +3629,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # HEAD /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/tags/{tagId}
 # operationId: Tag_GetEntityStateByApi
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-tags get-entity-state" [
+export def "tag-get-entity-state-by-api" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -3675,7 +3675,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/apis/{apiId}/tags/{tagId}
 # operationId: Tag_AssignToApi
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-apis-tags assign" [
+export def "tag-assign-to-api" [
   subscription_id: string
   resource_group_name: string
   service_name: string

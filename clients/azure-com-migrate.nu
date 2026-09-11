@@ -125,7 +125,7 @@ def type-completer [] { ["Microsoft.Migrate/projects"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-migrate-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -149,7 +149,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.Migrate/operations
 # operationId: Operations_List
-export def "providers-microsoft-migrate-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -183,7 +183,7 @@ export def "providers-microsoft-migrate-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Migrate/locations/{locationName}/assessmentOptions
 # operationId: AssessmentOptions_Get
-export def "subscriptions-providers-microsoft-migrate-locations-assessment-options get" [
+export def "assessment-options-get" [
   subscription_id: string
   location_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -226,7 +226,7 @@ export def "subscriptions-providers-microsoft-migrate-locations-assessment-optio
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Migrate/locations/{locationName}/checkNameAvailability
 # operationId: Location_CheckNameAvailability
-export def "subscriptions-providers-microsoft-migrate-locations-check-name-availability check" [
+export def "location-check-name-availability" [
   subscription_id: string
   location_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -271,7 +271,7 @@ export def "subscriptions-providers-microsoft-migrate-locations-check-name-avail
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Migrate/projects
 # operationId: Projects_ListBySubscription
-export def "subscriptions-providers-microsoft-migrate-projects list" [
+export def "projects-list-by-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -312,7 +312,7 @@ export def "subscriptions-providers-microsoft-migrate-projects list" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Migrate/projects/{projectName}/assessments
 # operationId: Assessments_ListByProject
-export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-assessments list" [
+export def "assessments-list-by-project" [
   subscription_id: string
   resource_group_name: string
   project_name: string
@@ -357,7 +357,7 @@ export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-a
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Migrate/projects/{projectName}/groups
 # operationId: Groups_ListByProject
-export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-groups list" [
+export def "groups-list-by-project" [
   subscription_id: string
   resource_group_name: string
   project_name: string
@@ -402,7 +402,7 @@ export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-g
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Migrate/projects/{projectName}/groups/{groupName}
 # operationId: Groups_Delete
-export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-groups delete" [
+export def "groups-delete" [
   subscription_id: string
   resource_group_name: string
   project_name: string
@@ -449,7 +449,7 @@ export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-g
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Migrate/projects/{projectName}/groups/{groupName}
 # operationId: Groups_Get
-export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-groups get" [
+export def "groups-get" [
   subscription_id: string
   resource_group_name: string
   project_name: string
@@ -497,7 +497,7 @@ export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-g
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Migrate/projects/{projectName}/groups/{groupName}
 # operationId: Groups_Create
 # --properties shape: {machines: list<string>}
-export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-groups create" [
+export def "groups-create" [
   subscription_id: string
   resource_group_name: string
   project_name: string
@@ -549,7 +549,7 @@ export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-g
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Migrate/projects/{projectName}/groups/{groupName}/assessments
 # operationId: Assessments_ListByGroup
-export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-groups-assessments list" [
+export def "assessments-list-by-group" [
   subscription_id: string
   resource_group_name: string
   project_name: string
@@ -596,7 +596,7 @@ export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-g
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Migrate/projects/{projectName}/groups/{groupName}/assessments/{assessmentName}
 # operationId: Assessments_Delete
-export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-groups-assessments delete" [
+export def "assessments-delete" [
   subscription_id: string
   resource_group_name: string
   project_name: string
@@ -645,7 +645,7 @@ export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-g
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Migrate/projects/{projectName}/groups/{groupName}/assessments/{assessmentName}
 # operationId: Assessments_Get
-export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-groups-assessments get" [
+export def "assessments-get" [
   subscription_id: string
   resource_group_name: string
   project_name: string
@@ -695,7 +695,7 @@ export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-g
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Migrate/projects/{projectName}/groups/{groupName}/assessments/{assessmentName}
 # operationId: Assessments_Create
 # --properties shape: {azureHybridUseBenefit: "Unknown"|"Yes"|"No", azureLocation: "Unknown"|"EastAsia"|"SoutheastAsia"|"AustraliaEast"|"AustraliaSoutheast"|"BrazilSouth"|"CanadaCentral"|"CanadaEast"|"WestEurope"|"NorthEurope"|"CentralIndia"|"SouthIndia"|"WestIndia"|"JapanEast"|"JapanWest"|"KoreaCentral"|"KoreaSouth"|"UkWest"|"UkSouth"|"NorthCentralUs"|"EastUs"|"WestUs2"|"SouthCentralUs"|"CentralUs"|"EastUs2"|"WestUs"|"WestCentralUs"|"GermanyCentral"|"GermanyNortheast"|"ChinaNorth"|"ChinaEast", ... (10 more fields)}
-export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-groups-assessments create" [
+export def "assessments-create" [
   subscription_id: string
   resource_group_name: string
   project_name: string
@@ -749,7 +749,7 @@ export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-g
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Migrate/projects/{projectName}/groups/{groupName}/assessments/{assessmentName}/assessedMachines
 # operationId: AssessedMachines_ListByAssessment
-export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-groups-assessments-assessed-machines list" [
+export def "assessed-machines-list-by-assessment" [
   subscription_id: string
   resource_group_name: string
   project_name: string
@@ -798,7 +798,7 @@ export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-g
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Migrate/projects/{projectName}/groups/{groupName}/assessments/{assessmentName}/assessedMachines/{assessedMachineName}
 # operationId: AssessedMachines_Get
-export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-groups-assessments-assessed-machines get" [
+export def "assessed-machines-get" [
   subscription_id: string
   resource_group_name: string
   project_name: string
@@ -849,7 +849,7 @@ export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-g
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Migrate/projects/{projectName}/groups/{groupName}/assessments/{assessmentName}/downloadUrl
 # operationId: Assessments_GetReportDownloadUrl
-export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-groups-assessments-download-url get-report" [
+export def "assessments-get-report-download-url" [
   subscription_id: string
   resource_group_name: string
   project_name: string
@@ -898,7 +898,7 @@ export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-g
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Migrate/projects/{projectName}/machines
 # operationId: Machines_ListByProject
-export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-machines list" [
+export def "machines-list-by-project" [
   subscription_id: string
   resource_group_name: string
   project_name: string
@@ -943,7 +943,7 @@ export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-m
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Migrate/projects/{projectName}/machines/{machineName}
 # operationId: Machines_Get
-export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-machines get" [
+export def "machines-get" [
   subscription_id: string
   resource_group_name: string
   project_name: string
@@ -990,7 +990,7 @@ export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-m
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Migrate/projects
 # operationId: Projects_ListByResourceGroup
-export def "subscriptions-resourcegroups-providers-microsoft-migrate-projects list-by-resource-group" [
+export def "projects-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1033,7 +1033,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-migrate-projects li
 #
 # DELETE /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Migrate/projects/{projectName}
 # operationId: Projects_Delete
-export def "subscriptions-resourcegroups-providers-microsoft-migrate-projects delete" [
+export def "projects-delete" [
   subscription_id: string
   resource_group_name: string
   project_name: string
@@ -1078,7 +1078,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-migrate-projects de
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Migrate/projects/{projectName}
 # operationId: Projects_Get
-export def "subscriptions-resourcegroups-providers-microsoft-migrate-projects get" [
+export def "projects-get" [
   subscription_id: string
   resource_group_name: string
   project_name: string
@@ -1124,7 +1124,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-migrate-projects ge
 # PATCH /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Migrate/projects/{projectName}
 # operationId: Projects_Update
 # --properties shape: {customerWorkspaceId?: string, customerWorkspaceLocation?: string, provisioningState?: "Accepted"|"Creating"|"Deleting"|"Failed"|"Moving"|"Succeeded"}
-export def "subscriptions-resourcegroups-providers-microsoft-migrate-projects update" [
+export def "projects-update" [
   subscription_id: string
   resource_group_name: string
   project_name: string
@@ -1177,7 +1177,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-migrate-projects up
 # PUT /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Migrate/projects/{projectName}
 # operationId: Projects_Create
 # --properties shape: {customerWorkspaceId?: string, customerWorkspaceLocation?: string, provisioningState?: "Accepted"|"Creating"|"Deleting"|"Failed"|"Moving"|"Succeeded"}
-export def "subscriptions-resourcegroups-providers-microsoft-migrate-projects create" [
+export def "projects-create" [
   subscription_id: string
   resource_group_name: string
   project_name: string
@@ -1229,7 +1229,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-migrate-projects cr
 #
 # POST /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Migrate/projects/{projectName}/keys
 # operationId: Projects_GetKeys
-export def "subscriptions-resourcegroups-providers-microsoft-migrate-projects-keys get" [
+export def "projects-get-keys" [
   subscription_id: string
   resource_group_name: string
   project_name: string

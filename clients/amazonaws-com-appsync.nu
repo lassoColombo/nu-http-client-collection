@@ -117,7 +117,7 @@ def format-completer [] { ["JSON" "SDL"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "domainnames-apiassociation create-associate" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associate-api" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -141,7 +141,7 @@ export def commands []: nothing -> table {
 #
 # POST /v1/domainnames/{domainName}/apiassociation
 # operationId: AssociateApi
-export def "domainnames-apiassociation create-associate" [
+export def "associate-api" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -190,7 +190,7 @@ export def "domainnames-apiassociation create-associate" [
 #
 # DELETE /v1/domainnames/{domainName}/apiassociation
 # operationId: DisassociateApi
-export def "domainnames-apiassociation delete-disassociate" [
+export def "disassociate-api" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -235,7 +235,7 @@ export def "domainnames-apiassociation delete-disassociate" [
 #
 # GET /v1/domainnames/{domainName}/apiassociation
 # operationId: GetApiAssociation
-export def "domainnames-apiassociation get-association" [
+export def "get-api-association" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -280,7 +280,7 @@ export def "domainnames-apiassociation get-association" [
 #
 # POST /v1/apis/{apiId}/ApiCaches
 # operationId: CreateApiCache
-export def "apis-api-caches create" [
+export def "create-api-cache" [
   api_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -333,7 +333,7 @@ export def "apis-api-caches create" [
 #
 # DELETE /v1/apis/{apiId}/ApiCaches
 # operationId: DeleteApiCache
-export def "apis-api-caches delete" [
+export def "delete-api-cache" [
   api_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -378,7 +378,7 @@ export def "apis-api-caches delete" [
 #
 # GET /v1/apis/{apiId}/ApiCaches
 # operationId: GetApiCache
-export def "apis-api-caches get" [
+export def "get-api-cache" [
   api_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -423,7 +423,7 @@ export def "apis-api-caches get" [
 #
 # POST /v1/apis/{apiId}/apikeys
 # operationId: CreateApiKey
-export def "apis-apikeys create-key" [
+export def "create-api-key" [
   api_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -473,7 +473,7 @@ export def "apis-apikeys create-key" [
 #
 # GET /v1/apis/{apiId}/apikeys
 # operationId: ListApiKeys
-export def "apis-apikeys list-keys" [
+export def "list-api-keys" [
   api_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -528,7 +528,7 @@ export def "apis-apikeys list-keys" [
 # --httpConfig shape: {endpoint?: any, authorizationConfig?: any}
 # --relationalDatabaseConfig shape: {relationalDatabaseSourceType?: any, rdsHttpEndpointConfig?: any}
 # --eventBridgeConfig shape: {eventBusArn?: any}
-export def "apis-datasources create-data-source" [
+export def "create-data-source" [
   api_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -587,7 +587,7 @@ export def "apis-datasources create-data-source" [
 #
 # GET /v1/apis/{apiId}/datasources
 # operationId: ListDataSources
-export def "apis-datasources list-data-sources" [
+export def "list-data-sources" [
   api_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -635,7 +635,7 @@ export def "apis-datasources list-data-sources" [
 #
 # POST /v1/domainnames
 # operationId: CreateDomainName
-export def "domainnames create-domain-name" [
+export def "create-domain-name" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -684,7 +684,7 @@ export def "domainnames create-domain-name" [
 #
 # GET /v1/domainnames
 # operationId: ListDomainNames
-export def "domainnames list-domain-names" [
+export def "list-domain-names" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -732,7 +732,7 @@ export def "domainnames list-domain-names" [
 # operationId: CreateFunction
 # --syncConfig shape: {conflictHandler?: any, conflictDetection?: any, lambdaConflictHandlerConfig?: any}
 # --runtime shape: {name?: any, runtimeVersion?: any}
-export def "apis-functions create" [
+export def "create-function" [
   api_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -790,7 +790,7 @@ export def "apis-functions create" [
 #
 # GET /v1/apis/{apiId}/functions
 # operationId: ListFunctions
-export def "apis-functions list" [
+export def "list-functions" [
   api_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -843,7 +843,7 @@ export def "apis-functions list" [
 # --openIDConnectConfig shape: {issuer?: any, clientId?: any, iatTTL?: any, authTTL?: any}
 # --additionalAuthenticationProviders item shape: {authenticationType?: any, openIDConnectConfig?: any, userPoolConfig?: any, lambdaAuthorizerConfig?: any}
 # --lambdaAuthorizerConfig shape: {authorizerResultTtlInSeconds?: any, authorizerUri?: any, identityValidationExpression?: any}
-export def "apis create-graphql" [
+export def "create-graphql-api" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -898,7 +898,7 @@ export def "apis create-graphql" [
 #
 # GET /v1/apis
 # operationId: ListGraphqlApis
-export def "apis list-graphql" [
+export def "list-graphql-apis" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -948,7 +948,7 @@ export def "apis list-graphql" [
 # --syncConfig shape: {conflictHandler?: any, conflictDetection?: any, lambdaConflictHandlerConfig?: any}
 # --cachingConfig shape: {ttl?: any, cachingKeys?: any}
 # --runtime shape: {name?: any, runtimeVersion?: any}
-export def "apis-types-resolvers create" [
+export def "create-resolver" [
   api_id: string
   type_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1009,7 +1009,7 @@ export def "apis-types-resolvers create" [
 #
 # GET /v1/apis/{apiId}/types/{typeName}/resolvers
 # operationId: ListResolvers
-export def "apis-types-resolvers list" [
+export def "list-resolvers" [
   api_id: string
   type_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1059,7 +1059,7 @@ export def "apis-types-resolvers list" [
 #
 # POST /v1/apis/{apiId}/types
 # operationId: CreateType
-export def "apis-types create" [
+export def "create-type" [
   api_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1109,7 +1109,7 @@ export def "apis-types create" [
 #
 # DELETE /v1/apis/{apiId}/apikeys/{id}
 # operationId: DeleteApiKey
-export def "apis-apikeys delete-key" [
+export def "delete-api-key" [
   api_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1156,7 +1156,7 @@ export def "apis-apikeys delete-key" [
 #
 # POST /v1/apis/{apiId}/apikeys/{id}
 # operationId: UpdateApiKey
-export def "apis-apikeys update-key" [
+export def "update-api-key" [
   api_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1208,7 +1208,7 @@ export def "apis-apikeys update-key" [
 #
 # DELETE /v1/apis/{apiId}/datasources/{name}
 # operationId: DeleteDataSource
-export def "apis-datasources delete-data-source" [
+export def "delete-data-source" [
   api_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1255,7 +1255,7 @@ export def "apis-datasources delete-data-source" [
 #
 # GET /v1/apis/{apiId}/datasources/{name}
 # operationId: GetDataSource
-export def "apis-datasources get-data-source" [
+export def "get-data-source" [
   api_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1309,7 +1309,7 @@ export def "apis-datasources get-data-source" [
 # --httpConfig shape: {endpoint?: any, authorizationConfig?: any}
 # --relationalDatabaseConfig shape: {relationalDatabaseSourceType?: any, rdsHttpEndpointConfig?: any}
 # --eventBridgeConfig shape: {eventBusArn?: any}
-export def "apis-datasources update-data-source" [
+export def "update-data-source" [
   api_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1369,7 +1369,7 @@ export def "apis-datasources update-data-source" [
 #
 # DELETE /v1/domainnames/{domainName}
 # operationId: DeleteDomainName
-export def "domainnames delete-domain-name" [
+export def "delete-domain-name" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1414,7 +1414,7 @@ export def "domainnames delete-domain-name" [
 #
 # GET /v1/domainnames/{domainName}
 # operationId: GetDomainName
-export def "domainnames get-domain-name" [
+export def "get-domain-name" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1459,7 +1459,7 @@ export def "domainnames get-domain-name" [
 #
 # POST /v1/domainnames/{domainName}
 # operationId: UpdateDomainName
-export def "domainnames update-domain-name" [
+export def "update-domain-name" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1508,7 +1508,7 @@ export def "domainnames update-domain-name" [
 #
 # DELETE /v1/apis/{apiId}/functions/{functionId}
 # operationId: DeleteFunction
-export def "apis-functions delete" [
+export def "delete-function" [
   api_id: string
   function_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1555,7 +1555,7 @@ export def "apis-functions delete" [
 #
 # GET /v1/apis/{apiId}/functions/{functionId}
 # operationId: GetFunction
-export def "apis-functions get" [
+export def "get-function" [
   api_id: string
   function_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1604,7 +1604,7 @@ export def "apis-functions get" [
 # operationId: UpdateFunction
 # --syncConfig shape: {conflictHandler?: any, conflictDetection?: any, lambdaConflictHandlerConfig?: any}
 # --runtime shape: {name?: any, runtimeVersion?: any}
-export def "apis-functions update" [
+export def "update-function" [
   api_id: string
   function_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1664,7 +1664,7 @@ export def "apis-functions update" [
 #
 # DELETE /v1/apis/{apiId}
 # operationId: DeleteGraphqlApi
-export def "apis delete-graphql" [
+export def "delete-graphql-api" [
   api_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1709,7 +1709,7 @@ export def "apis delete-graphql" [
 #
 # GET /v1/apis/{apiId}
 # operationId: GetGraphqlApi
-export def "apis get-graphql" [
+export def "get-graphql-api" [
   api_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1759,7 +1759,7 @@ export def "apis get-graphql" [
 # --openIDConnectConfig shape: {issuer?: any, clientId?: any, iatTTL?: any, authTTL?: any}
 # --additionalAuthenticationProviders item shape: {authenticationType?: any, openIDConnectConfig?: any, userPoolConfig?: any, lambdaAuthorizerConfig?: any}
 # --lambdaAuthorizerConfig shape: {authorizerResultTtlInSeconds?: any, authorizerUri?: any, identityValidationExpression?: any}
-export def "apis update-graphql" [
+export def "update-graphql-api" [
   api_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1815,7 +1815,7 @@ export def "apis update-graphql" [
 #
 # DELETE /v1/apis/{apiId}/types/{typeName}/resolvers/{fieldName}
 # operationId: DeleteResolver
-export def "apis-types-resolvers delete" [
+export def "delete-resolver" [
   api_id: string
   type_name: string
   field_name: string
@@ -1864,7 +1864,7 @@ export def "apis-types-resolvers delete" [
 #
 # GET /v1/apis/{apiId}/types/{typeName}/resolvers/{fieldName}
 # operationId: GetResolver
-export def "apis-types-resolvers get" [
+export def "get-resolver" [
   api_id: string
   type_name: string
   field_name: string
@@ -1917,7 +1917,7 @@ export def "apis-types-resolvers get" [
 # --syncConfig shape: {conflictHandler?: any, conflictDetection?: any, lambdaConflictHandlerConfig?: any}
 # --cachingConfig shape: {ttl?: any, cachingKeys?: any}
 # --runtime shape: {name?: any, runtimeVersion?: any}
-export def "apis-types-resolvers update" [
+export def "update-resolver" [
   api_id: string
   type_name: string
   field_name: string
@@ -1979,7 +1979,7 @@ export def "apis-types-resolvers update" [
 #
 # DELETE /v1/apis/{apiId}/types/{typeName}
 # operationId: DeleteType
-export def "apis-types delete" [
+export def "delete-type" [
   api_id: string
   type_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2026,7 +2026,7 @@ export def "apis-types delete" [
 #
 # POST /v1/apis/{apiId}/types/{typeName}
 # operationId: UpdateType
-export def "apis-types update" [
+export def "update-type" [
   api_id: string
   type_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2079,7 +2079,7 @@ export def "apis-types update" [
 # POST /v1/dataplane-evaluatecode
 # operationId: EvaluateCode
 # --runtime shape: {name?: any, runtimeVersion?: any}
-export def "dataplane-evaluatecode create-evaluate-code" [
+export def "evaluate-code" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2129,7 +2129,7 @@ export def "dataplane-evaluatecode create-evaluate-code" [
 #
 # POST /v1/dataplane-evaluatetemplate
 # operationId: EvaluateMappingTemplate
-export def "dataplane-evaluatetemplate create-evaluate-mapping-template" [
+export def "evaluate-mapping-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2177,7 +2177,7 @@ export def "dataplane-evaluatetemplate create-evaluate-mapping-template" [
 #
 # DELETE /v1/apis/{apiId}/FlushCache
 # operationId: FlushApiCache
-export def "apis-flush-cache delete" [
+export def "flush-api-cache" [
   api_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2222,7 +2222,7 @@ export def "apis-flush-cache delete" [
 #
 # GET /v1/apis/{apiId}/schema
 # operationId: GetIntrospectionSchema
-export def "apis-schema get-introspection" [
+export def "get-introspection-schema" [
   api_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2270,7 +2270,7 @@ export def "apis-schema get-introspection" [
 #
 # GET /v1/apis/{apiId}/schemacreation
 # operationId: GetSchemaCreationStatus
-export def "apis-schemacreation get-schema-creation-status" [
+export def "get-schema-creation-status" [
   api_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2315,7 +2315,7 @@ export def "apis-schemacreation get-schema-creation-status" [
 #
 # POST /v1/apis/{apiId}/schemacreation
 # operationId: StartSchemaCreation
-export def "apis-schemacreation start-schema-creation" [
+export def "start-schema-creation" [
   api_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2364,7 +2364,7 @@ export def "apis-schemacreation start-schema-creation" [
 #
 # GET /v1/apis/{apiId}/types/{typeName}
 # operationId: GetType
-export def "apis-types get" [
+export def "get-type" [
   api_id: string
   type_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2413,7 +2413,7 @@ export def "apis-types get" [
 #
 # GET /v1/apis/{apiId}/functions/{functionId}/resolvers
 # operationId: ListResolversByFunction
-export def "apis-functions-resolvers list" [
+export def "list-resolvers-by-function" [
   api_id: string
   function_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2463,7 +2463,7 @@ export def "apis-functions-resolvers list" [
 #
 # GET /v1/tags/{resourceArn}
 # operationId: ListTagsForResource
-export def "tags list-for-resource" [
+export def "list-tags-for-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2508,7 +2508,7 @@ export def "tags list-for-resource" [
 #
 # POST /v1/tags/{resourceArn}
 # operationId: TagResource
-export def "tags tag-resource" [
+export def "tag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2557,7 +2557,7 @@ export def "tags tag-resource" [
 #
 # GET /v1/apis/{apiId}/types
 # operationId: ListTypes
-export def "apis-types list" [
+export def "list-types" [
   api_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2606,7 +2606,7 @@ export def "apis-types list" [
 #
 # DELETE /v1/tags/{resourceArn}
 # operationId: UntagResource
-export def "tags untag-resource" [
+export def "untag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2653,7 +2653,7 @@ export def "tags untag-resource" [
 #
 # POST /v1/apis/{apiId}/ApiCaches/update
 # operationId: UpdateApiCache
-export def "apis-api-caches-update update" [
+export def "update-api-cache" [
   api_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

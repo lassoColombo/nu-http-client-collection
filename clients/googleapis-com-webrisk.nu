@@ -124,7 +124,7 @@ def threat-type-completer [] { ["MALWARE" "SOCIAL_ENGINEERING" "SOCIAL_ENGINEERI
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "hashes-search list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "webrisk-hashes-search" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -148,7 +148,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/hashes:search
 # operationId: webrisk.hashes.search
-export def "hashes-search list" [
+export def "webrisk-hashes-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -196,7 +196,7 @@ export def "hashes-search list" [
 #
 # GET /v1/threatLists:computeDiff
 # operationId: webrisk.threatLists.computeDiff
-export def "threat-lists-compute-diff get" [
+export def "webrisk-threat-lists-compute-diff" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -247,7 +247,7 @@ export def "threat-lists-compute-diff get" [
 #
 # GET /v1/uris:search
 # operationId: webrisk.uris.search
-export def "uris-search list" [
+export def "webrisk-uris-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -295,7 +295,7 @@ export def "uris-search list" [
 #
 # DELETE /v1/{name}
 # operationId: webrisk.projects.operations.delete
-export def "projects delete" [
+export def "webrisk-projects-operations-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -343,7 +343,7 @@ export def "projects delete" [
 #
 # GET /v1/{name}
 # operationId: webrisk.projects.operations.get
-export def "projects get" [
+export def "webrisk-projects-operations-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -391,7 +391,7 @@ export def "projects get" [
 #
 # GET /v1/{name}/operations
 # operationId: webrisk.projects.operations.list
-export def "operations list" [
+export def "webrisk-projects-operations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -442,7 +442,7 @@ export def "operations list" [
 #
 # POST /v1/{name}:cancel
 # operationId: webrisk.projects.operations.cancel
-export def "projects cancel" [
+export def "webrisk-projects-operations-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -494,7 +494,7 @@ export def "projects cancel" [
 #
 # POST /v1/{parent}/submissions
 # operationId: webrisk.projects.submissions.create
-export def "submissions create" [
+export def "webrisk-projects-submissions-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

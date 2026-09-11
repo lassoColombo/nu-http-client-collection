@@ -147,7 +147,7 @@ def normalize-completer [] { ["false" "true"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "food-converse get-talk-to-chatbot" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "talk-to-chatbot" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -172,7 +172,7 @@ export def commands []: nothing -> table {
 # GET /food/converse
 # Docs: https://spoonacular.com/food-api/docs#Talk-to-Chatbot — Read entire docs
 # operationId: talkToChatbot
-export def "food-converse get-talk-to-chatbot" [
+export def "talk-to-chatbot" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -210,7 +210,7 @@ export def "food-converse get-talk-to-chatbot" [
 # GET /food/converse/suggest
 # Docs: https://spoonacular.com/food-api/docs#Conversation-Suggests — Read entire docs
 # operationId: getConversationSuggests
-export def "food-converse-suggest get-conversation" [
+export def "get-conversation-suggests" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -248,7 +248,7 @@ export def "food-converse-suggest get-conversation" [
 # GET /food/customFoods/search
 # Docs: https://spoonacular.com/food-api/docs#Search-Custom-Foods — Read entire docs
 # operationId: searchCustomFoods
-export def "food-custom-foods-search list" [
+export def "search-custom-foods" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -289,7 +289,7 @@ export def "food-custom-foods-search list" [
 # POST /food/detect
 # Docs: https://spoonacular.com/food-api/docs#Detect-Food-in-Text — Read entire docs
 # operationId: detectFoodInText
-export def "food-detect create-in-text" [
+export def "detect-food-in-text" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -333,7 +333,7 @@ export def "food-detect create-in-text" [
 # GET /food/images/analyze
 # Docs: https://spoonacular.com/food-api/docs#Image-Analysis-by-URL — Read entire docs
 # operationId: imageAnalysisByURL
-export def "food-images-analyze get-analysis-by-url" [
+export def "image-analysis-by-url" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -370,7 +370,7 @@ export def "food-images-analyze get-analysis-by-url" [
 # GET /food/images/classify
 # Docs: https://spoonacular.com/food-api/docs#Image-Classification-by-URL — Read entire docs
 # operationId: imageClassificationByURL
-export def "food-images-classify get-classification-by-url" [
+export def "image-classification-by-url" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -407,7 +407,7 @@ export def "food-images-classify get-classification-by-url" [
 # GET /food/ingredients/autocomplete
 # Docs: https://spoonacular.com/food-api/docs#Autocomplete-Ingredient-Search — Read entire docs
 # operationId: autocompleteIngredientSearch
-export def "food-ingredients-autocomplete list" [
+export def "autocomplete-ingredient-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -448,7 +448,7 @@ export def "food-ingredients-autocomplete list" [
 # POST /food/ingredients/glycemicLoad
 # Docs: https://spoonacular.com/food-api/docs#Compute-Glycemic-Load — Read entire docs
 # operationId: computeGlycemicLoad
-export def "food-ingredients-glycemic-load create-compute" [
+export def "compute-glycemic-load" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -489,7 +489,7 @@ export def "food-ingredients-glycemic-load create-compute" [
 # POST /food/ingredients/map
 # Docs: https://spoonacular.com/food-api/docs#Map-Ingredients-to-Grocery-Products — Read entire docs
 # operationId: mapIngredientsToGroceryProducts
-export def "food-ingredients-map create-to-grocery-products" [
+export def "map-ingredients-to-grocery-products" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -529,7 +529,7 @@ export def "food-ingredients-map create-to-grocery-products" [
 # GET /food/ingredients/search
 # Docs: https://spoonacular.com/food-api/docs#Ingredient-Search — Read entire docs
 # operationId: ingredientSearch
-export def "food-ingredients-search list" [
+export def "ingredient-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -580,7 +580,7 @@ export def "food-ingredients-search list" [
 # GET /food/ingredients/substitutes
 # Docs: https://spoonacular.com/food-api/docs#Get-Ingredient-Substitutes — Read entire docs
 # operationId: getIngredientSubstitutes
-export def "food-ingredients-substitutes get" [
+export def "get-ingredient-substitutes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -617,7 +617,7 @@ export def "food-ingredients-substitutes get" [
 # GET /food/ingredients/{id}/amount
 # Docs: https://spoonacular.com/food-api/docs#Compute-Ingredient-Amount — Read entire docs
 # operationId: computeIngredientAmount
-export def "food-ingredients-amount get-compute" [
+export def "compute-ingredient-amount" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -658,7 +658,7 @@ export def "food-ingredients-amount get-compute" [
 # GET /food/ingredients/{id}/information
 # Docs: https://spoonacular.com/food-api/docs#Get-Ingredient-Information — Read entire docs
 # operationId: getIngredientInformation
-export def "food-ingredients-information get" [
+export def "get-ingredient-information" [
   id: int
   id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -700,7 +700,7 @@ export def "food-ingredients-information get" [
 # GET /food/ingredients/{id}/substitutes
 # Docs: https://spoonacular.com/food-api/docs#Get-Ingredient-Substitutes-by-ID — Read entire docs
 # operationId: getIngredientSubstitutesByID
-export def "food-ingredients-substitutes get-by-id" [
+export def "get-ingredient-substitutes-by-id" [
   id: int
   id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -739,7 +739,7 @@ export def "food-ingredients-substitutes get-by-id" [
 # GET /food/jokes/random
 # Docs: https://spoonacular.com/food-api/docs#Random-Food-Joke — Read entire docs
 # operationId: getARandomFoodJoke
-export def "food-jokes-random get" [
+export def "get-a-random-food-joke" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -774,7 +774,7 @@ export def "food-jokes-random get" [
 # GET /food/menuItems/search
 # Docs: https://spoonacular.com/food-api/docs#Search-Menu-Items — Read entire docs
 # operationId: searchMenuItems
-export def "food-menu-items-search list" [
+export def "search-menu-items" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -822,7 +822,7 @@ export def "food-menu-items-search list" [
 # GET /food/menuItems/suggest
 # Docs: https://spoonacular.com/food-api/docs#Autocomplete-Menu-Item-Search — Read entire docs
 # operationId: autocompleteMenuItemSearch
-export def "food-menu-items-suggest list-autocomplete" [
+export def "autocomplete-menu-item-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -860,7 +860,7 @@ export def "food-menu-items-suggest list-autocomplete" [
 # GET /food/menuItems/{id}
 # Docs: https://spoonacular.com/food-api/docs#Get-Menu-Item-Information — Read entire docs
 # operationId: getMenuItemInformation
-export def "food-menu-items get-information" [
+export def "get-menu-item-information" [
   id: int
   id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -899,7 +899,7 @@ export def "food-menu-items get-information" [
 # GET /food/menuItems/{id}/nutritionLabel
 # Docs: https://spoonacular.com/food-api/docs#Menu-Item-Nutrition-Label-Widget — Read entire docs
 # operationId: menuItemNutritionLabelWidget
-export def "food-menu-items-nutrition-label get-widget" [
+export def "menu-item-nutrition-label-widget" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -941,7 +941,7 @@ export def "food-menu-items-nutrition-label get-widget" [
 # GET /food/menuItems/{id}/nutritionLabel.png
 # Docs: https://spoonacular.com/food-api/docs#Menu-Item-Nutrition-Label-Image — Read entire docs
 # operationId: menuItemNutritionLabelImage
-export def "food-menu-items-nutrition-label-png get-image" [
+export def "menu-item-nutrition-label-image" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -982,7 +982,7 @@ export def "food-menu-items-nutrition-label-png get-image" [
 # GET /food/menuItems/{id}/nutritionWidget
 # Docs: https://spoonacular.com/food-api/docs#Menu-Item-Nutrition-by-ID-Widget — Read entire docs
 # operationId: visualizeMenuItemNutritionByID
-export def "food-menu-items-nutrition-widget get-visualize" [
+export def "visualize-menu-item-nutrition-by-id" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1024,7 +1024,7 @@ export def "food-menu-items-nutrition-widget get-visualize" [
 # GET /food/menuItems/{id}/nutritionWidget.png
 # Docs: https://spoonacular.com/food-api/docs#Menu-Item-Nutrition-by-ID-Image — Read entire docs
 # operationId: menuItemNutritionByIDImage
-export def "food-menu-items-nutrition-widget-png get-by-image" [
+export def "menu-item-nutrition-by-id-image" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1061,7 +1061,7 @@ export def "food-menu-items-nutrition-widget-png get-by-image" [
 # POST /food/products/classify
 # Docs: https://spoonacular.com/food-api/docs#Classify-Grocery-Product — Read entire docs
 # operationId: classifyGroceryProduct
-export def "food-products-classify create-grocery" [
+export def "classify-grocery-product" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1104,7 +1104,7 @@ export def "food-products-classify create-grocery" [
 # POST /food/products/classifyBatch
 # Docs: https://spoonacular.com/food-api/docs#Classify-Grocery-Product-Bulk — Read entire docs
 # operationId: classifyGroceryProductBulk
-export def "food-products-classify-batch create-grocery-bulk" [
+export def "classify-grocery-product-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1145,7 +1145,7 @@ export def "food-products-classify-batch create-grocery-bulk" [
 # GET /food/products/search
 # Docs: https://spoonacular.com/food-api/docs#Search-Grocery-Products — Read entire docs
 # operationId: searchGroceryProducts
-export def "food-products-search list-grocery" [
+export def "search-grocery-products" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1193,7 +1193,7 @@ export def "food-products-search list-grocery" [
 # GET /food/products/suggest
 # Docs: https://spoonacular.com/food-api/docs#Autocomplete-Product-Search — Read entire docs
 # operationId: autocompleteProductSearch
-export def "food-products-suggest list-autocomplete" [
+export def "autocomplete-product-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1231,7 +1231,7 @@ export def "food-products-suggest list-autocomplete" [
 # GET /food/products/upc/{upc}
 # Docs: https://spoonacular.com/food-api/docs#Search-Grocery-Products-by-UPC — Read entire docs
 # operationId: searchGroceryProductsByUPC
-export def "food-products-upc list-grocery" [
+export def "search-grocery-products-by-upc" [
   upc: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1268,7 +1268,7 @@ export def "food-products-upc list-grocery" [
 # GET /food/products/upc/{upc}/comparable
 # Docs: https://spoonacular.com/food-api/docs#Get-Comparable-Products — Read entire docs
 # operationId: getComparableProducts
-export def "food-products-upc-comparable get" [
+export def "get-comparable-products" [
   upc: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1305,7 +1305,7 @@ export def "food-products-upc-comparable get" [
 # GET /food/products/{id}
 # Docs: https://spoonacular.com/food-api/docs#Get-Product-Information — Read entire docs
 # operationId: getProductInformation
-export def "food-products get-information" [
+export def "get-product-information" [
   id: int
   id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -1344,7 +1344,7 @@ export def "food-products get-information" [
 # GET /food/products/{id}/nutritionLabel
 # Docs: https://spoonacular.com/food-api/docs#Product-Nutrition-Label-Widget — Read entire docs
 # operationId: productNutritionLabelWidget
-export def "food-products-nutrition-label get-widget" [
+export def "product-nutrition-label-widget" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1386,7 +1386,7 @@ export def "food-products-nutrition-label get-widget" [
 # GET /food/products/{id}/nutritionLabel.png
 # Docs: https://spoonacular.com/food-api/docs#Product-Nutrition-Label-Image — Read entire docs
 # operationId: productNutritionLabelImage
-export def "food-products-nutrition-label-png get-image" [
+export def "product-nutrition-label-image" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1427,7 +1427,7 @@ export def "food-products-nutrition-label-png get-image" [
 # GET /food/products/{id}/nutritionWidget
 # Docs: https://spoonacular.com/food-api/docs#Product-Nutrition-by-ID-Widget — Read entire docs
 # operationId: visualizeProductNutritionByID
-export def "food-products-nutrition-widget get-visualize" [
+export def "visualize-product-nutrition-by-id" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1469,7 +1469,7 @@ export def "food-products-nutrition-widget get-visualize" [
 # GET /food/products/{id}/nutritionWidget.png
 # Docs: https://spoonacular.com/food-api/docs#Product-Nutrition-by-ID-Image — Read entire docs
 # operationId: productNutritionByIDImage
-export def "food-products-nutrition-widget-png get-by-image" [
+export def "product-nutrition-by-id-image" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1506,7 +1506,7 @@ export def "food-products-nutrition-widget-png get-by-image" [
 # GET /food/restaurants/search
 # Docs: https://spoonacular.com/food-api/docs#Search-Restaurants — Read entire docs
 # operationId: searchRestaurants
-export def "food-restaurants-search list" [
+export def "search-restaurants" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1552,7 +1552,7 @@ export def "food-restaurants-search list" [
 # GET /food/search
 # Docs: https://spoonacular.com/food-api/docs#Search-All-Food — Read entire docs
 # operationId: searchAllFood
-export def "food-search list" [
+export def "search-all-food" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1591,7 +1591,7 @@ export def "food-search list" [
 # GET /food/site/search
 # Docs: https://spoonacular.com/food-api/docs#Search-Site-Content — Read entire docs
 # operationId: searchSiteContent
-export def "food-site-search list-content" [
+export def "search-site-content" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1628,7 +1628,7 @@ export def "food-site-search list-content" [
 # GET /food/trivia/random
 # Docs: https://spoonacular.com/food-api/docs#Random-Food-Trivia — Read entire docs
 # operationId: getRandomFoodTrivia
-export def "food-trivia-random get" [
+export def "get-random-food-trivia" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1663,7 +1663,7 @@ export def "food-trivia-random get" [
 # GET /food/videos/search
 # Docs: https://spoonacular.com/food-api/docs#Search-Food-Videos — Read entire docs
 # operationId: searchFoodVideos
-export def "food-videos-search list" [
+export def "search-food-videos" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1709,7 +1709,7 @@ export def "food-videos-search list" [
 # GET /food/wine/description
 # Docs: https://spoonacular.com/food-api/docs#Wine-Description — Read entire docs
 # operationId: getWineDescription
-export def "food-wine-description get" [
+export def "get-wine-description" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1746,7 +1746,7 @@ export def "food-wine-description get" [
 # GET /food/wine/dishes
 # Docs: https://spoonacular.com/food-api/docs#Dish-Pairing-for-Wine — Read entire docs
 # operationId: getDishPairingForWine
-export def "food-wine-dishes get-dish-pairing" [
+export def "get-dish-pairing-for-wine" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1783,7 +1783,7 @@ export def "food-wine-dishes get-dish-pairing" [
 # GET /food/wine/pairing
 # Docs: https://spoonacular.com/food-api/docs#Wine-Pairing — Read entire docs
 # operationId: getWinePairing
-export def "food-wine-pairing get" [
+export def "get-wine-pairing" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1821,7 +1821,7 @@ export def "food-wine-pairing get" [
 # GET /food/wine/recommendation
 # Docs: https://spoonacular.com/food-api/docs#Wine-Recommendation — Read entire docs
 # operationId: getWineRecommendation
-export def "food-wine-recommendation get" [
+export def "get-wine-recommendation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1861,7 +1861,7 @@ export def "food-wine-recommendation get" [
 # GET /mealplanner/generate
 # Docs: https://spoonacular.com/food-api/docs#Generate-Meal-Plan — Read entire docs
 # operationId: generateMealPlan
-export def "mealplanner-generate generate-meal-plan" [
+export def "generate-meal-plan" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1901,7 +1901,7 @@ export def "mealplanner-generate generate-meal-plan" [
 # DELETE /mealplanner/{username}/day/{date}
 # Docs: https://spoonacular.com/food-api/docs#Clear-Meal-Plan-Day — Read entire docs
 # operationId: clearMealPlanDay
-export def "mealplanner-day delete-clear-meal-plan" [
+export def "clear-meal-plan-day" [
   username: string
   date: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1947,7 +1947,7 @@ export def "mealplanner-day delete-clear-meal-plan" [
 # Docs: https://spoonacular.com/food-api/docs#Add-to-Meal-Plan — Read entire docs
 # operationId: addToMealPlan
 # --value shape: {ingredients: list}
-export def "mealplanner-items create-to-meal-plan" [
+export def "add-to-meal-plan" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1994,7 +1994,7 @@ export def "mealplanner-items create-to-meal-plan" [
 # DELETE /mealplanner/{username}/items/{id}
 # Docs: https://spoonacular.com/food-api/docs#Delete-from-Meal-Plan — Read entire docs
 # operationId: deleteFromMealPlan
-export def "mealplanner-items delete-from-meal-plan" [
+export def "delete-from-meal-plan" [
   username: string
   id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -2039,7 +2039,7 @@ export def "mealplanner-items delete-from-meal-plan" [
 # GET /mealplanner/{username}/shopping-list
 # Docs: https://spoonacular.com/food-api/docs#Get-Shopping-List — Read entire docs
 # operationId: getShoppingList
-export def "mealplanner-shopping-list get" [
+export def "get-shopping-list" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2078,7 +2078,7 @@ export def "mealplanner-shopping-list get" [
 # POST /mealplanner/{username}/shopping-list/items
 # Docs: https://spoonacular.com/food-api/docs#Add-to-Shopping-List — Read entire docs
 # operationId: addToShoppingList
-export def "mealplanner-shopping-list-items create" [
+export def "add-to-shopping-list" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2123,7 +2123,7 @@ export def "mealplanner-shopping-list-items create" [
 # DELETE /mealplanner/{username}/shopping-list/items/{id}
 # Docs: https://spoonacular.com/food-api/docs#Delete-from-Shopping-List — Read entire docs
 # operationId: deleteFromShoppingList
-export def "mealplanner-shopping-list-items delete" [
+export def "delete-from-shopping-list" [
   username: string
   id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -2168,7 +2168,7 @@ export def "mealplanner-shopping-list-items delete" [
 # POST /mealplanner/{username}/shopping-list/{start-date}/{end-date}
 # Docs: https://spoonacular.com/food-api/docs#Generate-Shopping-List — Read entire docs
 # operationId: generateShoppingList
-export def "mealplanner-shopping-list generate" [
+export def "generate-shopping-list" [
   username: string
   start_date: string
   end_date: string
@@ -2215,7 +2215,7 @@ export def "mealplanner-shopping-list generate" [
 # GET /mealplanner/{username}/templates
 # Docs: https://spoonacular.com/food-api/docs#Get-Meal-Plan-Templates — Read entire docs
 # operationId: getMealPlanTemplates
-export def "mealplanner-templates list" [
+export def "get-meal-plan-templates" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2254,7 +2254,7 @@ export def "mealplanner-templates list" [
 # POST /mealplanner/{username}/templates
 # Docs: https://spoonacular.com/food-api/docs#Add-Meal-Plan-Template — Read entire docs
 # operationId: addMealPlanTemplate
-export def "mealplanner-templates create-meal-plan" [
+export def "add-meal-plan-template" [
   username: string
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2299,7 +2299,7 @@ export def "mealplanner-templates create-meal-plan" [
 # DELETE /mealplanner/{username}/templates/{id}
 # Docs: https://spoonacular.com/food-api/docs#Delete-Meal-Plan-Template — Read entire docs
 # operationId: deleteMealPlanTemplate
-export def "mealplanner-templates delete-meal-plan" [
+export def "delete-meal-plan-template" [
   username: string
   username: string
   id: int
@@ -2348,7 +2348,7 @@ export def "mealplanner-templates delete-meal-plan" [
 # GET /mealplanner/{username}/templates/{id}
 # Docs: https://spoonacular.com/food-api/docs#Get-Meal-Plan-Template — Read entire docs
 # operationId: getMealPlanTemplate
-export def "mealplanner-templates get-meal-plan" [
+export def "get-meal-plan-template" [
   username: string
   id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -2389,7 +2389,7 @@ export def "mealplanner-templates get-meal-plan" [
 # GET /mealplanner/{username}/week/{start-date}
 # Docs: https://spoonacular.com/food-api/docs#Get-Meal-Plan-Week — Read entire docs
 # operationId: getMealPlanWeek
-export def "mealplanner-week get-meal-plan" [
+export def "get-meal-plan-week" [
   username: string
   start_date: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2430,7 +2430,7 @@ export def "mealplanner-week get-meal-plan" [
 # POST /recipes/analyze
 # Docs: https://spoonacular.com/food-api/docs#Analyze-Recipe — Read entire docs
 # operationId: analyzeRecipe
-export def "recipes-analyze create" [
+export def "analyze-recipe" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2476,7 +2476,7 @@ export def "recipes-analyze create" [
 # POST /recipes/analyzeInstructions
 # Docs: https://spoonacular.com/food-api/docs#Analyze-Recipe-Instructions — Read entire docs
 # operationId: analyzeRecipeInstructions
-export def "recipes-analyze-instructions create" [
+export def "analyze-recipe-instructions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2520,7 +2520,7 @@ export def "recipes-analyze-instructions create" [
 # GET /recipes/autocomplete
 # Docs: https://spoonacular.com/food-api/docs#Autocomplete-Recipe-Search — Read entire docs
 # operationId: autocompleteRecipeSearch
-export def "recipes-autocomplete list" [
+export def "autocomplete-recipe-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2558,7 +2558,7 @@ export def "recipes-autocomplete list" [
 # GET /recipes/complexSearch
 # Docs: https://spoonacular.com/food-api/docs#Search-Recipes — Read entire docs
 # operationId: searchRecipes
-export def "recipes-complex-search list" [
+export def "search-recipes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2690,7 +2690,7 @@ export def "recipes-complex-search list" [
 # GET /recipes/convert
 # Docs: https://spoonacular.com/food-api/docs#Convert-Amounts — Read entire docs
 # operationId: convertAmounts
-export def "recipes-convert get-amounts" [
+export def "convert-amounts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2730,7 +2730,7 @@ export def "recipes-convert get-amounts" [
 # POST /recipes/cuisine
 # Docs: https://spoonacular.com/food-api/docs#Classify-Cuisine — Read entire docs
 # operationId: classifyCuisine
-export def "recipes-cuisine create-classify" [
+export def "classify-cuisine" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2774,7 +2774,7 @@ export def "recipes-cuisine create-classify" [
 # GET /recipes/extract
 # Docs: https://spoonacular.com/food-api/docs#Extract-Recipe-from-Website — Read entire docs
 # operationId: extractRecipeFromWebsite
-export def "recipes-extract get-from-website" [
+export def "extract-recipe-from-website" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2815,7 +2815,7 @@ export def "recipes-extract get-from-website" [
 # GET /recipes/findByIngredients
 # Docs: https://spoonacular.com/food-api/docs#Search-Recipes-by-Ingredients — Read entire docs
 # operationId: searchRecipesByIngredients
-export def "recipes-find-by-ingredients list" [
+export def "search-recipes-by-ingredients" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2856,7 +2856,7 @@ export def "recipes-find-by-ingredients list" [
 # GET /recipes/findByNutrients
 # Docs: https://spoonacular.com/food-api/docs#Search-Recipes-by-Nutrients — Read entire docs
 # operationId: searchRecipesByNutrients
-export def "recipes-find-by-nutrients list" [
+export def "search-recipes-by-nutrients" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2968,7 +2968,7 @@ export def "recipes-find-by-nutrients list" [
 # GET /recipes/guessNutrition
 # Docs: https://spoonacular.com/food-api/docs#Guess-Nutrition-by-Dish-Name — Read entire docs
 # operationId: guessNutritionByDishName
-export def "recipes-guess-nutrition get-by-dish-name" [
+export def "guess-nutrition-by-dish-name" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3005,7 +3005,7 @@ export def "recipes-guess-nutrition get-by-dish-name" [
 # GET /recipes/informationBulk
 # Docs: https://spoonacular.com/food-api/docs#Get-Recipe-Information-Bulk — Read entire docs
 # operationId: getRecipeInformationBulk
-export def "recipes-information-bulk get" [
+export def "get-recipe-information-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3043,7 +3043,7 @@ export def "recipes-information-bulk get" [
 # POST /recipes/parseIngredients
 # Docs: https://spoonacular.com/food-api/docs#Parse-Ingredients — Read entire docs
 # operationId: parseIngredients
-export def "recipes-parse-ingredients create" [
+export def "parse-ingredients" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3089,7 +3089,7 @@ export def "recipes-parse-ingredients create" [
 # GET /recipes/queries/analyze
 # Docs: https://spoonacular.com/food-api/docs#Analyze-a-Recipe-Search-Query — Read entire docs
 # operationId: analyzeARecipeSearchQuery
-export def "recipes-queries-analyze list" [
+export def "analyze-a-recipe-search-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3126,7 +3126,7 @@ export def "recipes-queries-analyze list" [
 # GET /recipes/quickAnswer
 # Docs: https://spoonacular.com/food-api/docs#Quick-Answer — Read entire docs
 # operationId: quickAnswer
-export def "recipes-quick-answer get" [
+export def "quick-answer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3163,7 +3163,7 @@ export def "recipes-quick-answer get" [
 # GET /recipes/random
 # Docs: https://spoonacular.com/food-api/docs#Get-Random-Recipes — Read entire docs
 # operationId: getRandomRecipes
-export def "recipes-random get" [
+export def "get-random-recipes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3202,7 +3202,7 @@ export def "recipes-random get" [
 # POST /recipes/visualizeEquipment
 # Docs: https://spoonacular.com/food-api/docs#Equipment-Widget — Read entire docs
 # operationId: visualizeEquipment
-export def "recipes-visualize-equipment create" [
+export def "visualize-equipment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3247,7 +3247,7 @@ export def "recipes-visualize-equipment create" [
 # POST /recipes/visualizeIngredients
 # Docs: https://spoonacular.com/food-api/docs#Ingredients-Widget — Read entire docs
 # operationId: visualizeIngredients
-export def "recipes-visualize-ingredients create" [
+export def "visualize-ingredients" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3294,7 +3294,7 @@ export def "recipes-visualize-ingredients create" [
 # POST /recipes/visualizeNutrition
 # Docs: https://spoonacular.com/food-api/docs#Recipe-Nutrition-Widget — Read entire docs
 # operationId: visualizeRecipeNutrition
-export def "recipes-visualize-nutrition create" [
+export def "visualize-recipe-nutrition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3341,7 +3341,7 @@ export def "recipes-visualize-nutrition create" [
 # POST /recipes/visualizePriceEstimator
 # Docs: https://spoonacular.com/food-api/docs#Price-Breakdown-Widget — Read entire docs
 # operationId: visualizePriceBreakdown
-export def "recipes-visualize-price-estimator create-breakdown" [
+export def "visualize-price-breakdown" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3388,7 +3388,7 @@ export def "recipes-visualize-price-estimator create-breakdown" [
 # POST /recipes/visualizeRecipe
 # Docs: https://spoonacular.com/food-api/docs#Create-Recipe-Card — Read entire docs
 # operationId: createRecipeCard
-export def "recipes-visualize-recipe create-card" [
+export def "create-recipe-card" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3434,7 +3434,7 @@ export def "recipes-visualize-recipe create-card" [
 # POST /recipes/visualizeTaste
 # Docs: https://spoonacular.com/food-api/docs#Recipe-Taste-Widget — Read entire docs
 # operationId: visualizeRecipeTaste
-export def "recipes-visualize-taste create" [
+export def "visualize-recipe-taste" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3483,7 +3483,7 @@ export def "recipes-visualize-taste create" [
 # GET /recipes/{id}/analyzedInstructions
 # Docs: https://spoonacular.com/food-api/docs#Get-Analyzed-Recipe-Instructions — Read entire docs
 # operationId: getAnalyzedRecipeInstructions
-export def "recipes-analyzed-instructions get" [
+export def "get-analyzed-recipe-instructions" [
   id: int
   id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -3524,7 +3524,7 @@ export def "recipes-analyzed-instructions get" [
 # GET /recipes/{id}/card
 # Docs: https://spoonacular.com/food-api/docs#Create-Recipe-Card — Read entire docs
 # operationId: createRecipeCardGet
-export def "recipes-card create-get" [
+export def "create-recipe-card-get" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3566,7 +3566,7 @@ export def "recipes-card create-get" [
 # GET /recipes/{id}/equipmentWidget
 # Docs: https://spoonacular.com/food-api/docs#Equipment-by-ID-Widget — Read entire docs
 # operationId: visualizeRecipeEquipmentByID
-export def "recipes-equipment-widget get-visualize" [
+export def "visualize-recipe-equipment-by-id" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3605,7 +3605,7 @@ export def "recipes-equipment-widget get-visualize" [
 # GET /recipes/{id}/equipmentWidget.json
 # Docs: https://spoonacular.com/food-api/docs#Equipment-by-ID — Read entire docs
 # operationId: getRecipeEquipmentByID
-export def "recipes-equipment-widget-json get" [
+export def "get-recipe-equipment-by-id" [
   id: int
   id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -3644,7 +3644,7 @@ export def "recipes-equipment-widget-json get" [
 # GET /recipes/{id}/equipmentWidget.png
 # Docs: https://spoonacular.com/food-api/docs#Equipment-by-ID-Image — Read entire docs
 # operationId: equipmentByIDImage
-export def "recipes-equipment-widget-png get-by-image" [
+export def "equipment-by-id-image" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3681,7 +3681,7 @@ export def "recipes-equipment-widget-png get-by-image" [
 # GET /recipes/{id}/information
 # Docs: https://spoonacular.com/food-api/docs#Get-Recipe-Information — Read entire docs
 # operationId: getRecipeInformation
-export def "recipes-information get" [
+export def "get-recipe-information" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3720,7 +3720,7 @@ export def "recipes-information get" [
 # GET /recipes/{id}/ingredientWidget
 # Docs: https://spoonacular.com/food-api/docs#Ingredients-by-ID-Widget — Read entire docs
 # operationId: visualizeRecipeIngredientsByID
-export def "recipes-ingredient-widget get-visualize" [
+export def "visualize-recipe-ingredients-by-id" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3760,7 +3760,7 @@ export def "recipes-ingredient-widget get-visualize" [
 # GET /recipes/{id}/ingredientWidget.json
 # Docs: https://spoonacular.com/food-api/docs#Ingredients-by-ID — Read entire docs
 # operationId: getRecipeIngredientsByID
-export def "recipes-ingredient-widget-json get" [
+export def "get-recipe-ingredients-by-id" [
   id: int
   id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -3799,7 +3799,7 @@ export def "recipes-ingredient-widget-json get" [
 # GET /recipes/{id}/ingredientWidget.png
 # Docs: https://spoonacular.com/food-api/docs#Ingredients-by-ID-Image — Read entire docs
 # operationId: ingredientsByIDImage
-export def "recipes-ingredient-widget-png get-by-image" [
+export def "ingredients-by-id-image" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3838,7 +3838,7 @@ export def "recipes-ingredient-widget-png get-by-image" [
 # GET /recipes/{id}/nutritionLabel
 # Docs: https://spoonacular.com/food-api/docs#Recipe-Nutrition-Label-Widget — Read entire docs
 # operationId: recipeNutritionLabelWidget
-export def "recipes-nutrition-label get-widget" [
+export def "recipe-nutrition-label-widget" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3880,7 +3880,7 @@ export def "recipes-nutrition-label get-widget" [
 # GET /recipes/{id}/nutritionLabel.png
 # Docs: https://spoonacular.com/food-api/docs#Recipe-Nutrition-Label-Image — Read entire docs
 # operationId: recipeNutritionLabelImage
-export def "recipes-nutrition-label-png get-image" [
+export def "recipe-nutrition-label-image" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3921,7 +3921,7 @@ export def "recipes-nutrition-label-png get-image" [
 # GET /recipes/{id}/nutritionWidget
 # Docs: https://spoonacular.com/food-api/docs#Recipe-Nutrition-by-ID-Widget — Read entire docs
 # operationId: visualizeRecipeNutritionByID
-export def "recipes-nutrition-widget get-visualize" [
+export def "visualize-recipe-nutrition-by-id" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3963,7 +3963,7 @@ export def "recipes-nutrition-widget get-visualize" [
 # GET /recipes/{id}/nutritionWidget.json
 # Docs: https://spoonacular.com/food-api/docs#Nutrition-by-ID — Read entire docs
 # operationId: getRecipeNutritionWidgetByID
-export def "recipes-nutrition-widget-json get" [
+export def "get-recipe-nutrition-widget-by-id" [
   id: int
   id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -4002,7 +4002,7 @@ export def "recipes-nutrition-widget-json get" [
 # GET /recipes/{id}/nutritionWidget.png
 # Docs: https://spoonacular.com/food-api/docs#Recipe-Nutrition-by-ID-Image — Read entire docs
 # operationId: recipeNutritionByIDImage
-export def "recipes-nutrition-widget-png get-by-image" [
+export def "recipe-nutrition-by-id-image" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4039,7 +4039,7 @@ export def "recipes-nutrition-widget-png get-by-image" [
 # GET /recipes/{id}/priceBreakdownWidget
 # Docs: https://spoonacular.com/food-api/docs#Price-Breakdown-by-ID-Widget — Read entire docs
 # operationId: visualizeRecipePriceBreakdownByID
-export def "recipes-price-breakdown-widget get-visualize" [
+export def "visualize-recipe-price-breakdown-by-id" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4078,7 +4078,7 @@ export def "recipes-price-breakdown-widget get-visualize" [
 # GET /recipes/{id}/priceBreakdownWidget.json
 # Docs: https://spoonacular.com/food-api/docs#Price-Breakdown-by-ID — Read entire docs
 # operationId: getRecipePriceBreakdownByID
-export def "recipes-price-breakdown-widget-json get" [
+export def "get-recipe-price-breakdown-by-id" [
   id: int
   id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -4117,7 +4117,7 @@ export def "recipes-price-breakdown-widget-json get" [
 # GET /recipes/{id}/priceBreakdownWidget.png
 # Docs: https://spoonacular.com/food-api/docs#Price-Breakdown-by-ID-Image — Read entire docs
 # operationId: priceBreakdownByIDImage
-export def "recipes-price-breakdown-widget-png get-by-image" [
+export def "price-breakdown-by-id-image" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4154,7 +4154,7 @@ export def "recipes-price-breakdown-widget-png get-by-image" [
 # GET /recipes/{id}/similar
 # Docs: https://spoonacular.com/food-api/docs#Get-Similar-Recipes — Read entire docs
 # operationId: getSimilarRecipes
-export def "recipes-similar get" [
+export def "get-similar-recipes" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4194,7 +4194,7 @@ export def "recipes-similar get" [
 # GET /recipes/{id}/summary
 # Docs: https://spoonacular.com/food-api/docs#Summarize-Recipe — Read entire docs
 # operationId: summarizeRecipe
-export def "recipes-summary get-summarize" [
+export def "summarize-recipe" [
   id: int
   id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -4233,7 +4233,7 @@ export def "recipes-summary get-summarize" [
 # GET /recipes/{id}/tasteWidget
 # Docs: https://spoonacular.com/food-api/docs#Recipe-Taste-by-ID-Widget — Read entire docs
 # operationId: visualizeRecipeTasteByID
-export def "recipes-taste-widget get-visualize" [
+export def "visualize-recipe-taste-by-id" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4273,7 +4273,7 @@ export def "recipes-taste-widget get-visualize" [
 # GET /recipes/{id}/tasteWidget.json
 # Docs: https://spoonacular.com/food-api/docs#Taste-by-ID — Read entire docs
 # operationId: getRecipeTasteByID
-export def "recipes-taste-widget-json get" [
+export def "get-recipe-taste-by-id" [
   id: int
   id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -4314,7 +4314,7 @@ export def "recipes-taste-widget-json get" [
 # GET /recipes/{id}/tasteWidget.png
 # Docs: https://spoonacular.com/food-api/docs#Recipe-Taste-by-ID-Image — Read entire docs
 # operationId: recipeTasteByIDImage
-export def "recipes-taste-widget-png get-by-image" [
+export def "recipe-taste-by-id-image" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4354,7 +4354,7 @@ export def "recipes-taste-widget-png get-by-image" [
 # POST /users/connect
 # Docs: https://spoonacular.com/food-api/docs#Connect-User — Read entire docs
 # operationId: connectUser
-export def "users-connect create" [
+export def "connect-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

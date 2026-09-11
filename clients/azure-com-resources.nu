@@ -129,7 +129,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers list-at-tenant-scope" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-list-at-tenant-scope" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -153,7 +153,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers
 # operationId: Providers_ListAtTenantScope
-export def "providers list-at-tenant-scope" [
+export def "providers-list-at-tenant-scope" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -191,7 +191,7 @@ export def "providers list-at-tenant-scope" [
 #
 # GET /providers/Microsoft.Management/managementGroups/{groupId}/providers/Microsoft.Resources/deployments/
 # operationId: Deployments_ListAtManagementGroupScope
-export def "providers-microsoft-management-management-groups-providers-microsoft-resources-deployments list-at-scope" [
+export def "deployments-list-at-management-group-scope" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -231,7 +231,7 @@ export def "providers-microsoft-management-management-groups-providers-microsoft
 #
 # DELETE /providers/Microsoft.Management/managementGroups/{groupId}/providers/Microsoft.Resources/deployments/{deploymentName}
 # operationId: Deployments_DeleteAtManagementGroupScope
-export def "providers-microsoft-management-management-groups-providers-microsoft-resources-deployments delete-at-scope" [
+export def "deployments-delete-at-management-group-scope" [
   group_id: string
   deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -271,7 +271,7 @@ export def "providers-microsoft-management-management-groups-providers-microsoft
 #
 # GET /providers/Microsoft.Management/managementGroups/{groupId}/providers/Microsoft.Resources/deployments/{deploymentName}
 # operationId: Deployments_GetAtManagementGroupScope
-export def "providers-microsoft-management-management-groups-providers-microsoft-resources-deployments get-at-scope" [
+export def "deployments-get-at-management-group-scope" [
   group_id: string
   deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -311,7 +311,7 @@ export def "providers-microsoft-management-management-groups-providers-microsoft
 #
 # HEAD /providers/Microsoft.Management/managementGroups/{groupId}/providers/Microsoft.Resources/deployments/{deploymentName}
 # operationId: Deployments_CheckExistenceAtManagementGroupScope
-export def "providers-microsoft-management-management-groups-providers-microsoft-resources-deployments check-existence-at-scope" [
+export def "deployments-check-existence-at-management-group-scope" [
   group_id: string
   deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -352,7 +352,7 @@ export def "providers-microsoft-management-management-groups-providers-microsoft
 # PUT /providers/Microsoft.Management/managementGroups/{groupId}/providers/Microsoft.Resources/deployments/{deploymentName}
 # operationId: Deployments_CreateOrUpdateAtManagementGroupScope
 # --properties shape: {debugSetting?: any, mode: "Incremental"|"Complete", onErrorDeployment?: any, parameters?: record, parametersLink?: any, template?: record, templateLink?: any}
-export def "providers-microsoft-management-management-groups-providers-microsoft-resources-deployments create-or-update-at-scope" [
+export def "deployments-create-or-update-at-management-group-scope" [
   group_id: string
   deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -397,7 +397,7 @@ export def "providers-microsoft-management-management-groups-providers-microsoft
 #
 # POST /providers/Microsoft.Management/managementGroups/{groupId}/providers/Microsoft.Resources/deployments/{deploymentName}/cancel
 # operationId: Deployments_CancelAtManagementGroupScope
-export def "providers-microsoft-management-management-groups-providers-microsoft-resources-deployments-cancel cancel-at-scope" [
+export def "deployments-cancel-at-management-group-scope" [
   group_id: string
   deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -437,7 +437,7 @@ export def "providers-microsoft-management-management-groups-providers-microsoft
 #
 # POST /providers/Microsoft.Management/managementGroups/{groupId}/providers/Microsoft.Resources/deployments/{deploymentName}/exportTemplate
 # operationId: Deployments_ExportTemplateAtManagementGroupScope
-export def "providers-microsoft-management-management-groups-providers-microsoft-resources-deployments-export-template export-at-scope" [
+export def "deployments-export-template-at-management-group-scope" [
   group_id: string
   deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -477,7 +477,7 @@ export def "providers-microsoft-management-management-groups-providers-microsoft
 #
 # GET /providers/Microsoft.Management/managementGroups/{groupId}/providers/Microsoft.Resources/deployments/{deploymentName}/operations
 # operationId: DeploymentOperations_ListAtManagementGroupScope
-export def "providers-microsoft-management-management-groups-providers-microsoft-resources-deployments-operations list-at-scope" [
+export def "deployment-operations-list-at-management-group-scope" [
   group_id: string
   deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -518,7 +518,7 @@ export def "providers-microsoft-management-management-groups-providers-microsoft
 #
 # GET /providers/Microsoft.Management/managementGroups/{groupId}/providers/Microsoft.Resources/deployments/{deploymentName}/operations/{operationId}
 # operationId: DeploymentOperations_GetAtManagementGroupScope
-export def "providers-microsoft-management-management-groups-providers-microsoft-resources-deployments-operations get-at-scope" [
+export def "deployment-operations-get-at-management-group-scope" [
   group_id: string
   deployment_name: string
   operation_id: string
@@ -561,7 +561,7 @@ export def "providers-microsoft-management-management-groups-providers-microsoft
 # POST /providers/Microsoft.Management/managementGroups/{groupId}/providers/Microsoft.Resources/deployments/{deploymentName}/validate
 # operationId: Deployments_ValidateAtManagementGroupScope
 # --properties shape: {debugSetting?: any, mode: "Incremental"|"Complete", onErrorDeployment?: any, parameters?: record, parametersLink?: any, template?: record, templateLink?: any}
-export def "providers-microsoft-management-management-groups-providers-microsoft-resources-deployments-validate validate-at-scope" [
+export def "deployments-validate-at-management-group-scope" [
   group_id: string
   deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -606,7 +606,7 @@ export def "providers-microsoft-management-management-groups-providers-microsoft
 #
 # POST /providers/Microsoft.Resources/calculateTemplateHash
 # operationId: Deployments_CalculateTemplateHash
-export def "providers-microsoft-resources-calculate-template-hash create-deployments" [
+export def "deployments-calculate-template-hash" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -646,7 +646,7 @@ export def "providers-microsoft-resources-calculate-template-hash create-deploym
 #
 # GET /providers/Microsoft.Resources/deployments/
 # operationId: Deployments_ListAtTenantScope
-export def "providers-microsoft-resources-deployments list-at-tenant-scope" [
+export def "deployments-list-at-tenant-scope" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -684,7 +684,7 @@ export def "providers-microsoft-resources-deployments list-at-tenant-scope" [
 #
 # DELETE /providers/Microsoft.Resources/deployments/{deploymentName}
 # operationId: Deployments_DeleteAtTenantScope
-export def "providers-microsoft-resources-deployments delete-at-tenant-scope" [
+export def "deployments-delete-at-tenant-scope" [
   deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -722,7 +722,7 @@ export def "providers-microsoft-resources-deployments delete-at-tenant-scope" [
 #
 # GET /providers/Microsoft.Resources/deployments/{deploymentName}
 # operationId: Deployments_GetAtTenantScope
-export def "providers-microsoft-resources-deployments get-at-tenant-scope" [
+export def "deployments-get-at-tenant-scope" [
   deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -760,7 +760,7 @@ export def "providers-microsoft-resources-deployments get-at-tenant-scope" [
 #
 # HEAD /providers/Microsoft.Resources/deployments/{deploymentName}
 # operationId: Deployments_CheckExistenceAtTenantScope
-export def "providers-microsoft-resources-deployments check-existence-at-tenant-scope" [
+export def "deployments-check-existence-at-tenant-scope" [
   deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -799,7 +799,7 @@ export def "providers-microsoft-resources-deployments check-existence-at-tenant-
 # PUT /providers/Microsoft.Resources/deployments/{deploymentName}
 # operationId: Deployments_CreateOrUpdateAtTenantScope
 # --properties shape: {debugSetting?: any, mode: "Incremental"|"Complete", onErrorDeployment?: any, parameters?: record, parametersLink?: any, template?: record, templateLink?: any}
-export def "providers-microsoft-resources-deployments create-or-update-at-tenant-scope" [
+export def "deployments-create-or-update-at-tenant-scope" [
   deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -842,7 +842,7 @@ export def "providers-microsoft-resources-deployments create-or-update-at-tenant
 #
 # POST /providers/Microsoft.Resources/deployments/{deploymentName}/cancel
 # operationId: Deployments_CancelAtTenantScope
-export def "providers-microsoft-resources-deployments-cancel cancel-at-tenant-scope" [
+export def "deployments-cancel-at-tenant-scope" [
   deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -880,7 +880,7 @@ export def "providers-microsoft-resources-deployments-cancel cancel-at-tenant-sc
 #
 # POST /providers/Microsoft.Resources/deployments/{deploymentName}/exportTemplate
 # operationId: Deployments_ExportTemplateAtTenantScope
-export def "providers-microsoft-resources-deployments-export-template export-at-tenant-scope" [
+export def "deployments-export-template-at-tenant-scope" [
   deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -918,7 +918,7 @@ export def "providers-microsoft-resources-deployments-export-template export-at-
 #
 # GET /providers/Microsoft.Resources/deployments/{deploymentName}/operations
 # operationId: DeploymentOperations_ListAtTenantScope
-export def "providers-microsoft-resources-deployments-operations list-at-tenant-scope" [
+export def "deployment-operations-list-at-tenant-scope" [
   deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -957,7 +957,7 @@ export def "providers-microsoft-resources-deployments-operations list-at-tenant-
 #
 # GET /providers/Microsoft.Resources/deployments/{deploymentName}/operations/{operationId}
 # operationId: DeploymentOperations_GetAtTenantScope
-export def "providers-microsoft-resources-deployments-operations get-at-tenant-scope" [
+export def "deployment-operations-get-at-tenant-scope" [
   deployment_name: string
   operation_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -998,7 +998,7 @@ export def "providers-microsoft-resources-deployments-operations get-at-tenant-s
 # POST /providers/Microsoft.Resources/deployments/{deploymentName}/validate
 # operationId: Deployments_ValidateAtTenantScope
 # --properties shape: {debugSetting?: any, mode: "Incremental"|"Complete", onErrorDeployment?: any, parameters?: record, parametersLink?: any, template?: record, templateLink?: any}
-export def "providers-microsoft-resources-deployments-validate validate-at-tenant-scope" [
+export def "deployments-validate-at-tenant-scope" [
   deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1041,7 +1041,7 @@ export def "providers-microsoft-resources-deployments-validate validate-at-tenan
 #
 # GET /providers/Microsoft.Resources/operations
 # operationId: Operations_List
-export def "providers-microsoft-resources-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1077,7 +1077,7 @@ export def "providers-microsoft-resources-operations list" [
 #
 # GET /providers/{resourceProviderNamespace}
 # operationId: Providers_GetAtTenantScope
-export def "providers get-at-tenant-scope" [
+export def "providers-get-at-tenant-scope" [
   resource_provider_namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1116,7 +1116,7 @@ export def "providers get-at-tenant-scope" [
 #
 # GET /subscriptions/{subscriptionId}/providers
 # operationId: Providers_List
-export def "subscriptions-providers list" [
+export def "providers-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1156,7 +1156,7 @@ export def "subscriptions-providers list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Resources/deployments/
 # operationId: Deployments_ListAtSubscriptionScope
-export def "subscriptions-providers-microsoft-resources-deployments list-at-scope" [
+export def "deployments-list-at-subscription-scope" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1196,7 +1196,7 @@ export def "subscriptions-providers-microsoft-resources-deployments list-at-scop
 #
 # DELETE /subscriptions/{subscriptionId}/providers/Microsoft.Resources/deployments/{deploymentName}
 # operationId: Deployments_DeleteAtSubscriptionScope
-export def "subscriptions-providers-microsoft-resources-deployments delete-at-scope" [
+export def "deployments-delete-at-subscription-scope" [
   subscription_id: string
   deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1236,7 +1236,7 @@ export def "subscriptions-providers-microsoft-resources-deployments delete-at-sc
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Resources/deployments/{deploymentName}
 # operationId: Deployments_GetAtSubscriptionScope
-export def "subscriptions-providers-microsoft-resources-deployments get-at-scope" [
+export def "deployments-get-at-subscription-scope" [
   subscription_id: string
   deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1276,7 +1276,7 @@ export def "subscriptions-providers-microsoft-resources-deployments get-at-scope
 #
 # HEAD /subscriptions/{subscriptionId}/providers/Microsoft.Resources/deployments/{deploymentName}
 # operationId: Deployments_CheckExistenceAtSubscriptionScope
-export def "subscriptions-providers-microsoft-resources-deployments check-existence-at-scope" [
+export def "deployments-check-existence-at-subscription-scope" [
   subscription_id: string
   deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1317,7 +1317,7 @@ export def "subscriptions-providers-microsoft-resources-deployments check-existe
 # PUT /subscriptions/{subscriptionId}/providers/Microsoft.Resources/deployments/{deploymentName}
 # operationId: Deployments_CreateOrUpdateAtSubscriptionScope
 # --properties shape: {debugSetting?: any, mode: "Incremental"|"Complete", onErrorDeployment?: any, parameters?: record, parametersLink?: any, template?: record, templateLink?: any}
-export def "subscriptions-providers-microsoft-resources-deployments create-or-update-at-scope" [
+export def "deployments-create-or-update-at-subscription-scope" [
   subscription_id: string
   deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1362,7 +1362,7 @@ export def "subscriptions-providers-microsoft-resources-deployments create-or-up
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Resources/deployments/{deploymentName}/cancel
 # operationId: Deployments_CancelAtSubscriptionScope
-export def "subscriptions-providers-microsoft-resources-deployments-cancel cancel-at-scope" [
+export def "deployments-cancel-at-subscription-scope" [
   subscription_id: string
   deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1402,7 +1402,7 @@ export def "subscriptions-providers-microsoft-resources-deployments-cancel cance
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Resources/deployments/{deploymentName}/exportTemplate
 # operationId: Deployments_ExportTemplateAtSubscriptionScope
-export def "subscriptions-providers-microsoft-resources-deployments-export-template export-at-scope" [
+export def "deployments-export-template-at-subscription-scope" [
   subscription_id: string
   deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1442,7 +1442,7 @@ export def "subscriptions-providers-microsoft-resources-deployments-export-templ
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Resources/deployments/{deploymentName}/operations
 # operationId: DeploymentOperations_ListAtSubscriptionScope
-export def "subscriptions-providers-microsoft-resources-deployments-operations list-at-scope" [
+export def "deployment-operations-list-at-subscription-scope" [
   subscription_id: string
   deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1483,7 +1483,7 @@ export def "subscriptions-providers-microsoft-resources-deployments-operations l
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Resources/deployments/{deploymentName}/operations/{operationId}
 # operationId: DeploymentOperations_GetAtSubscriptionScope
-export def "subscriptions-providers-microsoft-resources-deployments-operations get-at-scope" [
+export def "deployment-operations-get-at-subscription-scope" [
   subscription_id: string
   deployment_name: string
   operation_id: string
@@ -1526,7 +1526,7 @@ export def "subscriptions-providers-microsoft-resources-deployments-operations g
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Resources/deployments/{deploymentName}/validate
 # operationId: Deployments_ValidateAtSubscriptionScope
 # --properties shape: {debugSetting?: any, mode: "Incremental"|"Complete", onErrorDeployment?: any, parameters?: record, parametersLink?: any, template?: record, templateLink?: any}
-export def "subscriptions-providers-microsoft-resources-deployments-validate validate-at-scope" [
+export def "deployments-validate-at-subscription-scope" [
   subscription_id: string
   deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1572,7 +1572,7 @@ export def "subscriptions-providers-microsoft-resources-deployments-validate val
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Resources/deployments/{deploymentName}/whatIf
 # operationId: Deployments_WhatIfAtSubscriptionScope
 # --properties shape: {whatIfSettings?: any, debugSetting?: any, mode: "Incremental"|"Complete", onErrorDeployment?: any, parameters?: record, parametersLink?: any, template?: record, templateLink?: any}
-export def "subscriptions-providers-microsoft-resources-deployments-what-if create-at-scope" [
+export def "deployments-what-if-at-subscription-scope" [
   subscription_id: string
   deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1617,7 +1617,7 @@ export def "subscriptions-providers-microsoft-resources-deployments-what-if crea
 #
 # GET /subscriptions/{subscriptionId}/providers/{resourceProviderNamespace}
 # operationId: Providers_Get
-export def "subscriptions-providers get" [
+export def "providers-get" [
   subscription_id: string
   resource_provider_namespace: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1658,7 +1658,7 @@ export def "subscriptions-providers get" [
 #
 # POST /subscriptions/{subscriptionId}/providers/{resourceProviderNamespace}/register
 # operationId: Providers_Register
-export def "subscriptions-providers-register create" [
+export def "providers-register" [
   subscription_id: string
   resource_provider_namespace: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1698,7 +1698,7 @@ export def "subscriptions-providers-register create" [
 #
 # POST /subscriptions/{subscriptionId}/providers/{resourceProviderNamespace}/unregister
 # operationId: Providers_Unregister
-export def "subscriptions-providers-unregister delete" [
+export def "providers-unregister" [
   subscription_id: string
   resource_provider_namespace: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1738,7 +1738,7 @@ export def "subscriptions-providers-unregister delete" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/resources
 # operationId: Resources_ListByResourceGroup
-export def "subscriptions-resource-groups-resources list" [
+export def "resources-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1781,7 +1781,7 @@ export def "subscriptions-resource-groups-resources list" [
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{sourceResourceGroupName}/moveResources
 # operationId: Resources_MoveResources
-export def "subscriptions-resource-groups-move-resources move" [
+export def "resources-move-resources" [
   subscription_id: string
   source_resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1826,7 +1826,7 @@ export def "subscriptions-resource-groups-move-resources move" [
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{sourceResourceGroupName}/validateMoveResources
 # operationId: Resources_ValidateMoveResources
-export def "subscriptions-resource-groups-validate-move-resources validate" [
+export def "resources-validate-move-resources" [
   subscription_id: string
   source_resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1871,7 +1871,7 @@ export def "subscriptions-resource-groups-validate-move-resources validate" [
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups
 # operationId: ResourceGroups_List
-export def "subscriptions-resourcegroups list-resource-groups" [
+export def "resource-groups-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1911,7 +1911,7 @@ export def "subscriptions-resourcegroups list-resource-groups" [
 #
 # DELETE /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}
 # operationId: ResourceGroups_Delete
-export def "subscriptions-resourcegroups delete-resource-groups" [
+export def "resource-groups-delete" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1951,7 +1951,7 @@ export def "subscriptions-resourcegroups delete-resource-groups" [
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}
 # operationId: ResourceGroups_Get
-export def "subscriptions-resourcegroups get-resource-groups" [
+export def "resource-groups-get" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1991,7 +1991,7 @@ export def "subscriptions-resourcegroups get-resource-groups" [
 #
 # HEAD /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}
 # operationId: ResourceGroups_CheckExistence
-export def "subscriptions-resourcegroups check-resource-groups-existence" [
+export def "resource-groups-check-existence" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2031,7 +2031,7 @@ export def "subscriptions-resourcegroups check-resource-groups-existence" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}
 # operationId: ResourceGroups_Update
-export def "subscriptions-resourcegroups update-resource-groups" [
+export def "resource-groups-update" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2078,7 +2078,7 @@ export def "subscriptions-resourcegroups update-resource-groups" [
 #
 # PUT /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}
 # operationId: ResourceGroups_CreateOrUpdate
-export def "subscriptions-resourcegroups create-resource-groups-or-update" [
+export def "resource-groups-create-or-update" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2125,7 +2125,7 @@ export def "subscriptions-resourcegroups create-resource-groups-or-update" [
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/deployments/{deploymentName}/operations
 # operationId: DeploymentOperations_List
-export def "subscriptions-resourcegroups-deployments-operations list" [
+export def "deployment-operations-list" [
   subscription_id: string
   resource_group_name: string
   deployment_name: string
@@ -2168,7 +2168,7 @@ export def "subscriptions-resourcegroups-deployments-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/deployments/{deploymentName}/operations/{operationId}
 # operationId: DeploymentOperations_Get
-export def "subscriptions-resourcegroups-deployments-operations get" [
+export def "deployment-operations-get" [
   subscription_id: string
   resource_group_name: string
   deployment_name: string
@@ -2212,7 +2212,7 @@ export def "subscriptions-resourcegroups-deployments-operations get" [
 #
 # POST /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/exportTemplate
 # operationId: ResourceGroups_ExportTemplate
-export def "subscriptions-resourcegroups-export-template export-resource-groups" [
+export def "resource-groups-export-template" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2257,7 +2257,7 @@ export def "subscriptions-resourcegroups-export-template export-resource-groups"
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Resources/deployments/
 # operationId: Deployments_ListByResourceGroup
-export def "subscriptions-resourcegroups-providers-microsoft-resources-deployments list-by-group" [
+export def "deployments-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2299,7 +2299,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-resources-deploymen
 #
 # DELETE /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Resources/deployments/{deploymentName}
 # operationId: Deployments_Delete
-export def "subscriptions-resourcegroups-providers-microsoft-resources-deployments delete" [
+export def "deployments-delete" [
   subscription_id: string
   resource_group_name: string
   deployment_name: string
@@ -2341,7 +2341,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-resources-deploymen
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Resources/deployments/{deploymentName}
 # operationId: Deployments_Get
-export def "subscriptions-resourcegroups-providers-microsoft-resources-deployments get" [
+export def "deployments-get" [
   subscription_id: string
   resource_group_name: string
   deployment_name: string
@@ -2383,7 +2383,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-resources-deploymen
 #
 # HEAD /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Resources/deployments/{deploymentName}
 # operationId: Deployments_CheckExistence
-export def "subscriptions-resourcegroups-providers-microsoft-resources-deployments check-existence" [
+export def "deployments-check-existence" [
   subscription_id: string
   resource_group_name: string
   deployment_name: string
@@ -2426,7 +2426,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-resources-deploymen
 # PUT /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Resources/deployments/{deploymentName}
 # operationId: Deployments_CreateOrUpdate
 # --properties shape: {debugSetting?: any, mode: "Incremental"|"Complete", onErrorDeployment?: any, parameters?: record, parametersLink?: any, template?: record, templateLink?: any}
-export def "subscriptions-resourcegroups-providers-microsoft-resources-deployments create-or-update" [
+export def "deployments-create-or-update" [
   subscription_id: string
   resource_group_name: string
   deployment_name: string
@@ -2473,7 +2473,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-resources-deploymen
 #
 # POST /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Resources/deployments/{deploymentName}/cancel
 # operationId: Deployments_Cancel
-export def "subscriptions-resourcegroups-providers-microsoft-resources-deployments-cancel cancel" [
+export def "deployments-cancel" [
   subscription_id: string
   resource_group_name: string
   deployment_name: string
@@ -2515,7 +2515,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-resources-deploymen
 #
 # POST /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Resources/deployments/{deploymentName}/exportTemplate
 # operationId: Deployments_ExportTemplate
-export def "subscriptions-resourcegroups-providers-microsoft-resources-deployments-export-template export" [
+export def "deployments-export-template" [
   subscription_id: string
   resource_group_name: string
   deployment_name: string
@@ -2558,7 +2558,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-resources-deploymen
 # POST /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Resources/deployments/{deploymentName}/validate
 # operationId: Deployments_Validate
 # --properties shape: {debugSetting?: any, mode: "Incremental"|"Complete", onErrorDeployment?: any, parameters?: record, parametersLink?: any, template?: record, templateLink?: any}
-export def "subscriptions-resourcegroups-providers-microsoft-resources-deployments-validate validate" [
+export def "deployments-validate" [
   subscription_id: string
   resource_group_name: string
   deployment_name: string
@@ -2606,7 +2606,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-resources-deploymen
 # POST /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Resources/deployments/{deploymentName}/whatIf
 # operationId: Deployments_WhatIf
 # --properties shape: {whatIfSettings?: any, debugSetting?: any, mode: "Incremental"|"Complete", onErrorDeployment?: any, parameters?: record, parametersLink?: any, template?: record, templateLink?: any}
-export def "subscriptions-resourcegroups-providers-microsoft-resources-deployments-what-if create" [
+export def "deployments-what-if" [
   subscription_id: string
   resource_group_name: string
   deployment_name: string
@@ -2653,7 +2653,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-resources-deploymen
 #
 # DELETE /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/{resourceProviderNamespace}/{parentResourcePath}/{resourceType}/{resourceName}
 # operationId: Resources_Delete
-export def "subscriptions-resourcegroups-providers delete-resources" [
+export def "resources-delete" [
   subscription_id: string
   resource_group_name: string
   resource_provider_namespace: string
@@ -2701,7 +2701,7 @@ export def "subscriptions-resourcegroups-providers delete-resources" [
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/{resourceProviderNamespace}/{parentResourcePath}/{resourceType}/{resourceName}
 # operationId: Resources_Get
-export def "subscriptions-resourcegroups-providers get-resources" [
+export def "resources-get" [
   subscription_id: string
   resource_group_name: string
   resource_provider_namespace: string
@@ -2749,7 +2749,7 @@ export def "subscriptions-resourcegroups-providers get-resources" [
 #
 # HEAD /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/{resourceProviderNamespace}/{parentResourcePath}/{resourceType}/{resourceName}
 # operationId: Resources_CheckExistence
-export def "subscriptions-resourcegroups-providers check-resources-existence" [
+export def "resources-check-existence" [
   subscription_id: string
   resource_group_name: string
   resource_provider_namespace: string
@@ -2800,7 +2800,7 @@ export def "subscriptions-resourcegroups-providers check-resources-existence" [
 # --identity shape: {type?: "SystemAssigned"|"UserAssigned"|"SystemAssigned, UserAssigned"|"None", userAssignedIdentities?: record}
 # --plan shape: {name?: string, product?: string, promotionCode?: string, publisher?: string, version?: string}
 # --sku shape: {capacity?: int, family?: string, model?: string, name?: string, size?: string, tier?: string}
-export def "subscriptions-resourcegroups-providers update-resources" [
+export def "resources-update" [
   subscription_id: string
   resource_group_name: string
   resource_provider_namespace: string
@@ -2862,7 +2862,7 @@ export def "subscriptions-resourcegroups-providers update-resources" [
 # --identity shape: {type?: "SystemAssigned"|"UserAssigned"|"SystemAssigned, UserAssigned"|"None", userAssignedIdentities?: record}
 # --plan shape: {name?: string, product?: string, promotionCode?: string, publisher?: string, version?: string}
 # --sku shape: {capacity?: int, family?: string, model?: string, name?: string, size?: string, tier?: string}
-export def "subscriptions-resourcegroups-providers create-resources-or-update" [
+export def "resources-create-or-update" [
   subscription_id: string
   resource_group_name: string
   resource_provider_namespace: string
@@ -2921,7 +2921,7 @@ export def "subscriptions-resourcegroups-providers create-resources-or-update" [
 #
 # GET /subscriptions/{subscriptionId}/resources
 # operationId: Resources_List
-export def "subscriptions-resources list" [
+export def "resources-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2962,7 +2962,7 @@ export def "subscriptions-resources list" [
 #
 # GET /subscriptions/{subscriptionId}/tagNames
 # operationId: Tags_List
-export def "subscriptions-tag-names list" [
+export def "tags-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3000,7 +3000,7 @@ export def "subscriptions-tag-names list" [
 #
 # DELETE /subscriptions/{subscriptionId}/tagNames/{tagName}
 # operationId: Tags_Delete
-export def "subscriptions-tag-names delete" [
+export def "tags-delete" [
   subscription_id: string
   tag_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3040,7 +3040,7 @@ export def "subscriptions-tag-names delete" [
 #
 # PUT /subscriptions/{subscriptionId}/tagNames/{tagName}
 # operationId: Tags_CreateOrUpdate
-export def "subscriptions-tag-names create-or-update" [
+export def "tags-create-or-update" [
   subscription_id: string
   tag_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3080,7 +3080,7 @@ export def "subscriptions-tag-names create-or-update" [
 #
 # DELETE /subscriptions/{subscriptionId}/tagNames/{tagName}/tagValues/{tagValue}
 # operationId: Tags_DeleteValue
-export def "subscriptions-tag-names-tag-values delete" [
+export def "tags-delete-value" [
   subscription_id: string
   tag_name: string
   tag_value: string
@@ -3122,7 +3122,7 @@ export def "subscriptions-tag-names-tag-values delete" [
 #
 # PUT /subscriptions/{subscriptionId}/tagNames/{tagName}/tagValues/{tagValue}
 # operationId: Tags_CreateOrUpdateValue
-export def "subscriptions-tag-names-tag-values create-or-update" [
+export def "tags-create-or-update-value" [
   subscription_id: string
   tag_name: string
   tag_value: string
@@ -3164,7 +3164,7 @@ export def "subscriptions-tag-names-tag-values create-or-update" [
 #
 # DELETE /{resourceId}
 # operationId: Resources_DeleteById
-export def "resources delete" [
+export def "resources-delete-by-id" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3202,7 +3202,7 @@ export def "resources delete" [
 #
 # GET /{resourceId}
 # operationId: Resources_GetById
-export def "resources get" [
+export def "resources-get-by-id" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3240,7 +3240,7 @@ export def "resources get" [
 #
 # HEAD /{resourceId}
 # operationId: Resources_CheckExistenceById
-export def "resources check-existence" [
+export def "resources-check-existence-by-id" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3281,7 +3281,7 @@ export def "resources check-existence" [
 # --identity shape: {type?: "SystemAssigned"|"UserAssigned"|"SystemAssigned, UserAssigned"|"None", userAssignedIdentities?: record}
 # --plan shape: {name?: string, product?: string, promotionCode?: string, publisher?: string, version?: string}
 # --sku shape: {capacity?: int, family?: string, model?: string, name?: string, size?: string, tier?: string}
-export def "resources update" [
+export def "resources-update-by-id" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3333,7 +3333,7 @@ export def "resources update" [
 # --identity shape: {type?: "SystemAssigned"|"UserAssigned"|"SystemAssigned, UserAssigned"|"None", userAssignedIdentities?: record}
 # --plan shape: {name?: string, product?: string, promotionCode?: string, publisher?: string, version?: string}
 # --sku shape: {capacity?: int, family?: string, model?: string, name?: string, size?: string, tier?: string}
-export def "resources create-or-update" [
+export def "resources-create-or-update-by-id" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3382,7 +3382,7 @@ export def "resources create-or-update" [
 #
 # GET /{scope}/providers/Microsoft.Resources/deployments/
 # operationId: Deployments_ListAtScope
-export def "providers-microsoft-resources-deployments list-at" [
+export def "deployments-list-at-scope" [
   scope: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3422,7 +3422,7 @@ export def "providers-microsoft-resources-deployments list-at" [
 #
 # DELETE /{scope}/providers/Microsoft.Resources/deployments/{deploymentName}
 # operationId: Deployments_DeleteAtScope
-export def "providers-microsoft-resources-deployments delete-at" [
+export def "deployments-delete-at-scope" [
   scope: string
   deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3462,7 +3462,7 @@ export def "providers-microsoft-resources-deployments delete-at" [
 #
 # GET /{scope}/providers/Microsoft.Resources/deployments/{deploymentName}
 # operationId: Deployments_GetAtScope
-export def "providers-microsoft-resources-deployments get-at" [
+export def "deployments-get-at-scope" [
   scope: string
   deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3502,7 +3502,7 @@ export def "providers-microsoft-resources-deployments get-at" [
 #
 # HEAD /{scope}/providers/Microsoft.Resources/deployments/{deploymentName}
 # operationId: Deployments_CheckExistenceAtScope
-export def "providers-microsoft-resources-deployments check-existence-at" [
+export def "deployments-check-existence-at-scope" [
   scope: string
   deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3543,7 +3543,7 @@ export def "providers-microsoft-resources-deployments check-existence-at" [
 # PUT /{scope}/providers/Microsoft.Resources/deployments/{deploymentName}
 # operationId: Deployments_CreateOrUpdateAtScope
 # --properties shape: {debugSetting?: any, mode: "Incremental"|"Complete", onErrorDeployment?: any, parameters?: record, parametersLink?: any, template?: record, templateLink?: any}
-export def "providers-microsoft-resources-deployments create-or-update-at" [
+export def "deployments-create-or-update-at-scope" [
   scope: string
   deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3588,7 +3588,7 @@ export def "providers-microsoft-resources-deployments create-or-update-at" [
 #
 # POST /{scope}/providers/Microsoft.Resources/deployments/{deploymentName}/cancel
 # operationId: Deployments_CancelAtScope
-export def "providers-microsoft-resources-deployments-cancel cancel-at" [
+export def "deployments-cancel-at-scope" [
   scope: string
   deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3628,7 +3628,7 @@ export def "providers-microsoft-resources-deployments-cancel cancel-at" [
 #
 # POST /{scope}/providers/Microsoft.Resources/deployments/{deploymentName}/exportTemplate
 # operationId: Deployments_ExportTemplateAtScope
-export def "providers-microsoft-resources-deployments-export-template export-at" [
+export def "deployments-export-template-at-scope" [
   scope: string
   deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3668,7 +3668,7 @@ export def "providers-microsoft-resources-deployments-export-template export-at"
 #
 # GET /{scope}/providers/Microsoft.Resources/deployments/{deploymentName}/operations
 # operationId: DeploymentOperations_ListAtScope
-export def "providers-microsoft-resources-deployments-operations list-at" [
+export def "deployment-operations-list-at-scope" [
   scope: string
   deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3709,7 +3709,7 @@ export def "providers-microsoft-resources-deployments-operations list-at" [
 #
 # GET /{scope}/providers/Microsoft.Resources/deployments/{deploymentName}/operations/{operationId}
 # operationId: DeploymentOperations_GetAtScope
-export def "providers-microsoft-resources-deployments-operations get-at" [
+export def "deployment-operations-get-at-scope" [
   scope: string
   deployment_name: string
   operation_id: string
@@ -3752,7 +3752,7 @@ export def "providers-microsoft-resources-deployments-operations get-at" [
 # POST /{scope}/providers/Microsoft.Resources/deployments/{deploymentName}/validate
 # operationId: Deployments_ValidateAtScope
 # --properties shape: {debugSetting?: any, mode: "Incremental"|"Complete", onErrorDeployment?: any, parameters?: record, parametersLink?: any, template?: record, templateLink?: any}
-export def "providers-microsoft-resources-deployments-validate validate-at" [
+export def "deployments-validate-at-scope" [
   scope: string
   deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL

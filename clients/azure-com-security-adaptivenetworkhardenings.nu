@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-providers-microsoft-security-adaptive-network-hardenings list-by-extended" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "adaptive-network-hardenings-list-by-extended-resource" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -128,7 +128,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/{resourceNamespace}/{resourceType}/{resourceName}/providers/Microsoft.Security/adaptiveNetworkHardenings
 # operationId: AdaptiveNetworkHardenings_ListByExtendedResource
-export def "subscriptions-resource-groups-providers-providers-microsoft-security-adaptive-network-hardenings list-by-extended" [
+export def "adaptive-network-hardenings-list-by-extended-resource" [
   subscription_id: string
   resource_group_name: string
   resource_namespace: string
@@ -174,7 +174,7 @@ export def "subscriptions-resource-groups-providers-providers-microsoft-security
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/{resourceNamespace}/{resourceType}/{resourceName}/providers/Microsoft.Security/adaptiveNetworkHardenings/{adaptiveNetworkHardeningResourceName}
 # operationId: AdaptiveNetworkHardenings_Get
-export def "subscriptions-resource-groups-providers-providers-microsoft-security-adaptive-network-hardenings get" [
+export def "adaptive-network-hardenings-get" [
   subscription_id: string
   resource_group_name: string
   resource_namespace: string
@@ -223,7 +223,7 @@ export def "subscriptions-resource-groups-providers-providers-microsoft-security
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/{resourceNamespace}/{resourceType}/{resourceName}/providers/Microsoft.Security/adaptiveNetworkHardenings/{adaptiveNetworkHardeningResourceName}/{adaptiveNetworkHardeningEnforceAction}
 # operationId: AdaptiveNetworkHardenings_Enforce
 # --rules item shape: {destinationPort?: int, direction?: "Inbound"|"Outbound", ipAddresses?: list<string>, name?: string, protocols?: list<string>}
-export def "subscriptions-resource-groups-providers-providers-microsoft-security-adaptive-network-hardenings create-enforce" [
+export def "adaptive-network-hardenings-enforce" [
   subscription_id: string
   resource_group_name: string
   resource_namespace: string

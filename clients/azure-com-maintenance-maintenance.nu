@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-maintenance-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.Maintenance/operations
 # operationId: Operations_List
-export def "providers-microsoft-maintenance-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -176,7 +176,7 @@ export def "providers-microsoft-maintenance-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Maintenance/maintenanceConfigurations
 # operationId: MaintenanceConfigurations_List
-export def "subscriptions-providers-microsoft-maintenance-maintenance-configurations list" [
+export def "maintenance-configurations-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -214,7 +214,7 @@ export def "subscriptions-providers-microsoft-maintenance-maintenance-configurat
 #
 # DELETE /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Maintenance/maintenanceConfigurations/{resourceName}
 # operationId: MaintenanceConfigurations_Delete
-export def "subscriptions-resourcegroups-providers-microsoft-maintenance-maintenance-configurations delete" [
+export def "maintenance-configurations-delete" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -256,7 +256,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-maintenance-mainten
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Maintenance/maintenanceConfigurations/{resourceName}
 # operationId: MaintenanceConfigurations_Get
-export def "subscriptions-resourcegroups-providers-microsoft-maintenance-maintenance-configurations get" [
+export def "maintenance-configurations-get" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -299,7 +299,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-maintenance-mainten
 # PATCH /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Maintenance/maintenanceConfigurations/{resourceName}
 # operationId: MaintenanceConfigurations_Update
 # --properties shape: {extensionProperties?: record, maintenanceScope?: "All"|"Host"|"Resource"|"InResource", namespace?: string}
-export def "subscriptions-resourcegroups-providers-microsoft-maintenance-maintenance-configurations update" [
+export def "maintenance-configurations-update" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -348,7 +348,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-maintenance-mainten
 # PUT /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Maintenance/maintenanceConfigurations/{resourceName}
 # operationId: MaintenanceConfigurations_CreateOrUpdate
 # --properties shape: {extensionProperties?: record, maintenanceScope?: "All"|"Host"|"Resource"|"InResource", namespace?: string}
-export def "subscriptions-resourcegroups-providers-microsoft-maintenance-maintenance-configurations create-or-update" [
+export def "maintenance-configurations-create-or-update" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -396,7 +396,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-maintenance-mainten
 #
 # PUT /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/{providerName}/{resourceParentType}/{resourceParentName}/{resourceType}/{resourceName}/providers/Microsoft.Maintenance/applyUpdates/default
 # operationId: ApplyUpdates_CreateOrUpdateParent
-export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenance-apply-updates-default create-or-parent" [
+export def "apply-updates-create-or-update-parent" [
   subscription_id: string
   resource_group_name: string
   provider_name: string
@@ -446,7 +446,7 @@ export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenan
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/{providerName}/{resourceParentType}/{resourceParentName}/{resourceType}/{resourceName}/providers/Microsoft.Maintenance/applyUpdates/{applyUpdateName}
 # operationId: ApplyUpdates_GetParent
-export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenance-apply-updates get-parent" [
+export def "apply-updates-get-parent" [
   subscription_id: string
   resource_group_name: string
   provider_name: string
@@ -498,7 +498,7 @@ export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenan
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/{providerName}/{resourceParentType}/{resourceParentName}/{resourceType}/{resourceName}/providers/Microsoft.Maintenance/configurationAssignments
 # operationId: ConfigurationAssignments_ListParent
-export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenance-configuration-assignments list-parent" [
+export def "configuration-assignments-list-parent" [
   subscription_id: string
   resource_group_name: string
   provider_name: string
@@ -548,7 +548,7 @@ export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenan
 #
 # DELETE /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/{providerName}/{resourceParentType}/{resourceParentName}/{resourceType}/{resourceName}/providers/Microsoft.Maintenance/configurationAssignments/{configurationAssignmentName}
 # operationId: ConfigurationAssignments_DeleteParent
-export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenance-configuration-assignments delete-parent" [
+export def "configuration-assignments-delete-parent" [
   subscription_id: string
   resource_group_name: string
   provider_name: string
@@ -601,7 +601,7 @@ export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenan
 # PUT /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/{providerName}/{resourceParentType}/{resourceParentName}/{resourceType}/{resourceName}/providers/Microsoft.Maintenance/configurationAssignments/{configurationAssignmentName}
 # operationId: ConfigurationAssignments_CreateOrUpdateParent
 # --properties shape: {maintenanceConfigurationId?: string, resourceId?: string}
-export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenance-configuration-assignments create-or-update-parent" [
+export def "configuration-assignments-create-or-update-parent" [
   subscription_id: string
   resource_group_name: string
   provider_name: string
@@ -658,7 +658,7 @@ export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenan
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/{providerName}/{resourceParentType}/{resourceParentName}/{resourceType}/{resourceName}/providers/Microsoft.Maintenance/updates
 # operationId: Updates_ListParent
-export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenance-updates list-parent" [
+export def "updates-list-parent" [
   subscription_id: string
   resource_group_name: string
   provider_name: string
@@ -708,7 +708,7 @@ export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenan
 #
 # PUT /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/{providerName}/{resourceType}/{resourceName}/providers/Microsoft.Maintenance/applyUpdates/default
 # operationId: ApplyUpdates_CreateOrUpdate
-export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenance-apply-updates-default create-or" [
+export def "apply-updates-create-or-update" [
   subscription_id: string
   resource_group_name: string
   provider_name: string
@@ -754,7 +754,7 @@ export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenan
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/{providerName}/{resourceType}/{resourceName}/providers/Microsoft.Maintenance/applyUpdates/{applyUpdateName}
 # operationId: ApplyUpdates_Get
-export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenance-apply-updates get" [
+export def "apply-updates-get" [
   subscription_id: string
   resource_group_name: string
   provider_name: string
@@ -802,7 +802,7 @@ export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenan
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/{providerName}/{resourceType}/{resourceName}/providers/Microsoft.Maintenance/configurationAssignments
 # operationId: ConfigurationAssignments_List
-export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenance-configuration-assignments list" [
+export def "configuration-assignments-list" [
   subscription_id: string
   resource_group_name: string
   provider_name: string
@@ -848,7 +848,7 @@ export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenan
 #
 # DELETE /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/{providerName}/{resourceType}/{resourceName}/providers/Microsoft.Maintenance/configurationAssignments/{configurationAssignmentName}
 # operationId: ConfigurationAssignments_Delete
-export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenance-configuration-assignments delete" [
+export def "configuration-assignments-delete" [
   subscription_id: string
   resource_group_name: string
   provider_name: string
@@ -897,7 +897,7 @@ export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenan
 # PUT /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/{providerName}/{resourceType}/{resourceName}/providers/Microsoft.Maintenance/configurationAssignments/{configurationAssignmentName}
 # operationId: ConfigurationAssignments_CreateOrUpdate
 # --properties shape: {maintenanceConfigurationId?: string, resourceId?: string}
-export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenance-configuration-assignments create-or-update" [
+export def "configuration-assignments-create-or-update" [
   subscription_id: string
   resource_group_name: string
   provider_name: string
@@ -950,7 +950,7 @@ export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenan
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/{providerName}/{resourceType}/{resourceName}/providers/Microsoft.Maintenance/updates
 # operationId: Updates_List
-export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenance-updates list" [
+export def "updates-list" [
   subscription_id: string
   resource_group_name: string
   provider_name: string

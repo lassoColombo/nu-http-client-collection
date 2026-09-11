@@ -123,7 +123,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-api-management-service-diagnostics list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "diagnostic-list-by-service" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -147,7 +147,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/diagnostics
 # operationId: Diagnostic_ListByService
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-diagnostics list" [
+export def "diagnostic-list-by-service" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -192,7 +192,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/diagnostics/{diagnosticId}
 # operationId: Diagnostic_Delete
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-diagnostics delete" [
+export def "diagnostic-delete" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -239,7 +239,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/diagnostics/{diagnosticId}
 # operationId: Diagnostic_Get
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-diagnostics get" [
+export def "diagnostic-get" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -283,7 +283,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # HEAD /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/diagnostics/{diagnosticId}
 # operationId: Diagnostic_GetEntityTag
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-diagnostics get-entity-tag" [
+export def "diagnostic-get-entity-tag" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -328,7 +328,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/diagnostics/{diagnosticId}
 # operationId: Diagnostic_Update
 # --properties shape: {alwaysLog?: "allErrors", backend?: any, frontend?: any, httpCorrelationProtocol?: "None"|"Legacy"|"W3C", logClientIp?: bool, loggerId: string, sampling?: any, verbosity?: "verbose"|"information"|"error"}
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-diagnostics update" [
+export def "diagnostic-update" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -380,7 +380,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/diagnostics/{diagnosticId}
 # operationId: Diagnostic_CreateOrUpdate
 # --properties shape: {alwaysLog?: "allErrors", backend?: any, frontend?: any, httpCorrelationProtocol?: "None"|"Legacy"|"W3C", logClientIp?: bool, loggerId: string, sampling?: any, verbosity?: "verbose"|"information"|"error"}
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-diagnostics create-or-update" [
+export def "diagnostic-create-or-update" [
   subscription_id: string
   resource_group_name: string
   service_name: string

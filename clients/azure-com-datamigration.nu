@@ -122,7 +122,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-data-migration-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.DataMigration/operations
 # operationId: Operations_List
-export def "providers-microsoft-data-migration-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -182,7 +182,7 @@ export def "providers-microsoft-data-migration-operations list" [
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.DataMigration/locations/{location}/checkNameAvailability
 # operationId: Services_CheckNameAvailability
-export def "subscriptions-providers-microsoft-data-migration-locations-check-name-availability check-services" [
+export def "services-check-name-availability" [
   subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -227,7 +227,7 @@ export def "subscriptions-providers-microsoft-data-migration-locations-check-nam
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.DataMigration/locations/{location}/usages
 # operationId: Usages_List
-export def "subscriptions-providers-microsoft-data-migration-locations-usages list" [
+export def "usages-list" [
   subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -267,7 +267,7 @@ export def "subscriptions-providers-microsoft-data-migration-locations-usages li
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.DataMigration/services
 # operationId: Services_List
-export def "subscriptions-providers-microsoft-data-migration-services list" [
+export def "services-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -305,7 +305,7 @@ export def "subscriptions-providers-microsoft-data-migration-services list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.DataMigration/skus
 # operationId: ResourceSkus_ListSkus
-export def "subscriptions-providers-microsoft-data-migration-skus list-resource" [
+export def "resource-skus-list-skus" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -343,7 +343,7 @@ export def "subscriptions-providers-microsoft-data-migration-skus list-resource"
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{groupName}/providers/Microsoft.DataMigration/services
 # operationId: Services_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-data-migration-services list" [
+export def "services-list-by-resource-group" [
   subscription_id: string
   group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -383,7 +383,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-migration-ser
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{groupName}/providers/Microsoft.DataMigration/services/{serviceName}
 # operationId: Services_Delete
-export def "subscriptions-resource-groups-providers-microsoft-data-migration-services delete" [
+export def "services-delete" [
   subscription_id: any
   group_name: any
   service_name: any
@@ -425,7 +425,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-migration-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{groupName}/providers/Microsoft.DataMigration/services/{serviceName}
 # operationId: Services_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-migration-services get" [
+export def "services-get" [
   subscription_id: string
   group_name: string
   service_name: string
@@ -469,7 +469,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-migration-ser
 # operationId: Services_Update
 # --properties shape: {publicKey?: string, virtualSubnetId: string}
 # --sku shape: {capacity?: int, family?: string, name?: string, size?: string, tier?: string}
-export def "subscriptions-resource-groups-providers-microsoft-data-migration-services update" [
+export def "services-update" [
   subscription_id: any
   group_name: any
   service_name: any
@@ -520,7 +520,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-migration-ser
 # operationId: Services_CreateOrUpdate
 # --properties shape: {publicKey?: string, virtualSubnetId: string}
 # --sku shape: {capacity?: int, family?: string, name?: string, size?: string, tier?: string}
-export def "subscriptions-resource-groups-providers-microsoft-data-migration-services create-or-update" [
+export def "services-create-or-update" [
   subscription_id: any
   group_name: any
   service_name: any
@@ -569,7 +569,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-migration-ser
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{groupName}/providers/Microsoft.DataMigration/services/{serviceName}/checkNameAvailability
 # operationId: Services_CheckChildrenNameAvailability
-export def "subscriptions-resource-groups-providers-microsoft-data-migration-services-check-name-availability check-children" [
+export def "services-check-children-name-availability" [
   subscription_id: string
   group_name: string
   service_name: string
@@ -616,7 +616,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-migration-ser
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{groupName}/providers/Microsoft.DataMigration/services/{serviceName}/checkStatus
 # operationId: Services_CheckStatus
-export def "subscriptions-resource-groups-providers-microsoft-data-migration-services-check-status check" [
+export def "services-check-status" [
   subscription_id: string
   group_name: string
   service_name: string
@@ -658,7 +658,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-migration-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{groupName}/providers/Microsoft.DataMigration/services/{serviceName}/projects
 # operationId: Projects_List
-export def "subscriptions-resource-groups-providers-microsoft-data-migration-services-projects list" [
+export def "projects-list" [
   subscription_id: string
   group_name: string
   service_name: string
@@ -700,7 +700,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-migration-ser
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{groupName}/providers/Microsoft.DataMigration/services/{serviceName}/projects/{projectName}
 # operationId: Projects_Delete
-export def "subscriptions-resource-groups-providers-microsoft-data-migration-services-projects delete" [
+export def "projects-delete" [
   subscription_id: any
   group_name: any
   service_name: any
@@ -744,7 +744,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-migration-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{groupName}/providers/Microsoft.DataMigration/services/{serviceName}/projects/{projectName}
 # operationId: Projects_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-migration-services-projects get" [
+export def "projects-get" [
   subscription_id: string
   group_name: string
   service_name: string
@@ -789,7 +789,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-migration-ser
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{groupName}/providers/Microsoft.DataMigration/services/{serviceName}/projects/{projectName}
 # operationId: Projects_Update
 # --properties shape: {databasesInfo?: list, sourceConnectionInfo?: record, sourcePlatform: "SQL"|"Unknown", targetConnectionInfo?: record, targetPlatform: "SQLDB"|"Unknown"}
-export def "subscriptions-resource-groups-providers-microsoft-data-migration-services-projects update" [
+export def "projects-update" [
   subscription_id: any
   group_name: any
   service_name: any
@@ -838,7 +838,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-migration-ser
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{groupName}/providers/Microsoft.DataMigration/services/{serviceName}/projects/{projectName}
 # operationId: Projects_CreateOrUpdate
 # --properties shape: {databasesInfo?: list, sourceConnectionInfo?: record, sourcePlatform: "SQL"|"Unknown", targetConnectionInfo?: record, targetPlatform: "SQLDB"|"Unknown"}
-export def "subscriptions-resource-groups-providers-microsoft-data-migration-services-projects create-or-update" [
+export def "projects-create-or-update" [
   subscription_id: any
   group_name: any
   service_name: any
@@ -886,7 +886,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-migration-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{groupName}/providers/Microsoft.DataMigration/services/{serviceName}/projects/{projectName}/tasks
 # operationId: Tasks_List
-export def "subscriptions-resource-groups-providers-microsoft-data-migration-services-projects-tasks list" [
+export def "tasks-list" [
   subscription_id: string
   group_name: string
   service_name: string
@@ -931,7 +931,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-migration-ser
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{groupName}/providers/Microsoft.DataMigration/services/{serviceName}/projects/{projectName}/tasks/{taskName}
 # operationId: Tasks_Delete
-export def "subscriptions-resource-groups-providers-microsoft-data-migration-services-projects-tasks delete" [
+export def "tasks-delete" [
   subscription_id: any
   group_name: any
   service_name: any
@@ -977,7 +977,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-migration-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{groupName}/providers/Microsoft.DataMigration/services/{serviceName}/projects/{projectName}/tasks/{taskName}
 # operationId: Tasks_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-migration-services-projects-tasks get" [
+export def "tasks-get" [
   subscription_id: string
   group_name: string
   service_name: string
@@ -1025,7 +1025,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-migration-ser
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{groupName}/providers/Microsoft.DataMigration/services/{serviceName}/projects/{projectName}/tasks/{taskName}
 # operationId: Tasks_Update
 # --properties shape: {taskType: string}
-export def "subscriptions-resource-groups-providers-microsoft-data-migration-services-projects-tasks update" [
+export def "tasks-update" [
   subscription_id: any
   group_name: any
   service_name: any
@@ -1075,7 +1075,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-migration-ser
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{groupName}/providers/Microsoft.DataMigration/services/{serviceName}/projects/{projectName}/tasks/{taskName}
 # operationId: Tasks_CreateOrUpdate
 # --properties shape: {taskType: string}
-export def "subscriptions-resource-groups-providers-microsoft-data-migration-services-projects-tasks create-or-update" [
+export def "tasks-create-or-update" [
   subscription_id: any
   group_name: any
   service_name: any
@@ -1124,7 +1124,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-migration-ser
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{groupName}/providers/Microsoft.DataMigration/services/{serviceName}/projects/{projectName}/tasks/{taskName}/cancel
 # operationId: Tasks_Cancel
-export def "subscriptions-resource-groups-providers-microsoft-data-migration-services-projects-tasks-cancel cancel" [
+export def "tasks-cancel" [
   subscription_id: string
   group_name: string
   service_name: string
@@ -1170,7 +1170,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-migration-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{groupName}/providers/Microsoft.DataMigration/services/{serviceName}/skus
 # operationId: Services_ListSkus
-export def "subscriptions-resource-groups-providers-microsoft-data-migration-services-skus list" [
+export def "services-list-skus" [
   subscription_id: string
   group_name: string
   service_name: string
@@ -1212,7 +1212,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-migration-ser
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{groupName}/providers/Microsoft.DataMigration/services/{serviceName}/start
 # operationId: Services_Start
-export def "subscriptions-resource-groups-providers-microsoft-data-migration-services-start start" [
+export def "services-start" [
   subscription_id: string
   group_name: string
   service_name: string
@@ -1254,7 +1254,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-migration-ser
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{groupName}/providers/Microsoft.DataMigration/services/{serviceName}/stop
 # operationId: Services_Stop
-export def "subscriptions-resource-groups-providers-microsoft-data-migration-services-stop stop" [
+export def "services-stop" [
   subscription_id: string
   group_name: string
   service_name: string

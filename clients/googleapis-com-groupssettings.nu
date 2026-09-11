@@ -122,7 +122,7 @@ def alt-completer [] { ["atom" "json"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "groups get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "groups-settings-groups-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # GET /{groupUniqueId}
 # operationId: groupsSettings.groups.get
-export def "groups get" [
+export def "groups-settings-groups-get" [
   group_unique_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -190,7 +190,7 @@ export def "groups get" [
 #
 # PATCH /{groupUniqueId}
 # operationId: groupsSettings.groups.patch
-export def "groups update-by-group-unique-id" [
+export def "groups-settings-groups-patch" [
   group_unique_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -299,7 +299,7 @@ export def "groups update-by-group-unique-id" [
 #
 # PUT /{groupUniqueId}
 # operationId: groupsSettings.groups.update
-export def "groups update-by-group-unique-id-1" [
+export def "groups-settings-groups-update" [
   group_unique_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

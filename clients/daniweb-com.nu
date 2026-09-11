@@ -163,7 +163,7 @@ def event-completer [] { ["conversation_message" "conversation_seen" "group_mess
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "apps list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-apps" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -186,7 +186,7 @@ export def commands []: nothing -> table {
 # Fetch all Daniapps that are currently in production mode.
 #
 # GET /apps
-export def "apps list" [
+export def "get-apps" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -222,7 +222,7 @@ export def "apps list" [
 # Fetch an array of Daniapps that are currently in production mode.
 #
 # GET /apps/{ID}
-export def "apps get" [
+export def "get-apps-id" [
   id: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -257,7 +257,7 @@ export def "apps get" [
 # Fetch all Daniapp audience segments that comprise the current access token's bubble.
 #
 # GET /audiences
-export def "audiences list" [
+export def "get-audiences" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -293,7 +293,7 @@ export def "audiences list" [
 # Fetch an array of Daniapp audience segments that comprise the current access token's bubble.
 #
 # GET /audiences/{ID}
-export def "audiences get" [
+export def "get-audiences-id" [
   id: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -328,7 +328,7 @@ export def "audiences get" [
 # Create a membership record for the OAuth'ed end-user based on the current audience segment/bubble combination.
 #
 # POST /audiences/{ID}/memberships
-export def "audiences-memberships create" [
+export def "post-audiences-id-memberships" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -363,7 +363,7 @@ export def "audiences-memberships create" [
 # Retrieve an array of names and locations, filtered by category, that begin with the query string passed in. Ideally used for search autocomplete dropdowns, as the search functionality filters against name and location. The four potential categories are: `conversations` for names of users you are in existing conversations with; `matches` for names of users you have previously skipped over; `people` for names of all other users; `locations` for locations of users. Only users and their locations who exist with the current access token's bubble are considered.
 #
 # GET /autocompletes
-export def "autocompletes get" [
+export def "get-autocompletes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -398,7 +398,7 @@ export def "autocompletes get" [
 # Paginated report of information about messages contributed by conversation and date. Only conversations that exist within the current access token's bubble are considered in the calculations. Optionally roll up all conversations to retrieve one record per date. Optionally specify a date formatted as YYYY-MM-DD to retrieve information just from the single date, along with additional navigational information, which is useful when generating a transcript for a single day and wanting to reference the previous and next days there were messages.
 #
 # POST /conversations/schedules
-export def "conversations-schedules create" [
+export def "post-conversations-schedules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -441,7 +441,7 @@ export def "conversations-schedules create" [
 # Fetch messages authored from within the current bubble that match a query string passed in as a search parameter along with their relevancy score.
 #
 # POST /conversations/searches
-export def "conversations-searches create" [
+export def "post-conversations-searches" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -484,7 +484,7 @@ export def "conversations-searches create" [
 # Retrieve conversations that you are participating in with users who exists within the same bubble, along with your current relationship with the conversations. The user_a / user_b properties of the conversation are populated with as much data as is available if the user is not you. If the user is you, only the id field is populated. There is a separate status endpoint to retrieve relationship information for individual conversations. Optionally filter: 'new' to only show conversations with messages you haven't yet seen; 'introductions' to only show conversations where users have introduced themselves to you but nothing more; 'unreplied' to only show conversations where you have introduced yourself to other users but nothing more; 'notifications' to show all conversations where the other user was the last person to message. Optionally only show conversations engaging within the existing access token's bubble. This report is limited to your ~500-1000 most recently active conversations you've engaged in within current the access token's bubble.
 #
 # GET /conversations/statuses
-export def "conversations-statuses list" [
+export def "get-conversations-statuses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -523,7 +523,7 @@ export def "conversations-statuses list" [
 # Fetch an array of conversations. You can only retrieve conversations with users who exist within the current access token's bubble.
 #
 # GET /conversations/{ID}
-export def "conversations get" [
+export def "get-conversations-id" [
   id: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -558,7 +558,7 @@ export def "conversations get" [
 # Retrieve the last {limit} messages in the conversation, provided the conversations exist within the current access token's bubble. If a timeout is 0 or greater, the batch is sorted oldest first. Otherwise, if timeout is a negative number, the transcript is paginated and sorted newest first. Specify a timeout for long polling (which delays the server sending back results for up to n seconds or until results are available, whichever comes first), or default to 0 for immediate results. Optionally record your status as online along with sharing the latest message you've seen with the other conversation participant. Optionally specify a gt_message_id to retrieve only messages with an ID greater than that specified (such as greater than the latest message ID received in the last poll). Optionally only poll for messages authored by the other person in the conversation, and echo messages authored by you when sending, for a perceived increase in performance. Optionally only retrieve messages that were posted from within the current access token's bubble. Optionally specify a date formatted as YYYY-MM-DD to retrieve a transcript of messages from a single day. When record_seen is set to true, the new message count for the conversation is reset to zero.
 #
 # GET /conversations/{ID}/messages
-export def "conversations-messages get" [
+export def "get-conversations-id-messages" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -602,7 +602,7 @@ export def "conversations-messages get" [
 # Post a message to a conversation that is with a user who exists within the current access token's bubble. Optionally specify whether emoticons should be parsed into smiley images. Optionally specify whether the message should be bubbled within the app. Additionally, optionally attach a single metadata key/value pair to the message upon submission.
 #
 # POST /conversations/{ID}/messages
-export def "conversations-messages create" [
+export def "post-conversations-id-messages" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -654,7 +654,7 @@ export def "conversations-messages create" [
 # Paginated report of information about messages contributed by conversation and date. Only conversations that exist within the current access token's bubble are considered in the calculations. Optionally roll up all conversations to retrieve one record per date. Optionally specify a date formatted as YYYY-MM-DD to retrieve information just from the single date, along with additional navigational information, which is useful when generating a transcript for a single day and wanting to reference the previous and next days there were messages within the conversation(s).
 #
 # POST /conversations/{ID}/schedules
-export def "conversations-schedules create-by-id" [
+export def "post-conversations-id-schedules" [
   id: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -699,7 +699,7 @@ export def "conversations-schedules create-by-id" [
 # Fetch messages authored from within specified conversations that match a query string passed in as a search parameter along with their relevancy score.
 #
 # POST /conversations/{ID}/searches
-export def "conversations-searches create-by-id" [
+export def "post-conversations-id-searches" [
   id: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -744,7 +744,7 @@ export def "conversations-searches create-by-id" [
 # Status information about your current relationship with one or more conversations you participating in, provided the conversations exist within the current access token's bubble.
 #
 # GET /conversations/{ID}/statuses
-export def "conversations-statuses get" [
+export def "get-conversations-id-statuses" [
   id: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -779,7 +779,7 @@ export def "conversations-statuses get" [
 # Archive or unarchive a conversation that is with a user who exists within the same bubble.
 #
 # PATCH /conversations/{ID}/statuses
-export def "conversations-statuses update" [
+export def "patch-conversations-id-statuses" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -820,7 +820,7 @@ export def "conversations-statuses update" [
 # Fetch an array of all groups that were created by users existing within the current access token's bubble. The groups must be either Public or you must be a member of them. Unlisted and Private groups that you are not a member of are not listed.
 #
 # GET /groups
-export def "groups list" [
+export def "get-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -856,7 +856,7 @@ export def "groups list" [
 # Create a new group for other members to join. Any user who is using an access token whose bubble you exist in can join your group provided it is not a private group. Private groups can only be joined by members who know its passphrase. Unlisted groups can be joined by anybody as long as they know the Group ID, but they are not referenced anywhere to non-members. Public groups can be joined by anybody, are discoverable, and anyone can see the public groups a user is a member of, provided the group owner exists in their access token's bubble. Groups each have their own discussions, transcripts, schedules, and ability to list and search their members.
 #
 # POST /groups
-export def "groups create" [
+export def "post-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -899,7 +899,7 @@ export def "groups create" [
 # Paginated listing of messages filtered by arbitrary metadata criteria. Messages must match on all key/value pairs passed in. Messages may only match on one value of an array passed in. However, messages are sorted based on how many distinct values they match on (most matches first).
 #
 # POST /groups/messages/metadata/filters
-export def "groups-messages-metadata-filters create" [
+export def "post-groups-messages-metadata-filters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -945,7 +945,7 @@ export def "groups-messages-metadata-filters create" [
 # Delete an array of group messages. You must be the owner or moderator of the group.
 #
 # DELETE /groups/messages/{ID}
-export def "groups-messages delete" [
+export def "delete-groups-messages-id" [
   id: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -980,7 +980,7 @@ export def "groups-messages delete" [
 # Fetch an array of group messages. You can only retrieve messages authored by you or by users existing within the current access token's bubble.
 #
 # GET /groups/messages/{ID}
-export def "groups-messages get-by-id" [
+export def "get-groups-messages-id" [
   id: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1015,7 +1015,7 @@ export def "groups-messages get-by-id" [
 # Retrieve all key/value pairs attached to the current message that you have access to, so long as the user who created the group exists within the current access token's bubble. This includes all public metadata, bubbled metadata that was created by an access token existing within the current bubble, user metadata that was created by you, or private metadata created by you from an access token existing within the current bubble.
 #
 # GET /groups/messages/{ID}/metadata
-export def "groups-messages-metadata get" [
+export def "get-groups-messages-id-metadata" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1053,7 +1053,7 @@ export def "groups-messages-metadata get" [
 # Attach one-to-many key/value pairs of metadata to a group message, so long as the user who authored the message exists within the current access token's bubble and you are a member of their group. A key is unique for each author/bubble combination. Attaching metadata with an existing key that was previously created by you, from within the same bubble, overwrites the key with the new value or set of values. The privacy setting allows you to specify who will have access to the metadata: Public metadata by anyone using an access token which grants them access to the user who authored the message and who is also a member of the group the message belongs to; Bubbled metadata by anyone using an access token existing within the current bubble who is also a member of the group the message belongs to; User metadata by you, so long as you are using an access token which grants you access to the user who authored the message and you remain a member of the group; Private metadata by you, so long as you are using an access token existing within the current bubble and you remain a member of the group.
 #
 # POST /groups/messages/{ID}/metadata
-export def "groups-messages-metadata create" [
+export def "post-groups-messages-id-metadata" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1102,7 +1102,7 @@ export def "groups-messages-metadata create" [
 # Retrieve all key/value pairs attached to the current message that you have access to, so long as the user who created the group exists within the current access token's bubble. This includes all public metadata, bubbled metadata that was created by an access token existing within the current bubble, user metadata that was created by you, or private metadata created by you from an access token existing within the current bubble. Metadata will be grouped by key.
 #
 # GET /groups/messages/{ID}/metadata/collections
-export def "groups-messages-metadata-collections get" [
+export def "get-groups-messages-id-metadata-collections" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1137,7 +1137,7 @@ export def "groups-messages-metadata-collections get" [
 # Paginated report of information about messages contributed by group and date. Only groups you're a member of and group messages authored by users the current access token has access to are considered in the calculations. Optionally roll up all groups to retrieve one record per date. Optionally specify a date formatted as YYYY-MM-DD to retrieve information just from the single date, along with additional navigational information, which is useful when generating a transcript for a single day and wanting to reference the previous and next days there were messages.
 #
 # POST /groups/schedules
-export def "groups-schedules create" [
+export def "post-groups-schedules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1180,7 +1180,7 @@ export def "groups-schedules create" [
 # Retrieve groups that were created by users within the current access token's bubble, along with your current relationship with the groups. The groups must be either Public or you must be a member of them. Unlisted and Private groups that you are not a member of are not listed. Optionally only retrieve groups that you are a member of.
 #
 # GET /groups/statuses
-export def "groups-statuses list" [
+export def "get-groups-statuses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1217,7 +1217,7 @@ export def "groups-statuses list" [
 # Fetch an array of groups. You can only retrieve groups created by users existing within the current access token's bubble.
 #
 # GET /groups/{ID}
-export def "groups get" [
+export def "get-groups-id" [
   id: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1252,7 +1252,7 @@ export def "groups get" [
 # Modify a group you previously created.
 #
 # PATCH /groups/{ID}
-export def "groups update" [
+export def "patch-groups-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1297,7 +1297,7 @@ export def "groups update" [
 # Leave a group that you are a member of and that was created by a user who exists within the current access token's bubble.
 #
 # DELETE /groups/{ID}/memberships
-export def "groups-memberships delete" [
+export def "delete-groups-id-memberships" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1332,7 +1332,7 @@ export def "groups-memberships delete" [
 # Fetch an array of users who are members of specific groups that you are also a member of. You can only retrieve users existing within the current access token's bubble.
 #
 # GET /groups/{ID}/memberships
-export def "groups-memberships get" [
+export def "get-groups-id-memberships" [
   id: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1370,7 +1370,7 @@ export def "groups-memberships get" [
 # Promote or demote a member's privileges within a group that you created. The user must exist within the current access token's bubble and be an existing member of the group.
 #
 # PATCH /groups/{ID}/memberships
-export def "groups-memberships update" [
+export def "patch-groups-id-memberships" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1412,7 +1412,7 @@ export def "groups-memberships update" [
 # Join a group that was created by a user who exists within the current access token's bubble, or join other users into a group that you created. If you are the group owner, you can pass in a user_id to create membership records for a user you are in a conversation with. The user must exist within the current access token's bubble. If the group is private, you must successfully pass in its passphrase in order to join. You can obtain the passphrase from the group's owner.
 #
 # POST /groups/{ID}/memberships
-export def "groups-memberships create" [
+export def "post-groups-id-memberships" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1454,7 +1454,7 @@ export def "groups-memberships create" [
 # Retrieve the last {limit} messages in the group, for messages authored by users within the current access token's bubble. If a timeout is 0 or greater, the batch is sorted oldest first. Otherwise, if timeout is a negative number, the transcript is paginated and sorted newest first. Specify a timeout for long polling (which delays the server sending back results for up to n seconds or until results are available, whichever comes first), or default to 0 for immediate results. Optionally record your status as online along with sharing the latest message you've seen with other group members. Optionally specify a gt_message_id to retrieve only messages with an ID greater than that specified (such as greater than the latest message ID received in the last poll). Optionally only poll for messages authored by other members of the group, and echo messages authored by you when sending, for a perceived increase in performance. Optionally only retrieve messages that were posted from within the current access token's bubble. Optionally specify a date formatted as YYYY-MM-DD to retrieve a transcript of messages from a single day. When record_seen is set to true, the new message count for the group is reset to zero.
 #
 # GET /groups/{ID}/messages
-export def "groups-messages get-by-id-1" [
+export def "get-groups-id-messages" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1499,7 +1499,7 @@ export def "groups-messages get-by-id-1" [
 # Post a message to a group that you are a member of and that was created by a user who exists within the current access token's bubble. Optionally specify whether emoticons should be parsed into smiley images. Additionally, optionally attach a single metadata key/value pair to the group message upon submission.
 #
 # POST /groups/{ID}/messages
-export def "groups-messages create" [
+export def "post-groups-id-messages" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1550,7 +1550,7 @@ export def "groups-messages create" [
 # Paginated report of information about group messages contributed by conversation and date. Only groups you're a member of and group messages authored by users existing within the current access token's bubble are considered in the calculations. Optionally roll up all groups to retrieve one record per date. Optionally specify a date formatted as YYYY-MM-DD to retrieve information just from the single date, along with additional navigational information, which is useful when generating a transcript for a single day and wanting to reference the previous and next days there were messages within the group discussion(s).
 #
 # POST /groups/{ID}/schedules
-export def "groups-schedules create-by-id" [
+export def "post-groups-id-schedules" [
   id: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1595,7 +1595,7 @@ export def "groups-schedules create-by-id" [
 # Status information about your current relationship with one or more groups you are a member of, provided the users who created the groups exist within the current access token's bubble.
 #
 # GET /groups/{ID}/statuses
-export def "groups-statuses get" [
+export def "get-groups-id-statuses" [
   id: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1628,7 +1628,7 @@ export def "groups-statuses get" [
 }
 
 # GET /industries
-export def "industries get" [
+export def "get-industries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1659,7 +1659,7 @@ export def "industries get" [
 }
 
 # POST /markdown
-export def "markdown create" [
+export def "post-markdown" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1697,7 +1697,7 @@ export def "markdown create" [
 }
 
 # GET /markdown/emoticons
-export def "markdown-emoticons get" [
+export def "get-markdown-emoticons" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1730,7 +1730,7 @@ export def "markdown-emoticons get" [
 # Paginated listing of messages filtered by arbitrary metadata criteria. Messages must match on all key/value pairs passed in. Messages may only match on one value of an array passed in. However, messages are sorted based on how many distinct values they match on (most matches first).
 #
 # POST /messages/metadata/filters
-export def "messages-metadata-filters create" [
+export def "post-messages-metadata-filters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1776,7 +1776,7 @@ export def "messages-metadata-filters create" [
 # Fetch an array of messages. You can only retrieve messages authored by you or by users who exist within the current access token's bubble.
 #
 # GET /messages/{ID}
-export def "messages get" [
+export def "get-messages-id" [
   id: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1811,7 +1811,7 @@ export def "messages get" [
 # Retrieve all key/value pairs attached to the current message that you have access to, so long as the user who authored the message exists within the current access token's bubble. This includes all public metadata, bubbled metadata that was created by an access token existing within the current bubble, user metadata that was created by you, or private metadata created by you from an access token existing within the current bubble.
 #
 # GET /messages/{ID}/metadata
-export def "messages-metadata get" [
+export def "get-messages-id-metadata" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1849,7 +1849,7 @@ export def "messages-metadata get" [
 # Attach one-to-many key/value pairs of metadata to a message, so long as the user who authored the message exists within the current access token's bubble. A key is unique for each author/bubble combination. Attaching metadata with an existing key that was previously created by you, from within the same bubble, overwrites the key with the new value or set of values. The privacy setting allows you to specify who will have access to the metadata: Public metadata by you or the other user in the message's conversation, using an access token which grants you access to the user who authored the message, if it wasn't you; Bubbled metadata by you or the other user in the message's conversation, using an access token existing within the current bubble; User metadata by you, so long as you are using an access token which grants you access to the user who authored the message, if it wasn't you; Private metadata by you, so long as you are using an access token existing within the current bubble.
 #
 # POST /messages/{ID}/metadata
-export def "messages-metadata create" [
+export def "post-messages-id-metadata" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1898,7 +1898,7 @@ export def "messages-metadata create" [
 # Retrieve all key/value pairs attached to the current message that you have access to, so long as the user who authored the message exists within the current access token's bubble. This includes all public metadata, bubbled metadata that was created by an access token existing within the current bubble, user metadata that was created by you, or private metadata created by you from an access token existing within the current bubble. Metadata will be grouped by key.
 #
 # GET /messages/{ID}/metadata/collections
-export def "messages-metadata-collections get" [
+export def "get-messages-id-metadata-collections" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1933,7 +1933,7 @@ export def "messages-metadata-collections get" [
 # Update the OAuth'ed end user's Curriculum Vitae by adding a position.
 #
 # POST /positions
-export def "positions create" [
+export def "post-positions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1980,7 +1980,7 @@ export def "positions create" [
 # Remove an item from the OAuth'ed end user's Curriculum Vitae.
 #
 # DELETE /positions/{ID}
-export def "positions delete" [
+export def "delete-positions-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2015,7 +2015,7 @@ export def "positions delete" [
 # Update the OAuth'ed end user's Curriculum Vitae by modifying an existing position.
 #
 # PATCH /positions/{ID}
-export def "positions update" [
+export def "patch-positions-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2064,7 +2064,7 @@ export def "positions update" [
 # Fetch an array of users that you've been matched with, connected with, skipped, or muted. You can only retrieve users existing within the current access token's bubble. This report may be limited to the last ~500-1000 users you've communicated with within the access token's bubble. Matches are always ordered by synergy, and the order_by parameter is ignored. You can only retrieve bubbled users when retrieving matches, and the bubbled parameter is ignored otherwise. Your 100 best algorithmic matches are based on: Complementary data submitted to Profiles, CVs, and Metadata; Complementary data acquired from third-parties; Location information; Many behavioral data points, such as how responsive users are to connections; Degrees of separation (mutual connections); etc. You may connect with 3 of these algorithmic matches per day for free. However, new members are allowed a grace period of additional daily matches. Each time you choose to meet or mute one of your algorithmic matches, a new match is introduced.
 #
 # GET /users
-export def "users get" [
+export def "get-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2103,7 +2103,7 @@ export def "users get" [
 # Invite users to into your current access token's bubble by having Dazah send out email invitations on your behalf. The invitation sends users to begin the OAuth flow for the current application (based on the settings specified in the application's profile), and therefore they will be redirected to the application upon signing up / logging in. Upon doing so, if they aren't already, they will automatically be connected with you as well. If your current access token does not escape the bubble, the invitation will specify you wish to connect within the application's name. If your current access token escapes the bubble, the invitation will specify you wish to connect within Dazah. Submit either a list of emails, or a LinkedIn or Outlook CSV file. You can retrieve your LinkedIn CSV file by exporting your LinkedIn Connections at https://www.linkedin.com/people/export-settings. You can retrieve your Outlook CSV file by using the Outlook Import and Export Wizard. This endpoint buckets the invitations into four categories: Existing invites are existing users who are already connected with you within the current bubble, and are therefore not emailed; Discovered invites are existing Dazah users who are available to be connected with within the current bubble, and are therefore not emailed. Now that they have been discovered, the users/{:ID}/meet API endpoint may be used to connect with them; Invalid invites are existing Dazah users who are unavailable to be connected with, because they have deactivated accounts, are muting you, etc., and are therefore not emailed; Emailed invites are queued to receive an invitation within approximately 1 hour. Note that if you are attempting to invite an existing Dazah user who does not currently exist within your current access token's bubble, they will fall within the Discovered bucket if your current access token escapes the bubble, but will be emailed an invitation to join the application if your current access token does not escape the bubble.
 #
 # POST /users/invites
-export def "users-invites create" [
+export def "post-users-invites" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2143,7 +2143,7 @@ export def "users-invites create" [
 # Paginated listing of users filtered by arbitrary metadata criteria. Users must match on all key/value pairs passed in. Users may only match on one value of an array passed in. However, users are sorted based on how many distinct values they match on (most matches first).
 #
 # POST /users/metadata/filters
-export def "users-metadata-filters create" [
+export def "post-users-metadata-filters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2189,7 +2189,7 @@ export def "users-metadata-filters create" [
 # Fetch an array of users that are geographically close to a set of coordinates. You can only retrieve users existing within the current access token's bubble.
 #
 # GET /users/nearby
-export def "users-nearby get" [
+export def "get-users-nearby" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2227,7 +2227,7 @@ export def "users-nearby get" [
 # Filter and perform a weighted search against user profile fields, CV fields, and metadata by specifying a string to search on for each individual field. By default, results are filtered such that all words in the string must exist, unless you seprate the words with OR. To perform a weighted search (as opposed to filtering), specify the weight (from 0-100) the search algorithm should assign to the field. You can optionally exclude users who you are already in or not in conversations with, exclude users who you previously skipped, or exclude users who you are muting. By doing so, you can effectively customize your own matching algorithm. You can specify geo coordinates to only find users a certain distance away from a specific location, or only find users within a certain distance from the OAuth'ed end-user's last known location. If your app utilizes multiple audience segments, you can specify which audiences you would like to search. You can also limit users to just those who have been recently active. You can also choose to only receive users originating from the current access token's bubble. Only users existing within the current access token's bubble will be matched, and you can only search within a group created by a bubbled user.
 #
 # POST /users/searches
-export def "users-searches create" [
+export def "post-users-searches" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2311,7 +2311,7 @@ export def "users-searches create" [
 # Fetch an array of users. You can only retrieve users existing within the current access token's bubble.
 #
 # GET /users/{ID}
-export def "users get-by-id" [
+export def "get-users-id" [
   id: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2346,7 +2346,7 @@ export def "users get-by-id" [
 # You can only retrieve groups that were created by users existing within the current access token's bubble.
 #
 # GET /users/{ID}/groups
-export def "users-groups get" [
+export def "get-users-id-groups" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2381,7 +2381,7 @@ export def "users-groups get" [
 # Paginated transcript of group messages authored by an individual user who exists within the current access token's bubble. Messages are sorted oldest to newest.
 #
 # GET /users/{ID}/groups/messages
-export def "users-groups-messages get" [
+export def "get-users-id-groups-messages" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2419,7 +2419,7 @@ export def "users-groups-messages get" [
 # Initiate a conversation with a user who exists within the current access token's bubble by sending them an introductory message. If you aren't already in a conversation with them, this endpoint meets them first, and then sends the message. Note that if you aren't in an existing conversation, you still must meet the criteria to meet them, meaning the user must currently be free for you to meet. You will receive an error message unless it is currently free for you to meet the user. You can use the users/{:IDS}/synergies endpoint to first determine if the user isn't already in a conversation with you and is free for you to meet and, if they aren't, how to pay to meet them. If you don't specify a message, it defaults to your custom introductory message defined in your settings.
 #
 # POST /users/{ID}/messages
-export def "users-messages create" [
+export def "post-users-id-messages" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2471,7 +2471,7 @@ export def "users-messages create" [
 # Retrieve all key/value pairs attached to the current user that you have access to, so long as the user exists within the current access token's bubble. This includes all public metadata, bubbled metadata that was created by an access token existing within the current bubble, user metadata that was created by you, or private metadata created by you from an access token existing within the current bubble. You will receive an error message unless either the current access token is bubbled, the user is an algorithmic match for you and you have not reached your quota of new introductions for the day, or you have paid to meet them. However, you can always use the /users/metadata/filters endpoint to filter across all users, including those that are unmatched, existing within the current access token's bubble based on preknown metadata key/value pairs.
 #
 # GET /users/{ID}/metadata
-export def "users-metadata get" [
+export def "get-users-id-metadata" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2509,7 +2509,7 @@ export def "users-metadata get" [
 # Attach one-to-many key/value pairs of metadata to a user, so long as the user exists within the current access token's bubble. You can set one key at a time, with one or many values. A key is unique for each author/bubble combination. Attaching metadata with an existing key that was previously created by you, from within the same bubble, overwrites the key with the new value or set of values. The privacy setting allows you to specify who will have access to the metadata: Public metadata by anyone using an access token which grants them access to the user; Bubbled metadata by anyone using an access token existing within the current bubble; User metadata by you, so long as you are using an access token which grants you access to the user; Private metadata by you, so long as you are using an access token existing within the current bubble.
 #
 # POST /users/{ID}/metadata
-export def "users-metadata create" [
+export def "post-users-id-metadata" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2558,7 +2558,7 @@ export def "users-metadata create" [
 # Retrieve all key/value pairs attached to the current user that you have access to, so long as the user exists within the current access token's bubble. This includes all public metadata, bubbled metadata that was created by an access token existing within the current bubble, user metadata that was created by you, or private metadata created by you from an access token existing within the current bubble. You will receive an error message unless either the current access token is bubbled, the user is an algorithmic match for you and you have not reached your quota of new introductions for the day, or you have paid to meet them. However, you can always use the /users/metadata/filters endpoint to filter across all users, including those that are unmatched, existing within the current access token's bubble based on preknown metadata key/value pairs. Metadata will be grouped by key.
 #
 # GET /users/{ID}/metadata/collections
-export def "users-metadata-collections get" [
+export def "get-users-id-metadata-collections" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2593,7 +2593,7 @@ export def "users-metadata-collections get" [
 # Retrieve the CV of a user who exists within the current access token's bubble. You will receive an error message unless either the current access token is bubbled, the user is an algorithmic match for you and you have not reached your quota of new introductions for the day, or you have paid to meet them. You can only record CV data to your own account. However, any app that you have OAuth'ed against can do so. By default, you will receive CV data that all apps have recorded for the user. Optionally, you can choose to only receive data that the current access token's bubble has recorded.
 #
 # GET /users/{ID}/positions
-export def "users-positions get" [
+export def "get-users-id-positions" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2630,7 +2630,7 @@ export def "users-positions get" [
 # Determine your match relationship with one or more users who exist within the current access token's bubble. Under some conditions, the price to meet the user will be $0. However, if this is not the case, the PayPal URL payment method will be provided along with the price to meet the user. The PayPal API can be leveraged to send payments programatically, provided the parameters passed in remain the same to ensure that the payment is correctly recorded. Once the payment has been recorded via PayPal IPN, the price to meet the user changes to $0. You can then call the users/{:ID}/meet endpoint to meet the user.
 #
 # GET /users/{ID}/synergies
-export def "users-synergies get" [
+export def "get-users-id-synergies" [
   id: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2665,7 +2665,7 @@ export def "users-synergies get" [
 # Skip, mute or unmute a user you've been matched with. Skipped matches are only presented as algorithmic matches after all other candidates have been exhausted. You cannot be matched with or meet muted users. You can only skip, mute or unmute users existing within the same bubble.
 #
 # PATCH /users/{ID}/synergies
-export def "users-synergies update" [
+export def "patch-users-id-synergies" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2707,7 +2707,7 @@ export def "users-synergies update" [
 # Retrieve the currently OAuth'ed end-user, based on the access token being used, including private information and settings such as their email address.
 #
 # GET /users/~
-export def "users get-1" [
+export def "get-users-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2740,7 +2740,7 @@ export def "users get-1" [
 # Update the OAuth'ed end user's account profile. At this time, for anti-spam reasons, restrictions preclude the ability to update email address and some other settings via the API.
 #
 # PATCH /users/~
-export def "users update" [
+export def "patch-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2793,7 +2793,7 @@ export def "users update" [
 # Fetch a listing of all webhooks owned by the current user/bubble combination.
 #
 # GET /webhooks
-export def "webhooks get" [
+export def "get-webhooks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2826,7 +2826,7 @@ export def "webhooks get" [
 # Register a new webhook for the current user/bubble combination. Specify an object_id to only be notified on an event related to that specific Conversation ID, Group ID, or User ID. Your access token must have access to the user being tracked, user you are in the conversation with, or user who created the group. You must be connected with a user in order to keep track of their online status. Alternatively, do not specify an object_id to be notified on all events that are related to conversations you're in, groups you're a member of, or users you are in conversations with. You may only have one webhook for each object_id/event. The webhook URI must reside on your own server. Webhooks do not expire when the access token used to create them expires. However, they will temporarily cease to function if the user who created them deauthorizes access to the application (effectively no longer existing within the bubble), unless/until the user reauthorizes the application using OAuth.
 #
 # POST /webhooks
-export def "webhooks create" [
+export def "post-webhooks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2869,7 +2869,7 @@ export def "webhooks create" [
 # Delete a webhook that was previously registered by the current user/bubble combination.
 #
 # DELETE /webhooks/{ID}
-export def "webhooks delete" [
+export def "delete-webhooks-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

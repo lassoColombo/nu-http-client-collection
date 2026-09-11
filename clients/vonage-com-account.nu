@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts get-services" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account-ctrl-get-account-services-by-account-id" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -122,7 +122,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/accounts/{account_id}
 # operationId: AccountCtrl.getAccountServicesByAccountID
-export def "accounts get-services" [
+export def "account-ctrl-get-account-services-by-account-id" [
   account_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -158,7 +158,7 @@ export def "accounts get-services" [
 #
 # GET /api/accounts/{account_id}/locations
 # operationId: AccountCtrl.getLocationsByAccountID
-export def "accounts-locations list" [
+export def "account-ctrl-get-locations-by-account-id" [
   account_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -194,7 +194,7 @@ export def "accounts-locations list" [
 #
 # GET /api/accounts/{account_id}/locations/{location_id}
 # operationId: AccountCtrl.getLocationByID
-export def "accounts-locations get" [
+export def "account-ctrl-get-location-by-id" [
   account_id: float
   location_id: float
   --base-url(-b): string@base-url-completer # API base URL

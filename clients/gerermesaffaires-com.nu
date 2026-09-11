@@ -151,7 +151,7 @@ def right-completer-1 [] { ["none" "read" "write"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "box-menus get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-box-menus" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -174,7 +174,7 @@ export def commands []: nothing -> table {
 # Returns predefined folders and workbooks of the Box for all the spaces
 #
 # GET /box/menus
-export def "box-menus get" [
+export def "get-box-menus" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -207,7 +207,7 @@ export def "box-menus get" [
 # Returns a list of groups custom ordered by name
 #
 # GET /business-groups
-export def "business-groups list" [
+export def "get-business-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -242,7 +242,7 @@ export def "business-groups list" [
 # Modifies an object
 #
 # PATCH /business-groups
-export def "business-groups update" [
+export def "patch-business-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -279,7 +279,7 @@ export def "business-groups update" [
 # Adds a group (only for managers and ADN collaborators)
 #
 # POST /business-groups
-export def "business-groups create" [
+export def "post-business-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -316,7 +316,7 @@ export def "business-groups create" [
 # Returns list of groups custom for managers
 #
 # GET /business-groups/all
-export def "business-groups-all get" [
+export def "get-business-groups-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -351,7 +351,7 @@ export def "business-groups-all get" [
 # Returns a group
 #
 # GET /business-groups/{id}
-export def "business-groups get" [
+export def "get-business-groups-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -386,7 +386,7 @@ export def "business-groups get" [
 # Returns spaces of the business group with id
 #
 # GET /business-groups/{id}/spaces
-export def "business-groups-spaces get" [
+export def "get-business-groups-id-spaces" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -425,7 +425,7 @@ export def "business-groups-spaces get" [
 # Remove a customer space from partner
 #
 # DELETE /business-groups/{id}/spaces/{spaceId}
-export def "business-groups-spaces delete" [
+export def "delete-business-groups-id-spaces-space-id" [
   id: string
   space_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -462,7 +462,7 @@ export def "business-groups-spaces delete" [
 # send an invitation to manager the private space of personId
 #
 # POST /business-groups/{id}/spaces/{spaceId}/legal-entities/{personId}/customers/{folderId}/guest-in-space
-export def "business-groups-spaces-legal-entities-customers-guest-in-space create" [
+export def "post-business-groups-id-spaces-space-id-legal-entities-person-id-customers-folder-id-guest-in-space" [
   id: string
   space_id: string
   person_id: string
@@ -509,7 +509,7 @@ export def "business-groups-spaces-legal-entities-customers-guest-in-space creat
 #
 # POST /business-groups/{id}/spaces/{spaceId}/legal-entities/{personId}/customers/{folderId}/spaces
 # --Logo shape: {Content64Encoded?: string, Name?: string}
-export def "business-groups-spaces-legal-entities-customers-spaces create" [
+export def "post-business-groups-id-spaces-space-id-legal-entities-person-id-customers-folder-id-spaces" [
   id: string
   space_id: string
   person_id: string
@@ -557,7 +557,7 @@ export def "business-groups-spaces-legal-entities-customers-spaces create" [
 # Returns predefined folders and workbooks of the Hub for all the spaces of the business group
 #
 # GET /hub/business-groups/{Id}/menus
-export def "hub-business-groups-menus get" [
+export def "get-hub-business-groups-id-menus" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -594,7 +594,7 @@ export def "hub-business-groups-menus get" [
 # POST /hub/documents
 # --Accounting shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
 # --File shape: {Content64Encoded?: string, Name?: string}
-export def "hub-documents create" [
+export def "post-hub-documents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -637,7 +637,7 @@ export def "hub-documents create" [
 # Returns predefined folders and workbooks of the Hub for all the spaces
 #
 # GET /hub/menus
-export def "hub-menus get" [
+export def "get-hub-menus" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -670,7 +670,7 @@ export def "hub-menus get" [
 # Returns predefined folders and workbooks of the Hub for all the spaces and customer spaces
 #
 # GET /hub/menus/all
-export def "hub-menus-all get" [
+export def "get-hub-menus-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -705,7 +705,7 @@ export def "hub-menus-all get" [
 # POST /hub/payslips
 # --Accounting shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
 # --File shape: {Content64Encoded?: string, Name?: string}
-export def "hub-payslips create" [
+export def "post-hub-payslips" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -750,7 +750,7 @@ export def "hub-payslips create" [
 # POST /hub/spaces/{spaceId}/documents
 # --Accounting shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
 # --File shape: {Content64Encoded?: string, Name?: string}
-export def "hub-spaces-documents create" [
+export def "post-hub-spaces-space-id-documents" [
   space_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -795,7 +795,7 @@ export def "hub-spaces-documents create" [
 # Returns predefined folders and workbooks of the Hub for the space
 #
 # GET /hub/spaces/{spaceId}/menus
-export def "hub-spaces-menus get" [
+export def "get-hub-spaces-space-id-menus" [
   space_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -832,7 +832,7 @@ export def "hub-spaces-menus get" [
 # POST /hub/spaces/{spaceId}/payslips
 # --Accounting shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
 # --File shape: {Content64Encoded?: string, Name?: string}
-export def "hub-spaces-payslips create" [
+export def "post-hub-spaces-space-id-payslips" [
   space_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -877,7 +877,7 @@ export def "hub-spaces-payslips create" [
 # Returns predefined entries
 #
 # GET /menus
-export def "menus get" [
+export def "get-menus" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -911,7 +911,7 @@ export def "menus get" [
 #
 # POST /menus/{menuId}/documents
 # --File shape: {Content64Encoded?: string, Name?: string}
-export def "menus-documents create" [
+export def "post-menus-menu-id-documents" [
   menu_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -954,7 +954,7 @@ export def "menus-documents create" [
 # Returns status of member
 #
 # GET /profile
-export def "profile get" [
+export def "get-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -991,7 +991,7 @@ export def "profile get" [
 # PATCH /profile
 # --Birth shape: {City?: string, Country?: string, Date?: string, ZipCode?: string}
 # --IDFile shape: {Content64Encoded?: string, Name?: string}
-export def "profile update" [
+export def "patch-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1036,7 +1036,7 @@ export def "profile update" [
 # POST /profile
 # --Birth shape: {City?: string, Country?: string, Date?: string, ZipCode?: string}
 # --IDFile shape: {Content64Encoded?: string, Name?: string}
-export def "profile create" [
+export def "post-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1079,7 +1079,7 @@ export def "profile create" [
 # modify email of profile
 #
 # PATCH /profile/email
-export def "profile-email update" [
+export def "patch-profile-email" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1118,7 +1118,7 @@ export def "profile-email update" [
 # Returns status of member
 #
 # GET /profile/id-file
-export def "profile-id-file get" [
+export def "get-profile-id-file" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1153,7 +1153,7 @@ export def "profile-id-file get" [
 # modify mobile of profile
 #
 # PATCH /profile/mobile
-export def "profile-mobile update" [
+export def "patch-profile-mobile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1192,7 +1192,7 @@ export def "profile-mobile update" [
 # Returns the method to get the validation code or the link to register after invitation
 #
 # GET /registration
-export def "registration get" [
+export def "get-registration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1227,7 +1227,7 @@ export def "registration get" [
 # complete the invitation
 #
 # POST /registration
-export def "registration create" [
+export def "post-registration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1265,7 +1265,7 @@ export def "registration create" [
 # Returns member id of user logged
 #
 # GET /session
-export def "session get" [
+export def "get-session" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1298,7 +1298,7 @@ export def "session get" [
 # Returns spaces of my group
 #
 # GET /spaces
-export def "spaces list" [
+export def "get-spaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1336,7 +1336,7 @@ export def "spaces list" [
 #
 # POST /spaces
 # --Logo shape: {Content64Encoded?: string, Name?: string}
-export def "spaces create" [
+export def "post-spaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1378,7 +1378,7 @@ export def "spaces create" [
 # Returns all spaces
 #
 # GET /spaces/all
-export def "spaces-all get" [
+export def "get-spaces-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1414,7 +1414,7 @@ export def "spaces-all get" [
 # Delete a Space (only space not delivered to customer)
 #
 # DELETE /spaces/{id}
-export def "spaces delete" [
+export def "delete-spaces-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1449,7 +1449,7 @@ export def "spaces delete" [
 # Returns a space
 #
 # GET /spaces/{id}
-export def "spaces get" [
+export def "get-spaces-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1485,7 +1485,7 @@ export def "spaces get" [
 #
 # PATCH /spaces/{id}
 # --Logo shape: {Content64Encoded?: string, Name?: string}
-export def "spaces update" [
+export def "patch-spaces-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1526,7 +1526,7 @@ export def "spaces update" [
 # Returns list of accounting years for the space {id}
 #
 # GET /spaces/{id}/accounting-year
-export def "spaces-accounting-year get" [
+export def "get-spaces-id-accounting-year" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1564,7 +1564,7 @@ export def "spaces-accounting-year get" [
 # Create a accounting year for the space id
 #
 # POST /spaces/{id}/accounting-year
-export def "spaces-accounting-year create" [
+export def "post-spaces-id-accounting-year" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1614,7 +1614,7 @@ export def "spaces-accounting-year create" [
 # Returns list of collective decisions for the space {id}
 #
 # GET /spaces/{id}/collective-decision
-export def "spaces-collective-decision get" [
+export def "get-spaces-id-collective-decision" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1657,7 +1657,7 @@ export def "spaces-collective-decision get" [
 # Create a colletive decision for the space id
 #
 # POST /spaces/{id}/collective-decision
-export def "spaces-collective-decision create" [
+export def "post-spaces-id-collective-decision" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1704,7 +1704,7 @@ export def "spaces-collective-decision create" [
 # Returns list of company entities
 #
 # GET /spaces/{id}/company-entities
-export def "spaces-company-entities list" [
+export def "get-spaces-id-company-entities" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1743,7 +1743,7 @@ export def "spaces-company-entities list" [
 # Add a Company Entity in a Space
 #
 # POST /spaces/{id}/company-entities
-export def "spaces-company-entities create" [
+export def "post-spaces-id-company-entities" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1790,7 +1790,7 @@ export def "spaces-company-entities create" [
 # Returns list of company entities even company entities archived
 #
 # GET /spaces/{id}/company-entities/all
-export def "spaces-company-entities-all get" [
+export def "get-spaces-id-company-entities-all" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1828,7 +1828,7 @@ export def "spaces-company-entities-all get" [
 # Returns a compay entity
 #
 # GET /spaces/{id}/company-entities/{companyId}
-export def "spaces-company-entities get" [
+export def "get-spaces-id-company-entities-company-id" [
   id: string
   company_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1865,7 +1865,7 @@ export def "spaces-company-entities get" [
 # Modify a company entity
 #
 # PATCH /spaces/{id}/company-entities/{companyId}
-export def "spaces-company-entities update" [
+export def "patch-spaces-id-company-entities-company-id" [
   id: string
   company_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1914,7 +1914,7 @@ export def "spaces-company-entities update" [
 # Returns all details of a company entity
 #
 # GET /spaces/{id}/company-entities/{personId}/details
-export def "spaces-company-entities-details get" [
+export def "get-spaces-id-company-entities-person-id-details" [
   id: string
   person_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1952,7 +1952,7 @@ export def "spaces-company-entities-details get" [
 #
 # POST /spaces/{id}/company-entities/{personId}/details
 # --Address shape: {City?: string, Complement?: string, Country?: string, Street?: string, ZipCode?: string}
-export def "spaces-company-entities-details create" [
+export def "post-spaces-id-company-entities-person-id-details" [
   id: string
   person_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1996,7 +1996,7 @@ export def "spaces-company-entities-details create" [
 # delete a contact detail for a company entity
 #
 # DELETE /spaces/{id}/company-entities/{personId}/details/{designation}
-export def "spaces-company-entities-details delete" [
+export def "delete-spaces-id-company-entities-person-id-details-designation" [
   id: string
   person_id: string
   designation: string
@@ -2035,7 +2035,7 @@ export def "spaces-company-entities-details delete" [
 # create an archive with documents
 #
 # POST /spaces/{id}/documents/download
-export def "spaces-documents-download create" [
+export def "post-spaces-id-documents-download" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2075,7 +2075,7 @@ export def "spaces-documents-download create" [
 # return the access of a person in a customer contract
 #
 # GET /spaces/{id}/folders/{folderId}/persons/{memberId}
-export def "spaces-folders-persons get" [
+export def "get-spaces-id-folders-folder-id-persons-member-id" [
   id: string
   folder_id: string
   member_id: string
@@ -2114,7 +2114,7 @@ export def "spaces-folders-persons get" [
 # Add/Modify/Delete a person in a customer contract (except manager)
 #
 # PATCH /spaces/{id}/folders/{folderId}/persons/{memberId}
-export def "spaces-folders-persons update" [
+export def "patch-spaces-id-folders-folder-id-persons-member-id" [
   id: string
   folder_id: string
   member_id: string
@@ -2159,7 +2159,7 @@ export def "spaces-folders-persons update" [
 # open an access
 #
 # PATCH /spaces/{id}/folders/{folderId}/persons/{memberId}/activeaccess
-export def "spaces-folders-persons-activeaccess update" [
+export def "patch-spaces-id-folders-folder-id-persons-member-id-activeaccess" [
   id: string
   folder_id: string
   member_id: string
@@ -2198,7 +2198,7 @@ export def "spaces-folders-persons-activeaccess update" [
 # close an access
 #
 # PATCH /spaces/{id}/folders/{folderId}/persons/{memberId}/unactiveaccess
-export def "spaces-folders-persons-unactiveaccess update" [
+export def "patch-spaces-id-folders-folder-id-persons-member-id-unactiveaccess" [
   id: string
   folder_id: string
   member_id: string
@@ -2237,7 +2237,7 @@ export def "spaces-folders-persons-unactiveaccess update" [
 # invite a owner in a space
 #
 # POST /spaces/{id}/folders/{folderId}/persons/{personId}/guest-in-space
-export def "spaces-folders-persons-guest-in-space create" [
+export def "post-spaces-id-folders-folder-id-persons-person-id-guest-in-space" [
   id: string
   folder_id: string
   person_id: string
@@ -2280,7 +2280,7 @@ export def "spaces-folders-persons-guest-in-space create" [
 # Returns list of groups
 #
 # GET /spaces/{id}/groups
-export def "spaces-groups list" [
+export def "get-spaces-id-groups" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2317,7 +2317,7 @@ export def "spaces-groups list" [
 # Add a group in a Space
 #
 # POST /spaces/{id}/groups
-export def "spaces-groups create" [
+export def "post-spaces-id-groups" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2357,7 +2357,7 @@ export def "spaces-groups create" [
 # Returns list of groups even archived of the space
 #
 # GET /spaces/{id}/groups/all
-export def "spaces-groups-all get" [
+export def "get-spaces-id-groups-all" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2394,7 +2394,7 @@ export def "spaces-groups-all get" [
 # Returns a group
 #
 # GET /spaces/{id}/groups/{groupId}
-export def "spaces-groups get" [
+export def "get-spaces-id-groups-group-id" [
   id: string
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2431,7 +2431,7 @@ export def "spaces-groups get" [
 # Modify a group
 #
 # PATCH /spaces/{id}/groups/{groupId}
-export def "spaces-groups update" [
+export def "patch-spaces-id-groups-group-id" [
   id: string
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2473,7 +2473,7 @@ export def "spaces-groups update" [
 # delete access to a folder for a group
 #
 # DELETE /spaces/{id}/groups/{groupId}/folders/{folderId}
-export def "spaces-groups-folders delete" [
+export def "delete-spaces-id-groups-group-id-folders-folder-id" [
   id: string
   group_id: string
   folder_id: string
@@ -2512,7 +2512,7 @@ export def "spaces-groups-folders delete" [
 # Add access to a folder for a group
 #
 # PATCH /spaces/{id}/groups/{groupId}/folders/{folderId}
-export def "spaces-groups-folders update" [
+export def "patch-spaces-id-groups-group-id-folders-folder-id" [
   id: string
   group_id: string
   folder_id: string
@@ -2555,7 +2555,7 @@ export def "spaces-groups-folders update" [
 # Delete a person of a group
 #
 # DELETE /spaces/{id}/groups/{groupId}/persons/{memberId}
-export def "spaces-groups-persons delete" [
+export def "delete-spaces-id-groups-group-id-persons-member-id" [
   id: string
   group_id: string
   member_id: string
@@ -2594,7 +2594,7 @@ export def "spaces-groups-persons delete" [
 # Add a person to a group
 #
 # PATCH /spaces/{id}/groups/{groupId}/persons/{memberId}
-export def "spaces-groups-persons update" [
+export def "patch-spaces-id-groups-group-id-persons-member-id" [
   id: string
   group_id: string
   member_id: string
@@ -2633,7 +2633,7 @@ export def "spaces-groups-persons update" [
 # Returns legal information of a space (except private)
 #
 # GET /spaces/{id}/legal
-export def "spaces-legal get" [
+export def "get-spaces-id-legal" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2668,7 +2668,7 @@ export def "spaces-legal get" [
 # Modify legal information of a Space (except private)
 #
 # PATCH /spaces/{id}/legal
-export def "spaces-legal update" [
+export def "patch-spaces-id-legal" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2710,7 +2710,7 @@ export def "spaces-legal update" [
 # Returns a space with the logo
 #
 # GET /spaces/{id}/logo
-export def "spaces-logo get" [
+export def "get-spaces-id-logo" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2745,7 +2745,7 @@ export def "spaces-logo get" [
 # Returns list of persons
 #
 # GET /spaces/{id}/persons
-export def "spaces-persons list" [
+export def "get-spaces-id-persons" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2788,7 +2788,7 @@ export def "spaces-persons list" [
 # POST /spaces/{id}/persons
 # --Address shape: {City?: string, Complement?: string, Country?: string, Street?: string, ZipCode?: string}
 # --Birth shape: {Date?: int, Place?: string}
-export def "spaces-persons create" [
+export def "post-spaces-id-persons" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2835,7 +2835,7 @@ export def "spaces-persons create" [
 # Returns list of persons even persons archived
 #
 # GET /spaces/{id}/persons/all
-export def "spaces-persons-all get" [
+export def "get-spaces-id-persons-all" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2876,7 +2876,7 @@ export def "spaces-persons-all get" [
 # Modify the role of a person
 #
 # PATCH /spaces/{id}/persons/{memberId}/player
-export def "spaces-persons-player update" [
+export def "patch-spaces-id-persons-member-id-player" [
   id: string
   member_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2920,7 +2920,7 @@ export def "spaces-persons-player update" [
 # delete a person
 #
 # DELETE /spaces/{id}/persons/{personId}
-export def "spaces-persons delete" [
+export def "delete-spaces-id-persons-person-id" [
   id: string
   person_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2957,7 +2957,7 @@ export def "spaces-persons delete" [
 # Returns a person
 #
 # GET /spaces/{id}/persons/{personId}
-export def "spaces-persons get" [
+export def "get-spaces-id-persons-person-id" [
   id: string
   person_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2996,7 +2996,7 @@ export def "spaces-persons get" [
 # PATCH /spaces/{id}/persons/{personId}
 # --Address shape: {City?: string, Complement?: string, Country?: string, Street?: string, ZipCode?: string}
 # --Birth shape: {Date?: int, Place?: string}
-export def "spaces-persons update" [
+export def "patch-spaces-id-persons-person-id" [
   id: string
   person_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3045,7 +3045,7 @@ export def "spaces-persons update" [
 # Returns all details of a person
 #
 # GET /spaces/{id}/persons/{personId}/details
-export def "spaces-persons-details get" [
+export def "get-spaces-id-persons-person-id-details" [
   id: string
   person_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3083,7 +3083,7 @@ export def "spaces-persons-details get" [
 #
 # POST /spaces/{id}/persons/{personId}/details
 # --Address shape: {City?: string, Complement?: string, Country?: string, Street?: string, ZipCode?: string}
-export def "spaces-persons-details create" [
+export def "post-spaces-id-persons-person-id-details" [
   id: string
   person_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3127,7 +3127,7 @@ export def "spaces-persons-details create" [
 # delete a contact detail for a person
 #
 # DELETE /spaces/{id}/persons/{personId}/details/{designation}
-export def "spaces-persons-details delete" [
+export def "delete-spaces-id-persons-person-id-details-designation" [
   id: string
   person_id: string
   designation: string
@@ -3166,7 +3166,7 @@ export def "spaces-persons-details delete" [
 # Returns list of folders with exceptionnal access of the person personId
 #
 # GET /spaces/{id}/persons/{personId}/folders
-export def "spaces-persons-folders list" [
+export def "get-spaces-id-persons-person-id-folders" [
   id: string
   person_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3205,7 +3205,7 @@ export def "spaces-persons-folders list" [
 # Returns list of groups of the person personId
 #
 # GET /spaces/{id}/persons/{personId}/groups
-export def "spaces-persons-groups get" [
+export def "get-spaces-id-persons-person-id-groups" [
   id: string
   person_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3242,7 +3242,7 @@ export def "spaces-persons-groups get" [
 # Returns list of portfolios of the person personId
 #
 # GET /spaces/{id}/persons/{personId}/portfolios
-export def "spaces-persons-portfolios get" [
+export def "get-spaces-id-persons-person-id-portfolios" [
   id: string
   person_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3279,7 +3279,7 @@ export def "spaces-persons-portfolios get" [
 # Create a portfolio for the person personId
 #
 # POST /spaces/{id}/persons/{personId}/portfolios
-export def "spaces-persons-portfolios create" [
+export def "post-spaces-id-persons-person-id-portfolios" [
   id: string
   person_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3326,7 +3326,7 @@ export def "spaces-persons-portfolios create" [
 # Add/Modify/Delete a person in a portfolio (except manager)
 #
 # PATCH /spaces/{id}/portfolios/{portfolioId}/persons/{memberId}
-export def "spaces-portfolios-persons update" [
+export def "patch-spaces-id-portfolios-portfolio-id-persons-member-id" [
   id: string
   portfolio_id: string
   member_id: string
@@ -3372,7 +3372,7 @@ export def "spaces-portfolios-persons update" [
 # Returns list of professionalvehicles for the space {id}
 #
 # GET /spaces/{id}/professional-vehicles
-export def "spaces-professional-vehicles get" [
+export def "get-spaces-id-professional-vehicles" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3409,7 +3409,7 @@ export def "spaces-professional-vehicles get" [
 # Create a professional vehicle for the space
 #
 # POST /spaces/{id}/professional-vehicles
-export def "spaces-professional-vehicles create" [
+export def "post-spaces-id-professional-vehicles" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3462,7 +3462,7 @@ export def "spaces-professional-vehicles create" [
 # Returns state of activation of logs
 #
 # GET /spaces/{id}/settings/nf203/logs
-export def "spaces-settings-nf203-logs get" [
+export def "get-spaces-id-settings-nf203-logs" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3497,7 +3497,7 @@ export def "spaces-settings-nf203-logs get" [
 # Enable/Disable logs
 #
 # POST /spaces/{id}/settings/nf203/logs
-export def "spaces-settings-nf203-logs create" [
+export def "post-spaces-id-settings-nf203-logs" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3536,7 +3536,7 @@ export def "spaces-settings-nf203-logs create" [
 # Returns all status of the space
 #
 # GET /spaces/{id}/status
-export def "spaces-status get" [
+export def "get-spaces-id-status" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3571,7 +3571,7 @@ export def "spaces-status get" [
 # Replace or Add a status
 #
 # POST /spaces/{id}/status
-export def "spaces-status create" [
+export def "post-spaces-id-status" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3612,7 +3612,7 @@ export def "spaces-status create" [
 # delete a status of the space
 #
 # DELETE /spaces/{id}/status/{code}
-export def "spaces-status delete" [
+export def "delete-spaces-id-status-code" [
   id: string
   code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3649,7 +3649,7 @@ export def "spaces-status delete" [
 # Returns list of tax contracts for the space {id}
 #
 # GET /spaces/{id}/tax-contracts
-export def "spaces-tax-contracts get" [
+export def "get-spaces-id-tax-contracts" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3684,7 +3684,7 @@ export def "spaces-tax-contracts get" [
 # Create a tax contract for the space
 #
 # POST /spaces/{id}/tax-contracts
-export def "spaces-tax-contracts create" [
+export def "post-spaces-id-tax-contracts" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3730,7 +3730,7 @@ export def "spaces-tax-contracts create" [
 # Returns list of triggers for the space {id}
 #
 # GET /spaces/{id}/triggers
-export def "spaces-triggers get" [
+export def "get-spaces-id-triggers" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3765,7 +3765,7 @@ export def "spaces-triggers get" [
 # Deletes a trigger for the space id
 #
 # DELETE /spaces/{id}/triggers/{name}
-export def "spaces-triggers delete" [
+export def "delete-spaces-id-triggers-name" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3802,7 +3802,7 @@ export def "spaces-triggers delete" [
 # Creates a trigger for the space id
 #
 # POST /spaces/{id}/triggers/{name}
-export def "spaces-triggers create" [
+export def "post-spaces-id-triggers-name" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3839,7 +3839,7 @@ export def "spaces-triggers create" [
 # Delete a common folder
 #
 # DELETE /spaces/{spaceId}/common-folders/{id}
-export def "spaces-common-folders delete" [
+export def "delete-spaces-space-id-common-folders-id" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3876,7 +3876,7 @@ export def "spaces-common-folders delete" [
 # Modify a common folder
 #
 # PATCH /spaces/{spaceId}/common-folders/{id}
-export def "spaces-common-folders update" [
+export def "patch-spaces-space-id-common-folders-id" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3922,7 +3922,7 @@ export def "spaces-common-folders update" [
 # Returns folder of the company entity
 #
 # GET /spaces/{spaceId}/company-entities/{id}/follow-ups
-export def "spaces-company-entities-follow-ups get" [
+export def "get-spaces-space-id-company-entities-id-follow-ups" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3959,7 +3959,7 @@ export def "spaces-company-entities-follow-ups get" [
 # Returns folder with Id and customer data
 #
 # GET /spaces/{spaceId}/customers
-export def "spaces-customers get" [
+export def "get-spaces-space-id-customers" [
   space_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3997,7 +3997,7 @@ export def "spaces-customers get" [
 # Returns folder with Id and customer data (even archived)
 #
 # GET /spaces/{spaceId}/customers/all
-export def "spaces-customers-all get" [
+export def "get-spaces-space-id-customers-all" [
   space_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4035,7 +4035,7 @@ export def "spaces-customers-all get" [
 # Returns documents of the folder
 #
 # GET /spaces/{spaceId}/documents
-export def "spaces-documents get" [
+export def "get-spaces-space-id-documents" [
   space_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4075,7 +4075,7 @@ export def "spaces-documents get" [
 #
 # PATCH /spaces/{spaceId}/documents/{documentId}
 # --Accounting shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
-export def "spaces-documents update" [
+export def "patch-spaces-space-id-documents-document-id" [
   space_id: string
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4121,7 +4121,7 @@ export def "spaces-documents update" [
 # read the data of a document
 #
 # GET /spaces/{spaceId}/documents/{documentId}/extend
-export def "spaces-documents-extend get" [
+export def "get-spaces-space-id-documents-document-id-extend" [
   space_id: string
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4158,7 +4158,7 @@ export def "spaces-documents-extend get" [
 # Add a data to a document
 #
 # POST /spaces/{spaceId}/documents/{documentId}/extend
-export def "spaces-documents-extend create" [
+export def "post-spaces-space-id-documents-document-id-extend" [
   space_id: string
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4199,7 +4199,7 @@ export def "spaces-documents-extend create" [
 # Returns versions of the document
 #
 # GET /spaces/{spaceId}/documents/{documentId}/folders
-export def "spaces-documents-folders get" [
+export def "get-spaces-space-id-documents-document-id-folders" [
   space_id: string
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4237,7 +4237,7 @@ export def "spaces-documents-folders get" [
 #
 # POST /spaces/{spaceId}/documents/{documentId}/mailing
 # --Address shape: {City?: string, Complement?: string, Country?: string, Street?: string, ZipCode?: string}
-export def "spaces-documents-mailing create" [
+export def "post-spaces-space-id-documents-document-id-mailing" [
   space_id: string
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4279,7 +4279,7 @@ export def "spaces-documents-mailing create" [
 # returns the number of pages and the price of the pdf to send by mail
 #
 # GET /spaces/{spaceId}/documents/{documentId}/mailingprice
-export def "spaces-documents-mailingprice get" [
+export def "get-spaces-space-id-documents-document-id-mailingprice" [
   space_id: string
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4316,7 +4316,7 @@ export def "spaces-documents-mailingprice get" [
 # Returns versions of the document
 #
 # GET /spaces/{spaceId}/documents/{documentId}/versions
-export def "spaces-documents-versions get" [
+export def "get-spaces-space-id-documents-document-id-versions" [
   space_id: string
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4354,7 +4354,7 @@ export def "spaces-documents-versions get" [
 #
 # POST /spaces/{spaceId}/documents/{documentId}/versions
 # --File shape: {Content64Encoded?: string, Name?: string}
-export def "spaces-documents-versions create" [
+export def "post-spaces-space-id-documents-document-id-versions" [
   space_id: string
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4400,7 +4400,7 @@ export def "spaces-documents-versions create" [
 # Returns current version of the document
 #
 # GET /spaces/{spaceId}/documents/{documentId}/versions/current
-export def "spaces-documents-versions-current get" [
+export def "get-spaces-space-id-documents-document-id-versions-current" [
   space_id: string
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4437,7 +4437,7 @@ export def "spaces-documents-versions-current get" [
 # Returns accesses of one document
 #
 # GET /spaces/{spaceId}/documents/{id}/access
-export def "spaces-documents-access get" [
+export def "get-spaces-space-id-documents-id-access" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4474,7 +4474,7 @@ export def "spaces-documents-access get" [
 # Returns the document with the accounting property
 #
 # GET /spaces/{spaceId}/documents/{id}/accounting
-export def "spaces-documents-accounting get" [
+export def "get-spaces-space-id-documents-id-accounting" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4511,7 +4511,7 @@ export def "spaces-documents-accounting get" [
 # Returns content of one document
 #
 # GET /spaces/{spaceId}/documents/{id}/download
-export def "spaces-documents-download get" [
+export def "get-spaces-space-id-documents-id-download" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4548,7 +4548,7 @@ export def "spaces-documents-download get" [
 # Returns folders with Id and employee data
 #
 # GET /spaces/{spaceId}/employees
-export def "spaces-employees get" [
+export def "get-spaces-space-id-employees" [
   space_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4587,7 +4587,7 @@ export def "spaces-employees get" [
 # Returns folders with Id and employee data (even archived)
 #
 # GET /spaces/{spaceId}/employees/all
-export def "spaces-employees-all get" [
+export def "get-spaces-space-id-employees-all" [
   space_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4626,7 +4626,7 @@ export def "spaces-employees-all get" [
 # Returns folders with Id and employer data
 #
 # GET /spaces/{spaceId}/employers
-export def "spaces-employers get" [
+export def "get-spaces-space-id-employers" [
   space_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4664,7 +4664,7 @@ export def "spaces-employers get" [
 # Returns folders with Id and employer data (even archived)
 #
 # GET /spaces/{spaceId}/employers/all
-export def "spaces-employers-all get" [
+export def "get-spaces-space-id-employers-all" [
   space_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4702,7 +4702,7 @@ export def "spaces-employers-all get" [
 # read the data of a space
 #
 # GET /spaces/{spaceId}/extend
-export def "spaces-extend get" [
+export def "get-spaces-space-id-extend" [
   space_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4737,7 +4737,7 @@ export def "spaces-extend get" [
 # Add a data to a space
 #
 # POST /spaces/{spaceId}/extend
-export def "spaces-extend create" [
+export def "post-spaces-space-id-extend" [
   space_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4776,7 +4776,7 @@ export def "spaces-extend create" [
 # Returns folders of the space
 #
 # GET /spaces/{spaceId}/folders
-export def "spaces-folders get-by-space-id" [
+export def "get-spaces-space-id-folders" [
   space_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4817,7 +4817,7 @@ export def "spaces-folders get-by-space-id" [
 # Returns folders of the space (even archived)
 #
 # GET /spaces/{spaceId}/folders/all
-export def "spaces-folders-all get" [
+export def "get-spaces-space-id-folders-all" [
   space_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4857,7 +4857,7 @@ export def "spaces-folders-all get" [
 # delete a bank statement
 #
 # DELETE /spaces/{spaceId}/folders/{folderId}/bank-statements/{documentId}
-export def "spaces-folders-bank-statements delete" [
+export def "delete-spaces-space-id-folders-folder-id-bank-statements-document-id" [
   space_id: string
   folder_id: string
   document_id: string
@@ -4896,7 +4896,7 @@ export def "spaces-folders-bank-statements delete" [
 # modify a bank statement
 #
 # PATCH /spaces/{spaceId}/folders/{folderId}/bank-statements/{documentId}
-export def "spaces-folders-bank-statements update" [
+export def "patch-spaces-space-id-folders-folder-id-bank-statements-document-id" [
   space_id: string
   folder_id: string
   document_id: string
@@ -4941,7 +4941,7 @@ export def "spaces-folders-bank-statements update" [
 # delete a contractual document
 #
 # DELETE /spaces/{spaceId}/folders/{folderId}/contractual-documents/{documentId}
-export def "spaces-folders-contractual-documents delete" [
+export def "delete-spaces-space-id-folders-folder-id-contractual-documents-document-id" [
   space_id: string
   folder_id: string
   document_id: string
@@ -4980,7 +4980,7 @@ export def "spaces-folders-contractual-documents delete" [
 # modify a contractual document
 #
 # PATCH /spaces/{spaceId}/folders/{folderId}/contractual-documents/{documentId}
-export def "spaces-folders-contractual-documents update" [
+export def "patch-spaces-space-id-folders-folder-id-contractual-documents-document-id" [
   space_id: string
   folder_id: string
   document_id: string
@@ -5027,7 +5027,7 @@ export def "spaces-folders-contractual-documents update" [
 # delete a corporate tax declaration
 #
 # DELETE /spaces/{spaceId}/folders/{folderId}/corporate-tax-declarations/{documentId}
-export def "spaces-folders-corporate-tax-declarations delete" [
+export def "delete-spaces-space-id-folders-folder-id-corporate-tax-declarations-document-id" [
   space_id: string
   folder_id: string
   document_id: string
@@ -5066,7 +5066,7 @@ export def "spaces-folders-corporate-tax-declarations delete" [
 # modify a coporate tax declaration
 #
 # PATCH /spaces/{spaceId}/folders/{folderId}/corporate-tax-declarations/{documentId}
-export def "spaces-folders-corporate-tax-declarations update" [
+export def "patch-spaces-space-id-folders-folder-id-corporate-tax-declarations-document-id" [
   space_id: string
   folder_id: string
   document_id: string
@@ -5113,7 +5113,7 @@ export def "spaces-folders-corporate-tax-declarations update" [
 # delete an expense proof
 #
 # DELETE /spaces/{spaceId}/folders/{folderId}/expense-proofs/{documentId}
-export def "spaces-folders-expense-proofs delete" [
+export def "delete-spaces-space-id-folders-folder-id-expense-proofs-document-id" [
   space_id: string
   folder_id: string
   document_id: string
@@ -5152,7 +5152,7 @@ export def "spaces-folders-expense-proofs delete" [
 # modify an expense report
 #
 # PATCH /spaces/{spaceId}/folders/{folderId}/expense-proofs/{documentId}
-export def "spaces-folders-expense-proofs update" [
+export def "patch-spaces-space-id-folders-folder-id-expense-proofs-document-id" [
   space_id: string
   folder_id: string
   document_id: string
@@ -5203,7 +5203,7 @@ export def "spaces-folders-expense-proofs update" [
 # delete an expense report
 #
 # DELETE /spaces/{spaceId}/folders/{folderId}/expense-reports/{documentId}
-export def "spaces-folders-expense-reports delete" [
+export def "delete-spaces-space-id-folders-folder-id-expense-reports-document-id" [
   space_id: string
   folder_id: string
   document_id: string
@@ -5242,7 +5242,7 @@ export def "spaces-folders-expense-reports delete" [
 # modify an expense report
 #
 # PATCH /spaces/{spaceId}/folders/{folderId}/expense-reports/{documentId}
-export def "spaces-folders-expense-reports update" [
+export def "patch-spaces-space-id-folders-folder-id-expense-reports-document-id" [
   space_id: string
   folder_id: string
   document_id: string
@@ -5289,7 +5289,7 @@ export def "spaces-folders-expense-reports update" [
 # delete an invoice document
 #
 # DELETE /spaces/{spaceId}/folders/{folderId}/invoices/{documentId}
-export def "spaces-folders-invoices delete" [
+export def "delete-spaces-space-id-folders-folder-id-invoices-document-id" [
   space_id: string
   folder_id: string
   document_id: string
@@ -5328,7 +5328,7 @@ export def "spaces-folders-invoices delete" [
 # modify a invoice
 #
 # PATCH /spaces/{spaceId}/folders/{folderId}/invoices/{documentId}
-export def "spaces-folders-invoices update" [
+export def "patch-spaces-space-id-folders-folder-id-invoices-document-id" [
   space_id: string
   folder_id: string
   document_id: string
@@ -5378,7 +5378,7 @@ export def "spaces-folders-invoices update" [
 # get a nominative social declaration
 #
 # GET /spaces/{spaceId}/folders/{folderId}/nominative-social-declarations/{documentId}
-export def "spaces-folders-nominative-social-declarations get" [
+export def "get-spaces-space-id-folders-folder-id-nominative-social-declarations-document-id" [
   space_id: string
   folder_id: string
   document_id: string
@@ -5417,7 +5417,7 @@ export def "spaces-folders-nominative-social-declarations get" [
 # delete a tax declaration
 #
 # DELETE /spaces/{spaceId}/folders/{folderId}/other-taxes/{documentId}
-export def "spaces-folders-other-taxes delete" [
+export def "delete-spaces-space-id-folders-folder-id-other-taxes-document-id" [
   space_id: string
   folder_id: string
   document_id: string
@@ -5456,7 +5456,7 @@ export def "spaces-folders-other-taxes delete" [
 # modify an other tax declaration
 #
 # PATCH /spaces/{spaceId}/folders/{folderId}/other-taxes/{documentId}
-export def "spaces-folders-other-taxes update" [
+export def "patch-spaces-space-id-folders-folder-id-other-taxes-document-id" [
   space_id: string
   folder_id: string
   document_id: string
@@ -5501,7 +5501,7 @@ export def "spaces-folders-other-taxes update" [
 # delete a payroll
 #
 # DELETE /spaces/{spaceId}/folders/{folderId}/payrolls/{documentId}
-export def "spaces-folders-payrolls delete" [
+export def "delete-spaces-space-id-folders-folder-id-payrolls-document-id" [
   space_id: string
   folder_id: string
   document_id: string
@@ -5540,7 +5540,7 @@ export def "spaces-folders-payrolls delete" [
 # modify a payroll
 #
 # PATCH /spaces/{spaceId}/folders/{folderId}/payrolls/{documentId}
-export def "spaces-folders-payrolls update" [
+export def "patch-spaces-space-id-folders-folder-id-payrolls-document-id" [
   space_id: string
   folder_id: string
   document_id: string
@@ -5588,7 +5588,7 @@ export def "spaces-folders-payrolls update" [
 # recalculate a payroll
 #
 # POST /spaces/{spaceId}/folders/{folderId}/payrolls/{documentId}/refresh
-export def "spaces-folders-payrolls-refresh create" [
+export def "post-spaces-space-id-folders-folder-id-payrolls-document-id-refresh" [
   space_id: string
   folder_id: string
   document_id: string
@@ -5627,7 +5627,7 @@ export def "spaces-folders-payrolls-refresh create" [
 # delete a payslip
 #
 # DELETE /spaces/{spaceId}/folders/{folderId}/payslips/{documentId}
-export def "spaces-folders-payslips delete" [
+export def "delete-spaces-space-id-folders-folder-id-payslips-document-id" [
   space_id: string
   folder_id: string
   document_id: string
@@ -5666,7 +5666,7 @@ export def "spaces-folders-payslips delete" [
 # modify a payslip
 #
 # PATCH /spaces/{spaceId}/folders/{folderId}/payslips/{documentId}
-export def "spaces-folders-payslips update" [
+export def "patch-spaces-space-id-folders-folder-id-payslips-document-id" [
   space_id: string
   folder_id: string
   document_id: string
@@ -5717,7 +5717,7 @@ export def "spaces-folders-payslips update" [
 # delete a social contract
 #
 # DELETE /spaces/{spaceId}/folders/{folderId}/social-contracts/{documentId}
-export def "spaces-folders-social-contracts delete" [
+export def "delete-spaces-space-id-folders-folder-id-social-contracts-document-id" [
   space_id: string
   folder_id: string
   document_id: string
@@ -5756,7 +5756,7 @@ export def "spaces-folders-social-contracts delete" [
 # modify a social contract
 #
 # PATCH /spaces/{spaceId}/folders/{folderId}/social-contracts/{documentId}
-export def "spaces-folders-social-contracts update" [
+export def "patch-spaces-space-id-folders-folder-id-social-contracts-document-id" [
   space_id: string
   folder_id: string
   document_id: string
@@ -5803,7 +5803,7 @@ export def "spaces-folders-social-contracts update" [
 # delete a social declaration
 #
 # DELETE /spaces/{spaceId}/folders/{folderId}/social-declarations/{documentId}
-export def "spaces-folders-social-declarations delete" [
+export def "delete-spaces-space-id-folders-folder-id-social-declarations-document-id" [
   space_id: string
   folder_id: string
   document_id: string
@@ -5842,7 +5842,7 @@ export def "spaces-folders-social-declarations delete" [
 # modify a social declaration
 #
 # PATCH /spaces/{spaceId}/folders/{folderId}/social-declarations/{documentId}
-export def "spaces-folders-social-declarations update" [
+export def "patch-spaces-space-id-folders-folder-id-social-declarations-document-id" [
   space_id: string
   folder_id: string
   document_id: string
@@ -5886,7 +5886,7 @@ export def "spaces-folders-social-declarations update" [
 # delete a VAT declaration
 #
 # DELETE /spaces/{spaceId}/folders/{folderId}/vat-declarations/{documentId}
-export def "spaces-folders-vat-declarations delete" [
+export def "delete-spaces-space-id-folders-folder-id-vat-declarations-document-id" [
   space_id: string
   folder_id: string
   document_id: string
@@ -5925,7 +5925,7 @@ export def "spaces-folders-vat-declarations delete" [
 # modify a vat declaration
 #
 # PATCH /spaces/{spaceId}/folders/{folderId}/vat-declarations/{documentId}
-export def "spaces-folders-vat-declarations update" [
+export def "patch-spaces-space-id-folders-folder-id-vat-declarations-document-id" [
   space_id: string
   folder_id: string
   document_id: string
@@ -5976,7 +5976,7 @@ export def "spaces-folders-vat-declarations update" [
 # Returns folder with Id
 #
 # GET /spaces/{spaceId}/folders/{id}
-export def "spaces-folders get-by-space-id-1" [
+export def "get-spaces-space-id-folders-id" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6013,7 +6013,7 @@ export def "spaces-folders get-by-space-id-1" [
 # Modify a Folder (except Name, Class, ModificationDate and ArchivalDate)
 #
 # PATCH /spaces/{spaceId}/folders/{id}
-export def "spaces-folders update" [
+export def "patch-spaces-space-id-folders-id" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6057,7 +6057,7 @@ export def "spaces-folders update" [
 # delete an AccountingYear
 #
 # DELETE /spaces/{spaceId}/folders/{id}/accounting-year
-export def "spaces-folders-accounting-year delete" [
+export def "delete-spaces-space-id-folders-id-accounting-year" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6094,7 +6094,7 @@ export def "spaces-folders-accounting-year delete" [
 # Modify a Folder (except Name, Class, ModificationDate and ArchivalDate) and AccountingYear data
 #
 # PATCH /spaces/{spaceId}/folders/{id}/accounting-year
-export def "spaces-folders-accounting-year update" [
+export def "patch-spaces-space-id-folders-id-accounting-year" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6146,7 +6146,7 @@ export def "spaces-folders-accounting-year update" [
 # Returns accountings documents of the folder (results and taxation or accountingyear)
 #
 # GET /spaces/{spaceId}/folders/{id}/accountings
-export def "spaces-folders-accountings get" [
+export def "get-spaces-space-id-folders-id-accountings" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6192,7 +6192,7 @@ export def "spaces-folders-accountings get" [
 # journal of accountings document delivered to a customer
 #
 # GET /spaces/{spaceId}/folders/{id}/accountings-journal
-export def "spaces-folders-accountings-journal get" [
+export def "get-spaces-space-id-folders-id-accountings-journal" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6238,7 +6238,7 @@ export def "spaces-folders-accountings-journal get" [
 # Delete a Folder (except Name, Class, ModificationDate and ArchivalDate) and Bank data
 #
 # DELETE /spaces/{spaceId}/folders/{id}/bank
-export def "spaces-folders-bank delete" [
+export def "delete-spaces-space-id-folders-id-bank" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6275,7 +6275,7 @@ export def "spaces-folders-bank delete" [
 # Returns folder with Id and bank data
 #
 # GET /spaces/{spaceId}/folders/{id}/bank
-export def "spaces-folders-bank get" [
+export def "get-spaces-space-id-folders-id-bank" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6312,7 +6312,7 @@ export def "spaces-folders-bank get" [
 # Modify a Folder (except Name, Class, ModificationDate and ArchivalDate) and Bank data
 #
 # PATCH /spaces/{spaceId}/folders/{id}/bank
-export def "spaces-folders-bank update" [
+export def "patch-spaces-space-id-folders-id-bank" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6361,7 +6361,7 @@ export def "spaces-folders-bank update" [
 # Returns bank statements of the folder bank
 #
 # GET /spaces/{spaceId}/folders/{id}/bank-statements
-export def "spaces-folders-bank-statements get" [
+export def "get-spaces-space-id-folders-id-bank-statements" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6404,7 +6404,7 @@ export def "spaces-folders-bank-statements get" [
 # POST /spaces/{spaceId}/folders/{id}/bank-statements
 # --Accounting shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
 # --File shape: {Content64Encoded?: string, Name?: string}
-export def "spaces-folders-bank-statements create" [
+export def "post-spaces-space-id-folders-id-bank-statements" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6455,7 +6455,7 @@ export def "spaces-folders-bank-statements create" [
 # Modify a Folder (except Name, Class, ModificationDate and ArchivalDate) and Collective Decision data
 #
 # PATCH /spaces/{spaceId}/folders/{id}/collective-decision
-export def "spaces-folders-collective-decision update" [
+export def "patch-spaces-space-id-folders-id-collective-decision" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6504,7 +6504,7 @@ export def "spaces-folders-collective-decision update" [
 # Returns common folders of a folder
 #
 # GET /spaces/{spaceId}/folders/{id}/common-folders
-export def "spaces-folders-common-folders get" [
+export def "get-spaces-space-id-folders-id-common-folders" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6544,7 +6544,7 @@ export def "spaces-folders-common-folders get" [
 # Add a common folder in another folder
 #
 # POST /spaces/{spaceId}/folders/{id}/common-folders
-export def "spaces-folders-common-folders create" [
+export def "post-spaces-space-id-folders-id-common-folders" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6591,7 +6591,7 @@ export def "spaces-folders-common-folders create" [
 # Returns common folders (even archived) of a folder
 #
 # GET /spaces/{spaceId}/folders/{id}/common-folders/all
-export def "spaces-folders-common-folders-all get" [
+export def "get-spaces-space-id-folders-id-common-folders-all" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6631,7 +6631,7 @@ export def "spaces-folders-common-folders-all get" [
 # Returns all contracting partners of a contract
 #
 # GET /spaces/{spaceId}/folders/{id}/contracting-partner
-export def "spaces-folders-contracting-partner get" [
+export def "get-spaces-space-id-folders-id-contracting-partner" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6668,7 +6668,7 @@ export def "spaces-folders-contracting-partner get" [
 # Returns collector space of a contract
 #
 # GET /spaces/{spaceId}/folders/{id}/contracting-partner/space
-export def "spaces-folders-contracting-partner-space get" [
+export def "get-spaces-space-id-folders-id-contracting-partner-space" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6705,7 +6705,7 @@ export def "spaces-folders-contracting-partner-space get" [
 # Returns documents of the folder
 #
 # GET /spaces/{spaceId}/folders/{id}/contractual-documents
-export def "spaces-folders-contractual-documents get" [
+export def "get-spaces-space-id-folders-id-contractual-documents" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6749,7 +6749,7 @@ export def "spaces-folders-contractual-documents get" [
 # POST /spaces/{spaceId}/folders/{id}/contractual-documents
 # --Accounting shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
 # --File shape: {Content64Encoded?: string, Name?: string}
-export def "spaces-folders-contractual-documents create" [
+export def "post-spaces-space-id-folders-id-contractual-documents" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6802,7 +6802,7 @@ export def "spaces-folders-contractual-documents create" [
 # Returns folder with Id and contractual-relationship data
 #
 # GET /spaces/{spaceId}/folders/{id}/contractual-relationship
-export def "spaces-folders-contractual-relationship get" [
+export def "get-spaces-space-id-folders-id-contractual-relationship" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6839,7 +6839,7 @@ export def "spaces-folders-contractual-relationship get" [
 # Returns corporate tax declarations
 #
 # GET /spaces/{spaceId}/folders/{id}/coporate-tax-declarations
-export def "spaces-folders-coporate-tax-declarations get" [
+export def "get-spaces-space-id-folders-id-coporate-tax-declarations" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6881,7 +6881,7 @@ export def "spaces-folders-coporate-tax-declarations get" [
 # POST /spaces/{spaceId}/folders/{id}/coporate-tax-declarations
 # --Accounting shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
 # --File shape: {Content64Encoded?: string, Name?: string}
-export def "spaces-folders-coporate-tax-declarations create" [
+export def "post-spaces-space-id-folders-id-coporate-tax-declarations" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6934,7 +6934,7 @@ export def "spaces-folders-coporate-tax-declarations create" [
 # delete a customer
 #
 # DELETE /spaces/{spaceId}/folders/{id}/customer
-export def "spaces-folders-customer delete" [
+export def "delete-spaces-space-id-folders-id-customer" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6971,7 +6971,7 @@ export def "spaces-folders-customer delete" [
 # Returns folder with Id and customer data
 #
 # GET /spaces/{spaceId}/folders/{id}/customer
-export def "spaces-folders-customer get" [
+export def "get-spaces-space-id-folders-id-customer" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7008,7 +7008,7 @@ export def "spaces-folders-customer get" [
 # Modify a Folder (except Name, Class, ModificationDate and ArchivalDate) and Customer data
 #
 # PATCH /spaces/{spaceId}/folders/{id}/customer
-export def "spaces-folders-customer update" [
+export def "patch-spaces-space-id-folders-id-customer" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7060,7 +7060,7 @@ export def "spaces-folders-customer update" [
 # journal of documents delivered to a customer
 #
 # GET /spaces/{spaceId}/folders/{id}/deliveries-journal
-export def "spaces-folders-deliveries-journal get" [
+export def "get-spaces-space-id-folders-id-deliveries-journal" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7103,7 +7103,7 @@ export def "spaces-folders-deliveries-journal get" [
 # Returns documents of the folder
 #
 # GET /spaces/{spaceId}/folders/{id}/documents
-export def "spaces-folders-documents get" [
+export def "get-spaces-space-id-folders-id-documents" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7148,7 +7148,7 @@ export def "spaces-folders-documents get" [
 # POST /spaces/{spaceId}/folders/{id}/documents
 # --Accounting shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
 # --File shape: {Content64Encoded?: string, Name?: string}
-export def "spaces-folders-documents create" [
+export def "post-spaces-space-id-folders-id-documents" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7196,7 +7196,7 @@ export def "spaces-folders-documents create" [
 # Detach a doc of a folder
 #
 # PATCH /spaces/{spaceId}/folders/{id}/documents/{documentId}/detach
-export def "spaces-folders-documents-detach update" [
+export def "patch-spaces-space-id-folders-id-documents-document-id-detach" [
   space_id: string
   id: string
   document_id: string
@@ -7235,7 +7235,7 @@ export def "spaces-folders-documents-detach update" [
 # Delete a Folder (except Name, Class, ModificationDate and ArchivalDate) and Employee data
 #
 # DELETE /spaces/{spaceId}/folders/{id}/employee
-export def "spaces-folders-employee delete" [
+export def "delete-spaces-space-id-folders-id-employee" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7272,7 +7272,7 @@ export def "spaces-folders-employee delete" [
 # Returns folder with Id and employee data
 #
 # GET /spaces/{spaceId}/folders/{id}/employee
-export def "spaces-folders-employee get" [
+export def "get-spaces-space-id-folders-id-employee" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7309,7 +7309,7 @@ export def "spaces-folders-employee get" [
 # Modify a Folder (except Name, Class, ModificationDate and ArchivalDate) and Employee data
 #
 # PATCH /spaces/{spaceId}/folders/{id}/employee
-export def "spaces-folders-employee update" [
+export def "patch-spaces-space-id-folders-id-employee" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7361,7 +7361,7 @@ export def "spaces-folders-employee update" [
 # Returns expense proofs of the folder (social, followup or exchange)
 #
 # GET /spaces/{spaceId}/folders/{id}/expense-proofs
-export def "spaces-folders-expense-proofs get" [
+export def "get-spaces-space-id-folders-id-expense-proofs" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7406,7 +7406,7 @@ export def "spaces-folders-expense-proofs get" [
 # POST /spaces/{spaceId}/folders/{id}/expense-proofs
 # --Accounting shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
 # --File shape: {Content64Encoded?: string, Name?: string}
-export def "spaces-folders-expense-proofs create" [
+export def "post-spaces-space-id-folders-id-expense-proofs" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7463,7 +7463,7 @@ export def "spaces-folders-expense-proofs create" [
 # Returns expense reports of the folder (social or followup)
 #
 # GET /spaces/{spaceId}/folders/{id}/expense-reports
-export def "spaces-folders-expense-reports get" [
+export def "get-spaces-space-id-folders-id-expense-reports" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7511,7 +7511,7 @@ export def "spaces-folders-expense-reports get" [
 # POST /spaces/{spaceId}/folders/{id}/expense-reports
 # --Accounting shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
 # --File shape: {Content64Encoded?: string, Name?: string}
-export def "spaces-folders-expense-reports create" [
+export def "post-spaces-space-id-folders-id-expense-reports" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7564,7 +7564,7 @@ export def "spaces-folders-expense-reports create" [
 # Returns expense proofs linked to the expenseReportId
 #
 # GET /spaces/{spaceId}/folders/{id}/expense-reports/{expenseReportId}/expense-proofs
-export def "spaces-folders-expense-reports-expense-proofs get" [
+export def "get-spaces-space-id-folders-id-expense-reports-expense-report-id-expense-proofs" [
   space_id: string
   id: string
   expense_report_id: string
@@ -7607,7 +7607,7 @@ export def "spaces-folders-expense-reports-expense-proofs get" [
 # Delete a Folder (except Name, Class, ModificationDate and ArchivalDate) and Insurance data
 #
 # DELETE /spaces/{spaceId}/folders/{id}/insurance
-export def "spaces-folders-insurance delete" [
+export def "delete-spaces-space-id-folders-id-insurance" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7644,7 +7644,7 @@ export def "spaces-folders-insurance delete" [
 # Returns folder with Id and insurance data
 #
 # GET /spaces/{spaceId}/folders/{id}/insurance
-export def "spaces-folders-insurance get" [
+export def "get-spaces-space-id-folders-id-insurance" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7681,7 +7681,7 @@ export def "spaces-folders-insurance get" [
 # Modify a Folder (except Name, Class, ModificationDate and ArchivalDate) and Insurance data
 #
 # PATCH /spaces/{spaceId}/folders/{id}/insurance
-export def "spaces-folders-insurance update" [
+export def "patch-spaces-space-id-folders-id-insurance" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7731,7 +7731,7 @@ export def "spaces-folders-insurance update" [
 # Returns invoices of the folder (customer, provider, accountingyear or root folders customers or providers)
 #
 # GET /spaces/{spaceId}/folders/{id}/invoices
-export def "spaces-folders-invoices get" [
+export def "get-spaces-space-id-folders-id-invoices" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7786,7 +7786,7 @@ export def "spaces-folders-invoices get" [
 # POST /spaces/{spaceId}/folders/{id}/invoices
 # --Accounting shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
 # --File shape: {Content64Encoded?: string, Name?: string}
-export def "spaces-folders-invoices create" [
+export def "post-spaces-space-id-folders-id-invoices" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7842,7 +7842,7 @@ export def "spaces-folders-invoices create" [
 # Returns legal entity of a follow up folder
 #
 # GET /spaces/{spaceId}/folders/{id}/legal-entity
-export def "spaces-folders-legal-entity get" [
+export def "get-spaces-space-id-folders-id-legal-entity" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7879,7 +7879,7 @@ export def "spaces-folders-legal-entity get" [
 # Delete a Folder (except Name, Class, ModificationDate and ArchivalDate) and Loan data
 #
 # DELETE /spaces/{spaceId}/folders/{id}/loan
-export def "spaces-folders-loan delete" [
+export def "delete-spaces-space-id-folders-id-loan" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7916,7 +7916,7 @@ export def "spaces-folders-loan delete" [
 # Returns folder with Id and loan data
 #
 # GET /spaces/{spaceId}/folders/{id}/loan
-export def "spaces-folders-loan get" [
+export def "get-spaces-space-id-folders-id-loan" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7953,7 +7953,7 @@ export def "spaces-folders-loan get" [
 # Modify a Folder (except Name, Class, ModificationDate and ArchivalDate) and Loan data
 #
 # PATCH /spaces/{spaceId}/folders/{id}/loan
-export def "spaces-folders-loan update" [
+export def "patch-spaces-space-id-folders-id-loan" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8007,7 +8007,7 @@ export def "spaces-folders-loan update" [
 # Returns messages of the folder
 #
 # GET /spaces/{spaceId}/folders/{id}/messages
-export def "spaces-folders-messages list" [
+export def "get-spaces-space-id-folders-id-messages" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8049,7 +8049,7 @@ export def "spaces-folders-messages list" [
 #
 # POST /spaces/{spaceId}/folders/{id}/messages
 # --Notify shape: {How?: "std"|"mail"|"sms", MemberIds?: list<string>}
-export def "spaces-folders-messages create" [
+export def "post-spaces-space-id-folders-id-messages" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8093,7 +8093,7 @@ export def "spaces-folders-messages create" [
 # Returns message with Id
 #
 # GET /spaces/{spaceId}/folders/{id}/messages/{messageId}
-export def "spaces-folders-messages get" [
+export def "get-spaces-space-id-folders-id-messages-message-id" [
   space_id: string
   id: string
   message_id: string
@@ -8133,7 +8133,7 @@ export def "spaces-folders-messages get" [
 #
 # PATCH /spaces/{spaceId}/folders/{id}/messages/{messageId}
 # --Notify shape: {How?: "std"|"mail"|"sms", MemberIds?: list<string>}
-export def "spaces-folders-messages update" [
+export def "patch-spaces-space-id-folders-id-messages-message-id" [
   space_id: string
   id: string
   message_id: string
@@ -8179,7 +8179,7 @@ export def "spaces-folders-messages update" [
 # Returns nominative social declarations of the folder social
 #
 # GET /spaces/{spaceId}/folders/{id}/nominative-social-declarations
-export def "spaces-folders-nominative-social-declarations list" [
+export def "get-spaces-space-id-folders-id-nominative-social-declarations" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8219,7 +8219,7 @@ export def "spaces-folders-nominative-social-declarations list" [
 # Returns other taxes declarations
 #
 # GET /spaces/{spaceId}/folders/{id}/other-taxes
-export def "spaces-folders-other-taxes get" [
+export def "get-spaces-space-id-folders-id-other-taxes" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8261,7 +8261,7 @@ export def "spaces-folders-other-taxes get" [
 # POST /spaces/{spaceId}/folders/{id}/other-taxes
 # --Accounting shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
 # --File shape: {Content64Encoded?: string, Name?: string}
-export def "spaces-folders-other-taxes create" [
+export def "post-spaces-space-id-folders-id-other-taxes" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8312,7 +8312,7 @@ export def "spaces-folders-other-taxes create" [
 # Returns identifiers/passwords of the folder
 #
 # GET /spaces/{spaceId}/folders/{id}/passwords
-export def "spaces-folders-passwords list" [
+export def "get-spaces-space-id-folders-id-passwords" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8349,7 +8349,7 @@ export def "spaces-folders-passwords list" [
 # Write a identifier/password in aa folder
 #
 # POST /spaces/{spaceId}/folders/{id}/passwords
-export def "spaces-folders-passwords create" [
+export def "post-spaces-space-id-folders-id-passwords" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8394,7 +8394,7 @@ export def "spaces-folders-passwords create" [
 # delete a password
 #
 # DELETE /spaces/{spaceId}/folders/{id}/passwords/{passwordId}
-export def "spaces-folders-passwords delete" [
+export def "delete-spaces-space-id-folders-id-passwords-password-id" [
   space_id: string
   id: string
   password_id: string
@@ -8433,7 +8433,7 @@ export def "spaces-folders-passwords delete" [
 # Returns password with Id
 #
 # GET /spaces/{spaceId}/folders/{id}/passwords/{passwordId}
-export def "spaces-folders-passwords get" [
+export def "get-spaces-space-id-folders-id-passwords-password-id" [
   space_id: string
   id: string
   password_id: string
@@ -8472,7 +8472,7 @@ export def "spaces-folders-passwords get" [
 # Modify a Password
 #
 # PATCH /spaces/{spaceId}/folders/{id}/passwords/{passwordId}
-export def "spaces-folders-passwords update" [
+export def "patch-spaces-space-id-folders-id-passwords-password-id" [
   space_id: string
   id: string
   password_id: string
@@ -8519,7 +8519,7 @@ export def "spaces-folders-passwords update" [
 # Returns payrolls of the folder social
 #
 # GET /spaces/{spaceId}/folders/{id}/payrolls
-export def "spaces-folders-payrolls get" [
+export def "get-spaces-space-id-folders-id-payrolls" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8563,7 +8563,7 @@ export def "spaces-folders-payrolls get" [
 # POST /spaces/{spaceId}/folders/{id}/payrolls
 # --Accounting shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
 # --File shape: {Content64Encoded?: string, Name?: string}
-export def "spaces-folders-payrolls create" [
+export def "post-spaces-space-id-folders-id-payrolls" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8617,7 +8617,7 @@ export def "spaces-folders-payrolls create" [
 # delete a nominative social declaration in a folder social
 #
 # DELETE /spaces/{spaceId}/folders/{id}/payrolls/{payrollId}/nominative-social-declaration
-export def "spaces-folders-payrolls-nominative-social-declaration delete" [
+export def "delete-spaces-space-id-folders-id-payrolls-payroll-id-nominative-social-declaration" [
   space_id: string
   id: string
   payroll_id: string
@@ -8658,7 +8658,7 @@ export def "spaces-folders-payrolls-nominative-social-declaration delete" [
 # POST /spaces/{spaceId}/folders/{id}/payrolls/{payrollId}/nominative-social-declaration
 # --Accounting shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
 # --File shape: {Content64Encoded?: string, Name?: string}
-export def "spaces-folders-payrolls-nominative-social-declaration create" [
+export def "post-spaces-space-id-folders-id-payrolls-payroll-id-nominative-social-declaration" [
   space_id: string
   id: string
   payroll_id: string
@@ -8708,7 +8708,7 @@ export def "spaces-folders-payrolls-nominative-social-declaration create" [
 # Returns payslips of the folder employee
 #
 # GET /spaces/{spaceId}/folders/{id}/payslips
-export def "spaces-folders-payslips get" [
+export def "get-spaces-space-id-folders-id-payslips" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8750,7 +8750,7 @@ export def "spaces-folders-payslips get" [
 # POST /spaces/{spaceId}/folders/{id}/payslips
 # --Accounting shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
 # --File shape: {Content64Encoded?: string, Name?: string}
-export def "spaces-folders-payslips create" [
+export def "post-spaces-space-id-folders-id-payslips" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8807,7 +8807,7 @@ export def "spaces-folders-payslips create" [
 # delete a secondary portfolio of a customer contract
 #
 # DELETE /spaces/{spaceId}/folders/{id}/portfolio/{portfolioId}
-export def "spaces-folders-portfolio delete" [
+export def "delete-spaces-space-id-folders-id-portfolio-portfolio-id" [
   space_id: string
   id: string
   portfolio_id: string
@@ -8846,7 +8846,7 @@ export def "spaces-folders-portfolio delete" [
 # delete a Professional Vehicle
 #
 # DELETE /spaces/{spaceId}/folders/{id}/professional-vehicle
-export def "spaces-folders-professional-vehicle delete" [
+export def "delete-spaces-space-id-folders-id-professional-vehicle" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8883,7 +8883,7 @@ export def "spaces-folders-professional-vehicle delete" [
 # Modify a Folder (except Name, Class, ModificationDate and ArchivalDate) and Professional Vehicle data
 #
 # PATCH /spaces/{spaceId}/folders/{id}/professional-vehicle
-export def "spaces-folders-professional-vehicle update" [
+export def "patch-spaces-space-id-folders-id-professional-vehicle" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8938,7 +8938,7 @@ export def "spaces-folders-professional-vehicle update" [
 # delete a provider
 #
 # DELETE /spaces/{spaceId}/folders/{id}/provider
-export def "spaces-folders-provider delete" [
+export def "delete-spaces-space-id-folders-id-provider" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8975,7 +8975,7 @@ export def "spaces-folders-provider delete" [
 # Returns folder with Id and provider data
 #
 # GET /spaces/{spaceId}/folders/{id}/provider
-export def "spaces-folders-provider get" [
+export def "get-spaces-space-id-folders-id-provider" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9012,7 +9012,7 @@ export def "spaces-folders-provider get" [
 # Modify a Folder (except Name, Class, ModificationDate and ArchivalDate) and Provider data
 #
 # PATCH /spaces/{spaceId}/folders/{id}/provider
-export def "spaces-folders-provider update" [
+export def "patch-spaces-space-id-folders-id-provider" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9061,7 +9061,7 @@ export def "spaces-folders-provider update" [
 # list of the required documents for a person
 #
 # GET /spaces/{spaceId}/folders/{id}/required-documents
-export def "spaces-folders-required-documents get" [
+export def "get-spaces-space-id-folders-id-required-documents" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9098,7 +9098,7 @@ export def "spaces-folders-required-documents get" [
 # Modify the status of a requireddocument
 #
 # PATCH /spaces/{spaceId}/folders/{id}/required-documents/{requireddocumentid}
-export def "spaces-folders-required-documents update" [
+export def "patch-spaces-space-id-folders-id-required-documents-requireddocumentid" [
   space_id: string
   id: string
   requireddocumentid: string
@@ -9142,7 +9142,7 @@ export def "spaces-folders-required-documents update" [
 #
 # POST /spaces/{spaceId}/folders/{id}/required-documents/{requireddocumentid}
 # --File shape: {Content64Encoded?: string, Name?: string}
-export def "spaces-folders-required-documents create" [
+export def "post-spaces-space-id-folders-id-required-documents-requireddocumentid" [
   space_id: string
   id: string
   requireddocumentid: string
@@ -9185,7 +9185,7 @@ export def "spaces-folders-required-documents create" [
 # delete a document from a required document
 #
 # DELETE /spaces/{spaceId}/folders/{id}/required-documents/{requireddocumentid}/documents/{documentId}
-export def "spaces-folders-required-documents-documents delete" [
+export def "delete-spaces-space-id-folders-id-required-documents-requireddocumentid-documents-document-id" [
   space_id: string
   id: string
   requireddocumentid: string
@@ -9226,7 +9226,7 @@ export def "spaces-folders-required-documents-documents delete" [
 # Returns sections of the folder
 #
 # GET /spaces/{spaceId}/folders/{id}/sections
-export def "spaces-folders-sections get" [
+export def "get-spaces-space-id-folders-id-sections" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9263,7 +9263,7 @@ export def "spaces-folders-sections get" [
 # Returns social contracts of the folder employee
 #
 # GET /spaces/{spaceId}/folders/{id}/social-contracts
-export def "spaces-folders-social-contracts get" [
+export def "get-spaces-space-id-folders-id-social-contracts" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9305,7 +9305,7 @@ export def "spaces-folders-social-contracts get" [
 # POST /spaces/{spaceId}/folders/{id}/social-contracts
 # --Accounting shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
 # --File shape: {Content64Encoded?: string, Name?: string}
-export def "spaces-folders-social-contracts create" [
+export def "post-spaces-space-id-folders-id-social-contracts" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9358,7 +9358,7 @@ export def "spaces-folders-social-contracts create" [
 # Returns social declarations
 #
 # GET /spaces/{spaceId}/folders/{id}/social-declarations
-export def "spaces-folders-social-declarations get" [
+export def "get-spaces-space-id-folders-id-social-declarations" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9400,7 +9400,7 @@ export def "spaces-folders-social-declarations get" [
 # POST /spaces/{spaceId}/folders/{id}/social-declarations
 # --Accounting shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
 # --File shape: {Content64Encoded?: string, Name?: string}
-export def "spaces-folders-social-declarations create" [
+export def "post-spaces-space-id-folders-id-social-declarations" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9450,7 +9450,7 @@ export def "spaces-folders-social-declarations create" [
 # delete a social regime
 #
 # DELETE /spaces/{spaceId}/folders/{id}/social-regimes
-export def "spaces-folders-social-regimes delete" [
+export def "delete-spaces-space-id-folders-id-social-regimes" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9487,7 +9487,7 @@ export def "spaces-folders-social-regimes delete" [
 # Returns folder with Id and social regime data
 #
 # GET /spaces/{spaceId}/folders/{id}/social-regimes
-export def "spaces-folders-social-regimes get" [
+export def "get-spaces-space-id-folders-id-social-regimes" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9524,7 +9524,7 @@ export def "spaces-folders-social-regimes get" [
 # Modify a Folder (except Name, Class, ModificationDate and ArchivalDate) and Social Regime data
 #
 # PATCH /spaces/{spaceId}/folders/{id}/social-regimes
-export def "spaces-folders-social-regimes update" [
+export def "patch-spaces-space-id-folders-id-social-regimes" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9574,7 +9574,7 @@ export def "spaces-folders-social-regimes update" [
 # Returns sum of invoices of the folder (customer, provider, accountingyear or root folders customers or providers)
 #
 # GET /spaces/{spaceId}/folders/{id}/sum-invoices
-export def "spaces-folders-sum-invoices get" [
+export def "get-spaces-space-id-folders-id-sum-invoices" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9618,7 +9618,7 @@ export def "spaces-folders-sum-invoices get" [
 # Delete a Folder (except Name, Class, ModificationDate and ArchivalDate) and tax contract data
 #
 # DELETE /spaces/{spaceId}/folders/{id}/tax-contract
-export def "spaces-folders-tax-contract delete" [
+export def "delete-spaces-space-id-folders-id-tax-contract" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9655,7 +9655,7 @@ export def "spaces-folders-tax-contract delete" [
 # Modify a Folder (except Name, Class, ModificationDate and ArchivalDate) and Tax Contract data
 #
 # PATCH /spaces/{spaceId}/folders/{id}/tax-contract
-export def "spaces-folders-tax-contract update" [
+export def "patch-spaces-space-id-folders-id-tax-contract" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9704,7 +9704,7 @@ export def "spaces-folders-tax-contract update" [
 # Returns vat declarations
 #
 # GET /spaces/{spaceId}/folders/{id}/vat-declarations
-export def "spaces-folders-vat-declarations get" [
+export def "get-spaces-space-id-folders-id-vat-declarations" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9746,7 +9746,7 @@ export def "spaces-folders-vat-declarations get" [
 # POST /spaces/{spaceId}/folders/{id}/vat-declarations
 # --Accounting shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
 # --File shape: {Content64Encoded?: string, Name?: string}
-export def "spaces-folders-vat-declarations create" [
+export def "post-spaces-space-id-folders-id-vat-declarations" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9803,7 +9803,7 @@ export def "spaces-folders-vat-declarations create" [
 # delete a class document
 #
 # DELETE /spaces/{spaceId}/folders/{id}/{documentClass}
-export def "spaces-folders delete" [
+export def "delete-spaces-space-id-folders-id-document-class" [
   space_id: string
   id: string
   document_class: string
@@ -9842,7 +9842,7 @@ export def "spaces-folders delete" [
 # Returns document of documentClass (without specific data) of the folder
 #
 # GET /spaces/{spaceId}/folders/{id}/{documentClass}
-export def "spaces-folders get-by-space-id-document-class" [
+export def "get-spaces-space-id-folders-id-document-class" [
   space_id: string
   id: string
   document_class: string
@@ -9883,7 +9883,7 @@ export def "spaces-folders get-by-space-id-document-class" [
 # POST /spaces/{spaceId}/folders/{id}/{documentClass}
 # --Accounting shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
 # --File shape: {Content64Encoded?: string, Name?: string}
-export def "spaces-folders create" [
+export def "post-spaces-space-id-folders-id-document-class" [
   space_id: string
   id: string
   document_class: string
@@ -9933,7 +9933,7 @@ export def "spaces-folders create" [
 # Returns list of bank folders for a legal-entity
 #
 # GET /spaces/{spaceId}/legal-entities/{id}/banks
-export def "spaces-legal-entities-banks get" [
+export def "get-spaces-space-id-legal-entities-id-banks" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9970,7 +9970,7 @@ export def "spaces-legal-entities-banks get" [
 # Add a folder for a bank
 #
 # POST /spaces/{spaceId}/legal-entities/{id}/banks
-export def "spaces-legal-entities-banks create" [
+export def "post-spaces-space-id-legal-entities-id-banks" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10019,7 +10019,7 @@ export def "spaces-legal-entities-banks create" [
 # Returns folder of the banks even archived
 #
 # GET /spaces/{spaceId}/legal-entities/{id}/banks/all
-export def "spaces-legal-entities-banks-all get" [
+export def "get-spaces-space-id-legal-entities-id-banks-all" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10056,7 +10056,7 @@ export def "spaces-legal-entities-banks-all get" [
 # Returns all contract folders of the legal entity
 #
 # GET /spaces/{spaceId}/legal-entities/{id}/contracts
-export def "spaces-legal-entities-contracts get" [
+export def "get-spaces-space-id-legal-entities-id-contracts" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10093,7 +10093,7 @@ export def "spaces-legal-entities-contracts get" [
 # Returns folder of the others contract with legal entity
 #
 # GET /spaces/{spaceId}/legal-entities/{id}/contractual-relationships
-export def "spaces-legal-entities-contractual-relationships get" [
+export def "get-spaces-space-id-legal-entities-id-contractual-relationships" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10130,7 +10130,7 @@ export def "spaces-legal-entities-contractual-relationships get" [
 # Returns folder of the others contract with legal entity (even archived)
 #
 # GET /spaces/{spaceId}/legal-entities/{id}/contractual-relationships/all
-export def "spaces-legal-entities-contractual-relationships-all get" [
+export def "get-spaces-space-id-legal-entities-id-contractual-relationships-all" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10167,7 +10167,7 @@ export def "spaces-legal-entities-contractual-relationships-all get" [
 # Returns folder of the customer
 #
 # GET /spaces/{spaceId}/legal-entities/{id}/customers
-export def "spaces-legal-entities-customers get" [
+export def "get-spaces-space-id-legal-entities-id-customers" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10204,7 +10204,7 @@ export def "spaces-legal-entities-customers get" [
 # Add a folder for a customer
 #
 # POST /spaces/{spaceId}/legal-entities/{id}/customers
-export def "spaces-legal-entities-customers create" [
+export def "post-spaces-space-id-legal-entities-id-customers" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10254,7 +10254,7 @@ export def "spaces-legal-entities-customers create" [
 # Returns folder of the customers (even archived)
 #
 # GET /spaces/{spaceId}/legal-entities/{id}/customers/all
-export def "spaces-legal-entities-customers-all get" [
+export def "get-spaces-space-id-legal-entities-id-customers-all" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10291,7 +10291,7 @@ export def "spaces-legal-entities-customers-all get" [
 # Returns list of insurance folders for a legal-entity
 #
 # GET /spaces/{spaceId}/legal-entities/{id}/insurances
-export def "spaces-legal-entities-insurances get" [
+export def "get-spaces-space-id-legal-entities-id-insurances" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10328,7 +10328,7 @@ export def "spaces-legal-entities-insurances get" [
 # Add a folder for a insurance
 #
 # POST /spaces/{spaceId}/legal-entities/{id}/insurances
-export def "spaces-legal-entities-insurances create" [
+export def "post-spaces-space-id-legal-entities-id-insurances" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10378,7 +10378,7 @@ export def "spaces-legal-entities-insurances create" [
 # Returns folder of the insurances even archived
 #
 # GET /spaces/{spaceId}/legal-entities/{id}/insurances/all
-export def "spaces-legal-entities-insurances-all get" [
+export def "get-spaces-space-id-legal-entities-id-insurances-all" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10415,7 +10415,7 @@ export def "spaces-legal-entities-insurances-all get" [
 # Returns folder of the loan
 #
 # GET /spaces/{spaceId}/legal-entities/{id}/loans
-export def "spaces-legal-entities-loans get" [
+export def "get-spaces-space-id-legal-entities-id-loans" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10452,7 +10452,7 @@ export def "spaces-legal-entities-loans get" [
 # Add a folder for a loan
 #
 # POST /spaces/{spaceId}/legal-entities/{id}/loans
-export def "spaces-legal-entities-loans create" [
+export def "post-spaces-space-id-legal-entities-id-loans" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10506,7 +10506,7 @@ export def "spaces-legal-entities-loans create" [
 # Returns folder of the loans even archived
 #
 # GET /spaces/{spaceId}/legal-entities/{id}/loans/all
-export def "spaces-legal-entities-loans-all get" [
+export def "get-spaces-space-id-legal-entities-id-loans-all" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10543,7 +10543,7 @@ export def "spaces-legal-entities-loans-all get" [
 # Returns list of providers folders for a legal-entity
 #
 # GET /spaces/{spaceId}/legal-entities/{id}/providers
-export def "spaces-legal-entities-providers get" [
+export def "get-spaces-space-id-legal-entities-id-providers" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10580,7 +10580,7 @@ export def "spaces-legal-entities-providers get" [
 # Add a folder for a provider
 #
 # POST /spaces/{spaceId}/legal-entities/{id}/providers
-export def "spaces-legal-entities-providers create" [
+export def "post-spaces-space-id-legal-entities-id-providers" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10629,7 +10629,7 @@ export def "spaces-legal-entities-providers create" [
 # Returns folder of the providers even archived
 #
 # GET /spaces/{spaceId}/legal-entities/{id}/providers/all
-export def "spaces-legal-entities-providers-all get" [
+export def "get-spaces-space-id-legal-entities-id-providers-all" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10666,7 +10666,7 @@ export def "spaces-legal-entities-providers-all get" [
 # Returns list of social regimes folders for a legal-entity
 #
 # GET /spaces/{spaceId}/legal-entities/{id}/social-regimes
-export def "spaces-legal-entities-social-regimes get" [
+export def "get-spaces-space-id-legal-entities-id-social-regimes" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10703,7 +10703,7 @@ export def "spaces-legal-entities-social-regimes get" [
 # Add a folder for a social regime
 #
 # POST /spaces/{spaceId}/legal-entities/{id}/social-regimes
-export def "spaces-legal-entities-social-regimes create" [
+export def "post-spaces-space-id-legal-entities-id-social-regimes" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10753,7 +10753,7 @@ export def "spaces-legal-entities-social-regimes create" [
 # Returns folder of the social regimes even archived
 #
 # GET /spaces/{spaceId}/legal-entities/{id}/social-regimes/all
-export def "spaces-legal-entities-social-regimes-all get" [
+export def "get-spaces-space-id-legal-entities-id-social-regimes-all" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10790,7 +10790,7 @@ export def "spaces-legal-entities-social-regimes-all get" [
 # Returns list of all loan folders of the space
 #
 # GET /spaces/{spaceId}/loans
-export def "spaces-loans get" [
+export def "get-spaces-space-id-loans" [
   space_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10825,7 +10825,7 @@ export def "spaces-loans get" [
 # Returns list of all loan folders even archived of the space
 #
 # GET /spaces/{spaceId}/loans/all
-export def "spaces-loans-all get" [
+export def "get-spaces-space-id-loans-all" [
   space_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10860,7 +10860,7 @@ export def "spaces-loans-all get" [
 # modify the invitation of a person to collect documents
 #
 # PATCH /spaces/{spaceId}/persons/{id}/call-for-document
-export def "spaces-persons-call-for-document update" [
+export def "patch-spaces-space-id-persons-id-call-for-document" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10905,7 +10905,7 @@ export def "spaces-persons-call-for-document update" [
 # invite a person to collect documents
 #
 # POST /spaces/{spaceId}/persons/{id}/call-for-document
-export def "spaces-persons-call-for-document create" [
+export def "post-spaces-space-id-persons-id-call-for-document" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10955,7 +10955,7 @@ export def "spaces-persons-call-for-document create" [
 # Returns folder of the employee
 #
 # GET /spaces/{spaceId}/persons/{id}/employees
-export def "spaces-persons-employees get" [
+export def "get-spaces-space-id-persons-id-employees" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10992,7 +10992,7 @@ export def "spaces-persons-employees get" [
 # Add a folder for a employee
 #
 # POST /spaces/{spaceId}/persons/{id}/employees
-export def "spaces-persons-employees create" [
+export def "post-spaces-space-id-persons-id-employees" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11044,7 +11044,7 @@ export def "spaces-persons-employees create" [
 # Returns folder of all employees (even archived)
 #
 # GET /spaces/{spaceId}/persons/{id}/employees/all
-export def "spaces-persons-employees-all get" [
+export def "get-spaces-space-id-persons-id-employees-all" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11081,7 +11081,7 @@ export def "spaces-persons-employees-all get" [
 # Returns folder exchange of the person
 #
 # GET /spaces/{spaceId}/persons/{id}/exchange
-export def "spaces-persons-exchange get" [
+export def "get-spaces-space-id-persons-id-exchange" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11118,7 +11118,7 @@ export def "spaces-persons-exchange get" [
 # Returns folder of the person
 #
 # GET /spaces/{spaceId}/persons/{id}/follow-ups
-export def "spaces-persons-follow-ups get" [
+export def "get-spaces-space-id-persons-id-follow-ups" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11155,7 +11155,7 @@ export def "spaces-persons-follow-ups get" [
 # delete the invitation of a person in a space
 #
 # DELETE /spaces/{spaceId}/persons/{id}/guest-in-space
-export def "spaces-persons-guest-in-space delete" [
+export def "delete-spaces-space-id-persons-id-guest-in-space" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11193,7 +11193,7 @@ export def "spaces-persons-guest-in-space delete" [
 #
 # PATCH /spaces/{spaceId}/persons/{id}/guest-in-space
 # --Folders item shape: {Id?: string, Right?: "read"|"write"}
-export def "spaces-persons-guest-in-space update" [
+export def "patch-spaces-space-id-persons-id-guest-in-space" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11240,7 +11240,7 @@ export def "spaces-persons-guest-in-space update" [
 #
 # POST /spaces/{spaceId}/persons/{id}/guest-in-space
 # --Folders item shape: {Id?: string, Right?: "read"|"write"}
-export def "spaces-persons-guest-in-space create" [
+export def "post-spaces-space-id-persons-id-guest-in-space" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11292,7 +11292,7 @@ export def "spaces-persons-guest-in-space create" [
 # delete the invitation of a person in a space
 #
 # DELETE /spaces/{spaceId}/persons/{id}/invitation
-export def "spaces-persons-invitation delete" [
+export def "delete-spaces-space-id-persons-id-invitation" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11329,7 +11329,7 @@ export def "spaces-persons-invitation delete" [
 # Returns invitation of a person
 #
 # GET /spaces/{spaceId}/persons/{id}/invitation
-export def "spaces-persons-invitation get" [
+export def "get-spaces-space-id-persons-id-invitation" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11367,7 +11367,7 @@ export def "spaces-persons-invitation get" [
 #
 # PATCH /spaces/{spaceId}/persons/{id}/invitation
 # --Folders item shape: {Id?: string, Right?: "read"|"write"}
-export def "spaces-persons-invitation update" [
+export def "patch-spaces-space-id-persons-id-invitation" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11415,7 +11415,7 @@ export def "spaces-persons-invitation update" [
 #
 # POST /spaces/{spaceId}/persons/{id}/invitation
 # --Folders item shape: {Id?: string, Right?: "read"|"write"}
-export def "spaces-persons-invitation create" [
+export def "post-spaces-space-id-persons-id-invitation" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11462,7 +11462,7 @@ export def "spaces-persons-invitation create" [
 # send the invitation of a person in a space
 #
 # POST /spaces/{spaceId}/persons/{id}/invitation/{invitationId}/send
-export def "spaces-persons-invitation-send create" [
+export def "post-spaces-space-id-persons-id-invitation-invitation-id-send" [
   space_id: string
   id: string
   invitation_id: string
@@ -11508,7 +11508,7 @@ export def "spaces-persons-invitation-send create" [
 # Returns folderId with the access of the person
 #
 # GET /spaces/{spaceId}/persons/{memberId}/folders/{id}
-export def "spaces-persons-folders get" [
+export def "get-spaces-space-id-persons-member-id-folders-id" [
   space_id: string
   member_id: string
   id: string
@@ -11547,7 +11547,7 @@ export def "spaces-persons-folders get" [
 # Modify an access
 #
 # PATCH /spaces/{spaceId}/persons/{memberId}/folders/{id}
-export def "spaces-persons-folders update" [
+export def "patch-spaces-space-id-persons-member-id-folders-id" [
   space_id: string
   member_id: string
   id: string
@@ -11594,7 +11594,7 @@ export def "spaces-persons-folders update" [
 # Returns folder with Id and provider data
 #
 # GET /spaces/{spaceId}/providers
-export def "spaces-providers get" [
+export def "get-spaces-space-id-providers" [
   space_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11631,7 +11631,7 @@ export def "spaces-providers get" [
 # Returns folder with Id and provider data (even archived)
 #
 # GET /spaces/{spaceId}/providers/all
-export def "spaces-providers-all get" [
+export def "get-spaces-space-id-providers-all" [
   space_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11668,7 +11668,7 @@ export def "spaces-providers-all get" [
 # Research text inside documents, folders or messages
 #
 # GET /spaces/{spaceId}/search
-export def "spaces-search get" [
+export def "get-spaces-space-id-search" [
   space_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11707,7 +11707,7 @@ export def "spaces-search get" [
 # Returns folder with Id and social regime data
 #
 # GET /spaces/{spaceId}/social-regimes
-export def "spaces-social-regimes get" [
+export def "get-spaces-space-id-social-regimes" [
   space_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11744,7 +11744,7 @@ export def "spaces-social-regimes get" [
 # Returns folder with Id and social regime data (even archived)
 #
 # GET /spaces/{spaceId}/social-regimes/all
-export def "spaces-social-regimes-all get" [
+export def "get-spaces-space-id-social-regimes-all" [
   space_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11781,7 +11781,7 @@ export def "spaces-social-regimes-all get" [
 # Returns CSV Invoicings of the spaces for the account of the spaceId
 #
 # GET /spaces/{spaceId}/spaces-invoicings
-export def "spaces-spaces-invoicings get" [
+export def "get-spaces-space-id-spaces-invoicings" [
   space_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

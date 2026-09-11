@@ -102,7 +102,7 @@ def temporal-completer [] { ["day" "dow" "hod" "hour" "month" "moy" "year"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "favicon-ico get-favico" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "favico-favicon-ico-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -126,7 +126,7 @@ export def commands []: nothing -> table {
 #
 # GET /favicon.ico
 # operationId: favico_favicon_ico_get
-export def "favicon-ico get-favico" [
+export def "favico-favicon-ico-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -160,7 +160,7 @@ export def "favicon-ico get-favico" [
 #
 # GET /ping
 # operationId: pong_ping_get
-export def "ping get-pong" [
+export def "pong-ping-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -194,7 +194,7 @@ export def "ping get-pong" [
 #
 # GET /v1/cities
 # operationId: cities_getv1_v1_cities_get
-export def "cities get-getv1" [
+export def "cities-getv1-v1-cities-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -238,7 +238,7 @@ export def "cities get-getv1" [
 #
 # GET /v1/countries
 # operationId: countries_getv1_v1_countries_get
-export def "countries get-getv1" [
+export def "countries-getv1-v1-countries-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -280,7 +280,7 @@ export def "countries get-getv1" [
 #
 # GET /v1/countries/{country_id}
 # operationId: countries_get_v1_countries__country_id__get
-export def "countries get-by-country-id" [
+export def "countries-get-v1-countries-country-id-get" [
   country_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -323,7 +323,7 @@ export def "countries get-by-country-id" [
 #
 # GET /v1/latest
 # operationId: latest_v1_get_v1_latest_get
-export def "latest get" [
+export def "latest-v1-get-v1-latest-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -382,7 +382,7 @@ export def "latest get" [
 #
 # GET /v1/latest/{location_id}
 # operationId: latest_v1_get_v1_latest__location_id__get
-export def "latest get-by-location-id" [
+export def "latest-v1-get-v1-latest-location-id-get" [
   location_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -442,7 +442,7 @@ export def "latest get-by-location-id" [
 #
 # GET /v1/locations
 # operationId: locationsv1_get_v1_locations_get
-export def "locations list" [
+export def "locationsv1-get-v1-locations-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -501,7 +501,7 @@ export def "locations list" [
 #
 # GET /v1/locations/{location_id}
 # operationId: locationsv1_get_v1_locations__location_id__get
-export def "locations get-locationsv1" [
+export def "locationsv1-get-v1-locations-location-id-get" [
   location_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -561,7 +561,7 @@ export def "locations get-locationsv1" [
 #
 # GET /v1/measurements
 # operationId: measurements_get_v1_v1_measurements_get
-export def "measurements get" [
+export def "measurements-get-v1-v1-measurements-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -623,7 +623,7 @@ export def "measurements get" [
 #
 # GET /v1/parameters
 # operationId: parameters_getv1_v1_parameters_get
-export def "parameters get-getv1" [
+export def "parameters-getv1-v1-parameters-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -666,7 +666,7 @@ export def "parameters get-getv1" [
 #
 # GET /v1/sources
 # operationId: sources_v1_get_v1_sources_get
-export def "sources get" [
+export def "sources-v1-get-v1-sources-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -707,7 +707,7 @@ export def "sources get" [
 #
 # GET /v2/averages
 # operationId: averages_v2_get_v2_averages_get
-export def "averages get" [
+export def "averages-v2-get-v2-averages-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -759,7 +759,7 @@ export def "averages get" [
 #
 # GET /v2/cities
 # operationId: cities_get_v2_cities_get
-export def "cities get" [
+export def "cities-get-v2-cities-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -803,7 +803,7 @@ export def "cities get" [
 #
 # GET /v2/countries
 # operationId: countries_get_v2_countries_get
-export def "countries get" [
+export def "countries-get-v2-countries-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -845,7 +845,7 @@ export def "countries get" [
 #
 # GET /v2/countries/{country_id}
 # operationId: countries_get_v2_countries__country_id__get
-export def "countries get-by-country-id-1" [
+export def "countries-get-v2-countries-country-id-get" [
   country_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -888,7 +888,7 @@ export def "countries get-by-country-id-1" [
 #
 # GET /v2/latest
 # operationId: latest_get_v2_latest_get
-export def "latest get-1" [
+export def "latest-get-v2-latest-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -947,7 +947,7 @@ export def "latest get-1" [
 #
 # GET /v2/latest/{location_id}
 # operationId: latest_get_v2_latest__location_id__get
-export def "latest get-by-location-id-1" [
+export def "latest-get-v2-latest-location-id-get" [
   location_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1007,7 +1007,7 @@ export def "latest get-by-location-id-1" [
 #
 # GET /v2/locations
 # operationId: locations_get_v2_locations_get
-export def "locations list-1" [
+export def "locations-get-v2-locations-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1066,7 +1066,7 @@ export def "locations list-1" [
 #
 # GET /v2/locations/tiles/mobile-generalized/tiles.json
 # operationId: mobilegentilejson_v2_locations_tiles_mobile_generalized_tiles_json_get
-export def "locations-tiles-mobile-generalized-tiles-json get-mobilegentilejson" [
+export def "mobilegentilejson-v2-locations-tiles-mobile-generalized-tiles-json-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1100,7 +1100,7 @@ export def "locations-tiles-mobile-generalized-tiles-json get-mobilegentilejson"
 #
 # GET /v2/locations/tiles/mobile-generalized/{z}/{x}/{y}.pbf
 # operationId: get_mobilegentile_v2_locations_tiles_mobile_generalized__z___x___y__pbf_get
-export def "locations-tiles-mobile-generalized get-mobilegentile-pbf" [
+export def "get-mobilegentile-v2-locations-tiles-mobile-generalized-z-x-y-pbf-get" [
   z: int
   x: int
   y: int
@@ -1148,7 +1148,7 @@ export def "locations-tiles-mobile-generalized get-mobilegentile-pbf" [
 #
 # GET /v2/locations/tiles/mobile/tiles.json
 # operationId: mobiletilejson_v2_locations_tiles_mobile_tiles_json_get
-export def "locations-tiles-mobile-tiles-json get-mobiletilejson" [
+export def "mobiletilejson-v2-locations-tiles-mobile-tiles-json-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1182,7 +1182,7 @@ export def "locations-tiles-mobile-tiles-json get-mobiletilejson" [
 #
 # GET /v2/locations/tiles/mobile/{z}/{x}/{y}.pbf
 # operationId: get_mobiletile_v2_locations_tiles_mobile__z___x___y__pbf_get
-export def "locations-tiles-mobile get-mobiletile-pbf" [
+export def "get-mobiletile-v2-locations-tiles-mobile-z-x-y-pbf-get" [
   z: int
   x: int
   y: int
@@ -1232,7 +1232,7 @@ export def "locations-tiles-mobile get-mobiletile-pbf" [
 #
 # GET /v2/locations/tiles/tiles.json
 # operationId: tilejson_v2_locations_tiles_tiles_json_get
-export def "locations-tiles-tiles-json get-tilejson" [
+export def "tilejson-v2-locations-tiles-tiles-json-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1266,7 +1266,7 @@ export def "locations-tiles-tiles-json get-tilejson" [
 #
 # GET /v2/locations/tiles/viewer
 # operationId: demo_v2_locations_tiles_viewer_get
-export def "locations-tiles-viewer get-demo" [
+export def "demo-v2-locations-tiles-viewer-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1300,7 +1300,7 @@ export def "locations-tiles-viewer get-demo" [
 #
 # GET /v2/locations/tiles/{z}/{x}/{y}.pbf
 # operationId: get_tile_v2_locations_tiles__z___x___y__pbf_get
-export def "locations-tiles get-pbf" [
+export def "get-tile-v2-locations-tiles-z-x-y-pbf-get" [
   z: int
   x: int
   y: int
@@ -1348,7 +1348,7 @@ export def "locations-tiles get-pbf" [
 #
 # GET /v2/locations/{location_id}
 # operationId: locations_get_v2_locations__location_id__get
-export def "locations get" [
+export def "locations-get-v2-locations-location-id-get" [
   location_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1408,7 +1408,7 @@ export def "locations get" [
 #
 # GET /v2/manufacturers
 # operationId: mfr_get_v2_manufacturers_get
-export def "manufacturers get-mfr" [
+export def "mfr-get-v2-manufacturers-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1442,7 +1442,7 @@ export def "manufacturers get-mfr" [
 #
 # GET /v2/measurements
 # operationId: measurements_get_v2_measurements_get
-export def "measurements get-1" [
+export def "measurements-get-v2-measurements-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1504,7 +1504,7 @@ export def "measurements get-1" [
 #
 # GET /v2/models
 # operationId: model_get_v2_models_get
-export def "models get" [
+export def "model-get-v2-models-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1538,7 +1538,7 @@ export def "models get" [
 #
 # GET /v2/parameters
 # operationId: parameters_get_v2_parameters_get
-export def "parameters get" [
+export def "parameters-get-v2-parameters-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1581,7 +1581,7 @@ export def "parameters get" [
 #
 # GET /v2/projects
 # operationId: projects_get_v2_projects_get
-export def "projects list" [
+export def "projects-get-v2-projects-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1633,7 +1633,7 @@ export def "projects list" [
 #
 # GET /v2/projects/{project_id}
 # operationId: projects_get_v2_projects__project_id__get
-export def "projects get" [
+export def "projects-get-v2-projects-project-id-get" [
   project_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1686,7 +1686,7 @@ export def "projects get" [
 #
 # GET /v2/sources
 # operationId: sources_get_v2_sources_get
-export def "sources get-1" [
+export def "sources-get-v2-sources-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1729,7 +1729,7 @@ export def "sources get-1" [
 #
 # GET /v2/sources/readme/{slug}
 # operationId: readme_get_v2_sources_readme__slug__get
-export def "sources-readme get" [
+export def "readme-get-v2-sources-readme-slug-get" [
   slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1765,7 +1765,7 @@ export def "sources-readme get" [
 #
 # GET /v2/summary
 # operationId: summary_get_v2_summary_get
-export def "summary get" [
+export def "summary-get-v2-summary-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -114,7 +114,7 @@ def accept-completer [] { ["application/pdf" "application/xml"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "hpcer-certificate create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "hpcer" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 # operationId: hpcer
 # --certificateParameters shape: {FullName: string, rollno: string, year: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "hpcer-certificate create" [
+export def "hpcer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -183,7 +183,7 @@ export def "hpcer-certificate create" [
 # operationId: hscer
 # --certificateParameters shape: {FullName: string, rollno: string, year: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "hscer-certificate create" [
+export def "hscer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -227,7 +227,7 @@ export def "hscer-certificate create" [
 # operationId: hsmgr
 # --certificateParameters shape: {FullName: string, rollno: string, year: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "hsmgr-certificate create" [
+export def "hsmgr" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -270,7 +270,7 @@ export def "hsmgr-certificate create" [
 # operationId: nchsc
 # --certificateParameters shape: {FullName: string, rollno: string, year: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "nchsc-certificate create" [
+export def "nchsc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -313,7 +313,7 @@ export def "nchsc-certificate create" [
 # operationId: nctsc
 # --certificateParameters shape: {FullName: string, rollno: string, year: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "nctsc-certificate create" [
+export def "nctsc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -356,7 +356,7 @@ export def "nctsc-certificate create" [
 # operationId: nsesc
 # --certificateParameters shape: {FullName: string, rollno: string, year: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "nsesc-certificate create" [
+export def "nsesc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -399,7 +399,7 @@ export def "nsesc-certificate create" [
 # operationId: nstsc
 # --certificateParameters shape: {FullName: string, rollno: string, year: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "nstsc-certificate create" [
+export def "nstsc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -442,7 +442,7 @@ export def "nstsc-certificate create" [
 # operationId: ntltr
 # --certificateParameters shape: {FullName: string, rollno: string, year: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "ntltr-certificate create" [
+export def "ntltr" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -485,7 +485,7 @@ export def "ntltr-certificate create" [
 # operationId: ntmks
 # --certificateParameters shape: {FullName: string, rollno: string, year: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "ntmks-certificate create" [
+export def "ntmks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -528,7 +528,7 @@ export def "ntmks-certificate create" [
 # operationId: skhsc
 # --certificateParameters shape: {FullName: string, rollno: string, year: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "skhsc-certificate create" [
+export def "skhsc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -571,7 +571,7 @@ export def "skhsc-certificate create" [
 # operationId: sktsc
 # --certificateParameters shape: {FullName: string, rollno: string, year: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "sktsc-certificate create" [
+export def "sktsc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -614,7 +614,7 @@ export def "sktsc-certificate create" [
 # operationId: spcer
 # --certificateParameters shape: {FullName: string, rollno: string, year: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "spcer-certificate create" [
+export def "spcer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -657,7 +657,7 @@ export def "spcer-certificate create" [
 # operationId: sscer
 # --certificateParameters shape: {FullName: string, rollno: string, year: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "sscer-certificate create" [
+export def "sscer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -701,7 +701,7 @@ export def "sscer-certificate create" [
 # operationId: ssmgr
 # --certificateParameters shape: {FullName: string, rollno: string, year: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "ssmgr-certificate create" [
+export def "ssmgr" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -744,7 +744,7 @@ export def "ssmgr-certificate create" [
 # operationId: tetcr
 # --certificateParameters shape: {FullName: string, rollno: string, year_month: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "tetcr-certificate create" [
+export def "tetcr" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -787,7 +787,7 @@ export def "tetcr-certificate create" [
 # operationId: tetms
 # --certificateParameters shape: {FullName: string, rollno: string, year_month: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "tetms-certificate create" [
+export def "tetms" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)

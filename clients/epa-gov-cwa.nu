@@ -159,7 +159,7 @@ def descending-completer [] { ["N" "Y"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cwa-rest-services-get-download get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-cwa-rest-services-get-download" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -182,7 +182,7 @@ export def commands []: nothing -> table {
 # Clean Water Act (CWA) Download Data Service
 #
 # GET /cwa_rest_services.get_download
-export def "cwa-rest-services-get-download get" [
+export def "get-cwa-rest-services-get-download" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -221,7 +221,7 @@ export def "cwa-rest-services-get-download get" [
 # Clean Water Act (CWA) Download Data Service
 #
 # POST /cwa_rest_services.get_download
-export def "cwa-rest-services-get-download create" [
+export def "post-cwa-rest-services-get-download" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -263,7 +263,7 @@ export def "cwa-rest-services-get-download create" [
 # Clean Water Act (CWA) Facility Search Service
 #
 # GET /cwa_rest_services.get_facilities
-export def "cwa-rest-services-get-facilities get" [
+export def "get-cwa-rest-services-get-facilities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -446,7 +446,7 @@ export def "cwa-rest-services-get-facilities get" [
 # Clean Water Act (CWA) Facility Search Service
 #
 # POST /cwa_rest_services.get_facilities
-export def "cwa-rest-services-get-facilities create" [
+export def "post-cwa-rest-services-get-facilities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -632,7 +632,7 @@ export def "cwa-rest-services-get-facilities create" [
 # Clean Water Act (CWA) Facility Enhanced Search Service
 #
 # GET /cwa_rest_services.get_facility_info
-export def "cwa-rest-services-get-facility-info get" [
+export def "get-cwa-rest-services-get-facility-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -812,7 +812,7 @@ export def "cwa-rest-services-get-facility-info get" [
 # Clean Water Act (CWA) Facility Enhanced Search Service
 #
 # POST /cwa_rest_services.get_facility_info
-export def "cwa-rest-services-get-facility-info create" [
+export def "post-cwa-rest-services-get-facility-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -995,7 +995,7 @@ export def "cwa-rest-services-get-facility-info create" [
 # Clean Water Act (CWA) GeoJSON Service
 #
 # GET /cwa_rest_services.get_geojson
-export def "cwa-rest-services-get-geojson get" [
+export def "get-cwa-rest-services-get-geojson" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1037,7 +1037,7 @@ export def "cwa-rest-services-get-geojson get" [
 # Clean Water Act (CWA) GeoJSON Service
 #
 # POST /cwa_rest_services.get_geojson
-export def "cwa-rest-services-get-geojson create" [
+export def "post-cwa-rest-services-get-geojson" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1082,7 +1082,7 @@ export def "cwa-rest-services-get-geojson create" [
 # Clean Water Act (CWA) Info Clusters Service
 #
 # GET /cwa_rest_services.get_info_clusters
-export def "cwa-rest-services-get-info-clusters get" [
+export def "get-cwa-rest-services-get-info-clusters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1120,7 +1120,7 @@ export def "cwa-rest-services-get-info-clusters get" [
 # Clean Water Act (CWA) Info Clusters Service
 #
 # POST /cwa_rest_services.get_info_clusters
-export def "cwa-rest-services-get-info-clusters create" [
+export def "post-cwa-rest-services-get-info-clusters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1161,7 +1161,7 @@ export def "cwa-rest-services-get-info-clusters create" [
 # Clean Water Act (CWA) Map Service
 #
 # GET /cwa_rest_services.get_map
-export def "cwa-rest-services-get-map get" [
+export def "get-cwa-rest-services-get-map" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1205,7 +1205,7 @@ export def "cwa-rest-services-get-map get" [
 # Clean Water Act (CWA) Map Service
 #
 # POST /cwa_rest_services.get_map
-export def "cwa-rest-services-get-map create" [
+export def "post-cwa-rest-services-get-map" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1252,7 +1252,7 @@ export def "cwa-rest-services-get-map create" [
 # Clean Water Act (CWA) Paginated Results Service
 #
 # GET /cwa_rest_services.get_qid
-export def "cwa-rest-services-get-qid get" [
+export def "get-cwa-rest-services-get-qid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1294,7 +1294,7 @@ export def "cwa-rest-services-get-qid get" [
 # Clean Water Act (CWA) Paginated Results Service
 #
 # POST /cwa_rest_services.get_qid
-export def "cwa-rest-services-get-qid create" [
+export def "post-cwa-rest-services-get-qid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1339,7 +1339,7 @@ export def "cwa-rest-services-get-qid create" [
 # Clean Water Act (CWA) Metadata Service
 #
 # GET /cwa_rest_services.metadata
-export def "cwa-rest-services-metadata get" [
+export def "get-cwa-rest-services-metadata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1376,7 +1376,7 @@ export def "cwa-rest-services-metadata get" [
 # Clean Water Act (CWA) Metadata Service
 #
 # POST /cwa_rest_services.metadata
-export def "cwa-rest-services-metadata create" [
+export def "post-cwa-rest-services-metadata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1416,7 +1416,7 @@ export def "cwa-rest-services-metadata create" [
 # ECHO BP Tribes Lookup Service
 #
 # GET /rest_lookups.bp_tribes
-export def "rest-lookups-bp-tribes get" [
+export def "get-rest-lookups-bp-tribes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1455,7 +1455,7 @@ export def "rest-lookups-bp-tribes get" [
 # ECHO BP Tribes Lookup Service
 #
 # POST /rest_lookups.bp_tribes
-export def "rest-lookups-bp-tribes create" [
+export def "post-rest-lookups-bp-tribes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1497,7 +1497,7 @@ export def "rest-lookups-bp-tribes create" [
 # ECHO CWA Parameter Lookup Service
 #
 # GET /rest_lookups.cwa_parameters
-export def "rest-lookups-cwa-parameters get" [
+export def "get-rest-lookups-cwa-parameters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1536,7 +1536,7 @@ export def "rest-lookups-cwa-parameters get" [
 # ECHO CWA Parameter Lookup Service
 #
 # POST /rest_lookups.cwa_parameters
-export def "rest-lookups-cwa-parameters create" [
+export def "post-rest-lookups-cwa-parameters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1578,7 +1578,7 @@ export def "rest-lookups-cwa-parameters create" [
 # ECHO CWA Pollutants Lookup Service
 #
 # GET /rest_lookups.cwa_pollutants
-export def "rest-lookups-cwa-pollutants get" [
+export def "get-rest-lookups-cwa-pollutants" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1617,7 +1617,7 @@ export def "rest-lookups-cwa-pollutants get" [
 # ECHO CWA Pollutants Lookup Service
 #
 # POST /rest_lookups.cwa_pollutants
-export def "rest-lookups-cwa-pollutants create" [
+export def "post-rest-lookups-cwa-pollutants" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1659,7 +1659,7 @@ export def "rest-lookups-cwa-pollutants create" [
 # ECHO Federal Agency Lookup Service
 #
 # GET /rest_lookups.federal_agencies
-export def "rest-lookups-federal-agencies get" [
+export def "get-rest-lookups-federal-agencies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1698,7 +1698,7 @@ export def "rest-lookups-federal-agencies get" [
 # ECHO Federal Agency Lookup Service
 #
 # POST /rest_lookups.federal_agencies
-export def "rest-lookups-federal-agencies create" [
+export def "post-rest-lookups-federal-agencies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1740,7 +1740,7 @@ export def "rest-lookups-federal-agencies create" [
 # ECHO ICIS NPDES Inspection Types Lookup Service
 #
 # GET /rest_lookups.icis_inspection_types
-export def "rest-lookups-icis-inspection-types get" [
+export def "get-rest-lookups-icis-inspection-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1779,7 +1779,7 @@ export def "rest-lookups-icis-inspection-types get" [
 # ECHO ICIS NPDES Inspection Types Lookup Service
 #
 # POST /rest_lookups.icis_inspection_types
-export def "rest-lookups-icis-inspection-types create" [
+export def "post-rest-lookups-icis-inspection-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1821,7 +1821,7 @@ export def "rest-lookups-icis-inspection-types create" [
 # ECHO ICIS NPDES Law Sections Lookup Service
 #
 # GET /rest_lookups.icis_law_sections
-export def "rest-lookups-icis-law-sections get" [
+export def "get-rest-lookups-icis-law-sections" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1863,7 +1863,7 @@ export def "rest-lookups-icis-law-sections get" [
 # ECHO ICIS NPDES Law Sections Lookup Service
 #
 # POST /rest_lookups.icis_law_sections
-export def "rest-lookups-icis-law-sections create" [
+export def "post-rest-lookups-icis-law-sections" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1908,7 +1908,7 @@ export def "rest-lookups-icis-law-sections create" [
 # ECHO NAICS Codes Lookup Service
 #
 # GET /rest_lookups.naics_codes
-export def "rest-lookups-naics-codes get" [
+export def "get-rest-lookups-naics-codes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1947,7 +1947,7 @@ export def "rest-lookups-naics-codes get" [
 # ECHO NAICS Codes Lookup Service
 #
 # POST /rest_lookups.naics_codes
-export def "rest-lookups-naics-codes create" [
+export def "post-rest-lookups-naics-codes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1989,7 +1989,7 @@ export def "rest-lookups-naics-codes create" [
 # ECHO NPDES Parameters Lookup Service
 #
 # GET /rest_lookups.npdes_parameters
-export def "rest-lookups-npdes-parameters get" [
+export def "get-rest-lookups-npdes-parameters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2027,7 +2027,7 @@ export def "rest-lookups-npdes-parameters get" [
 # ECHO NPDES Parameters Lookup Service
 #
 # POST /rest_lookups.npdes_parameters
-export def "rest-lookups-npdes-parameters create" [
+export def "post-rest-lookups-npdes-parameters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2068,7 +2068,7 @@ export def "rest-lookups-npdes-parameters create" [
 # ECHO WBD Code Lookup Service
 #
 # GET /rest_lookups.wbd_code_lu
-export def "rest-lookups-wbd-code-lu get" [
+export def "get-rest-lookups-wbd-code-lu" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2107,7 +2107,7 @@ export def "rest-lookups-wbd-code-lu get" [
 # ECHO WBD Code Lookup Service
 #
 # POST /rest_lookups.wbd_code_lu
-export def "rest-lookups-wbd-code-lu create" [
+export def "post-rest-lookups-wbd-code-lu" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2149,7 +2149,7 @@ export def "rest-lookups-wbd-code-lu create" [
 # ECHO WBD Name Lookup Service
 #
 # GET /rest_lookups.wbd_name_lu
-export def "rest-lookups-wbd-name-lu get" [
+export def "get-rest-lookups-wbd-name-lu" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2188,7 +2188,7 @@ export def "rest-lookups-wbd-name-lu get" [
 # ECHO WBD Name Lookup Service
 #
 # POST /rest_lookups.wbd_name_lu
-export def "rest-lookups-wbd-name-lu create" [
+export def "post-rest-lookups-wbd-name-lu" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

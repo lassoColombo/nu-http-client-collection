@@ -127,7 +127,7 @@ def type-completer-1 [] { ["accounts" "hashtags" "statuses"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "oembed get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-api-oembed" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -150,7 +150,7 @@ export def commands []: nothing -> table {
 # OEmbed as JSON
 #
 # GET /api/oembed
-export def "oembed get" [
+export def "get-api-oembed" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -187,7 +187,7 @@ export def "oembed get" [
 # View identity proof
 #
 # GET /api/proofs
-export def "proofs get" [
+export def "get-api-proofs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -223,7 +223,7 @@ export def "proofs get" [
 # Creates a user and account records. Returns an account access token for the app that initiated the request. The app should save this token for later, and should wait for the user to confirm their account by clicking a link in their email inbox.
 #
 # POST /api/v1/accounts
-export def "accounts create" [
+export def "post-api-v1-accounts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -260,7 +260,7 @@ export def "accounts create" [
 # Sets a private note on a user.
 #
 # GET /api/v1/accounts/relationships
-export def "accounts-relationships get" [
+export def "get-api-v1-accounts-relationships" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -295,7 +295,7 @@ export def "accounts-relationships get" [
 # Search for matching accounts by username or display name.
 #
 # GET /api/v1/accounts/search
-export def "accounts-search get" [
+export def "get-api-v1-accounts-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -333,7 +333,7 @@ export def "accounts-search get" [
 # Update the user's display and preferences.
 #
 # PATCH /api/v1/accounts/update_credentials
-export def "accounts-update-credentials update" [
+export def "patch-api-v1-accounts-update-credentials" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -370,7 +370,7 @@ export def "accounts-update-credentials update" [
 # Test to make sure that the user token works.
 #
 # GET /api/v1/accounts/verify_credentials
-export def "accounts-verify-credentials get" [
+export def "get-api-v1-accounts-verify-credentials" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -401,7 +401,7 @@ export def "accounts-verify-credentials get" [
 }
 
 # GET /api/v1/accounts/{id}
-export def "accounts get" [
+export def "get-api-v1-accounts-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -436,7 +436,7 @@ export def "accounts get" [
 # Block the given account. Clients should filter statuses from this account if received (e.g. due to a boost in the Home timeline).
 #
 # POST /api/v1/accounts/{id}/block
-export def "accounts-block create" [
+export def "post-api-v1-accounts-id-block" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -471,7 +471,7 @@ export def "accounts-block create" [
 # Tags featured by this account.
 #
 # GET /api/v1/accounts/{id}/featured_tags
-export def "accounts-featured-tags get" [
+export def "get-api-v1-accounts-id-featured-tags" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -506,7 +506,7 @@ export def "accounts-featured-tags get" [
 # Follow the given account. Can also be used to update whether to show reblogs or enable notifications.
 #
 # POST /api/v1/accounts/{id}/follow
-export def "accounts-follow create" [
+export def "post-api-v1-accounts-id-follow" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -545,7 +545,7 @@ export def "accounts-follow create" [
 # Accounts which follow the given account, if network is not hidden by the account owner.
 #
 # GET /api/v1/accounts/{id}/followers
-export def "accounts-followers get" [
+export def "get-api-v1-accounts-id-followers" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -584,7 +584,7 @@ export def "accounts-followers get" [
 # Accounts which the given account is following, if network is not hidden by the account owner.
 #
 # GET /api/v1/accounts/{id}/following
-export def "accounts-following get" [
+export def "get-api-v1-accounts-id-following" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -623,7 +623,7 @@ export def "accounts-following get" [
 # Array of IdentityProof
 #
 # GET /api/v1/accounts/{id}/identity_proofs
-export def "accounts-identity-proofs get" [
+export def "get-api-v1-accounts-id-identity-proofs" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -658,7 +658,7 @@ export def "accounts-identity-proofs get" [
 # User lists that you have added this account to.
 #
 # GET /api/v1/accounts/{id}/lists
-export def "accounts-lists get" [
+export def "get-api-v1-accounts-id-lists" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -693,7 +693,7 @@ export def "accounts-lists get" [
 # Mute the given account. Clients should filter statuses and notifications from this account, if received (e.g. due to a boost in the Home timeline).
 #
 # POST /api/v1/accounts/{id}/mute
-export def "accounts-mute create" [
+export def "post-api-v1-accounts-id-mute" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -732,7 +732,7 @@ export def "accounts-mute create" [
 # Sets a private note on a user.
 #
 # POST /api/v1/accounts/{id}/note
-export def "accounts-note create" [
+export def "post-api-v1-accounts-id-note" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -771,7 +771,7 @@ export def "accounts-note create" [
 # Add the given account to the user's featured profiles. (Featured profiles are currently shown on the user's own public profile.)
 #
 # POST /api/v1/accounts/{id}/pin
-export def "accounts-pin create" [
+export def "post-api-v1-accounts-id-pin" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -806,7 +806,7 @@ export def "accounts-pin create" [
 # Statuses posted to the given account.
 #
 # GET /api/v1/accounts/{id}/statuses
-export def "accounts-statuses get" [
+export def "get-api-v1-accounts-id-statuses" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -841,7 +841,7 @@ export def "accounts-statuses get" [
 # Block the given account. Clients should filter statuses from this account if received (e.g. due to a boost in the Home timeline).
 #
 # POST /api/v1/accounts/{id}/unblock
-export def "accounts-unblock create" [
+export def "post-api-v1-accounts-id-unblock" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -876,7 +876,7 @@ export def "accounts-unblock create" [
 # Unfollow the given account.
 #
 # POST /api/v1/accounts/{id}/unfollow
-export def "accounts-unfollow create" [
+export def "post-api-v1-accounts-id-unfollow" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -911,7 +911,7 @@ export def "accounts-unfollow create" [
 # Unmute the given account.
 #
 # POST /api/v1/accounts/{id}/unmute
-export def "accounts-unmute create" [
+export def "post-api-v1-accounts-id-unmute" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -946,7 +946,7 @@ export def "accounts-unmute create" [
 # Remove the given account from the user's featured profiles.
 #
 # POST /api/v1/accounts/{id}/unpin
-export def "accounts-unpin create" [
+export def "post-api-v1-accounts-id-unpin" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -981,7 +981,7 @@ export def "accounts-unpin create" [
 # View accounts matching certain criteria for filtering, up to 100 at a time. Pagination may be done with the HTTP Link header in the response.
 #
 # GET /api/v1/admin/accounts
-export def "admin-accounts list" [
+export def "get-api-v1-admin-accounts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1028,7 +1028,7 @@ export def "admin-accounts list" [
 # View admin-level information about the given account.
 #
 # GET /api/v1/admin/accounts/{id}
-export def "admin-accounts get" [
+export def "get-api-v1-admin-accounts-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1063,7 +1063,7 @@ export def "admin-accounts get" [
 # Perform an action against an account and log this action in the moderation history.
 #
 # POST /api/v1/admin/accounts/{id}/action
-export def "admin-accounts-action create" [
+export def "post-api-v1-admin-accounts-id-action" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1106,7 +1106,7 @@ export def "admin-accounts-action create" [
 # Approve the given local account if it is currently pending approval.
 #
 # POST /api/v1/admin/accounts/{id}/approve
-export def "admin-accounts-approve create" [
+export def "post-api-v1-admin-accounts-id-approve" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1141,7 +1141,7 @@ export def "admin-accounts-approve create" [
 # Re-enable a local account whose login is currently disabled.
 #
 # POST /api/v1/admin/accounts/{id}/enable
-export def "admin-accounts-enable create" [
+export def "post-api-v1-admin-accounts-id-enable" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1176,7 +1176,7 @@ export def "admin-accounts-enable create" [
 # Reject the given local account if it is currently pending approval.
 #
 # POST /api/v1/admin/accounts/{id}/reject
-export def "admin-accounts-reject create" [
+export def "post-api-v1-admin-accounts-id-reject" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1211,7 +1211,7 @@ export def "admin-accounts-reject create" [
 # Unsilence a currently silenced account.
 #
 # POST /api/v1/admin/accounts/{id}/unsilence
-export def "admin-accounts-unsilence create" [
+export def "post-api-v1-admin-accounts-id-unsilence" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1246,7 +1246,7 @@ export def "admin-accounts-unsilence create" [
 # Unsuspend a currently suspended account.
 #
 # POST /api/v1/admin/accounts/{id}/unsuspend
-export def "admin-accounts-unsuspend create" [
+export def "post-api-v1-admin-accounts-id-unsuspend" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1281,7 +1281,7 @@ export def "admin-accounts-unsuspend create" [
 # View all reports. Pagination may be done with HTTP Link header in the response.
 #
 # GET /api/v1/admin/reports
-export def "admin-reports list" [
+export def "get-api-v1-admin-reports" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1318,7 +1318,7 @@ export def "admin-reports list" [
 # View information about the report with the given ID.
 #
 # GET /api/v1/admin/reports/{id}
-export def "admin-reports get" [
+export def "get-api-v1-admin-reports-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1353,7 +1353,7 @@ export def "admin-reports get" [
 # Claim the handling of this report to yourself.
 #
 # POST /api/v1/admin/reports/{id}/assign_to_self
-export def "admin-reports-assign-to-self create" [
+export def "post-api-v1-admin-reports-id-assign-to-self" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1388,7 +1388,7 @@ export def "admin-reports-assign-to-self create" [
 # Mark a report as resolved with no further action taken.
 #
 # POST /api/v1/admin/reports/{id}/reopen
-export def "admin-reports-reopen create" [
+export def "post-api-v1-admin-reports-id-reopen" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1423,7 +1423,7 @@ export def "admin-reports-reopen create" [
 # Mark a report as resolved with no further action taken.
 #
 # POST /api/v1/admin/reports/{id}/resolve
-export def "admin-reports-resolve create" [
+export def "post-api-v1-admin-reports-id-resolve" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1458,7 +1458,7 @@ export def "admin-reports-resolve create" [
 # Unassign a report so that someone else can claim it.
 #
 # POST /api/v1/admin/reports/{id}/unassign
-export def "admin-reports-unassign create" [
+export def "post-api-v1-admin-reports-id-unassign" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1493,7 +1493,7 @@ export def "admin-reports-unassign create" [
 # See all currently active announcements set by admins.
 #
 # GET /api/v1/announcements
-export def "announcements get" [
+export def "get-api-v1-announcements" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1528,7 +1528,7 @@ export def "announcements get" [
 # Allows a user to mark the announcement as read.
 #
 # POST /api/v1/announcements/{id}/dismiss
-export def "announcements-dismiss create" [
+export def "post-api-v1-announcements-id-dismiss" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1563,7 +1563,7 @@ export def "announcements-dismiss create" [
 # Undo a react emoji to an announcement.
 #
 # DELETE /api/v1/announcements/{id}/reactions/{name}
-export def "announcements-reactions delete" [
+export def "delete-api-v1-announcements-id-reactions-name" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1600,7 +1600,7 @@ export def "announcements-reactions delete" [
 # Allows a user to mark the announcement as read.
 #
 # PUT /api/v1/announcements/{id}/reactions/{name}
-export def "announcements-reactions update" [
+export def "put-api-v1-announcements-id-reactions-name" [
   id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1637,7 +1637,7 @@ export def "announcements-reactions update" [
 # Create a new application to obtain OAuth2 credentials.
 #
 # POST /api/v1/apps
-export def "apps create" [
+export def "post-api-v1-apps" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1674,7 +1674,7 @@ export def "apps create" [
 # Confirm that the app's OAuth2 credentials work.
 #
 # GET /api/v1/apps/verify_credentials
-export def "apps-verify-credentials get" [
+export def "get-api-v1-apps-verify-credentials" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1707,7 +1707,7 @@ export def "apps-verify-credentials get" [
 # Get blocked users.
 #
 # GET /api/v1/blocks
-export def "blocks get" [
+export def "get-api-v1-blocks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1744,7 +1744,7 @@ export def "blocks get" [
 # Statuses the user has bookmarked.
 #
 # GET /api/v1/bookmarks
-export def "bookmarks get" [
+export def "get-api-v1-bookmarks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1782,7 +1782,7 @@ export def "bookmarks get" [
 # Show conversation.
 #
 # GET /api/v1/conversations
-export def "conversations get" [
+export def "get-api-v1-conversations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1820,7 +1820,7 @@ export def "conversations get" [
 # Remove converstation
 #
 # DELETE /api/v1/conversations/{id}
-export def "conversations delete" [
+export def "delete-api-v1-conversations-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1855,7 +1855,7 @@ export def "conversations delete" [
 # Remove converstation
 #
 # POST /api/v1/conversations/{id}/read
-export def "conversations-read create" [
+export def "post-api-v1-conversations-id-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1890,7 +1890,7 @@ export def "conversations-read create" [
 # Returns custom emojis that are available on the server.
 #
 # GET /api/v1/custom_emojis
-export def "custom-emojis get" [
+export def "get-api-v1-custom-emojis" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1923,7 +1923,7 @@ export def "custom-emojis get" [
 # List accounts visible in the directory.
 #
 # GET /api/v1/directory
-export def "directory get" [
+export def "get-api-v1-directory" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1961,7 +1961,7 @@ export def "directory get" [
 # Remove a domain block, if it exists in the user's array of blocked domains.
 #
 # DELETE /api/v1/domain_blocks
-export def "domain-blocks delete" [
+export def "delete-api-v1-domain-blocks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1996,7 +1996,7 @@ export def "domain-blocks delete" [
 # View domains the user has blocked.
 #
 # GET /api/v1/domain_blocks
-export def "domain-blocks get" [
+export def "get-api-v1-domain-blocks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2033,7 +2033,7 @@ export def "domain-blocks get" [
 # "Block a domain to: - hide all public posts from it - hide all notifications from it - remove all followers from it - prevent following new users from it (but does not remove existing follows)"
 #
 # POST /api/v1/domain_blocks
-export def "domain-blocks create" [
+export def "post-api-v1-domain-blocks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2070,7 +2070,7 @@ export def "domain-blocks create" [
 # Accounts that the user is currently featuring on their profile.
 #
 # GET /api/v1/endorsements
-export def "endorsements get" [
+export def "get-api-v1-endorsements" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2107,7 +2107,7 @@ export def "endorsements get" [
 # Statuses the user has favourited.
 #
 # GET /api/v1/favourites
-export def "favourites get" [
+export def "get-api-v1-favourites" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2144,7 +2144,7 @@ export def "favourites get" [
 # View your featured tags.
 #
 # GET /api/v1/featured_tags
-export def "featured-tags get" [
+export def "get-api-v1-featured-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2177,7 +2177,7 @@ export def "featured-tags get" [
 # Create a feature a tag.
 #
 # POST /api/v1/featured_tags
-export def "featured-tags create" [
+export def "post-api-v1-featured-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2214,7 +2214,7 @@ export def "featured-tags create" [
 # Shows your 10 most-used tags, with usage history for the past week.
 #
 # GET /api/v1/featured_tags/suggestions
-export def "featured-tags-suggestions get" [
+export def "get-api-v1-featured-tags-suggestions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2247,7 +2247,7 @@ export def "featured-tags-suggestions get" [
 # Unfeature a tag
 #
 # DELETE /api/v1/featured_tags/{id}
-export def "featured-tags delete" [
+export def "delete-api-v1-featured-tags-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2280,7 +2280,7 @@ export def "featured-tags delete" [
 }
 
 # GET /api/v1/filters
-export def "filters list" [
+export def "get-api-v1-filters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2311,7 +2311,7 @@ export def "filters list" [
 }
 
 # POST /api/v1/filters
-export def "filters create" [
+export def "post-api-v1-filters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2348,7 +2348,7 @@ export def "filters create" [
 # Delete a filter.
 #
 # DELETE /api/v1/filters/{id}
-export def "filters delete" [
+export def "delete-api-v1-filters-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2383,7 +2383,7 @@ export def "filters delete" [
 # Get one filter.
 #
 # GET /api/v1/filters/{id}
-export def "filters get" [
+export def "get-api-v1-filters-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2418,7 +2418,7 @@ export def "filters get" [
 # Update a filter.
 #
 # PUT /api/v1/filters/{id}
-export def "filters update" [
+export def "put-api-v1-filters-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2457,7 +2457,7 @@ export def "filters update" [
 # Pending Follows
 #
 # GET /api/v1/follow_requests
-export def "follow-requests get" [
+export def "get-api-v1-follow-requests" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2492,7 +2492,7 @@ export def "follow-requests get" [
 # Accept Follow
 #
 # POST /api/v1/follow_requests/{id}/authorize
-export def "follow-requests-authorize create" [
+export def "post-api-v1-follow-requests-id-authorize" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2527,7 +2527,7 @@ export def "follow-requests-authorize create" [
 # Accept Follow
 #
 # POST /api/v1/follow_requests/{id}/reject
-export def "follow-requests-reject create" [
+export def "post-api-v1-follow-requests-id-reject" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2562,7 +2562,7 @@ export def "follow-requests-reject create" [
 # Information about the server.
 #
 # GET /api/v1/instance
-export def "instance get" [
+export def "get-api-v1-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2595,7 +2595,7 @@ export def "instance get" [
 # Instance activity over the last 3 months, binned weekly.
 #
 # GET /api/v1/instance/activity
-export def "instance-activity get" [
+export def "get-api-v1-instance-activity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2628,7 +2628,7 @@ export def "instance-activity get" [
 # Information about the server.
 #
 # GET /api/v1/instance/peers
-export def "instance-peers get" [
+export def "get-api-v1-instance-peers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2661,7 +2661,7 @@ export def "instance-peers get" [
 # Delete a list
 #
 # DELETE /api/v1/lists
-export def "lists delete" [
+export def "delete-api-v1-lists" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2694,7 +2694,7 @@ export def "lists delete" [
 # Fetch all lists that the user owns.
 #
 # GET /api/v1/lists
-export def "lists list" [
+export def "get-api-v1-lists" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2727,7 +2727,7 @@ export def "lists list" [
 # Create a new list.
 #
 # POST /api/v1/lists
-export def "lists create" [
+export def "post-api-v1-lists" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2765,7 +2765,7 @@ export def "lists create" [
 # Change the title of a list, or which replies to show.
 #
 # PUT /api/v1/lists
-export def "lists update" [
+export def "put-api-v1-lists" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2803,7 +2803,7 @@ export def "lists update" [
 # Remove converstation
 #
 # GET /api/v1/lists/{id}
-export def "lists get" [
+export def "get-api-v1-lists-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2838,7 +2838,7 @@ export def "lists get" [
 # Remove accounts from the given list.
 #
 # DELETE /api/v1/lists/{id}/accounts
-export def "lists-accounts delete" [
+export def "delete-api-v1-lists-id-accounts" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2875,7 +2875,7 @@ export def "lists-accounts delete" [
 # View accounts in List
 #
 # GET /api/v1/lists/{id}/accounts
-export def "lists-accounts get" [
+export def "get-api-v1-lists-id-accounts" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2914,7 +2914,7 @@ export def "lists-accounts get" [
 # Add accounts to the given list. Note that the user must be following these accounts.
 #
 # POST /api/v1/lists/{id}/accounts
-export def "lists-accounts create" [
+export def "post-api-v1-lists-id-accounts" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2953,7 +2953,7 @@ export def "lists-accounts create" [
 # Get saved timeline position
 #
 # GET /api/v1/markers
-export def "markers get" [
+export def "get-api-v1-markers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2988,7 +2988,7 @@ export def "markers get" [
 # Get saved timeline position
 #
 # POST /api/v1/markers
-export def "markers create" [
+export def "post-api-v1-markers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3025,7 +3025,7 @@ export def "markers create" [
 # Creates an attachment to be used with a new status.
 #
 # POST /api/v1/media
-export def "media create" [
+export def "post-api-v1-media" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3062,7 +3062,7 @@ export def "media create" [
 # Get an attachement.
 #
 # GET /api/v1/media/{id}
-export def "media get" [
+export def "get-api-v1-media-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3097,7 +3097,7 @@ export def "media get" [
 # Update an Attachment, before it is attached to a status and posted.
 #
 # POST /api/v1/media/{id}
-export def "media create-by-id" [
+export def "post-api-v1-media-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3136,7 +3136,7 @@ export def "media create-by-id" [
 # Accounts the user has muted.
 #
 # GET /api/v1/mutes
-export def "mutes get" [
+export def "get-api-v1-mutes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3173,7 +3173,7 @@ export def "mutes get" [
 # Notifications concerning the user. This API returns Link headers containing links to the next/previous page. However, the links can also be constructed dynamically using query params and id values.
 #
 # GET /api/v1/notifications
-export def "notifications list" [
+export def "get-api-v1-notifications" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3213,7 +3213,7 @@ export def "notifications list" [
 # Clear all notifications from the server.
 #
 # POST /api/v1/notifications/clear
-export def "notifications-clear create" [
+export def "post-api-v1-notifications-clear" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3246,7 +3246,7 @@ export def "notifications-clear create" [
 # View information about a notification with a given ID.
 #
 # GET /api/v1/notifications/{id}
-export def "notifications get" [
+export def "get-api-v1-notifications-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3281,7 +3281,7 @@ export def "notifications get" [
 # Clear a single notification from the server.
 #
 # POST /api/v1/notifications/{id}/dismiss
-export def "notifications-dismiss create" [
+export def "post-api-v1-notifications-id-dismiss" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3316,7 +3316,7 @@ export def "notifications-dismiss create" [
 # View a poll.
 #
 # GET /api/v1/polls/{id}
-export def "polls get" [
+export def "get-api-v1-polls-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3351,7 +3351,7 @@ export def "polls get" [
 # Vote on a poll.
 #
 # POST /api/v1/polls/{id}
-export def "polls create" [
+export def "post-api-v1-polls-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3390,7 +3390,7 @@ export def "polls create" [
 # Shows your 10 most-used tags, with usage history for the past week.
 #
 # GET /api/v1/preferences
-export def "preferences get" [
+export def "get-api-v1-preferences" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3423,7 +3423,7 @@ export def "preferences get" [
 # Updates the current push subscription. Only the data part can be updated. To change fundamentals, a new subscription must be created instead.
 #
 # DELETE /api/v1/push/subscription
-export def "push-subscription delete" [
+export def "delete-api-v1-push-subscription" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3456,7 +3456,7 @@ export def "push-subscription delete" [
 # View the PushSubscription currently associated with this access token.
 #
 # GET /api/v1/push/subscription
-export def "push-subscription get" [
+export def "get-api-v1-push-subscription" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3489,7 +3489,7 @@ export def "push-subscription get" [
 # Add a Web Push API subscription to receive notifications. Each access token can have one push subscription. If you create a new subscription, the old subscription is deleted.
 #
 # POST /api/v1/push/subscription
-export def "push-subscription create" [
+export def "post-api-v1-push-subscription" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3527,7 +3527,7 @@ export def "push-subscription create" [
 # Updates the current push subscription. Only the data part can be updated. To change fundamentals, a new subscription must be created instead.
 #
 # PUT /api/v1/push/subscription
-export def "push-subscription update" [
+export def "put-api-v1-push-subscription" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3564,7 +3564,7 @@ export def "push-subscription update" [
 # File a report.
 #
 # POST /api/v1/reports
-export def "reports create" [
+export def "post-api-v1-reports" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3604,7 +3604,7 @@ export def "reports create" [
 # View scheduled statuses
 #
 # GET /api/v1/scheduled_statuses
-export def "scheduled-statuses list" [
+export def "get-api-v1-scheduled-statuses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3642,7 +3642,7 @@ export def "scheduled-statuses list" [
 # Cancel a scheduled status
 #
 # DELETE /api/v1/scheduled_statuses/{id}
-export def "scheduled-statuses delete" [
+export def "delete-api-v1-scheduled-statuses-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3677,7 +3677,7 @@ export def "scheduled-statuses delete" [
 # View a single scheduled status
 #
 # GET /api/v1/scheduled_statuses/{id}
-export def "scheduled-statuses get" [
+export def "get-api-v1-scheduled-statuses-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3712,7 +3712,7 @@ export def "scheduled-statuses get" [
 # View a single scheduled status
 #
 # PUT /api/v1/scheduled_statuses/{id}
-export def "scheduled-statuses update" [
+export def "put-api-v1-scheduled-statuses-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3749,7 +3749,7 @@ export def "scheduled-statuses update" [
 }
 
 # POST /api/v1/statuses
-export def "statuses create" [
+export def "post-api-v1-statuses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3787,7 +3787,7 @@ export def "statuses create" [
 }
 
 # DELETE /api/v1/statuses/{id}
-export def "statuses delete" [
+export def "delete-api-v1-statuses-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3820,7 +3820,7 @@ export def "statuses delete" [
 }
 
 # GET /api/v1/statuses/{id}
-export def "statuses get" [
+export def "get-api-v1-statuses-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3855,7 +3855,7 @@ export def "statuses get" [
 # Privately bookmark a status.
 #
 # POST /api/v1/statuses/{id}/bookmark
-export def "statuses-bookmark create" [
+export def "post-api-v1-statuses-id-bookmark" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3888,7 +3888,7 @@ export def "statuses-bookmark create" [
 }
 
 # GET /api/v1/statuses/{id}/context
-export def "statuses-context get" [
+export def "get-api-v1-statuses-id-context" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3923,7 +3923,7 @@ export def "statuses-context get" [
 # Add a status to your favourites list.
 #
 # POST /api/v1/statuses/{id}/favourite
-export def "statuses-favourite create" [
+export def "post-api-v1-statuses-id-favourite" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3958,7 +3958,7 @@ export def "statuses-favourite create" [
 # View who favourited a given status.
 #
 # GET /api/v1/statuses/{id}/favourited_by
-export def "statuses-favourited-by get" [
+export def "get-api-v1-statuses-id-favourited-by" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3993,7 +3993,7 @@ export def "statuses-favourited-by get" [
 # Do not receive notifications for the thread that this status is part of. Must be a thread in which you are a participant.
 #
 # POST /api/v1/statuses/{id}/mute
-export def "statuses-mute create" [
+export def "post-api-v1-statuses-id-mute" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4028,7 +4028,7 @@ export def "statuses-mute create" [
 # Feature one of your own public statuses at the top of your profile.
 #
 # POST /api/v1/statuses/{id}/pin
-export def "statuses-pin create" [
+export def "post-api-v1-statuses-id-pin" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4063,7 +4063,7 @@ export def "statuses-pin create" [
 # Reshare a status.
 #
 # POST /api/v1/statuses/{id}/reblog
-export def "statuses-reblog create" [
+export def "post-api-v1-statuses-id-reblog" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4102,7 +4102,7 @@ export def "statuses-reblog create" [
 # View who boosted a given status.
 #
 # GET /api/v1/statuses/{id}/reblogged_by
-export def "statuses-reblogged-by get" [
+export def "get-api-v1-statuses-id-reblogged-by" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4137,7 +4137,7 @@ export def "statuses-reblogged-by get" [
 # Remove a status from your private bookmarks.
 #
 # POST /api/v1/statuses/{id}/unbookmark
-export def "statuses-unbookmark create" [
+export def "post-api-v1-statuses-id-unbookmark" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4172,7 +4172,7 @@ export def "statuses-unbookmark create" [
 # Remove a status from your favourites list.
 #
 # POST /api/v1/statuses/{id}/unfavourite
-export def "statuses-unfavourite create" [
+export def "post-api-v1-statuses-id-unfavourite" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4207,7 +4207,7 @@ export def "statuses-unfavourite create" [
 # Status's conversation unmuted, or was already unmuted
 #
 # POST /api/v1/statuses/{id}/unmute
-export def "statuses-unmute create" [
+export def "post-api-v1-statuses-id-unmute" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4242,7 +4242,7 @@ export def "statuses-unmute create" [
 # Unfeature a status from the top of your profile.
 #
 # POST /api/v1/statuses/{id}/unpin
-export def "statuses-unpin create" [
+export def "post-api-v1-statuses-id-unpin" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4277,7 +4277,7 @@ export def "statuses-unpin create" [
 # Undo a reshare of a status.
 #
 # POST /api/v1/statuses/{id}/unreblog
-export def "statuses-unreblog create" [
+export def "post-api-v1-statuses-id-unreblog" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4312,7 +4312,7 @@ export def "statuses-unreblog create" [
 # Accounts the user has had past positive interactions with, but is not yet following.
 #
 # GET /api/v1/suggestions
-export def "suggestions get" [
+export def "get-api-v1-suggestions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4347,7 +4347,7 @@ export def "suggestions get" [
 # Delete user suggestion
 #
 # DELETE /api/v1/suggestions/{id}
-export def "suggestions delete" [
+export def "delete-api-v1-suggestions-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4382,7 +4382,7 @@ export def "suggestions delete" [
 # View statuses from followed users.
 #
 # GET /api/v1/timelines/home
-export def "timelines-home get" [
+export def "get-api-v1-timelines-home" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4421,7 +4421,7 @@ export def "timelines-home get" [
 # View statuses in the given list timeline.
 #
 # GET /api/v1/timelines/list/{list_id}
-export def "timelines-list get" [
+export def "get-api-v1-timelines-list-list-id" [
   list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4461,7 +4461,7 @@ export def "timelines-list get" [
 # Public timeline
 #
 # GET /api/v1/timelines/public
-export def "timelines-public get" [
+export def "get-api-v1-timelines-public" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4502,7 +4502,7 @@ export def "timelines-public get" [
 # View public statuses containing the given hashtag.
 #
 # GET /api/v1/timelines/tag/{hashtag}
-export def "timelines-tag get" [
+export def "get-api-v1-timelines-tag-hashtag" [
   hashtag: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4545,7 +4545,7 @@ export def "timelines-tag get" [
 # Tags that are being used more frequently within the past week.
 #
 # GET /api/v1/trends
-export def "trends get" [
+export def "get-api-v1-trends" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4580,7 +4580,7 @@ export def "trends get" [
 # Search results
 #
 # GET /api/v2/search
-export def "search get" [
+export def "get-api-v2-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4624,7 +4624,7 @@ export def "search get" [
 # Displays an authorization form to the user. If approved, it will create and return an authorization code, then redirect to the desired redirect_uri, or show the authorization code if urn:ietf:wg:oauth:2.0:oob was requested. The authorization code can be used while requesting a token to obtain access to user-level methods.
 #
 # GET /oauth/authorize
-export def "oauth-authorize get" [
+export def "get-oauth-authorize" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4663,7 +4663,7 @@ export def "oauth-authorize get" [
 # Revoke an access token to make it no longer valid for use.
 #
 # POST /oauth/revoke
-export def "oauth-revoke create" [
+export def "post-oauth-revoke" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4700,7 +4700,7 @@ export def "oauth-revoke create" [
 # Returns an access token, to be used during API calls that are not public.
 #
 # POST /oauth/token
-export def "oauth-token create" [
+export def "post-oauth-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

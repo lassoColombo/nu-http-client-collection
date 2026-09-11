@@ -105,7 +105,7 @@ def format-completer [] { ["json" "xml"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "verification-result get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-v1-verification-result" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -128,7 +128,7 @@ export def commands []: nothing -> table {
 # Verify that an OTP sent by the Send SMS Verification API is valid.
 #
 # GET /v1/verification/result
-export def "verification-result get" [
+export def "get-v1-verification-result" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -166,7 +166,7 @@ export def "verification-result get" [
 # Send an SMS with verification code and a custom message for authentication purpose.
 #
 # POST /v1/verification/send
-export def "verification-send create" [
+export def "post-v1-verification-send" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

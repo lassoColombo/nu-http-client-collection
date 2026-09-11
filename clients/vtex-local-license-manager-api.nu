@@ -127,7 +127,7 @@ def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "license-manager-site-pvt-logins-list-paged get-users" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-list-users" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -151,7 +151,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/license-manager/site/pvt/logins/list/paged
 # operationId: GetListUsers
-export def "license-manager-site-pvt-logins-list-paged get-users" [
+export def "get-list-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -193,7 +193,7 @@ export def "license-manager-site-pvt-logins-list-paged get-users" [
 #
 # GET /api/license-manager/site/pvt/roles/list/paged
 # operationId: GetListRoles
-export def "license-manager-site-pvt-roles-list-paged get" [
+export def "get-list-roles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -235,7 +235,7 @@ export def "license-manager-site-pvt-roles-list-paged get" [
 #
 # POST /api/license-manager/users
 # operationId: CreateUser
-export def "license-manager-users create" [
+export def "create-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -274,7 +274,7 @@ export def "license-manager-users create" [
 #
 # GET /api/license-manager/users/{userId}
 # operationId: GetUser
-export def "license-manager-users get" [
+export def "get-user" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -313,7 +313,7 @@ export def "license-manager-users get" [
 #
 # GET /api/license-manager/users/{userId}/roles
 # operationId: GetRolesbyUser
-export def "license-manager-users-roles get-rolesby" [
+export def "get-rolesby-user" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -352,7 +352,7 @@ export def "license-manager-users-roles get-rolesby" [
 #
 # PUT /api/license-manager/users/{userId}/roles
 # operationId: PutRolesinUser
-export def "license-manager-users-roles update-rolesin" [
+export def "put-rolesin-user" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -392,7 +392,7 @@ export def "license-manager-users-roles update-rolesin" [
 #
 # DELETE /api/license-manager/users/{userId}/roles/{roleId}
 # operationId: RemoveRolefromUser
-export def "license-manager-users-roles delete-rolefrom" [
+export def "remove-rolefrom-user" [
   user_id: string
   role_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -433,7 +433,7 @@ export def "license-manager-users-roles delete-rolefrom" [
 #
 # GET /api/vlm/account
 # operationId: GetAccount
-export def "vlm-account get" [
+export def "get-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -467,7 +467,7 @@ export def "vlm-account get" [
 #
 # GET /api/vlm/account/stores
 # operationId: GetByAccount
-export def "vlm-account-stores get" [
+export def "get-by-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -501,7 +501,7 @@ export def "vlm-account-stores get" [
 #
 # GET /api/vlm/appkeys
 # operationId: Getappkeysfromaccount
-export def "vlm-appkeys get-appkeysfromaccount" [
+export def "getappkeysfromaccount" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -538,7 +538,7 @@ export def "vlm-appkeys get-appkeysfromaccount" [
 #
 # POST /api/vlm/appkeys
 # operationId: Createnewappkey
-export def "vlm-appkeys create-newappkey" [
+export def "createnewappkey" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -576,7 +576,7 @@ export def "vlm-appkeys create-newappkey" [
 #
 # PUT /api/vlm/appkeys/{id}
 # operationId: Updateappkey
-export def "vlm-appkeys update" [
+export def "updateappkey" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)

@@ -119,7 +119,7 @@ def place-action-type-completer [] { ["APPOINTMENT" "DINING_RESERVATION" "FOOD_D
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "place-action-type-metadata list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "mybusinessplaceactions-place-action-type-metadata-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -143,7 +143,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/placeActionTypeMetadata
 # operationId: mybusinessplaceactions.placeActionTypeMetadata.list
-export def "place-action-type-metadata list" [
+export def "mybusinessplaceactions-place-action-type-metadata-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -193,7 +193,7 @@ export def "place-action-type-metadata list" [
 #
 # DELETE /v1/{name}
 # operationId: mybusinessplaceactions.locations.placeActionLinks.delete
-export def "locations delete" [
+export def "mybusinessplaceactions-locations-place-action-links-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -241,7 +241,7 @@ export def "locations delete" [
 #
 # GET /v1/{name}
 # operationId: mybusinessplaceactions.locations.placeActionLinks.get
-export def "locations get" [
+export def "mybusinessplaceactions-locations-place-action-links-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -289,7 +289,7 @@ export def "locations get" [
 #
 # PATCH /v1/{name}
 # operationId: mybusinessplaceactions.locations.placeActionLinks.patch
-export def "locations update" [
+export def "mybusinessplaceactions-locations-place-action-links-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -345,7 +345,7 @@ export def "locations update" [
 #
 # GET /v1/{parent}/placeActionLinks
 # operationId: mybusinessplaceactions.locations.placeActionLinks.list
-export def "place-action-links list" [
+export def "mybusinessplaceactions-locations-place-action-links-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -396,7 +396,7 @@ export def "place-action-links list" [
 #
 # POST /v1/{parent}/placeActionLinks
 # operationId: mybusinessplaceactions.locations.placeActionLinks.create
-export def "place-action-links create" [
+export def "mybusinessplaceactions-locations-place-action-links-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

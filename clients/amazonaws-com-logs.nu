@@ -148,7 +148,7 @@ def x-amz-target-completer-47 [] { ["Logs_20140328.UntagResource"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-associate-kms-key" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associate-kms-key" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -172,7 +172,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AssociateKmsKey
-export def "api create-associate-kms-key" [
+export def "associate-kms-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -221,7 +221,7 @@ export def "api create-associate-kms-key" [
 #
 # POST /
 # operationId: CancelExportTask
-export def "api cancel-export-task" [
+export def "cancel-export-task" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -269,7 +269,7 @@ export def "api cancel-export-task" [
 #
 # POST /
 # operationId: CreateExportTask
-export def "api create-export-task" [
+export def "create-export-task" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -323,7 +323,7 @@ export def "api create-export-task" [
 #
 # POST /
 # operationId: CreateLogGroup
-export def "api create-log-group" [
+export def "create-log-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -373,7 +373,7 @@ export def "api create-log-group" [
 #
 # POST /
 # operationId: CreateLogStream
-export def "api create-log-stream" [
+export def "create-log-stream" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -422,7 +422,7 @@ export def "api create-log-stream" [
 #
 # POST /
 # operationId: DeleteDataProtectionPolicy
-export def "api delete-data-protection-policy" [
+export def "delete-data-protection-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -470,7 +470,7 @@ export def "api delete-data-protection-policy" [
 #
 # POST /
 # operationId: DeleteDestination
-export def "api delete-destination" [
+export def "delete-destination" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -518,7 +518,7 @@ export def "api delete-destination" [
 #
 # POST /
 # operationId: DeleteLogGroup
-export def "api delete-log-group" [
+export def "delete-log-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -566,7 +566,7 @@ export def "api delete-log-group" [
 #
 # POST /
 # operationId: DeleteLogStream
-export def "api delete-log-stream" [
+export def "delete-log-stream" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -615,7 +615,7 @@ export def "api delete-log-stream" [
 #
 # POST /
 # operationId: DeleteMetricFilter
-export def "api delete-metric-filter" [
+export def "delete-metric-filter" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -664,7 +664,7 @@ export def "api delete-metric-filter" [
 #
 # POST /
 # operationId: DeleteQueryDefinition
-export def "api delete-list-definition" [
+export def "delete-query-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -712,7 +712,7 @@ export def "api delete-list-definition" [
 #
 # POST /
 # operationId: DeleteResourcePolicy
-export def "api delete-resource-policy" [
+export def "delete-resource-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -760,7 +760,7 @@ export def "api delete-resource-policy" [
 #
 # POST /
 # operationId: DeleteRetentionPolicy
-export def "api delete-retention-policy" [
+export def "delete-retention-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -808,7 +808,7 @@ export def "api delete-retention-policy" [
 #
 # POST /
 # operationId: DeleteSubscriptionFilter
-export def "api delete-subscription-filter" [
+export def "delete-subscription-filter" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -857,7 +857,7 @@ export def "api delete-subscription-filter" [
 #
 # POST /
 # operationId: DescribeDestinations
-export def "api get-destinations" [
+export def "describe-destinations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -910,7 +910,7 @@ export def "api get-destinations" [
 #
 # POST /
 # operationId: DescribeExportTasks
-export def "api get-export-tasks" [
+export def "describe-export-tasks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -961,7 +961,7 @@ export def "api get-export-tasks" [
 #
 # POST /
 # operationId: DescribeLogGroups
-export def "api get-log-groups" [
+export def "describe-log-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1017,7 +1017,7 @@ export def "api get-log-groups" [
 #
 # POST /
 # operationId: DescribeLogStreams
-export def "api get-log-streams" [
+export def "describe-log-streams" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1074,7 +1074,7 @@ export def "api get-log-streams" [
 #
 # POST /
 # operationId: DescribeMetricFilters
-export def "api get-metric-filters" [
+export def "describe-metric-filters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1130,7 +1130,7 @@ export def "api get-metric-filters" [
 #
 # POST /
 # operationId: DescribeQueries
-export def "api get-queries" [
+export def "describe-queries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1181,7 +1181,7 @@ export def "api get-queries" [
 #
 # POST /
 # operationId: DescribeQueryDefinitions
-export def "api get-list-definitions" [
+export def "describe-query-definitions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1231,7 +1231,7 @@ export def "api get-list-definitions" [
 #
 # POST /
 # operationId: DescribeResourcePolicies
-export def "api get-resource-policies" [
+export def "describe-resource-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1280,7 +1280,7 @@ export def "api get-resource-policies" [
 #
 # POST /
 # operationId: DescribeSubscriptionFilters
-export def "api get-subscription-filters" [
+export def "describe-subscription-filters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1334,7 +1334,7 @@ export def "api get-subscription-filters" [
 #
 # POST /
 # operationId: DisassociateKmsKey
-export def "api create-disassociate-kms-key" [
+export def "disassociate-kms-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1382,7 +1382,7 @@ export def "api create-disassociate-kms-key" [
 #
 # POST /
 # operationId: FilterLogEvents
-export def "api create-filter-log-events" [
+export def "filter-log-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1443,7 +1443,7 @@ export def "api create-filter-log-events" [
 #
 # POST /
 # operationId: GetDataProtectionPolicy
-export def "api get-data-protection-policy" [
+export def "get-data-protection-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1491,7 +1491,7 @@ export def "api get-data-protection-policy" [
 #
 # POST /
 # operationId: GetLogEvents
-export def "api get-log-events" [
+export def "get-log-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1550,7 +1550,7 @@ export def "api get-log-events" [
 #
 # POST /
 # operationId: GetLogGroupFields
-export def "api get-log-group-fields" [
+export def "get-log-group-fields" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1600,7 +1600,7 @@ export def "api get-log-group-fields" [
 #
 # POST /
 # operationId: GetLogRecord
-export def "api get-log-record" [
+export def "get-log-record" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1649,7 +1649,7 @@ export def "api get-log-record" [
 #
 # POST /
 # operationId: GetQueryResults
-export def "api get-list-results" [
+export def "get-query-results" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1697,7 +1697,7 @@ export def "api get-list-results" [
 #
 # POST /
 # operationId: ListTagsForResource
-export def "api list-tags-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1747,7 +1747,7 @@ export def "api list-tags-for-resource" [
 # DEPRECATED
 # operationId: ListTagsLogGroup
 @deprecated
-export def "api list-tags-log-group" [
+export def "list-tags-log-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1795,7 +1795,7 @@ export def "api list-tags-log-group" [
 #
 # POST /
 # operationId: PutDataProtectionPolicy
-export def "api update-data-protection-policy" [
+export def "put-data-protection-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1844,7 +1844,7 @@ export def "api update-data-protection-policy" [
 #
 # POST /
 # operationId: PutDestination
-export def "api update-destination" [
+export def "put-destination" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1895,7 +1895,7 @@ export def "api update-destination" [
 #
 # POST /
 # operationId: PutDestinationPolicy
-export def "api update-destination-policy" [
+export def "put-destination-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1945,7 +1945,7 @@ export def "api update-destination-policy" [
 #
 # POST /
 # operationId: PutLogEvents
-export def "api update-log-events" [
+export def "put-log-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1996,7 +1996,7 @@ export def "api update-log-events" [
 #
 # POST /
 # operationId: PutMetricFilter
-export def "api update-metric-filter" [
+export def "put-metric-filter" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2047,7 +2047,7 @@ export def "api update-metric-filter" [
 #
 # POST /
 # operationId: PutQueryDefinition
-export def "api update-list-definition" [
+export def "put-query-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2098,7 +2098,7 @@ export def "api update-list-definition" [
 #
 # POST /
 # operationId: PutResourcePolicy
-export def "api update-resource-policy" [
+export def "put-resource-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2147,7 +2147,7 @@ export def "api update-resource-policy" [
 #
 # POST /
 # operationId: PutRetentionPolicy
-export def "api update-retention-policy" [
+export def "put-retention-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2196,7 +2196,7 @@ export def "api update-retention-policy" [
 #
 # POST /
 # operationId: PutSubscriptionFilter
-export def "api update-subscription-filter" [
+export def "put-subscription-filter" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2249,7 +2249,7 @@ export def "api update-subscription-filter" [
 #
 # POST /
 # operationId: StartQuery
-export def "api start-list" [
+export def "start-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2303,7 +2303,7 @@ export def "api start-list" [
 #
 # POST /
 # operationId: StopQuery
-export def "api stop-list" [
+export def "stop-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2353,7 +2353,7 @@ export def "api stop-list" [
 # DEPRECATED
 # operationId: TagLogGroup
 @deprecated
-export def "api tag-log-group" [
+export def "tag-log-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2402,7 +2402,7 @@ export def "api tag-log-group" [
 #
 # POST /
 # operationId: TagResource
-export def "api tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2451,7 +2451,7 @@ export def "api tag-resource" [
 #
 # POST /
 # operationId: TestMetricFilter
-export def "api test-metric-filter" [
+export def "test-metric-filter" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2502,7 +2502,7 @@ export def "api test-metric-filter" [
 # DEPRECATED
 # operationId: UntagLogGroup
 @deprecated
-export def "api untag-log-group" [
+export def "untag-log-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2551,7 +2551,7 @@ export def "api untag-log-group" [
 #
 # POST /
 # operationId: UntagResource
-export def "api untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

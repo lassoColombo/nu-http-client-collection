@@ -111,7 +111,7 @@ def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "apps list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-app" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -135,7 +135,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/Apps
 # operationId: ListApp
-export def "apps list" [
+export def "list-app" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -173,7 +173,7 @@ export def "apps list" [
 #
 # GET /v1/Apps/{AppSid}/Manifest
 # operationId: FetchAppManifest
-export def "apps-manifest get" [
+export def "fetch-app-manifest" [
   app_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -209,7 +209,7 @@ export def "apps-manifest get" [
 #
 # DELETE /v1/Apps/{Sid}
 # operationId: DeleteApp
-export def "apps delete" [
+export def "delete-app" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -245,7 +245,7 @@ export def "apps delete" [
 #
 # GET /v1/Apps/{Sid}
 # operationId: FetchApp
-export def "apps get" [
+export def "fetch-app" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -281,7 +281,7 @@ export def "apps get" [
 #
 # GET /v1/Configs
 # operationId: ListAccountConfig
-export def "configs list-account" [
+export def "list-account-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -319,7 +319,7 @@ export def "configs list-account" [
 #
 # POST /v1/Configs
 # operationId: CreateAccountConfig
-export def "configs create-account" [
+export def "create-account-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -359,7 +359,7 @@ export def "configs create-account" [
 #
 # DELETE /v1/Configs/{Key}
 # operationId: DeleteAccountConfig
-export def "configs delete-account" [
+export def "delete-account-config" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -395,7 +395,7 @@ export def "configs delete-account" [
 #
 # GET /v1/Configs/{Key}
 # operationId: FetchAccountConfig
-export def "configs get-account" [
+export def "fetch-account-config" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -431,7 +431,7 @@ export def "configs get-account" [
 #
 # POST /v1/Configs/{Key}
 # operationId: UpdateAccountConfig
-export def "configs update-account" [
+export def "update-account-config" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -472,7 +472,7 @@ export def "configs update-account" [
 #
 # GET /v1/Devices
 # operationId: ListDevice
-export def "devices list" [
+export def "list-device" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -510,7 +510,7 @@ export def "devices list" [
 #
 # GET /v1/Devices/{DeviceSid}/Configs
 # operationId: ListDeviceConfig
-export def "devices-configs list" [
+export def "list-device-config" [
   device_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -550,7 +550,7 @@ export def "devices-configs list" [
 #
 # POST /v1/Devices/{DeviceSid}/Configs
 # operationId: CreateDeviceConfig
-export def "devices-configs create" [
+export def "create-device-config" [
   device_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -592,7 +592,7 @@ export def "devices-configs create" [
 #
 # DELETE /v1/Devices/{DeviceSid}/Configs/{Key}
 # operationId: DeleteDeviceConfig
-export def "devices-configs delete" [
+export def "delete-device-config" [
   device_sid: string
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -630,7 +630,7 @@ export def "devices-configs delete" [
 #
 # GET /v1/Devices/{DeviceSid}/Configs/{Key}
 # operationId: FetchDeviceConfig
-export def "devices-configs get" [
+export def "fetch-device-config" [
   device_sid: string
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -668,7 +668,7 @@ export def "devices-configs get" [
 #
 # POST /v1/Devices/{DeviceSid}/Configs/{Key}
 # operationId: UpdateDeviceConfig
-export def "devices-configs update" [
+export def "update-device-config" [
   device_sid: string
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -711,7 +711,7 @@ export def "devices-configs update" [
 #
 # GET /v1/Devices/{DeviceSid}/Secrets
 # operationId: ListDeviceSecret
-export def "devices-secrets list" [
+export def "list-device-secret" [
   device_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -751,7 +751,7 @@ export def "devices-secrets list" [
 #
 # POST /v1/Devices/{DeviceSid}/Secrets
 # operationId: CreateDeviceSecret
-export def "devices-secrets create" [
+export def "create-device-secret" [
   device_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -793,7 +793,7 @@ export def "devices-secrets create" [
 #
 # DELETE /v1/Devices/{DeviceSid}/Secrets/{Key}
 # operationId: DeleteDeviceSecret
-export def "devices-secrets delete" [
+export def "delete-device-secret" [
   device_sid: string
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -831,7 +831,7 @@ export def "devices-secrets delete" [
 #
 # GET /v1/Devices/{DeviceSid}/Secrets/{Key}
 # operationId: FetchDeviceSecret
-export def "devices-secrets get" [
+export def "fetch-device-secret" [
   device_sid: string
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -869,7 +869,7 @@ export def "devices-secrets get" [
 #
 # POST /v1/Devices/{DeviceSid}/Secrets/{Key}
 # operationId: UpdateDeviceSecret
-export def "devices-secrets update" [
+export def "update-device-secret" [
   device_sid: string
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -912,7 +912,7 @@ export def "devices-secrets update" [
 #
 # GET /v1/Devices/{Sid}
 # operationId: FetchDevice
-export def "devices get" [
+export def "fetch-device" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -948,7 +948,7 @@ export def "devices get" [
 #
 # POST /v1/Devices/{Sid}
 # operationId: UpdateDevice
-export def "devices update" [
+export def "update-device" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -991,7 +991,7 @@ export def "devices update" [
 #
 # GET /v1/Secrets
 # operationId: ListAccountSecret
-export def "secrets list-account" [
+export def "list-account-secret" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1029,7 +1029,7 @@ export def "secrets list-account" [
 #
 # POST /v1/Secrets
 # operationId: CreateAccountSecret
-export def "secrets create-account" [
+export def "create-account-secret" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1069,7 +1069,7 @@ export def "secrets create-account" [
 #
 # DELETE /v1/Secrets/{Key}
 # operationId: DeleteAccountSecret
-export def "secrets delete-account" [
+export def "delete-account-secret" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1105,7 +1105,7 @@ export def "secrets delete-account" [
 #
 # GET /v1/Secrets/{Key}
 # operationId: FetchAccountSecret
-export def "secrets get-account" [
+export def "fetch-account-secret" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1141,7 +1141,7 @@ export def "secrets get-account" [
 #
 # POST /v1/Secrets/{Key}
 # operationId: UpdateAccountSecret
-export def "secrets update-account" [
+export def "update-account-secret" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

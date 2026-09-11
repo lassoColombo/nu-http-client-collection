@@ -119,7 +119,7 @@ def integrator-completer [] { ["1ShoppingCart" "3dCart" "AdobeBC" "AmazonAU" "Am
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounting get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-accounting" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -143,7 +143,7 @@ export def commands []: nothing -> table {
 #
 # GET /accounting
 # operationId: get-accounting
-export def "accounting get" [
+export def "get-accounting" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -185,7 +185,7 @@ export def "accounting get" [
 #
 # GET /inventory
 # operationId: get-inventory
-export def "inventory get" [
+export def "get-inventory" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -226,7 +226,7 @@ export def "inventory get" [
 # POST /oauth/access_token
 # Docs: #section/Getting-Started/Perpetuating-Access — More Information on Refresh Tokens
 # operationId: post-oauth-access_token
-export def "oauth-access-token create" [
+export def "post-oauth-access-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -264,7 +264,7 @@ export def "oauth-access-token create" [
 #
 # GET /orders
 # operationId: get-orders
-export def "orders list" [
+export def "get-orders" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -309,7 +309,7 @@ export def "orders list" [
 # --items item shape: {declaredValue: string, quantity: int, sku: string}
 # --recipient shape: {address1: string, address2?: string, addressLocality: string, addressRegion: string, companyName?: string, country: string, email: string, firstName: string, lastName: string, phone: string, postalCode?: string}
 # --warehouse shape: {id?: int}
-export def "orders create" [
+export def "post-orders" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -354,7 +354,7 @@ export def "orders create" [
 #
 # DELETE /orders/{id}
 # operationId: delete-orders-id
-export def "orders delete" [
+export def "delete-orders-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -390,7 +390,7 @@ export def "orders delete" [
 #
 # GET /orders/{id}
 # operationId: getOrder
-export def "orders get" [
+export def "get-order" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -429,7 +429,7 @@ export def "orders get" [
 #
 # PUT /orders/{id}/ship
 # operationId: put-orders-id-ship
-export def "orders-ship update" [
+export def "put-orders-id-ship" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -471,7 +471,7 @@ export def "orders-ship update" [
 # PUT /orders/{id}/status
 # operationId: put-orders-id-status
 # --status shape: {code: string}
-export def "orders-status update" [
+export def "put-orders-id-status" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -512,7 +512,7 @@ export def "orders-status update" [
 #
 # GET /returns
 # operationId: get-returns
-export def "returns get" [
+export def "get-returns" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -553,7 +553,7 @@ export def "returns get" [
 # operationId: put-returns
 # --items item shape: {quantityExpected: int, sku: string}
 # --recipient shape: {address1: string, address2?: string, addressLocality: string, addressRegion: string, companyName?: string, country: string, email: string, firstName: string, lastName: string, phone: string, postalCode?: string}
-export def "returns update" [
+export def "put-returns" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -594,7 +594,7 @@ export def "returns update" [
 #
 # GET /track
 # operationId: get-track
-export def "track get" [
+export def "get-track" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -630,7 +630,7 @@ export def "track get" [
 #
 # GET /users/me
 # operationId: get-users-me
-export def "users-me get" [
+export def "get-users-me" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

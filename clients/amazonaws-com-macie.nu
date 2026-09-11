@@ -107,7 +107,7 @@ def x-amz-target-completer-6 [] { ["MacieService.UpdateS3Resources"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-associate-member-account" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associate-member-account" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -131,7 +131,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AssociateMemberAccount
-export def "api create-associate-member-account" [
+export def "associate-member-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -179,7 +179,7 @@ export def "api create-associate-member-account" [
 #
 # POST /
 # operationId: AssociateS3Resources
-export def "api create-associate-s3-resources" [
+export def "associate-s3-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -228,7 +228,7 @@ export def "api create-associate-s3-resources" [
 #
 # POST /
 # operationId: DisassociateMemberAccount
-export def "api create-disassociate-member-account" [
+export def "disassociate-member-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -276,7 +276,7 @@ export def "api create-disassociate-member-account" [
 #
 # POST /
 # operationId: DisassociateS3Resources
-export def "api create-disassociate-s3-resources" [
+export def "disassociate-s3-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -325,7 +325,7 @@ export def "api create-disassociate-s3-resources" [
 #
 # POST /
 # operationId: ListMemberAccounts
-export def "api list-member-accounts" [
+export def "list-member-accounts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -377,7 +377,7 @@ export def "api list-member-accounts" [
 #
 # POST /
 # operationId: ListS3Resources
-export def "api list-s3-resources" [
+export def "list-s3-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -430,7 +430,7 @@ export def "api list-s3-resources" [
 #
 # POST /
 # operationId: UpdateS3Resources
-export def "api update-s3-resources" [
+export def "update-s3-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

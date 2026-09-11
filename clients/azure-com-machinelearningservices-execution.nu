@@ -129,7 +129,7 @@ def accept-completer [] { ["application/json" "application/octet-stream"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "execution-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-run-id-cancel cancel-with-uri" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "runs-cancel-run-with-uri" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -153,7 +153,7 @@ export def commands []: nothing -> table {
 #
 # POST /execution/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/experiments/{experimentName}/runId/{runId}/cancel
 # operationId: Runs_CancelRunWithUri
-export def "execution-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-run-id-cancel cancel-with-uri" [
+export def "runs-cancel-run-with-uri" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -198,7 +198,7 @@ export def "execution-v1-0-subscriptions-resource-groups-providers-microsoft-mac
 # POST /execution/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/experiments/{experimentName}/snapshotrun
 # operationId: Runs_StartSnapshotRun
 # --configuration shape: {arguments?: list<string>, communicator?: "None"|"ParameterServer"|"Gloo"|"Mpi"|"Nccl", dataReferences?: record, environment?: record, framework?: "Python"|"PySpark"|"Cntk"|"TensorFlow"|"PyTorch", hdi?: record, history?: record, jobName?: string, maxRunDurationSeconds?: int, mpi?: record, nodeCount?: int, script?: string, spark?: record, target?: string, tensorflow?: record}
-export def "execution-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-snapshotrun start-runs-snapshot-run" [
+export def "runs-start-snapshot-run" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -250,7 +250,7 @@ export def "execution-v1-0-subscriptions-resource-groups-providers-microsoft-mac
 # POST /execution/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/experiments/{experimentName}/startlocalrun
 # operationId: Runs_StartLocalRun
 # --configuration shape: {arguments?: list<string>, communicator?: "None"|"ParameterServer"|"Gloo"|"Mpi"|"Nccl", dataReferences?: record, environment?: record, framework?: "Python"|"PySpark"|"Cntk"|"TensorFlow"|"PyTorch", hdi?: record, history?: record, jobName?: string, maxRunDurationSeconds?: int, mpi?: record, nodeCount?: int, script?: string, spark?: record, target?: string, tensorflow?: record}
-export def "execution-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-startlocalrun start-runs-local-run" [
+export def "runs-start-local-run" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -302,7 +302,7 @@ export def "execution-v1-0-subscriptions-resource-groups-providers-microsoft-mac
 #
 # POST /execution/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/experiments/{experimentName}/startrun
 # operationId: Runs_StartRun
-export def "execution-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-startrun start-runs-run" [
+export def "runs-start-run" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string

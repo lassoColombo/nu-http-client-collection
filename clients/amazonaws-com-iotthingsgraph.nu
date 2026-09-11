@@ -135,7 +135,7 @@ def x-amz-target-completer-34 [] { ["IotThingsGraphFrontEndService.UploadEntityD
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-associate-entity-to-thing" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associate-entity-to-thing" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -161,7 +161,7 @@ export def commands []: nothing -> table {
 # DEPRECATED
 # operationId: AssociateEntityToThing
 @deprecated
-export def "api create-associate-entity-to-thing" [
+export def "associate-entity-to-thing" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -213,7 +213,7 @@ export def "api create-associate-entity-to-thing" [
 # DEPRECATED
 # operationId: CreateFlowTemplate
 @deprecated
-export def "api create-flow-template" [
+export def "create-flow-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -266,7 +266,7 @@ export def "api create-flow-template" [
 # --definition shape: {language: any, text: any}
 # --metricsConfiguration shape: {cloudMetricEnabled?: any, metricRuleRoleArn?: any}
 @deprecated
-export def "api create-system-instance" [
+export def "create-system-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -322,7 +322,7 @@ export def "api create-system-instance" [
 # DEPRECATED
 # operationId: CreateSystemTemplate
 @deprecated
-export def "api create-system-template" [
+export def "create-system-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -373,7 +373,7 @@ export def "api create-system-template" [
 # DEPRECATED
 # operationId: DeleteFlowTemplate
 @deprecated
-export def "api delete-flow-template" [
+export def "delete-flow-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -423,7 +423,7 @@ export def "api delete-flow-template" [
 # DEPRECATED
 # operationId: DeleteNamespace
 @deprecated
-export def "api delete-namespace" [
+export def "delete-namespace" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -473,7 +473,7 @@ export def "api delete-namespace" [
 # DEPRECATED
 # operationId: DeleteSystemInstance
 @deprecated
-export def "api delete-system-instance" [
+export def "delete-system-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -523,7 +523,7 @@ export def "api delete-system-instance" [
 # DEPRECATED
 # operationId: DeleteSystemTemplate
 @deprecated
-export def "api delete-system-template" [
+export def "delete-system-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -573,7 +573,7 @@ export def "api delete-system-template" [
 # DEPRECATED
 # operationId: DeploySystemInstance
 @deprecated
-export def "api create-deploy-system-instance" [
+export def "deploy-system-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -623,7 +623,7 @@ export def "api create-deploy-system-instance" [
 # DEPRECATED
 # operationId: DeprecateFlowTemplate
 @deprecated
-export def "api create-deprecate-flow-template" [
+export def "deprecate-flow-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -673,7 +673,7 @@ export def "api create-deprecate-flow-template" [
 # DEPRECATED
 # operationId: DeprecateSystemTemplate
 @deprecated
-export def "api create-deprecate-system-template" [
+export def "deprecate-system-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -723,7 +723,7 @@ export def "api create-deprecate-system-template" [
 # DEPRECATED
 # operationId: DescribeNamespace
 @deprecated
-export def "api get-namespace" [
+export def "describe-namespace" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -773,7 +773,7 @@ export def "api get-namespace" [
 # DEPRECATED
 # operationId: DissociateEntityFromThing
 @deprecated
-export def "api create-dissociate-entity-from-thing" [
+export def "dissociate-entity-from-thing" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -824,7 +824,7 @@ export def "api create-dissociate-entity-from-thing" [
 # DEPRECATED
 # operationId: GetEntities
 @deprecated
-export def "api get-entities" [
+export def "get-entities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -875,7 +875,7 @@ export def "api get-entities" [
 # DEPRECATED
 # operationId: GetFlowTemplate
 @deprecated
-export def "api get-flow-template" [
+export def "get-flow-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -926,7 +926,7 @@ export def "api get-flow-template" [
 # DEPRECATED
 # operationId: GetFlowTemplateRevisions
 @deprecated
-export def "api get-flow-template-revisions" [
+export def "get-flow-template-revisions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -981,7 +981,7 @@ export def "api get-flow-template-revisions" [
 # DEPRECATED
 # operationId: GetNamespaceDeletionStatus
 @deprecated
-export def "api get-namespace-deletion-status" [
+export def "get-namespace-deletion-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1031,7 +1031,7 @@ export def "api get-namespace-deletion-status" [
 # DEPRECATED
 # operationId: GetSystemInstance
 @deprecated
-export def "api get-system-instance" [
+export def "get-system-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1081,7 +1081,7 @@ export def "api get-system-instance" [
 # DEPRECATED
 # operationId: GetSystemTemplate
 @deprecated
-export def "api get-system-template" [
+export def "get-system-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1132,7 +1132,7 @@ export def "api get-system-template" [
 # DEPRECATED
 # operationId: GetSystemTemplateRevisions
 @deprecated
-export def "api get-system-template-revisions" [
+export def "get-system-template-revisions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1187,7 +1187,7 @@ export def "api get-system-template-revisions" [
 # DEPRECATED
 # operationId: GetUploadStatus
 @deprecated
-export def "api get-upload-status" [
+export def "get-upload-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1237,7 +1237,7 @@ export def "api get-upload-status" [
 # DEPRECATED
 # operationId: ListFlowExecutionMessages
 @deprecated
-export def "api list-flow-execution-messages" [
+export def "list-flow-execution-messages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1292,7 +1292,7 @@ export def "api list-flow-execution-messages" [
 # DEPRECATED
 # operationId: ListTagsForResource
 @deprecated
-export def "api list-tags-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1347,7 +1347,7 @@ export def "api list-tags-for-resource" [
 # DEPRECATED
 # operationId: SearchEntities
 @deprecated
-export def "api list-entities" [
+export def "search-entities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1404,7 +1404,7 @@ export def "api list-entities" [
 # DEPRECATED
 # operationId: SearchFlowExecutions
 @deprecated
-export def "api list-flow-executions" [
+export def "search-flow-executions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1462,7 +1462,7 @@ export def "api list-flow-executions" [
 # DEPRECATED
 # operationId: SearchFlowTemplates
 @deprecated
-export def "api list-flow-templates" [
+export def "search-flow-templates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1517,7 +1517,7 @@ export def "api list-flow-templates" [
 # DEPRECATED
 # operationId: SearchSystemInstances
 @deprecated
-export def "api list-system-instances" [
+export def "search-system-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1572,7 +1572,7 @@ export def "api list-system-instances" [
 # DEPRECATED
 # operationId: SearchSystemTemplates
 @deprecated
-export def "api list-system-templates" [
+export def "search-system-templates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1627,7 +1627,7 @@ export def "api list-system-templates" [
 # DEPRECATED
 # operationId: SearchThings
 @deprecated
-export def "api list-things" [
+export def "search-things" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1683,7 +1683,7 @@ export def "api list-things" [
 # DEPRECATED
 # operationId: TagResource
 @deprecated
-export def "api tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1734,7 +1734,7 @@ export def "api tag-resource" [
 # DEPRECATED
 # operationId: UndeploySystemInstance
 @deprecated
-export def "api create-undeploy-system-instance" [
+export def "undeploy-system-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1784,7 +1784,7 @@ export def "api create-undeploy-system-instance" [
 # DEPRECATED
 # operationId: UntagResource
 @deprecated
-export def "api untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1835,7 +1835,7 @@ export def "api untag-resource" [
 # DEPRECATED
 # operationId: UpdateFlowTemplate
 @deprecated
-export def "api update-flow-template" [
+export def "update-flow-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1887,7 +1887,7 @@ export def "api update-flow-template" [
 # DEPRECATED
 # operationId: UpdateSystemTemplate
 @deprecated
-export def "api update-system-template" [
+export def "update-system-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1939,7 +1939,7 @@ export def "api update-system-template" [
 # DEPRECATED
 # operationId: UploadEntityDefinitions
 @deprecated
-export def "api upload-entity-definitions" [
+export def "upload-entity-definitions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

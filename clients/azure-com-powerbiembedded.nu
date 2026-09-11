@@ -123,7 +123,7 @@ def key-name-completer [] { ["key1" "key2"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-power-bi-operations get-available" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-available-operations" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -147,7 +147,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.PowerBI/operations
 # operationId: getAvailableOperations
-export def "providers-microsoft-power-bi-operations get-available" [
+export def "get-available-operations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -183,7 +183,7 @@ export def "providers-microsoft-power-bi-operations get-available" [
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.PowerBI/locations/{location}/checkNameAvailability
 # operationId: WorkspaceCollections_checkNameAvailability
-export def "subscriptions-providers-microsoft-power-bi-locations-check-name-availability check-workspace-collections" [
+export def "workspace-collections-check-name-availability" [
   subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -228,7 +228,7 @@ export def "subscriptions-providers-microsoft-power-bi-locations-check-name-avai
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.PowerBI/workspaceCollections
 # operationId: WorkspaceCollections_listBySubscription
-export def "subscriptions-providers-microsoft-power-bi-workspace-collections list" [
+export def "workspace-collections-list-by-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -266,7 +266,7 @@ export def "subscriptions-providers-microsoft-power-bi-workspace-collections lis
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/moveResources
 # operationId: WorkspaceCollections_migrate
-export def "subscriptions-resource-groups-move-resources create-workspace-collections-migrate" [
+export def "workspace-collections-migrate" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -311,7 +311,7 @@ export def "subscriptions-resource-groups-move-resources create-workspace-collec
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.PowerBI/workspaceCollections
 # operationId: WorkspaceCollections_listByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-power-bi-workspace-collections list" [
+export def "workspace-collections-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -351,7 +351,7 @@ export def "subscriptions-resource-groups-providers-microsoft-power-bi-workspace
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.PowerBI/workspaceCollections/{workspaceCollectionName}
 # operationId: WorkspaceCollections_delete
-export def "subscriptions-resource-groups-providers-microsoft-power-bi-workspace-collections delete" [
+export def "workspace-collections-delete" [
   subscription_id: string
   resource_group_name: string
   workspace_collection_name: string
@@ -393,7 +393,7 @@ export def "subscriptions-resource-groups-providers-microsoft-power-bi-workspace
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.PowerBI/workspaceCollections/{workspaceCollectionName}
 # operationId: WorkspaceCollections_getByName
-export def "subscriptions-resource-groups-providers-microsoft-power-bi-workspace-collections get-by-name" [
+export def "workspace-collections-get-by-name" [
   subscription_id: string
   resource_group_name: string
   workspace_collection_name: string
@@ -436,7 +436,7 @@ export def "subscriptions-resource-groups-providers-microsoft-power-bi-workspace
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.PowerBI/workspaceCollections/{workspaceCollectionName}
 # operationId: WorkspaceCollections_update
 # --sku shape: {name: "S1", tier: "Standard"}
-export def "subscriptions-resource-groups-providers-microsoft-power-bi-workspace-collections update" [
+export def "workspace-collections-update" [
   subscription_id: string
   resource_group_name: string
   workspace_collection_name: string
@@ -484,7 +484,7 @@ export def "subscriptions-resource-groups-providers-microsoft-power-bi-workspace
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.PowerBI/workspaceCollections/{workspaceCollectionName}
 # operationId: WorkspaceCollections_create
 # --sku shape: {name: "S1", tier: "Standard"}
-export def "subscriptions-resource-groups-providers-microsoft-power-bi-workspace-collections create" [
+export def "workspace-collections-create" [
   subscription_id: string
   resource_group_name: string
   workspace_collection_name: string
@@ -532,7 +532,7 @@ export def "subscriptions-resource-groups-providers-microsoft-power-bi-workspace
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.PowerBI/workspaceCollections/{workspaceCollectionName}/listKeys
 # operationId: WorkspaceCollections_getAccessKeys
-export def "subscriptions-resource-groups-providers-microsoft-power-bi-workspace-collections-list-keys get-access" [
+export def "workspace-collections-get-access-keys" [
   subscription_id: string
   resource_group_name: string
   workspace_collection_name: string
@@ -574,7 +574,7 @@ export def "subscriptions-resource-groups-providers-microsoft-power-bi-workspace
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.PowerBI/workspaceCollections/{workspaceCollectionName}/regenerateKey
 # operationId: WorkspaceCollections_regenerateKey
-export def "subscriptions-resource-groups-providers-microsoft-power-bi-workspace-collections-regenerate-key create" [
+export def "workspace-collections-regenerate-key" [
   subscription_id: string
   resource_group_name: string
   workspace_collection_name: string
@@ -620,7 +620,7 @@ export def "subscriptions-resource-groups-providers-microsoft-power-bi-workspace
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.PowerBI/workspaceCollections/{workspaceCollectionName}/workspaces
 # operationId: Workspaces_List
-export def "subscriptions-resource-groups-providers-microsoft-power-bi-workspace-collections-workspaces list" [
+export def "workspaces-list" [
   subscription_id: string
   resource_group_name: string
   workspace_collection_name: string

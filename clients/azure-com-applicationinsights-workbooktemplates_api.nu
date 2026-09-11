@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-group-providers-microsoft-insights-workbooktemplates list-workbook-templates" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "workbook-templates-list-by-resource-group" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroup/{resourceGroupName}/providers/microsoft.insights/workbooktemplates
 # operationId: WorkbookTemplates_ListByResourceGroup
-export def "subscriptions-resource-group-providers-microsoft-insights-workbooktemplates list-workbook-templates" [
+export def "workbook-templates-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -180,7 +180,7 @@ export def "subscriptions-resource-group-providers-microsoft-insights-workbookte
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroup/{resourceGroupName}/providers/microsoft.insights/workbooktemplates/{resourceName}
 # operationId: WorkbookTemplates_Delete
-export def "subscriptions-resource-group-providers-microsoft-insights-workbooktemplates delete-workbook-templates" [
+export def "workbook-templates-delete" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -222,7 +222,7 @@ export def "subscriptions-resource-group-providers-microsoft-insights-workbookte
 #
 # GET /subscriptions/{subscriptionId}/resourceGroup/{resourceGroupName}/providers/microsoft.insights/workbooktemplates/{resourceName}
 # operationId: WorkbookTemplates_Get
-export def "subscriptions-resource-group-providers-microsoft-insights-workbooktemplates get-workbook-templates" [
+export def "workbook-templates-get" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -265,7 +265,7 @@ export def "subscriptions-resource-group-providers-microsoft-insights-workbookte
 # PATCH /subscriptions/{subscriptionId}/resourceGroup/{resourceGroupName}/providers/microsoft.insights/workbooktemplates/{resourceName}
 # operationId: WorkbookTemplates_Update
 # --properties shape: {author?: string, galleries: list, localized?: record, priority?: int, templateData: record}
-export def "subscriptions-resource-group-providers-microsoft-insights-workbooktemplates update-workbook-templates" [
+export def "workbook-templates-update" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -313,7 +313,7 @@ export def "subscriptions-resource-group-providers-microsoft-insights-workbookte
 # PUT /subscriptions/{subscriptionId}/resourceGroup/{resourceGroupName}/providers/microsoft.insights/workbooktemplates/{resourceName}
 # operationId: WorkbookTemplates_CreateOrUpdate
 # --properties shape: {author?: string, galleries: list, localized?: record, priority?: int, templateData: record}
-export def "subscriptions-resource-group-providers-microsoft-insights-workbooktemplates create-workbook-templates-or-update" [
+export def "workbook-templates-create-or-update" [
   subscription_id: string
   resource_group_name: string
   resource_name: string

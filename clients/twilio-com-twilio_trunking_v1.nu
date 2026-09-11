@@ -117,7 +117,7 @@ def trim-completer [] { ["do-not-trim" "trim-silence"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "trunks list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-trunk" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 # GET /v1/Trunks
 #
 # operationId: ListTrunk
-export def "trunks list" [
+export def "list-trunk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -177,7 +177,7 @@ export def "trunks list" [
 # POST /v1/Trunks
 #
 # operationId: CreateTrunk
-export def "trunks create" [
+export def "create-trunk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -222,7 +222,7 @@ export def "trunks create" [
 # DELETE /v1/Trunks/{Sid}
 #
 # operationId: DeleteTrunk
-export def "trunks delete" [
+export def "delete-trunk" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -257,7 +257,7 @@ export def "trunks delete" [
 # GET /v1/Trunks/{Sid}
 #
 # operationId: FetchTrunk
-export def "trunks get" [
+export def "fetch-trunk" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -292,7 +292,7 @@ export def "trunks get" [
 # POST /v1/Trunks/{Sid}
 #
 # operationId: UpdateTrunk
-export def "trunks update" [
+export def "update-trunk" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -339,7 +339,7 @@ export def "trunks update" [
 # GET /v1/Trunks/{TrunkSid}/CredentialLists
 #
 # operationId: ListCredentialList
-export def "trunks-credential-lists list" [
+export def "list-credential-list" [
   trunk_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -378,7 +378,7 @@ export def "trunks-credential-lists list" [
 # POST /v1/Trunks/{TrunkSid}/CredentialLists
 #
 # operationId: CreateCredentialList
-export def "trunks-credential-lists create" [
+export def "create-credential-list" [
   trunk_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -418,7 +418,7 @@ export def "trunks-credential-lists create" [
 # DELETE /v1/Trunks/{TrunkSid}/CredentialLists/{Sid}
 #
 # operationId: DeleteCredentialList
-export def "trunks-credential-lists delete" [
+export def "delete-credential-list" [
   trunk_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -455,7 +455,7 @@ export def "trunks-credential-lists delete" [
 # GET /v1/Trunks/{TrunkSid}/CredentialLists/{Sid}
 #
 # operationId: FetchCredentialList
-export def "trunks-credential-lists get" [
+export def "fetch-credential-list" [
   trunk_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -493,7 +493,7 @@ export def "trunks-credential-lists get" [
 #
 # GET /v1/Trunks/{TrunkSid}/IpAccessControlLists
 # operationId: ListIpAccessControlList
-export def "trunks-ip-access-control-lists list" [
+export def "list-ip-access-control-list" [
   trunk_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -533,7 +533,7 @@ export def "trunks-ip-access-control-lists list" [
 #
 # POST /v1/Trunks/{TrunkSid}/IpAccessControlLists
 # operationId: CreateIpAccessControlList
-export def "trunks-ip-access-control-lists create" [
+export def "create-ip-access-control-list" [
   trunk_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -574,7 +574,7 @@ export def "trunks-ip-access-control-lists create" [
 #
 # DELETE /v1/Trunks/{TrunkSid}/IpAccessControlLists/{Sid}
 # operationId: DeleteIpAccessControlList
-export def "trunks-ip-access-control-lists delete" [
+export def "delete-ip-access-control-list" [
   trunk_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -611,7 +611,7 @@ export def "trunks-ip-access-control-lists delete" [
 # GET /v1/Trunks/{TrunkSid}/IpAccessControlLists/{Sid}
 #
 # operationId: FetchIpAccessControlList
-export def "trunks-ip-access-control-lists get" [
+export def "fetch-ip-access-control-list" [
   trunk_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -648,7 +648,7 @@ export def "trunks-ip-access-control-lists get" [
 # GET /v1/Trunks/{TrunkSid}/OriginationUrls
 #
 # operationId: ListOriginationUrl
-export def "trunks-origination-urls list" [
+export def "list-origination-url" [
   trunk_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -687,7 +687,7 @@ export def "trunks-origination-urls list" [
 # POST /v1/Trunks/{TrunkSid}/OriginationUrls
 #
 # operationId: CreateOriginationUrl
-export def "trunks-origination-urls create" [
+export def "create-origination-url" [
   trunk_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -731,7 +731,7 @@ export def "trunks-origination-urls create" [
 # DELETE /v1/Trunks/{TrunkSid}/OriginationUrls/{Sid}
 #
 # operationId: DeleteOriginationUrl
-export def "trunks-origination-urls delete" [
+export def "delete-origination-url" [
   trunk_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -768,7 +768,7 @@ export def "trunks-origination-urls delete" [
 # GET /v1/Trunks/{TrunkSid}/OriginationUrls/{Sid}
 #
 # operationId: FetchOriginationUrl
-export def "trunks-origination-urls get" [
+export def "fetch-origination-url" [
   trunk_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -805,7 +805,7 @@ export def "trunks-origination-urls get" [
 # POST /v1/Trunks/{TrunkSid}/OriginationUrls/{Sid}
 #
 # operationId: UpdateOriginationUrl
-export def "trunks-origination-urls update" [
+export def "update-origination-url" [
   trunk_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -851,7 +851,7 @@ export def "trunks-origination-urls update" [
 # GET /v1/Trunks/{TrunkSid}/PhoneNumbers
 #
 # operationId: ListPhoneNumber
-export def "trunks-phone-numbers list" [
+export def "list-phone-number" [
   trunk_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -890,7 +890,7 @@ export def "trunks-phone-numbers list" [
 # POST /v1/Trunks/{TrunkSid}/PhoneNumbers
 #
 # operationId: CreatePhoneNumber
-export def "trunks-phone-numbers create" [
+export def "create-phone-number" [
   trunk_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -930,7 +930,7 @@ export def "trunks-phone-numbers create" [
 # DELETE /v1/Trunks/{TrunkSid}/PhoneNumbers/{Sid}
 #
 # operationId: DeletePhoneNumber
-export def "trunks-phone-numbers delete" [
+export def "delete-phone-number" [
   trunk_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -967,7 +967,7 @@ export def "trunks-phone-numbers delete" [
 # GET /v1/Trunks/{TrunkSid}/PhoneNumbers/{Sid}
 #
 # operationId: FetchPhoneNumber
-export def "trunks-phone-numbers get" [
+export def "fetch-phone-number" [
   trunk_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1004,7 +1004,7 @@ export def "trunks-phone-numbers get" [
 # GET /v1/Trunks/{TrunkSid}/Recording
 #
 # operationId: FetchRecording
-export def "trunks-recording get" [
+export def "fetch-recording" [
   trunk_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1039,7 +1039,7 @@ export def "trunks-recording get" [
 # POST /v1/Trunks/{TrunkSid}/Recording
 #
 # operationId: UpdateRecording
-export def "trunks-recording update" [
+export def "update-recording" [
   trunk_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

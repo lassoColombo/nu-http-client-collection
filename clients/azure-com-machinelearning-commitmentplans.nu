@@ -122,7 +122,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-machine-learning-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.MachineLearning/operations
 # operationId: Operations_List
-export def "providers-microsoft-machine-learning-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -182,7 +182,7 @@ export def "providers-microsoft-machine-learning-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.MachineLearning/commitmentPlans
 # operationId: CommitmentPlans_List
-export def "subscriptions-providers-microsoft-machine-learning-commitment-plans list" [
+export def "commitment-plans-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -221,7 +221,7 @@ export def "subscriptions-providers-microsoft-machine-learning-commitment-plans 
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.MachineLearning/skus
 # operationId: Skus_List
-export def "subscriptions-providers-microsoft-machine-learning-skus list" [
+export def "skus-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -259,7 +259,7 @@ export def "subscriptions-providers-microsoft-machine-learning-skus list" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearning/commitmentPlans
 # operationId: CommitmentPlans_ListInResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-commitment-plans list" [
+export def "commitment-plans-list-in-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -300,7 +300,7 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-c
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearning/commitmentPlans/{commitmentPlanName}
 # operationId: CommitmentPlans_Remove
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-commitment-plans delete" [
+export def "commitment-plans-remove" [
   subscription_id: string
   resource_group_name: string
   commitment_plan_name: string
@@ -342,7 +342,7 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-c
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearning/commitmentPlans/{commitmentPlanName}
 # operationId: CommitmentPlans_Get
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-commitment-plans get" [
+export def "commitment-plans-get" [
   subscription_id: string
   resource_group_name: string
   commitment_plan_name: string
@@ -385,7 +385,7 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-c
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearning/commitmentPlans/{commitmentPlanName}
 # operationId: CommitmentPlans_Patch
 # --sku shape: {capacity?: int, name?: string, tier?: string}
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-commitment-plans update" [
+export def "commitment-plans-patch" [
   subscription_id: string
   resource_group_name: string
   commitment_plan_name: string
@@ -433,7 +433,7 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-c
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearning/commitmentPlans/{commitmentPlanName}
 # operationId: CommitmentPlans_CreateOrUpdate
 # --sku shape: {capacity?: int, name?: string, tier?: string}
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-commitment-plans create-or-update" [
+export def "commitment-plans-create-or-update" [
   subscription_id: string
   resource_group_name: string
   commitment_plan_name: string
@@ -483,7 +483,7 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-c
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearning/commitmentPlans/{commitmentPlanName}/commitmentAssociations
 # operationId: CommitmentAssociations_List
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-commitment-plans-commitment-associations list" [
+export def "commitment-associations-list" [
   subscription_id: string
   resource_group_name: string
   commitment_plan_name: string
@@ -526,7 +526,7 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-c
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearning/commitmentPlans/{commitmentPlanName}/commitmentAssociations/{commitmentAssociationName}
 # operationId: CommitmentAssociations_Get
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-commitment-plans-commitment-associations get" [
+export def "commitment-associations-get" [
   subscription_id: string
   resource_group_name: string
   commitment_plan_name: string
@@ -570,7 +570,7 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-c
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearning/commitmentPlans/{commitmentPlanName}/commitmentAssociations/{commitmentAssociationName}/move
 # operationId: CommitmentAssociations_Move
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-commitment-plans-commitment-associations-move move" [
+export def "commitment-associations-move" [
   subscription_id: string
   resource_group_name: string
   commitment_plan_name: string
@@ -618,7 +618,7 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-c
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearning/commitmentPlans/{commitmentPlanName}/usageHistory
 # operationId: UsageHistory_List
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-commitment-plans-usage-history list" [
+export def "usage-history-list" [
   subscription_id: string
   resource_group_name: string
   commitment_plan_name: string

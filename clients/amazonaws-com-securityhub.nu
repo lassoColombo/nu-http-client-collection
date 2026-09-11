@@ -122,7 +122,7 @@ def control-status-completer [] { ["DISABLED" "ENABLED"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "administrator create-accept-invitation" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accept-administrator-invitation" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # POST /administrator
 # operationId: AcceptAdministratorInvitation
-export def "administrator create-accept-invitation" [
+export def "accept-administrator-invitation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -194,7 +194,7 @@ export def "administrator create-accept-invitation" [
 #
 # GET /administrator
 # operationId: GetAdministratorAccount
-export def "administrator get-account" [
+export def "get-administrator-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -239,7 +239,7 @@ export def "administrator get-account" [
 # DEPRECATED
 # operationId: AcceptInvitation
 @deprecated
-export def "master create-accept-invitation" [
+export def "accept-invitation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -289,7 +289,7 @@ export def "master create-accept-invitation" [
 # DEPRECATED
 # operationId: GetMasterAccount
 @deprecated
-export def "master get-account" [
+export def "get-master-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -332,7 +332,7 @@ export def "master get-account" [
 #
 # POST /standards/deregister
 # operationId: BatchDisableStandards
-export def "standards-deregister disable-batch" [
+export def "batch-disable-standards" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -380,7 +380,7 @@ export def "standards-deregister disable-batch" [
 # POST /standards/register
 # operationId: BatchEnableStandards
 # --StandardsSubscriptionRequests item shape: {StandardsArn: any, StandardsInput?: any}
-export def "standards-register enable-batch" [
+export def "batch-enable-standards" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -427,7 +427,7 @@ export def "standards-register enable-batch" [
 #
 # POST /securityControls/batchGet
 # operationId: BatchGetSecurityControls
-export def "security-controls-batch-get get" [
+export def "batch-get-security-controls" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -475,7 +475,7 @@ export def "security-controls-batch-get get" [
 # POST /associations/batchGet
 # operationId: BatchGetStandardsControlAssociations
 # --StandardsControlAssociationIds item shape: {SecurityControlId: any, StandardsArn: any}
-export def "associations-batch-get get-standards-control" [
+export def "batch-get-standards-control-associations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -523,7 +523,7 @@ export def "associations-batch-get get-standards-control" [
 # POST /findings/import
 # operationId: BatchImportFindings
 # --Findings item shape: {SchemaVersion: any, Id: any, ProductArn: any, ProductName?: any, CompanyName?: any, Region?: any, GeneratorId: any, AwsAccountId: any, Types?: any, FirstObservedAt?: any, LastObservedAt?: any, CreatedAt: any, UpdatedAt: any, Severity?: any, Confidence?: any, Criticality?: any, Title: any, Description: any, Remediation?: any, SourceUrl?: any, ProductFields?: any, UserDefinedFields?: any, Malware?: any, Network?: any, NetworkPath?: any, Process?: any, Threats?: any, ThreatIntelIndicators?: any, ... (13 more fields)}
-export def "findings-import import-batch" [
+export def "batch-import-findings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -575,7 +575,7 @@ export def "findings-import import-batch" [
 # --Severity shape: {Normalized?: any, Product?: any, Label?: any}
 # --Workflow shape: {Status?: any}
 # --RelatedFindings item shape: {ProductArn: any, Id: any}
-export def "findings-batchupdate update-batch" [
+export def "batch-update-findings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -632,7 +632,7 @@ export def "findings-batchupdate update-batch" [
 # PATCH /associations
 # operationId: BatchUpdateStandardsControlAssociations
 # --StandardsControlAssociationUpdates item shape: {StandardsArn: any, SecurityControlId: any, AssociationStatus: any, UpdatedReason?: any}
-export def "associations update-batch-standards-control" [
+export def "batch-update-standards-control-associations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -679,7 +679,7 @@ export def "associations update-batch-standards-control" [
 #
 # POST /actionTargets
 # operationId: CreateActionTarget
-export def "action-targets create" [
+export def "create-action-target" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -728,7 +728,7 @@ export def "action-targets create" [
 #
 # POST /findingAggregator/create
 # operationId: CreateFindingAggregator
-export def "finding-aggregator-create create" [
+export def "create-finding-aggregator" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -777,7 +777,7 @@ export def "finding-aggregator-create create" [
 # POST /insights
 # operationId: CreateInsight
 # --Filters shape: {ProductArn?: any, AwsAccountId?: any, Id?: any, GeneratorId?: any, Region?: any, Type?: any, FirstObservedAt?: any, LastObservedAt?: any, CreatedAt?: any, UpdatedAt?: any, SeverityProduct?: any, SeverityNormalized?: any, SeverityLabel?: any, Confidence?: any, Criticality?: any, Title?: any, Description?: any, RecommendationText?: any, SourceUrl?: any, ProductFields?: any, ProductName?: any, CompanyName?: any, UserDefinedFields?: any, MalwareName?: any, MalwareType?: any, MalwarePath?: any, ... (71 more fields)}
-export def "insights create" [
+export def "create-insight" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -827,7 +827,7 @@ export def "insights create" [
 # POST /members
 # operationId: CreateMembers
 # --AccountDetails item shape: {AccountId: any, Email?: any}
-export def "members create" [
+export def "create-members" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -874,7 +874,7 @@ export def "members create" [
 #
 # GET /members
 # operationId: ListMembers
-export def "members list" [
+export def "list-members" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -921,7 +921,7 @@ export def "members list" [
 #
 # POST /invitations/decline
 # operationId: DeclineInvitations
-export def "invitations-decline create" [
+export def "decline-invitations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -968,7 +968,7 @@ export def "invitations-decline create" [
 #
 # DELETE /actionTargets/{ActionTargetArn}
 # operationId: DeleteActionTarget
-export def "action-targets delete" [
+export def "delete-action-target" [
   action_target_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1013,7 +1013,7 @@ export def "action-targets delete" [
 #
 # PATCH /actionTargets/{ActionTargetArn}
 # operationId: UpdateActionTarget
-export def "action-targets update" [
+export def "update-action-target" [
   action_target_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1063,7 +1063,7 @@ export def "action-targets update" [
 #
 # DELETE /findingAggregator/delete/{FindingAggregatorArn}
 # operationId: DeleteFindingAggregator
-export def "finding-aggregator-delete delete" [
+export def "delete-finding-aggregator" [
   finding_aggregator_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1108,7 +1108,7 @@ export def "finding-aggregator-delete delete" [
 #
 # DELETE /insights/{InsightArn}
 # operationId: DeleteInsight
-export def "insights delete" [
+export def "delete-insight" [
   insight_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1154,7 +1154,7 @@ export def "insights delete" [
 # PATCH /insights/{InsightArn}
 # operationId: UpdateInsight
 # --Filters shape: {ProductArn?: any, AwsAccountId?: any, Id?: any, GeneratorId?: any, Region?: any, Type?: any, FirstObservedAt?: any, LastObservedAt?: any, CreatedAt?: any, UpdatedAt?: any, SeverityProduct?: any, SeverityNormalized?: any, SeverityLabel?: any, Confidence?: any, Criticality?: any, Title?: any, Description?: any, RecommendationText?: any, SourceUrl?: any, ProductFields?: any, ProductName?: any, CompanyName?: any, UserDefinedFields?: any, MalwareName?: any, MalwareType?: any, MalwarePath?: any, ... (71 more fields)}
-export def "insights update" [
+export def "update-insight" [
   insight_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1205,7 +1205,7 @@ export def "insights update" [
 #
 # POST /invitations/delete
 # operationId: DeleteInvitations
-export def "invitations-delete delete" [
+export def "delete-invitations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1252,7 +1252,7 @@ export def "invitations-delete delete" [
 #
 # POST /members/delete
 # operationId: DeleteMembers
-export def "members-delete delete" [
+export def "delete-members" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1299,7 +1299,7 @@ export def "members-delete delete" [
 #
 # POST /actionTargets/get
 # operationId: DescribeActionTargets
-export def "action-targets-get get" [
+export def "describe-action-targets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1351,7 +1351,7 @@ export def "action-targets-get get" [
 #
 # GET /accounts
 # operationId: DescribeHub
-export def "accounts get-hub" [
+export def "describe-hub" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1396,7 +1396,7 @@ export def "accounts get-hub" [
 #
 # DELETE /accounts
 # operationId: DisableSecurityHub
-export def "accounts disable-security-hub" [
+export def "disable-security-hub" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1439,7 +1439,7 @@ export def "accounts disable-security-hub" [
 #
 # POST /accounts
 # operationId: EnableSecurityHub
-export def "accounts enable-security-hub" [
+export def "enable-security-hub" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1488,7 +1488,7 @@ export def "accounts enable-security-hub" [
 #
 # PATCH /accounts
 # operationId: UpdateSecurityHubConfiguration
-export def "accounts update-security-hub-configuration" [
+export def "update-security-hub-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1536,7 +1536,7 @@ export def "accounts update-security-hub-configuration" [
 #
 # GET /organization/configuration
 # operationId: DescribeOrganizationConfiguration
-export def "organization-configuration get" [
+export def "describe-organization-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1579,7 +1579,7 @@ export def "organization-configuration get" [
 #
 # POST /organization/configuration
 # operationId: UpdateOrganizationConfiguration
-export def "organization-configuration update" [
+export def "update-organization-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1627,7 +1627,7 @@ export def "organization-configuration update" [
 #
 # GET /products
 # operationId: DescribeProducts
-export def "products get" [
+export def "describe-products" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1674,7 +1674,7 @@ export def "products get" [
 #
 # GET /standards
 # operationId: DescribeStandards
-export def "standards get" [
+export def "describe-standards" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1720,7 +1720,7 @@ export def "standards get" [
 #
 # GET /standards/controls/{StandardsSubscriptionArn}
 # operationId: DescribeStandardsControls
-export def "standards-controls get" [
+export def "describe-standards-controls" [
   standards_subscription_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1768,7 +1768,7 @@ export def "standards-controls get" [
 #
 # DELETE /productSubscriptions/{ProductSubscriptionArn}
 # operationId: DisableImportFindingsForProduct
-export def "product-subscriptions disable-import-findings" [
+export def "disable-import-findings-for-product" [
   product_subscription_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1813,7 +1813,7 @@ export def "product-subscriptions disable-import-findings" [
 #
 # POST /organization/admin/disable
 # operationId: DisableOrganizationAdminAccount
-export def "organization-admin-disable disable-account" [
+export def "disable-organization-admin-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1860,7 +1860,7 @@ export def "organization-admin-disable disable-account" [
 #
 # POST /administrator/disassociate
 # operationId: DisassociateFromAdministratorAccount
-export def "administrator-disassociate create-from-account" [
+export def "disassociate-from-administrator-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1905,7 +1905,7 @@ export def "administrator-disassociate create-from-account" [
 # DEPRECATED
 # operationId: DisassociateFromMasterAccount
 @deprecated
-export def "master-disassociate create-from-account" [
+export def "disassociate-from-master-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1948,7 +1948,7 @@ export def "master-disassociate create-from-account" [
 #
 # POST /members/disassociate
 # operationId: DisassociateMembers
-export def "members-disassociate create" [
+export def "disassociate-members" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1995,7 +1995,7 @@ export def "members-disassociate create" [
 #
 # POST /productSubscriptions
 # operationId: EnableImportFindingsForProduct
-export def "product-subscriptions enable-import-findings" [
+export def "enable-import-findings-for-product" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2042,7 +2042,7 @@ export def "product-subscriptions enable-import-findings" [
 #
 # GET /productSubscriptions
 # operationId: ListEnabledProductsForImport
-export def "product-subscriptions list-enabled-for-import" [
+export def "list-enabled-products-for-import" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2088,7 +2088,7 @@ export def "product-subscriptions list-enabled-for-import" [
 #
 # POST /organization/admin/enable
 # operationId: EnableOrganizationAdminAccount
-export def "organization-admin-enable enable-account" [
+export def "enable-organization-admin-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2135,7 +2135,7 @@ export def "organization-admin-enable enable-account" [
 #
 # POST /standards/get
 # operationId: GetEnabledStandards
-export def "standards-get get-enabled" [
+export def "get-enabled-standards" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2187,7 +2187,7 @@ export def "standards-get get-enabled" [
 #
 # GET /findingAggregator/get/{FindingAggregatorArn}
 # operationId: GetFindingAggregator
-export def "finding-aggregator-get get" [
+export def "get-finding-aggregator" [
   finding_aggregator_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2234,7 +2234,7 @@ export def "finding-aggregator-get get" [
 # operationId: GetFindings
 # --Filters shape: {ProductArn?: any, AwsAccountId?: any, Id?: any, GeneratorId?: any, Region?: any, Type?: any, FirstObservedAt?: any, LastObservedAt?: any, CreatedAt?: any, UpdatedAt?: any, SeverityProduct?: any, SeverityNormalized?: any, SeverityLabel?: any, Confidence?: any, Criticality?: any, Title?: any, Description?: any, RecommendationText?: any, SourceUrl?: any, ProductFields?: any, ProductName?: any, CompanyName?: any, UserDefinedFields?: any, MalwareName?: any, MalwareType?: any, MalwarePath?: any, ... (71 more fields)}
 # --SortCriteria item shape: {Field?: any, SortOrder?: any}
-export def "findings get" [
+export def "get-findings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2289,7 +2289,7 @@ export def "findings get" [
 # operationId: UpdateFindings
 # --Filters shape: {ProductArn?: any, AwsAccountId?: any, Id?: any, GeneratorId?: any, Region?: any, Type?: any, FirstObservedAt?: any, LastObservedAt?: any, CreatedAt?: any, UpdatedAt?: any, SeverityProduct?: any, SeverityNormalized?: any, SeverityLabel?: any, Confidence?: any, Criticality?: any, Title?: any, Description?: any, RecommendationText?: any, SourceUrl?: any, ProductFields?: any, ProductName?: any, CompanyName?: any, UserDefinedFields?: any, MalwareName?: any, MalwareType?: any, MalwarePath?: any, ... (71 more fields)}
 # --Note shape: {Text?: any, UpdatedBy?: any}
-export def "findings update" [
+export def "update-findings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2338,7 +2338,7 @@ export def "findings update" [
 #
 # GET /insights/results/{InsightArn}
 # operationId: GetInsightResults
-export def "insights-results get" [
+export def "get-insight-results" [
   insight_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2383,7 +2383,7 @@ export def "insights-results get" [
 #
 # POST /insights/get
 # operationId: GetInsights
-export def "insights-get get" [
+export def "get-insights" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2435,7 +2435,7 @@ export def "insights-get get" [
 #
 # GET /invitations/count
 # operationId: GetInvitationsCount
-export def "invitations-count get" [
+export def "get-invitations-count" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2478,7 +2478,7 @@ export def "invitations-count get" [
 #
 # POST /members/get
 # operationId: GetMembers
-export def "members-get get" [
+export def "get-members" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2525,7 +2525,7 @@ export def "members-get get" [
 #
 # POST /members/invite
 # operationId: InviteMembers
-export def "members-invite create" [
+export def "invite-members" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2572,7 +2572,7 @@ export def "members-invite create" [
 #
 # GET /findingAggregator/list
 # operationId: ListFindingAggregators
-export def "finding-aggregator-list list" [
+export def "list-finding-aggregators" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2618,7 +2618,7 @@ export def "finding-aggregator-list list" [
 #
 # GET /invitations
 # operationId: ListInvitations
-export def "invitations list" [
+export def "list-invitations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2664,7 +2664,7 @@ export def "invitations list" [
 #
 # GET /organization/admin
 # operationId: ListOrganizationAdminAccounts
-export def "organization-admin list-accounts" [
+export def "list-organization-admin-accounts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2710,7 +2710,7 @@ export def "organization-admin list-accounts" [
 #
 # GET /securityControls/definitions
 # operationId: ListSecurityControlDefinitions
-export def "security-controls-definitions list" [
+export def "list-security-control-definitions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2757,7 +2757,7 @@ export def "security-controls-definitions list" [
 #
 # GET /associations
 # operationId: ListStandardsControlAssociations
-export def "associations list-standards-control" [
+export def "list-standards-control-associations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2804,7 +2804,7 @@ export def "associations list-standards-control" [
 #
 # GET /tags/{ResourceArn}
 # operationId: ListTagsForResource
-export def "tags list-for-resource" [
+export def "list-tags-for-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2849,7 +2849,7 @@ export def "tags list-for-resource" [
 #
 # POST /tags/{ResourceArn}
 # operationId: TagResource
-export def "tags tag-resource" [
+export def "tag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2898,7 +2898,7 @@ export def "tags tag-resource" [
 #
 # DELETE /tags/{ResourceArn}
 # operationId: UntagResource
-export def "tags untag-resource" [
+export def "untag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2945,7 +2945,7 @@ export def "tags untag-resource" [
 #
 # PATCH /findingAggregator/update
 # operationId: UpdateFindingAggregator
-export def "finding-aggregator-update update" [
+export def "update-finding-aggregator" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2994,7 +2994,7 @@ export def "finding-aggregator-update update" [
 #
 # PATCH /standards/control/{StandardsControlArn}
 # operationId: UpdateStandardsControl
-export def "standards-control update" [
+export def "update-standards-control" [
   standards_control_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

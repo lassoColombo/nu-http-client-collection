@@ -132,7 +132,7 @@ def renewal-plan-completer [] { ["ANNUAL" "COMMITMENT_PLAN_UNSPECIFIED" "FLEX" "
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta1 delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "bigqueryreservation-projects-locations-reservations-assignments-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -156,7 +156,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1beta1/{name}
 # operationId: bigqueryreservation.projects.locations.reservations.assignments.delete
-export def "v1beta1 delete" [
+export def "bigqueryreservation-projects-locations-reservations-assignments-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -205,7 +205,7 @@ export def "v1beta1 delete" [
 #
 # GET /v1beta1/{name}
 # operationId: bigqueryreservation.projects.locations.reservations.get
-export def "v1beta1 get" [
+export def "bigqueryreservation-projects-locations-reservations-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -253,7 +253,7 @@ export def "v1beta1 get" [
 #
 # PATCH /v1beta1/{name}
 # operationId: bigqueryreservation.projects.locations.reservations.assignments.patch
-export def "v1beta1 update" [
+export def "bigqueryreservation-projects-locations-reservations-assignments-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -307,7 +307,7 @@ export def "v1beta1 update" [
 #
 # POST /v1beta1/{name}:move
 # operationId: bigqueryreservation.projects.locations.reservations.assignments.move
-export def "v1beta1 move" [
+export def "bigqueryreservation-projects-locations-reservations-assignments-move" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -359,7 +359,7 @@ export def "v1beta1 move" [
 #
 # POST /v1beta1/{name}:split
 # operationId: bigqueryreservation.projects.locations.capacityCommitments.split
-export def "v1beta1 create-split" [
+export def "bigqueryreservation-projects-locations-capacity-commitments-split" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -411,7 +411,7 @@ export def "v1beta1 create-split" [
 #
 # GET /v1beta1/{parent}/assignments
 # operationId: bigqueryreservation.projects.locations.reservations.assignments.list
-export def "v1beta1-assignments list" [
+export def "bigqueryreservation-projects-locations-reservations-assignments-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -461,7 +461,7 @@ export def "v1beta1-assignments list" [
 #
 # POST /v1beta1/{parent}/assignments
 # operationId: bigqueryreservation.projects.locations.reservations.assignments.create
-export def "v1beta1-assignments create" [
+export def "bigqueryreservation-projects-locations-reservations-assignments-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -515,7 +515,7 @@ export def "v1beta1-assignments create" [
 #
 # GET /v1beta1/{parent}/capacityCommitments
 # operationId: bigqueryreservation.projects.locations.capacityCommitments.list
-export def "v1beta1-capacity-commitments list" [
+export def "bigqueryreservation-projects-locations-capacity-commitments-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -566,7 +566,7 @@ export def "v1beta1-capacity-commitments list" [
 # POST /v1beta1/{parent}/capacityCommitments
 # operationId: bigqueryreservation.projects.locations.capacityCommitments.create
 # --failureStatus shape: {code?: int, details?: list, message?: string}
-export def "v1beta1-capacity-commitments create" [
+export def "bigqueryreservation-projects-locations-capacity-commitments-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -624,7 +624,7 @@ export def "v1beta1-capacity-commitments create" [
 #
 # POST /v1beta1/{parent}/capacityCommitments:merge
 # operationId: bigqueryreservation.projects.locations.capacityCommitments.merge
-export def "v1beta1-capacity-commitments-merge create" [
+export def "bigqueryreservation-projects-locations-capacity-commitments-merge" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -676,7 +676,7 @@ export def "v1beta1-capacity-commitments-merge create" [
 #
 # GET /v1beta1/{parent}/reservations
 # operationId: bigqueryreservation.projects.locations.reservations.list
-export def "v1beta1-reservations list" [
+export def "bigqueryreservation-projects-locations-reservations-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -727,7 +727,7 @@ export def "v1beta1-reservations list" [
 #
 # POST /v1beta1/{parent}/reservations
 # operationId: bigqueryreservation.projects.locations.reservations.create
-export def "v1beta1-reservations create" [
+export def "bigqueryreservation-projects-locations-reservations-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -784,7 +784,7 @@ export def "v1beta1-reservations create" [
 #
 # GET /v1beta1/{parent}:searchAssignments
 # operationId: bigqueryreservation.projects.locations.searchAssignments
-export def "v1beta1 list-assignments" [
+export def "bigqueryreservation-projects-locations-search-assignments" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

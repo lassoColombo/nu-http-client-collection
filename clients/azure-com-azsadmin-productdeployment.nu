@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-deployment-admin-locations-global-product-deployments list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "product-deployments-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -128,7 +128,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Deployment.Admin/locations/global/productDeployments
 # operationId: ProductDeployments_List
-export def "subscriptions-providers-microsoft-deployment-admin-locations-global-product-deployments list" [
+export def "product-deployments-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -166,7 +166,7 @@ export def "subscriptions-providers-microsoft-deployment-admin-locations-global-
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Deployment.Admin/locations/global/productDeployments/{productId}
 # operationId: ProductDeployments_Get
-export def "subscriptions-providers-microsoft-deployment-admin-locations-global-product-deployments get" [
+export def "product-deployments-get" [
   subscription_id: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -206,7 +206,7 @@ export def "subscriptions-providers-microsoft-deployment-admin-locations-global-
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Deployment.Admin/locations/global/productDeployments/{productId}/bootstrap
 # operationId: ProductDeployments_BootStrap
-export def "subscriptions-providers-microsoft-deployment-admin-locations-global-product-deployments-bootstrap create-boot-strap" [
+export def "product-deployments-boot-strap" [
   subscription_id: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -250,7 +250,7 @@ export def "subscriptions-providers-microsoft-deployment-admin-locations-global-
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Deployment.Admin/locations/global/productDeployments/{productId}/deploy
 # operationId: ProductDeployments_Deploy
-export def "subscriptions-providers-microsoft-deployment-admin-locations-global-product-deployments-deploy create" [
+export def "product-deployments-deploy" [
   subscription_id: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -295,7 +295,7 @@ export def "subscriptions-providers-microsoft-deployment-admin-locations-global-
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Deployment.Admin/locations/global/productDeployments/{productId}/lock
 # operationId: ProductDeployments_Lock
-export def "subscriptions-providers-microsoft-deployment-admin-locations-global-product-deployments-lock lock" [
+export def "product-deployments-lock" [
   subscription_id: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -335,7 +335,7 @@ export def "subscriptions-providers-microsoft-deployment-admin-locations-global-
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Deployment.Admin/locations/global/productDeployments/{productId}/remove
 # operationId: ProductDeployments_Remove
-export def "subscriptions-providers-microsoft-deployment-admin-locations-global-product-deployments-remove delete" [
+export def "product-deployments-remove" [
   subscription_id: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -375,7 +375,7 @@ export def "subscriptions-providers-microsoft-deployment-admin-locations-global-
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Deployment.Admin/locations/global/productDeployments/{productId}/rotateSecrets
 # operationId: ProductDeployments_RotateSecrets
-export def "subscriptions-providers-microsoft-deployment-admin-locations-global-product-deployments-rotate-secrets create" [
+export def "product-deployments-rotate-secrets" [
   subscription_id: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -415,7 +415,7 @@ export def "subscriptions-providers-microsoft-deployment-admin-locations-global-
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Deployment.Admin/locations/global/productDeployments/{productId}/unlock
 # operationId: ProductDeployments_Unlock
-export def "subscriptions-providers-microsoft-deployment-admin-locations-global-product-deployments-unlock unlock" [
+export def "product-deployments-unlock" [
   subscription_id: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL

@@ -125,7 +125,7 @@ def type-completer-1 [] { ["email" "phone" "push" "sms"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api-public-alerts get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-api-public-v1-alerts-uuid" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -148,7 +148,7 @@ export def commands []: nothing -> table {
 # Retrieve alert details.
 #
 # GET /api-public/v1/alerts/{uuid}
-export def "api-public-alerts get" [
+export def "get-api-public-v1-alerts-uuid" [
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -187,7 +187,7 @@ export def "api-public-alerts get" [
 # Get current incident information
 #
 # GET /api-public/v1/incidents
-export def "api-public-incidents get" [
+export def "get-api-public-v1-incidents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -225,7 +225,7 @@ export def "api-public-incidents get" [
 #
 # POST /api-public/v1/incidents
 # --targets item shape: {slug: string, type: "User"|"EscalationPolicy"}
-export def "api-public-incidents create" [
+export def "post-api-public-v1-incidents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -269,7 +269,7 @@ export def "api-public-incidents create" [
 # Acknowledge an incident or list of incidents
 #
 # PATCH /api-public/v1/incidents/ack
-export def "api-public-incidents-ack update" [
+export def "patch-api-public-v1-incidents-ack" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -312,7 +312,7 @@ export def "api-public-incidents-ack update" [
 # Acknowledge all incidents for which a user was paged.
 #
 # PATCH /api-public/v1/incidents/byUser/ack
-export def "api-public-incidents-by-user-ack update" [
+export def "patch-api-public-v1-incidents-by-user-ack" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -354,7 +354,7 @@ export def "api-public-incidents-by-user-ack update" [
 # Resolve all incidents for which a user was paged.
 #
 # PATCH /api-public/v1/incidents/byUser/resolve
-export def "api-public-incidents-by-user-resolve update" [
+export def "patch-api-public-v1-incidents-by-user-resolve" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -397,7 +397,7 @@ export def "api-public-incidents-by-user-resolve update" [
 #
 # POST /api-public/v1/incidents/reroute
 # --reroutes item shape: {incidentNumber: string, targets: list}
-export def "api-public-incidents-reroute create" [
+export def "post-api-public-v1-incidents-reroute" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -439,7 +439,7 @@ export def "api-public-incidents-reroute create" [
 # Resolve an incident or list of incidents
 #
 # PATCH /api-public/v1/incidents/resolve
-export def "api-public-incidents-resolve update" [
+export def "patch-api-public-v1-incidents-resolve" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -482,7 +482,7 @@ export def "api-public-incidents-resolve update" [
 # Get an organization's current maintenance mode state
 #
 # GET /api-public/v1/maintenancemode
-export def "api-public-maintenancemode get" [
+export def "get-api-public-v1-maintenancemode" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -519,7 +519,7 @@ export def "api-public-maintenancemode get" [
 # Start maintenance mode for routing keys
 #
 # POST /api-public/v1/maintenancemode/start
-export def "api-public-maintenancemode-start create" [
+export def "post-api-public-v1-maintenancemode-start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -562,7 +562,7 @@ export def "api-public-maintenancemode-start create" [
 # End maintenance mode for routing keys
 #
 # PUT /api-public/v1/maintenancemode/{maintenancemodeid}/end
-export def "api-public-maintenancemode-end update" [
+export def "put-api-public-v1-maintenancemode-maintenancemodeid-end" [
   maintenancemodeid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -601,7 +601,7 @@ export def "api-public-maintenancemode-end update" [
 # Get an organization's on-call users
 #
 # GET /api-public/v1/oncall/current
-export def "api-public-oncall-current get" [
+export def "get-api-public-v1-oncall-current" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -638,7 +638,7 @@ export def "api-public-oncall-current get" [
 # List routing keys with associated teams
 #
 # GET /api-public/v1/org/routing-keys
-export def "api-public-org-routing-keys get" [
+export def "get-api-public-v1-org-routing-keys" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -675,7 +675,7 @@ export def "api-public-org-routing-keys get" [
 # List the scheduled overrides
 #
 # GET /api-public/v1/overrides
-export def "api-public-overrides list" [
+export def "get-api-public-v1-overrides" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -712,7 +712,7 @@ export def "api-public-overrides list" [
 # Creates a new scheduled override
 #
 # POST /api-public/v1/overrides
-export def "api-public-overrides create" [
+export def "post-api-public-v1-overrides" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -756,7 +756,7 @@ export def "api-public-overrides create" [
 # Deletes a scheduled override
 #
 # DELETE /api-public/v1/overrides/{publicId}
-export def "api-public-overrides delete" [
+export def "delete-api-public-v1-overrides-public-id" [
   public_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -795,7 +795,7 @@ export def "api-public-overrides delete" [
 # Get the specified scheduled override
 #
 # GET /api-public/v1/overrides/{publicId}
-export def "api-public-overrides get" [
+export def "get-api-public-v1-overrides-public-id" [
   public_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -834,7 +834,7 @@ export def "api-public-overrides get" [
 # Get the specified scheduled override
 #
 # GET /api-public/v1/overrides/{publicId}/assignments
-export def "api-public-overrides-assignments list" [
+export def "get-api-public-v1-overrides-public-id-assignments" [
   public_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -873,7 +873,7 @@ export def "api-public-overrides-assignments list" [
 # Delete the scheduled override assignment
 #
 # DELETE /api-public/v1/overrides/{publicId}/assignments/{policySlug}
-export def "api-public-overrides-assignments delete" [
+export def "delete-api-public-v1-overrides-public-id-assignments-policy-slug" [
   public_id: string
   policy_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -914,7 +914,7 @@ export def "api-public-overrides-assignments delete" [
 # Get the specified scheduled override assignment
 #
 # GET /api-public/v1/overrides/{publicId}/assignments/{policySlug}
-export def "api-public-overrides-assignments get" [
+export def "get-api-public-v1-overrides-public-id-assignments-policy-slug" [
   public_id: string
   policy_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -955,7 +955,7 @@ export def "api-public-overrides-assignments get" [
 # Update the scheduled override assignment
 #
 # PUT /api-public/v1/overrides/{publicId}/assignments/{policySlug}
-export def "api-public-overrides-assignments update" [
+export def "put-api-public-v1-overrides-public-id-assignments-policy-slug" [
   public_id: string
   policy_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1001,7 +1001,7 @@ export def "api-public-overrides-assignments update" [
 # Get escalation policy info
 #
 # GET /api-public/v1/policies
-export def "api-public-policies get" [
+export def "get-api-public-v1-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1038,7 +1038,7 @@ export def "api-public-policies get" [
 # Get the available contact types
 #
 # GET /api-public/v1/policies/types/contacts
-export def "api-public-policies-types-contacts get" [
+export def "get-api-public-v1-policies-types-contacts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1075,7 +1075,7 @@ export def "api-public-policies-types-contacts get" [
 # Get the available notification types
 #
 # GET /api-public/v1/policies/types/notifications
-export def "api-public-policies-types-notifications get" [
+export def "get-api-public-v1-policies-types-notifications" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1112,7 +1112,7 @@ export def "api-public-policies-types-notifications get" [
 # Get the available timeout values
 #
 # GET /api-public/v1/policies/types/timeouts
-export def "api-public-policies-types-timeouts get" [
+export def "get-api-public-v1-policies-types-timeouts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1149,7 +1149,7 @@ export def "api-public-policies-types-timeouts get" [
 # Create an on-call override (take on-call)
 #
 # PATCH /api-public/v1/policies/{policy}/oncall/user
-export def "api-public-policies-oncall-user update" [
+export def "patch-api-public-v1-policies-policy-oncall-user" [
   policy: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1193,7 +1193,7 @@ export def "api-public-policies-oncall-user update" [
 # Get the user's paging policy
 #
 # GET /api-public/v1/profile/{username}/policies
-export def "api-public-profile-policies get-by-username" [
+export def "get-api-public-v1-profile-username-policies" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1233,7 +1233,7 @@ export def "api-public-profile-policies get-by-username" [
 #
 # POST /api-public/v1/profile/{username}/policies
 # --rules item shape: {contact?: record, type?: "push"|"email"|"sms"|"phone"}
-export def "api-public-profile-policies create-by-username" [
+export def "post-api-public-v1-profile-username-policies" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1277,7 +1277,7 @@ export def "api-public-profile-policies create-by-username" [
 # Get a paging policy step
 #
 # GET /api-public/v1/profile/{username}/policies/{step}
-export def "api-public-profile-policies get-by-username-step" [
+export def "get-api-public-v1-profile-username-policies-step" [
   username: string
   step: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -1319,7 +1319,7 @@ export def "api-public-profile-policies get-by-username-step" [
 #
 # POST /api-public/v1/profile/{username}/policies/{step}
 # --contact shape: {id?: float, type?: "email"|"phone"}
-export def "api-public-profile-policies create-by-username-step" [
+export def "post-api-public-v1-profile-username-policies-step" [
   username: string
   step: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -1366,7 +1366,7 @@ export def "api-public-profile-policies create-by-username-step" [
 #
 # PUT /api-public/v1/profile/{username}/policies/{step}
 # --rules item shape: {contact?: record, type?: "push"|"email"|"sms"|"phone"}
-export def "api-public-profile-policies update-by-username-step" [
+export def "put-api-public-v1-profile-username-policies-step" [
   username: string
   step: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -1412,7 +1412,7 @@ export def "api-public-profile-policies update-by-username-step" [
 # Delete a rule from a paging policy step
 #
 # DELETE /api-public/v1/profile/{username}/policies/{step}/{rule}
-export def "api-public-profile-policies delete" [
+export def "delete-api-public-v1-profile-username-policies-step-rule" [
   username: string
   step: float
   rule: float
@@ -1455,7 +1455,7 @@ export def "api-public-profile-policies delete" [
 # Get a rule from a paging policy step
 #
 # GET /api-public/v1/profile/{username}/policies/{step}/{rule}
-export def "api-public-profile-policies get-by-username-step-rule" [
+export def "get-api-public-v1-profile-username-policies-step-rule" [
   username: string
   step: float
   rule: float
@@ -1499,7 +1499,7 @@ export def "api-public-profile-policies get-by-username-step-rule" [
 #
 # PUT /api-public/v1/profile/{username}/policies/{step}/{rule}
 # --contact shape: {id?: float, type?: "email"|"phone"}
-export def "api-public-profile-policies update-by-username-step-rule" [
+export def "put-api-public-v1-profile-username-policies-step-rule" [
   username: string
   step: float
   rule: float
@@ -1547,7 +1547,7 @@ export def "api-public-profile-policies update-by-username-step-rule" [
 # List teams
 #
 # GET /api-public/v1/team
-export def "api-public-team list" [
+export def "get-api-public-v1-team" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1584,7 +1584,7 @@ export def "api-public-team list" [
 # Add a team
 #
 # POST /api-public/v1/team
-export def "api-public-team create" [
+export def "post-api-public-v1-team" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1625,7 +1625,7 @@ export def "api-public-team create" [
 # Remove a team
 #
 # DELETE /api-public/v1/team/{team}
-export def "api-public-team delete" [
+export def "delete-api-public-v1-team-team" [
   team: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1664,7 +1664,7 @@ export def "api-public-team delete" [
 # Retrieve information for a team
 #
 # GET /api-public/v1/team/{team}
-export def "api-public-team get" [
+export def "get-api-public-v1-team-team" [
   team: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1703,7 +1703,7 @@ export def "api-public-team get" [
 # Update a team
 #
 # PUT /api-public/v1/team/{team}
-export def "api-public-team update" [
+export def "put-api-public-v1-team-team" [
   team: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1746,7 +1746,7 @@ export def "api-public-team update" [
 # Retrieve a list of team admins for a team
 #
 # GET /api-public/v1/team/{team}/admins
-export def "api-public-team-admins get" [
+export def "get-api-public-v1-team-team-admins" [
   team: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1785,7 +1785,7 @@ export def "api-public-team-admins get" [
 # Retrieve a list of members for a team
 #
 # GET /api-public/v1/team/{team}/members
-export def "api-public-team-members get" [
+export def "get-api-public-v1-team-team-members" [
   team: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1824,7 +1824,7 @@ export def "api-public-team-members get" [
 # Add a team member
 #
 # POST /api-public/v1/team/{team}/members
-export def "api-public-team-members create" [
+export def "post-api-public-v1-team-team-members" [
   team: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1867,7 +1867,7 @@ export def "api-public-team-members create" [
 # Remove a team member
 #
 # DELETE /api-public/v1/team/{team}/members/{user}
-export def "api-public-team-members delete" [
+export def "delete-api-public-v1-team-team-members-user" [
   team: string
   user: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1914,7 +1914,7 @@ export def "api-public-team-members delete" [
 # GET /api-public/v1/team/{team}/oncall/schedule
 # DEPRECATED
 @deprecated
-export def "api-public-team-oncall-schedule get-by-team" [
+export def "get-api-public-v1-team-team-oncall-schedule" [
   team: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1959,7 +1959,7 @@ export def "api-public-team-oncall-schedule get-by-team" [
 # PATCH /api-public/v1/team/{team}/oncall/user
 # DEPRECATED
 @deprecated
-export def "api-public-team-oncall-user update" [
+export def "patch-api-public-v1-team-team-oncall-user" [
   team: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2003,7 +2003,7 @@ export def "api-public-team-oncall-user update" [
 # Retrieve a list of escalation policies for a team
 #
 # GET /api-public/v1/team/{team}/policies
-export def "api-public-team-policies get" [
+export def "get-api-public-v1-team-team-policies" [
   team: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2042,7 +2042,7 @@ export def "api-public-team-policies get" [
 # List users
 #
 # GET /api-public/v1/user
-export def "api-public-user list" [
+export def "get-api-public-v1-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2079,7 +2079,7 @@ export def "api-public-user list" [
 # Add a user
 #
 # POST /api-public/v1/user
-export def "api-public-user create" [
+export def "post-api-public-v1-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2125,7 +2125,7 @@ export def "api-public-user create" [
 # Remove a user
 #
 # DELETE /api-public/v1/user/{user}
-export def "api-public-user delete" [
+export def "delete-api-public-v1-user-user" [
   user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2168,7 +2168,7 @@ export def "api-public-user delete" [
 # Retrieve information for a user
 #
 # GET /api-public/v1/user/{user}
-export def "api-public-user get" [
+export def "get-api-public-v1-user-user" [
   user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2207,7 +2207,7 @@ export def "api-public-user get" [
 # Update a user
 #
 # PUT /api-public/v1/user/{user}
-export def "api-public-user update" [
+export def "put-api-public-v1-user-user" [
   user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2255,7 +2255,7 @@ export def "api-public-user update" [
 # Get a list of all contact methods for a user
 #
 # GET /api-public/v1/user/{user}/contact-methods
-export def "api-public-user-contact-methods get" [
+export def "get-api-public-v1-user-user-contact-methods" [
   user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2294,7 +2294,7 @@ export def "api-public-user-contact-methods get" [
 # Get a list of all contact devices for a user
 #
 # GET /api-public/v1/user/{user}/contact-methods/devices
-export def "api-public-user-contact-methods-devices list" [
+export def "get-api-public-v1-user-user-contact-methods-devices" [
   user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2333,7 +2333,7 @@ export def "api-public-user-contact-methods-devices list" [
 # Delete a contact device for a user
 #
 # DELETE /api-public/v1/user/{user}/contact-methods/devices/{contactId}
-export def "api-public-user-contact-methods-devices delete" [
+export def "delete-api-public-v1-user-user-contact-methods-devices-contact-id" [
   user: string
   contact_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2374,7 +2374,7 @@ export def "api-public-user-contact-methods-devices delete" [
 # Get the indicated contact device for a user
 #
 # GET /api-public/v1/user/{user}/contact-methods/devices/{contactId}
-export def "api-public-user-contact-methods-devices get" [
+export def "get-api-public-v1-user-user-contact-methods-devices-contact-id" [
   user: string
   contact_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2415,7 +2415,7 @@ export def "api-public-user-contact-methods-devices get" [
 # Update a contact device for a user
 #
 # PUT /api-public/v1/user/{user}/contact-methods/devices/{contactId}
-export def "api-public-user-contact-methods-devices update" [
+export def "put-api-public-v1-user-user-contact-methods-devices-contact-id" [
   user: string
   contact_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2463,7 +2463,7 @@ export def "api-public-user-contact-methods-devices update" [
 # Get a list of all contact emails for a user
 #
 # GET /api-public/v1/user/{user}/contact-methods/emails
-export def "api-public-user-contact-methods-emails list" [
+export def "get-api-public-v1-user-user-contact-methods-emails" [
   user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2502,7 +2502,7 @@ export def "api-public-user-contact-methods-emails list" [
 # Create a contact emails for a user
 #
 # POST /api-public/v1/user/{user}/contact-methods/emails
-export def "api-public-user-contact-methods-emails create" [
+export def "post-api-public-v1-user-user-contact-methods-emails" [
   user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2547,7 +2547,7 @@ export def "api-public-user-contact-methods-emails create" [
 # Delete a contact email for a user
 #
 # DELETE /api-public/v1/user/{user}/contact-methods/emails/{contactId}
-export def "api-public-user-contact-methods-emails delete" [
+export def "delete-api-public-v1-user-user-contact-methods-emails-contact-id" [
   user: string
   contact_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2588,7 +2588,7 @@ export def "api-public-user-contact-methods-emails delete" [
 # Get the indicated contact email for a user
 #
 # GET /api-public/v1/user/{user}/contact-methods/emails/{contactId}
-export def "api-public-user-contact-methods-emails get" [
+export def "get-api-public-v1-user-user-contact-methods-emails-contact-id" [
   user: string
   contact_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2629,7 +2629,7 @@ export def "api-public-user-contact-methods-emails get" [
 # Get a list of all contact phones for a user
 #
 # GET /api-public/v1/user/{user}/contact-methods/phones
-export def "api-public-user-contact-methods-phones list" [
+export def "get-api-public-v1-user-user-contact-methods-phones" [
   user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2668,7 +2668,7 @@ export def "api-public-user-contact-methods-phones list" [
 # Create a contact phones for a user
 #
 # POST /api-public/v1/user/{user}/contact-methods/phones
-export def "api-public-user-contact-methods-phones create" [
+export def "post-api-public-v1-user-user-contact-methods-phones" [
   user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2713,7 +2713,7 @@ export def "api-public-user-contact-methods-phones create" [
 # Delete a contact phone for a user
 #
 # DELETE /api-public/v1/user/{user}/contact-methods/phones/{contactId}
-export def "api-public-user-contact-methods-phones delete" [
+export def "delete-api-public-v1-user-user-contact-methods-phones-contact-id" [
   user: string
   contact_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2754,7 +2754,7 @@ export def "api-public-user-contact-methods-phones delete" [
 # Get the indicated contact phone for a user
 #
 # GET /api-public/v1/user/{user}/contact-methods/phones/{contactId}
-export def "api-public-user-contact-methods-phones get" [
+export def "get-api-public-v1-user-user-contact-methods-phones-contact-id" [
   user: string
   contact_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2797,7 +2797,7 @@ export def "api-public-user-contact-methods-phones get" [
 # GET /api-public/v1/user/{user}/oncall/schedule
 # DEPRECATED
 @deprecated
-export def "api-public-user-oncall-schedule get-by-user" [
+export def "get-api-public-v1-user-user-oncall-schedule" [
   user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2840,7 +2840,7 @@ export def "api-public-user-oncall-schedule get-by-user" [
 # Get a list of paging policies for a user
 #
 # GET /api-public/v1/user/{user}/policies
-export def "api-public-user-policies get" [
+export def "get-api-public-v1-user-user-policies" [
   user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2879,7 +2879,7 @@ export def "api-public-user-policies get" [
 # Retrieve the user's team membership
 #
 # GET /api-public/v1/user/{user}/teams
-export def "api-public-user-teams get" [
+export def "get-api-public-v1-user-user-teams" [
   user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2918,7 +2918,7 @@ export def "api-public-user-teams get" [
 # Get a team's on-call schedule
 #
 # GET /api-public/v2/team/{team}/oncall/schedule
-export def "api-public-team-oncall-schedule get-by-team-1" [
+export def "get-api-public-v2-team-team-oncall-schedule" [
   team: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2961,7 +2961,7 @@ export def "api-public-team-oncall-schedule get-by-team-1" [
 # Get a user's on-call schedule
 #
 # GET /api-public/v2/user/{user}/oncall/schedule
-export def "api-public-user-oncall-schedule get-by-user-1" [
+export def "get-api-public-v2-user-user-oncall-schedule" [
   user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3006,7 +3006,7 @@ export def "api-public-user-oncall-schedule get-by-user-1" [
 # GET /api-reporting/v1/incidents
 # DEPRECATED
 @deprecated
-export def "api-reporting-incidents get" [
+export def "get-api-reporting-v1-incidents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3053,7 +3053,7 @@ export def "api-reporting-incidents get" [
 # A list of shift changes for a team
 #
 # GET /api-reporting/v1/team/{team}/oncall/log
-export def "api-reporting-team-oncall-log get" [
+export def "get-api-reporting-v1-team-team-oncall-log" [
   team: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3096,7 +3096,7 @@ export def "api-reporting-team-oncall-log get" [
 # Get/search incident history
 #
 # GET /api-reporting/v2/incidents
-export def "api-reporting-incidents get-1" [
+export def "get-api-reporting-v2-incidents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

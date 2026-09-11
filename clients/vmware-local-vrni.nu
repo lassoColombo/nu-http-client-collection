@@ -151,7 +151,7 @@ def entity-type-completer-1 [] { ["Application" "BaseEvent" "BaseFirewall" "Base
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "auth-token delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -175,7 +175,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /auth/token
 # operationId: delete
-export def "auth-token delete" [
+export def "delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -210,7 +210,7 @@ export def "auth-token delete" [
 # POST /auth/token
 # operationId: create
 # --domain shape: {domain_type?: "LDAP"|"LOCAL", value?: string}
-export def "auth-token create" [
+export def "create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -251,7 +251,7 @@ export def "auth-token create" [
 #
 # GET /data-sources/arista-switches
 # operationId: listAristaSwitches
-export def "data-sources-arista-switches list" [
+export def "list-arista-switches" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -285,7 +285,7 @@ export def "data-sources-arista-switches list" [
 #
 # POST /data-sources/arista-switches
 # operationId: addAristaSwitch
-export def "data-sources-arista-switches create-switch" [
+export def "add-arista-switch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -323,7 +323,7 @@ export def "data-sources-arista-switches create-switch" [
 #
 # DELETE /data-sources/arista-switches/{id}
 # operationId: deleteAristaSwitch
-export def "data-sources-arista-switches delete-switch" [
+export def "delete-arista-switch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -359,7 +359,7 @@ export def "data-sources-arista-switches delete-switch" [
 #
 # GET /data-sources/arista-switches/{id}
 # operationId: getAristaSwitch
-export def "data-sources-arista-switches get-switch" [
+export def "get-arista-switch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -395,7 +395,7 @@ export def "data-sources-arista-switches get-switch" [
 #
 # PUT /data-sources/arista-switches/{id}
 # operationId: updateAristaSwitch
-export def "data-sources-arista-switches update-switch" [
+export def "update-arista-switch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -435,7 +435,7 @@ export def "data-sources-arista-switches update-switch" [
 #
 # POST /data-sources/arista-switches/{id}/disable
 # operationId: disableAristaSwitch
-export def "data-sources-arista-switches-disable disable-switch" [
+export def "disable-arista-switch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -471,7 +471,7 @@ export def "data-sources-arista-switches-disable disable-switch" [
 #
 # POST /data-sources/arista-switches/{id}/enable
 # operationId: enableAristaSwitch
-export def "data-sources-arista-switches-enable enable-switch" [
+export def "enable-arista-switch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -507,7 +507,7 @@ export def "data-sources-arista-switches-enable enable-switch" [
 #
 # GET /data-sources/arista-switches/{id}/snmp-config
 # operationId: getAristaSwitchSnmpConfig
-export def "data-sources-arista-switches-snmp-config get-switch" [
+export def "get-arista-switch-snmp-config" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -545,7 +545,7 @@ export def "data-sources-arista-switches-snmp-config get-switch" [
 # operationId: updateAristaSwitchSnmpConfig
 # --config_snmp_2c shape: {community_string?: string}
 # --config_snmp_3 shape: {authentication_password?: string, authentication_type?: "NO_AUTH"|"MD5"|"SHA", context_name?: string, privacy_password?: string, privacy_type?: "AES"|"DES"|"AES128"|"AES192"|"AES256"|"3DES"|"NO_PRIV", username?: string}
-export def "data-sources-arista-switches-snmp-config update-switch" [
+export def "update-arista-switch-snmp-config" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -588,7 +588,7 @@ export def "data-sources-arista-switches-snmp-config update-switch" [
 #
 # GET /data-sources/brocade-switches
 # operationId: listBrocadeSwitches
-export def "data-sources-brocade-switches list" [
+export def "list-brocade-switches" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -622,7 +622,7 @@ export def "data-sources-brocade-switches list" [
 #
 # POST /data-sources/brocade-switches
 # operationId: addBrocadeSwitch
-export def "data-sources-brocade-switches create-switch" [
+export def "add-brocade-switch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -660,7 +660,7 @@ export def "data-sources-brocade-switches create-switch" [
 #
 # DELETE /data-sources/brocade-switches/{id}
 # operationId: deleteBrocadeSwitch
-export def "data-sources-brocade-switches delete-switch" [
+export def "delete-brocade-switch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -696,7 +696,7 @@ export def "data-sources-brocade-switches delete-switch" [
 #
 # GET /data-sources/brocade-switches/{id}
 # operationId: getBrocadeSwitch
-export def "data-sources-brocade-switches get-switch" [
+export def "get-brocade-switch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -732,7 +732,7 @@ export def "data-sources-brocade-switches get-switch" [
 #
 # PUT /data-sources/brocade-switches/{id}
 # operationId: updateBrocadeSwitch
-export def "data-sources-brocade-switches update-switch" [
+export def "update-brocade-switch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -772,7 +772,7 @@ export def "data-sources-brocade-switches update-switch" [
 #
 # POST /data-sources/brocade-switches/{id}/disable
 # operationId: disableBrocadeSwitch
-export def "data-sources-brocade-switches-disable disable-switch" [
+export def "disable-brocade-switch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -808,7 +808,7 @@ export def "data-sources-brocade-switches-disable disable-switch" [
 #
 # POST /data-sources/brocade-switches/{id}/enable
 # operationId: enableBrocadeSwitch
-export def "data-sources-brocade-switches-enable enable-switch" [
+export def "enable-brocade-switch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -844,7 +844,7 @@ export def "data-sources-brocade-switches-enable enable-switch" [
 #
 # GET /data-sources/brocade-switches/{id}/snmp-config
 # operationId: getBrocadeSwitchSnmpConfig
-export def "data-sources-brocade-switches-snmp-config get-switch" [
+export def "get-brocade-switch-snmp-config" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -882,7 +882,7 @@ export def "data-sources-brocade-switches-snmp-config get-switch" [
 # operationId: updateBrocadeSwitchSnmpConfig
 # --config_snmp_2c shape: {community_string?: string}
 # --config_snmp_3 shape: {authentication_password?: string, authentication_type?: "NO_AUTH"|"MD5"|"SHA", context_name?: string, privacy_password?: string, privacy_type?: "AES"|"DES"|"AES128"|"AES192"|"AES256"|"3DES"|"NO_PRIV", username?: string}
-export def "data-sources-brocade-switches-snmp-config update-switch" [
+export def "update-brocade-switch-snmp-config" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -925,7 +925,7 @@ export def "data-sources-brocade-switches-snmp-config update-switch" [
 #
 # GET /data-sources/checkpoint-firewalls
 # operationId: listCheckpointFirewalls
-export def "data-sources-checkpoint-firewalls list" [
+export def "list-checkpoint-firewalls" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -959,7 +959,7 @@ export def "data-sources-checkpoint-firewalls list" [
 #
 # POST /data-sources/checkpoint-firewalls
 # operationId: addCheckpointFirewall
-export def "data-sources-checkpoint-firewalls create" [
+export def "add-checkpoint-firewall" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -997,7 +997,7 @@ export def "data-sources-checkpoint-firewalls create" [
 #
 # DELETE /data-sources/checkpoint-firewalls/{id}
 # operationId: deleteCheckpointFirewall
-export def "data-sources-checkpoint-firewalls delete" [
+export def "delete-checkpoint-firewall" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1033,7 +1033,7 @@ export def "data-sources-checkpoint-firewalls delete" [
 #
 # GET /data-sources/checkpoint-firewalls/{id}
 # operationId: getCheckpointFirewall
-export def "data-sources-checkpoint-firewalls get" [
+export def "get-checkpoint-firewall" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1069,7 +1069,7 @@ export def "data-sources-checkpoint-firewalls get" [
 #
 # PUT /data-sources/checkpoint-firewalls/{id}
 # operationId: updateCheckpointFirewall
-export def "data-sources-checkpoint-firewalls update" [
+export def "update-checkpoint-firewall" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1109,7 +1109,7 @@ export def "data-sources-checkpoint-firewalls update" [
 #
 # POST /data-sources/checkpoint-firewalls/{id}/disable
 # operationId: disableCheckpointFirewall
-export def "data-sources-checkpoint-firewalls-disable disable" [
+export def "disable-checkpoint-firewall" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1145,7 +1145,7 @@ export def "data-sources-checkpoint-firewalls-disable disable" [
 #
 # POST /data-sources/checkpoint-firewalls/{id}/enable
 # operationId: enableCheckpointFirewall
-export def "data-sources-checkpoint-firewalls-enable enable" [
+export def "enable-checkpoint-firewall" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1181,7 +1181,7 @@ export def "data-sources-checkpoint-firewalls-enable enable" [
 #
 # GET /data-sources/cisco-switches
 # operationId: listCiscoSwitches
-export def "data-sources-cisco-switches list" [
+export def "list-cisco-switches" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1215,7 +1215,7 @@ export def "data-sources-cisco-switches list" [
 #
 # POST /data-sources/cisco-switches
 # operationId: addCiscoSwitch
-export def "data-sources-cisco-switches create-switch" [
+export def "add-cisco-switch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1253,7 +1253,7 @@ export def "data-sources-cisco-switches create-switch" [
 #
 # DELETE /data-sources/cisco-switches/{id}
 # operationId: deleteCiscoSwitch
-export def "data-sources-cisco-switches delete-switch" [
+export def "delete-cisco-switch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1289,7 +1289,7 @@ export def "data-sources-cisco-switches delete-switch" [
 #
 # GET /data-sources/cisco-switches/{id}
 # operationId: getCiscoSwitch
-export def "data-sources-cisco-switches get-switch" [
+export def "get-cisco-switch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1325,7 +1325,7 @@ export def "data-sources-cisco-switches get-switch" [
 #
 # PUT /data-sources/cisco-switches/{id}
 # operationId: updateCiscoSwitch
-export def "data-sources-cisco-switches update-switch" [
+export def "update-cisco-switch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1365,7 +1365,7 @@ export def "data-sources-cisco-switches update-switch" [
 #
 # POST /data-sources/cisco-switches/{id}/disable
 # operationId: disableCiscoSwitch
-export def "data-sources-cisco-switches-disable disable-switch" [
+export def "disable-cisco-switch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1401,7 +1401,7 @@ export def "data-sources-cisco-switches-disable disable-switch" [
 #
 # POST /data-sources/cisco-switches/{id}/enable
 # operationId: enableCiscoSwitch
-export def "data-sources-cisco-switches-enable enable-switch" [
+export def "enable-cisco-switch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1437,7 +1437,7 @@ export def "data-sources-cisco-switches-enable enable-switch" [
 #
 # GET /data-sources/cisco-switches/{id}/snmp-config
 # operationId: getCiscoSwitchSnmpConfig
-export def "data-sources-cisco-switches-snmp-config get-switch" [
+export def "get-cisco-switch-snmp-config" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1475,7 +1475,7 @@ export def "data-sources-cisco-switches-snmp-config get-switch" [
 # operationId: updateCiscoSwitchSnmpConfig
 # --config_snmp_2c shape: {community_string?: string}
 # --config_snmp_3 shape: {authentication_password?: string, authentication_type?: "NO_AUTH"|"MD5"|"SHA", context_name?: string, privacy_password?: string, privacy_type?: "AES"|"DES"|"AES128"|"AES192"|"AES256"|"3DES"|"NO_PRIV", username?: string}
-export def "data-sources-cisco-switches-snmp-config update-switch" [
+export def "update-cisco-switch-snmp-config" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1518,7 +1518,7 @@ export def "data-sources-cisco-switches-snmp-config update-switch" [
 #
 # GET /data-sources/dell-switches
 # operationId: listDellSwitches
-export def "data-sources-dell-switches list" [
+export def "list-dell-switches" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1552,7 +1552,7 @@ export def "data-sources-dell-switches list" [
 #
 # POST /data-sources/dell-switches
 # operationId: addDellSwitch
-export def "data-sources-dell-switches create-switch" [
+export def "add-dell-switch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1590,7 +1590,7 @@ export def "data-sources-dell-switches create-switch" [
 #
 # DELETE /data-sources/dell-switches/{id}
 # operationId: deleteDellSwitch
-export def "data-sources-dell-switches delete-switch" [
+export def "delete-dell-switch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1626,7 +1626,7 @@ export def "data-sources-dell-switches delete-switch" [
 #
 # GET /data-sources/dell-switches/{id}
 # operationId: getDellSwitch
-export def "data-sources-dell-switches get-switch" [
+export def "get-dell-switch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1662,7 +1662,7 @@ export def "data-sources-dell-switches get-switch" [
 #
 # PUT /data-sources/dell-switches/{id}
 # operationId: updateDellSwitch
-export def "data-sources-dell-switches update-switch" [
+export def "update-dell-switch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1702,7 +1702,7 @@ export def "data-sources-dell-switches update-switch" [
 #
 # POST /data-sources/dell-switches/{id}/disable
 # operationId: disableDellSwitch
-export def "data-sources-dell-switches-disable disable-switch" [
+export def "disable-dell-switch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1738,7 +1738,7 @@ export def "data-sources-dell-switches-disable disable-switch" [
 #
 # POST /data-sources/dell-switches/{id}/enable
 # operationId: enableDellSwitch
-export def "data-sources-dell-switches-enable enable-switch" [
+export def "enable-dell-switch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1774,7 +1774,7 @@ export def "data-sources-dell-switches-enable enable-switch" [
 #
 # GET /data-sources/dell-switches/{id}/snmp-config
 # operationId: getDellSwitchSnmpConfig
-export def "data-sources-dell-switches-snmp-config get-switch" [
+export def "get-dell-switch-snmp-config" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1812,7 +1812,7 @@ export def "data-sources-dell-switches-snmp-config get-switch" [
 # operationId: updateDellSwitchSnmpConfig
 # --config_snmp_2c shape: {community_string?: string}
 # --config_snmp_3 shape: {authentication_password?: string, authentication_type?: "NO_AUTH"|"MD5"|"SHA", context_name?: string, privacy_password?: string, privacy_type?: "AES"|"DES"|"AES128"|"AES192"|"AES256"|"3DES"|"NO_PRIV", username?: string}
-export def "data-sources-dell-switches-snmp-config update-switch" [
+export def "update-dell-switch-snmp-config" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1855,7 +1855,7 @@ export def "data-sources-dell-switches-snmp-config update-switch" [
 #
 # GET /data-sources/hpov-managers
 # operationId: listHpovManagers
-export def "data-sources-hpov-managers list" [
+export def "list-hpov-managers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1889,7 +1889,7 @@ export def "data-sources-hpov-managers list" [
 #
 # POST /data-sources/hpov-managers
 # operationId: addHpovManager
-export def "data-sources-hpov-managers create" [
+export def "add-hpov-manager" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1927,7 +1927,7 @@ export def "data-sources-hpov-managers create" [
 #
 # DELETE /data-sources/hpov-managers/{id}
 # operationId: deleteHpovManager
-export def "data-sources-hpov-managers delete" [
+export def "delete-hpov-manager" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1963,7 +1963,7 @@ export def "data-sources-hpov-managers delete" [
 #
 # GET /data-sources/hpov-managers/{id}
 # operationId: getHpovManager
-export def "data-sources-hpov-managers get" [
+export def "get-hpov-manager" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1999,7 +1999,7 @@ export def "data-sources-hpov-managers get" [
 #
 # PUT /data-sources/hpov-managers/{id}
 # operationId: updateHpovManager
-export def "data-sources-hpov-managers update" [
+export def "update-hpov-manager" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2039,7 +2039,7 @@ export def "data-sources-hpov-managers update" [
 #
 # POST /data-sources/hpov-managers/{id}/disable
 # operationId: disableHpovManager
-export def "data-sources-hpov-managers-disable disable" [
+export def "disable-hpov-manager" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2075,7 +2075,7 @@ export def "data-sources-hpov-managers-disable disable" [
 #
 # POST /data-sources/hpov-managers/{id}/enable
 # operationId: enableHpovManager
-export def "data-sources-hpov-managers-enable enable" [
+export def "enable-hpov-manager" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2111,7 +2111,7 @@ export def "data-sources-hpov-managers-enable enable" [
 #
 # GET /data-sources/hpvc-managers
 # operationId: listHpvcManagers
-export def "data-sources-hpvc-managers list" [
+export def "list-hpvc-managers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2145,7 +2145,7 @@ export def "data-sources-hpvc-managers list" [
 #
 # POST /data-sources/hpvc-managers
 # operationId: addHpvcManager
-export def "data-sources-hpvc-managers create" [
+export def "add-hpvc-manager" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2183,7 +2183,7 @@ export def "data-sources-hpvc-managers create" [
 #
 # DELETE /data-sources/hpvc-managers/{id}
 # operationId: deleteHpvcManager
-export def "data-sources-hpvc-managers delete" [
+export def "delete-hpvc-manager" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2219,7 +2219,7 @@ export def "data-sources-hpvc-managers delete" [
 #
 # GET /data-sources/hpvc-managers/{id}
 # operationId: getHpvcManager
-export def "data-sources-hpvc-managers get" [
+export def "get-hpvc-manager" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2255,7 +2255,7 @@ export def "data-sources-hpvc-managers get" [
 #
 # PUT /data-sources/hpvc-managers/{id}
 # operationId: updateHpvcManager
-export def "data-sources-hpvc-managers update" [
+export def "update-hpvc-manager" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2295,7 +2295,7 @@ export def "data-sources-hpvc-managers update" [
 #
 # POST /data-sources/hpvc-managers/{id}/disable
 # operationId: disableHpvcManager
-export def "data-sources-hpvc-managers-disable disable" [
+export def "disable-hpvc-manager" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2331,7 +2331,7 @@ export def "data-sources-hpvc-managers-disable disable" [
 #
 # POST /data-sources/hpvc-managers/{id}/enable
 # operationId: enableHpvcManager
-export def "data-sources-hpvc-managers-enable enable" [
+export def "enable-hpvc-manager" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2367,7 +2367,7 @@ export def "data-sources-hpvc-managers-enable enable" [
 #
 # GET /data-sources/juniper-switches
 # operationId: listJuniperSwitches
-export def "data-sources-juniper-switches list" [
+export def "list-juniper-switches" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2401,7 +2401,7 @@ export def "data-sources-juniper-switches list" [
 #
 # POST /data-sources/juniper-switches
 # operationId: addJuniperSwitch
-export def "data-sources-juniper-switches create-switch" [
+export def "add-juniper-switch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2439,7 +2439,7 @@ export def "data-sources-juniper-switches create-switch" [
 #
 # DELETE /data-sources/juniper-switches/{id}
 # operationId: deleteJuniperSwitch
-export def "data-sources-juniper-switches delete-switch" [
+export def "delete-juniper-switch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2475,7 +2475,7 @@ export def "data-sources-juniper-switches delete-switch" [
 #
 # GET /data-sources/juniper-switches/{id}
 # operationId: getJuniperSwitch
-export def "data-sources-juniper-switches get-switch" [
+export def "get-juniper-switch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2511,7 +2511,7 @@ export def "data-sources-juniper-switches get-switch" [
 #
 # PUT /data-sources/juniper-switches/{id}
 # operationId: updateJuniperSwitch
-export def "data-sources-juniper-switches update-switch" [
+export def "update-juniper-switch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2551,7 +2551,7 @@ export def "data-sources-juniper-switches update-switch" [
 #
 # POST /data-sources/juniper-switches/{id}/disable
 # operationId: disableJuniperSwitch
-export def "data-sources-juniper-switches-disable disable-switch" [
+export def "disable-juniper-switch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2587,7 +2587,7 @@ export def "data-sources-juniper-switches-disable disable-switch" [
 #
 # POST /data-sources/juniper-switches/{id}/enable
 # operationId: enableJuniperSwitch
-export def "data-sources-juniper-switches-enable enable-switch" [
+export def "enable-juniper-switch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2623,7 +2623,7 @@ export def "data-sources-juniper-switches-enable enable-switch" [
 #
 # GET /data-sources/juniper-switches/{id}/snmp-config
 # operationId: getJuniperSwitchSnmpConfig
-export def "data-sources-juniper-switches-snmp-config get-switch" [
+export def "get-juniper-switch-snmp-config" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2661,7 +2661,7 @@ export def "data-sources-juniper-switches-snmp-config get-switch" [
 # operationId: updateJuniperSwitchSnmpConfig
 # --config_snmp_2c shape: {community_string?: string}
 # --config_snmp_3 shape: {authentication_password?: string, authentication_type?: "NO_AUTH"|"MD5"|"SHA", context_name?: string, privacy_password?: string, privacy_type?: "AES"|"DES"|"AES128"|"AES192"|"AES256"|"3DES"|"NO_PRIV", username?: string}
-export def "data-sources-juniper-switches-snmp-config update-switch" [
+export def "update-juniper-switch-snmp-config" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2704,7 +2704,7 @@ export def "data-sources-juniper-switches-snmp-config update-switch" [
 #
 # GET /data-sources/nsxv-managers
 # operationId: listNsxvManagers
-export def "data-sources-nsxv-managers list" [
+export def "list-nsxv-managers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2739,7 +2739,7 @@ export def "data-sources-nsxv-managers list" [
 # POST /data-sources/nsxv-managers
 # operationId: addNsxvManagerDatasource
 # --credentials shape: {password: string, username: string}
-export def "data-sources-nsxv-managers create-datasource" [
+export def "add-nsxv-manager-datasource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2786,7 +2786,7 @@ export def "data-sources-nsxv-managers create-datasource" [
 #
 # DELETE /data-sources/nsxv-managers/{id}
 # operationId: deleteNsxvManager
-export def "data-sources-nsxv-managers delete" [
+export def "delete-nsxv-manager" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2822,7 +2822,7 @@ export def "data-sources-nsxv-managers delete" [
 #
 # GET /data-sources/nsxv-managers/{id}
 # operationId: getNsxvManager
-export def "data-sources-nsxv-managers get" [
+export def "get-nsxv-manager" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2859,7 +2859,7 @@ export def "data-sources-nsxv-managers get" [
 # PUT /data-sources/nsxv-managers/{id}
 # operationId: updateNsxvManager
 # --credentials shape: {password: string, username: string}
-export def "data-sources-nsxv-managers update" [
+export def "update-nsxv-manager" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2910,7 +2910,7 @@ export def "data-sources-nsxv-managers update" [
 #
 # GET /data-sources/nsxv-managers/{id}/controller-cluster
 # operationId: getNsxvControllerCluster
-export def "data-sources-nsxv-managers-controller-cluster get" [
+export def "get-nsxv-controller-cluster" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2946,7 +2946,7 @@ export def "data-sources-nsxv-managers-controller-cluster get" [
 #
 # PUT /data-sources/nsxv-managers/{id}/controller-cluster
 # operationId: updateNsxvControllerCluster
-export def "data-sources-nsxv-managers-controller-cluster update" [
+export def "update-nsxv-controller-cluster" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2987,7 +2987,7 @@ export def "data-sources-nsxv-managers-controller-cluster update" [
 #
 # POST /data-sources/nsxv-managers/{id}/disable
 # operationId: disableNsxvManager
-export def "data-sources-nsxv-managers-disable disable" [
+export def "disable-nsxv-manager" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3023,7 +3023,7 @@ export def "data-sources-nsxv-managers-disable disable" [
 #
 # POST /data-sources/nsxv-managers/{id}/enable
 # operationId: enableNsxvManager
-export def "data-sources-nsxv-managers-enable enable" [
+export def "enable-nsxv-manager" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3059,7 +3059,7 @@ export def "data-sources-nsxv-managers-enable enable" [
 #
 # GET /data-sources/panorama-firewalls
 # operationId: listPanoramaFirewalls
-export def "data-sources-panorama-firewalls list" [
+export def "list-panorama-firewalls" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3093,7 +3093,7 @@ export def "data-sources-panorama-firewalls list" [
 #
 # POST /data-sources/panorama-firewalls
 # operationId: addPanoramaFirewall
-export def "data-sources-panorama-firewalls create" [
+export def "add-panorama-firewall" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3131,7 +3131,7 @@ export def "data-sources-panorama-firewalls create" [
 #
 # DELETE /data-sources/panorama-firewalls/{id}
 # operationId: deletePanoramaFirewall
-export def "data-sources-panorama-firewalls delete" [
+export def "delete-panorama-firewall" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3167,7 +3167,7 @@ export def "data-sources-panorama-firewalls delete" [
 #
 # GET /data-sources/panorama-firewalls/{id}
 # operationId: getPanoramaFirewall
-export def "data-sources-panorama-firewalls get" [
+export def "get-panorama-firewall" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3203,7 +3203,7 @@ export def "data-sources-panorama-firewalls get" [
 #
 # PUT /data-sources/panorama-firewalls/{id}
 # operationId: updatePanoramaFirewall
-export def "data-sources-panorama-firewalls update" [
+export def "update-panorama-firewall" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3243,7 +3243,7 @@ export def "data-sources-panorama-firewalls update" [
 #
 # POST /data-sources/panorama-firewalls/{id}/disable
 # operationId: disablePanoramaFirewall
-export def "data-sources-panorama-firewalls-disable disable" [
+export def "disable-panorama-firewall" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3279,7 +3279,7 @@ export def "data-sources-panorama-firewalls-disable disable" [
 #
 # POST /data-sources/panorama-firewalls/{id}/enable
 # operationId: enablePanoramaFirewall
-export def "data-sources-panorama-firewalls-enable enable" [
+export def "enable-panorama-firewall" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3315,7 +3315,7 @@ export def "data-sources-panorama-firewalls-enable enable" [
 #
 # GET /data-sources/ucs-managers
 # operationId: listUcsManagers
-export def "data-sources-ucs-managers list" [
+export def "list-ucs-managers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3349,7 +3349,7 @@ export def "data-sources-ucs-managers list" [
 #
 # POST /data-sources/ucs-managers
 # operationId: addUcsManager
-export def "data-sources-ucs-managers create" [
+export def "add-ucs-manager" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3387,7 +3387,7 @@ export def "data-sources-ucs-managers create" [
 #
 # DELETE /data-sources/ucs-managers/{id}
 # operationId: deleteUcsManager
-export def "data-sources-ucs-managers delete" [
+export def "delete-ucs-manager" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3423,7 +3423,7 @@ export def "data-sources-ucs-managers delete" [
 #
 # GET /data-sources/ucs-managers/{id}
 # operationId: getUcsManager
-export def "data-sources-ucs-managers get" [
+export def "get-ucs-manager" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3459,7 +3459,7 @@ export def "data-sources-ucs-managers get" [
 #
 # PUT /data-sources/ucs-managers/{id}
 # operationId: updateUcsManager
-export def "data-sources-ucs-managers update" [
+export def "update-ucs-manager" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3499,7 +3499,7 @@ export def "data-sources-ucs-managers update" [
 #
 # POST /data-sources/ucs-managers/{id}/disable
 # operationId: disableUcsManager
-export def "data-sources-ucs-managers-disable disable" [
+export def "disable-ucs-manager" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3535,7 +3535,7 @@ export def "data-sources-ucs-managers-disable disable" [
 #
 # POST /data-sources/ucs-managers/{id}/enable
 # operationId: enableUcsManager
-export def "data-sources-ucs-managers-enable enable" [
+export def "enable-ucs-manager" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3571,7 +3571,7 @@ export def "data-sources-ucs-managers-enable enable" [
 #
 # GET /data-sources/ucs-managers/{id}/snmp-config
 # operationId: getUcsSnmpConfig
-export def "data-sources-ucs-managers-snmp-config get" [
+export def "get-ucs-snmp-config" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3609,7 +3609,7 @@ export def "data-sources-ucs-managers-snmp-config get" [
 # operationId: updateUcsSnmpConfig
 # --config_snmp_2c shape: {community_string?: string}
 # --config_snmp_3 shape: {authentication_password?: string, authentication_type?: "NO_AUTH"|"MD5"|"SHA", context_name?: string, privacy_password?: string, privacy_type?: "AES"|"DES"|"AES128"|"AES192"|"AES256"|"3DES"|"NO_PRIV", username?: string}
-export def "data-sources-ucs-managers-snmp-config update" [
+export def "update-ucs-snmp-config" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3652,7 +3652,7 @@ export def "data-sources-ucs-managers-snmp-config update" [
 #
 # GET /data-sources/vcenters
 # operationId: listVcenters
-export def "data-sources-vcenters list" [
+export def "list-vcenters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3688,7 +3688,7 @@ export def "data-sources-vcenters list" [
 # POST /data-sources/vcenters
 # operationId: addVcenterDatasource
 # --credentials shape: {password: string, username: string}
-export def "data-sources-vcenters create-datasource" [
+export def "add-vcenter-datasource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3733,7 +3733,7 @@ export def "data-sources-vcenters create-datasource" [
 #
 # DELETE /data-sources/vcenters/{id}
 # operationId: deleteVcenter
-export def "data-sources-vcenters delete" [
+export def "delete-vcenter" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3769,7 +3769,7 @@ export def "data-sources-vcenters delete" [
 #
 # GET /data-sources/vcenters/{id}
 # operationId: getVcenter
-export def "data-sources-vcenters get" [
+export def "get-vcenter" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3807,7 +3807,7 @@ export def "data-sources-vcenters get" [
 # PUT /data-sources/vcenters/{id}
 # operationId: updateVcenter
 # --credentials shape: {password: string, username: string}
-export def "data-sources-vcenters update" [
+export def "update-vcenter" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3855,7 +3855,7 @@ export def "data-sources-vcenters update" [
 #
 # POST /data-sources/vcenters/{id}/disable
 # operationId: disableVcenter
-export def "data-sources-vcenters-disable disable" [
+export def "disable-vcenter" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3891,7 +3891,7 @@ export def "data-sources-vcenters-disable disable" [
 #
 # POST /data-sources/vcenters/{id}/enable
 # operationId: enableVcenter
-export def "data-sources-vcenters-enable enable" [
+export def "enable-vcenter" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3927,7 +3927,7 @@ export def "data-sources-vcenters-enable enable" [
 #
 # GET /entities/clusters
 # operationId: listClusters
-export def "entities-clusters list" [
+export def "list-clusters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3967,7 +3967,7 @@ export def "entities-clusters list" [
 #
 # GET /entities/clusters/{id}
 # operationId: getCluster
-export def "entities-clusters get" [
+export def "get-cluster" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4006,7 +4006,7 @@ export def "entities-clusters get" [
 #
 # GET /entities/datastores
 # operationId: listDatastores
-export def "entities-datastores list" [
+export def "list-datastores" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4046,7 +4046,7 @@ export def "entities-datastores list" [
 #
 # GET /entities/datastores/{id}
 # operationId: getDatastore
-export def "entities-datastores get" [
+export def "get-datastore" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4085,7 +4085,7 @@ export def "entities-datastores get" [
 #
 # GET /entities/distributed-virtual-portgroups
 # operationId: listDistributedVirtualPortgroups
-export def "entities-distributed-virtual-portgroups list" [
+export def "list-distributed-virtual-portgroups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4125,7 +4125,7 @@ export def "entities-distributed-virtual-portgroups list" [
 #
 # GET /entities/distributed-virtual-portgroups/{id}
 # operationId: getDistributedVirtualPortgroup
-export def "entities-distributed-virtual-portgroups get" [
+export def "get-distributed-virtual-portgroup" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4164,7 +4164,7 @@ export def "entities-distributed-virtual-portgroups get" [
 #
 # GET /entities/distributed-virtual-switches
 # operationId: listDistributedVirtualSwitches
-export def "entities-distributed-virtual-switches list" [
+export def "list-distributed-virtual-switches" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4204,7 +4204,7 @@ export def "entities-distributed-virtual-switches list" [
 #
 # GET /entities/distributed-virtual-switches/{id}
 # operationId: getDistributedVirtualSwitch
-export def "entities-distributed-virtual-switches get-switch" [
+export def "get-distributed-virtual-switch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4243,7 +4243,7 @@ export def "entities-distributed-virtual-switches get-switch" [
 #
 # GET /entities/firewall-rules
 # operationId: listFirewallRules
-export def "entities-firewall-rules list" [
+export def "list-firewall-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4283,7 +4283,7 @@ export def "entities-firewall-rules list" [
 #
 # GET /entities/firewall-rules/{id}
 # operationId: getFirewallRule
-export def "entities-firewall-rules get" [
+export def "get-firewall-rule" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4322,7 +4322,7 @@ export def "entities-firewall-rules get" [
 #
 # GET /entities/firewalls
 # operationId: listFirewalls
-export def "entities-firewalls list" [
+export def "list-firewalls" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4362,7 +4362,7 @@ export def "entities-firewalls list" [
 #
 # GET /entities/firewalls/{id}
 # operationId: getFirewall
-export def "entities-firewalls get" [
+export def "get-firewall" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4401,7 +4401,7 @@ export def "entities-firewalls get" [
 #
 # GET /entities/flows
 # operationId: getFlows
-export def "entities-flows list" [
+export def "get-flows" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4441,7 +4441,7 @@ export def "entities-flows list" [
 #
 # GET /entities/flows/{id}
 # operationId: getFlow
-export def "entities-flows get" [
+export def "get-flow" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4480,7 +4480,7 @@ export def "entities-flows get" [
 #
 # GET /entities/folders
 # operationId: listFolders
-export def "entities-folders list" [
+export def "list-folders" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4520,7 +4520,7 @@ export def "entities-folders list" [
 #
 # GET /entities/folders/{id}
 # operationId: getFolder
-export def "entities-folders get" [
+export def "get-folder" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4559,7 +4559,7 @@ export def "entities-folders get" [
 #
 # GET /entities/hosts
 # operationId: listHosts
-export def "entities-hosts list" [
+export def "list-hosts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4599,7 +4599,7 @@ export def "entities-hosts list" [
 #
 # GET /entities/hosts/{id}
 # operationId: getHost
-export def "entities-hosts get" [
+export def "get-host" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4638,7 +4638,7 @@ export def "entities-hosts get" [
 #
 # GET /entities/ip-sets
 # operationId: listIPSets
-export def "entities-ip-sets list" [
+export def "list-ip-sets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4678,7 +4678,7 @@ export def "entities-ip-sets list" [
 #
 # GET /entities/ip-sets/{id}
 # operationId: getIPSet
-export def "entities-ip-sets get" [
+export def "get-ip-set" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4717,7 +4717,7 @@ export def "entities-ip-sets get" [
 #
 # GET /entities/layer2-networks
 # operationId: listLayer2Networks
-export def "entities-layer2-networks list" [
+export def "list-layer2-networks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4757,7 +4757,7 @@ export def "entities-layer2-networks list" [
 #
 # GET /entities/layer2-networks/{id}
 # operationId: getLayer2Network
-export def "entities-layer2-networks get" [
+export def "get-layer2-network" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4797,7 +4797,7 @@ export def "entities-layer2-networks get" [
 # POST /entities/names
 # operationId: getNames
 # --entities item shape: {entity_id?: string, time?: int}
-export def "entities-names get" [
+export def "get-names" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4835,7 +4835,7 @@ export def "entities-names get" [
 #
 # GET /entities/names/{id}
 # operationId: getName
-export def "entities-names get-by-id" [
+export def "get-name" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4873,7 +4873,7 @@ export def "entities-names get-by-id" [
 #
 # GET /entities/nsx-managers
 # operationId: listNSXManagers
-export def "entities-nsx-managers list" [
+export def "list-nsx-managers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4913,7 +4913,7 @@ export def "entities-nsx-managers list" [
 #
 # GET /entities/nsx-managers/{id}
 # operationId: getNSXManager
-export def "entities-nsx-managers get" [
+export def "get-nsx-manager" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4952,7 +4952,7 @@ export def "entities-nsx-managers get" [
 #
 # GET /entities/problems
 # operationId: listProblemEvents
-export def "entities-problems list-events" [
+export def "list-problem-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4992,7 +4992,7 @@ export def "entities-problems list-events" [
 #
 # GET /entities/problems/{id}
 # operationId: getProblemEvent
-export def "entities-problems get-event" [
+export def "get-problem-event" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5031,7 +5031,7 @@ export def "entities-problems get-event" [
 #
 # GET /entities/security-groups
 # operationId: listSecurityGroups
-export def "entities-security-groups list" [
+export def "list-security-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5071,7 +5071,7 @@ export def "entities-security-groups list" [
 #
 # GET /entities/security-groups/{id}
 # operationId: getSecurityGroup
-export def "entities-security-groups get" [
+export def "get-security-group" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5110,7 +5110,7 @@ export def "entities-security-groups get" [
 #
 # GET /entities/security-tags
 # operationId: listSecurityTags
-export def "entities-security-tags list" [
+export def "list-security-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5150,7 +5150,7 @@ export def "entities-security-tags list" [
 #
 # GET /entities/security-tags/{id}
 # operationId: getSecurityTag
-export def "entities-security-tags get" [
+export def "get-security-tag" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5189,7 +5189,7 @@ export def "entities-security-tags get" [
 #
 # GET /entities/service-groups
 # operationId: listServiceGroups
-export def "entities-service-groups list" [
+export def "list-service-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5229,7 +5229,7 @@ export def "entities-service-groups list" [
 #
 # GET /entities/service-groups/{id}
 # operationId: getServiceGroup
-export def "entities-service-groups get" [
+export def "get-service-group" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5268,7 +5268,7 @@ export def "entities-service-groups get" [
 #
 # GET /entities/services
 # operationId: listServices
-export def "entities-services list" [
+export def "list-services" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5308,7 +5308,7 @@ export def "entities-services list" [
 #
 # GET /entities/services/{id}
 # operationId: getService
-export def "entities-services get" [
+export def "get-service" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5347,7 +5347,7 @@ export def "entities-services get" [
 #
 # GET /entities/vc-datacenters
 # operationId: listDatacenters
-export def "entities-vc-datacenters list" [
+export def "list-datacenters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5387,7 +5387,7 @@ export def "entities-vc-datacenters list" [
 #
 # GET /entities/vc-datacenters/{id}
 # operationId: getDatacenter
-export def "entities-vc-datacenters get" [
+export def "get-datacenter" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5426,7 +5426,7 @@ export def "entities-vc-datacenters get" [
 #
 # GET /entities/vcenter-managers
 # operationId: listVcenterManagers
-export def "entities-vcenter-managers list" [
+export def "list-vcenter-managers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5466,7 +5466,7 @@ export def "entities-vcenter-managers list" [
 #
 # GET /entities/vcenter-managers/{id}
 # operationId: getVcenterManager
-export def "entities-vcenter-managers get" [
+export def "get-vcenter-manager" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5505,7 +5505,7 @@ export def "entities-vcenter-managers get" [
 #
 # GET /entities/vmknics
 # operationId: listVmknics
-export def "entities-vmknics list" [
+export def "list-vmknics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5545,7 +5545,7 @@ export def "entities-vmknics list" [
 #
 # GET /entities/vmknics/{id}
 # operationId: getVmknic
-export def "entities-vmknics get" [
+export def "get-vmknic" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5584,7 +5584,7 @@ export def "entities-vmknics get" [
 #
 # GET /entities/vms
 # operationId: listVms
-export def "entities-vms list" [
+export def "list-vms" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5624,7 +5624,7 @@ export def "entities-vms list" [
 #
 # GET /entities/vms/{id}
 # operationId: getVm
-export def "entities-vms get" [
+export def "get-vm" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5663,7 +5663,7 @@ export def "entities-vms get" [
 #
 # GET /entities/vnics
 # operationId: listVnics
-export def "entities-vnics list" [
+export def "list-vnics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5703,7 +5703,7 @@ export def "entities-vnics list" [
 #
 # GET /entities/vnics/{id}
 # operationId: getVnic
-export def "entities-vnics get" [
+export def "get-vnic" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5742,7 +5742,7 @@ export def "entities-vnics get" [
 #
 # GET /groups/applications
 # operationId: listApplications
-export def "groups-applications list" [
+export def "list-applications" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5782,7 +5782,7 @@ export def "groups-applications list" [
 #
 # POST /groups/applications
 # operationId: addApplication
-export def "groups-applications create" [
+export def "add-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5821,7 +5821,7 @@ export def "groups-applications create" [
 #
 # DELETE /groups/applications/{id}
 # operationId: deleteApplication
-export def "groups-applications delete" [
+export def "delete-application" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5857,7 +5857,7 @@ export def "groups-applications delete" [
 #
 # GET /groups/applications/{id}
 # operationId: getApplication
-export def "groups-applications get" [
+export def "get-application" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5894,7 +5894,7 @@ export def "groups-applications get" [
 #
 # GET /groups/applications/{id}/tiers
 # operationId: listApplicationTiers
-export def "groups-applications-tiers list" [
+export def "list-application-tiers" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5932,7 +5932,7 @@ export def "groups-applications-tiers list" [
 # POST /groups/applications/{id}/tiers
 # operationId: addTier
 # --group_membership_criteria item shape: {ip_address_membership_criteria?: record, membership_type?: "SearchMembershipCriteria"|"IPAddressMembershipCriteria", search_membership_criteria?: record}
-export def "groups-applications-tiers create" [
+export def "add-tier" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5974,7 +5974,7 @@ export def "groups-applications-tiers create" [
 #
 # DELETE /groups/applications/{id}/tiers/{tier-id}
 # operationId: deleteTier
-export def "groups-applications-tiers delete" [
+export def "delete-tier" [
   id: string
   tier_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6012,7 +6012,7 @@ export def "groups-applications-tiers delete" [
 #
 # GET /groups/applications/{id}/tiers/{tier-id}
 # operationId: getApplicationTier
-export def "groups-applications-tiers get" [
+export def "get-application-tier" [
   id: string
   tier_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6051,7 +6051,7 @@ export def "groups-applications-tiers get" [
 #
 # GET /groups/tiers/{tier-id}
 # operationId: getTier
-export def "groups-tiers get" [
+export def "get-tier" [
   tier_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6091,7 +6091,7 @@ export def "groups-tiers get" [
 #
 # GET /info/version
 # operationId: getVersion
-export def "info-version get" [
+export def "get-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6125,7 +6125,7 @@ export def "info-version get" [
 #
 # GET /infra/nodes
 # operationId: listNodes
-export def "infra-nodes list" [
+export def "list-nodes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6160,7 +6160,7 @@ export def "infra-nodes list" [
 #
 # GET /infra/nodes/{id}
 # operationId: getNode
-export def "infra-nodes get" [
+export def "get-node" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6200,7 +6200,7 @@ export def "infra-nodes get" [
 # --group_1 shape: {entity?: record}
 # --group_2 shape: {entity?: record}
 # --time_range shape: {end_time?: int, start_time?: int}
-export def "micro-seg-recommended-rules list" [
+export def "list-recommended-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6244,7 +6244,7 @@ export def "micro-seg-recommended-rules list" [
 # --group_1 shape: {entity?: record}
 # --group_2 shape: {entity?: record}
 # --time_range shape: {end_time?: int, start_time?: int}
-export def "micro-seg-recommended-rules-nsx export" [
+export def "export-nsx-recommended-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6286,7 +6286,7 @@ export def "micro-seg-recommended-rules-nsx export" [
 # operationId: searchEntities
 # --sort_by shape: {field?: string, order?: "ASC"|"DESC"}
 # --time_range shape: {end_time?: int, start_time?: int}
-export def "search list-entities" [
+export def "search-entities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

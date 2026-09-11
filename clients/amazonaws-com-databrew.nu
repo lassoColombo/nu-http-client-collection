@@ -120,7 +120,7 @@ def log-subscription-completer [] { ["DISABLE" "ENABLE"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "recipes-batch-delete-recipe-version delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "batch-delete-recipe-version" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -144,7 +144,7 @@ export def commands []: nothing -> table {
 #
 # POST /recipes/{name}/batchDeleteRecipeVersion
 # operationId: BatchDeleteRecipeVersion
-export def "recipes-batch-delete-recipe-version delete" [
+export def "batch-delete-recipe-version" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -196,7 +196,7 @@ export def "recipes-batch-delete-recipe-version delete" [
 # --FormatOptions shape: {Json?: any, Excel?: any, Csv?: any}
 # --Input shape: {S3InputDefinition?: any, DataCatalogInputDefinition?: any, DatabaseInputDefinition?: any, Metadata?: any}
 # --PathOptions shape: {LastModifiedDateCondition?: any, FilesLimit?: any, Parameters?: any}
-export def "datasets create" [
+export def "create-dataset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -248,7 +248,7 @@ export def "datasets create" [
 #
 # GET /datasets
 # operationId: ListDatasets
-export def "datasets list" [
+export def "list-datasets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -300,7 +300,7 @@ export def "datasets list" [
 # --Configuration shape: {DatasetStatisticsConfiguration?: any, ProfileColumns?: any, ColumnStatisticsConfigurations?: any, EntityDetectorConfiguration?: any}
 # --ValidationConfigurations item shape: {RulesetArn: any, ValidationMode?: any}
 # --JobSample shape: {Mode?: any, Size?: any}
-export def "profile-jobs create" [
+export def "create-profile-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -361,7 +361,7 @@ export def "profile-jobs create" [
 # POST /projects
 # operationId: CreateProject
 # --Sample shape: {Size?: any, Type?: any}
-export def "projects create" [
+export def "create-project" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -413,7 +413,7 @@ export def "projects create" [
 #
 # GET /projects
 # operationId: ListProjects
-export def "projects list" [
+export def "list-projects" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -462,7 +462,7 @@ export def "projects list" [
 # POST /recipes
 # operationId: CreateRecipe
 # --Steps item shape: {Action: any, ConditionExpressions?: any}
-export def "recipes create" [
+export def "create-recipe" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -512,7 +512,7 @@ export def "recipes create" [
 #
 # GET /recipes
 # operationId: ListRecipes
-export def "recipes list" [
+export def "list-recipes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -565,7 +565,7 @@ export def "recipes list" [
 # --DataCatalogOutputs item shape: {CatalogId?: any, DatabaseName: any, TableName: any, S3Options?: any, DatabaseOptions?: any, Overwrite?: any}
 # --DatabaseOutputs item shape: {GlueConnectionName: any, DatabaseOptions: any, DatabaseOutputMode?: any}
 # --RecipeReference shape: {Name?: any, RecipeVersion?: any}
-export def "recipe-jobs create" [
+export def "create-recipe-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -627,7 +627,7 @@ export def "recipe-jobs create" [
 # POST /rulesets
 # operationId: CreateRuleset
 # --Rules item shape: {Name: any, Disabled?: any, CheckExpression: any, SubstitutionMap?: any, Threshold?: any, ColumnSelectors?: any}
-export def "rulesets create" [
+export def "create-ruleset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -678,7 +678,7 @@ export def "rulesets create" [
 #
 # GET /rulesets
 # operationId: ListRulesets
-export def "rulesets list" [
+export def "list-rulesets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -727,7 +727,7 @@ export def "rulesets list" [
 #
 # POST /schedules
 # operationId: CreateSchedule
-export def "schedules create" [
+export def "create-schedule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -777,7 +777,7 @@ export def "schedules create" [
 #
 # GET /schedules
 # operationId: ListSchedules
-export def "schedules list" [
+export def "list-schedules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -826,7 +826,7 @@ export def "schedules list" [
 #
 # DELETE /datasets/{name}
 # operationId: DeleteDataset
-export def "datasets delete" [
+export def "delete-dataset" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -871,7 +871,7 @@ export def "datasets delete" [
 #
 # GET /datasets/{name}
 # operationId: DescribeDataset
-export def "datasets get" [
+export def "describe-dataset" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -919,7 +919,7 @@ export def "datasets get" [
 # --FormatOptions shape: {Json?: any, Excel?: any, Csv?: any}
 # --Input shape: {S3InputDefinition?: any, DataCatalogInputDefinition?: any, DatabaseInputDefinition?: any, Metadata?: any}
 # --PathOptions shape: {LastModifiedDateCondition?: any, FilesLimit?: any, Parameters?: any}
-export def "datasets update" [
+export def "update-dataset" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -971,7 +971,7 @@ export def "datasets update" [
 #
 # DELETE /jobs/{name}
 # operationId: DeleteJob
-export def "jobs delete" [
+export def "delete-job" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1016,7 +1016,7 @@ export def "jobs delete" [
 #
 # GET /jobs/{name}
 # operationId: DescribeJob
-export def "jobs get" [
+export def "describe-job" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1061,7 +1061,7 @@ export def "jobs get" [
 #
 # DELETE /projects/{name}
 # operationId: DeleteProject
-export def "projects delete" [
+export def "delete-project" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1106,7 +1106,7 @@ export def "projects delete" [
 #
 # GET /projects/{name}
 # operationId: DescribeProject
-export def "projects get" [
+export def "describe-project" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1152,7 +1152,7 @@ export def "projects get" [
 # PUT /projects/{name}
 # operationId: UpdateProject
 # --Sample shape: {Size?: any, Type?: any}
-export def "projects update" [
+export def "update-project" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1202,7 +1202,7 @@ export def "projects update" [
 #
 # DELETE /recipes/{name}/recipeVersion/{recipeVersion}
 # operationId: DeleteRecipeVersion
-export def "recipes-recipe-version delete" [
+export def "delete-recipe-version" [
   name: string
   recipe_version: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1249,7 +1249,7 @@ export def "recipes-recipe-version delete" [
 #
 # DELETE /rulesets/{name}
 # operationId: DeleteRuleset
-export def "rulesets delete" [
+export def "delete-ruleset" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1294,7 +1294,7 @@ export def "rulesets delete" [
 #
 # GET /rulesets/{name}
 # operationId: DescribeRuleset
-export def "rulesets get" [
+export def "describe-ruleset" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1340,7 +1340,7 @@ export def "rulesets get" [
 # PUT /rulesets/{name}
 # operationId: UpdateRuleset
 # --Rules item shape: {Name: any, Disabled?: any, CheckExpression: any, SubstitutionMap?: any, Threshold?: any, ColumnSelectors?: any}
-export def "rulesets update" [
+export def "update-ruleset" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1390,7 +1390,7 @@ export def "rulesets update" [
 #
 # DELETE /schedules/{name}
 # operationId: DeleteSchedule
-export def "schedules delete" [
+export def "delete-schedule" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1435,7 +1435,7 @@ export def "schedules delete" [
 #
 # GET /schedules/{name}
 # operationId: DescribeSchedule
-export def "schedules get" [
+export def "describe-schedule" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1480,7 +1480,7 @@ export def "schedules get" [
 #
 # PUT /schedules/{name}
 # operationId: UpdateSchedule
-export def "schedules update" [
+export def "update-schedule" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1530,7 +1530,7 @@ export def "schedules update" [
 #
 # GET /jobs/{name}/jobRun/{runId}
 # operationId: DescribeJobRun
-export def "jobs-job-run get" [
+export def "describe-job-run" [
   name: string
   run_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1577,7 +1577,7 @@ export def "jobs-job-run get" [
 #
 # GET /recipes/{name}
 # operationId: DescribeRecipe
-export def "recipes get" [
+export def "describe-recipe" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1625,7 +1625,7 @@ export def "recipes get" [
 # PUT /recipes/{name}
 # operationId: UpdateRecipe
 # --Steps item shape: {Action: any, ConditionExpressions?: any}
-export def "recipes update" [
+export def "update-recipe" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1675,7 +1675,7 @@ export def "recipes update" [
 #
 # GET /jobs/{name}/jobRuns
 # operationId: ListJobRuns
-export def "jobs-job-runs list" [
+export def "list-job-runs" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1725,7 +1725,7 @@ export def "jobs-job-runs list" [
 #
 # GET /jobs
 # operationId: ListJobs
-export def "jobs list" [
+export def "list-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1775,7 +1775,7 @@ export def "jobs list" [
 #
 # GET /recipeVersions
 # operationId: ListRecipeVersions
-export def "recipe-versions list" [
+export def "list-recipe-versions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1824,7 +1824,7 @@ export def "recipe-versions list" [
 #
 # GET /tags/{ResourceArn}
 # operationId: ListTagsForResource
-export def "tags list-for-resource" [
+export def "list-tags-for-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1869,7 +1869,7 @@ export def "tags list-for-resource" [
 #
 # POST /tags/{ResourceArn}
 # operationId: TagResource
-export def "tags tag-resource" [
+export def "tag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1918,7 +1918,7 @@ export def "tags tag-resource" [
 #
 # POST /recipes/{name}/publishRecipe
 # operationId: PublishRecipe
-export def "recipes-publish-recipe publish" [
+export def "publish-recipe" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1969,7 +1969,7 @@ export def "recipes-publish-recipe publish" [
 # operationId: SendProjectSessionAction
 # --RecipeStep shape: {Action?: any, ConditionExpressions?: any}
 # --ViewFrame shape: {StartColumnIndex?: any, ColumnRange?: any, HiddenColumns?: any, StartRowIndex?: any, RowRange?: any, Analytics?: any}
-export def "projects-send-project-session-action send" [
+export def "send-project-session-action" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2022,7 +2022,7 @@ export def "projects-send-project-session-action send" [
 #
 # POST /jobs/{name}/startJobRun
 # operationId: StartJobRun
-export def "jobs-start-job-run start" [
+export def "start-job-run" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2067,7 +2067,7 @@ export def "jobs-start-job-run start" [
 #
 # PUT /projects/{name}/startProjectSession
 # operationId: StartProjectSession
-export def "projects-start-project-session start" [
+export def "start-project-session" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2116,7 +2116,7 @@ export def "projects-start-project-session start" [
 #
 # POST /jobs/{name}/jobRun/{runId}/stopJobRun
 # operationId: StopJobRun
-export def "jobs-job-run-stop-job-run stop" [
+export def "stop-job-run" [
   name: string
   run_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2163,7 +2163,7 @@ export def "jobs-job-run-stop-job-run stop" [
 #
 # DELETE /tags/{ResourceArn}
 # operationId: UntagResource
-export def "tags untag-resource" [
+export def "untag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2214,7 +2214,7 @@ export def "tags untag-resource" [
 # --OutputLocation shape: {Bucket?: any, Key?: any, BucketOwner?: any}
 # --ValidationConfigurations item shape: {RulesetArn: any, ValidationMode?: any}
 # --JobSample shape: {Mode?: any, Size?: any}
-export def "profile-jobs update" [
+export def "update-profile-job" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2276,7 +2276,7 @@ export def "profile-jobs update" [
 # --Outputs item shape: {CompressionFormat?: any, Format?: any, PartitionColumns?: any, Location: any, Overwrite?: any, FormatOptions?: any, MaxOutputFiles?: any}
 # --DataCatalogOutputs item shape: {CatalogId?: any, DatabaseName: any, TableName: any, S3Options?: any, DatabaseOptions?: any, Overwrite?: any}
 # --DatabaseOutputs item shape: {GlueConnectionName: any, DatabaseOptions: any, DatabaseOutputMode?: any}
-export def "recipe-jobs update" [
+export def "update-recipe-job" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

@@ -138,7 +138,7 @@ def type-completer-1 [] { ["brand" "clip" "episode" "episode,clip" "series"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "broadcasts list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-broadcasts" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -161,7 +161,7 @@ export def commands []: nothing -> table {
 # Broadcasts
 #
 # GET /broadcasts
-export def "broadcasts list" [
+export def "get-broadcasts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -203,7 +203,7 @@ export def "broadcasts list" [
 # Latest Broadcasts
 #
 # GET /broadcasts/latest
-export def "broadcasts-latest get" [
+export def "get-broadcasts-latest" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -248,7 +248,7 @@ export def "broadcasts-latest get" [
 #
 # GET /broadcasts/{pid}
 # operationId: getBroadcastByPid
-export def "broadcasts get" [
+export def "get-broadcast-by-pid" [
   pid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -286,7 +286,7 @@ export def "broadcasts get" [
 # List of categories
 #
 # GET /categories
-export def "categories list" [
+export def "get-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -324,7 +324,7 @@ export def "categories list" [
 # Category by ID
 #
 # GET /categories/{id}
-export def "categories get" [
+export def "get-categories-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -363,7 +363,7 @@ export def "categories get" [
 #
 # GET /collections/{pid}/members
 # operationId: getCollectionMembers
-export def "collections-members get" [
+export def "get-collection-members" [
   pid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -405,7 +405,7 @@ export def "collections-members get" [
 #
 # GET /experience/homepage
 # operationId: getExperienceHomepage
-export def "experience-homepage get" [
+export def "get-experience-homepage" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -442,7 +442,7 @@ export def "experience-homepage get" [
 #
 # GET /music/popular/artists
 # operationId: getMusicPopularArtists
-export def "music-popular-artists list" [
+export def "get-music-popular-artists" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -485,7 +485,7 @@ export def "music-popular-artists list" [
 #
 # GET /music/popular/artists/{id}
 # operationId: getMusicPopularArtistById
-export def "music-popular-artists get" [
+export def "get-music-popular-artist-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -528,7 +528,7 @@ export def "music-popular-artists get" [
 #
 # GET /music/popular/playlists
 # operationId: getMusicPopularPlaylists
-export def "music-popular-playlists list" [
+export def "get-music-popular-playlists" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -571,7 +571,7 @@ export def "music-popular-playlists list" [
 #
 # GET /music/popular/playlists/{id}
 # operationId: getMusicPopularPlaylistById
-export def "music-popular-playlists get" [
+export def "get-music-popular-playlist-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -614,7 +614,7 @@ export def "music-popular-playlists get" [
 #
 # GET /music/popular/tracks
 # operationId: getMusicPopularTracks
-export def "music-popular-tracks list" [
+export def "get-music-popular-tracks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -660,7 +660,7 @@ export def "music-popular-tracks list" [
 #
 # GET /music/popular/tracks/{id}
 # operationId: getMusicPopularTrackById
-export def "music-popular-tracks get" [
+export def "get-music-popular-track-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -705,7 +705,7 @@ export def "music-popular-tracks get" [
 # Unfollow category
 #
 # DELETE /my/categories/follows
-export def "my-categories-follows delete" [
+export def "delete-my-categories-follows" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -747,7 +747,7 @@ export def "my-categories-follows delete" [
 # List of followed categories
 #
 # GET /my/categories/follows
-export def "my-categories-follows get" [
+export def "get-my-categories-follows" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -787,7 +787,7 @@ export def "my-categories-follows get" [
 # Follow category
 #
 # POST /my/categories/follows
-export def "my-categories-follows create" [
+export def "post-my-categories-follows" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -830,7 +830,7 @@ export def "my-categories-follows create" [
 #
 # GET /my/music/export
 # operationId: getMusicExport
-export def "my-music-export get" [
+export def "get-music-export" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -872,7 +872,7 @@ export def "my-music-export get" [
 #
 # GET /my/music/exports/jobs
 # operationId: getMusicExportJobs
-export def "my-music-exports-jobs get" [
+export def "get-music-export-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -914,7 +914,7 @@ export def "my-music-exports-jobs get" [
 #
 # POST /my/music/exports/jobs
 # operationId: postMusicExportJob
-export def "my-music-exports-jobs create" [
+export def "post-music-export-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -960,7 +960,7 @@ export def "my-music-exports-jobs create" [
 #
 # GET /my/music/exports/tracks
 # operationId: getMusicExportTracks
-export def "my-music-exports-tracks get" [
+export def "get-music-export-tracks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1005,7 +1005,7 @@ export def "my-music-exports-tracks get" [
 #
 # GET /my/music/favourites
 # operationId: getPersonalisedMusicFavourites
-export def "my-music-favourites list" [
+export def "get-personalised-music-favourites" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1049,7 +1049,7 @@ export def "my-music-favourites list" [
 #
 # POST /my/music/favourites
 # operationId: postPersonalisedMusicFavouritesBatch
-export def "my-music-favourites create-personalised-batch" [
+export def "post-personalised-music-favourites-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1092,7 +1092,7 @@ export def "my-music-favourites create-personalised-batch" [
 #
 # PUT /my/music/favourites
 # operationId: putPersonalisedMusicFavouritesBatch
-export def "my-music-favourites update-personalised-batch" [
+export def "put-personalised-music-favourites-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1135,7 +1135,7 @@ export def "my-music-favourites update-personalised-batch" [
 #
 # GET /my/music/favourites/{type}
 # operationId: getPersonalisedMusicFavouritesByType
-export def "my-music-favourites get-personalised" [
+export def "get-personalised-music-favourites-by-type" [
   type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1180,7 +1180,7 @@ export def "my-music-favourites get-personalised" [
 #
 # DELETE /my/music/favourites/{type}/{id}
 # operationId: deletePersonalisedMusicFavouritesByTypeById
-export def "my-music-favourites delete-personalised-by" [
+export def "delete-personalised-music-favourites-by-type-by-id" [
   type: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1223,7 +1223,7 @@ export def "my-music-favourites delete-personalised-by" [
 #
 # GET /my/music/favourites/{type}/{id}
 # operationId: getPersonalisedMusicFavouritesByTypeById
-export def "my-music-favourites get-personalised-by" [
+export def "get-personalised-music-favourites-by-type-by-id" [
   type: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1267,7 +1267,7 @@ export def "my-music-favourites get-personalised-by" [
 # POST /my/music/favourites/{type}/{id}
 # operationId: postPersonalisedMusicFavouritesByTypeById
 # --meta_data shape: {key: string}
-export def "my-music-favourites create-personalised-by" [
+export def "post-personalised-music-favourites-by-type-by-id" [
   type: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1318,7 +1318,7 @@ export def "my-music-favourites create-personalised-by" [
 # PUT /my/music/favourites/{type}/{id}
 # operationId: putPersonalisedMusicFavouritesByTypeById
 # --meta_data shape: {key: string}
-export def "my-music-favourites update-personalised-by" [
+export def "put-personalised-music-favourites-by-type-by-id" [
   type: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1368,7 +1368,7 @@ export def "my-music-favourites update-personalised-by" [
 #
 # GET /my/music/follows
 # operationId: getPersonalisedMusicFollows
-export def "my-music-follows list" [
+export def "get-personalised-music-follows" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1414,7 +1414,7 @@ export def "my-music-follows list" [
 #
 # POST /my/music/follows
 # operationId: postPersonalisedMusicFollowsBatch
-export def "my-music-follows create-personalised-batch" [
+export def "post-personalised-music-follows-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1462,7 +1462,7 @@ export def "my-music-follows create-personalised-batch" [
 #
 # PUT /my/music/follows
 # operationId: putPersonalisedMusicFollowsBatch
-export def "my-music-follows update-personalised-batch" [
+export def "put-personalised-music-follows-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1510,7 +1510,7 @@ export def "my-music-follows update-personalised-batch" [
 #
 # GET /my/music/follows/{type}
 # operationId: getPersonalisedMusicFollowsByType
-export def "my-music-follows get-personalised" [
+export def "get-personalised-music-follows-by-type" [
   type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1558,7 +1558,7 @@ export def "my-music-follows get-personalised" [
 #
 # DELETE /my/music/follows/{type}/{id}
 # operationId: deletePersonalisedMusicFollowsByTypeById
-export def "my-music-follows delete-personalised-by" [
+export def "delete-personalised-music-follows-by-type-by-id" [
   type: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1605,7 +1605,7 @@ export def "my-music-follows delete-personalised-by" [
 #
 # GET /my/music/follows/{type}/{id}
 # operationId: getPersonalisedMusicFollowsByTypeById
-export def "my-music-follows get-personalised-by" [
+export def "get-personalised-music-follows-by-type-by-id" [
   type: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1653,7 +1653,7 @@ export def "my-music-follows get-personalised-by" [
 # POST /my/music/follows/{type}/{id}
 # operationId: postPersonalisedMusicFollowsByTypeById
 # --meta_data shape: {key: string}
-export def "my-music-follows create-personalised-by" [
+export def "post-personalised-music-follows-by-type-by-id" [
   type: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1708,7 +1708,7 @@ export def "my-music-follows create-personalised-by" [
 # PUT /my/music/follows/{type}/{id}
 # operationId: putPersonalisedMusicFollowsByTypeById
 # --meta_data shape: {key: string}
-export def "my-music-follows update-personalised-by" [
+export def "put-personalised-music-follows-by-type-by-id" [
   type: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1762,7 +1762,7 @@ export def "my-music-follows update-personalised-by" [
 #
 # DELETE /my/music/preferences/export
 # operationId: deleteMusicPreferencesExport
-export def "my-music-preferences-export delete" [
+export def "delete-music-preferences-export" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1801,7 +1801,7 @@ export def "my-music-preferences-export delete" [
 #
 # GET /my/music/preferences/export
 # operationId: getMusicPreferencesExport
-export def "my-music-preferences-export list" [
+export def "get-music-preferences-export" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1840,7 +1840,7 @@ export def "my-music-preferences-export list" [
 #
 # POST /my/music/preferences/export
 # operationId: postMusicPreferencesExport
-export def "my-music-preferences-export create" [
+export def "post-music-preferences-export" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1892,7 +1892,7 @@ export def "my-music-preferences-export create" [
 #
 # DELETE /my/music/preferences/export/{vendor}
 # operationId: deleteMusicPreferencesExportVendor
-export def "my-music-preferences-export delete-by-vendor" [
+export def "delete-music-preferences-export-vendor" [
   vendor: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1933,7 +1933,7 @@ export def "my-music-preferences-export delete-by-vendor" [
 #
 # GET /my/music/preferences/export/{vendor}
 # operationId: getMusicPreferencesExportVendor
-export def "my-music-preferences-export get" [
+export def "get-music-preferences-export-vendor" [
   vendor: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1974,7 +1974,7 @@ export def "my-music-preferences-export get" [
 #
 # POST /my/music/preferences/export/{vendor}
 # operationId: postMusicPreferencesExportVendor
-export def "my-music-preferences-export create-by-vendor" [
+export def "post-music-preferences-export-vendor" [
   vendor: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2028,7 +2028,7 @@ export def "my-music-preferences-export create-by-vendor" [
 #
 # PUT /my/music/preferences/export/{vendor}
 # operationId: putMusicPreferencesExportVendor
-export def "my-music-preferences-export update" [
+export def "put-music-preferences-export-vendor" [
   vendor: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2081,7 +2081,7 @@ export def "my-music-preferences-export update" [
 # Unfollow network
 #
 # DELETE /my/networks/follows
-export def "my-networks-follows delete" [
+export def "delete-my-networks-follows" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2126,7 +2126,7 @@ export def "my-networks-follows delete" [
 # List of followed networks
 #
 # GET /my/networks/follows
-export def "my-networks-follows get" [
+export def "get-my-networks-follows" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2166,7 +2166,7 @@ export def "my-networks-follows get" [
 # Follow network
 #
 # POST /my/networks/follows
-export def "my-networks-follows create" [
+export def "post-my-networks-follows" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2211,7 +2211,7 @@ export def "my-networks-follows create" [
 # Write Play Event
 #
 # POST /my/plays
-export def "my-plays create" [
+export def "post-my-plays" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2257,7 +2257,7 @@ export def "my-plays create" [
 #
 # GET /my/playspace/containers/suggested
 # operationId: suggestContainer
-export def "my-playspace-containers-suggested get-suggest" [
+export def "suggest-container" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2298,7 +2298,7 @@ export def "my-playspace-containers-suggested get-suggest" [
 #
 # GET /my/playspace/containers/{id}
 # operationId: getContainer
-export def "my-playspace-containers get" [
+export def "get-container" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2338,7 +2338,7 @@ export def "my-playspace-containers get" [
 #
 # GET /my/programmes/recommendations
 # operationId: getRecommendations
-export def "my-programmes-recommendations get" [
+export def "get-recommendations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2380,7 +2380,7 @@ export def "my-programmes-recommendations get" [
 #
 # GET /my/radio/favourites
 # operationId: getPersonalisedRadioFavourites
-export def "my-radio-favourites list" [
+export def "get-personalised-radio-favourites" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2424,7 +2424,7 @@ export def "my-radio-favourites list" [
 #
 # POST /my/radio/favourites
 # operationId: postPersonalisedRadioBatch
-export def "my-radio-favourites create-personalised-batch" [
+export def "post-personalised-radio-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2467,7 +2467,7 @@ export def "my-radio-favourites create-personalised-batch" [
 #
 # PUT /my/radio/favourites
 # operationId: putPersonalisedRadioBatch
-export def "my-radio-favourites update-personalised-batch" [
+export def "put-personalised-radio-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2510,7 +2510,7 @@ export def "my-radio-favourites update-personalised-batch" [
 #
 # GET /my/radio/favourites/{type}
 # operationId: getPersonalisedRadioFavouritesByType
-export def "my-radio-favourites get-personalised" [
+export def "get-personalised-radio-favourites-by-type" [
   type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2556,7 +2556,7 @@ export def "my-radio-favourites get-personalised" [
 #
 # DELETE /my/radio/favourites/{type}/{pid}
 # operationId: deletePersonalisedRadioByActivityTypeById
-export def "my-radio-favourites delete-personalised-by-activity" [
+export def "delete-personalised-radio-by-activity-type-by-id" [
   type: string
   pid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2599,7 +2599,7 @@ export def "my-radio-favourites delete-personalised-by-activity" [
 #
 # GET /my/radio/favourites/{type}/{pid}
 # operationId: getPersonalisedRadioByActivityTypeById
-export def "my-radio-favourites get-personalised-by-activity" [
+export def "get-personalised-radio-by-activity-type-by-id" [
   type: string
   pid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2645,7 +2645,7 @@ export def "my-radio-favourites get-personalised-by-activity" [
 # POST /my/radio/favourites/{type}/{pid}
 # operationId: postPersonalisedRadioByActivityTypeById
 # --metadata shape: {key: string}
-export def "my-radio-favourites create-personalised-by-activity" [
+export def "post-personalised-radio-by-activity-type-by-id" [
   type: string
   pid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2696,7 +2696,7 @@ export def "my-radio-favourites create-personalised-by-activity" [
 # PUT /my/radio/favourites/{type}/{pid}
 # operationId: putPersonalisedRadioByActivityTypeById
 # --metadata shape: {key: string}
-export def "my-radio-favourites update-personalised-by-activity" [
+export def "put-personalised-radio-by-activity-type-by-id" [
   type: string
   pid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2746,7 +2746,7 @@ export def "my-radio-favourites update-personalised-by-activity" [
 #
 # GET /my/radio/follows
 # operationId: getPersonalisedRadioFollows
-export def "my-radio-follows list" [
+export def "get-personalised-radio-follows" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2790,7 +2790,7 @@ export def "my-radio-follows list" [
 #
 # POST /my/radio/follows
 # operationId: postPersonalisedRadioFollowsBatch
-export def "my-radio-follows create-personalised-batch" [
+export def "post-personalised-radio-follows-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2833,7 +2833,7 @@ export def "my-radio-follows create-personalised-batch" [
 #
 # PUT /my/radio/follows
 # operationId: putPersonalisedRadioFollowsBatch
-export def "my-radio-follows update-personalised-batch" [
+export def "put-personalised-radio-follows-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2876,7 +2876,7 @@ export def "my-radio-follows update-personalised-batch" [
 #
 # GET /my/radio/follows/{type}
 # operationId: getPersonalisedRadioFollowsByType
-export def "my-radio-follows get-personalised" [
+export def "get-personalised-radio-follows-by-type" [
   type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2922,7 +2922,7 @@ export def "my-radio-follows get-personalised" [
 #
 # DELETE /my/radio/follows/{type}/{pid}
 # operationId: deletePersonalisedRadioFollowsByTypeById
-export def "my-radio-follows delete-personalised-by" [
+export def "delete-personalised-radio-follows-by-type-by-id" [
   type: string
   pid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2965,7 +2965,7 @@ export def "my-radio-follows delete-personalised-by" [
 #
 # GET /my/radio/follows/{type}/{pid}
 # operationId: getPersonalisedRadioFollowsByTypeById
-export def "my-radio-follows get-personalised-by" [
+export def "get-personalised-radio-follows-by-type-by-id" [
   type: string
   pid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3009,7 +3009,7 @@ export def "my-radio-follows get-personalised-by" [
 # POST /my/radio/follows/{type}/{pid}
 # operationId: postPersonalisedRadioFollowsByTypeById
 # --metadata shape: {key: string}
-export def "my-radio-follows create-personalised-by" [
+export def "post-personalised-radio-follows-by-type-by-id" [
   type: string
   pid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3060,7 +3060,7 @@ export def "my-radio-follows create-personalised-by" [
 # PUT /my/radio/follows/{type}/{pid}
 # operationId: putPersonalisedRadioFollowsByTypeById
 # --metadata shape: {key: string}
-export def "my-radio-follows update-personalised-by" [
+export def "put-personalised-radio-follows-by-type-by-id" [
   type: string
   pid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3110,7 +3110,7 @@ export def "my-radio-follows update-personalised-by" [
 #
 # GET /my/radio/plays
 # operationId: getPersonalisedRadioPlays
-export def "my-radio-plays get-personalised" [
+export def "get-personalised-radio-plays" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3154,7 +3154,7 @@ export def "my-radio-plays get-personalised" [
 #
 # GET /podcasts
 # operationId: getPodcasts
-export def "podcasts list" [
+export def "get-podcasts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3200,7 +3200,7 @@ export def "podcasts list" [
 #
 # GET /podcasts/featured
 # operationId: getPodcastsFeatured
-export def "podcasts-featured get" [
+export def "get-podcasts-featured" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3237,7 +3237,7 @@ export def "podcasts-featured get" [
 #
 # GET /podcasts/{pid}
 # operationId: getPodcastByPid
-export def "podcasts get" [
+export def "get-podcast-by-pid" [
   pid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3279,7 +3279,7 @@ export def "podcasts get" [
 #
 # GET /podcasts/{pid}/episodes
 # operationId: getPodcastEpisodes
-export def "podcasts-episodes get" [
+export def "get-podcast-episodes" [
   pid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3321,7 +3321,7 @@ export def "podcasts-episodes get" [
 #
 # GET /radio/networks.json
 # operationId: getRadioNetworks
-export def "radio-networks-json get" [
+export def "get-radio-networks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3361,7 +3361,7 @@ export def "radio-networks-json get" [
 #
 # GET /radio/popular
 # operationId: getPopularEpisodesClips
-export def "radio-popular get-episodes-clips" [
+export def "get-popular-episodes-clips" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3410,7 +3410,7 @@ export def "radio-popular get-episodes-clips" [
 #
 # GET /radio/programmes
 # operationId: getRadioProgrammes
-export def "radio-programmes list" [
+export def "get-radio-programmes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3455,7 +3455,7 @@ export def "radio-programmes list" [
 #
 # GET /radio/programmes/{pid}
 # operationId: getRadioProgrammesByPid
-export def "radio-programmes get" [
+export def "get-radio-programmes-by-pid" [
   pid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

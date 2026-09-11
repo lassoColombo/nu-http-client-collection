@@ -110,7 +110,7 @@ def auth-scheme-completer [] { ["x-api-token"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "directories-mailinglists-contacts create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-contact-in-mailinglist" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -134,7 +134,7 @@ export def commands []: nothing -> table {
 #
 # POST /directories/{DirectoryId}/mailinglists/{MailingListId}/contacts
 # operationId: CreateContactInMailinglist
-export def "directories-mailinglists-contacts create" [
+export def "create-contact-in-mailinglist" [
   directory_id: string
   mailing_list_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -179,7 +179,7 @@ export def "directories-mailinglists-contacts create" [
 #
 # GET /distributions
 # operationId: GetDistributions
-export def "distributions get" [
+export def "get-distributions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -215,7 +215,7 @@ export def "distributions get" [
 #
 # POST /distributions
 # operationId: GenerateDistributionLinks
-export def "distributions generate-links" [
+export def "generate-distribution-links" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -258,7 +258,7 @@ export def "distributions generate-links" [
 #
 # GET /distributions/{DistributionId}/links
 # operationId: Retrievedistributionlinks
-export def "distributions-links get-distributionlinks" [
+export def "retrievedistributionlinks" [
   distribution_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -296,7 +296,7 @@ export def "distributions-links get-distributionlinks" [
 #
 # DELETE /eventsubscriptions/
 # operationId: WebhookDelete
-export def "eventsubscriptions delete-webhook" [
+export def "webhook-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -336,7 +336,7 @@ export def "eventsubscriptions delete-webhook" [
 #
 # POST /eventsubscriptions/
 # operationId: WhenAResponseIsReceived
-export def "eventsubscriptions create-when-response-is-received" [
+export def "when-a-response-is-received" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -376,7 +376,7 @@ export def "eventsubscriptions create-when-response-is-received" [
 #
 # GET /eventsubscriptions/{SubscriptionId}
 # operationId: GetEventSubscriptions
-export def "eventsubscriptions get-event-subscriptions" [
+export def "get-event-subscriptions" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -412,7 +412,7 @@ export def "eventsubscriptions get-event-subscriptions" [
 #
 # GET /survey-definitions/{SurveyId}
 # operationId: GetSurvey
-export def "survey-definitions get" [
+export def "get-survey" [
   survey_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

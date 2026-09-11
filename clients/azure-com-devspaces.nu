@@ -122,7 +122,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-dev-spaces-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.DevSpaces/operations
 # operationId: Operations_List
-export def "providers-microsoft-dev-spaces-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -182,7 +182,7 @@ export def "providers-microsoft-dev-spaces-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.DevSpaces/controllers
 # operationId: Controllers_List
-export def "subscriptions-providers-microsoft-dev-spaces-controllers list" [
+export def "controllers-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -220,7 +220,7 @@ export def "subscriptions-providers-microsoft-dev-spaces-controllers list" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevSpaces/controllers
 # operationId: Controllers_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-dev-spaces-controllers list" [
+export def "controllers-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -260,7 +260,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-spaces-control
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevSpaces/controllers/{name}
 # operationId: Controllers_Delete
-export def "subscriptions-resource-groups-providers-microsoft-dev-spaces-controllers delete" [
+export def "controllers-delete" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -302,7 +302,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-spaces-control
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevSpaces/controllers/{name}
 # operationId: Controllers_Get
-export def "subscriptions-resource-groups-providers-microsoft-dev-spaces-controllers get" [
+export def "controllers-get" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -344,7 +344,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-spaces-control
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevSpaces/controllers/{name}
 # operationId: Controllers_Update
-export def "subscriptions-resource-groups-providers-microsoft-dev-spaces-controllers update" [
+export def "controllers-update" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -392,7 +392,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-spaces-control
 # operationId: Controllers_Create
 # --properties shape: {targetContainerHostCredentialsBase64: string, targetContainerHostResourceId: string}
 # --sku shape: {name: "S1", tier?: "Standard"}
-export def "subscriptions-resource-groups-providers-microsoft-dev-spaces-controllers create" [
+export def "controllers-create" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -441,7 +441,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-spaces-control
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevSpaces/controllers/{name}/listConnectionDetails
 # operationId: Controllers_ListConnectionDetails
-export def "subscriptions-resource-groups-providers-microsoft-dev-spaces-controllers-list-connection-details list" [
+export def "controllers-list-connection-details" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -483,7 +483,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-spaces-control
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevSpaces/locations/{location}/checkContainerHostMapping
 # operationId: ContainerHostMappings_GetContainerHostMapping
-export def "subscriptions-resource-groups-providers-microsoft-dev-spaces-locations-check-container-host-mapping get" [
+export def "container-host-mappings-get-container-host-mapping" [
   subscription_id: string
   resource_group_name: string
   location: string

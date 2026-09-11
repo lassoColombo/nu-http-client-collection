@@ -125,7 +125,7 @@ def action-completer [] { ["ACCEPT" "DECLINE" "REVOKE"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "assessments-associate-to-assessment-report update-evidence-folder" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associate-assessment-report-evidence-folder" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -149,7 +149,7 @@ export def commands []: nothing -> table {
 #
 # PUT /assessments/{assessmentId}/associateToAssessmentReport
 # operationId: AssociateAssessmentReportEvidenceFolder
-export def "assessments-associate-to-assessment-report update-evidence-folder" [
+export def "associate-assessment-report-evidence-folder" [
   assessment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -198,7 +198,7 @@ export def "assessments-associate-to-assessment-report update-evidence-folder" [
 #
 # PUT /assessments/{assessmentId}/batchAssociateToAssessmentReport
 # operationId: BatchAssociateAssessmentReportEvidence
-export def "assessments-batch-associate-to-assessment-report update-evidence" [
+export def "batch-associate-assessment-report-evidence" [
   assessment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -249,7 +249,7 @@ export def "assessments-batch-associate-to-assessment-report update-evidence" [
 # POST /assessments/{assessmentId}/delegations
 # operationId: BatchCreateDelegationByAssessment
 # --createDelegationRequests item shape: {comment?: any, controlSetId?: any, roleArn?: any, roleType?: any}
-export def "assessments-delegations create-batch" [
+export def "batch-create-delegation-by-assessment" [
   assessment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -298,7 +298,7 @@ export def "assessments-delegations create-batch" [
 #
 # PUT /assessments/{assessmentId}/delegations
 # operationId: BatchDeleteDelegationByAssessment
-export def "assessments-delegations delete-batch" [
+export def "batch-delete-delegation-by-assessment" [
   assessment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -347,7 +347,7 @@ export def "assessments-delegations delete-batch" [
 #
 # PUT /assessments/{assessmentId}/batchDisassociateFromAssessmentReport
 # operationId: BatchDisassociateAssessmentReportEvidence
-export def "assessments-batch-disassociate-from-assessment-report update-evidence" [
+export def "batch-disassociate-assessment-report-evidence" [
   assessment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -398,7 +398,7 @@ export def "assessments-batch-disassociate-from-assessment-report update-evidenc
 # POST /assessments/{assessmentId}/controlSets/{controlSetId}/controls/{controlId}/evidence
 # operationId: BatchImportEvidenceToAssessmentControl
 # --manualEvidence item shape: {s3ResourcePath?: any}
-export def "assessments-control-sets-controls-evidence import-batch" [
+export def "batch-import-evidence-to-assessment-control" [
   assessment_id: string
   control_set_id: string
   control_id: string
@@ -454,7 +454,7 @@ export def "assessments-control-sets-controls-evidence import-batch" [
 # --assessmentReportsDestination shape: {destinationType?: any, destination?: any}
 # --scope shape: {awsAccounts?: any, awsServices?: any}
 # --roles item shape: {roleType: any, roleArn: any}
-export def "assessments create" [
+export def "create-assessment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -507,7 +507,7 @@ export def "assessments create" [
 #
 # GET /assessments
 # operationId: ListAssessments
-export def "assessments list" [
+export def "list-assessments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -555,7 +555,7 @@ export def "assessments list" [
 # POST /assessmentFrameworks
 # operationId: CreateAssessmentFramework
 # --controlSets item shape: {name: any, controls?: any}
-export def "assessment-frameworks create" [
+export def "create-assessment-framework" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -606,7 +606,7 @@ export def "assessment-frameworks create" [
 #
 # POST /assessments/{assessmentId}/reports
 # operationId: CreateAssessmentReport
-export def "assessments-reports create" [
+export def "create-assessment-report" [
   assessment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -658,7 +658,7 @@ export def "assessments-reports create" [
 # POST /controls
 # operationId: CreateControl
 # --controlMappingSources item shape: {sourceName?: any, sourceDescription?: any, sourceSetUpOption?: any, sourceType?: any, sourceKeyword?: record, sourceFrequency?: any, troubleshootingText?: any}
-export def "controls create" [
+export def "create-control" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -711,7 +711,7 @@ export def "controls create" [
 #
 # DELETE /assessments/{assessmentId}
 # operationId: DeleteAssessment
-export def "assessments delete" [
+export def "delete-assessment" [
   assessment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -756,7 +756,7 @@ export def "assessments delete" [
 #
 # GET /assessments/{assessmentId}
 # operationId: GetAssessment
-export def "assessments get" [
+export def "get-assessment" [
   assessment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -804,7 +804,7 @@ export def "assessments get" [
 # --scope shape: {awsAccounts?: any, awsServices?: any}
 # --assessmentReportsDestination shape: {destinationType?: any, destination?: any}
 # --roles item shape: {roleType: any, roleArn: any}
-export def "assessments update" [
+export def "update-assessment" [
   assessment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -857,7 +857,7 @@ export def "assessments update" [
 #
 # DELETE /assessmentFrameworks/{frameworkId}
 # operationId: DeleteAssessmentFramework
-export def "assessment-frameworks delete" [
+export def "delete-assessment-framework" [
   framework_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -902,7 +902,7 @@ export def "assessment-frameworks delete" [
 #
 # GET /assessmentFrameworks/{frameworkId}
 # operationId: GetAssessmentFramework
-export def "assessment-frameworks get" [
+export def "get-assessment-framework" [
   framework_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -948,7 +948,7 @@ export def "assessment-frameworks get" [
 # PUT /assessmentFrameworks/{frameworkId}
 # operationId: UpdateAssessmentFramework
 # --controlSets item shape: {id?: any, name: any, controls: any}
-export def "assessment-frameworks update" [
+export def "update-assessment-framework" [
   framework_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1000,7 +1000,7 @@ export def "assessment-frameworks update" [
 #
 # DELETE /assessmentFrameworkShareRequests/{requestId}
 # operationId: DeleteAssessmentFrameworkShare
-export def "assessment-framework-share-requests delete" [
+export def "delete-assessment-framework-share" [
   request_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1047,7 +1047,7 @@ export def "assessment-framework-share-requests delete" [
 #
 # DELETE /assessments/{assessmentId}/reports/{assessmentReportId}
 # operationId: DeleteAssessmentReport
-export def "assessments-reports delete" [
+export def "delete-assessment-report" [
   assessment_id: string
   assessment_report_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1094,7 +1094,7 @@ export def "assessments-reports delete" [
 #
 # DELETE /controls/{controlId}
 # operationId: DeleteControl
-export def "controls delete" [
+export def "delete-control" [
   control_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1139,7 +1139,7 @@ export def "controls delete" [
 #
 # GET /controls/{controlId}
 # operationId: GetControl
-export def "controls get" [
+export def "get-control" [
   control_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1185,7 +1185,7 @@ export def "controls get" [
 # PUT /controls/{controlId}
 # operationId: UpdateControl
 # --controlMappingSources item shape: {sourceId?: any, sourceName?: any, sourceDescription?: any, sourceSetUpOption?: any, sourceType?: any, sourceKeyword?: record, sourceFrequency?: any, troubleshootingText?: any}
-export def "controls update" [
+export def "update-control" [
   control_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1239,7 +1239,7 @@ export def "controls update" [
 #
 # POST /account/deregisterAccount
 # operationId: DeregisterAccount
-export def "account-deregister-account create" [
+export def "deregister-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1282,7 +1282,7 @@ export def "account-deregister-account create" [
 #
 # POST /account/deregisterOrganizationAdminAccount
 # operationId: DeregisterOrganizationAdminAccount
-export def "account-deregister-organization-admin-account create" [
+export def "deregister-organization-admin-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1329,7 +1329,7 @@ export def "account-deregister-organization-admin-account create" [
 #
 # PUT /assessments/{assessmentId}/disassociateFromAssessmentReport
 # operationId: DisassociateAssessmentReportEvidenceFolder
-export def "assessments-disassociate-from-assessment-report update-evidence-folder" [
+export def "disassociate-assessment-report-evidence-folder" [
   assessment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1378,7 +1378,7 @@ export def "assessments-disassociate-from-assessment-report update-evidence-fold
 #
 # GET /account/status
 # operationId: GetAccountStatus
-export def "account-status get" [
+export def "get-account-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1421,7 +1421,7 @@ export def "account-status get" [
 #
 # GET /assessments/{assessmentId}/reports/{assessmentReportId}/url
 # operationId: GetAssessmentReportUrl
-export def "assessments-reports-url get" [
+export def "get-assessment-report-url" [
   assessment_id: string
   assessment_report_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1468,7 +1468,7 @@ export def "assessments-reports-url get" [
 #
 # GET /assessments/{assessmentId}/changelogs
 # operationId: GetChangeLogs
-export def "assessments-changelogs get-change-logs" [
+export def "get-change-logs" [
   assessment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1518,7 +1518,7 @@ export def "assessments-changelogs get-change-logs" [
 #
 # GET /delegations
 # operationId: GetDelegations
-export def "delegations get" [
+export def "get-delegations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1564,7 +1564,7 @@ export def "delegations get" [
 #
 # GET /assessments/{assessmentId}/controlSets/{controlSetId}/evidenceFolders/{evidenceFolderId}/evidence/{evidenceId}
 # operationId: GetEvidence
-export def "assessments-control-sets-evidence-folders-evidence get" [
+export def "get-evidence" [
   assessment_id: string
   control_set_id: string
   evidence_folder_id: string
@@ -1615,7 +1615,7 @@ export def "assessments-control-sets-evidence-folders-evidence get" [
 #
 # GET /assessments/{assessmentId}/controlSets/{controlSetId}/evidenceFolders/{evidenceFolderId}/evidence
 # operationId: GetEvidenceByEvidenceFolder
-export def "assessments-control-sets-evidence-folders-evidence list" [
+export def "get-evidence-by-evidence-folder" [
   assessment_id: string
   control_set_id: string
   evidence_folder_id: string
@@ -1667,7 +1667,7 @@ export def "assessments-control-sets-evidence-folders-evidence list" [
 #
 # GET /assessments/{assessmentId}/controlSets/{controlSetId}/evidenceFolders/{evidenceFolderId}
 # operationId: GetEvidenceFolder
-export def "assessments-control-sets-evidence-folders get" [
+export def "get-evidence-folder" [
   assessment_id: string
   control_set_id: string
   evidence_folder_id: string
@@ -1716,7 +1716,7 @@ export def "assessments-control-sets-evidence-folders get" [
 #
 # GET /assessments/{assessmentId}/evidenceFolders
 # operationId: GetEvidenceFoldersByAssessment
-export def "assessments-evidence-folders get" [
+export def "get-evidence-folders-by-assessment" [
   assessment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1764,7 +1764,7 @@ export def "assessments-evidence-folders get" [
 #
 # GET /assessments/{assessmentId}/evidenceFolders-by-assessment-control/{controlSetId}/{controlId}
 # operationId: GetEvidenceFoldersByAssessmentControl
-export def "assessments-evidence-folders-by-assessment-control get" [
+export def "get-evidence-folders-by-assessment-control" [
   assessment_id: string
   control_set_id: string
   control_id: string
@@ -1816,7 +1816,7 @@ export def "assessments-evidence-folders-by-assessment-control get" [
 #
 # GET /insights
 # operationId: GetInsights
-export def "insights get" [
+export def "get-insights" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1859,7 +1859,7 @@ export def "insights get" [
 #
 # GET /insights/assessments/{assessmentId}
 # operationId: GetInsightsByAssessment
-export def "insights-assessments get" [
+export def "get-insights-by-assessment" [
   assessment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1904,7 +1904,7 @@ export def "insights-assessments get" [
 #
 # GET /account/organizationAdminAccount
 # operationId: GetOrganizationAdminAccount
-export def "account-organization-admin-account get" [
+export def "get-organization-admin-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1947,7 +1947,7 @@ export def "account-organization-admin-account get" [
 #
 # GET /services
 # operationId: GetServicesInScope
-export def "services get-in-scope" [
+export def "get-services-in-scope" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1990,7 +1990,7 @@ export def "services get-in-scope" [
 #
 # GET /settings/{attribute}
 # operationId: GetSettings
-export def "settings get" [
+export def "get-settings" [
   attribute: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2035,7 +2035,7 @@ export def "settings get" [
 #
 # GET /insights/controls-by-assessment
 # operationId: ListAssessmentControlInsightsByControlDomain
-export def "insights-controls-by-assessment list-domain" [
+export def "list-assessment-control-insights-by-control-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2083,7 +2083,7 @@ export def "insights-controls-by-assessment list-domain" [
 #
 # GET /assessmentFrameworkShareRequests
 # operationId: ListAssessmentFrameworkShareRequests
-export def "assessment-framework-share-requests list" [
+export def "list-assessment-framework-share-requests" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2130,7 +2130,7 @@ export def "assessment-framework-share-requests list" [
 #
 # GET /assessmentFrameworks
 # operationId: ListAssessmentFrameworks
-export def "assessment-frameworks list" [
+export def "list-assessment-frameworks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2177,7 +2177,7 @@ export def "assessment-frameworks list" [
 #
 # GET /assessmentReports
 # operationId: ListAssessmentReports
-export def "assessment-reports list" [
+export def "list-assessment-reports" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2223,7 +2223,7 @@ export def "assessment-reports list" [
 #
 # GET /insights/control-domains
 # operationId: ListControlDomainInsights
-export def "insights-control-domains list" [
+export def "list-control-domain-insights" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2269,7 +2269,7 @@ export def "insights-control-domains list" [
 #
 # GET /insights/control-domains-by-assessment
 # operationId: ListControlDomainInsightsByAssessment
-export def "insights-control-domains-by-assessment list" [
+export def "list-control-domain-insights-by-assessment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2316,7 +2316,7 @@ export def "insights-control-domains-by-assessment list" [
 #
 # GET /insights/controls
 # operationId: ListControlInsightsByControlDomain
-export def "insights-controls list-by-domain" [
+export def "list-control-insights-by-control-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2363,7 +2363,7 @@ export def "insights-controls list-by-domain" [
 #
 # GET /controls
 # operationId: ListControls
-export def "controls list" [
+export def "list-controls" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2410,7 +2410,7 @@ export def "controls list" [
 #
 # GET /dataSourceKeywords
 # operationId: ListKeywordsForDataSource
-export def "data-source-keywords list" [
+export def "list-keywords-for-data-source" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2457,7 +2457,7 @@ export def "data-source-keywords list" [
 #
 # GET /notifications
 # operationId: ListNotifications
-export def "notifications list" [
+export def "list-notifications" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2503,7 +2503,7 @@ export def "notifications list" [
 #
 # GET /tags/{resourceArn}
 # operationId: ListTagsForResource
-export def "tags list-for-resource" [
+export def "list-tags-for-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2548,7 +2548,7 @@ export def "tags list-for-resource" [
 #
 # POST /tags/{resourceArn}
 # operationId: TagResource
-export def "tags tag-resource" [
+export def "tag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2597,7 +2597,7 @@ export def "tags tag-resource" [
 #
 # POST /account/registerAccount
 # operationId: RegisterAccount
-export def "account-register-account create" [
+export def "register-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2645,7 +2645,7 @@ export def "account-register-account create" [
 #
 # POST /account/registerOrganizationAdminAccount
 # operationId: RegisterOrganizationAdminAccount
-export def "account-register-organization-admin-account create" [
+export def "register-organization-admin-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2692,7 +2692,7 @@ export def "account-register-organization-admin-account create" [
 #
 # POST /assessmentFrameworks/{frameworkId}/shareRequests
 # operationId: StartAssessmentFrameworkShare
-export def "assessment-frameworks-share-requests start" [
+export def "start-assessment-framework-share" [
   framework_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2743,7 +2743,7 @@ export def "assessment-frameworks-share-requests start" [
 #
 # DELETE /tags/{resourceArn}
 # operationId: UntagResource
-export def "tags untag-resource" [
+export def "untag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2790,7 +2790,7 @@ export def "tags untag-resource" [
 #
 # PUT /assessments/{assessmentId}/controlSets/{controlSetId}/controls/{controlId}
 # operationId: UpdateAssessmentControl
-export def "assessments-control-sets-controls update" [
+export def "update-assessment-control" [
   assessment_id: string
   control_set_id: string
   control_id: string
@@ -2844,7 +2844,7 @@ export def "assessments-control-sets-controls update" [
 #
 # PUT /assessments/{assessmentId}/controlSets/{controlSetId}/status
 # operationId: UpdateAssessmentControlSetStatus
-export def "assessments-control-sets-status update" [
+export def "update-assessment-control-set-status" [
   assessment_id: string
   control_set_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2896,7 +2896,7 @@ export def "assessments-control-sets-status update" [
 #
 # PUT /assessmentFrameworkShareRequests/{requestId}
 # operationId: UpdateAssessmentFrameworkShare
-export def "assessment-framework-share-requests update" [
+export def "update-assessment-framework-share" [
   request_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2946,7 +2946,7 @@ export def "assessment-framework-share-requests update" [
 #
 # PUT /assessments/{assessmentId}/status
 # operationId: UpdateAssessmentStatus
-export def "assessments-status update" [
+export def "update-assessment-status" [
   assessment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2998,7 +2998,7 @@ export def "assessments-status update" [
 # --defaultAssessmentReportsDestination shape: {destinationType?: any, destination?: any}
 # --defaultProcessOwners item shape: {roleType: any, roleArn: any}
 # --deregistrationPolicy shape: {deleteResources?: any}
-export def "settings update" [
+export def "update-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3050,7 +3050,7 @@ export def "settings update" [
 #
 # POST /assessmentReports/integrity
 # operationId: ValidateAssessmentReportIntegrity
-export def "assessment-reports-integrity validate" [
+export def "validate-assessment-report-integrity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

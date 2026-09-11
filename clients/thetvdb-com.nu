@@ -123,7 +123,7 @@ def auth-scheme-completer [] { ["jwt"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "episodes get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-episodes-id" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 # Returns the full information for a given episode id. __Deprecation Warning:__ The _director_ key will be deprecated in favor of the new _directors_ key in a future release.
 #
 # GET /episodes/{id}
-export def "episodes get" [
+export def "get-episodes-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -184,7 +184,7 @@ export def "episodes get" [
 # All available languages. These language abbreviations can be used in the `Accept-Language` header for routes that return translation records.
 #
 # GET /languages
-export def "languages list" [
+export def "get-languages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -217,7 +217,7 @@ export def "languages list" [
 # Information about a particular language, given the language ID.
 #
 # GET /languages/{id}
-export def "languages get" [
+export def "get-languages-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -252,7 +252,7 @@ export def "languages get" [
 # Returns a session token to be included in the rest of the requests. Note that API key authentication is required for all subsequent requests and user auth is required for routes in the `User` section
 #
 # POST /login
-export def "login create" [
+export def "post-login" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -291,7 +291,7 @@ export def "login create" [
 # Returns a movies records that contains all information known about a particular movies id.
 #
 # GET /movies/{id}
-export def "movies get" [
+export def "get-movies-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -329,7 +329,7 @@ export def "movies get" [
 # Returns all movies ids updated since a given timestamp.
 #
 # GET /movieupdates
-export def "movieupdates get" [
+export def "get-movieupdates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -364,7 +364,7 @@ export def "movieupdates get" [
 # Refreshes your current, valid JWT token and returns a new token. Hit this route so that you do not have to post to `/login` with your API key and credentials once you have already been authenticated.
 #
 # GET /refresh_token
-export def "refresh-token get" [
+export def "get-refresh-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -397,7 +397,7 @@ export def "refresh-token get" [
 # Allows the user to search for a series based on the following parameters.
 #
 # GET /search/series
-export def "search-series get" [
+export def "get-search-series" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -438,7 +438,7 @@ export def "search-series get" [
 # Returns an array of parameters to query by in the `/search/series` route.
 #
 # GET /search/series/params
-export def "search-series-params get" [
+export def "get-search-series-params" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -471,7 +471,7 @@ export def "search-series-params get" [
 # Returns a series records that contains all information known about a particular series id.
 #
 # GET /series/{id}
-export def "series get" [
+export def "get-series-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -509,7 +509,7 @@ export def "series get" [
 # Returns header information only about the given series ID.
 #
 # HEAD /series/{id}
-export def "series head" [
+export def "head-series-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -547,7 +547,7 @@ export def "series head" [
 # Returns actors for the given series id
 #
 # GET /series/{id}/actors
-export def "series-actors get" [
+export def "get-series-id-actors" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -582,7 +582,7 @@ export def "series-actors get" [
 # All episodes for a given series. Paginated with 100 results per page.
 #
 # GET /series/{id}/episodes
-export def "series-episodes get" [
+export def "get-series-id-episodes" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -619,7 +619,7 @@ export def "series-episodes get" [
 # This route allows the user to query against episodes for the given series. The response is a paginated array of episode records.
 #
 # GET /series/{id}/episodes/query
-export def "series-episodes-query get" [
+export def "get-series-id-episodes-query" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -665,7 +665,7 @@ export def "series-episodes-query get" [
 # Returns the allowed query keys for the `/series/{id}/episodes/query` route
 #
 # GET /series/{id}/episodes/query/params
-export def "series-episodes-query-params get" [
+export def "get-series-id-episodes-query-params" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -700,7 +700,7 @@ export def "series-episodes-query-params get" [
 # Returns a summary of the episodes and seasons available for the series. __Note__: Season "0" is for all episodes that are considered to be specials.
 #
 # GET /series/{id}/episodes/summary
-export def "series-episodes-summary get" [
+export def "get-series-id-episodes-summary" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -735,7 +735,7 @@ export def "series-episodes-summary get" [
 # Returns a series records, filtered by the supplied comma-separated list of keys. Query keys can be found at the `/series/{id}/filter/params` route.
 #
 # GET /series/{id}/filter
-export def "series-filter get" [
+export def "get-series-id-filter" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -775,7 +775,7 @@ export def "series-filter get" [
 # Returns the list of keys available for the `/series/{id}/filter` route
 #
 # GET /series/{id}/filter/params
-export def "series-filter-params get" [
+export def "get-series-id-filter-params" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -813,7 +813,7 @@ export def "series-filter-params get" [
 # Returns a summary of the images for a particular series
 #
 # GET /series/{id}/images
-export def "series-images get" [
+export def "get-series-id-images" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -851,7 +851,7 @@ export def "series-images get" [
 # Query images for the given series ID.
 #
 # GET /series/{id}/images/query
-export def "series-images-query get" [
+export def "get-series-id-images-query" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -893,7 +893,7 @@ export def "series-images-query get" [
 # Returns the allowed query keys for the `/series/{id}/images/query` route. Contains a parameter record for each unique `keyType`, listing values that will return results.
 #
 # GET /series/{id}/images/query/params
-export def "series-images-query-params get" [
+export def "get-series-id-images-query-params" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -931,7 +931,7 @@ export def "series-images-query-params get" [
 # Returns an array of series that have changed in a maximum of one week blocks since the provided `fromTime`. The user may specify a `toTime` to grab results for less than a week. Any timespan larger than a week will be reduced down to one week automatically.
 #
 # GET /updated/query
-export def "updated-query get" [
+export def "get-updated-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -970,7 +970,7 @@ export def "updated-query get" [
 # Returns an array of valid query keys for the `/updated/query/params` route.
 #
 # GET /updated/query/params
-export def "updated-query-params get" [
+export def "get-updated-query-params" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1003,7 +1003,7 @@ export def "updated-query-params get" [
 # Returns basic information about the currently authenticated user.
 #
 # GET /user
-export def "user get" [
+export def "get-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1036,7 +1036,7 @@ export def "user get" [
 # Returns an array of favorite series for a given user, will be a blank array if no favorites exist.
 #
 # GET /user/favorites
-export def "user-favorites get" [
+export def "get-user-favorites" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1069,7 +1069,7 @@ export def "user-favorites get" [
 # Deletes the given series ID from the user’s favorite’s list and returns the updated list.
 #
 # DELETE /user/favorites/{id}
-export def "user-favorites delete" [
+export def "delete-user-favorites-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1104,7 +1104,7 @@ export def "user-favorites delete" [
 # Adds the supplied series ID to the user’s favorite’s list and returns the updated list.
 #
 # PUT /user/favorites/{id}
-export def "user-favorites update" [
+export def "put-user-favorites-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1139,7 +1139,7 @@ export def "user-favorites update" [
 # Returns an array of ratings for the given user.
 #
 # GET /user/ratings
-export def "user-ratings get" [
+export def "get-user-ratings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1172,7 +1172,7 @@ export def "user-ratings get" [
 # Returns an array of ratings for a given user that match the query.
 #
 # GET /user/ratings/query
-export def "user-ratings-query get" [
+export def "get-user-ratings-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1207,7 +1207,7 @@ export def "user-ratings-query get" [
 # Returns a list of query params for use in the `/user/ratings/query` route.
 #
 # GET /user/ratings/query/params
-export def "user-ratings-query-params get" [
+export def "get-user-ratings-query-params" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1240,7 +1240,7 @@ export def "user-ratings-query-params get" [
 # This route deletes a given rating of a given type.
 #
 # DELETE /user/ratings/{itemType}/{itemId}
-export def "user-ratings delete" [
+export def "delete-user-ratings-item-type-item-id" [
   item_type: string
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1277,7 +1277,7 @@ export def "user-ratings delete" [
 # This route updates a given rating of a given type.
 #
 # PUT /user/ratings/{itemType}/{itemId}/{itemRating}
-export def "user-ratings update" [
+export def "put-user-ratings-item-type-item-id-item-rating" [
   item_type: string
   item_id: int
   item_rating: int

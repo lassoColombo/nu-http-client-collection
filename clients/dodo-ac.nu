@@ -103,7 +103,7 @@ def personality-completer [] { ["cranky" "jock" "lazy" "normal" "peppy" "sisterl
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "nh-art list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-nh-art" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -126,7 +126,7 @@ export def commands []: nothing -> table {
 # All New Horizons artwork
 #
 # GET /nh/art
-export def "nh-art list" [
+export def "get-nh-art" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -167,7 +167,7 @@ export def "nh-art list" [
 # Single New Horizons artwork
 #
 # GET /nh/art/{artwork}
-export def "nh-art get" [
+export def "get-nh-art-artwork" [
   artwork: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -208,7 +208,7 @@ export def "nh-art get" [
 # All New Horizons bugs
 #
 # GET /nh/bugs
-export def "nh-bugs list" [
+export def "get-nh-bugs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -249,7 +249,7 @@ export def "nh-bugs list" [
 # Single New Horizons bug
 #
 # GET /nh/bugs/{bug}
-export def "nh-bugs get" [
+export def "get-nh-bugs-bug" [
   bug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -290,7 +290,7 @@ export def "nh-bugs get" [
 # All New Horizons clothing
 #
 # GET /nh/clothing
-export def "nh-clothing list" [
+export def "get-nh-clothing" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -333,7 +333,7 @@ export def "nh-clothing list" [
 # Single New Horizons clothing
 #
 # GET /nh/clothing/{clothing}
-export def "nh-clothing get" [
+export def "get-nh-clothing-clothing" [
   clothing: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -374,7 +374,7 @@ export def "nh-clothing get" [
 # All New Horizons events
 #
 # GET /nh/events
-export def "nh-events get" [
+export def "get-nh-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -416,7 +416,7 @@ export def "nh-events get" [
 # All New Horizons fish
 #
 # GET /nh/fish
-export def "nh-fish list" [
+export def "get-nh-fish" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -457,7 +457,7 @@ export def "nh-fish list" [
 # Single New Horizons fish
 #
 # GET /nh/fish/{fish}
-export def "nh-fish get" [
+export def "get-nh-fish-fish" [
   fish: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -498,7 +498,7 @@ export def "nh-fish get" [
 # All New Horizons fossil groups or individual fossil
 #
 # GET /nh/fossils/all
-export def "nh-fossils-all list" [
+export def "get-nh-fossils-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -537,7 +537,7 @@ export def "nh-fossils-all list" [
 # Single New Horizons fossil group with individual fossils
 #
 # GET /nh/fossils/all/{fossil}
-export def "nh-fossils-all get" [
+export def "get-nh-fossils-all-fossil" [
   fossil: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -578,7 +578,7 @@ export def "nh-fossils-all get" [
 # All New Horizons fossil groups
 #
 # GET /nh/fossils/groups
-export def "nh-fossils-groups list" [
+export def "get-nh-fossils-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -617,7 +617,7 @@ export def "nh-fossils-groups list" [
 # Single New Horizons fossil group
 #
 # GET /nh/fossils/groups/{fossil_group}
-export def "nh-fossils-groups get" [
+export def "get-nh-fossils-groups-fossil-group" [
   fossil_group: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -658,7 +658,7 @@ export def "nh-fossils-groups get" [
 # All New Horizons fossils
 #
 # GET /nh/fossils/individuals
-export def "nh-fossils-individuals list" [
+export def "get-nh-fossils-individuals" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -697,7 +697,7 @@ export def "nh-fossils-individuals list" [
 # Single New Horizons fossil
 #
 # GET /nh/fossils/individuals/{fossil}
-export def "nh-fossils-individuals get" [
+export def "get-nh-fossils-individuals-fossil" [
   fossil: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -738,7 +738,7 @@ export def "nh-fossils-individuals get" [
 # All New Horizons furniture
 #
 # GET /nh/furniture
-export def "nh-furniture list" [
+export def "get-nh-furniture" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -779,7 +779,7 @@ export def "nh-furniture list" [
 # Single New Horizons furniture
 #
 # GET /nh/furniture/{furniture}
-export def "nh-furniture get" [
+export def "get-nh-furniture-furniture" [
   furniture: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -820,7 +820,7 @@ export def "nh-furniture get" [
 # All New Horizons interior items
 #
 # GET /nh/interior
-export def "nh-interior list" [
+export def "get-nh-interior" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -860,7 +860,7 @@ export def "nh-interior list" [
 # Single New Horizons interior item
 #
 # GET /nh/interior/{item}
-export def "nh-interior get" [
+export def "get-nh-interior-item" [
   item: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -902,7 +902,7 @@ export def "nh-interior get" [
 # Miscellaneous New Horizons items
 #
 # GET /nh/items
-export def "nh-items list" [
+export def "get-nh-items" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -941,7 +941,7 @@ export def "nh-items list" [
 # Single New Horizons miscellaneous item
 #
 # GET /nh/items/{item}
-export def "nh-items get" [
+export def "get-nh-items-item" [
   item: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -982,7 +982,7 @@ export def "nh-items get" [
 # All New Horizons photos and posters
 #
 # GET /nh/photos
-export def "nh-photos list" [
+export def "get-nh-photos" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1021,7 +1021,7 @@ export def "nh-photos list" [
 # Single New Horizons photo or poster
 #
 # GET /nh/photos/{item}
-export def "nh-photos get" [
+export def "get-nh-photos-item" [
   item: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1062,7 +1062,7 @@ export def "nh-photos get" [
 # All New Horizons recipes
 #
 # GET /nh/recipes
-export def "nh-recipes list" [
+export def "get-nh-recipes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1103,7 +1103,7 @@ export def "nh-recipes list" [
 # Single New Horizons recipe
 #
 # GET /nh/recipes/{item}
-export def "nh-recipes get" [
+export def "get-nh-recipes-item" [
   item: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1144,7 +1144,7 @@ export def "nh-recipes get" [
 # All New Horizons sea creatures
 #
 # GET /nh/sea
-export def "nh-sea list" [
+export def "get-nh-sea" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1185,7 +1185,7 @@ export def "nh-sea list" [
 # Single New Horizons sea creature
 #
 # GET /nh/sea/{sea_creature}
-export def "nh-sea get" [
+export def "get-nh-sea-sea-creature" [
   sea_creature: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1226,7 +1226,7 @@ export def "nh-sea get" [
 # All New Horizons tools
 #
 # GET /nh/tools
-export def "nh-tools list" [
+export def "get-nh-tools" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1265,7 +1265,7 @@ export def "nh-tools list" [
 # Single New Horizons tool
 #
 # GET /nh/tools/{tool}
-export def "nh-tools get" [
+export def "get-nh-tools-tool" [
   tool: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1306,7 +1306,7 @@ export def "nh-tools get" [
 # Villagers
 #
 # GET /villagers
-export def "villagers get" [
+export def "get-villagers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

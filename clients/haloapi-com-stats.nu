@@ -99,7 +99,7 @@ def auth-scheme-completer [] { ["ocp-apim-subscription-key" "query-subscription-
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "h5-arena-matches get-halo-5-match-result" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "halo-5-match-result-arena" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -123,7 +123,7 @@ export def commands []: nothing -> table {
 #
 # GET /h5/arena/matches/{matchId}
 # operationId: Halo-5-Match-Result-Arena
-export def "h5-arena-matches get-halo-5-match-result" [
+export def "halo-5-match-result-arena" [
   match_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -159,7 +159,7 @@ export def "h5-arena-matches get-halo-5-match-result" [
 #
 # GET /h5/campaign/matches/{matchId}
 # operationId: Halo-5-Match-Result-Campaign
-export def "h5-campaign-matches get-halo-5-match-result" [
+export def "halo-5-match-result-campaign" [
   match_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -195,7 +195,7 @@ export def "h5-campaign-matches get-halo-5-match-result" [
 #
 # GET /h5/companies/{companyId}
 # operationId: Halo-5-Company
-export def "h5-companies get-halo-5-company" [
+export def "halo-5-company" [
   company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -231,7 +231,7 @@ export def "h5-companies get-halo-5-company" [
 #
 # GET /h5/companies/{companyId}/commendations
 # operationId: Halo-5-Company-Commendations
-export def "h5-companies-commendations get-halo-5-company" [
+export def "halo-5-company-commendations" [
   company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -267,7 +267,7 @@ export def "h5-companies-commendations get-halo-5-company" [
 #
 # GET /h5/custom/matches/{matchId}
 # operationId: Halo-5-Match-Result-Custom
-export def "h5-custom-matches get-halo-5-match-result" [
+export def "halo-5-match-result-custom" [
   match_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -303,7 +303,7 @@ export def "h5-custom-matches get-halo-5-match-result" [
 #
 # GET /h5/customlocal/matches/{matchId}
 # operationId: Halo-5-Match-Result-Custom-Local
-export def "h5-customlocal-matches get-halo-5-match-result-custom-local" [
+export def "halo-5-match-result-custom-local" [
   match_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -339,7 +339,7 @@ export def "h5-customlocal-matches get-halo-5-match-result-custom-local" [
 #
 # GET /h5/matches/{matchId}/events
 # operationId: Halo-5-Match-Events
-export def "h5-matches-events get-halo-5-match" [
+export def "halo-5-match-events" [
   match_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -375,7 +375,7 @@ export def "h5-matches-events get-halo-5-match" [
 #
 # GET /h5/player-leaderboards/csr/{seasonId}/{playlistId}
 # operationId: Halo-5-Leaderboard-Player-CSR
-export def "h5-player-leaderboards-csr get-halo-5" [
+export def "halo-5-leaderboard-player-csr" [
   season_id: string
   playlist_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -415,7 +415,7 @@ export def "h5-player-leaderboards-csr get-halo-5" [
 #
 # GET /h5/players/{player}/commendations
 # operationId: Halo-5-Player-Commendations
-export def "h5-players-commendations get-halo-5" [
+export def "halo-5-player-commendations" [
   player: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -451,7 +451,7 @@ export def "h5-players-commendations get-halo-5" [
 #
 # GET /h5/players/{player}/matches
 # operationId: Halo-5-Player-Match-History
-export def "h5-players-matches get-halo-5-match-history" [
+export def "halo-5-player-match-history" [
   player: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -492,7 +492,7 @@ export def "h5-players-matches get-halo-5-match-history" [
 #
 # GET /h5/servicerecords/arena
 # operationId: Halo-5-Player-Service-Records-Arena
-export def "h5-servicerecords-arena get-halo-5-player-service-records" [
+export def "halo-5-player-service-records-arena" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -529,7 +529,7 @@ export def "h5-servicerecords-arena get-halo-5-player-service-records" [
 #
 # GET /h5/servicerecords/campaign
 # operationId: Halo-5-Player-Service-Records-Campaign
-export def "h5-servicerecords-campaign get-halo-5-player-service-records" [
+export def "halo-5-player-service-records-campaign" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -565,7 +565,7 @@ export def "h5-servicerecords-campaign get-halo-5-player-service-records" [
 #
 # GET /h5/servicerecords/custom
 # operationId: Halo-5-Player-Service-Records-Custom
-export def "h5-servicerecords-custom get-halo-5-player-service-records" [
+export def "halo-5-player-service-records-custom" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -601,7 +601,7 @@ export def "h5-servicerecords-custom get-halo-5-player-service-records" [
 #
 # GET /h5/servicerecords/customlocal
 # operationId: Halo-5-Player-Service-Records-Custom-Local
-export def "h5-servicerecords-customlocal get-halo-5-player-service-records-custom-local" [
+export def "halo-5-player-service-records-custom-local" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -637,7 +637,7 @@ export def "h5-servicerecords-customlocal get-halo-5-player-service-records-cust
 #
 # GET /h5/servicerecords/warzone
 # operationId: Halo-5-Player-Service-Records-Warzone
-export def "h5-servicerecords-warzone get-halo-5-player-service-records" [
+export def "halo-5-player-service-records-warzone" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -673,7 +673,7 @@ export def "h5-servicerecords-warzone get-halo-5-player-service-records" [
 #
 # GET /h5/warzone/matches/{matchId}
 # operationId: Halo-5-Match-Result-Warzone
-export def "h5-warzone-matches get-halo-5-match-result" [
+export def "halo-5-match-result-warzone" [
   match_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -709,7 +709,7 @@ export def "h5-warzone-matches get-halo-5-match-result" [
 #
 # GET /h5pc/custom/matches/{matchId}
 # operationId: Halo-5-PC-Match-Result-Custom
-export def "h5pc-custom-matches get-halo-5-pc-match-result" [
+export def "halo-5-pc-match-result-custom" [
   match_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -745,7 +745,7 @@ export def "h5pc-custom-matches get-halo-5-pc-match-result" [
 #
 # GET /h5pc/players/{player}/matches
 # operationId: Halo-5-PC-Player-Match-History
-export def "h5pc-players-matches get-halo-5-pc-match-history" [
+export def "halo-5-pc-player-match-history" [
   player: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -786,7 +786,7 @@ export def "h5pc-players-matches get-halo-5-pc-match-history" [
 #
 # GET /h5pc/servicerecords/custom
 # operationId: Halo-5-PC-Player-Service-Records-Custom
-export def "h5pc-servicerecords-custom get-halo-5-pc-player-service-records" [
+export def "halo-5-pc-player-service-records-custom" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -822,7 +822,7 @@ export def "h5pc-servicerecords-custom get-halo-5-pc-player-service-records" [
 #
 # GET /hw2/matches/{matchId}
 # operationId: Halo-Wars-2-Match-Result
-export def "hw2-matches get-halo-wars-2-match-result" [
+export def "halo-wars-2-match-result" [
   match_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -858,7 +858,7 @@ export def "hw2-matches get-halo-wars-2-match-result" [
 #
 # GET /hw2/matches/{matchId}/events
 # operationId: Halo-Wars-2-Match-Events
-export def "hw2-matches-events get-halo-wars-2-match" [
+export def "halo-wars-2-match-events" [
   match_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -894,7 +894,7 @@ export def "hw2-matches-events get-halo-wars-2-match" [
 #
 # GET /hw2/player-leaderboards/csr/{seasonId}/{playlistId}
 # operationId: Halo-Wars-2-Leaderboard-Player-CSR
-export def "hw2-player-leaderboards-csr get-halo-wars-2" [
+export def "halo-wars-2-leaderboard-player-csr" [
   season_id: string
   playlist_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -934,7 +934,7 @@ export def "hw2-player-leaderboards-csr get-halo-wars-2" [
 #
 # GET /hw2/players/{player}/campaign-progress
 # operationId: Halo-Wars-2-Player-Campaign-Progress
-export def "hw2-players-campaign-progress get-halo-wars-2" [
+export def "halo-wars-2-player-campaign-progress" [
   player: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -970,7 +970,7 @@ export def "hw2-players-campaign-progress get-halo-wars-2" [
 #
 # GET /hw2/players/{player}/matches
 # operationId: Halo-Wars-2-Player-Match-History
-export def "hw2-players-matches get-halo-wars-2-match-history" [
+export def "halo-wars-2-player-match-history" [
   player: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1010,7 +1010,7 @@ export def "hw2-players-matches get-halo-wars-2-match-history" [
 #
 # GET /hw2/players/{player}/stats
 # operationId: Halo-Wars-2-Player-Stats-Summary
-export def "hw2-players-stats stats-halo-wars-2-summary" [
+export def "halo-wars-2-player-stats-summary" [
   player: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1046,7 +1046,7 @@ export def "hw2-players-stats stats-halo-wars-2-summary" [
 #
 # GET /hw2/players/{player}/stats/seasons/{seasonId}
 # operationId: Halo-Wars-2-Player-Season-Stats-Summary
-export def "hw2-players-stats-seasons stats-halo-wars-2-summary" [
+export def "halo-wars-2-player-season-stats-summary" [
   player: string
   season_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1084,7 +1084,7 @@ export def "hw2-players-stats-seasons stats-halo-wars-2-summary" [
 #
 # GET /hw2/playlist/{playlistId}/rating
 # operationId: Halo-Wars-2-Player-Playlist-Ratings
-export def "hw2-playlist-rating get-halo-wars-2-player" [
+export def "halo-wars-2-player-playlist-ratings" [
   playlist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1122,7 +1122,7 @@ export def "hw2-playlist-rating get-halo-wars-2-player" [
 #
 # GET /hw2/xp
 # operationId: Halo-Wars-2-Player-XPs
-export def "hw2-xp get-halo-wars-2-player-x-ps" [
+export def "halo-wars-2-player-x-ps" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

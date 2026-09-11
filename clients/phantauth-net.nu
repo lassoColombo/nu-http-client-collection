@@ -103,7 +103,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "client create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-client" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -126,7 +126,7 @@ export def commands []: nothing -> table {
 # Create a Client Selfie
 #
 # POST /client
-export def "client create" [
+export def "post-client" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -181,7 +181,7 @@ export def "client create" [
 # Get a Client
 #
 # GET /client/{client_id}
-export def "client get" [
+export def "get-client-client-id" [
   client_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -216,7 +216,7 @@ export def "client get" [
 # Get a Client Token
 #
 # GET /client/{client_id}/token/{kind}
-export def "client-token get" [
+export def "get-client-client-id-token-kind" [
   client_id: string
   kind: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -253,7 +253,7 @@ export def "client-token get" [
 # Get a Domain
 #
 # GET /domain/{domainname}
-export def "domain get" [
+export def "get-domain-domainname" [
   domainname: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -288,7 +288,7 @@ export def "domain get" [
 # Get a Fleet
 #
 # GET /fleet/{fleetname}
-export def "fleet get" [
+export def "get-fleet-fleetname" [
   fleetname: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -323,7 +323,7 @@ export def "fleet get" [
 # Get a Team
 #
 # GET /team/{teamname}
-export def "team get" [
+export def "get-team-teamname" [
   teamname: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -358,7 +358,7 @@ export def "team get" [
 # Get a Tenant
 #
 # GET /tenant/{tenantname}
-export def "tenant get" [
+export def "get-tenant-tenantname" [
   tenantname: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -394,7 +394,7 @@ export def "tenant get" [
 #
 # POST /user
 # --address shape: {country?: string, formatted?: string, locality?: string, postal_code?: string, region?: string, street_address?: string}
-export def "user create" [
+export def "post-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -455,7 +455,7 @@ export def "user create" [
 # Get a User
 #
 # GET /user/{username}
-export def "user get" [
+export def "get-user-username" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -490,7 +490,7 @@ export def "user get" [
 # Get a User Token
 #
 # GET /user/{username}/token/{kind}
-export def "user-token get" [
+export def "get-user-username-token-kind" [
   username: string
   kind: string
   --base-url(-b): string@base-url-completer # API base URL

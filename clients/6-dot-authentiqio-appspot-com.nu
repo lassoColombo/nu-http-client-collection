@@ -124,7 +124,7 @@ def accept-completer [] { ["application/json" "application/jwt"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "key delete-nosecret" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "key-revoke-nosecret" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -148,7 +148,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /key
 # operationId: key_revoke_nosecret
-export def "key delete-nosecret" [
+export def "key-revoke-nosecret" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -186,7 +186,7 @@ export def "key delete-nosecret" [
 #
 # POST /key
 # operationId: key_register
-export def "key create" [
+export def "key-register" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -224,7 +224,7 @@ export def "key create" [
 #
 # DELETE /key/{PK}
 # operationId: key_revoke
-export def "key delete" [
+export def "key-revoke" [
   pk: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -262,7 +262,7 @@ export def "key delete" [
 #
 # GET /key/{PK}
 # operationId: key_retrieve
-export def "key get" [
+export def "key-retrieve" [
   pk: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -297,7 +297,7 @@ export def "key get" [
 # HEAD info on Authentiq ID
 #
 # HEAD /key/{PK}
-export def "key head" [
+export def "head-key-pk" [
   pk: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -333,7 +333,7 @@ export def "key head" [
 #
 # POST /key/{PK}
 # operationId: key_update
-export def "key update" [
+export def "key-update" [
   pk: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -373,7 +373,7 @@ export def "key update" [
 #
 # PUT /key/{PK}
 # operationId: key_bind
-export def "key update-bind" [
+export def "key-bind" [
   pk: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -413,7 +413,7 @@ export def "key update-bind" [
 #
 # POST /login
 # operationId: push_login_request
-export def "login push-request" [
+export def "push-login-request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -453,7 +453,7 @@ export def "login push-request" [
 #
 # POST /scope
 # operationId: sign_request
-export def "scope request-sign" [
+export def "sign-request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -493,7 +493,7 @@ export def "scope request-sign" [
 #
 # DELETE /scope/{job}
 # operationId: sign_delete
-export def "scope delete-sign" [
+export def "sign-delete" [
   job: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -529,7 +529,7 @@ export def "scope delete-sign" [
 #
 # GET /scope/{job}
 # operationId: sign_retrieve
-export def "scope get-sign" [
+export def "sign-retrieve" [
   job: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -566,7 +566,7 @@ export def "scope get-sign" [
 #
 # HEAD /scope/{job}
 # operationId: sign_retrieve_head
-export def "scope get-sign-head" [
+export def "sign-retrieve-head" [
   job: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -602,7 +602,7 @@ export def "scope get-sign-head" [
 #
 # POST /scope/{job}
 # operationId: sign_confirm
-export def "scope confirm-sign" [
+export def "sign-confirm" [
   job: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -638,7 +638,7 @@ export def "scope confirm-sign" [
 #
 # PUT /scope/{job}
 # operationId: sign_update
-export def "scope update-sign" [
+export def "sign-update" [
   job: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

@@ -116,7 +116,7 @@ def occupancy-completer [] { ["Occupied" "Vacant"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "hotel-hotels list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "hotels-get-hotels" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/hotel/v0/hotels
 # operationId: Hotels_GetHotels
-export def "hotel-hotels list" [
+export def "hotels-get-hotels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -179,7 +179,7 @@ export def "hotel-hotels list" [
 #
 # GET /api/hotel/v0/hotels/{hotelId}
 # operationId: Hotels_GetHotel
-export def "hotel-hotels get" [
+export def "hotels-get-hotel" [
   hotel_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -220,7 +220,7 @@ export def "hotel-hotels get" [
 #
 # GET /api/hotel/v0/hotels/{hotelId}/codes
 # operationId: Codes_GetCodes
-export def "hotel-hotels-codes list" [
+export def "codes-get-codes" [
   hotel_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -264,7 +264,7 @@ export def "hotel-hotels-codes list" [
 #
 # GET /api/hotel/v0/hotels/{hotelId}/codes/{id}
 # operationId: Codes_GetCode
-export def "hotel-hotels-codes get" [
+export def "codes-get-code" [
   hotel_id: int
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -307,7 +307,7 @@ export def "hotel-hotels-codes get" [
 #
 # GET /api/hotel/v0/hotels/{hotelId}/rateplans
 # operationId: RatePlans_GetRateplans
-export def "hotel-hotels-rateplans list" [
+export def "rate-plans-get-rateplans" [
   hotel_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -361,7 +361,7 @@ export def "hotel-hotels-rateplans list" [
 #
 # GET /api/hotel/v0/hotels/{hotelId}/rateplans/$count
 # operationId: RatePlans_GetRateplansCount
-export def "hotel-hotels-rateplans-count get-rate-plans-count" [
+export def "rate-plans-get-rateplans-count" [
   hotel_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -412,7 +412,7 @@ export def "hotel-hotels-rateplans-count get-rate-plans-count" [
 #
 # PUT /api/hotel/v0/hotels/{hotelId}/rateplans/batch/$rates
 # operationId: RatePlans_BatchUpdateRates
-export def "hotel-hotels-rateplans-batch-rates update-rate-plans-rates" [
+export def "rate-plans-batch-update-rates" [
   hotel_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -457,7 +457,7 @@ export def "hotel-hotels-rateplans-batch-rates update-rate-plans-rates" [
 #
 # GET /api/hotel/v0/hotels/{hotelId}/rateplans/{rateplanCode}
 # operationId: RatePlans_GetRateplan
-export def "hotel-hotels-rateplans get-rate-plans" [
+export def "rate-plans-get-rateplan" [
   hotel_id: int
   rateplan_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -500,7 +500,7 @@ export def "hotel-hotels-rateplans get-rate-plans" [
 #
 # GET /api/hotel/v0/hotels/{hotelId}/rateplans/{rateplanCode}/rates
 # operationId: RatePlans_GetRates
-export def "hotel-hotels-rateplans-rates list" [
+export def "rate-plans-get-rates" [
   hotel_id: int
   rateplan_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -550,7 +550,7 @@ export def "hotel-hotels-rateplans-rates list" [
 #
 # PATCH /api/hotel/v0/hotels/{hotelId}/rateplans/{rateplanCode}/rates
 # operationId: RatePlans_PatchRates
-export def "hotel-hotels-rateplans-rates update-plans-by-hotel-id-rateplan-code" [
+export def "rate-plans-patch-rates" [
   hotel_id: int
   rateplan_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -600,7 +600,7 @@ export def "hotel-hotels-rateplans-rates update-plans-by-hotel-id-rateplan-code"
 #
 # GET /api/hotel/v0/hotels/{hotelId}/rateplans/{rateplanCode}/rates/$count
 # operationId: RatePlans_GetRatesCount
-export def "hotel-hotels-rateplans-rates-count get-plans-count" [
+export def "rate-plans-get-rates-count" [
   hotel_id: int
   rateplan_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -646,7 +646,7 @@ export def "hotel-hotels-rateplans-rates-count get-plans-count" [
 #
 # GET /api/hotel/v0/hotels/{hotelId}/rateplans/{rateplanCode}/rates/{businessDay}
 # operationId: RatePlans_GetRate
-export def "hotel-hotels-rateplans-rates get-plans" [
+export def "rate-plans-get-rate" [
   hotel_id: int
   rateplan_code: string
   business_day: string
@@ -691,7 +691,7 @@ export def "hotel-hotels-rateplans-rates get-plans" [
 #
 # PATCH /api/hotel/v0/hotels/{hotelId}/rateplans/{rateplanCode}/rates/{businessDay}
 # operationId: RatePlans_PatchRate
-export def "hotel-hotels-rateplans-rates update-plans-by-hotel-id-rateplan-code-business-day" [
+export def "rate-plans-patch-rate" [
   hotel_id: int
   rateplan_code: string
   business_day: string
@@ -740,7 +740,7 @@ export def "hotel-hotels-rateplans-rates update-plans-by-hotel-id-rateplan-code-
 #
 # GET /api/hotel/v0/hotels/{hotelId}/room_types
 # operationId: RoomTypes_GetRoomTypes
-export def "hotel-hotels-room-types list" [
+export def "room-types-get-room-types" [
   hotel_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -781,7 +781,7 @@ export def "hotel-hotels-room-types list" [
 #
 # GET /api/hotel/v0/hotels/{hotelId}/room_types/{code}
 # operationId: RoomTypes_GetRoomType
-export def "hotel-hotels-room-types get" [
+export def "room-types-get-room-type" [
   hotel_id: int
   code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -824,7 +824,7 @@ export def "hotel-hotels-room-types get" [
 #
 # GET /api/hotel/v0/hotels/{hotelId}/rooms
 # operationId: Rooms_GetRooms
-export def "hotel-hotels-rooms list" [
+export def "rooms-get-rooms" [
   hotel_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -876,7 +876,7 @@ export def "hotel-hotels-rooms list" [
 #
 # GET /api/hotel/v0/hotels/{hotelId}/rooms/$count
 # operationId: Rooms_GetRoomsCount
-export def "hotel-hotels-rooms-count get-count" [
+export def "rooms-get-rooms-count" [
   hotel_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -925,7 +925,7 @@ export def "hotel-hotels-rooms-count get-count" [
 #
 # GET /api/hotel/v0/hotels/{hotelId}/rooms/available
 # operationId: Rooms_GetAvailableRooms
-export def "hotel-hotels-rooms-available get" [
+export def "rooms-get-available-rooms" [
   hotel_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -978,7 +978,7 @@ export def "hotel-hotels-rooms-available get" [
 #
 # GET /api/hotel/v0/hotels/{hotelId}/rooms/{roomNumber}
 # operationId: Rooms_GetRoom
-export def "hotel-hotels-rooms get" [
+export def "rooms-get-room" [
   hotel_id: int
   room_number: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1021,7 +1021,7 @@ export def "hotel-hotels-rooms get" [
 #
 # PATCH /api/hotel/v0/hotels/{hotelId}/rooms/{roomNumber}
 # operationId: Rooms_PatchRoom
-export def "hotel-hotels-rooms update" [
+export def "rooms-patch-room" [
   hotel_id: int
   room_number: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1068,7 +1068,7 @@ export def "hotel-hotels-rooms update" [
 #
 # PUT /api/hotel/v0/hotels/{hotelId}/yieldable_rateplans/{rateplanCode}/$rates
 # operationId: YieldableRates_SavePrices
-export def "hotel-hotels-yieldable-rateplans-rates update-rates-save-prices" [
+export def "yieldable-rates-save-prices" [
   hotel_id: int
   rateplan_code: string
   --base-url(-b): string@base-url-completer # API base URL

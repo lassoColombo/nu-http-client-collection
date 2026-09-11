@@ -97,7 +97,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "application-new-id get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-application-new-id" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -120,7 +120,7 @@ export def commands []: nothing -> table {
 # Create a new WeGA ID
 #
 # GET /application/newID
-export def "application-new-id get" [
+export def "get-application-new-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -155,7 +155,7 @@ export def "application-new-id get" [
 # Get status information about the running WeGA-WebApp
 #
 # GET /application/status
-export def "application-status get" [
+export def "get-application-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -188,7 +188,7 @@ export def "application-status get" [
 # Finds code samples by XML element
 #
 # GET /code/findByElement/{element}
-export def "code-find-by-element get" [
+export def "get-code-find-by-element-element" [
   element: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -228,7 +228,7 @@ export def "code-find-by-element get" [
 # Lists all documents
 #
 # GET /documents
-export def "documents list" [
+export def "get-documents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -265,7 +265,7 @@ export def "documents list" [
 # Finds documents by author
 #
 # GET /documents/findByAuthor/{authorID}
-export def "documents-find-by-author get" [
+export def "get-documents-find-by-author-author-id" [
   author_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -304,7 +304,7 @@ export def "documents-find-by-author get" [
 # Finds documents by date
 #
 # GET /documents/findByDate
-export def "documents-find-by-date get" [
+export def "get-documents-find-by-date" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -343,7 +343,7 @@ export def "documents-find-by-date get" [
 # Finds documents by reference
 #
 # GET /documents/findByMention/{docID}
-export def "documents-find-by-mention get" [
+export def "get-documents-find-by-mention-doc-id" [
   doc_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -382,7 +382,7 @@ export def "documents-find-by-mention get" [
 # Returns documents by ID
 #
 # GET /documents/{docID}
-export def "documents get" [
+export def "get-documents-doc-id" [
   doc_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -417,7 +417,7 @@ export def "documents get" [
 # Returns facets
 #
 # GET /facets/{facet}
-export def "facets get" [
+export def "get-facets-facet" [
   facet: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -458,7 +458,7 @@ export def "facets get" [
 # Search for a WeGA entity
 #
 # GET /search/entity
-export def "search-entity get" [
+export def "get-search-entity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -157,7 +157,7 @@ def subscriber-type-completer [] { ["email" "web"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "behavior create-report" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "report-behavior" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -181,7 +181,7 @@ export def commands []: nothing -> table {
 #
 # POST /v1/behavior
 # operationId: reportBehavior
-export def "behavior create-report" [
+export def "report-behavior" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -229,7 +229,7 @@ export def "behavior create-report" [
 #
 # GET /v1/checks
 # operationId: listChecks
-export def "checks list" [
+export def "list-checks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -266,7 +266,7 @@ export def "checks list" [
 #
 # POST /v1/checks
 # operationId: createCheck
-export def "checks create" [
+export def "create-check" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -339,7 +339,7 @@ export def "checks create" [
 #
 # GET /v1/checks/health
 # operationId: GetHealthDashboard
-export def "checks-health get-dashboard" [
+export def "get-health-dashboard" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -377,7 +377,7 @@ export def "checks-health get-dashboard" [
 #
 # GET /v1/checks/{check_id}
 # operationId: getCheck
-export def "checks get" [
+export def "get-check" [
   check_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -413,7 +413,7 @@ export def "checks get" [
 #
 # GET /v1/checks/{check_id}/details
 # operationId: listCheckDetails
-export def "checks-details list" [
+export def "list-check-details" [
   check_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -452,7 +452,7 @@ export def "checks-details list" [
 #
 # GET /v1/checks/{check_id}/pdf
 # operationId: getPDF
-export def "checks-pdf get" [
+export def "get-pdf" [
   check_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -490,7 +490,7 @@ export def "checks-pdf get" [
 #
 # POST /v1/checks/{check_id}/pdf
 # operationId: CreatePDF
-export def "checks-pdf create" [
+export def "create-pdf" [
   check_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -526,7 +526,7 @@ export def "checks-pdf create" [
 #
 # DELETE /v1/config
 # operationId: DeleteCustomType
-export def "config delete-custom-type" [
+export def "delete-custom-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -563,7 +563,7 @@ export def "config delete-custom-type" [
 #
 # GET /v1/config
 # operationId: listScoreConfigs
-export def "config list-score" [
+export def "list-score-configs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -599,7 +599,7 @@ export def "config list-score" [
 #
 # POST /v1/config
 # operationId: createScoreConfig
-export def "config create-score" [
+export def "create-score-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -652,7 +652,7 @@ export def "config create-score" [
 #
 # PUT /v1/config
 # operationId: UpdateCustomType
-export def "config update-custom-type" [
+export def "update-custom-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -705,7 +705,7 @@ export def "config update-custom-type" [
 #
 # GET /v1/continuous-checks
 # operationId: ListContinuousChecks
-export def "continuous-checks list" [
+export def "list-continuous-checks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -739,7 +739,7 @@ export def "continuous-checks list" [
 #
 # POST /v1/continuous-checks
 # operationId: createContinuousCheck
-export def "continuous-checks create" [
+export def "create-continuous-check" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -780,7 +780,7 @@ export def "continuous-checks create" [
 #
 # GET /v1/continuous-checks/{continuous_check_id}
 # operationId: GetContinuousCheck
-export def "continuous-checks get" [
+export def "get-continuous-check" [
   continuous_check_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -816,7 +816,7 @@ export def "continuous-checks get" [
 #
 # PUT /v1/continuous-checks/{continuous_check_id}
 # operationId: UpdateContinuousCheck
-export def "continuous-checks update" [
+export def "update-continuous-check" [
   continuous_check_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -857,7 +857,7 @@ export def "continuous-checks update" [
 # Lists background check logs. It can be paginated
 #
 # GET /v1/continuous-checks/{continuous_check_id}/history
-export def "continuous-checks-history get" [
+export def "get-v1-continuous-checks-continuous-check-id-history" [
   continuous_check_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -893,7 +893,7 @@ export def "continuous-checks-history get" [
 #
 # GET /v1/hooks
 # operationId: listHook
-export def "hooks list" [
+export def "list-hook" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -927,7 +927,7 @@ export def "hooks list" [
 #
 # POST /v1/hooks
 # operationId: createHook
-export def "hooks create" [
+export def "create-hook" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -973,7 +973,7 @@ export def "hooks create" [
 #
 # DELETE /v1/hooks/{hook_id}
 # operationId: deletHook
-export def "hooks delete-delet" [
+export def "delet-hook" [
   hook_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1009,7 +1009,7 @@ export def "hooks delete-delet" [
 #
 # PUT /v1/hooks/{hook_id}
 # operationId: updateHook
-export def "hooks update" [
+export def "update-hook" [
   hook_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1057,7 +1057,7 @@ export def "hooks update" [
 #
 # GET /v1/reports
 # operationId: listReports
-export def "reports list" [
+export def "list-reports" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1094,7 +1094,7 @@ export def "reports list" [
 #
 # POST /v1/reports
 # operationId: createReport
-export def "reports create" [
+export def "create-report" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1133,7 +1133,7 @@ export def "reports create" [
 #
 # GET /v1/reports/{report_id}
 # operationId: getReport
-export def "reports get" [
+export def "get-report" [
   report_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1169,7 +1169,7 @@ export def "reports get" [
 #
 # POST /v1/reports/{report_id}/upload
 # operationId: batchUpload
-export def "reports-upload upload-batch" [
+export def "batch-upload" [
   report_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

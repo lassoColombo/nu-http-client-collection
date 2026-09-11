@@ -106,7 +106,7 @@ def event-type-completer [] { ["ACCOUNT_SECRET_CREATE" "ACCOUNT_SECRET_DELETE" "
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "events list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-events" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -130,7 +130,7 @@ export def commands []: nothing -> table {
 #
 # GET /events
 # operationId: getEvents
-export def "events list" [
+export def "get-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -171,7 +171,7 @@ export def "events list" [
 #
 # OPTIONS /events
 # operationId: getEventsOptions
-export def "events get-options" [
+export def "get-events-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -205,7 +205,7 @@ export def "events get-options" [
 #
 # GET /events/{id}
 # operationId: getEvent
-export def "events get" [
+export def "get-event" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

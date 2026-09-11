@@ -118,7 +118,7 @@ def vetting-provider-completer [] { ["campaign-verify"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "deactivations get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "fetch-deactivation" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -142,7 +142,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/Deactivations
 # operationId: FetchDeactivation
-export def "deactivations get" [
+export def "fetch-deactivation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -177,7 +177,7 @@ export def "deactivations get" [
 # DELETE /v1/LinkShortening/Domains/{DomainSid}/Certificate
 #
 # operationId: DeleteDomainCertV4
-export def "link-shortening-domains-certificate delete-cert" [
+export def "delete-domain-cert-v4" [
   domain_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -212,7 +212,7 @@ export def "link-shortening-domains-certificate delete-cert" [
 # GET /v1/LinkShortening/Domains/{DomainSid}/Certificate
 #
 # operationId: FetchDomainCertV4
-export def "link-shortening-domains-certificate get-cert" [
+export def "fetch-domain-cert-v4" [
   domain_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -247,7 +247,7 @@ export def "link-shortening-domains-certificate get-cert" [
 # POST /v1/LinkShortening/Domains/{DomainSid}/Certificate
 #
 # operationId: UpdateDomainCertV4
-export def "link-shortening-domains-certificate update-cert" [
+export def "update-domain-cert-v4" [
   domain_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -287,7 +287,7 @@ export def "link-shortening-domains-certificate update-cert" [
 # GET /v1/LinkShortening/Domains/{DomainSid}/Config
 #
 # operationId: FetchDomainConfig
-export def "link-shortening-domains-config get" [
+export def "fetch-domain-config" [
   domain_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -322,7 +322,7 @@ export def "link-shortening-domains-config get" [
 # POST /v1/LinkShortening/Domains/{DomainSid}/Config
 #
 # operationId: UpdateDomainConfig
-export def "link-shortening-domains-config update" [
+export def "update-domain-config" [
   domain_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -363,7 +363,7 @@ export def "link-shortening-domains-config update" [
 # DELETE /v1/LinkShortening/Domains/{DomainSid}/MessagingServices/{MessagingServiceSid}
 #
 # operationId: DeleteLinkshorteningMessagingService
-export def "link-shortening-domains-messaging-services delete-linkshortening" [
+export def "delete-linkshortening-messaging-service" [
   domain_sid: string
   messaging_service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -400,7 +400,7 @@ export def "link-shortening-domains-messaging-services delete-linkshortening" [
 # POST /v1/LinkShortening/Domains/{DomainSid}/MessagingServices/{MessagingServiceSid}
 #
 # operationId: CreateLinkshorteningMessagingService
-export def "link-shortening-domains-messaging-services create-linkshortening" [
+export def "create-linkshortening-messaging-service" [
   domain_sid: string
   messaging_service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -437,7 +437,7 @@ export def "link-shortening-domains-messaging-services create-linkshortening" [
 # GET /v1/LinkShortening/MessagingService/{MessagingServiceSid}/DomainConfig
 #
 # operationId: FetchDomainConfigMessagingService
-export def "link-shortening-messaging-service-domain-config get" [
+export def "fetch-domain-config-messaging-service" [
   messaging_service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -472,7 +472,7 @@ export def "link-shortening-messaging-service-domain-config get" [
 # GET /v1/Services
 #
 # operationId: ListService
-export def "services list" [
+export def "list-service" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -509,7 +509,7 @@ export def "services list" [
 # POST /v1/Services
 #
 # operationId: CreateService
-export def "services create" [
+export def "create-service" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -562,7 +562,7 @@ export def "services create" [
 # POST /v1/Services/PreregisteredUsa2p
 #
 # operationId: CreateExternalCampaign
-export def "services-preregistered-usa2p create-external-campaign" [
+export def "create-external-campaign" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -601,7 +601,7 @@ export def "services-preregistered-usa2p create-external-campaign" [
 # GET /v1/Services/Usecases
 #
 # operationId: FetchUsecase
-export def "services-usecases get" [
+export def "fetch-usecase" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -634,7 +634,7 @@ export def "services-usecases get" [
 # GET /v1/Services/{MessagingServiceSid}/Compliance/Usa2p
 #
 # operationId: ListUsAppToPerson
-export def "services-compliance-usa2p list-us-app-to-person" [
+export def "list-us-app-to-person" [
   messaging_service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -673,7 +673,7 @@ export def "services-compliance-usa2p list-us-app-to-person" [
 # POST /v1/Services/{MessagingServiceSid}/Compliance/Usa2p
 #
 # operationId: CreateUsAppToPerson
-export def "services-compliance-usa2p create-us-app-to-person" [
+export def "create-us-app-to-person" [
   messaging_service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -725,7 +725,7 @@ export def "services-compliance-usa2p create-us-app-to-person" [
 # GET /v1/Services/{MessagingServiceSid}/Compliance/Usa2p/Usecases
 #
 # operationId: FetchUsAppToPersonUsecase
-export def "services-compliance-usa2p-usecases get-us-app-to-person" [
+export def "fetch-us-app-to-person-usecase" [
   messaging_service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -762,7 +762,7 @@ export def "services-compliance-usa2p-usecases get-us-app-to-person" [
 # DELETE /v1/Services/{MessagingServiceSid}/Compliance/Usa2p/{Sid}
 #
 # operationId: DeleteUsAppToPerson
-export def "services-compliance-usa2p delete-us-app-to-person" [
+export def "delete-us-app-to-person" [
   messaging_service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -799,7 +799,7 @@ export def "services-compliance-usa2p delete-us-app-to-person" [
 # GET /v1/Services/{MessagingServiceSid}/Compliance/Usa2p/{Sid}
 #
 # operationId: FetchUsAppToPerson
-export def "services-compliance-usa2p get-us-app-to-person" [
+export def "fetch-us-app-to-person" [
   messaging_service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -836,7 +836,7 @@ export def "services-compliance-usa2p get-us-app-to-person" [
 # GET /v1/Services/{ServiceSid}/AlphaSenders
 #
 # operationId: ListAlphaSender
-export def "services-alpha-senders list" [
+export def "list-alpha-sender" [
   service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -875,7 +875,7 @@ export def "services-alpha-senders list" [
 # POST /v1/Services/{ServiceSid}/AlphaSenders
 #
 # operationId: CreateAlphaSender
-export def "services-alpha-senders create" [
+export def "create-alpha-sender" [
   service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -915,7 +915,7 @@ export def "services-alpha-senders create" [
 # DELETE /v1/Services/{ServiceSid}/AlphaSenders/{Sid}
 #
 # operationId: DeleteAlphaSender
-export def "services-alpha-senders delete" [
+export def "delete-alpha-sender" [
   service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -952,7 +952,7 @@ export def "services-alpha-senders delete" [
 # GET /v1/Services/{ServiceSid}/AlphaSenders/{Sid}
 #
 # operationId: FetchAlphaSender
-export def "services-alpha-senders get" [
+export def "fetch-alpha-sender" [
   service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -989,7 +989,7 @@ export def "services-alpha-senders get" [
 # GET /v1/Services/{ServiceSid}/PhoneNumbers
 #
 # operationId: ListPhoneNumber
-export def "services-phone-numbers list" [
+export def "list-phone-number" [
   service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1028,7 +1028,7 @@ export def "services-phone-numbers list" [
 # POST /v1/Services/{ServiceSid}/PhoneNumbers
 #
 # operationId: CreatePhoneNumber
-export def "services-phone-numbers create" [
+export def "create-phone-number" [
   service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1068,7 +1068,7 @@ export def "services-phone-numbers create" [
 # DELETE /v1/Services/{ServiceSid}/PhoneNumbers/{Sid}
 #
 # operationId: DeletePhoneNumber
-export def "services-phone-numbers delete" [
+export def "delete-phone-number" [
   service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1105,7 +1105,7 @@ export def "services-phone-numbers delete" [
 # GET /v1/Services/{ServiceSid}/PhoneNumbers/{Sid}
 #
 # operationId: FetchPhoneNumber
-export def "services-phone-numbers get" [
+export def "fetch-phone-number" [
   service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1142,7 +1142,7 @@ export def "services-phone-numbers get" [
 # GET /v1/Services/{ServiceSid}/ShortCodes
 #
 # operationId: ListShortCode
-export def "services-short-codes list" [
+export def "list-short-code" [
   service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1181,7 +1181,7 @@ export def "services-short-codes list" [
 # POST /v1/Services/{ServiceSid}/ShortCodes
 #
 # operationId: CreateShortCode
-export def "services-short-codes create" [
+export def "create-short-code" [
   service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1221,7 +1221,7 @@ export def "services-short-codes create" [
 # DELETE /v1/Services/{ServiceSid}/ShortCodes/{Sid}
 #
 # operationId: DeleteShortCode
-export def "services-short-codes delete" [
+export def "delete-short-code" [
   service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1258,7 +1258,7 @@ export def "services-short-codes delete" [
 # GET /v1/Services/{ServiceSid}/ShortCodes/{Sid}
 #
 # operationId: FetchShortCode
-export def "services-short-codes get" [
+export def "fetch-short-code" [
   service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1295,7 +1295,7 @@ export def "services-short-codes get" [
 # DELETE /v1/Services/{Sid}
 #
 # operationId: DeleteService
-export def "services delete" [
+export def "delete-service" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1330,7 +1330,7 @@ export def "services delete" [
 # GET /v1/Services/{Sid}
 #
 # operationId: FetchService
-export def "services get" [
+export def "fetch-service" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1365,7 +1365,7 @@ export def "services get" [
 # POST /v1/Services/{Sid}
 #
 # operationId: UpdateService
-export def "services update" [
+export def "update-service" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1420,7 +1420,7 @@ export def "services update" [
 # GET /v1/Tollfree/Verifications
 #
 # operationId: ListTollfreeVerification
-export def "tollfree-verifications list" [
+export def "list-tollfree-verification" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1459,7 +1459,7 @@ export def "tollfree-verifications list" [
 # POST /v1/Tollfree/Verifications
 #
 # operationId: CreateTollfreeVerification
-export def "tollfree-verifications create" [
+export def "create-tollfree-verification" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1519,7 +1519,7 @@ export def "tollfree-verifications create" [
 # GET /v1/Tollfree/Verifications/{Sid}
 #
 # operationId: FetchTollfreeVerification
-export def "tollfree-verifications get" [
+export def "fetch-tollfree-verification" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1554,7 +1554,7 @@ export def "tollfree-verifications get" [
 # POST /v1/Tollfree/Verifications/{Sid}
 #
 # operationId: UpdateTollfreeVerification
-export def "tollfree-verifications update" [
+export def "update-tollfree-verification" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1613,7 +1613,7 @@ export def "tollfree-verifications update" [
 # GET /v1/a2p/BrandRegistrations
 #
 # operationId: ListBrandRegistrations
-export def "a2p-brand-registrations list" [
+export def "list-brand-registrations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1650,7 +1650,7 @@ export def "a2p-brand-registrations list" [
 # POST /v1/a2p/BrandRegistrations
 #
 # operationId: CreateBrandRegistrations
-export def "a2p-brand-registrations create" [
+export def "create-brand-registrations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1692,7 +1692,7 @@ export def "a2p-brand-registrations create" [
 # POST /v1/a2p/BrandRegistrations/{BrandRegistrationSid}/SmsOtp
 #
 # operationId: CreateBrandRegistrationOtp
-export def "a2p-brand-registrations-sms-otp create" [
+export def "create-brand-registration-otp" [
   brand_registration_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1727,7 +1727,7 @@ export def "a2p-brand-registrations-sms-otp create" [
 # GET /v1/a2p/BrandRegistrations/{BrandSid}/Vettings
 #
 # operationId: ListBrandVetting
-export def "a2p-brand-registrations-vettings list" [
+export def "list-brand-vetting" [
   brand_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1767,7 +1767,7 @@ export def "a2p-brand-registrations-vettings list" [
 # POST /v1/a2p/BrandRegistrations/{BrandSid}/Vettings
 #
 # operationId: CreateBrandVetting
-export def "a2p-brand-registrations-vettings create" [
+export def "create-brand-vetting" [
   brand_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1808,7 +1808,7 @@ export def "a2p-brand-registrations-vettings create" [
 # GET /v1/a2p/BrandRegistrations/{BrandSid}/Vettings/{BrandVettingSid}
 #
 # operationId: FetchBrandVetting
-export def "a2p-brand-registrations-vettings get" [
+export def "fetch-brand-vetting" [
   brand_sid: string
   brand_vetting_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1845,7 +1845,7 @@ export def "a2p-brand-registrations-vettings get" [
 # GET /v1/a2p/BrandRegistrations/{Sid}
 #
 # operationId: FetchBrandRegistrations
-export def "a2p-brand-registrations get" [
+export def "fetch-brand-registrations" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1880,7 +1880,7 @@ export def "a2p-brand-registrations get" [
 # POST /v1/a2p/BrandRegistrations/{Sid}
 #
 # operationId: UpdateBrandRegistrations
-export def "a2p-brand-registrations update" [
+export def "update-brand-registrations" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

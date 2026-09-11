@@ -115,7 +115,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "admin-mappings delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "delete-admin-mappings" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -138,7 +138,7 @@ export def commands []: nothing -> table {
 # Delete all stub mappings
 #
 # DELETE /__admin/mappings
-export def "admin-mappings delete" [
+export def "delete-admin-mappings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -171,7 +171,7 @@ export def "admin-mappings delete" [
 # Get all stub mappings
 #
 # GET /__admin/mappings
-export def "admin-mappings list" [
+export def "get-admin-mappings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -208,7 +208,7 @@ export def "admin-mappings list" [
 #
 # POST /__admin/mappings
 # --request shape: {basicAuthCredentials?: record, bodyPatterns?: list, cookies?: record, headers?: record, method?: string, queryParameters?: record, url?: string, urlPath?: string, urlPathPattern?: string, urlPattern?: string}
-export def "admin-mappings create" [
+export def "post-admin-mappings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -256,7 +256,7 @@ export def "admin-mappings create" [
 # Find stubs by matching on their metadata
 #
 # POST /__admin/mappings/find-by-metadata
-export def "admin-mappings-find-by-metadata create" [
+export def "post-admin-mappings-find-by-metadata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -305,7 +305,7 @@ export def "admin-mappings-find-by-metadata create" [
 # Import stub mappings
 #
 # POST /__admin/mappings/import
-export def "admin-mappings-import create" [
+export def "post-admin-mappings-import" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -338,7 +338,7 @@ export def "admin-mappings-import create" [
 # Delete stub mappings matching metadata
 #
 # POST /__admin/mappings/remove-by-metadata
-export def "admin-mappings-remove-by-metadata create" [
+export def "post-admin-mappings-remove-by-metadata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -387,7 +387,7 @@ export def "admin-mappings-remove-by-metadata create" [
 # Reset stub mappings
 #
 # POST /__admin/mappings/reset
-export def "admin-mappings-reset create" [
+export def "post-admin-mappings-reset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -420,7 +420,7 @@ export def "admin-mappings-reset create" [
 # Persist stub mappings
 #
 # POST /__admin/mappings/save
-export def "admin-mappings-save create" [
+export def "post-admin-mappings-save" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -453,7 +453,7 @@ export def "admin-mappings-save create" [
 # Delete a stub mapping
 #
 # DELETE /__admin/mappings/{stubMappingId}
-export def "admin-mappings delete-by-stub-mapping-id" [
+export def "delete-admin-mappings-stub-mapping-id" [
   stub_mapping_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -488,7 +488,7 @@ export def "admin-mappings delete-by-stub-mapping-id" [
 # Get stub mapping by ID
 #
 # GET /__admin/mappings/{stubMappingId}
-export def "admin-mappings get" [
+export def "get-admin-mappings-stub-mapping-id" [
   stub_mapping_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -524,7 +524,7 @@ export def "admin-mappings get" [
 #
 # PUT /__admin/mappings/{stubMappingId}
 # --request shape: {basicAuthCredentials?: record, bodyPatterns?: list, cookies?: record, headers?: record, method?: string, queryParameters?: record, url?: string, urlPath?: string, urlPathPattern?: string, urlPattern?: string}
-export def "admin-mappings update" [
+export def "put-admin-mappings-stub-mapping-id" [
   stub_mapping_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -574,7 +574,7 @@ export def "admin-mappings update" [
 # Find near misses matching specific request
 #
 # POST /__admin/near-misses/request
-export def "admin-near-misses-request create" [
+export def "post-admin-near-misses-request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -617,7 +617,7 @@ export def "admin-near-misses-request create" [
 #
 # POST /__admin/near-misses/request-pattern
 # --basicAuthCredentials shape: {password: string, username: string}
-export def "admin-near-misses-request-pattern create" [
+export def "post-admin-near-misses-request-pattern" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -666,7 +666,7 @@ export def "admin-near-misses-request-pattern create" [
 # --extractBodyCriteria shape: {binarySizeThreshold?: string, textSizeThreshold?: string}
 # --requestBodyPattern shape: {caseInsensitive?: bool, ignoreArrayOrder?: bool, ignoreExtraElements?: bool, matcher?: "auto"}
 # --filters shape: {ids?: list<string>, basicAuthCredentials?: record, bodyPatterns?: list, cookies?: record, headers?: record, method?: string, queryParameters?: record, url?: string, urlPath?: string, urlPathPattern?: string, urlPattern?: string}
-export def "admin-recordings-snapshot create" [
+export def "post-admin-recordings-snapshot" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -712,7 +712,7 @@ export def "admin-recordings-snapshot create" [
 # POST /__admin/recordings/start
 # --extractBodyCriteria shape: {binarySizeThreshold?: string, textSizeThreshold?: string}
 # --requestBodyPattern shape: {caseInsensitive?: bool, ignoreArrayOrder?: bool, ignoreExtraElements?: bool, matcher?: "auto"}
-export def "admin-recordings-start create" [
+export def "post-admin-recordings-start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -757,7 +757,7 @@ export def "admin-recordings-start create" [
 # Get recording status
 #
 # GET /__admin/recordings/status
-export def "admin-recordings-status get" [
+export def "get-admin-recordings-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -790,7 +790,7 @@ export def "admin-recordings-status get" [
 # Stop recording
 #
 # POST /__admin/recordings/stop
-export def "admin-recordings-stop create" [
+export def "post-admin-recordings-stop" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -823,7 +823,7 @@ export def "admin-recordings-stop create" [
 # Delete all requests in journal
 #
 # DELETE /__admin/requests
-export def "admin-requests delete" [
+export def "delete-admin-requests" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -856,7 +856,7 @@ export def "admin-requests delete" [
 # Get all requests in journal
 #
 # GET /__admin/requests
-export def "admin-requests list" [
+export def "get-admin-requests" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -893,7 +893,7 @@ export def "admin-requests list" [
 #
 # POST /__admin/requests/count
 # --basicAuthCredentials shape: {password: string, username: string}
-export def "admin-requests-count create" [
+export def "post-admin-requests-count" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -940,7 +940,7 @@ export def "admin-requests-count create" [
 #
 # POST /__admin/requests/find
 # --basicAuthCredentials shape: {password: string, username: string}
-export def "admin-requests-find create" [
+export def "post-admin-requests-find" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -987,7 +987,7 @@ export def "admin-requests-find create" [
 #
 # POST /__admin/requests/remove
 # --basicAuthCredentials shape: {password: string, username: string}
-export def "admin-requests-remove create" [
+export def "post-admin-requests-remove" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1033,7 +1033,7 @@ export def "admin-requests-remove create" [
 # Delete requests mappings matching metadata
 #
 # POST /__admin/requests/remove-by-metadata
-export def "admin-requests-remove-by-metadata create" [
+export def "post-admin-requests-remove-by-metadata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1084,7 +1084,7 @@ export def "admin-requests-remove-by-metadata create" [
 # POST /__admin/requests/reset
 # DEPRECATED
 @deprecated
-export def "admin-requests-reset create" [
+export def "post-admin-requests-reset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1117,7 +1117,7 @@ export def "admin-requests-reset create" [
 # Find unmatched requests
 #
 # GET /__admin/requests/unmatched
-export def "admin-requests-unmatched get" [
+export def "get-admin-requests-unmatched" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1150,7 +1150,7 @@ export def "admin-requests-unmatched get" [
 # Retrieve near-misses for all unmatched requests
 #
 # GET /__admin/requests/unmatched/near-misses
-export def "admin-requests-unmatched-near-misses get" [
+export def "get-admin-requests-unmatched-near-misses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1183,7 +1183,7 @@ export def "admin-requests-unmatched-near-misses get" [
 # Delete request by ID
 #
 # DELETE /__admin/requests/{requestId}
-export def "admin-requests delete-by-request-id" [
+export def "delete-admin-requests-request-id" [
   request_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1218,7 +1218,7 @@ export def "admin-requests delete-by-request-id" [
 # Get request by ID
 #
 # GET /__admin/requests/{requestId}
-export def "admin-requests get" [
+export def "get-admin-requests-request-id" [
   request_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1253,7 +1253,7 @@ export def "admin-requests get" [
 # Reset mappings and request journal
 #
 # POST /__admin/reset
-export def "admin-reset create" [
+export def "post-admin-reset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1286,7 +1286,7 @@ export def "admin-reset create" [
 # Get all scenarios
 #
 # GET /__admin/scenarios
-export def "admin-scenarios get" [
+export def "get-admin-scenarios" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1319,7 +1319,7 @@ export def "admin-scenarios get" [
 # Reset the state of all scenarios
 #
 # POST /__admin/scenarios/reset
-export def "admin-scenarios-reset create" [
+export def "post-admin-scenarios-reset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1352,7 +1352,7 @@ export def "admin-scenarios-reset create" [
 # Update global settings
 #
 # POST /__admin/settings
-export def "admin-settings create" [
+export def "post-admin-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1389,7 +1389,7 @@ export def "admin-settings create" [
 # Shutdown the WireMock server
 #
 # POST /__admin/shutdown
-export def "admin-shutdown create" [
+export def "post-admin-shutdown" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

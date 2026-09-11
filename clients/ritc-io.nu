@@ -124,7 +124,7 @@ def type-completer-1 [] { ["admin" "guest"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "actions list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-actions" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -148,7 +148,7 @@ export def commands []: nothing -> table {
 #
 # GET /actions
 # operationId: listActions
-export def "actions list" [
+export def "list-actions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -182,7 +182,7 @@ export def "actions list" [
 #
 # POST /actions
 # operationId: addAction
-export def "actions create" [
+export def "add-action" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -225,7 +225,7 @@ export def "actions create" [
 #
 # DELETE /actions/{action_id}
 # operationId: removeAction
-export def "actions delete" [
+export def "remove-action" [
   action_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -261,7 +261,7 @@ export def "actions delete" [
 #
 # GET /actions/{action_id}
 # operationId: getAction
-export def "actions get" [
+export def "get-action" [
   action_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -297,7 +297,7 @@ export def "actions get" [
 #
 # PATCH /actions/{action_id}
 # operationId: updateAction
-export def "actions update" [
+export def "update-action" [
   action_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -342,7 +342,7 @@ export def "actions update" [
 #
 # GET /admin
 # operationId: admin
-export def "admin get" [
+export def "admin" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -376,7 +376,7 @@ export def "admin get" [
 #
 # POST /admin/log
 # operationId: logInRitc
-export def "admin-log create-in-ritc" [
+export def "log-in-ritc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -414,7 +414,7 @@ export def "admin-log create-in-ritc" [
 #
 # GET /admin/ping
 # operationId: pingRitc
-export def "admin-ping ping-ritc" [
+export def "ping-ritc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -448,7 +448,7 @@ export def "admin-ping ping-ritc" [
 #
 # GET /apps
 # operationId: listApps
-export def "apps list" [
+export def "list-apps" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -482,7 +482,7 @@ export def "apps list" [
 #
 # POST /apps
 # operationId: addApp
-export def "apps create" [
+export def "add-app" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -521,7 +521,7 @@ export def "apps create" [
 #
 # GET /apps/channels/users
 # operationId: listAppChannels
-export def "apps-channels-users list" [
+export def "list-app-channels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -555,7 +555,7 @@ export def "apps-channels-users list" [
 #
 # GET /apps/channels/{channel_id}/users
 # operationId: listAppChannelUsers
-export def "apps-channels-users list-1" [
+export def "list-app-channel-users" [
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -591,7 +591,7 @@ export def "apps-channels-users list-1" [
 #
 # GET /apps/channels/{channel_id}/users/{user_id}
 # operationId: getAppChannelUser
-export def "apps-channels-users get" [
+export def "get-app-channel-user" [
   channel_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -629,7 +629,7 @@ export def "apps-channels-users get" [
 #
 # POST /apps/channels/{channel_id}/users/{user_id}
 # operationId: addAppChannelUser
-export def "apps-channels-users create" [
+export def "add-app-channel-user" [
   channel_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -667,7 +667,7 @@ export def "apps-channels-users create" [
 #
 # GET /apps/ext/api/credentials
 # operationId: listChannelExternalCredentials
-export def "apps-ext-credentials list-channel-external" [
+export def "list-channel-external-credentials" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -701,7 +701,7 @@ export def "apps-ext-credentials list-channel-external" [
 #
 # POST /apps/ext/api/credentials
 # operationId: addChannelExternalCredentials
-export def "apps-ext-credentials create-channel-external" [
+export def "add-channel-external-credentials" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -742,7 +742,7 @@ export def "apps-ext-credentials create-channel-external" [
 #
 # DELETE /apps/ext/api/credentials/{channel_id}
 # operationId: removeChannelExternalCredentials
-export def "apps-ext-credentials delete-external" [
+export def "remove-channel-external-credentials" [
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -778,7 +778,7 @@ export def "apps-ext-credentials delete-external" [
 #
 # GET /apps/ext/api/credentials/{channel_id}
 # operationId: getChannelExternalCredentials
-export def "apps-ext-credentials get-external" [
+export def "get-channel-external-credentials" [
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -814,7 +814,7 @@ export def "apps-ext-credentials get-external" [
 #
 # PATCH /apps/ext/api/credentials/{channel_id}
 # operationId: updateChannelExternalCredentials
-export def "apps-ext-credentials update-external" [
+export def "update-channel-external-credentials" [
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -857,7 +857,7 @@ export def "apps-ext-credentials update-external" [
 #
 # POST /apps/rulegroup/run/{rule_id_list}
 # operationId: runRuleGroup
-export def "apps-rulegroup-run create-group" [
+export def "run-rule-group" [
   rule_id_list: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -899,7 +899,7 @@ export def "apps-rulegroup-run create-group" [
 #
 # POST /apps/rules/run
 # operationId: runApp
-export def "apps-rules-run create" [
+export def "run-app" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -939,7 +939,7 @@ export def "apps-rules-run create" [
 #
 # DELETE /apps/{app_id}
 # operationId: removeApp
-export def "apps delete" [
+export def "remove-app" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -975,7 +975,7 @@ export def "apps delete" [
 #
 # GET /apps/{app_id}
 # operationId: getApp
-export def "apps get" [
+export def "get-app" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1011,7 +1011,7 @@ export def "apps get" [
 #
 # PATCH /apps/{app_id}
 # operationId: updateApp
-export def "apps update" [
+export def "update-app" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1052,7 +1052,7 @@ export def "apps update" [
 #
 # GET /channels
 # operationId: listChannels
-export def "channels list" [
+export def "list-channels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1087,7 +1087,7 @@ export def "channels list" [
 # POST /channels
 # operationId: addChannel
 # --functions item shape: {id?: string, name?: string, parameters?: list, type?: "action"|"trigger"}
-export def "channels create" [
+export def "add-channel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1129,7 +1129,7 @@ export def "channels create" [
 #
 # GET /channels/anonymous
 # operationId: listAnonymousChannels
-export def "channels-anonymous list" [
+export def "list-anonymous-channels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1163,7 +1163,7 @@ export def "channels-anonymous list" [
 #
 # DELETE /channels/{channel_id}
 # operationId: removeChannel
-export def "channels delete" [
+export def "remove-channel" [
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1199,7 +1199,7 @@ export def "channels delete" [
 #
 # GET /channels/{channel_id}
 # operationId: getChannel
-export def "channels get" [
+export def "get-channel" [
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1235,7 +1235,7 @@ export def "channels get" [
 #
 # PATCH /channels/{channel_id}
 # operationId: updateChannel
-export def "channels update" [
+export def "update-channel" [
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1279,7 +1279,7 @@ export def "channels update" [
 #
 # GET /channels/{channel_id}/functions
 # operationId: listChannelFunctions
-export def "channels-functions list" [
+export def "list-channel-functions" [
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1316,7 +1316,7 @@ export def "channels-functions list" [
 # POST /channels/{channel_id}/functions
 # operationId: addChannelFunction
 # --requestParameters item shape: {description?: string, fieldType?: string, label?: string, name?: string, schema?: record}
-export def "channels-functions create" [
+export def "add-channel-function" [
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1363,7 +1363,7 @@ export def "channels-functions create" [
 #
 # GET /channels/{channel_id}/functions/{function_id}
 # operationId: getChannelFunction
-export def "channels-functions get" [
+export def "get-channel-function" [
   channel_id: string
   function_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1401,7 +1401,7 @@ export def "channels-functions get" [
 #
 # POST /orgs
 # operationId: addOrganization
-export def "orgs create-organization" [
+export def "add-organization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1441,7 +1441,7 @@ export def "orgs create-organization" [
 #
 # GET /orgs/me
 # operationId: getMyOrganization
-export def "orgs-me get-my-organization" [
+export def "get-my-organization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1475,7 +1475,7 @@ export def "orgs-me get-my-organization" [
 #
 # GET /rules
 # operationId: listRules
-export def "rules list" [
+export def "list-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1509,7 +1509,7 @@ export def "rules list" [
 #
 # POST /rules
 # operationId: addRule
-export def "rules create" [
+export def "add-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1551,7 +1551,7 @@ export def "rules create" [
 #
 # DELETE /rules/{rule_id}
 # operationId: removeRule
-export def "rules delete" [
+export def "remove-rule" [
   rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1587,7 +1587,7 @@ export def "rules delete" [
 #
 # GET /rules/{rule_id}
 # operationId: getRule
-export def "rules get" [
+export def "get-rule" [
   rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1623,7 +1623,7 @@ export def "rules get" [
 #
 # PATCH /rules/{rule_id}
 # operationId: updateRule
-export def "rules update" [
+export def "update-rule" [
   rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1667,7 +1667,7 @@ export def "rules update" [
 #
 # POST /rules/{rule_id}/run
 # operationId: runRule
-export def "rules-run create" [
+export def "run-rule" [
   rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1707,7 +1707,7 @@ export def "rules-run create" [
 #
 # GET /triggers
 # operationId: listTriggers
-export def "triggers list" [
+export def "list-triggers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1741,7 +1741,7 @@ export def "triggers list" [
 #
 # POST /triggers
 # operationId: addTrigger
-export def "triggers create" [
+export def "add-trigger" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1784,7 +1784,7 @@ export def "triggers create" [
 #
 # DELETE /triggers/{trigger_id}
 # operationId: removeTrigger
-export def "triggers delete" [
+export def "remove-trigger" [
   trigger_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1820,7 +1820,7 @@ export def "triggers delete" [
 #
 # GET /triggers/{trigger_id}
 # operationId: getTrigger
-export def "triggers get" [
+export def "get-trigger" [
   trigger_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1856,7 +1856,7 @@ export def "triggers get" [
 #
 # PATCH /triggers/{trigger_id}
 # operationId: updateTrigger
-export def "triggers update" [
+export def "update-trigger" [
   trigger_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1901,7 +1901,7 @@ export def "triggers update" [
 #
 # GET /users
 # operationId: listAppUsers
-export def "users list-app" [
+export def "list-app-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1935,7 +1935,7 @@ export def "users list-app" [
 #
 # POST /users
 # operationId: addAppUser
-export def "users create-app" [
+export def "add-app-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1975,7 +1975,7 @@ export def "users create-app" [
 #
 # GET /users/admin
 # operationId: listAdminUsers
-export def "users-admin list" [
+export def "list-admin-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2009,7 +2009,7 @@ export def "users-admin list" [
 #
 # POST /users/admin
 # operationId: addAdminUser
-export def "users-admin create" [
+export def "add-admin-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2049,7 +2049,7 @@ export def "users-admin create" [
 #
 # DELETE /users/admin/{user_id}
 # operationId: removeAdminUser
-export def "users-admin delete" [
+export def "remove-admin-user" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2085,7 +2085,7 @@ export def "users-admin delete" [
 #
 # GET /users/admin/{user_id}
 # operationId: getAdminUser
-export def "users-admin get" [
+export def "get-admin-user" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2121,7 +2121,7 @@ export def "users-admin get" [
 #
 # PATCH /users/admin/{user_id}
 # operationId: updateAdminUser
-export def "users-admin update" [
+export def "update-admin-user" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2163,7 +2163,7 @@ export def "users-admin update" [
 #
 # POST /users/authenticate/{user_id}/channel/{channel_id}
 # operationId: authenticateAppUserForChannel
-export def "users-authenticate-channel create-app" [
+export def "authenticate-app-user-for-channel" [
   user_id: string
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2201,7 +2201,7 @@ export def "users-authenticate-channel create-app" [
 #
 # DELETE /users/{user_id}
 # operationId: removeAppUser
-export def "users delete-app" [
+export def "remove-app-user" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2237,7 +2237,7 @@ export def "users delete-app" [
 #
 # GET /users/{user_id}
 # operationId: getAppUser
-export def "users get-app" [
+export def "get-app-user" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2273,7 +2273,7 @@ export def "users get-app" [
 #
 # PATCH /users/{user_id}
 # operationId: updateAppUser
-export def "users update-app" [
+export def "update-app-user" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2315,7 +2315,7 @@ export def "users update-app" [
 #
 # GET /users/{user_id}/channels
 # operationId: listAppUserChannels
-export def "users-channels list-app" [
+export def "list-app-user-channels" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2351,7 +2351,7 @@ export def "users-channels list-app" [
 #
 # POST /users/{user_id}/channels
 # operationId: addAppUserToChannel
-export def "users-channels create-app" [
+export def "add-app-user-to-channel" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2391,7 +2391,7 @@ export def "users-channels create-app" [
 #
 # DELETE /users/{user_id}/channels/{channel_id}
 # operationId: removeAppUserFromChannel
-export def "users-channels delete-app" [
+export def "remove-app-user-from-channel" [
   user_id: string
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2429,7 +2429,7 @@ export def "users-channels delete-app" [
 #
 # GET /users/{user_id}/channels/{channel_id}
 # operationId: getAppUserChannel
-export def "users-channels get-app" [
+export def "get-app-user-channel" [
   user_id: string
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2467,7 +2467,7 @@ export def "users-channels get-app" [
 #
 # GET /users/{user_id}/rules
 # operationId: listAppUserRules
-export def "users-rules list-app" [
+export def "list-app-user-rules" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2503,7 +2503,7 @@ export def "users-rules list-app" [
 #
 # DELETE /users/{user_id}/rules/{rule_id}
 # operationId: removeAppUserFromRule
-export def "users-rules delete-app" [
+export def "remove-app-user-from-rule" [
   user_id: string
   rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2541,7 +2541,7 @@ export def "users-rules delete-app" [
 #
 # GET /users/{user_id}/rules/{rule_id}
 # operationId: getAppUserRule
-export def "users-rules get-app" [
+export def "get-app-user-rule" [
   user_id: string
   rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2579,7 +2579,7 @@ export def "users-rules get-app" [
 #
 # POST /users/{user_id}/rules/{rule_id}
 # operationId: addAppUserToRule
-export def "users-rules create-app" [
+export def "add-app-user-to-rule" [
   user_id: string
   rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2617,7 +2617,7 @@ export def "users-rules create-app" [
 #
 # POST /users/{user_id}/rules/{rule_id}/run
 # operationId: runRuleForAppUser
-export def "users-rules-run create-for-app" [
+export def "run-rule-for-app-user" [
   user_id: string
   rule_id: string
   --base-url(-b): string@base-url-completer # API base URL

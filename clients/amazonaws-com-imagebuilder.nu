@@ -124,7 +124,7 @@ def owner-completer [] { ["Amazon" "Self" "Shared" "ThirdParty"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cancel-image-creation cancel" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cancel-image-creation" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -148,7 +148,7 @@ export def commands []: nothing -> table {
 #
 # PUT /CancelImageCreation
 # operationId: CancelImageCreation
-export def "cancel-image-creation cancel" [
+export def "cancel-image-creation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -196,7 +196,7 @@ export def "cancel-image-creation cancel" [
 #
 # PUT /CreateComponent
 # operationId: CreateComponent
-export def "create-component create" [
+export def "create-component" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -256,7 +256,7 @@ export def "create-component create" [
 # --components item shape: {componentArn: any, parameters?: any}
 # --instanceConfiguration shape: {image?: any, blockDeviceMappings?: any}
 # --targetRepository shape: {service?: any, repositoryName?: any}
-export def "create-container-recipe create" [
+export def "create-container-recipe" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -319,7 +319,7 @@ export def "create-container-recipe create" [
 # PUT /CreateDistributionConfiguration
 # operationId: CreateDistributionConfiguration
 # --distributions item shape: {region: any, amiDistributionConfiguration?: any, containerDistributionConfiguration?: any, licenseConfigurationArns?: any, launchTemplateConfigurations?: any, s3ExportConfiguration?: any, fastLaunchConfigurations?: any}
-export def "create-distribution-configuration create" [
+export def "create-distribution-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -372,7 +372,7 @@ export def "create-distribution-configuration create" [
 # operationId: CreateImage
 # --imageTestsConfiguration shape: {imageTestsEnabled?: any, timeoutMinutes?: any}
 # --imageScanningConfiguration shape: {imageScanningEnabled?: any, ecrConfiguration?: any}
-export def "create-image create" [
+export def "create-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -430,7 +430,7 @@ export def "create-image create" [
 # --imageTestsConfiguration shape: {imageTestsEnabled?: any, timeoutMinutes?: any}
 # --schedule shape: {scheduleExpression?: any, timezone?: any, pipelineExecutionStartCondition?: any}
 # --imageScanningConfiguration shape: {imageScanningEnabled?: any, ecrConfiguration?: any}
-export def "create-image-pipeline create" [
+export def "create-image-pipeline" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -492,7 +492,7 @@ export def "create-image-pipeline create" [
 # --components item shape: {componentArn: any, parameters?: any}
 # --blockDeviceMappings item shape: {deviceName?: any, ebs?: any, virtualName?: any, noDevice?: any}
 # --additionalInstanceConfiguration shape: {systemsManagerAgent?: any, userDataOverride?: any}
-export def "create-image-recipe create" [
+export def "create-image-recipe" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -550,7 +550,7 @@ export def "create-image-recipe create" [
 # operationId: CreateInfrastructureConfiguration
 # --logging shape: {s3Logs?: any}
 # --instanceMetadataOptions shape: {httpTokens?: any, httpPutResponseHopLimit?: any}
-export def "create-infrastructure-configuration create" [
+export def "create-infrastructure-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -610,7 +610,7 @@ export def "create-infrastructure-configuration create" [
 #
 # DELETE /DeleteComponent
 # operationId: DeleteComponent
-export def "delete-component delete" [
+export def "delete-component" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -655,7 +655,7 @@ export def "delete-component delete" [
 #
 # DELETE /DeleteContainerRecipe
 # operationId: DeleteContainerRecipe
-export def "delete-container-recipe delete" [
+export def "delete-container-recipe" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -700,7 +700,7 @@ export def "delete-container-recipe delete" [
 #
 # DELETE /DeleteDistributionConfiguration
 # operationId: DeleteDistributionConfiguration
-export def "delete-distribution-configuration delete" [
+export def "delete-distribution-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -745,7 +745,7 @@ export def "delete-distribution-configuration delete" [
 #
 # DELETE /DeleteImage
 # operationId: DeleteImage
-export def "delete-image delete" [
+export def "delete-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -790,7 +790,7 @@ export def "delete-image delete" [
 #
 # DELETE /DeleteImagePipeline
 # operationId: DeleteImagePipeline
-export def "delete-image-pipeline delete" [
+export def "delete-image-pipeline" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -835,7 +835,7 @@ export def "delete-image-pipeline delete" [
 #
 # DELETE /DeleteImageRecipe
 # operationId: DeleteImageRecipe
-export def "delete-image-recipe delete" [
+export def "delete-image-recipe" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -880,7 +880,7 @@ export def "delete-image-recipe delete" [
 #
 # DELETE /DeleteInfrastructureConfiguration
 # operationId: DeleteInfrastructureConfiguration
-export def "delete-infrastructure-configuration delete" [
+export def "delete-infrastructure-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -925,7 +925,7 @@ export def "delete-infrastructure-configuration delete" [
 #
 # GET /GetComponent
 # operationId: GetComponent
-export def "get-component get" [
+export def "get-component" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -970,7 +970,7 @@ export def "get-component get" [
 #
 # GET /GetComponentPolicy
 # operationId: GetComponentPolicy
-export def "get-component-policy get" [
+export def "get-component-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1015,7 +1015,7 @@ export def "get-component-policy get" [
 #
 # GET /GetContainerRecipe
 # operationId: GetContainerRecipe
-export def "get-container-recipe get" [
+export def "get-container-recipe" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1060,7 +1060,7 @@ export def "get-container-recipe get" [
 #
 # GET /GetContainerRecipePolicy
 # operationId: GetContainerRecipePolicy
-export def "get-container-recipe-policy get" [
+export def "get-container-recipe-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1105,7 +1105,7 @@ export def "get-container-recipe-policy get" [
 #
 # GET /GetDistributionConfiguration
 # operationId: GetDistributionConfiguration
-export def "get-distribution-configuration get" [
+export def "get-distribution-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1150,7 +1150,7 @@ export def "get-distribution-configuration get" [
 #
 # GET /GetImage
 # operationId: GetImage
-export def "get-image get" [
+export def "get-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1195,7 +1195,7 @@ export def "get-image get" [
 #
 # GET /GetImagePipeline
 # operationId: GetImagePipeline
-export def "get-image-pipeline get" [
+export def "get-image-pipeline" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1240,7 +1240,7 @@ export def "get-image-pipeline get" [
 #
 # GET /GetImagePolicy
 # operationId: GetImagePolicy
-export def "get-image-policy get" [
+export def "get-image-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1285,7 +1285,7 @@ export def "get-image-policy get" [
 #
 # GET /GetImageRecipe
 # operationId: GetImageRecipe
-export def "get-image-recipe get" [
+export def "get-image-recipe" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1330,7 +1330,7 @@ export def "get-image-recipe get" [
 #
 # GET /GetImageRecipePolicy
 # operationId: GetImageRecipePolicy
-export def "get-image-recipe-policy get" [
+export def "get-image-recipe-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1375,7 +1375,7 @@ export def "get-image-recipe-policy get" [
 #
 # GET /GetInfrastructureConfiguration
 # operationId: GetInfrastructureConfiguration
-export def "get-infrastructure-configuration get" [
+export def "get-infrastructure-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1420,7 +1420,7 @@ export def "get-infrastructure-configuration get" [
 #
 # GET /GetWorkflowExecution
 # operationId: GetWorkflowExecution
-export def "get-workflow-execution get" [
+export def "get-workflow-execution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1465,7 +1465,7 @@ export def "get-workflow-execution get" [
 #
 # GET /GetWorkflowStepExecution
 # operationId: GetWorkflowStepExecution
-export def "get-workflow-step-execution get" [
+export def "get-workflow-step-execution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1510,7 +1510,7 @@ export def "get-workflow-step-execution get" [
 #
 # PUT /ImportComponent
 # operationId: ImportComponent
-export def "import-component import" [
+export def "import-component" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1568,7 +1568,7 @@ export def "import-component import" [
 #
 # PUT /ImportVmImage
 # operationId: ImportVmImage
-export def "import-vm-image import" [
+export def "import-vm-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1622,7 +1622,7 @@ export def "import-vm-image import" [
 #
 # POST /ListComponentBuildVersions
 # operationId: ListComponentBuildVersions
-export def "list-component-build-versions list" [
+export def "list-component-build-versions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1675,7 +1675,7 @@ export def "list-component-build-versions list" [
 # POST /ListComponents
 # operationId: ListComponents
 # --filters item shape: {name?: any, values?: any}
-export def "list-components list" [
+export def "list-components" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1730,7 +1730,7 @@ export def "list-components list" [
 # POST /ListContainerRecipes
 # operationId: ListContainerRecipes
 # --filters item shape: {name?: any, values?: any}
-export def "list-container-recipes list" [
+export def "list-container-recipes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1784,7 +1784,7 @@ export def "list-container-recipes list" [
 # POST /ListDistributionConfigurations
 # operationId: ListDistributionConfigurations
 # --filters item shape: {name?: any, values?: any}
-export def "list-distribution-configurations list" [
+export def "list-distribution-configurations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1837,7 +1837,7 @@ export def "list-distribution-configurations list" [
 # POST /ListImageBuildVersions
 # operationId: ListImageBuildVersions
 # --filters item shape: {name?: any, values?: any}
-export def "list-image-build-versions list" [
+export def "list-image-build-versions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1890,7 +1890,7 @@ export def "list-image-build-versions list" [
 #
 # POST /ListImagePackages
 # operationId: ListImagePackages
-export def "list-image-packages list" [
+export def "list-image-packages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1943,7 +1943,7 @@ export def "list-image-packages list" [
 # POST /ListImagePipelineImages
 # operationId: ListImagePipelineImages
 # --filters item shape: {name?: any, values?: any}
-export def "list-image-pipeline-images list" [
+export def "list-image-pipeline-images" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1997,7 +1997,7 @@ export def "list-image-pipeline-images list" [
 # POST /ListImagePipelines
 # operationId: ListImagePipelines
 # --filters item shape: {name?: any, values?: any}
-export def "list-image-pipelines list" [
+export def "list-image-pipelines" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2050,7 +2050,7 @@ export def "list-image-pipelines list" [
 # POST /ListImageRecipes
 # operationId: ListImageRecipes
 # --filters item shape: {name?: any, values?: any}
-export def "list-image-recipes list" [
+export def "list-image-recipes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2104,7 +2104,7 @@ export def "list-image-recipes list" [
 # POST /ListImageScanFindingAggregations
 # operationId: ListImageScanFindingAggregations
 # --filter shape: {name?: any, values?: any}
-export def "list-image-scan-finding-aggregations list" [
+export def "list-image-scan-finding-aggregations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2155,7 +2155,7 @@ export def "list-image-scan-finding-aggregations list" [
 # POST /ListImageScanFindings
 # operationId: ListImageScanFindings
 # --filters item shape: {name?: any, values?: any}
-export def "list-image-scan-findings list" [
+export def "list-image-scan-findings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2208,7 +2208,7 @@ export def "list-image-scan-findings list" [
 # POST /ListImages
 # operationId: ListImages
 # --filters item shape: {name?: any, values?: any}
-export def "list-images list" [
+export def "list-images" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2264,7 +2264,7 @@ export def "list-images list" [
 # POST /ListInfrastructureConfigurations
 # operationId: ListInfrastructureConfigurations
 # --filters item shape: {name?: any, values?: any}
-export def "list-infrastructure-configurations list" [
+export def "list-infrastructure-configurations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2316,7 +2316,7 @@ export def "list-infrastructure-configurations list" [
 #
 # GET /tags/{resourceArn}
 # operationId: ListTagsForResource
-export def "tags list-for-resource" [
+export def "list-tags-for-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2361,7 +2361,7 @@ export def "tags list-for-resource" [
 #
 # POST /tags/{resourceArn}
 # operationId: TagResource
-export def "tags tag-resource" [
+export def "tag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2410,7 +2410,7 @@ export def "tags tag-resource" [
 #
 # POST /ListWorkflowExecutions
 # operationId: ListWorkflowExecutions
-export def "list-workflow-executions list" [
+export def "list-workflow-executions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2462,7 +2462,7 @@ export def "list-workflow-executions list" [
 #
 # POST /ListWorkflowStepExecutions
 # operationId: ListWorkflowStepExecutions
-export def "list-workflow-step-executions list" [
+export def "list-workflow-step-executions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2514,7 +2514,7 @@ export def "list-workflow-step-executions list" [
 #
 # PUT /PutComponentPolicy
 # operationId: PutComponentPolicy
-export def "put-component-policy update" [
+export def "put-component-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2562,7 +2562,7 @@ export def "put-component-policy update" [
 #
 # PUT /PutContainerRecipePolicy
 # operationId: PutContainerRecipePolicy
-export def "put-container-recipe-policy update" [
+export def "put-container-recipe-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2610,7 +2610,7 @@ export def "put-container-recipe-policy update" [
 #
 # PUT /PutImagePolicy
 # operationId: PutImagePolicy
-export def "put-image-policy update" [
+export def "put-image-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2658,7 +2658,7 @@ export def "put-image-policy update" [
 #
 # PUT /PutImageRecipePolicy
 # operationId: PutImageRecipePolicy
-export def "put-image-recipe-policy update" [
+export def "put-image-recipe-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2706,7 +2706,7 @@ export def "put-image-recipe-policy update" [
 #
 # PUT /StartImagePipelineExecution
 # operationId: StartImagePipelineExecution
-export def "start-image-pipeline-execution start" [
+export def "start-image-pipeline-execution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2754,7 +2754,7 @@ export def "start-image-pipeline-execution start" [
 #
 # DELETE /tags/{resourceArn}
 # operationId: UntagResource
-export def "tags untag-resource" [
+export def "untag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2802,7 +2802,7 @@ export def "tags untag-resource" [
 # PUT /UpdateDistributionConfiguration
 # operationId: UpdateDistributionConfiguration
 # --distributions item shape: {region: any, amiDistributionConfiguration?: any, containerDistributionConfiguration?: any, licenseConfigurationArns?: any, launchTemplateConfigurations?: any, s3ExportConfiguration?: any, fastLaunchConfigurations?: any}
-export def "update-distribution-configuration update" [
+export def "update-distribution-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2855,7 +2855,7 @@ export def "update-distribution-configuration update" [
 # --imageTestsConfiguration shape: {imageTestsEnabled?: any, timeoutMinutes?: any}
 # --schedule shape: {scheduleExpression?: any, timezone?: any, pipelineExecutionStartCondition?: any}
 # --imageScanningConfiguration shape: {imageScanningEnabled?: any, ecrConfiguration?: any}
-export def "update-image-pipeline update" [
+export def "update-image-pipeline" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2915,7 +2915,7 @@ export def "update-image-pipeline update" [
 # operationId: UpdateInfrastructureConfiguration
 # --logging shape: {s3Logs?: any}
 # --instanceMetadataOptions shape: {httpTokens?: any, httpPutResponseHopLimit?: any}
-export def "update-infrastructure-configuration update" [
+export def "update-infrastructure-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

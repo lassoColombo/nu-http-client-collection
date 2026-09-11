@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "authorize get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "authorize" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -141,7 +141,7 @@ export def commands []: nothing -> table {
 # GET /authorize
 # Docs: http://openid.net/specs/openid-connect-core-1_0.html#AuthorizationEndpoint — OIDC Authorization Endpoint
 # operationId: authorize
-export def "authorize get" [
+export def "authorize" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -187,7 +187,7 @@ export def "authorize get" [
 #
 # GET /client
 # operationId: client
-export def "client list" [
+export def "client" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -222,7 +222,7 @@ export def "client list" [
 # POST /client
 # Docs: http://openid.net/specs/openid-connect-registration-1_0.html#ClientRegistration — OIDC Client Registration Endpoint
 # operationId: createClient
-export def "client create" [
+export def "create-client" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -273,7 +273,7 @@ export def "client create" [
 # DELETE /client/{client_id}
 # Docs: http://openid.net/specs/openid-connect-registration-1_0.html#ClientConfigurationEndpoint — OIDC Client Configuration Endpoint
 # operationId: clientClient_id
-export def "client delete" [
+export def "client-client-id" [
   client_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -310,7 +310,7 @@ export def "client delete" [
 # GET /client/{client_id}
 # Docs: http://openid.net/specs/openid-connect-registration-1_0.html#ClientConfigurationEndpoint — OIDC Client Configuration Endpoint
 # operationId: getClient
-export def "client get" [
+export def "get-client" [
   client_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -347,7 +347,7 @@ export def "client get" [
 # PUT /client/{client_id}
 # Docs: http://openid.net/specs/openid-connect-registration-1_0.html#ClientConfigurationEndpoint — OIDC Client Configuration Endpoint
 # operationId: updateClient
-export def "client update" [
+export def "update-client" [
   client_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -400,7 +400,7 @@ export def "client update" [
 # POST /token
 # Docs: http://openid.net/specs/openid-connect-core-1_0.html#TokenEndpoint — OIDC Token Endpoint
 # operationId: token
-export def "token create" [
+export def "token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -447,7 +447,7 @@ export def "token create" [
 # GET /userinfo
 # Docs: http://openid.net/specs/openid-connect-core-1_0.html#UserInfo — OIDC UserInfo Endpoint
 # operationId: userInfo
-export def "userinfo get-user" [
+export def "user-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -482,7 +482,7 @@ export def "userinfo get-user" [
 # GET /{client_id}/iframe
 # Docs: http://openid.net/specs/openid-connect-session-1_0.html#OPiframe — OIDC OP Session Management Iframe
 # operationId: authorizeIframe
-export def "iframe get-authorize" [
+export def "authorize-iframe" [
   client_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

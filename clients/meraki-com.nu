@@ -151,7 +151,7 @@ def state-completer [] { ["active" "expired" "expiring" "recentlyQueued" "unused
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "devices-camera-analytics-live get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-device-camera-analytics-live" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -175,7 +175,7 @@ export def commands []: nothing -> table {
 #
 # GET /devices/{serial}/camera/analytics/live
 # operationId: getDeviceCameraAnalyticsLive
-export def "devices-camera-analytics-live get" [
+export def "get-device-camera-analytics-live" [
   serial: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -211,7 +211,7 @@ export def "devices-camera-analytics-live get" [
 #
 # GET /devices/{serial}/camera/analytics/overview
 # operationId: getDeviceCameraAnalyticsOverview
-export def "devices-camera-analytics-overview get" [
+export def "get-device-camera-analytics-overview" [
   serial: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -252,7 +252,7 @@ export def "devices-camera-analytics-overview get" [
 #
 # GET /devices/{serial}/camera/analytics/recent
 # operationId: getDeviceCameraAnalyticsRecent
-export def "devices-camera-analytics-recent get" [
+export def "get-device-camera-analytics-recent" [
   serial: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -290,7 +290,7 @@ export def "devices-camera-analytics-recent get" [
 #
 # GET /devices/{serial}/camera/analytics/zones
 # operationId: getDeviceCameraAnalyticsZones
-export def "devices-camera-analytics-zones get" [
+export def "get-device-camera-analytics-zones" [
   serial: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -326,7 +326,7 @@ export def "devices-camera-analytics-zones get" [
 #
 # GET /devices/{serial}/camera/analytics/zones/{zoneId}/history
 # operationId: getDeviceCameraAnalyticsZoneHistory
-export def "devices-camera-analytics-zones-history get" [
+export def "get-device-camera-analytics-zone-history" [
   serial: string
   zone_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -370,7 +370,7 @@ export def "devices-camera-analytics-zones-history get" [
 #
 # GET /devices/{serial}/camera/qualityAndRetentionSettings
 # operationId: getDeviceCameraQualityAndRetentionSettings
-export def "devices-camera-quality-and-retention-settings get" [
+export def "get-device-camera-quality-and-retention-settings" [
   serial: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -406,7 +406,7 @@ export def "devices-camera-quality-and-retention-settings get" [
 #
 # PUT /devices/{serial}/camera/qualityAndRetentionSettings
 # operationId: updateDeviceCameraQualityAndRetentionSettings
-export def "devices-camera-quality-and-retention-settings update" [
+export def "update-device-camera-quality-and-retention-settings" [
   serial: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -452,7 +452,7 @@ export def "devices-camera-quality-and-retention-settings update" [
 #
 # GET /devices/{serial}/camera/video/settings
 # operationId: getDeviceCameraVideoSettings
-export def "devices-camera-video-settings get" [
+export def "get-device-camera-video-settings" [
   serial: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -488,7 +488,7 @@ export def "devices-camera-video-settings get" [
 #
 # PUT /devices/{serial}/camera/video/settings
 # operationId: updateDeviceCameraVideoSettings
-export def "devices-camera-video-settings update" [
+export def "update-device-camera-video-settings" [
   serial: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -528,7 +528,7 @@ export def "devices-camera-video-settings update" [
 #
 # GET /devices/{serial}/cellularGateway/settings
 # operationId: getDeviceCellularGatewaySettings
-export def "devices-cellular-gateway-settings get" [
+export def "get-device-cellular-gateway-settings" [
   serial: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -566,7 +566,7 @@ export def "devices-cellular-gateway-settings get" [
 # operationId: updateDeviceCellularGatewaySettings
 # --fixedIpAssignments item shape: {ip: string, mac: string, name?: string}
 # --reservedIpRanges item shape: {comment: string, end: string, start: string}
-export def "devices-cellular-gateway-settings update" [
+export def "update-device-cellular-gateway-settings" [
   serial: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -607,7 +607,7 @@ export def "devices-cellular-gateway-settings update" [
 #
 # GET /devices/{serial}/cellularGateway/settings/portForwardingRules
 # operationId: getDeviceCellularGatewaySettingsPortForwardingRules
-export def "devices-cellular-gateway-settings-port-forwarding-rules get" [
+export def "get-device-cellular-gateway-settings-port-forwarding-rules" [
   serial: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -644,7 +644,7 @@ export def "devices-cellular-gateway-settings-port-forwarding-rules get" [
 # PUT /devices/{serial}/cellularGateway/settings/portForwardingRules
 # operationId: updateDeviceCellularGatewaySettingsPortForwardingRules
 # --rules item shape: {access: string, allowedIps?: list<string>, lanIp: string, localPort: string, name?: string, protocol: string, publicPort: string}
-export def "devices-cellular-gateway-settings-port-forwarding-rules update" [
+export def "update-device-cellular-gateway-settings-port-forwarding-rules" [
   serial: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -684,7 +684,7 @@ export def "devices-cellular-gateway-settings-port-forwarding-rules update" [
 #
 # GET /devices/{serial}/clients
 # operationId: getDeviceClients
-export def "devices-clients get" [
+export def "get-device-clients" [
   serial: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -723,7 +723,7 @@ export def "devices-clients get" [
 #
 # POST /devices/{serial}/switch/ports/cycle
 # operationId: cycleDeviceSwitchPorts
-export def "devices-switch-ports-cycle create" [
+export def "cycle-device-switch-ports" [
   serial: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -763,7 +763,7 @@ export def "devices-switch-ports-cycle create" [
 #
 # GET /devices/{serial}/switchPortStatuses
 # operationId: getDeviceSwitchPortStatuses
-export def "devices-switch-port-statuses get" [
+export def "get-device-switch-port-statuses" [
   serial: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -802,7 +802,7 @@ export def "devices-switch-port-statuses get" [
 #
 # GET /devices/{serial}/switchPortStatuses/packets
 # operationId: getDeviceSwitchPortStatusesPackets
-export def "devices-switch-port-statuses-packets get" [
+export def "get-device-switch-port-statuses-packets" [
   serial: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -841,7 +841,7 @@ export def "devices-switch-port-statuses-packets get" [
 #
 # PUT /devices/{serial}/wireless/bluetooth/settings
 # operationId: updateDeviceWirelessBluetoothSettings
-export def "devices-wireless-bluetooth-settings update" [
+export def "update-device-wireless-bluetooth-settings" [
   serial: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -883,7 +883,7 @@ export def "devices-wireless-bluetooth-settings update" [
 #
 # DELETE /networks/{networkId}
 # operationId: deleteNetwork
-export def "networks delete" [
+export def "delete-network" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -919,7 +919,7 @@ export def "networks delete" [
 #
 # GET /networks/{networkId}
 # operationId: getNetwork
-export def "networks get" [
+export def "get-network" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -955,7 +955,7 @@ export def "networks get" [
 #
 # PUT /networks/{networkId}
 # operationId: updateNetwork
-export def "networks update" [
+export def "update-network" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1000,7 +1000,7 @@ export def "networks update" [
 #
 # GET /networks/{networkId}/accessPolicies
 # operationId: getNetworkAccessPolicies
-export def "networks-access-policies get" [
+export def "get-network-access-policies" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1036,7 +1036,7 @@ export def "networks-access-policies get" [
 #
 # GET /networks/{networkId}/airMarshal
 # operationId: getNetworkAirMarshal
-export def "networks-air-marshal get" [
+export def "get-network-air-marshal" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1075,7 +1075,7 @@ export def "networks-air-marshal get" [
 #
 # GET /networks/{networkId}/alertSettings
 # operationId: getNetworkAlertSettings
-export def "networks-alert-settings get" [
+export def "get-network-alert-settings" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1113,7 +1113,7 @@ export def "networks-alert-settings get" [
 # operationId: updateNetworkAlertSettings
 # --alerts item shape: {alertDestinations?: record, enabled?: bool, filters?: record, type: string}
 # --defaultDestinations shape: {allAdmins?: bool, emails?: list<string>, httpServerIds?: list<string>, snmp?: bool}
-export def "networks-alert-settings update" [
+export def "update-network-alert-settings" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1154,7 +1154,7 @@ export def "networks-alert-settings update" [
 #
 # GET /networks/{networkId}/appliance/firewall/inboundFirewallRules
 # operationId: getNetworkApplianceFirewallInboundFirewallRules
-export def "networks-appliance-firewall-inbound-firewall-rules get" [
+export def "get-network-appliance-firewall-inbound-firewall-rules" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1191,7 +1191,7 @@ export def "networks-appliance-firewall-inbound-firewall-rules get" [
 # PUT /networks/{networkId}/appliance/firewall/inboundFirewallRules
 # operationId: updateNetworkApplianceFirewallInboundFirewallRules
 # --rules item shape: {comment?: string, destCidr: string, destPort?: string, policy: "allow"|"deny", protocol: "any"|"icmp"|"icmp6"|"tcp"|"udp", srcCidr: string, srcPort?: string, syslogEnabled?: bool}
-export def "networks-appliance-firewall-inbound-firewall-rules update" [
+export def "update-network-appliance-firewall-inbound-firewall-rules" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1232,7 +1232,7 @@ export def "networks-appliance-firewall-inbound-firewall-rules update" [
 #
 # GET /networks/{networkId}/appliancePorts
 # operationId: getNetworkAppliancePorts
-export def "networks-appliance-ports list" [
+export def "get-network-appliance-ports" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1268,7 +1268,7 @@ export def "networks-appliance-ports list" [
 #
 # GET /networks/{networkId}/appliancePorts/{appliancePortId}
 # operationId: getNetworkAppliancePort
-export def "networks-appliance-ports get" [
+export def "get-network-appliance-port" [
   network_id: string
   appliance_port_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1306,7 +1306,7 @@ export def "networks-appliance-ports get" [
 #
 # PUT /networks/{networkId}/appliancePorts/{appliancePortId}
 # operationId: updateNetworkAppliancePort
-export def "networks-appliance-ports update" [
+export def "update-network-appliance-port" [
   network_id: string
   appliance_port_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1353,7 +1353,7 @@ export def "networks-appliance-ports update" [
 #
 # POST /networks/{networkId}/bind
 # operationId: bindNetwork
-export def "networks-bind create" [
+export def "bind-network" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1394,7 +1394,7 @@ export def "networks-bind create" [
 #
 # GET /networks/{networkId}/bluetoothClients
 # operationId: getNetworkBluetoothClients
-export def "networks-bluetooth-clients list" [
+export def "get-network-bluetooth-clients" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1437,7 +1437,7 @@ export def "networks-bluetooth-clients list" [
 #
 # GET /networks/{networkId}/bluetoothClients/{bluetoothClientId}
 # operationId: getNetworkBluetoothClient
-export def "networks-bluetooth-clients get" [
+export def "get-network-bluetooth-client" [
   network_id: string
   bluetooth_client_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1478,7 +1478,7 @@ export def "networks-bluetooth-clients get" [
 #
 # GET /networks/{networkId}/bluetoothSettings
 # operationId: getNetworkBluetoothSettings
-export def "networks-bluetooth-settings get" [
+export def "get-network-bluetooth-settings" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1514,7 +1514,7 @@ export def "networks-bluetooth-settings get" [
 #
 # PUT /networks/{networkId}/bluetoothSettings
 # operationId: updateNetworkBluetoothSettings
-export def "networks-bluetooth-settings update" [
+export def "update-network-bluetooth-settings" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1559,7 +1559,7 @@ export def "networks-bluetooth-settings update" [
 #
 # GET /networks/{networkId}/camera/qualityRetentionProfiles
 # operationId: getNetworkCameraQualityRetentionProfiles
-export def "networks-camera-quality-retention-profiles list" [
+export def "get-network-camera-quality-retention-profiles" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1596,7 +1596,7 @@ export def "networks-camera-quality-retention-profiles list" [
 # POST /networks/{networkId}/camera/qualityRetentionProfiles
 # operationId: createNetworkCameraQualityRetentionProfile
 # --videoSettings shape: {MV12/MV22/MV72?: record, MV12WE?: record, MV13?: record, MV21/MV71?: record, MV22X/MV72X?: record, MV32?: record, MV33?: record, MV52?: record, MV63?: record, MV63X?: record, MV93?: record, MV93X?: record}
-export def "networks-camera-quality-retention-profiles create" [
+export def "create-network-camera-quality-retention-profile" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1644,7 +1644,7 @@ export def "networks-camera-quality-retention-profiles create" [
 #
 # DELETE /networks/{networkId}/camera/qualityRetentionProfiles/{qualityRetentionProfileId}
 # operationId: deleteNetworkCameraQualityRetentionProfile
-export def "networks-camera-quality-retention-profiles delete" [
+export def "delete-network-camera-quality-retention-profile" [
   network_id: string
   quality_retention_profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1682,7 +1682,7 @@ export def "networks-camera-quality-retention-profiles delete" [
 #
 # GET /networks/{networkId}/camera/qualityRetentionProfiles/{qualityRetentionProfileId}
 # operationId: getNetworkCameraQualityRetentionProfile
-export def "networks-camera-quality-retention-profiles get" [
+export def "get-network-camera-quality-retention-profile" [
   network_id: string
   quality_retention_profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1721,7 +1721,7 @@ export def "networks-camera-quality-retention-profiles get" [
 # PUT /networks/{networkId}/camera/qualityRetentionProfiles/{qualityRetentionProfileId}
 # operationId: updateNetworkCameraQualityRetentionProfile
 # --videoSettings shape: {MV12/MV22/MV72?: record, MV12WE?: record, MV13?: record, MV21/MV71?: record, MV22X/MV72X?: record, MV32?: record, MV33?: record, MV52?: record, MV63?: record, MV63X?: record, MV93?: record, MV93X?: record}
-export def "networks-camera-quality-retention-profiles update" [
+export def "update-network-camera-quality-retention-profile" [
   network_id: string
   quality_retention_profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1771,7 +1771,7 @@ export def "networks-camera-quality-retention-profiles update" [
 #
 # GET /networks/{networkId}/camera/schedules
 # operationId: getNetworkCameraSchedules
-export def "networks-camera-schedules get" [
+export def "get-network-camera-schedules" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1807,7 +1807,7 @@ export def "networks-camera-schedules get" [
 #
 # POST /networks/{networkId}/cameras/{serial}/snapshot
 # operationId: generateNetworkCameraSnapshot
-export def "networks-cameras-snapshot generate" [
+export def "generate-network-camera-snapshot" [
   network_id: string
   serial: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1850,7 +1850,7 @@ export def "networks-cameras-snapshot generate" [
 #
 # GET /networks/{networkId}/cameras/{serial}/videoLink
 # operationId: getNetworkCameraVideoLink
-export def "networks-cameras-video-link get" [
+export def "get-network-camera-video-link" [
   network_id: string
   serial: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1890,7 +1890,7 @@ export def "networks-cameras-video-link get" [
 #
 # GET /networks/{networkId}/cellularFirewallRules
 # operationId: getNetworkCellularFirewallRules
-export def "networks-cellular-firewall-rules get" [
+export def "get-network-cellular-firewall-rules" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1927,7 +1927,7 @@ export def "networks-cellular-firewall-rules get" [
 # PUT /networks/{networkId}/cellularFirewallRules
 # operationId: updateNetworkCellularFirewallRules
 # --rules item shape: {comment?: string, destCidr: string, destPort?: string, policy: "allow"|"deny", protocol: "any"|"icmp"|"icmp6"|"tcp"|"udp", srcCidr: string, srcPort?: string, syslogEnabled?: bool}
-export def "networks-cellular-firewall-rules update" [
+export def "update-network-cellular-firewall-rules" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1967,7 +1967,7 @@ export def "networks-cellular-firewall-rules update" [
 #
 # GET /networks/{networkId}/clients
 # operationId: getNetworkClients
-export def "networks-clients list" [
+export def "get-network-clients" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2009,7 +2009,7 @@ export def "networks-clients list" [
 #
 # GET /networks/{networkId}/clients/connectionStats
 # operationId: getNetworkClientsConnectionStats
-export def "networks-clients-connection-stats list" [
+export def "get-network-clients-connection-stats" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2053,7 +2053,7 @@ export def "networks-clients-connection-stats list" [
 #
 # GET /networks/{networkId}/clients/latencyStats
 # operationId: getNetworkClientsLatencyStats
-export def "networks-clients-latency-stats list" [
+export def "get-network-clients-latency-stats" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2100,7 +2100,7 @@ export def "networks-clients-latency-stats list" [
 # operationId: provisionNetworkClients
 # --policiesBySecurityAppliance shape: {devicePolicy?: "Blocked"|"Normal"|"Whitelisted"}
 # --policiesBySsid shape: {0?: record, 1?: record, 2?: record, 3?: record, 4?: record, 5?: record, 6?: record, 7?: record, 8?: record, 9?: record, 10?: record, 11?: record, 12?: record, 13?: record, 14?: record}
-export def "networks-clients-provision create" [
+export def "provision-network-clients" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2145,7 +2145,7 @@ export def "networks-clients-provision create" [
 #
 # GET /networks/{networkId}/clients/{clientId}
 # operationId: getNetworkClient
-export def "networks-clients get" [
+export def "get-network-client" [
   network_id: string
   client_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2183,7 +2183,7 @@ export def "networks-clients get" [
 #
 # GET /networks/{networkId}/clients/{clientId}/connectionStats
 # operationId: getNetworkClientConnectionStats
-export def "networks-clients-connection-stats get" [
+export def "get-network-client-connection-stats" [
   network_id: string
   client_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2229,7 +2229,7 @@ export def "networks-clients-connection-stats get" [
 #
 # GET /networks/{networkId}/clients/{clientId}/events
 # operationId: getNetworkClientEvents
-export def "networks-clients-events get" [
+export def "get-network-client-events" [
   network_id: string
   client_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2271,7 +2271,7 @@ export def "networks-clients-events get" [
 #
 # GET /networks/{networkId}/clients/{clientId}/latencyHistory
 # operationId: getNetworkClientLatencyHistory
-export def "networks-clients-latency-history get" [
+export def "get-network-client-latency-history" [
   network_id: string
   client_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2314,7 +2314,7 @@ export def "networks-clients-latency-history get" [
 #
 # GET /networks/{networkId}/clients/{clientId}/latencyStats
 # operationId: getNetworkClientLatencyStats
-export def "networks-clients-latency-stats get" [
+export def "get-network-client-latency-stats" [
   network_id: string
   client_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2361,7 +2361,7 @@ export def "networks-clients-latency-stats get" [
 #
 # GET /networks/{networkId}/clients/{clientId}/policy
 # operationId: getNetworkClientPolicy
-export def "networks-clients-policy get" [
+export def "get-network-client-policy" [
   network_id: string
   client_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2399,7 +2399,7 @@ export def "networks-clients-policy get" [
 #
 # PUT /networks/{networkId}/clients/{clientId}/policy
 # operationId: updateNetworkClientPolicy
-export def "networks-clients-policy update" [
+export def "update-network-client-policy" [
   network_id: string
   client_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2442,7 +2442,7 @@ export def "networks-clients-policy update" [
 #
 # GET /networks/{networkId}/clients/{clientId}/splashAuthorizationStatus
 # operationId: getNetworkClientSplashAuthorizationStatus
-export def "networks-clients-splash-authorization-status get" [
+export def "get-network-client-splash-authorization-status" [
   network_id: string
   client_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2481,7 +2481,7 @@ export def "networks-clients-splash-authorization-status get" [
 # PUT /networks/{networkId}/clients/{clientId}/splashAuthorizationStatus
 # operationId: updateNetworkClientSplashAuthorizationStatus
 # --ssids shape: {0?: record, 1?: record, 2?: record, 3?: record, 4?: record, 5?: record, 6?: record, 7?: record, 8?: record, 9?: record, 10?: record, 11?: record, 12?: record, 13?: record, 14?: record}
-export def "networks-clients-splash-authorization-status update" [
+export def "update-network-client-splash-authorization-status" [
   network_id: string
   client_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2523,7 +2523,7 @@ export def "networks-clients-splash-authorization-status update" [
 #
 # GET /networks/{networkId}/clients/{clientId}/usageHistory
 # operationId: getNetworkClientUsageHistory
-export def "networks-clients-usage-history get" [
+export def "get-network-client-usage-history" [
   network_id: string
   client_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2561,7 +2561,7 @@ export def "networks-clients-usage-history get" [
 #
 # GET /networks/{networkId}/connectionStats
 # operationId: getNetworkConnectionStats
-export def "networks-connection-stats get" [
+export def "get-network-connection-stats" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2605,7 +2605,7 @@ export def "networks-connection-stats get" [
 #
 # GET /networks/{networkId}/contentFiltering
 # operationId: getNetworkContentFiltering
-export def "networks-content-filtering get" [
+export def "get-network-content-filtering" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2641,7 +2641,7 @@ export def "networks-content-filtering get" [
 #
 # PUT /networks/{networkId}/contentFiltering
 # operationId: updateNetworkContentFiltering
-export def "networks-content-filtering update" [
+export def "update-network-content-filtering" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2684,7 +2684,7 @@ export def "networks-content-filtering update" [
 #
 # GET /networks/{networkId}/contentFiltering/categories
 # operationId: getNetworkContentFilteringCategories
-export def "networks-content-filtering-categories get" [
+export def "get-network-content-filtering-categories" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2720,7 +2720,7 @@ export def "networks-content-filtering-categories get" [
 #
 # GET /networks/{networkId}/devices
 # operationId: getNetworkDevices
-export def "networks-devices list" [
+export def "get-network-devices" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2756,7 +2756,7 @@ export def "networks-devices list" [
 #
 # POST /networks/{networkId}/devices/claim
 # operationId: claimNetworkDevices
-export def "networks-devices-claim create" [
+export def "claim-network-devices" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2797,7 +2797,7 @@ export def "networks-devices-claim create" [
 #
 # GET /networks/{networkId}/devices/connectionStats
 # operationId: getNetworkDevicesConnectionStats
-export def "networks-devices-connection-stats list" [
+export def "get-network-devices-connection-stats" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2841,7 +2841,7 @@ export def "networks-devices-connection-stats list" [
 #
 # GET /networks/{networkId}/devices/latencyStats
 # operationId: getNetworkDevicesLatencyStats
-export def "networks-devices-latency-stats list" [
+export def "get-network-devices-latency-stats" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2886,7 +2886,7 @@ export def "networks-devices-latency-stats list" [
 #
 # GET /networks/{networkId}/devices/{serial}
 # operationId: getNetworkDevice
-export def "networks-devices get" [
+export def "get-network-device" [
   network_id: string
   serial: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2924,7 +2924,7 @@ export def "networks-devices get" [
 #
 # PUT /networks/{networkId}/devices/{serial}
 # operationId: updateNetworkDevice
-export def "networks-devices update" [
+export def "update-network-device" [
   network_id: string
   serial: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2974,7 +2974,7 @@ export def "networks-devices update" [
 #
 # GET /networks/{networkId}/devices/{serial}/connectionStats
 # operationId: getNetworkDeviceConnectionStats
-export def "networks-devices-connection-stats get" [
+export def "get-network-device-connection-stats" [
   network_id: string
   serial: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3020,7 +3020,7 @@ export def "networks-devices-connection-stats get" [
 #
 # GET /networks/{networkId}/devices/{serial}/latencyStats
 # operationId: getNetworkDeviceLatencyStats
-export def "networks-devices-latency-stats get" [
+export def "get-network-device-latency-stats" [
   network_id: string
   serial: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3067,7 +3067,7 @@ export def "networks-devices-latency-stats get" [
 #
 # GET /networks/{networkId}/devices/{serial}/lossAndLatencyHistory
 # operationId: getNetworkDeviceLossAndLatencyHistory
-export def "networks-devices-loss-and-latency-history get" [
+export def "get-network-device-loss-and-latency-history" [
   network_id: string
   serial: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3112,7 +3112,7 @@ export def "networks-devices-loss-and-latency-history get" [
 #
 # GET /networks/{networkId}/devices/{serial}/performance
 # operationId: getNetworkDevicePerformance
-export def "networks-devices-performance get" [
+export def "get-network-device-performance" [
   network_id: string
   serial: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3150,7 +3150,7 @@ export def "networks-devices-performance get" [
 #
 # POST /networks/{networkId}/devices/{serial}/reboot
 # operationId: rebootNetworkDevice
-export def "networks-devices-reboot create" [
+export def "reboot-network-device" [
   network_id: string
   serial: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3188,7 +3188,7 @@ export def "networks-devices-reboot create" [
 #
 # POST /networks/{networkId}/devices/{serial}/remove
 # operationId: removeNetworkDevice
-export def "networks-devices-remove delete" [
+export def "remove-network-device" [
   network_id: string
   serial: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3226,7 +3226,7 @@ export def "networks-devices-remove delete" [
 #
 # GET /networks/{networkId}/devices/{serial}/uplink
 # operationId: getNetworkDeviceUplink
-export def "networks-devices-uplink get" [
+export def "get-network-device-uplink" [
   network_id: string
   serial: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3264,7 +3264,7 @@ export def "networks-devices-uplink get" [
 #
 # GET /networks/{networkId}/devices/{serial}/wireless/status
 # operationId: getNetworkDeviceWirelessStatus
-export def "networks-devices-wireless-status get" [
+export def "get-network-device-wireless-status" [
   network_id: string
   serial: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3302,7 +3302,7 @@ export def "networks-devices-wireless-status get" [
 #
 # GET /networks/{networkId}/events
 # operationId: getNetworkEvents
-export def "networks-events get" [
+export def "get-network-events" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3353,7 +3353,7 @@ export def "networks-events get" [
 #
 # GET /networks/{networkId}/events/eventTypes
 # operationId: getNetworkEventsEventTypes
-export def "networks-events-event-types get" [
+export def "get-network-events-event-types" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3389,7 +3389,7 @@ export def "networks-events-event-types get" [
 #
 # GET /networks/{networkId}/failedConnections
 # operationId: getNetworkFailedConnections
-export def "networks-failed-connections get" [
+export def "get-network-failed-connections" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3435,7 +3435,7 @@ export def "networks-failed-connections get" [
 #
 # GET /networks/{networkId}/firewalledServices
 # operationId: getNetworkFirewalledServices
-export def "networks-firewalled-services list" [
+export def "get-network-firewalled-services" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3471,7 +3471,7 @@ export def "networks-firewalled-services list" [
 #
 # GET /networks/{networkId}/firewalledServices/{service}
 # operationId: getNetworkFirewalledService
-export def "networks-firewalled-services get" [
+export def "get-network-firewalled-service" [
   network_id: string
   service: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3509,7 +3509,7 @@ export def "networks-firewalled-services get" [
 #
 # PUT /networks/{networkId}/firewalledServices/{service}
 # operationId: updateNetworkFirewalledService
-export def "networks-firewalled-services update" [
+export def "update-network-firewalled-service" [
   network_id: string
   service: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3552,7 +3552,7 @@ export def "networks-firewalled-services update" [
 #
 # GET /networks/{networkId}/floorPlans
 # operationId: getNetworkFloorPlans
-export def "networks-floor-plans list" [
+export def "get-network-floor-plans" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3593,7 +3593,7 @@ export def "networks-floor-plans list" [
 # --center shape: {lat?: float, lng?: float}
 # --topLeftCorner shape: {lat?: float, lng?: float}
 # --topRightCorner shape: {lat?: float, lng?: float}
-export def "networks-floor-plans create" [
+export def "create-network-floor-plan" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3639,7 +3639,7 @@ export def "networks-floor-plans create" [
 #
 # DELETE /networks/{networkId}/floorPlans/{floorPlanId}
 # operationId: deleteNetworkFloorPlan
-export def "networks-floor-plans delete" [
+export def "delete-network-floor-plan" [
   network_id: string
   floor_plan_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3677,7 +3677,7 @@ export def "networks-floor-plans delete" [
 #
 # GET /networks/{networkId}/floorPlans/{floorPlanId}
 # operationId: getNetworkFloorPlan
-export def "networks-floor-plans get" [
+export def "get-network-floor-plan" [
   network_id: string
   floor_plan_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3720,7 +3720,7 @@ export def "networks-floor-plans get" [
 # --center shape: {lat?: float, lng?: float}
 # --topLeftCorner shape: {lat?: float, lng?: float}
 # --topRightCorner shape: {lat?: float, lng?: float}
-export def "networks-floor-plans update" [
+export def "update-network-floor-plan" [
   network_id: string
   floor_plan_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3768,7 +3768,7 @@ export def "networks-floor-plans update" [
 #
 # GET /networks/{networkId}/l3FirewallRules
 # operationId: getNetworkL3FirewallRules
-export def "networks-l3-firewall-rules get" [
+export def "get-network-l3-firewall-rules" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3805,7 +3805,7 @@ export def "networks-l3-firewall-rules get" [
 # PUT /networks/{networkId}/l3FirewallRules
 # operationId: updateNetworkL3FirewallRules
 # --rules item shape: {comment?: string, destCidr: string, destPort?: string, policy: "allow"|"deny", protocol: "any"|"icmp"|"icmp6"|"tcp"|"udp", srcCidr: string, srcPort?: string, syslogEnabled?: bool}
-export def "networks-l3-firewall-rules update" [
+export def "update-network-l3-firewall-rules" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3846,7 +3846,7 @@ export def "networks-l3-firewall-rules update" [
 #
 # GET /networks/{networkId}/l7FirewallRules
 # operationId: getNetworkL7FirewallRules
-export def "networks-l7-firewall-rules get" [
+export def "get-network-l7-firewall-rules" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3883,7 +3883,7 @@ export def "networks-l7-firewall-rules get" [
 # PUT /networks/{networkId}/l7FirewallRules
 # operationId: updateNetworkL7FirewallRules
 # --rules item shape: {policy?: "deny", type?: "application"|"applicationCategory"|"host"|"ipRange"|"port", value?: string}
-export def "networks-l7-firewall-rules update" [
+export def "update-network-l7-firewall-rules" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3923,7 +3923,7 @@ export def "networks-l7-firewall-rules update" [
 #
 # GET /networks/{networkId}/l7FirewallRules/applicationCategories
 # operationId: getNetworkL7FirewallRulesApplicationCategories
-export def "networks-l7-firewall-rules-application-categories get" [
+export def "get-network-l7-firewall-rules-application-categories" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3959,7 +3959,7 @@ export def "networks-l7-firewall-rules-application-categories get" [
 #
 # GET /networks/{networkId}/latencyStats
 # operationId: getNetworkLatencyStats
-export def "networks-latency-stats get" [
+export def "get-network-latency-stats" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4004,7 +4004,7 @@ export def "networks-latency-stats get" [
 #
 # GET /networks/{networkId}/merakiAuthUsers
 # operationId: getNetworkMerakiAuthUsers
-export def "networks-meraki-auth-users list" [
+export def "get-network-meraki-auth-users" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4040,7 +4040,7 @@ export def "networks-meraki-auth-users list" [
 #
 # GET /networks/{networkId}/merakiAuthUsers/{merakiAuthUserId}
 # operationId: getNetworkMerakiAuthUser
-export def "networks-meraki-auth-users get" [
+export def "get-network-meraki-auth-user" [
   network_id: string
   meraki_auth_user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4078,7 +4078,7 @@ export def "networks-meraki-auth-users get" [
 #
 # GET /networks/{networkId}/oneToManyNatRules
 # operationId: getNetworkOneToManyNatRules
-export def "networks-one-to-many-nat-rules get" [
+export def "get-network-one-to-many-nat-rules" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4115,7 +4115,7 @@ export def "networks-one-to-many-nat-rules get" [
 # PUT /networks/{networkId}/oneToManyNatRules
 # operationId: updateNetworkOneToManyNatRules
 # --rules item shape: {portRules: list, publicIp: string, uplink: "internet1"|"internet2"}
-export def "networks-one-to-many-nat-rules update" [
+export def "update-network-one-to-many-nat-rules" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4155,7 +4155,7 @@ export def "networks-one-to-many-nat-rules update" [
 #
 # GET /networks/{networkId}/oneToOneNatRules
 # operationId: getNetworkOneToOneNatRules
-export def "networks-one-to-one-nat-rules get" [
+export def "get-network-one-to-one-nat-rules" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4192,7 +4192,7 @@ export def "networks-one-to-one-nat-rules get" [
 # PUT /networks/{networkId}/oneToOneNatRules
 # operationId: updateNetworkOneToOneNatRules
 # --rules item shape: {allowedInbound?: list, lanIp: string, name?: string, publicIp?: string, uplink?: "internet1"|"internet2"}
-export def "networks-one-to-one-nat-rules update" [
+export def "update-network-one-to-one-nat-rules" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4232,7 +4232,7 @@ export def "networks-one-to-one-nat-rules update" [
 #
 # GET /networks/{networkId}/pii/piiKeys
 # operationId: getNetworkPiiPiiKeys
-export def "networks-pii-pii-keys get" [
+export def "get-network-pii-pii-keys" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4275,7 +4275,7 @@ export def "networks-pii-pii-keys get" [
 #
 # GET /networks/{networkId}/pii/requests
 # operationId: getNetworkPiiRequests
-export def "networks-pii-requests list" [
+export def "get-network-pii-requests" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4311,7 +4311,7 @@ export def "networks-pii-requests list" [
 #
 # POST /networks/{networkId}/pii/requests
 # operationId: createNetworkPiiRequest
-export def "networks-pii-requests create" [
+export def "create-network-pii-request" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4357,7 +4357,7 @@ export def "networks-pii-requests create" [
 #
 # DELETE /networks/{networkId}/pii/requests/{requestId}
 # operationId: deleteNetworkPiiRequest
-export def "networks-pii-requests delete" [
+export def "delete-network-pii-request" [
   network_id: string
   request_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4395,7 +4395,7 @@ export def "networks-pii-requests delete" [
 #
 # GET /networks/{networkId}/pii/requests/{requestId}
 # operationId: getNetworkPiiRequest
-export def "networks-pii-requests get" [
+export def "get-network-pii-request" [
   network_id: string
   request_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4433,7 +4433,7 @@ export def "networks-pii-requests get" [
 #
 # GET /networks/{networkId}/pii/smDevicesForKey
 # operationId: getNetworkPiiSmDevicesForKey
-export def "networks-pii-sm-devices-for-key get" [
+export def "get-network-pii-sm-devices-for-key" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4476,7 +4476,7 @@ export def "networks-pii-sm-devices-for-key get" [
 #
 # GET /networks/{networkId}/pii/smOwnersForKey
 # operationId: getNetworkPiiSmOwnersForKey
-export def "networks-pii-sm-owners-for-key get" [
+export def "get-network-pii-sm-owners-for-key" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4519,7 +4519,7 @@ export def "networks-pii-sm-owners-for-key get" [
 #
 # GET /networks/{networkId}/portForwardingRules
 # operationId: getNetworkPortForwardingRules
-export def "networks-port-forwarding-rules get" [
+export def "get-network-port-forwarding-rules" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4556,7 +4556,7 @@ export def "networks-port-forwarding-rules get" [
 # PUT /networks/{networkId}/portForwardingRules
 # operationId: updateNetworkPortForwardingRules
 # --rules item shape: {allowedIps: list<string>, lanIp: string, localPort: string, name?: string, protocol: "tcp"|"udp", publicPort: string, uplink?: "both"|"internet1"|"internet2"}
-export def "networks-port-forwarding-rules update" [
+export def "update-network-port-forwarding-rules" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4596,7 +4596,7 @@ export def "networks-port-forwarding-rules update" [
 #
 # GET /networks/{networkId}/security/intrusionSettings
 # operationId: getNetworkSecurityIntrusionSettings
-export def "networks-security-intrusion-settings get" [
+export def "get-network-security-intrusion-settings" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4633,7 +4633,7 @@ export def "networks-security-intrusion-settings get" [
 # PUT /networks/{networkId}/security/intrusionSettings
 # operationId: updateNetworkSecurityIntrusionSettings
 # --protectedNetworks shape: {excludedCidr?: list<string>, includedCidr?: list<string>, useDefault?: bool}
-export def "networks-security-intrusion-settings update" [
+export def "update-network-security-intrusion-settings" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4675,7 +4675,7 @@ export def "networks-security-intrusion-settings update" [
 #
 # GET /networks/{networkId}/security/malwareSettings
 # operationId: getNetworkSecurityMalwareSettings
-export def "networks-security-malware-settings get" [
+export def "get-network-security-malware-settings" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4713,7 +4713,7 @@ export def "networks-security-malware-settings get" [
 # operationId: updateNetworkSecurityMalwareSettings
 # --allowedFiles item shape: {comment: string, sha256: string}
 # --allowedUrls item shape: {comment: string, url: string}
-export def "networks-security-malware-settings update" [
+export def "update-network-security-malware-settings" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4755,7 +4755,7 @@ export def "networks-security-malware-settings update" [
 #
 # GET /networks/{networkId}/securityEvents
 # operationId: getNetworkSecurityEvents
-export def "networks-security-events get" [
+export def "get-network-security-events" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4798,7 +4798,7 @@ export def "networks-security-events get" [
 #
 # GET /networks/{networkId}/siteToSiteVpn
 # operationId: getNetworkSiteToSiteVpn
-export def "networks-site-to-site-vpn get" [
+export def "get-network-site-to-site-vpn" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4836,7 +4836,7 @@ export def "networks-site-to-site-vpn get" [
 # operationId: updateNetworkSiteToSiteVpn
 # --hubs item shape: {hubId: string, useDefaultRoute?: bool}
 # --subnets item shape: {localSubnet: string, useVpn?: bool}
-export def "networks-site-to-site-vpn update" [
+export def "update-network-site-to-site-vpn" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4878,7 +4878,7 @@ export def "networks-site-to-site-vpn update" [
 #
 # POST /networks/{networkId}/sm/bypassActivationLockAttempts
 # operationId: createNetworkSmBypassActivationLockAttempt
-export def "networks-sm-bypass-activation-lock-attempts create" [
+export def "create-network-sm-bypass-activation-lock-attempt" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4918,7 +4918,7 @@ export def "networks-sm-bypass-activation-lock-attempts create" [
 #
 # GET /networks/{networkId}/sm/bypassActivationLockAttempts/{attemptId}
 # operationId: getNetworkSmBypassActivationLockAttempt
-export def "networks-sm-bypass-activation-lock-attempts get" [
+export def "get-network-sm-bypass-activation-lock-attempt" [
   network_id: string
   attempt_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4957,7 +4957,7 @@ export def "networks-sm-bypass-activation-lock-attempts get" [
 # PUT /networks/{networkId}/sm/device/fields
 # operationId: updateNetworkSmDeviceFields
 # --deviceFields shape: {name?: string, notes?: string}
-export def "networks-sm-device-fields update" [
+export def "update-network-sm-device-fields" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5000,7 +5000,7 @@ export def "networks-sm-device-fields update" [
 #
 # PUT /networks/{networkId}/sm/device/wipe
 # operationId: wipeNetworkSmDevice
-export def "networks-sm-device-wipe update" [
+export def "wipe-network-sm-device" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5043,7 +5043,7 @@ export def "networks-sm-device-wipe update" [
 #
 # POST /networks/{networkId}/sm/device/{deviceId}/refreshDetails
 # operationId: refreshNetworkSmDeviceDetails
-export def "networks-sm-device-refresh-details refresh" [
+export def "refresh-network-sm-device-details" [
   network_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5081,7 +5081,7 @@ export def "networks-sm-device-refresh-details refresh" [
 #
 # GET /networks/{networkId}/sm/devices
 # operationId: getNetworkSmDevices
-export def "networks-sm-devices get" [
+export def "get-network-sm-devices" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5125,7 +5125,7 @@ export def "networks-sm-devices get" [
 #
 # PUT /networks/{networkId}/sm/devices/checkin
 # operationId: checkinNetworkSmDevices
-export def "networks-sm-devices-checkin update" [
+export def "checkin-network-sm-devices" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5168,7 +5168,7 @@ export def "networks-sm-devices-checkin update" [
 #
 # PUT /networks/{networkId}/sm/devices/tags
 # operationId: updateNetworkSmDevicesTags
-export def "networks-sm-devices-tags update" [
+export def "update-network-sm-devices-tags" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5213,7 +5213,7 @@ export def "networks-sm-devices-tags update" [
 #
 # POST /networks/{networkId}/sm/devices/{deviceId}/unenroll
 # operationId: unenrollNetworkSmDevice
-export def "networks-sm-devices-unenroll create" [
+export def "unenroll-network-sm-device" [
   network_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5251,7 +5251,7 @@ export def "networks-sm-devices-unenroll create" [
 #
 # GET /networks/{networkId}/sm/profiles
 # operationId: getNetworkSmProfiles
-export def "networks-sm-profiles get" [
+export def "get-network-sm-profiles" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5287,7 +5287,7 @@ export def "networks-sm-profiles get" [
 #
 # GET /networks/{networkId}/sm/targetGroups
 # operationId: getNetworkSmTargetGroups
-export def "networks-sm-target-groups list" [
+export def "get-network-sm-target-groups" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5325,7 +5325,7 @@ export def "networks-sm-target-groups list" [
 #
 # POST /networks/{networkId}/sm/targetGroups
 # operationId: createNetworkSmTargetGroup
-export def "networks-sm-target-groups create" [
+export def "create-network-sm-target-group" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5366,7 +5366,7 @@ export def "networks-sm-target-groups create" [
 #
 # DELETE /networks/{networkId}/sm/targetGroups/{targetGroupId}
 # operationId: deleteNetworkSmTargetGroup
-export def "networks-sm-target-groups delete" [
+export def "delete-network-sm-target-group" [
   network_id: string
   target_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5404,7 +5404,7 @@ export def "networks-sm-target-groups delete" [
 #
 # GET /networks/{networkId}/sm/targetGroups/{targetGroupId}
 # operationId: getNetworkSmTargetGroup
-export def "networks-sm-target-groups get" [
+export def "get-network-sm-target-group" [
   network_id: string
   target_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5444,7 +5444,7 @@ export def "networks-sm-target-groups get" [
 #
 # PUT /networks/{networkId}/sm/targetGroups/{targetGroupId}
 # operationId: updateNetworkSmTargetGroup
-export def "networks-sm-target-groups update" [
+export def "update-network-sm-target-group" [
   network_id: string
   target_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5487,7 +5487,7 @@ export def "networks-sm-target-groups update" [
 #
 # GET /networks/{networkId}/sm/user/{userId}/deviceProfiles
 # operationId: getNetworkSmUserDeviceProfiles
-export def "networks-sm-user-device-profiles get" [
+export def "get-network-sm-user-device-profiles" [
   network_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5525,7 +5525,7 @@ export def "networks-sm-user-device-profiles get" [
 #
 # GET /networks/{networkId}/sm/user/{userId}/softwares
 # operationId: getNetworkSmUserSoftwares
-export def "networks-sm-user-softwares get" [
+export def "get-network-sm-user-softwares" [
   network_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5563,7 +5563,7 @@ export def "networks-sm-user-softwares get" [
 #
 # GET /networks/{networkId}/sm/users
 # operationId: getNetworkSmUsers
-export def "networks-sm-users get" [
+export def "get-network-sm-users" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5604,7 +5604,7 @@ export def "networks-sm-users get" [
 #
 # GET /networks/{networkId}/sm/{deviceId}/cellularUsageHistory
 # operationId: getNetworkSmCellularUsageHistory
-export def "networks-sm-cellular-usage-history get" [
+export def "get-network-sm-cellular-usage-history" [
   network_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5642,7 +5642,7 @@ export def "networks-sm-cellular-usage-history get" [
 #
 # GET /networks/{networkId}/sm/{deviceId}/certs
 # operationId: getNetworkSmCerts
-export def "networks-sm-certs get" [
+export def "get-network-sm-certs" [
   network_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5680,7 +5680,7 @@ export def "networks-sm-certs get" [
 #
 # GET /networks/{networkId}/sm/{deviceId}/deviceProfiles
 # operationId: getNetworkSmDeviceProfiles
-export def "networks-sm-device-profiles get" [
+export def "get-network-sm-device-profiles" [
   network_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5718,7 +5718,7 @@ export def "networks-sm-device-profiles get" [
 #
 # GET /networks/{networkId}/sm/{deviceId}/networkAdapters
 # operationId: getNetworkSmNetworkAdapters
-export def "networks-sm-network-adapters get" [
+export def "get-network-sm-network-adapters" [
   network_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5756,7 +5756,7 @@ export def "networks-sm-network-adapters get" [
 #
 # GET /networks/{networkId}/sm/{deviceId}/restrictions
 # operationId: getNetworkSmRestrictions
-export def "networks-sm-restrictions get" [
+export def "get-network-sm-restrictions" [
   network_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5794,7 +5794,7 @@ export def "networks-sm-restrictions get" [
 #
 # GET /networks/{networkId}/sm/{deviceId}/securityCenters
 # operationId: getNetworkSmSecurityCenters
-export def "networks-sm-security-centers get" [
+export def "get-network-sm-security-centers" [
   network_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5832,7 +5832,7 @@ export def "networks-sm-security-centers get" [
 #
 # GET /networks/{networkId}/sm/{deviceId}/softwares
 # operationId: getNetworkSmSoftwares
-export def "networks-sm-softwares get" [
+export def "get-network-sm-softwares" [
   network_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5870,7 +5870,7 @@ export def "networks-sm-softwares get" [
 #
 # GET /networks/{networkId}/sm/{deviceId}/wlanLists
 # operationId: getNetworkSmWlanLists
-export def "networks-sm-wlan-lists get" [
+export def "get-network-sm-wlan-lists" [
   network_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5908,7 +5908,7 @@ export def "networks-sm-wlan-lists get" [
 #
 # GET /networks/{networkId}/snmpSettings
 # operationId: getNetworkSnmpSettings
-export def "networks-snmp-settings get" [
+export def "get-network-snmp-settings" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5944,7 +5944,7 @@ export def "networks-snmp-settings get" [
 #
 # GET /networks/{networkId}/splashLoginAttempts
 # operationId: getNetworkSplashLoginAttempts
-export def "networks-splash-login-attempts get" [
+export def "get-network-splash-login-attempts" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5984,7 +5984,7 @@ export def "networks-splash-login-attempts get" [
 #
 # POST /networks/{networkId}/split
 # operationId: splitNetwork
-export def "networks-split create" [
+export def "split-network" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6020,7 +6020,7 @@ export def "networks-split create" [
 #
 # GET /networks/{networkId}/ssids
 # operationId: getNetworkSsids
-export def "networks-ssids list" [
+export def "get-network-ssids" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6056,7 +6056,7 @@ export def "networks-ssids list" [
 #
 # GET /networks/{networkId}/ssids/{number}
 # operationId: getNetworkSsid
-export def "networks-ssids get" [
+export def "get-network-ssid" [
   network_id: string
   number: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6097,7 +6097,7 @@ export def "networks-ssids get" [
 # --apTagsAndVlanIds item shape: {tags?: string, vlanId?: int}
 # --radiusAccountingServers item shape: {host: string, port?: int, secret?: string}
 # --radiusServers item shape: {host: string, port?: int, secret?: string}
-export def "networks-ssids update" [
+export def "update-network-ssid" [
   network_id: string
   number: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6172,7 +6172,7 @@ export def "networks-ssids update" [
 #
 # GET /networks/{networkId}/ssids/{number}/l3FirewallRules
 # operationId: getNetworkSsidL3FirewallRules
-export def "networks-ssids-l3-firewall-rules get" [
+export def "get-network-ssid-l3-firewall-rules" [
   network_id: string
   number: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6211,7 +6211,7 @@ export def "networks-ssids-l3-firewall-rules get" [
 # PUT /networks/{networkId}/ssids/{number}/l3FirewallRules
 # operationId: updateNetworkSsidL3FirewallRules
 # --rules item shape: {comment?: string, destCidr: string, destPort?: string, policy: "allow"|"deny", protocol: "any"|"icmp"|"icmp6"|"tcp"|"udp"}
-export def "networks-ssids-l3-firewall-rules update" [
+export def "update-network-ssid-l3-firewall-rules" [
   network_id: string
   number: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6254,7 +6254,7 @@ export def "networks-ssids-l3-firewall-rules update" [
 #
 # GET /networks/{networkId}/ssids/{number}/splashSettings
 # operationId: getNetworkSsidSplashSettings
-export def "networks-ssids-splash-settings get" [
+export def "get-network-ssid-splash-settings" [
   network_id: string
   number: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6292,7 +6292,7 @@ export def "networks-ssids-splash-settings get" [
 #
 # PUT /networks/{networkId}/ssids/{number}/splashSettings
 # operationId: updateNetworkSsidSplashSettings
-export def "networks-ssids-splash-settings update" [
+export def "update-network-ssid-splash-settings" [
   network_id: string
   number: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6335,7 +6335,7 @@ export def "networks-ssids-splash-settings update" [
 #
 # GET /networks/{networkId}/staticRoutes
 # operationId: getNetworkStaticRoutes
-export def "networks-static-routes list" [
+export def "get-network-static-routes" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6371,7 +6371,7 @@ export def "networks-static-routes list" [
 #
 # POST /networks/{networkId}/staticRoutes
 # operationId: createNetworkStaticRoute
-export def "networks-static-routes create" [
+export def "create-network-static-route" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6413,7 +6413,7 @@ export def "networks-static-routes create" [
 #
 # DELETE /networks/{networkId}/staticRoutes/{staticRouteId}
 # operationId: deleteNetworkStaticRoute
-export def "networks-static-routes delete" [
+export def "delete-network-static-route" [
   network_id: string
   static_route_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6451,7 +6451,7 @@ export def "networks-static-routes delete" [
 #
 # GET /networks/{networkId}/staticRoutes/{staticRouteId}
 # operationId: getNetworkStaticRoute
-export def "networks-static-routes get" [
+export def "get-network-static-route" [
   network_id: string
   static_route_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6490,7 +6490,7 @@ export def "networks-static-routes get" [
 # PUT /networks/{networkId}/staticRoutes/{staticRouteId}
 # operationId: updateNetworkStaticRoute
 # --reservedIpRanges item shape: {comment: string, end: string, start: string}
-export def "networks-static-routes update" [
+export def "update-network-static-route" [
   network_id: string
   static_route_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6537,7 +6537,7 @@ export def "networks-static-routes update" [
 #
 # POST /networks/{networkId}/swapWarmSpare
 # operationId: swapNetworkWarmSpare
-export def "networks-swap-warm-spare create" [
+export def "swap-network-warm-spare" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6573,7 +6573,7 @@ export def "networks-swap-warm-spare create" [
 #
 # GET /networks/{networkId}/switch/linkAggregations
 # operationId: getNetworkSwitchLinkAggregations
-export def "networks-switch-link-aggregations get" [
+export def "get-network-switch-link-aggregations" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6611,7 +6611,7 @@ export def "networks-switch-link-aggregations get" [
 # operationId: createNetworkSwitchLinkAggregation
 # --switchPorts item shape: {portId: string, serial: string}
 # --switchProfilePorts item shape: {portId: string, profile: string}
-export def "networks-switch-link-aggregations create" [
+export def "create-network-switch-link-aggregation" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6652,7 +6652,7 @@ export def "networks-switch-link-aggregations create" [
 #
 # DELETE /networks/{networkId}/switch/linkAggregations/{linkAggregationId}
 # operationId: deleteNetworkSwitchLinkAggregation
-export def "networks-switch-link-aggregations delete" [
+export def "delete-network-switch-link-aggregation" [
   network_id: string
   link_aggregation_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6692,7 +6692,7 @@ export def "networks-switch-link-aggregations delete" [
 # operationId: updateNetworkSwitchLinkAggregation
 # --switchPorts item shape: {portId: string, serial: string}
 # --switchProfilePorts item shape: {portId: string, profile: string}
-export def "networks-switch-link-aggregations update" [
+export def "update-network-switch-link-aggregation" [
   network_id: string
   link_aggregation_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6735,7 +6735,7 @@ export def "networks-switch-link-aggregations update" [
 #
 # GET /networks/{networkId}/switch/portSchedules
 # operationId: getNetworkSwitchPortSchedules
-export def "networks-switch-port-schedules get" [
+export def "get-network-switch-port-schedules" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6772,7 +6772,7 @@ export def "networks-switch-port-schedules get" [
 # POST /networks/{networkId}/switch/portSchedules
 # operationId: createNetworkSwitchPortSchedule
 # --portSchedule shape: {friday?: record, monday?: record, saturday?: record, sunday?: record, thursday?: record, tuesday?: record, wednesday?: record}
-export def "networks-switch-port-schedules create" [
+export def "create-network-switch-port-schedule" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6813,7 +6813,7 @@ export def "networks-switch-port-schedules create" [
 #
 # DELETE /networks/{networkId}/switch/portSchedules/{portScheduleId}
 # operationId: deleteNetworkSwitchPortSchedule
-export def "networks-switch-port-schedules delete" [
+export def "delete-network-switch-port-schedule" [
   network_id: string
   port_schedule_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6852,7 +6852,7 @@ export def "networks-switch-port-schedules delete" [
 # PUT /networks/{networkId}/switch/portSchedules/{portScheduleId}
 # operationId: updateNetworkSwitchPortSchedule
 # --portSchedule shape: {friday?: record, monday?: record, saturday?: record, sunday?: record, thursday?: record, tuesday?: record, wednesday?: record}
-export def "networks-switch-port-schedules update" [
+export def "update-network-switch-port-schedule" [
   network_id: string
   port_schedule_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6895,7 +6895,7 @@ export def "networks-switch-port-schedules update" [
 #
 # GET /networks/{networkId}/switch/settings
 # operationId: getNetworkSwitchSettings
-export def "networks-switch-settings get" [
+export def "get-network-switch-settings" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6932,7 +6932,7 @@ export def "networks-switch-settings get" [
 # PUT /networks/{networkId}/switch/settings
 # operationId: updateNetworkSwitchSettings
 # --powerExceptions item shape: {powerType: "combined"|"redundant"|"useNetworkSetting", serial: string}
-export def "networks-switch-settings update" [
+export def "update-network-switch-settings" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6974,7 +6974,7 @@ export def "networks-switch-settings update" [
 #
 # GET /networks/{networkId}/switch/settings/mtu
 # operationId: getNetworkSwitchSettingsMtu
-export def "networks-switch-settings-mtu get" [
+export def "get-network-switch-settings-mtu" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7011,7 +7011,7 @@ export def "networks-switch-settings-mtu get" [
 # PUT /networks/{networkId}/switch/settings/mtu
 # operationId: updateNetworkSwitchSettingsMtu
 # --overrides item shape: {mtuSize: int, switchProfiles?: list<string>, switches?: list<string>}
-export def "networks-switch-settings-mtu update" [
+export def "update-network-switch-settings-mtu" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7052,7 +7052,7 @@ export def "networks-switch-settings-mtu update" [
 #
 # GET /networks/{networkId}/switch/settings/multicast
 # operationId: getNetworkSwitchSettingsMulticast
-export def "networks-switch-settings-multicast get" [
+export def "get-network-switch-settings-multicast" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7090,7 +7090,7 @@ export def "networks-switch-settings-multicast get" [
 # operationId: updateNetworkSwitchSettingsMulticast
 # --defaultSettings shape: {floodUnknownMulticastTrafficEnabled?: bool, igmpSnoopingEnabled?: bool}
 # --overrides item shape: {floodUnknownMulticastTrafficEnabled: bool, igmpSnoopingEnabled: bool, stacks?: list<string>, switchProfiles?: list<string>, switches?: list<string>}
-export def "networks-switch-settings-multicast update" [
+export def "update-network-switch-settings-multicast" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7131,7 +7131,7 @@ export def "networks-switch-settings-multicast update" [
 #
 # GET /networks/{networkId}/switch/settings/qosRules
 # operationId: getNetworkSwitchSettingsQosRules
-export def "networks-switch-settings-qos-rules list" [
+export def "get-network-switch-settings-qos-rules" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7167,7 +7167,7 @@ export def "networks-switch-settings-qos-rules list" [
 #
 # POST /networks/{networkId}/switch/settings/qosRules
 # operationId: createNetworkSwitchSettingsQosRule
-export def "networks-switch-settings-qos-rules create" [
+export def "create-network-switch-settings-qos-rule" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7213,7 +7213,7 @@ export def "networks-switch-settings-qos-rules create" [
 #
 # GET /networks/{networkId}/switch/settings/qosRules/order
 # operationId: getNetworkSwitchSettingsQosRulesOrder
-export def "networks-switch-settings-qos-rules-order get" [
+export def "get-network-switch-settings-qos-rules-order" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7249,7 +7249,7 @@ export def "networks-switch-settings-qos-rules-order get" [
 #
 # PUT /networks/{networkId}/switch/settings/qosRules/order
 # operationId: updateNetworkSwitchSettingsQosRulesOrder
-export def "networks-switch-settings-qos-rules-order update" [
+export def "update-network-switch-settings-qos-rules-order" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7289,7 +7289,7 @@ export def "networks-switch-settings-qos-rules-order update" [
 #
 # DELETE /networks/{networkId}/switch/settings/qosRules/{qosRuleId}
 # operationId: deleteNetworkSwitchSettingsQosRule
-export def "networks-switch-settings-qos-rules delete" [
+export def "delete-network-switch-settings-qos-rule" [
   network_id: string
   qos_rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7327,7 +7327,7 @@ export def "networks-switch-settings-qos-rules delete" [
 #
 # GET /networks/{networkId}/switch/settings/qosRules/{qosRuleId}
 # operationId: getNetworkSwitchSettingsQosRule
-export def "networks-switch-settings-qos-rules get" [
+export def "get-network-switch-settings-qos-rule" [
   network_id: string
   qos_rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7365,7 +7365,7 @@ export def "networks-switch-settings-qos-rules get" [
 #
 # PUT /networks/{networkId}/switch/settings/qosRules/{qosRuleId}
 # operationId: updateNetworkSwitchSettingsQosRule
-export def "networks-switch-settings-qos-rules update" [
+export def "update-network-switch-settings-qos-rule" [
   network_id: string
   qos_rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7413,7 +7413,7 @@ export def "networks-switch-settings-qos-rules update" [
 #
 # GET /networks/{networkId}/switch/settings/stormControl
 # operationId: getNetworkSwitchSettingsStormControl
-export def "networks-switch-settings-storm-control get" [
+export def "get-network-switch-settings-storm-control" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7449,7 +7449,7 @@ export def "networks-switch-settings-storm-control get" [
 #
 # PUT /networks/{networkId}/switch/settings/stormControl
 # operationId: updateNetworkSwitchSettingsStormControl
-export def "networks-switch-settings-storm-control update" [
+export def "update-network-switch-settings-storm-control" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7491,7 +7491,7 @@ export def "networks-switch-settings-storm-control update" [
 #
 # GET /networks/{networkId}/switchStacks
 # operationId: getNetworkSwitchStacks
-export def "networks-switch-stacks list" [
+export def "get-network-switch-stacks" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7527,7 +7527,7 @@ export def "networks-switch-stacks list" [
 #
 # POST /networks/{networkId}/switchStacks
 # operationId: createNetworkSwitchStack
-export def "networks-switch-stacks create" [
+export def "create-network-switch-stack" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7568,7 +7568,7 @@ export def "networks-switch-stacks create" [
 #
 # DELETE /networks/{networkId}/switchStacks/{switchStackId}
 # operationId: deleteNetworkSwitchStack
-export def "networks-switch-stacks delete" [
+export def "delete-network-switch-stack" [
   network_id: string
   switch_stack_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7606,7 +7606,7 @@ export def "networks-switch-stacks delete" [
 #
 # GET /networks/{networkId}/switchStacks/{switchStackId}
 # operationId: getNetworkSwitchStack
-export def "networks-switch-stacks get" [
+export def "get-network-switch-stack" [
   network_id: string
   switch_stack_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7644,7 +7644,7 @@ export def "networks-switch-stacks get" [
 #
 # POST /networks/{networkId}/switchStacks/{switchStackId}/add
 # operationId: addNetworkSwitchStack
-export def "networks-switch-stacks-add create" [
+export def "add-network-switch-stack" [
   network_id: string
   switch_stack_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7686,7 +7686,7 @@ export def "networks-switch-stacks-add create" [
 #
 # POST /networks/{networkId}/switchStacks/{switchStackId}/remove
 # operationId: removeNetworkSwitchStack
-export def "networks-switch-stacks-remove delete" [
+export def "remove-network-switch-stack" [
   network_id: string
   switch_stack_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7728,7 +7728,7 @@ export def "networks-switch-stacks-remove delete" [
 #
 # GET /networks/{networkId}/syslogServers
 # operationId: getNetworkSyslogServers
-export def "networks-syslog-servers get" [
+export def "get-network-syslog-servers" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7765,7 +7765,7 @@ export def "networks-syslog-servers get" [
 # PUT /networks/{networkId}/syslogServers
 # operationId: updateNetworkSyslogServers
 # --servers item shape: {host: string, port: int, roles: list<string>}
-export def "networks-syslog-servers update" [
+export def "update-network-syslog-servers" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7805,7 +7805,7 @@ export def "networks-syslog-servers update" [
 #
 # GET /networks/{networkId}/traffic
 # operationId: getNetworkTraffic
-export def "networks-traffic get" [
+export def "get-network-traffic" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7845,7 +7845,7 @@ export def "networks-traffic get" [
 #
 # POST /networks/{networkId}/unbind
 # operationId: unbindNetwork
-export def "networks-unbind create" [
+export def "unbind-network" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7881,7 +7881,7 @@ export def "networks-unbind create" [
 #
 # GET /networks/{networkId}/uplinkSettings
 # operationId: getNetworkUplinkSettings
-export def "networks-uplink-settings get" [
+export def "get-network-uplink-settings" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7918,7 +7918,7 @@ export def "networks-uplink-settings get" [
 # PUT /networks/{networkId}/uplinkSettings
 # operationId: updateNetworkUplinkSettings
 # --bandwidthLimits shape: {cellular?: record, wan1?: record, wan2?: record}
-export def "networks-uplink-settings update" [
+export def "update-network-uplink-settings" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7958,7 +7958,7 @@ export def "networks-uplink-settings update" [
 #
 # GET /networks/{networkId}/vlans
 # operationId: getNetworkVlans
-export def "networks-vlans list" [
+export def "get-network-vlans" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7994,7 +7994,7 @@ export def "networks-vlans list" [
 #
 # POST /networks/{networkId}/vlans
 # operationId: createNetworkVlan
-export def "networks-vlans create" [
+export def "create-network-vlan" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8038,7 +8038,7 @@ export def "networks-vlans create" [
 #
 # DELETE /networks/{networkId}/vlans/{vlanId}
 # operationId: deleteNetworkVlan
-export def "networks-vlans delete" [
+export def "delete-network-vlan" [
   network_id: string
   vlan_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8076,7 +8076,7 @@ export def "networks-vlans delete" [
 #
 # GET /networks/{networkId}/vlans/{vlanId}
 # operationId: getNetworkVlan
-export def "networks-vlans get" [
+export def "get-network-vlan" [
   network_id: string
   vlan_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8116,7 +8116,7 @@ export def "networks-vlans get" [
 # operationId: updateNetworkVlan
 # --dhcpOptions item shape: {code: string, type: "hex"|"integer"|"ip"|"text", value: string}
 # --reservedIpRanges item shape: {comment: string, end: string, start: string}
-export def "networks-vlans update" [
+export def "update-network-vlan" [
   network_id: string
   vlan_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8172,7 +8172,7 @@ export def "networks-vlans update" [
 #
 # GET /networks/{networkId}/vlansEnabledState
 # operationId: getNetworkVlansEnabledState
-export def "networks-vlans-enabled-state get" [
+export def "get-network-vlans-enabled-state" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8208,7 +8208,7 @@ export def "networks-vlans-enabled-state get" [
 #
 # PUT /networks/{networkId}/vlansEnabledState
 # operationId: updateNetworkVlansEnabledState
-export def "networks-vlans-enabled-state update" [
+export def "update-network-vlans-enabled-state" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8248,7 +8248,7 @@ export def "networks-vlans-enabled-state update" [
 #
 # GET /networks/{networkId}/warmSpareSettings
 # operationId: getNetworkWarmSpareSettings
-export def "networks-warm-spare-settings get" [
+export def "get-network-warm-spare-settings" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8284,7 +8284,7 @@ export def "networks-warm-spare-settings get" [
 #
 # PUT /networks/{networkId}/warmSpareSettings
 # operationId: updateNetworkWarmSpareSettings
-export def "networks-warm-spare-settings update" [
+export def "update-network-warm-spare-settings" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8328,7 +8328,7 @@ export def "networks-warm-spare-settings update" [
 #
 # GET /networks/{networkId}/wireless/rfProfiles
 # operationId: getNetworkWirelessRfProfiles
-export def "networks-wireless-rf-profiles list" [
+export def "get-network-wireless-rf-profiles" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8369,7 +8369,7 @@ export def "networks-wireless-rf-profiles list" [
 # --apBandSettings shape: {bandOperationMode?: "2.4ghz"|"5ghz"|"dual", bandSteeringEnabled?: bool}
 # --fiveGhzSettings shape: {channelWidth?: string, maxPower?: int, minBitrate?: int, minPower?: int, rxsop?: int, validAutoChannels?: list<int>}
 # --twoFourGhzSettings shape: {axEnabled?: bool, maxPower?: int, minBitrate?: float, minPower?: int, rxsop?: int, validAutoChannels?: list<int>}
-export def "networks-wireless-rf-profiles create" [
+export def "create-network-wireless-rf-profile" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8415,7 +8415,7 @@ export def "networks-wireless-rf-profiles create" [
 #
 # DELETE /networks/{networkId}/wireless/rfProfiles/{rfProfileId}
 # operationId: deleteNetworkWirelessRfProfile
-export def "networks-wireless-rf-profiles delete" [
+export def "delete-network-wireless-rf-profile" [
   network_id: string
   rf_profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8453,7 +8453,7 @@ export def "networks-wireless-rf-profiles delete" [
 #
 # GET /networks/{networkId}/wireless/rfProfiles/{rfProfileId}
 # operationId: getNetworkWirelessRfProfile
-export def "networks-wireless-rf-profiles get" [
+export def "get-network-wireless-rf-profile" [
   network_id: string
   rf_profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8494,7 +8494,7 @@ export def "networks-wireless-rf-profiles get" [
 # --apBandSettings shape: {bandOperationMode?: "2.4ghz"|"5ghz"|"dual", bandSteeringEnabled?: bool}
 # --fiveGhzSettings shape: {channelWidth?: string, maxPower?: int, minBitrate?: int, minPower?: int, rxsop?: int, validAutoChannels?: list<int>}
 # --twoFourGhzSettings shape: {axEnabled?: bool, maxPower?: int, minBitrate?: float, minPower?: int, rxsop?: int, validAutoChannels?: list<int>}
-export def "networks-wireless-rf-profiles update" [
+export def "update-network-wireless-rf-profile" [
   network_id: string
   rf_profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8542,7 +8542,7 @@ export def "networks-wireless-rf-profiles update" [
 #
 # GET /networks/{networkId}/wireless/settings
 # operationId: getNetworkWirelessSettings
-export def "networks-wireless-settings get" [
+export def "get-network-wireless-settings" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8578,7 +8578,7 @@ export def "networks-wireless-settings get" [
 #
 # PUT /networks/{networkId}/wireless/settings
 # operationId: updateNetworkWirelessSettings
-export def "networks-wireless-settings update" [
+export def "update-network-wireless-settings" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8622,7 +8622,7 @@ export def "networks-wireless-settings update" [
 #
 # PUT /networks/{network_id}/sm/devices/lock
 # operationId: lockNetworkSmDevices
-export def "networks-sm-devices-lock lock" [
+export def "lock-network-sm-devices" [
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8666,7 +8666,7 @@ export def "networks-sm-devices-lock lock" [
 #
 # GET /networks/{network_id}/sm/{id}/connectivity
 # operationId: getNetworkSmConnectivity
-export def "networks-sm-connectivity get" [
+export def "get-network-sm-connectivity" [
   network_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8708,7 +8708,7 @@ export def "networks-sm-connectivity get" [
 #
 # GET /networks/{network_id}/sm/{id}/desktopLogs
 # operationId: getNetworkSmDesktopLogs
-export def "networks-sm-desktop-logs get" [
+export def "get-network-sm-desktop-logs" [
   network_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8750,7 +8750,7 @@ export def "networks-sm-desktop-logs get" [
 #
 # GET /networks/{network_id}/sm/{id}/deviceCommandLogs
 # operationId: getNetworkSmDeviceCommandLogs
-export def "networks-sm-device-command-logs get" [
+export def "get-network-sm-device-command-logs" [
   network_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8792,7 +8792,7 @@ export def "networks-sm-device-command-logs get" [
 #
 # GET /networks/{network_id}/sm/{id}/performanceHistory
 # operationId: getNetworkSmPerformanceHistory
-export def "networks-sm-performance-history get" [
+export def "get-network-sm-performance-history" [
   network_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8834,7 +8834,7 @@ export def "networks-sm-performance-history get" [
 #
 # GET /organizations
 # operationId: getOrganizations
-export def "organizations list" [
+export def "get-organizations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8868,7 +8868,7 @@ export def "organizations list" [
 #
 # GET /organizations/{organizationId}
 # operationId: getOrganization
-export def "organizations get" [
+export def "get-organization" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8904,7 +8904,7 @@ export def "organizations get" [
 #
 # GET /organizations/{organizationId}/actionBatches
 # operationId: getOrganizationActionBatches
-export def "organizations-action-batches get" [
+export def "get-organization-action-batches" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8943,7 +8943,7 @@ export def "organizations-action-batches get" [
 # POST /organizations/{organizationId}/actionBatches
 # operationId: createOrganizationActionBatch
 # --actions item shape: {body?: record, operation: string, resource: string}
-export def "organizations-action-batches create-batch" [
+export def "create-organization-action-batch" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8985,7 +8985,7 @@ export def "organizations-action-batches create-batch" [
 #
 # DELETE /organizations/{organizationId}/actionBatches/{actionBatchId}
 # operationId: deleteOrganizationActionBatch
-export def "organizations-action-batches delete-batch" [
+export def "delete-organization-action-batch" [
   organization_id: string
   action_batch_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9023,7 +9023,7 @@ export def "organizations-action-batches delete-batch" [
 #
 # PUT /organizations/{organizationId}/actionBatches/{actionBatchId}
 # operationId: updateOrganizationActionBatch
-export def "organizations-action-batches update-batch" [
+export def "update-organization-action-batch" [
   organization_id: string
   action_batch_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9066,7 +9066,7 @@ export def "organizations-action-batches update-batch" [
 #
 # GET /organizations/{organizationId}/admins
 # operationId: getOrganizationAdmins
-export def "organizations-admins get" [
+export def "get-organization-admins" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9104,7 +9104,7 @@ export def "organizations-admins get" [
 # operationId: createOrganizationAdmin
 # --networks item shape: {access: string, id: string}
 # --tags item shape: {access: string, tag: string}
-export def "organizations-admins create" [
+export def "create-organization-admin" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9149,7 +9149,7 @@ export def "organizations-admins create" [
 #
 # DELETE /organizations/{organizationId}/admins/{adminId}
 # operationId: deleteOrganizationAdmin
-export def "organizations-admins delete" [
+export def "delete-organization-admin" [
   organization_id: string
   admin_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9189,7 +9189,7 @@ export def "organizations-admins delete" [
 # operationId: updateOrganizationAdmin
 # --networks item shape: {access: string, id: string}
 # --tags item shape: {access: string, tag: string}
-export def "organizations-admins update" [
+export def "update-organization-admin" [
   organization_id: string
   admin_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9234,7 +9234,7 @@ export def "organizations-admins update" [
 #
 # GET /organizations/{organizationId}/apiRequests
 # operationId: getOrganizationApiRequests
-export def "organizations-api-requests get" [
+export def "get-organization-api-requests" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9282,7 +9282,7 @@ export def "organizations-api-requests get" [
 #
 # GET /organizations/{organizationId}/apiRequests/overview
 # operationId: getOrganizationApiRequestsOverview
-export def "organizations-api-requests-overview get" [
+export def "get-organization-api-requests-overview" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9323,7 +9323,7 @@ export def "organizations-api-requests-overview get" [
 # POST /organizations/{organizationId}/claim
 # operationId: claimIntoOrganization
 # --licenses item shape: {key: string, mode?: "addDevices"|"renew"}
-export def "organizations-claim create-into" [
+export def "claim-into-organization" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9365,7 +9365,7 @@ export def "organizations-claim create-into" [
 #
 # POST /organizations/{organizationId}/clone
 # operationId: cloneOrganization
-export def "organizations-clone clone" [
+export def "clone-organization" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9405,7 +9405,7 @@ export def "organizations-clone clone" [
 #
 # GET /organizations/{organizationId}/configTemplates
 # operationId: getOrganizationConfigTemplates
-export def "organizations-config-templates get" [
+export def "get-organization-config-templates" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9441,7 +9441,7 @@ export def "organizations-config-templates get" [
 #
 # DELETE /organizations/{organizationId}/configTemplates/{configTemplateId}
 # operationId: deleteOrganizationConfigTemplate
-export def "organizations-config-templates delete" [
+export def "delete-organization-config-template" [
   organization_id: string
   config_template_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9479,7 +9479,7 @@ export def "organizations-config-templates delete" [
 #
 # GET /organizations/{organizationId}/configTemplates/{configTemplateId}/switchProfiles
 # operationId: getOrganizationConfigTemplateSwitchProfiles
-export def "organizations-config-templates-switch-profiles get" [
+export def "get-organization-config-template-switch-profiles" [
   organization_id: string
   config_template_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9517,7 +9517,7 @@ export def "organizations-config-templates-switch-profiles get" [
 #
 # GET /organizations/{organizationId}/configurationChanges
 # operationId: getOrganizationConfigurationChanges
-export def "organizations-configuration-changes get" [
+export def "get-organization-configuration-changes" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9562,7 +9562,7 @@ export def "organizations-configuration-changes get" [
 #
 # GET /organizations/{organizationId}/deviceStatuses
 # operationId: getOrganizationDeviceStatuses
-export def "organizations-device-statuses get" [
+export def "get-organization-device-statuses" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9598,7 +9598,7 @@ export def "organizations-device-statuses get" [
 #
 # GET /organizations/{organizationId}/devices
 # operationId: getOrganizationDevices
-export def "organizations-devices get" [
+export def "get-organization-devices" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9639,7 +9639,7 @@ export def "organizations-devices get" [
 #
 # GET /organizations/{organizationId}/insight/monitoredMediaServers
 # operationId: getOrganizationInsightMonitoredMediaServers
-export def "organizations-insight-monitored-media-servers list" [
+export def "get-organization-insight-monitored-media-servers" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9675,7 +9675,7 @@ export def "organizations-insight-monitored-media-servers list" [
 #
 # POST /organizations/{organizationId}/insight/monitoredMediaServers
 # operationId: createOrganizationInsightMonitoredMediaServer
-export def "organizations-insight-monitored-media-servers create" [
+export def "create-organization-insight-monitored-media-server" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9716,7 +9716,7 @@ export def "organizations-insight-monitored-media-servers create" [
 #
 # DELETE /organizations/{organizationId}/insight/monitoredMediaServers/{monitoredMediaServerId}
 # operationId: deleteOrganizationInsightMonitoredMediaServer
-export def "organizations-insight-monitored-media-servers delete" [
+export def "delete-organization-insight-monitored-media-server" [
   organization_id: string
   monitored_media_server_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9754,7 +9754,7 @@ export def "organizations-insight-monitored-media-servers delete" [
 #
 # GET /organizations/{organizationId}/insight/monitoredMediaServers/{monitoredMediaServerId}
 # operationId: getOrganizationInsightMonitoredMediaServer
-export def "organizations-insight-monitored-media-servers get" [
+export def "get-organization-insight-monitored-media-server" [
   organization_id: string
   monitored_media_server_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9792,7 +9792,7 @@ export def "organizations-insight-monitored-media-servers get" [
 #
 # PUT /organizations/{organizationId}/insight/monitoredMediaServers/{monitoredMediaServerId}
 # operationId: updateOrganizationInsightMonitoredMediaServer
-export def "organizations-insight-monitored-media-servers update" [
+export def "update-organization-insight-monitored-media-server" [
   organization_id: string
   monitored_media_server_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9835,7 +9835,7 @@ export def "organizations-insight-monitored-media-servers update" [
 #
 # GET /organizations/{organizationId}/inventory
 # operationId: getOrganizationInventory
-export def "organizations-inventory get" [
+export def "get-organization-inventory" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9873,7 +9873,7 @@ export def "organizations-inventory get" [
 #
 # GET /organizations/{organizationId}/licenseState
 # operationId: getOrganizationLicenseState
-export def "organizations-license-state get" [
+export def "get-organization-license-state" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9909,7 +9909,7 @@ export def "organizations-license-state get" [
 #
 # GET /organizations/{organizationId}/licenses
 # operationId: getOrganizationLicenses
-export def "organizations-licenses list" [
+export def "get-organization-licenses" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9952,7 +9952,7 @@ export def "organizations-licenses list" [
 #
 # POST /organizations/{organizationId}/licenses/assignSeats
 # operationId: assignOrganizationLicensesSeats
-export def "organizations-licenses-assign-seats assign" [
+export def "assign-organization-licenses-seats" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9994,7 +9994,7 @@ export def "organizations-licenses-assign-seats assign" [
 #
 # POST /organizations/{organizationId}/licenses/moveSeats
 # operationId: moveOrganizationLicensesSeats
-export def "organizations-licenses-move-seats move" [
+export def "move-organization-licenses-seats" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10036,7 +10036,7 @@ export def "organizations-licenses-move-seats move" [
 #
 # POST /organizations/{organizationId}/licenses/renewSeats
 # operationId: renewOrganizationLicensesSeats
-export def "organizations-licenses-renew-seats create" [
+export def "renew-organization-licenses-seats" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10077,7 +10077,7 @@ export def "organizations-licenses-renew-seats create" [
 #
 # GET /organizations/{organizationId}/licenses/{licenseId}
 # operationId: getOrganizationLicense
-export def "organizations-licenses get" [
+export def "get-organization-license" [
   organization_id: string
   license_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10115,7 +10115,7 @@ export def "organizations-licenses get" [
 #
 # GET /organizations/{organizationId}/networks
 # operationId: getOrganizationNetworks
-export def "organizations-networks get" [
+export def "get-organization-networks" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10153,7 +10153,7 @@ export def "organizations-networks get" [
 #
 # POST /organizations/{organizationId}/networks
 # operationId: createOrganizationNetwork
-export def "organizations-networks create" [
+export def "create-organization-network" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10199,7 +10199,7 @@ export def "organizations-networks create" [
 #
 # POST /organizations/{organizationId}/networks/combine
 # operationId: combineOrganizationNetworks
-export def "organizations-networks-combine create" [
+export def "combine-organization-networks" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10241,7 +10241,7 @@ export def "organizations-networks-combine create" [
 #
 # GET /organizations/{organizationId}/openapiSpec
 # operationId: getOrganizationOpenapiSpec
-export def "organizations-openapi-spec get" [
+export def "get-organization-openapi-spec" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10277,7 +10277,7 @@ export def "organizations-openapi-spec get" [
 #
 # GET /organizations/{organizationId}/samlRoles
 # operationId: getOrganizationSamlRoles
-export def "organizations-saml-roles list" [
+export def "get-organization-saml-roles" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10315,7 +10315,7 @@ export def "organizations-saml-roles list" [
 # operationId: createOrganizationSamlRole
 # --networks item shape: {access: string, id: string}
 # --tags item shape: {access: string, tag: string}
-export def "organizations-saml-roles create" [
+export def "create-organization-saml-role" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10358,7 +10358,7 @@ export def "organizations-saml-roles create" [
 #
 # GET /organizations/{organizationId}/samlRoles/{samlRoleId}
 # operationId: getOrganizationSamlRole
-export def "organizations-saml-roles get" [
+export def "get-organization-saml-role" [
   organization_id: string
   saml_role_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10398,7 +10398,7 @@ export def "organizations-saml-roles get" [
 # operationId: updateOrganizationSamlRole
 # --networks item shape: {access: string, id: string}
 # --tags item shape: {access: string, tag: string}
-export def "organizations-saml-roles update" [
+export def "update-organization-saml-role" [
   organization_id: string
   saml_role_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10443,7 +10443,7 @@ export def "organizations-saml-roles update" [
 #
 # GET /organizations/{organizationId}/security/intrusionSettings
 # operationId: getOrganizationSecurityIntrusionSettings
-export def "organizations-security-intrusion-settings get" [
+export def "get-organization-security-intrusion-settings" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10480,7 +10480,7 @@ export def "organizations-security-intrusion-settings get" [
 # PUT /organizations/{organizationId}/security/intrusionSettings
 # operationId: updateOrganizationSecurityIntrusionSettings
 # --whitelistedRules item shape: {message?: string, ruleId: string}
-export def "organizations-security-intrusion-settings update" [
+export def "update-organization-security-intrusion-settings" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10520,7 +10520,7 @@ export def "organizations-security-intrusion-settings update" [
 #
 # GET /organizations/{organizationId}/securityEvents
 # operationId: getOrganizationSecurityEvents
-export def "organizations-security-events get" [
+export def "get-organization-security-events" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10563,7 +10563,7 @@ export def "organizations-security-events get" [
 #
 # GET /organizations/{organizationId}/snmp
 # operationId: getOrganizationSnmp
-export def "organizations-snmp get" [
+export def "get-organization-snmp" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10599,7 +10599,7 @@ export def "organizations-snmp get" [
 #
 # GET /organizations/{organizationId}/thirdPartyVPNPeers
 # operationId: getOrganizationThirdPartyVPNPeers
-export def "organizations-third-party-vpn-peers get" [
+export def "get-organization-third-party-vpn-peers" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10636,7 +10636,7 @@ export def "organizations-third-party-vpn-peers get" [
 # PUT /organizations/{organizationId}/thirdPartyVPNPeers
 # operationId: updateOrganizationThirdPartyVPNPeers
 # --peers item shape: {ikeVersion?: "1"|"2", ipsecPolicies?: record, ipsecPoliciesPreset?: string, name: string, networkTags?: list<string>, privateSubnets: list<string>, publicIp: string, remoteId?: string, secret: string}
-export def "organizations-third-party-vpn-peers update" [
+export def "update-organization-third-party-vpn-peers" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10676,7 +10676,7 @@ export def "organizations-third-party-vpn-peers update" [
 #
 # GET /organizations/{organizationId}/uplinksLossAndLatency
 # operationId: getOrganizationUplinksLossAndLatency
-export def "organizations-uplinks-loss-and-latency get" [
+export def "get-organization-uplinks-loss-and-latency" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10718,7 +10718,7 @@ export def "organizations-uplinks-loss-and-latency get" [
 #
 # GET /organizations/{organizationId}/vpnFirewallRules
 # operationId: getOrganizationVpnFirewallRules
-export def "organizations-vpn-firewall-rules get" [
+export def "get-organization-vpn-firewall-rules" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10755,7 +10755,7 @@ export def "organizations-vpn-firewall-rules get" [
 # PUT /organizations/{organizationId}/vpnFirewallRules
 # operationId: updateOrganizationVpnFirewallRules
 # --rules item shape: {comment?: string, destCidr: string, destPort?: string, policy: "allow"|"deny", protocol: "any"|"icmp"|"icmp6"|"tcp"|"udp", srcCidr: string, srcPort?: string, syslogEnabled?: bool}
-export def "organizations-vpn-firewall-rules update" [
+export def "update-organization-vpn-firewall-rules" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

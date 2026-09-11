@@ -138,7 +138,7 @@ def delete-policy-completer [] { ["ABANDON" "DELETE"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "deploymentmanager-v2beta-projects-global-composite-types list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "deploymentmanager-composite-types-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -162,7 +162,7 @@ export def commands []: nothing -> table {
 #
 # GET /deploymentmanager/v2beta/projects/{project}/global/compositeTypes
 # operationId: deploymentmanager.compositeTypes.list
-export def "deploymentmanager-v2beta-projects-global-composite-types list" [
+export def "deploymentmanager-composite-types-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -217,7 +217,7 @@ export def "deploymentmanager-v2beta-projects-global-composite-types list" [
 # --labels item shape: {key?: string, value?: string}
 # --operation shape: {clientOperationId?: string, creationTimestamp?: string, description?: string, endTime?: string, error?: record, httpErrorMessage?: string, httpErrorStatusCode?: int, id?: string, insertTime?: string, kind?: string, name?: string, operationGroupId?: string, operationType?: string, progress?: int, region?: string, selfLink?: string, startTime?: string, status?: "PENDING"|"RUNNING"|"DONE", statusMessage?: string, targetId?: string, targetLink?: string, user?: string, warnings?: list, zone?: string}
 # --templateContents shape: {imports?: list, interpreter?: "UNKNOWN_INTERPRETER"|"PYTHON"|"JINJA", mainTemplate?: string, schema?: string, template?: string}
-export def "deploymentmanager-v2beta-projects-global-composite-types create" [
+export def "deploymentmanager-composite-types-insert" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -277,7 +277,7 @@ export def "deploymentmanager-v2beta-projects-global-composite-types create" [
 #
 # DELETE /deploymentmanager/v2beta/projects/{project}/global/compositeTypes/{compositeType}
 # operationId: deploymentmanager.compositeTypes.delete
-export def "deploymentmanager-v2beta-projects-global-composite-types delete" [
+export def "deploymentmanager-composite-types-delete" [
   project: string
   composite_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -327,7 +327,7 @@ export def "deploymentmanager-v2beta-projects-global-composite-types delete" [
 #
 # GET /deploymentmanager/v2beta/projects/{project}/global/compositeTypes/{compositeType}
 # operationId: deploymentmanager.compositeTypes.get
-export def "deploymentmanager-v2beta-projects-global-composite-types get" [
+export def "deploymentmanager-composite-types-get" [
   project: string
   composite_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -380,7 +380,7 @@ export def "deploymentmanager-v2beta-projects-global-composite-types get" [
 # --labels item shape: {key?: string, value?: string}
 # --operation shape: {clientOperationId?: string, creationTimestamp?: string, description?: string, endTime?: string, error?: record, httpErrorMessage?: string, httpErrorStatusCode?: int, id?: string, insertTime?: string, kind?: string, name?: string, operationGroupId?: string, operationType?: string, progress?: int, region?: string, selfLink?: string, startTime?: string, status?: "PENDING"|"RUNNING"|"DONE", statusMessage?: string, targetId?: string, targetLink?: string, user?: string, warnings?: list, zone?: string}
 # --templateContents shape: {imports?: list, interpreter?: "UNKNOWN_INTERPRETER"|"PYTHON"|"JINJA", mainTemplate?: string, schema?: string, template?: string}
-export def "deploymentmanager-v2beta-projects-global-composite-types update-by-project-composite-type" [
+export def "deploymentmanager-composite-types-patch" [
   project: string
   composite_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -445,7 +445,7 @@ export def "deploymentmanager-v2beta-projects-global-composite-types update-by-p
 # --labels item shape: {key?: string, value?: string}
 # --operation shape: {clientOperationId?: string, creationTimestamp?: string, description?: string, endTime?: string, error?: record, httpErrorMessage?: string, httpErrorStatusCode?: int, id?: string, insertTime?: string, kind?: string, name?: string, operationGroupId?: string, operationType?: string, progress?: int, region?: string, selfLink?: string, startTime?: string, status?: "PENDING"|"RUNNING"|"DONE", statusMessage?: string, targetId?: string, targetLink?: string, user?: string, warnings?: list, zone?: string}
 # --templateContents shape: {imports?: list, interpreter?: "UNKNOWN_INTERPRETER"|"PYTHON"|"JINJA", mainTemplate?: string, schema?: string, template?: string}
-export def "deploymentmanager-v2beta-projects-global-composite-types update-by-project-composite-type-1" [
+export def "deploymentmanager-composite-types-update" [
   project: string
   composite_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -507,7 +507,7 @@ export def "deploymentmanager-v2beta-projects-global-composite-types update-by-p
 #
 # GET /deploymentmanager/v2beta/projects/{project}/global/deployments
 # operationId: deploymentmanager.deployments.list
-export def "deploymentmanager-v2beta-projects-global-deployments list" [
+export def "deploymentmanager-deployments-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -563,7 +563,7 @@ export def "deploymentmanager-v2beta-projects-global-deployments list" [
 # --operation shape: {clientOperationId?: string, creationTimestamp?: string, description?: string, endTime?: string, error?: record, httpErrorMessage?: string, httpErrorStatusCode?: int, id?: string, insertTime?: string, kind?: string, name?: string, operationGroupId?: string, operationType?: string, progress?: int, region?: string, selfLink?: string, startTime?: string, status?: "PENDING"|"RUNNING"|"DONE", statusMessage?: string, targetId?: string, targetLink?: string, user?: string, warnings?: list, zone?: string}
 # --target shape: {config?: record, imports?: list}
 # --update shape: {description?: string, labels?: list, manifest?: string}
-export def "deploymentmanager-v2beta-projects-global-deployments create" [
+export def "deploymentmanager-deployments-insert" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -628,7 +628,7 @@ export def "deploymentmanager-v2beta-projects-global-deployments create" [
 #
 # DELETE /deploymentmanager/v2beta/projects/{project}/global/deployments/{deployment}
 # operationId: deploymentmanager.deployments.delete
-export def "deploymentmanager-v2beta-projects-global-deployments delete" [
+export def "deploymentmanager-deployments-delete" [
   project: string
   deployment: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -679,7 +679,7 @@ export def "deploymentmanager-v2beta-projects-global-deployments delete" [
 #
 # GET /deploymentmanager/v2beta/projects/{project}/global/deployments/{deployment}
 # operationId: deploymentmanager.deployments.get
-export def "deploymentmanager-v2beta-projects-global-deployments get" [
+export def "deploymentmanager-deployments-get" [
   project: string
   deployment: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -733,7 +733,7 @@ export def "deploymentmanager-v2beta-projects-global-deployments get" [
 # --operation shape: {clientOperationId?: string, creationTimestamp?: string, description?: string, endTime?: string, error?: record, httpErrorMessage?: string, httpErrorStatusCode?: int, id?: string, insertTime?: string, kind?: string, name?: string, operationGroupId?: string, operationType?: string, progress?: int, region?: string, selfLink?: string, startTime?: string, status?: "PENDING"|"RUNNING"|"DONE", statusMessage?: string, targetId?: string, targetLink?: string, user?: string, warnings?: list, zone?: string}
 # --target shape: {config?: record, imports?: list}
 # --update shape: {description?: string, labels?: list, manifest?: string}
-export def "deploymentmanager-v2beta-projects-global-deployments update-by-project-deployment" [
+export def "deploymentmanager-deployments-patch" [
   project: string
   deployment: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -805,7 +805,7 @@ export def "deploymentmanager-v2beta-projects-global-deployments update-by-proje
 # --operation shape: {clientOperationId?: string, creationTimestamp?: string, description?: string, endTime?: string, error?: record, httpErrorMessage?: string, httpErrorStatusCode?: int, id?: string, insertTime?: string, kind?: string, name?: string, operationGroupId?: string, operationType?: string, progress?: int, region?: string, selfLink?: string, startTime?: string, status?: "PENDING"|"RUNNING"|"DONE", statusMessage?: string, targetId?: string, targetLink?: string, user?: string, warnings?: list, zone?: string}
 # --target shape: {config?: record, imports?: list}
 # --update shape: {description?: string, labels?: list, manifest?: string}
-export def "deploymentmanager-v2beta-projects-global-deployments update-by-project-deployment-1" [
+export def "deploymentmanager-deployments-update" [
   project: string
   deployment: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -873,7 +873,7 @@ export def "deploymentmanager-v2beta-projects-global-deployments update-by-proje
 #
 # POST /deploymentmanager/v2beta/projects/{project}/global/deployments/{deployment}/cancelPreview
 # operationId: deploymentmanager.deployments.cancelPreview
-export def "deploymentmanager-v2beta-projects-global-deployments-cancel-preview cancel" [
+export def "deploymentmanager-deployments-cancel-preview" [
   project: string
   deployment: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -927,7 +927,7 @@ export def "deploymentmanager-v2beta-projects-global-deployments-cancel-preview 
 #
 # GET /deploymentmanager/v2beta/projects/{project}/global/deployments/{deployment}/manifests
 # operationId: deploymentmanager.manifests.list
-export def "deploymentmanager-v2beta-projects-global-deployments-manifests list" [
+export def "deploymentmanager-manifests-list" [
   project: string
   deployment: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -981,7 +981,7 @@ export def "deploymentmanager-v2beta-projects-global-deployments-manifests list"
 #
 # GET /deploymentmanager/v2beta/projects/{project}/global/deployments/{deployment}/manifests/{manifest}
 # operationId: deploymentmanager.manifests.get
-export def "deploymentmanager-v2beta-projects-global-deployments-manifests get" [
+export def "deploymentmanager-manifests-get" [
   project: string
   deployment: string
   manifest: string
@@ -1033,7 +1033,7 @@ export def "deploymentmanager-v2beta-projects-global-deployments-manifests get" 
 #
 # GET /deploymentmanager/v2beta/projects/{project}/global/deployments/{deployment}/resources
 # operationId: deploymentmanager.resources.list
-export def "deploymentmanager-v2beta-projects-global-deployments-resources list" [
+export def "deploymentmanager-resources-list" [
   project: string
   deployment: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1087,7 +1087,7 @@ export def "deploymentmanager-v2beta-projects-global-deployments-resources list"
 #
 # GET /deploymentmanager/v2beta/projects/{project}/global/deployments/{deployment}/resources/{resource}
 # operationId: deploymentmanager.resources.get
-export def "deploymentmanager-v2beta-projects-global-deployments-resources get" [
+export def "deploymentmanager-resources-get" [
   project: string
   deployment: string
   resource: string
@@ -1139,7 +1139,7 @@ export def "deploymentmanager-v2beta-projects-global-deployments-resources get" 
 #
 # POST /deploymentmanager/v2beta/projects/{project}/global/deployments/{deployment}/stop
 # operationId: deploymentmanager.deployments.stop
-export def "deploymentmanager-v2beta-projects-global-deployments-stop stop" [
+export def "deploymentmanager-deployments-stop" [
   project: string
   deployment: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1193,7 +1193,7 @@ export def "deploymentmanager-v2beta-projects-global-deployments-stop stop" [
 #
 # GET /deploymentmanager/v2beta/projects/{project}/global/deployments/{resource}/getIamPolicy
 # operationId: deploymentmanager.deployments.getIamPolicy
-export def "deploymentmanager-v2beta-projects-global-deployments-get-iam-policy get" [
+export def "deploymentmanager-deployments-get-iam-policy" [
   project: string
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1246,7 +1246,7 @@ export def "deploymentmanager-v2beta-projects-global-deployments-get-iam-policy 
 # operationId: deploymentmanager.deployments.setIamPolicy
 # --bindings item shape: {condition?: record, members?: list<string>, role?: string}
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
-export def "deploymentmanager-v2beta-projects-global-deployments-set-iam-policy update" [
+export def "deploymentmanager-deployments-set-iam-policy" [
   project: string
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1302,7 +1302,7 @@ export def "deploymentmanager-v2beta-projects-global-deployments-set-iam-policy 
 #
 # POST /deploymentmanager/v2beta/projects/{project}/global/deployments/{resource}/testIamPermissions
 # operationId: deploymentmanager.deployments.testIamPermissions
-export def "deploymentmanager-v2beta-projects-global-deployments-test-iam-permissions test" [
+export def "deploymentmanager-deployments-test-iam-permissions" [
   project: string
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1356,7 +1356,7 @@ export def "deploymentmanager-v2beta-projects-global-deployments-test-iam-permis
 #
 # GET /deploymentmanager/v2beta/projects/{project}/global/operations
 # operationId: deploymentmanager.operations.list
-export def "deploymentmanager-v2beta-projects-global-operations list" [
+export def "deploymentmanager-operations-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1408,7 +1408,7 @@ export def "deploymentmanager-v2beta-projects-global-operations list" [
 #
 # GET /deploymentmanager/v2beta/projects/{project}/global/operations/{operation}
 # operationId: deploymentmanager.operations.get
-export def "deploymentmanager-v2beta-projects-global-operations get" [
+export def "deploymentmanager-operations-get" [
   project: string
   operation: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1458,7 +1458,7 @@ export def "deploymentmanager-v2beta-projects-global-operations get" [
 #
 # GET /deploymentmanager/v2beta/projects/{project}/global/typeProviders
 # operationId: deploymentmanager.typeProviders.list
-export def "deploymentmanager-v2beta-projects-global-type-providers list" [
+export def "deploymentmanager-type-providers-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1515,7 +1515,7 @@ export def "deploymentmanager-v2beta-projects-global-type-providers list" [
 # --labels item shape: {key?: string, value?: string}
 # --operation shape: {clientOperationId?: string, creationTimestamp?: string, description?: string, endTime?: string, error?: record, httpErrorMessage?: string, httpErrorStatusCode?: int, id?: string, insertTime?: string, kind?: string, name?: string, operationGroupId?: string, operationType?: string, progress?: int, region?: string, selfLink?: string, startTime?: string, status?: "PENDING"|"RUNNING"|"DONE", statusMessage?: string, targetId?: string, targetLink?: string, user?: string, warnings?: list, zone?: string}
 # --options shape: {asyncOptions?: list, inputMappings?: list, validationOptions?: record, virtualProperties?: string}
-export def "deploymentmanager-v2beta-projects-global-type-providers create" [
+export def "deploymentmanager-type-providers-insert" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1578,7 +1578,7 @@ export def "deploymentmanager-v2beta-projects-global-type-providers create" [
 #
 # DELETE /deploymentmanager/v2beta/projects/{project}/global/typeProviders/{typeProvider}
 # operationId: deploymentmanager.typeProviders.delete
-export def "deploymentmanager-v2beta-projects-global-type-providers delete" [
+export def "deploymentmanager-type-providers-delete" [
   project: string
   type_provider: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1628,7 +1628,7 @@ export def "deploymentmanager-v2beta-projects-global-type-providers delete" [
 #
 # GET /deploymentmanager/v2beta/projects/{project}/global/typeProviders/{typeProvider}
 # operationId: deploymentmanager.typeProviders.get
-export def "deploymentmanager-v2beta-projects-global-type-providers get" [
+export def "deploymentmanager-type-providers-get" [
   project: string
   type_provider: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1683,7 +1683,7 @@ export def "deploymentmanager-v2beta-projects-global-type-providers get" [
 # --labels item shape: {key?: string, value?: string}
 # --operation shape: {clientOperationId?: string, creationTimestamp?: string, description?: string, endTime?: string, error?: record, httpErrorMessage?: string, httpErrorStatusCode?: int, id?: string, insertTime?: string, kind?: string, name?: string, operationGroupId?: string, operationType?: string, progress?: int, region?: string, selfLink?: string, startTime?: string, status?: "PENDING"|"RUNNING"|"DONE", statusMessage?: string, targetId?: string, targetLink?: string, user?: string, warnings?: list, zone?: string}
 # --options shape: {asyncOptions?: list, inputMappings?: list, validationOptions?: record, virtualProperties?: string}
-export def "deploymentmanager-v2beta-projects-global-type-providers update-by-project-type-provider" [
+export def "deploymentmanager-type-providers-patch" [
   project: string
   type_provider: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1753,7 +1753,7 @@ export def "deploymentmanager-v2beta-projects-global-type-providers update-by-pr
 # --labels item shape: {key?: string, value?: string}
 # --operation shape: {clientOperationId?: string, creationTimestamp?: string, description?: string, endTime?: string, error?: record, httpErrorMessage?: string, httpErrorStatusCode?: int, id?: string, insertTime?: string, kind?: string, name?: string, operationGroupId?: string, operationType?: string, progress?: int, region?: string, selfLink?: string, startTime?: string, status?: "PENDING"|"RUNNING"|"DONE", statusMessage?: string, targetId?: string, targetLink?: string, user?: string, warnings?: list, zone?: string}
 # --options shape: {asyncOptions?: list, inputMappings?: list, validationOptions?: record, virtualProperties?: string}
-export def "deploymentmanager-v2beta-projects-global-type-providers update-by-project-type-provider-1" [
+export def "deploymentmanager-type-providers-update" [
   project: string
   type_provider: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1818,7 +1818,7 @@ export def "deploymentmanager-v2beta-projects-global-type-providers update-by-pr
 #
 # GET /deploymentmanager/v2beta/projects/{project}/global/typeProviders/{typeProvider}/types
 # operationId: deploymentmanager.typeProviders.listTypes
-export def "deploymentmanager-v2beta-projects-global-type-providers-types list" [
+export def "deploymentmanager-type-providers-list-types" [
   project: string
   type_provider: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1872,7 +1872,7 @@ export def "deploymentmanager-v2beta-projects-global-type-providers-types list" 
 #
 # GET /deploymentmanager/v2beta/projects/{project}/global/typeProviders/{typeProvider}/types/{type}
 # operationId: deploymentmanager.typeProviders.getType
-export def "deploymentmanager-v2beta-projects-global-type-providers-types get" [
+export def "deploymentmanager-type-providers-get-type" [
   project: string
   type_provider: string
   type: string
@@ -1924,7 +1924,7 @@ export def "deploymentmanager-v2beta-projects-global-type-providers-types get" [
 #
 # GET /deploymentmanager/v2beta/projects/{project}/global/types
 # operationId: deploymentmanager.types.list
-export def "deploymentmanager-v2beta-projects-global-types list" [
+export def "deploymentmanager-types-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

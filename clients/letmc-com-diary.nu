@@ -127,7 +127,7 @@ def accept-completer-1 [] { ["application/json" "text/json"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "diary-allocations get-controller" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "diary-controller-get-allocations" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -151,7 +151,7 @@ export def commands []: nothing -> table {
 #
 # GET /v3/diary/{shortName}/allocations
 # operationId: DiaryController_GetAllocations
-export def "diary-allocations get-controller" [
+export def "diary-controller-get-allocations" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -194,7 +194,7 @@ export def "diary-allocations get-controller" [
 #
 # DELETE /v3/diary/{shortName}/appointment
 # operationId: DiaryController_DeleteAppointment
-export def "diary-appointment delete-controller" [
+export def "diary-controller-delete-appointment" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -233,7 +233,7 @@ export def "diary-appointment delete-controller" [
 #
 # GET /v3/diary/{shortName}/appointment
 # operationId: DiaryController_GetAppointment
-export def "diary-appointment get-controller" [
+export def "diary-controller-get-appointment" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -274,7 +274,7 @@ export def "diary-appointment get-controller" [
 # operationId: DiaryController_PostAppointment
 # --AllocationDetails shape: {End?: string, StaffID?: string, StaffName?: string, Start?: string}
 # --Guests item shape: {AllowMarketingCorrespondence?: bool, EmailAddress?: string, Forename?: string, MobilePhone?: string, OID?: string, Surname?: string}
-export def "diary-appointment create-controller" [
+export def "diary-controller-post-appointment" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -324,7 +324,7 @@ export def "diary-appointment create-controller" [
 # operationId: DiaryController_PutAppointment
 # --AllocationDetails shape: {End?: string, StaffID?: string, StaffName?: string, Start?: string}
 # --Guests item shape: {AllowMarketingCorrespondence?: bool, EmailAddress?: string, Forename?: string, MobilePhone?: string, OID?: string, Surname?: string}
-export def "diary-appointment update-controller" [
+export def "diary-controller-put-appointment" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -373,7 +373,7 @@ export def "diary-appointment update-controller" [
 #
 # POST /v3/diary/{shortName}/appointment/feedback
 # operationId: DiaryController_AddFeedback
-export def "diary-appointment-feedback create-controller" [
+export def "diary-controller-add-feedback" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -416,7 +416,7 @@ export def "diary-appointment-feedback create-controller" [
 #
 # PATCH /v3/diary/{shortName}/appointment/{appointmentID}/cancel
 # operationId: DiaryController_CancelAppointment
-export def "diary-appointment-cancel cancel-controller" [
+export def "diary-controller-cancel-appointment" [
   short_name: string
   appointment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -455,7 +455,7 @@ export def "diary-appointment-cancel cancel-controller" [
 #
 # GET /v3/diary/{shortName}/appointmentsbetweendates
 # operationId: DiaryController_GetAppointmentsBetweenDates
-export def "diary-appointmentsbetweendates get-controller-appointments-between-dates" [
+export def "diary-controller-get-appointments-between-dates" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -499,7 +499,7 @@ export def "diary-appointmentsbetweendates get-controller-appointments-between-d
 #
 # GET /v3/diary/{shortName}/appointmenttypes
 # operationId: DiaryController_GetAppointmentTypes
-export def "diary-appointmenttypes get-controller-appointment-types" [
+export def "diary-controller-get-appointment-types" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -539,7 +539,7 @@ export def "diary-appointmenttypes get-controller-appointment-types" [
 #
 # GET /v3/diary/{shortName}/company/branches
 # operationId: CompanyController_GetBranches
-export def "diary-company-branches get-controller" [
+export def "company-controller-get-branches" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -578,7 +578,7 @@ export def "diary-company-branches get-controller" [
 # Get a specific branch given its unique Object ID (OID)
 #
 # GET /v3/diary/{shortName}/company/branches/{branchID}
-export def "diary-company-branches get" [
+export def "get-v3-diary-short-name-company-branches-branch-id" [
   short_name: string
   branch_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -617,7 +617,7 @@ export def "diary-company-branches get" [
 #
 # GET /v3/diary/{shortName}/recurringappointment
 # operationId: DiaryController_GetRecurringAppointments
-export def "diary-recurringappointment get-controller-recurring-appointments" [
+export def "diary-controller-get-recurring-appointments" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -659,7 +659,7 @@ export def "diary-recurringappointment get-controller-recurring-appointments" [
 #
 # GET /v3/diary/{shortname}/{branchID}/guest/search
 # operationId: DiaryController_SearchGuest
-export def "diary-guest-search list-controller" [
+export def "diary-controller-search-guest" [
   shortname: string
   branch_id: string
   --base-url(-b): string@base-url-completer # API base URL

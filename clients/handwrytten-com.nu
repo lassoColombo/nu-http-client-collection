@@ -131,7 +131,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "auth-authorization create-login" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "login" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -155,7 +155,7 @@ export def commands []: nothing -> table {
 #
 # POST /auth/authorization
 # operationId: login
-export def "auth-authorization create-login" [
+export def "login" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -194,7 +194,7 @@ export def "auth-authorization create-login" [
 #
 # POST /auth/changePassword
 # operationId: changePassword
-export def "auth-change-password create" [
+export def "change-password" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -234,7 +234,7 @@ export def "auth-change-password create" [
 #
 # POST /auth/logout
 # operationId: logout
-export def "auth-logout create" [
+export def "logout" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -272,7 +272,7 @@ export def "auth-logout create" [
 #
 # POST /auth/register
 # operationId: register
-export def "auth-register create" [
+export def "register" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -314,7 +314,7 @@ export def "auth-register create" [
 #
 # POST /auth/resetPasswordRequest
 # operationId: resetPasswordRequest
-export def "auth-reset-password-request reset" [
+export def "reset-password-request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -352,7 +352,7 @@ export def "auth-reset-password-request reset" [
 #
 # POST /cards/createCustomCard
 # operationId: CreateCustomCard
-export def "cards-create-custom-card create" [
+export def "create-custom-card" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -406,7 +406,7 @@ export def "cards-create-custom-card create" [
 #
 # GET /cards/list
 # operationId: simpleListCards
-export def "cards-list list-simple" [
+export def "simple-list-cards" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -440,7 +440,7 @@ export def "cards-list list-simple" [
 #
 # POST /cards/list
 # operationId: listCards
-export def "cards-list list" [
+export def "list-cards" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -479,7 +479,7 @@ export def "cards-list list" [
 #
 # POST /cards/uploadCustomLogo
 # operationId: uploadCustomLogo
-export def "cards-upload-custom-logo upload" [
+export def "upload-custom-logo" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -521,7 +521,7 @@ export def "cards-upload-custom-logo upload" [
 #
 # POST /cards/view
 # operationId: filterableCardDetails
-export def "cards-view create-filterable-details" [
+export def "filterable-card-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -559,7 +559,7 @@ export def "cards-view create-filterable-details" [
 # Lists the countries to which Handwritten can mail, their associated country ID and any costs
 #
 # GET /countries/list
-export def "countries-list get" [
+export def "get-countries-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -593,7 +593,7 @@ export def "countries-list get" [
 #
 # GET /fonts/list
 # operationId: fontsList
-export def "fonts-list list" [
+export def "fonts-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -627,7 +627,7 @@ export def "fonts-list list" [
 #
 # GET /fonts/listForCustomizer
 # operationId: fontsListForCustomizer
-export def "fonts-list-for-customizer list" [
+export def "fonts-list-for-customizer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -661,7 +661,7 @@ export def "fonts-list-for-customizer list" [
 #
 # GET /giftCards/view
 # operationId: getGiftCardDetails
-export def "gift-cards-view get-details" [
+export def "get-gift-card-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -695,7 +695,7 @@ export def "gift-cards-view get-details" [
 #
 # POST /giftCards/view
 # operationId: giftCardDetails
-export def "gift-cards-view create-details" [
+export def "gift-card-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -729,7 +729,7 @@ export def "gift-cards-view create-details" [
 #
 # POST /orders/singleStepOrder
 # operationId: singleStepOrder
-export def "orders-single-step-order create" [
+export def "single-step-order" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -790,7 +790,7 @@ export def "orders-single-step-order create" [
 #
 # POST /profile/address
 # operationId: userAddress
-export def "profile-address create-user" [
+export def "user-address" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -828,7 +828,7 @@ export def "profile-address create-user" [
 #
 # POST /profile/deleteRecipient
 # operationId: deleteRecipient
-export def "profile-delete-recipient delete" [
+export def "delete-recipient" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -867,7 +867,7 @@ export def "profile-delete-recipient delete" [
 #
 # POST /profile/profileAddRecipient
 # operationId: addRecipientAddress
-export def "profile-profile-add-recipient create-address" [
+export def "add-recipient-address" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -914,7 +914,7 @@ export def "profile-profile-add-recipient create-address" [
 #
 # POST /profile/recipientsList
 # operationId: recipientsList
-export def "profile-recipients-list list" [
+export def "recipients-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -952,7 +952,7 @@ export def "profile-recipients-list list" [
 #
 # POST /profile/updateAddress
 # operationId: updateUserAddress
-export def "profile-update-address update-user" [
+export def "update-user-address" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1000,7 +1000,7 @@ export def "profile-update-address update-user" [
 #
 # POST /profile/updateRecipient
 # operationId: updateRecipient
-export def "profile-update-recipient update" [
+export def "update-recipient" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1048,7 +1048,7 @@ export def "profile-update-recipient update" [
 #
 # GET /templateCategories/list
 # operationId: getTemplateCategories
-export def "template-categories-list get" [
+export def "get-template-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1082,7 +1082,7 @@ export def "template-categories-list get" [
 #
 # POST /templateCategories/list
 # operationId: getTemplateCategoriesAuthorized
-export def "template-categories-list get-authorized" [
+export def "get-template-categories-authorized" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1120,7 +1120,7 @@ export def "template-categories-list get-authorized" [
 #
 # POST /templates/create
 # operationId: createTemplate
-export def "templates-create create" [
+export def "create-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1160,7 +1160,7 @@ export def "templates-create create" [
 #
 # POST /templates/delete
 # operationId: deleteTemplate
-export def "templates-delete delete" [
+export def "delete-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1199,7 +1199,7 @@ export def "templates-delete delete" [
 #
 # GET /templates/list
 # operationId: getTemplates
-export def "templates-list get" [
+export def "get-templates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1233,7 +1233,7 @@ export def "templates-list get" [
 #
 # POST /templates/list
 # operationId: getTemplatessAuthorized
-export def "templates-list get-templatess-authorized" [
+export def "get-templatess-authorized" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1272,7 +1272,7 @@ export def "templates-list get-templatess-authorized" [
 #
 # POST /templates/update
 # operationId: updateTemplate
-export def "templates-update update" [
+export def "update-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1313,7 +1313,7 @@ export def "templates-update update" [
 #
 # POST /templates/view
 # operationId: getTemplateDetail
-export def "templates-view get-detail" [
+export def "get-template-detail" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

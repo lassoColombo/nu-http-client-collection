@@ -110,7 +110,7 @@ def auth-scheme-completer [] { ["x-api-key" "none"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api-docs get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-doc" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -134,7 +134,7 @@ export def commands []: nothing -> table {
 #
 # GET /api-docs
 # operationId: getDoc
-export def "api-docs get" [
+export def "get-doc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -168,7 +168,7 @@ export def "api-docs get" [
 #
 # GET /health
 # operationId: healthCheck
-export def "health check" [
+export def "health-check" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -204,7 +204,7 @@ export def "health check" [
 # operationId: updateReimbursement
 # --Beneficiaries item shape: {EmailAddress?: string, Name?: string}
 # --Owner shape: {EmailAddress?: string, Name?: string}
-export def "reimbursement update" [
+export def "update-reimbursement" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -250,7 +250,7 @@ export def "reimbursement update" [
 # operationId: createReimbursement
 # --Beneficiaries item shape: {EmailAddress?: string, Name?: string}
 # --Owner shape: {EmailAddress?: string, Name?: string}
-export def "reimbursement create" [
+export def "create-reimbursement" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -295,7 +295,7 @@ export def "reimbursement create" [
 #
 # POST /reset
 # operationId: resetPolicy
-export def "reset reset-policy" [
+export def "reset-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

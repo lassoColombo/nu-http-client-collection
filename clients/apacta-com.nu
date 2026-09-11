@@ -158,7 +158,7 @@ def status-completer-2 [] { ["awaiting" "expired" "failed" "fresh"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "activities get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-activities" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -181,7 +181,7 @@ export def commands []: nothing -> table {
 # Get a list of activities
 #
 # GET /activities
-export def "activities get" [
+export def "get-activities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -214,7 +214,7 @@ export def "activities get" [
 # Create an activity
 #
 # POST /activities
-export def "activities create" [
+export def "post-activities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -252,7 +252,7 @@ export def "activities create" [
 # Bulk delete activities
 #
 # DELETE /activities/bulkDelete
-export def "activities-bulk-delete delete" [
+export def "delete-activities-bulk-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -289,7 +289,7 @@ export def "activities-bulk-delete delete" [
 # Delete an activity
 #
 # DELETE /activities/{activity_id}
-export def "activities delete" [
+export def "delete-activities-activity-id" [
   activity_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -324,7 +324,7 @@ export def "activities delete" [
 # Edit an activity
 #
 # PUT /activities/{activity_id}
-export def "activities update" [
+export def "put-activities-activity-id" [
   activity_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -364,7 +364,7 @@ export def "activities update" [
 # Get list of cities supported in Apacta
 #
 # GET /cities
-export def "cities list" [
+export def "get-cities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -401,7 +401,7 @@ export def "cities list" [
 # Get details about one city
 #
 # GET /cities/{city_id}
-export def "cities get" [
+export def "get-cities-city-id" [
   city_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -436,7 +436,7 @@ export def "cities get" [
 # Get a list of clocking records
 #
 # GET /clocking_records
-export def "clocking-records list" [
+export def "get-clocking-records" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -471,7 +471,7 @@ export def "clocking-records list" [
 # Create clocking record for authenticated user
 #
 # POST /clocking_records
-export def "clocking-records create" [
+export def "post-clocking-records" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -512,7 +512,7 @@ export def "clocking-records create" [
 # Checkout active clocking record for authenticated user
 #
 # POST /clocking_records/checkout
-export def "clocking-records-checkout create" [
+export def "post-clocking-records-checkout" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -545,7 +545,7 @@ export def "clocking-records-checkout create" [
 # Delete a clocking record
 #
 # DELETE /clocking_records/{clocking_record_id}
-export def "clocking-records delete" [
+export def "delete-clocking-records-clocking-record-id" [
   clocking_record_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -580,7 +580,7 @@ export def "clocking-records delete" [
 # Details of 1 clocking_record
 #
 # GET /clocking_records/{clocking_record_id}
-export def "clocking-records get" [
+export def "get-clocking-records-clocking-record-id" [
   clocking_record_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -615,7 +615,7 @@ export def "clocking-records get" [
 # Edit a clocking record
 #
 # PUT /clocking_records/{clocking_record_id}
-export def "clocking-records update" [
+export def "put-clocking-records-clocking-record-id" [
   clocking_record_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -650,7 +650,7 @@ export def "clocking-records update" [
 # Get a list of companies
 #
 # GET /companies
-export def "companies list" [
+export def "get-companies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -683,7 +683,7 @@ export def "companies list" [
 # URL for subscription selfservice
 #
 # GET /companies/subscription_self_service
-export def "companies-subscription-self-service get" [
+export def "get-companies-subscription-self-service" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -716,7 +716,7 @@ export def "companies-subscription-self-service get" [
 # Details of 1 company
 #
 # GET /companies/{company_id}
-export def "companies get" [
+export def "get-companies-company-id" [
   company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -751,7 +751,7 @@ export def "companies get" [
 # List a company integration feature settings
 #
 # GET /companies/{company_id}/companies_integration_feature_settings
-export def "companies-companies-integration-feature-settings list" [
+export def "get-companies-company-id-companies-integration-feature-settings" [
   company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -786,7 +786,7 @@ export def "companies-companies-integration-feature-settings list" [
 # Add a company integration feature setting
 #
 # POST /companies/{company_id}/companies_integration_feature_settings
-export def "companies-companies-integration-feature-settings create" [
+export def "post-companies-company-id-companies-integration-feature-settings" [
   company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -826,7 +826,7 @@ export def "companies-companies-integration-feature-settings create" [
 # View a company integration feature setting
 #
 # GET /companies/{company_id}/companies_integration_feature_settings/{c_integration_feature_setting_id}
-export def "companies-companies-integration-feature-settings get" [
+export def "get-companies-company-id-companies-integration-feature-settings-c-integration-feature-setting-id" [
   company_id: string
   c_integration_feature_setting_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -863,7 +863,7 @@ export def "companies-companies-integration-feature-settings get" [
 # Edit a company integration feature setting
 #
 # PUT /companies/{company_id}/companies_integration_feature_settings/{c_integration_feature_setting_id}
-export def "companies-companies-integration-feature-settings update" [
+export def "put-companies-company-id-companies-integration-feature-settings-c-integration-feature-setting-id" [
   company_id: string
   c_integration_feature_setting_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -900,7 +900,7 @@ export def "companies-companies-integration-feature-settings update" [
 # Get a list of company form templates
 #
 # GET /companies/{company_id}/form_templates/
-export def "companies-form-templates list" [
+export def "get-companies-company-id-form-templates" [
   company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -937,7 +937,7 @@ export def "companies-form-templates list" [
 # Delete a form template company
 #
 # DELETE /companies/{company_id}/form_templates/{form_template_id}
-export def "companies-form-templates delete" [
+export def "delete-companies-company-id-form-templates-form-template-id" [
   company_id: string
   form_template_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -974,7 +974,7 @@ export def "companies-form-templates delete" [
 # Get a company form template
 #
 # GET /companies/{company_id}/form_templates/{form_template_id}
-export def "companies-form-templates get" [
+export def "get-companies-company-id-form-templates-form-template-id" [
   company_id: string
   form_template_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1013,7 +1013,7 @@ export def "companies-form-templates get" [
 # Get a list of integration feature settings
 #
 # GET /companies/{company_id}/integration_feature_settings
-export def "companies-integration-feature-settings list" [
+export def "get-companies-company-id-integration-feature-settings" [
   company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1048,7 +1048,7 @@ export def "companies-integration-feature-settings list" [
 # Show details of 1 integration feature setting
 #
 # GET /companies/{company_id}/integration_feature_settings/{integration_feature_setting_id}
-export def "companies-integration-feature-settings get" [
+export def "get-companies-company-id-integration-feature-settings-integration-feature-setting-id" [
   company_id: string
   integration_feature_setting_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1085,7 +1085,7 @@ export def "companies-integration-feature-settings get" [
 # Get a list of company integration settings
 #
 # GET /companies/{company_id}/integration_settings
-export def "companies-integration-settings list" [
+export def "get-companies-company-id-integration-settings" [
   company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1122,7 +1122,7 @@ export def "companies-integration-settings list" [
 # Add a company integration setting
 #
 # POST /companies/{company_id}/integration_settings
-export def "companies-integration-settings create" [
+export def "post-companies-company-id-integration-settings" [
   company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1162,7 +1162,7 @@ export def "companies-integration-settings create" [
 # Delete a company integration setting
 #
 # DELETE /companies/{company_id}/integration_settings/{companies_integration_setting_id}
-export def "companies-integration-settings delete" [
+export def "delete-companies-company-id-integration-settings-companies-integration-setting-id" [
   company_id: string
   companies_integration_setting_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1199,7 +1199,7 @@ export def "companies-integration-settings delete" [
 # Get a company integration setting
 #
 # GET /companies/{company_id}/integration_settings/{companies_integration_setting_id}
-export def "companies-integration-settings get" [
+export def "get-companies-company-id-integration-settings-companies-integration-setting-id" [
   company_id: string
   companies_integration_setting_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1236,7 +1236,7 @@ export def "companies-integration-settings get" [
 # Edit a company integration setting
 #
 # PUT /companies/{company_id}/integration_settings/{companies_integration_setting_id}
-export def "companies-integration-settings update" [
+export def "put-companies-company-id-integration-settings-companies-integration-setting-id" [
   company_id: string
   companies_integration_setting_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1273,7 +1273,7 @@ export def "companies-integration-settings update" [
 # Delete a company price margin
 #
 # DELETE /companies/{company_id}/price_margins/{price_margins_id}
-export def "companies-price-margins delete" [
+export def "delete-companies-company-id-price-margins-price-margins-id" [
   company_id: string
   price_margins_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1312,7 +1312,7 @@ export def "companies-price-margins delete" [
 # Get a list of company price margins
 #
 # GET /companies/{company_id}/price_margins/{price_margins_id}
-export def "companies-price-margins get" [
+export def "get-companies-company-id-price-margins-price-margins-id" [
   company_id: string
   price_margins_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1349,7 +1349,7 @@ export def "companies-price-margins get" [
 # Add a company price margin
 #
 # POST /companies/{company_id}/price_margins/{price_margins_id}
-export def "companies-price-margins create" [
+export def "post-companies-company-id-price-margins-price-margins-id" [
   company_id: string
   price_margins_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1392,7 +1392,7 @@ export def "companies-price-margins create" [
 #
 # GET /companies_vendors
 # operationId: getCompaiesVendorsList
-export def "companies-vendors get-compaies-list" [
+export def "get-compaies-vendors-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1426,7 +1426,7 @@ export def "companies-vendors get-compaies-list" [
 #
 # POST /companies_vendors
 # operationId: addCompaniesVendor
-export def "companies-vendors create" [
+export def "add-companies-vendor" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1478,7 +1478,7 @@ export def "companies-vendors create" [
 #
 # DELETE /companies_vendors/bulkDelete
 # operationId: bulkCompaniesVendors
-export def "companies-vendors-bulk-delete delete" [
+export def "bulk-companies-vendors" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1515,7 +1515,7 @@ export def "companies-vendors-bulk-delete delete" [
 # Delete a companies vendor
 #
 # DELETE /companies_vendors/{companies_vendor_id}
-export def "companies-vendors delete" [
+export def "delete-companies-vendors-companies-vendor-id" [
   companies_vendor_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1551,7 +1551,7 @@ export def "companies-vendors delete" [
 #
 # GET /companies_vendors/{companies_vendor_id}
 # operationId: getCompaniesVendor
-export def "companies-vendors get" [
+export def "get-companies-vendor" [
   companies_vendor_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1587,7 +1587,7 @@ export def "companies-vendors get" [
 #
 # PUT /companies_vendors/{companies_vendor_id}
 # operationId: editCompaniesVendor
-export def "companies-vendors update-edit" [
+export def "edit-companies-vendor" [
   companies_vendor_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1641,7 +1641,7 @@ export def "companies-vendors update-edit" [
 #
 # GET /companies_vendors/{companies_vendor_id}/expense_statistics
 # operationId: getCompaniesVendorsExpenseStatistics
-export def "companies-vendors-expense-statistics get" [
+export def "get-companies-vendors-expense-statistics" [
   companies_vendor_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1677,7 +1677,7 @@ export def "companies-vendors-expense-statistics get" [
 #
 # GET /company_settings
 # operationId: getCompaySettingsList
-export def "company-settings get-compay-list" [
+export def "get-compay-settings-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1713,7 +1713,7 @@ export def "company-settings get-compay-list" [
 # Get a list of contact custom field attributes
 #
 # GET /contact_custom_field_attributes
-export def "contact-custom-field-attributes list" [
+export def "get-contact-custom-field-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1746,7 +1746,7 @@ export def "contact-custom-field-attributes list" [
 # Details of 1 contact custom field attribute
 #
 # GET /contact_custom_field_attributes/{contact_custom_field_attribute_id}
-export def "contact-custom-field-attributes get" [
+export def "get-contact-custom-field-attributes-contact-custom-field-attribute-id" [
   contact_custom_field_attribute_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1781,7 +1781,7 @@ export def "contact-custom-field-attributes get" [
 # Get list of contact types supported in Apacta
 #
 # GET /contact_types
-export def "contact-types list" [
+export def "get-contact-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1816,7 +1816,7 @@ export def "contact-types list" [
 # Get details about one contact type
 #
 # GET /contact_types/{contact_type_id}
-export def "contact-types get" [
+export def "get-contact-types-contact-type-id" [
   contact_type_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1851,7 +1851,7 @@ export def "contact-types get" [
 # Get a list of contacts
 #
 # GET /contacts
-export def "contacts list" [
+export def "get-contacts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1893,7 +1893,7 @@ export def "contacts list" [
 #
 # POST /contacts
 # --contact_types shape: {_ids?: list<string>}
-export def "contacts create" [
+export def "post-contacts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1940,7 +1940,7 @@ export def "contacts create" [
 #
 # DELETE /contacts/bulkDelete
 # operationId: bulkDeleteContacts
-export def "contacts-bulk-delete delete" [
+export def "bulk-delete-contacts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1977,7 +1977,7 @@ export def "contacts-bulk-delete delete" [
 # Delete a contact
 #
 # DELETE /contacts/{contact_id}
-export def "contacts delete" [
+export def "delete-contacts-contact-id" [
   contact_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2012,7 +2012,7 @@ export def "contacts delete" [
 # Details of 1 contact
 #
 # GET /contacts/{contact_id}
-export def "contacts get" [
+export def "get-contacts-contact-id" [
   contact_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2048,7 +2048,7 @@ export def "contacts get" [
 #
 # PUT /contacts/{contact_id}
 # --contact_types shape: {_ids?: list<string>}
-export def "contacts update" [
+export def "put-contacts-contact-id" [
   contact_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2096,7 +2096,7 @@ export def "contacts update" [
 # Get a list of contact custom field values
 #
 # GET /contacts/{contact_id}/contact_custom_field_values
-export def "contacts-contact-custom-field-values get" [
+export def "get-contacts-contact-id-contact-custom-field-values" [
   contact_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2132,7 +2132,7 @@ export def "contacts-contact-custom-field-values get" [
 #
 # GET /contacts/{contact_id}/contact_persons
 # operationId: getContactPersonsList
-export def "contacts-contact-persons get-list" [
+export def "get-contact-persons-list" [
   contact_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2172,7 +2172,7 @@ export def "contacts-contact-persons get-list" [
 #
 # POST /contacts/{contact_id}/contact_persons
 # operationId: addContactPerson
-export def "contacts-contact-persons create" [
+export def "add-contact-person" [
   contact_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2214,7 +2214,7 @@ export def "contacts-contact-persons create" [
 # Delete a contact person
 #
 # DELETE /contacts/{contact_id}/contact_persons/{contact_person_id}
-export def "contacts-contact-persons delete" [
+export def "delete-contacts-contact-id-contact-persons-contact-person-id" [
   contact_id: string
   contact_person_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2252,7 +2252,7 @@ export def "contacts-contact-persons delete" [
 #
 # GET /contacts/{contact_id}/contact_persons/{contact_person_id}
 # operationId: getContactPerson
-export def "contacts-contact-persons get" [
+export def "get-contact-person" [
   contact_id: string
   contact_person_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2290,7 +2290,7 @@ export def "contacts-contact-persons get" [
 #
 # PUT /contacts/{contact_id}/contact_persons/{contact_person_id}
 # operationId: editContactPerson
-export def "contacts-contact-persons update-edit" [
+export def "edit-contact-person" [
   contact_id: string
   contact_person_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2334,7 +2334,7 @@ export def "contacts-contact-persons update-edit" [
 # Get list of countries supported in Apacta
 #
 # GET /countries
-export def "countries list" [
+export def "get-countries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2367,7 +2367,7 @@ export def "countries list" [
 # Get details about one country
 #
 # GET /countries/{country_id}
-export def "countries get" [
+export def "get-countries-country-id" [
   country_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2402,7 +2402,7 @@ export def "countries get" [
 # Get list of currencies supported in Apacta
 #
 # GET /currencies
-export def "currencies list" [
+export def "get-currencies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2435,7 +2435,7 @@ export def "currencies list" [
 # Get details about one currency
 #
 # GET /currencies/{currency_id}
-export def "currencies get" [
+export def "get-currencies-currency-id" [
   currency_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2471,7 +2471,7 @@ export def "currencies get" [
 #
 # GET /driving_types
 # operationId: get-driving_types
-export def "driving-types list" [
+export def "get-driving-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2509,7 +2509,7 @@ export def "driving-types list" [
 #
 # POST /driving_types
 # operationId: post-driving_types
-export def "driving-types create" [
+export def "post-driving-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2552,7 +2552,7 @@ export def "driving-types create" [
 #
 # DELETE /driving_types/bulkDelete
 # operationId: bulkDeleteDrivingTypes
-export def "driving-types-bulk-delete delete" [
+export def "bulk-delete-driving-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2590,7 +2590,7 @@ export def "driving-types-bulk-delete delete" [
 #
 # DELETE /driving_types/{driving_type_id}
 # operationId: delete-driving_types-driving_type_id
-export def "driving-types delete" [
+export def "delete-driving-types-driving-type-id" [
   driving_type_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2626,7 +2626,7 @@ export def "driving-types delete" [
 #
 # GET /driving_types/{driving_type_id}
 # operationId: get-driving_types-driving_type_id
-export def "driving-types get" [
+export def "get-driving-types-driving-type-id" [
   driving_type_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2664,7 +2664,7 @@ export def "driving-types get" [
 #
 # PUT /driving_types/{driving_type_id}
 # operationId: put-driving_types-driving_type_id
-export def "driving-types update" [
+export def "put-driving-types-driving-type-id" [
   driving_type_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2699,7 +2699,7 @@ export def "driving-types update" [
 # Used to retrieve details about the logged in user's hours
 #
 # GET /employee_hours
-export def "employee-hours get" [
+export def "get-employee-hours" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2735,7 +2735,7 @@ export def "employee-hours get" [
 # Show list of events
 #
 # GET /events
-export def "events list" [
+export def "get-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2779,7 +2779,7 @@ export def "events list" [
 # Create event
 #
 # POST /events
-export def "events create" [
+export def "post-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2821,7 +2821,7 @@ export def "events create" [
 # Check if user is available at given datetime range
 #
 # GET /events/is_user_free
-export def "events-is-user-free get" [
+export def "get-events-is-user-free" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2858,7 +2858,7 @@ export def "events-is-user-free get" [
 # Delete event
 #
 # DELETE /events/{event_id}
-export def "events delete" [
+export def "delete-events-event-id" [
   event_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2893,7 +2893,7 @@ export def "events delete" [
 # Show event
 #
 # GET /events/{event_id}
-export def "events get" [
+export def "get-events-event-id" [
   event_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2928,7 +2928,7 @@ export def "events get" [
 # Edit event
 #
 # PUT /events/{event_id}
-export def "events update" [
+export def "put-events-event-id" [
   event_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2963,7 +2963,7 @@ export def "events update" [
 # Show list of expense files
 #
 # GET /expense_files
-export def "expense-files list" [
+export def "get-expense-files" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2999,7 +2999,7 @@ export def "expense-files list" [
 # Add file to expense
 #
 # POST /expense_files
-export def "expense-files create" [
+export def "post-expense-files" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3039,7 +3039,7 @@ export def "expense-files create" [
 # Delete file
 #
 # DELETE /expense_files/{expense_file_id}
-export def "expense-files delete" [
+export def "delete-expense-files-expense-file-id" [
   expense_file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3074,7 +3074,7 @@ export def "expense-files delete" [
 # Show file
 #
 # GET /expense_files/{expense_file_id}
-export def "expense-files get" [
+export def "get-expense-files-expense-file-id" [
   expense_file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3109,7 +3109,7 @@ export def "expense-files get" [
 # Edit file
 #
 # PUT /expense_files/{expense_file_id}
-export def "expense-files update" [
+export def "put-expense-files-expense-file-id" [
   expense_file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3144,7 +3144,7 @@ export def "expense-files update" [
 # Show list of expense lines
 #
 # GET /expense_lines
-export def "expense-lines list" [
+export def "get-expense-lines" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3181,7 +3181,7 @@ export def "expense-lines list" [
 # Add line to expense
 #
 # POST /expense_lines
-export def "expense-lines create" [
+export def "post-expense-lines" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3223,7 +3223,7 @@ export def "expense-lines create" [
 # Delete expense line
 #
 # DELETE /expense_lines/{expense_line_id}
-export def "expense-lines delete" [
+export def "delete-expense-lines-expense-line-id" [
   expense_line_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3258,7 +3258,7 @@ export def "expense-lines delete" [
 # Show expense line
 #
 # GET /expense_lines/{expense_line_id}
-export def "expense-lines get" [
+export def "get-expense-lines-expense-line-id" [
   expense_line_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3293,7 +3293,7 @@ export def "expense-lines get" [
 # Edit expense line
 #
 # PUT /expense_lines/{expense_line_id}
-export def "expense-lines update" [
+export def "put-expense-lines-expense-line-id" [
   expense_line_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3328,7 +3328,7 @@ export def "expense-lines update" [
 # Show list of expenses
 #
 # GET /expenses
-export def "expenses list" [
+export def "get-expenses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3374,7 +3374,7 @@ export def "expenses list" [
 # Add line to expense
 #
 # POST /expenses
-export def "expenses create" [
+export def "post-expenses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3419,7 +3419,7 @@ export def "expenses create" [
 #
 # DELETE /expenses/bulkDelete
 # operationId: bulkDeleteExpenses
-export def "expenses-bulk-delete delete" [
+export def "bulk-delete-expenses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3456,7 +3456,7 @@ export def "expenses-bulk-delete delete" [
 # Show highest Expense amount(`total_selling_price`)
 #
 # GET /expenses/highest_amount
-export def "expenses-highest-amount get" [
+export def "get-expenses-highest-amount" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3493,7 +3493,7 @@ export def "expenses-highest-amount get" [
 #
 # DELETE /expenses/sendEmails
 # operationId: sendEmailsExpenses
-export def "expenses-send-emails send" [
+export def "send-emails-expenses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3530,7 +3530,7 @@ export def "expenses-send-emails send" [
 # Delete expense
 #
 # DELETE /expenses/{expense_id}
-export def "expenses delete" [
+export def "delete-expenses-expense-id" [
   expense_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3565,7 +3565,7 @@ export def "expenses delete" [
 # Show expense
 #
 # GET /expenses/{expense_id}
-export def "expenses get" [
+export def "get-expenses-expense-id" [
   expense_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3600,7 +3600,7 @@ export def "expenses get" [
 # Edit expense
 #
 # PUT /expenses/{expense_id}
-export def "expenses update" [
+export def "put-expenses-expense-id" [
   expense_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3635,7 +3635,7 @@ export def "expenses update" [
 # Show list of all OIOUBL files for the expense
 #
 # GET /expenses/{expense_id}/original_files
-export def "expenses-original-files list" [
+export def "get-expenses-expense-id-original-files" [
   expense_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3670,7 +3670,7 @@ export def "expenses-original-files list" [
 # Show OIOUBL file
 #
 # GET /expenses/{expense_id}/original_files/{file_id}
-export def "expenses-original-files get" [
+export def "get-expenses-expense-id-original-files-file-id" [
   expense_id: string
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3708,7 +3708,7 @@ export def "expenses-original-files get" [
 #
 # GET /financial_statistics
 # operationId: getFinancialStatistics
-export def "financial-statistics get" [
+export def "get-financial-statistics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3749,7 +3749,7 @@ export def "financial-statistics get" [
 #
 # GET /financial_statistics/expensesSalesPrice
 # operationId: getExpensesSalesPrice
-export def "financial-statistics-expenses-sales-price get" [
+export def "get-expenses-sales-price" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3787,7 +3787,7 @@ export def "financial-statistics-expenses-sales-price get" [
 #
 # GET /financial_statistics/invoicedAmount
 # operationId: getInvoicedAmount
-export def "financial-statistics-invoiced-amount get" [
+export def "get-invoiced-amount" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3825,7 +3825,7 @@ export def "financial-statistics-invoiced-amount get" [
 #
 # GET /financial_statistics/margin
 # operationId: getMargin
-export def "financial-statistics-margin get" [
+export def "get-margin" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3863,7 +3863,7 @@ export def "financial-statistics-margin get" [
 #
 # GET /financial_statistics/materialRentalsCostPrice
 # operationId: getMaterialRentalsCostPrice
-export def "financial-statistics-material-rentals-cost-price get" [
+export def "get-material-rentals-cost-price" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3901,7 +3901,7 @@ export def "financial-statistics-material-rentals-cost-price get" [
 #
 # GET /financial_statistics/overview
 # operationId: getFinancialStatisticsOverview
-export def "financial-statistics-overview get" [
+export def "get-financial-statistics-overview" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3939,7 +3939,7 @@ export def "financial-statistics-overview get" [
 #
 # GET /financial_statistics/productsCostPrice
 # operationId: getProductsCostPrice
-export def "financial-statistics-products-cost-price get" [
+export def "get-products-cost-price" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3976,7 +3976,7 @@ export def "financial-statistics-products-cost-price get" [
 # Get Total working hours grouped by time entry type
 #
 # GET /financial_statistics/workingHours
-export def "financial-statistics-working-hours get" [
+export def "get-financial-statistics-working-hours" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4013,7 +4013,7 @@ export def "financial-statistics-working-hours get" [
 # Get list of form field types
 #
 # GET /form_field_types
-export def "form-field-types list" [
+export def "get-form-field-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4049,7 +4049,7 @@ export def "form-field-types list" [
 # Get details about single `FormField`
 #
 # GET /form_field_types/{form_field_type_id}
-export def "form-field-types get" [
+export def "get-form-field-types-form-field-type-id" [
   form_field_type_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4084,7 +4084,7 @@ export def "form-field-types get" [
 # Add a new field to a `Form`
 #
 # POST /form_fields
-export def "form-fields create" [
+export def "post-form-fields" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4127,7 +4127,7 @@ export def "form-fields create" [
 # Get details about single `FormField`
 #
 # GET /form_fields/{form_field_id}
-export def "form-fields get" [
+export def "get-form-fields-form-field-id" [
   form_field_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4162,7 +4162,7 @@ export def "form-fields get" [
 # Get array of form_templates for your company
 #
 # GET /form_templates
-export def "form-templates list" [
+export def "get-form-templates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4200,7 +4200,7 @@ export def "form-templates list" [
 # View one form template
 #
 # GET /form_templates/{form_template_id}
-export def "form-templates get" [
+export def "get-form-templates-form-template-id" [
   form_template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4235,7 +4235,7 @@ export def "form-templates get" [
 # Retrieve array of forms
 #
 # GET /forms
-export def "forms list" [
+export def "get-forms" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4278,7 +4278,7 @@ export def "forms list" [
 # Add new form
 #
 # POST /forms
-export def "forms create" [
+export def "post-forms" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4316,7 +4316,7 @@ export def "forms create" [
 # Undelete form and related entities to it
 #
 # GET /forms/undelete/{form_id}
-export def "forms-undelete get" [
+export def "get-forms-undelete-form-id" [
   form_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4351,7 +4351,7 @@ export def "forms-undelete get" [
 # Generate time form pdf
 #
 # GET /forms/view_time_form_pdf/{form_id}
-export def "forms-view-time-form-pdf get" [
+export def "get-forms-view-time-form-pdf-form-id" [
   form_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4386,7 +4386,7 @@ export def "forms-view-time-form-pdf get" [
 # Delete a form
 #
 # DELETE /forms/{form_id}
-export def "forms delete" [
+export def "delete-forms-form-id" [
   form_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4421,7 +4421,7 @@ export def "forms delete" [
 # View form
 #
 # GET /forms/{form_id}
-export def "forms get" [
+export def "get-forms-form-id" [
   form_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4456,7 +4456,7 @@ export def "forms get" [
 # Edit a form
 #
 # PUT /forms/{form_id}
-export def "forms update" [
+export def "put-forms-form-id" [
   form_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4492,7 +4492,7 @@ export def "forms update" [
 #
 # GET /integrations
 # operationId: get-integrations-list
-export def "integrations get-list" [
+export def "get-integrations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4525,7 +4525,7 @@ export def "integrations get-list" [
 # Authenticate to Billys
 #
 # POST /integrations/billysAuthenticate
-export def "integrations-billys-authenticate create" [
+export def "post-integrations-billys-authenticate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4559,7 +4559,7 @@ export def "integrations-billys-authenticate create" [
 #
 # GET /integrations/contactsSync
 # operationId: get-integrations-contactsSync
-export def "integrations-contacts-sync get" [
+export def "get-integrations-contacts-sync" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4592,7 +4592,7 @@ export def "integrations-contacts-sync get" [
 # Sync products from erp integration
 #
 # GET /integrations/productsSync
-export def "integrations-products-sync get" [
+export def "get-integrations-products-sync" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4626,7 +4626,7 @@ export def "integrations-products-sync get" [
 #
 # GET /integrations/{integration_id}
 # operationId: get-integrations-view
-export def "integrations get-view" [
+export def "get-integrations-view" [
   integration_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4661,7 +4661,7 @@ export def "integrations get-view" [
 # Get a list of invoice line text templates
 #
 # GET /invoice_line_text_template
-export def "invoice-line-text-template list" [
+export def "get-invoice-line-text-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4694,7 +4694,7 @@ export def "invoice-line-text-template list" [
 # Add a new invoice line text template
 #
 # POST /invoice_line_text_template
-export def "invoice-line-text-template create" [
+export def "post-invoice-line-text-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4734,7 +4734,7 @@ export def "invoice-line-text-template create" [
 # Delete an invoice line text template
 #
 # DELETE /invoice_line_text_template/{invoice_line_text_template_id}
-export def "invoice-line-text-template delete" [
+export def "delete-invoice-line-text-template-invoice-line-text-template-id" [
   invoice_line_text_template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4769,7 +4769,7 @@ export def "invoice-line-text-template delete" [
 # Get a single invoice line text template
 #
 # GET /invoice_line_text_template/{invoice_line_text_template_id}
-export def "invoice-line-text-template get" [
+export def "get-invoice-line-text-template-invoice-line-text-template-id" [
   invoice_line_text_template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4804,7 +4804,7 @@ export def "invoice-line-text-template get" [
 # Edit an invoice line text template
 #
 # POST /invoice_line_text_template/{invoice_line_text_template_id}
-export def "invoice-line-text-template create-by-invoice-line-text-template-id" [
+export def "post-invoice-line-text-template-invoice-line-text-template-id" [
   invoice_line_text_template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4846,7 +4846,7 @@ export def "invoice-line-text-template create-by-invoice-line-text-template-id" 
 # Add invoice line text
 #
 # POST /invoice_line_texts/
-export def "invoice-line-texts create" [
+export def "post-invoice-line-texts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4888,7 +4888,7 @@ export def "invoice-line-texts create" [
 # Edit invoice line text
 #
 # POST /invoice_line_texts/{invoice_line_text_id}
-export def "invoice-line-texts create-by-invoice-line-text-id" [
+export def "post-invoice-line-texts-invoice-line-text-id" [
   invoice_line_text_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4930,7 +4930,7 @@ export def "invoice-line-texts create-by-invoice-line-text-id" [
 # View list of invoice lines
 #
 # GET /invoice_lines
-export def "invoice-lines list" [
+export def "get-invoice-lines" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4969,7 +4969,7 @@ export def "invoice-lines list" [
 # Add invoice line
 #
 # POST /invoice_lines
-export def "invoice-lines create" [
+export def "post-invoice-lines" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5016,7 +5016,7 @@ export def "invoice-lines create" [
 # Delete invoice line
 #
 # DELETE /invoice_lines/{invoice_line_id}
-export def "invoice-lines delete" [
+export def "delete-invoice-lines-invoice-line-id" [
   invoice_line_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5051,7 +5051,7 @@ export def "invoice-lines delete" [
 # View invoice line
 #
 # GET /invoice_lines/{invoice_line_id}
-export def "invoice-lines get" [
+export def "get-invoice-lines-invoice-line-id" [
   invoice_line_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5086,7 +5086,7 @@ export def "invoice-lines get" [
 # Edit invoice line
 #
 # PUT /invoice_lines/{invoice_line_id}
-export def "invoice-lines update" [
+export def "put-invoice-lines-invoice-line-id" [
   invoice_line_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5133,7 +5133,7 @@ export def "invoice-lines update" [
 # View list of invoices
 #
 # GET /invoices
-export def "invoices list" [
+export def "get-invoices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5179,7 +5179,7 @@ export def "invoices list" [
 # Add invoice
 #
 # POST /invoices
-export def "invoices create" [
+export def "post-invoices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5234,7 +5234,7 @@ export def "invoices create" [
 #
 # DELETE /invoices/bulkDelete
 # operationId: bulkDeleteInvoices
-export def "invoices-bulk-delete delete" [
+export def "bulk-delete-invoices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5271,7 +5271,7 @@ export def "invoices-bulk-delete delete" [
 # List VAT options
 #
 # GET /invoices/vatOptions
-export def "invoices-vat-options get" [
+export def "get-invoices-vat-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5304,7 +5304,7 @@ export def "invoices-vat-options get" [
 # Delete invoice
 #
 # DELETE /invoices/{invoice_id}
-export def "invoices delete" [
+export def "delete-invoices-invoice-id" [
   invoice_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5339,7 +5339,7 @@ export def "invoices delete" [
 # View invoice
 #
 # GET /invoices/{invoice_id}
-export def "invoices get" [
+export def "get-invoices-invoice-id" [
   invoice_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5374,7 +5374,7 @@ export def "invoices get" [
 # Edit invoice
 #
 # PUT /invoices/{invoice_id}
-export def "invoices update" [
+export def "put-invoices-invoice-id" [
   invoice_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5429,7 +5429,7 @@ export def "invoices update" [
 # Create a copy of an invoice
 #
 # POST /invoices/{invoice_id}/copy
-export def "invoices-copy create" [
+export def "post-invoices-invoice-id-copy" [
   invoice_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5468,7 +5468,7 @@ export def "invoices-copy create" [
 #
 # GET /invoices/{invoice_id}/emails/{email_id}
 # operationId: getOneInvoiceEmails
-export def "invoices-emails get-one" [
+export def "get-one-invoice-emails" [
   invoice_id: string
   email_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5506,7 +5506,7 @@ export def "invoices-emails get-one" [
 #
 # GET /invoices/{invoice_id}/files
 # operationId: getInvoiceFiles
-export def "invoices-files get" [
+export def "get-invoice-files" [
   invoice_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5542,7 +5542,7 @@ export def "invoices-files get" [
 #
 # POST /invoices/{invoice_id}/files
 # operationId: createInvoiceFile
-export def "invoices-files create" [
+export def "create-invoice-file" [
   invoice_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5584,7 +5584,7 @@ export def "invoices-files create" [
 # Delete invoice file
 #
 # DELETE /invoices/{invoice_id}/files/{file_id}
-export def "invoices-files delete" [
+export def "delete-invoices-invoice-id-files-file-id" [
   invoice_id: string
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5622,7 +5622,7 @@ export def "invoices-files delete" [
 #
 # GET /invoices/{invoice_id}/files/{file_id}
 # operationId: getOneInvoiceFiles
-export def "invoices-files get-one" [
+export def "get-one-invoice-files" [
   invoice_id: string
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5659,7 +5659,7 @@ export def "invoices-files get-one" [
 # Creates an invoice file containing the project's pdf overview
 #
 # POST /invoices/{invoice_id}/linkProjectPdf
-export def "invoices-link-project-pdf create" [
+export def "post-invoices-invoice-id-link-project-pdf" [
   invoice_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5694,7 +5694,7 @@ export def "invoices-link-project-pdf create" [
 # Deletes the linked project overview pdf
 #
 # POST /invoices/{invoice_id}/unlinkProjectPdf
-export def "invoices-unlink-project-pdf create" [
+export def "post-invoices-invoice-id-unlink-project-pdf" [
   invoice_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5729,7 +5729,7 @@ export def "invoices-unlink-project-pdf create" [
 # View list of mass messages for specific user
 #
 # GET /mass_messages_users
-export def "mass-messages-users list" [
+export def "get-mass-messages-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5764,7 +5764,7 @@ export def "mass-messages-users list" [
 # View mass message
 #
 # GET /mass_messages_users/{mass_messages_user_id}
-export def "mass-messages-users get" [
+export def "get-mass-messages-users-mass-messages-user-id" [
   mass_messages_user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5799,7 +5799,7 @@ export def "mass-messages-users get" [
 # Edit mass message
 #
 # PUT /mass_messages_users/{mass_messages_user_id}
-export def "mass-messages-users update" [
+export def "put-mass-messages-users-mass-messages-user-id" [
   mass_messages_user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5834,7 +5834,7 @@ export def "mass-messages-users update" [
 # View list of all materials
 #
 # GET /materials
-export def "materials list" [
+export def "get-materials" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5872,7 +5872,7 @@ export def "materials list" [
 # Add material
 #
 # POST /materials
-export def "materials create" [
+export def "post-materials" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5915,7 +5915,7 @@ export def "materials create" [
 # Delete material
 #
 # DELETE /materials/{material_id}
-export def "materials delete" [
+export def "delete-materials-material-id" [
   material_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5950,7 +5950,7 @@ export def "materials delete" [
 # View material
 #
 # GET /materials/{material_id}
-export def "materials get" [
+export def "get-materials-material-id" [
   material_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5985,7 +5985,7 @@ export def "materials get" [
 # Edit material
 #
 # PUT /materials/{material_id}
-export def "materials update" [
+export def "put-materials-material-id" [
   material_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6020,7 +6020,7 @@ export def "materials update" [
 # Show list of rentals for specific material
 #
 # GET /materials/{material_id}/rentals/
-export def "materials-rentals list" [
+export def "get-materials-material-id-rentals" [
   material_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6055,7 +6055,7 @@ export def "materials-rentals list" [
 # Add material rental
 #
 # POST /materials/{material_id}/rentals/
-export def "materials-rentals create" [
+export def "post-materials-material-id-rentals" [
   material_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6100,7 +6100,7 @@ export def "materials-rentals create" [
 # Checkout material rental
 #
 # POST /materials/{material_id}/rentals/checkout/
-export def "materials-rentals-checkout create" [
+export def "post-materials-material-id-rentals-checkout" [
   material_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6141,7 +6141,7 @@ export def "materials-rentals-checkout create" [
 # Delete material rental
 #
 # DELETE /materials/{material_id}/rentals/{material_rental_id}/
-export def "materials-rentals delete" [
+export def "delete-materials-material-id-rentals-material-rental-id" [
   material_id: string
   material_rental_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6178,7 +6178,7 @@ export def "materials-rentals delete" [
 # Show rental foor materi
 #
 # GET /materials/{material_id}/rentals/{material_rental_id}/
-export def "materials-rentals get" [
+export def "get-materials-material-id-rentals-material-rental-id" [
   material_id: string
   material_rental_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6215,7 +6215,7 @@ export def "materials-rentals get" [
 # Edit material rental
 #
 # PUT /materials/{material_id}/rentals/{material_rental_id}/
-export def "materials-rentals update" [
+export def "put-materials-material-id-rentals-material-rental-id" [
   material_id: string
   material_rental_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6252,7 +6252,7 @@ export def "materials-rentals update" [
 # Get list of offer statuses
 #
 # GET /offer_statuses
-export def "offer-statuses list" [
+export def "get-offer-statuses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6285,7 +6285,7 @@ export def "offer-statuses list" [
 # Create a new offer status
 #
 # POST /offer_statuses
-export def "offer-statuses create" [
+export def "post-offer-statuses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6326,7 +6326,7 @@ export def "offer-statuses create" [
 # Bulk delete offer statuses
 #
 # DELETE /offer_statuses/bulkDelete
-export def "offer-statuses-bulk-delete delete" [
+export def "delete-offer-statuses-bulk-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6363,7 +6363,7 @@ export def "offer-statuses-bulk-delete delete" [
 # Delete a offer status
 #
 # DELETE /offer_statuses/{offer_status_id}
-export def "offer-statuses delete" [
+export def "delete-offer-statuses-offer-status-id" [
   offer_status_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6398,7 +6398,7 @@ export def "offer-statuses delete" [
 # Get a single offer status
 #
 # GET /offer_statuses/{offer_status_id}
-export def "offer-statuses get" [
+export def "get-offer-statuses-offer-status-id" [
   offer_status_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6433,7 +6433,7 @@ export def "offer-statuses get" [
 # Edit a offer status
 #
 # PUT /offer_statuses/{offer_status_id}
-export def "offer-statuses update" [
+export def "put-offer-statuses-offer-status-id" [
   offer_status_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6468,7 +6468,7 @@ export def "offer-statuses update" [
 # View list of offers
 #
 # GET /offers
-export def "offers list" [
+export def "get-offers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6501,7 +6501,7 @@ export def "offers list" [
 # Add new offer
 #
 # POST /offers
-export def "offers create" [
+export def "post-offers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6540,7 +6540,7 @@ export def "offers create" [
 # Delete an offer
 #
 # DELETE /offers/{offer_id}
-export def "offers delete" [
+export def "delete-offers-offer-id" [
   offer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6575,7 +6575,7 @@ export def "offers delete" [
 # View offer
 #
 # GET /offers/{offer_id}
-export def "offers get" [
+export def "get-offers-offer-id" [
   offer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6610,7 +6610,7 @@ export def "offers get" [
 # Edit an offer
 #
 # PUT /offers/{offer_id}
-export def "offers update" [
+export def "put-offers-offer-id" [
   offer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6650,7 +6650,7 @@ export def "offers update" [
 # Get list of changelog history for the offer. Returns offer object with contact and user objects if they are provided
 #
 # GET /offers/{offer_id}/changelog
-export def "offers-changelog get" [
+export def "get-offers-offer-id-changelog" [
   offer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6685,7 +6685,7 @@ export def "offers-changelog get" [
 # Get a statistics data for rejection reasons
 #
 # GET /overview/rejection_reasons
-export def "overview-rejection-reasons get" [
+export def "get-overview-rejection-reasons" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6718,7 +6718,7 @@ export def "overview-rejection-reasons get" [
 # Get a list of payment term types
 #
 # GET /payment_term_types
-export def "payment-term-types list" [
+export def "get-payment-term-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6751,7 +6751,7 @@ export def "payment-term-types list" [
 # Details of 1 payment term type
 #
 # GET /payment_term_types/{payment_term_type_id}
-export def "payment-term-types get" [
+export def "get-payment-term-types-payment-term-type-id" [
   payment_term_type_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6786,7 +6786,7 @@ export def "payment-term-types get" [
 # Get a list of payment terms
 #
 # GET /payment_terms
-export def "payment-terms list" [
+export def "get-payment-terms" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6819,7 +6819,7 @@ export def "payment-terms list" [
 # Get integration payment terms list
 #
 # GET /payment_terms/erp
-export def "payment-terms-erp get" [
+export def "get-payment-terms-erp" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6852,7 +6852,7 @@ export def "payment-terms-erp get" [
 # Details of 1 payment term
 #
 # GET /payment_terms/{payment_term_id}
-export def "payment-terms get" [
+export def "get-payment-terms-payment-term-id" [
   payment_term_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6887,7 +6887,7 @@ export def "payment-terms get" [
 # Check if API is up and API key works
 #
 # GET /ping
-export def "ping get" [
+export def "get-ping" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6920,7 +6920,7 @@ export def "ping get" [
 # List products
 #
 # GET /products
-export def "products list" [
+export def "get-products" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6958,7 +6958,7 @@ export def "products list" [
 # Add new product
 #
 # POST /products
-export def "products create" [
+export def "post-products" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7002,7 +7002,7 @@ export def "products create" [
 #
 # DELETE /products/bulkDelete
 # operationId: bulkDeleteProducts
-export def "products-bulk-delete delete" [
+export def "bulk-delete-products" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7039,7 +7039,7 @@ export def "products-bulk-delete delete" [
 # Restore a deleted product
 #
 # POST /products/undelete/{product_id}
-export def "products-undelete create" [
+export def "post-products-undelete-product-id" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7074,7 +7074,7 @@ export def "products-undelete create" [
 # Delete a product
 #
 # DELETE /products/{product_id}
-export def "products delete" [
+export def "delete-products-product-id" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7109,7 +7109,7 @@ export def "products delete" [
 # View single product
 #
 # GET /products/{product_id}
-export def "products get" [
+export def "get-products-product-id" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7144,7 +7144,7 @@ export def "products get" [
 # Edit a product
 #
 # PUT /products/{product_id}
-export def "products update" [
+export def "put-products-product-id" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7180,7 +7180,7 @@ export def "products update" [
 #
 # POST /products/{product_id}/uploadImage
 # operationId: Upload or delete product image
-export def "products-upload-image delete-or" [
+export def "upload-or-delete-product-image" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7220,7 +7220,7 @@ export def "products-upload-image delete-or" [
 # Get a product's variants
 #
 # GET /products/{product_id}/variants
-export def "products-variants get" [
+export def "get-products-product-id-variants" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7255,7 +7255,7 @@ export def "products-variants get" [
 # Add a new variant to a product
 #
 # POST /products/{product_id}/variants
-export def "products-variants create" [
+export def "post-products-product-id-variants" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7299,7 +7299,7 @@ export def "products-variants create" [
 # Delete a product variant
 #
 # DELETE /products/{product_id}/variants/{variant_type}/{variant_id}
-export def "products-variants delete" [
+export def "delete-products-product-id-variants-variant-type-variant-id" [
   product_id: string
   variant_type: string
   variant_id: string
@@ -7338,7 +7338,7 @@ export def "products-variants delete" [
 # Get a list of project custom field attributes
 #
 # GET /project_custom_field_attributes
-export def "project-custom-field-attributes list" [
+export def "get-project-custom-field-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7371,7 +7371,7 @@ export def "project-custom-field-attributes list" [
 # Details of 1 project custom field attribute
 #
 # GET /project_custom_field_attributes/{project_custom_field_attribute_id}
-export def "project-custom-field-attributes get" [
+export def "get-project-custom-field-attributes-project-custom-field-attribute-id" [
   project_custom_field_attribute_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7406,7 +7406,7 @@ export def "project-custom-field-attributes get" [
 # Get a list of project status types
 #
 # GET /project_status_types
-export def "project-status-types get" [
+export def "get-project-status-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7439,7 +7439,7 @@ export def "project-status-types get" [
 # Get list of project statuses
 #
 # GET /project_statuses
-export def "project-statuses list" [
+export def "get-project-statuses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7472,7 +7472,7 @@ export def "project-statuses list" [
 # Create a new project status
 #
 # POST /project_statuses
-export def "project-statuses create" [
+export def "post-project-statuses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7511,7 +7511,7 @@ export def "project-statuses create" [
 # Add default project statuses to company
 #
 # POST /project_statuses/add_default
-export def "project-statuses-add-default create" [
+export def "post-project-statuses-add-default" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7544,7 +7544,7 @@ export def "project-statuses-add-default create" [
 # Bulk delete project statuses
 #
 # DELETE /project_statuses/bulkDelete
-export def "project-statuses-bulk-delete delete" [
+export def "delete-project-statuses-bulk-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7581,7 +7581,7 @@ export def "project-statuses-bulk-delete delete" [
 # Delete a project status
 #
 # DELETE /project_statuses/{project_status_id}
-export def "project-statuses delete" [
+export def "delete-project-statuses-project-status-id" [
   project_status_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7616,7 +7616,7 @@ export def "project-statuses delete" [
 # Get a single project status
 #
 # GET /project_statuses/{project_status_id}
-export def "project-statuses get" [
+export def "get-project-statuses-project-status-id" [
   project_status_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7651,7 +7651,7 @@ export def "project-statuses get" [
 # Edit a project status
 #
 # PUT /project_statuses/{project_status_id}
-export def "project-statuses update" [
+export def "put-project-statuses-project-status-id" [
   project_status_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7686,7 +7686,7 @@ export def "project-statuses update" [
 # View list of projects
 #
 # GET /projects
-export def "projects list" [
+export def "get-projects" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7739,7 +7739,7 @@ export def "projects list" [
 # Add a project
 #
 # POST /projects
-export def "projects create" [
+export def "post-projects" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7786,7 +7786,7 @@ export def "projects create" [
 # Check if the company has projects with custom statuses
 #
 # GET /projects/has_projects_with_custom_statuses
-export def "projects-has-projects-with-custom-statuses get" [
+export def "get-projects-has-projects-with-custom-statuses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7819,7 +7819,7 @@ export def "projects-has-projects-with-custom-statuses get" [
 # Delete a project
 #
 # DELETE /projects/{project_id}
-export def "projects delete" [
+export def "delete-projects-project-id" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7854,7 +7854,7 @@ export def "projects delete" [
 # View specific project
 #
 # GET /projects/{project_id}
-export def "projects get" [
+export def "get-projects-project-id" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7889,7 +7889,7 @@ export def "projects get" [
 # Edit a project
 #
 # PUT /projects/{project_id}
-export def "projects update" [
+export def "put-projects-project-id" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7935,7 +7935,7 @@ export def "projects update" [
 # Show list of all files uploaded to project
 #
 # GET /projects/{project_id}/all_files
-export def "projects-all-files get" [
+export def "get-projects-project-id-all-files" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7970,7 +7970,7 @@ export def "projects-all-files get" [
 # Show list of files uploaded to project
 #
 # GET /projects/{project_id}/files
-export def "projects-files list" [
+export def "get-projects-project-id-files" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8005,7 +8005,7 @@ export def "projects-files list" [
 # Delete file
 #
 # DELETE /projects/{project_id}/files/{file_id}/
-export def "projects-files delete" [
+export def "delete-projects-project-id-files-file-id" [
   project_id: string
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8042,7 +8042,7 @@ export def "projects-files delete" [
 # Show file
 #
 # GET /projects/{project_id}/files/{file_id}/
-export def "projects-files get" [
+export def "get-projects-project-id-files-file-id" [
   project_id: string
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8079,7 +8079,7 @@ export def "projects-files get" [
 # Edit file
 #
 # PUT /projects/{project_id}/files/{file_id}/
-export def "projects-files update" [
+export def "put-projects-project-id-files-file-id" [
   project_id: string
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8116,7 +8116,7 @@ export def "projects-files update" [
 # Show list of project files uploaded to project
 #
 # GET /projects/{project_id}/project_files
-export def "projects-project-files list" [
+export def "get-projects-project-id-project-files" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8151,7 +8151,7 @@ export def "projects-project-files list" [
 # Add project file to projects
 #
 # POST /projects/{project_id}/project_files
-export def "projects-project-files create" [
+export def "post-projects-project-id-project-files" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8192,7 +8192,7 @@ export def "projects-project-files create" [
 # Delete project file
 #
 # DELETE /projects/{project_id}/project_files/{project_file_id}/
-export def "projects-project-files delete" [
+export def "delete-projects-project-id-project-files-project-file-id" [
   project_id: string
   project_file_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8229,7 +8229,7 @@ export def "projects-project-files delete" [
 # Show project file
 #
 # GET /projects/{project_id}/project_files/{project_file_id}/
-export def "projects-project-files get" [
+export def "get-projects-project-id-project-files-project-file-id" [
   project_id: string
   project_file_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8266,7 +8266,7 @@ export def "projects-project-files get" [
 # Edit project file
 #
 # PUT /projects/{project_id}/project_files/{project_file_id}/
-export def "projects-project-files update" [
+export def "put-projects-project-id-project-files-project-file-id" [
   project_id: string
   project_file_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8303,7 +8303,7 @@ export def "projects-project-files update" [
 # Send bulk forms pdf by email
 #
 # POST /projects/{project_id}/send_bulk_pdf
-export def "projects-send-bulk-pdf create" [
+export def "post-projects-project-id-send-bulk-pdf" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8342,7 +8342,7 @@ export def "projects-send-bulk-pdf create" [
 # Show list of users added to project
 #
 # GET /projects/{project_id}/users/
-export def "projects-users list" [
+export def "get-projects-project-id-users" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8377,7 +8377,7 @@ export def "projects-users list" [
 # Add user to project
 #
 # POST /projects/{project_id}/users/
-export def "projects-users create" [
+export def "post-projects-project-id-users" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8416,7 +8416,7 @@ export def "projects-users create" [
 # Delete user from project
 #
 # DELETE /projects/{project_id}/users/{user_id}
-export def "projects-users delete" [
+export def "delete-projects-project-id-users-user-id" [
   project_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8453,7 +8453,7 @@ export def "projects-users delete" [
 # View specific user assigned to project
 #
 # GET /projects/{project_id}/users/{user_id}
-export def "projects-users get" [
+export def "get-projects-project-id-users-user-id" [
   project_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8490,7 +8490,7 @@ export def "projects-users get" [
 # View list of report types
 #
 # GET /reports
-export def "reports get" [
+export def "get-reports" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8523,7 +8523,7 @@ export def "reports get" [
 # Get a list of roles
 #
 # GET /roles
-export def "roles get" [
+export def "get-roles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8556,7 +8556,7 @@ export def "roles get" [
 # List stock_locations
 #
 # GET /stock_locations
-export def "stock-locations list" [
+export def "get-stock-locations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8591,7 +8591,7 @@ export def "stock-locations list" [
 # Add new stock_locations
 #
 # POST /stock_locations
-export def "stock-locations create" [
+export def "post-stock-locations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8628,7 +8628,7 @@ export def "stock-locations create" [
 # Delete location
 #
 # DELETE /stock_locations/{location_id}
-export def "stock-locations delete" [
+export def "delete-stock-locations-location-id" [
   location_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8663,7 +8663,7 @@ export def "stock-locations delete" [
 # View single location
 #
 # GET /stock_locations/{location_id}
-export def "stock-locations get" [
+export def "get-stock-locations-location-id" [
   location_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8698,7 +8698,7 @@ export def "stock-locations get" [
 # Edit location
 #
 # PUT /stock_locations/{location_id}
-export def "stock-locations update" [
+export def "put-stock-locations-location-id" [
   location_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8733,7 +8733,7 @@ export def "stock-locations update" [
 # List time entries
 #
 # GET /time_entries
-export def "time-entries list" [
+export def "get-time-entries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8776,7 +8776,7 @@ export def "time-entries list" [
 # Add new time entry
 #
 # POST /time_entries
-export def "time-entries create" [
+export def "post-time-entries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8820,7 +8820,7 @@ export def "time-entries create" [
 # Delete time entry
 #
 # DELETE /time_entries/{time_entry_id}
-export def "time-entries delete" [
+export def "delete-time-entries-time-entry-id" [
   time_entry_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8855,7 +8855,7 @@ export def "time-entries delete" [
 # View time entry
 #
 # GET /time_entries/{time_entry_id}
-export def "time-entries get" [
+export def "get-time-entries-time-entry-id" [
   time_entry_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8890,7 +8890,7 @@ export def "time-entries get" [
 # Edit time entry
 #
 # PUT /time_entries/{time_entry_id}
-export def "time-entries update" [
+export def "put-time-entries-time-entry-id" [
   time_entry_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8925,7 +8925,7 @@ export def "time-entries update" [
 # List possible time entry intervals
 #
 # GET /time_entry_intervals
-export def "time-entry-intervals list" [
+export def "get-time-entry-intervals" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8958,7 +8958,7 @@ export def "time-entry-intervals list" [
 # View time entry interval
 #
 # GET /time_entry_intervals/{time_entry_interval_id}
-export def "time-entry-intervals get" [
+export def "get-time-entry-intervals-time-entry-interval-id" [
   time_entry_interval_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8993,7 +8993,7 @@ export def "time-entry-intervals get" [
 # List time entry rates
 #
 # GET /time_entry_rates
-export def "time-entry-rates list" [
+export def "get-time-entry-rates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9026,7 +9026,7 @@ export def "time-entry-rates list" [
 # Add new time entry rate
 #
 # POST /time_entry_rates
-export def "time-entry-rates create" [
+export def "post-time-entry-rates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9070,7 +9070,7 @@ export def "time-entry-rates create" [
 # Delete time entry rate
 #
 # DELETE /time_entry_rates/{time_entry_rate_id}
-export def "time-entry-rates delete" [
+export def "delete-time-entry-rates-time-entry-rate-id" [
   time_entry_rate_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9105,7 +9105,7 @@ export def "time-entry-rates delete" [
 # View time entry rate
 #
 # GET /time_entry_rates/{time_entry_rate_id}
-export def "time-entry-rates get" [
+export def "get-time-entry-rates-time-entry-rate-id" [
   time_entry_rate_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9140,7 +9140,7 @@ export def "time-entry-rates get" [
 # Edit time entry rate
 #
 # PUT /time_entry_rates/{time_entry_rate_id}
-export def "time-entry-rates update" [
+export def "put-time-entry-rates-time-entry-rate-id" [
   time_entry_rate_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9175,7 +9175,7 @@ export def "time-entry-rates update" [
 # List time entry rule groups
 #
 # GET /time_entry_rule_groups
-export def "time-entry-rule-groups get" [
+export def "get-time-entry-rule-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9210,7 +9210,7 @@ export def "time-entry-rule-groups get" [
 # List time entries types
 #
 # GET /time_entry_types
-export def "time-entry-types list" [
+export def "get-time-entry-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9243,7 +9243,7 @@ export def "time-entry-types list" [
 # Add new time entry type
 #
 # POST /time_entry_types
-export def "time-entry-types create" [
+export def "post-time-entry-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9284,7 +9284,7 @@ export def "time-entry-types create" [
 #
 # POST /time_entry_types/bulkActivate
 # operationId: bulkActivateTimeEntryTypes
-export def "time-entry-types-bulk-activate create" [
+export def "bulk-activate-time-entry-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9322,7 +9322,7 @@ export def "time-entry-types-bulk-activate create" [
 #
 # POST /time_entry_types/bulkDeactivate
 # operationId: bulkDeactivateTimeEntryTypes
-export def "time-entry-types-bulk-deactivate create" [
+export def "bulk-deactivate-time-entry-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9360,7 +9360,7 @@ export def "time-entry-types-bulk-deactivate create" [
 #
 # DELETE /time_entry_types/bulkDelete
 # operationId: bulkDeleteTimeEntryTypes
-export def "time-entry-types-bulk-delete delete" [
+export def "bulk-delete-time-entry-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9397,7 +9397,7 @@ export def "time-entry-types-bulk-delete delete" [
 # Delete time entry type
 #
 # DELETE /time_entry_types/{time_entry_type_id}
-export def "time-entry-types delete" [
+export def "delete-time-entry-types-time-entry-type-id" [
   time_entry_type_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9432,7 +9432,7 @@ export def "time-entry-types delete" [
 # View time entry type
 #
 # GET /time_entry_types/{time_entry_type_id}
-export def "time-entry-types get" [
+export def "get-time-entry-types-time-entry-type-id" [
   time_entry_type_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9467,7 +9467,7 @@ export def "time-entry-types get" [
 # Edit time entry type
 #
 # PUT /time_entry_types/{time_entry_type_id}
-export def "time-entry-types update" [
+export def "put-time-entry-types-time-entry-type-id" [
   time_entry_type_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9502,7 +9502,7 @@ export def "time-entry-types update" [
 # List possible time entry unit types
 #
 # GET /time_entry_unit_types
-export def "time-entry-unit-types list" [
+export def "get-time-entry-unit-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9535,7 +9535,7 @@ export def "time-entry-unit-types list" [
 # View time entry unit type
 #
 # GET /time_entry_unit_types/{time_entry_unit_type_id}
-export def "time-entry-unit-types get" [
+export def "get-time-entry-unit-types-time-entry-unit-type-id" [
   time_entry_unit_type_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9570,7 +9570,7 @@ export def "time-entry-unit-types get" [
 # List possible time entry value types
 #
 # GET /time_entry_value_types
-export def "time-entry-value-types list" [
+export def "get-time-entry-value-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9603,7 +9603,7 @@ export def "time-entry-value-types list" [
 # View time entry value type
 #
 # GET /time_entry_value_types/{time_entry_value_type_id}
-export def "time-entry-value-types get" [
+export def "get-time-entry-value-types-time-entry-value-type-id" [
   time_entry_value_type_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9638,7 +9638,7 @@ export def "time-entry-value-types get" [
 # Get a list of user custom field attributes
 #
 # GET /user_custom_field_attributes
-export def "user-custom-field-attributes list" [
+export def "get-user-custom-field-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9671,7 +9671,7 @@ export def "user-custom-field-attributes list" [
 # Details of 1 user custom field attribute
 #
 # GET /user_custom_field_attributes/{user_custom_field_attribute_id}
-export def "user-custom-field-attributes get" [
+export def "get-user-custom-field-attributes-user-custom-field-attribute-id" [
   user_custom_field_attribute_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9706,7 +9706,7 @@ export def "user-custom-field-attributes get" [
 # Get list of users in company
 #
 # GET /users
-export def "users list" [
+export def "get-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9746,7 +9746,7 @@ export def "users list" [
 #
 # POST /users
 # --roles shape: {_ids?: list<string>}
-export def "users create" [
+export def "post-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9804,7 +9804,7 @@ export def "users create" [
 #
 # POST /users/bulkActivate
 # operationId: usersBulkActivate
-export def "users-bulk-activate create" [
+export def "users-bulk-activate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9842,7 +9842,7 @@ export def "users-bulk-activate create" [
 #
 # POST /users/bulkDeactivate
 # operationId: usersBulkDeactivate
-export def "users-bulk-deactivate create" [
+export def "users-bulk-deactivate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9879,7 +9879,7 @@ export def "users-bulk-deactivate create" [
 # Resend Welcome SMS to the user
 #
 # GET /users/resendWelcomeSms
-export def "users-resend-welcome-sms get" [
+export def "get-users-resend-welcome-sms" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9912,7 +9912,7 @@ export def "users-resend-welcome-sms get" [
 # Delete user
 #
 # DELETE /users/{user_id}
-export def "users delete" [
+export def "delete-users-user-id" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9947,7 +9947,7 @@ export def "users delete" [
 # View user
 #
 # GET /users/{user_id}
-export def "users get" [
+export def "get-users-user-id" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9982,7 +9982,7 @@ export def "users get" [
 # Edit user
 #
 # PUT /users/{user_id}
-export def "users update" [
+export def "put-users-user-id" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10017,7 +10017,7 @@ export def "users update" [
 # Get a list of user integration settings
 #
 # GET /users/{user_id}/integration_settings
-export def "users-integration-settings list" [
+export def "get-users-user-id-integration-settings" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10052,7 +10052,7 @@ export def "users-integration-settings list" [
 # Add a user integration setting
 #
 # POST /users/{user_id}/integration_settings
-export def "users-integration-settings create" [
+export def "post-users-user-id-integration-settings" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10092,7 +10092,7 @@ export def "users-integration-settings create" [
 # Delete a user integration setting
 #
 # DELETE /users/{user_id}/integration_settings/{integration_settings_user_id}
-export def "users-integration-settings delete" [
+export def "delete-users-user-id-integration-settings-integration-settings-user-id" [
   user_id: string
   integration_settings_user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10129,7 +10129,7 @@ export def "users-integration-settings delete" [
 # Get a user integration setting
 #
 # GET /users/{user_id}/integration_settings/{integration_settings_user_id}
-export def "users-integration-settings get" [
+export def "get-users-user-id-integration-settings-integration-settings-user-id" [
   user_id: string
   integration_settings_user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10166,7 +10166,7 @@ export def "users-integration-settings get" [
 # Edit a user integration setting
 #
 # PUT /users/{user_id}/integration_settings/{integration_settings_user_id}
-export def "users-integration-settings update" [
+export def "put-users-user-id-integration-settings-integration-settings-user-id" [
   user_id: string
   integration_settings_user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10203,7 +10203,7 @@ export def "users-integration-settings update" [
 # Upload a new image to a user
 #
 # POST /users/{user_id}/uploadImage
-export def "users-upload-image create" [
+export def "post-users-user-id-upload-image" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10244,7 +10244,7 @@ export def "users-upload-image create" [
 # Get a list of user custom field values
 #
 # GET /users/{user_id}/user_custom_field_value
-export def "users-user-custom-field-value list" [
+export def "get-users-user-id-user-custom-field-value" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10279,7 +10279,7 @@ export def "users-user-custom-field-value list" [
 # Get a single record of user custom field value
 #
 # GET /users/{user_id}/user_custom_field_value/{user_custom_field_value_id}
-export def "users-user-custom-field-value get" [
+export def "get-users-user-id-user-custom-field-value-user-custom-field-value-id" [
   user_id: string
   user_custom_field_value_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10316,7 +10316,7 @@ export def "users-user-custom-field-value get" [
 # Update a single record of user custom field value
 #
 # PUT /users/{user_id}/user_custom_field_value/{user_custom_field_value_id}
-export def "users-user-custom-field-value update" [
+export def "put-users-user-id-user-custom-field-value-user-custom-field-value-id" [
   user_id: string
   user_custom_field_value_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10353,7 +10353,7 @@ export def "users-user-custom-field-value update" [
 # Get a list of price files
 #
 # GET /vendor_product_price_files
-export def "vendor-product-price-files list" [
+export def "get-vendor-product-price-files" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10391,7 +10391,7 @@ export def "vendor-product-price-files list" [
 # Upload a vendor price file
 #
 # POST /vendor_product_price_files
-export def "vendor-product-price-files create" [
+export def "post-vendor-product-price-files" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10430,7 +10430,7 @@ export def "vendor-product-price-files create" [
 # Get a single price file
 #
 # GET /vendor_product_price_files/{vendor_product_price_file_id}
-export def "vendor-product-price-files get" [
+export def "get-vendor-product-price-files-vendor-product-price-file-id" [
   vendor_product_price_file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10465,7 +10465,7 @@ export def "vendor-product-price-files get" [
 # List vendor products
 #
 # GET /vendor_products
-export def "vendor-products list" [
+export def "get-vendor-products" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10503,7 +10503,7 @@ export def "vendor-products list" [
 # View single vendor product
 #
 # GET /vendor_products/{vendor_product_id}
-export def "vendor-products get" [
+export def "get-vendor-products-vendor-product-id" [
   vendor_product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10539,7 +10539,7 @@ export def "vendor-products get" [
 #
 # GET /vendors
 # operationId: getVendorsList
-export def "vendors get-list" [
+export def "get-vendors-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10578,7 +10578,7 @@ export def "vendors get-list" [
 #
 # POST /vendors
 # operationId: addVendor
-export def "vendors create" [
+export def "add-vendor" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10620,7 +10620,7 @@ export def "vendors create" [
 # Delete a vendor
 #
 # DELETE /vendors/{vendor_id}
-export def "vendors delete" [
+export def "delete-vendors-vendor-id" [
   vendor_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10656,7 +10656,7 @@ export def "vendors delete" [
 #
 # GET /vendors/{vendor_id}
 # operationId: getVendor
-export def "vendors get" [
+export def "get-vendor" [
   vendor_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10692,7 +10692,7 @@ export def "vendors get" [
 #
 # PUT /vendors/{vendor_id}
 # operationId: editVendor
-export def "vendors update-edit" [
+export def "edit-vendor" [
   vendor_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10736,7 +10736,7 @@ export def "vendors update-edit" [
 # Download salary file
 #
 # GET /wages/downloadSalaryFile
-export def "wages-download-salary-file get" [
+export def "get-wages-download-salary-file" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10773,7 +10773,7 @@ export def "wages-download-salary-file get" [
 # Add wall comment
 #
 # POST /wall_comments
-export def "wall-comments create" [
+export def "post-wall-comments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10811,7 +10811,7 @@ export def "wall-comments create" [
 # View wall comment
 #
 # GET /wall_comments/{wall_comment_id}
-export def "wall-comments get" [
+export def "get-wall-comments-wall-comment-id" [
   wall_comment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10846,7 +10846,7 @@ export def "wall-comments get" [
 # View list of wall posts
 #
 # GET /wall_posts
-export def "wall-posts list" [
+export def "get-wall-posts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10882,7 +10882,7 @@ export def "wall-posts list" [
 # Add a wall post
 #
 # POST /wall_posts
-export def "wall-posts create" [
+export def "post-wall-posts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10920,7 +10920,7 @@ export def "wall-posts create" [
 # View wall post
 #
 # GET /wall_posts/{wall_post_id}
-export def "wall-posts get" [
+export def "get-wall-posts-wall-post-id" [
   wall_post_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10955,7 +10955,7 @@ export def "wall-posts get" [
 # See wall comments to a wall post
 #
 # GET /wall_posts/{wall_post_id}/wall_comments
-export def "wall-posts-wall-comments get" [
+export def "get-wall-posts-wall-post-id-wall-comments" [
   wall_post_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

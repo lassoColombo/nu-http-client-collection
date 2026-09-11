@@ -124,7 +124,7 @@ def import-method-completer [] { ["NotSpecified" "SoapPassThrough" "SoapToRest"]
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-web-connection-gateways list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "connection-gateways-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -148,7 +148,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Web/connectionGateways
 # operationId: ConnectionGateways_List
-export def "subscriptions-providers-microsoft-web-connection-gateways list" [
+export def "connection-gateways-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -186,7 +186,7 @@ export def "subscriptions-providers-microsoft-web-connection-gateways list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Web/customApis
 # operationId: CustomApis_List
-export def "subscriptions-providers-microsoft-web-custom-apis list" [
+export def "custom-apis-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -226,7 +226,7 @@ export def "subscriptions-providers-microsoft-web-custom-apis list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Web/locations/{location}/connectionGatewayInstallations
 # operationId: ConnectionGatewayInstallations_List
-export def "subscriptions-providers-microsoft-web-locations-connection-gateway-installations list" [
+export def "connection-gateway-installations-list" [
   subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -266,7 +266,7 @@ export def "subscriptions-providers-microsoft-web-locations-connection-gateway-i
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Web/locations/{location}/connectionGatewayInstallations/{gatewayId}
 # operationId: ConnectionGatewayInstallations_Get
-export def "subscriptions-providers-microsoft-web-locations-connection-gateway-installations get" [
+export def "connection-gateway-installations-get" [
   subscription_id: string
   location: string
   gateway_id: string
@@ -309,7 +309,7 @@ export def "subscriptions-providers-microsoft-web-locations-connection-gateway-i
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Web/locations/{location}/extractApiDefinitionFromWsdl
 # operationId: CustomApis_ExtractApiDefinitionFromWsdl
 # --service shape: {endpointQualifiedNames?: list<string>, qualifiedName: string}
-export def "subscriptions-providers-microsoft-web-locations-extract-api-definition-from-wsdl create-custom" [
+export def "custom-apis-extract-api-definition-from-wsdl" [
   subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -357,7 +357,7 @@ export def "subscriptions-providers-microsoft-web-locations-extract-api-definiti
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Web/locations/{location}/listWsdlInterfaces
 # operationId: CustomApis_ListWsdlInterfaces
 # --service shape: {endpointQualifiedNames?: list<string>, qualifiedName: string}
-export def "subscriptions-providers-microsoft-web-locations-list-wsdl-interfaces list-custom" [
+export def "custom-apis-list-wsdl-interfaces" [
   subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -404,7 +404,7 @@ export def "subscriptions-providers-microsoft-web-locations-list-wsdl-interfaces
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Web/locations/{location}/managedApis
 # operationId: ManagedApis_List
-export def "subscriptions-providers-microsoft-web-locations-managed-apis list" [
+export def "managed-apis-list" [
   subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -444,7 +444,7 @@ export def "subscriptions-providers-microsoft-web-locations-managed-apis list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Web/locations/{location}/managedApis/{apiName}
 # operationId: ManagedApis_Get
-export def "subscriptions-providers-microsoft-web-locations-managed-apis get" [
+export def "managed-apis-get" [
   subscription_id: string
   location: string
   api_name: string
@@ -486,7 +486,7 @@ export def "subscriptions-providers-microsoft-web-locations-managed-apis get" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/connectionGateways
 # operationId: ConnectionGateways_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-web-connection-gateways list" [
+export def "connection-gateways-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -526,7 +526,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-connection-gat
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/connectionGateways/{connectionGatewayName}
 # operationId: ConnectionGateways_Delete
-export def "subscriptions-resource-groups-providers-microsoft-web-connection-gateways delete" [
+export def "connection-gateways-delete" [
   subscription_id: string
   resource_group_name: string
   connection_gateway_name: string
@@ -568,7 +568,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-connection-gat
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/connectionGateways/{connectionGatewayName}
 # operationId: ConnectionGateways_Get
-export def "subscriptions-resource-groups-providers-microsoft-web-connection-gateways get" [
+export def "connection-gateways-get" [
   subscription_id: string
   resource_group_name: string
   connection_gateway_name: string
@@ -611,7 +611,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-connection-gat
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/connectionGateways/{connectionGatewayName}
 # operationId: ConnectionGateways_Update
 # --properties shape: {backendUri?: string, connectionGatewayInstallation?: record, contactInformation?: list<string>, description?: string, displayName?: string, machineName?: string, status?: record}
-export def "subscriptions-resource-groups-providers-microsoft-web-connection-gateways update" [
+export def "connection-gateways-update" [
   subscription_id: string
   resource_group_name: string
   connection_gateway_name: string
@@ -661,7 +661,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-connection-gat
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/connectionGateways/{connectionGatewayName}
 # operationId: ConnectionGateways_CreateOrUpdate
 # --properties shape: {backendUri?: string, connectionGatewayInstallation?: record, contactInformation?: list<string>, description?: string, displayName?: string, machineName?: string, status?: record}
-export def "subscriptions-resource-groups-providers-microsoft-web-connection-gateways create-or-update" [
+export def "connection-gateways-create-or-update" [
   subscription_id: string
   resource_group_name: string
   connection_gateway_name: string
@@ -710,7 +710,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-connection-gat
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/connections
 # operationId: Connections_List
-export def "subscriptions-resource-groups-providers-microsoft-web-connections list" [
+export def "connections-list" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -752,7 +752,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-connections li
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/connections/{connectionName}
 # operationId: Connections_Delete
-export def "subscriptions-resource-groups-providers-microsoft-web-connections delete" [
+export def "connections-delete" [
   subscription_id: string
   resource_group_name: string
   connection_name: string
@@ -794,7 +794,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-connections de
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/connections/{connectionName}
 # operationId: Connections_Get
-export def "subscriptions-resource-groups-providers-microsoft-web-connections get" [
+export def "connections-get" [
   subscription_id: string
   resource_group_name: string
   connection_name: string
@@ -837,7 +837,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-connections ge
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/connections/{connectionName}
 # operationId: Connections_Update
 # --properties shape: {api?: record, changedTime?: string, createdTime?: string, customParameterValues?: record, displayName?: string, nonSecretParameterValues?: record, parameterValues?: record, statuses?: list, testLinks?: list}
-export def "subscriptions-resource-groups-providers-microsoft-web-connections update" [
+export def "connections-update" [
   subscription_id: string
   resource_group_name: string
   connection_name: string
@@ -887,7 +887,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-connections up
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/connections/{connectionName}
 # operationId: Connections_CreateOrUpdate
 # --properties shape: {api?: record, changedTime?: string, createdTime?: string, customParameterValues?: record, displayName?: string, nonSecretParameterValues?: record, parameterValues?: record, statuses?: list, testLinks?: list}
-export def "subscriptions-resource-groups-providers-microsoft-web-connections create-or-update" [
+export def "connections-create-or-update" [
   subscription_id: string
   resource_group_name: string
   connection_name: string
@@ -936,7 +936,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-connections cr
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/connections/{connectionName}/confirmConsentCode
 # operationId: Connections_ConfirmConsentCode
-export def "subscriptions-resource-groups-providers-microsoft-web-connections-confirm-consent-code confirm" [
+export def "connections-confirm-consent-code" [
   subscription_id: string
   resource_group_name: string
   connection_name: string
@@ -985,7 +985,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-connections-co
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/connections/{connectionName}/listConsentLinks
 # operationId: Connections_ListConsentLinks
 # --parameters item shape: {objectId?: string, parameterName?: string, redirectUrl?: string, tenantId?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-connections-list-consent-links list" [
+export def "connections-list-consent-links" [
   subscription_id: string
   resource_group_name: string
   connection_name: string
@@ -1031,7 +1031,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-connections-li
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/customApis
 # operationId: CustomApis_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-web-custom-apis list" [
+export def "custom-apis-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1073,7 +1073,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-custom-apis li
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/customApis/{apiName}
 # operationId: CustomApis_Delete
-export def "subscriptions-resource-groups-providers-microsoft-web-custom-apis delete" [
+export def "custom-apis-delete" [
   subscription_id: string
   resource_group_name: string
   api_name: string
@@ -1115,7 +1115,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-custom-apis de
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/customApis/{apiName}
 # operationId: CustomApis_Get
-export def "subscriptions-resource-groups-providers-microsoft-web-custom-apis get" [
+export def "custom-apis-get" [
   subscription_id: string
   resource_group_name: string
   api_name: string
@@ -1158,7 +1158,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-custom-apis ge
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/customApis/{apiName}
 # operationId: CustomApis_Update
 # --properties shape: {apiDefinitions?: record, apiType?: "NotSpecified"|"Rest"|"Soap", backendService?: record, brandColor?: string, capabilities?: list<string>, connectionParameters?: record, description?: string, displayName?: string, iconUri?: string, runtimeUrls?: list<string>, swagger?: record, wsdlDefinition?: record}
-export def "subscriptions-resource-groups-providers-microsoft-web-custom-apis update" [
+export def "custom-apis-update" [
   subscription_id: string
   resource_group_name: string
   api_name: string
@@ -1208,7 +1208,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-custom-apis up
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/customApis/{apiName}
 # operationId: CustomApis_CreateOrUpdate
 # --properties shape: {apiDefinitions?: record, apiType?: "NotSpecified"|"Rest"|"Soap", backendService?: record, brandColor?: string, capabilities?: list<string>, connectionParameters?: record, description?: string, displayName?: string, iconUri?: string, runtimeUrls?: list<string>, swagger?: record, wsdlDefinition?: record}
-export def "subscriptions-resource-groups-providers-microsoft-web-custom-apis create-or-update" [
+export def "custom-apis-create-or-update" [
   subscription_id: string
   resource_group_name: string
   api_name: string
@@ -1257,7 +1257,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-custom-apis cr
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/customApis/{apiName}/move
 # operationId: CustomApis_Move
-export def "subscriptions-resource-groups-providers-microsoft-web-custom-apis-move move" [
+export def "custom-apis-move" [
   subscription_id: string
   resource_group_name: string
   api_name: string

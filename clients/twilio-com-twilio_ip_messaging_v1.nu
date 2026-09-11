@@ -133,7 +133,7 @@ def webhooks-on-message-updated-method-completer [] { ["DELETE" "GET" "HEAD" "PA
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "credentials list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-credential" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -156,7 +156,7 @@ export def commands []: nothing -> table {
 # GET /v1/Credentials
 #
 # operationId: ListCredential
-export def "credentials list" [
+export def "list-credential" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -193,7 +193,7 @@ export def "credentials list" [
 # POST /v1/Credentials
 #
 # operationId: CreateCredential
-export def "credentials create" [
+export def "create-credential" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -237,7 +237,7 @@ export def "credentials create" [
 # DELETE /v1/Credentials/{Sid}
 #
 # operationId: DeleteCredential
-export def "credentials delete" [
+export def "delete-credential" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -272,7 +272,7 @@ export def "credentials delete" [
 # GET /v1/Credentials/{Sid}
 #
 # operationId: FetchCredential
-export def "credentials get" [
+export def "fetch-credential" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -307,7 +307,7 @@ export def "credentials get" [
 # POST /v1/Credentials/{Sid}
 #
 # operationId: UpdateCredential
-export def "credentials update" [
+export def "update-credential" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -352,7 +352,7 @@ export def "credentials update" [
 # GET /v1/Services
 #
 # operationId: ListService
-export def "services list" [
+export def "list-service" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -389,7 +389,7 @@ export def "services list" [
 # POST /v1/Services
 #
 # operationId: CreateService
-export def "services create" [
+export def "create-service" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -427,7 +427,7 @@ export def "services create" [
 # GET /v1/Services/{ServiceSid}/Channels
 #
 # operationId: ListChannel
-export def "services-channels list" [
+export def "list-channel" [
   service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -467,7 +467,7 @@ export def "services-channels list" [
 # POST /v1/Services/{ServiceSid}/Channels
 #
 # operationId: CreateChannel
-export def "services-channels create" [
+export def "create-channel" [
   service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -510,7 +510,7 @@ export def "services-channels create" [
 # GET /v1/Services/{ServiceSid}/Channels/{ChannelSid}/Invites
 #
 # operationId: ListInvite
-export def "services-channels-invites list" [
+export def "list-invite" [
   service_sid: string
   channel_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -552,7 +552,7 @@ export def "services-channels-invites list" [
 # POST /v1/Services/{ServiceSid}/Channels/{ChannelSid}/Invites
 #
 # operationId: CreateInvite
-export def "services-channels-invites create" [
+export def "create-invite" [
   service_sid: string
   channel_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -595,7 +595,7 @@ export def "services-channels-invites create" [
 # DELETE /v1/Services/{ServiceSid}/Channels/{ChannelSid}/Invites/{Sid}
 #
 # operationId: DeleteInvite
-export def "services-channels-invites delete" [
+export def "delete-invite" [
   service_sid: string
   channel_sid: string
   sid: string
@@ -634,7 +634,7 @@ export def "services-channels-invites delete" [
 # GET /v1/Services/{ServiceSid}/Channels/{ChannelSid}/Invites/{Sid}
 #
 # operationId: FetchInvite
-export def "services-channels-invites get" [
+export def "fetch-invite" [
   service_sid: string
   channel_sid: string
   sid: string
@@ -673,7 +673,7 @@ export def "services-channels-invites get" [
 # GET /v1/Services/{ServiceSid}/Channels/{ChannelSid}/Members
 #
 # operationId: ListMember
-export def "services-channels-members list" [
+export def "list-member" [
   service_sid: string
   channel_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -715,7 +715,7 @@ export def "services-channels-members list" [
 # POST /v1/Services/{ServiceSid}/Channels/{ChannelSid}/Members
 #
 # operationId: CreateMember
-export def "services-channels-members create" [
+export def "create-member" [
   service_sid: string
   channel_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -758,7 +758,7 @@ export def "services-channels-members create" [
 # DELETE /v1/Services/{ServiceSid}/Channels/{ChannelSid}/Members/{Sid}
 #
 # operationId: DeleteMember
-export def "services-channels-members delete" [
+export def "delete-member" [
   service_sid: string
   channel_sid: string
   sid: string
@@ -797,7 +797,7 @@ export def "services-channels-members delete" [
 # GET /v1/Services/{ServiceSid}/Channels/{ChannelSid}/Members/{Sid}
 #
 # operationId: FetchMember
-export def "services-channels-members get" [
+export def "fetch-member" [
   service_sid: string
   channel_sid: string
   sid: string
@@ -836,7 +836,7 @@ export def "services-channels-members get" [
 # POST /v1/Services/{ServiceSid}/Channels/{ChannelSid}/Members/{Sid}
 #
 # operationId: UpdateMember
-export def "services-channels-members update" [
+export def "update-member" [
   service_sid: string
   channel_sid: string
   sid: string
@@ -881,7 +881,7 @@ export def "services-channels-members update" [
 # GET /v1/Services/{ServiceSid}/Channels/{ChannelSid}/Messages
 #
 # operationId: ListMessage
-export def "services-channels-messages list" [
+export def "list-message" [
   service_sid: string
   channel_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -923,7 +923,7 @@ export def "services-channels-messages list" [
 # POST /v1/Services/{ServiceSid}/Channels/{ChannelSid}/Messages
 #
 # operationId: CreateMessage
-export def "services-channels-messages create" [
+export def "create-message" [
   service_sid: string
   channel_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -967,7 +967,7 @@ export def "services-channels-messages create" [
 # DELETE /v1/Services/{ServiceSid}/Channels/{ChannelSid}/Messages/{Sid}
 #
 # operationId: DeleteMessage
-export def "services-channels-messages delete" [
+export def "delete-message" [
   service_sid: string
   channel_sid: string
   sid: string
@@ -1006,7 +1006,7 @@ export def "services-channels-messages delete" [
 # GET /v1/Services/{ServiceSid}/Channels/{ChannelSid}/Messages/{Sid}
 #
 # operationId: FetchMessage
-export def "services-channels-messages get" [
+export def "fetch-message" [
   service_sid: string
   channel_sid: string
   sid: string
@@ -1045,7 +1045,7 @@ export def "services-channels-messages get" [
 # POST /v1/Services/{ServiceSid}/Channels/{ChannelSid}/Messages/{Sid}
 #
 # operationId: UpdateMessage
-export def "services-channels-messages update" [
+export def "update-message" [
   service_sid: string
   channel_sid: string
   sid: string
@@ -1090,7 +1090,7 @@ export def "services-channels-messages update" [
 # DELETE /v1/Services/{ServiceSid}/Channels/{Sid}
 #
 # operationId: DeleteChannel
-export def "services-channels delete" [
+export def "delete-channel" [
   service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1127,7 +1127,7 @@ export def "services-channels delete" [
 # GET /v1/Services/{ServiceSid}/Channels/{Sid}
 #
 # operationId: FetchChannel
-export def "services-channels get" [
+export def "fetch-channel" [
   service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1164,7 +1164,7 @@ export def "services-channels get" [
 # POST /v1/Services/{ServiceSid}/Channels/{Sid}
 #
 # operationId: UpdateChannel
-export def "services-channels update" [
+export def "update-channel" [
   service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1208,7 +1208,7 @@ export def "services-channels update" [
 # GET /v1/Services/{ServiceSid}/Roles
 #
 # operationId: ListRole
-export def "services-roles list" [
+export def "list-role" [
   service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1247,7 +1247,7 @@ export def "services-roles list" [
 # POST /v1/Services/{ServiceSid}/Roles
 #
 # operationId: CreateRole
-export def "services-roles create" [
+export def "create-role" [
   service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1289,7 +1289,7 @@ export def "services-roles create" [
 # DELETE /v1/Services/{ServiceSid}/Roles/{Sid}
 #
 # operationId: DeleteRole
-export def "services-roles delete" [
+export def "delete-role" [
   service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1326,7 +1326,7 @@ export def "services-roles delete" [
 # GET /v1/Services/{ServiceSid}/Roles/{Sid}
 #
 # operationId: FetchRole
-export def "services-roles get" [
+export def "fetch-role" [
   service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1363,7 +1363,7 @@ export def "services-roles get" [
 # POST /v1/Services/{ServiceSid}/Roles/{Sid}
 #
 # operationId: UpdateRole
-export def "services-roles update" [
+export def "update-role" [
   service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1405,7 +1405,7 @@ export def "services-roles update" [
 # GET /v1/Services/{ServiceSid}/Users
 #
 # operationId: ListUser
-export def "services-users list" [
+export def "list-user" [
   service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1444,7 +1444,7 @@ export def "services-users list" [
 # POST /v1/Services/{ServiceSid}/Users
 #
 # operationId: CreateUser
-export def "services-users create" [
+export def "create-user" [
   service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1487,7 +1487,7 @@ export def "services-users create" [
 # DELETE /v1/Services/{ServiceSid}/Users/{Sid}
 #
 # operationId: DeleteUser
-export def "services-users delete" [
+export def "delete-user" [
   service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1524,7 +1524,7 @@ export def "services-users delete" [
 # GET /v1/Services/{ServiceSid}/Users/{Sid}
 #
 # operationId: FetchUser
-export def "services-users get" [
+export def "fetch-user" [
   service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1561,7 +1561,7 @@ export def "services-users get" [
 # POST /v1/Services/{ServiceSid}/Users/{Sid}
 #
 # operationId: UpdateUser
-export def "services-users update" [
+export def "update-user" [
   service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1605,7 +1605,7 @@ export def "services-users update" [
 # GET /v1/Services/{ServiceSid}/Users/{UserSid}/Channels
 #
 # operationId: ListUserChannel
-export def "services-users-channels list" [
+export def "list-user-channel" [
   service_sid: string
   user_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1646,7 +1646,7 @@ export def "services-users-channels list" [
 # DELETE /v1/Services/{Sid}
 #
 # operationId: DeleteService
-export def "services delete" [
+export def "delete-service" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1681,7 +1681,7 @@ export def "services delete" [
 # GET /v1/Services/{Sid}
 #
 # operationId: FetchService
-export def "services get" [
+export def "fetch-service" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1716,7 +1716,7 @@ export def "services get" [
 # POST /v1/Services/{Sid}
 #
 # operationId: UpdateService
-export def "services update" [
+export def "update-service" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

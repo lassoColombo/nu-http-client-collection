@@ -124,7 +124,7 @@ def key-type-completer [] { ["Primary" "Secondary"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-signal-r-service-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -148,7 +148,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.SignalRService/operations
 # operationId: Operations_List
-export def "providers-microsoft-signal-r-service-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,7 +184,7 @@ export def "providers-microsoft-signal-r-service-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.SignalRService/SignalR
 # operationId: SignalR_ListBySubscription
-export def "subscriptions-providers-microsoft-signal-r-service-signal-r list" [
+export def "signal-r-list-by-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -222,7 +222,7 @@ export def "subscriptions-providers-microsoft-signal-r-service-signal-r list" [
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.SignalRService/locations/{location}/checkNameAvailability
 # operationId: SignalR_CheckNameAvailability
-export def "subscriptions-providers-microsoft-signal-r-service-locations-check-name-availability check" [
+export def "signal-r-check-name-availability" [
   subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -267,7 +267,7 @@ export def "subscriptions-providers-microsoft-signal-r-service-locations-check-n
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.SignalRService/locations/{location}/usages
 # operationId: Usages_List
-export def "subscriptions-providers-microsoft-signal-r-service-locations-usages list" [
+export def "usages-list" [
   subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -307,7 +307,7 @@ export def "subscriptions-providers-microsoft-signal-r-service-locations-usages 
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.SignalRService/SignalR
 # operationId: SignalR_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-signal-r-service-signal-r list" [
+export def "signal-r-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -347,7 +347,7 @@ export def "subscriptions-resource-groups-providers-microsoft-signal-r-service-s
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.SignalRService/SignalR/{resourceName}/listKeys
 # operationId: SignalR_ListKeys
-export def "subscriptions-resource-groups-providers-microsoft-signal-r-service-signal-r-list-keys list" [
+export def "signal-r-list-keys" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -389,7 +389,7 @@ export def "subscriptions-resource-groups-providers-microsoft-signal-r-service-s
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.SignalRService/SignalR/{resourceName}/regenerateKey
 # operationId: SignalR_RegenerateKey
-export def "subscriptions-resource-groups-providers-microsoft-signal-r-service-signal-r-regenerate-key create" [
+export def "signal-r-regenerate-key" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -435,7 +435,7 @@ export def "subscriptions-resource-groups-providers-microsoft-signal-r-service-s
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.SignalRService/signalR/{resourceName}
 # operationId: SignalR_Delete
-export def "subscriptions-resource-groups-providers-microsoft-signal-r-service-signal-r delete" [
+export def "signal-r-delete" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -477,7 +477,7 @@ export def "subscriptions-resource-groups-providers-microsoft-signal-r-service-s
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.SignalRService/signalR/{resourceName}
 # operationId: SignalR_Get
-export def "subscriptions-resource-groups-providers-microsoft-signal-r-service-signal-r get" [
+export def "signal-r-get" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -521,7 +521,7 @@ export def "subscriptions-resource-groups-providers-microsoft-signal-r-service-s
 # operationId: SignalR_Update
 # --properties shape: {cors?: record, features?: list, hostNamePrefix?: string}
 # --sku shape: {capacity?: int, family?: string, name: string, size?: string, tier?: "Free"|"Basic"|"Standard"|"Premium"}
-export def "subscriptions-resource-groups-providers-microsoft-signal-r-service-signal-r update" [
+export def "signal-r-update" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -571,7 +571,7 @@ export def "subscriptions-resource-groups-providers-microsoft-signal-r-service-s
 # operationId: SignalR_CreateOrUpdate
 # --properties shape: {cors?: record, features?: list, hostNamePrefix?: string}
 # --sku shape: {capacity?: int, family?: string, name: string, size?: string, tier?: "Free"|"Basic"|"Standard"|"Premium"}
-export def "subscriptions-resource-groups-providers-microsoft-signal-r-service-signal-r create-or-update" [
+export def "signal-r-create-or-update" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -620,7 +620,7 @@ export def "subscriptions-resource-groups-providers-microsoft-signal-r-service-s
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.SignalRService/signalR/{resourceName}/restart
 # operationId: SignalR_Restart
-export def "subscriptions-resource-groups-providers-microsoft-signal-r-service-signal-r-restart restart" [
+export def "signal-r-restart" [
   subscription_id: string
   resource_group_name: string
   resource_name: string

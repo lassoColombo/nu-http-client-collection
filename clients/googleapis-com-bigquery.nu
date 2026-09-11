@@ -139,7 +139,7 @@ def projection-completer [] { ["full" "minimal"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "bigquery-projects-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -163,7 +163,7 @@ export def commands []: nothing -> table {
 #
 # GET /projects
 # operationId: bigquery.projects.list
-export def "projects list" [
+export def "bigquery-projects-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -207,7 +207,7 @@ export def "projects list" [
 #
 # GET /projects/{projectId}/datasets
 # operationId: bigquery.datasets.list
-export def "projects-datasets list" [
+export def "bigquery-datasets-list" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -259,7 +259,7 @@ export def "projects-datasets list" [
 # --datasetReference shape: {datasetId?: string, projectId?: string}
 # --defaultEncryptionConfiguration shape: {kmsKeyName?: string}
 # --tags item shape: {tagKey?: string, tagValue?: string}
-export def "projects-datasets create" [
+export def "bigquery-datasets-insert" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -328,7 +328,7 @@ export def "projects-datasets create" [
 #
 # DELETE /projects/{projectId}/datasets/{datasetId}
 # operationId: bigquery.datasets.delete
-export def "projects-datasets delete" [
+export def "bigquery-datasets-delete" [
   project_id: string
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -375,7 +375,7 @@ export def "projects-datasets delete" [
 #
 # GET /projects/{projectId}/datasets/{datasetId}
 # operationId: bigquery.datasets.get
-export def "projects-datasets get" [
+export def "bigquery-datasets-get" [
   project_id: string
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -425,7 +425,7 @@ export def "projects-datasets get" [
 # --datasetReference shape: {datasetId?: string, projectId?: string}
 # --defaultEncryptionConfiguration shape: {kmsKeyName?: string}
 # --tags item shape: {tagKey?: string, tagValue?: string}
-export def "projects-datasets update-by-project-id-dataset-id" [
+export def "bigquery-datasets-patch" [
   project_id: string
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -500,7 +500,7 @@ export def "projects-datasets update-by-project-id-dataset-id" [
 # --datasetReference shape: {datasetId?: string, projectId?: string}
 # --defaultEncryptionConfiguration shape: {kmsKeyName?: string}
 # --tags item shape: {tagKey?: string, tagValue?: string}
-export def "projects-datasets update-by-project-id-dataset-id-1" [
+export def "bigquery-datasets-update" [
   project_id: string
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -571,7 +571,7 @@ export def "projects-datasets update-by-project-id-dataset-id-1" [
 #
 # GET /projects/{projectId}/datasets/{datasetId}/models
 # operationId: bigquery.models.list
-export def "projects-datasets-models list" [
+export def "bigquery-models-list" [
   project_id: string
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -619,7 +619,7 @@ export def "projects-datasets-models list" [
 #
 # DELETE /projects/{projectId}/datasets/{datasetId}/models/{modelId}
 # operationId: bigquery.models.delete
-export def "projects-datasets-models delete" [
+export def "bigquery-models-delete" [
   project_id: string
   dataset_id: string
   model_id: string
@@ -667,7 +667,7 @@ export def "projects-datasets-models delete" [
 #
 # GET /projects/{projectId}/datasets/{datasetId}/models/{modelId}
 # operationId: bigquery.models.get
-export def "projects-datasets-models get" [
+export def "bigquery-models-get" [
   project_id: string
   dataset_id: string
   model_id: string
@@ -722,7 +722,7 @@ export def "projects-datasets-models get" [
 # --labelColumns item shape: {name?: string, type?: record}
 # --modelReference shape: {datasetId?: string, modelId?: string, projectId?: string}
 # --trainingRuns item shape: {dataSplitResult?: record, evaluationMetrics?: record, modelLevelGlobalExplanation?: record, trainingOptions?: record, vertexAiModelId?: string}
-export def "projects-datasets-models update" [
+export def "bigquery-models-patch" [
   project_id: string
   dataset_id: string
   model_id: string
@@ -782,7 +782,7 @@ export def "projects-datasets-models update" [
 #
 # GET /projects/{projectId}/datasets/{datasetId}/routines
 # operationId: bigquery.routines.list
-export def "projects-datasets-routines list" [
+export def "bigquery-routines-list" [
   project_id: string
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -838,7 +838,7 @@ export def "projects-datasets-routines list" [
 # --returnType shape: {arrayElementType?: record, structType?: record, typeKind?: "TYPE_KIND_UNSPECIFIED"|"INT64"|"BOOL"|"FLOAT64"|"STRING"|"BYTES"|"TIMESTAMP"|"DATE"|"TIME"|"DATETIME"|"INTERVAL"|"GEOGRAPHY"|"NUMERIC"|"BIGNUMERIC"|"JSON"|"ARRAY"|"STRUCT"}
 # --routineReference shape: {datasetId?: string, projectId?: string, routineId?: string}
 # --sparkOptions shape: {archiveUris?: list<string>, connection?: string, containerImage?: string, fileUris?: list<string>, jarUris?: list<string>, mainClass?: string, mainFileUri?: string, properties?: record, pyFileUris?: list<string>, runtimeVersion?: string}
-export def "projects-datasets-routines create" [
+export def "bigquery-routines-insert" [
   project_id: string
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -900,7 +900,7 @@ export def "projects-datasets-routines create" [
 #
 # DELETE /projects/{projectId}/datasets/{datasetId}/routines/{routineId}
 # operationId: bigquery.routines.delete
-export def "projects-datasets-routines delete" [
+export def "bigquery-routines-delete" [
   project_id: string
   dataset_id: string
   routine_id: string
@@ -948,7 +948,7 @@ export def "projects-datasets-routines delete" [
 #
 # GET /projects/{projectId}/datasets/{datasetId}/routines/{routineId}
 # operationId: bigquery.routines.get
-export def "projects-datasets-routines get" [
+export def "bigquery-routines-get" [
   project_id: string
   dataset_id: string
   routine_id: string
@@ -1003,7 +1003,7 @@ export def "projects-datasets-routines get" [
 # --returnType shape: {arrayElementType?: record, structType?: record, typeKind?: "TYPE_KIND_UNSPECIFIED"|"INT64"|"BOOL"|"FLOAT64"|"STRING"|"BYTES"|"TIMESTAMP"|"DATE"|"TIME"|"DATETIME"|"INTERVAL"|"GEOGRAPHY"|"NUMERIC"|"BIGNUMERIC"|"JSON"|"ARRAY"|"STRUCT"}
 # --routineReference shape: {datasetId?: string, projectId?: string, routineId?: string}
 # --sparkOptions shape: {archiveUris?: list<string>, connection?: string, containerImage?: string, fileUris?: list<string>, jarUris?: list<string>, mainClass?: string, mainFileUri?: string, properties?: record, pyFileUris?: list<string>, runtimeVersion?: string}
-export def "projects-datasets-routines update" [
+export def "bigquery-routines-update" [
   project_id: string
   dataset_id: string
   routine_id: string
@@ -1067,7 +1067,7 @@ export def "projects-datasets-routines update" [
 #
 # GET /projects/{projectId}/datasets/{datasetId}/tables
 # operationId: bigquery.tables.list
-export def "projects-datasets-tables list" [
+export def "bigquery-tables-list" [
   project_id: string
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1128,7 +1128,7 @@ export def "projects-datasets-tables list" [
 # --tableReference shape: {datasetId?: string, projectId?: string, tableId?: string}
 # --timePartitioning shape: {expirationMs?: string, field?: string, requirePartitionFilter?: bool, type?: string}
 # --view shape: {query?: string, useExplicitColumnNames?: bool, useLegacySql?: bool, userDefinedFunctionResources?: list}
-export def "projects-datasets-tables create" [
+export def "bigquery-tables-insert" [
   project_id: string
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1218,7 +1218,7 @@ export def "projects-datasets-tables create" [
 #
 # DELETE /projects/{projectId}/datasets/{datasetId}/tables/{tableId}
 # operationId: bigquery.tables.delete
-export def "projects-datasets-tables delete" [
+export def "bigquery-tables-delete" [
   project_id: string
   dataset_id: string
   table_id: string
@@ -1266,7 +1266,7 @@ export def "projects-datasets-tables delete" [
 #
 # GET /projects/{projectId}/datasets/{datasetId}/tables/{tableId}
 # operationId: bigquery.tables.get
-export def "projects-datasets-tables get" [
+export def "bigquery-tables-get" [
   project_id: string
   dataset_id: string
   table_id: string
@@ -1329,7 +1329,7 @@ export def "projects-datasets-tables get" [
 # --tableReference shape: {datasetId?: string, projectId?: string, tableId?: string}
 # --timePartitioning shape: {expirationMs?: string, field?: string, requirePartitionFilter?: bool, type?: string}
 # --view shape: {query?: string, useExplicitColumnNames?: bool, useLegacySql?: bool, userDefinedFunctionResources?: list}
-export def "projects-datasets-tables update-by-project-id-dataset-id-table-id" [
+export def "bigquery-tables-patch" [
   project_id: string
   dataset_id: string
   table_id: string
@@ -1435,7 +1435,7 @@ export def "projects-datasets-tables update-by-project-id-dataset-id-table-id" [
 # --tableReference shape: {datasetId?: string, projectId?: string, tableId?: string}
 # --timePartitioning shape: {expirationMs?: string, field?: string, requirePartitionFilter?: bool, type?: string}
 # --view shape: {query?: string, useExplicitColumnNames?: bool, useLegacySql?: bool, userDefinedFunctionResources?: list}
-export def "projects-datasets-tables update-by-project-id-dataset-id-table-id-1" [
+export def "bigquery-tables-update" [
   project_id: string
   dataset_id: string
   table_id: string
@@ -1528,7 +1528,7 @@ export def "projects-datasets-tables update-by-project-id-dataset-id-table-id-1"
 #
 # GET /projects/{projectId}/datasets/{datasetId}/tables/{tableId}/data
 # operationId: bigquery.tabledata.list
-export def "projects-datasets-tables-data list" [
+export def "bigquery-tabledata-list" [
   project_id: string
   dataset_id: string
   table_id: string
@@ -1581,7 +1581,7 @@ export def "projects-datasets-tables-data list" [
 # POST /projects/{projectId}/datasets/{datasetId}/tables/{tableId}/insertAll
 # operationId: bigquery.tabledata.insertAll
 # --rows item shape: {insertId?: string, json?: record}
-export def "projects-datasets-tables-insert-all create" [
+export def "bigquery-tabledata-insert-all" [
   project_id: string
   dataset_id: string
   table_id: string
@@ -1637,7 +1637,7 @@ export def "projects-datasets-tables-insert-all create" [
 #
 # GET /projects/{projectId}/datasets/{datasetId}/tables/{tableId}/rowAccessPolicies
 # operationId: bigquery.rowAccessPolicies.list
-export def "projects-datasets-tables-row-access-policies list" [
+export def "bigquery-row-access-policies-list" [
   project_id: string
   dataset_id: string
   table_id: string
@@ -1687,7 +1687,7 @@ export def "projects-datasets-tables-row-access-policies list" [
 #
 # GET /projects/{projectId}/jobs
 # operationId: bigquery.jobs.list
-export def "projects-jobs list" [
+export def "bigquery-jobs-list" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1739,7 +1739,7 @@ export def "projects-jobs list" [
 #
 # POST /projects/{projectId}/jobs
 # operationId: bigquery.jobs.insert
-export def "projects-jobs create" [
+export def "bigquery-jobs-insert" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1787,7 +1787,7 @@ export def "projects-jobs create" [
 #
 # GET /projects/{projectId}/jobs/{jobId}
 # operationId: bigquery.jobs.get
-export def "projects-jobs get" [
+export def "bigquery-jobs-get" [
   project_id: string
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1834,7 +1834,7 @@ export def "projects-jobs get" [
 #
 # POST /projects/{projectId}/jobs/{jobId}/cancel
 # operationId: bigquery.jobs.cancel
-export def "projects-jobs-cancel cancel" [
+export def "bigquery-jobs-cancel" [
   project_id: string
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1881,7 +1881,7 @@ export def "projects-jobs-cancel cancel" [
 #
 # DELETE /projects/{projectId}/jobs/{jobId}/delete
 # operationId: bigquery.jobs.delete
-export def "projects-jobs-delete delete" [
+export def "bigquery-jobs-delete" [
   project_id: string
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1931,7 +1931,7 @@ export def "projects-jobs-delete delete" [
 # --connectionProperties item shape: {key?: string, value?: string}
 # --defaultDataset shape: {datasetId?: string, projectId?: string}
 # --queryParameters item shape: {name?: string, parameterType?: record, parameterValue?: record}
-export def "projects-queries list" [
+export def "bigquery-jobs-query" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1996,7 +1996,7 @@ export def "projects-queries list" [
 #
 # GET /projects/{projectId}/queries/{jobId}
 # operationId: bigquery.jobs.getQueryResults
-export def "projects-queries get-list-results" [
+export def "bigquery-jobs-get-query-results" [
   project_id: string
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2047,7 +2047,7 @@ export def "projects-queries get-list-results" [
 #
 # GET /projects/{projectId}/serviceAccount
 # operationId: bigquery.projects.getServiceAccount
-export def "projects-service-account get" [
+export def "bigquery-projects-get-service-account" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2092,7 +2092,7 @@ export def "projects-service-account get" [
 # POST /{resource}:getIamPolicy
 # operationId: bigquery.tables.getIamPolicy
 # --options shape: {requestedPolicyVersion?: int}
-export def "tables get-iam-policy" [
+export def "bigquery-tables-get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2141,7 +2141,7 @@ export def "tables get-iam-policy" [
 # POST /{resource}:setIamPolicy
 # operationId: bigquery.tables.setIamPolicy
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
-export def "tables update-iam-policy" [
+export def "bigquery-tables-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2190,7 +2190,7 @@ export def "tables update-iam-policy" [
 #
 # POST /{resource}:testIamPermissions
 # operationId: bigquery.tables.testIamPermissions
-export def "tables test-iam-permissions" [
+export def "bigquery-tables-test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

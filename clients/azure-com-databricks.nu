@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-databricks-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.Databricks/operations
 # operationId: Operations_List
-export def "providers-microsoft-databricks-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -176,7 +176,7 @@ export def "providers-microsoft-databricks-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Databricks/workspaces
 # operationId: Workspaces_ListBySubscription
-export def "subscriptions-providers-microsoft-databricks-workspaces list" [
+export def "workspaces-list-by-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -214,7 +214,7 @@ export def "subscriptions-providers-microsoft-databricks-workspaces list" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Databricks/workspaces
 # operationId: Workspaces_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-databricks-workspaces list" [
+export def "workspaces-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -254,7 +254,7 @@ export def "subscriptions-resource-groups-providers-microsoft-databricks-workspa
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Databricks/workspaces/{workspaceName}
 # operationId: Workspaces_Delete
-export def "subscriptions-resource-groups-providers-microsoft-databricks-workspaces delete" [
+export def "workspaces-delete" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -296,7 +296,7 @@ export def "subscriptions-resource-groups-providers-microsoft-databricks-workspa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Databricks/workspaces/{workspaceName}
 # operationId: Workspaces_Get
-export def "subscriptions-resource-groups-providers-microsoft-databricks-workspaces get" [
+export def "workspaces-get" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -338,7 +338,7 @@ export def "subscriptions-resource-groups-providers-microsoft-databricks-workspa
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Databricks/workspaces/{workspaceName}
 # operationId: Workspaces_Update
-export def "subscriptions-resource-groups-providers-microsoft-databricks-workspaces update" [
+export def "workspaces-update" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -386,7 +386,7 @@ export def "subscriptions-resource-groups-providers-microsoft-databricks-workspa
 # operationId: Workspaces_CreateOrUpdate
 # --properties shape: {authorizations?: list, managedResourceGroupId: string, parameters?: any, uiDefinitionUri?: string}
 # --sku shape: {name: string, tier?: string}
-export def "subscriptions-resource-groups-providers-microsoft-databricks-workspaces create-or-update" [
+export def "workspaces-create-or-update" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string

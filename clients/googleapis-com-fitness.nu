@@ -136,7 +136,7 @@ def type-completer [] { ["derived" "raw"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "data-sources list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "fitness-users-data-sources-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -160,7 +160,7 @@ export def commands []: nothing -> table {
 #
 # GET /{userId}/dataSources
 # operationId: fitness.users.dataSources.list
-export def "data-sources list" [
+export def "fitness-users-data-sources-list" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -212,7 +212,7 @@ export def "data-sources list" [
 # --application shape: {detailsUrl?: string, name?: string, packageName?: string, version?: string}
 # --dataType shape: {field?: list, name?: string}
 # --device shape: {manufacturer?: string, model?: string, type?: "unknown"|"phone"|"tablet"|"watch"|"chestStrap"|"scale"|"headMounted"|"smartDisplay", uid?: string, version?: string}
-export def "data-sources create" [
+export def "fitness-users-data-sources-create" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -271,7 +271,7 @@ export def "data-sources create" [
 #
 # DELETE /{userId}/dataSources/{dataSourceId}
 # operationId: fitness.users.dataSources.delete
-export def "data-sources delete" [
+export def "fitness-users-data-sources-delete" [
   user_id: string
   data_source_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -321,7 +321,7 @@ export def "data-sources delete" [
 #
 # GET /{userId}/dataSources/{dataSourceId}
 # operationId: fitness.users.dataSources.get
-export def "data-sources get" [
+export def "fitness-users-data-sources-get" [
   user_id: string
   data_source_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -374,7 +374,7 @@ export def "data-sources get" [
 # --application shape: {detailsUrl?: string, name?: string, packageName?: string, version?: string}
 # --dataType shape: {field?: list, name?: string}
 # --device shape: {manufacturer?: string, model?: string, type?: "unknown"|"phone"|"tablet"|"watch"|"chestStrap"|"scale"|"headMounted"|"smartDisplay", uid?: string, version?: string}
-export def "data-sources update" [
+export def "fitness-users-data-sources-update" [
   user_id: string
   data_source_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -435,7 +435,7 @@ export def "data-sources update" [
 #
 # GET /{userId}/dataSources/{dataSourceId}/dataPointChanges
 # operationId: fitness.users.dataSources.dataPointChanges.list
-export def "data-sources-data-point-changes list" [
+export def "fitness-users-data-sources-data-point-changes-list" [
   user_id: string
   data_source_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -487,7 +487,7 @@ export def "data-sources-data-point-changes list" [
 #
 # DELETE /{userId}/dataSources/{dataSourceId}/datasets/{datasetId}
 # operationId: fitness.users.dataSources.datasets.delete
-export def "data-sources-datasets delete" [
+export def "fitness-users-data-sources-datasets-delete" [
   user_id: string
   data_source_id: string
   dataset_id: string
@@ -539,7 +539,7 @@ export def "data-sources-datasets delete" [
 #
 # GET /{userId}/dataSources/{dataSourceId}/datasets/{datasetId}
 # operationId: fitness.users.dataSources.datasets.get
-export def "data-sources-datasets get" [
+export def "fitness-users-data-sources-datasets-get" [
   user_id: string
   data_source_id: string
   dataset_id: string
@@ -594,7 +594,7 @@ export def "data-sources-datasets get" [
 # PATCH /{userId}/dataSources/{dataSourceId}/datasets/{datasetId}
 # operationId: fitness.users.dataSources.datasets.patch
 # --point item shape: {computationTimeMillis?: string, dataTypeName?: string, endTimeNanos?: string, modifiedTimeMillis?: string, originDataSourceId?: string, rawTimestampNanos?: string, startTimeNanos?: string, value?: list}
-export def "data-sources-datasets update" [
+export def "fitness-users-data-sources-datasets-patch" [
   user_id: string
   data_source_id: string
   dataset_id: string
@@ -659,7 +659,7 @@ export def "data-sources-datasets update" [
 # --bucketByActivityType shape: {activityDataSourceId?: string, minDurationMillis?: string}
 # --bucketBySession shape: {minDurationMillis?: string}
 # --bucketByTime shape: {durationMillis?: string, period?: record}
-export def "dataset-aggregate create" [
+export def "fitness-users-dataset-aggregate" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -718,7 +718,7 @@ export def "dataset-aggregate create" [
 #
 # GET /{userId}/sessions
 # operationId: fitness.users.sessions.list
-export def "sessions list" [
+export def "fitness-users-sessions-list" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -771,7 +771,7 @@ export def "sessions list" [
 #
 # DELETE /{userId}/sessions/{sessionId}
 # operationId: fitness.users.sessions.delete
-export def "sessions delete" [
+export def "fitness-users-sessions-delete" [
   user_id: string
   session_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -822,7 +822,7 @@ export def "sessions delete" [
 # PUT /{userId}/sessions/{sessionId}
 # operationId: fitness.users.sessions.update
 # --application shape: {detailsUrl?: string, name?: string, packageName?: string, version?: string}
-export def "sessions update" [
+export def "fitness-users-sessions-update" [
   user_id: string
   session_id: string
   --base-url(-b): string@base-url-completer # API base URL

@@ -114,7 +114,7 @@ def x-amz-target-completer-13 [] { ["AWSSupport_20130415.ResolveCase"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-attachments-to-update" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "add-attachments-to-set" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -138,7 +138,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AddAttachmentsToSet
-export def "api create-attachments-to-update" [
+export def "add-attachments-to-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -187,7 +187,7 @@ export def "api create-attachments-to-update" [
 #
 # POST /
 # operationId: AddCommunicationToCase
-export def "api create-communication-to-case" [
+export def "add-communication-to-case" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -238,7 +238,7 @@ export def "api create-communication-to-case" [
 #
 # POST /
 # operationId: CreateCase
-export def "api create-case" [
+export def "create-case" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -294,7 +294,7 @@ export def "api create-case" [
 #
 # POST /
 # operationId: DescribeAttachment
-export def "api get-attachment" [
+export def "describe-attachment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -342,7 +342,7 @@ export def "api get-attachment" [
 #
 # POST /
 # operationId: DescribeCases
-export def "api get-cases" [
+export def "describe-cases" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -401,7 +401,7 @@ export def "api get-cases" [
 #
 # POST /
 # operationId: DescribeCommunications
-export def "api get-communications" [
+export def "describe-communications" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -456,7 +456,7 @@ export def "api get-communications" [
 #
 # POST /
 # operationId: DescribeServices
-export def "api get-services" [
+export def "describe-services" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -505,7 +505,7 @@ export def "api get-services" [
 #
 # POST /
 # operationId: DescribeSeverityLevels
-export def "api get-severity-levels" [
+export def "describe-severity-levels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -553,7 +553,7 @@ export def "api get-severity-levels" [
 #
 # POST /
 # operationId: DescribeTrustedAdvisorCheckRefreshStatuses
-export def "api get-trusted-advisor-check-refresh-statuses" [
+export def "describe-trusted-advisor-check-refresh-statuses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -601,7 +601,7 @@ export def "api get-trusted-advisor-check-refresh-statuses" [
 #
 # POST /
 # operationId: DescribeTrustedAdvisorCheckResult
-export def "api get-trusted-advisor-check-result" [
+export def "describe-trusted-advisor-check-result" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -650,7 +650,7 @@ export def "api get-trusted-advisor-check-result" [
 #
 # POST /
 # operationId: DescribeTrustedAdvisorCheckSummaries
-export def "api get-trusted-advisor-check-summaries" [
+export def "describe-trusted-advisor-check-summaries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -698,7 +698,7 @@ export def "api get-trusted-advisor-check-summaries" [
 #
 # POST /
 # operationId: DescribeTrustedAdvisorChecks
-export def "api get-trusted-advisor-checks" [
+export def "describe-trusted-advisor-checks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -746,7 +746,7 @@ export def "api get-trusted-advisor-checks" [
 #
 # POST /
 # operationId: RefreshTrustedAdvisorCheck
-export def "api refresh-trusted-advisor-check" [
+export def "refresh-trusted-advisor-check" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -794,7 +794,7 @@ export def "api refresh-trusted-advisor-check" [
 #
 # POST /
 # operationId: ResolveCase
-export def "api create-resolve-case" [
+export def "resolve-case" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -119,7 +119,7 @@ def key-name-completer [] { ["primary" "secondary"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-agent-registration-information get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "agent-registration-information-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -144,7 +144,7 @@ export def commands []: nothing -> table {
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/agentRegistrationInformation
 # Docs: http://aka.ms/azureautomationsdk/agentregistrationoperations
 # operationId: AgentRegistrationInformation_Get
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-agent-registration-information get" [
+export def "agent-registration-information-get" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -188,7 +188,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/agentRegistrationInformation/regenerateKey
 # Docs: http://aka.ms/azureautomationsdk/agentregistrationoperations
 # operationId: AgentRegistrationInformation_RegenerateKey
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-agent-registration-information-regenerate-key create" [
+export def "agent-registration-information-regenerate-key" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -236,7 +236,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/nodes
 # Docs: http://aka.ms/azureautomationsdk/dscnodeoperations
 # operationId: DscNode_ListByAutomationAccount
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-nodes list-dsc" [
+export def "dsc-node-list-by-automation-account" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -284,7 +284,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/nodes/{nodeId}
 # Docs: http://aka.ms/azureautomationsdk/dscnodeoperations
 # operationId: DscNode_Delete
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-nodes delete-dsc" [
+export def "dsc-node-delete" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -330,7 +330,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/nodes/{nodeId}
 # Docs: http://aka.ms/azureautomationsdk/dscnodeoperations
 # operationId: DscNode_Get
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-nodes get-dsc" [
+export def "dsc-node-get" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -377,7 +377,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # Docs: http://aka.ms/azureautomationsdk/dscnodeoperations
 # operationId: DscNode_Update
 # --properties shape: {nodeConfiguration?: any}
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-nodes update-dsc" [
+export def "dsc-node-update" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -428,7 +428,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/nodes/{nodeId}/reports
 # Docs: http://aka.ms/azureautomationsdk/dscnodereportoperations
 # operationId: NodeReports_ListByNode
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-nodes-reports list" [
+export def "node-reports-list-by-node" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -475,7 +475,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/nodes/{nodeId}/reports/{reportId}
 # Docs: http://aka.ms/azureautomationsdk/dscnodereportoperations
 # operationId: NodeReports_Get
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-nodes-reports get" [
+export def "node-reports-get" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -523,7 +523,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/nodes/{nodeId}/reports/{reportId}/content
 # Docs: http://aka.ms/azureautomationsdk/dscnodereportoperations
 # operationId: NodeReports_GetContent
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-nodes-reports-content get" [
+export def "node-reports-get-content" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string

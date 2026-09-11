@@ -115,7 +115,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "queues get-list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-list-of-queues" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -139,7 +139,7 @@ export def commands []: nothing -> table {
 #
 # GET /queues
 # operationId: getListOfQueues
-export def "queues get-list" [
+export def "get-list-of-queues" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -173,7 +173,7 @@ export def "queues get-list" [
 #
 # POST /queues
 # operationId: createQueue
-export def "queues create" [
+export def "create-queue" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -207,7 +207,7 @@ export def "queues create" [
 #
 # DELETE /queues/{queueName}
 # operationId: deleteQueue
-export def "queues delete" [
+export def "delete-queue" [
   queue_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -245,7 +245,7 @@ export def "queues delete" [
 #
 # GET /queues/{queueName}/config
 # operationId: getQueueConfig
-export def "queues-config get" [
+export def "get-queue-config" [
   queue_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -281,7 +281,7 @@ export def "queues-config get" [
 #
 # PUT /queues/{queueName}/config
 # operationId: updateQueueConfig
-export def "queues-config update" [
+export def "update-queue-config" [
   queue_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -317,7 +317,7 @@ export def "queues-config update" [
 #
 # GET /queues/{queueName}/data/{queueMessageId}
 # operationId: getMessageData
-export def "queues-data get-message" [
+export def "get-message-data" [
   queue_name: string
   queue_message_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -355,7 +355,7 @@ export def "queues-data get-message" [
 #
 # GET /queues/{queueName}/messages
 # operationId: getNextMessages
-export def "queues-messages get-next" [
+export def "get-next-messages" [
   queue_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -393,7 +393,7 @@ export def "queues-messages get-next" [
 #
 # POST /queues/{queueName}/messages
 # operationId: sendMessageBinary
-export def "queues-messages send-binary" [
+export def "send-message-binary" [
   queue_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -438,7 +438,7 @@ export def "queues-messages send-binary" [
 #
 # DELETE /queues/{queueName}/messages/{queueMessageId}
 # operationId: ackMessage
-export def "queues-messages delete-ack" [
+export def "ack-message" [
   queue_name: string
   queue_message_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -476,7 +476,7 @@ export def "queues-messages delete-ack" [
 #
 # GET /status
 # operationId: status
-export def "status get" [
+export def "status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

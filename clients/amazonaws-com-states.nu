@@ -126,7 +126,7 @@ def x-amz-target-completer-25 [] { ["AWSStepFunctions.UpdateStateMachine"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-activity" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-activity" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -150,7 +150,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CreateActivity
-export def "api create-activity" [
+export def "create-activity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -199,7 +199,7 @@ export def "api create-activity" [
 #
 # POST /
 # operationId: CreateStateMachine
-export def "api create-state-machine" [
+export def "create-state-machine" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -253,7 +253,7 @@ export def "api create-state-machine" [
 #
 # POST /
 # operationId: DeleteActivity
-export def "api delete-activity" [
+export def "delete-activity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -301,7 +301,7 @@ export def "api delete-activity" [
 #
 # POST /
 # operationId: DeleteStateMachine
-export def "api delete-state-machine" [
+export def "delete-state-machine" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -349,7 +349,7 @@ export def "api delete-state-machine" [
 #
 # POST /
 # operationId: DescribeActivity
-export def "api get-activity" [
+export def "describe-activity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -397,7 +397,7 @@ export def "api get-activity" [
 #
 # POST /
 # operationId: DescribeExecution
-export def "api get-execution" [
+export def "describe-execution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -445,7 +445,7 @@ export def "api get-execution" [
 #
 # POST /
 # operationId: DescribeMapRun
-export def "api get-map-run" [
+export def "describe-map-run" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -493,7 +493,7 @@ export def "api get-map-run" [
 #
 # POST /
 # operationId: DescribeStateMachine
-export def "api get-state-machine" [
+export def "describe-state-machine" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -541,7 +541,7 @@ export def "api get-state-machine" [
 #
 # POST /
 # operationId: DescribeStateMachineForExecution
-export def "api get-state-machine-for-execution" [
+export def "describe-state-machine-for-execution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -589,7 +589,7 @@ export def "api get-state-machine-for-execution" [
 #
 # POST /
 # operationId: GetActivityTask
-export def "api get-activity-task" [
+export def "get-activity-task" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -638,7 +638,7 @@ export def "api get-activity-task" [
 #
 # POST /
 # operationId: GetExecutionHistory
-export def "api get-execution-history" [
+export def "get-execution-history" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -693,7 +693,7 @@ export def "api get-execution-history" [
 #
 # POST /
 # operationId: ListActivities
-export def "api list-activities" [
+export def "list-activities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -745,7 +745,7 @@ export def "api list-activities" [
 #
 # POST /
 # operationId: ListExecutions
-export def "api list-executions" [
+export def "list-executions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -800,7 +800,7 @@ export def "api list-executions" [
 #
 # POST /
 # operationId: ListMapRuns
-export def "api list-map-runs" [
+export def "list-map-runs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -853,7 +853,7 @@ export def "api list-map-runs" [
 #
 # POST /
 # operationId: ListStateMachines
-export def "api list-state-machines" [
+export def "list-state-machines" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -905,7 +905,7 @@ export def "api list-state-machines" [
 #
 # POST /
 # operationId: ListTagsForResource
-export def "api list-tags-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -953,7 +953,7 @@ export def "api list-tags-for-resource" [
 #
 # POST /
 # operationId: SendTaskFailure
-export def "api send-task-failure" [
+export def "send-task-failure" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1003,7 +1003,7 @@ export def "api send-task-failure" [
 #
 # POST /
 # operationId: SendTaskHeartbeat
-export def "api send-task-heartbeat" [
+export def "send-task-heartbeat" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1051,7 +1051,7 @@ export def "api send-task-heartbeat" [
 #
 # POST /
 # operationId: SendTaskSuccess
-export def "api send-task-success" [
+export def "send-task-success" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1100,7 +1100,7 @@ export def "api send-task-success" [
 #
 # POST /
 # operationId: StartExecution
-export def "api start-execution" [
+export def "start-execution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1151,7 +1151,7 @@ export def "api start-execution" [
 #
 # POST /
 # operationId: StartSyncExecution
-export def "api start-sync-execution" [
+export def "start-sync-execution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1202,7 +1202,7 @@ export def "api start-sync-execution" [
 #
 # POST /
 # operationId: StopExecution
-export def "api stop-execution" [
+export def "stop-execution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1252,7 +1252,7 @@ export def "api stop-execution" [
 #
 # POST /
 # operationId: TagResource
-export def "api tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1301,7 +1301,7 @@ export def "api tag-resource" [
 #
 # POST /
 # operationId: UntagResource
-export def "api untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1350,7 +1350,7 @@ export def "api untag-resource" [
 #
 # POST /
 # operationId: UpdateMapRun
-export def "api update-map-run" [
+export def "update-map-run" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1401,7 +1401,7 @@ export def "api update-map-run" [
 #
 # POST /
 # operationId: UpdateStateMachine
-export def "api update-state-machine" [
+export def "update-state-machine" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

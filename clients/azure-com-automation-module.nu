@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-modules list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "module-list-by-automation-account" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -141,7 +141,7 @@ export def commands []: nothing -> table {
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/modules
 # Docs: http://aka.ms/azureautomationsdk/moduleoperations
 # operationId: Module_ListByAutomationAccount
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-modules list" [
+export def "module-list-by-automation-account" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -184,7 +184,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/modules/{moduleName}
 # Docs: http://aka.ms/azureautomationsdk/moduleoperations
 # operationId: Module_Delete
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-modules delete" [
+export def "module-delete" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -229,7 +229,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/modules/{moduleName}
 # Docs: http://aka.ms/azureautomationsdk/moduleoperations
 # operationId: Module_Get
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-modules get" [
+export def "module-get" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -275,7 +275,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # Docs: http://aka.ms/azureautomationsdk/moduleoperations
 # operationId: Module_Update
 # --properties shape: {contentLink?: any}
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-modules update" [
+export def "module-update" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -328,7 +328,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # Docs: http://aka.ms/azureautomationsdk/moduleoperations
 # operationId: Module_CreateOrUpdate
 # --properties shape: {contentLink: any}
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-modules create-or-update" [
+export def "module-create-or-update" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -380,7 +380,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/modules/{moduleName}/activities
 # Docs: http://aka.ms/azureautomationsdk/activityoperations
 # operationId: Activity_ListByModule
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-modules-activities list-activity" [
+export def "activity-list-by-module" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -425,7 +425,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/modules/{moduleName}/activities/{activityName}
 # Docs: http://aka.ms/azureautomationsdk/activityoperations
 # operationId: Activity_Get
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-modules-activities get-activity" [
+export def "activity-get" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -472,7 +472,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/modules/{moduleName}/objectDataTypes/{typeName}/fields
 # Docs: http://aka.ms/azureautomationsdk/objectdatatypeoperations
 # operationId: ObjectDataTypes_ListFieldsByModuleAndType
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-modules-object-data-types-fields list-by-and" [
+export def "object-data-types-list-fields-by-module-and-type" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -519,7 +519,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/modules/{moduleName}/types/{typeName}/fields
 # Docs: http://aka.ms/azureautomationsdk/typefieldoperations
 # operationId: Fields_ListByType
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-modules-types-fields list" [
+export def "fields-list-by-type" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -566,7 +566,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/objectDataTypes/{typeName}/fields
 # Docs: http://aka.ms/azureautomationsdk/objectdatatypeoperations
 # operationId: ObjectDataTypes_ListFieldsByType
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-object-data-types-fields list" [
+export def "object-data-types-list-fields-by-type" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string

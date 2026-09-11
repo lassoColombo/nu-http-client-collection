@@ -118,7 +118,7 @@ def evaluation-method-completer [] { ["BATCH" "SERIAL"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "alarm-models create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-alarm-model" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -147,7 +147,7 @@ export def commands []: nothing -> table {
 # --alarmNotification shape: {notificationActions?: any}
 # --alarmEventActions shape: {alarmActions?: any}
 # --alarmCapabilities shape: {initializationConfiguration?: any, acknowledgeFlow?: any}
-export def "alarm-models create" [
+export def "create-alarm-model" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -203,7 +203,7 @@ export def "alarm-models create" [
 #
 # GET /alarm-models
 # operationId: ListAlarmModels
-export def "alarm-models list" [
+export def "list-alarm-models" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -251,7 +251,7 @@ export def "alarm-models list" [
 # operationId: CreateDetectorModel
 # --detectorModelDefinition shape: {states?: any, initialStateName?: any}
 # --tags item shape: {key: any, value: any}
-export def "detector-models create" [
+export def "create-detector-model" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -304,7 +304,7 @@ export def "detector-models create" [
 #
 # GET /detector-models
 # operationId: ListDetectorModels
-export def "detector-models list" [
+export def "list-detector-models" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -352,7 +352,7 @@ export def "detector-models list" [
 # operationId: CreateInput
 # --inputDefinition shape: {attributes?: any}
 # --tags item shape: {key: any, value: any}
-export def "inputs create" [
+export def "create-input" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -402,7 +402,7 @@ export def "inputs create" [
 #
 # GET /inputs
 # operationId: ListInputs
-export def "inputs list" [
+export def "list-inputs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -448,7 +448,7 @@ export def "inputs list" [
 #
 # DELETE /alarm-models/{alarmModelName}
 # operationId: DeleteAlarmModel
-export def "alarm-models delete" [
+export def "delete-alarm-model" [
   alarm_model_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -493,7 +493,7 @@ export def "alarm-models delete" [
 #
 # GET /alarm-models/{alarmModelName}
 # operationId: DescribeAlarmModel
-export def "alarm-models get" [
+export def "describe-alarm-model" [
   alarm_model_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -544,7 +544,7 @@ export def "alarm-models get" [
 # --alarmNotification shape: {notificationActions?: any}
 # --alarmEventActions shape: {alarmActions?: any}
 # --alarmCapabilities shape: {initializationConfiguration?: any, acknowledgeFlow?: any}
-export def "alarm-models update" [
+export def "update-alarm-model" [
   alarm_model_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -599,7 +599,7 @@ export def "alarm-models update" [
 #
 # DELETE /detector-models/{detectorModelName}
 # operationId: DeleteDetectorModel
-export def "detector-models delete" [
+export def "delete-detector-model" [
   detector_model_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -644,7 +644,7 @@ export def "detector-models delete" [
 #
 # GET /detector-models/{detectorModelName}
 # operationId: DescribeDetectorModel
-export def "detector-models get" [
+export def "describe-detector-model" [
   detector_model_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -692,7 +692,7 @@ export def "detector-models get" [
 # POST /detector-models/{detectorModelName}
 # operationId: UpdateDetectorModel
 # --detectorModelDefinition shape: {states?: any, initialStateName?: any}
-export def "detector-models update" [
+export def "update-detector-model" [
   detector_model_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -744,7 +744,7 @@ export def "detector-models update" [
 #
 # DELETE /inputs/{inputName}
 # operationId: DeleteInput
-export def "inputs delete" [
+export def "delete-input" [
   input_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -789,7 +789,7 @@ export def "inputs delete" [
 #
 # GET /inputs/{inputName}
 # operationId: DescribeInput
-export def "inputs get" [
+export def "describe-input" [
   input_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -835,7 +835,7 @@ export def "inputs get" [
 # PUT /inputs/{inputName}
 # operationId: UpdateInput
 # --inputDefinition shape: {attributes?: any}
-export def "inputs update" [
+export def "update-input" [
   input_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -885,7 +885,7 @@ export def "inputs update" [
 #
 # GET /analysis/detector-models/{analysisId}
 # operationId: DescribeDetectorModelAnalysis
-export def "analysis-detector-models get" [
+export def "describe-detector-model-analysis" [
   analysis_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -930,7 +930,7 @@ export def "analysis-detector-models get" [
 #
 # GET /logging
 # operationId: DescribeLoggingOptions
-export def "logging get-options" [
+export def "describe-logging-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -974,7 +974,7 @@ export def "logging get-options" [
 # PUT /logging
 # operationId: PutLoggingOptions
 # --loggingOptions shape: {roleArn?: any, level?: any, enabled?: any, detectorDebugOptions?: any}
-export def "logging update-options" [
+export def "put-logging-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1021,7 +1021,7 @@ export def "logging update-options" [
 #
 # GET /analysis/detector-models/{analysisId}/results
 # operationId: GetDetectorModelAnalysisResults
-export def "analysis-detector-models-results get" [
+export def "get-detector-model-analysis-results" [
   analysis_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1069,7 +1069,7 @@ export def "analysis-detector-models-results get" [
 #
 # GET /alarm-models/{alarmModelName}/versions
 # operationId: ListAlarmModelVersions
-export def "alarm-models-versions list" [
+export def "list-alarm-model-versions" [
   alarm_model_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1117,7 +1117,7 @@ export def "alarm-models-versions list" [
 #
 # GET /detector-models/{detectorModelName}/versions
 # operationId: ListDetectorModelVersions
-export def "detector-models-versions list" [
+export def "list-detector-model-versions" [
   detector_model_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1166,7 +1166,7 @@ export def "detector-models-versions list" [
 # POST /input-routings
 # operationId: ListInputRoutings
 # --inputIdentifier shape: {iotEventsInputIdentifier?: any, iotSiteWiseInputIdentifier?: any}
-export def "input-routings list" [
+export def "list-input-routings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1215,7 +1215,7 @@ export def "input-routings list" [
 #
 # GET /tags
 # operationId: ListTagsForResource
-export def "tags list-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1261,7 +1261,7 @@ export def "tags list-for-resource" [
 # POST /tags
 # operationId: TagResource
 # --tags item shape: {key: any, value: any}
-export def "tags tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1311,7 +1311,7 @@ export def "tags tag-resource" [
 # POST /analysis/detector-models/
 # operationId: StartDetectorModelAnalysis
 # --detectorModelDefinition shape: {states?: any, initialStateName?: any}
-export def "analysis-detector-models start" [
+export def "start-detector-model-analysis" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1358,7 +1358,7 @@ export def "analysis-detector-models start" [
 #
 # DELETE /tags
 # operationId: UntagResource
-export def "tags untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

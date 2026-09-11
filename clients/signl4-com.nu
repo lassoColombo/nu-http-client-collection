@@ -129,7 +129,7 @@ def response-mode-completer [] { ["2" "4"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "alerts create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-alerts" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -154,7 +154,7 @@ export def commands []: nothing -> table {
 # POST /alerts
 # --attachments item shape: {content?: string, contentType?: string, encoding?: "0"|"1", id?: string, name?: string}
 # --parameters item shape: {name?: string, order?: int, type?: "0"|"1"|"2"|"3"|"4"|"5"|"6"|"7"|"8"|"9"|"10"|"11"|"12"|"13"|"14"|"15"|"16"|"17"|"100", value?: string}
-export def "alerts create" [
+export def "post-alerts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -199,7 +199,7 @@ export def "alerts create" [
 # Confirms all visible alerts
 #
 # POST /alerts/acknowledgeAll
-export def "alerts-acknowledge-all create" [
+export def "post-alerts-acknowledge-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -242,7 +242,7 @@ export def "alerts-acknowledge-all create" [
 # Acknowlegde multiple alerts
 #
 # POST /alerts/acknowledgeMultiple
-export def "alerts-acknowledge-multiple create" [
+export def "post-alerts-acknowledge-multiple" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -281,7 +281,7 @@ export def "alerts-acknowledge-multiple create" [
 # Close all acknowledged alerts.
 #
 # POST /alerts/closeAll
-export def "alerts-close-all create" [
+export def "post-alerts-close-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -324,7 +324,7 @@ export def "alerts-close-all create" [
 # Close multiple alerts
 #
 # POST /alerts/closeMultiple
-export def "alerts-close-multiple create" [
+export def "post-alerts-close-multiple" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -364,7 +364,7 @@ export def "alerts-close-multiple create" [
 #
 # POST /alerts/paged
 # --continuationToken shape: {nextPartitionKey?: string, nextRowKey?: string, nextTableName?: string}
-export def "alerts-paged create" [
+export def "post-alerts-paged" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -415,7 +415,7 @@ export def "alerts-paged create" [
 # Get Alert Report
 #
 # GET /alerts/report
-export def "alerts-report get" [
+export def "get-alerts-report" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -451,7 +451,7 @@ export def "alerts-report get" [
 # Queue undo of multiple acknowledgments.
 #
 # POST /alerts/undoAcknowledgeMultiple
-export def "alerts-undo-acknowledge-multiple create" [
+export def "post-alerts-undo-acknowledge-multiple" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -490,7 +490,7 @@ export def "alerts-undo-acknowledge-multiple create" [
 # Withdraw closure of multiple alerts
 #
 # POST /alerts/undoCloseMultiple
-export def "alerts-undo-close-multiple create" [
+export def "post-alerts-undo-close-multiple" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -529,7 +529,7 @@ export def "alerts-undo-close-multiple create" [
 # Get Alert
 #
 # GET /alerts/{alertId}
-export def "alerts get" [
+export def "get-alerts-alert-id" [
   alert_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -565,7 +565,7 @@ export def "alerts get" [
 # Acknowledge an alert
 #
 # POST /alerts/{alertId}/acknowledge
-export def "alerts-acknowledge create" [
+export def "post-alerts-alert-id-acknowledge" [
   alert_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -606,7 +606,7 @@ export def "alerts-acknowledge create" [
 # Annotate Alert
 #
 # POST /alerts/{alertId}/annotate
-export def "alerts-annotate create" [
+export def "post-alerts-alert-id-annotate" [
   alert_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -650,7 +650,7 @@ export def "alerts-annotate create" [
 # Get annotations of an alert
 #
 # GET /alerts/{alertId}/annotations
-export def "alerts-annotations get" [
+export def "get-alerts-alert-id-annotations" [
   alert_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -686,7 +686,7 @@ export def "alerts-annotations get" [
 # Get attachments of an alert
 #
 # GET /alerts/{alertId}/attachments
-export def "alerts-attachments list" [
+export def "get-alerts-alert-id-attachments" [
   alert_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -722,7 +722,7 @@ export def "alerts-attachments list" [
 # Gets a specified attachment of a specified alert.
 #
 # GET /alerts/{alertId}/attachments/{attachmentId}
-export def "alerts-attachments get" [
+export def "get-alerts-alert-id-attachments-attachment-id" [
   alert_id: string
   attachment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -764,7 +764,7 @@ export def "alerts-attachments get" [
 # Close an alert
 #
 # POST /alerts/{alertId}/close
-export def "alerts-close create" [
+export def "post-alerts-alert-id-close" [
   alert_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -805,7 +805,7 @@ export def "alerts-close create" [
 # Get alert notifications
 #
 # GET /alerts/{alertId}/notifications
-export def "alerts-notifications get" [
+export def "get-alerts-alert-id-notifications" [
   alert_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -841,7 +841,7 @@ export def "alerts-notifications get" [
 # Get an overview alert.
 #
 # GET /alerts/{alertId}/overview
-export def "alerts-overview get" [
+export def "get-alerts-alert-id-overview" [
   alert_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -877,7 +877,7 @@ export def "alerts-overview get" [
 # Undo the acknowledgement of an alert.
 #
 # POST /alerts/{alertId}/undoAcknowledge
-export def "alerts-undo-acknowledge create" [
+export def "post-alerts-alert-id-undo-acknowledge" [
   alert_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -918,7 +918,7 @@ export def "alerts-undo-acknowledge create" [
 # Undo the closure of an alert.
 #
 # POST /alerts/{alertId}/undoClose
-export def "alerts-undo-close create" [
+export def "post-alerts-alert-id-undo-close" [
   alert_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -959,7 +959,7 @@ export def "alerts-undo-close create" [
 # Gets the names of all alert category images. You can get the image by going to account.signl4.com/images/alerts/categoryImageName.svg
 #
 # GET /categories/images
-export def "categories-images get" [
+export def "get-categories-images" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -993,7 +993,7 @@ export def "categories-images get" [
 # Get all categories
 #
 # GET /categories/{teamId}
-export def "categories list" [
+export def "get-categories-team-id" [
   team_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1030,7 +1030,7 @@ export def "categories list" [
 #
 # POST /categories/{teamId}
 # --augmentations item shape: {enabled?: bool, name?: string, type?: "0"|"1"|"2"|"3", value?: string}
-export def "categories create" [
+export def "post-categories-team-id" [
   team_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1079,7 +1079,7 @@ export def "categories create" [
 # Get metrics for all categories
 #
 # GET /categories/{teamId}/metrics
-export def "categories-metrics list" [
+export def "get-categories-team-id-metrics" [
   team_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1115,7 +1115,7 @@ export def "categories-metrics list" [
 # Delete an existing category
 #
 # DELETE /categories/{teamId}/{categoryId}
-export def "categories delete" [
+export def "delete-categories-team-id-category-id" [
   team_id: string
   category_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1152,7 +1152,7 @@ export def "categories delete" [
 # Get a specific category
 #
 # GET /categories/{teamId}/{categoryId}
-export def "categories get" [
+export def "get-categories-team-id-category-id" [
   team_id: string
   category_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1191,7 +1191,7 @@ export def "categories get" [
 #
 # PUT /categories/{teamId}/{categoryId}
 # --augmentations item shape: {enabled?: bool, name?: string, type?: "0"|"1"|"2"|"3", value?: string}
-export def "categories update" [
+export def "put-categories-team-id-category-id" [
   team_id: string
   category_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1242,7 +1242,7 @@ export def "categories update" [
 # Get metrics for a specific category
 #
 # GET /categories/{teamId}/{categoryId}/metrics
-export def "categories-metrics get" [
+export def "get-categories-team-id-category-id-metrics" [
   team_id: string
   category_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1280,7 +1280,7 @@ export def "categories-metrics get" [
 # Get category subscriptions
 #
 # GET /categories/{teamId}/{categoryId}/subscriptions
-export def "categories-subscriptions get" [
+export def "get-categories-team-id-category-id-subscriptions" [
   team_id: string
   category_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1318,7 +1318,7 @@ export def "categories-subscriptions get" [
 # Set category subscriptions
 #
 # POST /categories/{teamId}/{categoryId}/subscriptions
-export def "categories-subscriptions create" [
+export def "post-categories-team-id-category-id-subscriptions" [
   team_id: string
   category_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1361,7 +1361,7 @@ export def "categories-subscriptions create" [
 #
 # POST /events/paged
 # --continuationToken shape: {nextPartitionKey?: string, nextRowKey?: string, nextTableName?: string}
-export def "events-paged create" [
+export def "post-events-paged" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1407,7 +1407,7 @@ export def "events-paged create" [
 # Get overview event
 #
 # GET /events/{eventId}/overview
-export def "events-overview get" [
+export def "get-events-event-id-overview" [
   event_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1443,7 +1443,7 @@ export def "events-overview get" [
 # Get event parameters
 #
 # GET /events/{eventId}/parameters
-export def "events-parameters get" [
+export def "get-events-event-id-parameters" [
   event_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1479,7 +1479,7 @@ export def "events-parameters get" [
 # Get your subscription's current prepaid balance.
 #
 # GET /prepaid/balance
-export def "prepaid-balance get" [
+export def "get-prepaid-balance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1513,7 +1513,7 @@ export def "prepaid-balance get" [
 # Get your subscription's current prepaid settings.
 #
 # GET /prepaid/settings
-export def "prepaid-settings get" [
+export def "get-prepaid-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1547,7 +1547,7 @@ export def "prepaid-settings get" [
 # Update your subscription's current prepaid settings.
 #
 # PUT /prepaid/settings
-export def "prepaid-settings update" [
+export def "put-prepaid-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1587,7 +1587,7 @@ export def "prepaid-settings update" [
 # Get your subscription's prepaid transactions.
 #
 # GET /prepaid/transactions
-export def "prepaid-transactions get" [
+export def "get-prepaid-transactions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1621,7 +1621,7 @@ export def "prepaid-transactions get" [
 # Returns all script instances of the SIGNL4 team
 #
 # GET /scripts/instances
-export def "scripts-instances list" [
+export def "get-scripts-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1658,7 +1658,7 @@ export def "scripts-instances list" [
 #
 # POST /scripts/instances
 # --runtimeInformation shape: {status?: "0"|"1"|"2"|"3"|"-1", statusMessage?: string}
-export def "scripts-instances create" [
+export def "post-scripts-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1707,7 +1707,7 @@ export def "scripts-instances create" [
 # Deletes a script instance.
 #
 # DELETE /scripts/instances/{instanceId}
-export def "scripts-instances delete" [
+export def "delete-scripts-instances-instance-id" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1742,7 +1742,7 @@ export def "scripts-instances delete" [
 # Returns all information about a given script instance which includes its runtime status.
 #
 # GET /scripts/instances/{instanceId}
-export def "scripts-instances get" [
+export def "get-scripts-instances-instance-id" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1779,7 +1779,7 @@ export def "scripts-instances get" [
 #
 # PUT /scripts/instances/{instanceId}
 # --runtimeInformation shape: {status?: "0"|"1"|"2"|"3"|"-1", statusMessage?: string}
-export def "scripts-instances update" [
+export def "put-scripts-instances-instance-id" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1830,7 +1830,7 @@ export def "scripts-instances update" [
 # Updates custom data of a given script instance which includes its display name.
 #
 # PUT /scripts/instances/{instanceId}/data
-export def "scripts-instances-data update" [
+export def "put-scripts-instances-instance-id-data" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1873,7 +1873,7 @@ export def "scripts-instances-data update" [
 # Disables a given script instance.
 #
 # POST /scripts/instances/{instanceId}/disable
-export def "scripts-instances-disable create" [
+export def "post-scripts-instances-instance-id-disable" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1909,7 +1909,7 @@ export def "scripts-instances-disable create" [
 # Enables a script instance.
 #
 # POST /scripts/instances/{instanceId}/enable
-export def "scripts-instances-enable create" [
+export def "post-scripts-instances-instance-id-enable" [
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1945,7 +1945,7 @@ export def "scripts-instances-enable create" [
 # Returns all available inventory scripts which can be added to a SIGNL4 subscription.
 #
 # GET /scripts/inventory
-export def "scripts-inventory get" [
+export def "get-scripts-inventory" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1979,7 +1979,7 @@ export def "scripts-inventory get" [
 # Returns all inventory scripts.
 #
 # GET /scripts/inventory/parsed
-export def "scripts-inventory-parsed list" [
+export def "get-scripts-inventory-parsed" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2015,7 +2015,7 @@ export def "scripts-inventory-parsed list" [
 # Returns an inventory script by its id.
 #
 # GET /scripts/inventory/parsed/{scriptId}
-export def "scripts-inventory-parsed get" [
+export def "get-scripts-inventory-parsed-script-id" [
   script_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2053,7 +2053,7 @@ export def "scripts-inventory-parsed get" [
 # Get infos of all available/managed subscriptions.
 #
 # GET /subscriptions
-export def "subscriptions list" [
+export def "get-subscriptions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2087,7 +2087,7 @@ export def "subscriptions list" [
 # Get infos of a specific subscription.
 #
 # GET /subscriptions/{subscriptionId}
-export def "subscriptions get" [
+export def "get-subscriptions-subscription-id" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2123,7 +2123,7 @@ export def "subscriptions get" [
 # Returns the subscription's channel price information.
 #
 # GET /subscriptions/{subscriptionId}/channelPrices
-export def "subscriptions-channel-prices get" [
+export def "get-subscriptions-subscription-id-channel-prices" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2159,7 +2159,7 @@ export def "subscriptions-channel-prices get" [
 # Returns the features of a specified subscription.
 #
 # GET /subscriptions/{subscriptionId}/features
-export def "subscriptions-features get" [
+export def "get-subscriptions-subscription-id-features" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2195,7 +2195,7 @@ export def "subscriptions-features get" [
 # Get a subscription's current prepaid balance.
 #
 # GET /subscriptions/{subscriptionId}/prepaidBalance
-export def "subscriptions-prepaid-balance get" [
+export def "get-subscriptions-subscription-id-prepaid-balance" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2231,7 +2231,7 @@ export def "subscriptions-prepaid-balance get" [
 # Get a subscription's current prepaid settings.
 #
 # GET /subscriptions/{subscriptionId}/prepaidSettings
-export def "subscriptions-prepaid-settings get" [
+export def "get-subscriptions-subscription-id-prepaid-settings" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2267,7 +2267,7 @@ export def "subscriptions-prepaid-settings get" [
 # Update a subscription's current prepaid settings.
 #
 # PUT /subscriptions/{subscriptionId}/prepaidSettings
-export def "subscriptions-prepaid-settings update" [
+export def "put-subscriptions-subscription-id-prepaid-settings" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2309,7 +2309,7 @@ export def "subscriptions-prepaid-settings update" [
 # Get a subscription's prepaid transactions.
 #
 # GET /subscriptions/{subscriptionId}/prepaidTransactions
-export def "subscriptions-prepaid-transactions get" [
+export def "get-subscriptions-subscription-id-prepaid-transactions" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2345,7 +2345,7 @@ export def "subscriptions-prepaid-transactions get" [
 # Updates a subscriptions profile.
 #
 # PUT /subscriptions/{subscriptionId}/profile
-export def "subscriptions-profile update" [
+export def "put-subscriptions-subscription-id-profile" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2385,7 +2385,7 @@ export def "subscriptions-profile update" [
 # Get infos for all teams of the subscription.
 #
 # GET /subscriptions/{subscriptionId}/teams
-export def "subscriptions-teams get" [
+export def "get-subscriptions-subscription-id-teams" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2421,7 +2421,7 @@ export def "subscriptions-teams get" [
 # Gets a subscription's user licenses.
 #
 # GET /subscriptions/{subscriptionId}/userLicenses
-export def "subscriptions-user-licenses get" [
+export def "get-subscriptions-subscription-id-user-licenses" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2457,7 +2457,7 @@ export def "subscriptions-user-licenses get" [
 # Get infos of all teams.
 #
 # GET /teams
-export def "teams list" [
+export def "get-teams" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2491,7 +2491,7 @@ export def "teams list" [
 # Gets infos of a specific team.
 #
 # GET /teams/{teamId}
-export def "teams get" [
+export def "get-teams-team-id" [
   team_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2527,7 +2527,7 @@ export def "teams get" [
 # Get information about downloadable alert reports
 #
 # GET /teams/{teamId}/alertReports
-export def "teams-alert-reports list" [
+export def "get-teams-team-id-alert-reports" [
   team_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2563,7 +2563,7 @@ export def "teams-alert-reports list" [
 # Returns Alert Report
 #
 # GET /teams/{teamId}/alertReports/{fileName}
-export def "teams-alert-reports get" [
+export def "get-teams-team-id-alert-reports-file-name" [
   team_id: string
   file_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2601,7 +2601,7 @@ export def "teams-alert-reports get" [
 # Gets alert settings of a specific team.
 #
 # GET /teams/{teamId}/alertSettings
-export def "teams-alert-settings get" [
+export def "get-teams-team-id-alert-settings" [
   team_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2637,7 +2637,7 @@ export def "teams-alert-settings get" [
 # Sets alert settings of a specific team.
 #
 # POST /teams/{teamId}/alertSettings
-export def "teams-alert-settings create" [
+export def "post-teams-team-id-alert-settings" [
   team_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2682,7 +2682,7 @@ export def "teams-alert-settings create" [
 # Get Information about downloadable reports
 #
 # GET /teams/{teamId}/dutyReports
-export def "teams-duty-reports list" [
+export def "get-teams-team-id-duty-reports" [
   team_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2718,7 +2718,7 @@ export def "teams-duty-reports list" [
 # Download duty report with a specific fileName
 #
 # GET /teams/{teamId}/dutyReports/{fileName}
-export def "teams-duty-reports get" [
+export def "get-teams-team-id-duty-reports-file-name" [
   team_id: string
   file_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2756,7 +2756,7 @@ export def "teams-duty-reports get" [
 # Get duty assistant info for a team
 #
 # GET /teams/{teamId}/dutysummary
-export def "teams-dutysummary get" [
+export def "get-teams-team-id-dutysummary" [
   team_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2794,7 +2794,7 @@ export def "teams-dutysummary get" [
 # Gets event sources of a specific team.
 #
 # GET /teams/{teamId}/eventSources
-export def "teams-event-sources get" [
+export def "get-teams-team-id-event-sources" [
   team_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2830,7 +2830,7 @@ export def "teams-event-sources get" [
 # Get all invites of a team.
 #
 # GET /teams/{teamId}/memberships
-export def "teams-memberships get" [
+export def "get-teams-team-id-memberships" [
   team_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2867,7 +2867,7 @@ export def "teams-memberships get" [
 #
 # POST /teams/{teamId}/memberships
 # --invites item shape: {email?: string, roleId?: string}
-export def "teams-memberships create" [
+export def "post-teams-team-id-memberships" [
   team_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2908,7 +2908,7 @@ export def "teams-memberships create" [
 # Sends invite email again if an invite exists
 #
 # POST /teams/{teamId}/memberships/resendInviteMail
-export def "teams-memberships-resend-invite-mail create" [
+export def "post-teams-team-id-memberships-resend-invite-mail" [
   team_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2949,7 +2949,7 @@ export def "teams-memberships-resend-invite-mail create" [
 # Removes a user or invitation from a team, and may delete the user if he is not in any team.
 #
 # DELETE /teams/{teamId}/memberships/{userId}
-export def "teams-memberships delete" [
+export def "delete-teams-team-id-memberships-user-id" [
   team_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2989,7 +2989,7 @@ export def "teams-memberships delete" [
 # Update user's team membership.
 #
 # PUT /teams/{teamId}/memberships/{userId}
-export def "teams-memberships update" [
+export def "put-teams-team-id-memberships-user-id" [
   team_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3034,7 +3034,7 @@ export def "teams-memberships update" [
 # Updates team profile of a team
 #
 # PUT /teams/{teamId}/profile
-export def "teams-profile update" [
+export def "put-teams-team-id-profile" [
   team_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3074,7 +3074,7 @@ export def "teams-profile update" [
 # Returns information about all duties that belong to the team.
 #
 # GET /teams/{teamId}/schedules
-export def "teams-schedules list" [
+export def "get-teams-team-id-schedules" [
   team_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3114,7 +3114,7 @@ export def "teams-schedules list" [
 # Create/Update given duty schedule.
 #
 # POST /teams/{teamId}/schedules
-export def "teams-schedules create" [
+export def "post-teams-team-id-schedules" [
   team_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3158,7 +3158,7 @@ export def "teams-schedules create" [
 # Delete duty schedules in range
 #
 # POST /teams/{teamId}/schedules/deleteRange
-export def "teams-schedules-delete-range create" [
+export def "post-teams-team-id-schedules-delete-range" [
   team_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3199,7 +3199,7 @@ export def "teams-schedules-delete-range create" [
 # Save multiple schedules. It is possible to override existing schedules if you wish
 #
 # POST /teams/{teamId}/schedules/multiple
-export def "teams-schedules-multiple create" [
+export def "post-teams-team-id-schedules-multiple" [
   team_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3241,7 +3241,7 @@ export def "teams-schedules-multiple create" [
 # Delete a specific duty.
 #
 # DELETE /teams/{teamId}/schedules/{dutyId}
-export def "teams-schedules delete" [
+export def "delete-teams-team-id-schedules-duty-id" [
   team_id: string
   duty_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3278,7 +3278,7 @@ export def "teams-schedules delete" [
 # Returns information of the duty schedule with the specified Id.
 #
 # GET /teams/{teamId}/schedules/{scheduleId}
-export def "teams-schedules get" [
+export def "get-teams-team-id-schedules-schedule-id" [
   team_id: string
   schedule_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3316,7 +3316,7 @@ export def "teams-schedules get" [
 # Gets setup progress of a specific team.
 #
 # GET /teams/{teamId}/setupProgress
-export def "teams-setup-progress get" [
+export def "get-teams-team-id-setup-progress" [
   team_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3352,7 +3352,7 @@ export def "teams-setup-progress get" [
 # Get all Users
 #
 # GET /users
-export def "users list" [
+export def "get-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3386,7 +3386,7 @@ export def "users list" [
 # Get User by Id
 #
 # GET /users/{userId}
-export def "users get" [
+export def "get-users-user-id" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3422,7 +3422,7 @@ export def "users get" [
 # Updates the password of a user
 #
 # PUT /users/{userId}/changePassword
-export def "users-change-password update" [
+export def "put-users-user-id-change-password" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3462,7 +3462,7 @@ export def "users-change-password update" [
 # Checks if a user has the provided permission.
 #
 # POST /users/{userId}/checkPermissions
-export def "users-check-permissions create" [
+export def "post-users-user-id-check-permissions" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3504,7 +3504,7 @@ export def "users-check-permissions create" [
 # Get duty status by user Id
 #
 # GET /users/{userId}/dutyStatus
-export def "users-duty-status get" [
+export def "get-users-user-id-duty-status" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3538,7 +3538,7 @@ export def "users-duty-status get" [
 }
 
 # GET /users/{userId}/image
-export def "users-image get" [
+export def "get-users-user-id-image" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3577,7 +3577,7 @@ export def "users-image get" [
 # Uploaded a profile image for a specified user.
 #
 # POST /users/{userId}/image
-export def "users-image create" [
+export def "post-users-user-id-image" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3612,7 +3612,7 @@ export def "users-image create" [
 # Updates user profile of an user
 #
 # PUT /users/{userId}/profile
-export def "users-profile update" [
+export def "put-users-user-id-profile" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3652,7 +3652,7 @@ export def "users-profile update" [
 # Punch User in
 #
 # POST /users/{userId}/punchIn
-export def "users-punch-in create" [
+export def "post-users-user-id-punch-in" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3688,7 +3688,7 @@ export def "users-punch-in create" [
 # Punch User in as Manager
 #
 # POST /users/{userId}/punchInAsManager
-export def "users-punch-in-as-manager create" [
+export def "post-users-user-id-punch-in-as-manager" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3724,7 +3724,7 @@ export def "users-punch-in-as-manager create" [
 # Punch User out
 #
 # POST /users/{userId}/punchOut
-export def "users-punch-out create" [
+export def "post-users-user-id-punch-out" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3760,7 +3760,7 @@ export def "users-punch-out create" [
 # Gets setup progress of a specific user.
 #
 # GET /users/{userId}/setupProgress
-export def "users-setup-progress get" [
+export def "get-users-user-id-setup-progress" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3796,7 +3796,7 @@ export def "users-setup-progress get" [
 # Get Webhooks
 #
 # GET /webhooks
-export def "webhooks list" [
+export def "get-webhooks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3832,7 +3832,7 @@ export def "webhooks list" [
 # Create Webhook
 #
 # POST /webhooks
-export def "webhooks create" [
+export def "post-webhooks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3872,7 +3872,7 @@ export def "webhooks create" [
 # Delete Webhook by Id
 #
 # DELETE /webhooks/{webhookId}
-export def "webhooks delete" [
+export def "delete-webhooks-webhook-id" [
   webhook_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3908,7 +3908,7 @@ export def "webhooks delete" [
 #
 # GET /webhooks/{webhookId}
 # operationId: GetWebhookById
-export def "webhooks get" [
+export def "get-webhook-by-id" [
   webhook_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3944,7 +3944,7 @@ export def "webhooks get" [
 # Update Webhook by Id
 #
 # PUT /webhooks/{webhookId}
-export def "webhooks update" [
+export def "put-webhooks-webhook-id" [
   webhook_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3986,7 +3986,7 @@ export def "webhooks update" [
 # Ability to enable a webHook.
 #
 # POST /webhooks/{webhookId}/disable
-export def "webhooks-disable create" [
+export def "post-webhooks-webhook-id-disable" [
   webhook_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4022,7 +4022,7 @@ export def "webhooks-disable create" [
 # Ability to disable a webHook.
 #
 # POST /webhooks/{webhookId}/enable
-export def "webhooks-enable create" [
+export def "post-webhooks-webhook-id-enable" [
   webhook_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

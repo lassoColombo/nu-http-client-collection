@@ -144,7 +144,7 @@ def x-amz-target-completer-43 [] { ["FmrsService.UpdateTaskExecution"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api cancel-task-execution" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cancel-task-execution" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -168,7 +168,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CancelTaskExecution
-export def "api cancel-task-execution" [
+export def "cancel-task-execution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -216,7 +216,7 @@ export def "api cancel-task-execution" [
 #
 # POST /
 # operationId: CreateAgent
-export def "api create-agent" [
+export def "create-agent" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -269,7 +269,7 @@ export def "api create-agent" [
 #
 # POST /
 # operationId: CreateLocationEfs
-export def "api create-location-efs" [
+export def "create-location-efs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -323,7 +323,7 @@ export def "api create-location-efs" [
 #
 # POST /
 # operationId: CreateLocationFsxLustre
-export def "api create-location-fsx-lustre" [
+export def "create-location-fsx-lustre" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -375,7 +375,7 @@ export def "api create-location-fsx-lustre" [
 # POST /
 # operationId: CreateLocationFsxOntap
 # --Protocol shape: {NFS?: any, SMB?: any}
-export def "api create-location-fsx-ontap" [
+export def "create-location-fsx-ontap" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -427,7 +427,7 @@ export def "api create-location-fsx-ontap" [
 #
 # POST /
 # operationId: CreateLocationFsxOpenZfs
-export def "api create-location-fsx-open-zfs" [
+export def "create-location-fsx-open-zfs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -479,7 +479,7 @@ export def "api create-location-fsx-open-zfs" [
 #
 # POST /
 # operationId: CreateLocationFsxWindows
-export def "api create-location-fsx-windows" [
+export def "create-location-fsx-windows" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -533,7 +533,7 @@ export def "api create-location-fsx-windows" [
 #
 # POST /
 # operationId: CreateLocationHdfs
-export def "api create-location-hdfs" [
+export def "create-location-hdfs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -593,7 +593,7 @@ export def "api create-location-hdfs" [
 #
 # POST /
 # operationId: CreateLocationNfs
-export def "api create-location-nfs" [
+export def "create-location-nfs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -645,7 +645,7 @@ export def "api create-location-nfs" [
 #
 # POST /
 # operationId: CreateLocationObjectStorage
-export def "api create-location-object-storage" [
+export def "create-location-object-storage" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -703,7 +703,7 @@ export def "api create-location-object-storage" [
 # POST /
 # operationId: CreateLocationS3
 # --S3Config shape: {BucketAccessRoleArn: any}
-export def "api create-location-s3" [
+export def "create-location-s3" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -756,7 +756,7 @@ export def "api create-location-s3" [
 #
 # POST /
 # operationId: CreateLocationSmb
-export def "api create-location-smb" [
+export def "create-location-smb" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -811,7 +811,7 @@ export def "api create-location-smb" [
 #
 # POST /
 # operationId: CreateTask
-export def "api create-task" [
+export def "create-task" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -867,7 +867,7 @@ export def "api create-task" [
 #
 # POST /
 # operationId: DeleteAgent
-export def "api delete-agent" [
+export def "delete-agent" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -915,7 +915,7 @@ export def "api delete-agent" [
 #
 # POST /
 # operationId: DeleteLocation
-export def "api delete-location" [
+export def "delete-location" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -963,7 +963,7 @@ export def "api delete-location" [
 #
 # POST /
 # operationId: DeleteTask
-export def "api delete-task" [
+export def "delete-task" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1011,7 +1011,7 @@ export def "api delete-task" [
 #
 # POST /
 # operationId: DescribeAgent
-export def "api get-agent" [
+export def "describe-agent" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1059,7 +1059,7 @@ export def "api get-agent" [
 #
 # POST /
 # operationId: DescribeLocationEfs
-export def "api get-location-efs" [
+export def "describe-location-efs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1107,7 +1107,7 @@ export def "api get-location-efs" [
 #
 # POST /
 # operationId: DescribeLocationFsxLustre
-export def "api get-location-fsx-lustre" [
+export def "describe-location-fsx-lustre" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1155,7 +1155,7 @@ export def "api get-location-fsx-lustre" [
 #
 # POST /
 # operationId: DescribeLocationFsxOntap
-export def "api get-location-fsx-ontap" [
+export def "describe-location-fsx-ontap" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1203,7 +1203,7 @@ export def "api get-location-fsx-ontap" [
 #
 # POST /
 # operationId: DescribeLocationFsxOpenZfs
-export def "api get-location-fsx-open-zfs" [
+export def "describe-location-fsx-open-zfs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1251,7 +1251,7 @@ export def "api get-location-fsx-open-zfs" [
 #
 # POST /
 # operationId: DescribeLocationFsxWindows
-export def "api get-location-fsx-windows" [
+export def "describe-location-fsx-windows" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1299,7 +1299,7 @@ export def "api get-location-fsx-windows" [
 #
 # POST /
 # operationId: DescribeLocationHdfs
-export def "api get-location-hdfs" [
+export def "describe-location-hdfs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1347,7 +1347,7 @@ export def "api get-location-hdfs" [
 #
 # POST /
 # operationId: DescribeLocationNfs
-export def "api get-location-nfs" [
+export def "describe-location-nfs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1395,7 +1395,7 @@ export def "api get-location-nfs" [
 #
 # POST /
 # operationId: DescribeLocationObjectStorage
-export def "api get-location-object-storage" [
+export def "describe-location-object-storage" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1443,7 +1443,7 @@ export def "api get-location-object-storage" [
 #
 # POST /
 # operationId: DescribeLocationS3
-export def "api get-location-s3" [
+export def "describe-location-s3" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1491,7 +1491,7 @@ export def "api get-location-s3" [
 #
 # POST /
 # operationId: DescribeLocationSmb
-export def "api get-location-smb" [
+export def "describe-location-smb" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1539,7 +1539,7 @@ export def "api get-location-smb" [
 #
 # POST /
 # operationId: DescribeTask
-export def "api get-task" [
+export def "describe-task" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1587,7 +1587,7 @@ export def "api get-task" [
 #
 # POST /
 # operationId: DescribeTaskExecution
-export def "api get-task-execution" [
+export def "describe-task-execution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1635,7 +1635,7 @@ export def "api get-task-execution" [
 #
 # POST /
 # operationId: ListAgents
-export def "api list-agents" [
+export def "list-agents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1687,7 +1687,7 @@ export def "api list-agents" [
 #
 # POST /
 # operationId: ListLocations
-export def "api list-locations" [
+export def "list-locations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1740,7 +1740,7 @@ export def "api list-locations" [
 #
 # POST /
 # operationId: ListTagsForResource
-export def "api list-tags-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1793,7 +1793,7 @@ export def "api list-tags-for-resource" [
 #
 # POST /
 # operationId: ListTaskExecutions
-export def "api list-task-executions" [
+export def "list-task-executions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1846,7 +1846,7 @@ export def "api list-task-executions" [
 #
 # POST /
 # operationId: ListTasks
-export def "api list-tasks" [
+export def "list-tasks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1900,7 +1900,7 @@ export def "api list-tasks" [
 # POST /
 # operationId: StartTaskExecution
 # --OverrideOptions shape: {VerifyMode?: any, OverwriteMode?: any, Atime?: any, Mtime?: any, Uid?: any, Gid?: any, PreserveDeletedFiles?: any, PreserveDevices?: any, PosixPermissions?: any, BytesPerSecond?: any, TaskQueueing?: any, LogLevel?: any, TransferMode?: any, SecurityDescriptorCopyFlags?: any, ObjectTags?: any}
-export def "api start-task-execution" [
+export def "start-task-execution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1952,7 +1952,7 @@ export def "api start-task-execution" [
 #
 # POST /
 # operationId: TagResource
-export def "api tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2001,7 +2001,7 @@ export def "api tag-resource" [
 #
 # POST /
 # operationId: UntagResource
-export def "api untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2050,7 +2050,7 @@ export def "api untag-resource" [
 #
 # POST /
 # operationId: UpdateAgent
-export def "api update-agent" [
+export def "update-agent" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2099,7 +2099,7 @@ export def "api update-agent" [
 #
 # POST /
 # operationId: UpdateLocationHdfs
-export def "api update-location-hdfs" [
+export def "update-location-hdfs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2161,7 +2161,7 @@ export def "api update-location-hdfs" [
 # operationId: UpdateLocationNfs
 # --OnPremConfig shape: {AgentArns: any}
 # --MountOptions shape: {Version?: any}
-export def "api update-location-nfs" [
+export def "update-location-nfs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2212,7 +2212,7 @@ export def "api update-location-nfs" [
 #
 # POST /
 # operationId: UpdateLocationObjectStorage
-export def "api update-location-object-storage" [
+export def "update-location-object-storage" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2268,7 +2268,7 @@ export def "api update-location-object-storage" [
 # POST /
 # operationId: UpdateLocationSmb
 # --MountOptions shape: {Version?: any}
-export def "api update-location-smb" [
+export def "update-location-smb" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2323,7 +2323,7 @@ export def "api update-location-smb" [
 # POST /
 # operationId: UpdateTask
 # --Options shape: {VerifyMode?: any, OverwriteMode?: any, Atime?: any, Mtime?: any, Uid?: any, Gid?: any, PreserveDeletedFiles?: any, PreserveDevices?: any, PosixPermissions?: any, BytesPerSecond?: any, TaskQueueing?: any, LogLevel?: any, TransferMode?: any, SecurityDescriptorCopyFlags?: any, ObjectTags?: any}
-export def "api update-task" [
+export def "update-task" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2378,7 +2378,7 @@ export def "api update-task" [
 # POST /
 # operationId: UpdateTaskExecution
 # --Options shape: {VerifyMode?: any, OverwriteMode?: any, Atime?: any, Mtime?: any, Uid?: any, Gid?: any, PreserveDeletedFiles?: any, PreserveDevices?: any, PosixPermissions?: any, BytesPerSecond?: any, TaskQueueing?: any, LogLevel?: any, TransferMode?: any, SecurityDescriptorCopyFlags?: any, ObjectTags?: any}
-export def "api update-task-execution" [
+export def "update-task-execution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

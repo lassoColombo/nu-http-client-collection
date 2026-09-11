@@ -119,7 +119,7 @@ def feedback-completer [] { ["NOT_USEFUL" "USEFUL"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "detector-administrator create-accept-invitation" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accept-administrator-invitation" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -143,7 +143,7 @@ export def commands []: nothing -> table {
 #
 # POST /detector/{detectorId}/administrator
 # operationId: AcceptAdministratorInvitation
-export def "detector-administrator create-accept-invitation" [
+export def "accept-administrator-invitation" [
   detector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -193,7 +193,7 @@ export def "detector-administrator create-accept-invitation" [
 #
 # GET /detector/{detectorId}/administrator
 # operationId: GetAdministratorAccount
-export def "detector-administrator get-account" [
+export def "get-administrator-account" [
   detector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -240,7 +240,7 @@ export def "detector-administrator get-account" [
 # DEPRECATED
 # operationId: AcceptInvitation
 @deprecated
-export def "detector-master create-accept-invitation" [
+export def "accept-invitation" [
   detector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -292,7 +292,7 @@ export def "detector-master create-accept-invitation" [
 # DEPRECATED
 # operationId: GetMasterAccount
 @deprecated
-export def "detector-master get-account" [
+export def "get-master-account" [
   detector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -337,7 +337,7 @@ export def "detector-master get-account" [
 #
 # POST /detector/{detectorId}/findings/archive
 # operationId: ArchiveFindings
-export def "detector-findings-archive archive" [
+export def "archive-findings" [
   detector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -388,7 +388,7 @@ export def "detector-findings-archive archive" [
 # operationId: CreateDetector
 # --dataSources shape: {S3Logs?: any, Kubernetes?: any, MalwareProtection?: any}
 # --features item shape: {Name?: any, Status?: any, AdditionalConfiguration?: any}
-export def "detector create" [
+export def "create-detector" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -440,7 +440,7 @@ export def "detector create" [
 #
 # GET /detector
 # operationId: ListDetectors
-export def "detector list" [
+export def "list-detectors" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -489,7 +489,7 @@ export def "detector list" [
 # POST /detector/{detectorId}/filter
 # operationId: CreateFilter
 # --findingCriteria shape: {Criterion?: any}
-export def "detector-filter create" [
+export def "create-filter" [
   detector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -544,7 +544,7 @@ export def "detector-filter create" [
 #
 # GET /detector/{detectorId}/filter
 # operationId: ListFilters
-export def "detector-filter list" [
+export def "list-filters" [
   detector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -594,7 +594,7 @@ export def "detector-filter list" [
 #
 # POST /detector/{detectorId}/ipset
 # operationId: CreateIPSet
-export def "detector-ipset create-ip-update" [
+export def "create-ip-set" [
   detector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -648,7 +648,7 @@ export def "detector-ipset create-ip-update" [
 #
 # GET /detector/{detectorId}/ipset
 # operationId: ListIPSets
-export def "detector-ipset list-ip-sets" [
+export def "list-ip-sets" [
   detector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -699,7 +699,7 @@ export def "detector-ipset list-ip-sets" [
 # POST /detector/{detectorId}/member
 # operationId: CreateMembers
 # --accountDetails item shape: {AccountId: any, Email: any}
-export def "detector-member create" [
+export def "create-members" [
   detector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -748,7 +748,7 @@ export def "detector-member create" [
 #
 # GET /detector/{detectorId}/member
 # operationId: ListMembers
-export def "detector-member list" [
+export def "list-members" [
   detector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -800,7 +800,7 @@ export def "detector-member list" [
 # POST /detector/{detectorId}/publishingDestination
 # operationId: CreatePublishingDestination
 # --destinationProperties shape: {DestinationArn?: any, KmsKeyArn?: any}
-export def "detector-publishing-destination create" [
+export def "create-publishing-destination" [
   detector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -851,7 +851,7 @@ export def "detector-publishing-destination create" [
 #
 # GET /detector/{detectorId}/publishingDestination
 # operationId: ListPublishingDestinations
-export def "detector-publishing-destination list" [
+export def "list-publishing-destinations" [
   detector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -901,7 +901,7 @@ export def "detector-publishing-destination list" [
 #
 # POST /detector/{detectorId}/findings/create
 # operationId: CreateSampleFindings
-export def "detector-findings-create create-sample" [
+export def "create-sample-findings" [
   detector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -950,7 +950,7 @@ export def "detector-findings-create create-sample" [
 #
 # POST /detector/{detectorId}/threatintelset
 # operationId: CreateThreatIntelSet
-export def "detector-threatintelset create-threat-intel-update" [
+export def "create-threat-intel-set" [
   detector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1004,7 +1004,7 @@ export def "detector-threatintelset create-threat-intel-update" [
 #
 # GET /detector/{detectorId}/threatintelset
 # operationId: ListThreatIntelSets
-export def "detector-threatintelset list-threat-intel-sets" [
+export def "list-threat-intel-sets" [
   detector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1054,7 +1054,7 @@ export def "detector-threatintelset list-threat-intel-sets" [
 #
 # POST /invitation/decline
 # operationId: DeclineInvitations
-export def "invitation-decline create" [
+export def "decline-invitations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1101,7 +1101,7 @@ export def "invitation-decline create" [
 #
 # DELETE /detector/{detectorId}
 # operationId: DeleteDetector
-export def "detector delete" [
+export def "delete-detector" [
   detector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1146,7 +1146,7 @@ export def "detector delete" [
 #
 # GET /detector/{detectorId}
 # operationId: GetDetector
-export def "detector get" [
+export def "get-detector" [
   detector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1193,7 +1193,7 @@ export def "detector get" [
 # operationId: UpdateDetector
 # --dataSources shape: {S3Logs?: any, Kubernetes?: any, MalwareProtection?: any}
 # --features item shape: {Name?: any, Status?: any, AdditionalConfiguration?: any}
-export def "detector update" [
+export def "update-detector" [
   detector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1245,7 +1245,7 @@ export def "detector update" [
 #
 # DELETE /detector/{detectorId}/filter/{filterName}
 # operationId: DeleteFilter
-export def "detector-filter delete" [
+export def "delete-filter" [
   detector_id: string
   filter_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1292,7 +1292,7 @@ export def "detector-filter delete" [
 #
 # GET /detector/{detectorId}/filter/{filterName}
 # operationId: GetFilter
-export def "detector-filter get" [
+export def "get-filter" [
   detector_id: string
   filter_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1340,7 +1340,7 @@ export def "detector-filter get" [
 # POST /detector/{detectorId}/filter/{filterName}
 # operationId: UpdateFilter
 # --findingCriteria shape: {Criterion?: any}
-export def "detector-filter update" [
+export def "update-filter" [
   detector_id: string
   filter_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1394,7 +1394,7 @@ export def "detector-filter update" [
 #
 # DELETE /detector/{detectorId}/ipset/{ipSetId}
 # operationId: DeleteIPSet
-export def "detector-ipset delete-ip-update" [
+export def "delete-ip-set" [
   detector_id: string
   ip_set_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1441,7 +1441,7 @@ export def "detector-ipset delete-ip-update" [
 #
 # GET /detector/{detectorId}/ipset/{ipSetId}
 # operationId: GetIPSet
-export def "detector-ipset get-ip-update" [
+export def "get-ip-set" [
   detector_id: string
   ip_set_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1488,7 +1488,7 @@ export def "detector-ipset get-ip-update" [
 #
 # POST /detector/{detectorId}/ipset/{ipSetId}
 # operationId: UpdateIPSet
-export def "detector-ipset update-ip" [
+export def "update-ip-set" [
   detector_id: string
   ip_set_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1541,7 +1541,7 @@ export def "detector-ipset update-ip" [
 #
 # POST /invitation/delete
 # operationId: DeleteInvitations
-export def "invitation-delete delete" [
+export def "delete-invitations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1588,7 +1588,7 @@ export def "invitation-delete delete" [
 #
 # POST /detector/{detectorId}/member/delete
 # operationId: DeleteMembers
-export def "detector-member-delete delete" [
+export def "delete-members" [
   detector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1637,7 +1637,7 @@ export def "detector-member-delete delete" [
 #
 # DELETE /detector/{detectorId}/publishingDestination/{destinationId}
 # operationId: DeletePublishingDestination
-export def "detector-publishing-destination delete" [
+export def "delete-publishing-destination" [
   detector_id: string
   destination_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1684,7 +1684,7 @@ export def "detector-publishing-destination delete" [
 #
 # GET /detector/{detectorId}/publishingDestination/{destinationId}
 # operationId: DescribePublishingDestination
-export def "detector-publishing-destination get" [
+export def "describe-publishing-destination" [
   detector_id: string
   destination_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1732,7 +1732,7 @@ export def "detector-publishing-destination get" [
 # POST /detector/{detectorId}/publishingDestination/{destinationId}
 # operationId: UpdatePublishingDestination
 # --destinationProperties shape: {DestinationArn?: any, KmsKeyArn?: any}
-export def "detector-publishing-destination update" [
+export def "update-publishing-destination" [
   detector_id: string
   destination_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1783,7 +1783,7 @@ export def "detector-publishing-destination update" [
 #
 # DELETE /detector/{detectorId}/threatintelset/{threatIntelSetId}
 # operationId: DeleteThreatIntelSet
-export def "detector-threatintelset delete-threat-intel-update" [
+export def "delete-threat-intel-set" [
   detector_id: string
   threat_intel_set_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1830,7 +1830,7 @@ export def "detector-threatintelset delete-threat-intel-update" [
 #
 # GET /detector/{detectorId}/threatintelset/{threatIntelSetId}
 # operationId: GetThreatIntelSet
-export def "detector-threatintelset get-threat-intel-update" [
+export def "get-threat-intel-set" [
   detector_id: string
   threat_intel_set_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1877,7 +1877,7 @@ export def "detector-threatintelset get-threat-intel-update" [
 #
 # POST /detector/{detectorId}/threatintelset/{threatIntelSetId}
 # operationId: UpdateThreatIntelSet
-export def "detector-threatintelset update-threat-intel" [
+export def "update-threat-intel-set" [
   detector_id: string
   threat_intel_set_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1932,7 +1932,7 @@ export def "detector-threatintelset update-threat-intel" [
 # operationId: DescribeMalwareScans
 # --filterCriteria shape: {FilterCriterion?: any}
 # --sortCriteria shape: {AttributeName?: any, OrderBy?: any}
-export def "detector-malware-scans get" [
+export def "describe-malware-scans" [
   detector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1987,7 +1987,7 @@ export def "detector-malware-scans get" [
 #
 # GET /detector/{detectorId}/admin
 # operationId: DescribeOrganizationConfiguration
-export def "detector-admin get-organization-configuration" [
+export def "describe-organization-configuration" [
   detector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2039,7 +2039,7 @@ export def "detector-admin get-organization-configuration" [
 # operationId: UpdateOrganizationConfiguration
 # --dataSources shape: {S3Logs?: any, Kubernetes?: any, MalwareProtection?: any}
 # --features item shape: {Name?: any, AutoEnable?: any, AdditionalConfiguration?: any}
-export def "detector-admin update-organization-configuration" [
+export def "update-organization-configuration" [
   detector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2091,7 +2091,7 @@ export def "detector-admin update-organization-configuration" [
 #
 # POST /admin/disable
 # operationId: DisableOrganizationAdminAccount
-export def "admin-disable disable-organization-account" [
+export def "disable-organization-admin-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2138,7 +2138,7 @@ export def "admin-disable disable-organization-account" [
 #
 # POST /detector/{detectorId}/administrator/disassociate
 # operationId: DisassociateFromAdministratorAccount
-export def "detector-administrator-disassociate create-from-account" [
+export def "disassociate-from-administrator-account" [
   detector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2185,7 +2185,7 @@ export def "detector-administrator-disassociate create-from-account" [
 # DEPRECATED
 # operationId: DisassociateFromMasterAccount
 @deprecated
-export def "detector-master-disassociate create-from-account" [
+export def "disassociate-from-master-account" [
   detector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2230,7 +2230,7 @@ export def "detector-master-disassociate create-from-account" [
 #
 # POST /detector/{detectorId}/member/disassociate
 # operationId: DisassociateMembers
-export def "detector-member-disassociate create" [
+export def "disassociate-members" [
   detector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2279,7 +2279,7 @@ export def "detector-member-disassociate create" [
 #
 # POST /admin/enable
 # operationId: EnableOrganizationAdminAccount
-export def "admin-enable enable-organization-account" [
+export def "enable-organization-admin-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2327,7 +2327,7 @@ export def "admin-enable enable-organization-account" [
 # POST /detector/{detectorId}/coverage/statistics
 # operationId: GetCoverageStatistics
 # --filterCriteria shape: {FilterCriterion?: any}
-export def "detector-coverage-statistics get" [
+export def "get-coverage-statistics" [
   detector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2378,7 +2378,7 @@ export def "detector-coverage-statistics get" [
 # POST /detector/{detectorId}/findings/get
 # operationId: GetFindings
 # --sortCriteria shape: {AttributeName?: any, OrderBy?: any}
-export def "detector-findings-get get" [
+export def "get-findings" [
   detector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2429,7 +2429,7 @@ export def "detector-findings-get get" [
 # POST /detector/{detectorId}/findings/statistics
 # operationId: GetFindingsStatistics
 # --findingCriteria shape: {Criterion?: any}
-export def "detector-findings-statistics get" [
+export def "get-findings-statistics" [
   detector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2479,7 +2479,7 @@ export def "detector-findings-statistics get" [
 #
 # GET /invitation/count
 # operationId: GetInvitationsCount
-export def "invitation-count get" [
+export def "get-invitations-count" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2522,7 +2522,7 @@ export def "invitation-count get" [
 #
 # GET /detector/{detectorId}/malware-scan-settings
 # operationId: GetMalwareScanSettings
-export def "detector-malware-scan-settings get" [
+export def "get-malware-scan-settings" [
   detector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2568,7 +2568,7 @@ export def "detector-malware-scan-settings get" [
 # POST /detector/{detectorId}/malware-scan-settings
 # operationId: UpdateMalwareScanSettings
 # --scanResourceCriteria shape: {Include?: any, Exclude?: any}
-export def "detector-malware-scan-settings update" [
+export def "update-malware-scan-settings" [
   detector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2618,7 +2618,7 @@ export def "detector-malware-scan-settings update" [
 #
 # POST /detector/{detectorId}/member/detector/get
 # operationId: GetMemberDetectors
-export def "detector-member-detector-get get" [
+export def "get-member-detectors" [
   detector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2667,7 +2667,7 @@ export def "detector-member-detector-get get" [
 #
 # POST /detector/{detectorId}/member/get
 # operationId: GetMembers
-export def "detector-member-get get" [
+export def "get-members" [
   detector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2716,7 +2716,7 @@ export def "detector-member-get get" [
 #
 # POST /detector/{detectorId}/freeTrial/daysRemaining
 # operationId: GetRemainingFreeTrialDays
-export def "detector-free-trial-days-remaining get" [
+export def "get-remaining-free-trial-days" [
   detector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2766,7 +2766,7 @@ export def "detector-free-trial-days-remaining get" [
 # POST /detector/{detectorId}/usage/statistics
 # operationId: GetUsageStatistics
 # --usageCriteria shape: {AccountIds?: any, DataSources?: any, Resources?: any, Features?: any}
-export def "detector-usage-statistics get" [
+export def "get-usage-statistics" [
   detector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2822,7 +2822,7 @@ export def "detector-usage-statistics get" [
 #
 # POST /detector/{detectorId}/member/invite
 # operationId: InviteMembers
-export def "detector-member-invite create" [
+export def "invite-members" [
   detector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2875,7 +2875,7 @@ export def "detector-member-invite create" [
 # operationId: ListCoverage
 # --filterCriteria shape: {FilterCriterion?: any}
 # --sortCriteria shape: {AttributeName?: any, OrderBy?: any}
-export def "detector-coverage list" [
+export def "list-coverage" [
   detector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2932,7 +2932,7 @@ export def "detector-coverage list" [
 # operationId: ListFindings
 # --findingCriteria shape: {Criterion?: any}
 # --sortCriteria shape: {AttributeName?: any, OrderBy?: any}
-export def "detector-findings list" [
+export def "list-findings" [
   detector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2987,7 +2987,7 @@ export def "detector-findings list" [
 #
 # GET /invitation
 # operationId: ListInvitations
-export def "invitation list" [
+export def "list-invitations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3035,7 +3035,7 @@ export def "invitation list" [
 #
 # GET /admin
 # operationId: ListOrganizationAdminAccounts
-export def "admin list-organization-accounts" [
+export def "list-organization-admin-accounts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3083,7 +3083,7 @@ export def "admin list-organization-accounts" [
 #
 # GET /tags/{resourceArn}
 # operationId: ListTagsForResource
-export def "tags list-for-resource" [
+export def "list-tags-for-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3128,7 +3128,7 @@ export def "tags list-for-resource" [
 #
 # POST /tags/{resourceArn}
 # operationId: TagResource
-export def "tags tag-resource" [
+export def "tag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3177,7 +3177,7 @@ export def "tags tag-resource" [
 #
 # POST /detector/{detectorId}/member/start
 # operationId: StartMonitoringMembers
-export def "detector-member-start start-monitoring" [
+export def "start-monitoring-members" [
   detector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3226,7 +3226,7 @@ export def "detector-member-start start-monitoring" [
 #
 # POST /detector/{detectorId}/member/stop
 # operationId: StopMonitoringMembers
-export def "detector-member-stop stop-monitoring" [
+export def "stop-monitoring-members" [
   detector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3275,7 +3275,7 @@ export def "detector-member-stop stop-monitoring" [
 #
 # POST /detector/{detectorId}/findings/unarchive
 # operationId: UnarchiveFindings
-export def "detector-findings-unarchive unarchive" [
+export def "unarchive-findings" [
   detector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3324,7 +3324,7 @@ export def "detector-findings-unarchive unarchive" [
 #
 # DELETE /tags/{resourceArn}
 # operationId: UntagResource
-export def "tags untag-resource" [
+export def "untag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3371,7 +3371,7 @@ export def "tags untag-resource" [
 #
 # POST /detector/{detectorId}/findings/feedback
 # operationId: UpdateFindingsFeedback
-export def "detector-findings-feedback update" [
+export def "update-findings-feedback" [
   detector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3424,7 +3424,7 @@ export def "detector-findings-feedback update" [
 # operationId: UpdateMemberDetectors
 # --dataSources shape: {S3Logs?: any, Kubernetes?: any, MalwareProtection?: any}
 # --features item shape: {Name?: any, Status?: any, AdditionalConfiguration?: any}
-export def "detector-member-detector-update update" [
+export def "update-member-detectors" [
   detector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

@@ -131,7 +131,7 @@ def event-source-completer [] { ["AUTOML" "BATCH_UPLOAD" "ECOMMERCE" "EVENT_SOUR
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta1 delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "recommendationengine-projects-locations-catalogs-event-stores-prediction-api-key-registrations-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -155,7 +155,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1beta1/{name}
 # operationId: recommendationengine.projects.locations.catalogs.eventStores.predictionApiKeyRegistrations.delete
-export def "v1beta1 delete" [
+export def "recommendationengine-projects-locations-catalogs-event-stores-prediction-api-key-registrations-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -203,7 +203,7 @@ export def "v1beta1 delete" [
 #
 # GET /v1beta1/{name}
 # operationId: recommendationengine.projects.locations.catalogs.operations.get
-export def "v1beta1 get" [
+export def "recommendationengine-projects-locations-catalogs-operations-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -254,7 +254,7 @@ export def "v1beta1 get" [
 # --categoryHierarchies item shape: {categories?: list<string>}
 # --itemAttributes shape: {categoricalFeatures?: record, numericalFeatures?: record}
 # --productMetadata shape: {availableQuantity?: string, canonicalProductUri?: string, costs?: record, currencyCode?: string, exactPrice?: record, images?: list, priceRange?: record, stockState?: "STOCK_STATE_UNSPECIFIED"|"IN_STOCK"|"OUT_OF_STOCK"|"PREORDER"|"BACKORDER"}
-export def "v1beta1 update" [
+export def "recommendationengine-projects-locations-catalogs-catalog-items-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -315,7 +315,7 @@ export def "v1beta1 update" [
 #
 # GET /v1beta1/{name}/operations
 # operationId: recommendationengine.projects.locations.catalogs.operations.list
-export def "v1beta1-operations list" [
+export def "recommendationengine-projects-locations-catalogs-operations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -367,7 +367,7 @@ export def "v1beta1-operations list" [
 # POST /v1beta1/{name}:predict
 # operationId: recommendationengine.projects.locations.catalogs.eventStores.placements.predict
 # --userEvent shape: {eventDetail?: record, eventSource?: "EVENT_SOURCE_UNSPECIFIED"|"AUTOML"|"ECOMMERCE"|"BATCH_UPLOAD", eventTime?: string, eventType?: string, productEventDetail?: record, userInfo?: record}
-export def "v1beta1 create-predict" [
+export def "recommendationengine-projects-locations-catalogs-event-stores-placements-predict" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -425,7 +425,7 @@ export def "v1beta1 create-predict" [
 #
 # GET /v1beta1/{parent}/catalogItems
 # operationId: recommendationengine.projects.locations.catalogs.catalogItems.list
-export def "v1beta1-catalog-items list" [
+export def "recommendationengine-projects-locations-catalogs-catalog-items-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -479,7 +479,7 @@ export def "v1beta1-catalog-items list" [
 # --categoryHierarchies item shape: {categories?: list<string>}
 # --itemAttributes shape: {categoricalFeatures?: record, numericalFeatures?: record}
 # --productMetadata shape: {availableQuantity?: string, canonicalProductUri?: string, costs?: record, currencyCode?: string, exactPrice?: record, images?: list, priceRange?: record, stockState?: "STOCK_STATE_UNSPECIFIED"|"IN_STOCK"|"OUT_OF_STOCK"|"PREORDER"|"BACKORDER"}
-export def "v1beta1-catalog-items create" [
+export def "recommendationengine-projects-locations-catalogs-catalog-items-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -541,7 +541,7 @@ export def "v1beta1-catalog-items create" [
 # operationId: recommendationengine.projects.locations.catalogs.catalogItems.import
 # --errorsConfig shape: {gcsPrefix?: string}
 # --inputConfig shape: {bigQuerySource?: record, catalogInlineSource?: record, gcsSource?: record, userEventInlineSource?: record}
-export def "v1beta1-catalog-items-import import" [
+export def "recommendationengine-projects-locations-catalogs-catalog-items-import" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -596,7 +596,7 @@ export def "v1beta1-catalog-items-import import" [
 #
 # GET /v1beta1/{parent}/catalogs
 # operationId: recommendationengine.projects.locations.catalogs.list
-export def "v1beta1-catalogs list" [
+export def "recommendationengine-projects-locations-catalogs-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -646,7 +646,7 @@ export def "v1beta1-catalogs list" [
 #
 # GET /v1beta1/{parent}/predictionApiKeyRegistrations
 # operationId: recommendationengine.projects.locations.catalogs.eventStores.predictionApiKeyRegistrations.list
-export def "v1beta1-prediction-api-key-registrations list" [
+export def "recommendationengine-projects-locations-catalogs-event-stores-prediction-api-key-registrations-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -697,7 +697,7 @@ export def "v1beta1-prediction-api-key-registrations list" [
 # POST /v1beta1/{parent}/predictionApiKeyRegistrations
 # operationId: recommendationengine.projects.locations.catalogs.eventStores.predictionApiKeyRegistrations.create
 # --predictionApiKeyRegistration shape: {apiKey?: string}
-export def "v1beta1-prediction-api-key-registrations create" [
+export def "recommendationengine-projects-locations-catalogs-event-stores-prediction-api-key-registrations-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -749,7 +749,7 @@ export def "v1beta1-prediction-api-key-registrations create" [
 #
 # GET /v1beta1/{parent}/userEvents
 # operationId: recommendationengine.projects.locations.catalogs.eventStores.userEvents.list
-export def "v1beta1-user-events list" [
+export def "recommendationengine-projects-locations-catalogs-event-stores-user-events-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -800,7 +800,7 @@ export def "v1beta1-user-events list" [
 #
 # GET /v1beta1/{parent}/userEvents:collect
 # operationId: recommendationengine.projects.locations.catalogs.eventStores.userEvents.collect
-export def "v1beta1-user-events-collect get" [
+export def "recommendationengine-projects-locations-catalogs-event-stores-user-events-collect" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -853,7 +853,7 @@ export def "v1beta1-user-events-collect get" [
 # operationId: recommendationengine.projects.locations.catalogs.eventStores.userEvents.import
 # --errorsConfig shape: {gcsPrefix?: string}
 # --inputConfig shape: {bigQuerySource?: record, catalogInlineSource?: record, gcsSource?: record, userEventInlineSource?: record}
-export def "v1beta1-user-events-import import" [
+export def "recommendationengine-projects-locations-catalogs-event-stores-user-events-import" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -907,7 +907,7 @@ export def "v1beta1-user-events-import import" [
 #
 # POST /v1beta1/{parent}/userEvents:purge
 # operationId: recommendationengine.projects.locations.catalogs.eventStores.userEvents.purge
-export def "v1beta1-user-events-purge create" [
+export def "recommendationengine-projects-locations-catalogs-event-stores-user-events-purge" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -960,7 +960,7 @@ export def "v1beta1-user-events-purge create" [
 #
 # POST /v1beta1/{parent}/userEvents:rejoin
 # operationId: recommendationengine.projects.locations.catalogs.eventStores.userEvents.rejoin
-export def "v1beta1-user-events-rejoin create" [
+export def "recommendationengine-projects-locations-catalogs-event-stores-user-events-rejoin" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1015,7 +1015,7 @@ export def "v1beta1-user-events-rejoin create" [
 # --eventDetail shape: {eventAttributes?: record, experimentIds?: list<string>, pageViewId?: string, recommendationToken?: string, referrerUri?: string, uri?: string}
 # --productEventDetail shape: {cartId?: string, listId?: string, pageCategories?: list, productDetails?: list, purchaseTransaction?: record, searchQuery?: string}
 # --userInfo shape: {directUserRequest?: bool, ipAddress?: string, userAgent?: string, userId?: string, visitorId?: string}
-export def "v1beta1-user-events-write create" [
+export def "recommendationengine-projects-locations-catalogs-event-stores-user-events-write" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

@@ -97,7 +97,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "ip get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-ip" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -120,7 +120,7 @@ export def commands []: nothing -> table {
 # request the current time based on the ip of the request. note: this is a "best guess" obtained from open-source data.
 #
 # GET /ip
-export def "ip get" [
+export def "get-ip" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -153,7 +153,7 @@ export def "ip get" [
 # request the current time based on the ip of the request. note: this is a "best guess" obtained from open-source data.
 #
 # GET /ip.txt
-export def "ip-txt get" [
+export def "get-ip-txt" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -186,7 +186,7 @@ export def "ip-txt get" [
 # request the current time based on the ip of the request. note: this is a "best guess" obtained from open-source data.
 #
 # GET /ip/{ipv4}
-export def "ip get-by-ipv4" [
+export def "get-ip-ipv4" [
   ipv4: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -221,7 +221,7 @@ export def "ip get-by-ipv4" [
 # request the current time based on the ip of the request. note: this is a "best guess" obtained from open-source data.
 #
 # GET /ip/{ipv4}.txt
-export def "ip get-by-ipv4-1" [
+export def "get-ip-ipv4-txt" [
   ipv4: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -256,7 +256,7 @@ export def "ip get-by-ipv4-1" [
 # a listing of all timezones.
 #
 # GET /timezone
-export def "timezone get" [
+export def "get-timezone" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -289,7 +289,7 @@ export def "timezone get" [
 # a listing of all timezones.
 #
 # GET /timezone.txt
-export def "timezone-txt get" [
+export def "get-timezone-txt" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -322,7 +322,7 @@ export def "timezone-txt get" [
 # a listing of all timezones available for that area.
 #
 # GET /timezone/{area}
-export def "timezone get-by-area" [
+export def "get-timezone-area" [
   area: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -357,7 +357,7 @@ export def "timezone get-by-area" [
 # a listing of all timezones available for that area.
 #
 # GET /timezone/{area}.txt
-export def "timezone get-by-area-1" [
+export def "get-timezone-area-txt" [
   area: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -392,7 +392,7 @@ export def "timezone get-by-area-1" [
 # request the current time for a timezone.
 #
 # GET /timezone/{area}/{location}
-export def "timezone get-by-area-location" [
+export def "get-timezone-area-location" [
   area: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -429,7 +429,7 @@ export def "timezone get-by-area-location" [
 # request the current time for a timezone.
 #
 # GET /timezone/{area}/{location}.txt
-export def "timezone get-by-area-location-1" [
+export def "get-timezone-area-location-txt" [
   area: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -466,7 +466,7 @@ export def "timezone get-by-area-location-1" [
 # request the current time for a timezone.
 #
 # GET /timezone/{area}/{location}/{region}
-export def "timezone get-by-area-location-region" [
+export def "get-timezone-area-location-region" [
   area: string
   location: string
   region: string
@@ -505,7 +505,7 @@ export def "timezone get-by-area-location-region" [
 # request the current time for a timezone.
 #
 # GET /timezone/{area}/{location}/{region}.txt
-export def "timezone get-by-area-location-region-1" [
+export def "get-timezone-area-location-region-txt" [
   area: string
   location: string
   region: string

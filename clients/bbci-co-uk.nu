@@ -108,7 +108,7 @@ def mixin-completer [] { ["live" "promotions"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "atoz-programmes get-ato-z-list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-programmes-ato-z-search" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -132,7 +132,7 @@ export def commands []: nothing -> table {
 #
 # GET /atoz/{letter}/programmes
 # operationId: Get_Programmes AtoZ search_
-export def "atoz-programmes get-ato-z-list" [
+export def "get-programmes-ato-z-search" [
   letter: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -176,7 +176,7 @@ export def "atoz-programmes get-ato-z-list" [
 #
 # GET /categories
 # operationId: Get_Categories_
-export def "categories get" [
+export def "get-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -212,7 +212,7 @@ export def "categories get" [
 #
 # GET /categories/{category}
 # operationId: Get_Sub-categories_
-export def "categories get-sub" [
+export def "get-sub-categories" [
   category: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -250,7 +250,7 @@ export def "categories get-sub" [
 #
 # GET /categories/{category}/episodes
 # operationId: Get_Episodes by category_
-export def "categories-episodes get" [
+export def "get-episodes-by-category" [
   category: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -293,7 +293,7 @@ export def "categories-episodes get" [
 #
 # GET /categories/{category}/highlights
 # operationId: Get_Highlights by category_
-export def "categories-highlights get" [
+export def "get-highlights-by-category" [
   category: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -334,7 +334,7 @@ export def "categories-highlights get" [
 #
 # GET /categories/{category}/programmes
 # operationId: Get_Programmes by category_
-export def "categories-programmes get" [
+export def "get-programmes-by-category" [
   category: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -376,7 +376,7 @@ export def "categories-programmes get" [
 #
 # GET /channels
 # operationId: Get_Channels_
-export def "channels get" [
+export def "get-channels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -413,7 +413,7 @@ export def "channels get" [
 #
 # GET /channels/{channel}/broadcasts
 # operationId: Get_Broadcasts by channel_
-export def "channels-broadcasts get" [
+export def "get-broadcasts-by-channel" [
   channel: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -456,7 +456,7 @@ export def "channels-broadcasts get" [
 #
 # GET /channels/{channel}/highlights
 # operationId: Get_Highlights by channel_
-export def "channels-highlights get" [
+export def "get-highlights-by-channel" [
   channel: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -498,7 +498,7 @@ export def "channels-highlights get" [
 #
 # GET /channels/{channel}/programmes
 # operationId: Get_Programmes by channel_
-export def "channels-programmes get" [
+export def "get-programmes-by-channel" [
   channel: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -540,7 +540,7 @@ export def "channels-programmes get" [
 #
 # GET /channels/{channel}/schedule/{date}
 # operationId: Get_Schedule by channel_
-export def "channels-schedule get" [
+export def "get-schedule-by-channel" [
   channel: string
   date: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -582,7 +582,7 @@ export def "channels-schedule get" [
 #
 # GET /clips/{pid}
 # operationId: Get_Clips_
-export def "clips get" [
+export def "get-clips" [
   pid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -621,7 +621,7 @@ export def "clips get" [
 #
 # GET /episodes/{pid}
 # operationId: Get_Programme by PID_
-export def "episodes get-programme" [
+export def "get-programme-by-pid" [
   pid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -661,7 +661,7 @@ export def "episodes get-programme" [
 #
 # GET /episodes/{pid}/next
 # operationId: Get_Onward_Journey
-export def "episodes-next get-onward-journey" [
+export def "get-onward-journey" [
   pid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -700,7 +700,7 @@ export def "episodes-next get-onward-journey" [
 #
 # GET /episodes/{pid}/postrolls
 # operationId: getPostRolls
-export def "episodes-post-rolls get" [
+export def "get-post-rolls" [
   pid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -739,7 +739,7 @@ export def "episodes-post-rolls get" [
 #
 # GET /episodes/{pid}/prerolls
 # operationId: Get_Trailers (pre-rolls)_
-export def "episodes-prerolls get-trailers-pre-rolls" [
+export def "get-trailers-pre-rolls" [
   pid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -778,7 +778,7 @@ export def "episodes-prerolls get-trailers-pre-rolls" [
 #
 # GET /episodes/{pid}/recommendations
 # operationId: Get_Programme recommendations_
-export def "episodes-recommendations get-programme" [
+export def "get-programme-recommendations" [
   pid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -819,7 +819,7 @@ export def "episodes-recommendations get-programme" [
 #
 # GET /groups/popular/episodes
 # operationId: Get_Programmes popular_
-export def "groups-popular-episodes get-programmes" [
+export def "get-programmes-popular" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -862,7 +862,7 @@ export def "groups-popular-episodes get-programmes" [
 #
 # GET /groups/{pid}/episodes
 # operationId: Get_Episodes by group_
-export def "groups-episodes get" [
+export def "get-episodes-by-group" [
   pid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -907,7 +907,7 @@ export def "groups-episodes get" [
 #
 # GET /home/highlights
 # operationId: Get_Programme highlights_
-export def "home-highlights get-programme" [
+export def "get-programme-highlights" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -946,7 +946,7 @@ export def "home-highlights get-programme" [
 #
 # GET /programmes/{pid}
 # operationId: Get_Programmes by parent PID_
-export def "programmes get-by-parent" [
+export def "get-programmes-by-parent-pid" [
   pid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -986,7 +986,7 @@ export def "programmes get-by-parent" [
 #
 # GET /programmes/{pid}/episodes
 # operationId: Get_Episodes by parent PID_
-export def "programmes-episodes get-by-parent" [
+export def "get-episodes-by-parent-pid" [
   pid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1026,7 +1026,7 @@ export def "programmes-episodes get-by-parent" [
 #
 # GET /regions
 # operationId: Get_Regions_
-export def "regions get" [
+export def "get-regions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1062,7 +1062,7 @@ export def "regions get" [
 #
 # GET /schema/ibl.json
 # operationId: Get_Schema_
-export def "schema-ibl-json get" [
+export def "get-schema" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1096,7 +1096,7 @@ export def "schema-ibl-json get" [
 #
 # GET /search
 # operationId: Search_
-export def "search list" [
+export def "search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1135,7 +1135,7 @@ export def "search list" [
 #
 # GET /search-suggest
 # operationId: Search-suggest_
-export def "search-suggest list" [
+export def "search-suggest" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1174,7 +1174,7 @@ export def "search-suggest list" [
 #
 # GET /status
 # operationId: Get_Status_
-export def "status get" [
+export def "get-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1208,7 +1208,7 @@ export def "status get" [
 #
 # GET /user/purchases
 # operationId: Get_User store purchases_
-export def "user-purchases get-store" [
+export def "get-user-store-purchases" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1244,7 +1244,7 @@ export def "user-purchases get-store" [
 #
 # GET /user/recommendations
 # operationId: Get_User store recommendations_
-export def "user-recommendations get-store" [
+export def "get-user-store-recommendations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1280,7 +1280,7 @@ export def "user-recommendations get-store" [
 #
 # GET /user/watching
 # operationId: Get_User watching_
-export def "user-watching get" [
+export def "get-user-watching" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

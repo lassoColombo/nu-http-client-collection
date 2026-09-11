@@ -100,7 +100,7 @@ def accept-completer [] { ["application/js" "application/json" "application/xml"
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "identity-company get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-identity-company" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -123,7 +123,7 @@ export def commands []: nothing -> table {
 # Generate full company identity
 #
 # GET /identity/company
-export def "identity-company get" [
+export def "get-identity-company" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -157,7 +157,7 @@ export def "identity-company get" [
 # Generate postal addresses
 #
 # GET /identity/company/address
-export def "identity-company-address get" [
+export def "get-identity-company-address" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -193,7 +193,7 @@ export def "identity-company-address get" [
 # Generate company name(s)
 #
 # GET /identity/company/name
-export def "identity-company-name get" [
+export def "get-identity-company-name" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -229,7 +229,7 @@ export def "identity-company-name get" [
 # Generate random company phone number(s)
 #
 # GET /identity/company/phonenumber
-export def "identity-company-phonenumber get" [
+export def "get-identity-company-phonenumber" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -265,7 +265,7 @@ export def "identity-company-phonenumber get" [
 # Generate full identity name, phone, email, address, credit card etc.
 #
 # GET /identity/person
-export def "identity-person get" [
+export def "get-identity-person" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -299,7 +299,7 @@ export def "identity-person get" [
 # Generate postal addresses
 #
 # GET /identity/person/address
-export def "identity-person-address get" [
+export def "get-identity-person-address" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -335,7 +335,7 @@ export def "identity-person-address get" [
 # Generate credit card details (number, type, expiration date, name on the card etc).
 #
 # GET /identity/person/creditcard
-export def "identity-person-creditcard get" [
+export def "get-identity-person-creditcard" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -371,7 +371,7 @@ export def "identity-person-creditcard get" [
 # Generate random email ids
 #
 # GET /identity/person/email
-export def "identity-person-email get" [
+export def "get-identity-person-email" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -407,7 +407,7 @@ export def "identity-person-email get" [
 # Generate full name(s)
 #
 # GET /identity/person/name
-export def "identity-person-name get" [
+export def "get-identity-person-name" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -444,7 +444,7 @@ export def "identity-person-name get" [
 # Generate first name (in a given gender)
 #
 # GET /identity/person/name/first
-export def "identity-person-name-first get" [
+export def "get-identity-person-name-first" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -481,7 +481,7 @@ export def "identity-person-name-first get" [
 # Generate last name(s)
 #
 # GET /identity/person/name/last
-export def "identity-person-name-last get" [
+export def "get-identity-person-name-last" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -517,7 +517,7 @@ export def "identity-person-name-last get" [
 # Generate random phone number(s)
 #
 # GET /identity/person/phonenumber
-export def "identity-person-phonenumber get" [
+export def "get-identity-person-phonenumber" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

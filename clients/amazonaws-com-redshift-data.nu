@@ -110,7 +110,7 @@ def x-amz-target-completer-9 [] { ["RedshiftData.ListTables"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-batch-execute-statement" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "batch-execute-statement" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -134,7 +134,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: BatchExecuteStatement
-export def "api create-batch-execute-statement" [
+export def "batch-execute-statement" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -190,7 +190,7 @@ export def "api create-batch-execute-statement" [
 #
 # POST /
 # operationId: CancelStatement
-export def "api cancel-statement" [
+export def "cancel-statement" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -238,7 +238,7 @@ export def "api cancel-statement" [
 #
 # POST /
 # operationId: DescribeStatement
-export def "api get-statement" [
+export def "describe-statement" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -286,7 +286,7 @@ export def "api get-statement" [
 #
 # POST /
 # operationId: DescribeTable
-export def "api get-table" [
+export def "describe-table" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -346,7 +346,7 @@ export def "api get-table" [
 #
 # POST /
 # operationId: ExecuteStatement
-export def "api create-execute-statement" [
+export def "execute-statement" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -403,7 +403,7 @@ export def "api create-execute-statement" [
 #
 # POST /
 # operationId: GetStatementResult
-export def "api get-statement-result" [
+export def "get-statement-result" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -454,7 +454,7 @@ export def "api get-statement-result" [
 #
 # POST /
 # operationId: ListDatabases
-export def "api list-databases" [
+export def "list-databases" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -511,7 +511,7 @@ export def "api list-databases" [
 #
 # POST /
 # operationId: ListSchemas
-export def "api list-schemas" [
+export def "list-schemas" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -570,7 +570,7 @@ export def "api list-schemas" [
 #
 # POST /
 # operationId: ListStatements
-export def "api list-statements" [
+export def "list-statements" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -625,7 +625,7 @@ export def "api list-statements" [
 #
 # POST /
 # operationId: ListTables
-export def "api list-tables" [
+export def "list-tables" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

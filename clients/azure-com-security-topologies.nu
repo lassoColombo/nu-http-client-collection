@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-security-locations-topologies list-topology-by-home-region" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "topology-list-by-home-region" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -122,7 +122,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Security/locations/{ascLocation}/topologies
 # operationId: Topology_ListByHomeRegion
-export def "subscriptions-providers-microsoft-security-locations-topologies list-topology-by-home-region" [
+export def "topology-list-by-home-region" [
   subscription_id: string
   asc_location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -162,7 +162,7 @@ export def "subscriptions-providers-microsoft-security-locations-topologies list
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Security/topologies
 # operationId: Topology_List
-export def "subscriptions-providers-microsoft-security-topologies list-topology" [
+export def "topology-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -200,7 +200,7 @@ export def "subscriptions-providers-microsoft-security-topologies list-topology"
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Security/locations/{ascLocation}/topologies/{topologyResourceName}
 # operationId: Topology_Get
-export def "subscriptions-resource-groups-providers-microsoft-security-locations-topologies get-topology" [
+export def "topology-get" [
   subscription_id: string
   resource_group_name: string
   asc_location: string

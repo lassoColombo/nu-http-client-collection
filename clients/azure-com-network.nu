@@ -119,7 +119,7 @@ def processor-architecture-completer [] { ["Amd64" "X86"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-network-application-gateways list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "application-gateways-list-all" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -143,7 +143,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/applicationGateways
 # operationId: ApplicationGateways_ListAll
-export def "subscriptions-providers-microsoft-network-application-gateways list" [
+export def "application-gateways-list-all" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -182,7 +182,7 @@ export def "subscriptions-providers-microsoft-network-application-gateways list"
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/expressRouteCircuits
 # operationId: ExpressRouteCircuits_ListAll
-export def "subscriptions-providers-microsoft-network-express-route-circuits list" [
+export def "express-route-circuits-list-all" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -221,7 +221,7 @@ export def "subscriptions-providers-microsoft-network-express-route-circuits lis
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/expressRouteServiceProviders
 # operationId: ExpressRouteServiceProviders_List
-export def "subscriptions-providers-microsoft-network-express-route-service-providers list" [
+export def "express-route-service-providers-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -260,7 +260,7 @@ export def "subscriptions-providers-microsoft-network-express-route-service-prov
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/loadBalancers
 # operationId: LoadBalancers_ListAll
-export def "subscriptions-providers-microsoft-network-load-balancers list" [
+export def "load-balancers-list-all" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -299,7 +299,7 @@ export def "subscriptions-providers-microsoft-network-load-balancers list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/locations/{location}/CheckDnsNameAvailability
 # operationId: CheckDnsNameAvailability
-export def "subscriptions-providers-microsoft-network-locations-check-dns-name-availability check" [
+export def "check-dns-name-availability" [
   subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -341,7 +341,7 @@ export def "subscriptions-providers-microsoft-network-locations-check-dns-name-a
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/locations/{location}/usages
 # operationId: Usages_List
-export def "subscriptions-providers-microsoft-network-locations-usages list" [
+export def "usages-list" [
   subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -382,7 +382,7 @@ export def "subscriptions-providers-microsoft-network-locations-usages list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/networkInterfaces
 # operationId: NetworkInterfaces_ListAll
-export def "subscriptions-providers-microsoft-network-network-interfaces list" [
+export def "network-interfaces-list-all" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -421,7 +421,7 @@ export def "subscriptions-providers-microsoft-network-network-interfaces list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/networkSecurityGroups
 # operationId: NetworkSecurityGroups_ListAll
-export def "subscriptions-providers-microsoft-network-network-security-groups list" [
+export def "network-security-groups-list-all" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -460,7 +460,7 @@ export def "subscriptions-providers-microsoft-network-network-security-groups li
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/publicIPAddresses
 # operationId: PublicIPAddresses_ListAll
-export def "subscriptions-providers-microsoft-network-public-ip-addresses list" [
+export def "public-ip-addresses-list-all" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -499,7 +499,7 @@ export def "subscriptions-providers-microsoft-network-public-ip-addresses list" 
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/routeTables
 # operationId: RouteTables_ListAll
-export def "subscriptions-providers-microsoft-network-route-tables list" [
+export def "route-tables-list-all" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -538,7 +538,7 @@ export def "subscriptions-providers-microsoft-network-route-tables list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/virtualNetworks
 # operationId: VirtualNetworks_ListAll
-export def "subscriptions-providers-microsoft-network-virtual-networks list" [
+export def "virtual-networks-list-all" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -577,7 +577,7 @@ export def "subscriptions-providers-microsoft-network-virtual-networks list" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/applicationGateways
 # operationId: ApplicationGateways_List
-export def "subscriptions-resource-groups-providers-microsoft-network-application-gateways list" [
+export def "application-gateways-list" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -618,7 +618,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-applicatio
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/applicationGateways/{applicationGatewayName}
 # operationId: ApplicationGateways_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-application-gateways delete" [
+export def "application-gateways-delete" [
   subscription_id: string
   resource_group_name: string
   application_gateway_name: string
@@ -661,7 +661,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-applicatio
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/applicationGateways/{applicationGatewayName}
 # operationId: ApplicationGateways_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-application-gateways get" [
+export def "application-gateways-get" [
   subscription_id: string
   resource_group_name: string
   application_gateway_name: string
@@ -705,7 +705,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-applicatio
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/applicationGateways/{applicationGatewayName}
 # operationId: ApplicationGateways_CreateOrUpdate
 # --properties shape: {authenticationCertificates?: list, backendAddressPools?: list, backendHttpSettingsCollection?: list, frontendIPConfigurations?: list, frontendPorts?: list, gatewayIPConfigurations?: list, httpListeners?: list, probes?: list, provisioningState?: string, requestRoutingRules?: list, resourceGuid?: string, sku?: any, sslCertificates?: list, sslPolicy?: any, urlPathMaps?: list}
-export def "subscriptions-resource-groups-providers-microsoft-network-application-gateways create-or-update" [
+export def "application-gateways-create-or-update" [
   subscription_id: string
   resource_group_name: string
   application_gateway_name: string
@@ -756,7 +756,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-applicatio
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/applicationGateways/{applicationGatewayName}/start
 # operationId: ApplicationGateways_Start
-export def "subscriptions-resource-groups-providers-microsoft-network-application-gateways-start start" [
+export def "application-gateways-start" [
   subscription_id: string
   resource_group_name: string
   application_gateway_name: string
@@ -799,7 +799,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-applicatio
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/applicationGateways/{applicationGatewayName}/stop
 # operationId: ApplicationGateways_Stop
-export def "subscriptions-resource-groups-providers-microsoft-network-application-gateways-stop stop" [
+export def "application-gateways-stop" [
   subscription_id: string
   resource_group_name: string
   application_gateway_name: string
@@ -842,7 +842,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-applicatio
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/connections
 # operationId: VirtualNetworkGatewayConnections_List
-export def "subscriptions-resource-groups-providers-microsoft-network-connections list-virtual-gateway" [
+export def "virtual-network-gateway-connections-list" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -883,7 +883,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-connection
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/connections/{virtualNetworkGatewayConnectionName}
 # operationId: VirtualNetworkGatewayConnections_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-connections delete-virtual-gateway" [
+export def "virtual-network-gateway-connections-delete" [
   subscription_id: string
   resource_group_name: string
   virtual_network_gateway_connection_name: string
@@ -926,7 +926,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-connection
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/connections/{virtualNetworkGatewayConnectionName}
 # operationId: VirtualNetworkGatewayConnections_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-connections get-virtual-gateway" [
+export def "virtual-network-gateway-connections-get" [
   subscription_id: string
   resource_group_name: string
   virtual_network_gateway_connection_name: string
@@ -970,7 +970,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-connection
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/connections/{virtualNetworkGatewayConnectionName}
 # operationId: VirtualNetworkGatewayConnections_CreateOrUpdate
 # --properties shape: {authorizationKey?: string, connectionStatus?: "Unknown"|"Connecting"|"Connected"|"NotConnected", connectionType?: "IPsec"|"Vnet2Vnet"|"ExpressRoute"|"VPNClient", egressBytesTransferred?: int, enableBgp?: bool, ingressBytesTransferred?: int, localNetworkGateway2?: any, peer?: any, provisioningState?: string, resourceGuid?: string, routingWeight?: int, sharedKey?: string, virtualNetworkGateway1?: any, virtualNetworkGateway2?: any}
-export def "subscriptions-resource-groups-providers-microsoft-network-connections create-virtual-gateway-or-update" [
+export def "virtual-network-gateway-connections-create-or-update" [
   subscription_id: string
   resource_group_name: string
   virtual_network_gateway_connection_name: string
@@ -1021,7 +1021,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-connection
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/connections/{virtualNetworkGatewayConnectionName}/sharedkey
 # operationId: VirtualNetworkGatewayConnections_GetSharedKey
-export def "subscriptions-resource-groups-providers-microsoft-network-connections-sharedkey get-virtual-gateway-shared-key" [
+export def "virtual-network-gateway-connections-get-shared-key" [
   subscription_id: string
   resource_group_name: string
   virtual_network_gateway_connection_name: string
@@ -1064,7 +1064,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-connection
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/connections/{virtualNetworkGatewayConnectionName}/sharedkey
 # operationId: VirtualNetworkGatewayConnections_SetSharedKey
-export def "subscriptions-resource-groups-providers-microsoft-network-connections-sharedkey update-virtual-gateway-shared-key" [
+export def "virtual-network-gateway-connections-set-shared-key" [
   subscription_id: string
   resource_group_name: string
   virtual_network_gateway_connection_name: string
@@ -1111,7 +1111,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-connection
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/connections/{virtualNetworkGatewayConnectionName}/sharedkey/reset
 # operationId: VirtualNetworkGatewayConnections_ResetSharedKey
-export def "subscriptions-resource-groups-providers-microsoft-network-connections-sharedkey-reset reset-virtual-gateway-shared-key" [
+export def "virtual-network-gateway-connections-reset-shared-key" [
   subscription_id: string
   resource_group_name: string
   virtual_network_gateway_connection_name: string
@@ -1158,7 +1158,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-connection
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteCircuits
 # operationId: ExpressRouteCircuits_List
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits list" [
+export def "express-route-circuits-list" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1199,7 +1199,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteCircuits/{circuitName}
 # operationId: ExpressRouteCircuits_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits delete" [
+export def "express-route-circuits-delete" [
   subscription_id: string
   resource_group_name: string
   circuit_name: string
@@ -1242,7 +1242,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteCircuits/{circuitName}
 # operationId: ExpressRouteCircuits_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits get" [
+export def "express-route-circuits-get" [
   subscription_id: string
   resource_group_name: string
   circuit_name: string
@@ -1287,7 +1287,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 # operationId: ExpressRouteCircuits_CreateOrUpdate
 # --properties shape: {allowClassicOperations?: bool, authorizations?: list, circuitProvisioningState?: string, gatewayManagerEtag?: string, peerings?: list, provisioningState?: string, serviceKey?: string, serviceProviderNotes?: string, serviceProviderProperties?: any, serviceProviderProvisioningState?: "NotProvisioned"|"Provisioning"|"Provisioned"|"Deprovisioning"}
 # --sku shape: {family?: "UnlimitedData"|"MeteredData", name?: string, tier?: "Standard"|"Premium"}
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits create-or-update" [
+export def "express-route-circuits-create-or-update" [
   subscription_id: string
   resource_group_name: string
   circuit_name: string
@@ -1339,7 +1339,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteCircuits/{circuitName}/authorizations
 # operationId: ExpressRouteCircuitAuthorizations_List
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-authorizations list" [
+export def "express-route-circuit-authorizations-list" [
   subscription_id: string
   resource_group_name: string
   circuit_name: string
@@ -1382,7 +1382,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteCircuits/{circuitName}/authorizations/{authorizationName}
 # operationId: ExpressRouteCircuitAuthorizations_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-authorizations delete" [
+export def "express-route-circuit-authorizations-delete" [
   subscription_id: string
   resource_group_name: string
   circuit_name: string
@@ -1427,7 +1427,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteCircuits/{circuitName}/authorizations/{authorizationName}
 # operationId: ExpressRouteCircuitAuthorizations_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-authorizations get" [
+export def "express-route-circuit-authorizations-get" [
   subscription_id: string
   resource_group_name: string
   circuit_name: string
@@ -1473,7 +1473,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteCircuits/{circuitName}/authorizations/{authorizationName}
 # operationId: ExpressRouteCircuitAuthorizations_CreateOrUpdate
 # --properties shape: {authorizationKey?: string, authorizationUseStatus?: "Available"|"InUse", provisioningState?: string}
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-authorizations create-or-update" [
+export def "express-route-circuit-authorizations-create-or-update" [
   subscription_id: string
   resource_group_name: string
   circuit_name: string
@@ -1525,7 +1525,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteCircuits/{circuitName}/peerings
 # operationId: ExpressRouteCircuitPeerings_List
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-peerings list" [
+export def "express-route-circuit-peerings-list" [
   subscription_id: string
   resource_group_name: string
   circuit_name: string
@@ -1568,7 +1568,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteCircuits/{circuitName}/peerings/{peeringName}
 # operationId: ExpressRouteCircuitPeerings_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-peerings delete" [
+export def "express-route-circuit-peerings-delete" [
   subscription_id: string
   resource_group_name: string
   circuit_name: string
@@ -1613,7 +1613,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteCircuits/{circuitName}/peerings/{peeringName}
 # operationId: ExpressRouteCircuitPeerings_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-peerings get" [
+export def "express-route-circuit-peerings-get" [
   subscription_id: string
   resource_group_name: string
   circuit_name: string
@@ -1659,7 +1659,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteCircuits/{circuitName}/peerings/{peeringName}
 # operationId: ExpressRouteCircuitPeerings_CreateOrUpdate
 # --properties shape: {azureASN?: int, gatewayManagerEtag?: string, lastModifiedBy?: string, microsoftPeeringConfig?: any, peerASN?: int, peeringType?: "AzurePublicPeering"|"AzurePrivatePeering"|"MicrosoftPeering", primaryAzurePort?: string, primaryPeerAddressPrefix?: string, provisioningState?: string, secondaryAzurePort?: string, secondaryPeerAddressPrefix?: string, sharedKey?: string, state?: "Disabled"|"Enabled", stats?: any, vlanId?: int}
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-peerings create-or-update" [
+export def "express-route-circuit-peerings-create-or-update" [
   subscription_id: string
   resource_group_name: string
   circuit_name: string
@@ -1711,7 +1711,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteCircuits/{circuitName}/peerings/{peeringName}/arpTables/{devicePath}
 # operationId: ExpressRouteCircuits_ListArpTable
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-peerings-arp-tables list" [
+export def "express-route-circuits-list-arp-table" [
   subscription_id: string
   resource_group_name: string
   circuit_name: string
@@ -1758,7 +1758,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteCircuits/{circuitName}/peerings/{peeringName}/routeTables/{devicePath}
 # operationId: ExpressRouteCircuits_ListRoutesTable
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-peerings-route-tables list" [
+export def "express-route-circuits-list-routes-table" [
   subscription_id: string
   resource_group_name: string
   circuit_name: string
@@ -1805,7 +1805,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteCircuits/{circuitName}/peerings/{peeringName}/routeTablesSummary/{devicePath}
 # operationId: ExpressRouteCircuits_ListRoutesTableSummary
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-peerings-route-tables-summary list" [
+export def "express-route-circuits-list-routes-table-summary" [
   subscription_id: string
   resource_group_name: string
   circuit_name: string
@@ -1852,7 +1852,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteCircuits/{circuitName}/peerings/{peeringName}/stats
 # operationId: ExpressRouteCircuits_GetPeeringStats
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-peerings-stats get" [
+export def "express-route-circuits-get-peering-stats" [
   subscription_id: string
   resource_group_name: string
   circuit_name: string
@@ -1897,7 +1897,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteCircuits/{circuitName}/stats
 # operationId: ExpressRouteCircuits_GetStats
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-circuits-stats get" [
+export def "express-route-circuits-get-stats" [
   subscription_id: string
   resource_group_name: string
   circuit_name: string
@@ -1940,7 +1940,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/loadBalancers
 # operationId: LoadBalancers_List
-export def "subscriptions-resource-groups-providers-microsoft-network-load-balancers list" [
+export def "load-balancers-list" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1981,7 +1981,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-load-balan
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/loadBalancers/{loadBalancerName}
 # operationId: LoadBalancers_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-load-balancers delete" [
+export def "load-balancers-delete" [
   subscription_id: string
   resource_group_name: string
   load_balancer_name: string
@@ -2024,7 +2024,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-load-balan
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/loadBalancers/{loadBalancerName}
 # operationId: LoadBalancers_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-load-balancers get" [
+export def "load-balancers-get" [
   subscription_id: string
   resource_group_name: string
   load_balancer_name: string
@@ -2069,7 +2069,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-load-balan
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/loadBalancers/{loadBalancerName}
 # operationId: LoadBalancers_CreateOrUpdate
 # --properties shape: {backendAddressPools?: list, frontendIPConfigurations?: list, inboundNatPools?: list, inboundNatRules?: list, loadBalancingRules?: list, outboundNatRules?: list, probes?: list, provisioningState?: string, resourceGuid?: string}
-export def "subscriptions-resource-groups-providers-microsoft-network-load-balancers create-or-update" [
+export def "load-balancers-create-or-update" [
   subscription_id: string
   resource_group_name: string
   load_balancer_name: string
@@ -2120,7 +2120,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-load-balan
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/localNetworkGateways
 # operationId: LocalNetworkGateways_List
-export def "subscriptions-resource-groups-providers-microsoft-network-local-network-gateways list" [
+export def "local-network-gateways-list" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2161,7 +2161,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-local-netw
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/localNetworkGateways/{localNetworkGatewayName}
 # operationId: LocalNetworkGateways_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-local-network-gateways delete" [
+export def "local-network-gateways-delete" [
   subscription_id: string
   resource_group_name: string
   local_network_gateway_name: string
@@ -2204,7 +2204,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-local-netw
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/localNetworkGateways/{localNetworkGatewayName}
 # operationId: LocalNetworkGateways_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-local-network-gateways get" [
+export def "local-network-gateways-get" [
   subscription_id: string
   resource_group_name: string
   local_network_gateway_name: string
@@ -2248,7 +2248,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-local-netw
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/localNetworkGateways/{localNetworkGatewayName}
 # operationId: LocalNetworkGateways_CreateOrUpdate
 # --properties shape: {bgpSettings?: any, gatewayIpAddress?: string, localNetworkAddressSpace?: any, provisioningState?: string, resourceGuid?: string}
-export def "subscriptions-resource-groups-providers-microsoft-network-local-network-gateways create-or-update" [
+export def "local-network-gateways-create-or-update" [
   subscription_id: string
   resource_group_name: string
   local_network_gateway_name: string
@@ -2299,7 +2299,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-local-netw
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkInterfaces
 # operationId: NetworkInterfaces_List
-export def "subscriptions-resource-groups-providers-microsoft-network-network-interfaces list" [
+export def "network-interfaces-list" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2340,7 +2340,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-in
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkInterfaces/{networkInterfaceName}
 # operationId: NetworkInterfaces_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-network-interfaces delete" [
+export def "network-interfaces-delete" [
   subscription_id: string
   resource_group_name: string
   network_interface_name: string
@@ -2383,7 +2383,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-in
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkInterfaces/{networkInterfaceName}
 # operationId: NetworkInterfaces_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-network-interfaces get" [
+export def "network-interfaces-get" [
   subscription_id: string
   resource_group_name: string
   network_interface_name: string
@@ -2428,7 +2428,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-in
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkInterfaces/{networkInterfaceName}
 # operationId: NetworkInterfaces_CreateOrUpdate
 # --properties shape: {dnsSettings?: any, enableIPForwarding?: bool, ipConfigurations?: list, macAddress?: string, networkSecurityGroup?: any, primary?: bool, provisioningState?: string, resourceGuid?: string, virtualMachine?: any}
-export def "subscriptions-resource-groups-providers-microsoft-network-network-interfaces create-or-update" [
+export def "network-interfaces-create-or-update" [
   subscription_id: string
   resource_group_name: string
   network_interface_name: string
@@ -2479,7 +2479,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-in
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkInterfaces/{networkInterfaceName}/effectiveNetworkSecurityGroups
 # operationId: NetworkInterfaces_ListEffectiveNetworkSecurityGroups
-export def "subscriptions-resource-groups-providers-microsoft-network-network-interfaces-effective-network-security-groups list" [
+export def "network-interfaces-list-effective-network-security-groups" [
   subscription_id: string
   resource_group_name: string
   network_interface_name: string
@@ -2522,7 +2522,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-in
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkInterfaces/{networkInterfaceName}/effectiveRouteTable
 # operationId: NetworkInterfaces_GetEffectiveRouteTable
-export def "subscriptions-resource-groups-providers-microsoft-network-network-interfaces-effective-route-table get" [
+export def "network-interfaces-get-effective-route-table" [
   subscription_id: string
   resource_group_name: string
   network_interface_name: string
@@ -2565,7 +2565,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-in
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkSecurityGroups
 # operationId: NetworkSecurityGroups_List
-export def "subscriptions-resource-groups-providers-microsoft-network-network-security-groups list" [
+export def "network-security-groups-list" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2606,7 +2606,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-se
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkSecurityGroups/{networkSecurityGroupName}
 # operationId: NetworkSecurityGroups_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-network-security-groups delete" [
+export def "network-security-groups-delete" [
   subscription_id: string
   resource_group_name: string
   network_security_group_name: string
@@ -2649,7 +2649,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-se
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkSecurityGroups/{networkSecurityGroupName}
 # operationId: NetworkSecurityGroups_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-network-security-groups get" [
+export def "network-security-groups-get" [
   subscription_id: string
   resource_group_name: string
   network_security_group_name: string
@@ -2694,7 +2694,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-se
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkSecurityGroups/{networkSecurityGroupName}
 # operationId: NetworkSecurityGroups_CreateOrUpdate
 # --properties shape: {defaultSecurityRules?: list, provisioningState?: string, resourceGuid?: string, securityRules?: list}
-export def "subscriptions-resource-groups-providers-microsoft-network-network-security-groups create-or-update" [
+export def "network-security-groups-create-or-update" [
   subscription_id: string
   resource_group_name: string
   network_security_group_name: string
@@ -2745,7 +2745,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-se
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkSecurityGroups/{networkSecurityGroupName}/securityRules
 # operationId: SecurityRules_List
-export def "subscriptions-resource-groups-providers-microsoft-network-network-security-groups-security-rules list" [
+export def "security-rules-list" [
   subscription_id: string
   resource_group_name: string
   network_security_group_name: string
@@ -2788,7 +2788,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-se
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkSecurityGroups/{networkSecurityGroupName}/securityRules/{securityRuleName}
 # operationId: SecurityRules_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-network-security-groups-security-rules delete" [
+export def "security-rules-delete" [
   subscription_id: string
   resource_group_name: string
   network_security_group_name: string
@@ -2833,7 +2833,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-se
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkSecurityGroups/{networkSecurityGroupName}/securityRules/{securityRuleName}
 # operationId: SecurityRules_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-network-security-groups-security-rules get" [
+export def "security-rules-get" [
   subscription_id: string
   resource_group_name: string
   network_security_group_name: string
@@ -2879,7 +2879,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-se
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkSecurityGroups/{networkSecurityGroupName}/securityRules/{securityRuleName}
 # operationId: SecurityRules_CreateOrUpdate
 # --properties shape: {access: "Allow"|"Deny", description?: string, destinationAddressPrefix: string, destinationPortRange?: string, direction: "Inbound"|"Outbound", priority?: int, protocol: "Tcp"|"Udp"|"*", provisioningState?: string, sourceAddressPrefix: string, sourcePortRange?: string}
-export def "subscriptions-resource-groups-providers-microsoft-network-network-security-groups-security-rules create-or-update" [
+export def "security-rules-create-or-update" [
   subscription_id: string
   resource_group_name: string
   network_security_group_name: string
@@ -2931,7 +2931,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-se
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/publicIPAddresses
 # operationId: PublicIPAddresses_List
-export def "subscriptions-resource-groups-providers-microsoft-network-public-ip-addresses list" [
+export def "public-ip-addresses-list" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2972,7 +2972,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-public-ip-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/publicIPAddresses/{publicIpAddressName}
 # operationId: PublicIPAddresses_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-public-ip-addresses delete" [
+export def "public-ip-addresses-delete" [
   subscription_id: string
   resource_group_name: string
   public_ip_address_name: string
@@ -3015,7 +3015,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-public-ip-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/publicIPAddresses/{publicIpAddressName}
 # operationId: PublicIPAddresses_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-public-ip-addresses get" [
+export def "public-ip-addresses-get" [
   subscription_id: string
   resource_group_name: string
   public_ip_address_name: string
@@ -3060,7 +3060,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-public-ip-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/publicIPAddresses/{publicIpAddressName}
 # operationId: PublicIPAddresses_CreateOrUpdate
 # --properties shape: {dnsSettings?: any, idleTimeoutInMinutes?: int, ipAddress?: string, ipConfiguration?: any, provisioningState?: string, publicIPAddressVersion?: "IPv4"|"IPv6", publicIPAllocationMethod?: "Static"|"Dynamic", resourceGuid?: string}
-export def "subscriptions-resource-groups-providers-microsoft-network-public-ip-addresses create-or-update" [
+export def "public-ip-addresses-create-or-update" [
   subscription_id: string
   resource_group_name: string
   public_ip_address_name: string
@@ -3111,7 +3111,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-public-ip-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/routeTables
 # operationId: RouteTables_List
-export def "subscriptions-resource-groups-providers-microsoft-network-route-tables list" [
+export def "route-tables-list" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3152,7 +3152,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-route-tabl
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/routeTables/{routeTableName}
 # operationId: RouteTables_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-route-tables delete" [
+export def "route-tables-delete" [
   subscription_id: string
   resource_group_name: string
   route_table_name: string
@@ -3195,7 +3195,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-route-tabl
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/routeTables/{routeTableName}
 # operationId: RouteTables_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-route-tables get" [
+export def "route-tables-get" [
   subscription_id: string
   resource_group_name: string
   route_table_name: string
@@ -3240,7 +3240,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-route-tabl
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/routeTables/{routeTableName}
 # operationId: RouteTables_CreateOrUpdate
 # --properties shape: {provisioningState?: string, routes?: list}
-export def "subscriptions-resource-groups-providers-microsoft-network-route-tables create-or-update" [
+export def "route-tables-create-or-update" [
   subscription_id: string
   resource_group_name: string
   route_table_name: string
@@ -3291,7 +3291,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-route-tabl
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/routeTables/{routeTableName}/routes
 # operationId: Routes_List
-export def "subscriptions-resource-groups-providers-microsoft-network-route-tables-routes list" [
+export def "routes-list" [
   subscription_id: string
   resource_group_name: string
   route_table_name: string
@@ -3334,7 +3334,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-route-tabl
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/routeTables/{routeTableName}/routes/{routeName}
 # operationId: Routes_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-route-tables-routes delete" [
+export def "routes-delete" [
   subscription_id: string
   resource_group_name: string
   route_table_name: string
@@ -3379,7 +3379,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-route-tabl
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/routeTables/{routeTableName}/routes/{routeName}
 # operationId: Routes_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-route-tables-routes get" [
+export def "routes-get" [
   subscription_id: string
   resource_group_name: string
   route_table_name: string
@@ -3425,7 +3425,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-route-tabl
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/routeTables/{routeTableName}/routes/{routeName}
 # operationId: Routes_CreateOrUpdate
 # --properties shape: {addressPrefix?: string, nextHopIpAddress?: string, nextHopType: "VirtualNetworkGateway"|"VnetLocal"|"Internet"|"VirtualAppliance"|"None", provisioningState?: string}
-export def "subscriptions-resource-groups-providers-microsoft-network-route-tables-routes create-or-update" [
+export def "routes-create-or-update" [
   subscription_id: string
   resource_group_name: string
   route_table_name: string
@@ -3477,7 +3477,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-route-tabl
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworkGateways
 # operationId: VirtualNetworkGateways_List
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-network-gateways list" [
+export def "virtual-network-gateways-list" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3518,7 +3518,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworkGateways/{virtualNetworkGatewayName}
 # operationId: VirtualNetworkGateways_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-network-gateways delete" [
+export def "virtual-network-gateways-delete" [
   subscription_id: string
   resource_group_name: string
   virtual_network_gateway_name: string
@@ -3561,7 +3561,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworkGateways/{virtualNetworkGatewayName}
 # operationId: VirtualNetworkGateways_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-network-gateways get" [
+export def "virtual-network-gateways-get" [
   subscription_id: string
   resource_group_name: string
   virtual_network_gateway_name: string
@@ -3605,7 +3605,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworkGateways/{virtualNetworkGatewayName}
 # operationId: VirtualNetworkGateways_CreateOrUpdate
 # --properties shape: {activeActive?: bool, bgpSettings?: any, enableBgp?: bool, gatewayDefaultSite?: any, gatewayType?: "Vpn"|"ExpressRoute", ipConfigurations?: list, provisioningState?: string, resourceGuid?: string, sku?: any, vpnClientConfiguration?: any, vpnType?: "PolicyBased"|"RouteBased"}
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-network-gateways create-or-update" [
+export def "virtual-network-gateways-create-or-update" [
   subscription_id: string
   resource_group_name: string
   virtual_network_gateway_name: string
@@ -3656,7 +3656,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworkGateways/{virtualNetworkGatewayName}/generatevpnclientpackage
 # operationId: VirtualNetworkGateways_Generatevpnclientpackage
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-network-gateways-generatevpnclientpackage create" [
+export def "virtual-network-gateways-generatevpnclientpackage" [
   subscription_id: string
   resource_group_name: string
   virtual_network_gateway_name: string
@@ -3704,7 +3704,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworkGateways/{virtualNetworkGatewayName}/reset
 # operationId: VirtualNetworkGateways_Reset
 # --properties shape: {activeActive?: bool, bgpSettings?: any, enableBgp?: bool, gatewayDefaultSite?: any, gatewayType?: "Vpn"|"ExpressRoute", ipConfigurations?: list, provisioningState?: string, resourceGuid?: string, sku?: any, vpnClientConfiguration?: any, vpnType?: "PolicyBased"|"RouteBased"}
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-network-gateways-reset reset" [
+export def "virtual-network-gateways-reset" [
   subscription_id: string
   resource_group_name: string
   virtual_network_gateway_name: string
@@ -3755,7 +3755,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworks
 # operationId: VirtualNetworks_List
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks list" [
+export def "virtual-networks-list" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3796,7 +3796,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworks/{virtualNetworkName}
 # operationId: VirtualNetworks_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks delete" [
+export def "virtual-networks-delete" [
   subscription_id: string
   resource_group_name: string
   virtual_network_name: string
@@ -3839,7 +3839,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworks/{virtualNetworkName}
 # operationId: VirtualNetworks_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks get" [
+export def "virtual-networks-get" [
   subscription_id: string
   resource_group_name: string
   virtual_network_name: string
@@ -3884,7 +3884,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworks/{virtualNetworkName}
 # operationId: VirtualNetworks_CreateOrUpdate
 # --properties shape: {VirtualNetworkPeerings?: list, addressSpace?: any, dhcpOptions?: any, provisioningState?: string, resourceGuid?: string, subnets?: list}
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks create-or-update" [
+export def "virtual-networks-create-or-update" [
   subscription_id: string
   resource_group_name: string
   virtual_network_name: string
@@ -3935,7 +3935,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworks/{virtualNetworkName}/CheckIPAddressAvailability
 # operationId: VirtualNetworks_CheckIPAddressAvailability
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks-check-ip-address-availability check" [
+export def "virtual-networks-check-ip-address-availability" [
   subscription_id: string
   resource_group_name: string
   virtual_network_name: string
@@ -3979,7 +3979,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworks/{virtualNetworkName}/subnets
 # operationId: Subnets_List
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks-subnets list" [
+export def "subnets-list" [
   subscription_id: string
   resource_group_name: string
   virtual_network_name: string
@@ -4022,7 +4022,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworks/{virtualNetworkName}/subnets/{subnetName}
 # operationId: Subnets_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks-subnets delete" [
+export def "subnets-delete" [
   subscription_id: string
   resource_group_name: string
   virtual_network_name: string
@@ -4067,7 +4067,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworks/{virtualNetworkName}/subnets/{subnetName}
 # operationId: Subnets_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks-subnets get" [
+export def "subnets-get" [
   subscription_id: string
   resource_group_name: string
   virtual_network_name: string
@@ -4114,7 +4114,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworks/{virtualNetworkName}/subnets/{subnetName}
 # operationId: Subnets_CreateOrUpdate
 # --properties shape: {addressPrefix?: string, networkSecurityGroup?: any, provisioningState?: string, resourceNavigationLinks?: list, routeTable?: any}
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks-subnets create-or-update" [
+export def "subnets-create-or-update" [
   subscription_id: string
   resource_group_name: string
   virtual_network_name: string
@@ -4166,7 +4166,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworks/{virtualNetworkName}/virtualNetworkPeerings
 # operationId: VirtualNetworkPeerings_List
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks-virtual-network-peerings list" [
+export def "virtual-network-peerings-list" [
   subscription_id: string
   resource_group_name: string
   virtual_network_name: string
@@ -4209,7 +4209,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworks/{virtualNetworkName}/virtualNetworkPeerings/{virtualNetworkPeeringName}
 # operationId: VirtualNetworkPeerings_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks-virtual-network-peerings delete" [
+export def "virtual-network-peerings-delete" [
   subscription_id: string
   resource_group_name: string
   virtual_network_name: string
@@ -4254,7 +4254,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworks/{virtualNetworkName}/virtualNetworkPeerings/{virtualNetworkPeeringName}
 # operationId: VirtualNetworkPeerings_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks-virtual-network-peerings get" [
+export def "virtual-network-peerings-get" [
   subscription_id: string
   resource_group_name: string
   virtual_network_name: string
@@ -4300,7 +4300,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworks/{virtualNetworkName}/virtualNetworkPeerings/{virtualNetworkPeeringName}
 # operationId: VirtualNetworkPeerings_CreateOrUpdate
 # --properties shape: {allowForwardedTraffic?: bool, allowGatewayTransit?: bool, allowVirtualNetworkAccess?: bool, peeringState?: "Initiated"|"Connected"|"Disconnected", provisioningState?: string, remoteVirtualNetwork?: any, useRemoteGateways?: bool}
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks-virtual-network-peerings create-or-update" [
+export def "virtual-network-peerings-create-or-update" [
   subscription_id: string
   resource_group_name: string
   virtual_network_name: string
@@ -4352,7 +4352,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/microsoft.Compute/virtualMachineScaleSets/{virtualMachineScaleSetName}/networkInterfaces
 # operationId: NetworkInterfaces_ListVirtualMachineScaleSetNetworkInterfaces
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machine-scale-sets-network-interfaces list" [
+export def "network-interfaces-list-virtual-machine-scale-set-network-interfaces" [
   subscription_id: string
   resource_group_name: string
   virtual_machine_scale_set_name: string
@@ -4395,7 +4395,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/microsoft.Compute/virtualMachineScaleSets/{virtualMachineScaleSetName}/virtualMachines/{virtualmachineIndex}/networkInterfaces
 # operationId: NetworkInterfaces_ListVirtualMachineScaleSetVMNetworkInterfaces
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machine-scale-sets-virtual-machines-network-interfaces list-vm" [
+export def "network-interfaces-list-virtual-machine-scale-set-vm-network-interfaces" [
   subscription_id: string
   resource_group_name: string
   virtual_machine_scale_set_name: string
@@ -4440,7 +4440,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/microsoft.Compute/virtualMachineScaleSets/{virtualMachineScaleSetName}/virtualMachines/{virtualmachineIndex}/networkInterfaces/{networkInterfaceName}
 # operationId: NetworkInterfaces_GetVirtualMachineScaleSetNetworkInterface
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machine-scale-sets-virtual-machines-network-interfaces get" [
+export def "network-interfaces-get-virtual-machine-scale-set-network-interface" [
   subscription_id: string
   resource_group_name: string
   virtual_machine_scale_set_name: string

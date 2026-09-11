@@ -114,7 +114,7 @@ def request-completer-1 [] { ["GetCapabilities"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "map-copyrights-format get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-map-version-number-copyrights-format" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -137,7 +137,7 @@ export def commands []: nothing -> table {
 # Copyrights whole world
 #
 # GET /map/{versionNumber}/copyrights.{format}
-export def "map-copyrights-format get" [
+export def "get-map-version-number-copyrights-format" [
   version_number: int
   format: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -176,7 +176,7 @@ export def "map-copyrights-format get" [
 # Captions
 #
 # GET /map/{versionNumber}/copyrights/caption.{format}
-export def "map-copyrights-caption-format get" [
+export def "get-map-version-number-copyrights-caption-format" [
   version_number: int
   format: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -215,7 +215,7 @@ export def "map-copyrights-caption-format get" [
 # Copyrights bounding box
 #
 # GET /map/{versionNumber}/copyrights/{minLon}/{minLat}/{maxLon}/{maxLat}.{format}
-export def "map-copyrights get" [
+export def "get-map-version-number-copyrights-min-lon-min-lat-max-lon-max-lat-format" [
   version_number: int
   min_lon: float
   min_lat: float
@@ -262,7 +262,7 @@ export def "map-copyrights get" [
 # Copyrights tile
 #
 # GET /map/{versionNumber}/copyrights/{zoom}/{X}/{Y}.{format}
-export def "map-copyrights list" [
+export def "get-map-version-number-copyrights-zoom-x-y-format" [
   version_number: int
   zoom: int
   x: int
@@ -307,7 +307,7 @@ export def "map-copyrights list" [
 # Static Image
 #
 # GET /map/{versionNumber}/staticimage
-export def "map-staticimage get" [
+export def "get-map-version-number-staticimage" [
   version_number: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -352,7 +352,7 @@ export def "map-staticimage get" [
 # Tile
 #
 # GET /map/{versionNumber}/tile/{layer}/{style}/{zoom}/{X}/{Y}.pbf
-export def "map-tile list" [
+export def "get-map-version-number-tile-layer-style-zoom-x-y-pbf" [
   version_number: int
   layer: string
   style: string
@@ -400,7 +400,7 @@ export def "map-tile list" [
 # Tile
 #
 # GET /map/{versionNumber}/tile/{layer}/{style}/{zoom}/{X}/{Y}.{format}
-export def "map-tile get" [
+export def "get-map-version-number-tile-layer-style-zoom-x-y-format" [
   version_number: int
   layer: string
   style: string
@@ -451,7 +451,7 @@ export def "map-tile get" [
 #
 # GET /map/{versionNumber}/wms/
 # operationId: GetMap
-export def "map-wms get" [
+export def "get-map" [
   version_number: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -498,7 +498,7 @@ export def "map-wms get" [
 #
 # GET /map/{versionNumber}/wms//
 # operationId: GetCapabilities
-export def "map-wms get-capabilities" [
+export def "get-capabilities" [
   version_number: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -537,7 +537,7 @@ export def "map-wms get-capabilities" [
 # WMTS
 #
 # GET /map/{versionNumber}/wmts/{key}/{wmtsVersion}/WMTSCapabilities.xml
-export def "map-wmts-wmts-capabilities-xml get" [
+export def "get-map-version-number-wmts-key-wmts-version-wmts-capabilities-xml" [
   version_number: int
   key: string
   wmts_version: string

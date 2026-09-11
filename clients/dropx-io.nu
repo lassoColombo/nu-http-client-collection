@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["access_token"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "products get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-products" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -121,7 +121,7 @@ export def commands []: nothing -> table {
 # Get product details by providing the product IDs
 #
 # GET /products/
-export def "products get" [
+export def "get-products" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -156,7 +156,7 @@ export def "products get" [
 # Search for similar products by providing a link to any e-commerce product.
 #
 # GET /products/link-search
-export def "products-link-search get" [
+export def "get-products-link-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -192,7 +192,7 @@ export def "products-link-search get" [
 # Search for similar products by providing a link to any e-commerce product.
 #
 # GET /products/link-search-v2
-export def "products-link-search-v2 get" [
+export def "get-products-link-search-v2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -228,7 +228,7 @@ export def "products-link-search-v2 get" [
 # Search for any product using title
 #
 # GET /products/search
-export def "products-search get" [
+export def "get-products-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -264,7 +264,7 @@ export def "products-search get" [
 # Search for any product using title
 #
 # GET /products/search-v2
-export def "products-search-v2 get" [
+export def "get-products-search-v2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -300,7 +300,7 @@ export def "products-search-v2 get" [
 # Search for any product using title
 #
 # GET /products/title-search
-export def "products-title-search get" [
+export def "get-products-title-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -335,7 +335,7 @@ export def "products-title-search get" [
 # Get API usuage details
 #
 # GET /users/usage
-export def "users-usage get" [
+export def "get-users-usage" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

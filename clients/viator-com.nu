@@ -110,7 +110,7 @@ def sort-order-completer-2 [] { ["SEO_ALPHABETICAL" "SEO_PUBLISHED_DATE_A" "SEO_
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "available-products create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "available-products" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -134,7 +134,7 @@ export def commands []: nothing -> table {
 #
 # POST /available/products
 # operationId: availableProducts
-export def "available-products create" [
+export def "available-products" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -180,7 +180,7 @@ export def "available-products create" [
 # POST /booking/availability
 # operationId: bookingAvailability
 # --ageBands item shape: {bandId?: int, count?: int}
-export def "booking-availability create" [
+export def "booking-availability" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -225,7 +225,7 @@ export def "booking-availability create" [
 #
 # GET /booking/availability/dates
 # operationId: bookingAvailabilityDates
-export def "booking-availability-dates get" [
+export def "booking-availability-dates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -265,7 +265,7 @@ export def "booking-availability-dates get" [
 # POST /booking/availability/tourgrades
 # operationId: bookingAvailabilityTourgrades
 # --ageBands item shape: {bandId?: int, count?: int}
-export def "booking-availability-tourgrades create" [
+export def "booking-availability-tourgrades" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -309,7 +309,7 @@ export def "booking-availability-tourgrades create" [
 #
 # POST /booking/availability/tourgrades/pricingmatrix
 # operationId: bookingAvailabilityTourgradesPricingmatrix
-export def "booking-availability-tourgrades-pricingmatrix create" [
+export def "booking-availability-tourgrades-pricingmatrix" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -356,7 +356,7 @@ export def "booking-availability-tourgrades-pricingmatrix create" [
 # --booker shape: {cellPhone?: string, cellPhoneCountryCode?: string, email?: string, firstname: string, homePhone?: string, surname: string, title?: string}
 # --items item shape: {bookingQuestionAnswers?: list, hotelId?: string, languageOptionCode?: string, partnerItemDetail?: record, pickupPoint?: string, productCode?: string, specialRequirements?: string, tourGradeCode?: string, travelDate?: string, travellers?: list}
 # --partnerDetail shape: {distributorRef?: string}
-export def "booking-book create" [
+export def "booking-book" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -402,7 +402,7 @@ export def "booking-book create" [
 # POST /booking/calculateprice
 # operationId: bookingCalculateprice
 # --items item shape: {productCode?: string, tourGradeCode?: string, travelDate?: string, travellers?: list}
-export def "booking-calculateprice create" [
+export def "booking-calculateprice" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -444,7 +444,7 @@ export def "booking-calculateprice create" [
 #
 # GET /booking/hotels
 # operationId: bookingHotels
-export def "booking-hotels get" [
+export def "booking-hotels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -484,7 +484,7 @@ export def "booking-hotels get" [
 #
 # GET /booking/mybookings
 # operationId: bookingMybookings
-export def "booking-mybookings get" [
+export def "booking-mybookings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -525,7 +525,7 @@ export def "booking-mybookings get" [
 #
 # GET /booking/pastbooking
 # operationId: bookingPastbooking
-export def "booking-pastbooking get" [
+export def "booking-pastbooking" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -566,7 +566,7 @@ export def "booking-pastbooking get" [
 #
 # POST /booking/pricingmatrix
 # operationId: bookingPricingmatrix
-export def "booking-pricingmatrix create" [
+export def "booking-pricingmatrix" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -610,7 +610,7 @@ export def "booking-pricingmatrix create" [
 #
 # POST /booking/status
 # operationId: bookingStatus
-export def "booking-status create" [
+export def "booking-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -658,7 +658,7 @@ export def "booking-status create" [
 #
 # POST /booking/status/items
 # operationId: bookingStatusItems
-export def "booking-status-items create" [
+export def "booking-status-items" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -706,7 +706,7 @@ export def "booking-status-items create" [
 #
 # GET /booking/voucher
 # operationId: bookingVoucher
-export def "booking-voucher get" [
+export def "booking-voucher" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -750,7 +750,7 @@ export def "booking-voucher get" [
 #
 # GET /bookings/cancel-reasons
 # operationId: cancellationReasons
-export def "bookings-cancel-reasons get-cancellation" [
+export def "cancellation-reasons" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -787,7 +787,7 @@ export def "bookings-cancel-reasons get-cancellation" [
 #
 # POST /bookings/{booking-reference}/cancel
 # operationId: cancelBooking
-export def "bookings-cancel cancel" [
+export def "cancel-booking" [
   booking_reference: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -830,7 +830,7 @@ export def "bookings-cancel cancel" [
 #
 # GET /bookings/{booking-reference}/cancel-quote
 # operationId: cancelBookingQuote
-export def "bookings-cancel-quote cancel" [
+export def "cancel-booking-quote" [
   booking_reference: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -866,7 +866,7 @@ export def "bookings-cancel-quote cancel" [
 #
 # GET /health/check
 # operationId: healthCheck
-export def "health-check check" [
+export def "health-check" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -906,7 +906,7 @@ export def "health-check check" [
 # operationId: merchantCancellation
 # --cancelItems item shape: {cancelCode?: string, cancelDescription?: string, distributorItemRef?: string, itemId?: int}
 @deprecated
-export def "merchant-cancellation create" [
+export def "merchant-cancellation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -949,7 +949,7 @@ export def "merchant-cancellation create" [
 #
 # GET /product
 # operationId: product
-export def "product get" [
+export def "product" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -993,7 +993,7 @@ export def "product get" [
 #
 # GET /product/photos
 # operationId: productPhotos
-export def "product-photos get" [
+export def "product-photos" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1034,7 +1034,7 @@ export def "product-photos get" [
 #
 # GET /product/reviews
 # operationId: productReviews
-export def "product-reviews get" [
+export def "product-reviews" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1076,7 +1076,7 @@ export def "product-reviews get" [
 #
 # POST /search/freetext
 # operationId: searchFreetext
-export def "search-freetext list" [
+export def "search-freetext" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1122,7 +1122,7 @@ export def "search-freetext list" [
 #
 # POST /search/products
 # operationId: searchProducts
-export def "search-products list" [
+export def "search-products" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1171,7 +1171,7 @@ export def "search-products list" [
 #
 # POST /search/products/codes
 # operationId: searchProductsCodes
-export def "search-products-codes list" [
+export def "search-products-codes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1213,7 +1213,7 @@ export def "search-products-codes list" [
 #
 # POST /taxonomy/attractions
 # operationId: taxonomyAttractions
-export def "taxonomy-attractions create" [
+export def "taxonomy-attractions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1256,7 +1256,7 @@ export def "taxonomy-attractions create" [
 #
 # GET /taxonomy/categories
 # operationId: taxonomyCategories
-export def "taxonomy-categories get" [
+export def "taxonomy-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1295,7 +1295,7 @@ export def "taxonomy-categories get" [
 #
 # GET /taxonomy/destinations
 # operationId: taxonomyDestinations
-export def "taxonomy-destinations get" [
+export def "taxonomy-destinations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

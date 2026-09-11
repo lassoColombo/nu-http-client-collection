@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["apikey"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "country-code-check check" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "country-code-check" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # GET /country-code-check
 # operationId: country_code_check
-export def "country-code-check check" [
+export def "country-code-check" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -179,7 +179,7 @@ export def "country-code-check check" [
 #
 # GET /currency-conversion
 # operationId: currency_conversion
-export def "currency-conversion get" [
+export def "currency-conversion" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -221,7 +221,7 @@ export def "currency-conversion get" [
 # POST /invoice
 # operationId: create_invoice
 # --items item shape: {description: string, price_each: int, quantity: int, vat_rate: int}
-export def "invoice create" [
+export def "create-invoice" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -278,7 +278,7 @@ export def "invoice create" [
 #
 # DELETE /invoice/{id}
 # operationId: invoice_delete
-export def "invoice delete" [
+export def "invoice-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -317,7 +317,7 @@ export def "invoice delete" [
 #
 # GET /invoice/{id}
 # operationId: get_invoice
-export def "invoice get" [
+export def "get-invoice" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -357,7 +357,7 @@ export def "invoice get" [
 # PUT /invoice/{id}
 # operationId: invoice_update
 # --items item shape: {description: string, price_each: int, quantity: int, vat_rate: int}
-export def "invoice update" [
+export def "invoice-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -415,7 +415,7 @@ export def "invoice update" [
 #
 # GET /ip-check
 # operationId: ip_check
-export def "ip-check check" [
+export def "ip-check" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -454,7 +454,7 @@ export def "ip-check check" [
 #
 # GET /usage-check
 # operationId: api_usage
-export def "usage-check get" [
+export def "api-usage" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -491,7 +491,7 @@ export def "usage-check get" [
 #
 # GET /vat-number-check
 # operationId: vat_number_validate
-export def "vat-number-check validate" [
+export def "vat-number-validate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -530,7 +530,7 @@ export def "vat-number-check validate" [
 #
 # GET /vat-price
 # operationId: convert_price
-export def "vat-price get-convert" [
+export def "convert-price" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -572,7 +572,7 @@ export def "vat-price get-convert" [
 #
 # GET /vat-rates
 # operationId: vat_rates
-export def "vat-rates get" [
+export def "vat-rates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

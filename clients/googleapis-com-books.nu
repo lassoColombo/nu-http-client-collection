@@ -142,7 +142,7 @@ def association-completer [] { ["ASSOCIATION_UNDEFINED" "end-of-sample" "end-of-
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "books-cloudloading-add-book create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "books-cloudloading-add-book" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -166,7 +166,7 @@ export def commands []: nothing -> table {
 #
 # POST /books/v1/cloudloading/addBook
 # operationId: books.cloudloading.addBook
-export def "books-cloudloading-add-book create" [
+export def "books-cloudloading-add-book" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -216,7 +216,7 @@ export def "books-cloudloading-add-book create" [
 #
 # POST /books/v1/cloudloading/deleteBook
 # operationId: books.cloudloading.deleteBook
-export def "books-cloudloading-delete-book delete" [
+export def "books-cloudloading-delete-book" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -263,7 +263,7 @@ export def "books-cloudloading-delete-book delete" [
 #
 # POST /books/v1/cloudloading/updateBook
 # operationId: books.cloudloading.updateBook
-export def "books-cloudloading-update-book update" [
+export def "books-cloudloading-update-book" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -316,7 +316,7 @@ export def "books-cloudloading-update-book update" [
 #
 # GET /books/v1/dictionary/listOfflineMetadata
 # operationId: books.dictionary.listOfflineMetadata
-export def "books-dictionary-list-offline-metadata list" [
+export def "books-dictionary-list-offline-metadata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -363,7 +363,7 @@ export def "books-dictionary-list-offline-metadata list" [
 #
 # GET /books/v1/familysharing/getFamilyInfo
 # operationId: books.familysharing.getFamilyInfo
-export def "books-familysharing-get-family-info get" [
+export def "books-familysharing-get-family-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -410,7 +410,7 @@ export def "books-familysharing-get-family-info get" [
 #
 # POST /books/v1/familysharing/share
 # operationId: books.familysharing.share
-export def "books-familysharing-share create" [
+export def "books-familysharing-share" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -459,7 +459,7 @@ export def "books-familysharing-share create" [
 #
 # POST /books/v1/familysharing/unshare
 # operationId: books.familysharing.unshare
-export def "books-familysharing-unshare create" [
+export def "books-familysharing-unshare" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -508,7 +508,7 @@ export def "books-familysharing-unshare create" [
 #
 # GET /books/v1/myconfig/getUserSettings
 # operationId: books.myconfig.getUserSettings
-export def "books-myconfig-get-user-settings get" [
+export def "books-myconfig-get-user-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -555,7 +555,7 @@ export def "books-myconfig-get-user-settings get" [
 #
 # POST /books/v1/myconfig/releaseDownloadAccess
 # operationId: books.myconfig.releaseDownloadAccess
-export def "books-myconfig-release-download-access download" [
+export def "books-myconfig-release-download-access" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -605,7 +605,7 @@ export def "books-myconfig-release-download-access download" [
 #
 # POST /books/v1/myconfig/requestAccess
 # operationId: books.myconfig.requestAccess
-export def "books-myconfig-request-access request" [
+export def "books-myconfig-request-access" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -657,7 +657,7 @@ export def "books-myconfig-request-access request" [
 #
 # POST /books/v1/myconfig/syncVolumeLicenses
 # operationId: books.myconfig.syncVolumeLicenses
-export def "books-myconfig-sync-volume-licenses sync" [
+export def "books-myconfig-sync-volume-licenses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -713,7 +713,7 @@ export def "books-myconfig-sync-volume-licenses sync" [
 # operationId: books.myconfig.updateUserSettings
 # --notesExport shape: {folderName?: string, isEnabled?: bool}
 # --notification shape: {matchMyInterests?: record, moreFromAuthors?: record, moreFromSeries?: record, priceDrop?: record, rewardExpirations?: record}
-export def "books-myconfig-update-user-settings update" [
+export def "books-myconfig-update-user-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -765,7 +765,7 @@ export def "books-myconfig-update-user-settings update" [
 #
 # GET /books/v1/mylibrary/annotations
 # operationId: books.mylibrary.annotations.list
-export def "books-mylibrary-annotations list" [
+export def "books-mylibrary-annotations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -824,7 +824,7 @@ export def "books-mylibrary-annotations list" [
 # --clientVersionRanges shape: {cfiRange?: record, contentVersion?: string, gbImageRange?: record, gbTextRange?: record, imageCfiRange?: record}
 # --currentVersionRanges shape: {cfiRange?: record, contentVersion?: string, gbImageRange?: record, gbTextRange?: record, imageCfiRange?: record}
 # --layerSummary shape: {allowedCharacterCount?: int, limitType?: string, remainingCharacterCount?: int}
-export def "books-mylibrary-annotations create" [
+export def "books-mylibrary-annotations-insert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -894,7 +894,7 @@ export def "books-mylibrary-annotations create" [
 #
 # POST /books/v1/mylibrary/annotations/summary
 # operationId: books.mylibrary.annotations.summary
-export def "books-mylibrary-annotations-summary create" [
+export def "books-mylibrary-annotations-summary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -942,7 +942,7 @@ export def "books-mylibrary-annotations-summary create" [
 #
 # DELETE /books/v1/mylibrary/annotations/{annotationId}
 # operationId: books.mylibrary.annotations.delete
-export def "books-mylibrary-annotations delete" [
+export def "books-mylibrary-annotations-delete" [
   annotation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -994,7 +994,7 @@ export def "books-mylibrary-annotations delete" [
 # --clientVersionRanges shape: {cfiRange?: record, contentVersion?: string, gbImageRange?: record, gbTextRange?: record, imageCfiRange?: record}
 # --currentVersionRanges shape: {cfiRange?: record, contentVersion?: string, gbImageRange?: record, gbTextRange?: record, imageCfiRange?: record}
 # --layerSummary shape: {allowedCharacterCount?: int, limitType?: string, remainingCharacterCount?: int}
-export def "books-mylibrary-annotations update" [
+export def "books-mylibrary-annotations-update" [
   annotation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1063,7 +1063,7 @@ export def "books-mylibrary-annotations update" [
 #
 # GET /books/v1/mylibrary/bookshelves
 # operationId: books.mylibrary.bookshelves.list
-export def "books-mylibrary-bookshelves list" [
+export def "books-mylibrary-bookshelves-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1110,7 +1110,7 @@ export def "books-mylibrary-bookshelves list" [
 #
 # GET /books/v1/mylibrary/bookshelves/{shelf}
 # operationId: books.mylibrary.bookshelves.get
-export def "books-mylibrary-bookshelves get" [
+export def "books-mylibrary-bookshelves-get" [
   shelf: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1159,7 +1159,7 @@ export def "books-mylibrary-bookshelves get" [
 #
 # POST /books/v1/mylibrary/bookshelves/{shelf}/addVolume
 # operationId: books.mylibrary.bookshelves.addVolume
-export def "books-mylibrary-bookshelves-add-volume create" [
+export def "books-mylibrary-bookshelves-add-volume" [
   shelf: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1210,7 +1210,7 @@ export def "books-mylibrary-bookshelves-add-volume create" [
 #
 # POST /books/v1/mylibrary/bookshelves/{shelf}/clearVolumes
 # operationId: books.mylibrary.bookshelves.clearVolumes
-export def "books-mylibrary-bookshelves-clear-volumes create" [
+export def "books-mylibrary-bookshelves-clear-volumes" [
   shelf: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1259,7 +1259,7 @@ export def "books-mylibrary-bookshelves-clear-volumes create" [
 #
 # POST /books/v1/mylibrary/bookshelves/{shelf}/moveVolume
 # operationId: books.mylibrary.bookshelves.moveVolume
-export def "books-mylibrary-bookshelves-move-volume move" [
+export def "books-mylibrary-bookshelves-move-volume" [
   shelf: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1310,7 +1310,7 @@ export def "books-mylibrary-bookshelves-move-volume move" [
 #
 # POST /books/v1/mylibrary/bookshelves/{shelf}/removeVolume
 # operationId: books.mylibrary.bookshelves.removeVolume
-export def "books-mylibrary-bookshelves-remove-volume delete" [
+export def "books-mylibrary-bookshelves-remove-volume" [
   shelf: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1361,7 +1361,7 @@ export def "books-mylibrary-bookshelves-remove-volume delete" [
 #
 # GET /books/v1/mylibrary/bookshelves/{shelf}/volumes
 # operationId: books.mylibrary.bookshelves.volumes.list
-export def "books-mylibrary-bookshelves-volumes list" [
+export def "books-mylibrary-bookshelves-volumes-list" [
   shelf: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1416,7 +1416,7 @@ export def "books-mylibrary-bookshelves-volumes list" [
 #
 # GET /books/v1/mylibrary/readingpositions/{volumeId}
 # operationId: books.mylibrary.readingpositions.get
-export def "books-mylibrary-readingpositions get" [
+export def "books-mylibrary-readingpositions-get" [
   volume_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1466,7 +1466,7 @@ export def "books-mylibrary-readingpositions get" [
 #
 # POST /books/v1/mylibrary/readingpositions/{volumeId}/setPosition
 # operationId: books.mylibrary.readingpositions.setPosition
-export def "books-mylibrary-readingpositions-set-position update" [
+export def "books-mylibrary-readingpositions-set-position" [
   volume_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1520,7 +1520,7 @@ export def "books-mylibrary-readingpositions-set-position update" [
 #
 # GET /books/v1/notification/get
 # operationId: books.notification.get
-export def "books-notification-get get" [
+export def "books-notification-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1569,7 +1569,7 @@ export def "books-notification-get get" [
 #
 # GET /books/v1/onboarding/listCategories
 # operationId: books.onboarding.listCategories
-export def "books-onboarding-list-categories list" [
+export def "books-onboarding-list-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1616,7 +1616,7 @@ export def "books-onboarding-list-categories list" [
 #
 # GET /books/v1/onboarding/listCategoryVolumes
 # operationId: books.onboarding.listCategoryVolumes
-export def "books-onboarding-list-category-volumes list" [
+export def "books-onboarding-list-category-volumes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1667,7 +1667,7 @@ export def "books-onboarding-list-category-volumes list" [
 #
 # GET /books/v1/personalizedstream/get
 # operationId: books.personalizedstream.get
-export def "books-personalizedstream-get get" [
+export def "books-personalizedstream-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1716,7 +1716,7 @@ export def "books-personalizedstream-get get" [
 #
 # POST /books/v1/promooffer/accept
 # operationId: books.promooffer.accept
-export def "books-promooffer-accept create" [
+export def "books-promooffer-accept" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1770,7 +1770,7 @@ export def "books-promooffer-accept create" [
 #
 # POST /books/v1/promooffer/dismiss
 # operationId: books.promooffer.dismiss
-export def "books-promooffer-dismiss create" [
+export def "books-promooffer-dismiss" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1823,7 +1823,7 @@ export def "books-promooffer-dismiss create" [
 #
 # GET /books/v1/promooffer/get
 # operationId: books.promooffer.get
-export def "books-promooffer-get get" [
+export def "books-promooffer-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1875,7 +1875,7 @@ export def "books-promooffer-get get" [
 #
 # GET /books/v1/series/get
 # operationId: books.series.get
-export def "books-series-get get" [
+export def "books-series-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1922,7 +1922,7 @@ export def "books-series-get get" [
 #
 # GET /books/v1/series/membership/get
 # operationId: books.series.membership.get
-export def "books-series-membership-get get" [
+export def "books-series-membership-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1971,7 +1971,7 @@ export def "books-series-membership-get get" [
 #
 # GET /books/v1/users/{userId}/bookshelves
 # operationId: books.bookshelves.list
-export def "books-users-bookshelves list" [
+export def "books-bookshelves-list" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2020,7 +2020,7 @@ export def "books-users-bookshelves list" [
 #
 # GET /books/v1/users/{userId}/bookshelves/{shelf}
 # operationId: books.bookshelves.get
-export def "books-users-bookshelves get" [
+export def "books-bookshelves-get" [
   user_id: string
   shelf: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2071,7 +2071,7 @@ export def "books-users-bookshelves get" [
 #
 # GET /books/v1/users/{userId}/bookshelves/{shelf}/volumes
 # operationId: books.bookshelves.volumes.list
-export def "books-users-bookshelves-volumes list" [
+export def "books-bookshelves-volumes-list" [
   user_id: string
   shelf: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2125,7 +2125,7 @@ export def "books-users-bookshelves-volumes list" [
 #
 # GET /books/v1/volumes
 # operationId: books.volumes.list
-export def "books-volumes list" [
+export def "books-volumes-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -2185,7 +2185,7 @@ export def "books-volumes list" [
 #
 # GET /books/v1/volumes/mybooks
 # operationId: books.volumes.mybooks.list
-export def "books-volumes-mybooks list" [
+export def "books-volumes-mybooks-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -2238,7 +2238,7 @@ export def "books-volumes-mybooks list" [
 #
 # GET /books/v1/volumes/recommended
 # operationId: books.volumes.recommended.list
-export def "books-volumes-recommended list" [
+export def "books-volumes-recommended-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -2287,7 +2287,7 @@ export def "books-volumes-recommended list" [
 #
 # POST /books/v1/volumes/recommended/rate
 # operationId: books.volumes.recommended.rate
-export def "books-volumes-recommended-rate create" [
+export def "books-volumes-recommended-rate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -2337,7 +2337,7 @@ export def "books-volumes-recommended-rate create" [
 #
 # GET /books/v1/volumes/useruploaded
 # operationId: books.volumes.useruploaded.list
-export def "books-volumes-useruploaded list" [
+export def "books-volumes-useruploaded-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -2389,7 +2389,7 @@ export def "books-volumes-useruploaded list" [
 #
 # GET /books/v1/volumes/{volumeId}
 # operationId: books.volumes.get
-export def "books-volumes get" [
+export def "books-volumes-get" [
   volume_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2443,7 +2443,7 @@ export def "books-volumes get" [
 #
 # GET /books/v1/volumes/{volumeId}/associated
 # operationId: books.volumes.associated.list
-export def "books-volumes-associated list" [
+export def "books-volumes-associated-list" [
   volume_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2495,7 +2495,7 @@ export def "books-volumes-associated list" [
 #
 # GET /books/v1/volumes/{volumeId}/layers/{layerId}
 # operationId: books.layers.volumeAnnotations.list
-export def "books-volumes-layers list" [
+export def "books-layers-volume-annotations-list" [
   volume_id: string
   layer_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2558,7 +2558,7 @@ export def "books-volumes-layers list" [
 #
 # GET /books/v1/volumes/{volumeId}/layers/{layerId}/annotations/{annotationId}
 # operationId: books.layers.volumeAnnotations.get
-export def "books-volumes-layers-annotations get" [
+export def "books-layers-volume-annotations-get" [
   volume_id: string
   layer_id: string
   annotation_id: string
@@ -2612,7 +2612,7 @@ export def "books-volumes-layers-annotations get" [
 #
 # GET /books/v1/volumes/{volumeId}/layers/{layerId}/data
 # operationId: books.layers.annotationData.list
-export def "books-volumes-layers-data list" [
+export def "books-layers-annotation-data-list" [
   volume_id: string
   layer_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2673,7 +2673,7 @@ export def "books-volumes-layers-data list" [
 #
 # GET /books/v1/volumes/{volumeId}/layers/{layerId}/data/{annotationDataId}
 # operationId: books.layers.annotationData.get
-export def "books-volumes-layers-data get" [
+export def "books-layers-annotation-data-get" [
   volume_id: string
   layer_id: string
   annotation_data_id: string
@@ -2732,7 +2732,7 @@ export def "books-volumes-layers-data get" [
 #
 # GET /books/v1/volumes/{volumeId}/layersummary
 # operationId: books.layers.list
-export def "books-volumes-layersummary list" [
+export def "books-layers-list" [
   volume_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2784,7 +2784,7 @@ export def "books-volumes-layersummary list" [
 #
 # GET /books/v1/volumes/{volumeId}/layersummary/{summaryId}
 # operationId: books.layers.get
-export def "books-volumes-layersummary get" [
+export def "books-layers-get" [
   volume_id: string
   summary_id: string
   --base-url(-b): string@base-url-completer # API base URL

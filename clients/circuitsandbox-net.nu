@@ -141,7 +141,7 @@ def locale-completer [] { ["CA_ES" "DE_DE" "EN_GB" "EN_US" "ES_ES" "FR_FR" "IT_I
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "conversations get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-conversations" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -165,7 +165,7 @@ export def commands []: nothing -> table {
 #
 # GET /conversations
 # operationId: getConversations
-export def "conversations get" [
+export def "get-conversations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -204,7 +204,7 @@ export def "conversations get" [
 #
 # GET /conversations/byIds
 # operationId: getConversationsById
-export def "conversations-by-ids get" [
+export def "get-conversations-by-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -241,7 +241,7 @@ export def "conversations-by-ids get" [
 #
 # GET /conversations/community
 # operationId: getCommunityConversations
-export def "conversations-community get" [
+export def "get-community-conversations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -282,7 +282,7 @@ export def "conversations-community get" [
 #
 # POST /conversations/community
 # operationId: createCommunityConversation
-export def "conversations-community create" [
+export def "create-community-conversation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -324,7 +324,7 @@ export def "conversations-community create" [
 #
 # PUT /conversations/community/{convId}
 # operationId: updateConversationCommunity
-export def "conversations-community update" [
+export def "update-conversation-community" [
   conv_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -367,7 +367,7 @@ export def "conversations-community update" [
 #
 # POST /conversations/community/{convId}/join
 # operationId: joinCommunityConversation
-export def "conversations-community-join create" [
+export def "join-community-conversation" [
   conv_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -404,7 +404,7 @@ export def "conversations-community-join create" [
 #
 # DELETE /conversations/community/{convId}/participants
 # operationId: removeParticipantCommunity
-export def "conversations-community-participants delete" [
+export def "remove-participant-community" [
   conv_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -443,7 +443,7 @@ export def "conversations-community-participants delete" [
 #
 # POST /conversations/community/{convId}/participants
 # operationId: addParticipantCommunity
-export def "conversations-community-participants create" [
+export def "add-participant-community" [
   conv_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -485,7 +485,7 @@ export def "conversations-community-participants create" [
 #
 # GET /conversations/conversationdetails
 # operationId: getJoinDetailsMultiple
-export def "conversations-conversationdetails get-join-details-multiple" [
+export def "get-join-details-multiple" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -522,7 +522,7 @@ export def "conversations-conversationdetails get-join-details-multiple" [
 #
 # GET /conversations/direct
 # operationId: getDirectConversation
-export def "conversations-direct get" [
+export def "get-direct-conversation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -559,7 +559,7 @@ export def "conversations-direct get" [
 #
 # POST /conversations/direct
 # operationId: createDirectConversation
-export def "conversations-direct create" [
+export def "create-direct-conversation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -599,7 +599,7 @@ export def "conversations-direct create" [
 #
 # GET /conversations/favorite
 # operationId: getFavoriteConversations
-export def "conversations-favorite get" [
+export def "get-favorite-conversations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -633,7 +633,7 @@ export def "conversations-favorite get" [
 #
 # POST /conversations/group
 # operationId: createGroupConversation
-export def "conversations-group create" [
+export def "create-group-conversation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -674,7 +674,7 @@ export def "conversations-group create" [
 #
 # PUT /conversations/group/{convId}
 # operationId: updateConversationGroup
-export def "conversations-group update" [
+export def "update-conversation-group" [
   conv_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -716,7 +716,7 @@ export def "conversations-group update" [
 #
 # DELETE /conversations/group/{convId}/participants
 # operationId: removeParticipantGroup
-export def "conversations-group-participants delete" [
+export def "remove-participant-group" [
   conv_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -755,7 +755,7 @@ export def "conversations-group-participants delete" [
 #
 # POST /conversations/group/{convId}/participants
 # operationId: addParticipantGroup
-export def "conversations-group-participants create" [
+export def "add-participant-group" [
   conv_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -797,7 +797,7 @@ export def "conversations-group-participants create" [
 #
 # GET /conversations/label/{labelId}
 # operationId: getConversationsByLabel
-export def "conversations-label get" [
+export def "get-conversations-by-label" [
   label_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -837,7 +837,7 @@ export def "conversations-label get" [
 #
 # GET /conversations/messages/flag
 # operationId: getFlagItemConv
-export def "conversations-messages-flag get-item-conv" [
+export def "get-flag-item-conv" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -871,7 +871,7 @@ export def "conversations-messages-flag get-item-conv" [
 #
 # GET /conversations/messages/{itemId}
 # operationId: getSingleConversationtem
-export def "conversations-messages get-single-conversationtem" [
+export def "get-single-conversationtem" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -908,7 +908,7 @@ export def "conversations-messages get-single-conversationtem" [
 #
 # POST /conversations/moderate/{convId}
 # operationId: moderateConversation
-export def "conversations-moderate create" [
+export def "moderate-conversation" [
   conv_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -944,7 +944,7 @@ export def "conversations-moderate create" [
 #
 # GET /conversations/resolveinvitetoken
 # operationId: resolveInvitationToken
-export def "conversations-resolveinvitetoken get-resolve-invitation-token" [
+export def "resolve-invitation-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -981,7 +981,7 @@ export def "conversations-resolveinvitetoken get-resolve-invitation-token" [
 #
 # GET /conversations/search
 # operationId: searchConversations
-export def "conversations-search list" [
+export def "search-conversations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1020,7 +1020,7 @@ export def "conversations-search list" [
 #
 # POST /conversations/unmoderate/{convId}
 # operationId: unmoderateConversation
-export def "conversations-unmoderate create" [
+export def "unmoderate-conversation" [
   conv_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1056,7 +1056,7 @@ export def "conversations-unmoderate create" [
 #
 # GET /conversations/{convId}
 # operationId: getConversationbyId
-export def "conversations get-conversationby" [
+export def "get-conversationby-id" [
   conv_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1093,7 +1093,7 @@ export def "conversations get-conversationby" [
 #
 # DELETE /conversations/{convId}/archive
 # operationId: undoArchiveConversation
-export def "conversations-archive archive-undo" [
+export def "undo-archive-conversation" [
   conv_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1129,7 +1129,7 @@ export def "conversations-archive archive-undo" [
 #
 # POST /conversations/{convId}/archive
 # operationId: archiveConversation
-export def "conversations-archive archive" [
+export def "archive-conversation" [
   conv_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1165,7 +1165,7 @@ export def "conversations-archive archive" [
 #
 # GET /conversations/{convId}/conversationdetails
 # operationId: getJoinDetails
-export def "conversations-conversationdetails get-join-details" [
+export def "get-join-details" [
   conv_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1202,7 +1202,7 @@ export def "conversations-conversationdetails get-join-details" [
 #
 # DELETE /conversations/{convId}/favorite
 # operationId: deleteFavorite
-export def "conversations-favorite delete" [
+export def "delete-favorite" [
   conv_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1238,7 +1238,7 @@ export def "conversations-favorite delete" [
 #
 # POST /conversations/{convId}/favorite
 # operationId: addFavorite
-export def "conversations-favorite create" [
+export def "add-favorite" [
   conv_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1274,7 +1274,7 @@ export def "conversations-favorite create" [
 #
 # GET /conversations/{convId}/items
 # operationId: getConversationItems
-export def "conversations-items get" [
+export def "get-conversation-items" [
   conv_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1315,7 +1315,7 @@ export def "conversations-items get" [
 #
 # POST /conversations/{convId}/label
 # operationId: assignLabel
-export def "conversations-label assign" [
+export def "assign-label" [
   conv_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1357,7 +1357,7 @@ export def "conversations-label assign" [
 #
 # DELETE /conversations/{convId}/label/{labelId}
 # operationId: unassignLabel
-export def "conversations-label delete-unassign" [
+export def "unassign-label" [
   conv_id: string
   label_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1396,7 +1396,7 @@ export def "conversations-label delete-unassign" [
 #
 # POST /conversations/{convId}/messages
 # operationId: addTextItem
-export def "conversations-messages create-text-item" [
+export def "add-text-item" [
   conv_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1441,7 +1441,7 @@ export def "conversations-messages create-text-item" [
 #
 # GET /conversations/{convId}/messages/flag
 # operationId: getFlagItem
-export def "conversations-messages-flag get-item" [
+export def "get-flag-item" [
   conv_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1478,7 +1478,7 @@ export def "conversations-messages-flag get-item" [
 #
 # DELETE /conversations/{convId}/messages/{itemId}
 # operationId: deleteTextItem
-export def "conversations-messages delete-text-item" [
+export def "delete-text-item" [
   conv_id: string
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1517,7 +1517,7 @@ export def "conversations-messages delete-text-item" [
 #
 # POST /conversations/{convId}/messages/{itemId}
 # operationId: addTextItemWithParent
-export def "conversations-messages create-text-item-with-parent" [
+export def "add-text-item-with-parent" [
   conv_id: string
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1564,7 +1564,7 @@ export def "conversations-messages create-text-item-with-parent" [
 #
 # PUT /conversations/{convId}/messages/{itemId}
 # operationId: updateTextItem
-export def "conversations-messages update-text-item" [
+export def "update-text-item" [
   conv_id: string
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1611,7 +1611,7 @@ export def "conversations-messages update-text-item" [
 #
 # DELETE /conversations/{convId}/messages/{itemId}/flag
 # operationId: unFlagItem
-export def "conversations-messages-flag delete-un-item" [
+export def "un-flag-item" [
   conv_id: string
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1649,7 +1649,7 @@ export def "conversations-messages-flag delete-un-item" [
 #
 # POST /conversations/{convId}/messages/{itemId}/flag
 # operationId: flagItem
-export def "conversations-messages-flag create-item" [
+export def "flag-item" [
   conv_id: string
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1693,7 +1693,7 @@ export def "conversations-messages-flag create-item" [
 #
 # DELETE /conversations/{convId}/messages/{itemId}/like
 # operationId: unlikeItem
-export def "conversations-messages-like delete-unlike-item" [
+export def "unlike-item" [
   conv_id: string
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1731,7 +1731,7 @@ export def "conversations-messages-like delete-unlike-item" [
 #
 # POST /conversations/{convId}/messages/{itemId}/like
 # operationId: likeItem
-export def "conversations-messages-like create-item" [
+export def "like-item" [
   conv_id: string
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1769,7 +1769,7 @@ export def "conversations-messages-like create-item" [
 #
 # DELETE /conversations/{convId}/moderators
 # operationId: removeModerators
-export def "conversations-moderators delete" [
+export def "remove-moderators" [
   conv_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1810,7 +1810,7 @@ export def "conversations-moderators delete" [
 #
 # POST /conversations/{convId}/moderators
 # operationId: addModerators
-export def "conversations-moderators create" [
+export def "add-moderators" [
   conv_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1851,7 +1851,7 @@ export def "conversations-moderators create" [
 #
 # GET /conversations/{convId}/participants
 # operationId: getParticipantsByConvId
-export def "conversations-participants get-by-conv" [
+export def "get-participants-by-conv-id" [
   conv_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1893,7 +1893,7 @@ export def "conversations-participants get-by-conv" [
 #
 # GET /conversations/{convId}/pins
 # operationId: getPinnedConversations
-export def "conversations-pins get-pinned" [
+export def "get-pinned-conversations" [
   conv_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1930,7 +1930,7 @@ export def "conversations-pins get-pinned" [
 #
 # DELETE /conversations/{convId}/pins/{itemId}
 # operationId: unPinAConversation
-export def "conversations-pins delete-un" [
+export def "un-pin-a-conversation" [
   conv_id: string
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1969,7 +1969,7 @@ export def "conversations-pins delete-un" [
 #
 # POST /conversations/{convId}/pins/{itemId}
 # operationId: pinAConversation
-export def "conversations-pins create" [
+export def "pin-a-conversation" [
   conv_id: string
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2008,7 +2008,7 @@ export def "conversations-pins create" [
 #
 # GET /rtc/sessions
 # operationId: getActiveSessions
-export def "rtc-sessions get-active" [
+export def "get-active-sessions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2042,7 +2042,7 @@ export def "rtc-sessions get-active" [
 #
 # GET /spaces
 # operationId: getSpaces
-export def "spaces get" [
+export def "get-spaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2080,7 +2080,7 @@ export def "spaces get" [
 #
 # POST /spaces/create
 # operationId: createSpace
-export def "spaces-create create" [
+export def "create-space" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2128,7 +2128,7 @@ export def "spaces-create create" [
 #
 # GET /spaces/directory
 # operationId: getDirectory
-export def "spaces-directory get" [
+export def "get-directory" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2170,7 +2170,7 @@ export def "spaces-directory get" [
 #
 # GET /spaces/exists/{name}
 # operationId: existsSpaceName
-export def "spaces-exists get" [
+export def "exists-space-name" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2206,7 +2206,7 @@ export def "spaces-exists get" [
 #
 # PUT /spaces/flag/{itemId}
 # operationId: flagSpaceItem
-export def "spaces-flag update-item" [
+export def "flag-space-item" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2242,7 +2242,7 @@ export def "spaces-flag update-item" [
 #
 # GET /spaces/flagged
 # operationId: getFlaggedItems
-export def "spaces-flagged get-items" [
+export def "get-flagged-items" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2282,7 +2282,7 @@ export def "spaces-flagged get-items" [
 #
 # GET /spaces/ids
 # operationId: getSpacesByIds
-export def "spaces-ids get" [
+export def "get-spaces-by-ids" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2319,7 +2319,7 @@ export def "spaces-ids get" [
 #
 # DELETE /spaces/item/{itemId}
 # operationId: deleteSpaceItem
-export def "spaces-item delete" [
+export def "delete-space-item" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2355,7 +2355,7 @@ export def "spaces-item delete" [
 #
 # PUT /spaces/like/{itemId}
 # operationId: likeSpaceItem
-export def "spaces-like update-item" [
+export def "like-space-item" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2391,7 +2391,7 @@ export def "spaces-like update-item" [
 #
 # GET /spaces/likes/{itemId}
 # operationId: getLikes
-export def "spaces-likes get" [
+export def "get-likes" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2431,7 +2431,7 @@ export def "spaces-likes get" [
 #
 # PUT /spaces/search/add/recent
 # operationId: addRecentSpaceSearch
-export def "spaces-search-add-recent create" [
+export def "add-recent-space-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2473,7 +2473,7 @@ export def "spaces-search-add-recent create" [
 #
 # PUT /spaces/search/cancel/{searchId}
 # operationId: cancelSpaceSearch
-export def "spaces-search-cancel cancel" [
+export def "cancel-space-search" [
   search_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2509,7 +2509,7 @@ export def "spaces-search-cancel cancel" [
 #
 # GET /spaces/search/recent
 # operationId: getRecentSearches
-export def "spaces-search-recent get-searches" [
+export def "get-recent-searches" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2543,7 +2543,7 @@ export def "spaces-search-recent get-searches" [
 #
 # GET /spaces/search/startBasic
 # operationId: startBasicSpacesSearch
-export def "spaces-search-start-basic start" [
+export def "start-basic-spaces-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2584,7 +2584,7 @@ export def "spaces-search-start-basic start" [
 #
 # GET /spaces/search/startDetailed
 # operationId: startDetailedSpaceSearch
-export def "spaces-search-start-detailed start" [
+export def "start-detailed-space-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2626,7 +2626,7 @@ export def "spaces-search-start-detailed start" [
 #
 # PUT /spaces/topic/{topicId}/updateTags
 # operationId: updateTopicTags
-export def "spaces-topic-update-tags update" [
+export def "update-topic-tags" [
   topic_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2668,7 +2668,7 @@ export def "spaces-topic-update-tags update" [
 #
 # PUT /spaces/unflag/{itemId}
 # operationId: unflagSpaceItem
-export def "spaces-unflag update-item" [
+export def "unflag-space-item" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2704,7 +2704,7 @@ export def "spaces-unflag update-item" [
 #
 # PUT /spaces/unlike/{itemId}
 # operationId: unlikeSpaceItem
-export def "spaces-unlike update-item" [
+export def "unlike-space-item" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2740,7 +2740,7 @@ export def "spaces-unlike update-item" [
 #
 # DELETE /spaces/{id}
 # operationId: deleteSpace
-export def "spaces delete" [
+export def "delete-space" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2776,7 +2776,7 @@ export def "spaces delete" [
 #
 # PUT /spaces/{id}
 # operationId: updateSpace
-export def "spaces update" [
+export def "update-space" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2827,7 +2827,7 @@ export def "spaces update" [
 #
 # POST /spaces/{id}/join
 # operationId: joinSpace
-export def "spaces-join create" [
+export def "join-space" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2864,7 +2864,7 @@ export def "spaces-join create" [
 #
 # POST /spaces/{id}/labels/assign
 # operationId: assignLabels
-export def "spaces-labels-assign assign" [
+export def "assign-labels" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2906,7 +2906,7 @@ export def "spaces-labels-assign assign" [
 #
 # DELETE /spaces/{id}/labels/unassign
 # operationId: unassignLabels
-export def "spaces-labels-unassign delete" [
+export def "unassign-labels" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2948,7 +2948,7 @@ export def "spaces-labels-unassign delete" [
 #
 # POST /spaces/{id}/leave
 # operationId: leaveSpace
-export def "spaces-leave create" [
+export def "leave-space" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2984,7 +2984,7 @@ export def "spaces-leave create" [
 #
 # POST /spaces/{id}/participant
 # operationId: addParticipantsToSpace
-export def "spaces-participant create" [
+export def "add-participants-to-space" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3027,7 +3027,7 @@ export def "spaces-participant create" [
 #
 # POST /spaces/{id}/participant/remove
 # operationId: v2RemoveParticipantsFromSpace
-export def "spaces-participant-remove delete" [
+export def "v2-remove-participants-from-space" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3068,7 +3068,7 @@ export def "spaces-participant-remove delete" [
 #
 # GET /spaces/{id}/participants
 # operationId: getSpaceParticipants
-export def "spaces-participants get" [
+export def "get-space-participants" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3113,7 +3113,7 @@ export def "spaces-participants get" [
 #
 # GET /spaces/{id}/participants/pending
 # operationId: getPendingParticipants
-export def "spaces-participants-pending get" [
+export def "get-pending-participants" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3153,7 +3153,7 @@ export def "spaces-participants-pending get" [
 #
 # GET /spaces/{id}/pinnedTopics
 # operationId: getPinnedTopics
-export def "spaces-pinned-topics get" [
+export def "get-pinned-topics" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3190,7 +3190,7 @@ export def "spaces-pinned-topics get" [
 #
 # GET /spaces/{id}/searchParticipantsToAdd
 # operationId: searchParticipantsToAdd
-export def "spaces-search-participants-to-add list" [
+export def "search-participants-to-add" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3229,7 +3229,7 @@ export def "spaces-search-participants-to-add list" [
 #
 # GET /spaces/{id}/searchSpaceParticipants
 # operationId: searchSpaceParticipants
-export def "spaces-search-space-participants list" [
+export def "search-space-participants" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3268,7 +3268,7 @@ export def "spaces-search-space-participants list" [
 #
 # PUT /spaces/{id}/updateTimestamp
 # operationId: updateReadTimestamp
-export def "spaces-update-timestamp get" [
+export def "update-read-timestamp" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3309,7 +3309,7 @@ export def "spaces-update-timestamp get" [
 #
 # PUT /spaces/{spaceId}/participant
 # operationId: updateParticipantInSpace
-export def "spaces-participant update" [
+export def "update-participant-in-space" [
   space_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3351,7 +3351,7 @@ export def "spaces-participant update" [
 #
 # GET /spaces/{spaceId}/participant/import/
 # operationId: getParticipantsImportData
-export def "spaces-participant-import get-data" [
+export def "get-participants-import-data" [
   space_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3388,7 +3388,7 @@ export def "spaces-participant-import get-data" [
 #
 # POST /spaces/{spaceId}/participant/request
 # operationId: requestSpaceAcces
-export def "spaces-participant-request request-acces" [
+export def "request-space-acces" [
   space_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3429,7 +3429,7 @@ export def "spaces-participant-request request-acces" [
 #
 # POST /spaces/{spaceId}/participant/{participantId}/deny
 # operationId: denySpaceAcces
-export def "spaces-participant-deny create-acces" [
+export def "deny-space-acces" [
   space_id: string
   participant_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3472,7 +3472,7 @@ export def "spaces-participant-deny create-acces" [
 #
 # POST /spaces/{spaceId}/participant/{participantId}/grant
 # operationId: grantSpaceAcces
-export def "spaces-participant-grant create-acces" [
+export def "grant-space-acces" [
   space_id: string
   participant_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3510,7 +3510,7 @@ export def "spaces-participant-grant create-acces" [
 #
 # POST /spaces/{spaceId}/topic
 # operationId: createSpaceTopic
-export def "spaces-topic create" [
+export def "create-space-topic" [
   space_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3559,7 +3559,7 @@ export def "spaces-topic create" [
 #
 # GET /spaces/{spaceId}/topic/{topicId}
 # operationId: v2GetTopicWithReplies
-export def "spaces-topic get-with-replies" [
+export def "v2-get-topic-with-replies" [
   space_id: string
   topic_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3600,7 +3600,7 @@ export def "spaces-topic get-with-replies" [
 #
 # PUT /spaces/{spaceId}/topic/{topicId}
 # operationId: updateSpaceTopic
-export def "spaces-topic update" [
+export def "update-space-topic" [
   space_id: string
   topic_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3651,7 +3651,7 @@ export def "spaces-topic update" [
 #
 # GET /spaces/{spaceId}/topic/{topicId}/reply
 # operationId: getSpaceReplies
-export def "spaces-topic-reply get-replies" [
+export def "get-space-replies" [
   space_id: string
   topic_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3694,7 +3694,7 @@ export def "spaces-topic-reply get-replies" [
 #
 # POST /spaces/{spaceId}/topic/{topicId}/reply
 # operationId: createReply
-export def "spaces-topic-reply create" [
+export def "create-reply" [
   space_id: string
   topic_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3742,7 +3742,7 @@ export def "spaces-topic-reply create" [
 #
 # PUT /spaces/{spaceId}/topic/{topicId}/reply/{replyId}
 # operationId: updateSpaceReply
-export def "spaces-topic-reply update" [
+export def "update-space-reply" [
   space_id: string
   topic_id: string
   reply_id: string
@@ -3792,7 +3792,7 @@ export def "spaces-topic-reply update" [
 #
 # GET /spaces/{spaceId}/topics
 # operationId: getSpaceTopics
-export def "spaces-topics get" [
+export def "get-space-topics" [
   space_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3833,7 +3833,7 @@ export def "spaces-topics get" [
 #
 # PUT /spaces/{spaceId}/welcomebox/{content}
 # operationId: v2UpdateWelcomeBoxContent
-export def "spaces-welcomebox update-welcome-box" [
+export def "v2-update-welcome-box-content" [
   space_id: string
   content: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3876,7 +3876,7 @@ export def "spaces-welcomebox update-welcome-box" [
 #
 # PUT /spaces/{topicId}/pin
 # operationId: pinTopic
-export def "spaces-pin update-topic" [
+export def "pin-topic" [
   topic_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3917,7 +3917,7 @@ export def "spaces-pin update-topic" [
 #
 # PUT /spaces/{topicId}/unpin
 # operationId: unpinTopic
-export def "spaces-unpin update-topic" [
+export def "unpin-topic" [
   topic_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3953,7 +3953,7 @@ export def "spaces-unpin update-topic" [
 #
 # GET /telephony/deviceInfos
 # operationId: v2GetDeviceInfos
-export def "telephony-device-infos get" [
+export def "v2-get-device-infos" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3987,7 +3987,7 @@ export def "telephony-device-infos get" [
 #
 # GET /telephony/telephonyConversationId
 # operationId: v2GetTelephonyConversationId
-export def "telephony-telephony-conversation-id get" [
+export def "v2-get-telephony-conversation-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4021,7 +4021,7 @@ export def "telephony-telephony-conversation-id get" [
 #
 # GET /telephony/{telephonyConversationId}/journal
 # operationId: getJournalEntries
-export def "telephony-journal get-entries" [
+export def "get-journal-entries" [
   telephony_conversation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4063,7 +4063,7 @@ export def "telephony-journal get-entries" [
 #
 # GET /users
 # operationId: searchUser
-export def "users list" [
+export def "search-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4100,7 +4100,7 @@ export def "users list" [
 #
 # GET /users/labels
 # operationId: getLabel
-export def "users-labels get" [
+export def "get-label" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4134,7 +4134,7 @@ export def "users-labels get" [
 #
 # POST /users/labels
 # operationId: addLabel
-export def "users-labels create" [
+export def "add-label" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4174,7 +4174,7 @@ export def "users-labels create" [
 #
 # DELETE /users/labels/{labelId}
 # operationId: removeLabel
-export def "users-labels delete" [
+export def "remove-label" [
   label_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4211,7 +4211,7 @@ export def "users-labels delete" [
 #
 # GET /users/list
 # operationId: searchUsersList
-export def "users-list list" [
+export def "search-users-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4250,7 +4250,7 @@ export def "users-list list" [
 #
 # GET /users/presence
 # operationId: getPresence
-export def "users-presence list" [
+export def "get-presence" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4287,7 +4287,7 @@ export def "users-presence list" [
 #
 # PUT /users/presence
 # operationId: setUserPresence
-export def "users-presence update" [
+export def "set-user-presence" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4330,7 +4330,7 @@ export def "users-presence update" [
 #
 # GET /users/profile
 # operationId: getProfile
-export def "users-profile get" [
+export def "get-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4364,7 +4364,7 @@ export def "users-profile get" [
 #
 # PUT /users/profile
 # operationId: updateProfile
-export def "users-profile update" [
+export def "update-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4407,7 +4407,7 @@ export def "users-profile update" [
 #
 # GET /users/supportinfo
 # operationId: getSupportInfo
-export def "users-supportinfo get-support" [
+export def "get-support-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4441,7 +4441,7 @@ export def "users-supportinfo get-support" [
 #
 # GET /users/{emailAddress}/getUserByEmail
 # operationId: getUserByEmailAddress
-export def "users-get-user-by-email get-address" [
+export def "get-user-by-email-address" [
   email_address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4480,7 +4480,7 @@ export def "users-get-user-by-email get-address" [
 #
 # GET /users/{id}
 # operationId: getUserById
-export def "users get" [
+export def "get-user-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4517,7 +4517,7 @@ export def "users get" [
 #
 # GET /users/{id}/presence
 # operationId: getUserPresence
-export def "users-presence get" [
+export def "get-user-presence" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4554,7 +4554,7 @@ export def "users-presence get" [
 #
 # DELETE /webhooks
 # operationId: removeWebHooks
-export def "webhooks delete-web-hooks" [
+export def "remove-web-hooks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4588,7 +4588,7 @@ export def "webhooks delete-web-hooks" [
 #
 # GET /webhooks
 # operationId: getWebHook
-export def "webhooks list" [
+export def "get-web-hook" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4622,7 +4622,7 @@ export def "webhooks list" [
 #
 # POST /webhooks
 # operationId: addWebHook
-export def "webhooks create-web-hook" [
+export def "add-web-hook" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4663,7 +4663,7 @@ export def "webhooks create-web-hook" [
 #
 # POST /webhooks/incoming/create/{conversationId}
 # operationId: createIncomingWebhook
-export def "webhooks-incoming-create create" [
+export def "create-incoming-webhook" [
   conversation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4704,7 +4704,7 @@ export def "webhooks-incoming-create create" [
 #
 # GET /webhooks/incoming/user/{userId}
 # operationId: getIncomingWebhookByUser
-export def "webhooks-incoming-user get" [
+export def "get-incoming-webhook-by-user" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4744,7 +4744,7 @@ export def "webhooks-incoming-user get" [
 #
 # DELETE /webhooks/incoming/{webhookId}
 # operationId: deleteIncomingWebhook
-export def "webhooks-incoming delete" [
+export def "delete-incoming-webhook" [
   webhook_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4780,7 +4780,7 @@ export def "webhooks-incoming delete" [
 #
 # POST /webhooks/incoming/{webhookId}
 # operationId: postWebhookAsSlackMessage
-export def "webhooks-incoming create-as-slack-message" [
+export def "post-webhook-as-slack-message" [
   webhook_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4825,7 +4825,7 @@ export def "webhooks-incoming create-as-slack-message" [
 #
 # POST /webhooks/presence
 # operationId: addPresenceWebHook
-export def "webhooks-presence create-web-hook" [
+export def "add-presence-web-hook" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4866,7 +4866,7 @@ export def "webhooks-presence create-web-hook" [
 #
 # PUT /webhooks/presence/{id}
 # operationId: updatePresenceWebHook
-export def "webhooks-presence update-web-hook" [
+export def "update-presence-web-hook" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4909,7 +4909,7 @@ export def "webhooks-presence update-web-hook" [
 #
 # DELETE /webhooks/{id}
 # operationId: removeWebHook
-export def "webhooks delete-web-hook" [
+export def "remove-web-hook" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4945,7 +4945,7 @@ export def "webhooks delete-web-hook" [
 #
 # GET /webhooks/{id}
 # operationId: getWebHookById
-export def "webhooks get-web-hook" [
+export def "get-web-hook-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4982,7 +4982,7 @@ export def "webhooks get-web-hook" [
 #
 # PUT /webhooks/{id}
 # operationId: updateWebHook
-export def "webhooks update-web-hook" [
+export def "update-web-hook" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

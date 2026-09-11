@@ -122,7 +122,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-sql-servers-job-agents list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "job-agents-list-by-server" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/jobAgents
 # operationId: JobAgents_ListByServer
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-agents list" [
+export def "job-agents-list-by-server" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -188,7 +188,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-ag
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/jobAgents/{jobAgentName}
 # operationId: JobAgents_Delete
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-agents delete" [
+export def "job-agents-delete" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -232,7 +232,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-ag
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/jobAgents/{jobAgentName}
 # operationId: JobAgents_Get
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-agents get" [
+export def "job-agents-get" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -276,7 +276,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-ag
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/jobAgents/{jobAgentName}
 # operationId: JobAgents_Update
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-agents update" [
+export def "job-agents-update" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -326,7 +326,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-ag
 # operationId: JobAgents_CreateOrUpdate
 # --properties shape: {databaseId: string}
 # --sku shape: {capacity?: int, family?: string, name: string, size?: string, tier?: string}
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-agents create-or-update" [
+export def "job-agents-create-or-update" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -377,7 +377,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-ag
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/jobAgents/{jobAgentName}/credentials
 # operationId: JobCredentials_ListByAgent
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-agents-credentials list" [
+export def "job-credentials-list-by-agent" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -421,7 +421,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-ag
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/jobAgents/{jobAgentName}/credentials/{credentialName}
 # operationId: JobCredentials_Delete
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-agents-credentials delete" [
+export def "job-credentials-delete" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -467,7 +467,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-ag
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/jobAgents/{jobAgentName}/credentials/{credentialName}
 # operationId: JobCredentials_Get
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-agents-credentials get" [
+export def "job-credentials-get" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -514,7 +514,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-ag
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/jobAgents/{jobAgentName}/credentials/{credentialName}
 # operationId: JobCredentials_CreateOrUpdate
 # --properties shape: {password: string, username: string}
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-agents-credentials create-or-update" [
+export def "job-credentials-create-or-update" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -564,7 +564,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-ag
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/jobAgents/{jobAgentName}/executions
 # operationId: JobExecutions_ListByAgent
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-agents-executions list" [
+export def "job-executions-list-by-agent" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -615,7 +615,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-ag
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/jobAgents/{jobAgentName}/jobs
 # operationId: Jobs_ListByAgent
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-agents-jobs list" [
+export def "jobs-list-by-agent" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -659,7 +659,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-ag
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/jobAgents/{jobAgentName}/jobs/{jobName}
 # operationId: Jobs_Delete
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-agents-jobs delete" [
+export def "jobs-delete" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -705,7 +705,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-ag
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/jobAgents/{jobAgentName}/jobs/{jobName}
 # operationId: Jobs_Get
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-agents-jobs get" [
+export def "jobs-get" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -752,7 +752,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-ag
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/jobAgents/{jobAgentName}/jobs/{jobName}
 # operationId: Jobs_CreateOrUpdate
 # --properties shape: {description?: string, schedule?: record}
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-agents-jobs create-or-update" [
+export def "jobs-create-or-update" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -802,7 +802,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-ag
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/jobAgents/{jobAgentName}/jobs/{jobName}/executions
 # operationId: JobExecutions_ListByJob
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-agents-jobs-executions list" [
+export def "job-executions-list-by-job" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -855,7 +855,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-ag
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/jobAgents/{jobAgentName}/jobs/{jobName}/executions/{jobExecutionId}
 # operationId: JobExecutions_Get
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-agents-jobs-executions get" [
+export def "job-executions-get" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -903,7 +903,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-ag
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/jobAgents/{jobAgentName}/jobs/{jobName}/executions/{jobExecutionId}
 # operationId: JobExecutions_CreateOrUpdate
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-agents-jobs-executions create-or-update" [
+export def "job-executions-create-or-update" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -951,7 +951,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-ag
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/jobAgents/{jobAgentName}/jobs/{jobName}/executions/{jobExecutionId}/cancel
 # operationId: JobExecutions_Cancel
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-agents-jobs-executions-cancel cancel" [
+export def "job-executions-cancel" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -999,7 +999,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-ag
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/jobAgents/{jobAgentName}/jobs/{jobName}/executions/{jobExecutionId}/steps
 # operationId: JobStepExecutions_ListByJobExecution
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-agents-jobs-executions-steps list" [
+export def "job-step-executions-list-by-job-execution" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -1054,7 +1054,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-ag
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/jobAgents/{jobAgentName}/jobs/{jobName}/executions/{jobExecutionId}/steps/{stepName}
 # operationId: JobStepExecutions_Get
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-agents-jobs-executions-steps get" [
+export def "job-step-executions-get" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -1104,7 +1104,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-ag
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/jobAgents/{jobAgentName}/jobs/{jobName}/executions/{jobExecutionId}/steps/{stepName}/targets
 # operationId: JobTargetExecutions_ListByStep
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-agents-jobs-executions-steps-targets list" [
+export def "job-target-executions-list-by-step" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -1161,7 +1161,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-ag
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/jobAgents/{jobAgentName}/jobs/{jobName}/executions/{jobExecutionId}/steps/{stepName}/targets/{targetId}
 # operationId: JobTargetExecutions_Get
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-agents-jobs-executions-steps-targets get" [
+export def "job-target-executions-get" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -1213,7 +1213,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-ag
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/jobAgents/{jobAgentName}/jobs/{jobName}/executions/{jobExecutionId}/targets
 # operationId: JobTargetExecutions_ListByJobExecution
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-agents-jobs-executions-targets list" [
+export def "job-target-executions-list-by-job-execution" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -1268,7 +1268,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-ag
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/jobAgents/{jobAgentName}/jobs/{jobName}/start
 # operationId: JobExecutions_Create
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-agents-jobs-start create-executions" [
+export def "job-executions-create" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -1314,7 +1314,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-ag
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/jobAgents/{jobAgentName}/jobs/{jobName}/steps
 # operationId: JobSteps_ListByJob
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-agents-jobs-steps list" [
+export def "job-steps-list-by-job" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -1360,7 +1360,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-ag
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/jobAgents/{jobAgentName}/jobs/{jobName}/steps/{stepName}
 # operationId: JobSteps_Delete
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-agents-jobs-steps delete" [
+export def "job-steps-delete" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -1408,7 +1408,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-ag
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/jobAgents/{jobAgentName}/jobs/{jobName}/steps/{stepName}
 # operationId: JobSteps_Get
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-agents-jobs-steps get" [
+export def "job-steps-get" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -1457,7 +1457,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-ag
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/jobAgents/{jobAgentName}/jobs/{jobName}/steps/{stepName}
 # operationId: JobSteps_CreateOrUpdate
 # --properties shape: {action: record, credential: string, executionOptions?: record, output?: record, stepId?: int, targetGroup: string}
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-agents-jobs-steps create-or-update" [
+export def "job-steps-create-or-update" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -1509,7 +1509,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-ag
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/jobAgents/{jobAgentName}/jobs/{jobName}/versions
 # operationId: JobVersions_ListByJob
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-agents-jobs-versions list" [
+export def "job-versions-list-by-job" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -1555,7 +1555,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-ag
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/jobAgents/{jobAgentName}/jobs/{jobName}/versions/{jobVersion}
 # operationId: JobVersions_Get
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-agents-jobs-versions get" [
+export def "job-versions-get" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -1603,7 +1603,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-ag
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/jobAgents/{jobAgentName}/jobs/{jobName}/versions/{jobVersion}/steps
 # operationId: JobSteps_ListByVersion
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-agents-jobs-versions-steps list" [
+export def "job-steps-list-by-version" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -1651,7 +1651,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-ag
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/jobAgents/{jobAgentName}/jobs/{jobName}/versions/{jobVersion}/steps/{stepName}
 # operationId: JobSteps_GetByVersion
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-agents-jobs-versions-steps get" [
+export def "job-steps-get-by-version" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -1701,7 +1701,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-ag
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/jobAgents/{jobAgentName}/targetGroups
 # operationId: JobTargetGroups_ListByAgent
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-agents-target-groups list" [
+export def "job-target-groups-list-by-agent" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -1745,7 +1745,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-ag
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/jobAgents/{jobAgentName}/targetGroups/{targetGroupName}
 # operationId: JobTargetGroups_Delete
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-agents-target-groups delete" [
+export def "job-target-groups-delete" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -1791,7 +1791,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-ag
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/jobAgents/{jobAgentName}/targetGroups/{targetGroupName}
 # operationId: JobTargetGroups_Get
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-agents-target-groups get" [
+export def "job-target-groups-get" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -1838,7 +1838,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-ag
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/jobAgents/{jobAgentName}/targetGroups/{targetGroupName}
 # operationId: JobTargetGroups_CreateOrUpdate
 # --properties shape: {members: list}
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-job-agents-target-groups create-or-update" [
+export def "job-target-groups-create-or-update" [
   subscription_id: string
   resource_group_name: string
   server_name: string

@@ -107,7 +107,7 @@ def accept-completer-1 [] { ["application/json" "image/gif" "image/jpeg" "image/
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "pdf get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-api-pdf" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -130,7 +130,7 @@ export def commands []: nothing -> table {
 # Basic method to verify api is up and running
 #
 # GET /api/pdf
-export def "pdf get" [
+export def "get-api-pdf" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -163,7 +163,7 @@ export def "pdf get" [
 # Concatenate multiple pdf files into single pdf file..
 #
 # POST /api/pdf/pdfconcat
-export def "pdf-pdfconcat create" [
+export def "post-api-pdf-pdfconcat" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -202,7 +202,7 @@ export def "pdf-pdfconcat create" [
 #
 # POST /api/pdf/pdftoimage
 # --Options shape: {Height?: int, HorizontalResolution?: float, ImageFormat?: string, JpegQuality?: int, PageNumber?: int, PngCompressionLevel?: int, Transparent?: bool, VerticalResolution?: float, Width?: int}
-export def "pdf-pdftoimage create" [
+export def "post-api-pdf-pdftoimage" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -242,7 +242,7 @@ export def "pdf-pdftoimage create" [
 #
 # POST /api/pdf/pdfwritestring
 # --Options shape: {Font?: record, PageNumber?: int, Text?: string, TextColor?: record, XOrigin?: "0"|"1"|"2", XPosition?: float, YOrigin?: "0"|"1"|"2", YPosition?: float}
-export def "pdf-pdfwritestring create" [
+export def "post-api-pdf-pdfwritestring" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -282,7 +282,7 @@ export def "pdf-pdfwritestring create" [
 # Generate pdf file from url using the excellent tool wkhtmltopdf.
 #
 # POST /api/pdf/wkhtmltopdf
-export def "pdf-wkhtmltopdf create" [
+export def "post-api-pdf-wkhtmltopdf" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -324,7 +324,7 @@ export def "pdf-wkhtmltopdf create" [
 #
 # POST /api/pdf/xslfo
 # --Metadata shape: {Author?: string, EnableAdd?: bool, EnableCopy?: bool, EnableModify?: bool, EnablePrinting?: bool, Keywords?: list<string>, OwnerPassword?: string, Subject?: string, Title?: string, UserPassword?: string}
-export def "pdf-xslfo create" [
+export def "post-api-pdf-xslfo" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -365,7 +365,7 @@ export def "pdf-xslfo create" [
 #
 # POST /api/pdf/xslfowithtransform
 # --Metadata shape: {Author?: string, EnableAdd?: bool, EnableCopy?: bool, EnableModify?: bool, EnablePrinting?: bool, Keywords?: list<string>, OwnerPassword?: string, Subject?: string, Title?: string, UserPassword?: string}
-export def "pdf-xslfowithtransform create" [
+export def "post-api-pdf-xslfowithtransform" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

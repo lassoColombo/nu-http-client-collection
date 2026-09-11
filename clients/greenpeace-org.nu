@@ -97,7 +97,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "events list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-events" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -120,7 +120,7 @@ export def commands []: nothing -> table {
 # Return the upcoming events (e.g. start date >= today). Gets an array of `Event` object. Mandatory query param of **domain** determines the site / country the event belongs to.
 #
 # GET /events
-export def "events list" [
+export def "get-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -156,7 +156,7 @@ export def "events list" [
 # Get one `Event` object by specifying its UUID in the url path.
 #
 # GET /events/{UUID}
-export def "events get" [
+export def "get-events-uuid" [
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -191,7 +191,7 @@ export def "events get" [
 # Gets an array of `Group` object. Mandatory query param of **domain** determines the site / country the group belongs to.
 #
 # GET /groups
-export def "groups list" [
+export def "get-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -227,7 +227,7 @@ export def "groups list" [
 # Get one `Group` object by specifying its UUID in the url path.
 #
 # GET /groups/{UUID}
-export def "groups get" [
+export def "get-groups-uuid" [
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -262,7 +262,7 @@ export def "groups get" [
 # Gets an array of `Volunteer` object. Mandatory query param of **domain** determines the site / country the volunteers are from.
 #
 # GET /volunteers
-export def "volunteers list" [
+export def "get-volunteers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -299,7 +299,7 @@ export def "volunteers list" [
 # Get one specific `Volunteer` object by specifying its UUID in the url path.
 #
 # GET /volunteers/{UUID}
-export def "volunteers get" [
+export def "get-volunteers-uuid" [
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

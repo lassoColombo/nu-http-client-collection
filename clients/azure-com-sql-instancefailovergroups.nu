@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-sql-locations-instance-failover-groups list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "instance-failover-groups-list-by-location" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/locations/{locationName}/instanceFailoverGroups
 # operationId: InstanceFailoverGroups_ListByLocation
-export def "subscriptions-resource-groups-providers-microsoft-sql-locations-instance-failover-groups list" [
+export def "instance-failover-groups-list-by-location" [
   subscription_id: string
   resource_group_name: string
   location_name: string
@@ -182,7 +182,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-locations-inst
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/locations/{locationName}/instanceFailoverGroups/{failoverGroupName}
 # operationId: InstanceFailoverGroups_Delete
-export def "subscriptions-resource-groups-providers-microsoft-sql-locations-instance-failover-groups delete" [
+export def "instance-failover-groups-delete" [
   subscription_id: string
   resource_group_name: string
   location_name: string
@@ -226,7 +226,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-locations-inst
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/locations/{locationName}/instanceFailoverGroups/{failoverGroupName}
 # operationId: InstanceFailoverGroups_Get
-export def "subscriptions-resource-groups-providers-microsoft-sql-locations-instance-failover-groups get" [
+export def "instance-failover-groups-get" [
   subscription_id: string
   resource_group_name: string
   location_name: string
@@ -271,7 +271,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-locations-inst
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/locations/{locationName}/instanceFailoverGroups/{failoverGroupName}
 # operationId: InstanceFailoverGroups_CreateOrUpdate
 # --properties shape: {managedInstancePairs: list, partnerRegions: list, readOnlyEndpoint?: record, readWriteEndpoint: record}
-export def "subscriptions-resource-groups-providers-microsoft-sql-locations-instance-failover-groups create-or-update" [
+export def "instance-failover-groups-create-or-update" [
   subscription_id: string
   resource_group_name: string
   location_name: string
@@ -319,7 +319,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-locations-inst
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/locations/{locationName}/instanceFailoverGroups/{failoverGroupName}/failover
 # operationId: InstanceFailoverGroups_Failover
-export def "subscriptions-resource-groups-providers-microsoft-sql-locations-instance-failover-groups-failover create" [
+export def "instance-failover-groups-failover" [
   subscription_id: string
   resource_group_name: string
   location_name: string
@@ -363,7 +363,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-locations-inst
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/locations/{locationName}/instanceFailoverGroups/{failoverGroupName}/forceFailoverAllowDataLoss
 # operationId: InstanceFailoverGroups_ForceFailoverAllowDataLoss
-export def "subscriptions-resource-groups-providers-microsoft-sql-locations-instance-failover-groups-force-failover-allow-data-loss create" [
+export def "instance-failover-groups-force-failover-allow-data-loss" [
   subscription_id: string
   resource_group_name: string
   location_name: string

@@ -125,7 +125,7 @@ def key-type-completer [] { ["Primary" "Secondary"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-cache-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -149,7 +149,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.Cache/operations
 # operationId: Operations_List
-export def "providers-microsoft-cache-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -185,7 +185,7 @@ export def "providers-microsoft-cache-operations list" [
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Cache/CheckNameAvailability
 # operationId: Redis_CheckNameAvailability
-export def "subscriptions-providers-microsoft-cache-check-name-availability check-redis" [
+export def "redis-check-name-availability" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -228,7 +228,7 @@ export def "subscriptions-providers-microsoft-cache-check-name-availability chec
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Cache/Redis
 # operationId: Redis_List
-export def "subscriptions-providers-microsoft-cache-redis list" [
+export def "redis-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -266,7 +266,7 @@ export def "subscriptions-providers-microsoft-cache-redis list" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cache/Redis
 # operationId: Redis_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-cache-redis list" [
+export def "redis-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -306,7 +306,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cache-redis list" 
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cache/Redis/{cacheName}/firewallRules
 # operationId: FirewallRules_ListByRedisResource
-export def "subscriptions-resource-groups-providers-microsoft-cache-redis-firewall-rules list" [
+export def "firewall-rules-list-by-redis-resource" [
   subscription_id: string
   resource_group_name: string
   cache_name: string
@@ -348,7 +348,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cache-redis-firewa
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cache/Redis/{cacheName}/firewallRules/{ruleName}
 # operationId: FirewallRules_Delete
-export def "subscriptions-resource-groups-providers-microsoft-cache-redis-firewall-rules delete" [
+export def "firewall-rules-delete" [
   subscription_id: string
   resource_group_name: string
   cache_name: string
@@ -392,7 +392,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cache-redis-firewa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cache/Redis/{cacheName}/firewallRules/{ruleName}
 # operationId: FirewallRules_Get
-export def "subscriptions-resource-groups-providers-microsoft-cache-redis-firewall-rules get" [
+export def "firewall-rules-get" [
   subscription_id: string
   resource_group_name: string
   cache_name: string
@@ -437,7 +437,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cache-redis-firewa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cache/Redis/{cacheName}/firewallRules/{ruleName}
 # operationId: FirewallRules_CreateOrUpdate
 # --properties shape: {endIP: string, startIP: string}
-export def "subscriptions-resource-groups-providers-microsoft-cache-redis-firewall-rules create-or-update" [
+export def "firewall-rules-create-or-update" [
   subscription_id: string
   resource_group_name: string
   cache_name: string
@@ -485,7 +485,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cache-redis-firewa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cache/Redis/{cacheName}/patchSchedules
 # operationId: PatchSchedules_ListByRedisResource
-export def "subscriptions-resource-groups-providers-microsoft-cache-redis-patch-schedules list" [
+export def "patch-schedules-list-by-redis-resource" [
   subscription_id: string
   resource_group_name: string
   cache_name: string
@@ -527,7 +527,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cache-redis-patch-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cache/Redis/{name}
 # operationId: Redis_Delete
-export def "subscriptions-resource-groups-providers-microsoft-cache-redis delete" [
+export def "redis-delete" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -569,7 +569,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cache-redis delete
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cache/Redis/{name}
 # operationId: Redis_Get
-export def "subscriptions-resource-groups-providers-microsoft-cache-redis get" [
+export def "redis-get" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -612,7 +612,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cache-redis get" [
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cache/Redis/{name}
 # operationId: Redis_Update
 # --properties shape: {sku?: any, enableNonSslPort?: bool, minimumTlsVersion?: "1.0"|"1.1"|"1.2", redisConfiguration?: record, shardCount?: int, tenantSettings?: record}
-export def "subscriptions-resource-groups-providers-microsoft-cache-redis update" [
+export def "redis-update" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -660,7 +660,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cache-redis update
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cache/Redis/{name}
 # operationId: Redis_Create
 # --properties shape: {sku: any, staticIP?: string, subnetId?: string, enableNonSslPort?: bool, minimumTlsVersion?: "1.0"|"1.1"|"1.2", redisConfiguration?: record, shardCount?: int, tenantSettings?: record}
-export def "subscriptions-resource-groups-providers-microsoft-cache-redis create" [
+export def "redis-create" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -709,7 +709,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cache-redis create
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cache/Redis/{name}/export
 # operationId: Redis_ExportData
-export def "subscriptions-resource-groups-providers-microsoft-cache-redis-export export-data" [
+export def "redis-export-data" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -757,7 +757,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cache-redis-export
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cache/Redis/{name}/forceReboot
 # operationId: Redis_ForceReboot
-export def "subscriptions-resource-groups-providers-microsoft-cache-redis-force-reboot create" [
+export def "redis-force-reboot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -804,7 +804,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cache-redis-force-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cache/Redis/{name}/import
 # operationId: Redis_ImportData
-export def "subscriptions-resource-groups-providers-microsoft-cache-redis-import import-data" [
+export def "redis-import-data" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -851,7 +851,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cache-redis-import
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cache/Redis/{name}/linkedServers
 # operationId: LinkedServer_List
-export def "subscriptions-resource-groups-providers-microsoft-cache-redis-linked-servers list" [
+export def "linked-server-list" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -893,7 +893,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cache-redis-linked
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cache/Redis/{name}/linkedServers/{linkedServerName}
 # operationId: LinkedServer_Delete
-export def "subscriptions-resource-groups-providers-microsoft-cache-redis-linked-servers delete" [
+export def "linked-server-delete" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -937,7 +937,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cache-redis-linked
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cache/Redis/{name}/linkedServers/{linkedServerName}
 # operationId: LinkedServer_Get
-export def "subscriptions-resource-groups-providers-microsoft-cache-redis-linked-servers get" [
+export def "linked-server-get" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -982,7 +982,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cache-redis-linked
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cache/Redis/{name}/linkedServers/{linkedServerName}
 # operationId: LinkedServer_Create
 # --properties shape: {linkedRedisCacheId: string, linkedRedisCacheLocation: string, serverRole: "Primary"|"Secondary"}
-export def "subscriptions-resource-groups-providers-microsoft-cache-redis-linked-servers create" [
+export def "linked-server-create" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1030,7 +1030,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cache-redis-linked
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cache/Redis/{name}/listKeys
 # operationId: Redis_ListKeys
-export def "subscriptions-resource-groups-providers-microsoft-cache-redis-list-keys list" [
+export def "redis-list-keys" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1072,7 +1072,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cache-redis-list-k
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cache/Redis/{name}/listUpgradeNotifications
 # operationId: Redis_ListUpgradeNotifications
-export def "subscriptions-resource-groups-providers-microsoft-cache-redis-list-upgrade-notifications list" [
+export def "redis-list-upgrade-notifications" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1115,7 +1115,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cache-redis-list-u
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cache/Redis/{name}/patchSchedules/{default}
 # operationId: PatchSchedules_Delete
-export def "subscriptions-resource-groups-providers-microsoft-cache-redis-patch-schedules delete" [
+export def "patch-schedules-delete" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1159,7 +1159,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cache-redis-patch-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cache/Redis/{name}/patchSchedules/{default}
 # operationId: PatchSchedules_Get
-export def "subscriptions-resource-groups-providers-microsoft-cache-redis-patch-schedules get" [
+export def "patch-schedules-get" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1204,7 +1204,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cache-redis-patch-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cache/Redis/{name}/patchSchedules/{default}
 # operationId: PatchSchedules_CreateOrUpdate
 # --properties shape: {scheduleEntries: list}
-export def "subscriptions-resource-groups-providers-microsoft-cache-redis-patch-schedules create-or-update" [
+export def "patch-schedules-create-or-update" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1252,7 +1252,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cache-redis-patch-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cache/Redis/{name}/regenerateKey
 # operationId: Redis_RegenerateKey
-export def "subscriptions-resource-groups-providers-microsoft-cache-redis-regenerate-key create" [
+export def "redis-regenerate-key" [
   subscription_id: string
   resource_group_name: string
   name: string

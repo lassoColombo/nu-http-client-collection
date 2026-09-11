@@ -102,7 +102,7 @@ def question-status-completer [] { ["AllQuestions" "AnsweredOnly" "NotAnswered"]
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "dailyreports-dailyreports get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-api-dailyreports-dailyreports" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -125,7 +125,7 @@ export def commands []: nothing -> table {
 # Returns a list of daily reports
 #
 # GET /api/dailyreports/dailyreports
-export def "dailyreports-dailyreports get" [
+export def "get-api-dailyreports-dailyreports" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -165,7 +165,7 @@ export def "dailyreports-dailyreports get" [
 # Returns a list of written questions
 #
 # GET /api/writtenquestions/questions
-export def "writtenquestions-questions get" [
+export def "get-api-writtenquestions-questions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -219,7 +219,7 @@ export def "writtenquestions-questions get" [
 # Returns a written question
 #
 # GET /api/writtenquestions/questions/{date}/{uin}
-export def "writtenquestions-questions get-by-date-uin" [
+export def "get-api-writtenquestions-questions-date-uin" [
   date: string
   uin: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -259,7 +259,7 @@ export def "writtenquestions-questions get-by-date-uin" [
 # Returns a written question
 #
 # GET /api/writtenquestions/questions/{id}
-export def "writtenquestions-questions get-by-id" [
+export def "get-api-writtenquestions-questions-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -297,7 +297,7 @@ export def "writtenquestions-questions get-by-id" [
 # Returns a list of written statements
 #
 # GET /api/writtenstatements/statements
-export def "writtenstatements-statements get" [
+export def "get-api-writtenstatements-statements" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -342,7 +342,7 @@ export def "writtenstatements-statements get" [
 # Returns a written statemnet
 #
 # GET /api/writtenstatements/statements/{date}/{uin}
-export def "writtenstatements-statements get-by-date-uin" [
+export def "get-api-writtenstatements-statements-date-uin" [
   date: string
   uin: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -382,7 +382,7 @@ export def "writtenstatements-statements get-by-date-uin" [
 # Returns a written statement
 #
 # GET /api/writtenstatements/statements/{id}
-export def "writtenstatements-statements get-by-id" [
+export def "get-api-writtenstatements-statements-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

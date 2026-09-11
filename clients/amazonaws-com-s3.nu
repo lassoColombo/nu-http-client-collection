@@ -177,7 +177,7 @@ def x-amz-fwd-header-x-amz-storage-class-completer [] { ["DEEP_ARCHIVE" "GLACIER
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api abort-multipart-upload" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "abort-multipart-upload" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -202,7 +202,7 @@ export def commands []: nothing -> table {
 # DELETE /{Bucket}/{Key}
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/mpUploadAbort.html
 # operationId: AbortMultipartUpload
-export def "api abort-multipart-upload" [
+export def "abort-multipart-upload" [
   bucket: string
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -248,7 +248,7 @@ export def "api abort-multipart-upload" [
 # POST /{Bucket}/{Key}
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/mpUploadComplete.html
 # operationId: CompleteMultipartUpload
-export def "api complete-multipart-upload" [
+export def "complete-multipart-upload" [
   bucket: string
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -305,7 +305,7 @@ export def "api complete-multipart-upload" [
 # GET /{Bucket}/{Key}
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/mpUploadListParts.html
 # operationId: ListParts
-export def "api list-parts" [
+export def "list-parts" [
   bucket: string
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -358,7 +358,7 @@ export def "api list-parts" [
 # PUT /{Bucket}/{Key}
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTObjectCOPY.html
 # operationId: CopyObject
-export def "api copy-object" [
+export def "copy-object" [
   bucket: string
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -444,7 +444,7 @@ export def "api copy-object" [
 # PUT /{Bucket}
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTBucketPUT.html
 # operationId: CreateBucket
-export def "api create" [
+export def "create-bucket" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -496,7 +496,7 @@ export def "api create" [
 # DELETE /{Bucket}
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTBucketDELETE.html
 # operationId: DeleteBucket
-export def "api delete" [
+export def "delete-bucket" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -537,7 +537,7 @@ export def "api delete" [
 # HEAD /{Bucket}
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTBucketHEAD.html
 # operationId: HeadBucket
-export def "api head" [
+export def "head-bucket" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -578,7 +578,7 @@ export def "api head" [
 # GET /{Bucket}
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTBucketGET.html
 # operationId: ListObjects
-export def "api list-objects-by-bucket" [
+export def "list-objects" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -628,7 +628,7 @@ export def "api list-objects-by-bucket" [
 # POST /{Bucket}/{Key}
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/mpUploadInitiate.html
 # operationId: CreateMultipartUpload
-export def "api create-multipart-upload" [
+export def "create-multipart-upload" [
   bucket: string
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -704,7 +704,7 @@ export def "api create-multipart-upload" [
 #
 # DELETE /{Bucket}
 # operationId: DeleteBucketAnalyticsConfiguration
-export def "api delete-analytics-configuration" [
+export def "delete-bucket-analytics-configuration" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -747,7 +747,7 @@ export def "api delete-analytics-configuration" [
 #
 # GET /{Bucket}
 # operationId: GetBucketAnalyticsConfiguration
-export def "api get-analytics-configuration" [
+export def "get-bucket-analytics-configuration" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -790,7 +790,7 @@ export def "api get-analytics-configuration" [
 #
 # PUT /{Bucket}
 # operationId: PutBucketAnalyticsConfiguration
-export def "api update-analytics-configuration" [
+export def "put-bucket-analytics-configuration" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -838,7 +838,7 @@ export def "api update-analytics-configuration" [
 # DELETE /{Bucket}
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTBucketDELETEcors.html
 # operationId: DeleteBucketCors
-export def "api delete-cors" [
+export def "delete-bucket-cors" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -881,7 +881,7 @@ export def "api delete-cors" [
 # GET /{Bucket}
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTBucketGETcors.html
 # operationId: GetBucketCors
-export def "api get-cors" [
+export def "get-bucket-cors" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -924,7 +924,7 @@ export def "api get-cors" [
 # PUT /{Bucket}
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTBucketPUTcors.html
 # operationId: PutBucketCors
-export def "api update-cors" [
+export def "put-bucket-cors" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -972,7 +972,7 @@ export def "api update-cors" [
 #
 # DELETE /{Bucket}
 # operationId: DeleteBucketEncryption
-export def "api delete-encryption" [
+export def "delete-bucket-encryption" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1014,7 +1014,7 @@ export def "api delete-encryption" [
 #
 # GET /{Bucket}
 # operationId: GetBucketEncryption
-export def "api get-encryption" [
+export def "get-bucket-encryption" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1056,7 +1056,7 @@ export def "api get-encryption" [
 #
 # PUT /{Bucket}
 # operationId: PutBucketEncryption
-export def "api update-encryption" [
+export def "put-bucket-encryption" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1104,7 +1104,7 @@ export def "api update-encryption" [
 #
 # DELETE /{Bucket}
 # operationId: DeleteBucketIntelligentTieringConfiguration
-export def "api delete-intelligent-tiering-configuration" [
+export def "delete-bucket-intelligent-tiering-configuration" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1146,7 +1146,7 @@ export def "api delete-intelligent-tiering-configuration" [
 #
 # GET /{Bucket}
 # operationId: GetBucketIntelligentTieringConfiguration
-export def "api get-intelligent-tiering-configuration" [
+export def "get-bucket-intelligent-tiering-configuration" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1188,7 +1188,7 @@ export def "api get-intelligent-tiering-configuration" [
 #
 # PUT /{Bucket}
 # operationId: PutBucketIntelligentTieringConfiguration
-export def "api update-intelligent-tiering-configuration" [
+export def "put-bucket-intelligent-tiering-configuration" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1234,7 +1234,7 @@ export def "api update-intelligent-tiering-configuration" [
 #
 # DELETE /{Bucket}
 # operationId: DeleteBucketInventoryConfiguration
-export def "api delete-inventory-configuration" [
+export def "delete-bucket-inventory-configuration" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1277,7 +1277,7 @@ export def "api delete-inventory-configuration" [
 #
 # GET /{Bucket}
 # operationId: GetBucketInventoryConfiguration
-export def "api get-inventory-configuration" [
+export def "get-bucket-inventory-configuration" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1320,7 +1320,7 @@ export def "api get-inventory-configuration" [
 #
 # PUT /{Bucket}
 # operationId: PutBucketInventoryConfiguration
-export def "api update-inventory-configuration" [
+export def "put-bucket-inventory-configuration" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1368,7 +1368,7 @@ export def "api update-inventory-configuration" [
 # DELETE /{Bucket}
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTBucketDELETElifecycle.html
 # operationId: DeleteBucketLifecycle
-export def "api delete-lifecycle" [
+export def "delete-bucket-lifecycle" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1410,7 +1410,7 @@ export def "api delete-lifecycle" [
 #
 # GET /{Bucket}
 # operationId: GetBucketLifecycleConfiguration
-export def "api get-lifecycle-configuration" [
+export def "get-bucket-lifecycle-configuration" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1452,7 +1452,7 @@ export def "api get-lifecycle-configuration" [
 #
 # PUT /{Bucket}
 # operationId: PutBucketLifecycleConfiguration
-export def "api update-lifecycle-configuration" [
+export def "put-bucket-lifecycle-configuration" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1499,7 +1499,7 @@ export def "api update-lifecycle-configuration" [
 #
 # DELETE /{Bucket}
 # operationId: DeleteBucketMetricsConfiguration
-export def "api delete-metrics-configuration" [
+export def "delete-bucket-metrics-configuration" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1542,7 +1542,7 @@ export def "api delete-metrics-configuration" [
 #
 # GET /{Bucket}
 # operationId: GetBucketMetricsConfiguration
-export def "api get-metrics-configuration" [
+export def "get-bucket-metrics-configuration" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1585,7 +1585,7 @@ export def "api get-metrics-configuration" [
 #
 # PUT /{Bucket}
 # operationId: PutBucketMetricsConfiguration
-export def "api update-metrics-configuration" [
+export def "put-bucket-metrics-configuration" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1632,7 +1632,7 @@ export def "api update-metrics-configuration" [
 #
 # DELETE /{Bucket}
 # operationId: DeleteBucketOwnershipControls
-export def "api delete-ownership-controls" [
+export def "delete-bucket-ownership-controls" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1674,7 +1674,7 @@ export def "api delete-ownership-controls" [
 #
 # GET /{Bucket}
 # operationId: GetBucketOwnershipControls
-export def "api get-ownership-controls" [
+export def "get-bucket-ownership-controls" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1716,7 +1716,7 @@ export def "api get-ownership-controls" [
 #
 # PUT /{Bucket}
 # operationId: PutBucketOwnershipControls
-export def "api update-ownership-controls" [
+export def "put-bucket-ownership-controls" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1764,7 +1764,7 @@ export def "api update-ownership-controls" [
 # DELETE /{Bucket}
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTBucketDELETEpolicy.html
 # operationId: DeleteBucketPolicy
-export def "api delete-policy" [
+export def "delete-bucket-policy" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1807,7 +1807,7 @@ export def "api delete-policy" [
 # GET /{Bucket}
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTBucketGETpolicy.html
 # operationId: GetBucketPolicy
-export def "api get-policy" [
+export def "get-bucket-policy" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1850,7 +1850,7 @@ export def "api get-policy" [
 # PUT /{Bucket}
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTBucketPUTpolicy.html
 # operationId: PutBucketPolicy
-export def "api update-policy" [
+export def "put-bucket-policy" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1899,7 +1899,7 @@ export def "api update-policy" [
 #
 # DELETE /{Bucket}
 # operationId: DeleteBucketReplication
-export def "api delete-replication" [
+export def "delete-bucket-replication" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1941,7 +1941,7 @@ export def "api delete-replication" [
 #
 # GET /{Bucket}
 # operationId: GetBucketReplication
-export def "api get-replication" [
+export def "get-bucket-replication" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1983,7 +1983,7 @@ export def "api get-replication" [
 #
 # PUT /{Bucket}
 # operationId: PutBucketReplication
-export def "api update-replication" [
+export def "put-bucket-replication" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2033,7 +2033,7 @@ export def "api update-replication" [
 # DELETE /{Bucket}
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTBucketDELETEtagging.html
 # operationId: DeleteBucketTagging
-export def "api delete-tagging" [
+export def "delete-bucket-tagging" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2076,7 +2076,7 @@ export def "api delete-tagging" [
 # GET /{Bucket}
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTBucketGETtagging.html
 # operationId: GetBucketTagging
-export def "api get-tagging" [
+export def "get-bucket-tagging" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2119,7 +2119,7 @@ export def "api get-tagging" [
 # PUT /{Bucket}
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTBucketPUTtagging.html
 # operationId: PutBucketTagging
-export def "api update-tagging" [
+export def "put-bucket-tagging" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2168,7 +2168,7 @@ export def "api update-tagging" [
 # DELETE /{Bucket}
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTBucketDELETEwebsite.html
 # operationId: DeleteBucketWebsite
-export def "api delete-website" [
+export def "delete-bucket-website" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2211,7 +2211,7 @@ export def "api delete-website" [
 # GET /{Bucket}
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTBucketGETwebsite.html
 # operationId: GetBucketWebsite
-export def "api get-website" [
+export def "get-bucket-website" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2254,7 +2254,7 @@ export def "api get-website" [
 # PUT /{Bucket}
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTBucketPUTwebsite.html
 # operationId: PutBucketWebsite
-export def "api update-website" [
+export def "put-bucket-website" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2303,7 +2303,7 @@ export def "api update-website" [
 # DELETE /{Bucket}/{Key}
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTObjectDELETE.html
 # operationId: DeleteObject
-export def "api delete-object" [
+export def "delete-object" [
   bucket: string
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2351,7 +2351,7 @@ export def "api delete-object" [
 # GET /{Bucket}/{Key}
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTObjectGET.html
 # operationId: GetObject
-export def "api get-object" [
+export def "get-object" [
   bucket: string
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2413,7 +2413,7 @@ export def "api get-object" [
 # HEAD /{Bucket}/{Key}
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTObjectHEAD.html
 # operationId: HeadObject
-export def "api head-object" [
+export def "head-object" [
   bucket: string
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2469,7 +2469,7 @@ export def "api head-object" [
 # PUT /{Bucket}/{Key}
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTObjectPUT.html
 # operationId: PutObject
-export def "api update-object" [
+export def "put-object" [
   bucket: string
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2549,7 +2549,7 @@ export def "api update-object" [
 #
 # DELETE /{Bucket}/{Key}
 # operationId: DeleteObjectTagging
-export def "api delete-object-tagging" [
+export def "delete-object-tagging" [
   bucket: string
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2594,7 +2594,7 @@ export def "api delete-object-tagging" [
 #
 # GET /{Bucket}/{Key}
 # operationId: GetObjectTagging
-export def "api get-object-tagging" [
+export def "get-object-tagging" [
   bucket: string
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2640,7 +2640,7 @@ export def "api get-object-tagging" [
 #
 # PUT /{Bucket}/{Key}
 # operationId: PutObjectTagging
-export def "api update-object-tagging" [
+export def "put-object-tagging" [
   bucket: string
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2693,7 +2693,7 @@ export def "api update-object-tagging" [
 # POST /{Bucket}
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/multiobjectdeleteapi.html
 # operationId: DeleteObjects
-export def "api delete-objects" [
+export def "delete-objects" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2743,7 +2743,7 @@ export def "api delete-objects" [
 #
 # DELETE /{Bucket}
 # operationId: DeletePublicAccessBlock
-export def "api delete-public-access-block" [
+export def "delete-public-access-block" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2785,7 +2785,7 @@ export def "api delete-public-access-block" [
 #
 # GET /{Bucket}
 # operationId: GetPublicAccessBlock
-export def "api get-public-access-block" [
+export def "get-public-access-block" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2827,7 +2827,7 @@ export def "api get-public-access-block" [
 #
 # PUT /{Bucket}
 # operationId: PutPublicAccessBlock
-export def "api update-public-access-block" [
+export def "put-public-access-block" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2875,7 +2875,7 @@ export def "api update-public-access-block" [
 #
 # GET /{Bucket}
 # operationId: GetBucketAccelerateConfiguration
-export def "api get-accelerate-configuration" [
+export def "get-bucket-accelerate-configuration" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2917,7 +2917,7 @@ export def "api get-accelerate-configuration" [
 #
 # PUT /{Bucket}
 # operationId: PutBucketAccelerateConfiguration
-export def "api update-accelerate-configuration" [
+export def "put-bucket-accelerate-configuration" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2965,7 +2965,7 @@ export def "api update-accelerate-configuration" [
 # GET /{Bucket}
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTBucketGETacl.html
 # operationId: GetBucketAcl
-export def "api get-acl" [
+export def "get-bucket-acl" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3008,7 +3008,7 @@ export def "api get-acl" [
 # PUT /{Bucket}
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTBucketPUTacl.html
 # operationId: PutBucketAcl
-export def "api update-acl" [
+export def "put-bucket-acl" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3065,7 +3065,7 @@ export def "api update-acl" [
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTBucketGETlifecycle.html
 # operationId: GetBucketLifecycle
 @deprecated
-export def "api get-lifecycle" [
+export def "get-bucket-lifecycle" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3110,7 +3110,7 @@ export def "api get-lifecycle" [
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTBucketPUTlifecycle.html
 # operationId: PutBucketLifecycle
 @deprecated
-export def "api update-lifecycle" [
+export def "put-bucket-lifecycle" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3159,7 +3159,7 @@ export def "api update-lifecycle" [
 # GET /{Bucket}
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTBucketGETlocation.html
 # operationId: GetBucketLocation
-export def "api get-location" [
+export def "get-bucket-location" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3202,7 +3202,7 @@ export def "api get-location" [
 # GET /{Bucket}
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTBucketGETlogging.html
 # operationId: GetBucketLogging
-export def "api get-logging" [
+export def "get-bucket-logging" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3245,7 +3245,7 @@ export def "api get-logging" [
 # PUT /{Bucket}
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTBucketPUTlogging.html
 # operationId: PutBucketLogging
-export def "api update-logging" [
+export def "put-bucket-logging" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3293,7 +3293,7 @@ export def "api update-logging" [
 #
 # GET /{Bucket}
 # operationId: GetBucketNotificationConfiguration
-export def "api get-notification-configuration" [
+export def "get-bucket-notification-configuration" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3335,7 +3335,7 @@ export def "api get-notification-configuration" [
 #
 # PUT /{Bucket}
 # operationId: PutBucketNotificationConfiguration
-export def "api update-notification-configuration" [
+export def "put-bucket-notification-configuration" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3385,7 +3385,7 @@ export def "api update-notification-configuration" [
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTBucketGETnotification.html
 # operationId: GetBucketNotification
 @deprecated
-export def "api get-notification" [
+export def "get-bucket-notification" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3430,7 +3430,7 @@ export def "api get-notification" [
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTBucketPUTnotification.html
 # operationId: PutBucketNotification
 @deprecated
-export def "api update-notification" [
+export def "put-bucket-notification" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3478,7 +3478,7 @@ export def "api update-notification" [
 #
 # GET /{Bucket}
 # operationId: GetBucketPolicyStatus
-export def "api get-policy-status" [
+export def "get-bucket-policy-status" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3521,7 +3521,7 @@ export def "api get-policy-status" [
 # GET /{Bucket}
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTrequestPaymentGET.html
 # operationId: GetBucketRequestPayment
-export def "api get-request-payment" [
+export def "get-bucket-request-payment" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3564,7 +3564,7 @@ export def "api get-request-payment" [
 # PUT /{Bucket}
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTrequestPaymentPUT.html
 # operationId: PutBucketRequestPayment
-export def "api update-request-payment" [
+export def "put-bucket-request-payment" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3613,7 +3613,7 @@ export def "api update-request-payment" [
 # GET /{Bucket}
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTBucketGETversioningStatus.html
 # operationId: GetBucketVersioning
-export def "api get-versioning" [
+export def "get-bucket-versioning" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3656,7 +3656,7 @@ export def "api get-versioning" [
 # PUT /{Bucket}
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTBucketPUTVersioningStatus.html
 # operationId: PutBucketVersioning
-export def "api update-versioning" [
+export def "put-bucket-versioning" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3706,7 +3706,7 @@ export def "api update-versioning" [
 # GET /{Bucket}/{Key}
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTObjectGETacl.html
 # operationId: GetObjectAcl
-export def "api get-object-acl" [
+export def "get-object-acl" [
   bucket: string
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3753,7 +3753,7 @@ export def "api get-object-acl" [
 # PUT /{Bucket}/{Key}
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTObjectPUTacl.html
 # operationId: PutObjectAcl
-export def "api update-object-acl" [
+export def "put-object-acl" [
   bucket: string
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3811,7 +3811,7 @@ export def "api update-object-acl" [
 #
 # GET /{Bucket}/{Key}
 # operationId: GetObjectAttributes
-export def "api get-object-attributes" [
+export def "get-object-attributes" [
   bucket: string
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3863,7 +3863,7 @@ export def "api get-object-attributes" [
 #
 # GET /{Bucket}/{Key}
 # operationId: GetObjectLegalHold
-export def "api get-object-legal-hold" [
+export def "get-object-legal-hold" [
   bucket: string
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3909,7 +3909,7 @@ export def "api get-object-legal-hold" [
 #
 # PUT /{Bucket}/{Key}
 # operationId: PutObjectLegalHold
-export def "api update-object-legal-hold" [
+export def "put-object-legal-hold" [
   bucket: string
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3961,7 +3961,7 @@ export def "api update-object-legal-hold" [
 #
 # GET /{Bucket}
 # operationId: GetObjectLockConfiguration
-export def "api get-object-lock-configuration" [
+export def "get-object-lock-configuration" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4003,7 +4003,7 @@ export def "api get-object-lock-configuration" [
 #
 # PUT /{Bucket}
 # operationId: PutObjectLockConfiguration
-export def "api update-object-lock-configuration" [
+export def "put-object-lock-configuration" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4053,7 +4053,7 @@ export def "api update-object-lock-configuration" [
 #
 # GET /{Bucket}/{Key}
 # operationId: GetObjectRetention
-export def "api get-object-retention" [
+export def "get-object-retention" [
   bucket: string
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4099,7 +4099,7 @@ export def "api get-object-retention" [
 #
 # PUT /{Bucket}/{Key}
 # operationId: PutObjectRetention
-export def "api update-object-retention" [
+export def "put-object-retention" [
   bucket: string
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4153,7 +4153,7 @@ export def "api update-object-retention" [
 # GET /{Bucket}/{Key}
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTObjectGETtorrent.html
 # operationId: GetObjectTorrent
-export def "api get-object-torrent" [
+export def "get-object-torrent" [
   bucket: string
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4198,7 +4198,7 @@ export def "api get-object-torrent" [
 #
 # GET /{Bucket}
 # operationId: ListBucketAnalyticsConfigurations
-export def "api list-analytics-configurations" [
+export def "list-bucket-analytics-configurations" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4241,7 +4241,7 @@ export def "api list-analytics-configurations" [
 #
 # GET /{Bucket}
 # operationId: ListBucketIntelligentTieringConfigurations
-export def "api list-intelligent-tiering-configurations" [
+export def "list-bucket-intelligent-tiering-configurations" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4283,7 +4283,7 @@ export def "api list-intelligent-tiering-configurations" [
 #
 # GET /{Bucket}
 # operationId: ListBucketInventoryConfigurations
-export def "api list-inventory-configurations" [
+export def "list-bucket-inventory-configurations" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4326,7 +4326,7 @@ export def "api list-inventory-configurations" [
 #
 # GET /{Bucket}
 # operationId: ListBucketMetricsConfigurations
-export def "api list-metrics-configurations" [
+export def "list-bucket-metrics-configurations" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4370,7 +4370,7 @@ export def "api list-metrics-configurations" [
 # GET /
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTServiceGET.html
 # operationId: ListBuckets
-export def "api list-buckets" [
+export def "list-buckets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4408,7 +4408,7 @@ export def "api list-buckets" [
 # GET /{Bucket}
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/mpUploadListMPUpload.html
 # operationId: ListMultipartUploads
-export def "api list-multipart-uploads" [
+export def "list-multipart-uploads" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4460,7 +4460,7 @@ export def "api list-multipart-uploads" [
 # GET /{Bucket}
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTBucketGETVersion.html
 # operationId: ListObjectVersions
-export def "api list-object-versions" [
+export def "list-object-versions" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4511,7 +4511,7 @@ export def "api list-object-versions" [
 #
 # GET /{Bucket}
 # operationId: ListObjectsV2
-export def "api list-objects-by-bucket-1" [
+export def "list-objects-v2" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4564,7 +4564,7 @@ export def "api list-objects-by-bucket-1" [
 # POST /{Bucket}/{Key}
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTObjectRestore.html
 # operationId: RestoreObject
-export def "api create-restore-object" [
+export def "restore-object" [
   bucket: string
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4615,7 +4615,7 @@ export def "api create-restore-object" [
 #
 # POST /{Bucket}/{Key}
 # operationId: SelectObjectContent
-export def "api create-select-object-content" [
+export def "select-object-content" [
   bucket: string
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4668,7 +4668,7 @@ export def "api create-select-object-content" [
 # PUT /{Bucket}/{Key}
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/mpUploadUploadPart.html
 # operationId: UploadPart
-export def "api upload-part" [
+export def "upload-part" [
   bucket: string
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4729,7 +4729,7 @@ export def "api upload-part" [
 # PUT /{Bucket}/{Key}
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/mpUploadUploadPartCopy.html
 # operationId: UploadPartCopy
-export def "api upload-part-copy" [
+export def "upload-part-copy" [
   bucket: string
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4788,7 +4788,7 @@ export def "api upload-part-copy" [
 #
 # POST /WriteGetObjectResponse
 # operationId: WriteGetObjectResponse
-export def "write-get-object-response get" [
+export def "write-get-object-response" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

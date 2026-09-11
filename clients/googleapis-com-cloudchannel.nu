@@ -133,7 +133,7 @@ def link-state-completer [] { ["ACTIVE" "CHANNEL_PARTNER_LINK_STATE_UNSPECIFIED"
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "products list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cloudchannel-products-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -157,7 +157,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/products
 # operationId: cloudchannel.products.list
-export def "products list" [
+export def "cloudchannel-products-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -207,7 +207,7 @@ export def "products list" [
 #
 # GET /v1/{account}:listSubscribers
 # operationId: cloudchannel.accounts.listSubscribers
-export def "accounts list-subscribers" [
+export def "cloudchannel-accounts-list-subscribers" [
   account: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -257,7 +257,7 @@ export def "accounts list-subscribers" [
 #
 # POST /v1/{account}:register
 # operationId: cloudchannel.accounts.register
-export def "accounts create" [
+export def "cloudchannel-accounts-register" [
   account: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -309,7 +309,7 @@ export def "accounts create" [
 #
 # POST /v1/{account}:unregister
 # operationId: cloudchannel.accounts.unregister
-export def "accounts delete" [
+export def "cloudchannel-accounts-unregister" [
   account: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -361,7 +361,7 @@ export def "accounts delete" [
 #
 # GET /v1/{customer}:listPurchasableOffers
 # operationId: cloudchannel.accounts.customers.listPurchasableOffers
-export def "accounts list-purchasable-offers" [
+export def "cloudchannel-accounts-customers-list-purchasable-offers" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -415,7 +415,7 @@ export def "accounts list-purchasable-offers" [
 #
 # GET /v1/{customer}:listPurchasableSkus
 # operationId: cloudchannel.accounts.customers.listPurchasableSkus
-export def "accounts list-purchasable-skus" [
+export def "cloudchannel-accounts-customers-list-purchasable-skus" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -471,7 +471,7 @@ export def "accounts list-purchasable-skus" [
 # operationId: cloudchannel.accounts.customers.provisionCloudIdentity
 # --cloudIdentityInfo shape: {alternateEmail?: string, customerType?: "CUSTOMER_TYPE_UNSPECIFIED"|"DOMAIN"|"TEAM", eduData?: record, languageCode?: string, phoneNumber?: string}
 # --user shape: {email?: string, familyName?: string, givenName?: string}
-export def "accounts create-provision-cloud-identity" [
+export def "cloudchannel-accounts-customers-provision-cloud-identity" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -525,7 +525,7 @@ export def "accounts create-provision-cloud-identity" [
 #
 # GET /v1/{entitlement}:lookupOffer
 # operationId: cloudchannel.accounts.customers.entitlements.lookupOffer
-export def "accounts get-lookup-offer" [
+export def "cloudchannel-accounts-customers-entitlements-lookup-offer" [
   entitlement: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -573,7 +573,7 @@ export def "accounts get-lookup-offer" [
 #
 # DELETE /v1/{name}
 # operationId: cloudchannel.operations.delete
-export def "operations delete" [
+export def "cloudchannel-operations-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -621,7 +621,7 @@ export def "operations delete" [
 #
 # GET /v1/{name}
 # operationId: cloudchannel.operations.list
-export def "operations list" [
+export def "cloudchannel-operations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -673,7 +673,7 @@ export def "operations list" [
 # PATCH /v1/{name}
 # operationId: cloudchannel.accounts.customers.customerRepricingConfigs.patch
 # --repricingConfig shape: {adjustment?: record, channelPartnerGranularity?: record, conditionalOverrides?: list, effectiveInvoiceMonth?: record, entitlementGranularity?: record, rebillingBasis?: "REBILLING_BASIS_UNSPECIFIED"|"COST_AT_LIST"|"DIRECT_CUSTOMER_COST"}
-export def "accounts update" [
+export def "cloudchannel-accounts-customers-customer-repricing-configs-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -726,7 +726,7 @@ export def "accounts update" [
 #
 # POST /v1/{name}:activate
 # operationId: cloudchannel.accounts.customers.entitlements.activate
-export def "accounts create-activate" [
+export def "cloudchannel-accounts-customers-entitlements-activate" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -778,7 +778,7 @@ export def "accounts create-activate" [
 #
 # POST /v1/{name}:cancel
 # operationId: cloudchannel.operations.cancel
-export def "operations cancel" [
+export def "cloudchannel-operations-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -831,7 +831,7 @@ export def "operations cancel" [
 # POST /v1/{name}:changeOffer
 # operationId: cloudchannel.accounts.customers.entitlements.changeOffer
 # --parameters item shape: {name?: string, value?: record}
-export def "accounts create-change-offer" [
+export def "cloudchannel-accounts-customers-entitlements-change-offer" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -887,7 +887,7 @@ export def "accounts create-change-offer" [
 # POST /v1/{name}:changeParameters
 # operationId: cloudchannel.accounts.customers.entitlements.changeParameters
 # --parameters item shape: {name?: string, value?: record}
-export def "accounts create-change-parameters" [
+export def "cloudchannel-accounts-customers-entitlements-change-parameters" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -942,7 +942,7 @@ export def "accounts create-change-parameters" [
 # POST /v1/{name}:changeRenewalSettings
 # operationId: cloudchannel.accounts.customers.entitlements.changeRenewalSettings
 # --renewalSettings shape: {enableRenewal?: bool, paymentCycle?: record, paymentPlan?: "PAYMENT_PLAN_UNSPECIFIED"|"COMMITMENT"|"FLEXIBLE"|"FREE"|"TRIAL"|"OFFLINE", resizeUnitCount?: bool}
-export def "accounts create-change-renewal-settings" [
+export def "cloudchannel-accounts-customers-entitlements-change-renewal-settings" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -996,7 +996,7 @@ export def "accounts create-change-renewal-settings" [
 # POST /v1/{name}:run
 # operationId: cloudchannel.accounts.reports.run
 # --dateRange shape: {invoiceEndDate?: record, invoiceStartDate?: record, usageEndDateTime?: record, usageStartDateTime?: record}
-export def "accounts create-run" [
+export def "cloudchannel-accounts-reports-run" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1050,7 +1050,7 @@ export def "accounts create-run" [
 #
 # POST /v1/{name}:startPaidService
 # operationId: cloudchannel.accounts.customers.entitlements.startPaidService
-export def "accounts start-paid-service" [
+export def "cloudchannel-accounts-customers-entitlements-start-paid-service" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1102,7 +1102,7 @@ export def "accounts start-paid-service" [
 #
 # POST /v1/{name}:suspend
 # operationId: cloudchannel.accounts.customers.entitlements.suspend
-export def "accounts create-suspend" [
+export def "cloudchannel-accounts-customers-entitlements-suspend" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1154,7 +1154,7 @@ export def "accounts create-suspend" [
 #
 # GET /v1/{parent}/channelPartnerLinks
 # operationId: cloudchannel.accounts.channelPartnerLinks.list
-export def "channel-partner-links list" [
+export def "cloudchannel-accounts-channel-partner-links-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1206,7 +1206,7 @@ export def "channel-partner-links list" [
 # POST /v1/{parent}/channelPartnerLinks
 # operationId: cloudchannel.accounts.channelPartnerLinks.create
 # --channelPartnerCloudIdentityInfo shape: {alternateEmail?: string, customerType?: "CUSTOMER_TYPE_UNSPECIFIED"|"DOMAIN"|"TEAM", eduData?: record, languageCode?: string, phoneNumber?: string}
-export def "channel-partner-links create" [
+export def "cloudchannel-accounts-channel-partner-links-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1260,7 +1260,7 @@ export def "channel-partner-links create" [
 #
 # GET /v1/{parent}/channelPartnerRepricingConfigs
 # operationId: cloudchannel.accounts.channelPartnerLinks.channelPartnerRepricingConfigs.list
-export def "channel-partner-repricing-configs list" [
+export def "cloudchannel-accounts-channel-partner-links-channel-partner-repricing-configs-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1312,7 +1312,7 @@ export def "channel-partner-repricing-configs list" [
 # POST /v1/{parent}/channelPartnerRepricingConfigs
 # operationId: cloudchannel.accounts.channelPartnerLinks.channelPartnerRepricingConfigs.create
 # --repricingConfig shape: {adjustment?: record, channelPartnerGranularity?: record, conditionalOverrides?: list, effectiveInvoiceMonth?: record, entitlementGranularity?: record, rebillingBasis?: "REBILLING_BASIS_UNSPECIFIED"|"COST_AT_LIST"|"DIRECT_CUSTOMER_COST"}
-export def "channel-partner-repricing-configs create" [
+export def "cloudchannel-accounts-channel-partner-links-channel-partner-repricing-configs-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1364,7 +1364,7 @@ export def "channel-partner-repricing-configs create" [
 #
 # GET /v1/{parent}/customerRepricingConfigs
 # operationId: cloudchannel.accounts.customers.customerRepricingConfigs.list
-export def "customer-repricing-configs list" [
+export def "cloudchannel-accounts-customers-customer-repricing-configs-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1416,7 +1416,7 @@ export def "customer-repricing-configs list" [
 # POST /v1/{parent}/customerRepricingConfigs
 # operationId: cloudchannel.accounts.customers.customerRepricingConfigs.create
 # --repricingConfig shape: {adjustment?: record, channelPartnerGranularity?: record, conditionalOverrides?: list, effectiveInvoiceMonth?: record, entitlementGranularity?: record, rebillingBasis?: "REBILLING_BASIS_UNSPECIFIED"|"COST_AT_LIST"|"DIRECT_CUSTOMER_COST"}
-export def "customer-repricing-configs create" [
+export def "cloudchannel-accounts-customers-customer-repricing-configs-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1468,7 +1468,7 @@ export def "customer-repricing-configs create" [
 #
 # GET /v1/{parent}/customers
 # operationId: cloudchannel.accounts.customers.list
-export def "customers list" [
+export def "cloudchannel-accounts-customers-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1522,7 +1522,7 @@ export def "customers list" [
 # --cloudIdentityInfo shape: {alternateEmail?: string, customerType?: "CUSTOMER_TYPE_UNSPECIFIED"|"DOMAIN"|"TEAM", eduData?: record, languageCode?: string, phoneNumber?: string}
 # --orgPostalAddress shape: {addressLines?: list<string>, administrativeArea?: string, languageCode?: string, locality?: string, organization?: string, postalCode?: string, recipients?: list<string>, regionCode?: string, revision?: int, sortingCode?: string, sublocality?: string}
 # --primaryContactInfo shape: {email?: string, firstName?: string, lastName?: string, phone?: string, title?: string}
-export def "customers create" [
+export def "cloudchannel-accounts-customers-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1582,7 +1582,7 @@ export def "customers create" [
 #
 # POST /v1/{parent}/customers:import
 # operationId: cloudchannel.accounts.customers.import
-export def "customers-import import" [
+export def "cloudchannel-accounts-customers-import" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1639,7 +1639,7 @@ export def "customers-import import" [
 #
 # GET /v1/{parent}/entitlements
 # operationId: cloudchannel.accounts.customers.entitlements.list
-export def "entitlements list" [
+export def "cloudchannel-accounts-customers-entitlements-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1690,7 +1690,7 @@ export def "entitlements list" [
 # POST /v1/{parent}/entitlements
 # operationId: cloudchannel.accounts.customers.entitlements.create
 # --entitlement shape: {associationInfo?: record, commitmentSettings?: record, offer?: string, parameters?: list, provisionedService?: record, purchaseOrderId?: string, trialSettings?: record}
-export def "entitlements create" [
+export def "cloudchannel-accounts-customers-entitlements-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1743,7 +1743,7 @@ export def "entitlements create" [
 #
 # GET /v1/{parent}/offers
 # operationId: cloudchannel.accounts.offers.list
-export def "offers list" [
+export def "cloudchannel-accounts-offers-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1796,7 +1796,7 @@ export def "offers list" [
 #
 # GET /v1/{parent}/reports
 # operationId: cloudchannel.accounts.reports.list
-export def "reports list" [
+export def "cloudchannel-accounts-reports-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1847,7 +1847,7 @@ export def "reports list" [
 #
 # GET /v1/{parent}/skus
 # operationId: cloudchannel.products.skus.list
-export def "skus list" [
+export def "cloudchannel-products-skus-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1899,7 +1899,7 @@ export def "skus list" [
 #
 # POST /v1/{parent}:checkCloudIdentityAccountsExist
 # operationId: cloudchannel.accounts.checkCloudIdentityAccountsExist
-export def "accounts check-cloud-identity-exist" [
+export def "cloudchannel-accounts-check-cloud-identity-accounts-exist" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1951,7 +1951,7 @@ export def "accounts check-cloud-identity-exist" [
 #
 # GET /v1/{parent}:listEntitlementChanges
 # operationId: cloudchannel.accounts.customers.entitlements.listEntitlementChanges
-export def "accounts list-entitlement-changes" [
+export def "cloudchannel-accounts-customers-entitlements-list-entitlement-changes" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2002,7 +2002,7 @@ export def "accounts list-entitlement-changes" [
 #
 # POST /v1/{parent}:listTransferableOffers
 # operationId: cloudchannel.accounts.listTransferableOffers
-export def "accounts list-transferable-offers" [
+export def "cloudchannel-accounts-list-transferable-offers" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2059,7 +2059,7 @@ export def "accounts list-transferable-offers" [
 #
 # POST /v1/{parent}:listTransferableSkus
 # operationId: cloudchannel.accounts.listTransferableSkus
-export def "accounts list-transferable-skus" [
+export def "cloudchannel-accounts-list-transferable-skus" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2117,7 +2117,7 @@ export def "accounts list-transferable-skus" [
 # POST /v1/{parent}:transferEntitlements
 # operationId: cloudchannel.accounts.customers.transferEntitlements
 # --entitlements item shape: {associationInfo?: record, commitmentSettings?: record, offer?: string, parameters?: list, provisionedService?: record, purchaseOrderId?: string, trialSettings?: record}
-export def "accounts create-transfer-entitlements" [
+export def "cloudchannel-accounts-customers-transfer-entitlements" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2172,7 +2172,7 @@ export def "accounts create-transfer-entitlements" [
 # POST /v1/{parent}:transferEntitlementsToGoogle
 # operationId: cloudchannel.accounts.customers.transferEntitlementsToGoogle
 # --entitlements item shape: {associationInfo?: record, commitmentSettings?: record, offer?: string, parameters?: list, provisionedService?: record, purchaseOrderId?: string, trialSettings?: record}
-export def "accounts create-transfer-entitlements-to-google" [
+export def "cloudchannel-accounts-customers-transfer-entitlements-to-google" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2225,7 +2225,7 @@ export def "accounts create-transfer-entitlements-to-google" [
 #
 # POST /v1/{reportJob}:fetchReportResults
 # operationId: cloudchannel.accounts.reportJobs.fetchReportResults
-export def "accounts get-report-results" [
+export def "cloudchannel-accounts-report-jobs-fetch-report-results" [
   report_job: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

@@ -122,7 +122,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-webhooks list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "webhook-list-by-automation-account" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -147,7 +147,7 @@ export def commands []: nothing -> table {
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/webhooks
 # Docs: http://aka.ms/azureautomationsdk/webhookoperations
 # operationId: Webhook_ListByAutomationAccount
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-webhooks list" [
+export def "webhook-list-by-automation-account" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -191,7 +191,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/webhooks/generateUri
 # Docs: http://aka.ms/azureautomationsdk/webhookoperations
 # operationId: Webhook_GenerateUri
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-webhooks-generate-uri generate" [
+export def "webhook-generate-uri" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -234,7 +234,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/webhooks/{webhookName}
 # Docs: http://aka.ms/azureautomationsdk/webhookoperations
 # operationId: Webhook_Delete
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-webhooks delete" [
+export def "webhook-delete" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -279,7 +279,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/webhooks/{webhookName}
 # Docs: http://aka.ms/azureautomationsdk/webhookoperations
 # operationId: Webhook_Get
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-webhooks get" [
+export def "webhook-get" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -325,7 +325,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # Docs: http://aka.ms/azureautomationsdk/webhookoperations
 # operationId: Webhook_Update
 # --properties shape: {description?: string, isEnabled?: bool, parameters?: record, runOn?: string}
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-webhooks update" [
+export def "webhook-update" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -376,7 +376,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # Docs: http://aka.ms/azureautomationsdk/webhookoperations
 # operationId: Webhook_CreateOrUpdate
 # --properties shape: {expiryTime?: string, isEnabled?: bool, parameters?: record, runOn?: string, runbook?: any, uri?: string}
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-webhooks create-or-update" [
+export def "webhook-create-or-update" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string

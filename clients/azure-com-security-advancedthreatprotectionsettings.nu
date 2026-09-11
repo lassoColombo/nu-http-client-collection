@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-security-advanced-threat-protection-settings get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "advanced-threat-protection-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -128,7 +128,7 @@ export def commands []: nothing -> table {
 #
 # GET /{resourceId}/providers/Microsoft.Security/advancedThreatProtectionSettings/{settingName}
 # operationId: AdvancedThreatProtection_Get
-export def "providers-microsoft-security-advanced-threat-protection-settings get" [
+export def "advanced-threat-protection-get" [
   resource_id: string
   setting_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -169,7 +169,7 @@ export def "providers-microsoft-security-advanced-threat-protection-settings get
 # PUT /{resourceId}/providers/Microsoft.Security/advancedThreatProtectionSettings/{settingName}
 # operationId: AdvancedThreatProtection_Create
 # --properties shape: {isEnabled?: bool}
-export def "providers-microsoft-security-advanced-threat-protection-settings create" [
+export def "advanced-threat-protection-create" [
   resource_id: string
   setting_name: string
   --base-url(-b): string@base-url-completer # API base URL

@@ -155,7 +155,7 @@ def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "addon-pvt-giftlist-get list-gift" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-gift-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -179,7 +179,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/addon/pvt/giftlist/get/{listId}
 # operationId: GetGiftList
-export def "addon-pvt-giftlist-get list-gift" [
+export def "get-gift-list" [
   list_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -219,7 +219,7 @@ export def "addon-pvt-giftlist-get list-gift" [
 #
 # GET /api/addon/pvt/review/GetProductRate/{productId}
 # operationId: ReviewRateProduct
-export def "addon-pvt-review-get-product-rate get" [
+export def "review-rate-product" [
   product_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -259,7 +259,7 @@ export def "addon-pvt-review-get-product-rate get" [
 #
 # POST /api/catalog/pvt/attachment
 # --Domains item shape: {DomainValues?: string, FieldName?: string, MaxCaracters?: string}
-export def "catalog-pvt-attachment create" [
+export def "post-api-catalog-pvt-attachment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -305,7 +305,7 @@ export def "catalog-pvt-attachment create" [
 # Delete attachment
 #
 # DELETE /api/catalog/pvt/attachment/{attachmentid}
-export def "catalog-pvt-attachment delete" [
+export def "delete-api-catalog-pvt-attachment-attachmentid" [
   attachmentid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -344,7 +344,7 @@ export def "catalog-pvt-attachment delete" [
 # Get attachment
 #
 # GET /api/catalog/pvt/attachment/{attachmentid}
-export def "catalog-pvt-attachment get" [
+export def "get-api-catalog-pvt-attachment-attachmentid" [
   attachmentid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -384,7 +384,7 @@ export def "catalog-pvt-attachment get" [
 #
 # PUT /api/catalog/pvt/attachment/{attachmentid}
 # --Domains item shape: {DomainValues?: string, FieldName?: string, MaxCaracters?: string}
-export def "catalog-pvt-attachment update" [
+export def "put-api-catalog-pvt-attachment-attachmentid" [
   attachmentid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -432,7 +432,7 @@ export def "catalog-pvt-attachment update" [
 # Get all attachments
 #
 # GET /api/catalog/pvt/attachments
-export def "catalog-pvt-attachments get" [
+export def "get-api-catalog-pvt-attachments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -471,7 +471,7 @@ export def "catalog-pvt-attachments get" [
 # POST /api/catalog/pvt/brand
 @deprecated --flag ad-words-remarketing-code
 @deprecated --flag lomadee-campaign-code
-export def "catalog-pvt-brand create" [
+export def "post-api-catalog-pvt-brand" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -524,7 +524,7 @@ export def "catalog-pvt-brand create" [
 # Delete Brand
 #
 # DELETE /api/catalog/pvt/brand/{brandId}
-export def "catalog-pvt-brand delete" [
+export def "delete-api-catalog-pvt-brand-brand-id" [
   brand_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -563,7 +563,7 @@ export def "catalog-pvt-brand delete" [
 # Get Brand and context
 #
 # GET /api/catalog/pvt/brand/{brandId}
-export def "catalog-pvt-brand get" [
+export def "get-api-catalog-pvt-brand-brand-id" [
   brand_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -604,7 +604,7 @@ export def "catalog-pvt-brand get" [
 # PUT /api/catalog/pvt/brand/{brandId}
 @deprecated --flag ad-words-remarketing-code
 @deprecated --flag lomadee-campaign-code
-export def "catalog-pvt-brand update" [
+export def "put-api-catalog-pvt-brand-brand-id" [
   brand_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -661,7 +661,7 @@ export def "catalog-pvt-brand update" [
 # POST /api/catalog/pvt/category
 @deprecated --flag ad-words-remarketing-code
 @deprecated --flag lomadee-campaign-code
-export def "catalog-pvt-category create" [
+export def "post-api-catalog-pvt-category" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -718,7 +718,7 @@ export def "catalog-pvt-category create" [
 # Get Category by ID
 #
 # GET /api/catalog/pvt/category/{categoryId}
-export def "catalog-pvt-category get" [
+export def "get-api-catalog-pvt-category-category-id" [
   category_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -757,7 +757,7 @@ export def "catalog-pvt-category get" [
 # Update Category
 #
 # PUT /api/catalog/pvt/category/{categoryId}
-export def "catalog-pvt-category update" [
+export def "put-api-catalog-pvt-category-category-id" [
   category_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -815,7 +815,7 @@ export def "catalog-pvt-category update" [
 # Create Collection
 #
 # POST /api/catalog/pvt/collection
-export def "catalog-pvt-collection create" [
+export def "post-api-catalog-pvt-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -863,7 +863,7 @@ export def "catalog-pvt-collection create" [
 #
 # POST /api/catalog/pvt/collection/
 # operationId: POST-CreateCollection
-export def "catalog-pvt-collection create-1" [
+export def "post-create-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -912,7 +912,7 @@ export def "catalog-pvt-collection create-1" [
 #
 # GET /api/catalog/pvt/collection/inactive
 # operationId: GET-AllInactiveCollections
-export def "catalog-pvt-collection-inactive get-list" [
+export def "get-all-inactive-collections" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -950,7 +950,7 @@ export def "catalog-pvt-collection-inactive get-list" [
 #
 # GET /api/catalog/pvt/collection/stockkeepingunit/importfileexample
 # operationId: GET-Importfileexample
-export def "catalog-pvt-collection-stockkeepingunit-importfileexample get" [
+export def "get-importfileexample" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -987,7 +987,7 @@ export def "catalog-pvt-collection-stockkeepingunit-importfileexample get" [
 # Delete Collection
 #
 # DELETE /api/catalog/pvt/collection/{collectionId}
-export def "catalog-pvt-collection delete" [
+export def "delete-api-catalog-pvt-collection-collection-id" [
   collection_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -1026,7 +1026,7 @@ export def "catalog-pvt-collection delete" [
 # Get Collection
 #
 # GET /api/catalog/pvt/collection/{collectionId}
-export def "catalog-pvt-collection get" [
+export def "get-api-catalog-pvt-collection-collection-id" [
   collection_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -1065,7 +1065,7 @@ export def "catalog-pvt-collection get" [
 # Update Collection
 #
 # PUT /api/catalog/pvt/collection/{collectionId}
-export def "catalog-pvt-collection update" [
+export def "put-api-catalog-pvt-collection-collection-id" [
   collection_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -1114,7 +1114,7 @@ export def "catalog-pvt-collection update" [
 # Reposition SKU on the Subcollection
 #
 # POST /api/catalog/pvt/collection/{collectionId}/position
-export def "catalog-pvt-collection-position create" [
+export def "post-api-catalog-pvt-collection-collection-id-position" [
   collection_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -1162,7 +1162,7 @@ export def "catalog-pvt-collection-position create" [
 #
 # GET /api/catalog/pvt/collection/{collectionId}/products
 # operationId: GET-Productsfromacollection
-export def "catalog-pvt-collection-products get-productsfromacollection" [
+export def "get-productsfromacollection" [
   collection_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -1216,7 +1216,7 @@ export def "catalog-pvt-collection-products get-productsfromacollection" [
 #
 # POST /api/catalog/pvt/collection/{collectionId}/stockkeepingunit/importexclude
 # operationId: POST-Removeproductsbyimportfile
-export def "catalog-pvt-collection-stockkeepingunit-importexclude create-delete-productsbyimportfile" [
+export def "post-removeproductsbyimportfile" [
   collection_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -1264,7 +1264,7 @@ export def "catalog-pvt-collection-stockkeepingunit-importexclude create-delete-
 #
 # POST /api/catalog/pvt/collection/{collectionId}/stockkeepingunit/importinsert
 # operationId: POST-Addproductsbyimportfile
-export def "catalog-pvt-collection-stockkeepingunit-importinsert create-addproductsbyimportfile" [
+export def "post-addproductsbyimportfile" [
   collection_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -1311,7 +1311,7 @@ export def "catalog-pvt-collection-stockkeepingunit-importinsert create-addprodu
 # Get Subcollection by Collection ID
 #
 # GET /api/catalog/pvt/collection/{collectionId}/subcollection
-export def "catalog-pvt-collection-subcollection get" [
+export def "get-api-catalog-pvt-collection-collection-id-subcollection" [
   collection_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -1353,7 +1353,7 @@ export def "catalog-pvt-collection-subcollection get" [
 @deprecated --flag ad-words-remarketing-code
 @deprecated --flag lomadee-campaign-code
 @deprecated --flag supplier-id
-export def "catalog-pvt-product create" [
+export def "post-api-catalog-pvt-product" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -1418,7 +1418,7 @@ export def "catalog-pvt-product create" [
 #
 # GET /api/catalog/pvt/product/{productId}
 # operationId: GetProductbyid
-export def "catalog-pvt-product get-productbyid" [
+export def "get-productbyid" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -1460,7 +1460,7 @@ export def "catalog-pvt-product get-productbyid" [
 @deprecated --flag ad-words-remarketing-code
 @deprecated --flag lomadee-campaign-code
 @deprecated --flag supplier-id
-export def "catalog-pvt-product update" [
+export def "put-api-catalog-pvt-product-product-id" [
   product_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -1524,7 +1524,7 @@ export def "catalog-pvt-product update" [
 # Get Trade Policies by Product ID
 #
 # GET /api/catalog/pvt/product/{productId}/salespolicy
-export def "catalog-pvt-product-salespolicy get" [
+export def "get-api-catalog-pvt-product-product-id-salespolicy" [
   product_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -1563,7 +1563,7 @@ export def "catalog-pvt-product-salespolicy get" [
 # Remove Product from Trade Policy
 #
 # DELETE /api/catalog/pvt/product/{productId}/salespolicy/{tradepolicyId}
-export def "catalog-pvt-product-salespolicy delete" [
+export def "delete-api-catalog-pvt-product-product-id-salespolicy-tradepolicy-id" [
   product_id: int
   tradepolicy_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1604,7 +1604,7 @@ export def "catalog-pvt-product-salespolicy delete" [
 # Associate Product with Trade Policy
 #
 # POST /api/catalog/pvt/product/{productId}/salespolicy/{tradepolicyId}
-export def "catalog-pvt-product-salespolicy create" [
+export def "post-api-catalog-pvt-product-product-id-salespolicy-tradepolicy-id" [
   product_id: int
   tradepolicy_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1645,7 +1645,7 @@ export def "catalog-pvt-product-salespolicy create" [
 # Get Similar Categories
 #
 # GET /api/catalog/pvt/product/{productId}/similarcategory/
-export def "catalog-pvt-product-similarcategory get" [
+export def "get-api-catalog-pvt-product-product-id-similarcategory" [
   product_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -1684,7 +1684,7 @@ export def "catalog-pvt-product-similarcategory get" [
 # Delete Similar Category
 #
 # DELETE /api/catalog/pvt/product/{productId}/similarcategory/{categoryId}
-export def "catalog-pvt-product-similarcategory delete" [
+export def "delete-api-catalog-pvt-product-product-id-similarcategory-category-id" [
   product_id: int
   category_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1725,7 +1725,7 @@ export def "catalog-pvt-product-similarcategory delete" [
 # Add Similar Category
 #
 # POST /api/catalog/pvt/product/{productId}/similarcategory/{categoryId}
-export def "catalog-pvt-product-similarcategory create" [
+export def "post-api-catalog-pvt-product-product-id-similarcategory-category-id" [
   product_id: int
   category_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1767,7 +1767,7 @@ export def "catalog-pvt-product-similarcategory create" [
 #
 # DELETE /api/catalog/pvt/product/{productId}/specification
 # operationId: DeleteAllProductSpecifications
-export def "catalog-pvt-product-specification delete-list" [
+export def "delete-all-product-specifications" [
   product_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -1807,7 +1807,7 @@ export def "catalog-pvt-product-specification delete-list" [
 #
 # GET /api/catalog/pvt/product/{productId}/specification
 # operationId: GetProductSpecificationbyProductID
-export def "catalog-pvt-product-specification get-specificationby" [
+export def "get-product-specificationby-product-id" [
   product_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -1846,7 +1846,7 @@ export def "catalog-pvt-product-specification get-specificationby" [
 # Associate Product Specification
 #
 # POST /api/catalog/pvt/product/{productId}/specification
-export def "catalog-pvt-product-specification create" [
+export def "post-api-catalog-pvt-product-product-id-specification" [
   product_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -1894,7 +1894,7 @@ export def "catalog-pvt-product-specification create" [
 #
 # DELETE /api/catalog/pvt/product/{productId}/specification/{specificationId}
 # operationId: DeleteaProductSpecification
-export def "catalog-pvt-product-specification delete-deletea" [
+export def "deletea-product-specification" [
   product_id: int
   specification_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1935,7 +1935,7 @@ export def "catalog-pvt-product-specification delete-deletea" [
 # Associate product specification using specification name and group name
 #
 # PUT /api/catalog/pvt/product/{productId}/specificationvalue
-export def "catalog-pvt-product-specificationvalue update" [
+export def "put-api-catalog-pvt-product-product-id-specificationvalue" [
   product_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -1983,7 +1983,7 @@ export def "catalog-pvt-product-specificationvalue update" [
 # Dissociate attachments and SKUs
 #
 # DELETE /api/catalog/pvt/skuattachment
-export def "catalog-pvt-skuattachment delete" [
+export def "delete-api-catalog-pvt-skuattachment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -2023,7 +2023,7 @@ export def "catalog-pvt-skuattachment delete" [
 # Associate SKU Attachment
 #
 # POST /api/catalog/pvt/skuattachment
-export def "catalog-pvt-skuattachment create" [
+export def "post-api-catalog-pvt-skuattachment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -2067,7 +2067,7 @@ export def "catalog-pvt-skuattachment create" [
 # Delete SKU Attachment by Attachment Association ID
 #
 # DELETE /api/catalog/pvt/skuattachment/{skuAttachmentAssociationId}
-export def "catalog-pvt-skuattachment delete-by-sku-attachment-association-id" [
+export def "delete-api-catalog-pvt-skuattachment-sku-attachment-association-id" [
   sku_attachment_association_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -2107,7 +2107,7 @@ export def "catalog-pvt-skuattachment delete-by-sku-attachment-association-id" [
 #
 # POST /api/catalog/pvt/skucomplement
 # operationId: CreateSKUComplement
-export def "catalog-pvt-skucomplement create-sku-complement" [
+export def "create-sku-complement" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -2153,7 +2153,7 @@ export def "catalog-pvt-skucomplement create-sku-complement" [
 #
 # DELETE /api/catalog/pvt/skucomplement/{skuComplementId}
 # operationId: DeleteSKUComplementbySKUComplementID
-export def "catalog-pvt-skucomplement delete-sku-complementby-sku-complement" [
+export def "delete-sku-complementby-sku-complement-id" [
   sku_complement_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -2193,7 +2193,7 @@ export def "catalog-pvt-skucomplement delete-sku-complementby-sku-complement" [
 #
 # GET /api/catalog/pvt/skucomplement/{skuComplementId}
 # operationId: GetSKUComplementbySKUComplementID
-export def "catalog-pvt-skucomplement get-sku-complementby-sku-complement" [
+export def "get-sku-complementby-sku-complement-id" [
   sku_complement_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -2232,7 +2232,7 @@ export def "catalog-pvt-skucomplement get-sku-complementby-sku-complement" [
 # Associate SKU Service
 #
 # POST /api/catalog/pvt/skuservice
-export def "catalog-pvt-skuservice create" [
+export def "post-api-catalog-pvt-skuservice" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -2280,7 +2280,7 @@ export def "catalog-pvt-skuservice create" [
 # Dissociate SKU Service
 #
 # DELETE /api/catalog/pvt/skuservice/{skuServiceId}
-export def "catalog-pvt-skuservice delete" [
+export def "delete-api-catalog-pvt-skuservice-sku-service-id" [
   sku_service_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -2319,7 +2319,7 @@ export def "catalog-pvt-skuservice delete" [
 # Get SKU Service
 #
 # GET /api/catalog/pvt/skuservice/{skuServiceId}
-export def "catalog-pvt-skuservice get" [
+export def "get-api-catalog-pvt-skuservice-sku-service-id" [
   sku_service_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -2358,7 +2358,7 @@ export def "catalog-pvt-skuservice get" [
 # Update SKU Service
 #
 # PUT /api/catalog/pvt/skuservice/{skuServiceId}
-export def "catalog-pvt-skuservice update" [
+export def "put-api-catalog-pvt-skuservice-sku-service-id" [
   sku_service_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -2409,7 +2409,7 @@ export def "catalog-pvt-skuservice update" [
 #
 # POST /api/catalog/pvt/skuservicetype
 @deprecated --flag show-on-product-front
-export def "catalog-pvt-skuservicetype create" [
+export def "post-api-catalog-pvt-skuservicetype" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -2459,7 +2459,7 @@ export def "catalog-pvt-skuservicetype create" [
 # Delete SKU Service Type
 #
 # DELETE /api/catalog/pvt/skuservicetype/{skuServiceTypeId}
-export def "catalog-pvt-skuservicetype delete" [
+export def "delete-api-catalog-pvt-skuservicetype-sku-service-type-id" [
   sku_service_type_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -2498,7 +2498,7 @@ export def "catalog-pvt-skuservicetype delete" [
 # Get SKU Service Type
 #
 # GET /api/catalog/pvt/skuservicetype/{skuServiceTypeId}
-export def "catalog-pvt-skuservicetype get" [
+export def "get-api-catalog-pvt-skuservicetype-sku-service-type-id" [
   sku_service_type_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -2538,7 +2538,7 @@ export def "catalog-pvt-skuservicetype get" [
 #
 # PUT /api/catalog/pvt/skuservicetype/{skuServiceTypeId}
 @deprecated --flag show-on-product-front
-export def "catalog-pvt-skuservicetype update" [
+export def "put-api-catalog-pvt-skuservicetype-sku-service-type-id" [
   sku_service_type_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -2590,7 +2590,7 @@ export def "catalog-pvt-skuservicetype update" [
 # Dissociate Attachment by Attachment ID or SKU Service Type ID
 #
 # DELETE /api/catalog/pvt/skuservicetypeattachment
-export def "catalog-pvt-skuservicetypeattachment delete" [
+export def "delete-api-catalog-pvt-skuservicetypeattachment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -2630,7 +2630,7 @@ export def "catalog-pvt-skuservicetypeattachment delete" [
 # Associate SKU Service Attachment
 #
 # POST /api/catalog/pvt/skuservicetypeattachment
-export def "catalog-pvt-skuservicetypeattachment create" [
+export def "post-api-catalog-pvt-skuservicetypeattachment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -2674,7 +2674,7 @@ export def "catalog-pvt-skuservicetypeattachment create" [
 # Dissociate Attachment from SKU Service Type
 #
 # DELETE /api/catalog/pvt/skuservicetypeattachment/{skuServiceTypeAttachmentId}
-export def "catalog-pvt-skuservicetypeattachment delete-by-sku-service-type-attachment-id" [
+export def "delete-api-catalog-pvt-skuservicetypeattachment-sku-service-type-attachment-id" [
   sku_service_type_attachment_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -2713,7 +2713,7 @@ export def "catalog-pvt-skuservicetypeattachment delete-by-sku-service-type-atta
 # Create SKU Service Value
 #
 # POST /api/catalog/pvt/skuservicevalue
-export def "catalog-pvt-skuservicevalue create" [
+export def "post-api-catalog-pvt-skuservicevalue" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -2759,7 +2759,7 @@ export def "catalog-pvt-skuservicevalue create" [
 # Delete SKU Service Value
 #
 # DELETE /api/catalog/pvt/skuservicevalue/{skuServiceValueId}
-export def "catalog-pvt-skuservicevalue delete" [
+export def "delete-api-catalog-pvt-skuservicevalue-sku-service-value-id" [
   sku_service_value_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -2798,7 +2798,7 @@ export def "catalog-pvt-skuservicevalue delete" [
 # Get SKU Service Value
 #
 # GET /api/catalog/pvt/skuservicevalue/{skuServiceValueId}
-export def "catalog-pvt-skuservicevalue get" [
+export def "get-api-catalog-pvt-skuservicevalue-sku-service-value-id" [
   sku_service_value_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -2837,7 +2837,7 @@ export def "catalog-pvt-skuservicevalue get" [
 # Update SKU Service Value
 #
 # PUT /api/catalog/pvt/skuservicevalue/{skuServiceValueId}
-export def "catalog-pvt-skuservicevalue update" [
+export def "put-api-catalog-pvt-skuservicevalue-sku-service-value-id" [
   sku_service_value_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -2887,7 +2887,7 @@ export def "catalog-pvt-skuservicevalue update" [
 # POST /api/catalog/pvt/specification
 @deprecated --flag description
 @deprecated --flag is-wizard
-export def "catalog-pvt-specification create" [
+export def "post-api-catalog-pvt-specification" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -2944,7 +2944,7 @@ export def "catalog-pvt-specification create" [
 # Delete Non Structured Specification by SKU ID
 #
 # DELETE /api/catalog/pvt/specification/nonstructured
-export def "catalog-pvt-specification-nonstructured delete" [
+export def "delete-api-catalog-pvt-specification-nonstructured" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -2983,7 +2983,7 @@ export def "catalog-pvt-specification-nonstructured delete" [
 # Get Non Structured Specification by SKU ID
 #
 # GET /api/catalog/pvt/specification/nonstructured
-export def "catalog-pvt-specification-nonstructured list" [
+export def "get-api-catalog-pvt-specification-nonstructured" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -3022,7 +3022,7 @@ export def "catalog-pvt-specification-nonstructured list" [
 # Delete Non Structured Specification
 #
 # DELETE /api/catalog/pvt/specification/nonstructured/{Id}
-export def "catalog-pvt-specification-nonstructured delete-by-id" [
+export def "delete-api-catalog-pvt-specification-nonstructured-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -3061,7 +3061,7 @@ export def "catalog-pvt-specification-nonstructured delete-by-id" [
 # Get Non Structured Specification by ID
 #
 # GET /api/catalog/pvt/specification/nonstructured/{Id}
-export def "catalog-pvt-specification-nonstructured get" [
+export def "get-api-catalog-pvt-specification-nonstructured-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -3100,7 +3100,7 @@ export def "catalog-pvt-specification-nonstructured get" [
 # Get Specification
 #
 # GET /api/catalog/pvt/specification/{specificationId}
-export def "catalog-pvt-specification get" [
+export def "get-api-catalog-pvt-specification-specification-id" [
   specification_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -3140,7 +3140,7 @@ export def "catalog-pvt-specification get" [
 #
 # PUT /api/catalog/pvt/specification/{specificationId}
 @deprecated --flag is-wizard
-export def "catalog-pvt-specification update" [
+export def "put-api-catalog-pvt-specification-specification-id" [
   specification_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -3200,7 +3200,7 @@ export def "catalog-pvt-specification update" [
 #
 # POST /api/catalog/pvt/specificationgroup
 # operationId: SpecificationGroupInsert2
-export def "catalog-pvt-specificationgroup create-specification-group-insert2" [
+export def "specification-group-insert2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -3244,7 +3244,7 @@ export def "catalog-pvt-specificationgroup create-specification-group-insert2" [
 # Update Specification Group
 #
 # PUT /api/catalog/pvt/specificationgroup/{groupId}
-export def "catalog-pvt-specificationgroup update" [
+export def "put-api-catalog-pvt-specificationgroup-group-id" [
   group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -3293,7 +3293,7 @@ export def "catalog-pvt-specificationgroup update" [
 #
 # POST /api/catalog/pvt/specificationvalue
 @deprecated --flag text
-export def "catalog-pvt-specificationvalue create" [
+export def "post-api-catalog-pvt-specificationvalue" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -3340,7 +3340,7 @@ export def "catalog-pvt-specificationvalue create" [
 # Get Specification Value
 #
 # GET /api/catalog/pvt/specificationvalue/{specificationValueId}
-export def "catalog-pvt-specificationvalue get" [
+export def "get-api-catalog-pvt-specificationvalue-specification-value-id" [
   specification_value_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -3380,7 +3380,7 @@ export def "catalog-pvt-specificationvalue get" [
 #
 # PUT /api/catalog/pvt/specificationvalue/{specificationValueId}
 @deprecated --flag text
-export def "catalog-pvt-specificationvalue update" [
+export def "put-api-catalog-pvt-specificationvalue-specification-value-id" [
   specification_value_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -3429,7 +3429,7 @@ export def "catalog-pvt-specificationvalue update" [
 # Get SKU by RefId
 #
 # GET /api/catalog/pvt/stockkeepingunit
-export def "catalog-pvt-stockkeepingunit get" [
+export def "get-api-catalog-pvt-stockkeepingunit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -3468,7 +3468,7 @@ export def "catalog-pvt-stockkeepingunit get" [
 # Create SKU
 #
 # POST /api/catalog/pvt/stockkeepingunit
-export def "catalog-pvt-stockkeepingunit create" [
+export def "post-api-catalog-pvt-stockkeepingunit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -3537,7 +3537,7 @@ export def "catalog-pvt-stockkeepingunit create" [
 # Copy Files from an SKU to another SKU
 #
 # PUT /api/catalog/pvt/stockkeepingunit/copy/{skuIdfrom}/{skuIdto}/file/
-export def "catalog-pvt-stockkeepingunit-copy-file update" [
+export def "put-api-catalog-pvt-stockkeepingunit-copy-sku-idfrom-sku-idto-file" [
   sku_idfrom: int
   sku_idto: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3578,7 +3578,7 @@ export def "catalog-pvt-stockkeepingunit-copy-file update" [
 # Disassociate SKU File
 #
 # DELETE /api/catalog/pvt/stockkeepingunit/disassociate/{skuId}/file/{skuFileId}
-export def "catalog-pvt-stockkeepingunit-disassociate-file delete" [
+export def "delete-api-catalog-pvt-stockkeepingunit-disassociate-sku-id-file-sku-file-id" [
   sku_id: int
   sku_file_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3620,7 +3620,7 @@ export def "catalog-pvt-stockkeepingunit-disassociate-file delete" [
 #
 # GET /api/catalog/pvt/stockkeepingunit/{skuId}
 # operationId: Sku
-export def "catalog-pvt-stockkeepingunit get-sku" [
+export def "sku" [
   sku_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -3659,7 +3659,7 @@ export def "catalog-pvt-stockkeepingunit get-sku" [
 # Update SKU
 #
 # PUT /api/catalog/pvt/stockkeepingunit/{skuId}
-export def "catalog-pvt-stockkeepingunit update" [
+export def "put-api-catalog-pvt-stockkeepingunit-sku-id" [
   sku_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -3728,7 +3728,7 @@ export def "catalog-pvt-stockkeepingunit update" [
 # Get SKU Attachments by SKU ID
 #
 # GET /api/catalog/pvt/stockkeepingunit/{skuId}/attachment
-export def "catalog-pvt-stockkeepingunit-attachment get" [
+export def "get-api-catalog-pvt-stockkeepingunit-sku-id-attachment" [
   sku_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -3768,7 +3768,7 @@ export def "catalog-pvt-stockkeepingunit-attachment get" [
 #
 # GET /api/catalog/pvt/stockkeepingunit/{skuId}/complement
 # operationId: GetSKUComplementbySKUID
-export def "catalog-pvt-stockkeepingunit-complement get-sku-complementby" [
+export def "get-sku-complementby-skuid" [
   sku_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -3808,7 +3808,7 @@ export def "catalog-pvt-stockkeepingunit-complement get-sku-complementby" [
 #
 # GET /api/catalog/pvt/stockkeepingunit/{skuId}/complement/{complementTypeId}
 # operationId: GetSKUComplementsbyComplementTypeID
-export def "catalog-pvt-stockkeepingunit-complement get-sku-complementsby-type" [
+export def "get-sku-complementsby-complement-type-id" [
   sku_id: int
   complement_type_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3849,7 +3849,7 @@ export def "catalog-pvt-stockkeepingunit-complement get-sku-complementsby-type" 
 # Delete all SKU EAN values
 #
 # DELETE /api/catalog/pvt/stockkeepingunit/{skuId}/ean
-export def "catalog-pvt-stockkeepingunit-ean delete-by-sku-id" [
+export def "delete-api-catalog-pvt-stockkeepingunit-sku-id-ean" [
   sku_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -3888,7 +3888,7 @@ export def "catalog-pvt-stockkeepingunit-ean delete-by-sku-id" [
 # Get EAN by SKU ID
 #
 # GET /api/catalog/pvt/stockkeepingunit/{skuId}/ean
-export def "catalog-pvt-stockkeepingunit-ean get" [
+export def "get-api-catalog-pvt-stockkeepingunit-sku-id-ean" [
   sku_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -3927,7 +3927,7 @@ export def "catalog-pvt-stockkeepingunit-ean get" [
 # Delete SKU EAN
 #
 # DELETE /api/catalog/pvt/stockkeepingunit/{skuId}/ean/{ean}
-export def "catalog-pvt-stockkeepingunit-ean delete-by-sku-id-ean" [
+export def "delete-api-catalog-pvt-stockkeepingunit-sku-id-ean-ean" [
   sku_id: int
   ean: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3968,7 +3968,7 @@ export def "catalog-pvt-stockkeepingunit-ean delete-by-sku-id-ean" [
 # Create SKU EAN
 #
 # POST /api/catalog/pvt/stockkeepingunit/{skuId}/ean/{ean}
-export def "catalog-pvt-stockkeepingunit-ean create" [
+export def "post-api-catalog-pvt-stockkeepingunit-sku-id-ean-ean" [
   sku_id: int
   ean: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4009,7 +4009,7 @@ export def "catalog-pvt-stockkeepingunit-ean create" [
 # Delete All SKU Files
 #
 # DELETE /api/catalog/pvt/stockkeepingunit/{skuId}/file
-export def "catalog-pvt-stockkeepingunit-file delete-by-sku-id" [
+export def "delete-api-catalog-pvt-stockkeepingunit-sku-id-file" [
   sku_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -4048,7 +4048,7 @@ export def "catalog-pvt-stockkeepingunit-file delete-by-sku-id" [
 # Get SKU Files
 #
 # GET /api/catalog/pvt/stockkeepingunit/{skuId}/file
-export def "catalog-pvt-stockkeepingunit-file get" [
+export def "get-api-catalog-pvt-stockkeepingunit-sku-id-file" [
   sku_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -4087,7 +4087,7 @@ export def "catalog-pvt-stockkeepingunit-file get" [
 # Create SKU File
 #
 # POST /api/catalog/pvt/stockkeepingunit/{skuId}/file
-export def "catalog-pvt-stockkeepingunit-file create" [
+export def "post-api-catalog-pvt-stockkeepingunit-sku-id-file" [
   sku_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -4136,7 +4136,7 @@ export def "catalog-pvt-stockkeepingunit-file create" [
 # Delete SKU Image File
 #
 # DELETE /api/catalog/pvt/stockkeepingunit/{skuId}/file/{skuFileId}
-export def "catalog-pvt-stockkeepingunit-file delete-by-sku-id-sku-file-id" [
+export def "delete-api-catalog-pvt-stockkeepingunit-sku-id-file-sku-file-id" [
   sku_id: int
   sku_file_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4177,7 +4177,7 @@ export def "catalog-pvt-stockkeepingunit-file delete-by-sku-id-sku-file-id" [
 # Update SKU File
 #
 # PUT /api/catalog/pvt/stockkeepingunit/{skuId}/file/{skuFileId}
-export def "catalog-pvt-stockkeepingunit-file update" [
+export def "put-api-catalog-pvt-stockkeepingunit-sku-id-file-sku-file-id" [
   sku_id: int
   sku_file_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4228,7 +4228,7 @@ export def "catalog-pvt-stockkeepingunit-file update" [
 # Delete all SKU Specifications
 #
 # DELETE /api/catalog/pvt/stockkeepingunit/{skuId}/specification
-export def "catalog-pvt-stockkeepingunit-specification delete-by-sku-id" [
+export def "delete-api-catalog-pvt-stockkeepingunit-sku-id-specification" [
   sku_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -4267,7 +4267,7 @@ export def "catalog-pvt-stockkeepingunit-specification delete-by-sku-id" [
 # Get SKU Specifications
 #
 # GET /api/catalog/pvt/stockkeepingunit/{skuId}/specification
-export def "catalog-pvt-stockkeepingunit-specification get" [
+export def "get-api-catalog-pvt-stockkeepingunit-sku-id-specification" [
   sku_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -4306,7 +4306,7 @@ export def "catalog-pvt-stockkeepingunit-specification get" [
 # Associate SKU Specification
 #
 # POST /api/catalog/pvt/stockkeepingunit/{skuId}/specification
-export def "catalog-pvt-stockkeepingunit-specification create" [
+export def "post-api-catalog-pvt-stockkeepingunit-sku-id-specification" [
   sku_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -4352,7 +4352,7 @@ export def "catalog-pvt-stockkeepingunit-specification create" [
 # Update SKU Specification
 #
 # PUT /api/catalog/pvt/stockkeepingunit/{skuId}/specification
-export def "catalog-pvt-stockkeepingunit-specification update" [
+export def "put-api-catalog-pvt-stockkeepingunit-sku-id-specification" [
   sku_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -4401,7 +4401,7 @@ export def "catalog-pvt-stockkeepingunit-specification update" [
 # Delete SKU Specification
 #
 # DELETE /api/catalog/pvt/stockkeepingunit/{skuId}/specification/{specificationId}
-export def "catalog-pvt-stockkeepingunit-specification delete-by-sku-id-specification-id" [
+export def "delete-api-catalog-pvt-stockkeepingunit-sku-id-specification-specification-id" [
   sku_id: int
   specification_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4442,7 +4442,7 @@ export def "catalog-pvt-stockkeepingunit-specification delete-by-sku-id-specific
 # Associate SKU specification using specification name and group name
 #
 # PUT /api/catalog/pvt/stockkeepingunit/{skuId}/specificationvalue
-export def "catalog-pvt-stockkeepingunit-specificationvalue update" [
+export def "put-api-catalog-pvt-stockkeepingunit-sku-id-specificationvalue" [
   sku_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -4490,7 +4490,7 @@ export def "catalog-pvt-stockkeepingunit-specificationvalue update" [
 # Delete SKU Kit by SKU ID or Parent SKU ID
 #
 # DELETE /api/catalog/pvt/stockkeepingunitkit
-export def "catalog-pvt-stockkeepingunitkit delete" [
+export def "delete-api-catalog-pvt-stockkeepingunitkit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -4530,7 +4530,7 @@ export def "catalog-pvt-stockkeepingunitkit delete" [
 # Get SKU Kit by SKU ID or Parent SKU ID
 #
 # GET /api/catalog/pvt/stockkeepingunitkit
-export def "catalog-pvt-stockkeepingunitkit list" [
+export def "get-api-catalog-pvt-stockkeepingunitkit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -4570,7 +4570,7 @@ export def "catalog-pvt-stockkeepingunitkit list" [
 # Create SKU Kit
 #
 # POST /api/catalog/pvt/stockkeepingunitkit
-export def "catalog-pvt-stockkeepingunitkit create" [
+export def "post-api-catalog-pvt-stockkeepingunitkit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -4616,7 +4616,7 @@ export def "catalog-pvt-stockkeepingunitkit create" [
 # Delete SKU Kit by KitId
 #
 # DELETE /api/catalog/pvt/stockkeepingunitkit/{kitId}
-export def "catalog-pvt-stockkeepingunitkit delete-by-kit-id" [
+export def "delete-api-catalog-pvt-stockkeepingunitkit-kit-id" [
   kit_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -4655,7 +4655,7 @@ export def "catalog-pvt-stockkeepingunitkit delete-by-kit-id" [
 # Get SKU Kit
 #
 # GET /api/catalog/pvt/stockkeepingunitkit/{kitId}
-export def "catalog-pvt-stockkeepingunitkit get" [
+export def "get-api-catalog-pvt-stockkeepingunitkit-kit-id" [
   kit_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -4694,7 +4694,7 @@ export def "catalog-pvt-stockkeepingunitkit get" [
 # Create Subcollection
 #
 # POST /api/catalog/pvt/subcollection
-export def "catalog-pvt-subcollection create" [
+export def "post-api-catalog-pvt-subcollection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -4741,7 +4741,7 @@ export def "catalog-pvt-subcollection create" [
 # Delete Subcollection
 #
 # DELETE /api/catalog/pvt/subcollection/{subCollectionId}
-export def "catalog-pvt-subcollection delete" [
+export def "delete-api-catalog-pvt-subcollection-sub-collection-id" [
   sub_collection_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -4780,7 +4780,7 @@ export def "catalog-pvt-subcollection delete" [
 # Get Subcollection
 #
 # GET /api/catalog/pvt/subcollection/{subCollectionId}
-export def "catalog-pvt-subcollection get" [
+export def "get-api-catalog-pvt-subcollection-sub-collection-id" [
   sub_collection_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -4819,7 +4819,7 @@ export def "catalog-pvt-subcollection get" [
 # Update Subcollection
 #
 # PUT /api/catalog/pvt/subcollection/{subCollectionId}
-export def "catalog-pvt-subcollection update" [
+export def "put-api-catalog-pvt-subcollection-sub-collection-id" [
   sub_collection_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -4868,7 +4868,7 @@ export def "catalog-pvt-subcollection update" [
 # Associate Brand to Subcollection
 #
 # POST /api/catalog/pvt/subcollection/{subCollectionId}/brand
-export def "catalog-pvt-subcollection-brand create" [
+export def "post-api-catalog-pvt-subcollection-sub-collection-id-brand" [
   sub_collection_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -4913,7 +4913,7 @@ export def "catalog-pvt-subcollection-brand create" [
 # Delete Brand from Subcollection
 #
 # DELETE /api/catalog/pvt/subcollection/{subCollectionId}/brand/{brandId}
-export def "catalog-pvt-subcollection-brand delete-by-sub-collection-id-brand-id" [
+export def "delete-api-catalog-pvt-subcollection-sub-collection-id-brand-brand-id" [
   sub_collection_id: int
   brand_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4954,7 +4954,7 @@ export def "catalog-pvt-subcollection-brand delete-by-sub-collection-id-brand-id
 # Delete Category from Subcollection
 #
 # DELETE /api/catalog/pvt/subcollection/{subCollectionId}/brand/{categoryId}
-export def "catalog-pvt-subcollection-brand delete-by-sub-collection-id-category-id" [
+export def "delete-api-catalog-pvt-subcollection-sub-collection-id-brand-category-id" [
   sub_collection_id: int
   category_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4995,7 +4995,7 @@ export def "catalog-pvt-subcollection-brand delete-by-sub-collection-id-category
 # Associate Category to Subcollection
 #
 # POST /api/catalog/pvt/subcollection/{subCollectionId}/category
-export def "catalog-pvt-subcollection-category create" [
+export def "post-api-catalog-pvt-subcollection-sub-collection-id-category" [
   sub_collection_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -5040,7 +5040,7 @@ export def "catalog-pvt-subcollection-category create" [
 # Add SKU to Subcollection
 #
 # POST /api/catalog/pvt/subcollection/{subCollectionId}/stockkeepingunit
-export def "catalog-pvt-subcollection-stockkeepingunit create" [
+export def "post-api-catalog-pvt-subcollection-sub-collection-id-stockkeepingunit" [
   sub_collection_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -5085,7 +5085,7 @@ export def "catalog-pvt-subcollection-stockkeepingunit create" [
 # Delete SKU from Subcollection
 #
 # DELETE /api/catalog/pvt/subcollection/{subCollectionId}/stockkeepingunit/{skuId}
-export def "catalog-pvt-subcollection-stockkeepingunit delete" [
+export def "delete-api-catalog-pvt-subcollection-sub-collection-id-stockkeepingunit-sku-id" [
   sub_collection_id: int
   sku_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5126,7 +5126,7 @@ export def "catalog-pvt-subcollection-stockkeepingunit delete" [
 # Create Supplier
 #
 # POST /api/catalog/pvt/supplier
-export def "catalog-pvt-supplier create" [
+export def "post-api-catalog-pvt-supplier" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -5177,7 +5177,7 @@ export def "catalog-pvt-supplier create" [
 # Delete Supplier
 #
 # DELETE /api/catalog/pvt/supplier/{supplierId}
-export def "catalog-pvt-supplier delete" [
+export def "delete-api-catalog-pvt-supplier-supplier-id" [
   supplier_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -5216,7 +5216,7 @@ export def "catalog-pvt-supplier delete" [
 # Update Supplier
 #
 # PUT /api/catalog/pvt/supplier/{supplierId}
-export def "catalog-pvt-supplier update" [
+export def "put-api-catalog-pvt-supplier-supplier-id" [
   supplier_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -5270,7 +5270,7 @@ export def "catalog-pvt-supplier update" [
 #
 # GET /api/catalog_system/pub/category/tree/{categoryLevels}
 # operationId: CategoryTree
-export def "catalog-system-pub-category-tree get" [
+export def "category-tree" [
   category_levels: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -5310,7 +5310,7 @@ export def "catalog-system-pub-category-tree get" [
 #
 # GET /api/catalog_system/pub/products/variations/{productId}
 # operationId: ProductVariations
-export def "catalog-system-pub-products-variations get" [
+export def "product-variations" [
   product_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -5350,7 +5350,7 @@ export def "catalog-system-pub-products-variations get" [
 #
 # GET /api/catalog_system/pub/saleschannel/{salesChannelId}
 # operationId: SalesChannelbyId
-export def "catalog-system-pub-saleschannel get-sales-channelby" [
+export def "sales-channelby-id" [
   sales_channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -5390,7 +5390,7 @@ export def "catalog-system-pub-saleschannel get-sales-channelby" [
 #
 # POST /api/catalog_system/pub/sku/stockkeepingunitidsbyrefids
 # operationId: SkuIdlistbyRefIdlist
-export def "catalog-system-pub-sku-stockkeepingunitidsbyrefids create-idlistby-ref-idlist" [
+export def "sku-idlistby-ref-idlist" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -5434,7 +5434,7 @@ export def "catalog-system-pub-sku-stockkeepingunitidsbyrefids create-idlistby-r
 #
 # GET /api/catalog_system/pub/specification/field/listByCategoryId/{categoryId}
 # operationId: SpecificationsByCategoryId
-export def "catalog-system-pub-specification-field-list-by-category-id get" [
+export def "specifications-by-category-id" [
   category_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -5474,7 +5474,7 @@ export def "catalog-system-pub-specification-field-list-by-category-id get" [
 #
 # GET /api/catalog_system/pub/specification/field/listTreeByCategoryId/{categoryId}
 # operationId: SpecificationsTreeByCategoryId
-export def "catalog-system-pub-specification-field-list-tree-by-category-id get" [
+export def "specifications-tree-by-category-id" [
   category_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -5514,7 +5514,7 @@ export def "catalog-system-pub-specification-field-list-tree-by-category-id get"
 #
 # GET /api/catalog_system/pub/specification/fieldGet/{fieldId}
 # operationId: SpecificationsField
-export def "catalog-system-pub-specification-field-get get" [
+export def "specifications-field" [
   field_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -5554,7 +5554,7 @@ export def "catalog-system-pub-specification-field-get get" [
 #
 # GET /api/catalog_system/pub/specification/fieldvalue/{fieldId}
 # operationId: SpecificationsValuesByFieldId
-export def "catalog-system-pub-specification-fieldvalue get-values-by-field" [
+export def "specifications-values-by-field-id" [
   field_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -5594,7 +5594,7 @@ export def "catalog-system-pub-specification-fieldvalue get-values-by-field" [
 #
 # GET /api/catalog_system/pub/specification/groupGet/{groupId}
 # operationId: SpecificationsGroupGet
-export def "catalog-system-pub-specification-group-get get" [
+export def "specifications-group-get" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -5634,7 +5634,7 @@ export def "catalog-system-pub-specification-group-get get" [
 #
 # GET /api/catalog_system/pvt/brand/list
 # operationId: BrandList
-export def "catalog-system-pvt-brand-list list" [
+export def "brand-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -5672,7 +5672,7 @@ export def "catalog-system-pvt-brand-list list" [
 #
 # GET /api/catalog_system/pvt/brand/pagedlist
 # operationId: BrandListPerPage
-export def "catalog-system-pvt-brand-pagedlist list-per-page" [
+export def "brand-list-per-page" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -5713,7 +5713,7 @@ export def "catalog-system-pvt-brand-pagedlist list-per-page" [
 #
 # GET /api/catalog_system/pvt/brand/{brandId}
 # operationId: Brand
-export def "catalog-system-pvt-brand get" [
+export def "brand" [
   brand_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -5753,7 +5753,7 @@ export def "catalog-system-pvt-brand get" [
 #
 # GET /api/catalog_system/pvt/collection/search
 # operationId: GET-AllCollections
-export def "catalog-system-pvt-collection-search get-list" [
+export def "get-all-collections" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -5795,7 +5795,7 @@ export def "catalog-system-pvt-collection-search get-list" [
 #
 # GET /api/catalog_system/pvt/collection/search/{searchTerms}
 # operationId: GET-Collectionsbyseachterms
-export def "catalog-system-pvt-collection-search get-collectionsbyseachterms" [
+export def "get-collectionsbyseachterms" [
   search_terms: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -5839,7 +5839,7 @@ export def "catalog-system-pvt-collection-search get-collectionsbyseachterms" [
 #
 # GET /api/catalog_system/pvt/commercialcondition/list
 # operationId: GetAllCommercialConditions
-export def "catalog-system-pvt-commercialcondition-list get-list-commercial-conditions" [
+export def "get-all-commercial-conditions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -5877,7 +5877,7 @@ export def "catalog-system-pvt-commercialcondition-list get-list-commercial-cond
 #
 # GET /api/catalog_system/pvt/commercialcondition/{commercialConditionId}
 # operationId: GetCommercialConditions
-export def "catalog-system-pvt-commercialcondition get-commercial-conditions" [
+export def "get-commercial-conditions" [
   commercial_condition_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -5917,7 +5917,7 @@ export def "catalog-system-pvt-commercialcondition get-commercial-conditions" [
 #
 # GET /api/catalog_system/pvt/products/GetIndexedInfo/{productId}
 # operationId: IndexedInfo
-export def "catalog-system-pvt-products-get-indexed-info get" [
+export def "indexed-info" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -5957,7 +5957,7 @@ export def "catalog-system-pvt-products-get-indexed-info get" [
 #
 # GET /api/catalog_system/pvt/products/GetProductAndSkuIds
 # operationId: ProductAndSkuIds
-export def "catalog-system-pvt-products-get-product-and-sku-ids get" [
+export def "product-and-sku-ids" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -5999,7 +5999,7 @@ export def "catalog-system-pvt-products-get-product-and-sku-ids get" [
 #
 # GET /api/catalog_system/pvt/products/productget/{productId}
 # operationId: ProductandTradePolicy
-export def "catalog-system-pvt-products-productget get-productand-trade-policy" [
+export def "productand-trade-policy" [
   product_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -6039,7 +6039,7 @@ export def "catalog-system-pvt-products-productget get-productand-trade-policy" 
 #
 # GET /api/catalog_system/pvt/products/productgetbyrefid/{refId}
 # operationId: ProductbyRefId
-export def "catalog-system-pvt-products-productgetbyrefid get-productby-ref" [
+export def "productby-ref-id" [
   ref_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -6079,7 +6079,7 @@ export def "catalog-system-pvt-products-productgetbyrefid get-productby-ref" [
 #
 # GET /api/catalog_system/pvt/products/{productId}/specification
 # operationId: GetProductSpecification
-export def "catalog-system-pvt-products-specification get" [
+export def "get-product-specification" [
   product_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -6119,7 +6119,7 @@ export def "catalog-system-pvt-products-specification get" [
 #
 # POST /api/catalog_system/pvt/products/{productId}/specification
 # operationId: UpdateProductSpecification
-export def "catalog-system-pvt-products-specification update" [
+export def "update-product-specification" [
   product_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -6165,7 +6165,7 @@ export def "catalog-system-pvt-products-specification update" [
 #
 # GET /api/catalog_system/pvt/saleschannel/list
 # operationId: SalesChannelList
-export def "catalog-system-pvt-saleschannel-list list-sales-channel" [
+export def "sales-channel-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -6203,7 +6203,7 @@ export def "catalog-system-pvt-saleschannel-list list-sales-channel" [
 #
 # POST /api/catalog_system/pvt/seller
 # operationId: CreateSeller
-export def "catalog-system-pvt-seller create" [
+export def "create-seller" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -6271,7 +6271,7 @@ export def "catalog-system-pvt-seller create" [
 #
 # PUT /api/catalog_system/pvt/seller
 # operationId: UpdateSeller
-export def "catalog-system-pvt-seller update" [
+export def "update-seller" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -6339,7 +6339,7 @@ export def "catalog-system-pvt-seller update" [
 #
 # GET /api/catalog_system/pvt/seller/list
 # operationId: SellerList
-export def "catalog-system-pvt-seller-list list" [
+export def "seller-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -6381,7 +6381,7 @@ export def "catalog-system-pvt-seller-list list" [
 #
 # GET /api/catalog_system/pvt/seller/{sellerId}
 # operationId: GetSellerbyId
-export def "catalog-system-pvt-seller get-sellerby" [
+export def "get-sellerby-id" [
   seller_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -6421,7 +6421,7 @@ export def "catalog-system-pvt-seller get-sellerby" [
 #
 # GET /api/catalog_system/pvt/sellers/{sellerId}
 # operationId: GetSellersbyId
-export def "catalog-system-pvt-sellers get-sellersby" [
+export def "get-sellersby-id" [
   seller_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -6461,7 +6461,7 @@ export def "catalog-system-pvt-sellers get-sellersby" [
 #
 # POST /api/catalog_system/pvt/sku/associateattachments
 # operationId: AssociateattachmentstoSKU
-export def "catalog-system-pvt-sku-associateattachments create-associateattachmentsto" [
+export def "associateattachmentsto-sku" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -6506,7 +6506,7 @@ export def "catalog-system-pvt-sku-associateattachments create-associateattachme
 #
 # GET /api/catalog_system/pvt/sku/complements/{parentSkuId}/{type}
 # operationId: GetSKUcomplementsbytype
-export def "catalog-system-pvt-sku-complements get-sk-ucomplementsbytype" [
+export def "get-sk-ucomplementsbytype" [
   parent_sku_id: int
   type: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6548,7 +6548,7 @@ export def "catalog-system-pvt-sku-complements get-sk-ucomplementsbytype" [
 #
 # GET /api/catalog_system/pvt/sku/stockkeepingunitByProductId/{productId}
 # operationId: SkulistbyProductId
-export def "catalog-system-pvt-sku-stockkeepingunit-by-product-id get-skulistby" [
+export def "skulistby-product-id" [
   product_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -6588,7 +6588,7 @@ export def "catalog-system-pvt-sku-stockkeepingunit-by-product-id get-skulistby"
 #
 # GET /api/catalog_system/pvt/sku/stockkeepingunitbyalternateId/{alternateId}
 # operationId: SkubyAlternateId
-export def "catalog-system-pvt-sku-stockkeepingunitbyalternate-id get-skuby-alternate" [
+export def "skuby-alternate-id" [
   alternate_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -6628,7 +6628,7 @@ export def "catalog-system-pvt-sku-stockkeepingunitbyalternate-id get-skuby-alte
 #
 # GET /api/catalog_system/pvt/sku/stockkeepingunitbyean/{ean}
 # operationId: SkubyEAN
-export def "catalog-system-pvt-sku-stockkeepingunitbyean get-skuby" [
+export def "skuby-ean" [
   ean: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -6668,7 +6668,7 @@ export def "catalog-system-pvt-sku-stockkeepingunitbyean get-skuby" [
 #
 # GET /api/catalog_system/pvt/sku/stockkeepingunitbyid/{skuId}
 # operationId: SkuContext
-export def "catalog-system-pvt-sku-stockkeepingunitbyid get-context" [
+export def "sku-context" [
   sku_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -6710,7 +6710,7 @@ export def "catalog-system-pvt-sku-stockkeepingunitbyid get-context" [
 #
 # GET /api/catalog_system/pvt/sku/stockkeepingunitidbyrefid/{refId}
 # operationId: SkuIdbyRefId
-export def "catalog-system-pvt-sku-stockkeepingunitidbyrefid get-idby-ref" [
+export def "sku-idby-ref-id" [
   ref_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -6750,7 +6750,7 @@ export def "catalog-system-pvt-sku-stockkeepingunitidbyrefid get-idby-ref" [
 #
 # GET /api/catalog_system/pvt/sku/stockkeepingunitids
 # operationId: ListallSKUIDs
-export def "catalog-system-pvt-sku-stockkeepingunitids get-listall-skui-ds" [
+export def "listall-skui-ds" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -6790,7 +6790,7 @@ export def "catalog-system-pvt-sku-stockkeepingunitids get-listall-skui-ds" [
 # List all SKUs of a Trade Policy
 #
 # GET /api/catalog_system/pvt/sku/stockkeepingunitidsbysaleschannel
-export def "catalog-system-pvt-sku-stockkeepingunitidsbysaleschannel get" [
+export def "get-api-catalog-system-pvt-sku-stockkeepingunitidsbysaleschannel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -6832,7 +6832,7 @@ export def "catalog-system-pvt-sku-stockkeepingunitidsbysaleschannel get" [
 # Change Notification with Seller ID and Seller SKU ID
 #
 # POST /api/catalog_system/pvt/skuseller/changenotification/{sellerId}/{sellerSkuId}
-export def "catalog-system-pvt-skuseller-changenotification create" [
+export def "post-api-catalog-system-pvt-skuseller-changenotification-seller-id-seller-sku-id" [
   seller_id: string
   seller_sku_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6874,7 +6874,7 @@ export def "catalog-system-pvt-skuseller-changenotification create" [
 #
 # POST /api/catalog_system/pvt/skuseller/changenotification/{skuId}
 # operationId: ChangeNotification
-export def "catalog-system-pvt-skuseller-changenotification create-change-notification" [
+export def "change-notification" [
   sku_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -6914,7 +6914,7 @@ export def "catalog-system-pvt-skuseller-changenotification create-change-notifi
 #
 # POST /api/catalog_system/pvt/skuseller/remove/{sellerId}/{sellerSkuId}
 # operationId: DeleteSKUsellerassociation
-export def "catalog-system-pvt-skuseller-remove delete-sk-usellerassociation" [
+export def "delete-sk-usellerassociation" [
   seller_id: string
   seller_sku_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6956,7 +6956,7 @@ export def "catalog-system-pvt-skuseller-remove delete-sk-usellerassociation" [
 #
 # GET /api/catalog_system/pvt/skuseller/{sellerId}/{sellerSkuId}
 # operationId: GetSKUseller
-export def "catalog-system-pvt-skuseller get-sk-useller" [
+export def "get-sk-useller" [
   seller_id: string
   seller_sku_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6999,7 +6999,7 @@ export def "catalog-system-pvt-skuseller get-sk-useller" [
 # POST /api/catalog_system/pvt/specification/field
 # operationId: SpecificationsInsertField
 @deprecated --flag is-wizard
-export def "catalog-system-pvt-specification-field create" [
+export def "specifications-insert-field" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -7061,7 +7061,7 @@ export def "catalog-system-pvt-specification-field create" [
 # PUT /api/catalog_system/pvt/specification/field
 # operationId: SpecificationsInsertFieldUpdate
 @deprecated --flag is-wizard
-export def "catalog-system-pvt-specification-field create-update" [
+export def "specifications-insert-field-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -7122,7 +7122,7 @@ export def "catalog-system-pvt-specification-field create-update" [
 #
 # POST /api/catalog_system/pvt/specification/fieldValue
 # operationId: SpecificationsInsertFieldValue
-export def "catalog-system-pvt-specification-field-value create" [
+export def "specifications-insert-field-value" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -7170,7 +7170,7 @@ export def "catalog-system-pvt-specification-field-value create" [
 #
 # PUT /api/catalog_system/pvt/specification/fieldValue
 # operationId: SpecificationsUpdateFieldValue
-export def "catalog-system-pvt-specification-field-value update" [
+export def "specifications-update-field-value" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -7218,7 +7218,7 @@ export def "catalog-system-pvt-specification-field-value update" [
 #
 # GET /api/catalog_system/pvt/specification/fieldValue/{fieldValueId}
 # operationId: SpecificationsGetFieldValue
-export def "catalog-system-pvt-specification-field-value get" [
+export def "specifications-get-field-value" [
   field_value_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -7258,7 +7258,7 @@ export def "catalog-system-pvt-specification-field-value get" [
 #
 # GET /api/catalog_system/pvt/specification/groupbycategory/{categoryId}
 # operationId: SpecificationsGroupListbyCategory
-export def "catalog-system-pvt-specification-groupbycategory get-group-listby-category" [
+export def "specifications-group-listby-category" [
   category_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)

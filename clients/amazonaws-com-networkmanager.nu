@@ -122,7 +122,7 @@ def state-completer-1 [] { ["AVAILABLE" "CREATING" "DELETING" "FAILED"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "attachments-accept create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accept-attachment" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # POST /attachments/{attachmentId}/accept
 # operationId: AcceptAttachment
-export def "attachments-accept create" [
+export def "accept-attachment" [
   attachment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -191,7 +191,7 @@ export def "attachments-accept create" [
 #
 # POST /global-networks/{globalNetworkId}/connect-peer-associations
 # operationId: AssociateConnectPeer
-export def "global-networks-connect-peer-associations create-associate" [
+export def "associate-connect-peer" [
   global_network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -242,7 +242,7 @@ export def "global-networks-connect-peer-associations create-associate" [
 #
 # GET /global-networks/{globalNetworkId}/connect-peer-associations
 # operationId: GetConnectPeerAssociations
-export def "global-networks-connect-peer-associations get" [
+export def "get-connect-peer-associations" [
   global_network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -293,7 +293,7 @@ export def "global-networks-connect-peer-associations get" [
 #
 # POST /global-networks/{globalNetworkId}/customer-gateway-associations
 # operationId: AssociateCustomerGateway
-export def "global-networks-customer-gateway-associations create-associate" [
+export def "associate-customer-gateway" [
   global_network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -344,7 +344,7 @@ export def "global-networks-customer-gateway-associations create-associate" [
 #
 # GET /global-networks/{globalNetworkId}/customer-gateway-associations
 # operationId: GetCustomerGatewayAssociations
-export def "global-networks-customer-gateway-associations get" [
+export def "get-customer-gateway-associations" [
   global_network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -395,7 +395,7 @@ export def "global-networks-customer-gateway-associations get" [
 #
 # POST /global-networks/{globalNetworkId}/link-associations
 # operationId: AssociateLink
-export def "global-networks-link-associations create-associate" [
+export def "associate-link" [
   global_network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -445,7 +445,7 @@ export def "global-networks-link-associations create-associate" [
 #
 # GET /global-networks/{globalNetworkId}/link-associations
 # operationId: GetLinkAssociations
-export def "global-networks-link-associations get" [
+export def "get-link-associations" [
   global_network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -497,7 +497,7 @@ export def "global-networks-link-associations get" [
 #
 # POST /global-networks/{globalNetworkId}/transit-gateway-connect-peer-associations
 # operationId: AssociateTransitGatewayConnectPeer
-export def "global-networks-transit-gateway-connect-peer-associations create-associate" [
+export def "associate-transit-gateway-connect-peer" [
   global_network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -548,7 +548,7 @@ export def "global-networks-transit-gateway-connect-peer-associations create-ass
 #
 # GET /global-networks/{globalNetworkId}/transit-gateway-connect-peer-associations
 # operationId: GetTransitGatewayConnectPeerAssociations
-export def "global-networks-transit-gateway-connect-peer-associations get" [
+export def "get-transit-gateway-connect-peer-associations" [
   global_network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -601,7 +601,7 @@ export def "global-networks-transit-gateway-connect-peer-associations get" [
 # operationId: CreateConnectAttachment
 # --Options shape: {Protocol?: any}
 # --Tags item shape: {Key?: any, Value?: any}
-export def "connect-attachments create" [
+export def "create-connect-attachment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -655,7 +655,7 @@ export def "connect-attachments create" [
 # operationId: CreateConnectPeer
 # --BgpOptions shape: {PeerAsn?: any}
 # --Tags item shape: {Key?: any, Value?: any}
-export def "connect-peers create" [
+export def "create-connect-peer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -708,7 +708,7 @@ export def "connect-peers create" [
 #
 # GET /connect-peers
 # operationId: ListConnectPeers
-export def "connect-peers list" [
+export def "list-connect-peers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -759,7 +759,7 @@ export def "connect-peers list" [
 # POST /global-networks/{globalNetworkId}/connections
 # operationId: CreateConnection
 # --Tags item shape: {Key?: any, Value?: any}
-export def "global-networks-connections create" [
+export def "create-connection" [
   global_network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -813,7 +813,7 @@ export def "global-networks-connections create" [
 #
 # GET /global-networks/{globalNetworkId}/connections
 # operationId: GetConnections
-export def "global-networks-connections get" [
+export def "get-connections" [
   global_network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -866,7 +866,7 @@ export def "global-networks-connections get" [
 # POST /core-networks
 # operationId: CreateCoreNetwork
 # --Tags item shape: {Key?: any, Value?: any}
-export def "core-networks create" [
+export def "create-core-network" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -917,7 +917,7 @@ export def "core-networks create" [
 #
 # GET /core-networks
 # operationId: ListCoreNetworks
-export def "core-networks list" [
+export def "list-core-networks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -968,7 +968,7 @@ export def "core-networks list" [
 # --AWSLocation shape: {Zone?: any, SubnetArn?: any}
 # --Location shape: {Address?: any, Latitude?: any, Longitude?: any}
 # --Tags item shape: {Key?: any, Value?: any}
-export def "global-networks-devices create" [
+export def "create-device" [
   global_network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1025,7 +1025,7 @@ export def "global-networks-devices create" [
 #
 # GET /global-networks/{globalNetworkId}/devices
 # operationId: GetDevices
-export def "global-networks-devices get" [
+export def "get-devices" [
   global_network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1078,7 +1078,7 @@ export def "global-networks-devices get" [
 # POST /global-networks
 # operationId: CreateGlobalNetwork
 # --Tags item shape: {Key?: any, Value?: any}
-export def "global-networks create" [
+export def "create-global-network" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1126,7 +1126,7 @@ export def "global-networks create" [
 #
 # GET /global-networks
 # operationId: DescribeGlobalNetworks
-export def "global-networks get" [
+export def "describe-global-networks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1177,7 +1177,7 @@ export def "global-networks get" [
 # operationId: CreateLink
 # --Bandwidth shape: {UploadSpeed?: any, DownloadSpeed?: any}
 # --Tags item shape: {Key?: any, Value?: any}
-export def "global-networks-links create" [
+export def "create-link" [
   global_network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1231,7 +1231,7 @@ export def "global-networks-links create" [
 #
 # GET /global-networks/{globalNetworkId}/links
 # operationId: GetLinks
-export def "global-networks-links get" [
+export def "get-links" [
   global_network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1287,7 +1287,7 @@ export def "global-networks-links get" [
 # operationId: CreateSite
 # --Location shape: {Address?: any, Latitude?: any, Longitude?: any}
 # --Tags item shape: {Key?: any, Value?: any}
-export def "global-networks-sites create" [
+export def "create-site" [
   global_network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1338,7 +1338,7 @@ export def "global-networks-sites create" [
 #
 # GET /global-networks/{globalNetworkId}/sites
 # operationId: GetSites
-export def "global-networks-sites get" [
+export def "get-sites" [
   global_network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1390,7 +1390,7 @@ export def "global-networks-sites get" [
 # POST /site-to-site-vpn-attachments
 # operationId: CreateSiteToSiteVpnAttachment
 # --Tags item shape: {Key?: any, Value?: any}
-export def "site-to-site-vpn-attachments create" [
+export def "create-site-to-site-vpn-attachment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1441,7 +1441,7 @@ export def "site-to-site-vpn-attachments create" [
 # POST /transit-gateway-peerings
 # operationId: CreateTransitGatewayPeering
 # --Tags item shape: {Key?: any, Value?: any}
-export def "transit-gateway-peerings create" [
+export def "create-transit-gateway-peering" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1492,7 +1492,7 @@ export def "transit-gateway-peerings create" [
 # POST /transit-gateway-route-table-attachments
 # operationId: CreateTransitGatewayRouteTableAttachment
 # --Tags item shape: {Key?: any, Value?: any}
-export def "transit-gateway-route-table-attachments create" [
+export def "create-transit-gateway-route-table-attachment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1544,7 +1544,7 @@ export def "transit-gateway-route-table-attachments create" [
 # operationId: CreateVpcAttachment
 # --Options shape: {Ipv6Support?: any, ApplianceModeSupport?: any}
 # --Tags item shape: {Key?: any, Value?: any}
-export def "vpc-attachments create" [
+export def "create-vpc-attachment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1596,7 +1596,7 @@ export def "vpc-attachments create" [
 #
 # DELETE /attachments/{attachmentId}
 # operationId: DeleteAttachment
-export def "attachments delete" [
+export def "delete-attachment" [
   attachment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1641,7 +1641,7 @@ export def "attachments delete" [
 #
 # DELETE /connect-peers/{connectPeerId}
 # operationId: DeleteConnectPeer
-export def "connect-peers delete" [
+export def "delete-connect-peer" [
   connect_peer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1686,7 +1686,7 @@ export def "connect-peers delete" [
 #
 # GET /connect-peers/{connectPeerId}
 # operationId: GetConnectPeer
-export def "connect-peers get" [
+export def "get-connect-peer" [
   connect_peer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1731,7 +1731,7 @@ export def "connect-peers get" [
 #
 # DELETE /global-networks/{globalNetworkId}/connections/{connectionId}
 # operationId: DeleteConnection
-export def "global-networks-connections delete" [
+export def "delete-connection" [
   global_network_id: string
   connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1778,7 +1778,7 @@ export def "global-networks-connections delete" [
 #
 # PATCH /global-networks/{globalNetworkId}/connections/{connectionId}
 # operationId: UpdateConnection
-export def "global-networks-connections update" [
+export def "update-connection" [
   global_network_id: string
   connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1831,7 +1831,7 @@ export def "global-networks-connections update" [
 #
 # DELETE /core-networks/{coreNetworkId}
 # operationId: DeleteCoreNetwork
-export def "core-networks delete" [
+export def "delete-core-network" [
   core_network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1876,7 +1876,7 @@ export def "core-networks delete" [
 #
 # GET /core-networks/{coreNetworkId}
 # operationId: GetCoreNetwork
-export def "core-networks get" [
+export def "get-core-network" [
   core_network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1921,7 +1921,7 @@ export def "core-networks get" [
 #
 # PATCH /core-networks/{coreNetworkId}
 # operationId: UpdateCoreNetwork
-export def "core-networks update" [
+export def "update-core-network" [
   core_network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1970,7 +1970,7 @@ export def "core-networks update" [
 #
 # DELETE /core-networks/{coreNetworkId}/core-network-policy-versions/{policyVersionId}
 # operationId: DeleteCoreNetworkPolicyVersion
-export def "core-networks-core-network-policy-versions delete" [
+export def "delete-core-network-policy-version" [
   core_network_id: string
   policy_version_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2017,7 +2017,7 @@ export def "core-networks-core-network-policy-versions delete" [
 #
 # DELETE /global-networks/{globalNetworkId}/devices/{deviceId}
 # operationId: DeleteDevice
-export def "global-networks-devices delete" [
+export def "delete-device" [
   global_network_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2066,7 +2066,7 @@ export def "global-networks-devices delete" [
 # operationId: UpdateDevice
 # --AWSLocation shape: {Zone?: any, SubnetArn?: any}
 # --Location shape: {Address?: any, Latitude?: any, Longitude?: any}
-export def "global-networks-devices update" [
+export def "update-device" [
   global_network_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2124,7 +2124,7 @@ export def "global-networks-devices update" [
 #
 # DELETE /global-networks/{globalNetworkId}
 # operationId: DeleteGlobalNetwork
-export def "global-networks delete" [
+export def "delete-global-network" [
   global_network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2169,7 +2169,7 @@ export def "global-networks delete" [
 #
 # PATCH /global-networks/{globalNetworkId}
 # operationId: UpdateGlobalNetwork
-export def "global-networks update" [
+export def "update-global-network" [
   global_network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2218,7 +2218,7 @@ export def "global-networks update" [
 #
 # DELETE /global-networks/{globalNetworkId}/links/{linkId}
 # operationId: DeleteLink
-export def "global-networks-links delete" [
+export def "delete-link" [
   global_network_id: string
   link_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2266,7 +2266,7 @@ export def "global-networks-links delete" [
 # PATCH /global-networks/{globalNetworkId}/links/{linkId}
 # operationId: UpdateLink
 # --Bandwidth shape: {UploadSpeed?: any, DownloadSpeed?: any}
-export def "global-networks-links update" [
+export def "update-link" [
   global_network_id: string
   link_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2320,7 +2320,7 @@ export def "global-networks-links update" [
 #
 # DELETE /peerings/{peeringId}
 # operationId: DeletePeering
-export def "peerings delete" [
+export def "delete-peering" [
   peering_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2365,7 +2365,7 @@ export def "peerings delete" [
 #
 # DELETE /resource-policy/{resourceArn}
 # operationId: DeleteResourcePolicy
-export def "resource-policy delete" [
+export def "delete-resource-policy" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2410,7 +2410,7 @@ export def "resource-policy delete" [
 #
 # GET /resource-policy/{resourceArn}
 # operationId: GetResourcePolicy
-export def "resource-policy get" [
+export def "get-resource-policy" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2455,7 +2455,7 @@ export def "resource-policy get" [
 #
 # POST /resource-policy/{resourceArn}
 # operationId: PutResourcePolicy
-export def "resource-policy update" [
+export def "put-resource-policy" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2504,7 +2504,7 @@ export def "resource-policy update" [
 #
 # DELETE /global-networks/{globalNetworkId}/sites/{siteId}
 # operationId: DeleteSite
-export def "global-networks-sites delete" [
+export def "delete-site" [
   global_network_id: string
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2552,7 +2552,7 @@ export def "global-networks-sites delete" [
 # PATCH /global-networks/{globalNetworkId}/sites/{siteId}
 # operationId: UpdateSite
 # --Location shape: {Address?: any, Latitude?: any, Longitude?: any}
-export def "global-networks-sites update" [
+export def "update-site" [
   global_network_id: string
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2604,7 +2604,7 @@ export def "global-networks-sites update" [
 #
 # DELETE /global-networks/{globalNetworkId}/transit-gateway-registrations/{transitGatewayArn}
 # operationId: DeregisterTransitGateway
-export def "global-networks-transit-gateway-registrations delete-deregister" [
+export def "deregister-transit-gateway" [
   global_network_id: string
   transit_gateway_arn: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2651,7 +2651,7 @@ export def "global-networks-transit-gateway-registrations delete-deregister" [
 #
 # DELETE /global-networks/{globalNetworkId}/connect-peer-associations/{connectPeerId}
 # operationId: DisassociateConnectPeer
-export def "global-networks-connect-peer-associations delete-disassociate" [
+export def "disassociate-connect-peer" [
   global_network_id: string
   connect_peer_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2698,7 +2698,7 @@ export def "global-networks-connect-peer-associations delete-disassociate" [
 #
 # DELETE /global-networks/{globalNetworkId}/customer-gateway-associations/{customerGatewayArn}
 # operationId: DisassociateCustomerGateway
-export def "global-networks-customer-gateway-associations delete-disassociate" [
+export def "disassociate-customer-gateway" [
   global_network_id: string
   customer_gateway_arn: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2745,7 +2745,7 @@ export def "global-networks-customer-gateway-associations delete-disassociate" [
 #
 # DELETE /global-networks/{globalNetworkId}/link-associations
 # operationId: DisassociateLink
-export def "global-networks-link-associations delete-disassociate" [
+export def "disassociate-link" [
   global_network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2793,7 +2793,7 @@ export def "global-networks-link-associations delete-disassociate" [
 #
 # DELETE /global-networks/{globalNetworkId}/transit-gateway-connect-peer-associations/{transitGatewayConnectPeerArn}
 # operationId: DisassociateTransitGatewayConnectPeer
-export def "global-networks-transit-gateway-connect-peer-associations delete-disassociate" [
+export def "disassociate-transit-gateway-connect-peer" [
   global_network_id: string
   transit_gateway_connect_peer_arn: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2840,7 +2840,7 @@ export def "global-networks-transit-gateway-connect-peer-associations delete-dis
 #
 # POST /core-networks/{coreNetworkId}/core-network-change-sets/{policyVersionId}/execute
 # operationId: ExecuteCoreNetworkChangeSet
-export def "core-networks-core-network-change-sets-execute update" [
+export def "execute-core-network-change-set" [
   core_network_id: string
   policy_version_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2887,7 +2887,7 @@ export def "core-networks-core-network-change-sets-execute update" [
 #
 # GET /connect-attachments/{attachmentId}
 # operationId: GetConnectAttachment
-export def "connect-attachments get" [
+export def "get-connect-attachment" [
   attachment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2932,7 +2932,7 @@ export def "connect-attachments get" [
 #
 # GET /core-networks/{coreNetworkId}/core-network-change-events/{policyVersionId}
 # operationId: GetCoreNetworkChangeEvents
-export def "core-networks-core-network-change-events get" [
+export def "get-core-network-change-events" [
   core_network_id: string
   policy_version_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2984,7 +2984,7 @@ export def "core-networks-core-network-change-events get" [
 #
 # GET /core-networks/{coreNetworkId}/core-network-change-sets/{policyVersionId}
 # operationId: GetCoreNetworkChangeSet
-export def "core-networks-core-network-change-sets get" [
+export def "get-core-network-change-set" [
   core_network_id: string
   policy_version_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3036,7 +3036,7 @@ export def "core-networks-core-network-change-sets get" [
 #
 # GET /core-networks/{coreNetworkId}/core-network-policy
 # operationId: GetCoreNetworkPolicy
-export def "core-networks-core-network-policy get" [
+export def "get-core-network-policy" [
   core_network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3084,7 +3084,7 @@ export def "core-networks-core-network-policy get" [
 #
 # POST /core-networks/{coreNetworkId}/core-network-policy
 # operationId: PutCoreNetworkPolicy
-export def "core-networks-core-network-policy update" [
+export def "put-core-network-policy" [
   core_network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3136,7 +3136,7 @@ export def "core-networks-core-network-policy update" [
 #
 # GET /global-networks/{globalNetworkId}/network-resource-count
 # operationId: GetNetworkResourceCounts
-export def "global-networks-network-resource-count get" [
+export def "get-network-resource-counts" [
   global_network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3187,7 +3187,7 @@ export def "global-networks-network-resource-count get" [
 #
 # GET /global-networks/{globalNetworkId}/network-resource-relationships
 # operationId: GetNetworkResourceRelationships
-export def "global-networks-network-resource-relationships get" [
+export def "get-network-resource-relationships" [
   global_network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3243,7 +3243,7 @@ export def "global-networks-network-resource-relationships get" [
 #
 # GET /global-networks/{globalNetworkId}/network-resources
 # operationId: GetNetworkResources
-export def "global-networks-network-resources get" [
+export def "get-network-resources" [
   global_network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3300,7 +3300,7 @@ export def "global-networks-network-resources get" [
 # POST /global-networks/{globalNetworkId}/network-routes
 # operationId: GetNetworkRoutes
 # --RouteTableIdentifier shape: {TransitGatewayRouteTableArn?: any, CoreNetworkSegmentEdge?: any}
-export def "global-networks-network-routes get" [
+export def "get-network-routes" [
   global_network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3357,7 +3357,7 @@ export def "global-networks-network-routes get" [
 #
 # GET /global-networks/{globalNetworkId}/network-telemetry
 # operationId: GetNetworkTelemetry
-export def "global-networks-network-telemetry get" [
+export def "get-network-telemetry" [
   global_network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3413,7 +3413,7 @@ export def "global-networks-network-telemetry get" [
 #
 # GET /global-networks/{globalNetworkId}/route-analyses/{routeAnalysisId}
 # operationId: GetRouteAnalysis
-export def "global-networks-route-analyses get-analysis" [
+export def "get-route-analysis" [
   global_network_id: string
   route_analysis_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3460,7 +3460,7 @@ export def "global-networks-route-analyses get-analysis" [
 #
 # GET /site-to-site-vpn-attachments/{attachmentId}
 # operationId: GetSiteToSiteVpnAttachment
-export def "site-to-site-vpn-attachments get" [
+export def "get-site-to-site-vpn-attachment" [
   attachment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3505,7 +3505,7 @@ export def "site-to-site-vpn-attachments get" [
 #
 # GET /transit-gateway-peerings/{peeringId}
 # operationId: GetTransitGatewayPeering
-export def "transit-gateway-peerings get" [
+export def "get-transit-gateway-peering" [
   peering_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3550,7 +3550,7 @@ export def "transit-gateway-peerings get" [
 #
 # GET /global-networks/{globalNetworkId}/transit-gateway-registrations
 # operationId: GetTransitGatewayRegistrations
-export def "global-networks-transit-gateway-registrations get" [
+export def "get-transit-gateway-registrations" [
   global_network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3601,7 +3601,7 @@ export def "global-networks-transit-gateway-registrations get" [
 #
 # POST /global-networks/{globalNetworkId}/transit-gateway-registrations
 # operationId: RegisterTransitGateway
-export def "global-networks-transit-gateway-registrations create" [
+export def "register-transit-gateway" [
   global_network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3650,7 +3650,7 @@ export def "global-networks-transit-gateway-registrations create" [
 #
 # GET /transit-gateway-route-table-attachments/{attachmentId}
 # operationId: GetTransitGatewayRouteTableAttachment
-export def "transit-gateway-route-table-attachments get" [
+export def "get-transit-gateway-route-table-attachment" [
   attachment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3695,7 +3695,7 @@ export def "transit-gateway-route-table-attachments get" [
 #
 # GET /vpc-attachments/{attachmentId}
 # operationId: GetVpcAttachment
-export def "vpc-attachments get" [
+export def "get-vpc-attachment" [
   attachment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3741,7 +3741,7 @@ export def "vpc-attachments get" [
 # PATCH /vpc-attachments/{attachmentId}
 # operationId: UpdateVpcAttachment
 # --Options shape: {Ipv6Support?: any, ApplianceModeSupport?: any}
-export def "vpc-attachments update" [
+export def "update-vpc-attachment" [
   attachment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3792,7 +3792,7 @@ export def "vpc-attachments update" [
 #
 # GET /attachments
 # operationId: ListAttachments
-export def "attachments list" [
+export def "list-attachments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3844,7 +3844,7 @@ export def "attachments list" [
 #
 # GET /core-networks/{coreNetworkId}/core-network-policy-versions
 # operationId: ListCoreNetworkPolicyVersions
-export def "core-networks-core-network-policy-versions list" [
+export def "list-core-network-policy-versions" [
   core_network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3894,7 +3894,7 @@ export def "core-networks-core-network-policy-versions list" [
 #
 # GET /organizations/service-access
 # operationId: ListOrganizationServiceAccessStatus
-export def "organizations-service-access list-status" [
+export def "list-organization-service-access-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3940,7 +3940,7 @@ export def "organizations-service-access list-status" [
 #
 # POST /organizations/service-access
 # operationId: StartOrganizationServiceAccessUpdate
-export def "organizations-service-access start-update" [
+export def "start-organization-service-access-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3987,7 +3987,7 @@ export def "organizations-service-access start-update" [
 #
 # GET /peerings
 # operationId: ListPeerings
-export def "peerings list" [
+export def "list-peerings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4039,7 +4039,7 @@ export def "peerings list" [
 #
 # GET /tags/{resourceArn}
 # operationId: ListTagsForResource
-export def "tags list-for-resource" [
+export def "list-tags-for-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4085,7 +4085,7 @@ export def "tags list-for-resource" [
 # POST /tags/{resourceArn}
 # operationId: TagResource
 # --Tags item shape: {Key?: any, Value?: any}
-export def "tags tag-resource" [
+export def "tag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4134,7 +4134,7 @@ export def "tags tag-resource" [
 #
 # POST /attachments/{attachmentId}/reject
 # operationId: RejectAttachment
-export def "attachments-reject reject" [
+export def "reject-attachment" [
   attachment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4179,7 +4179,7 @@ export def "attachments-reject reject" [
 #
 # POST /core-networks/{coreNetworkId}/core-network-policy-versions/{policyVersionId}/restore
 # operationId: RestoreCoreNetworkPolicyVersion
-export def "core-networks-core-network-policy-versions-restore version" [
+export def "restore-core-network-policy-version" [
   core_network_id: string
   policy_version_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4228,7 +4228,7 @@ export def "core-networks-core-network-policy-versions-restore version" [
 # operationId: StartRouteAnalysis
 # --Source shape: {TransitGatewayAttachmentArn?: any, IpAddress?: any}
 # --Destination shape: {TransitGatewayAttachmentArn?: any, IpAddress?: any}
-export def "global-networks-route-analyses start-analysis" [
+export def "start-route-analysis" [
   global_network_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4280,7 +4280,7 @@ export def "global-networks-route-analyses start-analysis" [
 #
 # DELETE /tags/{resourceArn}
 # operationId: UntagResource
-export def "tags untag-resource" [
+export def "untag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4327,7 +4327,7 @@ export def "tags untag-resource" [
 #
 # PATCH /global-networks/{globalNetworkId}/network-resources/{resourceArn}/metadata
 # operationId: UpdateNetworkResourceMetadata
-export def "global-networks-network-resources-metadata update" [
+export def "update-network-resource-metadata" [
   global_network_id: string
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL

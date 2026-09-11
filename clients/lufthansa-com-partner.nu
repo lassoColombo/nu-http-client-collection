@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "baggage-baggagetripandcontact get-trip-and-contact" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "baggage-trip-and-contact" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -128,7 +128,7 @@ export def commands []: nothing -> table {
 #
 # GET /baggage/baggagetripandcontact/{searchID}
 # operationId: Baggage Trip and Contact
-export def "baggage-baggagetripandcontact get-trip-and-contact" [
+export def "baggage-trip-and-contact" [
   search_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -167,7 +167,7 @@ export def "baggage-baggagetripandcontact get-trip-and-contact" [
 #
 # GET /offers/fares/allfares
 # operationId: All Fares
-export def "offers-fares-allfares list" [
+export def "all-fares" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -214,7 +214,7 @@ export def "offers-fares-allfares list" [
 #
 # GET /offers/fares/bestfares
 # operationId: Best Fares
-export def "offers-fares-bestfares get-best" [
+export def "best-fares" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -262,7 +262,7 @@ export def "offers-fares-bestfares get-best" [
 #
 # GET /offers/fares/deeplink
 # operationId: Deep Links
-export def "offers-fares-deeplink get-deep-links" [
+export def "deep-links" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -319,7 +319,7 @@ export def "offers-fares-deeplink get-deep-links" [
 #
 # GET /offers/fares/deeplink/ffp
 # operationId: LH Deep Links - FFP
-export def "offers-fares-deeplink-ffp get-lh-deep-links" [
+export def "lh-deep-links-ffp" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -369,7 +369,7 @@ export def "offers-fares-deeplink-ffp get-lh-deep-links" [
 #
 # GET /offers/fares/deeplink/itco
 # operationId: LH Deep Links - ITCO
-export def "offers-fares-deeplink-itco get-lh-deep-links" [
+export def "lh-deep-links-itco" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -424,7 +424,7 @@ export def "offers-fares-deeplink-itco get-lh-deep-links" [
 #
 # GET /offers/fares/fares
 # operationId: Fares
-export def "offers-fares-fares get" [
+export def "fares" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -467,7 +467,7 @@ export def "offers-fares-fares get" [
 #
 # GET /offers/fares/lowestfares
 # operationId: Lowest Fares
-export def "offers-fares-lowestfares get-lowest" [
+export def "lowest-fares" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -514,7 +514,7 @@ export def "offers-fares-lowestfares get-lowest" [
 #
 # GET /offers/fares/subscriptions
 # operationId: Fares Subscriptions
-export def "offers-fares-subscriptions get" [
+export def "fares-subscriptions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -560,7 +560,7 @@ export def "offers-fares-subscriptions get" [
 #
 # GET /offers/ond/route/{origin}/{destination}
 # operationId: OND Route
-export def "offers-ond-route get" [
+export def "ond-route" [
   origin: string
   destination: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -605,7 +605,7 @@ export def "offers-ond-route get" [
 #
 # GET /offers/ond/status
 # operationId: OND Status
-export def "offers-ond-status get" [
+export def "ond-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -646,7 +646,7 @@ export def "offers-ond-status get" [
 #
 # GET /offers/ond/top
 # operationId: Top OND
-export def "offers-ond-top top" [
+export def "top-ond" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -686,7 +686,7 @@ export def "offers-ond-top top" [
 #
 # GET /orders/orders/{orderID}/{name}
 # operationId: Orders
-export def "orders-orders get" [
+export def "orders" [
   order_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -727,7 +727,7 @@ export def "orders-orders get" [
 #
 # PUT /preflight/autocheckin/{ticketnumber}
 # operationId: Auto Check-In
-export def "preflight-autocheckin check-auto" [
+export def "auto-check-in" [
   ticketnumber: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -768,7 +768,7 @@ export def "preflight-autocheckin check-auto" [
 #
 # GET /promotions/priceoffers/flights/ond/{origin}/{destination}
 # operationId: Price Offers
-export def "promotions-priceoffers-flights-ond get-price-offers" [
+export def "price-offers" [
   origin: string
   destination: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -810,7 +810,7 @@ export def "promotions-priceoffers-flights-ond get-price-offers" [
 #
 # GET /references/seatdetails/{aircraftCode}/{cabinCode}
 # operationId: Seat Details
-export def "references-seatdetails get-seat-details" [
+export def "seat-details" [
   aircraft_code: string
   cabin_code: string
   --base-url(-b): string@base-url-completer # API base URL

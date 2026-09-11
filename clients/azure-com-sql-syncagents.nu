@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-sql-servers-sync-agents list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "sync-agents-list-by-server" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/syncAgents
 # operationId: SyncAgents_ListByServer
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-sync-agents list" [
+export def "sync-agents-list-by-server" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -182,7 +182,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-sync-a
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/syncAgents/{syncAgentName}
 # operationId: SyncAgents_Delete
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-sync-agents delete" [
+export def "sync-agents-delete" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -226,7 +226,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-sync-a
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/syncAgents/{syncAgentName}
 # operationId: SyncAgents_Get
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-sync-agents get" [
+export def "sync-agents-get" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -271,7 +271,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-sync-a
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/syncAgents/{syncAgentName}
 # operationId: SyncAgents_CreateOrUpdate
 # --properties shape: {syncDatabaseId?: string}
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-sync-agents create-or-update" [
+export def "sync-agents-create-or-update" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -319,7 +319,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-sync-a
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/syncAgents/{syncAgentName}/generateKey
 # operationId: SyncAgents_GenerateKey
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-sync-agents-generate-key sync" [
+export def "sync-agents-generate-key" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -363,7 +363,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-sync-a
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/syncAgents/{syncAgentName}/linkedDatabases
 # operationId: SyncAgents_ListLinkedDatabases
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-sync-agents-linked-databases list" [
+export def "sync-agents-list-linked-databases" [
   subscription_id: string
   resource_group_name: string
   server_name: string

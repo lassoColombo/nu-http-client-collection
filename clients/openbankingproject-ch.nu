@@ -125,7 +125,7 @@ def frequency-completer [] { ["Annual" "Daily" "EveryTwoMonths" "EveryTwoWeeks" 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts get-list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-account-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -149,7 +149,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/accounts
 # operationId: getAccountList
-export def "accounts get-list" [
+export def "get-account-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -202,7 +202,7 @@ export def "accounts get-list" [
 #
 # GET /v1/accounts/{account-id}
 # operationId: readAccountDetails
-export def "accounts get-details" [
+export def "read-account-details" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -257,7 +257,7 @@ export def "accounts get-details" [
 #
 # GET /v1/accounts/{account-id}/balances
 # operationId: getBalances
-export def "accounts-balances get" [
+export def "get-balances" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -310,7 +310,7 @@ export def "accounts-balances get" [
 #
 # GET /v1/accounts/{account-id}/transactions
 # operationId: getTransactionList
-export def "accounts-transactions get-list" [
+export def "get-transaction-list" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -370,7 +370,7 @@ export def "accounts-transactions get-list" [
 #
 # GET /v1/accounts/{account-id}/transactions/{transactionId}
 # operationId: getTransactionDetails
-export def "accounts-transactions get-details" [
+export def "get-transaction-details" [
   account_id: string
   transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -426,7 +426,7 @@ export def "accounts-transactions get-details" [
 # POST /v1/consents
 # operationId: createConsent
 # --access shape: {accounts?: list, additionalInformation?: record, allPsd2?: "allAccounts"|"allAccountsWithOwnerName", availableAccounts?: "allAccounts"|"allAccountsWithOwnerName", availableAccountsWithBalance?: "allAccounts"|"allAccountsWithOwnerName", balances?: list, restrictedTo?: list<string>, transactions?: list}
-export def "consents create" [
+export def "create-consent" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -495,7 +495,7 @@ export def "consents create" [
 #
 # DELETE /v1/consents/{consentId}
 # operationId: deleteConsent
-export def "consents delete" [
+export def "delete-consent" [
   consent_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -547,7 +547,7 @@ export def "consents delete" [
 #
 # GET /v1/consents/{consentId}
 # operationId: getConsentInformation
-export def "consents get-information" [
+export def "get-consent-information" [
   consent_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -599,7 +599,7 @@ export def "consents get-information" [
 #
 # GET /v1/consents/{consentId}/authorisations
 # operationId: getConsentAuthorisation
-export def "consents-authorisations get" [
+export def "get-consent-authorisation" [
   consent_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -652,7 +652,7 @@ export def "consents-authorisations get" [
 # POST /v1/consents/{consentId}/authorisations
 # operationId: startConsentAuthorisation
 # --psuData shape: {additionalEncryptedPassword?: string, additionalPassword?: string, encryptedPassword?: string, password?: string}
-export def "consents-authorisations start" [
+export def "start-consent-authorisation" [
   consent_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -719,7 +719,7 @@ export def "consents-authorisations start" [
 #
 # GET /v1/consents/{consentId}/authorisations/{authorisationId}
 # operationId: getConsentScaStatus
-export def "consents-authorisations get-sca-status" [
+export def "get-consent-sca-status" [
   consent_id: string
   authorisation_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -774,7 +774,7 @@ export def "consents-authorisations get-sca-status" [
 # PUT /v1/consents/{consentId}/authorisations/{authorisationId}
 # operationId: updateConsentsPsuData
 # --psuData shape: {additionalEncryptedPassword?: string, additionalPassword?: string, encryptedPassword?: string, password?: string}
-export def "consents-authorisations update-psu-data" [
+export def "update-consents-psu-data" [
   consent_id: string
   authorisation_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -839,7 +839,7 @@ export def "consents-authorisations update-psu-data" [
 #
 # GET /v1/consents/{consentId}/status
 # operationId: getConsentStatus
-export def "consents-status get" [
+export def "get-consent-status" [
   consent_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -893,7 +893,7 @@ export def "consents-status get" [
 # operationId: checkAvailabilityOfFunds
 # --account shape: {cashAccountType?: string, currency?: string, iban?: string, otherAccountIdentification?: string}
 # --instructedAmount shape: {amount: string, currency: string}
-export def "funds-confirmations check-availability" [
+export def "check-availability-of-funds" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -941,7 +941,7 @@ export def "funds-confirmations check-availability" [
 #
 # POST /v1/signing-baskets
 # operationId: createSigningBasket
-export def "signing-baskets create" [
+export def "create-signing-basket" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1007,7 +1007,7 @@ export def "signing-baskets create" [
 #
 # DELETE /v1/signing-baskets/{basketId}
 # operationId: deleteSigningBasket
-export def "signing-baskets delete" [
+export def "delete-signing-basket" [
   basket_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1059,7 +1059,7 @@ export def "signing-baskets delete" [
 #
 # GET /v1/signing-baskets/{basketId}
 # operationId: getSigningBasket
-export def "signing-baskets get" [
+export def "get-signing-basket" [
   basket_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1111,7 +1111,7 @@ export def "signing-baskets get" [
 #
 # GET /v1/signing-baskets/{basketId}/authorisations
 # operationId: getSigningBasketAuthorisation
-export def "signing-baskets-authorisations get" [
+export def "get-signing-basket-authorisation" [
   basket_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1164,7 +1164,7 @@ export def "signing-baskets-authorisations get" [
 # POST /v1/signing-baskets/{basketId}/authorisations
 # operationId: startSigningBasketAuthorisation
 # --psuData shape: {additionalEncryptedPassword?: string, additionalPassword?: string, encryptedPassword?: string, password?: string}
-export def "signing-baskets-authorisations start" [
+export def "start-signing-basket-authorisation" [
   basket_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1231,7 +1231,7 @@ export def "signing-baskets-authorisations start" [
 #
 # GET /v1/signing-baskets/{basketId}/authorisations/{authorisationId}
 # operationId: getSigningBasketScaStatus
-export def "signing-baskets-authorisations get-sca-status" [
+export def "get-signing-basket-sca-status" [
   basket_id: string
   authorisation_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1286,7 +1286,7 @@ export def "signing-baskets-authorisations get-sca-status" [
 # PUT /v1/signing-baskets/{basketId}/authorisations/{authorisationId}
 # operationId: updateSigningBasketPsuData
 # --psuData shape: {additionalEncryptedPassword?: string, additionalPassword?: string, encryptedPassword?: string, password?: string}
-export def "signing-baskets-authorisations update-psu-data" [
+export def "update-signing-basket-psu-data" [
   basket_id: string
   authorisation_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1351,7 +1351,7 @@ export def "signing-baskets-authorisations update-psu-data" [
 #
 # GET /v1/signing-baskets/{basketId}/status
 # operationId: getSigningBasketStatus
-export def "signing-baskets-status get" [
+export def "get-signing-basket-status" [
   basket_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1417,7 +1417,7 @@ export def "signing-baskets-status get" [
 # --instructedAmount shape: {amount: string, currency: string}
 # --remittanceInformationStructured shape: {SCORorQRRorIPI?: "SCOR"|"QRR"|"IPI", additionalRemittanceInformation?: string, reference: string, referenceIssuer?: string, referenceType?: string}
 # --payments item shape: {chargeBearer?: "DEBT"|"CRED"|"SHAR"|"SLEV", creditorAccount: record, creditorAddress?: record, creditorAgent?: record, creditorAgentName?: string, creditorId?: string, creditorName: string, creditorNameAndAddress?: string, debtorId?: string, debtorName: string, endToEndIdentification: string, equivalentAmount?: record, exchangeRateInformation?: record, instructedAmount?: record, intermediaryAgent?: string, purposeCode?: "SALA"|"PENS", remittanceInformationStructured?: record, ... (5 more fields)}
-export def "payment-initiation-service-pis create-initiate" [
+export def "initiate-payment" [
   payment_service: string
   payment_product: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1520,7 +1520,7 @@ export def "payment-initiation-service-pis create-initiate" [
 #
 # DELETE /v1/{payment-service}/{payment-product}/{paymentId}
 # operationId: cancelPayment
-export def "payment-initiation-service-pis cancel" [
+export def "cancel-payment" [
   payment_service: string
   payment_product: string
   payment_id: string
@@ -1580,7 +1580,7 @@ export def "payment-initiation-service-pis cancel" [
 #
 # GET /v1/{payment-service}/{payment-product}/{paymentId}
 # operationId: getPaymentInformation
-export def "payment-initiation-service-pis get-information" [
+export def "get-payment-information" [
   payment_service: string
   payment_product: string
   payment_id: string
@@ -1636,7 +1636,7 @@ export def "payment-initiation-service-pis get-information" [
 #
 # GET /v1/{payment-service}/{payment-product}/{paymentId}/authorisations
 # operationId: getPaymentInitiationAuthorisation
-export def "authorisations get-initiation" [
+export def "get-payment-initiation-authorisation" [
   payment_service: string
   payment_product: string
   payment_id: string
@@ -1693,7 +1693,7 @@ export def "authorisations get-initiation" [
 # POST /v1/{payment-service}/{payment-product}/{paymentId}/authorisations
 # operationId: startPaymentAuthorisation
 # --psuData shape: {additionalEncryptedPassword?: string, additionalPassword?: string, encryptedPassword?: string, password?: string}
-export def "authorisations start" [
+export def "start-payment-authorisation" [
   payment_service: string
   payment_product: string
   payment_id: string
@@ -1764,7 +1764,7 @@ export def "authorisations start" [
 #
 # GET /v1/{payment-service}/{payment-product}/{paymentId}/authorisations/{authorisationId}
 # operationId: getPaymentInitiationScaStatus
-export def "authorisations get-initiation-sca-status" [
+export def "get-payment-initiation-sca-status" [
   payment_service: string
   payment_product: string
   payment_id: string
@@ -1823,7 +1823,7 @@ export def "authorisations get-initiation-sca-status" [
 # PUT /v1/{payment-service}/{payment-product}/{paymentId}/authorisations/{authorisationId}
 # operationId: updatePaymentPsuData
 # --psuData shape: {additionalEncryptedPassword?: string, additionalPassword?: string, encryptedPassword?: string, password?: string}
-export def "authorisations update-psu-data" [
+export def "update-payment-psu-data" [
   payment_service: string
   payment_product: string
   payment_id: string
@@ -1892,7 +1892,7 @@ export def "authorisations update-psu-data" [
 #
 # GET /v1/{payment-service}/{payment-product}/{paymentId}/cancellation-authorisations
 # operationId: getPaymentInitiationCancellationAuthorisationInformation
-export def "cancellation-authorisations get-initiation-information" [
+export def "get-payment-initiation-cancellation-authorisation-information" [
   payment_service: string
   payment_product: string
   payment_id: string
@@ -1949,7 +1949,7 @@ export def "cancellation-authorisations get-initiation-information" [
 # POST /v1/{payment-service}/{payment-product}/{paymentId}/cancellation-authorisations
 # operationId: startPaymentInitiationCancellationAuthorisation
 # --psuData shape: {additionalEncryptedPassword?: string, additionalPassword?: string, encryptedPassword?: string, password?: string}
-export def "cancellation-authorisations start-initiation" [
+export def "start-payment-initiation-cancellation-authorisation" [
   payment_service: string
   payment_product: string
   payment_id: string
@@ -2020,7 +2020,7 @@ export def "cancellation-authorisations start-initiation" [
 #
 # GET /v1/{payment-service}/{payment-product}/{paymentId}/cancellation-authorisations/{authorisationId}
 # operationId: getPaymentCancellationScaStatus
-export def "cancellation-authorisations get-sca-status" [
+export def "get-payment-cancellation-sca-status" [
   payment_service: string
   payment_product: string
   payment_id: string
@@ -2079,7 +2079,7 @@ export def "cancellation-authorisations get-sca-status" [
 # PUT /v1/{payment-service}/{payment-product}/{paymentId}/cancellation-authorisations/{authorisationId}
 # operationId: updatePaymentCancellationPsuData
 # --psuData shape: {additionalEncryptedPassword?: string, additionalPassword?: string, encryptedPassword?: string, password?: string}
-export def "cancellation-authorisations update-psu-data" [
+export def "update-payment-cancellation-psu-data" [
   payment_service: string
   payment_product: string
   payment_id: string
@@ -2148,7 +2148,7 @@ export def "cancellation-authorisations update-psu-data" [
 #
 # GET /v1/{payment-service}/{payment-product}/{paymentId}/status
 # operationId: getPaymentInitiationStatus
-export def "status get-initiation" [
+export def "get-payment-initiation-status" [
   payment_service: string
   payment_product: string
   payment_id: string

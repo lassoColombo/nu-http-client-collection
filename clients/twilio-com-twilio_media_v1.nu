@@ -118,7 +118,7 @@ def status-completer-3 [] { ["created" "ended" "failed" "started"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "media-processors list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-media-processor" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -142,7 +142,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/MediaProcessors
 # operationId: ListMediaProcessor
-export def "media-processors list" [
+export def "list-media-processor" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -181,7 +181,7 @@ export def "media-processors list" [
 # POST /v1/MediaProcessors
 #
 # operationId: CreateMediaProcessor
-export def "media-processors create" [
+export def "create-media-processor" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -225,7 +225,7 @@ export def "media-processors create" [
 #
 # GET /v1/MediaProcessors/{Sid}
 # operationId: FetchMediaProcessor
-export def "media-processors get" [
+export def "fetch-media-processor" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -261,7 +261,7 @@ export def "media-processors get" [
 #
 # POST /v1/MediaProcessors/{Sid}
 # operationId: UpdateMediaProcessor
-export def "media-processors update" [
+export def "update-media-processor" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -302,7 +302,7 @@ export def "media-processors update" [
 #
 # GET /v1/MediaRecordings
 # operationId: ListMediaRecording
-export def "media-recordings list" [
+export def "list-media-recording" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -344,7 +344,7 @@ export def "media-recordings list" [
 #
 # DELETE /v1/MediaRecordings/{Sid}
 # operationId: DeleteMediaRecording
-export def "media-recordings delete" [
+export def "delete-media-recording" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -380,7 +380,7 @@ export def "media-recordings delete" [
 #
 # GET /v1/MediaRecordings/{Sid}
 # operationId: FetchMediaRecording
-export def "media-recordings get" [
+export def "fetch-media-recording" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -416,7 +416,7 @@ export def "media-recordings get" [
 #
 # GET /v1/PlayerStreamers
 # operationId: ListPlayerStreamer
-export def "player-streamers list" [
+export def "list-player-streamer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -455,7 +455,7 @@ export def "player-streamers list" [
 # POST /v1/PlayerStreamers
 #
 # operationId: CreatePlayerStreamer
-export def "player-streamers create" [
+export def "create-player-streamer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -497,7 +497,7 @@ export def "player-streamers create" [
 #
 # GET /v1/PlayerStreamers/{Sid}
 # operationId: FetchPlayerStreamer
-export def "player-streamers get" [
+export def "fetch-player-streamer" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -533,7 +533,7 @@ export def "player-streamers get" [
 #
 # POST /v1/PlayerStreamers/{Sid}
 # operationId: UpdatePlayerStreamer
-export def "player-streamers update" [
+export def "update-player-streamer" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -574,7 +574,7 @@ export def "player-streamers update" [
 #
 # GET /v1/PlayerStreamers/{Sid}/PlaybackGrant
 # operationId: FetchPlayerStreamerPlaybackGrant
-export def "player-streamers-playback-grant get" [
+export def "fetch-player-streamer-playback-grant" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -609,7 +609,7 @@ export def "player-streamers-playback-grant get" [
 # POST /v1/PlayerStreamers/{Sid}/PlaybackGrant
 #
 # operationId: CreatePlayerStreamerPlaybackGrant
-export def "player-streamers-playback-grant create" [
+export def "create-player-streamer-playback-grant" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

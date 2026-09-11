@@ -130,7 +130,7 @@ def view-completer [] { ["BASIC" "FULL" "QUOTA_VIEW_UNSPECIFIED"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta1-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "serviceusage-operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -154,7 +154,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1beta1/operations
 # operationId: serviceusage.operations.list
-export def "v1beta1-operations list" [
+export def "serviceusage-operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -204,7 +204,7 @@ export def "v1beta1-operations list" [
 #
 # DELETE /v1beta1/{name}
 # operationId: serviceusage.services.consumerQuotaMetrics.limits.consumerOverrides.delete
-export def "v1beta1 delete" [
+export def "serviceusage-services-consumer-quota-metrics-limits-consumer-overrides-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -254,7 +254,7 @@ export def "v1beta1 delete" [
 #
 # GET /v1beta1/{name}
 # operationId: serviceusage.services.consumerQuotaMetrics.limits.get
-export def "v1beta1 get" [
+export def "serviceusage-services-consumer-quota-metrics-limits-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -303,7 +303,7 @@ export def "v1beta1 get" [
 #
 # PATCH /v1beta1/{name}
 # operationId: serviceusage.services.consumerQuotaMetrics.limits.consumerOverrides.patch
-export def "v1beta1 update" [
+export def "serviceusage-services-consumer-quota-metrics-limits-consumer-overrides-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -363,7 +363,7 @@ export def "v1beta1 update" [
 #
 # POST /v1beta1/{name}:disable
 # operationId: serviceusage.services.disable
-export def "v1beta1 disable" [
+export def "serviceusage-services-disable" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -415,7 +415,7 @@ export def "v1beta1 disable" [
 #
 # POST /v1beta1/{name}:enable
 # operationId: serviceusage.services.enable
-export def "v1beta1 enable" [
+export def "serviceusage-services-enable" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -467,7 +467,7 @@ export def "v1beta1 enable" [
 #
 # GET /v1beta1/{parent}/adminOverrides
 # operationId: serviceusage.services.consumerQuotaMetrics.limits.adminOverrides.list
-export def "v1beta1-admin-overrides list" [
+export def "serviceusage-services-consumer-quota-metrics-limits-admin-overrides-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -517,7 +517,7 @@ export def "v1beta1-admin-overrides list" [
 #
 # POST /v1beta1/{parent}/adminOverrides
 # operationId: serviceusage.services.consumerQuotaMetrics.limits.adminOverrides.create
-export def "v1beta1-admin-overrides create" [
+export def "serviceusage-services-consumer-quota-metrics-limits-admin-overrides-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -576,7 +576,7 @@ export def "v1beta1-admin-overrides create" [
 #
 # GET /v1beta1/{parent}/consumerOverrides
 # operationId: serviceusage.services.consumerQuotaMetrics.limits.consumerOverrides.list
-export def "v1beta1-consumer-overrides list" [
+export def "serviceusage-services-consumer-quota-metrics-limits-consumer-overrides-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -626,7 +626,7 @@ export def "v1beta1-consumer-overrides list" [
 #
 # POST /v1beta1/{parent}/consumerOverrides
 # operationId: serviceusage.services.consumerQuotaMetrics.limits.consumerOverrides.create
-export def "v1beta1-consumer-overrides create" [
+export def "serviceusage-services-consumer-quota-metrics-limits-consumer-overrides-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -685,7 +685,7 @@ export def "v1beta1-consumer-overrides create" [
 #
 # GET /v1beta1/{parent}/consumerQuotaMetrics
 # operationId: serviceusage.services.consumerQuotaMetrics.list
-export def "v1beta1-consumer-quota-metrics list" [
+export def "serviceusage-services-consumer-quota-metrics-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -737,7 +737,7 @@ export def "v1beta1-consumer-quota-metrics list" [
 # POST /v1beta1/{parent}/consumerQuotaMetrics:importAdminOverrides
 # operationId: serviceusage.services.consumerQuotaMetrics.importAdminOverrides
 # --inlineSource shape: {overrides?: list}
-export def "v1beta1-consumer-quota-metrics-import-admin-overrides import" [
+export def "serviceusage-services-consumer-quota-metrics-import-admin-overrides" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -792,7 +792,7 @@ export def "v1beta1-consumer-quota-metrics-import-admin-overrides import" [
 # POST /v1beta1/{parent}/consumerQuotaMetrics:importConsumerOverrides
 # operationId: serviceusage.services.consumerQuotaMetrics.importConsumerOverrides
 # --inlineSource shape: {overrides?: list}
-export def "v1beta1-consumer-quota-metrics-import-consumer-overrides import" [
+export def "serviceusage-services-consumer-quota-metrics-import-consumer-overrides" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -846,7 +846,7 @@ export def "v1beta1-consumer-quota-metrics-import-consumer-overrides import" [
 #
 # GET /v1beta1/{parent}/services
 # operationId: serviceusage.services.list
-export def "v1beta1-services list" [
+export def "serviceusage-services-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -897,7 +897,7 @@ export def "v1beta1-services list" [
 #
 # POST /v1beta1/{parent}/services:batchEnable
 # operationId: serviceusage.services.batchEnable
-export def "v1beta1-services-batch-enable enable" [
+export def "serviceusage-services-batch-enable" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -949,7 +949,7 @@ export def "v1beta1-services-batch-enable enable" [
 #
 # POST /v1beta1/{parent}:generateServiceIdentity
 # operationId: serviceusage.services.generateServiceIdentity
-export def "v1beta1 generate-service-identity" [
+export def "serviceusage-services-generate-service-identity" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

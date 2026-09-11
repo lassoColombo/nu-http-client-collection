@@ -117,7 +117,7 @@ def status-completer [] { ["ACTIVATED" "DISABLED" "NEW"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "coursedesigns get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-coursedesigns" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 # Lists all global course design templates
 #
 # GET /coursedesigns
-export def "coursedesigns get" [
+export def "get-coursedesigns" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -173,7 +173,7 @@ export def "coursedesigns get" [
 # Get Organization Unit with External Id
 #
 # GET /extorgunit
-export def "extorgunit get" [
+export def "get-extorgunit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -208,7 +208,7 @@ export def "extorgunit get" [
 # Gets a participation by external id
 #
 # GET /extparticipation
-export def "extparticipation get" [
+export def "get-extparticipation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -243,7 +243,7 @@ export def "extparticipation get" [
 # Gets Organization Unit by external id
 #
 # GET /extproject
-export def "extproject get" [
+export def "get-extproject" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -278,7 +278,7 @@ export def "extproject get" [
 # Gets a user by external id
 #
 # GET /extuser
-export def "extuser get" [
+export def "get-extuser" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -313,7 +313,7 @@ export def "extuser get" [
 # List Global User Groups.
 #
 # GET /globalusergroups
-export def "globalusergroups get" [
+export def "get-globalusergroups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -346,7 +346,7 @@ export def "globalusergroups get" [
 # List of all users in group.
 #
 # GET /globalusergroups/{groupid}/members
-export def "globalusergroups-members get" [
+export def "get-globalusergroups-groupid-members" [
   groupid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -381,7 +381,7 @@ export def "globalusergroups-members get" [
 # Organization Units
 #
 # GET /orgunits
-export def "orgunits list" [
+export def "get-orgunits" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -414,7 +414,7 @@ export def "orgunits list" [
 # Adds an Organization Unit
 #
 # POST /orgunits
-export def "orgunits create" [
+export def "post-orgunits" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -456,7 +456,7 @@ export def "orgunits create" [
 # Get Organization Unit
 #
 # GET /orgunits/{orgid}
-export def "orgunits get" [
+export def "get-orgunits-orgid" [
   orgid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -491,7 +491,7 @@ export def "orgunits get" [
 # Updates an Organization Unit
 #
 # PATCH /orgunits/{orgid}
-export def "orgunits update" [
+export def "patch-orgunits-orgid" [
   orgid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -535,7 +535,7 @@ export def "orgunits update" [
 # Organization Unit Projects
 #
 # GET /orgunits/{orgid}/projects
-export def "orgunits-projects list" [
+export def "get-orgunits-orgid-projects" [
   orgid: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -570,7 +570,7 @@ export def "orgunits-projects list" [
 # Create project
 #
 # POST /orgunits/{orgid}/projects
-export def "orgunits-projects create" [
+export def "post-orgunits-orgid-projects" [
   orgid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -617,7 +617,7 @@ export def "orgunits-projects create" [
 # Deletes the project
 #
 # DELETE /orgunits/{orgid}/projects/{projectid}
-export def "orgunits-projects delete" [
+export def "delete-orgunits-orgid-projects-projectid" [
   orgid: int
   projectid: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -654,7 +654,7 @@ export def "orgunits-projects delete" [
 # Project information
 #
 # GET /orgunits/{orgid}/projects/{projectid}
-export def "orgunits-projects get" [
+export def "get-orgunits-orgid-projects-projectid" [
   orgid: int
   projectid: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -691,7 +691,7 @@ export def "orgunits-projects get" [
 # Update project information
 #
 # PATCH /orgunits/{orgid}/projects/{projectid}
-export def "orgunits-projects update" [
+export def "patch-orgunits-orgid-projects-projectid" [
   orgid: int
   projectid: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -739,7 +739,7 @@ export def "orgunits-projects update" [
 # Project participants
 #
 # GET /orgunits/{orgid}/projects/{projectid}/participants
-export def "orgunits-projects-participants get" [
+export def "get-orgunits-orgid-projects-projectid-participants" [
   orgid: int
   projectid: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -776,7 +776,7 @@ export def "orgunits-projects-participants get" [
 # Add participant
 #
 # POST /orgunits/{orgid}/projects/{projectid}/participants
-export def "orgunits-projects-participants create" [
+export def "post-orgunits-orgid-projects-projectid-participants" [
   orgid: int
   projectid: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -819,7 +819,7 @@ export def "orgunits-projects-participants create" [
 # Deletes a participant
 #
 # DELETE /orgunits/{orgid}/projects/{projectid}/participants/${participantId}
-export def "orgunits-projects-participants-participant-id delete" [
+export def "delete-orgunits-orgid-projects-projectid-participants-participant-id" [
   orgid: int
   projectid: int
   participant_id: int
@@ -858,7 +858,7 @@ export def "orgunits-projects-participants-participant-id delete" [
 # Activate participant
 #
 # POST /orgunits/{orgid}/projects/{projectid}/participants/${participantId}/activate
-export def "orgunits-projects-participants-participant-id-activate create" [
+export def "post-orgunits-orgid-projects-projectid-participants-participant-id-activate" [
   orgid: int
   projectid: int
   participant_id: int
@@ -897,7 +897,7 @@ export def "orgunits-projects-participants-participant-id-activate create" [
 # Participant login link
 #
 # POST /orgunits/{orgid}/projects/{projectid}/participants/${participantId}/loginlink
-export def "orgunits-projects-participants-participant-id-loginlink create" [
+export def "post-orgunits-orgid-projects-projectid-participants-participant-id-loginlink" [
   orgid: int
   projectid: int
   participant_id: int
@@ -936,7 +936,7 @@ export def "orgunits-projects-participants-participant-id-loginlink create" [
 # Project team members
 #
 # GET /orgunits/{orgid}/projects/{projectid}/teammembers
-export def "orgunits-projects-teammembers get" [
+export def "get-orgunits-orgid-projects-projectid-teammembers" [
   orgid: int
   projectid: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -973,7 +973,7 @@ export def "orgunits-projects-teammembers get" [
 # List User Groups.
 #
 # GET /orgunits/{orgid}/usergroups
-export def "orgunits-usergroups list" [
+export def "get-orgunits-orgid-usergroups" [
   orgid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1008,7 +1008,7 @@ export def "orgunits-usergroups list" [
 # Create a User Group.
 #
 # POST /orgunits/{orgid}/usergroups
-export def "orgunits-usergroups create" [
+export def "post-orgunits-orgid-usergroups" [
   orgid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1048,7 +1048,7 @@ export def "orgunits-usergroups create" [
 # Get user group
 #
 # GET /orgunits/{orgid}/usergroups/{groupid}
-export def "orgunits-usergroups get" [
+export def "get-orgunits-orgid-usergroups-groupid" [
   orgid: int
   groupid: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1085,7 +1085,7 @@ export def "orgunits-usergroups get" [
 # List of all users in group.
 #
 # GET /orgunits/{orgid}/usergroups/{groupid}/members
-export def "orgunits-usergroups-members get" [
+export def "get-orgunits-orgid-usergroups-groupid-members" [
   orgid: int
   groupid: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1122,7 +1122,7 @@ export def "orgunits-usergroups-members get" [
 # Add user group member.
 #
 # POST /orgunits/{orgid}/usergroups/{groupid}/members
-export def "orgunits-usergroups-members create" [
+export def "post-orgunits-orgid-usergroups-groupid-members" [
   orgid: int
   groupid: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1163,7 +1163,7 @@ export def "orgunits-usergroups-members create" [
 # Remove user group member.
 #
 # DELETE /orgunits/{orgid}/usergroups/{groupid}/members/{uuid}
-export def "orgunits-usergroups-members delete" [
+export def "delete-orgunits-orgid-usergroups-groupid-members-uuid" [
   orgid: int
   groupid: int
   uuid: string
@@ -1202,7 +1202,7 @@ export def "orgunits-usergroups-members delete" [
 # Lists all users
 #
 # GET /users
-export def "users list" [
+export def "get-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1238,7 +1238,7 @@ export def "users list" [
 # Adds a user
 #
 # POST /users
-export def "users create" [
+export def "post-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1282,7 +1282,7 @@ export def "users create" [
 # User information
 #
 # GET /users/{userid}
-export def "users get" [
+export def "get-users-userid" [
   userid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1317,7 +1317,7 @@ export def "users get" [
 # Updates user information
 #
 # PATCH /users/{userid}
-export def "users update" [
+export def "patch-users-userid" [
   userid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1363,7 +1363,7 @@ export def "users update" [
 # User profile picture
 #
 # GET /users/{userid}/pic?key={APIKEY}
-export def "users-pic-key-apikey get" [
+export def "get-users-userid-pickey-apikey" [
   userid: string
   apikey: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1400,7 +1400,7 @@ export def "users-pic-key-apikey get" [
 # Returns information about the projects the user is a participant in.
 #
 # GET /users/{userid}/projectParticipations
-export def "users-project-participations get" [
+export def "get-users-userid-project-participations" [
   userid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

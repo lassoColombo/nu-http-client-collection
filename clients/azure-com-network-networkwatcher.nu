@@ -127,7 +127,7 @@ def verbosity-level-completer [] { ["Full" "Minimum" "Normal"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-network-network-watchers list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "network-watchers-list-all" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -151,7 +151,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/networkWatchers
 # operationId: NetworkWatchers_ListAll
-export def "subscriptions-providers-microsoft-network-network-watchers list" [
+export def "network-watchers-list-all" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -189,7 +189,7 @@ export def "subscriptions-providers-microsoft-network-network-watchers list" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkWatchers
 # operationId: NetworkWatchers_List
-export def "subscriptions-resource-groups-providers-microsoft-network-network-watchers list" [
+export def "network-watchers-list" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -229,7 +229,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-wa
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkWatchers/{networkWatcherName}
 # operationId: NetworkWatchers_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-network-watchers delete" [
+export def "network-watchers-delete" [
   subscription_id: string
   resource_group_name: string
   network_watcher_name: string
@@ -271,7 +271,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-wa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkWatchers/{networkWatcherName}
 # operationId: NetworkWatchers_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-network-watchers get" [
+export def "network-watchers-get" [
   subscription_id: string
   resource_group_name: string
   network_watcher_name: string
@@ -313,7 +313,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-wa
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkWatchers/{networkWatcherName}
 # operationId: NetworkWatchers_UpdateTags
-export def "subscriptions-resource-groups-providers-microsoft-network-network-watchers update-tags" [
+export def "network-watchers-update-tags" [
   subscription_id: string
   resource_group_name: string
   network_watcher_name: string
@@ -359,7 +359,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-wa
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkWatchers/{networkWatcherName}
 # operationId: NetworkWatchers_CreateOrUpdate
-export def "subscriptions-resource-groups-providers-microsoft-network-network-watchers create-or-update" [
+export def "network-watchers-create-or-update" [
   subscription_id: string
   resource_group_name: string
   network_watcher_name: string
@@ -409,7 +409,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-wa
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkWatchers/{networkWatcherName}/availableProvidersList
 # operationId: NetworkWatchers_ListAvailableProviders
-export def "subscriptions-resource-groups-providers-microsoft-network-network-watchers-available-providers-list list" [
+export def "network-watchers-list-available-providers" [
   subscription_id: string
   resource_group_name: string
   network_watcher_name: string
@@ -459,7 +459,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-wa
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkWatchers/{networkWatcherName}/azureReachabilityReport
 # operationId: NetworkWatchers_GetAzureReachabilityReport
 # --providerLocation shape: {city?: string, country: string, state?: string}
-export def "subscriptions-resource-groups-providers-microsoft-network-network-watchers-azure-reachability-report get" [
+export def "network-watchers-get-azure-reachability-report" [
   subscription_id: string
   resource_group_name: string
   network_watcher_name: string
@@ -511,7 +511,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-wa
 # operationId: NetworkWatchers_SetFlowLogConfiguration
 # --flowAnalyticsConfiguration shape: {networkWatcherFlowAnalyticsConfiguration: any}
 # --properties shape: {enabled: bool, format?: any, retentionPolicy?: any, storageId: string}
-export def "subscriptions-resource-groups-providers-microsoft-network-network-watchers-configure-flow-log update-configuration" [
+export def "network-watchers-set-flow-log-configuration" [
   subscription_id: string
   resource_group_name: string
   network_watcher_name: string
@@ -562,7 +562,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-wa
 # --destination shape: {address?: string, port?: int, resourceId?: string}
 # --protocolConfiguration shape: {HTTPConfiguration?: any}
 # --source shape: {port?: int, resourceId: string}
-export def "subscriptions-resource-groups-providers-microsoft-network-network-watchers-connectivity-check check" [
+export def "network-watchers-check-connectivity" [
   subscription_id: string
   resource_group_name: string
   network_watcher_name: string
@@ -611,7 +611,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-wa
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkWatchers/{networkWatcherName}/ipFlowVerify
 # operationId: NetworkWatchers_VerifyIPFlow
-export def "subscriptions-resource-groups-providers-microsoft-network-network-watchers-ip-flow-verify verify" [
+export def "network-watchers-verify-ip-flow" [
   subscription_id: string
   resource_group_name: string
   network_watcher_name: string
@@ -665,7 +665,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-wa
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkWatchers/{networkWatcherName}/networkConfigurationDiagnostic
 # operationId: NetworkWatchers_GetNetworkConfigurationDiagnostic
 # --profiles item shape: {destination: string, destinationPort: string, direction: "Inbound"|"Outbound", protocol: string, source: string}
-export def "subscriptions-resource-groups-providers-microsoft-network-network-watchers-network-configuration-diagnostic get" [
+export def "network-watchers-get-network-configuration-diagnostic" [
   subscription_id: string
   resource_group_name: string
   network_watcher_name: string
@@ -713,7 +713,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-wa
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkWatchers/{networkWatcherName}/nextHop
 # operationId: NetworkWatchers_GetNextHop
-export def "subscriptions-resource-groups-providers-microsoft-network-network-watchers-next-hop get" [
+export def "network-watchers-get-next-hop" [
   subscription_id: string
   resource_group_name: string
   network_watcher_name: string
@@ -762,7 +762,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-wa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkWatchers/{networkWatcherName}/packetCaptures
 # operationId: PacketCaptures_List
-export def "subscriptions-resource-groups-providers-microsoft-network-network-watchers-packet-captures list" [
+export def "packet-captures-list" [
   subscription_id: string
   resource_group_name: string
   network_watcher_name: string
@@ -804,7 +804,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-wa
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkWatchers/{networkWatcherName}/packetCaptures/{packetCaptureName}
 # operationId: PacketCaptures_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-network-watchers-packet-captures delete" [
+export def "packet-captures-delete" [
   subscription_id: string
   resource_group_name: string
   network_watcher_name: string
@@ -848,7 +848,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-wa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkWatchers/{networkWatcherName}/packetCaptures/{packetCaptureName}
 # operationId: PacketCaptures_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-network-watchers-packet-captures get" [
+export def "packet-captures-get" [
   subscription_id: string
   resource_group_name: string
   network_watcher_name: string
@@ -893,7 +893,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-wa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkWatchers/{networkWatcherName}/packetCaptures/{packetCaptureName}
 # operationId: PacketCaptures_Create
 # --properties shape: {bytesToCapturePerPacket?: int, filters?: list, storageLocation: any, target: string, timeLimitInSeconds?: int, totalBytesPerSession?: int}
-export def "subscriptions-resource-groups-providers-microsoft-network-network-watchers-packet-captures create" [
+export def "packet-captures-create" [
   subscription_id: string
   resource_group_name: string
   network_watcher_name: string
@@ -941,7 +941,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-wa
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkWatchers/{networkWatcherName}/packetCaptures/{packetCaptureName}/queryStatus
 # operationId: PacketCaptures_GetStatus
-export def "subscriptions-resource-groups-providers-microsoft-network-network-watchers-packet-captures-query-status get" [
+export def "packet-captures-get-status" [
   subscription_id: string
   resource_group_name: string
   network_watcher_name: string
@@ -985,7 +985,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-wa
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkWatchers/{networkWatcherName}/packetCaptures/{packetCaptureName}/stop
 # operationId: PacketCaptures_Stop
-export def "subscriptions-resource-groups-providers-microsoft-network-network-watchers-packet-captures-stop stop" [
+export def "packet-captures-stop" [
   subscription_id: string
   resource_group_name: string
   network_watcher_name: string
@@ -1029,7 +1029,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-wa
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkWatchers/{networkWatcherName}/queryFlowLogStatus
 # operationId: NetworkWatchers_GetFlowLogStatus
-export def "subscriptions-resource-groups-providers-microsoft-network-network-watchers-query-flow-log-status get" [
+export def "network-watchers-get-flow-log-status" [
   subscription_id: string
   resource_group_name: string
   network_watcher_name: string
@@ -1075,7 +1075,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-wa
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkWatchers/{networkWatcherName}/queryTroubleshootResult
 # operationId: NetworkWatchers_GetTroubleshootingResult
-export def "subscriptions-resource-groups-providers-microsoft-network-network-watchers-query-troubleshoot-result get-troubleshooting" [
+export def "network-watchers-get-troubleshooting-result" [
   subscription_id: string
   resource_group_name: string
   network_watcher_name: string
@@ -1121,7 +1121,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-wa
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkWatchers/{networkWatcherName}/securityGroupView
 # operationId: NetworkWatchers_GetVMSecurityRules
-export def "subscriptions-resource-groups-providers-microsoft-network-network-watchers-security-group-view get-vm-rules" [
+export def "network-watchers-get-vm-security-rules" [
   subscription_id: string
   resource_group_name: string
   network_watcher_name: string
@@ -1169,7 +1169,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-wa
 # operationId: NetworkWatchers_GetTopology
 # --targetSubnet shape: {id?: string}
 # --targetVirtualNetwork shape: {id?: string}
-export def "subscriptions-resource-groups-providers-microsoft-network-network-watchers-topology get" [
+export def "network-watchers-get-topology" [
   subscription_id: string
   resource_group_name: string
   network_watcher_name: string
@@ -1218,7 +1218,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-network-wa
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/networkWatchers/{networkWatcherName}/troubleshoot
 # operationId: NetworkWatchers_GetTroubleshooting
 # --properties shape: {storageId: string, storagePath: string}
-export def "subscriptions-resource-groups-providers-microsoft-network-network-watchers-troubleshoot get-troubleshooting" [
+export def "network-watchers-get-troubleshooting" [
   subscription_id: string
   resource_group_name: string
   network_watcher_name: string

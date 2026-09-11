@@ -190,7 +190,7 @@ def x-amz-target-completer-89 [] { ["StorageGateway_20130630.UpdateVTLDeviceType
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-activate-gateway" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "activate-gateway" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -214,7 +214,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: ActivateGateway
-export def "api create-activate-gateway" [
+export def "activate-gateway" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -269,7 +269,7 @@ export def "api create-activate-gateway" [
 #
 # POST /
 # operationId: AddCache
-export def "api create-cache" [
+export def "add-cache" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -318,7 +318,7 @@ export def "api create-cache" [
 #
 # POST /
 # operationId: AddTagsToResource
-export def "api create-tags-to-resource" [
+export def "add-tags-to-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -367,7 +367,7 @@ export def "api create-tags-to-resource" [
 #
 # POST /
 # operationId: AddUploadBuffer
-export def "api create-upload-buffer" [
+export def "add-upload-buffer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -416,7 +416,7 @@ export def "api create-upload-buffer" [
 #
 # POST /
 # operationId: AddWorkingStorage
-export def "api create-working-storage" [
+export def "add-working-storage" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -465,7 +465,7 @@ export def "api create-working-storage" [
 #
 # POST /
 # operationId: AssignTapePool
-export def "api assign-tape-pool" [
+export def "assign-tape-pool" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -516,7 +516,7 @@ export def "api assign-tape-pool" [
 # POST /
 # operationId: AssociateFileSystem
 # --CacheAttributes shape: {CacheStaleTimeoutInSeconds?: any}
-export def "api create-associate-file-system" [
+export def "associate-file-system" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -572,7 +572,7 @@ export def "api create-associate-file-system" [
 #
 # POST /
 # operationId: AttachVolume
-export def "api attach-volume" [
+export def "attach-volume" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -624,7 +624,7 @@ export def "api attach-volume" [
 #
 # POST /
 # operationId: CancelArchival
-export def "api cancel-archival" [
+export def "cancel-archival" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -673,7 +673,7 @@ export def "api cancel-archival" [
 #
 # POST /
 # operationId: CancelRetrieval
-export def "api cancel-retrieval" [
+export def "cancel-retrieval" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -722,7 +722,7 @@ export def "api cancel-retrieval" [
 #
 # POST /
 # operationId: CreateCachediSCSIVolume
-export def "api create-cachedi-scsi-volume" [
+export def "create-cachedi-scsi-volume" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -779,7 +779,7 @@ export def "api create-cachedi-scsi-volume" [
 #
 # POST /
 # operationId: CreateNFSFileShare
-export def "api create-nfs-file-share" [
+export def "create-nfs-file-share" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -847,7 +847,7 @@ export def "api create-nfs-file-share" [
 #
 # POST /
 # operationId: CreateSMBFileShare
-export def "api create-smb-file-share" [
+export def "create-smb-file-share" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -920,7 +920,7 @@ export def "api create-smb-file-share" [
 #
 # POST /
 # operationId: CreateSnapshot
-export def "api create-snapshot" [
+export def "create-snapshot" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -970,7 +970,7 @@ export def "api create-snapshot" [
 #
 # POST /
 # operationId: CreateSnapshotFromVolumeRecoveryPoint
-export def "api create-snapshot-from-volume-recovery-point" [
+export def "create-snapshot-from-volume-recovery-point" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1020,7 +1020,7 @@ export def "api create-snapshot-from-volume-recovery-point" [
 #
 # POST /
 # operationId: CreateStorediSCSIVolume
-export def "api create-storedi-scsi-volume" [
+export def "create-storedi-scsi-volume" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1076,7 +1076,7 @@ export def "api create-storedi-scsi-volume" [
 #
 # POST /
 # operationId: CreateTapePool
-export def "api create-tape-pool" [
+export def "create-tape-pool" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1128,7 +1128,7 @@ export def "api create-tape-pool" [
 #
 # POST /
 # operationId: CreateTapeWithBarcode
-export def "api create-tape-with-barcode" [
+export def "create-tape-with-barcode" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1183,7 +1183,7 @@ export def "api create-tape-with-barcode" [
 #
 # POST /
 # operationId: CreateTapes
-export def "api create-tapes" [
+export def "create-tapes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1240,7 +1240,7 @@ export def "api create-tapes" [
 #
 # POST /
 # operationId: DeleteAutomaticTapeCreationPolicy
-export def "api delete-automatic-tape-creation-policy" [
+export def "delete-automatic-tape-creation-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1288,7 +1288,7 @@ export def "api delete-automatic-tape-creation-policy" [
 #
 # POST /
 # operationId: DeleteBandwidthRateLimit
-export def "api delete-bandwidth-rate-limit" [
+export def "delete-bandwidth-rate-limit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1337,7 +1337,7 @@ export def "api delete-bandwidth-rate-limit" [
 #
 # POST /
 # operationId: DeleteChapCredentials
-export def "api delete-chap-credentials" [
+export def "delete-chap-credentials" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1386,7 +1386,7 @@ export def "api delete-chap-credentials" [
 #
 # POST /
 # operationId: DeleteFileShare
-export def "api delete-file-share" [
+export def "delete-file-share" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1435,7 +1435,7 @@ export def "api delete-file-share" [
 #
 # POST /
 # operationId: DeleteGateway
-export def "api delete-gateway" [
+export def "delete-gateway" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1483,7 +1483,7 @@ export def "api delete-gateway" [
 #
 # POST /
 # operationId: DeleteSnapshotSchedule
-export def "api delete-snapshot-schedule" [
+export def "delete-snapshot-schedule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1531,7 +1531,7 @@ export def "api delete-snapshot-schedule" [
 #
 # POST /
 # operationId: DeleteTape
-export def "api delete-tape" [
+export def "delete-tape" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1581,7 +1581,7 @@ export def "api delete-tape" [
 #
 # POST /
 # operationId: DeleteTapeArchive
-export def "api delete-tape-archive" [
+export def "delete-tape-archive" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1630,7 +1630,7 @@ export def "api delete-tape-archive" [
 #
 # POST /
 # operationId: DeleteTapePool
-export def "api delete-tape-pool" [
+export def "delete-tape-pool" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1678,7 +1678,7 @@ export def "api delete-tape-pool" [
 #
 # POST /
 # operationId: DeleteVolume
-export def "api delete-volume" [
+export def "delete-volume" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1726,7 +1726,7 @@ export def "api delete-volume" [
 #
 # POST /
 # operationId: DescribeAvailabilityMonitorTest
-export def "api get-availability-monitor-test" [
+export def "describe-availability-monitor-test" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1774,7 +1774,7 @@ export def "api get-availability-monitor-test" [
 #
 # POST /
 # operationId: DescribeBandwidthRateLimit
-export def "api get-bandwidth-rate-limit" [
+export def "describe-bandwidth-rate-limit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1822,7 +1822,7 @@ export def "api get-bandwidth-rate-limit" [
 #
 # POST /
 # operationId: DescribeBandwidthRateLimitSchedule
-export def "api get-bandwidth-rate-limit-schedule" [
+export def "describe-bandwidth-rate-limit-schedule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1870,7 +1870,7 @@ export def "api get-bandwidth-rate-limit-schedule" [
 #
 # POST /
 # operationId: DescribeCache
-export def "api get-cache" [
+export def "describe-cache" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1918,7 +1918,7 @@ export def "api get-cache" [
 #
 # POST /
 # operationId: DescribeCachediSCSIVolumes
-export def "api get-cachedi-scsi-volumes" [
+export def "describe-cachedi-scsi-volumes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1966,7 +1966,7 @@ export def "api get-cachedi-scsi-volumes" [
 #
 # POST /
 # operationId: DescribeChapCredentials
-export def "api get-chap-credentials" [
+export def "describe-chap-credentials" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2014,7 +2014,7 @@ export def "api get-chap-credentials" [
 #
 # POST /
 # operationId: DescribeFileSystemAssociations
-export def "api get-file-system-associations" [
+export def "describe-file-system-associations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2062,7 +2062,7 @@ export def "api get-file-system-associations" [
 #
 # POST /
 # operationId: DescribeGatewayInformation
-export def "api get-gateway-information" [
+export def "describe-gateway-information" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2110,7 +2110,7 @@ export def "api get-gateway-information" [
 #
 # POST /
 # operationId: DescribeMaintenanceStartTime
-export def "api get-maintenance-start-time" [
+export def "describe-maintenance-start-time" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2158,7 +2158,7 @@ export def "api get-maintenance-start-time" [
 #
 # POST /
 # operationId: DescribeNFSFileShares
-export def "api get-nfs-file-shares" [
+export def "describe-nfs-file-shares" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2206,7 +2206,7 @@ export def "api get-nfs-file-shares" [
 #
 # POST /
 # operationId: DescribeSMBFileShares
-export def "api get-smb-file-shares" [
+export def "describe-smb-file-shares" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2254,7 +2254,7 @@ export def "api get-smb-file-shares" [
 #
 # POST /
 # operationId: DescribeSMBSettings
-export def "api get-smb-settings" [
+export def "describe-smb-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2302,7 +2302,7 @@ export def "api get-smb-settings" [
 #
 # POST /
 # operationId: DescribeSnapshotSchedule
-export def "api get-snapshot-schedule" [
+export def "describe-snapshot-schedule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2350,7 +2350,7 @@ export def "api get-snapshot-schedule" [
 #
 # POST /
 # operationId: DescribeStorediSCSIVolumes
-export def "api get-storedi-scsi-volumes" [
+export def "describe-storedi-scsi-volumes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2398,7 +2398,7 @@ export def "api get-storedi-scsi-volumes" [
 #
 # POST /
 # operationId: DescribeTapeArchives
-export def "api get-tape-archives" [
+export def "describe-tape-archives" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2451,7 +2451,7 @@ export def "api get-tape-archives" [
 #
 # POST /
 # operationId: DescribeTapeRecoveryPoints
-export def "api get-tape-recovery-points" [
+export def "describe-tape-recovery-points" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2504,7 +2504,7 @@ export def "api get-tape-recovery-points" [
 #
 # POST /
 # operationId: DescribeTapes
-export def "api get-tapes" [
+export def "describe-tapes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2558,7 +2558,7 @@ export def "api get-tapes" [
 #
 # POST /
 # operationId: DescribeUploadBuffer
-export def "api get-upload-buffer" [
+export def "describe-upload-buffer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2606,7 +2606,7 @@ export def "api get-upload-buffer" [
 #
 # POST /
 # operationId: DescribeVTLDevices
-export def "api get-vtl-devices" [
+export def "describe-vtl-devices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2660,7 +2660,7 @@ export def "api get-vtl-devices" [
 #
 # POST /
 # operationId: DescribeWorkingStorage
-export def "api get-working-storage" [
+export def "describe-working-storage" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2708,7 +2708,7 @@ export def "api get-working-storage" [
 #
 # POST /
 # operationId: DetachVolume
-export def "api create-detach-volume" [
+export def "detach-volume" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2757,7 +2757,7 @@ export def "api create-detach-volume" [
 #
 # POST /
 # operationId: DisableGateway
-export def "api disable-gateway" [
+export def "disable-gateway" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2805,7 +2805,7 @@ export def "api disable-gateway" [
 #
 # POST /
 # operationId: DisassociateFileSystem
-export def "api create-disassociate-file-system" [
+export def "disassociate-file-system" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2854,7 +2854,7 @@ export def "api create-disassociate-file-system" [
 #
 # POST /
 # operationId: JoinDomain
-export def "api create-join-domain" [
+export def "join-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2908,7 +2908,7 @@ export def "api create-join-domain" [
 #
 # POST /
 # operationId: ListAutomaticTapeCreationPolicies
-export def "api list-automatic-tape-creation-policies" [
+export def "list-automatic-tape-creation-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2956,7 +2956,7 @@ export def "api list-automatic-tape-creation-policies" [
 #
 # POST /
 # operationId: ListFileShares
-export def "api list-file-shares" [
+export def "list-file-shares" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3009,7 +3009,7 @@ export def "api list-file-shares" [
 #
 # POST /
 # operationId: ListFileSystemAssociations
-export def "api list-file-system-associations" [
+export def "list-file-system-associations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3062,7 +3062,7 @@ export def "api list-file-system-associations" [
 #
 # POST /
 # operationId: ListGateways
-export def "api list-gateways" [
+export def "list-gateways" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3114,7 +3114,7 @@ export def "api list-gateways" [
 #
 # POST /
 # operationId: ListLocalDisks
-export def "api list-local-disks" [
+export def "list-local-disks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3162,7 +3162,7 @@ export def "api list-local-disks" [
 #
 # POST /
 # operationId: ListTagsForResource
-export def "api list-tags-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3215,7 +3215,7 @@ export def "api list-tags-for-resource" [
 #
 # POST /
 # operationId: ListTapePools
-export def "api list-tape-pools" [
+export def "list-tape-pools" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3268,7 +3268,7 @@ export def "api list-tape-pools" [
 #
 # POST /
 # operationId: ListTapes
-export def "api list-tapes" [
+export def "list-tapes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3321,7 +3321,7 @@ export def "api list-tapes" [
 #
 # POST /
 # operationId: ListVolumeInitiators
-export def "api list-volume-initiators" [
+export def "list-volume-initiators" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3369,7 +3369,7 @@ export def "api list-volume-initiators" [
 #
 # POST /
 # operationId: ListVolumeRecoveryPoints
-export def "api list-volume-recovery-points" [
+export def "list-volume-recovery-points" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3417,7 +3417,7 @@ export def "api list-volume-recovery-points" [
 #
 # POST /
 # operationId: ListVolumes
-export def "api list-volumes" [
+export def "list-volumes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3470,7 +3470,7 @@ export def "api list-volumes" [
 #
 # POST /
 # operationId: NotifyWhenUploaded
-export def "api notify-when-uploaded" [
+export def "notify-when-uploaded" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3518,7 +3518,7 @@ export def "api notify-when-uploaded" [
 #
 # POST /
 # operationId: RefreshCache
-export def "api refresh-cache" [
+export def "refresh-cache" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3568,7 +3568,7 @@ export def "api refresh-cache" [
 #
 # POST /
 # operationId: RemoveTagsFromResource
-export def "api delete-tags-from-resource" [
+export def "remove-tags-from-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3617,7 +3617,7 @@ export def "api delete-tags-from-resource" [
 #
 # POST /
 # operationId: ResetCache
-export def "api reset-cache" [
+export def "reset-cache" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3665,7 +3665,7 @@ export def "api reset-cache" [
 #
 # POST /
 # operationId: RetrieveTapeArchive
-export def "api get-tape-archive" [
+export def "retrieve-tape-archive" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3714,7 +3714,7 @@ export def "api get-tape-archive" [
 #
 # POST /
 # operationId: RetrieveTapeRecoveryPoint
-export def "api get-tape-recovery-point" [
+export def "retrieve-tape-recovery-point" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3763,7 +3763,7 @@ export def "api get-tape-recovery-point" [
 #
 # POST /
 # operationId: SetLocalConsolePassword
-export def "api update-local-console-password" [
+export def "set-local-console-password" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3812,7 +3812,7 @@ export def "api update-local-console-password" [
 #
 # POST /
 # operationId: SetSMBGuestPassword
-export def "api update-smb-guest-password" [
+export def "set-smb-guest-password" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3861,7 +3861,7 @@ export def "api update-smb-guest-password" [
 #
 # POST /
 # operationId: ShutdownGateway
-export def "api create-shutdown-gateway" [
+export def "shutdown-gateway" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3909,7 +3909,7 @@ export def "api create-shutdown-gateway" [
 #
 # POST /
 # operationId: StartAvailabilityMonitorTest
-export def "api start-availability-monitor-test" [
+export def "start-availability-monitor-test" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3957,7 +3957,7 @@ export def "api start-availability-monitor-test" [
 #
 # POST /
 # operationId: StartGateway
-export def "api start-gateway" [
+export def "start-gateway" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4005,7 +4005,7 @@ export def "api start-gateway" [
 #
 # POST /
 # operationId: UpdateAutomaticTapeCreationPolicy
-export def "api update-automatic-tape-creation-policy" [
+export def "update-automatic-tape-creation-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4054,7 +4054,7 @@ export def "api update-automatic-tape-creation-policy" [
 #
 # POST /
 # operationId: UpdateBandwidthRateLimit
-export def "api update-bandwidth-rate-limit" [
+export def "update-bandwidth-rate-limit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4104,7 +4104,7 @@ export def "api update-bandwidth-rate-limit" [
 #
 # POST /
 # operationId: UpdateBandwidthRateLimitSchedule
-export def "api update-bandwidth-rate-limit-schedule" [
+export def "update-bandwidth-rate-limit-schedule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4153,7 +4153,7 @@ export def "api update-bandwidth-rate-limit-schedule" [
 #
 # POST /
 # operationId: UpdateChapCredentials
-export def "api update-chap-credentials" [
+export def "update-chap-credentials" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4205,7 +4205,7 @@ export def "api update-chap-credentials" [
 # POST /
 # operationId: UpdateFileSystemAssociation
 # --CacheAttributes shape: {CacheStaleTimeoutInSeconds?: any}
-export def "api update-file-system-association" [
+export def "update-file-system-association" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4257,7 +4257,7 @@ export def "api update-file-system-association" [
 #
 # POST /
 # operationId: UpdateGatewayInformation
-export def "api update-gateway-information" [
+export def "update-gateway-information" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4309,7 +4309,7 @@ export def "api update-gateway-information" [
 #
 # POST /
 # operationId: UpdateGatewaySoftwareNow
-export def "api update-gateway-software-now" [
+export def "update-gateway-software-now" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4357,7 +4357,7 @@ export def "api update-gateway-software-now" [
 #
 # POST /
 # operationId: UpdateMaintenanceStartTime
-export def "api update-maintenance-start-time" [
+export def "update-maintenance-start-time" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4409,7 +4409,7 @@ export def "api update-maintenance-start-time" [
 #
 # POST /
 # operationId: UpdateNFSFileShare
-export def "api update-nfs-file-share" [
+export def "update-nfs-file-share" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4471,7 +4471,7 @@ export def "api update-nfs-file-share" [
 #
 # POST /
 # operationId: UpdateSMBFileShare
-export def "api update-smb-file-share" [
+export def "update-smb-file-share" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4537,7 +4537,7 @@ export def "api update-smb-file-share" [
 #
 # POST /
 # operationId: UpdateSMBFileShareVisibility
-export def "api update-smb-file-share-visibility" [
+export def "update-smb-file-share-visibility" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4586,7 +4586,7 @@ export def "api update-smb-file-share-visibility" [
 #
 # POST /
 # operationId: UpdateSMBLocalGroups
-export def "api update-smb-local-groups" [
+export def "update-smb-local-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4635,7 +4635,7 @@ export def "api update-smb-local-groups" [
 #
 # POST /
 # operationId: UpdateSMBSecurityStrategy
-export def "api update-smb-security-strategy" [
+export def "update-smb-security-strategy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4684,7 +4684,7 @@ export def "api update-smb-security-strategy" [
 #
 # POST /
 # operationId: UpdateSnapshotSchedule
-export def "api update-snapshot-schedule" [
+export def "update-snapshot-schedule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4736,7 +4736,7 @@ export def "api update-snapshot-schedule" [
 #
 # POST /
 # operationId: UpdateVTLDeviceType
-export def "api update-vtl-device-type" [
+export def "update-vtl-device-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

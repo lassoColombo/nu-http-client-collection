@@ -123,7 +123,7 @@ def x-amz-target-completer-22 [] { ["AWSCognitoIdentityService.UpdateIdentityPoo
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-identity-pool" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-identity-pool" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -147,7 +147,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CreateIdentityPool
-export def "api create-identity-pool" [
+export def "create-identity-pool" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -203,7 +203,7 @@ export def "api create-identity-pool" [
 #
 # POST /
 # operationId: DeleteIdentities
-export def "api delete-identities" [
+export def "delete-identities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -251,7 +251,7 @@ export def "api delete-identities" [
 #
 # POST /
 # operationId: DeleteIdentityPool
-export def "api delete-identity-pool" [
+export def "delete-identity-pool" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -299,7 +299,7 @@ export def "api delete-identity-pool" [
 #
 # POST /
 # operationId: DescribeIdentity
-export def "api get-identity" [
+export def "describe-identity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -347,7 +347,7 @@ export def "api get-identity" [
 #
 # POST /
 # operationId: DescribeIdentityPool
-export def "api get-identity-pool" [
+export def "describe-identity-pool" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -395,7 +395,7 @@ export def "api get-identity-pool" [
 #
 # POST /
 # operationId: GetCredentialsForIdentity
-export def "api get-credentials-for-identity" [
+export def "get-credentials-for-identity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -445,7 +445,7 @@ export def "api get-credentials-for-identity" [
 #
 # POST /
 # operationId: GetId
-export def "api get" [
+export def "get-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -495,7 +495,7 @@ export def "api get" [
 #
 # POST /
 # operationId: GetIdentityPoolRoles
-export def "api get-identity-pool-roles" [
+export def "get-identity-pool-roles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -543,7 +543,7 @@ export def "api get-identity-pool-roles" [
 #
 # POST /
 # operationId: GetOpenIdToken
-export def "api get-open-token" [
+export def "get-open-id-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -592,7 +592,7 @@ export def "api get-open-token" [
 #
 # POST /
 # operationId: GetOpenIdTokenForDeveloperIdentity
-export def "api get-open-token-for-developer-identity" [
+export def "get-open-id-token-for-developer-identity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -644,7 +644,7 @@ export def "api get-open-token-for-developer-identity" [
 #
 # POST /
 # operationId: GetPrincipalTagAttributeMap
-export def "api get-principal-tag-attribute-map" [
+export def "get-principal-tag-attribute-map" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -693,7 +693,7 @@ export def "api get-principal-tag-attribute-map" [
 #
 # POST /
 # operationId: ListIdentities
-export def "api list-identities" [
+export def "list-identities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -744,7 +744,7 @@ export def "api list-identities" [
 #
 # POST /
 # operationId: ListIdentityPools
-export def "api list-identity-pools" [
+export def "list-identity-pools" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -796,7 +796,7 @@ export def "api list-identity-pools" [
 #
 # POST /
 # operationId: ListTagsForResource
-export def "api list-tags-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -844,7 +844,7 @@ export def "api list-tags-for-resource" [
 #
 # POST /
 # operationId: LookupDeveloperIdentity
-export def "api create-lookup-developer-identity" [
+export def "lookup-developer-identity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -896,7 +896,7 @@ export def "api create-lookup-developer-identity" [
 #
 # POST /
 # operationId: MergeDeveloperIdentities
-export def "api create-merge-developer-identities" [
+export def "merge-developer-identities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -947,7 +947,7 @@ export def "api create-merge-developer-identities" [
 #
 # POST /
 # operationId: SetIdentityPoolRoles
-export def "api update-identity-pool-roles" [
+export def "set-identity-pool-roles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -997,7 +997,7 @@ export def "api update-identity-pool-roles" [
 #
 # POST /
 # operationId: SetPrincipalTagAttributeMap
-export def "api update-principal-tag-attribute-map" [
+export def "set-principal-tag-attribute-map" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1048,7 +1048,7 @@ export def "api update-principal-tag-attribute-map" [
 #
 # POST /
 # operationId: TagResource
-export def "api tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1097,7 +1097,7 @@ export def "api tag-resource" [
 #
 # POST /
 # operationId: UnlinkDeveloperIdentity
-export def "api create-unlink-developer-identity" [
+export def "unlink-developer-identity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1148,7 +1148,7 @@ export def "api create-unlink-developer-identity" [
 #
 # POST /
 # operationId: UnlinkIdentity
-export def "api create-unlink-identity" [
+export def "unlink-identity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1198,7 +1198,7 @@ export def "api create-unlink-identity" [
 #
 # POST /
 # operationId: UntagResource
-export def "api untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1247,7 +1247,7 @@ export def "api untag-resource" [
 #
 # POST /
 # operationId: UpdateIdentityPool
-export def "api update-identity-pool" [
+export def "update-identity-pool" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

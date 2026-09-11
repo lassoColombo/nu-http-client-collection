@@ -123,7 +123,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-api-management-service-properties list-property" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "property-list-by-service" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -148,7 +148,7 @@ export def commands []: nothing -> table {
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/properties
 # Docs: https://docs.microsoft.com/en-us/azure/api-management/api-management-howto-properties
 # operationId: Property_ListByService
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-properties list-property" [
+export def "property-list-by-service" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -193,7 +193,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/properties/{propId}
 # operationId: Property_Delete
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-properties delete-property" [
+export def "property-delete" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -240,7 +240,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/properties/{propId}
 # operationId: Property_Get
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-properties get-property" [
+export def "property-get" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -284,7 +284,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # HEAD /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/properties/{propId}
 # operationId: Property_GetEntityTag
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-properties get-property-entity-tag" [
+export def "property-get-entity-tag" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -329,7 +329,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/properties/{propId}
 # operationId: Property_Update
 # --properties shape: {displayName?: string, value?: string, secret?: bool, tags?: list<string>}
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-properties update-property" [
+export def "property-update" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -381,7 +381,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/properties/{propId}
 # operationId: Property_CreateOrUpdate
 # --properties shape: {displayName: string, value: string, secret?: bool, tags?: list<string>}
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-properties create-property-or-update" [
+export def "property-create-or-update" [
   subscription_id: string
   resource_group_name: string
   service_name: string

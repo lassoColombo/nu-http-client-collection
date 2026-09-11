@@ -118,7 +118,7 @@ def unternehmen-id-typ-completer [] { ["gln" "steuernummer" "uid"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "auth get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-auth" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -141,7 +141,7 @@ export def commands []: nothing -> table {
 # Request a JWT access token using your obono username and password.
 #
 # GET /auth
-export def "auth get" [
+export def "get-auth" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -174,7 +174,7 @@ export def "auth get" [
 # Retrieves a particular `Beleg` from the "Datenerfassungsprotokoll".
 #
 # GET /belege/{belegUuid}
-export def "belege get" [
+export def "get-belege-beleg-uuid" [
   beleg_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -207,7 +207,7 @@ export def "belege get" [
 }
 
 # GET /export/csv/registrierkassen/{registrierkasseUuid}/belege
-export def "export-csv-registrierkassen-belege get" [
+export def "get-export-csv-registrierkassen-registrierkasse-uuid-belege" [
   registrierkasse_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -244,7 +244,7 @@ export def "export-csv-registrierkassen-belege get" [
 }
 
 # GET /export/dep131/registrierkassen/{registrierkasseUuid}/belege
-export def "export-dep131-registrierkassen-belege get" [
+export def "get-export-dep131-registrierkassen-registrierkasse-uuid-belege" [
   registrierkasse_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -280,7 +280,7 @@ export def "export-dep131-registrierkassen-belege get" [
 }
 
 # GET /export/dep7/registrierkassen/{registrierkasseUuid}/belege
-export def "export-dep7-registrierkassen-belege get" [
+export def "get-export-dep7-registrierkassen-registrierkasse-uuid-belege" [
   registrierkasse_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -316,7 +316,7 @@ export def "export-dep7-registrierkassen-belege get" [
 }
 
 # GET /export/gobd/registrierkassen/{registrierkasseUuid}
-export def "export-gobd-registrierkassen get" [
+export def "get-export-gobd-registrierkassen-registrierkasse-uuid" [
   registrierkasse_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -352,7 +352,7 @@ export def "export-gobd-registrierkassen get" [
 }
 
 # GET /export/html/belege/{belegUuid}
-export def "export-html-belege get" [
+export def "get-export-html-belege-beleg-uuid" [
   beleg_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -385,7 +385,7 @@ export def "export-html-belege get" [
 }
 
 # GET /export/pdf/belege/{belegUuid}
-export def "export-pdf-belege get" [
+export def "get-export-pdf-belege-beleg-uuid" [
   beleg_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -418,7 +418,7 @@ export def "export-pdf-belege get" [
 }
 
 # GET /export/qr/belege/{belegUuid}
-export def "export-qr-belege get" [
+export def "get-export-qr-belege-beleg-uuid" [
   beleg_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -451,7 +451,7 @@ export def "export-qr-belege get" [
 }
 
 # GET /export/thermal-print/belege/{belegUuid}
-export def "export-thermal-print-belege get" [
+export def "get-export-thermal-print-belege-beleg-uuid" [
   beleg_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -489,7 +489,7 @@ export def "export-thermal-print-belege get" [
 }
 
 # GET /export/xls/registrierkassen/{registrierkasseUuid}/belege
-export def "export-xls-registrierkassen-belege get" [
+export def "get-export-xls-registrierkassen-registrierkasse-uuid-belege" [
   registrierkasse_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -528,7 +528,7 @@ export def "export-xls-registrierkassen-belege get" [
 #
 # GET /registrierkassen/{registrierkasseUuid}
 # operationId: getRegistrierkasse
-export def "registrierkassen get-registrierkasse" [
+export def "get-registrierkasse" [
   registrierkasse_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -564,7 +564,7 @@ export def "registrierkassen get-registrierkasse" [
 #
 # POST /registrierkassen/{registrierkasseUuid}/abschluss
 # operationId: createAbschluss
-export def "registrierkassen-abschluss create" [
+export def "create-abschluss" [
   registrierkasse_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -605,7 +605,7 @@ export def "registrierkassen-abschluss create" [
 #
 # GET /registrierkassen/{registrierkasseUuid}/belege
 # operationId: getBelege
-export def "registrierkassen-belege get" [
+export def "get-belege" [
   registrierkasse_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -650,7 +650,7 @@ export def "registrierkassen-belege get" [
 #
 # GET /registrierkassen/{registrierkasseUuid}/belege/{belegUuid}
 # operationId: getBeleg
-export def "registrierkassen-belege get-beleg" [
+export def "get-beleg" [
   registrierkasse_uuid: string
   beleg_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -691,7 +691,7 @@ export def "registrierkassen-belege get-beleg" [
 # --Posten item shape: {Bezeichnung: string, BruttoBetrag: int, Externer-Beleg-Belegkreis?: string, Externer-Beleg-Bezeichnung?: string, Externer-Beleg-Referenz?: string, Menge: int, NettoBetrag: int, Satz: "NORMAL"|"ERMAESSIGT1"|"ERMAESSIGT2"|"BESONDERS"|"NULL"}
 # --Rabatte item shape: {Betrag-Brutto: int, Betrag-Netto: int, Bezeichnung: string, Satz?: "NORMAL"|"ERMAESSIGT1"|"ERMAESSIGT2"|"BESONDERS"|"NULL"}
 # --Zahlungen item shape: {Betrag: int, Bezeichnung: string, Referenz?: string}
-export def "registrierkassen-belege create-beleg" [
+export def "add-beleg" [
   registrierkasse_uuid: string
   beleg_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -753,7 +753,7 @@ export def "registrierkassen-belege create-beleg" [
 #
 # GET /registrierkassen/{registrierkasseUuid}/dep
 # operationId: getDEP
-export def "registrierkassen-dep get" [
+export def "get-dep" [
   registrierkasse_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -789,7 +789,7 @@ export def "registrierkassen-dep get" [
 #
 # GET /registrierkassen/{registrierkasseUuid}/monatsbelege
 # operationId: getMonatsbelege
-export def "registrierkassen-monatsbelege get" [
+export def "get-monatsbelege" [
   registrierkasse_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

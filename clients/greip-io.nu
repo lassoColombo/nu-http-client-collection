@@ -97,7 +97,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "bulk-lookup get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-bulk-lookup" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -121,7 +121,7 @@ export def commands []: nothing -> table {
 #
 # GET /BulkLookup
 # Docs: https://docs.greip.io/methods/bulk-lookup — Greip API - Bulk Lookup
-export def "bulk-lookup get" [
+export def "get-bulk-lookup" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -161,7 +161,7 @@ export def "bulk-lookup get" [
 #
 # GET /Country
 # Docs: https://docs.greip.io/methods/country-data-api — Greip API - Country Data API
-export def "country get" [
+export def "get-country" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -201,7 +201,7 @@ export def "country get" [
 #
 # GET /GeoIP
 # Docs: https://docs.greip.io/methods/retrieve-visitor-info — Greip API - Retrieve Visitor Info
-export def "geo-ip get" [
+export def "get-geo-ip" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -240,7 +240,7 @@ export def "geo-ip get" [
 #
 # GET /IPLookup
 # Docs: https://docs.greip.io/methods/lookup-ip-address — Greip API - Lookup IP Address
-export def "ip-lookup get" [
+export def "get-ip-lookup" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -280,7 +280,7 @@ export def "ip-lookup get" [
 #
 # GET /badWords
 # Docs: https://docs.greip.io/methods/profanity-detection — Greip API - Profanity Detection
-export def "bad-words get" [
+export def "get-bad-words" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

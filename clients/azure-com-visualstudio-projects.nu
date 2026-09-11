@@ -112,7 +112,7 @@ def kind-completer [] { ["bootstrappedProject" "project"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-visualstudio-account-project list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects-list-by-account-resource" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -138,7 +138,7 @@ export def commands []: nothing -> table {
 # DEPRECATED
 # operationId: Projects_ListByAccountResource
 @deprecated
-export def "subscriptions-resource-groups-providers-microsoft-visualstudio-account-project list" [
+export def "projects-list-by-account-resource" [
   subscription_id: string
   resource_group_name: string
   root_resource_name: string
@@ -182,7 +182,7 @@ export def "subscriptions-resource-groups-providers-microsoft-visualstudio-accou
 # DEPRECATED
 # operationId: Projects_Get
 @deprecated
-export def "subscriptions-resource-groups-providers-microsoft-visualstudio-account-project get" [
+export def "projects-get" [
   subscription_id: string
   resource_group_name: string
   root_resource_name: string
@@ -229,7 +229,7 @@ export def "subscriptions-resource-groups-providers-microsoft-visualstudio-accou
 # operationId: Projects_Update
 # --properties shape: {pipelineBootstrapConfigurations?: list}
 @deprecated
-export def "subscriptions-resource-groups-providers-microsoft-visualstudio-account-project update" [
+export def "projects-update" [
   subscription_id: string
   resource_group_name: string
   root_resource_name: string
@@ -281,7 +281,7 @@ export def "subscriptions-resource-groups-providers-microsoft-visualstudio-accou
 # operationId: Projects_CreateOrUpdate
 # --properties shape: {bootstrapPipelineTemplate?: record, ownerUpn?: string, pipelineBootstrapConfigurations?: list, processTemplateId?: "Scrum"|"Agile"|"Cmmi", versionControlOption?: "Git"|"Tfvc"}
 @deprecated
-export def "subscriptions-resource-groups-providers-microsoft-visualstudio-account-project create-or-update" [
+export def "projects-create-or-update" [
   subscription_id: string
   resource_group_name: string
   root_resource_name: string

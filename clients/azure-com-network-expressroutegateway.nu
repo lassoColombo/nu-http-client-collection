@@ -110,7 +110,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-network-express-route-gateways list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "express-route-gateways-list-by-subscription" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -134,7 +134,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/expressRouteGateways
 # operationId: ExpressRouteGateways_ListBySubscription
-export def "subscriptions-providers-microsoft-network-express-route-gateways list" [
+export def "express-route-gateways-list-by-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -172,7 +172,7 @@ export def "subscriptions-providers-microsoft-network-express-route-gateways lis
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteGateways
 # operationId: ExpressRouteGateways_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-gateways list" [
+export def "express-route-gateways-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -212,7 +212,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteGateways/{expressRouteGatewayName}
 # operationId: ExpressRouteGateways_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-gateways delete" [
+export def "express-route-gateways-delete" [
   subscription_id: string
   resource_group_name: string
   express_route_gateway_name: string
@@ -254,7 +254,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteGateways/{expressRouteGatewayName}
 # operationId: ExpressRouteGateways_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-gateways get" [
+export def "express-route-gateways-get" [
   subscription_id: string
   resource_group_name: string
   express_route_gateway_name: string
@@ -297,7 +297,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteGateways/{expressRouteGatewayName}
 # operationId: ExpressRouteGateways_CreateOrUpdate
 # --properties shape: {autoScaleConfiguration?: any, virtualHub: any}
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-gateways create-or-update" [
+export def "express-route-gateways-create-or-update" [
   subscription_id: string
   resource_group_name: string
   express_route_gateway_name: string
@@ -346,7 +346,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteGateways/{expressRouteGatewayName}/expressRouteConnections
 # operationId: ExpressRouteConnections_List
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-gateways-express-route-connections list" [
+export def "express-route-connections-list" [
   subscription_id: string
   resource_group_name: string
   express_route_gateway_name: string
@@ -388,7 +388,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteGateways/{expressRouteGatewayName}/expressRouteConnections/{connectionName}
 # operationId: ExpressRouteConnections_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-gateways-express-route-connections delete" [
+export def "express-route-connections-delete" [
   subscription_id: string
   resource_group_name: string
   express_route_gateway_name: string
@@ -432,7 +432,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteGateways/{expressRouteGatewayName}/expressRouteConnections/{connectionName}
 # operationId: ExpressRouteConnections_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-gateways-express-route-connections get" [
+export def "express-route-connections-get" [
   subscription_id: string
   resource_group_name: string
   express_route_gateway_name: string
@@ -477,7 +477,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/expressRouteGateways/{expressRouteGatewayName}/expressRouteConnections/{connectionName}
 # operationId: ExpressRouteConnections_CreateOrUpdate
 # --properties shape: {authorizationKey?: string, expressRouteCircuitPeering: any, routingWeight?: int}
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-gateways-express-route-connections create-or-update" [
+export def "express-route-connections-create-or-update" [
   subscription_id: string
   resource_group_name: string
   express_route_gateway_name: string

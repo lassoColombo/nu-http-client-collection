@@ -106,7 +106,7 @@ def minimum-log-level-completer [] { ["DEBUG" "ERROR" "FATAL" "INFO" "TRACE" "WA
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "info get-groov" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "groov-info" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -130,7 +130,7 @@ export def commands []: nothing -> table {
 #
 # GET /info
 # operationId: groovInfo
-export def "info get-groov" [
+export def "groov-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -164,7 +164,7 @@ export def "info get-groov" [
 #
 # GET /v1/data-store/devices
 # operationId: listDevices
-export def "data-store-devices list" [
+export def "list-devices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -198,7 +198,7 @@ export def "data-store-devices list" [
 #
 # GET /v1/data-store/devices/{id}/tags
 # operationId: listDeviceTags
-export def "data-store-devices-tags list" [
+export def "list-device-tags" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -234,7 +234,7 @@ export def "data-store-devices-tags list" [
 #
 # POST /v1/data-store/read
 # operationId: batchReadTags
-export def "data-store-read get-batch-tags" [
+export def "batch-read-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -268,7 +268,7 @@ export def "data-store-read get-batch-tags" [
 #
 # GET /v1/data-store/read/{id}
 # operationId: readTag
-export def "data-store-read tag" [
+export def "read-tag" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -307,7 +307,7 @@ export def "data-store-read tag" [
 #
 # GET /v1/data-store/tags
 # operationId: listAllTags
-export def "data-store-tags list" [
+export def "list-all-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -341,7 +341,7 @@ export def "data-store-tags list" [
 #
 # POST /v1/data-store/write/{id}
 # operationId: writeTag
-export def "data-store-write tag" [
+export def "write-tag" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -380,7 +380,7 @@ export def "data-store-write tag" [
 #
 # GET /v1/logging/groovLogs.json
 # operationId: downloadLogJson
-export def "logging-groov-logs-json download" [
+export def "download-log-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -418,7 +418,7 @@ export def "logging-groov-logs-json download" [
 #
 # GET /v1/logging/groovLogs.txt
 # operationId: downloadLogText
-export def "logging-groov-logs-txt download-text" [
+export def "download-log-text" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -456,7 +456,7 @@ export def "logging-groov-logs-txt download-text" [
 #
 # GET /whoami
 # operationId: whoAmI
-export def "whoami get-who-am-i" [
+export def "who-am-i" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

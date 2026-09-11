@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-insights-private-link-scopes list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "private-link-scopes-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/microsoft.insights/privateLinkScopes
 # operationId: PrivateLinkScopes_List
-export def "subscriptions-providers-microsoft-insights-private-link-scopes list" [
+export def "private-link-scopes-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -178,7 +178,7 @@ export def "subscriptions-providers-microsoft-insights-private-link-scopes list"
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/privateLinkScopes/{scopeName}/privateEndpointConnections
 # operationId: PrivateEndpointConnections_ListByPrivateLinkScope
-export def "subscriptions-resource-groups-providers-microsoft-insights-private-link-scopes-private-endpoint-connections list" [
+export def "private-endpoint-connections-list-by-private-link-scope" [
   subscription_id: string
   resource_group_name: string
   scope_name: string
@@ -220,7 +220,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-private-l
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/privateLinkScopes/{scopeName}/privateEndpointConnections/{privateEndpointConnectionName}
 # operationId: PrivateEndpointConnections_Delete
-export def "subscriptions-resource-groups-providers-microsoft-insights-private-link-scopes-private-endpoint-connections delete" [
+export def "private-endpoint-connections-delete" [
   subscription_id: string
   resource_group_name: string
   scope_name: string
@@ -264,7 +264,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-private-l
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/privateLinkScopes/{scopeName}/privateEndpointConnections/{privateEndpointConnectionName}
 # operationId: PrivateEndpointConnections_Get
-export def "subscriptions-resource-groups-providers-microsoft-insights-private-link-scopes-private-endpoint-connections get" [
+export def "private-endpoint-connections-get" [
   subscription_id: string
   resource_group_name: string
   scope_name: string
@@ -309,7 +309,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-private-l
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/privateLinkScopes/{scopeName}/privateEndpointConnections/{privateEndpointConnectionName}
 # operationId: PrivateEndpointConnections_CreateOrUpdate
 # --properties shape: {privateEndpoint?: record, privateLinkServiceConnectionState?: record}
-export def "subscriptions-resource-groups-providers-microsoft-insights-private-link-scopes-private-endpoint-connections create-or-update" [
+export def "private-endpoint-connections-create-or-update" [
   subscription_id: string
   resource_group_name: string
   scope_name: string
@@ -358,7 +358,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-private-l
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/privateLinkScopes/{scopeName}/privateLinkResources
 # operationId: PrivateLinkResources_ListByPrivateLinkScope
-export def "subscriptions-resource-groups-providers-microsoft-insights-private-link-scopes-private-link-resources list" [
+export def "private-link-resources-list-by-private-link-scope" [
   subscription_id: string
   resource_group_name: string
   scope_name: string
@@ -400,7 +400,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-private-l
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/privateLinkScopes/{scopeName}/privateLinkResources/{groupName}
 # operationId: PrivateLinkResources_Get
-export def "subscriptions-resource-groups-providers-microsoft-insights-private-link-scopes-private-link-resources get" [
+export def "private-link-resources-get" [
   subscription_id: string
   resource_group_name: string
   scope_name: string
@@ -444,7 +444,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-private-l
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/privateLinkScopes/{scopeName}/scopedResources
 # operationId: PrivateLinkScopedResources_ListByPrivateLinkScope
-export def "subscriptions-resource-groups-providers-microsoft-insights-private-link-scopes-scoped-resources list" [
+export def "private-link-scoped-resources-list-by-private-link-scope" [
   subscription_id: string
   resource_group_name: string
   scope_name: string
@@ -486,7 +486,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-private-l
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/privateLinkScopes/{scopeName}/scopedResources/{name}
 # operationId: PrivateLinkScopedResources_Delete
-export def "subscriptions-resource-groups-providers-microsoft-insights-private-link-scopes-scoped-resources delete" [
+export def "private-link-scoped-resources-delete" [
   subscription_id: string
   resource_group_name: string
   scope_name: string
@@ -530,7 +530,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-private-l
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/privateLinkScopes/{scopeName}/scopedResources/{name}
 # operationId: PrivateLinkScopedResources_Get
-export def "subscriptions-resource-groups-providers-microsoft-insights-private-link-scopes-scoped-resources get" [
+export def "private-link-scoped-resources-get" [
   subscription_id: string
   resource_group_name: string
   scope_name: string
@@ -575,7 +575,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-private-l
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/privateLinkScopes/{scopeName}/scopedResources/{name}
 # operationId: PrivateLinkScopedResources_CreateOrUpdate
 # --properties shape: {linkedResourceId?: string}
-export def "subscriptions-resource-groups-providers-microsoft-insights-private-link-scopes-scoped-resources create-or-update" [
+export def "private-link-scoped-resources-create-or-update" [
   subscription_id: string
   resource_group_name: string
   scope_name: string
@@ -624,7 +624,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-private-l
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/microsoft.insights/privateLinkScopes
 # operationId: PrivateLinkScopes_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-insights-private-link-scopes list" [
+export def "private-link-scopes-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -664,7 +664,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-private-l
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/microsoft.insights/privateLinkScopes/{scopeName}
 # operationId: PrivateLinkScopes_Delete
-export def "subscriptions-resource-groups-providers-microsoft-insights-private-link-scopes delete" [
+export def "private-link-scopes-delete" [
   subscription_id: string
   resource_group_name: string
   scope_name: string
@@ -706,7 +706,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-private-l
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/microsoft.insights/privateLinkScopes/{scopeName}
 # operationId: PrivateLinkScopes_Get
-export def "subscriptions-resource-groups-providers-microsoft-insights-private-link-scopes get" [
+export def "private-link-scopes-get" [
   subscription_id: string
   resource_group_name: string
   scope_name: string
@@ -748,7 +748,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-private-l
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/microsoft.insights/privateLinkScopes/{scopeName}
 # operationId: PrivateLinkScopes_UpdateTags
-export def "subscriptions-resource-groups-providers-microsoft-insights-private-link-scopes update-tags" [
+export def "private-link-scopes-update-tags" [
   subscription_id: string
   resource_group_name: string
   scope_name: string
@@ -794,7 +794,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-private-l
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/microsoft.insights/privateLinkScopes/{scopeName}
 # operationId: PrivateLinkScopes_CreateOrUpdate
-export def "subscriptions-resource-groups-providers-microsoft-insights-private-link-scopes create-or-update" [
+export def "private-link-scopes-create-or-update" [
   subscription_id: string
   resource_group_name: string
   scope_name: string

@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-enterprise-knowledge-graph-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.EnterpriseKnowledgeGraph/operations
 # operationId: Operations_List
-export def "providers-microsoft-enterprise-knowledge-graph-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -176,7 +176,7 @@ export def "providers-microsoft-enterprise-knowledge-graph-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.EnterpriseKnowledgeGraph/services
 # operationId: EnterpriseKnowledgeGraph_List
-export def "subscriptions-providers-microsoft-enterprise-knowledge-graph-services list" [
+export def "enterprise-knowledge-graph-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -214,7 +214,7 @@ export def "subscriptions-providers-microsoft-enterprise-knowledge-graph-service
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EnterpriseKnowledgeGraph/services
 # operationId: EnterpriseKnowledgeGraph_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-enterprise-knowledge-graph-services list" [
+export def "enterprise-knowledge-graph-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -254,7 +254,7 @@ export def "subscriptions-resource-groups-providers-microsoft-enterprise-knowled
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EnterpriseKnowledgeGraph/services/{resourceName}
 # operationId: EnterpriseKnowledgeGraph_Delete
-export def "subscriptions-resource-groups-providers-microsoft-enterprise-knowledge-graph-services delete" [
+export def "enterprise-knowledge-graph-delete" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -296,7 +296,7 @@ export def "subscriptions-resource-groups-providers-microsoft-enterprise-knowled
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EnterpriseKnowledgeGraph/services/{resourceName}
 # operationId: EnterpriseKnowledgeGraph_Get
-export def "subscriptions-resource-groups-providers-microsoft-enterprise-knowledge-graph-services get" [
+export def "enterprise-knowledge-graph-get" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -340,7 +340,7 @@ export def "subscriptions-resource-groups-providers-microsoft-enterprise-knowled
 # operationId: EnterpriseKnowledgeGraph_Update
 # --properties shape: {description?: string, metadata?: record, provisioningState?: "Creating"|"Deleting"|"Failed"|"Succeeded"}
 # --sku shape: {name: "F0"|"S1"}
-export def "subscriptions-resource-groups-providers-microsoft-enterprise-knowledge-graph-services update" [
+export def "enterprise-knowledge-graph-update" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -391,7 +391,7 @@ export def "subscriptions-resource-groups-providers-microsoft-enterprise-knowled
 # operationId: EnterpriseKnowledgeGraph_Create
 # --properties shape: {description?: string, metadata?: record, provisioningState?: "Creating"|"Deleting"|"Failed"|"Succeeded"}
 # --sku shape: {name: "F0"|"S1"}
-export def "subscriptions-resource-groups-providers-microsoft-enterprise-knowledge-graph-services create" [
+export def "enterprise-knowledge-graph-create" [
   subscription_id: string
   resource_group_name: string
   resource_name: string

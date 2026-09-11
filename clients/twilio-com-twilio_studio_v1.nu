@@ -113,7 +113,7 @@ def status-completer [] { ["active" "ended"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "flows list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-flow" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -137,7 +137,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/Flows
 # operationId: ListFlow
-export def "flows list" [
+export def "list-flow" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -175,7 +175,7 @@ export def "flows list" [
 #
 # GET /v1/Flows/{FlowSid}/Engagements
 # operationId: ListEngagement
-export def "flows-engagements list" [
+export def "list-engagement" [
   flow_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -215,7 +215,7 @@ export def "flows-engagements list" [
 #
 # POST /v1/Flows/{FlowSid}/Engagements
 # operationId: CreateEngagement
-export def "flows-engagements create" [
+export def "create-engagement" [
   flow_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -258,7 +258,7 @@ export def "flows-engagements create" [
 #
 # GET /v1/Flows/{FlowSid}/Engagements/{EngagementSid}/Context
 # operationId: FetchEngagementContext
-export def "flows-engagements-context get" [
+export def "fetch-engagement-context" [
   flow_sid: string
   engagement_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -296,7 +296,7 @@ export def "flows-engagements-context get" [
 #
 # GET /v1/Flows/{FlowSid}/Engagements/{EngagementSid}/Steps
 # operationId: ListStep
-export def "flows-engagements-steps list" [
+export def "list-step" [
   flow_sid: string
   engagement_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -338,7 +338,7 @@ export def "flows-engagements-steps list" [
 #
 # GET /v1/Flows/{FlowSid}/Engagements/{EngagementSid}/Steps/{Sid}
 # operationId: FetchStep
-export def "flows-engagements-steps get" [
+export def "fetch-step" [
   flow_sid: string
   engagement_sid: string
   sid: string
@@ -378,7 +378,7 @@ export def "flows-engagements-steps get" [
 #
 # GET /v1/Flows/{FlowSid}/Engagements/{EngagementSid}/Steps/{StepSid}/Context
 # operationId: FetchStepContext
-export def "flows-engagements-steps-context get" [
+export def "fetch-step-context" [
   flow_sid: string
   engagement_sid: string
   step_sid: string
@@ -418,7 +418,7 @@ export def "flows-engagements-steps-context get" [
 #
 # DELETE /v1/Flows/{FlowSid}/Engagements/{Sid}
 # operationId: DeleteEngagement
-export def "flows-engagements delete" [
+export def "delete-engagement" [
   flow_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -456,7 +456,7 @@ export def "flows-engagements delete" [
 #
 # GET /v1/Flows/{FlowSid}/Engagements/{Sid}
 # operationId: FetchEngagement
-export def "flows-engagements get" [
+export def "fetch-engagement" [
   flow_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -494,7 +494,7 @@ export def "flows-engagements get" [
 #
 # GET /v1/Flows/{FlowSid}/Executions
 # operationId: ListExecution
-export def "flows-executions list" [
+export def "list-execution" [
   flow_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -536,7 +536,7 @@ export def "flows-executions list" [
 #
 # POST /v1/Flows/{FlowSid}/Executions
 # operationId: CreateExecution
-export def "flows-executions create" [
+export def "create-execution" [
   flow_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -579,7 +579,7 @@ export def "flows-executions create" [
 #
 # GET /v1/Flows/{FlowSid}/Executions/{ExecutionSid}/Context
 # operationId: FetchExecutionContext
-export def "flows-executions-context get" [
+export def "fetch-execution-context" [
   flow_sid: string
   execution_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -617,7 +617,7 @@ export def "flows-executions-context get" [
 #
 # GET /v1/Flows/{FlowSid}/Executions/{ExecutionSid}/Steps
 # operationId: ListExecutionStep
-export def "flows-executions-steps list" [
+export def "list-execution-step" [
   flow_sid: string
   execution_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -659,7 +659,7 @@ export def "flows-executions-steps list" [
 #
 # GET /v1/Flows/{FlowSid}/Executions/{ExecutionSid}/Steps/{Sid}
 # operationId: FetchExecutionStep
-export def "flows-executions-steps get" [
+export def "fetch-execution-step" [
   flow_sid: string
   execution_sid: string
   sid: string
@@ -699,7 +699,7 @@ export def "flows-executions-steps get" [
 #
 # GET /v1/Flows/{FlowSid}/Executions/{ExecutionSid}/Steps/{StepSid}/Context
 # operationId: FetchExecutionStepContext
-export def "flows-executions-steps-context get" [
+export def "fetch-execution-step-context" [
   flow_sid: string
   execution_sid: string
   step_sid: string
@@ -739,7 +739,7 @@ export def "flows-executions-steps-context get" [
 #
 # DELETE /v1/Flows/{FlowSid}/Executions/{Sid}
 # operationId: DeleteExecution
-export def "flows-executions delete" [
+export def "delete-execution" [
   flow_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -777,7 +777,7 @@ export def "flows-executions delete" [
 #
 # GET /v1/Flows/{FlowSid}/Executions/{Sid}
 # operationId: FetchExecution
-export def "flows-executions get" [
+export def "fetch-execution" [
   flow_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -815,7 +815,7 @@ export def "flows-executions get" [
 #
 # POST /v1/Flows/{FlowSid}/Executions/{Sid}
 # operationId: UpdateExecution
-export def "flows-executions update" [
+export def "update-execution" [
   flow_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -858,7 +858,7 @@ export def "flows-executions update" [
 #
 # DELETE /v1/Flows/{Sid}
 # operationId: DeleteFlow
-export def "flows delete" [
+export def "delete-flow" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -894,7 +894,7 @@ export def "flows delete" [
 #
 # GET /v1/Flows/{Sid}
 # operationId: FetchFlow
-export def "flows get" [
+export def "fetch-flow" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

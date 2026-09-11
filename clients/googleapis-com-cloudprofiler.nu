@@ -119,7 +119,7 @@ def profile-type-completer [] { ["CONTENTION" "CPU" "HEAP" "HEAP_ALLOC" "PEAK_HE
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects update" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cloudprofiler-projects-profiles-patch" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -144,7 +144,7 @@ export def commands []: nothing -> table {
 # PATCH /v2/{name}
 # operationId: cloudprofiler.projects.profiles.patch
 # --deployment shape: {labels?: record, projectId?: string, target?: string}
-export def "projects update" [
+export def "cloudprofiler-projects-profiles-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -202,7 +202,7 @@ export def "projects update" [
 # POST /v2/{parent}/profiles
 # operationId: cloudprofiler.projects.profiles.create
 # --deployment shape: {labels?: record, projectId?: string, target?: string}
-export def "profiles create" [
+export def "cloudprofiler-projects-profiles-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -256,7 +256,7 @@ export def "profiles create" [
 # POST /v2/{parent}/profiles:createOffline
 # operationId: cloudprofiler.projects.profiles.createOffline
 # --deployment shape: {labels?: record, projectId?: string, target?: string}
-export def "profiles-create-offline create" [
+export def "cloudprofiler-projects-profiles-create-offline" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

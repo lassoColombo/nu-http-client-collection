@@ -150,7 +150,7 @@ def x-amz-target-completer-49 [] { ["TrentService.VerifyMac"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api cancel-key-deletion" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cancel-key-deletion" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -174,7 +174,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CancelKeyDeletion
-export def "api cancel-key-deletion" [
+export def "cancel-key-deletion" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -222,7 +222,7 @@ export def "api cancel-key-deletion" [
 #
 # POST /
 # operationId: ConnectCustomKeyStore
-export def "api create-connect-custom-key-store" [
+export def "connect-custom-key-store" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -270,7 +270,7 @@ export def "api create-connect-custom-key-store" [
 #
 # POST /
 # operationId: CreateAlias
-export def "api create-alias" [
+export def "create-alias" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -319,7 +319,7 @@ export def "api create-alias" [
 #
 # POST /
 # operationId: CreateCustomKeyStore
-export def "api create-custom-key-store" [
+export def "create-custom-key-store" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -376,7 +376,7 @@ export def "api create-custom-key-store" [
 #
 # POST /
 # operationId: CreateGrant
-export def "api create-grant" [
+export def "create-grant" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -430,7 +430,7 @@ export def "api create-grant" [
 #
 # POST /
 # operationId: CreateKey
-export def "api create-key" [
+export def "create-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -488,7 +488,7 @@ export def "api create-key" [
 #
 # POST /
 # operationId: Decrypt
-export def "api create-decrypt" [
+export def "decrypt" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -540,7 +540,7 @@ export def "api create-decrypt" [
 #
 # POST /
 # operationId: DeleteAlias
-export def "api delete-alias" [
+export def "delete-alias" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -588,7 +588,7 @@ export def "api delete-alias" [
 #
 # POST /
 # operationId: DeleteCustomKeyStore
-export def "api delete-custom-key-store" [
+export def "delete-custom-key-store" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -636,7 +636,7 @@ export def "api delete-custom-key-store" [
 #
 # POST /
 # operationId: DeleteImportedKeyMaterial
-export def "api delete-imported-key-material" [
+export def "delete-imported-key-material" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -684,7 +684,7 @@ export def "api delete-imported-key-material" [
 #
 # POST /
 # operationId: DescribeCustomKeyStores
-export def "api get-custom-key-stores" [
+export def "describe-custom-key-stores" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -738,7 +738,7 @@ export def "api get-custom-key-stores" [
 #
 # POST /
 # operationId: DescribeKey
-export def "api get-key" [
+export def "describe-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -787,7 +787,7 @@ export def "api get-key" [
 #
 # POST /
 # operationId: DisableKey
-export def "api disable-key" [
+export def "disable-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -835,7 +835,7 @@ export def "api disable-key" [
 #
 # POST /
 # operationId: DisableKeyRotation
-export def "api disable-key-rotation" [
+export def "disable-key-rotation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -883,7 +883,7 @@ export def "api disable-key-rotation" [
 #
 # POST /
 # operationId: DisconnectCustomKeyStore
-export def "api create-disconnect-custom-key-store" [
+export def "disconnect-custom-key-store" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -931,7 +931,7 @@ export def "api create-disconnect-custom-key-store" [
 #
 # POST /
 # operationId: EnableKey
-export def "api enable-key" [
+export def "enable-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -979,7 +979,7 @@ export def "api enable-key" [
 #
 # POST /
 # operationId: EnableKeyRotation
-export def "api enable-key-rotation" [
+export def "enable-key-rotation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1027,7 +1027,7 @@ export def "api enable-key-rotation" [
 #
 # POST /
 # operationId: Encrypt
-export def "api create-encrypt" [
+export def "encrypt" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1079,7 +1079,7 @@ export def "api create-encrypt" [
 #
 # POST /
 # operationId: GenerateDataKey
-export def "api generate-data-key" [
+export def "generate-data-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1131,7 +1131,7 @@ export def "api generate-data-key" [
 #
 # POST /
 # operationId: GenerateDataKeyPair
-export def "api generate-data-key-pair" [
+export def "generate-data-key-pair" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1182,7 +1182,7 @@ export def "api generate-data-key-pair" [
 #
 # POST /
 # operationId: GenerateDataKeyPairWithoutPlaintext
-export def "api generate-data-key-pair-without-plaintext" [
+export def "generate-data-key-pair-without-plaintext" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1233,7 +1233,7 @@ export def "api generate-data-key-pair-without-plaintext" [
 #
 # POST /
 # operationId: GenerateDataKeyWithoutPlaintext
-export def "api generate-data-key-without-plaintext" [
+export def "generate-data-key-without-plaintext" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1285,7 +1285,7 @@ export def "api generate-data-key-without-plaintext" [
 #
 # POST /
 # operationId: GenerateMac
-export def "api generate-mac" [
+export def "generate-mac" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1336,7 +1336,7 @@ export def "api generate-mac" [
 #
 # POST /
 # operationId: GenerateRandom
-export def "api generate-random" [
+export def "generate-random" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1385,7 +1385,7 @@ export def "api generate-random" [
 #
 # POST /
 # operationId: GetKeyPolicy
-export def "api get-key-policy" [
+export def "get-key-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1434,7 +1434,7 @@ export def "api get-key-policy" [
 #
 # POST /
 # operationId: GetKeyRotationStatus
-export def "api get-key-rotation-status" [
+export def "get-key-rotation-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1482,7 +1482,7 @@ export def "api get-key-rotation-status" [
 #
 # POST /
 # operationId: GetParametersForImport
-export def "api get-parameters-for-import" [
+export def "get-parameters-for-import" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1532,7 +1532,7 @@ export def "api get-parameters-for-import" [
 #
 # POST /
 # operationId: GetPublicKey
-export def "api get-public-key" [
+export def "get-public-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1581,7 +1581,7 @@ export def "api get-public-key" [
 #
 # POST /
 # operationId: ImportKeyMaterial
-export def "api import-key-material" [
+export def "import-key-material" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1633,7 +1633,7 @@ export def "api import-key-material" [
 #
 # POST /
 # operationId: ListAliases
-export def "api list-aliases" [
+export def "list-aliases" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1686,7 +1686,7 @@ export def "api list-aliases" [
 #
 # POST /
 # operationId: ListGrants
-export def "api list-grants" [
+export def "list-grants" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1741,7 +1741,7 @@ export def "api list-grants" [
 #
 # POST /
 # operationId: ListKeyPolicies
-export def "api list-key-policies" [
+export def "list-key-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1794,7 +1794,7 @@ export def "api list-key-policies" [
 #
 # POST /
 # operationId: ListKeys
-export def "api list-keys" [
+export def "list-keys" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1846,7 +1846,7 @@ export def "api list-keys" [
 #
 # POST /
 # operationId: ListResourceTags
-export def "api list-resource-tags" [
+export def "list-resource-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1899,7 +1899,7 @@ export def "api list-resource-tags" [
 #
 # POST /
 # operationId: ListRetirableGrants
-export def "api list-retirable-grants" [
+export def "list-retirable-grants" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1952,7 +1952,7 @@ export def "api list-retirable-grants" [
 #
 # POST /
 # operationId: PutKeyPolicy
-export def "api update-key-policy" [
+export def "put-key-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2003,7 +2003,7 @@ export def "api update-key-policy" [
 #
 # POST /
 # operationId: ReEncrypt
-export def "api create-re-encrypt" [
+export def "re-encrypt" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2058,7 +2058,7 @@ export def "api create-re-encrypt" [
 #
 # POST /
 # operationId: ReplicateKey
-export def "api create-replicate-key" [
+export def "replicate-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2111,7 +2111,7 @@ export def "api create-replicate-key" [
 #
 # POST /
 # operationId: RetireGrant
-export def "api create-retire-grant" [
+export def "retire-grant" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2161,7 +2161,7 @@ export def "api create-retire-grant" [
 #
 # POST /
 # operationId: RevokeGrant
-export def "api delete-grant" [
+export def "revoke-grant" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2210,7 +2210,7 @@ export def "api delete-grant" [
 #
 # POST /
 # operationId: ScheduleKeyDeletion
-export def "api create-schedule-key-deletion" [
+export def "schedule-key-deletion" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2259,7 +2259,7 @@ export def "api create-schedule-key-deletion" [
 #
 # POST /
 # operationId: Sign
-export def "api create-sign" [
+export def "sign" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2311,7 +2311,7 @@ export def "api create-sign" [
 #
 # POST /
 # operationId: TagResource
-export def "api tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2360,7 +2360,7 @@ export def "api tag-resource" [
 #
 # POST /
 # operationId: UntagResource
-export def "api untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2409,7 +2409,7 @@ export def "api untag-resource" [
 #
 # POST /
 # operationId: UpdateAlias
-export def "api update-alias" [
+export def "update-alias" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2458,7 +2458,7 @@ export def "api update-alias" [
 #
 # POST /
 # operationId: UpdateCustomKeyStore
-export def "api update-custom-key-store" [
+export def "update-custom-key-store" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2514,7 +2514,7 @@ export def "api update-custom-key-store" [
 #
 # POST /
 # operationId: UpdateKeyDescription
-export def "api update-key-description" [
+export def "update-key-description" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2563,7 +2563,7 @@ export def "api update-key-description" [
 #
 # POST /
 # operationId: UpdatePrimaryRegion
-export def "api update-primary-region" [
+export def "update-primary-region" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2612,7 +2612,7 @@ export def "api update-primary-region" [
 #
 # POST /
 # operationId: Verify
-export def "api verify" [
+export def "verify" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2665,7 +2665,7 @@ export def "api verify" [
 #
 # POST /
 # operationId: VerifyMac
-export def "api verify-mac" [
+export def "verify-mac" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

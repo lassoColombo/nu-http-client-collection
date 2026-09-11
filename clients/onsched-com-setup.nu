@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "setup-appointments list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-setup-v1-appointments" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -139,7 +139,7 @@ export def commands []: nothing -> table {
 # List Appointments
 #
 # GET /setup/v1/appointments
-export def "setup-appointments list" [
+export def "get-setup-v1-appointments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -187,7 +187,7 @@ export def "setup-appointments list" [
 # Get Appointment
 #
 # GET /setup/v1/appointments/{id}
-export def "setup-appointments get" [
+export def "get-setup-v1-appointments-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -222,7 +222,7 @@ export def "setup-appointments get" [
 # Reassign Appointment
 #
 # PUT /setup/v1/appointments/{id}/reassign/resource/{resourceId}
-export def "setup-appointments-reassign-resource update" [
+export def "put-setup-v1-appointments-id-reassign-resource-resource-id" [
   id: string
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -259,7 +259,7 @@ export def "setup-appointments-reassign-resource update" [
 # List Users
 #
 # GET /setup/v1/businessusers
-export def "setup-businessusers list" [
+export def "get-setup-v1-businessusers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -298,7 +298,7 @@ export def "setup-businessusers list" [
 # Create User
 #
 # POST /setup/v1/businessusers
-export def "setup-businessusers create" [
+export def "post-setup-v1-businessusers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -340,7 +340,7 @@ export def "setup-businessusers create" [
 # List User Permissions
 #
 # GET /setup/v1/businessusers/permissions
-export def "setup-businessusers-permissions get" [
+export def "get-setup-v1-businessusers-permissions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -377,7 +377,7 @@ export def "setup-businessusers-permissions get" [
 # List User Companies
 #
 # GET /setup/v1/businessusers/{email}/companies
-export def "setup-businessusers-companies get" [
+export def "get-setup-v1-businessusers-email-companies" [
   email: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -416,7 +416,7 @@ export def "setup-businessusers-companies get" [
 # Delete User
 #
 # DELETE /setup/v1/businessusers/{id}
-export def "setup-businessusers delete" [
+export def "delete-setup-v1-businessusers-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -451,7 +451,7 @@ export def "setup-businessusers delete" [
 # Get User
 #
 # GET /setup/v1/businessusers/{id}
-export def "setup-businessusers get" [
+export def "get-setup-v1-businessusers-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -486,7 +486,7 @@ export def "setup-businessusers get" [
 # Update User
 #
 # PUT /setup/v1/businessusers/{id}
-export def "setup-businessusers update" [
+export def "put-setup-v1-businessusers-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -529,7 +529,7 @@ export def "setup-businessusers update" [
 # List Calendars
 #
 # GET /setup/v1/calendars
-export def "setup-calendars list" [
+export def "get-setup-v1-calendars" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -568,7 +568,7 @@ export def "setup-calendars list" [
 #
 # POST /setup/v1/calendars
 # --availability shape: {fri?: record, mon?: record, sat?: record, sun?: record, thu?: record, tue?: record, wed?: record}
-export def "setup-calendars create" [
+export def "post-setup-v1-calendars" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -611,7 +611,7 @@ export def "setup-calendars create" [
 # Delete Calendar Block
 #
 # DELETE /setup/v1/calendars/block/{id}
-export def "setup-calendars-block delete" [
+export def "delete-setup-v1-calendars-block-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -647,7 +647,7 @@ export def "setup-calendars-block delete" [
 #
 # PUT /setup/v1/calendars/block/{id}
 # --repeat shape: {frequency?: string, interval?: int, monthDay?: int, monthType?: string, weekdays?: string}
-export def "setup-calendars-block update" [
+export def "put-setup-v1-calendars-block-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -692,7 +692,7 @@ export def "setup-calendars-block update" [
 # Get Calendar Block
 #
 # GET /setup/v1/calendars/blocks/{id}
-export def "setup-calendars-blocks get-by-id" [
+export def "get-setup-v1-calendars-blocks-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -727,7 +727,7 @@ export def "setup-calendars-blocks get-by-id" [
 # Delete Calendar
 #
 # DELETE /setup/v1/calendars/{id}
-export def "setup-calendars delete" [
+export def "delete-setup-v1-calendars-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -762,7 +762,7 @@ export def "setup-calendars delete" [
 # Get Calendar
 #
 # GET /setup/v1/calendars/{id}
-export def "setup-calendars get" [
+export def "get-setup-v1-calendars-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -798,7 +798,7 @@ export def "setup-calendars get" [
 #
 # PUT /setup/v1/calendars/{id}
 # --availability shape: {fri?: record, mon?: record, sat?: record, sun?: record, thu?: record, tue?: record, wed?: record}
-export def "setup-calendars update" [
+export def "put-setup-v1-calendars-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -844,7 +844,7 @@ export def "setup-calendars update" [
 #
 # POST /setup/v1/calendars/{id}/block
 # --repeat shape: {frequency?: string, interval?: int, monthDay?: int, monthType?: string, weekdays?: string}
-export def "setup-calendars-block create" [
+export def "post-setup-v1-calendars-id-block" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -889,7 +889,7 @@ export def "setup-calendars-block create" [
 # List Calendar Blocks
 #
 # GET /setup/v1/calendars/{id}/blocks
-export def "setup-calendars-blocks get-by-id-1" [
+export def "get-setup-v1-calendars-id-blocks" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -927,7 +927,7 @@ export def "setup-calendars-blocks get-by-id-1" [
 # Recover Calendar
 #
 # PUT /setup/v1/calendars/{id}/recover
-export def "setup-calendars-recover update" [
+export def "put-setup-v1-calendars-id-recover" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -962,7 +962,7 @@ export def "setup-calendars-recover update" [
 # List Calendar Services
 #
 # GET /setup/v1/calendars/{id}/services
-export def "setup-calendars-services get" [
+export def "get-setup-v1-calendars-id-services" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1000,7 +1000,7 @@ export def "setup-calendars-services get" [
 # Get Company
 #
 # GET /setup/v1/companies
-export def "setup-companies get" [
+export def "get-setup-v1-companies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1033,7 +1033,7 @@ export def "setup-companies get" [
 # Create Company
 #
 # POST /setup/v1/companies
-export def "setup-companies create" [
+export def "post-setup-v1-companies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1090,7 +1090,7 @@ export def "setup-companies create" [
 # Update Company
 #
 # PUT /setup/v1/companies
-export def "setup-companies update" [
+export def "put-setup-v1-companies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1147,7 +1147,7 @@ export def "setup-companies update" [
 # List Company Domains
 #
 # GET /setup/v1/companies/domains
-export def "setup-companies-domains list" [
+export def "get-setup-v1-companies-domains" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1180,7 +1180,7 @@ export def "setup-companies-domains list" [
 # Create Company Domain
 #
 # POST /setup/v1/companies/domains
-export def "setup-companies-domains create" [
+export def "post-setup-v1-companies-domains" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1217,7 +1217,7 @@ export def "setup-companies-domains create" [
 # Delete Company Domain
 #
 # DELETE /setup/v1/companies/domains/{id}
-export def "setup-companies-domains delete" [
+export def "delete-setup-v1-companies-domains-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1252,7 +1252,7 @@ export def "setup-companies-domains delete" [
 # Get Company Domain
 #
 # GET /setup/v1/companies/domains/{id}
-export def "setup-companies-domains get" [
+export def "get-setup-v1-companies-domains-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1287,7 +1287,7 @@ export def "setup-companies-domains get" [
 # Update Company Domain
 #
 # PUT /setup/v1/companies/domains/{id}
-export def "setup-companies-domains update" [
+export def "put-setup-v1-companies-domains-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1326,7 +1326,7 @@ export def "setup-companies-domains update" [
 # List Email Templates
 #
 # GET /setup/v1/companies/email/templates
-export def "setup-companies-email-templates list" [
+export def "get-setup-v1-companies-email-templates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1359,7 +1359,7 @@ export def "setup-companies-email-templates list" [
 # Delete Master Template Settings
 #
 # DELETE /setup/v1/companies/email/templates/master
-export def "setup-companies-email-templates-master delete" [
+export def "delete-setup-v1-companies-email-templates-master" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1392,7 +1392,7 @@ export def "setup-companies-email-templates-master delete" [
 # Get Master Template Settings
 #
 # GET /setup/v1/companies/email/templates/master
-export def "setup-companies-email-templates-master get" [
+export def "get-setup-v1-companies-email-templates-master" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1425,7 +1425,7 @@ export def "setup-companies-email-templates-master get" [
 # Create Master Template Settings
 #
 # POST /setup/v1/companies/email/templates/master
-export def "setup-companies-email-templates-master create" [
+export def "post-setup-v1-companies-email-templates-master" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1487,7 +1487,7 @@ export def "setup-companies-email-templates-master create" [
 # Get Email Template
 #
 # GET /setup/v1/companies/email/templates/{templateName}
-export def "setup-companies-email-templates get" [
+export def "get-setup-v1-companies-email-templates-template-name" [
   template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1522,7 +1522,7 @@ export def "setup-companies-email-templates get" [
 # List Regions
 #
 # GET /setup/v1/companies/regions
-export def "setup-companies-regions list" [
+export def "get-setup-v1-companies-regions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1558,7 +1558,7 @@ export def "setup-companies-regions list" [
 # Create Region
 #
 # POST /setup/v1/companies/regions
-export def "setup-companies-regions create" [
+export def "post-setup-v1-companies-regions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1595,7 +1595,7 @@ export def "setup-companies-regions create" [
 # Delete Region
 #
 # DELETE /setup/v1/companies/regions/{id}
-export def "setup-companies-regions delete" [
+export def "delete-setup-v1-companies-regions-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1630,7 +1630,7 @@ export def "setup-companies-regions delete" [
 # Get Region
 #
 # GET /setup/v1/companies/regions/{id}
-export def "setup-companies-regions get" [
+export def "get-setup-v1-companies-regions-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1665,7 +1665,7 @@ export def "setup-companies-regions get" [
 # Update Region
 #
 # PUT /setup/v1/companies/regions/{id}
-export def "setup-companies-regions update" [
+export def "put-setup-v1-companies-regions-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1704,7 +1704,7 @@ export def "setup-companies-regions update" [
 # List Time Zones
 #
 # GET /setup/v1/companies/timezones/{date}
-export def "setup-companies-timezones get" [
+export def "get-setup-v1-companies-timezones-date" [
   date: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1739,7 +1739,7 @@ export def "setup-companies-timezones get" [
 # List Customers
 #
 # GET /setup/v1/customers
-export def "setup-customers list" [
+export def "get-setup-v1-customers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1780,7 +1780,7 @@ export def "setup-customers list" [
 # Get Customer
 #
 # GET /setup/v1/customers/{id}
-export def "setup-customers get" [
+export def "get-setup-v1-customers-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1815,7 +1815,7 @@ export def "setup-customers get" [
 # Get Customer Data
 #
 # GET /setup/v1/customers/{id}/privacy
-export def "setup-customers-privacy get" [
+export def "get-setup-v1-customers-id-privacy" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1850,7 +1850,7 @@ export def "setup-customers-privacy get" [
 # List Locations
 #
 # GET /setup/v1/locations
-export def "setup-locations list" [
+export def "get-setup-v1-locations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1895,7 +1895,7 @@ export def "setup-locations list" [
 # --businessHours shape: {fri?: record, mon?: record, sat?: record, sun?: record, thu?: record, tue?: record, wed?: record}
 # --defaults shape: {autoUpdateCustomer?: bool, businessNotification?: bool, customerCity?: bool, customerState?: bool, emailInfo?: bool, enableUtcTimezone?: bool}
 # --settings shape: {bookAheadUnit?: int, bookAheadValue?: int, bookInAdvance?: int, bookingTimerMins?: int, customerBookingsPerDay?: int, enableWorldTimezones?: bool}
-export def "setup-locations create" [
+export def "post-setup-v1-locations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1947,7 +1947,7 @@ export def "setup-locations create" [
 #
 # POST /setup/v1/locations/bulk
 # --locations item shape: {address?: record, adminEmail?: string, adminName?: string, appointmentReminders?: record, businessHours?: record, defaults?: record, email?: string, fax?: string, friendlyId?: string, name?: string, phone?: string, regionId?: string, settings?: record, timezoneName?: string, website?: string}
-export def "setup-locations-bulk create" [
+export def "post-setup-v1-locations-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1984,7 +1984,7 @@ export def "setup-locations-bulk create" [
 # Unlink Service
 #
 # DELETE /setup/v1/locations/services/{id}
-export def "setup-locations-services delete-by-id" [
+export def "delete-setup-v1-locations-services-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2019,7 +2019,7 @@ export def "setup-locations-services delete-by-id" [
 # Get Linked Service
 #
 # GET /setup/v1/locations/services/{id}
-export def "setup-locations-services get-by-id" [
+export def "get-setup-v1-locations-services-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2054,7 +2054,7 @@ export def "setup-locations-services get-by-id" [
 # Delete Location
 #
 # DELETE /setup/v1/locations/{id}
-export def "setup-locations delete" [
+export def "delete-setup-v1-locations-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2089,7 +2089,7 @@ export def "setup-locations delete" [
 # Get Location
 #
 # GET /setup/v1/locations/{id}
-export def "setup-locations get" [
+export def "get-setup-v1-locations-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2129,7 +2129,7 @@ export def "setup-locations get" [
 # --businessHours shape: {fri?: record, mon?: record, sat?: record, sun?: record, thu?: record, tue?: record, wed?: record}
 # --defaults shape: {autoUpdateCustomer?: bool, businessNotification?: bool, customerCity?: bool, customerState?: bool, emailInfo?: bool, enableUtcTimezone?: bool}
 # --settings shape: {bookAheadUnit?: int, bookAheadValue?: int, bookInAdvance?: int, bookingTimerMins?: int, customerBookingsPerDay?: int, enableWorldTimezones?: bool}
-export def "setup-locations update" [
+export def "put-setup-v1-locations-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2184,7 +2184,7 @@ export def "setup-locations update" [
 # Get Reminders
 #
 # GET /setup/v1/locations/{id}/appointmentreminders
-export def "setup-locations-appointmentreminders get" [
+export def "get-setup-v1-locations-id-appointmentreminders" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2219,7 +2219,7 @@ export def "setup-locations-appointmentreminders get" [
 # Update Reminders
 #
 # PUT /setup/v1/locations/{id}/appointmentreminders
-export def "setup-locations-appointmentreminders update" [
+export def "put-setup-v1-locations-id-appointmentreminders" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2265,7 +2265,7 @@ export def "setup-locations-appointmentreminders update" [
 # Delete All Location Images
 #
 # DELETE /setup/v1/locations/{id}/deleteallimages
-export def "setup-locations-delete-allimages delete" [
+export def "delete-setup-v1-locations-id-deleteallimages" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2302,7 +2302,7 @@ export def "setup-locations-delete-allimages delete" [
 # Delete Location Image
 #
 # DELETE /setup/v1/locations/{id}/deleteimage
-export def "setup-locations-delete-image delete" [
+export def "delete-setup-v1-locations-id-deleteimage" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2337,7 +2337,7 @@ export def "setup-locations-delete-image delete" [
 # List Email Templates
 #
 # GET /setup/v1/locations/{id}/email/templates
-export def "setup-locations-email-templates list" [
+export def "get-setup-v1-locations-id-email-templates" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2372,7 +2372,7 @@ export def "setup-locations-email-templates list" [
 # Create Custom Template
 #
 # POST /setup/v1/locations/{id}/email/templates
-export def "setup-locations-email-templates create" [
+export def "post-setup-v1-locations-id-email-templates" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2412,7 +2412,7 @@ export def "setup-locations-email-templates create" [
 # Delete Master Template Settings
 #
 # DELETE /setup/v1/locations/{id}/email/templates/master
-export def "setup-locations-email-templates-master delete" [
+export def "delete-setup-v1-locations-id-email-templates-master" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2447,7 +2447,7 @@ export def "setup-locations-email-templates-master delete" [
 # Get Master Template Settings
 #
 # GET /setup/v1/locations/{id}/email/templates/master
-export def "setup-locations-email-templates-master get" [
+export def "get-setup-v1-locations-id-email-templates-master" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2482,7 +2482,7 @@ export def "setup-locations-email-templates-master get" [
 # Create Master Template Settings
 #
 # POST /setup/v1/locations/{id}/email/templates/master
-export def "setup-locations-email-templates-master create" [
+export def "post-setup-v1-locations-id-email-templates-master" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2546,7 +2546,7 @@ export def "setup-locations-email-templates-master create" [
 # Delete Custom Template
 #
 # DELETE /setup/v1/locations/{id}/email/templates/{templateName}
-export def "setup-locations-email-templates delete" [
+export def "delete-setup-v1-locations-id-email-templates-template-name" [
   id: string
   template_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2583,7 +2583,7 @@ export def "setup-locations-email-templates delete" [
 # Get Email Template
 #
 # GET /setup/v1/locations/{id}/email/templates/{templateName}
-export def "setup-locations-email-templates get" [
+export def "get-setup-v1-locations-id-email-templates-template-name" [
   id: string
   template_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2620,7 +2620,7 @@ export def "setup-locations-email-templates get" [
 # Delete Google Cal Access
 #
 # DELETE /setup/v1/locations/{id}/google/service/account
-export def "setup-locations-google-service-account delete" [
+export def "delete-setup-v1-locations-id-google-service-account" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2655,7 +2655,7 @@ export def "setup-locations-google-service-account delete" [
 # Create Google Cal Access
 #
 # POST /setup/v1/locations/{id}/google/service/account
-export def "setup-locations-google-service-account create" [
+export def "post-setup-v1-locations-id-google-service-account" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2703,7 +2703,7 @@ export def "setup-locations-google-service-account create" [
 # Update Location Holidays
 #
 # PUT /setup/v1/locations/{id}/holidays/{holidayId}/{closed}
-export def "setup-locations-holidays update" [
+export def "put-setup-v1-locations-id-holidays-holiday-id-closed" [
   id: string
   holiday_id: string
   closed: bool
@@ -2742,7 +2742,7 @@ export def "setup-locations-holidays update" [
 # Recover Location
 #
 # PUT /setup/v1/locations/{id}/recover
-export def "setup-locations-recover update" [
+export def "put-setup-v1-locations-id-recover" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2777,7 +2777,7 @@ export def "setup-locations-recover update" [
 # Delete Linked Services
 #
 # DELETE /setup/v1/locations/{id}/services
-export def "setup-locations-services delete-by-id-1" [
+export def "delete-setup-v1-locations-id-services" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2812,7 +2812,7 @@ export def "setup-locations-services delete-by-id-1" [
 # List Location Linked Services
 #
 # GET /setup/v1/locations/{id}/services
-export def "setup-locations-services get-by-id-1" [
+export def "get-setup-v1-locations-id-services" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2850,7 +2850,7 @@ export def "setup-locations-services get-by-id-1" [
 # Create Linked Service
 #
 # POST /setup/v1/locations/{id}/services
-export def "setup-locations-services create" [
+export def "post-setup-v1-locations-id-services" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2889,7 +2889,7 @@ export def "setup-locations-services create" [
 # Update Location Scope
 #
 # PUT /setup/v1/locations/{id}/settings/scope/{settingsScope}
-export def "setup-locations-settings-scope update" [
+export def "put-setup-v1-locations-id-settings-scope-settings-scope" [
   id: string
   settings_scope: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2926,7 +2926,7 @@ export def "setup-locations-settings-scope update" [
 # Upload Location Image
 #
 # POST /setup/v1/locations/{id}/uploadimage
-export def "setup-locations-uploadimage create" [
+export def "post-setup-v1-locations-id-uploadimage" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2966,7 +2966,7 @@ export def "setup-locations-uploadimage create" [
 # List Resource Groups
 #
 # GET /setup/v1/resourcegroups
-export def "setup-resourcegroups list" [
+export def "get-setup-v1-resourcegroups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3004,7 +3004,7 @@ export def "setup-resourcegroups list" [
 # Create Resource Group
 #
 # POST /setup/v1/resourcegroups
-export def "setup-resourcegroups create" [
+export def "post-setup-v1-resourcegroups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3044,7 +3044,7 @@ export def "setup-resourcegroups create" [
 # Delete Resource Group
 #
 # DELETE /setup/v1/resourcegroups/{id}
-export def "setup-resourcegroups delete" [
+export def "delete-setup-v1-resourcegroups-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3079,7 +3079,7 @@ export def "setup-resourcegroups delete" [
 # Get Resource Group
 #
 # GET /setup/v1/resourcegroups/{id}
-export def "setup-resourcegroups get" [
+export def "get-setup-v1-resourcegroups-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3114,7 +3114,7 @@ export def "setup-resourcegroups get" [
 # Update Resource Group
 #
 # PUT /setup/v1/resourcegroups/{id}
-export def "setup-resourcegroups update" [
+export def "put-setup-v1-resourcegroups-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3155,7 +3155,7 @@ export def "setup-resourcegroups update" [
 # Recover Resource Group
 #
 # PUT /setup/v1/resourcegroups/{id}/recover
-export def "setup-resourcegroups-recover update" [
+export def "put-setup-v1-resourcegroups-id-recover" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3190,7 +3190,7 @@ export def "setup-resourcegroups-recover update" [
 # List Resources
 #
 # GET /setup/v1/resources
-export def "setup-resources list" [
+export def "get-setup-v1-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3238,7 +3238,7 @@ export def "setup-resources list" [
 # --contact shape: {businessPhone?: string, businessPhoneExt?: string, conferenceInfo?: string, homePhone?: string, mobilePhone?: string, preferredPhoneType?: string, skypeUsername?: string}
 # --customFields shape: {field1?: string, field10?: string, field2?: string, field3?: string, field4?: string, field5?: string, field6?: string, field7?: string, field8?: string, field9?: string}
 # --options shape: {bioLink?: string, bookingNotification?: int, calendarAvailability?: int, displayColor?: string, effectiveDate?: string, gender?: string, googleCalendarId?: string, hourly?: float, ignoreBusinessHours?: bool, notificationType?: int, outlookCalendarId?: string, sortKey?: int}
-export def "setup-resources create" [
+export def "post-setup-v1-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3290,7 +3290,7 @@ export def "setup-resources create" [
 # Delete Allocation
 #
 # DELETE /setup/v1/resources/allocations/{id}
-export def "setup-resources-allocations delete" [
+export def "delete-setup-v1-resources-allocations-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3325,7 +3325,7 @@ export def "setup-resources-allocations delete" [
 # Get Allocation
 #
 # GET /setup/v1/resources/allocations/{id}
-export def "setup-resources-allocations get-by-id" [
+export def "get-setup-v1-resources-allocations-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3361,7 +3361,7 @@ export def "setup-resources-allocations get-by-id" [
 #
 # PUT /setup/v1/resources/allocations/{id}
 # --repeat shape: {frequency?: string, interval?: int, monthDay?: int, monthType?: string, weekdays?: string}
-export def "setup-resources-allocations update" [
+export def "put-setup-v1-resources-allocations-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3406,7 +3406,7 @@ export def "setup-resources-allocations update" [
 # Delete Block
 #
 # DELETE /setup/v1/resources/block/{id}
-export def "setup-resources-block delete" [
+export def "delete-setup-v1-resources-block-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3442,7 +3442,7 @@ export def "setup-resources-block delete" [
 #
 # PUT /setup/v1/resources/block/{id}
 # --repeat shape: {frequency?: string, interval?: int, monthDay?: int, monthType?: string, weekdays?: string}
-export def "setup-resources-block update" [
+export def "put-setup-v1-resources-block-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3488,7 +3488,7 @@ export def "setup-resources-block update" [
 # Get Block
 #
 # GET /setup/v1/resources/blocks/{id}
-export def "setup-resources-blocks get-by-id" [
+export def "get-setup-v1-resources-blocks-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3524,7 +3524,7 @@ export def "setup-resources-blocks get-by-id" [
 #
 # POST /setup/v1/resources/bulk
 # --resources item shape: {address?: record, availability?: record, contact?: record, customFields?: record, description?: string, email?: string, groupId?: string, locationId?: string, name?: string, options?: record, recurringAvailability?: bool, serviceIds?: list<string>, timezoneId?: string}
-export def "setup-resources-bulk create" [
+export def "post-setup-v1-resources-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3565,7 +3565,7 @@ export def "setup-resources-bulk create" [
 #
 # PUT /setup/v1/resources/bulk
 # --resources item shape: {address?: record, availability?: record, contact?: record, customFields?: record, description?: string, email?: string, groupId?: string, id?: string, name?: string, options?: record, recurringAvailability?: bool, serviceIds?: list<string>, timezoneId?: string}
-export def "setup-resources-bulk update" [
+export def "put-setup-v1-resources-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3605,7 +3605,7 @@ export def "setup-resources-bulk update" [
 # Get Time Zones
 #
 # GET /setup/v1/resources/timezones
-export def "setup-resources-timezones get" [
+export def "get-setup-v1-resources-timezones" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3638,7 +3638,7 @@ export def "setup-resources-timezones get" [
 # Delete Resource
 #
 # DELETE /setup/v1/resources/{id}
-export def "setup-resources delete" [
+export def "delete-setup-v1-resources-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3673,7 +3673,7 @@ export def "setup-resources delete" [
 # Get Resource
 #
 # GET /setup/v1/resources/{id}
-export def "setup-resources get" [
+export def "get-setup-v1-resources-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3716,7 +3716,7 @@ export def "setup-resources get" [
 # --contact shape: {businessPhone?: string, businessPhoneExt?: string, conferenceInfo?: string, homePhone?: string, mobilePhone?: string, preferredPhoneType?: string, skypeUsername?: string}
 # --customFields shape: {field1?: string, field10?: string, field2?: string, field3?: string, field4?: string, field5?: string, field6?: string, field7?: string, field8?: string, field9?: string}
 # --options shape: {bioLink?: string, bookingNotification?: int, calendarAvailability?: int, displayColor?: string, effectiveDate?: string, gender?: string, googleCalendarId?: string, hourly?: float, ignoreBusinessHours?: bool, notificationType?: int, outlookCalendarId?: string, sortKey?: int}
-export def "setup-resources update" [
+export def "put-setup-v1-resources-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3770,7 +3770,7 @@ export def "setup-resources update" [
 # List Resource Allocations
 #
 # GET /setup/v1/resources/{id}/allocations
-export def "setup-resources-allocations get-by-id-1" [
+export def "get-setup-v1-resources-id-allocations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3811,7 +3811,7 @@ export def "setup-resources-allocations get-by-id-1" [
 #
 # POST /setup/v1/resources/{id}/allocations
 # --repeat shape: {frequency?: string, interval?: int, monthDay?: int, monthType?: string, weekdays?: string}
-export def "setup-resources-allocations create" [
+export def "post-setup-v1-resources-id-allocations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3856,7 +3856,7 @@ export def "setup-resources-allocations create" [
 # List Weekly Availability
 #
 # GET /setup/v1/resources/{id}/availability
-export def "setup-resources-availability get" [
+export def "get-setup-v1-resources-id-availability" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3898,7 +3898,7 @@ export def "setup-resources-availability get" [
 # --thu shape: {endTime?: int, startTime?: int}
 # --tue shape: {endTime?: int, startTime?: int}
 # --wed shape: {endTime?: int, startTime?: int}
-export def "setup-resources-availability update" [
+export def "put-setup-v1-resources-id-availability" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3944,7 +3944,7 @@ export def "setup-resources-availability update" [
 #
 # POST /setup/v1/resources/{id}/block
 # --repeat shape: {frequency?: string, interval?: int, monthDay?: int, monthType?: string, weekdays?: string}
-export def "setup-resources-block create" [
+export def "post-setup-v1-resources-id-block" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3990,7 +3990,7 @@ export def "setup-resources-block create" [
 # List Resource Blocks
 #
 # GET /setup/v1/resources/{id}/blocks
-export def "setup-resources-blocks get-by-id-1" [
+export def "get-setup-v1-resources-id-blocks" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4030,7 +4030,7 @@ export def "setup-resources-blocks get-by-id-1" [
 # Get Resource Google URL
 #
 # GET /setup/v1/resources/{id}/calendar/auth/google/{googleEmailAddress}
-export def "setup-resources-calendar-auth-google get" [
+export def "get-setup-v1-resources-id-calendar-auth-google-google-email-address" [
   id: string
   google_email_address: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4069,7 +4069,7 @@ export def "setup-resources-calendar-auth-google get" [
 # Get Resource Outlook URL
 #
 # GET /setup/v1/resources/{id}/calendar/auth/outlook/{outlookEmailAddress}
-export def "setup-resources-calendar-auth-outlook get" [
+export def "get-setup-v1-resources-id-calendar-auth-outlook-outlook-email-address" [
   id: string
   outlook_email_address: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4108,7 +4108,7 @@ export def "setup-resources-calendar-auth-outlook get" [
 # Delete Resource Image
 #
 # DELETE /setup/v1/resources/{id}/deleteimage
-export def "setup-resources-delete-image delete" [
+export def "delete-setup-v1-resources-id-deleteimage" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4143,7 +4143,7 @@ export def "setup-resources-delete-image delete" [
 # Reassign Resource
 #
 # PUT /setup/v1/resources/{id}/reassign/appointments/{resourceId}
-export def "setup-resources-reassign-appointments update" [
+export def "put-setup-v1-resources-id-reassign-appointments-resource-id" [
   id: string
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4184,7 +4184,7 @@ export def "setup-resources-reassign-appointments update" [
 # Recover Resource
 #
 # PUT /setup/v1/resources/{id}/recover
-export def "setup-resources-recover update" [
+export def "put-setup-v1-resources-id-recover" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4222,7 +4222,7 @@ export def "setup-resources-recover update" [
 # Delete Linked Services
 #
 # DELETE /setup/v1/resources/{id}/services
-export def "setup-resources-services delete" [
+export def "delete-setup-v1-resources-id-services" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4257,7 +4257,7 @@ export def "setup-resources-services delete" [
 # Create Linked Services
 #
 # POST /setup/v1/resources/{id}/services
-export def "setup-resources-services create" [
+export def "post-setup-v1-resources-id-services" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4296,7 +4296,7 @@ export def "setup-resources-services create" [
 # Update Linked Services
 #
 # PUT /setup/v1/resources/{id}/services
-export def "setup-resources-services update" [
+export def "put-setup-v1-resources-id-services" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4335,7 +4335,7 @@ export def "setup-resources-services update" [
 # Upload Resource Image
 #
 # POST /setup/v1/resources/{id}/uploadimage
-export def "setup-resources-uploadimage create" [
+export def "post-setup-v1-resources-id-uploadimage" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4375,7 +4375,7 @@ export def "setup-resources-uploadimage create" [
 # List Service Groups
 #
 # GET /setup/v1/servicegroups
-export def "setup-servicegroups list" [
+export def "get-setup-v1-servicegroups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4412,7 +4412,7 @@ export def "setup-servicegroups list" [
 # Create Service Group
 #
 # POST /setup/v1/servicegroups
-export def "setup-servicegroups create" [
+export def "post-setup-v1-servicegroups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4452,7 +4452,7 @@ export def "setup-servicegroups create" [
 # Delete Service Group
 #
 # DELETE /setup/v1/servicegroups/{id}
-export def "setup-servicegroups delete" [
+export def "delete-setup-v1-servicegroups-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4487,7 +4487,7 @@ export def "setup-servicegroups delete" [
 # Get Service Group
 #
 # GET /setup/v1/servicegroups/{id}
-export def "setup-servicegroups get" [
+export def "get-setup-v1-servicegroups-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4522,7 +4522,7 @@ export def "setup-servicegroups get" [
 # Update Service Group
 #
 # PUT /setup/v1/servicegroups/{id}
-export def "setup-servicegroups update" [
+export def "put-setup-v1-servicegroups-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4564,7 +4564,7 @@ export def "setup-servicegroups update" [
 # Recover Service Group
 #
 # PUT /setup/v1/servicegroups/{id}/recover
-export def "setup-servicegroups-recover update" [
+export def "put-setup-v1-servicegroups-id-recover" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4599,7 +4599,7 @@ export def "setup-servicegroups-recover update" [
 # List Services
 #
 # GET /setup/v1/services
-export def "setup-services list" [
+export def "get-setup-v1-services" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4643,7 +4643,7 @@ export def "setup-services list" [
 # --fees shape: {cancellationFeeAmount?: float, cancellationFeeTaxable?: bool, feeAmount?: float, feeTaxable?: bool, nonRefundable?: bool}
 # --options shape: {consumerPadding?: bool, defaultService?: bool, durationInterval?: int, durationMax?: int, durationMin?: int, durationSelect?: bool, padding?: int}
 # --settings shape: {bookAheadUnit?: int, bookAheadValue?: int, bookInAdvance?: int}
-export def "setup-services create" [
+export def "post-setup-v1-services" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4696,7 +4696,7 @@ export def "setup-services create" [
 # Delete Allocation
 #
 # DELETE /setup/v1/services/allocations/{id}
-export def "setup-services-allocations delete" [
+export def "delete-setup-v1-services-allocations-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4731,7 +4731,7 @@ export def "setup-services-allocations delete" [
 # Get Allocation
 #
 # GET /setup/v1/services/allocations/{id}
-export def "setup-services-allocations get-by-id" [
+export def "get-setup-v1-services-allocations-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4767,7 +4767,7 @@ export def "setup-services-allocations get-by-id" [
 #
 # PUT /setup/v1/services/allocations/{id}
 # --repeat shape: {frequency?: string, interval?: int, monthDay?: int, monthType?: string, weekdays?: string}
-export def "setup-services-allocations update" [
+export def "put-setup-v1-services-allocations-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4815,7 +4815,7 @@ export def "setup-services-allocations update" [
 # Delete Block
 #
 # DELETE /setup/v1/services/block/{id}
-export def "setup-services-block delete" [
+export def "delete-setup-v1-services-block-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4851,7 +4851,7 @@ export def "setup-services-block delete" [
 #
 # PUT /setup/v1/services/block/{id}
 # --repeat shape: {frequency?: string, interval?: int, monthDay?: int, monthType?: string, weekdays?: string}
-export def "setup-services-block update" [
+export def "put-setup-v1-services-block-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4896,7 +4896,7 @@ export def "setup-services-block update" [
 # Get Block
 #
 # GET /setup/v1/services/blocks/{id}
-export def "setup-services-blocks get-by-id" [
+export def "get-setup-v1-services-blocks-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4931,7 +4931,7 @@ export def "setup-services-blocks get-by-id" [
 # Link Service to Calendar
 #
 # POST /setup/v1/services/calendar
-export def "setup-services-calendar create" [
+export def "post-setup-v1-services-calendar" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4970,7 +4970,7 @@ export def "setup-services-calendar create" [
 # Delete Service Links
 #
 # DELETE /setup/v1/services/calendar/{id}
-export def "setup-services-calendar delete" [
+export def "delete-setup-v1-services-calendar-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5005,7 +5005,7 @@ export def "setup-services-calendar delete" [
 # Delete Service
 #
 # DELETE /setup/v1/services/{id}
-export def "setup-services delete" [
+export def "delete-setup-v1-services-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5040,7 +5040,7 @@ export def "setup-services delete" [
 # Get Service
 #
 # GET /setup/v1/services/{id}
-export def "setup-services get" [
+export def "get-setup-v1-services-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5080,7 +5080,7 @@ export def "setup-services get" [
 # --fees shape: {cancellationFeeAmount?: float, cancellationFeeTaxable?: bool, feeAmount?: float, feeTaxable?: bool, nonRefundable?: bool}
 # --options shape: {consumerPadding?: bool, defaultService?: bool, durationInterval?: int, durationMax?: int, durationMin?: int, durationSelect?: bool, padding?: int}
 # --settings shape: {bookAheadUnit?: int, bookAheadValue?: int, bookInAdvance?: int}
-export def "setup-services update" [
+export def "put-setup-v1-services-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5135,7 +5135,7 @@ export def "setup-services update" [
 # List Service Allocations
 #
 # GET /setup/v1/services/{id}/allocations
-export def "setup-services-allocations get-by-id-1" [
+export def "get-setup-v1-services-id-allocations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5178,7 +5178,7 @@ export def "setup-services-allocations get-by-id-1" [
 #
 # POST /setup/v1/services/{id}/allocations
 # --repeat shape: {frequency?: string, interval?: int, monthDay?: int, monthType?: string, weekdays?: string}
-export def "setup-services-allocations create" [
+export def "post-setup-v1-services-id-allocations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5227,7 +5227,7 @@ export def "setup-services-allocations create" [
 #
 # POST /setup/v1/services/{id}/allocations/bulk
 # --serviceAllocations item shape: {bookingLimit?: int, endDate?: string, endTime?: int, locationId?: string, reason?: string, repeat?: record, repeats?: bool, resourceId?: string, startDate?: string, startTime?: int}
-export def "setup-services-allocations-bulk create" [
+export def "post-setup-v1-services-id-allocations-bulk" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5266,7 +5266,7 @@ export def "setup-services-allocations-bulk create" [
 # Get Weekly Availability
 #
 # GET /setup/v1/services/{id}/availability
-export def "setup-services-availability get" [
+export def "get-setup-v1-services-id-availability" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5308,7 +5308,7 @@ export def "setup-services-availability get" [
 # --thu shape: {endTime?: int, startTime?: int}
 # --tue shape: {endTime?: int, startTime?: int}
 # --wed shape: {endTime?: int, startTime?: int}
-export def "setup-services-availability update" [
+export def "put-setup-v1-services-id-availability" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5354,7 +5354,7 @@ export def "setup-services-availability update" [
 #
 # POST /setup/v1/services/{id}/block
 # --repeat shape: {frequency?: string, interval?: int, monthDay?: int, monthType?: string, weekdays?: string}
-export def "setup-services-block create" [
+export def "post-setup-v1-services-id-block" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5400,7 +5400,7 @@ export def "setup-services-block create" [
 # List Service Blocks
 #
 # GET /setup/v1/services/{id}/blocks
-export def "setup-services-blocks get-by-id-1" [
+export def "get-setup-v1-services-id-blocks" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5440,7 +5440,7 @@ export def "setup-services-blocks get-by-id-1" [
 # Get Linked Calendar
 #
 # GET /setup/v1/services/{id}/calendar
-export def "setup-services-calendar get" [
+export def "get-setup-v1-services-id-calendar" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5477,7 +5477,7 @@ export def "setup-services-calendar get" [
 # Delete Service Image
 #
 # DELETE /setup/v1/services/{id}/deleteimage
-export def "setup-services-delete-image delete" [
+export def "delete-setup-v1-services-id-deleteimage" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5512,7 +5512,7 @@ export def "setup-services-delete-image delete" [
 # Recover Service
 #
 # PUT /setup/v1/services/{id}/recover
-export def "setup-services-recover update" [
+export def "put-setup-v1-services-id-recover" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5547,7 +5547,7 @@ export def "setup-services-recover update" [
 # List Resources for Service
 #
 # GET /setup/v1/services/{id}/resources
-export def "setup-services-resources get" [
+export def "get-setup-v1-services-id-resources" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5587,7 +5587,7 @@ export def "setup-services-resources get" [
 # Upload Service Image
 #
 # POST /setup/v1/services/{id}/uploadimage
-export def "setup-services-uploadimage create" [
+export def "post-setup-v1-services-id-uploadimage" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

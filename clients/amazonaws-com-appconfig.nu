@@ -119,7 +119,7 @@ def replicate-to-completer [] { ["NONE" "SSM_DOCUMENT"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "applications create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-application" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -143,7 +143,7 @@ export def commands []: nothing -> table {
 #
 # POST /applications
 # operationId: CreateApplication
-export def "applications create" [
+export def "create-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -192,7 +192,7 @@ export def "applications create" [
 #
 # GET /applications
 # operationId: ListApplications
-export def "applications list" [
+export def "list-applications" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -241,7 +241,7 @@ export def "applications list" [
 # POST /applications/{ApplicationId}/configurationprofiles
 # operationId: CreateConfigurationProfile
 # --Validators item shape: {Type: any, Content: any}
-export def "applications-configurationprofiles create-configuration-profile" [
+export def "create-configuration-profile" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -296,7 +296,7 @@ export def "applications-configurationprofiles create-configuration-profile" [
 #
 # GET /applications/{ApplicationId}/configurationprofiles
 # operationId: ListConfigurationProfiles
-export def "applications-configurationprofiles list-configuration-profiles" [
+export def "list-configuration-profiles" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -347,7 +347,7 @@ export def "applications-configurationprofiles list-configuration-profiles" [
 #
 # POST /deploymentstrategies
 # operationId: CreateDeploymentStrategy
-export def "deploymentstrategies create-deployment-strategy" [
+export def "create-deployment-strategy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -401,7 +401,7 @@ export def "deploymentstrategies create-deployment-strategy" [
 #
 # GET /deploymentstrategies
 # operationId: ListDeploymentStrategies
-export def "deploymentstrategies list-deployment-strategies" [
+export def "list-deployment-strategies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -450,7 +450,7 @@ export def "deploymentstrategies list-deployment-strategies" [
 # POST /applications/{ApplicationId}/environments
 # operationId: CreateEnvironment
 # --Monitors item shape: {AlarmArn: any, AlarmRoleArn?: any}
-export def "applications-environments create" [
+export def "create-environment" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -502,7 +502,7 @@ export def "applications-environments create" [
 #
 # GET /applications/{ApplicationId}/environments
 # operationId: ListEnvironments
-export def "applications-environments list" [
+export def "list-environments" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -552,7 +552,7 @@ export def "applications-environments list" [
 #
 # POST /extensions
 # operationId: CreateExtension
-export def "extensions create" [
+export def "create-extension" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -604,7 +604,7 @@ export def "extensions create" [
 #
 # GET /extensions
 # operationId: ListExtensions
-export def "extensions list" [
+export def "list-extensions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -653,7 +653,7 @@ export def "extensions list" [
 #
 # POST /extensionassociations
 # operationId: CreateExtensionAssociation
-export def "extensionassociations create-extension-association" [
+export def "create-extension-association" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -704,7 +704,7 @@ export def "extensionassociations create-extension-association" [
 #
 # GET /extensionassociations
 # operationId: ListExtensionAssociations
-export def "extensionassociations list-extension-associations" [
+export def "list-extension-associations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -755,7 +755,7 @@ export def "extensionassociations list-extension-associations" [
 #
 # POST /applications/{ApplicationId}/configurationprofiles/{ConfigurationProfileId}/hostedconfigurationversions
 # operationId: CreateHostedConfigurationVersion
-export def "applications-configurationprofiles-hostedconfigurationversions create-hosted-configuration-version" [
+export def "create-hosted-configuration-version" [
   application_id: string
   configuration_profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -812,7 +812,7 @@ export def "applications-configurationprofiles-hostedconfigurationversions creat
 #
 # DELETE /applications/{ApplicationId}
 # operationId: DeleteApplication
-export def "applications delete" [
+export def "delete-application" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -857,7 +857,7 @@ export def "applications delete" [
 #
 # GET /applications/{ApplicationId}
 # operationId: GetApplication
-export def "applications get" [
+export def "get-application" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -902,7 +902,7 @@ export def "applications get" [
 #
 # PATCH /applications/{ApplicationId}
 # operationId: UpdateApplication
-export def "applications update" [
+export def "update-application" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -952,7 +952,7 @@ export def "applications update" [
 #
 # DELETE /applications/{ApplicationId}/configurationprofiles/{ConfigurationProfileId}
 # operationId: DeleteConfigurationProfile
-export def "applications-configurationprofiles delete-configuration-profile" [
+export def "delete-configuration-profile" [
   application_id: string
   configuration_profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -999,7 +999,7 @@ export def "applications-configurationprofiles delete-configuration-profile" [
 #
 # GET /applications/{ApplicationId}/configurationprofiles/{ConfigurationProfileId}
 # operationId: GetConfigurationProfile
-export def "applications-configurationprofiles get-configuration-profile" [
+export def "get-configuration-profile" [
   application_id: string
   configuration_profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1047,7 +1047,7 @@ export def "applications-configurationprofiles get-configuration-profile" [
 # PATCH /applications/{ApplicationId}/configurationprofiles/{ConfigurationProfileId}
 # operationId: UpdateConfigurationProfile
 # --Validators item shape: {Type: any, Content: any}
-export def "applications-configurationprofiles update-configuration-profile" [
+export def "update-configuration-profile" [
   application_id: string
   configuration_profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1101,7 +1101,7 @@ export def "applications-configurationprofiles update-configuration-profile" [
 #
 # DELETE /deployementstrategies/{DeploymentStrategyId}
 # operationId: DeleteDeploymentStrategy
-export def "deployementstrategies delete-deployment-strategy" [
+export def "delete-deployment-strategy" [
   deployment_strategy_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1146,7 +1146,7 @@ export def "deployementstrategies delete-deployment-strategy" [
 #
 # DELETE /applications/{ApplicationId}/environments/{EnvironmentId}
 # operationId: DeleteEnvironment
-export def "applications-environments delete" [
+export def "delete-environment" [
   application_id: string
   environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1193,7 +1193,7 @@ export def "applications-environments delete" [
 #
 # GET /applications/{ApplicationId}/environments/{EnvironmentId}
 # operationId: GetEnvironment
-export def "applications-environments get" [
+export def "get-environment" [
   application_id: string
   environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1241,7 +1241,7 @@ export def "applications-environments get" [
 # PATCH /applications/{ApplicationId}/environments/{EnvironmentId}
 # operationId: UpdateEnvironment
 # --Monitors item shape: {AlarmArn: any, AlarmRoleArn?: any}
-export def "applications-environments update" [
+export def "update-environment" [
   application_id: string
   environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1294,7 +1294,7 @@ export def "applications-environments update" [
 #
 # DELETE /extensions/{ExtensionIdentifier}
 # operationId: DeleteExtension
-export def "extensions delete" [
+export def "delete-extension" [
   extension_identifier: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1341,7 +1341,7 @@ export def "extensions delete" [
 #
 # GET /extensions/{ExtensionIdentifier}
 # operationId: GetExtension
-export def "extensions get" [
+export def "get-extension" [
   extension_identifier: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1388,7 +1388,7 @@ export def "extensions get" [
 #
 # PATCH /extensions/{ExtensionIdentifier}
 # operationId: UpdateExtension
-export def "extensions update" [
+export def "update-extension" [
   extension_identifier: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1440,7 +1440,7 @@ export def "extensions update" [
 #
 # DELETE /extensionassociations/{ExtensionAssociationId}
 # operationId: DeleteExtensionAssociation
-export def "extensionassociations delete-extension-association" [
+export def "delete-extension-association" [
   extension_association_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1485,7 +1485,7 @@ export def "extensionassociations delete-extension-association" [
 #
 # GET /extensionassociations/{ExtensionAssociationId}
 # operationId: GetExtensionAssociation
-export def "extensionassociations get-extension-association" [
+export def "get-extension-association" [
   extension_association_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1530,7 +1530,7 @@ export def "extensionassociations get-extension-association" [
 #
 # PATCH /extensionassociations/{ExtensionAssociationId}
 # operationId: UpdateExtensionAssociation
-export def "extensionassociations update-extension-association" [
+export def "update-extension-association" [
   extension_association_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1579,7 +1579,7 @@ export def "extensionassociations update-extension-association" [
 #
 # DELETE /applications/{ApplicationId}/configurationprofiles/{ConfigurationProfileId}/hostedconfigurationversions/{VersionNumber}
 # operationId: DeleteHostedConfigurationVersion
-export def "applications-configurationprofiles-hostedconfigurationversions delete-hosted-configuration-version" [
+export def "delete-hosted-configuration-version" [
   application_id: string
   configuration_profile_id: string
   version_number: int
@@ -1628,7 +1628,7 @@ export def "applications-configurationprofiles-hostedconfigurationversions delet
 #
 # GET /applications/{ApplicationId}/configurationprofiles/{ConfigurationProfileId}/hostedconfigurationversions/{VersionNumber}
 # operationId: GetHostedConfigurationVersion
-export def "applications-configurationprofiles-hostedconfigurationversions get-hosted-configuration-version" [
+export def "get-hosted-configuration-version" [
   application_id: string
   configuration_profile_id: string
   version_number: int
@@ -1679,7 +1679,7 @@ export def "applications-configurationprofiles-hostedconfigurationversions get-h
 # DEPRECATED
 # operationId: GetConfiguration
 @deprecated
-export def "applications-environments-configurations get" [
+export def "get-configuration" [
   application: string
   environment: string
   configuration: string
@@ -1731,7 +1731,7 @@ export def "applications-environments-configurations get" [
 #
 # GET /applications/{ApplicationId}/environments/{EnvironmentId}/deployments/{DeploymentNumber}
 # operationId: GetDeployment
-export def "applications-environments-deployments get" [
+export def "get-deployment" [
   application_id: string
   environment_id: string
   deployment_number: int
@@ -1780,7 +1780,7 @@ export def "applications-environments-deployments get" [
 #
 # DELETE /applications/{ApplicationId}/environments/{EnvironmentId}/deployments/{DeploymentNumber}
 # operationId: StopDeployment
-export def "applications-environments-deployments stop" [
+export def "stop-deployment" [
   application_id: string
   environment_id: string
   deployment_number: int
@@ -1829,7 +1829,7 @@ export def "applications-environments-deployments stop" [
 #
 # GET /deploymentstrategies/{DeploymentStrategyId}
 # operationId: GetDeploymentStrategy
-export def "deploymentstrategies get-deployment-strategy" [
+export def "get-deployment-strategy" [
   deployment_strategy_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1874,7 +1874,7 @@ export def "deploymentstrategies get-deployment-strategy" [
 #
 # PATCH /deploymentstrategies/{DeploymentStrategyId}
 # operationId: UpdateDeploymentStrategy
-export def "deploymentstrategies update-deployment-strategy" [
+export def "update-deployment-strategy" [
   deployment_strategy_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1927,7 +1927,7 @@ export def "deploymentstrategies update-deployment-strategy" [
 #
 # GET /applications/{ApplicationId}/environments/{EnvironmentId}/deployments
 # operationId: ListDeployments
-export def "applications-environments-deployments list" [
+export def "list-deployments" [
   application_id: string
   environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1979,7 +1979,7 @@ export def "applications-environments-deployments list" [
 #
 # POST /applications/{ApplicationId}/environments/{EnvironmentId}/deployments
 # operationId: StartDeployment
-export def "applications-environments-deployments start" [
+export def "start-deployment" [
   application_id: string
   environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2035,7 +2035,7 @@ export def "applications-environments-deployments start" [
 #
 # GET /applications/{ApplicationId}/configurationprofiles/{ConfigurationProfileId}/hostedconfigurationversions
 # operationId: ListHostedConfigurationVersions
-export def "applications-configurationprofiles-hostedconfigurationversions list-hosted-configuration-versions" [
+export def "list-hosted-configuration-versions" [
   application_id: string
   configuration_profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2088,7 +2088,7 @@ export def "applications-configurationprofiles-hostedconfigurationversions list-
 #
 # GET /tags/{ResourceArn}
 # operationId: ListTagsForResource
-export def "tags list-for-resource" [
+export def "list-tags-for-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2133,7 +2133,7 @@ export def "tags list-for-resource" [
 #
 # POST /tags/{ResourceArn}
 # operationId: TagResource
-export def "tags tag-resource" [
+export def "tag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2182,7 +2182,7 @@ export def "tags tag-resource" [
 #
 # DELETE /tags/{ResourceArn}
 # operationId: UntagResource
-export def "tags untag-resource" [
+export def "untag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2229,7 +2229,7 @@ export def "tags untag-resource" [
 #
 # POST /applications/{ApplicationId}/configurationprofiles/{ConfigurationProfileId}/validators
 # operationId: ValidateConfiguration
-export def "applications-configurationprofiles-validators validate-configuration" [
+export def "validate-configuration" [
   application_id: string
   configuration_profile_id: string
   --base-url(-b): string@base-url-completer # API base URL

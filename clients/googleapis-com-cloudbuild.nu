@@ -129,7 +129,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1alpha2 delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cloudbuild-projects-worker-pools-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -153,7 +153,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1alpha2/{name}
 # operationId: cloudbuild.projects.workerPools.delete
-export def "v1alpha2 delete" [
+export def "cloudbuild-projects-worker-pools-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -201,7 +201,7 @@ export def "v1alpha2 delete" [
 #
 # GET /v1alpha2/{name}
 # operationId: cloudbuild.projects.workerPools.get
-export def "v1alpha2 get" [
+export def "cloudbuild-projects-worker-pools-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -251,7 +251,7 @@ export def "v1alpha2 get" [
 # operationId: cloudbuild.projects.workerPools.patch
 # --networkConfig shape: {peeredNetwork?: string}
 # --workerConfig shape: {diskSizeGb?: string, machineType?: string}
-export def "v1alpha2 update" [
+export def "cloudbuild-projects-worker-pools-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -306,7 +306,7 @@ export def "v1alpha2 update" [
 #
 # POST /v1alpha2/{name}:cancel
 # operationId: cloudbuild.projects.locations.operations.cancel
-export def "v1alpha2 cancel" [
+export def "cloudbuild-projects-locations-operations-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -358,7 +358,7 @@ export def "v1alpha2 cancel" [
 #
 # GET /v1alpha2/{parent}/workerPools
 # operationId: cloudbuild.projects.workerPools.list
-export def "v1alpha2-worker-pools list" [
+export def "cloudbuild-projects-worker-pools-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -408,7 +408,7 @@ export def "v1alpha2-worker-pools list" [
 # operationId: cloudbuild.projects.workerPools.create
 # --networkConfig shape: {peeredNetwork?: string}
 # --workerConfig shape: {diskSizeGb?: string, machineType?: string}
-export def "v1alpha2-worker-pools create" [
+export def "cloudbuild-projects-worker-pools-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

@@ -113,7 +113,7 @@ def relationship-type-filter-completer [] { ["CAUSE_OF_INPUT_ANOMALY_GROUP" "EFF
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "activate-anomaly-detector create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "activate-anomaly-detector" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -137,7 +137,7 @@ export def commands []: nothing -> table {
 #
 # POST /ActivateAnomalyDetector
 # operationId: ActivateAnomalyDetector
-export def "activate-anomaly-detector create" [
+export def "activate-anomaly-detector" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,7 +184,7 @@ export def "activate-anomaly-detector create" [
 #
 # POST /BackTestAnomalyDetector
 # operationId: BackTestAnomalyDetector
-export def "back-test-anomaly-detector test" [
+export def "back-test-anomaly-detector" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -233,7 +233,7 @@ export def "back-test-anomaly-detector test" [
 # operationId: CreateAlert
 # --Action shape: {SNSConfiguration?: any, LambdaConfiguration?: any}
 # --AlertFilters shape: {MetricList?: any, DimensionFilterList?: any}
-export def "create-alert create" [
+export def "create-alert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -287,7 +287,7 @@ export def "create-alert create" [
 # POST /CreateAnomalyDetector
 # operationId: CreateAnomalyDetector
 # --AnomalyDetectorConfig shape: {AnomalyDetectorFrequency?: any}
-export def "create-anomaly-detector create" [
+export def "create-anomaly-detector" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -342,7 +342,7 @@ export def "create-anomaly-detector create" [
 # --TimestampColumn shape: {ColumnName?: any, ColumnFormat?: any}
 # --MetricSource shape: {S3SourceConfig?: record, AppFlowConfig?: any, CloudWatchConfig?: any, RDSSourceConfig?: any, RedshiftSourceConfig?: any, AthenaSourceConfig?: any}
 # --DimensionFilterList item shape: {Name?: any, FilterList?: any}
-export def "create-metric-set create" [
+export def "create-metric-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -400,7 +400,7 @@ export def "create-metric-set create" [
 #
 # POST /DeactivateAnomalyDetector
 # operationId: DeactivateAnomalyDetector
-export def "deactivate-anomaly-detector create" [
+export def "deactivate-anomaly-detector" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -447,7 +447,7 @@ export def "deactivate-anomaly-detector create" [
 #
 # POST /DeleteAlert
 # operationId: DeleteAlert
-export def "delete-alert delete" [
+export def "delete-alert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -494,7 +494,7 @@ export def "delete-alert delete" [
 #
 # POST /DeleteAnomalyDetector
 # operationId: DeleteAnomalyDetector
-export def "delete-anomaly-detector delete" [
+export def "delete-anomaly-detector" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -541,7 +541,7 @@ export def "delete-anomaly-detector delete" [
 #
 # POST /DescribeAlert
 # operationId: DescribeAlert
-export def "describe-alert get" [
+export def "describe-alert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -588,7 +588,7 @@ export def "describe-alert get" [
 #
 # POST /DescribeAnomalyDetectionExecutions
 # operationId: DescribeAnomalyDetectionExecutions
-export def "describe-anomaly-detection-executions get" [
+export def "describe-anomaly-detection-executions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -641,7 +641,7 @@ export def "describe-anomaly-detection-executions get" [
 #
 # POST /DescribeAnomalyDetector
 # operationId: DescribeAnomalyDetector
-export def "describe-anomaly-detector get" [
+export def "describe-anomaly-detector" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -688,7 +688,7 @@ export def "describe-anomaly-detector get" [
 #
 # POST /DescribeMetricSet
 # operationId: DescribeMetricSet
-export def "describe-metric-set get" [
+export def "describe-metric-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -736,7 +736,7 @@ export def "describe-metric-set get" [
 # POST /DetectMetricSetConfig
 # operationId: DetectMetricSetConfig
 # --AutoDetectionMetricSource shape: {S3SourceConfig?: any}
-export def "detect-metric-set-config update" [
+export def "detect-metric-set-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -784,7 +784,7 @@ export def "detect-metric-set-config update" [
 #
 # POST /GetAnomalyGroup
 # operationId: GetAnomalyGroup
-export def "get-anomaly-group get" [
+export def "get-anomaly-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -832,7 +832,7 @@ export def "get-anomaly-group get" [
 #
 # POST /GetDataQualityMetrics
 # operationId: GetDataQualityMetrics
-export def "get-data-quality-metrics get" [
+export def "get-data-quality-metrics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -881,7 +881,7 @@ export def "get-data-quality-metrics get" [
 # POST /GetFeedback
 # operationId: GetFeedback
 # --AnomalyGroupTimeSeriesFeedback shape: {AnomalyGroupId?: any, TimeSeriesId?: any}
-export def "get-feedback get" [
+export def "get-feedback" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -935,7 +935,7 @@ export def "get-feedback get" [
 # POST /GetSampleData
 # operationId: GetSampleData
 # --S3SourceConfig shape: {RoleArn?: any, TemplatedPathList?: any, HistoricalDataPathList?: any, FileFormatDescriptor?: record}
-export def "get-sample-data get" [
+export def "get-sample-data" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -982,7 +982,7 @@ export def "get-sample-data get" [
 #
 # POST /ListAlerts
 # operationId: ListAlerts
-export def "list-alerts list" [
+export def "list-alerts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1034,7 +1034,7 @@ export def "list-alerts list" [
 #
 # POST /ListAnomalyDetectors
 # operationId: ListAnomalyDetectors
-export def "list-anomaly-detectors list" [
+export def "list-anomaly-detectors" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1085,7 +1085,7 @@ export def "list-anomaly-detectors list" [
 #
 # POST /ListAnomalyGroupRelatedMetrics
 # operationId: ListAnomalyGroupRelatedMetrics
-export def "list-anomaly-group-related-metrics list" [
+export def "list-anomaly-group-related-metrics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1139,7 +1139,7 @@ export def "list-anomaly-group-related-metrics list" [
 #
 # POST /ListAnomalyGroupSummaries
 # operationId: ListAnomalyGroupSummaries
-export def "list-anomaly-group-summaries list" [
+export def "list-anomaly-group-summaries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1192,7 +1192,7 @@ export def "list-anomaly-group-summaries list" [
 #
 # POST /ListAnomalyGroupTimeSeries
 # operationId: ListAnomalyGroupTimeSeries
-export def "list-anomaly-group-time-series list" [
+export def "list-anomaly-group-time-series" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1246,7 +1246,7 @@ export def "list-anomaly-group-time-series list" [
 #
 # POST /ListMetricSets
 # operationId: ListMetricSets
-export def "list-metric-sets list" [
+export def "list-metric-sets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1298,7 +1298,7 @@ export def "list-metric-sets list" [
 #
 # GET /tags/{resourceArn}
 # operationId: ListTagsForResource
-export def "tags list-for-resource" [
+export def "list-tags-for-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1343,7 +1343,7 @@ export def "tags list-for-resource" [
 #
 # POST /tags/{resourceArn}
 # operationId: TagResource
-export def "tags tag-resource" [
+export def "tag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1393,7 +1393,7 @@ export def "tags tag-resource" [
 # POST /PutFeedback
 # operationId: PutFeedback
 # --AnomalyGroupTimeSeriesFeedback shape: {AnomalyGroupId?: any, TimeSeriesId?: any, IsAnomaly?: any}
-export def "put-feedback update" [
+export def "put-feedback" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1441,7 +1441,7 @@ export def "put-feedback update" [
 #
 # DELETE /tags/{resourceArn}
 # operationId: UntagResource
-export def "tags untag-resource" [
+export def "untag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1490,7 +1490,7 @@ export def "tags untag-resource" [
 # operationId: UpdateAlert
 # --Action shape: {SNSConfiguration?: any, LambdaConfiguration?: any}
 # --AlertFilters shape: {MetricList?: any, DimensionFilterList?: any}
-export def "update-alert update" [
+export def "update-alert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1542,7 +1542,7 @@ export def "update-alert update" [
 # POST /UpdateAnomalyDetector
 # operationId: UpdateAnomalyDetector
 # --AnomalyDetectorConfig shape: {AnomalyDetectorFrequency?: any}
-export def "update-anomaly-detector update" [
+export def "update-anomaly-detector" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1596,7 +1596,7 @@ export def "update-anomaly-detector update" [
 # --TimestampColumn shape: {ColumnName?: any, ColumnFormat?: any}
 # --MetricSource shape: {S3SourceConfig?: record, AppFlowConfig?: any, CloudWatchConfig?: any, RDSSourceConfig?: any, RedshiftSourceConfig?: any, AthenaSourceConfig?: any}
 # --DimensionFilterList item shape: {Name?: any, FilterList?: any}
-export def "update-metric-set update" [
+export def "update-metric-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

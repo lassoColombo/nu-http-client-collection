@@ -130,7 +130,7 @@ def severity-completer [] { ["CRITICAL" "HIGH" "INFORMATIONAL" "LOW" "MEDIUM" "S
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "ids-projects-locations-operations-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -154,7 +154,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1/{name}
 # operationId: ids.projects.locations.operations.delete
-export def "projects delete" [
+export def "ids-projects-locations-operations-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -203,7 +203,7 @@ export def "projects delete" [
 #
 # GET /v1/{name}
 # operationId: ids.projects.locations.operations.get
-export def "projects get" [
+export def "ids-projects-locations-operations-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -251,7 +251,7 @@ export def "projects get" [
 #
 # PATCH /v1/{name}
 # operationId: ids.projects.locations.endpoints.patch
-export def "projects update" [
+export def "ids-projects-locations-endpoints-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -310,7 +310,7 @@ export def "projects update" [
 #
 # GET /v1/{name}/locations
 # operationId: ids.projects.locations.list
-export def "locations list" [
+export def "ids-projects-locations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -361,7 +361,7 @@ export def "locations list" [
 #
 # GET /v1/{name}/operations
 # operationId: ids.projects.locations.operations.list
-export def "operations list" [
+export def "ids-projects-locations-operations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -412,7 +412,7 @@ export def "operations list" [
 #
 # POST /v1/{name}:cancel
 # operationId: ids.projects.locations.operations.cancel
-export def "projects cancel" [
+export def "ids-projects-locations-operations-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -464,7 +464,7 @@ export def "projects cancel" [
 #
 # GET /v1/{parent}/endpoints
 # operationId: ids.projects.locations.endpoints.list
-export def "endpoints list" [
+export def "ids-projects-locations-endpoints-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -516,7 +516,7 @@ export def "endpoints list" [
 #
 # POST /v1/{parent}/endpoints
 # operationId: ids.projects.locations.endpoints.create
-export def "endpoints create" [
+export def "ids-projects-locations-endpoints-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -575,7 +575,7 @@ export def "endpoints create" [
 #
 # GET /v1/{resource}:getIamPolicy
 # operationId: ids.projects.locations.endpoints.getIamPolicy
-export def "projects get-iam-policy" [
+export def "ids-projects-locations-endpoints-get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -625,7 +625,7 @@ export def "projects get-iam-policy" [
 # POST /v1/{resource}:setIamPolicy
 # operationId: ids.projects.locations.endpoints.setIamPolicy
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
-export def "projects update-iam-policy" [
+export def "ids-projects-locations-endpoints-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -678,7 +678,7 @@ export def "projects update-iam-policy" [
 #
 # POST /v1/{resource}:testIamPermissions
 # operationId: ids.projects.locations.endpoints.testIamPermissions
-export def "projects test-iam-permissions" [
+export def "ids-projects-locations-endpoints-test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

@@ -99,7 +99,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-subscription-cancel cancel" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-cancel" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -123,7 +123,7 @@ export def commands []: nothing -> table {
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Subscription/cancel
 # operationId: Subscriptions_Cancel
-export def "subscriptions-providers-microsoft-subscription-cancel cancel" [
+export def "subscriptions-cancel" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -161,7 +161,7 @@ export def "subscriptions-providers-microsoft-subscription-cancel cancel" [
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Subscription/enable
 # operationId: Subscriptions_Enable
-export def "subscriptions-providers-microsoft-subscription-enable enable" [
+export def "subscriptions-enable" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -199,7 +199,7 @@ export def "subscriptions-providers-microsoft-subscription-enable enable" [
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Subscription/rename
 # operationId: Subscriptions_Rename
-export def "subscriptions-providers-microsoft-subscription-rename rename" [
+export def "subscriptions-rename" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

@@ -103,7 +103,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "mbus get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "mbus-api" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -127,7 +127,7 @@ export def commands []: nothing -> table {
 #
 # GET /mbus/api
 # operationId: mbus_api
-export def "mbus get" [
+export def "mbus-api" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -161,7 +161,7 @@ export def "mbus get" [
 #
 # POST /mbus/get/{device}/{baudrate}/{address}
 # operationId: get
-export def "mbus-get get" [
+export def "get" [
   device: string
   baudrate: int
   address: string
@@ -201,7 +201,7 @@ export def "mbus-get get" [
 #
 # POST /mbus/getMulti/{device}/{baudrate}/{address}/{maxframes}
 # operationId: getMulti
-export def "mbus-get-multi get" [
+export def "get-multi" [
   device: string
   baudrate: int
   address: string
@@ -243,7 +243,7 @@ export def "mbus-get-multi get" [
 #
 # GET /mbus/hat
 # operationId: hat
-export def "mbus-hat get" [
+export def "hat" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -277,7 +277,7 @@ export def "mbus-hat get" [
 #
 # POST /mbus/hat/off
 # operationId: hatOff
-export def "mbus-hat-off create" [
+export def "hat-off" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -311,7 +311,7 @@ export def "mbus-hat-off create" [
 #
 # POST /mbus/hat/on
 # operationId: hatOn
-export def "mbus-hat-on create" [
+export def "hat-on" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -345,7 +345,7 @@ export def "mbus-hat-on create" [
 #
 # POST /mbus/scan/{device}/{baudrate}
 # operationId: scan
-export def "mbus-scan create" [
+export def "scan" [
   device: string
   baudrate: int
   --base-url(-b): string@base-url-completer # API base URL

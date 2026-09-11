@@ -155,7 +155,7 @@ def page-type-completer [] { ["None" "PluginConfiguration"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "albums-instant-mix get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-instant-mix-from-album" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -179,7 +179,7 @@ export def commands []: nothing -> table {
 #
 # GET /Albums/{id}/InstantMix
 # operationId: GetInstantMixFromAlbum
-export def "albums-instant-mix get" [
+export def "get-instant-mix-from-album" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -224,7 +224,7 @@ export def "albums-instant-mix get" [
 #
 # GET /Albums/{itemId}/Similar
 # operationId: GetSimilarAlbums
-export def "albums-similar get" [
+export def "get-similar-albums" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -266,7 +266,7 @@ export def "albums-similar get" [
 #
 # GET /Artists
 # operationId: GetArtists
-export def "artists list" [
+export def "get-artists" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -332,7 +332,7 @@ export def "artists list" [
 #
 # GET /Artists/AlbumArtists
 # operationId: GetAlbumArtists
-export def "artists-album-artists get" [
+export def "get-album-artists" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -398,7 +398,7 @@ export def "artists-album-artists get" [
 #
 # GET /Artists/{id}/InstantMix
 # operationId: GetInstantMixFromArtists
-export def "artists-instant-mix get" [
+export def "get-instant-mix-from-artists" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -443,7 +443,7 @@ export def "artists-instant-mix get" [
 #
 # GET /Artists/{itemId}/Similar
 # operationId: GetSimilarArtists
-export def "artists-similar get" [
+export def "get-similar-artists" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -485,7 +485,7 @@ export def "artists-similar get" [
 #
 # GET /Artists/{name}
 # operationId: GetArtistByName
-export def "artists get" [
+export def "get-artist-by-name" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -524,7 +524,7 @@ export def "artists get" [
 #
 # GET /Artists/{name}/Images/{imageType}/{imageIndex}
 # operationId: GetArtistImage
-export def "artists-images get" [
+export def "get-artist-image" [
   name: string
   image_type: string
   image_index: int
@@ -579,7 +579,7 @@ export def "artists-images get" [
 #
 # HEAD /Artists/{name}/Images/{imageType}/{imageIndex}
 # operationId: HeadArtistImage
-export def "artists-images head" [
+export def "head-artist-image" [
   name: string
   image_type: string
   image_index: int
@@ -634,7 +634,7 @@ export def "artists-images head" [
 #
 # GET /Audio/{itemId}/hls/{segmentId}/stream.aac
 # operationId: GetHlsAudioSegmentLegacyAac
-export def "audio-hls-stream-aac get-segment-legacy" [
+export def "get-hls-audio-segment-legacy-aac" [
   item_id: string
   segment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -672,7 +672,7 @@ export def "audio-hls-stream-aac get-segment-legacy" [
 #
 # GET /Audio/{itemId}/hls/{segmentId}/stream.mp3
 # operationId: GetHlsAudioSegmentLegacyMp3
-export def "audio-hls-stream-mp3 get-segment-legacy" [
+export def "get-hls-audio-segment-legacy-mp3" [
   item_id: string
   segment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -710,7 +710,7 @@ export def "audio-hls-stream-mp3 get-segment-legacy" [
 #
 # GET /Audio/{itemId}/hls1/{playlistId}/{segmentId}.{container}
 # operationId: GetHlsAudioSegment
-export def "audio-hls1 get-hls-segment" [
+export def "get-hls-audio-segment" [
   item_id: string
   playlist_id: string
   segment_id: int
@@ -801,7 +801,7 @@ export def "audio-hls1 get-hls-segment" [
 #
 # GET /Audio/{itemId}/main.m3u8
 # operationId: GetVariantHlsAudioPlaylist
-export def "audio-main-m3u8 get-variant-hls-playlist" [
+export def "get-variant-hls-audio-playlist" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -886,7 +886,7 @@ export def "audio-main-m3u8 get-variant-hls-playlist" [
 #
 # GET /Audio/{itemId}/master.m3u8
 # operationId: GetMasterHlsAudioPlaylist
-export def "audio-master-m3u8 get-hls-playlist" [
+export def "get-master-hls-audio-playlist" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -972,7 +972,7 @@ export def "audio-master-m3u8 get-hls-playlist" [
 #
 # HEAD /Audio/{itemId}/master.m3u8
 # operationId: HeadMasterHlsAudioPlaylist
-export def "audio-master-m3u8 head-hls-playlist" [
+export def "head-master-hls-audio-playlist" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1058,7 +1058,7 @@ export def "audio-master-m3u8 head-hls-playlist" [
 #
 # GET /Audio/{itemId}/stream
 # operationId: GetAudioStream
-export def "audio-stream get" [
+export def "get-audio-stream" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1143,7 +1143,7 @@ export def "audio-stream get" [
 #
 # HEAD /Audio/{itemId}/stream
 # operationId: HeadAudioStream
-export def "audio-stream head" [
+export def "head-audio-stream" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1228,7 +1228,7 @@ export def "audio-stream head" [
 #
 # GET /Audio/{itemId}/stream.{container}
 # operationId: GetAudioStreamByContainer
-export def "audio-stream-container get" [
+export def "get-audio-stream-by-container" [
   item_id: string
   container: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1314,7 +1314,7 @@ export def "audio-stream-container get" [
 #
 # HEAD /Audio/{itemId}/stream.{container}
 # operationId: HeadAudioStreamByContainer
-export def "audio-stream-container head" [
+export def "head-audio-stream-by-container" [
   item_id: string
   container: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1400,7 +1400,7 @@ export def "audio-stream-container head" [
 #
 # GET /Audio/{itemId}/universal
 # operationId: GetUniversalAudioStream
-export def "audio-universal get-stream" [
+export def "get-universal-audio-stream" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1454,7 +1454,7 @@ export def "audio-universal get-stream" [
 #
 # HEAD /Audio/{itemId}/universal
 # operationId: HeadUniversalAudioStream
-export def "audio-universal head-stream" [
+export def "head-universal-audio-stream" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1508,7 +1508,7 @@ export def "audio-universal head-stream" [
 #
 # GET /Auth/Keys
 # operationId: GetKeys
-export def "auth-keys get" [
+export def "get-keys" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1543,7 +1543,7 @@ export def "auth-keys get" [
 #
 # POST /Auth/Keys
 # operationId: CreateKey
-export def "auth-keys create" [
+export def "create-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1579,7 +1579,7 @@ export def "auth-keys create" [
 #
 # DELETE /Auth/Keys/{key}
 # operationId: RevokeKey
-export def "auth-keys delete" [
+export def "revoke-key" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1615,7 +1615,7 @@ export def "auth-keys delete" [
 #
 # GET /Auth/PasswordResetProviders
 # operationId: GetPasswordResetProviders
-export def "auth-password-reset-providers get" [
+export def "get-password-reset-providers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1650,7 +1650,7 @@ export def "auth-password-reset-providers get" [
 #
 # GET /Auth/Providers
 # operationId: GetAuthProviders
-export def "auth-providers get" [
+export def "get-auth-providers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1685,7 +1685,7 @@ export def "auth-providers get" [
 #
 # GET /Branding/Configuration
 # operationId: GetBrandingOptions
-export def "branding-configuration get-options" [
+export def "get-branding-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1720,7 +1720,7 @@ export def "branding-configuration get-options" [
 #
 # GET /Branding/Css
 # operationId: GetBrandingCss
-export def "branding-css get" [
+export def "get-branding-css" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1755,7 +1755,7 @@ export def "branding-css get" [
 #
 # GET /Branding/Css.css
 # operationId: GetBrandingCss_2
-export def "branding-css-css get" [
+export def "get-branding-css-2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1790,7 +1790,7 @@ export def "branding-css-css get" [
 #
 # GET /Channels
 # operationId: GetChannels
-export def "channels get" [
+export def "get-channels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1832,7 +1832,7 @@ export def "channels get" [
 #
 # GET /Channels/Features
 # operationId: GetAllChannelFeatures
-export def "channels-features get-list" [
+export def "get-all-channel-features" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1867,7 +1867,7 @@ export def "channels-features get-list" [
 #
 # GET /Channels/Items/Latest
 # operationId: GetLatestChannelItems
-export def "channels-items-latest get" [
+export def "get-latest-channel-items" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1909,7 +1909,7 @@ export def "channels-items-latest get" [
 #
 # GET /Channels/{channelId}/Features
 # operationId: GetChannelFeatures
-export def "channels-features get" [
+export def "get-channel-features" [
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1946,7 +1946,7 @@ export def "channels-features get" [
 #
 # GET /Channels/{channelId}/Items
 # operationId: GetChannelItems
-export def "channels-items get" [
+export def "get-channel-items" [
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1992,7 +1992,7 @@ export def "channels-items get" [
 #
 # POST /Collections
 # operationId: CreateCollection
-export def "collections create" [
+export def "create-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2032,7 +2032,7 @@ export def "collections create" [
 #
 # DELETE /Collections/{collectionId}/Items
 # operationId: RemoveFromCollection
-export def "collections-items delete" [
+export def "remove-from-collection" [
   collection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2070,7 +2070,7 @@ export def "collections-items delete" [
 #
 # POST /Collections/{collectionId}/Items
 # operationId: AddToCollection
-export def "collections-items create" [
+export def "add-to-collection" [
   collection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2108,7 +2108,7 @@ export def "collections-items create" [
 #
 # DELETE /Devices
 # operationId: DeleteDevice
-export def "devices delete" [
+export def "delete-device" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2144,7 +2144,7 @@ export def "devices delete" [
 #
 # GET /Devices
 # operationId: GetDevices
-export def "devices get" [
+export def "get-devices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2182,7 +2182,7 @@ export def "devices get" [
 #
 # GET /Devices/Info
 # operationId: GetDeviceInfo
-export def "devices-info get" [
+export def "get-device-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2219,7 +2219,7 @@ export def "devices-info get" [
 #
 # GET /Devices/Options
 # operationId: GetDeviceOptions
-export def "devices-options get" [
+export def "get-device-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2256,7 +2256,7 @@ export def "devices-options get" [
 #
 # POST /Devices/Options
 # operationId: UpdateDeviceOptions
-export def "devices-options update" [
+export def "update-device-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2296,7 +2296,7 @@ export def "devices-options update" [
 #
 # GET /DisplayPreferences/{displayPreferencesId}
 # operationId: GetDisplayPreferences
-export def "display-preferences get" [
+export def "get-display-preferences" [
   display_preferences_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2336,7 +2336,7 @@ export def "display-preferences get" [
 #
 # POST /DisplayPreferences/{displayPreferencesId}
 # operationId: UpdateDisplayPreferences
-export def "display-preferences update" [
+export def "update-display-preferences" [
   display_preferences_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2392,7 +2392,7 @@ export def "display-preferences update" [
 #
 # GET /Dlna/ProfileInfos
 # operationId: GetProfileInfos
-export def "dlna-profile-infos get" [
+export def "get-profile-infos" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2435,7 +2435,7 @@ export def "dlna-profile-infos get" [
 # --SubtitleProfiles item shape: {Container?: string, DidlMode?: string, Format?: string, Language?: string, Method?: "Encode"|"Embed"|"External"|"Hls"}
 # --TranscodingProfiles item shape: {AudioCodec?: string, BreakOnNonKeyFrames?: bool, Container?: string, Context?: "Streaming"|"Static", CopyTimestamps?: bool, EnableMpegtsM2TsMode?: bool, EnableSubtitlesInManifest?: bool, EstimateContentLength?: bool, MaxAudioChannels?: string, MinSegments?: int, Protocol?: string, SegmentLength?: int, TranscodeSeekInfo?: "Auto"|"Bytes", Type?: "Audio"|"Video"|"Photo", VideoCodec?: string}
 # --XmlRootAttributes item shape: {Name?: string, Value?: string}
-export def "dlna-profiles create" [
+export def "create-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2511,7 +2511,7 @@ export def "dlna-profiles create" [
 #
 # GET /Dlna/Profiles/Default
 # operationId: GetDefaultProfile
-export def "dlna-profiles-default get" [
+export def "get-default-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2546,7 +2546,7 @@ export def "dlna-profiles-default get" [
 #
 # DELETE /Dlna/Profiles/{profileId}
 # operationId: DeleteProfile
-export def "dlna-profiles delete" [
+export def "delete-profile" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2582,7 +2582,7 @@ export def "dlna-profiles delete" [
 #
 # GET /Dlna/Profiles/{profileId}
 # operationId: GetProfile
-export def "dlna-profiles get" [
+export def "get-profile" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2627,7 +2627,7 @@ export def "dlna-profiles get" [
 # --SubtitleProfiles item shape: {Container?: string, DidlMode?: string, Format?: string, Language?: string, Method?: "Encode"|"Embed"|"External"|"Hls"}
 # --TranscodingProfiles item shape: {AudioCodec?: string, BreakOnNonKeyFrames?: bool, Container?: string, Context?: "Streaming"|"Static", CopyTimestamps?: bool, EnableMpegtsM2TsMode?: bool, EnableSubtitlesInManifest?: bool, EstimateContentLength?: bool, MaxAudioChannels?: string, MinSegments?: int, Protocol?: string, SegmentLength?: int, TranscodeSeekInfo?: "Auto"|"Bytes", Type?: "Audio"|"Video"|"Photo", VideoCodec?: string}
 # --XmlRootAttributes item shape: {Name?: string, Value?: string}
-export def "dlna-profiles update" [
+export def "update-profile" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2705,7 +2705,7 @@ export def "dlna-profiles update" [
 #
 # GET /Dlna/icons/{fileName}
 # operationId: GetIcon
-export def "dlna-icons list" [
+export def "get-icon" [
   file_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2741,7 +2741,7 @@ export def "dlna-icons list" [
 #
 # GET /Dlna/{serverId}/ConnectionManager
 # operationId: GetConnectionManager
-export def "dlna-connection-manager get" [
+export def "get-connection-manager" [
   server_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2777,7 +2777,7 @@ export def "dlna-connection-manager get" [
 #
 # GET /Dlna/{serverId}/ConnectionManager/ConnectionManager
 # operationId: GetConnectionManager_2
-export def "dlna-connection-manager-connection-manager get-by-server-id" [
+export def "get-connection-manager-2" [
   server_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2813,7 +2813,7 @@ export def "dlna-connection-manager-connection-manager get-by-server-id" [
 #
 # GET /Dlna/{serverId}/ConnectionManager/ConnectionManager.xml
 # operationId: GetConnectionManager_3
-export def "dlna-connection-manager-connection-manager-xml get-by-server-id" [
+export def "get-connection-manager-3" [
   server_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2849,7 +2849,7 @@ export def "dlna-connection-manager-connection-manager-xml get-by-server-id" [
 #
 # POST /Dlna/{serverId}/ConnectionManager/Control
 # operationId: ProcessConnectionManagerControlRequest
-export def "dlna-connection-manager-control request-process" [
+export def "process-connection-manager-control-request" [
   server_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2885,7 +2885,7 @@ export def "dlna-connection-manager-control request-process" [
 #
 # GET /Dlna/{serverId}/ContentDirectory
 # operationId: GetContentDirectory
-export def "dlna-content-directory get" [
+export def "get-content-directory" [
   server_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2921,7 +2921,7 @@ export def "dlna-content-directory get" [
 #
 # GET /Dlna/{serverId}/ContentDirectory/ContentDirectory
 # operationId: GetContentDirectory_2
-export def "dlna-content-directory-content-directory get-by-server-id" [
+export def "get-content-directory-2" [
   server_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2957,7 +2957,7 @@ export def "dlna-content-directory-content-directory get-by-server-id" [
 #
 # GET /Dlna/{serverId}/ContentDirectory/ContentDirectory.xml
 # operationId: GetContentDirectory_3
-export def "dlna-content-directory-content-directory-xml get-by-server-id" [
+export def "get-content-directory-3" [
   server_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2993,7 +2993,7 @@ export def "dlna-content-directory-content-directory-xml get-by-server-id" [
 #
 # POST /Dlna/{serverId}/ContentDirectory/Control
 # operationId: ProcessContentDirectoryControlRequest
-export def "dlna-content-directory-control request-process" [
+export def "process-content-directory-control-request" [
   server_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3029,7 +3029,7 @@ export def "dlna-content-directory-control request-process" [
 #
 # GET /Dlna/{serverId}/MediaReceiverRegistrar
 # operationId: GetMediaReceiverRegistrar
-export def "dlna-media-receiver-registrar get" [
+export def "get-media-receiver-registrar" [
   server_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3065,7 +3065,7 @@ export def "dlna-media-receiver-registrar get" [
 #
 # POST /Dlna/{serverId}/MediaReceiverRegistrar/Control
 # operationId: ProcessMediaReceiverRegistrarControlRequest
-export def "dlna-media-receiver-registrar-control request-process" [
+export def "process-media-receiver-registrar-control-request" [
   server_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3101,7 +3101,7 @@ export def "dlna-media-receiver-registrar-control request-process" [
 #
 # GET /Dlna/{serverId}/MediaReceiverRegistrar/MediaReceiverRegistrar
 # operationId: GetMediaReceiverRegistrar_2
-export def "dlna-media-receiver-registrar-media-receiver-registrar get-by-server-id" [
+export def "get-media-receiver-registrar-2" [
   server_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3137,7 +3137,7 @@ export def "dlna-media-receiver-registrar-media-receiver-registrar get-by-server
 #
 # GET /Dlna/{serverId}/MediaReceiverRegistrar/MediaReceiverRegistrar.xml
 # operationId: GetMediaReceiverRegistrar_3
-export def "dlna-media-receiver-registrar-media-receiver-registrar-xml get-by-server-id" [
+export def "get-media-receiver-registrar-3" [
   server_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3173,7 +3173,7 @@ export def "dlna-media-receiver-registrar-media-receiver-registrar-xml get-by-se
 #
 # GET /Dlna/{serverId}/description
 # operationId: GetDescriptionXml
-export def "dlna-description get-xml" [
+export def "get-description-xml" [
   server_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3209,7 +3209,7 @@ export def "dlna-description get-xml" [
 #
 # GET /Dlna/{serverId}/description.xml
 # operationId: GetDescriptionXml_2
-export def "dlna-description-xml get-by-server-id" [
+export def "get-description-xml-2" [
   server_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3245,7 +3245,7 @@ export def "dlna-description-xml get-by-server-id" [
 #
 # GET /Dlna/{serverId}/icons/{fileName}
 # operationId: GetIconId
-export def "dlna-icons get" [
+export def "get-icon-id" [
   server_id: string
   file_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3283,7 +3283,7 @@ export def "dlna-icons get" [
 #
 # GET /Environment/DefaultDirectoryBrowser
 # operationId: GetDefaultDirectoryBrowser
-export def "environment-default-directory-browser get" [
+export def "get-default-directory-browser" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3318,7 +3318,7 @@ export def "environment-default-directory-browser get" [
 #
 # GET /Environment/DirectoryContents
 # operationId: GetDirectoryContents
-export def "environment-directory-contents get" [
+export def "get-directory-contents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3357,7 +3357,7 @@ export def "environment-directory-contents get" [
 #
 # GET /Environment/Drives
 # operationId: GetDrives
-export def "environment-drives get" [
+export def "get-drives" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3394,7 +3394,7 @@ export def "environment-drives get" [
 # DEPRECATED
 # operationId: GetNetworkShares
 @deprecated
-export def "environment-network-shares get" [
+export def "get-network-shares" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3429,7 +3429,7 @@ export def "environment-network-shares get" [
 #
 # GET /Environment/ParentPath
 # operationId: GetParentPath
-export def "environment-parent-path get" [
+export def "get-parent-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3466,7 +3466,7 @@ export def "environment-parent-path get" [
 #
 # POST /Environment/ValidatePath
 # operationId: ValidatePath
-export def "environment-validate-path validate" [
+export def "validate-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3506,7 +3506,7 @@ export def "environment-validate-path validate" [
 #
 # GET /FallbackFont/Fonts
 # operationId: GetFallbackFontList
-export def "fallback-font-fonts get-list" [
+export def "get-fallback-font-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3541,7 +3541,7 @@ export def "fallback-font-fonts get-list" [
 #
 # GET /FallbackFont/Fonts/{name}
 # operationId: GetFallbackFont
-export def "fallback-font-fonts get" [
+export def "get-fallback-font" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3577,7 +3577,7 @@ export def "fallback-font-fonts get" [
 #
 # GET /Genres
 # operationId: GetGenres
-export def "genres list" [
+export def "get-genres" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3629,7 +3629,7 @@ export def "genres list" [
 #
 # GET /Genres/{genreName}
 # operationId: GetGenre
-export def "genres get" [
+export def "get-genre" [
   genre_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3668,7 +3668,7 @@ export def "genres get" [
 #
 # GET /Genres/{name}/Images/{imageType}
 # operationId: GetGenreImage
-export def "genres-images get" [
+export def "get-genre-image" [
   name: string
   image_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3722,7 +3722,7 @@ export def "genres-images get" [
 #
 # HEAD /Genres/{name}/Images/{imageType}
 # operationId: HeadGenreImage
-export def "genres-images head" [
+export def "head-genre-image" [
   name: string
   image_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3776,7 +3776,7 @@ export def "genres-images head" [
 #
 # GET /Genres/{name}/Images/{imageType}/{imageIndex}
 # operationId: GetGenreImageByIndex
-export def "genres-images get-by-index" [
+export def "get-genre-image-by-index" [
   name: string
   image_type: string
   image_index: int
@@ -3831,7 +3831,7 @@ export def "genres-images get-by-index" [
 #
 # HEAD /Genres/{name}/Images/{imageType}/{imageIndex}
 # operationId: HeadGenreImageByIndex
-export def "genres-images head-by-index" [
+export def "head-genre-image-by-index" [
   name: string
   image_type: string
   image_index: int
@@ -3886,7 +3886,7 @@ export def "genres-images head-by-index" [
 #
 # GET /GetUtcTime
 # operationId: GetUtcTime
-export def "get-utc-time get" [
+export def "get-utc-time" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3921,7 +3921,7 @@ export def "get-utc-time get" [
 #
 # GET /Images/General
 # operationId: GetGeneralImages
-export def "images-general get" [
+export def "get-general-images" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3956,7 +3956,7 @@ export def "images-general get" [
 #
 # GET /Images/General/{name}/{type}
 # operationId: GetGeneralImage
-export def "images-general get-by-name-type" [
+export def "get-general-image" [
   name: string
   type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3994,7 +3994,7 @@ export def "images-general get-by-name-type" [
 #
 # GET /Images/MediaInfo
 # operationId: GetMediaInfoImages
-export def "images-media-info get" [
+export def "get-media-info-images" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4029,7 +4029,7 @@ export def "images-media-info get" [
 #
 # GET /Images/MediaInfo/{theme}/{name}
 # operationId: GetMediaInfoImage
-export def "images-media-info get-by-theme-name" [
+export def "get-media-info-image" [
   theme: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4067,7 +4067,7 @@ export def "images-media-info get-by-theme-name" [
 #
 # GET /Images/Ratings
 # operationId: GetRatingImages
-export def "images-ratings get" [
+export def "get-rating-images" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4102,7 +4102,7 @@ export def "images-ratings get" [
 #
 # GET /Images/Ratings/{theme}/{name}
 # operationId: GetRatingImage
-export def "images-ratings get-by-theme-name" [
+export def "get-rating-image" [
   theme: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4140,7 +4140,7 @@ export def "images-ratings get-by-theme-name" [
 #
 # GET /Images/Remote
 # operationId: GetRemoteImage
-export def "images-remote get" [
+export def "get-remote-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4176,7 +4176,7 @@ export def "images-remote get" [
 #
 # DELETE /Items
 # operationId: DeleteItems
-export def "items delete" [
+export def "delete-items" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4212,7 +4212,7 @@ export def "items delete" [
 #
 # GET /Items
 # operationId: GetItems
-export def "items get" [
+export def "get-items" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4328,7 +4328,7 @@ export def "items get" [
 #
 # GET /Items/Counts
 # operationId: GetItemCounts
-export def "items-counts get" [
+export def "get-item-counts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4366,7 +4366,7 @@ export def "items-counts get" [
 #
 # GET /Items/Filters
 # operationId: GetQueryFiltersLegacy
-export def "items-filters get-list-legacy" [
+export def "get-query-filters-legacy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4406,7 +4406,7 @@ export def "items-filters get-list-legacy" [
 #
 # GET /Items/Filters2
 # operationId: GetQueryFilters
-export def "items-filters2 get-list-filters" [
+export def "get-query-filters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4454,7 +4454,7 @@ export def "items-filters2 get-list-filters" [
 # operationId: ApplySearchCriteria
 # --AlbumArtist shape: {AlbumArtist?: record, Artists?: list, ImageUrl?: string, IndexNumber?: int, IndexNumberEnd?: int, Name?: string, Overview?: string, ParentIndexNumber?: int, PremiereDate?: string, ProductionYear?: int, ProviderIds?: record, SearchProviderName?: string}
 # --Artists item shape: {AlbumArtist?: record, Artists?: list, ImageUrl?: string, IndexNumber?: int, IndexNumberEnd?: int, Name?: string, Overview?: string, ParentIndexNumber?: int, PremiereDate?: string, ProductionYear?: int, ProviderIds?: record, SearchProviderName?: string}
-export def "items-remote-search-apply list-criteria" [
+export def "apply-search-criteria" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4508,7 +4508,7 @@ export def "items-remote-search-apply list-criteria" [
 # POST /Items/RemoteSearch/Book
 # operationId: GetBookRemoteSearchResults
 # --SearchInfo shape: {IndexNumber?: int, IsAutomated?: bool, MetadataCountryCode?: string, MetadataLanguage?: string, Name?: string, ParentIndexNumber?: int, Path?: string, PremiereDate?: string, ProviderIds?: record, SeriesName?: string, Year?: int}
-export def "items-remote-search-book get-results" [
+export def "get-book-remote-search-results" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4551,7 +4551,7 @@ export def "items-remote-search-book get-results" [
 # POST /Items/RemoteSearch/BoxSet
 # operationId: GetBoxSetRemoteSearchResults
 # --SearchInfo shape: {IndexNumber?: int, IsAutomated?: bool, MetadataCountryCode?: string, MetadataLanguage?: string, Name?: string, ParentIndexNumber?: int, Path?: string, PremiereDate?: string, ProviderIds?: record, Year?: int}
-export def "items-remote-search-box-set get-results" [
+export def "get-box-set-remote-search-results" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4593,7 +4593,7 @@ export def "items-remote-search-box-set get-results" [
 #
 # GET /Items/RemoteSearch/Image
 # operationId: GetRemoteSearchImage
-export def "items-remote-search-image get" [
+export def "get-remote-search-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4631,7 +4631,7 @@ export def "items-remote-search-image get" [
 # POST /Items/RemoteSearch/Movie
 # operationId: GetMovieRemoteSearchResults
 # --SearchInfo shape: {IndexNumber?: int, IsAutomated?: bool, MetadataCountryCode?: string, MetadataLanguage?: string, Name?: string, ParentIndexNumber?: int, Path?: string, PremiereDate?: string, ProviderIds?: record, Year?: int}
-export def "items-remote-search-movie get-results" [
+export def "get-movie-remote-search-results" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4674,7 +4674,7 @@ export def "items-remote-search-movie get-results" [
 # POST /Items/RemoteSearch/MusicAlbum
 # operationId: GetMusicAlbumRemoteSearchResults
 # --SearchInfo shape: {AlbumArtists?: list<string>, ArtistProviderIds?: record, IndexNumber?: int, IsAutomated?: bool, MetadataCountryCode?: string, MetadataLanguage?: string, Name?: string, ParentIndexNumber?: int, Path?: string, PremiereDate?: string, ProviderIds?: record, SongInfos?: list, Year?: int}
-export def "items-remote-search-music-album get-results" [
+export def "get-music-album-remote-search-results" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4717,7 +4717,7 @@ export def "items-remote-search-music-album get-results" [
 # POST /Items/RemoteSearch/MusicArtist
 # operationId: GetMusicArtistRemoteSearchResults
 # --SearchInfo shape: {IndexNumber?: int, IsAutomated?: bool, MetadataCountryCode?: string, MetadataLanguage?: string, Name?: string, ParentIndexNumber?: int, Path?: string, PremiereDate?: string, ProviderIds?: record, SongInfos?: list, Year?: int}
-export def "items-remote-search-music-artist get-results" [
+export def "get-music-artist-remote-search-results" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4760,7 +4760,7 @@ export def "items-remote-search-music-artist get-results" [
 # POST /Items/RemoteSearch/MusicVideo
 # operationId: GetMusicVideoRemoteSearchResults
 # --SearchInfo shape: {Artists?: list<string>, IndexNumber?: int, IsAutomated?: bool, MetadataCountryCode?: string, MetadataLanguage?: string, Name?: string, ParentIndexNumber?: int, Path?: string, PremiereDate?: string, ProviderIds?: record, Year?: int}
-export def "items-remote-search-music-video get-results" [
+export def "get-music-video-remote-search-results" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4803,7 +4803,7 @@ export def "items-remote-search-music-video get-results" [
 # POST /Items/RemoteSearch/Person
 # operationId: GetPersonRemoteSearchResults
 # --SearchInfo shape: {IndexNumber?: int, IsAutomated?: bool, MetadataCountryCode?: string, MetadataLanguage?: string, Name?: string, ParentIndexNumber?: int, Path?: string, PremiereDate?: string, ProviderIds?: record, Year?: int}
-export def "items-remote-search-person get-results" [
+export def "get-person-remote-search-results" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4846,7 +4846,7 @@ export def "items-remote-search-person get-results" [
 # POST /Items/RemoteSearch/Series
 # operationId: GetSeriesRemoteSearchResults
 # --SearchInfo shape: {IndexNumber?: int, IsAutomated?: bool, MetadataCountryCode?: string, MetadataLanguage?: string, Name?: string, ParentIndexNumber?: int, Path?: string, PremiereDate?: string, ProviderIds?: record, Year?: int}
-export def "items-remote-search-series get-results" [
+export def "get-series-remote-search-results" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4889,7 +4889,7 @@ export def "items-remote-search-series get-results" [
 # POST /Items/RemoteSearch/Trailer
 # operationId: GetTrailerRemoteSearchResults
 # --SearchInfo shape: {IndexNumber?: int, IsAutomated?: bool, MetadataCountryCode?: string, MetadataLanguage?: string, Name?: string, ParentIndexNumber?: int, Path?: string, PremiereDate?: string, ProviderIds?: record, Year?: int}
-export def "items-remote-search-trailer get-results" [
+export def "get-trailer-remote-search-results" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4931,7 +4931,7 @@ export def "items-remote-search-trailer get-results" [
 #
 # GET /Items/{id}/InstantMix
 # operationId: GetInstantMixFromItem
-export def "items-instant-mix get" [
+export def "get-instant-mix-from-item" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4976,7 +4976,7 @@ export def "items-instant-mix get" [
 #
 # DELETE /Items/{itemId}
 # operationId: DeleteItem
-export def "items delete-by-item-id" [
+export def "delete-item" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5025,7 +5025,7 @@ export def "items delete-by-item-id" [
 # --RemoteTrailers item shape: {Name?: string, Url?: string}
 # --Studios item shape: {Id?: string, Name?: string}
 # --UserData shape: {IsFavorite?: bool, ItemId?: string, Key?: string, LastPlayedDate?: string, Likes?: bool, PlayCount?: int, PlaybackPositionTicks?: int, Played?: bool, PlayedPercentage?: float, Rating?: float, UnplayedItemCount?: int}
-export def "items update" [
+export def "update-item" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5215,7 +5215,7 @@ export def "items update" [
 #
 # GET /Items/{itemId}/Ancestors
 # operationId: GetAncestors
-export def "items-ancestors get" [
+export def "get-ancestors" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5254,7 +5254,7 @@ export def "items-ancestors get" [
 #
 # POST /Items/{itemId}/ContentType
 # operationId: UpdateItemContentType
-export def "items-content-type update" [
+export def "update-item-content-type" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5294,7 +5294,7 @@ export def "items-content-type update" [
 # DEPRECATED
 # operationId: GetCriticReviews
 @deprecated
-export def "items-critic-reviews get" [
+export def "get-critic-reviews" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5331,7 +5331,7 @@ export def "items-critic-reviews get" [
 #
 # GET /Items/{itemId}/Download
 # operationId: GetDownload
-export def "items-download get" [
+export def "get-download" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5368,7 +5368,7 @@ export def "items-download get" [
 #
 # GET /Items/{itemId}/ExternalIdInfos
 # operationId: GetExternalIdInfos
-export def "items-external-id-infos get" [
+export def "get-external-id-infos" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5405,7 +5405,7 @@ export def "items-external-id-infos get" [
 #
 # GET /Items/{itemId}/File
 # operationId: GetFile
-export def "items-file get" [
+export def "get-file" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5442,7 +5442,7 @@ export def "items-file get" [
 #
 # GET /Items/{itemId}/Images
 # operationId: GetItemImageInfos
-export def "items-images get-infos" [
+export def "get-item-image-infos" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5479,7 +5479,7 @@ export def "items-images get-infos" [
 #
 # DELETE /Items/{itemId}/Images/{imageType}
 # operationId: DeleteItemImage
-export def "items-images delete" [
+export def "delete-item-image" [
   item_id: string
   image_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5519,7 +5519,7 @@ export def "items-images delete" [
 #
 # GET /Items/{itemId}/Images/{imageType}
 # operationId: GetItemImage
-export def "items-images get" [
+export def "get-item-image" [
   item_id: string
   image_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5573,7 +5573,7 @@ export def "items-images get" [
 #
 # HEAD /Items/{itemId}/Images/{imageType}
 # operationId: HeadItemImage
-export def "items-images head" [
+export def "head-item-image" [
   item_id: string
   image_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5627,7 +5627,7 @@ export def "items-images head" [
 #
 # POST /Items/{itemId}/Images/{imageType}
 # operationId: SetItemImage
-export def "items-images update" [
+export def "set-item-image" [
   item_id: string
   image_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5665,7 +5665,7 @@ export def "items-images update" [
 #
 # DELETE /Items/{itemId}/Images/{imageType}/{imageIndex}
 # operationId: DeleteItemImageByIndex
-export def "items-images delete-by-index" [
+export def "delete-item-image-by-index" [
   item_id: string
   image_type: string
   image_index: int
@@ -5705,7 +5705,7 @@ export def "items-images delete-by-index" [
 #
 # GET /Items/{itemId}/Images/{imageType}/{imageIndex}
 # operationId: GetItemImageByIndex
-export def "items-images get-by-index" [
+export def "get-item-image-by-index" [
   item_id: string
   image_type: string
   image_index: int
@@ -5760,7 +5760,7 @@ export def "items-images get-by-index" [
 #
 # HEAD /Items/{itemId}/Images/{imageType}/{imageIndex}
 # operationId: HeadItemImageByIndex
-export def "items-images head-by-index" [
+export def "head-item-image-by-index" [
   item_id: string
   image_type: string
   image_index: int
@@ -5815,7 +5815,7 @@ export def "items-images head-by-index" [
 #
 # POST /Items/{itemId}/Images/{imageType}/{imageIndex}
 # operationId: SetItemImageByIndex
-export def "items-images update-by-index" [
+export def "set-item-image-by-index" [
   item_id: string
   image_type: string
   image_index: int
@@ -5855,7 +5855,7 @@ export def "items-images update-by-index" [
 #
 # POST /Items/{itemId}/Images/{imageType}/{imageIndex}/Index
 # operationId: UpdateItemImageIndex
-export def "items-images-index update" [
+export def "update-item-image-index" [
   item_id: string
   image_type: string
   image_index: int
@@ -5897,7 +5897,7 @@ export def "items-images-index update" [
 #
 # GET /Items/{itemId}/Images/{imageType}/{imageIndex}/{tag}/{format}/{maxWidth}/{maxHeight}/{percentPlayed}/{unplayedCount}
 # operationId: GetItemImage2
-export def "items-images get-image2" [
+export def "get-item-image2" [
   item_id: string
   image_type: string
   image_index: int
@@ -5958,7 +5958,7 @@ export def "items-images get-image2" [
 #
 # HEAD /Items/{itemId}/Images/{imageType}/{imageIndex}/{tag}/{format}/{maxWidth}/{maxHeight}/{percentPlayed}/{unplayedCount}
 # operationId: HeadItemImage2
-export def "items-images head-image2" [
+export def "head-item-image2" [
   item_id: string
   image_type: string
   image_index: int
@@ -6019,7 +6019,7 @@ export def "items-images head-image2" [
 #
 # GET /Items/{itemId}/MetadataEditor
 # operationId: GetMetadataEditorInfo
-export def "items-metadata-editor get" [
+export def "get-metadata-editor-info" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6056,7 +6056,7 @@ export def "items-metadata-editor get" [
 #
 # GET /Items/{itemId}/PlaybackInfo
 # operationId: GetPlaybackInfo
-export def "items-playback-info get" [
+export def "get-playback-info" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6096,7 +6096,7 @@ export def "items-playback-info get" [
 # POST /Items/{itemId}/PlaybackInfo
 # operationId: GetPostedPlaybackInfo
 # --DeviceProfile shape: {AlbumArtPn?: string, CodecProfiles?: list, ContainerProfiles?: list, DirectPlayProfiles?: list, EnableAlbumArtInDidl?: bool, EnableMSMediaReceiverRegistrar?: bool, EnableSingleAlbumArtLimit?: bool, EnableSingleSubtitleLimit?: bool, FriendlyName?: string, Id?: string, Identification?: record, IgnoreTranscodeByteRangeRequests?: bool, Manufacturer?: string, ManufacturerUrl?: string, MaxAlbumArtHeight?: int, MaxAlbumArtWidth?: int, MaxIconHeight?: int, MaxIconWidth?: int, MaxStaticBitrate?: int, ... (20 more fields)}
-export def "items-playback-info get-posted" [
+export def "get-posted-playback-info" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6166,7 +6166,7 @@ export def "items-playback-info get-posted" [
 #
 # POST /Items/{itemId}/Refresh
 # operationId: Post
-export def "items-refresh create" [
+export def "post" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6207,7 +6207,7 @@ export def "items-refresh create" [
 #
 # GET /Items/{itemId}/RemoteImages
 # operationId: GetRemoteImages
-export def "items-remote-images get" [
+export def "get-remote-images" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6250,7 +6250,7 @@ export def "items-remote-images get" [
 #
 # POST /Items/{itemId}/RemoteImages/Download
 # operationId: DownloadRemoteImage
-export def "items-remote-images-download download" [
+export def "download-remote-image" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6289,7 +6289,7 @@ export def "items-remote-images-download download" [
 #
 # GET /Items/{itemId}/RemoteImages/Providers
 # operationId: GetRemoteImageProviders
-export def "items-remote-images-providers get" [
+export def "get-remote-image-providers" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6326,7 +6326,7 @@ export def "items-remote-images-providers get" [
 #
 # GET /Items/{itemId}/RemoteSearch/Subtitles/{language}
 # operationId: SearchRemoteSubtitles
-export def "items-remote-search-subtitles list" [
+export def "search-remote-subtitles" [
   item_id: string
   language: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6367,7 +6367,7 @@ export def "items-remote-search-subtitles list" [
 #
 # POST /Items/{itemId}/RemoteSearch/Subtitles/{subtitleId}
 # operationId: DownloadRemoteSubtitles
-export def "items-remote-search-subtitles download" [
+export def "download-remote-subtitles" [
   item_id: string
   subtitle_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6405,7 +6405,7 @@ export def "items-remote-search-subtitles download" [
 #
 # GET /Items/{itemId}/Similar
 # operationId: GetSimilarItems
-export def "items-similar get" [
+export def "get-similar-items" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6447,7 +6447,7 @@ export def "items-similar get" [
 #
 # GET /Items/{itemId}/ThemeMedia
 # operationId: GetThemeMedia
-export def "items-theme-media get" [
+export def "get-theme-media" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6487,7 +6487,7 @@ export def "items-theme-media get" [
 #
 # GET /Items/{itemId}/ThemeSongs
 # operationId: GetThemeSongs
-export def "items-theme-songs get" [
+export def "get-theme-songs" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6527,7 +6527,7 @@ export def "items-theme-songs get" [
 #
 # GET /Items/{itemId}/ThemeVideos
 # operationId: GetThemeVideos
-export def "items-theme-videos get" [
+export def "get-theme-videos" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6567,7 +6567,7 @@ export def "items-theme-videos get" [
 #
 # GET /Libraries/AvailableOptions
 # operationId: GetLibraryOptionsInfo
-export def "libraries-available-options get-library" [
+export def "get-library-options-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6605,7 +6605,7 @@ export def "libraries-available-options get-library" [
 #
 # POST /Library/Media/Updated
 # operationId: PostUpdatedMedia
-export def "library-media-updated create" [
+export def "post-updated-media" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6643,7 +6643,7 @@ export def "library-media-updated create" [
 #
 # GET /Library/MediaFolders
 # operationId: GetMediaFolders
-export def "library-media-folders get" [
+export def "get-media-folders" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6680,7 +6680,7 @@ export def "library-media-folders get" [
 #
 # POST /Library/Movies/Added
 # operationId: PostAddedMovies
-export def "library-movies-added create" [
+export def "post-added-movies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6717,7 +6717,7 @@ export def "library-movies-added create" [
 #
 # POST /Library/Movies/Updated
 # operationId: PostUpdatedMovies
-export def "library-movies-updated create" [
+export def "post-updated-movies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6754,7 +6754,7 @@ export def "library-movies-updated create" [
 #
 # GET /Library/PhysicalPaths
 # operationId: GetPhysicalPaths
-export def "library-physical-paths get" [
+export def "get-physical-paths" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6789,7 +6789,7 @@ export def "library-physical-paths get" [
 #
 # GET /Library/Refresh
 # operationId: RefreshLibrary
-export def "library-refresh refresh" [
+export def "refresh-library" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6823,7 +6823,7 @@ export def "library-refresh refresh" [
 #
 # POST /Library/Series/Added
 # operationId: PostAddedSeries
-export def "library-series-added create" [
+export def "post-added-series" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6859,7 +6859,7 @@ export def "library-series-added create" [
 #
 # POST /Library/Series/Updated
 # operationId: PostUpdatedSeries
-export def "library-series-updated create" [
+export def "post-updated-series" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6895,7 +6895,7 @@ export def "library-series-updated create" [
 #
 # DELETE /Library/VirtualFolders
 # operationId: RemoveVirtualFolder
-export def "library-virtual-folders delete" [
+export def "remove-virtual-folder" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6932,7 +6932,7 @@ export def "library-virtual-folders delete" [
 #
 # GET /Library/VirtualFolders
 # operationId: GetVirtualFolders
-export def "library-virtual-folders get" [
+export def "get-virtual-folders" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6968,7 +6968,7 @@ export def "library-virtual-folders get" [
 # POST /Library/VirtualFolders
 # operationId: AddVirtualFolder
 # --LibraryOptions shape: {AutomaticRefreshIntervalDays?: int, DisabledLocalMetadataReaders?: list<string>, DisabledSubtitleFetchers?: list<string>, EnableAutomaticSeriesGrouping?: bool, EnableChapterImageExtraction?: bool, EnableEmbeddedEpisodeInfos?: bool, EnableEmbeddedTitles?: bool, EnableInternetProviders?: bool, EnablePhotos?: bool, EnableRealtimeMonitor?: bool, ExtractChapterImagesDuringLibraryScan?: bool, LocalMetadataReaderOrder?: list<string>, MetadataCountryCode?: string, MetadataSavers?: list<string>, ... (11 more fields)}
-export def "library-virtual-folders create" [
+export def "add-virtual-folder" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7012,7 +7012,7 @@ export def "library-virtual-folders create" [
 # POST /Library/VirtualFolders/LibraryOptions
 # operationId: UpdateLibraryOptions
 # --LibraryOptions shape: {AutomaticRefreshIntervalDays?: int, DisabledLocalMetadataReaders?: list<string>, DisabledSubtitleFetchers?: list<string>, EnableAutomaticSeriesGrouping?: bool, EnableChapterImageExtraction?: bool, EnableEmbeddedEpisodeInfos?: bool, EnableEmbeddedTitles?: bool, EnableInternetProviders?: bool, EnablePhotos?: bool, EnableRealtimeMonitor?: bool, ExtractChapterImagesDuringLibraryScan?: bool, LocalMetadataReaderOrder?: list<string>, MetadataCountryCode?: string, MetadataSavers?: list<string>, ... (11 more fields)}
-export def "library-virtual-folders-library-options update" [
+export def "update-library-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7051,7 +7051,7 @@ export def "library-virtual-folders-library-options update" [
 #
 # POST /Library/VirtualFolders/Name
 # operationId: RenameVirtualFolder
-export def "library-virtual-folders-name rename" [
+export def "rename-virtual-folder" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7089,7 +7089,7 @@ export def "library-virtual-folders-name rename" [
 #
 # DELETE /Library/VirtualFolders/Paths
 # operationId: RemoveMediaPath
-export def "library-virtual-folders-paths delete-media" [
+export def "remove-media-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7128,7 +7128,7 @@ export def "library-virtual-folders-paths delete-media" [
 # POST /Library/VirtualFolders/Paths
 # operationId: AddMediaPath
 # --PathInfo shape: {NetworkPath?: string, Path?: string}
-export def "library-virtual-folders-paths create-media" [
+export def "add-media-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7170,7 +7170,7 @@ export def "library-virtual-folders-paths create-media" [
 #
 # POST /Library/VirtualFolders/Paths/Update
 # operationId: UpdateMediaPath
-export def "library-virtual-folders-paths-update update-media" [
+export def "update-media-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7211,7 +7211,7 @@ export def "library-virtual-folders-paths-update update-media" [
 #
 # POST /LiveStreams/Close
 # operationId: CloseLiveStream
-export def "live-streams-close close" [
+export def "close-live-stream" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7248,7 +7248,7 @@ export def "live-streams-close close" [
 # POST /LiveStreams/Open
 # operationId: OpenLiveStream
 # --DeviceProfile shape: {AlbumArtPn?: string, CodecProfiles?: list, ContainerProfiles?: list, DirectPlayProfiles?: list, EnableAlbumArtInDidl?: bool, EnableMSMediaReceiverRegistrar?: bool, EnableSingleAlbumArtLimit?: bool, EnableSingleSubtitleLimit?: bool, FriendlyName?: string, Id?: string, Identification?: record, IgnoreTranscodeByteRangeRequests?: bool, Manufacturer?: string, ManufacturerUrl?: string, MaxAlbumArtHeight?: int, MaxAlbumArtWidth?: int, MaxIconHeight?: int, MaxIconWidth?: int, MaxStaticBitrate?: int, ... (20 more fields)}
-export def "live-streams-open open" [
+export def "open-live-stream" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7311,7 +7311,7 @@ export def "live-streams-open open" [
 #
 # GET /LiveTv/ChannelMappingOptions
 # operationId: GetChannelMappingOptions
-export def "live-tv-channel-mapping-options get" [
+export def "get-channel-mapping-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7348,7 +7348,7 @@ export def "live-tv-channel-mapping-options get" [
 #
 # POST /LiveTv/ChannelMappings
 # operationId: SetChannelMapping
-export def "live-tv-channel-mappings update" [
+export def "set-channel-mapping" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7389,7 +7389,7 @@ export def "live-tv-channel-mappings update" [
 #
 # GET /LiveTv/Channels
 # operationId: GetLiveTvChannels
-export def "live-tv-channels list" [
+export def "get-live-tv-channels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7446,7 +7446,7 @@ export def "live-tv-channels list" [
 #
 # GET /LiveTv/Channels/{channelId}
 # operationId: GetChannel
-export def "live-tv-channels get" [
+export def "get-channel" [
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7485,7 +7485,7 @@ export def "live-tv-channels get" [
 #
 # GET /LiveTv/GuideInfo
 # operationId: GetGuideInfo
-export def "live-tv-guide-info get" [
+export def "get-guide-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7520,7 +7520,7 @@ export def "live-tv-guide-info get" [
 #
 # GET /LiveTv/Info
 # operationId: GetLiveTvInfo
-export def "live-tv-info get" [
+export def "get-live-tv-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7555,7 +7555,7 @@ export def "live-tv-info get" [
 #
 # DELETE /LiveTv/ListingProviders
 # operationId: DeleteListingProvider
-export def "live-tv-listing-providers delete" [
+export def "delete-listing-provider" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7592,7 +7592,7 @@ export def "live-tv-listing-providers delete" [
 # POST /LiveTv/ListingProviders
 # operationId: AddListingProvider
 # --ChannelMappings item shape: {Name?: string, Value?: string}
-export def "live-tv-listing-providers create" [
+export def "add-listing-provider" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7652,7 +7652,7 @@ export def "live-tv-listing-providers create" [
 #
 # GET /LiveTv/ListingProviders/Default
 # operationId: GetDefaultListingProvider
-export def "live-tv-listing-providers-default get" [
+export def "get-default-listing-provider" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7687,7 +7687,7 @@ export def "live-tv-listing-providers-default get" [
 #
 # GET /LiveTv/ListingProviders/Lineups
 # operationId: GetLineups
-export def "live-tv-listing-providers-lineups get" [
+export def "get-lineups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7727,7 +7727,7 @@ export def "live-tv-listing-providers-lineups get" [
 #
 # GET /LiveTv/ListingProviders/SchedulesDirect/Countries
 # operationId: GetSchedulesDirectCountries
-export def "live-tv-listing-providers-schedules-direct-countries get" [
+export def "get-schedules-direct-countries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7761,7 +7761,7 @@ export def "live-tv-listing-providers-schedules-direct-countries get" [
 #
 # GET /LiveTv/LiveRecordings/{recordingId}/stream
 # operationId: GetLiveRecordingFile
-export def "live-tv-live-recordings-stream get-file" [
+export def "get-live-recording-file" [
   recording_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7797,7 +7797,7 @@ export def "live-tv-live-recordings-stream get-file" [
 #
 # GET /LiveTv/LiveStreamFiles/{streamId}/stream.{container}
 # operationId: GetLiveStreamFile
-export def "live-tv-live-stream-files-stream-container get" [
+export def "get-live-stream-file" [
   stream_id: string
   container: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7835,7 +7835,7 @@ export def "live-tv-live-stream-files-stream-container get" [
 #
 # GET /LiveTv/Programs
 # operationId: GetLiveTvPrograms
-export def "live-tv-programs get" [
+export def "get-live-tv-programs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7898,7 +7898,7 @@ export def "live-tv-programs get" [
 #
 # POST /LiveTv/Programs
 # operationId: GetPrograms
-export def "live-tv-programs get-1" [
+export def "get-programs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7963,7 +7963,7 @@ export def "live-tv-programs get-1" [
 #
 # GET /LiveTv/Programs/Recommended
 # operationId: GetRecommendedPrograms
-export def "live-tv-programs-recommended get" [
+export def "get-recommended-programs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8015,7 +8015,7 @@ export def "live-tv-programs-recommended get" [
 #
 # GET /LiveTv/Programs/{programId}
 # operationId: GetProgram
-export def "live-tv-programs get-by-program-id" [
+export def "get-program" [
   program_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8054,7 +8054,7 @@ export def "live-tv-programs get-by-program-id" [
 #
 # GET /LiveTv/Recordings
 # operationId: GetRecordings
-export def "live-tv-recordings list" [
+export def "get-recordings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8109,7 +8109,7 @@ export def "live-tv-recordings list" [
 #
 # GET /LiveTv/Recordings/Folders
 # operationId: GetRecordingFolders
-export def "live-tv-recordings-folders get" [
+export def "get-recording-folders" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8148,7 +8148,7 @@ export def "live-tv-recordings-folders get" [
 # DEPRECATED
 # operationId: GetRecordingGroups
 @deprecated
-export def "live-tv-recordings-groups list" [
+export def "get-recording-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8187,7 +8187,7 @@ export def "live-tv-recordings-groups list" [
 # DEPRECATED
 # operationId: GetRecordingGroup
 @deprecated
-export def "live-tv-recordings-groups get" [
+export def "get-recording-group" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8225,7 +8225,7 @@ export def "live-tv-recordings-groups get" [
 # DEPRECATED
 # operationId: GetRecordingsSeries
 @deprecated
-export def "live-tv-recordings-series get" [
+export def "get-recordings-series" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8275,7 +8275,7 @@ export def "live-tv-recordings-series get" [
 #
 # DELETE /LiveTv/Recordings/{recordingId}
 # operationId: DeleteRecording
-export def "live-tv-recordings delete" [
+export def "delete-recording" [
   recording_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8311,7 +8311,7 @@ export def "live-tv-recordings delete" [
 #
 # GET /LiveTv/Recordings/{recordingId}
 # operationId: GetRecording
-export def "live-tv-recordings get" [
+export def "get-recording" [
   recording_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8350,7 +8350,7 @@ export def "live-tv-recordings get" [
 #
 # GET /LiveTv/SeriesTimers
 # operationId: GetSeriesTimers
-export def "live-tv-series-timers list" [
+export def "get-series-timers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8388,7 +8388,7 @@ export def "live-tv-series-timers list" [
 #
 # POST /LiveTv/SeriesTimers
 # operationId: CreateSeriesTimer
-export def "live-tv-series-timers create" [
+export def "create-series-timer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8460,7 +8460,7 @@ export def "live-tv-series-timers create" [
 #
 # DELETE /LiveTv/SeriesTimers/{timerId}
 # operationId: CancelSeriesTimer
-export def "live-tv-series-timers cancel" [
+export def "cancel-series-timer" [
   timer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8496,7 +8496,7 @@ export def "live-tv-series-timers cancel" [
 #
 # GET /LiveTv/SeriesTimers/{timerId}
 # operationId: GetSeriesTimer
-export def "live-tv-series-timers get" [
+export def "get-series-timer" [
   timer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8533,7 +8533,7 @@ export def "live-tv-series-timers get" [
 #
 # POST /LiveTv/SeriesTimers/{timerId}
 # operationId: UpdateSeriesTimer
-export def "live-tv-series-timers update" [
+export def "update-series-timer" [
   timer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8607,7 +8607,7 @@ export def "live-tv-series-timers update" [
 #
 # GET /LiveTv/Timers
 # operationId: GetTimers
-export def "live-tv-timers list" [
+export def "get-timers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8648,7 +8648,7 @@ export def "live-tv-timers list" [
 # POST /LiveTv/Timers
 # operationId: CreateTimer
 # --ProgramInfo shape: {AirDays?: list<string>, AirTime?: string, AirsAfterSeasonNumber?: int, AirsBeforeEpisodeNumber?: int, AirsBeforeSeasonNumber?: int, Album?: string, AlbumArtist?: string, AlbumArtists?: list, AlbumCount?: int, AlbumId?: string, AlbumPrimaryImageTag?: string, Altitude?: float, Aperture?: float, ArtistCount?: int, ArtistItems?: list, Artists?: list<string>, AspectRatio?: string, Audio?: "Mono"|"Stereo"|"Dolby"|"DolbyDigital"|"Thx"|"Atmos", BackdropImageTags?: list<string>, CameraMake?: string, ... (131 more fields)}
-export def "live-tv-timers create" [
+export def "create-timer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8713,7 +8713,7 @@ export def "live-tv-timers create" [
 #
 # GET /LiveTv/Timers/Defaults
 # operationId: GetDefaultTimer
-export def "live-tv-timers-defaults get" [
+export def "get-default-timer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8750,7 +8750,7 @@ export def "live-tv-timers-defaults get" [
 #
 # DELETE /LiveTv/Timers/{timerId}
 # operationId: CancelTimer
-export def "live-tv-timers cancel" [
+export def "cancel-timer" [
   timer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8786,7 +8786,7 @@ export def "live-tv-timers cancel" [
 #
 # GET /LiveTv/Timers/{timerId}
 # operationId: GetTimer
-export def "live-tv-timers get" [
+export def "get-timer" [
   timer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8824,7 +8824,7 @@ export def "live-tv-timers get" [
 # POST /LiveTv/Timers/{timerId}
 # operationId: UpdateTimer
 # --ProgramInfo shape: {AirDays?: list<string>, AirTime?: string, AirsAfterSeasonNumber?: int, AirsBeforeEpisodeNumber?: int, AirsBeforeSeasonNumber?: int, Album?: string, AlbumArtist?: string, AlbumArtists?: list, AlbumCount?: int, AlbumId?: string, AlbumPrimaryImageTag?: string, Altitude?: float, Aperture?: float, ArtistCount?: int, ArtistItems?: list, Artists?: list<string>, AspectRatio?: string, Audio?: "Mono"|"Stereo"|"Dolby"|"DolbyDigital"|"Thx"|"Atmos", BackdropImageTags?: list<string>, CameraMake?: string, ... (131 more fields)}
-export def "live-tv-timers update" [
+export def "update-timer" [
   timer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8891,7 +8891,7 @@ export def "live-tv-timers update" [
 #
 # DELETE /LiveTv/TunerHosts
 # operationId: DeleteTunerHost
-export def "live-tv-tuner-hosts delete" [
+export def "delete-tuner-host" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8927,7 +8927,7 @@ export def "live-tv-tuner-hosts delete" [
 #
 # POST /LiveTv/TunerHosts
 # operationId: AddTunerHost
-export def "live-tv-tuner-hosts create" [
+export def "add-tuner-host" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8976,7 +8976,7 @@ export def "live-tv-tuner-hosts create" [
 #
 # GET /LiveTv/TunerHosts/Types
 # operationId: GetTunerHostTypes
-export def "live-tv-tuner-hosts-types get" [
+export def "get-tuner-host-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9011,7 +9011,7 @@ export def "live-tv-tuner-hosts-types get" [
 #
 # GET /LiveTv/Tuners/Discover
 # operationId: DiscoverTuners
-export def "live-tv-tuners-discover get" [
+export def "discover-tuners" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9048,7 +9048,7 @@ export def "live-tv-tuners-discover get" [
 #
 # GET /LiveTv/Tuners/Discvover
 # operationId: DiscvoverTuners
-export def "live-tv-tuners-discvover get" [
+export def "discvover-tuners" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9085,7 +9085,7 @@ export def "live-tv-tuners-discvover get" [
 #
 # POST /LiveTv/Tuners/{tunerId}/Reset
 # operationId: ResetTuner
-export def "live-tv-tuners-reset reset" [
+export def "reset-tuner" [
   tuner_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9121,7 +9121,7 @@ export def "live-tv-tuners-reset reset" [
 #
 # GET /Localization/Countries
 # operationId: GetCountries
-export def "localization-countries get" [
+export def "get-countries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9156,7 +9156,7 @@ export def "localization-countries get" [
 #
 # GET /Localization/Cultures
 # operationId: GetCultures
-export def "localization-cultures get" [
+export def "get-cultures" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9191,7 +9191,7 @@ export def "localization-cultures get" [
 #
 # GET /Localization/Options
 # operationId: GetLocalizationOptions
-export def "localization-options get" [
+export def "get-localization-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9226,7 +9226,7 @@ export def "localization-options get" [
 #
 # GET /Localization/ParentalRatings
 # operationId: GetParentalRatings
-export def "localization-parental-ratings get" [
+export def "get-parental-ratings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9261,7 +9261,7 @@ export def "localization-parental-ratings get" [
 #
 # GET /Movies/Recommendations
 # operationId: GetMovieRecommendations
-export def "movies-recommendations get" [
+export def "get-movie-recommendations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9302,7 +9302,7 @@ export def "movies-recommendations get" [
 #
 # GET /Movies/{itemId}/Similar
 # operationId: GetSimilarMovies
-export def "movies-similar get" [
+export def "get-similar-movies" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9346,7 +9346,7 @@ export def "movies-similar get" [
 # DEPRECATED
 # operationId: GetMusicGenres
 @deprecated
-export def "music-genres list" [
+export def "get-music-genres" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9398,7 +9398,7 @@ export def "music-genres list" [
 #
 # GET /MusicGenres/{genreName}
 # operationId: GetMusicGenre
-export def "music-genres get" [
+export def "get-music-genre" [
   genre_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9437,7 +9437,7 @@ export def "music-genres get" [
 #
 # GET /MusicGenres/{id}/InstantMix
 # operationId: GetInstantMixFromMusicGenres
-export def "music-genres-instant-mix get-by-id" [
+export def "get-instant-mix-from-music-genres" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9482,7 +9482,7 @@ export def "music-genres-instant-mix get-by-id" [
 #
 # GET /MusicGenres/{name}/Images/{imageType}
 # operationId: GetMusicGenreImage
-export def "music-genres-images get" [
+export def "get-music-genre-image" [
   name: string
   image_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9536,7 +9536,7 @@ export def "music-genres-images get" [
 #
 # HEAD /MusicGenres/{name}/Images/{imageType}
 # operationId: HeadMusicGenreImage
-export def "music-genres-images head" [
+export def "head-music-genre-image" [
   name: string
   image_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9590,7 +9590,7 @@ export def "music-genres-images head" [
 #
 # GET /MusicGenres/{name}/Images/{imageType}/{imageIndex}
 # operationId: GetMusicGenreImageByIndex
-export def "music-genres-images get-by-index" [
+export def "get-music-genre-image-by-index" [
   name: string
   image_type: string
   image_index: int
@@ -9645,7 +9645,7 @@ export def "music-genres-images get-by-index" [
 #
 # HEAD /MusicGenres/{name}/Images/{imageType}/{imageIndex}
 # operationId: HeadMusicGenreImageByIndex
-export def "music-genres-images head-by-index" [
+export def "head-music-genre-image-by-index" [
   name: string
   image_type: string
   image_index: int
@@ -9700,7 +9700,7 @@ export def "music-genres-images head-by-index" [
 #
 # GET /MusicGenres/{name}/InstantMix
 # operationId: GetInstantMixFromMusicGenre
-export def "music-genres-instant-mix get-by-name" [
+export def "get-instant-mix-from-music-genre" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9745,7 +9745,7 @@ export def "music-genres-instant-mix get-by-name" [
 #
 # POST /Notifications/Admin
 # operationId: CreateAdminNotification
-export def "notifications-admin create" [
+export def "create-admin-notification" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9784,7 +9784,7 @@ export def "notifications-admin create" [
 #
 # GET /Notifications/Services
 # operationId: GetNotificationServices
-export def "notifications-services get" [
+export def "get-notification-services" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9819,7 +9819,7 @@ export def "notifications-services get" [
 #
 # GET /Notifications/Types
 # operationId: GetNotificationTypes
-export def "notifications-types get" [
+export def "get-notification-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9854,7 +9854,7 @@ export def "notifications-types get" [
 #
 # GET /Notifications/{userId}
 # operationId: GetNotifications
-export def "notifications get" [
+export def "get-notifications" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9891,7 +9891,7 @@ export def "notifications get" [
 #
 # POST /Notifications/{userId}/Read
 # operationId: SetRead
-export def "notifications-read update" [
+export def "set-read" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9927,7 +9927,7 @@ export def "notifications-read update" [
 #
 # GET /Notifications/{userId}/Summary
 # operationId: GetNotificationsSummary
-export def "notifications-summary get" [
+export def "get-notifications-summary" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9964,7 +9964,7 @@ export def "notifications-summary get" [
 #
 # POST /Notifications/{userId}/Unread
 # operationId: SetUnread
-export def "notifications-unread update" [
+export def "set-unread" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10000,7 +10000,7 @@ export def "notifications-unread update" [
 #
 # GET /Packages
 # operationId: GetPackages
-export def "packages list" [
+export def "get-packages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10035,7 +10035,7 @@ export def "packages list" [
 #
 # POST /Packages/Installed/{name}
 # operationId: InstallPackage
-export def "packages-installed create-install" [
+export def "install-package" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10075,7 +10075,7 @@ export def "packages-installed create-install" [
 #
 # DELETE /Packages/Installing/{packageId}
 # operationId: CancelPackageInstallation
-export def "packages-installing cancel-installation" [
+export def "cancel-package-installation" [
   package_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10111,7 +10111,7 @@ export def "packages-installing cancel-installation" [
 #
 # GET /Packages/{name}
 # operationId: GetPackageInfo
-export def "packages get" [
+export def "get-package-info" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10150,7 +10150,7 @@ export def "packages get" [
 #
 # GET /Persons
 # operationId: GetPersons
-export def "persons list" [
+export def "get-persons" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10199,7 +10199,7 @@ export def "persons list" [
 #
 # GET /Persons/{name}
 # operationId: GetPerson
-export def "persons get" [
+export def "get-person" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10238,7 +10238,7 @@ export def "persons get" [
 #
 # GET /Persons/{name}/Images/{imageType}
 # operationId: GetPersonImage
-export def "persons-images get" [
+export def "get-person-image" [
   name: string
   image_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10292,7 +10292,7 @@ export def "persons-images get" [
 #
 # HEAD /Persons/{name}/Images/{imageType}
 # operationId: HeadPersonImage
-export def "persons-images head" [
+export def "head-person-image" [
   name: string
   image_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10346,7 +10346,7 @@ export def "persons-images head" [
 #
 # GET /Persons/{name}/Images/{imageType}/{imageIndex}
 # operationId: GetPersonImageByIndex
-export def "persons-images get-by-index" [
+export def "get-person-image-by-index" [
   name: string
   image_type: string
   image_index: int
@@ -10401,7 +10401,7 @@ export def "persons-images get-by-index" [
 #
 # HEAD /Persons/{name}/Images/{imageType}/{imageIndex}
 # operationId: HeadPersonImageByIndex
-export def "persons-images head-by-index" [
+export def "head-person-image-by-index" [
   name: string
   image_type: string
   image_index: int
@@ -10456,7 +10456,7 @@ export def "persons-images head-by-index" [
 #
 # GET /Playback/BitrateTest
 # operationId: GetBitrateTestBytes
-export def "playback-bitrate-test get-bytes" [
+export def "get-bitrate-test-bytes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10492,7 +10492,7 @@ export def "playback-bitrate-test get-bytes" [
 #
 # POST /Playlists
 # operationId: CreatePlaylist
-export def "playlists create" [
+export def "create-playlist" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10539,7 +10539,7 @@ export def "playlists create" [
 #
 # GET /Playlists/{id}/InstantMix
 # operationId: GetInstantMixFromPlaylist
-export def "playlists-instant-mix get" [
+export def "get-instant-mix-from-playlist" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10584,7 +10584,7 @@ export def "playlists-instant-mix get" [
 #
 # DELETE /Playlists/{playlistId}/Items
 # operationId: RemoveFromPlaylist
-export def "playlists-items delete" [
+export def "remove-from-playlist" [
   playlist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10622,7 +10622,7 @@ export def "playlists-items delete" [
 #
 # GET /Playlists/{playlistId}/Items
 # operationId: GetPlaylistItems
-export def "playlists-items get" [
+export def "get-playlist-items" [
   playlist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10668,7 +10668,7 @@ export def "playlists-items get" [
 #
 # POST /Playlists/{playlistId}/Items
 # operationId: AddToPlaylist
-export def "playlists-items create" [
+export def "add-to-playlist" [
   playlist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10707,7 +10707,7 @@ export def "playlists-items create" [
 #
 # POST /Playlists/{playlistId}/Items/{itemId}/Move/{newIndex}
 # operationId: MoveItem
-export def "playlists-items-move move" [
+export def "move-item" [
   playlist_id: string
   item_id: string
   new_index: int
@@ -10747,7 +10747,7 @@ export def "playlists-items-move move" [
 #
 # GET /Plugins
 # operationId: GetPlugins
-export def "plugins get" [
+export def "get-plugins" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10784,7 +10784,7 @@ export def "plugins get" [
 # DEPRECATED
 # operationId: UpdatePluginSecurityInfo
 @deprecated
-export def "plugins-security-info update" [
+export def "update-plugin-security-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10825,7 +10825,7 @@ export def "plugins-security-info update" [
 # DEPRECATED
 # operationId: UninstallPlugin
 @deprecated
-export def "plugins delete-uninstall" [
+export def "uninstall-plugin" [
   plugin_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10861,7 +10861,7 @@ export def "plugins delete-uninstall" [
 #
 # GET /Plugins/{pluginId}/Configuration
 # operationId: GetPluginConfiguration
-export def "plugins-configuration get" [
+export def "get-plugin-configuration" [
   plugin_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10898,7 +10898,7 @@ export def "plugins-configuration get" [
 #
 # POST /Plugins/{pluginId}/Configuration
 # operationId: UpdatePluginConfiguration
-export def "plugins-configuration update" [
+export def "update-plugin-configuration" [
   plugin_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10934,7 +10934,7 @@ export def "plugins-configuration update" [
 #
 # POST /Plugins/{pluginId}/Manifest
 # operationId: GetPluginManifest
-export def "plugins-manifest get" [
+export def "get-plugin-manifest" [
   plugin_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10970,7 +10970,7 @@ export def "plugins-manifest get" [
 #
 # DELETE /Plugins/{pluginId}/{version}
 # operationId: UninstallPluginByVersion
-export def "plugins version-uninstall" [
+export def "uninstall-plugin-by-version" [
   plugin_id: string
   version: record
   --base-url(-b): string@base-url-completer # API base URL
@@ -11008,7 +11008,7 @@ export def "plugins version-uninstall" [
 #
 # POST /Plugins/{pluginId}/{version}/Disable
 # operationId: DisablePlugin
-export def "plugins-disable disable" [
+export def "disable-plugin" [
   plugin_id: string
   version: record
   --base-url(-b): string@base-url-completer # API base URL
@@ -11046,7 +11046,7 @@ export def "plugins-disable disable" [
 #
 # POST /Plugins/{pluginId}/{version}/Enable
 # operationId: EnablePlugin
-export def "plugins-enable enable" [
+export def "enable-plugin" [
   plugin_id: string
   version: record
   --base-url(-b): string@base-url-completer # API base URL
@@ -11084,7 +11084,7 @@ export def "plugins-enable enable" [
 #
 # GET /Plugins/{pluginId}/{version}/Image
 # operationId: GetPluginImage
-export def "plugins-image get" [
+export def "get-plugin-image" [
   plugin_id: string
   version: record
   --base-url(-b): string@base-url-completer # API base URL
@@ -11122,7 +11122,7 @@ export def "plugins-image get" [
 #
 # GET /Providers/Subtitles/Subtitles/{id}
 # operationId: GetRemoteSubtitles
-export def "providers-subtitles-subtitles get-remote" [
+export def "get-remote-subtitles" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11158,7 +11158,7 @@ export def "providers-subtitles-subtitles get-remote" [
 #
 # POST /QuickConnect/Activate
 # operationId: Activate
-export def "quick-connect-activate create" [
+export def "activate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11192,7 +11192,7 @@ export def "quick-connect-activate create" [
 #
 # POST /QuickConnect/Authorize
 # operationId: Authorize
-export def "quick-connect-authorize create" [
+export def "authorize" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11229,7 +11229,7 @@ export def "quick-connect-authorize create" [
 #
 # POST /QuickConnect/Available
 # operationId: Available
-export def "quick-connect-available create" [
+export def "available" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11265,7 +11265,7 @@ export def "quick-connect-available create" [
 #
 # GET /QuickConnect/Connect
 # operationId: Connect
-export def "quick-connect-connect get" [
+export def "connect" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11302,7 +11302,7 @@ export def "quick-connect-connect get" [
 #
 # POST /QuickConnect/Deauthorize
 # operationId: Deauthorize
-export def "quick-connect-deauthorize create" [
+export def "deauthorize" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11337,7 +11337,7 @@ export def "quick-connect-deauthorize create" [
 #
 # GET /QuickConnect/Initiate
 # operationId: Initiate
-export def "quick-connect-initiate get" [
+export def "initiate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11372,7 +11372,7 @@ export def "quick-connect-initiate get" [
 #
 # GET /QuickConnect/Status
 # operationId: GetStatus
-export def "quick-connect-status get" [
+export def "get-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11407,7 +11407,7 @@ export def "quick-connect-status get" [
 #
 # GET /Repositories
 # operationId: GetRepositories
-export def "repositories get" [
+export def "get-repositories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11442,7 +11442,7 @@ export def "repositories get" [
 #
 # POST /Repositories
 # operationId: SetRepositories
-export def "repositories update" [
+export def "set-repositories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11480,7 +11480,7 @@ export def "repositories update" [
 #
 # GET /ScheduledTasks
 # operationId: GetTasks
-export def "scheduled-tasks list" [
+export def "get-tasks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11518,7 +11518,7 @@ export def "scheduled-tasks list" [
 #
 # DELETE /ScheduledTasks/Running/{taskId}
 # operationId: StopTask
-export def "scheduled-tasks-running stop" [
+export def "stop-task" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11554,7 +11554,7 @@ export def "scheduled-tasks-running stop" [
 #
 # POST /ScheduledTasks/Running/{taskId}
 # operationId: StartTask
-export def "scheduled-tasks-running start" [
+export def "start-task" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11590,7 +11590,7 @@ export def "scheduled-tasks-running start" [
 #
 # GET /ScheduledTasks/{taskId}
 # operationId: GetTask
-export def "scheduled-tasks get" [
+export def "get-task" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11627,7 +11627,7 @@ export def "scheduled-tasks get" [
 #
 # POST /ScheduledTasks/{taskId}/Triggers
 # operationId: UpdateTask
-export def "scheduled-tasks-triggers update" [
+export def "update-task" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11667,7 +11667,7 @@ export def "scheduled-tasks-triggers update" [
 #
 # GET /Search/Hints
 # operationId: Get
-export def "search-hints get" [
+export def "get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11721,7 +11721,7 @@ export def "search-hints get" [
 #
 # GET /Sessions
 # operationId: GetSessions
-export def "sessions get" [
+export def "get-sessions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11760,7 +11760,7 @@ export def "sessions get" [
 #
 # POST /Sessions/Capabilities
 # operationId: PostCapabilities
-export def "sessions-capabilities create" [
+export def "post-capabilities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11802,7 +11802,7 @@ export def "sessions-capabilities create" [
 # POST /Sessions/Capabilities/Full
 # operationId: PostFullCapabilities
 # --DeviceProfile shape: {AlbumArtPn?: string, CodecProfiles?: list, ContainerProfiles?: list, DirectPlayProfiles?: list, EnableAlbumArtInDidl?: bool, EnableMSMediaReceiverRegistrar?: bool, EnableSingleAlbumArtLimit?: bool, EnableSingleSubtitleLimit?: bool, FriendlyName?: string, Id?: string, Identification?: record, IgnoreTranscodeByteRangeRequests?: bool, Manufacturer?: string, ManufacturerUrl?: string, MaxAlbumArtHeight?: int, MaxAlbumArtWidth?: int, MaxIconHeight?: int, MaxIconWidth?: int, MaxStaticBitrate?: int, ... (20 more fields)}
-export def "sessions-capabilities-full create" [
+export def "post-full-capabilities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11851,7 +11851,7 @@ export def "sessions-capabilities-full create" [
 #
 # POST /Sessions/Logout
 # operationId: ReportSessionEnded
-export def "sessions-logout create-report-ended" [
+export def "report-session-ended" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11887,7 +11887,7 @@ export def "sessions-logout create-report-ended" [
 # operationId: ReportPlaybackStart
 # --Item shape: {AirDays?: list<string>, AirTime?: string, AirsAfterSeasonNumber?: int, AirsBeforeEpisodeNumber?: int, AirsBeforeSeasonNumber?: int, Album?: string, AlbumArtist?: string, AlbumArtists?: list, AlbumCount?: int, AlbumId?: string, AlbumPrimaryImageTag?: string, Altitude?: float, Aperture?: float, ArtistCount?: int, ArtistItems?: list, Artists?: list<string>, AspectRatio?: string, Audio?: "Mono"|"Stereo"|"Dolby"|"DolbyDigital"|"Thx"|"Atmos", BackdropImageTags?: list<string>, CameraMake?: string, ... (131 more fields)}
 # --NowPlayingQueue item shape: {Id?: string, PlaylistItemId?: string}
-export def "sessions-playing start-report-playback" [
+export def "report-playback-start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11944,7 +11944,7 @@ export def "sessions-playing start-report-playback" [
 #
 # POST /Sessions/Playing/Ping
 # operationId: PingPlaybackSession
-export def "sessions-playing-ping ping-playback" [
+export def "ping-playback-session" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11982,7 +11982,7 @@ export def "sessions-playing-ping ping-playback" [
 # operationId: ReportPlaybackProgress
 # --Item shape: {AirDays?: list<string>, AirTime?: string, AirsAfterSeasonNumber?: int, AirsBeforeEpisodeNumber?: int, AirsBeforeSeasonNumber?: int, Album?: string, AlbumArtist?: string, AlbumArtists?: list, AlbumCount?: int, AlbumId?: string, AlbumPrimaryImageTag?: string, Altitude?: float, Aperture?: float, ArtistCount?: int, ArtistItems?: list, Artists?: list<string>, AspectRatio?: string, Audio?: "Mono"|"Stereo"|"Dolby"|"DolbyDigital"|"Thx"|"Atmos", BackdropImageTags?: list<string>, CameraMake?: string, ... (131 more fields)}
 # --NowPlayingQueue item shape: {Id?: string, PlaylistItemId?: string}
-export def "sessions-playing-progress create-report-playback" [
+export def "report-playback-progress" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12041,7 +12041,7 @@ export def "sessions-playing-progress create-report-playback" [
 # operationId: ReportPlaybackStopped
 # --Item shape: {AirDays?: list<string>, AirTime?: string, AirsAfterSeasonNumber?: int, AirsBeforeEpisodeNumber?: int, AirsBeforeSeasonNumber?: int, Album?: string, AlbumArtist?: string, AlbumArtists?: list, AlbumCount?: int, AlbumId?: string, AlbumPrimaryImageTag?: string, Altitude?: float, Aperture?: float, ArtistCount?: int, ArtistItems?: list, Artists?: list<string>, AspectRatio?: string, Audio?: "Mono"|"Stereo"|"Dolby"|"DolbyDigital"|"Thx"|"Atmos", BackdropImageTags?: list<string>, CameraMake?: string, ... (131 more fields)}
 # --NowPlayingQueue item shape: {Id?: string, PlaylistItemId?: string}
-export def "sessions-playing-stopped create-report-playback" [
+export def "report-playback-stopped" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12089,7 +12089,7 @@ export def "sessions-playing-stopped create-report-playback" [
 #
 # POST /Sessions/Viewing
 # operationId: ReportViewing
-export def "sessions-viewing create-report" [
+export def "report-viewing" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12126,7 +12126,7 @@ export def "sessions-viewing create-report" [
 #
 # POST /Sessions/{sessionId}/Command
 # operationId: SendFullGeneralCommand
-export def "sessions-command send-full-general" [
+export def "send-full-general-command" [
   session_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12168,7 +12168,7 @@ export def "sessions-command send-full-general" [
 #
 # POST /Sessions/{sessionId}/Command/{command}
 # operationId: SendGeneralCommand
-export def "sessions-command send-general" [
+export def "send-general-command" [
   session_id: string
   command: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12206,7 +12206,7 @@ export def "sessions-command send-general" [
 #
 # POST /Sessions/{sessionId}/Message
 # operationId: SendMessageCommand
-export def "sessions-message send-command" [
+export def "send-message-command" [
   session_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12246,7 +12246,7 @@ export def "sessions-message send-command" [
 #
 # POST /Sessions/{sessionId}/Playing
 # operationId: Play
-export def "sessions-playing create-play" [
+export def "play" [
   session_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12286,7 +12286,7 @@ export def "sessions-playing create-play" [
 #
 # POST /Sessions/{sessionId}/Playing/{command}
 # operationId: SendPlaystateCommand
-export def "sessions-playing send-playstate" [
+export def "send-playstate-command" [
   session_id: string
   command: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12327,7 +12327,7 @@ export def "sessions-playing send-playstate" [
 #
 # POST /Sessions/{sessionId}/System/{command}
 # operationId: SendSystemCommand
-export def "sessions-system send" [
+export def "send-system-command" [
   session_id: string
   command: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12365,7 +12365,7 @@ export def "sessions-system send" [
 #
 # DELETE /Sessions/{sessionId}/User/{userId}
 # operationId: RemoveUserFromSession
-export def "sessions-user delete" [
+export def "remove-user-from-session" [
   session_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12403,7 +12403,7 @@ export def "sessions-user delete" [
 #
 # POST /Sessions/{sessionId}/User/{userId}
 # operationId: AddUserToSession
-export def "sessions-user create" [
+export def "add-user-to-session" [
   session_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12441,7 +12441,7 @@ export def "sessions-user create" [
 #
 # POST /Sessions/{sessionId}/Viewing
 # operationId: DisplayContent
-export def "sessions-viewing create-display-content" [
+export def "display-content" [
   session_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12481,7 +12481,7 @@ export def "sessions-viewing create-display-content" [
 #
 # GET /Shows/NextUp
 # operationId: GetNextUp
-export def "shows-next-up get" [
+export def "get-next-up" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12528,7 +12528,7 @@ export def "shows-next-up get" [
 #
 # GET /Shows/Upcoming
 # operationId: GetUpcomingEpisodes
-export def "shows-upcoming get-episodes" [
+export def "get-upcoming-episodes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12573,7 +12573,7 @@ export def "shows-upcoming get-episodes" [
 #
 # GET /Shows/{itemId}/Similar
 # operationId: GetSimilarShows
-export def "shows-similar get" [
+export def "get-similar-shows" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12615,7 +12615,7 @@ export def "shows-similar get" [
 #
 # GET /Shows/{seriesId}/Episodes
 # operationId: GetEpisodes
-export def "shows-episodes get" [
+export def "get-episodes" [
   series_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12667,7 +12667,7 @@ export def "shows-episodes get" [
 #
 # GET /Shows/{seriesId}/Seasons
 # operationId: GetSeasons
-export def "shows-seasons get" [
+export def "get-seasons" [
   series_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12714,7 +12714,7 @@ export def "shows-seasons get" [
 #
 # GET /Songs/{id}/InstantMix
 # operationId: GetInstantMixFromSong
-export def "songs-instant-mix get" [
+export def "get-instant-mix-from-song" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12759,7 +12759,7 @@ export def "songs-instant-mix get" [
 #
 # POST /Startup/Complete
 # operationId: CompleteWizard
-export def "startup-complete complete-wizard" [
+export def "complete-wizard" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12793,7 +12793,7 @@ export def "startup-complete complete-wizard" [
 #
 # GET /Startup/Configuration
 # operationId: GetStartupConfiguration
-export def "startup-configuration get" [
+export def "get-startup-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12828,7 +12828,7 @@ export def "startup-configuration get" [
 #
 # POST /Startup/Configuration
 # operationId: UpdateInitialConfiguration
-export def "startup-configuration update-initial" [
+export def "update-initial-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12868,7 +12868,7 @@ export def "startup-configuration update-initial" [
 #
 # GET /Startup/FirstUser
 # operationId: GetFirstUser_2
-export def "startup-first-user get" [
+export def "get-first-user-2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12903,7 +12903,7 @@ export def "startup-first-user get" [
 #
 # POST /Startup/RemoteAccess
 # operationId: SetRemoteAccess
-export def "startup-remote-access update" [
+export def "set-remote-access" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12942,7 +12942,7 @@ export def "startup-remote-access update" [
 #
 # GET /Startup/User
 # operationId: GetFirstUser
-export def "startup-user get-first" [
+export def "get-first-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12977,7 +12977,7 @@ export def "startup-user get-first" [
 #
 # POST /Startup/User
 # operationId: UpdateStartupUser
-export def "startup-user update" [
+export def "update-startup-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13016,7 +13016,7 @@ export def "startup-user update" [
 #
 # GET /Studios
 # operationId: GetStudios
-export def "studios list" [
+export def "get-studios" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13069,7 +13069,7 @@ export def "studios list" [
 #
 # GET /Studios/{name}
 # operationId: GetStudio
-export def "studios get" [
+export def "get-studio" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13108,7 +13108,7 @@ export def "studios get" [
 #
 # GET /Studios/{name}/Images/{imageType}
 # operationId: GetStudioImage
-export def "studios-images get" [
+export def "get-studio-image" [
   name: string
   image_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13162,7 +13162,7 @@ export def "studios-images get" [
 #
 # HEAD /Studios/{name}/Images/{imageType}
 # operationId: HeadStudioImage
-export def "studios-images head" [
+export def "head-studio-image" [
   name: string
   image_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13216,7 +13216,7 @@ export def "studios-images head" [
 #
 # GET /Studios/{name}/Images/{imageType}/{imageIndex}
 # operationId: GetStudioImageByIndex
-export def "studios-images get-by-index" [
+export def "get-studio-image-by-index" [
   name: string
   image_type: string
   image_index: int
@@ -13271,7 +13271,7 @@ export def "studios-images get-by-index" [
 #
 # HEAD /Studios/{name}/Images/{imageType}/{imageIndex}
 # operationId: HeadStudioImageByIndex
-export def "studios-images head-by-index" [
+export def "head-studio-image-by-index" [
   name: string
   image_type: string
   image_index: int
@@ -13326,7 +13326,7 @@ export def "studios-images head-by-index" [
 #
 # POST /SyncPlay/Buffering
 # operationId: SyncPlayBuffering
-export def "sync-play-buffering sync" [
+export def "sync-play-buffering" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13367,7 +13367,7 @@ export def "sync-play-buffering sync" [
 #
 # POST /SyncPlay/Join
 # operationId: SyncPlayJoinGroup
-export def "sync-play-join sync-group" [
+export def "sync-play-join-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13405,7 +13405,7 @@ export def "sync-play-join sync-group" [
 #
 # POST /SyncPlay/Leave
 # operationId: SyncPlayLeaveGroup
-export def "sync-play-leave sync-group" [
+export def "sync-play-leave-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13439,7 +13439,7 @@ export def "sync-play-leave sync-group" [
 #
 # GET /SyncPlay/List
 # operationId: SyncPlayGetGroups
-export def "sync-play-list get-groups" [
+export def "sync-play-get-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13474,7 +13474,7 @@ export def "sync-play-list get-groups" [
 #
 # POST /SyncPlay/MovePlaylistItem
 # operationId: SyncPlayMovePlaylistItem
-export def "sync-play-move-playlist-item sync" [
+export def "sync-play-move-playlist-item" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13513,7 +13513,7 @@ export def "sync-play-move-playlist-item sync" [
 #
 # POST /SyncPlay/New
 # operationId: SyncPlayCreateGroup
-export def "sync-play-new create-group" [
+export def "sync-play-create-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13551,7 +13551,7 @@ export def "sync-play-new create-group" [
 #
 # POST /SyncPlay/NextItem
 # operationId: SyncPlayNextItem
-export def "sync-play-next-item sync" [
+export def "sync-play-next-item" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13589,7 +13589,7 @@ export def "sync-play-next-item sync" [
 #
 # POST /SyncPlay/Pause
 # operationId: SyncPlayPause
-export def "sync-play-pause sync" [
+export def "sync-play-pause" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13623,7 +13623,7 @@ export def "sync-play-pause sync" [
 #
 # POST /SyncPlay/Ping
 # operationId: SyncPlayPing
-export def "sync-play-ping sync" [
+export def "sync-play-ping" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13661,7 +13661,7 @@ export def "sync-play-ping sync" [
 #
 # POST /SyncPlay/PreviousItem
 # operationId: SyncPlayPreviousItem
-export def "sync-play-previous-item sync" [
+export def "sync-play-previous-item" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13699,7 +13699,7 @@ export def "sync-play-previous-item sync" [
 #
 # POST /SyncPlay/Queue
 # operationId: SyncPlayQueue
-export def "sync-play-queue sync" [
+export def "sync-play-queue" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13738,7 +13738,7 @@ export def "sync-play-queue sync" [
 #
 # POST /SyncPlay/Ready
 # operationId: SyncPlayReady
-export def "sync-play-ready sync" [
+export def "sync-play-ready" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13779,7 +13779,7 @@ export def "sync-play-ready sync" [
 #
 # POST /SyncPlay/RemoveFromPlaylist
 # operationId: SyncPlayRemoveFromPlaylist
-export def "sync-play-remove-from-playlist sync" [
+export def "sync-play-remove-from-playlist" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13817,7 +13817,7 @@ export def "sync-play-remove-from-playlist sync" [
 #
 # POST /SyncPlay/Seek
 # operationId: SyncPlaySeek
-export def "sync-play-seek sync" [
+export def "sync-play-seek" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13855,7 +13855,7 @@ export def "sync-play-seek sync" [
 #
 # POST /SyncPlay/SetIgnoreWait
 # operationId: SyncPlaySetIgnoreWait
-export def "sync-play-set-ignore-wait sync" [
+export def "sync-play-set-ignore-wait" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13893,7 +13893,7 @@ export def "sync-play-set-ignore-wait sync" [
 #
 # POST /SyncPlay/SetNewQueue
 # operationId: SyncPlaySetNewQueue
-export def "sync-play-set-new-queue sync" [
+export def "sync-play-set-new-queue" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13933,7 +13933,7 @@ export def "sync-play-set-new-queue sync" [
 #
 # POST /SyncPlay/SetPlaylistItem
 # operationId: SyncPlaySetPlaylistItem
-export def "sync-play-set-playlist-item sync" [
+export def "sync-play-set-playlist-item" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13971,7 +13971,7 @@ export def "sync-play-set-playlist-item sync" [
 #
 # POST /SyncPlay/SetRepeatMode
 # operationId: SyncPlaySetRepeatMode
-export def "sync-play-set-repeat-mode sync" [
+export def "sync-play-set-repeat-mode" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14009,7 +14009,7 @@ export def "sync-play-set-repeat-mode sync" [
 #
 # POST /SyncPlay/SetShuffleMode
 # operationId: SyncPlaySetShuffleMode
-export def "sync-play-set-shuffle-mode sync" [
+export def "sync-play-set-shuffle-mode" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14047,7 +14047,7 @@ export def "sync-play-set-shuffle-mode sync" [
 #
 # POST /SyncPlay/Stop
 # operationId: SyncPlayStop
-export def "sync-play-stop sync" [
+export def "sync-play-stop" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14081,7 +14081,7 @@ export def "sync-play-stop sync" [
 #
 # POST /SyncPlay/Unpause
 # operationId: SyncPlayUnpause
-export def "sync-play-unpause sync" [
+export def "sync-play-unpause" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14115,7 +14115,7 @@ export def "sync-play-unpause sync" [
 #
 # GET /System/ActivityLog/Entries
 # operationId: GetLogEntries
-export def "system-activity-log-entries get" [
+export def "get-log-entries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14155,7 +14155,7 @@ export def "system-activity-log-entries get" [
 #
 # GET /System/Configuration
 # operationId: GetConfiguration
-export def "system-configuration get" [
+export def "get-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14194,7 +14194,7 @@ export def "system-configuration get" [
 # --MetadataOptions item shape: {DisabledImageFetchers?: list<string>, DisabledMetadataFetchers?: list<string>, DisabledMetadataSavers?: list<string>, ImageFetcherOrder?: list<string>, ItemType?: string, LocalMetadataReaderOrder?: list<string>, MetadataFetcherOrder?: list<string>}
 # --PathSubstitutions item shape: {From?: string, To?: string}
 # --PluginRepositories item shape: {Enabled?: bool, Name?: string, Url?: string}
-export def "system-configuration update" [
+export def "update-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14315,7 +14315,7 @@ export def "system-configuration update" [
 #
 # GET /System/Configuration/MetadataOptions/Default
 # operationId: GetDefaultMetadataOptions
-export def "system-configuration-metadata-options-default get" [
+export def "get-default-metadata-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14350,7 +14350,7 @@ export def "system-configuration-metadata-options-default get" [
 #
 # GET /System/Configuration/{key}
 # operationId: GetNamedConfiguration
-export def "system-configuration get-named" [
+export def "get-named-configuration" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14386,7 +14386,7 @@ export def "system-configuration get-named" [
 #
 # POST /System/Configuration/{key}
 # operationId: UpdateNamedConfiguration
-export def "system-configuration update-named" [
+export def "update-named-configuration" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14422,7 +14422,7 @@ export def "system-configuration update-named" [
 #
 # GET /System/Endpoint
 # operationId: GetEndpointInfo
-export def "system-endpoint get" [
+export def "get-endpoint-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14457,7 +14457,7 @@ export def "system-endpoint get" [
 #
 # GET /System/Info
 # operationId: GetSystemInfo
-export def "system-info get" [
+export def "get-system-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14492,7 +14492,7 @@ export def "system-info get" [
 #
 # GET /System/Info/Public
 # operationId: GetPublicSystemInfo
-export def "system-info-public get" [
+export def "get-public-system-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14527,7 +14527,7 @@ export def "system-info-public get" [
 #
 # GET /System/Logs
 # operationId: GetServerLogs
-export def "system-logs get-server" [
+export def "get-server-logs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14562,7 +14562,7 @@ export def "system-logs get-server" [
 #
 # GET /System/Logs/Log
 # operationId: GetLogFile
-export def "system-logs-log get-file" [
+export def "get-log-file" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14598,7 +14598,7 @@ export def "system-logs-log get-file" [
 #
 # POST /System/MediaEncoder/Path
 # operationId: UpdateMediaEncoderPath
-export def "system-media-encoder-path update" [
+export def "update-media-encoder-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14637,7 +14637,7 @@ export def "system-media-encoder-path update" [
 #
 # GET /System/Ping
 # operationId: GetPingSystem
-export def "system-ping get" [
+export def "get-ping-system" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14672,7 +14672,7 @@ export def "system-ping get" [
 #
 # POST /System/Ping
 # operationId: PostPingSystem
-export def "system-ping create" [
+export def "post-ping-system" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14707,7 +14707,7 @@ export def "system-ping create" [
 #
 # POST /System/Restart
 # operationId: RestartApplication
-export def "system-restart restart-application" [
+export def "restart-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14741,7 +14741,7 @@ export def "system-restart restart-application" [
 #
 # POST /System/Shutdown
 # operationId: ShutdownApplication
-export def "system-shutdown create-application" [
+export def "shutdown-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14775,7 +14775,7 @@ export def "system-shutdown create-application" [
 #
 # GET /System/WakeOnLanInfo
 # operationId: GetWakeOnLanInfo
-export def "system-wake-on-lan-info get" [
+export def "get-wake-on-lan-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14810,7 +14810,7 @@ export def "system-wake-on-lan-info get" [
 #
 # GET /Trailers
 # operationId: GetTrailers
-export def "trailers get" [
+export def "get-trailers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14925,7 +14925,7 @@ export def "trailers get" [
 #
 # GET /Trailers/{itemId}/Similar
 # operationId: GetSimilarTrailers
-export def "trailers-similar get" [
+export def "get-similar-trailers" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14967,7 +14967,7 @@ export def "trailers-similar get" [
 #
 # GET /Users
 # operationId: GetUsers
-export def "users list" [
+export def "get-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15005,7 +15005,7 @@ export def "users list" [
 #
 # POST /Users/AuthenticateByName
 # operationId: AuthenticateUserByName
-export def "users-authenticate-by-name create" [
+export def "authenticate-user-by-name" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15046,7 +15046,7 @@ export def "users-authenticate-by-name create" [
 #
 # POST /Users/AuthenticateWithQuickConnect
 # operationId: AuthenticateWithQuickConnect
-export def "users-authenticate-with-quick-connect create" [
+export def "authenticate-with-quick-connect" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15085,7 +15085,7 @@ export def "users-authenticate-with-quick-connect create" [
 #
 # POST /Users/ForgotPassword
 # operationId: ForgotPassword
-export def "users-forgot-password create" [
+export def "forgot-password" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15124,7 +15124,7 @@ export def "users-forgot-password create" [
 #
 # POST /Users/ForgotPassword/Pin
 # operationId: ForgotPasswordPin
-export def "users-forgot-password-pin create" [
+export def "forgot-password-pin" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15163,7 +15163,7 @@ export def "users-forgot-password-pin create" [
 #
 # GET /Users/Me
 # operationId: GetCurrentUser
-export def "users-me get" [
+export def "get-current-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15198,7 +15198,7 @@ export def "users-me get" [
 #
 # POST /Users/New
 # operationId: CreateUserByName
-export def "users-new create-by-name" [
+export def "create-user-by-name" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15238,7 +15238,7 @@ export def "users-new create-by-name" [
 #
 # GET /Users/Public
 # operationId: GetPublicUsers
-export def "users-public get" [
+export def "get-public-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15273,7 +15273,7 @@ export def "users-public get" [
 #
 # DELETE /Users/{userId}
 # operationId: DeleteUser
-export def "users delete" [
+export def "delete-user" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15309,7 +15309,7 @@ export def "users delete" [
 #
 # GET /Users/{userId}
 # operationId: GetUserById
-export def "users get" [
+export def "get-user-by-id" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15348,7 +15348,7 @@ export def "users get" [
 # operationId: UpdateUser
 # --Configuration shape: {AudioLanguagePreference?: string, DisplayCollectionsView?: bool, DisplayMissingEpisodes?: bool, EnableLocalPassword?: bool, EnableNextEpisodeAutoPlay?: bool, GroupedFolders?: list<string>, HidePlayedInLatest?: bool, LatestItemsExcludes?: list<string>, MyMediaExcludes?: list<string>, OrderedViews?: list<string>, PlayDefaultAudioTrack?: bool, RememberAudioSelections?: bool, RememberSubtitleSelections?: bool, SubtitleLanguagePreference?: string, ... (1 more fields)}
 # --Policy shape: {AccessSchedules?: list, AuthenticationProviderId?: string, BlockUnratedItems?: list<string>, BlockedChannels?: list<string>, BlockedMediaFolders?: list<string>, BlockedTags?: list<string>, EnableAllChannels?: bool, EnableAllDevices?: bool, EnableAllFolders?: bool, EnableAudioPlaybackTranscoding?: bool, EnableContentDeletion?: bool, EnableContentDeletionFromFolders?: list<string>, EnableContentDownloading?: bool, EnableLiveTvAccess?: bool, EnableLiveTvManagement?: bool, ... (24 more fields)}
-export def "users update" [
+export def "update-user" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15401,7 +15401,7 @@ export def "users update" [
 #
 # POST /Users/{userId}/Authenticate
 # operationId: AuthenticateUser
-export def "users-authenticate create" [
+export def "authenticate-user" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15441,7 +15441,7 @@ export def "users-authenticate create" [
 #
 # POST /Users/{userId}/Configuration
 # operationId: UpdateUserConfiguration
-export def "users-configuration update" [
+export def "update-user-configuration" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15495,7 +15495,7 @@ export def "users-configuration update" [
 #
 # POST /Users/{userId}/EasyPassword
 # operationId: UpdateUserEasyPassword
-export def "users-easy-password update" [
+export def "update-user-easy-password" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15537,7 +15537,7 @@ export def "users-easy-password update" [
 #
 # DELETE /Users/{userId}/FavoriteItems/{itemId}
 # operationId: UnmarkFavoriteItem
-export def "users-favorite-items delete-unmark" [
+export def "unmark-favorite-item" [
   user_id: string
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -15576,7 +15576,7 @@ export def "users-favorite-items delete-unmark" [
 #
 # POST /Users/{userId}/FavoriteItems/{itemId}
 # operationId: MarkFavoriteItem
-export def "users-favorite-items create-mark" [
+export def "mark-favorite-item" [
   user_id: string
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -15615,7 +15615,7 @@ export def "users-favorite-items create-mark" [
 #
 # GET /Users/{userId}/GroupingOptions
 # operationId: GetGroupingOptions
-export def "users-grouping-options get" [
+export def "get-grouping-options" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15652,7 +15652,7 @@ export def "users-grouping-options get" [
 #
 # DELETE /Users/{userId}/Images/{imageType}
 # operationId: DeleteUserImage
-export def "users-images delete-by-user-id-image-type" [
+export def "delete-user-image" [
   user_id: string
   image_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -15692,7 +15692,7 @@ export def "users-images delete-by-user-id-image-type" [
 #
 # GET /Users/{userId}/Images/{imageType}
 # operationId: GetUserImage
-export def "users-images get" [
+export def "get-user-image" [
   user_id: string
   image_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -15746,7 +15746,7 @@ export def "users-images get" [
 #
 # HEAD /Users/{userId}/Images/{imageType}
 # operationId: HeadUserImage
-export def "users-images head" [
+export def "head-user-image" [
   user_id: string
   image_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -15800,7 +15800,7 @@ export def "users-images head" [
 #
 # POST /Users/{userId}/Images/{imageType}
 # operationId: PostUserImage
-export def "users-images create-by-user-id-image-type" [
+export def "post-user-image" [
   user_id: string
   image_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -15840,7 +15840,7 @@ export def "users-images create-by-user-id-image-type" [
 #
 # GET /Users/{userId}/Images/{imageType}/{imageIndex}
 # operationId: GetUserImageByIndex
-export def "users-images get-by-index" [
+export def "get-user-image-by-index" [
   user_id: string
   image_type: string
   image_index: int
@@ -15895,7 +15895,7 @@ export def "users-images get-by-index" [
 #
 # HEAD /Users/{userId}/Images/{imageType}/{imageIndex}
 # operationId: HeadUserImageByIndex
-export def "users-images head-by-index" [
+export def "head-user-image-by-index" [
   user_id: string
   image_type: string
   image_index: int
@@ -15950,7 +15950,7 @@ export def "users-images head-by-index" [
 #
 # DELETE /Users/{userId}/Images/{imageType}/{index}
 # operationId: DeleteUserImageByIndex
-export def "users-images delete-by-user-id-image-type-index" [
+export def "delete-user-image-by-index" [
   user_id: string
   image_type: string
   index: int
@@ -15990,7 +15990,7 @@ export def "users-images delete-by-user-id-image-type-index" [
 #
 # POST /Users/{userId}/Images/{imageType}/{index}
 # operationId: PostUserImageByIndex
-export def "users-images create-by-user-id-image-type-index" [
+export def "post-user-image-by-index" [
   user_id: string
   image_type: string
   index: int
@@ -16030,7 +16030,7 @@ export def "users-images create-by-user-id-image-type-index" [
 #
 # GET /Users/{userId}/Items
 # operationId: GetItemsByUserId
-export def "users-items list" [
+export def "get-items-by-user-id" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16147,7 +16147,7 @@ export def "users-items list" [
 #
 # GET /Users/{userId}/Items/Latest
 # operationId: GetLatestMedia
-export def "users-items-latest get-media" [
+export def "get-latest-media" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16195,7 +16195,7 @@ export def "users-items-latest get-media" [
 #
 # GET /Users/{userId}/Items/Resume
 # operationId: GetResumeItems
-export def "users-items-resume get" [
+export def "get-resume-items" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16246,7 +16246,7 @@ export def "users-items-resume get" [
 #
 # GET /Users/{userId}/Items/Root
 # operationId: GetRootFolder
-export def "users-items-root get-folder" [
+export def "get-root-folder" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16283,7 +16283,7 @@ export def "users-items-root get-folder" [
 #
 # GET /Users/{userId}/Items/{itemId}
 # operationId: GetItem
-export def "users-items get" [
+export def "get-item" [
   user_id: string
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16322,7 +16322,7 @@ export def "users-items get" [
 #
 # GET /Users/{userId}/Items/{itemId}/Intros
 # operationId: GetIntros
-export def "users-items-intros get" [
+export def "get-intros" [
   user_id: string
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16361,7 +16361,7 @@ export def "users-items-intros get" [
 #
 # GET /Users/{userId}/Items/{itemId}/LocalTrailers
 # operationId: GetLocalTrailers
-export def "users-items-local-trailers get" [
+export def "get-local-trailers" [
   user_id: string
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16400,7 +16400,7 @@ export def "users-items-local-trailers get" [
 #
 # DELETE /Users/{userId}/Items/{itemId}/Rating
 # operationId: DeleteUserItemRating
-export def "users-items-rating delete" [
+export def "delete-user-item-rating" [
   user_id: string
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16439,7 +16439,7 @@ export def "users-items-rating delete" [
 #
 # POST /Users/{userId}/Items/{itemId}/Rating
 # operationId: UpdateUserItemRating
-export def "users-items-rating update" [
+export def "update-user-item-rating" [
   user_id: string
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16480,7 +16480,7 @@ export def "users-items-rating update" [
 #
 # GET /Users/{userId}/Items/{itemId}/SpecialFeatures
 # operationId: GetSpecialFeatures
-export def "users-items-special-features get" [
+export def "get-special-features" [
   user_id: string
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16519,7 +16519,7 @@ export def "users-items-special-features get" [
 #
 # POST /Users/{userId}/Password
 # operationId: UpdateUserPassword
-export def "users-password update" [
+export def "update-user-password" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16562,7 +16562,7 @@ export def "users-password update" [
 #
 # DELETE /Users/{userId}/PlayedItems/{itemId}
 # operationId: MarkUnplayedItem
-export def "users-played-items delete-mark-unplayed" [
+export def "mark-unplayed-item" [
   user_id: string
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16601,7 +16601,7 @@ export def "users-played-items delete-mark-unplayed" [
 #
 # POST /Users/{userId}/PlayedItems/{itemId}
 # operationId: MarkPlayedItem
-export def "users-played-items create-mark" [
+export def "mark-played-item" [
   user_id: string
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16642,7 +16642,7 @@ export def "users-played-items create-mark" [
 #
 # DELETE /Users/{userId}/PlayingItems/{itemId}
 # operationId: OnPlaybackStopped
-export def "users-playing-items delete-on-playback-stopped" [
+export def "on-playback-stopped" [
   user_id: string
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16686,7 +16686,7 @@ export def "users-playing-items delete-on-playback-stopped" [
 #
 # POST /Users/{userId}/PlayingItems/{itemId}
 # operationId: OnPlaybackStart
-export def "users-playing-items start-on-playback" [
+export def "on-playback-start" [
   user_id: string
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16732,7 +16732,7 @@ export def "users-playing-items start-on-playback" [
 #
 # POST /Users/{userId}/PlayingItems/{itemId}/Progress
 # operationId: OnPlaybackProgress
-export def "users-playing-items-progress create-on-playback" [
+export def "on-playback-progress" [
   user_id: string
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16783,7 +16783,7 @@ export def "users-playing-items-progress create-on-playback" [
 # POST /Users/{userId}/Policy
 # operationId: UpdateUserPolicy
 # --AccessSchedules item shape: {DayOfWeek: "Sunday"|"Monday"|"Tuesday"|"Wednesday"|"Thursday"|"Friday"|"Saturday"|"Everyday"|"Weekday"|"Weekend", EndHour: float, StartHour: float}
-export def "users-policy update" [
+export def "update-user-policy" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16861,7 +16861,7 @@ export def "users-policy update" [
 #
 # GET /Users/{userId}/Suggestions
 # operationId: GetSuggestions
-export def "users-suggestions get" [
+export def "get-suggestions" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16904,7 +16904,7 @@ export def "users-suggestions get" [
 #
 # GET /Users/{userId}/Views
 # operationId: GetUserViews
-export def "users-views get" [
+export def "get-user-views" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16945,7 +16945,7 @@ export def "users-views get" [
 #
 # DELETE /Videos/ActiveEncodings
 # operationId: StopEncodingProcess
-export def "videos-active-encodings stop-process" [
+export def "stop-encoding-process" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -16982,7 +16982,7 @@ export def "videos-active-encodings stop-process" [
 #
 # POST /Videos/MergeVersions
 # operationId: MergeVersions
-export def "videos-merge-versions create" [
+export def "merge-versions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -17018,7 +17018,7 @@ export def "videos-merge-versions create" [
 #
 # GET /Videos/{itemId}/AdditionalParts
 # operationId: GetAdditionalPart
-export def "videos-additional-parts get" [
+export def "get-additional-part" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17057,7 +17057,7 @@ export def "videos-additional-parts get" [
 #
 # DELETE /Videos/{itemId}/AlternateSources
 # operationId: DeleteAlternateSources
-export def "videos-alternate-sources delete" [
+export def "delete-alternate-sources" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17093,7 +17093,7 @@ export def "videos-alternate-sources delete" [
 #
 # POST /Videos/{itemId}/Subtitles
 # operationId: UploadSubtitle
-export def "videos-subtitles upload" [
+export def "upload-subtitle" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17136,7 +17136,7 @@ export def "videos-subtitles upload" [
 #
 # DELETE /Videos/{itemId}/Subtitles/{index}
 # operationId: DeleteSubtitle
-export def "videos-subtitles delete" [
+export def "delete-subtitle" [
   item_id: string
   index: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -17174,7 +17174,7 @@ export def "videos-subtitles delete" [
 #
 # GET /Videos/{itemId}/hls/{playlistId}/stream.m3u8
 # operationId: GetHlsPlaylistLegacy
-export def "videos-hls-stream-m3u8 get-playlist-legacy" [
+export def "get-hls-playlist-legacy" [
   item_id: string
   playlist_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -17212,7 +17212,7 @@ export def "videos-hls-stream-m3u8 get-playlist-legacy" [
 #
 # GET /Videos/{itemId}/hls/{playlistId}/{segmentId}.{segmentContainer}
 # operationId: GetHlsVideoSegmentLegacy
-export def "videos-hls get-segment-legacy" [
+export def "get-hls-video-segment-legacy" [
   item_id: string
   playlist_id: string
   segment_id: string
@@ -17254,7 +17254,7 @@ export def "videos-hls get-segment-legacy" [
 #
 # GET /Videos/{itemId}/hls1/{playlistId}/{segmentId}.{container}
 # operationId: GetHlsVideoSegment
-export def "videos-hls1 get-hls-segment" [
+export def "get-hls-video-segment" [
   item_id: string
   playlist_id: string
   segment_id: int
@@ -17344,7 +17344,7 @@ export def "videos-hls1 get-hls-segment" [
 #
 # GET /Videos/{itemId}/live.m3u8
 # operationId: GetLiveHlsStream
-export def "videos-live-m3u8 get-hls-stream" [
+export def "get-live-hls-stream" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17432,7 +17432,7 @@ export def "videos-live-m3u8 get-hls-stream" [
 #
 # GET /Videos/{itemId}/main.m3u8
 # operationId: GetVariantHlsVideoPlaylist
-export def "videos-main-m3u8 get-variant-hls-playlist" [
+export def "get-variant-hls-video-playlist" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17516,7 +17516,7 @@ export def "videos-main-m3u8 get-variant-hls-playlist" [
 #
 # GET /Videos/{itemId}/master.m3u8
 # operationId: GetMasterHlsVideoPlaylist
-export def "videos-master-m3u8 get-hls-playlist" [
+export def "get-master-hls-video-playlist" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17601,7 +17601,7 @@ export def "videos-master-m3u8 get-hls-playlist" [
 #
 # HEAD /Videos/{itemId}/master.m3u8
 # operationId: HeadMasterHlsVideoPlaylist
-export def "videos-master-m3u8 head-hls-playlist" [
+export def "head-master-hls-video-playlist" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17686,7 +17686,7 @@ export def "videos-master-m3u8 head-hls-playlist" [
 #
 # GET /Videos/{itemId}/stream
 # operationId: GetVideoStream
-export def "videos-stream get" [
+export def "get-video-stream" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17771,7 +17771,7 @@ export def "videos-stream get" [
 #
 # HEAD /Videos/{itemId}/stream
 # operationId: HeadVideoStream
-export def "videos-stream head" [
+export def "head-video-stream" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17856,7 +17856,7 @@ export def "videos-stream head" [
 #
 # GET /Videos/{itemId}/{mediaSourceId}/Subtitles/{index}/Stream.{format}
 # operationId: GetSubtitle
-export def "videos-subtitles-stream-format get" [
+export def "get-subtitle" [
   item_id: string
   media_source_id: string
   index: int
@@ -17903,7 +17903,7 @@ export def "videos-subtitles-stream-format get" [
 #
 # GET /Videos/{itemId}/{mediaSourceId}/Subtitles/{index}/subtitles.m3u8
 # operationId: GetSubtitlePlaylist
-export def "videos-subtitles-subtitles-m3u8 get-playlist" [
+export def "get-subtitle-playlist" [
   item_id: string
   media_source_id: string
   index: int
@@ -17945,7 +17945,7 @@ export def "videos-subtitles-subtitles-m3u8 get-playlist" [
 #
 # GET /Videos/{itemId}/{mediaSourceId}/Subtitles/{index}/{startPositionTicks}/Stream.{format}
 # operationId: GetSubtitleWithTicks
-export def "videos-subtitles-stream-format get-with-ticks" [
+export def "get-subtitle-with-ticks" [
   item_id: string
   media_source_id: string
   index: int
@@ -17993,7 +17993,7 @@ export def "videos-subtitles-stream-format get-with-ticks" [
 #
 # GET /Videos/{itemId}/{stream}.{container}
 # operationId: GetVideoStreamByContainer
-export def "videos get" [
+export def "get-video-stream-by-container" [
   item_id: string
   stream: string
   container: string
@@ -18081,7 +18081,7 @@ export def "videos get" [
 #
 # HEAD /Videos/{itemId}/{stream}.{container}
 # operationId: HeadVideoStreamByContainer
-export def "videos head" [
+export def "head-video-stream-by-container" [
   item_id: string
   stream: string
   container: string
@@ -18169,7 +18169,7 @@ export def "videos head" [
 #
 # GET /Videos/{videoId}/{mediaSourceId}/Attachments/{index}
 # operationId: GetAttachment
-export def "videos-attachments get" [
+export def "get-attachment" [
   video_id: string
   media_source_id: string
   index: int
@@ -18209,7 +18209,7 @@ export def "videos-attachments get" [
 #
 # GET /Years
 # operationId: GetYears
-export def "years list" [
+export def "get-years" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -18260,7 +18260,7 @@ export def "years list" [
 #
 # GET /Years/{year}
 # operationId: GetYear
-export def "years get" [
+export def "get-year" [
   year: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18299,7 +18299,7 @@ export def "years get" [
 #
 # GET /web/ConfigurationPage
 # operationId: GetDashboardConfigurationPage
-export def "web-configuration-page get-dashboard" [
+export def "get-dashboard-configuration-page" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -18336,7 +18336,7 @@ export def "web-configuration-page get-dashboard" [
 #
 # GET /web/ConfigurationPages
 # operationId: GetConfigurationPages
-export def "web-configuration-pages get" [
+export def "get-configuration-pages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

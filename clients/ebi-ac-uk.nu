@@ -97,7 +97,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "activities get-using" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-activities-using-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -121,7 +121,7 @@ export def commands []: nothing -> table {
 #
 # GET /activities
 # operationId: getActivitiesUsingGET
-export def "activities get-using" [
+export def "get-activities-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -162,7 +162,7 @@ export def "activities get-using" [
 #
 # GET /assays
 # operationId: getAssaysUsingGET
-export def "assays get-using" [
+export def "get-assays-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -203,7 +203,7 @@ export def "assays get-using" [
 #
 # GET /drugs
 # operationId: getDrugsUsingGET
-export def "drugs get-using" [
+export def "get-drugs-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -245,7 +245,7 @@ export def "drugs get-using" [
 #
 # GET /efo
 # operationId: getEFOUsingGET
-export def "efo get-using" [
+export def "get-efo-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -288,7 +288,7 @@ export def "efo get-using" [
 #
 # GET /hpo
 # operationId: getHpoUsingGET
-export def "hpo get-using" [
+export def "get-hpo-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -328,7 +328,7 @@ export def "hpo get-using" [
 #
 # GET /intact
 # operationId: getIntactUsingGET
-export def "intact get-using" [
+export def "get-intact-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -368,7 +368,7 @@ export def "intact get-using" [
 #
 # GET /molecules
 # operationId: getMoleculesUsingGET
-export def "molecules get-using" [
+export def "get-molecules-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -408,7 +408,7 @@ export def "molecules get-using" [
 #
 # GET /proteins
 # operationId: getProteinsUsingGET
-export def "proteins get-using" [
+export def "get-proteins-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -456,7 +456,7 @@ export def "proteins get-using" [
 #
 # GET /pubchem/bioassays
 # operationId: getBioassaysUsingGET
-export def "pubchem-bioassays get-using" [
+export def "get-bioassays-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -496,7 +496,7 @@ export def "pubchem-bioassays get-using" [
 #
 # GET /pubchem/bioassays/sids
 # operationId: getBioassaysUsingGET_1
-export def "pubchem-bioassays-sids get-using" [
+export def "get-bioassays-using-get-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -535,7 +535,7 @@ export def "pubchem-bioassays-sids get-using" [
 #
 # GET /pubchem/compounds
 # operationId: getCompoundsUsingGET
-export def "pubchem-compounds get-using" [
+export def "get-compounds-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -575,7 +575,7 @@ export def "pubchem-compounds get-using" [
 #
 # GET /pubchem/substances
 # operationId: getSubstancesUsingGET
-export def "pubchem-substances get-using" [
+export def "get-substances-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -614,7 +614,7 @@ export def "pubchem-substances get-using" [
 #
 # GET /targets
 # operationId: getTargetsUsingGET
-export def "targets get-using" [
+export def "get-targets-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-security-jit-network-access-policies list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "jit-network-access-policies-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Security/jitNetworkAccessPolicies
 # operationId: JitNetworkAccessPolicies_List
-export def "subscriptions-providers-microsoft-security-jit-network-access-policies list" [
+export def "jit-network-access-policies-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -178,7 +178,7 @@ export def "subscriptions-providers-microsoft-security-jit-network-access-polici
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Security/locations/{ascLocation}/jitNetworkAccessPolicies
 # operationId: JitNetworkAccessPolicies_ListByRegion
-export def "subscriptions-providers-microsoft-security-locations-jit-network-access-policies list-by-region" [
+export def "jit-network-access-policies-list-by-region" [
   subscription_id: string
   asc_location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -218,7 +218,7 @@ export def "subscriptions-providers-microsoft-security-locations-jit-network-acc
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Security/jitNetworkAccessPolicies
 # operationId: JitNetworkAccessPolicies_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-security-jit-network-access-policies list" [
+export def "jit-network-access-policies-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -258,7 +258,7 @@ export def "subscriptions-resource-groups-providers-microsoft-security-jit-netwo
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Security/locations/{ascLocation}/jitNetworkAccessPolicies
 # operationId: JitNetworkAccessPolicies_ListByResourceGroupAndRegion
-export def "subscriptions-resource-groups-providers-microsoft-security-locations-jit-network-access-policies list-by-and-region" [
+export def "jit-network-access-policies-list-by-resource-group-and-region" [
   subscription_id: string
   resource_group_name: string
   asc_location: string
@@ -300,7 +300,7 @@ export def "subscriptions-resource-groups-providers-microsoft-security-locations
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Security/locations/{ascLocation}/jitNetworkAccessPolicies/{jitNetworkAccessPolicyName}
 # operationId: JitNetworkAccessPolicies_Delete
-export def "subscriptions-resource-groups-providers-microsoft-security-locations-jit-network-access-policies delete" [
+export def "jit-network-access-policies-delete" [
   subscription_id: string
   resource_group_name: string
   asc_location: string
@@ -344,7 +344,7 @@ export def "subscriptions-resource-groups-providers-microsoft-security-locations
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Security/locations/{ascLocation}/jitNetworkAccessPolicies/{jitNetworkAccessPolicyName}
 # operationId: JitNetworkAccessPolicies_Get
-export def "subscriptions-resource-groups-providers-microsoft-security-locations-jit-network-access-policies get" [
+export def "jit-network-access-policies-get" [
   subscription_id: string
   resource_group_name: string
   asc_location: string
@@ -389,7 +389,7 @@ export def "subscriptions-resource-groups-providers-microsoft-security-locations
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Security/locations/{ascLocation}/jitNetworkAccessPolicies/{jitNetworkAccessPolicyName}
 # operationId: JitNetworkAccessPolicies_CreateOrUpdate
 # --properties shape: {requests?: list, virtualMachines: list}
-export def "subscriptions-resource-groups-providers-microsoft-security-locations-jit-network-access-policies create-or-update" [
+export def "jit-network-access-policies-create-or-update" [
   subscription_id: string
   resource_group_name: string
   asc_location: string
@@ -439,7 +439,7 @@ export def "subscriptions-resource-groups-providers-microsoft-security-locations
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Security/locations/{ascLocation}/jitNetworkAccessPolicies/{jitNetworkAccessPolicyName}/{jitNetworkAccessPolicyInitiateType}
 # operationId: JitNetworkAccessPolicies_Initiate
 # --virtualMachines item shape: {id: string, ports: list}
-export def "subscriptions-resource-groups-providers-microsoft-security-locations-jit-network-access-policies create-initiate" [
+export def "jit-network-access-policies-initiate" [
   subscription_id: string
   resource_group_name: string
   asc_location: string

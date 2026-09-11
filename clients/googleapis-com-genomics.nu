@@ -117,7 +117,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v2alpha1-pipelines-run create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "genomics-pipelines-run" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -142,7 +142,7 @@ export def commands []: nothing -> table {
 # POST /v2alpha1/pipelines:run
 # operationId: genomics.pipelines.run
 # --pipeline shape: {actions?: list, encryptedEnvironment?: record, environment?: record, resources?: record, timeout?: string}
-export def "v2alpha1-pipelines-run create" [
+export def "genomics-pipelines-run" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -197,7 +197,7 @@ export def "v2alpha1-pipelines-run create" [
 # --events item shape: {data?: record, timestamp?: string}
 # --result shape: {code?: int, details?: list, message?: string}
 # --workerStatus shape: {attachedDisks?: record, bootDisk?: record, freeRamBytes?: string, totalRamBytes?: string, uptimeSeconds?: string}
-export def "v2alpha1-workers check" [
+export def "genomics-workers-check-in" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -257,7 +257,7 @@ export def "v2alpha1-workers check" [
 # --events item shape: {data?: record, timestamp?: string}
 # --result shape: {code?: int, details?: list, message?: string}
 # --workerStatus shape: {attachedDisks?: record, bootDisk?: record, freeRamBytes?: string, totalRamBytes?: string, uptimeSeconds?: string}
-export def "v2alpha1 check" [
+export def "genomics-projects-workers-check-in" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -314,7 +314,7 @@ export def "v2alpha1 check" [
 #
 # GET /v2alpha1/{name}
 # operationId: genomics.projects.operations.list
-export def "v2alpha1 list" [
+export def "genomics-projects-operations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -365,7 +365,7 @@ export def "v2alpha1 list" [
 #
 # POST /v2alpha1/{name}:cancel
 # operationId: genomics.projects.operations.cancel
-export def "v2alpha1 cancel" [
+export def "genomics-projects-operations-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

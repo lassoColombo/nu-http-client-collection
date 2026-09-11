@@ -112,7 +112,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "messages-send send" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "fcm-projects-messages-send" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -137,7 +137,7 @@ export def commands []: nothing -> table {
 # POST /v1/{parent}/messages:send
 # operationId: fcm.projects.messages.send
 # --message shape: {android?: record, apns?: record, condition?: string, data?: record, fcmOptions?: record, name?: string, notification?: record, token?: string, topic?: string, webpush?: record}
-export def "messages-send send" [
+export def "fcm-projects-messages-send" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

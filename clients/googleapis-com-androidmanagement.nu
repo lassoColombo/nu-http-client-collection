@@ -134,7 +134,7 @@ def allow-personal-usage-completer [] { ["ALLOW_PERSONAL_USAGE_UNSPECIFIED" "PER
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "enterprises list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "androidmanagement-enterprises-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -158,7 +158,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/enterprises
 # operationId: androidmanagement.enterprises.list
-export def "enterprises list" [
+export def "androidmanagement-enterprises-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -212,7 +212,7 @@ export def "enterprises list" [
 # --logo shape: {sha256Hash?: string, url?: string}
 # --signinDetails item shape: {allowPersonalUsage?: "ALLOW_PERSONAL_USAGE_UNSPECIFIED"|"PERSONAL_USAGE_ALLOWED"|"PERSONAL_USAGE_DISALLOWED", qrCode?: string, signinEnrollmentToken?: string, signinUrl?: string}
 # --termsAndConditions item shape: {content?: record, header?: record}
-export def "enterprises create" [
+export def "androidmanagement-enterprises-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -275,7 +275,7 @@ export def "enterprises create" [
 #
 # POST /v1/signupUrls
 # operationId: androidmanagement.signupUrls.create
-export def "signup-urls create" [
+export def "androidmanagement-signup-urls-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -323,7 +323,7 @@ export def "signup-urls create" [
 #
 # DELETE /v1/{name}
 # operationId: androidmanagement.enterprises.webApps.delete
-export def "enterprises delete" [
+export def "androidmanagement-enterprises-web-apps-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -373,7 +373,7 @@ export def "enterprises delete" [
 #
 # GET /v1/{name}
 # operationId: androidmanagement.enterprises.webApps.get
-export def "enterprises get" [
+export def "androidmanagement-enterprises-web-apps-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -425,7 +425,7 @@ export def "enterprises get" [
 # PATCH /v1/{name}
 # operationId: androidmanagement.enterprises.webApps.patch
 # --icons item shape: {imageData?: string}
-export def "enterprises update" [
+export def "androidmanagement-enterprises-web-apps-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -483,7 +483,7 @@ export def "enterprises update" [
 #
 # POST /v1/{name}:cancel
 # operationId: androidmanagement.enterprises.devices.operations.cancel
-export def "enterprises cancel" [
+export def "androidmanagement-enterprises-devices-operations-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -533,7 +533,7 @@ export def "enterprises cancel" [
 # operationId: androidmanagement.enterprises.devices.issueCommand
 # --clearAppsDataParams shape: {packageNames?: list<string>}
 # --clearAppsDataStatus shape: {results?: record}
-export def "enterprises create-issue-command" [
+export def "androidmanagement-enterprises-devices-issue-command" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -593,7 +593,7 @@ export def "enterprises create-issue-command" [
 #
 # GET /v1/{parent}/devices
 # operationId: androidmanagement.enterprises.devices.list
-export def "devices list" [
+export def "androidmanagement-enterprises-devices-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -643,7 +643,7 @@ export def "devices list" [
 #
 # GET /v1/{parent}/enrollmentTokens
 # operationId: androidmanagement.enterprises.enrollmentTokens.list
-export def "enrollment-tokens list" [
+export def "androidmanagement-enterprises-enrollment-tokens-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -694,7 +694,7 @@ export def "enrollment-tokens list" [
 # POST /v1/{parent}/enrollmentTokens
 # operationId: androidmanagement.enterprises.enrollmentTokens.create
 # --user shape: {accountIdentifier?: string}
-export def "enrollment-tokens create" [
+export def "androidmanagement-enterprises-enrollment-tokens-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -755,7 +755,7 @@ export def "enrollment-tokens create" [
 #
 # GET /v1/{parent}/policies
 # operationId: androidmanagement.enterprises.policies.list
-export def "policies list" [
+export def "androidmanagement-enterprises-policies-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -805,7 +805,7 @@ export def "policies list" [
 #
 # GET /v1/{parent}/webApps
 # operationId: androidmanagement.enterprises.webApps.list
-export def "web-apps list" [
+export def "androidmanagement-enterprises-web-apps-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -856,7 +856,7 @@ export def "web-apps list" [
 # POST /v1/{parent}/webApps
 # operationId: androidmanagement.enterprises.webApps.create
 # --icons item shape: {imageData?: string}
-export def "web-apps create" [
+export def "androidmanagement-enterprises-web-apps-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -913,7 +913,7 @@ export def "web-apps create" [
 #
 # POST /v1/{parent}/webTokens
 # operationId: androidmanagement.enterprises.webTokens.create
-export def "web-tokens create" [
+export def "androidmanagement-enterprises-web-tokens-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

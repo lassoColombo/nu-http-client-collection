@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["query-api-key"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "user-content-by-date-json get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-user-content-by-date-json" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -122,7 +122,7 @@ export def commands []: nothing -> table {
 #
 # GET /user-content/by-date.json
 # operationId: GET_user-content-by-date-json
-export def "user-content-by-date-json get" [
+export def "get-user-content-by-date-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -158,7 +158,7 @@ export def "user-content-by-date-json get" [
 #
 # GET /user-content/recent.json
 # operationId: GET_user-content-recent-json
-export def "user-content-recent-json get" [
+export def "get-user-content-recent-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -192,7 +192,7 @@ export def "user-content-recent-json get" [
 #
 # GET /user-content/url.json
 # operationId: GET_user-content-url-json
-export def "user-content-url-json get" [
+export def "get-user-content-url-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -228,7 +228,7 @@ export def "user-content-url-json get" [
 #
 # GET /user-content/user.json
 # operationId: GET_user-content-user-json
-export def "user-content-user-json get" [
+export def "get-user-content-user-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -106,7 +106,7 @@ def accept-completer [] { ["application/json" "application/xml"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "almaws-task-lists-printouts list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-almaws-v1-task-lists-printouts" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -130,7 +130,7 @@ export def commands []: nothing -> table {
 #
 # GET /almaws/v1/task-lists/printouts
 # operationId: get/almaws/v1/task-lists/printouts
-export def "almaws-task-lists-printouts list" [
+export def "get-almaws-v1-task-lists-printouts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -172,7 +172,7 @@ export def "almaws-task-lists-printouts list" [
 #
 # POST /almaws/v1/task-lists/printouts
 # operationId: post/almaws/v1/task-lists/printouts
-export def "almaws-task-lists-printouts create" [
+export def "post-almaws-v1-task-lists-printouts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -213,7 +213,7 @@ export def "almaws-task-lists-printouts create" [
 #
 # GET /almaws/v1/task-lists/printouts/{printout_id}
 # operationId: get/almaws/v1/task-lists/printouts/{printout_id}
-export def "almaws-task-lists-printouts get" [
+export def "get-almaws-v1-task-lists-printouts-1" [
   printout_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -250,7 +250,7 @@ export def "almaws-task-lists-printouts get" [
 #
 # POST /almaws/v1/task-lists/printouts/{printout_id}
 # operationId: post/almaws/v1/task-lists/printouts/{printout_id}
-export def "almaws-task-lists-printouts create-by-printout-id" [
+export def "post-almaws-v1-task-lists-printouts-1" [
   printout_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -289,7 +289,7 @@ export def "almaws-task-lists-printouts create-by-printout-id" [
 #
 # GET /almaws/v1/task-lists/requested-resources
 # operationId: get/almaws/v1/task-lists/requested-resources
-export def "almaws-task-lists-requested-resources get" [
+export def "get-almaws-v1-task-lists-requested-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -335,7 +335,7 @@ export def "almaws-task-lists-requested-resources get" [
 #
 # POST /almaws/v1/task-lists/requested-resources
 # operationId: post/almaws/v1/task-lists/requested-resources
-export def "almaws-task-lists-requested-resources create" [
+export def "post-almaws-v1-task-lists-requested-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -378,7 +378,7 @@ export def "almaws-task-lists-requested-resources create" [
 #
 # GET /almaws/v1/task-lists/rs/lending-requests
 # operationId: get/almaws/v1/task-lists/rs/lending-requests
-export def "almaws-task-lists-rs-lending-requests get" [
+export def "get-almaws-v1-task-lists-rs-lending-requests" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -421,7 +421,7 @@ export def "almaws-task-lists-rs-lending-requests get" [
 #
 # POST /almaws/v1/task-lists/rs/lending-requests
 # operationId: post/almaws/v1/task-lists/rs/lending-requests
-export def "almaws-task-lists-rs-lending-requests create" [
+export def "post-almaws-v1-task-lists-rs-lending-requests" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -465,7 +465,7 @@ export def "almaws-task-lists-rs-lending-requests create" [
 #
 # GET /almaws/v1/task-lists/test
 # operationId: get/almaws/v1/task-lists/test
-export def "almaws-task-lists-test get" [
+export def "get-almaws-v1-task-lists-test" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -500,7 +500,7 @@ export def "almaws-task-lists-test get" [
 #
 # POST /almaws/v1/task-lists/test
 # operationId: post/almaws/v1/task-lists/test
-export def "almaws-task-lists-test create" [
+export def "post-almaws-v1-task-lists-test" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

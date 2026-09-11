@@ -106,7 +106,7 @@ def display-coordinates-completer [] { ["" "false" "true"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account-settings-json get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account-settings-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -131,7 +131,7 @@ export def commands []: nothing -> table {
 # GET /account/settings.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/account/settings
 # operationId: account.settings.get
-export def "account-settings-json get" [
+export def "account-settings-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -173,7 +173,7 @@ export def "account-settings-json get" [
 # POST /account/settings.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/account/settings
 # operationId: account.settings.post
-export def "account-settings-json create" [
+export def "account-settings-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -215,7 +215,7 @@ export def "account-settings-json create" [
 # POST /account/update_delivery_device.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/account/update_delivery_device
 # operationId: account.update_delivery_device
-export def "account-update-delivery-device-json update" [
+export def "account-update-delivery-device" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -253,7 +253,7 @@ export def "account-update-delivery-device-json update" [
 # POST /account/update_profile.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/account/update_profile
 # operationId: account.update_profile
-export def "account-update-profile-json update" [
+export def "account-update-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -295,7 +295,7 @@ export def "account-update-profile-json update" [
 # POST /account/update_profile_background_image.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/account/update_profile_background_image
 # operationId: accounts.update_profile_background_image
-export def "account-update-profile-background-image-json update" [
+export def "accounts-update-profile-background-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -338,7 +338,7 @@ export def "account-update-profile-background-image-json update" [
 # POST /account/update_profile_colors.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/account/update_profile_colors
 # operationId: accounts.update_profile_colors
-export def "account-update-profile-colors-json update" [
+export def "accounts-update-profile-colors" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -381,7 +381,7 @@ export def "account-update-profile-colors-json update" [
 # POST /account/update_profile_image.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/account/update_profile_image
 # operationId: accounts.update_profile_image
-export def "account-update-profile-image-json update" [
+export def "accounts-update-profile-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -421,7 +421,7 @@ export def "account-update-profile-image-json update" [
 # GET /application/rate_limit_status.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/application/rate_limit_status
 # operationId: application.rate_limit_status
-export def "application-rate-limit-status-json get" [
+export def "application-rate-limit-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -458,7 +458,7 @@ export def "application-rate-limit-status-json get" [
 # POST /blocks/create.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/blocks/create
 # operationId: blocks.create
-export def "blocks-create-json create" [
+export def "blocks-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -496,7 +496,7 @@ export def "blocks-create-json create" [
 # POST /blocks/destroy.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/blocks/destroy
 # operationId: blocks.destroy
-export def "blocks-destroy-json delete" [
+export def "blocks-destroy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -534,7 +534,7 @@ export def "blocks-destroy-json delete" [
 # GET /blocks/ids.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/blocks/ids
 # operationId: blocks.ids
-export def "blocks-ids-json get" [
+export def "blocks-ids" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -572,7 +572,7 @@ export def "blocks-ids-json get" [
 # GET /blocks/list.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/blocks/list
 # operationId: blocks.list
-export def "blocks-list-json list" [
+export def "blocks-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -611,7 +611,7 @@ export def "blocks-list-json list" [
 # GET /direct_messages.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/direct_messages
 # operationId: direct_messages
-export def "direct-messages-json get" [
+export def "direct-messages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -653,7 +653,7 @@ export def "direct-messages-json get" [
 # POST /direct_messages/destroy.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/direct_messages/destroy
 # operationId: direct_messages.destroy
-export def "direct-messages-destroy-json delete" [
+export def "direct-messages-destroy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -691,7 +691,7 @@ export def "direct-messages-destroy-json delete" [
 # POST /direct_messages/new.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/direct_messages/new
 # operationId: direct_messages.new
-export def "direct-messages-new-json create" [
+export def "direct-messages-new" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -728,7 +728,7 @@ export def "direct-messages-new-json create" [
 # GET /direct_messages/sent.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/direct_messages/sent
 # operationId: direct_messages.sent
-export def "direct-messages-sent-json get" [
+export def "direct-messages-sent" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -769,7 +769,7 @@ export def "direct-messages-sent-json get" [
 # GET /direct_messages/show.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/direct_messages/show
 # operationId: direct_messages.show
-export def "direct-messages-show-json get" [
+export def "direct-messages-show" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -806,7 +806,7 @@ export def "direct-messages-show-json get" [
 # POST /favorites/create.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/favorites/create
 # operationId: favorites.create
-export def "favorites-create-json create" [
+export def "favorites-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -844,7 +844,7 @@ export def "favorites-create-json create" [
 # POST /favorites/destroy.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/favorites/destroy
 # operationId: favorites.destroy
-export def "favorites-destroy-json delete" [
+export def "favorites-destroy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -882,7 +882,7 @@ export def "favorites-destroy-json delete" [
 # GET /favorites/list.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/favorites/list
 # operationId: favorites.list
-export def "favorites-list-json list" [
+export def "favorites-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -922,7 +922,7 @@ export def "favorites-list-json list" [
 # GET /followers/ids.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/followers/ids
 # operationId: followers.ids
-export def "followers-ids-json get" [
+export def "followers-ids" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -960,7 +960,7 @@ export def "followers-ids-json get" [
 # GET /friends/ids.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/friends/ids
 # operationId: friends.ids
-export def "friends-ids-json get" [
+export def "friends-ids" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -998,7 +998,7 @@ export def "friends-ids-json get" [
 # POST /friendships/create.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/friendships/create
 # operationId: friendships.create
-export def "friendships-create-json create" [
+export def "friendships-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1035,7 +1035,7 @@ export def "friendships-create-json create" [
 # POST /friendships/destroy.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/friendships/destroy
 # operationId: friendships.destroy
-export def "friendships-destroy-json delete" [
+export def "friendships-destroy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1070,7 +1070,7 @@ export def "friendships-destroy-json delete" [
 # GET /friendships/incoming.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/friendships/incoming
 # operationId: friendships.incoming
-export def "friendships-incoming-json get" [
+export def "friendships-incoming" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1108,7 +1108,7 @@ export def "friendships-incoming-json get" [
 # GET /friendships/lookup.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/friendships/lookup
 # operationId: friendships.lookup
-export def "friendships-lookup-json get" [
+export def "friendships-lookup" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1143,7 +1143,7 @@ export def "friendships-lookup-json get" [
 # GET /friendships/outgoing.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/friendships/outgoing
 # operationId: friendships.outgoing
-export def "friendships-outgoing-json get" [
+export def "friendships-outgoing" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1181,7 +1181,7 @@ export def "friendships-outgoing-json get" [
 # GET /friendships/show.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/friendships/show
 # operationId: friendships.show
-export def "friendships-show-json get" [
+export def "friendships-show" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1221,7 +1221,7 @@ export def "friendships-show-json get" [
 # POST /friendships/update.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/friendships/update
 # operationId: friendships.update
-export def "friendships-update-json update" [
+export def "friendships-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1259,7 +1259,7 @@ export def "friendships-update-json update" [
 # GET /geo/id/{place_id}.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/geo/id/%3Aplace_id
 # operationId: geo.place_id
-export def "geo-id get" [
+export def "geo-place-id" [
   place_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1296,7 +1296,7 @@ export def "geo-id get" [
 # POST /geo/places.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/geo/place
 # operationId: geo.places
-export def "geo-places-json create" [
+export def "geo-places" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1334,7 +1334,7 @@ export def "geo-places-json create" [
 # GET /geo/reverse_geocode.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/geo/reverse_geocode
 # operationId: geo.reverse_geocode
-export def "geo-reverse-geocode-json get" [
+export def "geo-reverse-geocode" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1376,7 +1376,7 @@ export def "geo-reverse-geocode-json get" [
 # GET /geo/search.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/geo/search
 # operationId: geo.search
-export def "geo-search-json list" [
+export def "geo-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1417,7 +1417,7 @@ export def "geo-search-json list" [
 # GET /geo/similar_places.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/geo/similar_places
 # operationId: geo.similar_places
-export def "geo-similar-places-json get" [
+export def "geo-similar-places" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1456,7 +1456,7 @@ export def "geo-similar-places-json get" [
 # GET /help/configuration.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/help/configuration
 # operationId: help.configurations
-export def "help-configuration-json get" [
+export def "help-configurations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1491,7 +1491,7 @@ export def "help-configuration-json get" [
 # GET /help/languages.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/help/languages
 # operationId: help.languages
-export def "help-languages-json get" [
+export def "help-languages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1526,7 +1526,7 @@ export def "help-languages-json get" [
 # GET /help/privacy.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/help/privacy
 # operationId: help.privacy
-export def "help-privacy-json get" [
+export def "help-privacy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1561,7 +1561,7 @@ export def "help-privacy-json get" [
 # GET /help/tos.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/help/tos
 # operationId: help.tos
-export def "help-tos-json get" [
+export def "help-tos" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1596,7 +1596,7 @@ export def "help-tos-json get" [
 # POST /lists/create.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/lists/create
 # operationId: lists.create
-export def "lists-create-json create" [
+export def "lists-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1635,7 +1635,7 @@ export def "lists-create-json create" [
 # POST /lists/destroy.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/lists/destroy
 # operationId: lists.destroy
-export def "lists-destroy-json delete" [
+export def "lists-destroy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1673,7 +1673,7 @@ export def "lists-destroy-json delete" [
 # GET /lists/list.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/lists/list
 # operationId: lists.list
-export def "lists-list-json list" [
+export def "lists-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1711,7 +1711,7 @@ export def "lists-list-json list" [
 # GET /lists/members.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/lists/members
 # operationId: lists.members
-export def "lists-members-json get" [
+export def "lists-members" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1752,7 +1752,7 @@ export def "lists-members-json get" [
 # POST /lists/members/create.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/lists/members/create
 # operationId: lists.members.create
-export def "lists-members-create-json create" [
+export def "lists-members-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1790,7 +1790,7 @@ export def "lists-members-create-json create" [
 # POST /lists/members/create_all.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/lists/members/create_all
 # operationId: lists.members.create_all
-export def "lists-members-create-all-json create" [
+export def "lists-members-create-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1830,7 +1830,7 @@ export def "lists-members-create-all-json create" [
 # POST /lists/members/destroy.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/lists/members/destroy
 # operationId: lists.members.destroy
-export def "lists-members-destroy-json delete" [
+export def "lists-members-destroy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1872,7 +1872,7 @@ export def "lists-members-destroy-json delete" [
 # POST /lists/members/destroy_all.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/lists/members/destroy_all
 # operationId: lists.members.destroy_all
-export def "lists-members-destroy-all-json delete" [
+export def "lists-members-destroy-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1912,7 +1912,7 @@ export def "lists-members-destroy-all-json delete" [
 # GET /lists/members/show.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/lists/members/show
 # operationId: lists.members.show
-export def "lists-members-show-json get" [
+export def "lists-members-show" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1952,7 +1952,7 @@ export def "lists-members-show-json get" [
 # GET /lists/memberships.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/lists/memberships
 # operationId: lists.memberships
-export def "lists-memberships-json get" [
+export def "lists-memberships" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1992,7 +1992,7 @@ export def "lists-memberships-json get" [
 # GET /lists/show.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/lists/show
 # operationId: lists.show
-export def "lists-show-json get" [
+export def "lists-show" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2030,7 +2030,7 @@ export def "lists-show-json get" [
 # GET /lists/statuses.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/lists/statuses
 # operationId: lists.statuses
-export def "lists-statuses-json get" [
+export def "lists-statuses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2073,7 +2073,7 @@ export def "lists-statuses-json get" [
 # GET /lists/subscribers.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/lists/subscribers
 # operationId: lists.subscribers
-export def "lists-subscribers-json get" [
+export def "lists-subscribers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2114,7 +2114,7 @@ export def "lists-subscribers-json get" [
 # POST /lists/subscribers/create.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/lists/subscribers/create
 # operationId: lists.subscribers.create
-export def "lists-subscribers-create-json create" [
+export def "lists-subscribers-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2152,7 +2152,7 @@ export def "lists-subscribers-create-json create" [
 # POST /lists/subscribers/destroy.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/lists/subscribers/destroy
 # operationId: lists.subscribers.destroy
-export def "lists-subscribers-destroy-json delete" [
+export def "lists-subscribers-destroy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2190,7 +2190,7 @@ export def "lists-subscribers-destroy-json delete" [
 # GET /lists/subscribers/show.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/lists/subscribers/show
 # operationId: lists.subscribers.show
-export def "lists-subscribers-show-json get" [
+export def "lists-subscribers-show" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2230,7 +2230,7 @@ export def "lists-subscribers-show-json get" [
 # GET /lists/subscriptions.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/lists/subscriptions
 # operationId: lists.subscriptions
-export def "lists-subscriptions-json get" [
+export def "lists-subscriptions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2268,7 +2268,7 @@ export def "lists-subscriptions-json get" [
 # POST /lists/update.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/lists/update
 # operationId: lists.update
-export def "lists-update-json update" [
+export def "lists-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2309,7 +2309,7 @@ export def "lists-update-json update" [
 # POST /saved_searches/create.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/saved_searches/create
 # operationId: saved_searches.create
-export def "saved-searches-create-json create" [
+export def "saved-searches-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2346,7 +2346,7 @@ export def "saved-searches-create-json create" [
 # POST /saved_searches/destroy/{id}.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/saved_searches/destroy/%3Aid
 # operationId: saved_searches.destroy
-export def "saved-searches-destroy delete" [
+export def "saved-searches-destroy" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2383,7 +2383,7 @@ export def "saved-searches-destroy delete" [
 # GET /saved_searches/list.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/saved_searches/list
 # operationId: saved_searches.list
-export def "saved-searches-list-json list" [
+export def "saved-searches-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2418,7 +2418,7 @@ export def "saved-searches-list-json list" [
 # GET /saved_searches/show/{id}.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/saved_searches/show/%3Aid
 # operationId: savedsearchesid
-export def "saved-searches-show get-savedsearchesid" [
+export def "savedsearchesid" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2455,7 +2455,7 @@ export def "saved-searches-show get-savedsearchesid" [
 # GET /search/tweets.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/search/tweets
 # operationId: search.tweets
-export def "search-tweets-json get" [
+export def "search-tweets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2502,7 +2502,7 @@ export def "search-tweets-json get" [
 # POST /statuses/destroy/{id}.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/statuses/destroy/:id
 # operationId: statuses.destroy
-export def "statuses-destroy delete" [
+export def "statuses-destroy" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2541,7 +2541,7 @@ export def "statuses-destroy delete" [
 # GET /statuses/home_timeline.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/statuses/home_timeline
 # operationId: statuses.home_timeline
-export def "statuses-home-timeline-json get" [
+export def "statuses-home-timeline" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2583,7 +2583,7 @@ export def "statuses-home-timeline-json get" [
 # GET /statuses/mentions_timeline.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/statuses/mentions_timeline
 # operationId: statuses.mentions.timeline
-export def "statuses-mentions-timeline-json get" [
+export def "statuses-mentions-timeline" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2625,7 +2625,7 @@ export def "statuses-mentions-timeline-json get" [
 # GET /statuses/oembed.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/statuses/oembed
 # operationId: statuses.oembed
-export def "statuses-oembed-json get" [
+export def "statuses-oembed" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2668,7 +2668,7 @@ export def "statuses-oembed-json get" [
 # POST /statuses/retweet/{id}.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/statuses/retweet/:id
 # operationId: statusesretweetid
-export def "statuses-retweet create-statusesretweetid" [
+export def "statusesretweetid" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2707,7 +2707,7 @@ export def "statuses-retweet create-statusesretweetid" [
 # GET /statuses/retweets/{id}.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/statuses/retweets/:id
 # operationId: statuses.retweets
-export def "statuses-retweets get" [
+export def "statuses-retweets" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2747,7 +2747,7 @@ export def "statuses-retweets get" [
 # GET /statuses/show/{id}.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/statuses/show/:id
 # operationId: statuses.show
-export def "statuses-show get" [
+export def "statuses-show" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2788,7 +2788,7 @@ export def "statuses-show get" [
 # POST /statuses/update.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/statuses/update
 # operationId: statuses.update
-export def "statuses-update-json update" [
+export def "statuses-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2831,7 +2831,7 @@ export def "statuses-update-json update" [
 # POST /statuses/update_with_media.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/statuses/update_with_media
 # operationId: statuses.update_with_media
-export def "statuses-update-with-media-json update" [
+export def "statuses-update-with-media" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2878,7 +2878,7 @@ export def "statuses-update-with-media-json update" [
 # GET /statuses/user_timeline.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/statuses/user_timeline
 # operationId: statuses.user_timeline
-export def "statuses-user-timeline-json get" [
+export def "statuses-user-timeline" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2921,7 +2921,7 @@ export def "statuses-user-timeline-json get" [
 # GET /trends/available.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/trends/available
 # operationId: trends.available
-export def "trends-available-json get" [
+export def "trends-available" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2956,7 +2956,7 @@ export def "trends-available-json get" [
 # GET /trends/closest.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/trends/closest
 # operationId: trends.closest
-export def "trends-closest-json get" [
+export def "trends-closest" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2994,7 +2994,7 @@ export def "trends-closest-json get" [
 # GET /trends/place.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/trends/place
 # operationId: trends.place
-export def "trends-place-json get" [
+export def "trends-place" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3032,7 +3032,7 @@ export def "trends-place-json get" [
 # GET /users/contributees.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/users/contributees
 # operationId: users.contributees
-export def "users-contributees-json get" [
+export def "users-contributees" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3070,7 +3070,7 @@ export def "users-contributees-json get" [
 # GET /users/contributors.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/users/contributors
 # operationId: users.contributors
-export def "users-contributors-json get" [
+export def "users-contributors" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3108,7 +3108,7 @@ export def "users-contributors-json get" [
 # GET /users/lookup.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/users/lookup
 # operationId: users.lookup
-export def "users-lookup-json get" [
+export def "users-lookup" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3147,7 +3147,7 @@ export def "users-lookup-json get" [
 # POST /users/report_spam.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/report_spam
 # operationId: users.report_spam
-export def "users-report-spam-json create" [
+export def "users-report-spam" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3182,7 +3182,7 @@ export def "users-report-spam-json create" [
 # GET /users/search.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/users/search
 # operationId: users.search
-export def "users-search-json list" [
+export def "users-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3222,7 +3222,7 @@ export def "users-search-json list" [
 # GET /users/show.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/users/show
 # operationId: users.show
-export def "users-show-json get" [
+export def "users-show" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3261,7 +3261,7 @@ export def "users-show-json get" [
 # GET /users/suggestions.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/users/suggestions
 # operationId: users.suggestions
-export def "users-suggestions-json get" [
+export def "users-suggestions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3298,7 +3298,7 @@ export def "users-suggestions-json get" [
 # GET /users/suggestions/{slug}.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/users/suggestions/%3Aslug
 # operationId: users.suggestions.slug
-export def "users-suggestions get" [
+export def "users-suggestions-slug" [
   slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3337,7 +3337,7 @@ export def "users-suggestions get" [
 # GET /users/suggestions/{slug}/members.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/users/suggestions/%3Aslug/members
 # operationId: users.suggestionsslugmembers
-export def "users-suggestions-members-json get-suggestionsslugmembers" [
+export def "users-suggestionsslugmembers" [
   slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

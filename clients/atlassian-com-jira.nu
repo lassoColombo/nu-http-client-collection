@@ -184,7 +184,7 @@ def workflow-mode-completer [] { ["draft" "live"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "rest-3-announcement-banner get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-banner" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -208,7 +208,7 @@ export def commands []: nothing -> table {
 #
 # GET /rest/api/3/announcementBanner
 # operationId: getBanner
-export def "rest-3-announcement-banner get" [
+export def "get-banner" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -242,7 +242,7 @@ export def "rest-3-announcement-banner get" [
 #
 # PUT /rest/api/3/announcementBanner
 # operationId: setBanner
-export def "rest-3-announcement-banner update" [
+export def "set-banner" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -284,7 +284,7 @@ export def "rest-3-announcement-banner update" [
 # POST /rest/api/3/app/field/value
 # operationId: updateMultipleCustomFieldValues
 # --updates item shape: {customField: string, issueIds: list<int>, value: any}
-export def "rest-3-app-field-value update-multiple-custom" [
+export def "update-multiple-custom-field-values" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -324,7 +324,7 @@ export def "rest-3-app-field-value update-multiple-custom" [
 #
 # GET /rest/api/3/app/field/{fieldIdOrKey}/context/configuration
 # operationId: getCustomFieldConfiguration
-export def "rest-3-app-field-context-configuration get-custom" [
+export def "get-custom-field-configuration" [
   field_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -369,7 +369,7 @@ export def "rest-3-app-field-context-configuration get-custom" [
 # PUT /rest/api/3/app/field/{fieldIdOrKey}/context/configuration
 # operationId: updateCustomFieldConfiguration
 # --configurations item shape: {configuration?: any, id: string, schema?: any}
-export def "rest-3-app-field-context-configuration update-custom" [
+export def "update-custom-field-configuration" [
   field_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -410,7 +410,7 @@ export def "rest-3-app-field-context-configuration update-custom" [
 # PUT /rest/api/3/app/field/{fieldIdOrKey}/value
 # operationId: updateCustomFieldValue
 # --updates item shape: {issueIds: list<int>, value: any}
-export def "rest-3-app-field-value update-custom" [
+export def "update-custom-field-value" [
   field_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -452,7 +452,7 @@ export def "rest-3-app-field-value update-custom" [
 #
 # GET /rest/api/3/application-properties
 # operationId: getApplicationProperty
-export def "rest-3-application-properties get-property" [
+export def "get-application-property" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -490,7 +490,7 @@ export def "rest-3-application-properties get-property" [
 #
 # GET /rest/api/3/application-properties/advanced-settings
 # operationId: getAdvancedSettings
-export def "rest-3-application-properties-advanced-settings get" [
+export def "get-advanced-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -524,7 +524,7 @@ export def "rest-3-application-properties-advanced-settings get" [
 #
 # PUT /rest/api/3/application-properties/{id}
 # operationId: setApplicationProperty
-export def "rest-3-application-properties update-property" [
+export def "set-application-property" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -565,7 +565,7 @@ export def "rest-3-application-properties update-property" [
 #
 # GET /rest/api/3/applicationrole
 # operationId: getAllApplicationRoles
-export def "rest-3-applicationrole get-list-application-roles" [
+export def "get-all-application-roles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -599,7 +599,7 @@ export def "rest-3-applicationrole get-list-application-roles" [
 #
 # GET /rest/api/3/applicationrole/{key}
 # operationId: getApplicationRole
-export def "rest-3-applicationrole get-application-role" [
+export def "get-application-role" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -635,7 +635,7 @@ export def "rest-3-applicationrole get-application-role" [
 #
 # GET /rest/api/3/attachment/content/{id}
 # operationId: getAttachmentContent
-export def "rest-3-attachment-content get" [
+export def "get-attachment-content" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -673,7 +673,7 @@ export def "rest-3-attachment-content get" [
 #
 # GET /rest/api/3/attachment/meta
 # operationId: getAttachmentMeta
-export def "rest-3-attachment-meta get" [
+export def "get-attachment-meta" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -707,7 +707,7 @@ export def "rest-3-attachment-meta get" [
 #
 # GET /rest/api/3/attachment/thumbnail/{id}
 # operationId: getAttachmentThumbnail
-export def "rest-3-attachment-thumbnail get" [
+export def "get-attachment-thumbnail" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -748,7 +748,7 @@ export def "rest-3-attachment-thumbnail get" [
 #
 # DELETE /rest/api/3/attachment/{id}
 # operationId: removeAttachment
-export def "rest-3-attachment delete" [
+export def "remove-attachment" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -784,7 +784,7 @@ export def "rest-3-attachment delete" [
 #
 # GET /rest/api/3/attachment/{id}
 # operationId: getAttachment
-export def "rest-3-attachment get" [
+export def "get-attachment" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -820,7 +820,7 @@ export def "rest-3-attachment get" [
 #
 # GET /rest/api/3/attachment/{id}/expand/human
 # operationId: expandAttachmentForHumans
-export def "rest-3-attachment-expand-human get" [
+export def "expand-attachment-for-humans" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -856,7 +856,7 @@ export def "rest-3-attachment-expand-human get" [
 #
 # GET /rest/api/3/attachment/{id}/expand/raw
 # operationId: expandAttachmentForMachines
-export def "rest-3-attachment-expand-raw get-for-machines" [
+export def "expand-attachment-for-machines" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -892,7 +892,7 @@ export def "rest-3-attachment-expand-raw get-for-machines" [
 #
 # GET /rest/api/3/auditing/record
 # operationId: getAuditRecords
-export def "rest-3-auditing-record get-audit" [
+export def "get-audit-records" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -932,7 +932,7 @@ export def "rest-3-auditing-record get-audit" [
 #
 # GET /rest/api/3/avatar/{type}/system
 # operationId: getAllSystemAvatars
-export def "rest-3-avatar-system get-list" [
+export def "get-all-system-avatars" [
   type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -968,7 +968,7 @@ export def "rest-3-avatar-system get-list" [
 #
 # POST /rest/api/3/comment/list
 # operationId: getCommentsByIds
-export def "rest-3-comment-list get" [
+export def "get-comments-by-ids" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1008,7 +1008,7 @@ export def "rest-3-comment-list get" [
 #
 # GET /rest/api/3/comment/{commentId}/properties
 # operationId: getCommentPropertyKeys
-export def "rest-3-comment-properties get-property-keys" [
+export def "get-comment-property-keys" [
   comment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1044,7 +1044,7 @@ export def "rest-3-comment-properties get-property-keys" [
 #
 # DELETE /rest/api/3/comment/{commentId}/properties/{propertyKey}
 # operationId: deleteCommentProperty
-export def "rest-3-comment-properties delete-property" [
+export def "delete-comment-property" [
   comment_id: string
   property_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1082,7 +1082,7 @@ export def "rest-3-comment-properties delete-property" [
 #
 # GET /rest/api/3/comment/{commentId}/properties/{propertyKey}
 # operationId: getCommentProperty
-export def "rest-3-comment-properties get-property" [
+export def "get-comment-property" [
   comment_id: string
   property_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1120,7 +1120,7 @@ export def "rest-3-comment-properties get-property" [
 #
 # PUT /rest/api/3/comment/{commentId}/properties/{propertyKey}
 # operationId: setCommentProperty
-export def "rest-3-comment-properties update-property" [
+export def "set-comment-property" [
   comment_id: string
   property_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1162,7 +1162,7 @@ export def "rest-3-comment-properties update-property" [
 #
 # POST /rest/api/3/component
 # operationId: createComponent
-export def "rest-3-component create" [
+export def "create-component" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1205,7 +1205,7 @@ export def "rest-3-component create" [
 #
 # DELETE /rest/api/3/component/{id}
 # operationId: deleteComponent
-export def "rest-3-component delete" [
+export def "delete-component" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1243,7 +1243,7 @@ export def "rest-3-component delete" [
 #
 # GET /rest/api/3/component/{id}
 # operationId: getComponent
-export def "rest-3-component get" [
+export def "get-component" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1279,7 +1279,7 @@ export def "rest-3-component get" [
 #
 # PUT /rest/api/3/component/{id}
 # operationId: updateComponent
-export def "rest-3-component update" [
+export def "update-component" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1324,7 +1324,7 @@ export def "rest-3-component update" [
 #
 # GET /rest/api/3/component/{id}/relatedIssueCounts
 # operationId: getComponentRelatedIssues
-export def "rest-3-component-related-issue-counts get" [
+export def "get-component-related-issues" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1360,7 +1360,7 @@ export def "rest-3-component-related-issue-counts get" [
 #
 # GET /rest/api/3/configuration
 # operationId: getConfiguration
-export def "rest-3-configuration get" [
+export def "get-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1394,7 +1394,7 @@ export def "rest-3-configuration get" [
 #
 # GET /rest/api/3/configuration/timetracking
 # operationId: getSelectedTimeTrackingImplementation
-export def "rest-3-configuration-timetracking get-selected-time-tracking-implementation" [
+export def "get-selected-time-tracking-implementation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1428,7 +1428,7 @@ export def "rest-3-configuration-timetracking get-selected-time-tracking-impleme
 #
 # PUT /rest/api/3/configuration/timetracking
 # operationId: selectTimeTrackingImplementation
-export def "rest-3-configuration-timetracking update-select-time-tracking-implementation" [
+export def "select-time-tracking-implementation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1467,7 +1467,7 @@ export def "rest-3-configuration-timetracking update-select-time-tracking-implem
 #
 # GET /rest/api/3/configuration/timetracking/list
 # operationId: getAvailableTimeTrackingImplementations
-export def "rest-3-configuration-timetracking-list get-available-time-tracking-implementations" [
+export def "get-available-time-tracking-implementations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1501,7 +1501,7 @@ export def "rest-3-configuration-timetracking-list get-available-time-tracking-i
 #
 # GET /rest/api/3/configuration/timetracking/options
 # operationId: getSharedTimeTrackingConfiguration
-export def "rest-3-configuration-timetracking-options get-shared-time-tracking" [
+export def "get-shared-time-tracking-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1535,7 +1535,7 @@ export def "rest-3-configuration-timetracking-options get-shared-time-tracking" 
 #
 # PUT /rest/api/3/configuration/timetracking/options
 # operationId: setSharedTimeTrackingConfiguration
-export def "rest-3-configuration-timetracking-options update-shared-time-tracking" [
+export def "set-shared-time-tracking-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1576,7 +1576,7 @@ export def "rest-3-configuration-timetracking-options update-shared-time-trackin
 #
 # GET /rest/api/3/customFieldOption/{id}
 # operationId: getCustomFieldOption
-export def "rest-3-custom-field-option get" [
+export def "get-custom-field-option" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1612,7 +1612,7 @@ export def "rest-3-custom-field-option get" [
 #
 # GET /rest/api/3/dashboard
 # operationId: getAllDashboards
-export def "rest-3-dashboard get-list" [
+export def "get-all-dashboards" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1652,7 +1652,7 @@ export def "rest-3-dashboard get-list" [
 # operationId: createDashboard
 # --editPermissions item shape: {group?: any, project?: any, role?: any, type: "user"|"group"|"project"|"projectRole"|"global"|"loggedin"|"authenticated"|"project-unknown", user?: any}
 # --sharePermissions item shape: {group?: any, project?: any, role?: any, type: "user"|"group"|"project"|"projectRole"|"global"|"loggedin"|"authenticated"|"project-unknown", user?: any}
-export def "rest-3-dashboard create" [
+export def "create-dashboard" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1693,7 +1693,7 @@ export def "rest-3-dashboard create" [
 #
 # GET /rest/api/3/dashboard/gadgets
 # operationId: getAllAvailableDashboardGadgets
-export def "rest-3-dashboard-gadgets get-list-available" [
+export def "get-all-available-dashboard-gadgets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1727,7 +1727,7 @@ export def "rest-3-dashboard-gadgets get-list-available" [
 #
 # GET /rest/api/3/dashboard/search
 # operationId: getDashboardsPaginated
-export def "rest-3-dashboard-search get-paginated" [
+export def "get-dashboards-paginated" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1773,7 +1773,7 @@ export def "rest-3-dashboard-search get-paginated" [
 #
 # GET /rest/api/3/dashboard/{dashboardId}/gadget
 # operationId: getAllGadgets
-export def "rest-3-dashboard-gadget get-list" [
+export def "get-all-gadgets" [
   dashboard_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1813,7 +1813,7 @@ export def "rest-3-dashboard-gadget get-list" [
 #
 # POST /rest/api/3/dashboard/{dashboardId}/gadget
 # operationId: addGadget
-export def "rest-3-dashboard-gadget create" [
+export def "add-gadget" [
   dashboard_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1858,7 +1858,7 @@ export def "rest-3-dashboard-gadget create" [
 #
 # DELETE /rest/api/3/dashboard/{dashboardId}/gadget/{gadgetId}
 # operationId: removeGadget
-export def "rest-3-dashboard-gadget delete" [
+export def "remove-gadget" [
   dashboard_id: int
   gadget_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1896,7 +1896,7 @@ export def "rest-3-dashboard-gadget delete" [
 #
 # PUT /rest/api/3/dashboard/{dashboardId}/gadget/{gadgetId}
 # operationId: updateGadget
-export def "rest-3-dashboard-gadget update" [
+export def "update-gadget" [
   dashboard_id: int
   gadget_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1940,7 +1940,7 @@ export def "rest-3-dashboard-gadget update" [
 #
 # GET /rest/api/3/dashboard/{dashboardId}/items/{itemId}/properties
 # operationId: getDashboardItemPropertyKeys
-export def "rest-3-dashboard-items-properties get-property-keys" [
+export def "get-dashboard-item-property-keys" [
   dashboard_id: string
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1978,7 +1978,7 @@ export def "rest-3-dashboard-items-properties get-property-keys" [
 #
 # DELETE /rest/api/3/dashboard/{dashboardId}/items/{itemId}/properties/{propertyKey}
 # operationId: deleteDashboardItemProperty
-export def "rest-3-dashboard-items-properties delete-property" [
+export def "delete-dashboard-item-property" [
   dashboard_id: string
   item_id: string
   property_key: string
@@ -2018,7 +2018,7 @@ export def "rest-3-dashboard-items-properties delete-property" [
 #
 # GET /rest/api/3/dashboard/{dashboardId}/items/{itemId}/properties/{propertyKey}
 # operationId: getDashboardItemProperty
-export def "rest-3-dashboard-items-properties get-property" [
+export def "get-dashboard-item-property" [
   dashboard_id: string
   item_id: string
   property_key: string
@@ -2058,7 +2058,7 @@ export def "rest-3-dashboard-items-properties get-property" [
 #
 # PUT /rest/api/3/dashboard/{dashboardId}/items/{itemId}/properties/{propertyKey}
 # operationId: setDashboardItemProperty
-export def "rest-3-dashboard-items-properties update-property" [
+export def "set-dashboard-item-property" [
   dashboard_id: string
   item_id: string
   property_key: string
@@ -2102,7 +2102,7 @@ export def "rest-3-dashboard-items-properties update-property" [
 #
 # DELETE /rest/api/3/dashboard/{id}
 # operationId: deleteDashboard
-export def "rest-3-dashboard delete" [
+export def "delete-dashboard" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2138,7 +2138,7 @@ export def "rest-3-dashboard delete" [
 #
 # GET /rest/api/3/dashboard/{id}
 # operationId: getDashboard
-export def "rest-3-dashboard get" [
+export def "get-dashboard" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2176,7 +2176,7 @@ export def "rest-3-dashboard get" [
 # operationId: updateDashboard
 # --editPermissions item shape: {group?: any, project?: any, role?: any, type: "user"|"group"|"project"|"projectRole"|"global"|"loggedin"|"authenticated"|"project-unknown", user?: any}
 # --sharePermissions item shape: {group?: any, project?: any, role?: any, type: "user"|"group"|"project"|"projectRole"|"global"|"loggedin"|"authenticated"|"project-unknown", user?: any}
-export def "rest-3-dashboard update" [
+export def "update-dashboard" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2221,7 +2221,7 @@ export def "rest-3-dashboard update" [
 # operationId: copyDashboard
 # --editPermissions item shape: {group?: any, project?: any, role?: any, type: "user"|"group"|"project"|"projectRole"|"global"|"loggedin"|"authenticated"|"project-unknown", user?: any}
 # --sharePermissions item shape: {group?: any, project?: any, role?: any, type: "user"|"group"|"project"|"projectRole"|"global"|"loggedin"|"authenticated"|"project-unknown", user?: any}
-export def "rest-3-dashboard-copy copy" [
+export def "copy-dashboard" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2264,7 +2264,7 @@ export def "rest-3-dashboard-copy copy" [
 #
 # GET /rest/api/3/events
 # operationId: getEvents
-export def "rest-3-events get" [
+export def "get-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2298,7 +2298,7 @@ export def "rest-3-events get" [
 #
 # POST /rest/api/3/expression/analyse
 # operationId: analyseExpression
-export def "rest-3-expression-analyse create" [
+export def "analyse-expression" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2339,7 +2339,7 @@ export def "rest-3-expression-analyse create" [
 #
 # POST /rest/api/3/expression/eval
 # operationId: evaluateJiraExpression
-export def "rest-3-expression-eval create-evaluate-jira" [
+export def "evaluate-jira-expression" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2380,7 +2380,7 @@ export def "rest-3-expression-eval create-evaluate-jira" [
 #
 # GET /rest/api/3/field
 # operationId: getFields
-export def "rest-3-field get" [
+export def "get-fields" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2414,7 +2414,7 @@ export def "rest-3-field get" [
 #
 # POST /rest/api/3/field
 # operationId: createCustomField
-export def "rest-3-field create-custom" [
+export def "create-custom-field" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2455,7 +2455,7 @@ export def "rest-3-field create-custom" [
 #
 # GET /rest/api/3/field/search
 # operationId: getFieldsPaginated
-export def "rest-3-field-search get-paginated" [
+export def "get-fields-paginated" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2497,7 +2497,7 @@ export def "rest-3-field-search get-paginated" [
 #
 # GET /rest/api/3/field/search/trashed
 # operationId: getTrashedFieldsPaginated
-export def "rest-3-field-search-trashed get-paginated" [
+export def "get-trashed-fields-paginated" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2538,7 +2538,7 @@ export def "rest-3-field-search-trashed get-paginated" [
 #
 # PUT /rest/api/3/field/{fieldId}
 # operationId: updateCustomField
-export def "rest-3-field update-custom" [
+export def "update-custom-field" [
   field_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2580,7 +2580,7 @@ export def "rest-3-field update-custom" [
 #
 # GET /rest/api/3/field/{fieldId}/context
 # operationId: getContextsForField
-export def "rest-3-field-context get" [
+export def "get-contexts-for-field" [
   field_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2622,7 +2622,7 @@ export def "rest-3-field-context get" [
 #
 # POST /rest/api/3/field/{fieldId}/context
 # operationId: createCustomFieldContext
-export def "rest-3-field-context create-custom" [
+export def "create-custom-field-context" [
   field_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2665,7 +2665,7 @@ export def "rest-3-field-context create-custom" [
 #
 # GET /rest/api/3/field/{fieldId}/context/defaultValue
 # operationId: getDefaultValues
-export def "rest-3-field-context-default-value get" [
+export def "get-default-values" [
   field_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2705,7 +2705,7 @@ export def "rest-3-field-context-default-value get" [
 #
 # PUT /rest/api/3/field/{fieldId}/context/defaultValue
 # operationId: setDefaultValues
-export def "rest-3-field-context-default-value update" [
+export def "set-default-values" [
   field_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2745,7 +2745,7 @@ export def "rest-3-field-context-default-value update" [
 #
 # GET /rest/api/3/field/{fieldId}/context/issuetypemapping
 # operationId: getIssueTypeMappingsForContexts
-export def "rest-3-field-context-issuetypemapping get-issue-type-mappings" [
+export def "get-issue-type-mappings-for-contexts" [
   field_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2786,7 +2786,7 @@ export def "rest-3-field-context-issuetypemapping get-issue-type-mappings" [
 # POST /rest/api/3/field/{fieldId}/context/mapping
 # operationId: getCustomFieldContextsForProjectsAndIssueTypes
 # --mappings item shape: {issueTypeId: string, projectId: string}
-export def "rest-3-field-context-mapping get-custom-for-projects-and-issue-types" [
+export def "get-custom-field-contexts-for-projects-and-issue-types" [
   field_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2829,7 +2829,7 @@ export def "rest-3-field-context-mapping get-custom-for-projects-and-issue-types
 #
 # GET /rest/api/3/field/{fieldId}/context/projectmapping
 # operationId: getProjectContextMapping
-export def "rest-3-field-context-projectmapping get-project-mapping" [
+export def "get-project-context-mapping" [
   field_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2869,7 +2869,7 @@ export def "rest-3-field-context-projectmapping get-project-mapping" [
 #
 # DELETE /rest/api/3/field/{fieldId}/context/{contextId}
 # operationId: deleteCustomFieldContext
-export def "rest-3-field-context delete-custom" [
+export def "delete-custom-field-context" [
   field_id: string
   context_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2907,7 +2907,7 @@ export def "rest-3-field-context delete-custom" [
 #
 # PUT /rest/api/3/field/{fieldId}/context/{contextId}
 # operationId: updateCustomFieldContext
-export def "rest-3-field-context update-custom" [
+export def "update-custom-field-context" [
   field_id: string
   context_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2950,7 +2950,7 @@ export def "rest-3-field-context update-custom" [
 #
 # PUT /rest/api/3/field/{fieldId}/context/{contextId}/issuetype
 # operationId: addIssueTypesToContext
-export def "rest-3-field-context-issuetype create-issue-types" [
+export def "add-issue-types-to-context" [
   field_id: string
   context_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2992,7 +2992,7 @@ export def "rest-3-field-context-issuetype create-issue-types" [
 #
 # POST /rest/api/3/field/{fieldId}/context/{contextId}/issuetype/remove
 # operationId: removeIssueTypesFromContext
-export def "rest-3-field-context-issuetype-remove delete-issue-types" [
+export def "remove-issue-types-from-context" [
   field_id: string
   context_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3034,7 +3034,7 @@ export def "rest-3-field-context-issuetype-remove delete-issue-types" [
 #
 # GET /rest/api/3/field/{fieldId}/context/{contextId}/option
 # operationId: getOptionsForContext
-export def "rest-3-field-context-option get" [
+export def "get-options-for-context" [
   field_id: string
   context_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3078,7 +3078,7 @@ export def "rest-3-field-context-option get" [
 # POST /rest/api/3/field/{fieldId}/context/{contextId}/option
 # operationId: createCustomFieldOption
 # --options item shape: {disabled?: bool, optionId?: string, value: string}
-export def "rest-3-field-context-option create-custom" [
+export def "create-custom-field-option" [
   field_id: string
   context_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3121,7 +3121,7 @@ export def "rest-3-field-context-option create-custom" [
 # PUT /rest/api/3/field/{fieldId}/context/{contextId}/option
 # operationId: updateCustomFieldOption
 # --options item shape: {disabled?: bool, id: string, value?: string}
-export def "rest-3-field-context-option update-custom" [
+export def "update-custom-field-option" [
   field_id: string
   context_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3163,7 +3163,7 @@ export def "rest-3-field-context-option update-custom" [
 #
 # PUT /rest/api/3/field/{fieldId}/context/{contextId}/option/move
 # operationId: reorderCustomFieldOptions
-export def "rest-3-field-context-option-move update-reorder-custom" [
+export def "reorder-custom-field-options" [
   field_id: string
   context_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3207,7 +3207,7 @@ export def "rest-3-field-context-option-move update-reorder-custom" [
 #
 # DELETE /rest/api/3/field/{fieldId}/context/{contextId}/option/{optionId}
 # operationId: deleteCustomFieldOption
-export def "rest-3-field-context-option delete-custom" [
+export def "delete-custom-field-option" [
   field_id: string
   context_id: int
   option_id: int
@@ -3247,7 +3247,7 @@ export def "rest-3-field-context-option delete-custom" [
 #
 # PUT /rest/api/3/field/{fieldId}/context/{contextId}/project
 # operationId: assignProjectsToCustomFieldContext
-export def "rest-3-field-context-project assign-to-custom" [
+export def "assign-projects-to-custom-field-context" [
   field_id: string
   context_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3289,7 +3289,7 @@ export def "rest-3-field-context-project assign-to-custom" [
 #
 # POST /rest/api/3/field/{fieldId}/context/{contextId}/project/remove
 # operationId: removeCustomFieldContextFromProjects
-export def "rest-3-field-context-project-remove delete-custom" [
+export def "remove-custom-field-context-from-projects" [
   field_id: string
   context_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3333,7 +3333,7 @@ export def "rest-3-field-context-project-remove delete-custom" [
 # DEPRECATED
 # operationId: getContextsForFieldDeprecated
 @deprecated
-export def "rest-3-field-contexts get-for-deprecated" [
+export def "get-contexts-for-field-deprecated" [
   field_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3372,7 +3372,7 @@ export def "rest-3-field-contexts get-for-deprecated" [
 #
 # GET /rest/api/3/field/{fieldId}/screens
 # operationId: getScreensForField
-export def "rest-3-field-screens get" [
+export def "get-screens-for-field" [
   field_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3412,7 +3412,7 @@ export def "rest-3-field-screens get" [
 #
 # GET /rest/api/3/field/{fieldKey}/option
 # operationId: getAllIssueFieldOptions
-export def "rest-3-field-option get-list-issue" [
+export def "get-all-issue-field-options" [
   field_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3452,7 +3452,7 @@ export def "rest-3-field-option get-list-issue" [
 # POST /rest/api/3/field/{fieldKey}/option
 # operationId: createIssueFieldOption
 # --config shape: {attributes?: list<string>, scope?: any}
-export def "rest-3-field-option create-issue" [
+export def "create-issue-field-option" [
   field_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3494,7 +3494,7 @@ export def "rest-3-field-option create-issue" [
 #
 # GET /rest/api/3/field/{fieldKey}/option/suggestions/edit
 # operationId: getSelectableIssueFieldOptions
-export def "rest-3-field-option-suggestions-edit get-selectable-issue" [
+export def "get-selectable-issue-field-options" [
   field_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3534,7 +3534,7 @@ export def "rest-3-field-option-suggestions-edit get-selectable-issue" [
 #
 # GET /rest/api/3/field/{fieldKey}/option/suggestions/search
 # operationId: getVisibleIssueFieldOptions
-export def "rest-3-field-option-suggestions-search get-visible-issue" [
+export def "get-visible-issue-field-options" [
   field_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3574,7 +3574,7 @@ export def "rest-3-field-option-suggestions-search get-visible-issue" [
 #
 # DELETE /rest/api/3/field/{fieldKey}/option/{optionId}
 # operationId: deleteIssueFieldOption
-export def "rest-3-field-option delete-issue" [
+export def "delete-issue-field-option" [
   field_key: string
   option_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3612,7 +3612,7 @@ export def "rest-3-field-option delete-issue" [
 #
 # GET /rest/api/3/field/{fieldKey}/option/{optionId}
 # operationId: getIssueFieldOption
-export def "rest-3-field-option get-issue" [
+export def "get-issue-field-option" [
   field_key: string
   option_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3651,7 +3651,7 @@ export def "rest-3-field-option get-issue" [
 # PUT /rest/api/3/field/{fieldKey}/option/{optionId}
 # operationId: updateIssueFieldOption
 # --config shape: {attributes?: list<string>, scope?: any}
-export def "rest-3-field-option update-issue" [
+export def "update-issue-field-option" [
   field_key: string
   option_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3696,7 +3696,7 @@ export def "rest-3-field-option update-issue" [
 #
 # DELETE /rest/api/3/field/{fieldKey}/option/{optionId}/issue
 # operationId: replaceIssueFieldOption
-export def "rest-3-field-option-issue update" [
+export def "replace-issue-field-option" [
   field_key: string
   option_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3739,7 +3739,7 @@ export def "rest-3-field-option-issue update" [
 #
 # DELETE /rest/api/3/field/{id}
 # operationId: deleteCustomField
-export def "rest-3-field delete-custom" [
+export def "delete-custom-field" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3775,7 +3775,7 @@ export def "rest-3-field delete-custom" [
 #
 # POST /rest/api/3/field/{id}/restore
 # operationId: restoreCustomField
-export def "rest-3-field-restore create-custom" [
+export def "restore-custom-field" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3811,7 +3811,7 @@ export def "rest-3-field-restore create-custom" [
 #
 # POST /rest/api/3/field/{id}/trash
 # operationId: trashCustomField
-export def "rest-3-field-trash create-custom" [
+export def "trash-custom-field" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3847,7 +3847,7 @@ export def "rest-3-field-trash create-custom" [
 #
 # GET /rest/api/3/fieldconfiguration
 # operationId: getAllFieldConfigurations
-export def "rest-3-fieldconfiguration get-list-field-configurations" [
+export def "get-all-field-configurations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3887,7 +3887,7 @@ export def "rest-3-fieldconfiguration get-list-field-configurations" [
 #
 # POST /rest/api/3/fieldconfiguration
 # operationId: createFieldConfiguration
-export def "rest-3-fieldconfiguration create-field-configuration" [
+export def "create-field-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3926,7 +3926,7 @@ export def "rest-3-fieldconfiguration create-field-configuration" [
 #
 # DELETE /rest/api/3/fieldconfiguration/{id}
 # operationId: deleteFieldConfiguration
-export def "rest-3-fieldconfiguration delete-field-configuration" [
+export def "delete-field-configuration" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3962,7 +3962,7 @@ export def "rest-3-fieldconfiguration delete-field-configuration" [
 #
 # PUT /rest/api/3/fieldconfiguration/{id}
 # operationId: updateFieldConfiguration
-export def "rest-3-fieldconfiguration update-field-configuration" [
+export def "update-field-configuration" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4003,7 +4003,7 @@ export def "rest-3-fieldconfiguration update-field-configuration" [
 #
 # GET /rest/api/3/fieldconfiguration/{id}/fields
 # operationId: getFieldConfigurationItems
-export def "rest-3-fieldconfiguration-fields get-configuration-items" [
+export def "get-field-configuration-items" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4043,7 +4043,7 @@ export def "rest-3-fieldconfiguration-fields get-configuration-items" [
 # PUT /rest/api/3/fieldconfiguration/{id}/fields
 # operationId: updateFieldConfigurationItems
 # --fieldConfigurationItems item shape: {description?: string, id: string, isHidden?: bool, isRequired?: bool, renderer?: string}
-export def "rest-3-fieldconfiguration-fields update-configuration-items" [
+export def "update-field-configuration-items" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4083,7 +4083,7 @@ export def "rest-3-fieldconfiguration-fields update-configuration-items" [
 #
 # GET /rest/api/3/fieldconfigurationscheme
 # operationId: getAllFieldConfigurationSchemes
-export def "rest-3-fieldconfigurationscheme get-list-field-configuration-schemes" [
+export def "get-all-field-configuration-schemes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4121,7 +4121,7 @@ export def "rest-3-fieldconfigurationscheme get-list-field-configuration-schemes
 #
 # POST /rest/api/3/fieldconfigurationscheme
 # operationId: createFieldConfigurationScheme
-export def "rest-3-fieldconfigurationscheme create-field-configuration-scheme" [
+export def "create-field-configuration-scheme" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4160,7 +4160,7 @@ export def "rest-3-fieldconfigurationscheme create-field-configuration-scheme" [
 #
 # GET /rest/api/3/fieldconfigurationscheme/mapping
 # operationId: getFieldConfigurationSchemeMappings
-export def "rest-3-fieldconfigurationscheme-mapping get-field-configuration-scheme" [
+export def "get-field-configuration-scheme-mappings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4198,7 +4198,7 @@ export def "rest-3-fieldconfigurationscheme-mapping get-field-configuration-sche
 #
 # GET /rest/api/3/fieldconfigurationscheme/project
 # operationId: getFieldConfigurationSchemeProjectMapping
-export def "rest-3-fieldconfigurationscheme-project get-field-configuration-scheme-mapping" [
+export def "get-field-configuration-scheme-project-mapping" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4236,7 +4236,7 @@ export def "rest-3-fieldconfigurationscheme-project get-field-configuration-sche
 #
 # PUT /rest/api/3/fieldconfigurationscheme/project
 # operationId: assignFieldConfigurationSchemeToProject
-export def "rest-3-fieldconfigurationscheme-project assign-field-configuration-scheme" [
+export def "assign-field-configuration-scheme-to-project" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4275,7 +4275,7 @@ export def "rest-3-fieldconfigurationscheme-project assign-field-configuration-s
 #
 # DELETE /rest/api/3/fieldconfigurationscheme/{id}
 # operationId: deleteFieldConfigurationScheme
-export def "rest-3-fieldconfigurationscheme delete-field-configuration-scheme" [
+export def "delete-field-configuration-scheme" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4311,7 +4311,7 @@ export def "rest-3-fieldconfigurationscheme delete-field-configuration-scheme" [
 #
 # PUT /rest/api/3/fieldconfigurationscheme/{id}
 # operationId: updateFieldConfigurationScheme
-export def "rest-3-fieldconfigurationscheme update-field-configuration-scheme" [
+export def "update-field-configuration-scheme" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4353,7 +4353,7 @@ export def "rest-3-fieldconfigurationscheme update-field-configuration-scheme" [
 # PUT /rest/api/3/fieldconfigurationscheme/{id}/mapping
 # operationId: setFieldConfigurationSchemeMapping
 # --mappings item shape: {fieldConfigurationId: string, issueTypeId: string}
-export def "rest-3-fieldconfigurationscheme-mapping update-field-configuration-scheme" [
+export def "set-field-configuration-scheme-mapping" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4393,7 +4393,7 @@ export def "rest-3-fieldconfigurationscheme-mapping update-field-configuration-s
 #
 # POST /rest/api/3/fieldconfigurationscheme/{id}/mapping/delete
 # operationId: removeIssueTypesFromGlobalFieldConfigurationScheme
-export def "rest-3-fieldconfigurationscheme-mapping-delete delete-issue-types-from-global-field-configuration-scheme" [
+export def "remove-issue-types-from-global-field-configuration-scheme" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4435,7 +4435,7 @@ export def "rest-3-fieldconfigurationscheme-mapping-delete delete-issue-types-fr
 # DEPRECATED
 # operationId: getFilters
 @deprecated
-export def "rest-3-filter list" [
+export def "get-filters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4473,7 +4473,7 @@ export def "rest-3-filter list" [
 # operationId: createFilter
 # --editPermissions item shape: {group?: any, project?: any, role?: any, type: "user"|"group"|"project"|"projectRole"|"global"|"loggedin"|"authenticated"|"project-unknown", user?: any}
 # --sharePermissions item shape: {group?: any, project?: any, role?: any, type: "user"|"group"|"project"|"projectRole"|"global"|"loggedin"|"authenticated"|"project-unknown", user?: any}
-export def "rest-3-filter create" [
+export def "create-filter" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4519,7 +4519,7 @@ export def "rest-3-filter create" [
 #
 # GET /rest/api/3/filter/defaultShareScope
 # operationId: getDefaultShareScope
-export def "rest-3-filter-default-share-scope get" [
+export def "get-default-share-scope" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4553,7 +4553,7 @@ export def "rest-3-filter-default-share-scope get" [
 #
 # PUT /rest/api/3/filter/defaultShareScope
 # operationId: setDefaultShareScope
-export def "rest-3-filter-default-share-scope update" [
+export def "set-default-share-scope" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4591,7 +4591,7 @@ export def "rest-3-filter-default-share-scope update" [
 #
 # GET /rest/api/3/filter/favourite
 # operationId: getFavouriteFilters
-export def "rest-3-filter-favourite get" [
+export def "get-favourite-filters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4627,7 +4627,7 @@ export def "rest-3-filter-favourite get" [
 #
 # GET /rest/api/3/filter/my
 # operationId: getMyFilters
-export def "rest-3-filter-my get" [
+export def "get-my-filters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4664,7 +4664,7 @@ export def "rest-3-filter-my get" [
 #
 # GET /rest/api/3/filter/search
 # operationId: getFiltersPaginated
-export def "rest-3-filter-search get-paginated" [
+export def "get-filters-paginated" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4711,7 +4711,7 @@ export def "rest-3-filter-search get-paginated" [
 #
 # DELETE /rest/api/3/filter/{id}
 # operationId: deleteFilter
-export def "rest-3-filter delete" [
+export def "delete-filter" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4747,7 +4747,7 @@ export def "rest-3-filter delete" [
 #
 # GET /rest/api/3/filter/{id}
 # operationId: getFilter
-export def "rest-3-filter get" [
+export def "get-filter" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4788,7 +4788,7 @@ export def "rest-3-filter get" [
 # operationId: updateFilter
 # --editPermissions item shape: {group?: any, project?: any, role?: any, type: "user"|"group"|"project"|"projectRole"|"global"|"loggedin"|"authenticated"|"project-unknown", user?: any}
 # --sharePermissions item shape: {group?: any, project?: any, role?: any, type: "user"|"group"|"project"|"projectRole"|"global"|"loggedin"|"authenticated"|"project-unknown", user?: any}
-export def "rest-3-filter update" [
+export def "update-filter" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4836,7 +4836,7 @@ export def "rest-3-filter update" [
 #
 # DELETE /rest/api/3/filter/{id}/columns
 # operationId: resetColumns
-export def "rest-3-filter-columns reset" [
+export def "reset-columns" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4872,7 +4872,7 @@ export def "rest-3-filter-columns reset" [
 #
 # GET /rest/api/3/filter/{id}/columns
 # operationId: getColumns
-export def "rest-3-filter-columns get" [
+export def "get-columns" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4908,7 +4908,7 @@ export def "rest-3-filter-columns get" [
 #
 # PUT /rest/api/3/filter/{id}/columns
 # operationId: setColumns
-export def "rest-3-filter-columns update" [
+export def "set-columns" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4950,7 +4950,7 @@ export def "rest-3-filter-columns update" [
 #
 # DELETE /rest/api/3/filter/{id}/favourite
 # operationId: deleteFavouriteForFilter
-export def "rest-3-filter-favourite delete" [
+export def "delete-favourite-for-filter" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4988,7 +4988,7 @@ export def "rest-3-filter-favourite delete" [
 #
 # PUT /rest/api/3/filter/{id}/favourite
 # operationId: setFavouriteForFilter
-export def "rest-3-filter-favourite update" [
+export def "set-favourite-for-filter" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5026,7 +5026,7 @@ export def "rest-3-filter-favourite update" [
 #
 # PUT /rest/api/3/filter/{id}/owner
 # operationId: changeFilterOwner
-export def "rest-3-filter-owner update-change" [
+export def "change-filter-owner" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5066,7 +5066,7 @@ export def "rest-3-filter-owner update-change" [
 #
 # GET /rest/api/3/filter/{id}/permission
 # operationId: getSharePermissions
-export def "rest-3-filter-permission list" [
+export def "get-share-permissions" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5102,7 +5102,7 @@ export def "rest-3-filter-permission list" [
 #
 # POST /rest/api/3/filter/{id}/permission
 # operationId: addSharePermission
-export def "rest-3-filter-permission create-share" [
+export def "add-share-permission" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5148,7 +5148,7 @@ export def "rest-3-filter-permission create-share" [
 #
 # DELETE /rest/api/3/filter/{id}/permission/{permissionId}
 # operationId: deleteSharePermission
-export def "rest-3-filter-permission delete-share" [
+export def "delete-share-permission" [
   id: int
   permission_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5186,7 +5186,7 @@ export def "rest-3-filter-permission delete-share" [
 #
 # GET /rest/api/3/filter/{id}/permission/{permissionId}
 # operationId: getSharePermission
-export def "rest-3-filter-permission get-share" [
+export def "get-share-permission" [
   id: int
   permission_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5224,7 +5224,7 @@ export def "rest-3-filter-permission get-share" [
 #
 # DELETE /rest/api/3/group
 # operationId: removeGroup
-export def "rest-3-group delete" [
+export def "remove-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5265,7 +5265,7 @@ export def "rest-3-group delete" [
 # DEPRECATED
 # operationId: getGroup
 @deprecated
-export def "rest-3-group get" [
+export def "get-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5303,7 +5303,7 @@ export def "rest-3-group get" [
 #
 # POST /rest/api/3/group
 # operationId: createGroup
-export def "rest-3-group create" [
+export def "create-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5341,7 +5341,7 @@ export def "rest-3-group create" [
 #
 # GET /rest/api/3/group/bulk
 # operationId: bulkGetGroups
-export def "rest-3-group-bulk get" [
+export def "bulk-get-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5382,7 +5382,7 @@ export def "rest-3-group-bulk get" [
 #
 # GET /rest/api/3/group/member
 # operationId: getUsersFromGroup
-export def "rest-3-group-member get-users" [
+export def "get-users-from-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5422,7 +5422,7 @@ export def "rest-3-group-member get-users" [
 #
 # DELETE /rest/api/3/group/user
 # operationId: removeUserFromGroup
-export def "rest-3-group-user delete" [
+export def "remove-user-from-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5461,7 +5461,7 @@ export def "rest-3-group-user delete" [
 #
 # POST /rest/api/3/group/user
 # operationId: addUserToGroup
-export def "rest-3-group-user create" [
+export def "add-user-to-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5503,7 +5503,7 @@ export def "rest-3-group-user create" [
 #
 # GET /rest/api/3/groups/picker
 # operationId: findGroups
-export def "rest-3-groups-picker find" [
+export def "find-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5545,7 +5545,7 @@ export def "rest-3-groups-picker find" [
 #
 # GET /rest/api/3/groupuserpicker
 # operationId: findUsersAndGroups
-export def "rest-3-groupuserpicker find-users-and-groups" [
+export def "find-users-and-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5589,7 +5589,7 @@ export def "rest-3-groupuserpicker find-users-and-groups" [
 #
 # GET /rest/api/3/instance/license
 # operationId: getLicense
-export def "rest-3-instance-license get" [
+export def "get-license" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5624,7 +5624,7 @@ export def "rest-3-instance-license get" [
 # POST /rest/api/3/issue
 # operationId: createIssue
 # --properties item shape: {key?: string, value?: any}
-export def "rest-3-issue create" [
+export def "create-issue" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5669,7 +5669,7 @@ export def "rest-3-issue create" [
 # POST /rest/api/3/issue/bulk
 # operationId: createIssues
 # --issueUpdates item shape: {fields?: record, historyMetadata?: any, properties?: list, transition?: any, update?: record}
-export def "rest-3-issue-bulk create" [
+export def "create-issues" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5707,7 +5707,7 @@ export def "rest-3-issue-bulk create" [
 #
 # GET /rest/api/3/issue/createmeta
 # operationId: getCreateIssueMeta
-export def "rest-3-issue-createmeta get-create-meta" [
+export def "get-create-issue-meta" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5747,7 +5747,7 @@ export def "rest-3-issue-createmeta get-create-meta" [
 #
 # GET /rest/api/3/issue/picker
 # operationId: getIssuePickerResource
-export def "rest-3-issue-picker get-resource" [
+export def "get-issue-picker-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5788,7 +5788,7 @@ export def "rest-3-issue-picker get-resource" [
 #
 # POST /rest/api/3/issue/properties
 # operationId: bulkSetIssuesPropertiesList
-export def "rest-3-issue-properties update-bulk-list" [
+export def "bulk-set-issues-properties-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5828,7 +5828,7 @@ export def "rest-3-issue-properties update-bulk-list" [
 # POST /rest/api/3/issue/properties/multi
 # operationId: bulkSetIssuePropertiesByIssue
 # --issues item shape: {issueID?: int, properties?: record}
-export def "rest-3-issue-properties-multi update-bulk" [
+export def "bulk-set-issue-properties-by-issue" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5866,7 +5866,7 @@ export def "rest-3-issue-properties-multi update-bulk" [
 #
 # DELETE /rest/api/3/issue/properties/{propertyKey}
 # operationId: bulkDeleteIssueProperty
-export def "rest-3-issue-properties delete-bulk-property" [
+export def "bulk-delete-issue-property" [
   property_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5907,7 +5907,7 @@ export def "rest-3-issue-properties delete-bulk-property" [
 #
 # PUT /rest/api/3/issue/properties/{propertyKey}
 # operationId: bulkSetIssueProperty
-export def "rest-3-issue-properties update-bulk-property" [
+export def "bulk-set-issue-property" [
   property_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5949,7 +5949,7 @@ export def "rest-3-issue-properties update-bulk-property" [
 #
 # POST /rest/api/3/issue/watching
 # operationId: getIsWatchingIssueBulk
-export def "rest-3-issue-watching get-is-bulk" [
+export def "get-is-watching-issue-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5987,7 +5987,7 @@ export def "rest-3-issue-watching get-is-bulk" [
 #
 # DELETE /rest/api/3/issue/{issueIdOrKey}
 # operationId: deleteIssue
-export def "rest-3-issue delete" [
+export def "delete-issue" [
   issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6025,7 +6025,7 @@ export def "rest-3-issue delete" [
 #
 # GET /rest/api/3/issue/{issueIdOrKey}
 # operationId: getIssue
-export def "rest-3-issue get" [
+export def "get-issue" [
   issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6068,7 +6068,7 @@ export def "rest-3-issue get" [
 # PUT /rest/api/3/issue/{issueIdOrKey}
 # operationId: editIssue
 # --properties item shape: {key?: string, value?: any}
-export def "rest-3-issue update-edit" [
+export def "edit-issue" [
   issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6116,7 +6116,7 @@ export def "rest-3-issue update-edit" [
 #
 # PUT /rest/api/3/issue/{issueIdOrKey}/assignee
 # operationId: assignIssue
-export def "rest-3-issue-assignee assign" [
+export def "assign-issue" [
   issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6158,7 +6158,7 @@ export def "rest-3-issue-assignee assign" [
 #
 # POST /rest/api/3/issue/{issueIdOrKey}/attachments
 # operationId: addAttachment
-export def "rest-3-issue-attachments create" [
+export def "add-attachment" [
   issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6200,7 +6200,7 @@ export def "rest-3-issue-attachments create" [
 #
 # GET /rest/api/3/issue/{issueIdOrKey}/changelog
 # operationId: getChangeLogs
-export def "rest-3-issue-changelog get-change-logs" [
+export def "get-change-logs" [
   issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6239,7 +6239,7 @@ export def "rest-3-issue-changelog get-change-logs" [
 #
 # POST /rest/api/3/issue/{issueIdOrKey}/changelog/list
 # operationId: getChangeLogsByIds
-export def "rest-3-issue-changelog-list get-change-logs" [
+export def "get-change-logs-by-ids" [
   issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6279,7 +6279,7 @@ export def "rest-3-issue-changelog-list get-change-logs" [
 #
 # GET /rest/api/3/issue/{issueIdOrKey}/comment
 # operationId: getComments
-export def "rest-3-issue-comment list" [
+export def "get-comments" [
   issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6321,7 +6321,7 @@ export def "rest-3-issue-comment list" [
 # POST /rest/api/3/issue/{issueIdOrKey}/comment
 # operationId: addComment
 # --properties item shape: {key?: string, value?: any}
-export def "rest-3-issue-comment create" [
+export def "add-comment" [
   issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6365,7 +6365,7 @@ export def "rest-3-issue-comment create" [
 #
 # DELETE /rest/api/3/issue/{issueIdOrKey}/comment/{id}
 # operationId: deleteComment
-export def "rest-3-issue-comment delete" [
+export def "delete-comment" [
   issue_id_or_key: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6403,7 +6403,7 @@ export def "rest-3-issue-comment delete" [
 #
 # GET /rest/api/3/issue/{issueIdOrKey}/comment/{id}
 # operationId: getComment
-export def "rest-3-issue-comment get" [
+export def "get-comment" [
   issue_id_or_key: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6444,7 +6444,7 @@ export def "rest-3-issue-comment get" [
 # PUT /rest/api/3/issue/{issueIdOrKey}/comment/{id}
 # operationId: updateComment
 # --properties item shape: {key?: string, value?: any}
-export def "rest-3-issue-comment update" [
+export def "update-comment" [
   issue_id_or_key: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6492,7 +6492,7 @@ export def "rest-3-issue-comment update" [
 #
 # GET /rest/api/3/issue/{issueIdOrKey}/editmeta
 # operationId: getEditIssueMeta
-export def "rest-3-issue-editmeta get-edit-meta" [
+export def "get-edit-issue-meta" [
   issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6531,7 +6531,7 @@ export def "rest-3-issue-editmeta get-edit-meta" [
 #
 # POST /rest/api/3/issue/{issueIdOrKey}/notify
 # operationId: notify
-export def "rest-3-issue-notify notify" [
+export def "notify" [
   issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6575,7 +6575,7 @@ export def "rest-3-issue-notify notify" [
 #
 # GET /rest/api/3/issue/{issueIdOrKey}/properties
 # operationId: getIssuePropertyKeys
-export def "rest-3-issue-properties get-property-keys" [
+export def "get-issue-property-keys" [
   issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6611,7 +6611,7 @@ export def "rest-3-issue-properties get-property-keys" [
 #
 # DELETE /rest/api/3/issue/{issueIdOrKey}/properties/{propertyKey}
 # operationId: deleteIssueProperty
-export def "rest-3-issue-properties delete-property" [
+export def "delete-issue-property" [
   issue_id_or_key: string
   property_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6649,7 +6649,7 @@ export def "rest-3-issue-properties delete-property" [
 #
 # GET /rest/api/3/issue/{issueIdOrKey}/properties/{propertyKey}
 # operationId: getIssueProperty
-export def "rest-3-issue-properties get-property" [
+export def "get-issue-property" [
   issue_id_or_key: string
   property_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6687,7 +6687,7 @@ export def "rest-3-issue-properties get-property" [
 #
 # PUT /rest/api/3/issue/{issueIdOrKey}/properties/{propertyKey}
 # operationId: setIssueProperty
-export def "rest-3-issue-properties update-property" [
+export def "set-issue-property" [
   issue_id_or_key: string
   property_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6729,7 +6729,7 @@ export def "rest-3-issue-properties update-property" [
 #
 # DELETE /rest/api/3/issue/{issueIdOrKey}/remotelink
 # operationId: deleteRemoteIssueLinkByGlobalId
-export def "rest-3-issue-remotelink delete-remote-link-by-global" [
+export def "delete-remote-issue-link-by-global-id" [
   issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6767,7 +6767,7 @@ export def "rest-3-issue-remotelink delete-remote-link-by-global" [
 #
 # GET /rest/api/3/issue/{issueIdOrKey}/remotelink
 # operationId: getRemoteIssueLinks
-export def "rest-3-issue-remotelink get-remote-links" [
+export def "get-remote-issue-links" [
   issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6805,7 +6805,7 @@ export def "rest-3-issue-remotelink get-remote-links" [
 #
 # POST /rest/api/3/issue/{issueIdOrKey}/remotelink
 # operationId: createOrUpdateRemoteIssueLink
-export def "rest-3-issue-remotelink create-or-update-remote-link" [
+export def "create-or-update-remote-issue-link" [
   issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6848,7 +6848,7 @@ export def "rest-3-issue-remotelink create-or-update-remote-link" [
 #
 # DELETE /rest/api/3/issue/{issueIdOrKey}/remotelink/{linkId}
 # operationId: deleteRemoteIssueLinkById
-export def "rest-3-issue-remotelink delete-remote-link" [
+export def "delete-remote-issue-link-by-id" [
   issue_id_or_key: string
   link_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6886,7 +6886,7 @@ export def "rest-3-issue-remotelink delete-remote-link" [
 #
 # GET /rest/api/3/issue/{issueIdOrKey}/remotelink/{linkId}
 # operationId: getRemoteIssueLinkById
-export def "rest-3-issue-remotelink get-remote-link" [
+export def "get-remote-issue-link-by-id" [
   issue_id_or_key: string
   link_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6924,7 +6924,7 @@ export def "rest-3-issue-remotelink get-remote-link" [
 #
 # PUT /rest/api/3/issue/{issueIdOrKey}/remotelink/{linkId}
 # operationId: updateRemoteIssueLink
-export def "rest-3-issue-remotelink update-remote-link" [
+export def "update-remote-issue-link" [
   issue_id_or_key: string
   link_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6969,7 +6969,7 @@ export def "rest-3-issue-remotelink update-remote-link" [
 #
 # GET /rest/api/3/issue/{issueIdOrKey}/transitions
 # operationId: getTransitions
-export def "rest-3-issue-transitions get" [
+export def "get-transitions" [
   issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7012,7 +7012,7 @@ export def "rest-3-issue-transitions get" [
 # POST /rest/api/3/issue/{issueIdOrKey}/transitions
 # operationId: doTransition
 # --properties item shape: {key?: string, value?: any}
-export def "rest-3-issue-transitions create-do" [
+export def "do-transition" [
   issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7056,7 +7056,7 @@ export def "rest-3-issue-transitions create-do" [
 #
 # DELETE /rest/api/3/issue/{issueIdOrKey}/votes
 # operationId: removeVote
-export def "rest-3-issue-votes delete" [
+export def "remove-vote" [
   issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7092,7 +7092,7 @@ export def "rest-3-issue-votes delete" [
 #
 # GET /rest/api/3/issue/{issueIdOrKey}/votes
 # operationId: getVotes
-export def "rest-3-issue-votes get" [
+export def "get-votes" [
   issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7128,7 +7128,7 @@ export def "rest-3-issue-votes get" [
 #
 # POST /rest/api/3/issue/{issueIdOrKey}/votes
 # operationId: addVote
-export def "rest-3-issue-votes create" [
+export def "add-vote" [
   issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7164,7 +7164,7 @@ export def "rest-3-issue-votes create" [
 #
 # DELETE /rest/api/3/issue/{issueIdOrKey}/watchers
 # operationId: removeWatcher
-export def "rest-3-issue-watchers delete" [
+export def "remove-watcher" [
   issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7203,7 +7203,7 @@ export def "rest-3-issue-watchers delete" [
 #
 # GET /rest/api/3/issue/{issueIdOrKey}/watchers
 # operationId: getIssueWatchers
-export def "rest-3-issue-watchers get" [
+export def "get-issue-watchers" [
   issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7239,7 +7239,7 @@ export def "rest-3-issue-watchers get" [
 #
 # POST /rest/api/3/issue/{issueIdOrKey}/watchers
 # operationId: addWatcher
-export def "rest-3-issue-watchers create" [
+export def "add-watcher" [
   issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7279,7 +7279,7 @@ export def "rest-3-issue-watchers create" [
 #
 # GET /rest/api/3/issue/{issueIdOrKey}/worklog
 # operationId: getIssueWorklog
-export def "rest-3-issue-worklog list" [
+export def "get-issue-worklog" [
   issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7322,7 +7322,7 @@ export def "rest-3-issue-worklog list" [
 # POST /rest/api/3/issue/{issueIdOrKey}/worklog
 # operationId: addWorklog
 # --properties item shape: {key?: string, value?: any}
-export def "rest-3-issue-worklog create" [
+export def "add-worklog" [
   issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7374,7 +7374,7 @@ export def "rest-3-issue-worklog create" [
 #
 # DELETE /rest/api/3/issue/{issueIdOrKey}/worklog/{id}
 # operationId: deleteWorklog
-export def "rest-3-issue-worklog delete" [
+export def "delete-worklog" [
   issue_id_or_key: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7418,7 +7418,7 @@ export def "rest-3-issue-worklog delete" [
 #
 # GET /rest/api/3/issue/{issueIdOrKey}/worklog/{id}
 # operationId: getWorklog
-export def "rest-3-issue-worklog get" [
+export def "get-worklog" [
   issue_id_or_key: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7459,7 +7459,7 @@ export def "rest-3-issue-worklog get" [
 # PUT /rest/api/3/issue/{issueIdOrKey}/worklog/{id}
 # operationId: updateWorklog
 # --properties item shape: {key?: string, value?: any}
-export def "rest-3-issue-worklog update" [
+export def "update-worklog" [
   issue_id_or_key: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7512,7 +7512,7 @@ export def "rest-3-issue-worklog update" [
 #
 # GET /rest/api/3/issue/{issueIdOrKey}/worklog/{worklogId}/properties
 # operationId: getWorklogPropertyKeys
-export def "rest-3-issue-worklog-properties get-property-keys" [
+export def "get-worklog-property-keys" [
   issue_id_or_key: string
   worklog_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7550,7 +7550,7 @@ export def "rest-3-issue-worklog-properties get-property-keys" [
 #
 # DELETE /rest/api/3/issue/{issueIdOrKey}/worklog/{worklogId}/properties/{propertyKey}
 # operationId: deleteWorklogProperty
-export def "rest-3-issue-worklog-properties delete-property" [
+export def "delete-worklog-property" [
   issue_id_or_key: string
   worklog_id: string
   property_key: string
@@ -7590,7 +7590,7 @@ export def "rest-3-issue-worklog-properties delete-property" [
 #
 # GET /rest/api/3/issue/{issueIdOrKey}/worklog/{worklogId}/properties/{propertyKey}
 # operationId: getWorklogProperty
-export def "rest-3-issue-worklog-properties get-property" [
+export def "get-worklog-property" [
   issue_id_or_key: string
   worklog_id: string
   property_key: string
@@ -7630,7 +7630,7 @@ export def "rest-3-issue-worklog-properties get-property" [
 #
 # PUT /rest/api/3/issue/{issueIdOrKey}/worklog/{worklogId}/properties/{propertyKey}
 # operationId: setWorklogProperty
-export def "rest-3-issue-worklog-properties update-property" [
+export def "set-worklog-property" [
   issue_id_or_key: string
   worklog_id: string
   property_key: string
@@ -7678,7 +7678,7 @@ export def "rest-3-issue-worklog-properties update-property" [
 # --inwardIssue shape: {id?: string, key?: string}
 # --outwardIssue shape: {id?: string, key?: string}
 # --type shape: {id?: string, inward?: string, name?: string, outward?: string}
-export def "rest-3-issue-link create" [
+export def "link-issues" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7719,7 +7719,7 @@ export def "rest-3-issue-link create" [
 #
 # DELETE /rest/api/3/issueLink/{linkId}
 # operationId: deleteIssueLink
-export def "rest-3-issue-link delete" [
+export def "delete-issue-link" [
   link_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7755,7 +7755,7 @@ export def "rest-3-issue-link delete" [
 #
 # GET /rest/api/3/issueLink/{linkId}
 # operationId: getIssueLink
-export def "rest-3-issue-link get" [
+export def "get-issue-link" [
   link_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7791,7 +7791,7 @@ export def "rest-3-issue-link get" [
 #
 # GET /rest/api/3/issueLinkType
 # operationId: getIssueLinkTypes
-export def "rest-3-issue-link-type list" [
+export def "get-issue-link-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7825,7 +7825,7 @@ export def "rest-3-issue-link-type list" [
 #
 # POST /rest/api/3/issueLinkType
 # operationId: createIssueLinkType
-export def "rest-3-issue-link-type create" [
+export def "create-issue-link-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7866,7 +7866,7 @@ export def "rest-3-issue-link-type create" [
 #
 # DELETE /rest/api/3/issueLinkType/{issueLinkTypeId}
 # operationId: deleteIssueLinkType
-export def "rest-3-issue-link-type delete" [
+export def "delete-issue-link-type" [
   issue_link_type_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7902,7 +7902,7 @@ export def "rest-3-issue-link-type delete" [
 #
 # GET /rest/api/3/issueLinkType/{issueLinkTypeId}
 # operationId: getIssueLinkType
-export def "rest-3-issue-link-type get" [
+export def "get-issue-link-type" [
   issue_link_type_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7938,7 +7938,7 @@ export def "rest-3-issue-link-type get" [
 #
 # PUT /rest/api/3/issueLinkType/{issueLinkTypeId}
 # operationId: updateIssueLinkType
-export def "rest-3-issue-link-type update" [
+export def "update-issue-link-type" [
   issue_link_type_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7981,7 +7981,7 @@ export def "rest-3-issue-link-type update" [
 #
 # GET /rest/api/3/issuesecurityschemes
 # operationId: getIssueSecuritySchemes
-export def "rest-3-issuesecurityschemes get-issue-security-schemes" [
+export def "get-issue-security-schemes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8015,7 +8015,7 @@ export def "rest-3-issuesecurityschemes get-issue-security-schemes" [
 #
 # GET /rest/api/3/issuesecurityschemes/{id}
 # operationId: getIssueSecurityScheme
-export def "rest-3-issuesecurityschemes get-issue-security-scheme" [
+export def "get-issue-security-scheme" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8051,7 +8051,7 @@ export def "rest-3-issuesecurityschemes get-issue-security-scheme" [
 #
 # GET /rest/api/3/issuesecurityschemes/{issueSecuritySchemeId}/members
 # operationId: getIssueSecurityLevelMembers
-export def "rest-3-issuesecurityschemes-members get-issue-security-level" [
+export def "get-issue-security-level-members" [
   issue_security_scheme_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8092,7 +8092,7 @@ export def "rest-3-issuesecurityschemes-members get-issue-security-level" [
 #
 # GET /rest/api/3/issuetype
 # operationId: getIssueAllTypes
-export def "rest-3-issuetype get-issue-list-types" [
+export def "get-issue-all-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8126,7 +8126,7 @@ export def "rest-3-issuetype get-issue-list-types" [
 #
 # POST /rest/api/3/issuetype
 # operationId: createIssueType
-export def "rest-3-issuetype create-issue-type" [
+export def "create-issue-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8167,7 +8167,7 @@ export def "rest-3-issuetype create-issue-type" [
 #
 # GET /rest/api/3/issuetype/project
 # operationId: getIssueTypesForProject
-export def "rest-3-issuetype-project get-issue-types" [
+export def "get-issue-types-for-project" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8204,7 +8204,7 @@ export def "rest-3-issuetype-project get-issue-types" [
 #
 # DELETE /rest/api/3/issuetype/{id}
 # operationId: deleteIssueType
-export def "rest-3-issuetype delete-issue-type" [
+export def "delete-issue-type" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8242,7 +8242,7 @@ export def "rest-3-issuetype delete-issue-type" [
 #
 # GET /rest/api/3/issuetype/{id}
 # operationId: getIssueType
-export def "rest-3-issuetype get-issue-type" [
+export def "get-issue-type" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8278,7 +8278,7 @@ export def "rest-3-issuetype get-issue-type" [
 #
 # PUT /rest/api/3/issuetype/{id}
 # operationId: updateIssueType
-export def "rest-3-issuetype update-issue-type" [
+export def "update-issue-type" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8320,7 +8320,7 @@ export def "rest-3-issuetype update-issue-type" [
 #
 # GET /rest/api/3/issuetype/{id}/alternatives
 # operationId: getAlternativeIssueTypes
-export def "rest-3-issuetype-alternatives get-issue-types" [
+export def "get-alternative-issue-types" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8356,7 +8356,7 @@ export def "rest-3-issuetype-alternatives get-issue-types" [
 #
 # POST /rest/api/3/issuetype/{id}/avatar2
 # operationId: createIssueTypeAvatar
-export def "rest-3-issuetype-avatar2 create-issue-type-avatar" [
+export def "create-issue-type-avatar" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8400,7 +8400,7 @@ export def "rest-3-issuetype-avatar2 create-issue-type-avatar" [
 #
 # GET /rest/api/3/issuetype/{issueTypeId}/properties
 # operationId: getIssueTypePropertyKeys
-export def "rest-3-issuetype-properties get-issue-type-property-keys" [
+export def "get-issue-type-property-keys" [
   issue_type_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8436,7 +8436,7 @@ export def "rest-3-issuetype-properties get-issue-type-property-keys" [
 #
 # DELETE /rest/api/3/issuetype/{issueTypeId}/properties/{propertyKey}
 # operationId: deleteIssueTypeProperty
-export def "rest-3-issuetype-properties delete-issue-type-property" [
+export def "delete-issue-type-property" [
   issue_type_id: string
   property_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8474,7 +8474,7 @@ export def "rest-3-issuetype-properties delete-issue-type-property" [
 #
 # GET /rest/api/3/issuetype/{issueTypeId}/properties/{propertyKey}
 # operationId: getIssueTypeProperty
-export def "rest-3-issuetype-properties get-issue-type-property" [
+export def "get-issue-type-property" [
   issue_type_id: string
   property_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8512,7 +8512,7 @@ export def "rest-3-issuetype-properties get-issue-type-property" [
 #
 # PUT /rest/api/3/issuetype/{issueTypeId}/properties/{propertyKey}
 # operationId: setIssueTypeProperty
-export def "rest-3-issuetype-properties update-issue-type-property" [
+export def "set-issue-type-property" [
   issue_type_id: string
   property_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8554,7 +8554,7 @@ export def "rest-3-issuetype-properties update-issue-type-property" [
 #
 # GET /rest/api/3/issuetypescheme
 # operationId: getAllIssueTypeSchemes
-export def "rest-3-issuetypescheme get-list-issue-type-schemes" [
+export def "get-all-issue-type-schemes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8595,7 +8595,7 @@ export def "rest-3-issuetypescheme get-list-issue-type-schemes" [
 #
 # POST /rest/api/3/issuetypescheme
 # operationId: createIssueTypeScheme
-export def "rest-3-issuetypescheme create-issue-type-scheme" [
+export def "create-issue-type-scheme" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8636,7 +8636,7 @@ export def "rest-3-issuetypescheme create-issue-type-scheme" [
 #
 # GET /rest/api/3/issuetypescheme/mapping
 # operationId: getIssueTypeSchemesMapping
-export def "rest-3-issuetypescheme-mapping get-issue-type-schemes" [
+export def "get-issue-type-schemes-mapping" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8674,7 +8674,7 @@ export def "rest-3-issuetypescheme-mapping get-issue-type-schemes" [
 #
 # GET /rest/api/3/issuetypescheme/project
 # operationId: getIssueTypeSchemeForProjects
-export def "rest-3-issuetypescheme-project get-issue-type-scheme" [
+export def "get-issue-type-scheme-for-projects" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8712,7 +8712,7 @@ export def "rest-3-issuetypescheme-project get-issue-type-scheme" [
 #
 # PUT /rest/api/3/issuetypescheme/project
 # operationId: assignIssueTypeSchemeToProject
-export def "rest-3-issuetypescheme-project assign-issue-type-scheme" [
+export def "assign-issue-type-scheme-to-project" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8751,7 +8751,7 @@ export def "rest-3-issuetypescheme-project assign-issue-type-scheme" [
 #
 # DELETE /rest/api/3/issuetypescheme/{issueTypeSchemeId}
 # operationId: deleteIssueTypeScheme
-export def "rest-3-issuetypescheme delete-issue-type-scheme" [
+export def "delete-issue-type-scheme" [
   issue_type_scheme_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8787,7 +8787,7 @@ export def "rest-3-issuetypescheme delete-issue-type-scheme" [
 #
 # PUT /rest/api/3/issuetypescheme/{issueTypeSchemeId}
 # operationId: updateIssueTypeScheme
-export def "rest-3-issuetypescheme update-issue-type-scheme" [
+export def "update-issue-type-scheme" [
   issue_type_scheme_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8829,7 +8829,7 @@ export def "rest-3-issuetypescheme update-issue-type-scheme" [
 #
 # PUT /rest/api/3/issuetypescheme/{issueTypeSchemeId}/issuetype
 # operationId: addIssueTypesToIssueTypeScheme
-export def "rest-3-issuetypescheme-issuetype create-issue-types-to-issue-type-scheme" [
+export def "add-issue-types-to-issue-type-scheme" [
   issue_type_scheme_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8869,7 +8869,7 @@ export def "rest-3-issuetypescheme-issuetype create-issue-types-to-issue-type-sc
 #
 # PUT /rest/api/3/issuetypescheme/{issueTypeSchemeId}/issuetype/move
 # operationId: reorderIssueTypesInIssueTypeScheme
-export def "rest-3-issuetypescheme-issuetype-move update-reorder-issue-types-in-issue-type-scheme" [
+export def "reorder-issue-types-in-issue-type-scheme" [
   issue_type_scheme_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8911,7 +8911,7 @@ export def "rest-3-issuetypescheme-issuetype-move update-reorder-issue-types-in-
 #
 # DELETE /rest/api/3/issuetypescheme/{issueTypeSchemeId}/issuetype/{issueTypeId}
 # operationId: removeIssueTypeFromIssueTypeScheme
-export def "rest-3-issuetypescheme-issuetype delete-issue-type-from-issue-type-scheme" [
+export def "remove-issue-type-from-issue-type-scheme" [
   issue_type_scheme_id: int
   issue_type_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -8949,7 +8949,7 @@ export def "rest-3-issuetypescheme-issuetype delete-issue-type-from-issue-type-s
 #
 # GET /rest/api/3/issuetypescreenscheme
 # operationId: getIssueTypeScreenSchemes
-export def "rest-3-issuetypescreenscheme get-issue-type-screen-schemes" [
+export def "get-issue-type-screen-schemes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8991,7 +8991,7 @@ export def "rest-3-issuetypescreenscheme get-issue-type-screen-schemes" [
 # POST /rest/api/3/issuetypescreenscheme
 # operationId: createIssueTypeScreenScheme
 # --issueTypeMappings item shape: {issueTypeId: string, screenSchemeId: string}
-export def "rest-3-issuetypescreenscheme create-issue-type-screen-scheme" [
+export def "create-issue-type-screen-scheme" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9031,7 +9031,7 @@ export def "rest-3-issuetypescreenscheme create-issue-type-screen-scheme" [
 #
 # GET /rest/api/3/issuetypescreenscheme/mapping
 # operationId: getIssueTypeScreenSchemeMappings
-export def "rest-3-issuetypescreenscheme-mapping get-issue-type-screen-scheme" [
+export def "get-issue-type-screen-scheme-mappings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9069,7 +9069,7 @@ export def "rest-3-issuetypescreenscheme-mapping get-issue-type-screen-scheme" [
 #
 # GET /rest/api/3/issuetypescreenscheme/project
 # operationId: getIssueTypeScreenSchemeProjectAssociations
-export def "rest-3-issuetypescreenscheme-project get-issue-type-screen-scheme-associations" [
+export def "get-issue-type-screen-scheme-project-associations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9107,7 +9107,7 @@ export def "rest-3-issuetypescreenscheme-project get-issue-type-screen-scheme-as
 #
 # PUT /rest/api/3/issuetypescreenscheme/project
 # operationId: assignIssueTypeScreenSchemeToProject
-export def "rest-3-issuetypescreenscheme-project assign-issue-type-screen-scheme" [
+export def "assign-issue-type-screen-scheme-to-project" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9146,7 +9146,7 @@ export def "rest-3-issuetypescreenscheme-project assign-issue-type-screen-scheme
 #
 # DELETE /rest/api/3/issuetypescreenscheme/{issueTypeScreenSchemeId}
 # operationId: deleteIssueTypeScreenScheme
-export def "rest-3-issuetypescreenscheme delete-issue-type-screen-scheme" [
+export def "delete-issue-type-screen-scheme" [
   issue_type_screen_scheme_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9182,7 +9182,7 @@ export def "rest-3-issuetypescreenscheme delete-issue-type-screen-scheme" [
 #
 # PUT /rest/api/3/issuetypescreenscheme/{issueTypeScreenSchemeId}
 # operationId: updateIssueTypeScreenScheme
-export def "rest-3-issuetypescreenscheme update-issue-type-screen-scheme" [
+export def "update-issue-type-screen-scheme" [
   issue_type_screen_scheme_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9224,7 +9224,7 @@ export def "rest-3-issuetypescreenscheme update-issue-type-screen-scheme" [
 # PUT /rest/api/3/issuetypescreenscheme/{issueTypeScreenSchemeId}/mapping
 # operationId: appendMappingsForIssueTypeScreenScheme
 # --issueTypeMappings item shape: {issueTypeId: string, screenSchemeId: string}
-export def "rest-3-issuetypescreenscheme-mapping create-for-issue-type-screen-scheme" [
+export def "append-mappings-for-issue-type-screen-scheme" [
   issue_type_screen_scheme_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9264,7 +9264,7 @@ export def "rest-3-issuetypescreenscheme-mapping create-for-issue-type-screen-sc
 #
 # PUT /rest/api/3/issuetypescreenscheme/{issueTypeScreenSchemeId}/mapping/default
 # operationId: updateDefaultScreenScheme
-export def "rest-3-issuetypescreenscheme-mapping-default update-screen-scheme" [
+export def "update-default-screen-scheme" [
   issue_type_screen_scheme_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9304,7 +9304,7 @@ export def "rest-3-issuetypescreenscheme-mapping-default update-screen-scheme" [
 #
 # POST /rest/api/3/issuetypescreenscheme/{issueTypeScreenSchemeId}/mapping/remove
 # operationId: removeMappingsFromIssueTypeScreenScheme
-export def "rest-3-issuetypescreenscheme-mapping-remove delete-from-issue-type-screen-scheme" [
+export def "remove-mappings-from-issue-type-screen-scheme" [
   issue_type_screen_scheme_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9344,7 +9344,7 @@ export def "rest-3-issuetypescreenscheme-mapping-remove delete-from-issue-type-s
 #
 # GET /rest/api/3/issuetypescreenscheme/{issueTypeScreenSchemeId}/project
 # operationId: getProjectsForIssueTypeScreenScheme
-export def "rest-3-issuetypescreenscheme-project get-for-issue-type-screen-scheme" [
+export def "get-projects-for-issue-type-screen-scheme" [
   issue_type_screen_scheme_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9384,7 +9384,7 @@ export def "rest-3-issuetypescreenscheme-project get-for-issue-type-screen-schem
 #
 # GET /rest/api/3/jql/autocompletedata
 # operationId: getAutoComplete
-export def "rest-3-jql-autocompletedata get-auto-complete" [
+export def "get-auto-complete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9418,7 +9418,7 @@ export def "rest-3-jql-autocompletedata get-auto-complete" [
 #
 # POST /rest/api/3/jql/autocompletedata
 # operationId: getAutoCompletePost
-export def "rest-3-jql-autocompletedata get-auto-complete-create" [
+export def "get-auto-complete-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9457,7 +9457,7 @@ export def "rest-3-jql-autocompletedata get-auto-complete-create" [
 #
 # GET /rest/api/3/jql/autocompletedata/suggestions
 # operationId: getFieldAutoCompleteForQueryString
-export def "rest-3-jql-autocompletedata-suggestions get-field-auto-complete-for-list-string" [
+export def "get-field-auto-complete-for-query-string" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9496,7 +9496,7 @@ export def "rest-3-jql-autocompletedata-suggestions get-field-auto-complete-for-
 #
 # GET /rest/api/3/jql/function/computation
 # operationId: getPrecomputations
-export def "rest-3-jql-function-computation get-precomputations" [
+export def "get-precomputations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9537,7 +9537,7 @@ export def "rest-3-jql-function-computation get-precomputations" [
 # POST /rest/api/3/jql/function/computation
 # operationId: updatePrecomputations
 # --values item shape: {id: int, value: string}
-export def "rest-3-jql-function-computation update-precomputations" [
+export def "update-precomputations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9575,7 +9575,7 @@ export def "rest-3-jql-function-computation update-precomputations" [
 #
 # POST /rest/api/3/jql/match
 # operationId: matchIssues
-export def "rest-3-jql-match create-issues" [
+export def "match-issues" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9614,7 +9614,7 @@ export def "rest-3-jql-match create-issues" [
 #
 # POST /rest/api/3/jql/parse
 # operationId: parseJqlQueries
-export def "rest-3-jql-parse create-queries" [
+export def "parse-jql-queries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9654,7 +9654,7 @@ export def "rest-3-jql-parse create-queries" [
 #
 # POST /rest/api/3/jql/pdcleaner
 # operationId: migrateQueries
-export def "rest-3-jql-pdcleaner create-migrate-queries" [
+export def "migrate-queries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9693,7 +9693,7 @@ export def "rest-3-jql-pdcleaner create-migrate-queries" [
 # POST /rest/api/3/jql/sanitize
 # operationId: sanitiseJqlQueries
 # --queries item shape: {accountId?: string, query: string}
-export def "rest-3-jql-sanitize create-sanitise-queries" [
+export def "sanitise-jql-queries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9731,7 +9731,7 @@ export def "rest-3-jql-sanitize create-sanitise-queries" [
 #
 # GET /rest/api/3/label
 # operationId: getAllLabels
-export def "rest-3-label get-list" [
+export def "get-all-labels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9768,7 +9768,7 @@ export def "rest-3-label get-list" [
 #
 # GET /rest/api/3/license/approximateLicenseCount
 # operationId: getApproximateLicenseCount
-export def "rest-3-license-approximate-license-count get" [
+export def "get-approximate-license-count" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9802,7 +9802,7 @@ export def "rest-3-license-approximate-license-count get" [
 #
 # GET /rest/api/3/license/approximateLicenseCount/product/{applicationKey}
 # operationId: getApproximateApplicationLicenseCount
-export def "rest-3-license-approximate-license-count-product get-application" [
+export def "get-approximate-application-license-count" [
   application_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9838,7 +9838,7 @@ export def "rest-3-license-approximate-license-count-product get-application" [
 #
 # GET /rest/api/3/mypermissions
 # operationId: getMyPermissions
-export def "rest-3-mypermissions get-my-permissions" [
+export def "get-my-permissions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9881,7 +9881,7 @@ export def "rest-3-mypermissions get-my-permissions" [
 #
 # DELETE /rest/api/3/mypreferences
 # operationId: removePreference
-export def "rest-3-mypreferences delete-preference" [
+export def "remove-preference" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9917,7 +9917,7 @@ export def "rest-3-mypreferences delete-preference" [
 #
 # GET /rest/api/3/mypreferences
 # operationId: getPreference
-export def "rest-3-mypreferences get-preference" [
+export def "get-preference" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9953,7 +9953,7 @@ export def "rest-3-mypreferences get-preference" [
 #
 # PUT /rest/api/3/mypreferences
 # operationId: setPreference
-export def "rest-3-mypreferences update-preference" [
+export def "set-preference" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9995,7 +9995,7 @@ export def "rest-3-mypreferences update-preference" [
 # DEPRECATED
 # operationId: deleteLocale
 @deprecated
-export def "rest-3-mypreferences-locale delete" [
+export def "delete-locale" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10029,7 +10029,7 @@ export def "rest-3-mypreferences-locale delete" [
 #
 # GET /rest/api/3/mypreferences/locale
 # operationId: getLocale
-export def "rest-3-mypreferences-locale get" [
+export def "get-locale" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10065,7 +10065,7 @@ export def "rest-3-mypreferences-locale get" [
 # DEPRECATED
 # operationId: setLocale
 @deprecated
-export def "rest-3-mypreferences-locale update" [
+export def "set-locale" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10103,7 +10103,7 @@ export def "rest-3-mypreferences-locale update" [
 #
 # GET /rest/api/3/myself
 # operationId: getCurrentUser
-export def "rest-3-myself get-user" [
+export def "get-current-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10139,7 +10139,7 @@ export def "rest-3-myself get-user" [
 #
 # GET /rest/api/3/notificationscheme
 # operationId: getNotificationSchemes
-export def "rest-3-notificationscheme get-notification-schemes" [
+export def "get-notification-schemes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10181,7 +10181,7 @@ export def "rest-3-notificationscheme get-notification-schemes" [
 # POST /rest/api/3/notificationscheme
 # operationId: createNotificationScheme
 # --notificationSchemeEvents item shape: {event: any, notifications: list}
-export def "rest-3-notificationscheme create-notification-scheme" [
+export def "create-notification-scheme" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10221,7 +10221,7 @@ export def "rest-3-notificationscheme create-notification-scheme" [
 #
 # GET /rest/api/3/notificationscheme/project
 # operationId: getNotificationSchemeToProjectMappings
-export def "rest-3-notificationscheme-project get-notification-scheme-to-mappings" [
+export def "get-notification-scheme-to-project-mappings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10260,7 +10260,7 @@ export def "rest-3-notificationscheme-project get-notification-scheme-to-mapping
 #
 # GET /rest/api/3/notificationscheme/{id}
 # operationId: getNotificationScheme
-export def "rest-3-notificationscheme get-notification-scheme" [
+export def "get-notification-scheme" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10298,7 +10298,7 @@ export def "rest-3-notificationscheme get-notification-scheme" [
 #
 # PUT /rest/api/3/notificationscheme/{id}
 # operationId: updateNotificationScheme
-export def "rest-3-notificationscheme update-notification-scheme" [
+export def "update-notification-scheme" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10340,7 +10340,7 @@ export def "rest-3-notificationscheme update-notification-scheme" [
 # PUT /rest/api/3/notificationscheme/{id}/notification
 # operationId: addNotifications
 # --notificationSchemeEvents item shape: {event: any, notifications: list}
-export def "rest-3-notificationscheme-notification create" [
+export def "add-notifications" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10380,7 +10380,7 @@ export def "rest-3-notificationscheme-notification create" [
 #
 # DELETE /rest/api/3/notificationscheme/{notificationSchemeId}
 # operationId: deleteNotificationScheme
-export def "rest-3-notificationscheme delete-notification-scheme" [
+export def "delete-notification-scheme" [
   notification_scheme_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10416,7 +10416,7 @@ export def "rest-3-notificationscheme delete-notification-scheme" [
 #
 # DELETE /rest/api/3/notificationscheme/{notificationSchemeId}/notification/{notificationId}
 # operationId: removeNotificationFromNotificationScheme
-export def "rest-3-notificationscheme-notification delete-from-scheme" [
+export def "remove-notification-from-notification-scheme" [
   notification_scheme_id: string
   notification_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10454,7 +10454,7 @@ export def "rest-3-notificationscheme-notification delete-from-scheme" [
 #
 # GET /rest/api/3/permissions
 # operationId: getAllPermissions
-export def "rest-3-permissions get-list" [
+export def "get-all-permissions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10489,7 +10489,7 @@ export def "rest-3-permissions get-list" [
 # POST /rest/api/3/permissions/check
 # operationId: getBulkPermissions
 # --projectPermissions item shape: {issues?: list<int>, permissions: list<string>, projects?: list<int>}
-export def "rest-3-permissions-check get-bulk" [
+export def "get-bulk-permissions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10529,7 +10529,7 @@ export def "rest-3-permissions-check get-bulk" [
 #
 # POST /rest/api/3/permissions/project
 # operationId: getPermittedProjects
-export def "rest-3-permissions-project get-permitted" [
+export def "get-permitted-projects" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10567,7 +10567,7 @@ export def "rest-3-permissions-project get-permitted" [
 #
 # GET /rest/api/3/permissionscheme
 # operationId: getAllPermissionSchemes
-export def "rest-3-permissionscheme get-list-permission-schemes" [
+export def "get-all-permission-schemes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10604,7 +10604,7 @@ export def "rest-3-permissionscheme get-list-permission-schemes" [
 # POST /rest/api/3/permissionscheme
 # operationId: createPermissionScheme
 # --permissions item shape: {holder?: any, permission?: string}
-export def "rest-3-permissionscheme create-permission-scheme" [
+export def "create-permission-scheme" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10647,7 +10647,7 @@ export def "rest-3-permissionscheme create-permission-scheme" [
 #
 # DELETE /rest/api/3/permissionscheme/{schemeId}
 # operationId: deletePermissionScheme
-export def "rest-3-permissionscheme delete-permission-scheme" [
+export def "delete-permission-scheme" [
   scheme_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10683,7 +10683,7 @@ export def "rest-3-permissionscheme delete-permission-scheme" [
 #
 # GET /rest/api/3/permissionscheme/{schemeId}
 # operationId: getPermissionScheme
-export def "rest-3-permissionscheme get-permission-scheme" [
+export def "get-permission-scheme" [
   scheme_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10722,7 +10722,7 @@ export def "rest-3-permissionscheme get-permission-scheme" [
 # PUT /rest/api/3/permissionscheme/{schemeId}
 # operationId: updatePermissionScheme
 # --permissions item shape: {holder?: any, permission?: string}
-export def "rest-3-permissionscheme update-permission-scheme" [
+export def "update-permission-scheme" [
   scheme_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10767,7 +10767,7 @@ export def "rest-3-permissionscheme update-permission-scheme" [
 #
 # GET /rest/api/3/permissionscheme/{schemeId}/permission
 # operationId: getPermissionSchemeGrants
-export def "rest-3-permissionscheme-permission get-scheme-grants" [
+export def "get-permission-scheme-grants" [
   scheme_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10805,7 +10805,7 @@ export def "rest-3-permissionscheme-permission get-scheme-grants" [
 #
 # POST /rest/api/3/permissionscheme/{schemeId}/permission
 # operationId: createPermissionGrant
-export def "rest-3-permissionscheme-permission create-grant" [
+export def "create-permission-grant" [
   scheme_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10848,7 +10848,7 @@ export def "rest-3-permissionscheme-permission create-grant" [
 #
 # DELETE /rest/api/3/permissionscheme/{schemeId}/permission/{permissionId}
 # operationId: deletePermissionSchemeEntity
-export def "rest-3-permissionscheme-permission delete-scheme-entity" [
+export def "delete-permission-scheme-entity" [
   scheme_id: int
   permission_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -10886,7 +10886,7 @@ export def "rest-3-permissionscheme-permission delete-scheme-entity" [
 #
 # GET /rest/api/3/permissionscheme/{schemeId}/permission/{permissionId}
 # operationId: getPermissionSchemeGrant
-export def "rest-3-permissionscheme-permission get-scheme-grant" [
+export def "get-permission-scheme-grant" [
   scheme_id: int
   permission_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -10928,7 +10928,7 @@ export def "rest-3-permissionscheme-permission get-scheme-grant" [
 # DEPRECATED
 # operationId: getPriorities
 @deprecated
-export def "rest-3-priority get-priorities" [
+export def "get-priorities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10962,7 +10962,7 @@ export def "rest-3-priority get-priorities" [
 #
 # POST /rest/api/3/priority
 # operationId: createPriority
-export def "rest-3-priority create" [
+export def "create-priority" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11003,7 +11003,7 @@ export def "rest-3-priority create" [
 #
 # PUT /rest/api/3/priority/default
 # operationId: setDefaultPriority
-export def "rest-3-priority-default update" [
+export def "set-default-priority" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11041,7 +11041,7 @@ export def "rest-3-priority-default update" [
 #
 # PUT /rest/api/3/priority/move
 # operationId: movePriorities
-export def "rest-3-priority-move move-priorities" [
+export def "move-priorities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11081,7 +11081,7 @@ export def "rest-3-priority-move move-priorities" [
 #
 # GET /rest/api/3/priority/search
 # operationId: searchPriorities
-export def "rest-3-priority-search list-priorities" [
+export def "search-priorities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11120,7 +11120,7 @@ export def "rest-3-priority-search list-priorities" [
 #
 # DELETE /rest/api/3/priority/{id}
 # operationId: deletePriority
-export def "rest-3-priority delete" [
+export def "delete-priority" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11158,7 +11158,7 @@ export def "rest-3-priority delete" [
 #
 # GET /rest/api/3/priority/{id}
 # operationId: getPriority
-export def "rest-3-priority get" [
+export def "get-priority" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11194,7 +11194,7 @@ export def "rest-3-priority get" [
 #
 # PUT /rest/api/3/priority/{id}
 # operationId: updatePriority
-export def "rest-3-priority update" [
+export def "update-priority" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11239,7 +11239,7 @@ export def "rest-3-priority update" [
 # DEPRECATED
 # operationId: getAllProjects
 @deprecated
-export def "rest-3-project get-list" [
+export def "get-all-projects" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11277,7 +11277,7 @@ export def "rest-3-project get-list" [
 #
 # POST /rest/api/3/project
 # operationId: createProject
-export def "rest-3-project create" [
+export def "create-project" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11332,7 +11332,7 @@ export def "rest-3-project create" [
 #
 # GET /rest/api/3/project/recent
 # operationId: getRecent
-export def "rest-3-project-recent get" [
+export def "get-recent" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11369,7 +11369,7 @@ export def "rest-3-project-recent get" [
 #
 # GET /rest/api/3/project/search
 # operationId: searchProjects
-export def "rest-3-project-search list" [
+export def "search-projects" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11417,7 +11417,7 @@ export def "rest-3-project-search list" [
 #
 # GET /rest/api/3/project/type
 # operationId: getAllProjectTypes
-export def "rest-3-project-type get-list" [
+export def "get-all-project-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11451,7 +11451,7 @@ export def "rest-3-project-type get-list" [
 #
 # GET /rest/api/3/project/type/accessible
 # operationId: getAllAccessibleProjectTypes
-export def "rest-3-project-type-accessible get-list" [
+export def "get-all-accessible-project-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11485,7 +11485,7 @@ export def "rest-3-project-type-accessible get-list" [
 #
 # GET /rest/api/3/project/type/{projectTypeKey}
 # operationId: getProjectTypeByKey
-export def "rest-3-project-type get-by-key" [
+export def "get-project-type-by-key" [
   project_type_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11521,7 +11521,7 @@ export def "rest-3-project-type get-by-key" [
 #
 # GET /rest/api/3/project/type/{projectTypeKey}/accessible
 # operationId: getAccessibleProjectTypeByKey
-export def "rest-3-project-type-accessible get-by-key" [
+export def "get-accessible-project-type-by-key" [
   project_type_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11557,7 +11557,7 @@ export def "rest-3-project-type-accessible get-by-key" [
 #
 # DELETE /rest/api/3/project/{projectIdOrKey}
 # operationId: deleteProject
-export def "rest-3-project delete" [
+export def "delete-project" [
   project_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11595,7 +11595,7 @@ export def "rest-3-project delete" [
 #
 # GET /rest/api/3/project/{projectIdOrKey}
 # operationId: getProject
-export def "rest-3-project get" [
+export def "get-project" [
   project_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11634,7 +11634,7 @@ export def "rest-3-project get" [
 #
 # PUT /rest/api/3/project/{projectIdOrKey}
 # operationId: updateProject
-export def "rest-3-project update" [
+export def "update-project" [
   project_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11687,7 +11687,7 @@ export def "rest-3-project update" [
 #
 # POST /rest/api/3/project/{projectIdOrKey}/archive
 # operationId: archiveProject
-export def "rest-3-project-archive archive" [
+export def "archive-project" [
   project_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11723,7 +11723,7 @@ export def "rest-3-project-archive archive" [
 #
 # PUT /rest/api/3/project/{projectIdOrKey}/avatar
 # operationId: updateProjectAvatar
-export def "rest-3-project-avatar update" [
+export def "update-project-avatar" [
   project_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11763,7 +11763,7 @@ export def "rest-3-project-avatar update" [
 #
 # DELETE /rest/api/3/project/{projectIdOrKey}/avatar/{id}
 # operationId: deleteProjectAvatar
-export def "rest-3-project-avatar delete" [
+export def "delete-project-avatar" [
   project_id_or_key: string
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -11801,7 +11801,7 @@ export def "rest-3-project-avatar delete" [
 #
 # POST /rest/api/3/project/{projectIdOrKey}/avatar2
 # operationId: createProjectAvatar
-export def "rest-3-project-avatar2 create-avatar" [
+export def "create-project-avatar" [
   project_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11845,7 +11845,7 @@ export def "rest-3-project-avatar2 create-avatar" [
 #
 # GET /rest/api/3/project/{projectIdOrKey}/avatars
 # operationId: getAllProjectAvatars
-export def "rest-3-project-avatars get-list" [
+export def "get-all-project-avatars" [
   project_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11881,7 +11881,7 @@ export def "rest-3-project-avatars get-list" [
 #
 # GET /rest/api/3/project/{projectIdOrKey}/component
 # operationId: getProjectComponentsPaginated
-export def "rest-3-project-component get-paginated" [
+export def "get-project-components-paginated" [
   project_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11922,7 +11922,7 @@ export def "rest-3-project-component get-paginated" [
 #
 # GET /rest/api/3/project/{projectIdOrKey}/components
 # operationId: getProjectComponents
-export def "rest-3-project-components get" [
+export def "get-project-components" [
   project_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11958,7 +11958,7 @@ export def "rest-3-project-components get" [
 #
 # POST /rest/api/3/project/{projectIdOrKey}/delete
 # operationId: deleteProjectAsynchronously
-export def "rest-3-project-delete delete-asynchronously" [
+export def "delete-project-asynchronously" [
   project_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11994,7 +11994,7 @@ export def "rest-3-project-delete delete-asynchronously" [
 #
 # GET /rest/api/3/project/{projectIdOrKey}/features
 # operationId: getFeaturesForProject
-export def "rest-3-project-features get" [
+export def "get-features-for-project" [
   project_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12030,7 +12030,7 @@ export def "rest-3-project-features get" [
 #
 # PUT /rest/api/3/project/{projectIdOrKey}/features/{featureKey}
 # operationId: toggleFeatureForProject
-export def "rest-3-project-features update-toggle" [
+export def "toggle-feature-for-project" [
   project_id_or_key: string
   feature_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12072,7 +12072,7 @@ export def "rest-3-project-features update-toggle" [
 #
 # GET /rest/api/3/project/{projectIdOrKey}/properties
 # operationId: getProjectPropertyKeys
-export def "rest-3-project-properties get-property-keys" [
+export def "get-project-property-keys" [
   project_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12108,7 +12108,7 @@ export def "rest-3-project-properties get-property-keys" [
 #
 # DELETE /rest/api/3/project/{projectIdOrKey}/properties/{propertyKey}
 # operationId: deleteProjectProperty
-export def "rest-3-project-properties delete-property" [
+export def "delete-project-property" [
   project_id_or_key: string
   property_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12146,7 +12146,7 @@ export def "rest-3-project-properties delete-property" [
 #
 # GET /rest/api/3/project/{projectIdOrKey}/properties/{propertyKey}
 # operationId: getProjectProperty
-export def "rest-3-project-properties get-property" [
+export def "get-project-property" [
   project_id_or_key: string
   property_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12184,7 +12184,7 @@ export def "rest-3-project-properties get-property" [
 #
 # PUT /rest/api/3/project/{projectIdOrKey}/properties/{propertyKey}
 # operationId: setProjectProperty
-export def "rest-3-project-properties update-property" [
+export def "set-project-property" [
   project_id_or_key: string
   property_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12226,7 +12226,7 @@ export def "rest-3-project-properties update-property" [
 #
 # POST /rest/api/3/project/{projectIdOrKey}/restore
 # operationId: restore
-export def "rest-3-project-restore create" [
+export def "restore" [
   project_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12262,7 +12262,7 @@ export def "rest-3-project-restore create" [
 #
 # GET /rest/api/3/project/{projectIdOrKey}/role
 # operationId: getProjectRoles
-export def "rest-3-project-role list" [
+export def "get-project-roles" [
   project_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12298,7 +12298,7 @@ export def "rest-3-project-role list" [
 #
 # DELETE /rest/api/3/project/{projectIdOrKey}/role/{id}
 # operationId: deleteActor
-export def "rest-3-project-role delete-actor" [
+export def "delete-actor" [
   project_id_or_key: string
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -12340,7 +12340,7 @@ export def "rest-3-project-role delete-actor" [
 #
 # GET /rest/api/3/project/{projectIdOrKey}/role/{id}
 # operationId: getProjectRole
-export def "rest-3-project-role get" [
+export def "get-project-role" [
   project_id_or_key: string
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -12380,7 +12380,7 @@ export def "rest-3-project-role get" [
 #
 # POST /rest/api/3/project/{projectIdOrKey}/role/{id}
 # operationId: addActorUsers
-export def "rest-3-project-role create-actor-users" [
+export def "add-actor-users" [
   project_id_or_key: string
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -12424,7 +12424,7 @@ export def "rest-3-project-role create-actor-users" [
 #
 # PUT /rest/api/3/project/{projectIdOrKey}/role/{id}
 # operationId: setActors
-export def "rest-3-project-role update-actors" [
+export def "set-actors" [
   project_id_or_key: string
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -12466,7 +12466,7 @@ export def "rest-3-project-role update-actors" [
 #
 # GET /rest/api/3/project/{projectIdOrKey}/roledetails
 # operationId: getProjectRoleDetails
-export def "rest-3-project-roledetails get-role-details" [
+export def "get-project-role-details" [
   project_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12505,7 +12505,7 @@ export def "rest-3-project-roledetails get-role-details" [
 #
 # GET /rest/api/3/project/{projectIdOrKey}/statuses
 # operationId: getAllStatuses
-export def "rest-3-project-statuses get-list" [
+export def "get-all-statuses" [
   project_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12543,7 +12543,7 @@ export def "rest-3-project-statuses get-list" [
 # DEPRECATED
 # operationId: updateProjectType
 @deprecated
-export def "rest-3-project-type update" [
+export def "update-project-type" [
   project_id_or_key: string
   new_project_type_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12581,7 +12581,7 @@ export def "rest-3-project-type update" [
 #
 # GET /rest/api/3/project/{projectIdOrKey}/version
 # operationId: getProjectVersionsPaginated
-export def "rest-3-project-version get-paginated" [
+export def "get-project-versions-paginated" [
   project_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12624,7 +12624,7 @@ export def "rest-3-project-version get-paginated" [
 #
 # GET /rest/api/3/project/{projectIdOrKey}/versions
 # operationId: getProjectVersions
-export def "rest-3-project-versions get" [
+export def "get-project-versions" [
   project_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12662,7 +12662,7 @@ export def "rest-3-project-versions get" [
 #
 # GET /rest/api/3/project/{projectId}/email
 # operationId: getProjectEmail
-export def "rest-3-project-email get" [
+export def "get-project-email" [
   project_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12698,7 +12698,7 @@ export def "rest-3-project-email get" [
 #
 # PUT /rest/api/3/project/{projectId}/email
 # operationId: updateProjectEmail
-export def "rest-3-project-email update" [
+export def "update-project-email" [
   project_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12741,7 +12741,7 @@ export def "rest-3-project-email update" [
 # DEPRECATED
 # operationId: getHierarchy
 @deprecated
-export def "rest-3-project-hierarchy get" [
+export def "get-hierarchy" [
   project_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12777,7 +12777,7 @@ export def "rest-3-project-hierarchy get" [
 #
 # GET /rest/api/3/project/{projectKeyOrId}/issuesecuritylevelscheme
 # operationId: getProjectIssueSecurityScheme
-export def "rest-3-project-issuesecuritylevelscheme get-issue-security-scheme" [
+export def "get-project-issue-security-scheme" [
   project_key_or_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12815,7 +12815,7 @@ export def "rest-3-project-issuesecuritylevelscheme get-issue-security-scheme" [
 # DEPRECATED
 # operationId: getNotificationSchemeForProject
 @deprecated
-export def "rest-3-project-notificationscheme get-notification-scheme" [
+export def "get-notification-scheme-for-project" [
   project_key_or_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12853,7 +12853,7 @@ export def "rest-3-project-notificationscheme get-notification-scheme" [
 #
 # GET /rest/api/3/project/{projectKeyOrId}/permissionscheme
 # operationId: getAssignedPermissionScheme
-export def "rest-3-project-permissionscheme get-assigned-permission-scheme" [
+export def "get-assigned-permission-scheme" [
   project_key_or_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12891,7 +12891,7 @@ export def "rest-3-project-permissionscheme get-assigned-permission-scheme" [
 #
 # PUT /rest/api/3/project/{projectKeyOrId}/permissionscheme
 # operationId: assignPermissionScheme
-export def "rest-3-project-permissionscheme assign-permission-scheme" [
+export def "assign-permission-scheme" [
   project_key_or_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12933,7 +12933,7 @@ export def "rest-3-project-permissionscheme assign-permission-scheme" [
 #
 # GET /rest/api/3/project/{projectKeyOrId}/securitylevel
 # operationId: getSecurityLevelsForProject
-export def "rest-3-project-securitylevel get-security-levels" [
+export def "get-security-levels-for-project" [
   project_key_or_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12969,7 +12969,7 @@ export def "rest-3-project-securitylevel get-security-levels" [
 #
 # GET /rest/api/3/projectCategory
 # operationId: getAllProjectCategories
-export def "rest-3-project-category get-list-categories" [
+export def "get-all-project-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13003,7 +13003,7 @@ export def "rest-3-project-category get-list-categories" [
 #
 # POST /rest/api/3/projectCategory
 # operationId: createProjectCategory
-export def "rest-3-project-category create" [
+export def "create-project-category" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13042,7 +13042,7 @@ export def "rest-3-project-category create" [
 #
 # DELETE /rest/api/3/projectCategory/{id}
 # operationId: removeProjectCategory
-export def "rest-3-project-category delete" [
+export def "remove-project-category" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13078,7 +13078,7 @@ export def "rest-3-project-category delete" [
 #
 # GET /rest/api/3/projectCategory/{id}
 # operationId: getProjectCategoryById
-export def "rest-3-project-category get" [
+export def "get-project-category-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13114,7 +13114,7 @@ export def "rest-3-project-category get" [
 #
 # PUT /rest/api/3/projectCategory/{id}
 # operationId: updateProjectCategory
-export def "rest-3-project-category update" [
+export def "update-project-category" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13155,7 +13155,7 @@ export def "rest-3-project-category update" [
 #
 # GET /rest/api/3/projectvalidate/key
 # operationId: validateProjectKey
-export def "rest-3-projectvalidate-key validate-project" [
+export def "validate-project-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13191,7 +13191,7 @@ export def "rest-3-projectvalidate-key validate-project" [
 #
 # GET /rest/api/3/projectvalidate/validProjectKey
 # operationId: getValidProjectKey
-export def "rest-3-projectvalidate-valid-project-key get" [
+export def "get-valid-project-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13227,7 +13227,7 @@ export def "rest-3-projectvalidate-valid-project-key get" [
 #
 # GET /rest/api/3/projectvalidate/validProjectName
 # operationId: getValidProjectName
-export def "rest-3-projectvalidate-valid-project-name get" [
+export def "get-valid-project-name" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13265,7 +13265,7 @@ export def "rest-3-projectvalidate-valid-project-name get" [
 # DEPRECATED
 # operationId: getResolutions
 @deprecated
-export def "rest-3-resolution list" [
+export def "get-resolutions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13299,7 +13299,7 @@ export def "rest-3-resolution list" [
 #
 # POST /rest/api/3/resolution
 # operationId: createResolution
-export def "rest-3-resolution create" [
+export def "create-resolution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13338,7 +13338,7 @@ export def "rest-3-resolution create" [
 #
 # PUT /rest/api/3/resolution/default
 # operationId: setDefaultResolution
-export def "rest-3-resolution-default update" [
+export def "set-default-resolution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13376,7 +13376,7 @@ export def "rest-3-resolution-default update" [
 #
 # PUT /rest/api/3/resolution/move
 # operationId: moveResolutions
-export def "rest-3-resolution-move move" [
+export def "move-resolutions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13416,7 +13416,7 @@ export def "rest-3-resolution-move move" [
 #
 # GET /rest/api/3/resolution/search
 # operationId: searchResolutions
-export def "rest-3-resolution-search list" [
+export def "search-resolutions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13455,7 +13455,7 @@ export def "rest-3-resolution-search list" [
 #
 # DELETE /rest/api/3/resolution/{id}
 # operationId: deleteResolution
-export def "rest-3-resolution delete" [
+export def "delete-resolution" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13493,7 +13493,7 @@ export def "rest-3-resolution delete" [
 #
 # GET /rest/api/3/resolution/{id}
 # operationId: getResolution
-export def "rest-3-resolution get" [
+export def "get-resolution" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13529,7 +13529,7 @@ export def "rest-3-resolution get" [
 #
 # PUT /rest/api/3/resolution/{id}
 # operationId: updateResolution
-export def "rest-3-resolution update" [
+export def "update-resolution" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13570,7 +13570,7 @@ export def "rest-3-resolution update" [
 #
 # GET /rest/api/3/role
 # operationId: getAllProjectRoles
-export def "rest-3-role get-list-project" [
+export def "get-all-project-roles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13604,7 +13604,7 @@ export def "rest-3-role get-list-project" [
 #
 # POST /rest/api/3/role
 # operationId: createProjectRole
-export def "rest-3-role create-project" [
+export def "create-project-role" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13643,7 +13643,7 @@ export def "rest-3-role create-project" [
 #
 # DELETE /rest/api/3/role/{id}
 # operationId: deleteProjectRole
-export def "rest-3-role delete-project" [
+export def "delete-project-role" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13681,7 +13681,7 @@ export def "rest-3-role delete-project" [
 #
 # GET /rest/api/3/role/{id}
 # operationId: getProjectRoleById
-export def "rest-3-role get-project" [
+export def "get-project-role-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13717,7 +13717,7 @@ export def "rest-3-role get-project" [
 #
 # POST /rest/api/3/role/{id}
 # operationId: partialUpdateProjectRole
-export def "rest-3-role update-project" [
+export def "partial-update-project-role" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13758,7 +13758,7 @@ export def "rest-3-role update-project" [
 #
 # PUT /rest/api/3/role/{id}
 # operationId: fullyUpdateProjectRole
-export def "rest-3-role update-fully-project" [
+export def "fully-update-project-role" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13799,7 +13799,7 @@ export def "rest-3-role update-fully-project" [
 #
 # DELETE /rest/api/3/role/{id}/actors
 # operationId: deleteProjectRoleActorsFromRole
-export def "rest-3-role-actors delete-project" [
+export def "delete-project-role-actors-from-role" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13839,7 +13839,7 @@ export def "rest-3-role-actors delete-project" [
 #
 # GET /rest/api/3/role/{id}/actors
 # operationId: getProjectRoleActorsForRole
-export def "rest-3-role-actors get-project" [
+export def "get-project-role-actors-for-role" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13875,7 +13875,7 @@ export def "rest-3-role-actors get-project" [
 #
 # POST /rest/api/3/role/{id}/actors
 # operationId: addProjectRoleActorsToRole
-export def "rest-3-role-actors create-project" [
+export def "add-project-role-actors-to-role" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13917,7 +13917,7 @@ export def "rest-3-role-actors create-project" [
 #
 # GET /rest/api/3/screens
 # operationId: getScreens
-export def "rest-3-screens get" [
+export def "get-screens" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13958,7 +13958,7 @@ export def "rest-3-screens get" [
 #
 # POST /rest/api/3/screens
 # operationId: createScreen
-export def "rest-3-screens create" [
+export def "create-screen" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13997,7 +13997,7 @@ export def "rest-3-screens create" [
 #
 # POST /rest/api/3/screens/addToDefault/{fieldId}
 # operationId: addFieldToDefaultScreen
-export def "rest-3-screens-add-to-default create-field" [
+export def "add-field-to-default-screen" [
   field_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14033,7 +14033,7 @@ export def "rest-3-screens-add-to-default create-field" [
 #
 # DELETE /rest/api/3/screens/{screenId}
 # operationId: deleteScreen
-export def "rest-3-screens delete" [
+export def "delete-screen" [
   screen_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14069,7 +14069,7 @@ export def "rest-3-screens delete" [
 #
 # PUT /rest/api/3/screens/{screenId}
 # operationId: updateScreen
-export def "rest-3-screens update" [
+export def "update-screen" [
   screen_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14110,7 +14110,7 @@ export def "rest-3-screens update" [
 #
 # GET /rest/api/3/screens/{screenId}/availableFields
 # operationId: getAvailableScreenFields
-export def "rest-3-screens-available-fields get" [
+export def "get-available-screen-fields" [
   screen_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14146,7 +14146,7 @@ export def "rest-3-screens-available-fields get" [
 #
 # GET /rest/api/3/screens/{screenId}/tabs
 # operationId: getAllScreenTabs
-export def "rest-3-screens-tabs get-list" [
+export def "get-all-screen-tabs" [
   screen_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14184,7 +14184,7 @@ export def "rest-3-screens-tabs get-list" [
 #
 # POST /rest/api/3/screens/{screenId}/tabs
 # operationId: addScreenTab
-export def "rest-3-screens-tabs create" [
+export def "add-screen-tab" [
   screen_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14224,7 +14224,7 @@ export def "rest-3-screens-tabs create" [
 #
 # DELETE /rest/api/3/screens/{screenId}/tabs/{tabId}
 # operationId: deleteScreenTab
-export def "rest-3-screens-tabs delete" [
+export def "delete-screen-tab" [
   screen_id: int
   tab_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -14262,7 +14262,7 @@ export def "rest-3-screens-tabs delete" [
 #
 # PUT /rest/api/3/screens/{screenId}/tabs/{tabId}
 # operationId: renameScreenTab
-export def "rest-3-screens-tabs rename" [
+export def "rename-screen-tab" [
   screen_id: int
   tab_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -14304,7 +14304,7 @@ export def "rest-3-screens-tabs rename" [
 #
 # GET /rest/api/3/screens/{screenId}/tabs/{tabId}/fields
 # operationId: getAllScreenTabFields
-export def "rest-3-screens-tabs-fields get-list" [
+export def "get-all-screen-tab-fields" [
   screen_id: int
   tab_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -14344,7 +14344,7 @@ export def "rest-3-screens-tabs-fields get-list" [
 #
 # POST /rest/api/3/screens/{screenId}/tabs/{tabId}/fields
 # operationId: addScreenTabField
-export def "rest-3-screens-tabs-fields create" [
+export def "add-screen-tab-field" [
   screen_id: int
   tab_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -14386,7 +14386,7 @@ export def "rest-3-screens-tabs-fields create" [
 #
 # DELETE /rest/api/3/screens/{screenId}/tabs/{tabId}/fields/{id}
 # operationId: removeScreenTabField
-export def "rest-3-screens-tabs-fields delete" [
+export def "remove-screen-tab-field" [
   screen_id: int
   tab_id: int
   id: string
@@ -14426,7 +14426,7 @@ export def "rest-3-screens-tabs-fields delete" [
 #
 # POST /rest/api/3/screens/{screenId}/tabs/{tabId}/fields/{id}/move
 # operationId: moveScreenTabField
-export def "rest-3-screens-tabs-fields-move move" [
+export def "move-screen-tab-field" [
   screen_id: int
   tab_id: int
   id: string
@@ -14471,7 +14471,7 @@ export def "rest-3-screens-tabs-fields-move move" [
 #
 # POST /rest/api/3/screens/{screenId}/tabs/{tabId}/move/{pos}
 # operationId: moveScreenTab
-export def "rest-3-screens-tabs-move move" [
+export def "move-screen-tab" [
   screen_id: int
   tab_id: int
   pos: int
@@ -14511,7 +14511,7 @@ export def "rest-3-screens-tabs-move move" [
 #
 # GET /rest/api/3/screenscheme
 # operationId: getScreenSchemes
-export def "rest-3-screenscheme get-screen-schemes" [
+export def "get-screen-schemes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14552,7 +14552,7 @@ export def "rest-3-screenscheme get-screen-schemes" [
 #
 # POST /rest/api/3/screenscheme
 # operationId: createScreenScheme
-export def "rest-3-screenscheme create-screen-scheme" [
+export def "create-screen-scheme" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14592,7 +14592,7 @@ export def "rest-3-screenscheme create-screen-scheme" [
 #
 # DELETE /rest/api/3/screenscheme/{screenSchemeId}
 # operationId: deleteScreenScheme
-export def "rest-3-screenscheme delete-screen-scheme" [
+export def "delete-screen-scheme" [
   screen_scheme_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14628,7 +14628,7 @@ export def "rest-3-screenscheme delete-screen-scheme" [
 #
 # PUT /rest/api/3/screenscheme/{screenSchemeId}
 # operationId: updateScreenScheme
-export def "rest-3-screenscheme update-screen-scheme" [
+export def "update-screen-scheme" [
   screen_scheme_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14670,7 +14670,7 @@ export def "rest-3-screenscheme update-screen-scheme" [
 #
 # GET /rest/api/3/search
 # operationId: searchForIssuesUsingJql
-export def "rest-3-search list-for-issues-using-jql" [
+export def "search-for-issues-using-jql" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14713,7 +14713,7 @@ export def "rest-3-search list-for-issues-using-jql" [
 #
 # POST /rest/api/3/search
 # operationId: searchForIssuesUsingJqlPost
-export def "rest-3-search create-for-issues-using-jql" [
+export def "search-for-issues-using-jql-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14758,7 +14758,7 @@ export def "rest-3-search create-for-issues-using-jql" [
 #
 # GET /rest/api/3/securitylevel/{id}
 # operationId: getIssueSecurityLevel
-export def "rest-3-securitylevel get-issue-security-level" [
+export def "get-issue-security-level" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14794,7 +14794,7 @@ export def "rest-3-securitylevel get-issue-security-level" [
 #
 # GET /rest/api/3/serverInfo
 # operationId: getServerInfo
-export def "rest-3-server-info get" [
+export def "get-server-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14828,7 +14828,7 @@ export def "rest-3-server-info get" [
 #
 # GET /rest/api/3/settings/columns
 # operationId: getIssueNavigatorDefaultColumns
-export def "rest-3-settings-columns get-issue-navigator-default" [
+export def "get-issue-navigator-default-columns" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14862,7 +14862,7 @@ export def "rest-3-settings-columns get-issue-navigator-default" [
 #
 # PUT /rest/api/3/settings/columns
 # operationId: setIssueNavigatorDefaultColumns
-export def "rest-3-settings-columns update-issue-navigator-default" [
+export def "set-issue-navigator-default-columns" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14902,7 +14902,7 @@ export def "rest-3-settings-columns update-issue-navigator-default" [
 #
 # GET /rest/api/3/status
 # operationId: getStatuses
-export def "rest-3-status get-statuses" [
+export def "get-statuses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14936,7 +14936,7 @@ export def "rest-3-status get-statuses" [
 #
 # GET /rest/api/3/status/{idOrName}
 # operationId: getStatus
-export def "rest-3-status get" [
+export def "get-status" [
   id_or_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14972,7 +14972,7 @@ export def "rest-3-status get" [
 #
 # GET /rest/api/3/statuscategory
 # operationId: getStatusCategories
-export def "rest-3-statuscategory get-status-categories" [
+export def "get-status-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15006,7 +15006,7 @@ export def "rest-3-statuscategory get-status-categories" [
 #
 # GET /rest/api/3/statuscategory/{idOrKey}
 # operationId: getStatusCategory
-export def "rest-3-statuscategory get-status-category" [
+export def "get-status-category" [
   id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15042,7 +15042,7 @@ export def "rest-3-statuscategory get-status-category" [
 #
 # DELETE /rest/api/3/statuses
 # operationId: deleteStatusesById
-export def "rest-3-statuses delete" [
+export def "delete-statuses-by-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15078,7 +15078,7 @@ export def "rest-3-statuses delete" [
 #
 # GET /rest/api/3/statuses
 # operationId: getStatusesById
-export def "rest-3-statuses get" [
+export def "get-statuses-by-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15117,7 +15117,7 @@ export def "rest-3-statuses get" [
 # operationId: createStatuses
 # --scope shape: {project?: record, type: "PROJECT"|"GLOBAL"}
 # --statuses item shape: {description?: string, name: string, statusCategory: "TODO"|"IN_PROGRESS"|"DONE"}
-export def "rest-3-statuses create" [
+export def "create-statuses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15157,7 +15157,7 @@ export def "rest-3-statuses create" [
 # PUT /rest/api/3/statuses
 # operationId: updateStatuses
 # --statuses item shape: {description?: string, id: string, name: string, statusCategory: "TODO"|"IN_PROGRESS"|"DONE"}
-export def "rest-3-statuses update" [
+export def "update-statuses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15195,7 +15195,7 @@ export def "rest-3-statuses update" [
 #
 # GET /rest/api/3/statuses/search
 # operationId: search
-export def "rest-3-statuses-search list" [
+export def "search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15236,7 +15236,7 @@ export def "rest-3-statuses-search list" [
 #
 # GET /rest/api/3/task/{taskId}
 # operationId: getTask
-export def "rest-3-task get" [
+export def "get-task" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15272,7 +15272,7 @@ export def "rest-3-task get" [
 #
 # POST /rest/api/3/task/{taskId}/cancel
 # operationId: cancelTask
-export def "rest-3-task-cancel cancel" [
+export def "cancel-task" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15308,7 +15308,7 @@ export def "rest-3-task-cancel cancel" [
 #
 # GET /rest/api/3/uiModifications
 # operationId: getUiModifications
-export def "rest-3-ui-modifications get" [
+export def "get-ui-modifications" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15347,7 +15347,7 @@ export def "rest-3-ui-modifications get" [
 # POST /rest/api/3/uiModifications
 # operationId: createUiModification
 # --contexts item shape: {issueTypeId: string, projectId: string, viewType: string}
-export def "rest-3-ui-modifications create" [
+export def "create-ui-modification" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15388,7 +15388,7 @@ export def "rest-3-ui-modifications create" [
 #
 # DELETE /rest/api/3/uiModifications/{uiModificationId}
 # operationId: deleteUiModification
-export def "rest-3-ui-modifications delete" [
+export def "delete-ui-modification" [
   ui_modification_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15425,7 +15425,7 @@ export def "rest-3-ui-modifications delete" [
 # PUT /rest/api/3/uiModifications/{uiModificationId}
 # operationId: updateUiModification
 # --contexts item shape: {issueTypeId: string, projectId: string, viewType: string}
-export def "rest-3-ui-modifications update" [
+export def "update-ui-modification" [
   ui_modification_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15468,7 +15468,7 @@ export def "rest-3-ui-modifications update" [
 #
 # GET /rest/api/3/universal_avatar/type/{type}/owner/{entityId}
 # operationId: getAvatars
-export def "rest-3-universal-avatar-type-owner get" [
+export def "get-avatars" [
   type: string
   entity_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -15506,7 +15506,7 @@ export def "rest-3-universal-avatar-type-owner get" [
 #
 # POST /rest/api/3/universal_avatar/type/{type}/owner/{entityId}
 # operationId: storeAvatar
-export def "rest-3-universal-avatar-type-owner create-store" [
+export def "store-avatar" [
   type: string
   entity_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -15552,7 +15552,7 @@ export def "rest-3-universal-avatar-type-owner create-store" [
 #
 # DELETE /rest/api/3/universal_avatar/type/{type}/owner/{owningObjectId}/avatar/{id}
 # operationId: deleteAvatar
-export def "rest-3-universal-avatar-type-owner-avatar delete" [
+export def "delete-avatar" [
   type: string
   owning_object_id: string
   id: int
@@ -15592,7 +15592,7 @@ export def "rest-3-universal-avatar-type-owner-avatar delete" [
 #
 # GET /rest/api/3/universal_avatar/view/type/{type}
 # operationId: getAvatarImageByType
-export def "rest-3-universal-avatar-view-type get-image" [
+export def "get-avatar-image-by-type" [
   type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15632,7 +15632,7 @@ export def "rest-3-universal-avatar-view-type get-image" [
 #
 # GET /rest/api/3/universal_avatar/view/type/{type}/avatar/{id}
 # operationId: getAvatarImageByID
-export def "rest-3-universal-avatar-view-type-avatar get-image" [
+export def "get-avatar-image-by-id" [
   type: string
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -15674,7 +15674,7 @@ export def "rest-3-universal-avatar-view-type-avatar get-image" [
 #
 # GET /rest/api/3/universal_avatar/view/type/{type}/owner/{entityId}
 # operationId: getAvatarImageByOwner
-export def "rest-3-universal-avatar-view-type-owner get-image" [
+export def "get-avatar-image-by-owner" [
   type: string
   entity_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -15716,7 +15716,7 @@ export def "rest-3-universal-avatar-view-type-owner get-image" [
 #
 # DELETE /rest/api/3/user
 # operationId: removeUser
-export def "rest-3-user delete" [
+export def "remove-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15754,7 +15754,7 @@ export def "rest-3-user delete" [
 #
 # GET /rest/api/3/user
 # operationId: getUser
-export def "rest-3-user get" [
+export def "get-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15793,7 +15793,7 @@ export def "rest-3-user get" [
 #
 # POST /rest/api/3/user
 # operationId: createUser
-export def "rest-3-user create" [
+export def "create-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15836,7 +15836,7 @@ export def "rest-3-user create" [
 #
 # GET /rest/api/3/user/assignable/multiProjectSearch
 # operationId: findBulkAssignableUsers
-export def "rest-3-user-assignable-multi-project-search find-bulk" [
+export def "find-bulk-assignable-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15877,7 +15877,7 @@ export def "rest-3-user-assignable-multi-project-search find-bulk" [
 #
 # GET /rest/api/3/user/assignable/search
 # operationId: findAssignableUsers
-export def "rest-3-user-assignable-search find" [
+export def "find-assignable-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15922,7 +15922,7 @@ export def "rest-3-user-assignable-search find" [
 #
 # GET /rest/api/3/user/bulk
 # operationId: bulkGetUsers
-export def "rest-3-user-bulk get" [
+export def "bulk-get-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15962,7 +15962,7 @@ export def "rest-3-user-bulk get" [
 #
 # GET /rest/api/3/user/bulk/migration
 # operationId: bulkGetUsersMigration
-export def "rest-3-user-bulk-migration get" [
+export def "bulk-get-users-migration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -16001,7 +16001,7 @@ export def "rest-3-user-bulk-migration get" [
 #
 # DELETE /rest/api/3/user/columns
 # operationId: resetUserColumns
-export def "rest-3-user-columns reset" [
+export def "reset-user-columns" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -16038,7 +16038,7 @@ export def "rest-3-user-columns reset" [
 #
 # GET /rest/api/3/user/columns
 # operationId: getUserDefaultColumns
-export def "rest-3-user-columns get-default" [
+export def "get-user-default-columns" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -16075,7 +16075,7 @@ export def "rest-3-user-columns get-default" [
 #
 # PUT /rest/api/3/user/columns
 # operationId: setUserColumns
-export def "rest-3-user-columns update" [
+export def "set-user-columns" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -16117,7 +16117,7 @@ export def "rest-3-user-columns update" [
 #
 # GET /rest/api/3/user/email
 # operationId: getUserEmail
-export def "rest-3-user-email get" [
+export def "get-user-email" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -16153,7 +16153,7 @@ export def "rest-3-user-email get" [
 #
 # GET /rest/api/3/user/email/bulk
 # operationId: getUserEmailBulk
-export def "rest-3-user-email-bulk get" [
+export def "get-user-email-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -16189,7 +16189,7 @@ export def "rest-3-user-email-bulk get" [
 #
 # GET /rest/api/3/user/groups
 # operationId: getUserGroups
-export def "rest-3-user-groups get" [
+export def "get-user-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -16227,7 +16227,7 @@ export def "rest-3-user-groups get" [
 #
 # GET /rest/api/3/user/permission/search
 # operationId: findUsersWithAllPermissions
-export def "rest-3-user-permission-search find-with-list" [
+export def "find-users-with-all-permissions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -16270,7 +16270,7 @@ export def "rest-3-user-permission-search find-with-list" [
 #
 # GET /rest/api/3/user/picker
 # operationId: findUsersForPicker
-export def "rest-3-user-picker find" [
+export def "find-users-for-picker" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -16312,7 +16312,7 @@ export def "rest-3-user-picker find" [
 #
 # GET /rest/api/3/user/properties
 # operationId: getUserPropertyKeys
-export def "rest-3-user-properties get-property-keys" [
+export def "get-user-property-keys" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -16350,7 +16350,7 @@ export def "rest-3-user-properties get-property-keys" [
 #
 # DELETE /rest/api/3/user/properties/{propertyKey}
 # operationId: deleteUserProperty
-export def "rest-3-user-properties delete-property" [
+export def "delete-user-property" [
   property_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16390,7 +16390,7 @@ export def "rest-3-user-properties delete-property" [
 #
 # GET /rest/api/3/user/properties/{propertyKey}
 # operationId: getUserProperty
-export def "rest-3-user-properties get-property" [
+export def "get-user-property" [
   property_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16430,7 +16430,7 @@ export def "rest-3-user-properties get-property" [
 #
 # PUT /rest/api/3/user/properties/{propertyKey}
 # operationId: setUserProperty
-export def "rest-3-user-properties update-property" [
+export def "set-user-property" [
   property_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16474,7 +16474,7 @@ export def "rest-3-user-properties update-property" [
 #
 # GET /rest/api/3/user/search
 # operationId: findUsers
-export def "rest-3-user-search find" [
+export def "find-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -16515,7 +16515,7 @@ export def "rest-3-user-search find" [
 #
 # GET /rest/api/3/user/search/query
 # operationId: findUsersByQuery
-export def "rest-3-user-search-query find" [
+export def "find-users-by-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -16553,7 +16553,7 @@ export def "rest-3-user-search-query find" [
 #
 # GET /rest/api/3/user/search/query/key
 # operationId: findUserKeysByQuery
-export def "rest-3-user-search-query-key find" [
+export def "find-user-keys-by-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -16591,7 +16591,7 @@ export def "rest-3-user-search-query-key find" [
 #
 # GET /rest/api/3/user/viewissue/search
 # operationId: findUsersWithBrowsePermission
-export def "rest-3-user-viewissue-search find-with-browse-permission" [
+export def "find-users-with-browse-permission" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -16633,7 +16633,7 @@ export def "rest-3-user-viewissue-search find-with-browse-permission" [
 #
 # GET /rest/api/3/users
 # operationId: getAllUsersDefault
-export def "rest-3-users get-list-default" [
+export def "get-all-users-default" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -16670,7 +16670,7 @@ export def "rest-3-users get-list-default" [
 #
 # GET /rest/api/3/users/search
 # operationId: getAllUsers
-export def "rest-3-users-search get-list" [
+export def "get-all-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -16708,7 +16708,7 @@ export def "rest-3-users-search get-list" [
 # POST /rest/api/3/version
 # operationId: createVersion
 # --operations item shape: {href?: string, iconClass?: string, id?: string, label?: string, styleClass?: string, title?: string, weight?: int}
-export def "rest-3-version create" [
+export def "create-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -16757,7 +16757,7 @@ export def "rest-3-version create" [
 # DEPRECATED
 # operationId: deleteVersion
 @deprecated
-export def "rest-3-version delete" [
+export def "delete-version" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16796,7 +16796,7 @@ export def "rest-3-version delete" [
 #
 # GET /rest/api/3/version/{id}
 # operationId: getVersion
-export def "rest-3-version get" [
+export def "get-version" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16835,7 +16835,7 @@ export def "rest-3-version get" [
 # PUT /rest/api/3/version/{id}
 # operationId: updateVersion
 # --operations item shape: {href?: string, iconClass?: string, id?: string, label?: string, styleClass?: string, title?: string, weight?: int}
-export def "rest-3-version update" [
+export def "update-version" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16884,7 +16884,7 @@ export def "rest-3-version update" [
 #
 # PUT /rest/api/3/version/{id}/mergeto/{moveIssuesTo}
 # operationId: mergeVersions
-export def "rest-3-version-mergeto update-merge" [
+export def "merge-versions" [
   id: string
   move_issues_to: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16922,7 +16922,7 @@ export def "rest-3-version-mergeto update-merge" [
 #
 # POST /rest/api/3/version/{id}/move
 # operationId: moveVersion
-export def "rest-3-version-move move" [
+export def "move-version" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16963,7 +16963,7 @@ export def "rest-3-version-move move" [
 #
 # GET /rest/api/3/version/{id}/relatedIssueCounts
 # operationId: getVersionRelatedIssues
-export def "rest-3-version-related-issue-counts get" [
+export def "get-version-related-issues" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17000,7 +17000,7 @@ export def "rest-3-version-related-issue-counts get" [
 # POST /rest/api/3/version/{id}/removeAndSwap
 # operationId: deleteAndReplaceVersion
 # --customFieldReplacementList item shape: {customFieldId?: int, moveTo?: int}
-export def "rest-3-version-remove-and-swap delete-update" [
+export def "delete-and-replace-version" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17042,7 +17042,7 @@ export def "rest-3-version-remove-and-swap delete-update" [
 #
 # GET /rest/api/3/version/{id}/unresolvedIssueCount
 # operationId: getVersionUnresolvedIssues
-export def "rest-3-version-unresolved-issue-count get" [
+export def "get-version-unresolved-issues" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17078,7 +17078,7 @@ export def "rest-3-version-unresolved-issue-count get" [
 #
 # DELETE /rest/api/3/webhook
 # operationId: deleteWebhookById
-export def "rest-3-webhook delete" [
+export def "delete-webhook-by-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -17116,7 +17116,7 @@ export def "rest-3-webhook delete" [
 #
 # GET /rest/api/3/webhook
 # operationId: getDynamicWebhooksForApp
-export def "rest-3-webhook get-dynamic-for-app" [
+export def "get-dynamic-webhooks-for-app" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -17154,7 +17154,7 @@ export def "rest-3-webhook get-dynamic-for-app" [
 # POST /rest/api/3/webhook
 # operationId: registerDynamicWebhooks
 # --webhooks item shape: {events: list<string>, fieldIdsFilter?: list<string>, issuePropertyKeysFilter?: list<string>, jqlFilter: string}
-export def "rest-3-webhook create-dynamic" [
+export def "register-dynamic-webhooks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -17193,7 +17193,7 @@ export def "rest-3-webhook create-dynamic" [
 #
 # GET /rest/api/3/webhook/failed
 # operationId: getFailedWebhooks
-export def "rest-3-webhook-failed get" [
+export def "get-failed-webhooks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -17230,7 +17230,7 @@ export def "rest-3-webhook-failed get" [
 #
 # PUT /rest/api/3/webhook/refresh
 # operationId: refreshWebhooks
-export def "rest-3-webhook-refresh refresh" [
+export def "refresh-webhooks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -17270,7 +17270,7 @@ export def "rest-3-webhook-refresh refresh" [
 # DEPRECATED
 # operationId: getAllWorkflows
 @deprecated
-export def "rest-3-workflow get-list" [
+export def "get-all-workflows" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -17308,7 +17308,7 @@ export def "rest-3-workflow get-list" [
 # operationId: createWorkflow
 # --statuses item shape: {id: string, properties?: record}
 # --transitions item shape: {description?: string, from?: list<string>, name: string, properties?: record, rules?: any, screen?: any, to: string, type: "global"|"initial"|"directed"}
-export def "rest-3-workflow create" [
+export def "create-workflow" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -17349,7 +17349,7 @@ export def "rest-3-workflow create" [
 #
 # GET /rest/api/3/workflow/rule/config
 # operationId: getWorkflowTransitionRuleConfigurations
-export def "rest-3-workflow-rule-config get-transition-configurations" [
+export def "get-workflow-transition-rule-configurations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -17393,7 +17393,7 @@ export def "rest-3-workflow-rule-config get-transition-configurations" [
 # PUT /rest/api/3/workflow/rule/config
 # operationId: updateWorkflowTransitionRuleConfigurations
 # --workflows item shape: {conditions?: list, postFunctions?: list, validators?: list, workflowId: record}
-export def "rest-3-workflow-rule-config update-transition-configurations" [
+export def "update-workflow-transition-rule-configurations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -17432,7 +17432,7 @@ export def "rest-3-workflow-rule-config update-transition-configurations" [
 # PUT /rest/api/3/workflow/rule/config/delete
 # operationId: deleteWorkflowTransitionRuleConfigurations
 # --workflows item shape: {workflowId: record, workflowRuleIds: list<string>}
-export def "rest-3-workflow-rule-config-delete delete-transition-configurations" [
+export def "delete-workflow-transition-rule-configurations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -17470,7 +17470,7 @@ export def "rest-3-workflow-rule-config-delete delete-transition-configurations"
 #
 # GET /rest/api/3/workflow/search
 # operationId: getWorkflowsPaginated
-export def "rest-3-workflow-search get-paginated" [
+export def "get-workflows-paginated" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -17512,7 +17512,7 @@ export def "rest-3-workflow-search get-paginated" [
 #
 # DELETE /rest/api/3/workflow/transitions/{transitionId}/properties
 # operationId: deleteWorkflowTransitionProperty
-export def "rest-3-workflow-transitions-properties delete-property" [
+export def "delete-workflow-transition-property" [
   transition_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17552,7 +17552,7 @@ export def "rest-3-workflow-transitions-properties delete-property" [
 #
 # GET /rest/api/3/workflow/transitions/{transitionId}/properties
 # operationId: getWorkflowTransitionProperties
-export def "rest-3-workflow-transitions-properties get" [
+export def "get-workflow-transition-properties" [
   transition_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17593,7 +17593,7 @@ export def "rest-3-workflow-transitions-properties get" [
 #
 # POST /rest/api/3/workflow/transitions/{transitionId}/properties
 # operationId: createWorkflowTransitionProperty
-export def "rest-3-workflow-transitions-properties create-property" [
+export def "create-workflow-transition-property" [
   transition_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17637,7 +17637,7 @@ export def "rest-3-workflow-transitions-properties create-property" [
 #
 # PUT /rest/api/3/workflow/transitions/{transitionId}/properties
 # operationId: updateWorkflowTransitionProperty
-export def "rest-3-workflow-transitions-properties update-property" [
+export def "update-workflow-transition-property" [
   transition_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17681,7 +17681,7 @@ export def "rest-3-workflow-transitions-properties update-property" [
 #
 # DELETE /rest/api/3/workflow/{entityId}
 # operationId: deleteInactiveWorkflow
-export def "rest-3-workflow delete-inactive" [
+export def "delete-inactive-workflow" [
   entity_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17717,7 +17717,7 @@ export def "rest-3-workflow delete-inactive" [
 #
 # GET /rest/api/3/workflowscheme
 # operationId: getAllWorkflowSchemes
-export def "rest-3-workflowscheme get-list-workflow-schemes" [
+export def "get-all-workflow-schemes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -17754,7 +17754,7 @@ export def "rest-3-workflowscheme get-list-workflow-schemes" [
 #
 # POST /rest/api/3/workflowscheme
 # operationId: createWorkflowScheme
-export def "rest-3-workflowscheme create-workflow-scheme" [
+export def "create-workflow-scheme" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -17796,7 +17796,7 @@ export def "rest-3-workflowscheme create-workflow-scheme" [
 #
 # GET /rest/api/3/workflowscheme/project
 # operationId: getWorkflowSchemeProjectAssociations
-export def "rest-3-workflowscheme-project get-workflow-scheme-associations" [
+export def "get-workflow-scheme-project-associations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -17832,7 +17832,7 @@ export def "rest-3-workflowscheme-project get-workflow-scheme-associations" [
 #
 # PUT /rest/api/3/workflowscheme/project
 # operationId: assignSchemeToProject
-export def "rest-3-workflowscheme-project assign-scheme" [
+export def "assign-scheme-to-project" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -17871,7 +17871,7 @@ export def "rest-3-workflowscheme-project assign-scheme" [
 #
 # DELETE /rest/api/3/workflowscheme/{id}
 # operationId: deleteWorkflowScheme
-export def "rest-3-workflowscheme delete-workflow-scheme" [
+export def "delete-workflow-scheme" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17907,7 +17907,7 @@ export def "rest-3-workflowscheme delete-workflow-scheme" [
 #
 # GET /rest/api/3/workflowscheme/{id}
 # operationId: getWorkflowScheme
-export def "rest-3-workflowscheme get-workflow-scheme" [
+export def "get-workflow-scheme" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17945,7 +17945,7 @@ export def "rest-3-workflowscheme get-workflow-scheme" [
 #
 # PUT /rest/api/3/workflowscheme/{id}
 # operationId: updateWorkflowScheme
-export def "rest-3-workflowscheme update-workflow-scheme" [
+export def "update-workflow-scheme" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17989,7 +17989,7 @@ export def "rest-3-workflowscheme update-workflow-scheme" [
 #
 # POST /rest/api/3/workflowscheme/{id}/createdraft
 # operationId: createWorkflowSchemeDraftFromParent
-export def "rest-3-workflowscheme-create-draft create-workflow-scheme-from-parent" [
+export def "create-workflow-scheme-draft-from-parent" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18025,7 +18025,7 @@ export def "rest-3-workflowscheme-create-draft create-workflow-scheme-from-paren
 #
 # DELETE /rest/api/3/workflowscheme/{id}/default
 # operationId: deleteDefaultWorkflow
-export def "rest-3-workflowscheme-default delete-workflow" [
+export def "delete-default-workflow" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18063,7 +18063,7 @@ export def "rest-3-workflowscheme-default delete-workflow" [
 #
 # GET /rest/api/3/workflowscheme/{id}/default
 # operationId: getDefaultWorkflow
-export def "rest-3-workflowscheme-default get-workflow" [
+export def "get-default-workflow" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18101,7 +18101,7 @@ export def "rest-3-workflowscheme-default get-workflow" [
 #
 # PUT /rest/api/3/workflowscheme/{id}/default
 # operationId: updateDefaultWorkflow
-export def "rest-3-workflowscheme-default update-workflow" [
+export def "update-default-workflow" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18142,7 +18142,7 @@ export def "rest-3-workflowscheme-default update-workflow" [
 #
 # DELETE /rest/api/3/workflowscheme/{id}/draft
 # operationId: deleteWorkflowSchemeDraft
-export def "rest-3-workflowscheme-draft delete-workflow-scheme" [
+export def "delete-workflow-scheme-draft" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18178,7 +18178,7 @@ export def "rest-3-workflowscheme-draft delete-workflow-scheme" [
 #
 # GET /rest/api/3/workflowscheme/{id}/draft
 # operationId: getWorkflowSchemeDraft
-export def "rest-3-workflowscheme-draft get-workflow-scheme" [
+export def "get-workflow-scheme-draft" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18214,7 +18214,7 @@ export def "rest-3-workflowscheme-draft get-workflow-scheme" [
 #
 # PUT /rest/api/3/workflowscheme/{id}/draft
 # operationId: updateWorkflowSchemeDraft
-export def "rest-3-workflowscheme-draft update-workflow-scheme" [
+export def "update-workflow-scheme-draft" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18258,7 +18258,7 @@ export def "rest-3-workflowscheme-draft update-workflow-scheme" [
 #
 # DELETE /rest/api/3/workflowscheme/{id}/draft/default
 # operationId: deleteDraftDefaultWorkflow
-export def "rest-3-workflowscheme-draft-default delete-workflow" [
+export def "delete-draft-default-workflow" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18294,7 +18294,7 @@ export def "rest-3-workflowscheme-draft-default delete-workflow" [
 #
 # GET /rest/api/3/workflowscheme/{id}/draft/default
 # operationId: getDraftDefaultWorkflow
-export def "rest-3-workflowscheme-draft-default get-workflow" [
+export def "get-draft-default-workflow" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18330,7 +18330,7 @@ export def "rest-3-workflowscheme-draft-default get-workflow" [
 #
 # PUT /rest/api/3/workflowscheme/{id}/draft/default
 # operationId: updateDraftDefaultWorkflow
-export def "rest-3-workflowscheme-draft-default update-workflow" [
+export def "update-draft-default-workflow" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18371,7 +18371,7 @@ export def "rest-3-workflowscheme-draft-default update-workflow" [
 #
 # DELETE /rest/api/3/workflowscheme/{id}/draft/issuetype/{issueType}
 # operationId: deleteWorkflowSchemeDraftIssueType
-export def "rest-3-workflowscheme-draft-issuetype delete-workflow-scheme-issue-type" [
+export def "delete-workflow-scheme-draft-issue-type" [
   id: int
   issue_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -18409,7 +18409,7 @@ export def "rest-3-workflowscheme-draft-issuetype delete-workflow-scheme-issue-t
 #
 # GET /rest/api/3/workflowscheme/{id}/draft/issuetype/{issueType}
 # operationId: getWorkflowSchemeDraftIssueType
-export def "rest-3-workflowscheme-draft-issuetype get-workflow-scheme-issue-type" [
+export def "get-workflow-scheme-draft-issue-type" [
   id: int
   issue_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -18447,7 +18447,7 @@ export def "rest-3-workflowscheme-draft-issuetype get-workflow-scheme-issue-type
 #
 # PUT /rest/api/3/workflowscheme/{id}/draft/issuetype/{issueType}
 # operationId: setWorkflowSchemeDraftIssueType
-export def "rest-3-workflowscheme-draft-issuetype update-workflow-scheme-issue-type" [
+export def "set-workflow-scheme-draft-issue-type" [
   id: int
   issue_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -18492,7 +18492,7 @@ export def "rest-3-workflowscheme-draft-issuetype update-workflow-scheme-issue-t
 # POST /rest/api/3/workflowscheme/{id}/draft/publish
 # operationId: publishDraftWorkflowScheme
 # --statusMappings item shape: {issueTypeId: string, newStatusId: string, statusId: string}
-export def "rest-3-workflowscheme-draft-publish publish-workflow-scheme" [
+export def "publish-draft-workflow-scheme" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18534,7 +18534,7 @@ export def "rest-3-workflowscheme-draft-publish publish-workflow-scheme" [
 #
 # DELETE /rest/api/3/workflowscheme/{id}/draft/workflow
 # operationId: deleteDraftWorkflowMapping
-export def "rest-3-workflowscheme-draft-workflow delete-mapping" [
+export def "delete-draft-workflow-mapping" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18572,7 +18572,7 @@ export def "rest-3-workflowscheme-draft-workflow delete-mapping" [
 #
 # GET /rest/api/3/workflowscheme/{id}/draft/workflow
 # operationId: getDraftWorkflow
-export def "rest-3-workflowscheme-draft-workflow get" [
+export def "get-draft-workflow" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18610,7 +18610,7 @@ export def "rest-3-workflowscheme-draft-workflow get" [
 #
 # PUT /rest/api/3/workflowscheme/{id}/draft/workflow
 # operationId: updateDraftWorkflowMapping
-export def "rest-3-workflowscheme-draft-workflow update-mapping" [
+export def "update-draft-workflow-mapping" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18655,7 +18655,7 @@ export def "rest-3-workflowscheme-draft-workflow update-mapping" [
 #
 # DELETE /rest/api/3/workflowscheme/{id}/issuetype/{issueType}
 # operationId: deleteWorkflowSchemeIssueType
-export def "rest-3-workflowscheme-issuetype delete-workflow-scheme-issue-type" [
+export def "delete-workflow-scheme-issue-type" [
   id: int
   issue_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -18695,7 +18695,7 @@ export def "rest-3-workflowscheme-issuetype delete-workflow-scheme-issue-type" [
 #
 # GET /rest/api/3/workflowscheme/{id}/issuetype/{issueType}
 # operationId: getWorkflowSchemeIssueType
-export def "rest-3-workflowscheme-issuetype get-workflow-scheme-issue-type" [
+export def "get-workflow-scheme-issue-type" [
   id: int
   issue_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -18735,7 +18735,7 @@ export def "rest-3-workflowscheme-issuetype get-workflow-scheme-issue-type" [
 #
 # PUT /rest/api/3/workflowscheme/{id}/issuetype/{issueType}
 # operationId: setWorkflowSchemeIssueType
-export def "rest-3-workflowscheme-issuetype update-workflow-scheme-issue-type" [
+export def "set-workflow-scheme-issue-type" [
   id: int
   issue_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -18779,7 +18779,7 @@ export def "rest-3-workflowscheme-issuetype update-workflow-scheme-issue-type" [
 #
 # DELETE /rest/api/3/workflowscheme/{id}/workflow
 # operationId: deleteWorkflowMapping
-export def "rest-3-workflowscheme-workflow delete-mapping" [
+export def "delete-workflow-mapping" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18818,7 +18818,7 @@ export def "rest-3-workflowscheme-workflow delete-mapping" [
 #
 # GET /rest/api/3/workflowscheme/{id}/workflow
 # operationId: getWorkflow
-export def "rest-3-workflowscheme-workflow get" [
+export def "get-workflow" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18857,7 +18857,7 @@ export def "rest-3-workflowscheme-workflow get" [
 #
 # PUT /rest/api/3/workflowscheme/{id}/workflow
 # operationId: updateWorkflowMapping
-export def "rest-3-workflowscheme-workflow update-mapping" [
+export def "update-workflow-mapping" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18902,7 +18902,7 @@ export def "rest-3-workflowscheme-workflow update-mapping" [
 #
 # GET /rest/api/3/worklog/deleted
 # operationId: getIdsOfWorklogsDeletedSince
-export def "rest-3-worklog-deleted get-of-since" [
+export def "get-ids-of-worklogs-deleted-since" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -18938,7 +18938,7 @@ export def "rest-3-worklog-deleted get-of-since" [
 #
 # POST /rest/api/3/worklog/list
 # operationId: getWorklogsForIds
-export def "rest-3-worklog-list get" [
+export def "get-worklogs-for-ids" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -18978,7 +18978,7 @@ export def "rest-3-worklog-list get" [
 #
 # GET /rest/api/3/worklog/updated
 # operationId: getIdsOfWorklogsModifiedSince
-export def "rest-3-worklog-updated get-of-modified-since" [
+export def "get-ids-of-worklogs-modified-since" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -19015,7 +19015,7 @@ export def "rest-3-worklog-updated get-of-modified-since" [
 #
 # GET /rest/atlassian-connect/1/addons/{addonKey}/properties
 # operationId: AddonPropertiesResource.getAddonProperties_get
-export def "rest-atlassian-connect-1-addons-properties get" [
+export def "addon-properties-resource-get-addon-properties-get" [
   addon_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -19051,7 +19051,7 @@ export def "rest-atlassian-connect-1-addons-properties get" [
 #
 # DELETE /rest/atlassian-connect/1/addons/{addonKey}/properties/{propertyKey}
 # operationId: AddonPropertiesResource.deleteAddonProperty_delete
-export def "rest-atlassian-connect-1-addons-properties delete-property" [
+export def "addon-properties-resource-delete-addon-property-delete" [
   addon_key: string
   property_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -19089,7 +19089,7 @@ export def "rest-atlassian-connect-1-addons-properties delete-property" [
 #
 # GET /rest/atlassian-connect/1/addons/{addonKey}/properties/{propertyKey}
 # operationId: AddonPropertiesResource.getAddonProperty_get
-export def "rest-atlassian-connect-1-addons-properties get-property" [
+export def "addon-properties-resource-get-addon-property-get" [
   addon_key: string
   property_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -19127,7 +19127,7 @@ export def "rest-atlassian-connect-1-addons-properties get-property" [
 #
 # PUT /rest/atlassian-connect/1/addons/{addonKey}/properties/{propertyKey}
 # operationId: AddonPropertiesResource.putAddonProperty_put
-export def "rest-atlassian-connect-1-addons-properties update-property" [
+export def "addon-properties-resource-put-addon-property-put" [
   addon_key: string
   property_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -19169,7 +19169,7 @@ export def "rest-atlassian-connect-1-addons-properties update-property" [
 #
 # DELETE /rest/atlassian-connect/1/app/module/dynamic
 # operationId: DynamicModulesResource.removeModules_delete
-export def "rest-atlassian-connect-1-app-module-dynamic delete" [
+export def "dynamic-modules-resource-remove-modules-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -19205,7 +19205,7 @@ export def "rest-atlassian-connect-1-app-module-dynamic delete" [
 #
 # GET /rest/atlassian-connect/1/app/module/dynamic
 # operationId: DynamicModulesResource.getModules_get
-export def "rest-atlassian-connect-1-app-module-dynamic get" [
+export def "dynamic-modules-resource-get-modules-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -19239,7 +19239,7 @@ export def "rest-atlassian-connect-1-app-module-dynamic get" [
 #
 # POST /rest/atlassian-connect/1/app/module/dynamic
 # operationId: DynamicModulesResource.registerModules_post
-export def "rest-atlassian-connect-1-app-module-dynamic create" [
+export def "dynamic-modules-resource-register-modules-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -19278,7 +19278,7 @@ export def "rest-atlassian-connect-1-app-module-dynamic create" [
 # PUT /rest/atlassian-connect/1/migration/field
 # operationId: AppIssueFieldValueUpdateResource.updateIssueFields_put
 # --updateValueList item shape: {_type: "StringIssueField"|"NumberIssueField"|"RichTextIssueField"|"SingleSelectIssueField"|"MultiSelectIssueField"|"TextIssueField", fieldID: int, issueID: int, number?: float, optionID?: string, richText?: string, string?: string, text?: string}
-export def "rest-atlassian-connect-1-migration-field update-issue" [
+export def "app-issue-field-value-update-resource-update-issue-fields-put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -19319,7 +19319,7 @@ export def "rest-atlassian-connect-1-migration-field update-issue" [
 #
 # PUT /rest/atlassian-connect/1/migration/properties/{entityType}
 # operationId: MigrationResource.updateEntityPropertiesValue_put
-export def "rest-atlassian-connect-1-migration-properties update-entity-value" [
+export def "migration-resource-update-entity-properties-value-put" [
   entity_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -19362,7 +19362,7 @@ export def "rest-atlassian-connect-1-migration-properties update-entity-value" [
 #
 # POST /rest/atlassian-connect/1/migration/workflow/rule/search
 # operationId: MigrationResource.workflowRuleSearch_post
-export def "rest-atlassian-connect-1-migration-workflow-rule-search create" [
+export def "migration-resource-workflow-rule-search-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

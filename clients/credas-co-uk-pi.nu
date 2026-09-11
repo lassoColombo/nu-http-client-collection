@@ -118,7 +118,7 @@ def status-completer-1 [] { ["0" "1" "2" "3" "4" "6"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "bank-accounts-verify verify" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "verify" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -145,7 +145,7 @@ export def commands []: nothing -> table {
 # --accountDetails shape: {accountNumber: string, sortcode: string}
 # --address shape: {addressLine1: string, addressLine2?: string, addressLine3?: string, city: string, country: string, county?: string, postcode: string}
 # --person shape: {forename: string, middleName?: string, surname: string}
-export def "bank-accounts-verify verify" [
+export def "verify" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -190,7 +190,7 @@ export def "bank-accounts-verify verify" [
 #
 # POST /api/companies
 # operationId: SearchCompany
-export def "companies list-company" [
+export def "search-company" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -229,7 +229,7 @@ export def "companies list-company" [
 # GET /api/companies/{companyId}
 #
 # operationId: GetCompany
-export def "companies get-company" [
+export def "get-company" [
   company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -271,7 +271,7 @@ export def "companies get-company" [
 # operationId: CheckCreditStatus
 # --address shape: {addressLine1: string, addressLine2?: string, addressLine3?: string, city: string, country: string, county?: string, postcode: string}
 # --person shape: {dateOfBirth: string, forename: string, middleName?: string, surname: string}
-export def "credit-status-perform check" [
+export def "check-credit-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -317,7 +317,7 @@ export def "credit-status-perform check" [
 # operationId: AddDataCheck
 # --currentAddress shape: {addressLine1: string, addressLine2?: string, addressLine3?: string, city: string, country: string, county?: string, postcode: string}
 # --person shape: {dateOfBirth: string, forename: string, middleName?: string, surname: string}
-export def "datachecks create-data-check" [
+export def "add-data-check" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -363,7 +363,7 @@ export def "datachecks create-data-check" [
 # POST /api/images/id-document
 # operationId: AddIdDocumentImage
 # --documentParameters item shape: {key?: string, value?: string}
-export def "images-id-document create" [
+export def "add-id-document-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -408,7 +408,7 @@ export def "images-id-document create" [
 #
 # GET /api/images/id-document/{registrationId}
 # operationId: GetIdDocumentImages
-export def "images-id-document get" [
+export def "get-id-document-images" [
   registration_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -448,7 +448,7 @@ export def "images-id-document get" [
 #
 # POST /api/images/liveness
 # operationId: AddLivenessImage
-export def "images-liveness create" [
+export def "add-liveness-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -490,7 +490,7 @@ export def "images-liveness create" [
 #
 # GET /api/images/liveness-performed/{registrationId}
 # operationId: GetLivenessPerformedImage
-export def "images-liveness-performed get" [
+export def "get-liveness-performed-image" [
   registration_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -530,7 +530,7 @@ export def "images-liveness-performed get" [
 #
 # GET /api/images/liveness/{registrationId}
 # operationId: GetLivenessImage
-export def "images-liveness get" [
+export def "get-liveness-image" [
   registration_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -570,7 +570,7 @@ export def "images-liveness get" [
 #
 # GET /api/images/scan-report-pdf/{scanId}
 # operationId: GetScanReportPdf
-export def "images-scan-report-pdf get" [
+export def "get-scan-report-pdf" [
   scan_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -610,7 +610,7 @@ export def "images-scan-report-pdf get" [
 #
 # POST /api/images/selfie
 # operationId: AddSelfieImage
-export def "images-selfie create" [
+export def "add-selfie-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -653,7 +653,7 @@ export def "images-selfie create" [
 #
 # GET /api/images/selfie/{registrationId}
 # operationId: GetSelfieImage
-export def "images-selfie get" [
+export def "get-selfie-image" [
   registration_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -695,7 +695,7 @@ export def "images-selfie get" [
 # operationId: AddPropertyRegisterCheck
 # --address shape: {addressLine1: string, addressLine2?: string, addressLine3?: string, city: string, country: string, county?: string, postcode: string}
 # --person shape: {forename: string, middleName?: string, surname: string}
-export def "property-register create-check" [
+export def "add-property-register-check" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -739,7 +739,7 @@ export def "property-register create-check" [
 #
 # GET /api/property-register/{id}
 # operationId: GetPropertyRegisterCheckResult
-export def "property-register get-check-result" [
+export def "get-property-register-check-result" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -779,7 +779,7 @@ export def "property-register get-check-result" [
 #
 # GET /api/reg-types
 # operationId: GetAll
-export def "reg-types get-list" [
+export def "get-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -820,7 +820,7 @@ export def "reg-types get-list" [
 # --parameters item shape: {key?: string, value?: string}
 # --returnUrls shape: {returnUrl?: string}
 # --settings shape: {capturePersonalDetails?: bool, nameMatchRoutine?: "1"|"2", requiredChecks?: list<int>, skipEmailStep?: bool}
-export def "registrations create" [
+export def "add-registration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -879,7 +879,7 @@ export def "registrations create" [
 # operationId: AddInstantRegistration
 # --documentParameters item shape: {key?: string, value?: string}
 # --parameters item shape: {key?: string, value?: string}
-export def "registrations-instant create" [
+export def "add-instant-registration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -931,7 +931,7 @@ export def "registrations-instant create" [
 #
 # GET /api/registrations/referenceid/{referenceId}/summary
 # operationId: GetRegistrationSummariesByReferenceId
-export def "registrations-referenceid-summary get-summaries-by-reference" [
+export def "get-registration-summaries-by-reference-id" [
   reference_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -971,7 +971,7 @@ export def "registrations-referenceid-summary get-summaries-by-reference" [
 #
 # GET /api/registrations/regcode/{regCode}/summary
 # operationId: GetRegistrationSummaryByRegCode
-export def "registrations-regcode-summary get-by-reg-code" [
+export def "get-registration-summary-by-reg-code" [
   reg_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1011,7 +1011,7 @@ export def "registrations-regcode-summary get-by-reg-code" [
 #
 # GET /api/registrations/search
 # operationId: GetRegistrationSearch
-export def "registrations-search get" [
+export def "get-registration-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1056,7 +1056,7 @@ export def "registrations-search get" [
 #
 # GET /api/registrations/{id}/check-submitted-id-documents
 # operationId: CheckSubmittedIdDocuments
-export def "registrations-check-submitted-id-documents check" [
+export def "check-submitted-id-documents" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1096,7 +1096,7 @@ export def "registrations-check-submitted-id-documents check" [
 #
 # PUT /api/registrations/{id}/contact-details
 # operationId: UpdateContactDetails
-export def "registrations-contact-details update" [
+export def "update-contact-details" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1145,7 +1145,7 @@ export def "registrations-contact-details update" [
 #
 # PUT /api/registrations/{id}/override-check-status
 # operationId: OverrideCheckStatus
-export def "registrations-override-check-status check" [
+export def "override-check-status" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1190,7 +1190,7 @@ export def "registrations-override-check-status check" [
 #
 # GET /api/registrations/{id}/pdf-export
 # operationId: GetRegistrationPdfExport
-export def "registrations-pdf-export get" [
+export def "get-registration-pdf-export" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1229,7 +1229,7 @@ export def "registrations-pdf-export get" [
 # Returns a PDF report for a given registration containing specified sections
 #
 # GET /api/registrations/{id}/pdf-export-sections
-export def "registrations-pdf-export-sections get" [
+export def "get-api-registrations-id-pdf-export-sections" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1281,7 +1281,7 @@ export def "registrations-pdf-export-sections get" [
 #
 # GET /api/registrations/{id}/pdf-settlement-status
 # operationId: GetShareCodePdfExport
-export def "registrations-pdf-settlement-status get-share-code-export" [
+export def "get-share-code-pdf-export" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1321,7 +1321,7 @@ export def "registrations-pdf-settlement-status get-share-code-export" [
 #
 # POST /api/registrations/{id}/resend-invitation
 # operationId: ResendInvitation
-export def "registrations-resend-invitation resend" [
+export def "resend-invitation" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1360,7 +1360,7 @@ export def "registrations-resend-invitation resend" [
 #
 # GET /api/registrations/{id}/settings
 # operationId: GetRegistrationSettings
-export def "registrations-settings get" [
+export def "get-registration-settings" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1399,7 +1399,7 @@ export def "registrations-settings get" [
 #
 # PUT /api/registrations/{id}/settings
 # operationId: UpdateRegistrationSettings
-export def "registrations-settings update" [
+export def "update-registration-settings" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1445,7 +1445,7 @@ export def "registrations-settings update" [
 #
 # PUT /api/registrations/{id}/status
 # operationId: UpdateRegistrationStatus
-export def "registrations-status update" [
+export def "update-registration-status" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1488,7 +1488,7 @@ export def "registrations-status update" [
 #
 # GET /api/registrations/{id}/summary
 # operationId: GetRegistrationSummary
-export def "registrations-summary get" [
+export def "get-registration-summary" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1528,7 +1528,7 @@ export def "registrations-summary get" [
 #
 # GET /api/registrations/{id}/supported-id-documents
 # operationId: GetRegistrationSupportedIdDocuments
-export def "registrations-supported-id-documents get" [
+export def "get-registration-supported-id-documents" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1568,7 +1568,7 @@ export def "registrations-supported-id-documents get" [
 #
 # POST /api/report-view/by-referenceid
 # operationId: GetReportViewByReferenceId
-export def "report-view-by-referenceid get-reference" [
+export def "get-report-view-by-reference-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1613,7 +1613,7 @@ export def "report-view-by-referenceid get-reference" [
 #
 # POST /api/report-view/by-registrationid
 # operationId: GetReportViewByRegistrationId
-export def "report-view-by-registrationid get-registration" [
+export def "get-report-view-by-registration-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1659,7 +1659,7 @@ export def "report-view-by-registrationid get-registration" [
 # POST /api/web-verifications/by-referenceid
 # operationId: GetWebVerificationsByReferenceId
 # --returnUrls shape: {returnUrl?: string}
-export def "web-verifications-by-referenceid get-reference" [
+export def "get-web-verifications-by-reference-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1703,7 +1703,7 @@ export def "web-verifications-by-referenceid get-reference" [
 # POST /api/web-verifications/by-registrationid
 # operationId: GetWebVerificationsByRegistrationId
 # --returnUrls shape: {returnUrl?: string}
-export def "web-verifications-by-registrationid get-registration" [
+export def "get-web-verifications-by-registration-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

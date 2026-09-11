@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["query-api_key"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "contacts get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-contacts" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -127,7 +127,7 @@ export def commands []: nothing -> table {
 # View all contacts under your account
 #
 # GET /contacts
-export def "contacts get" [
+export def "get-contacts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -160,7 +160,7 @@ export def "contacts get" [
 # View all your records for a given domain
 #
 # GET /dns/{domain}
-export def "dns get" [
+export def "get-dns-domain" [
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -195,7 +195,7 @@ export def "dns get" [
 # Add dns record for given domain
 #
 # POST /dns/{domain}/add
-export def "dns-add create" [
+export def "post-dns-domain-add" [
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -236,7 +236,7 @@ export def "dns-add create" [
 # Delete dns record for a given domain
 #
 # POST /dns/{domain}/delete
-export def "dns-delete create" [
+export def "post-dns-domain-delete" [
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -273,7 +273,7 @@ export def "dns-delete create" [
 # Update dns record for a given domain
 #
 # POST /dns/{domain}/update
-export def "dns-update create" [
+export def "post-dns-domain-update" [
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -315,7 +315,7 @@ export def "dns-update create" [
 # View all your domains managed by SolarVPS Distributed DNS
 #
 # GET /domains
-export def "domains get" [
+export def "get-domains" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -348,7 +348,7 @@ export def "domains get" [
 # Add domain to be managed by SolarVPS Distributed DNS
 #
 # POST /domains/add
-export def "domains-add create" [
+export def "post-domains-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -383,7 +383,7 @@ export def "domains-add create" [
 # Delete domain from SolarVPS Distributed DNS
 #
 # POST /domains/delete
-export def "domains-delete create" [
+export def "post-domains-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -418,7 +418,7 @@ export def "domains-delete create" [
 # Generate API Key
 #
 # GET /key/generate
-export def "key-generate get" [
+export def "get-key-generate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -454,7 +454,7 @@ export def "key-generate get" [
 # Get API Key
 #
 # GET /key/get
-export def "key-get get" [
+export def "get-key-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -490,7 +490,7 @@ export def "key-get get" [
 # View all your pods
 #
 # GET /pods
-export def "pods get" [
+export def "get-pods" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -523,7 +523,7 @@ export def "pods get" [
 # View information on a specific pod
 #
 # GET /pods/{podId}
-export def "pods get-by-pod-id" [
+export def "get-pods-pod-id" [
   pod_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -558,7 +558,7 @@ export def "pods get-by-pod-id" [
 # Ping your specified pod
 #
 # GET /pods/{podId}/ping
-export def "pods-ping get" [
+export def "get-pods-pod-id-ping" [
   pod_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -593,7 +593,7 @@ export def "pods-ping get" [
 # Perform action on a specific pod
 #
 # GET /pods/{podId}/{action}
-export def "pods get-by-pod-id-action" [
+export def "get-pods-pod-id-action" [
   pod_id: float
   action: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -630,7 +630,7 @@ export def "pods get-by-pod-id-action" [
 # View all your monitors
 #
 # GET /solarray
-export def "solarray get" [
+export def "get-solarray" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -663,7 +663,7 @@ export def "solarray get" [
 # View all your critical notifications
 #
 # GET /solarray/critical
-export def "solarray-critical get" [
+export def "get-solarray-critical" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -696,7 +696,7 @@ export def "solarray-critical get" [
 # View all your tickets
 #
 # GET /tickets
-export def "tickets list" [
+export def "get-tickets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -729,7 +729,7 @@ export def "tickets list" [
 # Open ticket with desired department
 #
 # POST /tickets/{department}/add
-export def "tickets-add create" [
+export def "post-tickets-department-add" [
   department: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -767,7 +767,7 @@ export def "tickets-add create" [
 # View details on a specific ticket
 #
 # GET /tickets/{ticketId}
-export def "tickets get" [
+export def "get-tickets-ticket-id" [
   ticket_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -802,7 +802,7 @@ export def "tickets get" [
 # Post a reply to a ticket
 #
 # POST /tickets/{ticketid}/update
-export def "tickets-update create" [
+export def "post-tickets-ticketid-update" [
   ticketid: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

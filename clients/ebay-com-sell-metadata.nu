@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "country-sales-tax-jurisdiction get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-sales-tax-jurisdictions" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -122,7 +122,7 @@ export def commands []: nothing -> table {
 #
 # GET /country/{countryCode}/sales_tax_jurisdiction
 # operationId: getSalesTaxJurisdictions
-export def "country-sales-tax-jurisdiction get" [
+export def "get-sales-tax-jurisdictions" [
   country_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -158,7 +158,7 @@ export def "country-sales-tax-jurisdiction get" [
 #
 # GET /marketplace/{marketplace_id}/get_automotive_parts_compatibility_policies
 # operationId: getAutomotivePartsCompatibilityPolicies
-export def "marketplace-get-automotive-parts-compatibility-policies get" [
+export def "get-automotive-parts-compatibility-policies" [
   marketplace_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -196,7 +196,7 @@ export def "marketplace-get-automotive-parts-compatibility-policies get" [
 #
 # GET /marketplace/{marketplace_id}/get_extended_producer_responsibility_policies
 # operationId: getExtendedProducerResponsibilityPolicies
-export def "marketplace-get-extended-producer-responsibility-policies get" [
+export def "get-extended-producer-responsibility-policies" [
   marketplace_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -234,7 +234,7 @@ export def "marketplace-get-extended-producer-responsibility-policies get" [
 #
 # GET /marketplace/{marketplace_id}/get_hazardous_materials_labels
 # operationId: getHazardousMaterialsLabels
-export def "marketplace-get-hazardous-materials-labels get" [
+export def "get-hazardous-materials-labels" [
   marketplace_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -270,7 +270,7 @@ export def "marketplace-get-hazardous-materials-labels get" [
 #
 # GET /marketplace/{marketplace_id}/get_item_condition_policies
 # operationId: getItemConditionPolicies
-export def "marketplace-get-item-condition-policies get" [
+export def "get-item-condition-policies" [
   marketplace_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -308,7 +308,7 @@ export def "marketplace-get-item-condition-policies get" [
 #
 # GET /marketplace/{marketplace_id}/get_listing_structure_policies
 # operationId: getListingStructurePolicies
-export def "marketplace-get-listing-structure-policies get" [
+export def "get-listing-structure-policies" [
   marketplace_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -346,7 +346,7 @@ export def "marketplace-get-listing-structure-policies get" [
 #
 # GET /marketplace/{marketplace_id}/get_negotiated_price_policies
 # operationId: getNegotiatedPricePolicies
-export def "marketplace-get-negotiated-price-policies get" [
+export def "get-negotiated-price-policies" [
   marketplace_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -384,7 +384,7 @@ export def "marketplace-get-negotiated-price-policies get" [
 #
 # GET /marketplace/{marketplace_id}/get_return_policies
 # operationId: getReturnPolicies
-export def "marketplace-get-return-policies get" [
+export def "get-return-policies" [
   marketplace_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

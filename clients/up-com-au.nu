@@ -120,7 +120,7 @@ def filter-status-completer [] { ["HELD" "SETTLED"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-accounts" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -143,7 +143,7 @@ export def commands []: nothing -> table {
 # List accounts
 #
 # GET /accounts
-export def "accounts list" [
+export def "get-accounts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -180,7 +180,7 @@ export def "accounts list" [
 # List transactions by account
 #
 # GET /accounts/{accountId}/transactions
-export def "accounts-transactions get" [
+export def "get-accounts-account-id-transactions" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -222,7 +222,7 @@ export def "accounts-transactions get" [
 # Retrieve account
 #
 # GET /accounts/{id}
-export def "accounts get" [
+export def "get-accounts-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -257,7 +257,7 @@ export def "accounts get" [
 # List categories
 #
 # GET /categories
-export def "categories list" [
+export def "get-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -292,7 +292,7 @@ export def "categories list" [
 # Retrieve category
 #
 # GET /categories/{id}
-export def "categories get" [
+export def "get-categories-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -327,7 +327,7 @@ export def "categories get" [
 # List tags
 #
 # GET /tags
-export def "tags get" [
+export def "get-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -362,7 +362,7 @@ export def "tags get" [
 # List transactions
 #
 # GET /transactions
-export def "transactions list" [
+export def "get-transactions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -402,7 +402,7 @@ export def "transactions list" [
 # Retrieve transaction
 #
 # GET /transactions/{id}
-export def "transactions get" [
+export def "get-transactions-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -437,7 +437,7 @@ export def "transactions get" [
 # Categorize transaction
 #
 # PATCH /transactions/{transactionId}/relationships/category
-export def "transactions-relationships-category update" [
+export def "patch-transactions-transaction-id-relationships-category" [
   transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -477,7 +477,7 @@ export def "transactions-relationships-category update" [
 #
 # DELETE /transactions/{transactionId}/relationships/tags
 # --data item shape: {id: string, type: string}
-export def "transactions-relationships-tags delete" [
+export def "delete-transactions-transaction-id-relationships-tags" [
   transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -517,7 +517,7 @@ export def "transactions-relationships-tags delete" [
 #
 # POST /transactions/{transactionId}/relationships/tags
 # --data item shape: {id: string, type: string}
-export def "transactions-relationships-tags create" [
+export def "post-transactions-transaction-id-relationships-tags" [
   transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -556,7 +556,7 @@ export def "transactions-relationships-tags create" [
 # Ping
 #
 # GET /util/ping
-export def "util-ping get" [
+export def "get-util-ping" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -589,7 +589,7 @@ export def "util-ping get" [
 # List webhooks
 #
 # GET /webhooks
-export def "webhooks list" [
+export def "get-webhooks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -624,7 +624,7 @@ export def "webhooks list" [
 # Create webhook
 #
 # POST /webhooks
-export def "webhooks create" [
+export def "post-webhooks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -661,7 +661,7 @@ export def "webhooks create" [
 # Delete webhook
 #
 # DELETE /webhooks/{id}
-export def "webhooks delete" [
+export def "delete-webhooks-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -696,7 +696,7 @@ export def "webhooks delete" [
 # Retrieve webhook
 #
 # GET /webhooks/{id}
-export def "webhooks get" [
+export def "get-webhooks-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -731,7 +731,7 @@ export def "webhooks get" [
 # List webhook logs
 #
 # GET /webhooks/{webhookId}/logs
-export def "webhooks-logs get" [
+export def "get-webhooks-webhook-id-logs" [
   webhook_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -768,7 +768,7 @@ export def "webhooks-logs get" [
 # Ping webhook
 #
 # POST /webhooks/{webhookId}/ping
-export def "webhooks-ping create" [
+export def "post-webhooks-webhook-id-ping" [
   webhook_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

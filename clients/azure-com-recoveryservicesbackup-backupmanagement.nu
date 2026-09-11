@@ -122,7 +122,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-backup-engines list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "backup-engines-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{vaultName}/backupEngines
 # operationId: BackupEngines_List
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-backup-engines list" [
+export def "backup-engines-list" [
   subscription_id: string
   resource_group_name: string
   vault_name: string
@@ -190,7 +190,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{vaultName}/backupEngines/{backupEngineName}
 # operationId: BackupEngines_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-backup-engines get" [
+export def "backup-engines-get" [
   subscription_id: string
   resource_group_name: string
   vault_name: string
@@ -236,7 +236,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{vaultName}/backupFabrics/{fabricName}/operationResults/{operationId}
 # operationId: ProtectionContainerRefreshOperationResults_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-backup-fabrics-operation-results refresh-protection-container-get" [
+export def "protection-container-refresh-operation-results-get" [
   subscription_id: string
   resource_group_name: string
   vault_name: string
@@ -282,7 +282,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{vaultName}/backupFabrics/{fabricName}/protectionContainers/{containerName}
 # operationId: ProtectionContainers_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-backup-fabrics-protection-containers get" [
+export def "protection-containers-get" [
   subscription_id: string
   resource_group_name: string
   vault_name: string
@@ -328,7 +328,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{vaultName}/backupFabrics/{fabricName}/protectionContainers/{containerName}/operationResults/{operationId}
 # operationId: ProtectionContainerOperationResults_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-backup-fabrics-protection-containers-operation-results get" [
+export def "protection-container-operation-results-get" [
   subscription_id: string
   resource_group_name: string
   vault_name: string
@@ -376,7 +376,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # DELETE /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{vaultName}/backupFabrics/{fabricName}/protectionContainers/{containerName}/protectedItems/{protectedItemName}
 # operationId: ProtectedItems_Delete
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-backup-fabrics-protection-containers-protected-items delete" [
+export def "protected-items-delete" [
   subscription_id: string
   resource_group_name: string
   vault_name: string
@@ -424,7 +424,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{vaultName}/backupFabrics/{fabricName}/protectionContainers/{containerName}/protectedItems/{protectedItemName}
 # operationId: ProtectedItems_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-backup-fabrics-protection-containers-protected-items get" [
+export def "protected-items-get" [
   subscription_id: string
   resource_group_name: string
   vault_name: string
@@ -474,7 +474,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # PUT /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{vaultName}/backupFabrics/{fabricName}/protectionContainers/{containerName}/protectedItems/{protectedItemName}
 # operationId: ProtectedItems_CreateOrUpdate
 # --properties shape: {backupManagementType?: "Invalid"|"AzureIaasVM"|"MAB"|"DPM"|"AzureBackupServer"|"AzureSql", containerName?: string, lastRecoveryPoint?: string, policyId?: string, protectedItemType: string, sourceResourceId?: string, workloadType?: "Invalid"|"VM"|"FileFolder"|"AzureSqlDb"|"SQLDB"|"Exchange"|"Sharepoint"|"VMwareVM"|"SystemState"|"Client"|"GenericDataSource"}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-backup-fabrics-protection-containers-protected-items create-or-update" [
+export def "protected-items-create-or-update" [
   subscription_id: string
   resource_group_name: string
   vault_name: string
@@ -530,7 +530,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{vaultName}/backupFabrics/{fabricName}/protectionContainers/{containerName}/protectedItems/{protectedItemName}/backup
 # operationId: Backups_Trigger
 # --properties shape: {objectType: string}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-backup-fabrics-protection-containers-protected-items-backup trigger" [
+export def "backups-trigger" [
   subscription_id: string
   resource_group_name: string
   vault_name: string
@@ -585,7 +585,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{vaultName}/backupFabrics/{fabricName}/protectionContainers/{containerName}/protectedItems/{protectedItemName}/operationResults/{operationId}
 # operationId: ProtectedItemOperationResults_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-backup-fabrics-protection-containers-protected-items-operation-results get" [
+export def "protected-item-operation-results-get" [
   subscription_id: string
   resource_group_name: string
   vault_name: string
@@ -635,7 +635,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{vaultName}/backupFabrics/{fabricName}/protectionContainers/{containerName}/protectedItems/{protectedItemName}/operationsStatus/{operationId}
 # operationId: ProtectedItemOperationStatuses_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-backup-fabrics-protection-containers-protected-items-operations-status get-statuses" [
+export def "protected-item-operation-statuses-get" [
   subscription_id: string
   resource_group_name: string
   vault_name: string
@@ -685,7 +685,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{vaultName}/backupFabrics/{fabricName}/protectionContainers/{containerName}/protectedItems/{protectedItemName}/recoveryPoints
 # operationId: RecoveryPoints_List
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-backup-fabrics-protection-containers-protected-items-recovery-points list" [
+export def "recovery-points-list" [
   subscription_id: string
   resource_group_name: string
   vault_name: string
@@ -734,7 +734,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{vaultName}/backupFabrics/{fabricName}/protectionContainers/{containerName}/protectedItems/{protectedItemName}/recoveryPoints/{recoveryPointId}
 # operationId: RecoveryPoints_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-backup-fabrics-protection-containers-protected-items-recovery-points get" [
+export def "recovery-points-get" [
   subscription_id: string
   resource_group_name: string
   vault_name: string
@@ -785,7 +785,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{vaultName}/backupFabrics/{fabricName}/protectionContainers/{containerName}/protectedItems/{protectedItemName}/recoveryPoints/{recoveryPointId}/provisionInstantItemRecovery
 # operationId: ItemLevelRecoveryConnections_Provision
 # --properties shape: {objectType: string}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-backup-fabrics-protection-containers-protected-items-recovery-points-provision-instant-item-recovery create-level-connections" [
+export def "item-level-recovery-connections-provision" [
   subscription_id: string
   resource_group_name: string
   vault_name: string
@@ -843,7 +843,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{vaultName}/backupFabrics/{fabricName}/protectionContainers/{containerName}/protectedItems/{protectedItemName}/recoveryPoints/{recoveryPointId}/restore
 # operationId: Restores_Trigger
 # --properties shape: {objectType: string}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-backup-fabrics-protection-containers-protected-items-recovery-points-restore trigger" [
+export def "restores-trigger" [
   subscription_id: string
   resource_group_name: string
   vault_name: string
@@ -900,7 +900,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{vaultName}/backupFabrics/{fabricName}/protectionContainers/{containerName}/protectedItems/{protectedItemName}/recoveryPoints/{recoveryPointId}/revokeInstantItemRecovery
 # operationId: ItemLevelRecoveryConnections_Revoke
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-backup-fabrics-protection-containers-protected-items-recovery-points-revoke-instant-item-recovery delete-level-connections" [
+export def "item-level-recovery-connections-revoke" [
   subscription_id: string
   resource_group_name: string
   vault_name: string
@@ -950,7 +950,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{vaultName}/backupFabrics/{fabricName}/refreshContainers
 # operationId: ProtectionContainers_Refresh
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-backup-fabrics-refresh-containers refresh-protection" [
+export def "protection-containers-refresh" [
   subscription_id: string
   resource_group_name: string
   vault_name: string
@@ -994,7 +994,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{vaultName}/backupJobs/operationResults/{operationId}
 # operationId: ExportJobsOperationResults_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-backup-jobs-operation-results export-get" [
+export def "export-jobs-operation-results-get" [
   subscription_id: string
   resource_group_name: string
   vault_name: string
@@ -1038,7 +1038,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{vaultName}/backupJobs/{jobName}/cancel
 # operationId: JobCancellations_Trigger
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-backup-jobs-cancel trigger-cancellations" [
+export def "job-cancellations-trigger" [
   subscription_id: string
   resource_group_name: string
   vault_name: string
@@ -1082,7 +1082,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{vaultName}/backupJobs/{jobName}/operationResults/{operationId}
 # operationId: JobOperationResults_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-backup-jobs-operation-results get" [
+export def "job-operation-results-get" [
   subscription_id: string
   resource_group_name: string
   vault_name: string
@@ -1128,7 +1128,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{vaultName}/backupJobsExport
 # operationId: Jobs_Export
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-backup-jobs-export export" [
+export def "jobs-export" [
   subscription_id: string
   resource_group_name: string
   vault_name: string
@@ -1171,7 +1171,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{vaultName}/backupOperationResults/{operationId}
 # operationId: BackupOperationResults_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-backup-operation-results get" [
+export def "backup-operation-results-get" [
   subscription_id: string
   resource_group_name: string
   vault_name: string
@@ -1215,7 +1215,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{vaultName}/backupOperations/{operationId}
 # operationId: BackupOperationStatuses_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-backup-operations get-statuses" [
+export def "backup-operation-statuses-get" [
   subscription_id: string
   resource_group_name: string
   vault_name: string
@@ -1259,7 +1259,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{vaultName}/backupPolicies
 # operationId: BackupPolicies_List
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-backup-policies list" [
+export def "backup-policies-list" [
   subscription_id: string
   resource_group_name: string
   vault_name: string
@@ -1302,7 +1302,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # DELETE /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{vaultName}/backupPolicies/{policyName}
 # operationId: ProtectionPolicies_Delete
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-backup-policies delete-protection" [
+export def "protection-policies-delete" [
   subscription_id: string
   resource_group_name: string
   vault_name: string
@@ -1346,7 +1346,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{vaultName}/backupPolicies/{policyName}
 # operationId: ProtectionPolicies_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-backup-policies get-protection" [
+export def "protection-policies-get" [
   subscription_id: string
   resource_group_name: string
   vault_name: string
@@ -1391,7 +1391,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # PUT /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{vaultName}/backupPolicies/{policyName}
 # operationId: ProtectionPolicies_CreateOrUpdate
 # --properties shape: {backupManagementType: string, protectedItemsCount?: int}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-backup-policies create-protection-or-update" [
+export def "protection-policies-create-or-update" [
   subscription_id: string
   resource_group_name: string
   vault_name: string
@@ -1442,7 +1442,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{vaultName}/backupPolicies/{policyName}/operationResults/{operationId}
 # operationId: ProtectionPolicyOperationResults_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-backup-policies-operation-results get-protection-policy" [
+export def "protection-policy-operation-results-get" [
   subscription_id: string
   resource_group_name: string
   vault_name: string
@@ -1488,7 +1488,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{vaultName}/backupPolicies/{policyName}/operations/{operationId}
 # operationId: ProtectionPolicyOperationStatuses_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-backup-policies-operations get-protection-policy-statuses" [
+export def "protection-policy-operation-statuses-get" [
   subscription_id: string
   resource_group_name: string
   vault_name: string
@@ -1534,7 +1534,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{vaultName}/backupProtectableItems
 # operationId: BackupProtectableItems_List
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-backup-protectable-items list" [
+export def "backup-protectable-items-list" [
   subscription_id: string
   resource_group_name: string
   vault_name: string
@@ -1578,7 +1578,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{vaultName}/backupProtectedItems
 # operationId: BackupProtectedItems_List
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-backup-protected-items list" [
+export def "backup-protected-items-list" [
   subscription_id: string
   resource_group_name: string
   vault_name: string
@@ -1622,7 +1622,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{vaultName}/backupProtectionContainers
 # operationId: BackupProtectionContainers_List
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-backup-protection-containers list" [
+export def "backup-protection-containers-list" [
   subscription_id: string
   resource_group_name: string
   vault_name: string
@@ -1665,7 +1665,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{vaultName}/backupSecurityPIN
 # operationId: SecurityPINs_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-backup-security-pin get-pi-ns" [
+export def "security-pi-ns-get" [
   subscription_id: string
   resource_group_name: string
   vault_name: string
@@ -1707,7 +1707,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{vaultName}/backupUsageSummaries
 # operationId: BackupUsageSummaries_List
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-backup-usage-summaries list" [
+export def "backup-usage-summaries-list" [
   subscription_id: string
   resource_group_name: string
   vault_name: string
@@ -1751,7 +1751,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{vaultName}/backupconfig/vaultconfig
 # operationId: BackupResourceVaultConfigs_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-backupconfig-vaultconfig get-backup-configs" [
+export def "backup-resource-vault-configs-get" [
   subscription_id: string
   resource_group_name: string
   vault_name: string
@@ -1794,7 +1794,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # PATCH /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{vaultName}/backupconfig/vaultconfig
 # operationId: BackupResourceVaultConfigs_Update
 # --properties shape: {enhancedSecurityState?: "Invalid"|"Enabled"|"Disabled", storageType?: "Invalid"|"GeoRedundant"|"LocallyRedundant", storageTypeState?: "Invalid"|"Locked"|"Unlocked"}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-backupconfig-vaultconfig update-backup-configs" [
+export def "backup-resource-vault-configs-update" [
   subscription_id: string
   resource_group_name: string
   vault_name: string
@@ -1843,7 +1843,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{vaultName}/backupstorageconfig/vaultstorageconfig
 # operationId: BackupResourceStorageConfigs_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-backupstorageconfig-vaultstorageconfig get-backup-storage-configs" [
+export def "backup-resource-storage-configs-get" [
   subscription_id: string
   resource_group_name: string
   vault_name: string
@@ -1885,7 +1885,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # PATCH /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{vaultName}/backupstorageconfig/vaultstorageconfig
 # operationId: BackupResourceStorageConfigs_Update
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-backupstorageconfig-vaultstorageconfig update-backup-storage-configs" [
+export def "backup-resource-storage-configs-update" [
   subscription_id: string
   resource_group_name: string
   vault_name: string

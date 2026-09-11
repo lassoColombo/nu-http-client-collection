@@ -129,7 +129,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta create-lookup-effective-guest-policy" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "osconfig-projects-zones-instances-lookup-effective-guest-policy" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -153,7 +153,7 @@ export def commands []: nothing -> table {
 #
 # POST /v1beta/{instance}:lookupEffectiveGuestPolicy
 # operationId: osconfig.projects.zones.instances.lookupEffectiveGuestPolicy
-export def "v1beta create-lookup-effective-guest-policy" [
+export def "osconfig-projects-zones-instances-lookup-effective-guest-policy" [
   instance: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -207,7 +207,7 @@ export def "v1beta create-lookup-effective-guest-policy" [
 #
 # DELETE /v1beta/{name}
 # operationId: osconfig.projects.patchDeployments.delete
-export def "v1beta delete" [
+export def "osconfig-projects-patch-deployments-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -255,7 +255,7 @@ export def "v1beta delete" [
 #
 # GET /v1beta/{name}
 # operationId: osconfig.projects.patchJobs.get
-export def "v1beta get" [
+export def "osconfig-projects-patch-jobs-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -308,7 +308,7 @@ export def "v1beta get" [
 # --patchConfig shape: {apt?: record, goo?: record, migInstancesAllowed?: bool, postStep?: record, preStep?: record, rebootConfig?: "REBOOT_CONFIG_UNSPECIFIED"|"DEFAULT"|"ALWAYS"|"NEVER", windowsUpdate?: record, yum?: record, zypper?: record}
 # --recurringSchedule shape: {endTime?: string, frequency?: "FREQUENCY_UNSPECIFIED"|"WEEKLY"|"MONTHLY"|"DAILY", monthly?: record, startTime?: string, timeOfDay?: record, timeZone?: record, weekly?: record}
 # --rollout shape: {disruptionBudget?: record, mode?: "MODE_UNSPECIFIED"|"ZONE_BY_ZONE"|"CONCURRENT_ZONES"}
-export def "v1beta update" [
+export def "osconfig-projects-patch-deployments-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -368,7 +368,7 @@ export def "v1beta update" [
 #
 # POST /v1beta/{name}:cancel
 # operationId: osconfig.projects.patchJobs.cancel
-export def "v1beta cancel" [
+export def "osconfig-projects-patch-jobs-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -420,7 +420,7 @@ export def "v1beta cancel" [
 #
 # POST /v1beta/{name}:pause
 # operationId: osconfig.projects.patchDeployments.pause
-export def "v1beta pause" [
+export def "osconfig-projects-patch-deployments-pause" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -472,7 +472,7 @@ export def "v1beta pause" [
 #
 # POST /v1beta/{name}:resume
 # operationId: osconfig.projects.patchDeployments.resume
-export def "v1beta create-resume" [
+export def "osconfig-projects-patch-deployments-resume" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -524,7 +524,7 @@ export def "v1beta create-resume" [
 #
 # GET /v1beta/{parent}/guestPolicies
 # operationId: osconfig.projects.guestPolicies.list
-export def "v1beta-guest-policies list" [
+export def "osconfig-projects-guest-policies-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -578,7 +578,7 @@ export def "v1beta-guest-policies list" [
 # --packageRepositories item shape: {apt?: record, goo?: record, yum?: record, zypper?: record}
 # --packages item shape: {desiredState?: "DESIRED_STATE_UNSPECIFIED"|"INSTALLED"|"UPDATED"|"REMOVED", manager?: "MANAGER_UNSPECIFIED"|"ANY"|"APT"|"YUM"|"ZYPPER"|"GOO", name?: string}
 # --recipes item shape: {artifacts?: list, desiredState?: "DESIRED_STATE_UNSPECIFIED"|"INSTALLED"|"UPDATED"|"REMOVED", installSteps?: list, name?: string, updateSteps?: list, version?: string}
-export def "v1beta-guest-policies create" [
+export def "osconfig-projects-guest-policies-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -637,7 +637,7 @@ export def "v1beta-guest-policies create" [
 #
 # GET /v1beta/{parent}/instanceDetails
 # operationId: osconfig.projects.patchJobs.instanceDetails.list
-export def "v1beta-instance-details list" [
+export def "osconfig-projects-patch-jobs-instance-details-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -688,7 +688,7 @@ export def "v1beta-instance-details list" [
 #
 # GET /v1beta/{parent}/patchDeployments
 # operationId: osconfig.projects.patchDeployments.list
-export def "v1beta-patch-deployments list" [
+export def "osconfig-projects-patch-deployments-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -743,7 +743,7 @@ export def "v1beta-patch-deployments list" [
 # --patchConfig shape: {apt?: record, goo?: record, migInstancesAllowed?: bool, postStep?: record, preStep?: record, rebootConfig?: "REBOOT_CONFIG_UNSPECIFIED"|"DEFAULT"|"ALWAYS"|"NEVER", windowsUpdate?: record, yum?: record, zypper?: record}
 # --recurringSchedule shape: {endTime?: string, frequency?: "FREQUENCY_UNSPECIFIED"|"WEEKLY"|"MONTHLY"|"DAILY", monthly?: record, startTime?: string, timeOfDay?: record, timeZone?: record, weekly?: record}
 # --rollout shape: {disruptionBudget?: record, mode?: "MODE_UNSPECIFIED"|"ZONE_BY_ZONE"|"CONCURRENT_ZONES"}
-export def "v1beta-patch-deployments create" [
+export def "osconfig-projects-patch-deployments-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -803,7 +803,7 @@ export def "v1beta-patch-deployments create" [
 #
 # GET /v1beta/{parent}/patchJobs
 # operationId: osconfig.projects.patchJobs.list
-export def "v1beta-patch-jobs list" [
+export def "osconfig-projects-patch-jobs-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -857,7 +857,7 @@ export def "v1beta-patch-jobs list" [
 # --instanceFilter shape: {all?: bool, groupLabels?: list, instanceNamePrefixes?: list<string>, instances?: list<string>, zones?: list<string>}
 # --patchConfig shape: {apt?: record, goo?: record, migInstancesAllowed?: bool, postStep?: record, preStep?: record, rebootConfig?: "REBOOT_CONFIG_UNSPECIFIED"|"DEFAULT"|"ALWAYS"|"NEVER", windowsUpdate?: record, yum?: record, zypper?: record}
 # --rollout shape: {disruptionBudget?: record, mode?: "MODE_UNSPECIFIED"|"ZONE_BY_ZONE"|"CONCURRENT_ZONES"}
-export def "v1beta-patch-jobs-execute create" [
+export def "osconfig-projects-patch-jobs-execute" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

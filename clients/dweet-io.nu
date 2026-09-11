@@ -103,7 +103,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "alert-when create-get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-alert-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -127,7 +127,7 @@ export def commands []: nothing -> table {
 #
 # GET /alert/{who}/when/{thing}/{condition}
 # operationId: createAlertGET
-export def "alert-when create-get" [
+export def "create-alert-get" [
   who: string
   thing: string
   condition: string
@@ -168,7 +168,7 @@ export def "alert-when create-get" [
 # Create a dweet for a thing.
 #
 # POST /dweet/for/{thing}
-export def "dweet-for create" [
+export def "post-dweet-for-thing" [
   thing: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -209,7 +209,7 @@ export def "dweet-for create" [
 # Create a dweet for a thing. This method differs from /dweet/for/{thing} only in that successful dweets result in an HTTP 204 response rather than the typical verbose response.
 #
 # POST /dweet/quietly/for/{thing}
-export def "dweet-quietly-for create" [
+export def "post-dweet-quietly-for-thing" [
   thing: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -251,7 +251,7 @@ export def "dweet-quietly-for create" [
 #
 # GET /get/alert/for/{thing}
 # operationId: getAlert
-export def "get-alert-for get" [
+export def "get-alert" [
   thing: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -288,7 +288,7 @@ export def "get-alert-for get" [
 # Read the last 5 cached dweets for a thing.
 #
 # GET /get/dweets/for/{thing}
-export def "get-dweets-for get" [
+export def "get-get-dweets-for-thing" [
   thing: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -326,7 +326,7 @@ export def "get-dweets-for get" [
 #
 # GET /get/latest/dweet/for/{thing}
 # operationId: getLatestDweet
-export def "get-latest-dweet-for get" [
+export def "get-latest-dweet" [
   thing: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -364,7 +364,7 @@ export def "get-latest-dweet-for get" [
 #
 # GET /get/stored/alerts/for/{thing}
 # operationId: getStoredAlerts
-export def "get-stored-alerts-for get" [
+export def "get-stored-alerts" [
   thing: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -404,7 +404,7 @@ export def "get-stored-alerts-for get" [
 # Read all the saved dweets for a thing from long term storage. You can query a maximum of 1 day per request and a granularly of 1 hour.
 #
 # GET /get/stored/dweets/for/{thing}
-export def "get-stored-dweets-for get" [
+export def "get-get-stored-dweets-for-thing" [
   thing: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -445,7 +445,7 @@ export def "get-stored-dweets-for get" [
 #
 # GET /listen/for/dweets/from/{thing}
 # operationId: listenForDweets
-export def "listen-for-dweets-from get" [
+export def "listen-for-dweets" [
   thing: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -481,7 +481,7 @@ export def "listen-for-dweets-from get" [
 #
 # GET /lock/{thing}
 # operationId: lockThing
-export def "lock get" [
+export def "lock-thing" [
   thing: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -520,7 +520,7 @@ export def "lock get" [
 #
 # GET /remove/alert/for/{thing}
 # operationId: removeAlert
-export def "remove-alert-for delete" [
+export def "remove-alert" [
   thing: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -558,7 +558,7 @@ export def "remove-alert-for delete" [
 #
 # GET /remove/lock/{lock}
 # operationId: removeLock
-export def "remove-lock delete" [
+export def "remove-lock" [
   lock: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -596,7 +596,7 @@ export def "remove-lock delete" [
 #
 # GET /unlock/{thing}
 # operationId: unlockThing
-export def "unlock get" [
+export def "unlock-thing" [
   thing: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

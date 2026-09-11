@@ -128,7 +128,7 @@ def language-completer [] { ["el" "en" "es" "et" "fi" "fr" "he" "iw" "jp" "lt" "
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account-feedback create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-api-account-v1-feedback" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -152,7 +152,7 @@ export def commands []: nothing -> table {
 #
 # POST /api/account/v1/feedback
 # operationId: postApiAccountV1Feedback
-export def "account-feedback create" [
+export def "post-api-account-v1-feedback" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -199,7 +199,7 @@ export def "account-feedback create" [
 #
 # POST /api/account/v1/merchantname/add
 # operationId: postApiAccountV1MerchantnameAdd
-export def "account-merchantname-add create" [
+export def "post-api-account-v1-merchantname-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -242,7 +242,7 @@ export def "account-merchantname-add create" [
 # DEPRECATED
 # operationId: postApiReceiptV1MatchFile
 @deprecated
-export def "receipt-match-file create" [
+export def "post-api-receipt-v1-match-file" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -292,7 +292,7 @@ export def "receipt-match-file create" [
 #
 # POST /api/receipt/v1/simple/encoded
 # operationId: postApiReceiptV1SimpleEncoded
-export def "receipt-simple-encoded create" [
+export def "post-api-receipt-v1-simple-encoded" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -344,7 +344,7 @@ export def "receipt-simple-encoded create" [
 #
 # POST /api/receipt/v1/simple/file
 # operationId: postApiReceiptV1SimpleFile
-export def "receipt-simple-file create" [
+export def "post-api-receipt-v1-simple-file" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -398,7 +398,7 @@ export def "receipt-simple-file create" [
 # DEPRECATED
 # operationId: postApiReceiptV1SimpleStorage
 @deprecated
-export def "receipt-simple-storage create" [
+export def "post-api-receipt-v1-simple-storage" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -449,7 +449,7 @@ export def "receipt-simple-storage create" [
 # POST /api/receipt/v1/simple/url
 # operationId: postApiReceiptV1SimpleUrl
 # --headers shape: {x-custom-key?: string}
-export def "receipt-simple-url create" [
+export def "post-api-receipt-v1-simple-url" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -500,7 +500,7 @@ export def "receipt-simple-url create" [
 #
 # POST /api/receipt/v1/verbose/encoded
 # operationId: postApiReceiptV1VerboseEncoded
-export def "receipt-verbose-encoded create" [
+export def "post-api-receipt-v1-verbose-encoded" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -552,7 +552,7 @@ export def "receipt-verbose-encoded create" [
 #
 # POST /api/receipt/v1/verbose/file
 # operationId: postApiReceiptV1VerboseFile
-export def "receipt-verbose-file create" [
+export def "post-api-receipt-v1-verbose-file" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -606,7 +606,7 @@ export def "receipt-verbose-file create" [
 # DEPRECATED
 # operationId: postApiReceiptV1VerboseStorage
 @deprecated
-export def "receipt-verbose-storage create" [
+export def "post-api-receipt-v1-verbose-storage" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -657,7 +657,7 @@ export def "receipt-verbose-storage create" [
 # POST /api/receipt/v1/verbose/url
 # operationId: postApiReceiptV1VerboseUrl
 # --headers shape: {x-custom-key?: string}
-export def "receipt-verbose-url create" [
+export def "post-api-receipt-v1-verbose-url" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -708,7 +708,7 @@ export def "receipt-verbose-url create" [
 #
 # POST /api/validation/v1/campaign/file
 # operationId: postApiValidationV1CampaignFile
-export def "validation-campaign-file create" [
+export def "post-api-validation-v1-campaign-file" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -756,7 +756,7 @@ export def "validation-campaign-file create" [
 #
 # POST /api/validation/v1/campaign/product-validation/file
 # operationId: postApiValidationV1CampaignProductvalidationFile
-export def "validation-campaign-product-validation-file create-productvalidation" [
+export def "post-api-validation-v1-campaign-productvalidation-file" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

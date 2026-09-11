@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["ocp-apim-subscription-key"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "configurations-policy reset" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "policy-reset" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /configurations/policy
 # operationId: Policy_Reset
-export def "configurations-policy reset" [
+export def "policy-reset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -174,7 +174,7 @@ export def "configurations-policy reset" [
 #
 # GET /configurations/policy
 # operationId: Policy_Get
-export def "configurations-policy get" [
+export def "policy-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -208,7 +208,7 @@ export def "configurations-policy get" [
 #
 # PUT /configurations/policy
 # operationId: Policy_Update
-export def "configurations-policy update" [
+export def "policy-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -247,7 +247,7 @@ export def "configurations-policy update" [
 #
 # GET /configurations/service
 # operationId: ServiceConfiguration_Get
-export def "configurations-service get" [
+export def "service-configuration-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -281,7 +281,7 @@ export def "configurations-service get" [
 #
 # PUT /configurations/service
 # operationId: ServiceConfiguration_Update
-export def "configurations-service update" [
+export def "service-configuration-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -326,7 +326,7 @@ export def "configurations-service update" [
 #
 # GET /evaluations
 # operationId: Evaluations_List
-export def "evaluations list" [
+export def "evaluations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -361,7 +361,7 @@ export def "evaluations list" [
 # POST /evaluations
 # operationId: Evaluations_Create
 # --policies item shape: {arguments: string, name: string}
-export def "evaluations create" [
+export def "evaluations-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -403,7 +403,7 @@ export def "evaluations create" [
 #
 # DELETE /evaluations/{evaluationId}
 # operationId: Evaluations_Delete
-export def "evaluations delete" [
+export def "evaluations-delete" [
   evaluation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -439,7 +439,7 @@ export def "evaluations delete" [
 #
 # GET /evaluations/{evaluationId}
 # operationId: Evaluations_Get
-export def "evaluations get" [
+export def "evaluations-get" [
   evaluation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -475,7 +475,7 @@ export def "evaluations get" [
 #
 # POST /events/{eventId}/activate
 # operationId: Events_Activate
-export def "events-activate create" [
+export def "events-activate" [
   event_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -511,7 +511,7 @@ export def "events-activate create" [
 #
 # POST /events/{eventId}/reward
 # operationId: Events_Reward
-export def "events-reward create" [
+export def "events-reward" [
   event_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -551,7 +551,7 @@ export def "events-reward create" [
 #
 # DELETE /logs
 # operationId: Log_Delete
-export def "logs delete" [
+export def "log-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -585,7 +585,7 @@ export def "logs delete" [
 #
 # GET /logs/properties
 # operationId: Log_GetProperties
-export def "logs-properties get" [
+export def "log-get-properties" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -619,7 +619,7 @@ export def "logs-properties get" [
 #
 # DELETE /model
 # operationId: Model_Reset
-export def "model reset" [
+export def "model-reset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -653,7 +653,7 @@ export def "model reset" [
 #
 # GET /model
 # operationId: Model_Get
-export def "model get" [
+export def "model-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -687,7 +687,7 @@ export def "model get" [
 #
 # GET /model/properties
 # operationId: Model_GetProperties
-export def "model-properties get" [
+export def "model-get-properties" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -722,7 +722,7 @@ export def "model-properties get" [
 # POST /rank
 # operationId: Rank
 # --actions item shape: {features: list, id: string}
-export def "rank create" [
+export def "rank" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

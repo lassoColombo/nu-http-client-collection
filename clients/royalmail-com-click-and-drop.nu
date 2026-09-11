@@ -119,7 +119,7 @@ def accept-completer [] { ["application/json" "application/pdf"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "manifests create-async" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-manifests-async" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -143,7 +143,7 @@ export def commands []: nothing -> table {
 #
 # POST /manifests
 # operationId: CreateManifestsAsync
-export def "manifests create-async" [
+export def "create-manifests-async" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -186,7 +186,7 @@ export def "manifests create-async" [
 #
 # GET /manifests/{manifestGuid}
 # operationId: GetManifestAsync
-export def "manifests get-async" [
+export def "get-manifest-async" [
   manifest_guid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -222,7 +222,7 @@ export def "manifests get-async" [
 #
 # POST /manifests/{manifestGuid}/retry
 # operationId: RetryManifestAsync
-export def "manifests-retry create-async" [
+export def "retry-manifest-async" [
   manifest_guid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -258,7 +258,7 @@ export def "manifests-retry create-async" [
 #
 # GET /orders
 # operationId: GetOrdersAsync
-export def "orders get-async" [
+export def "get-orders-async" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -298,7 +298,7 @@ export def "orders get-async" [
 # POST /orders
 # operationId: CreateOrdersAsync
 # --items item shape: {billing?: record, currencyCode?: string, customsDutyCosts?: float, label?: record, orderDate: string, orderReference?: string, otherCosts?: float, packages?: list, plannedDespatchDate?: string, postageDetails?: record, recipient: record, sender?: record, shippingCostCharged: float, specialInstructions?: string, subtotal: float, tags?: list, total: float}
-export def "orders create-async" [
+export def "create-orders-async" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -336,7 +336,7 @@ export def "orders create-async" [
 #
 # GET /orders/full
 # operationId: GetOrdersWithDetailsAsync
-export def "orders-full get-with-details-async" [
+export def "get-orders-with-details-async" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -376,7 +376,7 @@ export def "orders-full get-with-details-async" [
 # PUT /orders/status
 # operationId: UpdateOrdersStatusAsync
 # --items item shape: {despatchDate?: string, orderIdentifier?: int, orderReference?: string, shippingCarrier?: string, shippingService?: string, status?: "new"|"despatchedByOtherCourier"|"despatched", trackingNumber?: string}
-export def "orders-status update-async" [
+export def "update-orders-status-async" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -414,7 +414,7 @@ export def "orders-status update-async" [
 #
 # DELETE /orders/{orderIdentifiers}
 # operationId: DeleteOrdersAsync
-export def "orders delete-async" [
+export def "delete-orders-async" [
   order_identifiers: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -450,7 +450,7 @@ export def "orders delete-async" [
 #
 # GET /orders/{orderIdentifiers}
 # operationId: GetSpecificOrdersAsync
-export def "orders get-specific-async" [
+export def "get-specific-orders-async" [
   order_identifiers: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -486,7 +486,7 @@ export def "orders get-specific-async" [
 #
 # GET /orders/{orderIdentifiers}/full
 # operationId: GetSpecificOrdersWithDetailsAsync
-export def "orders-full get-specific-with-details-async" [
+export def "get-specific-orders-with-details-async" [
   order_identifiers: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -522,7 +522,7 @@ export def "orders-full get-specific-with-details-async" [
 #
 # GET /orders/{orderIdentifiers}/label
 # operationId: GetOrdersLabelAsync
-export def "orders-label get-async" [
+export def "get-orders-label-async" [
   order_identifiers: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -563,7 +563,7 @@ export def "orders-label get-async" [
 #
 # GET /version
 # operationId: GetVersionAsync
-export def "version get-async" [
+export def "get-version-async" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

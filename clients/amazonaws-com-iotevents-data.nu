@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "alarms-acknowledge create-batch" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "batch-acknowledge-alarm" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -129,7 +129,7 @@ export def commands []: nothing -> table {
 # POST /alarms/acknowledge
 # operationId: BatchAcknowledgeAlarm
 # --acknowledgeActionRequests item shape: {requestId: any, alarmModelName: any, keyValue?: any, note?: any}
-export def "alarms-acknowledge create-batch" [
+export def "batch-acknowledge-alarm" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -177,7 +177,7 @@ export def "alarms-acknowledge create-batch" [
 # POST /detectors/delete
 # operationId: BatchDeleteDetector
 # --detectors item shape: {messageId: any, detectorModelName: any, keyValue?: any}
-export def "detectors-delete delete-batch" [
+export def "batch-delete-detector" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -225,7 +225,7 @@ export def "detectors-delete delete-batch" [
 # POST /alarms/disable
 # operationId: BatchDisableAlarm
 # --disableActionRequests item shape: {requestId: any, alarmModelName: any, keyValue?: any, note?: any}
-export def "alarms-disable disable-batch" [
+export def "batch-disable-alarm" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -273,7 +273,7 @@ export def "alarms-disable disable-batch" [
 # POST /alarms/enable
 # operationId: BatchEnableAlarm
 # --enableActionRequests item shape: {requestId: any, alarmModelName: any, keyValue?: any, note?: any}
-export def "alarms-enable enable-batch" [
+export def "batch-enable-alarm" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -321,7 +321,7 @@ export def "alarms-enable enable-batch" [
 # POST /inputs/messages
 # operationId: BatchPutMessage
 # --messages item shape: {messageId: any, inputName: any, payload: any, timestamp?: any}
-export def "inputs-messages update-batch" [
+export def "batch-put-message" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -369,7 +369,7 @@ export def "inputs-messages update-batch" [
 # POST /alarms/reset
 # operationId: BatchResetAlarm
 # --resetActionRequests item shape: {requestId: any, alarmModelName: any, keyValue?: any, note?: any}
-export def "alarms-reset reset-batch" [
+export def "batch-reset-alarm" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -417,7 +417,7 @@ export def "alarms-reset reset-batch" [
 # POST /alarms/snooze
 # operationId: BatchSnoozeAlarm
 # --snoozeActionRequests item shape: {requestId: any, alarmModelName: any, keyValue?: any, note?: any, snoozeDuration: any}
-export def "alarms-snooze create-batch" [
+export def "batch-snooze-alarm" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -465,7 +465,7 @@ export def "alarms-snooze create-batch" [
 # POST /detectors
 # operationId: BatchUpdateDetector
 # --detectors item shape: {messageId: any, detectorModelName: any, keyValue?: any, state: any}
-export def "detectors update-batch" [
+export def "batch-update-detector" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -512,7 +512,7 @@ export def "detectors update-batch" [
 #
 # GET /alarms/{alarmModelName}/keyValues/
 # operationId: DescribeAlarm
-export def "alarms-key-values get" [
+export def "describe-alarm" [
   alarm_model_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -559,7 +559,7 @@ export def "alarms-key-values get" [
 #
 # GET /detectors/{detectorModelName}/keyValues/
 # operationId: DescribeDetector
-export def "detectors-key-values get" [
+export def "describe-detector" [
   detector_model_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -606,7 +606,7 @@ export def "detectors-key-values get" [
 #
 # GET /alarms/{alarmModelName}
 # operationId: ListAlarms
-export def "alarms list" [
+export def "list-alarms" [
   alarm_model_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -654,7 +654,7 @@ export def "alarms list" [
 #
 # GET /detectors/{detectorModelName}
 # operationId: ListDetectors
-export def "detectors list" [
+export def "list-detectors" [
   detector_model_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

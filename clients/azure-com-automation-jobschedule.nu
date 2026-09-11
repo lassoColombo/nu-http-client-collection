@@ -110,7 +110,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-job-schedules list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "job-schedule-list-by-automation-account" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -135,7 +135,7 @@ export def commands []: nothing -> table {
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/jobSchedules
 # Docs: http://aka.ms/azureautomationsdk/jobscheduleoperations
 # operationId: JobSchedule_ListByAutomationAccount
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-job-schedules list" [
+export def "job-schedule-list-by-automation-account" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -179,7 +179,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/jobSchedules/{jobScheduleId}
 # Docs: http://aka.ms/azureautomationsdk/jobscheduleoperations
 # operationId: JobSchedule_Delete
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-job-schedules delete" [
+export def "job-schedule-delete" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -224,7 +224,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/jobSchedules/{jobScheduleId}
 # Docs: http://aka.ms/azureautomationsdk/jobscheduleoperations
 # operationId: JobSchedule_Get
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-job-schedules get" [
+export def "job-schedule-get" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -270,7 +270,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # Docs: http://aka.ms/azureautomationsdk/jobscheduleoperations
 # operationId: JobSchedule_Create
 # --properties shape: {parameters?: record, runOn?: string, runbook: any, schedule: any}
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-job-schedules create" [
+export def "job-schedule-create" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string

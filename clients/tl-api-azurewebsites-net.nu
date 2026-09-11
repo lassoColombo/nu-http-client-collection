@@ -117,7 +117,7 @@ def auth-scheme-completer [] { ["ocp-apim-subscription-key" "bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "article delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "article-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -141,7 +141,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /api/Article
 # operationId: Article_Delete
-export def "article delete" [
+export def "article-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -179,7 +179,7 @@ export def "article delete" [
 # operationId: Article_Post
 # --availableGyms item shape: {externalGymNumber?: int, gymId?: int, gymName?: string, location?: string}
 # --gymArticles item shape: {articleId?: int, availableQty?: float, createdUser?: string, employeeDiscount?: float, employeePrice?: float, gymId?: int, gymIdList?: string, gymName?: string, id?: int, isDefault?: bool, isInventoryItem?: bool, isObsolete?: bool, modifiedUser?: string, reorderLevel?: float, revenueAccountId?: int, sellingPrice?: float}
-export def "article create" [
+export def "article-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -248,7 +248,7 @@ export def "article create" [
 # operationId: Article_Put
 # --availableGyms item shape: {externalGymNumber?: int, gymId?: int, gymName?: string, location?: string}
 # --gymArticles item shape: {articleId?: int, availableQty?: float, createdUser?: string, employeeDiscount?: float, employeePrice?: float, gymId?: int, gymIdList?: string, gymName?: string, id?: int, isDefault?: bool, isInventoryItem?: bool, isObsolete?: bool, modifiedUser?: string, reorderLevel?: float, revenueAccountId?: int, sellingPrice?: float}
-export def "article update" [
+export def "article-put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -315,7 +315,7 @@ export def "article update" [
 #
 # PUT /api/Article/ArticleGymDetails
 # operationId: Article_UpdateArticleGymDetails
-export def "article-article-gym-details update" [
+export def "article-update-article-gym-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -352,7 +352,7 @@ export def "article-article-gym-details update" [
 # GET /api/Article/GetAddons
 #
 # operationId: Article_GetAddons
-export def "article-get-addons get" [
+export def "article-get-addons" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -392,7 +392,7 @@ export def "article-get-addons get" [
 #
 # GET /api/Article/GymArticle/{articleId}/{gymId}
 # operationId: Article_GymArticleDetails
-export def "article-gym-article get-details" [
+export def "article-gym-article-details" [
   article_id: int
   gym_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -430,7 +430,7 @@ export def "article-gym-article get-details" [
 #
 # POST /api/Article/MeasureUnit
 # operationId: Article_AddMeasureUnit
-export def "article-measure-unit create" [
+export def "article-add-measure-unit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -468,7 +468,7 @@ export def "article-measure-unit create" [
 #
 # GET /api/Article/MeasureUnits
 # operationId: Article_GetMeasureUnits
-export def "article-measure-units get" [
+export def "article-get-measure-units" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -504,7 +504,7 @@ export def "article-measure-units get" [
 #
 # GET /api/Article/RevenueAccounts
 # operationId: Article_GetRevenueAccounts
-export def "article-revenue-accounts get" [
+export def "article-get-revenue-accounts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -538,7 +538,7 @@ export def "article-revenue-accounts get" [
 #
 # GET /api/Article/Search
 # operationId: Article_Search
-export def "article-search list" [
+export def "article-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -580,7 +580,7 @@ export def "article-search list" [
 #
 # PUT /api/Article/UpdateStatus
 # operationId: Article_UpdateStatus
-export def "article-update-status update" [
+export def "article-update-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -618,7 +618,7 @@ export def "article-update-status update" [
 #
 # GET /api/Article/{articleID}
 # operationId: Article_get
-export def "article get" [
+export def "article-get" [
   article_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -654,7 +654,7 @@ export def "article get" [
 #
 # POST /api/Auth/login
 # operationId: Auth_Login
-export def "auth-login create" [
+export def "auth-login" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -694,7 +694,7 @@ export def "auth-login create" [
 #
 # GET /api/Gym/{gymID}
 # operationId: Gym_get
-export def "gym get" [
+export def "gym-get" [
   gym_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -730,7 +730,7 @@ export def "gym get" [
 #
 # GET /api/Membership
 # operationId: Membership_Get
-export def "membership get" [
+export def "membership-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -764,7 +764,7 @@ export def "membership get" [
 #
 # POST /api/Membership
 # operationId: Membership_Post
-export def "membership create" [
+export def "membership-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -802,7 +802,7 @@ export def "membership create" [
 #
 # DELETE /api/Package
 # operationId: Package_Delete
-export def "package delete" [
+export def "package-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -838,7 +838,7 @@ export def "package delete" [
 #
 # GET /api/Package
 # operationId: Package_Get
-export def "package get" [
+export def "package-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -876,7 +876,7 @@ export def "package get" [
 # operationId: Package_Post
 # --addOns item shape: {articleId: int, articleName?: string, articleNumber?: int, articlePrice?: float, endOrder?: int, isIncludeServiceInCharge?: bool, measureUnit?: string, numberOfItems?: float, startOrder?: int}
 # --availableGyms item shape: {externalGymNumber?: int, gymId?: int, gymName?: string, location?: string}
-export def "package create" [
+export def "package-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -958,7 +958,7 @@ export def "package create" [
 # operationId: Package_Put
 # --addOns item shape: {articleId: int, articleName?: string, articleNumber?: int, articlePrice?: float, endOrder?: int, isIncludeServiceInCharge?: bool, measureUnit?: string, numberOfItems?: float, startOrder?: int}
 # --availableGyms item shape: {externalGymNumber?: int, gymId?: int, gymName?: string, location?: string}
-export def "package update" [
+export def "package-put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1038,7 +1038,7 @@ export def "package update" [
 #
 # GET /api/Package/Search
 # operationId: Package_Search
-export def "package-search list" [
+export def "package-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1084,7 +1084,7 @@ export def "package-search list" [
 #
 # PUT /api/Package/UpdateStatus
 # operationId: Package_UpdateStatus
-export def "package-update-status update" [
+export def "package-update-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1122,7 +1122,7 @@ export def "package-update-status update" [
 #
 # GET /api/Status
 # operationId: Status_Get
-export def "status get" [
+export def "status-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1158,7 +1158,7 @@ export def "status get" [
 #
 # GET /api/Test
 # operationId: Test_get
-export def "test get" [
+export def "test-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1192,7 +1192,7 @@ export def "test get" [
 #
 # GET /api/User
 # operationId: User_Get
-export def "user get" [
+export def "user-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1226,7 +1226,7 @@ export def "user get" [
 #
 # POST /api/User/registerUser
 # operationId: User_registerUser
-export def "user-register-user create" [
+export def "user-register-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1270,7 +1270,7 @@ export def "user-register-user create" [
 #
 # PUT /api/User/updateuser
 # operationId: User_updateUser
-export def "user-updateuser update" [
+export def "user-update-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

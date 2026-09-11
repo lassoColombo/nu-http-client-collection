@@ -124,7 +124,7 @@ def x-amz-target-completer-22 [] { ["AWSBudgetServiceGateway.UpdateSubscriber"] 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-budget" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-budget" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -148,7 +148,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CreateBudget
-export def "api create-budget" [
+export def "create-budget" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -201,7 +201,7 @@ export def "api create-budget" [
 # --ActionThreshold shape: {ActionThresholdValue: float, ActionThresholdType: "PERCENTAGE"|"ABSOLUTE_VALUE"}
 # --Definition shape: {IamActionDefinition?: any, ScpActionDefinition?: any, SsmActionDefinition?: any}
 # --Subscribers item shape: {SubscriptionType: any, Address: any}
-export def "api create-budget-action" [
+export def "create-budget-action" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -257,7 +257,7 @@ export def "api create-budget-action" [
 #
 # POST /
 # operationId: CreateNotification
-export def "api create-notification" [
+export def "create-notification" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -308,7 +308,7 @@ export def "api create-notification" [
 #
 # POST /
 # operationId: CreateSubscriber
-export def "api create-subscriber" [
+export def "create-subscriber" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -359,7 +359,7 @@ export def "api create-subscriber" [
 #
 # POST /
 # operationId: DeleteBudget
-export def "api delete-budget" [
+export def "delete-budget" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -408,7 +408,7 @@ export def "api delete-budget" [
 #
 # POST /
 # operationId: DeleteBudgetAction
-export def "api delete-budget-action" [
+export def "delete-budget-action" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -458,7 +458,7 @@ export def "api delete-budget-action" [
 #
 # POST /
 # operationId: DeleteNotification
-export def "api delete-notification" [
+export def "delete-notification" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -508,7 +508,7 @@ export def "api delete-notification" [
 #
 # POST /
 # operationId: DeleteSubscriber
-export def "api delete-subscriber" [
+export def "delete-subscriber" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -559,7 +559,7 @@ export def "api delete-subscriber" [
 #
 # POST /
 # operationId: DescribeBudget
-export def "api get-budget" [
+export def "describe-budget" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -608,7 +608,7 @@ export def "api get-budget" [
 #
 # POST /
 # operationId: DescribeBudgetAction
-export def "api get-budget-action" [
+export def "describe-budget-action" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -659,7 +659,7 @@ export def "api get-budget-action" [
 # POST /
 # operationId: DescribeBudgetActionHistories
 # --TimePeriod shape: {Start?: any, End?: any}
-export def "api get-budget-action-histories" [
+export def "describe-budget-action-histories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -715,7 +715,7 @@ export def "api get-budget-action-histories" [
 #
 # POST /
 # operationId: DescribeBudgetActionsForAccount
-export def "api get-budget-actions-for-account" [
+export def "describe-budget-actions-for-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -768,7 +768,7 @@ export def "api get-budget-actions-for-account" [
 #
 # POST /
 # operationId: DescribeBudgetActionsForBudget
-export def "api get-budget-actions-for-budget" [
+export def "describe-budget-actions-for-budget" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -822,7 +822,7 @@ export def "api get-budget-actions-for-budget" [
 #
 # POST /
 # operationId: DescribeBudgetNotificationsForAccount
-export def "api get-budget-notifications-for-account" [
+export def "describe-budget-notifications-for-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -875,7 +875,7 @@ export def "api get-budget-notifications-for-account" [
 #
 # POST /
 # operationId: DescribeBudgetPerformanceHistory
-export def "api get-budget-performance-history" [
+export def "describe-budget-performance-history" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -930,7 +930,7 @@ export def "api get-budget-performance-history" [
 #
 # POST /
 # operationId: DescribeBudgets
-export def "api get-budgets" [
+export def "describe-budgets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -983,7 +983,7 @@ export def "api get-budgets" [
 #
 # POST /
 # operationId: DescribeNotificationsForBudget
-export def "api get-notifications-for-budget" [
+export def "describe-notifications-for-budget" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1037,7 +1037,7 @@ export def "api get-notifications-for-budget" [
 #
 # POST /
 # operationId: DescribeSubscribersForNotification
-export def "api get-subscribers-for-notification" [
+export def "describe-subscribers-for-notification" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1092,7 +1092,7 @@ export def "api get-subscribers-for-notification" [
 #
 # POST /
 # operationId: ExecuteBudgetAction
-export def "api create-execute-budget-action" [
+export def "execute-budget-action" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1143,7 +1143,7 @@ export def "api create-execute-budget-action" [
 #
 # POST /
 # operationId: UpdateBudget
-export def "api update-budget" [
+export def "update-budget" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1195,7 +1195,7 @@ export def "api update-budget" [
 # --ActionThreshold shape: {ActionThresholdValue: float, ActionThresholdType: "PERCENTAGE"|"ABSOLUTE_VALUE"}
 # --Definition shape: {IamActionDefinition?: any, ScpActionDefinition?: any, SsmActionDefinition?: any}
 # --Subscribers item shape: {SubscriptionType: any, Address: any}
-export def "api update-budget-action" [
+export def "update-budget-action" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1251,7 +1251,7 @@ export def "api update-budget-action" [
 #
 # POST /
 # operationId: UpdateNotification
-export def "api update-notification" [
+export def "update-notification" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1302,7 +1302,7 @@ export def "api update-notification" [
 #
 # POST /
 # operationId: UpdateSubscriber
-export def "api update-subscriber" [
+export def "update-subscriber" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

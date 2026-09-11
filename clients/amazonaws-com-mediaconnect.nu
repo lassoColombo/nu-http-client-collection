@@ -122,7 +122,7 @@ def desired-state-completer [] { ["ACTIVE" "DELETED" "STANDBY"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "bridges-outputs create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "add-bridge-outputs" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -147,7 +147,7 @@ export def commands []: nothing -> table {
 # POST /v1/bridges/{bridgeArn}/outputs
 # operationId: AddBridgeOutputs
 # --outputs item shape: {NetworkOutput?: any}
-export def "bridges-outputs create" [
+export def "add-bridge-outputs" [
   bridge_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -197,7 +197,7 @@ export def "bridges-outputs create" [
 # POST /v1/bridges/{bridgeArn}/sources
 # operationId: AddBridgeSources
 # --sources item shape: {FlowSource?: any, NetworkSource?: any}
-export def "bridges-sources create" [
+export def "add-bridge-sources" [
   bridge_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -247,7 +247,7 @@ export def "bridges-sources create" [
 # POST /v1/flows/{flowArn}/mediaStreams
 # operationId: AddFlowMediaStreams
 # --mediaStreams item shape: {Attributes?: any, ClockRate?: any, Description?: any, MediaStreamId: any, MediaStreamName: any, MediaStreamType: any, VideoFormat?: any}
-export def "flows-media-streams create" [
+export def "add-flow-media-streams" [
   flow_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -297,7 +297,7 @@ export def "flows-media-streams create" [
 # POST /v1/flows/{flowArn}/outputs
 # operationId: AddFlowOutputs
 # --outputs item shape: {CidrAllowList?: any, Description?: any, Destination?: any, Encryption?: any, MaxLatency?: any, MediaStreamOutputConfigurations?: any, MinLatency?: any, Name?: any, Port?: any, Protocol: any, RemoteId?: any, SenderControlPort?: any, SmoothingLatency?: any, StreamId?: any, VpcInterfaceAttachment?: any}
-export def "flows-outputs create" [
+export def "add-flow-outputs" [
   flow_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -347,7 +347,7 @@ export def "flows-outputs create" [
 # POST /v1/flows/{flowArn}/source
 # operationId: AddFlowSources
 # --sources item shape: {Decryption?: any, Description?: any, EntitlementArn?: any, IngestPort?: any, MaxBitrate?: any, MaxLatency?: any, MaxSyncBuffer?: any, MediaStreamSourceConfigurations?: any, MinLatency?: any, Name?: any, Protocol?: any, SenderControlPort?: any, SenderIpAddress?: any, SourceListenerAddress?: any, SourceListenerPort?: any, StreamId?: any, VpcInterfaceName?: any, WhitelistCidr?: any, GatewayBridgeSource?: any}
-export def "flows-source create" [
+export def "add-flow-sources" [
   flow_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -397,7 +397,7 @@ export def "flows-source create" [
 # POST /v1/flows/{flowArn}/vpcInterfaces
 # operationId: AddFlowVpcInterfaces
 # --vpcInterfaces item shape: {Name: any, NetworkInterfaceType?: any, RoleArn: any, SecurityGroupIds: any, SubnetId: any}
-export def "flows-vpc-interfaces create" [
+export def "add-flow-vpc-interfaces" [
   flow_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -451,7 +451,7 @@ export def "flows-vpc-interfaces create" [
 # --outputs item shape: {NetworkOutput?: any}
 # --sourceFailoverConfig shape: {FailoverMode?: any, RecoveryWindow?: any, SourcePriority?: any, State?: any}
 # --sources item shape: {FlowSource?: any, NetworkSource?: any}
-export def "bridges create" [
+export def "create-bridge" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -504,7 +504,7 @@ export def "bridges create" [
 #
 # GET /v1/bridges
 # operationId: ListBridges
-export def "bridges list" [
+export def "list-bridges" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -561,7 +561,7 @@ export def "bridges list" [
 # --sources item shape: {Decryption?: any, Description?: any, EntitlementArn?: any, IngestPort?: any, MaxBitrate?: any, MaxLatency?: any, MaxSyncBuffer?: any, MediaStreamSourceConfigurations?: any, MinLatency?: any, Name?: any, Protocol?: any, SenderControlPort?: any, SenderIpAddress?: any, SourceListenerAddress?: any, SourceListenerPort?: any, StreamId?: any, VpcInterfaceName?: any, WhitelistCidr?: any, GatewayBridgeSource?: any}
 # --vpcInterfaces item shape: {Name: any, NetworkInterfaceType?: any, RoleArn: any, SecurityGroupIds: any, SubnetId: any}
 # --maintenance shape: {MaintenanceDay?: any, MaintenanceStartHour?: any}
-export def "flows create" [
+export def "create-flow" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -617,7 +617,7 @@ export def "flows create" [
 #
 # GET /v1/flows
 # operationId: ListFlows
-export def "flows list" [
+export def "list-flows" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -666,7 +666,7 @@ export def "flows list" [
 # POST /v1/gateways
 # operationId: CreateGateway
 # --networks item shape: {CidrBlock: any, Name: any}
-export def "gateways create" [
+export def "create-gateway" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -715,7 +715,7 @@ export def "gateways create" [
 #
 # GET /v1/gateways
 # operationId: ListGateways
-export def "gateways list" [
+export def "list-gateways" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -763,7 +763,7 @@ export def "gateways list" [
 #
 # DELETE /v1/bridges/{bridgeArn}
 # operationId: DeleteBridge
-export def "bridges delete" [
+export def "delete-bridge" [
   bridge_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -808,7 +808,7 @@ export def "bridges delete" [
 #
 # GET /v1/bridges/{bridgeArn}
 # operationId: DescribeBridge
-export def "bridges get" [
+export def "describe-bridge" [
   bridge_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -856,7 +856,7 @@ export def "bridges get" [
 # --egressGatewayBridge shape: {MaxBitrate?: any}
 # --ingressGatewayBridge shape: {MaxBitrate?: any, MaxOutputs?: any}
 # --sourceFailoverConfig shape: {FailoverMode?: any, RecoveryWindow?: any, SourcePriority?: any, State?: any}
-export def "bridges update" [
+export def "update-bridge" [
   bridge_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -907,7 +907,7 @@ export def "bridges update" [
 #
 # DELETE /v1/flows/{flowArn}
 # operationId: DeleteFlow
-export def "flows delete" [
+export def "delete-flow" [
   flow_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -952,7 +952,7 @@ export def "flows delete" [
 #
 # GET /v1/flows/{flowArn}
 # operationId: DescribeFlow
-export def "flows get" [
+export def "describe-flow" [
   flow_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -999,7 +999,7 @@ export def "flows get" [
 # operationId: UpdateFlow
 # --sourceFailoverConfig shape: {FailoverMode?: any, RecoveryWindow?: any, SourcePriority?: any, State?: any}
 # --maintenance shape: {MaintenanceDay?: any, MaintenanceScheduledDate?: any, MaintenanceStartHour?: any}
-export def "flows update" [
+export def "update-flow" [
   flow_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1049,7 +1049,7 @@ export def "flows update" [
 #
 # DELETE /v1/gateways/{gatewayArn}
 # operationId: DeleteGateway
-export def "gateways delete" [
+export def "delete-gateway" [
   gateway_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1094,7 +1094,7 @@ export def "gateways delete" [
 #
 # GET /v1/gateways/{gatewayArn}
 # operationId: DescribeGateway
-export def "gateways get" [
+export def "describe-gateway" [
   gateway_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1139,7 +1139,7 @@ export def "gateways get" [
 #
 # DELETE /v1/gateway-instances/{gatewayInstanceArn}
 # operationId: DeregisterGatewayInstance
-export def "gateway-instances delete-deregister" [
+export def "deregister-gateway-instance" [
   gateway_instance_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1186,7 +1186,7 @@ export def "gateway-instances delete-deregister" [
 #
 # GET /v1/gateway-instances/{gatewayInstanceArn}
 # operationId: DescribeGatewayInstance
-export def "gateway-instances get" [
+export def "describe-gateway-instance" [
   gateway_instance_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1231,7 +1231,7 @@ export def "gateway-instances get" [
 #
 # PUT /v1/gateway-instances/{gatewayInstanceArn}
 # operationId: UpdateGatewayInstance
-export def "gateway-instances update" [
+export def "update-gateway-instance" [
   gateway_instance_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1280,7 +1280,7 @@ export def "gateway-instances update" [
 #
 # GET /v1/offerings/{offeringArn}
 # operationId: DescribeOffering
-export def "offerings get" [
+export def "describe-offering" [
   offering_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1325,7 +1325,7 @@ export def "offerings get" [
 #
 # POST /v1/offerings/{offeringArn}
 # operationId: PurchaseOffering
-export def "offerings create-purchase" [
+export def "purchase-offering" [
   offering_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1375,7 +1375,7 @@ export def "offerings create-purchase" [
 #
 # GET /v1/reservations/{reservationArn}
 # operationId: DescribeReservation
-export def "reservations get" [
+export def "describe-reservation" [
   reservation_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1421,7 +1421,7 @@ export def "reservations get" [
 # POST /v1/flows/{flowArn}/entitlements
 # operationId: GrantFlowEntitlements
 # --entitlements item shape: {DataTransferSubscriberFeePercent?: any, Description?: any, Encryption?: any, EntitlementStatus?: any, Name?: any, Subscribers: any}
-export def "flows-entitlements create-grant" [
+export def "grant-flow-entitlements" [
   flow_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1470,7 +1470,7 @@ export def "flows-entitlements create-grant" [
 #
 # GET /v1/entitlements
 # operationId: ListEntitlements
-export def "entitlements list" [
+export def "list-entitlements" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1518,7 +1518,7 @@ export def "entitlements list" [
 #
 # GET /v1/gateway-instances
 # operationId: ListGatewayInstances
-export def "gateway-instances list" [
+export def "list-gateway-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1567,7 +1567,7 @@ export def "gateway-instances list" [
 #
 # GET /v1/offerings
 # operationId: ListOfferings
-export def "offerings list" [
+export def "list-offerings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1615,7 +1615,7 @@ export def "offerings list" [
 #
 # GET /v1/reservations
 # operationId: ListReservations
-export def "reservations list" [
+export def "list-reservations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1663,7 +1663,7 @@ export def "reservations list" [
 #
 # GET /tags/{resourceArn}
 # operationId: ListTagsForResource
-export def "tags list-for-resource" [
+export def "list-tags-for-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1708,7 +1708,7 @@ export def "tags list-for-resource" [
 #
 # POST /tags/{resourceArn}
 # operationId: TagResource
-export def "tags tag-resource" [
+export def "tag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1757,7 +1757,7 @@ export def "tags tag-resource" [
 #
 # DELETE /v1/bridges/{bridgeArn}/outputs/{outputName}
 # operationId: RemoveBridgeOutput
-export def "bridges-outputs delete" [
+export def "remove-bridge-output" [
   bridge_arn: string
   output_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1805,7 +1805,7 @@ export def "bridges-outputs delete" [
 # PUT /v1/bridges/{bridgeArn}/outputs/{outputName}
 # operationId: UpdateBridgeOutput
 # --networkOutput shape: {IpAddress?: any, NetworkName?: any, Port?: any, Protocol?: any, Ttl?: any}
-export def "bridges-outputs update" [
+export def "update-bridge-output" [
   bridge_arn: string
   output_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1856,7 +1856,7 @@ export def "bridges-outputs update" [
 #
 # DELETE /v1/bridges/{bridgeArn}/sources/{sourceName}
 # operationId: RemoveBridgeSource
-export def "bridges-sources delete" [
+export def "remove-bridge-source" [
   bridge_arn: string
   source_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1905,7 +1905,7 @@ export def "bridges-sources delete" [
 # operationId: UpdateBridgeSource
 # --flowSource shape: {FlowArn?: any, FlowVpcInterfaceAttachment?: any}
 # --networkSource shape: {MulticastIp?: any, NetworkName?: any, Port?: any, Protocol?: any}
-export def "bridges-sources update" [
+export def "update-bridge-source" [
   bridge_arn: string
   source_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1957,7 +1957,7 @@ export def "bridges-sources update" [
 #
 # DELETE /v1/flows/{flowArn}/mediaStreams/{mediaStreamName}
 # operationId: RemoveFlowMediaStream
-export def "flows-media-streams delete" [
+export def "remove-flow-media-stream" [
   flow_arn: string
   media_stream_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2005,7 +2005,7 @@ export def "flows-media-streams delete" [
 # PUT /v1/flows/{flowArn}/mediaStreams/{mediaStreamName}
 # operationId: UpdateFlowMediaStream
 # --attributes shape: {Fmtp?: any, Lang?: any}
-export def "flows-media-streams update" [
+export def "update-flow-media-stream" [
   flow_arn: string
   media_stream_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2060,7 +2060,7 @@ export def "flows-media-streams update" [
 #
 # DELETE /v1/flows/{flowArn}/outputs/{outputArn}
 # operationId: RemoveFlowOutput
-export def "flows-outputs delete" [
+export def "remove-flow-output" [
   flow_arn: string
   output_arn: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2110,7 +2110,7 @@ export def "flows-outputs delete" [
 # --encryption shape: {Algorithm?: any, ConstantInitializationVector?: any, DeviceId?: any, KeyType?: any, Region?: any, ResourceId?: any, RoleArn?: any, SecretArn?: any, Url?: any}
 # --mediaStreamOutputConfigurations item shape: {DestinationConfigurations?: any, EncodingName: any, EncodingParameters?: any, MediaStreamName: any}
 # --vpcInterfaceAttachment shape: {VpcInterfaceName?: any}
-export def "flows-outputs update" [
+export def "update-flow-output" [
   flow_arn: string
   output_arn: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2175,7 +2175,7 @@ export def "flows-outputs update" [
 #
 # DELETE /v1/flows/{flowArn}/source/{sourceArn}
 # operationId: RemoveFlowSource
-export def "flows-source delete" [
+export def "remove-flow-source" [
   flow_arn: string
   source_arn: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2225,7 +2225,7 @@ export def "flows-source delete" [
 # --decryption shape: {Algorithm?: any, ConstantInitializationVector?: any, DeviceId?: any, KeyType?: any, Region?: any, ResourceId?: any, RoleArn?: any, SecretArn?: any, Url?: any}
 # --mediaStreamSourceConfigurations item shape: {EncodingName: any, InputConfigurations?: any, MediaStreamName: any}
 # --gatewayBridgeSource shape: {BridgeArn?: any, VpcInterfaceAttachment?: any}
-export def "flows-source update" [
+export def "update-flow-source" [
   flow_arn: string
   source_arn: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2293,7 +2293,7 @@ export def "flows-source update" [
 #
 # DELETE /v1/flows/{flowArn}/vpcInterfaces/{vpcInterfaceName}
 # operationId: RemoveFlowVpcInterface
-export def "flows-vpc-interfaces delete" [
+export def "remove-flow-vpc-interface" [
   flow_arn: string
   vpc_interface_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2340,7 +2340,7 @@ export def "flows-vpc-interfaces delete" [
 #
 # DELETE /v1/flows/{flowArn}/entitlements/{entitlementArn}
 # operationId: RevokeFlowEntitlement
-export def "flows-entitlements delete" [
+export def "revoke-flow-entitlement" [
   flow_arn: string
   entitlement_arn: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2388,7 +2388,7 @@ export def "flows-entitlements delete" [
 # PUT /v1/flows/{flowArn}/entitlements/{entitlementArn}
 # operationId: UpdateFlowEntitlement
 # --encryption shape: {Algorithm?: any, ConstantInitializationVector?: any, DeviceId?: any, KeyType?: any, Region?: any, ResourceId?: any, RoleArn?: any, SecretArn?: any, Url?: any}
-export def "flows-entitlements update" [
+export def "update-flow-entitlement" [
   flow_arn: string
   entitlement_arn: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2442,7 +2442,7 @@ export def "flows-entitlements update" [
 #
 # POST /v1/flows/start/{flowArn}
 # operationId: StartFlow
-export def "flows-start start" [
+export def "start-flow" [
   flow_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2487,7 +2487,7 @@ export def "flows-start start" [
 #
 # POST /v1/flows/stop/{flowArn}
 # operationId: StopFlow
-export def "flows-stop stop" [
+export def "stop-flow" [
   flow_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2532,7 +2532,7 @@ export def "flows-stop stop" [
 #
 # DELETE /tags/{resourceArn}
 # operationId: UntagResource
-export def "tags untag-resource" [
+export def "untag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2579,7 +2579,7 @@ export def "tags untag-resource" [
 #
 # PUT /v1/bridges/{bridgeArn}/state
 # operationId: UpdateBridgeState
-export def "bridges-state update" [
+export def "update-bridge-state" [
   bridge_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

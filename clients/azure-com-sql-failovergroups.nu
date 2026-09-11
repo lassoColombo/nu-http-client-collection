@@ -122,7 +122,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-sql-servers-failover-groups list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "failover-groups-list-by-server" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/failoverGroups
 # operationId: FailoverGroups_ListByServer
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-failover-groups list" [
+export def "failover-groups-list-by-server" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -188,7 +188,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-failov
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/failoverGroups/{failoverGroupName}
 # operationId: FailoverGroups_Delete
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-failover-groups delete" [
+export def "failover-groups-delete" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -232,7 +232,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-failov
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/failoverGroups/{failoverGroupName}
 # operationId: FailoverGroups_Get
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-failover-groups get" [
+export def "failover-groups-get" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -277,7 +277,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-failov
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/failoverGroups/{failoverGroupName}
 # operationId: FailoverGroups_Update
 # --properties shape: {databases?: list<string>, readOnlyEndpoint?: record, readWriteEndpoint?: record}
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-failover-groups update" [
+export def "failover-groups-update" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -327,7 +327,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-failov
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/failoverGroups/{failoverGroupName}
 # operationId: FailoverGroups_CreateOrUpdate
 # --properties shape: {databases?: list<string>, partnerServers: list, readOnlyEndpoint?: record, readWriteEndpoint: record}
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-failover-groups create-or-update" [
+export def "failover-groups-create-or-update" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -376,7 +376,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-failov
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/failoverGroups/{failoverGroupName}/failover
 # operationId: FailoverGroups_Failover
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-failover-groups-failover create" [
+export def "failover-groups-failover" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -420,7 +420,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-failov
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/failoverGroups/{failoverGroupName}/forceFailoverAllowDataLoss
 # operationId: FailoverGroups_ForceFailoverAllowDataLoss
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-failover-groups-force-failover-allow-data-loss create" [
+export def "failover-groups-force-failover-allow-data-loss" [
   subscription_id: string
   resource_group_name: string
   server_name: string

@@ -103,7 +103,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "activatestatementcreditoffer create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-activatestatementcreditoffer" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -126,7 +126,7 @@ export def commands []: nothing -> table {
 # Make Statement Credit Offer Available Redeemable
 #
 # POST /activatestatementcreditoffer
-export def "activatestatementcreditoffer create" [
+export def "post-activatestatementcreditoffer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -163,7 +163,7 @@ export def "activatestatementcreditoffer create" [
 # Returns Matched Offers
 #
 # GET /matchedoffers
-export def "matchedoffers get" [
+export def "get-matchedoffers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -205,7 +205,7 @@ export def "matchedoffers get" [
 # Returns Information on an Offer
 #
 # GET /offerdetails
-export def "offerdetails get" [
+export def "get-offerdetails" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -242,7 +242,7 @@ export def "offerdetails get" [
 # Returns Redeemed Offers
 #
 # GET /redeemedoffers
-export def "redeemedoffers get" [
+export def "get-redeemedoffers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -281,7 +281,7 @@ export def "redeemedoffers get" [
 # Returns Information About Redeemable Postpaid Credit Offer
 #
 # GET /statementcreditactivationdetail
-export def "statementcreditactivationdetail get" [
+export def "get-statementcreditactivationdetail" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -318,7 +318,7 @@ export def "statementcreditactivationdetail get" [
 # Provide User Feedback on Offer
 #
 # POST /userfeedback
-export def "userfeedback create" [
+export def "post-userfeedback" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -356,7 +356,7 @@ export def "userfeedback create" [
 # Returns Savings for the User
 #
 # GET /usersavings
-export def "usersavings get" [
+export def "get-usersavings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -392,7 +392,7 @@ export def "usersavings get" [
 # Returns User Session Token
 #
 # GET /usertoken
-export def "usertoken get" [
+export def "get-usertoken" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -122,7 +122,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-container-registry-registries-list-build-source-upload-url get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "registries-get-build-source-upload-url" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ContainerRegistry/registries/{registryName}/listBuildSourceUploadUrl
 # operationId: Registries_GetBuildSourceUploadUrl
-export def "subscriptions-resource-groups-providers-microsoft-container-registry-registries-list-build-source-upload-url get" [
+export def "registries-get-build-source-upload-url" [
   subscription_id: string
   resource_group_name: string
   registry_name: string
@@ -188,7 +188,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-registry
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ContainerRegistry/registries/{registryName}/runs
 # operationId: Runs_List
-export def "subscriptions-resource-groups-providers-microsoft-container-registry-registries-runs list" [
+export def "runs-list" [
   subscription_id: string
   resource_group_name: string
   registry_name: string
@@ -232,7 +232,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-registry
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ContainerRegistry/registries/{registryName}/runs/{runId}
 # operationId: Runs_Get
-export def "subscriptions-resource-groups-providers-microsoft-container-registry-registries-runs get" [
+export def "runs-get" [
   subscription_id: string
   resource_group_name: string
   registry_name: string
@@ -276,7 +276,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-registry
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ContainerRegistry/registries/{registryName}/runs/{runId}
 # operationId: Runs_Update
-export def "subscriptions-resource-groups-providers-microsoft-container-registry-registries-runs update" [
+export def "runs-update" [
   subscription_id: string
   resource_group_name: string
   registry_name: string
@@ -324,7 +324,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-registry
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ContainerRegistry/registries/{registryName}/runs/{runId}/cancel
 # operationId: Runs_Cancel
-export def "subscriptions-resource-groups-providers-microsoft-container-registry-registries-runs-cancel cancel" [
+export def "runs-cancel" [
   subscription_id: string
   resource_group_name: string
   registry_name: string
@@ -368,7 +368,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-registry
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ContainerRegistry/registries/{registryName}/runs/{runId}/listLogSasUrl
 # operationId: Runs_GetLogSasUrl
-export def "subscriptions-resource-groups-providers-microsoft-container-registry-registries-runs-list-log-sas-url get" [
+export def "runs-get-log-sas-url" [
   subscription_id: string
   resource_group_name: string
   registry_name: string
@@ -413,7 +413,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-registry
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ContainerRegistry/registries/{registryName}/scheduleRun
 # Discriminator (request): type
 # operationId: Registries_ScheduleRun
-export def "subscriptions-resource-groups-providers-microsoft-container-registry-registries-schedule-run create" [
+export def "registries-schedule-run" [
   subscription_id: string
   resource_group_name: string
   registry_name: string
@@ -460,7 +460,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-registry
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ContainerRegistry/registries/{registryName}/taskRuns
 # operationId: TaskRuns_List
-export def "subscriptions-resource-groups-providers-microsoft-container-registry-registries-task-runs list" [
+export def "task-runs-list" [
   subscription_id: string
   resource_group_name: string
   registry_name: string
@@ -502,7 +502,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-registry
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ContainerRegistry/registries/{registryName}/taskRuns/{taskRunName}
 # operationId: TaskRuns_Delete
-export def "subscriptions-resource-groups-providers-microsoft-container-registry-registries-task-runs delete" [
+export def "task-runs-delete" [
   subscription_id: string
   resource_group_name: string
   registry_name: string
@@ -546,7 +546,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-registry
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ContainerRegistry/registries/{registryName}/taskRuns/{taskRunName}
 # operationId: TaskRuns_Get
-export def "subscriptions-resource-groups-providers-microsoft-container-registry-registries-task-runs get" [
+export def "task-runs-get" [
   subscription_id: string
   resource_group_name: string
   registry_name: string
@@ -592,7 +592,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-registry
 # operationId: TaskRuns_Update
 # --identity shape: {principalId?: string, tenantId?: string, type?: "SystemAssigned"|"UserAssigned"|"SystemAssigned, UserAssigned"|"None", userAssignedIdentities?: record}
 # --properties shape: {forceUpdateTag?: string, runRequest?: record}
-export def "subscriptions-resource-groups-providers-microsoft-container-registry-registries-task-runs update" [
+export def "task-runs-update" [
   subscription_id: string
   resource_group_name: string
   registry_name: string
@@ -644,7 +644,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-registry
 # operationId: TaskRuns_Create
 # --identity shape: {principalId?: string, tenantId?: string, type?: "SystemAssigned"|"UserAssigned"|"SystemAssigned, UserAssigned"|"None", userAssignedIdentities?: record}
 # --properties shape: {forceUpdateTag?: string, runRequest?: record, runResult?: record}
-export def "subscriptions-resource-groups-providers-microsoft-container-registry-registries-task-runs create" [
+export def "task-runs-create" [
   subscription_id: string
   resource_group_name: string
   registry_name: string
@@ -695,7 +695,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-registry
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ContainerRegistry/registries/{registryName}/tasks
 # operationId: Tasks_List
-export def "subscriptions-resource-groups-providers-microsoft-container-registry-registries-tasks list" [
+export def "tasks-list" [
   subscription_id: string
   resource_group_name: string
   registry_name: string
@@ -737,7 +737,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-registry
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ContainerRegistry/registries/{registryName}/tasks/{taskName}
 # operationId: Tasks_Delete
-export def "subscriptions-resource-groups-providers-microsoft-container-registry-registries-tasks delete" [
+export def "tasks-delete" [
   subscription_id: string
   resource_group_name: string
   registry_name: string
@@ -781,7 +781,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-registry
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ContainerRegistry/registries/{registryName}/tasks/{taskName}
 # operationId: Tasks_Get
-export def "subscriptions-resource-groups-providers-microsoft-container-registry-registries-tasks get" [
+export def "tasks-get" [
   subscription_id: string
   resource_group_name: string
   registry_name: string
@@ -827,7 +827,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-registry
 # operationId: Tasks_Update
 # --identity shape: {principalId?: string, tenantId?: string, type?: "SystemAssigned"|"UserAssigned"|"SystemAssigned, UserAssigned"|"None", userAssignedIdentities?: record}
 # --properties shape: {agentConfiguration?: record, credentials?: record, platform?: record, status?: "Disabled"|"Enabled", step?: record, timeout?: int, trigger?: record}
-export def "subscriptions-resource-groups-providers-microsoft-container-registry-registries-tasks update" [
+export def "tasks-update" [
   subscription_id: string
   resource_group_name: string
   registry_name: string
@@ -879,7 +879,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-registry
 # operationId: Tasks_Create
 # --identity shape: {principalId?: string, tenantId?: string, type?: "SystemAssigned"|"UserAssigned"|"SystemAssigned, UserAssigned"|"None", userAssignedIdentities?: record}
 # --properties shape: {agentConfiguration?: record, credentials?: record, platform: record, status?: "Disabled"|"Enabled", step: record, timeout?: int, trigger?: record}
-export def "subscriptions-resource-groups-providers-microsoft-container-registry-registries-tasks create" [
+export def "tasks-create" [
   subscription_id: string
   resource_group_name: string
   registry_name: string
@@ -930,7 +930,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-registry
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ContainerRegistry/registries/{registryName}/tasks/{taskName}/listDetails
 # operationId: Tasks_GetDetails
-export def "subscriptions-resource-groups-providers-microsoft-container-registry-registries-tasks-list-details get" [
+export def "tasks-get-details" [
   subscription_id: string
   resource_group_name: string
   registry_name: string

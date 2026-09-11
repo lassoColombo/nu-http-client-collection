@@ -146,7 +146,7 @@ def x-amz-target-completer-44 [] { ["CodeBuild_20161006.UpdateWebhook"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api delete-batch-builds" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "batch-delete-builds" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -170,7 +170,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: BatchDeleteBuilds
-export def "api delete-batch-builds" [
+export def "batch-delete-builds" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -218,7 +218,7 @@ export def "api delete-batch-builds" [
 #
 # POST /
 # operationId: BatchGetBuildBatches
-export def "api get-batch-build-batches" [
+export def "batch-get-build-batches" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -266,7 +266,7 @@ export def "api get-batch-build-batches" [
 #
 # POST /
 # operationId: BatchGetBuilds
-export def "api get-batch-builds" [
+export def "batch-get-builds" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -314,7 +314,7 @@ export def "api get-batch-builds" [
 #
 # POST /
 # operationId: BatchGetProjects
-export def "api get-batch-projects" [
+export def "batch-get-projects" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -362,7 +362,7 @@ export def "api get-batch-projects" [
 #
 # POST /
 # operationId: BatchGetReportGroups
-export def "api get-batch-report-groups" [
+export def "batch-get-report-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -410,7 +410,7 @@ export def "api get-batch-report-groups" [
 #
 # POST /
 # operationId: BatchGetReports
-export def "api get-batch-reports" [
+export def "batch-get-reports" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -458,7 +458,7 @@ export def "api get-batch-reports" [
 #
 # POST /
 # operationId: CreateProject
-export def "api create-project" [
+export def "create-project" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -526,7 +526,7 @@ export def "api create-project" [
 #
 # POST /
 # operationId: CreateReportGroup
-export def "api create-report-group" [
+export def "create-report-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -577,7 +577,7 @@ export def "api create-report-group" [
 #
 # POST /
 # operationId: CreateWebhook
-export def "api create-webhook" [
+export def "create-webhook" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -628,7 +628,7 @@ export def "api create-webhook" [
 #
 # POST /
 # operationId: DeleteBuildBatch
-export def "api delete-build-batch" [
+export def "delete-build-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -676,7 +676,7 @@ export def "api delete-build-batch" [
 #
 # POST /
 # operationId: DeleteProject
-export def "api delete-project" [
+export def "delete-project" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -724,7 +724,7 @@ export def "api delete-project" [
 #
 # POST /
 # operationId: DeleteReport
-export def "api delete-report" [
+export def "delete-report" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -772,7 +772,7 @@ export def "api delete-report" [
 #
 # POST /
 # operationId: DeleteReportGroup
-export def "api delete-report-group" [
+export def "delete-report-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -821,7 +821,7 @@ export def "api delete-report-group" [
 #
 # POST /
 # operationId: DeleteResourcePolicy
-export def "api delete-resource-policy" [
+export def "delete-resource-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -869,7 +869,7 @@ export def "api delete-resource-policy" [
 #
 # POST /
 # operationId: DeleteSourceCredentials
-export def "api delete-source-credentials" [
+export def "delete-source-credentials" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -917,7 +917,7 @@ export def "api delete-source-credentials" [
 #
 # POST /
 # operationId: DeleteWebhook
-export def "api delete-webhook" [
+export def "delete-webhook" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -965,7 +965,7 @@ export def "api delete-webhook" [
 #
 # POST /
 # operationId: DescribeCodeCoverages
-export def "api get-code-coverages" [
+export def "describe-code-coverages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1022,7 +1022,7 @@ export def "api get-code-coverages" [
 #
 # POST /
 # operationId: DescribeTestCases
-export def "api get-test-cases" [
+export def "describe-test-cases" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1076,7 +1076,7 @@ export def "api get-test-cases" [
 #
 # POST /
 # operationId: GetReportGroupTrend
-export def "api get-report-group-trend" [
+export def "get-report-group-trend" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1126,7 +1126,7 @@ export def "api get-report-group-trend" [
 #
 # POST /
 # operationId: GetResourcePolicy
-export def "api get-resource-policy" [
+export def "get-resource-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1174,7 +1174,7 @@ export def "api get-resource-policy" [
 #
 # POST /
 # operationId: ImportSourceCredentials
-export def "api import-source-credentials" [
+export def "import-source-credentials" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1226,7 +1226,7 @@ export def "api import-source-credentials" [
 #
 # POST /
 # operationId: InvalidateProjectCache
-export def "api create-invalidate-project-cache" [
+export def "invalidate-project-cache" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1274,7 +1274,7 @@ export def "api create-invalidate-project-cache" [
 #
 # POST /
 # operationId: ListBuildBatches
-export def "api list-build-batches" [
+export def "list-build-batches" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1328,7 +1328,7 @@ export def "api list-build-batches" [
 #
 # POST /
 # operationId: ListBuildBatchesForProject
-export def "api list-build-batches-for-project" [
+export def "list-build-batches-for-project" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1383,7 +1383,7 @@ export def "api list-build-batches-for-project" [
 #
 # POST /
 # operationId: ListBuilds
-export def "api list-builds" [
+export def "list-builds" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1434,7 +1434,7 @@ export def "api list-builds" [
 #
 # POST /
 # operationId: ListBuildsForProject
-export def "api list-builds-for-project" [
+export def "list-builds-for-project" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1486,7 +1486,7 @@ export def "api list-builds-for-project" [
 #
 # POST /
 # operationId: ListCuratedEnvironmentImages
-export def "api list-curated-environment-images" [
+export def "list-curated-environment-images" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1534,7 +1534,7 @@ export def "api list-curated-environment-images" [
 #
 # POST /
 # operationId: ListProjects
-export def "api list-projects" [
+export def "list-projects" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1586,7 +1586,7 @@ export def "api list-projects" [
 #
 # POST /
 # operationId: ListReportGroups
-export def "api list-report-groups" [
+export def "list-report-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1640,7 +1640,7 @@ export def "api list-report-groups" [
 #
 # POST /
 # operationId: ListReports
-export def "api list-reports" [
+export def "list-reports" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1694,7 +1694,7 @@ export def "api list-reports" [
 #
 # POST /
 # operationId: ListReportsForReportGroup
-export def "api list-reports-for-report-group" [
+export def "list-reports-for-report-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1749,7 +1749,7 @@ export def "api list-reports-for-report-group" [
 #
 # POST /
 # operationId: ListSharedProjects
-export def "api list-shared-projects" [
+export def "list-shared-projects" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1803,7 +1803,7 @@ export def "api list-shared-projects" [
 #
 # POST /
 # operationId: ListSharedReportGroups
-export def "api list-shared-report-groups" [
+export def "list-shared-report-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1857,7 +1857,7 @@ export def "api list-shared-report-groups" [
 #
 # POST /
 # operationId: ListSourceCredentials
-export def "api list-source-credentials" [
+export def "list-source-credentials" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1905,7 +1905,7 @@ export def "api list-source-credentials" [
 #
 # POST /
 # operationId: PutResourcePolicy
-export def "api update-resource-policy" [
+export def "put-resource-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1954,7 +1954,7 @@ export def "api update-resource-policy" [
 #
 # POST /
 # operationId: RetryBuild
-export def "api build-retry" [
+export def "retry-build" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2002,7 +2002,7 @@ export def "api build-retry" [
 #
 # POST /
 # operationId: RetryBuildBatch
-export def "api build-retry-batch" [
+export def "retry-build-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2051,7 +2051,7 @@ export def "api build-retry-batch" [
 #
 # POST /
 # operationId: StartBuild
-export def "api start-build" [
+export def "start-build" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2128,7 +2128,7 @@ export def "api start-build" [
 #
 # POST /
 # operationId: StartBuildBatch
-export def "api start-build-batch" [
+export def "start-build-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2205,7 +2205,7 @@ export def "api start-build-batch" [
 #
 # POST /
 # operationId: StopBuild
-export def "api stop-build" [
+export def "stop-build" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2253,7 +2253,7 @@ export def "api stop-build" [
 #
 # POST /
 # operationId: StopBuildBatch
-export def "api stop-build-batch" [
+export def "stop-build-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2302,7 +2302,7 @@ export def "api stop-build-batch" [
 # POST /
 # operationId: UpdateProject
 # --buildBatchConfig shape: {serviceRole?: any, combineArtifacts?: any, restrictions?: any, timeoutInMins?: any, batchReportMode?: any}
-export def "api update-project" [
+export def "update-project" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2370,7 +2370,7 @@ export def "api update-project" [
 #
 # POST /
 # operationId: UpdateProjectVisibility
-export def "api update-project-visibility" [
+export def "update-project-visibility" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2420,7 +2420,7 @@ export def "api update-project-visibility" [
 #
 # POST /
 # operationId: UpdateReportGroup
-export def "api update-report-group" [
+export def "update-report-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2470,7 +2470,7 @@ export def "api update-report-group" [
 #
 # POST /
 # operationId: UpdateWebhook
-export def "api update-webhook" [
+export def "update-webhook" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -122,7 +122,7 @@ def operation-completer-1 [] { ["Untag"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "2020-05-31-distribution-associate-alias update-alias2020-by-target-distribution-id" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associate-alias2020-05-31" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # PUT /2020-05-31/distribution/{TargetDistributionId}/associate-alias
 # operationId: AssociateAlias2020_05_31
-export def "2020-05-31-distribution-associate-alias update-alias2020-by-target-distribution-id" [
+export def "associate-alias2020-05-31" [
   target_distribution_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -193,7 +193,7 @@ export def "2020-05-31-distribution-associate-alias update-alias2020-by-target-d
 #
 # POST /2020-05-31/distribution/{PrimaryDistributionId}/copy
 # operationId: CopyDistribution2020_05_31
-export def "2020-05-31-distribution-copy copy-distribution2020-by-primary-distribution-id" [
+export def "copy-distribution2020-05-31" [
   primary_distribution_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -244,7 +244,7 @@ export def "2020-05-31-distribution-copy copy-distribution2020-by-primary-distri
 #
 # POST /2020-05-31/cache-policy
 # operationId: CreateCachePolicy2020_05_31
-export def "2020-05-31-cache-policy create-policy2020" [
+export def "create-cache-policy2020-05-31" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -291,7 +291,7 @@ export def "2020-05-31-cache-policy create-policy2020" [
 #
 # GET /2020-05-31/cache-policy
 # operationId: ListCachePolicies2020_05_31
-export def "2020-05-31-cache-policy list-policies2020" [
+export def "list-cache-policies2020-05-31" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -338,7 +338,7 @@ export def "2020-05-31-cache-policy list-policies2020" [
 #
 # POST /2020-05-31/origin-access-identity/cloudfront
 # operationId: CreateCloudFrontOriginAccessIdentity2020_05_31
-export def "2020-05-31-origin-access-identity-cloudfront create-cloud-front-identity2020" [
+export def "create-cloud-front-origin-access-identity2020-05-31" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -385,7 +385,7 @@ export def "2020-05-31-origin-access-identity-cloudfront create-cloud-front-iden
 #
 # GET /2020-05-31/origin-access-identity/cloudfront
 # operationId: ListCloudFrontOriginAccessIdentities2020_05_31
-export def "2020-05-31-origin-access-identity-cloudfront list-cloud-front-identities2020" [
+export def "list-cloud-front-origin-access-identities2020-05-31" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -431,7 +431,7 @@ export def "2020-05-31-origin-access-identity-cloudfront list-cloud-front-identi
 #
 # POST /2020-05-31/continuous-deployment-policy
 # operationId: CreateContinuousDeploymentPolicy2020_05_31
-export def "2020-05-31-continuous-deployment-policy create-policy2020" [
+export def "create-continuous-deployment-policy2020-05-31" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -478,7 +478,7 @@ export def "2020-05-31-continuous-deployment-policy create-policy2020" [
 #
 # GET /2020-05-31/continuous-deployment-policy
 # operationId: ListContinuousDeploymentPolicies2020_05_31
-export def "2020-05-31-continuous-deployment-policy list-policies2020" [
+export def "list-continuous-deployment-policies2020-05-31" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -524,7 +524,7 @@ export def "2020-05-31-continuous-deployment-policy list-policies2020" [
 #
 # POST /2020-05-31/distribution
 # operationId: CreateDistribution2020_05_31
-export def "2020-05-31-distribution create-distribution2020" [
+export def "create-distribution2020-05-31" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -571,7 +571,7 @@ export def "2020-05-31-distribution create-distribution2020" [
 #
 # GET /2020-05-31/distribution
 # operationId: ListDistributions2020_05_31
-export def "2020-05-31-distribution list-distributions2020" [
+export def "list-distributions2020-05-31" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -617,7 +617,7 @@ export def "2020-05-31-distribution list-distributions2020" [
 #
 # POST /2020-05-31/distribution
 # operationId: CreateDistributionWithTags2020_05_31
-export def "2020-05-31-distribution create-with-tags2020" [
+export def "create-distribution-with-tags2020-05-31" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -666,7 +666,7 @@ export def "2020-05-31-distribution create-with-tags2020" [
 #
 # POST /2020-05-31/field-level-encryption
 # operationId: CreateFieldLevelEncryptionConfig2020_05_31
-export def "2020-05-31-field-level-encryption create-config2020" [
+export def "create-field-level-encryption-config2020-05-31" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -713,7 +713,7 @@ export def "2020-05-31-field-level-encryption create-config2020" [
 #
 # GET /2020-05-31/field-level-encryption
 # operationId: ListFieldLevelEncryptionConfigs2020_05_31
-export def "2020-05-31-field-level-encryption list-configs2020" [
+export def "list-field-level-encryption-configs2020-05-31" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -759,7 +759,7 @@ export def "2020-05-31-field-level-encryption list-configs2020" [
 #
 # POST /2020-05-31/field-level-encryption-profile
 # operationId: CreateFieldLevelEncryptionProfile2020_05_31
-export def "2020-05-31-field-level-encryption-profile create-profile2020" [
+export def "create-field-level-encryption-profile2020-05-31" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -806,7 +806,7 @@ export def "2020-05-31-field-level-encryption-profile create-profile2020" [
 #
 # GET /2020-05-31/field-level-encryption-profile
 # operationId: ListFieldLevelEncryptionProfiles2020_05_31
-export def "2020-05-31-field-level-encryption-profile list-profiles2020" [
+export def "list-field-level-encryption-profiles2020-05-31" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -852,7 +852,7 @@ export def "2020-05-31-field-level-encryption-profile list-profiles2020" [
 #
 # POST /2020-05-31/function
 # operationId: CreateFunction2020_05_31
-export def "2020-05-31-function create-function2020" [
+export def "create-function2020-05-31" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -899,7 +899,7 @@ export def "2020-05-31-function create-function2020" [
 #
 # GET /2020-05-31/function
 # operationId: ListFunctions2020_05_31
-export def "2020-05-31-function list-functions2020" [
+export def "list-functions2020-05-31" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -946,7 +946,7 @@ export def "2020-05-31-function list-functions2020" [
 #
 # POST /2020-05-31/distribution/{DistributionId}/invalidation
 # operationId: CreateInvalidation2020_05_31
-export def "2020-05-31-distribution-invalidation create-invalidation2020-by-distribution-id" [
+export def "create-invalidation2020-05-31" [
   distribution_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -995,7 +995,7 @@ export def "2020-05-31-distribution-invalidation create-invalidation2020-by-dist
 #
 # GET /2020-05-31/distribution/{DistributionId}/invalidation
 # operationId: ListInvalidations2020_05_31
-export def "2020-05-31-distribution-invalidation list-invalidations2020-by-distribution-id" [
+export def "list-invalidations2020-05-31" [
   distribution_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1043,7 +1043,7 @@ export def "2020-05-31-distribution-invalidation list-invalidations2020-by-distr
 #
 # POST /2020-05-31/key-group
 # operationId: CreateKeyGroup2020_05_31
-export def "2020-05-31-key-group create-group2020" [
+export def "create-key-group2020-05-31" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1090,7 +1090,7 @@ export def "2020-05-31-key-group create-group2020" [
 #
 # GET /2020-05-31/key-group
 # operationId: ListKeyGroups2020_05_31
-export def "2020-05-31-key-group list-groups2020" [
+export def "list-key-groups2020-05-31" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1136,7 +1136,7 @@ export def "2020-05-31-key-group list-groups2020" [
 #
 # POST /2020-05-31/distributions/{DistributionId}/monitoring-subscription/
 # operationId: CreateMonitoringSubscription2020_05_31
-export def "2020-05-31-distributions-monitoring-subscription create-subscription2020-by-distribution-id" [
+export def "create-monitoring-subscription2020-05-31" [
   distribution_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1185,7 +1185,7 @@ export def "2020-05-31-distributions-monitoring-subscription create-subscription
 #
 # DELETE /2020-05-31/distributions/{DistributionId}/monitoring-subscription/
 # operationId: DeleteMonitoringSubscription2020_05_31
-export def "2020-05-31-distributions-monitoring-subscription delete-subscription2020-by-distribution-id" [
+export def "delete-monitoring-subscription2020-05-31" [
   distribution_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1230,7 +1230,7 @@ export def "2020-05-31-distributions-monitoring-subscription delete-subscription
 #
 # GET /2020-05-31/distributions/{DistributionId}/monitoring-subscription/
 # operationId: GetMonitoringSubscription2020_05_31
-export def "2020-05-31-distributions-monitoring-subscription get-subscription2020-by-distribution-id" [
+export def "get-monitoring-subscription2020-05-31" [
   distribution_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1275,7 +1275,7 @@ export def "2020-05-31-distributions-monitoring-subscription get-subscription202
 #
 # POST /2020-05-31/origin-access-control
 # operationId: CreateOriginAccessControl2020_05_31
-export def "2020-05-31-origin-access-control create-control2020" [
+export def "create-origin-access-control2020-05-31" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1322,7 +1322,7 @@ export def "2020-05-31-origin-access-control create-control2020" [
 #
 # GET /2020-05-31/origin-access-control
 # operationId: ListOriginAccessControls2020_05_31
-export def "2020-05-31-origin-access-control list-controls2020" [
+export def "list-origin-access-controls2020-05-31" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1368,7 +1368,7 @@ export def "2020-05-31-origin-access-control list-controls2020" [
 #
 # POST /2020-05-31/origin-request-policy
 # operationId: CreateOriginRequestPolicy2020_05_31
-export def "2020-05-31-origin-request-policy create-policy2020" [
+export def "create-origin-request-policy2020-05-31" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1415,7 +1415,7 @@ export def "2020-05-31-origin-request-policy create-policy2020" [
 #
 # GET /2020-05-31/origin-request-policy
 # operationId: ListOriginRequestPolicies2020_05_31
-export def "2020-05-31-origin-request-policy list-policies2020" [
+export def "list-origin-request-policies2020-05-31" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1462,7 +1462,7 @@ export def "2020-05-31-origin-request-policy list-policies2020" [
 #
 # POST /2020-05-31/public-key
 # operationId: CreatePublicKey2020_05_31
-export def "2020-05-31-public-key create-key2020" [
+export def "create-public-key2020-05-31" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1509,7 +1509,7 @@ export def "2020-05-31-public-key create-key2020" [
 #
 # GET /2020-05-31/public-key
 # operationId: ListPublicKeys2020_05_31
-export def "2020-05-31-public-key list-keys2020" [
+export def "list-public-keys2020-05-31" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1555,7 +1555,7 @@ export def "2020-05-31-public-key list-keys2020" [
 #
 # POST /2020-05-31/realtime-log-config
 # operationId: CreateRealtimeLogConfig2020_05_31
-export def "2020-05-31-realtime-log-config create-config2020" [
+export def "create-realtime-log-config2020-05-31" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1602,7 +1602,7 @@ export def "2020-05-31-realtime-log-config create-config2020" [
 #
 # GET /2020-05-31/realtime-log-config
 # operationId: ListRealtimeLogConfigs2020_05_31
-export def "2020-05-31-realtime-log-config list-configs2020" [
+export def "list-realtime-log-configs2020-05-31" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1648,7 +1648,7 @@ export def "2020-05-31-realtime-log-config list-configs2020" [
 #
 # POST /2020-05-31/response-headers-policy
 # operationId: CreateResponseHeadersPolicy2020_05_31
-export def "2020-05-31-response-headers-policy create-policy2020" [
+export def "create-response-headers-policy2020-05-31" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1695,7 +1695,7 @@ export def "2020-05-31-response-headers-policy create-policy2020" [
 #
 # GET /2020-05-31/response-headers-policy
 # operationId: ListResponseHeadersPolicies2020_05_31
-export def "2020-05-31-response-headers-policy list-policies2020" [
+export def "list-response-headers-policies2020-05-31" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1742,7 +1742,7 @@ export def "2020-05-31-response-headers-policy list-policies2020" [
 #
 # POST /2020-05-31/streaming-distribution
 # operationId: CreateStreamingDistribution2020_05_31
-export def "2020-05-31-streaming-distribution create-distribution2020" [
+export def "create-streaming-distribution2020-05-31" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1789,7 +1789,7 @@ export def "2020-05-31-streaming-distribution create-distribution2020" [
 #
 # GET /2020-05-31/streaming-distribution
 # operationId: ListStreamingDistributions2020_05_31
-export def "2020-05-31-streaming-distribution list-distributions2020" [
+export def "list-streaming-distributions2020-05-31" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1835,7 +1835,7 @@ export def "2020-05-31-streaming-distribution list-distributions2020" [
 #
 # POST /2020-05-31/streaming-distribution
 # operationId: CreateStreamingDistributionWithTags2020_05_31
-export def "2020-05-31-streaming-distribution create-with-tags2020" [
+export def "create-streaming-distribution-with-tags2020-05-31" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1884,7 +1884,7 @@ export def "2020-05-31-streaming-distribution create-with-tags2020" [
 #
 # DELETE /2020-05-31/cache-policy/{Id}
 # operationId: DeleteCachePolicy2020_05_31
-export def "2020-05-31-cache-policy delete-policy2020-by-id" [
+export def "delete-cache-policy2020-05-31" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1930,7 +1930,7 @@ export def "2020-05-31-cache-policy delete-policy2020-by-id" [
 #
 # GET /2020-05-31/cache-policy/{Id}
 # operationId: GetCachePolicy2020_05_31
-export def "2020-05-31-cache-policy get-policy2020-by-id" [
+export def "get-cache-policy2020-05-31" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1975,7 +1975,7 @@ export def "2020-05-31-cache-policy get-policy2020-by-id" [
 #
 # PUT /2020-05-31/cache-policy/{Id}
 # operationId: UpdateCachePolicy2020_05_31
-export def "2020-05-31-cache-policy update-policy2020-by-id" [
+export def "update-cache-policy2020-05-31" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2025,7 +2025,7 @@ export def "2020-05-31-cache-policy update-policy2020-by-id" [
 #
 # DELETE /2020-05-31/origin-access-identity/cloudfront/{Id}
 # operationId: DeleteCloudFrontOriginAccessIdentity2020_05_31
-export def "2020-05-31-origin-access-identity-cloudfront delete-cloud-front-identity2020-by-id" [
+export def "delete-cloud-front-origin-access-identity2020-05-31" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2071,7 +2071,7 @@ export def "2020-05-31-origin-access-identity-cloudfront delete-cloud-front-iden
 #
 # GET /2020-05-31/origin-access-identity/cloudfront/{Id}
 # operationId: GetCloudFrontOriginAccessIdentity2020_05_31
-export def "2020-05-31-origin-access-identity-cloudfront get-cloud-front-identity2020-by-id" [
+export def "get-cloud-front-origin-access-identity2020-05-31" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2116,7 +2116,7 @@ export def "2020-05-31-origin-access-identity-cloudfront get-cloud-front-identit
 #
 # DELETE /2020-05-31/continuous-deployment-policy/{Id}
 # operationId: DeleteContinuousDeploymentPolicy2020_05_31
-export def "2020-05-31-continuous-deployment-policy delete-policy2020-by-id" [
+export def "delete-continuous-deployment-policy2020-05-31" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2162,7 +2162,7 @@ export def "2020-05-31-continuous-deployment-policy delete-policy2020-by-id" [
 #
 # GET /2020-05-31/continuous-deployment-policy/{Id}
 # operationId: GetContinuousDeploymentPolicy2020_05_31
-export def "2020-05-31-continuous-deployment-policy get-policy2020-by-id" [
+export def "get-continuous-deployment-policy2020-05-31" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2207,7 +2207,7 @@ export def "2020-05-31-continuous-deployment-policy get-policy2020-by-id" [
 #
 # PUT /2020-05-31/continuous-deployment-policy/{Id}
 # operationId: UpdateContinuousDeploymentPolicy2020_05_31
-export def "2020-05-31-continuous-deployment-policy update-policy2020-by-id" [
+export def "update-continuous-deployment-policy2020-05-31" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2257,7 +2257,7 @@ export def "2020-05-31-continuous-deployment-policy update-policy2020-by-id" [
 #
 # DELETE /2020-05-31/distribution/{Id}
 # operationId: DeleteDistribution2020_05_31
-export def "2020-05-31-distribution delete-distribution2020-by-id" [
+export def "delete-distribution2020-05-31" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2303,7 +2303,7 @@ export def "2020-05-31-distribution delete-distribution2020-by-id" [
 #
 # GET /2020-05-31/distribution/{Id}
 # operationId: GetDistribution2020_05_31
-export def "2020-05-31-distribution get-distribution2020-by-id" [
+export def "get-distribution2020-05-31" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2348,7 +2348,7 @@ export def "2020-05-31-distribution get-distribution2020-by-id" [
 #
 # DELETE /2020-05-31/field-level-encryption/{Id}
 # operationId: DeleteFieldLevelEncryptionConfig2020_05_31
-export def "2020-05-31-field-level-encryption delete-config2020-by-id" [
+export def "delete-field-level-encryption-config2020-05-31" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2394,7 +2394,7 @@ export def "2020-05-31-field-level-encryption delete-config2020-by-id" [
 #
 # GET /2020-05-31/field-level-encryption/{Id}
 # operationId: GetFieldLevelEncryption2020_05_31
-export def "2020-05-31-field-level-encryption get-encryption2020-by-id" [
+export def "get-field-level-encryption2020-05-31" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2439,7 +2439,7 @@ export def "2020-05-31-field-level-encryption get-encryption2020-by-id" [
 #
 # DELETE /2020-05-31/field-level-encryption-profile/{Id}
 # operationId: DeleteFieldLevelEncryptionProfile2020_05_31
-export def "2020-05-31-field-level-encryption-profile delete-profile2020-by-id" [
+export def "delete-field-level-encryption-profile2020-05-31" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2485,7 +2485,7 @@ export def "2020-05-31-field-level-encryption-profile delete-profile2020-by-id" 
 #
 # GET /2020-05-31/field-level-encryption-profile/{Id}
 # operationId: GetFieldLevelEncryptionProfile2020_05_31
-export def "2020-05-31-field-level-encryption-profile get-profile2020-by-id" [
+export def "get-field-level-encryption-profile2020-05-31" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2530,7 +2530,7 @@ export def "2020-05-31-field-level-encryption-profile get-profile2020-by-id" [
 #
 # DELETE /2020-05-31/function/{Name}
 # operationId: DeleteFunction2020_05_31
-export def "2020-05-31-function delete-function2020-by-name" [
+export def "delete-function2020-05-31" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2576,7 +2576,7 @@ export def "2020-05-31-function delete-function2020-by-name" [
 #
 # PUT /2020-05-31/function/{Name}
 # operationId: UpdateFunction2020_05_31
-export def "2020-05-31-function update-function2020-by-name" [
+export def "update-function2020-05-31" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2626,7 +2626,7 @@ export def "2020-05-31-function update-function2020-by-name" [
 #
 # DELETE /2020-05-31/key-group/{Id}
 # operationId: DeleteKeyGroup2020_05_31
-export def "2020-05-31-key-group delete-group2020-by-id" [
+export def "delete-key-group2020-05-31" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2672,7 +2672,7 @@ export def "2020-05-31-key-group delete-group2020-by-id" [
 #
 # GET /2020-05-31/key-group/{Id}
 # operationId: GetKeyGroup2020_05_31
-export def "2020-05-31-key-group get-group2020-by-id" [
+export def "get-key-group2020-05-31" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2717,7 +2717,7 @@ export def "2020-05-31-key-group get-group2020-by-id" [
 #
 # PUT /2020-05-31/key-group/{Id}
 # operationId: UpdateKeyGroup2020_05_31
-export def "2020-05-31-key-group update-group2020-by-id" [
+export def "update-key-group2020-05-31" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2767,7 +2767,7 @@ export def "2020-05-31-key-group update-group2020-by-id" [
 #
 # DELETE /2020-05-31/origin-access-control/{Id}
 # operationId: DeleteOriginAccessControl2020_05_31
-export def "2020-05-31-origin-access-control delete-control2020-by-id" [
+export def "delete-origin-access-control2020-05-31" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2813,7 +2813,7 @@ export def "2020-05-31-origin-access-control delete-control2020-by-id" [
 #
 # GET /2020-05-31/origin-access-control/{Id}
 # operationId: GetOriginAccessControl2020_05_31
-export def "2020-05-31-origin-access-control get-control2020-by-id" [
+export def "get-origin-access-control2020-05-31" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2858,7 +2858,7 @@ export def "2020-05-31-origin-access-control get-control2020-by-id" [
 #
 # DELETE /2020-05-31/origin-request-policy/{Id}
 # operationId: DeleteOriginRequestPolicy2020_05_31
-export def "2020-05-31-origin-request-policy delete-policy2020-by-id" [
+export def "delete-origin-request-policy2020-05-31" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2904,7 +2904,7 @@ export def "2020-05-31-origin-request-policy delete-policy2020-by-id" [
 #
 # GET /2020-05-31/origin-request-policy/{Id}
 # operationId: GetOriginRequestPolicy2020_05_31
-export def "2020-05-31-origin-request-policy get-policy2020-by-id" [
+export def "get-origin-request-policy2020-05-31" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2949,7 +2949,7 @@ export def "2020-05-31-origin-request-policy get-policy2020-by-id" [
 #
 # PUT /2020-05-31/origin-request-policy/{Id}
 # operationId: UpdateOriginRequestPolicy2020_05_31
-export def "2020-05-31-origin-request-policy update-policy2020-by-id" [
+export def "update-origin-request-policy2020-05-31" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2999,7 +2999,7 @@ export def "2020-05-31-origin-request-policy update-policy2020-by-id" [
 #
 # DELETE /2020-05-31/public-key/{Id}
 # operationId: DeletePublicKey2020_05_31
-export def "2020-05-31-public-key delete-key2020-by-id" [
+export def "delete-public-key2020-05-31" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3045,7 +3045,7 @@ export def "2020-05-31-public-key delete-key2020-by-id" [
 #
 # GET /2020-05-31/public-key/{Id}
 # operationId: GetPublicKey2020_05_31
-export def "2020-05-31-public-key get-key2020-by-id" [
+export def "get-public-key2020-05-31" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3090,7 +3090,7 @@ export def "2020-05-31-public-key get-key2020-by-id" [
 #
 # POST /2020-05-31/delete-realtime-log-config/
 # operationId: DeleteRealtimeLogConfig2020_05_31
-export def "2020-05-31-delete-realtime-log-config delete-config2020" [
+export def "delete-realtime-log-config2020-05-31" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3137,7 +3137,7 @@ export def "2020-05-31-delete-realtime-log-config delete-config2020" [
 #
 # DELETE /2020-05-31/response-headers-policy/{Id}
 # operationId: DeleteResponseHeadersPolicy2020_05_31
-export def "2020-05-31-response-headers-policy delete-policy2020-by-id" [
+export def "delete-response-headers-policy2020-05-31" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3183,7 +3183,7 @@ export def "2020-05-31-response-headers-policy delete-policy2020-by-id" [
 #
 # GET /2020-05-31/response-headers-policy/{Id}
 # operationId: GetResponseHeadersPolicy2020_05_31
-export def "2020-05-31-response-headers-policy get-policy2020-by-id" [
+export def "get-response-headers-policy2020-05-31" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3228,7 +3228,7 @@ export def "2020-05-31-response-headers-policy get-policy2020-by-id" [
 #
 # PUT /2020-05-31/response-headers-policy/{Id}
 # operationId: UpdateResponseHeadersPolicy2020_05_31
-export def "2020-05-31-response-headers-policy update-policy2020-by-id" [
+export def "update-response-headers-policy2020-05-31" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3278,7 +3278,7 @@ export def "2020-05-31-response-headers-policy update-policy2020-by-id" [
 #
 # DELETE /2020-05-31/streaming-distribution/{Id}
 # operationId: DeleteStreamingDistribution2020_05_31
-export def "2020-05-31-streaming-distribution delete-distribution2020-by-id" [
+export def "delete-streaming-distribution2020-05-31" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3324,7 +3324,7 @@ export def "2020-05-31-streaming-distribution delete-distribution2020-by-id" [
 #
 # GET /2020-05-31/streaming-distribution/{Id}
 # operationId: GetStreamingDistribution2020_05_31
-export def "2020-05-31-streaming-distribution get-distribution2020-by-id" [
+export def "get-streaming-distribution2020-05-31" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3369,7 +3369,7 @@ export def "2020-05-31-streaming-distribution get-distribution2020-by-id" [
 #
 # GET /2020-05-31/function/{Name}/describe
 # operationId: DescribeFunction2020_05_31
-export def "2020-05-31-function-describe get-function2020-by-name" [
+export def "describe-function2020-05-31" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3416,7 +3416,7 @@ export def "2020-05-31-function-describe get-function2020-by-name" [
 #
 # GET /2020-05-31/cache-policy/{Id}/config
 # operationId: GetCachePolicyConfig2020_05_31
-export def "2020-05-31-cache-policy-config get-config2020-by-id" [
+export def "get-cache-policy-config2020-05-31" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3461,7 +3461,7 @@ export def "2020-05-31-cache-policy-config get-config2020-by-id" [
 #
 # GET /2020-05-31/origin-access-identity/cloudfront/{Id}/config
 # operationId: GetCloudFrontOriginAccessIdentityConfig2020_05_31
-export def "2020-05-31-origin-access-identity-cloudfront-config get-cloud-front-config2020-by-id" [
+export def "get-cloud-front-origin-access-identity-config2020-05-31" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3506,7 +3506,7 @@ export def "2020-05-31-origin-access-identity-cloudfront-config get-cloud-front-
 #
 # PUT /2020-05-31/origin-access-identity/cloudfront/{Id}/config
 # operationId: UpdateCloudFrontOriginAccessIdentity2020_05_31
-export def "2020-05-31-origin-access-identity-cloudfront-config update-cloud-front-identity2020-by-id" [
+export def "update-cloud-front-origin-access-identity2020-05-31" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3556,7 +3556,7 @@ export def "2020-05-31-origin-access-identity-cloudfront-config update-cloud-fro
 #
 # GET /2020-05-31/continuous-deployment-policy/{Id}/config
 # operationId: GetContinuousDeploymentPolicyConfig2020_05_31
-export def "2020-05-31-continuous-deployment-policy-config get-config2020-by-id" [
+export def "get-continuous-deployment-policy-config2020-05-31" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3601,7 +3601,7 @@ export def "2020-05-31-continuous-deployment-policy-config get-config2020-by-id"
 #
 # GET /2020-05-31/distribution/{Id}/config
 # operationId: GetDistributionConfig2020_05_31
-export def "2020-05-31-distribution-config get-config2020-by-id" [
+export def "get-distribution-config2020-05-31" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3646,7 +3646,7 @@ export def "2020-05-31-distribution-config get-config2020-by-id" [
 #
 # PUT /2020-05-31/distribution/{Id}/config
 # operationId: UpdateDistribution2020_05_31
-export def "2020-05-31-distribution-config update-distribution2020-by-id" [
+export def "update-distribution2020-05-31" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3696,7 +3696,7 @@ export def "2020-05-31-distribution-config update-distribution2020-by-id" [
 #
 # GET /2020-05-31/field-level-encryption/{Id}/config
 # operationId: GetFieldLevelEncryptionConfig2020_05_31
-export def "2020-05-31-field-level-encryption-config get-config2020-by-id" [
+export def "get-field-level-encryption-config2020-05-31" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3741,7 +3741,7 @@ export def "2020-05-31-field-level-encryption-config get-config2020-by-id" [
 #
 # PUT /2020-05-31/field-level-encryption/{Id}/config
 # operationId: UpdateFieldLevelEncryptionConfig2020_05_31
-export def "2020-05-31-field-level-encryption-config update-config2020-by-id" [
+export def "update-field-level-encryption-config2020-05-31" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3791,7 +3791,7 @@ export def "2020-05-31-field-level-encryption-config update-config2020-by-id" [
 #
 # GET /2020-05-31/field-level-encryption-profile/{Id}/config
 # operationId: GetFieldLevelEncryptionProfileConfig2020_05_31
-export def "2020-05-31-field-level-encryption-profile-config get-config2020-by-id" [
+export def "get-field-level-encryption-profile-config2020-05-31" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3836,7 +3836,7 @@ export def "2020-05-31-field-level-encryption-profile-config get-config2020-by-i
 #
 # PUT /2020-05-31/field-level-encryption-profile/{Id}/config
 # operationId: UpdateFieldLevelEncryptionProfile2020_05_31
-export def "2020-05-31-field-level-encryption-profile-config update-profile2020-by-id" [
+export def "update-field-level-encryption-profile2020-05-31" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3886,7 +3886,7 @@ export def "2020-05-31-field-level-encryption-profile-config update-profile2020-
 #
 # GET /2020-05-31/function/{Name}
 # operationId: GetFunction2020_05_31
-export def "2020-05-31-function get-function2020-by-name" [
+export def "get-function2020-05-31" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3933,7 +3933,7 @@ export def "2020-05-31-function get-function2020-by-name" [
 #
 # GET /2020-05-31/distribution/{DistributionId}/invalidation/{Id}
 # operationId: GetInvalidation2020_05_31
-export def "2020-05-31-distribution-invalidation get-invalidation2020-by-distribution-id" [
+export def "get-invalidation2020-05-31" [
   distribution_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3980,7 +3980,7 @@ export def "2020-05-31-distribution-invalidation get-invalidation2020-by-distrib
 #
 # GET /2020-05-31/key-group/{Id}/config
 # operationId: GetKeyGroupConfig2020_05_31
-export def "2020-05-31-key-group-config get-config2020-by-id" [
+export def "get-key-group-config2020-05-31" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4025,7 +4025,7 @@ export def "2020-05-31-key-group-config get-config2020-by-id" [
 #
 # GET /2020-05-31/origin-access-control/{Id}/config
 # operationId: GetOriginAccessControlConfig2020_05_31
-export def "2020-05-31-origin-access-control-config get-config2020-by-id" [
+export def "get-origin-access-control-config2020-05-31" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4070,7 +4070,7 @@ export def "2020-05-31-origin-access-control-config get-config2020-by-id" [
 #
 # PUT /2020-05-31/origin-access-control/{Id}/config
 # operationId: UpdateOriginAccessControl2020_05_31
-export def "2020-05-31-origin-access-control-config update-control2020-by-id" [
+export def "update-origin-access-control2020-05-31" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4120,7 +4120,7 @@ export def "2020-05-31-origin-access-control-config update-control2020-by-id" [
 #
 # GET /2020-05-31/origin-request-policy/{Id}/config
 # operationId: GetOriginRequestPolicyConfig2020_05_31
-export def "2020-05-31-origin-request-policy-config get-config2020-by-id" [
+export def "get-origin-request-policy-config2020-05-31" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4165,7 +4165,7 @@ export def "2020-05-31-origin-request-policy-config get-config2020-by-id" [
 #
 # GET /2020-05-31/public-key/{Id}/config
 # operationId: GetPublicKeyConfig2020_05_31
-export def "2020-05-31-public-key-config get-config2020-by-id" [
+export def "get-public-key-config2020-05-31" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4210,7 +4210,7 @@ export def "2020-05-31-public-key-config get-config2020-by-id" [
 #
 # PUT /2020-05-31/public-key/{Id}/config
 # operationId: UpdatePublicKey2020_05_31
-export def "2020-05-31-public-key-config update-key2020-by-id" [
+export def "update-public-key2020-05-31" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4260,7 +4260,7 @@ export def "2020-05-31-public-key-config update-key2020-by-id" [
 #
 # POST /2020-05-31/get-realtime-log-config/
 # operationId: GetRealtimeLogConfig2020_05_31
-export def "2020-05-31-get-realtime-log-config get-config2020" [
+export def "get-realtime-log-config2020-05-31" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4307,7 +4307,7 @@ export def "2020-05-31-get-realtime-log-config get-config2020" [
 #
 # GET /2020-05-31/response-headers-policy/{Id}/config
 # operationId: GetResponseHeadersPolicyConfig2020_05_31
-export def "2020-05-31-response-headers-policy-config get-config2020-by-id" [
+export def "get-response-headers-policy-config2020-05-31" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4352,7 +4352,7 @@ export def "2020-05-31-response-headers-policy-config get-config2020-by-id" [
 #
 # GET /2020-05-31/streaming-distribution/{Id}/config
 # operationId: GetStreamingDistributionConfig2020_05_31
-export def "2020-05-31-streaming-distribution-config get-config2020-by-id" [
+export def "get-streaming-distribution-config2020-05-31" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4397,7 +4397,7 @@ export def "2020-05-31-streaming-distribution-config get-config2020-by-id" [
 #
 # PUT /2020-05-31/streaming-distribution/{Id}/config
 # operationId: UpdateStreamingDistribution2020_05_31
-export def "2020-05-31-streaming-distribution-config update-distribution2020-by-id" [
+export def "update-streaming-distribution2020-05-31" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4447,7 +4447,7 @@ export def "2020-05-31-streaming-distribution-config update-distribution2020-by-
 #
 # GET /2020-05-31/conflicting-alias
 # operationId: ListConflictingAliases2020_05_31
-export def "2020-05-31-conflicting-alias list-aliases2020" [
+export def "list-conflicting-aliases2020-05-31" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4495,7 +4495,7 @@ export def "2020-05-31-conflicting-alias list-aliases2020" [
 #
 # GET /2020-05-31/distributionsByCachePolicyId/{CachePolicyId}
 # operationId: ListDistributionsByCachePolicyId2020_05_31
-export def "2020-05-31-distributions-by-cache-policy-id list-id2020-by-cache-policy-id" [
+export def "list-distributions-by-cache-policy-id2020-05-31" [
   cache_policy_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4543,7 +4543,7 @@ export def "2020-05-31-distributions-by-cache-policy-id list-id2020-by-cache-pol
 #
 # GET /2020-05-31/distributionsByKeyGroupId/{KeyGroupId}
 # operationId: ListDistributionsByKeyGroup2020_05_31
-export def "2020-05-31-distributions-by-key-group-id list-group2020-by-key-group-id" [
+export def "list-distributions-by-key-group2020-05-31" [
   key_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4591,7 +4591,7 @@ export def "2020-05-31-distributions-by-key-group-id list-group2020-by-key-group
 #
 # GET /2020-05-31/distributionsByOriginRequestPolicyId/{OriginRequestPolicyId}
 # operationId: ListDistributionsByOriginRequestPolicyId2020_05_31
-export def "2020-05-31-distributions-by-origin-request-policy-id list-id2020-by-origin-request-policy-id" [
+export def "list-distributions-by-origin-request-policy-id2020-05-31" [
   origin_request_policy_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4639,7 +4639,7 @@ export def "2020-05-31-distributions-by-origin-request-policy-id list-id2020-by-
 #
 # POST /2020-05-31/distributionsByRealtimeLogConfig/
 # operationId: ListDistributionsByRealtimeLogConfig2020_05_31
-export def "2020-05-31-distributions-by-realtime-log-config list-config2020" [
+export def "list-distributions-by-realtime-log-config2020-05-31" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4686,7 +4686,7 @@ export def "2020-05-31-distributions-by-realtime-log-config list-config2020" [
 #
 # GET /2020-05-31/distributionsByResponseHeadersPolicyId/{ResponseHeadersPolicyId}
 # operationId: ListDistributionsByResponseHeadersPolicyId2020_05_31
-export def "2020-05-31-distributions-by-response-headers-policy-id list-id2020-by-response-headers-policy-id" [
+export def "list-distributions-by-response-headers-policy-id2020-05-31" [
   response_headers_policy_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4734,7 +4734,7 @@ export def "2020-05-31-distributions-by-response-headers-policy-id list-id2020-b
 #
 # GET /2020-05-31/distributionsByWebACLId/{WebACLId}
 # operationId: ListDistributionsByWebACLId2020_05_31
-export def "2020-05-31-distributions-by-web-acl-id list-id2020-by-web-acl-id" [
+export def "list-distributions-by-web-acl-id2020-05-31" [
   web_acl_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4782,7 +4782,7 @@ export def "2020-05-31-distributions-by-web-acl-id list-id2020-by-web-acl-id" [
 #
 # GET /2020-05-31/tagging
 # operationId: ListTagsForResource2020_05_31
-export def "2020-05-31-tagging list-tags-for-resource2020" [
+export def "list-tags-for-resource2020-05-31" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4827,7 +4827,7 @@ export def "2020-05-31-tagging list-tags-for-resource2020" [
 #
 # POST /2020-05-31/function/{Name}/publish
 # operationId: PublishFunction2020_05_31
-export def "2020-05-31-function-publish publish-function2020-by-name" [
+export def "publish-function2020-05-31" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4873,7 +4873,7 @@ export def "2020-05-31-function-publish publish-function2020-by-name" [
 #
 # POST /2020-05-31/tagging
 # operationId: TagResource2020_05_31
-export def "2020-05-31-tagging tag-resource2020" [
+export def "tag-resource2020-05-31" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4923,7 +4923,7 @@ export def "2020-05-31-tagging tag-resource2020" [
 #
 # POST /2020-05-31/function/{Name}/test
 # operationId: TestFunction2020_05_31
-export def "2020-05-31-function-test test-function2020-by-name" [
+export def "test-function2020-05-31" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4973,7 +4973,7 @@ export def "2020-05-31-function-test test-function2020-by-name" [
 #
 # POST /2020-05-31/tagging
 # operationId: UntagResource2020_05_31
-export def "2020-05-31-tagging untag-resource2020" [
+export def "untag-resource2020-05-31" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5023,7 +5023,7 @@ export def "2020-05-31-tagging untag-resource2020" [
 #
 # PUT /2020-05-31/distribution/{Id}/promote-staging-config
 # operationId: UpdateDistributionWithStagingConfig2020_05_31
-export def "2020-05-31-distribution-promote-staging-config update-with-config2020-by-id" [
+export def "update-distribution-with-staging-config2020-05-31" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5071,7 +5071,7 @@ export def "2020-05-31-distribution-promote-staging-config update-with-config202
 #
 # PUT /2020-05-31/realtime-log-config/
 # operationId: UpdateRealtimeLogConfig2020_05_31
-export def "2020-05-31-realtime-log-config update-config2020" [
+export def "update-realtime-log-config2020-05-31" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

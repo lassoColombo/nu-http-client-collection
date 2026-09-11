@@ -119,7 +119,7 @@ def scope-completer [] { ["All" "Api" "Operation" "Product" "Tenant"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-api-management-service-policies list-policy" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "policy-list-by-service" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -143,7 +143,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/policies
 # operationId: Policy_ListByService
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-policies list-policy" [
+export def "policy-list-by-service" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -186,7 +186,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/policies/{policyId}
 # operationId: Policy_Delete
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-policies delete-policy" [
+export def "policy-delete" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -233,7 +233,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/policies/{policyId}
 # operationId: Policy_Get
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-policies get-policy" [
+export def "policy-get" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -277,7 +277,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # HEAD /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/policies/{policyId}
 # operationId: Policy_GetEntityTag
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-policies get-policy-entity-tag" [
+export def "policy-get-entity-tag" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -322,7 +322,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/policies/{policyId}
 # operationId: Policy_CreateOrUpdate
 # --properties shape: {contentFormat?: "xml"|"xml-link"|"rawxml"|"rawxml-link", policyContent: string}
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-policies create-policy-or-update" [
+export def "policy-create-or-update" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -370,7 +370,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/policySnippets
 # operationId: PolicySnippets_ListByService
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-policy-snippets list" [
+export def "policy-snippets-list-by-service" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -413,7 +413,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/regions
 # operationId: Regions_ListByService
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-regions list" [
+export def "regions-list-by-service" [
   subscription_id: string
   resource_group_name: string
   service_name: string

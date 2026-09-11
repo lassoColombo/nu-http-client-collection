@@ -100,7 +100,7 @@ def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "ardef get-card-type-information" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-card-type-information" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -124,7 +124,7 @@ export def commands []: nothing -> table {
 #
 # POST /ardef
 # operationId: Get Card Type Information 
-export def "ardef get-card-type-information" [
+export def "get-card-type-information" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -164,7 +164,7 @@ export def "ardef get-card-type-information" [
 # POST /auth
 # operationId: Authorization
 # --customer shape: {billing_addr1?: string, billing_addr2?: string, billing_city?: string, billing_country?: string, billing_country_code?: string, billing_state?: string, billing_zip?: string, billing_zip4?: string, customer_email?: string, customer_firm_name?: string, customer_first_name?: string, customer_last_name?: string, customer_phone?: string, shipping_addresses?: list}
-export def "auth create-authorization" [
+export def "authorization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -256,7 +256,7 @@ export def "auth create-authorization" [
 #
 # POST /batchClose
 # operationId: Batch Close
-export def "batch-close close" [
+export def "batch-close" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -304,7 +304,7 @@ export def "batch-close close" [
 #
 # POST /capture/{pgIdOrig}
 # operationId: Capture
-export def "capture create" [
+export def "capture" [
   pg_id_orig: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -356,7 +356,7 @@ export def "capture create" [
 # POST /credit
 # operationId: Credit
 # --customer shape: {billing_addr1?: string, billing_addr2?: string, billing_city?: string, billing_country?: string, billing_country_code?: string, billing_state?: string, billing_zip?: string, billing_zip4?: string, customer_email?: string, customer_firm_name?: string, customer_first_name?: string, customer_last_name?: string, customer_phone?: string, shipping_addresses?: list}
-export def "credit create" [
+export def "credit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -448,7 +448,7 @@ export def "credit create" [
 #
 # POST /emailReceipt/{pgId}
 # operationId: Send Receipt
-export def "email-receipt send" [
+export def "send-receipt" [
   pg_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -492,7 +492,7 @@ export def "email-receipt send" [
 #
 # POST /expireToken
 # operationId: Expire
-export def "expire-token create" [
+export def "expire" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -542,7 +542,7 @@ export def "expire-token create" [
 # POST /force
 # operationId: Force
 # --customer shape: {billing_addr1?: string, billing_addr2?: string, billing_city?: string, billing_country?: string, billing_country_code?: string, billing_state?: string, billing_zip?: string, billing_zip4?: string, customer_email?: string, customer_firm_name?: string, customer_first_name?: string, customer_last_name?: string, customer_phone?: string, shipping_addresses?: list}
-export def "force create" [
+export def "force" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -634,7 +634,7 @@ export def "force create" [
 #
 # POST /recharge/{pgIdOrig}
 # operationId: Recharge
-export def "recharge create" [
+export def "recharge" [
   pg_id_orig: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -684,7 +684,7 @@ export def "recharge create" [
 #
 # POST /refund/{pgIdOrig}
 # operationId: Refund
-export def "refund create" [
+export def "refund" [
   pg_id_orig: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -736,7 +736,7 @@ export def "refund create" [
 # POST /sale
 # operationId: Sale
 # --customer shape: {billing_addr1?: string, billing_addr2?: string, billing_city?: string, billing_country?: string, billing_country_code?: string, billing_state?: string, billing_zip?: string, billing_zip4?: string, customer_email?: string, customer_firm_name?: string, customer_first_name?: string, customer_last_name?: string, customer_phone?: string, shipping_addresses?: list}
-export def "sale create" [
+export def "sale" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -828,7 +828,7 @@ export def "sale create" [
 #
 # POST /tokenize
 # operationId: Tokenize
-export def "tokenize create" [
+export def "tokenize" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -893,7 +893,7 @@ export def "tokenize create" [
 # POST /verify
 # operationId: Verify
 # --customer shape: {billing_addr1?: string, billing_addr2?: string, billing_city?: string, billing_country?: string, billing_country_code?: string, billing_state?: string, billing_zip?: string, billing_zip4?: string, customer_email?: string, customer_firm_name?: string, customer_first_name?: string, customer_last_name?: string, customer_phone?: string, shipping_addresses?: list}
-export def "verify create" [
+export def "verify" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -960,7 +960,7 @@ export def "verify create" [
 #
 # POST /void/{pgIdOrig}
 # operationId: Void
-export def "void create" [
+export def "void" [
   pg_id_orig: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

@@ -119,7 +119,7 @@ def unified-api-completer [] { ["accounting" "ats" "calendar" "crm" "csp" "custo
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "webhook-logs list-event" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "event-logs-all" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -143,7 +143,7 @@ export def commands []: nothing -> table {
 #
 # GET /webhook/logs
 # operationId: eventLogsAll
-export def "webhook-logs list-event" [
+export def "event-logs-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,7 +184,7 @@ export def "webhook-logs list-event" [
 #
 # POST /webhook/w/{id}/{serviceId}
 # operationId: webhooksResolve
-export def "webhook-w create-resolve" [
+export def "webhooks-resolve" [
   id: string
   service_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -228,7 +228,7 @@ export def "webhook-w create-resolve" [
 #
 # GET /webhook/webhooks
 # operationId: webhooksAll
-export def "webhook-webhooks list" [
+export def "webhooks-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -268,7 +268,7 @@ export def "webhook-webhooks list" [
 #
 # POST /webhook/webhooks
 # operationId: webhooksAdd
-export def "webhook-webhooks create" [
+export def "webhooks-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -313,7 +313,7 @@ export def "webhook-webhooks create" [
 #
 # DELETE /webhook/webhooks/{id}
 # operationId: webhooksDelete
-export def "webhook-webhooks delete" [
+export def "webhooks-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -352,7 +352,7 @@ export def "webhook-webhooks delete" [
 #
 # GET /webhook/webhooks/{id}
 # operationId: webhooksOne
-export def "webhook-webhooks get-one" [
+export def "webhooks-one" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -391,7 +391,7 @@ export def "webhook-webhooks get-one" [
 #
 # PATCH /webhook/webhooks/{id}
 # operationId: webhooksUpdate
-export def "webhook-webhooks update" [
+export def "webhooks-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -437,7 +437,7 @@ export def "webhook-webhooks update" [
 #
 # POST /webhook/webhooks/{id}/execute/{serviceId}
 # operationId: webhooksExecute
-export def "webhook-webhooks-execute create" [
+export def "webhooks-execute" [
   id: string
   service_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -479,7 +479,7 @@ export def "webhook-webhooks-execute create" [
 #
 # POST /webhook/webhooks/{id}/x/{serviceId}
 # operationId: webhooksShortExecute
-export def "webhook-webhooks-x create-short-execute" [
+export def "webhooks-short-execute" [
   id: string
   service_id: string
   --base-url(-b): string@base-url-completer # API base URL

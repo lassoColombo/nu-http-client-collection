@@ -121,7 +121,7 @@ def format-completer [] { ["solr"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "datasources list-data-sources" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "data-sources-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 # GET /datasources
 # Docs: https://docs.microsoft.com/rest/api/searchservice/List-Data-Sources
 # operationId: DataSources_List
-export def "datasources list-data-sources" [
+export def "data-sources-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -191,7 +191,7 @@ export def "datasources list-data-sources" [
 # --credentials shape: {connectionString?: string}
 # --dataChangeDetectionPolicy shape: {@odata.type: string}
 # --dataDeletionDetectionPolicy shape: {@odata.type: string}
-export def "datasources create-data-sources" [
+export def "data-sources-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -242,7 +242,7 @@ export def "datasources create-data-sources" [
 # DELETE /datasources('{dataSourceName}')
 # Docs: https://docs.microsoft.com/rest/api/searchservice/Delete-Data-Source
 # operationId: DataSources_Delete
-export def "datasources delete-data-sources" [
+export def "data-sources-delete" [
   data_source_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -286,7 +286,7 @@ export def "datasources delete-data-sources" [
 # GET /datasources('{dataSourceName}')
 # Docs: https://docs.microsoft.com/rest/api/searchservice/Get-Data-Source
 # operationId: DataSources_Get
-export def "datasources get-data-sources" [
+export def "data-sources-get" [
   data_source_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -332,7 +332,7 @@ export def "datasources get-data-sources" [
 # --credentials shape: {connectionString?: string}
 # --dataChangeDetectionPolicy shape: {@odata.type: string}
 # --dataDeletionDetectionPolicy shape: {@odata.type: string}
-export def "datasources create-data-sources-or-update" [
+export def "data-sources-create-or-update" [
   data_source_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -388,7 +388,7 @@ export def "datasources create-data-sources-or-update" [
 # GET /indexers
 # Docs: https://docs.microsoft.com/rest/api/searchservice/List-Indexers
 # operationId: Indexers_List
-export def "indexers list" [
+export def "indexers-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -433,7 +433,7 @@ export def "indexers list" [
 # --outputFieldMappings item shape: {mappingFunction?: any, sourceFieldName: string, targetFieldName?: string}
 # --parameters shape: {base64EncodeKeys?: bool, batchSize?: int, configuration?: record, maxFailedItems?: int, maxFailedItemsPerBatch?: int}
 # --schedule shape: {interval: string, startTime?: string}
-export def "indexers create" [
+export def "indexers-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -487,7 +487,7 @@ export def "indexers create" [
 # DELETE /indexers('{indexerName}')
 # Docs: https://docs.microsoft.com/rest/api/searchservice/Delete-Indexer
 # operationId: Indexers_Delete
-export def "indexers delete" [
+export def "indexers-delete" [
   indexer_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -531,7 +531,7 @@ export def "indexers delete" [
 # GET /indexers('{indexerName}')
 # Docs: https://docs.microsoft.com/rest/api/searchservice/Get-Indexer
 # operationId: Indexers_Get
-export def "indexers get" [
+export def "indexers-get" [
   indexer_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -577,7 +577,7 @@ export def "indexers get" [
 # --outputFieldMappings item shape: {mappingFunction?: any, sourceFieldName: string, targetFieldName?: string}
 # --parameters shape: {base64EncodeKeys?: bool, batchSize?: int, configuration?: record, maxFailedItems?: int, maxFailedItemsPerBatch?: int}
 # --schedule shape: {interval: string, startTime?: string}
-export def "indexers create-or-update" [
+export def "indexers-create-or-update" [
   indexer_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -636,7 +636,7 @@ export def "indexers create-or-update" [
 # POST /indexers('{indexerName}')/search.reset
 # Docs: https://docs.microsoft.com/rest/api/searchservice/Reset-Indexer
 # operationId: Indexers_Reset
-export def "indexers-search-reset reset" [
+export def "indexers-reset" [
   indexer_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -678,7 +678,7 @@ export def "indexers-search-reset reset" [
 # POST /indexers('{indexerName}')/search.run
 # Docs: https://docs.microsoft.com/rest/api/searchservice/Run-Indexer
 # operationId: Indexers_Run
-export def "indexers-search-run create" [
+export def "indexers-run" [
   indexer_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -720,7 +720,7 @@ export def "indexers-search-run create" [
 # GET /indexers('{indexerName}')/search.status
 # Docs: https://docs.microsoft.com/rest/api/searchservice/Get-Indexer-Status
 # operationId: Indexers_GetStatus
-export def "indexers-search-status get" [
+export def "indexers-get-status" [
   indexer_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -762,7 +762,7 @@ export def "indexers-search-status get" [
 # GET /indexes
 # Docs: https://docs.microsoft.com/rest/api/searchservice/List-Indexes
 # operationId: Indexes_List
-export def "indexes list" [
+export def "indexes-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -812,7 +812,7 @@ export def "indexes list" [
 # --suggesters item shape: {name: string, searchMode: "analyzingInfixMatching", sourceFields: list<string>}
 # --tokenFilters item shape: {@odata.type: string, name: string}
 # --tokenizers item shape: {@odata.type: string, name: string}
-export def "indexes create" [
+export def "indexes-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -867,7 +867,7 @@ export def "indexes create" [
 # DELETE /indexes('{indexName}')
 # Docs: https://docs.microsoft.com/rest/api/searchservice/Delete-Index
 # operationId: Indexes_Delete
-export def "indexes delete" [
+export def "indexes-delete" [
   index_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -911,7 +911,7 @@ export def "indexes delete" [
 # GET /indexes('{indexName}')
 # Docs: https://docs.microsoft.com/rest/api/searchservice/Get-Index
 # operationId: Indexes_Get
-export def "indexes get" [
+export def "indexes-get" [
   index_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -962,7 +962,7 @@ export def "indexes get" [
 # --suggesters item shape: {name: string, searchMode: "analyzingInfixMatching", sourceFields: list<string>}
 # --tokenFilters item shape: {@odata.type: string, name: string}
 # --tokenizers item shape: {@odata.type: string, name: string}
-export def "indexes create-or-update" [
+export def "indexes-create-or-update" [
   index_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1023,7 +1023,7 @@ export def "indexes create-or-update" [
 # POST /indexes('{indexName}')/search.analyze
 # Docs: https://docs.microsoft.com/rest/api/searchservice/test-analyzer
 # operationId: Indexes_Analyze
-export def "indexes-search-analyze create" [
+export def "indexes-analyze" [
   index_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1073,7 +1073,7 @@ export def "indexes-search-analyze create" [
 # GET /indexes('{indexName}')/search.stats
 # Docs: https://docs.microsoft.com/rest/api/searchservice/Get-Index-Statistics
 # operationId: Indexes_GetStatistics
-export def "indexes-search-stats get-statistics" [
+export def "indexes-get-statistics" [
   index_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1114,7 +1114,7 @@ export def "indexes-search-stats get-statistics" [
 #
 # GET /servicestats
 # operationId: GetServiceStatistics
-export def "servicestats get-service-statistics" [
+export def "get-service-statistics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1154,7 +1154,7 @@ export def "servicestats get-service-statistics" [
 # GET /skillsets
 # Docs: https://docs.microsoft.com/rest/api/searchservice/list-skillset
 # operationId: Skillsets_List
-export def "skillsets list" [
+export def "skillsets-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1197,7 +1197,7 @@ export def "skillsets list" [
 # operationId: Skillsets_Create
 # --cognitiveServices shape: {@odata.type: string, description?: string}
 # --skills item shape: {@odata.type: string, context?: string, description?: string, inputs: list, name?: string, outputs: list}
-export def "skillsets create" [
+export def "skillsets-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1245,7 +1245,7 @@ export def "skillsets create" [
 # DELETE /skillsets('{skillsetName}')
 # Docs: https://docs.microsoft.com/rest/api/searchservice/delete-skillset
 # operationId: Skillsets_Delete
-export def "skillsets delete" [
+export def "skillsets-delete" [
   skillset_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1289,7 +1289,7 @@ export def "skillsets delete" [
 # GET /skillsets('{skillsetName}')
 # Docs: https://docs.microsoft.com/rest/api/searchservice/get-skillset
 # operationId: Skillsets_Get
-export def "skillsets get" [
+export def "skillsets-get" [
   skillset_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1333,7 +1333,7 @@ export def "skillsets get" [
 # operationId: Skillsets_CreateOrUpdate
 # --cognitiveServices shape: {@odata.type: string, description?: string}
 # --skills item shape: {@odata.type: string, context?: string, description?: string, inputs: list, name?: string, outputs: list}
-export def "skillsets create-or-update" [
+export def "skillsets-create-or-update" [
   skillset_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1386,7 +1386,7 @@ export def "skillsets create-or-update" [
 # GET /synonymmaps
 # Docs: https://docs.microsoft.com/rest/api/searchservice/List-Synonym-Maps
 # operationId: SynonymMaps_List
-export def "synonymmaps list-synonym-maps" [
+export def "synonym-maps-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1428,7 +1428,7 @@ export def "synonymmaps list-synonym-maps" [
 # Docs: https://docs.microsoft.com/rest/api/searchservice/Create-Synonym-Map
 # operationId: SynonymMaps_Create
 # --encryptionKey shape: {accessCredentials?: any, keyVaultKeyName: string, keyVaultKeyVersion: string, keyVaultUri: string}
-export def "synonymmaps create-synonym-maps" [
+export def "synonym-maps-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1476,7 +1476,7 @@ export def "synonymmaps create-synonym-maps" [
 # DELETE /synonymmaps('{synonymMapName}')
 # Docs: https://docs.microsoft.com/rest/api/searchservice/Delete-Synonym-Map
 # operationId: SynonymMaps_Delete
-export def "synonymmaps delete-synonym-maps" [
+export def "synonym-maps-delete" [
   synonym_map_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1520,7 +1520,7 @@ export def "synonymmaps delete-synonym-maps" [
 # GET /synonymmaps('{synonymMapName}')
 # Docs: https://docs.microsoft.com/rest/api/searchservice/Get-Synonym-Map
 # operationId: SynonymMaps_Get
-export def "synonymmaps get-synonym-maps" [
+export def "synonym-maps-get" [
   synonym_map_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1563,7 +1563,7 @@ export def "synonymmaps get-synonym-maps" [
 # Docs: https://docs.microsoft.com/rest/api/searchservice/Update-Synonym-Map
 # operationId: SynonymMaps_CreateOrUpdate
 # --encryptionKey shape: {accessCredentials?: any, keyVaultKeyName: string, keyVaultKeyVersion: string, keyVaultUri: string}
-export def "synonymmaps create-synonym-maps-or-update" [
+export def "synonym-maps-create-or-update" [
   synonym_map_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

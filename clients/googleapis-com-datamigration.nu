@@ -133,7 +133,7 @@ def state-completer-1 [] { ["CREATING" "DELETED" "DELETING" "DRAFT" "FAILED" "RE
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta1 generate-ssh-script" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "datamigration-projects-locations-migration-jobs-generate-ssh-script" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -159,7 +159,7 @@ export def commands []: nothing -> table {
 # operationId: datamigration.projects.locations.migrationJobs.generateSshScript
 # --vmCreationConfig shape: {subnet?: string, vmMachineType?: string, vmZone?: string}
 # --vmSelectionConfig shape: {vmZone?: string}
-export def "v1beta1 generate-ssh-script" [
+export def "datamigration-projects-locations-migration-jobs-generate-ssh-script" [
   migration_job: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -214,7 +214,7 @@ export def "v1beta1 generate-ssh-script" [
 #
 # DELETE /v1beta1/{name}
 # operationId: datamigration.projects.locations.operations.delete
-export def "v1beta1 delete" [
+export def "datamigration-projects-locations-operations-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -264,7 +264,7 @@ export def "v1beta1 delete" [
 #
 # GET /v1beta1/{name}
 # operationId: datamigration.projects.locations.operations.get
-export def "v1beta1 get" [
+export def "datamigration-projects-locations-operations-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -317,7 +317,7 @@ export def "v1beta1 get" [
 # --reverseSshConnectivity shape: {vm?: string, vmIp?: string, vmPort?: int, vpc?: string}
 # --sourceDatabase shape: {engine?: "DATABASE_ENGINE_UNSPECIFIED"|"MYSQL", provider?: "DATABASE_PROVIDER_UNSPECIFIED"|"CLOUDSQL"|"RDS"}
 # --vpcPeeringConnectivity shape: {vpc?: string}
-export def "v1beta1 update" [
+export def "datamigration-projects-locations-migration-jobs-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -384,7 +384,7 @@ export def "v1beta1 update" [
 #
 # GET /v1beta1/{name}/locations
 # operationId: datamigration.projects.locations.list
-export def "v1beta1-locations list" [
+export def "datamigration-projects-locations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -435,7 +435,7 @@ export def "v1beta1-locations list" [
 #
 # GET /v1beta1/{name}/operations
 # operationId: datamigration.projects.locations.operations.list
-export def "v1beta1-operations list" [
+export def "datamigration-projects-locations-operations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -486,7 +486,7 @@ export def "v1beta1-operations list" [
 #
 # POST /v1beta1/{name}:cancel
 # operationId: datamigration.projects.locations.operations.cancel
-export def "v1beta1 cancel" [
+export def "datamigration-projects-locations-operations-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -538,7 +538,7 @@ export def "v1beta1 cancel" [
 #
 # POST /v1beta1/{name}:promote
 # operationId: datamigration.projects.locations.migrationJobs.promote
-export def "v1beta1 create-promote" [
+export def "datamigration-projects-locations-migration-jobs-promote" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -590,7 +590,7 @@ export def "v1beta1 create-promote" [
 #
 # POST /v1beta1/{name}:restart
 # operationId: datamigration.projects.locations.migrationJobs.restart
-export def "v1beta1 restart" [
+export def "datamigration-projects-locations-migration-jobs-restart" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -642,7 +642,7 @@ export def "v1beta1 restart" [
 #
 # POST /v1beta1/{name}:resume
 # operationId: datamigration.projects.locations.migrationJobs.resume
-export def "v1beta1 create-resume" [
+export def "datamigration-projects-locations-migration-jobs-resume" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -694,7 +694,7 @@ export def "v1beta1 create-resume" [
 #
 # POST /v1beta1/{name}:start
 # operationId: datamigration.projects.locations.migrationJobs.start
-export def "v1beta1 start" [
+export def "datamigration-projects-locations-migration-jobs-start" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -746,7 +746,7 @@ export def "v1beta1 start" [
 #
 # POST /v1beta1/{name}:stop
 # operationId: datamigration.projects.locations.migrationJobs.stop
-export def "v1beta1 stop" [
+export def "datamigration-projects-locations-migration-jobs-stop" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -798,7 +798,7 @@ export def "v1beta1 stop" [
 #
 # POST /v1beta1/{name}:verify
 # operationId: datamigration.projects.locations.migrationJobs.verify
-export def "v1beta1 verify" [
+export def "datamigration-projects-locations-migration-jobs-verify" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -850,7 +850,7 @@ export def "v1beta1 verify" [
 #
 # GET /v1beta1/{parent}/connectionProfiles
 # operationId: datamigration.projects.locations.connectionProfiles.list
-export def "v1beta1-connection-profiles list" [
+export def "datamigration-projects-locations-connection-profiles-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -905,7 +905,7 @@ export def "v1beta1-connection-profiles list" [
 # --cloudsql shape: {settings?: record}
 # --error shape: {code?: int, details?: list, message?: string}
 # --mysql shape: {cloudSqlId?: string, host?: string, password?: string, port?: int, ssl?: record, username?: string}
-export def "v1beta1-connection-profiles create" [
+export def "datamigration-projects-locations-connection-profiles-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -966,7 +966,7 @@ export def "v1beta1-connection-profiles create" [
 #
 # GET /v1beta1/{parent}/migrationJobs
 # operationId: datamigration.projects.locations.migrationJobs.list
-export def "v1beta1-migration-jobs list" [
+export def "datamigration-projects-locations-migration-jobs-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1023,7 +1023,7 @@ export def "v1beta1-migration-jobs list" [
 # --reverseSshConnectivity shape: {vm?: string, vmIp?: string, vmPort?: int, vpc?: string}
 # --sourceDatabase shape: {engine?: "DATABASE_ENGINE_UNSPECIFIED"|"MYSQL", provider?: "DATABASE_PROVIDER_UNSPECIFIED"|"CLOUDSQL"|"RDS"}
 # --vpcPeeringConnectivity shape: {vpc?: string}
-export def "v1beta1-migration-jobs create" [
+export def "datamigration-projects-locations-migration-jobs-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1090,7 +1090,7 @@ export def "v1beta1-migration-jobs create" [
 #
 # GET /v1beta1/{resource}:getIamPolicy
 # operationId: datamigration.projects.locations.migrationJobs.getIamPolicy
-export def "v1beta1 get-iam-policy" [
+export def "datamigration-projects-locations-migration-jobs-get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1140,7 +1140,7 @@ export def "v1beta1 get-iam-policy" [
 # POST /v1beta1/{resource}:setIamPolicy
 # operationId: datamigration.projects.locations.migrationJobs.setIamPolicy
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
-export def "v1beta1 update-iam-policy" [
+export def "datamigration-projects-locations-migration-jobs-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1193,7 +1193,7 @@ export def "v1beta1 update-iam-policy" [
 #
 # POST /v1beta1/{resource}:testIamPermissions
 # operationId: datamigration.projects.locations.migrationJobs.testIamPermissions
-export def "v1beta1 test-iam-permissions" [
+export def "datamigration-projects-locations-migration-jobs-test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

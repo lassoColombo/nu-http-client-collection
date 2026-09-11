@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "contacts list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-contacts" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -122,7 +122,7 @@ export def commands []: nothing -> table {
 #
 # GET /contacts
 # operationId: getContacts
-export def "contacts list" [
+export def "get-contacts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -160,7 +160,7 @@ export def "contacts list" [
 #
 # GET /contacts/{id}
 # operationId: getContact
-export def "contacts get" [
+export def "get-contact" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -196,7 +196,7 @@ export def "contacts get" [
 #
 # GET /contacts/{id}/district
 # operationId: getDistrictForStudentContact
-export def "contacts-district get-for-student" [
+export def "get-district-for-student-contact" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -232,7 +232,7 @@ export def "contacts-district get-for-student" [
 #
 # GET /contacts/{id}/student
 # operationId: getStudentForContact
-export def "contacts-student get" [
+export def "get-student-for-contact" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -268,7 +268,7 @@ export def "contacts-student get" [
 #
 # GET /district_admins
 # operationId: getDistrictAdmins
-export def "district-admins list" [
+export def "get-district-admins" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -306,7 +306,7 @@ export def "district-admins list" [
 #
 # GET /district_admins/{id}
 # operationId: getDistrictAdmin
-export def "district-admins get" [
+export def "get-district-admin" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -342,7 +342,7 @@ export def "district-admins get" [
 #
 # GET /districts
 # operationId: getDistricts
-export def "districts list" [
+export def "get-districts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -376,7 +376,7 @@ export def "districts list" [
 #
 # GET /districts/{id}
 # operationId: getDistrict
-export def "districts get" [
+export def "get-district" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -414,7 +414,7 @@ export def "districts get" [
 #
 # GET /districts/{id}/admins
 # operationId: getAdminsForDistrict
-export def "districts-admins get" [
+export def "get-admins-for-district" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -450,7 +450,7 @@ export def "districts-admins get" [
 #
 # GET /districts/{id}/schools
 # operationId: getSchoolsForDistrict
-export def "districts-schools get" [
+export def "get-schools-for-district" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -491,7 +491,7 @@ export def "districts-schools get" [
 #
 # GET /districts/{id}/sections
 # operationId: getSectionsForDistrict
-export def "districts-sections get" [
+export def "get-sections-for-district" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -532,7 +532,7 @@ export def "districts-sections get" [
 #
 # GET /districts/{id}/status
 # operationId: getDistrictStatus
-export def "districts-status get" [
+export def "get-district-status" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -568,7 +568,7 @@ export def "districts-status get" [
 #
 # GET /districts/{id}/students
 # operationId: getStudentsForDistrict
-export def "districts-students get" [
+export def "get-students-for-district" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -609,7 +609,7 @@ export def "districts-students get" [
 #
 # GET /districts/{id}/teachers
 # operationId: getTeachersForDistrict
-export def "districts-teachers get" [
+export def "get-teachers-for-district" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -650,7 +650,7 @@ export def "districts-teachers get" [
 #
 # GET /school_admins
 # operationId: getSchoolAdmins
-export def "school-admins list" [
+export def "get-school-admins" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -689,7 +689,7 @@ export def "school-admins list" [
 #
 # GET /school_admins/{id}
 # operationId: getSchoolAdmin
-export def "school-admins get" [
+export def "get-school-admin" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -727,7 +727,7 @@ export def "school-admins get" [
 #
 # GET /school_admins/{id}/schools
 # operationId: getSchoolsForSchoolAdmin
-export def "school-admins-schools get" [
+export def "get-schools-for-school-admin" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -767,7 +767,7 @@ export def "school-admins-schools get" [
 #
 # GET /schools
 # operationId: getSchools
-export def "schools list" [
+export def "get-schools" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -806,7 +806,7 @@ export def "schools list" [
 #
 # GET /schools/{id}
 # operationId: getSchool
-export def "schools get" [
+export def "get-school" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -842,7 +842,7 @@ export def "schools get" [
 #
 # GET /schools/{id}/district
 # operationId: getDistrictForSchool
-export def "schools-district get" [
+export def "get-district-for-school" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -878,7 +878,7 @@ export def "schools-district get" [
 #
 # GET /schools/{id}/sections
 # operationId: getSectionsForSchool
-export def "schools-sections get" [
+export def "get-sections-for-school" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -919,7 +919,7 @@ export def "schools-sections get" [
 #
 # GET /schools/{id}/students
 # operationId: getStudentsForSchool
-export def "schools-students get" [
+export def "get-students-for-school" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -960,7 +960,7 @@ export def "schools-students get" [
 #
 # GET /schools/{id}/teachers
 # operationId: getTeachersForSchool
-export def "schools-teachers get" [
+export def "get-teachers-for-school" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1001,7 +1001,7 @@ export def "schools-teachers get" [
 #
 # GET /sections
 # operationId: getSections
-export def "sections list" [
+export def "get-sections" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1040,7 +1040,7 @@ export def "sections list" [
 #
 # GET /sections/{id}
 # operationId: getSection
-export def "sections get" [
+export def "get-section" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1076,7 +1076,7 @@ export def "sections get" [
 #
 # GET /sections/{id}/district
 # operationId: getDistrictForSection
-export def "sections-district get" [
+export def "get-district-for-section" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1112,7 +1112,7 @@ export def "sections-district get" [
 #
 # GET /sections/{id}/school
 # operationId: getSchoolForSection
-export def "sections-school get" [
+export def "get-school-for-section" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1148,7 +1148,7 @@ export def "sections-school get" [
 #
 # GET /sections/{id}/students
 # operationId: getStudentsForSection
-export def "sections-students get" [
+export def "get-students-for-section" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1188,7 +1188,7 @@ export def "sections-students get" [
 #
 # GET /sections/{id}/teacher
 # operationId: getTeacherForSection
-export def "sections-teacher get" [
+export def "get-teacher-for-section" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1224,7 +1224,7 @@ export def "sections-teacher get" [
 #
 # GET /sections/{id}/teachers
 # operationId: getTeachersForSection
-export def "sections-teachers get" [
+export def "get-teachers-for-section" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1264,7 +1264,7 @@ export def "sections-teachers get" [
 #
 # GET /students
 # operationId: getStudents
-export def "students list" [
+export def "get-students" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1303,7 +1303,7 @@ export def "students list" [
 #
 # GET /students/{id}
 # operationId: getStudent
-export def "students get" [
+export def "get-student" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1341,7 +1341,7 @@ export def "students get" [
 #
 # GET /students/{id}/contacts
 # operationId: getContactsForStudent
-export def "students-contacts get" [
+export def "get-contacts-for-student" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1379,7 +1379,7 @@ export def "students-contacts get" [
 #
 # GET /students/{id}/district
 # operationId: getDistrictForStudent
-export def "students-district get" [
+export def "get-district-for-student" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1415,7 +1415,7 @@ export def "students-district get" [
 #
 # GET /students/{id}/school
 # operationId: getSchoolForStudent
-export def "students-school get" [
+export def "get-school-for-student" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1451,7 +1451,7 @@ export def "students-school get" [
 #
 # GET /students/{id}/sections
 # operationId: getSectionsForStudent
-export def "students-sections get" [
+export def "get-sections-for-student" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1491,7 +1491,7 @@ export def "students-sections get" [
 #
 # GET /students/{id}/teachers
 # operationId: getTeachersForStudent
-export def "students-teachers get" [
+export def "get-teachers-for-student" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1531,7 +1531,7 @@ export def "students-teachers get" [
 #
 # GET /teachers
 # operationId: getTeachers
-export def "teachers list" [
+export def "get-teachers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1570,7 +1570,7 @@ export def "teachers list" [
 #
 # GET /teachers/{id}
 # operationId: getTeacher
-export def "teachers get" [
+export def "get-teacher" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1608,7 +1608,7 @@ export def "teachers get" [
 #
 # GET /teachers/{id}/district
 # operationId: getDistrictForTeacher
-export def "teachers-district get" [
+export def "get-district-for-teacher" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1644,7 +1644,7 @@ export def "teachers-district get" [
 #
 # GET /teachers/{id}/grade_levels
 # operationId: getGradeLevelsForTeacher
-export def "teachers-grade-levels get" [
+export def "get-grade-levels-for-teacher" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1680,7 +1680,7 @@ export def "teachers-grade-levels get" [
 #
 # GET /teachers/{id}/school
 # operationId: getSchoolForTeacher
-export def "teachers-school get" [
+export def "get-school-for-teacher" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1716,7 +1716,7 @@ export def "teachers-school get" [
 #
 # GET /teachers/{id}/sections
 # operationId: getSectionsForTeacher
-export def "teachers-sections get" [
+export def "get-sections-for-teacher" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1756,7 +1756,7 @@ export def "teachers-sections get" [
 #
 # GET /teachers/{id}/students
 # operationId: getStudentsForTeacher
-export def "teachers-students get" [
+export def "get-students-for-teacher" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

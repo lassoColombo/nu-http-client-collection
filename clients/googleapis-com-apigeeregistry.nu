@@ -135,7 +135,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "apigeeregistry-projects-locations-operations-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -159,7 +159,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1/{name}
 # operationId: apigeeregistry.projects.locations.operations.delete
-export def "projects delete" [
+export def "apigeeregistry-projects-locations-operations-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -208,7 +208,7 @@ export def "projects delete" [
 #
 # GET /v1/{name}
 # operationId: apigeeregistry.projects.locations.operations.get
-export def "projects get" [
+export def "apigeeregistry-projects-locations-operations-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -256,7 +256,7 @@ export def "projects get" [
 #
 # PATCH /v1/{name}
 # operationId: apigeeregistry.projects.locations.apis.versions.specs.patch
-export def "projects update" [
+export def "apigeeregistry-projects-locations-apis-versions-specs-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -317,7 +317,7 @@ export def "projects update" [
 #
 # PUT /v1/{name}
 # operationId: apigeeregistry.projects.locations.artifacts.replaceArtifact
-export def "projects update-artifact" [
+export def "apigeeregistry-projects-locations-artifacts-replace-artifact" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -373,7 +373,7 @@ export def "projects update-artifact" [
 #
 # GET /v1/{name}/locations
 # operationId: apigeeregistry.projects.locations.list
-export def "locations list" [
+export def "apigeeregistry-projects-locations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -424,7 +424,7 @@ export def "locations list" [
 #
 # GET /v1/{name}/operations
 # operationId: apigeeregistry.projects.locations.operations.list
-export def "operations list" [
+export def "apigeeregistry-projects-locations-operations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -475,7 +475,7 @@ export def "operations list" [
 #
 # POST /v1/{name}:cancel
 # operationId: apigeeregistry.projects.locations.operations.cancel
-export def "projects cancel" [
+export def "apigeeregistry-projects-locations-operations-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -527,7 +527,7 @@ export def "projects cancel" [
 #
 # DELETE /v1/{name}:deleteRevision
 # operationId: apigeeregistry.projects.locations.apis.versions.specs.deleteRevision
-export def "projects delete-revision" [
+export def "apigeeregistry-projects-locations-apis-versions-specs-delete-revision" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -575,7 +575,7 @@ export def "projects delete-revision" [
 #
 # GET /v1/{name}:getContents
 # operationId: apigeeregistry.projects.locations.artifacts.getContents
-export def "projects get-contents" [
+export def "apigeeregistry-projects-locations-artifacts-get-contents" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -623,7 +623,7 @@ export def "projects get-contents" [
 #
 # GET /v1/{name}:listRevisions
 # operationId: apigeeregistry.projects.locations.apis.versions.specs.listRevisions
-export def "projects list-revisions" [
+export def "apigeeregistry-projects-locations-apis-versions-specs-list-revisions" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -674,7 +674,7 @@ export def "projects list-revisions" [
 #
 # POST /v1/{name}:rollback
 # operationId: apigeeregistry.projects.locations.apis.versions.specs.rollback
-export def "projects create-rollback" [
+export def "apigeeregistry-projects-locations-apis-versions-specs-rollback" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -726,7 +726,7 @@ export def "projects create-rollback" [
 #
 # POST /v1/{name}:tagRevision
 # operationId: apigeeregistry.projects.locations.apis.versions.specs.tagRevision
-export def "projects tag-revision" [
+export def "apigeeregistry-projects-locations-apis-versions-specs-tag-revision" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -778,7 +778,7 @@ export def "projects tag-revision" [
 #
 # GET /v1/{parent}/apis
 # operationId: apigeeregistry.projects.locations.apis.list
-export def "apis list" [
+export def "apigeeregistry-projects-locations-apis-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -830,7 +830,7 @@ export def "apis list" [
 #
 # POST /v1/{parent}/apis
 # operationId: apigeeregistry.projects.locations.apis.create
-export def "apis create" [
+export def "apigeeregistry-projects-locations-apis-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -890,7 +890,7 @@ export def "apis create" [
 #
 # GET /v1/{parent}/artifacts
 # operationId: apigeeregistry.projects.locations.artifacts.list
-export def "artifacts list" [
+export def "apigeeregistry-projects-locations-artifacts-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -942,7 +942,7 @@ export def "artifacts list" [
 #
 # POST /v1/{parent}/artifacts
 # operationId: apigeeregistry.projects.locations.artifacts.create
-export def "artifacts create" [
+export def "apigeeregistry-projects-locations-artifacts-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -999,7 +999,7 @@ export def "artifacts create" [
 #
 # GET /v1/{parent}/deployments
 # operationId: apigeeregistry.projects.locations.apis.deployments.list
-export def "deployments list" [
+export def "apigeeregistry-projects-locations-apis-deployments-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1051,7 +1051,7 @@ export def "deployments list" [
 #
 # POST /v1/{parent}/deployments
 # operationId: apigeeregistry.projects.locations.apis.deployments.create
-export def "deployments create" [
+export def "apigeeregistry-projects-locations-apis-deployments-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1114,7 +1114,7 @@ export def "deployments create" [
 # POST /v1/{parent}/instances
 # operationId: apigeeregistry.projects.locations.instances.create
 # --config shape: {cmekKeyName?: string}
-export def "instances create" [
+export def "apigeeregistry-projects-locations-instances-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1169,7 +1169,7 @@ export def "instances create" [
 #
 # GET /v1/{parent}/specs
 # operationId: apigeeregistry.projects.locations.apis.versions.specs.list
-export def "specs list" [
+export def "apigeeregistry-projects-locations-apis-versions-specs-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1221,7 +1221,7 @@ export def "specs list" [
 #
 # POST /v1/{parent}/specs
 # operationId: apigeeregistry.projects.locations.apis.versions.specs.create
-export def "specs create" [
+export def "apigeeregistry-projects-locations-apis-versions-specs-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1281,7 +1281,7 @@ export def "specs create" [
 #
 # GET /v1/{parent}/versions
 # operationId: apigeeregistry.projects.locations.apis.versions.list
-export def "versions list" [
+export def "apigeeregistry-projects-locations-apis-versions-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1333,7 +1333,7 @@ export def "versions list" [
 #
 # POST /v1/{parent}/versions
 # operationId: apigeeregistry.projects.locations.apis.versions.create
-export def "versions create" [
+export def "apigeeregistry-projects-locations-apis-versions-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1392,7 +1392,7 @@ export def "versions create" [
 #
 # GET /v1/{resource}:getIamPolicy
 # operationId: apigeeregistry.projects.locations.runtime.getIamPolicy
-export def "projects get-iam-policy" [
+export def "apigeeregistry-projects-locations-runtime-get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1442,7 +1442,7 @@ export def "projects get-iam-policy" [
 # POST /v1/{resource}:setIamPolicy
 # operationId: apigeeregistry.projects.locations.runtime.setIamPolicy
 # --policy shape: {bindings?: list, etag?: string, version?: int}
-export def "projects update-iam-policy" [
+export def "apigeeregistry-projects-locations-runtime-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1494,7 +1494,7 @@ export def "projects update-iam-policy" [
 #
 # POST /v1/{resource}:testIamPermissions
 # operationId: apigeeregistry.projects.locations.runtime.testIamPermissions
-export def "projects test-iam-permissions" [
+export def "apigeeregistry-projects-locations-runtime-test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

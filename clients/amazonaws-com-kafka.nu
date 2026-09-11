@@ -125,7 +125,7 @@ def storage-mode-completer [] { ["LOCAL" "TIERED"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "clusters-scram-secrets create-batch-associate" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "batch-associate-scram-secret" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -149,7 +149,7 @@ export def commands []: nothing -> table {
 #
 # POST /v1/clusters/{clusterArn}/scram-secrets
 # operationId: BatchAssociateScramSecret
-export def "clusters-scram-secrets create-batch-associate" [
+export def "batch-associate-scram-secret" [
   cluster_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -198,7 +198,7 @@ export def "clusters-scram-secrets create-batch-associate" [
 #
 # PATCH /v1/clusters/{clusterArn}/scram-secrets
 # operationId: BatchDisassociateScramSecret
-export def "clusters-scram-secrets update-batch-disassociate" [
+export def "batch-disassociate-scram-secret" [
   cluster_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -247,7 +247,7 @@ export def "clusters-scram-secrets update-batch-disassociate" [
 #
 # GET /v1/clusters/{clusterArn}/scram-secrets
 # operationId: ListScramSecrets
-export def "clusters-scram-secrets list" [
+export def "list-scram-secrets" [
   cluster_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -303,7 +303,7 @@ export def "clusters-scram-secrets list" [
 # --encryptionInfo shape: {EncryptionAtRest?: any, EncryptionInTransit?: any}
 # --openMonitoring shape: {Prometheus?: any}
 # --loggingInfo shape: {BrokerLogs?: any}
-export def "clusters create" [
+export def "create-cluster" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -361,7 +361,7 @@ export def "clusters create" [
 #
 # GET /v1/clusters
 # operationId: ListClusters
-export def "clusters list" [
+export def "list-clusters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -412,7 +412,7 @@ export def "clusters list" [
 # operationId: CreateClusterV2
 # --provisioned shape: {BrokerNodeGroupInfo?: any, ClientAuthentication?: any, ConfigurationInfo?: any, EncryptionInfo?: any, EnhancedMonitoring?: any, OpenMonitoring?: any, KafkaVersion?: any, LoggingInfo?: any, NumberOfBrokerNodes?: any, StorageMode?: any}
 # --serverless shape: {VpcConfigs?: any, ClientAuthentication?: any}
-export def "clusters create-1" [
+export def "create-cluster-v2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -462,7 +462,7 @@ export def "clusters create-1" [
 #
 # GET /api/v2/clusters
 # operationId: ListClustersV2
-export def "clusters list-1" [
+export def "list-clusters-v2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -512,7 +512,7 @@ export def "clusters list-1" [
 #
 # POST /v1/configurations
 # operationId: CreateConfiguration
-export def "configurations create" [
+export def "create-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -562,7 +562,7 @@ export def "configurations create" [
 #
 # GET /v1/configurations
 # operationId: ListConfigurations
-export def "configurations list" [
+export def "list-configurations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -610,7 +610,7 @@ export def "configurations list" [
 #
 # DELETE /v1/clusters/{clusterArn}
 # operationId: DeleteCluster
-export def "clusters delete" [
+export def "delete-cluster" [
   cluster_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -657,7 +657,7 @@ export def "clusters delete" [
 #
 # GET /v1/clusters/{clusterArn}
 # operationId: DescribeCluster
-export def "clusters get-by-cluster-arn" [
+export def "describe-cluster" [
   cluster_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -702,7 +702,7 @@ export def "clusters get-by-cluster-arn" [
 #
 # DELETE /v1/configurations/{arn}
 # operationId: DeleteConfiguration
-export def "configurations delete" [
+export def "delete-configuration" [
   arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -747,7 +747,7 @@ export def "configurations delete" [
 #
 # GET /v1/configurations/{arn}
 # operationId: DescribeConfiguration
-export def "configurations get" [
+export def "describe-configuration" [
   arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -792,7 +792,7 @@ export def "configurations get" [
 #
 # PUT /v1/configurations/{arn}
 # operationId: UpdateConfiguration
-export def "configurations update" [
+export def "update-configuration" [
   arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -842,7 +842,7 @@ export def "configurations update" [
 #
 # GET /api/v2/clusters/{clusterArn}
 # operationId: DescribeClusterV2
-export def "clusters get-by-cluster-arn-1" [
+export def "describe-cluster-v2" [
   cluster_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -887,7 +887,7 @@ export def "clusters get-by-cluster-arn-1" [
 #
 # GET /v1/operations/{clusterOperationArn}
 # operationId: DescribeClusterOperation
-export def "operations get" [
+export def "describe-cluster-operation" [
   cluster_operation_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -932,7 +932,7 @@ export def "operations get" [
 #
 # GET /v1/configurations/{arn}/revisions/{revision}
 # operationId: DescribeConfigurationRevision
-export def "configurations-revisions get" [
+export def "describe-configuration-revision" [
   arn: string
   revision: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -979,7 +979,7 @@ export def "configurations-revisions get" [
 #
 # GET /v1/clusters/{clusterArn}/bootstrap-brokers
 # operationId: GetBootstrapBrokers
-export def "clusters-bootstrap-brokers get" [
+export def "get-bootstrap-brokers" [
   cluster_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1024,7 +1024,7 @@ export def "clusters-bootstrap-brokers get" [
 #
 # GET /v1/compatible-kafka-versions
 # operationId: GetCompatibleKafkaVersions
-export def "compatible-kafka-versions get" [
+export def "get-compatible-kafka-versions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1069,7 +1069,7 @@ export def "compatible-kafka-versions get" [
 #
 # GET /v1/clusters/{clusterArn}/operations
 # operationId: ListClusterOperations
-export def "clusters-operations list" [
+export def "list-cluster-operations" [
   cluster_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1119,7 +1119,7 @@ export def "clusters-operations list" [
 #
 # GET /v1/configurations/{arn}/revisions
 # operationId: ListConfigurationRevisions
-export def "configurations-revisions list" [
+export def "list-configuration-revisions" [
   arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1169,7 +1169,7 @@ export def "configurations-revisions list" [
 #
 # GET /v1/kafka-versions
 # operationId: ListKafkaVersions
-export def "kafka-versions list" [
+export def "list-kafka-versions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1217,7 +1217,7 @@ export def "kafka-versions list" [
 #
 # GET /v1/clusters/{clusterArn}/nodes
 # operationId: ListNodes
-export def "clusters-nodes list" [
+export def "list-nodes" [
   cluster_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1267,7 +1267,7 @@ export def "clusters-nodes list" [
 #
 # GET /v1/tags/{resourceArn}
 # operationId: ListTagsForResource
-export def "tags list-for-resource" [
+export def "list-tags-for-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1312,7 +1312,7 @@ export def "tags list-for-resource" [
 #
 # POST /v1/tags/{resourceArn}
 # operationId: TagResource
-export def "tags tag-resource" [
+export def "tag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1361,7 +1361,7 @@ export def "tags tag-resource" [
 #
 # PUT /v1/clusters/{clusterArn}/reboot-broker
 # operationId: RebootBroker
-export def "clusters-reboot-broker update" [
+export def "reboot-broker" [
   cluster_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1410,7 +1410,7 @@ export def "clusters-reboot-broker update" [
 #
 # DELETE /v1/tags/{resourceArn}
 # operationId: UntagResource
-export def "tags untag-resource" [
+export def "untag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1457,7 +1457,7 @@ export def "tags untag-resource" [
 #
 # PUT /v1/clusters/{clusterArn}/nodes/count
 # operationId: UpdateBrokerCount
-export def "clusters-nodes-count update-broker" [
+export def "update-broker-count" [
   cluster_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1507,7 +1507,7 @@ export def "clusters-nodes-count update-broker" [
 #
 # PUT /v1/clusters/{clusterArn}/nodes/type
 # operationId: UpdateBrokerType
-export def "clusters-nodes-type update-broker" [
+export def "update-broker-type" [
   cluster_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1558,7 +1558,7 @@ export def "clusters-nodes-type update-broker" [
 # PUT /v1/clusters/{clusterArn}/nodes/storage
 # operationId: UpdateBrokerStorage
 # --targetBrokerEBSVolumeInfo item shape: {KafkaBrokerNodeId: any, ProvisionedThroughput?: any, VolumeSizeGB?: any}
-export def "clusters-nodes-storage update-broker" [
+export def "update-broker-storage" [
   cluster_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1609,7 +1609,7 @@ export def "clusters-nodes-storage update-broker" [
 # PUT /v1/clusters/{clusterArn}/connectivity
 # operationId: UpdateConnectivity
 # --connectivityInfo shape: {PublicAccess?: any}
-export def "clusters-connectivity update" [
+export def "update-connectivity" [
   cluster_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1660,7 +1660,7 @@ export def "clusters-connectivity update" [
 # PUT /v1/clusters/{clusterArn}/configuration
 # operationId: UpdateClusterConfiguration
 # --configurationInfo shape: {Arn?: any, Revision?: any}
-export def "clusters-configuration update" [
+export def "update-cluster-configuration" [
   cluster_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1711,7 +1711,7 @@ export def "clusters-configuration update" [
 # PUT /v1/clusters/{clusterArn}/version
 # operationId: UpdateClusterKafkaVersion
 # --configurationInfo shape: {Arn?: any, Revision?: any}
-export def "clusters-version update-kafka" [
+export def "update-cluster-kafka-version" [
   cluster_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1764,7 +1764,7 @@ export def "clusters-version update-kafka" [
 # operationId: UpdateMonitoring
 # --openMonitoring shape: {Prometheus?: any}
 # --loggingInfo shape: {BrokerLogs?: any}
-export def "clusters-monitoring update" [
+export def "update-monitoring" [
   cluster_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1818,7 +1818,7 @@ export def "clusters-monitoring update" [
 # operationId: UpdateSecurity
 # --clientAuthentication shape: {Sasl?: any, Tls?: any, Unauthenticated?: any}
 # --encryptionInfo shape: {EncryptionAtRest?: any, EncryptionInTransit?: any}
-export def "clusters-security update" [
+export def "update-security" [
   cluster_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1870,7 +1870,7 @@ export def "clusters-security update" [
 # PUT /v1/clusters/{clusterArn}/storage
 # operationId: UpdateStorage
 # --provisionedThroughput shape: {Enabled?: any, VolumeThroughput?: any}
-export def "clusters-storage update" [
+export def "update-storage" [
   cluster_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

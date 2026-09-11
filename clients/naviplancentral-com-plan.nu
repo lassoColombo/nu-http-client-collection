@@ -105,7 +105,7 @@ def accept-completer [] { ["application/json" "text/json"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "advisors get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "advisors-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -129,7 +129,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/Advisors
 # operationId: Advisors_Get
-export def "advisors get" [
+export def "advisors-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -164,7 +164,7 @@ export def "advisors get" [
 #
 # GET /api/Advisors/{householdId}/{clientId}
 # operationId: Advisors_GetByHouseholdidClientid
-export def "advisors get-by-household-id-client-id" [
+export def "advisors-get-by-householdid-clientid" [
   household_id: int
   client_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -203,7 +203,7 @@ export def "advisors get-by-household-id-client-id" [
 #
 # GET /api/Advisors/{id}
 # operationId: Advisors_GetById
-export def "advisors get-by-id" [
+export def "advisors-get-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -240,7 +240,7 @@ export def "advisors get-by-id" [
 #
 # GET /api/Assumptions
 # operationId: Assumptions_GetByPlanid
-export def "assumptions get-by-planid" [
+export def "assumptions-get-by-planid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -277,7 +277,7 @@ export def "assumptions get-by-planid" [
 #
 # GET /api/BusinessEntities
 # operationId: BusinessEntities_GetByPlanid
-export def "business-entities list" [
+export def "business-entities-get-by-planid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -314,7 +314,7 @@ export def "business-entities list" [
 #
 # GET /api/BusinessEntities/{id}
 # operationId: BusinessEntities_GetByIdPlanid
-export def "business-entities get-by-planid" [
+export def "business-entities-get-by-id-planid" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -353,7 +353,7 @@ export def "business-entities get-by-planid" [
 #
 # GET /api/Calculations/MonteCarlo
 # operationId: Calculations_GetByPlanid
-export def "calculations-monte-carlo get-by-planid" [
+export def "calculations-get-by-planid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -390,7 +390,7 @@ export def "calculations-monte-carlo get-by-planid" [
 #
 # GET /api/DefinedBenefitPensions
 # operationId: DefinedBenefitPensions_GetByPlanid
-export def "defined-benefit-pensions list" [
+export def "defined-benefit-pensions-get-by-planid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -427,7 +427,7 @@ export def "defined-benefit-pensions list" [
 #
 # GET /api/DefinedBenefitPensions/{id}
 # operationId: DefinedBenefitPensions_GetByIdPlanid
-export def "defined-benefit-pensions get-by-planid" [
+export def "defined-benefit-pensions-get-by-id-planid" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -466,7 +466,7 @@ export def "defined-benefit-pensions get-by-planid" [
 #
 # POST /api/Eula/Accept
 # operationId: Eula_Accept
-export def "eula-accept create" [
+export def "eula-accept" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -501,7 +501,7 @@ export def "eula-accept create" [
 #
 # GET /api/Family
 # operationId: Family_GetByPlanid
-export def "family get-by-planid" [
+export def "family-get-by-planid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -538,7 +538,7 @@ export def "family get-by-planid" [
 #
 # GET /api/GoalAdjustments/Education/{id}/Adjustments
 # operationId: GoalAdjustments_GetEducationByIdClientidPlanid
-export def "goal-adjustments-education-adjustments get-by-clientid-planid" [
+export def "goal-adjustments-get-education-by-id-clientid-planid" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -579,7 +579,7 @@ export def "goal-adjustments-education-adjustments get-by-clientid-planid" [
 # POST /api/GoalAdjustments/Education/{id}/Calculations
 # operationId: GoalAdjustments_PostEducationByIdGoaladjustmentsPlanid
 # --adjustedValues shape: {duration?: float, expensesCovered?: float, lumpSumContribution?: float, lumpSumDate?: string, monthlySavingsContribution?: float}
-export def "goal-adjustments-education-calculations create-by-goaladjustments-planid" [
+export def "goal-adjustments-post-education-by-id-goaladjustments-planid" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -622,7 +622,7 @@ export def "goal-adjustments-education-calculations create-by-goaladjustments-pl
 #
 # GET /api/GoalAdjustments/GoalSuccessRates
 # operationId: GoalAdjustments_GetGoalSuccessRatesByClientidPlanid
-export def "goal-adjustments-goal-success-rates get-by-clientid-planid" [
+export def "goal-adjustments-get-goal-success-rates-by-clientid-planid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -660,7 +660,7 @@ export def "goal-adjustments-goal-success-rates get-by-clientid-planid" [
 #
 # GET /api/GoalAdjustments/MajorPurchase/{id}/Adjustments
 # operationId: GoalAdjustments_GetMajorPurchaseByIdClientidPlanid
-export def "goal-adjustments-major-purchase-adjustments get-by-clientid-planid" [
+export def "goal-adjustments-get-major-purchase-by-id-clientid-planid" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -701,7 +701,7 @@ export def "goal-adjustments-major-purchase-adjustments get-by-clientid-planid" 
 # POST /api/GoalAdjustments/MajorPurchase/{id}/Calculations
 # operationId: GoalAdjustments_PostMajorPurchaseByIdGoaladjustmentsPlanid
 # --adjustedValues shape: {lumpSumContribution?: float, lumpSumDate?: string, monthlySavingsContribution?: float, targetDate?: string, totalNeed?: float}
-export def "goal-adjustments-major-purchase-calculations create-by-goaladjustments-planid" [
+export def "goal-adjustments-post-major-purchase-by-id-goaladjustments-planid" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -744,7 +744,7 @@ export def "goal-adjustments-major-purchase-calculations create-by-goaladjustmen
 #
 # GET /api/GoalAdjustments/Restrictions
 # operationId: GoalAdjustments_GetGoalAdjustmentRestrictionsByClientidPlanid
-export def "goal-adjustments-restrictions get-by-clientid-planid" [
+export def "goal-adjustments-get-goal-adjustment-restrictions-by-clientid-planid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -782,7 +782,7 @@ export def "goal-adjustments-restrictions get-by-clientid-planid" [
 #
 # GET /api/GoalAdjustments/Retirement/Adjustments
 # operationId: GoalAdjustments_GetRetirementByClientidPlanid
-export def "goal-adjustments-retirement-adjustments get-by-clientid-planid" [
+export def "goal-adjustments-get-retirement-by-clientid-planid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -821,7 +821,7 @@ export def "goal-adjustments-retirement-adjustments get-by-clientid-planid" [
 # POST /api/GoalAdjustments/Retirement/Calculations
 # operationId: GoalAdjustments_PostRetirementByGoaladjustmentsPlanid
 # --adjustedValues shape: {clientRetirementAge?: float, coClientRetirementAge?: float, discretionaryExpenseCoverage?: float, fixedExpenseCoverage?: float, lumpSumContribution?: float, lumpSumDate?: string, monthlySavingsContribution?: float}
-export def "goal-adjustments-retirement-calculations create-by-goaladjustments-planid" [
+export def "goal-adjustments-post-retirement-by-goaladjustments-planid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -862,7 +862,7 @@ export def "goal-adjustments-retirement-calculations create-by-goaladjustments-p
 #
 # GET /api/GoalAdjustments/{id}/WhatAreMyOptions
 # operationId: GoalAdjustments_GetWhatAreMyOptionsByIdClientidPlanid
-export def "goal-adjustments-what-are-my-options get-by-clientid-planid" [
+export def "goal-adjustments-get-what-are-my-options-by-id-clientid-planid" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -902,7 +902,7 @@ export def "goal-adjustments-what-are-my-options get-by-clientid-planid" [
 #
 # GET /api/Goals
 # operationId: Goals_GetByPlanid
-export def "goals list" [
+export def "goals-get-by-planid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -939,7 +939,7 @@ export def "goals list" [
 #
 # GET /api/Goals/{id}
 # operationId: Goals_GetByIdPlanid
-export def "goals get-by-planid" [
+export def "goals-get-by-id-planid" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -978,7 +978,7 @@ export def "goals get-by-planid" [
 #
 # GET /api/HoldingCompanies
 # operationId: HoldingCompanies_GetByPlanid
-export def "holding-companies list" [
+export def "holding-companies-get-by-planid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1015,7 +1015,7 @@ export def "holding-companies list" [
 #
 # GET /api/HoldingCompanies/{id}
 # operationId: HoldingCompanies_GetByIdPlanid
-export def "holding-companies get-by-planid" [
+export def "holding-companies-get-by-id-planid" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1054,7 +1054,7 @@ export def "holding-companies get-by-planid" [
 #
 # GET /api/Households
 # operationId: Households_GetByHouseholdid
-export def "households get-by-householdid" [
+export def "households-get-by-householdid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1091,7 +1091,7 @@ export def "households get-by-householdid" [
 #
 # GET /api/Liabilities
 # operationId: Liabilities_GetByPlanid
-export def "liabilities list" [
+export def "liabilities-get-by-planid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1128,7 +1128,7 @@ export def "liabilities list" [
 #
 # GET /api/Liabilities/{id}
 # operationId: Liabilities_GetByIdPlanid
-export def "liabilities get-by-planid" [
+export def "liabilities-get-by-id-planid" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1167,7 +1167,7 @@ export def "liabilities get-by-planid" [
 #
 # GET /api/LifestyleAssets
 # operationId: LifestyleAssets_GetByPlanid
-export def "lifestyle-assets list" [
+export def "lifestyle-assets-get-by-planid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1204,7 +1204,7 @@ export def "lifestyle-assets list" [
 #
 # GET /api/LifestyleAssets/{id}
 # operationId: LifestyleAssets_GetByIdPlanid
-export def "lifestyle-assets get-by-planid" [
+export def "lifestyle-assets-get-by-id-planid" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1243,7 +1243,7 @@ export def "lifestyle-assets get-by-planid" [
 #
 # GET /api/LivePlan/Goals
 # operationId: LivePlan_GetGoalsByClientidPlanid
-export def "live-plan-goals get-by-clientid-planid" [
+export def "live-plan-get-goals-by-clientid-planid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1281,7 +1281,7 @@ export def "live-plan-goals get-by-clientid-planid" [
 #
 # GET /api/LivePlan/Goals/Funding
 # operationId: LivePlan_GetGoalFundingListByClientidPlanid
-export def "live-plan-goals-funding get-list-by-clientid-planid" [
+export def "live-plan-get-goal-funding-list-by-clientid-planid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1319,7 +1319,7 @@ export def "live-plan-goals-funding get-list-by-clientid-planid" [
 #
 # GET /api/LivePlan/Goals/{id}/WhatAreMyOptions
 # operationId: LivePlan_GetWhatAreMyOptionsByIdClientidPlanid
-export def "live-plan-goals-what-are-my-options get-by-clientid-planid" [
+export def "live-plan-get-what-are-my-options-by-id-clientid-planid" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1359,7 +1359,7 @@ export def "live-plan-goals-what-are-my-options get-by-clientid-planid" [
 #
 # GET /api/LivePlan/NetWorth/Accounts
 # operationId: LivePlan_GetAccountsByClientidPlanid
-export def "live-plan-net-worth-accounts get-by-clientid-planid" [
+export def "live-plan-get-accounts-by-clientid-planid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1397,7 +1397,7 @@ export def "live-plan-net-worth-accounts get-by-clientid-planid" [
 #
 # GET /api/LivePlan/NetWorth/Liabilities
 # operationId: LivePlan_GetLiabilitiesByClientidPlanid
-export def "live-plan-net-worth-liabilities get-by-clientid-planid" [
+export def "live-plan-get-liabilities-by-clientid-planid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1435,7 +1435,7 @@ export def "live-plan-net-worth-liabilities get-by-clientid-planid" [
 #
 # GET /api/LivePlan/NetWorth/LifestyleAssets
 # operationId: LivePlan_GetLifestyleAssetsByClientidPlanid
-export def "live-plan-net-worth-lifestyle-assets get-by-clientid-planid" [
+export def "live-plan-get-lifestyle-assets-by-clientid-planid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1473,7 +1473,7 @@ export def "live-plan-net-worth-lifestyle-assets get-by-clientid-planid" [
 #
 # GET /api/LivePlan/NetWorth/RealEstate
 # operationId: LivePlan_GetRealEstateAssetsByClientidPlanid
-export def "live-plan-net-worth-real-estate get-assets-by-clientid-planid" [
+export def "live-plan-get-real-estate-assets-by-clientid-planid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1511,7 +1511,7 @@ export def "live-plan-net-worth-real-estate get-assets-by-clientid-planid" [
 #
 # GET /api/LivePlan/Projections/NetWorth
 # operationId: LivePlan_GetProjectedNetWorthByClientidPlanid
-export def "live-plan-projections-net-worth get-projected-by-clientid-planid" [
+export def "live-plan-get-projected-net-worth-by-clientid-planid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1549,7 +1549,7 @@ export def "live-plan-projections-net-worth get-projected-by-clientid-planid" [
 #
 # GET /api/LivePlan/Projections/{id}/NeedsVsAbilities
 # operationId: LivePlan_GetProjectedNeedsVsAbilitiesByIdClientidPlanid
-export def "live-plan-projections-needs-vs-abilities get-projected-by-clientid-planid" [
+export def "live-plan-get-projected-needs-vs-abilities-by-id-clientid-planid" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1589,7 +1589,7 @@ export def "live-plan-projections-needs-vs-abilities get-projected-by-clientid-p
 #
 # GET /api/NetWorth
 # operationId: NetWorth_GetByPlanid
-export def "net-worth get-by-planid" [
+export def "net-worth-get-by-planid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1626,7 +1626,7 @@ export def "net-worth get-by-planid" [
 #
 # POST /api/Password/HasUserSetPassword
 # operationId: Password_HasUserSetPassword
-export def "password-has-user-set-password update" [
+export def "password-has-user-set-password" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1661,7 +1661,7 @@ export def "password-has-user-set-password update" [
 #
 # GET /api/Password/PasswordRequirements
 # operationId: Password_PasswordRequirements
-export def "password-password-requirements get" [
+export def "password-password-requirements" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1696,7 +1696,7 @@ export def "password-password-requirements get" [
 #
 # POST /api/Password/Reset
 # operationId: Password_ResetByModel
-export def "password-reset reset-by-model" [
+export def "password-reset-by-model" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1736,7 +1736,7 @@ export def "password-reset reset-by-model" [
 #
 # POST /api/Password/Set
 # operationId: Password_SetByModel
-export def "password-set update-by-model" [
+export def "password-set-by-model" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1776,7 +1776,7 @@ export def "password-set update-by-model" [
 #
 # GET /api/PlanInformation
 # operationId: PlanInformation_GetByPlanid
-export def "plan-information get-by-planid" [
+export def "plan-information-get-by-planid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1813,7 +1813,7 @@ export def "plan-information get-by-planid" [
 #
 # GET /api/PlanStatuses
 # operationId: PlanStatuses_GetByPlanid
-export def "plan-statuses get-by-planid" [
+export def "plan-statuses-get-by-planid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1850,7 +1850,7 @@ export def "plan-statuses get-by-planid" [
 #
 # GET /api/PortfolioAccounts
 # operationId: PortfolioAccounts_GetByPlanid
-export def "portfolio-accounts list" [
+export def "portfolio-accounts-get-by-planid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1887,7 +1887,7 @@ export def "portfolio-accounts list" [
 #
 # GET /api/PortfolioAccounts/{id}
 # operationId: PortfolioAccounts_GetByIdPlanid
-export def "portfolio-accounts get-by-planid" [
+export def "portfolio-accounts-get-by-id-planid" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1926,7 +1926,7 @@ export def "portfolio-accounts get-by-planid" [
 #
 # GET /api/ProjectedAnnualSummary
 # operationId: ProjectedAnnualSummary_GetByPlanid
-export def "projected-annual-summary list" [
+export def "projected-annual-summary-get-by-planid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1963,7 +1963,7 @@ export def "projected-annual-summary list" [
 #
 # GET /api/ProjectedAnnualSummary/{id}
 # operationId: ProjectedAnnualSummary_GetByIdPlanid
-export def "projected-annual-summary get-by-planid" [
+export def "projected-annual-summary-get-by-id-planid" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2002,7 +2002,7 @@ export def "projected-annual-summary get-by-planid" [
 #
 # GET /api/ProjectedCashFlow
 # operationId: ProjectedCashFlow_GetByPlanid
-export def "projected-cash-flow list" [
+export def "projected-cash-flow-get-by-planid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2039,7 +2039,7 @@ export def "projected-cash-flow list" [
 #
 # GET /api/ProjectedCashFlow/{id}
 # operationId: ProjectedCashFlow_GetByIdPlanid
-export def "projected-cash-flow get-by-planid" [
+export def "projected-cash-flow-get-by-id-planid" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2078,7 +2078,7 @@ export def "projected-cash-flow get-by-planid" [
 #
 # GET /api/ProjectedGoals/AssetsFundingGoals
 # operationId: ProjectedGoals_GetAssetsFundingGoalsByPlanid
-export def "projected-goals-assets-funding-goals get-by-planid" [
+export def "projected-goals-get-assets-funding-goals-by-planid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2115,7 +2115,7 @@ export def "projected-goals-assets-funding-goals get-by-planid" [
 #
 # GET /api/ProjectedGoals/NeedsVsAbilities
 # operationId: ProjectedGoals_GetNeedsVsAbilitiesByPlanid
-export def "projected-goals-needs-vs-abilities get-by-planid" [
+export def "projected-goals-get-needs-vs-abilities-by-planid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2152,7 +2152,7 @@ export def "projected-goals-needs-vs-abilities get-by-planid" [
 #
 # GET /api/ProjectedNetWorth
 # operationId: ProjectedNetWorth_GetByPlanid
-export def "projected-net-worth list" [
+export def "projected-net-worth-get-by-planid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2189,7 +2189,7 @@ export def "projected-net-worth list" [
 #
 # GET /api/ProjectedNetWorth/{id}
 # operationId: ProjectedNetWorth_GetByIdPlanid
-export def "projected-net-worth get-by-planid" [
+export def "projected-net-worth-get-by-id-planid" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2228,7 +2228,7 @@ export def "projected-net-worth get-by-planid" [
 #
 # GET /api/RestrictedStocks
 # operationId: RestrictedStocks_GetByPlanid
-export def "restricted-stocks list" [
+export def "restricted-stocks-get-by-planid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2265,7 +2265,7 @@ export def "restricted-stocks list" [
 #
 # GET /api/RestrictedStocks/{id}
 # operationId: RestrictedStocks_GetByIdPlanid
-export def "restricted-stocks get-by-planid" [
+export def "restricted-stocks-get-by-id-planid" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2304,7 +2304,7 @@ export def "restricted-stocks get-by-planid" [
 #
 # GET /api/ServiceInformation/Statistics
 # operationId: ServiceInformation_Statistics
-export def "service-information-statistics get" [
+export def "service-information-statistics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2339,7 +2339,7 @@ export def "service-information-statistics get" [
 #
 # GET /api/StockOptions
 # operationId: StockOptions_GetByPlanid
-export def "stock-options list" [
+export def "stock-options-get-by-planid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2376,7 +2376,7 @@ export def "stock-options list" [
 #
 # GET /api/StockOptions/{id}
 # operationId: StockOptions_GetByIdPlanid
-export def "stock-options get-by-planid" [
+export def "stock-options-get-by-id-planid" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2415,7 +2415,7 @@ export def "stock-options get-by-planid" [
 #
 # POST /api/auth/Login
 # operationId: Auth_LoginByModel
-export def "auth-login create-by-model" [
+export def "auth-login-by-model" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2455,7 +2455,7 @@ export def "auth-login create-by-model" [
 #
 # GET /api/auth/LoginConfiguration
 # operationId: Auth_PasswordRequirements
-export def "auth-login-configuration get-password-requirements" [
+export def "auth-password-requirements" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2489,7 +2489,7 @@ export def "auth-login-configuration get-password-requirements" [
 # POST /api/auth/Logout
 #
 # operationId: Auth_Logout
-export def "auth-logout create" [
+export def "auth-logout" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2524,7 +2524,7 @@ export def "auth-logout create" [
 #
 # POST /api/auth/ResumeSession
 # operationId: Auth_ResumeSession
-export def "auth-resume-session create" [
+export def "auth-resume-session" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

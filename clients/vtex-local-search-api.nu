@@ -109,7 +109,7 @@ def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "catalog-system-pub-facets-category get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-api-catalog-system-pub-facets-category-category-id" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -132,7 +132,7 @@ export def commands []: nothing -> table {
 # Get Category Facets
 #
 # GET /api/catalog_system/pub/facets/category/{categoryId}
-export def "catalog-system-pub-facets-category get" [
+export def "get-api-catalog-system-pub-facets-category-category-id" [
   category_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -175,7 +175,7 @@ export def "catalog-system-pub-facets-category get" [
 #
 # GET /api/catalog_system/pub/facets/search/{term}
 # operationId: Facetscategory
-export def "catalog-system-pub-facets-search get-facetscategory" [
+export def "facetscategory" [
   term: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -219,7 +219,7 @@ export def "catalog-system-pub-facets-search get-facetscategory" [
 #
 # GET /api/catalog_system/pub/products/crossselling/accessories/{productId}
 # operationId: ProductSearchAccessories
-export def "catalog-system-pub-products-crossselling-accessories list" [
+export def "product-search-accessories" [
   product_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -259,7 +259,7 @@ export def "catalog-system-pub-products-crossselling-accessories list" [
 #
 # GET /api/catalog_system/pub/products/crossselling/showtogether/{productId}
 # operationId: ProductSearchShowTogether
-export def "catalog-system-pub-products-crossselling-showtogether list-show-together" [
+export def "product-search-show-together" [
   product_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -299,7 +299,7 @@ export def "catalog-system-pub-products-crossselling-showtogether list-show-toge
 #
 # GET /api/catalog_system/pub/products/crossselling/similars/{productId}
 # operationId: ProductSearchSimilars
-export def "catalog-system-pub-products-crossselling-similars list" [
+export def "product-search-similars" [
   product_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -339,7 +339,7 @@ export def "catalog-system-pub-products-crossselling-similars list" [
 #
 # GET /api/catalog_system/pub/products/crossselling/suggestions/{productId}
 # operationId: ProductSearchSuggestions
-export def "catalog-system-pub-products-crossselling-suggestions list" [
+export def "product-search-suggestions" [
   product_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -379,7 +379,7 @@ export def "catalog-system-pub-products-crossselling-suggestions list" [
 #
 # GET /api/catalog_system/pub/products/crossselling/whoboughtalsobought/{productId}
 # operationId: ProductSearchWhoBoughtAlsoBought
-export def "catalog-system-pub-products-crossselling-whoboughtalsobought list-who-bought-also-bought" [
+export def "product-search-who-bought-also-bought" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -419,7 +419,7 @@ export def "catalog-system-pub-products-crossselling-whoboughtalsobought list-wh
 #
 # GET /api/catalog_system/pub/products/crossselling/whosawalsobought/{productId}
 # operationId: ProductSearchWhoSawAlsoBought
-export def "catalog-system-pub-products-crossselling-whosawalsobought list-who-saw-also-bought" [
+export def "product-search-who-saw-also-bought" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -459,7 +459,7 @@ export def "catalog-system-pub-products-crossselling-whosawalsobought list-who-s
 #
 # GET /api/catalog_system/pub/products/crossselling/whosawalsosaw/{productId}
 # operationId: ProductSearchWhoSawAlsoSaw
-export def "catalog-system-pub-products-crossselling-whosawalsosaw list-who-saw-also-saw" [
+export def "product-search-who-saw-also-saw" [
   product_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -498,7 +498,7 @@ export def "catalog-system-pub-products-crossselling-whosawalsosaw list-who-saw-
 # Search Product offers
 #
 # GET /api/catalog_system/pub/products/offers/{productId}
-export def "catalog-system-pub-products-offers get" [
+export def "get-api-catalog-system-pub-products-offers-product-id" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -537,7 +537,7 @@ export def "catalog-system-pub-products-offers get" [
 # Search SKU offers
 #
 # GET /api/catalog_system/pub/products/offers/{productId}/sku/{skuId}
-export def "catalog-system-pub-products-offers-sku get" [
+export def "get-api-catalog-system-pub-products-offers-product-id-sku-sku-id" [
   product_id: string
   sku_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -579,7 +579,7 @@ export def "catalog-system-pub-products-offers-sku get" [
 #
 # GET /api/catalog_system/pub/products/search
 # operationId: ProductSearchFilteredandOrdered
-export def "catalog-system-pub-products-search list-filteredand-ordered" [
+export def "product-search-filteredand-ordered" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -623,7 +623,7 @@ export def "catalog-system-pub-products-search list-filteredand-ordered" [
 #
 # GET /api/catalog_system/pub/products/search/{product-text-link}/p
 # operationId: Searchbyproducturl
-export def "catalog-system-pub-products-search-p get-searchbyproducturl" [
+export def "searchbyproducturl" [
   product_text_link: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -663,7 +663,7 @@ export def "catalog-system-pub-products-search-p get-searchbyproducturl" [
 #
 # GET /api/catalog_system/pub/products/search/{search}
 # operationId: ProductSearch
-export def "catalog-system-pub-products-search list" [
+export def "product-search" [
   search: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -703,7 +703,7 @@ export def "catalog-system-pub-products-search list" [
 #
 # GET /buscaautocomplete
 # operationId: AutoComplete
-export def "buscaautocomplete complete-auto" [
+export def "auto-complete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)

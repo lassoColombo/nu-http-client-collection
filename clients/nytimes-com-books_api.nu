@@ -100,7 +100,7 @@ def sort-order-completer [] { ["ASC" "DESC"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "lists-format get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-lists-format" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -124,7 +124,7 @@ export def commands []: nothing -> table {
 #
 # GET /lists.{format}
 # operationId: GET_lists-format
-export def "lists-format get" [
+export def "get-lists-format" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -171,7 +171,7 @@ export def "lists-format get" [
 #
 # GET /lists/best-sellers/history.json
 # operationId: GET_lists-best-sellers-history-json
-export def "lists-best-sellers-history-json get" [
+export def "get-lists-best-sellers-history-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -213,7 +213,7 @@ export def "lists-best-sellers-history-json get" [
 #
 # GET /lists/names.{format}
 # operationId: GET_lists-names-format
-export def "lists-names-format get" [
+export def "get-lists-names-format" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -251,7 +251,7 @@ export def "lists-names-format get" [
 #
 # GET /lists/overview.{format}
 # operationId: GET_lists-overview-format
-export def "lists-overview-format get" [
+export def "get-lists-overview-format" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -290,7 +290,7 @@ export def "lists-overview-format get" [
 #
 # GET /lists/{date}/{list}.json
 # operationId: GET_lists-date-list-json
-export def "lists get-json" [
+export def "get-lists-date-list-json" [
   date: string
   list: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -338,7 +338,7 @@ export def "lists get-json" [
 #
 # GET /reviews.{format}
 # operationId: GET_reviews-format
-export def "reviews-format get" [
+export def "get-reviews-format" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

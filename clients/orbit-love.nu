@@ -127,7 +127,7 @@ def activity-type-completer-1 [] { ["content" "custom" "discord" "discourse" "gi
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "user get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-user" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -150,7 +150,7 @@ export def commands []: nothing -> table {
 # Get info about the current user
 #
 # GET /user
-export def "user get" [
+export def "get-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -183,7 +183,7 @@ export def "user get" [
 # Get all workspaces for the current user
 #
 # GET /workspaces
-export def "workspaces list" [
+export def "get-workspaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -216,7 +216,7 @@ export def "workspaces list" [
 # Get a workspace
 #
 # GET /workspaces/{workspace_slug}
-export def "workspaces get" [
+export def "get-workspaces-workspace-slug" [
   workspace_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -254,7 +254,7 @@ export def "workspaces get" [
 #
 # GET /{workspace_slug}/activities
 @deprecated --flag type
-export def "activities list" [
+export def "get-workspace-slug-activities" [
   workspace_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -309,7 +309,7 @@ export def "activities list" [
 #
 # POST /{workspace_slug}/activities
 # --identity shape: {email?: string, name?: string, source: string, source_host?: string, uid?: string, url?: string, username?: string}
-export def "activities create" [
+export def "post-workspace-slug-activities" [
   workspace_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -349,7 +349,7 @@ export def "activities create" [
 # Get an activity in the workspace
 #
 # GET /{workspace_slug}/activities/{id}
-export def "activities get" [
+export def "get-workspace-slug-activities-id" [
   workspace_slug: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -386,7 +386,7 @@ export def "activities get" [
 # List all activity types for a workspace
 #
 # GET /{workspace_slug}/activity_types
-export def "activity-types get" [
+export def "get-workspace-slug-activity-types" [
   workspace_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -422,7 +422,7 @@ export def "activity-types get" [
 #
 # GET /{workspace_slug}/members
 @deprecated --flag type
-export def "members list" [
+export def "get-workspace-slug-members" [
   workspace_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -481,7 +481,7 @@ export def "members list" [
 # POST /{workspace_slug}/members
 # --identity shape: {email?: string, name?: string, source: string, source_host?: string, uid?: string, url?: string, username?: string}
 # --member shape: {bio?: string, birthday?: string, company?: string, devto?: string, email?: string, github?: string, linkedin?: string, location?: string, name?: string, pronouns?: string, shipping_address?: string, slug?: string, tag_list?: string, tags?: string, tags_to_add?: string, teammate?: bool, title?: string, tshirt?: string, twitter?: string, url?: string}
-export def "members create" [
+export def "post-workspace-slug-members" [
   workspace_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -521,7 +521,7 @@ export def "members create" [
 # Find a member by an identity
 #
 # GET /{workspace_slug}/members/find
-export def "members-find get" [
+export def "get-workspace-slug-members-find" [
   workspace_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -563,7 +563,7 @@ export def "members-find get" [
 # Delete a member
 #
 # DELETE /{workspace_slug}/members/{member_slug}
-export def "members delete" [
+export def "delete-workspace-slug-members-member-slug" [
   workspace_slug: string
   member_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -600,7 +600,7 @@ export def "members delete" [
 # Get a member
 #
 # GET /{workspace_slug}/members/{member_slug}
-export def "members get" [
+export def "get-workspace-slug-members-member-slug" [
   workspace_slug: string
   member_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -637,7 +637,7 @@ export def "members get" [
 # Update a member
 #
 # PUT /{workspace_slug}/members/{member_slug}
-export def "members update" [
+export def "put-workspace-slug-members-member-slug" [
   workspace_slug: string
   member_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -698,7 +698,7 @@ export def "members update" [
 #
 # GET /{workspace_slug}/members/{member_slug}/activities
 @deprecated --flag type
-export def "members-activities get" [
+export def "get-workspace-slug-members-member-slug-activities" [
   workspace_slug: string
   member_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -742,7 +742,7 @@ export def "members-activities get" [
 # Create a Custom or a Content activity for a member
 #
 # POST /{workspace_slug}/members/{member_slug}/activities
-export def "members-activities create" [
+export def "post-workspace-slug-members-member-slug-activities" [
   workspace_slug: string
   member_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -793,7 +793,7 @@ export def "members-activities create" [
 # Delete a post activity
 #
 # DELETE /{workspace_slug}/members/{member_slug}/activities/{id}
-export def "members-activities delete" [
+export def "delete-workspace-slug-members-member-slug-activities-id" [
   workspace_slug: string
   member_slug: string
   id: string
@@ -832,7 +832,7 @@ export def "members-activities delete" [
 # Update a custom activity for a member
 #
 # PUT /{workspace_slug}/members/{member_slug}/activities/{id}
-export def "members-activities update" [
+export def "put-workspace-slug-members-member-slug-activities-id" [
   workspace_slug: string
   member_slug: string
   id: string
@@ -884,7 +884,7 @@ export def "members-activities update" [
 # Remove identity from a member
 #
 # DELETE /{workspace_slug}/members/{member_slug}/identities
-export def "members-identities delete" [
+export def "delete-workspace-slug-members-member-slug-identities" [
   workspace_slug: string
   member_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -931,7 +931,7 @@ export def "members-identities delete" [
 # Add identity to a member
 #
 # POST /{workspace_slug}/members/{member_slug}/identities
-export def "members-identities create" [
+export def "post-workspace-slug-members-member-slug-identities" [
   workspace_slug: string
   member_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -978,7 +978,7 @@ export def "members-identities create" [
 # Get the member's notes
 #
 # GET /{workspace_slug}/members/{member_slug}/notes
-export def "members-notes get" [
+export def "get-workspace-slug-members-member-slug-notes" [
   workspace_slug: string
   member_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1017,7 +1017,7 @@ export def "members-notes get" [
 # Create a note
 #
 # POST /{workspace_slug}/members/{member_slug}/notes
-export def "members-notes create" [
+export def "post-workspace-slug-members-member-slug-notes" [
   workspace_slug: string
   member_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1058,7 +1058,7 @@ export def "members-notes create" [
 # Update a note
 #
 # PUT /{workspace_slug}/members/{member_slug}/notes/{id}
-export def "members-notes update" [
+export def "put-workspace-slug-members-member-slug-notes-id" [
   workspace_slug: string
   member_slug: string
   id: string
@@ -1101,7 +1101,7 @@ export def "members-notes update" [
 # List organizations in a workspace
 #
 # GET /{workspace_slug}/organizations
-export def "organizations list" [
+export def "get-workspace-slug-organizations" [
   workspace_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1142,7 +1142,7 @@ export def "organizations list" [
 # Get an organization
 #
 # GET /{workspace_slug}/organizations/{organization_id}
-export def "organizations get" [
+export def "get-workspace-slug-organizations-organization-id" [
   workspace_slug: string
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1179,7 +1179,7 @@ export def "organizations get" [
 # Update an organization
 #
 # PUT /{workspace_slug}/organizations/{organization_id}
-export def "organizations update" [
+export def "put-workspace-slug-organizations-organization-id" [
   workspace_slug: string
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1227,7 +1227,7 @@ export def "organizations update" [
 # List member activities in an organization
 #
 # GET /{workspace_slug}/organizations/{organization_id}/activities
-export def "organizations-activities get" [
+export def "get-workspace-slug-organizations-organization-id-activities" [
   workspace_slug: string
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1270,7 +1270,7 @@ export def "organizations-activities get" [
 # List members in an organization
 #
 # GET /{workspace_slug}/organizations/{organization_id}/members
-export def "organizations-members get" [
+export def "get-workspace-slug-organizations-organization-id-members" [
   workspace_slug: string
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1311,7 +1311,7 @@ export def "organizations-members get" [
 #
 # GET /{workspace_slug}/reports
 @deprecated --flag type
-export def "reports get" [
+export def "get-workspace-slug-reports" [
   workspace_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1353,7 +1353,7 @@ export def "reports get" [
 # List webhooks in a workspace
 #
 # GET /{workspace_slug}/webhooks
-export def "webhooks list" [
+export def "get-workspace-slug-webhooks" [
   workspace_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1388,7 +1388,7 @@ export def "webhooks list" [
 # Create a webhook
 #
 # POST /{workspace_slug}/webhooks
-export def "webhooks create" [
+export def "post-workspace-slug-webhooks" [
   workspace_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1433,7 +1433,7 @@ export def "webhooks create" [
 # Delete a webhook
 #
 # DELETE /{workspace_slug}/webhooks/{id}
-export def "webhooks delete" [
+export def "delete-workspace-slug-webhooks-id" [
   workspace_slug: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1470,7 +1470,7 @@ export def "webhooks delete" [
 # Get a webhook
 #
 # GET /{workspace_slug}/webhooks/{id}
-export def "webhooks get" [
+export def "get-workspace-slug-webhooks-id" [
   workspace_slug: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1507,7 +1507,7 @@ export def "webhooks get" [
 # Update a webhook
 #
 # PUT /{workspace_slug}/webhooks/{id}
-export def "webhooks update" [
+export def "put-workspace-slug-webhooks-id" [
   workspace_slug: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL

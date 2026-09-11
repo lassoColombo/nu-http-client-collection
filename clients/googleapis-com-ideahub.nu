@@ -113,7 +113,7 @@ def type-completer [] { ["POST_DELETED" "POST_DRAFTED" "POST_PUBLISHED" "POST_UN
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1alpha-ideas list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "ideahub-ideas-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -137,7 +137,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1alpha/ideas
 # operationId: ideahub.ideas.list
-export def "v1alpha-ideas list" [
+export def "ideahub-ideas-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -188,7 +188,7 @@ export def "v1alpha-ideas list" [
 #
 # PATCH /v1alpha/{name}
 # operationId: ideahub.platforms.properties.topicStates.patch
-export def "v1alpha update" [
+export def "ideahub-platforms-properties-topic-states-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -243,7 +243,7 @@ export def "v1alpha update" [
 #
 # POST /v1alpha/{parent}/ideaActivities
 # operationId: ideahub.platforms.properties.ideaActivities.create
-export def "v1alpha-idea-activities create" [
+export def "ideahub-platforms-properties-idea-activities-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -299,7 +299,7 @@ export def "v1alpha-idea-activities create" [
 #
 # GET /v1alpha/{parent}/ideas
 # operationId: ideahub.platforms.properties.ideas.list
-export def "v1alpha-ideas list-1" [
+export def "ideahub-platforms-properties-ideas-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -351,7 +351,7 @@ export def "v1alpha-ideas list-1" [
 #
 # GET /v1alpha/{parent}/locales
 # operationId: ideahub.platforms.properties.locales.list
-export def "v1alpha-locales list" [
+export def "ideahub-platforms-properties-locales-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

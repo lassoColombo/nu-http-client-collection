@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer" "none"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "mobile-authorization-code create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-mobile-authorization-code" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # POST /mobile/authorization-code
 # operationId: CreateMobileAuthorizationCode
-export def "mobile-authorization-code create" [
+export def "create-mobile-authorization-code" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -178,7 +178,7 @@ export def "mobile-authorization-code create" [
 #
 # POST /oauth2/clients/{client_id}/access-token/renew
 # operationId: RenewToken
-export def "oauth2-clients-access-token-renew create" [
+export def "renew-token" [
   client_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -218,7 +218,7 @@ export def "oauth2-clients-access-token-renew create" [
 #
 # POST /oauth2/revoke
 # operationId: RevokeToken
-export def "oauth2-revoke delete-token" [
+export def "revoke-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -259,7 +259,7 @@ export def "oauth2-revoke delete-token" [
 #
 # POST /oauth2/token
 # operationId: ObtainToken
-export def "oauth2-token create-obtain" [
+export def "obtain-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -305,7 +305,7 @@ export def "oauth2-token create-obtain" [
 #
 # GET /v1/me/employees
 # operationId: ListEmployees
-export def "me-employees list" [
+export def "list-employees" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -349,7 +349,7 @@ export def "me-employees list" [
 #
 # POST /v1/me/employees
 # operationId: CreateEmployee
-export def "me-employees create" [
+export def "create-employee" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -396,7 +396,7 @@ export def "me-employees create" [
 #
 # GET /v1/me/employees/{employee_id}
 # operationId: RetrieveEmployee
-export def "me-employees get" [
+export def "retrieve-employee" [
   employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -432,7 +432,7 @@ export def "me-employees get" [
 #
 # PUT /v1/me/employees/{employee_id}
 # operationId: UpdateEmployee
-export def "me-employees update" [
+export def "update-employee" [
   employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -481,7 +481,7 @@ export def "me-employees update" [
 #
 # GET /v1/me/roles
 # operationId: ListEmployeeRoles
-export def "me-roles list-employee" [
+export def "list-employee-roles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -519,7 +519,7 @@ export def "me-roles list-employee" [
 #
 # POST /v1/me/roles
 # operationId: CreateEmployeeRole
-export def "me-roles create-employee" [
+export def "create-employee-role" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -562,7 +562,7 @@ export def "me-roles create-employee" [
 #
 # GET /v1/me/roles/{role_id}
 # operationId: RetrieveEmployeeRole
-export def "me-roles get-employee" [
+export def "retrieve-employee-role" [
   role_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -598,7 +598,7 @@ export def "me-roles get-employee" [
 #
 # PUT /v1/me/roles/{role_id}
 # operationId: UpdateEmployeeRole
-export def "me-roles update-employee" [
+export def "update-employee-role" [
   role_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -643,7 +643,7 @@ export def "me-roles update-employee" [
 #
 # GET /v1/{location_id}/orders
 # operationId: ListOrders
-export def "orders list" [
+export def "list-orders" [
   location_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -683,7 +683,7 @@ export def "orders list" [
 #
 # GET /v1/{location_id}/orders/{order_id}
 # operationId: RetrieveOrder
-export def "orders get" [
+export def "retrieve-order" [
   location_id: string
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -721,7 +721,7 @@ export def "orders get" [
 #
 # PUT /v1/{location_id}/orders/{order_id}
 # operationId: UpdateOrder
-export def "orders update-by-location-id-order-id" [
+export def "update-order" [
   location_id: string
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -767,7 +767,7 @@ export def "orders update-by-location-id-order-id" [
 #
 # GET /v1/{location_id}/payments
 # operationId: ListPayments
-export def "payments list" [
+export def "list-payments" [
   location_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -810,7 +810,7 @@ export def "payments list" [
 #
 # GET /v1/{location_id}/payments/{payment_id}
 # operationId: RetrievePayment
-export def "payments get-by-location-id-payment-id" [
+export def "retrieve-payment" [
   location_id: string
   payment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -848,7 +848,7 @@ export def "payments get-by-location-id-payment-id" [
 #
 # GET /v1/{location_id}/refunds
 # operationId: ListRefunds
-export def "refunds list" [
+export def "list-refunds" [
   location_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -891,7 +891,7 @@ export def "refunds list" [
 # POST /v1/{location_id}/refunds
 # operationId: CreateRefund
 # --refunded_money shape: {amount?: int, currency_code?: string}
-export def "refunds create" [
+export def "create-refund" [
   location_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -935,7 +935,7 @@ export def "refunds create" [
 #
 # GET /v1/{location_id}/settlements
 # operationId: ListSettlements
-export def "settlements list" [
+export def "list-settlements" [
   location_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -978,7 +978,7 @@ export def "settlements list" [
 #
 # GET /v1/{location_id}/settlements/{settlement_id}
 # operationId: RetrieveSettlement
-export def "settlements get" [
+export def "retrieve-settlement" [
   location_id: string
   settlement_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1016,7 +1016,7 @@ export def "settlements get" [
 #
 # POST /v2/apple-pay/domains
 # operationId: RegisterDomain
-export def "apple-pay-domains create" [
+export def "register-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1054,7 +1054,7 @@ export def "apple-pay-domains create" [
 #
 # GET /v2/bank-accounts
 # operationId: ListBankAccounts
-export def "bank-accounts list" [
+export def "list-bank-accounts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1092,7 +1092,7 @@ export def "bank-accounts list" [
 #
 # GET /v2/bank-accounts/by-v1-id/{v1_bank_account_id}
 # operationId: GetBankAccountByV1Id
-export def "bank-accounts-by-v1-id get" [
+export def "get-bank-account-by-v1-id" [
   v1_bank_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1128,7 +1128,7 @@ export def "bank-accounts-by-v1-id get" [
 #
 # GET /v2/bank-accounts/{bank_account_id}
 # operationId: GetBankAccount
-export def "bank-accounts get" [
+export def "get-bank-account" [
   bank_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1165,7 +1165,7 @@ export def "bank-accounts get" [
 # POST /v2/bookings
 # operationId: CreateBooking
 # --booking shape: {appointment_segments?: list, created_at?: string, customer_id?: string, customer_note?: string, id?: string, location_id?: string, seller_note?: string, start_at?: string, status?: string, updated_at?: string, version?: int}
-export def "bookings create" [
+export def "create-booking" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1205,7 +1205,7 @@ export def "bookings create" [
 # POST /v2/bookings/availability/search
 # operationId: SearchAvailability
 # --query shape: {filter: record}
-export def "bookings-availability-search list" [
+export def "search-availability" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1243,7 +1243,7 @@ export def "bookings-availability-search list" [
 #
 # GET /v2/bookings/business-booking-profile
 # operationId: RetrieveBusinessBookingProfile
-export def "bookings-business-booking-profile get" [
+export def "retrieve-business-booking-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1277,7 +1277,7 @@ export def "bookings-business-booking-profile get" [
 #
 # GET /v2/bookings/team-member-booking-profiles
 # operationId: ListTeamMemberBookingProfiles
-export def "bookings-team-member-booking-profiles list" [
+export def "list-team-member-booking-profiles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1316,7 +1316,7 @@ export def "bookings-team-member-booking-profiles list" [
 #
 # GET /v2/bookings/team-member-booking-profiles/{team_member_id}
 # operationId: RetrieveTeamMemberBookingProfile
-export def "bookings-team-member-booking-profiles get" [
+export def "retrieve-team-member-booking-profile" [
   team_member_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1352,7 +1352,7 @@ export def "bookings-team-member-booking-profiles get" [
 #
 # GET /v2/bookings/{booking_id}
 # operationId: RetrieveBooking
-export def "bookings get" [
+export def "retrieve-booking" [
   booking_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1389,7 +1389,7 @@ export def "bookings get" [
 # PUT /v2/bookings/{booking_id}
 # operationId: UpdateBooking
 # --booking shape: {appointment_segments?: list, created_at?: string, customer_id?: string, customer_note?: string, id?: string, location_id?: string, seller_note?: string, start_at?: string, status?: string, updated_at?: string, version?: int}
-export def "bookings update" [
+export def "update-booking" [
   booking_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1430,7 +1430,7 @@ export def "bookings update" [
 #
 # POST /v2/bookings/{booking_id}/cancel
 # operationId: CancelBooking
-export def "bookings-cancel cancel" [
+export def "cancel-booking" [
   booking_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1471,7 +1471,7 @@ export def "bookings-cancel cancel" [
 #
 # GET /v2/cards
 # operationId: ListCards
-export def "cards list" [
+export def "list-cards" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1512,7 +1512,7 @@ export def "cards list" [
 # POST /v2/cards
 # operationId: CreateCard
 # --card shape: {billing_address?: record, bin?: string, card_brand?: string, card_type?: string, cardholder_name?: string, customer_id?: string, enabled?: bool, exp_month?: int, exp_year?: int, fingerprint?: string, id?: string, last_4?: string, prepaid_type?: string, reference_id?: string, version?: int}
-export def "cards create" [
+export def "create-card" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1553,7 +1553,7 @@ export def "cards create" [
 #
 # GET /v2/cards/{card_id}
 # operationId: RetrieveCard
-export def "cards get" [
+export def "retrieve-card" [
   card_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1589,7 +1589,7 @@ export def "cards get" [
 #
 # POST /v2/cards/{card_id}/disable
 # operationId: DisableCard
-export def "cards-disable disable" [
+export def "disable-card" [
   card_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1625,7 +1625,7 @@ export def "cards-disable disable" [
 #
 # GET /v2/cash-drawers/shifts
 # operationId: ListCashDrawerShifts
-export def "cash-drawers-shifts list" [
+export def "list-cash-drawer-shifts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1666,7 +1666,7 @@ export def "cash-drawers-shifts list" [
 #
 # GET /v2/cash-drawers/shifts/{shift_id}
 # operationId: RetrieveCashDrawerShift
-export def "cash-drawers-shifts get" [
+export def "retrieve-cash-drawer-shift" [
   shift_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1704,7 +1704,7 @@ export def "cash-drawers-shifts get" [
 #
 # GET /v2/cash-drawers/shifts/{shift_id}/events
 # operationId: ListCashDrawerShiftEvents
-export def "cash-drawers-shifts-events list" [
+export def "list-cash-drawer-shift-events" [
   shift_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1744,7 +1744,7 @@ export def "cash-drawers-shifts-events list" [
 #
 # POST /v2/catalog/batch-delete
 # operationId: BatchDeleteCatalogObjects
-export def "catalog-batch-delete delete-objects" [
+export def "batch-delete-catalog-objects" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1782,7 +1782,7 @@ export def "catalog-batch-delete delete-objects" [
 #
 # POST /v2/catalog/batch-retrieve
 # operationId: BatchRetrieveCatalogObjects
-export def "catalog-batch-retrieve get-objects" [
+export def "batch-retrieve-catalog-objects" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1823,7 +1823,7 @@ export def "catalog-batch-retrieve get-objects" [
 # POST /v2/catalog/batch-upsert
 # operationId: BatchUpsertCatalogObjects
 # --batches item shape: {objects: list}
-export def "catalog-batch-upsert update-objects" [
+export def "batch-upsert-catalog-objects" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1862,7 +1862,7 @@ export def "catalog-batch-upsert update-objects" [
 #
 # GET /v2/catalog/info
 # operationId: CatalogInfo
-export def "catalog-info get" [
+export def "catalog-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1896,7 +1896,7 @@ export def "catalog-info get" [
 #
 # GET /v2/catalog/list
 # operationId: ListCatalog
-export def "catalog-list list" [
+export def "list-catalog" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1935,7 +1935,7 @@ export def "catalog-list list" [
 # POST /v2/catalog/object
 # operationId: UpsertCatalogObject
 # --object shape: {absent_at_location_ids?: list<string>, catalog_v1_ids?: list, category_data?: record, custom_attribute_definition_data?: record, custom_attribute_values?: record, discount_data?: record, id: string, image_data?: record, image_id?: string, is_deleted?: bool, item_data?: record, item_option_data?: record, item_option_value_data?: record, item_variation_data?: record, measurement_unit_data?: record, modifier_data?: record, modifier_list_data?: record, present_at_all_locations?: bool, ... (10 more fields)}
-export def "catalog-object update" [
+export def "upsert-catalog-object" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1974,7 +1974,7 @@ export def "catalog-object update" [
 #
 # DELETE /v2/catalog/object/{object_id}
 # operationId: DeleteCatalogObject
-export def "catalog-object delete" [
+export def "delete-catalog-object" [
   object_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2010,7 +2010,7 @@ export def "catalog-object delete" [
 #
 # GET /v2/catalog/object/{object_id}
 # operationId: RetrieveCatalogObject
-export def "catalog-object get" [
+export def "retrieve-catalog-object" [
   object_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2050,7 +2050,7 @@ export def "catalog-object get" [
 # POST /v2/catalog/search
 # operationId: SearchCatalogObjects
 # --query shape: {exact_query?: record, item_variations_for_item_option_values_query?: record, items_for_item_options_query?: record, items_for_modifier_list_query?: record, items_for_tax_query?: record, prefix_query?: record, range_query?: record, set_query?: record, sorted_attribute_query?: record, text_query?: record}
-export def "catalog-search list-objects" [
+export def "search-catalog-objects" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2095,7 +2095,7 @@ export def "catalog-search list-objects" [
 # POST /v2/catalog/search-catalog-items
 # operationId: SearchCatalogItems
 # --custom_attribute_filters item shape: {bool_filter?: bool, custom_attribute_definition_id?: string, key?: string, number_filter?: record, selection_uids_filter?: list<string>, string_filter?: string}
-export def "catalog-search-catalog-items list" [
+export def "search-catalog-items" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2141,7 +2141,7 @@ export def "catalog-search-catalog-items list" [
 #
 # POST /v2/catalog/update-item-modifier-lists
 # operationId: UpdateItemModifierLists
-export def "catalog-update-item-modifier-lists update" [
+export def "update-item-modifier-lists" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2181,7 +2181,7 @@ export def "catalog-update-item-modifier-lists update" [
 #
 # POST /v2/catalog/update-item-taxes
 # operationId: UpdateItemTaxes
-export def "catalog-update-item-taxes update" [
+export def "update-item-taxes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2221,7 +2221,7 @@ export def "catalog-update-item-taxes update" [
 #
 # GET /v2/customers
 # operationId: ListCustomers
-export def "customers list" [
+export def "list-customers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2261,7 +2261,7 @@ export def "customers list" [
 # POST /v2/customers
 # operationId: CreateCustomer
 # --address shape: {address_line_1?: string, address_line_2?: string, address_line_3?: string, administrative_district_level_1?: string, administrative_district_level_2?: string, administrative_district_level_3?: string, country?: string, first_name?: string, last_name?: string, locality?: string, organization?: string, postal_code?: string, sublocality?: string, sublocality_2?: string, sublocality_3?: string}
-export def "customers create" [
+export def "create-customer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2309,7 +2309,7 @@ export def "customers create" [
 #
 # GET /v2/customers/groups
 # operationId: ListCustomerGroups
-export def "customers-groups list" [
+export def "list-customer-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2347,7 +2347,7 @@ export def "customers-groups list" [
 # POST /v2/customers/groups
 # operationId: CreateCustomerGroup
 # --group shape: {created_at?: string, id?: string, name: string, updated_at?: string}
-export def "customers-groups create" [
+export def "create-customer-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2386,7 +2386,7 @@ export def "customers-groups create" [
 #
 # DELETE /v2/customers/groups/{group_id}
 # operationId: DeleteCustomerGroup
-export def "customers-groups delete-by-group-id" [
+export def "delete-customer-group" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2422,7 +2422,7 @@ export def "customers-groups delete-by-group-id" [
 #
 # GET /v2/customers/groups/{group_id}
 # operationId: RetrieveCustomerGroup
-export def "customers-groups get" [
+export def "retrieve-customer-group" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2459,7 +2459,7 @@ export def "customers-groups get" [
 # PUT /v2/customers/groups/{group_id}
 # operationId: UpdateCustomerGroup
 # --group shape: {created_at?: string, id?: string, name: string, updated_at?: string}
-export def "customers-groups update" [
+export def "update-customer-group" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2500,7 +2500,7 @@ export def "customers-groups update" [
 # POST /v2/customers/search
 # operationId: SearchCustomers
 # --query shape: {filter?: record, sort?: record}
-export def "customers-search list" [
+export def "search-customers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2540,7 +2540,7 @@ export def "customers-search list" [
 #
 # GET /v2/customers/segments
 # operationId: ListCustomerSegments
-export def "customers-segments list" [
+export def "list-customer-segments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2577,7 +2577,7 @@ export def "customers-segments list" [
 #
 # GET /v2/customers/segments/{segment_id}
 # operationId: RetrieveCustomerSegment
-export def "customers-segments get" [
+export def "retrieve-customer-segment" [
   segment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2613,7 +2613,7 @@ export def "customers-segments get" [
 #
 # DELETE /v2/customers/{customer_id}
 # operationId: DeleteCustomer
-export def "customers delete" [
+export def "delete-customer" [
   customer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2651,7 +2651,7 @@ export def "customers delete" [
 #
 # GET /v2/customers/{customer_id}
 # operationId: RetrieveCustomer
-export def "customers get" [
+export def "retrieve-customer" [
   customer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2688,7 +2688,7 @@ export def "customers get" [
 # PUT /v2/customers/{customer_id}
 # operationId: UpdateCustomer
 # --address shape: {address_line_1?: string, address_line_2?: string, address_line_3?: string, administrative_district_level_1?: string, administrative_district_level_2?: string, administrative_district_level_3?: string, country?: string, first_name?: string, last_name?: string, locality?: string, organization?: string, postal_code?: string, sublocality?: string, sublocality_2?: string, sublocality_3?: string}
-export def "customers update" [
+export def "update-customer" [
   customer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2739,7 +2739,7 @@ export def "customers update" [
 # POST /v2/customers/{customer_id}/cards
 # operationId: CreateCustomerCard
 # --billing_address shape: {address_line_1?: string, address_line_2?: string, address_line_3?: string, administrative_district_level_1?: string, administrative_district_level_2?: string, administrative_district_level_3?: string, country?: string, first_name?: string, last_name?: string, locality?: string, organization?: string, postal_code?: string, sublocality?: string, sublocality_2?: string, sublocality_3?: string}
-export def "customers-cards create" [
+export def "create-customer-card" [
   customer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2782,7 +2782,7 @@ export def "customers-cards create" [
 #
 # DELETE /v2/customers/{customer_id}/cards/{card_id}
 # operationId: DeleteCustomerCard
-export def "customers-cards delete" [
+export def "delete-customer-card" [
   customer_id: string
   card_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2820,7 +2820,7 @@ export def "customers-cards delete" [
 #
 # DELETE /v2/customers/{customer_id}/groups/{group_id}
 # operationId: RemoveGroupFromCustomer
-export def "customers-groups delete-by-customer-id-group-id" [
+export def "remove-group-from-customer" [
   customer_id: string
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2858,7 +2858,7 @@ export def "customers-groups delete-by-customer-id-group-id" [
 #
 # PUT /v2/customers/{customer_id}/groups/{group_id}
 # operationId: AddGroupToCustomer
-export def "customers-groups create-by-customer-id-group-id" [
+export def "add-group-to-customer" [
   customer_id: string
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2896,7 +2896,7 @@ export def "customers-groups create-by-customer-id-group-id" [
 #
 # GET /v2/devices/codes
 # operationId: ListDeviceCodes
-export def "devices-codes list" [
+export def "list-device-codes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2936,7 +2936,7 @@ export def "devices-codes list" [
 # POST /v2/devices/codes
 # operationId: CreateDeviceCode
 # --device_code shape: {code?: string, created_at?: string, device_id?: string, id?: string, location_id?: string, name?: string, pair_by?: string, paired_at?: string, product_type: string, status?: string, status_changed_at?: string}
-export def "devices-codes create" [
+export def "create-device-code" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2975,7 +2975,7 @@ export def "devices-codes create" [
 #
 # GET /v2/devices/codes/{id}
 # operationId: GetDeviceCode
-export def "devices-codes get" [
+export def "get-device-code" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3011,7 +3011,7 @@ export def "devices-codes get" [
 #
 # GET /v2/disputes
 # operationId: ListDisputes
-export def "disputes list" [
+export def "list-disputes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3049,7 +3049,7 @@ export def "disputes list" [
 #
 # GET /v2/disputes/{dispute_id}
 # operationId: RetrieveDispute
-export def "disputes get" [
+export def "retrieve-dispute" [
   dispute_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3085,7 +3085,7 @@ export def "disputes get" [
 #
 # POST /v2/disputes/{dispute_id}/accept
 # operationId: AcceptDispute
-export def "disputes-accept create" [
+export def "accept-dispute" [
   dispute_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3121,7 +3121,7 @@ export def "disputes-accept create" [
 #
 # GET /v2/disputes/{dispute_id}/evidence
 # operationId: ListDisputeEvidence
-export def "disputes-evidence list" [
+export def "list-dispute-evidence" [
   dispute_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3159,7 +3159,7 @@ export def "disputes-evidence list" [
 #
 # POST /v2/disputes/{dispute_id}/evidence-text
 # operationId: CreateDisputeEvidenceText
-export def "disputes-evidence-text create" [
+export def "create-dispute-evidence-text" [
   dispute_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3201,7 +3201,7 @@ export def "disputes-evidence-text create" [
 #
 # DELETE /v2/disputes/{dispute_id}/evidence/{evidence_id}
 # operationId: DeleteDisputeEvidence
-export def "disputes-evidence delete" [
+export def "delete-dispute-evidence" [
   dispute_id: string
   evidence_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3239,7 +3239,7 @@ export def "disputes-evidence delete" [
 #
 # GET /v2/disputes/{dispute_id}/evidence/{evidence_id}
 # operationId: RetrieveDisputeEvidence
-export def "disputes-evidence get" [
+export def "retrieve-dispute-evidence" [
   dispute_id: string
   evidence_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3277,7 +3277,7 @@ export def "disputes-evidence get" [
 #
 # POST /v2/disputes/{dispute_id}/submit-evidence
 # operationId: SubmitEvidence
-export def "disputes-submit-evidence submit" [
+export def "submit-evidence" [
   dispute_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3312,7 +3312,7 @@ export def "disputes-submit-evidence submit" [
 # ListEmployees
 #
 # GET /v2/employees
-export def "employees list" [
+export def "get-v2-employees" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3350,7 +3350,7 @@ export def "employees list" [
 # RetrieveEmployee
 #
 # GET /v2/employees/{id}
-export def "employees get" [
+export def "get-v2-employees-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3386,7 +3386,7 @@ export def "employees get" [
 #
 # GET /v2/gift-cards
 # operationId: ListGiftCards
-export def "gift-cards list" [
+export def "list-gift-cards" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3427,7 +3427,7 @@ export def "gift-cards list" [
 # POST /v2/gift-cards
 # operationId: CreateGiftCard
 # --gift_card shape: {balance_money?: record, created_at?: string, customer_ids?: list<string>, gan?: string, gan_source?: any, id?: string, state?: any, type: any}
-export def "gift-cards create" [
+export def "create-gift-card" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3467,7 +3467,7 @@ export def "gift-cards create" [
 #
 # GET /v2/gift-cards/activities
 # operationId: ListGiftCardActivities
-export def "gift-cards-activities list" [
+export def "list-gift-card-activities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3511,7 +3511,7 @@ export def "gift-cards-activities list" [
 # POST /v2/gift-cards/activities
 # operationId: CreateGiftCardActivity
 # --gift_card_activity shape: {activate_activity_details?: record, adjust_decrement_activity_details?: record, adjust_increment_activity_details?: record, block_activity_details?: record, clear_balance_activity_details?: record, created_at?: string, deactivate_activity_details?: record, gift_card_balance_money?: record, gift_card_gan?: string, gift_card_id?: string, id?: string, import_activity_details?: record, import_reversal_activity_details?: record, load_activity_details?: record, location_id: string, ... (5 more fields)}
-export def "gift-cards-activities create-activity" [
+export def "create-gift-card-activity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3550,7 +3550,7 @@ export def "gift-cards-activities create-activity" [
 #
 # POST /v2/gift-cards/from-gan
 # operationId: RetrieveGiftCardFromGAN
-export def "gift-cards-from-gan get" [
+export def "retrieve-gift-card-from-gan" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3588,7 +3588,7 @@ export def "gift-cards-from-gan get" [
 #
 # POST /v2/gift-cards/from-nonce
 # operationId: RetrieveGiftCardFromNonce
-export def "gift-cards-from-nonce get" [
+export def "retrieve-gift-card-from-nonce" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3626,7 +3626,7 @@ export def "gift-cards-from-nonce get" [
 #
 # POST /v2/gift-cards/{gift_card_id}/link-customer
 # operationId: LinkCustomerToGiftCard
-export def "gift-cards-link-customer create" [
+export def "link-customer-to-gift-card" [
   gift_card_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3666,7 +3666,7 @@ export def "gift-cards-link-customer create" [
 #
 # POST /v2/gift-cards/{gift_card_id}/unlink-customer
 # operationId: UnlinkCustomerFromGiftCard
-export def "gift-cards-unlink-customer create" [
+export def "unlink-customer-from-gift-card" [
   gift_card_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3706,7 +3706,7 @@ export def "gift-cards-unlink-customer create" [
 #
 # GET /v2/gift-cards/{id}
 # operationId: RetrieveGiftCard
-export def "gift-cards get" [
+export def "retrieve-gift-card" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3742,7 +3742,7 @@ export def "gift-cards get" [
 #
 # GET /v2/inventory/adjustment/{adjustment_id}
 # operationId: DeprecatedRetrieveInventoryAdjustment
-export def "inventory-adjustment get-deprecated" [
+export def "deprecated-retrieve-inventory-adjustment" [
   adjustment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3778,7 +3778,7 @@ export def "inventory-adjustment get-deprecated" [
 #
 # GET /v2/inventory/adjustments/{adjustment_id}
 # operationId: RetrieveInventoryAdjustment
-export def "inventory-adjustments get" [
+export def "retrieve-inventory-adjustment" [
   adjustment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3815,7 +3815,7 @@ export def "inventory-adjustments get" [
 # POST /v2/inventory/batch-change
 # operationId: DeprecatedBatchChangeInventory
 # --changes item shape: {adjustment?: record, measurement_unit?: record, measurement_unit_id?: string, physical_count?: record, transfer?: record, type?: string}
-export def "inventory-batch-change create-deprecated" [
+export def "deprecated-batch-change-inventory" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3855,7 +3855,7 @@ export def "inventory-batch-change create-deprecated" [
 #
 # POST /v2/inventory/batch-retrieve-changes
 # operationId: DeprecatedBatchRetrieveInventoryChanges
-export def "inventory-batch-retrieve-changes get-deprecated" [
+export def "deprecated-batch-retrieve-inventory-changes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3899,7 +3899,7 @@ export def "inventory-batch-retrieve-changes get-deprecated" [
 #
 # POST /v2/inventory/batch-retrieve-counts
 # operationId: DeprecatedBatchRetrieveInventoryCounts
-export def "inventory-batch-retrieve-counts get-deprecated" [
+export def "deprecated-batch-retrieve-inventory-counts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3942,7 +3942,7 @@ export def "inventory-batch-retrieve-counts get-deprecated" [
 # POST /v2/inventory/changes/batch-create
 # operationId: BatchChangeInventory
 # --changes item shape: {adjustment?: record, measurement_unit?: record, measurement_unit_id?: string, physical_count?: record, transfer?: record, type?: string}
-export def "inventory-changes-batch-create create" [
+export def "batch-change-inventory" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3982,7 +3982,7 @@ export def "inventory-changes-batch-create create" [
 #
 # POST /v2/inventory/changes/batch-retrieve
 # operationId: BatchRetrieveInventoryChanges
-export def "inventory-changes-batch-retrieve get" [
+export def "batch-retrieve-inventory-changes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4026,7 +4026,7 @@ export def "inventory-changes-batch-retrieve get" [
 #
 # POST /v2/inventory/counts/batch-retrieve
 # operationId: BatchRetrieveInventoryCounts
-export def "inventory-counts-batch-retrieve get" [
+export def "batch-retrieve-inventory-counts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4068,7 +4068,7 @@ export def "inventory-counts-batch-retrieve get" [
 #
 # GET /v2/inventory/physical-count/{physical_count_id}
 # operationId: DeprecatedRetrieveInventoryPhysicalCount
-export def "inventory-physical-count get-deprecated" [
+export def "deprecated-retrieve-inventory-physical-count" [
   physical_count_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4104,7 +4104,7 @@ export def "inventory-physical-count get-deprecated" [
 #
 # GET /v2/inventory/physical-counts/{physical_count_id}
 # operationId: RetrieveInventoryPhysicalCount
-export def "inventory-physical-counts get" [
+export def "retrieve-inventory-physical-count" [
   physical_count_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4140,7 +4140,7 @@ export def "inventory-physical-counts get" [
 #
 # GET /v2/inventory/transfers/{transfer_id}
 # operationId: RetrieveInventoryTransfer
-export def "inventory-transfers get" [
+export def "retrieve-inventory-transfer" [
   transfer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4176,7 +4176,7 @@ export def "inventory-transfers get" [
 #
 # GET /v2/inventory/{catalog_object_id}
 # operationId: RetrieveInventoryCount
-export def "inventory get-count" [
+export def "retrieve-inventory-count" [
   catalog_object_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4215,7 +4215,7 @@ export def "inventory get-count" [
 #
 # GET /v2/inventory/{catalog_object_id}/changes
 # operationId: RetrieveInventoryChanges
-export def "inventory-changes get" [
+export def "retrieve-inventory-changes" [
   catalog_object_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4254,7 +4254,7 @@ export def "inventory-changes get" [
 #
 # GET /v2/invoices
 # operationId: ListInvoices
-export def "invoices list" [
+export def "list-invoices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4293,7 +4293,7 @@ export def "invoices list" [
 # POST /v2/invoices
 # operationId: CreateInvoice
 # --invoice shape: {accepted_payment_methods?: record, created_at?: string, custom_fields?: list, delivery_method?: any, description?: string, id?: string, invoice_number?: string, location_id?: string, next_payment_amount_money?: record, order_id?: string, payment_requests?: list, primary_recipient?: record, public_url?: string, scheduled_at?: string, status?: string, subscription_id?: string, timezone?: string, title?: string, updated_at?: string, version?: int}
-export def "invoices create" [
+export def "create-invoice" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4333,7 +4333,7 @@ export def "invoices create" [
 # POST /v2/invoices/search
 # operationId: SearchInvoices
 # --query shape: {filter: record, sort?: record}
-export def "invoices-search list" [
+export def "search-invoices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4373,7 +4373,7 @@ export def "invoices-search list" [
 #
 # DELETE /v2/invoices/{invoice_id}
 # operationId: DeleteInvoice
-export def "invoices delete" [
+export def "delete-invoice" [
   invoice_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4411,7 +4411,7 @@ export def "invoices delete" [
 #
 # GET /v2/invoices/{invoice_id}
 # operationId: GetInvoice
-export def "invoices get" [
+export def "get-invoice" [
   invoice_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4448,7 +4448,7 @@ export def "invoices get" [
 # PUT /v2/invoices/{invoice_id}
 # operationId: UpdateInvoice
 # --invoice shape: {accepted_payment_methods?: record, created_at?: string, custom_fields?: list, delivery_method?: any, description?: string, id?: string, invoice_number?: string, location_id?: string, next_payment_amount_money?: record, order_id?: string, payment_requests?: list, primary_recipient?: record, public_url?: string, scheduled_at?: string, status?: string, subscription_id?: string, timezone?: string, title?: string, updated_at?: string, version?: int}
-export def "invoices update" [
+export def "update-invoice" [
   invoice_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4490,7 +4490,7 @@ export def "invoices update" [
 #
 # POST /v2/invoices/{invoice_id}/cancel
 # operationId: CancelInvoice
-export def "invoices-cancel cancel" [
+export def "cancel-invoice" [
   invoice_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4530,7 +4530,7 @@ export def "invoices-cancel cancel" [
 #
 # POST /v2/invoices/{invoice_id}/publish
 # operationId: PublishInvoice
-export def "invoices-publish publish" [
+export def "publish-invoice" [
   invoice_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4571,7 +4571,7 @@ export def "invoices-publish publish" [
 #
 # GET /v2/labor/break-types
 # operationId: ListBreakTypes
-export def "labor-break-types list" [
+export def "list-break-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4610,7 +4610,7 @@ export def "labor-break-types list" [
 # POST /v2/labor/break-types
 # operationId: CreateBreakType
 # --break_type shape: {break_name: string, created_at?: string, expected_duration: string, id?: string, is_paid: bool, location_id: string, updated_at?: string, version?: int}
-export def "labor-break-types create" [
+export def "create-break-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4649,7 +4649,7 @@ export def "labor-break-types create" [
 #
 # DELETE /v2/labor/break-types/{id}
 # operationId: DeleteBreakType
-export def "labor-break-types delete" [
+export def "delete-break-type" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4685,7 +4685,7 @@ export def "labor-break-types delete" [
 #
 # GET /v2/labor/break-types/{id}
 # operationId: GetBreakType
-export def "labor-break-types get" [
+export def "get-break-type" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4722,7 +4722,7 @@ export def "labor-break-types get" [
 # PUT /v2/labor/break-types/{id}
 # operationId: UpdateBreakType
 # --break_type shape: {break_name: string, created_at?: string, expected_duration: string, id?: string, is_paid: bool, location_id: string, updated_at?: string, version?: int}
-export def "labor-break-types update" [
+export def "update-break-type" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4762,7 +4762,7 @@ export def "labor-break-types update" [
 #
 # GET /v2/labor/employee-wages
 # operationId: ListEmployeeWages
-export def "labor-employee-wages list" [
+export def "list-employee-wages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4800,7 +4800,7 @@ export def "labor-employee-wages list" [
 #
 # GET /v2/labor/employee-wages/{id}
 # operationId: GetEmployeeWage
-export def "labor-employee-wages get" [
+export def "get-employee-wage" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4837,7 +4837,7 @@ export def "labor-employee-wages get" [
 # POST /v2/labor/shifts
 # operationId: CreateShift
 # --shift shape: {breaks?: list, created_at?: string, employee_id?: string, end_at?: string, id?: string, location_id?: string, start_at: string, status?: string, team_member_id?: string, timezone?: string, updated_at?: string, version?: int, wage?: record}
-export def "labor-shifts create" [
+export def "create-shift" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4877,7 +4877,7 @@ export def "labor-shifts create" [
 # POST /v2/labor/shifts/search
 # operationId: SearchShifts
 # --query shape: {filter?: record, sort?: record}
-export def "labor-shifts-search list" [
+export def "search-shifts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4917,7 +4917,7 @@ export def "labor-shifts-search list" [
 #
 # DELETE /v2/labor/shifts/{id}
 # operationId: DeleteShift
-export def "labor-shifts delete" [
+export def "delete-shift" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4953,7 +4953,7 @@ export def "labor-shifts delete" [
 #
 # GET /v2/labor/shifts/{id}
 # operationId: GetShift
-export def "labor-shifts get" [
+export def "get-shift" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4990,7 +4990,7 @@ export def "labor-shifts get" [
 # PUT /v2/labor/shifts/{id}
 # operationId: UpdateShift
 # --shift shape: {breaks?: list, created_at?: string, employee_id?: string, end_at?: string, id?: string, location_id?: string, start_at: string, status?: string, team_member_id?: string, timezone?: string, updated_at?: string, version?: int, wage?: record}
-export def "labor-shifts update" [
+export def "update-shift" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5030,7 +5030,7 @@ export def "labor-shifts update" [
 #
 # GET /v2/labor/team-member-wages
 # operationId: ListTeamMemberWages
-export def "labor-team-member-wages list" [
+export def "list-team-member-wages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5068,7 +5068,7 @@ export def "labor-team-member-wages list" [
 #
 # GET /v2/labor/team-member-wages/{id}
 # operationId: GetTeamMemberWage
-export def "labor-team-member-wages get" [
+export def "get-team-member-wage" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5104,7 +5104,7 @@ export def "labor-team-member-wages get" [
 #
 # GET /v2/labor/workweek-configs
 # operationId: ListWorkweekConfigs
-export def "labor-workweek-configs list" [
+export def "list-workweek-configs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5142,7 +5142,7 @@ export def "labor-workweek-configs list" [
 # PUT /v2/labor/workweek-configs/{id}
 # operationId: UpdateWorkweekConfig
 # --workweek_config shape: {created_at?: string, id?: string, start_of_day_local_time: string, start_of_week: string, updated_at?: string, version?: int}
-export def "labor-workweek-configs update" [
+export def "update-workweek-config" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5182,7 +5182,7 @@ export def "labor-workweek-configs update" [
 #
 # GET /v2/locations
 # operationId: ListLocations
-export def "locations list" [
+export def "list-locations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5217,7 +5217,7 @@ export def "locations list" [
 # POST /v2/locations
 # operationId: CreateLocation
 # --location shape: {address?: record, business_email?: string, business_hours?: record, business_name?: string, capabilities?: list<string>, coordinates?: record, country?: string, created_at?: string, currency?: string, description?: string, facebook_url?: string, full_format_logo_url?: string, id?: string, instagram_username?: string, language_code?: string, logo_url?: string, mcc?: string, merchant_id?: string, name?: string, phone_number?: string, pos_background_url?: string, status?: string, tax_ids?: record, ... (4 more fields)}
-export def "locations create" [
+export def "create-location" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5255,7 +5255,7 @@ export def "locations create" [
 #
 # GET /v2/locations/{location_id}
 # operationId: RetrieveLocation
-export def "locations get" [
+export def "retrieve-location" [
   location_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5292,7 +5292,7 @@ export def "locations get" [
 # PUT /v2/locations/{location_id}
 # operationId: UpdateLocation
 # --location shape: {address?: record, business_email?: string, business_hours?: record, business_name?: string, capabilities?: list<string>, coordinates?: record, country?: string, created_at?: string, currency?: string, description?: string, facebook_url?: string, full_format_logo_url?: string, id?: string, instagram_username?: string, language_code?: string, logo_url?: string, mcc?: string, merchant_id?: string, name?: string, phone_number?: string, pos_background_url?: string, status?: string, tax_ids?: record, ... (4 more fields)}
-export def "locations update" [
+export def "update-location" [
   location_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5335,7 +5335,7 @@ export def "locations update" [
 # --additional_recipients item shape: {amount_money: record, description: string, location_id: string}
 # --order shape: {idempotency_key?: string, order?: record}
 # --pre_populate_shipping_address shape: {address_line_1?: string, address_line_2?: string, address_line_3?: string, administrative_district_level_1?: string, administrative_district_level_2?: string, administrative_district_level_3?: string, country?: string, first_name?: string, last_name?: string, locality?: string, organization?: string, postal_code?: string, sublocality?: string, sublocality_2?: string, sublocality_3?: string}
-export def "locations-checkouts create" [
+export def "create-checkout" [
   location_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5382,7 +5382,7 @@ export def "locations-checkouts create" [
 # ListRefunds
 #
 # GET /v2/locations/{location_id}/refunds
-export def "locations-refunds get" [
+export def "get-v2-locations-location-id-refunds" [
   location_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5423,7 +5423,7 @@ export def "locations-refunds get" [
 #
 # GET /v2/locations/{location_id}/transactions
 # operationId: ListTransactions
-export def "locations-transactions list" [
+export def "list-transactions" [
   location_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5468,7 +5468,7 @@ export def "locations-transactions list" [
 # --amount_money shape: {amount?: int, currency?: string}
 # --billing_address shape: {address_line_1?: string, address_line_2?: string, address_line_3?: string, administrative_district_level_1?: string, administrative_district_level_2?: string, administrative_district_level_3?: string, country?: string, first_name?: string, last_name?: string, locality?: string, organization?: string, postal_code?: string, sublocality?: string, sublocality_2?: string, sublocality_3?: string}
 # --shipping_address shape: {address_line_1?: string, address_line_2?: string, address_line_3?: string, administrative_district_level_1?: string, administrative_district_level_2?: string, administrative_district_level_3?: string, country?: string, first_name?: string, last_name?: string, locality?: string, organization?: string, postal_code?: string, sublocality?: string, sublocality_2?: string, sublocality_3?: string}
-export def "locations-transactions create-charge" [
+export def "charge" [
   location_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5521,7 +5521,7 @@ export def "locations-transactions create-charge" [
 #
 # GET /v2/locations/{location_id}/transactions/{transaction_id}
 # operationId: RetrieveTransaction
-export def "locations-transactions get" [
+export def "retrieve-transaction" [
   location_id: string
   transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5559,7 +5559,7 @@ export def "locations-transactions get" [
 #
 # POST /v2/locations/{location_id}/transactions/{transaction_id}/capture
 # operationId: CaptureTransaction
-export def "locations-transactions-capture create" [
+export def "capture-transaction" [
   location_id: string
   transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5597,7 +5597,7 @@ export def "locations-transactions-capture create" [
 #
 # POST /v2/locations/{location_id}/transactions/{transaction_id}/refund
 # --amount_money shape: {amount?: int, currency?: string}
-export def "locations-transactions-refund create" [
+export def "post-v2-locations-location-id-transactions-transaction-id-refund" [
   location_id: string
   transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5642,7 +5642,7 @@ export def "locations-transactions-refund create" [
 #
 # POST /v2/locations/{location_id}/transactions/{transaction_id}/void
 # operationId: VoidTransaction
-export def "locations-transactions-void create" [
+export def "void-transaction" [
   location_id: string
   transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5681,7 +5681,7 @@ export def "locations-transactions-void create" [
 # POST /v2/loyalty/accounts
 # operationId: CreateLoyaltyAccount
 # --loyalty_account shape: {balance?: int, created_at?: string, customer_id?: string, enrolled_at?: string, expiring_point_deadlines?: list, id?: string, lifetime_points?: int, mapping?: record, program_id: string, updated_at?: string}
-export def "loyalty-accounts create" [
+export def "create-loyalty-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5721,7 +5721,7 @@ export def "loyalty-accounts create" [
 # POST /v2/loyalty/accounts/search
 # operationId: SearchLoyaltyAccounts
 # --query shape: {customer_ids?: list<string>, mappings?: list}
-export def "loyalty-accounts-search list" [
+export def "search-loyalty-accounts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5761,7 +5761,7 @@ export def "loyalty-accounts-search list" [
 #
 # GET /v2/loyalty/accounts/{account_id}
 # operationId: RetrieveLoyaltyAccount
-export def "loyalty-accounts get" [
+export def "retrieve-loyalty-account" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5798,7 +5798,7 @@ export def "loyalty-accounts get" [
 # POST /v2/loyalty/accounts/{account_id}/accumulate
 # operationId: AccumulateLoyaltyPoints
 # --accumulate_points shape: {loyalty_program_id?: string, order_id?: string, points?: int}
-export def "loyalty-accounts-accumulate create-points" [
+export def "accumulate-loyalty-points" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5841,7 +5841,7 @@ export def "loyalty-accounts-accumulate create-points" [
 # POST /v2/loyalty/accounts/{account_id}/adjust
 # operationId: AdjustLoyaltyPoints
 # --adjust_points shape: {loyalty_program_id?: string, points: int, reason?: string}
-export def "loyalty-accounts-adjust create-points" [
+export def "adjust-loyalty-points" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5883,7 +5883,7 @@ export def "loyalty-accounts-adjust create-points" [
 # POST /v2/loyalty/events/search
 # operationId: SearchLoyaltyEvents
 # --query shape: {filter?: record}
-export def "loyalty-events-search list" [
+export def "search-loyalty-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5923,7 +5923,7 @@ export def "loyalty-events-search list" [
 #
 # GET /v2/loyalty/programs
 # operationId: ListLoyaltyPrograms
-export def "loyalty-programs list" [
+export def "list-loyalty-programs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5957,7 +5957,7 @@ export def "loyalty-programs list" [
 #
 # GET /v2/loyalty/programs/{program_id}
 # operationId: RetrieveLoyaltyProgram
-export def "loyalty-programs get" [
+export def "retrieve-loyalty-program" [
   program_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5994,7 +5994,7 @@ export def "loyalty-programs get" [
 # POST /v2/loyalty/programs/{program_id}/calculate
 # operationId: CalculateLoyaltyPoints
 # --transaction_amount_money shape: {amount?: int, currency?: string}
-export def "loyalty-programs-calculate create-points" [
+export def "calculate-loyalty-points" [
   program_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6036,7 +6036,7 @@ export def "loyalty-programs-calculate create-points" [
 # POST /v2/loyalty/rewards
 # operationId: CreateLoyaltyReward
 # --reward shape: {created_at?: string, id?: string, loyalty_account_id: string, order_id?: string, points?: int, redeemed_at?: string, reward_tier_id: string, status?: string, updated_at?: string}
-export def "loyalty-rewards create" [
+export def "create-loyalty-reward" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6076,7 +6076,7 @@ export def "loyalty-rewards create" [
 # POST /v2/loyalty/rewards/search
 # operationId: SearchLoyaltyRewards
 # --query shape: {loyalty_account_id: string, status?: string}
-export def "loyalty-rewards-search list" [
+export def "search-loyalty-rewards" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6116,7 +6116,7 @@ export def "loyalty-rewards-search list" [
 #
 # DELETE /v2/loyalty/rewards/{reward_id}
 # operationId: DeleteLoyaltyReward
-export def "loyalty-rewards delete" [
+export def "delete-loyalty-reward" [
   reward_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6152,7 +6152,7 @@ export def "loyalty-rewards delete" [
 #
 # GET /v2/loyalty/rewards/{reward_id}
 # operationId: RetrieveLoyaltyReward
-export def "loyalty-rewards get" [
+export def "retrieve-loyalty-reward" [
   reward_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6188,7 +6188,7 @@ export def "loyalty-rewards get" [
 #
 # POST /v2/loyalty/rewards/{reward_id}/redeem
 # operationId: RedeemLoyaltyReward
-export def "loyalty-rewards-redeem create" [
+export def "redeem-loyalty-reward" [
   reward_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6229,7 +6229,7 @@ export def "loyalty-rewards-redeem create" [
 #
 # GET /v2/merchants
 # operationId: ListMerchants
-export def "merchants list" [
+export def "list-merchants" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6265,7 +6265,7 @@ export def "merchants list" [
 #
 # GET /v2/merchants/{merchant_id}
 # operationId: RetrieveMerchant
-export def "merchants get" [
+export def "retrieve-merchant" [
   merchant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6302,7 +6302,7 @@ export def "merchants get" [
 # POST /v2/orders
 # operationId: CreateOrder
 # --order shape: {closed_at?: string, created_at?: string, customer_id?: string, discounts?: list, fulfillments?: list, id?: string, line_items?: list, location_id: string, metadata?: record, net_amounts?: record, pricing_options?: record, reference_id?: string, refunds?: list, return_amounts?: record, returns?: list, rewards?: list, rounding_adjustment?: record, service_charges?: list, source?: record, state?: string, taxes?: list, tenders?: list, total_discount_money?: record, total_money?: record, ... (5 more fields)}
-export def "orders create" [
+export def "create-order" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6341,7 +6341,7 @@ export def "orders create" [
 #
 # POST /v2/orders/batch-retrieve
 # operationId: BatchRetrieveOrders
-export def "orders-batch-retrieve get" [
+export def "batch-retrieve-orders" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6382,7 +6382,7 @@ export def "orders-batch-retrieve get" [
 # operationId: CalculateOrder
 # --order shape: {closed_at?: string, created_at?: string, customer_id?: string, discounts?: list, fulfillments?: list, id?: string, line_items?: list, location_id: string, metadata?: record, net_amounts?: record, pricing_options?: record, reference_id?: string, refunds?: list, return_amounts?: record, returns?: list, rewards?: list, rounding_adjustment?: record, service_charges?: list, source?: record, state?: string, taxes?: list, tenders?: list, total_discount_money?: record, total_money?: record, ... (5 more fields)}
 # --proposed_rewards item shape: {id: string, reward_tier_id: string}
-export def "orders-calculate create" [
+export def "calculate-order" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6422,7 +6422,7 @@ export def "orders-calculate create" [
 # POST /v2/orders/search
 # operationId: SearchOrders
 # --query shape: {filter?: record, sort?: record}
-export def "orders-search list" [
+export def "search-orders" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6463,7 +6463,7 @@ export def "orders-search list" [
 # RetrieveOrder
 #
 # GET /v2/orders/{order_id}
-export def "orders list-1" [
+export def "get-v2-orders-order-id" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6499,7 +6499,7 @@ export def "orders list-1" [
 #
 # PUT /v2/orders/{order_id}
 # --order shape: {closed_at?: string, created_at?: string, customer_id?: string, discounts?: list, fulfillments?: list, id?: string, line_items?: list, location_id: string, metadata?: record, net_amounts?: record, pricing_options?: record, reference_id?: string, refunds?: list, return_amounts?: record, returns?: list, rewards?: list, rounding_adjustment?: record, service_charges?: list, source?: record, state?: string, taxes?: list, tenders?: list, total_discount_money?: record, total_money?: record, ... (5 more fields)}
-export def "orders update-by-order-id" [
+export def "put-v2-orders-order-id" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6541,7 +6541,7 @@ export def "orders update-by-order-id" [
 #
 # POST /v2/orders/{order_id}/pay
 # operationId: PayOrder
-export def "orders-pay create" [
+export def "pay-order" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6582,7 +6582,7 @@ export def "orders-pay create" [
 # ListPayments
 #
 # GET /v2/payments
-export def "payments get" [
+export def "get-v2-payments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6633,7 +6633,7 @@ export def "payments get" [
 # --external_details shape: {source: string, source_fee_money?: record, source_id?: string, type: string}
 # --shipping_address shape: {address_line_1?: string, address_line_2?: string, address_line_3?: string, administrative_district_level_1?: string, administrative_district_level_2?: string, administrative_district_level_3?: string, country?: string, first_name?: string, last_name?: string, locality?: string, organization?: string, postal_code?: string, sublocality?: string, sublocality_2?: string, sublocality_3?: string}
 # --tip_money shape: {amount?: int, currency?: string}
-export def "payments create" [
+export def "create-payment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6690,7 +6690,7 @@ export def "payments create" [
 #
 # POST /v2/payments/cancel
 # operationId: CancelPaymentByIdempotencyKey
-export def "payments-cancel cancel-by-idempotency-key" [
+export def "cancel-payment-by-idempotency-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6728,7 +6728,7 @@ export def "payments-cancel cancel-by-idempotency-key" [
 #
 # GET /v2/payments/{payment_id}
 # operationId: GetPayment
-export def "payments get-by-payment-id" [
+export def "get-payment" [
   payment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6765,7 +6765,7 @@ export def "payments get-by-payment-id" [
 # PUT /v2/payments/{payment_id}
 # operationId: UpdatePayment
 # --payment shape: {amount_money?: record, app_fee_money?: record, approved_money?: record, bank_account_details?: record, billing_address?: record, buyer_email_address?: string, capabilities?: list<string>, card_details?: record, cash_details?: record, created_at?: string, customer_id?: string, delay_action?: string, delay_duration?: string, delayed_until?: string, employee_id?: string, external_details?: record, id?: string, location_id?: string, note?: string, order_id?: string, processing_fee?: list, ... (15 more fields)}
-export def "payments update" [
+export def "update-payment" [
   payment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6806,7 +6806,7 @@ export def "payments update" [
 #
 # POST /v2/payments/{payment_id}/cancel
 # operationId: CancelPayment
-export def "payments-cancel cancel" [
+export def "cancel-payment" [
   payment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6842,7 +6842,7 @@ export def "payments-cancel cancel" [
 #
 # POST /v2/payments/{payment_id}/complete
 # operationId: CompletePayment
-export def "payments-complete complete" [
+export def "complete-payment" [
   payment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6878,7 +6878,7 @@ export def "payments-complete complete" [
 #
 # GET /v2/refunds
 # operationId: ListPaymentRefunds
-export def "refunds list-payment" [
+export def "list-payment-refunds" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6923,7 +6923,7 @@ export def "refunds list-payment" [
 # operationId: RefundPayment
 # --amount_money shape: {amount?: int, currency?: string}
 # --app_fee_money shape: {amount?: int, currency?: string}
-export def "refunds create-payment" [
+export def "refund-payment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6965,7 +6965,7 @@ export def "refunds create-payment" [
 #
 # GET /v2/refunds/{refund_id}
 # operationId: GetPaymentRefund
-export def "refunds get-payment" [
+export def "get-payment-refund" [
   refund_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7001,7 +7001,7 @@ export def "refunds get-payment" [
 #
 # GET /v2/sites
 # operationId: ListSites
-export def "sites list" [
+export def "list-sites" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7035,7 +7035,7 @@ export def "sites list" [
 #
 # DELETE /v2/sites/{site_id}/snippet
 # operationId: DeleteSnippet
-export def "sites-snippet delete" [
+export def "delete-snippet" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7071,7 +7071,7 @@ export def "sites-snippet delete" [
 #
 # GET /v2/sites/{site_id}/snippet
 # operationId: RetrieveSnippet
-export def "sites-snippet get" [
+export def "retrieve-snippet" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7108,7 +7108,7 @@ export def "sites-snippet get" [
 # POST /v2/sites/{site_id}/snippet
 # operationId: UpsertSnippet
 # --snippet shape: {content: string, created_at?: string, id?: string, site_id?: string, updated_at?: string}
-export def "sites-snippet update" [
+export def "upsert-snippet" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7149,7 +7149,7 @@ export def "sites-snippet update" [
 # POST /v2/subscriptions
 # operationId: CreateSubscription
 # --price_override_money shape: {amount?: int, currency?: string}
-export def "subscriptions create" [
+export def "create-subscription" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7197,7 +7197,7 @@ export def "subscriptions create" [
 # POST /v2/subscriptions/search
 # operationId: SearchSubscriptions
 # --query shape: {filter?: record}
-export def "subscriptions-search list" [
+export def "search-subscriptions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7237,7 +7237,7 @@ export def "subscriptions-search list" [
 #
 # GET /v2/subscriptions/{subscription_id}
 # operationId: RetrieveSubscription
-export def "subscriptions get" [
+export def "retrieve-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7274,7 +7274,7 @@ export def "subscriptions get" [
 # PUT /v2/subscriptions/{subscription_id}
 # operationId: UpdateSubscription
 # --subscription shape: {canceled_date?: string, card_id?: string, charged_through_date?: string, created_at?: string, customer_id?: string, id?: string, invoice_ids?: list<string>, location_id?: string, plan_id?: string, price_override_money?: record, start_date?: string, status?: string, tax_percentage?: string, timezone?: string, version?: int}
-export def "subscriptions update" [
+export def "update-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7314,7 +7314,7 @@ export def "subscriptions update" [
 #
 # POST /v2/subscriptions/{subscription_id}/cancel
 # operationId: CancelSubscription
-export def "subscriptions-cancel cancel" [
+export def "cancel-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7350,7 +7350,7 @@ export def "subscriptions-cancel cancel" [
 #
 # GET /v2/subscriptions/{subscription_id}/events
 # operationId: ListSubscriptionEvents
-export def "subscriptions-events list" [
+export def "list-subscription-events" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7389,7 +7389,7 @@ export def "subscriptions-events list" [
 #
 # POST /v2/subscriptions/{subscription_id}/resume
 # operationId: ResumeSubscription
-export def "subscriptions-resume create" [
+export def "resume-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7426,7 +7426,7 @@ export def "subscriptions-resume create" [
 # POST /v2/team-members
 # operationId: CreateTeamMember
 # --team_member shape: {assigned_locations?: record, created_at?: string, email_address?: string, family_name?: string, given_name?: string, id?: string, is_owner?: bool, phone_number?: string, reference_id?: string, status?: string, updated_at?: string}
-export def "team-members create" [
+export def "create-team-member" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7465,7 +7465,7 @@ export def "team-members create" [
 #
 # POST /v2/team-members/bulk-create
 # operationId: BulkCreateTeamMembers
-export def "team-members-bulk-create create" [
+export def "bulk-create-team-members" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7503,7 +7503,7 @@ export def "team-members-bulk-create create" [
 #
 # POST /v2/team-members/bulk-update
 # operationId: BulkUpdateTeamMembers
-export def "team-members-bulk-update update" [
+export def "bulk-update-team-members" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7542,7 +7542,7 @@ export def "team-members-bulk-update update" [
 # POST /v2/team-members/search
 # operationId: SearchTeamMembers
 # --query shape: {filter?: record}
-export def "team-members-search list" [
+export def "search-team-members" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7582,7 +7582,7 @@ export def "team-members-search list" [
 #
 # GET /v2/team-members/{team_member_id}
 # operationId: RetrieveTeamMember
-export def "team-members get" [
+export def "retrieve-team-member" [
   team_member_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7619,7 +7619,7 @@ export def "team-members get" [
 # PUT /v2/team-members/{team_member_id}
 # operationId: UpdateTeamMember
 # --team_member shape: {assigned_locations?: record, created_at?: string, email_address?: string, family_name?: string, given_name?: string, id?: string, is_owner?: bool, phone_number?: string, reference_id?: string, status?: string, updated_at?: string}
-export def "team-members update" [
+export def "update-team-member" [
   team_member_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7659,7 +7659,7 @@ export def "team-members update" [
 #
 # GET /v2/team-members/{team_member_id}/wage-setting
 # operationId: RetrieveWageSetting
-export def "team-members-wage-setting get" [
+export def "retrieve-wage-setting" [
   team_member_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7696,7 +7696,7 @@ export def "team-members-wage-setting get" [
 # PUT /v2/team-members/{team_member_id}/wage-setting
 # operationId: UpdateWageSetting
 # --wage_setting shape: {created_at?: string, is_overtime_exempt?: bool, job_assignments?: list, team_member_id?: string, updated_at?: string, version?: int}
-export def "team-members-wage-setting update" [
+export def "update-wage-setting" [
   team_member_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7737,7 +7737,7 @@ export def "team-members-wage-setting update" [
 # POST /v2/terminals/checkouts
 # operationId: CreateTerminalCheckout
 # --checkout shape: {amount_money: record, app_id?: string, cancel_reason?: string, created_at?: string, deadline_duration?: string, device_options: record, id?: string, location_id?: string, note?: string, payment_ids?: list<string>, payment_type?: string, reference_id?: string, status?: string, updated_at?: string}
-export def "terminals-checkouts create" [
+export def "create-terminal-checkout" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7777,7 +7777,7 @@ export def "terminals-checkouts create" [
 # POST /v2/terminals/checkouts/search
 # operationId: SearchTerminalCheckouts
 # --query shape: {filter?: record, sort?: record}
-export def "terminals-checkouts-search list" [
+export def "search-terminal-checkouts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7817,7 +7817,7 @@ export def "terminals-checkouts-search list" [
 #
 # GET /v2/terminals/checkouts/{checkout_id}
 # operationId: GetTerminalCheckout
-export def "terminals-checkouts get" [
+export def "get-terminal-checkout" [
   checkout_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7853,7 +7853,7 @@ export def "terminals-checkouts get" [
 #
 # POST /v2/terminals/checkouts/{checkout_id}/cancel
 # operationId: CancelTerminalCheckout
-export def "terminals-checkouts-cancel cancel" [
+export def "cancel-terminal-checkout" [
   checkout_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7890,7 +7890,7 @@ export def "terminals-checkouts-cancel cancel" [
 # POST /v2/terminals/refunds
 # operationId: CreateTerminalRefund
 # --refund shape: {amount_money: record, app_id?: string, cancel_reason?: string, created_at?: string, deadline_duration?: string, device_id?: string, id?: string, location_id?: string, order_id?: string, payment_id: string, reason?: string, refund_id?: string, status?: string, updated_at?: string}
-export def "terminals-refunds create" [
+export def "create-terminal-refund" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7930,7 +7930,7 @@ export def "terminals-refunds create" [
 # POST /v2/terminals/refunds/search
 # operationId: SearchTerminalRefunds
 # --query shape: {filter?: record, sort?: record}
-export def "terminals-refunds-search list" [
+export def "search-terminal-refunds" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7970,7 +7970,7 @@ export def "terminals-refunds-search list" [
 #
 # GET /v2/terminals/refunds/{terminal_refund_id}
 # operationId: GetTerminalRefund
-export def "terminals-refunds get" [
+export def "get-terminal-refund" [
   terminal_refund_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8006,7 +8006,7 @@ export def "terminals-refunds get" [
 #
 # POST /v2/terminals/refunds/{terminal_refund_id}/cancel
 # operationId: CancelTerminalRefund
-export def "terminals-refunds-cancel cancel" [
+export def "cancel-terminal-refund" [
   terminal_refund_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

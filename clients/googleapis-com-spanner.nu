@@ -133,7 +133,7 @@ def query-mode-completer [] { ["NORMAL" "PLAN" "PROFILE"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects delete-drop" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "spanner-projects-instances-databases-drop-database" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -157,7 +157,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1/{database}
 # operationId: spanner.projects.instances.databases.dropDatabase
-export def "projects delete-drop" [
+export def "spanner-projects-instances-databases-drop-database" [
   database: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -205,7 +205,7 @@ export def "projects delete-drop" [
 #
 # GET /v1/{database}/ddl
 # operationId: spanner.projects.instances.databases.getDdl
-export def "ddl get" [
+export def "spanner-projects-instances-databases-get-ddl" [
   database: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -253,7 +253,7 @@ export def "ddl get" [
 #
 # PATCH /v1/{database}/ddl
 # operationId: spanner.projects.instances.databases.updateDdl
-export def "ddl update" [
+export def "spanner-projects-instances-databases-update-ddl" [
   database: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -307,7 +307,7 @@ export def "ddl update" [
 #
 # GET /v1/{database}/sessions
 # operationId: spanner.projects.instances.databases.sessions.list
-export def "sessions list" [
+export def "spanner-projects-instances-databases-sessions-list" [
   database: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -359,7 +359,7 @@ export def "sessions list" [
 # POST /v1/{database}/sessions
 # operationId: spanner.projects.instances.databases.sessions.create
 # --session shape: {creatorRole?: string, labels?: record}
-export def "sessions create" [
+export def "spanner-projects-instances-databases-sessions-create" [
   database: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -412,7 +412,7 @@ export def "sessions create" [
 # POST /v1/{database}/sessions:batchCreate
 # operationId: spanner.projects.instances.databases.sessions.batchCreate
 # --sessionTemplate shape: {creatorRole?: string, labels?: record}
-export def "sessions-batch-create create" [
+export def "spanner-projects-instances-databases-sessions-batch-create" [
   database: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -465,7 +465,7 @@ export def "sessions-batch-create create" [
 #
 # DELETE /v1/{name}
 # operationId: spanner.projects.instances.operations.delete
-export def "projects delete" [
+export def "spanner-projects-instances-operations-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -515,7 +515,7 @@ export def "projects delete" [
 #
 # GET /v1/{name}
 # operationId: spanner.projects.instances.operations.list
-export def "projects list" [
+export def "spanner-projects-instances-operations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -569,7 +569,7 @@ export def "projects list" [
 # --encryptionConfig shape: {kmsKeyName?: string}
 # --encryptionInfo item shape: {encryptionStatus?: record}
 # --restoreInfo shape: {backupInfo?: record, sourceType?: "TYPE_UNSPECIFIED"|"BACKUP"}
-export def "projects update" [
+export def "spanner-projects-instances-databases-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -625,7 +625,7 @@ export def "projects update" [
 #
 # GET /v1/{name}/scans
 # operationId: spanner.projects.instances.databases.getScans
-export def "scans get" [
+export def "spanner-projects-instances-databases-get-scans" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -676,7 +676,7 @@ export def "scans get" [
 #
 # POST /v1/{name}:cancel
 # operationId: spanner.projects.instances.operations.cancel
-export def "projects cancel" [
+export def "spanner-projects-instances-operations-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -724,7 +724,7 @@ export def "projects cancel" [
 #
 # GET /v1/{parent}
 # operationId: spanner.scans.list
-export def "scans list" [
+export def "spanner-scans-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -776,7 +776,7 @@ export def "scans list" [
 #
 # GET /v1/{parent}/backupOperations
 # operationId: spanner.projects.instances.backupOperations.list
-export def "backup-operations list" [
+export def "spanner-projects-instances-backup-operations-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -827,7 +827,7 @@ export def "backup-operations list" [
 #
 # GET /v1/{parent}/backups
 # operationId: spanner.projects.instances.backups.list
-export def "backups list" [
+export def "spanner-projects-instances-backups-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -879,7 +879,7 @@ export def "backups list" [
 # POST /v1/{parent}/backups
 # operationId: spanner.projects.instances.backups.create
 # --encryptionInfo shape: {encryptionStatus?: record}
-export def "backups create" [
+export def "spanner-projects-instances-backups-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -939,7 +939,7 @@ export def "backups create" [
 # POST /v1/{parent}/backups:copy
 # operationId: spanner.projects.instances.backups.copy
 # --encryptionConfig shape: {encryptionType?: "ENCRYPTION_TYPE_UNSPECIFIED"|"USE_CONFIG_DEFAULT_OR_BACKUP_ENCRYPTION"|"GOOGLE_DEFAULT_ENCRYPTION"|"CUSTOMER_MANAGED_ENCRYPTION", kmsKeyName?: string}
-export def "backups-copy copy" [
+export def "spanner-projects-instances-backups-copy" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -994,7 +994,7 @@ export def "backups-copy copy" [
 #
 # GET /v1/{parent}/databaseOperations
 # operationId: spanner.projects.instances.databaseOperations.list
-export def "database-operations list" [
+export def "spanner-projects-instances-database-operations-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1045,7 +1045,7 @@ export def "database-operations list" [
 #
 # GET /v1/{parent}/databaseRoles
 # operationId: spanner.projects.instances.databases.databaseRoles.list
-export def "database-roles list" [
+export def "spanner-projects-instances-databases-database-roles-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1095,7 +1095,7 @@ export def "database-roles list" [
 #
 # GET /v1/{parent}/databases
 # operationId: spanner.projects.instances.databases.list
-export def "databases list" [
+export def "spanner-projects-instances-databases-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1146,7 +1146,7 @@ export def "databases list" [
 # POST /v1/{parent}/databases
 # operationId: spanner.projects.instances.databases.create
 # --encryptionConfig shape: {kmsKeyName?: string}
-export def "databases create" [
+export def "spanner-projects-instances-databases-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1203,7 +1203,7 @@ export def "databases create" [
 # POST /v1/{parent}/databases:restore
 # operationId: spanner.projects.instances.databases.restore
 # --encryptionConfig shape: {encryptionType?: "ENCRYPTION_TYPE_UNSPECIFIED"|"USE_CONFIG_DEFAULT_OR_BACKUP_ENCRYPTION"|"GOOGLE_DEFAULT_ENCRYPTION"|"CUSTOMER_MANAGED_ENCRYPTION", kmsKeyName?: string}
-export def "databases-restore create" [
+export def "spanner-projects-instances-databases-restore" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1257,7 +1257,7 @@ export def "databases-restore create" [
 #
 # GET /v1/{parent}/instanceConfigOperations
 # operationId: spanner.projects.instanceConfigOperations.list
-export def "instance-config-operations list" [
+export def "spanner-projects-instance-config-operations-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1308,7 +1308,7 @@ export def "instance-config-operations list" [
 #
 # GET /v1/{parent}/instanceConfigs
 # operationId: spanner.projects.instanceConfigs.list
-export def "instance-configs list" [
+export def "spanner-projects-instance-configs-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1359,7 +1359,7 @@ export def "instance-configs list" [
 # POST /v1/{parent}/instanceConfigs
 # operationId: spanner.projects.instanceConfigs.create
 # --instanceConfig shape: {baseConfig?: string, displayName?: string, etag?: string, labels?: record, leaderOptions?: list<string>, name?: string, replicas?: list}
-export def "instance-configs create" [
+export def "spanner-projects-instance-configs-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1413,7 +1413,7 @@ export def "instance-configs create" [
 #
 # GET /v1/{parent}/instances
 # operationId: spanner.projects.instances.list
-export def "instances list" [
+export def "spanner-projects-instances-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1466,7 +1466,7 @@ export def "instances list" [
 # POST /v1/{parent}/instances
 # operationId: spanner.projects.instances.create
 # --instance shape: {config?: string, displayName?: string, endpointUris?: list<string>, freeInstanceMetadata?: record, instanceType?: "INSTANCE_TYPE_UNSPECIFIED"|"PROVISIONED"|"FREE_INSTANCE", labels?: record, name?: string, nodeCount?: int, processingUnits?: int}
-export def "instances create" [
+export def "spanner-projects-instances-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1520,7 +1520,7 @@ export def "instances create" [
 # POST /v1/{resource}:getIamPolicy
 # operationId: spanner.projects.instances.databases.getIamPolicy
 # --options shape: {requestedPolicyVersion?: int}
-export def "projects get-iam-policy" [
+export def "spanner-projects-instances-databases-get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1573,7 +1573,7 @@ export def "projects get-iam-policy" [
 # POST /v1/{resource}:setIamPolicy
 # operationId: spanner.projects.instances.databases.setIamPolicy
 # --policy shape: {bindings?: list, etag?: string, version?: int}
-export def "projects update-iam-policy" [
+export def "spanner-projects-instances-databases-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1625,7 +1625,7 @@ export def "projects update-iam-policy" [
 #
 # POST /v1/{resource}:testIamPermissions
 # operationId: spanner.projects.instances.databases.databaseRoles.testIamPermissions
-export def "projects test-iam-permissions" [
+export def "spanner-projects-instances-databases-database-roles-test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1679,7 +1679,7 @@ export def "projects test-iam-permissions" [
 # operationId: spanner.projects.instances.databases.sessions.beginTransaction
 # --options shape: {partitionedDml?: record, readOnly?: record, readWrite?: record}
 # --requestOptions shape: {priority?: "PRIORITY_UNSPECIFIED"|"PRIORITY_LOW"|"PRIORITY_MEDIUM"|"PRIORITY_HIGH", requestTag?: string, transactionTag?: string}
-export def "projects create-begin-transaction" [
+export def "spanner-projects-instances-databases-sessions-begin-transaction" [
   session: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1735,7 +1735,7 @@ export def "projects create-begin-transaction" [
 # --mutations item shape: {delete?: record, insert?: record, insertOrUpdate?: record, replace?: record, update?: record}
 # --requestOptions shape: {priority?: "PRIORITY_UNSPECIFIED"|"PRIORITY_LOW"|"PRIORITY_MEDIUM"|"PRIORITY_HIGH", requestTag?: string, transactionTag?: string}
 # --singleUseTransaction shape: {partitionedDml?: record, readOnly?: record, readWrite?: record}
-export def "projects commit" [
+export def "spanner-projects-instances-databases-sessions-commit" [
   session: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1794,7 +1794,7 @@ export def "projects commit" [
 # --requestOptions shape: {priority?: "PRIORITY_UNSPECIFIED"|"PRIORITY_LOW"|"PRIORITY_MEDIUM"|"PRIORITY_HIGH", requestTag?: string, transactionTag?: string}
 # --statements item shape: {paramTypes?: record, params?: record, sql?: string}
 # --transaction shape: {begin?: record, id?: string, singleUse?: record}
-export def "projects create-execute-batch-dml" [
+export def "spanner-projects-instances-databases-sessions-execute-batch-dml" [
   session: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1852,7 +1852,7 @@ export def "projects create-execute-batch-dml" [
 # --queryOptions shape: {optimizerStatisticsPackage?: string, optimizerVersion?: string}
 # --requestOptions shape: {priority?: "PRIORITY_UNSPECIFIED"|"PRIORITY_LOW"|"PRIORITY_MEDIUM"|"PRIORITY_HIGH", requestTag?: string, transactionTag?: string}
 # --transaction shape: {begin?: record, id?: string, singleUse?: record}
-export def "projects create-execute-sql" [
+export def "spanner-projects-instances-databases-sessions-execute-sql" [
   session: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1917,7 +1917,7 @@ export def "projects create-execute-sql" [
 # --queryOptions shape: {optimizerStatisticsPackage?: string, optimizerVersion?: string}
 # --requestOptions shape: {priority?: "PRIORITY_UNSPECIFIED"|"PRIORITY_LOW"|"PRIORITY_MEDIUM"|"PRIORITY_HIGH", requestTag?: string, transactionTag?: string}
 # --transaction shape: {begin?: record, id?: string, singleUse?: record}
-export def "projects create-execute-streaming-sql" [
+export def "spanner-projects-instances-databases-sessions-execute-streaming-sql" [
   session: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1981,7 +1981,7 @@ export def "projects create-execute-streaming-sql" [
 # operationId: spanner.projects.instances.databases.sessions.partitionQuery
 # --partitionOptions shape: {maxPartitions?: string, partitionSizeBytes?: string}
 # --transaction shape: {begin?: record, id?: string, singleUse?: record}
-export def "projects list-partition" [
+export def "spanner-projects-instances-databases-sessions-partition-query" [
   session: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2040,7 +2040,7 @@ export def "projects list-partition" [
 # --keySet shape: {all?: bool, keys?: list, ranges?: list}
 # --partitionOptions shape: {maxPartitions?: string, partitionSizeBytes?: string}
 # --transaction shape: {begin?: record, id?: string, singleUse?: record}
-export def "projects get-partition" [
+export def "spanner-projects-instances-databases-sessions-partition-read" [
   session: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2100,7 +2100,7 @@ export def "projects get-partition" [
 # --keySet shape: {all?: bool, keys?: list, ranges?: list}
 # --requestOptions shape: {priority?: "PRIORITY_UNSPECIFIED"|"PRIORITY_LOW"|"PRIORITY_MEDIUM"|"PRIORITY_HIGH", requestTag?: string, transactionTag?: string}
 # --transaction shape: {begin?: record, id?: string, singleUse?: record}
-export def "projects get" [
+export def "spanner-projects-instances-databases-sessions-read" [
   session: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2161,7 +2161,7 @@ export def "projects get" [
 #
 # POST /v1/{session}:rollback
 # operationId: spanner.projects.instances.databases.sessions.rollback
-export def "projects create-rollback" [
+export def "spanner-projects-instances-databases-sessions-rollback" [
   session: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2216,7 +2216,7 @@ export def "projects create-rollback" [
 # --keySet shape: {all?: bool, keys?: list, ranges?: list}
 # --requestOptions shape: {priority?: "PRIORITY_UNSPECIFIED"|"PRIORITY_LOW"|"PRIORITY_MEDIUM"|"PRIORITY_HIGH", requestTag?: string, transactionTag?: string}
 # --transaction shape: {begin?: record, id?: string, singleUse?: record}
-export def "projects get-streaming" [
+export def "spanner-projects-instances-databases-sessions-streaming-read" [
   session: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

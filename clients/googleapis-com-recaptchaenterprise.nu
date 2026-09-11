@@ -130,7 +130,7 @@ def annotation-completer [] { ["ANNOTATION_UNSPECIFIED" "FRAUDULENT" "LEGITIMATE
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects get-legacy-secret" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "recaptchaenterprise-projects-keys-retrieve-legacy-secret-key" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -154,7 +154,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/{key}:retrieveLegacySecretKey
 # operationId: recaptchaenterprise.projects.keys.retrieveLegacySecretKey
-export def "projects get-legacy-secret" [
+export def "recaptchaenterprise-projects-keys-retrieve-legacy-secret-key" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -202,7 +202,7 @@ export def "projects get-legacy-secret" [
 #
 # DELETE /v1/{name}
 # operationId: recaptchaenterprise.projects.keys.delete
-export def "projects delete" [
+export def "recaptchaenterprise-projects-keys-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -250,7 +250,7 @@ export def "projects delete" [
 #
 # GET /v1/{name}
 # operationId: recaptchaenterprise.projects.keys.getMetrics
-export def "projects get-metrics" [
+export def "recaptchaenterprise-projects-keys-get-metrics" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -303,7 +303,7 @@ export def "projects get-metrics" [
 # --testingOptions shape: {testingChallenge?: "TESTING_CHALLENGE_UNSPECIFIED"|"NOCAPTCHA"|"UNSOLVABLE_CHALLENGE", testingScore?: float}
 # --wafSettings shape: {wafFeature?: "WAF_FEATURE_UNSPECIFIED"|"CHALLENGE_PAGE"|"SESSION_TOKEN"|"ACTION_TOKEN"|"EXPRESS", wafService?: "WAF_SERVICE_UNSPECIFIED"|"CA"|"FASTLY"}
 # --webSettings shape: {allowAllDomains?: bool, allowAmpTraffic?: bool, allowedDomains?: list<string>, challengeSecurityPreference?: "CHALLENGE_SECURITY_PREFERENCE_UNSPECIFIED"|"USABILITY"|"BALANCE"|"SECURITY", integrationType?: "INTEGRATION_TYPE_UNSPECIFIED"|"SCORE"|"CHECKBOX"|"INVISIBLE"}
-export def "projects update" [
+export def "recaptchaenterprise-projects-keys-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -364,7 +364,7 @@ export def "projects update" [
 # POST /v1/{name}:annotate
 # operationId: recaptchaenterprise.projects.assessments.annotate
 # --transactionEvent shape: {eventTime?: string, eventType?: "TRANSACTION_EVENT_TYPE_UNSPECIFIED"|"MERCHANT_APPROVE"|"MERCHANT_DENY"|"MANUAL_REVIEW"|"AUTHORIZATION"|"AUTHORIZATION_DECLINE"|"PAYMENT_CAPTURE"|"PAYMENT_CAPTURE_DECLINE"|"CANCEL"|"CHARGEBACK_INQUIRY"|"CHARGEBACK_ALERT"|"FRAUD_NOTIFICATION"|"CHARGEBACK"|"CHARGEBACK_REPRESENTMENT"|"CHARGEBACK_REVERSE"|"REFUND_REQUEST"|"REFUND_DECLINE"|"REFUND"|"REFUND_REVERSE", reason?: string, value?: float}
-export def "projects create-annotate" [
+export def "recaptchaenterprise-projects-assessments-annotate" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -419,7 +419,7 @@ export def "projects create-annotate" [
 #
 # POST /v1/{name}:migrate
 # operationId: recaptchaenterprise.projects.keys.migrate
-export def "projects create-migrate" [
+export def "recaptchaenterprise-projects-keys-migrate" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -479,7 +479,7 @@ export def "projects create-migrate" [
 # --privatePasswordLeakVerification shape: {encryptedUserCredentialsHash?: string, lookupHashPrefix?: string}
 # --riskAnalysis shape: {extendedVerdictReasons?: list<string>, reasons?: list<string>, score?: float}
 # --tokenProperties shape: {action?: string, androidPackageName?: string, createTime?: string, hostname?: string, invalidReason?: "INVALID_REASON_UNSPECIFIED"|"UNKNOWN_INVALID_REASON"|"MALFORMED"|"EXPIRED"|"DUPE"|"MISSING"|"BROWSER_ERROR", iosBundleId?: string, valid?: bool}
-export def "assessments create" [
+export def "recaptchaenterprise-projects-assessments-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -538,7 +538,7 @@ export def "assessments create" [
 #
 # GET /v1/{parent}/firewallpolicies
 # operationId: recaptchaenterprise.projects.firewallpolicies.list
-export def "firewallpolicies list" [
+export def "recaptchaenterprise-projects-firewallpolicies-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -589,7 +589,7 @@ export def "firewallpolicies list" [
 # POST /v1/{parent}/firewallpolicies
 # operationId: recaptchaenterprise.projects.firewallpolicies.create
 # --actions item shape: {allow?: record, block?: record, redirect?: record, setHeader?: record, substitute?: record}
-export def "firewallpolicies create" [
+export def "recaptchaenterprise-projects-firewallpolicies-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -645,7 +645,7 @@ export def "firewallpolicies create" [
 #
 # GET /v1/{parent}/keys
 # operationId: recaptchaenterprise.projects.keys.list
-export def "keys list" [
+export def "recaptchaenterprise-projects-keys-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -700,7 +700,7 @@ export def "keys list" [
 # --testingOptions shape: {testingChallenge?: "TESTING_CHALLENGE_UNSPECIFIED"|"NOCAPTCHA"|"UNSOLVABLE_CHALLENGE", testingScore?: float}
 # --wafSettings shape: {wafFeature?: "WAF_FEATURE_UNSPECIFIED"|"CHALLENGE_PAGE"|"SESSION_TOKEN"|"ACTION_TOKEN"|"EXPRESS", wafService?: "WAF_SERVICE_UNSPECIFIED"|"CA"|"FASTLY"}
 # --webSettings shape: {allowAllDomains?: bool, allowAmpTraffic?: bool, allowedDomains?: list<string>, challengeSecurityPreference?: "CHALLENGE_SECURITY_PREFERENCE_UNSPECIFIED"|"USABILITY"|"BALANCE"|"SECURITY", integrationType?: "INTEGRATION_TYPE_UNSPECIFIED"|"SCORE"|"CHECKBOX"|"INVISIBLE"}
-export def "keys create" [
+export def "recaptchaenterprise-projects-keys-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -759,7 +759,7 @@ export def "keys create" [
 #
 # GET /v1/{parent}/memberships
 # operationId: recaptchaenterprise.projects.relatedaccountgroups.memberships.list
-export def "memberships list" [
+export def "recaptchaenterprise-projects-relatedaccountgroups-memberships-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -809,7 +809,7 @@ export def "memberships list" [
 #
 # GET /v1/{parent}/relatedaccountgroups
 # operationId: recaptchaenterprise.projects.relatedaccountgroups.list
-export def "relatedaccountgroups list" [
+export def "recaptchaenterprise-projects-relatedaccountgroups-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -859,7 +859,7 @@ export def "relatedaccountgroups list" [
 #
 # POST /v1/{project}/relatedaccountgroupmemberships:search
 # operationId: recaptchaenterprise.projects.relatedaccountgroupmemberships.search
-export def "relatedaccountgroupmemberships-search list" [
+export def "recaptchaenterprise-projects-relatedaccountgroupmemberships-search" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

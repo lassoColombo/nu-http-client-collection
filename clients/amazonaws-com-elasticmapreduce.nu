@@ -153,7 +153,7 @@ def x-amz-target-completer-52 [] { ["ElasticMapReduce.UpdateStudioSessionMapping
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-instance-fleet" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "add-instance-fleet" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -177,7 +177,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AddInstanceFleet
-export def "api create-instance-fleet" [
+export def "add-instance-fleet" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -226,7 +226,7 @@ export def "api create-instance-fleet" [
 #
 # POST /
 # operationId: AddInstanceGroups
-export def "api create-instance-groups" [
+export def "add-instance-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -275,7 +275,7 @@ export def "api create-instance-groups" [
 #
 # POST /
 # operationId: AddJobFlowSteps
-export def "api create-job-flow-steps" [
+export def "add-job-flow-steps" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -325,7 +325,7 @@ export def "api create-job-flow-steps" [
 #
 # POST /
 # operationId: AddTags
-export def "api create-tags" [
+export def "add-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -374,7 +374,7 @@ export def "api create-tags" [
 #
 # POST /
 # operationId: CancelSteps
-export def "api cancel-steps" [
+export def "cancel-steps" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -424,7 +424,7 @@ export def "api cancel-steps" [
 #
 # POST /
 # operationId: CreateSecurityConfiguration
-export def "api create-security-configuration" [
+export def "create-security-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -473,7 +473,7 @@ export def "api create-security-configuration" [
 #
 # POST /
 # operationId: CreateStudio
-export def "api create-studio" [
+export def "create-studio" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -533,7 +533,7 @@ export def "api create-studio" [
 #
 # POST /
 # operationId: CreateStudioSessionMapping
-export def "api create-studio-session-mapping" [
+export def "create-studio-session-mapping" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -585,7 +585,7 @@ export def "api create-studio-session-mapping" [
 #
 # POST /
 # operationId: DeleteSecurityConfiguration
-export def "api delete-security-configuration" [
+export def "delete-security-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -633,7 +633,7 @@ export def "api delete-security-configuration" [
 #
 # POST /
 # operationId: DeleteStudio
-export def "api delete-studio" [
+export def "delete-studio" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -681,7 +681,7 @@ export def "api delete-studio" [
 #
 # POST /
 # operationId: DeleteStudioSessionMapping
-export def "api delete-studio-session-mapping" [
+export def "delete-studio-session-mapping" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -732,7 +732,7 @@ export def "api delete-studio-session-mapping" [
 #
 # POST /
 # operationId: DescribeCluster
-export def "api get" [
+export def "describe-cluster" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -782,7 +782,7 @@ export def "api get" [
 # DEPRECATED
 # operationId: DescribeJobFlows
 @deprecated
-export def "api get-job-flows" [
+export def "describe-job-flows" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -833,7 +833,7 @@ export def "api get-job-flows" [
 #
 # POST /
 # operationId: DescribeNotebookExecution
-export def "api get-notebook-execution" [
+export def "describe-notebook-execution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -881,7 +881,7 @@ export def "api get-notebook-execution" [
 #
 # POST /
 # operationId: DescribeReleaseLabel
-export def "api get-release-label" [
+export def "describe-release-label" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -931,7 +931,7 @@ export def "api get-release-label" [
 #
 # POST /
 # operationId: DescribeSecurityConfiguration
-export def "api get-security-configuration" [
+export def "describe-security-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -979,7 +979,7 @@ export def "api get-security-configuration" [
 #
 # POST /
 # operationId: DescribeStep
-export def "api get-step" [
+export def "describe-step" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1028,7 +1028,7 @@ export def "api get-step" [
 #
 # POST /
 # operationId: DescribeStudio
-export def "api get-studio" [
+export def "describe-studio" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1076,7 +1076,7 @@ export def "api get-studio" [
 #
 # POST /
 # operationId: GetAutoTerminationPolicy
-export def "api get-auto-termination-policy" [
+export def "get-auto-termination-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1124,7 +1124,7 @@ export def "api get-auto-termination-policy" [
 #
 # POST /
 # operationId: GetBlockPublicAccessConfiguration
-export def "api get-block-public-access-configuration" [
+export def "get-block-public-access-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1172,7 +1172,7 @@ export def "api get-block-public-access-configuration" [
 #
 # POST /
 # operationId: GetClusterSessionCredentials
-export def "api get-session-credentials" [
+export def "get-cluster-session-credentials" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1221,7 +1221,7 @@ export def "api get-session-credentials" [
 #
 # POST /
 # operationId: GetManagedScalingPolicy
-export def "api get-managed-scaling-policy" [
+export def "get-managed-scaling-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1269,7 +1269,7 @@ export def "api get-managed-scaling-policy" [
 #
 # POST /
 # operationId: GetStudioSessionMapping
-export def "api get-studio-session-mapping" [
+export def "get-studio-session-mapping" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1320,7 +1320,7 @@ export def "api get-studio-session-mapping" [
 #
 # POST /
 # operationId: ListBootstrapActions
-export def "api list-bootstrap-actions" [
+export def "list-bootstrap-actions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1371,7 +1371,7 @@ export def "api list-bootstrap-actions" [
 #
 # POST /
 # operationId: ListClusters
-export def "api list-clusters" [
+export def "list-clusters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1424,7 +1424,7 @@ export def "api list-clusters" [
 #
 # POST /
 # operationId: ListInstanceFleets
-export def "api list-instance-fleets" [
+export def "list-instance-fleets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1475,7 +1475,7 @@ export def "api list-instance-fleets" [
 #
 # POST /
 # operationId: ListInstanceGroups
-export def "api list-instance-groups" [
+export def "list-instance-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1526,7 +1526,7 @@ export def "api list-instance-groups" [
 #
 # POST /
 # operationId: ListInstances
-export def "api list-instances" [
+export def "list-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1582,7 +1582,7 @@ export def "api list-instances" [
 #
 # POST /
 # operationId: ListNotebookExecutions
-export def "api list-notebook-executions" [
+export def "list-notebook-executions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1636,7 +1636,7 @@ export def "api list-notebook-executions" [
 #
 # POST /
 # operationId: ListReleaseLabels
-export def "api list-release-labels" [
+export def "list-release-labels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1689,7 +1689,7 @@ export def "api list-release-labels" [
 #
 # POST /
 # operationId: ListSecurityConfigurations
-export def "api list-security-configurations" [
+export def "list-security-configurations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1739,7 +1739,7 @@ export def "api list-security-configurations" [
 #
 # POST /
 # operationId: ListSteps
-export def "api list-steps" [
+export def "list-steps" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1792,7 +1792,7 @@ export def "api list-steps" [
 #
 # POST /
 # operationId: ListStudioSessionMappings
-export def "api list-studio-session-mappings" [
+export def "list-studio-session-mappings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1844,7 +1844,7 @@ export def "api list-studio-session-mappings" [
 #
 # POST /
 # operationId: ListStudios
-export def "api list-studios" [
+export def "list-studios" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1894,7 +1894,7 @@ export def "api list-studios" [
 #
 # POST /
 # operationId: ModifyCluster
-export def "api create-modify" [
+export def "modify-cluster" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1943,7 +1943,7 @@ export def "api create-modify" [
 #
 # POST /
 # operationId: ModifyInstanceFleet
-export def "api create-modify-instance-fleet" [
+export def "modify-instance-fleet" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1992,7 +1992,7 @@ export def "api create-modify-instance-fleet" [
 #
 # POST /
 # operationId: ModifyInstanceGroups
-export def "api create-modify-instance-groups" [
+export def "modify-instance-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2041,7 +2041,7 @@ export def "api create-modify-instance-groups" [
 #
 # POST /
 # operationId: PutAutoScalingPolicy
-export def "api update-auto-scaling-policy" [
+export def "put-auto-scaling-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2091,7 +2091,7 @@ export def "api update-auto-scaling-policy" [
 #
 # POST /
 # operationId: PutAutoTerminationPolicy
-export def "api update-auto-termination-policy" [
+export def "put-auto-termination-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2140,7 +2140,7 @@ export def "api update-auto-termination-policy" [
 #
 # POST /
 # operationId: PutBlockPublicAccessConfiguration
-export def "api update-block-public-access-configuration" [
+export def "put-block-public-access-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2188,7 +2188,7 @@ export def "api update-block-public-access-configuration" [
 #
 # POST /
 # operationId: PutManagedScalingPolicy
-export def "api update-managed-scaling-policy" [
+export def "put-managed-scaling-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2237,7 +2237,7 @@ export def "api update-managed-scaling-policy" [
 #
 # POST /
 # operationId: RemoveAutoScalingPolicy
-export def "api delete-auto-scaling-policy" [
+export def "remove-auto-scaling-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2286,7 +2286,7 @@ export def "api delete-auto-scaling-policy" [
 #
 # POST /
 # operationId: RemoveAutoTerminationPolicy
-export def "api delete-auto-termination-policy" [
+export def "remove-auto-termination-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2334,7 +2334,7 @@ export def "api delete-auto-termination-policy" [
 #
 # POST /
 # operationId: RemoveManagedScalingPolicy
-export def "api delete-managed-scaling-policy" [
+export def "remove-managed-scaling-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2382,7 +2382,7 @@ export def "api delete-managed-scaling-policy" [
 #
 # POST /
 # operationId: RemoveTags
-export def "api delete-tags" [
+export def "remove-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2432,7 +2432,7 @@ export def "api delete-tags" [
 # POST /
 # operationId: RunJobFlow
 # --AutoTerminationPolicy shape: {IdleTimeout?: any}
-export def "api create-run-job-flow" [
+export def "run-job-flow" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2508,7 +2508,7 @@ export def "api create-run-job-flow" [
 #
 # POST /
 # operationId: SetTerminationProtection
-export def "api update-termination-protection" [
+export def "set-termination-protection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2557,7 +2557,7 @@ export def "api update-termination-protection" [
 #
 # POST /
 # operationId: SetVisibleToAllUsers
-export def "api update-visible-to-list-users" [
+export def "set-visible-to-all-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2606,7 +2606,7 @@ export def "api update-visible-to-list-users" [
 #
 # POST /
 # operationId: StartNotebookExecution
-export def "api start-notebook-execution" [
+export def "start-notebook-execution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2661,7 +2661,7 @@ export def "api start-notebook-execution" [
 #
 # POST /
 # operationId: StopNotebookExecution
-export def "api stop-notebook-execution" [
+export def "stop-notebook-execution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2709,7 +2709,7 @@ export def "api stop-notebook-execution" [
 #
 # POST /
 # operationId: TerminateJobFlows
-export def "api create-terminate-job-flows" [
+export def "terminate-job-flows" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2757,7 +2757,7 @@ export def "api create-terminate-job-flows" [
 #
 # POST /
 # operationId: UpdateStudio
-export def "api update-studio" [
+export def "update-studio" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2809,7 +2809,7 @@ export def "api update-studio" [
 #
 # POST /
 # operationId: UpdateStudioSessionMapping
-export def "api update-studio-session-mapping" [
+export def "update-studio-session-mapping" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

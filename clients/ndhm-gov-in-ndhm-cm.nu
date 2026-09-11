@@ -105,7 +105,7 @@ def accept-completer [] { ["application/json" "application/xml"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v0-5-care-contexts-on-discover create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-v0-5-care-contexts-on-discover" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -131,7 +131,7 @@ export def commands []: nothing -> table {
 # --error shape: {code: "1000"|"10001", message: string}
 # --patient shape: {careContexts: list, display: string, matchedBy?: list<string>, referenceNumber: string}
 # --resp shape: {requestId: string}
-export def "v0-5-care-contexts-on-discover create" [
+export def "post-v0-5-care-contexts-on-discover" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -177,7 +177,7 @@ export def "v0-5-care-contexts-on-discover create" [
 #
 # POST /v0.5/consent-requests/init
 # --consent shape: {careContexts?: list, hiTypes: list<string>, hip?: record, hiu: record, patient: record, permission: record, purpose: record, requester: record}
-export def "v0-5-consent-requests-init create" [
+export def "post-v0-5-consent-requests-init" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -219,7 +219,7 @@ export def "v0-5-consent-requests-init create" [
 # Get consent request status
 #
 # POST /v0.5/consent-requests/status
-export def "v0-5-consent-requests-status create" [
+export def "post-v0-5-consent-requests-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -261,7 +261,7 @@ export def "v0-5-consent-requests-status create" [
 # Get consent artefact
 #
 # POST /v0.5/consents/fetch
-export def "v0-5-consents-fetch create" [
+export def "post-v0-5-consents-fetch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -306,7 +306,7 @@ export def "v0-5-consents-fetch create" [
 # --acknowledgement shape: {consentId: string, status: "OK"|"UNKNOWN"}
 # --error shape: {code: "1000"|"10001", message: string}
 # --resp shape: {requestId: string}
-export def "v0-5-consents-hip-on-notify create" [
+export def "post-v0-5-consents-hip-on-notify" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -353,7 +353,7 @@ export def "v0-5-consents-hip-on-notify create" [
 # --acknowledgement item shape: {consentId: string, status: "OK"|"UNKNOWN"}
 # --error shape: {code: "1000"|"10001", message: string}
 # --resp shape: {requestId: string}
-export def "v0-5-consents-hiu-on-notify create" [
+export def "post-v0-5-consents-hiu-on-notify" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -398,7 +398,7 @@ export def "v0-5-consents-hiu-on-notify create" [
 #
 # POST /v0.5/health-information/notify
 # --notification shape: {consentId: string, doneAt: string, notifier: record, statusNotification: record, transactionId: string}
-export def "v0-5-health-information-notify create" [
+export def "post-v0-5-health-information-notify" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -443,7 +443,7 @@ export def "v0-5-health-information-notify create" [
 # --error shape: {code: "1000"|"10001", message: string}
 # --hiRequest shape: {sessionStatus: "ACKNOWLEDGED", transactionId: string}
 # --resp shape: {requestId: string}
-export def "v0-5-health-information-on-request create" [
+export def "post-v0-5-health-information-on-request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -488,7 +488,7 @@ export def "v0-5-health-information-on-request create" [
 #
 # POST /v0.5/health-information/request
 # --hiRequest shape: {consent: record, dataPushUrl: string, dateRange: record, keyMaterial: record}
-export def "v0-5-health-information-request create" [
+export def "post-v0-5-health-information-request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -530,7 +530,7 @@ export def "v0-5-health-information-request create" [
 # Get consent request status
 #
 # GET /v0.5/heartbeat
-export def "v0-5-heartbeat get" [
+export def "get-v0-5-heartbeat" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -565,7 +565,7 @@ export def "v0-5-heartbeat get" [
 #
 # POST /v0.5/links/link/add-contexts
 # --link shape: {accessToken: string, patient: record}
-export def "v0-5-links-link-add-contexts create" [
+export def "post-v0-5-links-link-add-contexts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -610,7 +610,7 @@ export def "v0-5-links-link-add-contexts create" [
 # --error shape: {code: "1000"|"10001", message: string}
 # --patient shape: {careContexts: list, display: string, referenceNumber: string}
 # --resp shape: {requestId: string}
-export def "v0-5-links-link-on-confirm create" [
+export def "post-v0-5-links-link-on-confirm" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -657,7 +657,7 @@ export def "v0-5-links-link-on-confirm create" [
 # --error shape: {code: "1000"|"10001", message: string}
 # --link shape: {authenticationType: "DIRECT"|"MEDIATED", meta?: record, referenceNumber: string}
 # --resp shape: {requestId: string}
-export def "v0-5-links-link-on-init create" [
+export def "post-v0-5-links-link-on-init" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -703,7 +703,7 @@ export def "v0-5-links-link-on-init create" [
 #
 # POST /v0.5/patients/find
 # --query shape: {patient: record, requester: record}
-export def "v0-5-patients-find create" [
+export def "post-v0-5-patients-find" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -748,7 +748,7 @@ export def "v0-5-patients-find create" [
 # --acknowledgement shape: {healthId: string, status: "SUCCESS"|"FAILURE"}
 # --error shape: {code: "1000"|"10001", message: string}
 # --resp shape: {requestId: string}
-export def "v0-5-patients-profile-on-share create" [
+export def "post-v0-5-patients-profile-on-share" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -793,7 +793,7 @@ export def "v0-5-patients-profile-on-share create" [
 #
 # POST /v0.5/subscription-requests/cm/init
 # --subscription shape: {categories: list<string>, hips?: list, hiu: record, patient: record, period: record, purpose: record}
-export def "v0-5-subscription-requests-cm-init create" [
+export def "post-v0-5-subscription-requests-cm-init" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -838,7 +838,7 @@ export def "v0-5-subscription-requests-cm-init create" [
 # --acknowledgement shape: {status: "OK", subscriptionRequestId: string}
 # --error shape: {code: "1000"|"10001", message: string}
 # --resp shape: {requestId: string}
-export def "v0-5-subscription-requests-hiu-on-notify create" [
+export def "post-v0-5-subscription-requests-hiu-on-notify" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -885,7 +885,7 @@ export def "v0-5-subscription-requests-hiu-on-notify create" [
 # --acknowledgement shape: {eventId: string, status: "OK"}
 # --error shape: {code: "1000"|"10001", message: string}
 # --resp shape: {requestId: string}
-export def "v0-5-subscriptions-hiu-on-notify create" [
+export def "post-v0-5-subscriptions-hiu-on-notify" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -930,7 +930,7 @@ export def "v0-5-subscriptions-hiu-on-notify create" [
 #
 # POST /v0.5/users/auth/confirm
 # --credential shape: {authCode?: string, demographic?: record}
-export def "v0-5-users-auth-confirm create" [
+export def "post-v0-5-users-auth-confirm" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -974,7 +974,7 @@ export def "v0-5-users-auth-confirm create" [
 #
 # POST /v0.5/users/auth/fetch-modes
 # --query shape: {id: string, purpose: "LINK"|"KYC"|"KYC_AND_LINK", requester: record}
-export def "v0-5-users-auth-fetch-modes create" [
+export def "post-v0-5-users-auth-fetch-modes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1017,7 +1017,7 @@ export def "v0-5-users-auth-fetch-modes create" [
 #
 # POST /v0.5/users/auth/init
 # --query shape: {authMode?: "MOBILE_OTP"|"DIRECT"|"DEMOGRAPHICS"|"AADHAAR_OTP", id: string, purpose: "LINK"|"KYC"|"KYC_AND_LINK", requester: record}
-export def "v0-5-users-auth-init create" [
+export def "post-v0-5-users-auth-init" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1062,7 +1062,7 @@ export def "v0-5-users-auth-init create" [
 # --acknowledgement shape: {status: "OK"}
 # --error shape: {code: "1000"|"10001", message: string}
 # --resp shape: {requestId: string}
-export def "v0-5-users-auth-on-notify create" [
+export def "post-v0-5-users-auth-on-notify" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

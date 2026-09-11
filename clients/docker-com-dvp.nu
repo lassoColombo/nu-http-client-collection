@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["bearer" "none"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "discovery get-namespaces" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-namespaces" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -128,7 +128,7 @@ export def commands []: nothing -> table {
 #
 # GET /
 # operationId: getNamespaces
-export def "discovery get-namespaces" [
+export def "get-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -162,7 +162,7 @@ export def "discovery get-namespaces" [
 #
 # GET /namespaces/{namespace}
 # operationId: getNamespace
-export def "namespaces get" [
+export def "get-namespace" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -198,7 +198,7 @@ export def "namespaces get" [
 #
 # GET /namespaces/{namespace}/pulls/exports/years
 # operationId: getNamespaceYears
-export def "namespaces-pulls-exports-years get" [
+export def "get-namespace-years" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -234,7 +234,7 @@ export def "namespaces-pulls-exports-years get" [
 #
 # GET /namespaces/{namespace}/pulls/exports/years/{year}/{timespantype}
 # operationId: getNamespaceTimespans
-export def "namespaces-pulls-exports-years get-timespans" [
+export def "get-namespace-timespans" [
   namespace: string
   year: int
   timespantype: string
@@ -274,7 +274,7 @@ export def "namespaces-pulls-exports-years get-timespans" [
 #
 # GET /namespaces/{namespace}/pulls/exports/years/{year}/{timespantype}/{timespan}
 # operationId: getNamespaceTimespanMetadata
-export def "namespaces-pulls-exports-years get-metadata" [
+export def "get-namespace-timespan-metadata" [
   namespace: string
   year: int
   timespantype: string
@@ -316,7 +316,7 @@ export def "namespaces-pulls-exports-years get-metadata" [
 #
 # GET /namespaces/{namespace}/pulls/exports/years/{year}/{timespantype}/{timespan}/{dataview}
 # operationId: getNamespaceDataByTimespan
-export def "namespaces-pulls-exports-years get-data" [
+export def "get-namespace-data-by-timespan" [
   namespace: string
   year: int
   timespantype: string
@@ -360,7 +360,7 @@ export def "namespaces-pulls-exports-years get-data" [
 #
 # POST /v2/users/2fa-login
 # operationId: PostUsers2FALogin
-export def "users-2fa-login create-users2-fa" [
+export def "post-users2-fa-login" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -399,7 +399,7 @@ export def "users-2fa-login create-users2-fa" [
 #
 # POST /v2/users/login
 # operationId: PostUsersLogin
-export def "users-login create" [
+export def "post-users-login" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

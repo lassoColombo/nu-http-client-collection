@@ -131,7 +131,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "autocomplete complete-auto" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "auto-complete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -155,7 +155,7 @@ export def commands []: nothing -> table {
 #
 # GET /autocomplete
 # operationId: autoComplete
-export def "autocomplete complete-auto" [
+export def "auto-complete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -195,7 +195,7 @@ export def "autocomplete complete-auto" [
 #
 # GET /coordinates
 # operationId: searchCoordinates
-export def "coordinates list" [
+export def "search-coordinates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -231,7 +231,7 @@ export def "coordinates list" [
 #
 # GET /reverse
 # operationId: getReverseGeoCode
-export def "reverse get-geo-code" [
+export def "get-reverse-geo-code" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -268,7 +268,7 @@ export def "reverse get-geo-code" [
 #
 # GET /search
 # operationId: search
-export def "search list" [
+export def "search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -309,7 +309,7 @@ export def "search list" [
 # POST /upload
 # operationId: uploadFile
 # --parts item shape: {bodyAsString?: string, contentTypeFromMessage?: bool, headers?: record, mediaType?: record}
-export def "upload upload-file" [
+export def "upload-file" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

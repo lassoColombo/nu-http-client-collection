@@ -270,7 +270,7 @@ def topic-completer [] { ["sdkclient-scan-data"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "const-alarm-defs get-definitions" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-alarm-definitions" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -294,7 +294,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/v1/const/alarm_defs
 # operationId: getAlarmDefinitions
-export def "const-alarm-defs get-definitions" [
+export def "get-alarm-definitions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -328,7 +328,7 @@ export def "const-alarm-defs get-definitions" [
 #
 # GET /api/v1/const/ap_channels
 # operationId: getApChannels
-export def "const-ap-channels get" [
+export def "get-ap-channels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -364,7 +364,7 @@ export def "const-ap-channels get" [
 #
 # GET /api/v1/const/ap_led_status
 # operationId: getApLedDefinition
-export def "const-ap-led-status get-definition" [
+export def "get-ap-led-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -398,7 +398,7 @@ export def "const-ap-led-status get-definition" [
 #
 # GET /api/v1/const/applications
 # operationId: getApplications
-export def "const-applications get" [
+export def "get-applications" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -432,7 +432,7 @@ export def "const-applications get" [
 #
 # GET /api/v1/const/call_events
 # operationId: getCallEventsDefinitions
-export def "const-call-events get-definitions" [
+export def "get-call-events-definitions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -466,7 +466,7 @@ export def "const-call-events get-definitions" [
 #
 # GET /api/v1/const/client_events
 # operationId: getClientEventsDefinitions
-export def "const-client-events get-definitions" [
+export def "get-client-events-definitions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -500,7 +500,7 @@ export def "const-client-events get-definitions" [
 #
 # GET /api/v1/const/countries
 # operationId: getCountryCodes
-export def "const-countries get-country-codes" [
+export def "get-country-codes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -534,7 +534,7 @@ export def "const-countries get-country-codes" [
 #
 # GET /api/v1/const/default_gateway_config
 # operationId: getGetawayDefaultConfig
-export def "const-default-gateway-config get-getaway" [
+export def "get-getaway-default-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -571,7 +571,7 @@ export def "const-default-gateway-config get-getaway" [
 #
 # GET /api/v1/const/device_events
 # operationId: getDeviceEventsDefinitions
-export def "const-device-events get-definitions" [
+export def "get-device-events-definitions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -605,7 +605,7 @@ export def "const-device-events get-definitions" [
 #
 # GET /api/v1/const/device_models
 # operationId: getDeviceModels
-export def "const-device-models get" [
+export def "get-device-models" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -639,7 +639,7 @@ export def "const-device-models get" [
 #
 # GET /api/v1/const/insight_metrics
 # operationId: getSiteAvailableInsightMetrics
-export def "const-insight-metrics get-site-available" [
+export def "get-site-available-insight-metrics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -673,7 +673,7 @@ export def "const-insight-metrics get-site-available" [
 #
 # GET /api/v1/const/languages
 # operationId: getSiteLanguages
-export def "const-languages get-site" [
+export def "get-site-languages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -707,7 +707,7 @@ export def "const-languages get-site" [
 #
 # GET /api/v1/const/mxedge_events
 # operationId: getMxEdgeEventsDefinitions
-export def "const-mxedge-events get-mx-edge-definitions" [
+export def "get-mx-edge-events-definitions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -741,7 +741,7 @@ export def "const-mxedge-events get-mx-edge-definitions" [
 #
 # GET /api/v1/const/mxedge_models
 # operationId: getMxEdgeModels
-export def "const-mxedge-models get-mx-edge" [
+export def "get-mx-edge-models" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -777,7 +777,7 @@ export def "const-mxedge-models get-mx-edge" [
 # DEPRECATED
 # operationId: getSystemEventsDefinitions
 @deprecated
-export def "const-system-events get-definitions" [
+export def "get-system-events-definitions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -811,7 +811,7 @@ export def "const-system-events get-definitions" [
 #
 # GET /api/v1/const/traffic_types
 # operationId: getTrafficTypes
-export def "const-traffic-types get" [
+export def "get-traffic-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -845,7 +845,7 @@ export def "const-traffic-types get" [
 #
 # GET /api/v1/installer/orgs/{org_id}/alarmtemplates
 # operationId: getInstallerAlarmTemplates
-export def "installer-orgs-alarmtemplates get-alarm-templates" [
+export def "get-installer-alarm-templates" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -881,7 +881,7 @@ export def "installer-orgs-alarmtemplates get-alarm-templates" [
 #
 # GET /api/v1/installer/orgs/{org_id}/deviceprofiles
 # operationId: getInstallerDeviceProfiles_WIP_
-export def "installer-orgs-deviceprofiles get-device-profiles-wip" [
+export def "get-installer-device-profiles-wip" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -917,7 +917,7 @@ export def "installer-orgs-deviceprofiles get-device-profiles-wip" [
 #
 # GET /api/v1/installer/orgs/{org_id}/devices
 # operationId: getInstallerListOfRenctlyClaimedDevices
-export def "installer-orgs-devices get-list-of-renctly-claimed" [
+export def "get-installer-list-of-renctly-claimed-devices" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -953,7 +953,7 @@ export def "installer-orgs-devices get-list-of-renctly-claimed" [
 #
 # POST /api/v1/installer/orgs/{org_id}/devices
 # operationId: claimInstallerDevices
-export def "installer-orgs-devices create-claim" [
+export def "claim-installer-devices" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -993,7 +993,7 @@ export def "installer-orgs-devices create-claim" [
 #
 # DELETE /api/v1/installer/orgs/{org_id}/devices/{device_mac}
 # operationId: unassignInstallerRecentlyClaimedDevice
-export def "installer-orgs-devices delete-unassign-recently-claimed" [
+export def "unassign-installer-recently-claimed-device" [
   org_id: string
   device_mac: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1031,7 +1031,7 @@ export def "installer-orgs-devices delete-unassign-recently-claimed" [
 #
 # PUT /api/v1/installer/orgs/{org_id}/devices/{device_mac}
 # operationId: provisionInstallerDevices
-export def "installer-orgs-devices update-provision" [
+export def "provision-installer-devices" [
   org_id: string
   device_mac: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1082,7 +1082,7 @@ export def "installer-orgs-devices update-provision" [
 #
 # POST /api/v1/installer/orgs/{org_id}/devices/{device_mac}/locate
 # operationId: startInstallerLocateDevice
-export def "installer-orgs-devices-locate start" [
+export def "start-installer-locate-device" [
   org_id: string
   device_mac: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1124,7 +1124,7 @@ export def "installer-orgs-devices-locate start" [
 #
 # POST /api/v1/installer/orgs/{org_id}/devices/{device_mac}/unlocate
 # operationId: stopInstallerLocateDevice
-export def "installer-orgs-devices-unlocate stop-locate" [
+export def "stop-installer-locate-device" [
   org_id: string
   device_mac: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1162,7 +1162,7 @@ export def "installer-orgs-devices-unlocate stop-locate" [
 #
 # DELETE /api/v1/installer/orgs/{org_id}/devices/{device_mac}/{image_name}
 # operationId: deleteInstallerDeviceImage
-export def "installer-orgs-devices delete" [
+export def "delete-installer-device-image" [
   org_id: string
   device_mac: string
   image_name: string
@@ -1202,7 +1202,7 @@ export def "installer-orgs-devices delete" [
 #
 # POST /api/v1/installer/orgs/{org_id}/devices/{device_mac}/{image_name}
 # operationId: addInstallerDeviceImage
-export def "installer-orgs-devices create" [
+export def "add-installer-device-image" [
   org_id: string
   device_mac: string
   image_name: string
@@ -1249,7 +1249,7 @@ export def "installer-orgs-devices create" [
 #
 # GET /api/v1/installer/orgs/{org_id}/rftemplates
 # operationId: getInstallerRfTemplatesNames
-export def "installer-orgs-rftemplates get-rf-templates-names" [
+export def "get-installer-rf-templates-names" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1285,7 +1285,7 @@ export def "installer-orgs-rftemplates get-rf-templates-names" [
 #
 # GET /api/v1/installer/orgs/{org_id}/secpolicies
 # operationId: getInstallerSecPolicies
-export def "installer-orgs-secpolicies get-sec-policies" [
+export def "get-installer-sec-policies" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1321,7 +1321,7 @@ export def "installer-orgs-secpolicies get-sec-policies" [
 #
 # GET /api/v1/installer/orgs/{org_id}/sitegroups
 # operationId: getInstallerSiteGroups
-export def "installer-orgs-sitegroups get-site-groups" [
+export def "get-installer-site-groups" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1357,7 +1357,7 @@ export def "installer-orgs-sitegroups get-site-groups" [
 #
 # GET /api/v1/installer/orgs/{org_id}/sites
 # operationId: getInstallerSites
-export def "installer-orgs-sites get" [
+export def "get-installer-sites" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1394,7 +1394,7 @@ export def "installer-orgs-sites get" [
 # PUT /api/v1/installer/orgs/{org_id}/sites/{site_name}
 # operationId: createOrUpdateInstallerSites
 # --latlng shape: {lat?: float, lng?: float}
-export def "installer-orgs-sites create-or-update" [
+export def "create-or-update-installer-sites" [
   org_id: string
   site_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1449,7 +1449,7 @@ export def "installer-orgs-sites create-or-update" [
 #
 # GET /api/v1/installer/orgs/{org_id}/sites/{site_name}/maps
 # operationId: getInstallerMaps
-export def "installer-orgs-sites-maps get" [
+export def "get-installer-maps" [
   org_id: string
   site_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1488,7 +1488,7 @@ export def "installer-orgs-sites-maps get" [
 # POST /api/v1/installer/orgs/{org_id}/sites/{site_name}/maps/import
 # operationId: importInstallerMap
 # --json shape: {import_all_floorplans?: bool, import_height?: bool, import_orientation?: bool, vendor_name: "ibwave"|"ekahau"}
-export def "installer-orgs-sites-maps-import import" [
+export def "import-installer-map" [
   org_id: string
   site_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1534,7 +1534,7 @@ export def "installer-orgs-sites-maps-import import" [
 #
 # DELETE /api/v1/installer/orgs/{org_id}/sites/{site_name}/maps/{map_id}
 # operationId: deleteInstallerMap
-export def "installer-orgs-sites-maps delete" [
+export def "delete-installer-map" [
   org_id: string
   site_name: string
   map_id: string
@@ -1580,7 +1580,7 @@ export def "installer-orgs-sites-maps delete" [
 # --wall_path shape: {coordinate?: string, name?: string, nodes?: list}
 # --wayfinding shape: {micello?: record, snap_to_path?: bool}
 # --wayfinding_path shape: {coordinate?: string, nodes?: list}
-export def "installer-orgs-sites-maps create" [
+export def "create-installer-map" [
   org_id: string
   site_name: string
   map_id: string
@@ -1651,7 +1651,7 @@ export def "installer-orgs-sites-maps create" [
 # --wall_path shape: {coordinate?: string, name?: string, nodes?: list}
 # --wayfinding shape: {micello?: record, snap_to_path?: bool}
 # --wayfinding_path shape: {coordinate?: string, nodes?: list}
-export def "installer-orgs-sites-maps update" [
+export def "update-installer-map" [
   org_id: string
   site_name: string
   map_id: string
@@ -1716,7 +1716,7 @@ export def "installer-orgs-sites-maps update" [
 #
 # GET /api/v1/installer/sites/{site_name}/optimize
 # operationId: optimizeInstallerRrm
-export def "installer-sites-optimize get-rrm" [
+export def "optimize-installer-rrm" [
   site_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1752,7 +1752,7 @@ export def "installer-sites-optimize get-rrm" [
 #
 # POST /api/v1/invite/verify/{token}
 # operationId: verifyAdminInvite
-export def "invite-verify verify-admin" [
+export def "verify-admin-invite" [
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1788,7 +1788,7 @@ export def "invite-verify verify-admin" [
 #
 # POST /api/v1/login
 # operationId: login
-export def "login create" [
+export def "login" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1828,7 +1828,7 @@ export def "login create" [
 #
 # POST /api/v1/login/lookup
 # operationId: lookup
-export def "login-lookup create" [
+export def "lookup" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1866,7 +1866,7 @@ export def "login-lookup create" [
 #
 # DELETE /api/v1/login/oauth/{provider}
 # operationId: unlinkOAuth2Provider
-export def "login-oauth delete-unlink-o-auth2" [
+export def "unlink-o-auth2-provider" [
   provider: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1902,7 +1902,7 @@ export def "login-oauth delete-unlink-o-auth2" [
 #
 # GET /api/v1/login/oauth/{provider}
 # operationId: getOAuth2AuthorizationUrlForLogin
-export def "login-oauth get-o-auth2-authorization-url" [
+export def "get-o-auth2-authorization-url-for-login" [
   provider: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1940,7 +1940,7 @@ export def "login-oauth get-o-auth2-authorization-url" [
 #
 # POST /api/v1/login/oauth/{provider}
 # operationId: loginOAuth2
-export def "login-oauth create-o-auth2" [
+export def "login-o-auth2" [
   provider: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1980,7 +1980,7 @@ export def "login-oauth create-o-auth2" [
 #
 # POST /api/v1/login/two_factor
 # operationId: twoFactor
-export def "login-two-factor create" [
+export def "two-factor" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2018,7 +2018,7 @@ export def "login-two-factor create" [
 #
 # POST /api/v1/logout
 # operationId: logout
-export def "logout create" [
+export def "logout" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2052,7 +2052,7 @@ export def "logout create" [
 #
 # POST /api/v1/mobile/verify/{secret}
 # operationId: activateSdkInvite
-export def "mobile-verify create-activate-sdk-invite" [
+export def "activate-sdk-invite" [
   secret: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2092,7 +2092,7 @@ export def "mobile-verify create-activate-sdk-invite" [
 #
 # POST /api/v1/msps
 # operationId: createMsp
-export def "msps create" [
+export def "create-msp" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2135,7 +2135,7 @@ export def "msps create" [
 #
 # DELETE /api/v1/msps/{msp_id}
 # operationId: deleteMsp
-export def "msps delete" [
+export def "delete-msp" [
   msp_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2171,7 +2171,7 @@ export def "msps delete" [
 #
 # GET /api/v1/msps/{msp_id}
 # operationId: getMspDetails
-export def "msps get-details" [
+export def "get-msp-details" [
   msp_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2207,7 +2207,7 @@ export def "msps get-details" [
 #
 # PUT /api/v1/msps/{msp_id}
 # operationId: updateMsp
-export def "msps update" [
+export def "update-msp" [
   msp_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2252,7 +2252,7 @@ export def "msps update" [
 #
 # GET /api/v1/msps/{msp_id}/admins
 # operationId: getMspAdmins
-export def "msps-admins list" [
+export def "get-msp-admins" [
   msp_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2288,7 +2288,7 @@ export def "msps-admins list" [
 #
 # DELETE /api/v1/msps/{msp_id}/admins/{admin_id}
 # operationId: revokeMspAdmin
-export def "msps-admins delete" [
+export def "revoke-msp-admin" [
   msp_id: string
   admin_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2326,7 +2326,7 @@ export def "msps-admins delete" [
 #
 # GET /api/v1/msps/{msp_id}/admins/{admin_id}
 # operationId: getMspAdmin
-export def "msps-admins get" [
+export def "get-msp-admin" [
   msp_id: string
   admin_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2365,7 +2365,7 @@ export def "msps-admins get" [
 # PUT /api/v1/msps/{msp_id}/admins/{admin_id}
 # operationId: updateMspAdmin
 # --privileges item shape: {msp_id?: string, msp_logo_url?: string, msp_name?: string, msp_url?: string, name?: string, org_id?: string, org_name?: string, orggroup_ids?: list<string>, role: "admin"|"write"|"read"|"helpdesk"|"installer", scope: "org"|"site"|"msp"|"orggroup", site_id?: string, sitegroup_ids?: list<string>, views?: list<string>}
-export def "msps-admins update" [
+export def "update-msp-admin" [
   msp_id: string
   admin_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2412,7 +2412,7 @@ export def "msps-admins update" [
 #
 # POST /api/v1/msps/{msp_id}/claim
 # operationId: claimMspLicence
-export def "msps-claim create-licence" [
+export def "claim-msp-licence" [
   msp_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2452,7 +2452,7 @@ export def "msps-claim create-licence" [
 #
 # GET /api/v1/msps/{msp_id}/insights/{metric}
 # operationId: getMspSle
-export def "msps-insights get-sle" [
+export def "get-msp-sle" [
   msp_id: string
   metric: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2496,7 +2496,7 @@ export def "msps-insights get-sle" [
 #
 # GET /api/v1/msps/{msp_id}/inventory/{device_mac}
 # operationId: getMspInventoryByMac
-export def "msps-inventory get" [
+export def "get-msp-inventory-by-mac" [
   msp_id: string
   device_mac: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2535,7 +2535,7 @@ export def "msps-inventory get" [
 # POST /api/v1/msps/{msp_id}/invites
 # operationId: inviteMspAdmin
 # --privileges item shape: {msp_id?: string, msp_logo_url?: string, msp_name?: string, msp_url?: string, name?: string, org_id?: string, org_name?: string, orggroup_ids?: list<string>, role: "admin"|"write"|"read"|"helpdesk"|"installer", scope: "org"|"site"|"msp"|"orggroup", site_id?: string, sitegroup_ids?: list<string>, views?: list<string>}
-export def "msps-invites create-admin" [
+export def "invite-msp-admin" [
   msp_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2580,7 +2580,7 @@ export def "msps-invites create-admin" [
 #
 # DELETE /api/v1/msps/{msp_id}/invites/{invite_id}
 # operationId: uninviteMspAdmin
-export def "msps-invites delete-uninvite-admin" [
+export def "uninvite-msp-admin" [
   msp_id: string
   invite_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2619,7 +2619,7 @@ export def "msps-invites delete-uninvite-admin" [
 # PUT /api/v1/msps/{msp_id}/invites/{invite_id}
 # operationId: updateMspAdminInvite
 # --privileges item shape: {msp_id?: string, msp_logo_url?: string, msp_name?: string, msp_url?: string, name?: string, org_id?: string, org_name?: string, orggroup_ids?: list<string>, role: "admin"|"write"|"read"|"helpdesk"|"installer", scope: "org"|"site"|"msp"|"orggroup", site_id?: string, sitegroup_ids?: list<string>, views?: list<string>}
-export def "msps-invites update-admin" [
+export def "update-msp-admin-invite" [
   msp_id: string
   invite_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2666,7 +2666,7 @@ export def "msps-invites update-admin" [
 #
 # GET /api/v1/msps/{msp_id}/licenses
 # operationId: getMspLicenses
-export def "msps-licenses get" [
+export def "get-msp-licenses" [
   msp_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2702,7 +2702,7 @@ export def "msps-licenses get" [
 #
 # PUT /api/v1/msps/{msp_id}/licenses
 # operationId: moveOrDeleteMspLicenseToAnotherOrg
-export def "msps-licenses move-or-delete-to-another-org" [
+export def "move-or-delete-msp-license-to-another-org" [
   msp_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2746,7 +2746,7 @@ export def "msps-licenses move-or-delete-to-another-org" [
 #
 # DELETE /api/v1/msps/{msp_id}/logo
 # operationId: deleteMspLogo
-export def "msps-logo delete" [
+export def "delete-msp-logo" [
   msp_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2782,7 +2782,7 @@ export def "msps-logo delete" [
 #
 # POST /api/v1/msps/{msp_id}/logo
 # operationId: postMspLogo
-export def "msps-logo create" [
+export def "post-msp-logo" [
   msp_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2822,7 +2822,7 @@ export def "msps-logo create" [
 #
 # GET /api/v1/msps/{msp_id}/logs
 # operationId: getMspLogs
-export def "msps-logs get" [
+export def "get-msp-logs" [
   msp_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2862,7 +2862,7 @@ export def "msps-logs get" [
 #
 # GET /api/v1/msps/{msp_id}/logs/count
 # operationId: countMspLogs
-export def "msps-logs-count logs" [
+export def "count-msp-logs" [
   msp_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2900,7 +2900,7 @@ export def "msps-logs-count logs" [
 #
 # GET /api/v1/msps/{msp_id}/orggroups
 # operationId: getMspOrgGroups
-export def "msps-orggroups get-org-groups" [
+export def "get-msp-org-groups" [
   msp_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2936,7 +2936,7 @@ export def "msps-orggroups get-org-groups" [
 #
 # POST /api/v1/msps/{msp_id}/orggroups
 # operationId: createMspOrgGroup
-export def "msps-orggroups create-org-group" [
+export def "create-msp-org-group" [
   msp_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2977,7 +2977,7 @@ export def "msps-orggroups create-org-group" [
 #
 # DELETE /api/v1/msps/{msp_id}/orggroups/{orggroup_id}
 # operationId: deleteMspOrgGroup
-export def "msps-orggroups delete-org-group" [
+export def "delete-msp-org-group" [
   msp_id: string
   orggroup_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3015,7 +3015,7 @@ export def "msps-orggroups delete-org-group" [
 #
 # GET /api/v1/msps/{msp_id}/orggroups/{orggroup_id}
 # operationId: getMspOrgGroup
-export def "msps-orggroups get-org-group" [
+export def "get-msp-org-group" [
   msp_id: string
   orggroup_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3053,7 +3053,7 @@ export def "msps-orggroups get-org-group" [
 #
 # PUT /api/v1/msps/{msp_id}/orggroups/{orggroup_id}
 # operationId: updateMspOrgGroup
-export def "msps-orggroups update-org-group" [
+export def "update-msp-org-group" [
   msp_id: string
   orggroup_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3096,7 +3096,7 @@ export def "msps-orggroups update-org-group" [
 #
 # GET /api/v1/msps/{msp_id}/orgs
 # operationId: getMspOrgs
-export def "msps-orgs list" [
+export def "get-msp-orgs" [
   msp_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3132,7 +3132,7 @@ export def "msps-orgs list" [
 #
 # POST /api/v1/msps/{msp_id}/orgs
 # operationId: createMspOrg
-export def "msps-orgs create" [
+export def "create-msp-org" [
   msp_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3176,7 +3176,7 @@ export def "msps-orgs create" [
 #
 # PUT /api/v1/msps/{msp_id}/orgs
 # operationId: manageMspOrgs
-export def "msps-orgs update-manage" [
+export def "manage-msp-orgs" [
   msp_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3217,7 +3217,7 @@ export def "msps-orgs update-manage" [
 #
 # GET /api/v1/msps/{msp_id}/orgs/search
 # operationId: searchMspOrgs
-export def "msps-orgs-search list" [
+export def "search-msp-orgs" [
   msp_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3260,7 +3260,7 @@ export def "msps-orgs-search list" [
 #
 # GET /api/v1/msps/{msp_id}/orgs/{org_id}
 # operationId: getMspOrg
-export def "msps-orgs get" [
+export def "get-msp-org" [
   msp_id: string
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3298,7 +3298,7 @@ export def "msps-orgs get" [
 #
 # GET /api/v1/msps/{msp_id}/search
 # operationId: searchMspOrgGroup
-export def "msps-search list-org-group" [
+export def "search-msp-org-group" [
   msp_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3341,7 +3341,7 @@ export def "msps-search list-org-group" [
 #
 # GET /api/v1/msps/{msp_id}/ssoroles
 # operationId: getMspSsoRoles
-export def "msps-ssoroles get-sso-roles" [
+export def "get-msp-sso-roles" [
   msp_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3378,7 +3378,7 @@ export def "msps-ssoroles get-sso-roles" [
 # POST /api/v1/msps/{msp_id}/ssoroles
 # operationId: createMspSsoRole
 # --privileges item shape: {msp_id?: string, msp_logo_url?: string, msp_name?: string, msp_url?: string, name?: string, org_id?: string, org_name?: string, orggroup_ids?: list<string>, role: "admin"|"write"|"read"|"helpdesk"|"installer", scope: "org"|"site"|"msp"|"orggroup", site_id?: string, sitegroup_ids?: list<string>, views?: list<string>}
-export def "msps-ssoroles create-sso-role" [
+export def "create-msp-sso-role" [
   msp_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3419,7 +3419,7 @@ export def "msps-ssoroles create-sso-role" [
 #
 # DELETE /api/v1/msps/{msp_id}/ssoroles/{ssorole_id}
 # operationId: deleteMspSsoRole
-export def "msps-ssoroles delete-sso-role" [
+export def "delete-msp-sso-role" [
   msp_id: string
   ssorole_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3458,7 +3458,7 @@ export def "msps-ssoroles delete-sso-role" [
 # PUT /api/v1/msps/{msp_id}/ssoroles/{ssorole_id}
 # operationId: updateMspSsoRole
 # --privileges item shape: {msp_id?: string, msp_logo_url?: string, msp_name?: string, msp_url?: string, name?: string, org_id?: string, org_name?: string, orggroup_ids?: list<string>, role: "admin"|"write"|"read"|"helpdesk"|"installer", scope: "org"|"site"|"msp"|"orggroup", site_id?: string, sitegroup_ids?: list<string>, views?: list<string>}
-export def "msps-ssoroles update-sso-role" [
+export def "update-msp-sso-role" [
   msp_id: string
   ssorole_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3501,7 +3501,7 @@ export def "msps-ssoroles update-sso-role" [
 #
 # GET /api/v1/msps/{msp_id}/ssos
 # operationId: getMspSso
-export def "msps-ssos get" [
+export def "get-msp-sso" [
   msp_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3537,7 +3537,7 @@ export def "msps-ssos get" [
 #
 # POST /api/v1/msps/{msp_id}/ssos
 # operationId: createMspSso
-export def "msps-ssos create" [
+export def "create-msp-sso" [
   msp_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3609,7 +3609,7 @@ export def "msps-ssos create" [
 #
 # DELETE /api/v1/msps/{msp_id}/ssos/{sso_id}
 # operationId: deleteMspSso
-export def "msps-ssos delete" [
+export def "delete-msp-sso" [
   msp_id: string
   sso_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3647,7 +3647,7 @@ export def "msps-ssos delete" [
 #
 # PUT /api/v1/msps/{msp_id}/ssos/{sso_id}
 # operationId: updateMspSso
-export def "msps-ssos update" [
+export def "update-msp-sso" [
   msp_id: string
   sso_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3721,7 +3721,7 @@ export def "msps-ssos update" [
 #
 # GET /api/v1/msps/{msp_id}/ssos/{sso_id}/failures
 # operationId: getMspSsoLatestFailures
-export def "msps-ssos-failures get-latest" [
+export def "get-msp-sso-latest-failures" [
   msp_id: string
   sso_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3759,7 +3759,7 @@ export def "msps-ssos-failures get-latest" [
 #
 # GET /api/v1/msps/{msp_id}/ssos/{sso_id}/metadata
 # operationId: getMspSsoSamlMetadata
-export def "msps-ssos-metadata get-saml" [
+export def "get-msp-sso-saml-metadata" [
   msp_id: string
   sso_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3797,7 +3797,7 @@ export def "msps-ssos-metadata get-saml" [
 #
 # GET /api/v1/msps/{msp_id}/ssos/{sso_id}/metadata.xml
 # operationId: downloadMspSsoSamlMetadata
-export def "msps-ssos-metadata-xml download-saml" [
+export def "download-msp-sso-saml-metadata" [
   msp_id: string
   sso_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3835,7 +3835,7 @@ export def "msps-ssos-metadata-xml download-saml" [
 #
 # GET /api/v1/msps/{msp_id}/stats/licenses
 # operationId: getMspOrgLicenses
-export def "msps-stats-licenses get-org" [
+export def "get-msp-org-licenses" [
   msp_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3871,7 +3871,7 @@ export def "msps-stats-licenses get-org" [
 #
 # GET /api/v1/msps/{msp_id}/stats/orgs
 # operationId: getMspOrgStats
-export def "msps-stats-orgs get" [
+export def "get-msp-org-stats" [
   msp_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3910,7 +3910,7 @@ export def "msps-stats-orgs get" [
 #
 # GET /api/v1/msps/{msp_id}/tickets
 # operationId: getMspTickets
-export def "msps-tickets get" [
+export def "get-msp-tickets" [
   msp_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3950,7 +3950,7 @@ export def "msps-tickets get" [
 #
 # GET /api/v1/msps/{msp_id}/tickets/count
 # operationId: countMspTickets
-export def "msps-tickets-count get" [
+export def "count-msp-tickets" [
   msp_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3988,7 +3988,7 @@ export def "msps-tickets-count get" [
 #
 # POST /api/v1/orgs
 # operationId: createOrg
-export def "orgs create" [
+export def "create-org" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4030,7 +4030,7 @@ export def "orgs create" [
 #
 # DELETE /api/v1/orgs/{org_id}
 # operationId: deleteOrg
-export def "orgs delete" [
+export def "delete-org" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4066,7 +4066,7 @@ export def "orgs delete" [
 #
 # GET /api/v1/orgs/{org_id}
 # operationId: getOrgInfo
-export def "orgs get" [
+export def "get-org-info" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4102,7 +4102,7 @@ export def "orgs get" [
 #
 # PUT /api/v1/orgs/{org_id}
 # operationId: updateOrg
-export def "orgs update" [
+export def "update-org" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4146,7 +4146,7 @@ export def "orgs update" [
 #
 # GET /api/v1/orgs/{org_id}/128routers/register_cmd
 # operationId: getOrg128TRegistrationCommands
-export def "orgs-128routers-register-cmd get-org128-t-registration-commands" [
+export def "get-org128-t-registration-commands" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4182,7 +4182,7 @@ export def "orgs-128routers-register-cmd get-org128-t-registration-commands" [
 #
 # GET /api/v1/orgs/{org_id}/admins
 # operationId: getOrgAdmins
-export def "orgs-admins get" [
+export def "get-org-admins" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4218,7 +4218,7 @@ export def "orgs-admins get" [
 #
 # DELETE /api/v1/orgs/{org_id}/admins/{admin_id}
 # operationId: revokeOrgAdmin
-export def "orgs-admins delete" [
+export def "revoke-org-admin" [
   org_id: string
   admin_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4257,7 +4257,7 @@ export def "orgs-admins delete" [
 # PUT /api/v1/orgs/{org_id}/admins/{admin_id}
 # operationId: updateOrgAdmin
 # --privileges item shape: {msp_id?: string, msp_logo_url?: string, msp_name?: string, msp_url?: string, name?: string, org_id?: string, org_name?: string, orggroup_ids?: list<string>, role: "admin"|"write"|"read"|"helpdesk"|"installer", scope: "org"|"site"|"msp"|"orggroup", site_id?: string, sitegroup_ids?: list<string>, views?: list<string>}
-export def "orgs-admins update" [
+export def "update-org-admin" [
   org_id: string
   admin_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4304,7 +4304,7 @@ export def "orgs-admins update" [
 #
 # POST /api/v1/orgs/{org_id}/alarms/ack
 # operationId: multiAckOrgAlarms
-export def "orgs-alarms-ack create-multi" [
+export def "multi-ack-org-alarms" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4345,7 +4345,7 @@ export def "orgs-alarms-ack create-multi" [
 #
 # POST /api/v1/orgs/{org_id}/alarms/ack_all
 # operationId: ackOrgAllAlarms
-export def "orgs-alarms-ack-all list" [
+export def "ack-org-all-alarms" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4385,7 +4385,7 @@ export def "orgs-alarms-ack-all list" [
 #
 # GET /api/v1/orgs/{org_id}/alarms/count
 # operationId: countOrgAlarms
-export def "orgs-alarms-count get" [
+export def "count-org-alarms" [
   org_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4428,7 +4428,7 @@ export def "orgs-alarms-count get" [
 #
 # GET /api/v1/orgs/{org_id}/alarms/search
 # operationId: searchOrgAlarms
-export def "orgs-alarms-search list" [
+export def "search-org-alarms" [
   org_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4471,7 +4471,7 @@ export def "orgs-alarms-search list" [
 #
 # POST /api/v1/orgs/{org_id}/alarms/unack
 # operationId: multiUnackOrgAlarms
-export def "orgs-alarms-unack create-multi" [
+export def "multi-unack-org-alarms" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4512,7 +4512,7 @@ export def "orgs-alarms-unack create-multi" [
 #
 # POST /api/v1/orgs/{org_id}/alarms/unack_all
 # operationId: unackOrgAllArlarms
-export def "orgs-alarms-unack-all list-arlarms" [
+export def "unack-org-all-arlarms" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4552,7 +4552,7 @@ export def "orgs-alarms-unack-all list-arlarms" [
 #
 # POST /api/v1/orgs/{org_id}/alarms/{alarm_id}/ack
 # operationId: ackOrgAlarm
-export def "orgs-alarms-ack create" [
+export def "ack-org-alarm" [
   org_id: string
   alarm_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4594,7 +4594,7 @@ export def "orgs-alarms-ack create" [
 #
 # GET /api/v1/orgs/{org_id}/alarmtemplates
 # operationId: getOrgAlarmTemplates
-export def "orgs-alarmtemplates get-alarm-templates" [
+export def "get-org-alarm-templates" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4631,7 +4631,7 @@ export def "orgs-alarmtemplates get-alarm-templates" [
 # POST /api/v1/orgs/{org_id}/alarmtemplates
 # operationId: createOrgAlarmTemplate
 # --delivery shape: {additional_emails?: list<string>, enabled: bool, to_org_admins?: bool, to_site_admins?: bool}
-export def "orgs-alarmtemplates create-alarm-template" [
+export def "create-org-alarm-template" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4674,7 +4674,7 @@ export def "orgs-alarmtemplates create-alarm-template" [
 # POST /api/v1/orgs/{org_id}/alarmtemplates/suppress
 # operationId: suppressOrgAlarm
 # --applies shape: {org_id: string, site_ids: list<string>, sitegroup_ids: list<string>}
-export def "orgs-alarmtemplates-suppress create-alarm" [
+export def "suppress-org-alarm" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4715,7 +4715,7 @@ export def "orgs-alarmtemplates-suppress create-alarm" [
 #
 # DELETE /api/v1/orgs/{org_id}/alarmtemplates/{alarmtemplate_id}
 # operationId: deleteOrgAlarmTemplate
-export def "orgs-alarmtemplates delete-alarm-template" [
+export def "delete-org-alarm-template" [
   org_id: string
   alarmtemplate_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4753,7 +4753,7 @@ export def "orgs-alarmtemplates delete-alarm-template" [
 #
 # GET /api/v1/orgs/{org_id}/alarmtemplates/{alarmtemplate_id}
 # operationId: getOrgAlarmTemplate
-export def "orgs-alarmtemplates get-alarm-template" [
+export def "get-org-alarm-template" [
   org_id: string
   alarmtemplate_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4792,7 +4792,7 @@ export def "orgs-alarmtemplates get-alarm-template" [
 # PUT /api/v1/orgs/{org_id}/alarmtemplates/{alarmtemplate_id}
 # operationId: updateOrgAlarmTemplate
 # --delivery shape: {additional_emails?: list<string>, enabled: bool, to_org_admins?: bool, to_site_admins?: bool}
-export def "orgs-alarmtemplates update-alarm-template" [
+export def "update-org-alarm-template" [
   org_id: string
   alarmtemplate_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4836,7 +4836,7 @@ export def "orgs-alarmtemplates update-alarm-template" [
 #
 # GET /api/v1/orgs/{org_id}/apitokens
 # operationId: getOrgApiTokens
-export def "orgs-apitokens get-tokens" [
+export def "get-org-api-tokens" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4873,7 +4873,7 @@ export def "orgs-apitokens get-tokens" [
 # POST /api/v1/orgs/{org_id}/apitokens
 # operationId: createOrgApiToken
 # --privileges item shape: {role: "admin"|"write"|"read", scope: "site"|"org"|"sitegroup", site_id: string, sitegroup_id?: string}
-export def "orgs-apitokens create-token" [
+export def "create-org-api-token" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4914,7 +4914,7 @@ export def "orgs-apitokens create-token" [
 #
 # DELETE /api/v1/orgs/{org_id}/apitokens/{apitoken_id}
 # operationId: deleteOrgApiToken
-export def "orgs-apitokens delete-token" [
+export def "delete-org-api-token" [
   org_id: string
   apitoken_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4952,7 +4952,7 @@ export def "orgs-apitokens delete-token" [
 #
 # GET /api/v1/orgs/{org_id}/apitokens/{apitoken_id}
 # operationId: getOrgApiToken
-export def "orgs-apitokens get-token" [
+export def "get-org-api-token" [
   org_id: string
   apitoken_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4991,7 +4991,7 @@ export def "orgs-apitokens get-token" [
 # PUT /api/v1/orgs/{org_id}/apitokens/{apitoken_id}
 # operationId: updateOrgApiToken
 # --privileges item shape: {msp_id?: string, msp_logo_url?: string, msp_name?: string, msp_url?: string, name?: string, org_id?: string, org_name?: string, orggroup_ids?: list<string>, role: "admin"|"write"|"read"|"helpdesk"|"installer", scope: "org"|"site"|"msp"|"orggroup", site_id?: string, sitegroup_ids?: list<string>, views?: list<string>}
-export def "orgs-apitokens update-token" [
+export def "update-org-api-token" [
   org_id: string
   apitoken_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5035,7 +5035,7 @@ export def "orgs-apitokens update-token" [
 #
 # GET /api/v1/orgs/{org_id}/aptemplates
 # operationId: getOrgAptemplates
-export def "orgs-aptemplates list" [
+export def "get-org-aptemplates" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5073,7 +5073,7 @@ export def "orgs-aptemplates list" [
 # operationId: createOrgAptemplate
 # --ap_matching shape: {enabled?: bool, rules?: list}
 # --wifi shape: {cisco_enabled?: bool, disable_11k?: bool, disable_radios_when_power_constrained?: bool, enable_arp_spoof?: bool, enable_shared_radio_scanning?: bool, enabled?: bool, locate_connected?: bool, locate_unconnected?: bool, mesh_allow_dfs?: bool, mesh_enable_crm?: bool, mesh_enabled?: bool, proxy_arp?: bool}
-export def "orgs-aptemplates create" [
+export def "create-org-aptemplate" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5114,7 +5114,7 @@ export def "orgs-aptemplates create" [
 #
 # DELETE /api/v1/orgs/{org_id}/aptemplates/{aptemplate_id}
 # operationId: deleteOrgAptemplate
-export def "orgs-aptemplates delete" [
+export def "delete-org-aptemplate" [
   org_id: string
   aptemplate_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5152,7 +5152,7 @@ export def "orgs-aptemplates delete" [
 #
 # GET /api/v1/orgs/{org_id}/aptemplates/{aptemplate_id}
 # operationId: getOrgAptemplate
-export def "orgs-aptemplates get" [
+export def "get-org-aptemplate" [
   org_id: string
   aptemplate_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5192,7 +5192,7 @@ export def "orgs-aptemplates get" [
 # operationId: updateOrgAptemplate
 # --ap_matching shape: {enabled?: bool, rules?: list}
 # --wifi shape: {cisco_enabled?: bool, disable_11k?: bool, disable_radios_when_power_constrained?: bool, enable_arp_spoof?: bool, enable_shared_radio_scanning?: bool, enabled?: bool, locate_connected?: bool, locate_unconnected?: bool, mesh_allow_dfs?: bool, mesh_enable_crm?: bool, mesh_enabled?: bool, proxy_arp?: bool}
-export def "orgs-aptemplates update" [
+export def "update-org-aptemplate" [
   org_id: string
   aptemplate_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5235,7 +5235,7 @@ export def "orgs-aptemplates update" [
 #
 # GET /api/v1/orgs/{org_id}/assetfilters
 # operationId: getOrgAssetFilters
-export def "orgs-assetfilters get-asset-filters" [
+export def "get-org-asset-filters" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5271,7 +5271,7 @@ export def "orgs-assetfilters get-asset-filters" [
 #
 # POST /api/v1/orgs/{org_id}/assetfilters
 # operationId: createOrgAssetFilters
-export def "orgs-assetfilters create-asset-filters" [
+export def "create-org-asset-filters" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5321,7 +5321,7 @@ export def "orgs-assetfilters create-asset-filters" [
 #
 # DELETE /api/v1/orgs/{org_id}/assetfilters/{assetfilter_id}
 # operationId: deleteOrgAssetFilter
-export def "orgs-assetfilters delete-asset-filter" [
+export def "delete-org-asset-filter" [
   org_id: string
   assetfilter_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5359,7 +5359,7 @@ export def "orgs-assetfilters delete-asset-filter" [
 #
 # GET /api/v1/orgs/{org_id}/assetfilters/{assetfilter_id}
 # operationId: getOrgAssetFilter
-export def "orgs-assetfilters get-asset-filter" [
+export def "get-org-asset-filter" [
   org_id: string
   assetfilter_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5397,7 +5397,7 @@ export def "orgs-assetfilters get-asset-filter" [
 #
 # PUT /api/v1/orgs/{org_id}/assetfilters/{assetfilter_id}
 # operationId: updateOrgAssetFilters
-export def "orgs-assetfilters update-asset-filters" [
+export def "update-org-asset-filters" [
   org_id: string
   assetfilter_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5449,7 +5449,7 @@ export def "orgs-assetfilters update-asset-filters" [
 #
 # GET /api/v1/orgs/{org_id}/assets
 # operationId: getOrgAssets
-export def "orgs-assets list" [
+export def "get-org-assets" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5485,7 +5485,7 @@ export def "orgs-assets list" [
 #
 # POST /api/v1/orgs/{org_id}/assets
 # operationId: createOrgAsset
-export def "orgs-assets create" [
+export def "create-org-asset" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5528,7 +5528,7 @@ export def "orgs-assets create" [
 #
 # POST /api/v1/orgs/{org_id}/assets/import
 # operationId: importOrgAssets
-export def "orgs-assets-import import" [
+export def "import-org-assets" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5568,7 +5568,7 @@ export def "orgs-assets-import import" [
 #
 # DELETE /api/v1/orgs/{org_id}/assets/{asset_id}
 # operationId: deleteOrgAsset
-export def "orgs-assets delete" [
+export def "delete-org-asset" [
   org_id: string
   asset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5606,7 +5606,7 @@ export def "orgs-assets delete" [
 #
 # GET /api/v1/orgs/{org_id}/assets/{asset_id}
 # operationId: getOrgAsset
-export def "orgs-assets get" [
+export def "get-org-asset" [
   org_id: string
   asset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5644,7 +5644,7 @@ export def "orgs-assets get" [
 #
 # PUT /api/v1/orgs/{org_id}/assets/{asset_id}
 # operationId: updateOrgAsset
-export def "orgs-assets update" [
+export def "update-org-asset" [
   org_id: string
   asset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5689,7 +5689,7 @@ export def "orgs-assets update" [
 #
 # GET /api/v1/orgs/{org_id}/call/events/count
 # operationId: countOrgCallEvents
-export def "orgs-call-events-count get" [
+export def "count-org-call-events" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5727,7 +5727,7 @@ export def "orgs-call-events-count get" [
 #
 # GET /api/v1/orgs/{org_id}/call/events/search
 # operationId: searchOrgCallEvents
-export def "orgs-call-events-search list" [
+export def "search-org-call-events" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5768,7 +5768,7 @@ export def "orgs-call-events-search list" [
 #
 # GET /api/v1/orgs/{org_id}/cert
 # operationId: getOrgCertificates
-export def "orgs-cert get-certificates" [
+export def "get-org-certificates" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5804,7 +5804,7 @@ export def "orgs-cert get-certificates" [
 #
 # POST /api/v1/orgs/{org_id}/cert/regenerate
 # operationId: clearOrgCertificates
-export def "orgs-cert-regenerate create-clear-certificates" [
+export def "clear-org-certificates" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5840,7 +5840,7 @@ export def "orgs-cert-regenerate create-clear-certificates" [
 #
 # POST /api/v1/orgs/{org_id}/claim
 # operationId: claimOrgLicense
-export def "orgs-claim create-license" [
+export def "claim-org-license" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5881,7 +5881,7 @@ export def "orgs-claim create-license" [
 #
 # GET /api/v1/orgs/{org_id}/clients/count
 # operationId: countOrgClientsWireless
-export def "orgs-clients-count get-wireless" [
+export def "count-org-clients-wireless" [
   org_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5933,7 +5933,7 @@ export def "orgs-clients-count get-wireless" [
 #
 # GET /api/v1/orgs/{org_id}/clients/events/search
 # operationId: searchOrgClientsEvents
-export def "orgs-clients-events-search list" [
+export def "search-org-clients-events" [
   org_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5981,7 +5981,7 @@ export def "orgs-clients-events-search list" [
 #
 # GET /api/v1/orgs/{org_id}/clients/search
 # operationId: searchOrgClientsWireless
-export def "orgs-clients-search list-wireless" [
+export def "search-org-clients-wireless" [
   org_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6035,7 +6035,7 @@ export def "orgs-clients-search list-wireless" [
 #
 # GET /api/v1/orgs/{org_id}/clients/sessions/count
 # operationId: countOrgWirelessClientsSessions
-export def "orgs-clients-sessions-count get-wireless" [
+export def "count-org-wireless-clients-sessions" [
   org_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6086,7 +6086,7 @@ export def "orgs-clients-sessions-count get-wireless" [
 #
 # GET /api/v1/orgs/{org_id}/clients/sessions/search
 # operationId: searchOrgClientWirelessSessions
-export def "orgs-clients-sessions-search list-wireless" [
+export def "search-org-client-wireless-sessions" [
   org_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6138,7 +6138,7 @@ export def "orgs-clients-sessions-search list-wireless" [
 #
 # POST /api/v1/orgs/{org_id}/clone
 # operationId: cloneOrg
-export def "orgs-clone clone" [
+export def "clone-org" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6178,7 +6178,7 @@ export def "orgs-clone clone" [
 #
 # GET /api/v1/orgs/{org_id}/crl
 # operationId: getOrgCrlFile
-export def "orgs-crl get-file" [
+export def "get-org-crl-file" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6214,7 +6214,7 @@ export def "orgs-crl get-file" [
 #
 # POST /api/v1/orgs/{org_id}/crl/truncate
 # operationId: truncateOrgCrlFile
-export def "orgs-crl-truncate create-file" [
+export def "truncate-org-crl-file" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6254,7 +6254,7 @@ export def "orgs-crl-truncate create-file" [
 #
 # GET /api/v1/orgs/{org_id}/deviceprofiles
 # operationId: getOrgDeviceProfiles
-export def "orgs-deviceprofiles get-device-profiles" [
+export def "get-org-device-profiles" [
   org_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6305,7 +6305,7 @@ export def "orgs-deviceprofiles get-device-profiles" [
 # --switch_config shape: {enabled?: bool, eth0?: record, eth1?: record, eth2?: record, eth3?: record, module?: record, wds?: record}
 # --usb_config shape: {cacert?: string, channel?: int, enabled?: bool, host?: string, port?: int, type?: "imagotag"|"solum"|"hanshow", verify_cert?: bool, vlan_id?: int}
 @deprecated --flag switch-config
-export def "orgs-deviceprofiles create-device-profiles" [
+export def "create-org-device-profiles" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6371,7 +6371,7 @@ export def "orgs-deviceprofiles create-device-profiles" [
 #
 # DELETE /api/v1/orgs/{org_id}/deviceprofiles/{deviceprofile_id}
 # operationId: deleteOrgDeviceProfile
-export def "orgs-deviceprofiles delete-device-profile" [
+export def "delete-org-device-profile" [
   org_id: string
   deviceprofile_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6409,7 +6409,7 @@ export def "orgs-deviceprofiles delete-device-profile" [
 #
 # GET /api/v1/orgs/{org_id}/deviceprofiles/{deviceprofile_id}
 # operationId: getOrgDeviceProfile
-export def "orgs-deviceprofiles get-device-profile" [
+export def "get-org-device-profile" [
   org_id: string
   deviceprofile_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6458,7 +6458,7 @@ export def "orgs-deviceprofiles get-device-profile" [
 # --switch_config shape: {enabled?: bool, eth0?: record, eth1?: record, eth2?: record, eth3?: record, module?: record, wds?: record}
 # --usb_config shape: {cacert?: string, channel?: int, enabled?: bool, host?: string, port?: int, type?: "imagotag"|"solum"|"hanshow", verify_cert?: bool, vlan_id?: int}
 @deprecated --flag switch-config
-export def "orgs-deviceprofiles update-device-profile" [
+export def "update-org-device-profile" [
   org_id: string
   deviceprofile_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6526,7 +6526,7 @@ export def "orgs-deviceprofiles update-device-profile" [
 #
 # POST /api/v1/orgs/{org_id}/deviceprofiles/{deviceprofile_id}/assign
 # operationId: assignOrgDeviceProfileToDevices
-export def "orgs-deviceprofiles-assign assign-device-profile-to-devices" [
+export def "assign-org-device-profile-to-devices" [
   org_id: string
   deviceprofile_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6568,7 +6568,7 @@ export def "orgs-deviceprofiles-assign assign-device-profile-to-devices" [
 #
 # POST /api/v1/orgs/{org_id}/deviceprofiles/{deviceprofile_id}/unassign
 # operationId: unassignOrgDeviceProfilesFromDevices
-export def "orgs-deviceprofiles-unassign create-device-profiles-from-devices" [
+export def "unassign-org-device-profiles-from-devices" [
   org_id: string
   deviceprofile_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6610,7 +6610,7 @@ export def "orgs-deviceprofiles-unassign create-device-profiles-from-devices" [
 #
 # GET /api/v1/orgs/{org_id}/devices
 # operationId: getOrgDevices
-export def "orgs-devices get" [
+export def "get-org-devices" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6646,7 +6646,7 @@ export def "orgs-devices get" [
 #
 # GET /api/v1/orgs/{org_id}/devices/count
 # operationId: countOrgDevices
-export def "orgs-devices-count get" [
+export def "count-org-devices" [
   org_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6701,7 +6701,7 @@ export def "orgs-devices-count get" [
 #
 # GET /api/v1/orgs/{org_id}/devices/events/count
 # operationId: countOrgDevicesEvents
-export def "orgs-devices-events-count get" [
+export def "count-org-devices-events" [
   org_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6751,7 +6751,7 @@ export def "orgs-devices-events-count get" [
 #
 # GET /api/v1/orgs/{org_id}/devices/events/search
 # operationId: searchOrgDevicesEvents
-export def "orgs-devices-events-search list" [
+export def "search-org-devices-events" [
   org_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6797,7 +6797,7 @@ export def "orgs-devices-events-search list" [
 #
 # GET /api/v1/orgs/{org_id}/devices/last_config/count
 # operationId: countOrgDeviceLastConfigs
-export def "orgs-devices-last-config-count get" [
+export def "count-org-device-last-configs" [
   org_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6839,7 +6839,7 @@ export def "orgs-devices-last-config-count get" [
 #
 # GET /api/v1/orgs/{org_id}/devices/last_config/search
 # operationId: searchOrgDeviceLastConfigs
-export def "orgs-devices-last-config-search list" [
+export def "search-org-device-last-configs" [
   org_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6884,7 +6884,7 @@ export def "orgs-devices-last-config-search list" [
 #
 # GET /api/v1/orgs/{org_id}/devices/radio_macs
 # operationId: getOrgApsMacs
-export def "orgs-devices-radio-macs get-aps" [
+export def "get-org-aps-macs" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6920,7 +6920,7 @@ export def "orgs-devices-radio-macs get-aps" [
 #
 # GET /api/v1/orgs/{org_id}/devices/search
 # operationId: searchOrgDevices
-export def "orgs-devices-search list" [
+export def "search-org-devices" [
   org_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6981,7 +6981,7 @@ export def "orgs-devices-search list" [
 #
 # GET /api/v1/orgs/{org_id}/devices/upgrade
 # operationId: getOrgMultiSitesDevicesUpgrades
-export def "orgs-devices-upgrade list" [
+export def "get-org-multi-sites-devices-upgrades" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7017,7 +7017,7 @@ export def "orgs-devices-upgrade list" [
 #
 # POST /api/v1/orgs/{org_id}/devices/upgrade
 # operationId: upgradeOrgMultiSitesDevices
-export def "orgs-devices-upgrade create-multi-sites" [
+export def "upgrade-org-multi-sites-devices" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7076,7 +7076,7 @@ export def "orgs-devices-upgrade create-multi-sites" [
 #
 # GET /api/v1/orgs/{org_id}/devices/upgrade/{upgrade_id}
 # operationId: getOrgMultiSitesUpgrade
-export def "orgs-devices-upgrade get-multi-sites" [
+export def "get-org-multi-sites-upgrade" [
   org_id: string
   upgrade_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7114,7 +7114,7 @@ export def "orgs-devices-upgrade get-multi-sites" [
 #
 # GET /api/v1/orgs/{org_id}/evpn_topologies
 # operationId: getOrgEvpnTopologies
-export def "orgs-evpn-topologies get" [
+export def "get-org-evpn-topologies" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7151,7 +7151,7 @@ export def "orgs-evpn-topologies get" [
 # POST /api/v1/orgs/{org_id}/evpn_topologies
 # operationId: createOrgEvpnTopology
 # --switches item shape: {deviceprofile_id?: string, esilaglinks?: list<string>, evpn_id?: int, mac?: string, pod?: int, role?: "core"|"distribution"|"access"|"collapsed-core"|"none"|"esilag-access", site_id?: string}
-export def "orgs-evpn-topologies create-topology" [
+export def "create-org-evpn-topology" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7193,7 +7193,7 @@ export def "orgs-evpn-topologies create-topology" [
 #
 # DELETE /api/v1/orgs/{org_id}/evpn_topologies/{evpn_topology_id}
 # operationId: deleteOrgEvpnTopology
-export def "orgs-evpn-topologies delete" [
+export def "delete-org-evpn-topology" [
   org_id: string
   evpn_topology_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7231,7 +7231,7 @@ export def "orgs-evpn-topologies delete" [
 #
 # GET /api/v1/orgs/{org_id}/evpn_topologies/{evpn_topology_id}
 # operationId: getOrgEvpnTolopogy
-export def "orgs-evpn-topologies get-tolopogy" [
+export def "get-org-evpn-tolopogy" [
   org_id: string
   evpn_topology_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7270,7 +7270,7 @@ export def "orgs-evpn-topologies get-tolopogy" [
 # PUT /api/v1/orgs/{org_id}/evpn_topologies/{evpn_topology_id}
 # operationId: updateOrgEvpnTopology
 # --switches item shape: {deviceprofile_id?: string, esilaglinks?: list<string>, evpn_id?: int, mac?: string, pod?: int, role?: "core"|"distribution"|"access"|"collapsed-core"|"none"|"esilag-access", site_id?: string}
-export def "orgs-evpn-topologies update" [
+export def "update-org-evpn-topology" [
   org_id: string
   evpn_topology_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7314,7 +7314,7 @@ export def "orgs-evpn-topologies update" [
 #
 # GET /api/v1/orgs/{org_id}/gatewaytemplates
 # operationId: getOrgGatewayTemplates
-export def "orgs-gatewaytemplates get-gateway-templates" [
+export def "get-org-gateway-templates" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7353,7 +7353,7 @@ export def "orgs-gatewaytemplates get-gateway-templates" [
 # --gateway_matching shape: {enable?: bool, rules?: list}
 # --oob_ip_config shape: {dns?: list<string>, dns_suffix?: list<string>, gateway?: string, ip?: string, netmask?: string, network?: string, type?: "static"|"dynamic", use_mgmt_vrf?: bool, use_mgmt_vrf_for_host_out?: bool}
 # --service_policies item shape: {action?: "allow"|"deny", ewf?: list, idp?: record, local_routing?: bool, name?: string, path_preferences?: string, servicepolicy_id?: string, services?: list<string>, tenants?: list<string>}
-export def "orgs-gatewaytemplates create-gateway-template" [
+export def "create-org-gateway-template" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7407,7 +7407,7 @@ export def "orgs-gatewaytemplates create-gateway-template" [
 #
 # DELETE /api/v1/orgs/{org_id}/gatewaytemplates/{gatewaytemplate_id}
 # operationId: deleteOrgGatewayTemplate
-export def "orgs-gatewaytemplates delete-gateway-template" [
+export def "delete-org-gateway-template" [
   org_id: string
   gatewaytemplate_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7445,7 +7445,7 @@ export def "orgs-gatewaytemplates delete-gateway-template" [
 #
 # GET /api/v1/orgs/{org_id}/gatewaytemplates/{gatewaytemplate_id}
 # operationId: getOrgGatewayTemplate
-export def "orgs-gatewaytemplates get-gateway-template" [
+export def "get-org-gateway-template" [
   org_id: string
   gatewaytemplate_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7486,7 +7486,7 @@ export def "orgs-gatewaytemplates get-gateway-template" [
 # --gateway_matching shape: {enable?: bool, rules?: list}
 # --oob_ip_config shape: {dns?: list<string>, dns_suffix?: list<string>, gateway?: string, ip?: string, netmask?: string, network?: string, type?: "static"|"dynamic", use_mgmt_vrf?: bool, use_mgmt_vrf_for_host_out?: bool}
 # --service_policies item shape: {action?: "allow"|"deny", ewf?: list, idp?: record, local_routing?: bool, name?: string, path_preferences?: string, servicepolicy_id?: string, services?: list<string>, tenants?: list<string>}
-export def "orgs-gatewaytemplates update-gateway-template" [
+export def "update-org-gateway-template" [
   org_id: string
   gatewaytemplate_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7542,7 +7542,7 @@ export def "orgs-gatewaytemplates update-gateway-template" [
 #
 # GET /api/v1/orgs/{org_id}/guests
 # operationId: getOrgGuestAuthorizations
-export def "orgs-guests get-authorizations" [
+export def "get-org-guest-authorizations" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7578,7 +7578,7 @@ export def "orgs-guests get-authorizations" [
 #
 # GET /api/v1/orgs/{org_id}/guests/count
 # operationId: countOrgGuestAuthorizations
-export def "orgs-guests-count get-authorizations" [
+export def "count-org-guest-authorizations" [
   org_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7621,7 +7621,7 @@ export def "orgs-guests-count get-authorizations" [
 #
 # GET /api/v1/orgs/{org_id}/guests/search
 # operationId: searchOrgGuestAuthorization
-export def "orgs-guests-search list-authorization" [
+export def "search-org-guest-authorization" [
   org_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7665,7 +7665,7 @@ export def "orgs-guests-search list-authorization" [
 #
 # DELETE /api/v1/orgs/{org_id}/guests/{guest_mac}
 # operationId: deleteOrgGuestAuthorization
-export def "orgs-guests delete-authorization" [
+export def "delete-org-guest-authorization" [
   org_id: string
   guest_mac: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7703,7 +7703,7 @@ export def "orgs-guests delete-authorization" [
 #
 # GET /api/v1/orgs/{org_id}/guests/{guest_mac}
 # operationId: getOrgGuestAuthorization
-export def "orgs-guests get-authorization" [
+export def "get-org-guest-authorization" [
   org_id: string
   guest_mac: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7741,7 +7741,7 @@ export def "orgs-guests get-authorization" [
 #
 # PUT /api/v1/orgs/{org_id}/guests/{guest_mac}
 # operationId: updateOrgGuestAuthorization
-export def "orgs-guests update-authorization" [
+export def "update-org-guest-authorization" [
   org_id: string
   guest_mac: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7794,7 +7794,7 @@ export def "orgs-guests update-authorization" [
 #
 # GET /api/v1/orgs/{org_id}/insights/sites-sle
 # operationId: getOrgSitesSle
-export def "orgs-insights-sites-sle get" [
+export def "get-org-sites-sle" [
   org_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7838,7 +7838,7 @@ export def "orgs-insights-sites-sle get" [
 #
 # GET /api/v1/orgs/{org_id}/insights/{metric}
 # operationId: getOrgSle
-export def "orgs-insights get-sle" [
+export def "get-org-sle" [
   org_id: any
   metric: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -7882,7 +7882,7 @@ export def "orgs-insights get-sle" [
 #
 # GET /api/v1/orgs/{org_id}/inventory
 # operationId: getOrgInventory
-export def "orgs-inventory get" [
+export def "get-org-inventory" [
   org_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7929,7 +7929,7 @@ export def "orgs-inventory get" [
 #
 # POST /api/v1/orgs/{org_id}/inventory
 # operationId: addOrgInventory
-export def "orgs-inventory create" [
+export def "add-org-inventory" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7969,7 +7969,7 @@ export def "orgs-inventory create" [
 #
 # PUT /api/v1/orgs/{org_id}/inventory
 # operationId: updateOrgInventoryAssignment
-export def "orgs-inventory update-assignment" [
+export def "update-org-inventory-assignment" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8015,7 +8015,7 @@ export def "orgs-inventory update-assignment" [
 #
 # POST /api/v1/orgs/{org_id}/inventory/reevaluate_auto_assignment
 # operationId: reevaluateOrgAutoAssignment
-export def "orgs-inventory-reevaluate-auto-assignment create" [
+export def "reevaluate-org-auto-assignment" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8055,7 +8055,7 @@ export def "orgs-inventory-reevaluate-auto-assignment create" [
 #
 # POST /api/v1/orgs/{org_id}/inventory/replace
 # operationId: replaceOrgDevices
-export def "orgs-inventory-replace update-devices" [
+export def "replace-org-devices" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8099,7 +8099,7 @@ export def "orgs-inventory-replace update-devices" [
 # POST /api/v1/orgs/{org_id}/invites
 # operationId: inviteOrgAdmin
 # --privileges item shape: {msp_id?: string, msp_logo_url?: string, msp_name?: string, msp_url?: string, name?: string, org_id?: string, org_name?: string, orggroup_ids?: list<string>, role: "admin"|"write"|"read"|"helpdesk"|"installer", scope: "org"|"site"|"msp"|"orggroup", site_id?: string, sitegroup_ids?: list<string>, views?: list<string>}
-export def "orgs-invites create-admin" [
+export def "invite-org-admin" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8144,7 +8144,7 @@ export def "orgs-invites create-admin" [
 #
 # DELETE /api/v1/orgs/{org_id}/invites/{invite_id}
 # operationId: uninviteOrgAdmin
-export def "orgs-invites delete-uninvite-admin" [
+export def "uninvite-org-admin" [
   org_id: string
   invite_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8183,7 +8183,7 @@ export def "orgs-invites delete-uninvite-admin" [
 # PUT /api/v1/orgs/{org_id}/invites/{invite_id}
 # operationId: updateOrgAdminInvite
 # --privileges item shape: {msp_id?: string, msp_logo_url?: string, msp_name?: string, msp_url?: string, name?: string, org_id?: string, org_name?: string, orggroup_ids?: list<string>, role: "admin"|"write"|"read"|"helpdesk"|"installer", scope: "org"|"site"|"msp"|"orggroup", site_id?: string, sitegroup_ids?: list<string>, views?: list<string>}
-export def "orgs-invites update-admin" [
+export def "update-org-admin-invite" [
   org_id: string
   invite_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8230,7 +8230,7 @@ export def "orgs-invites update-admin" [
 #
 # GET /api/v1/orgs/{org_id}/jsi/devices
 # operationId: getOrgJsiDevices
-export def "orgs-jsi-devices get" [
+export def "get-org-jsi-devices" [
   org_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8272,7 +8272,7 @@ export def "orgs-jsi-devices get" [
 #
 # GET /api/v1/orgs/{org_id}/jsi/devices/outbound_ssh_cmd
 # operationId: adoptOrgJsiDevice
-export def "orgs-jsi-devices-outbound-ssh-cmd get-adopt" [
+export def "adopt-org-jsi-device" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8308,7 +8308,7 @@ export def "orgs-jsi-devices-outbound-ssh-cmd get-adopt" [
 #
 # POST /api/v1/orgs/{org_id}/jsi/devices/{device_mac}/shell
 # operationId: createOrgJsiDeviceShellSession
-export def "orgs-jsi-devices-shell create-session" [
+export def "create-org-jsi-device-shell-session" [
   org_id: string
   device_mac: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8346,7 +8346,7 @@ export def "orgs-jsi-devices-shell create-session" [
 #
 # POST /api/v1/orgs/{org_id}/jsi/devices/{device_mac}/upgrade
 # operationId: upgradeOrgJsiDevice
-export def "orgs-jsi-devices-upgrade create" [
+export def "upgrade-org-jsi-device" [
   org_id: string
   device_mac: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8388,7 +8388,7 @@ export def "orgs-jsi-devices-upgrade create" [
 #
 # GET /api/v1/orgs/{org_id}/jsi/inventory
 # operationId: getOrgJsiPastPurchases
-export def "orgs-jsi-inventory get-past-purchases" [
+export def "get-org-jsi-past-purchases" [
   org_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8431,7 +8431,7 @@ export def "orgs-jsi-inventory get-past-purchases" [
 # DEPRECATED
 # operationId: getOrgJunosDevicesRegistrationCommands
 @deprecated
-export def "orgs-junos-register-cmd get-devices-registration-commands" [
+export def "get-org-junos-devices-registration-commands" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8467,7 +8467,7 @@ export def "orgs-junos-register-cmd get-devices-registration-commands" [
 #
 # GET /api/v1/orgs/{org_id}/licenses
 # operationId: getOrgLicencesSummary
-export def "orgs-licenses get-licences-summary" [
+export def "get-org-licences-summary" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8503,7 +8503,7 @@ export def "orgs-licenses get-licences-summary" [
 #
 # PUT /api/v1/orgs/{org_id}/licenses
 # operationId: moveOrDeleteOrgLicenseToAnotherOrg
-export def "orgs-licenses move-or-delete-to-another" [
+export def "move-or-delete-org-license-to-another-org" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8548,7 +8548,7 @@ export def "orgs-licenses move-or-delete-to-another" [
 #
 # GET /api/v1/orgs/{org_id}/licenses/usages
 # operationId: getOrgLicencesBySite
-export def "orgs-licenses-usages get-licences-by-site" [
+export def "get-org-licences-by-site" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8584,7 +8584,7 @@ export def "orgs-licenses-usages get-licences-by-site" [
 #
 # GET /api/v1/orgs/{org_id}/logs
 # operationId: getOrgLogs
-export def "orgs-logs get" [
+export def "get-org-logs" [
   org_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8629,7 +8629,7 @@ export def "orgs-logs get" [
 #
 # GET /api/v1/orgs/{org_id}/logs/count
 # operationId: countOrgLogsByDistinctAttributes
-export def "orgs-logs-count logs-by-distinct-attributes" [
+export def "count-org-logs-by-distinct-attributes" [
   org_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8677,7 +8677,7 @@ export def "orgs-logs-count logs-by-distinct-attributes" [
 # POST /api/v1/orgs/{org_id}/maps/import
 # operationId: importOrgMaps
 # --json shape: {import_all_floorpans?: bool, import_height?: bool, import_orientation?: bool, site_id: string, vendor_name: "ekahau"|"ibwave"}
-export def "orgs-maps-import import" [
+export def "import-org-maps" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8722,7 +8722,7 @@ export def "orgs-maps-import import" [
 #
 # GET /api/v1/orgs/{org_id}/mxclusters
 # operationId: getOrgMxEdgeClusters
-export def "orgs-mxclusters get-mx-edge-clusters" [
+export def "get-org-mx-edge-clusters" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8765,7 +8765,7 @@ export def "orgs-mxclusters get-mx-edge-clusters" [
 # --radsec_tls shape: {keypair?: string}
 # --tunterm_dhcpd_config shape: {enabled?: bool, servers?: list<string>, type?: "relay"}
 # --tunterm_monitoring item shape: {host?: string, port?: int, protocol?: "arp"|"ping"|"tcp", timeout?: int}
-export def "orgs-mxclusters create-mx-edge" [
+export def "create-org-mx-edge-cluster" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8818,7 +8818,7 @@ export def "orgs-mxclusters create-mx-edge" [
 #
 # DELETE /api/v1/orgs/{org_id}/mxclusters/{mxcluster_id}
 # operationId: deleteOrgMxEdgeCluster
-export def "orgs-mxclusters delete-mx-edge" [
+export def "delete-org-mx-edge-cluster" [
   org_id: string
   mxcluster_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8856,7 +8856,7 @@ export def "orgs-mxclusters delete-mx-edge" [
 #
 # GET /api/v1/orgs/{org_id}/mxclusters/{mxcluster_id}
 # operationId: getOrgMxEdgeCluster
-export def "orgs-mxclusters get-mx-edge" [
+export def "get-org-mx-edge-cluster" [
   org_id: string
   mxcluster_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8901,7 +8901,7 @@ export def "orgs-mxclusters get-mx-edge" [
 # --radsec_tls shape: {keypair?: string}
 # --tunterm_dhcpd_config shape: {enabled?: bool, servers?: list<string>, type?: "relay"}
 # --tunterm_monitoring item shape: {host?: string, port?: int, protocol?: "arp"|"ping"|"tcp", timeout?: int}
-export def "orgs-mxclusters update-mx-edge" [
+export def "update-org-mx-edge-cluster" [
   org_id: string
   mxcluster_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8956,7 +8956,7 @@ export def "orgs-mxclusters update-mx-edge" [
 #
 # GET /api/v1/orgs/{org_id}/mxedges
 # operationId: getOrgMxEdges
-export def "orgs-mxedges get-mx-edges" [
+export def "get-org-mx-edges" [
   org_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9006,7 +9006,7 @@ export def "orgs-mxedges get-mx-edges" [
 # --tunterm_port_config shape: {downstream_ports?: list<string>, separate_upstream_downstream?: bool, upstream_port_vlan_id?: int, upstream_ports?: list<string>}
 # --tunterm_switch_config shape: {enabled?: bool}
 # --versions shape: {mxagent?: string, tuntnerm?: string}
-export def "orgs-mxedges create-mx-edge" [
+export def "create-org-mx-edge" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9062,7 +9062,7 @@ export def "orgs-mxedges create-mx-edge" [
 #
 # POST /api/v1/orgs/{org_id}/mxedges/assign
 # operationId: assignOrgMxEdgeToSite
-export def "orgs-mxedges-assign assign-mx-edge-to-site" [
+export def "assign-org-mx-edge-to-site" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9103,7 +9103,7 @@ export def "orgs-mxedges-assign assign-mx-edge-to-site" [
 #
 # POST /api/v1/orgs/{org_id}/mxedges/claim
 # operationId: claimOrgMxEdge
-export def "orgs-mxedges-claim create-mx-edge" [
+export def "claim-org-mx-edge" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9143,7 +9143,7 @@ export def "orgs-mxedges-claim create-mx-edge" [
 #
 # POST /api/v1/orgs/{org_id}/mxedges/unassign
 # operationId: unassignOrgMxEdgeFromSite
-export def "orgs-mxedges-unassign create-mx-edge-from-site" [
+export def "unassign-org-mx-edge-from-site" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9183,7 +9183,7 @@ export def "orgs-mxedges-unassign create-mx-edge-from-site" [
 #
 # GET /api/v1/orgs/{org_id}/mxedges/upgrade
 # operationId: getOrgMxEdgeUpgrades
-export def "orgs-mxedges-upgrade list" [
+export def "get-org-mx-edge-upgrades" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9221,7 +9221,7 @@ export def "orgs-mxedges-upgrade list" [
 # operationId: upgradeOrgMxEdges
 # --allow_downgrades shape: {mxagent?: bool, mxdas?: bool, mxocproxy?: bool, radsecproxy?: bool, tunterm?: bool}
 # --versions shape: {mxagent: string, mxdas?: string, mxocproxy?: string, radsecproxy?: string, tunterm: string}
-export def "orgs-mxedges-upgrade create-mx-edges" [
+export def "upgrade-org-mx-edges" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9266,7 +9266,7 @@ export def "orgs-mxedges-upgrade create-mx-edges" [
 #
 # GET /api/v1/orgs/{org_id}/mxedges/upgrade/{upgrade_id}
 # operationId: getOrgMxEdgeUpgrade
-export def "orgs-mxedges-upgrade get-mx-edge" [
+export def "get-org-mx-edge-upgrade" [
   org_id: string
   upgrade_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9304,7 +9304,7 @@ export def "orgs-mxedges-upgrade get-mx-edge" [
 #
 # GET /api/v1/orgs/{org_id}/mxedges/version
 # operationId: getOrgMxEdgeUpgradeInfo
-export def "orgs-mxedges-version get-mx-edge-upgrade" [
+export def "get-org-mx-edge-upgrade-info" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9342,7 +9342,7 @@ export def "orgs-mxedges-version get-mx-edge-upgrade" [
 #
 # DELETE /api/v1/orgs/{org_id}/mxedges/{mxedge_id}
 # operationId: deleteOrgMxEdge
-export def "orgs-mxedges delete-mx-edge" [
+export def "delete-org-mx-edge" [
   org_id: string
   mxedge_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9380,7 +9380,7 @@ export def "orgs-mxedges delete-mx-edge" [
 #
 # GET /api/v1/orgs/{org_id}/mxedges/{mxedge_id}
 # operationId: getOrgMxEdge
-export def "orgs-mxedges get-mx-edge" [
+export def "get-org-mx-edge" [
   org_id: string
   mxedge_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9428,7 +9428,7 @@ export def "orgs-mxedges get-mx-edge" [
 # --tunterm_port_config shape: {downstream_ports?: list<string>, separate_upstream_downstream?: bool, upstream_port_vlan_id?: int, upstream_ports?: list<string>}
 # --tunterm_switch_config shape: {enabled?: bool}
 # --versions shape: {mxagent?: string, tuntnerm?: string}
-export def "orgs-mxedges update-mx-edge" [
+export def "update-org-mx-edge" [
   org_id: string
   mxedge_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9486,7 +9486,7 @@ export def "orgs-mxedges update-mx-edge" [
 #
 # POST /api/v1/orgs/{org_id}/mxedges/{mxedge_id}/restart
 # operationId: restartOrgMxEdge
-export def "orgs-mxedges-restart restart-mx-edge" [
+export def "restart-org-mx-edge" [
   org_id: string
   mxedge_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9524,7 +9524,7 @@ export def "orgs-mxedges-restart restart-mx-edge" [
 #
 # POST /api/v1/orgs/{org_id}/mxedges/{mxedge_id}/services/tunterm/bounce_port
 # operationId: bounceOrgMxEdgeDataPorts
-export def "orgs-mxedges-services-tunterm-bounce-port create-mx-edge-data" [
+export def "bounce-org-mx-edge-data-ports" [
   org_id: string
   mxedge_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9567,7 +9567,7 @@ export def "orgs-mxedges-services-tunterm-bounce-port create-mx-edge-data" [
 #
 # POST /api/v1/orgs/{org_id}/mxedges/{mxedge_id}/services/{name}/{action}
 # operationId: controlOrgMxEdgeServices
-export def "orgs-mxedges-services create-control-mx-edge" [
+export def "control-org-mx-edge-services" [
   org_id: string
   mxedge_id: string
   name: string
@@ -9609,7 +9609,7 @@ export def "orgs-mxedges-services create-control-mx-edge" [
 #
 # POST /api/v1/orgs/{org_id}/mxedges/{mxedge_id}/support
 # operationId: uploadOrgMxEdgeSupportFiles
-export def "orgs-mxedges-support upload-mx-edge-files" [
+export def "upload-org-mx-edge-support-files" [
   org_id: string
   mxedge_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9647,7 +9647,7 @@ export def "orgs-mxedges-support upload-mx-edge-files" [
 #
 # POST /api/v1/orgs/{org_id}/mxedges/{mxedge_id}/unregister
 # operationId: unregisterOrgMxEdge
-export def "orgs-mxedges-unregister delete-mx-edge" [
+export def "unregister-org-mx-edge" [
   org_id: string
   mxedge_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9686,7 +9686,7 @@ export def "orgs-mxedges-unregister delete-mx-edge" [
 # POST /api/v1/orgs/{org_id}/mxedges/{mxedge_id}/upgrade
 # operationId: upgradeOrgMxEdge
 # --versions shape: {mxagent?: string, tunterm?: string}
-export def "orgs-mxedges-upgrade create-mx-edge" [
+export def "upgrade-org-mx-edge" [
   org_id: string
   mxedge_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9730,7 +9730,7 @@ export def "orgs-mxedges-upgrade create-mx-edge" [
 #
 # GET /api/v1/orgs/{org_id}/mxtunnels
 # operationId: getOrgMxTunnels
-export def "orgs-mxtunnels get-mx-tunnels" [
+export def "get-org-mx-tunnels" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9768,7 +9768,7 @@ export def "orgs-mxtunnels get-mx-tunnels" [
 # operationId: createOrgMxTunnel
 # --auto_preemption shape: {day_of_week?: "any"|"mon"|"tue"|"wed"|"thu"|"fri"|"sat"|"sun", enabled?: bool, time_of_day?: string}
 # --ipsec shape: {dns_servers?: list<string>, dns_suffix?: list<string>, enabled?: bool, extra_routes?: list, split_tunnel?: bool, use_mxedge?: bool}
-export def "orgs-mxtunnels create-mx-tunnel" [
+export def "create-org-mx-tunnel" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9817,7 +9817,7 @@ export def "orgs-mxtunnels create-mx-tunnel" [
 #
 # DELETE /api/v1/orgs/{org_id}/mxtunnels/{mxtunnel_id}
 # operationId: deleteOrgMxTunnel
-export def "orgs-mxtunnels delete-mx-tunnel" [
+export def "delete-org-mx-tunnel" [
   org_id: string
   mxtunnel_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9855,7 +9855,7 @@ export def "orgs-mxtunnels delete-mx-tunnel" [
 #
 # GET /api/v1/orgs/{org_id}/mxtunnels/{mxtunnel_id}
 # operationId: getOrgMxTunnel
-export def "orgs-mxtunnels get-mx-tunnel" [
+export def "get-org-mx-tunnel" [
   org_id: string
   mxtunnel_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9895,7 +9895,7 @@ export def "orgs-mxtunnels get-mx-tunnel" [
 # operationId: updateOrgMxTunnel
 # --auto_preemption shape: {day_of_week?: "any"|"mon"|"tue"|"wed"|"thu"|"fri"|"sat"|"sun", enabled?: bool, time_of_day?: string}
 # --ipsec shape: {dns_servers?: list<string>, dns_suffix?: list<string>, enabled?: bool, extra_routes?: list, split_tunnel?: bool, use_mxedge?: bool}
-export def "orgs-mxtunnels update-mx-tunnel" [
+export def "update-org-mx-tunnel" [
   org_id: string
   mxtunnel_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9946,7 +9946,7 @@ export def "orgs-mxtunnels update-mx-tunnel" [
 #
 # GET /api/v1/orgs/{org_id}/nacrules
 # operationId: getOrgNacRules
-export def "orgs-nacrules get-nac-rules" [
+export def "get-org-nac-rules" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9984,7 +9984,7 @@ export def "orgs-nacrules get-nac-rules" [
 # operationId: createOrgNacRule
 # --matching shape: {auth_type?: "cert"|"idp"|"mab"|"psk", nactags?: list<string>, port_types?: list<string>, site_ids?: list<string>, sitegroup_ids?: list<string>}
 # --not_matching shape: {auth_type?: "cert"|"idp"|"mab"|"psk", nactags?: list<string>, port_types?: list<string>, site_ids?: list<string>, sitegroup_ids?: list<string>}
-export def "orgs-nacrules create-nac-rule" [
+export def "create-org-nac-rule" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10030,7 +10030,7 @@ export def "orgs-nacrules create-nac-rule" [
 #
 # DELETE /api/v1/orgs/{org_id}/nacrules/{nacrule_id}
 # operationId: deleteOrgNacRule
-export def "orgs-nacrules delete-nac-rule" [
+export def "delete-org-nac-rule" [
   org_id: string
   nacrule_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10068,7 +10068,7 @@ export def "orgs-nacrules delete-nac-rule" [
 #
 # GET /api/v1/orgs/{org_id}/nacrules/{nacrule_id}
 # operationId: getOrgNacRule
-export def "orgs-nacrules get-nac-rule" [
+export def "get-org-nac-rule" [
   org_id: string
   nacrule_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10108,7 +10108,7 @@ export def "orgs-nacrules get-nac-rule" [
 # operationId: updateOrgNacRule
 # --matching shape: {auth_type?: "cert"|"idp"|"mab"|"psk", nactags?: list<string>, port_types?: list<string>, site_ids?: list<string>, sitegroup_ids?: list<string>}
 # --not_matching shape: {auth_type?: "cert"|"idp"|"mab"|"psk", nactags?: list<string>, port_types?: list<string>, site_ids?: list<string>, sitegroup_ids?: list<string>}
-export def "orgs-nacrules update-nac-rule" [
+export def "update-org-nac-rule" [
   org_id: string
   nacrule_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10156,7 +10156,7 @@ export def "orgs-nacrules update-nac-rule" [
 #
 # GET /api/v1/orgs/{org_id}/nactags
 # operationId: getOrgNacTags
-export def "orgs-nactags get-nac-tags" [
+export def "get-org-nac-tags" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10192,7 +10192,7 @@ export def "orgs-nactags get-nac-tags" [
 #
 # POST /api/v1/orgs/{org_id}/nactags
 # operationId: createOrgNacTag
-export def "orgs-nactags create-nac-tag" [
+export def "create-org-nac-tag" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10238,7 +10238,7 @@ export def "orgs-nactags create-nac-tag" [
 #
 # DELETE /api/v1/orgs/{org_id}/nactags/{nactag_id}
 # operationId: DeleteOrgNacTag
-export def "orgs-nactags delete-nac-tag" [
+export def "delete-org-nac-tag" [
   org_id: string
   nactag_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10276,7 +10276,7 @@ export def "orgs-nactags delete-nac-tag" [
 #
 # GET /api/v1/orgs/{org_id}/nactags/{nactag_id}
 # operationId: getOrgNacTag
-export def "orgs-nactags get-nac-tag" [
+export def "get-org-nac-tag" [
   org_id: string
   nactag_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10314,7 +10314,7 @@ export def "orgs-nactags get-nac-tag" [
 #
 # PUT /api/v1/orgs/{org_id}/nactags/{nactag_id}
 # operationId: updateOrgNacTag
-export def "orgs-nactags update-nac-tag" [
+export def "update-org-nac-tag" [
   org_id: string
   nactag_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10362,7 +10362,7 @@ export def "orgs-nactags update-nac-tag" [
 #
 # GET /api/v1/orgs/{org_id}/networks
 # operationId: getOrgNetworks
-export def "orgs-networks list" [
+export def "get-org-networks" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10400,7 +10400,7 @@ export def "orgs-networks list" [
 # operationId: createOrgNetwork
 # --internal_access shape: {enabled?: bool}
 # --internet_access shape: {create_simple_service_policy?: bool, destination_nat?: record, enabled?: bool, restricted?: bool, static_nat?: record}
-export def "orgs-networks create" [
+export def "create-org-network" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10450,7 +10450,7 @@ export def "orgs-networks create" [
 #
 # DELETE /api/v1/orgs/{org_id}/networks/{network_id}
 # operationId: deleteOrgNetwork
-export def "orgs-networks delete" [
+export def "delete-org-network" [
   org_id: string
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10488,7 +10488,7 @@ export def "orgs-networks delete" [
 #
 # GET /api/v1/orgs/{org_id}/networks/{network_id}
 # operationId: getOrgNetwork
-export def "orgs-networks get" [
+export def "get-org-network" [
   org_id: string
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10528,7 +10528,7 @@ export def "orgs-networks get" [
 # operationId: updateOrgNetwork
 # --internal_access shape: {enabled?: bool}
 # --internet_access shape: {create_simple_service_policy?: bool, destination_nat?: record, enabled?: bool, restricted?: bool, static_nat?: record}
-export def "orgs-networks update" [
+export def "update-org-network" [
   org_id: string
   network_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10580,7 +10580,7 @@ export def "orgs-networks update" [
 #
 # GET /api/v1/orgs/{org_id}/networktemplates
 # operationId: getOrgNetworkTemplates
-export def "orgs-networktemplates get-network-templates" [
+export def "get-org-network-templates" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10625,7 +10625,7 @@ export def "orgs-networktemplates get-network-templates" [
 # --switch_matching shape: {enable?: bool, rules?: list}
 # --switch_mgmt shape: {config_revert?: int, protect_re?: record, root_password?: string, tacacs?: record}
 # --vrf_config shape: {enabled?: bool}
-export def "orgs-networktemplates create-network-template" [
+export def "create-org-network-template" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10682,7 +10682,7 @@ export def "orgs-networktemplates create-network-template" [
 #
 # DELETE /api/v1/orgs/{org_id}/networktemplates/{networktemplate_id}
 # operationId: deleteOrgNetworkTemplate
-export def "orgs-networktemplates delete-network-template" [
+export def "delete-org-network-template" [
   org_id: string
   networktemplate_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10720,7 +10720,7 @@ export def "orgs-networktemplates delete-network-template" [
 #
 # GET /api/v1/orgs/{org_id}/networktemplates/{networktemplate_id}
 # operationId: getOrgNetworkTemplate
-export def "orgs-networktemplates get-network-template" [
+export def "get-org-network-template" [
   org_id: string
   networktemplate_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10767,7 +10767,7 @@ export def "orgs-networktemplates get-network-template" [
 # --switch_matching shape: {enable?: bool, rules?: list}
 # --switch_mgmt shape: {config_revert?: int, protect_re?: record, root_password?: string, tacacs?: record}
 # --vrf_config shape: {enabled?: bool}
-export def "orgs-networktemplates update-network-templates" [
+export def "update-org-network-templates" [
   org_id: string
   networktemplate_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10826,7 +10826,7 @@ export def "orgs-networktemplates update-network-templates" [
 #
 # GET /api/v1/orgs/{org_id}/ocdevices/outbound_ssh_cmd
 # operationId: getOrgJuniperDevicesCommand
-export def "orgs-ocdevices-outbound-ssh-cmd get-juniper-devices-command" [
+export def "get-org-juniper-devices-command" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10864,7 +10864,7 @@ export def "orgs-ocdevices-outbound-ssh-cmd get-juniper-devices-command" [
 #
 # GET /api/v1/orgs/{org_id}/otherdevices
 # operationId: getOrgOtherDevices
-export def "orgs-otherdevices get-other-devices" [
+export def "get-org-other-devices" [
   org_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10908,7 +10908,7 @@ export def "orgs-otherdevices get-other-devices" [
 #
 # PUT /api/v1/orgs/{org_id}/otherdevices
 # operationId: updateOrgOtherDevices
-export def "orgs-otherdevices update-other-devices" [
+export def "update-org-other-devices" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10950,7 +10950,7 @@ export def "orgs-otherdevices update-other-devices" [
 #
 # DELETE /api/v1/orgs/{org_id}/otherdevices/{device_mac}
 # operationId: deleteOrgOtherDevice
-export def "orgs-otherdevices delete-other" [
+export def "delete-org-other-device" [
   org_id: string
   device_mac: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10988,7 +10988,7 @@ export def "orgs-otherdevices delete-other" [
 #
 # GET /api/v1/orgs/{org_id}/otherdevices/{device_mac}
 # operationId: getOrgOtherDevice
-export def "orgs-otherdevices get-other" [
+export def "get-org-other-device" [
   org_id: string
   device_mac: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11026,7 +11026,7 @@ export def "orgs-otherdevices get-other" [
 #
 # PUT /api/v1/orgs/{org_id}/otherdevices/{device_mac}
 # operationId: updateOrgOtherDevice
-export def "orgs-otherdevices update-other" [
+export def "update-org-other-device" [
   org_id: string
   device_mac: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11069,7 +11069,7 @@ export def "orgs-otherdevices update-other" [
 #
 # GET /api/v1/orgs/{org_id}/pma/dashboards
 # operationId: getOrgPmaDashboards
-export def "orgs-pma-dashboards get" [
+export def "get-org-pma-dashboards" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11105,7 +11105,7 @@ export def "orgs-pma-dashboards get" [
 #
 # GET /api/v1/orgs/{org_id}/pskportals
 # operationId: getOrgPskPortals
-export def "orgs-pskportals get-psk-portals" [
+export def "get-org-psk-portals" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11143,7 +11143,7 @@ export def "orgs-pskportals get-psk-portals" [
 # operationId: createOrgPskPortal
 # --passphrase_rules shape: {alphaberts_enabled?: bool, length?: int, max_length?: int, min_length?: int, numerics_enabled?: bool, symbols?: string, symbols_enabled?: bool}
 # --sso shape: {allowed_roles?: list<string>, idp_cert?: string, idp_sign_algo?: string, idp_sso_url?: string, issuer?: string, nameid_format?: string, role_mapping?: record, use_sso_role_for_psk_role?: bool}
-export def "orgs-pskportals create-psk-portal" [
+export def "create-org-psk-portal" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11201,7 +11201,7 @@ export def "orgs-pskportals create-psk-portal" [
 #
 # DELETE /api/v1/orgs/{org_id}/pskportals/{pskportal_id}
 # operationId: deleteOrgPskPortal
-export def "orgs-pskportals delete-psk-portal" [
+export def "delete-org-psk-portal" [
   org_id: string
   pskportal_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11239,7 +11239,7 @@ export def "orgs-pskportals delete-psk-portal" [
 #
 # GET /api/v1/orgs/{org_id}/pskportals/{pskportal_id}
 # operationId: getOrgPskPortal
-export def "orgs-pskportals get-psk-portal" [
+export def "get-org-psk-portal" [
   org_id: string
   pskportal_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11279,7 +11279,7 @@ export def "orgs-pskportals get-psk-portal" [
 # operationId: updateOrgPskPortal
 # --passphrase_rules shape: {alphaberts_enabled?: bool, length?: int, max_length?: int, min_length?: int, numerics_enabled?: bool, symbols?: string, symbols_enabled?: bool}
 # --sso shape: {allowed_roles?: list<string>, idp_cert?: string, idp_sign_algo?: string, idp_sso_url?: string, issuer?: string, nameid_format?: string, role_mapping?: record, use_sso_role_for_psk_role?: bool}
-export def "orgs-pskportals update-psk-portal" [
+export def "update-org-psk-portal" [
   org_id: string
   pskportal_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11339,7 +11339,7 @@ export def "orgs-pskportals update-psk-portal" [
 #
 # GET /api/v1/orgs/{org_id}/psks
 # operationId: getOrgPsks
-export def "orgs-psks list" [
+export def "get-org-psks" [
   org_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11381,7 +11381,7 @@ export def "orgs-psks list" [
 #
 # POST /api/v1/orgs/{org_id}/psks
 # operationId: createOrgPsk
-export def "orgs-psks create" [
+export def "create-org-psk" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11437,7 +11437,7 @@ export def "orgs-psks create" [
 #
 # PUT /api/v1/orgs/{org_id}/psks
 # operationId: updateOrgMultiPsks
-export def "orgs-psks update-multi" [
+export def "update-org-multi-psks" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11477,7 +11477,7 @@ export def "orgs-psks update-multi" [
 #
 # POST /api/v1/orgs/{org_id}/psks/import
 # operationId: importOrgPsks
-export def "orgs-psks-import import" [
+export def "import-org-psks" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11517,7 +11517,7 @@ export def "orgs-psks-import import" [
 #
 # DELETE /api/v1/orgs/{org_id}/psks/{psk_id}
 # operationId: deleteOrgPsk
-export def "orgs-psks delete" [
+export def "delete-org-psk" [
   org_id: string
   psk_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11555,7 +11555,7 @@ export def "orgs-psks delete" [
 #
 # GET /api/v1/orgs/{org_id}/psks/{psk_id}
 # operationId: getOrgPsk
-export def "orgs-psks get" [
+export def "get-org-psk" [
   org_id: string
   psk_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11593,7 +11593,7 @@ export def "orgs-psks get" [
 #
 # PUT /api/v1/orgs/{org_id}/psks/{psk_id}
 # operationId: updateOrgPsk
-export def "orgs-psks update" [
+export def "update-org-psk" [
   org_id: string
   psk_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11649,7 +11649,7 @@ export def "orgs-psks update" [
 #
 # POST /api/v1/orgs/{org_id}/psks/{psk_id}/delete_old_passphrase
 # operationId: deleteOrgPskOldPassphrase
-export def "orgs-psks-delete-old-passphrase delete" [
+export def "delete-org-psk-old-passphrase" [
   org_id: string
   psk_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11691,7 +11691,7 @@ export def "orgs-psks-delete-old-passphrase delete" [
 #
 # GET /api/v1/orgs/{org_id}/rftemplates
 # operationId: getOrgRfTemplates
-export def "orgs-rftemplates get-rf-templates" [
+export def "get-org-rf-templates" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11730,7 +11730,7 @@ export def "orgs-rftemplates get-rf-templates" [
 # --band_24 shape: {allow_rrm_disable?: bool, ant_gain?: int, antenna_mode?: "default"|"1x1"|"2x2"|"3x3"|"4x4", bandwidth?: "20"|"40"|"80", channel?: int, channels?: list<int>, disabled?: bool, power?: int, power_max?: int, power_min?: int, preamble?: "short"|"long"|"auto", usage?: "24"|"5"|"rrm"}
 # --band_5 shape: {allow_rrm_disable?: bool, ant_gain?: int, antenna_mode?: "default"|"1x1"|"2x2"|"3x3"|"4x4", bandwidth?: "20"|"40"|"80", channel?: int, channels?: list<int>, disabled?: bool, power?: int, power_max?: int, power_min?: int, preamble?: "short"|"long"|"auto", usage?: "24"|"5"|"rrm"}
 # --band_5_on_24_radio shape: {allow_rrm_disable?: bool, ant_gain?: int, antenna_mode?: "default"|"1x1"|"2x2"|"3x3"|"4x4", bandwidth?: "20"|"40"|"80", channel?: int, channels?: list<int>, disabled?: bool, power?: int, power_max?: int, power_min?: int, preamble?: "short"|"long"|"auto", usage?: "24"|"5"|"rrm"}
-export def "orgs-rftemplates create-rf-template" [
+export def "create-org-rf-template" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11779,7 +11779,7 @@ export def "orgs-rftemplates create-rf-template" [
 #
 # DELETE /api/v1/orgs/{org_id}/rftemplates/{rftemplate_id}
 # operationId: deleteOrgRfTemplate
-export def "orgs-rftemplates delete-rf-template" [
+export def "delete-org-rf-template" [
   org_id: string
   rftemplate_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11817,7 +11817,7 @@ export def "orgs-rftemplates delete-rf-template" [
 #
 # GET /api/v1/orgs/{org_id}/rftemplates/{rftemplate_id}
 # operationId: getOrgRfTemplate
-export def "orgs-rftemplates get-rf-template" [
+export def "get-org-rf-template" [
   org_id: string
   rftemplate_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11858,7 +11858,7 @@ export def "orgs-rftemplates get-rf-template" [
 # --band_24 shape: {allow_rrm_disable?: bool, ant_gain?: int, antenna_mode?: "default"|"1x1"|"2x2"|"3x3"|"4x4", bandwidth?: "20"|"40"|"80", channel?: int, channels?: list<int>, disabled?: bool, power?: int, power_max?: int, power_min?: int, preamble?: "short"|"long"|"auto", usage?: "24"|"5"|"rrm"}
 # --band_5 shape: {allow_rrm_disable?: bool, ant_gain?: int, antenna_mode?: "default"|"1x1"|"2x2"|"3x3"|"4x4", bandwidth?: "20"|"40"|"80", channel?: int, channels?: list<int>, disabled?: bool, power?: int, power_max?: int, power_min?: int, preamble?: "short"|"long"|"auto", usage?: "24"|"5"|"rrm"}
 # --band_5_on_24_radio shape: {allow_rrm_disable?: bool, ant_gain?: int, antenna_mode?: "default"|"1x1"|"2x2"|"3x3"|"4x4", bandwidth?: "20"|"40"|"80", channel?: int, channels?: list<int>, disabled?: bool, power?: int, power_max?: int, power_min?: int, preamble?: "short"|"long"|"auto", usage?: "24"|"5"|"rrm"}
-export def "orgs-rftemplates update-rf-template" [
+export def "update-org-rf-template" [
   org_id: string
   rftemplate_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11909,7 +11909,7 @@ export def "orgs-rftemplates update-rf-template" [
 #
 # PUT /api/v1/orgs/{org_id}/sdkclients/{sdkclient_id}
 # operationId: updateSdkClient
-export def "orgs-sdkclients update-sdk-client" [
+export def "update-sdk-client" [
   org_id: string
   sdkclient_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11951,7 +11951,7 @@ export def "orgs-sdkclients update-sdk-client" [
 #
 # GET /api/v1/orgs/{org_id}/sdkinvites
 # operationId: getSdkInvites
-export def "orgs-sdkinvites get-sdk-invites" [
+export def "get-sdk-invites" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11987,7 +11987,7 @@ export def "orgs-sdkinvites get-sdk-invites" [
 #
 # POST /api/v1/orgs/{org_id}/sdkinvites
 # operationId: createSdkInvite
-export def "orgs-sdkinvites create-sdk-invite" [
+export def "create-sdk-invite" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12031,7 +12031,7 @@ export def "orgs-sdkinvites create-sdk-invite" [
 #
 # DELETE /api/v1/orgs/{org_id}/sdkinvites/{sdkinvite_id}
 # operationId: revokeSdkInvite
-export def "orgs-sdkinvites delete-sdk-invite" [
+export def "revoke-sdk-invite" [
   org_id: string
   sdkinvite_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12069,7 +12069,7 @@ export def "orgs-sdkinvites delete-sdk-invite" [
 #
 # GET /api/v1/orgs/{org_id}/sdkinvites/{sdkinvite_id}
 # operationId: getSdkInvite
-export def "orgs-sdkinvites get-sdk-invite" [
+export def "get-sdk-invite" [
   org_id: string
   sdkinvite_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12107,7 +12107,7 @@ export def "orgs-sdkinvites get-sdk-invite" [
 #
 # PUT /api/v1/orgs/{org_id}/sdkinvites/{sdkinvite_id}
 # operationId: updateSdkInvite
-export def "orgs-sdkinvites update-sdk-invite" [
+export def "update-sdk-invite" [
   org_id: string
   sdkinvite_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12153,7 +12153,7 @@ export def "orgs-sdkinvites update-sdk-invite" [
 #
 # POST /api/v1/orgs/{org_id}/sdkinvites/{sdkinvite_id}/email
 # operationId: sendSdkInviteEmail
-export def "orgs-sdkinvites-email send-sdk-invite" [
+export def "send-sdk-invite-email" [
   org_id: string
   sdkinvite_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12195,7 +12195,7 @@ export def "orgs-sdkinvites-email send-sdk-invite" [
 #
 # GET /api/v1/orgs/{org_id}/sdkinvites/{sdkinvite_id}/qrcode
 # operationId: getSdkInviteQrCode
-export def "orgs-sdkinvites-qrcode get-sdk-invite-qr-code" [
+export def "get-sdk-invite-qr-code" [
   org_id: string
   sdkinvite_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12233,7 +12233,7 @@ export def "orgs-sdkinvites-qrcode get-sdk-invite-qr-code" [
 #
 # POST /api/v1/orgs/{org_id}/sdkinvites/{sdkinvite_id}/sms
 # operationId: sendSdkInviteSms
-export def "orgs-sdkinvites-sms send-sdk-invite" [
+export def "send-sdk-invite-sms" [
   org_id: string
   sdkinvite_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12275,7 +12275,7 @@ export def "orgs-sdkinvites-sms send-sdk-invite" [
 #
 # GET /api/v1/orgs/{org_id}/sdktemplates
 # operationId: getSdkTemplates
-export def "orgs-sdktemplates get-sdk-templates" [
+export def "get-sdk-templates" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12311,7 +12311,7 @@ export def "orgs-sdktemplates get-sdk-templates" [
 #
 # POST /api/v1/orgs/{org_id}/sdktemplates
 # operationId: createSdkTemplate
-export def "orgs-sdktemplates create-sdk-template" [
+export def "create-sdk-template" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12357,7 +12357,7 @@ export def "orgs-sdktemplates create-sdk-template" [
 #
 # DELETE /api/v1/orgs/{org_id}/sdktemplates/{sdktemplate_id}
 # operationId: deleteSdkTemplate
-export def "orgs-sdktemplates delete-sdk-template" [
+export def "delete-sdk-template" [
   org_id: string
   sdktemplate_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12395,7 +12395,7 @@ export def "orgs-sdktemplates delete-sdk-template" [
 #
 # GET /api/v1/orgs/{org_id}/sdktemplates/{sdktemplate_id}
 # operationId: getSdkTemplate
-export def "orgs-sdktemplates get-sdk-template" [
+export def "get-sdk-template" [
   org_id: string
   sdktemplate_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12433,7 +12433,7 @@ export def "orgs-sdktemplates get-sdk-template" [
 #
 # PUT /api/v1/orgs/{org_id}/sdktemplates/{sdktemplate_id}
 # operationId: updateSdkTemplate
-export def "orgs-sdktemplates update-sdk-template" [
+export def "update-sdk-template" [
   org_id: string
   sdktemplate_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12481,7 +12481,7 @@ export def "orgs-sdktemplates update-sdk-template" [
 #
 # GET /api/v1/orgs/{org_id}/secpolicies
 # operationId: getOrgSecPolicies
-export def "orgs-secpolicies get-sec-policies" [
+export def "get-org-sec-policies" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12518,7 +12518,7 @@ export def "orgs-secpolicies get-sec-policies" [
 # POST /api/v1/orgs/{org_id}/secpolicies
 # operationId: createOrgSecPolicies
 # --wlans item shape: {acct_interim_interval?: int, acct_servers?: list, airwatch?: record, allow_ipv6_ndp?: bool, allow_mdns?: bool, allow_ssdp?: bool, ap_ids?: list<string>, app_limit?: record, app_qos?: record, apply_to?: "site"|"wxtags"|"aps", arp_filter?: bool, auth?: record, auth_server_selection?: "ordered"|"unordered", auth_servers?: list, auth_servers_nas_id?: string, auth_servers_nas_ip?: string, auth_servers_retries?: int, auth_servers_timeout?: int, band?: string, band_steer?: bool, ... (68 more fields)}
-export def "orgs-secpolicies create-sec-policies" [
+export def "create-org-sec-policies" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12559,7 +12559,7 @@ export def "orgs-secpolicies create-sec-policies" [
 #
 # DELETE /api/v1/orgs/{org_id}/secpolicies/{secpolicy_id}
 # operationId: deleteOrgSecPolicy
-export def "orgs-secpolicies delete-sec-policy" [
+export def "delete-org-sec-policy" [
   org_id: string
   secpolicy_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12597,7 +12597,7 @@ export def "orgs-secpolicies delete-sec-policy" [
 #
 # GET /api/v1/orgs/{org_id}/secpolicies/{secpolicy_id}
 # operationId: getOrgSecPolicy
-export def "orgs-secpolicies get-sec-policy" [
+export def "get-org-sec-policy" [
   org_id: string
   secpolicy_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12636,7 +12636,7 @@ export def "orgs-secpolicies get-sec-policy" [
 # PUT /api/v1/orgs/{org_id}/secpolicies/{secpolicy_id}
 # operationId: updateOrgSecPolicies
 # --wlans item shape: {acct_interim_interval?: int, acct_servers?: list, airwatch?: record, allow_ipv6_ndp?: bool, allow_mdns?: bool, allow_ssdp?: bool, ap_ids?: list<string>, app_limit?: record, app_qos?: record, apply_to?: "site"|"wxtags"|"aps", arp_filter?: bool, auth?: record, auth_server_selection?: "ordered"|"unordered", auth_servers?: list, auth_servers_nas_id?: string, auth_servers_nas_ip?: string, auth_servers_retries?: int, auth_servers_timeout?: int, band?: string, band_steer?: bool, ... (68 more fields)}
-export def "orgs-secpolicies update-sec-policies" [
+export def "update-org-sec-policies" [
   org_id: string
   secpolicy_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12679,7 +12679,7 @@ export def "orgs-secpolicies update-sec-policies" [
 #
 # GET /api/v1/orgs/{org_id}/servicepolicies
 # operationId: getOrgServicePolicies
-export def "orgs-servicepolicies get-service-policies" [
+export def "get-org-service-policies" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12715,7 +12715,7 @@ export def "orgs-servicepolicies get-service-policies" [
 #
 # POST /api/v1/orgs/{org_id}/servicepolicies
 # operationId: createOrgServicePolicy
-export def "orgs-servicepolicies create-service-policy" [
+export def "create-org-service-policy" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12758,7 +12758,7 @@ export def "orgs-servicepolicies create-service-policy" [
 #
 # DELETE /api/v1/orgs/{org_id}/servicepolicies/{servicepolicy_id}
 # operationId: deleteOrgServicePolicy
-export def "orgs-servicepolicies delete-service-policy" [
+export def "delete-org-service-policy" [
   org_id: string
   servicepolicy_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12796,7 +12796,7 @@ export def "orgs-servicepolicies delete-service-policy" [
 #
 # GET /api/v1/orgs/{org_id}/servicepolicies/{servicepolicy_id}
 # operationId: getOrgServicePolicy
-export def "orgs-servicepolicies get-service-policy" [
+export def "get-org-service-policy" [
   org_id: string
   servicepolicy_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12834,7 +12834,7 @@ export def "orgs-servicepolicies get-service-policy" [
 #
 # PUT /api/v1/orgs/{org_id}/servicepolicies/{servicepolicy_id}
 # operationId: updateOrgServicePolicy
-export def "orgs-servicepolicies update-service-policy" [
+export def "update-org-service-policy" [
   org_id: string
   servicepolicy_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12879,7 +12879,7 @@ export def "orgs-servicepolicies update-service-policy" [
 #
 # GET /api/v1/orgs/{org_id}/services
 # operationId: getOrgServices
-export def "orgs-services list" [
+export def "get-org-services" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12916,7 +12916,7 @@ export def "orgs-services list" [
 # POST /api/v1/orgs/{org_id}/services
 # operationId: createOrgService
 # --specs item shape: {port_range?: int, protocol?: string}
-export def "orgs-services create" [
+export def "create-org-service" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12973,7 +12973,7 @@ export def "orgs-services create" [
 #
 # DELETE /api/v1/orgs/{org_id}/services/{service_id}
 # operationId: deleteOrgService
-export def "orgs-services delete" [
+export def "delete-org-service" [
   org_id: string
   service_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13011,7 +13011,7 @@ export def "orgs-services delete" [
 #
 # GET /api/v1/orgs/{org_id}/services/{service_id}
 # operationId: getOrgService
-export def "orgs-services get" [
+export def "get-org-service" [
   org_id: string
   service_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13050,7 +13050,7 @@ export def "orgs-services get" [
 # PUT /api/v1/orgs/{org_id}/services/{service_id}
 # operationId: updateOrgService
 # --specs item shape: {port_range?: int, protocol?: string}
-export def "orgs-services update" [
+export def "update-org-service" [
   org_id: string
   service_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13109,7 +13109,7 @@ export def "orgs-services update" [
 #
 # GET /api/v1/orgs/{org_id}/setting
 # operationId: getOrgSettings
-export def "orgs-setting get" [
+export def "get-org-settings" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13165,7 +13165,7 @@ export def "orgs-setting get" [
 # --simple_alert shape: {arp_failure?: record, dhcp_failure?: record, dns_failure?: record}
 # --switch_mgmt shape: {ap_affinity_threshold?: int}
 # --vpn_options shape: {as_base?: int}
-export def "orgs-setting update" [
+export def "update-org-settings" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13230,7 +13230,7 @@ export def "orgs-setting update" [
 #
 # DELETE /api/v1/orgs/{org_id}/setting/blacklist
 # operationId: deleteOrgClientsBlocklist
-export def "orgs-setting-blacklist delete-clients-blocklist" [
+export def "delete-org-clients-blocklist" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13266,7 +13266,7 @@ export def "orgs-setting-blacklist delete-clients-blocklist" [
 #
 # POST /api/v1/orgs/{org_id}/setting/blacklist
 # operationId: createOrgClientsBlocklist
-export def "orgs-setting-blacklist create-clients-blocklist" [
+export def "create-org-clients-blocklist" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13306,7 +13306,7 @@ export def "orgs-setting-blacklist create-clients-blocklist" [
 #
 # POST /api/v1/orgs/{org_id}/setting/cradlepoint/setup
 # operationId: setupOrgCradlepointConnectionToMist
-export def "orgs-setting-cradlepoint-setup create-connection-to-mist" [
+export def "setup-org-cradlepoint-connection-to-mist" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13349,7 +13349,7 @@ export def "orgs-setting-cradlepoint-setup create-connection-to-mist" [
 #
 # POST /api/v1/orgs/{org_id}/setting/cradlepoint/sync
 # operationId: syncOrgCradlepointRouters
-export def "orgs-setting-cradlepoint-sync sync-routers" [
+export def "sync-org-cradlepoint-routers" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13385,7 +13385,7 @@ export def "orgs-setting-cradlepoint-sync sync-routers" [
 #
 # POST /api/v1/orgs/{org_id}/setting/juniper/link_accounts
 # operationId: linkOrgToJuniperJuniperAccount
-export def "orgs-setting-juniper-link-accounts create" [
+export def "link-org-to-juniper-juniper-account" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13426,7 +13426,7 @@ export def "orgs-setting-juniper-link-accounts create" [
 #
 # DELETE /api/v1/orgs/{org_id}/setting/juniper/linked_account
 # operationId: unlinkOrgFromJuniperCustomerId
-export def "orgs-setting-juniper-linked-account delete-unlink-from-customer" [
+export def "unlink-org-from-juniper-customer-id" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13467,7 +13467,7 @@ export def "orgs-setting-juniper-linked-account delete-unlink-from-customer" [
 #
 # POST /api/v1/orgs/{org_id}/setting/pcap_bucket/setup
 # operationId: setOrgCustomBucket
-export def "orgs-setting-pcap-bucket-setup update-custom" [
+export def "set-org-custom-bucket" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13507,7 +13507,7 @@ export def "orgs-setting-pcap-bucket-setup update-custom" [
 #
 # POST /api/v1/orgs/{org_id}/setting/pcap_bucket/verify
 # operationId: verifyOrgCustomBucket
-export def "orgs-setting-pcap-bucket-verify verify-custom" [
+export def "verify-org-custom-bucket" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13548,7 +13548,7 @@ export def "orgs-setting-pcap-bucket-verify verify-custom" [
 #
 # POST /api/v1/orgs/{org_id}/setting/zscaler/setup
 # operationId: setupOrgZscalerCredential
-export def "orgs-setting-zscaler-setup create-credential" [
+export def "setup-org-zscaler-credential" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13593,7 +13593,7 @@ export def "orgs-setting-zscaler-setup create-credential" [
 # DEPRECATED
 # operationId: deleteOrgOauthAppAuthorization_deprecated
 @deprecated
-export def "orgs-setting-link delete-oauth-authorization-deprecated" [
+export def "delete-org-oauth-app-authorization-deprecated" [
   org_id: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13633,7 +13633,7 @@ export def "orgs-setting-link delete-oauth-authorization-deprecated" [
 # DEPRECATED
 # operationId: getOrgOauthAppLinkedStatus_deprecated
 @deprecated
-export def "orgs-setting-link get-oauth-linked-status-deprecated" [
+export def "get-org-oauth-app-linked-status-deprecated" [
   org_id: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13673,7 +13673,7 @@ export def "orgs-setting-link get-oauth-linked-status-deprecated" [
 #
 # DELETE /api/v1/orgs/{org_id}/setting/{app_name}/link_accounts
 # operationId: deleteOrgOauthAppAuthorization
-export def "orgs-setting-link-accounts delete-oauth-authorization" [
+export def "delete-org-oauth-app-authorization" [
   org_id: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13715,7 +13715,7 @@ export def "orgs-setting-link-accounts delete-oauth-authorization" [
 #
 # GET /api/v1/orgs/{org_id}/setting/{app_name}/link_accounts
 # operationId: getOrgOauthAppLinkedStatus
-export def "orgs-setting-link-accounts get-oauth-linked-status" [
+export def "get-org-oauth-app-linked-status" [
   org_id: string
   app_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13755,7 +13755,7 @@ export def "orgs-setting-link-accounts get-oauth-linked-status" [
 #
 # GET /api/v1/orgs/{org_id}/sitegroups
 # operationId: getOrgSiteGroups
-export def "orgs-sitegroups get-site-groups" [
+export def "get-org-site-groups" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13791,7 +13791,7 @@ export def "orgs-sitegroups get-site-groups" [
 #
 # POST /api/v1/orgs/{org_id}/sitegroups
 # operationId: createOrgSiteGroup
-export def "orgs-sitegroups create-site-group" [
+export def "create-org-site-group" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13832,7 +13832,7 @@ export def "orgs-sitegroups create-site-group" [
 #
 # DELETE /api/v1/orgs/{org_id}/sitegroups/{sitegroup_id}
 # operationId: deleteOrgSiteGroup
-export def "orgs-sitegroups delete-site-group" [
+export def "delete-org-site-group" [
   org_id: string
   sitegroup_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13870,7 +13870,7 @@ export def "orgs-sitegroups delete-site-group" [
 #
 # GET /api/v1/orgs/{org_id}/sitegroups/{sitegroup_id}
 # operationId: getOrgSiteGroup
-export def "orgs-sitegroups get-site-group" [
+export def "get-org-site-group" [
   org_id: string
   sitegroup_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13908,7 +13908,7 @@ export def "orgs-sitegroups get-site-group" [
 #
 # PUT /api/v1/orgs/{org_id}/sitegroups/{sitegroup_id}
 # operationId: updateOrgSiteGroup
-export def "orgs-sitegroups update-site-group" [
+export def "update-org-site-group" [
   org_id: string
   sitegroup_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13951,7 +13951,7 @@ export def "orgs-sitegroups update-site-group" [
 #
 # GET /api/v1/orgs/{org_id}/sites
 # operationId: getOrgSites
-export def "orgs-sites get" [
+export def "get-org-sites" [
   org_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13991,7 +13991,7 @@ export def "orgs-sites get" [
 # POST /api/v1/orgs/{org_id}/sites
 # operationId: createOrgSite
 # --latlng shape: {lat?: float, lng?: float}
-export def "orgs-sites create" [
+export def "create-org-site" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14044,7 +14044,7 @@ export def "orgs-sites create" [
 #
 # GET /api/v1/orgs/{org_id}/sites/count
 # operationId: countOrgSites
-export def "orgs-sites-count get" [
+export def "count-org-sites" [
   org_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14087,7 +14087,7 @@ export def "orgs-sites-count get" [
 #
 # GET /api/v1/orgs/{org_id}/sites/search
 # operationId: searchOrgSites
-export def "orgs-sites-search list" [
+export def "search-org-sites" [
   org_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14144,7 +14144,7 @@ export def "orgs-sites-search list" [
 #
 # POST /api/v1/orgs/{org_id}/sites/{site_name}/maps/import
 # operationId: importOrgMapToSite
-export def "orgs-sites-maps-import import" [
+export def "import-org-map-to-site" [
   org_id: string
   site_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -14189,7 +14189,7 @@ export def "orgs-sites-maps-import import" [
 #
 # GET /api/v1/orgs/{org_id}/sitetemplates
 # operationId: getOrgSiteTemplates
-export def "orgs-sitetemplates get-site-templates" [
+export def "get-org-site-templates" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14227,7 +14227,7 @@ export def "orgs-sitetemplates get-site-templates" [
 # operationId: createOrgSiteTemplates
 # --auto_upgrade shape: {day_of_week?: string, enabled?: bool, time_of_day?: string, version?: string}
 # --vars shape: {SSID_STR?: string, VLAN_ID?: string}
-export def "orgs-sitetemplates create-site-templates" [
+export def "create-org-site-templates" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14269,7 +14269,7 @@ export def "orgs-sitetemplates create-site-templates" [
 #
 # DELETE /api/v1/orgs/{org_id}/sitetemplates/{sitetemplate_id}
 # operationId: deleteOrgSiteTemplate
-export def "orgs-sitetemplates delete-site-template" [
+export def "delete-org-site-template" [
   org_id: string
   sitetemplate_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -14307,7 +14307,7 @@ export def "orgs-sitetemplates delete-site-template" [
 #
 # GET /api/v1/orgs/{org_id}/sitetemplates/{sitetemplate_id}
 # operationId: getOrgSiteTemplate
-export def "orgs-sitetemplates get-site-template" [
+export def "get-org-site-template" [
   org_id: string
   sitetemplate_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -14347,7 +14347,7 @@ export def "orgs-sitetemplates get-site-template" [
 # operationId: updateOrgSiteTemplate
 # --auto_upgrade shape: {day_of_week?: string, enabled?: bool, time_of_day?: string, version?: string}
 # --vars shape: {SSID_STR?: string, VLAN_ID?: string}
-export def "orgs-sitetemplates update-site-template" [
+export def "update-org-site-template" [
   org_id: string
   sitetemplate_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -14391,7 +14391,7 @@ export def "orgs-sitetemplates update-site-template" [
 #
 # GET /api/v1/orgs/{org_id}/ssoroles
 # operationId: getOrgSsoRoles
-export def "orgs-ssoroles get-sso-roles" [
+export def "get-org-sso-roles" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14428,7 +14428,7 @@ export def "orgs-ssoroles get-sso-roles" [
 # POST /api/v1/orgs/{org_id}/ssoroles
 # operationId: createOrgSsoRole
 # --privileges item shape: {msp_id?: string, msp_logo_url?: string, msp_name?: string, msp_url?: string, name?: string, org_id?: string, org_name?: string, orggroup_ids?: list<string>, role: "admin"|"write"|"read"|"helpdesk"|"installer", scope: "org"|"site"|"msp"|"orggroup", site_id?: string, sitegroup_ids?: list<string>, views?: list<string>}
-export def "orgs-ssoroles create-sso-role" [
+export def "create-org-sso-role" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14469,7 +14469,7 @@ export def "orgs-ssoroles create-sso-role" [
 #
 # DELETE /api/v1/orgs/{org_id}/ssoroles/{ssorole_id}
 # operationId: deleteOrgSsoRole
-export def "orgs-ssoroles delete-sso-role" [
+export def "delete-org-sso-role" [
   org_id: string
   ssorole_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -14507,7 +14507,7 @@ export def "orgs-ssoroles delete-sso-role" [
 #
 # GET /api/v1/orgs/{org_id}/ssoroles/{ssorole_id}
 # operationId: getOrgSsoRole
-export def "orgs-ssoroles get-sso-role" [
+export def "get-org-sso-role" [
   org_id: string
   ssorole_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -14546,7 +14546,7 @@ export def "orgs-ssoroles get-sso-role" [
 # PUT /api/v1/orgs/{org_id}/ssoroles/{ssorole_id}
 # operationId: updateOrgSsoRole
 # --privileges item shape: {msp_id?: string, msp_logo_url?: string, msp_name?: string, msp_url?: string, name?: string, org_id?: string, org_name?: string, orggroup_ids?: list<string>, role: "admin"|"write"|"read"|"helpdesk"|"installer", scope: "org"|"site"|"msp"|"orggroup", site_id?: string, sitegroup_ids?: list<string>, views?: list<string>}
-export def "orgs-ssoroles update-sso-role" [
+export def "update-org-sso-role" [
   org_id: string
   ssorole_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -14589,7 +14589,7 @@ export def "orgs-ssoroles update-sso-role" [
 #
 # GET /api/v1/orgs/{org_id}/ssos
 # operationId: getOrgSsos
-export def "orgs-ssos list" [
+export def "get-org-ssos" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14625,7 +14625,7 @@ export def "orgs-ssos list" [
 #
 # POST /api/v1/orgs/{org_id}/ssos
 # operationId: createOrgSso
-export def "orgs-ssos create" [
+export def "create-org-sso" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14697,7 +14697,7 @@ export def "orgs-ssos create" [
 #
 # DELETE /api/v1/orgs/{org_id}/ssos/{sso_id}
 # operationId: deleteOrgSso
-export def "orgs-ssos delete" [
+export def "delete-org-sso" [
   org_id: string
   sso_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -14735,7 +14735,7 @@ export def "orgs-ssos delete" [
 #
 # GET /api/v1/orgs/{org_id}/ssos/{sso_id}
 # operationId: getOrgSso
-export def "orgs-ssos get" [
+export def "get-org-sso" [
   org_id: string
   sso_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -14773,7 +14773,7 @@ export def "orgs-ssos get" [
 #
 # PUT /api/v1/orgs/{org_id}/ssos/{sso_id}
 # operationId: updateOrgSso
-export def "orgs-ssos update" [
+export def "update-org-sso" [
   org_id: string
   sso_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -14847,7 +14847,7 @@ export def "orgs-ssos update" [
 #
 # GET /api/v1/orgs/{org_id}/ssos/{sso_id}/failures
 # operationId: getOrgSsoLatestFailures
-export def "orgs-ssos-failures get-latest" [
+export def "get-org-sso-latest-failures" [
   org_id: any
   sso_id: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -14891,7 +14891,7 @@ export def "orgs-ssos-failures get-latest" [
 #
 # GET /api/v1/orgs/{org_id}/ssos/{sso_id}/metadata
 # operationId: getOrgSsoSamlMetadata
-export def "orgs-ssos-metadata get-saml" [
+export def "get-org-sso-saml-metadata" [
   org_id: string
   sso_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -14929,7 +14929,7 @@ export def "orgs-ssos-metadata get-saml" [
 #
 # GET /api/v1/orgs/{org_id}/ssos/{sso_id}/metadata.xml
 # operationId: downloadOrgSsoSamlMetadata
-export def "orgs-ssos-metadata-xml download-saml" [
+export def "download-org-sso-saml-metadata" [
   org_id: string
   sso_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -14967,7 +14967,7 @@ export def "orgs-ssos-metadata-xml download-saml" [
 #
 # GET /api/v1/orgs/{org_id}/ssr/upgrade
 # operationId: getOrgSsrUpgrades
-export def "orgs-ssr-upgrade get" [
+export def "get-org-ssr-upgrades" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15003,7 +15003,7 @@ export def "orgs-ssr-upgrade get" [
 #
 # POST /api/v1/orgs/{org_id}/ssr/upgrade
 # operationId: upgradeOrgSsrs
-export def "orgs-ssr-upgrade create" [
+export def "upgrade-org-ssrs" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15048,7 +15048,7 @@ export def "orgs-ssr-upgrade create" [
 #
 # POST /api/v1/orgs/{org_id}/ssr/upgrade/{upgrade_id}/cancel
 # operationId: cancelOrgSsrUpgrade
-export def "orgs-ssr-upgrade-cancel cancel" [
+export def "cancel-org-ssr-upgrade" [
   org_id: string
   upgrade_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -15090,7 +15090,7 @@ export def "orgs-ssr-upgrade-cancel cancel" [
 #
 # GET /api/v1/orgs/{org_id}/ssr/versions
 # operationId: getOrgSsrUpgradeInfo
-export def "orgs-ssr-versions get-upgrade" [
+export def "get-org-ssr-upgrade-info" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15128,7 +15128,7 @@ export def "orgs-ssr-versions get-upgrade" [
 #
 # GET /api/v1/orgs/{org_id}/stats
 # operationId: getOrgStats
-export def "orgs-stats get" [
+export def "get-org-stats" [
   org_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15170,7 +15170,7 @@ export def "orgs-stats get" [
 #
 # GET /api/v1/orgs/{org_id}/stats/assets
 # operationId: getOrgAssetsStats
-export def "orgs-stats-assets get" [
+export def "get-org-assets-stats" [
   org_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15212,7 +15212,7 @@ export def "orgs-stats-assets get" [
 #
 # GET /api/v1/orgs/{org_id}/stats/assets/count
 # operationId: countOrgAssetsByDistanceField
-export def "orgs-stats-assets-count get-by-distance-field" [
+export def "count-org-assets-by-distance-field" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15250,7 +15250,7 @@ export def "orgs-stats-assets-count get-by-distance-field" [
 #
 # GET /api/v1/orgs/{org_id}/stats/assets/search
 # operationId: searchOrgAssets
-export def "orgs-stats-assets-search list" [
+export def "search-org-assets" [
   org_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15305,7 +15305,7 @@ export def "orgs-stats-assets-search list" [
 #
 # GET /api/v1/orgs/{org_id}/stats/bgp_peers/count
 # operationId: countOrgBgpStats
-export def "orgs-stats-bgp-peers-count stats" [
+export def "count-org-bgp-stats" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15341,7 +15341,7 @@ export def "orgs-stats-bgp-peers-count stats" [
 #
 # GET /api/v1/orgs/{org_id}/stats/bgp_peers/search
 # operationId: searchOrgBgpStats
-export def "orgs-stats-bgp-peers-search list" [
+export def "search-org-bgp-stats" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15377,7 +15377,7 @@ export def "orgs-stats-bgp-peers-search list" [
 #
 # GET /api/v1/orgs/{org_id}/stats/devices
 # operationId: getOrgDevicesStats
-export def "orgs-stats-devices get" [
+export def "get-org-devices-stats" [
   org_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15425,7 +15425,7 @@ export def "orgs-stats-devices get" [
 #
 # GET /api/v1/orgs/{org_id}/stats/mxedges
 # operationId: getOrgMxEdgesStats
-export def "orgs-stats-mxedges get-mx-edges" [
+export def "get-org-mx-edges-stats" [
   org_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15468,7 +15468,7 @@ export def "orgs-stats-mxedges get-mx-edges" [
 #
 # GET /api/v1/orgs/{org_id}/stats/mxedges/{mxedge_id}
 # operationId: getOrgMxEdgeStats
-export def "orgs-stats-mxedges get-mx-edge" [
+export def "get-org-mx-edge-stats" [
   org_id: string
   mxedge_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -15506,7 +15506,7 @@ export def "orgs-stats-mxedges get-mx-edge" [
 #
 # GET /api/v1/orgs/{org_id}/stats/otherdevices/{device_mac}
 # operationId: getOrgOtherDeviceStats
-export def "orgs-stats-otherdevices get-other" [
+export def "get-org-other-device-stats" [
   org_id: string
   device_mac: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -15544,7 +15544,7 @@ export def "orgs-stats-otherdevices get-other" [
 #
 # GET /api/v1/orgs/{org_id}/stats/ports/search
 # operationId: searchOrgSwOrGwPorts
-export def "orgs-stats-ports-search list-sw-or-gw" [
+export def "search-org-sw-or-gw-ports" [
   org_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15614,7 +15614,7 @@ export def "orgs-stats-ports-search list-sw-or-gw" [
 #
 # GET /api/v1/orgs/{org_id}/stats/switch_ports/count
 # operationId: countOrgByDisctinctAttributesOfSwitchPorts
-export def "orgs-stats-switch-ports-count get-by-disctinct-attributes" [
+export def "count-org-by-disctinct-attributes-of-switch-ports" [
   org_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15682,7 +15682,7 @@ export def "orgs-stats-switch-ports-count get-by-disctinct-attributes" [
 #
 # GET /api/v1/orgs/{org_id}/stats/tunnels/count
 # operationId: countOrgTunnelsStats
-export def "orgs-stats-tunnels-count stats" [
+export def "count-org-tunnels-stats" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15721,7 +15721,7 @@ export def "orgs-stats-tunnels-count stats" [
 #
 # GET /api/v1/orgs/{org_id}/stats/tunnels/search
 # operationId: searchOrgTunnelsStats
-export def "orgs-stats-tunnels-search list" [
+export def "search-org-tunnels-stats" [
   org_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15778,7 +15778,7 @@ export def "orgs-stats-tunnels-search list" [
 #
 # GET /api/v1/orgs/{org_id}/stats/vpn_peers/count
 # operationId: countOrgPeerPathStats
-export def "orgs-stats-vpn-peers-count stats-path" [
+export def "count-org-peer-path-stats" [
   org_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15821,7 +15821,7 @@ export def "orgs-stats-vpn-peers-count stats-path" [
 #
 # GET /api/v1/orgs/{org_id}/stats/vpn_peers/search
 # operationId: searchOrgPeerPathStats
-export def "orgs-stats-vpn-peers-search list-path" [
+export def "search-org-peer-path-stats" [
   org_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15862,7 +15862,7 @@ export def "orgs-stats-vpn-peers-search list-path" [
 #
 # DELETE /api/v1/orgs/{org_id}/subscriptions
 # operationId: unsubscribeOrgAlarmsReports
-export def "orgs-subscriptions unsubscribe-alarms-reports" [
+export def "unsubscribe-org-alarms-reports" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15898,7 +15898,7 @@ export def "orgs-subscriptions unsubscribe-alarms-reports" [
 #
 # POST /api/v1/orgs/{org_id}/subscriptions
 # operationId: subscribeOrgAlarmsReports
-export def "orgs-subscriptions subscribe-alarms-reports" [
+export def "subscribe-org-alarms-reports" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15934,7 +15934,7 @@ export def "orgs-subscriptions subscribe-alarms-reports" [
 #
 # GET /api/v1/orgs/{org_id}/templates
 # operationId: getOrgTemplates
-export def "orgs-templates list" [
+export def "get-org-templates" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15972,7 +15972,7 @@ export def "orgs-templates list" [
 # operationId: createOrgTemplate
 # --applies shape: {org_id?: string, site_ids?: list<string>, sitegroup_ids?: list<string>}
 # --exceptions shape: {site_ids?: list<string>, sitegroup_ids?: list<string>}
-export def "orgs-templates create" [
+export def "create-org-template" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16016,7 +16016,7 @@ export def "orgs-templates create" [
 #
 # DELETE /api/v1/orgs/{org_id}/templates/{template_id}
 # operationId: deleteOrgTemplate
-export def "orgs-templates delete" [
+export def "delete-org-template" [
   org_id: string
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16054,7 +16054,7 @@ export def "orgs-templates delete" [
 #
 # GET /api/v1/orgs/{org_id}/templates/{template_id}
 # operationId: getOrgTemplate
-export def "orgs-templates get" [
+export def "get-org-template" [
   org_id: string
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16094,7 +16094,7 @@ export def "orgs-templates get" [
 # operationId: updateOrgTemplate
 # --applies shape: {org_id?: string, site_ids?: list<string>, sitegroup_ids?: list<string>}
 # --exceptions shape: {site_ids?: list<string>, sitegroup_ids?: list<string>}
-export def "orgs-templates update" [
+export def "update-org-template" [
   org_id: string
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16140,7 +16140,7 @@ export def "orgs-templates update" [
 #
 # POST /api/v1/orgs/{org_id}/templates/{template_id}/clone
 # operationId: cloneOrgTemplate
-export def "orgs-templates-clone clone" [
+export def "clone-org-template" [
   org_id: string
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16182,7 +16182,7 @@ export def "orgs-templates-clone clone" [
 #
 # GET /api/v1/orgs/{org_id}/tickets
 # operationId: getOrgTickets
-export def "orgs-tickets list" [
+export def "get-org-tickets" [
   org_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16223,7 +16223,7 @@ export def "orgs-tickets list" [
 # POST /api/v1/orgs/{org_id}/tickets
 # operationId: createOrgTicket
 # --comments item shape: {attachments?: list, author: string, comment: string, created_at: int}
-export def "orgs-tickets create" [
+export def "create-org-ticket" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16267,7 +16267,7 @@ export def "orgs-tickets create" [
 #
 # GET /api/v1/orgs/{org_id}/tickets/count
 # operationId: countOrgTickets
-export def "orgs-tickets-count get" [
+export def "count-org-tickets" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16305,7 +16305,7 @@ export def "orgs-tickets-count get" [
 #
 # GET /api/v1/orgs/{org_id}/tickets/{ticket_id}
 # operationId: getOrgTicket
-export def "orgs-tickets get" [
+export def "get-org-ticket" [
   org_id: string
   ticket_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16344,7 +16344,7 @@ export def "orgs-tickets get" [
 # PUT /api/v1/orgs/{org_id}/tickets/{ticket_id}
 # operationId: updateOrgTicket
 # --comments item shape: {attachments?: list, author: string, comment: string, created_at: int}
-export def "orgs-tickets update" [
+export def "update-org-ticket" [
   org_id: string
   ticket_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16390,7 +16390,7 @@ export def "orgs-tickets update" [
 #
 # POST /api/v1/orgs/{org_id}/tickets/{ticket_id}/comments
 # operationId: addOrgTicketComment
-export def "orgs-tickets-comments create" [
+export def "add-org-ticket-comment" [
   org_id: string
   ticket_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16432,7 +16432,7 @@ export def "orgs-tickets-comments create" [
 #
 # GET /api/v1/orgs/{org_id}/troubleshoot
 # operationId: troubleshootOrgClient
-export def "orgs-troubleshoot get-client" [
+export def "troubleshoot-org-client" [
   org_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16474,7 +16474,7 @@ export def "orgs-troubleshoot get-client" [
 #
 # GET /api/v1/orgs/{org_id}/vpns
 # operationId: getOrgsVpns
-export def "orgs-vpns list" [
+export def "get-orgs-vpns" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16510,7 +16510,7 @@ export def "orgs-vpns list" [
 #
 # POST /api/v1/orgs/{org_id}/vpns
 # operationId: createOrgVpns
-export def "orgs-vpns create" [
+export def "create-org-vpns" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16552,7 +16552,7 @@ export def "orgs-vpns create" [
 #
 # DELETE /api/v1/orgs/{org_id}/vpns/{vpn_id}
 # operationId: deleteOrgVpn
-export def "orgs-vpns delete" [
+export def "delete-org-vpn" [
   org_id: string
   vpn_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16590,7 +16590,7 @@ export def "orgs-vpns delete" [
 #
 # GET /api/v1/orgs/{org_id}/vpns/{vpn_id}
 # operationId: getOrgVpn
-export def "orgs-vpns get" [
+export def "get-org-vpn" [
   org_id: string
   vpn_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16628,7 +16628,7 @@ export def "orgs-vpns get" [
 #
 # PUT /api/v1/orgs/{org_id}/vpns/{vpn_id}
 # operationId: updateOrgVpn
-export def "orgs-vpns update" [
+export def "update-org-vpn" [
   org_id: string
   vpn_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16672,7 +16672,7 @@ export def "orgs-vpns update" [
 #
 # GET /api/v1/orgs/{org_id}/webhooks
 # operationId: getOrgWebhooks
-export def "orgs-webhooks list" [
+export def "get-org-webhooks" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16708,7 +16708,7 @@ export def "orgs-webhooks list" [
 #
 # POST /api/v1/orgs/{org_id}/webhooks
 # operationId: createOrgWebhook
-export def "orgs-webhooks create" [
+export def "create-org-webhook" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16756,7 +16756,7 @@ export def "orgs-webhooks create" [
 #
 # DELETE /api/v1/orgs/{org_id}/webhooks/{webhook_id}
 # operationId: deleteOrgWebhook
-export def "orgs-webhooks delete" [
+export def "delete-org-webhook" [
   org_id: string
   webhook_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16794,7 +16794,7 @@ export def "orgs-webhooks delete" [
 #
 # GET /api/v1/orgs/{org_id}/webhooks/{webhook_id}
 # operationId: getOrgWebhook
-export def "orgs-webhooks get" [
+export def "get-org-webhook" [
   org_id: string
   webhook_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16832,7 +16832,7 @@ export def "orgs-webhooks get" [
 #
 # PUT /api/v1/orgs/{org_id}/webhooks/{webhook_id}
 # operationId: updateOrgWebhook
-export def "orgs-webhooks update" [
+export def "update-org-webhook" [
   org_id: string
   webhook_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16882,7 +16882,7 @@ export def "orgs-webhooks update" [
 #
 # GET /api/v1/orgs/{org_id}/wired_clients/count
 # operationId: countOrgClientsWired
-export def "orgs-wired-clients-count get" [
+export def "count-org-clients-wired" [
   org_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16925,7 +16925,7 @@ export def "orgs-wired-clients-count get" [
 #
 # GET /api/v1/orgs/{org_id}/wired_clients/search
 # operationId: searchOrgClientsWired
-export def "orgs-wired-clients-search list" [
+export def "search-org-clients-wired" [
   org_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16974,7 +16974,7 @@ export def "orgs-wired-clients-search list" [
 #
 # GET /api/v1/orgs/{org_id}/wlans
 # operationId: getOrgWlans
-export def "orgs-wlans list" [
+export def "get-org-wlans" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17030,7 +17030,7 @@ export def "orgs-wlans list" [
 # --rateset shape: {5?: record, 24?: record}
 # --schedule shape: {enabled?: bool, hours?: record}
 @deprecated --flag band
-export def "orgs-wlans create" [
+export def "create-org-wlan" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17157,7 +17157,7 @@ export def "orgs-wlans create" [
 #
 # GET /api/v1/orgs/{org_id}/wlans/derived
 # operationId: getOrgWlanDerived
-export def "orgs-wlans-derived get" [
+export def "get-org-wlan-derived" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17195,7 +17195,7 @@ export def "orgs-wlans-derived get" [
 #
 # DELETE /api/v1/orgs/{org_id}/wlans/{wlan_id}
 # operationId: deleteOrgWlan
-export def "orgs-wlans delete" [
+export def "delete-org-wlan" [
   org_id: string
   wlan_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -17233,7 +17233,7 @@ export def "orgs-wlans delete" [
 #
 # GET /api/v1/orgs/{org_id}/wlans/{wlan_id}
 # operationId: getOrgWLAN
-export def "orgs-wlans get" [
+export def "get-org-wlan" [
   org_id: string
   wlan_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -17291,7 +17291,7 @@ export def "orgs-wlans get" [
 # --rateset shape: {5?: record, 24?: record}
 # --schedule shape: {enabled?: bool, hours?: record}
 @deprecated --flag band
-export def "orgs-wlans update" [
+export def "update-org-wlan" [
   org_id: string
   wlan_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -17420,7 +17420,7 @@ export def "orgs-wlans update" [
 #
 # DELETE /api/v1/orgs/{org_id}/wlans/{wlan_id}/portal_image
 # operationId: deleteOrgWlanPortalImage
-export def "orgs-wlans-portal-image delete" [
+export def "delete-org-wlan-portal-image" [
   org_id: string
   wlan_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -17458,7 +17458,7 @@ export def "orgs-wlans-portal-image delete" [
 #
 # POST /api/v1/orgs/{org_id}/wlans/{wlan_id}/portal_image
 # operationId: uploadOrgWlanPortalImage
-export def "orgs-wlans-portal-image upload" [
+export def "upload-org-wlan-portal-image" [
   org_id: string
   wlan_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -17503,7 +17503,7 @@ export def "orgs-wlans-portal-image upload" [
 #
 # PUT /api/v1/orgs/{org_id}/wlans/{wlan_id}/portal_template
 # operationId: updateOrgWlanPortalTemplate
-export def "orgs-wlans-portal-template update" [
+export def "update-org-wlan-portal-template" [
   org_id: string
   wlan_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -17658,7 +17658,7 @@ export def "orgs-wlans-portal-template update" [
 #
 # GET /api/v1/orgs/{org_id}/wxrules
 # operationId: getOrgWxRules
-export def "orgs-wxrules get-wx-rules" [
+export def "get-org-wx-rules" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17694,7 +17694,7 @@ export def "orgs-wxrules get-wx-rules" [
 #
 # POST /api/v1/orgs/{org_id}/wxrules
 # operationId: createOrgWxRule
-export def "orgs-wxrules create-wx-rule" [
+export def "create-org-wx-rule" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17741,7 +17741,7 @@ export def "orgs-wxrules create-wx-rule" [
 #
 # GET /api/v1/orgs/{org_id}/wxrules/derived
 # operationId: getOrgWxRulesDerived
-export def "orgs-wxrules-derived get-wx-rules" [
+export def "get-org-wx-rules-derived" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17777,7 +17777,7 @@ export def "orgs-wxrules-derived get-wx-rules" [
 #
 # DELETE /api/v1/orgs/{org_id}/wxrules/{wxrules_id}
 # operationId: deleteOrgWxRule
-export def "orgs-wxrules delete-wx-rule" [
+export def "delete-org-wx-rule" [
   org_id: string
   wxrules_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -17815,7 +17815,7 @@ export def "orgs-wxrules delete-wx-rule" [
 #
 # GET /api/v1/orgs/{org_id}/wxrules/{wxrules_id}
 # operationId: getOrgWxRule
-export def "orgs-wxrules get-wx-rule" [
+export def "get-org-wx-rule" [
   org_id: string
   wxrules_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -17853,7 +17853,7 @@ export def "orgs-wxrules get-wx-rule" [
 #
 # PUT /api/v1/orgs/{org_id}/wxrules/{wxrules_id}
 # operationId: updateOrgWxRule
-export def "orgs-wxrules update-wx-rule" [
+export def "update-org-wx-rule" [
   org_id: string
   wxrules_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -17902,7 +17902,7 @@ export def "orgs-wxrules update-wx-rule" [
 #
 # GET /api/v1/orgs/{org_id}/wxtags
 # operationId: getOrgWxTags
-export def "orgs-wxtags get-wx-tags" [
+export def "get-org-wx-tags" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17939,7 +17939,7 @@ export def "orgs-wxtags get-wx-tags" [
 # POST /api/v1/orgs/{org_id}/wxtags
 # operationId: createOrgWxTag
 # --specs item shape: {port_range?: string, protocol?: string, subnets?: list<string>}
-export def "orgs-wxtags create-wx-tag" [
+export def "create-org-wx-tag" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17989,7 +17989,7 @@ export def "orgs-wxtags create-wx-tag" [
 #
 # GET /api/v1/orgs/{org_id}/wxtags/apps
 # operationId: getOrgApplicationList
-export def "orgs-wxtags-apps get-application-list" [
+export def "get-org-application-list" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18025,7 +18025,7 @@ export def "orgs-wxtags-apps get-application-list" [
 #
 # DELETE /api/v1/orgs/{org_id}/wxtags/{wxtag_id}
 # operationId: deleteOrgWxTag
-export def "orgs-wxtags delete-wx-tag" [
+export def "delete-org-wx-tag" [
   org_id: string
   wxtag_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -18063,7 +18063,7 @@ export def "orgs-wxtags delete-wx-tag" [
 #
 # GET /api/v1/orgs/{org_id}/wxtags/{wxtag_id}
 # operationId: getOrgWxTag
-export def "orgs-wxtags get-wx-tag" [
+export def "get-org-wx-tag" [
   org_id: string
   wxtag_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -18102,7 +18102,7 @@ export def "orgs-wxtags get-wx-tag" [
 # PUT /api/v1/orgs/{org_id}/wxtags/{wxtag_id}
 # operationId: updateOrgWxTag
 # --specs item shape: {port_range?: string, protocol?: string, subnets?: list<string>}
-export def "orgs-wxtags update-wx-tag" [
+export def "update-org-wx-tag" [
   org_id: string
   wxtag_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -18154,7 +18154,7 @@ export def "orgs-wxtags update-wx-tag" [
 #
 # GET /api/v1/orgs/{org_id}/wxtags/{wxtag_id}/clients
 # operationId: getOrgCurrentMatchingClientsOfAWxTag
-export def "orgs-wxtags-clients get-matching-of-wx-tag" [
+export def "get-org-current-matching-clients-of-a-wx-tag" [
   org_id: string
   wxtag_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -18192,7 +18192,7 @@ export def "orgs-wxtags-clients get-matching-of-wx-tag" [
 #
 # GET /api/v1/orgs/{org_id}/wxtunnels
 # operationId: getOrgWxTunnels
-export def "orgs-wxtunnels get-wx-tunnels" [
+export def "get-org-wx-tunnels" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18231,7 +18231,7 @@ export def "orgs-wxtunnels get-wx-tunnels" [
 # --dmvpn shape: {enabled?: bool, holding_time?: int, host_routes?: list<string>}
 # --ipsec shape: {enabled?: bool, psk: string}
 # --sessions item shape: {ap_as_session_id?: string, comment?: string, enable_cookie?: bool, ethertype?: "ethernet"|"vlan", local_session_id?: int, pseudo_802.1ad_enabled?: bool, remote_id?: string, remote_session_id?: int, use_ap_as_session_ids?: bool}
-export def "orgs-wxtunnels create-wx-tunnel" [
+export def "create-org-wx-tunnel" [
   org_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18286,7 +18286,7 @@ export def "orgs-wxtunnels create-wx-tunnel" [
 #
 # DELETE /api/v1/orgs/{org_id}/wxtunnels/{wxtunnel_id}
 # operationId: deleteOrgWxTunnel
-export def "orgs-wxtunnels delete-wx-tunnel" [
+export def "delete-org-wx-tunnel" [
   org_id: string
   wxtunnel_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -18324,7 +18324,7 @@ export def "orgs-wxtunnels delete-wx-tunnel" [
 #
 # GET /api/v1/orgs/{org_id}/wxtunnels/{wxtunnel_id}
 # operationId: getOrgWxTunnel
-export def "orgs-wxtunnels get-wx-tunnel" [
+export def "get-org-wx-tunnel" [
   org_id: string
   wxtunnel_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -18365,7 +18365,7 @@ export def "orgs-wxtunnels get-wx-tunnel" [
 # --dmvpn shape: {enabled?: bool, holding_time?: int, host_routes?: list<string>}
 # --ipsec shape: {enabled?: bool, psk: string}
 # --sessions item shape: {ap_as_session_id?: string, comment?: string, enable_cookie?: bool, ethertype?: "ethernet"|"vlan", local_session_id?: int, pseudo_802.1ad_enabled?: bool, remote_id?: string, remote_session_id?: int, use_ap_as_session_ids?: bool}
-export def "orgs-wxtunnels update-wx-tunnel" [
+export def "update-org-wx-tunnel" [
   org_id: string
   wxtunnel_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -18422,7 +18422,7 @@ export def "orgs-wxtunnels update-wx-tunnel" [
 #
 # POST /api/v1/recover
 # operationId: recoverPassword
-export def "recover create-password" [
+export def "recover-password" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -18461,7 +18461,7 @@ export def "recover create-password" [
 #
 # POST /api/v1/recover/verify/{token}
 # operationId: verifyRecoverPasssword
-export def "recover-verify verify-passsword" [
+export def "verify-recover-passsword" [
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18497,7 +18497,7 @@ export def "recover-verify verify-passsword" [
 #
 # POST /api/v1/register
 # operationId: registerNewAdmin
-export def "register create-new-admin" [
+export def "register-new-admin" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -18545,7 +18545,7 @@ export def "register create-new-admin" [
 #
 # POST /api/v1/register/verify/{token}
 # operationId: verifyRegistration
-export def "register-verify verify-registration" [
+export def "verify-registration" [
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18581,7 +18581,7 @@ export def "register-verify verify-registration" [
 #
 # DELETE /api/v1/self
 # operationId: deleteSelf
-export def "self delete" [
+export def "delete-self" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -18615,7 +18615,7 @@ export def "self delete" [
 #
 # GET /api/v1/self
 # operationId: getSelf
-export def "self get" [
+export def "get-self" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -18650,7 +18650,7 @@ export def "self get" [
 # PUT /api/v1/self
 # operationId: updateSelf
 # --privileges item shape: {msp_id?: string, msp_logo_url?: string, msp_name?: string, msp_url?: string, name?: string, org_id?: string, org_name?: string, orggroup_ids?: list<string>, role: "admin"|"write"|"read"|"helpdesk"|"installer", scope: "org"|"site"|"msp"|"orggroup", site_id?: string, sitegroup_ids?: list<string>, views?: list<string>}
-export def "self update" [
+export def "update-self" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -18693,7 +18693,7 @@ export def "self update" [
 #
 # GET /api/v1/self/apitokens
 # operationId: getApiTokens
-export def "self-apitokens get-tokens" [
+export def "get-api-tokens" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -18727,7 +18727,7 @@ export def "self-apitokens get-tokens" [
 #
 # POST /api/v1/self/apitokens
 # operationId: createApiToken
-export def "self-apitokens create-token" [
+export def "create-api-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -18765,7 +18765,7 @@ export def "self-apitokens create-token" [
 #
 # DELETE /api/v1/self/apitokens/{apitoken_id}
 # operationId: deleteApiToken
-export def "self-apitokens delete-token" [
+export def "delete-api-token" [
   apitoken_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18801,7 +18801,7 @@ export def "self-apitokens delete-token" [
 #
 # GET /api/v1/self/logs
 # operationId: getSelfAuditLogs
-export def "self-logs get-audit" [
+export def "get-self-audit-logs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -18841,7 +18841,7 @@ export def "self-logs get-audit" [
 #
 # GET /api/v1/self/oauth/{provider}
 # operationId: getOAuth2UrlForLinking
-export def "self-oauth get-o-auth2-url-for-linking" [
+export def "get-o-auth2-url-for-linking" [
   provider: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18879,7 +18879,7 @@ export def "self-oauth get-o-auth2-url-for-linking" [
 #
 # POST /api/v1/self/oauth/{provider}
 # operationId: linkOAuth2MistAccount
-export def "self-oauth create-link-o-auth2-mist-account" [
+export def "link-o-auth2-mist-account" [
   provider: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18919,7 +18919,7 @@ export def "self-oauth create-link-o-auth2-mist-account" [
 #
 # GET /api/v1/self/subscriptions
 # operationId: getAlarmSubscriptions
-export def "self-subscriptions get-alarm" [
+export def "get-alarm-subscriptions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -18953,7 +18953,7 @@ export def "self-subscriptions get-alarm" [
 #
 # GET /api/v1/self/two_factor/token
 # operationId: generateQrCodeForVerification
-export def "self-two-factor-token generate-qr-code-for-verification" [
+export def "generate-qr-code-for-verification" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -18989,7 +18989,7 @@ export def "self-two-factor-token generate-qr-code-for-verification" [
 #
 # POST /api/v1/self/two_factor/verify
 # operationId: verifyTwoFactor
-export def "self-two-factor-verify verify" [
+export def "verify-two-factor" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -19027,7 +19027,7 @@ export def "self-two-factor-verify verify" [
 #
 # POST /api/v1/self/update
 # operationId: updateSelfEmail
-export def "self-update update-email" [
+export def "update-self-email" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -19065,7 +19065,7 @@ export def "self-update update-email" [
 #
 # GET /api/v1/self/update/verify/{token}
 # operationId: verifySelfEmail
-export def "self-update-verify verify-email" [
+export def "verify-self-email" [
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -19101,7 +19101,7 @@ export def "self-update-verify verify-email" [
 #
 # DELETE /api/v1/sites/{site_id}
 # operationId: deleteSite
-export def "sites delete" [
+export def "delete-site" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -19137,7 +19137,7 @@ export def "sites delete" [
 #
 # GET /api/v1/sites/{site_id}
 # operationId: getSiteInfo
-export def "sites get" [
+export def "get-site-info" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -19174,7 +19174,7 @@ export def "sites get" [
 # PUT /api/v1/sites/{site_id}
 # operationId: updateSiteInfo
 # --latlng shape: {lat?: float, lng?: float}
-export def "sites update-get" [
+export def "update-site-info" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -19227,7 +19227,7 @@ export def "sites update-get" [
 #
 # POST /api/v1/sites/{site_id}/alarms/ack
 # operationId: multiAckSiteAlarms
-export def "sites-alarms-ack create-multi" [
+export def "multi-ack-site-alarms" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -19268,7 +19268,7 @@ export def "sites-alarms-ack create-multi" [
 #
 # POST /api/v1/sites/{site_id}/alarms/ack_all
 # operationId: ackSiteAllAlarms
-export def "sites-alarms-ack-all list" [
+export def "ack-site-all-alarms" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -19308,7 +19308,7 @@ export def "sites-alarms-ack-all list" [
 #
 # GET /api/v1/sites/{site_id}/alarms/count
 # operationId: countSiteAlarms
-export def "sites-alarms-count get" [
+export def "count-site-alarms" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -19356,7 +19356,7 @@ export def "sites-alarms-count get" [
 #
 # GET /api/v1/sites/{site_id}/alarms/search
 # operationId: searchSiteAlarms
-export def "sites-alarms-search list" [
+export def "search-site-alarms" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -19402,7 +19402,7 @@ export def "sites-alarms-search list" [
 #
 # POST /api/v1/sites/{site_id}/alarms/unack
 # operationId: multiUnackSiteAlarms
-export def "sites-alarms-unack create-multi" [
+export def "multi-unack-site-alarms" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -19443,7 +19443,7 @@ export def "sites-alarms-unack create-multi" [
 #
 # POST /api/v1/sites/{site_id}/alarms/unack_all
 # operationId: unackSiteAllArlarms
-export def "sites-alarms-unack-all list-arlarms" [
+export def "unack-site-all-arlarms" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -19483,7 +19483,7 @@ export def "sites-alarms-unack-all list-arlarms" [
 #
 # POST /api/v1/sites/{site_id}/alarms/{alarm_id}/ack
 # operationId: ackSiteAlarm
-export def "sites-alarms-ack create" [
+export def "ack-site-alarm" [
   site_id: string
   alarm_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -19525,7 +19525,7 @@ export def "sites-alarms-ack create" [
 #
 # POST /api/v1/sites/{site_id}/alarms/{alarm_id}/unack
 # operationId: unackSiteAlarm
-export def "sites-alarms-unack create" [
+export def "unack-site-alarm" [
   site_id: string
   alarm_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -19567,7 +19567,7 @@ export def "sites-alarms-unack create" [
 #
 # GET /api/v1/sites/{site_id}/anomaly/client/{client_mac}/{metric}
 # operationId: getSiteAnomalyEventsForClient
-export def "sites-anomaly-client get-events" [
+export def "get-site-anomaly-events-for-client" [
   site_id: string
   client_mac: string
   metric: string
@@ -19607,7 +19607,7 @@ export def "sites-anomaly-client get-events" [
 #
 # GET /api/v1/sites/{site_id}/anomaly/device/{device_mac}/{metric}
 # operationId: getSiteAnomalyEventsforDevice
-export def "sites-anomaly-device get-eventsfor" [
+export def "get-site-anomaly-eventsfor-device" [
   site_id: string
   device_mac: string
   metric: string
@@ -19647,7 +19647,7 @@ export def "sites-anomaly-device get-eventsfor" [
 #
 # GET /api/v1/sites/{site_id}/anomaly/{metric}
 # operationId: getSiteAnomalyEvents
-export def "sites-anomaly get-events" [
+export def "get-site-anomaly-events" [
   site_id: string
   metric: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -19685,7 +19685,7 @@ export def "sites-anomaly get-events" [
 #
 # GET /api/v1/sites/{site_id}/apps
 # operationId: getSiteApps
-export def "sites-apps get" [
+export def "get-site-apps" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -19721,7 +19721,7 @@ export def "sites-apps get" [
 #
 # GET /api/v1/sites/{site_id}/assetfilters
 # operationId: getSiteAssetFilters
-export def "sites-assetfilters get-asset-filters" [
+export def "get-site-asset-filters" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -19757,7 +19757,7 @@ export def "sites-assetfilters get-asset-filters" [
 #
 # POST /api/v1/sites/{site_id}/assetfilters
 # operationId: createSiteAssetFilters
-export def "sites-assetfilters create-asset-filters" [
+export def "create-site-asset-filters" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -19807,7 +19807,7 @@ export def "sites-assetfilters create-asset-filters" [
 #
 # DELETE /api/v1/sites/{site_id}/assetfilters/{assetfilter_id}
 # operationId: deleteSiteAssetFilter
-export def "sites-assetfilters delete-asset-filter" [
+export def "delete-site-asset-filter" [
   site_id: string
   assetfilter_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -19845,7 +19845,7 @@ export def "sites-assetfilters delete-asset-filter" [
 #
 # GET /api/v1/sites/{site_id}/assetfilters/{assetfilter_id}
 # operationId: getSiteAssetFilter
-export def "sites-assetfilters get-asset-filter" [
+export def "get-site-asset-filter" [
   site_id: string
   assetfilter_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -19883,7 +19883,7 @@ export def "sites-assetfilters get-asset-filter" [
 #
 # PUT /api/v1/sites/{site_id}/assetfilters/{assetfilter_id}
 # operationId: updateSiteAssetFilter
-export def "sites-assetfilters update-asset-filter" [
+export def "update-site-asset-filter" [
   site_id: string
   assetfilter_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -19935,7 +19935,7 @@ export def "sites-assetfilters update-asset-filter" [
 #
 # GET /api/v1/sites/{site_id}/assets
 # operationId: getSiteAssets
-export def "sites-assets list" [
+export def "get-site-assets" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -19971,7 +19971,7 @@ export def "sites-assets list" [
 #
 # POST /api/v1/sites/{site_id}/assets
 # operationId: createSiteAsset
-export def "sites-assets create" [
+export def "create-site-asset" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -20014,7 +20014,7 @@ export def "sites-assets create" [
 #
 # POST /api/v1/sites/{site_id}/assets/import
 # operationId: importSiteAssets
-export def "sites-assets-import import" [
+export def "import-site-assets" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -20056,7 +20056,7 @@ export def "sites-assets-import import" [
 #
 # DELETE /api/v1/sites/{site_id}/assets/{asset_id}
 # operationId: deleteSiteAsset
-export def "sites-assets delete" [
+export def "delete-site-asset" [
   site_id: string
   asset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -20094,7 +20094,7 @@ export def "sites-assets delete" [
 #
 # GET /api/v1/sites/{site_id}/assets/{asset_id}
 # operationId: getSiteAsset
-export def "sites-assets get" [
+export def "get-site-asset" [
   site_id: string
   asset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -20132,7 +20132,7 @@ export def "sites-assets get" [
 #
 # PUT /api/v1/sites/{site_id}/assets/{asset_id}
 # operationId: updateSiteAsset
-export def "sites-assets update" [
+export def "update-site-asset" [
   site_id: string
   asset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -20177,7 +20177,7 @@ export def "sites-assets update" [
 #
 # GET /api/v1/sites/{site_id}/beacons
 # operationId: getSiteBeacons
-export def "sites-beacons list" [
+export def "get-site-beacons" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -20213,7 +20213,7 @@ export def "sites-beacons list" [
 #
 # POST /api/v1/sites/{site_id}/beacons
 # operationId: createSiteBeacon
-export def "sites-beacons create" [
+export def "create-site-beacon" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -20265,7 +20265,7 @@ export def "sites-beacons create" [
 #
 # DELETE /api/v1/sites/{site_id}/beacons/{beacon_id}
 # operationId: deleteSiteBeacons
-export def "sites-beacons delete" [
+export def "delete-site-beacons" [
   site_id: string
   beacon_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -20303,7 +20303,7 @@ export def "sites-beacons delete" [
 #
 # GET /api/v1/sites/{site_id}/beacons/{beacon_id}
 # operationId: getSiteBeacon
-export def "sites-beacons get" [
+export def "get-site-beacon" [
   site_id: string
   beacon_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -20341,7 +20341,7 @@ export def "sites-beacons get" [
 #
 # PUT /api/v1/sites/{site_id}/beacons/{beacon_id}
 # operationId: updateSiteBeacons
-export def "sites-beacons update" [
+export def "update-site-beacons" [
   site_id: string
   beacon_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -20395,7 +20395,7 @@ export def "sites-beacons update" [
 #
 # GET /api/v1/sites/{site_id}/call/events/count
 # operationId: countSiteCallEvents
-export def "sites-call-events-count get" [
+export def "count-site-call-events" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -20433,7 +20433,7 @@ export def "sites-call-events-count get" [
 #
 # GET /api/v1/sites/{site_id}/call/events/search
 # operationId: searchSiteCallEvents
-export def "sites-call-events-search list" [
+export def "search-site-call-events" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -20474,7 +20474,7 @@ export def "sites-call-events-search list" [
 #
 # GET /api/v1/sites/{site_id}/clients/count
 # operationId: countSiteByDistinctAttributesOfClients
-export def "sites-clients-count get-by-distinct-attributes" [
+export def "count-site-by-distinct-attributes-of-clients" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -20525,7 +20525,7 @@ export def "sites-clients-count get-by-distinct-attributes" [
 #
 # POST /api/v1/sites/{site_id}/clients/disconnect
 # operationId: disconnectSiteMultipleClients
-export def "sites-clients-disconnect create-multiple" [
+export def "disconnect-site-multiple-clients" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -20565,7 +20565,7 @@ export def "sites-clients-disconnect create-multiple" [
 #
 # GET /api/v1/sites/{site_id}/clients/events/count
 # operationId: countSiteByDistinctAttributesOfClientsEvents
-export def "sites-clients-events-count get-by-distinct-attributes" [
+export def "count-site-by-distinct-attributes-of-clients-events" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -20615,7 +20615,7 @@ export def "sites-clients-events-count get-by-distinct-attributes" [
 #
 # GET /api/v1/sites/{site_id}/clients/events/search
 # operationId: searchSiteClientsEvents
-export def "sites-clients-events-search list" [
+export def "search-site-clients-events" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -20663,7 +20663,7 @@ export def "sites-clients-events-search list" [
 #
 # GET /api/v1/sites/{site_id}/clients/search
 # operationId: searchSiteClientsWireless
-export def "sites-clients-search list-wireless" [
+export def "search-site-clients-wireless" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -20713,7 +20713,7 @@ export def "sites-clients-search list-wireless" [
 #
 # GET /api/v1/sites/{site_id}/clients/sessions/count
 # operationId: countSiteByDistinctAttributesOfClientSessions
-export def "sites-clients-sessions-count get-by-distinct-attributes" [
+export def "count-site-by-distinct-attributes-of-client-sessions" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -20764,7 +20764,7 @@ export def "sites-clients-sessions-count get-by-distinct-attributes" [
 #
 # GET /api/v1/sites/{site_id}/clients/sessions/search
 # operationId: searchSiteClientWirelessSessions
-export def "sites-clients-sessions-search list-wireless" [
+export def "search-site-client-wireless-sessions" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -20816,7 +20816,7 @@ export def "sites-clients-sessions-search list-wireless" [
 #
 # POST /api/v1/sites/{site_id}/clients/unauthorize
 # operationId: unauthorizeSiteMultipleClients
-export def "sites-clients-unauthorize create-multiple" [
+export def "unauthorize-site-multiple-clients" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -20856,7 +20856,7 @@ export def "sites-clients-unauthorize create-multiple" [
 #
 # POST /api/v1/sites/{site_id}/clients/{client_mac}/disconnect
 # operationId: disconnectSiteClient
-export def "sites-clients-disconnect create" [
+export def "disconnect-site-client" [
   site_id: string
   client_mac: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -20894,7 +20894,7 @@ export def "sites-clients-disconnect create" [
 #
 # GET /api/v1/sites/{site_id}/clients/{client_mac}/events
 # operationId: getSiteEventsForClient
-export def "sites-clients-events get" [
+export def "get-site-events-for-client" [
   site_id: any
   client_mac: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -20944,7 +20944,7 @@ export def "sites-clients-events get" [
 #
 # POST /api/v1/sites/{site_id}/clients/{client_mac}/unauthorize
 # operationId: unauthorizeSiteClient
-export def "sites-clients-unauthorize create" [
+export def "unauthorize-site-client" [
   site_id: string
   client_mac: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -20982,7 +20982,7 @@ export def "sites-clients-unauthorize create" [
 #
 # GET /api/v1/sites/{site_id}/devices
 # operationId: getSiteDevices
-export def "sites-devices list" [
+export def "get-site-devices" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -21050,7 +21050,7 @@ export def "sites-devices list" [
 # --vrf_config shape: {enabled?: bool}
 # --vrrp_config shape: {enabled?: bool, groups?: record}
 # --dhcpd_config shape: {enabled?: bool}
-export def "sites-devices create" [
+export def "create-site-device" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -21145,7 +21145,7 @@ export def "sites-devices create" [
 #
 # GET /api/v1/sites/{site_id}/devices/ap_channels
 # operationId: getSiteDeviceRadioChannels
-export def "sites-devices-ap-channels get-radio" [
+export def "get-site-device-radio-channels" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -21183,7 +21183,7 @@ export def "sites-devices-ap-channels get-radio" [
 #
 # GET /api/v1/sites/{site_id}/devices/config_history/count
 # operationId: countSiteDeviceConfigHistory
-export def "sites-devices-config-history-count get" [
+export def "count-site-device-config-history" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -21227,7 +21227,7 @@ export def "sites-devices-config-history-count get" [
 #
 # GET /api/v1/sites/{site_id}/devices/config_history/search
 # operationId: searchSiteDeviceConfigHistory
-export def "sites-devices-config-history-search list" [
+export def "search-site-device-config-history" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -21270,7 +21270,7 @@ export def "sites-devices-config-history-search list" [
 #
 # GET /api/v1/sites/{site_id}/devices/count
 # operationId: countSiteDevices
-export def "sites-devices-count get" [
+export def "count-site-devices" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -21324,7 +21324,7 @@ export def "sites-devices-count get" [
 #
 # GET /api/v1/sites/{site_id}/devices/events/count
 # operationId: countSiteDeviceEvents
-export def "sites-devices-events-count get" [
+export def "count-site-device-events" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -21370,7 +21370,7 @@ export def "sites-devices-events-count get" [
 #
 # GET /api/v1/sites/{site_id}/devices/events/search
 # operationId: searchSiteDevicesEvents
-export def "sites-devices-events-search list" [
+export def "search-site-devices-events" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -21417,7 +21417,7 @@ export def "sites-devices-events-search list" [
 #
 # GET /api/v1/sites/{site_id}/devices/export
 # operationId: exportSiteDevices
-export def "sites-devices-export export" [
+export def "export-site-devices" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -21453,7 +21453,7 @@ export def "sites-devices-export export" [
 #
 # POST /api/v1/sites/{site_id}/devices/import
 # operationId: importSiteDevices
-export def "sites-devices-import import" [
+export def "import-site-devices" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -21493,7 +21493,7 @@ export def "sites-devices-import import" [
 #
 # GET /api/v1/sites/{site_id}/devices/last_config/count
 # operationId: countSiteDeviceLastConfig
-export def "sites-devices-last-config-count get" [
+export def "count-site-device-last-config" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -21536,7 +21536,7 @@ export def "sites-devices-last-config-count get" [
 #
 # GET /api/v1/sites/{site_id}/devices/last_config/search
 # operationId: searchSiteDeviceLastConfigs
-export def "sites-devices-last-config-search list" [
+export def "search-site-device-last-configs" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -21581,7 +21581,7 @@ export def "sites-devices-last-config-search list" [
 #
 # POST /api/v1/sites/{site_id}/devices/reprovision
 # operationId: reprovisionSiteAllAps
-export def "sites-devices-reprovision list-aps" [
+export def "reprovision-site-all-aps" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -21617,7 +21617,7 @@ export def "sites-devices-reprovision list-aps" [
 #
 # POST /api/v1/sites/{site_id}/devices/reset_radio_config
 # operationId: resetSiteAllApsToUseRrm
-export def "sites-devices-reset-radio-config list-aps-to-use-rrm" [
+export def "reset-site-all-aps-to-use-rrm" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -21658,7 +21658,7 @@ export def "sites-devices-reset-radio-config list-aps-to-use-rrm" [
 #
 # POST /api/v1/sites/{site_id}/devices/restart
 # operationId: multiRestartSiteDevices
-export def "sites-devices-restart restart-multi" [
+export def "multi-restart-site-devices" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -21699,7 +21699,7 @@ export def "sites-devices-restart restart-multi" [
 #
 # GET /api/v1/sites/{site_id}/devices/search
 # operationId: searchSiteDevices
-export def "sites-devices-search list" [
+export def "search-site-devices" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -21760,7 +21760,7 @@ export def "sites-devices-search list" [
 #
 # GET /api/v1/sites/{site_id}/devices/upgrade
 # operationId: getSiteDevicesUpgrade
-export def "sites-devices-upgrade list" [
+export def "get-site-devices-upgrade" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -21798,7 +21798,7 @@ export def "sites-devices-upgrade list" [
 #
 # POST /api/v1/sites/{site_id}/devices/upgrade
 # operationId: multiUpgradeSiteDevices
-export def "sites-devices-upgrade create-multi" [
+export def "multi-upgrade-site-devices" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -21857,7 +21857,7 @@ export def "sites-devices-upgrade create-multi" [
 #
 # GET /api/v1/sites/{site_id}/devices/upgrade/{upgrade_id}
 # operationId: getSiteUpgrade
-export def "sites-devices-upgrade get" [
+export def "get-site-upgrade" [
   site_id: string
   upgrade_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -21895,7 +21895,7 @@ export def "sites-devices-upgrade get" [
 #
 # POST /api/v1/sites/{site_id}/devices/upgrade/{upgrade_id}/cancel
 # operationId: cancelSiteDeviceUpgrade
-export def "sites-devices-upgrade-cancel cancel" [
+export def "cancel-site-device-upgrade" [
   site_id: string
   upgrade_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -21933,7 +21933,7 @@ export def "sites-devices-upgrade-cancel cancel" [
 #
 # GET /api/v1/sites/{site_id}/devices/versions
 # operationId: getSiteAvailableDeviceVersions
-export def "sites-devices-versions get-available" [
+export def "get-site-available-device-versions" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -21971,7 +21971,7 @@ export def "sites-devices-versions get-available" [
 #
 # POST /api/v1/sites/{site_id}/devices/zerioze
 # operationId: zeroizeSiteFipsAllAps
-export def "sites-devices-zerioze list-zeroize-fips-aps" [
+export def "zeroize-site-fips-all-aps" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -22011,7 +22011,7 @@ export def "sites-devices-zerioze list-zeroize-fips-aps" [
 #
 # DELETE /api/v1/sites/{site_id}/devices/{device_id}
 # operationId: deleteSiteDevice
-export def "sites-devices delete" [
+export def "delete-site-device" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -22049,7 +22049,7 @@ export def "sites-devices delete" [
 #
 # GET /api/v1/sites/{site_id}/devices/{device_id}
 # operationId: getSiteDevice
-export def "sites-devices get" [
+export def "get-site-device" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -22114,7 +22114,7 @@ export def "sites-devices get" [
 # --vrf_config shape: {enabled?: bool}
 # --vrrp_config shape: {enabled?: bool, groups?: record}
 # --dhcpd_config shape: {enabled?: bool}
-export def "sites-devices update" [
+export def "update-site-device" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -22211,7 +22211,7 @@ export def "sites-devices update" [
 #
 # POST /api/v1/sites/{site_id}/devices/{device_id}/arp
 # operationId: arpFromDevice
-export def "sites-devices-arp create" [
+export def "arp-from-device" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -22249,7 +22249,7 @@ export def "sites-devices-arp create" [
 #
 # POST /api/v1/sites/{site_id}/devices/{device_id}/bounce_port
 # operationId: portsBounceFromSwitch
-export def "sites-devices-bounce-port create-from-switch" [
+export def "ports-bounce-from-switch" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -22292,7 +22292,7 @@ export def "sites-devices-bounce-port create-from-switch" [
 #
 # POST /api/v1/sites/{site_id}/devices/{device_id}/cable_test
 # operationId: cableTestFromSwitch
-export def "sites-devices-cable-test test-from-switch" [
+export def "cable-test-from-switch" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -22334,7 +22334,7 @@ export def "sites-devices-cable-test test-from-switch" [
 #
 # POST /api/v1/sites/{site_id}/devices/{device_id}/check_radius_server
 # operationId: startSiteSwitchRadiusSyntheticTest
-export def "sites-devices-check-radius-server start-switch-synthetic-test" [
+export def "start-site-switch-radius-synthetic-test" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -22378,7 +22378,7 @@ export def "sites-devices-check-radius-server start-switch-synthetic-test" [
 #
 # POST /api/v1/sites/{site_id}/devices/{device_id}/clear_arp
 # operationId: clearSiteSsrArpCache
-export def "sites-devices-clear-arp create-ssr-cache" [
+export def "clear-site-ssr-arp-cache" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -22420,7 +22420,7 @@ export def "sites-devices-clear-arp create-ssr-cache" [
 #
 # POST /api/v1/sites/{site_id}/devices/{device_id}/clear_bgp
 # operationId: clearSiteSsrBgpRoutes
-export def "sites-devices-clear-bgp create-ssr-routes" [
+export def "clear-site-ssr-bgp-routes" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -22464,7 +22464,7 @@ export def "sites-devices-clear-bgp create-ssr-routes" [
 #
 # POST /api/v1/sites/{site_id}/devices/{device_id}/clear_bpdu_error
 # operationId: clearBpduErrosFromPortsOnSwitch
-export def "sites-devices-clear-bpdu-error create-erros-from-ports-on-switch" [
+export def "clear-bpdu-erros-from-ports-on-switch" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -22506,7 +22506,7 @@ export def "sites-devices-clear-bpdu-error create-erros-from-ports-on-switch" [
 #
 # POST /api/v1/sites/{site_id}/devices/{device_id}/clear_macs
 # operationId: clearAllLearnedMacsFromPortOnSwitch
-export def "sites-devices-clear-macs list-learned-from-port-on-switch" [
+export def "clear-all-learned-macs-from-port-on-switch" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -22548,7 +22548,7 @@ export def "sites-devices-clear-macs list-learned-from-port-on-switch" [
 #
 # GET /api/v1/sites/{site_id}/devices/{device_id}/config_cmd
 # operationId: getSiteDeviceConfigCmd
-export def "sites-devices-config-cmd get" [
+export def "get-site-device-config-cmd" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -22588,7 +22588,7 @@ export def "sites-devices-config-cmd get" [
 #
 # DELETE /api/v1/sites/{site_id}/devices/{device_id}/ha
 # operationId: deleteSiteDeviceHaCluster
-export def "sites-devices-ha delete" [
+export def "delete-site-device-ha-cluster" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -22627,7 +22627,7 @@ export def "sites-devices-ha delete" [
 # POST /api/v1/sites/{site_id}/devices/{device_id}/ha
 # operationId: createSiteDeviceHaCluster
 # --nodes item shape: {mac: string}
-export def "sites-devices-ha create" [
+export def "create-site-device-ha-cluster" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -22671,7 +22671,7 @@ export def "sites-devices-ha create" [
 # DEPRECATED
 # operationId: swapSiteDeviceHaClusterNode
 @deprecated
-export def "sites-devices-ha update-swap-node" [
+export def "swap-site-device-ha-cluster-node" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -22714,7 +22714,7 @@ export def "sites-devices-ha update-swap-node" [
 #
 # DELETE /api/v1/sites/{site_id}/devices/{device_id}/image{image_number}
 # operationId: deleteSiteDeviceImage
-export def "sites-devices-imageimage-number delete" [
+export def "delete-site-device-image" [
   site_id: string
   device_id: string
   image_number: int
@@ -22754,7 +22754,7 @@ export def "sites-devices-imageimage-number delete" [
 #
 # POST /api/v1/sites/{site_id}/devices/{device_id}/image{image_number}
 # operationId: addSiteDeviceImage
-export def "sites-devices-imageimage-number create" [
+export def "add-site-device-image" [
   site_id: string
   device_id: string
   image_number: int
@@ -22801,7 +22801,7 @@ export def "sites-devices-imageimage-number create" [
 #
 # GET /api/v1/sites/{site_id}/devices/{device_id}/iot
 # operationId: getSiteDeviceIotPort
-export def "sites-devices-iot get-port" [
+export def "get-site-device-iot-port" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -22839,7 +22839,7 @@ export def "sites-devices-iot get-port" [
 #
 # PUT /api/v1/sites/{site_id}/devices/{device_id}/iot
 # operationId: setSiteDeviceIotPort
-export def "sites-devices-iot update-port" [
+export def "set-site-device-iot-port" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -22881,7 +22881,7 @@ export def "sites-devices-iot update-port" [
 #
 # DELETE /api/v1/sites/{site_id}/devices/{device_id}/local_port_config
 # operationId: deleteSiteLocalSwitchPortConfig
-export def "sites-devices-local-port-config delete-switch" [
+export def "delete-site-local-switch-port-config" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -22919,7 +22919,7 @@ export def "sites-devices-local-port-config delete-switch" [
 #
 # PUT /api/v1/sites/{site_id}/devices/{device_id}/local_port_config
 # operationId: updateSiteLocalSwitchPortConfig
-export def "sites-devices-local-port-config update-switch" [
+export def "update-site-local-switch-port-config" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -22974,7 +22974,7 @@ export def "sites-devices-local-port-config update-switch" [
 #
 # POST /api/v1/sites/{site_id}/devices/{device_id}/locate
 # operationId: startSiteLocateDevice
-export def "sites-devices-locate start" [
+export def "start-site-locate-device" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -23012,7 +23012,7 @@ export def "sites-devices-locate start" [
 #
 # POST /api/v1/sites/{site_id}/devices/{device_id}/ping
 # operationId: pingFromDevice
-export def "sites-devices-ping ping" [
+export def "ping-from-device" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -23057,7 +23057,7 @@ export def "sites-devices-ping ping" [
 #
 # POST /api/v1/sites/{site_id}/devices/{device_id}/poll_stats
 # operationId: pollSiteSwitchStats
-export def "sites-devices-poll-stats stats-switch" [
+export def "poll-site-switch-stats" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -23095,7 +23095,7 @@ export def "sites-devices-poll-stats stats-switch" [
 #
 # POST /api/v1/sites/{site_id}/devices/{device_id}/release_dhcp
 # operationId: releaseSiteSsrDhcpLease
-export def "sites-devices-release-dhcp create-ssr-lease" [
+export def "release-site-ssr-dhcp-lease" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -23137,7 +23137,7 @@ export def "sites-devices-release-dhcp create-ssr-lease" [
 #
 # POST /api/v1/sites/{site_id}/devices/{device_id}/request_ztp_password
 # operationId: getSiteDeviceZtpPassword
-export def "sites-devices-request-ztp-password get" [
+export def "get-site-device-ztp-password" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -23175,7 +23175,7 @@ export def "sites-devices-request-ztp-password get" [
 #
 # POST /api/v1/sites/{site_id}/devices/{device_id}/resolve_dns
 # operationId: testSiteSsrDnsResolution
-export def "sites-devices-resolve-dns test-ssr-resolution" [
+export def "test-site-ssr-dns-resolution" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -23213,7 +23213,7 @@ export def "sites-devices-resolve-dns test-ssr-resolution" [
 #
 # POST /api/v1/sites/{site_id}/devices/{device_id}/restart
 # operationId: restartSiteDevice
-export def "sites-devices-restart restart" [
+export def "restart-site-device" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -23256,7 +23256,7 @@ export def "sites-devices-restart restart" [
 #
 # POST /api/v1/sites/{site_id}/devices/{device_id}/service_ping
 # operationId: servicePingFromSsr
-export def "sites-devices-service-ping ping-from-ssr" [
+export def "service-ping-from-ssr" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -23302,7 +23302,7 @@ export def "sites-devices-service-ping ping-from-ssr" [
 #
 # POST /api/v1/sites/{site_id}/devices/{device_id}/show_route
 # operationId: getSiteSsrAndSrxRoutes
-export def "sites-devices-show-route get-ssr-and-srx" [
+export def "get-site-ssr-and-srx-routes" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -23348,7 +23348,7 @@ export def "sites-devices-show-route get-ssr-and-srx" [
 #
 # POST /api/v1/sites/{site_id}/devices/{device_id}/show_session
 # operationId: getSiteSsrAndSrxSessions
-export def "sites-devices-show-session get-ssr-and-srx" [
+export def "get-site-ssr-and-srx-sessions" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -23390,7 +23390,7 @@ export def "sites-devices-show-session get-ssr-and-srx" [
 #
 # POST /api/v1/sites/{site_id}/devices/{device_id}/snapshot
 # operationId: createSiteDeviceSnapshot
-export def "sites-devices-snapshot create" [
+export def "create-site-device-snapshot" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -23428,7 +23428,7 @@ export def "sites-devices-snapshot create" [
 #
 # POST /api/v1/sites/{site_id}/devices/{device_id}/support
 # operationId: uploadSiteDeviceSupportFile
-export def "sites-devices-support upload-file" [
+export def "upload-site-device-support-file" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -23472,7 +23472,7 @@ export def "sites-devices-support upload-file" [
 #
 # POST /api/v1/sites/{site_id}/devices/{device_id}/synthetic_test
 # operationId: StartSiteDeviceSyntheticTest
-export def "sites-devices-synthetic-test start" [
+export def "start-site-device-synthetic-test" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -23520,7 +23520,7 @@ export def "sites-devices-synthetic-test start" [
 #
 # POST /api/v1/sites/{site_id}/devices/{device_id}/traceroute
 # operationId: tracerouteFromDevice
-export def "sites-devices-traceroute create" [
+export def "traceroute-from-device" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -23565,7 +23565,7 @@ export def "sites-devices-traceroute create" [
 #
 # POST /api/v1/sites/{site_id}/devices/{device_id}/unlocate
 # operationId: stopSiteLocateDevice
-export def "sites-devices-unlocate stop-locate" [
+export def "stop-site-locate-device" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -23603,7 +23603,7 @@ export def "sites-devices-unlocate stop-locate" [
 #
 # POST /api/v1/sites/{site_id}/devices/{device_id}/upgrade
 # operationId: upgradeSiteDevice
-export def "sites-devices-upgrade create" [
+export def "upgrade-site-device" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -23645,7 +23645,7 @@ export def "sites-devices-upgrade create" [
 #
 # DELETE /api/v1/sites/{site_id}/devices/{device_id}/vc
 # operationId: deleteSiteVirtualChassis
-export def "sites-devices-vc delete-virtual-chassis" [
+export def "delete-site-virtual-chassis" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -23683,7 +23683,7 @@ export def "sites-devices-vc delete-virtual-chassis" [
 #
 # GET /api/v1/sites/{site_id}/devices/{device_id}/vc
 # operationId: getSiteVirtualChassis
-export def "sites-devices-vc get-virtual-chassis" [
+export def "get-site-virtual-chassis" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -23722,7 +23722,7 @@ export def "sites-devices-vc get-virtual-chassis" [
 # POST /api/v1/sites/{site_id}/devices/{device_id}/vc
 # operationId: createSiteVirtualChassis
 # --members item shape: {mac?: string, member?: int, vc_ports?: list<string>, vc_role?: "master"|"backup"|"linecard"}
-export def "sites-devices-vc create-virtual-chassis" [
+export def "create-site-virtual-chassis" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -23768,7 +23768,7 @@ export def "sites-devices-vc create-virtual-chassis" [
 # PUT /api/v1/sites/{site_id}/devices/{device_id}/vc
 # operationId: updateSiteVirtualChassisMember
 # --members item shape: {mac?: string, member?: int, vc_ports?: list<string>, vc_role?: "master"|"backup"|"linecard"}
-export def "sites-devices-vc update-virtual-chassis-member" [
+export def "update-site-virtual-chassis-member" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -23814,7 +23814,7 @@ export def "sites-devices-vc update-virtual-chassis-member" [
 # POST /api/v1/sites/{site_id}/devices/{device_id}/vc/vc_port
 # operationId: setSiteVcPort
 # --members item shape: {member: float, vc_ports?: list<string>}
-export def "sites-devices-vc-vc-port update" [
+export def "set-site-vc-port" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -23857,7 +23857,7 @@ export def "sites-devices-vc-vc-port update" [
 #
 # GET /api/v1/sites/{site_id}/events/fast_roam
 # operationId: getSiteRoamingEvents
-export def "sites-events-fast-roam get-roaming" [
+export def "get-site-roaming-events" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -23900,7 +23900,7 @@ export def "sites-events-fast-roam get-roaming" [
 #
 # GET /api/v1/sites/{site_id}/events/interference
 # operationId: getSiteInterferenceEvents
-export def "sites-events-interference get" [
+export def "get-site-interference-events" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -23942,7 +23942,7 @@ export def "sites-events-interference get" [
 #
 # GET /api/v1/sites/{site_id}/events/system/count
 # operationId: countSiteSystemEvents
-export def "sites-events-system-count get" [
+export def "count-site-system-events" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -23985,7 +23985,7 @@ export def "sites-events-system-count get" [
 #
 # GET /api/v1/sites/{site_id}/events/system/search
 # operationId: searchSiteSystemEvents
-export def "sites-events-system-search list" [
+export def "search-site-system-events" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -24027,7 +24027,7 @@ export def "sites-events-system-search list" [
 #
 # GET /api/v1/sites/{site_id}/evpn_topologies
 # operationId: getSiteEvpnTopologies
-export def "sites-evpn-topologies get" [
+export def "get-site-evpn-topologies" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -24064,7 +24064,7 @@ export def "sites-evpn-topologies get" [
 # POST /api/v1/sites/{site_id}/evpn_topologies
 # operationId: createSiteEvpnTopology
 # --switches item shape: {deviceprofile_id?: string, esilaglinks?: list<string>, evpn_id?: int, mac?: string, pod?: int, role?: "core"|"distribution"|"access"|"collapsed-core"|"none"|"esilag-access", site_id?: string}
-export def "sites-evpn-topologies create-topology" [
+export def "create-site-evpn-topology" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -24106,7 +24106,7 @@ export def "sites-evpn-topologies create-topology" [
 #
 # DELETE /api/v1/sites/{site_id}/evpn_topologies/{evpn_topology_id}
 # operationId: deleteSiteEvpnTopology
-export def "sites-evpn-topologies delete" [
+export def "delete-site-evpn-topology" [
   site_id: string
   evpn_topology_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -24144,7 +24144,7 @@ export def "sites-evpn-topologies delete" [
 #
 # GET /api/v1/sites/{site_id}/evpn_topologies/{evpn_topology_id}
 # operationId: getSiteEvpnTolopogy
-export def "sites-evpn-topologies get-tolopogy" [
+export def "get-site-evpn-tolopogy" [
   site_id: string
   evpn_topology_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -24183,7 +24183,7 @@ export def "sites-evpn-topologies get-tolopogy" [
 # PUT /api/v1/sites/{site_id}/evpn_topologies/{evpn_topology_id}
 # operationId: updateSiteEvpnTopology
 # --switches item shape: {deviceprofile_id?: string, esilaglinks?: list<string>, evpn_id?: int, mac?: string, pod?: int, role?: "core"|"distribution"|"access"|"collapsed-core"|"none"|"esilag-access", site_id?: string}
-export def "sites-evpn-topologies update" [
+export def "update-site-evpn-topology" [
   site_id: string
   evpn_topology_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -24227,7 +24227,7 @@ export def "sites-evpn-topologies update" [
 #
 # GET /api/v1/sites/{site_id}/guests
 # operationId: getSiteAllGuestAuthorizations
-export def "sites-guests get-list-authorizations" [
+export def "get-site-all-guest-authorizations" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -24265,7 +24265,7 @@ export def "sites-guests get-list-authorizations" [
 #
 # GET /api/v1/sites/{site_id}/guests/count
 # operationId: countSiteGuestAuthorizations
-export def "sites-guests-count get-authorizations" [
+export def "count-site-guest-authorizations" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -24308,7 +24308,7 @@ export def "sites-guests-count get-authorizations" [
 #
 # GET /api/v1/sites/{site_id}/guests/search
 # operationId: searchSiteGuestAuthorization
-export def "sites-guests-search list-authorization" [
+export def "search-site-guest-authorization" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -24352,7 +24352,7 @@ export def "sites-guests-search list-authorization" [
 #
 # DELETE /api/v1/sites/{site_id}/guests/{guest_mac}
 # operationId: deleteSiteGuestAuthorization
-export def "sites-guests delete-authorization" [
+export def "delete-site-guest-authorization" [
   site_id: string
   guest_mac: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -24390,7 +24390,7 @@ export def "sites-guests delete-authorization" [
 #
 # GET /api/v1/sites/{site_id}/guests/{guest_mac}
 # operationId: getSiteGuestAuthorization
-export def "sites-guests get-authorization" [
+export def "get-site-guest-authorization" [
   site_id: string
   guest_mac: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -24428,7 +24428,7 @@ export def "sites-guests get-authorization" [
 #
 # PUT /api/v1/sites/{site_id}/guests/{guest_mac}
 # operationId: updateSiteGuestAuthorization
-export def "sites-guests update-authorization" [
+export def "update-site-guest-authorization" [
   site_id: string
   guest_mac: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -24481,7 +24481,7 @@ export def "sites-guests update-authorization" [
 #
 # GET /api/v1/sites/{site_id}/insights/client/{client_mac}/{metric}
 # operationId: getSiteInsightMetricsForClient
-export def "sites-insights-client get" [
+export def "get-site-insight-metrics-for-client" [
   site_id: any
   client_mac: any
   metric: any
@@ -24528,7 +24528,7 @@ export def "sites-insights-client get" [
 #
 # GET /api/v1/sites/{site_id}/insights/device/{device_mac}/{metric}
 # operationId: getSiteInsightMetricsForDevice
-export def "sites-insights-device get" [
+export def "get-site-insight-metrics-for-device" [
   site_id: any
   device_mac: any
   metric: any
@@ -24575,7 +24575,7 @@ export def "sites-insights-device get" [
 #
 # GET /api/v1/sites/{site_id}/insights/rogues
 # operationId: getSiteRogueAPs
-export def "sites-insights-rogues get-ps" [
+export def "get-site-rogue-a-ps" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -24618,7 +24618,7 @@ export def "sites-insights-rogues get-ps" [
 #
 # GET /api/v1/sites/{site_id}/insights/rogues/clients
 # operationId: getSiteRogueClients
-export def "sites-insights-rogues-clients get" [
+export def "get-site-rogue-clients" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -24660,7 +24660,7 @@ export def "sites-insights-rogues-clients get" [
 #
 # GET /api/v1/sites/{site_id}/insights/{metric}
 # operationId: getSiteInsightMetrics
-export def "sites-insights get" [
+export def "get-site-insight-metrics" [
   site_id: any
   metric: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -24705,7 +24705,7 @@ export def "sites-insights get" [
 #
 # GET /api/v1/sites/{site_id}/licenses/usages
 # operationId: getSiteLicenseUsage
-export def "sites-licenses-usages get" [
+export def "get-site-license-usage" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -24741,7 +24741,7 @@ export def "sites-licenses-usages get" [
 #
 # GET /api/v1/sites/{site_id}/location/coverage
 # operationId: getSiteBeamCoverageOverview
-export def "sites-location-coverage get-beam-overview" [
+export def "get-site-beam-coverage-overview" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -24785,7 +24785,7 @@ export def "sites-location-coverage get-beam-overview" [
 #
 # GET /api/v1/sites/{site_id}/location/ml/current
 # operationId: getSiteMachineLearningCurrentStat
-export def "sites-location-ml-current get-machine-learning-stat" [
+export def "get-site-machine-learning-current-stat" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -24823,7 +24823,7 @@ export def "sites-location-ml-current get-machine-learning-stat" [
 #
 # GET /api/v1/sites/{site_id}/location/ml/defaults
 # operationId: getSiteDefaultPlfForModels
-export def "sites-location-ml-defaults get-plf-for-models" [
+export def "get-site-default-plf-for-models" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -24859,7 +24859,7 @@ export def "sites-location-ml-defaults get-plf-for-models" [
 #
 # DELETE /api/v1/sites/{site_id}/location/ml/device/{device_id}
 # operationId: clearSiteMlOverwriteForDevice
-export def "sites-location-ml-device delete-clear-overwrite" [
+export def "clear-site-ml-overwrite-for-device" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -24897,7 +24897,7 @@ export def "sites-location-ml-device delete-clear-overwrite" [
 #
 # PUT /api/v1/sites/{site_id}/location/ml/device/{device_id}
 # operationId: overwriteSiteMlForDevice
-export def "sites-location-ml-device update-overwrite" [
+export def "overwrite-site-ml-for-device" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -24939,7 +24939,7 @@ export def "sites-location-ml-device update-overwrite" [
 #
 # DELETE /api/v1/sites/{site_id}/location/ml/map/{map_id}
 # operationId: clearSiteMlOverwriteForMap
-export def "sites-location-ml-map delete-clear-overwrite" [
+export def "clear-site-ml-overwrite-for-map" [
   site_id: string
   map_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -24977,7 +24977,7 @@ export def "sites-location-ml-map delete-clear-overwrite" [
 #
 # PUT /api/v1/sites/{site_id}/location/ml/map/{map_id}
 # operationId: overwriteSiteMlForMap
-export def "sites-location-ml-map update-overwrite" [
+export def "overwrite-site-ml-for-map" [
   site_id: string
   map_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -25019,7 +25019,7 @@ export def "sites-location-ml-map update-overwrite" [
 #
 # POST /api/v1/sites/{site_id}/location/ml/reset/map/{map_id}
 # operationId: resetSiteMlStatsByMap
-export def "sites-location-ml-reset-map stats" [
+export def "reset-site-ml-stats-by-map" [
   site_id: string
   map_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -25057,7 +25057,7 @@ export def "sites-location-ml-reset-map stats" [
 #
 # GET /api/v1/sites/{site_id}/location/ml/updates
 # operationId: getSiteMachineLearningEvents
-export def "sites-location-ml-updates get-machine-learning-events" [
+export def "get-site-machine-learning-events" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -25101,7 +25101,7 @@ export def "sites-location-ml-updates get-machine-learning-events" [
 #
 # GET /api/v1/sites/{site_id}/maps
 # operationId: getSiteMaps
-export def "sites-maps list" [
+export def "get-site-maps" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -25143,7 +25143,7 @@ export def "sites-maps list" [
 # --wall_path shape: {coordinate?: string, name?: string, nodes?: list}
 # --wayfinding shape: {micello?: record, snap_to_path?: bool}
 # --wayfinding_path shape: {coordinate?: string, nodes?: list}
-export def "sites-maps create" [
+export def "create-site-map" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -25205,7 +25205,7 @@ export def "sites-maps create" [
 # POST /api/v1/sites/{site_id}/maps/import
 # operationId: importSiteMaps
 # --json shape: {import_all_floorpans?: bool, import_height?: bool, import_orientation?: bool, site_id: string, vendor_name: "ekahau"|"ibwave"}
-export def "sites-maps-import import" [
+export def "import-site-maps" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -25250,7 +25250,7 @@ export def "sites-maps-import import" [
 #
 # DELETE /api/v1/sites/{site_id}/maps/{map_id}
 # operationId: deleteSiteMap
-export def "sites-maps delete" [
+export def "delete-site-map" [
   site_id: string
   map_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -25288,7 +25288,7 @@ export def "sites-maps delete" [
 #
 # GET /api/v1/sites/{site_id}/maps/{map_id}
 # operationId: getSiteMap
-export def "sites-maps get" [
+export def "get-site-map" [
   site_id: string
   map_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -25332,7 +25332,7 @@ export def "sites-maps get" [
 # --wall_path shape: {coordinate?: string, name?: string, nodes?: list}
 # --wayfinding shape: {micello?: record, snap_to_path?: bool}
 # --wayfinding_path shape: {coordinate?: string, nodes?: list}
-export def "sites-maps update" [
+export def "update-site-map" [
   site_id: string
   map_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -25395,7 +25395,7 @@ export def "sites-maps update" [
 #
 # DELETE /api/v1/sites/{site_id}/maps/{map_id}/auto_orient
 # operationId: deleteSiteApAutoOrientation
-export def "sites-maps-auto-orient delete-ap-orientation" [
+export def "delete-site-ap-auto-orientation" [
   site_id: string
   map_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -25433,7 +25433,7 @@ export def "sites-maps-auto-orient delete-ap-orientation" [
 #
 # POST /api/v1/sites/{site_id}/maps/{map_id}/auto_orient
 # operationId: startSiteApAutoOrientation
-export def "sites-maps-auto-orient start-ap-orientation" [
+export def "start-site-ap-auto-orientation" [
   site_id: string
   map_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -25471,7 +25471,7 @@ export def "sites-maps-auto-orient start-ap-orientation" [
 #
 # DELETE /api/v1/sites/{site_id}/maps/{map_id}/auto_placement
 # operationId: deleteSiteApAutoplacement
-export def "sites-maps-auto-placement delete-ap-autoplacement" [
+export def "delete-site-ap-autoplacement" [
   site_id: string
   map_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -25509,7 +25509,7 @@ export def "sites-maps-auto-placement delete-ap-autoplacement" [
 #
 # GET /api/v1/sites/{site_id}/maps/{map_id}/auto_placement
 # operationId: getSiteApAutoPlacement
-export def "sites-maps-auto-placement get-ap" [
+export def "get-site-ap-auto-placement" [
   site_id: string
   map_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -25547,7 +25547,7 @@ export def "sites-maps-auto-placement get-ap" [
 #
 # POST /api/v1/sites/{site_id}/maps/{map_id}/auto_placement
 # operationId: runSiteApAutoplacement
-export def "sites-maps-auto-placement create-run-ap-autoplacement" [
+export def "run-site-ap-autoplacement" [
   site_id: string
   map_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -25590,7 +25590,7 @@ export def "sites-maps-auto-placement create-run-ap-autoplacement" [
 #
 # POST /api/v1/sites/{site_id}/maps/{map_id}/clear_auto_orient
 # operationId: clearSiteApAutoOrient
-export def "sites-maps-clear-auto-orient create-ap" [
+export def "clear-site-ap-auto-orient" [
   site_id: string
   map_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -25632,7 +25632,7 @@ export def "sites-maps-clear-auto-orient create-ap" [
 #
 # POST /api/v1/sites/{site_id}/maps/{map_id}/clear_autoplacement
 # operationId: clearSiteApAutoplacement
-export def "sites-maps-clear-autoplacement create-ap" [
+export def "clear-site-ap-autoplacement" [
   site_id: string
   map_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -25674,7 +25674,7 @@ export def "sites-maps-clear-autoplacement create-ap" [
 #
 # DELETE /api/v1/sites/{site_id}/maps/{map_id}/image
 # operationId: deleteSiteMapImage
-export def "sites-maps-image delete" [
+export def "delete-site-map-image" [
   site_id: string
   map_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -25712,7 +25712,7 @@ export def "sites-maps-image delete" [
 #
 # POST /api/v1/sites/{site_id}/maps/{map_id}/image
 # operationId: addSiteMapImage
-export def "sites-maps-image create" [
+export def "add-site-map-image" [
   site_id: string
   map_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -25758,7 +25758,7 @@ export def "sites-maps-image create" [
 # POST /api/v1/sites/{site_id}/maps/{map_id}/replace
 # operationId: replaceSiteMapImage
 # --json shape: {transform?: record}
-export def "sites-maps-replace update-image" [
+export def "replace-site-map-image" [
   site_id: string
   map_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -25805,7 +25805,7 @@ export def "sites-maps-replace update-image" [
 # DEPRECATED
 # operationId: revertSiteApAutoOrient
 @deprecated
-export def "sites-maps-revert-auto-orient create-ap" [
+export def "revert-site-ap-auto-orient" [
   site_id: string
   map_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -25849,7 +25849,7 @@ export def "sites-maps-revert-auto-orient create-ap" [
 # DEPRECATED
 # operationId: revertSiteApAutoplacement
 @deprecated
-export def "sites-maps-revert-autoplacement create-ap" [
+export def "revert-site-ap-autoplacement" [
   site_id: string
   map_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -25891,7 +25891,7 @@ export def "sites-maps-revert-autoplacement create-ap" [
 #
 # POST /api/v1/sites/{site_id}/maps/{map_id}/set_map
 # operationId: bulkAssignSiteApsToMap
-export def "sites-maps-set-map assign-bulk-aps" [
+export def "bulk-assign-site-aps-to-map" [
   site_id: string
   map_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -25933,7 +25933,7 @@ export def "sites-maps-set-map assign-bulk-aps" [
 #
 # POST /api/v1/sites/{site_id}/maps/{map_id}/wayfinding/import
 # operationId: importSiteWayfindings
-export def "sites-maps-wayfinding-import import" [
+export def "import-site-wayfindings" [
   site_id: string
   map_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -25985,7 +25985,7 @@ export def "sites-maps-wayfinding-import import" [
 #
 # GET /api/v1/sites/{site_id}/mxedges
 # operationId: getSiteMxEdges
-export def "sites-mxedges get-mx-edges" [
+export def "get-site-mx-edges" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -26031,7 +26031,7 @@ export def "sites-mxedges get-mx-edges" [
 # --tunterm_port_config shape: {downstream_ports?: list<string>, separate_upstream_downstream?: bool, upstream_port_vlan_id?: int, upstream_ports?: list<string>}
 # --tunterm_switch_config shape: {enabled?: bool}
 # --versions shape: {mxagent?: string, tuntnerm?: string}
-export def "sites-mxedges create-mx-edge" [
+export def "create-site-mx-edge" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -26087,7 +26087,7 @@ export def "sites-mxedges create-mx-edge" [
 #
 # DELETE /api/v1/sites/{site_id}/mxedges/{mxedge_id}
 # operationId: deleteSiteMxEdge
-export def "sites-mxedges delete-mx-edge" [
+export def "delete-site-mx-edge" [
   site_id: string
   mxedge_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -26125,7 +26125,7 @@ export def "sites-mxedges delete-mx-edge" [
 #
 # GET /api/v1/sites/{site_id}/mxedges/{mxedge_id}
 # operationId: getSiteMxEdge
-export def "sites-mxedges get-mx-edge" [
+export def "get-site-mx-edge" [
   site_id: string
   mxedge_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -26173,7 +26173,7 @@ export def "sites-mxedges get-mx-edge" [
 # --tunterm_port_config shape: {downstream_ports?: list<string>, separate_upstream_downstream?: bool, upstream_port_vlan_id?: int, upstream_ports?: list<string>}
 # --tunterm_switch_config shape: {enabled?: bool}
 # --versions shape: {mxagent?: string, tuntnerm?: string}
-export def "sites-mxedges update-mx-edge" [
+export def "update-site-mx-edge" [
   site_id: string
   mxedge_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -26231,7 +26231,7 @@ export def "sites-mxedges update-mx-edge" [
 #
 # POST /api/v1/sites/{site_id}/mxedges/{mxedge_id}/support
 # operationId: uploadSiteMxEdgeSupportFiles
-export def "sites-mxedges-support upload-mx-edge-files" [
+export def "upload-site-mx-edge-support-files" [
   site_id: string
   mxedge_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -26269,7 +26269,7 @@ export def "sites-mxedges-support upload-mx-edge-files" [
 #
 # POST /api/v1/sites/{site_id}/mxtunnels/{mxtunnel_id}/preempt_aps
 # operationId: preemptSitesMxTunnel
-export def "sites-mxtunnels-preempt-aps create-mx-tunnel" [
+export def "preempt-sites-mx-tunnel" [
   site_id: string
   mxtunnel_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -26307,7 +26307,7 @@ export def "sites-mxtunnels-preempt-aps create-mx-tunnel" [
 #
 # GET /api/v1/sites/{site_id}/otherdevices
 # operationId: getSiteOtherDevices
-export def "sites-otherdevices get-other-devices" [
+export def "get-site-other-devices" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -26351,7 +26351,7 @@ export def "sites-otherdevices get-other-devices" [
 #
 # GET /api/v1/sites/{site_id}/pcaps
 # operationId: getSitePacketCaptures
-export def "sites-pcaps get-packet-captures" [
+export def "get-site-packet-captures" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -26394,7 +26394,7 @@ export def "sites-pcaps get-packet-captures" [
 #
 # DELETE /api/v1/sites/{site_id}/pcaps/capture
 # operationId: stopSitePacketCapture
-export def "sites-pcaps-capture stop-packet" [
+export def "stop-site-packet-capture" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -26430,7 +26430,7 @@ export def "sites-pcaps-capture stop-packet" [
 #
 # GET /api/v1/sites/{site_id}/pcaps/capture
 # operationId: getSiteCapturingStatus
-export def "sites-pcaps-capture get-capturing-status" [
+export def "get-site-capturing-status" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -26466,7 +26466,7 @@ export def "sites-pcaps-capture get-capturing-status" [
 #
 # POST /api/v1/sites/{site_id}/pcaps/capture
 # operationId: startSitePacketCapture
-export def "sites-pcaps-capture start-packet" [
+export def "start-site-packet-capture" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -26524,7 +26524,7 @@ export def "sites-pcaps-capture start-packet" [
 #
 # GET /api/v1/sites/{site_id}/psks
 # operationId: getSitePsks
-export def "sites-psks list" [
+export def "get-site-psks" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -26566,7 +26566,7 @@ export def "sites-psks list" [
 #
 # POST /api/v1/sites/{site_id}/psks
 # operationId: createSitePsk
-export def "sites-psks create" [
+export def "create-site-psk" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -26620,7 +26620,7 @@ export def "sites-psks create" [
 #
 # PUT /api/v1/sites/{site_id}/psks
 # operationId: updateSitePsks
-export def "sites-psks update-by-site-id" [
+export def "update-site-psks" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -26660,7 +26660,7 @@ export def "sites-psks update-by-site-id" [
 #
 # POST /api/v1/sites/{site_id}/psks/import
 # operationId: importSitePsks
-export def "sites-psks-import import" [
+export def "import-site-psks" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -26700,7 +26700,7 @@ export def "sites-psks-import import" [
 #
 # DELETE /api/v1/sites/{site_id}/psks/{psk_id}
 # operationId: deleteSitePsk
-export def "sites-psks delete" [
+export def "delete-site-psk" [
   site_id: string
   psk_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -26738,7 +26738,7 @@ export def "sites-psks delete" [
 #
 # GET /api/v1/sites/{site_id}/psks/{psk_id}
 # operationId: getSitePsk
-export def "sites-psks get" [
+export def "get-site-psk" [
   site_id: string
   psk_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -26776,7 +26776,7 @@ export def "sites-psks get" [
 #
 # PUT /api/v1/sites/{site_id}/psks/{psk_id}
 # operationId: updateSitePsk
-export def "sites-psks update-by-site-id-psk-id" [
+export def "update-site-psk" [
   site_id: string
   psk_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -26832,7 +26832,7 @@ export def "sites-psks update-by-site-id-psk-id" [
 #
 # GET /api/v1/sites/{site_id}/rfdiags
 # operationId: getSiteSiteRfdiagRecording
-export def "sites-rfdiags list" [
+export def "get-site-site-rfdiag-recording" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -26874,7 +26874,7 @@ export def "sites-rfdiags list" [
 #
 # POST /api/v1/sites/{site_id}/rfdiags
 # operationId: startSiteRecording
-export def "sites-rfdiags start-recording" [
+export def "start-site-recording" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -26918,7 +26918,7 @@ export def "sites-rfdiags start-recording" [
 #
 # DELETE /api/v1/sites/{site_id}/rfdiags/{rfdiag_id}
 # operationId: deleteSiteRfdiagRecording
-export def "sites-rfdiags delete-recording" [
+export def "delete-site-rfdiag-recording" [
   site_id: string
   rfdiag_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -26956,7 +26956,7 @@ export def "sites-rfdiags delete-recording" [
 #
 # GET /api/v1/sites/{site_id}/rfdiags/{rfdiag_id}
 # operationId: getSiteRfdiagRecording
-export def "sites-rfdiags get-recording" [
+export def "get-site-rfdiag-recording" [
   site_id: string
   rfdiag_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -26994,7 +26994,7 @@ export def "sites-rfdiags get-recording" [
 #
 # PUT /api/v1/sites/{site_id}/rfdiags/{rfdiag_id}
 # operationId: updateSiteRfdiagRecording
-export def "sites-rfdiags update-recording" [
+export def "update-site-rfdiag-recording" [
   site_id: string
   rfdiag_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -27040,7 +27040,7 @@ export def "sites-rfdiags update-recording" [
 #
 # GET /api/v1/sites/{site_id}/rfdiags/{rfdiag_id}/download
 # operationId: downloadSiteRfdiagRecording
-export def "sites-rfdiags-download download-recording" [
+export def "download-site-rfdiag-recording" [
   site_id: string
   rfdiag_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -27078,7 +27078,7 @@ export def "sites-rfdiags-download download-recording" [
 #
 # POST /api/v1/sites/{site_id}/rfdiags/{rfdiag_id}/stop
 # operationId: stopSiteRfdiagRecording
-export def "sites-rfdiags-stop stop-recording" [
+export def "stop-site-rfdiag-recording" [
   site_id: string
   rfdiag_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -27116,7 +27116,7 @@ export def "sites-rfdiags-stop stop-recording" [
 #
 # GET /api/v1/sites/{site_id}/rogues/events/count
 # operationId: countSiteRogueEvents
-export def "sites-rogues-events-count get" [
+export def "count-site-rogue-events" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -27165,7 +27165,7 @@ export def "sites-rogues-events-count get" [
 #
 # GET /api/v1/sites/{site_id}/rogues/events/search
 # operationId: searchSiteRogueEvents
-export def "sites-rogues-events-search list" [
+export def "search-site-rogue-events" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -27212,7 +27212,7 @@ export def "sites-rogues-events-search list" [
 #
 # GET /api/v1/sites/{site_id}/rogues/{rogue_bssid}
 # operationId: getSiteRogueAP
-export def "sites-rogues get-ap" [
+export def "get-site-rogue-ap" [
   site_id: string
   rogue_bssid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -27250,7 +27250,7 @@ export def "sites-rogues get-ap" [
 #
 # POST /api/v1/sites/{site_id}/rogues/{rogue_bssid}/deauth_clients
 # operationId: deauthSiteClientsConnectedToARogue
-export def "sites-rogues-deauth-clients create-connected" [
+export def "deauth-site-clients-connected-to-a-rogue" [
   site_id: string
   rogue_bssid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -27288,7 +27288,7 @@ export def "sites-rogues-deauth-clients create-connected" [
 #
 # GET /api/v1/sites/{site_id}/rrm/current
 # operationId: getSiteCurrentChannelPlanning
-export def "sites-rrm-current get-channel-planning" [
+export def "get-site-current-channel-planning" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -27324,7 +27324,7 @@ export def "sites-rrm-current get-channel-planning" [
 #
 # GET /api/v1/sites/{site_id}/rrm/current/devices/{device_id}/band/{band}
 # operationId: getSiteCurrentRrmConsiderationsForAnApOnASpecificBand
-export def "sites-rrm-current-devices-band get-considerations-for-ap-on-specific" [
+export def "get-site-current-rrm-considerations-for-an-ap-on-a-specific-band" [
   site_id: string
   device_id: string
   band: string
@@ -27364,7 +27364,7 @@ export def "sites-rrm-current-devices-band get-considerations-for-ap-on-specific
 #
 # GET /api/v1/sites/{site_id}/rrm/events
 # operationId: getSiteRrmEvents
-export def "sites-rrm-events get" [
+export def "get-site-rrm-events" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -27407,7 +27407,7 @@ export def "sites-rrm-events get" [
 #
 # POST /api/v1/sites/{site_id}/rrm/optimize
 # operationId: optimizeSiteRrm
-export def "sites-rrm-optimize create" [
+export def "optimize-site-rrm" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -27447,7 +27447,7 @@ export def "sites-rrm-optimize create" [
 #
 # GET /api/v1/sites/{site_id}/rssizones
 # operationId: getSiteRssiZones
-export def "sites-rssizones get-rssi-zones" [
+export def "get-site-rssi-zones" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -27484,7 +27484,7 @@ export def "sites-rssizones get-rssi-zones" [
 # POST /api/v1/sites/{site_id}/rssizones
 # operationId: createSiteRssiZone
 # --devices item shape: {device_id: string, rssi: int}
-export def "sites-rssizones create-rssi-zone" [
+export def "create-site-rssi-zone" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -27525,7 +27525,7 @@ export def "sites-rssizones create-rssi-zone" [
 #
 # DELETE /api/v1/sites/{site_id}/rssizones/{rssizone_id}
 # operationId: deleteSiteRssiZone
-export def "sites-rssizones delete-rssi-zone" [
+export def "delete-site-rssi-zone" [
   site_id: string
   rssizone_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -27563,7 +27563,7 @@ export def "sites-rssizones delete-rssi-zone" [
 #
 # GET /api/v1/sites/{site_id}/rssizones/{rssizone_id}
 # operationId: getSiteRssiZone
-export def "sites-rssizones get-rssi-zone" [
+export def "get-site-rssi-zone" [
   site_id: string
   rssizone_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -27602,7 +27602,7 @@ export def "sites-rssizones get-rssi-zone" [
 # PUT /api/v1/sites/{site_id}/rssizones/{rssizone_id}
 # operationId: updateSiteRssiZone
 # --devices item shape: {device_id: string, rssi: int}
-export def "sites-rssizones update-rssi-zone" [
+export def "update-site-rssi-zone" [
   site_id: string
   rssizone_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -27645,7 +27645,7 @@ export def "sites-rssizones update-rssi-zone" [
 #
 # GET /api/v1/sites/{site_id}/setting
 # operationId: getSiteSetting
-export def "sites-setting get" [
+export def "get-site-setting" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -27717,7 +27717,7 @@ export def "sites-setting get" [
 # --wifi shape: {cisco_enabled?: bool, disable_11k?: bool, disable_radios_when_power_constrained?: bool, enable_arp_spoof_check?: bool, enable_channel_144?: bool, enable_shared_radio_scanning?: bool, enable_vna?: bool, enabled?: bool, locate_connected?: bool, locate_unconnected?: bool, mesh_allow_dfs?: bool, mesh_enable_crm?: bool, mesh_enabled?: bool, mesh_psk?: string, mesh_ssid?: string, proxy_arp?: "default"|"enabled"|"disabled"}
 # --wired_vna shape: {enabled?: bool}
 # --zone_occupancy_alert shape: {email_notifiers?: list<string>, enabled?: bool, threshold?: int}
-export def "sites-setting update" [
+export def "update-site-settings" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -27811,7 +27811,7 @@ export def "sites-setting update" [
 #
 # DELETE /api/v1/sites/{site_id}/setting/blacklist
 # operationId: deleteSiteClientsBlocklist
-export def "sites-setting-blacklist delete-clients-blocklist" [
+export def "delete-site-clients-blocklist" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -27847,7 +27847,7 @@ export def "sites-setting-blacklist delete-clients-blocklist" [
 #
 # POST /api/v1/sites/{site_id}/setting/blacklist
 # operationId: createSiteClientsBlocklist
-export def "sites-setting-blacklist create-clients-blocklist" [
+export def "create-site-clients-blocklist" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -27887,7 +27887,7 @@ export def "sites-setting-blacklist create-clients-blocklist" [
 #
 # DELETE /api/v1/sites/{site_id}/setting/watched_station
 # operationId: deleteSiteWatchedStations
-export def "sites-setting-watched-station delete" [
+export def "delete-site-watched-stations" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -27923,7 +27923,7 @@ export def "sites-setting-watched-station delete" [
 #
 # POST /api/v1/sites/{site_id}/setting/watched_station
 # operationId: createSiteWatchedStations
-export def "sites-setting-watched-station create" [
+export def "create-site-watched-stations" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -27963,7 +27963,7 @@ export def "sites-setting-watched-station create" [
 #
 # DELETE /api/v1/sites/{site_id}/setting/whitelist
 # operationId: deleteSiteClientsAllowlist
-export def "sites-setting-whitelist delete-clients-allowlist" [
+export def "delete-site-clients-allowlist" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -27999,7 +27999,7 @@ export def "sites-setting-whitelist delete-clients-allowlist" [
 #
 # POST /api/v1/sites/{site_id}/setting/whitelist
 # operationId: createSiteClientsAllowlist
-export def "sites-setting-whitelist create-clients-allowlist" [
+export def "create-site-clients-allowlist" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -28039,7 +28039,7 @@ export def "sites-setting-whitelist create-clients-allowlist" [
 #
 # GET /api/v1/sites/{site_id}/skyatp/events/count
 # operationId: countSiteByDistringAttributesOfSkyatpEvents
-export def "sites-skyatp-events-count get-by-distring-attributes" [
+export def "count-site-by-distring-attributes-of-skyatp-events" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -28087,7 +28087,7 @@ export def "sites-skyatp-events-count get-by-distring-attributes" [
 #
 # GET /api/v1/sites/{site_id}/skyatp/events/search
 # operationId: searchSiteSkyatpEvents
-export def "sites-skyatp-events-search list" [
+export def "search-site-skyatp-events" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -28133,7 +28133,7 @@ export def "sites-skyatp-events-search list" [
 #
 # GET /api/v1/sites/{site_id}/sle/{scope}/{scope_id}/metric/{metric}/classifier/{classifier}/summary
 # operationId: getSiteSleClassifierDetails
-export def "sites-sle-metric-classifier-summary get-details" [
+export def "get-site-sle-classifier-details" [
   site_id: any
   scope: string
   scope_id: string
@@ -28181,7 +28181,7 @@ export def "sites-sle-metric-classifier-summary get-details" [
 #
 # GET /api/v1/sites/{site_id}/sle/{scope}/{scope_id}/metric/{metric}/classifiers
 # operationId: getSiteSleMetricClassifiers
-export def "sites-sle-metric-classifiers get" [
+export def "get-site-sle-metric-classifiers" [
   site_id: string
   scope: string
   scope_id: string
@@ -28223,7 +28223,7 @@ export def "sites-sle-metric-classifiers get" [
 #
 # GET /api/v1/sites/{site_id}/sle/{scope}/{scope_id}/metric/{metric}/histogram
 # operationId: getSiteSleHistogram
-export def "sites-sle-metric-histogram get" [
+export def "get-site-sle-histogram" [
   site_id: any
   scope: string
   scope_id: string
@@ -28269,7 +28269,7 @@ export def "sites-sle-metric-histogram get" [
 #
 # GET /api/v1/sites/{site_id}/sle/{scope}/{scope_id}/metric/{metric}/impact-summary
 # operationId: getSiteSleImpactSummary
-export def "sites-sle-metric-impact-summary get" [
+export def "get-site-sle-impact-summary" [
   site_id: any
   scope: string
   scope_id: string
@@ -28317,7 +28317,7 @@ export def "sites-sle-metric-impact-summary get" [
 #
 # GET /api/v1/sites/{site_id}/sle/{scope}/{scope_id}/metric/{metric}/impacted-applications
 # operationId: getSiteSleImpactedApplications
-export def "sites-sle-metric-impacted-applications get" [
+export def "get-site-sle-impacted-applications" [
   site_id: any
   scope: string
   scope_id: string
@@ -28364,7 +28364,7 @@ export def "sites-sle-metric-impacted-applications get" [
 #
 # GET /api/v1/sites/{site_id}/sle/{scope}/{scope_id}/metric/{metric}/impacted-aps
 # operationId: getSiteSleImpactedAps
-export def "sites-sle-metric-impacted-aps get" [
+export def "get-site-sle-impacted-aps" [
   site_id: any
   scope: string
   scope_id: string
@@ -28411,7 +28411,7 @@ export def "sites-sle-metric-impacted-aps get" [
 #
 # GET /api/v1/sites/{site_id}/sle/{scope}/{scope_id}/metric/{metric}/impacted-chassis
 # operationId: getSiteSleImpactedChassis
-export def "sites-sle-metric-impacted-chassis get" [
+export def "get-site-sle-impacted-chassis" [
   site_id: any
   scope: string
   scope_id: string
@@ -28458,7 +28458,7 @@ export def "sites-sle-metric-impacted-chassis get" [
 #
 # GET /api/v1/sites/{site_id}/sle/{scope}/{scope_id}/metric/{metric}/impacted-clients
 # operationId: getSiteSleImpactedWiredClients
-export def "sites-sle-metric-impacted-clients get-wired" [
+export def "get-site-sle-impacted-wired-clients" [
   site_id: any
   scope: string
   scope_id: string
@@ -28505,7 +28505,7 @@ export def "sites-sle-metric-impacted-clients get-wired" [
 #
 # GET /api/v1/sites/{site_id}/sle/{scope}/{scope_id}/metric/{metric}/impacted-gateways
 # operationId: getSiteSleImpactedGateways
-export def "sites-sle-metric-impacted-gateways get" [
+export def "get-site-sle-impacted-gateways" [
   site_id: any
   scope: string
   scope_id: string
@@ -28552,7 +28552,7 @@ export def "sites-sle-metric-impacted-gateways get" [
 #
 # GET /api/v1/sites/{site_id}/sle/{scope}/{scope_id}/metric/{metric}/impacted-interfaces
 # operationId: getSiteSleImpactedInterfaces
-export def "sites-sle-metric-impacted-interfaces get" [
+export def "get-site-sle-impacted-interfaces" [
   site_id: any
   scope: string
   scope_id: string
@@ -28599,7 +28599,7 @@ export def "sites-sle-metric-impacted-interfaces get" [
 #
 # GET /api/v1/sites/{site_id}/sle/{scope}/{scope_id}/metric/{metric}/impacted-switches
 # operationId: getSiteSleImpactedSwitches
-export def "sites-sle-metric-impacted-switches get" [
+export def "get-site-sle-impacted-switches" [
   site_id: any
   scope: string
   scope_id: string
@@ -28646,7 +28646,7 @@ export def "sites-sle-metric-impacted-switches get" [
 #
 # GET /api/v1/sites/{site_id}/sle/{scope}/{scope_id}/metric/{metric}/impacted-users
 # operationId: getSiteSleImpactedWirelessClients
-export def "sites-sle-metric-impacted-users get-wireless-clients" [
+export def "get-site-sle-impacted-wireless-clients" [
   site_id: any
   scope: string
   scope_id: string
@@ -28693,7 +28693,7 @@ export def "sites-sle-metric-impacted-users get-wireless-clients" [
 #
 # GET /api/v1/sites/{site_id}/sle/{scope}/{scope_id}/metric/{metric}/summary
 # operationId: getSiteSleSummary
-export def "sites-sle-metric-summary get" [
+export def "get-site-sle-summary" [
   site_id: any
   scope: string
   scope_id: string
@@ -28739,7 +28739,7 @@ export def "sites-sle-metric-summary get" [
 #
 # GET /api/v1/sites/{site_id}/sle/{scope}/{scope_id}/metric/{metric}/threshold
 # operationId: getSiteSleThreshold
-export def "sites-sle-metric-threshold get" [
+export def "get-site-sle-threshold" [
   site_id: string
   scope: string
   scope_id: string
@@ -28781,7 +28781,7 @@ export def "sites-sle-metric-threshold get" [
 #
 # POST /api/v1/sites/{site_id}/sle/{scope}/{scope_id}/metric/{metric}/threshold
 # operationId: replaceSiteSleThreshold
-export def "sites-sle-metric-threshold update-by-site-id-scope-id-metric" [
+export def "replace-site-sle-threshold" [
   site_id: string
   scope: string
   scope_id: string
@@ -28828,7 +28828,7 @@ export def "sites-sle-metric-threshold update-by-site-id-scope-id-metric" [
 #
 # PUT /api/v1/sites/{site_id}/sle/{scope}/{scope_id}/metric/{metric}/threshold
 # operationId: updateSiteSleThreshold
-export def "sites-sle-metric-threshold update-by-site-id-scope-id-metric-1" [
+export def "update-site-sle-threshold" [
   site_id: string
   scope: string
   scope_id: string
@@ -28875,7 +28875,7 @@ export def "sites-sle-metric-threshold update-by-site-id-scope-id-metric-1" [
 #
 # GET /api/v1/sites/{site_id}/sle/{scope}/{scope_id}/metrics
 # operationId: getSiteSlesMetrics
-export def "sites-sle-metrics get" [
+export def "get-site-sles-metrics" [
   site_id: string
   scope: string
   scope_id: string
@@ -28915,7 +28915,7 @@ export def "sites-sle-metrics get" [
 #
 # GET /api/v1/sites/{site_id}/ssr/upgrade/{upgrade_id}
 # operationId: getSiteSsrUpgrade
-export def "sites-ssr-upgrade get" [
+export def "get-site-ssr-upgrade" [
   site_id: string
   upgrade_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -28953,7 +28953,7 @@ export def "sites-ssr-upgrade get" [
 #
 # POST /api/v1/sites/{site_id}/ssr/{device_id}/upgrade
 # operationId: upgradeSiteSsr
-export def "sites-ssr-upgrade create" [
+export def "upgrade-site-ssr" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -28998,7 +28998,7 @@ export def "sites-ssr-upgrade create" [
 #
 # GET /api/v1/sites/{site_id}/stats
 # operationId: getSiteStats
-export def "sites-stats get-by-site-id" [
+export def "get-site-stats" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -29034,7 +29034,7 @@ export def "sites-stats get-by-site-id" [
 #
 # GET /api/v1/sites/{site_id}/stats/apps/count
 # operationId: countSiteApps
-export def "sites-stats-apps-count get" [
+export def "count-site-apps" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -29075,7 +29075,7 @@ export def "sites-stats-apps-count get" [
 #
 # GET /api/v1/sites/{site_id}/stats/assets
 # operationId: getSiteAssetsStats
-export def "sites-stats-assets get" [
+export def "get-site-assets-stats" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -29117,7 +29117,7 @@ export def "sites-stats-assets get" [
 #
 # GET /api/v1/sites/{site_id}/stats/assets/asset_id
 # operationId: getSiteAssetStats
-export def "sites-stats-assets-asset-id get" [
+export def "get-site-asset-stats" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -29157,7 +29157,7 @@ export def "sites-stats-assets-asset-id get" [
 #
 # GET /api/v1/sites/{site_id}/stats/assets/count
 # operationId: countSiteAssets
-export def "sites-stats-assets-count get" [
+export def "count-site-assets" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -29195,7 +29195,7 @@ export def "sites-stats-assets-count get" [
 #
 # GET /api/v1/sites/{site_id}/stats/assets/search
 # operationId: searchSiteAssets
-export def "sites-stats-assets-search list" [
+export def "search-site-assets" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -29250,7 +29250,7 @@ export def "sites-stats-assets-search list" [
 #
 # GET /api/v1/sites/{site_id}/stats/beacons
 # operationId: getSiteBeaconsStats
-export def "sites-stats-beacons get" [
+export def "get-site-beacons-stats" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -29292,7 +29292,7 @@ export def "sites-stats-beacons get" [
 #
 # GET /api/v1/sites/{site_id}/stats/bgp_peers/count
 # operationId: countSiteBgpStats
-export def "sites-stats-bgp-peers-count stats" [
+export def "count-site-bgp-stats" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -29331,7 +29331,7 @@ export def "sites-stats-bgp-peers-count stats" [
 #
 # GET /api/v1/sites/{site_id}/stats/bgp_peers/search
 # operationId: searchSiteBgpStats
-export def "sites-stats-bgp-peers-search list" [
+export def "search-site-bgp-stats" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -29367,7 +29367,7 @@ export def "sites-stats-bgp-peers-search list" [
 #
 # GET /api/v1/sites/{site_id}/stats/calls/count
 # operationId: countSiteCalls
-export def "sites-stats-calls-count get" [
+export def "count-site-calls" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -29408,7 +29408,7 @@ export def "sites-stats-calls-count get" [
 #
 # GET /api/v1/sites/{site_id}/stats/calls/search
 # operationId: searchSiteCalls
-export def "sites-stats-calls-search list" [
+export def "search-site-calls" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -29451,7 +29451,7 @@ export def "sites-stats-calls-search list" [
 #
 # GET /api/v1/sites/{site_id}/stats/clients
 # operationId: getSiteClientsStats
-export def "sites-stats-clients list" [
+export def "get-site-clients-stats" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -29489,7 +29489,7 @@ export def "sites-stats-clients list" [
 #
 # GET /api/v1/sites/{site_id}/stats/clients/{client_mac}
 # operationId: getSiteClientStats
-export def "sites-stats-clients get" [
+export def "get-site-client-stats" [
   site_id: string
   client_mac: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -29529,7 +29529,7 @@ export def "sites-stats-clients get" [
 #
 # GET /api/v1/sites/{site_id}/stats/devices
 # operationId: getSiteDevicesStats
-export def "sites-stats-devices list" [
+export def "get-site-devices-stats" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -29573,7 +29573,7 @@ export def "sites-stats-devices list" [
 #
 # GET /api/v1/sites/{site_id}/stats/devices/{device_id}
 # operationId: getSiteDeviceStats
-export def "sites-stats-devices get" [
+export def "get-site-device-stats" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -29611,7 +29611,7 @@ export def "sites-stats-devices get" [
 #
 # GET /api/v1/sites/{site_id}/stats/devices/{device_id}/clients
 # operationId: getSiteAllClientsStatsByDevice
-export def "sites-stats-devices-clients get-list" [
+export def "get-site-all-clients-stats-by-device" [
   site_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -29649,7 +29649,7 @@ export def "sites-stats-devices-clients get-list" [
 #
 # GET /api/v1/sites/{site_id}/stats/discovered_assets
 # operationId: getSiteDiscoveredAssets
-export def "sites-stats-discovered-assets get" [
+export def "get-site-discovered-assets" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -29691,7 +29691,7 @@ export def "sites-stats-discovered-assets get" [
 #
 # GET /api/v1/sites/{site_id}/stats/discovered_switch_metrics/search
 # operationId: searchSiteDiscoveredSwitchesMetrics
-export def "sites-stats-discovered-switch-metrics-search list-switches" [
+export def "search-site-discovered-switches-metrics" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -29734,7 +29734,7 @@ export def "sites-stats-discovered-switch-metrics-search list-switches" [
 #
 # GET /api/v1/sites/{site_id}/stats/discovered_switches/count
 # operationId: countSiteDiscoveredSwitches
-export def "sites-stats-discovered-switches-count get" [
+export def "count-site-discovered-switches" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -29777,7 +29777,7 @@ export def "sites-stats-discovered-switches-count get" [
 #
 # GET /api/v1/sites/{site_id}/stats/discovered_switches/metrics
 # operationId: getSiteDiscoveredSwitchesMetrics
-export def "sites-stats-discovered-switches-metrics get" [
+export def "get-site-discovered-switches-metrics" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -29816,7 +29816,7 @@ export def "sites-stats-discovered-switches-metrics get" [
 #
 # GET /api/v1/sites/{site_id}/stats/discovered_switches/search
 # operationId: searchSiteDiscoveredSwitches
-export def "sites-stats-discovered-switches-search list" [
+export def "search-site-discovered-switches" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -29863,7 +29863,7 @@ export def "sites-stats-discovered-switches-search list" [
 #
 # GET /api/v1/sites/{site_id}/stats/filtered_assets
 # operationId: getSiteAssetsOfInterest
-export def "sites-stats-filtered-assets get-of-interest" [
+export def "get-site-assets-of-interest" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -29905,7 +29905,7 @@ export def "sites-stats-filtered-assets get-of-interest" [
 #
 # GET /api/v1/sites/{site_id}/stats/gateways/metrics
 # operationId: getSiteGatewayMetrics
-export def "sites-stats-gateways-metrics get" [
+export def "get-site-gateway-metrics" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -29941,7 +29941,7 @@ export def "sites-stats-gateways-metrics get" [
 #
 # GET /api/v1/sites/{site_id}/stats/maps/{map_id}/clients
 # operationId: getSiteClientsStatsByMap
-export def "sites-stats-maps-clients get" [
+export def "get-site-clients-stats-by-map" [
   site_id: any
   map_id: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -29985,7 +29985,7 @@ export def "sites-stats-maps-clients get" [
 #
 # GET /api/v1/sites/{site_id}/stats/maps/{map_id}/discovered_assets
 # operationId: getSiteDiscoveredAssetByMap
-export def "sites-stats-maps-discovered-assets get" [
+export def "get-site-discovered-asset-by-map" [
   site_id: string
   map_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -30023,7 +30023,7 @@ export def "sites-stats-maps-discovered-assets get" [
 #
 # GET /api/v1/sites/{site_id}/stats/maps/{map_id}/sdkclients
 # operationId: getSiteSdkStatsByMap
-export def "sites-stats-maps-sdkclients get-sdk" [
+export def "get-site-sdk-stats-by-map" [
   site_id: string
   map_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -30061,7 +30061,7 @@ export def "sites-stats-maps-sdkclients get-sdk" [
 #
 # GET /api/v1/sites/{site_id}/stats/maps/{map_id}/unconnected_clients
 # operationId: getSiteUnconnectedClientStats
-export def "sites-stats-maps-unconnected-clients get" [
+export def "get-site-unconnected-client-stats" [
   site_id: string
   map_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -30099,7 +30099,7 @@ export def "sites-stats-maps-unconnected-clients get" [
 #
 # GET /api/v1/sites/{site_id}/stats/mxedges
 # operationId: getSiteMxEdgesStats
-export def "sites-stats-mxedges get-mx-edges" [
+export def "get-site-mx-edges-stats" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -30135,7 +30135,7 @@ export def "sites-stats-mxedges get-mx-edges" [
 #
 # GET /api/v1/sites/{site_id}/stats/mxedges/{mxedge_id}
 # operationId: getSiteMxEdgeStats
-export def "sites-stats-mxedges get-mx-edge" [
+export def "get-site-mx-edge-stats" [
   site_id: string
   mxedge_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -30173,7 +30173,7 @@ export def "sites-stats-mxedges get-mx-edge" [
 #
 # GET /api/v1/sites/{site_id}/stats/ports/count
 # operationId: countSiteByDisctinctAttributesOPorts
-export def "sites-stats-ports-count get-by-disctinct-attributes-o" [
+export def "count-site-by-disctinct-attributes-o-ports" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -30241,7 +30241,7 @@ export def "sites-stats-ports-count get-by-disctinct-attributes-o" [
 #
 # GET /api/v1/sites/{site_id}/stats/ports/search
 # operationId: searchSiteSwOrGwPorts
-export def "sites-stats-ports-search list-sw-or-gw" [
+export def "search-site-sw-or-gw-ports" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -30312,7 +30312,7 @@ export def "sites-stats-ports-search list-sw-or-gw" [
 #
 # GET /api/v1/sites/{site_id}/stats/sdkclients/{sdkclient_id}
 # operationId: getSiteSdkStats
-export def "sites-stats-sdkclients get-sdk" [
+export def "get-site-sdk-stats" [
   site_id: string
   sdkclient_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -30350,7 +30350,7 @@ export def "sites-stats-sdkclients get-sdk" [
 #
 # GET /api/v1/sites/{site_id}/stats/switch_ports/count
 # operationId: countSiteByDisctinctAttributesOfSwitchPorts
-export def "sites-stats-switch-ports-count get-by-disctinct-attributes" [
+export def "count-site-by-disctinct-attributes-of-switch-ports" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -30418,7 +30418,7 @@ export def "sites-stats-switch-ports-count get-by-disctinct-attributes" [
 #
 # GET /api/v1/sites/{site_id}/stats/switch_ports/search
 # operationId: searchSiteSwitchPorts
-export def "sites-stats-switch-ports-search list" [
+export def "search-site-switch-ports" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -30484,7 +30484,7 @@ export def "sites-stats-switch-ports-search list" [
 #
 # GET /api/v1/sites/{site_id}/stats/switches/metrics
 # operationId: getSiteAdoptedSwitchesComplianceMetrics
-export def "sites-stats-switches-metrics get-adopted-compliance" [
+export def "get-site-adopted-switches-compliance-metrics" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -30520,7 +30520,7 @@ export def "sites-stats-switches-metrics get-adopted-compliance" [
 #
 # GET /api/v1/sites/{site_id}/stats/wxrules
 # operationId: getSiteWxRulesUsage
-export def "sites-stats-wxrules get-wx-rules-usage" [
+export def "get-site-wx-rules-usage" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -30556,7 +30556,7 @@ export def "sites-stats-wxrules get-wx-rules-usage" [
 #
 # GET /api/v1/sites/{site_id}/stats/zones
 # operationId: getSiteZonesStats
-export def "sites-stats-zones get" [
+export def "get-site-zones-stats" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -30594,7 +30594,7 @@ export def "sites-stats-zones get" [
 #
 # GET /api/v1/sites/{site_id}/stats/{zone_type}/{zone_id}
 # operationId: getSiteZoneStats
-export def "sites-stats get-by-site-id-zone-type-zone-id" [
+export def "get-site-zone-stats" [
   site_id: string
   zone_type: string
   zone_id: string
@@ -30634,7 +30634,7 @@ export def "sites-stats get-by-site-id-zone-type-zone-id" [
 #
 # DELETE /api/v1/sites/{site_id}/subscriptions
 # operationId: UnsubscribeSite
-export def "sites-subscriptions unsubscribe" [
+export def "unsubscribe-site" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -30670,7 +30670,7 @@ export def "sites-subscriptions unsubscribe" [
 #
 # POST /api/v1/sites/{site_id}/subscriptions
 # operationId: SubscribeSite
-export def "sites-subscriptions subscribe" [
+export def "subscribe-site" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -30706,7 +30706,7 @@ export def "sites-subscriptions subscribe" [
 #
 # GET /api/v1/sites/{site_id}/synthetic_test
 # operationId: getSiteSyntheticTestStatus
-export def "sites-synthetic-test get-status" [
+export def "get-site-synthetic-test-status" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -30742,7 +30742,7 @@ export def "sites-synthetic-test get-status" [
 #
 # POST /api/v1/sites/{site_id}/synthetic_test
 # operationId: triggerSiteSyntheticTest
-export def "sites-synthetic-test trigger" [
+export def "trigger-site-synthetic-test" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -30782,7 +30782,7 @@ export def "sites-synthetic-test trigger" [
 #
 # GET /api/v1/sites/{site_id}/uisettings
 # operationId: getSiteCurdSettings
-export def "sites-uisettings get-curd-settings" [
+export def "get-site-curd-settings" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -30820,7 +30820,7 @@ export def "sites-uisettings get-curd-settings" [
 # operationId: createSiteCurdSettings
 # --defaultTimeRange shape: {end?: int, endDate?: string, interval?: string, name?: string, shortName?: string, start?: int, usePreset?: bool}
 # --tiles item shape: {chartBand?: string, chartColor?: string, chartDirection?: string, chartRankBy?: string, chartType?: string, colspan?: int, column?: int, hideEmptyRows?: bool, id?: string, metric?: record, name?: string, row?: int, rowspan?: int, scopeId?: string, scopeType?: string, sortedColumns?: any, timeRange?: record, trendType?: string, vizType?: string}
-export def "sites-uisettings create-curd-settings" [
+export def "create-site-curd-settings" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -30869,7 +30869,7 @@ export def "sites-uisettings create-curd-settings" [
 #
 # GET /api/v1/sites/{site_id}/uisettings/derived
 # operationId: getSiteDerivedCurdSetting
-export def "sites-uisettings-derived get-curd-setting" [
+export def "get-site-derived-curd-setting" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -30905,7 +30905,7 @@ export def "sites-uisettings-derived get-curd-setting" [
 #
 # DELETE /api/v1/sites/{site_id}/uisettings/{uisetting_id}
 # operationId: deleteSiteCurdSetting
-export def "sites-uisettings delete-curd-setting" [
+export def "delete-site-curd-setting" [
   site_id: string
   uisetting_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -30943,7 +30943,7 @@ export def "sites-uisettings delete-curd-setting" [
 #
 # GET /api/v1/sites/{site_id}/uisettings/{uisetting_id}
 # operationId: getSiteCurdSetting
-export def "sites-uisettings get-curd-setting" [
+export def "get-site-curd-setting" [
   site_id: string
   uisetting_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -30983,7 +30983,7 @@ export def "sites-uisettings get-curd-setting" [
 # operationId: updateSiteCurdSetting
 # --defaultTimeRange shape: {end?: int, endDate?: string, interval?: string, name?: string, shortName?: string, start?: int, usePreset?: bool}
 # --tiles item shape: {chartBand?: string, chartColor?: string, chartDirection?: string, chartRankBy?: string, chartType?: string, colspan?: int, column?: int, hideEmptyRows?: bool, id?: string, metric?: record, name?: string, row?: int, rowspan?: int, scopeId?: string, scopeType?: string, sortedColumns?: any, timeRange?: record, trendType?: string, vizType?: string}
-export def "sites-uisettings update-curd-setting" [
+export def "update-site-curd-setting" [
   site_id: string
   uisetting_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -31034,7 +31034,7 @@ export def "sites-uisettings update-curd-setting" [
 #
 # GET /api/v1/sites/{site_id}/vbeacons
 # operationId: getSiteVBeacons
-export def "sites-vbeacons get-v-beacons" [
+export def "get-site-v-beacons" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -31070,7 +31070,7 @@ export def "sites-vbeacons get-v-beacons" [
 #
 # POST /api/v1/sites/{site_id}/vbeacons
 # operationId: createSiteVBeacon
-export def "sites-vbeacons create-v-beacon" [
+export def "create-site-v-beacon" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -31121,7 +31121,7 @@ export def "sites-vbeacons create-v-beacon" [
 #
 # DELETE /api/v1/sites/{site_id}/vbeacons/{vbeacon_id}
 # operationId: deleteSiteVBeacon
-export def "sites-vbeacons delete-v-beacon" [
+export def "delete-site-v-beacon" [
   site_id: string
   vbeacon_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -31159,7 +31159,7 @@ export def "sites-vbeacons delete-v-beacon" [
 #
 # GET /api/v1/sites/{site_id}/vbeacons/{vbeacon_id}
 # operationId: getSiteVBeacon
-export def "sites-vbeacons get-v-beacon" [
+export def "get-site-v-beacon" [
   site_id: string
   vbeacon_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -31197,7 +31197,7 @@ export def "sites-vbeacons get-v-beacon" [
 #
 # PUT /api/v1/sites/{site_id}/vbeacons/{vbeacon_id}
 # operationId: updateSiteVBeacon
-export def "sites-vbeacons update-v-beacon" [
+export def "update-site-v-beacon" [
   site_id: string
   vbeacon_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -31250,7 +31250,7 @@ export def "sites-vbeacons update-v-beacon" [
 #
 # GET /api/v1/sites/{site_id}/webhooks
 # operationId: getSiteWebhooks
-export def "sites-webhooks list" [
+export def "get-site-webhooks" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -31286,7 +31286,7 @@ export def "sites-webhooks list" [
 #
 # POST /api/v1/sites/{site_id}/webhooks
 # operationId: createSiteWebhook
-export def "sites-webhooks create" [
+export def "create-site-webhook" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -31334,7 +31334,7 @@ export def "sites-webhooks create" [
 #
 # DELETE /api/v1/sites/{site_id}/webhooks/{webhook_id}
 # operationId: deleteSiteWebhook
-export def "sites-webhooks delete" [
+export def "delete-site-webhook" [
   site_id: string
   webhook_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -31372,7 +31372,7 @@ export def "sites-webhooks delete" [
 #
 # GET /api/v1/sites/{site_id}/webhooks/{webhook_id}
 # operationId: getSiteWebhook
-export def "sites-webhooks get" [
+export def "get-site-webhook" [
   site_id: string
   webhook_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -31410,7 +31410,7 @@ export def "sites-webhooks get" [
 #
 # PUT /api/v1/sites/{site_id}/webhooks/{webhook_id}
 # operationId: updateSiteWebhook
-export def "sites-webhooks update" [
+export def "update-site-webhook" [
   site_id: string
   webhook_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -31460,7 +31460,7 @@ export def "sites-webhooks update" [
 #
 # POST /api/v1/sites/{site_id}/webhooks/{webhook_id}/ping
 # operationId: pingSiteWebhook
-export def "sites-webhooks-ping ping" [
+export def "ping-site-webhook" [
   site_id: string
   webhook_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -31498,7 +31498,7 @@ export def "sites-webhooks-ping ping" [
 #
 # GET /api/v1/sites/{site_id}/wired_clients/count
 # operationId: countSiteClientsWired
-export def "sites-wired-clients-count get" [
+export def "count-site-clients-wired" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -31545,7 +31545,7 @@ export def "sites-wired-clients-count get" [
 #
 # GET /api/v1/sites/{site_id}/wired_clients/search
 # operationId: searchSiteClientsWired
-export def "sites-wired-clients-search list" [
+export def "search-site-clients-wired" [
   site_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -31593,7 +31593,7 @@ export def "sites-wired-clients-search list" [
 #
 # GET /api/v1/sites/{site_id}/wlans
 # operationId: getSiteWlans
-export def "sites-wlans list" [
+export def "get-site-wlans" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -31649,7 +31649,7 @@ export def "sites-wlans list" [
 # --rateset shape: {5?: record, 24?: record}
 # --schedule shape: {enabled?: bool, hours?: record}
 @deprecated --flag band
-export def "sites-wlans create" [
+export def "create-site-wlan" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -31776,7 +31776,7 @@ export def "sites-wlans create" [
 #
 # GET /api/v1/sites/{site_id}/wlans/derived
 # operationId: getSiteWlanDerived
-export def "sites-wlans-derived get" [
+export def "get-site-wlan-derived" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -31814,7 +31814,7 @@ export def "sites-wlans-derived get" [
 #
 # DELETE /api/v1/sites/{site_id}/wlans/{wlan_id}
 # operationId: deleteSiteWlan
-export def "sites-wlans delete" [
+export def "delete-site-wlan" [
   site_id: string
   wlan_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -31852,7 +31852,7 @@ export def "sites-wlans delete" [
 #
 # GET /api/v1/sites/{site_id}/wlans/{wlan_id}
 # operationId: getSiteWlan
-export def "sites-wlans get" [
+export def "get-site-wlan" [
   site_id: string
   wlan_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -31910,7 +31910,7 @@ export def "sites-wlans get" [
 # --rateset shape: {5?: record, 24?: record}
 # --schedule shape: {enabled?: bool, hours?: record}
 @deprecated --flag band
-export def "sites-wlans update" [
+export def "update-site-wlan" [
   site_id: string
   wlan_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -32039,7 +32039,7 @@ export def "sites-wlans update" [
 #
 # POST /api/v1/sites/{site_id}/wlans/{wlan_id}/portal_image
 # operationId: uploadSiteWlanPortalImage
-export def "sites-wlans-portal-image upload" [
+export def "upload-site-wlan-portal-image" [
   site_id: string
   wlan_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -32084,7 +32084,7 @@ export def "sites-wlans-portal-image upload" [
 #
 # PUT /api/v1/sites/{site_id}/wlans/{wlan_id}/portal_template
 # operationId: updateSiteWlanPortalTemplate
-export def "sites-wlans-portal-template update" [
+export def "update-site-wlan-portal-template" [
   site_id: string
   wlan_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -32239,7 +32239,7 @@ export def "sites-wlans-portal-template update" [
 #
 # GET /api/v1/sites/{site_id}/wxrules
 # operationId: getSiteWxRules
-export def "sites-wxrules get-wx-rules" [
+export def "get-site-wx-rules" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -32275,7 +32275,7 @@ export def "sites-wxrules get-wx-rules" [
 #
 # POST /api/v1/sites/{site_id}/wxrules
 # operationId: createSiteWxRule
-export def "sites-wxrules create-wx-rule" [
+export def "create-site-wx-rule" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -32322,7 +32322,7 @@ export def "sites-wxrules create-wx-rule" [
 #
 # GET /api/v1/sites/{site_id}/wxrules/derived
 # operationId: getSiteWxRulesDerived
-export def "sites-wxrules-derived get-wx-rules" [
+export def "get-site-wx-rules-derived" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -32358,7 +32358,7 @@ export def "sites-wxrules-derived get-wx-rules" [
 #
 # DELETE /api/v1/sites/{site_id}/wxrules/{wxrules_id}
 # operationId: deleteSiteWxRule
-export def "sites-wxrules delete-wx-rule" [
+export def "delete-site-wx-rule" [
   site_id: string
   wxrules_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -32396,7 +32396,7 @@ export def "sites-wxrules delete-wx-rule" [
 #
 # GET /api/v1/sites/{site_id}/wxrules/{wxrules_id}
 # operationId: getSiteWxRule
-export def "sites-wxrules get-wx-rule" [
+export def "get-site-wx-rule" [
   site_id: string
   wxrules_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -32434,7 +32434,7 @@ export def "sites-wxrules get-wx-rule" [
 #
 # PUT /api/v1/sites/{site_id}/wxrules/{wxrules_id}
 # operationId: updateSiteWxRule
-export def "sites-wxrules update-wx-rule" [
+export def "update-site-wx-rule" [
   site_id: string
   wxrules_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -32483,7 +32483,7 @@ export def "sites-wxrules update-wx-rule" [
 #
 # GET /api/v1/sites/{site_id}/wxtags
 # operationId: getSiteWxTags
-export def "sites-wxtags get-wx-tags" [
+export def "get-site-wx-tags" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -32520,7 +32520,7 @@ export def "sites-wxtags get-wx-tags" [
 # POST /api/v1/sites/{site_id}/wxtags
 # operationId: createSiteWxTag
 # --specs item shape: {port_range?: string, protocol?: string, subnets?: list<string>}
-export def "sites-wxtags create-wx-tag" [
+export def "create-site-wx-tag" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -32570,7 +32570,7 @@ export def "sites-wxtags create-wx-tag" [
 #
 # GET /api/v1/sites/{site_id}/wxtags/apps
 # operationId: getSiteApplicationList
-export def "sites-wxtags-apps get-application-list" [
+export def "get-site-application-list" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -32606,7 +32606,7 @@ export def "sites-wxtags-apps get-application-list" [
 #
 # DELETE /api/v1/sites/{site_id}/wxtags/{wxtag_id}
 # operationId: deleteSiteWxTag
-export def "sites-wxtags delete-wx-tag" [
+export def "delete-site-wx-tag" [
   site_id: string
   wxtag_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -32644,7 +32644,7 @@ export def "sites-wxtags delete-wx-tag" [
 #
 # GET /api/v1/sites/{site_id}/wxtags/{wxtag_id}
 # operationId: getSiteWxTag
-export def "sites-wxtags get-wx-tag" [
+export def "get-site-wx-tag" [
   site_id: string
   wxtag_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -32683,7 +32683,7 @@ export def "sites-wxtags get-wx-tag" [
 # PUT /api/v1/sites/{site_id}/wxtags/{wxtag_id}
 # operationId: updateSiteWxTag
 # --specs item shape: {port_range?: string, protocol?: string, subnets?: list<string>}
-export def "sites-wxtags update-wx-tag" [
+export def "update-site-wx-tag" [
   site_id: string
   wxtag_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -32735,7 +32735,7 @@ export def "sites-wxtags update-wx-tag" [
 #
 # GET /api/v1/sites/{site_id}/wxtags/{wxtag_id}/clients
 # operationId: getSiteCurrentMatchingClientsOfAWxTag
-export def "sites-wxtags-clients get-matching-of-wx-tag" [
+export def "get-site-current-matching-clients-of-a-wx-tag" [
   site_id: string
   wxtag_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -32773,7 +32773,7 @@ export def "sites-wxtags-clients get-matching-of-wx-tag" [
 #
 # GET /api/v1/sites/{site_id}/wxtunnels
 # operationId: getSiteWxTunnels
-export def "sites-wxtunnels get-wx-tunnels" [
+export def "get-site-wx-tunnels" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -32812,7 +32812,7 @@ export def "sites-wxtunnels get-wx-tunnels" [
 # --dmvpn shape: {enabled?: bool, holding_time?: int, host_routes?: list<string>}
 # --ipsec shape: {enabled?: bool, psk: string}
 # --sessions item shape: {ap_as_session_id?: string, comment?: string, enable_cookie?: bool, ethertype?: "ethernet"|"vlan", local_session_id?: int, pseudo_802.1ad_enabled?: bool, remote_id?: string, remote_session_id?: int, use_ap_as_session_ids?: bool}
-export def "sites-wxtunnels create-wx-tunnel" [
+export def "create-site-wx-tunnel" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -32867,7 +32867,7 @@ export def "sites-wxtunnels create-wx-tunnel" [
 #
 # DELETE /api/v1/sites/{site_id}/wxtunnels/{wxtunnel_id}
 # operationId: deleteSiteWxTunnel
-export def "sites-wxtunnels delete-wx-tunnel" [
+export def "delete-site-wx-tunnel" [
   site_id: string
   wxtunnel_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -32905,7 +32905,7 @@ export def "sites-wxtunnels delete-wx-tunnel" [
 #
 # GET /api/v1/sites/{site_id}/wxtunnels/{wxtunnel_id}
 # operationId: getSiteWxTunnel
-export def "sites-wxtunnels get-wx-tunnel" [
+export def "get-site-wx-tunnel" [
   site_id: string
   wxtunnel_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -32946,7 +32946,7 @@ export def "sites-wxtunnels get-wx-tunnel" [
 # --dmvpn shape: {enabled?: bool, holding_time?: int, host_routes?: list<string>}
 # --ipsec shape: {enabled?: bool, psk: string}
 # --sessions item shape: {ap_as_session_id?: string, comment?: string, enable_cookie?: bool, ethertype?: "ethernet"|"vlan", local_session_id?: int, pseudo_802.1ad_enabled?: bool, remote_id?: string, remote_session_id?: int, use_ap_as_session_ids?: bool}
-export def "sites-wxtunnels update-wx-tunnel" [
+export def "update-site-wx-tunnel" [
   site_id: string
   wxtunnel_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -33003,7 +33003,7 @@ export def "sites-wxtunnels update-wx-tunnel" [
 #
 # GET /api/v1/sites/{site_id}/zones
 # operationId: getSiteZones
-export def "sites-zones list" [
+export def "get-site-zones" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -33040,7 +33040,7 @@ export def "sites-zones list" [
 # POST /api/v1/sites/{site_id}/zones
 # operationId: createSiteZone
 # --vertices item shape: {x: float, y: float}
-export def "sites-zones create" [
+export def "create-site-zone" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -33083,7 +33083,7 @@ export def "sites-zones create" [
 #
 # DELETE /api/v1/sites/{site_id}/zones/{zone_id}
 # operationId: deleteSiteZone
-export def "sites-zones delete" [
+export def "delete-site-zone" [
   site_id: string
   zone_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -33121,7 +33121,7 @@ export def "sites-zones delete" [
 #
 # GET /api/v1/sites/{site_id}/zones/{zone_id}
 # operationId: getSiteZone
-export def "sites-zones get" [
+export def "get-site-zone" [
   site_id: string
   zone_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -33160,7 +33160,7 @@ export def "sites-zones get" [
 # PUT /api/v1/sites/{site_id}/zones/{zone_id}
 # operationId: updateSiteZone
 # --vertices item shape: {x: float, y: float}
-export def "sites-zones update" [
+export def "update-site-zone" [
   site_id: string
   zone_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -33205,7 +33205,7 @@ export def "sites-zones update" [
 #
 # GET /api/v1/sites/{site_id}/{zone_type}/count
 # operationId: countSiteZoneSessions
-export def "sites-count get-sessions" [
+export def "count-site-zone-sessions" [
   site_id: any
   zone_type: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -33254,7 +33254,7 @@ export def "sites-count get-sessions" [
 #
 # GET /api/v1/sites/{site_id}/{zone_type}/visits/search
 # operationId: searchSiteZoneSessions
-export def "sites-visits-search list-sessions" [
+export def "search-site-zone-sessions" [
   site_id: any
   zone_type: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -33302,7 +33302,7 @@ export def "sites-visits-search list-sessions" [
 #
 # GET /api/v1/utils/test_telstra
 # operationId: testSiteWlanTelstraSetup
-export def "utils-test-telstra test-site-wlan-setup" [
+export def "test-site-wlan-telstra-setup" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -33336,7 +33336,7 @@ export def "utils-test-telstra test-site-wlan-setup" [
 #
 # POST /api/v1/utils/test_twilio
 # operationId: testSiteWlanTwilioSetup
-export def "utils-test-twilio test-site-wlan-setup" [
+export def "test-site-wlan-twilio-setup" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -33377,7 +33377,7 @@ export def "utils-test-twilio test-site-wlan-setup" [
 #
 # POST /webhook_example/_alarm_
 # operationId: alarms
-export def "webhook-example-alarm create" [
+export def "alarms" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -33417,7 +33417,7 @@ export def "webhook-example-alarm create" [
 # POST /webhook_example/_asset_raw_
 # operationId: assetRaw
 # --events item shape: {asset_id: string, beam: int, device_id: string, ibeacon_major?: int, ibeacon_minor?: int, ibeacon_uuid?: string, mac: string, map_id: string, mfg_company_id: float, mfg_data: string, rssi: float, service_data_data?: string, service_data_last_rx_time?: int, service_data_rx_cnt?: int, service_data_uuid?: string, service_packets?: list, site_id: string, timestamp: float}
-export def "webhook-example-asset-raw create" [
+export def "asset-raw" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -33457,7 +33457,7 @@ export def "webhook-example-asset-raw create" [
 # POST /webhook_example/_audit_
 # operationId: audits
 # --events item shape: {admin_name: string, device_id: string, id: string, message: string, org_id: string, site_id: string, src_ip: string, timestamp: float}
-export def "webhook-example-audit create" [
+export def "audits" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -33497,7 +33497,7 @@ export def "webhook-example-audit create" [
 # POST /webhook_example/_client_join_
 # operationId: clientJoin
 # --events item shape: {ap: string, ap_name: string, band: string, bssid: string, connect: int, connect_float: float, mac: string, org_id: string, rssi: float, site_id: string, site_name: string, ssid: string, timestamp: float, version: float, wlan_id: string}
-export def "webhook-example-client-join create" [
+export def "client-join" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -33537,7 +33537,7 @@ export def "webhook-example-client-join create" [
 # POST /webhook_example/_client_sessions_
 # operationId: clientSessions
 # --events item shape: {ap: string, ap_name: string, band: string, bssid: string, client_family: string, client_manufacture: string, client_model: string, client_os: string, connect: int, connect_float: float, disconnect: int, disconnect_float: float, duration: int, mac: string, next_ap: string, org_id: string, rssi: float, site_id: string, site_name: string, ssid: string, termination_reason: int, timestamp: float, version: float, wlan_id: string}
-export def "webhook-example-client-sessions create" [
+export def "client-sessions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -33577,7 +33577,7 @@ export def "webhook-example-client-sessions create" [
 # POST /webhook_example/_device_events_
 # operationId: deviceEvents
 # --events item shape: {ap?: string, ap_name?: string, audit_id?: string, device_name: string, device_type: "ap"|"switch"|"gateway", ev_type: "notice"|"warn", mac: string, org_id: string, reason?: string, site_id?: string, site_name?: string, text?: string, timestamp: int, type: string}
-export def "webhook-example-device-events create" [
+export def "device-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -33617,7 +33617,7 @@ export def "webhook-example-device-events create" [
 # POST /webhook_example/_device_updowns_
 # operationId: deviceUpDown
 # --events item shape: {timestamp: float}
-export def "webhook-example-device-updowns create-up-down" [
+export def "device-up-down" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -33657,7 +33657,7 @@ export def "webhook-example-device-updowns create-up-down" [
 # POST /webhook_example/_discovered_raw_rssi_
 # operationId: discovered-raw-rssi
 # --events item shape: {ap_loc?: list<float>, beam: int, device_id: string, ibeacon_major?: int, ibeacon_minor?: int, ibeacon_uuid?: string, is_asset?: bool, mac: string, map_id: string, mfg_company_id?: string, mfg_data?: string, org_id: string, rssi: float, service_packets?: list, site_id: string, timestamp?: int}
-export def "webhook-example-discovered-raw-rssi create" [
+export def "discovered-raw-rssi" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -33697,7 +33697,7 @@ export def "webhook-example-discovered-raw-rssi create" [
 # POST /webhook_example/_location_
 # operationId: location
 # --events item shape: {battery_voltage?: int, eddystone_uid_instance?: string, eddystone_uid_namespace?: string, eddystone_url_url?: string, ibeacon_major?: int, ibeacon_minor?: int, ibeacon_uuid?: string, id: string, mac?: string, map_id: string, mfg_company_id?: int, mfg_data?: string, name?: string, site_id: string, timestamp: int, type: string, wifi_beacon_extended_info?: list, x: int, y: int}
-export def "webhook-example-location create" [
+export def "location" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -33736,7 +33736,7 @@ export def "webhook-example-location create" [
 #
 # POST /webhook_example/_occupancy_alerts_
 # operationId: occupancyAlerts
-export def "webhook-example-occupancy-alerts create" [
+export def "occupancy-alerts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -33776,7 +33776,7 @@ export def "webhook-example-occupancy-alerts create" [
 # POST /webhook_example/_ping_
 # operationId: ping
 # --events item shape: {id: string, name: string, site_id: string, timestamp: float}
-export def "webhook-example-ping ping" [
+export def "ping" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -33816,7 +33816,7 @@ export def "webhook-example-ping ping" [
 # POST /webhook_example/_sdkclient_scan_data
 # operationId: sdkclientScanData
 # --events item shape: {connection_ap: string, connection_band: string, connection_bssid: string, connection_channel: int, connection_rssi: float, last_seen: float, mac: string, scan_data?: list, site_id: string}
-export def "webhook-example-sdkclient-scan-data create" [
+export def "sdkclient-scan-data" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -33855,7 +33855,7 @@ export def "webhook-example-sdkclient-scan-data create" [
 # POST /webhook_example/_zone_
 # operationId: zone
 # --events item shape: {asset_id?: string, id: string, mac?: string, map_id: string, name?: string, site_id: string, timestamp: int, trigger: "enter"|"exit", type: string, zone_id: string}
-export def "webhook-example-zone create" [
+export def "zone" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

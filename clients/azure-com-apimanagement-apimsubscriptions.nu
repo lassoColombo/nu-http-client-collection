@@ -129,7 +129,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-api-management-service-subscriptions list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscription-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -153,7 +153,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/subscriptions
 # operationId: Subscription_List
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-subscriptions list" [
+export def "subscription-list" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -198,7 +198,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/subscriptions/{sid}
 # operationId: Subscription_Delete
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-subscriptions delete" [
+export def "subscription-delete" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -245,7 +245,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/subscriptions/{sid}
 # operationId: Subscription_Get
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-subscriptions get" [
+export def "subscription-get" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -289,7 +289,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # HEAD /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/subscriptions/{sid}
 # operationId: Subscription_GetEntityTag
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-subscriptions get-entity-tag" [
+export def "subscription-get-entity-tag" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -334,7 +334,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/subscriptions/{sid}
 # operationId: Subscription_Update
 # --properties shape: {allowTracing?: bool, displayName?: string, expirationDate?: string, ownerId?: string, primaryKey?: string, scope?: string, secondaryKey?: string, state?: "suspended"|"active"|"expired"|"submitted"|"rejected"|"cancelled", stateComment?: string}
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-subscriptions update" [
+export def "subscription-update" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -387,7 +387,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/subscriptions/{sid}
 # operationId: Subscription_CreateOrUpdate
 # --properties shape: {allowTracing?: bool, displayName: string, ownerId?: string, primaryKey?: string, scope: string, secondaryKey?: string, state?: "suspended"|"active"|"expired"|"submitted"|"rejected"|"cancelled"}
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-subscriptions create-or-update" [
+export def "subscription-create-or-update" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -439,7 +439,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/subscriptions/{sid}/listSecrets
 # operationId: Subscription_ListSecrets
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-subscriptions-list-secrets list" [
+export def "subscription-list-secrets" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -483,7 +483,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/subscriptions/{sid}/regeneratePrimaryKey
 # operationId: Subscription_RegeneratePrimaryKey
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-subscriptions-regenerate-primary-key create" [
+export def "subscription-regenerate-primary-key" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -527,7 +527,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/subscriptions/{sid}/regenerateSecondaryKey
 # operationId: Subscription_RegenerateSecondaryKey
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-subscriptions-regenerate-secondary-key create" [
+export def "subscription-regenerate-secondary-key" [
   subscription_id: string
   resource_group_name: string
   service_name: string

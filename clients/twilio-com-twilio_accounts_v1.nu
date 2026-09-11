@@ -111,7 +111,7 @@ def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "auth-tokens-promote update-promotion" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "update-auth-token-promotion" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -135,7 +135,7 @@ export def commands []: nothing -> table {
 #
 # POST /v1/AuthTokens/Promote
 # operationId: UpdateAuthTokenPromotion
-export def "auth-tokens-promote update-promotion" [
+export def "update-auth-token-promotion" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -169,7 +169,7 @@ export def "auth-tokens-promote update-promotion" [
 #
 # DELETE /v1/AuthTokens/Secondary
 # operationId: DeleteSecondaryAuthToken
-export def "auth-tokens-secondary delete" [
+export def "delete-secondary-auth-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -203,7 +203,7 @@ export def "auth-tokens-secondary delete" [
 #
 # POST /v1/AuthTokens/Secondary
 # operationId: CreateSecondaryAuthToken
-export def "auth-tokens-secondary create" [
+export def "create-secondary-auth-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -237,7 +237,7 @@ export def "auth-tokens-secondary create" [
 #
 # GET /v1/Credentials/AWS
 # operationId: ListCredentialAws
-export def "credentials-aws list" [
+export def "list-credential-aws" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -275,7 +275,7 @@ export def "credentials-aws list" [
 #
 # POST /v1/Credentials/AWS
 # operationId: CreateCredentialAws
-export def "credentials-aws create" [
+export def "create-credential-aws" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -316,7 +316,7 @@ export def "credentials-aws create" [
 #
 # DELETE /v1/Credentials/AWS/{Sid}
 # operationId: DeleteCredentialAws
-export def "credentials-aws delete" [
+export def "delete-credential-aws" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -352,7 +352,7 @@ export def "credentials-aws delete" [
 #
 # GET /v1/Credentials/AWS/{Sid}
 # operationId: FetchCredentialAws
-export def "credentials-aws get" [
+export def "fetch-credential-aws" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -388,7 +388,7 @@ export def "credentials-aws get" [
 #
 # POST /v1/Credentials/AWS/{Sid}
 # operationId: UpdateCredentialAws
-export def "credentials-aws update" [
+export def "update-credential-aws" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -429,7 +429,7 @@ export def "credentials-aws update" [
 #
 # GET /v1/Credentials/PublicKeys
 # operationId: ListCredentialPublicKey
-export def "credentials-public-keys list" [
+export def "list-credential-public-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -467,7 +467,7 @@ export def "credentials-public-keys list" [
 #
 # POST /v1/Credentials/PublicKeys
 # operationId: CreateCredentialPublicKey
-export def "credentials-public-keys create" [
+export def "create-credential-public-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -508,7 +508,7 @@ export def "credentials-public-keys create" [
 #
 # DELETE /v1/Credentials/PublicKeys/{Sid}
 # operationId: DeleteCredentialPublicKey
-export def "credentials-public-keys delete" [
+export def "delete-credential-public-key" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -544,7 +544,7 @@ export def "credentials-public-keys delete" [
 #
 # GET /v1/Credentials/PublicKeys/{Sid}
 # operationId: FetchCredentialPublicKey
-export def "credentials-public-keys get" [
+export def "fetch-credential-public-key" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -580,7 +580,7 @@ export def "credentials-public-keys get" [
 #
 # POST /v1/Credentials/PublicKeys/{Sid}
 # operationId: UpdateCredentialPublicKey
-export def "credentials-public-keys update" [
+export def "update-credential-public-key" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

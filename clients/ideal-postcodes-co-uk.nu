@@ -117,7 +117,7 @@ def bias-ip-completer [] { ["true"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "addresses get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "addresses" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -141,7 +141,7 @@ export def commands []: nothing -> table {
 #
 # GET /addresses
 # operationId: Addresses
-export def "addresses get" [
+export def "addresses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -201,7 +201,7 @@ export def "addresses get" [
 #
 # GET /autocomplete/addresses
 # operationId: AddressAutocomplete
-export def "autocomplete-addresses get-address" [
+export def "address-autocomplete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -259,7 +259,7 @@ export def "autocomplete-addresses get-address" [
 #
 # GET /autocomplete/addresses/{address}/gbr
 # operationId: Resolve
-export def "autocomplete-addresses-gbr get-resolve" [
+export def "resolve" [
   address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -297,7 +297,7 @@ export def "autocomplete-addresses-gbr get-resolve" [
 #
 # GET /autocomplete/addresses/{address}/usa
 # operationId: ResolveUsa
-export def "autocomplete-addresses-usa get-resolve" [
+export def "resolve-usa" [
   address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -335,7 +335,7 @@ export def "autocomplete-addresses-usa get-resolve" [
 #
 # POST /cleanse/addresses
 # operationId: AddressCleanse
-export def "cleanse-addresses create-address" [
+export def "address-cleanse" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -375,7 +375,7 @@ export def "cleanse-addresses create-address" [
 #
 # GET /emails
 # operationId: EmailValidation
-export def "emails get-validation" [
+export def "email-validation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -412,7 +412,7 @@ export def "emails get-validation" [
 #
 # GET /keys/{key}
 # operationId: KeyAvailability
-export def "keys get-availability" [
+export def "key-availability" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -448,7 +448,7 @@ export def "keys get-availability" [
 #
 # GET /keys/{key}/configs
 # operationId: ListConfigs
-export def "keys-configs list" [
+export def "list-configs" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -486,7 +486,7 @@ export def "keys-configs list" [
 #
 # POST /keys/{key}/configs
 # operationId: CreateConfig
-export def "keys-configs create" [
+export def "create-config" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -529,7 +529,7 @@ export def "keys-configs create" [
 #
 # DELETE /keys/{key}/configs/{config}
 # operationId: DeleteConfig
-export def "keys-configs delete" [
+export def "delete-config" [
   key: string
   config: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -569,7 +569,7 @@ export def "keys-configs delete" [
 #
 # GET /keys/{key}/configs/{config}
 # operationId: RetrieveConfig
-export def "keys-configs get" [
+export def "retrieve-config" [
   key: string
   config: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -607,7 +607,7 @@ export def "keys-configs get" [
 #
 # POST /keys/{key}/configs/{config}
 # operationId: UpdateConfig
-export def "keys-configs update" [
+export def "update-config" [
   key: string
   config: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -651,7 +651,7 @@ export def "keys-configs update" [
 #
 # GET /keys/{key}/details
 # operationId: KeyDetails
-export def "keys-details get" [
+export def "key-details" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -689,7 +689,7 @@ export def "keys-details get" [
 #
 # GET /keys/{key}/licensees
 # operationId: ListLicensees
-export def "keys-licensees list" [
+export def "list-licensees" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -731,7 +731,7 @@ export def "keys-licensees list" [
 # POST /keys/{key}/licensees
 # operationId: CreateLicensee
 # --daily shape: {limit?: float}
-export def "keys-licensees create" [
+export def "create-licensee" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -777,7 +777,7 @@ export def "keys-licensees create" [
 #
 # DELETE /keys/{key}/licensees/{licensee}
 # operationId: DeleteLicensee
-export def "keys-licensees delete" [
+export def "delete-licensee" [
   key: string
   licensee: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -817,7 +817,7 @@ export def "keys-licensees delete" [
 #
 # GET /keys/{key}/licensees/{licensee}
 # operationId: RetrieveLicensee
-export def "keys-licensees get" [
+export def "retrieve-licensee" [
   key: string
   licensee: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -858,7 +858,7 @@ export def "keys-licensees get" [
 # PUT /keys/{key}/licensees/{licensee}
 # operationId: UpdateLicensee
 # --daily shape: {limit?: float}
-export def "keys-licensees update" [
+export def "update-licensee" [
   key: string
   licensee: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -906,7 +906,7 @@ export def "keys-licensees update" [
 #
 # GET /keys/{key}/lookups
 # operationId: KeyLogs
-export def "keys-lookups logs" [
+export def "key-logs" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -946,7 +946,7 @@ export def "keys-lookups logs" [
 #
 # GET /keys/{key}/usage
 # operationId: KeyUsage
-export def "keys-usage get" [
+export def "key-usage" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -987,7 +987,7 @@ export def "keys-usage get" [
 #
 # GET /phone_numbers
 # operationId: PhoneNumberValidation
-export def "phone-numbers get-validation" [
+export def "phone-number-validation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1024,7 +1024,7 @@ export def "phone-numbers get-validation" [
 #
 # GET /places
 # operationId: FindPlace
-export def "places find" [
+export def "find-place" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1065,7 +1065,7 @@ export def "places find" [
 #
 # GET /places/${place}
 # operationId: ResolvePlace
-export def "places-place get-resolve" [
+export def "resolve-place" [
   place: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1103,7 +1103,7 @@ export def "places-place get-resolve" [
 #
 # GET /postcodes/{postcode}
 # operationId: Postcodes
-export def "post-codes create" [
+export def "postcodes" [
   postcode: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1143,7 +1143,7 @@ export def "post-codes create" [
 #
 # GET /udprn/{udprn}
 # operationId: UDPRN
-export def "udprn get" [
+export def "udprn" [
   udprn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1182,7 +1182,7 @@ export def "udprn get" [
 #
 # GET /umprn/{umprn}
 # operationId: UMPRN
-export def "umprn get" [
+export def "umprn" [
   umprn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

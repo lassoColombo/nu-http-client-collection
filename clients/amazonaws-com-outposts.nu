@@ -136,7 +136,7 @@ def maximum-supported-weight-lbs-completer [] { ["MAX_1400_LBS" "MAX_1600_LBS" "
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "orders-cancel cancel" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cancel-order" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -160,7 +160,7 @@ export def commands []: nothing -> table {
 #
 # POST /orders/{OrderId}/cancel
 # operationId: CancelOrder
-export def "orders-cancel cancel" [
+export def "cancel-order" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -206,7 +206,7 @@ export def "orders-cancel cancel" [
 # POST /orders
 # operationId: CreateOrder
 # --LineItems item shape: {CatalogItemId?: any, Quantity?: any}
-export def "orders create" [
+export def "create-order" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -256,7 +256,7 @@ export def "orders create" [
 #
 # POST /outposts
 # operationId: CreateOutpost
-export def "outposts create" [
+export def "create-outpost" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -309,7 +309,7 @@ export def "outposts create" [
 #
 # GET /outposts
 # operationId: ListOutposts
-export def "outposts list" [
+export def "list-outposts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -361,7 +361,7 @@ export def "outposts list" [
 # --OperatingAddress shape: {ContactName?: any, ContactPhoneNumber?: any, AddressLine1?: any, AddressLine2?: any, AddressLine3?: any, City?: any, StateOrRegion?: any, DistrictOrCounty?: any, PostalCode?: any, CountryCode?: any, Municipality?: any}
 # --ShippingAddress shape: {ContactName?: any, ContactPhoneNumber?: any, AddressLine1?: any, AddressLine2?: any, AddressLine3?: any, City?: any, StateOrRegion?: any, DistrictOrCounty?: any, PostalCode?: any, CountryCode?: any, Municipality?: any}
 # --RackPhysicalProperties shape: {PowerDrawKva?: any, PowerPhase?: any, PowerConnector?: any, PowerFeedDrop?: any, UplinkGbps?: any, UplinkCount?: any, FiberOpticCableType?: any, OpticalStandard?: any, MaximumSupportedWeightLbs?: any}
-export def "sites create" [
+export def "create-site" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -414,7 +414,7 @@ export def "sites create" [
 #
 # GET /sites
 # operationId: ListSites
-export def "sites list" [
+export def "list-sites" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -463,7 +463,7 @@ export def "sites list" [
 #
 # DELETE /outposts/{OutpostId}
 # operationId: DeleteOutpost
-export def "outposts delete" [
+export def "delete-outpost" [
   outpost_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -508,7 +508,7 @@ export def "outposts delete" [
 #
 # GET /outposts/{OutpostId}
 # operationId: GetOutpost
-export def "outposts get" [
+export def "get-outpost" [
   outpost_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -553,7 +553,7 @@ export def "outposts get" [
 #
 # PATCH /outposts/{OutpostId}
 # operationId: UpdateOutpost
-export def "outposts update" [
+export def "update-outpost" [
   outpost_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -604,7 +604,7 @@ export def "outposts update" [
 #
 # DELETE /sites/{SiteId}
 # operationId: DeleteSite
-export def "sites delete" [
+export def "delete-site" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -649,7 +649,7 @@ export def "sites delete" [
 #
 # GET /sites/{SiteId}
 # operationId: GetSite
-export def "sites get" [
+export def "get-site" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -694,7 +694,7 @@ export def "sites get" [
 #
 # PATCH /sites/{SiteId}
 # operationId: UpdateSite
-export def "sites update" [
+export def "update-site" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -745,7 +745,7 @@ export def "sites update" [
 #
 # GET /catalog/item/{CatalogItemId}
 # operationId: GetCatalogItem
-export def "catalog-item get" [
+export def "get-catalog-item" [
   catalog_item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -790,7 +790,7 @@ export def "catalog-item get" [
 #
 # GET /connections/{ConnectionId}
 # operationId: GetConnection
-export def "connections get" [
+export def "get-connection" [
   connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -835,7 +835,7 @@ export def "connections get" [
 #
 # GET /orders/{OrderId}
 # operationId: GetOrder
-export def "orders get" [
+export def "get-order" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -880,7 +880,7 @@ export def "orders get" [
 #
 # GET /outposts/{OutpostId}/instanceTypes
 # operationId: GetOutpostInstanceTypes
-export def "outposts-instance-types get" [
+export def "get-outpost-instance-types" [
   outpost_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -928,7 +928,7 @@ export def "outposts-instance-types get" [
 #
 # GET /sites/{SiteId}/address
 # operationId: GetSiteAddress
-export def "sites-address get" [
+export def "get-site-address" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -975,7 +975,7 @@ export def "sites-address get" [
 #
 # GET /outposts/{OutpostId}/assets
 # operationId: ListAssets
-export def "outposts-assets list" [
+export def "list-assets" [
   outpost_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1025,7 +1025,7 @@ export def "outposts-assets list" [
 #
 # GET /catalog/items
 # operationId: ListCatalogItems
-export def "catalog-items list" [
+export def "list-catalog-items" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1074,7 +1074,7 @@ export def "catalog-items list" [
 #
 # GET /list-orders
 # operationId: ListOrders
-export def "list-orders list" [
+export def "list-orders" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1121,7 +1121,7 @@ export def "list-orders list" [
 #
 # GET /tags/{ResourceArn}
 # operationId: ListTagsForResource
-export def "tags list-for-resource" [
+export def "list-tags-for-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1166,7 +1166,7 @@ export def "tags list-for-resource" [
 #
 # POST /tags/{ResourceArn}
 # operationId: TagResource
-export def "tags tag-resource" [
+export def "tag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1215,7 +1215,7 @@ export def "tags tag-resource" [
 #
 # POST /connections
 # operationId: StartConnection
-export def "connections start" [
+export def "start-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1265,7 +1265,7 @@ export def "connections start" [
 #
 # DELETE /tags/{ResourceArn}
 # operationId: UntagResource
-export def "tags untag-resource" [
+export def "untag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1313,7 +1313,7 @@ export def "tags untag-resource" [
 # PUT /sites/{SiteId}/address
 # operationId: UpdateSiteAddress
 # --Address shape: {ContactName?: any, ContactPhoneNumber?: any, AddressLine1?: any, AddressLine2?: any, AddressLine3?: any, City?: any, StateOrRegion?: any, DistrictOrCounty?: any, PostalCode?: any, CountryCode?: any, Municipality?: any}
-export def "sites-address update" [
+export def "update-site-address" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1363,7 +1363,7 @@ export def "sites-address update" [
 #
 # PATCH /sites/{SiteId}/rackPhysicalProperties
 # operationId: UpdateSiteRackPhysicalProperties
-export def "sites-rack-physical-properties update" [
+export def "update-site-rack-physical-properties" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

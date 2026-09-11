@@ -127,7 +127,7 @@ def sas-type-completer [] { ["account" "service"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "certificates get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-certificates" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -151,7 +151,7 @@ export def commands []: nothing -> table {
 #
 # GET /certificates
 # operationId: GetCertificates
-export def "certificates get" [
+export def "get-certificates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -189,7 +189,7 @@ export def "certificates get" [
 #
 # DELETE /certificates/contacts
 # operationId: DeleteCertificateContacts
-export def "certificates-contacts delete" [
+export def "delete-certificate-contacts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -225,7 +225,7 @@ export def "certificates-contacts delete" [
 #
 # GET /certificates/contacts
 # operationId: GetCertificateContacts
-export def "certificates-contacts get" [
+export def "get-certificate-contacts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -262,7 +262,7 @@ export def "certificates-contacts get" [
 # PUT /certificates/contacts
 # operationId: SetCertificateContacts
 # --contacts item shape: {email?: string, name?: string, phone?: string}
-export def "certificates-contacts update" [
+export def "set-certificate-contacts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -302,7 +302,7 @@ export def "certificates-contacts update" [
 #
 # GET /certificates/issuers
 # operationId: GetCertificateIssuers
-export def "certificates-issuers list" [
+export def "get-certificate-issuers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -339,7 +339,7 @@ export def "certificates-issuers list" [
 #
 # DELETE /certificates/issuers/{issuer-name}
 # operationId: DeleteCertificateIssuer
-export def "certificates-issuers delete" [
+export def "delete-certificate-issuer" [
   issuer_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -377,7 +377,7 @@ export def "certificates-issuers delete" [
 #
 # GET /certificates/issuers/{issuer-name}
 # operationId: GetCertificateIssuer
-export def "certificates-issuers get" [
+export def "get-certificate-issuer" [
   issuer_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -418,7 +418,7 @@ export def "certificates-issuers get" [
 # --attributes shape: {enabled?: bool}
 # --credentials shape: {account_id?: string, pwd?: string}
 # --org_details shape: {admin_details?: list, id?: string}
-export def "certificates-issuers update-by-issuer-name" [
+export def "update-certificate-issuer" [
   issuer_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -466,7 +466,7 @@ export def "certificates-issuers update-by-issuer-name" [
 # --attributes shape: {enabled?: bool}
 # --credentials shape: {account_id?: string, pwd?: string}
 # --org_details shape: {admin_details?: list, id?: string}
-export def "certificates-issuers update-by-issuer-name-1" [
+export def "set-certificate-issuer" [
   issuer_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -511,7 +511,7 @@ export def "certificates-issuers update-by-issuer-name-1" [
 #
 # POST /certificates/restore
 # operationId: RestoreCertificate
-export def "certificates-restore create" [
+export def "restore-certificate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -551,7 +551,7 @@ export def "certificates-restore create" [
 #
 # DELETE /certificates/{certificate-name}
 # operationId: DeleteCertificate
-export def "certificates delete" [
+export def "delete-certificate" [
   certificate_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -589,7 +589,7 @@ export def "certificates delete" [
 #
 # POST /certificates/{certificate-name}/backup
 # operationId: BackupCertificate
-export def "certificates-backup create" [
+export def "backup-certificate" [
   certificate_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -629,7 +629,7 @@ export def "certificates-backup create" [
 # operationId: CreateCertificate
 # --attributes shape: {enabled?: bool, exp?: int, nbf?: int}
 # --policy shape: {attributes?: any, issuer?: any, key_props?: any, lifetime_actions?: list, secret_props?: any, x509_props?: any}
-export def "certificates-create create" [
+export def "create-certificate" [
   certificate_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -675,7 +675,7 @@ export def "certificates-create create" [
 # operationId: ImportCertificate
 # --attributes shape: {enabled?: bool, exp?: int, nbf?: int}
 # --policy shape: {attributes?: any, issuer?: any, key_props?: any, lifetime_actions?: list, secret_props?: any, x509_props?: any}
-export def "certificates-import import" [
+export def "import-certificate" [
   certificate_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -721,7 +721,7 @@ export def "certificates-import import" [
 #
 # DELETE /certificates/{certificate-name}/pending
 # operationId: DeleteCertificateOperation
-export def "certificates-pending delete-operation" [
+export def "delete-certificate-operation" [
   certificate_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -759,7 +759,7 @@ export def "certificates-pending delete-operation" [
 #
 # GET /certificates/{certificate-name}/pending
 # operationId: GetCertificateOperation
-export def "certificates-pending get-operation" [
+export def "get-certificate-operation" [
   certificate_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -797,7 +797,7 @@ export def "certificates-pending get-operation" [
 #
 # PATCH /certificates/{certificate-name}/pending
 # operationId: UpdateCertificateOperation
-export def "certificates-pending update-operation" [
+export def "update-certificate-operation" [
   certificate_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -840,7 +840,7 @@ export def "certificates-pending update-operation" [
 # POST /certificates/{certificate-name}/pending/merge
 # operationId: MergeCertificate
 # --attributes shape: {enabled?: bool, exp?: int, nbf?: int}
-export def "certificates-pending-merge create" [
+export def "merge-certificate" [
   certificate_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -884,7 +884,7 @@ export def "certificates-pending-merge create" [
 #
 # GET /certificates/{certificate-name}/policy
 # operationId: GetCertificatePolicy
-export def "certificates-policy get" [
+export def "get-certificate-policy" [
   certificate_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -928,7 +928,7 @@ export def "certificates-policy get" [
 # --lifetime_actions item shape: {action?: any, trigger?: any}
 # --secret_props shape: {contentType?: string}
 # --x509_props shape: {ekus?: list<string>, key_usage?: list<string>, sans?: any, subject?: string, validity_months?: int}
-export def "certificates-policy update" [
+export def "update-certificate-policy" [
   certificate_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -975,7 +975,7 @@ export def "certificates-policy update" [
 #
 # GET /certificates/{certificate-name}/versions
 # operationId: GetCertificateVersions
-export def "certificates-versions get" [
+export def "get-certificate-versions" [
   certificate_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1014,7 +1014,7 @@ export def "certificates-versions get" [
 #
 # GET /certificates/{certificate-name}/{certificate-version}
 # operationId: GetCertificate
-export def "certificates get-by-certificate-name-certificate-version" [
+export def "get-certificate" [
   certificate_name: string
   certificate_version: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1056,7 +1056,7 @@ export def "certificates get-by-certificate-name-certificate-version" [
 # operationId: UpdateCertificate
 # --attributes shape: {enabled?: bool, exp?: int, nbf?: int}
 # --policy shape: {attributes?: any, issuer?: any, key_props?: any, lifetime_actions?: list, secret_props?: any, x509_props?: any}
-export def "certificates update" [
+export def "update-certificate" [
   certificate_name: string
   certificate_version: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1102,7 +1102,7 @@ export def "certificates update" [
 #
 # GET /deletedcertificates
 # operationId: GetDeletedCertificates
-export def "delete-dcertificates get-deleted-certificates" [
+export def "get-deleted-certificates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1140,7 +1140,7 @@ export def "delete-dcertificates get-deleted-certificates" [
 #
 # DELETE /deletedcertificates/{certificate-name}
 # operationId: PurgeDeletedCertificate
-export def "delete-dcertificates delete-purge-deleted" [
+export def "purge-deleted-certificate" [
   certificate_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1178,7 +1178,7 @@ export def "delete-dcertificates delete-purge-deleted" [
 #
 # GET /deletedcertificates/{certificate-name}
 # operationId: GetDeletedCertificate
-export def "delete-dcertificates get-deleted" [
+export def "get-deleted-certificate" [
   certificate_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1216,7 +1216,7 @@ export def "delete-dcertificates get-deleted" [
 #
 # POST /deletedcertificates/{certificate-name}/recover
 # operationId: RecoverDeletedCertificate
-export def "delete-dcertificates-recover create-deleted" [
+export def "recover-deleted-certificate" [
   certificate_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1254,7 +1254,7 @@ export def "delete-dcertificates-recover create-deleted" [
 #
 # GET /deletedkeys
 # operationId: GetDeletedKeys
-export def "delete-dkeys get-deleted-keys" [
+export def "get-deleted-keys" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1291,7 +1291,7 @@ export def "delete-dkeys get-deleted-keys" [
 #
 # DELETE /deletedkeys/{key-name}
 # operationId: PurgeDeletedKey
-export def "delete-dkeys delete-purge-deleted" [
+export def "purge-deleted-key" [
   key_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1329,7 +1329,7 @@ export def "delete-dkeys delete-purge-deleted" [
 #
 # GET /deletedkeys/{key-name}
 # operationId: GetDeletedKey
-export def "delete-dkeys get-deleted" [
+export def "get-deleted-key" [
   key_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1367,7 +1367,7 @@ export def "delete-dkeys get-deleted" [
 #
 # POST /deletedkeys/{key-name}/recover
 # operationId: RecoverDeletedKey
-export def "delete-dkeys-recover create-deleted" [
+export def "recover-deleted-key" [
   key_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1405,7 +1405,7 @@ export def "delete-dkeys-recover create-deleted" [
 #
 # GET /deletedsecrets
 # operationId: GetDeletedSecrets
-export def "delete-dsecrets get-deleted-secrets" [
+export def "get-deleted-secrets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1442,7 +1442,7 @@ export def "delete-dsecrets get-deleted-secrets" [
 #
 # DELETE /deletedsecrets/{secret-name}
 # operationId: PurgeDeletedSecret
-export def "delete-dsecrets delete-purge-deleted" [
+export def "purge-deleted-secret" [
   secret_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1480,7 +1480,7 @@ export def "delete-dsecrets delete-purge-deleted" [
 #
 # GET /deletedsecrets/{secret-name}
 # operationId: GetDeletedSecret
-export def "delete-dsecrets get-deleted" [
+export def "get-deleted-secret" [
   secret_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1518,7 +1518,7 @@ export def "delete-dsecrets get-deleted" [
 #
 # POST /deletedsecrets/{secret-name}/recover
 # operationId: RecoverDeletedSecret
-export def "delete-dsecrets-recover create-deleted" [
+export def "recover-deleted-secret" [
   secret_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1556,7 +1556,7 @@ export def "delete-dsecrets-recover create-deleted" [
 #
 # GET /deletedstorage
 # operationId: GetDeletedStorageAccounts
-export def "delete-dstorage get-deleted-storage-accounts" [
+export def "get-deleted-storage-accounts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1593,7 +1593,7 @@ export def "delete-dstorage get-deleted-storage-accounts" [
 #
 # DELETE /deletedstorage/{storage-account-name}
 # operationId: PurgeDeletedStorageAccount
-export def "delete-dstorage delete-purge-deleted" [
+export def "purge-deleted-storage-account" [
   storage_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1631,7 +1631,7 @@ export def "delete-dstorage delete-purge-deleted" [
 #
 # GET /deletedstorage/{storage-account-name}
 # operationId: GetDeletedStorageAccount
-export def "delete-dstorage get-deleted" [
+export def "get-deleted-storage-account" [
   storage_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1669,7 +1669,7 @@ export def "delete-dstorage get-deleted" [
 #
 # POST /deletedstorage/{storage-account-name}/recover
 # operationId: RecoverDeletedStorageAccount
-export def "delete-dstorage-recover create-deleted" [
+export def "recover-deleted-storage-account" [
   storage_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1707,7 +1707,7 @@ export def "delete-dstorage-recover create-deleted" [
 #
 # GET /deletedstorage/{storage-account-name}/sas
 # operationId: GetDeletedSasDefinitions
-export def "delete-dstorage-sas get-deleted-definitions" [
+export def "get-deleted-sas-definitions" [
   storage_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1746,7 +1746,7 @@ export def "delete-dstorage-sas get-deleted-definitions" [
 #
 # GET /deletedstorage/{storage-account-name}/sas/{sas-definition-name}
 # operationId: GetDeletedSasDefinition
-export def "delete-dstorage-sas get-deleted" [
+export def "get-deleted-sas-definition" [
   storage_account_name: string
   sas_definition_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1786,7 +1786,7 @@ export def "delete-dstorage-sas get-deleted" [
 #
 # POST /deletedstorage/{storage-account-name}/sas/{sas-definition-name}/recover
 # operationId: RecoverDeletedSasDefinition
-export def "delete-dstorage-sas-recover create-deleted" [
+export def "recover-deleted-sas-definition" [
   storage_account_name: string
   sas_definition_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1826,7 +1826,7 @@ export def "delete-dstorage-sas-recover create-deleted" [
 #
 # GET /keys
 # operationId: GetKeys
-export def "keys get" [
+export def "get-keys" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1863,7 +1863,7 @@ export def "keys get" [
 #
 # POST /keys/restore
 # operationId: RestoreKey
-export def "keys-restore create" [
+export def "restore-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1903,7 +1903,7 @@ export def "keys-restore create" [
 #
 # DELETE /keys/{key-name}
 # operationId: DeleteKey
-export def "keys delete" [
+export def "delete-key" [
   key_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1943,7 +1943,7 @@ export def "keys delete" [
 # operationId: ImportKey
 # --attributes shape: {enabled?: bool, exp?: int, nbf?: int}
 # --key shape: {crv?: "P-256"|"P-384"|"P-521"|"P-256K", d?: string, dp?: string, dq?: string, e?: string, k?: string, key_hsm?: string, key_ops?: list<string>, kid?: string, kty?: "EC"|"EC-HSM"|"RSA"|"RSA-HSM"|"oct", n?: string, p?: string, q?: string, qi?: string, x?: string, y?: string}
-export def "keys import" [
+export def "import-key" [
   key_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1988,7 +1988,7 @@ export def "keys import" [
 #
 # POST /keys/{key-name}/backup
 # operationId: BackupKey
-export def "keys-backup create" [
+export def "backup-key" [
   key_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2027,7 +2027,7 @@ export def "keys-backup create" [
 # POST /keys/{key-name}/create
 # operationId: CreateKey
 # --attributes shape: {enabled?: bool, exp?: int, nbf?: int}
-export def "keys-create create" [
+export def "create-key" [
   key_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2074,7 +2074,7 @@ export def "keys-create create" [
 #
 # GET /keys/{key-name}/versions
 # operationId: GetKeyVersions
-export def "keys-versions get" [
+export def "get-key-versions" [
   key_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2113,7 +2113,7 @@ export def "keys-versions get" [
 #
 # GET /keys/{key-name}/{key-version}
 # operationId: GetKey
-export def "keys get-by-key-name-key-version" [
+export def "get-key" [
   key_name: string
   key_version: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2154,7 +2154,7 @@ export def "keys get-by-key-name-key-version" [
 # PATCH /keys/{key-name}/{key-version}
 # operationId: UpdateKey
 # --attributes shape: {enabled?: bool, exp?: int, nbf?: int}
-export def "keys update" [
+export def "update-key" [
   key_name: string
   key_version: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2200,7 +2200,7 @@ export def "keys update" [
 #
 # POST /keys/{key-name}/{key-version}/decrypt
 # operationId: decrypt
-export def "keys-decrypt create" [
+export def "decrypt" [
   key_name: string
   key_version: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2245,7 +2245,7 @@ export def "keys-decrypt create" [
 #
 # POST /keys/{key-name}/{key-version}/encrypt
 # operationId: encrypt
-export def "keys-encrypt create" [
+export def "encrypt" [
   key_name: string
   key_version: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2290,7 +2290,7 @@ export def "keys-encrypt create" [
 #
 # POST /keys/{key-name}/{key-version}/sign
 # operationId: sign
-export def "keys-sign create" [
+export def "sign" [
   key_name: string
   key_version: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2335,7 +2335,7 @@ export def "keys-sign create" [
 #
 # POST /keys/{key-name}/{key-version}/unwrapkey
 # operationId: unwrapKey
-export def "keys-unwrapkey create-unwrap" [
+export def "unwrap-key" [
   key_name: string
   key_version: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2380,7 +2380,7 @@ export def "keys-unwrapkey create-unwrap" [
 #
 # POST /keys/{key-name}/{key-version}/verify
 # operationId: verify
-export def "keys-verify verify" [
+export def "verify" [
   key_name: string
   key_version: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2426,7 +2426,7 @@ export def "keys-verify verify" [
 #
 # POST /keys/{key-name}/{key-version}/wrapkey
 # operationId: wrapKey
-export def "keys-wrapkey create-wrap" [
+export def "wrap-key" [
   key_name: string
   key_version: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2471,7 +2471,7 @@ export def "keys-wrapkey create-wrap" [
 #
 # GET /secrets
 # operationId: GetSecrets
-export def "secrets get" [
+export def "get-secrets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2508,7 +2508,7 @@ export def "secrets get" [
 #
 # POST /secrets/restore
 # operationId: RestoreSecret
-export def "secrets-restore create" [
+export def "restore-secret" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2548,7 +2548,7 @@ export def "secrets-restore create" [
 #
 # DELETE /secrets/{secret-name}
 # operationId: DeleteSecret
-export def "secrets delete" [
+export def "delete-secret" [
   secret_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2587,7 +2587,7 @@ export def "secrets delete" [
 # PUT /secrets/{secret-name}
 # operationId: SetSecret
 # --attributes shape: {enabled?: bool, exp?: int, nbf?: int}
-export def "secrets update-by-secret-name" [
+export def "set-secret" [
   secret_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2632,7 +2632,7 @@ export def "secrets update-by-secret-name" [
 #
 # POST /secrets/{secret-name}/backup
 # operationId: BackupSecret
-export def "secrets-backup create" [
+export def "backup-secret" [
   secret_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2670,7 +2670,7 @@ export def "secrets-backup create" [
 #
 # GET /secrets/{secret-name}/versions
 # operationId: GetSecretVersions
-export def "secrets-versions get" [
+export def "get-secret-versions" [
   secret_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2709,7 +2709,7 @@ export def "secrets-versions get" [
 #
 # GET /secrets/{secret-name}/{secret-version}
 # operationId: GetSecret
-export def "secrets get-by-secret-name-secret-version" [
+export def "get-secret" [
   secret_name: string
   secret_version: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2750,7 +2750,7 @@ export def "secrets get-by-secret-name-secret-version" [
 # PATCH /secrets/{secret-name}/{secret-version}
 # operationId: UpdateSecret
 # --attributes shape: {enabled?: bool, exp?: int, nbf?: int}
-export def "secrets update-by-secret-name-secret-version" [
+export def "update-secret" [
   secret_name: string
   secret_version: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2796,7 +2796,7 @@ export def "secrets update-by-secret-name-secret-version" [
 #
 # GET /storage
 # operationId: GetStorageAccounts
-export def "storage get-accounts" [
+export def "get-storage-accounts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2833,7 +2833,7 @@ export def "storage get-accounts" [
 #
 # POST /storage/restore
 # operationId: RestoreStorageAccount
-export def "storage-restore create-account" [
+export def "restore-storage-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2873,7 +2873,7 @@ export def "storage-restore create-account" [
 #
 # DELETE /storage/{storage-account-name}
 # operationId: DeleteStorageAccount
-export def "storage delete" [
+export def "delete-storage-account" [
   storage_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2911,7 +2911,7 @@ export def "storage delete" [
 #
 # GET /storage/{storage-account-name}
 # operationId: GetStorageAccount
-export def "storage get" [
+export def "get-storage-account" [
   storage_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2950,7 +2950,7 @@ export def "storage get" [
 # PATCH /storage/{storage-account-name}
 # operationId: UpdateStorageAccount
 # --attributes shape: {enabled?: bool}
-export def "storage update-by-storage-account-name" [
+export def "update-storage-account" [
   storage_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2997,7 +2997,7 @@ export def "storage update-by-storage-account-name" [
 # PUT /storage/{storage-account-name}
 # operationId: SetStorageAccount
 # --attributes shape: {enabled?: bool}
-export def "storage update-by-storage-account-name-1" [
+export def "set-storage-account" [
   storage_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3044,7 +3044,7 @@ export def "storage update-by-storage-account-name-1" [
 #
 # POST /storage/{storage-account-name}/backup
 # operationId: BackupStorageAccount
-export def "storage-backup create" [
+export def "backup-storage-account" [
   storage_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3082,7 +3082,7 @@ export def "storage-backup create" [
 #
 # POST /storage/{storage-account-name}/regeneratekey
 # operationId: RegenerateStorageAccountKey
-export def "storage-regeneratekey create-regenerate-key" [
+export def "regenerate-storage-account-key" [
   storage_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3124,7 +3124,7 @@ export def "storage-regeneratekey create-regenerate-key" [
 #
 # GET /storage/{storage-account-name}/sas
 # operationId: GetSasDefinitions
-export def "storage-sas get-definitions" [
+export def "get-sas-definitions" [
   storage_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3163,7 +3163,7 @@ export def "storage-sas get-definitions" [
 #
 # DELETE /storage/{storage-account-name}/sas/{sas-definition-name}
 # operationId: DeleteSasDefinition
-export def "storage-sas delete" [
+export def "delete-sas-definition" [
   storage_account_name: string
   sas_definition_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3203,7 +3203,7 @@ export def "storage-sas delete" [
 #
 # GET /storage/{storage-account-name}/sas/{sas-definition-name}
 # operationId: GetSasDefinition
-export def "storage-sas get" [
+export def "get-sas-definition" [
   storage_account_name: string
   sas_definition_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3244,7 +3244,7 @@ export def "storage-sas get" [
 # PATCH /storage/{storage-account-name}/sas/{sas-definition-name}
 # operationId: UpdateSasDefinition
 # --attributes shape: {enabled?: bool}
-export def "storage-sas update-by-storage-account-name-sas-definition-name" [
+export def "update-sas-definition" [
   storage_account_name: string
   sas_definition_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3293,7 +3293,7 @@ export def "storage-sas update-by-storage-account-name-sas-definition-name" [
 # PUT /storage/{storage-account-name}/sas/{sas-definition-name}
 # operationId: SetSasDefinition
 # --attributes shape: {enabled?: bool}
-export def "storage-sas update-by-storage-account-name-sas-definition-name-1" [
+export def "set-sas-definition" [
   storage_account_name: string
   sas_definition_name: string
   --base-url(-b): string@base-url-completer # API base URL

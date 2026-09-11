@@ -117,7 +117,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta create-firebase" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "firebasestorage-projects-buckets-add-firebase" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -141,7 +141,7 @@ export def commands []: nothing -> table {
 #
 # POST /v1beta/{bucket}:addFirebase
 # operationId: firebasestorage.projects.buckets.addFirebase
-export def "v1beta create-firebase" [
+export def "firebasestorage-projects-buckets-add-firebase" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -193,7 +193,7 @@ export def "v1beta create-firebase" [
 #
 # POST /v1beta/{bucket}:removeFirebase
 # operationId: firebasestorage.projects.buckets.removeFirebase
-export def "v1beta delete-firebase" [
+export def "firebasestorage-projects-buckets-remove-firebase" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -245,7 +245,7 @@ export def "v1beta delete-firebase" [
 #
 # GET /v1beta/{name}
 # operationId: firebasestorage.projects.buckets.get
-export def "v1beta get" [
+export def "firebasestorage-projects-buckets-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -293,7 +293,7 @@ export def "v1beta get" [
 #
 # GET /v1beta/{parent}/buckets
 # operationId: firebasestorage.projects.buckets.list
-export def "v1beta-buckets list" [
+export def "firebasestorage-projects-buckets-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

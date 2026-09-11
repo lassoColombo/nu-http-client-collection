@@ -180,7 +180,7 @@ def action-completer-70 [] { ["VerifyEmailIdentity"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api get-clone-receipt-rule-update" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-clone-receipt-rule-set" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -204,7 +204,7 @@ export def commands []: nothing -> table {
 #
 # GET /
 # operationId: GET_CloneReceiptRuleSet
-export def "api get-clone-receipt-rule-update" [
+export def "get-clone-receipt-rule-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -252,7 +252,7 @@ export def "api get-clone-receipt-rule-update" [
 #
 # POST /
 # operationId: POST_CloneReceiptRuleSet
-export def "api create-clone-receipt-rule-update" [
+export def "post-clone-receipt-rule-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -302,7 +302,7 @@ export def "api create-clone-receipt-rule-update" [
 #
 # GET /
 # operationId: GET_CreateConfigurationSet
-export def "api get-create-configuration-update" [
+export def "get-create-configuration-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -349,7 +349,7 @@ export def "api get-create-configuration-update" [
 #
 # POST /
 # operationId: POST_CreateConfigurationSet
-export def "api create-configuration-update" [
+export def "post-create-configuration-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -399,7 +399,7 @@ export def "api create-configuration-update" [
 #
 # GET /
 # operationId: GET_CreateConfigurationSetEventDestination
-export def "api get-create-configuration-update-event-destination" [
+export def "get-create-configuration-set-event-destination" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -447,7 +447,7 @@ export def "api get-create-configuration-update-event-destination" [
 #
 # POST /
 # operationId: POST_CreateConfigurationSetEventDestination
-export def "api create-configuration-update-event-destination" [
+export def "post-create-configuration-set-event-destination" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -497,7 +497,7 @@ export def "api create-configuration-update-event-destination" [
 #
 # GET /
 # operationId: GET_CreateConfigurationSetTrackingOptions
-export def "api get-create-configuration-update-tracking-options" [
+export def "get-create-configuration-set-tracking-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -545,7 +545,7 @@ export def "api get-create-configuration-update-tracking-options" [
 #
 # POST /
 # operationId: POST_CreateConfigurationSetTrackingOptions
-export def "api create-configuration-update-tracking-options" [
+export def "post-create-configuration-set-tracking-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -595,7 +595,7 @@ export def "api create-configuration-update-tracking-options" [
 #
 # GET /
 # operationId: GET_CreateCustomVerificationEmailTemplate
-export def "api get-create-custom-verification-email-template" [
+export def "get-create-custom-verification-email-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -647,7 +647,7 @@ export def "api get-create-custom-verification-email-template" [
 #
 # POST /
 # operationId: POST_CreateCustomVerificationEmailTemplate
-export def "api create-custom-verification-email-template" [
+export def "post-create-custom-verification-email-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -697,7 +697,7 @@ export def "api create-custom-verification-email-template" [
 #
 # GET /
 # operationId: GET_CreateReceiptFilter
-export def "api get-create-receipt-filter" [
+export def "get-create-receipt-filter" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -744,7 +744,7 @@ export def "api get-create-receipt-filter" [
 #
 # POST /
 # operationId: POST_CreateReceiptFilter
-export def "api create-receipt-filter" [
+export def "post-create-receipt-filter" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -794,7 +794,7 @@ export def "api create-receipt-filter" [
 #
 # GET /
 # operationId: GET_CreateReceiptRule
-export def "api get-create-receipt-rule" [
+export def "get-create-receipt-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -843,7 +843,7 @@ export def "api get-create-receipt-rule" [
 #
 # POST /
 # operationId: POST_CreateReceiptRule
-export def "api create-receipt-rule" [
+export def "post-create-receipt-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -893,7 +893,7 @@ export def "api create-receipt-rule" [
 #
 # GET /
 # operationId: GET_CreateReceiptRuleSet
-export def "api get-create-receipt-rule-update" [
+export def "get-create-receipt-rule-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -940,7 +940,7 @@ export def "api get-create-receipt-rule-update" [
 #
 # POST /
 # operationId: POST_CreateReceiptRuleSet
-export def "api create-receipt-rule-update" [
+export def "post-create-receipt-rule-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -990,7 +990,7 @@ export def "api create-receipt-rule-update" [
 #
 # GET /
 # operationId: GET_CreateTemplate
-export def "api get-create-template" [
+export def "get-create-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1037,7 +1037,7 @@ export def "api get-create-template" [
 #
 # POST /
 # operationId: POST_CreateTemplate
-export def "api create-template" [
+export def "post-create-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1087,7 +1087,7 @@ export def "api create-template" [
 #
 # GET /
 # operationId: GET_DeleteConfigurationSet
-export def "api get-delete-configuration-update" [
+export def "get-delete-configuration-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1134,7 +1134,7 @@ export def "api get-delete-configuration-update" [
 #
 # POST /
 # operationId: POST_DeleteConfigurationSet
-export def "api create-delete-configuration-update" [
+export def "post-delete-configuration-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1184,7 +1184,7 @@ export def "api create-delete-configuration-update" [
 #
 # GET /
 # operationId: GET_DeleteConfigurationSetEventDestination
-export def "api get-delete-configuration-update-event-destination" [
+export def "get-delete-configuration-set-event-destination" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1232,7 +1232,7 @@ export def "api get-delete-configuration-update-event-destination" [
 #
 # POST /
 # operationId: POST_DeleteConfigurationSetEventDestination
-export def "api create-delete-configuration-update-event-destination" [
+export def "post-delete-configuration-set-event-destination" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1282,7 +1282,7 @@ export def "api create-delete-configuration-update-event-destination" [
 #
 # GET /
 # operationId: GET_DeleteConfigurationSetTrackingOptions
-export def "api get-delete-configuration-update-tracking-options" [
+export def "get-delete-configuration-set-tracking-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1329,7 +1329,7 @@ export def "api get-delete-configuration-update-tracking-options" [
 #
 # POST /
 # operationId: POST_DeleteConfigurationSetTrackingOptions
-export def "api create-delete-configuration-update-tracking-options" [
+export def "post-delete-configuration-set-tracking-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1379,7 +1379,7 @@ export def "api create-delete-configuration-update-tracking-options" [
 #
 # GET /
 # operationId: GET_DeleteCustomVerificationEmailTemplate
-export def "api get-delete-custom-verification-email-template" [
+export def "get-delete-custom-verification-email-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1426,7 +1426,7 @@ export def "api get-delete-custom-verification-email-template" [
 #
 # POST /
 # operationId: POST_DeleteCustomVerificationEmailTemplate
-export def "api create-delete-custom-verification-email-template" [
+export def "post-delete-custom-verification-email-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1476,7 +1476,7 @@ export def "api create-delete-custom-verification-email-template" [
 #
 # GET /
 # operationId: GET_DeleteIdentity
-export def "api get-delete-identity" [
+export def "get-delete-identity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1523,7 +1523,7 @@ export def "api get-delete-identity" [
 #
 # POST /
 # operationId: POST_DeleteIdentity
-export def "api create-delete-identity" [
+export def "post-delete-identity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1573,7 +1573,7 @@ export def "api create-delete-identity" [
 #
 # GET /
 # operationId: GET_DeleteIdentityPolicy
-export def "api get-delete-identity-policy" [
+export def "get-delete-identity-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1621,7 +1621,7 @@ export def "api get-delete-identity-policy" [
 #
 # POST /
 # operationId: POST_DeleteIdentityPolicy
-export def "api create-delete-identity-policy" [
+export def "post-delete-identity-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1671,7 +1671,7 @@ export def "api create-delete-identity-policy" [
 #
 # GET /
 # operationId: GET_DeleteReceiptFilter
-export def "api get-delete-receipt-filter" [
+export def "get-delete-receipt-filter" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1718,7 +1718,7 @@ export def "api get-delete-receipt-filter" [
 #
 # POST /
 # operationId: POST_DeleteReceiptFilter
-export def "api create-delete-receipt-filter" [
+export def "post-delete-receipt-filter" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1768,7 +1768,7 @@ export def "api create-delete-receipt-filter" [
 #
 # GET /
 # operationId: GET_DeleteReceiptRule
-export def "api get-delete-receipt-rule" [
+export def "get-delete-receipt-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1816,7 +1816,7 @@ export def "api get-delete-receipt-rule" [
 #
 # POST /
 # operationId: POST_DeleteReceiptRule
-export def "api create-delete-receipt-rule" [
+export def "post-delete-receipt-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1866,7 +1866,7 @@ export def "api create-delete-receipt-rule" [
 #
 # GET /
 # operationId: GET_DeleteReceiptRuleSet
-export def "api get-delete-receipt-rule-update" [
+export def "get-delete-receipt-rule-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1913,7 +1913,7 @@ export def "api get-delete-receipt-rule-update" [
 #
 # POST /
 # operationId: POST_DeleteReceiptRuleSet
-export def "api create-delete-receipt-rule-update" [
+export def "post-delete-receipt-rule-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1963,7 +1963,7 @@ export def "api create-delete-receipt-rule-update" [
 #
 # GET /
 # operationId: GET_DeleteTemplate
-export def "api get-delete-template" [
+export def "get-delete-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2010,7 +2010,7 @@ export def "api get-delete-template" [
 #
 # POST /
 # operationId: POST_DeleteTemplate
-export def "api create-delete-template" [
+export def "post-delete-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2060,7 +2060,7 @@ export def "api create-delete-template" [
 #
 # GET /
 # operationId: GET_DeleteVerifiedEmailAddress
-export def "api get-delete-verified-email-address" [
+export def "get-delete-verified-email-address" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2107,7 +2107,7 @@ export def "api get-delete-verified-email-address" [
 #
 # POST /
 # operationId: POST_DeleteVerifiedEmailAddress
-export def "api create-delete-verified-email-address" [
+export def "post-delete-verified-email-address" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2157,7 +2157,7 @@ export def "api create-delete-verified-email-address" [
 #
 # GET /
 # operationId: GET_DescribeActiveReceiptRuleSet
-export def "api get-active-receipt-rule-update" [
+export def "get-describe-active-receipt-rule-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2203,7 +2203,7 @@ export def "api get-active-receipt-rule-update" [
 #
 # POST /
 # operationId: POST_DescribeActiveReceiptRuleSet
-export def "api create-get-active-receipt-rule-update" [
+export def "post-describe-active-receipt-rule-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2253,7 +2253,7 @@ export def "api create-get-active-receipt-rule-update" [
 #
 # GET /
 # operationId: GET_DescribeConfigurationSet
-export def "api get-configuration-update" [
+export def "get-describe-configuration-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2301,7 +2301,7 @@ export def "api get-configuration-update" [
 #
 # POST /
 # operationId: POST_DescribeConfigurationSet
-export def "api create-get-configuration-update" [
+export def "post-describe-configuration-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2351,7 +2351,7 @@ export def "api create-get-configuration-update" [
 #
 # GET /
 # operationId: GET_DescribeReceiptRule
-export def "api get-receipt-rule" [
+export def "get-describe-receipt-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2399,7 +2399,7 @@ export def "api get-receipt-rule" [
 #
 # POST /
 # operationId: POST_DescribeReceiptRule
-export def "api create-get-receipt-rule" [
+export def "post-describe-receipt-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2449,7 +2449,7 @@ export def "api create-get-receipt-rule" [
 #
 # GET /
 # operationId: GET_DescribeReceiptRuleSet
-export def "api get-receipt-rule-update" [
+export def "get-describe-receipt-rule-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2496,7 +2496,7 @@ export def "api get-receipt-rule-update" [
 #
 # POST /
 # operationId: POST_DescribeReceiptRuleSet
-export def "api create-get-receipt-rule-update" [
+export def "post-describe-receipt-rule-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2546,7 +2546,7 @@ export def "api create-get-receipt-rule-update" [
 #
 # GET /
 # operationId: GET_GetAccountSendingEnabled
-export def "api get-account-sending-enabled" [
+export def "get-get-account-sending-enabled" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2592,7 +2592,7 @@ export def "api get-account-sending-enabled" [
 #
 # POST /
 # operationId: POST_GetAccountSendingEnabled
-export def "api create-get-account-sending-enabled" [
+export def "post-get-account-sending-enabled" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2638,7 +2638,7 @@ export def "api create-get-account-sending-enabled" [
 #
 # GET /
 # operationId: GET_GetCustomVerificationEmailTemplate
-export def "api get-custom-verification-email-template" [
+export def "get-get-custom-verification-email-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2685,7 +2685,7 @@ export def "api get-custom-verification-email-template" [
 #
 # POST /
 # operationId: POST_GetCustomVerificationEmailTemplate
-export def "api create-get-custom-verification-email-template" [
+export def "post-get-custom-verification-email-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2735,7 +2735,7 @@ export def "api create-get-custom-verification-email-template" [
 #
 # GET /
 # operationId: GET_GetIdentityDkimAttributes
-export def "api get-identity-dkim-attributes" [
+export def "get-get-identity-dkim-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2782,7 +2782,7 @@ export def "api get-identity-dkim-attributes" [
 #
 # POST /
 # operationId: POST_GetIdentityDkimAttributes
-export def "api create-get-identity-dkim-attributes" [
+export def "post-get-identity-dkim-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2832,7 +2832,7 @@ export def "api create-get-identity-dkim-attributes" [
 #
 # GET /
 # operationId: GET_GetIdentityMailFromDomainAttributes
-export def "api get-identity-mail-from-domain-attributes" [
+export def "get-get-identity-mail-from-domain-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2879,7 +2879,7 @@ export def "api get-identity-mail-from-domain-attributes" [
 #
 # POST /
 # operationId: POST_GetIdentityMailFromDomainAttributes
-export def "api create-get-identity-mail-from-domain-attributes" [
+export def "post-get-identity-mail-from-domain-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2929,7 +2929,7 @@ export def "api create-get-identity-mail-from-domain-attributes" [
 #
 # GET /
 # operationId: GET_GetIdentityNotificationAttributes
-export def "api get-identity-notification-attributes" [
+export def "get-get-identity-notification-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2976,7 +2976,7 @@ export def "api get-identity-notification-attributes" [
 #
 # POST /
 # operationId: POST_GetIdentityNotificationAttributes
-export def "api create-get-identity-notification-attributes" [
+export def "post-get-identity-notification-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3026,7 +3026,7 @@ export def "api create-get-identity-notification-attributes" [
 #
 # GET /
 # operationId: GET_GetIdentityPolicies
-export def "api get-identity-policies" [
+export def "get-get-identity-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3074,7 +3074,7 @@ export def "api get-identity-policies" [
 #
 # POST /
 # operationId: POST_GetIdentityPolicies
-export def "api create-get-identity-policies" [
+export def "post-get-identity-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3124,7 +3124,7 @@ export def "api create-get-identity-policies" [
 #
 # GET /
 # operationId: GET_GetIdentityVerificationAttributes
-export def "api get-identity-verification-attributes" [
+export def "get-get-identity-verification-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3171,7 +3171,7 @@ export def "api get-identity-verification-attributes" [
 #
 # POST /
 # operationId: POST_GetIdentityVerificationAttributes
-export def "api create-get-identity-verification-attributes" [
+export def "post-get-identity-verification-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3221,7 +3221,7 @@ export def "api create-get-identity-verification-attributes" [
 #
 # GET /
 # operationId: GET_GetSendQuota
-export def "api get-send-quota" [
+export def "get-get-send-quota" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3267,7 +3267,7 @@ export def "api get-send-quota" [
 #
 # POST /
 # operationId: POST_GetSendQuota
-export def "api create-get-send-quota" [
+export def "post-get-send-quota" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3313,7 +3313,7 @@ export def "api create-get-send-quota" [
 #
 # GET /
 # operationId: GET_GetSendStatistics
-export def "api get-send-statistics" [
+export def "get-get-send-statistics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3359,7 +3359,7 @@ export def "api get-send-statistics" [
 #
 # POST /
 # operationId: POST_GetSendStatistics
-export def "api create-get-send-statistics" [
+export def "post-get-send-statistics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3405,7 +3405,7 @@ export def "api create-get-send-statistics" [
 #
 # GET /
 # operationId: GET_GetTemplate
-export def "api get-template" [
+export def "get-get-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3452,7 +3452,7 @@ export def "api get-template" [
 #
 # POST /
 # operationId: POST_GetTemplate
-export def "api create-get-template" [
+export def "post-get-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3502,7 +3502,7 @@ export def "api create-get-template" [
 #
 # GET /
 # operationId: GET_ListConfigurationSets
-export def "api get-list-configuration-sets" [
+export def "get-list-configuration-sets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3550,7 +3550,7 @@ export def "api get-list-configuration-sets" [
 #
 # POST /
 # operationId: POST_ListConfigurationSets
-export def "api create-list-configuration-sets" [
+export def "post-list-configuration-sets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3600,7 +3600,7 @@ export def "api create-list-configuration-sets" [
 #
 # GET /
 # operationId: GET_ListCustomVerificationEmailTemplates
-export def "api get-list-custom-verification-email-templates" [
+export def "get-list-custom-verification-email-templates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3648,7 +3648,7 @@ export def "api get-list-custom-verification-email-templates" [
 #
 # POST /
 # operationId: POST_ListCustomVerificationEmailTemplates
-export def "api create-list-custom-verification-email-templates" [
+export def "post-list-custom-verification-email-templates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3700,7 +3700,7 @@ export def "api create-list-custom-verification-email-templates" [
 #
 # GET /
 # operationId: GET_ListIdentities
-export def "api get-list-identities" [
+export def "get-list-identities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3749,7 +3749,7 @@ export def "api get-list-identities" [
 #
 # POST /
 # operationId: POST_ListIdentities
-export def "api create-list-identities" [
+export def "post-list-identities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3801,7 +3801,7 @@ export def "api create-list-identities" [
 #
 # GET /
 # operationId: GET_ListIdentityPolicies
-export def "api get-list-identity-policies" [
+export def "get-list-identity-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3848,7 +3848,7 @@ export def "api get-list-identity-policies" [
 #
 # POST /
 # operationId: POST_ListIdentityPolicies
-export def "api create-list-identity-policies" [
+export def "post-list-identity-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3898,7 +3898,7 @@ export def "api create-list-identity-policies" [
 #
 # GET /
 # operationId: GET_ListReceiptFilters
-export def "api get-list-receipt-filters" [
+export def "get-list-receipt-filters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3944,7 +3944,7 @@ export def "api get-list-receipt-filters" [
 #
 # POST /
 # operationId: POST_ListReceiptFilters
-export def "api create-list-receipt-filters" [
+export def "post-list-receipt-filters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3994,7 +3994,7 @@ export def "api create-list-receipt-filters" [
 #
 # GET /
 # operationId: GET_ListReceiptRuleSets
-export def "api get-list-receipt-rule-sets" [
+export def "get-list-receipt-rule-sets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4041,7 +4041,7 @@ export def "api get-list-receipt-rule-sets" [
 #
 # POST /
 # operationId: POST_ListReceiptRuleSets
-export def "api create-list-receipt-rule-sets" [
+export def "post-list-receipt-rule-sets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4091,7 +4091,7 @@ export def "api create-list-receipt-rule-sets" [
 #
 # GET /
 # operationId: GET_ListTemplates
-export def "api get-list-templates" [
+export def "get-list-templates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4139,7 +4139,7 @@ export def "api get-list-templates" [
 #
 # POST /
 # operationId: POST_ListTemplates
-export def "api create-list-templates" [
+export def "post-list-templates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4189,7 +4189,7 @@ export def "api create-list-templates" [
 #
 # GET /
 # operationId: GET_ListVerifiedEmailAddresses
-export def "api get-list-verified-email-addresses" [
+export def "get-list-verified-email-addresses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4235,7 +4235,7 @@ export def "api get-list-verified-email-addresses" [
 #
 # POST /
 # operationId: POST_ListVerifiedEmailAddresses
-export def "api create-list-verified-email-addresses" [
+export def "post-list-verified-email-addresses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4281,7 +4281,7 @@ export def "api create-list-verified-email-addresses" [
 #
 # GET /
 # operationId: GET_PutConfigurationSetDeliveryOptions
-export def "api get-update-configuration-delivery-options" [
+export def "get-put-configuration-set-delivery-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4329,7 +4329,7 @@ export def "api get-update-configuration-delivery-options" [
 #
 # POST /
 # operationId: POST_PutConfigurationSetDeliveryOptions
-export def "api create-update-configuration-delivery-options" [
+export def "post-put-configuration-set-delivery-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4379,7 +4379,7 @@ export def "api create-update-configuration-delivery-options" [
 #
 # GET /
 # operationId: GET_PutIdentityPolicy
-export def "api get-update-identity-policy" [
+export def "get-put-identity-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4428,7 +4428,7 @@ export def "api get-update-identity-policy" [
 #
 # POST /
 # operationId: POST_PutIdentityPolicy
-export def "api create-update-identity-policy" [
+export def "post-put-identity-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4478,7 +4478,7 @@ export def "api create-update-identity-policy" [
 #
 # GET /
 # operationId: GET_ReorderReceiptRuleSet
-export def "api get-reorder-receipt-rule-update" [
+export def "get-reorder-receipt-rule-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4526,7 +4526,7 @@ export def "api get-reorder-receipt-rule-update" [
 #
 # POST /
 # operationId: POST_ReorderReceiptRuleSet
-export def "api create-reorder-receipt-rule-update" [
+export def "post-reorder-receipt-rule-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4576,7 +4576,7 @@ export def "api create-reorder-receipt-rule-update" [
 #
 # GET /
 # operationId: GET_SendBounce
-export def "api get-send-bounce" [
+export def "get-send-bounce" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4628,7 +4628,7 @@ export def "api get-send-bounce" [
 #
 # POST /
 # operationId: POST_SendBounce
-export def "api create-send-bounce" [
+export def "post-send-bounce" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4678,7 +4678,7 @@ export def "api create-send-bounce" [
 #
 # GET /
 # operationId: GET_SendBulkTemplatedEmail
-export def "api get-send-bulk-templated-email" [
+export def "get-send-bulk-templated-email" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4735,7 +4735,7 @@ export def "api get-send-bulk-templated-email" [
 #
 # POST /
 # operationId: POST_SendBulkTemplatedEmail
-export def "api create-send-bulk-templated-email" [
+export def "post-send-bulk-templated-email" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4785,7 +4785,7 @@ export def "api create-send-bulk-templated-email" [
 #
 # GET /
 # operationId: GET_SendCustomVerificationEmail
-export def "api get-send-custom-verification-email" [
+export def "get-send-custom-verification-email" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4834,7 +4834,7 @@ export def "api get-send-custom-verification-email" [
 #
 # POST /
 # operationId: POST_SendCustomVerificationEmail
-export def "api create-send-custom-verification-email" [
+export def "post-send-custom-verification-email" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4884,7 +4884,7 @@ export def "api create-send-custom-verification-email" [
 #
 # GET /
 # operationId: GET_SendEmail
-export def "api get-send-email" [
+export def "get-send-email" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4939,7 +4939,7 @@ export def "api get-send-email" [
 #
 # POST /
 # operationId: POST_SendEmail
-export def "api create-send-email" [
+export def "post-send-email" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4989,7 +4989,7 @@ export def "api create-send-email" [
 #
 # GET /
 # operationId: GET_SendRawEmail
-export def "api get-send-raw-email" [
+export def "get-send-raw-email" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5043,7 +5043,7 @@ export def "api get-send-raw-email" [
 #
 # POST /
 # operationId: POST_SendRawEmail
-export def "api create-send-raw-email" [
+export def "post-send-raw-email" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5093,7 +5093,7 @@ export def "api create-send-raw-email" [
 #
 # GET /
 # operationId: GET_SendTemplatedEmail
-export def "api get-send-templated-email" [
+export def "get-send-templated-email" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5150,7 +5150,7 @@ export def "api get-send-templated-email" [
 #
 # POST /
 # operationId: POST_SendTemplatedEmail
-export def "api create-send-templated-email" [
+export def "post-send-templated-email" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5200,7 +5200,7 @@ export def "api create-send-templated-email" [
 #
 # GET /
 # operationId: GET_SetActiveReceiptRuleSet
-export def "api get-update-active-receipt-rule" [
+export def "get-set-active-receipt-rule-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5247,7 +5247,7 @@ export def "api get-update-active-receipt-rule" [
 #
 # POST /
 # operationId: POST_SetActiveReceiptRuleSet
-export def "api create-update-active-receipt-rule" [
+export def "post-set-active-receipt-rule-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5297,7 +5297,7 @@ export def "api create-update-active-receipt-rule" [
 #
 # GET /
 # operationId: GET_SetIdentityDkimEnabled
-export def "api get-update-identity-dkim-enabled" [
+export def "get-set-identity-dkim-enabled" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5345,7 +5345,7 @@ export def "api get-update-identity-dkim-enabled" [
 #
 # POST /
 # operationId: POST_SetIdentityDkimEnabled
-export def "api create-update-identity-dkim-enabled" [
+export def "post-set-identity-dkim-enabled" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5395,7 +5395,7 @@ export def "api create-update-identity-dkim-enabled" [
 #
 # GET /
 # operationId: GET_SetIdentityFeedbackForwardingEnabled
-export def "api get-update-identity-feedback-forwarding-enabled" [
+export def "get-set-identity-feedback-forwarding-enabled" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5443,7 +5443,7 @@ export def "api get-update-identity-feedback-forwarding-enabled" [
 #
 # POST /
 # operationId: POST_SetIdentityFeedbackForwardingEnabled
-export def "api create-update-identity-feedback-forwarding-enabled" [
+export def "post-set-identity-feedback-forwarding-enabled" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5493,7 +5493,7 @@ export def "api create-update-identity-feedback-forwarding-enabled" [
 #
 # GET /
 # operationId: GET_SetIdentityHeadersInNotificationsEnabled
-export def "api get-update-identity-headers-in-notifications-enabled" [
+export def "get-set-identity-headers-in-notifications-enabled" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5542,7 +5542,7 @@ export def "api get-update-identity-headers-in-notifications-enabled" [
 #
 # POST /
 # operationId: POST_SetIdentityHeadersInNotificationsEnabled
-export def "api create-update-identity-headers-in-notifications-enabled" [
+export def "post-set-identity-headers-in-notifications-enabled" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5592,7 +5592,7 @@ export def "api create-update-identity-headers-in-notifications-enabled" [
 #
 # GET /
 # operationId: GET_SetIdentityMailFromDomain
-export def "api get-update-identity-mail-from-domain" [
+export def "get-set-identity-mail-from-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5641,7 +5641,7 @@ export def "api get-update-identity-mail-from-domain" [
 #
 # POST /
 # operationId: POST_SetIdentityMailFromDomain
-export def "api create-update-identity-mail-from-domain" [
+export def "post-set-identity-mail-from-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5691,7 +5691,7 @@ export def "api create-update-identity-mail-from-domain" [
 #
 # GET /
 # operationId: GET_SetIdentityNotificationTopic
-export def "api get-update-identity-notification-topic" [
+export def "get-set-identity-notification-topic" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5740,7 +5740,7 @@ export def "api get-update-identity-notification-topic" [
 #
 # POST /
 # operationId: POST_SetIdentityNotificationTopic
-export def "api create-update-identity-notification-topic" [
+export def "post-set-identity-notification-topic" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5790,7 +5790,7 @@ export def "api create-update-identity-notification-topic" [
 #
 # GET /
 # operationId: GET_SetReceiptRulePosition
-export def "api get-update-receipt-rule-position" [
+export def "get-set-receipt-rule-position" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5839,7 +5839,7 @@ export def "api get-update-receipt-rule-position" [
 #
 # POST /
 # operationId: POST_SetReceiptRulePosition
-export def "api create-update-receipt-rule-position" [
+export def "post-set-receipt-rule-position" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5889,7 +5889,7 @@ export def "api create-update-receipt-rule-position" [
 #
 # GET /
 # operationId: GET_TestRenderTemplate
-export def "api get-test-render-template" [
+export def "get-test-render-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5937,7 +5937,7 @@ export def "api get-test-render-template" [
 #
 # POST /
 # operationId: POST_TestRenderTemplate
-export def "api create-test-render-template" [
+export def "post-test-render-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5987,7 +5987,7 @@ export def "api create-test-render-template" [
 #
 # GET /
 # operationId: GET_UpdateAccountSendingEnabled
-export def "api get-update-account-sending-enabled" [
+export def "get-update-account-sending-enabled" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6034,7 +6034,7 @@ export def "api get-update-account-sending-enabled" [
 #
 # POST /
 # operationId: POST_UpdateAccountSendingEnabled
-export def "api create-update-account-sending-enabled" [
+export def "post-update-account-sending-enabled" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6084,7 +6084,7 @@ export def "api create-update-account-sending-enabled" [
 #
 # GET /
 # operationId: GET_UpdateConfigurationSetEventDestination
-export def "api get-update-configuration-event-destination" [
+export def "get-update-configuration-set-event-destination" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6132,7 +6132,7 @@ export def "api get-update-configuration-event-destination" [
 #
 # POST /
 # operationId: POST_UpdateConfigurationSetEventDestination
-export def "api create-update-configuration-event-destination" [
+export def "post-update-configuration-set-event-destination" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6182,7 +6182,7 @@ export def "api create-update-configuration-event-destination" [
 #
 # GET /
 # operationId: GET_UpdateConfigurationSetReputationMetricsEnabled
-export def "api get-update-configuration-reputation-metrics-enabled" [
+export def "get-update-configuration-set-reputation-metrics-enabled" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6230,7 +6230,7 @@ export def "api get-update-configuration-reputation-metrics-enabled" [
 #
 # POST /
 # operationId: POST_UpdateConfigurationSetReputationMetricsEnabled
-export def "api create-update-configuration-reputation-metrics-enabled" [
+export def "post-update-configuration-set-reputation-metrics-enabled" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6280,7 +6280,7 @@ export def "api create-update-configuration-reputation-metrics-enabled" [
 #
 # GET /
 # operationId: GET_UpdateConfigurationSetSendingEnabled
-export def "api get-update-configuration-sending-enabled" [
+export def "get-update-configuration-set-sending-enabled" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6328,7 +6328,7 @@ export def "api get-update-configuration-sending-enabled" [
 #
 # POST /
 # operationId: POST_UpdateConfigurationSetSendingEnabled
-export def "api create-update-configuration-sending-enabled" [
+export def "post-update-configuration-set-sending-enabled" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6378,7 +6378,7 @@ export def "api create-update-configuration-sending-enabled" [
 #
 # GET /
 # operationId: GET_UpdateConfigurationSetTrackingOptions
-export def "api get-update-configuration-tracking-options" [
+export def "get-update-configuration-set-tracking-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6426,7 +6426,7 @@ export def "api get-update-configuration-tracking-options" [
 #
 # POST /
 # operationId: POST_UpdateConfigurationSetTrackingOptions
-export def "api create-update-configuration-tracking-options" [
+export def "post-update-configuration-set-tracking-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6476,7 +6476,7 @@ export def "api create-update-configuration-tracking-options" [
 #
 # GET /
 # operationId: GET_UpdateCustomVerificationEmailTemplate
-export def "api get-update-custom-verification-email-template" [
+export def "get-update-custom-verification-email-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6528,7 +6528,7 @@ export def "api get-update-custom-verification-email-template" [
 #
 # POST /
 # operationId: POST_UpdateCustomVerificationEmailTemplate
-export def "api create-update-custom-verification-email-template" [
+export def "post-update-custom-verification-email-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6578,7 +6578,7 @@ export def "api create-update-custom-verification-email-template" [
 #
 # GET /
 # operationId: GET_UpdateReceiptRule
-export def "api get-update-receipt-rule" [
+export def "get-update-receipt-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6626,7 +6626,7 @@ export def "api get-update-receipt-rule" [
 #
 # POST /
 # operationId: POST_UpdateReceiptRule
-export def "api create-update-receipt-rule" [
+export def "post-update-receipt-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6676,7 +6676,7 @@ export def "api create-update-receipt-rule" [
 #
 # GET /
 # operationId: GET_UpdateTemplate
-export def "api get-update-template" [
+export def "get-update-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6723,7 +6723,7 @@ export def "api get-update-template" [
 #
 # POST /
 # operationId: POST_UpdateTemplate
-export def "api create-update-template" [
+export def "post-update-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6773,7 +6773,7 @@ export def "api create-update-template" [
 #
 # GET /
 # operationId: GET_VerifyDomainDkim
-export def "api get-verify-domain-dkim" [
+export def "get-verify-domain-dkim" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6820,7 +6820,7 @@ export def "api get-verify-domain-dkim" [
 #
 # POST /
 # operationId: POST_VerifyDomainDkim
-export def "api create-verify-domain-dkim" [
+export def "post-verify-domain-dkim" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6870,7 +6870,7 @@ export def "api create-verify-domain-dkim" [
 #
 # GET /
 # operationId: GET_VerifyDomainIdentity
-export def "api get-verify-domain-identity" [
+export def "get-verify-domain-identity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6917,7 +6917,7 @@ export def "api get-verify-domain-identity" [
 #
 # POST /
 # operationId: POST_VerifyDomainIdentity
-export def "api create-verify-domain-identity" [
+export def "post-verify-domain-identity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6967,7 +6967,7 @@ export def "api create-verify-domain-identity" [
 #
 # GET /
 # operationId: GET_VerifyEmailAddress
-export def "api get-verify-email-address" [
+export def "get-verify-email-address" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7014,7 +7014,7 @@ export def "api get-verify-email-address" [
 #
 # POST /
 # operationId: POST_VerifyEmailAddress
-export def "api create-verify-email-address" [
+export def "post-verify-email-address" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7064,7 +7064,7 @@ export def "api create-verify-email-address" [
 #
 # GET /
 # operationId: GET_VerifyEmailIdentity
-export def "api get-verify-email-identity" [
+export def "get-verify-email-identity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7111,7 +7111,7 @@ export def "api get-verify-email-identity" [
 #
 # POST /
 # operationId: POST_VerifyEmailIdentity
-export def "api create-verify-email-identity" [
+export def "post-verify-email-identity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

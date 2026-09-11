@@ -118,7 +118,7 @@ def data-store-type-completer [] { ["AzureBlob" "AzureDataLake" "AzureDataLakeGe
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "datastore-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-datastores delete-data-stores-list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "data-stores-delete-all" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -142,7 +142,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /datastore/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/datastores
 # operationId: DataStores_DeleteAll
-export def "datastore-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-datastores delete-data-stores-list" [
+export def "data-stores-delete-all" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -182,7 +182,7 @@ export def "datastore-v1-0-subscriptions-resource-groups-providers-microsoft-mac
 #
 # GET /datastore/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/datastores
 # operationId: DataStores_List
-export def "datastore-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-datastores list-data-stores" [
+export def "data-stores-list" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -232,7 +232,7 @@ export def "datastore-v1-0-subscriptions-resource-groups-providers-microsoft-mac
 # --azureSqlDatabaseSection shape: {authorityUrl?: string, certificate?: string, clientId?: string, clientSecret?: string, databaseName?: string, endpoint?: string, isCertAuth?: bool, resourceGroup?: string, resourceUri?: string, serverName?: string, subscriptionId?: string, tenantId?: string, thumbprint?: string}
 # --azureStorageSection shape: {accountKey?: string, accountName?: string, areWorkspaceManagedIdentitiesAllowed?: bool, blobCacheTimeout?: int, clientCredentials?: record, containerName?: string, credential?: string, credentialType?: "None"|"Sas"|"AccountKey"|"ClientCredentials", endpoint?: string, isSas?: bool, protocol?: string, resourceGroup?: string, sasToken?: string, subscriptionId?: string}
 # --glusterFsSection shape: {serverAddress?: string, volumeName?: string}
-export def "datastore-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-datastores create-data-stores" [
+export def "data-stores-create" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -287,7 +287,7 @@ export def "datastore-v1-0-subscriptions-resource-groups-providers-microsoft-mac
 #
 # DELETE /datastore/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/datastores/{name}
 # operationId: DataStores_Delete
-export def "datastore-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-datastores delete-data-stores" [
+export def "data-stores-delete" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -329,7 +329,7 @@ export def "datastore-v1-0-subscriptions-resource-groups-providers-microsoft-mac
 #
 # GET /datastore/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/datastores/{name}
 # operationId: DataStores_Get
-export def "datastore-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-datastores get-data-stores" [
+export def "data-stores-get" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -376,7 +376,7 @@ export def "datastore-v1-0-subscriptions-resource-groups-providers-microsoft-mac
 # --azureSqlDatabaseSection shape: {authorityUrl?: string, certificate?: string, clientId?: string, clientSecret?: string, databaseName?: string, endpoint?: string, isCertAuth?: bool, resourceGroup?: string, resourceUri?: string, serverName?: string, subscriptionId?: string, tenantId?: string, thumbprint?: string}
 # --azureStorageSection shape: {accountKey?: string, accountName?: string, areWorkspaceManagedIdentitiesAllowed?: bool, blobCacheTimeout?: int, clientCredentials?: record, containerName?: string, credential?: string, credentialType?: "None"|"Sas"|"AccountKey"|"ClientCredentials", endpoint?: string, isSas?: bool, protocol?: string, resourceGroup?: string, sasToken?: string, subscriptionId?: string}
 # --glusterFsSection shape: {serverAddress?: string, volumeName?: string}
-export def "datastore-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-datastores update-data-stores" [
+export def "data-stores-update" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -433,7 +433,7 @@ export def "datastore-v1-0-subscriptions-resource-groups-providers-microsoft-mac
 #
 # GET /datastore/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/default
 # operationId: DataStores_GetDefault
-export def "datastore-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-default get-data-stores" [
+export def "data-stores-get-default" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -473,7 +473,7 @@ export def "datastore-v1-0-subscriptions-resource-groups-providers-microsoft-mac
 #
 # PUT /datastore/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/default/{name}
 # operationId: DataStores_SetDefault
-export def "datastore-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-default update-data-stores" [
+export def "data-stores-set-default" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string

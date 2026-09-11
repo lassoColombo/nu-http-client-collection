@@ -119,7 +119,7 @@ def visibility-completer [] { ["0" "1"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "generate-upload create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-generate-upload" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -141,7 +141,7 @@ export def commands []: nothing -> table {
 
 # POST /generate/upload
 @deprecated --flag model
-export def "generate-upload create" [
+export def "post-generate-upload" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (key)
   --token-bearerauth: string # Auth token for bearerAuth (Authorization)
@@ -185,7 +185,7 @@ export def "generate-upload create" [
 
 # POST /generate/url
 @deprecated --flag model
-export def "generate-url create" [
+export def "post-generate-url" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (key)
   --token-bearerauth: string # Auth token for bearerAuth (Authorization)
@@ -228,7 +228,7 @@ export def "generate-url create" [
 
 # POST /generate/user
 @deprecated --flag model
-export def "generate-user create" [
+export def "post-generate-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (key)
   --token-bearerauth: string # Auth token for bearerAuth (Authorization)
@@ -270,7 +270,7 @@ export def "generate-user create" [
 }
 
 # GET /get/delay
-export def "get-delay get" [
+export def "get-get-delay" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (key)
   --token-bearerauth: string # Auth token for bearerAuth (Authorization)
@@ -306,7 +306,7 @@ export def "get-delay get" [
 # Deprecated. Use /get/uuid instead.
 #
 # GET /get/id/{id}
-export def "get-id get" [
+export def "get-get-id-id" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -342,7 +342,7 @@ export def "get-id get" [
 }
 
 # GET /get/list/{page}
-export def "get-list get" [
+export def "get-get-list-page" [
   page: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -378,7 +378,7 @@ export def "get-list get" [
 }
 
 # GET /get/uuid/{uuid}
-export def "get-uuid get" [
+export def "get-get-uuid-uuid" [
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -414,7 +414,7 @@ export def "get-uuid get" [
 }
 
 # GET /validate/name/{name}
-export def "validate-name get" [
+export def "get-validate-name-name" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -450,7 +450,7 @@ export def "validate-name get" [
 }
 
 # GET /validate/uuid/{uuid}
-export def "validate-uuid get" [
+export def "get-validate-uuid-uuid" [
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

@@ -119,7 +119,7 @@ def output-format-completer [] { ["ION_BINARY" "ION_TEXT" "JSON"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "ledgers-journal-kinesis-streams cancel" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cancel-journal-kinesis-stream" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -143,7 +143,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /ledgers/{name}/journal-kinesis-streams/{streamId}
 # operationId: CancelJournalKinesisStream
-export def "ledgers-journal-kinesis-streams cancel" [
+export def "cancel-journal-kinesis-stream" [
   name: string
   stream_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -190,7 +190,7 @@ export def "ledgers-journal-kinesis-streams cancel" [
 #
 # GET /ledgers/{name}/journal-kinesis-streams/{streamId}
 # operationId: DescribeJournalKinesisStream
-export def "ledgers-journal-kinesis-streams get" [
+export def "describe-journal-kinesis-stream" [
   name: string
   stream_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -237,7 +237,7 @@ export def "ledgers-journal-kinesis-streams get" [
 #
 # POST /ledgers
 # operationId: CreateLedger
-export def "ledgers create" [
+export def "create-ledger" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -288,7 +288,7 @@ export def "ledgers create" [
 #
 # GET /ledgers
 # operationId: ListLedgers
-export def "ledgers list" [
+export def "list-ledgers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -336,7 +336,7 @@ export def "ledgers list" [
 #
 # DELETE /ledgers/{name}
 # operationId: DeleteLedger
-export def "ledgers delete" [
+export def "delete-ledger" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -381,7 +381,7 @@ export def "ledgers delete" [
 #
 # GET /ledgers/{name}
 # operationId: DescribeLedger
-export def "ledgers get" [
+export def "describe-ledger" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -426,7 +426,7 @@ export def "ledgers get" [
 #
 # PATCH /ledgers/{name}
 # operationId: UpdateLedger
-export def "ledgers update" [
+export def "update-ledger" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -476,7 +476,7 @@ export def "ledgers update" [
 #
 # GET /ledgers/{name}/journal-s3-exports/{exportId}
 # operationId: DescribeJournalS3Export
-export def "ledgers-journal-s3-exports get" [
+export def "describe-journal-s3-export" [
   name: string
   export_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -524,7 +524,7 @@ export def "ledgers-journal-s3-exports get" [
 # POST /ledgers/{name}/journal-s3-exports
 # operationId: ExportJournalToS3
 # --S3ExportConfiguration shape: {Bucket?: any, Prefix?: any, EncryptionConfiguration?: any}
-export def "ledgers-journal-s3-exports export" [
+export def "export-journal-to-s3" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -577,7 +577,7 @@ export def "ledgers-journal-s3-exports export" [
 #
 # GET /ledgers/{name}/journal-s3-exports
 # operationId: ListJournalS3ExportsForLedger
-export def "ledgers-journal-s3-exports list" [
+export def "list-journal-s3-exports-for-ledger" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -629,7 +629,7 @@ export def "ledgers-journal-s3-exports list" [
 # operationId: GetBlock
 # --BlockAddress shape: {IonText?: any}
 # --DigestTipAddress shape: {IonText?: any}
-export def "ledgers-block get" [
+export def "get-block" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -679,7 +679,7 @@ export def "ledgers-block get" [
 #
 # POST /ledgers/{name}/digest
 # operationId: GetDigest
-export def "ledgers-digest get" [
+export def "get-digest" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -726,7 +726,7 @@ export def "ledgers-digest get" [
 # operationId: GetRevision
 # --BlockAddress shape: {IonText?: any}
 # --DigestTipAddress shape: {IonText?: any}
-export def "ledgers-revision get" [
+export def "get-revision" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -777,7 +777,7 @@ export def "ledgers-revision get" [
 #
 # GET /ledgers/{name}/journal-kinesis-streams
 # operationId: ListJournalKinesisStreamsForLedger
-export def "ledgers-journal-kinesis-streams list" [
+export def "list-journal-kinesis-streams-for-ledger" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -828,7 +828,7 @@ export def "ledgers-journal-kinesis-streams list" [
 # POST /ledgers/{name}/journal-kinesis-streams
 # operationId: StreamJournalToKinesis
 # --KinesisConfiguration shape: {StreamArn?: any, AggregationEnabled?: any}
-export def "ledgers-journal-kinesis-streams create" [
+export def "stream-journal-to-kinesis" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -882,7 +882,7 @@ export def "ledgers-journal-kinesis-streams create" [
 #
 # GET /journal-s3-exports
 # operationId: ListJournalS3Exports
-export def "journal-s3-exports list" [
+export def "list-journal-s3-exports" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -930,7 +930,7 @@ export def "journal-s3-exports list" [
 #
 # GET /tags/{resourceArn}
 # operationId: ListTagsForResource
-export def "tags list-for-resource" [
+export def "list-tags-for-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -975,7 +975,7 @@ export def "tags list-for-resource" [
 #
 # POST /tags/{resourceArn}
 # operationId: TagResource
-export def "tags tag-resource" [
+export def "tag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1024,7 +1024,7 @@ export def "tags tag-resource" [
 #
 # DELETE /tags/{resourceArn}
 # operationId: UntagResource
-export def "tags untag-resource" [
+export def "untag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1071,7 +1071,7 @@ export def "tags untag-resource" [
 #
 # PATCH /ledgers/{name}/permissions-mode
 # operationId: UpdateLedgerPermissionsMode
-export def "ledgers-permissions-mode update" [
+export def "update-ledger-permissions-mode" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

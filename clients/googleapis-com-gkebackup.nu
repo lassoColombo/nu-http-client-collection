@@ -129,7 +129,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "gkebackup-projects-locations-restore-plans-restores-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -153,7 +153,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1/{name}
 # operationId: gkebackup.projects.locations.restorePlans.restores.delete
-export def "projects delete" [
+export def "gkebackup-projects-locations-restore-plans-restores-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -203,7 +203,7 @@ export def "projects delete" [
 #
 # GET /v1/{name}
 # operationId: gkebackup.projects.locations.restorePlans.restores.volumeRestores.get
-export def "projects get" [
+export def "gkebackup-projects-locations-restore-plans-restores-volume-restores-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -252,7 +252,7 @@ export def "projects get" [
 # PATCH /v1/{name}
 # operationId: gkebackup.projects.locations.restorePlans.restores.patch
 # --restoreConfig shape: {allNamespaces?: bool, clusterResourceConflictPolicy?: "CLUSTER_RESOURCE_CONFLICT_POLICY_UNSPECIFIED"|"USE_EXISTING_VERSION"|"USE_BACKUP_VERSION", clusterResourceRestoreScope?: record, namespacedResourceRestoreMode?: "NAMESPACED_RESOURCE_RESTORE_MODE_UNSPECIFIED"|"DELETE_AND_RESTORE"|"FAIL_ON_CONFLICT", selectedApplications?: record, selectedNamespaces?: record, substitutionRules?: list, ... (1 more fields)}
-export def "projects update" [
+export def "gkebackup-projects-locations-restore-plans-restores-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -308,7 +308,7 @@ export def "projects update" [
 #
 # GET /v1/{name}/locations
 # operationId: gkebackup.projects.locations.list
-export def "locations list" [
+export def "gkebackup-projects-locations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -359,7 +359,7 @@ export def "locations list" [
 #
 # DELETE /v1/{name}/operations
 # operationId: gkebackup.projects.locations.deleteOperations
-export def "operations delete" [
+export def "gkebackup-projects-locations-delete-operations" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -407,7 +407,7 @@ export def "operations delete" [
 #
 # GET /v1/{name}/operations
 # operationId: gkebackup.projects.locations.operations.list
-export def "operations list" [
+export def "gkebackup-projects-locations-operations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -458,7 +458,7 @@ export def "operations list" [
 #
 # POST /v1/{name}:cancel
 # operationId: gkebackup.projects.locations.operations.cancel
-export def "projects cancel" [
+export def "gkebackup-projects-locations-operations-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -510,7 +510,7 @@ export def "projects cancel" [
 #
 # GET /v1/{parent}/backupPlans
 # operationId: gkebackup.projects.locations.backupPlans.list
-export def "backup-plans list" [
+export def "gkebackup-projects-locations-backup-plans-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -565,7 +565,7 @@ export def "backup-plans list" [
 # --backupConfig shape: {allNamespaces?: bool, encryptionKey?: record, includeSecrets?: bool, includeVolumeData?: bool, selectedApplications?: record, selectedNamespaces?: record}
 # --backupSchedule shape: {cronSchedule?: string, paused?: bool}
 # --retentionPolicy shape: {backupDeleteLockDays?: int, backupRetainDays?: int, locked?: bool}
-export def "backup-plans create" [
+export def "gkebackup-projects-locations-backup-plans-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -624,7 +624,7 @@ export def "backup-plans create" [
 #
 # GET /v1/{parent}/backups
 # operationId: gkebackup.projects.locations.backupPlans.backups.list
-export def "backups list" [
+export def "gkebackup-projects-locations-backup-plans-backups-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -680,7 +680,7 @@ export def "backups list" [
 # --encryptionKey shape: {gcpKmsEncryptionKey?: string}
 # --selectedApplications shape: {namespacedNames?: list}
 # --selectedNamespaces shape: {namespaces?: list<string>}
-export def "backups create" [
+export def "gkebackup-projects-locations-backup-plans-backups-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -740,7 +740,7 @@ export def "backups create" [
 #
 # GET /v1/{parent}/restorePlans
 # operationId: gkebackup.projects.locations.restorePlans.list
-export def "restore-plans list" [
+export def "gkebackup-projects-locations-restore-plans-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -793,7 +793,7 @@ export def "restore-plans list" [
 # POST /v1/{parent}/restorePlans
 # operationId: gkebackup.projects.locations.restorePlans.create
 # --restoreConfig shape: {allNamespaces?: bool, clusterResourceConflictPolicy?: "CLUSTER_RESOURCE_CONFLICT_POLICY_UNSPECIFIED"|"USE_EXISTING_VERSION"|"USE_BACKUP_VERSION", clusterResourceRestoreScope?: record, namespacedResourceRestoreMode?: "NAMESPACED_RESOURCE_RESTORE_MODE_UNSPECIFIED"|"DELETE_AND_RESTORE"|"FAIL_ON_CONFLICT", selectedApplications?: record, selectedNamespaces?: record, substitutionRules?: list, ... (1 more fields)}
-export def "restore-plans create" [
+export def "gkebackup-projects-locations-restore-plans-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -850,7 +850,7 @@ export def "restore-plans create" [
 #
 # GET /v1/{parent}/restores
 # operationId: gkebackup.projects.locations.restorePlans.restores.list
-export def "restores list" [
+export def "gkebackup-projects-locations-restore-plans-restores-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -903,7 +903,7 @@ export def "restores list" [
 # POST /v1/{parent}/restores
 # operationId: gkebackup.projects.locations.restorePlans.restores.create
 # --restoreConfig shape: {allNamespaces?: bool, clusterResourceConflictPolicy?: "CLUSTER_RESOURCE_CONFLICT_POLICY_UNSPECIFIED"|"USE_EXISTING_VERSION"|"USE_BACKUP_VERSION", clusterResourceRestoreScope?: record, namespacedResourceRestoreMode?: "NAMESPACED_RESOURCE_RESTORE_MODE_UNSPECIFIED"|"DELETE_AND_RESTORE"|"FAIL_ON_CONFLICT", selectedApplications?: record, selectedNamespaces?: record, substitutionRules?: list, ... (1 more fields)}
-export def "restores create" [
+export def "gkebackup-projects-locations-restore-plans-restores-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -959,7 +959,7 @@ export def "restores create" [
 #
 # GET /v1/{parent}/volumeBackups
 # operationId: gkebackup.projects.locations.backupPlans.backups.volumeBackups.list
-export def "volume-backups list" [
+export def "gkebackup-projects-locations-backup-plans-backups-volume-backups-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1011,7 +1011,7 @@ export def "volume-backups list" [
 #
 # GET /v1/{parent}/volumeRestores
 # operationId: gkebackup.projects.locations.restorePlans.restores.volumeRestores.list
-export def "volume-restores list" [
+export def "gkebackup-projects-locations-restore-plans-restores-volume-restores-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1063,7 +1063,7 @@ export def "volume-restores list" [
 #
 # GET /v1/{resource}:getIamPolicy
 # operationId: gkebackup.projects.locations.restorePlans.restores.volumeRestores.getIamPolicy
-export def "projects get-iam-policy" [
+export def "gkebackup-projects-locations-restore-plans-restores-volume-restores-get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1113,7 +1113,7 @@ export def "projects get-iam-policy" [
 # POST /v1/{resource}:setIamPolicy
 # operationId: gkebackup.projects.locations.restorePlans.restores.volumeRestores.setIamPolicy
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
-export def "projects update-iam-policy" [
+export def "gkebackup-projects-locations-restore-plans-restores-volume-restores-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1166,7 +1166,7 @@ export def "projects update-iam-policy" [
 #
 # POST /v1/{resource}:testIamPermissions
 # operationId: gkebackup.projects.locations.restorePlans.restores.volumeRestores.testIamPermissions
-export def "projects test-iam-permissions" [
+export def "gkebackup-projects-locations-restore-plans-restores-volume-restores-test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

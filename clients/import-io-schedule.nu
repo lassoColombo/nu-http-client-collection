@@ -110,7 +110,7 @@ def auth-scheme-completer [] { ["query-_apikey"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "extractor list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-extractor" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -133,7 +133,7 @@ export def commands []: nothing -> table {
 # Get the list of schedules for all your extractors
 #
 # GET /extractor
-export def "extractor list" [
+export def "get-extractor" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -166,7 +166,7 @@ export def "extractor list" [
 # Schedule and extractor to run at a specific time
 #
 # POST /extractor
-export def "extractor create" [
+export def "post-extractor" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -205,7 +205,7 @@ export def "extractor create" [
 # Delete an existing schedule
 #
 # DELETE /extractor/{extractorId}/
-export def "extractor delete" [
+export def "delete-extractor-extractor-id" [
   extractor_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -240,7 +240,7 @@ export def "extractor delete" [
 # Get the schedule of a particular extractor
 #
 # GET /extractor/{extractorId}/
-export def "extractor get" [
+export def "get-extractor-extractor-id" [
   extractor_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

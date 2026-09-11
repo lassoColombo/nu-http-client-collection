@@ -131,7 +131,7 @@ def import-method-completer [] { ["IMPORT_METHOD_UNSPECIFIED" "RSA_OAEP_3072_SHA
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects generate-random-bytes" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cloudkms-projects-locations-generate-random-bytes" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -155,7 +155,7 @@ export def commands []: nothing -> table {
 #
 # POST /v1/{location}:generateRandomBytes
 # operationId: cloudkms.projects.locations.generateRandomBytes
-export def "projects generate-random-bytes" [
+export def "cloudkms-projects-locations-generate-random-bytes" [
   location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -208,7 +208,7 @@ export def "projects generate-random-bytes" [
 #
 # GET /v1/{name}
 # operationId: cloudkms.projects.locations.keyRings.importJobs.get
-export def "projects get" [
+export def "cloudkms-projects-locations-key-rings-import-jobs-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -258,7 +258,7 @@ export def "projects get" [
 # operationId: cloudkms.projects.locations.keyRings.cryptoKeys.cryptoKeyVersions.patch
 # --attestation shape: {certChains?: record}
 # --externalProtectionLevelOptions shape: {ekmConnectionKeyPath?: string, externalKeyUri?: string}
-export def "projects update" [
+export def "cloudkms-projects-locations-key-rings-crypto-keys-crypto-key-versions-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -313,7 +313,7 @@ export def "projects update" [
 #
 # GET /v1/{name}/locations
 # operationId: cloudkms.projects.locations.list
-export def "locations list" [
+export def "cloudkms-projects-locations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -364,7 +364,7 @@ export def "locations list" [
 #
 # GET /v1/{name}/publicKey
 # operationId: cloudkms.projects.locations.keyRings.cryptoKeys.cryptoKeyVersions.getPublicKey
-export def "public-key get" [
+export def "cloudkms-projects-locations-key-rings-crypto-keys-crypto-key-versions-get-public-key" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -412,7 +412,7 @@ export def "public-key get" [
 #
 # POST /v1/{name}:asymmetricDecrypt
 # operationId: cloudkms.projects.locations.keyRings.cryptoKeys.cryptoKeyVersions.asymmetricDecrypt
-export def "projects create-asymmetric-decrypt" [
+export def "cloudkms-projects-locations-key-rings-crypto-keys-crypto-key-versions-asymmetric-decrypt" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -466,7 +466,7 @@ export def "projects create-asymmetric-decrypt" [
 # POST /v1/{name}:asymmetricSign
 # operationId: cloudkms.projects.locations.keyRings.cryptoKeys.cryptoKeyVersions.asymmetricSign
 # --digest shape: {sha256?: string, sha384?: string, sha512?: string}
-export def "projects create-asymmetric-sign" [
+export def "cloudkms-projects-locations-key-rings-crypto-keys-crypto-key-versions-asymmetric-sign" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -521,7 +521,7 @@ export def "projects create-asymmetric-sign" [
 #
 # POST /v1/{name}:decrypt
 # operationId: cloudkms.projects.locations.keyRings.cryptoKeys.decrypt
-export def "projects create-decrypt" [
+export def "cloudkms-projects-locations-key-rings-crypto-keys-decrypt" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -576,7 +576,7 @@ export def "projects create-decrypt" [
 #
 # POST /v1/{name}:destroy
 # operationId: cloudkms.projects.locations.keyRings.cryptoKeys.cryptoKeyVersions.destroy
-export def "projects delete" [
+export def "cloudkms-projects-locations-key-rings-crypto-keys-crypto-key-versions-destroy" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -628,7 +628,7 @@ export def "projects delete" [
 #
 # POST /v1/{name}:encrypt
 # operationId: cloudkms.projects.locations.keyRings.cryptoKeys.encrypt
-export def "projects create-encrypt" [
+export def "cloudkms-projects-locations-key-rings-crypto-keys-encrypt" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -683,7 +683,7 @@ export def "projects create-encrypt" [
 #
 # POST /v1/{name}:macSign
 # operationId: cloudkms.projects.locations.keyRings.cryptoKeys.cryptoKeyVersions.macSign
-export def "projects create-mac-sign" [
+export def "cloudkms-projects-locations-key-rings-crypto-keys-crypto-key-versions-mac-sign" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -736,7 +736,7 @@ export def "projects create-mac-sign" [
 #
 # POST /v1/{name}:macVerify
 # operationId: cloudkms.projects.locations.keyRings.cryptoKeys.cryptoKeyVersions.macVerify
-export def "projects verify-mac" [
+export def "cloudkms-projects-locations-key-rings-crypto-keys-crypto-key-versions-mac-verify" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -791,7 +791,7 @@ export def "projects verify-mac" [
 #
 # POST /v1/{name}:restore
 # operationId: cloudkms.projects.locations.keyRings.cryptoKeys.cryptoKeyVersions.restore
-export def "projects create-restore" [
+export def "cloudkms-projects-locations-key-rings-crypto-keys-crypto-key-versions-restore" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -843,7 +843,7 @@ export def "projects create-restore" [
 #
 # POST /v1/{name}:updatePrimaryVersion
 # operationId: cloudkms.projects.locations.keyRings.cryptoKeys.updatePrimaryVersion
-export def "projects update-primary-version" [
+export def "cloudkms-projects-locations-key-rings-crypto-keys-update-primary-version" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -895,7 +895,7 @@ export def "projects update-primary-version" [
 #
 # GET /v1/{name}:verifyConnectivity
 # operationId: cloudkms.projects.locations.ekmConnections.verifyConnectivity
-export def "projects verify-connectivity" [
+export def "cloudkms-projects-locations-ekm-connections-verify-connectivity" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -943,7 +943,7 @@ export def "projects verify-connectivity" [
 #
 # GET /v1/{parent}/cryptoKeyVersions
 # operationId: cloudkms.projects.locations.keyRings.cryptoKeys.cryptoKeyVersions.list
-export def "crypto-key-versions list" [
+export def "cloudkms-projects-locations-key-rings-crypto-keys-crypto-key-versions-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -998,7 +998,7 @@ export def "crypto-key-versions list" [
 # operationId: cloudkms.projects.locations.keyRings.cryptoKeys.cryptoKeyVersions.create
 # --attestation shape: {certChains?: record}
 # --externalProtectionLevelOptions shape: {ekmConnectionKeyPath?: string, externalKeyUri?: string}
-export def "crypto-key-versions create" [
+export def "cloudkms-projects-locations-key-rings-crypto-keys-crypto-key-versions-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1052,7 +1052,7 @@ export def "crypto-key-versions create" [
 #
 # POST /v1/{parent}/cryptoKeyVersions:import
 # operationId: cloudkms.projects.locations.keyRings.cryptoKeys.cryptoKeyVersions.import
-export def "crypto-key-versions-import import" [
+export def "cloudkms-projects-locations-key-rings-crypto-keys-crypto-key-versions-import" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1108,7 +1108,7 @@ export def "crypto-key-versions-import import" [
 #
 # GET /v1/{parent}/cryptoKeys
 # operationId: cloudkms.projects.locations.keyRings.cryptoKeys.list
-export def "crypto-keys list" [
+export def "cloudkms-projects-locations-key-rings-crypto-keys-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1163,7 +1163,7 @@ export def "crypto-keys list" [
 # operationId: cloudkms.projects.locations.keyRings.cryptoKeys.create
 # --primary shape: {attestation?: record, externalProtectionLevelOptions?: record, state?: "CRYPTO_KEY_VERSION_STATE_UNSPECIFIED"|"PENDING_GENERATION"|"ENABLED"|"DISABLED"|"DESTROYED"|"DESTROY_SCHEDULED"|"PENDING_IMPORT"|"IMPORT_FAILED"|"GENERATION_FAILED"|"PENDING_EXTERNAL_DESTRUCTION"|"EXTERNAL_DESTRUCTION_FAILED"}
 # --versionTemplate shape: {algorithm?: "CRYPTO_KEY_VERSION_ALGORITHM_UNSPECIFIED"|"GOOGLE_SYMMETRIC_ENCRYPTION"|"RSA_SIGN_PSS_2048_SHA256"|"RSA_SIGN_PSS_3072_SHA256"|"RSA_SIGN_PSS_4096_SHA256"|"RSA_SIGN_PSS_4096_SHA512"|"RSA_SIGN_PKCS1_2048_SHA256"|"RSA_SIGN_PKCS1_3072_SHA256"|"RSA_SIGN_PKCS1_4096_SHA256"|"RSA_SIGN_PKCS1_4096_SHA512"|"RSA_SIGN_RAW_PKCS1_2048"|"RSA_SIGN_RAW_PKCS1_3072"|"RSA_SIGN_RAW_PKCS1_4096"|"RSA_DECRYPT_OAEP_2048_SHA256"|"RSA_DECRYPT_OAEP_3072_SHA256"|"RSA_DECRYPT_OAEP_4096_SHA256"|"RSA_DECRYPT_OAEP_4096_SHA512"|"RSA_DECRYPT_OAEP_2048_SHA1"|"RSA_DECRYPT_OAEP_3072_SHA1"|"RSA_DECRYPT_OAEP_4096_SHA1"|"EC_SIGN_P256_SHA256"|"EC_SIGN_P384_SHA384"|"EC_SIGN_SECP256K1_SHA256"|"HMAC_SHA256"|"HMAC_SHA1"|"HMAC_SHA384"|"HMAC_SHA512"|"HMAC_SHA224"|"EXTERNAL_SYMMETRIC_ENCRYPTION", ... (1 more fields)}
-export def "crypto-keys create" [
+export def "cloudkms-projects-locations-key-rings-crypto-keys-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1225,7 +1225,7 @@ export def "crypto-keys create" [
 #
 # GET /v1/{parent}/ekmConnections
 # operationId: cloudkms.projects.locations.ekmConnections.list
-export def "ekm-connections list" [
+export def "cloudkms-projects-locations-ekm-connections-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1278,7 +1278,7 @@ export def "ekm-connections list" [
 # POST /v1/{parent}/ekmConnections
 # operationId: cloudkms.projects.locations.ekmConnections.create
 # --serviceResolvers item shape: {endpointFilter?: string, hostname?: string, serverCertificates?: list, serviceDirectoryService?: string}
-export def "ekm-connections create" [
+export def "cloudkms-projects-locations-ekm-connections-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1334,7 +1334,7 @@ export def "ekm-connections create" [
 #
 # GET /v1/{parent}/importJobs
 # operationId: cloudkms.projects.locations.keyRings.importJobs.list
-export def "import-jobs list" [
+export def "cloudkms-projects-locations-key-rings-import-jobs-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1388,7 +1388,7 @@ export def "import-jobs list" [
 # operationId: cloudkms.projects.locations.keyRings.importJobs.create
 # --attestation shape: {certChains?: record}
 # --publicKey shape: {pem?: string}
-export def "import-jobs create" [
+export def "cloudkms-projects-locations-key-rings-import-jobs-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1444,7 +1444,7 @@ export def "import-jobs create" [
 #
 # GET /v1/{parent}/keyRings
 # operationId: cloudkms.projects.locations.keyRings.list
-export def "key-rings list" [
+export def "cloudkms-projects-locations-key-rings-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1496,7 +1496,7 @@ export def "key-rings list" [
 #
 # POST /v1/{parent}/keyRings
 # operationId: cloudkms.projects.locations.keyRings.create
-export def "key-rings create" [
+export def "cloudkms-projects-locations-key-rings-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1549,7 +1549,7 @@ export def "key-rings create" [
 #
 # GET /v1/{resource}:getIamPolicy
 # operationId: cloudkms.projects.locations.keyRings.importJobs.getIamPolicy
-export def "projects get-iam-policy" [
+export def "cloudkms-projects-locations-key-rings-import-jobs-get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1599,7 +1599,7 @@ export def "projects get-iam-policy" [
 # POST /v1/{resource}:setIamPolicy
 # operationId: cloudkms.projects.locations.keyRings.importJobs.setIamPolicy
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
-export def "projects update-iam-policy" [
+export def "cloudkms-projects-locations-key-rings-import-jobs-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1652,7 +1652,7 @@ export def "projects update-iam-policy" [
 #
 # POST /v1/{resource}:testIamPermissions
 # operationId: cloudkms.projects.locations.keyRings.importJobs.testIamPermissions
-export def "projects test-iam-permissions" [
+export def "cloudkms-projects-locations-key-rings-import-jobs-test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

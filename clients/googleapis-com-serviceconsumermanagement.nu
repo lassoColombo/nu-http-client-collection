@@ -130,7 +130,7 @@ def view-completer [] { ["BASIC" "FULL" "QUOTA_VIEW_UNSPECIFIED"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta1 delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "serviceconsumermanagement-services-consumer-quota-metrics-limits-producer-overrides-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -154,7 +154,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1beta1/{name}
 # operationId: serviceconsumermanagement.services.consumerQuotaMetrics.limits.producerOverrides.delete
-export def "v1beta1 delete" [
+export def "serviceconsumermanagement-services-consumer-quota-metrics-limits-producer-overrides-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -204,7 +204,7 @@ export def "v1beta1 delete" [
 #
 # GET /v1beta1/{name}
 # operationId: serviceconsumermanagement.services.consumerQuotaMetrics.limits.get
-export def "v1beta1 get" [
+export def "serviceconsumermanagement-services-consumer-quota-metrics-limits-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -253,7 +253,7 @@ export def "v1beta1 get" [
 #
 # PATCH /v1beta1/{name}
 # operationId: serviceconsumermanagement.services.consumerQuotaMetrics.limits.producerOverrides.patch
-export def "v1beta1 update" [
+export def "serviceconsumermanagement-services-consumer-quota-metrics-limits-producer-overrides-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -313,7 +313,7 @@ export def "v1beta1 update" [
 #
 # GET /v1beta1/{parent}/consumerQuotaMetrics
 # operationId: serviceconsumermanagement.services.consumerQuotaMetrics.list
-export def "v1beta1-consumer-quota-metrics list" [
+export def "serviceconsumermanagement-services-consumer-quota-metrics-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -365,7 +365,7 @@ export def "v1beta1-consumer-quota-metrics list" [
 # POST /v1beta1/{parent}/consumerQuotaMetrics:importProducerOverrides
 # operationId: serviceconsumermanagement.services.consumerQuotaMetrics.importProducerOverrides
 # --inlineSource shape: {overrides?: list}
-export def "v1beta1-consumer-quota-metrics-import-producer-overrides import" [
+export def "serviceconsumermanagement-services-consumer-quota-metrics-import-producer-overrides" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -419,7 +419,7 @@ export def "v1beta1-consumer-quota-metrics-import-producer-overrides import" [
 #
 # GET /v1beta1/{parent}/producerOverrides
 # operationId: serviceconsumermanagement.services.consumerQuotaMetrics.limits.producerOverrides.list
-export def "v1beta1-producer-overrides list" [
+export def "serviceconsumermanagement-services-consumer-quota-metrics-limits-producer-overrides-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -469,7 +469,7 @@ export def "v1beta1-producer-overrides list" [
 #
 # POST /v1beta1/{parent}/producerOverrides
 # operationId: serviceconsumermanagement.services.consumerQuotaMetrics.limits.producerOverrides.create
-export def "v1beta1-producer-overrides create" [
+export def "serviceconsumermanagement-services-consumer-quota-metrics-limits-producer-overrides-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

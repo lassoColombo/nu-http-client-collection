@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-insights-autoscalesettings list-autoscale-settings" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "autoscale-settings-list-by-subscription" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/microsoft.insights/autoscalesettings
 # operationId: AutoscaleSettings_ListBySubscription
-export def "subscriptions-providers-microsoft-insights-autoscalesettings list-autoscale-settings" [
+export def "autoscale-settings-list-by-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -178,7 +178,7 @@ export def "subscriptions-providers-microsoft-insights-autoscalesettings list-au
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/microsoft.insights/autoscalesettings
 # operationId: AutoscaleSettings_ListByResourceGroup
-export def "subscriptions-resourcegroups-providers-microsoft-insights-autoscalesettings list-autoscale-settings-by-resource-group" [
+export def "autoscale-settings-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -218,7 +218,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-insights-autoscales
 #
 # DELETE /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/microsoft.insights/autoscalesettings/{autoscaleSettingName}
 # operationId: AutoscaleSettings_Delete
-export def "subscriptions-resourcegroups-providers-microsoft-insights-autoscalesettings delete-autoscale-settings" [
+export def "autoscale-settings-delete" [
   subscription_id: string
   resource_group_name: string
   autoscale_setting_name: string
@@ -260,7 +260,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-insights-autoscales
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/microsoft.insights/autoscalesettings/{autoscaleSettingName}
 # operationId: AutoscaleSettings_Get
-export def "subscriptions-resourcegroups-providers-microsoft-insights-autoscalesettings get-autoscale-settings" [
+export def "autoscale-settings-get" [
   subscription_id: string
   resource_group_name: string
   autoscale_setting_name: string
@@ -303,7 +303,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-insights-autoscales
 # PATCH /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/microsoft.insights/autoscalesettings/{autoscaleSettingName}
 # operationId: AutoscaleSettings_Update
 # --properties shape: {enabled?: bool, name?: string, notifications?: list, profiles: list, targetResourceUri?: string}
-export def "subscriptions-resourcegroups-providers-microsoft-insights-autoscalesettings update-autoscale-settings" [
+export def "autoscale-settings-update" [
   subscription_id: string
   resource_group_name: string
   autoscale_setting_name: string
@@ -351,7 +351,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-insights-autoscales
 # PUT /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/microsoft.insights/autoscalesettings/{autoscaleSettingName}
 # operationId: AutoscaleSettings_CreateOrUpdate
 # --properties shape: {enabled?: bool, name?: string, notifications?: list, profiles: list, targetResourceUri?: string}
-export def "subscriptions-resourcegroups-providers-microsoft-insights-autoscalesettings create-autoscale-settings-or-update" [
+export def "autoscale-settings-create-or-update" [
   subscription_id: string
   resource_group_name: string
   autoscale_setting_name: string

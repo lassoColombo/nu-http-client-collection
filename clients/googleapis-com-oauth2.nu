@@ -116,7 +116,7 @@ def alt-completer [] { ["json"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "oauth2-tokeninfo create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "oauth2-tokeninfo" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -139,7 +139,7 @@ export def commands []: nothing -> table {
 # POST /oauth2/v2/tokeninfo
 #
 # operationId: oauth2.tokeninfo
-export def "oauth2-tokeninfo create" [
+export def "oauth2-tokeninfo" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -182,7 +182,7 @@ export def "oauth2-tokeninfo create" [
 # GET /oauth2/v2/userinfo
 #
 # operationId: oauth2.userinfo.get
-export def "oauth2-userinfo get" [
+export def "oauth2-userinfo-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -223,7 +223,7 @@ export def "oauth2-userinfo get" [
 # GET /userinfo/v2/me
 #
 # operationId: oauth2.userinfo.v2.me.get
-export def "userinfo-me get" [
+export def "oauth2-userinfo-v2-me-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)

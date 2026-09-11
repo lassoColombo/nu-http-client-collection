@@ -153,7 +153,7 @@ def type-completer-2 [] { ["CAT" "SIMPLE"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounting-customers-invoices get-list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-all" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -177,7 +177,7 @@ export def commands []: nothing -> table {
 #
 # GET /accounting/customers/invoices
 # operationId: getAll
-export def "accounting-customers-invoices get-list" [
+export def "get-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -213,7 +213,7 @@ export def "accounting-customers-invoices get-list" [
 #
 # POST /accounting/customers/invoices
 # operationId: create_1
-export def "accounting-customers-invoices create" [
+export def "create-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -253,7 +253,7 @@ export def "accounting-customers-invoices create" [
 #
 # POST /accounting/customers/invoices/documents
 # operationId: downloadDocuments
-export def "accounting-customers-invoices-documents download" [
+export def "download-documents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -291,7 +291,7 @@ export def "accounting-customers-invoices-documents download" [
 #
 # GET /accounting/customers/invoices/ids
 # operationId: getAllIds
-export def "accounting-customers-invoices-ids get-list" [
+export def "get-all-ids" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -327,7 +327,7 @@ export def "accounting-customers-invoices-ids get-list" [
 #
 # POST /accounting/customers/invoices/sendReminders
 # operationId: sendReminders
-export def "accounting-customers-invoices-send-reminders send" [
+export def "send-reminders" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -365,7 +365,7 @@ export def "accounting-customers-invoices-send-reminders send" [
 #
 # DELETE /accounting/customers/invoices/{invoiceId}
 # operationId: delete_1
-export def "accounting-customers-invoices delete-by-invoice-id" [
+export def "delete-1" [
   invoice_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -401,7 +401,7 @@ export def "accounting-customers-invoices delete-by-invoice-id" [
 #
 # GET /accounting/customers/invoices/{invoiceId}
 # operationId: getById
-export def "accounting-customers-invoices get" [
+export def "get-by-id" [
   invoice_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -439,7 +439,7 @@ export def "accounting-customers-invoices get" [
 #
 # GET /accounting/customers/invoices/{invoiceId}/dates
 # operationId: getDates
-export def "accounting-customers-invoices-dates get" [
+export def "get-dates" [
   invoice_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -475,7 +475,7 @@ export def "accounting-customers-invoices-dates get" [
 #
 # GET /accounting/customers/invoices/{invoiceId}/document
 # operationId: getDocument
-export def "accounting-customers-invoices-document get" [
+export def "get-document" [
   invoice_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -511,7 +511,7 @@ export def "accounting-customers-invoices-document get" [
 #
 # POST /accounting/customers/invoices/{invoiceId}/duplicate
 # operationId: duplicate
-export def "accounting-customers-invoices-duplicate create" [
+export def "duplicate" [
   invoice_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -547,7 +547,7 @@ export def "accounting-customers-invoices-duplicate create" [
 #
 # POST /accounting/customers/invoices/{invoiceId}/duplicate/proForma
 # operationId: duplicateAsProForma
-export def "accounting-customers-invoices-duplicate-pro-forma create" [
+export def "duplicate-as-pro-forma" [
   invoice_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -583,7 +583,7 @@ export def "accounting-customers-invoices-duplicate-pro-forma create" [
 #
 # GET /accounting/customers/invoices/{invoiceId}/paymentTerms
 # operationId: getPaymentTerms
-export def "accounting-customers-invoices-payment-terms get" [
+export def "get-payment-terms" [
   invoice_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -619,7 +619,7 @@ export def "accounting-customers-invoices-payment-terms get" [
 #
 # GET /accounting/customers/invoices/{invoiceId}/payments
 # operationId: getPayments
-export def "accounting-customers-invoices-payments get" [
+export def "get-payments" [
   invoice_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -656,7 +656,7 @@ export def "accounting-customers-invoices-payments get" [
 # POST /accounting/customers/invoices/{invoiceId}/payments
 # operationId: createPayment
 # --paymentDate shape: {value?: int}
-export def "accounting-customers-invoices-payments create" [
+export def "create-payment" [
   invoice_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -699,7 +699,7 @@ export def "accounting-customers-invoices-payments create" [
 #
 # POST /accounting/customers/invoices/{invoiceId}/sendReminder
 # operationId: sendReminder
-export def "accounting-customers-invoices-send-reminder send" [
+export def "send-reminder" [
   invoice_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -735,7 +735,7 @@ export def "accounting-customers-invoices-send-reminder send" [
 #
 # DELETE /accounting/customers/payments/{paymentId}
 # operationId: delete_2
-export def "accounting-customers-payments delete-by-payment-id" [
+export def "delete-2" [
   payment_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -771,7 +771,7 @@ export def "accounting-customers-payments delete-by-payment-id" [
 #
 # GET /accounting/providers/invoices
 # operationId: getAll_2
-export def "accounting-providers-invoices get-list" [
+export def "get-all-2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -807,7 +807,7 @@ export def "accounting-providers-invoices get-list" [
 #
 # POST /accounting/providers/invoices
 # operationId: create_4
-export def "accounting-providers-invoices create" [
+export def "create-4" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -845,7 +845,7 @@ export def "accounting-providers-invoices create" [
 #
 # GET /accounting/providers/invoices/ids
 # operationId: getAllIds_3
-export def "accounting-providers-invoices-ids get-list" [
+export def "get-all-ids-3" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -881,7 +881,7 @@ export def "accounting-providers-invoices-ids get-list" [
 #
 # DELETE /accounting/providers/invoices/{invoiceId}
 # operationId: delete_6
-export def "accounting-providers-invoices delete-by-invoice-id" [
+export def "delete-6" [
   invoice_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -917,7 +917,7 @@ export def "accounting-providers-invoices delete-by-invoice-id" [
 #
 # GET /accounting/providers/invoices/{invoiceId}
 # operationId: getById_3
-export def "accounting-providers-invoices get-by-invoice-id" [
+export def "get-by-id-3" [
   invoice_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -953,7 +953,7 @@ export def "accounting-providers-invoices get-by-invoice-id" [
 #
 # GET /accounting/providers/invoices/{invoiceId}/document
 # operationId: getDocument_1
-export def "accounting-providers-invoices-document get-by-invoice-id" [
+export def "get-document-1" [
   invoice_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -989,7 +989,7 @@ export def "accounting-providers-invoices-document get-by-invoice-id" [
 #
 # GET /accounting/providers/invoices/{invoiceId}/payments
 # operationId: getPayments_1
-export def "accounting-providers-invoices-payments get-by-invoice-id" [
+export def "get-payments-1" [
   invoice_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1026,7 +1026,7 @@ export def "accounting-providers-invoices-payments get-by-invoice-id" [
 # POST /accounting/providers/invoices/{invoiceId}/payments
 # operationId: createPayment_1
 # --paymentDate shape: {value?: int}
-export def "accounting-providers-invoices-payments create-by-invoice-id" [
+export def "create-payment-1" [
   invoice_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1069,7 +1069,7 @@ export def "accounting-providers-invoices-payments create-by-invoice-id" [
 #
 # POST /accounting/providers/invoices/{invoiceId}/send
 # operationId: send
-export def "accounting-providers-invoices-send send" [
+export def "send" [
   invoice_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1105,7 +1105,7 @@ export def "accounting-providers-invoices-send send" [
 #
 # POST /accounting/providers/invoices/{invoiceId}/status
 # operationId: setStatus
-export def "accounting-providers-invoices-status update" [
+export def "set-status" [
   invoice_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1145,7 +1145,7 @@ export def "accounting-providers-invoices-status update" [
 #
 # DELETE /accounting/providers/payments/{paymentId}
 # operationId: delete_7
-export def "accounting-providers-payments delete-by-payment-id" [
+export def "delete-7" [
   payment_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1181,7 +1181,7 @@ export def "accounting-providers-payments delete-by-payment-id" [
 #
 # GET /browser
 # operationId: browseJSON
-export def "browser get-browse-json" [
+export def "browse-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1221,7 +1221,7 @@ export def "browser get-browse-json" [
 #
 # GET /browser/csv
 # operationId: browseCSV
-export def "browser-csv get-browse" [
+export def "browse-csv" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1260,7 +1260,7 @@ export def "browser-csv get-browse" [
 #
 # GET /browser/views/details/for/{className}
 # operationId: getCurrentViewDetails
-export def "browser-views-details-for list" [
+export def "get-current-view-details" [
   class_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1298,7 +1298,7 @@ export def "browser-views-details-for list" [
 #
 # GET /browser/views/details/for/{className}/{viewId}
 # operationId: getViewDetails
-export def "browser-views-details-for get" [
+export def "get-view-details" [
   class_name: string
   view_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1338,7 +1338,7 @@ export def "browser-views-details-for get" [
 #
 # POST /browser/views/details/for/{className}/{viewId}
 # operationId: selectViewAndGetItsDetails
-export def "browser-views-details-for get-select-and-its" [
+export def "select-view-and-get-its-details" [
   class_name: string
   view_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1378,7 +1378,7 @@ export def "browser-views-details-for get-select-and-its" [
 #
 # GET /browser/views/for/{className}
 # operationId: getViewsBrief
-export def "browser-views-for get-brief" [
+export def "get-views-brief" [
   class_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1420,7 +1420,7 @@ export def "browser-views-for get-brief" [
 # --order shape: {column?: string, type?: string}
 # --permissions shape: {sharedGroups?: list<int>}
 # --settings shape: {local?: record, name?: string}
-export def "browser-views-for create" [
+export def "create" [
   class_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1463,7 +1463,7 @@ export def "browser-views-for create" [
 #
 # DELETE /browser/views/{viewId}
 # operationId: delete
-export def "browser-views delete" [
+export def "delete" [
   view_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1499,7 +1499,7 @@ export def "browser-views delete" [
 #
 # GET /browser/views/{viewId}
 # operationId: get
-export def "browser-views get" [
+export def "get" [
   view_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1539,7 +1539,7 @@ export def "browser-views get" [
 # --order shape: {column?: string, type?: string}
 # --permissions shape: {sharedGroups?: list<int>}
 # --settings shape: {local?: record, name?: string}
-export def "browser-views update" [
+export def "update" [
   view_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1582,7 +1582,7 @@ export def "browser-views update" [
 #
 # GET /browser/views/{viewId}/columns
 # operationId: getColumns
-export def "browser-views-columns get" [
+export def "get-columns" [
   view_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1618,7 +1618,7 @@ export def "browser-views-columns get" [
 #
 # PUT /browser/views/{viewId}/columns
 # operationId: updateColumns
-export def "browser-views-columns update" [
+export def "update-columns" [
   view_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1658,7 +1658,7 @@ export def "browser-views-columns update" [
 #
 # DELETE /browser/views/{viewId}/columns/{columnName}
 # operationId: deleteColumn
-export def "browser-views-columns delete" [
+export def "delete-column" [
   view_id: int
   column_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1696,7 +1696,7 @@ export def "browser-views-columns delete" [
 #
 # GET /browser/views/{viewId}/columns/{columnName}/settings
 # operationId: getColumnSettings
-export def "browser-views-columns-settings get" [
+export def "get-column-settings" [
   view_id: int
   column_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1734,7 +1734,7 @@ export def "browser-views-columns-settings get" [
 #
 # PUT /browser/views/{viewId}/columns/{columnName}/settings
 # operationId: updateColumnSettings
-export def "browser-views-columns-settings update" [
+export def "update-column-settings" [
   view_id: int
   column_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1776,7 +1776,7 @@ export def "browser-views-columns-settings update" [
 #
 # GET /browser/views/{viewId}/filter
 # operationId: getFilter
-export def "browser-views-filter get" [
+export def "get-filter" [
   view_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1812,7 +1812,7 @@ export def "browser-views-filter get" [
 #
 # PUT /browser/views/{viewId}/filter
 # operationId: updateFilter
-export def "browser-views-filter update" [
+export def "update-filter" [
   view_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1852,7 +1852,7 @@ export def "browser-views-filter update" [
 #
 # PUT /browser/views/{viewId}/filter/{filterProperty}
 # operationId: updateFilterProperty
-export def "browser-views-filter update-property" [
+export def "update-filter-property" [
   view_id: int
   filter_property: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1897,7 +1897,7 @@ export def "browser-views-filter update-property" [
 #
 # GET /browser/views/{viewId}/order
 # operationId: getOrder
-export def "browser-views-order get" [
+export def "get-order" [
   view_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1933,7 +1933,7 @@ export def "browser-views-order get" [
 #
 # PUT /browser/views/{viewId}/order
 # operationId: updateOrder
-export def "browser-views-order update" [
+export def "update-order" [
   view_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1974,7 +1974,7 @@ export def "browser-views-order update" [
 #
 # GET /browser/views/{viewId}/permissions
 # operationId: getPermissions
-export def "browser-views-permissions get" [
+export def "get-permissions" [
   view_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2010,7 +2010,7 @@ export def "browser-views-permissions get" [
 #
 # PUT /browser/views/{viewId}/permissions
 # operationId: updatePermissions
-export def "browser-views-permissions update" [
+export def "update-permissions" [
   view_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2050,7 +2050,7 @@ export def "browser-views-permissions update" [
 #
 # GET /browser/views/{viewId}/settings
 # operationId: getSettings
-export def "browser-views-settings get" [
+export def "get-settings" [
   view_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2087,7 +2087,7 @@ export def "browser-views-settings get" [
 # PUT /browser/views/{viewId}/settings
 # operationId: updateSettings
 # --local shape: {maxLinesInRow?: int, maxRows?: int}
-export def "browser-views-settings update" [
+export def "update-settings" [
   view_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2128,7 +2128,7 @@ export def "browser-views-settings update" [
 #
 # GET /browser/views/{viewId}/settings/local
 # operationId: getLocalSettings
-export def "browser-views-settings-local get" [
+export def "get-local-settings" [
   view_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2164,7 +2164,7 @@ export def "browser-views-settings-local get" [
 #
 # PUT /browser/views/{viewId}/settings/local
 # operationId: updateLocalSettings
-export def "browser-views-settings-local update" [
+export def "update-local-settings" [
   view_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2205,7 +2205,7 @@ export def "browser-views-settings-local update" [
 #
 # GET /customers
 # operationId: getAllNamesWithIds
-export def "customers get-list-names" [
+export def "get-all-names-with-ids" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2248,7 +2248,7 @@ export def "customers get-list-names" [
 # --customFields item shape: {key?: string, name?: string, type?: "TEXT"|"DATE"|"DATE_AND_TIME"|"NUMBER"|"CHECKBOX"|"SELECTION"|"MULTI_SELECTION", value?: record}
 # --persons item shape: {active?: bool, contact?: record, customFields?: list, customerId?: int, firstProjectDate?: string, firstQuoteDate?: string, gender?: "FEMALE"|"MALE", id?: int, lastName?: string, lastProjectDate?: string, lastQuoteDate?: string, motherTonguesIds?: list<int>, name?: string, numberOfProjects?: int, numberOfQuotes?: int, positionId?: int}
 # --responsiblePersons shape: {accountManagerId?: int, projectCoordinatorId?: int, projectManagerId: int, salesPersonId: int}
-export def "customers create" [
+export def "create-3" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2312,7 +2312,7 @@ export def "customers create" [
 #
 # GET /customers/ids
 # operationId: getAllIds_2
-export def "customers-ids get-list" [
+export def "get-all-ids-2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2352,7 +2352,7 @@ export def "customers-ids get-list" [
 # operationId: create_2
 # --contact shape: {emails?: record, fax?: string, phones?: list<string>, sms?: string}
 # --customFields item shape: {key?: string, name?: string, type?: "TEXT"|"DATE"|"DATE_AND_TIME"|"NUMBER"|"CHECKBOX"|"SELECTION"|"MULTI_SELECTION", value?: record}
-export def "customers-persons create" [
+export def "create-2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2405,7 +2405,7 @@ export def "customers-persons create" [
 #
 # POST /customers/persons/accessToken
 # operationId: generateSingleUseSignInToken
-export def "customers-persons-access-token generate-single-use-sign" [
+export def "generate-single-use-sign-in-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2443,7 +2443,7 @@ export def "customers-persons-access-token generate-single-use-sign" [
 #
 # GET /customers/persons/ids
 # operationId: getAllIds_1
-export def "customers-persons-ids get-list" [
+export def "get-all-ids-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2479,7 +2479,7 @@ export def "customers-persons-ids get-list" [
 #
 # DELETE /customers/persons/{personId}
 # operationId: delete_3
-export def "customers-persons delete-by-person-id" [
+export def "delete-3" [
   person_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2515,7 +2515,7 @@ export def "customers-persons delete-by-person-id" [
 #
 # GET /customers/persons/{personId}
 # operationId: getById_1
-export def "customers-persons get-by-person-id" [
+export def "get-by-id-1" [
   person_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2553,7 +2553,7 @@ export def "customers-persons get-by-person-id" [
 # operationId: update_1
 # --contact shape: {emails?: record, fax?: string, phones?: list<string>, sms?: string}
 # --customFields item shape: {key?: string, name?: string, type?: "TEXT"|"DATE"|"DATE_AND_TIME"|"NUMBER"|"CHECKBOX"|"SELECTION"|"MULTI_SELECTION", value?: record}
-export def "customers-persons update-by-person-id" [
+export def "update-1" [
   person_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2608,7 +2608,7 @@ export def "customers-persons update-by-person-id" [
 #
 # GET /customers/persons/{personId}/contact
 # operationId: getContact
-export def "customers-persons-contact get" [
+export def "get-contact" [
   person_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2645,7 +2645,7 @@ export def "customers-persons-contact get" [
 # PUT /customers/persons/{personId}/contact
 # operationId: updateContact
 # --emails shape: {additional?: list<string>, primary: string}
-export def "customers-persons-contact update" [
+export def "update-contact" [
   person_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2688,7 +2688,7 @@ export def "customers-persons-contact update" [
 #
 # GET /customers/persons/{personId}/customFields
 # operationId: getCustomFields
-export def "customers-persons-custom-fields get" [
+export def "get-custom-fields" [
   person_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2725,7 +2725,7 @@ export def "customers-persons-custom-fields get" [
 # PUT /customers/persons/{personId}/customFields
 # operationId: updateCustomFields
 # --customFields item shape: {key?: string, name?: string, type?: "TEXT"|"DATE"|"DATE_AND_TIME"|"NUMBER"|"CHECKBOX"|"SELECTION"|"MULTI_SELECTION", value?: record}
-export def "customers-persons-custom-fields update" [
+export def "update-custom-fields" [
   person_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2766,7 +2766,7 @@ export def "customers-persons-custom-fields update" [
 #
 # DELETE /customers/priceLists/{priceListId}
 # operationId: delete_4
-export def "customers-price-lists delete-by-price-list-id" [
+export def "delete-4" [
   price_list_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2802,7 +2802,7 @@ export def "customers-price-lists delete-by-price-list-id" [
 #
 # DELETE /customers/{customerId}
 # operationId: delete_5
-export def "customers delete-by-customer-id" [
+export def "delete-5" [
   customer_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2838,7 +2838,7 @@ export def "customers delete-by-customer-id" [
 #
 # GET /customers/{customerId}
 # operationId: getById_2
-export def "customers get-by-customer-id" [
+export def "get-by-id-2" [
   customer_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2883,7 +2883,7 @@ export def "customers get-by-customer-id" [
 # --customFields item shape: {key?: string, name?: string, type?: "TEXT"|"DATE"|"DATE_AND_TIME"|"NUMBER"|"CHECKBOX"|"SELECTION"|"MULTI_SELECTION", value?: record}
 # --persons item shape: {active?: bool, contact?: record, customFields?: list, customerId?: int, firstProjectDate?: string, firstQuoteDate?: string, gender?: "FEMALE"|"MALE", id?: int, lastName?: string, lastProjectDate?: string, lastQuoteDate?: string, motherTonguesIds?: list<int>, name?: string, numberOfProjects?: int, numberOfQuotes?: int, positionId?: int}
 # --responsiblePersons shape: {accountManagerId?: int, projectCoordinatorId?: int, projectManagerId: int, salesPersonId: int}
-export def "customers update-by-customer-id" [
+export def "update-2" [
   customer_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2949,7 +2949,7 @@ export def "customers update-by-customer-id" [
 #
 # GET /customers/{customerId}/address
 # operationId: getAddress
-export def "customers-address get" [
+export def "get-address" [
   customer_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2985,7 +2985,7 @@ export def "customers-address get" [
 #
 # PUT /customers/{customerId}/address
 # operationId: updateAddress
-export def "customers-address update" [
+export def "update-address" [
   customer_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3031,7 +3031,7 @@ export def "customers-address update" [
 #
 # GET /customers/{customerId}/categories
 # operationId: getCategories
-export def "customers-categories get" [
+export def "get-categories" [
   customer_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3067,7 +3067,7 @@ export def "customers-categories get" [
 #
 # PUT /customers/{customerId}/categories
 # operationId: updateCategories
-export def "customers-categories update" [
+export def "update-categories" [
   customer_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3107,7 +3107,7 @@ export def "customers-categories update" [
 #
 # GET /customers/{customerId}/contact
 # operationId: getContact_1
-export def "customers-contact get-by-customer-id" [
+export def "get-contact-1" [
   customer_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3144,7 +3144,7 @@ export def "customers-contact get-by-customer-id" [
 # PUT /customers/{customerId}/contact
 # operationId: updateContact_1
 # --emails shape: {additional?: list<string>, cc?: list<string>, primary: string}
-export def "customers-contact update-by-customer-id" [
+export def "update-contact-1" [
   customer_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3188,7 +3188,7 @@ export def "customers-contact update-by-customer-id" [
 #
 # GET /customers/{customerId}/correspondenceAddress
 # operationId: getCorrespondenceAddress
-export def "customers-correspondence-address get" [
+export def "get-correspondence-address" [
   customer_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3224,7 +3224,7 @@ export def "customers-correspondence-address get" [
 #
 # PUT /customers/{customerId}/correspondenceAddress
 # operationId: updateCorrespondenceAddress
-export def "customers-correspondence-address update" [
+export def "update-correspondence-address" [
   customer_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3270,7 +3270,7 @@ export def "customers-correspondence-address update" [
 #
 # GET /customers/{customerId}/customFields
 # operationId: getCustomFields_1
-export def "customers-custom-fields get-by-customer-id" [
+export def "get-custom-fields-1" [
   customer_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3307,7 +3307,7 @@ export def "customers-custom-fields get-by-customer-id" [
 # PUT /customers/{customerId}/customFields
 # operationId: updateCustomFields_1
 # --customFields item shape: {key?: string, name?: string, type?: "TEXT"|"DATE"|"DATE_AND_TIME"|"NUMBER"|"CHECKBOX"|"SELECTION"|"MULTI_SELECTION", value?: record}
-export def "customers-custom-fields update-by-customer-id" [
+export def "update-custom-fields-1" [
   customer_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3348,7 +3348,7 @@ export def "customers-custom-fields update-by-customer-id" [
 #
 # GET /customers/{customerId}/customFields/{customFieldKey}
 # operationId: getCustomField
-export def "customers-custom-fields get" [
+export def "get-custom-field" [
   customer_id: int
   custom_field_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3386,7 +3386,7 @@ export def "customers-custom-fields get" [
 #
 # PUT /customers/{customerId}/customFields/{customFieldKey}
 # operationId: updateCustomField
-export def "customers-custom-fields update" [
+export def "update-custom-field" [
   customer_id: int
   custom_field_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3431,7 +3431,7 @@ export def "customers-custom-fields update" [
 #
 # GET /customers/{customerId}/industries
 # operationId: getIndustries
-export def "customers-industries get" [
+export def "get-industries" [
   customer_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3467,7 +3467,7 @@ export def "customers-industries get" [
 #
 # PUT /customers/{customerId}/industries
 # operationId: updateIndustries
-export def "customers-industries update" [
+export def "update-industries" [
   customer_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3507,7 +3507,7 @@ export def "customers-industries update" [
 #
 # GET /dictionaries/active
 # operationId: getActive
-export def "dictionaries-active list" [
+export def "get-active" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3541,7 +3541,7 @@ export def "dictionaries-active list" [
 #
 # GET /dictionaries/all
 # operationId: getAll_1
-export def "dictionaries-all list" [
+export def "get-all-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3575,7 +3575,7 @@ export def "dictionaries-all list" [
 #
 # GET /dictionaries/currency/{isoCode}/exchangeRate
 # operationId: getByIsoCode
-export def "dictionaries-currency-exchange-rate get-by-iso-code" [
+export def "get-by-iso-code" [
   iso_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3614,7 +3614,7 @@ export def "dictionaries-currency-exchange-rate get-by-iso-code" [
 # --dateFrom shape: {value?: int}
 # --lastModification shape: {value?: int}
 # --publicationDate shape: {value?: int}
-export def "dictionaries-currency-exchange-rate create" [
+export def "create-exchange-rate" [
   iso_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3658,7 +3658,7 @@ export def "dictionaries-currency-exchange-rate create" [
 #
 # GET /dictionaries/{type}/active
 # operationId: getActiveByType
-export def "dictionaries-active get" [
+export def "get-active-by-type" [
   type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3696,7 +3696,7 @@ export def "dictionaries-active get" [
 #
 # GET /dictionaries/{type}/all
 # operationId: getAllByType
-export def "dictionaries-all get" [
+export def "get-all-by-type" [
   type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3734,7 +3734,7 @@ export def "dictionaries-all get" [
 #
 # GET /dictionaries/{type}/{id}
 # operationId: getByTypeAndId
-export def "dictionaries get-by-and" [
+export def "get-by-type-and-id" [
   type: string
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3772,7 +3772,7 @@ export def "dictionaries get-by-and" [
 #
 # POST /files
 # operationId: uploadFile
-export def "files upload" [
+export def "upload-file" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3812,7 +3812,7 @@ export def "files upload" [
 #
 # GET /jobs/{jobId}
 # operationId: getJobDetails
-export def "jobs get-details" [
+export def "get-job-details" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3848,7 +3848,7 @@ export def "jobs get-details" [
 #
 # PUT /jobs/{jobId}/dates
 # operationId: updateDates
-export def "jobs-dates update" [
+export def "update-dates" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3891,7 +3891,7 @@ export def "jobs-dates update" [
 #
 # GET /jobs/{jobId}/files
 # operationId: getJobFiles
-export def "jobs-files get" [
+export def "get-job-files" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3926,7 +3926,7 @@ export def "jobs-files get" [
 # POST /jobs/{jobId}/files/output
 #
 # operationId: assignFileToJobOutput
-export def "jobs-files-output assign" [
+export def "assign-file-to-job-output" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3970,7 +3970,7 @@ export def "jobs-files-output assign" [
 #
 # GET /jobs/{jobId}/files/{fileId}
 # operationId: getJobFiles_1
-export def "jobs-files get-by-job-id-file-id" [
+export def "get-job-files-1" [
   job_id: string
   file_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4008,7 +4008,7 @@ export def "jobs-files get-by-job-id-file-id" [
 #
 # PUT /jobs/{jobId}/instructions
 # operationId: updateInstructions
-export def "jobs-instructions update" [
+export def "update-instructions" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4053,7 +4053,7 @@ export def "jobs-instructions update" [
 #
 # PUT /jobs/{jobId}/status
 # operationId: changeStatus
-export def "jobs-status update-change" [
+export def "change-status" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4094,7 +4094,7 @@ export def "jobs-status update-change" [
 #
 # PUT /jobs/{jobId}/vendor
 # operationId: assignVendor
-export def "jobs-vendor assign" [
+export def "assign-vendor" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4135,7 +4135,7 @@ export def "jobs-vendor assign" [
 #
 # GET /license
 # operationId: getLicense
-export def "license get" [
+export def "get-license" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4169,7 +4169,7 @@ export def "license get" [
 #
 # POST /license/refresh
 # operationId: refresh
-export def "license-refresh refresh" [
+export def "refresh" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4203,7 +4203,7 @@ export def "license-refresh refresh" [
 #
 # POST /macros/{macroId}/run
 # operationId: run
-export def "macros-run create" [
+export def "run" [
   macro_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4249,7 +4249,7 @@ export def "macros-run create" [
 # --inputFiles item shape: {category?: "WORKFILE"|"TM"|"DICTIONARY"|"REF"|"LOG_FILE", content?: string, name?: string, token?: string, url?: string}
 # --instructions shape: {forProvider?: string, fromCustomer?: string, internal?: string, notes?: string, paymentNoteForCustomer?: string, paymentNoteForVendor?: string}
 # --people shape: {customerContacts?: record, responsiblePersons?: record}
-export def "projects create" [
+export def "create-5" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4297,7 +4297,7 @@ export def "projects create" [
 #
 # GET /projects/files/{fileId}/download
 # operationId: getFileById
-export def "projects-files-download get" [
+export def "get-file-by-id" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4333,7 +4333,7 @@ export def "projects-files-download get" [
 #
 # GET /projects/ids
 # operationId: getAllIds_6
-export def "projects-ids get-list" [
+export def "get-all-ids-6" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4369,7 +4369,7 @@ export def "projects-ids get-list" [
 #
 # DELETE /projects/{projectId}
 # operationId: delete_12
-export def "projects delete-by-project-id" [
+export def "delete-12" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4405,7 +4405,7 @@ export def "projects delete-by-project-id" [
 #
 # GET /projects/{projectId}
 # operationId: getById_7
-export def "projects get-by-project-id-by-project-id" [
+export def "get-by-id-7" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4443,7 +4443,7 @@ export def "projects get-by-project-id-by-project-id" [
 #
 # GET /projects/{projectId}/contacts
 # operationId: getContacts
-export def "projects-contacts get" [
+export def "get-contacts" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4479,7 +4479,7 @@ export def "projects-contacts get" [
 #
 # PUT /projects/{projectId}/contacts
 # operationId: updateContacts
-export def "projects-contacts update" [
+export def "update-contacts" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4521,7 +4521,7 @@ export def "projects-contacts update" [
 #
 # GET /projects/{projectId}/customFields
 # operationId: getCustomFields_5
-export def "projects-custom-fields get-by-project-id-by-project-id" [
+export def "get-custom-fields-5" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4558,7 +4558,7 @@ export def "projects-custom-fields get-by-project-id-by-project-id" [
 # PUT /projects/{projectId}/customFields
 # operationId: updateCustomFields_3
 # --customFields item shape: {key?: string, name?: string, type?: "TEXT"|"DATE"|"DATE_AND_TIME"|"NUMBER"|"CHECKBOX"|"SELECTION"|"MULTI_SELECTION", value?: record}
-export def "projects-custom-fields update-by-project-id" [
+export def "update-custom-fields-3" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4599,7 +4599,7 @@ export def "projects-custom-fields update-by-project-id" [
 #
 # GET /projects/{projectId}/dates
 # operationId: getDates_1
-export def "projects-dates get-by-project-id" [
+export def "get-dates-1" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4639,7 +4639,7 @@ export def "projects-dates get-by-project-id" [
 # --actualStartDate shape: {value?: int}
 # --deadline shape: {value?: int}
 # --startDate shape: {value?: int}
-export def "projects-dates update-by-project-id" [
+export def "update-dates-1" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4682,7 +4682,7 @@ export def "projects-dates update-by-project-id" [
 #
 # GET /projects/{projectId}/finance
 # operationId: getFinance
-export def "projects-finance get" [
+export def "get-finance" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4720,7 +4720,7 @@ export def "projects-finance get" [
 # operationId: createPayable
 # --catLogFile shape: {content?: string, name?: string, token?: string, url?: string}
 # --languageCombination shape: {sourceLanguageId?: int, targetLanguageId?: int}
-export def "projects-finance-payables create" [
+export def "create-payable" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4776,7 +4776,7 @@ export def "projects-finance-payables create" [
 #
 # DELETE /projects/{projectId}/finance/payables/{payableId}
 # operationId: deletePayable
-export def "projects-finance-payables delete" [
+export def "delete-payable" [
   project_id: string
   payable_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4815,7 +4815,7 @@ export def "projects-finance-payables delete" [
 # PUT /projects/{projectId}/finance/payables/{payableId}
 # operationId: updatePayable
 # --languageCombination shape: {sourceLanguageId?: int, targetLanguageId?: int}
-export def "projects-finance-payables update" [
+export def "update-payable" [
   project_id: string
   payable_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4874,7 +4874,7 @@ export def "projects-finance-payables update" [
 # operationId: createReceivable
 # --catLogFile shape: {content?: string, name?: string, token?: string, url?: string}
 # --languageCombination shape: {sourceLanguageId?: int, targetLanguageId?: int}
-export def "projects-finance-receivables create" [
+export def "create-receivable" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4930,7 +4930,7 @@ export def "projects-finance-receivables create" [
 #
 # DELETE /projects/{projectId}/finance/receivables/{receivableId}
 # operationId: deleteReceivable
-export def "projects-finance-receivables delete" [
+export def "delete-receivable" [
   project_id: string
   receivable_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4969,7 +4969,7 @@ export def "projects-finance-receivables delete" [
 # PUT /projects/{projectId}/finance/receivables/{receivableId}
 # operationId: updateReceivable
 # --languageCombination shape: {sourceLanguageId?: int, targetLanguageId?: int}
-export def "projects-finance-receivables update" [
+export def "update-receivable" [
   project_id: string
   receivable_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5026,7 +5026,7 @@ export def "projects-finance-receivables update" [
 #
 # GET /projects/{projectId}/instructions
 # operationId: getInstructions
-export def "projects-instructions get" [
+export def "get-instructions" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5062,7 +5062,7 @@ export def "projects-instructions get" [
 #
 # PUT /projects/{projectId}/instructions
 # operationId: updateInstructions_1
-export def "projects-instructions update-by-project-id" [
+export def "update-instructions-1" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5107,7 +5107,7 @@ export def "projects-instructions update-by-project-id" [
 #
 # POST /projects/{projectId}/languageCombinations
 # operationId: createLanguageCombination
-export def "projects-language-combinations create" [
+export def "create-language-combination" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5153,7 +5153,7 @@ export def "projects-language-combinations create" [
 # --instructions shape: {forProvider?: string, fromCustomer?: string, internal?: string, notes?: string, paymentNoteForCustomer?: string, paymentNoteForVendor?: string}
 # --languageCombination shape: {sourceLanguageId?: int, targetLanguageId?: int}
 # --people shape: {customerContacts?: record, responsiblePersons?: record}
-export def "projects-tasks create" [
+export def "create-task" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5201,7 +5201,7 @@ export def "projects-tasks create" [
 #
 # GET /providers/ids
 # operationId: getAllIds_5
-export def "providers-ids get-list" [
+export def "get-all-ids-5" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5237,7 +5237,7 @@ export def "providers-ids get-list" [
 #
 # GET /providers/persons/ids
 # operationId: getAllIds_4
-export def "providers-persons-ids get-list" [
+export def "get-all-ids-4" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5273,7 +5273,7 @@ export def "providers-persons-ids get-list" [
 #
 # DELETE /providers/persons/{personId}
 # operationId: delete_8
-export def "providers-persons delete-by-person-id" [
+export def "delete-8" [
   person_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5309,7 +5309,7 @@ export def "providers-persons delete-by-person-id" [
 #
 # GET /providers/persons/{personId}
 # operationId: getById_4
-export def "providers-persons get-by-person-id" [
+export def "get-by-id-4" [
   person_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5345,7 +5345,7 @@ export def "providers-persons get-by-person-id" [
 #
 # GET /providers/persons/{personId}/contact
 # operationId: getContact_2
-export def "providers-persons-contact get-by-person-id" [
+export def "get-contact-2" [
   person_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5381,7 +5381,7 @@ export def "providers-persons-contact get-by-person-id" [
 #
 # GET /providers/persons/{personId}/customFields
 # operationId: getCustomFields_2
-export def "providers-persons-custom-fields get-by-person-id" [
+export def "get-custom-fields-2" [
   person_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5417,7 +5417,7 @@ export def "providers-persons-custom-fields get-by-person-id" [
 #
 # POST /providers/persons/{personId}/notification/invitation
 # operationId: sendInvitations
-export def "providers-persons-notification-invitation send" [
+export def "send-invitations" [
   person_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5453,7 +5453,7 @@ export def "providers-persons-notification-invitation send" [
 #
 # DELETE /providers/priceLists/{priceListId}
 # operationId: delete_9
-export def "providers-price-lists delete-by-price-list-id" [
+export def "delete-9" [
   price_list_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5489,7 +5489,7 @@ export def "providers-price-lists delete-by-price-list-id" [
 #
 # DELETE /providers/{providerId}
 # operationId: delete_10
-export def "providers delete-by-provider-id" [
+export def "delete-10" [
   provider_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5525,7 +5525,7 @@ export def "providers delete-by-provider-id" [
 #
 # GET /providers/{providerId}
 # operationId: getById_5
-export def "providers get-by-provider-id" [
+export def "get-by-id-5" [
   provider_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5563,7 +5563,7 @@ export def "providers get-by-provider-id" [
 #
 # GET /providers/{providerId}/address
 # operationId: getAddress_1
-export def "providers-address get-by-provider-id" [
+export def "get-address-1" [
   provider_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5599,7 +5599,7 @@ export def "providers-address get-by-provider-id" [
 #
 # GET /providers/{providerId}/competencies
 # operationId: getCompetencies
-export def "providers-competencies get" [
+export def "get-competencies" [
   provider_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5635,7 +5635,7 @@ export def "providers-competencies get" [
 #
 # GET /providers/{providerId}/contact
 # operationId: getContact_3
-export def "providers-contact get-by-provider-id" [
+export def "get-contact-3" [
   provider_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5671,7 +5671,7 @@ export def "providers-contact get-by-provider-id" [
 #
 # GET /providers/{providerId}/correspondenceAddress
 # operationId: getCorrespondenceAddress_1
-export def "providers-correspondence-address get-by-provider-id" [
+export def "get-correspondence-address-1" [
   provider_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5707,7 +5707,7 @@ export def "providers-correspondence-address get-by-provider-id" [
 #
 # GET /providers/{providerId}/customFields
 # operationId: getCustomFields_3
-export def "providers-custom-fields get-by-provider-id" [
+export def "get-custom-fields-3" [
   provider_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5743,7 +5743,7 @@ export def "providers-custom-fields get-by-provider-id" [
 #
 # POST /providers/{providerId}/notification/invitation
 # operationId: sendInvitations_1
-export def "providers-notification-invitation send-by-provider-id" [
+export def "send-invitations-1" [
   provider_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5779,7 +5779,7 @@ export def "providers-notification-invitation send-by-provider-id" [
 #
 # GET /quotes/ids
 # operationId: getAllIds_7
-export def "quotes-ids get-list" [
+export def "get-all-ids-7" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5815,7 +5815,7 @@ export def "quotes-ids get-list" [
 #
 # DELETE /quotes/{quoteId}
 # operationId: delete_13
-export def "quotes delete-by-quote-id" [
+export def "delete-13" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5851,7 +5851,7 @@ export def "quotes delete-by-quote-id" [
 #
 # GET /quotes/{quoteId}
 # operationId: getById_8
-export def "quotes get-by-quote-id-by-quote-id" [
+export def "get-by-id-8" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5889,7 +5889,7 @@ export def "quotes get-by-quote-id-by-quote-id" [
 #
 # POST /quotes/{quoteId}/confirmation/send
 # operationId: send_1
-export def "quotes-confirmation-send send-by-quote-id" [
+export def "send-1" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5925,7 +5925,7 @@ export def "quotes-confirmation-send send-by-quote-id" [
 #
 # GET /quotes/{quoteId}/customFields
 # operationId: getCustomFields_6
-export def "quotes-custom-fields get-by-quote-id-by-quote-id" [
+export def "get-custom-fields-6" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5962,7 +5962,7 @@ export def "quotes-custom-fields get-by-quote-id-by-quote-id" [
 # PUT /quotes/{quoteId}/customFields
 # operationId: updateCustomFields_4
 # --customFields item shape: {key?: string, name?: string, type?: "TEXT"|"DATE"|"DATE_AND_TIME"|"NUMBER"|"CHECKBOX"|"SELECTION"|"MULTI_SELECTION", value?: record}
-export def "quotes-custom-fields update-by-quote-id" [
+export def "update-custom-fields-4" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6003,7 +6003,7 @@ export def "quotes-custom-fields update-by-quote-id" [
 #
 # GET /quotes/{quoteId}/dates
 # operationId: getDates_2
-export def "quotes-dates get-by-quote-id" [
+export def "get-dates-2" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6039,7 +6039,7 @@ export def "quotes-dates get-by-quote-id" [
 #
 # GET /quotes/{quoteId}/finance
 # operationId: getFinance_1
-export def "quotes-finance get-by-quote-id-by-quote-id" [
+export def "get-finance-1" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6077,7 +6077,7 @@ export def "quotes-finance get-by-quote-id-by-quote-id" [
 # operationId: createPayable_1
 # --catLogFile shape: {content?: string, name?: string, token?: string, url?: string}
 # --languageCombination shape: {sourceLanguageId?: int, targetLanguageId?: int}
-export def "quotes-finance-payables create-by-quote-id-by-quote-id" [
+export def "create-payable-1" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6133,7 +6133,7 @@ export def "quotes-finance-payables create-by-quote-id-by-quote-id" [
 #
 # DELETE /quotes/{quoteId}/finance/payables/{payableId}
 # operationId: deletePayable_1
-export def "quotes-finance-payables delete-by-quote-id-payable-id-by-quote-id-payable-id" [
+export def "delete-payable-1" [
   quote_id: string
   payable_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6172,7 +6172,7 @@ export def "quotes-finance-payables delete-by-quote-id-payable-id-by-quote-id-pa
 # PUT /quotes/{quoteId}/finance/payables/{payableId}
 # operationId: updatePayable_1
 # --languageCombination shape: {sourceLanguageId?: int, targetLanguageId?: int}
-export def "quotes-finance-payables update-by-quote-id-payable-id-by-quote-id-payable-id" [
+export def "update-payable-1" [
   quote_id: string
   payable_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6231,7 +6231,7 @@ export def "quotes-finance-payables update-by-quote-id-payable-id-by-quote-id-pa
 # operationId: createReceivable_1
 # --catLogFile shape: {content?: string, name?: string, token?: string, url?: string}
 # --languageCombination shape: {sourceLanguageId?: int, targetLanguageId?: int}
-export def "quotes-finance-receivables create-by-quote-id-by-quote-id" [
+export def "create-receivable-1" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6287,7 +6287,7 @@ export def "quotes-finance-receivables create-by-quote-id-by-quote-id" [
 #
 # DELETE /quotes/{quoteId}/finance/receivables/{receivableId}
 # operationId: deleteReceivable_1
-export def "quotes-finance-receivables delete-by-quote-id-receivable-id-by-quote-id-receivable-id" [
+export def "delete-receivable-1" [
   quote_id: string
   receivable_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6326,7 +6326,7 @@ export def "quotes-finance-receivables delete-by-quote-id-receivable-id-by-quote
 # PUT /quotes/{quoteId}/finance/receivables/{receivableId}
 # operationId: updateReceivable_1
 # --languageCombination shape: {sourceLanguageId?: int, targetLanguageId?: int}
-export def "quotes-finance-receivables update-by-quote-id-receivable-id-by-quote-id-receivable-id" [
+export def "update-receivable-1" [
   quote_id: string
   receivable_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6383,7 +6383,7 @@ export def "quotes-finance-receivables update-by-quote-id-receivable-id-by-quote
 #
 # GET /quotes/{quoteId}/instructions
 # operationId: getInstructions_1
-export def "quotes-instructions get-by-quote-id" [
+export def "get-instructions-1" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6419,7 +6419,7 @@ export def "quotes-instructions get-by-quote-id" [
 #
 # PUT /quotes/{quoteId}/instructions
 # operationId: updateInstructions_2
-export def "quotes-instructions update-by-quote-id" [
+export def "update-instructions-2" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6464,7 +6464,7 @@ export def "quotes-instructions update-by-quote-id" [
 #
 # POST /quotes/{quoteId}/languageCombinations
 # operationId: createLanguageCombination_1
-export def "quotes-language-combinations create-by-quote-id" [
+export def "create-language-combination-1" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6505,7 +6505,7 @@ export def "quotes-language-combinations create-by-quote-id" [
 #
 # POST /quotes/{quoteId}/start
 # operationId: start
-export def "quotes-start start" [
+export def "start" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6548,7 +6548,7 @@ export def "quotes-start start" [
 # --jobs shape: {jobCount?: int, jobIds?: list<int>}
 # --languageCombination shape: {sourceLanguageId?: int, targetLanguageId?: int}
 # --people shape: {customerContacts?: record, responsiblePersons?: record}
-export def "quotes-tasks create-by-quote-id" [
+export def "create-task-1" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6600,7 +6600,7 @@ export def "quotes-tasks create-by-quote-id" [
 #
 # POST /reports/export/xml
 # operationId: exportToXML
-export def "reports-export-xml export" [
+export def "export-to-xml" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6638,7 +6638,7 @@ export def "reports-export-xml export" [
 #
 # POST /reports/import/xml
 # operationId: importFromXML
-export def "reports-import-xml import" [
+export def "import-from-xml" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6676,7 +6676,7 @@ export def "reports-import-xml import" [
 #
 # DELETE /reports/{reportId}
 # operationId: delete_11
-export def "reports delete-by-report-id" [
+export def "delete-11" [
   report_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6712,7 +6712,7 @@ export def "reports delete-by-report-id" [
 #
 # POST /reports/{reportId}/duplicate
 # operationId: duplicate_1
-export def "reports-duplicate create-by-report-id" [
+export def "duplicate-1" [
   report_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6748,7 +6748,7 @@ export def "reports-duplicate create-by-report-id" [
 #
 # PUT /reports/{reportId}/preferred
 # operationId: setPreferred
-export def "reports-preferred update" [
+export def "set-preferred" [
   report_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6788,7 +6788,7 @@ export def "reports-preferred update" [
 #
 # GET /reports/{reportId}/result/csv
 # operationId: generateCSV
-export def "reports-result-csv generate" [
+export def "generate-csv" [
   report_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6824,7 +6824,7 @@ export def "reports-result-csv generate" [
 #
 # GET /reports/{reportId}/result/printerFriendly
 # operationId: generatePrinterFriendly
-export def "reports-result-printer-friendly generate" [
+export def "generate-printer-friendly" [
   report_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6860,7 +6860,7 @@ export def "reports-result-printer-friendly generate" [
 #
 # GET /services/active
 # operationId: getAllActive
-export def "services-active get-list" [
+export def "get-all-active" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6896,7 +6896,7 @@ export def "services-active get-list" [
 #
 # GET /services/all
 # operationId: getAll_3
-export def "services-all get" [
+export def "get-all-3" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6932,7 +6932,7 @@ export def "services-all get" [
 #
 # GET /subscription
 # operationId: getAll_4
-export def "subscription get-list" [
+export def "get-all-4" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6966,7 +6966,7 @@ export def "subscription get-list" [
 #
 # POST /subscription
 # operationId: subscribe
-export def "subscription subscribe" [
+export def "subscribe" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7007,7 +7007,7 @@ export def "subscription subscribe" [
 #
 # GET /subscription/supports
 # operationId: areHooksSupported
-export def "subscription-supports get-are-hooks-supported" [
+export def "are-hooks-supported" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7041,7 +7041,7 @@ export def "subscription-supports get-are-hooks-supported" [
 #
 # DELETE /subscription/{subscriptionId}
 # operationId: unsubscribe
-export def "subscription unsubscribe" [
+export def "unsubscribe" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7077,7 +7077,7 @@ export def "subscription unsubscribe" [
 #
 # DELETE /tasks/{taskId}
 # operationId: delete_14
-export def "tasks delete-by-task-id" [
+export def "delete-14" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7117,7 +7117,7 @@ export def "tasks delete-by-task-id" [
 #
 # PUT /tasks/{taskId}/clientTaskPONumber
 # operationId: updateClientTaskPONumber
-export def "tasks-client-task-po-number update" [
+export def "update-client-task-po-number" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7157,7 +7157,7 @@ export def "tasks-client-task-po-number update" [
 #
 # GET /tasks/{taskId}/contacts
 # operationId: getContacts_1
-export def "tasks-contacts get-by-task-id" [
+export def "get-contacts-1" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7193,7 +7193,7 @@ export def "tasks-contacts get-by-task-id" [
 #
 # PUT /tasks/{taskId}/contacts
 # operationId: updateContacts_1
-export def "tasks-contacts update-by-task-id" [
+export def "update-contacts-1" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7235,7 +7235,7 @@ export def "tasks-contacts update-by-task-id" [
 #
 # GET /tasks/{taskId}/customFields
 # operationId: getCustomFields_7
-export def "tasks-custom-fields get-by-task-id" [
+export def "get-custom-fields-7" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7272,7 +7272,7 @@ export def "tasks-custom-fields get-by-task-id" [
 # PUT /tasks/{taskId}/customFields
 # operationId: updateCustomFields_5
 # --customFields item shape: {key?: string, name?: string, type?: "TEXT"|"DATE"|"DATE_AND_TIME"|"NUMBER"|"CHECKBOX"|"SELECTION"|"MULTI_SELECTION", value?: record}
-export def "tasks-custom-fields update-by-task-id" [
+export def "update-custom-fields-5" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7313,7 +7313,7 @@ export def "tasks-custom-fields update-by-task-id" [
 #
 # GET /tasks/{taskId}/dates
 # operationId: getDates_3
-export def "tasks-dates get-by-task-id" [
+export def "get-dates-3" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7353,7 +7353,7 @@ export def "tasks-dates get-by-task-id" [
 # --actualStartDate shape: {value?: int}
 # --deadline shape: {value?: int}
 # --startDate shape: {value?: int}
-export def "tasks-dates update-by-task-id" [
+export def "update-dates-2" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7396,7 +7396,7 @@ export def "tasks-dates update-by-task-id" [
 #
 # GET /tasks/{taskId}/files
 # operationId: getTaskFiles
-export def "tasks-files get" [
+export def "get-task-files" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7432,7 +7432,7 @@ export def "tasks-files get" [
 #
 # POST /tasks/{taskId}/files/input
 # operationId: addFile
-export def "tasks-files-input create" [
+export def "add-file" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7475,7 +7475,7 @@ export def "tasks-files-input create" [
 #
 # GET /tasks/{taskId}/instructions
 # operationId: getInstructions_2
-export def "tasks-instructions get-by-task-id" [
+export def "get-instructions-2" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7511,7 +7511,7 @@ export def "tasks-instructions get-by-task-id" [
 #
 # PUT /tasks/{taskId}/instructions
 # operationId: updateInstructions_3
-export def "tasks-instructions update-by-task-id" [
+export def "update-instructions-3" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7556,7 +7556,7 @@ export def "tasks-instructions update-by-task-id" [
 #
 # PUT /tasks/{taskId}/name
 # operationId: updateName
-export def "tasks-name update" [
+export def "update-name" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7596,7 +7596,7 @@ export def "tasks-name update" [
 #
 # GET /tasks/{taskId}/progress
 # operationId: getProgress
-export def "tasks-progress get" [
+export def "get-progress" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7632,7 +7632,7 @@ export def "tasks-progress get" [
 #
 # POST /tasks/{taskId}/start
 # operationId: start_1
-export def "tasks-start start-by-task-id" [
+export def "start-1" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7668,7 +7668,7 @@ export def "tasks-start start-by-task-id" [
 #
 # GET /users
 # operationId: getAllNamesWithIds_1
-export def "users get-list-names" [
+export def "get-all-names-with-ids-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7702,7 +7702,7 @@ export def "users get-list-names" [
 #
 # GET /users/me
 # operationId: getMe
-export def "users-me get" [
+export def "get-me" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7736,7 +7736,7 @@ export def "users-me get" [
 #
 # GET /users/me/timeZone
 # operationId: getTimeZone
-export def "users-me-time-zone get" [
+export def "get-time-zone" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7770,7 +7770,7 @@ export def "users-me-time-zone get" [
 #
 # GET /users/{userId}
 # operationId: getById_6
-export def "users get-by-user-id" [
+export def "get-by-id-6" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7807,7 +7807,7 @@ export def "users get-by-user-id" [
 # PUT /users/{userId}
 # operationId: update_3
 # --customFields item shape: {key?: string, name?: string, type?: "TEXT"|"DATE"|"DATE_AND_TIME"|"NUMBER"|"CHECKBOX"|"SELECTION"|"MULTI_SELECTION", value?: record}
-export def "users update-by-user-id" [
+export def "update-3" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7858,7 +7858,7 @@ export def "users update-by-user-id" [
 #
 # GET /users/{userId}/customFields
 # operationId: getCustomFields_4
-export def "users-custom-fields get-by-user-id" [
+export def "get-custom-fields-4" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7895,7 +7895,7 @@ export def "users-custom-fields get-by-user-id" [
 # PUT /users/{userId}/customFields
 # operationId: updateCustomFields_2
 # --customFields item shape: {key?: string, name?: string, type?: "TEXT"|"DATE"|"DATE_AND_TIME"|"NUMBER"|"CHECKBOX"|"SELECTION"|"MULTI_SELECTION", value?: record}
-export def "users-custom-fields update-by-user-id" [
+export def "update-custom-fields-2" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7936,7 +7936,7 @@ export def "users-custom-fields update-by-user-id" [
 #
 # GET /users/{userId}/customFields/{customFieldKey}
 # operationId: getCustomField_1
-export def "users-custom-fields get-by-user-id-custom-field-key" [
+export def "get-custom-field-1" [
   user_id: int
   custom_field_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7974,7 +7974,7 @@ export def "users-custom-fields get-by-user-id-custom-field-key" [
 #
 # PUT /users/{userId}/customFields/{customFieldKey}
 # operationId: updateCustomField_1
-export def "users-custom-fields update-by-user-id-custom-field-key" [
+export def "update-custom-field-1" [
   user_id: int
   custom_field_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8019,7 +8019,7 @@ export def "users-custom-fields update-by-user-id-custom-field-key" [
 #
 # PUT /users/{userId}/password
 # operationId: changePassword
-export def "users-password update-change" [
+export def "change-password" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8060,7 +8060,7 @@ export def "users-password update-change" [
 # GET /v2/jobs/for-external-id
 #
 # operationId: getByExternalId
-export def "jobs-for-external-id get" [
+export def "get-by-external-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8097,7 +8097,7 @@ export def "jobs-for-external-id get" [
 #
 # GET /v2/jobs/{jobId}
 # operationId: getFileById_1
-export def "jobs get-file-by-job-id" [
+export def "get-file-by-id-1" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8133,7 +8133,7 @@ export def "jobs get-file-by-job-id" [
 #
 # PUT /v2/jobs/{jobId}/dates
 # operationId: changeDates
-export def "jobs-dates update-change" [
+export def "change-dates" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8176,7 +8176,7 @@ export def "jobs-dates update-change" [
 #
 # operationId: addExternalFileLink
 # --languageCombinationIds item shape: {sourceLanguageId?: int, targetLanguageId?: int}
-export def "jobs-files-add-external-link create" [
+export def "add-external-file-link" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8220,7 +8220,7 @@ export def "jobs-files-add-external-link create" [
 #
 # GET /v2/jobs/{jobId}/files/delivered
 # operationId: getDeliveredFiles
-export def "jobs-files-delivered get" [
+export def "get-delivered-files" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8257,7 +8257,7 @@ export def "jobs-files-delivered get" [
 # PUT /v2/jobs/{jobId}/files/delivered/add
 # operationId: addFiles
 # --files item shape: {category?: string, fileId?: string, languageCombinationIds?: list, languageIds?: list<int>}
-export def "jobs-files-delivered-add create" [
+export def "add-files" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8298,7 +8298,7 @@ export def "jobs-files-delivered-add create" [
 # POST /v2/jobs/{jobId}/files/delivered/addLink
 # operationId: addFileLinks
 # --fileLinks item shape: {category?: string, externalInfo?: record, filename?: string, languageCombinationIds?: list, languageIds?: list<int>, toBeGenerated?: bool, url?: string}
-export def "jobs-files-delivered-add-link create" [
+export def "add-file-links" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8338,7 +8338,7 @@ export def "jobs-files-delivered-add-link create" [
 #
 # POST /v2/jobs/{jobId}/files/delivered/upload
 # operationId: uploadFile_1
-export def "jobs-files-delivered-upload upload-by-job-id" [
+export def "upload-file-1" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8380,7 +8380,7 @@ export def "jobs-files-delivered-upload upload-by-job-id" [
 #
 # GET /v2/jobs/{jobId}/files/sharedReferenceFiles
 # operationId: getSharedReferenceFiles
-export def "jobs-files-shared-reference-files get" [
+export def "get-shared-reference-files" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8416,7 +8416,7 @@ export def "jobs-files-shared-reference-files get" [
 #
 # PUT /v2/jobs/{jobId}/files/sharedReferenceFiles/share
 # operationId: shareAsReferenceFiles
-export def "jobs-files-shared-reference-files-share update" [
+export def "share-as-reference-files" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8456,7 +8456,7 @@ export def "jobs-files-shared-reference-files-share update" [
 #
 # GET /v2/jobs/{jobId}/files/sharedWorkFiles
 # operationId: getSharedWorkFiles
-export def "jobs-files-shared-work-files get" [
+export def "get-shared-work-files" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8492,7 +8492,7 @@ export def "jobs-files-shared-work-files get" [
 #
 # PUT /v2/jobs/{jobId}/files/sharedWorkFiles/share
 # operationId: shareAsWorkFiles
-export def "jobs-files-shared-work-files-share update" [
+export def "share-as-work-files" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8532,7 +8532,7 @@ export def "jobs-files-shared-work-files-share update" [
 #
 # PUT /v2/jobs/{jobId}/files/stopSharing
 # operationId: stopSharing
-export def "jobs-files-stop-sharing stop" [
+export def "stop-sharing" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8572,7 +8572,7 @@ export def "jobs-files-stop-sharing stop" [
 #
 # PUT /v2/jobs/{jobId}/instructions
 # operationId: updateInstructions_4
-export def "jobs-instructions update-by-job-id" [
+export def "update-instructions-4" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8612,7 +8612,7 @@ export def "jobs-instructions update-by-job-id" [
 #
 # PUT /v2/jobs/{jobId}/status
 # operationId: changeStatus_1
-export def "jobs-status update-change-by-job-id" [
+export def "change-status-1" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8653,7 +8653,7 @@ export def "jobs-status update-change-by-job-id" [
 #
 # PUT /v2/jobs/{jobId}/vendor
 # operationId: assignVendor_1
-export def "jobs-vendor assign-by-job-id" [
+export def "assign-vendor-1" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8693,7 +8693,7 @@ export def "jobs-vendor assign-by-job-id" [
 #
 # POST /v2/projects
 # operationId: create_6
-export def "projects create-1" [
+export def "create-6" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8734,7 +8734,7 @@ export def "projects create-1" [
 #
 # POST /v2/projects/files/archive
 # operationId: archive
-export def "projects-files-archive archive" [
+export def "archive" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8772,7 +8772,7 @@ export def "projects-files-archive archive" [
 #
 # GET /v2/projects/files/{fileId}
 # operationId: getFileById_2
-export def "projects-files get-by-file-id" [
+export def "get-file-by-id-2" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8808,7 +8808,7 @@ export def "projects-files get-by-file-id" [
 #
 # GET /v2/projects/files/{fileId}/download/{fileName}
 # operationId: getFileContentById
-export def "projects-files-download get-content" [
+export def "get-file-content-by-id" [
   file_id: string
   file_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8846,7 +8846,7 @@ export def "projects-files-download get-content" [
 #
 # GET /v2/projects/for-external-id/{externalProjectId}
 # operationId: getByExternalId_1
-export def "projects-for-external-id get-by-external-project-id" [
+export def "get-by-external-id-1" [
   external_project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8882,7 +8882,7 @@ export def "projects-for-external-id get-by-external-project-id" [
 #
 # GET /v2/projects/{projectId}
 # operationId: getById_9
-export def "projects get-by-project-id-by-project-id-1" [
+export def "get-by-id-9" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8918,7 +8918,7 @@ export def "projects get-by-project-id-by-project-id-1" [
 #
 # POST /v2/projects/{projectId}/addJob
 # operationId: addJobToProcess
-export def "projects-add-job create-to-process" [
+export def "add-job-to-process" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8954,7 +8954,7 @@ export def "projects-add-job create-to-process" [
 #
 # GET /v2/projects/{projectId}/catToolProject
 # operationId: getCATToolProjectInfo
-export def "projects-cat-tool-project get" [
+export def "get-cat-tool-project-info" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8990,7 +8990,7 @@ export def "projects-cat-tool-project get" [
 #
 # GET /v2/projects/{projectId}/clientContacts
 # operationId: getContacts_2
-export def "projects-client-contacts get-by-project-id" [
+export def "get-contacts-2" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9026,7 +9026,7 @@ export def "projects-client-contacts get-by-project-id" [
 #
 # PUT /v2/projects/{projectId}/clientContacts
 # operationId: updateContacts_2
-export def "projects-client-contacts update-by-project-id" [
+export def "update-contacts-2" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9067,7 +9067,7 @@ export def "projects-client-contacts update-by-project-id" [
 #
 # PUT /v2/projects/{projectId}/clientDeadline
 # operationId: updateClientDeadline
-export def "projects-client-deadline update" [
+export def "update-client-deadline" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9107,7 +9107,7 @@ export def "projects-client-deadline update" [
 #
 # PUT /v2/projects/{projectId}/clientNotes
 # operationId: updateClientNotes
-export def "projects-client-notes update" [
+export def "update-client-notes" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9147,7 +9147,7 @@ export def "projects-client-notes update" [
 #
 # PUT /v2/projects/{projectId}/clientReferenceNumber
 # operationId: updateClientReferenceNumber
-export def "projects-client-reference-number update" [
+export def "update-client-reference-number" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9187,7 +9187,7 @@ export def "projects-client-reference-number update" [
 #
 # GET /v2/projects/{projectId}/customFields
 # operationId: getCustomFields_8
-export def "projects-custom-fields get-by-project-id-by-project-id-1" [
+export def "get-custom-fields-8" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9223,7 +9223,7 @@ export def "projects-custom-fields get-by-project-id-by-project-id-1" [
 #
 # PUT /v2/projects/{projectId}/customFields/{key}
 # operationId: updateCustomField_2
-export def "projects-custom-fields update-by-project-id-key" [
+export def "update-custom-field-2" [
   project_id: string
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9265,7 +9265,7 @@ export def "projects-custom-fields update-by-project-id-key" [
 #
 # GET /v2/projects/{projectId}/files
 # operationId: getFiles
-export def "projects-files get" [
+export def "get-files" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9302,7 +9302,7 @@ export def "projects-files get" [
 # PUT /v2/projects/{projectId}/files/add
 # operationId: addFiles_1
 # --files item shape: {category?: string, fileId?: string, languageCombinationIds?: list, languageIds?: list<int>}
-export def "projects-files-add create-by-project-id" [
+export def "add-files-1" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9342,7 +9342,7 @@ export def "projects-files-add create-by-project-id" [
 #
 # operationId: addExternalFileLinks
 # --languageCombinationIds item shape: {sourceLanguageId?: int, targetLanguageId?: int}
-export def "projects-files-add-external-link create" [
+export def "add-external-file-links" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9387,7 +9387,7 @@ export def "projects-files-add-external-link create" [
 # POST /v2/projects/{projectId}/files/addLink
 # operationId: addFileLinks_1
 # --fileLinks item shape: {category?: string, externalInfo?: record, filename?: string, languageCombinationIds?: list, languageIds?: list<int>, toBeGenerated?: bool, url?: string}
-export def "projects-files-add-link create-by-project-id" [
+export def "add-file-links-1" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9427,7 +9427,7 @@ export def "projects-files-add-link create-by-project-id" [
 #
 # GET /v2/projects/{projectId}/files/deliverable
 # operationId: getDeliverableFiles
-export def "projects-files-deliverable get" [
+export def "get-deliverable-files" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9463,7 +9463,7 @@ export def "projects-files-deliverable get" [
 #
 # POST /v2/projects/{projectId}/files/upload
 # operationId: uploadFile_2
-export def "projects-files-upload upload-by-project-id" [
+export def "upload-file-2" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9505,7 +9505,7 @@ export def "projects-files-upload upload-by-project-id" [
 #
 # GET /v2/projects/{projectId}/finance
 # operationId: getFinance_2
-export def "projects-finance get-by-project-id" [
+export def "get-finance-2" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9543,7 +9543,7 @@ export def "projects-finance get-by-project-id" [
 # operationId: createPayable_2
 # --catLogFile shape: {content?: string, name?: string, token?: string, url?: string}
 # --languageCombination shape: {sourceLanguageId?: int, targetLanguageId?: int}
-export def "projects-finance-payables create-by-project-id" [
+export def "create-payable-2" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9599,7 +9599,7 @@ export def "projects-finance-payables create-by-project-id" [
 #
 # DELETE /v2/projects/{projectId}/finance/payables/{payableId}
 # operationId: deletePayable_2
-export def "projects-finance-payables delete-by-project-id-payable-id" [
+export def "delete-payable-2" [
   project_id: string
   payable_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -9638,7 +9638,7 @@ export def "projects-finance-payables delete-by-project-id-payable-id" [
 # PUT /v2/projects/{projectId}/finance/payables/{payableId}
 # operationId: updatePayable_2
 # --languageCombination shape: {sourceLanguageId?: int, targetLanguageId?: int}
-export def "projects-finance-payables update-by-project-id-payable-id" [
+export def "update-payable-2" [
   project_id: string
   payable_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -9697,7 +9697,7 @@ export def "projects-finance-payables update-by-project-id-payable-id" [
 # operationId: createReceivable_2
 # --catLogFile shape: {content?: string, name?: string, token?: string, url?: string}
 # --languageCombination shape: {sourceLanguageId?: int, targetLanguageId?: int}
-export def "projects-finance-receivables create-by-project-id" [
+export def "create-receivable-2" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9753,7 +9753,7 @@ export def "projects-finance-receivables create-by-project-id" [
 #
 # DELETE /v2/projects/{projectId}/finance/receivables/{receivableId}
 # operationId: deleteReceivable_2
-export def "projects-finance-receivables delete-by-project-id-receivable-id" [
+export def "delete-receivable-2" [
   project_id: string
   receivable_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -9792,7 +9792,7 @@ export def "projects-finance-receivables delete-by-project-id-receivable-id" [
 # PUT /v2/projects/{projectId}/finance/receivables/{receivableId}
 # operationId: updateReceivable_2
 # --languageCombination shape: {sourceLanguageId?: int, targetLanguageId?: int}
-export def "projects-finance-receivables update-by-project-id-receivable-id" [
+export def "update-receivable-2" [
   project_id: string
   receivable_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -9849,7 +9849,7 @@ export def "projects-finance-receivables update-by-project-id-receivable-id" [
 #
 # PUT /v2/projects/{projectId}/internalNotes
 # operationId: updateInternalNotes
-export def "projects-internal-notes update" [
+export def "update-internal-notes" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9889,7 +9889,7 @@ export def "projects-internal-notes update" [
 #
 # GET /v2/projects/{projectId}/jobs
 # operationId: getJobs
-export def "projects-jobs get" [
+export def "get-jobs" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9925,7 +9925,7 @@ export def "projects-jobs get" [
 #
 # PUT /v2/projects/{projectId}/orderDate
 # operationId: updateOrderedOn
-export def "projects-order-date update-ordered" [
+export def "update-ordered-on" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9965,7 +9965,7 @@ export def "projects-order-date update-ordered" [
 #
 # GET /v2/projects/{projectId}/process
 # operationId: getProcessId
-export def "projects-process get" [
+export def "get-process-id" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10001,7 +10001,7 @@ export def "projects-process get" [
 #
 # PUT /v2/projects/{projectId}/sourceLanguage
 # operationId: updateSourceLanguage
-export def "projects-source-language update" [
+export def "update-source-language" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10041,7 +10041,7 @@ export def "projects-source-language update" [
 #
 # PUT /v2/projects/{projectId}/specialization
 # operationId: updateSpecialization
-export def "projects-specialization update" [
+export def "update-specialization" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10081,7 +10081,7 @@ export def "projects-specialization update" [
 #
 # PUT /v2/projects/{projectId}/status
 # operationId: changeStatus_2
-export def "projects-status update-change-by-project-id" [
+export def "change-status-2" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10121,7 +10121,7 @@ export def "projects-status update-change-by-project-id" [
 #
 # PUT /v2/projects/{projectId}/targetLanguages
 # operationId: updateTargetLanguages
-export def "projects-target-languages update" [
+export def "update-target-languages" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10161,7 +10161,7 @@ export def "projects-target-languages update" [
 #
 # PUT /v2/projects/{projectId}/vendorInstructions
 # operationId: updateVendorInstructions
-export def "projects-vendor-instructions update" [
+export def "update-vendor-instructions" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10201,7 +10201,7 @@ export def "projects-vendor-instructions update" [
 #
 # PUT /v2/projects/{projectId}/volume
 # operationId: updateVolume
-export def "projects-volume update" [
+export def "update-volume" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10241,7 +10241,7 @@ export def "projects-volume update" [
 #
 # POST /v2/quotes
 # operationId: create_7
-export def "quotes create" [
+export def "create-7" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10282,7 +10282,7 @@ export def "quotes create" [
 #
 # POST /v2/quotes/files/archive
 # operationId: archive_1
-export def "quotes-files-archive archive" [
+export def "archive-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10320,7 +10320,7 @@ export def "quotes-files-archive archive" [
 #
 # GET /v2/quotes/files/{fileId}
 # operationId: getFileById_3
-export def "quotes-files get-by-file-id" [
+export def "get-file-by-id-3" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10356,7 +10356,7 @@ export def "quotes-files get-by-file-id" [
 #
 # GET /v2/quotes/files/{fileId}/download/{fileName}
 # operationId: getFileContentById_1
-export def "quotes-files-download get-content-by-file-id-file-name" [
+export def "get-file-content-by-id-1" [
   file_id: string
   file_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10394,7 +10394,7 @@ export def "quotes-files-download get-content-by-file-id-file-name" [
 #
 # GET /v2/quotes/{quoteId}
 # operationId: getById_10
-export def "quotes get-by-quote-id-by-quote-id-1" [
+export def "get-by-id-10" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10430,7 +10430,7 @@ export def "quotes get-by-quote-id-by-quote-id-1" [
 #
 # PUT /v2/quotes/{quoteId}/businessDays
 # operationId: updateBusinessDays
-export def "quotes-business-days update" [
+export def "update-business-days" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10470,7 +10470,7 @@ export def "quotes-business-days update" [
 #
 # GET /v2/quotes/{quoteId}/clientContacts
 # operationId: getContacts_3
-export def "quotes-client-contacts get-by-quote-id" [
+export def "get-contacts-3" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10506,7 +10506,7 @@ export def "quotes-client-contacts get-by-quote-id" [
 #
 # PUT /v2/quotes/{quoteId}/clientContacts
 # operationId: updateContacts_3
-export def "quotes-client-contacts update-by-quote-id" [
+export def "update-contacts-3" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10547,7 +10547,7 @@ export def "quotes-client-contacts update-by-quote-id" [
 #
 # PUT /v2/quotes/{quoteId}/clientNotes
 # operationId: updateClientNotes_1
-export def "quotes-client-notes update-by-quote-id" [
+export def "update-client-notes-1" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10587,7 +10587,7 @@ export def "quotes-client-notes update-by-quote-id" [
 #
 # PUT /v2/quotes/{quoteId}/clientReferenceNumber
 # operationId: updateClientReferenceNumber_1
-export def "quotes-client-reference-number update-by-quote-id" [
+export def "update-client-reference-number-1" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10627,7 +10627,7 @@ export def "quotes-client-reference-number update-by-quote-id" [
 #
 # GET /v2/quotes/{quoteId}/customFields
 # operationId: getCustomFields_9
-export def "quotes-custom-fields get-by-quote-id-by-quote-id-1" [
+export def "get-custom-fields-9" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10663,7 +10663,7 @@ export def "quotes-custom-fields get-by-quote-id-by-quote-id-1" [
 #
 # PUT /v2/quotes/{quoteId}/customFields/{key}
 # operationId: updateCustomField_3
-export def "quotes-custom-fields update-by-quote-id-key" [
+export def "update-custom-field-3" [
   quote_id: string
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10705,7 +10705,7 @@ export def "quotes-custom-fields update-by-quote-id-key" [
 #
 # PUT /v2/quotes/{quoteId}/expectedDeliveryDate
 # operationId: updateExpectedDeliveryDate
-export def "quotes-expected-delivery-date update" [
+export def "update-expected-delivery-date" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10745,7 +10745,7 @@ export def "quotes-expected-delivery-date update" [
 #
 # GET /v2/quotes/{quoteId}/files
 # operationId: getFiles_1
-export def "quotes-files get-by-quote-id" [
+export def "get-files-1" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10781,7 +10781,7 @@ export def "quotes-files get-by-quote-id" [
 #
 # PUT /v2/quotes/{quoteId}/files/add
 # operationId: addFiles_2
-export def "quotes-files-add create-by-quote-id" [
+export def "add-files-2" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10821,7 +10821,7 @@ export def "quotes-files-add create-by-quote-id" [
 #
 # POST /v2/quotes/{quoteId}/files/upload
 # operationId: uploadFile_3
-export def "quotes-files-upload upload-by-quote-id" [
+export def "upload-file-3" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10863,7 +10863,7 @@ export def "quotes-files-upload upload-by-quote-id" [
 #
 # GET /v2/quotes/{quoteId}/finance
 # operationId: getFinance_3
-export def "quotes-finance get-by-quote-id-by-quote-id-1" [
+export def "get-finance-3" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10901,7 +10901,7 @@ export def "quotes-finance get-by-quote-id-by-quote-id-1" [
 # operationId: createPayable_3
 # --catLogFile shape: {content?: string, name?: string, token?: string, url?: string}
 # --languageCombination shape: {sourceLanguageId?: int, targetLanguageId?: int}
-export def "quotes-finance-payables create-by-quote-id-by-quote-id-1" [
+export def "create-payable-3" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10957,7 +10957,7 @@ export def "quotes-finance-payables create-by-quote-id-by-quote-id-1" [
 #
 # DELETE /v2/quotes/{quoteId}/finance/payables/{payableId}
 # operationId: deletePayable_3
-export def "quotes-finance-payables delete-by-quote-id-payable-id-by-quote-id-payable-id-1" [
+export def "delete-payable-3" [
   quote_id: string
   payable_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -10996,7 +10996,7 @@ export def "quotes-finance-payables delete-by-quote-id-payable-id-by-quote-id-pa
 # PUT /v2/quotes/{quoteId}/finance/payables/{payableId}
 # operationId: updatePayable_3
 # --languageCombination shape: {sourceLanguageId?: int, targetLanguageId?: int}
-export def "quotes-finance-payables update-by-quote-id-payable-id-by-quote-id-payable-id-1" [
+export def "update-payable-3" [
   quote_id: string
   payable_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -11055,7 +11055,7 @@ export def "quotes-finance-payables update-by-quote-id-payable-id-by-quote-id-pa
 # operationId: createReceivable_3
 # --catLogFile shape: {content?: string, name?: string, token?: string, url?: string}
 # --languageCombination shape: {sourceLanguageId?: int, targetLanguageId?: int}
-export def "quotes-finance-receivables create-by-quote-id-by-quote-id-1" [
+export def "create-receivable-3" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11111,7 +11111,7 @@ export def "quotes-finance-receivables create-by-quote-id-by-quote-id-1" [
 #
 # DELETE /v2/quotes/{quoteId}/finance/receivables/{receivableId}
 # operationId: deleteReceivable_3
-export def "quotes-finance-receivables delete-by-quote-id-receivable-id-by-quote-id-receivable-id-1" [
+export def "delete-receivable-3" [
   quote_id: string
   receivable_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -11150,7 +11150,7 @@ export def "quotes-finance-receivables delete-by-quote-id-receivable-id-by-quote
 # PUT /v2/quotes/{quoteId}/finance/receivables/{receivableId}
 # operationId: updateReceivable_3
 # --languageCombination shape: {sourceLanguageId?: int, targetLanguageId?: int}
-export def "quotes-finance-receivables update-by-quote-id-receivable-id-by-quote-id-receivable-id-1" [
+export def "update-receivable-3" [
   quote_id: string
   receivable_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -11207,7 +11207,7 @@ export def "quotes-finance-receivables update-by-quote-id-receivable-id-by-quote
 #
 # PUT /v2/quotes/{quoteId}/internalNotes
 # operationId: updateInternalNotes_1
-export def "quotes-internal-notes update-by-quote-id" [
+export def "update-internal-notes-1" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11247,7 +11247,7 @@ export def "quotes-internal-notes update-by-quote-id" [
 #
 # GET /v2/quotes/{quoteId}/jobs
 # operationId: getJobs_1
-export def "quotes-jobs get-by-quote-id" [
+export def "get-jobs-1" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11283,7 +11283,7 @@ export def "quotes-jobs get-by-quote-id" [
 #
 # PUT /v2/quotes/{quoteId}/quoteExpiry
 # operationId: updateQuoteExpiry
-export def "quotes-quote-expiry update" [
+export def "update-quote-expiry" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11323,7 +11323,7 @@ export def "quotes-quote-expiry update" [
 #
 # PUT /v2/quotes/{quoteId}/sourceLanguage
 # operationId: updateSourceLanguage_1
-export def "quotes-source-language update-by-quote-id" [
+export def "update-source-language-1" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11363,7 +11363,7 @@ export def "quotes-source-language update-by-quote-id" [
 #
 # PUT /v2/quotes/{quoteId}/specialization
 # operationId: updateSpecialization_1
-export def "quotes-specialization update-by-quote-id" [
+export def "update-specialization-1" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11403,7 +11403,7 @@ export def "quotes-specialization update-by-quote-id" [
 #
 # PUT /v2/quotes/{quoteId}/status
 # operationId: changeStatus_3
-export def "quotes-status update-change-by-quote-id" [
+export def "change-status-3" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11443,7 +11443,7 @@ export def "quotes-status update-change-by-quote-id" [
 #
 # PUT /v2/quotes/{quoteId}/targetLanguages
 # operationId: updateTargetLanguages_1
-export def "quotes-target-languages update-by-quote-id" [
+export def "update-target-languages-1" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11483,7 +11483,7 @@ export def "quotes-target-languages update-by-quote-id" [
 #
 # PUT /v2/quotes/{quoteId}/vendorInstructions
 # operationId: updateVendorInstructions_1
-export def "quotes-vendor-instructions update-by-quote-id" [
+export def "update-vendor-instructions-1" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11523,7 +11523,7 @@ export def "quotes-vendor-instructions update-by-quote-id" [
 #
 # PUT /v2/quotes/{quoteId}/volume
 # operationId: updateVolume_1
-export def "quotes-volume update-by-quote-id" [
+export def "update-volume-1" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

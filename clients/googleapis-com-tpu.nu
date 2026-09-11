@@ -130,7 +130,7 @@ def health-completer [] { ["HEALTHY" "HEALTH_UNSPECIFIED" "TIMEOUT" "UNHEALTHY_M
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "tpu-projects-locations-operations-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -154,7 +154,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v2/{name}
 # operationId: tpu.projects.locations.operations.delete
-export def "projects delete" [
+export def "tpu-projects-locations-operations-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -202,7 +202,7 @@ export def "projects delete" [
 #
 # GET /v2/{name}
 # operationId: tpu.projects.locations.runtimeVersions.get
-export def "projects get" [
+export def "tpu-projects-locations-runtime-versions-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -258,7 +258,7 @@ export def "projects get" [
 # --serviceAccount shape: {email?: string, scope?: list<string>}
 # --shieldedInstanceConfig shape: {enableSecureBoot?: bool}
 # --symptoms item shape: {createTime?: string, details?: string, symptomType?: "SYMPTOM_TYPE_UNSPECIFIED"|"LOW_MEMORY"|"OUT_OF_MEMORY"|"EXECUTE_TIMED_OUT"|"MESH_BUILD_FAIL"|"HBM_OUT_OF_MEMORY"|"PROJECT_ABUSE", workerId?: string}
-export def "projects update" [
+export def "tpu-projects-locations-nodes-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -324,7 +324,7 @@ export def "projects update" [
 #
 # GET /v2/{name}/locations
 # operationId: tpu.projects.locations.list
-export def "locations list" [
+export def "tpu-projects-locations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -375,7 +375,7 @@ export def "locations list" [
 #
 # GET /v2/{name}/operations
 # operationId: tpu.projects.locations.operations.list
-export def "operations list" [
+export def "tpu-projects-locations-operations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -426,7 +426,7 @@ export def "operations list" [
 #
 # POST /v2/{name}:cancel
 # operationId: tpu.projects.locations.operations.cancel
-export def "projects cancel" [
+export def "tpu-projects-locations-operations-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -474,7 +474,7 @@ export def "projects cancel" [
 #
 # POST /v2/{name}:getGuestAttributes
 # operationId: tpu.projects.locations.nodes.getGuestAttributes
-export def "projects get-guest-attributes" [
+export def "tpu-projects-locations-nodes-get-guest-attributes" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -527,7 +527,7 @@ export def "projects get-guest-attributes" [
 #
 # POST /v2/{name}:start
 # operationId: tpu.projects.locations.nodes.start
-export def "projects start" [
+export def "tpu-projects-locations-nodes-start" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -579,7 +579,7 @@ export def "projects start" [
 #
 # POST /v2/{name}:stop
 # operationId: tpu.projects.locations.nodes.stop
-export def "projects stop" [
+export def "tpu-projects-locations-nodes-stop" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -631,7 +631,7 @@ export def "projects stop" [
 #
 # GET /v2/{parent}/acceleratorTypes
 # operationId: tpu.projects.locations.acceleratorTypes.list
-export def "accelerator-types list" [
+export def "tpu-projects-locations-accelerator-types-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -683,7 +683,7 @@ export def "accelerator-types list" [
 #
 # GET /v2/{parent}/nodes
 # operationId: tpu.projects.locations.nodes.list
-export def "nodes list" [
+export def "tpu-projects-locations-nodes-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -741,7 +741,7 @@ export def "nodes list" [
 # --serviceAccount shape: {email?: string, scope?: list<string>}
 # --shieldedInstanceConfig shape: {enableSecureBoot?: bool}
 # --symptoms item shape: {createTime?: string, details?: string, symptomType?: "SYMPTOM_TYPE_UNSPECIFIED"|"LOW_MEMORY"|"OUT_OF_MEMORY"|"EXECUTE_TIMED_OUT"|"MESH_BUILD_FAIL"|"HBM_OUT_OF_MEMORY"|"PROJECT_ABUSE", workerId?: string}
-export def "nodes create" [
+export def "tpu-projects-locations-nodes-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -807,7 +807,7 @@ export def "nodes create" [
 #
 # GET /v2/{parent}/runtimeVersions
 # operationId: tpu.projects.locations.runtimeVersions.list
-export def "runtime-versions list" [
+export def "tpu-projects-locations-runtime-versions-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -859,7 +859,7 @@ export def "runtime-versions list" [
 #
 # POST /v2/{parent}:generateServiceIdentity
 # operationId: tpu.projects.locations.generateServiceIdentity
-export def "projects generate-service-identity" [
+export def "tpu-projects-locations-generate-service-identity" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

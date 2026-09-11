@@ -119,7 +119,7 @@ def order-completer [] { ["created_at_asc" "created_at_desc" "title_asc" "title_
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account update" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "patch-account" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -142,7 +142,7 @@ export def commands []: nothing -> table {
 # Update account
 #
 # PATCH /account
-export def "account update" [
+export def "patch-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -187,7 +187,7 @@ export def "account update" [
 # Delete attachment
 #
 # DELETE /attachments/{id}
-export def "attachments delete" [
+export def "delete-attachments-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -222,7 +222,7 @@ export def "attachments delete" [
 # Sign in user
 #
 # POST /authentication
-export def "authentication create" [
+export def "post-authentication" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -260,7 +260,7 @@ export def "authentication create" [
 # List your collaborator invitations
 #
 # GET /collaborator_invitations
-export def "collaborator-invitations list" [
+export def "get-collaborator-invitations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -293,7 +293,7 @@ export def "collaborator-invitations list" [
 # Invite user to collaborate on map
 #
 # POST /collaborator_invitations
-export def "collaborator-invitations create" [
+export def "post-collaborator-invitations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -333,7 +333,7 @@ export def "collaborator-invitations create" [
 # Delete collaborator invitation
 #
 # DELETE /collaborator_invitations/{id}
-export def "collaborator-invitations delete" [
+export def "delete-collaborator-invitations-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -368,7 +368,7 @@ export def "collaborator-invitations delete" [
 # Show collaborator invitation
 #
 # GET /collaborator_invitations/{id}
-export def "collaborator-invitations get" [
+export def "get-collaborator-invitations-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -403,7 +403,7 @@ export def "collaborator-invitations get" [
 # Accept collaborator invitation.
 #
 # PATCH /collaborator_invitations/{id}
-export def "collaborator-invitations update" [
+export def "patch-collaborator-invitations-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -438,7 +438,7 @@ export def "collaborator-invitations update" [
 # Delete comment
 #
 # DELETE /comments/{id}
-export def "comments delete" [
+export def "delete-comments-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -473,7 +473,7 @@ export def "comments delete" [
 # Update comment
 #
 # PATCH /comments/{id}
-export def "comments update" [
+export def "patch-comments-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -512,7 +512,7 @@ export def "comments update" [
 # List your own events
 #
 # GET /events
-export def "events list" [
+export def "get-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -549,7 +549,7 @@ export def "events list" [
 # Delete event
 #
 # DELETE /events/{id}
-export def "events delete" [
+export def "delete-events-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -584,7 +584,7 @@ export def "events delete" [
 # Get event
 #
 # GET /events/{id}
-export def "events get" [
+export def "get-events-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -619,7 +619,7 @@ export def "events get" [
 # Update event
 #
 # PATCH /events/{id}
-export def "events update" [
+export def "patch-events-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -666,7 +666,7 @@ export def "events update" [
 # List your own maps
 #
 # GET /maps
-export def "maps list" [
+export def "get-maps" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -700,7 +700,7 @@ export def "maps list" [
 #
 # POST /maps
 # --map_settings shape: {editor_access?: string, respotting_to_this_map?: bool, visitor_access?: string}
-export def "maps create" [
+export def "post-maps" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -741,7 +741,7 @@ export def "maps create" [
 # Search maps
 #
 # GET /maps/search
-export def "maps-search get" [
+export def "get-maps-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -779,7 +779,7 @@ export def "maps-search get" [
 # Delete map
 #
 # DELETE /maps/{id}
-export def "maps delete" [
+export def "delete-maps-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -814,7 +814,7 @@ export def "maps delete" [
 # Get map
 #
 # GET /maps/{id}
-export def "maps get" [
+export def "get-maps-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -850,7 +850,7 @@ export def "maps get" [
 #
 # PATCH /maps/{id}
 # --map_settings shape: {editor_access?: string, respotting_to_this_map?: bool, visitor_access?: string}
-export def "maps update" [
+export def "patch-maps-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -893,7 +893,7 @@ export def "maps update" [
 # List attachments for a given map
 #
 # GET /maps/{id}/attachments
-export def "maps-attachments get" [
+export def "get-maps-id-attachments" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -928,7 +928,7 @@ export def "maps-attachments get" [
 # Upload map attachment
 #
 # POST /maps/{id}/attachments
-export def "maps-attachments create" [
+export def "post-maps-id-attachments" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -967,7 +967,7 @@ export def "maps-attachments create" [
 # List collaborators of a map
 #
 # GET /maps/{id}/collaborators/
-export def "maps-collaborators get" [
+export def "get-maps-id-collaborators" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1002,7 +1002,7 @@ export def "maps-collaborators get" [
 # Delete collaboration
 #
 # DELETE /maps/{id}/collaborators/{user_id}
-export def "maps-collaborators delete" [
+export def "delete-maps-id-collaborators-user-id" [
   id: int
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1039,7 +1039,7 @@ export def "maps-collaborators delete" [
 # Update collaborator
 #
 # PATCH /maps/{id}/collaborators/{user_id}
-export def "maps-collaborators update" [
+export def "patch-maps-id-collaborators-user-id" [
   id: int
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1080,7 +1080,7 @@ export def "maps-collaborators update" [
 # List comments for a given map
 #
 # GET /maps/{id}/comments
-export def "maps-comments get" [
+export def "get-maps-id-comments" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1115,7 +1115,7 @@ export def "maps-comments get" [
 # Create map comment
 #
 # POST /maps/{id}/comments
-export def "maps-comments create" [
+export def "post-maps-id-comments" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1154,7 +1154,7 @@ export def "maps-comments create" [
 # List respots of a map
 #
 # GET /maps/{id}/respots
-export def "maps-respots get" [
+export def "get-maps-id-respots" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1189,7 +1189,7 @@ export def "maps-respots get" [
 # List spots for a given map
 #
 # GET /maps/{id}/spots
-export def "maps-spots list" [
+export def "get-maps-id-spots" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1226,7 +1226,7 @@ export def "maps-spots list" [
 # Create spot
 #
 # POST /maps/{id}/spots
-export def "maps-spots create" [
+export def "post-maps-id-spots" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1270,7 +1270,7 @@ export def "maps-spots create" [
 # Unsubscribe from map
 #
 # DELETE /maps/{id}/subscriptions
-export def "maps-subscriptions delete" [
+export def "delete-maps-id-subscriptions" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1305,7 +1305,7 @@ export def "maps-subscriptions delete" [
 # List subscriptions for a given map
 #
 # GET /maps/{id}/subscriptions
-export def "maps-subscriptions get" [
+export def "get-maps-id-subscriptions" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1340,7 +1340,7 @@ export def "maps-subscriptions get" [
 # Get spot
 #
 # GET /maps/{map_id}/spots/{id}
-export def "maps-spots get" [
+export def "get-maps-map-id-spots-id" [
   map_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1377,7 +1377,7 @@ export def "maps-spots get" [
 # Delete respot from map by spot id
 #
 # DELETE /maps/{map_id}/spots/{spot_id}/respot
-export def "maps-spots-respot delete" [
+export def "delete-maps-map-id-spots-spot-id-respot" [
   map_id: int
   spot_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1414,7 +1414,7 @@ export def "maps-spots-respot delete" [
 # List maps that user can respot to
 #
 # GET /respot_maps
-export def "respot-maps get" [
+export def "get-respot-maps" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1447,7 +1447,7 @@ export def "respot-maps get" [
 # Delete respot
 #
 # DELETE /respots/{id}
-export def "respots delete" [
+export def "delete-respots-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1482,7 +1482,7 @@ export def "respots delete" [
 # Get respot
 #
 # GET /respots/{id}
-export def "respots get" [
+export def "get-respots-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1517,7 +1517,7 @@ export def "respots get" [
 # Get secret access token to share map
 #
 # GET /share/map/{id}
-export def "share-map get" [
+export def "get-share-map-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1552,7 +1552,7 @@ export def "share-map get" [
 # List your own spots
 #
 # GET /spots
-export def "spots get" [
+export def "get-spots" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1587,7 +1587,7 @@ export def "spots get" [
 # Search spots
 #
 # GET /spots/search
-export def "spots-search get" [
+export def "get-spots-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1625,7 +1625,7 @@ export def "spots-search get" [
 # Delete spot
 #
 # DELETE /spots/{id}
-export def "spots delete" [
+export def "delete-spots-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1660,7 +1660,7 @@ export def "spots delete" [
 # Update spot
 #
 # PATCH /spots/{id}
-export def "spots update" [
+export def "patch-spots-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1704,7 +1704,7 @@ export def "spots update" [
 # List attachments for a given spot
 #
 # GET /spots/{id}/attachments
-export def "spots-attachments get" [
+export def "get-spots-id-attachments" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1739,7 +1739,7 @@ export def "spots-attachments get" [
 # Upload spot attachment
 #
 # POST /spots/{id}/attachments
-export def "spots-attachments create" [
+export def "post-spots-id-attachments" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1778,7 +1778,7 @@ export def "spots-attachments create" [
 # List comments for a given spot
 #
 # GET /spots/{id}/comments
-export def "spots-comments get" [
+export def "get-spots-id-comments" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1813,7 +1813,7 @@ export def "spots-comments get" [
 # Create spot comment
 #
 # POST /spots/{id}/comments
-export def "spots-comments create" [
+export def "post-spots-id-comments" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1852,7 +1852,7 @@ export def "spots-comments create" [
 # List events for a given spot
 #
 # GET /spots/{id}/events
-export def "spots-events get" [
+export def "get-spots-id-events" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1891,7 +1891,7 @@ export def "spots-events get" [
 # Create event
 #
 # POST /spots/{id}/events
-export def "spots-events create" [
+export def "post-spots-id-events" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1938,7 +1938,7 @@ export def "spots-events create" [
 # Respot a spot onto a map
 #
 # POST /spots/{id}/respots
-export def "spots-respots create" [
+export def "post-spots-id-respots" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1977,7 +1977,7 @@ export def "spots-respots create" [
 # List subscriptions. Pass no parameters to get own subscriptions
 #
 # GET /subscriptions
-export def "subscriptions get" [
+export def "get-subscriptions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2013,7 +2013,7 @@ export def "subscriptions get" [
 # Create map subscription
 #
 # POST /subscriptions
-export def "subscriptions create" [
+export def "post-subscriptions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2050,7 +2050,7 @@ export def "subscriptions create" [
 # List latest maps
 #
 # GET /trends/latest
-export def "trends-latest get" [
+export def "get-trends-latest" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2083,7 +2083,7 @@ export def "trends-latest get" [
 # List recommended maps
 #
 # GET /trends/recommended
-export def "trends-recommended get" [
+export def "get-trends-recommended" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2116,7 +2116,7 @@ export def "trends-recommended get" [
 # Search users
 #
 # GET /users/search
-export def "users-search get" [
+export def "get-users-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2151,7 +2151,7 @@ export def "users-search get" [
 # Get user profile
 #
 # GET /users/{id}
-export def "users get" [
+export def "get-users-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2186,7 +2186,7 @@ export def "users get" [
 # List maps for a given user
 #
 # GET /users/{user_id}/maps
-export def "users-maps get" [
+export def "get-users-user-id-maps" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

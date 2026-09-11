@@ -117,7 +117,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-api-management-service-notifications list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "notification-list-by-service" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -141,7 +141,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/notifications
 # operationId: Notification_ListByService
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-notifications list" [
+export def "notification-list-by-service" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -185,7 +185,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/notifications/{notificationName}
 # operationId: Notification_Get
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-notifications get" [
+export def "notification-get" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -229,7 +229,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/notifications/{notificationName}
 # operationId: Notification_CreateOrUpdate
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-notifications create-or-update" [
+export def "notification-create-or-update" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -276,7 +276,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/notifications/{notificationName}/recipientEmails
 # operationId: NotificationRecipientEmail_ListByNotification
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-notifications-recipient-emails list" [
+export def "notification-recipient-email-list-by-notification" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -320,7 +320,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/notifications/{notificationName}/recipientEmails/{email}
 # operationId: NotificationRecipientEmail_Delete
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-notifications-recipient-emails delete" [
+export def "notification-recipient-email-delete" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -366,7 +366,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # HEAD /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/notifications/{notificationName}/recipientEmails/{email}
 # operationId: NotificationRecipientEmail_CheckEntityExists
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-notifications-recipient-emails check-entity-exists" [
+export def "notification-recipient-email-check-entity-exists" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -412,7 +412,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/notifications/{notificationName}/recipientEmails/{email}
 # operationId: NotificationRecipientEmail_CreateOrUpdate
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-notifications-recipient-emails create-or-update" [
+export def "notification-recipient-email-create-or-update" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -458,7 +458,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/notifications/{notificationName}/recipientUsers
 # operationId: NotificationRecipientUser_ListByNotification
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-notifications-recipient-users list" [
+export def "notification-recipient-user-list-by-notification" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -502,7 +502,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/notifications/{notificationName}/recipientUsers/{userId}
 # operationId: NotificationRecipientUser_Delete
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-notifications-recipient-users delete" [
+export def "notification-recipient-user-delete" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -548,7 +548,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # HEAD /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/notifications/{notificationName}/recipientUsers/{userId}
 # operationId: NotificationRecipientUser_CheckEntityExists
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-notifications-recipient-users check-entity-exists" [
+export def "notification-recipient-user-check-entity-exists" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -594,7 +594,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/notifications/{notificationName}/recipientUsers/{userId}
 # operationId: NotificationRecipientUser_CreateOrUpdate
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-notifications-recipient-users create-or-update" [
+export def "notification-recipient-user-create-or-update" [
   subscription_id: string
   resource_group_name: string
   service_name: string

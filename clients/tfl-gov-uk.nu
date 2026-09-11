@@ -108,7 +108,7 @@ def direction-completer-1 [] { ["Average" "From" "To"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accident-stats get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accident-stats-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -132,7 +132,7 @@ export def commands []: nothing -> table {
 #
 # GET /AccidentStats/{year}
 # operationId: AccidentStats_Get
-export def "accident-stats get" [
+export def "accident-stats-get" [
   year: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -169,7 +169,7 @@ export def "accident-stats get" [
 #
 # GET /AirQuality
 # operationId: AirQuality_Get
-export def "air-quality get" [
+export def "air-quality-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -204,7 +204,7 @@ export def "air-quality get" [
 #
 # GET /BikePoint
 # operationId: BikePoint_GetAll
-export def "bike-point get-list" [
+export def "bike-point-get-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -239,7 +239,7 @@ export def "bike-point get-list" [
 #
 # GET /BikePoint/Search
 # operationId: BikePoint_Search
-export def "bike-point-search list" [
+export def "bike-point-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -276,7 +276,7 @@ export def "bike-point-search list" [
 #
 # GET /BikePoint/{id}
 # operationId: BikePoint_Get
-export def "bike-point get" [
+export def "bike-point-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -313,7 +313,7 @@ export def "bike-point get" [
 #
 # GET /Cabwise/search
 # operationId: Cabwise_Get
-export def "cabwise-search get" [
+export def "cabwise-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -359,7 +359,7 @@ export def "cabwise-search get" [
 #
 # GET /Journey/JourneyResults/{from}/to/{to}
 # operationId: Journey_JourneyResults
-export def "journey-journey-results-to get" [
+export def "journey-journey-results" [
   from: string
   to: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -425,7 +425,7 @@ export def "journey-journey-results-to get" [
 #
 # GET /Journey/Meta/Modes
 # operationId: Journey_Meta
-export def "journey-meta-modes get" [
+export def "journey-meta" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -460,7 +460,7 @@ export def "journey-meta-modes get" [
 #
 # GET /Line/Meta/DisruptionCategories
 # operationId: Line_MetaDisruptionCategories
-export def "line-meta-disruption-categories get" [
+export def "line-meta-disruption-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -495,7 +495,7 @@ export def "line-meta-disruption-categories get" [
 #
 # GET /Line/Meta/Modes
 # operationId: Line_MetaModes
-export def "line-meta-modes get" [
+export def "line-meta-modes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -530,7 +530,7 @@ export def "line-meta-modes get" [
 #
 # GET /Line/Meta/ServiceTypes
 # operationId: Line_MetaServiceTypes
-export def "line-meta-service-types get" [
+export def "line-meta-service-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -565,7 +565,7 @@ export def "line-meta-service-types get" [
 #
 # GET /Line/Meta/Severity
 # operationId: Line_MetaSeverity
-export def "line-meta-severity get" [
+export def "line-meta-severity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -600,7 +600,7 @@ export def "line-meta-severity get" [
 #
 # GET /Line/Mode/{modes}
 # operationId: Line_GetByMode
-export def "line-mode get" [
+export def "line-get-by-mode" [
   modes: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -637,7 +637,7 @@ export def "line-mode get" [
 #
 # GET /Line/Mode/{modes}/Disruption
 # operationId: Line_DisruptionByMode
-export def "line-mode-disruption get" [
+export def "line-disruption-by-mode" [
   modes: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -674,7 +674,7 @@ export def "line-mode-disruption get" [
 #
 # GET /Line/Mode/{modes}/Route
 # operationId: Line_RouteByMode
-export def "line-mode-route get" [
+export def "line-route-by-mode" [
   modes: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -713,7 +713,7 @@ export def "line-mode-route get" [
 #
 # GET /Line/Mode/{modes}/Status
 # operationId: Line_StatusByMode
-export def "line-mode-status get" [
+export def "line-status-by-mode" [
   modes: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -753,7 +753,7 @@ export def "line-mode-status get" [
 #
 # GET /Line/Route
 # operationId: Line_Route
-export def "line-route list" [
+export def "line-route" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -790,7 +790,7 @@ export def "line-route list" [
 #
 # GET /Line/Search/{query}
 # operationId: Line_Search
-export def "line-search list" [
+export def "line-search" [
   query: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -830,7 +830,7 @@ export def "line-search list" [
 #
 # GET /Line/Status/{severity}
 # operationId: Line_StatusBySeverity
-export def "line-status get-by-severity" [
+export def "line-status-by-severity" [
   severity: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -867,7 +867,7 @@ export def "line-status get-by-severity" [
 #
 # GET /Line/{ids}
 # operationId: Line_Get
-export def "line get" [
+export def "line-get" [
   ids: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -904,7 +904,7 @@ export def "line get" [
 #
 # GET /Line/{ids}/Arrivals/{stopPointId}
 # operationId: Line_Arrivals
-export def "line-arrivals get" [
+export def "line-arrivals" [
   ids: list
   stop_point_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -946,7 +946,7 @@ export def "line-arrivals get" [
 #
 # GET /Line/{ids}/Disruption
 # operationId: Line_Disruption
-export def "line-disruption get" [
+export def "line-disruption" [
   ids: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -983,7 +983,7 @@ export def "line-disruption get" [
 #
 # GET /Line/{ids}/Route
 # operationId: Line_LineRoutesByIds
-export def "line-route get" [
+export def "line-line-routes-by-ids" [
   ids: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1022,7 +1022,7 @@ export def "line-route get" [
 #
 # GET /Line/{ids}/Status
 # operationId: Line_StatusByIds
-export def "line-status get-by-ids" [
+export def "line-status-by-ids" [
   ids: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1061,7 +1061,7 @@ export def "line-status get-by-ids" [
 #
 # GET /Line/{ids}/Status/{StartDate}/to/{EndDate}
 # operationId: Line_Status
-export def "line-status-to get" [
+export def "line-status" [
   ids: list
   start_date: string
   end_date: string
@@ -1108,7 +1108,7 @@ export def "line-status-to get" [
 #
 # GET /Line/{id}/Route/Sequence/{direction}
 # operationId: Line_RouteSequence
-export def "line-route-sequence get" [
+export def "line-route-sequence" [
   id: string
   direction: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1150,7 +1150,7 @@ export def "line-route-sequence get" [
 #
 # GET /Line/{id}/StopPoints
 # operationId: Line_StopPoints
-export def "line-stop-points stop" [
+export def "line-stop-points" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1189,7 +1189,7 @@ export def "line-stop-points stop" [
 #
 # GET /Line/{id}/Timetable/{fromStopPointId}
 # operationId: Line_Timetable
-export def "line-timetable get" [
+export def "line-timetable" [
   id: string
   from_stop_point_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1228,7 +1228,7 @@ export def "line-timetable get" [
 #
 # GET /Line/{id}/Timetable/{fromStopPointId}/to/{toStopPointId}
 # operationId: Line_TimetableTo
-export def "line-timetable-to get" [
+export def "line-timetable-to" [
   id: string
   from_stop_point_id: string
   to_stop_point_id: string
@@ -1269,7 +1269,7 @@ export def "line-timetable-to get" [
 #
 # GET /Mode/ActiveServiceTypes
 # operationId: Mode_GetActiveServiceTypes
-export def "mode-active-service-types get" [
+export def "mode-get-active-service-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1304,7 +1304,7 @@ export def "mode-active-service-types get" [
 #
 # GET /Mode/{mode}/Arrivals
 # operationId: Mode_Arrivals
-export def "mode-arrivals get" [
+export def "mode-arrivals" [
   mode: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1343,7 +1343,7 @@ export def "mode-arrivals get" [
 #
 # GET /Occupancy/BikePoints/{ids}
 # operationId: Occupancy_GetBikePointsOccupancies
-export def "occupancy-bike-points get-occupancies" [
+export def "occupancy-get-bike-points-occupancies" [
   ids: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1379,7 +1379,7 @@ export def "occupancy-bike-points get-occupancies" [
 # Gets the occupancy for all car parks that have occupancy data
 #
 # GET /Occupancy/CarPark
-export def "occupancy-car-park list" [
+export def "get-occupancy-car-park" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1414,7 +1414,7 @@ export def "occupancy-car-park list" [
 #
 # GET /Occupancy/CarPark/{id}
 # operationId: Occupancy_Get
-export def "occupancy-car-park get" [
+export def "occupancy-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1451,7 +1451,7 @@ export def "occupancy-car-park get" [
 #
 # GET /Occupancy/ChargeConnector
 # operationId: Occupancy_GetAllChargeConnectorStatus
-export def "occupancy-charge-connector get-list-status" [
+export def "occupancy-get-all-charge-connector-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1486,7 +1486,7 @@ export def "occupancy-charge-connector get-list-status" [
 #
 # GET /Occupancy/ChargeConnector/{ids}
 # operationId: Occupancy_GetChargeConnectorStatus
-export def "occupancy-charge-connector get-status" [
+export def "occupancy-get-charge-connector-status" [
   ids: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1523,7 +1523,7 @@ export def "occupancy-charge-connector get-status" [
 #
 # GET /Place
 # operationId: Place_GetByGeo
-export def "place get-by-geo" [
+export def "place-get-by-geo" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1571,7 +1571,7 @@ export def "place get-by-geo" [
 #
 # GET /Place/Address/Streets/{Postcode}
 # operationId: Place_GetStreetsByPostCode
-export def "place-address-streets get-by-create-code" [
+export def "place-get-streets-by-post-code" [
   postcode: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1611,7 +1611,7 @@ export def "place-address-streets get-by-create-code" [
 #
 # GET /Place/Meta/Categories
 # operationId: Place_MetaCategories
-export def "place-meta-categories get" [
+export def "place-meta-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1646,7 +1646,7 @@ export def "place-meta-categories get" [
 #
 # GET /Place/Meta/PlaceTypes
 # operationId: Place_MetaPlaceTypes
-export def "place-meta-place-types get" [
+export def "place-meta-place-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1681,7 +1681,7 @@ export def "place-meta-place-types get" [
 #
 # GET /Place/Search
 # operationId: Place_Search
-export def "place-search list" [
+export def "place-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1719,7 +1719,7 @@ export def "place-search list" [
 #
 # GET /Place/Type/{types}
 # operationId: Place_GetByType
-export def "place-type get" [
+export def "place-get-by-type" [
   types: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1758,7 +1758,7 @@ export def "place-type get" [
 #
 # GET /Place/{id}
 # operationId: Place_Get
-export def "place get" [
+export def "place-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1797,7 +1797,7 @@ export def "place get" [
 #
 # GET /Place/{type}/At/{Lat}/{Lon}
 # operationId: Place_GetAt
-export def "place-at get" [
+export def "place-get-at" [
   type: list
   lat: string
   lon: string
@@ -1843,7 +1843,7 @@ export def "place-at get" [
 #
 # GET /Place/{type}/overlay/{z}/{Lat}/{Lon}/{width}/{height}
 # operationId: Place_GetOverlay
-export def "place-overlay get" [
+export def "place-get-overlay" [
   type: list
   z: int
   lat: string
@@ -1895,7 +1895,7 @@ export def "place-overlay get" [
 #
 # GET /Road
 # operationId: Road_Get
-export def "road list" [
+export def "road-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1930,7 +1930,7 @@ export def "road list" [
 #
 # GET /Road/Meta/Categories
 # operationId: Road_MetaCategories
-export def "road-meta-categories get" [
+export def "road-meta-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1965,7 +1965,7 @@ export def "road-meta-categories get" [
 #
 # GET /Road/Meta/Severities
 # operationId: Road_MetaSeverities
-export def "road-meta-severities get" [
+export def "road-meta-severities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2000,7 +2000,7 @@ export def "road-meta-severities get" [
 #
 # GET /Road/all/Disruption/{disruptionIds}
 # operationId: Road_DisruptionById
-export def "road-all-disruption get" [
+export def "road-disruption-by-id" [
   disruption_ids: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2039,7 +2039,7 @@ export def "road-all-disruption get" [
 #
 # GET /Road/all/Street/Disruption
 # operationId: Road_DisruptedStreets
-export def "road-all-street-disruption get-disrupted" [
+export def "road-disrupted-streets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2076,7 +2076,7 @@ export def "road-all-street-disruption get-disrupted" [
 # Gets the road with the specified id (e.g. A1)
 #
 # GET /Road/{ids}
-export def "road get" [
+export def "get-road-ids" [
   ids: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2113,7 +2113,7 @@ export def "road get" [
 #
 # GET /Road/{ids}/Disruption
 # operationId: Road_Disruption
-export def "road-disruption get" [
+export def "road-disruption" [
   ids: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2155,7 +2155,7 @@ export def "road-disruption get" [
 #
 # GET /Road/{ids}/Status
 # operationId: Road_Status
-export def "road-status get" [
+export def "road-status" [
   ids: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2195,7 +2195,7 @@ export def "road-status get" [
 #
 # GET /Search
 # operationId: Search_Get
-export def "search get" [
+export def "search-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2232,7 +2232,7 @@ export def "search get" [
 #
 # GET /Search/BusSchedules
 # operationId: Search_BusSchedules
-export def "search-bus-schedules list" [
+export def "search-bus-schedules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2269,7 +2269,7 @@ export def "search-bus-schedules list" [
 #
 # GET /Search/Meta/Categories
 # operationId: Search_MetaCategories
-export def "search-meta-categories list" [
+export def "search-meta-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2304,7 +2304,7 @@ export def "search-meta-categories list" [
 #
 # GET /Search/Meta/SearchProviders
 # operationId: Search_MetaSearchProviders
-export def "search-meta-search-providers list" [
+export def "search-meta-search-providers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2339,7 +2339,7 @@ export def "search-meta-search-providers list" [
 #
 # GET /Search/Meta/Sorts
 # operationId: Search_MetaSorts
-export def "search-meta-sorts list" [
+export def "search-meta-sorts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2374,7 +2374,7 @@ export def "search-meta-sorts list" [
 #
 # GET /StopPoint
 # operationId: StopPoint_GetByGeoPoint
-export def "stop-point get-by-geo" [
+export def "stop-point-get-by-geo-point" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2418,7 +2418,7 @@ export def "stop-point get-by-geo" [
 #
 # GET /StopPoint/Meta/Categories
 # operationId: StopPoint_MetaCategories
-export def "stop-point-meta-categories stop" [
+export def "stop-point-meta-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2453,7 +2453,7 @@ export def "stop-point-meta-categories stop" [
 #
 # GET /StopPoint/Meta/Modes
 # operationId: StopPoint_MetaModes
-export def "stop-point-meta-modes stop" [
+export def "stop-point-meta-modes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2488,7 +2488,7 @@ export def "stop-point-meta-modes stop" [
 #
 # GET /StopPoint/Meta/StopTypes
 # operationId: StopPoint_MetaStopTypes
-export def "stop-point-meta-stop-types stop" [
+export def "stop-point-meta-stop-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2523,7 +2523,7 @@ export def "stop-point-meta-stop-types stop" [
 #
 # GET /StopPoint/Mode/{modes}
 # operationId: StopPoint_GetByMode
-export def "stop-point-mode get" [
+export def "stop-point-get-by-mode" [
   modes: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2562,7 +2562,7 @@ export def "stop-point-mode get" [
 #
 # GET /StopPoint/Mode/{modes}/Disruption
 # operationId: StopPoint_DisruptionByMode
-export def "stop-point-mode-disruption stop" [
+export def "stop-point-disruption-by-mode" [
   modes: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2600,7 +2600,7 @@ export def "stop-point-mode-disruption stop" [
 # Search StopPoints by their common name, or their 5-digit Countdown Bus Stop Code.
 #
 # GET /StopPoint/Search
-export def "stop-point-search get" [
+export def "get-stop-point-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2643,7 +2643,7 @@ export def "stop-point-search get" [
 #
 # GET /StopPoint/Search/{query}
 # operationId: StopPoint_Search
-export def "stop-point-search stop" [
+export def "stop-point-search" [
   query: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2687,7 +2687,7 @@ export def "stop-point-search stop" [
 #
 # GET /StopPoint/ServiceTypes
 # operationId: StopPoint_GetServiceTypes
-export def "stop-point-service-types get" [
+export def "stop-point-get-service-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2726,7 +2726,7 @@ export def "stop-point-service-types get" [
 #
 # GET /StopPoint/Sms/{id}
 # operationId: StopPoint_GetBySms
-export def "stop-point-sms get" [
+export def "stop-point-get-by-sms" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2765,7 +2765,7 @@ export def "stop-point-sms get" [
 #
 # GET /StopPoint/Type/{types}
 # operationId: StopPoint_GetByType
-export def "stop-point-type get" [
+export def "stop-point-get-by-type" [
   types: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2802,7 +2802,7 @@ export def "stop-point-type get" [
 #
 # GET /StopPoint/Type/{types}/page/{page}
 # operationId: StopPoint_GetByTypeWithPagination
-export def "stop-point-type-page get-by-with-pagination" [
+export def "stop-point-get-by-type-with-pagination" [
   types: list
   page: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2841,7 +2841,7 @@ export def "stop-point-type-page get-by-with-pagination" [
 #
 # GET /StopPoint/{ids}
 # operationId: StopPoint_Get
-export def "stop-point get" [
+export def "stop-point-get" [
   ids: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2880,7 +2880,7 @@ export def "stop-point get" [
 #
 # GET /StopPoint/{ids}/Disruption
 # operationId: StopPoint_Disruption
-export def "stop-point-disruption stop" [
+export def "stop-point-disruption" [
   ids: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2921,7 +2921,7 @@ export def "stop-point-disruption stop" [
 #
 # GET /StopPoint/{id}/ArrivalDepartures
 # operationId: StopPoint_ArrivalDepartures
-export def "stop-point-arrival-departures stop" [
+export def "stop-point-arrival-departures" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2960,7 +2960,7 @@ export def "stop-point-arrival-departures stop" [
 #
 # GET /StopPoint/{id}/Arrivals
 # operationId: StopPoint_Arrivals
-export def "stop-point-arrivals stop" [
+export def "stop-point-arrivals" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2997,7 +2997,7 @@ export def "stop-point-arrivals stop" [
 #
 # GET /StopPoint/{id}/CanReachOnLine/{lineId}
 # operationId: StopPoint_ReachableFrom
-export def "stop-point-can-reach-on-line stop-reachable" [
+export def "stop-point-reachable-from" [
   id: string
   line_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3038,7 +3038,7 @@ export def "stop-point-can-reach-on-line stop-reachable" [
 #
 # GET /StopPoint/{id}/Crowding/{line}
 # operationId: StopPoint_Crowding
-export def "stop-point-crowding stop" [
+export def "stop-point-crowding" [
   id: string
   line: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3079,7 +3079,7 @@ export def "stop-point-crowding stop" [
 #
 # GET /StopPoint/{id}/DirectionTo/{toStopPointId}
 # operationId: StopPoint_Direction
-export def "stop-point-direction-to stop" [
+export def "stop-point-direction" [
   id: string
   to_stop_point_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3120,7 +3120,7 @@ export def "stop-point-direction-to stop" [
 #
 # GET /StopPoint/{id}/Route
 # operationId: StopPoint_Route
-export def "stop-point-route stop" [
+export def "stop-point-route" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3158,7 +3158,7 @@ export def "stop-point-route stop" [
 # Get a list of places corresponding to a given id and place types.
 #
 # GET /StopPoint/{id}/placeTypes
-export def "stop-point-place-types get" [
+export def "get-stop-point-id-place-types" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3197,7 +3197,7 @@ export def "stop-point-place-types get" [
 #
 # GET /StopPoint/{stopPointId}/CarParks
 # operationId: StopPoint_GetCarParksById
-export def "stop-point-car-parks get" [
+export def "stop-point-get-car-parks-by-id" [
   stop_point_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3234,7 +3234,7 @@ export def "stop-point-car-parks get" [
 #
 # GET /StopPoint/{stopPointId}/TaxiRanks
 # operationId: StopPoint_GetTaxiRanksByIds
-export def "stop-point-taxi-ranks get" [
+export def "stop-point-get-taxi-ranks-by-ids" [
   stop_point_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3271,7 +3271,7 @@ export def "stop-point-taxi-ranks get" [
 #
 # GET /TravelTimes/compareOverlay/{z}/mapcenter/{mapCenterLat}/{mapCenterLon}/pinlocation/{pinLat}/{pinLon}/dimensions/{width}/{height}
 # operationId: TravelTime_GetCompareOverlay
-export def "travel-times-compare-overlay-mapcenter-pinlocation-dimensions get" [
+export def "travel-time-get-compare-overlay" [
   z: int
   map_center_lat: float
   map_center_lon: float
@@ -3328,7 +3328,7 @@ export def "travel-times-compare-overlay-mapcenter-pinlocation-dimensions get" [
 #
 # GET /TravelTimes/overlay/{z}/mapcenter/{mapCenterLat}/{mapCenterLon}/pinlocation/{pinLat}/{pinLon}/dimensions/{width}/{height}
 # operationId: TravelTime_GetOverlay
-export def "travel-times-overlay-mapcenter-pinlocation-dimensions get" [
+export def "travel-time-get-overlay" [
   z: int
   map_center_lat: float
   map_center_lon: float
@@ -3383,7 +3383,7 @@ export def "travel-times-overlay-mapcenter-pinlocation-dimensions get" [
 #
 # GET /Vehicle/{ids}/Arrivals
 # operationId: Vehicle_Get
-export def "vehicle-arrivals get" [
+export def "vehicle-get" [
   ids: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-policy-insights-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -128,7 +128,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.PolicyInsights/operations
 # operationId: Operations_List
-export def "providers-microsoft-policy-insights-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -164,7 +164,7 @@ export def "providers-microsoft-policy-insights-operations list" [
 #
 # POST /providers/{managementGroupsNamespace}/managementGroups/{managementGroupName}/providers/Microsoft.PolicyInsights/policyStates/{policyStatesResource}/queryResults
 # operationId: PolicyStates_ListQueryResultsForManagementGroup
-export def "providers-management-groups-providers-microsoft-policy-insights-policy-states-query-results list" [
+export def "policy-states-list-query-results-for-management-group" [
   management_groups_namespace: string
   management_group_name: string
   policy_states_resource: string
@@ -213,7 +213,7 @@ export def "providers-management-groups-providers-microsoft-policy-insights-poli
 #
 # POST /providers/{managementGroupsNamespace}/managementGroups/{managementGroupName}/providers/Microsoft.PolicyInsights/policyStates/{policyStatesSummaryResource}/summarize
 # operationId: PolicyStates_SummarizeForManagementGroup
-export def "providers-management-groups-providers-microsoft-policy-insights-policy-states-summarize create" [
+export def "policy-states-summarize-for-management-group" [
   management_groups_namespace: string
   management_group_name: string
   policy_states_summary_resource: string
@@ -259,7 +259,7 @@ export def "providers-management-groups-providers-microsoft-policy-insights-poli
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.PolicyInsights/policyStates/{policyStatesResource}/queryResults
 # operationId: PolicyStates_ListQueryResultsForSubscription
-export def "subscriptions-providers-microsoft-policy-insights-policy-states-query-results list" [
+export def "policy-states-list-query-results-for-subscription" [
   subscription_id: string
   policy_states_resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -306,7 +306,7 @@ export def "subscriptions-providers-microsoft-policy-insights-policy-states-quer
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.PolicyInsights/policyStates/{policyStatesSummaryResource}/summarize
 # operationId: PolicyStates_SummarizeForSubscription
-export def "subscriptions-providers-microsoft-policy-insights-policy-states-summarize create" [
+export def "policy-states-summarize-for-subscription" [
   subscription_id: string
   policy_states_summary_resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -350,7 +350,7 @@ export def "subscriptions-providers-microsoft-policy-insights-policy-states-summ
 #
 # POST /subscriptions/{subscriptionId}/providers/{authorizationNamespace}/policyAssignments/{policyAssignmentName}/providers/Microsoft.PolicyInsights/policyStates/{policyStatesResource}/queryResults
 # operationId: PolicyStates_ListQueryResultsForSubscriptionLevelPolicyAssignment
-export def "subscriptions-providers-policy-assignments-providers-microsoft-policy-insights-policy-states-query-results list-for-level" [
+export def "policy-states-list-query-results-for-subscription-level-policy-assignment" [
   subscription_id: string
   authorization_namespace: string
   policy_assignment_name: string
@@ -401,7 +401,7 @@ export def "subscriptions-providers-policy-assignments-providers-microsoft-polic
 #
 # POST /subscriptions/{subscriptionId}/providers/{authorizationNamespace}/policyAssignments/{policyAssignmentName}/providers/Microsoft.PolicyInsights/policyStates/{policyStatesSummaryResource}/summarize
 # operationId: PolicyStates_SummarizeForSubscriptionLevelPolicyAssignment
-export def "subscriptions-providers-policy-assignments-providers-microsoft-policy-insights-policy-states-summarize create-for-level" [
+export def "policy-states-summarize-for-subscription-level-policy-assignment" [
   subscription_id: string
   authorization_namespace: string
   policy_assignment_name: string
@@ -449,7 +449,7 @@ export def "subscriptions-providers-policy-assignments-providers-microsoft-polic
 #
 # POST /subscriptions/{subscriptionId}/providers/{authorizationNamespace}/policyDefinitions/{policyDefinitionName}/providers/Microsoft.PolicyInsights/policyStates/{policyStatesResource}/queryResults
 # operationId: PolicyStates_ListQueryResultsForPolicyDefinition
-export def "subscriptions-providers-policy-definitions-providers-microsoft-policy-insights-policy-states-query-results list" [
+export def "policy-states-list-query-results-for-policy-definition" [
   subscription_id: string
   authorization_namespace: string
   policy_definition_name: string
@@ -500,7 +500,7 @@ export def "subscriptions-providers-policy-definitions-providers-microsoft-polic
 #
 # POST /subscriptions/{subscriptionId}/providers/{authorizationNamespace}/policyDefinitions/{policyDefinitionName}/providers/Microsoft.PolicyInsights/policyStates/{policyStatesSummaryResource}/summarize
 # operationId: PolicyStates_SummarizeForPolicyDefinition
-export def "subscriptions-providers-policy-definitions-providers-microsoft-policy-insights-policy-states-summarize create" [
+export def "policy-states-summarize-for-policy-definition" [
   subscription_id: string
   authorization_namespace: string
   policy_definition_name: string
@@ -548,7 +548,7 @@ export def "subscriptions-providers-policy-definitions-providers-microsoft-polic
 #
 # POST /subscriptions/{subscriptionId}/providers/{authorizationNamespace}/policySetDefinitions/{policySetDefinitionName}/providers/Microsoft.PolicyInsights/policyStates/{policyStatesResource}/queryResults
 # operationId: PolicyStates_ListQueryResultsForPolicySetDefinition
-export def "subscriptions-providers-policy-set-definitions-providers-microsoft-policy-insights-policy-states-query-results list" [
+export def "policy-states-list-query-results-for-policy-set-definition" [
   subscription_id: string
   authorization_namespace: string
   policy_set_definition_name: string
@@ -599,7 +599,7 @@ export def "subscriptions-providers-policy-set-definitions-providers-microsoft-p
 #
 # POST /subscriptions/{subscriptionId}/providers/{authorizationNamespace}/policySetDefinitions/{policySetDefinitionName}/providers/Microsoft.PolicyInsights/policyStates/{policyStatesSummaryResource}/summarize
 # operationId: PolicyStates_SummarizeForPolicySetDefinition
-export def "subscriptions-providers-policy-set-definitions-providers-microsoft-policy-insights-policy-states-summarize update" [
+export def "policy-states-summarize-for-policy-set-definition" [
   subscription_id: string
   authorization_namespace: string
   policy_set_definition_name: string
@@ -647,7 +647,7 @@ export def "subscriptions-providers-policy-set-definitions-providers-microsoft-p
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.PolicyInsights/policyStates/{policyStatesResource}/queryResults
 # operationId: PolicyStates_ListQueryResultsForResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-policy-insights-policy-states-query-results list" [
+export def "policy-states-list-query-results-for-resource-group" [
   subscription_id: string
   resource_group_name: string
   policy_states_resource: string
@@ -696,7 +696,7 @@ export def "subscriptions-resource-groups-providers-microsoft-policy-insights-po
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.PolicyInsights/policyStates/{policyStatesSummaryResource}/summarize
 # operationId: PolicyStates_SummarizeForResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-policy-insights-policy-states-summarize create" [
+export def "policy-states-summarize-for-resource-group" [
   subscription_id: string
   resource_group_name: string
   policy_states_summary_resource: string
@@ -742,7 +742,7 @@ export def "subscriptions-resource-groups-providers-microsoft-policy-insights-po
 #
 # POST /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/{authorizationNamespace}/policyAssignments/{policyAssignmentName}/providers/Microsoft.PolicyInsights/policyStates/{policyStatesResource}/queryResults
 # operationId: PolicyStates_ListQueryResultsForResourceGroupLevelPolicyAssignment
-export def "subscriptions-resourcegroups-providers-policy-assignments-providers-microsoft-policy-insights-policy-states-query-results list-for-resource-group-level" [
+export def "policy-states-list-query-results-for-resource-group-level-policy-assignment" [
   subscription_id: string
   resource_group_name: string
   authorization_namespace: string
@@ -795,7 +795,7 @@ export def "subscriptions-resourcegroups-providers-policy-assignments-providers-
 #
 # POST /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/{authorizationNamespace}/policyAssignments/{policyAssignmentName}/providers/Microsoft.PolicyInsights/policyStates/{policyStatesSummaryResource}/summarize
 # operationId: PolicyStates_SummarizeForResourceGroupLevelPolicyAssignment
-export def "subscriptions-resourcegroups-providers-policy-assignments-providers-microsoft-policy-insights-policy-states-summarize create-for-resource-group-level" [
+export def "policy-states-summarize-for-resource-group-level-policy-assignment" [
   subscription_id: string
   resource_group_name: string
   authorization_namespace: string
@@ -845,7 +845,7 @@ export def "subscriptions-resourcegroups-providers-policy-assignments-providers-
 #
 # POST /{resourceId}/providers/Microsoft.PolicyInsights/policyStates/{policyStatesResource}/queryResults
 # operationId: PolicyStates_ListQueryResultsForResource
-export def "providers-microsoft-policy-insights-policy-states-query-results list-for-resource" [
+export def "policy-states-list-query-results-for-resource" [
   resource_id: string
   policy_states_resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -893,7 +893,7 @@ export def "providers-microsoft-policy-insights-policy-states-query-results list
 #
 # POST /{resourceId}/providers/Microsoft.PolicyInsights/policyStates/{policyStatesSummaryResource}/summarize
 # operationId: PolicyStates_SummarizeForResource
-export def "providers-microsoft-policy-insights-policy-states-summarize create-for-resource" [
+export def "policy-states-summarize-for-resource" [
   resource_id: string
   policy_states_summary_resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -937,7 +937,7 @@ export def "providers-microsoft-policy-insights-policy-states-summarize create-f
 #
 # GET /{scope}/providers/Microsoft.PolicyInsights/policyStates/$metadata
 # operationId: PolicyStates_GetMetadata
-export def "providers-microsoft-policy-insights-policy-states-metadata get-metadata" [
+export def "policy-states-get-metadata" [
   scope: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

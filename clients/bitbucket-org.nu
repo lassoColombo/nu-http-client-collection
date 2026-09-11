@@ -138,7 +138,7 @@ def role-completer-2 [] { ["collaborator" "member" "owner"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "addon delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "delete-addon" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -161,7 +161,7 @@ export def commands []: nothing -> table {
 # Delete an app
 #
 # DELETE /addon
-export def "addon delete" [
+export def "delete-addon" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -194,7 +194,7 @@ export def "addon delete" [
 # Update an installed app
 #
 # PUT /addon
-export def "addon update" [
+export def "put-addon" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -227,7 +227,7 @@ export def "addon update" [
 # List linkers for an app
 #
 # GET /addon/linkers
-export def "addon-linkers list" [
+export def "get-addon-linkers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -260,7 +260,7 @@ export def "addon-linkers list" [
 # Get a linker for an app
 #
 # GET /addon/linkers/{linker_key}
-export def "addon-linkers get" [
+export def "get-addon-linkers-linker-key" [
   linker_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -295,7 +295,7 @@ export def "addon-linkers get" [
 # Delete all linker values
 #
 # DELETE /addon/linkers/{linker_key}/values
-export def "addon-linkers-values delete-by-linker-key" [
+export def "delete-addon-linkers-linker-key-values" [
   linker_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -330,7 +330,7 @@ export def "addon-linkers-values delete-by-linker-key" [
 # List linker values for a linker
 #
 # GET /addon/linkers/{linker_key}/values
-export def "addon-linkers-values list" [
+export def "get-addon-linkers-linker-key-values" [
   linker_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -365,7 +365,7 @@ export def "addon-linkers-values list" [
 # Create a linker value
 #
 # POST /addon/linkers/{linker_key}/values
-export def "addon-linkers-values create" [
+export def "post-addon-linkers-linker-key-values" [
   linker_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -400,7 +400,7 @@ export def "addon-linkers-values create" [
 # Update a linker value
 #
 # PUT /addon/linkers/{linker_key}/values
-export def "addon-linkers-values update" [
+export def "put-addon-linkers-linker-key-values" [
   linker_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -435,7 +435,7 @@ export def "addon-linkers-values update" [
 # Delete a linker value
 #
 # DELETE /addon/linkers/{linker_key}/values/{value_id}
-export def "addon-linkers-values delete-by-linker-key-value-id" [
+export def "delete-addon-linkers-linker-key-values-value-id" [
   linker_key: string
   value_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -472,7 +472,7 @@ export def "addon-linkers-values delete-by-linker-key-value-id" [
 # Get a linker value
 #
 # GET /addon/linkers/{linker_key}/values/{value_id}
-export def "addon-linkers-values get" [
+export def "get-addon-linkers-linker-key-values-value-id" [
   linker_key: string
   value_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -509,7 +509,7 @@ export def "addon-linkers-values get" [
 # Get a webhook resource
 #
 # GET /hook_events
-export def "hook-events list" [
+export def "get-hook-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -542,7 +542,7 @@ export def "hook-events list" [
 # List subscribable webhook types
 #
 # GET /hook_events/{subject_type}
-export def "hook-events get" [
+export def "get-hook-events-subject-type" [
   subject_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -577,7 +577,7 @@ export def "hook-events get" [
 # List pull requests for a user
 #
 # GET /pullrequests/{selected_user}
-export def "pullrequests get" [
+export def "get-pullrequests-selected-user" [
   selected_user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -614,7 +614,7 @@ export def "pullrequests get" [
 # List public repositories
 #
 # GET /repositories
-export def "repositories get" [
+export def "get-repositories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -652,7 +652,7 @@ export def "repositories get" [
 # List repositories in a workspace
 #
 # GET /repositories/{workspace}
-export def "repositories get-by-workspace" [
+export def "get-repositories-workspace" [
   workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -691,7 +691,7 @@ export def "repositories get-by-workspace" [
 # Delete a repository
 #
 # DELETE /repositories/{workspace}/{repo_slug}
-export def "repositories delete" [
+export def "delete-repositories-workspace-repo-slug" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -730,7 +730,7 @@ export def "repositories delete" [
 # Get a repository
 #
 # GET /repositories/{workspace}/{repo_slug}
-export def "repositories get-by-workspace-repo-slug" [
+export def "get-repositories-workspace-repo-slug" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -768,7 +768,7 @@ export def "repositories get-by-workspace-repo-slug" [
 #
 # POST /repositories/{workspace}/{repo_slug}
 # --links shape: {avatar?: record, clone?: list, commits?: record, downloads?: record, forks?: record, hooks?: record, html?: record, pullrequests?: record, self?: record, watchers?: record}
-export def "repositories create" [
+export def "post-repositories-workspace-repo-slug" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -828,7 +828,7 @@ export def "repositories create" [
 #
 # PUT /repositories/{workspace}/{repo_slug}
 # --links shape: {avatar?: record, clone?: list, commits?: record, downloads?: record, forks?: record, hooks?: record, html?: record, pullrequests?: record, self?: record, watchers?: record}
-export def "repositories update" [
+export def "put-repositories-workspace-repo-slug" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -887,7 +887,7 @@ export def "repositories update" [
 # List branch restrictions
 #
 # GET /repositories/{workspace}/{repo_slug}/branch-restrictions
-export def "repositories-branch-restrictions list" [
+export def "get-repositories-workspace-repo-slug-branch-restrictions" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -929,7 +929,7 @@ export def "repositories-branch-restrictions list" [
 # POST /repositories/{workspace}/{repo_slug}/branch-restrictions
 # --groups item shape: {type: string, full_slug?: string, links?: record, name?: string, owner?: any, slug?: string, workspace?: any}
 # --users item shape: {type: string, created_on?: string, display_name?: string, links?: record, username?: string, uuid?: string}
-export def "repositories-branch-restrictions create" [
+export def "post-repositories-workspace-repo-slug-branch-restrictions" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -972,7 +972,7 @@ export def "repositories-branch-restrictions create" [
 # Delete a branch restriction rule
 #
 # DELETE /repositories/{workspace}/{repo_slug}/branch-restrictions/{id}
-export def "repositories-branch-restrictions delete" [
+export def "delete-repositories-workspace-repo-slug-branch-restrictions-id" [
   workspace: string
   repo_slug: string
   id: string
@@ -1011,7 +1011,7 @@ export def "repositories-branch-restrictions delete" [
 # Get a branch restriction rule
 #
 # GET /repositories/{workspace}/{repo_slug}/branch-restrictions/{id}
-export def "repositories-branch-restrictions get" [
+export def "get-repositories-workspace-repo-slug-branch-restrictions-id" [
   workspace: string
   repo_slug: string
   id: string
@@ -1052,7 +1052,7 @@ export def "repositories-branch-restrictions get" [
 # PUT /repositories/{workspace}/{repo_slug}/branch-restrictions/{id}
 # --groups item shape: {type: string, full_slug?: string, links?: record, name?: string, owner?: any, slug?: string, workspace?: any}
 # --users item shape: {type: string, created_on?: string, display_name?: string, links?: record, username?: string, uuid?: string}
-export def "repositories-branch-restrictions update" [
+export def "put-repositories-workspace-repo-slug-branch-restrictions-id" [
   workspace: string
   repo_slug: string
   id: string
@@ -1097,7 +1097,7 @@ export def "repositories-branch-restrictions update" [
 # Get the branching model for a repository
 #
 # GET /repositories/{workspace}/{repo_slug}/branching-model
-export def "repositories-branching-model get" [
+export def "get-repositories-workspace-repo-slug-branching-model" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1134,7 +1134,7 @@ export def "repositories-branching-model get" [
 # Get the branching model config for a repository
 #
 # GET /repositories/{workspace}/{repo_slug}/branching-model/settings
-export def "repositories-branching-model-settings get" [
+export def "get-repositories-workspace-repo-slug-branching-model-settings" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1171,7 +1171,7 @@ export def "repositories-branching-model-settings get" [
 # Update the branching model config for a repository
 #
 # PUT /repositories/{workspace}/{repo_slug}/branching-model/settings
-export def "repositories-branching-model-settings update" [
+export def "put-repositories-workspace-repo-slug-branching-model-settings" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1208,7 +1208,7 @@ export def "repositories-branching-model-settings update" [
 # Get a commit
 #
 # GET /repositories/{workspace}/{repo_slug}/commit/{commit}
-export def "repositories-commit get" [
+export def "get-repositories-workspace-repo-slug-commit-commit" [
   workspace: string
   repo_slug: string
   commit: string
@@ -1247,7 +1247,7 @@ export def "repositories-commit get" [
 # Unapprove a commit
 #
 # DELETE /repositories/{workspace}/{repo_slug}/commit/{commit}/approve
-export def "repositories-commit-approve delete" [
+export def "delete-repositories-workspace-repo-slug-commit-commit-approve" [
   workspace: string
   repo_slug: string
   commit: string
@@ -1286,7 +1286,7 @@ export def "repositories-commit-approve delete" [
 # Approve a commit
 #
 # POST /repositories/{workspace}/{repo_slug}/commit/{commit}/approve
-export def "repositories-commit-approve create" [
+export def "post-repositories-workspace-repo-slug-commit-commit-approve" [
   workspace: string
   repo_slug: string
   commit: string
@@ -1325,7 +1325,7 @@ export def "repositories-commit-approve create" [
 # List a commit's comments
 #
 # GET /repositories/{workspace}/{repo_slug}/commit/{commit}/comments
-export def "repositories-commit-comments list" [
+export def "get-repositories-workspace-repo-slug-commit-commit-comments" [
   workspace: string
   repo_slug: string
   commit: string
@@ -1367,7 +1367,7 @@ export def "repositories-commit-comments list" [
 # Create comment for a commit
 #
 # POST /repositories/{workspace}/{repo_slug}/commit/{commit}/comments
-export def "repositories-commit-comments create" [
+export def "post-repositories-workspace-repo-slug-commit-commit-comments" [
   workspace: string
   repo_slug: string
   commit: string
@@ -1410,7 +1410,7 @@ export def "repositories-commit-comments create" [
 # Delete a commit comment
 #
 # DELETE /repositories/{workspace}/{repo_slug}/commit/{commit}/comments/{comment_id}
-export def "repositories-commit-comments delete" [
+export def "delete-repositories-workspace-repo-slug-commit-commit-comments-comment-id" [
   workspace: string
   repo_slug: string
   commit: string
@@ -1451,7 +1451,7 @@ export def "repositories-commit-comments delete" [
 # Get a commit comment
 #
 # GET /repositories/{workspace}/{repo_slug}/commit/{commit}/comments/{comment_id}
-export def "repositories-commit-comments get" [
+export def "get-repositories-workspace-repo-slug-commit-commit-comments-comment-id" [
   workspace: string
   repo_slug: string
   commit: string
@@ -1492,7 +1492,7 @@ export def "repositories-commit-comments get" [
 # Update a commit comment
 #
 # PUT /repositories/{workspace}/{repo_slug}/commit/{commit}/comments/{comment_id}
-export def "repositories-commit-comments update" [
+export def "put-repositories-workspace-repo-slug-commit-commit-comments-comment-id" [
   workspace: string
   repo_slug: string
   commit: string
@@ -1538,7 +1538,7 @@ export def "repositories-commit-comments update" [
 #
 # DELETE /repositories/{workspace}/{repo_slug}/commit/{commit}/properties/{app_key}/{property_name}
 # operationId: deleteCommitHostedPropertyValue
-export def "repositories-commit-properties delete-hosted-value" [
+export def "delete-commit-hosted-property-value" [
   workspace: string
   repo_slug: string
   commit: string
@@ -1582,7 +1582,7 @@ export def "repositories-commit-properties delete-hosted-value" [
 #
 # GET /repositories/{workspace}/{repo_slug}/commit/{commit}/properties/{app_key}/{property_name}
 # operationId: getCommitHostedPropertyValue
-export def "repositories-commit-properties get-hosted-value" [
+export def "get-commit-hosted-property-value" [
   workspace: string
   repo_slug: string
   commit: string
@@ -1626,7 +1626,7 @@ export def "repositories-commit-properties get-hosted-value" [
 #
 # PUT /repositories/{workspace}/{repo_slug}/commit/{commit}/properties/{app_key}/{property_name}
 # operationId: updateCommitHostedPropertyValue
-export def "repositories-commit-properties update-hosted-value" [
+export def "update-commit-hosted-property-value" [
   workspace: string
   repo_slug: string
   commit: string
@@ -1674,7 +1674,7 @@ export def "repositories-commit-properties update-hosted-value" [
 #
 # GET /repositories/{workspace}/{repo_slug}/commit/{commit}/pullrequests
 # operationId: getPullrequestsForCommit
-export def "repositories-commit-pullrequests get" [
+export def "get-pullrequests-for-commit" [
   workspace: string
   repo_slug: string
   commit: string
@@ -1717,7 +1717,7 @@ export def "repositories-commit-pullrequests get" [
 #
 # GET /repositories/{workspace}/{repo_slug}/commit/{commit}/reports
 # operationId: getReportsForCommit
-export def "repositories-commit-reports list" [
+export def "get-reports-for-commit" [
   workspace: string
   repo_slug: string
   commit: string
@@ -1757,7 +1757,7 @@ export def "repositories-commit-reports list" [
 #
 # DELETE /repositories/{workspace}/{repo_slug}/commit/{commit}/reports/{reportId}
 # operationId: deleteReport
-export def "repositories-commit-reports delete" [
+export def "delete-report" [
   workspace: string
   repo_slug: string
   commit: string
@@ -1799,7 +1799,7 @@ export def "repositories-commit-reports delete" [
 #
 # GET /repositories/{workspace}/{repo_slug}/commit/{commit}/reports/{reportId}
 # operationId: getReport
-export def "repositories-commit-reports get" [
+export def "get-report" [
   workspace: string
   repo_slug: string
   commit: string
@@ -1842,7 +1842,7 @@ export def "repositories-commit-reports get" [
 # PUT /repositories/{workspace}/{repo_slug}/commit/{commit}/reports/{reportId}
 # operationId: createOrUpdateReport
 # --data item shape: {title?: string, type?: "BOOLEAN"|"DATE"|"DURATION"|"LINK"|"NUMBER"|"PERCENTAGE"|"TEXT", value?: record}
-export def "repositories-commit-reports create-or-update" [
+export def "create-or-update-report" [
   workspace: string
   repo_slug: string
   commit: string
@@ -1901,7 +1901,7 @@ export def "repositories-commit-reports create-or-update" [
 #
 # GET /repositories/{workspace}/{repo_slug}/commit/{commit}/reports/{reportId}/annotations
 # operationId: getAnnotationsForReport
-export def "repositories-commit-reports-annotations list" [
+export def "get-annotations-for-report" [
   workspace: string
   repo_slug: string
   commit: string
@@ -1943,7 +1943,7 @@ export def "repositories-commit-reports-annotations list" [
 #
 # POST /repositories/{workspace}/{repo_slug}/commit/{commit}/reports/{reportId}/annotations
 # operationId: bulkCreateOrUpdateAnnotations
-export def "repositories-commit-reports-annotations create-bulk-or-update" [
+export def "bulk-create-or-update-annotations" [
   workspace: string
   repo_slug: string
   commit: string
@@ -1989,7 +1989,7 @@ export def "repositories-commit-reports-annotations create-bulk-or-update" [
 #
 # DELETE /repositories/{workspace}/{repo_slug}/commit/{commit}/reports/{reportId}/annotations/{annotationId}
 # operationId: deleteAnnotation
-export def "repositories-commit-reports-annotations delete" [
+export def "delete-annotation" [
   workspace: string
   repo_slug: string
   commit: string
@@ -2033,7 +2033,7 @@ export def "repositories-commit-reports-annotations delete" [
 #
 # GET /repositories/{workspace}/{repo_slug}/commit/{commit}/reports/{reportId}/annotations/{annotationId}
 # operationId: getAnnotation
-export def "repositories-commit-reports-annotations get" [
+export def "get-annotation" [
   workspace: string
   repo_slug: string
   commit: string
@@ -2077,7 +2077,7 @@ export def "repositories-commit-reports-annotations get" [
 #
 # PUT /repositories/{workspace}/{repo_slug}/commit/{commit}/reports/{reportId}/annotations/{annotationId}
 # operationId: createOrUpdateAnnotation
-export def "repositories-commit-reports-annotations create-or-update" [
+export def "create-or-update-annotation" [
   workspace: string
   repo_slug: string
   commit: string
@@ -2136,7 +2136,7 @@ export def "repositories-commit-reports-annotations create-or-update" [
 # List commit statuses for a commit
 #
 # GET /repositories/{workspace}/{repo_slug}/commit/{commit}/statuses
-export def "repositories-commit-statuses get" [
+export def "get-repositories-workspace-repo-slug-commit-commit-statuses" [
   workspace: string
   repo_slug: string
   commit: string
@@ -2179,7 +2179,7 @@ export def "repositories-commit-statuses get" [
 #
 # POST /repositories/{workspace}/{repo_slug}/commit/{commit}/statuses/build
 # --links shape: {commit?: record, self?: record}
-export def "repositories-commit-statuses-build create" [
+export def "post-repositories-workspace-repo-slug-commit-commit-statuses-build" [
   workspace: string
   repo_slug: string
   commit: string
@@ -2232,7 +2232,7 @@ export def "repositories-commit-statuses-build create" [
 # Get a build status for a commit
 #
 # GET /repositories/{workspace}/{repo_slug}/commit/{commit}/statuses/build/{key}
-export def "repositories-commit-statuses-build get" [
+export def "get-repositories-workspace-repo-slug-commit-commit-statuses-build-key" [
   workspace: string
   repo_slug: string
   commit: string
@@ -2274,7 +2274,7 @@ export def "repositories-commit-statuses-build get" [
 #
 # PUT /repositories/{workspace}/{repo_slug}/commit/{commit}/statuses/build/{key}
 # --links shape: {commit?: record, self?: record}
-export def "repositories-commit-statuses-build update" [
+export def "put-repositories-workspace-repo-slug-commit-commit-statuses-build-key" [
   workspace: string
   repo_slug: string
   commit: string
@@ -2329,7 +2329,7 @@ export def "repositories-commit-statuses-build update" [
 # List commits
 #
 # GET /repositories/{workspace}/{repo_slug}/commits
-export def "repositories-commits list" [
+export def "get-repositories-workspace-repo-slug-commits" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2366,7 +2366,7 @@ export def "repositories-commits list" [
 # List commits with include/exclude
 #
 # POST /repositories/{workspace}/{repo_slug}/commits
-export def "repositories-commits create-by-workspace-repo-slug" [
+export def "post-repositories-workspace-repo-slug-commits" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2403,7 +2403,7 @@ export def "repositories-commits create-by-workspace-repo-slug" [
 # List commits for revision
 #
 # GET /repositories/{workspace}/{repo_slug}/commits/{revision}
-export def "repositories-commits get" [
+export def "get-repositories-workspace-repo-slug-commits-revision" [
   workspace: string
   repo_slug: string
   revision: string
@@ -2442,7 +2442,7 @@ export def "repositories-commits get" [
 # List commits for revision using include/exclude
 #
 # POST /repositories/{workspace}/{repo_slug}/commits/{revision}
-export def "repositories-commits create-by-workspace-repo-slug-revision" [
+export def "post-repositories-workspace-repo-slug-commits-revision" [
   workspace: string
   repo_slug: string
   revision: string
@@ -2481,7 +2481,7 @@ export def "repositories-commits create-by-workspace-repo-slug-revision" [
 # List components
 #
 # GET /repositories/{workspace}/{repo_slug}/components
-export def "repositories-components list" [
+export def "get-repositories-workspace-repo-slug-components" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2518,7 +2518,7 @@ export def "repositories-components list" [
 # Get a component for issues
 #
 # GET /repositories/{workspace}/{repo_slug}/components/{component_id}
-export def "repositories-components get" [
+export def "get-repositories-workspace-repo-slug-components-component-id" [
   workspace: string
   repo_slug: string
   component_id: int
@@ -2557,7 +2557,7 @@ export def "repositories-components get" [
 # List default reviewers
 #
 # GET /repositories/{workspace}/{repo_slug}/default-reviewers
-export def "repositories-default-reviewers list" [
+export def "get-repositories-workspace-repo-slug-default-reviewers" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2594,7 +2594,7 @@ export def "repositories-default-reviewers list" [
 # Remove a user from the default reviewers
 #
 # DELETE /repositories/{workspace}/{repo_slug}/default-reviewers/{target_username}
-export def "repositories-default-reviewers delete" [
+export def "delete-repositories-workspace-repo-slug-default-reviewers-target-username" [
   workspace: string
   repo_slug: string
   target_username: string
@@ -2633,7 +2633,7 @@ export def "repositories-default-reviewers delete" [
 # Get a default reviewer
 #
 # GET /repositories/{workspace}/{repo_slug}/default-reviewers/{target_username}
-export def "repositories-default-reviewers get" [
+export def "get-repositories-workspace-repo-slug-default-reviewers-target-username" [
   workspace: string
   repo_slug: string
   target_username: string
@@ -2672,7 +2672,7 @@ export def "repositories-default-reviewers get" [
 # Add a user to the default reviewers
 #
 # PUT /repositories/{workspace}/{repo_slug}/default-reviewers/{target_username}
-export def "repositories-default-reviewers update" [
+export def "put-repositories-workspace-repo-slug-default-reviewers-target-username" [
   workspace: string
   repo_slug: string
   target_username: string
@@ -2711,7 +2711,7 @@ export def "repositories-default-reviewers update" [
 # List repository deploy keys
 #
 # GET /repositories/{workspace}/{repo_slug}/deploy-keys
-export def "repositories-deploy-keys list" [
+export def "get-repositories-workspace-repo-slug-deploy-keys" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2748,7 +2748,7 @@ export def "repositories-deploy-keys list" [
 # Add a repository deploy key
 #
 # POST /repositories/{workspace}/{repo_slug}/deploy-keys
-export def "repositories-deploy-keys create" [
+export def "post-repositories-workspace-repo-slug-deploy-keys" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2785,7 +2785,7 @@ export def "repositories-deploy-keys create" [
 # Delete a repository deploy key
 #
 # DELETE /repositories/{workspace}/{repo_slug}/deploy-keys/{key_id}
-export def "repositories-deploy-keys delete" [
+export def "delete-repositories-workspace-repo-slug-deploy-keys-key-id" [
   workspace: string
   repo_slug: string
   key_id: string
@@ -2824,7 +2824,7 @@ export def "repositories-deploy-keys delete" [
 # Get a repository deploy key
 #
 # GET /repositories/{workspace}/{repo_slug}/deploy-keys/{key_id}
-export def "repositories-deploy-keys get" [
+export def "get-repositories-workspace-repo-slug-deploy-keys-key-id" [
   workspace: string
   repo_slug: string
   key_id: string
@@ -2863,7 +2863,7 @@ export def "repositories-deploy-keys get" [
 # Update a repository deploy key
 #
 # PUT /repositories/{workspace}/{repo_slug}/deploy-keys/{key_id}
-export def "repositories-deploy-keys update" [
+export def "put-repositories-workspace-repo-slug-deploy-keys-key-id" [
   workspace: string
   repo_slug: string
   key_id: string
@@ -2903,7 +2903,7 @@ export def "repositories-deploy-keys update" [
 #
 # GET /repositories/{workspace}/{repo_slug}/deployments/
 # operationId: getDeploymentsForRepository
-export def "repositories-deployments list" [
+export def "get-deployments-for-repository" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2941,7 +2941,7 @@ export def "repositories-deployments list" [
 #
 # GET /repositories/{workspace}/{repo_slug}/deployments/{deployment_uuid}
 # operationId: getDeploymentForRepository
-export def "repositories-deployments get-for-repository" [
+export def "get-deployment-for-repository" [
   workspace: string
   repo_slug: string
   deployment_uuid: string
@@ -2981,7 +2981,7 @@ export def "repositories-deployments get-for-repository" [
 #
 # GET /repositories/{workspace}/{repo_slug}/deployments_config/environments/{environment_uuid}/variables
 # operationId: getDeploymentVariables
-export def "repositories-deployments-config-environments-variables get" [
+export def "get-deployment-variables" [
   workspace: string
   repo_slug: string
   environment_uuid: string
@@ -3021,7 +3021,7 @@ export def "repositories-deployments-config-environments-variables get" [
 #
 # POST /repositories/{workspace}/{repo_slug}/deployments_config/environments/{environment_uuid}/variables
 # operationId: createDeploymentVariable
-export def "repositories-deployments-config-environments-variables create" [
+export def "create-deployment-variable" [
   workspace: string
   repo_slug: string
   environment_uuid: string
@@ -3069,7 +3069,7 @@ export def "repositories-deployments-config-environments-variables create" [
 #
 # DELETE /repositories/{workspace}/{repo_slug}/deployments_config/environments/{environment_uuid}/variables/{variable_uuid}
 # operationId: deleteDeploymentVariable
-export def "repositories-deployments-config-environments-variables delete" [
+export def "delete-deployment-variable" [
   workspace: string
   repo_slug: string
   environment_uuid: string
@@ -3111,7 +3111,7 @@ export def "repositories-deployments-config-environments-variables delete" [
 #
 # PUT /repositories/{workspace}/{repo_slug}/deployments_config/environments/{environment_uuid}/variables/{variable_uuid}
 # operationId: updateDeploymentVariable
-export def "repositories-deployments-config-environments-variables update" [
+export def "update-deployment-variable" [
   workspace: string
   repo_slug: string
   environment_uuid: string
@@ -3160,7 +3160,7 @@ export def "repositories-deployments-config-environments-variables update" [
 # Compare two commits
 #
 # GET /repositories/{workspace}/{repo_slug}/diff/{spec}
-export def "repositories-diff get" [
+export def "get-repositories-workspace-repo-slug-diff-spec" [
   workspace: string
   repo_slug: string
   spec: string
@@ -3207,7 +3207,7 @@ export def "repositories-diff get" [
 # Compare two commit diff stats
 #
 # GET /repositories/{workspace}/{repo_slug}/diffstat/{spec}
-export def "repositories-diffstat get" [
+export def "get-repositories-workspace-repo-slug-diffstat-spec" [
   workspace: string
   repo_slug: string
   spec: string
@@ -3252,7 +3252,7 @@ export def "repositories-diffstat get" [
 # List download artifacts
 #
 # GET /repositories/{workspace}/{repo_slug}/downloads
-export def "repositories-downloads list" [
+export def "get-repositories-workspace-repo-slug-downloads" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3289,7 +3289,7 @@ export def "repositories-downloads list" [
 # Upload a download artifact
 #
 # POST /repositories/{workspace}/{repo_slug}/downloads
-export def "repositories-downloads create" [
+export def "post-repositories-workspace-repo-slug-downloads" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3326,7 +3326,7 @@ export def "repositories-downloads create" [
 # Delete a download artifact
 #
 # DELETE /repositories/{workspace}/{repo_slug}/downloads/{filename}
-export def "repositories-downloads delete" [
+export def "delete-repositories-workspace-repo-slug-downloads-filename" [
   workspace: string
   repo_slug: string
   filename: string
@@ -3365,7 +3365,7 @@ export def "repositories-downloads delete" [
 # Get a download artifact link
 #
 # GET /repositories/{workspace}/{repo_slug}/downloads/{filename}
-export def "repositories-downloads get" [
+export def "get-repositories-workspace-repo-slug-downloads-filename" [
   workspace: string
   repo_slug: string
   filename: string
@@ -3404,7 +3404,7 @@ export def "repositories-downloads get" [
 # Get the effective, or currently applied, branching model for a repository
 #
 # GET /repositories/{workspace}/{repo_slug}/effective-branching-model
-export def "repositories-effective-branching-model get" [
+export def "get-repositories-workspace-repo-slug-effective-branching-model" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3441,7 +3441,7 @@ export def "repositories-effective-branching-model get" [
 # List effective default reviewers
 #
 # GET /repositories/{workspace}/{repo_slug}/effective-default-reviewers
-export def "repositories-effective-default-reviewers get" [
+export def "get-repositories-workspace-repo-slug-effective-default-reviewers" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3479,7 +3479,7 @@ export def "repositories-effective-default-reviewers get" [
 #
 # GET /repositories/{workspace}/{repo_slug}/environments/
 # operationId: getEnvironmentsForRepository
-export def "repositories-environments list" [
+export def "get-environments-for-repository" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3517,7 +3517,7 @@ export def "repositories-environments list" [
 #
 # POST /repositories/{workspace}/{repo_slug}/environments/
 # operationId: createEnvironment
-export def "repositories-environments create" [
+export def "create-environment" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3561,7 +3561,7 @@ export def "repositories-environments create" [
 #
 # DELETE /repositories/{workspace}/{repo_slug}/environments/{environment_uuid}
 # operationId: deleteEnvironmentForRepository
-export def "repositories-environments delete-for-repository" [
+export def "delete-environment-for-repository" [
   workspace: string
   repo_slug: string
   environment_uuid: string
@@ -3601,7 +3601,7 @@ export def "repositories-environments delete-for-repository" [
 #
 # GET /repositories/{workspace}/{repo_slug}/environments/{environment_uuid}
 # operationId: getEnvironmentForRepository
-export def "repositories-environments get-for-repository" [
+export def "get-environment-for-repository" [
   workspace: string
   repo_slug: string
   environment_uuid: string
@@ -3641,7 +3641,7 @@ export def "repositories-environments get-for-repository" [
 #
 # POST /repositories/{workspace}/{repo_slug}/environments/{environment_uuid}/changes/
 # operationId: updateEnvironmentForRepository
-export def "repositories-environments-changes update-for-repository" [
+export def "update-environment-for-repository" [
   workspace: string
   repo_slug: string
   environment_uuid: string
@@ -3680,7 +3680,7 @@ export def "repositories-environments-changes update-for-repository" [
 # List commits that modified a file
 #
 # GET /repositories/{workspace}/{repo_slug}/filehistory/{commit}/{path}
-export def "repositories-filehistory get" [
+export def "get-repositories-workspace-repo-slug-filehistory-commit-path" [
   workspace: string
   repo_slug: string
   commit: string
@@ -3725,7 +3725,7 @@ export def "repositories-filehistory get" [
 # List repository forks
 #
 # GET /repositories/{workspace}/{repo_slug}/forks
-export def "repositories-forks get" [
+export def "get-repositories-workspace-repo-slug-forks" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3767,7 +3767,7 @@ export def "repositories-forks get" [
 #
 # POST /repositories/{workspace}/{repo_slug}/forks
 # --links shape: {avatar?: record, clone?: list, commits?: record, downloads?: record, forks?: record, hooks?: record, html?: record, pullrequests?: record, self?: record, watchers?: record}
-export def "repositories-forks create" [
+export def "post-repositories-workspace-repo-slug-forks" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3826,7 +3826,7 @@ export def "repositories-forks create" [
 # List webhooks for a repository
 #
 # GET /repositories/{workspace}/{repo_slug}/hooks
-export def "repositories-hooks list" [
+export def "get-repositories-workspace-repo-slug-hooks" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3863,7 +3863,7 @@ export def "repositories-hooks list" [
 # Create a webhook for a repository
 #
 # POST /repositories/{workspace}/{repo_slug}/hooks
-export def "repositories-hooks create" [
+export def "post-repositories-workspace-repo-slug-hooks" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3900,7 +3900,7 @@ export def "repositories-hooks create" [
 # Delete a webhook for a repository
 #
 # DELETE /repositories/{workspace}/{repo_slug}/hooks/{uid}
-export def "repositories-hooks delete" [
+export def "delete-repositories-workspace-repo-slug-hooks-uid" [
   workspace: string
   repo_slug: string
   uid: string
@@ -3939,7 +3939,7 @@ export def "repositories-hooks delete" [
 # Get a webhook for a repository
 #
 # GET /repositories/{workspace}/{repo_slug}/hooks/{uid}
-export def "repositories-hooks get" [
+export def "get-repositories-workspace-repo-slug-hooks-uid" [
   workspace: string
   repo_slug: string
   uid: string
@@ -3978,7 +3978,7 @@ export def "repositories-hooks get" [
 # Update a webhook for a repository
 #
 # PUT /repositories/{workspace}/{repo_slug}/hooks/{uid}
-export def "repositories-hooks update" [
+export def "put-repositories-workspace-repo-slug-hooks-uid" [
   workspace: string
   repo_slug: string
   uid: string
@@ -4017,7 +4017,7 @@ export def "repositories-hooks update" [
 # List issues
 #
 # GET /repositories/{workspace}/{repo_slug}/issues
-export def "repositories-issues list" [
+export def "get-repositories-workspace-repo-slug-issues" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4056,7 +4056,7 @@ export def "repositories-issues list" [
 # POST /repositories/{workspace}/{repo_slug}/issues
 # --content shape: {html?: string, markup?: "markdown"|"creole"|"plaintext", raw?: string}
 # --links shape: {attachments?: record, comments?: record, html?: record, self?: record, vote?: record, watch?: record}
-export def "repositories-issues create" [
+export def "post-repositories-workspace-repo-slug-issues" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4114,7 +4114,7 @@ export def "repositories-issues create" [
 # Export issues
 #
 # POST /repositories/{workspace}/{repo_slug}/issues/export
-export def "repositories-issues-export create" [
+export def "post-repositories-workspace-repo-slug-issues-export" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4159,7 +4159,7 @@ export def "repositories-issues-export create" [
 # Check issue export status
 #
 # GET /repositories/{workspace}/{repo_slug}/issues/export/{repo_name}-issues-{task_id}.zip
-export def "repositories-issues-export get" [
+export def "get-repositories-workspace-repo-slug-issues-export-repo-name-issues-task-id-zip" [
   workspace: string
   repo_slug: string
   repo_name: string
@@ -4200,7 +4200,7 @@ export def "repositories-issues-export get" [
 # Check issue import status
 #
 # GET /repositories/{workspace}/{repo_slug}/issues/import
-export def "repositories-issues-import get" [
+export def "get-repositories-workspace-repo-slug-issues-import" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4237,7 +4237,7 @@ export def "repositories-issues-import get" [
 # Import issues
 #
 # POST /repositories/{workspace}/{repo_slug}/issues/import
-export def "repositories-issues-import create" [
+export def "post-repositories-workspace-repo-slug-issues-import" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4274,7 +4274,7 @@ export def "repositories-issues-import create" [
 # Delete an issue
 #
 # DELETE /repositories/{workspace}/{repo_slug}/issues/{issue_id}
-export def "repositories-issues delete" [
+export def "delete-repositories-workspace-repo-slug-issues-issue-id" [
   workspace: string
   repo_slug: string
   issue_id: string
@@ -4313,7 +4313,7 @@ export def "repositories-issues delete" [
 # Get an issue
 #
 # GET /repositories/{workspace}/{repo_slug}/issues/{issue_id}
-export def "repositories-issues get" [
+export def "get-repositories-workspace-repo-slug-issues-issue-id" [
   workspace: string
   repo_slug: string
   issue_id: string
@@ -4352,7 +4352,7 @@ export def "repositories-issues get" [
 # Update an issue
 #
 # PUT /repositories/{workspace}/{repo_slug}/issues/{issue_id}
-export def "repositories-issues update" [
+export def "put-repositories-workspace-repo-slug-issues-issue-id" [
   workspace: string
   repo_slug: string
   issue_id: string
@@ -4391,7 +4391,7 @@ export def "repositories-issues update" [
 # List attachments for an issue
 #
 # GET /repositories/{workspace}/{repo_slug}/issues/{issue_id}/attachments
-export def "repositories-issues-attachments list" [
+export def "get-repositories-workspace-repo-slug-issues-issue-id-attachments" [
   workspace: string
   repo_slug: string
   issue_id: string
@@ -4430,7 +4430,7 @@ export def "repositories-issues-attachments list" [
 # Upload an attachment to an issue
 #
 # POST /repositories/{workspace}/{repo_slug}/issues/{issue_id}/attachments
-export def "repositories-issues-attachments create" [
+export def "post-repositories-workspace-repo-slug-issues-issue-id-attachments" [
   workspace: string
   repo_slug: string
   issue_id: string
@@ -4469,7 +4469,7 @@ export def "repositories-issues-attachments create" [
 # Delete an attachment for an issue
 #
 # DELETE /repositories/{workspace}/{repo_slug}/issues/{issue_id}/attachments/{path}
-export def "repositories-issues-attachments delete" [
+export def "delete-repositories-workspace-repo-slug-issues-issue-id-attachments-path" [
   workspace: string
   repo_slug: string
   issue_id: string
@@ -4510,7 +4510,7 @@ export def "repositories-issues-attachments delete" [
 # Get attachment for an issue
 #
 # GET /repositories/{workspace}/{repo_slug}/issues/{issue_id}/attachments/{path}
-export def "repositories-issues-attachments get" [
+export def "get-repositories-workspace-repo-slug-issues-issue-id-attachments-path" [
   workspace: string
   repo_slug: string
   issue_id: string
@@ -4551,7 +4551,7 @@ export def "repositories-issues-attachments get" [
 # List changes on an issue
 #
 # GET /repositories/{workspace}/{repo_slug}/issues/{issue_id}/changes
-export def "repositories-issues-changes list" [
+export def "get-repositories-workspace-repo-slug-issues-issue-id-changes" [
   workspace: string
   repo_slug: string
   issue_id: string
@@ -4596,7 +4596,7 @@ export def "repositories-issues-changes list" [
 # --changes shape: {assignee?: record, component?: record, content?: record, kind?: record, milestone?: record, priority?: record, state?: record, title?: record, version?: record}
 # --links shape: {issue?: record, self?: record}
 # --message shape: {html?: string, markup?: "markdown"|"creole"|"plaintext", raw?: string}
-export def "repositories-issues-changes create" [
+export def "post-repositories-workspace-repo-slug-issues-issue-id-changes" [
   workspace: string
   repo_slug: string
   issue_id: string
@@ -4646,7 +4646,7 @@ export def "repositories-issues-changes create" [
 # Get issue change object
 #
 # GET /repositories/{workspace}/{repo_slug}/issues/{issue_id}/changes/{change_id}
-export def "repositories-issues-changes get" [
+export def "get-repositories-workspace-repo-slug-issues-issue-id-changes-change-id" [
   workspace: string
   repo_slug: string
   issue_id: string
@@ -4687,7 +4687,7 @@ export def "repositories-issues-changes get" [
 # List comments on an issue
 #
 # GET /repositories/{workspace}/{repo_slug}/issues/{issue_id}/comments
-export def "repositories-issues-comments list" [
+export def "get-repositories-workspace-repo-slug-issues-issue-id-comments" [
   workspace: string
   repo_slug: string
   issue_id: string
@@ -4728,7 +4728,7 @@ export def "repositories-issues-comments list" [
 # Create a comment on an issue
 #
 # POST /repositories/{workspace}/{repo_slug}/issues/{issue_id}/comments
-export def "repositories-issues-comments create" [
+export def "post-repositories-workspace-repo-slug-issues-issue-id-comments" [
   workspace: string
   repo_slug: string
   issue_id: string
@@ -4771,7 +4771,7 @@ export def "repositories-issues-comments create" [
 # Delete a comment on an issue
 #
 # DELETE /repositories/{workspace}/{repo_slug}/issues/{issue_id}/comments/{comment_id}
-export def "repositories-issues-comments delete" [
+export def "delete-repositories-workspace-repo-slug-issues-issue-id-comments-comment-id" [
   workspace: string
   repo_slug: string
   issue_id: string
@@ -4812,7 +4812,7 @@ export def "repositories-issues-comments delete" [
 # Get a comment on an issue
 #
 # GET /repositories/{workspace}/{repo_slug}/issues/{issue_id}/comments/{comment_id}
-export def "repositories-issues-comments get" [
+export def "get-repositories-workspace-repo-slug-issues-issue-id-comments-comment-id" [
   workspace: string
   repo_slug: string
   issue_id: string
@@ -4853,7 +4853,7 @@ export def "repositories-issues-comments get" [
 # Update a comment on an issue
 #
 # PUT /repositories/{workspace}/{repo_slug}/issues/{issue_id}/comments/{comment_id}
-export def "repositories-issues-comments update" [
+export def "put-repositories-workspace-repo-slug-issues-issue-id-comments-comment-id" [
   workspace: string
   repo_slug: string
   issue_id: string
@@ -4898,7 +4898,7 @@ export def "repositories-issues-comments update" [
 # Remove vote for an issue
 #
 # DELETE /repositories/{workspace}/{repo_slug}/issues/{issue_id}/vote
-export def "repositories-issues-vote delete" [
+export def "delete-repositories-workspace-repo-slug-issues-issue-id-vote" [
   workspace: string
   repo_slug: string
   issue_id: string
@@ -4937,7 +4937,7 @@ export def "repositories-issues-vote delete" [
 # Check if current user voted for an issue
 #
 # GET /repositories/{workspace}/{repo_slug}/issues/{issue_id}/vote
-export def "repositories-issues-vote get" [
+export def "get-repositories-workspace-repo-slug-issues-issue-id-vote" [
   workspace: string
   repo_slug: string
   issue_id: string
@@ -4976,7 +4976,7 @@ export def "repositories-issues-vote get" [
 # Vote for an issue
 #
 # PUT /repositories/{workspace}/{repo_slug}/issues/{issue_id}/vote
-export def "repositories-issues-vote update" [
+export def "put-repositories-workspace-repo-slug-issues-issue-id-vote" [
   workspace: string
   repo_slug: string
   issue_id: string
@@ -5015,7 +5015,7 @@ export def "repositories-issues-vote update" [
 # Stop watching an issue
 #
 # DELETE /repositories/{workspace}/{repo_slug}/issues/{issue_id}/watch
-export def "repositories-issues-watch delete" [
+export def "delete-repositories-workspace-repo-slug-issues-issue-id-watch" [
   workspace: string
   repo_slug: string
   issue_id: string
@@ -5054,7 +5054,7 @@ export def "repositories-issues-watch delete" [
 # Check if current user is watching a issue
 #
 # GET /repositories/{workspace}/{repo_slug}/issues/{issue_id}/watch
-export def "repositories-issues-watch get" [
+export def "get-repositories-workspace-repo-slug-issues-issue-id-watch" [
   workspace: string
   repo_slug: string
   issue_id: string
@@ -5093,7 +5093,7 @@ export def "repositories-issues-watch get" [
 # Watch an issue
 #
 # PUT /repositories/{workspace}/{repo_slug}/issues/{issue_id}/watch
-export def "repositories-issues-watch update" [
+export def "put-repositories-workspace-repo-slug-issues-issue-id-watch" [
   workspace: string
   repo_slug: string
   issue_id: string
@@ -5132,7 +5132,7 @@ export def "repositories-issues-watch update" [
 # Get the common ancestor between two commits
 #
 # GET /repositories/{workspace}/{repo_slug}/merge-base/{revspec}
-export def "repositories-merge-base get" [
+export def "get-repositories-workspace-repo-slug-merge-base-revspec" [
   workspace: string
   repo_slug: string
   revspec: string
@@ -5171,7 +5171,7 @@ export def "repositories-merge-base get" [
 # List milestones
 #
 # GET /repositories/{workspace}/{repo_slug}/milestones
-export def "repositories-milestones list" [
+export def "get-repositories-workspace-repo-slug-milestones" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5208,7 +5208,7 @@ export def "repositories-milestones list" [
 # Get a milestone
 #
 # GET /repositories/{workspace}/{repo_slug}/milestones/{milestone_id}
-export def "repositories-milestones get" [
+export def "get-repositories-workspace-repo-slug-milestones-milestone-id" [
   workspace: string
   repo_slug: string
   milestone_id: int
@@ -5247,7 +5247,7 @@ export def "repositories-milestones get" [
 # Retrieve the inheritance state for repository settings
 #
 # GET /repositories/{workspace}/{repo_slug}/override-settings
-export def "repositories-override-settings get" [
+export def "get-repositories-workspace-repo-slug-override-settings" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5284,7 +5284,7 @@ export def "repositories-override-settings get" [
 # Set the inheritance state for repository settings
 #
 # PUT /repositories/{workspace}/{repo_slug}/override-settings
-export def "repositories-override-settings update" [
+export def "put-repositories-workspace-repo-slug-override-settings" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5321,7 +5321,7 @@ export def "repositories-override-settings update" [
 # Get a patch for two commits
 #
 # GET /repositories/{workspace}/{repo_slug}/patch/{spec}
-export def "repositories-patch get" [
+export def "get-repositories-workspace-repo-slug-patch-spec" [
   workspace: string
   repo_slug: string
   spec: string
@@ -5360,7 +5360,7 @@ export def "repositories-patch get" [
 # List explicit group permissions for a repository
 #
 # GET /repositories/{workspace}/{repo_slug}/permissions-config/groups
-export def "repositories-permissions-config-groups list" [
+export def "get-repositories-workspace-repo-slug-permissions-config-groups" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5397,7 +5397,7 @@ export def "repositories-permissions-config-groups list" [
 # Delete an explicit group permission for a repository
 #
 # DELETE /repositories/{workspace}/{repo_slug}/permissions-config/groups/{group_slug}
-export def "repositories-permissions-config-groups delete" [
+export def "delete-repositories-workspace-repo-slug-permissions-config-groups-group-slug" [
   workspace: string
   repo_slug: string
   group_slug: string
@@ -5436,7 +5436,7 @@ export def "repositories-permissions-config-groups delete" [
 # Get an explicit group permission for a repository
 #
 # GET /repositories/{workspace}/{repo_slug}/permissions-config/groups/{group_slug}
-export def "repositories-permissions-config-groups get" [
+export def "get-repositories-workspace-repo-slug-permissions-config-groups-group-slug" [
   workspace: string
   repo_slug: string
   group_slug: string
@@ -5475,7 +5475,7 @@ export def "repositories-permissions-config-groups get" [
 # Update an explicit group permission for a repository
 #
 # PUT /repositories/{workspace}/{repo_slug}/permissions-config/groups/{group_slug}
-export def "repositories-permissions-config-groups update" [
+export def "put-repositories-workspace-repo-slug-permissions-config-groups-group-slug" [
   workspace: string
   repo_slug: string
   group_slug: string
@@ -5514,7 +5514,7 @@ export def "repositories-permissions-config-groups update" [
 # List explicit user permissions for a repository
 #
 # GET /repositories/{workspace}/{repo_slug}/permissions-config/users
-export def "repositories-permissions-config-users list" [
+export def "get-repositories-workspace-repo-slug-permissions-config-users" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5551,7 +5551,7 @@ export def "repositories-permissions-config-users list" [
 # Delete an explicit user permission for a repository
 #
 # DELETE /repositories/{workspace}/{repo_slug}/permissions-config/users/{selected_user_id}
-export def "repositories-permissions-config-users delete" [
+export def "delete-repositories-workspace-repo-slug-permissions-config-users-selected-user-id" [
   workspace: string
   repo_slug: string
   selected_user_id: string
@@ -5590,7 +5590,7 @@ export def "repositories-permissions-config-users delete" [
 # Get an explicit user permission for a repository
 #
 # GET /repositories/{workspace}/{repo_slug}/permissions-config/users/{selected_user_id}
-export def "repositories-permissions-config-users get" [
+export def "get-repositories-workspace-repo-slug-permissions-config-users-selected-user-id" [
   workspace: string
   repo_slug: string
   selected_user_id: string
@@ -5629,7 +5629,7 @@ export def "repositories-permissions-config-users get" [
 # Update an explicit user permission for a repository
 #
 # PUT /repositories/{workspace}/{repo_slug}/permissions-config/users/{selected_user_id}
-export def "repositories-permissions-config-users update" [
+export def "put-repositories-workspace-repo-slug-permissions-config-users-selected-user-id" [
   workspace: string
   repo_slug: string
   selected_user_id: string
@@ -5669,7 +5669,7 @@ export def "repositories-permissions-config-users update" [
 #
 # DELETE /repositories/{workspace}/{repo_slug}/pipelines-config/caches
 # operationId: deleteRepositoryPipelineCaches
-export def "repositories-pipelines-config-caches delete-repository-by-workspace-repo-slug" [
+export def "delete-repository-pipeline-caches" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5709,7 +5709,7 @@ export def "repositories-pipelines-config-caches delete-repository-by-workspace-
 #
 # GET /repositories/{workspace}/{repo_slug}/pipelines-config/caches/
 # operationId: getRepositoryPipelineCaches
-export def "repositories-pipelines-config-caches get-repository" [
+export def "get-repository-pipeline-caches" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5747,7 +5747,7 @@ export def "repositories-pipelines-config-caches get-repository" [
 #
 # DELETE /repositories/{workspace}/{repo_slug}/pipelines-config/caches/{cache_uuid}
 # operationId: deleteRepositoryPipelineCache
-export def "repositories-pipelines-config-caches delete-repository-by-workspace-repo-slug-cache-uuid" [
+export def "delete-repository-pipeline-cache" [
   workspace: string
   repo_slug: string
   cache_uuid: string
@@ -5787,7 +5787,7 @@ export def "repositories-pipelines-config-caches delete-repository-by-workspace-
 #
 # GET /repositories/{workspace}/{repo_slug}/pipelines-config/caches/{cache_uuid}/content-uri
 # operationId: getRepositoryPipelineCacheContentURI
-export def "repositories-pipelines-config-caches-content-uri get-repository" [
+export def "get-repository-pipeline-cache-content-uri" [
   workspace: string
   repo_slug: string
   cache_uuid: string
@@ -5827,7 +5827,7 @@ export def "repositories-pipelines-config-caches-content-uri get-repository" [
 #
 # GET /repositories/{workspace}/{repo_slug}/pipelines/
 # operationId: getPipelinesForRepository
-export def "repositories-pipelines list" [
+export def "get-pipelines-for-repository" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5865,7 +5865,7 @@ export def "repositories-pipelines list" [
 #
 # POST /repositories/{workspace}/{repo_slug}/pipelines/
 # operationId: createPipelineForRepository
-export def "repositories-pipelines create-for-repository" [
+export def "create-pipeline-for-repository" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5917,7 +5917,7 @@ export def "repositories-pipelines create-for-repository" [
 #
 # GET /repositories/{workspace}/{repo_slug}/pipelines/{pipeline_uuid}
 # operationId: getPipelineForRepository
-export def "repositories-pipelines get-for-repository" [
+export def "get-pipeline-for-repository" [
   workspace: string
   repo_slug: string
   pipeline_uuid: string
@@ -5957,7 +5957,7 @@ export def "repositories-pipelines get-for-repository" [
 #
 # GET /repositories/{workspace}/{repo_slug}/pipelines/{pipeline_uuid}/steps/
 # operationId: getPipelineStepsForRepository
-export def "repositories-pipelines-steps list" [
+export def "get-pipeline-steps-for-repository" [
   workspace: string
   repo_slug: string
   pipeline_uuid: string
@@ -5997,7 +5997,7 @@ export def "repositories-pipelines-steps list" [
 #
 # GET /repositories/{workspace}/{repo_slug}/pipelines/{pipeline_uuid}/steps/{step_uuid}
 # operationId: getPipelineStepForRepository
-export def "repositories-pipelines-steps get-for-repository" [
+export def "get-pipeline-step-for-repository" [
   workspace: string
   repo_slug: string
   pipeline_uuid: string
@@ -6039,7 +6039,7 @@ export def "repositories-pipelines-steps get-for-repository" [
 #
 # GET /repositories/{workspace}/{repo_slug}/pipelines/{pipeline_uuid}/steps/{step_uuid}/log
 # operationId: getPipelineStepLogForRepository
-export def "repositories-pipelines-steps-log get-for-repository" [
+export def "get-pipeline-step-log-for-repository" [
   workspace: string
   repo_slug: string
   pipeline_uuid: string
@@ -6081,7 +6081,7 @@ export def "repositories-pipelines-steps-log get-for-repository" [
 #
 # GET /repositories/{workspace}/{repo_slug}/pipelines/{pipeline_uuid}/steps/{step_uuid}/logs/{log_uuid}
 # operationId: getPipelineContainerLog
-export def "repositories-pipelines-steps-logs get-container" [
+export def "get-pipeline-container-log" [
   workspace: string
   repo_slug: string
   pipeline_uuid: string
@@ -6125,7 +6125,7 @@ export def "repositories-pipelines-steps-logs get-container" [
 #
 # GET /repositories/{workspace}/{repo_slug}/pipelines/{pipeline_uuid}/steps/{step_uuid}/test_reports
 # operationId: getPipelineTestReports
-export def "repositories-pipelines-steps-test-reports get" [
+export def "get-pipeline-test-reports" [
   workspace: string
   repo_slug: string
   pipeline_uuid: string
@@ -6167,7 +6167,7 @@ export def "repositories-pipelines-steps-test-reports get" [
 #
 # GET /repositories/{workspace}/{repo_slug}/pipelines/{pipeline_uuid}/steps/{step_uuid}/test_reports/test_cases
 # operationId: getPipelineTestReportTestCases
-export def "repositories-pipelines-steps-test-reports-test-cases get" [
+export def "get-pipeline-test-report-test-cases" [
   workspace: string
   repo_slug: string
   pipeline_uuid: string
@@ -6209,7 +6209,7 @@ export def "repositories-pipelines-steps-test-reports-test-cases get" [
 #
 # GET /repositories/{workspace}/{repo_slug}/pipelines/{pipeline_uuid}/steps/{step_uuid}/test_reports/test_cases/{test_case_uuid}/test_case_reasons
 # operationId: getPipelineTestReportTestCaseReasons
-export def "repositories-pipelines-steps-test-reports-test-cases-test-case-reasons get" [
+export def "get-pipeline-test-report-test-case-reasons" [
   workspace: string
   repo_slug: string
   pipeline_uuid: string
@@ -6253,7 +6253,7 @@ export def "repositories-pipelines-steps-test-reports-test-cases-test-case-reaso
 #
 # POST /repositories/{workspace}/{repo_slug}/pipelines/{pipeline_uuid}/stopPipeline
 # operationId: stopPipeline
-export def "repositories-pipelines-stop-pipeline stop" [
+export def "stop-pipeline" [
   workspace: string
   repo_slug: string
   pipeline_uuid: string
@@ -6293,7 +6293,7 @@ export def "repositories-pipelines-stop-pipeline stop" [
 #
 # GET /repositories/{workspace}/{repo_slug}/pipelines_config
 # operationId: getRepositoryPipelineConfig
-export def "repositories-pipelines-config get-repository" [
+export def "get-repository-pipeline-config" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6331,7 +6331,7 @@ export def "repositories-pipelines-config get-repository" [
 #
 # PUT /repositories/{workspace}/{repo_slug}/pipelines_config
 # operationId: updateRepositoryPipelineConfig
-export def "repositories-pipelines-config update-repository" [
+export def "update-repository-pipeline-config" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6375,7 +6375,7 @@ export def "repositories-pipelines-config update-repository" [
 #
 # PUT /repositories/{workspace}/{repo_slug}/pipelines_config/build_number
 # operationId: updateRepositoryBuildNumber
-export def "repositories-pipelines-config-build-number update-repository" [
+export def "update-repository-build-number" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6418,7 +6418,7 @@ export def "repositories-pipelines-config-build-number update-repository" [
 #
 # GET /repositories/{workspace}/{repo_slug}/pipelines_config/schedules/
 # operationId: getRepositoryPipelineSchedules
-export def "repositories-pipelines-config-schedules list" [
+export def "get-repository-pipeline-schedules" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6456,7 +6456,7 @@ export def "repositories-pipelines-config-schedules list" [
 #
 # POST /repositories/{workspace}/{repo_slug}/pipelines_config/schedules/
 # operationId: createRepositoryPipelineSchedule
-export def "repositories-pipelines-config-schedules create-repository" [
+export def "create-repository-pipeline-schedule" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6505,7 +6505,7 @@ export def "repositories-pipelines-config-schedules create-repository" [
 #
 # DELETE /repositories/{workspace}/{repo_slug}/pipelines_config/schedules/{schedule_uuid}
 # operationId: deleteRepositoryPipelineSchedule
-export def "repositories-pipelines-config-schedules delete-repository" [
+export def "delete-repository-pipeline-schedule" [
   workspace: string
   repo_slug: string
   schedule_uuid: string
@@ -6545,7 +6545,7 @@ export def "repositories-pipelines-config-schedules delete-repository" [
 #
 # GET /repositories/{workspace}/{repo_slug}/pipelines_config/schedules/{schedule_uuid}
 # operationId: getRepositoryPipelineSchedule
-export def "repositories-pipelines-config-schedules get-repository" [
+export def "get-repository-pipeline-schedule" [
   workspace: string
   repo_slug: string
   schedule_uuid: string
@@ -6585,7 +6585,7 @@ export def "repositories-pipelines-config-schedules get-repository" [
 #
 # PUT /repositories/{workspace}/{repo_slug}/pipelines_config/schedules/{schedule_uuid}
 # operationId: updateRepositoryPipelineSchedule
-export def "repositories-pipelines-config-schedules update-repository" [
+export def "update-repository-pipeline-schedule" [
   workspace: string
   repo_slug: string
   schedule_uuid: string
@@ -6636,7 +6636,7 @@ export def "repositories-pipelines-config-schedules update-repository" [
 #
 # GET /repositories/{workspace}/{repo_slug}/pipelines_config/schedules/{schedule_uuid}/executions/
 # operationId: getRepositoryPipelineScheduleExecutions
-export def "repositories-pipelines-config-schedules-executions get-repository" [
+export def "get-repository-pipeline-schedule-executions" [
   workspace: string
   repo_slug: string
   schedule_uuid: string
@@ -6676,7 +6676,7 @@ export def "repositories-pipelines-config-schedules-executions get-repository" [
 #
 # DELETE /repositories/{workspace}/{repo_slug}/pipelines_config/ssh/key_pair
 # operationId: deleteRepositoryPipelineKeyPair
-export def "repositories-pipelines-config-ssh-key-pair delete-repository" [
+export def "delete-repository-pipeline-key-pair" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6714,7 +6714,7 @@ export def "repositories-pipelines-config-ssh-key-pair delete-repository" [
 #
 # GET /repositories/{workspace}/{repo_slug}/pipelines_config/ssh/key_pair
 # operationId: getRepositoryPipelineSshKeyPair
-export def "repositories-pipelines-config-ssh-key-pair get-repository" [
+export def "get-repository-pipeline-ssh-key-pair" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6752,7 +6752,7 @@ export def "repositories-pipelines-config-ssh-key-pair get-repository" [
 #
 # PUT /repositories/{workspace}/{repo_slug}/pipelines_config/ssh/key_pair
 # operationId: updateRepositoryPipelineKeyPair
-export def "repositories-pipelines-config-ssh-key-pair update-repository" [
+export def "update-repository-pipeline-key-pair" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6796,7 +6796,7 @@ export def "repositories-pipelines-config-ssh-key-pair update-repository" [
 #
 # GET /repositories/{workspace}/{repo_slug}/pipelines_config/ssh/known_hosts/
 # operationId: getRepositoryPipelineKnownHosts
-export def "repositories-pipelines-config-ssh-known-hosts list" [
+export def "get-repository-pipeline-known-hosts" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6834,7 +6834,7 @@ export def "repositories-pipelines-config-ssh-known-hosts list" [
 #
 # POST /repositories/{workspace}/{repo_slug}/pipelines_config/ssh/known_hosts/
 # operationId: createRepositoryPipelineKnownHost
-export def "repositories-pipelines-config-ssh-known-hosts create-repository" [
+export def "create-repository-pipeline-known-host" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6879,7 +6879,7 @@ export def "repositories-pipelines-config-ssh-known-hosts create-repository" [
 #
 # DELETE /repositories/{workspace}/{repo_slug}/pipelines_config/ssh/known_hosts/{known_host_uuid}
 # operationId: deleteRepositoryPipelineKnownHost
-export def "repositories-pipelines-config-ssh-known-hosts delete-repository" [
+export def "delete-repository-pipeline-known-host" [
   workspace: string
   repo_slug: string
   known_host_uuid: string
@@ -6919,7 +6919,7 @@ export def "repositories-pipelines-config-ssh-known-hosts delete-repository" [
 #
 # GET /repositories/{workspace}/{repo_slug}/pipelines_config/ssh/known_hosts/{known_host_uuid}
 # operationId: getRepositoryPipelineKnownHost
-export def "repositories-pipelines-config-ssh-known-hosts get-repository" [
+export def "get-repository-pipeline-known-host" [
   workspace: string
   repo_slug: string
   known_host_uuid: string
@@ -6959,7 +6959,7 @@ export def "repositories-pipelines-config-ssh-known-hosts get-repository" [
 #
 # PUT /repositories/{workspace}/{repo_slug}/pipelines_config/ssh/known_hosts/{known_host_uuid}
 # operationId: updateRepositoryPipelineKnownHost
-export def "repositories-pipelines-config-ssh-known-hosts update-repository" [
+export def "update-repository-pipeline-known-host" [
   workspace: string
   repo_slug: string
   known_host_uuid: string
@@ -7006,7 +7006,7 @@ export def "repositories-pipelines-config-ssh-known-hosts update-repository" [
 #
 # GET /repositories/{workspace}/{repo_slug}/pipelines_config/variables/
 # operationId: getRepositoryPipelineVariables
-export def "repositories-pipelines-config-variables list" [
+export def "get-repository-pipeline-variables" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7044,7 +7044,7 @@ export def "repositories-pipelines-config-variables list" [
 #
 # POST /repositories/{workspace}/{repo_slug}/pipelines_config/variables/
 # operationId: createRepositoryPipelineVariable
-export def "repositories-pipelines-config-variables create-repository" [
+export def "create-repository-pipeline-variable" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7090,7 +7090,7 @@ export def "repositories-pipelines-config-variables create-repository" [
 #
 # DELETE /repositories/{workspace}/{repo_slug}/pipelines_config/variables/{variable_uuid}
 # operationId: deleteRepositoryPipelineVariable
-export def "repositories-pipelines-config-variables delete-repository" [
+export def "delete-repository-pipeline-variable" [
   workspace: string
   repo_slug: string
   variable_uuid: string
@@ -7130,7 +7130,7 @@ export def "repositories-pipelines-config-variables delete-repository" [
 #
 # GET /repositories/{workspace}/{repo_slug}/pipelines_config/variables/{variable_uuid}
 # operationId: getRepositoryPipelineVariable
-export def "repositories-pipelines-config-variables get-repository" [
+export def "get-repository-pipeline-variable" [
   workspace: string
   repo_slug: string
   variable_uuid: string
@@ -7170,7 +7170,7 @@ export def "repositories-pipelines-config-variables get-repository" [
 #
 # PUT /repositories/{workspace}/{repo_slug}/pipelines_config/variables/{variable_uuid}
 # operationId: updateRepositoryPipelineVariable
-export def "repositories-pipelines-config-variables update-repository" [
+export def "update-repository-pipeline-variable" [
   workspace: string
   repo_slug: string
   variable_uuid: string
@@ -7218,7 +7218,7 @@ export def "repositories-pipelines-config-variables update-repository" [
 #
 # DELETE /repositories/{workspace}/{repo_slug}/properties/{app_key}/{property_name}
 # operationId: deleteRepositoryHostedPropertyValue
-export def "repositories-properties delete-repository-hosted-value" [
+export def "delete-repository-hosted-property-value" [
   workspace: string
   repo_slug: string
   app_key: string
@@ -7260,7 +7260,7 @@ export def "repositories-properties delete-repository-hosted-value" [
 #
 # GET /repositories/{workspace}/{repo_slug}/properties/{app_key}/{property_name}
 # operationId: getRepositoryHostedPropertyValue
-export def "repositories-properties get-repository-hosted-value" [
+export def "get-repository-hosted-property-value" [
   workspace: string
   repo_slug: string
   app_key: string
@@ -7302,7 +7302,7 @@ export def "repositories-properties get-repository-hosted-value" [
 #
 # PUT /repositories/{workspace}/{repo_slug}/properties/{app_key}/{property_name}
 # operationId: updateRepositoryHostedPropertyValue
-export def "repositories-properties update-repository-hosted-value" [
+export def "update-repository-hosted-property-value" [
   workspace: string
   repo_slug: string
   app_key: string
@@ -7347,7 +7347,7 @@ export def "repositories-properties update-repository-hosted-value" [
 # List pull requests
 #
 # GET /repositories/{workspace}/{repo_slug}/pullrequests
-export def "repositories-pullrequests list" [
+export def "get-repositories-workspace-repo-slug-pullrequests" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7394,7 +7394,7 @@ export def "repositories-pullrequests list" [
 # --reviewers item shape: {type: string, created_on?: string, display_name?: string, links?: record, username?: string, uuid?: string}
 # --source shape: {branch?: record, commit?: record, repository?: any}
 # --summary shape: {html?: string, markup?: "markdown"|"creole"|"plaintext", raw?: string}
-export def "repositories-pullrequests create" [
+export def "post-repositories-workspace-repo-slug-pullrequests" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7454,7 +7454,7 @@ export def "repositories-pullrequests create" [
 # List a pull request activity log
 #
 # GET /repositories/{workspace}/{repo_slug}/pullrequests/activity
-export def "repositories-pullrequests-activity list" [
+export def "get-repositories-workspace-repo-slug-pullrequests-activity" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7491,7 +7491,7 @@ export def "repositories-pullrequests-activity list" [
 # Get a pull request
 #
 # GET /repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}
-export def "repositories-pullrequests get" [
+export def "get-repositories-workspace-repo-slug-pullrequests-pull-request-id" [
   workspace: string
   repo_slug: string
   pull_request_id: int
@@ -7538,7 +7538,7 @@ export def "repositories-pullrequests get" [
 # --reviewers item shape: {type: string, created_on?: string, display_name?: string, links?: record, username?: string, uuid?: string}
 # --source shape: {branch?: record, commit?: record, repository?: any}
 # --summary shape: {html?: string, markup?: "markdown"|"creole"|"plaintext", raw?: string}
-export def "repositories-pullrequests update" [
+export def "put-repositories-workspace-repo-slug-pullrequests-pull-request-id" [
   workspace: string
   repo_slug: string
   pull_request_id: int
@@ -7600,7 +7600,7 @@ export def "repositories-pullrequests update" [
 # List a pull request activity log
 #
 # GET /repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/activity
-export def "repositories-pullrequests-activity get" [
+export def "get-repositories-workspace-repo-slug-pullrequests-pull-request-id-activity" [
   workspace: string
   repo_slug: string
   pull_request_id: int
@@ -7639,7 +7639,7 @@ export def "repositories-pullrequests-activity get" [
 # Unapprove a pull request
 #
 # DELETE /repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/approve
-export def "repositories-pullrequests-approve delete" [
+export def "delete-repositories-workspace-repo-slug-pullrequests-pull-request-id-approve" [
   workspace: string
   repo_slug: string
   pull_request_id: int
@@ -7678,7 +7678,7 @@ export def "repositories-pullrequests-approve delete" [
 # Approve a pull request
 #
 # POST /repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/approve
-export def "repositories-pullrequests-approve create" [
+export def "post-repositories-workspace-repo-slug-pullrequests-pull-request-id-approve" [
   workspace: string
   repo_slug: string
   pull_request_id: int
@@ -7717,7 +7717,7 @@ export def "repositories-pullrequests-approve create" [
 # List comments on a pull request
 #
 # GET /repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/comments
-export def "repositories-pullrequests-comments list" [
+export def "get-repositories-workspace-repo-slug-pullrequests-pull-request-id-comments" [
   workspace: string
   repo_slug: string
   pull_request_id: int
@@ -7756,7 +7756,7 @@ export def "repositories-pullrequests-comments list" [
 # Create a comment on a pull request
 #
 # POST /repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/comments
-export def "repositories-pullrequests-comments create" [
+export def "post-repositories-workspace-repo-slug-pullrequests-pull-request-id-comments" [
   workspace: string
   repo_slug: string
   pull_request_id: int
@@ -7799,7 +7799,7 @@ export def "repositories-pullrequests-comments create" [
 # Delete a comment on a pull request
 #
 # DELETE /repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/comments/{comment_id}
-export def "repositories-pullrequests-comments delete" [
+export def "delete-repositories-workspace-repo-slug-pullrequests-pull-request-id-comments-comment-id" [
   workspace: string
   repo_slug: string
   pull_request_id: int
@@ -7840,7 +7840,7 @@ export def "repositories-pullrequests-comments delete" [
 # Get a comment on a pull request
 #
 # GET /repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/comments/{comment_id}
-export def "repositories-pullrequests-comments get" [
+export def "get-repositories-workspace-repo-slug-pullrequests-pull-request-id-comments-comment-id" [
   workspace: string
   repo_slug: string
   pull_request_id: int
@@ -7881,7 +7881,7 @@ export def "repositories-pullrequests-comments get" [
 # Update a comment on a pull request
 #
 # PUT /repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/comments/{comment_id}
-export def "repositories-pullrequests-comments update" [
+export def "put-repositories-workspace-repo-slug-pullrequests-pull-request-id-comments-comment-id" [
   workspace: string
   repo_slug: string
   pull_request_id: int
@@ -7926,7 +7926,7 @@ export def "repositories-pullrequests-comments update" [
 # List commits on a pull request
 #
 # GET /repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/commits
-export def "repositories-pullrequests-commits get" [
+export def "get-repositories-workspace-repo-slug-pullrequests-pull-request-id-commits" [
   workspace: string
   repo_slug: string
   pull_request_id: int
@@ -7965,7 +7965,7 @@ export def "repositories-pullrequests-commits get" [
 # Decline a pull request
 #
 # POST /repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/decline
-export def "repositories-pullrequests-decline create" [
+export def "post-repositories-workspace-repo-slug-pullrequests-pull-request-id-decline" [
   workspace: string
   repo_slug: string
   pull_request_id: int
@@ -8004,7 +8004,7 @@ export def "repositories-pullrequests-decline create" [
 # List changes in a pull request
 #
 # GET /repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/diff
-export def "repositories-pullrequests-diff get" [
+export def "get-repositories-workspace-repo-slug-pullrequests-pull-request-id-diff" [
   workspace: string
   repo_slug: string
   pull_request_id: int
@@ -8043,7 +8043,7 @@ export def "repositories-pullrequests-diff get" [
 # Get the diff stat for a pull request
 #
 # GET /repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/diffstat
-export def "repositories-pullrequests-diffstat get" [
+export def "get-repositories-workspace-repo-slug-pullrequests-pull-request-id-diffstat" [
   workspace: string
   repo_slug: string
   pull_request_id: int
@@ -8082,7 +8082,7 @@ export def "repositories-pullrequests-diffstat get" [
 # Merge a pull request
 #
 # POST /repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/merge
-export def "repositories-pullrequests-merge create" [
+export def "post-repositories-workspace-repo-slug-pullrequests-pull-request-id-merge" [
   workspace: string
   repo_slug: string
   pull_request_id: int
@@ -8130,7 +8130,7 @@ export def "repositories-pullrequests-merge create" [
 # Get the merge task status for a pull request
 #
 # GET /repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/merge/task-status/{task_id}
-export def "repositories-pullrequests-merge-task-status get" [
+export def "get-repositories-workspace-repo-slug-pullrequests-pull-request-id-merge-task-status-task-id" [
   workspace: string
   repo_slug: string
   pull_request_id: int
@@ -8171,7 +8171,7 @@ export def "repositories-pullrequests-merge-task-status get" [
 # Get the patch for a pull request
 #
 # GET /repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/patch
-export def "repositories-pullrequests-patch get" [
+export def "get-repositories-workspace-repo-slug-pullrequests-pull-request-id-patch" [
   workspace: string
   repo_slug: string
   pull_request_id: int
@@ -8210,7 +8210,7 @@ export def "repositories-pullrequests-patch get" [
 # Remove change request for a pull request
 #
 # DELETE /repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/request-changes
-export def "repositories-pullrequests-request-changes delete" [
+export def "delete-repositories-workspace-repo-slug-pullrequests-pull-request-id-request-changes" [
   workspace: string
   repo_slug: string
   pull_request_id: int
@@ -8249,7 +8249,7 @@ export def "repositories-pullrequests-request-changes delete" [
 # Request changes for a pull request
 #
 # POST /repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/request-changes
-export def "repositories-pullrequests-request-changes create" [
+export def "post-repositories-workspace-repo-slug-pullrequests-pull-request-id-request-changes" [
   workspace: string
   repo_slug: string
   pull_request_id: int
@@ -8288,7 +8288,7 @@ export def "repositories-pullrequests-request-changes create" [
 # List commit statuses for a pull request
 #
 # GET /repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/statuses
-export def "repositories-pullrequests-statuses get" [
+export def "get-repositories-workspace-repo-slug-pullrequests-pull-request-id-statuses" [
   workspace: string
   repo_slug: string
   pull_request_id: int
@@ -8331,7 +8331,7 @@ export def "repositories-pullrequests-statuses get" [
 #
 # DELETE /repositories/{workspace}/{repo_slug}/pullrequests/{pullrequest_id}/properties/{app_key}/{property_name}
 # operationId: deletePullRequestHostedPropertyValue
-export def "repositories-pullrequests-properties delete-pull-request-hosted-value" [
+export def "delete-pull-request-hosted-property-value" [
   workspace: string
   repo_slug: string
   pullrequest_id: string
@@ -8375,7 +8375,7 @@ export def "repositories-pullrequests-properties delete-pull-request-hosted-valu
 #
 # GET /repositories/{workspace}/{repo_slug}/pullrequests/{pullrequest_id}/properties/{app_key}/{property_name}
 # operationId: getPullRequestHostedPropertyValue
-export def "repositories-pullrequests-properties get-pull-request-hosted-value" [
+export def "get-pull-request-hosted-property-value" [
   workspace: string
   repo_slug: string
   pullrequest_id: string
@@ -8419,7 +8419,7 @@ export def "repositories-pullrequests-properties get-pull-request-hosted-value" 
 #
 # PUT /repositories/{workspace}/{repo_slug}/pullrequests/{pullrequest_id}/properties/{app_key}/{property_name}
 # operationId: updatePullRequestHostedPropertyValue
-export def "repositories-pullrequests-properties update-pull-request-hosted-value" [
+export def "update-pull-request-hosted-property-value" [
   workspace: string
   repo_slug: string
   pullrequest_id: string
@@ -8466,7 +8466,7 @@ export def "repositories-pullrequests-properties update-pull-request-hosted-valu
 # List branches and tags
 #
 # GET /repositories/{workspace}/{repo_slug}/refs
-export def "repositories-refs get" [
+export def "get-repositories-workspace-repo-slug-refs" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8506,7 +8506,7 @@ export def "repositories-refs get" [
 # List open branches
 #
 # GET /repositories/{workspace}/{repo_slug}/refs/branches
-export def "repositories-refs-branches list" [
+export def "get-repositories-workspace-repo-slug-refs-branches" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8546,7 +8546,7 @@ export def "repositories-refs-branches list" [
 # Create a branch
 #
 # POST /repositories/{workspace}/{repo_slug}/refs/branches
-export def "repositories-refs-branches create" [
+export def "post-repositories-workspace-repo-slug-refs-branches" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8583,7 +8583,7 @@ export def "repositories-refs-branches create" [
 # Delete a branch
 #
 # DELETE /repositories/{workspace}/{repo_slug}/refs/branches/{name}
-export def "repositories-refs-branches delete" [
+export def "delete-repositories-workspace-repo-slug-refs-branches-name" [
   workspace: string
   repo_slug: string
   name: string
@@ -8622,7 +8622,7 @@ export def "repositories-refs-branches delete" [
 # Get a branch
 #
 # GET /repositories/{workspace}/{repo_slug}/refs/branches/{name}
-export def "repositories-refs-branches get" [
+export def "get-repositories-workspace-repo-slug-refs-branches-name" [
   workspace: string
   repo_slug: string
   name: string
@@ -8661,7 +8661,7 @@ export def "repositories-refs-branches get" [
 # List tags
 #
 # GET /repositories/{workspace}/{repo_slug}/refs/tags
-export def "repositories-refs-tags list" [
+export def "get-repositories-workspace-repo-slug-refs-tags" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8702,7 +8702,7 @@ export def "repositories-refs-tags list" [
 #
 # POST /repositories/{workspace}/{repo_slug}/refs/tags
 # --links shape: {commits?: record, html?: record, self?: record}
-export def "repositories-refs-tags create" [
+export def "post-repositories-workspace-repo-slug-refs-tags" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8749,7 +8749,7 @@ export def "repositories-refs-tags create" [
 # Delete a tag
 #
 # DELETE /repositories/{workspace}/{repo_slug}/refs/tags/{name}
-export def "repositories-refs-tags delete" [
+export def "delete-repositories-workspace-repo-slug-refs-tags-name" [
   workspace: string
   repo_slug: string
   name: string
@@ -8788,7 +8788,7 @@ export def "repositories-refs-tags delete" [
 # Get a tag
 #
 # GET /repositories/{workspace}/{repo_slug}/refs/tags/{name}
-export def "repositories-refs-tags get" [
+export def "get-repositories-workspace-repo-slug-refs-tags-name" [
   workspace: string
   repo_slug: string
   name: string
@@ -8827,7 +8827,7 @@ export def "repositories-refs-tags get" [
 # Get the root directory of the main branch
 #
 # GET /repositories/{workspace}/{repo_slug}/src
-export def "repositories-src get-by-workspace-repo-slug" [
+export def "get-repositories-workspace-repo-slug-src" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8866,7 +8866,7 @@ export def "repositories-src get-by-workspace-repo-slug" [
 # Create a commit by uploading a file
 #
 # POST /repositories/{workspace}/{repo_slug}/src
-export def "repositories-src create" [
+export def "post-repositories-workspace-repo-slug-src" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8909,7 +8909,7 @@ export def "repositories-src create" [
 # Get file or directory contents
 #
 # GET /repositories/{workspace}/{repo_slug}/src/{commit}/{path}
-export def "repositories-src get-by-workspace-repo-slug-commit-path" [
+export def "get-repositories-workspace-repo-slug-src-commit-path" [
   workspace: string
   repo_slug: string
   commit: string
@@ -8955,7 +8955,7 @@ export def "repositories-src get-by-workspace-repo-slug-commit-path" [
 # List defined versions for issues
 #
 # GET /repositories/{workspace}/{repo_slug}/versions
-export def "repositories-versions list" [
+export def "get-repositories-workspace-repo-slug-versions" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8992,7 +8992,7 @@ export def "repositories-versions list" [
 # Get a defined version for issues
 #
 # GET /repositories/{workspace}/{repo_slug}/versions/{version_id}
-export def "repositories-versions get" [
+export def "get-repositories-workspace-repo-slug-versions-version-id" [
   workspace: string
   repo_slug: string
   version_id: int
@@ -9031,7 +9031,7 @@ export def "repositories-versions get" [
 # List repositories watchers
 #
 # GET /repositories/{workspace}/{repo_slug}/watchers
-export def "repositories-watchers get" [
+export def "get-repositories-workspace-repo-slug-watchers" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9068,7 +9068,7 @@ export def "repositories-watchers get" [
 # List snippets
 #
 # GET /snippets
-export def "snippets get" [
+export def "get-snippets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9103,7 +9103,7 @@ export def "snippets get" [
 # Create a snippet
 #
 # POST /snippets
-export def "snippets create" [
+export def "post-snippets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9148,7 +9148,7 @@ export def "snippets create" [
 # List snippets in a workspace
 #
 # GET /snippets/{workspace}
-export def "snippets get-by-workspace" [
+export def "get-snippets-workspace" [
   workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9185,7 +9185,7 @@ export def "snippets get-by-workspace" [
 # Create a snippet for a workspace
 #
 # POST /snippets/{workspace}
-export def "snippets create-by-workspace" [
+export def "post-snippets-workspace" [
   workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9232,7 +9232,7 @@ export def "snippets create-by-workspace" [
 # Delete a snippet
 #
 # DELETE /snippets/{workspace}/{encoded_id}
-export def "snippets delete-by-workspace-encoded-id" [
+export def "delete-snippets-workspace-encoded-id" [
   workspace: string
   encoded_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9269,7 +9269,7 @@ export def "snippets delete-by-workspace-encoded-id" [
 # Get a snippet
 #
 # GET /snippets/{workspace}/{encoded_id}
-export def "snippets get-by-workspace-encoded-id" [
+export def "get-snippets-workspace-encoded-id" [
   workspace: string
   encoded_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9307,7 +9307,7 @@ export def "snippets get-by-workspace-encoded-id" [
 # Update a snippet
 #
 # PUT /snippets/{workspace}/{encoded_id}
-export def "snippets update-by-workspace-encoded-id" [
+export def "put-snippets-workspace-encoded-id" [
   workspace: string
   encoded_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9345,7 +9345,7 @@ export def "snippets update-by-workspace-encoded-id" [
 # List comments on a snippet
 #
 # GET /snippets/{workspace}/{encoded_id}/comments
-export def "snippets-comments list" [
+export def "get-snippets-workspace-encoded-id-comments" [
   workspace: string
   encoded_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9383,7 +9383,7 @@ export def "snippets-comments list" [
 #
 # POST /snippets/{workspace}/{encoded_id}/comments
 # --links shape: {html?: record, self?: record}
-export def "snippets-comments create" [
+export def "post-snippets-workspace-encoded-id-comments" [
   workspace: string
   encoded_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9426,7 +9426,7 @@ export def "snippets-comments create" [
 # Delete a comment on a snippet
 #
 # DELETE /snippets/{workspace}/{encoded_id}/comments/{comment_id}
-export def "snippets-comments delete" [
+export def "delete-snippets-workspace-encoded-id-comments-comment-id" [
   workspace: string
   encoded_id: string
   comment_id: int
@@ -9465,7 +9465,7 @@ export def "snippets-comments delete" [
 # Get a comment on a snippet
 #
 # GET /snippets/{workspace}/{encoded_id}/comments/{comment_id}
-export def "snippets-comments get" [
+export def "get-snippets-workspace-encoded-id-comments-comment-id" [
   workspace: string
   encoded_id: string
   comment_id: int
@@ -9505,7 +9505,7 @@ export def "snippets-comments get" [
 #
 # PUT /snippets/{workspace}/{encoded_id}/comments/{comment_id}
 # --links shape: {html?: record, self?: record}
-export def "snippets-comments update" [
+export def "put-snippets-workspace-encoded-id-comments-comment-id" [
   workspace: string
   encoded_id: string
   comment_id: int
@@ -9550,7 +9550,7 @@ export def "snippets-comments update" [
 # List snippet changes
 #
 # GET /snippets/{workspace}/{encoded_id}/commits
-export def "snippets-commits list" [
+export def "get-snippets-workspace-encoded-id-commits" [
   workspace: string
   encoded_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9587,7 +9587,7 @@ export def "snippets-commits list" [
 # Get a previous snippet change
 #
 # GET /snippets/{workspace}/{encoded_id}/commits/{revision}
-export def "snippets-commits get" [
+export def "get-snippets-workspace-encoded-id-commits-revision" [
   workspace: string
   encoded_id: string
   revision: string
@@ -9626,7 +9626,7 @@ export def "snippets-commits get" [
 # Get a snippet's raw file at HEAD
 #
 # GET /snippets/{workspace}/{encoded_id}/files/{path}
-export def "snippets-files list" [
+export def "get-snippets-workspace-encoded-id-files-path" [
   workspace: string
   encoded_id: string
   path: string
@@ -9665,7 +9665,7 @@ export def "snippets-files list" [
 # Stop watching a snippet
 #
 # DELETE /snippets/{workspace}/{encoded_id}/watch
-export def "snippets-watch delete" [
+export def "delete-snippets-workspace-encoded-id-watch" [
   workspace: string
   encoded_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9702,7 +9702,7 @@ export def "snippets-watch delete" [
 # Check if the current user is watching a snippet
 #
 # GET /snippets/{workspace}/{encoded_id}/watch
-export def "snippets-watch get" [
+export def "get-snippets-workspace-encoded-id-watch" [
   workspace: string
   encoded_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9739,7 +9739,7 @@ export def "snippets-watch get" [
 # Watch a snippet
 #
 # PUT /snippets/{workspace}/{encoded_id}/watch
-export def "snippets-watch update" [
+export def "put-snippets-workspace-encoded-id-watch" [
   workspace: string
   encoded_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9778,7 +9778,7 @@ export def "snippets-watch update" [
 # GET /snippets/{workspace}/{encoded_id}/watchers
 # DEPRECATED
 @deprecated
-export def "snippets-watchers get" [
+export def "get-snippets-workspace-encoded-id-watchers" [
   workspace: string
   encoded_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9815,7 +9815,7 @@ export def "snippets-watchers get" [
 # Delete a previous revision of a snippet
 #
 # DELETE /snippets/{workspace}/{encoded_id}/{node_id}
-export def "snippets delete-by-workspace-encoded-id-node-id" [
+export def "delete-snippets-workspace-encoded-id-node-id" [
   workspace: string
   encoded_id: string
   node_id: string
@@ -9854,7 +9854,7 @@ export def "snippets delete-by-workspace-encoded-id-node-id" [
 # Get a previous revision of a snippet
 #
 # GET /snippets/{workspace}/{encoded_id}/{node_id}
-export def "snippets get-by-workspace-encoded-id-node-id" [
+export def "get-snippets-workspace-encoded-id-node-id" [
   workspace: string
   encoded_id: string
   node_id: string
@@ -9894,7 +9894,7 @@ export def "snippets get-by-workspace-encoded-id-node-id" [
 # Update a previous revision of a snippet
 #
 # PUT /snippets/{workspace}/{encoded_id}/{node_id}
-export def "snippets update-by-workspace-encoded-id-node-id" [
+export def "put-snippets-workspace-encoded-id-node-id" [
   workspace: string
   encoded_id: string
   node_id: string
@@ -9934,7 +9934,7 @@ export def "snippets update-by-workspace-encoded-id-node-id" [
 # Get a snippet's raw file
 #
 # GET /snippets/{workspace}/{encoded_id}/{node_id}/files/{path}
-export def "snippets-files get" [
+export def "get-snippets-workspace-encoded-id-node-id-files-path" [
   workspace: string
   encoded_id: string
   node_id: string
@@ -9975,7 +9975,7 @@ export def "snippets-files get" [
 # Get snippet changes between versions
 #
 # GET /snippets/{workspace}/{encoded_id}/{revision}/diff
-export def "snippets-diff get" [
+export def "get-snippets-workspace-encoded-id-revision-diff" [
   workspace: string
   encoded_id: string
   revision: string
@@ -10016,7 +10016,7 @@ export def "snippets-diff get" [
 # Get snippet patch between versions
 #
 # GET /snippets/{workspace}/{encoded_id}/{revision}/patch
-export def "snippets-patch get" [
+export def "get-snippets-workspace-encoded-id-revision-patch" [
   workspace: string
   encoded_id: string
   revision: string
@@ -10058,7 +10058,7 @@ export def "snippets-patch get" [
 # DEPRECATED
 # operationId: getPipelineVariablesForTeam
 @deprecated
-export def "teams-pipelines-config-variables list" [
+export def "get-pipeline-variables-for-team" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10096,7 +10096,7 @@ export def "teams-pipelines-config-variables list" [
 # DEPRECATED
 # operationId: createPipelineVariableForTeam
 @deprecated
-export def "teams-pipelines-config-variables create" [
+export def "create-pipeline-variable-for-team" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10142,7 +10142,7 @@ export def "teams-pipelines-config-variables create" [
 # DEPRECATED
 # operationId: deletePipelineVariableForTeam
 @deprecated
-export def "teams-pipelines-config-variables delete" [
+export def "delete-pipeline-variable-for-team" [
   username: string
   variable_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10182,7 +10182,7 @@ export def "teams-pipelines-config-variables delete" [
 # DEPRECATED
 # operationId: getPipelineVariableForTeam
 @deprecated
-export def "teams-pipelines-config-variables get" [
+export def "get-pipeline-variable-for-team" [
   username: string
   variable_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10222,7 +10222,7 @@ export def "teams-pipelines-config-variables get" [
 # DEPRECATED
 # operationId: updatePipelineVariableForTeam
 @deprecated
-export def "teams-pipelines-config-variables update" [
+export def "update-pipeline-variable-for-team" [
   username: string
   variable_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10268,7 +10268,7 @@ export def "teams-pipelines-config-variables update" [
 #
 # GET /teams/{username}/search/code
 # operationId: searchTeam
-export def "teams-search-code list" [
+export def "search-team" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10307,7 +10307,7 @@ export def "teams-search-code list" [
 # Get current user
 #
 # GET /user
-export def "user get" [
+export def "get-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10340,7 +10340,7 @@ export def "user get" [
 # List email addresses for current user
 #
 # GET /user/emails
-export def "user-emails list" [
+export def "get-user-emails" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10373,7 +10373,7 @@ export def "user-emails list" [
 # Get an email address for current user
 #
 # GET /user/emails/{email}
-export def "user-emails get" [
+export def "get-user-emails-email" [
   email: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10408,7 +10408,7 @@ export def "user-emails get" [
 # List repository permissions for a user
 #
 # GET /user/permissions/repositories
-export def "user-permissions-repositories get" [
+export def "get-user-permissions-repositories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10444,7 +10444,7 @@ export def "user-permissions-repositories get" [
 # List workspaces for the current user
 #
 # GET /user/permissions/workspaces
-export def "user-permissions-workspaces get" [
+export def "get-user-permissions-workspaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10480,7 +10480,7 @@ export def "user-permissions-workspaces get" [
 # Get a user
 #
 # GET /users/{selected_user}
-export def "users get" [
+export def "get-users-selected-user" [
   selected_user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10518,7 +10518,7 @@ export def "users get" [
 # DEPRECATED
 # operationId: getPipelineVariablesForUser
 @deprecated
-export def "users-pipelines-config-variables list" [
+export def "get-pipeline-variables-for-user" [
   selected_user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10556,7 +10556,7 @@ export def "users-pipelines-config-variables list" [
 # DEPRECATED
 # operationId: createPipelineVariableForUser
 @deprecated
-export def "users-pipelines-config-variables create" [
+export def "create-pipeline-variable-for-user" [
   selected_user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10602,7 +10602,7 @@ export def "users-pipelines-config-variables create" [
 # DEPRECATED
 # operationId: deletePipelineVariableForUser
 @deprecated
-export def "users-pipelines-config-variables delete" [
+export def "delete-pipeline-variable-for-user" [
   selected_user: string
   variable_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10642,7 +10642,7 @@ export def "users-pipelines-config-variables delete" [
 # DEPRECATED
 # operationId: getPipelineVariableForUser
 @deprecated
-export def "users-pipelines-config-variables get" [
+export def "get-pipeline-variable-for-user" [
   selected_user: string
   variable_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10682,7 +10682,7 @@ export def "users-pipelines-config-variables get" [
 # DEPRECATED
 # operationId: updatePipelineVariableForUser
 @deprecated
-export def "users-pipelines-config-variables update" [
+export def "update-pipeline-variable-for-user" [
   selected_user: string
   variable_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10728,7 +10728,7 @@ export def "users-pipelines-config-variables update" [
 #
 # DELETE /users/{selected_user}/properties/{app_key}/{property_name}
 # operationId: deleteUserHostedPropertyValue
-export def "users-properties delete-hosted-value" [
+export def "delete-user-hosted-property-value" [
   selected_user: string
   app_key: string
   property_name: string
@@ -10768,7 +10768,7 @@ export def "users-properties delete-hosted-value" [
 #
 # GET /users/{selected_user}/properties/{app_key}/{property_name}
 # operationId: retrieveUserHostedPropertyValue
-export def "users-properties get-hosted-value" [
+export def "retrieve-user-hosted-property-value" [
   selected_user: string
   app_key: string
   property_name: string
@@ -10808,7 +10808,7 @@ export def "users-properties get-hosted-value" [
 #
 # PUT /users/{selected_user}/properties/{app_key}/{property_name}
 # operationId: updateUserHostedPropertyValue
-export def "users-properties update-hosted-value" [
+export def "update-user-hosted-property-value" [
   selected_user: string
   app_key: string
   property_name: string
@@ -10852,7 +10852,7 @@ export def "users-properties update-hosted-value" [
 #
 # GET /users/{selected_user}/search/code
 # operationId: searchAccount
-export def "users-search-code list-account" [
+export def "search-account" [
   selected_user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10891,7 +10891,7 @@ export def "users-search-code list-account" [
 # List SSH keys
 #
 # GET /users/{selected_user}/ssh-keys
-export def "users-ssh-keys list" [
+export def "get-users-selected-user-ssh-keys" [
   selected_user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10926,7 +10926,7 @@ export def "users-ssh-keys list" [
 # Add a new SSH key
 #
 # POST /users/{selected_user}/ssh-keys
-export def "users-ssh-keys create" [
+export def "post-users-selected-user-ssh-keys" [
   selected_user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10965,7 +10965,7 @@ export def "users-ssh-keys create" [
 # Delete a SSH key
 #
 # DELETE /users/{selected_user}/ssh-keys/{key_id}
-export def "users-ssh-keys delete" [
+export def "delete-users-selected-user-ssh-keys-key-id" [
   selected_user: string
   key_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11002,7 +11002,7 @@ export def "users-ssh-keys delete" [
 # Get a SSH key
 #
 # GET /users/{selected_user}/ssh-keys/{key_id}
-export def "users-ssh-keys get" [
+export def "get-users-selected-user-ssh-keys-key-id" [
   selected_user: string
   key_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11039,7 +11039,7 @@ export def "users-ssh-keys get" [
 # Update a SSH key
 #
 # PUT /users/{selected_user}/ssh-keys/{key_id}
-export def "users-ssh-keys update" [
+export def "put-users-selected-user-ssh-keys-key-id" [
   selected_user: string
   key_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11080,7 +11080,7 @@ export def "users-ssh-keys update" [
 # List workspaces for user
 #
 # GET /workspaces
-export def "workspaces list" [
+export def "get-workspaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11117,7 +11117,7 @@ export def "workspaces list" [
 # Get a workspace
 #
 # GET /workspaces/{workspace}
-export def "workspaces get" [
+export def "get-workspaces-workspace" [
   workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11152,7 +11152,7 @@ export def "workspaces get" [
 # List webhooks for a workspace
 #
 # GET /workspaces/{workspace}/hooks
-export def "workspaces-hooks list" [
+export def "get-workspaces-workspace-hooks" [
   workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11187,7 +11187,7 @@ export def "workspaces-hooks list" [
 # Create a webhook for a workspace
 #
 # POST /workspaces/{workspace}/hooks
-export def "workspaces-hooks create" [
+export def "post-workspaces-workspace-hooks" [
   workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11222,7 +11222,7 @@ export def "workspaces-hooks create" [
 # Delete a webhook for a workspace
 #
 # DELETE /workspaces/{workspace}/hooks/{uid}
-export def "workspaces-hooks delete" [
+export def "delete-workspaces-workspace-hooks-uid" [
   workspace: string
   uid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11259,7 +11259,7 @@ export def "workspaces-hooks delete" [
 # Get a webhook for a workspace
 #
 # GET /workspaces/{workspace}/hooks/{uid}
-export def "workspaces-hooks get" [
+export def "get-workspaces-workspace-hooks-uid" [
   workspace: string
   uid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11296,7 +11296,7 @@ export def "workspaces-hooks get" [
 # Update a webhook for a workspace
 #
 # PUT /workspaces/{workspace}/hooks/{uid}
-export def "workspaces-hooks update" [
+export def "put-workspaces-workspace-hooks-uid" [
   workspace: string
   uid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11333,7 +11333,7 @@ export def "workspaces-hooks update" [
 # List users in a workspace
 #
 # GET /workspaces/{workspace}/members
-export def "workspaces-members list" [
+export def "get-workspaces-workspace-members" [
   workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11368,7 +11368,7 @@ export def "workspaces-members list" [
 # Get user membership for a workspace
 #
 # GET /workspaces/{workspace}/members/{member}
-export def "workspaces-members get" [
+export def "get-workspaces-workspace-members-member" [
   workspace: string
   member: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11405,7 +11405,7 @@ export def "workspaces-members get" [
 # List user permissions in a workspace
 #
 # GET /workspaces/{workspace}/permissions
-export def "workspaces-permissions get" [
+export def "get-workspaces-workspace-permissions" [
   workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11442,7 +11442,7 @@ export def "workspaces-permissions get" [
 # List all repository permissions for a workspace
 #
 # GET /workspaces/{workspace}/permissions/repositories
-export def "workspaces-permissions-repositories list" [
+export def "get-workspaces-workspace-permissions-repositories" [
   workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11480,7 +11480,7 @@ export def "workspaces-permissions-repositories list" [
 # List a repository permissions for a workspace
 #
 # GET /workspaces/{workspace}/permissions/repositories/{repo_slug}
-export def "workspaces-permissions-repositories get" [
+export def "get-workspaces-workspace-permissions-repositories-repo-slug" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11521,7 +11521,7 @@ export def "workspaces-permissions-repositories get" [
 #
 # GET /workspaces/{workspace}/pipelines-config/identity/oidc/.well-known/openid-configuration
 # operationId: getOIDCConfiguration
-export def "workspaces-pipelines-config-identity-oidc-well-known-openid-configuration get" [
+export def "get-oidc-configuration" [
   workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11557,7 +11557,7 @@ export def "workspaces-pipelines-config-identity-oidc-well-known-openid-configur
 #
 # GET /workspaces/{workspace}/pipelines-config/identity/oidc/keys.json
 # operationId: getOIDCKeys
-export def "workspaces-pipelines-config-identity-oidc-keys-json get" [
+export def "get-oidc-keys" [
   workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11593,7 +11593,7 @@ export def "workspaces-pipelines-config-identity-oidc-keys-json get" [
 #
 # GET /workspaces/{workspace}/pipelines-config/variables
 # operationId: getPipelineVariablesForWorkspace
-export def "workspaces-pipelines-config-variables list" [
+export def "get-pipeline-variables-for-workspace" [
   workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11629,7 +11629,7 @@ export def "workspaces-pipelines-config-variables list" [
 #
 # POST /workspaces/{workspace}/pipelines-config/variables
 # operationId: createPipelineVariableForWorkspace
-export def "workspaces-pipelines-config-variables create" [
+export def "create-pipeline-variable-for-workspace" [
   workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11673,7 +11673,7 @@ export def "workspaces-pipelines-config-variables create" [
 #
 # DELETE /workspaces/{workspace}/pipelines-config/variables/{variable_uuid}
 # operationId: deletePipelineVariableForWorkspace
-export def "workspaces-pipelines-config-variables delete" [
+export def "delete-pipeline-variable-for-workspace" [
   workspace: string
   variable_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11711,7 +11711,7 @@ export def "workspaces-pipelines-config-variables delete" [
 #
 # GET /workspaces/{workspace}/pipelines-config/variables/{variable_uuid}
 # operationId: getPipelineVariableForWorkspace
-export def "workspaces-pipelines-config-variables get" [
+export def "get-pipeline-variable-for-workspace" [
   workspace: string
   variable_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11749,7 +11749,7 @@ export def "workspaces-pipelines-config-variables get" [
 #
 # PUT /workspaces/{workspace}/pipelines-config/variables/{variable_uuid}
 # operationId: updatePipelineVariableForWorkspace
-export def "workspaces-pipelines-config-variables update" [
+export def "update-pipeline-variable-for-workspace" [
   workspace: string
   variable_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11794,7 +11794,7 @@ export def "workspaces-pipelines-config-variables update" [
 # List projects in a workspace
 #
 # GET /workspaces/{workspace}/projects
-export def "workspaces-projects list" [
+export def "get-workspaces-workspace-projects" [
   workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11830,7 +11830,7 @@ export def "workspaces-projects list" [
 #
 # POST /workspaces/{workspace}/projects
 # --links shape: {avatar?: record, html?: record}
-export def "workspaces-projects create" [
+export def "post-workspaces-workspace-projects" [
   workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11879,7 +11879,7 @@ export def "workspaces-projects create" [
 # Delete a project for a workspace
 #
 # DELETE /workspaces/{workspace}/projects/{project_key}
-export def "workspaces-projects delete" [
+export def "delete-workspaces-workspace-projects-project-key" [
   workspace: string
   project_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11916,7 +11916,7 @@ export def "workspaces-projects delete" [
 # Get a project for a workspace
 #
 # GET /workspaces/{workspace}/projects/{project_key}
-export def "workspaces-projects get" [
+export def "get-workspaces-workspace-projects-project-key" [
   workspace: string
   project_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11954,7 +11954,7 @@ export def "workspaces-projects get" [
 #
 # PUT /workspaces/{workspace}/projects/{project_key}
 # --links shape: {avatar?: record, html?: record}
-export def "workspaces-projects update" [
+export def "put-workspaces-workspace-projects-project-key" [
   workspace: string
   project_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12005,7 +12005,7 @@ export def "workspaces-projects update" [
 # Get the branching model for a project
 #
 # GET /workspaces/{workspace}/projects/{project_key}/branching-model
-export def "workspaces-projects-branching-model get" [
+export def "get-workspaces-workspace-projects-project-key-branching-model" [
   workspace: string
   project_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12042,7 +12042,7 @@ export def "workspaces-projects-branching-model get" [
 # Get the branching model config for a project
 #
 # GET /workspaces/{workspace}/projects/{project_key}/branching-model/settings
-export def "workspaces-projects-branching-model-settings get" [
+export def "get-workspaces-workspace-projects-project-key-branching-model-settings" [
   workspace: string
   project_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12079,7 +12079,7 @@ export def "workspaces-projects-branching-model-settings get" [
 # Update the branching model config for a project
 #
 # PUT /workspaces/{workspace}/projects/{project_key}/branching-model/settings
-export def "workspaces-projects-branching-model-settings update" [
+export def "put-workspaces-workspace-projects-project-key-branching-model-settings" [
   workspace: string
   project_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12116,7 +12116,7 @@ export def "workspaces-projects-branching-model-settings update" [
 # List the default reviewers in a project
 #
 # GET /workspaces/{workspace}/projects/{project_key}/default-reviewers
-export def "workspaces-projects-default-reviewers list" [
+export def "get-workspaces-workspace-projects-project-key-default-reviewers" [
   workspace: string
   project_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12153,7 +12153,7 @@ export def "workspaces-projects-default-reviewers list" [
 # Remove the specific user from the project's default reviewers
 #
 # DELETE /workspaces/{workspace}/projects/{project_key}/default-reviewers/{selected_user}
-export def "workspaces-projects-default-reviewers delete" [
+export def "delete-workspaces-workspace-projects-project-key-default-reviewers-selected-user" [
   workspace: string
   project_key: string
   selected_user: string
@@ -12192,7 +12192,7 @@ export def "workspaces-projects-default-reviewers delete" [
 # Get a default reviewer
 #
 # GET /workspaces/{workspace}/projects/{project_key}/default-reviewers/{selected_user}
-export def "workspaces-projects-default-reviewers get" [
+export def "get-workspaces-workspace-projects-project-key-default-reviewers-selected-user" [
   workspace: string
   project_key: string
   selected_user: string
@@ -12231,7 +12231,7 @@ export def "workspaces-projects-default-reviewers get" [
 # Add the specific user as a default reviewer for the project
 #
 # PUT /workspaces/{workspace}/projects/{project_key}/default-reviewers/{selected_user}
-export def "workspaces-projects-default-reviewers update" [
+export def "put-workspaces-workspace-projects-project-key-default-reviewers-selected-user" [
   workspace: string
   project_key: string
   selected_user: string
@@ -12270,7 +12270,7 @@ export def "workspaces-projects-default-reviewers update" [
 # List project deploy keys
 #
 # GET /workspaces/{workspace}/projects/{project_key}/deploy-keys
-export def "workspaces-projects-deploy-keys list" [
+export def "get-workspaces-workspace-projects-project-key-deploy-keys" [
   workspace: string
   project_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12307,7 +12307,7 @@ export def "workspaces-projects-deploy-keys list" [
 # Create a project deploy key
 #
 # POST /workspaces/{workspace}/projects/{project_key}/deploy-keys
-export def "workspaces-projects-deploy-keys create" [
+export def "post-workspaces-workspace-projects-project-key-deploy-keys" [
   workspace: string
   project_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12344,7 +12344,7 @@ export def "workspaces-projects-deploy-keys create" [
 # Delete a deploy key from a project
 #
 # DELETE /workspaces/{workspace}/projects/{project_key}/deploy-keys/{key_id}
-export def "workspaces-projects-deploy-keys delete" [
+export def "delete-workspaces-workspace-projects-project-key-deploy-keys-key-id" [
   workspace: string
   project_key: string
   key_id: string
@@ -12383,7 +12383,7 @@ export def "workspaces-projects-deploy-keys delete" [
 # Get a project deploy key
 #
 # GET /workspaces/{workspace}/projects/{project_key}/deploy-keys/{key_id}
-export def "workspaces-projects-deploy-keys get" [
+export def "get-workspaces-workspace-projects-project-key-deploy-keys-key-id" [
   workspace: string
   project_key: string
   key_id: string
@@ -12423,7 +12423,7 @@ export def "workspaces-projects-deploy-keys get" [
 #
 # GET /workspaces/{workspace}/search/code
 # operationId: searchWorkspace
-export def "workspaces-search-code list" [
+export def "search-workspace" [
   workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

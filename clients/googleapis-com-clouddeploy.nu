@@ -129,7 +129,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "clouddeploy-projects-locations-targets-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -153,7 +153,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1/{name}
 # operationId: clouddeploy.projects.locations.targets.delete
-export def "projects delete" [
+export def "clouddeploy-projects-locations-targets-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -205,7 +205,7 @@ export def "projects delete" [
 #
 # GET /v1/{name}
 # operationId: clouddeploy.projects.locations.targets.get
-export def "projects get" [
+export def "clouddeploy-projects-locations-targets-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -258,7 +258,7 @@ export def "projects get" [
 # --gke shape: {cluster?: string, internalIp?: bool}
 # --multiTarget shape: {targetIds?: list<string>}
 # --run shape: {location?: string}
-export def "projects update" [
+export def "clouddeploy-projects-locations-targets-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -324,7 +324,7 @@ export def "projects update" [
 #
 # GET /v1/{name}/locations
 # operationId: clouddeploy.projects.locations.list
-export def "locations list" [
+export def "clouddeploy-projects-locations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -375,7 +375,7 @@ export def "locations list" [
 #
 # GET /v1/{name}/operations
 # operationId: clouddeploy.projects.locations.operations.list
-export def "operations list" [
+export def "clouddeploy-projects-locations-operations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -426,7 +426,7 @@ export def "operations list" [
 #
 # POST /v1/{name}:abandon
 # operationId: clouddeploy.projects.locations.deliveryPipelines.releases.abandon
-export def "projects create-abandon" [
+export def "clouddeploy-projects-locations-delivery-pipelines-releases-abandon" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -478,7 +478,7 @@ export def "projects create-abandon" [
 #
 # POST /v1/{name}:advance
 # operationId: clouddeploy.projects.locations.deliveryPipelines.releases.rollouts.advance
-export def "projects create-advance" [
+export def "clouddeploy-projects-locations-delivery-pipelines-releases-rollouts-advance" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -530,7 +530,7 @@ export def "projects create-advance" [
 #
 # POST /v1/{name}:approve
 # operationId: clouddeploy.projects.locations.deliveryPipelines.releases.rollouts.approve
-export def "projects approve" [
+export def "clouddeploy-projects-locations-delivery-pipelines-releases-rollouts-approve" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -582,7 +582,7 @@ export def "projects approve" [
 #
 # POST /v1/{name}:cancel
 # operationId: clouddeploy.projects.locations.operations.cancel
-export def "projects cancel" [
+export def "clouddeploy-projects-locations-operations-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -634,7 +634,7 @@ export def "projects cancel" [
 #
 # POST /v1/{name}:terminate
 # operationId: clouddeploy.projects.locations.deliveryPipelines.releases.rollouts.jobRuns.terminate
-export def "projects create-terminate" [
+export def "clouddeploy-projects-locations-delivery-pipelines-releases-rollouts-job-runs-terminate" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -686,7 +686,7 @@ export def "projects create-terminate" [
 #
 # GET /v1/{parent}/deliveryPipelines
 # operationId: clouddeploy.projects.locations.deliveryPipelines.list
-export def "delivery-pipelines list" [
+export def "clouddeploy-projects-locations-delivery-pipelines-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -740,7 +740,7 @@ export def "delivery-pipelines list" [
 # operationId: clouddeploy.projects.locations.deliveryPipelines.create
 # --condition shape: {pipelineReadyCondition?: record, targetsPresentCondition?: record, targetsTypeCondition?: record}
 # --serialPipeline shape: {stages?: list}
-export def "delivery-pipelines create" [
+export def "clouddeploy-projects-locations-delivery-pipelines-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -802,7 +802,7 @@ export def "delivery-pipelines create" [
 #
 # GET /v1/{parent}/jobRuns
 # operationId: clouddeploy.projects.locations.deliveryPipelines.releases.rollouts.jobRuns.list
-export def "job-runs list" [
+export def "clouddeploy-projects-locations-delivery-pipelines-releases-rollouts-job-runs-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -854,7 +854,7 @@ export def "job-runs list" [
 #
 # GET /v1/{parent}/releases
 # operationId: clouddeploy.projects.locations.deliveryPipelines.releases.list
-export def "releases list" [
+export def "clouddeploy-projects-locations-delivery-pipelines-releases-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -910,7 +910,7 @@ export def "releases list" [
 # --condition shape: {releaseReadyCondition?: record, skaffoldSupportedCondition?: record}
 # --deliveryPipelineSnapshot shape: {annotations?: record, condition?: record, description?: string, etag?: string, labels?: record, name?: string, serialPipeline?: record, suspended?: bool}
 # --targetSnapshots item shape: {annotations?: record, anthosCluster?: record, description?: string, etag?: string, executionConfigs?: list, gke?: record, labels?: record, multiTarget?: record, name?: string, requireApproval?: bool, run?: record}
-export def "releases create" [
+export def "clouddeploy-projects-locations-delivery-pipelines-releases-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -975,7 +975,7 @@ export def "releases create" [
 #
 # GET /v1/{parent}/rollouts
 # operationId: clouddeploy.projects.locations.deliveryPipelines.releases.rollouts.list
-export def "rollouts list" [
+export def "clouddeploy-projects-locations-delivery-pipelines-releases-rollouts-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1029,7 +1029,7 @@ export def "rollouts list" [
 # operationId: clouddeploy.projects.locations.deliveryPipelines.releases.rollouts.create
 # --metadata shape: {cloudRun?: record}
 # --phases item shape: {childRolloutJobs?: record, deploymentJobs?: record}
-export def "rollouts create" [
+export def "clouddeploy-projects-locations-delivery-pipelines-releases-rollouts-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1091,7 +1091,7 @@ export def "rollouts create" [
 #
 # GET /v1/{parent}/targets
 # operationId: clouddeploy.projects.locations.targets.list
-export def "targets list" [
+export def "clouddeploy-projects-locations-targets-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1148,7 +1148,7 @@ export def "targets list" [
 # --gke shape: {cluster?: string, internalIp?: bool}
 # --multiTarget shape: {targetIds?: list<string>}
 # --run shape: {location?: string}
-export def "targets create" [
+export def "clouddeploy-projects-locations-targets-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1213,7 +1213,7 @@ export def "targets create" [
 #
 # GET /v1/{resource}:getIamPolicy
 # operationId: clouddeploy.projects.locations.targets.getIamPolicy
-export def "projects get-iam-policy" [
+export def "clouddeploy-projects-locations-targets-get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1263,7 +1263,7 @@ export def "projects get-iam-policy" [
 # POST /v1/{resource}:setIamPolicy
 # operationId: clouddeploy.projects.locations.targets.setIamPolicy
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
-export def "projects update-iam-policy" [
+export def "clouddeploy-projects-locations-targets-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1316,7 +1316,7 @@ export def "projects update-iam-policy" [
 #
 # POST /v1/{resource}:testIamPermissions
 # operationId: clouddeploy.projects.locations.targets.testIamPermissions
-export def "projects test-iam-permissions" [
+export def "clouddeploy-projects-locations-targets-test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1368,7 +1368,7 @@ export def "projects test-iam-permissions" [
 #
 # POST /v1/{rollout}:ignoreJob
 # operationId: clouddeploy.projects.locations.deliveryPipelines.releases.rollouts.ignoreJob
-export def "projects create-ignore-job" [
+export def "clouddeploy-projects-locations-delivery-pipelines-releases-rollouts-ignore-job" [
   rollout: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1421,7 +1421,7 @@ export def "projects create-ignore-job" [
 #
 # POST /v1/{rollout}:retryJob
 # operationId: clouddeploy.projects.locations.deliveryPipelines.releases.rollouts.retryJob
-export def "projects create-retry-job" [
+export def "clouddeploy-projects-locations-delivery-pipelines-releases-rollouts-retry-job" [
   rollout: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

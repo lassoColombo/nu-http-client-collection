@@ -112,7 +112,7 @@ def format-completer [] { ["pdf"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cripc-certificate create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cripc" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -138,7 +138,7 @@ export def commands []: nothing -> table {
 # operationId: cripc
 # --certificateParameters shape: {FullName: string, policy_number: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "cripc-certificate create" [
+export def "cripc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -181,7 +181,7 @@ export def "cripc-certificate create" [
 # operationId: cvipc
 # --certificateParameters shape: {FullName: string, policy_number: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "cvipc-certificate create" [
+export def "cvipc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -224,7 +224,7 @@ export def "cvipc-certificate create" [
 # operationId: cyipc
 # --certificateParameters shape: {FullName: string, policy_number: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "cyipc-certificate create" [
+export def "cyipc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -267,7 +267,7 @@ export def "cyipc-certificate create" [
 # operationId: hlipc
 # --certificateParameters shape: {FullName: string, policy_number: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "hlipc-certificate create" [
+export def "hlipc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -310,7 +310,7 @@ export def "hlipc-certificate create" [
 # operationId: hmipc
 # --certificateParameters shape: {FullName: string, policy_number: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "hmipc-certificate create" [
+export def "hmipc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -353,7 +353,7 @@ export def "hmipc-certificate create" [
 # operationId: tripc
 # --certificateParameters shape: {FullName: string, policy_number: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "tripc-certificate create" [
+export def "tripc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -396,7 +396,7 @@ export def "tripc-certificate create" [
 # operationId: twipc
 # --certificateParameters shape: {FullName: string, policy_number: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "twipc-certificate create" [
+export def "twipc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)

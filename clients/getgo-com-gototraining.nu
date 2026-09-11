@@ -115,7 +115,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts-organizers get-list-organisers" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-all-organisers" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -141,7 +141,7 @@ export def commands []: nothing -> table {
 # DEPRECATED
 # operationId: getAllOrganisers
 @deprecated
-export def "accounts-organizers get-list-organisers" [
+export def "get-all-organisers" [
   account_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -180,7 +180,7 @@ export def "accounts-organizers get-list-organisers" [
 #
 # GET /organizers/{organizerKey}/trainings
 # operationId: getAllTrainings
-export def "organizers-trainings get-list" [
+export def "get-all-trainings" [
   organizer_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -221,7 +221,7 @@ export def "organizers-trainings get-list" [
 # operationId: scheduleTraining
 # --registrationSettings shape: {disableConfirmationEmail: bool, disableWebRegistration: bool}
 # --times item shape: {endDate: string, startDate: string}
-export def "organizers-trainings create-schedule" [
+export def "schedule-training" [
   organizer_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -269,7 +269,7 @@ export def "organizers-trainings create-schedule" [
 #
 # DELETE /organizers/{organizerKey}/trainings/{trainingKey}
 # operationId: cancelTraining
-export def "organizers-trainings cancel" [
+export def "cancel-training" [
   organizer_key: int
   training_key: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -310,7 +310,7 @@ export def "organizers-trainings cancel" [
 #
 # GET /organizers/{organizerKey}/trainings/{trainingKey}
 # operationId: getTraining
-export def "organizers-trainings get" [
+export def "get-training" [
   organizer_key: int
   training_key: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -351,7 +351,7 @@ export def "organizers-trainings get" [
 #
 # GET /organizers/{organizerKey}/trainings/{trainingKey}/manageUrl
 # operationId: getManageTrainingURL
-export def "organizers-trainings-manage-url get" [
+export def "get-manage-training-url" [
   organizer_key: int
   training_key: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -392,7 +392,7 @@ export def "organizers-trainings-manage-url get" [
 #
 # PUT /organizers/{organizerKey}/trainings/{trainingKey}/nameDescription
 # operationId: updateTrainingNameDescription
-export def "organizers-trainings-name-description update" [
+export def "update-training-name-description" [
   organizer_key: int
   training_key: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -438,7 +438,7 @@ export def "organizers-trainings-name-description update" [
 #
 # GET /organizers/{organizerKey}/trainings/{trainingKey}/organizers
 # operationId: getOrganisersForTraining
-export def "organizers-trainings-organizers get-organisers" [
+export def "get-organisers-for-training" [
   organizer_key: int
   training_key: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -479,7 +479,7 @@ export def "organizers-trainings-organizers get-organisers" [
 #
 # PUT /organizers/{organizerKey}/trainings/{trainingKey}/organizers
 # operationId: updateOrganisersForTraining
-export def "organizers-trainings-organizers update-organisers" [
+export def "update-organisers-for-training" [
   organizer_key: int
   training_key: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -525,7 +525,7 @@ export def "organizers-trainings-organizers update-organisers" [
 #
 # GET /organizers/{organizerKey}/trainings/{trainingKey}/registrants
 # operationId: getRegistrants
-export def "organizers-trainings-registrants list" [
+export def "get-registrants" [
   organizer_key: int
   training_key: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -566,7 +566,7 @@ export def "organizers-trainings-registrants list" [
 #
 # POST /organizers/{organizerKey}/trainings/{trainingKey}/registrants
 # operationId: registerForTraining
-export def "organizers-trainings-registrants create" [
+export def "register-for-training" [
   organizer_key: int
   training_key: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -613,7 +613,7 @@ export def "organizers-trainings-registrants create" [
 #
 # DELETE /organizers/{organizerKey}/trainings/{trainingKey}/registrants/{registrantKey}
 # operationId: cancelRegistration
-export def "organizers-trainings-registrants cancel-registration" [
+export def "cancel-registration" [
   organizer_key: int
   training_key: int
   registrant_key: int
@@ -656,7 +656,7 @@ export def "organizers-trainings-registrants cancel-registration" [
 #
 # GET /organizers/{organizerKey}/trainings/{trainingKey}/registrants/{registrantKey}
 # operationId: getRegistrant
-export def "organizers-trainings-registrants get" [
+export def "get-registrant" [
   organizer_key: int
   training_key: int
   registrant_key: int
@@ -699,7 +699,7 @@ export def "organizers-trainings-registrants get" [
 #
 # PUT /organizers/{organizerKey}/trainings/{trainingKey}/registrationSettings
 # operationId: updateRegistrationSettingsForTraining
-export def "organizers-trainings-registration-settings update" [
+export def "update-registration-settings-for-training" [
   organizer_key: int
   training_key: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -745,7 +745,7 @@ export def "organizers-trainings-registration-settings update" [
 #
 # GET /organizers/{organizerKey}/trainings/{trainingKey}/startUrl
 # operationId: getStartUrl
-export def "organizers-trainings-start-url get" [
+export def "get-start-url" [
   organizer_key: int
   training_key: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -787,7 +787,7 @@ export def "organizers-trainings-start-url get" [
 # PUT /organizers/{organizerKey}/trainings/{trainingKey}/times
 # operationId: updateTrainingTimes
 # --times item shape: {endDate: string, startDate: string}
-export def "organizers-trainings-times update" [
+export def "update-training-times" [
   organizer_key: int
   training_key: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -835,7 +835,7 @@ export def "organizers-trainings-times update" [
 #
 # POST /reports/organizers/{organizerKey}/sessions
 # operationId: getSessionDetailsForDateRange
-export def "reports-organizers-sessions get-details-for-date-range" [
+export def "get-session-details-for-date-range" [
   organizer_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -879,7 +879,7 @@ export def "reports-organizers-sessions get-details-for-date-range" [
 #
 # GET /reports/organizers/{organizerKey}/sessions/{sessionKey}/attendees
 # operationId: getAttendanceDetails
-export def "reports-organizers-sessions-attendees get-attendance-details" [
+export def "get-attendance-details" [
   organizer_key: int
   session_key: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -920,7 +920,7 @@ export def "reports-organizers-sessions-attendees get-attendance-details" [
 #
 # GET /reports/organizers/{organizerKey}/trainings/{trainingKey}
 # operationId: getSessionDetailsForTraining
-export def "reports-organizers-trainings get-session-details" [
+export def "get-session-details-for-training" [
   organizer_key: int
   training_key: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -961,7 +961,7 @@ export def "reports-organizers-trainings get-session-details" [
 #
 # GET /trainings/{trainingKey}/recordings
 # operationId: getRecordingsForTraining
-export def "trainings-recordings get" [
+export def "get-recordings-for-training" [
   training_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1000,7 +1000,7 @@ export def "trainings-recordings get" [
 #
 # GET /trainings/{trainingKey}/recordings/{recordingId}
 # operationId: getRecordingDownloadById
-export def "trainings-recordings get-download" [
+export def "get-recording-download-by-id" [
   training_key: int
   recording_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1041,7 +1041,7 @@ export def "trainings-recordings get-download" [
 #
 # GET /trainings/{trainingKey}/start
 # operationId: startTraining
-export def "trainings-start start" [
+export def "start-training" [
   training_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

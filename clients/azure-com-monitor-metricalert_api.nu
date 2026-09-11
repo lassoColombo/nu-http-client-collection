@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-insights-metric-alerts list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "metric-alerts-list-by-subscription" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Insights/metricAlerts
 # operationId: MetricAlerts_ListBySubscription
-export def "subscriptions-providers-microsoft-insights-metric-alerts list" [
+export def "metric-alerts-list-by-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -178,7 +178,7 @@ export def "subscriptions-providers-microsoft-insights-metric-alerts list" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/metricAlerts
 # operationId: MetricAlerts_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-insights-metric-alerts list" [
+export def "metric-alerts-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -218,7 +218,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-metric-al
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/metricAlerts/{ruleName}
 # operationId: MetricAlerts_Delete
-export def "subscriptions-resource-groups-providers-microsoft-insights-metric-alerts delete" [
+export def "metric-alerts-delete" [
   subscription_id: string
   resource_group_name: string
   rule_name: string
@@ -260,7 +260,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-metric-al
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/metricAlerts/{ruleName}
 # operationId: MetricAlerts_Get
-export def "subscriptions-resource-groups-providers-microsoft-insights-metric-alerts get" [
+export def "metric-alerts-get" [
   subscription_id: string
   resource_group_name: string
   rule_name: string
@@ -303,7 +303,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-metric-al
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/metricAlerts/{ruleName}
 # operationId: MetricAlerts_Update
 # --properties shape: {actions?: list, autoMitigate?: bool, criteria: record, description: string, enabled: bool, evaluationFrequency: string, scopes?: list<string>, severity: int, targetResourceRegion?: string, targetResourceType?: string, windowSize: string}
-export def "subscriptions-resource-groups-providers-microsoft-insights-metric-alerts update" [
+export def "metric-alerts-update" [
   subscription_id: string
   resource_group_name: string
   rule_name: string
@@ -351,7 +351,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-metric-al
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/metricAlerts/{ruleName}
 # operationId: MetricAlerts_CreateOrUpdate
 # --properties shape: {actions?: list, autoMitigate?: bool, criteria: record, description: string, enabled: bool, evaluationFrequency: string, scopes?: list<string>, severity: int, targetResourceRegion?: string, targetResourceType?: string, windowSize: string}
-export def "subscriptions-resource-groups-providers-microsoft-insights-metric-alerts create-or-update" [
+export def "metric-alerts-create-or-update" [
   subscription_id: string
   resource_group_name: string
   rule_name: string
@@ -399,7 +399,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-metric-al
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/metricAlerts/{ruleName}/status
 # operationId: MetricAlertsStatus_List
-export def "subscriptions-resource-groups-providers-microsoft-insights-metric-alerts-status list" [
+export def "metric-alerts-status-list" [
   subscription_id: string
   resource_group_name: string
   rule_name: string
@@ -441,7 +441,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-metric-al
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Insights/metricAlerts/{ruleName}/status/{statusName}
 # operationId: MetricAlertsStatus_ListByName
-export def "subscriptions-resource-groups-providers-microsoft-insights-metric-alerts-status list-by-name" [
+export def "metric-alerts-status-list-by-name" [
   subscription_id: string
   resource_group_name: string
   rule_name: string

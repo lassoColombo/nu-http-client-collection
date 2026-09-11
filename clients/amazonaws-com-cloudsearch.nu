@@ -132,7 +132,7 @@ def action-completer-25 [] { ["UpdateServiceAccessPolicies"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api get-build-suggesters" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-build-suggesters" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -156,7 +156,7 @@ export def commands []: nothing -> table {
 #
 # GET /
 # operationId: GET_BuildSuggesters
-export def "api get-build-suggesters" [
+export def "get-build-suggesters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -203,7 +203,7 @@ export def "api get-build-suggesters" [
 #
 # POST /
 # operationId: POST_BuildSuggesters
-export def "api create-build-suggesters" [
+export def "post-build-suggesters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -253,7 +253,7 @@ export def "api create-build-suggesters" [
 #
 # GET /
 # operationId: GET_CreateDomain
-export def "api get-create-domain" [
+export def "get-create-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -300,7 +300,7 @@ export def "api get-create-domain" [
 #
 # POST /
 # operationId: POST_CreateDomain
-export def "api create-domain" [
+export def "post-create-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -350,7 +350,7 @@ export def "api create-domain" [
 #
 # GET /
 # operationId: GET_DefineAnalysisScheme
-export def "api get-define-analysis-scheme" [
+export def "get-define-analysis-scheme" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -398,7 +398,7 @@ export def "api get-define-analysis-scheme" [
 #
 # POST /
 # operationId: POST_DefineAnalysisScheme
-export def "api create-define-analysis-scheme" [
+export def "post-define-analysis-scheme" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -448,7 +448,7 @@ export def "api create-define-analysis-scheme" [
 #
 # GET /
 # operationId: GET_DefineExpression
-export def "api get-define-expression" [
+export def "get-define-expression" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -496,7 +496,7 @@ export def "api get-define-expression" [
 #
 # POST /
 # operationId: POST_DefineExpression
-export def "api create-define-expression" [
+export def "post-define-expression" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -546,7 +546,7 @@ export def "api create-define-expression" [
 #
 # GET /
 # operationId: GET_DefineIndexField
-export def "api get-define-index-field" [
+export def "get-define-index-field" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -594,7 +594,7 @@ export def "api get-define-index-field" [
 #
 # POST /
 # operationId: POST_DefineIndexField
-export def "api create-define-index-field" [
+export def "post-define-index-field" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -644,7 +644,7 @@ export def "api create-define-index-field" [
 #
 # GET /
 # operationId: GET_DefineSuggester
-export def "api get-define-suggester" [
+export def "get-define-suggester" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -692,7 +692,7 @@ export def "api get-define-suggester" [
 #
 # POST /
 # operationId: POST_DefineSuggester
-export def "api create-define-suggester" [
+export def "post-define-suggester" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -742,7 +742,7 @@ export def "api create-define-suggester" [
 #
 # GET /
 # operationId: GET_DeleteAnalysisScheme
-export def "api get-delete-analysis-scheme" [
+export def "get-delete-analysis-scheme" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -790,7 +790,7 @@ export def "api get-delete-analysis-scheme" [
 #
 # POST /
 # operationId: POST_DeleteAnalysisScheme
-export def "api create-delete-analysis-scheme" [
+export def "post-delete-analysis-scheme" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -840,7 +840,7 @@ export def "api create-delete-analysis-scheme" [
 #
 # GET /
 # operationId: GET_DeleteDomain
-export def "api get-delete-domain" [
+export def "get-delete-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -887,7 +887,7 @@ export def "api get-delete-domain" [
 #
 # POST /
 # operationId: POST_DeleteDomain
-export def "api create-delete-domain" [
+export def "post-delete-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -937,7 +937,7 @@ export def "api create-delete-domain" [
 #
 # GET /
 # operationId: GET_DeleteExpression
-export def "api get-delete-expression" [
+export def "get-delete-expression" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -985,7 +985,7 @@ export def "api get-delete-expression" [
 #
 # POST /
 # operationId: POST_DeleteExpression
-export def "api create-delete-expression" [
+export def "post-delete-expression" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1035,7 +1035,7 @@ export def "api create-delete-expression" [
 #
 # GET /
 # operationId: GET_DeleteIndexField
-export def "api get-delete-index-field" [
+export def "get-delete-index-field" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1083,7 +1083,7 @@ export def "api get-delete-index-field" [
 #
 # POST /
 # operationId: POST_DeleteIndexField
-export def "api create-delete-index-field" [
+export def "post-delete-index-field" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1133,7 +1133,7 @@ export def "api create-delete-index-field" [
 #
 # GET /
 # operationId: GET_DeleteSuggester
-export def "api get-delete-suggester" [
+export def "get-delete-suggester" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1181,7 +1181,7 @@ export def "api get-delete-suggester" [
 #
 # POST /
 # operationId: POST_DeleteSuggester
-export def "api create-delete-suggester" [
+export def "post-delete-suggester" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1231,7 +1231,7 @@ export def "api create-delete-suggester" [
 #
 # GET /
 # operationId: GET_DescribeAnalysisSchemes
-export def "api get-analysis-schemes" [
+export def "get-describe-analysis-schemes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1280,7 +1280,7 @@ export def "api get-analysis-schemes" [
 #
 # POST /
 # operationId: POST_DescribeAnalysisSchemes
-export def "api create-get-analysis-schemes" [
+export def "post-describe-analysis-schemes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1330,7 +1330,7 @@ export def "api create-get-analysis-schemes" [
 #
 # GET /
 # operationId: GET_DescribeAvailabilityOptions
-export def "api get-availability-options" [
+export def "get-describe-availability-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1378,7 +1378,7 @@ export def "api get-availability-options" [
 #
 # POST /
 # operationId: POST_DescribeAvailabilityOptions
-export def "api create-get-availability-options" [
+export def "post-describe-availability-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1428,7 +1428,7 @@ export def "api create-get-availability-options" [
 #
 # GET /
 # operationId: GET_DescribeDomainEndpointOptions
-export def "api get-domain-endpoint-options" [
+export def "get-describe-domain-endpoint-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1476,7 +1476,7 @@ export def "api get-domain-endpoint-options" [
 #
 # POST /
 # operationId: POST_DescribeDomainEndpointOptions
-export def "api create-get-domain-endpoint-options" [
+export def "post-describe-domain-endpoint-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1526,7 +1526,7 @@ export def "api create-get-domain-endpoint-options" [
 #
 # GET /
 # operationId: GET_DescribeDomains
-export def "api get-domains" [
+export def "get-describe-domains" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1573,7 +1573,7 @@ export def "api get-domains" [
 #
 # POST /
 # operationId: POST_DescribeDomains
-export def "api create-get-domains" [
+export def "post-describe-domains" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1623,7 +1623,7 @@ export def "api create-get-domains" [
 #
 # GET /
 # operationId: GET_DescribeExpressions
-export def "api get-expressions" [
+export def "get-describe-expressions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1672,7 +1672,7 @@ export def "api get-expressions" [
 #
 # POST /
 # operationId: POST_DescribeExpressions
-export def "api create-get-expressions" [
+export def "post-describe-expressions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1722,7 +1722,7 @@ export def "api create-get-expressions" [
 #
 # GET /
 # operationId: GET_DescribeIndexFields
-export def "api get-index-fields" [
+export def "get-describe-index-fields" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1771,7 +1771,7 @@ export def "api get-index-fields" [
 #
 # POST /
 # operationId: POST_DescribeIndexFields
-export def "api create-get-index-fields" [
+export def "post-describe-index-fields" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1821,7 +1821,7 @@ export def "api create-get-index-fields" [
 #
 # GET /
 # operationId: GET_DescribeScalingParameters
-export def "api get-scaling-parameters" [
+export def "get-describe-scaling-parameters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1868,7 +1868,7 @@ export def "api get-scaling-parameters" [
 #
 # POST /
 # operationId: POST_DescribeScalingParameters
-export def "api create-get-scaling-parameters" [
+export def "post-describe-scaling-parameters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1918,7 +1918,7 @@ export def "api create-get-scaling-parameters" [
 #
 # GET /
 # operationId: GET_DescribeServiceAccessPolicies
-export def "api get-service-access-policies" [
+export def "get-describe-service-access-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1966,7 +1966,7 @@ export def "api get-service-access-policies" [
 #
 # POST /
 # operationId: POST_DescribeServiceAccessPolicies
-export def "api create-get-service-access-policies" [
+export def "post-describe-service-access-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2016,7 +2016,7 @@ export def "api create-get-service-access-policies" [
 #
 # GET /
 # operationId: GET_DescribeSuggesters
-export def "api get-suggesters" [
+export def "get-describe-suggesters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2065,7 +2065,7 @@ export def "api get-suggesters" [
 #
 # POST /
 # operationId: POST_DescribeSuggesters
-export def "api create-get-suggesters" [
+export def "post-describe-suggesters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2115,7 +2115,7 @@ export def "api create-get-suggesters" [
 #
 # GET /
 # operationId: GET_IndexDocuments
-export def "api get-index-documents" [
+export def "get-index-documents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2162,7 +2162,7 @@ export def "api get-index-documents" [
 #
 # POST /
 # operationId: POST_IndexDocuments
-export def "api create-index-documents" [
+export def "post-index-documents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2212,7 +2212,7 @@ export def "api create-index-documents" [
 #
 # GET /
 # operationId: GET_ListDomainNames
-export def "api get-list-domain-names" [
+export def "get-list-domain-names" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2258,7 +2258,7 @@ export def "api get-list-domain-names" [
 #
 # POST /
 # operationId: POST_ListDomainNames
-export def "api create-list-domain-names" [
+export def "post-list-domain-names" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2304,7 +2304,7 @@ export def "api create-list-domain-names" [
 #
 # GET /
 # operationId: GET_UpdateAvailabilityOptions
-export def "api get-update-availability-options" [
+export def "get-update-availability-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2352,7 +2352,7 @@ export def "api get-update-availability-options" [
 #
 # POST /
 # operationId: POST_UpdateAvailabilityOptions
-export def "api create-update-availability-options" [
+export def "post-update-availability-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2402,7 +2402,7 @@ export def "api create-update-availability-options" [
 #
 # GET /
 # operationId: GET_UpdateDomainEndpointOptions
-export def "api get-update-domain-endpoint-options" [
+export def "get-update-domain-endpoint-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2450,7 +2450,7 @@ export def "api get-update-domain-endpoint-options" [
 #
 # POST /
 # operationId: POST_UpdateDomainEndpointOptions
-export def "api create-update-domain-endpoint-options" [
+export def "post-update-domain-endpoint-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2500,7 +2500,7 @@ export def "api create-update-domain-endpoint-options" [
 #
 # GET /
 # operationId: GET_UpdateScalingParameters
-export def "api get-update-scaling-parameters" [
+export def "get-update-scaling-parameters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2548,7 +2548,7 @@ export def "api get-update-scaling-parameters" [
 #
 # POST /
 # operationId: POST_UpdateScalingParameters
-export def "api create-update-scaling-parameters" [
+export def "post-update-scaling-parameters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2598,7 +2598,7 @@ export def "api create-update-scaling-parameters" [
 #
 # GET /
 # operationId: GET_UpdateServiceAccessPolicies
-export def "api get-update-service-access-policies" [
+export def "get-update-service-access-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2646,7 +2646,7 @@ export def "api get-update-service-access-policies" [
 #
 # POST /
 # operationId: POST_UpdateServiceAccessPolicies
-export def "api create-update-service-access-policies" [
+export def "post-update-service-access-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

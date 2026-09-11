@@ -144,7 +144,7 @@ def auth-scheme-completer [] { ["x-zeno-api-key"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "podcasts-categories get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-podcast-categories" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -168,7 +168,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/v2/podcasts/categories
 # operationId: getPodcastCategories
-export def "podcasts-categories get" [
+export def "get-podcast-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -202,7 +202,7 @@ export def "podcasts-categories get" [
 #
 # GET /api/v2/podcasts/countries
 # operationId: getPodcastCountries
-export def "podcasts-countries get" [
+export def "get-podcast-countries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -237,7 +237,7 @@ export def "podcasts-countries get" [
 # POST /api/v2/podcasts/create
 # operationId: createPodcast
 # --podcast shape: {author?: string, block?: bool, categories: list<string>, copyright?: string, country?: string, description: string, explicit?: bool, image?: string, key?: string, keywords?: list<string>, language: string, link?: string, ownerEmail?: string, ownerName?: string, showType?: string, subtitle?: string, summary: string, title: string}
-export def "podcasts-create create" [
+export def "create-podcast" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -278,7 +278,7 @@ export def "podcasts-create create" [
 #
 # GET /api/v2/podcasts/languages
 # operationId: getPodcastLanguages
-export def "podcasts-languages get" [
+export def "get-podcast-languages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -313,7 +313,7 @@ export def "podcasts-languages get" [
 # POST /api/v2/podcasts/search
 # operationId: searchPodcasts
 # --filters shape: {category?: list<string>, country?: list<string>, language?: list<string>, podcastType?: "podcasts"|"shows"}
-export def "podcasts-search list" [
+export def "search-podcasts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -354,7 +354,7 @@ export def "podcasts-search list" [
 #
 # DELETE /api/v2/podcasts/{podcastKey}
 # operationId: deletePodcast
-export def "podcasts delete" [
+export def "delete-podcast" [
   podcast_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -390,7 +390,7 @@ export def "podcasts delete" [
 #
 # GET /api/v2/podcasts/{podcastKey}
 # operationId: getPodcast
-export def "podcasts get" [
+export def "get-podcast" [
   podcast_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -427,7 +427,7 @@ export def "podcasts get" [
 # PUT /api/v2/podcasts/{podcastKey}
 # operationId: updatePodcast
 # --podcast shape: {author?: string, block?: bool, categories: list<string>, copyright?: string, country?: string, description: string, explicit?: bool, image?: string, key?: string, keywords?: list<string>, language: string, link?: string, ownerEmail?: string, ownerName?: string, showType?: string, subtitle?: string, summary: string, title: string}
-export def "podcasts update" [
+export def "update-podcast" [
   podcast_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -470,7 +470,7 @@ export def "podcasts update" [
 #
 # GET /api/v2/podcasts/{podcastKey}/episodes
 # operationId: getPodcastEpisodes
-export def "podcasts-episodes list" [
+export def "get-podcast-episodes" [
   podcast_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -510,7 +510,7 @@ export def "podcasts-episodes list" [
 # POST /api/v2/podcasts/{podcastKey}/episodes/create
 # operationId: createPodcastEpisode
 # --episode shape: {author?: string, block?: bool, description: string, duration?: int, episode?: int, episodeType?: string, explicit?: bool, fileUrl?: string, image?: string, key?: string, link?: string, publishDate: string, season?: int, size?: int, subtitle?: string, summary: string, tags?: list<string>, title: string}
-export def "podcasts-episodes-create create" [
+export def "create-podcast-episode" [
   podcast_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -554,7 +554,7 @@ export def "podcasts-episodes-create create" [
 #
 # DELETE /api/v2/podcasts/{podcastKey}/episodes/{episodeKey}
 # operationId: deletePodcast_1
-export def "podcasts-episodes delete-by-podcast-key-episode-key" [
+export def "delete-podcast-1" [
   podcast_key: string
   episode_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -592,7 +592,7 @@ export def "podcasts-episodes delete-by-podcast-key-episode-key" [
 #
 # GET /api/v2/podcasts/{podcastKey}/episodes/{episodeKey}
 # operationId: getPodcastEpisode
-export def "podcasts-episodes get" [
+export def "get-podcast-episode" [
   podcast_key: string
   episode_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -631,7 +631,7 @@ export def "podcasts-episodes get" [
 # PUT /api/v2/podcasts/{podcastKey}/episodes/{episodeKey}
 # operationId: updatePodcastEpisode
 # --episode shape: {author?: string, block?: bool, description: string, duration?: int, episode?: int, episodeType?: string, explicit?: bool, fileUrl?: string, image?: string, key?: string, link?: string, publishDate: string, season?: int, size?: int, subtitle?: string, summary: string, tags?: list<string>, title: string}
-export def "podcasts-episodes update" [
+export def "update-podcast-episode" [
   podcast_key: string
   episode_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -676,7 +676,7 @@ export def "podcasts-episodes update" [
 #
 # GET /api/v2/stations/countries
 # operationId: getStationCountries
-export def "stations-countries get" [
+export def "get-station-countries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -710,7 +710,7 @@ export def "stations-countries get" [
 #
 # GET /api/v2/stations/genres
 # operationId: getStationGenres
-export def "stations-genres get" [
+export def "get-station-genres" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -744,7 +744,7 @@ export def "stations-genres get" [
 #
 # GET /api/v2/stations/languages
 # operationId: getStationLanguages
-export def "stations-languages get" [
+export def "get-station-languages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -778,7 +778,7 @@ export def "stations-languages get" [
 #
 # GET /api/v2/stations/list
 # operationId: getPartnerAggregatorStations
-export def "stations-list get-partner-aggregator" [
+export def "get-partner-aggregator-stations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -816,7 +816,7 @@ export def "stations-list get-partner-aggregator" [
 # POST /api/v2/stations/search
 # operationId: searchStations
 # --filters shape: {country?: list<string>, genre?: list<string>, language?: list<string>}
-export def "stations-search list" [
+export def "search-stations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

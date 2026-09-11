@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cinema-detail-search get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cinema-detail-search-read" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -122,7 +122,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/v1/cinema-detail/search/{cinema_name}
 # operationId: cinema-detail_search_read
-export def "cinema-detail-search get" [
+export def "cinema-detail-search-read" [
   cinema_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -158,7 +158,7 @@ export def "cinema-detail-search get" [
 #
 # GET /api/v1/cinema-schedule/search/{movie_title}
 # operationId: cinema-schedule_search_read
-export def "cinema-schedule-search get" [
+export def "cinema-schedule-search-read" [
   movie_title: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -194,7 +194,7 @@ export def "cinema-schedule-search get" [
 #
 # GET /api/v1/cinema-schedule/searchall/{param}
 # operationId: cinema-schedule_searchall_read
-export def "cinema-schedule-searchall get" [
+export def "cinema-schedule-searchall-read" [
   param: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -230,7 +230,7 @@ export def "cinema-schedule-searchall get" [
 #
 # GET /api/v1/cinema-shedule-showtime/search/{movie_title}
 # operationId: cinema-shedule-showtime_search_read
-export def "cinema-shedule-showtime-search get" [
+export def "cinema-shedule-showtime-search-read" [
   movie_title: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -266,7 +266,7 @@ export def "cinema-shedule-showtime-search get" [
 #
 # GET /api/v1/cinema-shedule-showtime/searchall/{param}
 # operationId: cinema-shedule-showtime_searchall_read
-export def "cinema-shedule-showtime-searchall get" [
+export def "cinema-shedule-showtime-searchall-read" [
   param: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -302,7 +302,7 @@ export def "cinema-shedule-showtime-searchall get" [
 #
 # GET /api/v1/cinema/search/{id}
 # operationId: cinema_search_read
-export def "cinema-search get" [
+export def "cinema-search-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -338,7 +338,7 @@ export def "cinema-search get" [
 #
 # GET /api/v1/company-credits/search/{movie_title}
 # operationId: company-credits_search_read
-export def "company-credits-search get" [
+export def "company-credits-search-read" [
   movie_title: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -374,7 +374,7 @@ export def "company-credits-search get" [
 #
 # GET /api/v1/company-credits/searchall/{param}
 # operationId: company-credits_searchall_read
-export def "company-credits-searchall get" [
+export def "company-credits-searchall-read" [
   param: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -410,7 +410,7 @@ export def "company-credits-searchall get" [
 #
 # GET /api/v1/company/search/{company_name}
 # operationId: company_search_read
-export def "company-search get" [
+export def "company-search-read" [
   company_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -446,7 +446,7 @@ export def "company-search get" [
 #
 # GET /api/v1/filmography-type/search/{filmography_description}
 # operationId: filmography-type_search_read
-export def "filmography-type-search get" [
+export def "filmography-type-search-read" [
   filmography_description: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -482,7 +482,7 @@ export def "filmography-type-search get" [
 #
 # GET /api/v1/filmography/search/{movie_title}
 # operationId: filmography_search_read
-export def "filmography-search get" [
+export def "filmography-search-read" [
   movie_title: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -518,7 +518,7 @@ export def "filmography-search get" [
 #
 # GET /api/v1/filmography/searchall/{param}
 # operationId: filmography_searchall_read
-export def "filmography-searchall get" [
+export def "filmography-searchall-read" [
   param: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -554,7 +554,7 @@ export def "filmography-searchall get" [
 #
 # GET /api/v1/genre-type/search/{genre_description}
 # operationId: genre-type_search_read
-export def "genre-type-search get" [
+export def "genre-type-search-read" [
   genre_description: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -590,7 +590,7 @@ export def "genre-type-search get" [
 #
 # GET /api/v1/genre/search/{movie_title}
 # operationId: genre_search_read
-export def "genre-search get" [
+export def "genre-search-read" [
   movie_title: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -626,7 +626,7 @@ export def "genre-search get" [
 #
 # GET /api/v1/genre/searchall/{movie_genre_type}
 # operationId: genre_searchall_read
-export def "genre-searchall get" [
+export def "genre-searchall-read" [
   movie_genre_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -662,7 +662,7 @@ export def "genre-searchall get" [
 #
 # GET /api/v1/job/search/{job_title}
 # operationId: job_search_read
-export def "job-search get" [
+export def "job-search-read" [
   job_title: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -698,7 +698,7 @@ export def "job-search get" [
 #
 # GET /api/v1/job/searchall/{company_name}
 # operationId: job_searchall_read
-export def "job-searchall get" [
+export def "job-searchall-read" [
   company_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -734,7 +734,7 @@ export def "job-searchall get" [
 #
 # GET /api/v1/media/search/{movie_title}
 # operationId: media_search_read
-export def "media-search get" [
+export def "media-search-read" [
   movie_title: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -770,7 +770,7 @@ export def "media-search get" [
 #
 # GET /api/v1/media/searchall/{user}
 # operationId: media_searchall_read
-export def "media-searchall get" [
+export def "media-searchall-read" [
   user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -806,7 +806,7 @@ export def "media-searchall get" [
 #
 # GET /api/v1/movie-cast/search/{movie_title}
 # operationId: movie-cast_search_read
-export def "movie-cast-search get" [
+export def "movie-cast-search-read" [
   movie_title: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -842,7 +842,7 @@ export def "movie-cast-search get" [
 #
 # GET /api/v1/movie-cast/searchall/{param}
 # operationId: movie-cast_searchall_read
-export def "movie-cast-searchall get" [
+export def "movie-cast-searchall-read" [
   param: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -878,7 +878,7 @@ export def "movie-cast-searchall get" [
 #
 # GET /api/v1/movie/search/{movie_title}
 # operationId: movie_search_read
-export def "movie-search get" [
+export def "movie-search-read" [
   movie_title: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -914,7 +914,7 @@ export def "movie-search get" [
 #
 # GET /api/v1/news/search/{title}
 # operationId: news_search_read
-export def "news-search get" [
+export def "news-search-read" [
   title: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -950,7 +950,7 @@ export def "news-search get" [
 #
 # GET /api/v1/people/search/{user}
 # operationId: people_search_read
-export def "people-search get" [
+export def "people-search-read" [
   user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -986,7 +986,7 @@ export def "people-search get" [
 #
 # GET /api/v1/showtime/searchall/{param}
 # operationId: showtime_searchall_read
-export def "showtime-searchall get" [
+export def "showtime-searchall-read" [
   param: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1022,7 +1022,7 @@ export def "showtime-searchall get" [
 #
 # GET /api/v1/watchlist/search/{movie_title}
 # operationId: watchlist_search_read
-export def "watchlist-search get" [
+export def "watchlist-search-read" [
   movie_title: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1058,7 +1058,7 @@ export def "watchlist-search get" [
 #
 # GET /api/v1/watchlist/searchall/{param}
 # operationId: watchlist_searchall_read
-export def "watchlist-searchall get" [
+export def "watchlist-searchall-read" [
   param: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

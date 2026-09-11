@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "claims update-devices-by-code" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "claim-devices-by-claim-code" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # PUT /claims/{claimCode}
 # operationId: ClaimDevicesByClaimCode
-export def "claims update-devices-by-code" [
+export def "claim-devices-by-claim-code" [
   claim_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -185,7 +185,7 @@ export def "claims update-devices-by-code" [
 #
 # GET /devices/{deviceId}
 # operationId: DescribeDevice
-export def "devices get" [
+export def "describe-device" [
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -230,7 +230,7 @@ export def "devices get" [
 #
 # PUT /devices/{deviceId}/finalize-claim
 # operationId: FinalizeDeviceClaim
-export def "devices-finalize-claim finalize" [
+export def "finalize-device-claim" [
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -279,7 +279,7 @@ export def "devices-finalize-claim finalize" [
 #
 # GET /devices/{deviceId}/methods
 # operationId: GetDeviceMethods
-export def "devices-methods get" [
+export def "get-device-methods" [
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -325,7 +325,7 @@ export def "devices-methods get" [
 # POST /devices/{deviceId}/methods
 # operationId: InvokeDeviceMethod
 # --deviceMethod shape: {DeviceType?: any, MethodName?: any}
-export def "devices-methods create-invoke" [
+export def "invoke-device-method" [
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -375,7 +375,7 @@ export def "devices-methods create-invoke" [
 #
 # PUT /devices/{deviceId}/initiate-claim
 # operationId: InitiateDeviceClaim
-export def "devices-initiate-claim update" [
+export def "initiate-device-claim" [
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -420,7 +420,7 @@ export def "devices-initiate-claim update" [
 #
 # GET /devices/{deviceId}/events
 # operationId: ListDeviceEvents
-export def "devices-events list" [
+export def "list-device-events" [
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -470,7 +470,7 @@ export def "devices-events list" [
 #
 # GET /devices
 # operationId: ListDevices
-export def "devices list" [
+export def "list-devices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -517,7 +517,7 @@ export def "devices list" [
 #
 # GET /tags/{resource-arn}
 # operationId: ListTagsForResource
-export def "tags list" [
+export def "list-tags-for-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -562,7 +562,7 @@ export def "tags list" [
 #
 # POST /tags/{resource-arn}
 # operationId: TagResource
-export def "tags tag" [
+export def "tag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -611,7 +611,7 @@ export def "tags tag" [
 #
 # PUT /devices/{deviceId}/unclaim
 # operationId: UnclaimDevice
-export def "devices-unclaim update" [
+export def "unclaim-device" [
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -656,7 +656,7 @@ export def "devices-unclaim update" [
 #
 # DELETE /tags/{resource-arn}
 # operationId: UntagResource
-export def "tags untag" [
+export def "untag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -703,7 +703,7 @@ export def "tags untag" [
 #
 # PUT /devices/{deviceId}/state
 # operationId: UpdateDeviceState
-export def "devices-state update" [
+export def "update-device-state" [
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

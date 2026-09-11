@@ -124,7 +124,7 @@ def underlying-resource-action-completer [] { ["Delete" "Detach"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-machine-learning-services-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -148,7 +148,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.MachineLearningServices/operations
 # operationId: Operations_List
-export def "providers-microsoft-machine-learning-services-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,7 +184,7 @@ export def "providers-microsoft-machine-learning-services-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.MachineLearningServices/locations/{location}/Quotas
 # operationId: Quotas_List
-export def "subscriptions-providers-microsoft-machine-learning-services-locations-quotas list" [
+export def "quotas-list" [
   subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -225,7 +225,7 @@ export def "subscriptions-providers-microsoft-machine-learning-services-location
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.MachineLearningServices/locations/{location}/updateQuotas
 # operationId: Quotas_Update
 # --value item shape: {id?: string, limit?: int, type?: string, unit?: "Count"}
-export def "subscriptions-providers-microsoft-machine-learning-services-locations-update-quotas update" [
+export def "quotas-update" [
   subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -269,7 +269,7 @@ export def "subscriptions-providers-microsoft-machine-learning-services-location
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.MachineLearningServices/locations/{location}/usages
 # operationId: Usages_List
-export def "subscriptions-providers-microsoft-machine-learning-services-locations-usages list" [
+export def "usages-list" [
   subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -310,7 +310,7 @@ export def "subscriptions-providers-microsoft-machine-learning-services-location
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.MachineLearningServices/locations/{location}/vmSizes
 # operationId: VirtualMachineSizes_List
-export def "subscriptions-providers-microsoft-machine-learning-services-locations-vm-sizes list-virtual" [
+export def "virtual-machine-sizes-list" [
   subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -350,7 +350,7 @@ export def "subscriptions-providers-microsoft-machine-learning-services-location
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.MachineLearningServices/workspaces
 # operationId: Workspaces_ListBySubscription
-export def "subscriptions-providers-microsoft-machine-learning-services-workspaces list" [
+export def "workspaces-list-by-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -389,7 +389,7 @@ export def "subscriptions-providers-microsoft-machine-learning-services-workspac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces
 # operationId: Workspaces_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces list" [
+export def "workspaces-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -430,7 +430,7 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-s
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}
 # operationId: Workspaces_Delete
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces delete" [
+export def "workspaces-delete" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -472,7 +472,7 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-s
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}
 # operationId: Workspaces_Get
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces get" [
+export def "workspaces-get" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -515,7 +515,7 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-s
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}
 # operationId: Workspaces_Update
 # --properties shape: {description?: string, friendlyName?: string}
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces update" [
+export def "workspaces-update" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -564,7 +564,7 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-s
 # operationId: Workspaces_CreateOrUpdate
 # --properties shape: {applicationInsights?: string, containerRegistry?: string, description?: string, discoveryUrl?: string, friendlyName?: string, keyVault?: string, storageAccount?: string}
 # --identity shape: {type?: "SystemAssigned"}
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces create-or-update" [
+export def "workspaces-create-or-update" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -613,7 +613,7 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-s
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/computes
 # operationId: MachineLearningCompute_ListByWorkspace
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-computes list" [
+export def "machine-learning-compute-list-by-workspace" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -656,7 +656,7 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-s
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/computes/{computeName}
 # operationId: MachineLearningCompute_Delete
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-computes delete" [
+export def "machine-learning-compute-delete" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -701,7 +701,7 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-s
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/computes/{computeName}
 # operationId: MachineLearningCompute_Get
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-computes get" [
+export def "machine-learning-compute-get" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -746,7 +746,7 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-s
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/computes/{computeName}
 # operationId: MachineLearningCompute_Update
 # --properties shape: {scaleSettings?: record}
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-computes update" [
+export def "machine-learning-compute-update" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -796,7 +796,7 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-s
 # operationId: MachineLearningCompute_CreateOrUpdate
 # --identity shape: {type?: "SystemAssigned"}
 # --properties shape: {computeLocation?: string, computeType: "AKS"|"AmlCompute"|"DataFactory"|"VirtualMachine"|"HDInsight"|"Databricks"|"DataLakeAnalytics", description?: string, resourceId?: string}
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-computes create-or-update" [
+export def "machine-learning-compute-create-or-update" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -847,7 +847,7 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-s
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/computes/{computeName}/listKeys
 # operationId: MachineLearningCompute_ListKeys
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-computes-list-keys list" [
+export def "machine-learning-compute-list-keys" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -891,7 +891,7 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-s
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/computes/{computeName}/listNodes
 # operationId: MachineLearningCompute_ListNodes
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-computes-list-nodes list" [
+export def "machine-learning-compute-list-nodes" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -935,7 +935,7 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-s
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/listKeys
 # operationId: Workspaces_ListKeys
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-list-keys list" [
+export def "workspaces-list-keys" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -977,7 +977,7 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-s
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/resyncKeys
 # operationId: Workspaces_ResyncKeys
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-resync-keys create" [
+export def "workspaces-resync-keys" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string

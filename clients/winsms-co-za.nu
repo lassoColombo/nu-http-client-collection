@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "credits-balance get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-credit-balance" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -128,7 +128,7 @@ export def commands []: nothing -> table {
 #
 # GET /credits/balance
 # operationId: getCreditBalance
-export def "credits-balance get" [
+export def "get-credit-balance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -162,7 +162,7 @@ export def "credits-balance get" [
 #
 # POST /credits/transfer
 # operationId: transferCredits
-export def "credits-transfer create" [
+export def "transfer-credits" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -202,7 +202,7 @@ export def "credits-transfer create" [
 #
 # GET /shortcode/incoming
 # operationId: getShortCodeMessages
-export def "shortcode-incoming get-short-code-messages" [
+export def "get-short-code-messages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -239,7 +239,7 @@ export def "shortcode-incoming get-short-code-messages" [
 #
 # GET /sms/incoming
 # operationId: getIncomingMessages
-export def "sms-incoming get-messages" [
+export def "get-incoming-messages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -276,7 +276,7 @@ export def "sms-incoming get-messages" [
 #
 # GET /sms/incoming/optout
 # operationId: getOptoutMessages
-export def "sms-incoming-optout get-messages" [
+export def "get-optout-messages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -311,7 +311,7 @@ export def "sms-incoming-optout get-messages" [
 # POST /sms/outgoing/send
 # operationId: smsSend
 # --recipients item shape: {clientMessageId?: string, mobileNumber: string}
-export def "sms-outgoing-send send" [
+export def "sms-send" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -353,7 +353,7 @@ export def "sms-outgoing-send send" [
 # POST /sms/outgoing/sendmulti
 # operationId: smsSendBatch
 # --messages item shape: {maxSegments?: int, message: string, recipients: list, scheduledTime?: string}
-export def "sms-outgoing-sendmulti send-batch" [
+export def "sms-send-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -391,7 +391,7 @@ export def "sms-outgoing-sendmulti send-batch" [
 #
 # POST /sms/outgoing/status
 # operationId: smsStatus
-export def "sms-outgoing-status create" [
+export def "sms-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -429,7 +429,7 @@ export def "sms-outgoing-status create" [
 #
 # GET /sms/scheduled
 # operationId: getScheduledMessages
-export def "sms-scheduled get-messages" [
+export def "get-scheduled-messages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -466,7 +466,7 @@ export def "sms-scheduled get-messages" [
 #
 # POST /sms/scheduled/delete
 # operationId: deleteScheduledMessages
-export def "sms-scheduled-delete delete-messages" [
+export def "delete-scheduled-messages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -504,7 +504,7 @@ export def "sms-scheduled-delete delete-messages" [
 #
 # GET /subaccounts
 # operationId: getSubAccounts
-export def "subaccounts get-sub-accounts" [
+export def "get-sub-accounts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

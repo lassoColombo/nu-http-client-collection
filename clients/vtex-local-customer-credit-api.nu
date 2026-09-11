@@ -127,7 +127,7 @@ def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "creditcontrol-accounts get-searchallaccounts" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "searchallaccounts" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -151,7 +151,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/creditcontrol/accounts
 # operationId: Searchallaccounts
-export def "creditcontrol-accounts get-searchallaccounts" [
+export def "searchallaccounts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -189,7 +189,7 @@ export def "creditcontrol-accounts get-searchallaccounts" [
 #
 # POST /api/creditcontrol/accounts
 # operationId: OpenanAccount
-export def "creditcontrol-accounts create-openan" [
+export def "openan-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -238,7 +238,7 @@ export def "creditcontrol-accounts create-openan" [
 #
 # PUT /api/creditcontrol/accounts/{accountId}
 # operationId: OpenorChangeAccount
-export def "creditcontrol-accounts update-openor-change" [
+export def "openor-change-account" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -287,7 +287,7 @@ export def "creditcontrol-accounts update-openor-change" [
 #
 # DELETE /api/creditcontrol/accounts/{creditAccountId}
 # operationId: CloseanAccount
-export def "creditcontrol-accounts delete-closean" [
+export def "closean-account" [
   credit_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -335,7 +335,7 @@ export def "creditcontrol-accounts delete-closean" [
 #
 # GET /api/creditcontrol/accounts/{creditAccountId}
 # operationId: RetrieveaAccountbyId
-export def "creditcontrol-accounts get-retrievea-accountby" [
+export def "retrievea-accountby-id" [
   credit_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -375,7 +375,7 @@ export def "creditcontrol-accounts get-retrievea-accountby" [
 #
 # PUT /api/creditcontrol/accounts/{creditAccountId}
 # operationId: Updateemailanddescriptionofaaccount
-export def "creditcontrol-accounts update-emailanddescriptionofaaccount" [
+export def "updateemailanddescriptionofaaccount" [
   credit_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -422,7 +422,7 @@ export def "creditcontrol-accounts update-emailanddescriptionofaaccount" [
 #
 # PUT /api/creditcontrol/accounts/{creditAccountId}/creditlimit
 # operationId: ChangecreditlimitofanAccount
-export def "creditcontrol-accounts-creditlimit update-changecreditlimitofan" [
+export def "changecreditlimitofan-account" [
   credit_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -469,7 +469,7 @@ export def "creditcontrol-accounts-creditlimit update-changecreditlimitofan" [
 # POST /api/creditcontrol/accounts/{creditAccountId}/holders
 # operationId: AddanaccountHolder
 # --claims shape: {email: string}
-export def "creditcontrol-accounts-holders create-addanaccount" [
+export def "addanaccount-holder" [
   credit_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -515,7 +515,7 @@ export def "creditcontrol-accounts-holders create-addanaccount" [
 #
 # DELETE /api/creditcontrol/accounts/{creditAccountId}/holders/{holderId}
 # operationId: Deleteanaccountholder
-export def "creditcontrol-accounts-holders delete-anaccountholder" [
+export def "deleteanaccountholder" [
   credit_account_id: string
   holder_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -557,7 +557,7 @@ export def "creditcontrol-accounts-holders delete-anaccountholder" [
 #
 # GET /api/creditcontrol/accounts/{creditAccountId}/invoices
 # operationId: SearchallinvoicesofaAccount
-export def "creditcontrol-accounts-invoices get-searchallinvoicesofa" [
+export def "searchallinvoicesofa-account" [
   credit_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -597,7 +597,7 @@ export def "creditcontrol-accounts-invoices get-searchallinvoicesofa" [
 #
 # DELETE /api/creditcontrol/accounts/{creditAccountId}/invoices/{invoiceId}
 # operationId: CancelInvoice
-export def "creditcontrol-accounts-invoices cancel" [
+export def "cancel-invoice" [
   credit_account_id: string
   invoice_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -639,7 +639,7 @@ export def "creditcontrol-accounts-invoices cancel" [
 #
 # GET /api/creditcontrol/accounts/{creditAccountId}/invoices/{invoiceId}
 # operationId: RetrieveInvoicebyId
-export def "creditcontrol-accounts-invoices get-invoiceby" [
+export def "retrieve-invoiceby-id" [
   credit_account_id: string
   invoice_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -681,7 +681,7 @@ export def "creditcontrol-accounts-invoices get-invoiceby" [
 #
 # PUT /api/creditcontrol/accounts/{creditAccountId}/invoices/{invoiceId}
 # operationId: ChangeInvoice
-export def "creditcontrol-accounts-invoices update-change" [
+export def "change-invoice" [
   credit_account_id: string
   invoice_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -733,7 +733,7 @@ export def "creditcontrol-accounts-invoices update-change" [
 #
 # POST /api/creditcontrol/accounts/{creditAccountId}/invoices/{invoiceId}/payments
 # operationId: MarkaninvoiceasPaid
-export def "creditcontrol-accounts-invoices-payments create-markaninvoiceas-paid" [
+export def "markaninvoiceas-paid" [
   credit_account_id: string
   invoice_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -781,7 +781,7 @@ export def "creditcontrol-accounts-invoices-payments create-markaninvoiceas-paid
 #
 # PUT /api/creditcontrol/accounts/{creditAccountId}/invoices/{invoiceId}/postponement
 # operationId: Postponeaninvoice
-export def "creditcontrol-accounts-invoices-post-ponement create-poneaninvoice" [
+export def "postponeaninvoice" [
   credit_account_id: string
   invoice_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -829,7 +829,7 @@ export def "creditcontrol-accounts-invoices-post-ponement create-poneaninvoice" 
 #
 # GET /api/creditcontrol/accounts/{creditAccountId}/statements
 # operationId: Accountstatements
-export def "creditcontrol-accounts-statements get-accountstatements" [
+export def "accountstatements" [
   credit_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -869,7 +869,7 @@ export def "creditcontrol-accounts-statements get-accountstatements" [
 #
 # PUT /api/creditcontrol/accounts/{creditAccountId}/statements/{statementId}
 # operationId: Decreasebalanceofanaccount
-export def "creditcontrol-accounts-statements update-decreasebalanceofanaccount" [
+export def "decreasebalanceofanaccount" [
   credit_account_id: string
   statement_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -917,7 +917,7 @@ export def "creditcontrol-accounts-statements update-decreasebalanceofanaccount"
 #
 # PUT /api/creditcontrol/accounts/{creditAccountId}/tolerance
 # operationId: Changetoleranceofanaccount
-export def "creditcontrol-accounts-tolerance update-changetoleranceofanaccount" [
+export def "changetoleranceofanaccount" [
   credit_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -963,7 +963,7 @@ export def "creditcontrol-accounts-tolerance update-changetoleranceofanaccount" 
 #
 # POST /api/creditcontrol/accounts/{creditAccountId}/transaction
 # operationId: CreateaPreAuthorization
-export def "creditcontrol-accounts-transaction create-createa-pre-authorization" [
+export def "createa-pre-authorization" [
   credit_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -1012,7 +1012,7 @@ export def "creditcontrol-accounts-transaction create-createa-pre-authorization"
 #
 # DELETE /api/creditcontrol/accounts/{creditAccountId}/transactions/{transactionId}
 # operationId: CancelaPreAuthorization
-export def "creditcontrol-accounts-transactions delete-cancela-pre-authorization" [
+export def "cancela-pre-authorization" [
   credit_account_id: string
   transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1054,7 +1054,7 @@ export def "creditcontrol-accounts-transactions delete-cancela-pre-authorization
 #
 # PUT /api/creditcontrol/accounts/{creditAccountId}/transactions/{transactionId}
 # operationId: CreateaPreAuthorization(usingid)
-export def "creditcontrol-accounts-transactions update-createa-pre-authorizationusingid" [
+export def "createa-pre-authorizationusingid" [
   credit_account_id: string
   transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1105,7 +1105,7 @@ export def "creditcontrol-accounts-transactions update-createa-pre-authorization
 #
 # POST /api/creditcontrol/accounts/{creditAccountId}/transactions/{transactionId}/refunds
 # operationId: PartialorTotalRefundaSettlement
-export def "creditcontrol-accounts-transactions-refunds create-partialor-total-refunda-settlement" [
+export def "partialor-total-refunda-settlement" [
   credit_account_id: string
   transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1153,7 +1153,7 @@ export def "creditcontrol-accounts-transactions-refunds create-partialor-total-r
 #
 # PUT /api/creditcontrol/accounts/{creditAccountId}/transactions/{transactionId}/settlement
 # operationId: CreateorUpdateSettlement
-export def "creditcontrol-accounts-transactions-settlement update-createor" [
+export def "createor-update-settlement" [
   credit_account_id: string
   transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1201,7 +1201,7 @@ export def "creditcontrol-accounts-transactions-settlement update-createor" [
 #
 # GET /api/creditcontrol/invoices
 # operationId: Searchallinvoices
-export def "creditcontrol-invoices get-searchallinvoices" [
+export def "searchallinvoices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -1248,7 +1248,7 @@ export def "creditcontrol-invoices get-searchallinvoices" [
 #
 # GET /api/creditcontrol/storeconfig
 # operationId: Retrievestoreconfiguration
-export def "creditcontrol-storeconfig get-storeconfiguration" [
+export def "retrievestoreconfiguration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -1287,7 +1287,7 @@ export def "creditcontrol-storeconfig get-storeconfiguration" [
 # PUT /api/creditcontrol/storeconfig
 # operationId: Createorchangestoreconfiguration
 # --notificationsSettings shape: {daysAfter?: list, daysPrior?: list}
-export def "creditcontrol-storeconfig create-orchangestoreconfiguration" [
+export def "createorchangestoreconfiguration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)

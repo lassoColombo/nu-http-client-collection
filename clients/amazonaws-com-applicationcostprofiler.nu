@@ -119,7 +119,7 @@ def format-completer [] { ["CSV" "PARQUET"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "report-definition delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "delete-report-definition" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -143,7 +143,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /reportDefinition/{reportId}
 # operationId: DeleteReportDefinition
-export def "report-definition delete" [
+export def "delete-report-definition" [
   report_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -188,7 +188,7 @@ export def "report-definition delete" [
 #
 # GET /reportDefinition/{reportId}
 # operationId: GetReportDefinition
-export def "report-definition get" [
+export def "get-report-definition" [
   report_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -234,7 +234,7 @@ export def "report-definition get" [
 # PUT /reportDefinition/{reportId}
 # operationId: UpdateReportDefinition
 # --destinationS3Location shape: {bucket?: any, prefix?: any}
-export def "report-definition update-by-report-id" [
+export def "update-report-definition" [
   report_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -287,7 +287,7 @@ export def "report-definition update-by-report-id" [
 # POST /importApplicationUsage
 # operationId: ImportApplicationUsage
 # --sourceS3Location shape: {bucket?: any, key?: any, region?: any}
-export def "import-application-usage import" [
+export def "import-application-usage" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -334,7 +334,7 @@ export def "import-application-usage import" [
 #
 # GET /reportDefinition
 # operationId: ListReportDefinitions
-export def "report-definition list" [
+export def "list-report-definitions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -381,7 +381,7 @@ export def "report-definition list" [
 # POST /reportDefinition
 # operationId: PutReportDefinition
 # --destinationS3Location shape: {bucket?: any, prefix?: any}
-export def "report-definition update" [
+export def "put-report-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

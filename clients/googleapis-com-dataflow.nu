@@ -137,7 +137,7 @@ def view-completer-1 [] { ["METADATA_ONLY"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1b3-projects-worker-messages create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "dataflow-projects-worker-messages" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -162,7 +162,7 @@ export def commands []: nothing -> table {
 # POST /v1b3/projects/{projectId}/WorkerMessages
 # operationId: dataflow.projects.workerMessages
 # --workerMessages item shape: {labels?: record, time?: string, workerHealthReport?: record, workerLifecycleEvent?: record, workerMessageCode?: record, workerMetrics?: record, workerShutdownNotice?: record, workerThreadScalingReport?: record}
-export def "v1b3-projects-worker-messages create" [
+export def "dataflow-projects-worker-messages" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -215,7 +215,7 @@ export def "v1b3-projects-worker-messages create" [
 #
 # GET /v1b3/projects/{projectId}/jobs
 # operationId: dataflow.projects.jobs.list
-export def "v1b3-projects-jobs list" [
+export def "dataflow-projects-jobs-list" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -275,7 +275,7 @@ export def "v1b3-projects-jobs list" [
 # --pipelineDescription shape: {displayData?: list, executionPipelineStage?: list, originalPipelineTransform?: list, stepNamesHash?: string}
 # --stageStates item shape: {currentStateTime?: string, executionStageName?: string, executionStageState?: "JOB_STATE_UNKNOWN"|"JOB_STATE_STOPPED"|"JOB_STATE_RUNNING"|"JOB_STATE_DONE"|"JOB_STATE_FAILED"|"JOB_STATE_CANCELLED"|"JOB_STATE_UPDATED"|"JOB_STATE_DRAINING"|"JOB_STATE_DRAINED"|"JOB_STATE_PENDING"|"JOB_STATE_CANCELLING"|"JOB_STATE_QUEUED"|"JOB_STATE_RESOURCE_CLEANING_UP"}
 # --steps item shape: {kind?: string, name?: string, properties?: record}
-export def "v1b3-projects-jobs create" [
+export def "dataflow-projects-jobs-create" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -354,7 +354,7 @@ export def "v1b3-projects-jobs create" [
 #
 # GET /v1b3/projects/{projectId}/jobs/{jobId}
 # operationId: dataflow.projects.jobs.get
-export def "v1b3-projects-jobs get" [
+export def "dataflow-projects-jobs-get" [
   project_id: string
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -412,7 +412,7 @@ export def "v1b3-projects-jobs get" [
 # --pipelineDescription shape: {displayData?: list, executionPipelineStage?: list, originalPipelineTransform?: list, stepNamesHash?: string}
 # --stageStates item shape: {currentStateTime?: string, executionStageName?: string, executionStageState?: "JOB_STATE_UNKNOWN"|"JOB_STATE_STOPPED"|"JOB_STATE_RUNNING"|"JOB_STATE_DONE"|"JOB_STATE_FAILED"|"JOB_STATE_CANCELLED"|"JOB_STATE_UPDATED"|"JOB_STATE_DRAINING"|"JOB_STATE_DRAINED"|"JOB_STATE_PENDING"|"JOB_STATE_CANCELLING"|"JOB_STATE_QUEUED"|"JOB_STATE_RESOURCE_CLEANING_UP"}
 # --steps item shape: {kind?: string, name?: string, properties?: record}
-export def "v1b3-projects-jobs update" [
+export def "dataflow-projects-jobs-update" [
   project_id: string
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -492,7 +492,7 @@ export def "v1b3-projects-jobs update" [
 #
 # POST /v1b3/projects/{projectId}/jobs/{jobId}/debug/getConfig
 # operationId: dataflow.projects.jobs.debug.getConfig
-export def "v1b3-projects-jobs-debug-get-config get" [
+export def "dataflow-projects-jobs-debug-get-config" [
   project_id: string
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -548,7 +548,7 @@ export def "v1b3-projects-jobs-debug-get-config get" [
 #
 # POST /v1b3/projects/{projectId}/jobs/{jobId}/debug/sendCapture
 # operationId: dataflow.projects.jobs.debug.sendCapture
-export def "v1b3-projects-jobs-debug-send-capture send" [
+export def "dataflow-projects-jobs-debug-send-capture" [
   project_id: string
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -606,7 +606,7 @@ export def "v1b3-projects-jobs-debug-send-capture send" [
 #
 # GET /v1b3/projects/{projectId}/jobs/{jobId}/messages
 # operationId: dataflow.projects.jobs.messages.list
-export def "v1b3-projects-jobs-messages list" [
+export def "dataflow-projects-jobs-messages-list" [
   project_id: string
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -662,7 +662,7 @@ export def "v1b3-projects-jobs-messages list" [
 #
 # GET /v1b3/projects/{projectId}/jobs/{jobId}/metrics
 # operationId: dataflow.projects.jobs.getMetrics
-export def "v1b3-projects-jobs-metrics get" [
+export def "dataflow-projects-jobs-get-metrics" [
   project_id: string
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -714,7 +714,7 @@ export def "v1b3-projects-jobs-metrics get" [
 #
 # POST /v1b3/projects/{projectId}/jobs/{jobId}/workItems:lease
 # operationId: dataflow.projects.jobs.workItems.lease
-export def "v1b3-projects-jobs-work-items-lease create" [
+export def "dataflow-projects-jobs-work-items-lease" [
   project_id: string
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -775,7 +775,7 @@ export def "v1b3-projects-jobs-work-items-lease create" [
 # POST /v1b3/projects/{projectId}/jobs/{jobId}/workItems:reportStatus
 # operationId: dataflow.projects.jobs.workItems.reportStatus
 # --workItemStatuses item shape: {completed?: bool, counterUpdates?: list, dynamicSourceSplit?: record, errors?: list, metricUpdates?: list, progress?: record, reportIndex?: string, reportedProgress?: record, requestedLeaseDuration?: string, sourceFork?: record, sourceOperationResponse?: record, stopPosition?: record, totalThrottlerWaitTimeSeconds?: float, workItemId?: string}
-export def "v1b3-projects-jobs-work-items-report-status create" [
+export def "dataflow-projects-jobs-work-items-report-status" [
   project_id: string
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -833,7 +833,7 @@ export def "v1b3-projects-jobs-work-items-report-status create" [
 #
 # POST /v1b3/projects/{projectId}/jobs/{jobId}:snapshot
 # operationId: dataflow.projects.jobs.snapshot
-export def "v1b3-projects-jobs create-snapshot" [
+export def "dataflow-projects-jobs-snapshot" [
   project_id: string
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -890,7 +890,7 @@ export def "v1b3-projects-jobs create-snapshot" [
 #
 # GET /v1b3/projects/{projectId}/jobs:aggregated
 # operationId: dataflow.projects.jobs.aggregated
-export def "v1b3-projects-jobs-aggregated get" [
+export def "dataflow-projects-jobs-aggregated" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -945,7 +945,7 @@ export def "v1b3-projects-jobs-aggregated get" [
 # POST /v1b3/projects/{projectId}/locations/{location}/WorkerMessages
 # operationId: dataflow.projects.locations.workerMessages
 # --workerMessages item shape: {labels?: record, time?: string, workerHealthReport?: record, workerLifecycleEvent?: record, workerMessageCode?: record, workerMetrics?: record, workerShutdownNotice?: record, workerThreadScalingReport?: record}
-export def "v1b3-projects-locations-worker-messages create" [
+export def "dataflow-projects-locations-worker-messages" [
   project_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1001,7 +1001,7 @@ export def "v1b3-projects-locations-worker-messages create" [
 # POST /v1b3/projects/{projectId}/locations/{location}/flexTemplates:launch
 # operationId: dataflow.projects.locations.flexTemplates.launch
 # --launchParameter shape: {containerSpec?: record, containerSpecGcsPath?: string, environment?: record, jobName?: string, launchOptions?: record, parameters?: record, transformNameMappings?: record, update?: bool}
-export def "v1b3-projects-locations-flex-templates-launch create" [
+export def "dataflow-projects-locations-flex-templates-launch" [
   project_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1056,7 +1056,7 @@ export def "v1b3-projects-locations-flex-templates-launch create" [
 #
 # GET /v1b3/projects/{projectId}/locations/{location}/jobs
 # operationId: dataflow.projects.locations.jobs.list
-export def "v1b3-projects-locations-jobs list" [
+export def "dataflow-projects-locations-jobs-list" [
   project_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1117,7 +1117,7 @@ export def "v1b3-projects-locations-jobs list" [
 # --pipelineDescription shape: {displayData?: list, executionPipelineStage?: list, originalPipelineTransform?: list, stepNamesHash?: string}
 # --stageStates item shape: {currentStateTime?: string, executionStageName?: string, executionStageState?: "JOB_STATE_UNKNOWN"|"JOB_STATE_STOPPED"|"JOB_STATE_RUNNING"|"JOB_STATE_DONE"|"JOB_STATE_FAILED"|"JOB_STATE_CANCELLED"|"JOB_STATE_UPDATED"|"JOB_STATE_DRAINING"|"JOB_STATE_DRAINED"|"JOB_STATE_PENDING"|"JOB_STATE_CANCELLING"|"JOB_STATE_QUEUED"|"JOB_STATE_RESOURCE_CLEANING_UP"}
 # --steps item shape: {kind?: string, name?: string, properties?: record}
-export def "v1b3-projects-locations-jobs create" [
+export def "dataflow-projects-locations-jobs-create" [
   project_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1197,7 +1197,7 @@ export def "v1b3-projects-locations-jobs create" [
 #
 # GET /v1b3/projects/{projectId}/locations/{location}/jobs/{jobId}
 # operationId: dataflow.projects.locations.jobs.get
-export def "v1b3-projects-locations-jobs get" [
+export def "dataflow-projects-locations-jobs-get" [
   project_id: string
   location: string
   job_id: string
@@ -1256,7 +1256,7 @@ export def "v1b3-projects-locations-jobs get" [
 # --pipelineDescription shape: {displayData?: list, executionPipelineStage?: list, originalPipelineTransform?: list, stepNamesHash?: string}
 # --stageStates item shape: {currentStateTime?: string, executionStageName?: string, executionStageState?: "JOB_STATE_UNKNOWN"|"JOB_STATE_STOPPED"|"JOB_STATE_RUNNING"|"JOB_STATE_DONE"|"JOB_STATE_FAILED"|"JOB_STATE_CANCELLED"|"JOB_STATE_UPDATED"|"JOB_STATE_DRAINING"|"JOB_STATE_DRAINED"|"JOB_STATE_PENDING"|"JOB_STATE_CANCELLING"|"JOB_STATE_QUEUED"|"JOB_STATE_RESOURCE_CLEANING_UP"}
 # --steps item shape: {kind?: string, name?: string, properties?: record}
-export def "v1b3-projects-locations-jobs update" [
+export def "dataflow-projects-locations-jobs-update" [
   project_id: string
   location: string
   job_id: string
@@ -1337,7 +1337,7 @@ export def "v1b3-projects-locations-jobs update" [
 #
 # POST /v1b3/projects/{projectId}/locations/{location}/jobs/{jobId}/debug/getConfig
 # operationId: dataflow.projects.locations.jobs.debug.getConfig
-export def "v1b3-projects-locations-jobs-debug-get-config get" [
+export def "dataflow-projects-locations-jobs-debug-get-config" [
   project_id: string
   location: string
   job_id: string
@@ -1395,7 +1395,7 @@ export def "v1b3-projects-locations-jobs-debug-get-config get" [
 #
 # POST /v1b3/projects/{projectId}/locations/{location}/jobs/{jobId}/debug/sendCapture
 # operationId: dataflow.projects.locations.jobs.debug.sendCapture
-export def "v1b3-projects-locations-jobs-debug-send-capture send" [
+export def "dataflow-projects-locations-jobs-debug-send-capture" [
   project_id: string
   location: string
   job_id: string
@@ -1455,7 +1455,7 @@ export def "v1b3-projects-locations-jobs-debug-send-capture send" [
 #
 # GET /v1b3/projects/{projectId}/locations/{location}/jobs/{jobId}/executionDetails
 # operationId: dataflow.projects.locations.jobs.getExecutionDetails
-export def "v1b3-projects-locations-jobs-execution-details get" [
+export def "dataflow-projects-locations-jobs-get-execution-details" [
   project_id: string
   location: string
   job_id: string
@@ -1509,7 +1509,7 @@ export def "v1b3-projects-locations-jobs-execution-details get" [
 #
 # GET /v1b3/projects/{projectId}/locations/{location}/jobs/{jobId}/messages
 # operationId: dataflow.projects.locations.jobs.messages.list
-export def "v1b3-projects-locations-jobs-messages list" [
+export def "dataflow-projects-locations-jobs-messages-list" [
   project_id: string
   location: string
   job_id: string
@@ -1566,7 +1566,7 @@ export def "v1b3-projects-locations-jobs-messages list" [
 #
 # GET /v1b3/projects/{projectId}/locations/{location}/jobs/{jobId}/metrics
 # operationId: dataflow.projects.locations.jobs.getMetrics
-export def "v1b3-projects-locations-jobs-metrics get" [
+export def "dataflow-projects-locations-jobs-get-metrics" [
   project_id: string
   location: string
   job_id: string
@@ -1619,7 +1619,7 @@ export def "v1b3-projects-locations-jobs-metrics get" [
 #
 # GET /v1b3/projects/{projectId}/locations/{location}/jobs/{jobId}/snapshots
 # operationId: dataflow.projects.locations.jobs.snapshots.list
-export def "v1b3-projects-locations-jobs-snapshots list" [
+export def "dataflow-projects-locations-jobs-snapshots-list" [
   project_id: string
   location: string
   job_id: string
@@ -1671,7 +1671,7 @@ export def "v1b3-projects-locations-jobs-snapshots list" [
 #
 # GET /v1b3/projects/{projectId}/locations/{location}/jobs/{jobId}/stages/{stageId}/executionDetails
 # operationId: dataflow.projects.locations.jobs.stages.getExecutionDetails
-export def "v1b3-projects-locations-jobs-stages-execution-details get" [
+export def "dataflow-projects-locations-jobs-stages-get-execution-details" [
   project_id: string
   location: string
   job_id: string
@@ -1729,7 +1729,7 @@ export def "v1b3-projects-locations-jobs-stages-execution-details get" [
 #
 # POST /v1b3/projects/{projectId}/locations/{location}/jobs/{jobId}/workItems:lease
 # operationId: dataflow.projects.locations.jobs.workItems.lease
-export def "v1b3-projects-locations-jobs-work-items-lease create" [
+export def "dataflow-projects-locations-jobs-work-items-lease" [
   project_id: string
   location: string
   job_id: string
@@ -1792,7 +1792,7 @@ export def "v1b3-projects-locations-jobs-work-items-lease create" [
 # POST /v1b3/projects/{projectId}/locations/{location}/jobs/{jobId}/workItems:reportStatus
 # operationId: dataflow.projects.locations.jobs.workItems.reportStatus
 # --workItemStatuses item shape: {completed?: bool, counterUpdates?: list, dynamicSourceSplit?: record, errors?: list, metricUpdates?: list, progress?: record, reportIndex?: string, reportedProgress?: record, requestedLeaseDuration?: string, sourceFork?: record, sourceOperationResponse?: record, stopPosition?: record, totalThrottlerWaitTimeSeconds?: float, workItemId?: string}
-export def "v1b3-projects-locations-jobs-work-items-report-status create" [
+export def "dataflow-projects-locations-jobs-work-items-report-status" [
   project_id: string
   location: string
   job_id: string
@@ -1852,7 +1852,7 @@ export def "v1b3-projects-locations-jobs-work-items-report-status create" [
 #
 # POST /v1b3/projects/{projectId}/locations/{location}/jobs/{jobId}:snapshot
 # operationId: dataflow.projects.locations.jobs.snapshot
-export def "v1b3-projects-locations-jobs create-snapshot" [
+export def "dataflow-projects-locations-jobs-snapshot" [
   project_id: string
   location: string
   job_id: string
@@ -1911,7 +1911,7 @@ export def "v1b3-projects-locations-jobs create-snapshot" [
 #
 # GET /v1b3/projects/{projectId}/locations/{location}/snapshots
 # operationId: dataflow.projects.locations.snapshots.list
-export def "v1b3-projects-locations-snapshots list" [
+export def "dataflow-projects-locations-snapshots-list" [
   project_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1962,7 +1962,7 @@ export def "v1b3-projects-locations-snapshots list" [
 #
 # DELETE /v1b3/projects/{projectId}/locations/{location}/snapshots/{snapshotId}
 # operationId: dataflow.projects.locations.snapshots.delete
-export def "v1b3-projects-locations-snapshots delete" [
+export def "dataflow-projects-locations-snapshots-delete" [
   project_id: string
   location: string
   snapshot_id: string
@@ -2014,7 +2014,7 @@ export def "v1b3-projects-locations-snapshots delete" [
 #
 # GET /v1b3/projects/{projectId}/locations/{location}/snapshots/{snapshotId}
 # operationId: dataflow.projects.locations.snapshots.get
-export def "v1b3-projects-locations-snapshots get" [
+export def "dataflow-projects-locations-snapshots-get" [
   project_id: string
   location: string
   snapshot_id: string
@@ -2067,7 +2067,7 @@ export def "v1b3-projects-locations-snapshots get" [
 # POST /v1b3/projects/{projectId}/locations/{location}/templates
 # operationId: dataflow.projects.locations.templates.create
 # --environment shape: {additionalExperiments?: list<string>, additionalUserLabels?: record, bypassTempDirValidation?: bool, enableStreamingEngine?: bool, ipConfiguration?: "WORKER_IP_UNSPECIFIED"|"WORKER_IP_PUBLIC"|"WORKER_IP_PRIVATE", kmsKeyName?: string, machineType?: string, maxWorkers?: int, network?: string, numWorkers?: int, serviceAccountEmail?: string, subnetwork?: string, tempLocation?: string, workerRegion?: string, workerZone?: string, zone?: string}
-export def "v1b3-projects-locations-templates create" [
+export def "dataflow-projects-locations-templates-create" [
   project_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2125,7 +2125,7 @@ export def "v1b3-projects-locations-templates create" [
 #
 # GET /v1b3/projects/{projectId}/locations/{location}/templates:get
 # operationId: dataflow.projects.locations.templates.get
-export def "v1b3-projects-locations-templates-get get" [
+export def "dataflow-projects-locations-templates-get" [
   project_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2178,7 +2178,7 @@ export def "v1b3-projects-locations-templates-get get" [
 # POST /v1b3/projects/{projectId}/locations/{location}/templates:launch
 # operationId: dataflow.projects.locations.templates.launch
 # --environment shape: {additionalExperiments?: list<string>, additionalUserLabels?: record, bypassTempDirValidation?: bool, enableStreamingEngine?: bool, ipConfiguration?: "WORKER_IP_UNSPECIFIED"|"WORKER_IP_PUBLIC"|"WORKER_IP_PRIVATE", kmsKeyName?: string, machineType?: string, maxWorkers?: int, network?: string, numWorkers?: int, serviceAccountEmail?: string, subnetwork?: string, tempLocation?: string, workerRegion?: string, workerZone?: string, zone?: string}
-export def "v1b3-projects-locations-templates-launch create" [
+export def "dataflow-projects-locations-templates-launch" [
   project_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2240,7 +2240,7 @@ export def "v1b3-projects-locations-templates-launch create" [
 #
 # DELETE /v1b3/projects/{projectId}/snapshots
 # operationId: dataflow.projects.deleteSnapshots
-export def "v1b3-projects-snapshots delete" [
+export def "dataflow-projects-delete-snapshots" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2290,7 +2290,7 @@ export def "v1b3-projects-snapshots delete" [
 #
 # GET /v1b3/projects/{projectId}/snapshots
 # operationId: dataflow.projects.snapshots.list
-export def "v1b3-projects-snapshots list" [
+export def "dataflow-projects-snapshots-list" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2340,7 +2340,7 @@ export def "v1b3-projects-snapshots list" [
 #
 # GET /v1b3/projects/{projectId}/snapshots/{snapshotId}
 # operationId: dataflow.projects.snapshots.get
-export def "v1b3-projects-snapshots get" [
+export def "dataflow-projects-snapshots-get" [
   project_id: string
   snapshot_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2392,7 +2392,7 @@ export def "v1b3-projects-snapshots get" [
 # POST /v1b3/projects/{projectId}/templates
 # operationId: dataflow.projects.templates.create
 # --environment shape: {additionalExperiments?: list<string>, additionalUserLabels?: record, bypassTempDirValidation?: bool, enableStreamingEngine?: bool, ipConfiguration?: "WORKER_IP_UNSPECIFIED"|"WORKER_IP_PUBLIC"|"WORKER_IP_PRIVATE", kmsKeyName?: string, machineType?: string, maxWorkers?: int, network?: string, numWorkers?: int, serviceAccountEmail?: string, subnetwork?: string, tempLocation?: string, workerRegion?: string, workerZone?: string, zone?: string}
-export def "v1b3-projects-templates create" [
+export def "dataflow-projects-templates-create" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2448,7 +2448,7 @@ export def "v1b3-projects-templates create" [
 #
 # GET /v1b3/projects/{projectId}/templates:get
 # operationId: dataflow.projects.templates.get
-export def "v1b3-projects-templates-get get" [
+export def "dataflow-projects-templates-get" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2500,7 +2500,7 @@ export def "v1b3-projects-templates-get get" [
 # POST /v1b3/projects/{projectId}/templates:launch
 # operationId: dataflow.projects.templates.launch
 # --environment shape: {additionalExperiments?: list<string>, additionalUserLabels?: record, bypassTempDirValidation?: bool, enableStreamingEngine?: bool, ipConfiguration?: "WORKER_IP_UNSPECIFIED"|"WORKER_IP_PUBLIC"|"WORKER_IP_PRIVATE", kmsKeyName?: string, machineType?: string, maxWorkers?: int, network?: string, numWorkers?: int, serviceAccountEmail?: string, subnetwork?: string, tempLocation?: string, workerRegion?: string, workerZone?: string, zone?: string}
-export def "v1b3-projects-templates-launch create" [
+export def "dataflow-projects-templates-launch" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

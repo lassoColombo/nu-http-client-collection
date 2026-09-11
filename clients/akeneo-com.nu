@@ -122,7 +122,7 @@ def type-completer-2 [] { ["image" "multiple_options" "number" "reference_entity
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "oauth-token create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-token" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # POST /api/oauth/v1/token
 # operationId: post_token
-export def "oauth-token create" [
+export def "post-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -192,7 +192,7 @@ export def "oauth-token create" [
 #
 # GET /api/rest/v1
 # operationId: get_endpoints
-export def "rest get-endpoints" [
+export def "get-endpoints" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -226,7 +226,7 @@ export def "rest get-endpoints" [
 #
 # GET /api/rest/v1/asset-categories
 # operationId: get_asset_categories
-export def "rest-asset-categories list" [
+export def "get-asset-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -265,7 +265,7 @@ export def "rest-asset-categories list" [
 # PATCH /api/rest/v1/asset-categories
 # operationId: patch_asset_categories
 # --labels shape: {localeCode?: string}
-export def "rest-asset-categories update" [
+export def "patch-asset-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -306,7 +306,7 @@ export def "rest-asset-categories update" [
 # POST /api/rest/v1/asset-categories
 # operationId: post_asset_categories
 # --labels shape: {localeCode?: string}
-export def "rest-asset-categories create" [
+export def "post-asset-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -346,7 +346,7 @@ export def "rest-asset-categories create" [
 #
 # GET /api/rest/v1/asset-categories/{code}
 # operationId: get_asset_categories__code_
-export def "rest-asset-categories get" [
+export def "get-asset-categories-code" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -383,7 +383,7 @@ export def "rest-asset-categories get" [
 # PATCH /api/rest/v1/asset-categories/{code}
 # operationId: patch_asset_categories__code_
 # --labels shape: {localeCode?: string}
-export def "rest-asset-categories update-by-code" [
+export def "patch-asset-categories-code" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -425,7 +425,7 @@ export def "rest-asset-categories update-by-code" [
 #
 # GET /api/rest/v1/asset-families
 # operationId: get_asset_families
-export def "rest-asset-families get" [
+export def "get-asset-families" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -461,7 +461,7 @@ export def "rest-asset-families get" [
 #
 # GET /api/rest/v1/asset-families/{asset_family_code}/assets
 # operationId: get_assets
-export def "rest-asset-families-assets list" [
+export def "get-assets" [
   asset_family_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -502,7 +502,7 @@ export def "rest-asset-families-assets list" [
 #
 # PATCH /api/rest/v1/asset-families/{asset_family_code}/assets
 # operationId: patch_assets
-export def "rest-asset-families-assets update-by-asset-family-code" [
+export def "patch-assets" [
   asset_family_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -542,7 +542,7 @@ export def "rest-asset-families-assets update-by-asset-family-code" [
 #
 # DELETE /api/rest/v1/asset-families/{asset_family_code}/assets/{code}
 # operationId: delete_assets__code_
-export def "rest-asset-families-assets delete" [
+export def "delete-assets-code" [
   asset_family_code: string
   code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -580,7 +580,7 @@ export def "rest-asset-families-assets delete" [
 #
 # GET /api/rest/v1/asset-families/{asset_family_code}/assets/{code}
 # operationId: get_assets__code_
-export def "rest-asset-families-assets get" [
+export def "get-assets-code" [
   asset_family_code: string
   code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -619,7 +619,7 @@ export def "rest-asset-families-assets get" [
 # PATCH /api/rest/v1/asset-families/{asset_family_code}/assets/{code}
 # operationId: patch_asset__code_
 # --values shape: {attributeCode?: list}
-export def "rest-asset-families-assets update-by-asset-family-code-1" [
+export def "patch-asset-code" [
   asset_family_code: string
   code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -664,7 +664,7 @@ export def "rest-asset-families-assets update-by-asset-family-code-1" [
 #
 # GET /api/rest/v1/asset-families/{asset_family_code}/attributes
 # operationId: get_asset_families__code__attributes
-export def "rest-asset-families-attributes list" [
+export def "get-asset-families-code-attributes" [
   asset_family_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -700,7 +700,7 @@ export def "rest-asset-families-attributes list" [
 #
 # GET /api/rest/v1/asset-families/{asset_family_code}/attributes/{attribute_code}/options
 # operationId: get_asset_family_attributes__attribute_code__options
-export def "rest-asset-families-attributes-options list" [
+export def "get-asset-family-attributes-attribute-code-options" [
   asset_family_code: string
   attribute_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -738,7 +738,7 @@ export def "rest-asset-families-attributes-options list" [
 #
 # GET /api/rest/v1/asset-families/{asset_family_code}/attributes/{attribute_code}/options/{code}
 # operationId: get_asset_attributes__attribute_code__options__code_
-export def "rest-asset-families-attributes-options get" [
+export def "get-asset-attributes-attribute-code-options-code" [
   asset_family_code: string
   attribute_code: string
   code: string
@@ -779,7 +779,7 @@ export def "rest-asset-families-attributes-options get" [
 # PATCH /api/rest/v1/asset-families/{asset_family_code}/attributes/{attribute_code}/options/{code}
 # operationId: patch_asset_attributes__attribute_code__options__code_
 # --labels shape: {localeCode?: string}
-export def "rest-asset-families-attributes-options update" [
+export def "patch-asset-attributes-attribute-code-options-code" [
   asset_family_code: string
   attribute_code: string
   code: string
@@ -824,7 +824,7 @@ export def "rest-asset-families-attributes-options update" [
 #
 # GET /api/rest/v1/asset-families/{asset_family_code}/attributes/{code}
 # operationId: get_asset_family_attributes__code_
-export def "rest-asset-families-attributes get" [
+export def "get-asset-family-attributes-code" [
   asset_family_code: string
   code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -863,7 +863,7 @@ export def "rest-asset-families-attributes get" [
 # PATCH /api/rest/v1/asset-families/{asset_family_code}/attributes/{code}
 # operationId: patch_asset_family_attributes__code_
 # --labels shape: {localeCode?: string}
-export def "rest-asset-families-attributes update" [
+export def "patch-asset-family-attributes-code" [
   asset_family_code: string
   code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -924,7 +924,7 @@ export def "rest-asset-families-attributes update" [
 #
 # GET /api/rest/v1/asset-families/{code}
 # operationId: get_asset_family__code_
-export def "rest-asset-families get-family" [
+export def "get-asset-family-code" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -964,7 +964,7 @@ export def "rest-asset-families get-family" [
 # --naming_convention shape: {abort_asset_creation_on_error?: bool, pattern?: string, source?: record}
 # --product_link_rules item shape: {assign_assets_to?: list, product_selections?: list}
 # --transformations item shape: {filename_prefix?: string, filename_suffix?: string, label: string, operations: record, source: record, target: record}
-export def "rest-asset-families update-family" [
+export def "patch-asset-family-code" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1009,7 +1009,7 @@ export def "rest-asset-families update-family" [
 #
 # POST /api/rest/v1/asset-media-files
 # operationId: post_asset_media_files
-export def "rest-asset-media-files create" [
+export def "post-asset-media-files" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1052,7 +1052,7 @@ export def "rest-asset-media-files create" [
 #
 # GET /api/rest/v1/asset-media-files/{code}
 # operationId: get_asset_media_files__code
-export def "rest-asset-media-files get" [
+export def "get-asset-media-files-code" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1088,7 +1088,7 @@ export def "rest-asset-media-files get" [
 #
 # GET /api/rest/v1/asset-tags
 # operationId: get_asset_tags
-export def "rest-asset-tags list" [
+export def "get-asset-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1126,7 +1126,7 @@ export def "rest-asset-tags list" [
 #
 # GET /api/rest/v1/asset-tags/{code}
 # operationId: get_asset_tags__code_
-export def "rest-asset-tags get" [
+export def "get-asset-tags-code" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1162,7 +1162,7 @@ export def "rest-asset-tags get" [
 #
 # PATCH /api/rest/v1/asset-tags/{code}
 # operationId: patch_asset_tags__code_
-export def "rest-asset-tags update" [
+export def "patch-asset-tags-code" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1202,7 +1202,7 @@ export def "rest-asset-tags update" [
 #
 # GET /api/rest/v1/assets
 # operationId: get_pam_assets
-export def "rest-assets list" [
+export def "get-pam-assets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1244,7 +1244,7 @@ export def "rest-assets list" [
 # operationId: patch_pam_assets
 # --reference_files item shape: {_link?: record, code?: string, locale?: string}
 # --variation_files item shape: {_link?: record, code?: string, locale?: string, scope?: string}
-export def "rest-assets update-pam" [
+export def "patch-pam-assets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1291,7 +1291,7 @@ export def "rest-assets update-pam" [
 # operationId: post_pam_assets
 # --reference_files item shape: {_link?: record, code?: string, locale?: string}
 # --variation_files item shape: {_link?: record, code?: string, locale?: string, scope?: string}
-export def "rest-assets create-pam" [
+export def "post-pam-assets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1336,7 +1336,7 @@ export def "rest-assets create-pam" [
 #
 # GET /api/rest/v1/assets/{asset_code}/reference-files/{locale_code}
 # operationId: get_reference_files__locale_code_
-export def "rest-assets-reference-files get" [
+export def "get-reference-files-locale-code" [
   asset_code: string
   locale_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1374,7 +1374,7 @@ export def "rest-assets-reference-files get" [
 #
 # POST /api/rest/v1/assets/{asset_code}/reference-files/{locale_code}
 # operationId: post_reference_files__locale_code_
-export def "rest-assets-reference-files create" [
+export def "post-reference-files-locale-code" [
   asset_code: string
   locale_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1421,7 +1421,7 @@ export def "rest-assets-reference-files create" [
 #
 # GET /api/rest/v1/assets/{asset_code}/reference-files/{locale_code}/download
 # operationId: get_reference_files__channel_code__locale_code__download
-export def "rest-assets-reference-files-download get-channel" [
+export def "get-reference-files-channel-code-locale-code-download" [
   asset_code: string
   locale_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1459,7 +1459,7 @@ export def "rest-assets-reference-files-download get-channel" [
 #
 # GET /api/rest/v1/assets/{asset_code}/variation-files/{channel_code}/{locale_code}
 # operationId: get_variation_files__channel_code__locale_code
-export def "rest-assets-variation-files get" [
+export def "get-variation-files-channel-code-locale-code" [
   asset_code: string
   channel_code: string
   locale_code: string
@@ -1499,7 +1499,7 @@ export def "rest-assets-variation-files get" [
 #
 # POST /api/rest/v1/assets/{asset_code}/variation-files/{channel_code}/{locale_code}
 # operationId: post_variation_files__channel_code__locale_code_
-export def "rest-assets-variation-files create" [
+export def "post-variation-files-channel-code-locale-code" [
   asset_code: string
   channel_code: string
   locale_code: string
@@ -1548,7 +1548,7 @@ export def "rest-assets-variation-files create" [
 #
 # GET /api/rest/v1/assets/{asset_code}/variation-files/{channel_code}/{locale_code}/download
 # operationId: get_variation_files__channel_code__locale_code__download
-export def "rest-assets-variation-files-download get" [
+export def "get-variation-files-channel-code-locale-code-download" [
   asset_code: string
   channel_code: string
   locale_code: string
@@ -1588,7 +1588,7 @@ export def "rest-assets-variation-files-download get" [
 #
 # GET /api/rest/v1/assets/{code}
 # operationId: get_pam_assets__code_
-export def "rest-assets get-pam" [
+export def "get-pam-assets-code" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1626,7 +1626,7 @@ export def "rest-assets get-pam" [
 # operationId: patch_pam_assets__code_
 # --reference_files item shape: {_link?: record, code?: string, locale?: string}
 # --variation_files item shape: {_link?: record, code?: string, locale?: string, scope?: string}
-export def "rest-assets update-pam-by-code" [
+export def "patch-pam-assets-code" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1673,7 +1673,7 @@ export def "rest-assets update-pam-by-code" [
 #
 # GET /api/rest/v1/association-types
 # operationId: association_types_get_list
-export def "rest-association-types get-list" [
+export def "association-types-get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1712,7 +1712,7 @@ export def "rest-association-types get-list" [
 # PATCH /api/rest/v1/association-types
 # operationId: several_association_types_patch
 # --labels shape: {localeCode?: string}
-export def "rest-association-types update-several" [
+export def "several-association-types-patch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1754,7 +1754,7 @@ export def "rest-association-types update-several" [
 # POST /api/rest/v1/association-types
 # operationId: association_types_post
 # --labels shape: {localeCode?: string}
-export def "rest-association-types create" [
+export def "association-types-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1795,7 +1795,7 @@ export def "rest-association-types create" [
 #
 # GET /api/rest/v1/association-types/{code}
 # operationId: association_types_get
-export def "rest-association-types get" [
+export def "association-types-get" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1832,7 +1832,7 @@ export def "rest-association-types get" [
 # PATCH /api/rest/v1/association-types/{code}
 # operationId: association_types_patch
 # --labels shape: {localeCode?: string}
-export def "rest-association-types update" [
+export def "association-types-patch" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1875,7 +1875,7 @@ export def "rest-association-types update" [
 #
 # GET /api/rest/v1/attribute-groups
 # operationId: attribute_groups_get_list
-export def "rest-attribute-groups get-list" [
+export def "attribute-groups-get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1915,7 +1915,7 @@ export def "rest-attribute-groups get-list" [
 # PATCH /api/rest/v1/attribute-groups
 # operationId: several_attribute_groups_patch
 # --labels shape: {localeCode?: string}
-export def "rest-attribute-groups update-several" [
+export def "several-attribute-groups-patch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1957,7 +1957,7 @@ export def "rest-attribute-groups update-several" [
 # POST /api/rest/v1/attribute-groups
 # operationId: attribute_groups_post
 # --labels shape: {localeCode?: string}
-export def "rest-attribute-groups create" [
+export def "attribute-groups-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1998,7 +1998,7 @@ export def "rest-attribute-groups create" [
 #
 # GET /api/rest/v1/attribute-groups/{code}
 # operationId: attribute_groups_get
-export def "rest-attribute-groups get" [
+export def "attribute-groups-get" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2035,7 +2035,7 @@ export def "rest-attribute-groups get" [
 # PATCH /api/rest/v1/attribute-groups/{code}
 # operationId: attribute_groups_patch
 # --labels shape: {localeCode?: string}
-export def "rest-attribute-groups update" [
+export def "attribute-groups-patch" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2078,7 +2078,7 @@ export def "rest-attribute-groups update" [
 #
 # GET /api/rest/v1/attributes
 # operationId: get_attributes
-export def "rest-attributes list" [
+export def "get-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2121,7 +2121,7 @@ export def "rest-attributes list" [
 # --group_labels shape: {localeCode?: string}
 # --labels shape: {localeCode?: string}
 # --table_configuration item shape: {code: string, data_type: "select"|"text"|"number"|"boolean", is_required_for_completeness?: bool, labels?: record, validations?: record}
-export def "rest-attributes update" [
+export def "patch-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2189,7 +2189,7 @@ export def "rest-attributes update" [
 # --group_labels shape: {localeCode?: string}
 # --labels shape: {localeCode?: string}
 # --table_configuration item shape: {code: string, data_type: "select"|"text"|"number"|"boolean", is_required_for_completeness?: bool, labels?: record, validations?: record}
-export def "rest-attributes create" [
+export def "post-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2254,7 +2254,7 @@ export def "rest-attributes create" [
 #
 # GET /api/rest/v1/attributes/{attribute_code}/options
 # operationId: get_attributes__attribute_code__options
-export def "rest-attributes-options list" [
+export def "get-attributes-attribute-code-options" [
   attribute_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2295,7 +2295,7 @@ export def "rest-attributes-options list" [
 # PATCH /api/rest/v1/attributes/{attribute_code}/options
 # operationId: patch_attributes__attribute_code__options
 # --labels shape: {localeCode?: string}
-export def "rest-attributes-options update-by-attribute-code" [
+export def "patch-attributes-attribute-code-options" [
   attribute_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2339,7 +2339,7 @@ export def "rest-attributes-options update-by-attribute-code" [
 # POST /api/rest/v1/attributes/{attribute_code}/options
 # operationId: post_attributes__attribute_code__options
 # --labels shape: {localeCode?: string}
-export def "rest-attributes-options create" [
+export def "post-attributes-attribute-code-options" [
   attribute_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2382,7 +2382,7 @@ export def "rest-attributes-options create" [
 #
 # GET /api/rest/v1/attributes/{attribute_code}/options/{code}
 # operationId: get_attributes__attribute_code__options__code_
-export def "rest-attributes-options get" [
+export def "get-attributes-attribute-code-options-code" [
   attribute_code: string
   code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2421,7 +2421,7 @@ export def "rest-attributes-options get" [
 # PATCH /api/rest/v1/attributes/{attribute_code}/options/{code}
 # operationId: patch_attributes__attribute_code__options__code_
 # --labels shape: {localeCode?: string}
-export def "rest-attributes-options update-by-attribute-code-1" [
+export def "patch-attributes-attribute-code-options-code" [
   attribute_code: string
   code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2466,7 +2466,7 @@ export def "rest-attributes-options update-by-attribute-code-1" [
 #
 # GET /api/rest/v1/attributes/{code}
 # operationId: get_attributes__code_
-export def "rest-attributes get" [
+export def "get-attributes-code" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2507,7 +2507,7 @@ export def "rest-attributes get" [
 # --group_labels shape: {localeCode?: string}
 # --labels shape: {localeCode?: string}
 # --table_configuration item shape: {code: string, data_type: "select"|"text"|"number"|"boolean", is_required_for_completeness?: bool, labels?: record, validations?: record}
-export def "rest-attributes update-by-code" [
+export def "patch-attributes-code" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2574,7 +2574,7 @@ export def "rest-attributes update-by-code" [
 #
 # GET /api/rest/v1/catalogs
 # operationId: get_app_catalogs
-export def "rest-catalogs list" [
+export def "get-app-catalogs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2611,7 +2611,7 @@ export def "rest-catalogs list" [
 #
 # POST /api/rest/v1/catalogs
 # operationId: post_app_catalog
-export def "rest-catalogs create-app" [
+export def "post-app-catalog" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2649,7 +2649,7 @@ export def "rest-catalogs create-app" [
 #
 # DELETE /api/rest/v1/catalogs/{id}
 # operationId: delete_app_catalog
-export def "rest-catalogs delete-app" [
+export def "delete-app-catalog" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2685,7 +2685,7 @@ export def "rest-catalogs delete-app" [
 #
 # GET /api/rest/v1/catalogs/{id}
 # operationId: get_app_catalog
-export def "rest-catalogs get-app" [
+export def "get-app-catalog" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2721,7 +2721,7 @@ export def "rest-catalogs get-app" [
 #
 # PATCH /api/rest/v1/catalogs/{id}
 # operationId: patch_app_catalog
-export def "rest-catalogs update-app" [
+export def "patch-app-catalog" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2761,7 +2761,7 @@ export def "rest-catalogs update-app" [
 #
 # GET /api/rest/v1/catalogs/{id}/product-uuids
 # operationId: get_app_catalog_product_uuids
-export def "rest-catalogs-product-uuids get-app" [
+export def "get-app-catalog-product-uuids" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2802,7 +2802,7 @@ export def "rest-catalogs-product-uuids get-app" [
 #
 # GET /api/rest/v1/catalogs/{id}/products
 # operationId: get_app_catalog_products
-export def "rest-catalogs-products list" [
+export def "get-app-catalog-products" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2843,7 +2843,7 @@ export def "rest-catalogs-products list" [
 #
 # GET /api/rest/v1/catalogs/{id}/products/{uuid}
 # operationId: get_app_catalog_products_uuid
-export def "rest-catalogs-products get-app" [
+export def "get-app-catalog-products-uuid" [
   id: string
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2881,7 +2881,7 @@ export def "rest-catalogs-products get-app" [
 #
 # GET /api/rest/v1/categories
 # operationId: get_categories
-export def "rest-categories list" [
+export def "get-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2924,7 +2924,7 @@ export def "rest-categories list" [
 # operationId: patch_categories
 # --labels shape: {localeCode?: string}
 # --values shape: {attributeCode|attributeUuid|channelCode|localeCode?: list}
-export def "rest-categories update" [
+export def "patch-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2969,7 +2969,7 @@ export def "rest-categories update" [
 # operationId: post_categories
 # --labels shape: {localeCode?: string}
 # --values shape: {attributeCode|attributeUuid|channelCode|localeCode?: list}
-export def "rest-categories create" [
+export def "post-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3012,7 +3012,7 @@ export def "rest-categories create" [
 #
 # GET /api/rest/v1/categories/{code}
 # operationId: get_categories__code_
-export def "rest-categories get" [
+export def "get-categories-code" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3053,7 +3053,7 @@ export def "rest-categories get" [
 # operationId: patch_categories__code_
 # --labels shape: {localeCode?: string}
 # --values shape: {attributeCode|attributeUuid|channelCode|localeCode?: list}
-export def "rest-categories update-by-code" [
+export def "patch-categories-code" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3098,7 +3098,7 @@ export def "rest-categories update-by-code" [
 #
 # GET /api/rest/v1/category-media-files/{code}/download
 # operationId: get_category_media_files__code__download
-export def "rest-category-media-files-download get" [
+export def "get-category-media-files-code-download" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3134,7 +3134,7 @@ export def "rest-category-media-files-download get" [
 #
 # GET /api/rest/v1/channels
 # operationId: get_channels
-export def "rest-channels list" [
+export def "get-channels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3174,7 +3174,7 @@ export def "rest-channels list" [
 # operationId: several_channels_patch
 # --conversion_units shape: {attributeCode?: string}
 # --labels shape: {localeCode?: string}
-export def "rest-channels update-several" [
+export def "several-channels-patch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3219,7 +3219,7 @@ export def "rest-channels update-several" [
 # operationId: channels_post
 # --conversion_units shape: {attributeCode?: string}
 # --labels shape: {localeCode?: string}
-export def "rest-channels create" [
+export def "channels-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3262,7 +3262,7 @@ export def "rest-channels create" [
 #
 # GET /api/rest/v1/channels/{code}
 # operationId: get_channels__code_
-export def "rest-channels get" [
+export def "get-channels-code" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3300,7 +3300,7 @@ export def "rest-channels get" [
 # operationId: channels_patch
 # --conversion_units shape: {attributeCode?: string}
 # --labels shape: {localeCode?: string}
-export def "rest-channels update" [
+export def "channels-patch" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3345,7 +3345,7 @@ export def "rest-channels update" [
 #
 # GET /api/rest/v1/currencies
 # operationId: currencies_get_list
-export def "rest-currencies get-list" [
+export def "currencies-get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3383,7 +3383,7 @@ export def "rest-currencies get-list" [
 #
 # GET /api/rest/v1/currencies/{code}
 # operationId: currencies_get
-export def "rest-currencies get" [
+export def "currencies-get" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3419,7 +3419,7 @@ export def "rest-currencies get" [
 #
 # GET /api/rest/v1/families
 # operationId: get_families
-export def "rest-families list" [
+export def "get-families" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3460,7 +3460,7 @@ export def "rest-families list" [
 # operationId: patch_families
 # --attribute_requirements shape: {channelCode?: list<string>}
 # --labels shape: {localeCode?: string}
-export def "rest-families update" [
+export def "patch-families" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3505,7 +3505,7 @@ export def "rest-families update" [
 # operationId: post_families
 # --attribute_requirements shape: {channelCode?: list<string>}
 # --labels shape: {localeCode?: string}
-export def "rest-families create" [
+export def "post-families" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3548,7 +3548,7 @@ export def "rest-families create" [
 #
 # GET /api/rest/v1/families/{code}
 # operationId: get_families__code_
-export def "rest-families get" [
+export def "get-families-code" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3586,7 +3586,7 @@ export def "rest-families get" [
 # operationId: patch_families__code_
 # --attribute_requirements shape: {channelCode?: list<string>}
 # --labels shape: {localeCode?: string}
-export def "rest-families update-by-code" [
+export def "patch-families-code" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3631,7 +3631,7 @@ export def "rest-families update-by-code" [
 #
 # GET /api/rest/v1/families/{family_code}/variants
 # operationId: get_families__family_code__variants
-export def "rest-families-variants list" [
+export def "get-families-family-code-variants" [
   family_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3673,7 +3673,7 @@ export def "rest-families-variants list" [
 # operationId: patch_families__family_code__variants
 # --labels shape: {localeCode?: string}
 # --variant_attribute_sets item shape: {attributes?: list<string>, axes: list<string>, level: int}
-export def "rest-families-variants update-by-family-code" [
+export def "patch-families-family-code-variants" [
   family_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3717,7 +3717,7 @@ export def "rest-families-variants update-by-family-code" [
 # operationId: post_families__family_code__variants
 # --labels shape: {localeCode?: string}
 # --variant_attribute_sets item shape: {attributes?: list<string>, axes: list<string>, level: int}
-export def "rest-families-variants create" [
+export def "post-families-family-code-variants" [
   family_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3759,7 +3759,7 @@ export def "rest-families-variants create" [
 #
 # GET /api/rest/v1/families/{family_code}/variants/{code}
 # operationId: get_families__family_code__variants__code__
-export def "rest-families-variants get" [
+export def "get-families-family-code-variants-code" [
   family_code: string
   code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3799,7 +3799,7 @@ export def "rest-families-variants get" [
 # operationId: patch_families__family_code__variants__code__
 # --labels shape: {localeCode?: string}
 # --variant_attribute_sets item shape: {attributes?: list<string>, axes: list<string>, level: int}
-export def "rest-families-variants update-by-family-code-1" [
+export def "patch-families-family-code-variants-code" [
   family_code: string
   code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3843,7 +3843,7 @@ export def "rest-families-variants update-by-family-code-1" [
 #
 # GET /api/rest/v1/locales
 # operationId: get_locales
-export def "rest-locales list" [
+export def "get-locales" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3882,7 +3882,7 @@ export def "rest-locales list" [
 #
 # GET /api/rest/v1/locales/{code}
 # operationId: get_locales__code_
-export def "rest-locales get" [
+export def "get-locales-code" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3918,7 +3918,7 @@ export def "rest-locales get" [
 #
 # GET /api/rest/v1/measure-families
 # operationId: measure_families_get_list
-export def "rest-measure-families get-list" [
+export def "measure-families-get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3952,7 +3952,7 @@ export def "rest-measure-families get-list" [
 #
 # GET /api/rest/v1/measure-families/{code}
 # operationId: measure_families_get
-export def "rest-measure-families get" [
+export def "measure-families-get" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3988,7 +3988,7 @@ export def "rest-measure-families get" [
 #
 # GET /api/rest/v1/measurement-families
 # operationId: measurement_families_get_list
-export def "rest-measurement-families get-list" [
+export def "measurement-families-get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4022,7 +4022,7 @@ export def "rest-measurement-families get-list" [
 #
 # PATCH /api/rest/v1/measurement-families
 # operationId: patch_measurement_families
-export def "rest-measurement-families update" [
+export def "patch-measurement-families" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4060,7 +4060,7 @@ export def "rest-measurement-families update" [
 #
 # GET /api/rest/v1/media-files
 # operationId: get_media_files
-export def "rest-media-files list" [
+export def "get-media-files" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4098,7 +4098,7 @@ export def "rest-media-files list" [
 #
 # POST /api/rest/v1/media-files
 # operationId: post_media_files
-export def "rest-media-files create" [
+export def "post-media-files" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4143,7 +4143,7 @@ export def "rest-media-files create" [
 #
 # GET /api/rest/v1/media-files/{code}
 # operationId: get_media_files__code_
-export def "rest-media-files get" [
+export def "get-media-files-code" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4179,7 +4179,7 @@ export def "rest-media-files get" [
 #
 # GET /api/rest/v1/media-files/{code}/download
 # operationId: get_media_files__code__download
-export def "rest-media-files-download get" [
+export def "get-media-files-code-download" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4215,7 +4215,7 @@ export def "rest-media-files-download get" [
 #
 # GET /api/rest/v1/product-models
 # operationId: get_product_models
-export def "rest-product-models list" [
+export def "get-product-models" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4264,7 +4264,7 @@ export def "rest-product-models list" [
 # --metadata shape: {workflow_status?: "read_only"|"draft_in_progress"|"proposal_waiting_for_approval"|"working_copy"}
 # --quantified_associations shape: {quantifiedAssociationTypeCode?: record}
 # --values shape: {attributeCode?: list}
-export def "rest-product-models update" [
+export def "patch-product-models" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4317,7 +4317,7 @@ export def "rest-product-models update" [
 # --metadata shape: {workflow_status?: "read_only"|"draft_in_progress"|"proposal_waiting_for_approval"|"working_copy"}
 # --quantified_associations shape: {quantifiedAssociationTypeCode?: record}
 # --values shape: {attributeCode?: list}
-export def "rest-product-models create" [
+export def "post-product-models" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4366,7 +4366,7 @@ export def "rest-product-models create" [
 #
 # DELETE /api/rest/v1/product-models/{code}
 # operationId: delete_product_models__code_
-export def "rest-product-models delete" [
+export def "delete-product-models-code" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4402,7 +4402,7 @@ export def "rest-product-models delete" [
 #
 # GET /api/rest/v1/product-models/{code}
 # operationId: get_product_models__code_
-export def "rest-product-models get" [
+export def "get-product-models-code" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4444,7 +4444,7 @@ export def "rest-product-models get" [
 # --metadata shape: {workflow_status?: "read_only"|"draft_in_progress"|"proposal_waiting_for_approval"|"working_copy"}
 # --quantified_associations shape: {quantifiedAssociationTypeCode?: record}
 # --values shape: {attributeCode?: list}
-export def "rest-product-models update-by-code" [
+export def "patch-product-models-code" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4495,7 +4495,7 @@ export def "rest-product-models update-by-code" [
 #
 # GET /api/rest/v1/product-models/{code}/draft
 # operationId: get_product_model_draft__code_
-export def "rest-product-models-draft get" [
+export def "get-product-model-draft-code" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4531,7 +4531,7 @@ export def "rest-product-models-draft get" [
 #
 # POST /api/rest/v1/product-models/{code}/proposal
 # operationId: post_product_model_proposal
-export def "rest-product-models-proposal create" [
+export def "post-product-model-proposal" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4567,7 +4567,7 @@ export def "rest-product-models-proposal create" [
 #
 # GET /api/rest/v1/products
 # operationId: get_products
-export def "rest-products list" [
+export def "get-products" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4619,7 +4619,7 @@ export def "rest-products list" [
 # --metadata shape: {workflow_status?: "read_only"|"draft_in_progress"|"proposal_waiting_for_approval"|"working_copy"}
 # --quantified_associations shape: {quantifiedAssociationTypeCode?: record}
 # --values shape: {attributeCode?: list}
-export def "rest-products update" [
+export def "patch-products" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4676,7 +4676,7 @@ export def "rest-products update" [
 # --metadata shape: {workflow_status?: "read_only"|"draft_in_progress"|"proposal_waiting_for_approval"|"working_copy"}
 # --quantified_associations shape: {quantifiedAssociationTypeCode?: record}
 # --values shape: {attributeCode?: list}
-export def "rest-products create" [
+export def "post-products" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4728,7 +4728,7 @@ export def "rest-products create" [
 #
 # GET /api/rest/v1/products-uuid
 # operationId: get_products_uuid
-export def "rest-products-uuid list" [
+export def "get-products-uuid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4780,7 +4780,7 @@ export def "rest-products-uuid list" [
 # --metadata shape: {workflow_status?: "read_only"|"draft_in_progress"|"proposal_waiting_for_approval"|"working_copy"}
 # --quantified_associations shape: {quantifiedAssociationTypeCode?: record}
 # --values shape: {attributeCode?: list}
-export def "rest-products-uuid update" [
+export def "patch-products-uuid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4836,7 +4836,7 @@ export def "rest-products-uuid update" [
 # --metadata shape: {workflow_status?: "read_only"|"draft_in_progress"|"proposal_waiting_for_approval"|"working_copy"}
 # --quantified_associations shape: {quantifiedAssociationTypeCode?: record}
 # --values shape: {attributeCode?: list}
-export def "rest-products-uuid create" [
+export def "post-products-uuid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4887,7 +4887,7 @@ export def "rest-products-uuid create" [
 #
 # DELETE /api/rest/v1/products-uuid/{uuid}
 # operationId: delete_products_uuid__uuid_
-export def "rest-products-uuid delete" [
+export def "delete-products-uuid-uuid" [
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4923,7 +4923,7 @@ export def "rest-products-uuid delete" [
 #
 # GET /api/rest/v1/products-uuid/{uuid}
 # operationId: get_products_uuid__uuid_
-export def "rest-products-uuid get" [
+export def "get-products-uuid-uuid" [
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4968,7 +4968,7 @@ export def "rest-products-uuid get" [
 # --metadata shape: {workflow_status?: "read_only"|"draft_in_progress"|"proposal_waiting_for_approval"|"working_copy"}
 # --quantified_associations shape: {quantifiedAssociationTypeCode?: record}
 # --values shape: {attributeCode?: list}
-export def "rest-products-uuid update-by-uuid" [
+export def "patch-products-uuid-uuid" [
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5021,7 +5021,7 @@ export def "rest-products-uuid update-by-uuid" [
 #
 # GET /api/rest/v1/products-uuid/{uuid}/draft
 # operationId: get_draft_uuid__uuid_
-export def "rest-products-uuid-draft get" [
+export def "get-draft-uuid-uuid" [
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5057,7 +5057,7 @@ export def "rest-products-uuid-draft get" [
 #
 # POST /api/rest/v1/products-uuid/{uuid}/proposal
 # operationId: post_proposal_uuid
-export def "rest-products-uuid-proposal create" [
+export def "post-proposal-uuid" [
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5093,7 +5093,7 @@ export def "rest-products-uuid-proposal create" [
 #
 # DELETE /api/rest/v1/products/{code}
 # operationId: delete_products__code_
-export def "rest-products delete" [
+export def "delete-products-code" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5129,7 +5129,7 @@ export def "rest-products delete" [
 #
 # GET /api/rest/v1/products/{code}
 # operationId: get_products__code_
-export def "rest-products get" [
+export def "get-products-code" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5174,7 +5174,7 @@ export def "rest-products get" [
 # --metadata shape: {workflow_status?: "read_only"|"draft_in_progress"|"proposal_waiting_for_approval"|"working_copy"}
 # --quantified_associations shape: {quantifiedAssociationTypeCode?: record}
 # --values shape: {attributeCode?: list}
-export def "rest-products update-by-code" [
+export def "patch-products-code" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5228,7 +5228,7 @@ export def "rest-products update-by-code" [
 #
 # GET /api/rest/v1/products/{code}/draft
 # operationId: get_draft__code_
-export def "rest-products-draft get" [
+export def "get-draft-code" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5264,7 +5264,7 @@ export def "rest-products-draft get" [
 #
 # POST /api/rest/v1/products/{code}/proposal
 # operationId: post_proposal
-export def "rest-products-proposal create" [
+export def "post-proposal" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5300,7 +5300,7 @@ export def "rest-products-proposal create" [
 #
 # GET /api/rest/v1/published-products
 # operationId: get_published_products
-export def "rest-published-products list" [
+export def "get-published-products" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5344,7 +5344,7 @@ export def "rest-published-products list" [
 #
 # GET /api/rest/v1/published-products/{code}
 # operationId: get_published_products__code_
-export def "rest-published-products get" [
+export def "get-published-products-code" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5380,7 +5380,7 @@ export def "rest-published-products get" [
 #
 # GET /api/rest/v1/reference-entities
 # operationId: get_reference_entities
-export def "rest-reference-entities list" [
+export def "get-reference-entities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5416,7 +5416,7 @@ export def "rest-reference-entities list" [
 #
 # POST /api/rest/v1/reference-entities-media-files
 # operationId: post_reference_entity_media_files
-export def "rest-reference-entities-media-files create-entity" [
+export def "post-reference-entity-media-files" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5459,7 +5459,7 @@ export def "rest-reference-entities-media-files create-entity" [
 #
 # GET /api/rest/v1/reference-entities-media-files/{code}
 # operationId: get_reference_entity_media_files__code
-export def "rest-reference-entities-media-files get-entity" [
+export def "get-reference-entity-media-files-code" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5495,7 +5495,7 @@ export def "rest-reference-entities-media-files get-entity" [
 #
 # GET /api/rest/v1/reference-entities/{code}
 # operationId: get_reference_entities__code_
-export def "rest-reference-entities get" [
+export def "get-reference-entities-code" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5532,7 +5532,7 @@ export def "rest-reference-entities get" [
 # PATCH /api/rest/v1/reference-entities/{code}
 # operationId: patch_reference_entity__code_
 # --labels shape: {localeCode?: string}
-export def "rest-reference-entities update-entity" [
+export def "patch-reference-entity-code" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5574,7 +5574,7 @@ export def "rest-reference-entities update-entity" [
 #
 # GET /api/rest/v1/reference-entities/{reference_entity_code}/attributes
 # operationId: get_reference_entities__code__attributes
-export def "rest-reference-entities-attributes list" [
+export def "get-reference-entities-code-attributes" [
   reference_entity_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5610,7 +5610,7 @@ export def "rest-reference-entities-attributes list" [
 #
 # GET /api/rest/v1/reference-entities/{reference_entity_code}/attributes/{attribute_code}/options
 # operationId: get_reference_entity_attributes__attribute_code__options
-export def "rest-reference-entities-attributes-options list" [
+export def "get-reference-entity-attributes-attribute-code-options" [
   reference_entity_code: string
   attribute_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5648,7 +5648,7 @@ export def "rest-reference-entities-attributes-options list" [
 #
 # GET /api/rest/v1/reference-entities/{reference_entity_code}/attributes/{attribute_code}/options/{code}
 # operationId: get_reference_entity_attributes__attribute_code__options__code_
-export def "rest-reference-entities-attributes-options get" [
+export def "get-reference-entity-attributes-attribute-code-options-code" [
   reference_entity_code: string
   attribute_code: string
   code: string
@@ -5689,7 +5689,7 @@ export def "rest-reference-entities-attributes-options get" [
 # PATCH /api/rest/v1/reference-entities/{reference_entity_code}/attributes/{attribute_code}/options/{code}
 # operationId: patch_reference_entity_attributes__attribute_code__options__code_
 # --labels shape: {localeCode?: string}
-export def "rest-reference-entities-attributes-options update" [
+export def "patch-reference-entity-attributes-attribute-code-options-code" [
   reference_entity_code: string
   attribute_code: string
   code: string
@@ -5734,7 +5734,7 @@ export def "rest-reference-entities-attributes-options update" [
 #
 # GET /api/rest/v1/reference-entities/{reference_entity_code}/attributes/{code}
 # operationId: get_reference_entity_attributes__code_
-export def "rest-reference-entities-attributes get" [
+export def "get-reference-entity-attributes-code" [
   reference_entity_code: string
   code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5773,7 +5773,7 @@ export def "rest-reference-entities-attributes get" [
 # PATCH /api/rest/v1/reference-entities/{reference_entity_code}/attributes/{code}
 # operationId: patch_reference_entity_attributes__code_
 # --labels shape: {localeCode?: string}
-export def "rest-reference-entities-attributes update" [
+export def "patch-reference-entity-attributes-code" [
   reference_entity_code: string
   code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5831,7 +5831,7 @@ export def "rest-reference-entities-attributes update" [
 #
 # GET /api/rest/v1/reference-entities/{reference_entity_code}/records
 # operationId: get_reference_entity_records
-export def "rest-reference-entities-records list" [
+export def "get-reference-entity-records" [
   reference_entity_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5872,7 +5872,7 @@ export def "rest-reference-entities-records list" [
 #
 # PATCH /api/rest/v1/reference-entities/{reference_entity_code}/records
 # operationId: patch_reference_entity_records
-export def "rest-reference-entities-records update-by-reference-entity-code" [
+export def "patch-reference-entity-records" [
   reference_entity_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5912,7 +5912,7 @@ export def "rest-reference-entities-records update-by-reference-entity-code" [
 #
 # GET /api/rest/v1/reference-entities/{reference_entity_code}/records/{code}
 # operationId: get_reference_entity_records__code_
-export def "rest-reference-entities-records get" [
+export def "get-reference-entity-records-code" [
   reference_entity_code: string
   code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5951,7 +5951,7 @@ export def "rest-reference-entities-records get" [
 # PATCH /api/rest/v1/reference-entities/{reference_entity_code}/records/{code}
 # operationId: patch_reference_entity_records__code_
 # --values shape: {attributeCode?: list}
-export def "rest-reference-entities-records update-by-reference-entity-code-1" [
+export def "patch-reference-entity-records-code" [
   reference_entity_code: string
   code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5996,7 +5996,7 @@ export def "rest-reference-entities-records update-by-reference-entity-code-1" [
 #
 # GET /api/rest/v1/system-information
 # operationId: get_system_information
-export def "rest-system-information get" [
+export def "get-system-information" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

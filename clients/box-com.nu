@@ -206,7 +206,7 @@ def accept-completer-2 [] { ["application/json" "application/octet-stream"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "authorize get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-authorize" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -230,7 +230,7 @@ export def commands []: nothing -> table {
 #
 # GET /authorize
 # operationId: get_authorize
-export def "authorize get" [
+export def "get-authorize" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -270,7 +270,7 @@ export def "authorize get" [
 #
 # GET /collaboration_whitelist_entries
 # operationId: get_collaboration_whitelist_entries
-export def "collaboration-whitelist-entries list" [
+export def "get-collaboration-whitelist-entries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -307,7 +307,7 @@ export def "collaboration-whitelist-entries list" [
 #
 # POST /collaboration_whitelist_entries
 # operationId: post_collaboration_whitelist_entries
-export def "collaboration-whitelist-entries create" [
+export def "post-collaboration-whitelist-entries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -346,7 +346,7 @@ export def "collaboration-whitelist-entries create" [
 #
 # DELETE /collaboration_whitelist_entries/{collaboration_whitelist_entry_id}
 # operationId: delete_collaboration_whitelist_entries_id
-export def "collaboration-whitelist-entries delete" [
+export def "delete-collaboration-whitelist-entries-id" [
   collaboration_whitelist_entry_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -382,7 +382,7 @@ export def "collaboration-whitelist-entries delete" [
 #
 # GET /collaboration_whitelist_entries/{collaboration_whitelist_entry_id}
 # operationId: get_collaboration_whitelist_entries_id
-export def "collaboration-whitelist-entries get" [
+export def "get-collaboration-whitelist-entries-id" [
   collaboration_whitelist_entry_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -418,7 +418,7 @@ export def "collaboration-whitelist-entries get" [
 #
 # GET /collaboration_whitelist_exempt_targets
 # operationId: get_collaboration_whitelist_exempt_targets
-export def "collaboration-whitelist-exempt-targets list" [
+export def "get-collaboration-whitelist-exempt-targets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -456,7 +456,7 @@ export def "collaboration-whitelist-exempt-targets list" [
 # POST /collaboration_whitelist_exempt_targets
 # operationId: post_collaboration_whitelist_exempt_targets
 # --user shape: {id: string}
-export def "collaboration-whitelist-exempt-targets create" [
+export def "post-collaboration-whitelist-exempt-targets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -494,7 +494,7 @@ export def "collaboration-whitelist-exempt-targets create" [
 #
 # DELETE /collaboration_whitelist_exempt_targets/{collaboration_whitelist_exempt_target_id}
 # operationId: delete_collaboration_whitelist_exempt_targets_id
-export def "collaboration-whitelist-exempt-targets delete" [
+export def "delete-collaboration-whitelist-exempt-targets-id" [
   collaboration_whitelist_exempt_target_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -530,7 +530,7 @@ export def "collaboration-whitelist-exempt-targets delete" [
 #
 # GET /collaboration_whitelist_exempt_targets/{collaboration_whitelist_exempt_target_id}
 # operationId: get_collaboration_whitelist_exempt_targets_id
-export def "collaboration-whitelist-exempt-targets get" [
+export def "get-collaboration-whitelist-exempt-targets-id" [
   collaboration_whitelist_exempt_target_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -566,7 +566,7 @@ export def "collaboration-whitelist-exempt-targets get" [
 #
 # GET /collaborations
 # operationId: get_collaborations
-export def "collaborations list" [
+export def "get-collaborations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -607,7 +607,7 @@ export def "collaborations list" [
 # operationId: post_collaborations
 # --accessible_by shape: {id?: string, login?: string, type: "user"|"group"}
 # --item shape: {id: string, type: "file"|"folder"}
-export def "collaborations create" [
+export def "post-collaborations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -652,7 +652,7 @@ export def "collaborations create" [
 #
 # DELETE /collaborations/{collaboration_id}
 # operationId: delete_collaborations_id
-export def "collaborations delete" [
+export def "delete-collaborations-id" [
   collaboration_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -688,7 +688,7 @@ export def "collaborations delete" [
 #
 # GET /collaborations/{collaboration_id}
 # operationId: get_collaborations_id
-export def "collaborations get" [
+export def "get-collaborations-id" [
   collaboration_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -726,7 +726,7 @@ export def "collaborations get" [
 #
 # PUT /collaborations/{collaboration_id}
 # operationId: put_collaborations_id
-export def "collaborations update" [
+export def "put-collaborations-id" [
   collaboration_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -769,7 +769,7 @@ export def "collaborations update" [
 #
 # GET /collections
 # operationId: get_collections
-export def "collections get" [
+export def "get-collections" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -807,7 +807,7 @@ export def "collections get" [
 #
 # GET /collections/{collection_id}/items
 # operationId: get_collections_id_items
-export def "collections-items get" [
+export def "get-collections-id-items" [
   collection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -848,7 +848,7 @@ export def "collections-items get" [
 # POST /comments
 # operationId: post_comments
 # --item shape: {id: string, type: "file"|"comment"}
-export def "comments create" [
+export def "post-comments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -890,7 +890,7 @@ export def "comments create" [
 #
 # DELETE /comments/{comment_id}
 # operationId: delete_comments_id
-export def "comments delete" [
+export def "delete-comments-id" [
   comment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -926,7 +926,7 @@ export def "comments delete" [
 #
 # GET /comments/{comment_id}
 # operationId: get_comments_id
-export def "comments get" [
+export def "get-comments-id" [
   comment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -964,7 +964,7 @@ export def "comments get" [
 #
 # PUT /comments/{comment_id}
 # operationId: put_comments_id
-export def "comments update" [
+export def "put-comments-id" [
   comment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1006,7 +1006,7 @@ export def "comments update" [
 #
 # DELETE /device_pinners/{device_pinner_id}
 # operationId: delete_device_pinners_id
-export def "device-pinners delete" [
+export def "delete-device-pinners-id" [
   device_pinner_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1042,7 +1042,7 @@ export def "device-pinners delete" [
 #
 # GET /device_pinners/{device_pinner_id}
 # operationId: get_device_pinners_id
-export def "device-pinners get" [
+export def "get-device-pinners-id" [
   device_pinner_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1078,7 +1078,7 @@ export def "device-pinners get" [
 #
 # GET /enterprises/{enterprise_id}/device_pinners
 # operationId: get_enterprises_id_device_pinners
-export def "enterprises-device-pinners get" [
+export def "get-enterprises-id-device-pinners" [
   enterprise_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1118,7 +1118,7 @@ export def "enterprises-device-pinners get" [
 #
 # GET /events
 # operationId: get_events
-export def "events get" [
+export def "get-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1159,7 +1159,7 @@ export def "events get" [
 #
 # OPTIONS /events
 # operationId: options_events
-export def "events options" [
+export def "options-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1193,7 +1193,7 @@ export def "events options" [
 #
 # DELETE /file_requests/{file_request_id}
 # operationId: delete_file_requests_id
-export def "file-requests delete" [
+export def "delete-file-requests-id" [
   file_request_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1229,7 +1229,7 @@ export def "file-requests delete" [
 #
 # GET /file_requests/{file_request_id}
 # operationId: get_file_requests_id
-export def "file-requests get" [
+export def "get-file-requests-id" [
   file_request_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1265,7 +1265,7 @@ export def "file-requests get" [
 #
 # PUT /file_requests/{file_request_id}
 # operationId: put_file_requests_id
-export def "file-requests update" [
+export def "put-file-requests-id" [
   file_request_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1314,7 +1314,7 @@ export def "file-requests update" [
 # POST /file_requests/{file_request_id}/copy
 # operationId: post_file_requests_id_copy
 # --folder shape: {id: string, type?: "folder"}
-export def "file-requests-copy create" [
+export def "post-file-requests-id-copy" [
   file_request_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1360,7 +1360,7 @@ export def "file-requests-copy create" [
 #
 # GET /file_version_legal_holds
 # operationId: get_file_version_legal_holds
-export def "file-version-legal-holds list" [
+export def "get-file-version-legal-holds" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1398,7 +1398,7 @@ export def "file-version-legal-holds list" [
 #
 # GET /file_version_legal_holds/{file_version_legal_hold_id}
 # operationId: get_file_version_legal_holds_id
-export def "file-version-legal-holds get" [
+export def "get-file-version-legal-holds-id" [
   file_version_legal_hold_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1434,7 +1434,7 @@ export def "file-version-legal-holds get" [
 #
 # GET /file_version_retentions
 # operationId: get_file_version_retentions
-export def "file-version-retentions list" [
+export def "get-file-version-retentions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1477,7 +1477,7 @@ export def "file-version-retentions list" [
 #
 # GET /file_version_retentions/{file_version_retention_id}
 # operationId: get_file_version_retentions_id
-export def "file-version-retentions get" [
+export def "get-file-version-retentions-id" [
   file_version_retention_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1513,7 +1513,7 @@ export def "file-version-retentions get" [
 #
 # OPTIONS /files/content
 # operationId: options_files_content
-export def "files-content options" [
+export def "options-files-content" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1548,7 +1548,7 @@ export def "files-content options" [
 # POST /files/content
 # operationId: post_files_content
 # --attributes shape: {content_created_at?: string, content_modified_at?: string, name: string, parent: record}
-export def "files-content create" [
+export def "post-files-content" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1594,7 +1594,7 @@ export def "files-content create" [
 #
 # POST /files/upload_sessions
 # operationId: post_files_upload_sessions
-export def "files-upload-sessions create" [
+export def "post-files-upload-sessions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1634,7 +1634,7 @@ export def "files-upload-sessions create" [
 #
 # DELETE /files/upload_sessions/{upload_session_id}
 # operationId: delete_files_upload_sessions_id
-export def "files-upload-sessions delete" [
+export def "delete-files-upload-sessions-id" [
   upload_session_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1670,7 +1670,7 @@ export def "files-upload-sessions delete" [
 #
 # GET /files/upload_sessions/{upload_session_id}
 # operationId: get_files_upload_sessions_id
-export def "files-upload-sessions get" [
+export def "get-files-upload-sessions-id" [
   upload_session_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1706,7 +1706,7 @@ export def "files-upload-sessions get" [
 #
 # PUT /files/upload_sessions/{upload_session_id}
 # operationId: put_files_upload_sessions_id
-export def "files-upload-sessions update" [
+export def "put-files-upload-sessions-id" [
   upload_session_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1751,7 +1751,7 @@ export def "files-upload-sessions update" [
 # POST /files/upload_sessions/{upload_session_id}/commit
 # operationId: post_files_upload_sessions_id_commit
 # --parts item shape: {offset?: int, part_id?: string, size?: int, sha1?: string}
-export def "files-upload-sessions-commit create" [
+export def "post-files-upload-sessions-id-commit" [
   upload_session_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1796,7 +1796,7 @@ export def "files-upload-sessions-commit create" [
 #
 # GET /files/upload_sessions/{upload_session_id}/parts
 # operationId: get_files_upload_sessions_id_parts
-export def "files-upload-sessions-parts get" [
+export def "get-files-upload-sessions-id-parts" [
   upload_session_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1835,7 +1835,7 @@ export def "files-upload-sessions-parts get" [
 #
 # DELETE /files/{file_id}
 # operationId: delete_files_id
-export def "files delete" [
+export def "delete-files-id" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1874,7 +1874,7 @@ export def "files delete" [
 #
 # GET /files/{file_id}
 # operationId: get_files_id
-export def "files get" [
+export def "get-files-id" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1917,7 +1917,7 @@ export def "files get" [
 #
 # POST /files/{file_id}
 # operationId: post_files_id
-export def "files create" [
+export def "post-files-id" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1962,7 +1962,7 @@ export def "files create" [
 # operationId: put_files_id
 # --lock shape: {access?: "lock", expires_at?: string, is_download_prevented?: bool}
 # --permissions shape: {can_download?: "open"|"company"}
-export def "files update" [
+export def "put-files-id" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2015,7 +2015,7 @@ export def "files update" [
 # PUT /files/{file_id}
 # operationId: put_files_id#add_shared_link
 # --shared_link shape: {access?: "open"|"company"|"collaborators", password?: string, permissions?: record, unshared_at?: string, vanity_name?: string}
-export def "files create-shared-link" [
+export def "put-files-idadd-shared-link" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2057,7 +2057,7 @@ export def "files create-shared-link" [
 #
 # GET /files/{file_id}
 # operationId: get_files_id#get_shared_link
-export def "files get-shared-link" [
+export def "get-files-idget-shared-link" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2095,7 +2095,7 @@ export def "files get-shared-link" [
 #
 # PUT /files/{file_id}
 # operationId: put_files_id#remove_shared_link
-export def "files delete-shared-link" [
+export def "put-files-idremove-shared-link" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2138,7 +2138,7 @@ export def "files delete-shared-link" [
 # PUT /files/{file_id}
 # operationId: put_files_id#update_shared_link
 # --shared_link shape: {access?: "open"|"company"|"collaborators", password?: string, permissions?: record, unshared_at?: string, vanity_name?: string}
-export def "files update-shared-link" [
+export def "put-files-idupdate-shared-link" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2180,7 +2180,7 @@ export def "files update-shared-link" [
 #
 # GET /files/{file_id}/collaborations
 # operationId: get_files_id_collaborations
-export def "files-collaborations get" [
+export def "get-files-id-collaborations" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2220,7 +2220,7 @@ export def "files-collaborations get" [
 #
 # GET /files/{file_id}/comments
 # operationId: get_files_id_comments
-export def "files-comments get" [
+export def "get-files-id-comments" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2260,7 +2260,7 @@ export def "files-comments get" [
 #
 # GET /files/{file_id}/content
 # operationId: get_files_id_content
-export def "files-content get" [
+export def "get-files-id-content" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2304,7 +2304,7 @@ export def "files-content get" [
 # POST /files/{file_id}/content
 # operationId: post_files_id_content
 # --attributes shape: {content_modified_at?: string, name: string}
-export def "files-content create-by-file-id" [
+export def "post-files-id-content" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2354,7 +2354,7 @@ export def "files-content create-by-file-id" [
 # POST /files/{file_id}/copy
 # operationId: post_files_id_copy
 # --parent shape: {id: string}
-export def "files-copy create" [
+export def "post-files-id-copy" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2398,7 +2398,7 @@ export def "files-copy create" [
 #
 # GET /files/{file_id}/metadata
 # operationId: get_files_id_metadata
-export def "files-metadata get-by-file-id" [
+export def "get-files-id-metadata" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2434,7 +2434,7 @@ export def "files-metadata get-by-file-id" [
 #
 # DELETE /files/{file_id}/metadata/enterprise/securityClassification-6VMVochwUWo
 # operationId: delete_files_id_metadata_enterprise_securityClassification-6VMVochwUWo
-export def "files-metadata-enterprise-security-classification-6-vm-vochw-u-wo delete" [
+export def "delete-files-id-metadata-enterprise-security-classification-6vm-vochw-u-wo" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2470,7 +2470,7 @@ export def "files-metadata-enterprise-security-classification-6-vm-vochw-u-wo de
 #
 # GET /files/{file_id}/metadata/enterprise/securityClassification-6VMVochwUWo
 # operationId: get_files_id_metadata_enterprise_securityClassification-6VMVochwUWo
-export def "files-metadata-enterprise-security-classification-6-vm-vochw-u-wo get" [
+export def "get-files-id-metadata-enterprise-security-classification-6vm-vochw-u-wo" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2506,7 +2506,7 @@ export def "files-metadata-enterprise-security-classification-6-vm-vochw-u-wo ge
 #
 # POST /files/{file_id}/metadata/enterprise/securityClassification-6VMVochwUWo
 # operationId: post_files_id_metadata_enterprise_securityClassification-6VMVochwUWo
-export def "files-metadata-enterprise-security-classification-6-vm-vochw-u-wo create" [
+export def "post-files-id-metadata-enterprise-security-classification-6vm-vochw-u-wo" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2546,7 +2546,7 @@ export def "files-metadata-enterprise-security-classification-6-vm-vochw-u-wo cr
 #
 # PUT /files/{file_id}/metadata/enterprise/securityClassification-6VMVochwUWo
 # operationId: put_files_id_metadata_enterprise_securityClassification-6VMVochwUWo
-export def "files-metadata-enterprise-security-classification-6-vm-vochw-u-wo update" [
+export def "put-files-id-metadata-enterprise-security-classification-6vm-vochw-u-wo" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2586,7 +2586,7 @@ export def "files-metadata-enterprise-security-classification-6-vm-vochw-u-wo up
 #
 # DELETE /files/{file_id}/metadata/global/boxSkillsCards
 # operationId: delete_files_id_metadata_global_boxSkillsCards
-export def "files-metadata-global-box-skills-cards delete" [
+export def "delete-files-id-metadata-global-box-skills-cards" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2622,7 +2622,7 @@ export def "files-metadata-global-box-skills-cards delete" [
 #
 # GET /files/{file_id}/metadata/global/boxSkillsCards
 # operationId: get_files_id_metadata_global_boxSkillsCards
-export def "files-metadata-global-box-skills-cards get" [
+export def "get-files-id-metadata-global-box-skills-cards" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2658,7 +2658,7 @@ export def "files-metadata-global-box-skills-cards get" [
 #
 # POST /files/{file_id}/metadata/global/boxSkillsCards
 # operationId: post_files_id_metadata_global_boxSkillsCards
-export def "files-metadata-global-box-skills-cards create" [
+export def "post-files-id-metadata-global-box-skills-cards" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2698,7 +2698,7 @@ export def "files-metadata-global-box-skills-cards create" [
 #
 # PUT /files/{file_id}/metadata/global/boxSkillsCards
 # operationId: put_files_id_metadata_global_boxSkillsCards
-export def "files-metadata-global-box-skills-cards update" [
+export def "put-files-id-metadata-global-box-skills-cards" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2738,7 +2738,7 @@ export def "files-metadata-global-box-skills-cards update" [
 #
 # DELETE /files/{file_id}/metadata/{scope}/{template_key}
 # operationId: delete_files_id_metadata_id_id
-export def "files-metadata delete" [
+export def "delete-files-id-metadata-id-id" [
   file_id: string
   scope: string
   template_key: string
@@ -2778,7 +2778,7 @@ export def "files-metadata delete" [
 #
 # GET /files/{file_id}/metadata/{scope}/{template_key}
 # operationId: get_files_id_metadata_id_id
-export def "files-metadata get-by-file-id-scope-template-key" [
+export def "get-files-id-metadata-id-id" [
   file_id: string
   scope: string
   template_key: string
@@ -2818,7 +2818,7 @@ export def "files-metadata get-by-file-id-scope-template-key" [
 #
 # POST /files/{file_id}/metadata/{scope}/{template_key}
 # operationId: post_files_id_metadata_id_id
-export def "files-metadata create" [
+export def "post-files-id-metadata-id-id" [
   file_id: string
   scope: string
   template_key: string
@@ -2862,7 +2862,7 @@ export def "files-metadata create" [
 #
 # PUT /files/{file_id}/metadata/{scope}/{template_key}
 # operationId: put_files_id_metadata_id_id
-export def "files-metadata update" [
+export def "put-files-id-metadata-id-id" [
   file_id: string
   scope: string
   template_key: string
@@ -2906,7 +2906,7 @@ export def "files-metadata update" [
 #
 # GET /files/{file_id}/tasks
 # operationId: get_files_id_tasks
-export def "files-tasks get" [
+export def "get-files-id-tasks" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2942,7 +2942,7 @@ export def "files-tasks get" [
 #
 # GET /files/{file_id}/thumbnail.{extension}
 # operationId: get_files_id_thumbnail_id
-export def "files-thumbnail-extension get" [
+export def "get-files-id-thumbnail-id" [
   file_id: string
   extension: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2986,7 +2986,7 @@ export def "files-thumbnail-extension get" [
 #
 # DELETE /files/{file_id}/trash
 # operationId: delete_files_id_trash
-export def "files-trash delete" [
+export def "delete-files-id-trash" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3022,7 +3022,7 @@ export def "files-trash delete" [
 #
 # GET /files/{file_id}/trash
 # operationId: get_files_id_trash
-export def "files-trash get" [
+export def "get-files-id-trash" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3060,7 +3060,7 @@ export def "files-trash get" [
 #
 # POST /files/{file_id}/upload_sessions
 # operationId: post_files_id_upload_sessions
-export def "files-upload-sessions create-by-file-id" [
+export def "post-files-id-upload-sessions" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3101,7 +3101,7 @@ export def "files-upload-sessions create-by-file-id" [
 #
 # GET /files/{file_id}/versions
 # operationId: get_files_id_versions
-export def "files-versions list" [
+export def "get-files-id-versions" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3141,7 +3141,7 @@ export def "files-versions list" [
 #
 # POST /files/{file_id}/versions/current
 # operationId: post_files_id_versions_current
-export def "files-versions-current create" [
+export def "post-files-id-versions-current" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3184,7 +3184,7 @@ export def "files-versions-current create" [
 #
 # DELETE /files/{file_id}/versions/{file_version_id}
 # operationId: delete_files_id_versions_id
-export def "files-versions delete" [
+export def "delete-files-id-versions-id" [
   file_id: string
   file_version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3225,7 +3225,7 @@ export def "files-versions delete" [
 #
 # GET /files/{file_id}/versions/{file_version_id}
 # operationId: get_files_id_versions_id
-export def "files-versions get" [
+export def "get-files-id-versions-id" [
   file_id: string
   file_version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3265,7 +3265,7 @@ export def "files-versions get" [
 #
 # PUT /files/{file_id}/versions/{file_version_id}
 # operationId: put_files_id_versions_id
-export def "files-versions update" [
+export def "put-files-id-versions-id" [
   file_id: string
   file_version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3307,7 +3307,7 @@ export def "files-versions update" [
 #
 # DELETE /files/{file_id}/watermark
 # operationId: delete_files_id_watermark
-export def "files-watermark delete" [
+export def "delete-files-id-watermark" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3343,7 +3343,7 @@ export def "files-watermark delete" [
 #
 # GET /files/{file_id}/watermark
 # operationId: get_files_id_watermark
-export def "files-watermark get" [
+export def "get-files-id-watermark" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3380,7 +3380,7 @@ export def "files-watermark get" [
 # PUT /files/{file_id}/watermark
 # operationId: put_files_id_watermark
 # --watermark shape: {imprint: "default"}
-export def "files-watermark update" [
+export def "put-files-id-watermark" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3420,7 +3420,7 @@ export def "files-watermark update" [
 #
 # GET /folder_locks
 # operationId: get_folder_locks
-export def "folder-locks get" [
+export def "get-folder-locks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3458,7 +3458,7 @@ export def "folder-locks get" [
 # operationId: post_folder_locks
 # --folder shape: {id: string, type: string}
 # --locked_operations shape: {delete: bool, move: bool}
-export def "folder-locks create" [
+export def "post-folder-locks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3497,7 +3497,7 @@ export def "folder-locks create" [
 #
 # DELETE /folder_locks/{folder_lock_id}
 # operationId: delete_folder_locks_id
-export def "folder-locks delete" [
+export def "delete-folder-locks-id" [
   folder_lock_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3534,7 +3534,7 @@ export def "folder-locks delete" [
 # POST /folders
 # operationId: post_folders
 # --parent shape: {id: string}
-export def "folders create" [
+export def "post-folders" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3577,7 +3577,7 @@ export def "folders create" [
 #
 # GET /folders/trash/items
 # operationId: get_folders_trash_items
-export def "folders-trash-items get" [
+export def "get-folders-trash-items" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3619,7 +3619,7 @@ export def "folders-trash-items get" [
 #
 # DELETE /folders/{folder_id}
 # operationId: delete_folders_id
-export def "folders delete" [
+export def "delete-folders-id" [
   folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3660,7 +3660,7 @@ export def "folders delete" [
 #
 # GET /folders/{folder_id}
 # operationId: get_folders_id
-export def "folders get" [
+export def "get-folders-id" [
   folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3702,7 +3702,7 @@ export def "folders get" [
 #
 # POST /folders/{folder_id}
 # operationId: post_folders_id
-export def "folders create-by-folder-id" [
+export def "post-folders-id" [
   folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3747,7 +3747,7 @@ export def "folders create-by-folder-id" [
 # operationId: put_folders_id
 # --collections item shape: {id?: string, type?: string}
 # --parent shape: {id?: string}
-export def "folders update" [
+export def "put-folders-id" [
   folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3803,7 +3803,7 @@ export def "folders update" [
 # PUT /folders/{folder_id}
 # operationId: put_folders_id#add_shared_link
 # --shared_link shape: {access?: "open"|"company"|"collaborators", password?: string, permissions?: record, unshared_at?: string, vanity_name?: string}
-export def "folders create-shared-link" [
+export def "put-folders-idadd-shared-link" [
   folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3845,7 +3845,7 @@ export def "folders create-shared-link" [
 #
 # GET /folders/{folder_id}
 # operationId: get_folders_id#get_shared_link
-export def "folders get-shared-link" [
+export def "get-folders-idget-shared-link" [
   folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3883,7 +3883,7 @@ export def "folders get-shared-link" [
 #
 # PUT /folders/{folder_id}
 # operationId: put_folders_id#remove_shared_link
-export def "folders delete-shared-link" [
+export def "put-folders-idremove-shared-link" [
   folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3926,7 +3926,7 @@ export def "folders delete-shared-link" [
 # PUT /folders/{folder_id}
 # operationId: put_folders_id#update_shared_link
 # --shared_link shape: {access?: "open"|"company"|"collaborators", password?: string, permissions?: record, unshared_at?: string, vanity_name?: string}
-export def "folders update-shared-link" [
+export def "put-folders-idupdate-shared-link" [
   folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3968,7 +3968,7 @@ export def "folders update-shared-link" [
 #
 # GET /folders/{folder_id}/collaborations
 # operationId: get_folders_id_collaborations
-export def "folders-collaborations get" [
+export def "get-folders-id-collaborations" [
   folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4007,7 +4007,7 @@ export def "folders-collaborations get" [
 # POST /folders/{folder_id}/copy
 # operationId: post_folders_id_copy
 # --parent shape: {id: string}
-export def "folders-copy create" [
+export def "post-folders-id-copy" [
   folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4050,7 +4050,7 @@ export def "folders-copy create" [
 #
 # GET /folders/{folder_id}/items
 # operationId: get_folders_id_items
-export def "folders-items get" [
+export def "get-folders-id-items" [
   folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4097,7 +4097,7 @@ export def "folders-items get" [
 #
 # GET /folders/{folder_id}/metadata
 # operationId: get_folders_id_metadata
-export def "folders-metadata get-by-folder-id" [
+export def "get-folders-id-metadata" [
   folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4133,7 +4133,7 @@ export def "folders-metadata get-by-folder-id" [
 #
 # DELETE /folders/{folder_id}/metadata/enterprise/securityClassification-6VMVochwUWo
 # operationId: delete_folders_id_metadata_enterprise_securityClassification-6VMVochwUWo
-export def "folders-metadata-enterprise-security-classification-6-vm-vochw-u-wo delete" [
+export def "delete-folders-id-metadata-enterprise-security-classification-6vm-vochw-u-wo" [
   folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4169,7 +4169,7 @@ export def "folders-metadata-enterprise-security-classification-6-vm-vochw-u-wo 
 #
 # GET /folders/{folder_id}/metadata/enterprise/securityClassification-6VMVochwUWo
 # operationId: get_folders_id_metadata_enterprise_securityClassification-6VMVochwUWo
-export def "folders-metadata-enterprise-security-classification-6-vm-vochw-u-wo get" [
+export def "get-folders-id-metadata-enterprise-security-classification-6vm-vochw-u-wo" [
   folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4205,7 +4205,7 @@ export def "folders-metadata-enterprise-security-classification-6-vm-vochw-u-wo 
 #
 # POST /folders/{folder_id}/metadata/enterprise/securityClassification-6VMVochwUWo
 # operationId: post_folders_id_metadata_enterprise_securityClassification-6VMVochwUWo
-export def "folders-metadata-enterprise-security-classification-6-vm-vochw-u-wo create" [
+export def "post-folders-id-metadata-enterprise-security-classification-6vm-vochw-u-wo" [
   folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4245,7 +4245,7 @@ export def "folders-metadata-enterprise-security-classification-6-vm-vochw-u-wo 
 #
 # PUT /folders/{folder_id}/metadata/enterprise/securityClassification-6VMVochwUWo
 # operationId: put_folders_id_metadata_enterprise_securityClassification-6VMVochwUWo
-export def "folders-metadata-enterprise-security-classification-6-vm-vochw-u-wo update" [
+export def "put-folders-id-metadata-enterprise-security-classification-6vm-vochw-u-wo" [
   folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4285,7 +4285,7 @@ export def "folders-metadata-enterprise-security-classification-6-vm-vochw-u-wo 
 #
 # DELETE /folders/{folder_id}/metadata/{scope}/{template_key}
 # operationId: delete_folders_id_metadata_id_id
-export def "folders-metadata delete" [
+export def "delete-folders-id-metadata-id-id" [
   folder_id: string
   scope: string
   template_key: string
@@ -4325,7 +4325,7 @@ export def "folders-metadata delete" [
 #
 # GET /folders/{folder_id}/metadata/{scope}/{template_key}
 # operationId: get_folders_id_metadata_id_id
-export def "folders-metadata get-by-folder-id-scope-template-key" [
+export def "get-folders-id-metadata-id-id" [
   folder_id: string
   scope: string
   template_key: string
@@ -4365,7 +4365,7 @@ export def "folders-metadata get-by-folder-id-scope-template-key" [
 #
 # POST /folders/{folder_id}/metadata/{scope}/{template_key}
 # operationId: post_folders_id_metadata_id_id
-export def "folders-metadata create" [
+export def "post-folders-id-metadata-id-id" [
   folder_id: string
   scope: string
   template_key: string
@@ -4409,7 +4409,7 @@ export def "folders-metadata create" [
 #
 # PUT /folders/{folder_id}/metadata/{scope}/{template_key}
 # operationId: put_folders_id_metadata_id_id
-export def "folders-metadata update" [
+export def "put-folders-id-metadata-id-id" [
   folder_id: string
   scope: string
   template_key: string
@@ -4453,7 +4453,7 @@ export def "folders-metadata update" [
 #
 # DELETE /folders/{folder_id}/trash
 # operationId: delete_folders_id_trash
-export def "folders-trash delete" [
+export def "delete-folders-id-trash" [
   folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4489,7 +4489,7 @@ export def "folders-trash delete" [
 #
 # GET /folders/{folder_id}/trash
 # operationId: get_folders_id_trash
-export def "folders-trash get" [
+export def "get-folders-id-trash" [
   folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4527,7 +4527,7 @@ export def "folders-trash get" [
 #
 # DELETE /folders/{folder_id}/watermark
 # operationId: delete_folders_id_watermark
-export def "folders-watermark delete" [
+export def "delete-folders-id-watermark" [
   folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4563,7 +4563,7 @@ export def "folders-watermark delete" [
 #
 # GET /folders/{folder_id}/watermark
 # operationId: get_folders_id_watermark
-export def "folders-watermark get" [
+export def "get-folders-id-watermark" [
   folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4600,7 +4600,7 @@ export def "folders-watermark get" [
 # PUT /folders/{folder_id}/watermark
 # operationId: put_folders_id_watermark
 # --watermark shape: {imprint: "default"}
-export def "folders-watermark update" [
+export def "put-folders-id-watermark" [
   folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4642,7 +4642,7 @@ export def "folders-watermark update" [
 # operationId: post_group_memberships
 # --group shape: {id: string}
 # --user shape: {id: string}
-export def "group-memberships create" [
+export def "post-group-memberships" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4685,7 +4685,7 @@ export def "group-memberships create" [
 #
 # DELETE /group_memberships/{group_membership_id}
 # operationId: delete_group_memberships_id
-export def "group-memberships delete" [
+export def "delete-group-memberships-id" [
   group_membership_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4721,7 +4721,7 @@ export def "group-memberships delete" [
 #
 # GET /group_memberships/{group_membership_id}
 # operationId: get_group_memberships_id
-export def "group-memberships get" [
+export def "get-group-memberships-id" [
   group_membership_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4759,7 +4759,7 @@ export def "group-memberships get" [
 #
 # PUT /group_memberships/{group_membership_id}
 # operationId: put_group_memberships_id
-export def "group-memberships update" [
+export def "put-group-memberships-id" [
   group_membership_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4802,7 +4802,7 @@ export def "group-memberships update" [
 #
 # GET /groups
 # operationId: get_groups
-export def "groups list" [
+export def "get-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4841,7 +4841,7 @@ export def "groups list" [
 #
 # POST /groups
 # operationId: post_groups
-export def "groups create" [
+export def "post-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4886,7 +4886,7 @@ export def "groups create" [
 #
 # POST /groups/terminate_sessions
 # operationId: post_groups_terminate_sessions
-export def "groups-terminate-sessions create" [
+export def "post-groups-terminate-sessions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4924,7 +4924,7 @@ export def "groups-terminate-sessions create" [
 #
 # DELETE /groups/{group_id}
 # operationId: delete_groups_id
-export def "groups delete" [
+export def "delete-groups-id" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4960,7 +4960,7 @@ export def "groups delete" [
 #
 # GET /groups/{group_id}
 # operationId: get_groups_id
-export def "groups get" [
+export def "get-groups-id" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4998,7 +4998,7 @@ export def "groups get" [
 #
 # PUT /groups/{group_id}
 # operationId: put_groups_id
-export def "groups update" [
+export def "put-groups-id" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5045,7 +5045,7 @@ export def "groups update" [
 #
 # GET /groups/{group_id}/collaborations
 # operationId: get_groups_id_collaborations
-export def "groups-collaborations get" [
+export def "get-groups-id-collaborations" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5084,7 +5084,7 @@ export def "groups-collaborations get" [
 #
 # GET /groups/{group_id}/memberships
 # operationId: get_groups_id_memberships
-export def "groups-memberships get" [
+export def "get-groups-id-memberships" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5125,7 +5125,7 @@ export def "groups-memberships get" [
 # operationId: post_invites
 # --actionable_by shape: {login?: string}
 # --enterprise shape: {id: string}
-export def "invites create" [
+export def "post-invites" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5166,7 +5166,7 @@ export def "invites create" [
 #
 # GET /invites/{invite_id}
 # operationId: get_invites_id
-export def "invites get" [
+export def "get-invites-id" [
   invite_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5204,7 +5204,7 @@ export def "invites get" [
 #
 # GET /legal_hold_policies
 # operationId: get_legal_hold_policies
-export def "legal-hold-policies list" [
+export def "get-legal-hold-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5243,7 +5243,7 @@ export def "legal-hold-policies list" [
 #
 # POST /legal_hold_policies
 # operationId: post_legal_hold_policies
-export def "legal-hold-policies create" [
+export def "post-legal-hold-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5285,7 +5285,7 @@ export def "legal-hold-policies create" [
 #
 # DELETE /legal_hold_policies/{legal_hold_policy_id}
 # operationId: delete_legal_hold_policies_id
-export def "legal-hold-policies delete" [
+export def "delete-legal-hold-policies-id" [
   legal_hold_policy_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5321,7 +5321,7 @@ export def "legal-hold-policies delete" [
 #
 # GET /legal_hold_policies/{legal_hold_policy_id}
 # operationId: get_legal_hold_policies_id
-export def "legal-hold-policies get" [
+export def "get-legal-hold-policies-id" [
   legal_hold_policy_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5357,7 +5357,7 @@ export def "legal-hold-policies get" [
 #
 # PUT /legal_hold_policies/{legal_hold_policy_id}
 # operationId: put_legal_hold_policies_id
-export def "legal-hold-policies update" [
+export def "put-legal-hold-policies-id" [
   legal_hold_policy_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5399,7 +5399,7 @@ export def "legal-hold-policies update" [
 #
 # GET /legal_hold_policy_assignments
 # operationId: get_legal_hold_policy_assignments
-export def "legal-hold-policy-assignments list" [
+export def "get-legal-hold-policy-assignments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5441,7 +5441,7 @@ export def "legal-hold-policy-assignments list" [
 # POST /legal_hold_policy_assignments
 # operationId: post_legal_hold_policy_assignments
 # --assign_to shape: {id: string, type: "file"|"file_version"|"folder"|"user"}
-export def "legal-hold-policy-assignments create" [
+export def "post-legal-hold-policy-assignments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5480,7 +5480,7 @@ export def "legal-hold-policy-assignments create" [
 #
 # DELETE /legal_hold_policy_assignments/{legal_hold_policy_assignment_id}
 # operationId: delete_legal_hold_policy_assignments_id
-export def "legal-hold-policy-assignments delete" [
+export def "delete-legal-hold-policy-assignments-id" [
   legal_hold_policy_assignment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5516,7 +5516,7 @@ export def "legal-hold-policy-assignments delete" [
 #
 # GET /legal_hold_policy_assignments/{legal_hold_policy_assignment_id}
 # operationId: get_legal_hold_policy_assignments_id
-export def "legal-hold-policy-assignments get" [
+export def "get-legal-hold-policy-assignments-id" [
   legal_hold_policy_assignment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5552,7 +5552,7 @@ export def "legal-hold-policy-assignments get" [
 #
 # GET /legal_hold_policy_assignments/{legal_hold_policy_assignment_id}/file_versions_on_hold
 # operationId: get_legal_hold_policy_assignments_id_file_versions_on_hold
-export def "legal-hold-policy-assignments-file-versions-on-hold get" [
+export def "get-legal-hold-policy-assignments-id-file-versions-on-hold" [
   legal_hold_policy_assignment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5592,7 +5592,7 @@ export def "legal-hold-policy-assignments-file-versions-on-hold get" [
 #
 # GET /legal_hold_policy_assignments/{legal_hold_policy_assignment_id}/files_on_hold
 # operationId: get_legal_hold_policy_assignments_id_files_on_hold
-export def "legal-hold-policy-assignments-files-on-hold get" [
+export def "get-legal-hold-policy-assignments-id-files-on-hold" [
   legal_hold_policy_assignment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5632,7 +5632,7 @@ export def "legal-hold-policy-assignments-files-on-hold get" [
 #
 # GET /metadata_cascade_policies
 # operationId: get_metadata_cascade_policies
-export def "metadata-cascade-policies list" [
+export def "get-metadata-cascade-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5671,7 +5671,7 @@ export def "metadata-cascade-policies list" [
 #
 # POST /metadata_cascade_policies
 # operationId: post_metadata_cascade_policies
-export def "metadata-cascade-policies create" [
+export def "post-metadata-cascade-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5711,7 +5711,7 @@ export def "metadata-cascade-policies create" [
 #
 # DELETE /metadata_cascade_policies/{metadata_cascade_policy_id}
 # operationId: delete_metadata_cascade_policies_id
-export def "metadata-cascade-policies delete" [
+export def "delete-metadata-cascade-policies-id" [
   metadata_cascade_policy_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5747,7 +5747,7 @@ export def "metadata-cascade-policies delete" [
 #
 # GET /metadata_cascade_policies/{metadata_cascade_policy_id}
 # operationId: get_metadata_cascade_policies_id
-export def "metadata-cascade-policies get" [
+export def "get-metadata-cascade-policies-id" [
   metadata_cascade_policy_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5783,7 +5783,7 @@ export def "metadata-cascade-policies get" [
 #
 # POST /metadata_cascade_policies/{metadata_cascade_policy_id}/apply
 # operationId: post_metadata_cascade_policies_id_apply
-export def "metadata-cascade-policies-apply create" [
+export def "post-metadata-cascade-policies-id-apply" [
   metadata_cascade_policy_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5824,7 +5824,7 @@ export def "metadata-cascade-policies-apply create" [
 # POST /metadata_queries/execute_read
 # operationId: post_metadata_queries_execute_read
 # --order_by item shape: {direction?: "ASC"|"DESC"|"asc"|"desc", field_key?: string}
-export def "metadata-queries-execute-read create" [
+export def "post-metadata-queries-execute-read" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5869,7 +5869,7 @@ export def "metadata-queries-execute-read create" [
 #
 # GET /metadata_query_indices
 # operationId: get_metadata_query_indices
-export def "metadata-query-indices get" [
+export def "get-metadata-query-indices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5906,7 +5906,7 @@ export def "metadata-query-indices get" [
 #
 # GET /metadata_templates
 # operationId: get_metadata_templates
-export def "metadata-templates list" [
+export def "get-metadata-templates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5942,7 +5942,7 @@ export def "metadata-templates list" [
 #
 # GET /metadata_templates/enterprise
 # operationId: get_metadata_templates_enterprise
-export def "metadata-templates-enterprise get" [
+export def "get-metadata-templates-enterprise" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5979,7 +5979,7 @@ export def "metadata-templates-enterprise get" [
 #
 # DELETE /metadata_templates/enterprise/securityClassification-6VMVochwUWo/schema
 # operationId: delete_metadata_templates_enterprise_securityClassification-6VMVochwUWo_schema
-export def "metadata-templates-enterprise-security-classification-6-vm-vochw-u-wo-schema delete" [
+export def "delete-metadata-templates-enterprise-security-classification-6vm-vochw-u-wo-schema" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6013,7 +6013,7 @@ export def "metadata-templates-enterprise-security-classification-6-vm-vochw-u-w
 #
 # GET /metadata_templates/enterprise/securityClassification-6VMVochwUWo/schema
 # operationId: get_metadata_templates_enterprise_securityClassification-6VMVochwUWo_schema
-export def "metadata-templates-enterprise-security-classification-6-vm-vochw-u-wo-schema get" [
+export def "get-metadata-templates-enterprise-security-classification-6vm-vochw-u-wo-schema" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6047,7 +6047,7 @@ export def "metadata-templates-enterprise-security-classification-6-vm-vochw-u-w
 #
 # PUT /metadata_templates/enterprise/securityClassification-6VMVochwUWo/schema
 # operationId: put_metadata_templates_enterprise_securityClassification-6VMVochwUWo_schema#add
-export def "metadata-templates-enterprise-security-classification-6-vm-vochw-u-wo-schema create" [
+export def "put-metadata-templates-enterprise-security-classification-6vm-vochw-u-wo-schemaadd" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6085,7 +6085,7 @@ export def "metadata-templates-enterprise-security-classification-6-vm-vochw-u-w
 #
 # PUT /metadata_templates/enterprise/securityClassification-6VMVochwUWo/schema
 # operationId: put_metadata_templates_enterprise_securityClassification-6VMVochwUWo_schema#delete
-export def "metadata-templates-enterprise-security-classification-6-vm-vochw-u-wo-schema delete-1" [
+export def "put-metadata-templates-enterprise-security-classification-6vm-vochw-u-wo-schemadelete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6123,7 +6123,7 @@ export def "metadata-templates-enterprise-security-classification-6-vm-vochw-u-w
 #
 # PUT /metadata_templates/enterprise/securityClassification-6VMVochwUWo/schema
 # operationId: put_metadata_templates_enterprise_securityClassification-6VMVochwUWo_schema#update
-export def "metadata-templates-enterprise-security-classification-6-vm-vochw-u-wo-schema update" [
+export def "put-metadata-templates-enterprise-security-classification-6vm-vochw-u-wo-schemaupdate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6161,7 +6161,7 @@ export def "metadata-templates-enterprise-security-classification-6-vm-vochw-u-w
 #
 # GET /metadata_templates/global
 # operationId: get_metadata_templates_global
-export def "metadata-templates-global get" [
+export def "get-metadata-templates-global" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6199,7 +6199,7 @@ export def "metadata-templates-global get" [
 # POST /metadata_templates/schema
 # operationId: post_metadata_templates_schema
 # --fields item shape: {description?: string, displayName: string, hidden?: bool, key: string, options?: list, type: "string"|"float"|"date"|"enum"|"multiSelect"}
-export def "metadata-templates-schema create" [
+export def "post-metadata-templates-schema" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6243,7 +6243,7 @@ export def "metadata-templates-schema create" [
 # POST /metadata_templates/schema
 # operationId: post_metadata_templates_schema#classifications
 # --fields item shape: {displayName?: "Classification", hidden?: bool, key?: "Box__Security__Classification__Key", options?: list, type?: "enum"}
-export def "metadata-templates-schema create-classifications" [
+export def "post-metadata-templates-schemaclassifications" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6286,7 +6286,7 @@ export def "metadata-templates-schema create-classifications" [
 #
 # DELETE /metadata_templates/{scope}/{template_key}/schema
 # operationId: delete_metadata_templates_id_id_schema
-export def "metadata-templates-schema delete" [
+export def "delete-metadata-templates-id-id-schema" [
   scope: string
   template_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6324,7 +6324,7 @@ export def "metadata-templates-schema delete" [
 #
 # GET /metadata_templates/{scope}/{template_key}/schema
 # operationId: get_metadata_templates_id_id_schema
-export def "metadata-templates-schema get" [
+export def "get-metadata-templates-id-id-schema" [
   scope: string
   template_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6362,7 +6362,7 @@ export def "metadata-templates-schema get" [
 #
 # PUT /metadata_templates/{scope}/{template_key}/schema
 # operationId: put_metadata_templates_id_id_schema
-export def "metadata-templates-schema update" [
+export def "put-metadata-templates-id-id-schema" [
   scope: string
   template_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6404,7 +6404,7 @@ export def "metadata-templates-schema update" [
 #
 # GET /metadata_templates/{template_id}
 # operationId: get_metadata_templates_id
-export def "metadata-templates get" [
+export def "get-metadata-templates-id" [
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6440,7 +6440,7 @@ export def "metadata-templates get" [
 #
 # POST /oauth2/revoke
 # operationId: post_oauth2_revoke
-export def "oauth2-revoke create" [
+export def "post-oauth2-revoke" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6481,7 +6481,7 @@ export def "oauth2-revoke create" [
 #
 # POST /oauth2/token
 # operationId: post_oauth2_token
-export def "oauth2-token create" [
+export def "post-oauth2-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6534,7 +6534,7 @@ export def "oauth2-token create" [
 #
 # POST /oauth2/token
 # operationId: post_oauth2_token#refresh
-export def "oauth2-token refresh" [
+export def "post-oauth2-tokenrefresh" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6576,7 +6576,7 @@ export def "oauth2-token refresh" [
 #
 # GET /recent_items
 # operationId: get_recent_items
-export def "recent-items get" [
+export def "get-recent-items" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6614,7 +6614,7 @@ export def "recent-items get" [
 #
 # GET /retention_policies
 # operationId: get_retention_policies
-export def "retention-policies list" [
+export def "get-retention-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6656,7 +6656,7 @@ export def "retention-policies list" [
 # POST /retention_policies
 # operationId: post_retention_policies
 # --custom_notification_recipients item shape: {id?: string, type: "user", login: string, name: string}
-export def "retention-policies create" [
+export def "post-retention-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6702,7 +6702,7 @@ export def "retention-policies create" [
 #
 # DELETE /retention_policies/{retention_policy_id}
 # operationId: delete_retention_policies_id
-export def "retention-policies delete" [
+export def "delete-retention-policies-id" [
   retention_policy_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6738,7 +6738,7 @@ export def "retention-policies delete" [
 #
 # GET /retention_policies/{retention_policy_id}
 # operationId: get_retention_policies_id
-export def "retention-policies get" [
+export def "get-retention-policies-id" [
   retention_policy_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6777,7 +6777,7 @@ export def "retention-policies get" [
 # PUT /retention_policies/{retention_policy_id}
 # operationId: put_retention_policies_id
 # --custom_notification_recipients item shape: {id?: string, type: "user", login: string, name: string}
-export def "retention-policies update" [
+export def "put-retention-policies-id" [
   retention_policy_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6825,7 +6825,7 @@ export def "retention-policies update" [
 #
 # GET /retention_policies/{retention_policy_id}/assignments
 # operationId: get_retention_policies_id_assignments
-export def "retention-policies-assignments get" [
+export def "get-retention-policies-id-assignments" [
   retention_policy_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6868,7 +6868,7 @@ export def "retention-policies-assignments get" [
 # operationId: post_retention_policy_assignments
 # --assign_to shape: {id: string, type: "enterprise"|"folder"|"metadata_template"}
 # --filter_fields item shape: {field?: string, value?: string}
-export def "retention-policy-assignments create" [
+export def "post-retention-policy-assignments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6909,7 +6909,7 @@ export def "retention-policy-assignments create" [
 #
 # DELETE /retention_policy_assignments/{retention_policy_assignment_id}
 # operationId: delete_retention_policy_assignments_id
-export def "retention-policy-assignments delete" [
+export def "delete-retention-policy-assignments-id" [
   retention_policy_assignment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6945,7 +6945,7 @@ export def "retention-policy-assignments delete" [
 #
 # GET /retention_policy_assignments/{retention_policy_assignment_id}
 # operationId: get_retention_policy_assignments_id
-export def "retention-policy-assignments get" [
+export def "get-retention-policy-assignments-id" [
   retention_policy_assignment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6983,7 +6983,7 @@ export def "retention-policy-assignments get" [
 #
 # GET /retention_policy_assignments/{retention_policy_assignment_id}/file_versions_under_retention
 # operationId: get_retention_policy_assignments_id_file_versions_under_retention
-export def "retention-policy-assignments-file-versions-under-retention get" [
+export def "get-retention-policy-assignments-id-file-versions-under-retention" [
   retention_policy_assignment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7022,7 +7022,7 @@ export def "retention-policy-assignments-file-versions-under-retention get" [
 #
 # GET /retention_policy_assignments/{retention_policy_assignment_id}/files_under_retention
 # operationId: get_retention_policy_assignments_id_files_under_retention
-export def "retention-policy-assignments-files-under-retention get" [
+export def "get-retention-policy-assignments-id-files-under-retention" [
   retention_policy_assignment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7061,7 +7061,7 @@ export def "retention-policy-assignments-files-under-retention get" [
 #
 # GET /search
 # operationId: get_search
-export def "search get" [
+export def "get-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7115,7 +7115,7 @@ export def "search get" [
 #
 # GET /shared_items
 # operationId: get_shared_items
-export def "shared-items get" [
+export def "get-shared-items" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7155,7 +7155,7 @@ export def "shared-items get" [
 #
 # GET /shared_items
 # operationId: get_shared_items#folders
-export def "shared-items get-folders" [
+export def "get-shared-itemsfolders" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7195,7 +7195,7 @@ export def "shared-items get-folders" [
 #
 # GET /shared_items
 # operationId: get_shared_items#web_links
-export def "shared-items get-web-links" [
+export def "get-shared-itemsweb-links" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7235,7 +7235,7 @@ export def "shared-items get-web-links" [
 #
 # GET /shield_information_barrier_reports
 # operationId: get_shield_information_barrier_reports
-export def "shield-information-barrier-reports list" [
+export def "get-shield-information-barrier-reports" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7274,7 +7274,7 @@ export def "shield-information-barrier-reports list" [
 # POST /shield_information_barrier_reports
 # operationId: post_shield_information_barrier_reports
 # --shield_information_barrier shape: {id?: string, type?: "shield_information_barrier"}
-export def "shield-information-barrier-reports create" [
+export def "post-shield-information-barrier-reports" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7312,7 +7312,7 @@ export def "shield-information-barrier-reports create" [
 #
 # GET /shield_information_barrier_reports/{shield_information_barrier_report_id}
 # operationId: get_shield_information_barrier_reports_id
-export def "shield-information-barrier-reports get" [
+export def "get-shield-information-barrier-reports-id" [
   shield_information_barrier_report_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7348,7 +7348,7 @@ export def "shield-information-barrier-reports get" [
 #
 # GET /shield_information_barrier_segment_members
 # operationId: get_shield_information_barrier_segment_members
-export def "shield-information-barrier-segment-members list" [
+export def "get-shield-information-barrier-segment-members" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7388,7 +7388,7 @@ export def "shield-information-barrier-segment-members list" [
 # operationId: post_shield_information_barrier_segment_members
 # --shield_information_barrier shape: {id?: string, type?: "shield_information_barrier"}
 # --shield_information_barrier_segment shape: {id?: string, type?: "shield_information_barrier_segment"}
-export def "shield-information-barrier-segment-members create" [
+export def "post-shield-information-barrier-segment-members" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7429,7 +7429,7 @@ export def "shield-information-barrier-segment-members create" [
 #
 # DELETE /shield_information_barrier_segment_members/{shield_information_barrier_segment_member_id}
 # operationId: delete_shield_information_barrier_segment_members_id
-export def "shield-information-barrier-segment-members delete" [
+export def "delete-shield-information-barrier-segment-members-id" [
   shield_information_barrier_segment_member_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7465,7 +7465,7 @@ export def "shield-information-barrier-segment-members delete" [
 #
 # GET /shield_information_barrier_segment_members/{shield_information_barrier_segment_member_id}
 # operationId: get_shield_information_barrier_segment_members_id
-export def "shield-information-barrier-segment-members get" [
+export def "get-shield-information-barrier-segment-members-id" [
   shield_information_barrier_segment_member_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7501,7 +7501,7 @@ export def "shield-information-barrier-segment-members get" [
 #
 # GET /shield_information_barrier_segment_restrictions
 # operationId: get_shield_information_barrier_segment_restrictions
-export def "shield-information-barrier-segment-restrictions list" [
+export def "get-shield-information-barrier-segment-restrictions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7542,7 +7542,7 @@ export def "shield-information-barrier-segment-restrictions list" [
 # --restricted_segment shape: {id?: string, type?: "shield_information_barrier_segment"}
 # --shield_information_barrier shape: {id?: string, type?: "shield_information_barrier"}
 # --shield_information_barrier_segment shape: {id?: string, type?: "shield_information_barrier_segment"}
-export def "shield-information-barrier-segment-restrictions create" [
+export def "post-shield-information-barrier-segment-restrictions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7583,7 +7583,7 @@ export def "shield-information-barrier-segment-restrictions create" [
 #
 # DELETE /shield_information_barrier_segment_restrictions/{shield_information_barrier_segment_restriction_id}
 # operationId: delete_shield_information_barrier_segment_restrictions_id
-export def "shield-information-barrier-segment-restrictions delete" [
+export def "delete-shield-information-barrier-segment-restrictions-id" [
   shield_information_barrier_segment_restriction_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7619,7 +7619,7 @@ export def "shield-information-barrier-segment-restrictions delete" [
 #
 # GET /shield_information_barrier_segment_restrictions/{shield_information_barrier_segment_restriction_id}
 # operationId: get_shield_information_barrier_segment_restrictions_id
-export def "shield-information-barrier-segment-restrictions get" [
+export def "get-shield-information-barrier-segment-restrictions-id" [
   shield_information_barrier_segment_restriction_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7655,7 +7655,7 @@ export def "shield-information-barrier-segment-restrictions get" [
 #
 # GET /shield_information_barrier_segments
 # operationId: get_shield_information_barrier_segments
-export def "shield-information-barrier-segments list" [
+export def "get-shield-information-barrier-segments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7694,7 +7694,7 @@ export def "shield-information-barrier-segments list" [
 # POST /shield_information_barrier_segments
 # operationId: post_shield_information_barrier_segments
 # --shield_information_barrier shape: {id?: string, type?: "shield_information_barrier"}
-export def "shield-information-barrier-segments create" [
+export def "post-shield-information-barrier-segments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7734,7 +7734,7 @@ export def "shield-information-barrier-segments create" [
 #
 # DELETE /shield_information_barrier_segments/{shield_information_barrier_segment_id}
 # operationId: delete_shield_information_barrier_segments_id
-export def "shield-information-barrier-segments delete" [
+export def "delete-shield-information-barrier-segments-id" [
   shield_information_barrier_segment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7770,7 +7770,7 @@ export def "shield-information-barrier-segments delete" [
 #
 # GET /shield_information_barrier_segments/{shield_information_barrier_segment_id}
 # operationId: get_shield_information_barrier_segments_id
-export def "shield-information-barrier-segments get" [
+export def "get-shield-information-barrier-segments-id" [
   shield_information_barrier_segment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7806,7 +7806,7 @@ export def "shield-information-barrier-segments get" [
 #
 # PUT /shield_information_barrier_segments/{shield_information_barrier_segment_id}
 # operationId: put_shield_information_barrier_segments_id
-export def "shield-information-barrier-segments update" [
+export def "put-shield-information-barrier-segments-id" [
   shield_information_barrier_segment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7847,7 +7847,7 @@ export def "shield-information-barrier-segments update" [
 #
 # GET /shield_information_barriers
 # operationId: get_shield_information_barriers
-export def "shield-information-barriers list" [
+export def "get-shield-information-barriers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7884,7 +7884,7 @@ export def "shield-information-barriers list" [
 #
 # POST /shield_information_barriers
 # operationId: post_shield_information_barriers
-export def "shield-information-barriers create" [
+export def "post-shield-information-barriers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7931,7 +7931,7 @@ export def "shield-information-barriers create" [
 #
 # POST /shield_information_barriers/change_status
 # operationId: post_shield_information_barriers_change_status
-export def "shield-information-barriers-change-status create" [
+export def "post-shield-information-barriers-change-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7970,7 +7970,7 @@ export def "shield-information-barriers-change-status create" [
 #
 # GET /shield_information_barriers/{shield_information_barrier_id}
 # operationId: get_shield_information_barriers_id
-export def "shield-information-barriers get" [
+export def "get-shield-information-barriers-id" [
   shield_information_barrier_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8006,7 +8006,7 @@ export def "shield-information-barriers get" [
 #
 # GET /sign_requests
 # operationId: get_sign_requests
-export def "sign-requests list" [
+export def "get-sign-requests" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8046,7 +8046,7 @@ export def "sign-requests list" [
 # --prefill_tags item shape: {checkbox_value?: bool, date_value?: string, document_tag_id?: string, text_value?: string}
 # --signers item shape: {declined_redirect_url?: string, email: string, embed_url_external_user_id?: string, is_in_person?: bool, login_required?: bool, order?: int, password?: string, redirect_url?: string, role?: "signer"|"approver"|"final_copy_reader", verification_phone_number?: string}
 # --source_files item shape: {etag?: string, id: string, type: "file", file_version?: any, name?: string, sequence_id: any, sha1: string}
-export def "sign-requests create" [
+export def "post-sign-requests" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8099,7 +8099,7 @@ export def "sign-requests create" [
 #
 # GET /sign_requests/{sign_request_id}
 # operationId: get_sign_requests_id
-export def "sign-requests get" [
+export def "get-sign-requests-id" [
   sign_request_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8135,7 +8135,7 @@ export def "sign-requests get" [
 #
 # POST /sign_requests/{sign_request_id}/cancel
 # operationId: post_sign_requests_id_cancel
-export def "sign-requests-cancel create" [
+export def "post-sign-requests-id-cancel" [
   sign_request_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8171,7 +8171,7 @@ export def "sign-requests-cancel create" [
 #
 # POST /sign_requests/{sign_request_id}/resend
 # operationId: post_sign_requests_id_resend
-export def "sign-requests-resend create" [
+export def "post-sign-requests-id-resend" [
   sign_request_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8211,7 +8211,7 @@ export def "sign-requests-resend create" [
 # --file_version shape: {id?: string, type?: "file_version"}
 # --metadata shape: {cards?: list}
 # --usage shape: {unit?: string, value?: float}
-export def "skill-invocations update" [
+export def "put-skill-invocations-id" [
   skill_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8255,7 +8255,7 @@ export def "skill-invocations update" [
 #
 # GET /storage_policies
 # operationId: get_storage_policies
-export def "storage-policies list" [
+export def "get-storage-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8293,7 +8293,7 @@ export def "storage-policies list" [
 #
 # GET /storage_policies/{storage_policy_id}
 # operationId: get_storage_policies_id
-export def "storage-policies get" [
+export def "get-storage-policies-id" [
   storage_policy_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8329,7 +8329,7 @@ export def "storage-policies get" [
 #
 # GET /storage_policy_assignments
 # operationId: get_storage_policy_assignments
-export def "storage-policy-assignments list" [
+export def "get-storage-policy-assignments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8369,7 +8369,7 @@ export def "storage-policy-assignments list" [
 # operationId: post_storage_policy_assignments
 # --assigned_to shape: {id: string, type: "user"|"enterprise"}
 # --storage_policy shape: {id: string, type: "storage_policy"}
-export def "storage-policy-assignments create" [
+export def "post-storage-policy-assignments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8408,7 +8408,7 @@ export def "storage-policy-assignments create" [
 #
 # DELETE /storage_policy_assignments/{storage_policy_assignment_id}
 # operationId: delete_storage_policy_assignments_id
-export def "storage-policy-assignments delete" [
+export def "delete-storage-policy-assignments-id" [
   storage_policy_assignment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8444,7 +8444,7 @@ export def "storage-policy-assignments delete" [
 #
 # GET /storage_policy_assignments/{storage_policy_assignment_id}
 # operationId: get_storage_policy_assignments_id
-export def "storage-policy-assignments get" [
+export def "get-storage-policy-assignments-id" [
   storage_policy_assignment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8481,7 +8481,7 @@ export def "storage-policy-assignments get" [
 # PUT /storage_policy_assignments/{storage_policy_assignment_id}
 # operationId: put_storage_policy_assignments_id
 # --storage_policy shape: {id: string, type: "storage_policy"}
-export def "storage-policy-assignments update" [
+export def "put-storage-policy-assignments-id" [
   storage_policy_assignment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8523,7 +8523,7 @@ export def "storage-policy-assignments update" [
 # operationId: post_task_assignments
 # --assign_to shape: {id?: string, login?: string}
 # --task shape: {id: string, type: "task"}
-export def "task-assignments create" [
+export def "post-task-assignments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8562,7 +8562,7 @@ export def "task-assignments create" [
 #
 # DELETE /task_assignments/{task_assignment_id}
 # operationId: delete_task_assignments_id
-export def "task-assignments delete" [
+export def "delete-task-assignments-id" [
   task_assignment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8598,7 +8598,7 @@ export def "task-assignments delete" [
 #
 # GET /task_assignments/{task_assignment_id}
 # operationId: get_task_assignments_id
-export def "task-assignments get" [
+export def "get-task-assignments-id" [
   task_assignment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8634,7 +8634,7 @@ export def "task-assignments get" [
 #
 # PUT /task_assignments/{task_assignment_id}
 # operationId: put_task_assignments_id
-export def "task-assignments update" [
+export def "put-task-assignments-id" [
   task_assignment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8676,7 +8676,7 @@ export def "task-assignments update" [
 # POST /tasks
 # operationId: post_tasks
 # --item shape: {id: string, type: "file"}
-export def "tasks create" [
+export def "post-tasks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8718,7 +8718,7 @@ export def "tasks create" [
 #
 # DELETE /tasks/{task_id}
 # operationId: delete_tasks_id
-export def "tasks delete" [
+export def "delete-tasks-id" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8754,7 +8754,7 @@ export def "tasks delete" [
 #
 # GET /tasks/{task_id}
 # operationId: get_tasks_id
-export def "tasks get" [
+export def "get-tasks-id" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8790,7 +8790,7 @@ export def "tasks get" [
 #
 # PUT /tasks/{task_id}
 # operationId: put_tasks_id
-export def "tasks update" [
+export def "put-tasks-id" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8833,7 +8833,7 @@ export def "tasks update" [
 #
 # GET /tasks/{task_id}/assignments
 # operationId: get_tasks_id_assignments
-export def "tasks-assignments get" [
+export def "get-tasks-id-assignments" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8869,7 +8869,7 @@ export def "tasks-assignments get" [
 #
 # GET /terms_of_service_user_statuses
 # operationId: get_terms_of_service_user_statuses
-export def "terms-of-service-user-statuses get" [
+export def "get-terms-of-service-user-statuses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8908,7 +8908,7 @@ export def "terms-of-service-user-statuses get" [
 # operationId: post_terms_of_service_user_statuses
 # --tos shape: {id: string, type: "terms_of_service"}
 # --user shape: {id: string, type: "user"}
-export def "terms-of-service-user-statuses create" [
+export def "post-terms-of-service-user-statuses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8948,7 +8948,7 @@ export def "terms-of-service-user-statuses create" [
 #
 # PUT /terms_of_service_user_statuses/{terms_of_service_user_status_id}
 # operationId: put_terms_of_service_user_statuses_id
-export def "terms-of-service-user-statuses update" [
+export def "put-terms-of-service-user-statuses-id" [
   terms_of_service_user_status_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8988,7 +8988,7 @@ export def "terms-of-service-user-statuses update" [
 #
 # GET /terms_of_services
 # operationId: get_terms_of_services
-export def "terms-of-services list" [
+export def "get-terms-of-services" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9024,7 +9024,7 @@ export def "terms-of-services list" [
 #
 # POST /terms_of_services
 # operationId: post_terms_of_services
-export def "terms-of-services create" [
+export def "post-terms-of-services" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9064,7 +9064,7 @@ export def "terms-of-services create" [
 #
 # GET /terms_of_services/{terms_of_service_id}
 # operationId: get_terms_of_services_id
-export def "terms-of-services get" [
+export def "get-terms-of-services-id" [
   terms_of_service_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9100,7 +9100,7 @@ export def "terms-of-services get" [
 #
 # PUT /terms_of_services/{terms_of_service_id}
 # operationId: put_terms_of_services_id
-export def "terms-of-services update" [
+export def "put-terms-of-services-id" [
   terms_of_service_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9141,7 +9141,7 @@ export def "terms-of-services update" [
 #
 # GET /users
 # operationId: get_users
-export def "users list" [
+export def "get-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9185,7 +9185,7 @@ export def "users list" [
 # POST /users
 # operationId: post_users
 # --tracking_codes item shape: {name?: string, type?: "tracking_code", value?: string}
-export def "users create" [
+export def "post-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9242,7 +9242,7 @@ export def "users create" [
 #
 # GET /users/me
 # operationId: get_users_me
-export def "users-me get" [
+export def "get-users-me" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9278,7 +9278,7 @@ export def "users-me get" [
 #
 # POST /users/terminate_sessions
 # operationId: post_users_terminate_sessions
-export def "users-terminate-sessions create" [
+export def "post-users-terminate-sessions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9317,7 +9317,7 @@ export def "users-terminate-sessions create" [
 #
 # DELETE /users/{user_id}
 # operationId: delete_users_id
-export def "users delete" [
+export def "delete-users-id" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9356,7 +9356,7 @@ export def "users delete" [
 #
 # GET /users/{user_id}
 # operationId: get_users_id
-export def "users get" [
+export def "get-users-id" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9396,7 +9396,7 @@ export def "users get" [
 # operationId: put_users_id
 # --notification_email shape: {email?: string}
 # --tracking_codes item shape: {name?: string, type?: "tracking_code", value?: string}
-export def "users update" [
+export def "put-users-id" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9458,7 +9458,7 @@ export def "users update" [
 #
 # DELETE /users/{user_id}/avatar
 # operationId: delete_users_id_avatar
-export def "users-avatar delete" [
+export def "delete-users-id-avatar" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9494,7 +9494,7 @@ export def "users-avatar delete" [
 #
 # GET /users/{user_id}/avatar
 # operationId: get_users_id_avatar
-export def "users-avatar get" [
+export def "get-users-id-avatar" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9531,7 +9531,7 @@ export def "users-avatar get" [
 #
 # POST /users/{user_id}/avatar
 # operationId: post_users_id_avatar
-export def "users-avatar create" [
+export def "post-users-id-avatar" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9573,7 +9573,7 @@ export def "users-avatar create" [
 #
 # GET /users/{user_id}/email_aliases
 # operationId: get_users_id_email_aliases
-export def "users-email-aliases get" [
+export def "get-users-id-email-aliases" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9609,7 +9609,7 @@ export def "users-email-aliases get" [
 #
 # POST /users/{user_id}/email_aliases
 # operationId: post_users_id_email_aliases
-export def "users-email-aliases create" [
+export def "post-users-id-email-aliases" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9649,7 +9649,7 @@ export def "users-email-aliases create" [
 #
 # DELETE /users/{user_id}/email_aliases/{email_alias_id}
 # operationId: delete_users_id_email_aliases_id
-export def "users-email-aliases delete" [
+export def "delete-users-id-email-aliases-id" [
   user_id: string
   email_alias_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9688,7 +9688,7 @@ export def "users-email-aliases delete" [
 # PUT /users/{user_id}/folders/0
 # operationId: put_users_id_folders_0
 # --owned_by shape: {id: string}
-export def "users-folders-0 update-by-user-id" [
+export def "put-users-id-folders-0" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9731,7 +9731,7 @@ export def "users-folders-0 update-by-user-id" [
 #
 # GET /users/{user_id}/memberships
 # operationId: get_users_id_memberships
-export def "users-memberships get" [
+export def "get-users-id-memberships" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9772,7 +9772,7 @@ export def "users-memberships get" [
 # operationId: post_web_links
 # --parent shape: {id: string}
 # --shared_link shape: {access?: "open"|"company"|"collaborators", password?: string, unshared_at?: string, vanity_name?: string}
-export def "web-links create" [
+export def "post-web-links" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9814,7 +9814,7 @@ export def "web-links create" [
 #
 # DELETE /web_links/{web_link_id}
 # operationId: delete_web_links_id
-export def "web-links delete" [
+export def "delete-web-links-id" [
   web_link_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9850,7 +9850,7 @@ export def "web-links delete" [
 #
 # GET /web_links/{web_link_id}
 # operationId: get_web_links_id
-export def "web-links get" [
+export def "get-web-links-id" [
   web_link_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9889,7 +9889,7 @@ export def "web-links get" [
 #
 # POST /web_links/{web_link_id}
 # operationId: post_web_links_id
-export def "web-links create-by-web-link-id" [
+export def "post-web-links-id" [
   web_link_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9933,7 +9933,7 @@ export def "web-links create-by-web-link-id" [
 # PUT /web_links/{web_link_id}
 # operationId: put_web_links_id
 # --shared_link shape: {access?: "open"|"company"|"collaborators", password?: string, unshared_at?: string, vanity_name?: string}
-export def "web-links update" [
+export def "put-web-links-id" [
   web_link_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9978,7 +9978,7 @@ export def "web-links update" [
 # PUT /web_links/{web_link_id}
 # operationId: put_web_links_id#add_shared_link
 # --shared_link shape: {access?: "open"|"company"|"collaborators", password?: string, permissions?: record, unshared_at?: string, vanity_name?: string}
-export def "web-links create-shared" [
+export def "put-web-links-idadd-shared-link" [
   web_link_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10020,7 +10020,7 @@ export def "web-links create-shared" [
 #
 # GET /web_links/{web_link_id}
 # operationId: get_web_links_id#get_shared_link
-export def "web-links get-shared" [
+export def "get-web-links-idget-shared-link" [
   web_link_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10058,7 +10058,7 @@ export def "web-links get-shared" [
 #
 # PUT /web_links/{web_link_id}
 # operationId: put_web_links_id#remove_shared_link
-export def "web-links delete-shared" [
+export def "put-web-links-idremove-shared-link" [
   web_link_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10101,7 +10101,7 @@ export def "web-links delete-shared" [
 # PUT /web_links/{web_link_id}
 # operationId: put_web_links_id#update_shared_link
 # --shared_link shape: {access?: "open"|"company"|"collaborators", password?: string, permissions?: record, unshared_at?: string, vanity_name?: string}
-export def "web-links update-shared" [
+export def "put-web-links-idupdate-shared-link" [
   web_link_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10143,7 +10143,7 @@ export def "web-links update-shared" [
 #
 # DELETE /web_links/{web_link_id}/trash
 # operationId: delete_web_links_id_trash
-export def "web-links-trash delete" [
+export def "delete-web-links-id-trash" [
   web_link_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10179,7 +10179,7 @@ export def "web-links-trash delete" [
 #
 # GET /web_links/{web_link_id}/trash
 # operationId: get_web_links_id_trash
-export def "web-links-trash get" [
+export def "get-web-links-id-trash" [
   web_link_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10217,7 +10217,7 @@ export def "web-links-trash get" [
 #
 # GET /webhooks
 # operationId: get_webhooks
-export def "webhooks list" [
+export def "get-webhooks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10255,7 +10255,7 @@ export def "webhooks list" [
 # POST /webhooks
 # operationId: post_webhooks
 # --target shape: {id?: string, type?: "file"|"folder"}
-export def "webhooks create" [
+export def "post-webhooks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10295,7 +10295,7 @@ export def "webhooks create" [
 #
 # DELETE /webhooks/{webhook_id}
 # operationId: delete_webhooks_id
-export def "webhooks delete" [
+export def "delete-webhooks-id" [
   webhook_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10331,7 +10331,7 @@ export def "webhooks delete" [
 #
 # GET /webhooks/{webhook_id}
 # operationId: get_webhooks_id
-export def "webhooks get" [
+export def "get-webhooks-id" [
   webhook_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10368,7 +10368,7 @@ export def "webhooks get" [
 # PUT /webhooks/{webhook_id}
 # operationId: put_webhooks_id
 # --target shape: {id?: string, type?: "file"|"folder"}
-export def "webhooks update" [
+export def "put-webhooks-id" [
   webhook_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10410,7 +10410,7 @@ export def "webhooks update" [
 #
 # GET /workflows
 # operationId: get_workflows
-export def "workflows get" [
+export def "get-workflows" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10453,7 +10453,7 @@ export def "workflows get" [
 # --flow shape: {id?: string, type?: string}
 # --folder shape: {id?: string, type?: "folder"}
 # --outcomes item shape: {id?: string, parameter?: string, type?: "outcome"}
-export def "workflows-start create" [
+export def "post-workflows-id-start" [
   workflow_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10498,7 +10498,7 @@ export def "workflows-start create" [
 # POST /zip_downloads
 # operationId: post_zip_downloads
 # --items item shape: {id: string, type: "file"|"folder."}
-export def "zip-downloads create" [
+export def "post-zip-downloads" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10537,7 +10537,7 @@ export def "zip-downloads create" [
 #
 # GET /zip_downloads/{zip_download_id}/content
 # operationId: get_zip_downloads_id_content
-export def "zip-downloads-content get" [
+export def "get-zip-downloads-id-content" [
   zip_download_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10574,7 +10574,7 @@ export def "zip-downloads-content get" [
 #
 # GET /zip_downloads/{zip_download_id}/status
 # operationId: get_zip_downloads_id_status
-export def "zip-downloads-status get" [
+export def "get-zip-downloads-id-status" [
   zip_download_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

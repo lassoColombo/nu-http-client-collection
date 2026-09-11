@@ -152,7 +152,7 @@ def type-completer [] { ["custom_field" "portfolio" "project" "tag" "task" "user
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "attachments get-for-object" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-attachments-for-object" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -176,7 +176,7 @@ export def commands []: nothing -> table {
 #
 # GET /attachments
 # operationId: getAttachmentsForObject
-export def "attachments get-for-object" [
+export def "get-attachments-for-object" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -214,7 +214,7 @@ export def "attachments get-for-object" [
 #
 # POST /attachments
 # operationId: createAttachmentForObject
-export def "attachments create-for-object" [
+export def "create-attachment-for-object" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -262,7 +262,7 @@ export def "attachments create-for-object" [
 #
 # DELETE /attachments/{attachment_gid}
 # operationId: deleteAttachment
-export def "attachments delete" [
+export def "delete-attachment" [
   attachment_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -301,7 +301,7 @@ export def "attachments delete" [
 #
 # GET /attachments/{attachment_gid}
 # operationId: getAttachment
-export def "attachments get" [
+export def "get-attachment" [
   attachment_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -341,7 +341,7 @@ export def "attachments get" [
 # POST /batch
 # operationId: createBatchRequest
 # --data shape: {actions?: list}
-export def "batch create-request" [
+export def "create-batch-request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -382,7 +382,7 @@ export def "batch create-request" [
 #
 # POST /custom_fields
 # operationId: createCustomField
-export def "custom-fields create" [
+export def "create-custom-field" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -425,7 +425,7 @@ export def "custom-fields create" [
 #
 # DELETE /custom_fields/{custom_field_gid}
 # operationId: deleteCustomField
-export def "custom-fields delete" [
+export def "delete-custom-field" [
   custom_field_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -464,7 +464,7 @@ export def "custom-fields delete" [
 #
 # GET /custom_fields/{custom_field_gid}
 # operationId: getCustomField
-export def "custom-fields get" [
+export def "get-custom-field" [
   custom_field_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -503,7 +503,7 @@ export def "custom-fields get" [
 #
 # PUT /custom_fields/{custom_field_gid}
 # operationId: updateCustomField
-export def "custom-fields update" [
+export def "update-custom-field" [
   custom_field_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -546,7 +546,7 @@ export def "custom-fields update" [
 #
 # POST /custom_fields/{custom_field_gid}/enum_options
 # operationId: createEnumOptionForCustomField
-export def "custom-fields-enum-options create" [
+export def "create-enum-option-for-custom-field" [
   custom_field_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -592,7 +592,7 @@ export def "custom-fields-enum-options create" [
 # POST /custom_fields/{custom_field_gid}/enum_options/insert
 # operationId: insertEnumOptionForCustomField
 # --data shape: {after_enum_option?: string, before_enum_option?: string, enum_option: string}
-export def "custom-fields-enum-options-insert create" [
+export def "insert-enum-option-for-custom-field" [
   custom_field_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -635,7 +635,7 @@ export def "custom-fields-enum-options-insert create" [
 #
 # PUT /enum_options/{enum_option_gid}
 # operationId: updateEnumOption
-export def "enum-options update" [
+export def "update-enum-option" [
   enum_option_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -678,7 +678,7 @@ export def "enum-options update" [
 #
 # GET /events
 # operationId: getEvents
-export def "events get" [
+export def "get-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -717,7 +717,7 @@ export def "events get" [
 #
 # GET /goal_relationships
 # operationId: getGoalRelationships
-export def "goal-relationships list" [
+export def "get-goal-relationships" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -756,7 +756,7 @@ export def "goal-relationships list" [
 #
 # GET /goal_relationships/{goal_relationship_gid}
 # operationId: getGoalRelationship
-export def "goal-relationships get" [
+export def "get-goal-relationship" [
   goal_relationship_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -795,7 +795,7 @@ export def "goal-relationships get" [
 #
 # PUT /goal_relationships/{goal_relationship_gid}
 # operationId: updateGoalRelationship
-export def "goal-relationships update" [
+export def "update-goal-relationship" [
   goal_relationship_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -838,7 +838,7 @@ export def "goal-relationships update" [
 #
 # GET /goals
 # operationId: getGoals
-export def "goals list" [
+export def "get-goals" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -883,7 +883,7 @@ export def "goals list" [
 #
 # POST /goals
 # operationId: createGoal
-export def "goals create" [
+export def "create-goal" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -926,7 +926,7 @@ export def "goals create" [
 #
 # DELETE /goals/{goal_gid}
 # operationId: deleteGoal
-export def "goals delete" [
+export def "delete-goal" [
   goal_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -965,7 +965,7 @@ export def "goals delete" [
 #
 # GET /goals/{goal_gid}
 # operationId: getGoal
-export def "goals get" [
+export def "get-goal" [
   goal_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1004,7 +1004,7 @@ export def "goals get" [
 #
 # PUT /goals/{goal_gid}
 # operationId: updateGoal
-export def "goals update" [
+export def "update-goal" [
   goal_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1048,7 +1048,7 @@ export def "goals update" [
 # POST /goals/{goal_gid}/addFollowers
 # operationId: addFollowers
 # --data shape: {followers: list<string>}
-export def "goals-add-followers create" [
+export def "add-followers" [
   goal_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1092,7 +1092,7 @@ export def "goals-add-followers create" [
 # POST /goals/{goal_gid}/addSupportingRelationship
 # operationId: addSupportingRelationship
 # --data shape: {contribution_weight?: float, insert_after?: string, insert_before?: string, supporting_resource: string}
-export def "goals-add-supporting-relationship create" [
+export def "add-supporting-relationship" [
   goal_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1135,7 +1135,7 @@ export def "goals-add-supporting-relationship create" [
 #
 # GET /goals/{goal_gid}/parentGoals
 # operationId: getParentGoalsForGoal
-export def "goals-parent-goals get" [
+export def "get-parent-goals-for-goal" [
   goal_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1175,7 +1175,7 @@ export def "goals-parent-goals get" [
 # POST /goals/{goal_gid}/removeFollowers
 # operationId: removeFollowers
 # --data shape: {followers: list<string>}
-export def "goals-remove-followers delete" [
+export def "remove-followers" [
   goal_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1219,7 +1219,7 @@ export def "goals-remove-followers delete" [
 # POST /goals/{goal_gid}/removeSupportingRelationship
 # operationId: removeSupportingRelationship
 # --data shape: {supporting_resource: string}
-export def "goals-remove-supporting-relationship delete" [
+export def "remove-supporting-relationship" [
   goal_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1262,7 +1262,7 @@ export def "goals-remove-supporting-relationship delete" [
 #
 # POST /goals/{goal_gid}/setMetric
 # operationId: createGoalMetric
-export def "goals-set-metric create" [
+export def "create-goal-metric" [
   goal_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1305,7 +1305,7 @@ export def "goals-set-metric create" [
 #
 # POST /goals/{goal_gid}/setMetricCurrentValue
 # operationId: updateGoalMetric
-export def "goals-set-metric-current-value update" [
+export def "update-goal-metric" [
   goal_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1348,7 +1348,7 @@ export def "goals-set-metric-current-value update" [
 #
 # GET /jobs/{job_gid}
 # operationId: getJob
-export def "jobs get" [
+export def "get-job" [
   job_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1388,7 +1388,7 @@ export def "jobs get" [
 # POST /organization_exports
 # operationId: createOrganizationExport
 # --data shape: {organization?: string}
-export def "organization-exports create" [
+export def "create-organization-export" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1431,7 +1431,7 @@ export def "organization-exports create" [
 #
 # GET /organization_exports/{organization_export_gid}
 # operationId: getOrganizationExport
-export def "organization-exports get" [
+export def "get-organization-export" [
   organization_export_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1470,7 +1470,7 @@ export def "organization-exports get" [
 #
 # GET /portfolio_memberships
 # operationId: getPortfolioMemberships
-export def "portfolio-memberships list" [
+export def "get-portfolio-memberships" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1512,7 +1512,7 @@ export def "portfolio-memberships list" [
 #
 # GET /portfolio_memberships/{portfolio_membership_gid}
 # operationId: getPortfolioMembership
-export def "portfolio-memberships get" [
+export def "get-portfolio-membership" [
   portfolio_membership_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1551,7 +1551,7 @@ export def "portfolio-memberships get" [
 #
 # GET /portfolios
 # operationId: getPortfolios
-export def "portfolios list" [
+export def "get-portfolios" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1590,7 +1590,7 @@ export def "portfolios list" [
 #
 # POST /portfolios
 # operationId: createPortfolio
-export def "portfolios create" [
+export def "create-portfolio" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1631,7 +1631,7 @@ export def "portfolios create" [
 #
 # DELETE /portfolios/{portfolio_gid}
 # operationId: deletePortfolio
-export def "portfolios delete" [
+export def "delete-portfolio" [
   portfolio_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1670,7 +1670,7 @@ export def "portfolios delete" [
 #
 # GET /portfolios/{portfolio_gid}
 # operationId: getPortfolio
-export def "portfolios get" [
+export def "get-portfolio" [
   portfolio_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1709,7 +1709,7 @@ export def "portfolios get" [
 #
 # PUT /portfolios/{portfolio_gid}
 # operationId: updatePortfolio
-export def "portfolios update" [
+export def "update-portfolio" [
   portfolio_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1753,7 +1753,7 @@ export def "portfolios update" [
 # POST /portfolios/{portfolio_gid}/addCustomFieldSetting
 # operationId: addCustomFieldSettingForPortfolio
 # --data shape: {custom_field: string, insert_after?: string, insert_before?: string, is_important?: bool}
-export def "portfolios-add-custom-field-setting create" [
+export def "add-custom-field-setting-for-portfolio" [
   portfolio_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1796,7 +1796,7 @@ export def "portfolios-add-custom-field-setting create" [
 # POST /portfolios/{portfolio_gid}/addItem
 # operationId: addItemForPortfolio
 # --data shape: {insert_after?: string, insert_before?: string, item: string}
-export def "portfolios-add-item create" [
+export def "add-item-for-portfolio" [
   portfolio_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1840,7 +1840,7 @@ export def "portfolios-add-item create" [
 # POST /portfolios/{portfolio_gid}/addMembers
 # operationId: addMembersForPortfolio
 # --data shape: {members: string}
-export def "portfolios-add-members create" [
+export def "add-members-for-portfolio" [
   portfolio_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1883,7 +1883,7 @@ export def "portfolios-add-members create" [
 #
 # GET /portfolios/{portfolio_gid}/custom_field_settings
 # operationId: getCustomFieldSettingsForPortfolio
-export def "portfolios-custom-field-settings get" [
+export def "get-custom-field-settings-for-portfolio" [
   portfolio_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1924,7 +1924,7 @@ export def "portfolios-custom-field-settings get" [
 #
 # GET /portfolios/{portfolio_gid}/items
 # operationId: getItemsForPortfolio
-export def "portfolios-items get" [
+export def "get-items-for-portfolio" [
   portfolio_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1965,7 +1965,7 @@ export def "portfolios-items get" [
 #
 # GET /portfolios/{portfolio_gid}/portfolio_memberships
 # operationId: getPortfolioMembershipsForPortfolio
-export def "portfolios-portfolio-memberships get" [
+export def "get-portfolio-memberships-for-portfolio" [
   portfolio_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2008,7 +2008,7 @@ export def "portfolios-portfolio-memberships get" [
 # POST /portfolios/{portfolio_gid}/removeCustomFieldSetting
 # operationId: removeCustomFieldSettingForPortfolio
 # --data shape: {custom_field: string}
-export def "portfolios-remove-custom-field-setting delete" [
+export def "remove-custom-field-setting-for-portfolio" [
   portfolio_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2051,7 +2051,7 @@ export def "portfolios-remove-custom-field-setting delete" [
 # POST /portfolios/{portfolio_gid}/removeItem
 # operationId: removeItemForPortfolio
 # --data shape: {item: string}
-export def "portfolios-remove-item delete" [
+export def "remove-item-for-portfolio" [
   portfolio_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2095,7 +2095,7 @@ export def "portfolios-remove-item delete" [
 # POST /portfolios/{portfolio_gid}/removeMembers
 # operationId: removeMembersForPortfolio
 # --data shape: {members: string}
-export def "portfolios-remove-members delete" [
+export def "remove-members-for-portfolio" [
   portfolio_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2138,7 +2138,7 @@ export def "portfolios-remove-members delete" [
 #
 # DELETE /project_briefs/{project_brief_gid}
 # operationId: deleteProjectBrief
-export def "project-briefs delete" [
+export def "delete-project-brief" [
   project_brief_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2177,7 +2177,7 @@ export def "project-briefs delete" [
 #
 # GET /project_briefs/{project_brief_gid}
 # operationId: getProjectBrief
-export def "project-briefs get" [
+export def "get-project-brief" [
   project_brief_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2216,7 +2216,7 @@ export def "project-briefs get" [
 #
 # PUT /project_briefs/{project_brief_gid}
 # operationId: updateProjectBrief
-export def "project-briefs update" [
+export def "update-project-brief" [
   project_brief_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2259,7 +2259,7 @@ export def "project-briefs update" [
 #
 # GET /project_memberships/{project_membership_gid}
 # operationId: getProjectMembership
-export def "project-memberships get" [
+export def "get-project-membership" [
   project_membership_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2298,7 +2298,7 @@ export def "project-memberships get" [
 #
 # DELETE /project_statuses/{project_status_gid}
 # operationId: deleteProjectStatus
-export def "project-statuses delete" [
+export def "delete-project-status" [
   project_status_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2337,7 +2337,7 @@ export def "project-statuses delete" [
 #
 # GET /project_statuses/{project_status_gid}
 # operationId: getProjectStatus
-export def "project-statuses get" [
+export def "get-project-status" [
   project_status_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2376,7 +2376,7 @@ export def "project-statuses get" [
 #
 # GET /project_templates
 # operationId: getProjectTemplates
-export def "project-templates list" [
+export def "get-project-templates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2415,7 +2415,7 @@ export def "project-templates list" [
 #
 # GET /project_templates/{project_template_gid}
 # operationId: getProjectTemplate
-export def "project-templates get" [
+export def "get-project-template" [
   project_template_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2455,7 +2455,7 @@ export def "project-templates get" [
 # POST /project_templates/{project_template_gid}/instantiateProject
 # operationId: instantiateProject
 # --data shape: {is_strict?: bool, name: string, public: bool, requested_dates?: list, team?: string, workspace?: string}
-export def "project-templates-instantiate-project create" [
+export def "instantiate-project" [
   project_template_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2498,7 +2498,7 @@ export def "project-templates-instantiate-project create" [
 #
 # GET /projects
 # operationId: getProjects
-export def "projects list" [
+export def "get-projects" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2538,7 +2538,7 @@ export def "projects list" [
 #
 # POST /projects
 # operationId: createProject
-export def "projects create" [
+export def "create-project" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2579,7 +2579,7 @@ export def "projects create" [
 #
 # DELETE /projects/{project_gid}
 # operationId: deleteProject
-export def "projects delete" [
+export def "delete-project" [
   project_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2618,7 +2618,7 @@ export def "projects delete" [
 #
 # GET /projects/{project_gid}
 # operationId: getProject
-export def "projects get" [
+export def "get-project" [
   project_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2657,7 +2657,7 @@ export def "projects get" [
 #
 # PUT /projects/{project_gid}
 # operationId: updateProject
-export def "projects update" [
+export def "update-project" [
   project_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2701,7 +2701,7 @@ export def "projects update" [
 # POST /projects/{project_gid}/addCustomFieldSetting
 # operationId: addCustomFieldSettingForProject
 # --data shape: {custom_field: string, insert_after?: string, insert_before?: string, is_important?: bool}
-export def "projects-add-custom-field-setting create" [
+export def "add-custom-field-setting-for-project" [
   project_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2744,7 +2744,7 @@ export def "projects-add-custom-field-setting create" [
 # POST /projects/{project_gid}/addFollowers
 # operationId: addFollowersForProject
 # --data shape: {followers: string}
-export def "projects-add-followers create" [
+export def "add-followers-for-project" [
   project_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2788,7 +2788,7 @@ export def "projects-add-followers create" [
 # POST /projects/{project_gid}/addMembers
 # operationId: addMembersForProject
 # --data shape: {members: string}
-export def "projects-add-members create" [
+export def "add-members-for-project" [
   project_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2831,7 +2831,7 @@ export def "projects-add-members create" [
 #
 # GET /projects/{project_gid}/custom_field_settings
 # operationId: getCustomFieldSettingsForProject
-export def "projects-custom-field-settings get" [
+export def "get-custom-field-settings-for-project" [
   project_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2873,7 +2873,7 @@ export def "projects-custom-field-settings get" [
 # POST /projects/{project_gid}/duplicate
 # operationId: duplicateProject
 # --data shape: {include?: "members"|"notes"|"forms"|"task_notes"|"task_assignee"|"task_subtasks"|"task_attachments"|"task_dates"|"task_dependencies"|"task_followers"|"task_tags"|"task_projects", name: string, schedule_dates?: record, team?: string}
-export def "projects-duplicate create" [
+export def "duplicate-project" [
   project_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2916,7 +2916,7 @@ export def "projects-duplicate create" [
 #
 # POST /projects/{project_gid}/project_briefs
 # operationId: createProjectBrief
-export def "projects-project-briefs create" [
+export def "create-project-brief" [
   project_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2959,7 +2959,7 @@ export def "projects-project-briefs create" [
 #
 # GET /projects/{project_gid}/project_memberships
 # operationId: getProjectMembershipsForProject
-export def "projects-project-memberships get" [
+export def "get-project-memberships-for-project" [
   project_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3001,7 +3001,7 @@ export def "projects-project-memberships get" [
 #
 # GET /projects/{project_gid}/project_statuses
 # operationId: getProjectStatusesForProject
-export def "projects-project-statuses get" [
+export def "get-project-statuses-for-project" [
   project_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3042,7 +3042,7 @@ export def "projects-project-statuses get" [
 #
 # POST /projects/{project_gid}/project_statuses
 # operationId: createProjectStatusForProject
-export def "projects-project-statuses create-status" [
+export def "create-project-status-for-project" [
   project_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3086,7 +3086,7 @@ export def "projects-project-statuses create-status" [
 # POST /projects/{project_gid}/removeCustomFieldSetting
 # operationId: removeCustomFieldSettingForProject
 # --data shape: {custom_field: string}
-export def "projects-remove-custom-field-setting delete" [
+export def "remove-custom-field-setting-for-project" [
   project_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3129,7 +3129,7 @@ export def "projects-remove-custom-field-setting delete" [
 # POST /projects/{project_gid}/removeFollowers
 # operationId: removeFollowersForProject
 # --data shape: {followers: string}
-export def "projects-remove-followers delete" [
+export def "remove-followers-for-project" [
   project_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3173,7 +3173,7 @@ export def "projects-remove-followers delete" [
 # POST /projects/{project_gid}/removeMembers
 # operationId: removeMembersForProject
 # --data shape: {members: string}
-export def "projects-remove-members delete" [
+export def "remove-members-for-project" [
   project_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3217,7 +3217,7 @@ export def "projects-remove-members delete" [
 # POST /projects/{project_gid}/saveAsTemplate
 # operationId: projectSaveAsTemplate
 # --data shape: {name: string, public: bool, team?: string, workspace?: string}
-export def "projects-save-as-template create" [
+export def "project-save-as-template" [
   project_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3260,7 +3260,7 @@ export def "projects-save-as-template create" [
 #
 # GET /projects/{project_gid}/sections
 # operationId: getSectionsForProject
-export def "projects-sections get" [
+export def "get-sections-for-project" [
   project_gid: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3300,7 +3300,7 @@ export def "projects-sections get" [
 # POST /projects/{project_gid}/sections
 # operationId: createSectionForProject
 # --data shape: {insert_after?: string, insert_before?: string, name: string}
-export def "projects-sections create" [
+export def "create-section-for-project" [
   project_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3344,7 +3344,7 @@ export def "projects-sections create" [
 # POST /projects/{project_gid}/sections/insert
 # operationId: insertSectionForProject
 # --data shape: {after_section?: string, before_section?: string, project: string, section: string}
-export def "projects-sections-insert create" [
+export def "insert-section-for-project" [
   project_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3387,7 +3387,7 @@ export def "projects-sections-insert create" [
 #
 # GET /projects/{project_gid}/task_counts
 # operationId: getTaskCountsForProject
-export def "projects-task-counts get" [
+export def "get-task-counts-for-project" [
   project_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3428,7 +3428,7 @@ export def "projects-task-counts get" [
 #
 # GET /projects/{project_gid}/tasks
 # operationId: getTasksForProject
-export def "projects-tasks get" [
+export def "get-tasks-for-project" [
   project_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3470,7 +3470,7 @@ export def "projects-tasks get" [
 #
 # DELETE /sections/{section_gid}
 # operationId: deleteSection
-export def "sections delete" [
+export def "delete-section" [
   section_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3509,7 +3509,7 @@ export def "sections delete" [
 #
 # GET /sections/{section_gid}
 # operationId: getSection
-export def "sections get" [
+export def "get-section" [
   section_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3549,7 +3549,7 @@ export def "sections get" [
 # PUT /sections/{section_gid}
 # operationId: updateSection
 # --data shape: {insert_after?: string, insert_before?: string, name: string}
-export def "sections update" [
+export def "update-section" [
   section_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3593,7 +3593,7 @@ export def "sections update" [
 # POST /sections/{section_gid}/addTask
 # operationId: addTaskForSection
 # --data shape: {insert_after?: string, insert_before?: string, task: string}
-export def "sections-add-task create" [
+export def "add-task-for-section" [
   section_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3636,7 +3636,7 @@ export def "sections-add-task create" [
 #
 # GET /sections/{section_gid}/tasks
 # operationId: getTasksForSection
-export def "sections-tasks get" [
+export def "get-tasks-for-section" [
   section_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3677,7 +3677,7 @@ export def "sections-tasks get" [
 #
 # GET /status_updates
 # operationId: getStatusesForObject
-export def "status-updates get-statuses-for-object" [
+export def "get-statuses-for-object" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3718,7 +3718,7 @@ export def "status-updates get-statuses-for-object" [
 #
 # POST /status_updates
 # operationId: createStatusForObject
-export def "status-updates create-for-object" [
+export def "create-status-for-object" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3761,7 +3761,7 @@ export def "status-updates create-for-object" [
 #
 # DELETE /status_updates/{status_gid}
 # operationId: deleteStatus
-export def "status-updates delete" [
+export def "delete-status" [
   status_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3800,7 +3800,7 @@ export def "status-updates delete" [
 #
 # GET /status_updates/{status_gid}
 # operationId: getStatus
-export def "status-updates get" [
+export def "get-status" [
   status_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3839,7 +3839,7 @@ export def "status-updates get" [
 #
 # DELETE /stories/{story_gid}
 # operationId: deleteStory
-export def "stories delete" [
+export def "delete-story" [
   story_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3878,7 +3878,7 @@ export def "stories delete" [
 #
 # GET /stories/{story_gid}
 # operationId: getStory
-export def "stories get" [
+export def "get-story" [
   story_gid: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3917,7 +3917,7 @@ export def "stories get" [
 #
 # PUT /stories/{story_gid}
 # operationId: updateStory
-export def "stories update" [
+export def "update-story" [
   story_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3960,7 +3960,7 @@ export def "stories update" [
 #
 # GET /tags
 # operationId: getTags
-export def "tags list" [
+export def "get-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3998,7 +3998,7 @@ export def "tags list" [
 #
 # POST /tags
 # operationId: createTag
-export def "tags create" [
+export def "create-tag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4039,7 +4039,7 @@ export def "tags create" [
 #
 # DELETE /tags/{tag_gid}
 # operationId: deleteTag
-export def "tags delete" [
+export def "delete-tag" [
   tag_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4080,7 +4080,7 @@ export def "tags delete" [
 #
 # GET /tags/{tag_gid}
 # operationId: getTag
-export def "tags get" [
+export def "get-tag" [
   tag_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4121,7 +4121,7 @@ export def "tags get" [
 #
 # PUT /tags/{tag_gid}
 # operationId: updateTag
-export def "tags update" [
+export def "update-tag" [
   tag_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4162,7 +4162,7 @@ export def "tags update" [
 #
 # GET /tags/{tag_gid}/tasks
 # operationId: getTasksForTag
-export def "tags-tasks get" [
+export def "get-tasks-for-tag" [
   tag_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4203,7 +4203,7 @@ export def "tags-tasks get" [
 #
 # GET /tasks
 # operationId: getTasks
-export def "tasks list" [
+export def "get-tasks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4246,7 +4246,7 @@ export def "tasks list" [
 #
 # POST /tasks
 # operationId: createTask
-export def "tasks create" [
+export def "create-task" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4287,7 +4287,7 @@ export def "tasks create" [
 #
 # DELETE /tasks/{task_gid}
 # operationId: deleteTask
-export def "tasks delete" [
+export def "delete-task" [
   task_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4326,7 +4326,7 @@ export def "tasks delete" [
 #
 # GET /tasks/{task_gid}
 # operationId: getTask
-export def "tasks get" [
+export def "get-task" [
   task_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4365,7 +4365,7 @@ export def "tasks get" [
 #
 # PUT /tasks/{task_gid}
 # operationId: updateTask
-export def "tasks update" [
+export def "update-task" [
   task_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4409,7 +4409,7 @@ export def "tasks update" [
 # POST /tasks/{task_gid}/addDependencies
 # operationId: addDependenciesForTask
 # --data shape: {dependencies?: list<string>}
-export def "tasks-add-dependencies create" [
+export def "add-dependencies-for-task" [
   task_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4453,7 +4453,7 @@ export def "tasks-add-dependencies create" [
 # POST /tasks/{task_gid}/addDependents
 # operationId: addDependentsForTask
 # --data shape: {dependents?: list<string>}
-export def "tasks-add-dependents create" [
+export def "add-dependents-for-task" [
   task_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4497,7 +4497,7 @@ export def "tasks-add-dependents create" [
 # POST /tasks/{task_gid}/addFollowers
 # operationId: addFollowersForTask
 # --data shape: {followers: list<string>}
-export def "tasks-add-followers create" [
+export def "add-followers-for-task" [
   task_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4541,7 +4541,7 @@ export def "tasks-add-followers create" [
 # POST /tasks/{task_gid}/addProject
 # operationId: addProjectForTask
 # --data shape: {insert_after?: string, insert_before?: string, project: string, section?: string}
-export def "tasks-add-project create" [
+export def "add-project-for-task" [
   task_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4585,7 +4585,7 @@ export def "tasks-add-project create" [
 # POST /tasks/{task_gid}/addTag
 # operationId: addTagForTask
 # --data shape: {tag: string}
-export def "tasks-add-tag create" [
+export def "add-tag-for-task" [
   task_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4628,7 +4628,7 @@ export def "tasks-add-tag create" [
 #
 # GET /tasks/{task_gid}/dependencies
 # operationId: getDependenciesForTask
-export def "tasks-dependencies get" [
+export def "get-dependencies-for-task" [
   task_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4669,7 +4669,7 @@ export def "tasks-dependencies get" [
 #
 # GET /tasks/{task_gid}/dependents
 # operationId: getDependentsForTask
-export def "tasks-dependents get" [
+export def "get-dependents-for-task" [
   task_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4711,7 +4711,7 @@ export def "tasks-dependents get" [
 # POST /tasks/{task_gid}/duplicate
 # operationId: duplicateTask
 # --data shape: {include?: "notes"|"assignee"|"subtasks"|"attachments"|"tags"|"followers"|"projects"|"dates"|"dependencies"|"parent", name?: string}
-export def "tasks-duplicate create" [
+export def "duplicate-task" [
   task_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4754,7 +4754,7 @@ export def "tasks-duplicate create" [
 #
 # GET /tasks/{task_gid}/projects
 # operationId: getProjectsForTask
-export def "tasks-projects get" [
+export def "get-projects-for-task" [
   task_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4796,7 +4796,7 @@ export def "tasks-projects get" [
 # POST /tasks/{task_gid}/removeDependencies
 # operationId: removeDependenciesForTask
 # --data shape: {dependencies?: list<string>}
-export def "tasks-remove-dependencies delete" [
+export def "remove-dependencies-for-task" [
   task_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4840,7 +4840,7 @@ export def "tasks-remove-dependencies delete" [
 # POST /tasks/{task_gid}/removeDependents
 # operationId: removeDependentsForTask
 # --data shape: {dependents?: list<string>}
-export def "tasks-remove-dependents delete" [
+export def "remove-dependents-for-task" [
   task_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4884,7 +4884,7 @@ export def "tasks-remove-dependents delete" [
 # POST /tasks/{task_gid}/removeFollowers
 # operationId: removeFollowerForTask
 # --data shape: {followers: list<string>}
-export def "tasks-remove-followers delete" [
+export def "remove-follower-for-task" [
   task_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4928,7 +4928,7 @@ export def "tasks-remove-followers delete" [
 # POST /tasks/{task_gid}/removeProject
 # operationId: removeProjectForTask
 # --data shape: {project: string}
-export def "tasks-remove-project delete" [
+export def "remove-project-for-task" [
   task_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4972,7 +4972,7 @@ export def "tasks-remove-project delete" [
 # POST /tasks/{task_gid}/removeTag
 # operationId: removeTagForTask
 # --data shape: {tag: string}
-export def "tasks-remove-tag delete" [
+export def "remove-tag-for-task" [
   task_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5016,7 +5016,7 @@ export def "tasks-remove-tag delete" [
 # POST /tasks/{task_gid}/setParent
 # operationId: setParentForTask
 # --data shape: {insert_after?: string, insert_before?: string, parent: string}
-export def "tasks-set-parent update" [
+export def "set-parent-for-task" [
   task_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5059,7 +5059,7 @@ export def "tasks-set-parent update" [
 #
 # GET /tasks/{task_gid}/stories
 # operationId: getStoriesForTask
-export def "tasks-stories get" [
+export def "get-stories-for-task" [
   task_gid: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5098,7 +5098,7 @@ export def "tasks-stories get" [
 #
 # POST /tasks/{task_gid}/stories
 # operationId: createStoryForTask
-export def "tasks-stories create-story" [
+export def "create-story-for-task" [
   task_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5141,7 +5141,7 @@ export def "tasks-stories create-story" [
 #
 # GET /tasks/{task_gid}/subtasks
 # operationId: getSubtasksForTask
-export def "tasks-subtasks get" [
+export def "get-subtasks-for-task" [
   task_gid: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5180,7 +5180,7 @@ export def "tasks-subtasks get" [
 #
 # POST /tasks/{task_gid}/subtasks
 # operationId: createSubtaskForTask
-export def "tasks-subtasks create" [
+export def "create-subtask-for-task" [
   task_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5223,7 +5223,7 @@ export def "tasks-subtasks create" [
 #
 # GET /tasks/{task_gid}/tags
 # operationId: getTagsForTask
-export def "tasks-tags get" [
+export def "get-tags-for-task" [
   task_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5264,7 +5264,7 @@ export def "tasks-tags get" [
 #
 # GET /team_memberships
 # operationId: getTeamMemberships
-export def "team-memberships list" [
+export def "get-team-memberships" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5306,7 +5306,7 @@ export def "team-memberships list" [
 #
 # GET /team_memberships/{team_membership_gid}
 # operationId: getTeamMembership
-export def "team-memberships get" [
+export def "get-team-membership" [
   team_membership_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5345,7 +5345,7 @@ export def "team-memberships get" [
 #
 # POST /teams
 # operationId: createTeam
-export def "teams create" [
+export def "create-team" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5388,7 +5388,7 @@ export def "teams create" [
 #
 # PUT /teams
 # operationId: updateTeam
-export def "teams update" [
+export def "update-team" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5431,7 +5431,7 @@ export def "teams update" [
 #
 # GET /teams/{team_gid}
 # operationId: getTeam
-export def "teams get" [
+export def "get-team" [
   team_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5473,7 +5473,7 @@ export def "teams get" [
 # POST /teams/{team_gid}/addUser
 # operationId: addUserForTeam
 # --data shape: {user?: string}
-export def "teams-add-user create" [
+export def "add-user-for-team" [
   team_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5516,7 +5516,7 @@ export def "teams-add-user create" [
 #
 # GET /teams/{team_gid}/project_templates
 # operationId: getProjectTemplatesForTeam
-export def "teams-project-templates get" [
+export def "get-project-templates-for-team" [
   team_gid: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5555,7 +5555,7 @@ export def "teams-project-templates get" [
 #
 # GET /teams/{team_gid}/projects
 # operationId: getProjectsForTeam
-export def "teams-projects get" [
+export def "get-projects-for-team" [
   team_gid: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5595,7 +5595,7 @@ export def "teams-projects get" [
 #
 # POST /teams/{team_gid}/projects
 # operationId: createProjectForTeam
-export def "teams-projects create" [
+export def "create-project-for-team" [
   team_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5639,7 +5639,7 @@ export def "teams-projects create" [
 # POST /teams/{team_gid}/removeUser
 # operationId: removeUserForTeam
 # --data shape: {user?: string}
-export def "teams-remove-user delete" [
+export def "remove-user-for-team" [
   team_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5682,7 +5682,7 @@ export def "teams-remove-user delete" [
 #
 # GET /teams/{team_gid}/team_memberships
 # operationId: getTeamMembershipsForTeam
-export def "teams-team-memberships get" [
+export def "get-team-memberships-for-team" [
   team_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5723,7 +5723,7 @@ export def "teams-team-memberships get" [
 #
 # GET /teams/{team_gid}/users
 # operationId: getUsersForTeam
-export def "teams-users get" [
+export def "get-users-for-team" [
   team_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5763,7 +5763,7 @@ export def "teams-users get" [
 #
 # GET /time_periods
 # operationId: getTimePeriods
-export def "time-periods list" [
+export def "get-time-periods" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5805,7 +5805,7 @@ export def "time-periods list" [
 #
 # GET /time_periods/{time_period_gid}
 # operationId: getTimePeriod
-export def "time-periods get" [
+export def "get-time-period" [
   time_period_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5844,7 +5844,7 @@ export def "time-periods get" [
 #
 # GET /user_task_lists/{user_task_list_gid}
 # operationId: getUserTaskList
-export def "user-task-lists get" [
+export def "get-user-task-list" [
   user_task_list_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5883,7 +5883,7 @@ export def "user-task-lists get" [
 #
 # GET /user_task_lists/{user_task_list_gid}/tasks
 # operationId: getTasksForUserTaskList
-export def "user-task-lists-tasks get" [
+export def "get-tasks-for-user-task-list" [
   user_task_list_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5925,7 +5925,7 @@ export def "user-task-lists-tasks get" [
 #
 # GET /users
 # operationId: getUsers
-export def "users list" [
+export def "get-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5966,7 +5966,7 @@ export def "users list" [
 #
 # GET /users/{user_gid}
 # operationId: getUser
-export def "users get" [
+export def "get-user" [
   user_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6005,7 +6005,7 @@ export def "users get" [
 #
 # GET /users/{user_gid}/favorites
 # operationId: getFavoritesForUser
-export def "users-favorites get" [
+export def "get-favorites-for-user" [
   user_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6046,7 +6046,7 @@ export def "users-favorites get" [
 #
 # GET /users/{user_gid}/team_memberships
 # operationId: getTeamMembershipsForUser
-export def "users-team-memberships get" [
+export def "get-team-memberships-for-user" [
   user_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6088,7 +6088,7 @@ export def "users-team-memberships get" [
 #
 # GET /users/{user_gid}/teams
 # operationId: getTeamsForUser
-export def "users-teams get" [
+export def "get-teams-for-user" [
   user_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6130,7 +6130,7 @@ export def "users-teams get" [
 #
 # GET /users/{user_gid}/user_task_list
 # operationId: getUserTaskListForUser
-export def "users-user-task-list get" [
+export def "get-user-task-list-for-user" [
   user_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6170,7 +6170,7 @@ export def "users-user-task-list get" [
 #
 # GET /users/{user_gid}/workspace_memberships
 # operationId: getWorkspaceMembershipsForUser
-export def "users-workspace-memberships get" [
+export def "get-workspace-memberships-for-user" [
   user_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6211,7 +6211,7 @@ export def "users-workspace-memberships get" [
 #
 # GET /webhooks
 # operationId: getWebhooks
-export def "webhooks list" [
+export def "get-webhooks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6251,7 +6251,7 @@ export def "webhooks list" [
 # POST /webhooks
 # operationId: createWebhook
 # --data shape: {filters?: list, resource: string, target: string}
-export def "webhooks create" [
+export def "create-webhook" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6292,7 +6292,7 @@ export def "webhooks create" [
 #
 # DELETE /webhooks/{webhook_gid}
 # operationId: deleteWebhook
-export def "webhooks delete" [
+export def "delete-webhook" [
   webhook_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6331,7 +6331,7 @@ export def "webhooks delete" [
 #
 # GET /webhooks/{webhook_gid}
 # operationId: getWebhook
-export def "webhooks get" [
+export def "get-webhook" [
   webhook_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6371,7 +6371,7 @@ export def "webhooks get" [
 # PUT /webhooks/{webhook_gid}
 # operationId: updateWebhook
 # --data shape: {filters?: list}
-export def "webhooks update" [
+export def "update-webhook" [
   webhook_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6414,7 +6414,7 @@ export def "webhooks update" [
 #
 # GET /workspace_memberships/{workspace_membership_gid}
 # operationId: getWorkspaceMembership
-export def "workspace-memberships get" [
+export def "get-workspace-membership" [
   workspace_membership_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6453,7 +6453,7 @@ export def "workspace-memberships get" [
 #
 # GET /workspaces
 # operationId: getWorkspaces
-export def "workspaces list" [
+export def "get-workspaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6492,7 +6492,7 @@ export def "workspaces list" [
 #
 # GET /workspaces/{workspace_gid}
 # operationId: getWorkspace
-export def "workspaces get" [
+export def "get-workspace" [
   workspace_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6531,7 +6531,7 @@ export def "workspaces get" [
 #
 # PUT /workspaces/{workspace_gid}
 # operationId: updateWorkspace
-export def "workspaces update" [
+export def "update-workspace" [
   workspace_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6575,7 +6575,7 @@ export def "workspaces update" [
 # POST /workspaces/{workspace_gid}/addUser
 # operationId: addUserForWorkspace
 # --data shape: {user?: string}
-export def "workspaces-add-user create" [
+export def "add-user-for-workspace" [
   workspace_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6618,7 +6618,7 @@ export def "workspaces-add-user create" [
 #
 # GET /workspaces/{workspace_gid}/audit_log_events
 # operationId: getAuditLogEvents
-export def "workspaces-audit-log-events get" [
+export def "get-audit-log-events" [
   workspace_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6663,7 +6663,7 @@ export def "workspaces-audit-log-events get" [
 #
 # GET /workspaces/{workspace_gid}/custom_fields
 # operationId: getCustomFieldsForWorkspace
-export def "workspaces-custom-fields get" [
+export def "get-custom-fields-for-workspace" [
   workspace_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6704,7 +6704,7 @@ export def "workspaces-custom-fields get" [
 #
 # GET /workspaces/{workspace_gid}/projects
 # operationId: getProjectsForWorkspace
-export def "workspaces-projects get" [
+export def "get-projects-for-workspace" [
   workspace_gid: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6744,7 +6744,7 @@ export def "workspaces-projects get" [
 #
 # POST /workspaces/{workspace_gid}/projects
 # operationId: createProjectForWorkspace
-export def "workspaces-projects create" [
+export def "create-project-for-workspace" [
   workspace_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6788,7 +6788,7 @@ export def "workspaces-projects create" [
 # POST /workspaces/{workspace_gid}/removeUser
 # operationId: removeUserForWorkspace
 # --data shape: {user?: string}
-export def "workspaces-remove-user delete" [
+export def "remove-user-for-workspace" [
   workspace_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6831,7 +6831,7 @@ export def "workspaces-remove-user delete" [
 #
 # GET /workspaces/{workspace_gid}/tags
 # operationId: getTagsForWorkspace
-export def "workspaces-tags get" [
+export def "get-tags-for-workspace" [
   workspace_gid: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6870,7 +6870,7 @@ export def "workspaces-tags get" [
 #
 # POST /workspaces/{workspace_gid}/tags
 # operationId: createTagForWorkspace
-export def "workspaces-tags create" [
+export def "create-tag-for-workspace" [
   workspace_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6913,7 +6913,7 @@ export def "workspaces-tags create" [
 #
 # GET /workspaces/{workspace_gid}/tasks/search
 # operationId: searchTasksForWorkspace
-export def "workspaces-tasks-search list" [
+export def "search-tasks-for-workspace" [
   workspace_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7004,7 +7004,7 @@ export def "workspaces-tasks-search list" [
 #
 # GET /workspaces/{workspace_gid}/teams
 # operationId: getTeamsForWorkspace
-export def "workspaces-teams get" [
+export def "get-teams-for-workspace" [
   workspace_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7045,7 +7045,7 @@ export def "workspaces-teams get" [
 #
 # GET /workspaces/{workspace_gid}/typeahead
 # operationId: typeaheadForWorkspace
-export def "workspaces-typeahead get" [
+export def "typeahead-for-workspace" [
   workspace_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7088,7 +7088,7 @@ export def "workspaces-typeahead get" [
 #
 # GET /workspaces/{workspace_gid}/users
 # operationId: getUsersForWorkspace
-export def "workspaces-users get" [
+export def "get-users-for-workspace" [
   workspace_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7128,7 +7128,7 @@ export def "workspaces-users get" [
 #
 # GET /workspaces/{workspace_gid}/workspace_memberships
 # operationId: getWorkspaceMembershipsForWorkspace
-export def "workspaces-workspace-memberships get" [
+export def "get-workspace-memberships-for-workspace" [
   workspace_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

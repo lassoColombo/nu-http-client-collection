@@ -138,7 +138,7 @@ def accept-completer-2 [] { ["application/json" "application/vnd.kubernetes.prot
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "well-known-openid-configuration get-service-account-issuer-open" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-service-account-issuer-open-id-configuration" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -162,7 +162,7 @@ export def commands []: nothing -> table {
 #
 # GET /.well-known/openid-configuration/
 # operationId: getServiceAccountIssuerOpenIDConfiguration
-export def "well-known-openid-configuration get-service-account-issuer-open" [
+export def "get-service-account-issuer-open-id-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -196,7 +196,7 @@ export def "well-known-openid-configuration get-service-account-issuer-open" [
 #
 # GET /api/
 # operationId: getCoreAPIVersions
-export def "core get-versions" [
+export def "get-core-api-versions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -231,7 +231,7 @@ export def "core get-versions" [
 #
 # GET /api/v1/
 # operationId: getCoreV1APIResources
-export def "core-v1 get-resources" [
+export def "get-core-v1api-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -266,7 +266,7 @@ export def "core-v1 get-resources" [
 #
 # GET /api/v1/componentstatuses
 # operationId: listCoreV1ComponentStatus
-export def "componentstatuses list-component-status" [
+export def "list-core-v1-component-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -313,7 +313,7 @@ export def "componentstatuses list-component-status" [
 #
 # GET /api/v1/componentstatuses/{name}
 # operationId: readCoreV1ComponentStatus
-export def "componentstatuses get-component-status" [
+export def "read-core-v1-component-status" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -352,7 +352,7 @@ export def "componentstatuses get-component-status" [
 #
 # GET /api/v1/configmaps
 # operationId: listCoreV1ConfigMapForAllNamespaces
-export def "configmaps list-config-map-for-namespaces" [
+export def "list-core-v1-config-map-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -399,7 +399,7 @@ export def "configmaps list-config-map-for-namespaces" [
 #
 # GET /api/v1/endpoints
 # operationId: listCoreV1EndpointsForAllNamespaces
-export def "endpoints list-for-namespaces" [
+export def "list-core-v1-endpoints-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -446,7 +446,7 @@ export def "endpoints list-for-namespaces" [
 #
 # GET /api/v1/events
 # operationId: listCoreV1EventForAllNamespaces
-export def "events list-for-namespaces" [
+export def "list-core-v1-event-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -493,7 +493,7 @@ export def "events list-for-namespaces" [
 #
 # GET /api/v1/limitranges
 # operationId: listCoreV1LimitRangeForAllNamespaces
-export def "limitranges list-limit-range-for-namespaces" [
+export def "list-core-v1-limit-range-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -540,7 +540,7 @@ export def "limitranges list-limit-range-for-namespaces" [
 #
 # GET /api/v1/namespaces
 # operationId: listCoreV1Namespace
-export def "namespaces list" [
+export def "list-core-v1-namespace" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -590,7 +590,7 @@ export def "namespaces list" [
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {finalizers?: list<string>}
 # --status shape: {conditions?: list, phase?: string}
-export def "namespaces create" [
+export def "create-core-v1-namespace" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -640,7 +640,7 @@ export def "namespaces create" [
 # operationId: createCoreV1NamespacedBinding
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --target shape: {apiVersion?: string, fieldPath?: string, kind?: string, name?: string, namespace?: string, resourceVersion?: string, uid?: string}
-export def "namespaces-bindings create" [
+export def "create-core-v1-namespaced-binding" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -690,7 +690,7 @@ export def "namespaces-bindings create" [
 # DELETE /api/v1/namespaces/{namespace}/configmaps
 # operationId: deleteCoreV1CollectionNamespacedConfigMap
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "namespaces-configmaps delete-collection-config-map" [
+export def "delete-core-v1-collection-namespaced-config-map" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -751,7 +751,7 @@ export def "namespaces-configmaps delete-collection-config-map" [
 #
 # GET /api/v1/namespaces/{namespace}/configmaps
 # operationId: listCoreV1NamespacedConfigMap
-export def "namespaces-configmaps list-config-map" [
+export def "list-core-v1-namespaced-config-map" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -801,7 +801,7 @@ export def "namespaces-configmaps list-config-map" [
 # POST /api/v1/namespaces/{namespace}/configmaps
 # operationId: createCoreV1NamespacedConfigMap
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
-export def "namespaces-configmaps create-config-map" [
+export def "create-core-v1-namespaced-config-map" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -853,7 +853,7 @@ export def "namespaces-configmaps create-config-map" [
 # DELETE /api/v1/namespaces/{namespace}/configmaps/{name}
 # operationId: deleteCoreV1NamespacedConfigMap
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "namespaces-configmaps delete-config-map" [
+export def "delete-core-v1-namespaced-config-map" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -908,7 +908,7 @@ export def "namespaces-configmaps delete-config-map" [
 #
 # GET /api/v1/namespaces/{namespace}/configmaps/{name}
 # operationId: readCoreV1NamespacedConfigMap
-export def "namespaces-configmaps get-config-map" [
+export def "read-core-v1-namespaced-config-map" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -949,7 +949,7 @@ export def "namespaces-configmaps get-config-map" [
 #
 # PATCH /api/v1/namespaces/{namespace}/configmaps/{name}
 # operationId: patchCoreV1NamespacedConfigMap
-export def "namespaces-configmaps update-config-map-by-namespace-name" [
+export def "patch-core-v1-namespaced-config-map" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -999,7 +999,7 @@ export def "namespaces-configmaps update-config-map-by-namespace-name" [
 # PUT /api/v1/namespaces/{namespace}/configmaps/{name}
 # operationId: replaceCoreV1NamespacedConfigMap
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
-export def "namespaces-configmaps update-config-map-by-namespace-name-1" [
+export def "replace-core-v1-namespaced-config-map" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1053,7 +1053,7 @@ export def "namespaces-configmaps update-config-map-by-namespace-name-1" [
 # DELETE /api/v1/namespaces/{namespace}/endpoints
 # operationId: deleteCoreV1CollectionNamespacedEndpoints
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "namespaces-endpoints delete-collection" [
+export def "delete-core-v1-collection-namespaced-endpoints" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1114,7 +1114,7 @@ export def "namespaces-endpoints delete-collection" [
 #
 # GET /api/v1/namespaces/{namespace}/endpoints
 # operationId: listCoreV1NamespacedEndpoints
-export def "namespaces-endpoints list" [
+export def "list-core-v1-namespaced-endpoints" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1165,7 +1165,7 @@ export def "namespaces-endpoints list" [
 # operationId: createCoreV1NamespacedEndpoints
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --subsets item shape: {addresses?: list, notReadyAddresses?: list, ports?: list}
-export def "namespaces-endpoints create" [
+export def "create-core-v1-namespaced-endpoints" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1215,7 +1215,7 @@ export def "namespaces-endpoints create" [
 # DELETE /api/v1/namespaces/{namespace}/endpoints/{name}
 # operationId: deleteCoreV1NamespacedEndpoints
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "namespaces-endpoints delete" [
+export def "delete-core-v1-namespaced-endpoints" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1270,7 +1270,7 @@ export def "namespaces-endpoints delete" [
 #
 # GET /api/v1/namespaces/{namespace}/endpoints/{name}
 # operationId: readCoreV1NamespacedEndpoints
-export def "namespaces-endpoints get" [
+export def "read-core-v1-namespaced-endpoints" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1311,7 +1311,7 @@ export def "namespaces-endpoints get" [
 #
 # PATCH /api/v1/namespaces/{namespace}/endpoints/{name}
 # operationId: patchCoreV1NamespacedEndpoints
-export def "namespaces-endpoints update-by-namespace-name" [
+export def "patch-core-v1-namespaced-endpoints" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1362,7 +1362,7 @@ export def "namespaces-endpoints update-by-namespace-name" [
 # operationId: replaceCoreV1NamespacedEndpoints
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --subsets item shape: {addresses?: list, notReadyAddresses?: list, ports?: list}
-export def "namespaces-endpoints update-by-namespace-name-1" [
+export def "replace-core-v1-namespaced-endpoints" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1414,7 +1414,7 @@ export def "namespaces-endpoints update-by-namespace-name-1" [
 # DELETE /api/v1/namespaces/{namespace}/events
 # operationId: deleteCoreV1CollectionNamespacedEvent
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "namespaces-events delete-collection" [
+export def "delete-core-v1-collection-namespaced-event" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1475,7 +1475,7 @@ export def "namespaces-events delete-collection" [
 #
 # GET /api/v1/namespaces/{namespace}/events
 # operationId: listCoreV1NamespacedEvent
-export def "namespaces-events list" [
+export def "list-core-v1-namespaced-event" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1529,7 +1529,7 @@ export def "namespaces-events list" [
 # --related shape: {apiVersion?: string, fieldPath?: string, kind?: string, name?: string, namespace?: string, resourceVersion?: string, uid?: string}
 # --series shape: {count?: int, lastObservedTime?: string}
 # --source shape: {component?: string, host?: string}
-export def "namespaces-events create" [
+export def "create-core-v1-namespaced-event" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1592,7 +1592,7 @@ export def "namespaces-events create" [
 # DELETE /api/v1/namespaces/{namespace}/events/{name}
 # operationId: deleteCoreV1NamespacedEvent
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "namespaces-events delete" [
+export def "delete-core-v1-namespaced-event" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1647,7 +1647,7 @@ export def "namespaces-events delete" [
 #
 # GET /api/v1/namespaces/{namespace}/events/{name}
 # operationId: readCoreV1NamespacedEvent
-export def "namespaces-events get" [
+export def "read-core-v1-namespaced-event" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1688,7 +1688,7 @@ export def "namespaces-events get" [
 #
 # PATCH /api/v1/namespaces/{namespace}/events/{name}
 # operationId: patchCoreV1NamespacedEvent
-export def "namespaces-events update-by-namespace-name" [
+export def "patch-core-v1-namespaced-event" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1742,7 +1742,7 @@ export def "namespaces-events update-by-namespace-name" [
 # --related shape: {apiVersion?: string, fieldPath?: string, kind?: string, name?: string, namespace?: string, resourceVersion?: string, uid?: string}
 # --series shape: {count?: int, lastObservedTime?: string}
 # --source shape: {component?: string, host?: string}
-export def "namespaces-events update-by-namespace-name-1" [
+export def "replace-core-v1-namespaced-event" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1807,7 +1807,7 @@ export def "namespaces-events update-by-namespace-name-1" [
 # DELETE /api/v1/namespaces/{namespace}/limitranges
 # operationId: deleteCoreV1CollectionNamespacedLimitRange
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "namespaces-limitranges delete-collection-limit-range" [
+export def "delete-core-v1-collection-namespaced-limit-range" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1868,7 +1868,7 @@ export def "namespaces-limitranges delete-collection-limit-range" [
 #
 # GET /api/v1/namespaces/{namespace}/limitranges
 # operationId: listCoreV1NamespacedLimitRange
-export def "namespaces-limitranges list-limit-range" [
+export def "list-core-v1-namespaced-limit-range" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1919,7 +1919,7 @@ export def "namespaces-limitranges list-limit-range" [
 # operationId: createCoreV1NamespacedLimitRange
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {limits: list}
-export def "namespaces-limitranges create-limit-range" [
+export def "create-core-v1-namespaced-limit-range" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1969,7 +1969,7 @@ export def "namespaces-limitranges create-limit-range" [
 # DELETE /api/v1/namespaces/{namespace}/limitranges/{name}
 # operationId: deleteCoreV1NamespacedLimitRange
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "namespaces-limitranges delete-limit-range" [
+export def "delete-core-v1-namespaced-limit-range" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2024,7 +2024,7 @@ export def "namespaces-limitranges delete-limit-range" [
 #
 # GET /api/v1/namespaces/{namespace}/limitranges/{name}
 # operationId: readCoreV1NamespacedLimitRange
-export def "namespaces-limitranges get-limit-range" [
+export def "read-core-v1-namespaced-limit-range" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2065,7 +2065,7 @@ export def "namespaces-limitranges get-limit-range" [
 #
 # PATCH /api/v1/namespaces/{namespace}/limitranges/{name}
 # operationId: patchCoreV1NamespacedLimitRange
-export def "namespaces-limitranges update-limit-range-by-namespace-name" [
+export def "patch-core-v1-namespaced-limit-range" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2116,7 +2116,7 @@ export def "namespaces-limitranges update-limit-range-by-namespace-name" [
 # operationId: replaceCoreV1NamespacedLimitRange
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {limits: list}
-export def "namespaces-limitranges update-limit-range-by-namespace-name-1" [
+export def "replace-core-v1-namespaced-limit-range" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2168,7 +2168,7 @@ export def "namespaces-limitranges update-limit-range-by-namespace-name-1" [
 # DELETE /api/v1/namespaces/{namespace}/persistentvolumeclaims
 # operationId: deleteCoreV1CollectionNamespacedPersistentVolumeClaim
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "namespaces-persistentvolumeclaims delete-collection-persistent-volume-claim" [
+export def "delete-core-v1-collection-namespaced-persistent-volume-claim" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2229,7 +2229,7 @@ export def "namespaces-persistentvolumeclaims delete-collection-persistent-volum
 #
 # GET /api/v1/namespaces/{namespace}/persistentvolumeclaims
 # operationId: listCoreV1NamespacedPersistentVolumeClaim
-export def "namespaces-persistentvolumeclaims list-persistent-volume-claim" [
+export def "list-core-v1-namespaced-persistent-volume-claim" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2281,7 +2281,7 @@ export def "namespaces-persistentvolumeclaims list-persistent-volume-claim" [
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {accessModes?: list<string>, dataSource?: record, dataSourceRef?: record, resources?: record, selector?: record, storageClassName?: string, volumeMode?: string, volumeName?: string}
 # --status shape: {accessModes?: list<string>, allocatedResources?: record, capacity?: record, conditions?: list, phase?: string, resizeStatus?: string}
-export def "namespaces-persistentvolumeclaims create-persistent-volume-claim" [
+export def "create-core-v1-namespaced-persistent-volume-claim" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2332,7 +2332,7 @@ export def "namespaces-persistentvolumeclaims create-persistent-volume-claim" [
 # DELETE /api/v1/namespaces/{namespace}/persistentvolumeclaims/{name}
 # operationId: deleteCoreV1NamespacedPersistentVolumeClaim
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "namespaces-persistentvolumeclaims delete-persistent-volume-claim" [
+export def "delete-core-v1-namespaced-persistent-volume-claim" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2387,7 +2387,7 @@ export def "namespaces-persistentvolumeclaims delete-persistent-volume-claim" [
 #
 # GET /api/v1/namespaces/{namespace}/persistentvolumeclaims/{name}
 # operationId: readCoreV1NamespacedPersistentVolumeClaim
-export def "namespaces-persistentvolumeclaims get-persistent-volume-claim" [
+export def "read-core-v1-namespaced-persistent-volume-claim" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2428,7 +2428,7 @@ export def "namespaces-persistentvolumeclaims get-persistent-volume-claim" [
 #
 # PATCH /api/v1/namespaces/{namespace}/persistentvolumeclaims/{name}
 # operationId: patchCoreV1NamespacedPersistentVolumeClaim
-export def "namespaces-persistentvolumeclaims update-persistent-volume-claim-by-namespace-name" [
+export def "patch-core-v1-namespaced-persistent-volume-claim" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2480,7 +2480,7 @@ export def "namespaces-persistentvolumeclaims update-persistent-volume-claim-by-
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {accessModes?: list<string>, dataSource?: record, dataSourceRef?: record, resources?: record, selector?: record, storageClassName?: string, volumeMode?: string, volumeName?: string}
 # --status shape: {accessModes?: list<string>, allocatedResources?: record, capacity?: record, conditions?: list, phase?: string, resizeStatus?: string}
-export def "namespaces-persistentvolumeclaims update-persistent-volume-claim-by-namespace-name-1" [
+export def "replace-core-v1-namespaced-persistent-volume-claim" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2532,7 +2532,7 @@ export def "namespaces-persistentvolumeclaims update-persistent-volume-claim-by-
 #
 # GET /api/v1/namespaces/{namespace}/persistentvolumeclaims/{name}/status
 # operationId: readCoreV1NamespacedPersistentVolumeClaimStatus
-export def "namespaces-persistentvolumeclaims-status get-persistent-volume-claim" [
+export def "read-core-v1-namespaced-persistent-volume-claim-status" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2573,7 +2573,7 @@ export def "namespaces-persistentvolumeclaims-status get-persistent-volume-claim
 #
 # PATCH /api/v1/namespaces/{namespace}/persistentvolumeclaims/{name}/status
 # operationId: patchCoreV1NamespacedPersistentVolumeClaimStatus
-export def "namespaces-persistentvolumeclaims-status update-persistent-volume-claim-by-namespace-name" [
+export def "patch-core-v1-namespaced-persistent-volume-claim-status" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2625,7 +2625,7 @@ export def "namespaces-persistentvolumeclaims-status update-persistent-volume-cl
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {accessModes?: list<string>, dataSource?: record, dataSourceRef?: record, resources?: record, selector?: record, storageClassName?: string, volumeMode?: string, volumeName?: string}
 # --status shape: {accessModes?: list<string>, allocatedResources?: record, capacity?: record, conditions?: list, phase?: string, resizeStatus?: string}
-export def "namespaces-persistentvolumeclaims-status update-persistent-volume-claim-by-namespace-name-1" [
+export def "replace-core-v1-namespaced-persistent-volume-claim-status" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2678,7 +2678,7 @@ export def "namespaces-persistentvolumeclaims-status update-persistent-volume-cl
 # DELETE /api/v1/namespaces/{namespace}/pods
 # operationId: deleteCoreV1CollectionNamespacedPod
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "namespaces-pods delete-collection" [
+export def "delete-core-v1-collection-namespaced-pod" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2739,7 +2739,7 @@ export def "namespaces-pods delete-collection" [
 #
 # GET /api/v1/namespaces/{namespace}/pods
 # operationId: listCoreV1NamespacedPod
-export def "namespaces-pods list" [
+export def "list-core-v1-namespaced-pod" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2791,7 +2791,7 @@ export def "namespaces-pods list" [
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {activeDeadlineSeconds?: int, affinity?: record, automountServiceAccountToken?: bool, containers: list, dnsConfig?: record, dnsPolicy?: string, enableServiceLinks?: bool, ephemeralContainers?: list, hostAliases?: list, hostIPC?: bool, hostNetwork?: bool, hostPID?: bool, hostUsers?: bool, hostname?: string, imagePullSecrets?: list, initContainers?: list, nodeName?: string, nodeSelector?: record, os?: record, overhead?: record, preemptionPolicy?: string, priority?: int, priorityClassName?: string, ... (16 more fields)}
 # --status shape: {conditions?: list, containerStatuses?: list, ephemeralContainerStatuses?: list, hostIP?: string, initContainerStatuses?: list, message?: string, nominatedNodeName?: string, phase?: string, podIP?: string, podIPs?: list, qosClass?: string, reason?: string, resize?: string, startTime?: string}
-export def "namespaces-pods create" [
+export def "create-core-v1-namespaced-pod" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2842,7 +2842,7 @@ export def "namespaces-pods create" [
 # DELETE /api/v1/namespaces/{namespace}/pods/{name}
 # operationId: deleteCoreV1NamespacedPod
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "namespaces-pods delete" [
+export def "delete-core-v1-namespaced-pod" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2897,7 +2897,7 @@ export def "namespaces-pods delete" [
 #
 # GET /api/v1/namespaces/{namespace}/pods/{name}
 # operationId: readCoreV1NamespacedPod
-export def "namespaces-pods get" [
+export def "read-core-v1-namespaced-pod" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2938,7 +2938,7 @@ export def "namespaces-pods get" [
 #
 # PATCH /api/v1/namespaces/{namespace}/pods/{name}
 # operationId: patchCoreV1NamespacedPod
-export def "namespaces-pods update-by-namespace-name" [
+export def "patch-core-v1-namespaced-pod" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2990,7 +2990,7 @@ export def "namespaces-pods update-by-namespace-name" [
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {activeDeadlineSeconds?: int, affinity?: record, automountServiceAccountToken?: bool, containers: list, dnsConfig?: record, dnsPolicy?: string, enableServiceLinks?: bool, ephemeralContainers?: list, hostAliases?: list, hostIPC?: bool, hostNetwork?: bool, hostPID?: bool, hostUsers?: bool, hostname?: string, imagePullSecrets?: list, initContainers?: list, nodeName?: string, nodeSelector?: record, os?: record, overhead?: record, preemptionPolicy?: string, priority?: int, priorityClassName?: string, ... (16 more fields)}
 # --status shape: {conditions?: list, containerStatuses?: list, ephemeralContainerStatuses?: list, hostIP?: string, initContainerStatuses?: list, message?: string, nominatedNodeName?: string, phase?: string, podIP?: string, podIPs?: list, qosClass?: string, reason?: string, resize?: string, startTime?: string}
-export def "namespaces-pods update-by-namespace-name-1" [
+export def "replace-core-v1-namespaced-pod" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3042,7 +3042,7 @@ export def "namespaces-pods update-by-namespace-name-1" [
 #
 # GET /api/v1/namespaces/{namespace}/pods/{name}/attach
 # operationId: connectCoreV1GetNamespacedPodAttach
-export def "namespaces-pods-attach get-connect" [
+export def "connect-core-v1-get-namespaced-pod-attach" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3086,7 +3086,7 @@ export def "namespaces-pods-attach get-connect" [
 #
 # POST /api/v1/namespaces/{namespace}/pods/{name}/attach
 # operationId: connectCoreV1PostNamespacedPodAttach
-export def "namespaces-pods-attach create-connect" [
+export def "connect-core-v1-post-namespaced-pod-attach" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3132,7 +3132,7 @@ export def "namespaces-pods-attach create-connect" [
 # operationId: createCoreV1NamespacedPodBinding
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --target shape: {apiVersion?: string, fieldPath?: string, kind?: string, name?: string, namespace?: string, resourceVersion?: string, uid?: string}
-export def "namespaces-pods-binding create" [
+export def "create-core-v1-namespaced-pod-binding" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3183,7 +3183,7 @@ export def "namespaces-pods-binding create" [
 #
 # GET /api/v1/namespaces/{namespace}/pods/{name}/ephemeralcontainers
 # operationId: readCoreV1NamespacedPodEphemeralcontainers
-export def "namespaces-pods-ephemeralcontainers get" [
+export def "read-core-v1-namespaced-pod-ephemeralcontainers" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3224,7 +3224,7 @@ export def "namespaces-pods-ephemeralcontainers get" [
 #
 # PATCH /api/v1/namespaces/{namespace}/pods/{name}/ephemeralcontainers
 # operationId: patchCoreV1NamespacedPodEphemeralcontainers
-export def "namespaces-pods-ephemeralcontainers update-by-namespace-name" [
+export def "patch-core-v1-namespaced-pod-ephemeralcontainers" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3276,7 +3276,7 @@ export def "namespaces-pods-ephemeralcontainers update-by-namespace-name" [
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {activeDeadlineSeconds?: int, affinity?: record, automountServiceAccountToken?: bool, containers: list, dnsConfig?: record, dnsPolicy?: string, enableServiceLinks?: bool, ephemeralContainers?: list, hostAliases?: list, hostIPC?: bool, hostNetwork?: bool, hostPID?: bool, hostUsers?: bool, hostname?: string, imagePullSecrets?: list, initContainers?: list, nodeName?: string, nodeSelector?: record, os?: record, overhead?: record, preemptionPolicy?: string, priority?: int, priorityClassName?: string, ... (16 more fields)}
 # --status shape: {conditions?: list, containerStatuses?: list, ephemeralContainerStatuses?: list, hostIP?: string, initContainerStatuses?: list, message?: string, nominatedNodeName?: string, phase?: string, podIP?: string, podIPs?: list, qosClass?: string, reason?: string, resize?: string, startTime?: string}
-export def "namespaces-pods-ephemeralcontainers update-by-namespace-name-1" [
+export def "replace-core-v1-namespaced-pod-ephemeralcontainers" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3330,7 +3330,7 @@ export def "namespaces-pods-ephemeralcontainers update-by-namespace-name-1" [
 # operationId: createCoreV1NamespacedPodEviction
 # --deleteOptions shape: {apiVersion?: string, dryRun?: list<string>, gracePeriodSeconds?: int, kind?: string, orphanDependents?: bool, preconditions?: record, propagationPolicy?: string}
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
-export def "namespaces-pods-eviction create" [
+export def "create-core-v1-namespaced-pod-eviction" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3381,7 +3381,7 @@ export def "namespaces-pods-eviction create" [
 #
 # GET /api/v1/namespaces/{namespace}/pods/{name}/exec
 # operationId: connectCoreV1GetNamespacedPodExec
-export def "namespaces-pods-exec get-connect" [
+export def "connect-core-v1-get-namespaced-pod-exec" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3426,7 +3426,7 @@ export def "namespaces-pods-exec get-connect" [
 #
 # POST /api/v1/namespaces/{namespace}/pods/{name}/exec
 # operationId: connectCoreV1PostNamespacedPodExec
-export def "namespaces-pods-exec create-connect" [
+export def "connect-core-v1-post-namespaced-pod-exec" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3471,7 +3471,7 @@ export def "namespaces-pods-exec create-connect" [
 #
 # GET /api/v1/namespaces/{namespace}/pods/{name}/log
 # operationId: readCoreV1NamespacedPodLog
-export def "namespaces-pods-log get" [
+export def "read-core-v1-namespaced-pod-log" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3520,7 +3520,7 @@ export def "namespaces-pods-log get" [
 #
 # GET /api/v1/namespaces/{namespace}/pods/{name}/portforward
 # operationId: connectCoreV1GetNamespacedPodPortforward
-export def "namespaces-pods-portforward get-connect" [
+export def "connect-core-v1-get-namespaced-pod-portforward" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3560,7 +3560,7 @@ export def "namespaces-pods-portforward get-connect" [
 #
 # POST /api/v1/namespaces/{namespace}/pods/{name}/portforward
 # operationId: connectCoreV1PostNamespacedPodPortforward
-export def "namespaces-pods-portforward create-connect" [
+export def "connect-core-v1-post-namespaced-pod-portforward" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3600,7 +3600,7 @@ export def "namespaces-pods-portforward create-connect" [
 #
 # DELETE /api/v1/namespaces/{namespace}/pods/{name}/proxy
 # operationId: connectCoreV1DeleteNamespacedPodProxy
-export def "namespaces-pods-proxy delete-connect-by-namespace-name" [
+export def "connect-core-v1-delete-namespaced-pod-proxy" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3640,7 +3640,7 @@ export def "namespaces-pods-proxy delete-connect-by-namespace-name" [
 #
 # GET /api/v1/namespaces/{namespace}/pods/{name}/proxy
 # operationId: connectCoreV1GetNamespacedPodProxy
-export def "namespaces-pods-proxy list" [
+export def "connect-core-v1-get-namespaced-pod-proxy" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3680,7 +3680,7 @@ export def "namespaces-pods-proxy list" [
 #
 # HEAD /api/v1/namespaces/{namespace}/pods/{name}/proxy
 # operationId: connectCoreV1HeadNamespacedPodProxy
-export def "namespaces-pods-proxy head-connect-by-namespace-name" [
+export def "connect-core-v1-head-namespaced-pod-proxy" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3720,7 +3720,7 @@ export def "namespaces-pods-proxy head-connect-by-namespace-name" [
 #
 # OPTIONS /api/v1/namespaces/{namespace}/pods/{name}/proxy
 # operationId: connectCoreV1OptionsNamespacedPodProxy
-export def "namespaces-pods-proxy options-connect-by-namespace-name" [
+export def "connect-core-v1-options-namespaced-pod-proxy" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3760,7 +3760,7 @@ export def "namespaces-pods-proxy options-connect-by-namespace-name" [
 #
 # PATCH /api/v1/namespaces/{namespace}/pods/{name}/proxy
 # operationId: connectCoreV1PatchNamespacedPodProxy
-export def "namespaces-pods-proxy update-connect-by-namespace-name" [
+export def "connect-core-v1-patch-namespaced-pod-proxy" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3800,7 +3800,7 @@ export def "namespaces-pods-proxy update-connect-by-namespace-name" [
 #
 # POST /api/v1/namespaces/{namespace}/pods/{name}/proxy
 # operationId: connectCoreV1PostNamespacedPodProxy
-export def "namespaces-pods-proxy create-connect-by-namespace-name" [
+export def "connect-core-v1-post-namespaced-pod-proxy" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3840,7 +3840,7 @@ export def "namespaces-pods-proxy create-connect-by-namespace-name" [
 #
 # PUT /api/v1/namespaces/{namespace}/pods/{name}/proxy
 # operationId: connectCoreV1PutNamespacedPodProxy
-export def "namespaces-pods-proxy update-connect-by-namespace-name-1" [
+export def "connect-core-v1-put-namespaced-pod-proxy" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3880,7 +3880,7 @@ export def "namespaces-pods-proxy update-connect-by-namespace-name-1" [
 #
 # DELETE /api/v1/namespaces/{namespace}/pods/{name}/proxy/{path}
 # operationId: connectCoreV1DeleteNamespacedPodProxyWithPath
-export def "namespaces-pods-proxy delete-connect-by-namespace-name-path" [
+export def "connect-core-v1-delete-namespaced-pod-proxy-with-path" [
   namespace: string
   name: string
   path: string
@@ -3922,7 +3922,7 @@ export def "namespaces-pods-proxy delete-connect-by-namespace-name-path" [
 #
 # GET /api/v1/namespaces/{namespace}/pods/{name}/proxy/{path}
 # operationId: connectCoreV1GetNamespacedPodProxyWithPath
-export def "namespaces-pods-proxy get-connect" [
+export def "connect-core-v1-get-namespaced-pod-proxy-with-path" [
   namespace: string
   name: string
   path: string
@@ -3964,7 +3964,7 @@ export def "namespaces-pods-proxy get-connect" [
 #
 # HEAD /api/v1/namespaces/{namespace}/pods/{name}/proxy/{path}
 # operationId: connectCoreV1HeadNamespacedPodProxyWithPath
-export def "namespaces-pods-proxy head-connect-by-namespace-name-path" [
+export def "connect-core-v1-head-namespaced-pod-proxy-with-path" [
   namespace: string
   name: string
   path: string
@@ -4006,7 +4006,7 @@ export def "namespaces-pods-proxy head-connect-by-namespace-name-path" [
 #
 # OPTIONS /api/v1/namespaces/{namespace}/pods/{name}/proxy/{path}
 # operationId: connectCoreV1OptionsNamespacedPodProxyWithPath
-export def "namespaces-pods-proxy options-connect-by-namespace-name-path" [
+export def "connect-core-v1-options-namespaced-pod-proxy-with-path" [
   namespace: string
   name: string
   path: string
@@ -4048,7 +4048,7 @@ export def "namespaces-pods-proxy options-connect-by-namespace-name-path" [
 #
 # PATCH /api/v1/namespaces/{namespace}/pods/{name}/proxy/{path}
 # operationId: connectCoreV1PatchNamespacedPodProxyWithPath
-export def "namespaces-pods-proxy update-connect-by-namespace-name-path" [
+export def "connect-core-v1-patch-namespaced-pod-proxy-with-path" [
   namespace: string
   name: string
   path: string
@@ -4090,7 +4090,7 @@ export def "namespaces-pods-proxy update-connect-by-namespace-name-path" [
 #
 # POST /api/v1/namespaces/{namespace}/pods/{name}/proxy/{path}
 # operationId: connectCoreV1PostNamespacedPodProxyWithPath
-export def "namespaces-pods-proxy create-connect-by-namespace-name-path" [
+export def "connect-core-v1-post-namespaced-pod-proxy-with-path" [
   namespace: string
   name: string
   path: string
@@ -4132,7 +4132,7 @@ export def "namespaces-pods-proxy create-connect-by-namespace-name-path" [
 #
 # PUT /api/v1/namespaces/{namespace}/pods/{name}/proxy/{path}
 # operationId: connectCoreV1PutNamespacedPodProxyWithPath
-export def "namespaces-pods-proxy update-connect-by-namespace-name-path-1" [
+export def "connect-core-v1-put-namespaced-pod-proxy-with-path" [
   namespace: string
   name: string
   path: string
@@ -4174,7 +4174,7 @@ export def "namespaces-pods-proxy update-connect-by-namespace-name-path-1" [
 #
 # GET /api/v1/namespaces/{namespace}/pods/{name}/status
 # operationId: readCoreV1NamespacedPodStatus
-export def "namespaces-pods-status get" [
+export def "read-core-v1-namespaced-pod-status" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4215,7 +4215,7 @@ export def "namespaces-pods-status get" [
 #
 # PATCH /api/v1/namespaces/{namespace}/pods/{name}/status
 # operationId: patchCoreV1NamespacedPodStatus
-export def "namespaces-pods-status update-by-namespace-name" [
+export def "patch-core-v1-namespaced-pod-status" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4267,7 +4267,7 @@ export def "namespaces-pods-status update-by-namespace-name" [
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {activeDeadlineSeconds?: int, affinity?: record, automountServiceAccountToken?: bool, containers: list, dnsConfig?: record, dnsPolicy?: string, enableServiceLinks?: bool, ephemeralContainers?: list, hostAliases?: list, hostIPC?: bool, hostNetwork?: bool, hostPID?: bool, hostUsers?: bool, hostname?: string, imagePullSecrets?: list, initContainers?: list, nodeName?: string, nodeSelector?: record, os?: record, overhead?: record, preemptionPolicy?: string, priority?: int, priorityClassName?: string, ... (16 more fields)}
 # --status shape: {conditions?: list, containerStatuses?: list, ephemeralContainerStatuses?: list, hostIP?: string, initContainerStatuses?: list, message?: string, nominatedNodeName?: string, phase?: string, podIP?: string, podIPs?: list, qosClass?: string, reason?: string, resize?: string, startTime?: string}
-export def "namespaces-pods-status update-by-namespace-name-1" [
+export def "replace-core-v1-namespaced-pod-status" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4320,7 +4320,7 @@ export def "namespaces-pods-status update-by-namespace-name-1" [
 # DELETE /api/v1/namespaces/{namespace}/podtemplates
 # operationId: deleteCoreV1CollectionNamespacedPodTemplate
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "namespaces-podtemplates delete-collection-pod-template" [
+export def "delete-core-v1-collection-namespaced-pod-template" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4381,7 +4381,7 @@ export def "namespaces-podtemplates delete-collection-pod-template" [
 #
 # GET /api/v1/namespaces/{namespace}/podtemplates
 # operationId: listCoreV1NamespacedPodTemplate
-export def "namespaces-podtemplates list-pod-template" [
+export def "list-core-v1-namespaced-pod-template" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4432,7 +4432,7 @@ export def "namespaces-podtemplates list-pod-template" [
 # operationId: createCoreV1NamespacedPodTemplate
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --template shape: {metadata?: record, spec?: record}
-export def "namespaces-podtemplates create-pod-template" [
+export def "create-core-v1-namespaced-pod-template" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4482,7 +4482,7 @@ export def "namespaces-podtemplates create-pod-template" [
 # DELETE /api/v1/namespaces/{namespace}/podtemplates/{name}
 # operationId: deleteCoreV1NamespacedPodTemplate
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "namespaces-podtemplates delete-pod-template" [
+export def "delete-core-v1-namespaced-pod-template" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4537,7 +4537,7 @@ export def "namespaces-podtemplates delete-pod-template" [
 #
 # GET /api/v1/namespaces/{namespace}/podtemplates/{name}
 # operationId: readCoreV1NamespacedPodTemplate
-export def "namespaces-podtemplates get-pod-template" [
+export def "read-core-v1-namespaced-pod-template" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4578,7 +4578,7 @@ export def "namespaces-podtemplates get-pod-template" [
 #
 # PATCH /api/v1/namespaces/{namespace}/podtemplates/{name}
 # operationId: patchCoreV1NamespacedPodTemplate
-export def "namespaces-podtemplates update-pod-template-by-namespace-name" [
+export def "patch-core-v1-namespaced-pod-template" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4629,7 +4629,7 @@ export def "namespaces-podtemplates update-pod-template-by-namespace-name" [
 # operationId: replaceCoreV1NamespacedPodTemplate
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --template shape: {metadata?: record, spec?: record}
-export def "namespaces-podtemplates update-pod-template-by-namespace-name-1" [
+export def "replace-core-v1-namespaced-pod-template" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4681,7 +4681,7 @@ export def "namespaces-podtemplates update-pod-template-by-namespace-name-1" [
 # DELETE /api/v1/namespaces/{namespace}/replicationcontrollers
 # operationId: deleteCoreV1CollectionNamespacedReplicationController
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "namespaces-replicationcontrollers delete-collection-replication-controller" [
+export def "delete-core-v1-collection-namespaced-replication-controller" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4742,7 +4742,7 @@ export def "namespaces-replicationcontrollers delete-collection-replication-cont
 #
 # GET /api/v1/namespaces/{namespace}/replicationcontrollers
 # operationId: listCoreV1NamespacedReplicationController
-export def "namespaces-replicationcontrollers list-replication-controller" [
+export def "list-core-v1-namespaced-replication-controller" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4794,7 +4794,7 @@ export def "namespaces-replicationcontrollers list-replication-controller" [
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {minReadySeconds?: int, replicas?: int, selector?: record, template?: record}
 # --status shape: {availableReplicas?: int, conditions?: list, fullyLabeledReplicas?: int, observedGeneration?: int, readyReplicas?: int, replicas: int}
-export def "namespaces-replicationcontrollers create-replication-controller" [
+export def "create-core-v1-namespaced-replication-controller" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4845,7 +4845,7 @@ export def "namespaces-replicationcontrollers create-replication-controller" [
 # DELETE /api/v1/namespaces/{namespace}/replicationcontrollers/{name}
 # operationId: deleteCoreV1NamespacedReplicationController
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "namespaces-replicationcontrollers delete-replication-controller" [
+export def "delete-core-v1-namespaced-replication-controller" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4900,7 +4900,7 @@ export def "namespaces-replicationcontrollers delete-replication-controller" [
 #
 # GET /api/v1/namespaces/{namespace}/replicationcontrollers/{name}
 # operationId: readCoreV1NamespacedReplicationController
-export def "namespaces-replicationcontrollers get-replication-controller" [
+export def "read-core-v1-namespaced-replication-controller" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4941,7 +4941,7 @@ export def "namespaces-replicationcontrollers get-replication-controller" [
 #
 # PATCH /api/v1/namespaces/{namespace}/replicationcontrollers/{name}
 # operationId: patchCoreV1NamespacedReplicationController
-export def "namespaces-replicationcontrollers update-replication-controller-by-namespace-name" [
+export def "patch-core-v1-namespaced-replication-controller" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4993,7 +4993,7 @@ export def "namespaces-replicationcontrollers update-replication-controller-by-n
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {minReadySeconds?: int, replicas?: int, selector?: record, template?: record}
 # --status shape: {availableReplicas?: int, conditions?: list, fullyLabeledReplicas?: int, observedGeneration?: int, readyReplicas?: int, replicas: int}
-export def "namespaces-replicationcontrollers update-replication-controller-by-namespace-name-1" [
+export def "replace-core-v1-namespaced-replication-controller" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5045,7 +5045,7 @@ export def "namespaces-replicationcontrollers update-replication-controller-by-n
 #
 # GET /api/v1/namespaces/{namespace}/replicationcontrollers/{name}/scale
 # operationId: readCoreV1NamespacedReplicationControllerScale
-export def "namespaces-replicationcontrollers-scale get-replication-controller" [
+export def "read-core-v1-namespaced-replication-controller-scale" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5086,7 +5086,7 @@ export def "namespaces-replicationcontrollers-scale get-replication-controller" 
 #
 # PATCH /api/v1/namespaces/{namespace}/replicationcontrollers/{name}/scale
 # operationId: patchCoreV1NamespacedReplicationControllerScale
-export def "namespaces-replicationcontrollers-scale update-replication-controller-by-namespace-name" [
+export def "patch-core-v1-namespaced-replication-controller-scale" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5138,7 +5138,7 @@ export def "namespaces-replicationcontrollers-scale update-replication-controlle
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {replicas?: int}
 # --status shape: {replicas: int, selector?: string}
-export def "namespaces-replicationcontrollers-scale update-replication-controller-by-namespace-name-1" [
+export def "replace-core-v1-namespaced-replication-controller-scale" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5190,7 +5190,7 @@ export def "namespaces-replicationcontrollers-scale update-replication-controlle
 #
 # GET /api/v1/namespaces/{namespace}/replicationcontrollers/{name}/status
 # operationId: readCoreV1NamespacedReplicationControllerStatus
-export def "namespaces-replicationcontrollers-status get-replication-controller" [
+export def "read-core-v1-namespaced-replication-controller-status" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5231,7 +5231,7 @@ export def "namespaces-replicationcontrollers-status get-replication-controller"
 #
 # PATCH /api/v1/namespaces/{namespace}/replicationcontrollers/{name}/status
 # operationId: patchCoreV1NamespacedReplicationControllerStatus
-export def "namespaces-replicationcontrollers-status update-replication-controller-by-namespace-name" [
+export def "patch-core-v1-namespaced-replication-controller-status" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5283,7 +5283,7 @@ export def "namespaces-replicationcontrollers-status update-replication-controll
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {minReadySeconds?: int, replicas?: int, selector?: record, template?: record}
 # --status shape: {availableReplicas?: int, conditions?: list, fullyLabeledReplicas?: int, observedGeneration?: int, readyReplicas?: int, replicas: int}
-export def "namespaces-replicationcontrollers-status update-replication-controller-by-namespace-name-1" [
+export def "replace-core-v1-namespaced-replication-controller-status" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5336,7 +5336,7 @@ export def "namespaces-replicationcontrollers-status update-replication-controll
 # DELETE /api/v1/namespaces/{namespace}/resourcequotas
 # operationId: deleteCoreV1CollectionNamespacedResourceQuota
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "namespaces-resourcequotas delete-collection-resource-quota" [
+export def "delete-core-v1-collection-namespaced-resource-quota" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5397,7 +5397,7 @@ export def "namespaces-resourcequotas delete-collection-resource-quota" [
 #
 # GET /api/v1/namespaces/{namespace}/resourcequotas
 # operationId: listCoreV1NamespacedResourceQuota
-export def "namespaces-resourcequotas list-resource-quota" [
+export def "list-core-v1-namespaced-resource-quota" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5449,7 +5449,7 @@ export def "namespaces-resourcequotas list-resource-quota" [
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {hard?: record, scopeSelector?: record, scopes?: list<string>}
 # --status shape: {hard?: record, used?: record}
-export def "namespaces-resourcequotas create-resource-quota" [
+export def "create-core-v1-namespaced-resource-quota" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5500,7 +5500,7 @@ export def "namespaces-resourcequotas create-resource-quota" [
 # DELETE /api/v1/namespaces/{namespace}/resourcequotas/{name}
 # operationId: deleteCoreV1NamespacedResourceQuota
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "namespaces-resourcequotas delete-resource-quota" [
+export def "delete-core-v1-namespaced-resource-quota" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5555,7 +5555,7 @@ export def "namespaces-resourcequotas delete-resource-quota" [
 #
 # GET /api/v1/namespaces/{namespace}/resourcequotas/{name}
 # operationId: readCoreV1NamespacedResourceQuota
-export def "namespaces-resourcequotas get-resource-quota" [
+export def "read-core-v1-namespaced-resource-quota" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5596,7 +5596,7 @@ export def "namespaces-resourcequotas get-resource-quota" [
 #
 # PATCH /api/v1/namespaces/{namespace}/resourcequotas/{name}
 # operationId: patchCoreV1NamespacedResourceQuota
-export def "namespaces-resourcequotas update-resource-quota-by-namespace-name" [
+export def "patch-core-v1-namespaced-resource-quota" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5648,7 +5648,7 @@ export def "namespaces-resourcequotas update-resource-quota-by-namespace-name" [
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {hard?: record, scopeSelector?: record, scopes?: list<string>}
 # --status shape: {hard?: record, used?: record}
-export def "namespaces-resourcequotas update-resource-quota-by-namespace-name-1" [
+export def "replace-core-v1-namespaced-resource-quota" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5700,7 +5700,7 @@ export def "namespaces-resourcequotas update-resource-quota-by-namespace-name-1"
 #
 # GET /api/v1/namespaces/{namespace}/resourcequotas/{name}/status
 # operationId: readCoreV1NamespacedResourceQuotaStatus
-export def "namespaces-resourcequotas-status get-resource-quota" [
+export def "read-core-v1-namespaced-resource-quota-status" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5741,7 +5741,7 @@ export def "namespaces-resourcequotas-status get-resource-quota" [
 #
 # PATCH /api/v1/namespaces/{namespace}/resourcequotas/{name}/status
 # operationId: patchCoreV1NamespacedResourceQuotaStatus
-export def "namespaces-resourcequotas-status update-resource-quota-by-namespace-name" [
+export def "patch-core-v1-namespaced-resource-quota-status" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5793,7 +5793,7 @@ export def "namespaces-resourcequotas-status update-resource-quota-by-namespace-
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {hard?: record, scopeSelector?: record, scopes?: list<string>}
 # --status shape: {hard?: record, used?: record}
-export def "namespaces-resourcequotas-status update-resource-quota-by-namespace-name-1" [
+export def "replace-core-v1-namespaced-resource-quota-status" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5846,7 +5846,7 @@ export def "namespaces-resourcequotas-status update-resource-quota-by-namespace-
 # DELETE /api/v1/namespaces/{namespace}/secrets
 # operationId: deleteCoreV1CollectionNamespacedSecret
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "namespaces-secrets delete-collection" [
+export def "delete-core-v1-collection-namespaced-secret" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5907,7 +5907,7 @@ export def "namespaces-secrets delete-collection" [
 #
 # GET /api/v1/namespaces/{namespace}/secrets
 # operationId: listCoreV1NamespacedSecret
-export def "namespaces-secrets list" [
+export def "list-core-v1-namespaced-secret" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5957,7 +5957,7 @@ export def "namespaces-secrets list" [
 # POST /api/v1/namespaces/{namespace}/secrets
 # operationId: createCoreV1NamespacedSecret
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
-export def "namespaces-secrets create" [
+export def "create-core-v1-namespaced-secret" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6010,7 +6010,7 @@ export def "namespaces-secrets create" [
 # DELETE /api/v1/namespaces/{namespace}/secrets/{name}
 # operationId: deleteCoreV1NamespacedSecret
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "namespaces-secrets delete" [
+export def "delete-core-v1-namespaced-secret" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6065,7 +6065,7 @@ export def "namespaces-secrets delete" [
 #
 # GET /api/v1/namespaces/{namespace}/secrets/{name}
 # operationId: readCoreV1NamespacedSecret
-export def "namespaces-secrets get" [
+export def "read-core-v1-namespaced-secret" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6106,7 +6106,7 @@ export def "namespaces-secrets get" [
 #
 # PATCH /api/v1/namespaces/{namespace}/secrets/{name}
 # operationId: patchCoreV1NamespacedSecret
-export def "namespaces-secrets update-by-namespace-name" [
+export def "patch-core-v1-namespaced-secret" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6156,7 +6156,7 @@ export def "namespaces-secrets update-by-namespace-name" [
 # PUT /api/v1/namespaces/{namespace}/secrets/{name}
 # operationId: replaceCoreV1NamespacedSecret
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
-export def "namespaces-secrets update-by-namespace-name-1" [
+export def "replace-core-v1-namespaced-secret" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6211,7 +6211,7 @@ export def "namespaces-secrets update-by-namespace-name-1" [
 # DELETE /api/v1/namespaces/{namespace}/serviceaccounts
 # operationId: deleteCoreV1CollectionNamespacedServiceAccount
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "namespaces-serviceaccounts delete-collection-service-account" [
+export def "delete-core-v1-collection-namespaced-service-account" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6272,7 +6272,7 @@ export def "namespaces-serviceaccounts delete-collection-service-account" [
 #
 # GET /api/v1/namespaces/{namespace}/serviceaccounts
 # operationId: listCoreV1NamespacedServiceAccount
-export def "namespaces-serviceaccounts list-service-account" [
+export def "list-core-v1-namespaced-service-account" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6324,7 +6324,7 @@ export def "namespaces-serviceaccounts list-service-account" [
 # --imagePullSecrets item shape: {name?: string}
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --secrets item shape: {apiVersion?: string, fieldPath?: string, kind?: string, name?: string, namespace?: string, resourceVersion?: string, uid?: string}
-export def "namespaces-serviceaccounts create-service-account" [
+export def "create-core-v1-namespaced-service-account" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6376,7 +6376,7 @@ export def "namespaces-serviceaccounts create-service-account" [
 # DELETE /api/v1/namespaces/{namespace}/serviceaccounts/{name}
 # operationId: deleteCoreV1NamespacedServiceAccount
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "namespaces-serviceaccounts delete-service-account" [
+export def "delete-core-v1-namespaced-service-account" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6431,7 +6431,7 @@ export def "namespaces-serviceaccounts delete-service-account" [
 #
 # GET /api/v1/namespaces/{namespace}/serviceaccounts/{name}
 # operationId: readCoreV1NamespacedServiceAccount
-export def "namespaces-serviceaccounts get-service-account" [
+export def "read-core-v1-namespaced-service-account" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6472,7 +6472,7 @@ export def "namespaces-serviceaccounts get-service-account" [
 #
 # PATCH /api/v1/namespaces/{namespace}/serviceaccounts/{name}
 # operationId: patchCoreV1NamespacedServiceAccount
-export def "namespaces-serviceaccounts update-service-account-by-namespace-name" [
+export def "patch-core-v1-namespaced-service-account" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6524,7 +6524,7 @@ export def "namespaces-serviceaccounts update-service-account-by-namespace-name"
 # --imagePullSecrets item shape: {name?: string}
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --secrets item shape: {apiVersion?: string, fieldPath?: string, kind?: string, name?: string, namespace?: string, resourceVersion?: string, uid?: string}
-export def "namespaces-serviceaccounts update-service-account-by-namespace-name-1" [
+export def "replace-core-v1-namespaced-service-account" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6580,7 +6580,7 @@ export def "namespaces-serviceaccounts update-service-account-by-namespace-name-
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {audiences: list<string>, boundObjectRef?: record, expirationSeconds?: int}
 # --status shape: {expirationTimestamp: string, token: string}
-export def "namespaces-serviceaccounts-token create-service-account" [
+export def "create-core-v1-namespaced-service-account-token" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6633,7 +6633,7 @@ export def "namespaces-serviceaccounts-token create-service-account" [
 # DELETE /api/v1/namespaces/{namespace}/services
 # operationId: deleteCoreV1CollectionNamespacedService
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "namespaces-services delete-collection" [
+export def "delete-core-v1-collection-namespaced-service" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6694,7 +6694,7 @@ export def "namespaces-services delete-collection" [
 #
 # GET /api/v1/namespaces/{namespace}/services
 # operationId: listCoreV1NamespacedService
-export def "namespaces-services list" [
+export def "list-core-v1-namespaced-service" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6746,7 +6746,7 @@ export def "namespaces-services list" [
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {allocateLoadBalancerNodePorts?: bool, clusterIP?: string, clusterIPs?: list<string>, externalIPs?: list<string>, externalName?: string, externalTrafficPolicy?: string, healthCheckNodePort?: int, internalTrafficPolicy?: string, ipFamilies?: list<string>, ipFamilyPolicy?: string, loadBalancerClass?: string, loadBalancerIP?: string, loadBalancerSourceRanges?: list<string>, ports?: list, publishNotReadyAddresses?: bool, selector?: record, sessionAffinity?: string, sessionAffinityConfig?: record, ... (1 more fields)}
 # --status shape: {conditions?: list, loadBalancer?: record}
-export def "namespaces-services create" [
+export def "create-core-v1-namespaced-service" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6797,7 +6797,7 @@ export def "namespaces-services create" [
 # DELETE /api/v1/namespaces/{namespace}/services/{name}
 # operationId: deleteCoreV1NamespacedService
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "namespaces-services delete" [
+export def "delete-core-v1-namespaced-service" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6852,7 +6852,7 @@ export def "namespaces-services delete" [
 #
 # GET /api/v1/namespaces/{namespace}/services/{name}
 # operationId: readCoreV1NamespacedService
-export def "namespaces-services get" [
+export def "read-core-v1-namespaced-service" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6893,7 +6893,7 @@ export def "namespaces-services get" [
 #
 # PATCH /api/v1/namespaces/{namespace}/services/{name}
 # operationId: patchCoreV1NamespacedService
-export def "namespaces-services update-by-namespace-name" [
+export def "patch-core-v1-namespaced-service" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6945,7 +6945,7 @@ export def "namespaces-services update-by-namespace-name" [
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {allocateLoadBalancerNodePorts?: bool, clusterIP?: string, clusterIPs?: list<string>, externalIPs?: list<string>, externalName?: string, externalTrafficPolicy?: string, healthCheckNodePort?: int, internalTrafficPolicy?: string, ipFamilies?: list<string>, ipFamilyPolicy?: string, loadBalancerClass?: string, loadBalancerIP?: string, loadBalancerSourceRanges?: list<string>, ports?: list, publishNotReadyAddresses?: bool, selector?: record, sessionAffinity?: string, sessionAffinityConfig?: record, ... (1 more fields)}
 # --status shape: {conditions?: list, loadBalancer?: record}
-export def "namespaces-services update-by-namespace-name-1" [
+export def "replace-core-v1-namespaced-service" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6997,7 +6997,7 @@ export def "namespaces-services update-by-namespace-name-1" [
 #
 # DELETE /api/v1/namespaces/{namespace}/services/{name}/proxy
 # operationId: connectCoreV1DeleteNamespacedServiceProxy
-export def "namespaces-services-proxy delete-connect-by-namespace-name" [
+export def "connect-core-v1-delete-namespaced-service-proxy" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7037,7 +7037,7 @@ export def "namespaces-services-proxy delete-connect-by-namespace-name" [
 #
 # GET /api/v1/namespaces/{namespace}/services/{name}/proxy
 # operationId: connectCoreV1GetNamespacedServiceProxy
-export def "namespaces-services-proxy list" [
+export def "connect-core-v1-get-namespaced-service-proxy" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7077,7 +7077,7 @@ export def "namespaces-services-proxy list" [
 #
 # HEAD /api/v1/namespaces/{namespace}/services/{name}/proxy
 # operationId: connectCoreV1HeadNamespacedServiceProxy
-export def "namespaces-services-proxy head-connect-by-namespace-name" [
+export def "connect-core-v1-head-namespaced-service-proxy" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7117,7 +7117,7 @@ export def "namespaces-services-proxy head-connect-by-namespace-name" [
 #
 # OPTIONS /api/v1/namespaces/{namespace}/services/{name}/proxy
 # operationId: connectCoreV1OptionsNamespacedServiceProxy
-export def "namespaces-services-proxy options-connect-by-namespace-name" [
+export def "connect-core-v1-options-namespaced-service-proxy" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7157,7 +7157,7 @@ export def "namespaces-services-proxy options-connect-by-namespace-name" [
 #
 # PATCH /api/v1/namespaces/{namespace}/services/{name}/proxy
 # operationId: connectCoreV1PatchNamespacedServiceProxy
-export def "namespaces-services-proxy update-connect-by-namespace-name" [
+export def "connect-core-v1-patch-namespaced-service-proxy" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7197,7 +7197,7 @@ export def "namespaces-services-proxy update-connect-by-namespace-name" [
 #
 # POST /api/v1/namespaces/{namespace}/services/{name}/proxy
 # operationId: connectCoreV1PostNamespacedServiceProxy
-export def "namespaces-services-proxy create-connect-by-namespace-name" [
+export def "connect-core-v1-post-namespaced-service-proxy" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7237,7 +7237,7 @@ export def "namespaces-services-proxy create-connect-by-namespace-name" [
 #
 # PUT /api/v1/namespaces/{namespace}/services/{name}/proxy
 # operationId: connectCoreV1PutNamespacedServiceProxy
-export def "namespaces-services-proxy update-connect-by-namespace-name-1" [
+export def "connect-core-v1-put-namespaced-service-proxy" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7277,7 +7277,7 @@ export def "namespaces-services-proxy update-connect-by-namespace-name-1" [
 #
 # DELETE /api/v1/namespaces/{namespace}/services/{name}/proxy/{path}
 # operationId: connectCoreV1DeleteNamespacedServiceProxyWithPath
-export def "namespaces-services-proxy delete-connect-by-namespace-name-path" [
+export def "connect-core-v1-delete-namespaced-service-proxy-with-path" [
   namespace: string
   name: string
   path: string
@@ -7319,7 +7319,7 @@ export def "namespaces-services-proxy delete-connect-by-namespace-name-path" [
 #
 # GET /api/v1/namespaces/{namespace}/services/{name}/proxy/{path}
 # operationId: connectCoreV1GetNamespacedServiceProxyWithPath
-export def "namespaces-services-proxy get-connect" [
+export def "connect-core-v1-get-namespaced-service-proxy-with-path" [
   namespace: string
   name: string
   path: string
@@ -7361,7 +7361,7 @@ export def "namespaces-services-proxy get-connect" [
 #
 # HEAD /api/v1/namespaces/{namespace}/services/{name}/proxy/{path}
 # operationId: connectCoreV1HeadNamespacedServiceProxyWithPath
-export def "namespaces-services-proxy head-connect-by-namespace-name-path" [
+export def "connect-core-v1-head-namespaced-service-proxy-with-path" [
   namespace: string
   name: string
   path: string
@@ -7403,7 +7403,7 @@ export def "namespaces-services-proxy head-connect-by-namespace-name-path" [
 #
 # OPTIONS /api/v1/namespaces/{namespace}/services/{name}/proxy/{path}
 # operationId: connectCoreV1OptionsNamespacedServiceProxyWithPath
-export def "namespaces-services-proxy options-connect-by-namespace-name-path" [
+export def "connect-core-v1-options-namespaced-service-proxy-with-path" [
   namespace: string
   name: string
   path: string
@@ -7445,7 +7445,7 @@ export def "namespaces-services-proxy options-connect-by-namespace-name-path" [
 #
 # PATCH /api/v1/namespaces/{namespace}/services/{name}/proxy/{path}
 # operationId: connectCoreV1PatchNamespacedServiceProxyWithPath
-export def "namespaces-services-proxy update-connect-by-namespace-name-path" [
+export def "connect-core-v1-patch-namespaced-service-proxy-with-path" [
   namespace: string
   name: string
   path: string
@@ -7487,7 +7487,7 @@ export def "namespaces-services-proxy update-connect-by-namespace-name-path" [
 #
 # POST /api/v1/namespaces/{namespace}/services/{name}/proxy/{path}
 # operationId: connectCoreV1PostNamespacedServiceProxyWithPath
-export def "namespaces-services-proxy create-connect-by-namespace-name-path" [
+export def "connect-core-v1-post-namespaced-service-proxy-with-path" [
   namespace: string
   name: string
   path: string
@@ -7529,7 +7529,7 @@ export def "namespaces-services-proxy create-connect-by-namespace-name-path" [
 #
 # PUT /api/v1/namespaces/{namespace}/services/{name}/proxy/{path}
 # operationId: connectCoreV1PutNamespacedServiceProxyWithPath
-export def "namespaces-services-proxy update-connect-by-namespace-name-path-1" [
+export def "connect-core-v1-put-namespaced-service-proxy-with-path" [
   namespace: string
   name: string
   path: string
@@ -7571,7 +7571,7 @@ export def "namespaces-services-proxy update-connect-by-namespace-name-path-1" [
 #
 # GET /api/v1/namespaces/{namespace}/services/{name}/status
 # operationId: readCoreV1NamespacedServiceStatus
-export def "namespaces-services-status get" [
+export def "read-core-v1-namespaced-service-status" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7612,7 +7612,7 @@ export def "namespaces-services-status get" [
 #
 # PATCH /api/v1/namespaces/{namespace}/services/{name}/status
 # operationId: patchCoreV1NamespacedServiceStatus
-export def "namespaces-services-status update-by-namespace-name" [
+export def "patch-core-v1-namespaced-service-status" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7664,7 +7664,7 @@ export def "namespaces-services-status update-by-namespace-name" [
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {allocateLoadBalancerNodePorts?: bool, clusterIP?: string, clusterIPs?: list<string>, externalIPs?: list<string>, externalName?: string, externalTrafficPolicy?: string, healthCheckNodePort?: int, internalTrafficPolicy?: string, ipFamilies?: list<string>, ipFamilyPolicy?: string, loadBalancerClass?: string, loadBalancerIP?: string, loadBalancerSourceRanges?: list<string>, ports?: list, publishNotReadyAddresses?: bool, selector?: record, sessionAffinity?: string, sessionAffinityConfig?: record, ... (1 more fields)}
 # --status shape: {conditions?: list, loadBalancer?: record}
-export def "namespaces-services-status update-by-namespace-name-1" [
+export def "replace-core-v1-namespaced-service-status" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7717,7 +7717,7 @@ export def "namespaces-services-status update-by-namespace-name-1" [
 # DELETE /api/v1/namespaces/{name}
 # operationId: deleteCoreV1Namespace
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "namespaces delete" [
+export def "delete-core-v1-namespace" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7770,7 +7770,7 @@ export def "namespaces delete" [
 #
 # GET /api/v1/namespaces/{name}
 # operationId: readCoreV1Namespace
-export def "namespaces get" [
+export def "read-core-v1-namespace" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7809,7 +7809,7 @@ export def "namespaces get" [
 #
 # PATCH /api/v1/namespaces/{name}
 # operationId: patchCoreV1Namespace
-export def "namespaces update-by-name" [
+export def "patch-core-v1-namespace" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7859,7 +7859,7 @@ export def "namespaces update-by-name" [
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {finalizers?: list<string>}
 # --status shape: {conditions?: list, phase?: string}
-export def "namespaces update-by-name-1" [
+export def "replace-core-v1-namespace" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7912,7 +7912,7 @@ export def "namespaces update-by-name-1" [
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {finalizers?: list<string>}
 # --status shape: {conditions?: list, phase?: string}
-export def "namespaces-finalize update" [
+export def "replace-core-v1-namespace-finalize" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7962,7 +7962,7 @@ export def "namespaces-finalize update" [
 #
 # GET /api/v1/namespaces/{name}/status
 # operationId: readCoreV1NamespaceStatus
-export def "namespaces-status get" [
+export def "read-core-v1-namespace-status" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8001,7 +8001,7 @@ export def "namespaces-status get" [
 #
 # PATCH /api/v1/namespaces/{name}/status
 # operationId: patchCoreV1NamespaceStatus
-export def "namespaces-status update-by-name" [
+export def "patch-core-v1-namespace-status" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8051,7 +8051,7 @@ export def "namespaces-status update-by-name" [
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {finalizers?: list<string>}
 # --status shape: {conditions?: list, phase?: string}
-export def "namespaces-status update-by-name-1" [
+export def "replace-core-v1-namespace-status" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8102,7 +8102,7 @@ export def "namespaces-status update-by-name-1" [
 # DELETE /api/v1/nodes
 # operationId: deleteCoreV1CollectionNode
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "nodes delete-collection" [
+export def "delete-core-v1-collection-node" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8161,7 +8161,7 @@ export def "nodes delete-collection" [
 #
 # GET /api/v1/nodes
 # operationId: listCoreV1Node
-export def "nodes list" [
+export def "list-core-v1-node" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8211,7 +8211,7 @@ export def "nodes list" [
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {configSource?: record, externalID?: string, podCIDR?: string, podCIDRs?: list<string>, providerID?: string, taints?: list, unschedulable?: bool}
 # --status shape: {addresses?: list, allocatable?: record, capacity?: record, conditions?: list, config?: record, daemonEndpoints?: record, images?: list, nodeInfo?: record, phase?: string, volumesAttached?: list, volumesInUse?: list<string>}
-export def "nodes create" [
+export def "create-core-v1-node" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8260,7 +8260,7 @@ export def "nodes create" [
 # DELETE /api/v1/nodes/{name}
 # operationId: deleteCoreV1Node
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "nodes delete" [
+export def "delete-core-v1-node" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8313,7 +8313,7 @@ export def "nodes delete" [
 #
 # GET /api/v1/nodes/{name}
 # operationId: readCoreV1Node
-export def "nodes get" [
+export def "read-core-v1-node" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8352,7 +8352,7 @@ export def "nodes get" [
 #
 # PATCH /api/v1/nodes/{name}
 # operationId: patchCoreV1Node
-export def "nodes update-by-name" [
+export def "patch-core-v1-node" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8402,7 +8402,7 @@ export def "nodes update-by-name" [
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {configSource?: record, externalID?: string, podCIDR?: string, podCIDRs?: list<string>, providerID?: string, taints?: list, unschedulable?: bool}
 # --status shape: {addresses?: list, allocatable?: record, capacity?: record, conditions?: list, config?: record, daemonEndpoints?: record, images?: list, nodeInfo?: record, phase?: string, volumesAttached?: list, volumesInUse?: list<string>}
-export def "nodes update-by-name-1" [
+export def "replace-core-v1-node" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8452,7 +8452,7 @@ export def "nodes update-by-name-1" [
 #
 # DELETE /api/v1/nodes/{name}/proxy
 # operationId: connectCoreV1DeleteNodeProxy
-export def "nodes-proxy delete-connect-by-name" [
+export def "connect-core-v1-delete-node-proxy" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8490,7 +8490,7 @@ export def "nodes-proxy delete-connect-by-name" [
 #
 # GET /api/v1/nodes/{name}/proxy
 # operationId: connectCoreV1GetNodeProxy
-export def "nodes-proxy list" [
+export def "connect-core-v1-get-node-proxy" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8528,7 +8528,7 @@ export def "nodes-proxy list" [
 #
 # HEAD /api/v1/nodes/{name}/proxy
 # operationId: connectCoreV1HeadNodeProxy
-export def "nodes-proxy head-connect-by-name" [
+export def "connect-core-v1-head-node-proxy" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8566,7 +8566,7 @@ export def "nodes-proxy head-connect-by-name" [
 #
 # OPTIONS /api/v1/nodes/{name}/proxy
 # operationId: connectCoreV1OptionsNodeProxy
-export def "nodes-proxy options-connect-by-name" [
+export def "connect-core-v1-options-node-proxy" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8604,7 +8604,7 @@ export def "nodes-proxy options-connect-by-name" [
 #
 # PATCH /api/v1/nodes/{name}/proxy
 # operationId: connectCoreV1PatchNodeProxy
-export def "nodes-proxy update-connect-by-name" [
+export def "connect-core-v1-patch-node-proxy" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8642,7 +8642,7 @@ export def "nodes-proxy update-connect-by-name" [
 #
 # POST /api/v1/nodes/{name}/proxy
 # operationId: connectCoreV1PostNodeProxy
-export def "nodes-proxy create-connect-by-name" [
+export def "connect-core-v1-post-node-proxy" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8680,7 +8680,7 @@ export def "nodes-proxy create-connect-by-name" [
 #
 # PUT /api/v1/nodes/{name}/proxy
 # operationId: connectCoreV1PutNodeProxy
-export def "nodes-proxy update-connect-by-name-1" [
+export def "connect-core-v1-put-node-proxy" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8718,7 +8718,7 @@ export def "nodes-proxy update-connect-by-name-1" [
 #
 # DELETE /api/v1/nodes/{name}/proxy/{path}
 # operationId: connectCoreV1DeleteNodeProxyWithPath
-export def "nodes-proxy delete-connect-by-name-path" [
+export def "connect-core-v1-delete-node-proxy-with-path" [
   name: string
   path: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8758,7 +8758,7 @@ export def "nodes-proxy delete-connect-by-name-path" [
 #
 # GET /api/v1/nodes/{name}/proxy/{path}
 # operationId: connectCoreV1GetNodeProxyWithPath
-export def "nodes-proxy get-connect" [
+export def "connect-core-v1-get-node-proxy-with-path" [
   name: string
   path: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8798,7 +8798,7 @@ export def "nodes-proxy get-connect" [
 #
 # HEAD /api/v1/nodes/{name}/proxy/{path}
 # operationId: connectCoreV1HeadNodeProxyWithPath
-export def "nodes-proxy head-connect-by-name-path" [
+export def "connect-core-v1-head-node-proxy-with-path" [
   name: string
   path: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8838,7 +8838,7 @@ export def "nodes-proxy head-connect-by-name-path" [
 #
 # OPTIONS /api/v1/nodes/{name}/proxy/{path}
 # operationId: connectCoreV1OptionsNodeProxyWithPath
-export def "nodes-proxy options-connect-by-name-path" [
+export def "connect-core-v1-options-node-proxy-with-path" [
   name: string
   path: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8878,7 +8878,7 @@ export def "nodes-proxy options-connect-by-name-path" [
 #
 # PATCH /api/v1/nodes/{name}/proxy/{path}
 # operationId: connectCoreV1PatchNodeProxyWithPath
-export def "nodes-proxy update-connect-by-name-path" [
+export def "connect-core-v1-patch-node-proxy-with-path" [
   name: string
   path: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8918,7 +8918,7 @@ export def "nodes-proxy update-connect-by-name-path" [
 #
 # POST /api/v1/nodes/{name}/proxy/{path}
 # operationId: connectCoreV1PostNodeProxyWithPath
-export def "nodes-proxy create-connect-by-name-path" [
+export def "connect-core-v1-post-node-proxy-with-path" [
   name: string
   path: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8958,7 +8958,7 @@ export def "nodes-proxy create-connect-by-name-path" [
 #
 # PUT /api/v1/nodes/{name}/proxy/{path}
 # operationId: connectCoreV1PutNodeProxyWithPath
-export def "nodes-proxy update-connect-by-name-path-1" [
+export def "connect-core-v1-put-node-proxy-with-path" [
   name: string
   path: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8998,7 +8998,7 @@ export def "nodes-proxy update-connect-by-name-path-1" [
 #
 # GET /api/v1/nodes/{name}/status
 # operationId: readCoreV1NodeStatus
-export def "nodes-status get" [
+export def "read-core-v1-node-status" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9037,7 +9037,7 @@ export def "nodes-status get" [
 #
 # PATCH /api/v1/nodes/{name}/status
 # operationId: patchCoreV1NodeStatus
-export def "nodes-status update-by-name" [
+export def "patch-core-v1-node-status" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9087,7 +9087,7 @@ export def "nodes-status update-by-name" [
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {configSource?: record, externalID?: string, podCIDR?: string, podCIDRs?: list<string>, providerID?: string, taints?: list, unschedulable?: bool}
 # --status shape: {addresses?: list, allocatable?: record, capacity?: record, conditions?: list, config?: record, daemonEndpoints?: record, images?: list, nodeInfo?: record, phase?: string, volumesAttached?: list, volumesInUse?: list<string>}
-export def "nodes-status update-by-name-1" [
+export def "replace-core-v1-node-status" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9137,7 +9137,7 @@ export def "nodes-status update-by-name-1" [
 #
 # GET /api/v1/persistentvolumeclaims
 # operationId: listCoreV1PersistentVolumeClaimForAllNamespaces
-export def "persistentvolumeclaims list-persistent-volume-claim-for-namespaces" [
+export def "list-core-v1-persistent-volume-claim-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9185,7 +9185,7 @@ export def "persistentvolumeclaims list-persistent-volume-claim-for-namespaces" 
 # DELETE /api/v1/persistentvolumes
 # operationId: deleteCoreV1CollectionPersistentVolume
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "persistentvolumes delete-collection-persistent-volume" [
+export def "delete-core-v1-collection-persistent-volume" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9244,7 +9244,7 @@ export def "persistentvolumes delete-collection-persistent-volume" [
 #
 # GET /api/v1/persistentvolumes
 # operationId: listCoreV1PersistentVolume
-export def "persistentvolumes list-persistent-volume" [
+export def "list-core-v1-persistent-volume" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9294,7 +9294,7 @@ export def "persistentvolumes list-persistent-volume" [
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {accessModes?: list<string>, awsElasticBlockStore?: record, azureDisk?: record, azureFile?: record, capacity?: record, cephfs?: record, cinder?: record, claimRef?: record, csi?: record, fc?: record, flexVolume?: record, flocker?: record, gcePersistentDisk?: record, glusterfs?: record, hostPath?: record, iscsi?: record, local?: record, mountOptions?: list<string>, nfs?: record, nodeAffinity?: record, persistentVolumeReclaimPolicy?: string, photonPersistentDisk?: record, portworxVolume?: record, ... (7 more fields)}
 # --status shape: {message?: string, phase?: string, reason?: string}
-export def "persistentvolumes create-persistent-volume" [
+export def "create-core-v1-persistent-volume" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9343,7 +9343,7 @@ export def "persistentvolumes create-persistent-volume" [
 # DELETE /api/v1/persistentvolumes/{name}
 # operationId: deleteCoreV1PersistentVolume
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "persistentvolumes delete-persistent-volume" [
+export def "delete-core-v1-persistent-volume" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9396,7 +9396,7 @@ export def "persistentvolumes delete-persistent-volume" [
 #
 # GET /api/v1/persistentvolumes/{name}
 # operationId: readCoreV1PersistentVolume
-export def "persistentvolumes get-persistent-volume" [
+export def "read-core-v1-persistent-volume" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9435,7 +9435,7 @@ export def "persistentvolumes get-persistent-volume" [
 #
 # PATCH /api/v1/persistentvolumes/{name}
 # operationId: patchCoreV1PersistentVolume
-export def "persistentvolumes update-persistent-volume-by-name" [
+export def "patch-core-v1-persistent-volume" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9485,7 +9485,7 @@ export def "persistentvolumes update-persistent-volume-by-name" [
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {accessModes?: list<string>, awsElasticBlockStore?: record, azureDisk?: record, azureFile?: record, capacity?: record, cephfs?: record, cinder?: record, claimRef?: record, csi?: record, fc?: record, flexVolume?: record, flocker?: record, gcePersistentDisk?: record, glusterfs?: record, hostPath?: record, iscsi?: record, local?: record, mountOptions?: list<string>, nfs?: record, nodeAffinity?: record, persistentVolumeReclaimPolicy?: string, photonPersistentDisk?: record, portworxVolume?: record, ... (7 more fields)}
 # --status shape: {message?: string, phase?: string, reason?: string}
-export def "persistentvolumes update-persistent-volume-by-name-1" [
+export def "replace-core-v1-persistent-volume" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9535,7 +9535,7 @@ export def "persistentvolumes update-persistent-volume-by-name-1" [
 #
 # GET /api/v1/persistentvolumes/{name}/status
 # operationId: readCoreV1PersistentVolumeStatus
-export def "persistentvolumes-status get-persistent-volume" [
+export def "read-core-v1-persistent-volume-status" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9574,7 +9574,7 @@ export def "persistentvolumes-status get-persistent-volume" [
 #
 # PATCH /api/v1/persistentvolumes/{name}/status
 # operationId: patchCoreV1PersistentVolumeStatus
-export def "persistentvolumes-status update-persistent-volume-by-name" [
+export def "patch-core-v1-persistent-volume-status" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9624,7 +9624,7 @@ export def "persistentvolumes-status update-persistent-volume-by-name" [
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {accessModes?: list<string>, awsElasticBlockStore?: record, azureDisk?: record, azureFile?: record, capacity?: record, cephfs?: record, cinder?: record, claimRef?: record, csi?: record, fc?: record, flexVolume?: record, flocker?: record, gcePersistentDisk?: record, glusterfs?: record, hostPath?: record, iscsi?: record, local?: record, mountOptions?: list<string>, nfs?: record, nodeAffinity?: record, persistentVolumeReclaimPolicy?: string, photonPersistentDisk?: record, portworxVolume?: record, ... (7 more fields)}
 # --status shape: {message?: string, phase?: string, reason?: string}
-export def "persistentvolumes-status update-persistent-volume-by-name-1" [
+export def "replace-core-v1-persistent-volume-status" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9674,7 +9674,7 @@ export def "persistentvolumes-status update-persistent-volume-by-name-1" [
 #
 # GET /api/v1/pods
 # operationId: listCoreV1PodForAllNamespaces
-export def "pods list-for-namespaces" [
+export def "list-core-v1-pod-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9721,7 +9721,7 @@ export def "pods list-for-namespaces" [
 #
 # GET /api/v1/podtemplates
 # operationId: listCoreV1PodTemplateForAllNamespaces
-export def "podtemplates list-pod-template-for-namespaces" [
+export def "list-core-v1-pod-template-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9768,7 +9768,7 @@ export def "podtemplates list-pod-template-for-namespaces" [
 #
 # GET /api/v1/replicationcontrollers
 # operationId: listCoreV1ReplicationControllerForAllNamespaces
-export def "replicationcontrollers list-replication-controller-for-namespaces" [
+export def "list-core-v1-replication-controller-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9815,7 +9815,7 @@ export def "replicationcontrollers list-replication-controller-for-namespaces" [
 #
 # GET /api/v1/resourcequotas
 # operationId: listCoreV1ResourceQuotaForAllNamespaces
-export def "resourcequotas list-resource-quota-for-namespaces" [
+export def "list-core-v1-resource-quota-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9862,7 +9862,7 @@ export def "resourcequotas list-resource-quota-for-namespaces" [
 #
 # GET /api/v1/secrets
 # operationId: listCoreV1SecretForAllNamespaces
-export def "secrets list-for-namespaces" [
+export def "list-core-v1-secret-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9909,7 +9909,7 @@ export def "secrets list-for-namespaces" [
 #
 # GET /api/v1/serviceaccounts
 # operationId: listCoreV1ServiceAccountForAllNamespaces
-export def "serviceaccounts list-service-account-for-namespaces" [
+export def "list-core-v1-service-account-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9956,7 +9956,7 @@ export def "serviceaccounts list-service-account-for-namespaces" [
 #
 # GET /api/v1/services
 # operationId: listCoreV1ServiceForAllNamespaces
-export def "services list-for-namespaces" [
+export def "list-core-v1-service-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10003,7 +10003,7 @@ export def "services list-for-namespaces" [
 #
 # GET /api/v1/watch/configmaps
 # operationId: watchCoreV1ConfigMapListForAllNamespaces
-export def "watch-configmaps list-config-map-for-namespaces" [
+export def "watch-core-v1-config-map-list-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10050,7 +10050,7 @@ export def "watch-configmaps list-config-map-for-namespaces" [
 #
 # GET /api/v1/watch/endpoints
 # operationId: watchCoreV1EndpointsListForAllNamespaces
-export def "watch-endpoints list-for-namespaces" [
+export def "watch-core-v1-endpoints-list-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10097,7 +10097,7 @@ export def "watch-endpoints list-for-namespaces" [
 #
 # GET /api/v1/watch/events
 # operationId: watchCoreV1EventListForAllNamespaces
-export def "watch-events list-for-namespaces" [
+export def "watch-core-v1-event-list-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10144,7 +10144,7 @@ export def "watch-events list-for-namespaces" [
 #
 # GET /api/v1/watch/limitranges
 # operationId: watchCoreV1LimitRangeListForAllNamespaces
-export def "watch-limitranges list-limit-range-for-namespaces" [
+export def "watch-core-v1-limit-range-list-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10191,7 +10191,7 @@ export def "watch-limitranges list-limit-range-for-namespaces" [
 #
 # GET /api/v1/watch/namespaces
 # operationId: watchCoreV1NamespaceList
-export def "watch-namespaces list" [
+export def "watch-core-v1-namespace-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10238,7 +10238,7 @@ export def "watch-namespaces list" [
 #
 # GET /api/v1/watch/namespaces/{namespace}/configmaps
 # operationId: watchCoreV1NamespacedConfigMapList
-export def "watch-namespaces-configmaps list-config-map" [
+export def "watch-core-v1-namespaced-config-map-list" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10287,7 +10287,7 @@ export def "watch-namespaces-configmaps list-config-map" [
 #
 # GET /api/v1/watch/namespaces/{namespace}/configmaps/{name}
 # operationId: watchCoreV1NamespacedConfigMap
-export def "watch-namespaces-configmaps watch-config-map" [
+export def "watch-core-v1-namespaced-config-map" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10338,7 +10338,7 @@ export def "watch-namespaces-configmaps watch-config-map" [
 #
 # GET /api/v1/watch/namespaces/{namespace}/endpoints
 # operationId: watchCoreV1NamespacedEndpointsList
-export def "watch-namespaces-endpoints list" [
+export def "watch-core-v1-namespaced-endpoints-list" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10387,7 +10387,7 @@ export def "watch-namespaces-endpoints list" [
 #
 # GET /api/v1/watch/namespaces/{namespace}/endpoints/{name}
 # operationId: watchCoreV1NamespacedEndpoints
-export def "watch-namespaces-endpoints watch" [
+export def "watch-core-v1-namespaced-endpoints" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10438,7 +10438,7 @@ export def "watch-namespaces-endpoints watch" [
 #
 # GET /api/v1/watch/namespaces/{namespace}/events
 # operationId: watchCoreV1NamespacedEventList
-export def "watch-namespaces-events list" [
+export def "watch-core-v1-namespaced-event-list" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10487,7 +10487,7 @@ export def "watch-namespaces-events list" [
 #
 # GET /api/v1/watch/namespaces/{namespace}/events/{name}
 # operationId: watchCoreV1NamespacedEvent
-export def "watch-namespaces-events watch" [
+export def "watch-core-v1-namespaced-event" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10538,7 +10538,7 @@ export def "watch-namespaces-events watch" [
 #
 # GET /api/v1/watch/namespaces/{namespace}/limitranges
 # operationId: watchCoreV1NamespacedLimitRangeList
-export def "watch-namespaces-limitranges list-limit-range" [
+export def "watch-core-v1-namespaced-limit-range-list" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10587,7 +10587,7 @@ export def "watch-namespaces-limitranges list-limit-range" [
 #
 # GET /api/v1/watch/namespaces/{namespace}/limitranges/{name}
 # operationId: watchCoreV1NamespacedLimitRange
-export def "watch-namespaces-limitranges watch-limit-range" [
+export def "watch-core-v1-namespaced-limit-range" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10638,7 +10638,7 @@ export def "watch-namespaces-limitranges watch-limit-range" [
 #
 # GET /api/v1/watch/namespaces/{namespace}/persistentvolumeclaims
 # operationId: watchCoreV1NamespacedPersistentVolumeClaimList
-export def "watch-namespaces-persistentvolumeclaims list-persistent-volume-claim" [
+export def "watch-core-v1-namespaced-persistent-volume-claim-list" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10687,7 +10687,7 @@ export def "watch-namespaces-persistentvolumeclaims list-persistent-volume-claim
 #
 # GET /api/v1/watch/namespaces/{namespace}/persistentvolumeclaims/{name}
 # operationId: watchCoreV1NamespacedPersistentVolumeClaim
-export def "watch-namespaces-persistentvolumeclaims watch-persistent-volume-claim" [
+export def "watch-core-v1-namespaced-persistent-volume-claim" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10738,7 +10738,7 @@ export def "watch-namespaces-persistentvolumeclaims watch-persistent-volume-clai
 #
 # GET /api/v1/watch/namespaces/{namespace}/pods
 # operationId: watchCoreV1NamespacedPodList
-export def "watch-namespaces-pods list" [
+export def "watch-core-v1-namespaced-pod-list" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10787,7 +10787,7 @@ export def "watch-namespaces-pods list" [
 #
 # GET /api/v1/watch/namespaces/{namespace}/pods/{name}
 # operationId: watchCoreV1NamespacedPod
-export def "watch-namespaces-pods watch" [
+export def "watch-core-v1-namespaced-pod" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10838,7 +10838,7 @@ export def "watch-namespaces-pods watch" [
 #
 # GET /api/v1/watch/namespaces/{namespace}/podtemplates
 # operationId: watchCoreV1NamespacedPodTemplateList
-export def "watch-namespaces-podtemplates list-pod-template" [
+export def "watch-core-v1-namespaced-pod-template-list" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10887,7 +10887,7 @@ export def "watch-namespaces-podtemplates list-pod-template" [
 #
 # GET /api/v1/watch/namespaces/{namespace}/podtemplates/{name}
 # operationId: watchCoreV1NamespacedPodTemplate
-export def "watch-namespaces-podtemplates watch-pod-template" [
+export def "watch-core-v1-namespaced-pod-template" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10938,7 +10938,7 @@ export def "watch-namespaces-podtemplates watch-pod-template" [
 #
 # GET /api/v1/watch/namespaces/{namespace}/replicationcontrollers
 # operationId: watchCoreV1NamespacedReplicationControllerList
-export def "watch-namespaces-replicationcontrollers list-replication-controller" [
+export def "watch-core-v1-namespaced-replication-controller-list" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10987,7 +10987,7 @@ export def "watch-namespaces-replicationcontrollers list-replication-controller"
 #
 # GET /api/v1/watch/namespaces/{namespace}/replicationcontrollers/{name}
 # operationId: watchCoreV1NamespacedReplicationController
-export def "watch-namespaces-replicationcontrollers watch-replication-controller" [
+export def "watch-core-v1-namespaced-replication-controller" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11038,7 +11038,7 @@ export def "watch-namespaces-replicationcontrollers watch-replication-controller
 #
 # GET /api/v1/watch/namespaces/{namespace}/resourcequotas
 # operationId: watchCoreV1NamespacedResourceQuotaList
-export def "watch-namespaces-resourcequotas list-resource-quota" [
+export def "watch-core-v1-namespaced-resource-quota-list" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11087,7 +11087,7 @@ export def "watch-namespaces-resourcequotas list-resource-quota" [
 #
 # GET /api/v1/watch/namespaces/{namespace}/resourcequotas/{name}
 # operationId: watchCoreV1NamespacedResourceQuota
-export def "watch-namespaces-resourcequotas watch-resource-quota" [
+export def "watch-core-v1-namespaced-resource-quota" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11138,7 +11138,7 @@ export def "watch-namespaces-resourcequotas watch-resource-quota" [
 #
 # GET /api/v1/watch/namespaces/{namespace}/secrets
 # operationId: watchCoreV1NamespacedSecretList
-export def "watch-namespaces-secrets list" [
+export def "watch-core-v1-namespaced-secret-list" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11187,7 +11187,7 @@ export def "watch-namespaces-secrets list" [
 #
 # GET /api/v1/watch/namespaces/{namespace}/secrets/{name}
 # operationId: watchCoreV1NamespacedSecret
-export def "watch-namespaces-secrets watch" [
+export def "watch-core-v1-namespaced-secret" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11238,7 +11238,7 @@ export def "watch-namespaces-secrets watch" [
 #
 # GET /api/v1/watch/namespaces/{namespace}/serviceaccounts
 # operationId: watchCoreV1NamespacedServiceAccountList
-export def "watch-namespaces-serviceaccounts list-service-account" [
+export def "watch-core-v1-namespaced-service-account-list" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11287,7 +11287,7 @@ export def "watch-namespaces-serviceaccounts list-service-account" [
 #
 # GET /api/v1/watch/namespaces/{namespace}/serviceaccounts/{name}
 # operationId: watchCoreV1NamespacedServiceAccount
-export def "watch-namespaces-serviceaccounts watch-service-account" [
+export def "watch-core-v1-namespaced-service-account" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11338,7 +11338,7 @@ export def "watch-namespaces-serviceaccounts watch-service-account" [
 #
 # GET /api/v1/watch/namespaces/{namespace}/services
 # operationId: watchCoreV1NamespacedServiceList
-export def "watch-namespaces-services list" [
+export def "watch-core-v1-namespaced-service-list" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11387,7 +11387,7 @@ export def "watch-namespaces-services list" [
 #
 # GET /api/v1/watch/namespaces/{namespace}/services/{name}
 # operationId: watchCoreV1NamespacedService
-export def "watch-namespaces-services watch" [
+export def "watch-core-v1-namespaced-service" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11438,7 +11438,7 @@ export def "watch-namespaces-services watch" [
 #
 # GET /api/v1/watch/namespaces/{name}
 # operationId: watchCoreV1Namespace
-export def "watch-namespaces watch" [
+export def "watch-core-v1-namespace" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11487,7 +11487,7 @@ export def "watch-namespaces watch" [
 #
 # GET /api/v1/watch/nodes
 # operationId: watchCoreV1NodeList
-export def "watch-nodes list" [
+export def "watch-core-v1-node-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11534,7 +11534,7 @@ export def "watch-nodes list" [
 #
 # GET /api/v1/watch/nodes/{name}
 # operationId: watchCoreV1Node
-export def "watch-nodes watch" [
+export def "watch-core-v1-node" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11583,7 +11583,7 @@ export def "watch-nodes watch" [
 #
 # GET /api/v1/watch/persistentvolumeclaims
 # operationId: watchCoreV1PersistentVolumeClaimListForAllNamespaces
-export def "watch-persistentvolumeclaims list-persistent-volume-claim-for-namespaces" [
+export def "watch-core-v1-persistent-volume-claim-list-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11630,7 +11630,7 @@ export def "watch-persistentvolumeclaims list-persistent-volume-claim-for-namesp
 #
 # GET /api/v1/watch/persistentvolumes
 # operationId: watchCoreV1PersistentVolumeList
-export def "watch-persistentvolumes list-persistent-volume" [
+export def "watch-core-v1-persistent-volume-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11677,7 +11677,7 @@ export def "watch-persistentvolumes list-persistent-volume" [
 #
 # GET /api/v1/watch/persistentvolumes/{name}
 # operationId: watchCoreV1PersistentVolume
-export def "watch-persistentvolumes watch-persistent-volume" [
+export def "watch-core-v1-persistent-volume" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11726,7 +11726,7 @@ export def "watch-persistentvolumes watch-persistent-volume" [
 #
 # GET /api/v1/watch/pods
 # operationId: watchCoreV1PodListForAllNamespaces
-export def "watch-pods list-for-namespaces" [
+export def "watch-core-v1-pod-list-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11773,7 +11773,7 @@ export def "watch-pods list-for-namespaces" [
 #
 # GET /api/v1/watch/podtemplates
 # operationId: watchCoreV1PodTemplateListForAllNamespaces
-export def "watch-podtemplates list-pod-template-for-namespaces" [
+export def "watch-core-v1-pod-template-list-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11820,7 +11820,7 @@ export def "watch-podtemplates list-pod-template-for-namespaces" [
 #
 # GET /api/v1/watch/replicationcontrollers
 # operationId: watchCoreV1ReplicationControllerListForAllNamespaces
-export def "watch-replicationcontrollers list-replication-controller-for-namespaces" [
+export def "watch-core-v1-replication-controller-list-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11867,7 +11867,7 @@ export def "watch-replicationcontrollers list-replication-controller-for-namespa
 #
 # GET /api/v1/watch/resourcequotas
 # operationId: watchCoreV1ResourceQuotaListForAllNamespaces
-export def "watch-resourcequotas list-resource-quota-for-namespaces" [
+export def "watch-core-v1-resource-quota-list-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11914,7 +11914,7 @@ export def "watch-resourcequotas list-resource-quota-for-namespaces" [
 #
 # GET /api/v1/watch/secrets
 # operationId: watchCoreV1SecretListForAllNamespaces
-export def "watch-secrets list-for-namespaces" [
+export def "watch-core-v1-secret-list-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11961,7 +11961,7 @@ export def "watch-secrets list-for-namespaces" [
 #
 # GET /api/v1/watch/serviceaccounts
 # operationId: watchCoreV1ServiceAccountListForAllNamespaces
-export def "watch-serviceaccounts list-service-account-for-namespaces" [
+export def "watch-core-v1-service-account-list-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12008,7 +12008,7 @@ export def "watch-serviceaccounts list-service-account-for-namespaces" [
 #
 # GET /api/v1/watch/services
 # operationId: watchCoreV1ServiceListForAllNamespaces
-export def "watch-services list-for-namespaces" [
+export def "watch-core-v1-service-list-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12055,7 +12055,7 @@ export def "watch-services list-for-namespaces" [
 #
 # GET /apis/
 # operationId: getAPIVersions
-export def "apis get-versions" [
+export def "get-api-versions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12090,7 +12090,7 @@ export def "apis get-versions" [
 #
 # GET /apis/admissionregistration.k8s.io/
 # operationId: getAdmissionregistrationAPIGroup
-export def "apis-admissionregistration-k8s-io get-group" [
+export def "get-admissionregistration-api-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12125,7 +12125,7 @@ export def "apis-admissionregistration-k8s-io get-group" [
 #
 # GET /apis/admissionregistration.k8s.io/v1/
 # operationId: getAdmissionregistrationV1APIResources
-export def "apis-admissionregistration-k8s-io get-resources" [
+export def "get-admissionregistration-v1api-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12161,7 +12161,7 @@ export def "apis-admissionregistration-k8s-io get-resources" [
 # DELETE /apis/admissionregistration.k8s.io/v1/mutatingwebhookconfigurations
 # operationId: deleteAdmissionregistrationV1CollectionMutatingWebhookConfiguration
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-admissionregistration-k8s-io-mutatingwebhookconfigurations delete-collection-mutating-webhook-configuration" [
+export def "delete-admissionregistration-v1-collection-mutating-webhook-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12220,7 +12220,7 @@ export def "apis-admissionregistration-k8s-io-mutatingwebhookconfigurations dele
 #
 # GET /apis/admissionregistration.k8s.io/v1/mutatingwebhookconfigurations
 # operationId: listAdmissionregistrationV1MutatingWebhookConfiguration
-export def "apis-admissionregistration-k8s-io-mutatingwebhookconfigurations list-mutating-webhook-configuration" [
+export def "list-admissionregistration-v1-mutating-webhook-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12269,7 +12269,7 @@ export def "apis-admissionregistration-k8s-io-mutatingwebhookconfigurations list
 # operationId: createAdmissionregistrationV1MutatingWebhookConfiguration
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --webhooks item shape: {admissionReviewVersions: list<string>, clientConfig: record, failurePolicy?: string, matchPolicy?: string, name: string, namespaceSelector?: record, objectSelector?: record, reinvocationPolicy?: string, rules?: list, sideEffects: string, timeoutSeconds?: int}
-export def "apis-admissionregistration-k8s-io-mutatingwebhookconfigurations create-mutating-webhook-configuration" [
+export def "create-admissionregistration-v1-mutating-webhook-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12317,7 +12317,7 @@ export def "apis-admissionregistration-k8s-io-mutatingwebhookconfigurations crea
 # DELETE /apis/admissionregistration.k8s.io/v1/mutatingwebhookconfigurations/{name}
 # operationId: deleteAdmissionregistrationV1MutatingWebhookConfiguration
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-admissionregistration-k8s-io-mutatingwebhookconfigurations delete-mutating-webhook-configuration" [
+export def "delete-admissionregistration-v1-mutating-webhook-configuration" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12370,7 +12370,7 @@ export def "apis-admissionregistration-k8s-io-mutatingwebhookconfigurations dele
 #
 # GET /apis/admissionregistration.k8s.io/v1/mutatingwebhookconfigurations/{name}
 # operationId: readAdmissionregistrationV1MutatingWebhookConfiguration
-export def "apis-admissionregistration-k8s-io-mutatingwebhookconfigurations get-mutating-webhook-configuration" [
+export def "read-admissionregistration-v1-mutating-webhook-configuration" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12409,7 +12409,7 @@ export def "apis-admissionregistration-k8s-io-mutatingwebhookconfigurations get-
 #
 # PATCH /apis/admissionregistration.k8s.io/v1/mutatingwebhookconfigurations/{name}
 # operationId: patchAdmissionregistrationV1MutatingWebhookConfiguration
-export def "apis-admissionregistration-k8s-io-mutatingwebhookconfigurations update-mutating-webhook-configuration-by-name" [
+export def "patch-admissionregistration-v1-mutating-webhook-configuration" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12458,7 +12458,7 @@ export def "apis-admissionregistration-k8s-io-mutatingwebhookconfigurations upda
 # operationId: replaceAdmissionregistrationV1MutatingWebhookConfiguration
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --webhooks item shape: {admissionReviewVersions: list<string>, clientConfig: record, failurePolicy?: string, matchPolicy?: string, name: string, namespaceSelector?: record, objectSelector?: record, reinvocationPolicy?: string, rules?: list, sideEffects: string, timeoutSeconds?: int}
-export def "apis-admissionregistration-k8s-io-mutatingwebhookconfigurations update-mutating-webhook-configuration-by-name-1" [
+export def "replace-admissionregistration-v1-mutating-webhook-configuration" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12508,7 +12508,7 @@ export def "apis-admissionregistration-k8s-io-mutatingwebhookconfigurations upda
 # DELETE /apis/admissionregistration.k8s.io/v1/validatingwebhookconfigurations
 # operationId: deleteAdmissionregistrationV1CollectionValidatingWebhookConfiguration
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-admissionregistration-k8s-io-validatingwebhookconfigurations delete-collection-validating-webhook-configuration" [
+export def "delete-admissionregistration-v1-collection-validating-webhook-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12567,7 +12567,7 @@ export def "apis-admissionregistration-k8s-io-validatingwebhookconfigurations de
 #
 # GET /apis/admissionregistration.k8s.io/v1/validatingwebhookconfigurations
 # operationId: listAdmissionregistrationV1ValidatingWebhookConfiguration
-export def "apis-admissionregistration-k8s-io-validatingwebhookconfigurations list-validating-webhook-configuration" [
+export def "list-admissionregistration-v1-validating-webhook-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12616,7 +12616,7 @@ export def "apis-admissionregistration-k8s-io-validatingwebhookconfigurations li
 # operationId: createAdmissionregistrationV1ValidatingWebhookConfiguration
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --webhooks item shape: {admissionReviewVersions: list<string>, clientConfig: record, failurePolicy?: string, matchPolicy?: string, name: string, namespaceSelector?: record, objectSelector?: record, rules?: list, sideEffects: string, timeoutSeconds?: int}
-export def "apis-admissionregistration-k8s-io-validatingwebhookconfigurations create-validating-webhook-configuration" [
+export def "create-admissionregistration-v1-validating-webhook-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12664,7 +12664,7 @@ export def "apis-admissionregistration-k8s-io-validatingwebhookconfigurations cr
 # DELETE /apis/admissionregistration.k8s.io/v1/validatingwebhookconfigurations/{name}
 # operationId: deleteAdmissionregistrationV1ValidatingWebhookConfiguration
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-admissionregistration-k8s-io-validatingwebhookconfigurations delete-validating-webhook-configuration" [
+export def "delete-admissionregistration-v1-validating-webhook-configuration" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12717,7 +12717,7 @@ export def "apis-admissionregistration-k8s-io-validatingwebhookconfigurations de
 #
 # GET /apis/admissionregistration.k8s.io/v1/validatingwebhookconfigurations/{name}
 # operationId: readAdmissionregistrationV1ValidatingWebhookConfiguration
-export def "apis-admissionregistration-k8s-io-validatingwebhookconfigurations get-validating-webhook-configuration" [
+export def "read-admissionregistration-v1-validating-webhook-configuration" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12756,7 +12756,7 @@ export def "apis-admissionregistration-k8s-io-validatingwebhookconfigurations ge
 #
 # PATCH /apis/admissionregistration.k8s.io/v1/validatingwebhookconfigurations/{name}
 # operationId: patchAdmissionregistrationV1ValidatingWebhookConfiguration
-export def "apis-admissionregistration-k8s-io-validatingwebhookconfigurations update-validating-webhook-configuration-by-name" [
+export def "patch-admissionregistration-v1-validating-webhook-configuration" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12805,7 +12805,7 @@ export def "apis-admissionregistration-k8s-io-validatingwebhookconfigurations up
 # operationId: replaceAdmissionregistrationV1ValidatingWebhookConfiguration
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --webhooks item shape: {admissionReviewVersions: list<string>, clientConfig: record, failurePolicy?: string, matchPolicy?: string, name: string, namespaceSelector?: record, objectSelector?: record, rules?: list, sideEffects: string, timeoutSeconds?: int}
-export def "apis-admissionregistration-k8s-io-validatingwebhookconfigurations update-validating-webhook-configuration-by-name-1" [
+export def "replace-admissionregistration-v1-validating-webhook-configuration" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12854,7 +12854,7 @@ export def "apis-admissionregistration-k8s-io-validatingwebhookconfigurations up
 #
 # GET /apis/admissionregistration.k8s.io/v1/watch/mutatingwebhookconfigurations
 # operationId: watchAdmissionregistrationV1MutatingWebhookConfigurationList
-export def "apis-admissionregistration-k8s-io-watch-mutatingwebhookconfigurations list-mutating-webhook-configuration" [
+export def "watch-admissionregistration-v1-mutating-webhook-configuration-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12901,7 +12901,7 @@ export def "apis-admissionregistration-k8s-io-watch-mutatingwebhookconfiguration
 #
 # GET /apis/admissionregistration.k8s.io/v1/watch/mutatingwebhookconfigurations/{name}
 # operationId: watchAdmissionregistrationV1MutatingWebhookConfiguration
-export def "apis-admissionregistration-k8s-io-watch-mutatingwebhookconfigurations watch-mutating-webhook-configuration" [
+export def "watch-admissionregistration-v1-mutating-webhook-configuration" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12950,7 +12950,7 @@ export def "apis-admissionregistration-k8s-io-watch-mutatingwebhookconfiguration
 #
 # GET /apis/admissionregistration.k8s.io/v1/watch/validatingwebhookconfigurations
 # operationId: watchAdmissionregistrationV1ValidatingWebhookConfigurationList
-export def "apis-admissionregistration-k8s-io-watch-validatingwebhookconfigurations list-validating-webhook-configuration" [
+export def "watch-admissionregistration-v1-validating-webhook-configuration-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12997,7 +12997,7 @@ export def "apis-admissionregistration-k8s-io-watch-validatingwebhookconfigurati
 #
 # GET /apis/admissionregistration.k8s.io/v1/watch/validatingwebhookconfigurations/{name}
 # operationId: watchAdmissionregistrationV1ValidatingWebhookConfiguration
-export def "apis-admissionregistration-k8s-io-watch-validatingwebhookconfigurations watch-validating-webhook-configuration" [
+export def "watch-admissionregistration-v1-validating-webhook-configuration" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13046,7 +13046,7 @@ export def "apis-admissionregistration-k8s-io-watch-validatingwebhookconfigurati
 #
 # GET /apis/admissionregistration.k8s.io/v1alpha1/
 # operationId: getAdmissionregistrationV1alpha1APIResources
-export def "apis-admissionregistration-k8s-io-v1alpha1 get-resources" [
+export def "get-admissionregistration-v1alpha1-api-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13082,7 +13082,7 @@ export def "apis-admissionregistration-k8s-io-v1alpha1 get-resources" [
 # DELETE /apis/admissionregistration.k8s.io/v1alpha1/validatingadmissionpolicies
 # operationId: deleteAdmissionregistrationV1alpha1CollectionValidatingAdmissionPolicy
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-admissionregistration-k8s-io-v1alpha1-validatingadmissionpolicies delete-collection-validating-admission-policy" [
+export def "delete-admissionregistration-v1alpha1-collection-validating-admission-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13141,7 +13141,7 @@ export def "apis-admissionregistration-k8s-io-v1alpha1-validatingadmissionpolici
 #
 # GET /apis/admissionregistration.k8s.io/v1alpha1/validatingadmissionpolicies
 # operationId: listAdmissionregistrationV1alpha1ValidatingAdmissionPolicy
-export def "apis-admissionregistration-k8s-io-v1alpha1-validatingadmissionpolicies list-validating-admission-policy" [
+export def "list-admissionregistration-v1alpha1-validating-admission-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13190,7 +13190,7 @@ export def "apis-admissionregistration-k8s-io-v1alpha1-validatingadmissionpolici
 # operationId: createAdmissionregistrationV1alpha1ValidatingAdmissionPolicy
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {failurePolicy?: string, matchConstraints?: record, paramKind?: record, validations: list}
-export def "apis-admissionregistration-k8s-io-v1alpha1-validatingadmissionpolicies create-validating-admission-policy" [
+export def "create-admissionregistration-v1alpha1-validating-admission-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13238,7 +13238,7 @@ export def "apis-admissionregistration-k8s-io-v1alpha1-validatingadmissionpolici
 # DELETE /apis/admissionregistration.k8s.io/v1alpha1/validatingadmissionpolicies/{name}
 # operationId: deleteAdmissionregistrationV1alpha1ValidatingAdmissionPolicy
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-admissionregistration-k8s-io-v1alpha1-validatingadmissionpolicies delete-validating-admission-policy" [
+export def "delete-admissionregistration-v1alpha1-validating-admission-policy" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13291,7 +13291,7 @@ export def "apis-admissionregistration-k8s-io-v1alpha1-validatingadmissionpolici
 #
 # GET /apis/admissionregistration.k8s.io/v1alpha1/validatingadmissionpolicies/{name}
 # operationId: readAdmissionregistrationV1alpha1ValidatingAdmissionPolicy
-export def "apis-admissionregistration-k8s-io-v1alpha1-validatingadmissionpolicies get-validating-admission-policy" [
+export def "read-admissionregistration-v1alpha1-validating-admission-policy" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13330,7 +13330,7 @@ export def "apis-admissionregistration-k8s-io-v1alpha1-validatingadmissionpolici
 #
 # PATCH /apis/admissionregistration.k8s.io/v1alpha1/validatingadmissionpolicies/{name}
 # operationId: patchAdmissionregistrationV1alpha1ValidatingAdmissionPolicy
-export def "apis-admissionregistration-k8s-io-v1alpha1-validatingadmissionpolicies update-validating-admission-policy-by-name" [
+export def "patch-admissionregistration-v1alpha1-validating-admission-policy" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13379,7 +13379,7 @@ export def "apis-admissionregistration-k8s-io-v1alpha1-validatingadmissionpolici
 # operationId: replaceAdmissionregistrationV1alpha1ValidatingAdmissionPolicy
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {failurePolicy?: string, matchConstraints?: record, paramKind?: record, validations: list}
-export def "apis-admissionregistration-k8s-io-v1alpha1-validatingadmissionpolicies update-validating-admission-policy-by-name-1" [
+export def "replace-admissionregistration-v1alpha1-validating-admission-policy" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13429,7 +13429,7 @@ export def "apis-admissionregistration-k8s-io-v1alpha1-validatingadmissionpolici
 # DELETE /apis/admissionregistration.k8s.io/v1alpha1/validatingadmissionpolicybindings
 # operationId: deleteAdmissionregistrationV1alpha1CollectionValidatingAdmissionPolicyBinding
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-admissionregistration-k8s-io-v1alpha1-validatingadmissionpolicybindings delete-collection-validating-admission-policy-binding" [
+export def "delete-admissionregistration-v1alpha1-collection-validating-admission-policy-binding" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13488,7 +13488,7 @@ export def "apis-admissionregistration-k8s-io-v1alpha1-validatingadmissionpolicy
 #
 # GET /apis/admissionregistration.k8s.io/v1alpha1/validatingadmissionpolicybindings
 # operationId: listAdmissionregistrationV1alpha1ValidatingAdmissionPolicyBinding
-export def "apis-admissionregistration-k8s-io-v1alpha1-validatingadmissionpolicybindings list-validating-admission-policy-binding" [
+export def "list-admissionregistration-v1alpha1-validating-admission-policy-binding" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13537,7 +13537,7 @@ export def "apis-admissionregistration-k8s-io-v1alpha1-validatingadmissionpolicy
 # operationId: createAdmissionregistrationV1alpha1ValidatingAdmissionPolicyBinding
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {matchResources?: record, paramRef?: record, policyName?: string}
-export def "apis-admissionregistration-k8s-io-v1alpha1-validatingadmissionpolicybindings create-validating-admission-policy-binding" [
+export def "create-admissionregistration-v1alpha1-validating-admission-policy-binding" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13585,7 +13585,7 @@ export def "apis-admissionregistration-k8s-io-v1alpha1-validatingadmissionpolicy
 # DELETE /apis/admissionregistration.k8s.io/v1alpha1/validatingadmissionpolicybindings/{name}
 # operationId: deleteAdmissionregistrationV1alpha1ValidatingAdmissionPolicyBinding
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-admissionregistration-k8s-io-v1alpha1-validatingadmissionpolicybindings delete-validating-admission-policy-binding" [
+export def "delete-admissionregistration-v1alpha1-validating-admission-policy-binding" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13638,7 +13638,7 @@ export def "apis-admissionregistration-k8s-io-v1alpha1-validatingadmissionpolicy
 #
 # GET /apis/admissionregistration.k8s.io/v1alpha1/validatingadmissionpolicybindings/{name}
 # operationId: readAdmissionregistrationV1alpha1ValidatingAdmissionPolicyBinding
-export def "apis-admissionregistration-k8s-io-v1alpha1-validatingadmissionpolicybindings get-validating-admission-policy-binding" [
+export def "read-admissionregistration-v1alpha1-validating-admission-policy-binding" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13677,7 +13677,7 @@ export def "apis-admissionregistration-k8s-io-v1alpha1-validatingadmissionpolicy
 #
 # PATCH /apis/admissionregistration.k8s.io/v1alpha1/validatingadmissionpolicybindings/{name}
 # operationId: patchAdmissionregistrationV1alpha1ValidatingAdmissionPolicyBinding
-export def "apis-admissionregistration-k8s-io-v1alpha1-validatingadmissionpolicybindings update-validating-admission-policy-binding-by-name" [
+export def "patch-admissionregistration-v1alpha1-validating-admission-policy-binding" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13726,7 +13726,7 @@ export def "apis-admissionregistration-k8s-io-v1alpha1-validatingadmissionpolicy
 # operationId: replaceAdmissionregistrationV1alpha1ValidatingAdmissionPolicyBinding
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {matchResources?: record, paramRef?: record, policyName?: string}
-export def "apis-admissionregistration-k8s-io-v1alpha1-validatingadmissionpolicybindings update-validating-admission-policy-binding-by-name-1" [
+export def "replace-admissionregistration-v1alpha1-validating-admission-policy-binding" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13775,7 +13775,7 @@ export def "apis-admissionregistration-k8s-io-v1alpha1-validatingadmissionpolicy
 #
 # GET /apis/admissionregistration.k8s.io/v1alpha1/watch/validatingadmissionpolicies
 # operationId: watchAdmissionregistrationV1alpha1ValidatingAdmissionPolicyList
-export def "apis-admissionregistration-k8s-io-v1alpha1-watch-validatingadmissionpolicies list-validating-admission-policy" [
+export def "watch-admissionregistration-v1alpha1-validating-admission-policy-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13822,7 +13822,7 @@ export def "apis-admissionregistration-k8s-io-v1alpha1-watch-validatingadmission
 #
 # GET /apis/admissionregistration.k8s.io/v1alpha1/watch/validatingadmissionpolicies/{name}
 # operationId: watchAdmissionregistrationV1alpha1ValidatingAdmissionPolicy
-export def "apis-admissionregistration-k8s-io-v1alpha1-watch-validatingadmissionpolicies watch-validating-admission-policy" [
+export def "watch-admissionregistration-v1alpha1-validating-admission-policy" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13871,7 +13871,7 @@ export def "apis-admissionregistration-k8s-io-v1alpha1-watch-validatingadmission
 #
 # GET /apis/admissionregistration.k8s.io/v1alpha1/watch/validatingadmissionpolicybindings
 # operationId: watchAdmissionregistrationV1alpha1ValidatingAdmissionPolicyBindingList
-export def "apis-admissionregistration-k8s-io-v1alpha1-watch-validatingadmissionpolicybindings list-validating-admission-policy-binding" [
+export def "watch-admissionregistration-v1alpha1-validating-admission-policy-binding-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13918,7 +13918,7 @@ export def "apis-admissionregistration-k8s-io-v1alpha1-watch-validatingadmission
 #
 # GET /apis/admissionregistration.k8s.io/v1alpha1/watch/validatingadmissionpolicybindings/{name}
 # operationId: watchAdmissionregistrationV1alpha1ValidatingAdmissionPolicyBinding
-export def "apis-admissionregistration-k8s-io-v1alpha1-watch-validatingadmissionpolicybindings watch-validating-admission-policy-binding" [
+export def "watch-admissionregistration-v1alpha1-validating-admission-policy-binding" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13967,7 +13967,7 @@ export def "apis-admissionregistration-k8s-io-v1alpha1-watch-validatingadmission
 #
 # GET /apis/apiextensions.k8s.io/
 # operationId: getApiextensionsAPIGroup
-export def "apis-apiextensions-k8s-io get-group" [
+export def "get-apiextensions-api-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14002,7 +14002,7 @@ export def "apis-apiextensions-k8s-io get-group" [
 #
 # GET /apis/apiextensions.k8s.io/v1/
 # operationId: getApiextensionsV1APIResources
-export def "apis-apiextensions-k8s-io get-resources" [
+export def "get-apiextensions-v1api-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14038,7 +14038,7 @@ export def "apis-apiextensions-k8s-io get-resources" [
 # DELETE /apis/apiextensions.k8s.io/v1/customresourcedefinitions
 # operationId: deleteApiextensionsV1CollectionCustomResourceDefinition
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-apiextensions-k8s-io-customresourcedefinitions delete-collection-custom-resource-definition" [
+export def "delete-apiextensions-v1-collection-custom-resource-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14097,7 +14097,7 @@ export def "apis-apiextensions-k8s-io-customresourcedefinitions delete-collectio
 #
 # GET /apis/apiextensions.k8s.io/v1/customresourcedefinitions
 # operationId: listApiextensionsV1CustomResourceDefinition
-export def "apis-apiextensions-k8s-io-customresourcedefinitions list-custom-resource-definition" [
+export def "list-apiextensions-v1-custom-resource-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14147,7 +14147,7 @@ export def "apis-apiextensions-k8s-io-customresourcedefinitions list-custom-reso
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {conversion?: record, group: string, names: record, preserveUnknownFields?: bool, scope: string, versions: list}
 # --status shape: {acceptedNames?: record, conditions?: list, storedVersions?: list<string>}
-export def "apis-apiextensions-k8s-io-customresourcedefinitions create-custom-resource-definition" [
+export def "create-apiextensions-v1-custom-resource-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14196,7 +14196,7 @@ export def "apis-apiextensions-k8s-io-customresourcedefinitions create-custom-re
 # DELETE /apis/apiextensions.k8s.io/v1/customresourcedefinitions/{name}
 # operationId: deleteApiextensionsV1CustomResourceDefinition
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-apiextensions-k8s-io-customresourcedefinitions delete-custom-resource-definition" [
+export def "delete-apiextensions-v1-custom-resource-definition" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14249,7 +14249,7 @@ export def "apis-apiextensions-k8s-io-customresourcedefinitions delete-custom-re
 #
 # GET /apis/apiextensions.k8s.io/v1/customresourcedefinitions/{name}
 # operationId: readApiextensionsV1CustomResourceDefinition
-export def "apis-apiextensions-k8s-io-customresourcedefinitions get-custom-resource-definition" [
+export def "read-apiextensions-v1-custom-resource-definition" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14288,7 +14288,7 @@ export def "apis-apiextensions-k8s-io-customresourcedefinitions get-custom-resou
 #
 # PATCH /apis/apiextensions.k8s.io/v1/customresourcedefinitions/{name}
 # operationId: patchApiextensionsV1CustomResourceDefinition
-export def "apis-apiextensions-k8s-io-customresourcedefinitions update-custom-resource-definition-by-name" [
+export def "patch-apiextensions-v1-custom-resource-definition" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14338,7 +14338,7 @@ export def "apis-apiextensions-k8s-io-customresourcedefinitions update-custom-re
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {conversion?: record, group: string, names: record, preserveUnknownFields?: bool, scope: string, versions: list}
 # --status shape: {acceptedNames?: record, conditions?: list, storedVersions?: list<string>}
-export def "apis-apiextensions-k8s-io-customresourcedefinitions update-custom-resource-definition-by-name-1" [
+export def "replace-apiextensions-v1-custom-resource-definition" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14388,7 +14388,7 @@ export def "apis-apiextensions-k8s-io-customresourcedefinitions update-custom-re
 #
 # GET /apis/apiextensions.k8s.io/v1/customresourcedefinitions/{name}/status
 # operationId: readApiextensionsV1CustomResourceDefinitionStatus
-export def "apis-apiextensions-k8s-io-customresourcedefinitions-status get-custom-resource-definition" [
+export def "read-apiextensions-v1-custom-resource-definition-status" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14427,7 +14427,7 @@ export def "apis-apiextensions-k8s-io-customresourcedefinitions-status get-custo
 #
 # PATCH /apis/apiextensions.k8s.io/v1/customresourcedefinitions/{name}/status
 # operationId: patchApiextensionsV1CustomResourceDefinitionStatus
-export def "apis-apiextensions-k8s-io-customresourcedefinitions-status update-custom-resource-definition-by-name" [
+export def "patch-apiextensions-v1-custom-resource-definition-status" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14477,7 +14477,7 @@ export def "apis-apiextensions-k8s-io-customresourcedefinitions-status update-cu
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {conversion?: record, group: string, names: record, preserveUnknownFields?: bool, scope: string, versions: list}
 # --status shape: {acceptedNames?: record, conditions?: list, storedVersions?: list<string>}
-export def "apis-apiextensions-k8s-io-customresourcedefinitions-status update-custom-resource-definition-by-name-1" [
+export def "replace-apiextensions-v1-custom-resource-definition-status" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14527,7 +14527,7 @@ export def "apis-apiextensions-k8s-io-customresourcedefinitions-status update-cu
 #
 # GET /apis/apiextensions.k8s.io/v1/watch/customresourcedefinitions
 # operationId: watchApiextensionsV1CustomResourceDefinitionList
-export def "apis-apiextensions-k8s-io-watch-customresourcedefinitions list-custom-resource-definition" [
+export def "watch-apiextensions-v1-custom-resource-definition-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14574,7 +14574,7 @@ export def "apis-apiextensions-k8s-io-watch-customresourcedefinitions list-custo
 #
 # GET /apis/apiextensions.k8s.io/v1/watch/customresourcedefinitions/{name}
 # operationId: watchApiextensionsV1CustomResourceDefinition
-export def "apis-apiextensions-k8s-io-watch-customresourcedefinitions watch-custom-resource-definition" [
+export def "watch-apiextensions-v1-custom-resource-definition" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14623,7 +14623,7 @@ export def "apis-apiextensions-k8s-io-watch-customresourcedefinitions watch-cust
 #
 # GET /apis/apiregistration.k8s.io/
 # operationId: getApiregistrationAPIGroup
-export def "apis-apiregistration-k8s-io get-group" [
+export def "get-apiregistration-api-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14658,7 +14658,7 @@ export def "apis-apiregistration-k8s-io get-group" [
 #
 # GET /apis/apiregistration.k8s.io/v1/
 # operationId: getApiregistrationV1APIResources
-export def "apis-apiregistration-k8s-io get-resources" [
+export def "get-apiregistration-v1api-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14694,7 +14694,7 @@ export def "apis-apiregistration-k8s-io get-resources" [
 # DELETE /apis/apiregistration.k8s.io/v1/apiservices
 # operationId: deleteApiregistrationV1CollectionAPIService
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-apiregistration-k8s-io-apiservices delete-collection-service" [
+export def "delete-apiregistration-v1-collection-api-service" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14753,7 +14753,7 @@ export def "apis-apiregistration-k8s-io-apiservices delete-collection-service" [
 #
 # GET /apis/apiregistration.k8s.io/v1/apiservices
 # operationId: listApiregistrationV1APIService
-export def "apis-apiregistration-k8s-io-apiservices list-service" [
+export def "list-apiregistration-v1api-service" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14803,7 +14803,7 @@ export def "apis-apiregistration-k8s-io-apiservices list-service" [
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {caBundle?: string, group?: string, groupPriorityMinimum: int, insecureSkipTLSVerify?: bool, service?: record, version?: string, versionPriority: int}
 # --status shape: {conditions?: list}
-export def "apis-apiregistration-k8s-io-apiservices create-service" [
+export def "create-apiregistration-v1api-service" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14852,7 +14852,7 @@ export def "apis-apiregistration-k8s-io-apiservices create-service" [
 # DELETE /apis/apiregistration.k8s.io/v1/apiservices/{name}
 # operationId: deleteApiregistrationV1APIService
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-apiregistration-k8s-io-apiservices delete-service" [
+export def "delete-apiregistration-v1api-service" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14905,7 +14905,7 @@ export def "apis-apiregistration-k8s-io-apiservices delete-service" [
 #
 # GET /apis/apiregistration.k8s.io/v1/apiservices/{name}
 # operationId: readApiregistrationV1APIService
-export def "apis-apiregistration-k8s-io-apiservices get-service" [
+export def "read-apiregistration-v1api-service" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14944,7 +14944,7 @@ export def "apis-apiregistration-k8s-io-apiservices get-service" [
 #
 # PATCH /apis/apiregistration.k8s.io/v1/apiservices/{name}
 # operationId: patchApiregistrationV1APIService
-export def "apis-apiregistration-k8s-io-apiservices update-service-by-name" [
+export def "patch-apiregistration-v1api-service" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14994,7 +14994,7 @@ export def "apis-apiregistration-k8s-io-apiservices update-service-by-name" [
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {caBundle?: string, group?: string, groupPriorityMinimum: int, insecureSkipTLSVerify?: bool, service?: record, version?: string, versionPriority: int}
 # --status shape: {conditions?: list}
-export def "apis-apiregistration-k8s-io-apiservices update-service-by-name-1" [
+export def "replace-apiregistration-v1api-service" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15044,7 +15044,7 @@ export def "apis-apiregistration-k8s-io-apiservices update-service-by-name-1" [
 #
 # GET /apis/apiregistration.k8s.io/v1/apiservices/{name}/status
 # operationId: readApiregistrationV1APIServiceStatus
-export def "apis-apiregistration-k8s-io-apiservices-status get-service" [
+export def "read-apiregistration-v1api-service-status" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15083,7 +15083,7 @@ export def "apis-apiregistration-k8s-io-apiservices-status get-service" [
 #
 # PATCH /apis/apiregistration.k8s.io/v1/apiservices/{name}/status
 # operationId: patchApiregistrationV1APIServiceStatus
-export def "apis-apiregistration-k8s-io-apiservices-status update-service-by-name" [
+export def "patch-apiregistration-v1api-service-status" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15133,7 +15133,7 @@ export def "apis-apiregistration-k8s-io-apiservices-status update-service-by-nam
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {caBundle?: string, group?: string, groupPriorityMinimum: int, insecureSkipTLSVerify?: bool, service?: record, version?: string, versionPriority: int}
 # --status shape: {conditions?: list}
-export def "apis-apiregistration-k8s-io-apiservices-status update-service-by-name-1" [
+export def "replace-apiregistration-v1api-service-status" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15183,7 +15183,7 @@ export def "apis-apiregistration-k8s-io-apiservices-status update-service-by-nam
 #
 # GET /apis/apiregistration.k8s.io/v1/watch/apiservices
 # operationId: watchApiregistrationV1APIServiceList
-export def "apis-apiregistration-k8s-io-watch-apiservices list-service" [
+export def "watch-apiregistration-v1api-service-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15230,7 +15230,7 @@ export def "apis-apiregistration-k8s-io-watch-apiservices list-service" [
 #
 # GET /apis/apiregistration.k8s.io/v1/watch/apiservices/{name}
 # operationId: watchApiregistrationV1APIService
-export def "apis-apiregistration-k8s-io-watch-apiservices watch-service" [
+export def "watch-apiregistration-v1api-service" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15279,7 +15279,7 @@ export def "apis-apiregistration-k8s-io-watch-apiservices watch-service" [
 #
 # GET /apis/apps/
 # operationId: getAppsAPIGroup
-export def "apis-apps get-group" [
+export def "get-apps-api-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15314,7 +15314,7 @@ export def "apis-apps get-group" [
 #
 # GET /apis/apps/v1/
 # operationId: getAppsV1APIResources
-export def "apis-apps get-resources" [
+export def "get-apps-v1api-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15349,7 +15349,7 @@ export def "apis-apps get-resources" [
 #
 # GET /apis/apps/v1/controllerrevisions
 # operationId: listAppsV1ControllerRevisionForAllNamespaces
-export def "apis-apps-controllerrevisions list-controller-revision-for-namespaces" [
+export def "list-apps-v1-controller-revision-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15396,7 +15396,7 @@ export def "apis-apps-controllerrevisions list-controller-revision-for-namespace
 #
 # GET /apis/apps/v1/daemonsets
 # operationId: listAppsV1DaemonSetForAllNamespaces
-export def "apis-apps-daemonsets list-daemon-update-for-namespaces" [
+export def "list-apps-v1-daemon-set-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15443,7 +15443,7 @@ export def "apis-apps-daemonsets list-daemon-update-for-namespaces" [
 #
 # GET /apis/apps/v1/deployments
 # operationId: listAppsV1DeploymentForAllNamespaces
-export def "apis-apps-deployments list-for-namespaces" [
+export def "list-apps-v1-deployment-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15491,7 +15491,7 @@ export def "apis-apps-deployments list-for-namespaces" [
 # DELETE /apis/apps/v1/namespaces/{namespace}/controllerrevisions
 # operationId: deleteAppsV1CollectionNamespacedControllerRevision
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-apps-namespaces-controllerrevisions delete-collection-controller-revision" [
+export def "delete-apps-v1-collection-namespaced-controller-revision" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15552,7 +15552,7 @@ export def "apis-apps-namespaces-controllerrevisions delete-collection-controlle
 #
 # GET /apis/apps/v1/namespaces/{namespace}/controllerrevisions
 # operationId: listAppsV1NamespacedControllerRevision
-export def "apis-apps-namespaces-controllerrevisions list-controller-revision" [
+export def "list-apps-v1-namespaced-controller-revision" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15602,7 +15602,7 @@ export def "apis-apps-namespaces-controllerrevisions list-controller-revision" [
 # POST /apis/apps/v1/namespaces/{namespace}/controllerrevisions
 # operationId: createAppsV1NamespacedControllerRevision
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
-export def "apis-apps-namespaces-controllerrevisions create-controller-revision" [
+export def "create-apps-v1-namespaced-controller-revision" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15653,7 +15653,7 @@ export def "apis-apps-namespaces-controllerrevisions create-controller-revision"
 # DELETE /apis/apps/v1/namespaces/{namespace}/controllerrevisions/{name}
 # operationId: deleteAppsV1NamespacedControllerRevision
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-apps-namespaces-controllerrevisions delete-controller-revision" [
+export def "delete-apps-v1-namespaced-controller-revision" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -15708,7 +15708,7 @@ export def "apis-apps-namespaces-controllerrevisions delete-controller-revision"
 #
 # GET /apis/apps/v1/namespaces/{namespace}/controllerrevisions/{name}
 # operationId: readAppsV1NamespacedControllerRevision
-export def "apis-apps-namespaces-controllerrevisions get-controller-revision" [
+export def "read-apps-v1-namespaced-controller-revision" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -15749,7 +15749,7 @@ export def "apis-apps-namespaces-controllerrevisions get-controller-revision" [
 #
 # PATCH /apis/apps/v1/namespaces/{namespace}/controllerrevisions/{name}
 # operationId: patchAppsV1NamespacedControllerRevision
-export def "apis-apps-namespaces-controllerrevisions update-controller-revision-by-namespace-name" [
+export def "patch-apps-v1-namespaced-controller-revision" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -15799,7 +15799,7 @@ export def "apis-apps-namespaces-controllerrevisions update-controller-revision-
 # PUT /apis/apps/v1/namespaces/{namespace}/controllerrevisions/{name}
 # operationId: replaceAppsV1NamespacedControllerRevision
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
-export def "apis-apps-namespaces-controllerrevisions update-controller-revision-by-namespace-name-1" [
+export def "replace-apps-v1-namespaced-controller-revision" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -15852,7 +15852,7 @@ export def "apis-apps-namespaces-controllerrevisions update-controller-revision-
 # DELETE /apis/apps/v1/namespaces/{namespace}/daemonsets
 # operationId: deleteAppsV1CollectionNamespacedDaemonSet
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-apps-namespaces-daemonsets delete-collection-daemon-update" [
+export def "delete-apps-v1-collection-namespaced-daemon-set" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15913,7 +15913,7 @@ export def "apis-apps-namespaces-daemonsets delete-collection-daemon-update" [
 #
 # GET /apis/apps/v1/namespaces/{namespace}/daemonsets
 # operationId: listAppsV1NamespacedDaemonSet
-export def "apis-apps-namespaces-daemonsets list-daemon-update" [
+export def "list-apps-v1-namespaced-daemon-set" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15965,7 +15965,7 @@ export def "apis-apps-namespaces-daemonsets list-daemon-update" [
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {minReadySeconds?: int, revisionHistoryLimit?: int, selector: record, template: record, updateStrategy?: record}
 # --status shape: {collisionCount?: int, conditions?: list, currentNumberScheduled: int, desiredNumberScheduled: int, numberAvailable?: int, numberMisscheduled: int, numberReady: int, numberUnavailable?: int, observedGeneration?: int, updatedNumberScheduled?: int}
-export def "apis-apps-namespaces-daemonsets create-daemon-update" [
+export def "create-apps-v1-namespaced-daemon-set" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16016,7 +16016,7 @@ export def "apis-apps-namespaces-daemonsets create-daemon-update" [
 # DELETE /apis/apps/v1/namespaces/{namespace}/daemonsets/{name}
 # operationId: deleteAppsV1NamespacedDaemonSet
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-apps-namespaces-daemonsets delete-daemon-update" [
+export def "delete-apps-v1-namespaced-daemon-set" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16071,7 +16071,7 @@ export def "apis-apps-namespaces-daemonsets delete-daemon-update" [
 #
 # GET /apis/apps/v1/namespaces/{namespace}/daemonsets/{name}
 # operationId: readAppsV1NamespacedDaemonSet
-export def "apis-apps-namespaces-daemonsets get-daemon-update" [
+export def "read-apps-v1-namespaced-daemon-set" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16112,7 +16112,7 @@ export def "apis-apps-namespaces-daemonsets get-daemon-update" [
 #
 # PATCH /apis/apps/v1/namespaces/{namespace}/daemonsets/{name}
 # operationId: patchAppsV1NamespacedDaemonSet
-export def "apis-apps-namespaces-daemonsets update-daemon-by-namespace-name" [
+export def "patch-apps-v1-namespaced-daemon-set" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16164,7 +16164,7 @@ export def "apis-apps-namespaces-daemonsets update-daemon-by-namespace-name" [
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {minReadySeconds?: int, revisionHistoryLimit?: int, selector: record, template: record, updateStrategy?: record}
 # --status shape: {collisionCount?: int, conditions?: list, currentNumberScheduled: int, desiredNumberScheduled: int, numberAvailable?: int, numberMisscheduled: int, numberReady: int, numberUnavailable?: int, observedGeneration?: int, updatedNumberScheduled?: int}
-export def "apis-apps-namespaces-daemonsets update-daemon-by-namespace-name-1" [
+export def "replace-apps-v1-namespaced-daemon-set" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16216,7 +16216,7 @@ export def "apis-apps-namespaces-daemonsets update-daemon-by-namespace-name-1" [
 #
 # GET /apis/apps/v1/namespaces/{namespace}/daemonsets/{name}/status
 # operationId: readAppsV1NamespacedDaemonSetStatus
-export def "apis-apps-namespaces-daemonsets-status get-daemon-update" [
+export def "read-apps-v1-namespaced-daemon-set-status" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16257,7 +16257,7 @@ export def "apis-apps-namespaces-daemonsets-status get-daemon-update" [
 #
 # PATCH /apis/apps/v1/namespaces/{namespace}/daemonsets/{name}/status
 # operationId: patchAppsV1NamespacedDaemonSetStatus
-export def "apis-apps-namespaces-daemonsets-status update-daemon-by-namespace-name" [
+export def "patch-apps-v1-namespaced-daemon-set-status" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16309,7 +16309,7 @@ export def "apis-apps-namespaces-daemonsets-status update-daemon-by-namespace-na
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {minReadySeconds?: int, revisionHistoryLimit?: int, selector: record, template: record, updateStrategy?: record}
 # --status shape: {collisionCount?: int, conditions?: list, currentNumberScheduled: int, desiredNumberScheduled: int, numberAvailable?: int, numberMisscheduled: int, numberReady: int, numberUnavailable?: int, observedGeneration?: int, updatedNumberScheduled?: int}
-export def "apis-apps-namespaces-daemonsets-status update-daemon-by-namespace-name-1" [
+export def "replace-apps-v1-namespaced-daemon-set-status" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16362,7 +16362,7 @@ export def "apis-apps-namespaces-daemonsets-status update-daemon-by-namespace-na
 # DELETE /apis/apps/v1/namespaces/{namespace}/deployments
 # operationId: deleteAppsV1CollectionNamespacedDeployment
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-apps-namespaces-deployments delete-collection" [
+export def "delete-apps-v1-collection-namespaced-deployment" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16423,7 +16423,7 @@ export def "apis-apps-namespaces-deployments delete-collection" [
 #
 # GET /apis/apps/v1/namespaces/{namespace}/deployments
 # operationId: listAppsV1NamespacedDeployment
-export def "apis-apps-namespaces-deployments list" [
+export def "list-apps-v1-namespaced-deployment" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16475,7 +16475,7 @@ export def "apis-apps-namespaces-deployments list" [
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {minReadySeconds?: int, paused?: bool, progressDeadlineSeconds?: int, replicas?: int, revisionHistoryLimit?: int, selector: record, strategy?: record, template: record}
 # --status shape: {availableReplicas?: int, collisionCount?: int, conditions?: list, observedGeneration?: int, readyReplicas?: int, replicas?: int, unavailableReplicas?: int, updatedReplicas?: int}
-export def "apis-apps-namespaces-deployments create" [
+export def "create-apps-v1-namespaced-deployment" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16526,7 +16526,7 @@ export def "apis-apps-namespaces-deployments create" [
 # DELETE /apis/apps/v1/namespaces/{namespace}/deployments/{name}
 # operationId: deleteAppsV1NamespacedDeployment
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-apps-namespaces-deployments delete" [
+export def "delete-apps-v1-namespaced-deployment" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16581,7 +16581,7 @@ export def "apis-apps-namespaces-deployments delete" [
 #
 # GET /apis/apps/v1/namespaces/{namespace}/deployments/{name}
 # operationId: readAppsV1NamespacedDeployment
-export def "apis-apps-namespaces-deployments get" [
+export def "read-apps-v1-namespaced-deployment" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16622,7 +16622,7 @@ export def "apis-apps-namespaces-deployments get" [
 #
 # PATCH /apis/apps/v1/namespaces/{namespace}/deployments/{name}
 # operationId: patchAppsV1NamespacedDeployment
-export def "apis-apps-namespaces-deployments update-by-namespace-name" [
+export def "patch-apps-v1-namespaced-deployment" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16674,7 +16674,7 @@ export def "apis-apps-namespaces-deployments update-by-namespace-name" [
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {minReadySeconds?: int, paused?: bool, progressDeadlineSeconds?: int, replicas?: int, revisionHistoryLimit?: int, selector: record, strategy?: record, template: record}
 # --status shape: {availableReplicas?: int, collisionCount?: int, conditions?: list, observedGeneration?: int, readyReplicas?: int, replicas?: int, unavailableReplicas?: int, updatedReplicas?: int}
-export def "apis-apps-namespaces-deployments update-by-namespace-name-1" [
+export def "replace-apps-v1-namespaced-deployment" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16726,7 +16726,7 @@ export def "apis-apps-namespaces-deployments update-by-namespace-name-1" [
 #
 # GET /apis/apps/v1/namespaces/{namespace}/deployments/{name}/scale
 # operationId: readAppsV1NamespacedDeploymentScale
-export def "apis-apps-namespaces-deployments-scale get" [
+export def "read-apps-v1-namespaced-deployment-scale" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16767,7 +16767,7 @@ export def "apis-apps-namespaces-deployments-scale get" [
 #
 # PATCH /apis/apps/v1/namespaces/{namespace}/deployments/{name}/scale
 # operationId: patchAppsV1NamespacedDeploymentScale
-export def "apis-apps-namespaces-deployments-scale update-by-namespace-name" [
+export def "patch-apps-v1-namespaced-deployment-scale" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16819,7 +16819,7 @@ export def "apis-apps-namespaces-deployments-scale update-by-namespace-name" [
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {replicas?: int}
 # --status shape: {replicas: int, selector?: string}
-export def "apis-apps-namespaces-deployments-scale update-by-namespace-name-1" [
+export def "replace-apps-v1-namespaced-deployment-scale" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16871,7 +16871,7 @@ export def "apis-apps-namespaces-deployments-scale update-by-namespace-name-1" [
 #
 # GET /apis/apps/v1/namespaces/{namespace}/deployments/{name}/status
 # operationId: readAppsV1NamespacedDeploymentStatus
-export def "apis-apps-namespaces-deployments-status get" [
+export def "read-apps-v1-namespaced-deployment-status" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16912,7 +16912,7 @@ export def "apis-apps-namespaces-deployments-status get" [
 #
 # PATCH /apis/apps/v1/namespaces/{namespace}/deployments/{name}/status
 # operationId: patchAppsV1NamespacedDeploymentStatus
-export def "apis-apps-namespaces-deployments-status update-by-namespace-name" [
+export def "patch-apps-v1-namespaced-deployment-status" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16964,7 +16964,7 @@ export def "apis-apps-namespaces-deployments-status update-by-namespace-name" [
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {minReadySeconds?: int, paused?: bool, progressDeadlineSeconds?: int, replicas?: int, revisionHistoryLimit?: int, selector: record, strategy?: record, template: record}
 # --status shape: {availableReplicas?: int, collisionCount?: int, conditions?: list, observedGeneration?: int, readyReplicas?: int, replicas?: int, unavailableReplicas?: int, updatedReplicas?: int}
-export def "apis-apps-namespaces-deployments-status update-by-namespace-name-1" [
+export def "replace-apps-v1-namespaced-deployment-status" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -17017,7 +17017,7 @@ export def "apis-apps-namespaces-deployments-status update-by-namespace-name-1" 
 # DELETE /apis/apps/v1/namespaces/{namespace}/replicasets
 # operationId: deleteAppsV1CollectionNamespacedReplicaSet
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-apps-namespaces-replicasets delete-collection-replica-update" [
+export def "delete-apps-v1-collection-namespaced-replica-set" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17078,7 +17078,7 @@ export def "apis-apps-namespaces-replicasets delete-collection-replica-update" [
 #
 # GET /apis/apps/v1/namespaces/{namespace}/replicasets
 # operationId: listAppsV1NamespacedReplicaSet
-export def "apis-apps-namespaces-replicasets list-replica-update" [
+export def "list-apps-v1-namespaced-replica-set" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17130,7 +17130,7 @@ export def "apis-apps-namespaces-replicasets list-replica-update" [
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {minReadySeconds?: int, replicas?: int, selector: record, template?: record}
 # --status shape: {availableReplicas?: int, conditions?: list, fullyLabeledReplicas?: int, observedGeneration?: int, readyReplicas?: int, replicas: int}
-export def "apis-apps-namespaces-replicasets create-replica-update" [
+export def "create-apps-v1-namespaced-replica-set" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17181,7 +17181,7 @@ export def "apis-apps-namespaces-replicasets create-replica-update" [
 # DELETE /apis/apps/v1/namespaces/{namespace}/replicasets/{name}
 # operationId: deleteAppsV1NamespacedReplicaSet
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-apps-namespaces-replicasets delete-replica-update" [
+export def "delete-apps-v1-namespaced-replica-set" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -17236,7 +17236,7 @@ export def "apis-apps-namespaces-replicasets delete-replica-update" [
 #
 # GET /apis/apps/v1/namespaces/{namespace}/replicasets/{name}
 # operationId: readAppsV1NamespacedReplicaSet
-export def "apis-apps-namespaces-replicasets get-replica-update" [
+export def "read-apps-v1-namespaced-replica-set" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -17277,7 +17277,7 @@ export def "apis-apps-namespaces-replicasets get-replica-update" [
 #
 # PATCH /apis/apps/v1/namespaces/{namespace}/replicasets/{name}
 # operationId: patchAppsV1NamespacedReplicaSet
-export def "apis-apps-namespaces-replicasets update-replica-by-namespace-name" [
+export def "patch-apps-v1-namespaced-replica-set" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -17329,7 +17329,7 @@ export def "apis-apps-namespaces-replicasets update-replica-by-namespace-name" [
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {minReadySeconds?: int, replicas?: int, selector: record, template?: record}
 # --status shape: {availableReplicas?: int, conditions?: list, fullyLabeledReplicas?: int, observedGeneration?: int, readyReplicas?: int, replicas: int}
-export def "apis-apps-namespaces-replicasets update-replica-by-namespace-name-1" [
+export def "replace-apps-v1-namespaced-replica-set" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -17381,7 +17381,7 @@ export def "apis-apps-namespaces-replicasets update-replica-by-namespace-name-1"
 #
 # GET /apis/apps/v1/namespaces/{namespace}/replicasets/{name}/scale
 # operationId: readAppsV1NamespacedReplicaSetScale
-export def "apis-apps-namespaces-replicasets-scale get-replica-update" [
+export def "read-apps-v1-namespaced-replica-set-scale" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -17422,7 +17422,7 @@ export def "apis-apps-namespaces-replicasets-scale get-replica-update" [
 #
 # PATCH /apis/apps/v1/namespaces/{namespace}/replicasets/{name}/scale
 # operationId: patchAppsV1NamespacedReplicaSetScale
-export def "apis-apps-namespaces-replicasets-scale update-replica-by-namespace-name" [
+export def "patch-apps-v1-namespaced-replica-set-scale" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -17474,7 +17474,7 @@ export def "apis-apps-namespaces-replicasets-scale update-replica-by-namespace-n
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {replicas?: int}
 # --status shape: {replicas: int, selector?: string}
-export def "apis-apps-namespaces-replicasets-scale update-replica-by-namespace-name-1" [
+export def "replace-apps-v1-namespaced-replica-set-scale" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -17526,7 +17526,7 @@ export def "apis-apps-namespaces-replicasets-scale update-replica-by-namespace-n
 #
 # GET /apis/apps/v1/namespaces/{namespace}/replicasets/{name}/status
 # operationId: readAppsV1NamespacedReplicaSetStatus
-export def "apis-apps-namespaces-replicasets-status get-replica-update" [
+export def "read-apps-v1-namespaced-replica-set-status" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -17567,7 +17567,7 @@ export def "apis-apps-namespaces-replicasets-status get-replica-update" [
 #
 # PATCH /apis/apps/v1/namespaces/{namespace}/replicasets/{name}/status
 # operationId: patchAppsV1NamespacedReplicaSetStatus
-export def "apis-apps-namespaces-replicasets-status update-replica-by-namespace-name" [
+export def "patch-apps-v1-namespaced-replica-set-status" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -17619,7 +17619,7 @@ export def "apis-apps-namespaces-replicasets-status update-replica-by-namespace-
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {minReadySeconds?: int, replicas?: int, selector: record, template?: record}
 # --status shape: {availableReplicas?: int, conditions?: list, fullyLabeledReplicas?: int, observedGeneration?: int, readyReplicas?: int, replicas: int}
-export def "apis-apps-namespaces-replicasets-status update-replica-by-namespace-name-1" [
+export def "replace-apps-v1-namespaced-replica-set-status" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -17672,7 +17672,7 @@ export def "apis-apps-namespaces-replicasets-status update-replica-by-namespace-
 # DELETE /apis/apps/v1/namespaces/{namespace}/statefulsets
 # operationId: deleteAppsV1CollectionNamespacedStatefulSet
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-apps-namespaces-statefulsets delete-collection-stateful-update" [
+export def "delete-apps-v1-collection-namespaced-stateful-set" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17733,7 +17733,7 @@ export def "apis-apps-namespaces-statefulsets delete-collection-stateful-update"
 #
 # GET /apis/apps/v1/namespaces/{namespace}/statefulsets
 # operationId: listAppsV1NamespacedStatefulSet
-export def "apis-apps-namespaces-statefulsets list-stateful-update" [
+export def "list-apps-v1-namespaced-stateful-set" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17785,7 +17785,7 @@ export def "apis-apps-namespaces-statefulsets list-stateful-update" [
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {minReadySeconds?: int, ordinals?: record, persistentVolumeClaimRetentionPolicy?: record, podManagementPolicy?: string, replicas?: int, revisionHistoryLimit?: int, selector: record, serviceName: string, template: record, updateStrategy?: record, volumeClaimTemplates?: list}
 # --status shape: {availableReplicas?: int, collisionCount?: int, conditions?: list, currentReplicas?: int, currentRevision?: string, observedGeneration?: int, readyReplicas?: int, replicas: int, updateRevision?: string, updatedReplicas?: int}
-export def "apis-apps-namespaces-statefulsets create-stateful-update" [
+export def "create-apps-v1-namespaced-stateful-set" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17836,7 +17836,7 @@ export def "apis-apps-namespaces-statefulsets create-stateful-update" [
 # DELETE /apis/apps/v1/namespaces/{namespace}/statefulsets/{name}
 # operationId: deleteAppsV1NamespacedStatefulSet
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-apps-namespaces-statefulsets delete-stateful-update" [
+export def "delete-apps-v1-namespaced-stateful-set" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -17891,7 +17891,7 @@ export def "apis-apps-namespaces-statefulsets delete-stateful-update" [
 #
 # GET /apis/apps/v1/namespaces/{namespace}/statefulsets/{name}
 # operationId: readAppsV1NamespacedStatefulSet
-export def "apis-apps-namespaces-statefulsets get-stateful-update" [
+export def "read-apps-v1-namespaced-stateful-set" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -17932,7 +17932,7 @@ export def "apis-apps-namespaces-statefulsets get-stateful-update" [
 #
 # PATCH /apis/apps/v1/namespaces/{namespace}/statefulsets/{name}
 # operationId: patchAppsV1NamespacedStatefulSet
-export def "apis-apps-namespaces-statefulsets update-stateful-by-namespace-name" [
+export def "patch-apps-v1-namespaced-stateful-set" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -17984,7 +17984,7 @@ export def "apis-apps-namespaces-statefulsets update-stateful-by-namespace-name"
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {minReadySeconds?: int, ordinals?: record, persistentVolumeClaimRetentionPolicy?: record, podManagementPolicy?: string, replicas?: int, revisionHistoryLimit?: int, selector: record, serviceName: string, template: record, updateStrategy?: record, volumeClaimTemplates?: list}
 # --status shape: {availableReplicas?: int, collisionCount?: int, conditions?: list, currentReplicas?: int, currentRevision?: string, observedGeneration?: int, readyReplicas?: int, replicas: int, updateRevision?: string, updatedReplicas?: int}
-export def "apis-apps-namespaces-statefulsets update-stateful-by-namespace-name-1" [
+export def "replace-apps-v1-namespaced-stateful-set" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -18036,7 +18036,7 @@ export def "apis-apps-namespaces-statefulsets update-stateful-by-namespace-name-
 #
 # GET /apis/apps/v1/namespaces/{namespace}/statefulsets/{name}/scale
 # operationId: readAppsV1NamespacedStatefulSetScale
-export def "apis-apps-namespaces-statefulsets-scale get-stateful-update" [
+export def "read-apps-v1-namespaced-stateful-set-scale" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -18077,7 +18077,7 @@ export def "apis-apps-namespaces-statefulsets-scale get-stateful-update" [
 #
 # PATCH /apis/apps/v1/namespaces/{namespace}/statefulsets/{name}/scale
 # operationId: patchAppsV1NamespacedStatefulSetScale
-export def "apis-apps-namespaces-statefulsets-scale update-stateful-by-namespace-name" [
+export def "patch-apps-v1-namespaced-stateful-set-scale" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -18129,7 +18129,7 @@ export def "apis-apps-namespaces-statefulsets-scale update-stateful-by-namespace
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {replicas?: int}
 # --status shape: {replicas: int, selector?: string}
-export def "apis-apps-namespaces-statefulsets-scale update-stateful-by-namespace-name-1" [
+export def "replace-apps-v1-namespaced-stateful-set-scale" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -18181,7 +18181,7 @@ export def "apis-apps-namespaces-statefulsets-scale update-stateful-by-namespace
 #
 # GET /apis/apps/v1/namespaces/{namespace}/statefulsets/{name}/status
 # operationId: readAppsV1NamespacedStatefulSetStatus
-export def "apis-apps-namespaces-statefulsets-status get-stateful-update" [
+export def "read-apps-v1-namespaced-stateful-set-status" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -18222,7 +18222,7 @@ export def "apis-apps-namespaces-statefulsets-status get-stateful-update" [
 #
 # PATCH /apis/apps/v1/namespaces/{namespace}/statefulsets/{name}/status
 # operationId: patchAppsV1NamespacedStatefulSetStatus
-export def "apis-apps-namespaces-statefulsets-status update-stateful-by-namespace-name" [
+export def "patch-apps-v1-namespaced-stateful-set-status" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -18274,7 +18274,7 @@ export def "apis-apps-namespaces-statefulsets-status update-stateful-by-namespac
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {minReadySeconds?: int, ordinals?: record, persistentVolumeClaimRetentionPolicy?: record, podManagementPolicy?: string, replicas?: int, revisionHistoryLimit?: int, selector: record, serviceName: string, template: record, updateStrategy?: record, volumeClaimTemplates?: list}
 # --status shape: {availableReplicas?: int, collisionCount?: int, conditions?: list, currentReplicas?: int, currentRevision?: string, observedGeneration?: int, readyReplicas?: int, replicas: int, updateRevision?: string, updatedReplicas?: int}
-export def "apis-apps-namespaces-statefulsets-status update-stateful-by-namespace-name-1" [
+export def "replace-apps-v1-namespaced-stateful-set-status" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -18326,7 +18326,7 @@ export def "apis-apps-namespaces-statefulsets-status update-stateful-by-namespac
 #
 # GET /apis/apps/v1/replicasets
 # operationId: listAppsV1ReplicaSetForAllNamespaces
-export def "apis-apps-replicasets list-replica-update-for-namespaces" [
+export def "list-apps-v1-replica-set-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -18373,7 +18373,7 @@ export def "apis-apps-replicasets list-replica-update-for-namespaces" [
 #
 # GET /apis/apps/v1/statefulsets
 # operationId: listAppsV1StatefulSetForAllNamespaces
-export def "apis-apps-statefulsets list-stateful-update-for-namespaces" [
+export def "list-apps-v1-stateful-set-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -18420,7 +18420,7 @@ export def "apis-apps-statefulsets list-stateful-update-for-namespaces" [
 #
 # GET /apis/apps/v1/watch/controllerrevisions
 # operationId: watchAppsV1ControllerRevisionListForAllNamespaces
-export def "apis-apps-watch-controllerrevisions list-controller-revision-for-namespaces" [
+export def "watch-apps-v1-controller-revision-list-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -18467,7 +18467,7 @@ export def "apis-apps-watch-controllerrevisions list-controller-revision-for-nam
 #
 # GET /apis/apps/v1/watch/daemonsets
 # operationId: watchAppsV1DaemonSetListForAllNamespaces
-export def "apis-apps-watch-daemonsets update-daemon-list-for-namespaces" [
+export def "watch-apps-v1-daemon-set-list-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -18514,7 +18514,7 @@ export def "apis-apps-watch-daemonsets update-daemon-list-for-namespaces" [
 #
 # GET /apis/apps/v1/watch/deployments
 # operationId: watchAppsV1DeploymentListForAllNamespaces
-export def "apis-apps-watch-deployments list-for-namespaces" [
+export def "watch-apps-v1-deployment-list-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -18561,7 +18561,7 @@ export def "apis-apps-watch-deployments list-for-namespaces" [
 #
 # GET /apis/apps/v1/watch/namespaces/{namespace}/controllerrevisions
 # operationId: watchAppsV1NamespacedControllerRevisionList
-export def "apis-apps-watch-namespaces-controllerrevisions list-controller-revision" [
+export def "watch-apps-v1-namespaced-controller-revision-list" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18610,7 +18610,7 @@ export def "apis-apps-watch-namespaces-controllerrevisions list-controller-revis
 #
 # GET /apis/apps/v1/watch/namespaces/{namespace}/controllerrevisions/{name}
 # operationId: watchAppsV1NamespacedControllerRevision
-export def "apis-apps-watch-namespaces-controllerrevisions watch-controller-revision" [
+export def "watch-apps-v1-namespaced-controller-revision" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -18661,7 +18661,7 @@ export def "apis-apps-watch-namespaces-controllerrevisions watch-controller-revi
 #
 # GET /apis/apps/v1/watch/namespaces/{namespace}/daemonsets
 # operationId: watchAppsV1NamespacedDaemonSetList
-export def "apis-apps-watch-namespaces-daemonsets update-daemon-list" [
+export def "watch-apps-v1-namespaced-daemon-set-list" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18710,7 +18710,7 @@ export def "apis-apps-watch-namespaces-daemonsets update-daemon-list" [
 #
 # GET /apis/apps/v1/watch/namespaces/{namespace}/daemonsets/{name}
 # operationId: watchAppsV1NamespacedDaemonSet
-export def "apis-apps-watch-namespaces-daemonsets update-daemon" [
+export def "watch-apps-v1-namespaced-daemon-set" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -18761,7 +18761,7 @@ export def "apis-apps-watch-namespaces-daemonsets update-daemon" [
 #
 # GET /apis/apps/v1/watch/namespaces/{namespace}/deployments
 # operationId: watchAppsV1NamespacedDeploymentList
-export def "apis-apps-watch-namespaces-deployments list" [
+export def "watch-apps-v1-namespaced-deployment-list" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18810,7 +18810,7 @@ export def "apis-apps-watch-namespaces-deployments list" [
 #
 # GET /apis/apps/v1/watch/namespaces/{namespace}/deployments/{name}
 # operationId: watchAppsV1NamespacedDeployment
-export def "apis-apps-watch-namespaces-deployments watch" [
+export def "watch-apps-v1-namespaced-deployment" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -18861,7 +18861,7 @@ export def "apis-apps-watch-namespaces-deployments watch" [
 #
 # GET /apis/apps/v1/watch/namespaces/{namespace}/replicasets
 # operationId: watchAppsV1NamespacedReplicaSetList
-export def "apis-apps-watch-namespaces-replicasets update-replica-list" [
+export def "watch-apps-v1-namespaced-replica-set-list" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18910,7 +18910,7 @@ export def "apis-apps-watch-namespaces-replicasets update-replica-list" [
 #
 # GET /apis/apps/v1/watch/namespaces/{namespace}/replicasets/{name}
 # operationId: watchAppsV1NamespacedReplicaSet
-export def "apis-apps-watch-namespaces-replicasets update-replica" [
+export def "watch-apps-v1-namespaced-replica-set" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -18961,7 +18961,7 @@ export def "apis-apps-watch-namespaces-replicasets update-replica" [
 #
 # GET /apis/apps/v1/watch/namespaces/{namespace}/statefulsets
 # operationId: watchAppsV1NamespacedStatefulSetList
-export def "apis-apps-watch-namespaces-statefulsets update-stateful-list" [
+export def "watch-apps-v1-namespaced-stateful-set-list" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -19010,7 +19010,7 @@ export def "apis-apps-watch-namespaces-statefulsets update-stateful-list" [
 #
 # GET /apis/apps/v1/watch/namespaces/{namespace}/statefulsets/{name}
 # operationId: watchAppsV1NamespacedStatefulSet
-export def "apis-apps-watch-namespaces-statefulsets update-stateful" [
+export def "watch-apps-v1-namespaced-stateful-set" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -19061,7 +19061,7 @@ export def "apis-apps-watch-namespaces-statefulsets update-stateful" [
 #
 # GET /apis/apps/v1/watch/replicasets
 # operationId: watchAppsV1ReplicaSetListForAllNamespaces
-export def "apis-apps-watch-replicasets update-replica-list-for-namespaces" [
+export def "watch-apps-v1-replica-set-list-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -19108,7 +19108,7 @@ export def "apis-apps-watch-replicasets update-replica-list-for-namespaces" [
 #
 # GET /apis/apps/v1/watch/statefulsets
 # operationId: watchAppsV1StatefulSetListForAllNamespaces
-export def "apis-apps-watch-statefulsets update-stateful-list-for-namespaces" [
+export def "watch-apps-v1-stateful-set-list-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -19155,7 +19155,7 @@ export def "apis-apps-watch-statefulsets update-stateful-list-for-namespaces" [
 #
 # GET /apis/authentication.k8s.io/
 # operationId: getAuthenticationAPIGroup
-export def "apis-authentication-k8s-io get-group" [
+export def "get-authentication-api-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -19190,7 +19190,7 @@ export def "apis-authentication-k8s-io get-group" [
 #
 # GET /apis/authentication.k8s.io/v1/
 # operationId: getAuthenticationV1APIResources
-export def "apis-authentication-k8s-io get-resources" [
+export def "get-authentication-v1api-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -19228,7 +19228,7 @@ export def "apis-authentication-k8s-io get-resources" [
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {audiences?: list<string>, token?: string}
 # --status shape: {audiences?: list<string>, authenticated?: bool, error?: string, user?: record}
-export def "apis-authentication-k8s-io-tokenreviews create-token-review" [
+export def "create-authentication-v1-token-review" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -19276,7 +19276,7 @@ export def "apis-authentication-k8s-io-tokenreviews create-token-review" [
 #
 # GET /apis/authentication.k8s.io/v1alpha1/
 # operationId: getAuthenticationV1alpha1APIResources
-export def "apis-authentication-k8s-io-v1alpha1 get-resources" [
+export def "get-authentication-v1alpha1-api-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -19313,7 +19313,7 @@ export def "apis-authentication-k8s-io-v1alpha1 get-resources" [
 # operationId: createAuthenticationV1alpha1SelfSubjectReview
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --status shape: {userInfo?: record}
-export def "apis-authentication-k8s-io-v1alpha1-selfsubjectreviews create-self-subject-review" [
+export def "create-authentication-v1alpha1-self-subject-review" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -19360,7 +19360,7 @@ export def "apis-authentication-k8s-io-v1alpha1-selfsubjectreviews create-self-s
 #
 # GET /apis/authorization.k8s.io/
 # operationId: getAuthorizationAPIGroup
-export def "apis-authorization-k8s-io get-group" [
+export def "get-authorization-api-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -19395,7 +19395,7 @@ export def "apis-authorization-k8s-io get-group" [
 #
 # GET /apis/authorization.k8s.io/v1/
 # operationId: getAuthorizationV1APIResources
-export def "apis-authorization-k8s-io get-resources" [
+export def "get-authorization-v1api-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -19433,7 +19433,7 @@ export def "apis-authorization-k8s-io get-resources" [
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {extra?: record, groups?: list<string>, nonResourceAttributes?: record, resourceAttributes?: record, uid?: string, user?: string}
 # --status shape: {allowed: bool, denied?: bool, evaluationError?: string, reason?: string}
-export def "apis-authorization-k8s-io-namespaces-localsubjectaccessreviews create-local-subject-access-review" [
+export def "create-authorization-v1-namespaced-local-subject-access-review" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -19486,7 +19486,7 @@ export def "apis-authorization-k8s-io-namespaces-localsubjectaccessreviews creat
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {nonResourceAttributes?: record, resourceAttributes?: record}
 # --status shape: {allowed: bool, denied?: bool, evaluationError?: string, reason?: string}
-export def "apis-authorization-k8s-io-selfsubjectaccessreviews create-self-subject-access-review" [
+export def "create-authorization-v1-self-subject-access-review" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -19537,7 +19537,7 @@ export def "apis-authorization-k8s-io-selfsubjectaccessreviews create-self-subje
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {namespace?: string}
 # --status shape: {evaluationError?: string, incomplete: bool, nonResourceRules: list, resourceRules: list}
-export def "apis-authorization-k8s-io-selfsubjectrulesreviews create-self-subject-rules-review" [
+export def "create-authorization-v1-self-subject-rules-review" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -19588,7 +19588,7 @@ export def "apis-authorization-k8s-io-selfsubjectrulesreviews create-self-subjec
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {extra?: record, groups?: list<string>, nonResourceAttributes?: record, resourceAttributes?: record, uid?: string, user?: string}
 # --status shape: {allowed: bool, denied?: bool, evaluationError?: string, reason?: string}
-export def "apis-authorization-k8s-io-subjectaccessreviews create-subject-access-review" [
+export def "create-authorization-v1-subject-access-review" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -19636,7 +19636,7 @@ export def "apis-authorization-k8s-io-subjectaccessreviews create-subject-access
 #
 # GET /apis/autoscaling/
 # operationId: getAutoscalingAPIGroup
-export def "apis-autoscaling get-group" [
+export def "get-autoscaling-api-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -19671,7 +19671,7 @@ export def "apis-autoscaling get-group" [
 #
 # GET /apis/autoscaling/v1/
 # operationId: getAutoscalingV1APIResources
-export def "apis-autoscaling get-resources" [
+export def "get-autoscaling-v1api-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -19706,7 +19706,7 @@ export def "apis-autoscaling get-resources" [
 #
 # GET /apis/autoscaling/v1/horizontalpodautoscalers
 # operationId: listAutoscalingV1HorizontalPodAutoscalerForAllNamespaces
-export def "apis-autoscaling-horizontalpodautoscalers list-horizontal-pod-autoscaler-for-namespaces" [
+export def "list-autoscaling-v1-horizontal-pod-autoscaler-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -19754,7 +19754,7 @@ export def "apis-autoscaling-horizontalpodautoscalers list-horizontal-pod-autosc
 # DELETE /apis/autoscaling/v1/namespaces/{namespace}/horizontalpodautoscalers
 # operationId: deleteAutoscalingV1CollectionNamespacedHorizontalPodAutoscaler
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-autoscaling-namespaces-horizontalpodautoscalers delete-collection-horizontal-pod-autoscaler-by-namespace" [
+export def "delete-autoscaling-v1-collection-namespaced-horizontal-pod-autoscaler" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -19815,7 +19815,7 @@ export def "apis-autoscaling-namespaces-horizontalpodautoscalers delete-collecti
 #
 # GET /apis/autoscaling/v1/namespaces/{namespace}/horizontalpodautoscalers
 # operationId: listAutoscalingV1NamespacedHorizontalPodAutoscaler
-export def "apis-autoscaling-namespaces-horizontalpodautoscalers list-horizontal-pod-autoscaler-by-namespace" [
+export def "list-autoscaling-v1-namespaced-horizontal-pod-autoscaler" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -19867,7 +19867,7 @@ export def "apis-autoscaling-namespaces-horizontalpodautoscalers list-horizontal
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {maxReplicas: int, minReplicas?: int, scaleTargetRef: record, targetCPUUtilizationPercentage?: int}
 # --status shape: {currentCPUUtilizationPercentage?: int, currentReplicas: int, desiredReplicas: int, lastScaleTime?: string, observedGeneration?: int}
-export def "apis-autoscaling-namespaces-horizontalpodautoscalers create-horizontal-pod-autoscaler-by-namespace" [
+export def "create-autoscaling-v1-namespaced-horizontal-pod-autoscaler" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -19918,7 +19918,7 @@ export def "apis-autoscaling-namespaces-horizontalpodautoscalers create-horizont
 # DELETE /apis/autoscaling/v1/namespaces/{namespace}/horizontalpodautoscalers/{name}
 # operationId: deleteAutoscalingV1NamespacedHorizontalPodAutoscaler
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-autoscaling-namespaces-horizontalpodautoscalers delete-horizontal-pod-autoscaler-by-namespace-name" [
+export def "delete-autoscaling-v1-namespaced-horizontal-pod-autoscaler" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -19973,7 +19973,7 @@ export def "apis-autoscaling-namespaces-horizontalpodautoscalers delete-horizont
 #
 # GET /apis/autoscaling/v1/namespaces/{namespace}/horizontalpodautoscalers/{name}
 # operationId: readAutoscalingV1NamespacedHorizontalPodAutoscaler
-export def "apis-autoscaling-namespaces-horizontalpodautoscalers get-horizontal-pod-autoscaler-by-namespace-name" [
+export def "read-autoscaling-v1-namespaced-horizontal-pod-autoscaler" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -20014,7 +20014,7 @@ export def "apis-autoscaling-namespaces-horizontalpodautoscalers get-horizontal-
 #
 # PATCH /apis/autoscaling/v1/namespaces/{namespace}/horizontalpodautoscalers/{name}
 # operationId: patchAutoscalingV1NamespacedHorizontalPodAutoscaler
-export def "apis-autoscaling-namespaces-horizontalpodautoscalers update-horizontal-pod-autoscaler-by-namespace-name" [
+export def "patch-autoscaling-v1-namespaced-horizontal-pod-autoscaler" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -20066,7 +20066,7 @@ export def "apis-autoscaling-namespaces-horizontalpodautoscalers update-horizont
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {maxReplicas: int, minReplicas?: int, scaleTargetRef: record, targetCPUUtilizationPercentage?: int}
 # --status shape: {currentCPUUtilizationPercentage?: int, currentReplicas: int, desiredReplicas: int, lastScaleTime?: string, observedGeneration?: int}
-export def "apis-autoscaling-namespaces-horizontalpodautoscalers update-horizontal-pod-autoscaler-by-namespace-name-1" [
+export def "replace-autoscaling-v1-namespaced-horizontal-pod-autoscaler" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -20118,7 +20118,7 @@ export def "apis-autoscaling-namespaces-horizontalpodautoscalers update-horizont
 #
 # GET /apis/autoscaling/v1/namespaces/{namespace}/horizontalpodautoscalers/{name}/status
 # operationId: readAutoscalingV1NamespacedHorizontalPodAutoscalerStatus
-export def "apis-autoscaling-namespaces-horizontalpodautoscalers-status get-horizontal-pod-autoscaler-by-namespace-name" [
+export def "read-autoscaling-v1-namespaced-horizontal-pod-autoscaler-status" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -20159,7 +20159,7 @@ export def "apis-autoscaling-namespaces-horizontalpodautoscalers-status get-hori
 #
 # PATCH /apis/autoscaling/v1/namespaces/{namespace}/horizontalpodautoscalers/{name}/status
 # operationId: patchAutoscalingV1NamespacedHorizontalPodAutoscalerStatus
-export def "apis-autoscaling-namespaces-horizontalpodautoscalers-status update-horizontal-pod-autoscaler-by-namespace-name" [
+export def "patch-autoscaling-v1-namespaced-horizontal-pod-autoscaler-status" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -20211,7 +20211,7 @@ export def "apis-autoscaling-namespaces-horizontalpodautoscalers-status update-h
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {maxReplicas: int, minReplicas?: int, scaleTargetRef: record, targetCPUUtilizationPercentage?: int}
 # --status shape: {currentCPUUtilizationPercentage?: int, currentReplicas: int, desiredReplicas: int, lastScaleTime?: string, observedGeneration?: int}
-export def "apis-autoscaling-namespaces-horizontalpodautoscalers-status update-horizontal-pod-autoscaler-by-namespace-name-1" [
+export def "replace-autoscaling-v1-namespaced-horizontal-pod-autoscaler-status" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -20263,7 +20263,7 @@ export def "apis-autoscaling-namespaces-horizontalpodautoscalers-status update-h
 #
 # GET /apis/autoscaling/v1/watch/horizontalpodautoscalers
 # operationId: watchAutoscalingV1HorizontalPodAutoscalerListForAllNamespaces
-export def "apis-autoscaling-watch-horizontalpodautoscalers list-horizontal-pod-autoscaler-for-namespaces" [
+export def "watch-autoscaling-v1-horizontal-pod-autoscaler-list-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -20310,7 +20310,7 @@ export def "apis-autoscaling-watch-horizontalpodautoscalers list-horizontal-pod-
 #
 # GET /apis/autoscaling/v1/watch/namespaces/{namespace}/horizontalpodautoscalers
 # operationId: watchAutoscalingV1NamespacedHorizontalPodAutoscalerList
-export def "apis-autoscaling-watch-namespaces-horizontalpodautoscalers list-horizontal-pod-autoscaler-by-namespace" [
+export def "watch-autoscaling-v1-namespaced-horizontal-pod-autoscaler-list" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -20359,7 +20359,7 @@ export def "apis-autoscaling-watch-namespaces-horizontalpodautoscalers list-hori
 #
 # GET /apis/autoscaling/v1/watch/namespaces/{namespace}/horizontalpodautoscalers/{name}
 # operationId: watchAutoscalingV1NamespacedHorizontalPodAutoscaler
-export def "apis-autoscaling-watch-namespaces-horizontalpodautoscalers watch-horizontal-pod-autoscaler-by-namespace-name" [
+export def "watch-autoscaling-v1-namespaced-horizontal-pod-autoscaler" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -20410,7 +20410,7 @@ export def "apis-autoscaling-watch-namespaces-horizontalpodautoscalers watch-hor
 #
 # GET /apis/autoscaling/v2/
 # operationId: getAutoscalingV2APIResources
-export def "apis-autoscaling get-resources-1" [
+export def "get-autoscaling-v2api-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -20445,7 +20445,7 @@ export def "apis-autoscaling get-resources-1" [
 #
 # GET /apis/autoscaling/v2/horizontalpodautoscalers
 # operationId: listAutoscalingV2HorizontalPodAutoscalerForAllNamespaces
-export def "apis-autoscaling-horizontalpodautoscalers list-horizontal-pod-autoscaler-for-namespaces-1" [
+export def "list-autoscaling-v2-horizontal-pod-autoscaler-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -20493,7 +20493,7 @@ export def "apis-autoscaling-horizontalpodautoscalers list-horizontal-pod-autosc
 # DELETE /apis/autoscaling/v2/namespaces/{namespace}/horizontalpodautoscalers
 # operationId: deleteAutoscalingV2CollectionNamespacedHorizontalPodAutoscaler
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-autoscaling-namespaces-horizontalpodautoscalers delete-collection-horizontal-pod-autoscaler-by-namespace-1" [
+export def "delete-autoscaling-v2-collection-namespaced-horizontal-pod-autoscaler" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -20554,7 +20554,7 @@ export def "apis-autoscaling-namespaces-horizontalpodautoscalers delete-collecti
 #
 # GET /apis/autoscaling/v2/namespaces/{namespace}/horizontalpodautoscalers
 # operationId: listAutoscalingV2NamespacedHorizontalPodAutoscaler
-export def "apis-autoscaling-namespaces-horizontalpodautoscalers list-horizontal-pod-autoscaler-by-namespace-1" [
+export def "list-autoscaling-v2-namespaced-horizontal-pod-autoscaler" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -20606,7 +20606,7 @@ export def "apis-autoscaling-namespaces-horizontalpodautoscalers list-horizontal
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {behavior?: record, maxReplicas: int, metrics?: list, minReplicas?: int, scaleTargetRef: record}
 # --status shape: {conditions?: list, currentMetrics?: list, currentReplicas?: int, desiredReplicas: int, lastScaleTime?: string, observedGeneration?: int}
-export def "apis-autoscaling-namespaces-horizontalpodautoscalers create-horizontal-pod-autoscaler-by-namespace-1" [
+export def "create-autoscaling-v2-namespaced-horizontal-pod-autoscaler" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -20657,7 +20657,7 @@ export def "apis-autoscaling-namespaces-horizontalpodautoscalers create-horizont
 # DELETE /apis/autoscaling/v2/namespaces/{namespace}/horizontalpodautoscalers/{name}
 # operationId: deleteAutoscalingV2NamespacedHorizontalPodAutoscaler
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-autoscaling-namespaces-horizontalpodautoscalers delete-horizontal-pod-autoscaler-by-namespace-name-1" [
+export def "delete-autoscaling-v2-namespaced-horizontal-pod-autoscaler" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -20712,7 +20712,7 @@ export def "apis-autoscaling-namespaces-horizontalpodautoscalers delete-horizont
 #
 # GET /apis/autoscaling/v2/namespaces/{namespace}/horizontalpodautoscalers/{name}
 # operationId: readAutoscalingV2NamespacedHorizontalPodAutoscaler
-export def "apis-autoscaling-namespaces-horizontalpodautoscalers get-horizontal-pod-autoscaler-by-namespace-name-1" [
+export def "read-autoscaling-v2-namespaced-horizontal-pod-autoscaler" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -20753,7 +20753,7 @@ export def "apis-autoscaling-namespaces-horizontalpodautoscalers get-horizontal-
 #
 # PATCH /apis/autoscaling/v2/namespaces/{namespace}/horizontalpodautoscalers/{name}
 # operationId: patchAutoscalingV2NamespacedHorizontalPodAutoscaler
-export def "apis-autoscaling-namespaces-horizontalpodautoscalers update-horizontal-pod-autoscaler-by-namespace-name-2" [
+export def "patch-autoscaling-v2-namespaced-horizontal-pod-autoscaler" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -20805,7 +20805,7 @@ export def "apis-autoscaling-namespaces-horizontalpodautoscalers update-horizont
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {behavior?: record, maxReplicas: int, metrics?: list, minReplicas?: int, scaleTargetRef: record}
 # --status shape: {conditions?: list, currentMetrics?: list, currentReplicas?: int, desiredReplicas: int, lastScaleTime?: string, observedGeneration?: int}
-export def "apis-autoscaling-namespaces-horizontalpodautoscalers update-horizontal-pod-autoscaler-by-namespace-name-3" [
+export def "replace-autoscaling-v2-namespaced-horizontal-pod-autoscaler" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -20857,7 +20857,7 @@ export def "apis-autoscaling-namespaces-horizontalpodautoscalers update-horizont
 #
 # GET /apis/autoscaling/v2/namespaces/{namespace}/horizontalpodautoscalers/{name}/status
 # operationId: readAutoscalingV2NamespacedHorizontalPodAutoscalerStatus
-export def "apis-autoscaling-namespaces-horizontalpodautoscalers-status get-horizontal-pod-autoscaler-by-namespace-name-1" [
+export def "read-autoscaling-v2-namespaced-horizontal-pod-autoscaler-status" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -20898,7 +20898,7 @@ export def "apis-autoscaling-namespaces-horizontalpodautoscalers-status get-hori
 #
 # PATCH /apis/autoscaling/v2/namespaces/{namespace}/horizontalpodautoscalers/{name}/status
 # operationId: patchAutoscalingV2NamespacedHorizontalPodAutoscalerStatus
-export def "apis-autoscaling-namespaces-horizontalpodautoscalers-status update-horizontal-pod-autoscaler-by-namespace-name-2" [
+export def "patch-autoscaling-v2-namespaced-horizontal-pod-autoscaler-status" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -20950,7 +20950,7 @@ export def "apis-autoscaling-namespaces-horizontalpodautoscalers-status update-h
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {behavior?: record, maxReplicas: int, metrics?: list, minReplicas?: int, scaleTargetRef: record}
 # --status shape: {conditions?: list, currentMetrics?: list, currentReplicas?: int, desiredReplicas: int, lastScaleTime?: string, observedGeneration?: int}
-export def "apis-autoscaling-namespaces-horizontalpodautoscalers-status update-horizontal-pod-autoscaler-by-namespace-name-3" [
+export def "replace-autoscaling-v2-namespaced-horizontal-pod-autoscaler-status" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -21002,7 +21002,7 @@ export def "apis-autoscaling-namespaces-horizontalpodautoscalers-status update-h
 #
 # GET /apis/autoscaling/v2/watch/horizontalpodautoscalers
 # operationId: watchAutoscalingV2HorizontalPodAutoscalerListForAllNamespaces
-export def "apis-autoscaling-watch-horizontalpodautoscalers list-horizontal-pod-autoscaler-for-namespaces-1" [
+export def "watch-autoscaling-v2-horizontal-pod-autoscaler-list-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -21049,7 +21049,7 @@ export def "apis-autoscaling-watch-horizontalpodautoscalers list-horizontal-pod-
 #
 # GET /apis/autoscaling/v2/watch/namespaces/{namespace}/horizontalpodautoscalers
 # operationId: watchAutoscalingV2NamespacedHorizontalPodAutoscalerList
-export def "apis-autoscaling-watch-namespaces-horizontalpodautoscalers list-horizontal-pod-autoscaler-by-namespace-1" [
+export def "watch-autoscaling-v2-namespaced-horizontal-pod-autoscaler-list" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -21098,7 +21098,7 @@ export def "apis-autoscaling-watch-namespaces-horizontalpodautoscalers list-hori
 #
 # GET /apis/autoscaling/v2/watch/namespaces/{namespace}/horizontalpodautoscalers/{name}
 # operationId: watchAutoscalingV2NamespacedHorizontalPodAutoscaler
-export def "apis-autoscaling-watch-namespaces-horizontalpodautoscalers watch-horizontal-pod-autoscaler-by-namespace-name-1" [
+export def "watch-autoscaling-v2-namespaced-horizontal-pod-autoscaler" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -21149,7 +21149,7 @@ export def "apis-autoscaling-watch-namespaces-horizontalpodautoscalers watch-hor
 #
 # GET /apis/batch/
 # operationId: getBatchAPIGroup
-export def "apis-batch get-group" [
+export def "get-batch-api-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -21184,7 +21184,7 @@ export def "apis-batch get-group" [
 #
 # GET /apis/batch/v1/
 # operationId: getBatchV1APIResources
-export def "apis-batch get-resources" [
+export def "get-batch-v1api-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -21219,7 +21219,7 @@ export def "apis-batch get-resources" [
 #
 # GET /apis/batch/v1/cronjobs
 # operationId: listBatchV1CronJobForAllNamespaces
-export def "apis-batch-cronjobs list-cron-job-for-namespaces" [
+export def "list-batch-v1-cron-job-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -21266,7 +21266,7 @@ export def "apis-batch-cronjobs list-cron-job-for-namespaces" [
 #
 # GET /apis/batch/v1/jobs
 # operationId: listBatchV1JobForAllNamespaces
-export def "apis-batch-jobs list-for-namespaces" [
+export def "list-batch-v1-job-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -21314,7 +21314,7 @@ export def "apis-batch-jobs list-for-namespaces" [
 # DELETE /apis/batch/v1/namespaces/{namespace}/cronjobs
 # operationId: deleteBatchV1CollectionNamespacedCronJob
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-batch-namespaces-cronjobs delete-collection-cron-job" [
+export def "delete-batch-v1-collection-namespaced-cron-job" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -21375,7 +21375,7 @@ export def "apis-batch-namespaces-cronjobs delete-collection-cron-job" [
 #
 # GET /apis/batch/v1/namespaces/{namespace}/cronjobs
 # operationId: listBatchV1NamespacedCronJob
-export def "apis-batch-namespaces-cronjobs list-cron-job" [
+export def "list-batch-v1-namespaced-cron-job" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -21427,7 +21427,7 @@ export def "apis-batch-namespaces-cronjobs list-cron-job" [
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {concurrencyPolicy?: string, failedJobsHistoryLimit?: int, jobTemplate: record, schedule: string, startingDeadlineSeconds?: int, successfulJobsHistoryLimit?: int, suspend?: bool, timeZone?: string}
 # --status shape: {active?: list, lastScheduleTime?: string, lastSuccessfulTime?: string}
-export def "apis-batch-namespaces-cronjobs create-cron-job" [
+export def "create-batch-v1-namespaced-cron-job" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -21478,7 +21478,7 @@ export def "apis-batch-namespaces-cronjobs create-cron-job" [
 # DELETE /apis/batch/v1/namespaces/{namespace}/cronjobs/{name}
 # operationId: deleteBatchV1NamespacedCronJob
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-batch-namespaces-cronjobs delete-cron-job" [
+export def "delete-batch-v1-namespaced-cron-job" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -21533,7 +21533,7 @@ export def "apis-batch-namespaces-cronjobs delete-cron-job" [
 #
 # GET /apis/batch/v1/namespaces/{namespace}/cronjobs/{name}
 # operationId: readBatchV1NamespacedCronJob
-export def "apis-batch-namespaces-cronjobs get-cron-job" [
+export def "read-batch-v1-namespaced-cron-job" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -21574,7 +21574,7 @@ export def "apis-batch-namespaces-cronjobs get-cron-job" [
 #
 # PATCH /apis/batch/v1/namespaces/{namespace}/cronjobs/{name}
 # operationId: patchBatchV1NamespacedCronJob
-export def "apis-batch-namespaces-cronjobs update-cron-job-by-namespace-name" [
+export def "patch-batch-v1-namespaced-cron-job" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -21626,7 +21626,7 @@ export def "apis-batch-namespaces-cronjobs update-cron-job-by-namespace-name" [
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {concurrencyPolicy?: string, failedJobsHistoryLimit?: int, jobTemplate: record, schedule: string, startingDeadlineSeconds?: int, successfulJobsHistoryLimit?: int, suspend?: bool, timeZone?: string}
 # --status shape: {active?: list, lastScheduleTime?: string, lastSuccessfulTime?: string}
-export def "apis-batch-namespaces-cronjobs update-cron-job-by-namespace-name-1" [
+export def "replace-batch-v1-namespaced-cron-job" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -21678,7 +21678,7 @@ export def "apis-batch-namespaces-cronjobs update-cron-job-by-namespace-name-1" 
 #
 # GET /apis/batch/v1/namespaces/{namespace}/cronjobs/{name}/status
 # operationId: readBatchV1NamespacedCronJobStatus
-export def "apis-batch-namespaces-cronjobs-status get-cron-job" [
+export def "read-batch-v1-namespaced-cron-job-status" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -21719,7 +21719,7 @@ export def "apis-batch-namespaces-cronjobs-status get-cron-job" [
 #
 # PATCH /apis/batch/v1/namespaces/{namespace}/cronjobs/{name}/status
 # operationId: patchBatchV1NamespacedCronJobStatus
-export def "apis-batch-namespaces-cronjobs-status update-cron-job-by-namespace-name" [
+export def "patch-batch-v1-namespaced-cron-job-status" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -21771,7 +21771,7 @@ export def "apis-batch-namespaces-cronjobs-status update-cron-job-by-namespace-n
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {concurrencyPolicy?: string, failedJobsHistoryLimit?: int, jobTemplate: record, schedule: string, startingDeadlineSeconds?: int, successfulJobsHistoryLimit?: int, suspend?: bool, timeZone?: string}
 # --status shape: {active?: list, lastScheduleTime?: string, lastSuccessfulTime?: string}
-export def "apis-batch-namespaces-cronjobs-status update-cron-job-by-namespace-name-1" [
+export def "replace-batch-v1-namespaced-cron-job-status" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -21824,7 +21824,7 @@ export def "apis-batch-namespaces-cronjobs-status update-cron-job-by-namespace-n
 # DELETE /apis/batch/v1/namespaces/{namespace}/jobs
 # operationId: deleteBatchV1CollectionNamespacedJob
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-batch-namespaces-jobs delete-collection" [
+export def "delete-batch-v1-collection-namespaced-job" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -21885,7 +21885,7 @@ export def "apis-batch-namespaces-jobs delete-collection" [
 #
 # GET /apis/batch/v1/namespaces/{namespace}/jobs
 # operationId: listBatchV1NamespacedJob
-export def "apis-batch-namespaces-jobs list" [
+export def "list-batch-v1-namespaced-job" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -21937,7 +21937,7 @@ export def "apis-batch-namespaces-jobs list" [
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {activeDeadlineSeconds?: int, backoffLimit?: int, completionMode?: string, completions?: int, manualSelector?: bool, parallelism?: int, podFailurePolicy?: record, selector?: record, suspend?: bool, template: record, ttlSecondsAfterFinished?: int}
 # --status shape: {active?: int, completedIndexes?: string, completionTime?: string, conditions?: list, failed?: int, ready?: int, startTime?: string, succeeded?: int, uncountedTerminatedPods?: record}
-export def "apis-batch-namespaces-jobs create" [
+export def "create-batch-v1-namespaced-job" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -21988,7 +21988,7 @@ export def "apis-batch-namespaces-jobs create" [
 # DELETE /apis/batch/v1/namespaces/{namespace}/jobs/{name}
 # operationId: deleteBatchV1NamespacedJob
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-batch-namespaces-jobs delete" [
+export def "delete-batch-v1-namespaced-job" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -22043,7 +22043,7 @@ export def "apis-batch-namespaces-jobs delete" [
 #
 # GET /apis/batch/v1/namespaces/{namespace}/jobs/{name}
 # operationId: readBatchV1NamespacedJob
-export def "apis-batch-namespaces-jobs get" [
+export def "read-batch-v1-namespaced-job" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -22084,7 +22084,7 @@ export def "apis-batch-namespaces-jobs get" [
 #
 # PATCH /apis/batch/v1/namespaces/{namespace}/jobs/{name}
 # operationId: patchBatchV1NamespacedJob
-export def "apis-batch-namespaces-jobs update-by-namespace-name" [
+export def "patch-batch-v1-namespaced-job" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -22136,7 +22136,7 @@ export def "apis-batch-namespaces-jobs update-by-namespace-name" [
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {activeDeadlineSeconds?: int, backoffLimit?: int, completionMode?: string, completions?: int, manualSelector?: bool, parallelism?: int, podFailurePolicy?: record, selector?: record, suspend?: bool, template: record, ttlSecondsAfterFinished?: int}
 # --status shape: {active?: int, completedIndexes?: string, completionTime?: string, conditions?: list, failed?: int, ready?: int, startTime?: string, succeeded?: int, uncountedTerminatedPods?: record}
-export def "apis-batch-namespaces-jobs update-by-namespace-name-1" [
+export def "replace-batch-v1-namespaced-job" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -22188,7 +22188,7 @@ export def "apis-batch-namespaces-jobs update-by-namespace-name-1" [
 #
 # GET /apis/batch/v1/namespaces/{namespace}/jobs/{name}/status
 # operationId: readBatchV1NamespacedJobStatus
-export def "apis-batch-namespaces-jobs-status get" [
+export def "read-batch-v1-namespaced-job-status" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -22229,7 +22229,7 @@ export def "apis-batch-namespaces-jobs-status get" [
 #
 # PATCH /apis/batch/v1/namespaces/{namespace}/jobs/{name}/status
 # operationId: patchBatchV1NamespacedJobStatus
-export def "apis-batch-namespaces-jobs-status update-by-namespace-name" [
+export def "patch-batch-v1-namespaced-job-status" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -22281,7 +22281,7 @@ export def "apis-batch-namespaces-jobs-status update-by-namespace-name" [
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {activeDeadlineSeconds?: int, backoffLimit?: int, completionMode?: string, completions?: int, manualSelector?: bool, parallelism?: int, podFailurePolicy?: record, selector?: record, suspend?: bool, template: record, ttlSecondsAfterFinished?: int}
 # --status shape: {active?: int, completedIndexes?: string, completionTime?: string, conditions?: list, failed?: int, ready?: int, startTime?: string, succeeded?: int, uncountedTerminatedPods?: record}
-export def "apis-batch-namespaces-jobs-status update-by-namespace-name-1" [
+export def "replace-batch-v1-namespaced-job-status" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -22333,7 +22333,7 @@ export def "apis-batch-namespaces-jobs-status update-by-namespace-name-1" [
 #
 # GET /apis/batch/v1/watch/cronjobs
 # operationId: watchBatchV1CronJobListForAllNamespaces
-export def "apis-batch-watch-cronjobs list-cron-job-for-namespaces" [
+export def "watch-batch-v1-cron-job-list-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -22380,7 +22380,7 @@ export def "apis-batch-watch-cronjobs list-cron-job-for-namespaces" [
 #
 # GET /apis/batch/v1/watch/jobs
 # operationId: watchBatchV1JobListForAllNamespaces
-export def "apis-batch-watch-jobs list-for-namespaces" [
+export def "watch-batch-v1-job-list-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -22427,7 +22427,7 @@ export def "apis-batch-watch-jobs list-for-namespaces" [
 #
 # GET /apis/batch/v1/watch/namespaces/{namespace}/cronjobs
 # operationId: watchBatchV1NamespacedCronJobList
-export def "apis-batch-watch-namespaces-cronjobs list-cron-job" [
+export def "watch-batch-v1-namespaced-cron-job-list" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -22476,7 +22476,7 @@ export def "apis-batch-watch-namespaces-cronjobs list-cron-job" [
 #
 # GET /apis/batch/v1/watch/namespaces/{namespace}/cronjobs/{name}
 # operationId: watchBatchV1NamespacedCronJob
-export def "apis-batch-watch-namespaces-cronjobs watch-cron-job" [
+export def "watch-batch-v1-namespaced-cron-job" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -22527,7 +22527,7 @@ export def "apis-batch-watch-namespaces-cronjobs watch-cron-job" [
 #
 # GET /apis/batch/v1/watch/namespaces/{namespace}/jobs
 # operationId: watchBatchV1NamespacedJobList
-export def "apis-batch-watch-namespaces-jobs list" [
+export def "watch-batch-v1-namespaced-job-list" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -22576,7 +22576,7 @@ export def "apis-batch-watch-namespaces-jobs list" [
 #
 # GET /apis/batch/v1/watch/namespaces/{namespace}/jobs/{name}
 # operationId: watchBatchV1NamespacedJob
-export def "apis-batch-watch-namespaces-jobs watch" [
+export def "watch-batch-v1-namespaced-job" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -22627,7 +22627,7 @@ export def "apis-batch-watch-namespaces-jobs watch" [
 #
 # GET /apis/certificates.k8s.io/
 # operationId: getCertificatesAPIGroup
-export def "apis-certificates-k8s-io get-group" [
+export def "get-certificates-api-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -22662,7 +22662,7 @@ export def "apis-certificates-k8s-io get-group" [
 #
 # GET /apis/certificates.k8s.io/v1/
 # operationId: getCertificatesV1APIResources
-export def "apis-certificates-k8s-io get-resources" [
+export def "get-certificates-v1api-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -22698,7 +22698,7 @@ export def "apis-certificates-k8s-io get-resources" [
 # DELETE /apis/certificates.k8s.io/v1/certificatesigningrequests
 # operationId: deleteCertificatesV1CollectionCertificateSigningRequest
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-certificates-k8s-io-certificatesigningrequests delete-collection-signing-request" [
+export def "delete-certificates-v1-collection-certificate-signing-request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -22757,7 +22757,7 @@ export def "apis-certificates-k8s-io-certificatesigningrequests delete-collectio
 #
 # GET /apis/certificates.k8s.io/v1/certificatesigningrequests
 # operationId: listCertificatesV1CertificateSigningRequest
-export def "apis-certificates-k8s-io-certificatesigningrequests list-signing-request" [
+export def "list-certificates-v1-certificate-signing-request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -22807,7 +22807,7 @@ export def "apis-certificates-k8s-io-certificatesigningrequests list-signing-req
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {expirationSeconds?: int, extra?: record, groups?: list<string>, request: string, signerName: string, uid?: string, usages?: list<string>, username?: string}
 # --status shape: {certificate?: string, conditions?: list}
-export def "apis-certificates-k8s-io-certificatesigningrequests create-signing-request" [
+export def "create-certificates-v1-certificate-signing-request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -22856,7 +22856,7 @@ export def "apis-certificates-k8s-io-certificatesigningrequests create-signing-r
 # DELETE /apis/certificates.k8s.io/v1/certificatesigningrequests/{name}
 # operationId: deleteCertificatesV1CertificateSigningRequest
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-certificates-k8s-io-certificatesigningrequests delete-signing-request" [
+export def "delete-certificates-v1-certificate-signing-request" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -22909,7 +22909,7 @@ export def "apis-certificates-k8s-io-certificatesigningrequests delete-signing-r
 #
 # GET /apis/certificates.k8s.io/v1/certificatesigningrequests/{name}
 # operationId: readCertificatesV1CertificateSigningRequest
-export def "apis-certificates-k8s-io-certificatesigningrequests get-signing-request" [
+export def "read-certificates-v1-certificate-signing-request" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -22948,7 +22948,7 @@ export def "apis-certificates-k8s-io-certificatesigningrequests get-signing-requ
 #
 # PATCH /apis/certificates.k8s.io/v1/certificatesigningrequests/{name}
 # operationId: patchCertificatesV1CertificateSigningRequest
-export def "apis-certificates-k8s-io-certificatesigningrequests update-signing-request-by-name" [
+export def "patch-certificates-v1-certificate-signing-request" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -22998,7 +22998,7 @@ export def "apis-certificates-k8s-io-certificatesigningrequests update-signing-r
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {expirationSeconds?: int, extra?: record, groups?: list<string>, request: string, signerName: string, uid?: string, usages?: list<string>, username?: string}
 # --status shape: {certificate?: string, conditions?: list}
-export def "apis-certificates-k8s-io-certificatesigningrequests update-signing-request-by-name-1" [
+export def "replace-certificates-v1-certificate-signing-request" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -23048,7 +23048,7 @@ export def "apis-certificates-k8s-io-certificatesigningrequests update-signing-r
 #
 # GET /apis/certificates.k8s.io/v1/certificatesigningrequests/{name}/approval
 # operationId: readCertificatesV1CertificateSigningRequestApproval
-export def "apis-certificates-k8s-io-certificatesigningrequests-approval get-signing-request" [
+export def "read-certificates-v1-certificate-signing-request-approval" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -23087,7 +23087,7 @@ export def "apis-certificates-k8s-io-certificatesigningrequests-approval get-sig
 #
 # PATCH /apis/certificates.k8s.io/v1/certificatesigningrequests/{name}/approval
 # operationId: patchCertificatesV1CertificateSigningRequestApproval
-export def "apis-certificates-k8s-io-certificatesigningrequests-approval update-signing-request-by-name" [
+export def "patch-certificates-v1-certificate-signing-request-approval" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -23137,7 +23137,7 @@ export def "apis-certificates-k8s-io-certificatesigningrequests-approval update-
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {expirationSeconds?: int, extra?: record, groups?: list<string>, request: string, signerName: string, uid?: string, usages?: list<string>, username?: string}
 # --status shape: {certificate?: string, conditions?: list}
-export def "apis-certificates-k8s-io-certificatesigningrequests-approval update-signing-request-by-name-1" [
+export def "replace-certificates-v1-certificate-signing-request-approval" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -23187,7 +23187,7 @@ export def "apis-certificates-k8s-io-certificatesigningrequests-approval update-
 #
 # GET /apis/certificates.k8s.io/v1/certificatesigningrequests/{name}/status
 # operationId: readCertificatesV1CertificateSigningRequestStatus
-export def "apis-certificates-k8s-io-certificatesigningrequests-status get-signing-request" [
+export def "read-certificates-v1-certificate-signing-request-status" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -23226,7 +23226,7 @@ export def "apis-certificates-k8s-io-certificatesigningrequests-status get-signi
 #
 # PATCH /apis/certificates.k8s.io/v1/certificatesigningrequests/{name}/status
 # operationId: patchCertificatesV1CertificateSigningRequestStatus
-export def "apis-certificates-k8s-io-certificatesigningrequests-status update-signing-request-by-name" [
+export def "patch-certificates-v1-certificate-signing-request-status" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -23276,7 +23276,7 @@ export def "apis-certificates-k8s-io-certificatesigningrequests-status update-si
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {expirationSeconds?: int, extra?: record, groups?: list<string>, request: string, signerName: string, uid?: string, usages?: list<string>, username?: string}
 # --status shape: {certificate?: string, conditions?: list}
-export def "apis-certificates-k8s-io-certificatesigningrequests-status update-signing-request-by-name-1" [
+export def "replace-certificates-v1-certificate-signing-request-status" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -23326,7 +23326,7 @@ export def "apis-certificates-k8s-io-certificatesigningrequests-status update-si
 #
 # GET /apis/certificates.k8s.io/v1/watch/certificatesigningrequests
 # operationId: watchCertificatesV1CertificateSigningRequestList
-export def "apis-certificates-k8s-io-watch-certificatesigningrequests request-signing-list" [
+export def "watch-certificates-v1-certificate-signing-request-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -23373,7 +23373,7 @@ export def "apis-certificates-k8s-io-watch-certificatesigningrequests request-si
 #
 # GET /apis/certificates.k8s.io/v1/watch/certificatesigningrequests/{name}
 # operationId: watchCertificatesV1CertificateSigningRequest
-export def "apis-certificates-k8s-io-watch-certificatesigningrequests request-signing" [
+export def "watch-certificates-v1-certificate-signing-request" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -23422,7 +23422,7 @@ export def "apis-certificates-k8s-io-watch-certificatesigningrequests request-si
 #
 # GET /apis/coordination.k8s.io/
 # operationId: getCoordinationAPIGroup
-export def "apis-coordination-k8s-io get-group" [
+export def "get-coordination-api-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -23457,7 +23457,7 @@ export def "apis-coordination-k8s-io get-group" [
 #
 # GET /apis/coordination.k8s.io/v1/
 # operationId: getCoordinationV1APIResources
-export def "apis-coordination-k8s-io get-resources" [
+export def "get-coordination-v1api-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -23492,7 +23492,7 @@ export def "apis-coordination-k8s-io get-resources" [
 #
 # GET /apis/coordination.k8s.io/v1/leases
 # operationId: listCoordinationV1LeaseForAllNamespaces
-export def "apis-coordination-k8s-io-leases list-for-namespaces" [
+export def "list-coordination-v1-lease-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -23540,7 +23540,7 @@ export def "apis-coordination-k8s-io-leases list-for-namespaces" [
 # DELETE /apis/coordination.k8s.io/v1/namespaces/{namespace}/leases
 # operationId: deleteCoordinationV1CollectionNamespacedLease
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-coordination-k8s-io-namespaces-leases delete-collection" [
+export def "delete-coordination-v1-collection-namespaced-lease" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -23601,7 +23601,7 @@ export def "apis-coordination-k8s-io-namespaces-leases delete-collection" [
 #
 # GET /apis/coordination.k8s.io/v1/namespaces/{namespace}/leases
 # operationId: listCoordinationV1NamespacedLease
-export def "apis-coordination-k8s-io-namespaces-leases list" [
+export def "list-coordination-v1-namespaced-lease" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -23652,7 +23652,7 @@ export def "apis-coordination-k8s-io-namespaces-leases list" [
 # operationId: createCoordinationV1NamespacedLease
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {acquireTime?: string, holderIdentity?: string, leaseDurationSeconds?: int, leaseTransitions?: int, renewTime?: string}
-export def "apis-coordination-k8s-io-namespaces-leases create" [
+export def "create-coordination-v1-namespaced-lease" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -23702,7 +23702,7 @@ export def "apis-coordination-k8s-io-namespaces-leases create" [
 # DELETE /apis/coordination.k8s.io/v1/namespaces/{namespace}/leases/{name}
 # operationId: deleteCoordinationV1NamespacedLease
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-coordination-k8s-io-namespaces-leases delete" [
+export def "delete-coordination-v1-namespaced-lease" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -23757,7 +23757,7 @@ export def "apis-coordination-k8s-io-namespaces-leases delete" [
 #
 # GET /apis/coordination.k8s.io/v1/namespaces/{namespace}/leases/{name}
 # operationId: readCoordinationV1NamespacedLease
-export def "apis-coordination-k8s-io-namespaces-leases get" [
+export def "read-coordination-v1-namespaced-lease" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -23798,7 +23798,7 @@ export def "apis-coordination-k8s-io-namespaces-leases get" [
 #
 # PATCH /apis/coordination.k8s.io/v1/namespaces/{namespace}/leases/{name}
 # operationId: patchCoordinationV1NamespacedLease
-export def "apis-coordination-k8s-io-namespaces-leases update-by-namespace-name" [
+export def "patch-coordination-v1-namespaced-lease" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -23849,7 +23849,7 @@ export def "apis-coordination-k8s-io-namespaces-leases update-by-namespace-name"
 # operationId: replaceCoordinationV1NamespacedLease
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {acquireTime?: string, holderIdentity?: string, leaseDurationSeconds?: int, leaseTransitions?: int, renewTime?: string}
-export def "apis-coordination-k8s-io-namespaces-leases update-by-namespace-name-1" [
+export def "replace-coordination-v1-namespaced-lease" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -23900,7 +23900,7 @@ export def "apis-coordination-k8s-io-namespaces-leases update-by-namespace-name-
 #
 # GET /apis/coordination.k8s.io/v1/watch/leases
 # operationId: watchCoordinationV1LeaseListForAllNamespaces
-export def "apis-coordination-k8s-io-watch-leases list-for-namespaces" [
+export def "watch-coordination-v1-lease-list-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -23947,7 +23947,7 @@ export def "apis-coordination-k8s-io-watch-leases list-for-namespaces" [
 #
 # GET /apis/coordination.k8s.io/v1/watch/namespaces/{namespace}/leases
 # operationId: watchCoordinationV1NamespacedLeaseList
-export def "apis-coordination-k8s-io-watch-namespaces-leases list" [
+export def "watch-coordination-v1-namespaced-lease-list" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -23996,7 +23996,7 @@ export def "apis-coordination-k8s-io-watch-namespaces-leases list" [
 #
 # GET /apis/coordination.k8s.io/v1/watch/namespaces/{namespace}/leases/{name}
 # operationId: watchCoordinationV1NamespacedLease
-export def "apis-coordination-k8s-io-watch-namespaces-leases watch" [
+export def "watch-coordination-v1-namespaced-lease" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -24047,7 +24047,7 @@ export def "apis-coordination-k8s-io-watch-namespaces-leases watch" [
 #
 # GET /apis/discovery.k8s.io/
 # operationId: getDiscoveryAPIGroup
-export def "apis-discovery-k8s-io get-group" [
+export def "get-discovery-api-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -24082,7 +24082,7 @@ export def "apis-discovery-k8s-io get-group" [
 #
 # GET /apis/discovery.k8s.io/v1/
 # operationId: getDiscoveryV1APIResources
-export def "apis-discovery-k8s-io get-resources" [
+export def "get-discovery-v1api-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -24117,7 +24117,7 @@ export def "apis-discovery-k8s-io get-resources" [
 #
 # GET /apis/discovery.k8s.io/v1/endpointslices
 # operationId: listDiscoveryV1EndpointSliceForAllNamespaces
-export def "apis-discovery-k8s-io-endpointslices list-endpoint-slice-for-namespaces" [
+export def "list-discovery-v1-endpoint-slice-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -24165,7 +24165,7 @@ export def "apis-discovery-k8s-io-endpointslices list-endpoint-slice-for-namespa
 # DELETE /apis/discovery.k8s.io/v1/namespaces/{namespace}/endpointslices
 # operationId: deleteDiscoveryV1CollectionNamespacedEndpointSlice
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-discovery-k8s-io-namespaces-endpointslices delete-collection-endpoint-slice" [
+export def "delete-discovery-v1-collection-namespaced-endpoint-slice" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -24226,7 +24226,7 @@ export def "apis-discovery-k8s-io-namespaces-endpointslices delete-collection-en
 #
 # GET /apis/discovery.k8s.io/v1/namespaces/{namespace}/endpointslices
 # operationId: listDiscoveryV1NamespacedEndpointSlice
-export def "apis-discovery-k8s-io-namespaces-endpointslices list-endpoint-slice" [
+export def "list-discovery-v1-namespaced-endpoint-slice" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -24278,7 +24278,7 @@ export def "apis-discovery-k8s-io-namespaces-endpointslices list-endpoint-slice"
 # --endpoints item shape: {addresses: list<string>, conditions?: record, deprecatedTopology?: record, hints?: record, hostname?: string, nodeName?: string, targetRef?: record, zone?: string}
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --ports item shape: {appProtocol?: string, name?: string, port?: int, protocol?: string}
-export def "apis-discovery-k8s-io-namespaces-endpointslices create-endpoint-slice" [
+export def "create-discovery-v1-namespaced-endpoint-slice" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -24330,7 +24330,7 @@ export def "apis-discovery-k8s-io-namespaces-endpointslices create-endpoint-slic
 # DELETE /apis/discovery.k8s.io/v1/namespaces/{namespace}/endpointslices/{name}
 # operationId: deleteDiscoveryV1NamespacedEndpointSlice
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-discovery-k8s-io-namespaces-endpointslices delete-endpoint-slice" [
+export def "delete-discovery-v1-namespaced-endpoint-slice" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -24385,7 +24385,7 @@ export def "apis-discovery-k8s-io-namespaces-endpointslices delete-endpoint-slic
 #
 # GET /apis/discovery.k8s.io/v1/namespaces/{namespace}/endpointslices/{name}
 # operationId: readDiscoveryV1NamespacedEndpointSlice
-export def "apis-discovery-k8s-io-namespaces-endpointslices get-endpoint-slice" [
+export def "read-discovery-v1-namespaced-endpoint-slice" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -24426,7 +24426,7 @@ export def "apis-discovery-k8s-io-namespaces-endpointslices get-endpoint-slice" 
 #
 # PATCH /apis/discovery.k8s.io/v1/namespaces/{namespace}/endpointslices/{name}
 # operationId: patchDiscoveryV1NamespacedEndpointSlice
-export def "apis-discovery-k8s-io-namespaces-endpointslices update-endpoint-slice-by-namespace-name" [
+export def "patch-discovery-v1-namespaced-endpoint-slice" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -24478,7 +24478,7 @@ export def "apis-discovery-k8s-io-namespaces-endpointslices update-endpoint-slic
 # --endpoints item shape: {addresses: list<string>, conditions?: record, deprecatedTopology?: record, hints?: record, hostname?: string, nodeName?: string, targetRef?: record, zone?: string}
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --ports item shape: {appProtocol?: string, name?: string, port?: int, protocol?: string}
-export def "apis-discovery-k8s-io-namespaces-endpointslices update-endpoint-slice-by-namespace-name-1" [
+export def "replace-discovery-v1-namespaced-endpoint-slice" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -24531,7 +24531,7 @@ export def "apis-discovery-k8s-io-namespaces-endpointslices update-endpoint-slic
 #
 # GET /apis/discovery.k8s.io/v1/watch/endpointslices
 # operationId: watchDiscoveryV1EndpointSliceListForAllNamespaces
-export def "apis-discovery-k8s-io-watch-endpointslices list-endpoint-slice-for-namespaces" [
+export def "watch-discovery-v1-endpoint-slice-list-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -24578,7 +24578,7 @@ export def "apis-discovery-k8s-io-watch-endpointslices list-endpoint-slice-for-n
 #
 # GET /apis/discovery.k8s.io/v1/watch/namespaces/{namespace}/endpointslices
 # operationId: watchDiscoveryV1NamespacedEndpointSliceList
-export def "apis-discovery-k8s-io-watch-namespaces-endpointslices list-endpoint-slice" [
+export def "watch-discovery-v1-namespaced-endpoint-slice-list" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -24627,7 +24627,7 @@ export def "apis-discovery-k8s-io-watch-namespaces-endpointslices list-endpoint-
 #
 # GET /apis/discovery.k8s.io/v1/watch/namespaces/{namespace}/endpointslices/{name}
 # operationId: watchDiscoveryV1NamespacedEndpointSlice
-export def "apis-discovery-k8s-io-watch-namespaces-endpointslices watch-endpoint-slice" [
+export def "watch-discovery-v1-namespaced-endpoint-slice" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -24678,7 +24678,7 @@ export def "apis-discovery-k8s-io-watch-namespaces-endpointslices watch-endpoint
 #
 # GET /apis/events.k8s.io/
 # operationId: getEventsAPIGroup
-export def "apis-events-k8s-io get-group" [
+export def "get-events-api-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -24713,7 +24713,7 @@ export def "apis-events-k8s-io get-group" [
 #
 # GET /apis/events.k8s.io/v1/
 # operationId: getEventsV1APIResources
-export def "apis-events-k8s-io get-resources" [
+export def "get-events-v1api-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -24748,7 +24748,7 @@ export def "apis-events-k8s-io get-resources" [
 #
 # GET /apis/events.k8s.io/v1/events
 # operationId: listEventsV1EventForAllNamespaces
-export def "apis-events-k8s-io-events list-for-namespaces" [
+export def "list-events-v1-event-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -24796,7 +24796,7 @@ export def "apis-events-k8s-io-events list-for-namespaces" [
 # DELETE /apis/events.k8s.io/v1/namespaces/{namespace}/events
 # operationId: deleteEventsV1CollectionNamespacedEvent
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-events-k8s-io-namespaces-events delete-collection" [
+export def "delete-events-v1-collection-namespaced-event" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -24857,7 +24857,7 @@ export def "apis-events-k8s-io-namespaces-events delete-collection" [
 #
 # GET /apis/events.k8s.io/v1/namespaces/{namespace}/events
 # operationId: listEventsV1NamespacedEvent
-export def "apis-events-k8s-io-namespaces-events list" [
+export def "list-events-v1-namespaced-event" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -24911,7 +24911,7 @@ export def "apis-events-k8s-io-namespaces-events list" [
 # --regarding shape: {apiVersion?: string, fieldPath?: string, kind?: string, name?: string, namespace?: string, resourceVersion?: string, uid?: string}
 # --related shape: {apiVersion?: string, fieldPath?: string, kind?: string, name?: string, namespace?: string, resourceVersion?: string, uid?: string}
 # --series shape: {count: int, lastObservedTime: string}
-export def "apis-events-k8s-io-namespaces-events create" [
+export def "create-events-v1-namespaced-event" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -24974,7 +24974,7 @@ export def "apis-events-k8s-io-namespaces-events create" [
 # DELETE /apis/events.k8s.io/v1/namespaces/{namespace}/events/{name}
 # operationId: deleteEventsV1NamespacedEvent
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-events-k8s-io-namespaces-events delete" [
+export def "delete-events-v1-namespaced-event" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -25029,7 +25029,7 @@ export def "apis-events-k8s-io-namespaces-events delete" [
 #
 # GET /apis/events.k8s.io/v1/namespaces/{namespace}/events/{name}
 # operationId: readEventsV1NamespacedEvent
-export def "apis-events-k8s-io-namespaces-events get" [
+export def "read-events-v1-namespaced-event" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -25070,7 +25070,7 @@ export def "apis-events-k8s-io-namespaces-events get" [
 #
 # PATCH /apis/events.k8s.io/v1/namespaces/{namespace}/events/{name}
 # operationId: patchEventsV1NamespacedEvent
-export def "apis-events-k8s-io-namespaces-events update-by-namespace-name" [
+export def "patch-events-v1-namespaced-event" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -25124,7 +25124,7 @@ export def "apis-events-k8s-io-namespaces-events update-by-namespace-name" [
 # --regarding shape: {apiVersion?: string, fieldPath?: string, kind?: string, name?: string, namespace?: string, resourceVersion?: string, uid?: string}
 # --related shape: {apiVersion?: string, fieldPath?: string, kind?: string, name?: string, namespace?: string, resourceVersion?: string, uid?: string}
 # --series shape: {count: int, lastObservedTime: string}
-export def "apis-events-k8s-io-namespaces-events update-by-namespace-name-1" [
+export def "replace-events-v1-namespaced-event" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -25188,7 +25188,7 @@ export def "apis-events-k8s-io-namespaces-events update-by-namespace-name-1" [
 #
 # GET /apis/events.k8s.io/v1/watch/events
 # operationId: watchEventsV1EventListForAllNamespaces
-export def "apis-events-k8s-io-watch-events list-for-namespaces" [
+export def "watch-events-v1-event-list-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -25235,7 +25235,7 @@ export def "apis-events-k8s-io-watch-events list-for-namespaces" [
 #
 # GET /apis/events.k8s.io/v1/watch/namespaces/{namespace}/events
 # operationId: watchEventsV1NamespacedEventList
-export def "apis-events-k8s-io-watch-namespaces-events list" [
+export def "watch-events-v1-namespaced-event-list" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -25284,7 +25284,7 @@ export def "apis-events-k8s-io-watch-namespaces-events list" [
 #
 # GET /apis/events.k8s.io/v1/watch/namespaces/{namespace}/events/{name}
 # operationId: watchEventsV1NamespacedEvent
-export def "apis-events-k8s-io-watch-namespaces-events watch" [
+export def "watch-events-v1-namespaced-event" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -25335,7 +25335,7 @@ export def "apis-events-k8s-io-watch-namespaces-events watch" [
 #
 # GET /apis/flowcontrol.apiserver.k8s.io/
 # operationId: getFlowcontrolApiserverAPIGroup
-export def "apis-flowcontrol-apiserver-k8s-io get-group" [
+export def "get-flowcontrol-apiserver-api-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -25370,7 +25370,7 @@ export def "apis-flowcontrol-apiserver-k8s-io get-group" [
 #
 # GET /apis/flowcontrol.apiserver.k8s.io/v1beta2/
 # operationId: getFlowcontrolApiserverV1beta2APIResources
-export def "apis-flowcontrol-apiserver-k8s-io-v1beta2 get-resources" [
+export def "get-flowcontrol-apiserver-v1beta2-api-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -25406,7 +25406,7 @@ export def "apis-flowcontrol-apiserver-k8s-io-v1beta2 get-resources" [
 # DELETE /apis/flowcontrol.apiserver.k8s.io/v1beta2/flowschemas
 # operationId: deleteFlowcontrolApiserverV1beta2CollectionFlowSchema
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-flowcontrol-apiserver-k8s-io-v1beta2-flowschemas delete-collection-flow-schema" [
+export def "delete-flowcontrol-apiserver-v1beta2-collection-flow-schema" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -25465,7 +25465,7 @@ export def "apis-flowcontrol-apiserver-k8s-io-v1beta2-flowschemas delete-collect
 #
 # GET /apis/flowcontrol.apiserver.k8s.io/v1beta2/flowschemas
 # operationId: listFlowcontrolApiserverV1beta2FlowSchema
-export def "apis-flowcontrol-apiserver-k8s-io-v1beta2-flowschemas list-flow-schema" [
+export def "list-flowcontrol-apiserver-v1beta2-flow-schema" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -25515,7 +25515,7 @@ export def "apis-flowcontrol-apiserver-k8s-io-v1beta2-flowschemas list-flow-sche
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {distinguisherMethod?: record, matchingPrecedence?: int, priorityLevelConfiguration: record, rules?: list}
 # --status shape: {conditions?: list}
-export def "apis-flowcontrol-apiserver-k8s-io-v1beta2-flowschemas create-flow-schema" [
+export def "create-flowcontrol-apiserver-v1beta2-flow-schema" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -25564,7 +25564,7 @@ export def "apis-flowcontrol-apiserver-k8s-io-v1beta2-flowschemas create-flow-sc
 # DELETE /apis/flowcontrol.apiserver.k8s.io/v1beta2/flowschemas/{name}
 # operationId: deleteFlowcontrolApiserverV1beta2FlowSchema
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-flowcontrol-apiserver-k8s-io-v1beta2-flowschemas delete-flow-schema" [
+export def "delete-flowcontrol-apiserver-v1beta2-flow-schema" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -25617,7 +25617,7 @@ export def "apis-flowcontrol-apiserver-k8s-io-v1beta2-flowschemas delete-flow-sc
 #
 # GET /apis/flowcontrol.apiserver.k8s.io/v1beta2/flowschemas/{name}
 # operationId: readFlowcontrolApiserverV1beta2FlowSchema
-export def "apis-flowcontrol-apiserver-k8s-io-v1beta2-flowschemas get-flow-schema" [
+export def "read-flowcontrol-apiserver-v1beta2-flow-schema" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -25656,7 +25656,7 @@ export def "apis-flowcontrol-apiserver-k8s-io-v1beta2-flowschemas get-flow-schem
 #
 # PATCH /apis/flowcontrol.apiserver.k8s.io/v1beta2/flowschemas/{name}
 # operationId: patchFlowcontrolApiserverV1beta2FlowSchema
-export def "apis-flowcontrol-apiserver-k8s-io-v1beta2-flowschemas update-flow-schema-by-name" [
+export def "patch-flowcontrol-apiserver-v1beta2-flow-schema" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -25706,7 +25706,7 @@ export def "apis-flowcontrol-apiserver-k8s-io-v1beta2-flowschemas update-flow-sc
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {distinguisherMethod?: record, matchingPrecedence?: int, priorityLevelConfiguration: record, rules?: list}
 # --status shape: {conditions?: list}
-export def "apis-flowcontrol-apiserver-k8s-io-v1beta2-flowschemas update-flow-schema-by-name-1" [
+export def "replace-flowcontrol-apiserver-v1beta2-flow-schema" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -25756,7 +25756,7 @@ export def "apis-flowcontrol-apiserver-k8s-io-v1beta2-flowschemas update-flow-sc
 #
 # GET /apis/flowcontrol.apiserver.k8s.io/v1beta2/flowschemas/{name}/status
 # operationId: readFlowcontrolApiserverV1beta2FlowSchemaStatus
-export def "apis-flowcontrol-apiserver-k8s-io-v1beta2-flowschemas-status get-flow-schema" [
+export def "read-flowcontrol-apiserver-v1beta2-flow-schema-status" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -25795,7 +25795,7 @@ export def "apis-flowcontrol-apiserver-k8s-io-v1beta2-flowschemas-status get-flo
 #
 # PATCH /apis/flowcontrol.apiserver.k8s.io/v1beta2/flowschemas/{name}/status
 # operationId: patchFlowcontrolApiserverV1beta2FlowSchemaStatus
-export def "apis-flowcontrol-apiserver-k8s-io-v1beta2-flowschemas-status update-flow-schema-by-name" [
+export def "patch-flowcontrol-apiserver-v1beta2-flow-schema-status" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -25845,7 +25845,7 @@ export def "apis-flowcontrol-apiserver-k8s-io-v1beta2-flowschemas-status update-
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {distinguisherMethod?: record, matchingPrecedence?: int, priorityLevelConfiguration: record, rules?: list}
 # --status shape: {conditions?: list}
-export def "apis-flowcontrol-apiserver-k8s-io-v1beta2-flowschemas-status update-flow-schema-by-name-1" [
+export def "replace-flowcontrol-apiserver-v1beta2-flow-schema-status" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -25896,7 +25896,7 @@ export def "apis-flowcontrol-apiserver-k8s-io-v1beta2-flowschemas-status update-
 # DELETE /apis/flowcontrol.apiserver.k8s.io/v1beta2/prioritylevelconfigurations
 # operationId: deleteFlowcontrolApiserverV1beta2CollectionPriorityLevelConfiguration
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-flowcontrol-apiserver-k8s-io-v1beta2-prioritylevelconfigurations delete-collection-priority-level-configuration" [
+export def "delete-flowcontrol-apiserver-v1beta2-collection-priority-level-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -25955,7 +25955,7 @@ export def "apis-flowcontrol-apiserver-k8s-io-v1beta2-prioritylevelconfiguration
 #
 # GET /apis/flowcontrol.apiserver.k8s.io/v1beta2/prioritylevelconfigurations
 # operationId: listFlowcontrolApiserverV1beta2PriorityLevelConfiguration
-export def "apis-flowcontrol-apiserver-k8s-io-v1beta2-prioritylevelconfigurations list-priority-level-configuration" [
+export def "list-flowcontrol-apiserver-v1beta2-priority-level-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -26005,7 +26005,7 @@ export def "apis-flowcontrol-apiserver-k8s-io-v1beta2-prioritylevelconfiguration
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {limited?: record, type: string}
 # --status shape: {conditions?: list}
-export def "apis-flowcontrol-apiserver-k8s-io-v1beta2-prioritylevelconfigurations create-priority-level-configuration" [
+export def "create-flowcontrol-apiserver-v1beta2-priority-level-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -26054,7 +26054,7 @@ export def "apis-flowcontrol-apiserver-k8s-io-v1beta2-prioritylevelconfiguration
 # DELETE /apis/flowcontrol.apiserver.k8s.io/v1beta2/prioritylevelconfigurations/{name}
 # operationId: deleteFlowcontrolApiserverV1beta2PriorityLevelConfiguration
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-flowcontrol-apiserver-k8s-io-v1beta2-prioritylevelconfigurations delete-priority-level-configuration" [
+export def "delete-flowcontrol-apiserver-v1beta2-priority-level-configuration" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -26107,7 +26107,7 @@ export def "apis-flowcontrol-apiserver-k8s-io-v1beta2-prioritylevelconfiguration
 #
 # GET /apis/flowcontrol.apiserver.k8s.io/v1beta2/prioritylevelconfigurations/{name}
 # operationId: readFlowcontrolApiserverV1beta2PriorityLevelConfiguration
-export def "apis-flowcontrol-apiserver-k8s-io-v1beta2-prioritylevelconfigurations get-priority-level-configuration" [
+export def "read-flowcontrol-apiserver-v1beta2-priority-level-configuration" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -26146,7 +26146,7 @@ export def "apis-flowcontrol-apiserver-k8s-io-v1beta2-prioritylevelconfiguration
 #
 # PATCH /apis/flowcontrol.apiserver.k8s.io/v1beta2/prioritylevelconfigurations/{name}
 # operationId: patchFlowcontrolApiserverV1beta2PriorityLevelConfiguration
-export def "apis-flowcontrol-apiserver-k8s-io-v1beta2-prioritylevelconfigurations update-priority-level-configuration-by-name" [
+export def "patch-flowcontrol-apiserver-v1beta2-priority-level-configuration" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -26196,7 +26196,7 @@ export def "apis-flowcontrol-apiserver-k8s-io-v1beta2-prioritylevelconfiguration
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {limited?: record, type: string}
 # --status shape: {conditions?: list}
-export def "apis-flowcontrol-apiserver-k8s-io-v1beta2-prioritylevelconfigurations update-priority-level-configuration-by-name-1" [
+export def "replace-flowcontrol-apiserver-v1beta2-priority-level-configuration" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -26246,7 +26246,7 @@ export def "apis-flowcontrol-apiserver-k8s-io-v1beta2-prioritylevelconfiguration
 #
 # GET /apis/flowcontrol.apiserver.k8s.io/v1beta2/prioritylevelconfigurations/{name}/status
 # operationId: readFlowcontrolApiserverV1beta2PriorityLevelConfigurationStatus
-export def "apis-flowcontrol-apiserver-k8s-io-v1beta2-prioritylevelconfigurations-status get-priority-level-configuration" [
+export def "read-flowcontrol-apiserver-v1beta2-priority-level-configuration-status" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -26285,7 +26285,7 @@ export def "apis-flowcontrol-apiserver-k8s-io-v1beta2-prioritylevelconfiguration
 #
 # PATCH /apis/flowcontrol.apiserver.k8s.io/v1beta2/prioritylevelconfigurations/{name}/status
 # operationId: patchFlowcontrolApiserverV1beta2PriorityLevelConfigurationStatus
-export def "apis-flowcontrol-apiserver-k8s-io-v1beta2-prioritylevelconfigurations-status update-priority-level-configuration-by-name" [
+export def "patch-flowcontrol-apiserver-v1beta2-priority-level-configuration-status" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -26335,7 +26335,7 @@ export def "apis-flowcontrol-apiserver-k8s-io-v1beta2-prioritylevelconfiguration
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {limited?: record, type: string}
 # --status shape: {conditions?: list}
-export def "apis-flowcontrol-apiserver-k8s-io-v1beta2-prioritylevelconfigurations-status update-priority-level-configuration-by-name-1" [
+export def "replace-flowcontrol-apiserver-v1beta2-priority-level-configuration-status" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -26385,7 +26385,7 @@ export def "apis-flowcontrol-apiserver-k8s-io-v1beta2-prioritylevelconfiguration
 #
 # GET /apis/flowcontrol.apiserver.k8s.io/v1beta2/watch/flowschemas
 # operationId: watchFlowcontrolApiserverV1beta2FlowSchemaList
-export def "apis-flowcontrol-apiserver-k8s-io-v1beta2-watch-flowschemas list-flow-schema" [
+export def "watch-flowcontrol-apiserver-v1beta2-flow-schema-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -26432,7 +26432,7 @@ export def "apis-flowcontrol-apiserver-k8s-io-v1beta2-watch-flowschemas list-flo
 #
 # GET /apis/flowcontrol.apiserver.k8s.io/v1beta2/watch/flowschemas/{name}
 # operationId: watchFlowcontrolApiserverV1beta2FlowSchema
-export def "apis-flowcontrol-apiserver-k8s-io-v1beta2-watch-flowschemas watch-flow-schema" [
+export def "watch-flowcontrol-apiserver-v1beta2-flow-schema" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -26481,7 +26481,7 @@ export def "apis-flowcontrol-apiserver-k8s-io-v1beta2-watch-flowschemas watch-fl
 #
 # GET /apis/flowcontrol.apiserver.k8s.io/v1beta2/watch/prioritylevelconfigurations
 # operationId: watchFlowcontrolApiserverV1beta2PriorityLevelConfigurationList
-export def "apis-flowcontrol-apiserver-k8s-io-v1beta2-watch-prioritylevelconfigurations list-priority-level-configuration" [
+export def "watch-flowcontrol-apiserver-v1beta2-priority-level-configuration-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -26528,7 +26528,7 @@ export def "apis-flowcontrol-apiserver-k8s-io-v1beta2-watch-prioritylevelconfigu
 #
 # GET /apis/flowcontrol.apiserver.k8s.io/v1beta2/watch/prioritylevelconfigurations/{name}
 # operationId: watchFlowcontrolApiserverV1beta2PriorityLevelConfiguration
-export def "apis-flowcontrol-apiserver-k8s-io-v1beta2-watch-prioritylevelconfigurations watch-priority-level-configuration" [
+export def "watch-flowcontrol-apiserver-v1beta2-priority-level-configuration" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -26577,7 +26577,7 @@ export def "apis-flowcontrol-apiserver-k8s-io-v1beta2-watch-prioritylevelconfigu
 #
 # GET /apis/flowcontrol.apiserver.k8s.io/v1beta3/
 # operationId: getFlowcontrolApiserverV1beta3APIResources
-export def "apis-flowcontrol-apiserver-k8s-io-v1beta3 get-resources" [
+export def "get-flowcontrol-apiserver-v1beta3-api-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -26613,7 +26613,7 @@ export def "apis-flowcontrol-apiserver-k8s-io-v1beta3 get-resources" [
 # DELETE /apis/flowcontrol.apiserver.k8s.io/v1beta3/flowschemas
 # operationId: deleteFlowcontrolApiserverV1beta3CollectionFlowSchema
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-flowcontrol-apiserver-k8s-io-v1beta3-flowschemas delete-collection-flow-schema" [
+export def "delete-flowcontrol-apiserver-v1beta3-collection-flow-schema" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -26672,7 +26672,7 @@ export def "apis-flowcontrol-apiserver-k8s-io-v1beta3-flowschemas delete-collect
 #
 # GET /apis/flowcontrol.apiserver.k8s.io/v1beta3/flowschemas
 # operationId: listFlowcontrolApiserverV1beta3FlowSchema
-export def "apis-flowcontrol-apiserver-k8s-io-v1beta3-flowschemas list-flow-schema" [
+export def "list-flowcontrol-apiserver-v1beta3-flow-schema" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -26722,7 +26722,7 @@ export def "apis-flowcontrol-apiserver-k8s-io-v1beta3-flowschemas list-flow-sche
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {distinguisherMethod?: record, matchingPrecedence?: int, priorityLevelConfiguration: record, rules?: list}
 # --status shape: {conditions?: list}
-export def "apis-flowcontrol-apiserver-k8s-io-v1beta3-flowschemas create-flow-schema" [
+export def "create-flowcontrol-apiserver-v1beta3-flow-schema" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -26771,7 +26771,7 @@ export def "apis-flowcontrol-apiserver-k8s-io-v1beta3-flowschemas create-flow-sc
 # DELETE /apis/flowcontrol.apiserver.k8s.io/v1beta3/flowschemas/{name}
 # operationId: deleteFlowcontrolApiserverV1beta3FlowSchema
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-flowcontrol-apiserver-k8s-io-v1beta3-flowschemas delete-flow-schema" [
+export def "delete-flowcontrol-apiserver-v1beta3-flow-schema" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -26824,7 +26824,7 @@ export def "apis-flowcontrol-apiserver-k8s-io-v1beta3-flowschemas delete-flow-sc
 #
 # GET /apis/flowcontrol.apiserver.k8s.io/v1beta3/flowschemas/{name}
 # operationId: readFlowcontrolApiserverV1beta3FlowSchema
-export def "apis-flowcontrol-apiserver-k8s-io-v1beta3-flowschemas get-flow-schema" [
+export def "read-flowcontrol-apiserver-v1beta3-flow-schema" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -26863,7 +26863,7 @@ export def "apis-flowcontrol-apiserver-k8s-io-v1beta3-flowschemas get-flow-schem
 #
 # PATCH /apis/flowcontrol.apiserver.k8s.io/v1beta3/flowschemas/{name}
 # operationId: patchFlowcontrolApiserverV1beta3FlowSchema
-export def "apis-flowcontrol-apiserver-k8s-io-v1beta3-flowschemas update-flow-schema-by-name" [
+export def "patch-flowcontrol-apiserver-v1beta3-flow-schema" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -26913,7 +26913,7 @@ export def "apis-flowcontrol-apiserver-k8s-io-v1beta3-flowschemas update-flow-sc
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {distinguisherMethod?: record, matchingPrecedence?: int, priorityLevelConfiguration: record, rules?: list}
 # --status shape: {conditions?: list}
-export def "apis-flowcontrol-apiserver-k8s-io-v1beta3-flowschemas update-flow-schema-by-name-1" [
+export def "replace-flowcontrol-apiserver-v1beta3-flow-schema" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -26963,7 +26963,7 @@ export def "apis-flowcontrol-apiserver-k8s-io-v1beta3-flowschemas update-flow-sc
 #
 # GET /apis/flowcontrol.apiserver.k8s.io/v1beta3/flowschemas/{name}/status
 # operationId: readFlowcontrolApiserverV1beta3FlowSchemaStatus
-export def "apis-flowcontrol-apiserver-k8s-io-v1beta3-flowschemas-status get-flow-schema" [
+export def "read-flowcontrol-apiserver-v1beta3-flow-schema-status" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -27002,7 +27002,7 @@ export def "apis-flowcontrol-apiserver-k8s-io-v1beta3-flowschemas-status get-flo
 #
 # PATCH /apis/flowcontrol.apiserver.k8s.io/v1beta3/flowschemas/{name}/status
 # operationId: patchFlowcontrolApiserverV1beta3FlowSchemaStatus
-export def "apis-flowcontrol-apiserver-k8s-io-v1beta3-flowschemas-status update-flow-schema-by-name" [
+export def "patch-flowcontrol-apiserver-v1beta3-flow-schema-status" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -27052,7 +27052,7 @@ export def "apis-flowcontrol-apiserver-k8s-io-v1beta3-flowschemas-status update-
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {distinguisherMethod?: record, matchingPrecedence?: int, priorityLevelConfiguration: record, rules?: list}
 # --status shape: {conditions?: list}
-export def "apis-flowcontrol-apiserver-k8s-io-v1beta3-flowschemas-status update-flow-schema-by-name-1" [
+export def "replace-flowcontrol-apiserver-v1beta3-flow-schema-status" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -27103,7 +27103,7 @@ export def "apis-flowcontrol-apiserver-k8s-io-v1beta3-flowschemas-status update-
 # DELETE /apis/flowcontrol.apiserver.k8s.io/v1beta3/prioritylevelconfigurations
 # operationId: deleteFlowcontrolApiserverV1beta3CollectionPriorityLevelConfiguration
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-flowcontrol-apiserver-k8s-io-v1beta3-prioritylevelconfigurations delete-collection-priority-level-configuration" [
+export def "delete-flowcontrol-apiserver-v1beta3-collection-priority-level-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -27162,7 +27162,7 @@ export def "apis-flowcontrol-apiserver-k8s-io-v1beta3-prioritylevelconfiguration
 #
 # GET /apis/flowcontrol.apiserver.k8s.io/v1beta3/prioritylevelconfigurations
 # operationId: listFlowcontrolApiserverV1beta3PriorityLevelConfiguration
-export def "apis-flowcontrol-apiserver-k8s-io-v1beta3-prioritylevelconfigurations list-priority-level-configuration" [
+export def "list-flowcontrol-apiserver-v1beta3-priority-level-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -27212,7 +27212,7 @@ export def "apis-flowcontrol-apiserver-k8s-io-v1beta3-prioritylevelconfiguration
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {limited?: record, type: string}
 # --status shape: {conditions?: list}
-export def "apis-flowcontrol-apiserver-k8s-io-v1beta3-prioritylevelconfigurations create-priority-level-configuration" [
+export def "create-flowcontrol-apiserver-v1beta3-priority-level-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -27261,7 +27261,7 @@ export def "apis-flowcontrol-apiserver-k8s-io-v1beta3-prioritylevelconfiguration
 # DELETE /apis/flowcontrol.apiserver.k8s.io/v1beta3/prioritylevelconfigurations/{name}
 # operationId: deleteFlowcontrolApiserverV1beta3PriorityLevelConfiguration
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-flowcontrol-apiserver-k8s-io-v1beta3-prioritylevelconfigurations delete-priority-level-configuration" [
+export def "delete-flowcontrol-apiserver-v1beta3-priority-level-configuration" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -27314,7 +27314,7 @@ export def "apis-flowcontrol-apiserver-k8s-io-v1beta3-prioritylevelconfiguration
 #
 # GET /apis/flowcontrol.apiserver.k8s.io/v1beta3/prioritylevelconfigurations/{name}
 # operationId: readFlowcontrolApiserverV1beta3PriorityLevelConfiguration
-export def "apis-flowcontrol-apiserver-k8s-io-v1beta3-prioritylevelconfigurations get-priority-level-configuration" [
+export def "read-flowcontrol-apiserver-v1beta3-priority-level-configuration" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -27353,7 +27353,7 @@ export def "apis-flowcontrol-apiserver-k8s-io-v1beta3-prioritylevelconfiguration
 #
 # PATCH /apis/flowcontrol.apiserver.k8s.io/v1beta3/prioritylevelconfigurations/{name}
 # operationId: patchFlowcontrolApiserverV1beta3PriorityLevelConfiguration
-export def "apis-flowcontrol-apiserver-k8s-io-v1beta3-prioritylevelconfigurations update-priority-level-configuration-by-name" [
+export def "patch-flowcontrol-apiserver-v1beta3-priority-level-configuration" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -27403,7 +27403,7 @@ export def "apis-flowcontrol-apiserver-k8s-io-v1beta3-prioritylevelconfiguration
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {limited?: record, type: string}
 # --status shape: {conditions?: list}
-export def "apis-flowcontrol-apiserver-k8s-io-v1beta3-prioritylevelconfigurations update-priority-level-configuration-by-name-1" [
+export def "replace-flowcontrol-apiserver-v1beta3-priority-level-configuration" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -27453,7 +27453,7 @@ export def "apis-flowcontrol-apiserver-k8s-io-v1beta3-prioritylevelconfiguration
 #
 # GET /apis/flowcontrol.apiserver.k8s.io/v1beta3/prioritylevelconfigurations/{name}/status
 # operationId: readFlowcontrolApiserverV1beta3PriorityLevelConfigurationStatus
-export def "apis-flowcontrol-apiserver-k8s-io-v1beta3-prioritylevelconfigurations-status get-priority-level-configuration" [
+export def "read-flowcontrol-apiserver-v1beta3-priority-level-configuration-status" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -27492,7 +27492,7 @@ export def "apis-flowcontrol-apiserver-k8s-io-v1beta3-prioritylevelconfiguration
 #
 # PATCH /apis/flowcontrol.apiserver.k8s.io/v1beta3/prioritylevelconfigurations/{name}/status
 # operationId: patchFlowcontrolApiserverV1beta3PriorityLevelConfigurationStatus
-export def "apis-flowcontrol-apiserver-k8s-io-v1beta3-prioritylevelconfigurations-status update-priority-level-configuration-by-name" [
+export def "patch-flowcontrol-apiserver-v1beta3-priority-level-configuration-status" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -27542,7 +27542,7 @@ export def "apis-flowcontrol-apiserver-k8s-io-v1beta3-prioritylevelconfiguration
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {limited?: record, type: string}
 # --status shape: {conditions?: list}
-export def "apis-flowcontrol-apiserver-k8s-io-v1beta3-prioritylevelconfigurations-status update-priority-level-configuration-by-name-1" [
+export def "replace-flowcontrol-apiserver-v1beta3-priority-level-configuration-status" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -27592,7 +27592,7 @@ export def "apis-flowcontrol-apiserver-k8s-io-v1beta3-prioritylevelconfiguration
 #
 # GET /apis/flowcontrol.apiserver.k8s.io/v1beta3/watch/flowschemas
 # operationId: watchFlowcontrolApiserverV1beta3FlowSchemaList
-export def "apis-flowcontrol-apiserver-k8s-io-v1beta3-watch-flowschemas list-flow-schema" [
+export def "watch-flowcontrol-apiserver-v1beta3-flow-schema-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -27639,7 +27639,7 @@ export def "apis-flowcontrol-apiserver-k8s-io-v1beta3-watch-flowschemas list-flo
 #
 # GET /apis/flowcontrol.apiserver.k8s.io/v1beta3/watch/flowschemas/{name}
 # operationId: watchFlowcontrolApiserverV1beta3FlowSchema
-export def "apis-flowcontrol-apiserver-k8s-io-v1beta3-watch-flowschemas watch-flow-schema" [
+export def "watch-flowcontrol-apiserver-v1beta3-flow-schema" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -27688,7 +27688,7 @@ export def "apis-flowcontrol-apiserver-k8s-io-v1beta3-watch-flowschemas watch-fl
 #
 # GET /apis/flowcontrol.apiserver.k8s.io/v1beta3/watch/prioritylevelconfigurations
 # operationId: watchFlowcontrolApiserverV1beta3PriorityLevelConfigurationList
-export def "apis-flowcontrol-apiserver-k8s-io-v1beta3-watch-prioritylevelconfigurations list-priority-level-configuration" [
+export def "watch-flowcontrol-apiserver-v1beta3-priority-level-configuration-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -27735,7 +27735,7 @@ export def "apis-flowcontrol-apiserver-k8s-io-v1beta3-watch-prioritylevelconfigu
 #
 # GET /apis/flowcontrol.apiserver.k8s.io/v1beta3/watch/prioritylevelconfigurations/{name}
 # operationId: watchFlowcontrolApiserverV1beta3PriorityLevelConfiguration
-export def "apis-flowcontrol-apiserver-k8s-io-v1beta3-watch-prioritylevelconfigurations watch-priority-level-configuration" [
+export def "watch-flowcontrol-apiserver-v1beta3-priority-level-configuration" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -27784,7 +27784,7 @@ export def "apis-flowcontrol-apiserver-k8s-io-v1beta3-watch-prioritylevelconfigu
 #
 # GET /apis/internal.apiserver.k8s.io/
 # operationId: getInternalApiserverAPIGroup
-export def "apis-internal-apiserver-k8s-io get-group" [
+export def "get-internal-apiserver-api-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -27819,7 +27819,7 @@ export def "apis-internal-apiserver-k8s-io get-group" [
 #
 # GET /apis/internal.apiserver.k8s.io/v1alpha1/
 # operationId: getInternalApiserverV1alpha1APIResources
-export def "apis-internal-apiserver-k8s-io-v1alpha1 get-resources" [
+export def "get-internal-apiserver-v1alpha1-api-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -27855,7 +27855,7 @@ export def "apis-internal-apiserver-k8s-io-v1alpha1 get-resources" [
 # DELETE /apis/internal.apiserver.k8s.io/v1alpha1/storageversions
 # operationId: deleteInternalApiserverV1alpha1CollectionStorageVersion
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-internal-apiserver-k8s-io-v1alpha1-storageversions delete-collection-storage-version" [
+export def "delete-internal-apiserver-v1alpha1-collection-storage-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -27914,7 +27914,7 @@ export def "apis-internal-apiserver-k8s-io-v1alpha1-storageversions delete-colle
 #
 # GET /apis/internal.apiserver.k8s.io/v1alpha1/storageversions
 # operationId: listInternalApiserverV1alpha1StorageVersion
-export def "apis-internal-apiserver-k8s-io-v1alpha1-storageversions list-storage-version" [
+export def "list-internal-apiserver-v1alpha1-storage-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -27963,7 +27963,7 @@ export def "apis-internal-apiserver-k8s-io-v1alpha1-storageversions list-storage
 # operationId: createInternalApiserverV1alpha1StorageVersion
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --status shape: {commonEncodingVersion?: string, conditions?: list, storageVersions?: list}
-export def "apis-internal-apiserver-k8s-io-v1alpha1-storageversions create-storage-version" [
+export def "create-internal-apiserver-v1alpha1-storage-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -28012,7 +28012,7 @@ export def "apis-internal-apiserver-k8s-io-v1alpha1-storageversions create-stora
 # DELETE /apis/internal.apiserver.k8s.io/v1alpha1/storageversions/{name}
 # operationId: deleteInternalApiserverV1alpha1StorageVersion
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-internal-apiserver-k8s-io-v1alpha1-storageversions delete-storage-version" [
+export def "delete-internal-apiserver-v1alpha1-storage-version" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -28065,7 +28065,7 @@ export def "apis-internal-apiserver-k8s-io-v1alpha1-storageversions delete-stora
 #
 # GET /apis/internal.apiserver.k8s.io/v1alpha1/storageversions/{name}
 # operationId: readInternalApiserverV1alpha1StorageVersion
-export def "apis-internal-apiserver-k8s-io-v1alpha1-storageversions get-storage-version" [
+export def "read-internal-apiserver-v1alpha1-storage-version" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -28104,7 +28104,7 @@ export def "apis-internal-apiserver-k8s-io-v1alpha1-storageversions get-storage-
 #
 # PATCH /apis/internal.apiserver.k8s.io/v1alpha1/storageversions/{name}
 # operationId: patchInternalApiserverV1alpha1StorageVersion
-export def "apis-internal-apiserver-k8s-io-v1alpha1-storageversions update-storage-version-by-name" [
+export def "patch-internal-apiserver-v1alpha1-storage-version" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -28153,7 +28153,7 @@ export def "apis-internal-apiserver-k8s-io-v1alpha1-storageversions update-stora
 # operationId: replaceInternalApiserverV1alpha1StorageVersion
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --status shape: {commonEncodingVersion?: string, conditions?: list, storageVersions?: list}
-export def "apis-internal-apiserver-k8s-io-v1alpha1-storageversions update-storage-version-by-name-1" [
+export def "replace-internal-apiserver-v1alpha1-storage-version" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -28203,7 +28203,7 @@ export def "apis-internal-apiserver-k8s-io-v1alpha1-storageversions update-stora
 #
 # GET /apis/internal.apiserver.k8s.io/v1alpha1/storageversions/{name}/status
 # operationId: readInternalApiserverV1alpha1StorageVersionStatus
-export def "apis-internal-apiserver-k8s-io-v1alpha1-storageversions-status get-storage-version" [
+export def "read-internal-apiserver-v1alpha1-storage-version-status" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -28242,7 +28242,7 @@ export def "apis-internal-apiserver-k8s-io-v1alpha1-storageversions-status get-s
 #
 # PATCH /apis/internal.apiserver.k8s.io/v1alpha1/storageversions/{name}/status
 # operationId: patchInternalApiserverV1alpha1StorageVersionStatus
-export def "apis-internal-apiserver-k8s-io-v1alpha1-storageversions-status update-storage-version-by-name" [
+export def "patch-internal-apiserver-v1alpha1-storage-version-status" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -28291,7 +28291,7 @@ export def "apis-internal-apiserver-k8s-io-v1alpha1-storageversions-status updat
 # operationId: replaceInternalApiserverV1alpha1StorageVersionStatus
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --status shape: {commonEncodingVersion?: string, conditions?: list, storageVersions?: list}
-export def "apis-internal-apiserver-k8s-io-v1alpha1-storageversions-status update-storage-version-by-name-1" [
+export def "replace-internal-apiserver-v1alpha1-storage-version-status" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -28341,7 +28341,7 @@ export def "apis-internal-apiserver-k8s-io-v1alpha1-storageversions-status updat
 #
 # GET /apis/internal.apiserver.k8s.io/v1alpha1/watch/storageversions
 # operationId: watchInternalApiserverV1alpha1StorageVersionList
-export def "apis-internal-apiserver-k8s-io-v1alpha1-watch-storageversions version-storage-list" [
+export def "watch-internal-apiserver-v1alpha1-storage-version-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -28388,7 +28388,7 @@ export def "apis-internal-apiserver-k8s-io-v1alpha1-watch-storageversions versio
 #
 # GET /apis/internal.apiserver.k8s.io/v1alpha1/watch/storageversions/{name}
 # operationId: watchInternalApiserverV1alpha1StorageVersion
-export def "apis-internal-apiserver-k8s-io-v1alpha1-watch-storageversions version-storage" [
+export def "watch-internal-apiserver-v1alpha1-storage-version" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -28437,7 +28437,7 @@ export def "apis-internal-apiserver-k8s-io-v1alpha1-watch-storageversions versio
 #
 # GET /apis/networking.k8s.io/
 # operationId: getNetworkingAPIGroup
-export def "apis-networking-k8s-io get-group" [
+export def "get-networking-api-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -28472,7 +28472,7 @@ export def "apis-networking-k8s-io get-group" [
 #
 # GET /apis/networking.k8s.io/v1/
 # operationId: getNetworkingV1APIResources
-export def "apis-networking-k8s-io get-resources" [
+export def "get-networking-v1api-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -28508,7 +28508,7 @@ export def "apis-networking-k8s-io get-resources" [
 # DELETE /apis/networking.k8s.io/v1/ingressclasses
 # operationId: deleteNetworkingV1CollectionIngressClass
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-networking-k8s-io-ingressclasses delete-collection-ingress-class" [
+export def "delete-networking-v1-collection-ingress-class" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -28567,7 +28567,7 @@ export def "apis-networking-k8s-io-ingressclasses delete-collection-ingress-clas
 #
 # GET /apis/networking.k8s.io/v1/ingressclasses
 # operationId: listNetworkingV1IngressClass
-export def "apis-networking-k8s-io-ingressclasses list-ingress-class" [
+export def "list-networking-v1-ingress-class" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -28616,7 +28616,7 @@ export def "apis-networking-k8s-io-ingressclasses list-ingress-class" [
 # operationId: createNetworkingV1IngressClass
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {controller?: string, parameters?: record}
-export def "apis-networking-k8s-io-ingressclasses create-ingress-class" [
+export def "create-networking-v1-ingress-class" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -28664,7 +28664,7 @@ export def "apis-networking-k8s-io-ingressclasses create-ingress-class" [
 # DELETE /apis/networking.k8s.io/v1/ingressclasses/{name}
 # operationId: deleteNetworkingV1IngressClass
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-networking-k8s-io-ingressclasses delete-ingress-class" [
+export def "delete-networking-v1-ingress-class" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -28717,7 +28717,7 @@ export def "apis-networking-k8s-io-ingressclasses delete-ingress-class" [
 #
 # GET /apis/networking.k8s.io/v1/ingressclasses/{name}
 # operationId: readNetworkingV1IngressClass
-export def "apis-networking-k8s-io-ingressclasses get-ingress-class" [
+export def "read-networking-v1-ingress-class" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -28756,7 +28756,7 @@ export def "apis-networking-k8s-io-ingressclasses get-ingress-class" [
 #
 # PATCH /apis/networking.k8s.io/v1/ingressclasses/{name}
 # operationId: patchNetworkingV1IngressClass
-export def "apis-networking-k8s-io-ingressclasses update-ingress-class-by-name" [
+export def "patch-networking-v1-ingress-class" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -28805,7 +28805,7 @@ export def "apis-networking-k8s-io-ingressclasses update-ingress-class-by-name" 
 # operationId: replaceNetworkingV1IngressClass
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {controller?: string, parameters?: record}
-export def "apis-networking-k8s-io-ingressclasses update-ingress-class-by-name-1" [
+export def "replace-networking-v1-ingress-class" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -28854,7 +28854,7 @@ export def "apis-networking-k8s-io-ingressclasses update-ingress-class-by-name-1
 #
 # GET /apis/networking.k8s.io/v1/ingresses
 # operationId: listNetworkingV1IngressForAllNamespaces
-export def "apis-networking-k8s-io-ingresses list-ingress-for-namespaces" [
+export def "list-networking-v1-ingress-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -28902,7 +28902,7 @@ export def "apis-networking-k8s-io-ingresses list-ingress-for-namespaces" [
 # DELETE /apis/networking.k8s.io/v1/namespaces/{namespace}/ingresses
 # operationId: deleteNetworkingV1CollectionNamespacedIngress
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-networking-k8s-io-namespaces-ingresses delete-collection-ingress" [
+export def "delete-networking-v1-collection-namespaced-ingress" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -28963,7 +28963,7 @@ export def "apis-networking-k8s-io-namespaces-ingresses delete-collection-ingres
 #
 # GET /apis/networking.k8s.io/v1/namespaces/{namespace}/ingresses
 # operationId: listNetworkingV1NamespacedIngress
-export def "apis-networking-k8s-io-namespaces-ingresses list-ingress" [
+export def "list-networking-v1-namespaced-ingress" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -29015,7 +29015,7 @@ export def "apis-networking-k8s-io-namespaces-ingresses list-ingress" [
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {defaultBackend?: record, ingressClassName?: string, rules?: list, tls?: list}
 # --status shape: {loadBalancer?: record}
-export def "apis-networking-k8s-io-namespaces-ingresses create-ingress" [
+export def "create-networking-v1-namespaced-ingress" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -29066,7 +29066,7 @@ export def "apis-networking-k8s-io-namespaces-ingresses create-ingress" [
 # DELETE /apis/networking.k8s.io/v1/namespaces/{namespace}/ingresses/{name}
 # operationId: deleteNetworkingV1NamespacedIngress
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-networking-k8s-io-namespaces-ingresses delete-ingress" [
+export def "delete-networking-v1-namespaced-ingress" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -29121,7 +29121,7 @@ export def "apis-networking-k8s-io-namespaces-ingresses delete-ingress" [
 #
 # GET /apis/networking.k8s.io/v1/namespaces/{namespace}/ingresses/{name}
 # operationId: readNetworkingV1NamespacedIngress
-export def "apis-networking-k8s-io-namespaces-ingresses get-ingress" [
+export def "read-networking-v1-namespaced-ingress" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -29162,7 +29162,7 @@ export def "apis-networking-k8s-io-namespaces-ingresses get-ingress" [
 #
 # PATCH /apis/networking.k8s.io/v1/namespaces/{namespace}/ingresses/{name}
 # operationId: patchNetworkingV1NamespacedIngress
-export def "apis-networking-k8s-io-namespaces-ingresses update-ingress-by-namespace-name" [
+export def "patch-networking-v1-namespaced-ingress" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -29214,7 +29214,7 @@ export def "apis-networking-k8s-io-namespaces-ingresses update-ingress-by-namesp
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {defaultBackend?: record, ingressClassName?: string, rules?: list, tls?: list}
 # --status shape: {loadBalancer?: record}
-export def "apis-networking-k8s-io-namespaces-ingresses update-ingress-by-namespace-name-1" [
+export def "replace-networking-v1-namespaced-ingress" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -29266,7 +29266,7 @@ export def "apis-networking-k8s-io-namespaces-ingresses update-ingress-by-namesp
 #
 # GET /apis/networking.k8s.io/v1/namespaces/{namespace}/ingresses/{name}/status
 # operationId: readNetworkingV1NamespacedIngressStatus
-export def "apis-networking-k8s-io-namespaces-ingresses-status get-ingress" [
+export def "read-networking-v1-namespaced-ingress-status" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -29307,7 +29307,7 @@ export def "apis-networking-k8s-io-namespaces-ingresses-status get-ingress" [
 #
 # PATCH /apis/networking.k8s.io/v1/namespaces/{namespace}/ingresses/{name}/status
 # operationId: patchNetworkingV1NamespacedIngressStatus
-export def "apis-networking-k8s-io-namespaces-ingresses-status update-ingress-by-namespace-name" [
+export def "patch-networking-v1-namespaced-ingress-status" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -29359,7 +29359,7 @@ export def "apis-networking-k8s-io-namespaces-ingresses-status update-ingress-by
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {defaultBackend?: record, ingressClassName?: string, rules?: list, tls?: list}
 # --status shape: {loadBalancer?: record}
-export def "apis-networking-k8s-io-namespaces-ingresses-status update-ingress-by-namespace-name-1" [
+export def "replace-networking-v1-namespaced-ingress-status" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -29412,7 +29412,7 @@ export def "apis-networking-k8s-io-namespaces-ingresses-status update-ingress-by
 # DELETE /apis/networking.k8s.io/v1/namespaces/{namespace}/networkpolicies
 # operationId: deleteNetworkingV1CollectionNamespacedNetworkPolicy
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-networking-k8s-io-namespaces-networkpolicies delete-collection-network-policy" [
+export def "delete-networking-v1-collection-namespaced-network-policy" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -29473,7 +29473,7 @@ export def "apis-networking-k8s-io-namespaces-networkpolicies delete-collection-
 #
 # GET /apis/networking.k8s.io/v1/namespaces/{namespace}/networkpolicies
 # operationId: listNetworkingV1NamespacedNetworkPolicy
-export def "apis-networking-k8s-io-namespaces-networkpolicies list-network-policy" [
+export def "list-networking-v1-namespaced-network-policy" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -29525,7 +29525,7 @@ export def "apis-networking-k8s-io-namespaces-networkpolicies list-network-polic
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {egress?: list, ingress?: list, podSelector: record, policyTypes?: list<string>}
 # --status shape: {conditions?: list}
-export def "apis-networking-k8s-io-namespaces-networkpolicies create-network-policy" [
+export def "create-networking-v1-namespaced-network-policy" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -29576,7 +29576,7 @@ export def "apis-networking-k8s-io-namespaces-networkpolicies create-network-pol
 # DELETE /apis/networking.k8s.io/v1/namespaces/{namespace}/networkpolicies/{name}
 # operationId: deleteNetworkingV1NamespacedNetworkPolicy
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-networking-k8s-io-namespaces-networkpolicies delete-network-policy" [
+export def "delete-networking-v1-namespaced-network-policy" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -29631,7 +29631,7 @@ export def "apis-networking-k8s-io-namespaces-networkpolicies delete-network-pol
 #
 # GET /apis/networking.k8s.io/v1/namespaces/{namespace}/networkpolicies/{name}
 # operationId: readNetworkingV1NamespacedNetworkPolicy
-export def "apis-networking-k8s-io-namespaces-networkpolicies get-network-policy" [
+export def "read-networking-v1-namespaced-network-policy" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -29672,7 +29672,7 @@ export def "apis-networking-k8s-io-namespaces-networkpolicies get-network-policy
 #
 # PATCH /apis/networking.k8s.io/v1/namespaces/{namespace}/networkpolicies/{name}
 # operationId: patchNetworkingV1NamespacedNetworkPolicy
-export def "apis-networking-k8s-io-namespaces-networkpolicies update-network-policy-by-namespace-name" [
+export def "patch-networking-v1-namespaced-network-policy" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -29724,7 +29724,7 @@ export def "apis-networking-k8s-io-namespaces-networkpolicies update-network-pol
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {egress?: list, ingress?: list, podSelector: record, policyTypes?: list<string>}
 # --status shape: {conditions?: list}
-export def "apis-networking-k8s-io-namespaces-networkpolicies update-network-policy-by-namespace-name-1" [
+export def "replace-networking-v1-namespaced-network-policy" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -29776,7 +29776,7 @@ export def "apis-networking-k8s-io-namespaces-networkpolicies update-network-pol
 #
 # GET /apis/networking.k8s.io/v1/namespaces/{namespace}/networkpolicies/{name}/status
 # operationId: readNetworkingV1NamespacedNetworkPolicyStatus
-export def "apis-networking-k8s-io-namespaces-networkpolicies-status get-network-policy" [
+export def "read-networking-v1-namespaced-network-policy-status" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -29817,7 +29817,7 @@ export def "apis-networking-k8s-io-namespaces-networkpolicies-status get-network
 #
 # PATCH /apis/networking.k8s.io/v1/namespaces/{namespace}/networkpolicies/{name}/status
 # operationId: patchNetworkingV1NamespacedNetworkPolicyStatus
-export def "apis-networking-k8s-io-namespaces-networkpolicies-status update-network-policy-by-namespace-name" [
+export def "patch-networking-v1-namespaced-network-policy-status" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -29869,7 +29869,7 @@ export def "apis-networking-k8s-io-namespaces-networkpolicies-status update-netw
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {egress?: list, ingress?: list, podSelector: record, policyTypes?: list<string>}
 # --status shape: {conditions?: list}
-export def "apis-networking-k8s-io-namespaces-networkpolicies-status update-network-policy-by-namespace-name-1" [
+export def "replace-networking-v1-namespaced-network-policy-status" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -29921,7 +29921,7 @@ export def "apis-networking-k8s-io-namespaces-networkpolicies-status update-netw
 #
 # GET /apis/networking.k8s.io/v1/networkpolicies
 # operationId: listNetworkingV1NetworkPolicyForAllNamespaces
-export def "apis-networking-k8s-io-networkpolicies list-network-policy-for-namespaces" [
+export def "list-networking-v1-network-policy-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -29968,7 +29968,7 @@ export def "apis-networking-k8s-io-networkpolicies list-network-policy-for-names
 #
 # GET /apis/networking.k8s.io/v1/watch/ingressclasses
 # operationId: watchNetworkingV1IngressClassList
-export def "apis-networking-k8s-io-watch-ingressclasses list-ingress-class" [
+export def "watch-networking-v1-ingress-class-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -30015,7 +30015,7 @@ export def "apis-networking-k8s-io-watch-ingressclasses list-ingress-class" [
 #
 # GET /apis/networking.k8s.io/v1/watch/ingressclasses/{name}
 # operationId: watchNetworkingV1IngressClass
-export def "apis-networking-k8s-io-watch-ingressclasses watch-ingress-class" [
+export def "watch-networking-v1-ingress-class" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -30064,7 +30064,7 @@ export def "apis-networking-k8s-io-watch-ingressclasses watch-ingress-class" [
 #
 # GET /apis/networking.k8s.io/v1/watch/ingresses
 # operationId: watchNetworkingV1IngressListForAllNamespaces
-export def "apis-networking-k8s-io-watch-ingresses list-ingress-for-namespaces" [
+export def "watch-networking-v1-ingress-list-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -30111,7 +30111,7 @@ export def "apis-networking-k8s-io-watch-ingresses list-ingress-for-namespaces" 
 #
 # GET /apis/networking.k8s.io/v1/watch/namespaces/{namespace}/ingresses
 # operationId: watchNetworkingV1NamespacedIngressList
-export def "apis-networking-k8s-io-watch-namespaces-ingresses list-ingress" [
+export def "watch-networking-v1-namespaced-ingress-list" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -30160,7 +30160,7 @@ export def "apis-networking-k8s-io-watch-namespaces-ingresses list-ingress" [
 #
 # GET /apis/networking.k8s.io/v1/watch/namespaces/{namespace}/ingresses/{name}
 # operationId: watchNetworkingV1NamespacedIngress
-export def "apis-networking-k8s-io-watch-namespaces-ingresses watch-ingress" [
+export def "watch-networking-v1-namespaced-ingress" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -30211,7 +30211,7 @@ export def "apis-networking-k8s-io-watch-namespaces-ingresses watch-ingress" [
 #
 # GET /apis/networking.k8s.io/v1/watch/namespaces/{namespace}/networkpolicies
 # operationId: watchNetworkingV1NamespacedNetworkPolicyList
-export def "apis-networking-k8s-io-watch-namespaces-networkpolicies list-network-policy" [
+export def "watch-networking-v1-namespaced-network-policy-list" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -30260,7 +30260,7 @@ export def "apis-networking-k8s-io-watch-namespaces-networkpolicies list-network
 #
 # GET /apis/networking.k8s.io/v1/watch/namespaces/{namespace}/networkpolicies/{name}
 # operationId: watchNetworkingV1NamespacedNetworkPolicy
-export def "apis-networking-k8s-io-watch-namespaces-networkpolicies watch-network-policy" [
+export def "watch-networking-v1-namespaced-network-policy" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -30311,7 +30311,7 @@ export def "apis-networking-k8s-io-watch-namespaces-networkpolicies watch-networ
 #
 # GET /apis/networking.k8s.io/v1/watch/networkpolicies
 # operationId: watchNetworkingV1NetworkPolicyListForAllNamespaces
-export def "apis-networking-k8s-io-watch-networkpolicies list-network-policy-for-namespaces" [
+export def "watch-networking-v1-network-policy-list-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -30358,7 +30358,7 @@ export def "apis-networking-k8s-io-watch-networkpolicies list-network-policy-for
 #
 # GET /apis/networking.k8s.io/v1alpha1/
 # operationId: getNetworkingV1alpha1APIResources
-export def "apis-networking-k8s-io-v1alpha1 get-resources" [
+export def "get-networking-v1alpha1-api-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -30394,7 +30394,7 @@ export def "apis-networking-k8s-io-v1alpha1 get-resources" [
 # DELETE /apis/networking.k8s.io/v1alpha1/clustercidrs
 # operationId: deleteNetworkingV1alpha1CollectionClusterCIDR
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-networking-k8s-io-v1alpha1-clustercidrs delete-collection-cidr" [
+export def "delete-networking-v1alpha1-collection-cluster-cidr" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -30453,7 +30453,7 @@ export def "apis-networking-k8s-io-v1alpha1-clustercidrs delete-collection-cidr"
 #
 # GET /apis/networking.k8s.io/v1alpha1/clustercidrs
 # operationId: listNetworkingV1alpha1ClusterCIDR
-export def "apis-networking-k8s-io-v1alpha1-clustercidrs list-cidr" [
+export def "list-networking-v1alpha1-cluster-cidr" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -30502,7 +30502,7 @@ export def "apis-networking-k8s-io-v1alpha1-clustercidrs list-cidr" [
 # operationId: createNetworkingV1alpha1ClusterCIDR
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {ipv4?: string, ipv6?: string, nodeSelector?: record, perNodeHostBits: int}
-export def "apis-networking-k8s-io-v1alpha1-clustercidrs create-cidr" [
+export def "create-networking-v1alpha1-cluster-cidr" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -30550,7 +30550,7 @@ export def "apis-networking-k8s-io-v1alpha1-clustercidrs create-cidr" [
 # DELETE /apis/networking.k8s.io/v1alpha1/clustercidrs/{name}
 # operationId: deleteNetworkingV1alpha1ClusterCIDR
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-networking-k8s-io-v1alpha1-clustercidrs delete-cidr" [
+export def "delete-networking-v1alpha1-cluster-cidr" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -30603,7 +30603,7 @@ export def "apis-networking-k8s-io-v1alpha1-clustercidrs delete-cidr" [
 #
 # GET /apis/networking.k8s.io/v1alpha1/clustercidrs/{name}
 # operationId: readNetworkingV1alpha1ClusterCIDR
-export def "apis-networking-k8s-io-v1alpha1-clustercidrs get-cidr" [
+export def "read-networking-v1alpha1-cluster-cidr" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -30642,7 +30642,7 @@ export def "apis-networking-k8s-io-v1alpha1-clustercidrs get-cidr" [
 #
 # PATCH /apis/networking.k8s.io/v1alpha1/clustercidrs/{name}
 # operationId: patchNetworkingV1alpha1ClusterCIDR
-export def "apis-networking-k8s-io-v1alpha1-clustercidrs update-cidr-by-name" [
+export def "patch-networking-v1alpha1-cluster-cidr" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -30691,7 +30691,7 @@ export def "apis-networking-k8s-io-v1alpha1-clustercidrs update-cidr-by-name" [
 # operationId: replaceNetworkingV1alpha1ClusterCIDR
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {ipv4?: string, ipv6?: string, nodeSelector?: record, perNodeHostBits: int}
-export def "apis-networking-k8s-io-v1alpha1-clustercidrs update-cidr-by-name-1" [
+export def "replace-networking-v1alpha1-cluster-cidr" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -30740,7 +30740,7 @@ export def "apis-networking-k8s-io-v1alpha1-clustercidrs update-cidr-by-name-1" 
 #
 # GET /apis/networking.k8s.io/v1alpha1/watch/clustercidrs
 # operationId: watchNetworkingV1alpha1ClusterCIDRList
-export def "apis-networking-k8s-io-v1alpha1-watch-clustercidrs list-cidr" [
+export def "watch-networking-v1alpha1-cluster-cidr-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -30787,7 +30787,7 @@ export def "apis-networking-k8s-io-v1alpha1-watch-clustercidrs list-cidr" [
 #
 # GET /apis/networking.k8s.io/v1alpha1/watch/clustercidrs/{name}
 # operationId: watchNetworkingV1alpha1ClusterCIDR
-export def "apis-networking-k8s-io-v1alpha1-watch-clustercidrs watch-cidr" [
+export def "watch-networking-v1alpha1-cluster-cidr" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -30836,7 +30836,7 @@ export def "apis-networking-k8s-io-v1alpha1-watch-clustercidrs watch-cidr" [
 #
 # GET /apis/node.k8s.io/
 # operationId: getNodeAPIGroup
-export def "apis-node-k8s-io get-group" [
+export def "get-node-api-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -30871,7 +30871,7 @@ export def "apis-node-k8s-io get-group" [
 #
 # GET /apis/node.k8s.io/v1/
 # operationId: getNodeV1APIResources
-export def "apis-node-k8s-io get-resources" [
+export def "get-node-v1api-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -30907,7 +30907,7 @@ export def "apis-node-k8s-io get-resources" [
 # DELETE /apis/node.k8s.io/v1/runtimeclasses
 # operationId: deleteNodeV1CollectionRuntimeClass
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-node-k8s-io-runtimeclasses delete-collection-runtime-class" [
+export def "delete-node-v1-collection-runtime-class" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -30966,7 +30966,7 @@ export def "apis-node-k8s-io-runtimeclasses delete-collection-runtime-class" [
 #
 # GET /apis/node.k8s.io/v1/runtimeclasses
 # operationId: listNodeV1RuntimeClass
-export def "apis-node-k8s-io-runtimeclasses list-runtime-class" [
+export def "list-node-v1-runtime-class" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -31016,7 +31016,7 @@ export def "apis-node-k8s-io-runtimeclasses list-runtime-class" [
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --overhead shape: {podFixed?: record}
 # --scheduling shape: {nodeSelector?: record, tolerations?: list}
-export def "apis-node-k8s-io-runtimeclasses create-runtime-class" [
+export def "create-node-v1-runtime-class" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -31066,7 +31066,7 @@ export def "apis-node-k8s-io-runtimeclasses create-runtime-class" [
 # DELETE /apis/node.k8s.io/v1/runtimeclasses/{name}
 # operationId: deleteNodeV1RuntimeClass
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-node-k8s-io-runtimeclasses delete-runtime-class" [
+export def "delete-node-v1-runtime-class" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -31119,7 +31119,7 @@ export def "apis-node-k8s-io-runtimeclasses delete-runtime-class" [
 #
 # GET /apis/node.k8s.io/v1/runtimeclasses/{name}
 # operationId: readNodeV1RuntimeClass
-export def "apis-node-k8s-io-runtimeclasses get-runtime-class" [
+export def "read-node-v1-runtime-class" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -31158,7 +31158,7 @@ export def "apis-node-k8s-io-runtimeclasses get-runtime-class" [
 #
 # PATCH /apis/node.k8s.io/v1/runtimeclasses/{name}
 # operationId: patchNodeV1RuntimeClass
-export def "apis-node-k8s-io-runtimeclasses update-runtime-class-by-name" [
+export def "patch-node-v1-runtime-class" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -31208,7 +31208,7 @@ export def "apis-node-k8s-io-runtimeclasses update-runtime-class-by-name" [
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --overhead shape: {podFixed?: record}
 # --scheduling shape: {nodeSelector?: record, tolerations?: list}
-export def "apis-node-k8s-io-runtimeclasses update-runtime-class-by-name-1" [
+export def "replace-node-v1-runtime-class" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -31259,7 +31259,7 @@ export def "apis-node-k8s-io-runtimeclasses update-runtime-class-by-name-1" [
 #
 # GET /apis/node.k8s.io/v1/watch/runtimeclasses
 # operationId: watchNodeV1RuntimeClassList
-export def "apis-node-k8s-io-watch-runtimeclasses list-runtime-class" [
+export def "watch-node-v1-runtime-class-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -31306,7 +31306,7 @@ export def "apis-node-k8s-io-watch-runtimeclasses list-runtime-class" [
 #
 # GET /apis/node.k8s.io/v1/watch/runtimeclasses/{name}
 # operationId: watchNodeV1RuntimeClass
-export def "apis-node-k8s-io-watch-runtimeclasses watch-runtime-class" [
+export def "watch-node-v1-runtime-class" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -31355,7 +31355,7 @@ export def "apis-node-k8s-io-watch-runtimeclasses watch-runtime-class" [
 #
 # GET /apis/policy/
 # operationId: getPolicyAPIGroup
-export def "apis-policy get-group" [
+export def "get-policy-api-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -31390,7 +31390,7 @@ export def "apis-policy get-group" [
 #
 # GET /apis/policy/v1/
 # operationId: getPolicyV1APIResources
-export def "apis-policy get-resources" [
+export def "get-policy-v1api-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -31426,7 +31426,7 @@ export def "apis-policy get-resources" [
 # DELETE /apis/policy/v1/namespaces/{namespace}/poddisruptionbudgets
 # operationId: deletePolicyV1CollectionNamespacedPodDisruptionBudget
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-policy-namespaces-poddisruptionbudgets delete-collection-pod-disruption-budget" [
+export def "delete-policy-v1-collection-namespaced-pod-disruption-budget" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -31487,7 +31487,7 @@ export def "apis-policy-namespaces-poddisruptionbudgets delete-collection-pod-di
 #
 # GET /apis/policy/v1/namespaces/{namespace}/poddisruptionbudgets
 # operationId: listPolicyV1NamespacedPodDisruptionBudget
-export def "apis-policy-namespaces-poddisruptionbudgets list-pod-disruption-budget" [
+export def "list-policy-v1-namespaced-pod-disruption-budget" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -31539,7 +31539,7 @@ export def "apis-policy-namespaces-poddisruptionbudgets list-pod-disruption-budg
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {maxUnavailable?: string, minAvailable?: string, selector?: record, unhealthyPodEvictionPolicy?: string}
 # --status shape: {conditions?: list, currentHealthy: int, desiredHealthy: int, disruptedPods?: record, disruptionsAllowed: int, expectedPods: int, observedGeneration?: int}
-export def "apis-policy-namespaces-poddisruptionbudgets create-pod-disruption-budget" [
+export def "create-policy-v1-namespaced-pod-disruption-budget" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -31590,7 +31590,7 @@ export def "apis-policy-namespaces-poddisruptionbudgets create-pod-disruption-bu
 # DELETE /apis/policy/v1/namespaces/{namespace}/poddisruptionbudgets/{name}
 # operationId: deletePolicyV1NamespacedPodDisruptionBudget
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-policy-namespaces-poddisruptionbudgets delete-pod-disruption-budget" [
+export def "delete-policy-v1-namespaced-pod-disruption-budget" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -31645,7 +31645,7 @@ export def "apis-policy-namespaces-poddisruptionbudgets delete-pod-disruption-bu
 #
 # GET /apis/policy/v1/namespaces/{namespace}/poddisruptionbudgets/{name}
 # operationId: readPolicyV1NamespacedPodDisruptionBudget
-export def "apis-policy-namespaces-poddisruptionbudgets get-pod-disruption-budget" [
+export def "read-policy-v1-namespaced-pod-disruption-budget" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -31686,7 +31686,7 @@ export def "apis-policy-namespaces-poddisruptionbudgets get-pod-disruption-budge
 #
 # PATCH /apis/policy/v1/namespaces/{namespace}/poddisruptionbudgets/{name}
 # operationId: patchPolicyV1NamespacedPodDisruptionBudget
-export def "apis-policy-namespaces-poddisruptionbudgets update-pod-disruption-budget-by-namespace-name" [
+export def "patch-policy-v1-namespaced-pod-disruption-budget" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -31738,7 +31738,7 @@ export def "apis-policy-namespaces-poddisruptionbudgets update-pod-disruption-bu
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {maxUnavailable?: string, minAvailable?: string, selector?: record, unhealthyPodEvictionPolicy?: string}
 # --status shape: {conditions?: list, currentHealthy: int, desiredHealthy: int, disruptedPods?: record, disruptionsAllowed: int, expectedPods: int, observedGeneration?: int}
-export def "apis-policy-namespaces-poddisruptionbudgets update-pod-disruption-budget-by-namespace-name-1" [
+export def "replace-policy-v1-namespaced-pod-disruption-budget" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -31790,7 +31790,7 @@ export def "apis-policy-namespaces-poddisruptionbudgets update-pod-disruption-bu
 #
 # GET /apis/policy/v1/namespaces/{namespace}/poddisruptionbudgets/{name}/status
 # operationId: readPolicyV1NamespacedPodDisruptionBudgetStatus
-export def "apis-policy-namespaces-poddisruptionbudgets-status get-pod-disruption-budget" [
+export def "read-policy-v1-namespaced-pod-disruption-budget-status" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -31831,7 +31831,7 @@ export def "apis-policy-namespaces-poddisruptionbudgets-status get-pod-disruptio
 #
 # PATCH /apis/policy/v1/namespaces/{namespace}/poddisruptionbudgets/{name}/status
 # operationId: patchPolicyV1NamespacedPodDisruptionBudgetStatus
-export def "apis-policy-namespaces-poddisruptionbudgets-status update-pod-disruption-budget-by-namespace-name" [
+export def "patch-policy-v1-namespaced-pod-disruption-budget-status" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -31883,7 +31883,7 @@ export def "apis-policy-namespaces-poddisruptionbudgets-status update-pod-disrup
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {maxUnavailable?: string, minAvailable?: string, selector?: record, unhealthyPodEvictionPolicy?: string}
 # --status shape: {conditions?: list, currentHealthy: int, desiredHealthy: int, disruptedPods?: record, disruptionsAllowed: int, expectedPods: int, observedGeneration?: int}
-export def "apis-policy-namespaces-poddisruptionbudgets-status update-pod-disruption-budget-by-namespace-name-1" [
+export def "replace-policy-v1-namespaced-pod-disruption-budget-status" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -31935,7 +31935,7 @@ export def "apis-policy-namespaces-poddisruptionbudgets-status update-pod-disrup
 #
 # GET /apis/policy/v1/poddisruptionbudgets
 # operationId: listPolicyV1PodDisruptionBudgetForAllNamespaces
-export def "apis-policy-poddisruptionbudgets list-pod-disruption-budget-for-namespaces" [
+export def "list-policy-v1-pod-disruption-budget-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -31982,7 +31982,7 @@ export def "apis-policy-poddisruptionbudgets list-pod-disruption-budget-for-name
 #
 # GET /apis/policy/v1/watch/namespaces/{namespace}/poddisruptionbudgets
 # operationId: watchPolicyV1NamespacedPodDisruptionBudgetList
-export def "apis-policy-watch-namespaces-poddisruptionbudgets list-pod-disruption-budget" [
+export def "watch-policy-v1-namespaced-pod-disruption-budget-list" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -32031,7 +32031,7 @@ export def "apis-policy-watch-namespaces-poddisruptionbudgets list-pod-disruptio
 #
 # GET /apis/policy/v1/watch/namespaces/{namespace}/poddisruptionbudgets/{name}
 # operationId: watchPolicyV1NamespacedPodDisruptionBudget
-export def "apis-policy-watch-namespaces-poddisruptionbudgets watch-pod-disruption-budget" [
+export def "watch-policy-v1-namespaced-pod-disruption-budget" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -32082,7 +32082,7 @@ export def "apis-policy-watch-namespaces-poddisruptionbudgets watch-pod-disrupti
 #
 # GET /apis/policy/v1/watch/poddisruptionbudgets
 # operationId: watchPolicyV1PodDisruptionBudgetListForAllNamespaces
-export def "apis-policy-watch-poddisruptionbudgets list-pod-disruption-budget-for-namespaces" [
+export def "watch-policy-v1-pod-disruption-budget-list-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -32129,7 +32129,7 @@ export def "apis-policy-watch-poddisruptionbudgets list-pod-disruption-budget-fo
 #
 # GET /apis/rbac.authorization.k8s.io/
 # operationId: getRbacAuthorizationAPIGroup
-export def "apis-rbac-authorization-k8s-io get-group" [
+export def "get-rbac-authorization-api-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -32164,7 +32164,7 @@ export def "apis-rbac-authorization-k8s-io get-group" [
 #
 # GET /apis/rbac.authorization.k8s.io/v1/
 # operationId: getRbacAuthorizationV1APIResources
-export def "apis-rbac-authorization-k8s-io get-resources" [
+export def "get-rbac-authorization-v1api-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -32200,7 +32200,7 @@ export def "apis-rbac-authorization-k8s-io get-resources" [
 # DELETE /apis/rbac.authorization.k8s.io/v1/clusterrolebindings
 # operationId: deleteRbacAuthorizationV1CollectionClusterRoleBinding
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-rbac-authorization-k8s-io-clusterrolebindings delete-collection-role-binding" [
+export def "delete-rbac-authorization-v1-collection-cluster-role-binding" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -32259,7 +32259,7 @@ export def "apis-rbac-authorization-k8s-io-clusterrolebindings delete-collection
 #
 # GET /apis/rbac.authorization.k8s.io/v1/clusterrolebindings
 # operationId: listRbacAuthorizationV1ClusterRoleBinding
-export def "apis-rbac-authorization-k8s-io-clusterrolebindings list-role-binding" [
+export def "list-rbac-authorization-v1-cluster-role-binding" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -32309,7 +32309,7 @@ export def "apis-rbac-authorization-k8s-io-clusterrolebindings list-role-binding
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --roleRef shape: {apiGroup: string, kind: string, name: string}
 # --subjects item shape: {apiGroup?: string, kind: string, name: string, namespace?: string}
-export def "apis-rbac-authorization-k8s-io-clusterrolebindings create-role-binding" [
+export def "create-rbac-authorization-v1-cluster-role-binding" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -32358,7 +32358,7 @@ export def "apis-rbac-authorization-k8s-io-clusterrolebindings create-role-bindi
 # DELETE /apis/rbac.authorization.k8s.io/v1/clusterrolebindings/{name}
 # operationId: deleteRbacAuthorizationV1ClusterRoleBinding
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-rbac-authorization-k8s-io-clusterrolebindings delete-role-binding" [
+export def "delete-rbac-authorization-v1-cluster-role-binding" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -32411,7 +32411,7 @@ export def "apis-rbac-authorization-k8s-io-clusterrolebindings delete-role-bindi
 #
 # GET /apis/rbac.authorization.k8s.io/v1/clusterrolebindings/{name}
 # operationId: readRbacAuthorizationV1ClusterRoleBinding
-export def "apis-rbac-authorization-k8s-io-clusterrolebindings get-role-binding" [
+export def "read-rbac-authorization-v1-cluster-role-binding" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -32450,7 +32450,7 @@ export def "apis-rbac-authorization-k8s-io-clusterrolebindings get-role-binding"
 #
 # PATCH /apis/rbac.authorization.k8s.io/v1/clusterrolebindings/{name}
 # operationId: patchRbacAuthorizationV1ClusterRoleBinding
-export def "apis-rbac-authorization-k8s-io-clusterrolebindings update-role-binding-by-name" [
+export def "patch-rbac-authorization-v1-cluster-role-binding" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -32500,7 +32500,7 @@ export def "apis-rbac-authorization-k8s-io-clusterrolebindings update-role-bindi
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --roleRef shape: {apiGroup: string, kind: string, name: string}
 # --subjects item shape: {apiGroup?: string, kind: string, name: string, namespace?: string}
-export def "apis-rbac-authorization-k8s-io-clusterrolebindings update-role-binding-by-name-1" [
+export def "replace-rbac-authorization-v1-cluster-role-binding" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -32551,7 +32551,7 @@ export def "apis-rbac-authorization-k8s-io-clusterrolebindings update-role-bindi
 # DELETE /apis/rbac.authorization.k8s.io/v1/clusterroles
 # operationId: deleteRbacAuthorizationV1CollectionClusterRole
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-rbac-authorization-k8s-io-clusterroles delete-collection-role" [
+export def "delete-rbac-authorization-v1-collection-cluster-role" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -32610,7 +32610,7 @@ export def "apis-rbac-authorization-k8s-io-clusterroles delete-collection-role" 
 #
 # GET /apis/rbac.authorization.k8s.io/v1/clusterroles
 # operationId: listRbacAuthorizationV1ClusterRole
-export def "apis-rbac-authorization-k8s-io-clusterroles list-role" [
+export def "list-rbac-authorization-v1-cluster-role" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -32660,7 +32660,7 @@ export def "apis-rbac-authorization-k8s-io-clusterroles list-role" [
 # --aggregationRule shape: {clusterRoleSelectors?: list}
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --rules item shape: {apiGroups?: list<string>, nonResourceURLs?: list<string>, resourceNames?: list<string>, resources?: list<string>, verbs: list<string>}
-export def "apis-rbac-authorization-k8s-io-clusterroles create-role" [
+export def "create-rbac-authorization-v1-cluster-role" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -32709,7 +32709,7 @@ export def "apis-rbac-authorization-k8s-io-clusterroles create-role" [
 # DELETE /apis/rbac.authorization.k8s.io/v1/clusterroles/{name}
 # operationId: deleteRbacAuthorizationV1ClusterRole
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-rbac-authorization-k8s-io-clusterroles delete-role" [
+export def "delete-rbac-authorization-v1-cluster-role" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -32762,7 +32762,7 @@ export def "apis-rbac-authorization-k8s-io-clusterroles delete-role" [
 #
 # GET /apis/rbac.authorization.k8s.io/v1/clusterroles/{name}
 # operationId: readRbacAuthorizationV1ClusterRole
-export def "apis-rbac-authorization-k8s-io-clusterroles get-role" [
+export def "read-rbac-authorization-v1-cluster-role" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -32801,7 +32801,7 @@ export def "apis-rbac-authorization-k8s-io-clusterroles get-role" [
 #
 # PATCH /apis/rbac.authorization.k8s.io/v1/clusterroles/{name}
 # operationId: patchRbacAuthorizationV1ClusterRole
-export def "apis-rbac-authorization-k8s-io-clusterroles update-role-by-name" [
+export def "patch-rbac-authorization-v1-cluster-role" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -32851,7 +32851,7 @@ export def "apis-rbac-authorization-k8s-io-clusterroles update-role-by-name" [
 # --aggregationRule shape: {clusterRoleSelectors?: list}
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --rules item shape: {apiGroups?: list<string>, nonResourceURLs?: list<string>, resourceNames?: list<string>, resources?: list<string>, verbs: list<string>}
-export def "apis-rbac-authorization-k8s-io-clusterroles update-role-by-name-1" [
+export def "replace-rbac-authorization-v1-cluster-role" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -32902,7 +32902,7 @@ export def "apis-rbac-authorization-k8s-io-clusterroles update-role-by-name-1" [
 # DELETE /apis/rbac.authorization.k8s.io/v1/namespaces/{namespace}/rolebindings
 # operationId: deleteRbacAuthorizationV1CollectionNamespacedRoleBinding
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-rbac-authorization-k8s-io-namespaces-rolebindings delete-collection-role-binding" [
+export def "delete-rbac-authorization-v1-collection-namespaced-role-binding" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -32963,7 +32963,7 @@ export def "apis-rbac-authorization-k8s-io-namespaces-rolebindings delete-collec
 #
 # GET /apis/rbac.authorization.k8s.io/v1/namespaces/{namespace}/rolebindings
 # operationId: listRbacAuthorizationV1NamespacedRoleBinding
-export def "apis-rbac-authorization-k8s-io-namespaces-rolebindings list-role-binding" [
+export def "list-rbac-authorization-v1-namespaced-role-binding" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -33015,7 +33015,7 @@ export def "apis-rbac-authorization-k8s-io-namespaces-rolebindings list-role-bin
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --roleRef shape: {apiGroup: string, kind: string, name: string}
 # --subjects item shape: {apiGroup?: string, kind: string, name: string, namespace?: string}
-export def "apis-rbac-authorization-k8s-io-namespaces-rolebindings create-role-binding" [
+export def "create-rbac-authorization-v1-namespaced-role-binding" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -33066,7 +33066,7 @@ export def "apis-rbac-authorization-k8s-io-namespaces-rolebindings create-role-b
 # DELETE /apis/rbac.authorization.k8s.io/v1/namespaces/{namespace}/rolebindings/{name}
 # operationId: deleteRbacAuthorizationV1NamespacedRoleBinding
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-rbac-authorization-k8s-io-namespaces-rolebindings delete-role-binding" [
+export def "delete-rbac-authorization-v1-namespaced-role-binding" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -33121,7 +33121,7 @@ export def "apis-rbac-authorization-k8s-io-namespaces-rolebindings delete-role-b
 #
 # GET /apis/rbac.authorization.k8s.io/v1/namespaces/{namespace}/rolebindings/{name}
 # operationId: readRbacAuthorizationV1NamespacedRoleBinding
-export def "apis-rbac-authorization-k8s-io-namespaces-rolebindings get-role-binding" [
+export def "read-rbac-authorization-v1-namespaced-role-binding" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -33162,7 +33162,7 @@ export def "apis-rbac-authorization-k8s-io-namespaces-rolebindings get-role-bind
 #
 # PATCH /apis/rbac.authorization.k8s.io/v1/namespaces/{namespace}/rolebindings/{name}
 # operationId: patchRbacAuthorizationV1NamespacedRoleBinding
-export def "apis-rbac-authorization-k8s-io-namespaces-rolebindings update-role-binding-by-namespace-name" [
+export def "patch-rbac-authorization-v1-namespaced-role-binding" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -33214,7 +33214,7 @@ export def "apis-rbac-authorization-k8s-io-namespaces-rolebindings update-role-b
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --roleRef shape: {apiGroup: string, kind: string, name: string}
 # --subjects item shape: {apiGroup?: string, kind: string, name: string, namespace?: string}
-export def "apis-rbac-authorization-k8s-io-namespaces-rolebindings update-role-binding-by-namespace-name-1" [
+export def "replace-rbac-authorization-v1-namespaced-role-binding" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -33267,7 +33267,7 @@ export def "apis-rbac-authorization-k8s-io-namespaces-rolebindings update-role-b
 # DELETE /apis/rbac.authorization.k8s.io/v1/namespaces/{namespace}/roles
 # operationId: deleteRbacAuthorizationV1CollectionNamespacedRole
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-rbac-authorization-k8s-io-namespaces-roles delete-collection" [
+export def "delete-rbac-authorization-v1-collection-namespaced-role" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -33328,7 +33328,7 @@ export def "apis-rbac-authorization-k8s-io-namespaces-roles delete-collection" [
 #
 # GET /apis/rbac.authorization.k8s.io/v1/namespaces/{namespace}/roles
 # operationId: listRbacAuthorizationV1NamespacedRole
-export def "apis-rbac-authorization-k8s-io-namespaces-roles list" [
+export def "list-rbac-authorization-v1-namespaced-role" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -33379,7 +33379,7 @@ export def "apis-rbac-authorization-k8s-io-namespaces-roles list" [
 # operationId: createRbacAuthorizationV1NamespacedRole
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --rules item shape: {apiGroups?: list<string>, nonResourceURLs?: list<string>, resourceNames?: list<string>, resources?: list<string>, verbs: list<string>}
-export def "apis-rbac-authorization-k8s-io-namespaces-roles create" [
+export def "create-rbac-authorization-v1-namespaced-role" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -33429,7 +33429,7 @@ export def "apis-rbac-authorization-k8s-io-namespaces-roles create" [
 # DELETE /apis/rbac.authorization.k8s.io/v1/namespaces/{namespace}/roles/{name}
 # operationId: deleteRbacAuthorizationV1NamespacedRole
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-rbac-authorization-k8s-io-namespaces-roles delete" [
+export def "delete-rbac-authorization-v1-namespaced-role" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -33484,7 +33484,7 @@ export def "apis-rbac-authorization-k8s-io-namespaces-roles delete" [
 #
 # GET /apis/rbac.authorization.k8s.io/v1/namespaces/{namespace}/roles/{name}
 # operationId: readRbacAuthorizationV1NamespacedRole
-export def "apis-rbac-authorization-k8s-io-namespaces-roles get" [
+export def "read-rbac-authorization-v1-namespaced-role" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -33525,7 +33525,7 @@ export def "apis-rbac-authorization-k8s-io-namespaces-roles get" [
 #
 # PATCH /apis/rbac.authorization.k8s.io/v1/namespaces/{namespace}/roles/{name}
 # operationId: patchRbacAuthorizationV1NamespacedRole
-export def "apis-rbac-authorization-k8s-io-namespaces-roles update-by-namespace-name" [
+export def "patch-rbac-authorization-v1-namespaced-role" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -33576,7 +33576,7 @@ export def "apis-rbac-authorization-k8s-io-namespaces-roles update-by-namespace-
 # operationId: replaceRbacAuthorizationV1NamespacedRole
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --rules item shape: {apiGroups?: list<string>, nonResourceURLs?: list<string>, resourceNames?: list<string>, resources?: list<string>, verbs: list<string>}
-export def "apis-rbac-authorization-k8s-io-namespaces-roles update-by-namespace-name-1" [
+export def "replace-rbac-authorization-v1-namespaced-role" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -33627,7 +33627,7 @@ export def "apis-rbac-authorization-k8s-io-namespaces-roles update-by-namespace-
 #
 # GET /apis/rbac.authorization.k8s.io/v1/rolebindings
 # operationId: listRbacAuthorizationV1RoleBindingForAllNamespaces
-export def "apis-rbac-authorization-k8s-io-rolebindings list-role-binding-for-namespaces" [
+export def "list-rbac-authorization-v1-role-binding-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -33674,7 +33674,7 @@ export def "apis-rbac-authorization-k8s-io-rolebindings list-role-binding-for-na
 #
 # GET /apis/rbac.authorization.k8s.io/v1/roles
 # operationId: listRbacAuthorizationV1RoleForAllNamespaces
-export def "apis-rbac-authorization-k8s-io-roles list-for-namespaces" [
+export def "list-rbac-authorization-v1-role-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -33721,7 +33721,7 @@ export def "apis-rbac-authorization-k8s-io-roles list-for-namespaces" [
 #
 # GET /apis/rbac.authorization.k8s.io/v1/watch/clusterrolebindings
 # operationId: watchRbacAuthorizationV1ClusterRoleBindingList
-export def "apis-rbac-authorization-k8s-io-watch-clusterrolebindings list-role-binding" [
+export def "watch-rbac-authorization-v1-cluster-role-binding-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -33768,7 +33768,7 @@ export def "apis-rbac-authorization-k8s-io-watch-clusterrolebindings list-role-b
 #
 # GET /apis/rbac.authorization.k8s.io/v1/watch/clusterrolebindings/{name}
 # operationId: watchRbacAuthorizationV1ClusterRoleBinding
-export def "apis-rbac-authorization-k8s-io-watch-clusterrolebindings watch-role-binding" [
+export def "watch-rbac-authorization-v1-cluster-role-binding" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -33817,7 +33817,7 @@ export def "apis-rbac-authorization-k8s-io-watch-clusterrolebindings watch-role-
 #
 # GET /apis/rbac.authorization.k8s.io/v1/watch/clusterroles
 # operationId: watchRbacAuthorizationV1ClusterRoleList
-export def "apis-rbac-authorization-k8s-io-watch-clusterroles list-role" [
+export def "watch-rbac-authorization-v1-cluster-role-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -33864,7 +33864,7 @@ export def "apis-rbac-authorization-k8s-io-watch-clusterroles list-role" [
 #
 # GET /apis/rbac.authorization.k8s.io/v1/watch/clusterroles/{name}
 # operationId: watchRbacAuthorizationV1ClusterRole
-export def "apis-rbac-authorization-k8s-io-watch-clusterroles watch-role" [
+export def "watch-rbac-authorization-v1-cluster-role" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -33913,7 +33913,7 @@ export def "apis-rbac-authorization-k8s-io-watch-clusterroles watch-role" [
 #
 # GET /apis/rbac.authorization.k8s.io/v1/watch/namespaces/{namespace}/rolebindings
 # operationId: watchRbacAuthorizationV1NamespacedRoleBindingList
-export def "apis-rbac-authorization-k8s-io-watch-namespaces-rolebindings list-role-binding" [
+export def "watch-rbac-authorization-v1-namespaced-role-binding-list" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -33962,7 +33962,7 @@ export def "apis-rbac-authorization-k8s-io-watch-namespaces-rolebindings list-ro
 #
 # GET /apis/rbac.authorization.k8s.io/v1/watch/namespaces/{namespace}/rolebindings/{name}
 # operationId: watchRbacAuthorizationV1NamespacedRoleBinding
-export def "apis-rbac-authorization-k8s-io-watch-namespaces-rolebindings watch-role-binding" [
+export def "watch-rbac-authorization-v1-namespaced-role-binding" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -34013,7 +34013,7 @@ export def "apis-rbac-authorization-k8s-io-watch-namespaces-rolebindings watch-r
 #
 # GET /apis/rbac.authorization.k8s.io/v1/watch/namespaces/{namespace}/roles
 # operationId: watchRbacAuthorizationV1NamespacedRoleList
-export def "apis-rbac-authorization-k8s-io-watch-namespaces-roles list" [
+export def "watch-rbac-authorization-v1-namespaced-role-list" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -34062,7 +34062,7 @@ export def "apis-rbac-authorization-k8s-io-watch-namespaces-roles list" [
 #
 # GET /apis/rbac.authorization.k8s.io/v1/watch/namespaces/{namespace}/roles/{name}
 # operationId: watchRbacAuthorizationV1NamespacedRole
-export def "apis-rbac-authorization-k8s-io-watch-namespaces-roles watch" [
+export def "watch-rbac-authorization-v1-namespaced-role" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -34113,7 +34113,7 @@ export def "apis-rbac-authorization-k8s-io-watch-namespaces-roles watch" [
 #
 # GET /apis/rbac.authorization.k8s.io/v1/watch/rolebindings
 # operationId: watchRbacAuthorizationV1RoleBindingListForAllNamespaces
-export def "apis-rbac-authorization-k8s-io-watch-rolebindings list-role-binding-for-namespaces" [
+export def "watch-rbac-authorization-v1-role-binding-list-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -34160,7 +34160,7 @@ export def "apis-rbac-authorization-k8s-io-watch-rolebindings list-role-binding-
 #
 # GET /apis/rbac.authorization.k8s.io/v1/watch/roles
 # operationId: watchRbacAuthorizationV1RoleListForAllNamespaces
-export def "apis-rbac-authorization-k8s-io-watch-roles list-for-namespaces" [
+export def "watch-rbac-authorization-v1-role-list-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -34207,7 +34207,7 @@ export def "apis-rbac-authorization-k8s-io-watch-roles list-for-namespaces" [
 #
 # GET /apis/resource.k8s.io/
 # operationId: getResourceAPIGroup
-export def "apis-resource-k8s-io get-group" [
+export def "get-resource-api-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -34242,7 +34242,7 @@ export def "apis-resource-k8s-io get-group" [
 #
 # GET /apis/resource.k8s.io/v1alpha1/
 # operationId: getResourceV1alpha1APIResources
-export def "apis-resource-k8s-io-v1alpha1 get" [
+export def "get-resource-v1alpha1-api-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -34278,7 +34278,7 @@ export def "apis-resource-k8s-io-v1alpha1 get" [
 # DELETE /apis/resource.k8s.io/v1alpha1/namespaces/{namespace}/podschedulings
 # operationId: deleteResourceV1alpha1CollectionNamespacedPodScheduling
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-resource-k8s-io-v1alpha1-namespaces-podschedulings delete-collection-pod-scheduling" [
+export def "delete-resource-v1alpha1-collection-namespaced-pod-scheduling" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -34339,7 +34339,7 @@ export def "apis-resource-k8s-io-v1alpha1-namespaces-podschedulings delete-colle
 #
 # GET /apis/resource.k8s.io/v1alpha1/namespaces/{namespace}/podschedulings
 # operationId: listResourceV1alpha1NamespacedPodScheduling
-export def "apis-resource-k8s-io-v1alpha1-namespaces-podschedulings list-pod-scheduling" [
+export def "list-resource-v1alpha1-namespaced-pod-scheduling" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -34391,7 +34391,7 @@ export def "apis-resource-k8s-io-v1alpha1-namespaces-podschedulings list-pod-sch
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {potentialNodes?: list<string>, selectedNode?: string}
 # --status shape: {resourceClaims?: list}
-export def "apis-resource-k8s-io-v1alpha1-namespaces-podschedulings create-pod-scheduling" [
+export def "create-resource-v1alpha1-namespaced-pod-scheduling" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -34442,7 +34442,7 @@ export def "apis-resource-k8s-io-v1alpha1-namespaces-podschedulings create-pod-s
 # DELETE /apis/resource.k8s.io/v1alpha1/namespaces/{namespace}/podschedulings/{name}
 # operationId: deleteResourceV1alpha1NamespacedPodScheduling
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-resource-k8s-io-v1alpha1-namespaces-podschedulings delete-pod-scheduling" [
+export def "delete-resource-v1alpha1-namespaced-pod-scheduling" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -34497,7 +34497,7 @@ export def "apis-resource-k8s-io-v1alpha1-namespaces-podschedulings delete-pod-s
 #
 # GET /apis/resource.k8s.io/v1alpha1/namespaces/{namespace}/podschedulings/{name}
 # operationId: readResourceV1alpha1NamespacedPodScheduling
-export def "apis-resource-k8s-io-v1alpha1-namespaces-podschedulings get-pod-scheduling" [
+export def "read-resource-v1alpha1-namespaced-pod-scheduling" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -34538,7 +34538,7 @@ export def "apis-resource-k8s-io-v1alpha1-namespaces-podschedulings get-pod-sche
 #
 # PATCH /apis/resource.k8s.io/v1alpha1/namespaces/{namespace}/podschedulings/{name}
 # operationId: patchResourceV1alpha1NamespacedPodScheduling
-export def "apis-resource-k8s-io-v1alpha1-namespaces-podschedulings update-pod-scheduling-by-namespace-name" [
+export def "patch-resource-v1alpha1-namespaced-pod-scheduling" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -34590,7 +34590,7 @@ export def "apis-resource-k8s-io-v1alpha1-namespaces-podschedulings update-pod-s
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {potentialNodes?: list<string>, selectedNode?: string}
 # --status shape: {resourceClaims?: list}
-export def "apis-resource-k8s-io-v1alpha1-namespaces-podschedulings update-pod-scheduling-by-namespace-name-1" [
+export def "replace-resource-v1alpha1-namespaced-pod-scheduling" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -34642,7 +34642,7 @@ export def "apis-resource-k8s-io-v1alpha1-namespaces-podschedulings update-pod-s
 #
 # GET /apis/resource.k8s.io/v1alpha1/namespaces/{namespace}/podschedulings/{name}/status
 # operationId: readResourceV1alpha1NamespacedPodSchedulingStatus
-export def "apis-resource-k8s-io-v1alpha1-namespaces-podschedulings-status get-pod-scheduling" [
+export def "read-resource-v1alpha1-namespaced-pod-scheduling-status" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -34683,7 +34683,7 @@ export def "apis-resource-k8s-io-v1alpha1-namespaces-podschedulings-status get-p
 #
 # PATCH /apis/resource.k8s.io/v1alpha1/namespaces/{namespace}/podschedulings/{name}/status
 # operationId: patchResourceV1alpha1NamespacedPodSchedulingStatus
-export def "apis-resource-k8s-io-v1alpha1-namespaces-podschedulings-status update-pod-scheduling-by-namespace-name" [
+export def "patch-resource-v1alpha1-namespaced-pod-scheduling-status" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -34735,7 +34735,7 @@ export def "apis-resource-k8s-io-v1alpha1-namespaces-podschedulings-status updat
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {potentialNodes?: list<string>, selectedNode?: string}
 # --status shape: {resourceClaims?: list}
-export def "apis-resource-k8s-io-v1alpha1-namespaces-podschedulings-status update-pod-scheduling-by-namespace-name-1" [
+export def "replace-resource-v1alpha1-namespaced-pod-scheduling-status" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -34788,7 +34788,7 @@ export def "apis-resource-k8s-io-v1alpha1-namespaces-podschedulings-status updat
 # DELETE /apis/resource.k8s.io/v1alpha1/namespaces/{namespace}/resourceclaims
 # operationId: deleteResourceV1alpha1CollectionNamespacedResourceClaim
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-resource-k8s-io-v1alpha1-namespaces-resourceclaims delete-collection-claim" [
+export def "delete-resource-v1alpha1-collection-namespaced-resource-claim" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -34849,7 +34849,7 @@ export def "apis-resource-k8s-io-v1alpha1-namespaces-resourceclaims delete-colle
 #
 # GET /apis/resource.k8s.io/v1alpha1/namespaces/{namespace}/resourceclaims
 # operationId: listResourceV1alpha1NamespacedResourceClaim
-export def "apis-resource-k8s-io-v1alpha1-namespaces-resourceclaims list-claim" [
+export def "list-resource-v1alpha1-namespaced-resource-claim" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -34901,7 +34901,7 @@ export def "apis-resource-k8s-io-v1alpha1-namespaces-resourceclaims list-claim" 
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {allocationMode?: string, parametersRef?: record, resourceClassName: string}
 # --status shape: {allocation?: record, deallocationRequested?: bool, driverName?: string, reservedFor?: list}
-export def "apis-resource-k8s-io-v1alpha1-namespaces-resourceclaims create-claim" [
+export def "create-resource-v1alpha1-namespaced-resource-claim" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -34952,7 +34952,7 @@ export def "apis-resource-k8s-io-v1alpha1-namespaces-resourceclaims create-claim
 # DELETE /apis/resource.k8s.io/v1alpha1/namespaces/{namespace}/resourceclaims/{name}
 # operationId: deleteResourceV1alpha1NamespacedResourceClaim
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-resource-k8s-io-v1alpha1-namespaces-resourceclaims delete-claim" [
+export def "delete-resource-v1alpha1-namespaced-resource-claim" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -35007,7 +35007,7 @@ export def "apis-resource-k8s-io-v1alpha1-namespaces-resourceclaims delete-claim
 #
 # GET /apis/resource.k8s.io/v1alpha1/namespaces/{namespace}/resourceclaims/{name}
 # operationId: readResourceV1alpha1NamespacedResourceClaim
-export def "apis-resource-k8s-io-v1alpha1-namespaces-resourceclaims get-claim" [
+export def "read-resource-v1alpha1-namespaced-resource-claim" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -35048,7 +35048,7 @@ export def "apis-resource-k8s-io-v1alpha1-namespaces-resourceclaims get-claim" [
 #
 # PATCH /apis/resource.k8s.io/v1alpha1/namespaces/{namespace}/resourceclaims/{name}
 # operationId: patchResourceV1alpha1NamespacedResourceClaim
-export def "apis-resource-k8s-io-v1alpha1-namespaces-resourceclaims update-claim-by-namespace-name" [
+export def "patch-resource-v1alpha1-namespaced-resource-claim" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -35100,7 +35100,7 @@ export def "apis-resource-k8s-io-v1alpha1-namespaces-resourceclaims update-claim
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {allocationMode?: string, parametersRef?: record, resourceClassName: string}
 # --status shape: {allocation?: record, deallocationRequested?: bool, driverName?: string, reservedFor?: list}
-export def "apis-resource-k8s-io-v1alpha1-namespaces-resourceclaims update-claim-by-namespace-name-1" [
+export def "replace-resource-v1alpha1-namespaced-resource-claim" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -35152,7 +35152,7 @@ export def "apis-resource-k8s-io-v1alpha1-namespaces-resourceclaims update-claim
 #
 # GET /apis/resource.k8s.io/v1alpha1/namespaces/{namespace}/resourceclaims/{name}/status
 # operationId: readResourceV1alpha1NamespacedResourceClaimStatus
-export def "apis-resource-k8s-io-v1alpha1-namespaces-resourceclaims-status get-claim" [
+export def "read-resource-v1alpha1-namespaced-resource-claim-status" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -35193,7 +35193,7 @@ export def "apis-resource-k8s-io-v1alpha1-namespaces-resourceclaims-status get-c
 #
 # PATCH /apis/resource.k8s.io/v1alpha1/namespaces/{namespace}/resourceclaims/{name}/status
 # operationId: patchResourceV1alpha1NamespacedResourceClaimStatus
-export def "apis-resource-k8s-io-v1alpha1-namespaces-resourceclaims-status update-claim-by-namespace-name" [
+export def "patch-resource-v1alpha1-namespaced-resource-claim-status" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -35245,7 +35245,7 @@ export def "apis-resource-k8s-io-v1alpha1-namespaces-resourceclaims-status updat
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {allocationMode?: string, parametersRef?: record, resourceClassName: string}
 # --status shape: {allocation?: record, deallocationRequested?: bool, driverName?: string, reservedFor?: list}
-export def "apis-resource-k8s-io-v1alpha1-namespaces-resourceclaims-status update-claim-by-namespace-name-1" [
+export def "replace-resource-v1alpha1-namespaced-resource-claim-status" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -35298,7 +35298,7 @@ export def "apis-resource-k8s-io-v1alpha1-namespaces-resourceclaims-status updat
 # DELETE /apis/resource.k8s.io/v1alpha1/namespaces/{namespace}/resourceclaimtemplates
 # operationId: deleteResourceV1alpha1CollectionNamespacedResourceClaimTemplate
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-resource-k8s-io-v1alpha1-namespaces-resourceclaimtemplates delete-collection-claim-template" [
+export def "delete-resource-v1alpha1-collection-namespaced-resource-claim-template" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -35359,7 +35359,7 @@ export def "apis-resource-k8s-io-v1alpha1-namespaces-resourceclaimtemplates dele
 #
 # GET /apis/resource.k8s.io/v1alpha1/namespaces/{namespace}/resourceclaimtemplates
 # operationId: listResourceV1alpha1NamespacedResourceClaimTemplate
-export def "apis-resource-k8s-io-v1alpha1-namespaces-resourceclaimtemplates list-claim-template" [
+export def "list-resource-v1alpha1-namespaced-resource-claim-template" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -35410,7 +35410,7 @@ export def "apis-resource-k8s-io-v1alpha1-namespaces-resourceclaimtemplates list
 # operationId: createResourceV1alpha1NamespacedResourceClaimTemplate
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {metadata?: record, spec: record}
-export def "apis-resource-k8s-io-v1alpha1-namespaces-resourceclaimtemplates create-claim-template" [
+export def "create-resource-v1alpha1-namespaced-resource-claim-template" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -35460,7 +35460,7 @@ export def "apis-resource-k8s-io-v1alpha1-namespaces-resourceclaimtemplates crea
 # DELETE /apis/resource.k8s.io/v1alpha1/namespaces/{namespace}/resourceclaimtemplates/{name}
 # operationId: deleteResourceV1alpha1NamespacedResourceClaimTemplate
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-resource-k8s-io-v1alpha1-namespaces-resourceclaimtemplates delete-claim-template" [
+export def "delete-resource-v1alpha1-namespaced-resource-claim-template" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -35515,7 +35515,7 @@ export def "apis-resource-k8s-io-v1alpha1-namespaces-resourceclaimtemplates dele
 #
 # GET /apis/resource.k8s.io/v1alpha1/namespaces/{namespace}/resourceclaimtemplates/{name}
 # operationId: readResourceV1alpha1NamespacedResourceClaimTemplate
-export def "apis-resource-k8s-io-v1alpha1-namespaces-resourceclaimtemplates get-claim-template" [
+export def "read-resource-v1alpha1-namespaced-resource-claim-template" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -35556,7 +35556,7 @@ export def "apis-resource-k8s-io-v1alpha1-namespaces-resourceclaimtemplates get-
 #
 # PATCH /apis/resource.k8s.io/v1alpha1/namespaces/{namespace}/resourceclaimtemplates/{name}
 # operationId: patchResourceV1alpha1NamespacedResourceClaimTemplate
-export def "apis-resource-k8s-io-v1alpha1-namespaces-resourceclaimtemplates update-claim-template-by-namespace-name" [
+export def "patch-resource-v1alpha1-namespaced-resource-claim-template" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -35607,7 +35607,7 @@ export def "apis-resource-k8s-io-v1alpha1-namespaces-resourceclaimtemplates upda
 # operationId: replaceResourceV1alpha1NamespacedResourceClaimTemplate
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {metadata?: record, spec: record}
-export def "apis-resource-k8s-io-v1alpha1-namespaces-resourceclaimtemplates update-claim-template-by-namespace-name-1" [
+export def "replace-resource-v1alpha1-namespaced-resource-claim-template" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -35658,7 +35658,7 @@ export def "apis-resource-k8s-io-v1alpha1-namespaces-resourceclaimtemplates upda
 #
 # GET /apis/resource.k8s.io/v1alpha1/podschedulings
 # operationId: listResourceV1alpha1PodSchedulingForAllNamespaces
-export def "apis-resource-k8s-io-v1alpha1-podschedulings list-pod-scheduling-for-namespaces" [
+export def "list-resource-v1alpha1-pod-scheduling-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -35705,7 +35705,7 @@ export def "apis-resource-k8s-io-v1alpha1-podschedulings list-pod-scheduling-for
 #
 # GET /apis/resource.k8s.io/v1alpha1/resourceclaims
 # operationId: listResourceV1alpha1ResourceClaimForAllNamespaces
-export def "apis-resource-k8s-io-v1alpha1-resourceclaims list-claim-for-namespaces" [
+export def "list-resource-v1alpha1-resource-claim-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -35752,7 +35752,7 @@ export def "apis-resource-k8s-io-v1alpha1-resourceclaims list-claim-for-namespac
 #
 # GET /apis/resource.k8s.io/v1alpha1/resourceclaimtemplates
 # operationId: listResourceV1alpha1ResourceClaimTemplateForAllNamespaces
-export def "apis-resource-k8s-io-v1alpha1-resourceclaimtemplates list-claim-template-for-namespaces" [
+export def "list-resource-v1alpha1-resource-claim-template-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -35800,7 +35800,7 @@ export def "apis-resource-k8s-io-v1alpha1-resourceclaimtemplates list-claim-temp
 # DELETE /apis/resource.k8s.io/v1alpha1/resourceclasses
 # operationId: deleteResourceV1alpha1CollectionResourceClass
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-resource-k8s-io-v1alpha1-resourceclasses delete-collection-class" [
+export def "delete-resource-v1alpha1-collection-resource-class" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -35859,7 +35859,7 @@ export def "apis-resource-k8s-io-v1alpha1-resourceclasses delete-collection-clas
 #
 # GET /apis/resource.k8s.io/v1alpha1/resourceclasses
 # operationId: listResourceV1alpha1ResourceClass
-export def "apis-resource-k8s-io-v1alpha1-resourceclasses list-class" [
+export def "list-resource-v1alpha1-resource-class" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -35909,7 +35909,7 @@ export def "apis-resource-k8s-io-v1alpha1-resourceclasses list-class" [
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --parametersRef shape: {apiGroup?: string, kind: string, name: string, namespace?: string}
 # --suitableNodes shape: {nodeSelectorTerms: list}
-export def "apis-resource-k8s-io-v1alpha1-resourceclasses create-class" [
+export def "create-resource-v1alpha1-resource-class" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -35959,7 +35959,7 @@ export def "apis-resource-k8s-io-v1alpha1-resourceclasses create-class" [
 # DELETE /apis/resource.k8s.io/v1alpha1/resourceclasses/{name}
 # operationId: deleteResourceV1alpha1ResourceClass
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-resource-k8s-io-v1alpha1-resourceclasses delete-class" [
+export def "delete-resource-v1alpha1-resource-class" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -36012,7 +36012,7 @@ export def "apis-resource-k8s-io-v1alpha1-resourceclasses delete-class" [
 #
 # GET /apis/resource.k8s.io/v1alpha1/resourceclasses/{name}
 # operationId: readResourceV1alpha1ResourceClass
-export def "apis-resource-k8s-io-v1alpha1-resourceclasses get-class" [
+export def "read-resource-v1alpha1-resource-class" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -36051,7 +36051,7 @@ export def "apis-resource-k8s-io-v1alpha1-resourceclasses get-class" [
 #
 # PATCH /apis/resource.k8s.io/v1alpha1/resourceclasses/{name}
 # operationId: patchResourceV1alpha1ResourceClass
-export def "apis-resource-k8s-io-v1alpha1-resourceclasses update-class-by-name" [
+export def "patch-resource-v1alpha1-resource-class" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -36101,7 +36101,7 @@ export def "apis-resource-k8s-io-v1alpha1-resourceclasses update-class-by-name" 
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --parametersRef shape: {apiGroup?: string, kind: string, name: string, namespace?: string}
 # --suitableNodes shape: {nodeSelectorTerms: list}
-export def "apis-resource-k8s-io-v1alpha1-resourceclasses update-class-by-name-1" [
+export def "replace-resource-v1alpha1-resource-class" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -36152,7 +36152,7 @@ export def "apis-resource-k8s-io-v1alpha1-resourceclasses update-class-by-name-1
 #
 # GET /apis/resource.k8s.io/v1alpha1/watch/namespaces/{namespace}/podschedulings
 # operationId: watchResourceV1alpha1NamespacedPodSchedulingList
-export def "apis-resource-k8s-io-v1alpha1-watch-namespaces-podschedulings list-pod-scheduling" [
+export def "watch-resource-v1alpha1-namespaced-pod-scheduling-list" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -36201,7 +36201,7 @@ export def "apis-resource-k8s-io-v1alpha1-watch-namespaces-podschedulings list-p
 #
 # GET /apis/resource.k8s.io/v1alpha1/watch/namespaces/{namespace}/podschedulings/{name}
 # operationId: watchResourceV1alpha1NamespacedPodScheduling
-export def "apis-resource-k8s-io-v1alpha1-watch-namespaces-podschedulings watch-pod-scheduling" [
+export def "watch-resource-v1alpha1-namespaced-pod-scheduling" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -36252,7 +36252,7 @@ export def "apis-resource-k8s-io-v1alpha1-watch-namespaces-podschedulings watch-
 #
 # GET /apis/resource.k8s.io/v1alpha1/watch/namespaces/{namespace}/resourceclaims
 # operationId: watchResourceV1alpha1NamespacedResourceClaimList
-export def "apis-resource-k8s-io-v1alpha1-watch-namespaces-resourceclaims list-claim" [
+export def "watch-resource-v1alpha1-namespaced-resource-claim-list" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -36301,7 +36301,7 @@ export def "apis-resource-k8s-io-v1alpha1-watch-namespaces-resourceclaims list-c
 #
 # GET /apis/resource.k8s.io/v1alpha1/watch/namespaces/{namespace}/resourceclaims/{name}
 # operationId: watchResourceV1alpha1NamespacedResourceClaim
-export def "apis-resource-k8s-io-v1alpha1-watch-namespaces-resourceclaims watch-claim" [
+export def "watch-resource-v1alpha1-namespaced-resource-claim" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -36352,7 +36352,7 @@ export def "apis-resource-k8s-io-v1alpha1-watch-namespaces-resourceclaims watch-
 #
 # GET /apis/resource.k8s.io/v1alpha1/watch/namespaces/{namespace}/resourceclaimtemplates
 # operationId: watchResourceV1alpha1NamespacedResourceClaimTemplateList
-export def "apis-resource-k8s-io-v1alpha1-watch-namespaces-resourceclaimtemplates list-claim-template" [
+export def "watch-resource-v1alpha1-namespaced-resource-claim-template-list" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -36401,7 +36401,7 @@ export def "apis-resource-k8s-io-v1alpha1-watch-namespaces-resourceclaimtemplate
 #
 # GET /apis/resource.k8s.io/v1alpha1/watch/namespaces/{namespace}/resourceclaimtemplates/{name}
 # operationId: watchResourceV1alpha1NamespacedResourceClaimTemplate
-export def "apis-resource-k8s-io-v1alpha1-watch-namespaces-resourceclaimtemplates watch-claim-template" [
+export def "watch-resource-v1alpha1-namespaced-resource-claim-template" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -36452,7 +36452,7 @@ export def "apis-resource-k8s-io-v1alpha1-watch-namespaces-resourceclaimtemplate
 #
 # GET /apis/resource.k8s.io/v1alpha1/watch/podschedulings
 # operationId: watchResourceV1alpha1PodSchedulingListForAllNamespaces
-export def "apis-resource-k8s-io-v1alpha1-watch-podschedulings list-pod-scheduling-for-namespaces" [
+export def "watch-resource-v1alpha1-pod-scheduling-list-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -36499,7 +36499,7 @@ export def "apis-resource-k8s-io-v1alpha1-watch-podschedulings list-pod-scheduli
 #
 # GET /apis/resource.k8s.io/v1alpha1/watch/resourceclaims
 # operationId: watchResourceV1alpha1ResourceClaimListForAllNamespaces
-export def "apis-resource-k8s-io-v1alpha1-watch-resourceclaims list-claim-for-namespaces" [
+export def "watch-resource-v1alpha1-resource-claim-list-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -36546,7 +36546,7 @@ export def "apis-resource-k8s-io-v1alpha1-watch-resourceclaims list-claim-for-na
 #
 # GET /apis/resource.k8s.io/v1alpha1/watch/resourceclaimtemplates
 # operationId: watchResourceV1alpha1ResourceClaimTemplateListForAllNamespaces
-export def "apis-resource-k8s-io-v1alpha1-watch-resourceclaimtemplates list-claim-template-for-namespaces" [
+export def "watch-resource-v1alpha1-resource-claim-template-list-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -36593,7 +36593,7 @@ export def "apis-resource-k8s-io-v1alpha1-watch-resourceclaimtemplates list-clai
 #
 # GET /apis/resource.k8s.io/v1alpha1/watch/resourceclasses
 # operationId: watchResourceV1alpha1ResourceClassList
-export def "apis-resource-k8s-io-v1alpha1-watch-resourceclasses list-class" [
+export def "watch-resource-v1alpha1-resource-class-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -36640,7 +36640,7 @@ export def "apis-resource-k8s-io-v1alpha1-watch-resourceclasses list-class" [
 #
 # GET /apis/resource.k8s.io/v1alpha1/watch/resourceclasses/{name}
 # operationId: watchResourceV1alpha1ResourceClass
-export def "apis-resource-k8s-io-v1alpha1-watch-resourceclasses watch-class" [
+export def "watch-resource-v1alpha1-resource-class" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -36689,7 +36689,7 @@ export def "apis-resource-k8s-io-v1alpha1-watch-resourceclasses watch-class" [
 #
 # GET /apis/scheduling.k8s.io/
 # operationId: getSchedulingAPIGroup
-export def "apis-scheduling-k8s-io get-group" [
+export def "get-scheduling-api-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -36724,7 +36724,7 @@ export def "apis-scheduling-k8s-io get-group" [
 #
 # GET /apis/scheduling.k8s.io/v1/
 # operationId: getSchedulingV1APIResources
-export def "apis-scheduling-k8s-io get-resources" [
+export def "get-scheduling-v1api-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -36760,7 +36760,7 @@ export def "apis-scheduling-k8s-io get-resources" [
 # DELETE /apis/scheduling.k8s.io/v1/priorityclasses
 # operationId: deleteSchedulingV1CollectionPriorityClass
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-scheduling-k8s-io-priorityclasses delete-collection-priority-class" [
+export def "delete-scheduling-v1-collection-priority-class" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -36819,7 +36819,7 @@ export def "apis-scheduling-k8s-io-priorityclasses delete-collection-priority-cl
 #
 # GET /apis/scheduling.k8s.io/v1/priorityclasses
 # operationId: listSchedulingV1PriorityClass
-export def "apis-scheduling-k8s-io-priorityclasses list-priority-class" [
+export def "list-scheduling-v1-priority-class" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -36867,7 +36867,7 @@ export def "apis-scheduling-k8s-io-priorityclasses list-priority-class" [
 # POST /apis/scheduling.k8s.io/v1/priorityclasses
 # operationId: createSchedulingV1PriorityClass
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
-export def "apis-scheduling-k8s-io-priorityclasses create-priority-class" [
+export def "create-scheduling-v1-priority-class" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -36918,7 +36918,7 @@ export def "apis-scheduling-k8s-io-priorityclasses create-priority-class" [
 # DELETE /apis/scheduling.k8s.io/v1/priorityclasses/{name}
 # operationId: deleteSchedulingV1PriorityClass
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-scheduling-k8s-io-priorityclasses delete-priority-class" [
+export def "delete-scheduling-v1-priority-class" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -36971,7 +36971,7 @@ export def "apis-scheduling-k8s-io-priorityclasses delete-priority-class" [
 #
 # GET /apis/scheduling.k8s.io/v1/priorityclasses/{name}
 # operationId: readSchedulingV1PriorityClass
-export def "apis-scheduling-k8s-io-priorityclasses get-priority-class" [
+export def "read-scheduling-v1-priority-class" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -37010,7 +37010,7 @@ export def "apis-scheduling-k8s-io-priorityclasses get-priority-class" [
 #
 # PATCH /apis/scheduling.k8s.io/v1/priorityclasses/{name}
 # operationId: patchSchedulingV1PriorityClass
-export def "apis-scheduling-k8s-io-priorityclasses update-priority-class-by-name" [
+export def "patch-scheduling-v1-priority-class" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -37058,7 +37058,7 @@ export def "apis-scheduling-k8s-io-priorityclasses update-priority-class-by-name
 # PUT /apis/scheduling.k8s.io/v1/priorityclasses/{name}
 # operationId: replaceSchedulingV1PriorityClass
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
-export def "apis-scheduling-k8s-io-priorityclasses update-priority-class-by-name-1" [
+export def "replace-scheduling-v1-priority-class" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -37110,7 +37110,7 @@ export def "apis-scheduling-k8s-io-priorityclasses update-priority-class-by-name
 #
 # GET /apis/scheduling.k8s.io/v1/watch/priorityclasses
 # operationId: watchSchedulingV1PriorityClassList
-export def "apis-scheduling-k8s-io-watch-priorityclasses list-priority-class" [
+export def "watch-scheduling-v1-priority-class-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -37157,7 +37157,7 @@ export def "apis-scheduling-k8s-io-watch-priorityclasses list-priority-class" [
 #
 # GET /apis/scheduling.k8s.io/v1/watch/priorityclasses/{name}
 # operationId: watchSchedulingV1PriorityClass
-export def "apis-scheduling-k8s-io-watch-priorityclasses watch-priority-class" [
+export def "watch-scheduling-v1-priority-class" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -37206,7 +37206,7 @@ export def "apis-scheduling-k8s-io-watch-priorityclasses watch-priority-class" [
 #
 # GET /apis/storage.k8s.io/
 # operationId: getStorageAPIGroup
-export def "apis-storage-k8s-io get-group" [
+export def "get-storage-api-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -37241,7 +37241,7 @@ export def "apis-storage-k8s-io get-group" [
 #
 # GET /apis/storage.k8s.io/v1/
 # operationId: getStorageV1APIResources
-export def "apis-storage-k8s-io get-resources" [
+export def "get-storage-v1api-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -37277,7 +37277,7 @@ export def "apis-storage-k8s-io get-resources" [
 # DELETE /apis/storage.k8s.io/v1/csidrivers
 # operationId: deleteStorageV1CollectionCSIDriver
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-storage-k8s-io-csidrivers delete-collection-csi-driver" [
+export def "delete-storage-v1-collection-csi-driver" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -37336,7 +37336,7 @@ export def "apis-storage-k8s-io-csidrivers delete-collection-csi-driver" [
 #
 # GET /apis/storage.k8s.io/v1/csidrivers
 # operationId: listStorageV1CSIDriver
-export def "apis-storage-k8s-io-csidrivers list-csi-driver" [
+export def "list-storage-v1csi-driver" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -37385,7 +37385,7 @@ export def "apis-storage-k8s-io-csidrivers list-csi-driver" [
 # operationId: createStorageV1CSIDriver
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {attachRequired?: bool, fsGroupPolicy?: string, podInfoOnMount?: bool, requiresRepublish?: bool, seLinuxMount?: bool, storageCapacity?: bool, tokenRequests?: list, volumeLifecycleModes?: list<string>}
-export def "apis-storage-k8s-io-csidrivers create-csi-driver" [
+export def "create-storage-v1csi-driver" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -37433,7 +37433,7 @@ export def "apis-storage-k8s-io-csidrivers create-csi-driver" [
 # DELETE /apis/storage.k8s.io/v1/csidrivers/{name}
 # operationId: deleteStorageV1CSIDriver
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-storage-k8s-io-csidrivers delete-csi-driver" [
+export def "delete-storage-v1csi-driver" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -37486,7 +37486,7 @@ export def "apis-storage-k8s-io-csidrivers delete-csi-driver" [
 #
 # GET /apis/storage.k8s.io/v1/csidrivers/{name}
 # operationId: readStorageV1CSIDriver
-export def "apis-storage-k8s-io-csidrivers get-csi-driver" [
+export def "read-storage-v1csi-driver" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -37525,7 +37525,7 @@ export def "apis-storage-k8s-io-csidrivers get-csi-driver" [
 #
 # PATCH /apis/storage.k8s.io/v1/csidrivers/{name}
 # operationId: patchStorageV1CSIDriver
-export def "apis-storage-k8s-io-csidrivers update-csi-driver-by-name" [
+export def "patch-storage-v1csi-driver" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -37574,7 +37574,7 @@ export def "apis-storage-k8s-io-csidrivers update-csi-driver-by-name" [
 # operationId: replaceStorageV1CSIDriver
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {attachRequired?: bool, fsGroupPolicy?: string, podInfoOnMount?: bool, requiresRepublish?: bool, seLinuxMount?: bool, storageCapacity?: bool, tokenRequests?: list, volumeLifecycleModes?: list<string>}
-export def "apis-storage-k8s-io-csidrivers update-csi-driver-by-name-1" [
+export def "replace-storage-v1csi-driver" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -37624,7 +37624,7 @@ export def "apis-storage-k8s-io-csidrivers update-csi-driver-by-name-1" [
 # DELETE /apis/storage.k8s.io/v1/csinodes
 # operationId: deleteStorageV1CollectionCSINode
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-storage-k8s-io-csinodes delete-collection-csi-node" [
+export def "delete-storage-v1-collection-csi-node" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -37683,7 +37683,7 @@ export def "apis-storage-k8s-io-csinodes delete-collection-csi-node" [
 #
 # GET /apis/storage.k8s.io/v1/csinodes
 # operationId: listStorageV1CSINode
-export def "apis-storage-k8s-io-csinodes list-csi-node" [
+export def "list-storage-v1csi-node" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -37732,7 +37732,7 @@ export def "apis-storage-k8s-io-csinodes list-csi-node" [
 # operationId: createStorageV1CSINode
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {drivers: list}
-export def "apis-storage-k8s-io-csinodes create-csi-node" [
+export def "create-storage-v1csi-node" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -37780,7 +37780,7 @@ export def "apis-storage-k8s-io-csinodes create-csi-node" [
 # DELETE /apis/storage.k8s.io/v1/csinodes/{name}
 # operationId: deleteStorageV1CSINode
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-storage-k8s-io-csinodes delete-csi-node" [
+export def "delete-storage-v1csi-node" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -37833,7 +37833,7 @@ export def "apis-storage-k8s-io-csinodes delete-csi-node" [
 #
 # GET /apis/storage.k8s.io/v1/csinodes/{name}
 # operationId: readStorageV1CSINode
-export def "apis-storage-k8s-io-csinodes get-csi-node" [
+export def "read-storage-v1csi-node" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -37872,7 +37872,7 @@ export def "apis-storage-k8s-io-csinodes get-csi-node" [
 #
 # PATCH /apis/storage.k8s.io/v1/csinodes/{name}
 # operationId: patchStorageV1CSINode
-export def "apis-storage-k8s-io-csinodes update-csi-node-by-name" [
+export def "patch-storage-v1csi-node" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -37921,7 +37921,7 @@ export def "apis-storage-k8s-io-csinodes update-csi-node-by-name" [
 # operationId: replaceStorageV1CSINode
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {drivers: list}
-export def "apis-storage-k8s-io-csinodes update-csi-node-by-name-1" [
+export def "replace-storage-v1csi-node" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -37970,7 +37970,7 @@ export def "apis-storage-k8s-io-csinodes update-csi-node-by-name-1" [
 #
 # GET /apis/storage.k8s.io/v1/csistoragecapacities
 # operationId: listStorageV1CSIStorageCapacityForAllNamespaces
-export def "apis-storage-k8s-io-csistoragecapacities list-csi-capacity-for-namespaces" [
+export def "list-storage-v1csi-storage-capacity-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -38018,7 +38018,7 @@ export def "apis-storage-k8s-io-csistoragecapacities list-csi-capacity-for-names
 # DELETE /apis/storage.k8s.io/v1/namespaces/{namespace}/csistoragecapacities
 # operationId: deleteStorageV1CollectionNamespacedCSIStorageCapacity
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-storage-k8s-io-namespaces-csistoragecapacities delete-collection-csi-capacity" [
+export def "delete-storage-v1-collection-namespaced-csi-storage-capacity" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -38079,7 +38079,7 @@ export def "apis-storage-k8s-io-namespaces-csistoragecapacities delete-collectio
 #
 # GET /apis/storage.k8s.io/v1/namespaces/{namespace}/csistoragecapacities
 # operationId: listStorageV1NamespacedCSIStorageCapacity
-export def "apis-storage-k8s-io-namespaces-csistoragecapacities list-csi-capacity" [
+export def "list-storage-v1-namespaced-csi-storage-capacity" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -38130,7 +38130,7 @@ export def "apis-storage-k8s-io-namespaces-csistoragecapacities list-csi-capacit
 # operationId: createStorageV1NamespacedCSIStorageCapacity
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --nodeTopology shape: {matchExpressions?: list, matchLabels?: record}
-export def "apis-storage-k8s-io-namespaces-csistoragecapacities create-csi-capacity" [
+export def "create-storage-v1-namespaced-csi-storage-capacity" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -38183,7 +38183,7 @@ export def "apis-storage-k8s-io-namespaces-csistoragecapacities create-csi-capac
 # DELETE /apis/storage.k8s.io/v1/namespaces/{namespace}/csistoragecapacities/{name}
 # operationId: deleteStorageV1NamespacedCSIStorageCapacity
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-storage-k8s-io-namespaces-csistoragecapacities delete-csi-capacity" [
+export def "delete-storage-v1-namespaced-csi-storage-capacity" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -38238,7 +38238,7 @@ export def "apis-storage-k8s-io-namespaces-csistoragecapacities delete-csi-capac
 #
 # GET /apis/storage.k8s.io/v1/namespaces/{namespace}/csistoragecapacities/{name}
 # operationId: readStorageV1NamespacedCSIStorageCapacity
-export def "apis-storage-k8s-io-namespaces-csistoragecapacities get-csi-capacity" [
+export def "read-storage-v1-namespaced-csi-storage-capacity" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -38279,7 +38279,7 @@ export def "apis-storage-k8s-io-namespaces-csistoragecapacities get-csi-capacity
 #
 # PATCH /apis/storage.k8s.io/v1/namespaces/{namespace}/csistoragecapacities/{name}
 # operationId: patchStorageV1NamespacedCSIStorageCapacity
-export def "apis-storage-k8s-io-namespaces-csistoragecapacities update-csi-capacity-by-namespace-name" [
+export def "patch-storage-v1-namespaced-csi-storage-capacity" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -38330,7 +38330,7 @@ export def "apis-storage-k8s-io-namespaces-csistoragecapacities update-csi-capac
 # operationId: replaceStorageV1NamespacedCSIStorageCapacity
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --nodeTopology shape: {matchExpressions?: list, matchLabels?: record}
-export def "apis-storage-k8s-io-namespaces-csistoragecapacities update-csi-capacity-by-namespace-name-1" [
+export def "replace-storage-v1-namespaced-csi-storage-capacity" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -38385,7 +38385,7 @@ export def "apis-storage-k8s-io-namespaces-csistoragecapacities update-csi-capac
 # DELETE /apis/storage.k8s.io/v1/storageclasses
 # operationId: deleteStorageV1CollectionStorageClass
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-storage-k8s-io-storageclasses delete-collection-class" [
+export def "delete-storage-v1-collection-storage-class" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -38444,7 +38444,7 @@ export def "apis-storage-k8s-io-storageclasses delete-collection-class" [
 #
 # GET /apis/storage.k8s.io/v1/storageclasses
 # operationId: listStorageV1StorageClass
-export def "apis-storage-k8s-io-storageclasses list-class" [
+export def "list-storage-v1-storage-class" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -38493,7 +38493,7 @@ export def "apis-storage-k8s-io-storageclasses list-class" [
 # operationId: createStorageV1StorageClass
 # --allowedTopologies item shape: {matchLabelExpressions?: list}
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
-export def "apis-storage-k8s-io-storageclasses create-class" [
+export def "create-storage-v1-storage-class" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -38547,7 +38547,7 @@ export def "apis-storage-k8s-io-storageclasses create-class" [
 # DELETE /apis/storage.k8s.io/v1/storageclasses/{name}
 # operationId: deleteStorageV1StorageClass
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-storage-k8s-io-storageclasses delete-class" [
+export def "delete-storage-v1-storage-class" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -38600,7 +38600,7 @@ export def "apis-storage-k8s-io-storageclasses delete-class" [
 #
 # GET /apis/storage.k8s.io/v1/storageclasses/{name}
 # operationId: readStorageV1StorageClass
-export def "apis-storage-k8s-io-storageclasses get-class" [
+export def "read-storage-v1-storage-class" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -38639,7 +38639,7 @@ export def "apis-storage-k8s-io-storageclasses get-class" [
 #
 # PATCH /apis/storage.k8s.io/v1/storageclasses/{name}
 # operationId: patchStorageV1StorageClass
-export def "apis-storage-k8s-io-storageclasses update-class-by-name" [
+export def "patch-storage-v1-storage-class" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -38688,7 +38688,7 @@ export def "apis-storage-k8s-io-storageclasses update-class-by-name" [
 # operationId: replaceStorageV1StorageClass
 # --allowedTopologies item shape: {matchLabelExpressions?: list}
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
-export def "apis-storage-k8s-io-storageclasses update-class-by-name-1" [
+export def "replace-storage-v1-storage-class" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -38744,7 +38744,7 @@ export def "apis-storage-k8s-io-storageclasses update-class-by-name-1" [
 # DELETE /apis/storage.k8s.io/v1/volumeattachments
 # operationId: deleteStorageV1CollectionVolumeAttachment
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-storage-k8s-io-volumeattachments delete-collection-volume-attachment" [
+export def "delete-storage-v1-collection-volume-attachment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -38803,7 +38803,7 @@ export def "apis-storage-k8s-io-volumeattachments delete-collection-volume-attac
 #
 # GET /apis/storage.k8s.io/v1/volumeattachments
 # operationId: listStorageV1VolumeAttachment
-export def "apis-storage-k8s-io-volumeattachments list-volume-attachment" [
+export def "list-storage-v1-volume-attachment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -38853,7 +38853,7 @@ export def "apis-storage-k8s-io-volumeattachments list-volume-attachment" [
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {attacher: string, nodeName: string, source: record}
 # --status shape: {attachError?: record, attached: bool, attachmentMetadata?: record, detachError?: record}
-export def "apis-storage-k8s-io-volumeattachments create-volume-attachment" [
+export def "create-storage-v1-volume-attachment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -38902,7 +38902,7 @@ export def "apis-storage-k8s-io-volumeattachments create-volume-attachment" [
 # DELETE /apis/storage.k8s.io/v1/volumeattachments/{name}
 # operationId: deleteStorageV1VolumeAttachment
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-storage-k8s-io-volumeattachments delete-volume-attachment" [
+export def "delete-storage-v1-volume-attachment" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -38955,7 +38955,7 @@ export def "apis-storage-k8s-io-volumeattachments delete-volume-attachment" [
 #
 # GET /apis/storage.k8s.io/v1/volumeattachments/{name}
 # operationId: readStorageV1VolumeAttachment
-export def "apis-storage-k8s-io-volumeattachments get-volume-attachment" [
+export def "read-storage-v1-volume-attachment" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -38994,7 +38994,7 @@ export def "apis-storage-k8s-io-volumeattachments get-volume-attachment" [
 #
 # PATCH /apis/storage.k8s.io/v1/volumeattachments/{name}
 # operationId: patchStorageV1VolumeAttachment
-export def "apis-storage-k8s-io-volumeattachments update-volume-attachment-by-name" [
+export def "patch-storage-v1-volume-attachment" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -39044,7 +39044,7 @@ export def "apis-storage-k8s-io-volumeattachments update-volume-attachment-by-na
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {attacher: string, nodeName: string, source: record}
 # --status shape: {attachError?: record, attached: bool, attachmentMetadata?: record, detachError?: record}
-export def "apis-storage-k8s-io-volumeattachments update-volume-attachment-by-name-1" [
+export def "replace-storage-v1-volume-attachment" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -39094,7 +39094,7 @@ export def "apis-storage-k8s-io-volumeattachments update-volume-attachment-by-na
 #
 # GET /apis/storage.k8s.io/v1/volumeattachments/{name}/status
 # operationId: readStorageV1VolumeAttachmentStatus
-export def "apis-storage-k8s-io-volumeattachments-status get-volume-attachment" [
+export def "read-storage-v1-volume-attachment-status" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -39133,7 +39133,7 @@ export def "apis-storage-k8s-io-volumeattachments-status get-volume-attachment" 
 #
 # PATCH /apis/storage.k8s.io/v1/volumeattachments/{name}/status
 # operationId: patchStorageV1VolumeAttachmentStatus
-export def "apis-storage-k8s-io-volumeattachments-status update-volume-attachment-by-name" [
+export def "patch-storage-v1-volume-attachment-status" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -39183,7 +39183,7 @@ export def "apis-storage-k8s-io-volumeattachments-status update-volume-attachmen
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {attacher: string, nodeName: string, source: record}
 # --status shape: {attachError?: record, attached: bool, attachmentMetadata?: record, detachError?: record}
-export def "apis-storage-k8s-io-volumeattachments-status update-volume-attachment-by-name-1" [
+export def "replace-storage-v1-volume-attachment-status" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -39233,7 +39233,7 @@ export def "apis-storage-k8s-io-volumeattachments-status update-volume-attachmen
 #
 # GET /apis/storage.k8s.io/v1/watch/csidrivers
 # operationId: watchStorageV1CSIDriverList
-export def "apis-storage-k8s-io-watch-csidrivers list-csi-driver" [
+export def "watch-storage-v1csi-driver-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -39280,7 +39280,7 @@ export def "apis-storage-k8s-io-watch-csidrivers list-csi-driver" [
 #
 # GET /apis/storage.k8s.io/v1/watch/csidrivers/{name}
 # operationId: watchStorageV1CSIDriver
-export def "apis-storage-k8s-io-watch-csidrivers watch-csi-driver" [
+export def "watch-storage-v1csi-driver" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -39329,7 +39329,7 @@ export def "apis-storage-k8s-io-watch-csidrivers watch-csi-driver" [
 #
 # GET /apis/storage.k8s.io/v1/watch/csinodes
 # operationId: watchStorageV1CSINodeList
-export def "apis-storage-k8s-io-watch-csinodes list-csi-node" [
+export def "watch-storage-v1csi-node-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -39376,7 +39376,7 @@ export def "apis-storage-k8s-io-watch-csinodes list-csi-node" [
 #
 # GET /apis/storage.k8s.io/v1/watch/csinodes/{name}
 # operationId: watchStorageV1CSINode
-export def "apis-storage-k8s-io-watch-csinodes watch-csi-node" [
+export def "watch-storage-v1csi-node" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -39425,7 +39425,7 @@ export def "apis-storage-k8s-io-watch-csinodes watch-csi-node" [
 #
 # GET /apis/storage.k8s.io/v1/watch/csistoragecapacities
 # operationId: watchStorageV1CSIStorageCapacityListForAllNamespaces
-export def "apis-storage-k8s-io-watch-csistoragecapacities list-csi-capacity-for-namespaces" [
+export def "watch-storage-v1csi-storage-capacity-list-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -39472,7 +39472,7 @@ export def "apis-storage-k8s-io-watch-csistoragecapacities list-csi-capacity-for
 #
 # GET /apis/storage.k8s.io/v1/watch/namespaces/{namespace}/csistoragecapacities
 # operationId: watchStorageV1NamespacedCSIStorageCapacityList
-export def "apis-storage-k8s-io-watch-namespaces-csistoragecapacities list-csi-capacity" [
+export def "watch-storage-v1-namespaced-csi-storage-capacity-list" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -39521,7 +39521,7 @@ export def "apis-storage-k8s-io-watch-namespaces-csistoragecapacities list-csi-c
 #
 # GET /apis/storage.k8s.io/v1/watch/namespaces/{namespace}/csistoragecapacities/{name}
 # operationId: watchStorageV1NamespacedCSIStorageCapacity
-export def "apis-storage-k8s-io-watch-namespaces-csistoragecapacities watch-csi-capacity" [
+export def "watch-storage-v1-namespaced-csi-storage-capacity" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -39572,7 +39572,7 @@ export def "apis-storage-k8s-io-watch-namespaces-csistoragecapacities watch-csi-
 #
 # GET /apis/storage.k8s.io/v1/watch/storageclasses
 # operationId: watchStorageV1StorageClassList
-export def "apis-storage-k8s-io-watch-storageclasses list-class" [
+export def "watch-storage-v1-storage-class-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -39619,7 +39619,7 @@ export def "apis-storage-k8s-io-watch-storageclasses list-class" [
 #
 # GET /apis/storage.k8s.io/v1/watch/storageclasses/{name}
 # operationId: watchStorageV1StorageClass
-export def "apis-storage-k8s-io-watch-storageclasses watch-class" [
+export def "watch-storage-v1-storage-class" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -39668,7 +39668,7 @@ export def "apis-storage-k8s-io-watch-storageclasses watch-class" [
 #
 # GET /apis/storage.k8s.io/v1/watch/volumeattachments
 # operationId: watchStorageV1VolumeAttachmentList
-export def "apis-storage-k8s-io-watch-volumeattachments list-volume-attachment" [
+export def "watch-storage-v1-volume-attachment-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -39715,7 +39715,7 @@ export def "apis-storage-k8s-io-watch-volumeattachments list-volume-attachment" 
 #
 # GET /apis/storage.k8s.io/v1/watch/volumeattachments/{name}
 # operationId: watchStorageV1VolumeAttachment
-export def "apis-storage-k8s-io-watch-volumeattachments watch-volume-attachment" [
+export def "watch-storage-v1-volume-attachment" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -39764,7 +39764,7 @@ export def "apis-storage-k8s-io-watch-volumeattachments watch-volume-attachment"
 #
 # GET /apis/storage.k8s.io/v1beta1/
 # operationId: getStorageV1beta1APIResources
-export def "apis-storage-k8s-io-v1beta1 get-resources" [
+export def "get-storage-v1beta1-api-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -39799,7 +39799,7 @@ export def "apis-storage-k8s-io-v1beta1 get-resources" [
 #
 # GET /apis/storage.k8s.io/v1beta1/csistoragecapacities
 # operationId: listStorageV1beta1CSIStorageCapacityForAllNamespaces
-export def "apis-storage-k8s-io-v1beta1-csistoragecapacities list-csi-capacity-for-namespaces" [
+export def "list-storage-v1beta1-csi-storage-capacity-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -39847,7 +39847,7 @@ export def "apis-storage-k8s-io-v1beta1-csistoragecapacities list-csi-capacity-f
 # DELETE /apis/storage.k8s.io/v1beta1/namespaces/{namespace}/csistoragecapacities
 # operationId: deleteStorageV1beta1CollectionNamespacedCSIStorageCapacity
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-storage-k8s-io-v1beta1-namespaces-csistoragecapacities delete-collection-csi-capacity" [
+export def "delete-storage-v1beta1-collection-namespaced-csi-storage-capacity" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -39908,7 +39908,7 @@ export def "apis-storage-k8s-io-v1beta1-namespaces-csistoragecapacities delete-c
 #
 # GET /apis/storage.k8s.io/v1beta1/namespaces/{namespace}/csistoragecapacities
 # operationId: listStorageV1beta1NamespacedCSIStorageCapacity
-export def "apis-storage-k8s-io-v1beta1-namespaces-csistoragecapacities list-csi-capacity" [
+export def "list-storage-v1beta1-namespaced-csi-storage-capacity" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -39959,7 +39959,7 @@ export def "apis-storage-k8s-io-v1beta1-namespaces-csistoragecapacities list-csi
 # operationId: createStorageV1beta1NamespacedCSIStorageCapacity
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --nodeTopology shape: {matchExpressions?: list, matchLabels?: record}
-export def "apis-storage-k8s-io-v1beta1-namespaces-csistoragecapacities create-csi-capacity" [
+export def "create-storage-v1beta1-namespaced-csi-storage-capacity" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -40012,7 +40012,7 @@ export def "apis-storage-k8s-io-v1beta1-namespaces-csistoragecapacities create-c
 # DELETE /apis/storage.k8s.io/v1beta1/namespaces/{namespace}/csistoragecapacities/{name}
 # operationId: deleteStorageV1beta1NamespacedCSIStorageCapacity
 # --preconditions shape: {resourceVersion?: string, uid?: string}
-export def "apis-storage-k8s-io-v1beta1-namespaces-csistoragecapacities delete-csi-capacity" [
+export def "delete-storage-v1beta1-namespaced-csi-storage-capacity" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -40067,7 +40067,7 @@ export def "apis-storage-k8s-io-v1beta1-namespaces-csistoragecapacities delete-c
 #
 # GET /apis/storage.k8s.io/v1beta1/namespaces/{namespace}/csistoragecapacities/{name}
 # operationId: readStorageV1beta1NamespacedCSIStorageCapacity
-export def "apis-storage-k8s-io-v1beta1-namespaces-csistoragecapacities get-csi-capacity" [
+export def "read-storage-v1beta1-namespaced-csi-storage-capacity" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -40108,7 +40108,7 @@ export def "apis-storage-k8s-io-v1beta1-namespaces-csistoragecapacities get-csi-
 #
 # PATCH /apis/storage.k8s.io/v1beta1/namespaces/{namespace}/csistoragecapacities/{name}
 # operationId: patchStorageV1beta1NamespacedCSIStorageCapacity
-export def "apis-storage-k8s-io-v1beta1-namespaces-csistoragecapacities update-csi-capacity-by-namespace-name" [
+export def "patch-storage-v1beta1-namespaced-csi-storage-capacity" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -40159,7 +40159,7 @@ export def "apis-storage-k8s-io-v1beta1-namespaces-csistoragecapacities update-c
 # operationId: replaceStorageV1beta1NamespacedCSIStorageCapacity
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list<string>, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --nodeTopology shape: {matchExpressions?: list, matchLabels?: record}
-export def "apis-storage-k8s-io-v1beta1-namespaces-csistoragecapacities update-csi-capacity-by-namespace-name-1" [
+export def "replace-storage-v1beta1-namespaced-csi-storage-capacity" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -40213,7 +40213,7 @@ export def "apis-storage-k8s-io-v1beta1-namespaces-csistoragecapacities update-c
 #
 # GET /apis/storage.k8s.io/v1beta1/watch/csistoragecapacities
 # operationId: watchStorageV1beta1CSIStorageCapacityListForAllNamespaces
-export def "apis-storage-k8s-io-v1beta1-watch-csistoragecapacities list-csi-capacity-for-namespaces" [
+export def "watch-storage-v1beta1-csi-storage-capacity-list-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -40260,7 +40260,7 @@ export def "apis-storage-k8s-io-v1beta1-watch-csistoragecapacities list-csi-capa
 #
 # GET /apis/storage.k8s.io/v1beta1/watch/namespaces/{namespace}/csistoragecapacities
 # operationId: watchStorageV1beta1NamespacedCSIStorageCapacityList
-export def "apis-storage-k8s-io-v1beta1-watch-namespaces-csistoragecapacities list-csi-capacity" [
+export def "watch-storage-v1beta1-namespaced-csi-storage-capacity-list" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -40309,7 +40309,7 @@ export def "apis-storage-k8s-io-v1beta1-watch-namespaces-csistoragecapacities li
 #
 # GET /apis/storage.k8s.io/v1beta1/watch/namespaces/{namespace}/csistoragecapacities/{name}
 # operationId: watchStorageV1beta1NamespacedCSIStorageCapacity
-export def "apis-storage-k8s-io-v1beta1-watch-namespaces-csistoragecapacities watch-csi-capacity" [
+export def "watch-storage-v1beta1-namespaced-csi-storage-capacity" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -40359,7 +40359,7 @@ export def "apis-storage-k8s-io-v1beta1-watch-namespaces-csistoragecapacities wa
 # GET /logs/
 #
 # operationId: logFileListHandler
-export def "logs list-file-handler" [
+export def "log-file-list-handler" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -40392,7 +40392,7 @@ export def "logs list-file-handler" [
 # GET /logs/{logpath}
 #
 # operationId: logFileHandler
-export def "logs get-file-handler" [
+export def "log-file-handler" [
   logpath: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -40428,7 +40428,7 @@ export def "logs get-file-handler" [
 #
 # GET /openid/v1/jwks/
 # operationId: getServiceAccountIssuerOpenIDKeyset
-export def "openid-jwks get-service-account-issuer-open-keyset" [
+export def "get-service-account-issuer-open-id-keyset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -40462,7 +40462,7 @@ export def "openid-jwks get-service-account-issuer-open-keyset" [
 #
 # GET /version/
 # operationId: getCodeVersion
-export def "version get-code" [
+export def "get-code-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

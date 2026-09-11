@@ -122,7 +122,7 @@ def location-type-completer [] { ["INGESTION" "SAGEMAKER"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "permission-group-users create-associate" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associate-user-to-permission-group" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # POST /permission-group/{permissionGroupId}/users/{userId}
 # operationId: AssociateUserToPermissionGroup
-export def "permission-group-users create-associate" [
+export def "associate-user-to-permission-group" [
   permission_group_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -197,7 +197,7 @@ export def "permission-group-users create-associate" [
 #
 # DELETE /permission-group/{permissionGroupId}/users/{userId}
 # operationId: DisassociateUserFromPermissionGroup
-export def "permission-group-users delete-disassociate" [
+export def "disassociate-user-from-permission-group" [
   permission_group_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -246,7 +246,7 @@ export def "permission-group-users delete-disassociate" [
 #
 # POST /datasets/{datasetId}/changesetsv2
 # operationId: CreateChangeset
-export def "datasets-changesetsv2 create-changeset" [
+export def "create-changeset" [
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -298,7 +298,7 @@ export def "datasets-changesetsv2 create-changeset" [
 #
 # GET /datasets/{datasetId}/changesetsv2
 # operationId: ListChangesets
-export def "datasets-changesetsv2 list-changesets" [
+export def "list-changesets" [
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -347,7 +347,7 @@ export def "datasets-changesetsv2 list-changesets" [
 # POST /datasets/{datasetId}/dataviewsv2
 # operationId: CreateDataView
 # --destinationTypeParams shape: {destinationType?: any, s3DestinationExportFileFormat?: any, s3DestinationExportFileFormatOptions?: any}
-export def "datasets-dataviewsv2 create-data-view" [
+export def "create-data-view" [
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -401,7 +401,7 @@ export def "datasets-dataviewsv2 create-data-view" [
 #
 # GET /datasets/{datasetId}/dataviewsv2
 # operationId: ListDataViews
-export def "datasets-dataviewsv2 list-data-views" [
+export def "list-data-views" [
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -452,7 +452,7 @@ export def "datasets-dataviewsv2 list-data-views" [
 # --ownerInfo shape: {name?: any, phoneNumber?: any, email?: any}
 # --permissionGroupParams shape: {permissionGroupId?: any, datasetPermissions?: any}
 # --schemaDefinition shape: {tabularSchemaConfig?: any}
-export def "datasetsv2 create-dataset" [
+export def "create-dataset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -506,7 +506,7 @@ export def "datasetsv2 create-dataset" [
 #
 # GET /datasetsv2
 # operationId: ListDatasets
-export def "datasetsv2 list-datasets" [
+export def "list-datasets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -552,7 +552,7 @@ export def "datasetsv2 list-datasets" [
 #
 # POST /permission-group
 # operationId: CreatePermissionGroup
-export def "permission-group create" [
+export def "create-permission-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -602,7 +602,7 @@ export def "permission-group create" [
 #
 # POST /user
 # operationId: CreateUser
-export def "user create" [
+export def "create-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -655,7 +655,7 @@ export def "user create" [
 #
 # DELETE /datasetsv2/{datasetId}
 # operationId: DeleteDataset
-export def "datasetsv2 delete-dataset" [
+export def "delete-dataset" [
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -702,7 +702,7 @@ export def "datasetsv2 delete-dataset" [
 #
 # GET /datasetsv2/{datasetId}
 # operationId: GetDataset
-export def "datasetsv2 get-dataset" [
+export def "get-dataset" [
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -748,7 +748,7 @@ export def "datasetsv2 get-dataset" [
 # PUT /datasetsv2/{datasetId}
 # operationId: UpdateDataset
 # --schemaDefinition shape: {tabularSchemaConfig?: any}
-export def "datasetsv2 update-dataset" [
+export def "update-dataset" [
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -802,7 +802,7 @@ export def "datasetsv2 update-dataset" [
 #
 # DELETE /permission-group/{permissionGroupId}
 # operationId: DeletePermissionGroup
-export def "permission-group delete" [
+export def "delete-permission-group" [
   permission_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -849,7 +849,7 @@ export def "permission-group delete" [
 #
 # GET /permission-group/{permissionGroupId}
 # operationId: GetPermissionGroup
-export def "permission-group get" [
+export def "get-permission-group" [
   permission_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -894,7 +894,7 @@ export def "permission-group get" [
 #
 # PUT /permission-group/{permissionGroupId}
 # operationId: UpdatePermissionGroup
-export def "permission-group update" [
+export def "update-permission-group" [
   permission_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -946,7 +946,7 @@ export def "permission-group update" [
 #
 # POST /user/{userId}/disable
 # operationId: DisableUser
-export def "user-disable disable" [
+export def "disable-user" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -995,7 +995,7 @@ export def "user-disable disable" [
 #
 # POST /user/{userId}/enable
 # operationId: EnableUser
-export def "user-enable enable" [
+export def "enable-user" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1044,7 +1044,7 @@ export def "user-enable enable" [
 #
 # GET /datasets/{datasetId}/changesetsv2/{changesetId}
 # operationId: GetChangeset
-export def "datasets-changesetsv2 get-changeset" [
+export def "get-changeset" [
   dataset_id: string
   changeset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1091,7 +1091,7 @@ export def "datasets-changesetsv2 get-changeset" [
 #
 # PUT /datasets/{datasetId}/changesetsv2/{changesetId}
 # operationId: UpdateChangeset
-export def "datasets-changesetsv2 update-changeset" [
+export def "update-changeset" [
   dataset_id: string
   changeset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1144,7 +1144,7 @@ export def "datasets-changesetsv2 update-changeset" [
 #
 # GET /datasets/{datasetId}/dataviewsv2/{dataviewId}
 # operationId: GetDataView
-export def "datasets-dataviewsv2 get-data-view" [
+export def "get-data-view" [
   dataset_id: string
   dataview_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1191,7 +1191,7 @@ export def "datasets-dataviewsv2 get-data-view" [
 #
 # POST /datasets/{datasetId}/dataviewsv2/{dataviewId}/external-access-details
 # operationId: GetExternalDataViewAccessDetails
-export def "datasets-dataviewsv2-external-access-details get-data-view" [
+export def "get-external-data-view-access-details" [
   dataset_id: string
   dataview_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1238,7 +1238,7 @@ export def "datasets-dataviewsv2-external-access-details get-data-view" [
 #
 # GET /credentials/programmatic
 # operationId: GetProgrammaticAccessCredentials
-export def "credentials-programmatic get-access" [
+export def "get-programmatic-access-credentials" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1284,7 +1284,7 @@ export def "credentials-programmatic get-access" [
 #
 # GET /user/{userId}
 # operationId: GetUser
-export def "user get" [
+export def "get-user" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1329,7 +1329,7 @@ export def "user get" [
 #
 # PUT /user/{userId}
 # operationId: UpdateUser
-export def "user update" [
+export def "update-user" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1383,7 +1383,7 @@ export def "user update" [
 #
 # POST /workingLocationV1
 # operationId: GetWorkingLocation
-export def "working-location-v1 get" [
+export def "get-working-location" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1430,7 +1430,7 @@ export def "working-location-v1 get" [
 #
 # GET /permission-group
 # operationId: ListPermissionGroups
-export def "permission-group list" [
+export def "list-permission-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1476,7 +1476,7 @@ export def "permission-group list" [
 #
 # GET /user/{userId}/permission-groups
 # operationId: ListPermissionGroupsByUser
-export def "user-permission-groups list" [
+export def "list-permission-groups-by-user" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1524,7 +1524,7 @@ export def "user-permission-groups list" [
 #
 # GET /user
 # operationId: ListUsers
-export def "user list" [
+export def "list-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1570,7 +1570,7 @@ export def "user list" [
 #
 # GET /permission-group/{permissionGroupId}/users
 # operationId: ListUsersByPermissionGroup
-export def "permission-group-users list" [
+export def "list-users-by-permission-group" [
   permission_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1618,7 +1618,7 @@ export def "permission-group-users list" [
 #
 # POST /user/{userId}/password
 # operationId: ResetUserPassword
-export def "user-password reset" [
+export def "reset-user-password" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

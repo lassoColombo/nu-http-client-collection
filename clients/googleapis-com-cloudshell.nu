@@ -123,7 +123,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "users create-public-key" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cloudshell-users-environments-add-public-key" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -147,7 +147,7 @@ export def commands []: nothing -> table {
 #
 # POST /v1/{environment}:addPublicKey
 # operationId: cloudshell.users.environments.addPublicKey
-export def "users create-public-key" [
+export def "cloudshell-users-environments-add-public-key" [
   environment: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -199,7 +199,7 @@ export def "users create-public-key" [
 #
 # POST /v1/{environment}:removePublicKey
 # operationId: cloudshell.users.environments.removePublicKey
-export def "users delete-public-key" [
+export def "cloudshell-users-environments-remove-public-key" [
   environment: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -251,7 +251,7 @@ export def "users delete-public-key" [
 #
 # DELETE /v1/{name}
 # operationId: cloudshell.operations.delete
-export def "operations delete" [
+export def "cloudshell-operations-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -299,7 +299,7 @@ export def "operations delete" [
 #
 # GET /v1/{name}
 # operationId: cloudshell.users.environments.get
-export def "users get" [
+export def "cloudshell-users-environments-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -350,7 +350,7 @@ export def "users get" [
 #
 # POST /v1/{name}:authorize
 # operationId: cloudshell.users.environments.authorize
-export def "users create-authorize" [
+export def "cloudshell-users-environments-authorize" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -404,7 +404,7 @@ export def "users create-authorize" [
 #
 # POST /v1/{name}:cancel
 # operationId: cloudshell.operations.cancel
-export def "operations cancel" [
+export def "cloudshell-operations-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -456,7 +456,7 @@ export def "operations cancel" [
 #
 # POST /v1/{name}:start
 # operationId: cloudshell.users.environments.start
-export def "users start" [
+export def "cloudshell-users-environments-start" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

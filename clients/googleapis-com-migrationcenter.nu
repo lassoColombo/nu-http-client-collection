@@ -136,7 +136,7 @@ def type-completer-1 [] { ["TOTAL_COST_OF_OWNERSHIP" "TYPE_UNSPECIFIED"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1alpha1 create-assets" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "migrationcenter-projects-locations-groups-add-assets" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -161,7 +161,7 @@ export def commands []: nothing -> table {
 # POST /v1alpha1/{group}:addAssets
 # operationId: migrationcenter.projects.locations.groups.addAssets
 # --assets shape: {assetIds?: list<string>}
-export def "v1alpha1 create-assets" [
+export def "migrationcenter-projects-locations-groups-add-assets" [
   group: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -216,7 +216,7 @@ export def "v1alpha1 create-assets" [
 # POST /v1alpha1/{group}:removeAssets
 # operationId: migrationcenter.projects.locations.groups.removeAssets
 # --assets shape: {assetIds?: list<string>}
-export def "v1alpha1 delete-assets" [
+export def "migrationcenter-projects-locations-groups-remove-assets" [
   group: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -270,7 +270,7 @@ export def "v1alpha1 delete-assets" [
 #
 # DELETE /v1alpha1/{name}
 # operationId: migrationcenter.projects.locations.sources.delete
-export def "v1alpha1 delete" [
+export def "migrationcenter-projects-locations-sources-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -319,7 +319,7 @@ export def "v1alpha1 delete" [
 #
 # GET /v1alpha1/{name}
 # operationId: migrationcenter.projects.locations.sources.get
-export def "v1alpha1 get" [
+export def "migrationcenter-projects-locations-sources-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -368,7 +368,7 @@ export def "v1alpha1 get" [
 #
 # PATCH /v1alpha1/{name}
 # operationId: migrationcenter.projects.locations.sources.patch
-export def "v1alpha1 update" [
+export def "migrationcenter-projects-locations-sources-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -426,7 +426,7 @@ export def "v1alpha1 update" [
 #
 # GET /v1alpha1/{name}/locations
 # operationId: migrationcenter.projects.locations.list
-export def "v1alpha1-locations list" [
+export def "migrationcenter-projects-locations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -477,7 +477,7 @@ export def "v1alpha1-locations list" [
 #
 # GET /v1alpha1/{name}/operations
 # operationId: migrationcenter.projects.locations.operations.list
-export def "v1alpha1-operations list" [
+export def "migrationcenter-projects-locations-operations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -528,7 +528,7 @@ export def "v1alpha1-operations list" [
 #
 # POST /v1alpha1/{name}:cancel
 # operationId: migrationcenter.projects.locations.operations.cancel
-export def "v1alpha1 cancel" [
+export def "migrationcenter-projects-locations-operations-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -580,7 +580,7 @@ export def "v1alpha1 cancel" [
 #
 # POST /v1alpha1/{name}:run
 # operationId: migrationcenter.projects.locations.importJobs.run
-export def "v1alpha1 create-run" [
+export def "migrationcenter-projects-locations-import-jobs-run" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -632,7 +632,7 @@ export def "v1alpha1 create-run" [
 #
 # POST /v1alpha1/{name}:validate
 # operationId: migrationcenter.projects.locations.importJobs.validate
-export def "v1alpha1 validate" [
+export def "migrationcenter-projects-locations-import-jobs-validate" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -684,7 +684,7 @@ export def "v1alpha1 validate" [
 #
 # GET /v1alpha1/{parent}/assets
 # operationId: migrationcenter.projects.locations.assets.list
-export def "v1alpha1-assets list" [
+export def "migrationcenter-projects-locations-assets-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -738,7 +738,7 @@ export def "v1alpha1-assets list" [
 # POST /v1alpha1/{parent}/assets:aggregateValues
 # operationId: migrationcenter.projects.locations.assets.aggregateValues
 # --aggregations item shape: {count?: record, field?: string, frequency?: record, histogram?: record, sum?: record}
-export def "v1alpha1-assets-aggregate-values create" [
+export def "migrationcenter-projects-locations-assets-aggregate-values" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -791,7 +791,7 @@ export def "v1alpha1-assets-aggregate-values create" [
 #
 # POST /v1alpha1/{parent}/assets:batchDelete
 # operationId: migrationcenter.projects.locations.assets.batchDelete
-export def "v1alpha1-assets-batch-delete delete" [
+export def "migrationcenter-projects-locations-assets-batch-delete" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -845,7 +845,7 @@ export def "v1alpha1-assets-batch-delete delete" [
 # POST /v1alpha1/{parent}/assets:batchUpdate
 # operationId: migrationcenter.projects.locations.assets.batchUpdate
 # --requests item shape: {asset?: record, requestId?: string, updateMask?: string}
-export def "v1alpha1-assets-batch-update update" [
+export def "migrationcenter-projects-locations-assets-batch-update" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -898,7 +898,7 @@ export def "v1alpha1-assets-batch-update update" [
 # POST /v1alpha1/{parent}/assets:reportAssetFrames
 # operationId: migrationcenter.projects.locations.assets.reportAssetFrames
 # --framesData item shape: {attributes?: record, labels?: record, performanceSamples?: list, reportTime?: string, traceToken?: string, virtualMachineDetails?: record}
-export def "v1alpha1-assets-report-asset-frames create" [
+export def "migrationcenter-projects-locations-assets-report-asset-frames" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -951,7 +951,7 @@ export def "v1alpha1-assets-report-asset-frames create" [
 #
 # GET /v1alpha1/{parent}/groups
 # operationId: migrationcenter.projects.locations.groups.list
-export def "v1alpha1-groups list" [
+export def "migrationcenter-projects-locations-groups-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1003,7 +1003,7 @@ export def "v1alpha1-groups list" [
 #
 # POST /v1alpha1/{parent}/groups
 # operationId: migrationcenter.projects.locations.groups.create
-export def "v1alpha1-groups create" [
+export def "migrationcenter-projects-locations-groups-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1059,7 +1059,7 @@ export def "v1alpha1-groups create" [
 #
 # GET /v1alpha1/{parent}/importDataFiles
 # operationId: migrationcenter.projects.locations.importJobs.importDataFiles.list
-export def "v1alpha1-import-data-files list" [
+export def "migrationcenter-projects-locations-import-jobs-import-data-files-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1111,7 +1111,7 @@ export def "v1alpha1-import-data-files list" [
 #
 # POST /v1alpha1/{parent}/importDataFiles
 # operationId: migrationcenter.projects.locations.importJobs.importDataFiles.create
-export def "v1alpha1-import-data-files create" [
+export def "migrationcenter-projects-locations-import-jobs-import-data-files-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1167,7 +1167,7 @@ export def "v1alpha1-import-data-files create" [
 #
 # GET /v1alpha1/{parent}/importJobs
 # operationId: migrationcenter.projects.locations.importJobs.list
-export def "v1alpha1-import-jobs list" [
+export def "migrationcenter-projects-locations-import-jobs-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1224,7 +1224,7 @@ export def "v1alpha1-import-jobs list" [
 # --gcsPayload shape: {format?: "IMPORT_JOB_FORMAT_UNSPECIFIED"|"IMPORT_JOB_FORMAT_CMDB"|"IMPORT_JOB_FORMAT_RVTOOLS_XLSX"|"IMPORT_JOB_FORMAT_RVTOOLS_CSV"|"IMPORT_JOB_FORMAT_EXPORTED_AWS_CSV"|"IMPORT_JOB_FORMAT_EXPORTED_AZURE_CSV"|"IMPORT_JOB_FORMAT_MANUAL_CSV", path?: string}
 # --inlinePayload shape: {format?: "IMPORT_JOB_FORMAT_UNSPECIFIED"|"IMPORT_JOB_FORMAT_CMDB"|"IMPORT_JOB_FORMAT_RVTOOLS_XLSX"|"IMPORT_JOB_FORMAT_RVTOOLS_CSV"|"IMPORT_JOB_FORMAT_EXPORTED_AWS_CSV"|"IMPORT_JOB_FORMAT_EXPORTED_AZURE_CSV"|"IMPORT_JOB_FORMAT_MANUAL_CSV", payload?: list}
 # --validationReport shape: {fileValidations?: list, jobErrors?: list}
-export def "v1alpha1-import-jobs create" [
+export def "migrationcenter-projects-locations-import-jobs-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1284,7 +1284,7 @@ export def "v1alpha1-import-jobs create" [
 #
 # GET /v1alpha1/{parent}/preferenceSets
 # operationId: migrationcenter.projects.locations.preferenceSets.list
-export def "v1alpha1-preference-sets list" [
+export def "migrationcenter-projects-locations-preference-sets-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1336,7 +1336,7 @@ export def "v1alpha1-preference-sets list" [
 # POST /v1alpha1/{parent}/preferenceSets
 # operationId: migrationcenter.projects.locations.preferenceSets.create
 # --virtualMachinePreferences shape: {commitmentPlan?: "COMMITMENT_PLAN_UNSPECIFIED"|"COMMITMENT_PLAN_NONE"|"COMMITMENT_PLAN_ONE_YEAR"|"COMMITMENT_PLAN_THREE_YEARS", computeEnginePreferences?: record, regionPreferences?: record, sizingOptimizationStrategy?: "SIZING_OPTIMIZATION_STRATEGY_UNSPECIFIED"|"SIZING_OPTIMIZATION_STRATEGY_SAME_AS_SOURCE"|"SIZING_OPTIMIZATION_STRATEGY_MODERATE"|"SIZING_OPTIMIZATION_STRATEGY_AGGRESSIVE"}
-export def "v1alpha1-preference-sets create" [
+export def "migrationcenter-projects-locations-preference-sets-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1392,7 +1392,7 @@ export def "v1alpha1-preference-sets create" [
 #
 # GET /v1alpha1/{parent}/reportConfigs
 # operationId: migrationcenter.projects.locations.reportConfigs.list
-export def "v1alpha1-report-configs list" [
+export def "migrationcenter-projects-locations-report-configs-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1445,7 +1445,7 @@ export def "v1alpha1-report-configs list" [
 # POST /v1alpha1/{parent}/reportConfigs
 # operationId: migrationcenter.projects.locations.reportConfigs.create
 # --groupPreferencesetAssignments item shape: {group?: string, preferenceSet?: string}
-export def "v1alpha1-report-configs create" [
+export def "migrationcenter-projects-locations-report-configs-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1501,7 +1501,7 @@ export def "v1alpha1-report-configs create" [
 #
 # GET /v1alpha1/{parent}/reports
 # operationId: migrationcenter.projects.locations.reportConfigs.reports.list
-export def "v1alpha1-reports list" [
+export def "migrationcenter-projects-locations-report-configs-reports-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1555,7 +1555,7 @@ export def "v1alpha1-reports list" [
 # POST /v1alpha1/{parent}/reports
 # operationId: migrationcenter.projects.locations.reportConfigs.reports.create
 # --summary shape: {allAssetsStats?: record, groupFindings?: list}
-export def "v1alpha1-reports create" [
+export def "migrationcenter-projects-locations-report-configs-reports-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1613,7 +1613,7 @@ export def "v1alpha1-reports create" [
 #
 # GET /v1alpha1/{parent}/sources
 # operationId: migrationcenter.projects.locations.sources.list
-export def "v1alpha1-sources list" [
+export def "migrationcenter-projects-locations-sources-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1665,7 +1665,7 @@ export def "v1alpha1-sources list" [
 #
 # POST /v1alpha1/{parent}/sources
 # operationId: migrationcenter.projects.locations.sources.create
-export def "v1alpha1-sources create" [
+export def "migrationcenter-projects-locations-sources-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

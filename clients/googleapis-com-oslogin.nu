@@ -130,7 +130,7 @@ def view-completer [] { ["BASIC" "LOGIN_PROFILE_VIEW_UNSPECIFIED" "SECURITY_KEY"
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "oslogin-users-ssh-public-keys-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -154,7 +154,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1beta/{name}
 # operationId: oslogin.users.sshPublicKeys.delete
-export def "v1beta delete" [
+export def "oslogin-users-ssh-public-keys-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -202,7 +202,7 @@ export def "v1beta delete" [
 #
 # GET /v1beta/{name}
 # operationId: oslogin.users.sshPublicKeys.get
-export def "v1beta get" [
+export def "oslogin-users-ssh-public-keys-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -250,7 +250,7 @@ export def "v1beta get" [
 #
 # PATCH /v1beta/{name}
 # operationId: oslogin.users.sshPublicKeys.patch
-export def "v1beta update" [
+export def "oslogin-users-ssh-public-keys-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -304,7 +304,7 @@ export def "v1beta update" [
 #
 # GET /v1beta/{name}/loginProfile
 # operationId: oslogin.users.getLoginProfile
-export def "v1beta-login-profile get" [
+export def "oslogin-users-get-login-profile" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -355,7 +355,7 @@ export def "v1beta-login-profile get" [
 #
 # POST /v1beta/{parent}/sshPublicKeys
 # operationId: oslogin.users.sshPublicKeys.create
-export def "v1beta-ssh-public-keys create" [
+export def "oslogin-users-ssh-public-keys-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -408,7 +408,7 @@ export def "v1beta-ssh-public-keys create" [
 #
 # POST /v1beta/{parent}:importSshPublicKey
 # operationId: oslogin.users.importSshPublicKey
-export def "v1beta import-ssh-public-key" [
+export def "oslogin-users-import-ssh-public-key" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

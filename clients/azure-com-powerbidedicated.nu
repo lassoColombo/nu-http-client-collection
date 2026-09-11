@@ -122,7 +122,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-power-bi-dedicated-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.PowerBIDedicated/operations
 # operationId: Operations_List
-export def "providers-microsoft-power-bi-dedicated-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -182,7 +182,7 @@ export def "providers-microsoft-power-bi-dedicated-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.PowerBIDedicated/capacities
 # operationId: Capacities_List
-export def "subscriptions-providers-microsoft-power-bi-dedicated-capacities list" [
+export def "capacities-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -220,7 +220,7 @@ export def "subscriptions-providers-microsoft-power-bi-dedicated-capacities list
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.PowerBIDedicated/locations/{location}/checkNameAvailability
 # operationId: Capacities_CheckNameAvailability
-export def "subscriptions-providers-microsoft-power-bi-dedicated-locations-check-name-availability check-capacities" [
+export def "capacities-check-name-availability" [
   subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -265,7 +265,7 @@ export def "subscriptions-providers-microsoft-power-bi-dedicated-locations-check
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.PowerBIDedicated/skus
 # operationId: Capacities_ListSkus
-export def "subscriptions-providers-microsoft-power-bi-dedicated-skus list-capacities" [
+export def "capacities-list-skus" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -303,7 +303,7 @@ export def "subscriptions-providers-microsoft-power-bi-dedicated-skus list-capac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.PowerBIDedicated/capacities
 # operationId: Capacities_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-power-bi-dedicated-capacities list" [
+export def "capacities-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -343,7 +343,7 @@ export def "subscriptions-resource-groups-providers-microsoft-power-bi-dedicated
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.PowerBIDedicated/capacities/{dedicatedCapacityName}
 # operationId: Capacities_Delete
-export def "subscriptions-resource-groups-providers-microsoft-power-bi-dedicated-capacities delete" [
+export def "capacities-delete" [
   subscription_id: string
   resource_group_name: string
   dedicated_capacity_name: string
@@ -385,7 +385,7 @@ export def "subscriptions-resource-groups-providers-microsoft-power-bi-dedicated
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.PowerBIDedicated/capacities/{dedicatedCapacityName}
 # operationId: Capacities_GetDetails
-export def "subscriptions-resource-groups-providers-microsoft-power-bi-dedicated-capacities get-details" [
+export def "capacities-get-details" [
   subscription_id: string
   resource_group_name: string
   dedicated_capacity_name: string
@@ -429,7 +429,7 @@ export def "subscriptions-resource-groups-providers-microsoft-power-bi-dedicated
 # operationId: Capacities_Update
 # --properties shape: {administration?: record}
 # --sku shape: {name: string, tier?: "PBIE_Azure"}
-export def "subscriptions-resource-groups-providers-microsoft-power-bi-dedicated-capacities update" [
+export def "capacities-update" [
   subscription_id: string
   resource_group_name: string
   dedicated_capacity_name: string
@@ -479,7 +479,7 @@ export def "subscriptions-resource-groups-providers-microsoft-power-bi-dedicated
 # operationId: Capacities_Create
 # --properties shape: {administration?: record}
 # --sku shape: {name: string, tier?: "PBIE_Azure"}
-export def "subscriptions-resource-groups-providers-microsoft-power-bi-dedicated-capacities create" [
+export def "capacities-create" [
   subscription_id: string
   resource_group_name: string
   dedicated_capacity_name: string
@@ -528,7 +528,7 @@ export def "subscriptions-resource-groups-providers-microsoft-power-bi-dedicated
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.PowerBIDedicated/capacities/{dedicatedCapacityName}/resume
 # operationId: Capacities_Resume
-export def "subscriptions-resource-groups-providers-microsoft-power-bi-dedicated-capacities-resume create" [
+export def "capacities-resume" [
   subscription_id: string
   resource_group_name: string
   dedicated_capacity_name: string
@@ -570,7 +570,7 @@ export def "subscriptions-resource-groups-providers-microsoft-power-bi-dedicated
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.PowerBIDedicated/capacities/{dedicatedCapacityName}/skus
 # operationId: Capacities_ListSkusForCapacity
-export def "subscriptions-resource-groups-providers-microsoft-power-bi-dedicated-capacities-skus list-for-capacity" [
+export def "capacities-list-skus-for-capacity" [
   subscription_id: string
   resource_group_name: string
   dedicated_capacity_name: string
@@ -612,7 +612,7 @@ export def "subscriptions-resource-groups-providers-microsoft-power-bi-dedicated
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.PowerBIDedicated/capacities/{dedicatedCapacityName}/suspend
 # operationId: Capacities_Suspend
-export def "subscriptions-resource-groups-providers-microsoft-power-bi-dedicated-capacities-suspend create" [
+export def "capacities-suspend" [
   subscription_id: string
   resource_group_name: string
   dedicated_capacity_name: string

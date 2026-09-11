@@ -165,7 +165,7 @@ def x-amz-target-completer-64 [] { ["PhotonAdminProxyService.UpdateStack"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-associate-application-fleet" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associate-application-fleet" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -189,7 +189,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AssociateApplicationFleet
-export def "api create-associate-application-fleet" [
+export def "associate-application-fleet" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -238,7 +238,7 @@ export def "api create-associate-application-fleet" [
 #
 # POST /
 # operationId: AssociateApplicationToEntitlement
-export def "api create-associate-application-to-entitlement" [
+export def "associate-application-to-entitlement" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -288,7 +288,7 @@ export def "api create-associate-application-to-entitlement" [
 #
 # POST /
 # operationId: AssociateFleet
-export def "api create-associate-fleet" [
+export def "associate-fleet" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -337,7 +337,7 @@ export def "api create-associate-fleet" [
 #
 # POST /
 # operationId: BatchAssociateUserStack
-export def "api create-batch-associate-user-stack" [
+export def "batch-associate-user-stack" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -385,7 +385,7 @@ export def "api create-batch-associate-user-stack" [
 #
 # POST /
 # operationId: BatchDisassociateUserStack
-export def "api create-batch-disassociate-user-stack" [
+export def "batch-disassociate-user-stack" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -433,7 +433,7 @@ export def "api create-batch-disassociate-user-stack" [
 #
 # POST /
 # operationId: CopyImage
-export def "api copy-image" [
+export def "copy-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -484,7 +484,7 @@ export def "api copy-image" [
 #
 # POST /
 # operationId: CreateAppBlock
-export def "api create-app-block" [
+export def "create-app-block" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -537,7 +537,7 @@ export def "api create-app-block" [
 #
 # POST /
 # operationId: CreateApplication
-export def "api create-application" [
+export def "create-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -595,7 +595,7 @@ export def "api create-application" [
 #
 # POST /
 # operationId: CreateDirectoryConfig
-export def "api create-directory-config" [
+export def "create-directory-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -646,7 +646,7 @@ export def "api create-directory-config" [
 #
 # POST /
 # operationId: CreateEntitlement
-export def "api create-entitlement" [
+export def "create-entitlement" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -698,7 +698,7 @@ export def "api create-entitlement" [
 #
 # POST /
 # operationId: CreateFleet
-export def "api create-fleet" [
+export def "create-fleet" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -766,7 +766,7 @@ export def "api create-fleet" [
 #
 # POST /
 # operationId: CreateImageBuilder
-export def "api create-image-builder" [
+export def "create-image-builder" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -826,7 +826,7 @@ export def "api create-image-builder" [
 #
 # POST /
 # operationId: CreateImageBuilderStreamingURL
-export def "api create-image-builder-streaming-url" [
+export def "create-image-builder-streaming-url" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -875,7 +875,7 @@ export def "api create-image-builder-streaming-url" [
 #
 # POST /
 # operationId: CreateStack
-export def "api create-stack" [
+export def "create-stack" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -934,7 +934,7 @@ export def "api create-stack" [
 #
 # POST /
 # operationId: CreateStreamingURL
-export def "api create-streaming-url" [
+export def "create-streaming-url" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -987,7 +987,7 @@ export def "api create-streaming-url" [
 #
 # POST /
 # operationId: CreateUpdatedImage
-export def "api create-updated-image" [
+export def "create-updated-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1040,7 +1040,7 @@ export def "api create-updated-image" [
 #
 # POST /
 # operationId: CreateUsageReportSubscription
-export def "api create-usage-report-subscription" [
+export def "create-usage-report-subscription" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1088,7 +1088,7 @@ export def "api create-usage-report-subscription" [
 #
 # POST /
 # operationId: CreateUser
-export def "api create-user" [
+export def "create-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1140,7 +1140,7 @@ export def "api create-user" [
 #
 # POST /
 # operationId: DeleteAppBlock
-export def "api delete-app-block" [
+export def "delete-app-block" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1188,7 +1188,7 @@ export def "api delete-app-block" [
 #
 # POST /
 # operationId: DeleteApplication
-export def "api delete-application" [
+export def "delete-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1236,7 +1236,7 @@ export def "api delete-application" [
 #
 # POST /
 # operationId: DeleteDirectoryConfig
-export def "api delete-directory-config" [
+export def "delete-directory-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1284,7 +1284,7 @@ export def "api delete-directory-config" [
 #
 # POST /
 # operationId: DeleteEntitlement
-export def "api delete-entitlement" [
+export def "delete-entitlement" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1333,7 +1333,7 @@ export def "api delete-entitlement" [
 #
 # POST /
 # operationId: DeleteFleet
-export def "api delete-fleet" [
+export def "delete-fleet" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1381,7 +1381,7 @@ export def "api delete-fleet" [
 #
 # POST /
 # operationId: DeleteImage
-export def "api delete-image" [
+export def "delete-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1429,7 +1429,7 @@ export def "api delete-image" [
 #
 # POST /
 # operationId: DeleteImageBuilder
-export def "api delete-image-builder" [
+export def "delete-image-builder" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1477,7 +1477,7 @@ export def "api delete-image-builder" [
 #
 # POST /
 # operationId: DeleteImagePermissions
-export def "api delete-image-permissions" [
+export def "delete-image-permissions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1526,7 +1526,7 @@ export def "api delete-image-permissions" [
 #
 # POST /
 # operationId: DeleteStack
-export def "api delete-stack" [
+export def "delete-stack" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1574,7 +1574,7 @@ export def "api delete-stack" [
 #
 # POST /
 # operationId: DeleteUsageReportSubscription
-export def "api delete-usage-report-subscription" [
+export def "delete-usage-report-subscription" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1622,7 +1622,7 @@ export def "api delete-usage-report-subscription" [
 #
 # POST /
 # operationId: DeleteUser
-export def "api delete-user" [
+export def "delete-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1671,7 +1671,7 @@ export def "api delete-user" [
 #
 # POST /
 # operationId: DescribeAppBlocks
-export def "api get-app-blocks" [
+export def "describe-app-blocks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1721,7 +1721,7 @@ export def "api get-app-blocks" [
 #
 # POST /
 # operationId: DescribeApplicationFleetAssociations
-export def "api get-application-fleet-associations" [
+export def "describe-application-fleet-associations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1772,7 +1772,7 @@ export def "api get-application-fleet-associations" [
 #
 # POST /
 # operationId: DescribeApplications
-export def "api get-applications" [
+export def "describe-applications" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1822,7 +1822,7 @@ export def "api get-applications" [
 #
 # POST /
 # operationId: DescribeDirectoryConfigs
-export def "api get-directory-configs" [
+export def "describe-directory-configs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1872,7 +1872,7 @@ export def "api get-directory-configs" [
 #
 # POST /
 # operationId: DescribeEntitlements
-export def "api get-entitlements" [
+export def "describe-entitlements" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1923,7 +1923,7 @@ export def "api get-entitlements" [
 #
 # POST /
 # operationId: DescribeFleets
-export def "api get-fleets" [
+export def "describe-fleets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1972,7 +1972,7 @@ export def "api get-fleets" [
 #
 # POST /
 # operationId: DescribeImageBuilders
-export def "api get-image-builders" [
+export def "describe-image-builders" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2022,7 +2022,7 @@ export def "api get-image-builders" [
 #
 # POST /
 # operationId: DescribeImagePermissions
-export def "api get-image-permissions" [
+export def "describe-image-permissions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2076,7 +2076,7 @@ export def "api get-image-permissions" [
 #
 # POST /
 # operationId: DescribeImages
-export def "api get-images" [
+export def "describe-images" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2131,7 +2131,7 @@ export def "api get-images" [
 #
 # POST /
 # operationId: DescribeSessions
-export def "api get-sessions" [
+export def "describe-sessions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2184,7 +2184,7 @@ export def "api get-sessions" [
 #
 # POST /
 # operationId: DescribeStacks
-export def "api get-stacks" [
+export def "describe-stacks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2233,7 +2233,7 @@ export def "api get-stacks" [
 #
 # POST /
 # operationId: DescribeUsageReportSubscriptions
-export def "api get-usage-report-subscriptions" [
+export def "describe-usage-report-subscriptions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2282,7 +2282,7 @@ export def "api get-usage-report-subscriptions" [
 #
 # POST /
 # operationId: DescribeUserStackAssociations
-export def "api get-user-stack-associations" [
+export def "describe-user-stack-associations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2334,7 +2334,7 @@ export def "api get-user-stack-associations" [
 #
 # POST /
 # operationId: DescribeUsers
-export def "api get-users" [
+export def "describe-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2384,7 +2384,7 @@ export def "api get-users" [
 #
 # POST /
 # operationId: DisableUser
-export def "api disable-user" [
+export def "disable-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2433,7 +2433,7 @@ export def "api disable-user" [
 #
 # POST /
 # operationId: DisassociateApplicationFleet
-export def "api create-disassociate-application-fleet" [
+export def "disassociate-application-fleet" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2482,7 +2482,7 @@ export def "api create-disassociate-application-fleet" [
 #
 # POST /
 # operationId: DisassociateApplicationFromEntitlement
-export def "api create-disassociate-application-from-entitlement" [
+export def "disassociate-application-from-entitlement" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2532,7 +2532,7 @@ export def "api create-disassociate-application-from-entitlement" [
 #
 # POST /
 # operationId: DisassociateFleet
-export def "api create-disassociate-fleet" [
+export def "disassociate-fleet" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2581,7 +2581,7 @@ export def "api create-disassociate-fleet" [
 #
 # POST /
 # operationId: EnableUser
-export def "api enable-user" [
+export def "enable-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2630,7 +2630,7 @@ export def "api enable-user" [
 #
 # POST /
 # operationId: ExpireSession
-export def "api create-expire-session" [
+export def "expire-session" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2678,7 +2678,7 @@ export def "api create-expire-session" [
 #
 # POST /
 # operationId: ListAssociatedFleets
-export def "api list-associated-fleets" [
+export def "list-associated-fleets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2727,7 +2727,7 @@ export def "api list-associated-fleets" [
 #
 # POST /
 # operationId: ListAssociatedStacks
-export def "api list-associated-stacks" [
+export def "list-associated-stacks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2776,7 +2776,7 @@ export def "api list-associated-stacks" [
 #
 # POST /
 # operationId: ListEntitledApplications
-export def "api list-entitled-applications" [
+export def "list-entitled-applications" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2827,7 +2827,7 @@ export def "api list-entitled-applications" [
 #
 # POST /
 # operationId: ListTagsForResource
-export def "api list-tags-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2875,7 +2875,7 @@ export def "api list-tags-for-resource" [
 #
 # POST /
 # operationId: StartFleet
-export def "api start-fleet" [
+export def "start-fleet" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2923,7 +2923,7 @@ export def "api start-fleet" [
 #
 # POST /
 # operationId: StartImageBuilder
-export def "api start-image-builder" [
+export def "start-image-builder" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2972,7 +2972,7 @@ export def "api start-image-builder" [
 #
 # POST /
 # operationId: StopFleet
-export def "api stop-fleet" [
+export def "stop-fleet" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3020,7 +3020,7 @@ export def "api stop-fleet" [
 #
 # POST /
 # operationId: StopImageBuilder
-export def "api stop-image-builder" [
+export def "stop-image-builder" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3068,7 +3068,7 @@ export def "api stop-image-builder" [
 #
 # POST /
 # operationId: TagResource
-export def "api tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3117,7 +3117,7 @@ export def "api tag-resource" [
 #
 # POST /
 # operationId: UntagResource
-export def "api untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3166,7 +3166,7 @@ export def "api untag-resource" [
 #
 # POST /
 # operationId: UpdateApplication
-export def "api update-application" [
+export def "update-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3222,7 +3222,7 @@ export def "api update-application" [
 #
 # POST /
 # operationId: UpdateDirectoryConfig
-export def "api update-directory-config" [
+export def "update-directory-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3273,7 +3273,7 @@ export def "api update-directory-config" [
 #
 # POST /
 # operationId: UpdateEntitlement
-export def "api update-entitlement" [
+export def "update-entitlement" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3325,7 +3325,7 @@ export def "api update-entitlement" [
 #
 # POST /
 # operationId: UpdateFleet
-export def "api update-fleet" [
+export def "update-fleet" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3393,7 +3393,7 @@ export def "api update-fleet" [
 #
 # POST /
 # operationId: UpdateImagePermissions
-export def "api update-image-permissions" [
+export def "update-image-permissions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3443,7 +3443,7 @@ export def "api update-image-permissions" [
 #
 # POST /
 # operationId: UpdateStack
-export def "api update-stack" [
+export def "update-stack" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

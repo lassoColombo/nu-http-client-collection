@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-network-nat-gateways list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "nat-gateways-list-all" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/natGateways
 # operationId: NatGateways_ListAll
-export def "subscriptions-providers-microsoft-network-nat-gateways list" [
+export def "nat-gateways-list-all" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -178,7 +178,7 @@ export def "subscriptions-providers-microsoft-network-nat-gateways list" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/natGateways
 # operationId: NatGateways_List
-export def "subscriptions-resource-groups-providers-microsoft-network-nat-gateways list" [
+export def "nat-gateways-list" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -218,7 +218,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-nat-gatewa
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/natGateways/{natGatewayName}
 # operationId: NatGateways_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-nat-gateways delete" [
+export def "nat-gateways-delete" [
   subscription_id: string
   resource_group_name: string
   nat_gateway_name: string
@@ -260,7 +260,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-nat-gatewa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/natGateways/{natGatewayName}
 # operationId: NatGateways_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-nat-gateways get" [
+export def "nat-gateways-get" [
   subscription_id: string
   resource_group_name: string
   nat_gateway_name: string
@@ -303,7 +303,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-nat-gatewa
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/natGateways/{natGatewayName}
 # operationId: NatGateways_UpdateTags
-export def "subscriptions-resource-groups-providers-microsoft-network-nat-gateways update-tags" [
+export def "nat-gateways-update-tags" [
   subscription_id: string
   resource_group_name: string
   nat_gateway_name: string
@@ -351,7 +351,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-nat-gatewa
 # operationId: NatGateways_CreateOrUpdate
 # --properties shape: {idleTimeoutInMinutes?: int, publicIpAddresses?: list, publicIpPrefixes?: list, resourceGuid?: string}
 # --sku shape: {name?: "Standard"}
-export def "subscriptions-resource-groups-providers-microsoft-network-nat-gateways create-or-update" [
+export def "nat-gateways-create-or-update" [
   subscription_id: string
   resource_group_name: string
   nat_gateway_name: string

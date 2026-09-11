@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-nodecounts get-node-count-information" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "node-count-information-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -123,7 +123,7 @@ export def commands []: nothing -> table {
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/nodecounts/{countType}
 # Docs: http://aka.ms/azureautomationsdk/nodecounts
 # operationId: NodeCountInformation_Get
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-nodecounts get-node-count-information" [
+export def "node-count-information-get" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string

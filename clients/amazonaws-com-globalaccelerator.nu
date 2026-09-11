@@ -149,7 +149,7 @@ def x-amz-target-completer-48 [] { ["GlobalAccelerator_V20180706.WithdrawByoipCi
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-custom-routing-endpoints" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "add-custom-routing-endpoints" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -173,7 +173,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AddCustomRoutingEndpoints
-export def "api create-custom-routing-endpoints" [
+export def "add-custom-routing-endpoints" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -222,7 +222,7 @@ export def "api create-custom-routing-endpoints" [
 #
 # POST /
 # operationId: AddEndpoints
-export def "api create-endpoints" [
+export def "add-endpoints" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -271,7 +271,7 @@ export def "api create-endpoints" [
 #
 # POST /
 # operationId: AdvertiseByoipCidr
-export def "api create-advertise-byoip-cidr" [
+export def "advertise-byoip-cidr" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -319,7 +319,7 @@ export def "api create-advertise-byoip-cidr" [
 #
 # POST /
 # operationId: AllowCustomRoutingTraffic
-export def "api create-allow-custom-routing-traffic" [
+export def "allow-custom-routing-traffic" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -371,7 +371,7 @@ export def "api create-allow-custom-routing-traffic" [
 #
 # POST /
 # operationId: CreateAccelerator
-export def "api create-accelerator" [
+export def "create-accelerator" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -424,7 +424,7 @@ export def "api create-accelerator" [
 #
 # POST /
 # operationId: CreateCustomRoutingAccelerator
-export def "api create-custom-routing-accelerator" [
+export def "create-custom-routing-accelerator" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -477,7 +477,7 @@ export def "api create-custom-routing-accelerator" [
 #
 # POST /
 # operationId: CreateCustomRoutingEndpointGroup
-export def "api create-custom-routing-endpoint-group" [
+export def "create-custom-routing-endpoint-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -528,7 +528,7 @@ export def "api create-custom-routing-endpoint-group" [
 #
 # POST /
 # operationId: CreateCustomRoutingListener
-export def "api create-custom-routing-listener" [
+export def "create-custom-routing-listener" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -578,7 +578,7 @@ export def "api create-custom-routing-listener" [
 #
 # POST /
 # operationId: CreateEndpointGroup
-export def "api create-endpoint-group" [
+export def "create-endpoint-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -636,7 +636,7 @@ export def "api create-endpoint-group" [
 #
 # POST /
 # operationId: CreateListener
-export def "api create-listener" [
+export def "create-listener" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -688,7 +688,7 @@ export def "api create-listener" [
 #
 # POST /
 # operationId: DeleteAccelerator
-export def "api delete-accelerator" [
+export def "delete-accelerator" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -736,7 +736,7 @@ export def "api delete-accelerator" [
 #
 # POST /
 # operationId: DeleteCustomRoutingAccelerator
-export def "api delete-custom-routing-accelerator" [
+export def "delete-custom-routing-accelerator" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -784,7 +784,7 @@ export def "api delete-custom-routing-accelerator" [
 #
 # POST /
 # operationId: DeleteCustomRoutingEndpointGroup
-export def "api delete-custom-routing-endpoint-group" [
+export def "delete-custom-routing-endpoint-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -832,7 +832,7 @@ export def "api delete-custom-routing-endpoint-group" [
 #
 # POST /
 # operationId: DeleteCustomRoutingListener
-export def "api delete-custom-routing-listener" [
+export def "delete-custom-routing-listener" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -880,7 +880,7 @@ export def "api delete-custom-routing-listener" [
 #
 # POST /
 # operationId: DeleteEndpointGroup
-export def "api delete-endpoint-group" [
+export def "delete-endpoint-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -928,7 +928,7 @@ export def "api delete-endpoint-group" [
 #
 # POST /
 # operationId: DeleteListener
-export def "api delete-listener" [
+export def "delete-listener" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -976,7 +976,7 @@ export def "api delete-listener" [
 #
 # POST /
 # operationId: DenyCustomRoutingTraffic
-export def "api create-deny-custom-routing-traffic" [
+export def "deny-custom-routing-traffic" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1028,7 +1028,7 @@ export def "api create-deny-custom-routing-traffic" [
 #
 # POST /
 # operationId: DeprovisionByoipCidr
-export def "api create-deprovision-byoip-cidr" [
+export def "deprovision-byoip-cidr" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1076,7 +1076,7 @@ export def "api create-deprovision-byoip-cidr" [
 #
 # POST /
 # operationId: DescribeAccelerator
-export def "api get-accelerator" [
+export def "describe-accelerator" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1124,7 +1124,7 @@ export def "api get-accelerator" [
 #
 # POST /
 # operationId: DescribeAcceleratorAttributes
-export def "api get-accelerator-attributes" [
+export def "describe-accelerator-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1172,7 +1172,7 @@ export def "api get-accelerator-attributes" [
 #
 # POST /
 # operationId: DescribeCustomRoutingAccelerator
-export def "api get-custom-routing-accelerator" [
+export def "describe-custom-routing-accelerator" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1220,7 +1220,7 @@ export def "api get-custom-routing-accelerator" [
 #
 # POST /
 # operationId: DescribeCustomRoutingAcceleratorAttributes
-export def "api get-custom-routing-accelerator-attributes" [
+export def "describe-custom-routing-accelerator-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1268,7 +1268,7 @@ export def "api get-custom-routing-accelerator-attributes" [
 #
 # POST /
 # operationId: DescribeCustomRoutingEndpointGroup
-export def "api get-custom-routing-endpoint-group" [
+export def "describe-custom-routing-endpoint-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1316,7 +1316,7 @@ export def "api get-custom-routing-endpoint-group" [
 #
 # POST /
 # operationId: DescribeCustomRoutingListener
-export def "api get-custom-routing-listener" [
+export def "describe-custom-routing-listener" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1364,7 +1364,7 @@ export def "api get-custom-routing-listener" [
 #
 # POST /
 # operationId: DescribeEndpointGroup
-export def "api get-endpoint-group" [
+export def "describe-endpoint-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1412,7 +1412,7 @@ export def "api get-endpoint-group" [
 #
 # POST /
 # operationId: DescribeListener
-export def "api get-listener" [
+export def "describe-listener" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1460,7 +1460,7 @@ export def "api get-listener" [
 #
 # POST /
 # operationId: ListAccelerators
-export def "api list-accelerators" [
+export def "list-accelerators" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1512,7 +1512,7 @@ export def "api list-accelerators" [
 #
 # POST /
 # operationId: ListByoipCidrs
-export def "api list-byoip-cidrs" [
+export def "list-byoip-cidrs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1564,7 +1564,7 @@ export def "api list-byoip-cidrs" [
 #
 # POST /
 # operationId: ListCustomRoutingAccelerators
-export def "api list-custom-routing-accelerators" [
+export def "list-custom-routing-accelerators" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1616,7 +1616,7 @@ export def "api list-custom-routing-accelerators" [
 #
 # POST /
 # operationId: ListCustomRoutingEndpointGroups
-export def "api list-custom-routing-endpoint-groups" [
+export def "list-custom-routing-endpoint-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1669,7 +1669,7 @@ export def "api list-custom-routing-endpoint-groups" [
 #
 # POST /
 # operationId: ListCustomRoutingListeners
-export def "api list-custom-routing-eners" [
+export def "list-custom-routing-listeners" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1722,7 +1722,7 @@ export def "api list-custom-routing-eners" [
 #
 # POST /
 # operationId: ListCustomRoutingPortMappings
-export def "api list-custom-routing-port-mappings" [
+export def "list-custom-routing-port-mappings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1776,7 +1776,7 @@ export def "api list-custom-routing-port-mappings" [
 #
 # POST /
 # operationId: ListCustomRoutingPortMappingsByDestination
-export def "api list-custom-routing-port-mappings-by-destination" [
+export def "list-custom-routing-port-mappings-by-destination" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1830,7 +1830,7 @@ export def "api list-custom-routing-port-mappings-by-destination" [
 #
 # POST /
 # operationId: ListEndpointGroups
-export def "api list-endpoint-groups" [
+export def "list-endpoint-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1883,7 +1883,7 @@ export def "api list-endpoint-groups" [
 #
 # POST /
 # operationId: ListListeners
-export def "api list-eners" [
+export def "list-listeners" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1936,7 +1936,7 @@ export def "api list-eners" [
 #
 # POST /
 # operationId: ListTagsForResource
-export def "api list-tags-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1984,7 +1984,7 @@ export def "api list-tags-for-resource" [
 #
 # POST /
 # operationId: ProvisionByoipCidr
-export def "api create-provision-byoip-cidr" [
+export def "provision-byoip-cidr" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2033,7 +2033,7 @@ export def "api create-provision-byoip-cidr" [
 #
 # POST /
 # operationId: RemoveCustomRoutingEndpoints
-export def "api delete-custom-routing-endpoints" [
+export def "remove-custom-routing-endpoints" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2082,7 +2082,7 @@ export def "api delete-custom-routing-endpoints" [
 #
 # POST /
 # operationId: RemoveEndpoints
-export def "api delete-endpoints" [
+export def "remove-endpoints" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2131,7 +2131,7 @@ export def "api delete-endpoints" [
 #
 # POST /
 # operationId: TagResource
-export def "api tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2180,7 +2180,7 @@ export def "api tag-resource" [
 #
 # POST /
 # operationId: UntagResource
-export def "api untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2229,7 +2229,7 @@ export def "api untag-resource" [
 #
 # POST /
 # operationId: UpdateAccelerator
-export def "api update-accelerator" [
+export def "update-accelerator" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2280,7 +2280,7 @@ export def "api update-accelerator" [
 #
 # POST /
 # operationId: UpdateAcceleratorAttributes
-export def "api update-accelerator-attributes" [
+export def "update-accelerator-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2331,7 +2331,7 @@ export def "api update-accelerator-attributes" [
 #
 # POST /
 # operationId: UpdateCustomRoutingAccelerator
-export def "api update-custom-routing-accelerator" [
+export def "update-custom-routing-accelerator" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2382,7 +2382,7 @@ export def "api update-custom-routing-accelerator" [
 #
 # POST /
 # operationId: UpdateCustomRoutingAcceleratorAttributes
-export def "api update-custom-routing-accelerator-attributes" [
+export def "update-custom-routing-accelerator-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2433,7 +2433,7 @@ export def "api update-custom-routing-accelerator-attributes" [
 #
 # POST /
 # operationId: UpdateCustomRoutingListener
-export def "api update-custom-routing-listener" [
+export def "update-custom-routing-listener" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2482,7 +2482,7 @@ export def "api update-custom-routing-listener" [
 #
 # POST /
 # operationId: UpdateEndpointGroup
-export def "api update-endpoint-group" [
+export def "update-endpoint-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2538,7 +2538,7 @@ export def "api update-endpoint-group" [
 #
 # POST /
 # operationId: UpdateListener
-export def "api update-listener" [
+export def "update-listener" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2589,7 +2589,7 @@ export def "api update-listener" [
 #
 # POST /
 # operationId: WithdrawByoipCidr
-export def "api create-withdraw-byoip-cidr" [
+export def "withdraw-byoip-cidr" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

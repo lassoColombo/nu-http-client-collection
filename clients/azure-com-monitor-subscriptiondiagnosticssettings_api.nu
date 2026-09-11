@@ -110,7 +110,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-insights-diagnostic-settings list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscription-diagnostic-settings-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -134,7 +134,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/microsoft.insights/diagnosticSettings
 # operationId: SubscriptionDiagnosticSettings_List
-export def "subscriptions-providers-microsoft-insights-diagnostic-settings list" [
+export def "subscription-diagnostic-settings-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -172,7 +172,7 @@ export def "subscriptions-providers-microsoft-insights-diagnostic-settings list"
 #
 # DELETE /subscriptions/{subscriptionId}/providers/microsoft.insights/diagnosticSettings/{name}
 # operationId: SubscriptionDiagnosticSettings_Delete
-export def "subscriptions-providers-microsoft-insights-diagnostic-settings delete" [
+export def "subscription-diagnostic-settings-delete" [
   subscription_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -212,7 +212,7 @@ export def "subscriptions-providers-microsoft-insights-diagnostic-settings delet
 #
 # GET /subscriptions/{subscriptionId}/providers/microsoft.insights/diagnosticSettings/{name}
 # operationId: SubscriptionDiagnosticSettings_Get
-export def "subscriptions-providers-microsoft-insights-diagnostic-settings get" [
+export def "subscription-diagnostic-settings-get" [
   subscription_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -253,7 +253,7 @@ export def "subscriptions-providers-microsoft-insights-diagnostic-settings get" 
 # PUT /subscriptions/{subscriptionId}/providers/microsoft.insights/diagnosticSettings/{name}
 # operationId: SubscriptionDiagnosticSettings_CreateOrUpdate
 # --properties shape: {eventHubAuthorizationRuleId?: string, eventHubName?: string, logs?: list, serviceBusRuleId?: string, storageAccountId?: string, workspaceId?: string}
-export def "subscriptions-providers-microsoft-insights-diagnostic-settings create-or-update" [
+export def "subscription-diagnostic-settings-create-or-update" [
   subscription_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL

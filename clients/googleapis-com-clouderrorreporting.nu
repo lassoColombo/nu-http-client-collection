@@ -133,7 +133,7 @@ def order-completer [] { ["AFFECTED_USERS_DESC" "COUNT_DESC" "CREATED_DESC" "GRO
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta1 get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "clouderrorreporting-projects-groups-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -157,7 +157,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1beta1/{groupName}
 # operationId: clouderrorreporting.projects.groups.get
-export def "v1beta1 get" [
+export def "clouderrorreporting-projects-groups-get" [
   group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -206,7 +206,7 @@ export def "v1beta1 get" [
 # PUT /v1beta1/{name}
 # operationId: clouderrorreporting.projects.groups.update
 # --trackingIssues item shape: {url?: string}
-export def "v1beta1 update" [
+export def "clouderrorreporting-projects-groups-update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -261,7 +261,7 @@ export def "v1beta1 update" [
 #
 # DELETE /v1beta1/{projectName}/events
 # operationId: clouderrorreporting.projects.deleteEvents
-export def "v1beta1-events delete" [
+export def "clouderrorreporting-projects-delete-events" [
   project_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -309,7 +309,7 @@ export def "v1beta1-events delete" [
 #
 # GET /v1beta1/{projectName}/events
 # operationId: clouderrorreporting.projects.events.list
-export def "v1beta1-events list" [
+export def "clouderrorreporting-projects-events-list" [
   project_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -366,7 +366,7 @@ export def "v1beta1-events list" [
 # operationId: clouderrorreporting.projects.events.report
 # --context shape: {httpRequest?: record, reportLocation?: record, sourceReferences?: list, user?: string}
 # --serviceContext shape: {resourceType?: string, service?: string, version?: string}
-export def "v1beta1-events-report create" [
+export def "clouderrorreporting-projects-events-report" [
   project_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -421,7 +421,7 @@ export def "v1beta1-events-report create" [
 #
 # GET /v1beta1/{projectName}/groupStats
 # operationId: clouderrorreporting.projects.groupStats.list
-export def "v1beta1-group-stats list" [
+export def "clouderrorreporting-projects-group-stats-list" [
   project_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

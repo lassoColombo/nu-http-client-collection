@@ -100,7 +100,7 @@ def disruption-status-completer [] { ["current" "planned"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "departures-route-type-stop get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "departures-get-for-stop" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -124,7 +124,7 @@ export def commands []: nothing -> table {
 #
 # GET /v3/departures/route_type/{route_type}/stop/{stop_id}
 # operationId: Departures_GetForStop
-export def "departures-route-type-stop get" [
+export def "departures-get-for-stop" [
   route_type: int
   stop_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -176,7 +176,7 @@ export def "departures-route-type-stop get" [
 #
 # GET /v3/departures/route_type/{route_type}/stop/{stop_id}/route/{route_id}
 # operationId: Departures_GetForStopAndRoute
-export def "departures-route-type-stop-route get-for-and" [
+export def "departures-get-for-stop-and-route" [
   route_type: int
   stop_id: int
   route_id: string
@@ -229,7 +229,7 @@ export def "departures-route-type-stop-route get-for-and" [
 #
 # GET /v3/directions/route/{route_id}
 # operationId: Directions_ForRoute
-export def "directions-route get" [
+export def "directions-for-route" [
   route_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -270,7 +270,7 @@ export def "directions-route get" [
 #
 # GET /v3/directions/{direction_id}
 # operationId: Directions_ForDirection
-export def "directions get" [
+export def "directions-for-direction" [
   direction_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -311,7 +311,7 @@ export def "directions get" [
 #
 # GET /v3/directions/{direction_id}/route_type/{route_type}
 # operationId: Directions_ForDirectionAndType
-export def "directions-route-type get-for-and" [
+export def "directions-for-direction-and-type" [
   direction_id: int
   route_type: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -354,7 +354,7 @@ export def "directions-route-type get-for-and" [
 #
 # GET /v3/disruptions
 # operationId: Disruptions_GetAllDisruptions
-export def "disruptions get-list" [
+export def "disruptions-get-all-disruptions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -396,7 +396,7 @@ export def "disruptions get-list" [
 #
 # GET /v3/disruptions/modes
 # operationId: Disruptions_GetDisruptionModes
-export def "disruptions-modes get" [
+export def "disruptions-get-disruption-modes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -435,7 +435,7 @@ export def "disruptions-modes get" [
 #
 # GET /v3/disruptions/route/{route_id}
 # operationId: Disruptions_GetDisruptionsByRoute
-export def "disruptions-route get" [
+export def "disruptions-get-disruptions-by-route" [
   route_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -477,7 +477,7 @@ export def "disruptions-route get" [
 #
 # GET /v3/disruptions/route/{route_id}/stop/{stop_id}
 # operationId: Disruptions_GetDisruptionsByRouteAndStop
-export def "disruptions-route-stop get-by-and" [
+export def "disruptions-get-disruptions-by-route-and-stop" [
   route_id: int
   stop_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -521,7 +521,7 @@ export def "disruptions-route-stop get-by-and" [
 #
 # GET /v3/disruptions/stop/{stop_id}
 # operationId: Disruptions_GetDisruptionsByStop
-export def "disruptions-stop get" [
+export def "disruptions-get-disruptions-by-stop" [
   stop_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -563,7 +563,7 @@ export def "disruptions-stop get" [
 #
 # GET /v3/disruptions/{disruption_id}
 # operationId: Disruptions_GetDisruptionById
-export def "disruptions get" [
+export def "disruptions-get-disruption-by-id" [
   disruption_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -604,7 +604,7 @@ export def "disruptions get" [
 #
 # GET /v3/fare_estimate/min_zone/{minZone}/max_zone/{maxZone}
 # operationId: FareEstimate_GetFareEstimateByZone
-export def "fare-estimate-min-zone-max-zone get" [
+export def "fare-estimate-get-fare-estimate-by-zone" [
   min_zone: int
   max_zone: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -651,7 +651,7 @@ export def "fare-estimate-min-zone-max-zone get" [
 #
 # GET /v3/outlets
 # operationId: Outlets_GetAllOutlets
-export def "outlets get-list" [
+export def "outlets-get-all-outlets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -691,7 +691,7 @@ export def "outlets get-list" [
 #
 # GET /v3/outlets/location/{latitude},{longitude}
 # operationId: Outlets_GetOutletsByGeolocation
-export def "outlets-location get-by-geolocation" [
+export def "outlets-get-outlets-by-geolocation" [
   latitude: float
   longitude: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -736,7 +736,7 @@ export def "outlets-location get-by-geolocation" [
 #
 # GET /v3/pattern/run/{run_ref}/route_type/{route_type}
 # operationId: Patterns_GetPatternByRun
-export def "pattern-run-route-type get" [
+export def "patterns-get-pattern-by-run" [
   run_ref: string
   route_type: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -784,7 +784,7 @@ export def "pattern-run-route-type get" [
 #
 # GET /v3/route_types
 # operationId: RouteTypes_GetRouteTypes
-export def "route-types get" [
+export def "route-types-get-route-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -823,7 +823,7 @@ export def "route-types get" [
 #
 # GET /v3/routes
 # operationId: Routes_OneOrMoreRoutes
-export def "routes get-one-or-more" [
+export def "routes-one-or-more-routes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -864,7 +864,7 @@ export def "routes get-one-or-more" [
 #
 # GET /v3/routes/{route_id}
 # operationId: Routes_RouteFromId
-export def "routes get" [
+export def "routes-route-from-id" [
   route_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -907,7 +907,7 @@ export def "routes get" [
 #
 # GET /v3/runs/route/{route_id}
 # operationId: Runs_ForRoute
-export def "runs-route get" [
+export def "runs-for-route" [
   route_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -950,7 +950,7 @@ export def "runs-route get" [
 #
 # GET /v3/runs/route/{route_id}/route_type/{route_type}
 # operationId: Runs_ForRouteAndRouteType
-export def "runs-route-route-type get-for-and" [
+export def "runs-for-route-and-route-type" [
   route_id: int
   route_type: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -995,7 +995,7 @@ export def "runs-route-route-type get-for-and" [
 #
 # GET /v3/runs/{run_ref}
 # operationId: Runs_ForRun
-export def "runs get" [
+export def "runs-for-run" [
   run_ref: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1039,7 +1039,7 @@ export def "runs get" [
 #
 # GET /v3/runs/{run_ref}/route_type/{route_type}
 # operationId: Runs_ForRunAndRouteType
-export def "runs-route-type get-for-and" [
+export def "runs-for-run-and-route-type" [
   run_ref: string
   route_type: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1085,7 +1085,7 @@ export def "runs-route-type get-for-and" [
 #
 # GET /v3/search/{search_term}
 # operationId: Search_Search
-export def "search list" [
+export def "search-search" [
   search_term: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1135,7 +1135,7 @@ export def "search list" [
 #
 # GET /v3/stops/location/{latitude},{longitude}
 # operationId: Stops_StopsByGeolocation
-export def "stops-location get-by-geolocation" [
+export def "stops-stops-by-geolocation" [
   latitude: float
   longitude: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -1182,7 +1182,7 @@ export def "stops-location get-by-geolocation" [
 #
 # GET /v3/stops/route/{route_id}/route_type/{route_type}
 # operationId: Stops_StopsForRoute
-export def "stops-route-route-type get" [
+export def "stops-stops-for-route" [
   route_id: int
   route_type: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1229,7 +1229,7 @@ export def "stops-route-route-type get" [
 #
 # GET /v3/stops/{stop_id}/route_type/{route_type}
 # operationId: Stops_StopDetails
-export def "stops-route-type stop-details" [
+export def "stops-stop-details" [
   stop_id: int
   route_type: int
   --base-url(-b): string@base-url-completer # API base URL

@@ -135,7 +135,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "tasks-lists-clear create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "tasks-tasks-clear" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -159,7 +159,7 @@ export def commands []: nothing -> table {
 #
 # POST /tasks/v1/lists/{tasklist}/clear
 # operationId: tasks.tasks.clear
-export def "tasks-lists-clear create" [
+export def "tasks-tasks-clear" [
   tasklist: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -207,7 +207,7 @@ export def "tasks-lists-clear create" [
 #
 # GET /tasks/v1/lists/{tasklist}/tasks
 # operationId: tasks.tasks.list
-export def "tasks-lists-tasks list" [
+export def "tasks-tasks-list" [
   tasklist: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -266,7 +266,7 @@ export def "tasks-lists-tasks list" [
 # POST /tasks/v1/lists/{tasklist}/tasks
 # operationId: tasks.tasks.insert
 # --links item shape: {description?: string, link?: string, type?: string}
-export def "tasks-lists-tasks create" [
+export def "tasks-tasks-insert" [
   tasklist: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -334,7 +334,7 @@ export def "tasks-lists-tasks create" [
 #
 # DELETE /tasks/v1/lists/{tasklist}/tasks/{task}
 # operationId: tasks.tasks.delete
-export def "tasks-lists-tasks delete" [
+export def "tasks-tasks-delete" [
   tasklist: string
   task: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -384,7 +384,7 @@ export def "tasks-lists-tasks delete" [
 #
 # GET /tasks/v1/lists/{tasklist}/tasks/{task}
 # operationId: tasks.tasks.get
-export def "tasks-lists-tasks get" [
+export def "tasks-tasks-get" [
   tasklist: string
   task: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -435,7 +435,7 @@ export def "tasks-lists-tasks get" [
 # PATCH /tasks/v1/lists/{tasklist}/tasks/{task}
 # operationId: tasks.tasks.patch
 # --links item shape: {description?: string, link?: string, type?: string}
-export def "tasks-lists-tasks update-by-tasklist-task" [
+export def "tasks-tasks-patch" [
   tasklist: string
   task: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -504,7 +504,7 @@ export def "tasks-lists-tasks update-by-tasklist-task" [
 # PUT /tasks/v1/lists/{tasklist}/tasks/{task}
 # operationId: tasks.tasks.update
 # --links item shape: {description?: string, link?: string, type?: string}
-export def "tasks-lists-tasks update-by-tasklist-task-1" [
+export def "tasks-tasks-update" [
   tasklist: string
   task: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -572,7 +572,7 @@ export def "tasks-lists-tasks update-by-tasklist-task-1" [
 #
 # POST /tasks/v1/lists/{tasklist}/tasks/{task}/move
 # operationId: tasks.tasks.move
-export def "tasks-lists-tasks-move move" [
+export def "tasks-tasks-move" [
   tasklist: string
   task: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -624,7 +624,7 @@ export def "tasks-lists-tasks-move move" [
 #
 # GET /tasks/v1/users/@me/lists
 # operationId: tasks.tasklists.list
-export def "tasks-users-me-lists list" [
+export def "tasks-tasklists-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -672,7 +672,7 @@ export def "tasks-users-me-lists list" [
 #
 # POST /tasks/v1/users/@me/lists
 # operationId: tasks.tasklists.insert
-export def "tasks-users-me-lists create" [
+export def "tasks-tasklists-insert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -727,7 +727,7 @@ export def "tasks-users-me-lists create" [
 #
 # DELETE /tasks/v1/users/@me/lists/{tasklist}
 # operationId: tasks.tasklists.delete
-export def "tasks-users-me-lists delete" [
+export def "tasks-tasklists-delete" [
   tasklist: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -775,7 +775,7 @@ export def "tasks-users-me-lists delete" [
 #
 # GET /tasks/v1/users/@me/lists/{tasklist}
 # operationId: tasks.tasklists.get
-export def "tasks-users-me-lists get" [
+export def "tasks-tasklists-get" [
   tasklist: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -823,7 +823,7 @@ export def "tasks-users-me-lists get" [
 #
 # PATCH /tasks/v1/users/@me/lists/{tasklist}
 # operationId: tasks.tasklists.patch
-export def "tasks-users-me-lists update-by-tasklist" [
+export def "tasks-tasklists-patch" [
   tasklist: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -880,7 +880,7 @@ export def "tasks-users-me-lists update-by-tasklist" [
 #
 # PUT /tasks/v1/users/@me/lists/{tasklist}
 # operationId: tasks.tasklists.update
-export def "tasks-users-me-lists update-by-tasklist-1" [
+export def "tasks-tasklists-update" [
   tasklist: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

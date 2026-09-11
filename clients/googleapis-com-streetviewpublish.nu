@@ -132,7 +132,7 @@ def gps-source-completer [] { ["CAMERA_MOTION_METADATA_TRACK" "PHOTO_SEQUENCE"] 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "photo create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "streetviewpublish-photo-create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -161,7 +161,7 @@ export def commands []: nothing -> table {
 # --places item shape: {placeId?: string}
 # --pose shape: {accuracyMeters?: float, altitude?: float, gpsRecordTimestampUnixEpoch?: string, heading?: float, latLngPair?: record, level?: record, pitch?: float, roll?: float}
 # --uploadReference shape: {uploadUrl?: string}
-export def "photo create" [
+export def "streetviewpublish-photo-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -221,7 +221,7 @@ export def "photo create" [
 # --places item shape: {placeId?: string}
 # --pose shape: {accuracyMeters?: float, altitude?: float, gpsRecordTimestampUnixEpoch?: string, heading?: float, latLngPair?: record, level?: record, pitch?: float, roll?: float}
 # --uploadReference shape: {uploadUrl?: string}
-export def "photo update" [
+export def "streetviewpublish-photo-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -279,7 +279,7 @@ export def "photo update" [
 #
 # DELETE /v1/photo/{photoId}
 # operationId: streetviewpublish.photo.delete
-export def "photo delete" [
+export def "streetviewpublish-photo-delete" [
   photo_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -327,7 +327,7 @@ export def "photo delete" [
 #
 # GET /v1/photo/{photoId}
 # operationId: streetviewpublish.photo.get
-export def "photo get" [
+export def "streetviewpublish-photo-get" [
   photo_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -377,7 +377,7 @@ export def "photo get" [
 #
 # POST /v1/photo:startUpload
 # operationId: streetviewpublish.photo.startUpload
-export def "photo-start-upload start" [
+export def "streetviewpublish-photo-start-upload" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -433,7 +433,7 @@ export def "photo-start-upload start" [
 # --rawGpsTimeline item shape: {accuracyMeters?: float, altitude?: float, gpsRecordTimestampUnixEpoch?: string, heading?: float, latLngPair?: record, level?: record, pitch?: float, roll?: float}
 # --sequenceBounds shape: {northeast?: record, southwest?: record}
 # --uploadReference shape: {uploadUrl?: string}
-export def "photo-sequence create" [
+export def "streetviewpublish-photo-sequence-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -490,7 +490,7 @@ export def "photo-sequence create" [
 #
 # DELETE /v1/photoSequence/{sequenceId}
 # operationId: streetviewpublish.photoSequence.delete
-export def "photo-sequence delete" [
+export def "streetviewpublish-photo-sequence-delete" [
   sequence_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -538,7 +538,7 @@ export def "photo-sequence delete" [
 #
 # GET /v1/photoSequence/{sequenceId}
 # operationId: streetviewpublish.photoSequence.get
-export def "photo-sequence get" [
+export def "streetviewpublish-photo-sequence-get" [
   sequence_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -588,7 +588,7 @@ export def "photo-sequence get" [
 #
 # POST /v1/photoSequence:startUpload
 # operationId: streetviewpublish.photoSequence.startUpload
-export def "photo-sequence-start-upload start" [
+export def "streetviewpublish-photo-sequence-start-upload" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -638,7 +638,7 @@ export def "photo-sequence-start-upload start" [
 #
 # GET /v1/photoSequences
 # operationId: streetviewpublish.photoSequences.list
-export def "photo-sequences list" [
+export def "streetviewpublish-photo-sequences-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -687,7 +687,7 @@ export def "photo-sequences list" [
 #
 # GET /v1/photos
 # operationId: streetviewpublish.photos.list
-export def "photos list" [
+export def "streetviewpublish-photos-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -738,7 +738,7 @@ export def "photos list" [
 #
 # POST /v1/photos:batchDelete
 # operationId: streetviewpublish.photos.batchDelete
-export def "photos-batch-delete delete" [
+export def "streetviewpublish-photos-batch-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -788,7 +788,7 @@ export def "photos-batch-delete delete" [
 #
 # GET /v1/photos:batchGet
 # operationId: streetviewpublish.photos.batchGet
-export def "photos-batch-get get" [
+export def "streetviewpublish-photos-batch-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -838,7 +838,7 @@ export def "photos-batch-get get" [
 # POST /v1/photos:batchUpdate
 # operationId: streetviewpublish.photos.batchUpdate
 # --updatePhotoRequests item shape: {photo?: record, updateMask?: string}
-export def "photos-batch-update update" [
+export def "streetviewpublish-photos-batch-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)

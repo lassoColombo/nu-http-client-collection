@@ -110,7 +110,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resourcegroups-providers-microsoft-backup-admin-backup-locations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "backup-locations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -134,7 +134,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Backup.Admin/backupLocations
 # operationId: BackupLocations_List
-export def "subscriptions-resourcegroups-providers-microsoft-backup-admin-backup-locations list" [
+export def "backup-locations-list" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -174,7 +174,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-backup-admin-backup
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Backup.Admin/backupLocations/{location}
 # operationId: BackupLocations_Get
-export def "subscriptions-resourcegroups-providers-microsoft-backup-admin-backup-locations get" [
+export def "backup-locations-get" [
   subscription_id: string
   resource_group_name: string
   location: string
@@ -217,7 +217,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-backup-admin-backup
 # PUT /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Backup.Admin/backupLocations/{location}
 # operationId: BackupLocations_Update
 # --properties shape: {externalStoreDefault?: record}
-export def "subscriptions-resourcegroups-providers-microsoft-backup-admin-backup-locations update" [
+export def "backup-locations-update" [
   subscription_id: string
   resource_group_name: string
   location: string
@@ -265,7 +265,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-backup-admin-backup
 #
 # POST /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Backup.Admin/backupLocations/{location}/createBackup
 # operationId: BackupLocations_CreateBackup
-export def "subscriptions-resourcegroups-providers-microsoft-backup-admin-backup-locations-create-backup create" [
+export def "backup-locations-create-backup" [
   subscription_id: string
   resource_group_name: string
   location: string

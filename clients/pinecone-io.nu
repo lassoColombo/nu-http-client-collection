@@ -119,7 +119,7 @@ def pod-type-completer [] { ["p1.x1" "p1.x2" "p1.x4" "p1.x8" "p2.x1" "p2.x2" "p2
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "collections list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-collections" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -143,7 +143,7 @@ export def commands []: nothing -> table {
 #
 # GET /collections
 # operationId: list_collections
-export def "collections list" [
+export def "list-collections" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -177,7 +177,7 @@ export def "collections list" [
 #
 # POST /collections
 # operationId: create_collection
-export def "collections create" [
+export def "create-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -216,7 +216,7 @@ export def "collections create" [
 #
 # DELETE /collections/{collectionName}
 # operationId: delete_collection
-export def "collections delete" [
+export def "delete-collection" [
   collection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -252,7 +252,7 @@ export def "collections delete" [
 #
 # GET /collections/{collectionName}
 # operationId: describe_collection
-export def "collections get" [
+export def "describe-collection" [
   collection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -288,7 +288,7 @@ export def "collections get" [
 #
 # POST /describe_index_stats
 # operationId: DescribeIndexStats
-export def "describe-index-stats get" [
+export def "describe-index-stats" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -326,7 +326,7 @@ export def "describe-index-stats get" [
 #
 # GET /indexes
 # operationId: list_indexes
-export def "indexes list" [
+export def "list-indexes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -361,7 +361,7 @@ export def "indexes list" [
 # POST /indexes
 # operationId: create_index
 # --metadata_config shape: {indexed?: list<string>}
-export def "indexes create-index" [
+export def "create-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -406,7 +406,7 @@ export def "indexes create-index" [
 #
 # DELETE /indexes/{indexName}
 # operationId: delete_index
-export def "indexes delete-index" [
+export def "delete-index" [
   index_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -442,7 +442,7 @@ export def "indexes delete-index" [
 #
 # GET /indexes/{indexName}
 # operationId: describe_index
-export def "indexes get-index" [
+export def "describe-index" [
   index_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -478,7 +478,7 @@ export def "indexes get-index" [
 #
 # PATCH /indexes/{indexName}
 # operationId: configure_index
-export def "indexes update-configure-index" [
+export def "configure-index" [
   index_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -520,7 +520,7 @@ export def "indexes update-configure-index" [
 # POST /query
 # operationId: Query
 # --sparseVector shape: {indices: list<int>, values: list<float>}
-export def "query list" [
+export def "query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -565,7 +565,7 @@ export def "query list" [
 #
 # POST /vectors/delete
 # operationId: Delete
-export def "vectors-delete delete" [
+export def "delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -606,7 +606,7 @@ export def "vectors-delete delete" [
 #
 # POST /vectors/fetch
 # operationId: Fetch
-export def "vectors-fetch get" [
+export def "fetch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -646,7 +646,7 @@ export def "vectors-fetch get" [
 # POST /vectors/update
 # operationId: Update
 # --sparseValues shape: {indices: list<int>, values: list<float>}
-export def "vectors-update update" [
+export def "update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -689,7 +689,7 @@ export def "vectors-update update" [
 # POST /vectors/upsert
 # operationId: Upsert
 # --vectors item shape: {id?: string, metadata?: record, sparseValues?: record, values?: list<float>}
-export def "vectors-upsert update" [
+export def "upsert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

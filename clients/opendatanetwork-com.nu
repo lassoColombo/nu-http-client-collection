@@ -99,7 +99,7 @@ def format-completer [] { ["google"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "data-availability find-list-available-for-some-entities" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "find-all-available-data-for-some-entities" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -123,7 +123,7 @@ export def commands []: nothing -> table {
 #
 # GET /data/v1/availability/
 # operationId: Find all available data for some entities
-export def "data-availability find-list-available-for-some-entities" [
+export def "find-all-available-data-for-some-entities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -163,7 +163,7 @@ export def "data-availability find-list-available-for-some-entities" [
 #
 # GET /data/v1/constraint/{variable}
 # operationId: Get constraint permutations for entities
-export def "data-constraint get-permutations-for-entities" [
+export def "get-constraint-permutations-for-entities" [
   variable: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -206,7 +206,7 @@ export def "data-constraint get-permutations-for-entities" [
 #
 # GET /data/v1/map/new
 # operationId: Create a map
-export def "data-map-new create" [
+export def "create-a-map" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -248,7 +248,7 @@ export def "data-map-new create" [
 #
 # GET /data/v1/values
 # operationId: Get values for variables
-export def "data-values get-for-variables" [
+export def "get-values-for-variables" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -292,7 +292,7 @@ export def "data-values get-for-variables" [
 #
 # GET /entity/v1
 # operationId: Get Entities
-export def "entity get-entities" [
+export def "get-entities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -334,7 +334,7 @@ export def "entity get-entities" [
 #
 # GET /entity/v1/{relation}
 # operationId: Find the relatives of an entity
-export def "entity find-relatives" [
+export def "find-the-relatives-of-an-entity" [
   relation: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -378,7 +378,7 @@ export def "entity find-relatives" [
 #
 # GET /search/v1/dataset
 # operationId: Get datasets
-export def "search-dataset get" [
+export def "get-datasets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -421,7 +421,7 @@ export def "search-dataset get" [
 #
 # GET /search/v1/question
 # operationId: Get questions
-export def "search-question get" [
+export def "get-questions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -463,7 +463,7 @@ export def "search-question get" [
 #
 # GET /suggest/v1/{type}
 # operationId: Get suggestions
-export def "suggest get-suggestions" [
+export def "get-suggestions" [
   type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

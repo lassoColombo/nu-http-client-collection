@@ -110,7 +110,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-security-device-security-groups list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "device-security-groups-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -134,7 +134,7 @@ export def commands []: nothing -> table {
 #
 # GET /{resourceId}/providers/Microsoft.Security/deviceSecurityGroups
 # operationId: DeviceSecurityGroups_List
-export def "providers-microsoft-security-device-security-groups list" [
+export def "device-security-groups-list" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -172,7 +172,7 @@ export def "providers-microsoft-security-device-security-groups list" [
 #
 # DELETE /{resourceId}/providers/Microsoft.Security/deviceSecurityGroups/{deviceSecurityGroupName}
 # operationId: DeviceSecurityGroups_Delete
-export def "providers-microsoft-security-device-security-groups delete" [
+export def "device-security-groups-delete" [
   resource_id: string
   device_security_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -212,7 +212,7 @@ export def "providers-microsoft-security-device-security-groups delete" [
 #
 # GET /{resourceId}/providers/Microsoft.Security/deviceSecurityGroups/{deviceSecurityGroupName}
 # operationId: DeviceSecurityGroups_Get
-export def "providers-microsoft-security-device-security-groups get" [
+export def "device-security-groups-get" [
   resource_id: string
   device_security_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -253,7 +253,7 @@ export def "providers-microsoft-security-device-security-groups get" [
 # PUT /{resourceId}/providers/Microsoft.Security/deviceSecurityGroups/{deviceSecurityGroupName}
 # operationId: DeviceSecurityGroups_CreateOrUpdate
 # --properties shape: {allowlistRules?: list, denylistRules?: list, thresholdRules?: list, timeWindowRules?: list}
-export def "providers-microsoft-security-device-security-groups create-or-update" [
+export def "device-security-groups-create-or-update" [
   resource_id: string
   device_security_group_name: string
   --base-url(-b): string@base-url-completer # API base URL

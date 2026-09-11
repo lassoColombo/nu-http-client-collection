@@ -125,7 +125,7 @@ def target-status-completer [] { ["Archived" "Deleted" "Disposed" "Published" "U
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "repository-external-connection create-associate" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associate-external-connection" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -149,7 +149,7 @@ export def commands []: nothing -> table {
 #
 # POST /v1/repository/external-connection
 # operationId: AssociateExternalConnection
-export def "repository-external-connection create-associate" [
+export def "associate-external-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -197,7 +197,7 @@ export def "repository-external-connection create-associate" [
 #
 # DELETE /v1/repository/external-connection
 # operationId: DisassociateExternalConnection
-export def "repository-external-connection delete-disassociate" [
+export def "disassociate-external-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -245,7 +245,7 @@ export def "repository-external-connection delete-disassociate" [
 #
 # POST /v1/package/versions/copy
 # operationId: CopyPackageVersions
-export def "package-versions-copy copy" [
+export def "copy-package-versions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -304,7 +304,7 @@ export def "package-versions-copy copy" [
 # POST /v1/domain
 # operationId: CreateDomain
 # --tags item shape: {key: any, value: any}
-export def "domain create" [
+export def "create-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -354,7 +354,7 @@ export def "domain create" [
 #
 # DELETE /v1/domain
 # operationId: DeleteDomain
-export def "domain delete" [
+export def "delete-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -400,7 +400,7 @@ export def "domain delete" [
 #
 # GET /v1/domain
 # operationId: DescribeDomain
-export def "domain get" [
+export def "describe-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -448,7 +448,7 @@ export def "domain get" [
 # operationId: CreateRepository
 # --upstreams item shape: {repositoryName: any}
 # --tags item shape: {key: any, value: any}
-export def "repository create" [
+export def "create-repository" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -501,7 +501,7 @@ export def "repository create" [
 #
 # DELETE /v1/repository
 # operationId: DeleteRepository
-export def "repository delete" [
+export def "delete-repository" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -548,7 +548,7 @@ export def "repository delete" [
 #
 # GET /v1/repository
 # operationId: DescribeRepository
-export def "repository get" [
+export def "describe-repository" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -596,7 +596,7 @@ export def "repository get" [
 # PUT /v1/repository
 # operationId: UpdateRepository
 # --upstreams item shape: {repositoryName: any}
-export def "repository update" [
+export def "update-repository" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -648,7 +648,7 @@ export def "repository update" [
 #
 # DELETE /v1/domain/permissions/policy
 # operationId: DeleteDomainPermissionsPolicy
-export def "domain-permissions-policy delete" [
+export def "delete-domain-permissions-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -695,7 +695,7 @@ export def "domain-permissions-policy delete" [
 #
 # GET /v1/domain/permissions/policy
 # operationId: GetDomainPermissionsPolicy
-export def "domain-permissions-policy get" [
+export def "get-domain-permissions-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -741,7 +741,7 @@ export def "domain-permissions-policy get" [
 #
 # DELETE /v1/package
 # operationId: DeletePackage
-export def "package delete" [
+export def "delete-package" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -791,7 +791,7 @@ export def "package delete" [
 #
 # GET /v1/package
 # operationId: DescribePackage
-export def "package get" [
+export def "describe-package" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -842,7 +842,7 @@ export def "package get" [
 # POST /v1/package
 # operationId: PutPackageOriginConfiguration
 # --restrictions shape: {publish?: any, upstream?: any}
-export def "package update-origin-configuration" [
+export def "put-package-origin-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -896,7 +896,7 @@ export def "package update-origin-configuration" [
 #
 # POST /v1/package/versions/delete
 # operationId: DeletePackageVersions
-export def "package-versions-delete delete" [
+export def "delete-package-versions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -951,7 +951,7 @@ export def "package-versions-delete delete" [
 #
 # DELETE /v1/repository/permissions/policies
 # operationId: DeleteRepositoryPermissionsPolicy
-export def "repository-permissions-policies delete-policy" [
+export def "delete-repository-permissions-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -999,7 +999,7 @@ export def "repository-permissions-policies delete-policy" [
 #
 # GET /v1/package/version
 # operationId: DescribePackageVersion
-export def "package-version get" [
+export def "describe-package-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1050,7 +1050,7 @@ export def "package-version get" [
 #
 # POST /v1/package/versions/dispose
 # operationId: DisposePackageVersions
-export def "package-versions-dispose create" [
+export def "dispose-package-versions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1106,7 +1106,7 @@ export def "package-versions-dispose create" [
 #
 # POST /v1/authorization-token
 # operationId: GetAuthorizationToken
-export def "authorization-token get" [
+export def "get-authorization-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1153,7 +1153,7 @@ export def "authorization-token get" [
 #
 # GET /v1/package/version/asset
 # operationId: GetPackageVersionAsset
-export def "package-version-asset get" [
+export def "get-package-version-asset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1206,7 +1206,7 @@ export def "package-version-asset get" [
 #
 # GET /v1/package/version/readme
 # operationId: GetPackageVersionReadme
-export def "package-version-readme get" [
+export def "get-package-version-readme" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1257,7 +1257,7 @@ export def "package-version-readme get" [
 #
 # GET /v1/repository/endpoint
 # operationId: GetRepositoryEndpoint
-export def "repository-endpoint get" [
+export def "get-repository-endpoint" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1305,7 +1305,7 @@ export def "repository-endpoint get" [
 #
 # GET /v1/repository/permissions/policy
 # operationId: GetRepositoryPermissionsPolicy
-export def "repository-permissions-policy get" [
+export def "get-repository-permissions-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1352,7 +1352,7 @@ export def "repository-permissions-policy get" [
 #
 # PUT /v1/repository/permissions/policy
 # operationId: PutRepositoryPermissionsPolicy
-export def "repository-permissions-policy update" [
+export def "put-repository-permissions-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1404,7 +1404,7 @@ export def "repository-permissions-policy update" [
 #
 # POST /v1/domains
 # operationId: ListDomains
-export def "domains list" [
+export def "list-domains" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1455,7 +1455,7 @@ export def "domains list" [
 #
 # POST /v1/package/version/assets
 # operationId: ListPackageVersionAssets
-export def "package-version-assets list" [
+export def "list-package-version-assets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1510,7 +1510,7 @@ export def "package-version-assets list" [
 #
 # POST /v1/package/version/dependencies
 # operationId: ListPackageVersionDependencies
-export def "package-version-dependencies list" [
+export def "list-package-version-dependencies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1562,7 +1562,7 @@ export def "package-version-dependencies list" [
 #
 # POST /v1/package/versions
 # operationId: ListPackageVersions
-export def "package-versions list" [
+export def "list-package-versions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1619,7 +1619,7 @@ export def "package-versions list" [
 #
 # POST /v1/packages
 # operationId: ListPackages
-export def "packages list" [
+export def "list-packages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1675,7 +1675,7 @@ export def "packages list" [
 #
 # POST /v1/repositories
 # operationId: ListRepositories
-export def "repositories list" [
+export def "list-repositories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1724,7 +1724,7 @@ export def "repositories list" [
 #
 # POST /v1/domain/repositories
 # operationId: ListRepositoriesInDomain
-export def "domain-repositories list" [
+export def "list-repositories-in-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1776,7 +1776,7 @@ export def "domain-repositories list" [
 #
 # POST /v1/tags
 # operationId: ListTagsForResource
-export def "tags list-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1821,7 +1821,7 @@ export def "tags list-for-resource" [
 #
 # POST /v1/package/version/publish
 # operationId: PublishPackageVersion
-export def "package-version-publish publish" [
+export def "publish-package-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1879,7 +1879,7 @@ export def "package-version-publish publish" [
 #
 # PUT /v1/domain/permissions/policy
 # operationId: PutDomainPermissionsPolicy
-export def "domain-permissions-policy update" [
+export def "put-domain-permissions-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1930,7 +1930,7 @@ export def "domain-permissions-policy update" [
 # POST /v1/tag
 # operationId: TagResource
 # --tags item shape: {key: any, value: any}
-export def "tag tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1979,7 +1979,7 @@ export def "tag tag-resource" [
 #
 # POST /v1/untag
 # operationId: UntagResource
-export def "untag untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2028,7 +2028,7 @@ export def "untag untag-resource" [
 #
 # POST /v1/package/versions/update_status
 # operationId: UpdatePackageVersionsStatus
-export def "package-versions-update-status update" [
+export def "update-package-versions-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

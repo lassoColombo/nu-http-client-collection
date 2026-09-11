@@ -112,7 +112,7 @@ def format-completer [] { ["pdf"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "alltr-certificate create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "alltr" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -138,7 +138,7 @@ export def commands []: nothing -> table {
 # operationId: alltr
 # --certificateParameters shape: {DOB: string, FullName: string, RegNum: string, UID: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "alltr-certificate create" [
+export def "alltr" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -181,7 +181,7 @@ export def "alltr-certificate create" [
 # operationId: bknoc
 # --certificateParameters shape: {DOB: string, FullName: string, RegNum: string, UID: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "bknoc-certificate create" [
+export def "bknoc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -224,7 +224,7 @@ export def "bknoc-certificate create" [
 # operationId: bpcer
 # --certificateParameters shape: {DOB: string, FullName: string, RegNum: string, UID: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "bpcer-certificate create" [
+export def "bpcer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -267,7 +267,7 @@ export def "bpcer-certificate create" [
 # operationId: cfltr
 # --certificateParameters shape: {DOB: string, FullName: string, RegNum: string, UID: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "cfltr-certificate create" [
+export def "cfltr" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -310,7 +310,7 @@ export def "cfltr-certificate create" [
 # operationId: lcsag
 # --certificateParameters shape: {DOB: string, FullName: string, RegNum: string, UID: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "lcsag-certificate create" [
+export def "lcsag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -353,7 +353,7 @@ export def "lcsag-certificate create" [
 # operationId: pscer
 # --certificateParameters shape: {DOB: string, FullName: string, RegNum: string, UID: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "pscer-certificate create" [
+export def "pscer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -396,7 +396,7 @@ export def "pscer-certificate create" [
 # operationId: psnoc
 # --certificateParameters shape: {DOB: string, FullName: string, RegNum: string, UID: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "psnoc-certificate create" [
+export def "psnoc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
@@ -439,7 +439,7 @@ export def "psnoc-certificate create" [
 # operationId: wtrbl
 # --certificateParameters shape: {DOB: string, FullName: string, RegNum: string, UID: string}
 # --consentArtifact shape: {consent: record, signature: record}
-export def "wtrbl-certificate create" [
+export def "wtrbl" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
   --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)

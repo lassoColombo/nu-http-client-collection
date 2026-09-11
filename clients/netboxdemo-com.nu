@@ -156,7 +156,7 @@ def status-completer-9 [] { ["active" "decommissioning" "failed" "offline" "plan
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "circuits-circuit-terminations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "circuits-circuit-terminations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -180,7 +180,7 @@ export def commands []: nothing -> table {
 #
 # GET /circuits/circuit-terminations/
 # operationId: circuits_circuit-terminations_list
-export def "circuits-circuit-terminations list" [
+export def "circuits-circuit-terminations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -248,7 +248,7 @@ export def "circuits-circuit-terminations list" [
 #
 # operationId: circuits_circuit-terminations_create
 # --cable shape: {label?: string}
-export def "circuits-circuit-terminations create" [
+export def "circuits-circuit-terminations-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -294,7 +294,7 @@ export def "circuits-circuit-terminations create" [
 # DELETE /circuits/circuit-terminations/{id}/
 #
 # operationId: circuits_circuit-terminations_delete
-export def "circuits-circuit-terminations delete" [
+export def "circuits-circuit-terminations-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -330,7 +330,7 @@ export def "circuits-circuit-terminations delete" [
 #
 # GET /circuits/circuit-terminations/{id}/
 # operationId: circuits_circuit-terminations_read
-export def "circuits-circuit-terminations get" [
+export def "circuits-circuit-terminations-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -366,7 +366,7 @@ export def "circuits-circuit-terminations get" [
 #
 # operationId: circuits_circuit-terminations_partial_update
 # --cable shape: {label?: string}
-export def "circuits-circuit-terminations update-by-id" [
+export def "circuits-circuit-terminations-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -415,7 +415,7 @@ export def "circuits-circuit-terminations update-by-id" [
 #
 # operationId: circuits_circuit-terminations_update
 # --cable shape: {label?: string}
-export def "circuits-circuit-terminations update-by-id-1" [
+export def "circuits-circuit-terminations-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -464,7 +464,7 @@ export def "circuits-circuit-terminations update-by-id-1" [
 #
 # GET /circuits/circuit-types/
 # operationId: circuits_circuit-types_list
-export def "circuits-circuit-types list" [
+export def "circuits-circuit-types-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -527,7 +527,7 @@ export def "circuits-circuit-types list" [
 # POST /circuits/circuit-types/
 #
 # operationId: circuits_circuit-types_create
-export def "circuits-circuit-types create" [
+export def "circuits-circuit-types-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -566,7 +566,7 @@ export def "circuits-circuit-types create" [
 # DELETE /circuits/circuit-types/{id}/
 #
 # operationId: circuits_circuit-types_delete
-export def "circuits-circuit-types delete" [
+export def "circuits-circuit-types-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -602,7 +602,7 @@ export def "circuits-circuit-types delete" [
 #
 # GET /circuits/circuit-types/{id}/
 # operationId: circuits_circuit-types_read
-export def "circuits-circuit-types get" [
+export def "circuits-circuit-types-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -637,7 +637,7 @@ export def "circuits-circuit-types get" [
 # PATCH /circuits/circuit-types/{id}/
 #
 # operationId: circuits_circuit-types_partial_update
-export def "circuits-circuit-types update-by-id" [
+export def "circuits-circuit-types-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -678,7 +678,7 @@ export def "circuits-circuit-types update-by-id" [
 # PUT /circuits/circuit-types/{id}/
 #
 # operationId: circuits_circuit-types_update
-export def "circuits-circuit-types update-by-id-1" [
+export def "circuits-circuit-types-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -720,7 +720,7 @@ export def "circuits-circuit-types update-by-id-1" [
 #
 # GET /circuits/circuits/
 # operationId: circuits_circuits_list
-export def "circuits-circuits list" [
+export def "circuits-circuits-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -819,7 +819,7 @@ export def "circuits-circuits list" [
 # POST /circuits/circuits/
 #
 # operationId: circuits_circuits_create
-export def "circuits-circuits create" [
+export def "circuits-circuits-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -866,7 +866,7 @@ export def "circuits-circuits create" [
 # DELETE /circuits/circuits/{id}/
 #
 # operationId: circuits_circuits_delete
-export def "circuits-circuits delete" [
+export def "circuits-circuits-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -902,7 +902,7 @@ export def "circuits-circuits delete" [
 #
 # GET /circuits/circuits/{id}/
 # operationId: circuits_circuits_read
-export def "circuits-circuits get" [
+export def "circuits-circuits-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -937,7 +937,7 @@ export def "circuits-circuits get" [
 # PATCH /circuits/circuits/{id}/
 #
 # operationId: circuits_circuits_partial_update
-export def "circuits-circuits update-by-id" [
+export def "circuits-circuits-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -986,7 +986,7 @@ export def "circuits-circuits update-by-id" [
 # PUT /circuits/circuits/{id}/
 #
 # operationId: circuits_circuits_update
-export def "circuits-circuits update-by-id-1" [
+export def "circuits-circuits-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1036,7 +1036,7 @@ export def "circuits-circuits update-by-id-1" [
 #
 # GET /circuits/providers/
 # operationId: circuits_providers_list
-export def "circuits-providers list" [
+export def "circuits-providers-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1131,7 +1131,7 @@ export def "circuits-providers list" [
 # POST /circuits/providers/
 #
 # operationId: circuits_providers_create
-export def "circuits-providers create" [
+export def "circuits-providers-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1177,7 +1177,7 @@ export def "circuits-providers create" [
 # DELETE /circuits/providers/{id}/
 #
 # operationId: circuits_providers_delete
-export def "circuits-providers delete" [
+export def "circuits-providers-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1213,7 +1213,7 @@ export def "circuits-providers delete" [
 #
 # GET /circuits/providers/{id}/
 # operationId: circuits_providers_read
-export def "circuits-providers get" [
+export def "circuits-providers-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1248,7 +1248,7 @@ export def "circuits-providers get" [
 # PATCH /circuits/providers/{id}/
 #
 # operationId: circuits_providers_partial_update
-export def "circuits-providers update-by-id" [
+export def "circuits-providers-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1296,7 +1296,7 @@ export def "circuits-providers update-by-id" [
 # PUT /circuits/providers/{id}/
 #
 # operationId: circuits_providers_update
-export def "circuits-providers update-by-id-1" [
+export def "circuits-providers-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1345,7 +1345,7 @@ export def "circuits-providers update-by-id-1" [
 #
 # GET /circuits/providers/{id}/graphs/
 # operationId: circuits_providers_graphs
-export def "circuits-providers-graphs get" [
+export def "circuits-providers-graphs" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1381,7 +1381,7 @@ export def "circuits-providers-graphs get" [
 #
 # GET /dcim/cables/
 # operationId: dcim_cables_list
-export def "dcim-cables list" [
+export def "dcim-cables-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1456,7 +1456,7 @@ export def "dcim-cables list" [
 # POST /dcim/cables/
 #
 # operationId: dcim_cables_create
-export def "dcim-cables create" [
+export def "dcim-cables-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1502,7 +1502,7 @@ export def "dcim-cables create" [
 # DELETE /dcim/cables/{id}/
 #
 # operationId: dcim_cables_delete
-export def "dcim-cables delete" [
+export def "dcim-cables-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1538,7 +1538,7 @@ export def "dcim-cables delete" [
 #
 # GET /dcim/cables/{id}/
 # operationId: dcim_cables_read
-export def "dcim-cables get" [
+export def "dcim-cables-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1573,7 +1573,7 @@ export def "dcim-cables get" [
 # PATCH /dcim/cables/{id}/
 #
 # operationId: dcim_cables_partial_update
-export def "dcim-cables update-by-id" [
+export def "dcim-cables-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1621,7 +1621,7 @@ export def "dcim-cables update-by-id" [
 # PUT /dcim/cables/{id}/
 #
 # operationId: dcim_cables_update
-export def "dcim-cables update-by-id-1" [
+export def "dcim-cables-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1670,7 +1670,7 @@ export def "dcim-cables update-by-id-1" [
 #
 # GET /dcim/connected-device/
 # operationId: dcim_connected-device_list
-export def "dcim-connected-device list" [
+export def "dcim-connected-device-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1706,7 +1706,7 @@ export def "dcim-connected-device list" [
 # GET /dcim/console-connections/
 #
 # operationId: dcim_console-connections_list
-export def "dcim-console-connections list" [
+export def "dcim-console-connections-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1758,7 +1758,7 @@ export def "dcim-console-connections list" [
 #
 # GET /dcim/console-port-templates/
 # operationId: dcim_console-port-templates_list
-export def "dcim-console-port-templates list" [
+export def "dcim-console-port-templates-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1815,7 +1815,7 @@ export def "dcim-console-port-templates list" [
 # POST /dcim/console-port-templates/
 #
 # operationId: dcim_console-port-templates_create
-export def "dcim-console-port-templates create" [
+export def "dcim-console-port-templates-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1854,7 +1854,7 @@ export def "dcim-console-port-templates create" [
 # DELETE /dcim/console-port-templates/{id}/
 #
 # operationId: dcim_console-port-templates_delete
-export def "dcim-console-port-templates delete" [
+export def "dcim-console-port-templates-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1890,7 +1890,7 @@ export def "dcim-console-port-templates delete" [
 #
 # GET /dcim/console-port-templates/{id}/
 # operationId: dcim_console-port-templates_read
-export def "dcim-console-port-templates get" [
+export def "dcim-console-port-templates-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1925,7 +1925,7 @@ export def "dcim-console-port-templates get" [
 # PATCH /dcim/console-port-templates/{id}/
 #
 # operationId: dcim_console-port-templates_partial_update
-export def "dcim-console-port-templates update-by-id" [
+export def "dcim-console-port-templates-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1966,7 +1966,7 @@ export def "dcim-console-port-templates update-by-id" [
 # PUT /dcim/console-port-templates/{id}/
 #
 # operationId: dcim_console-port-templates_update
-export def "dcim-console-port-templates update-by-id-1" [
+export def "dcim-console-port-templates-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2008,7 +2008,7 @@ export def "dcim-console-port-templates update-by-id-1" [
 #
 # GET /dcim/console-ports/
 # operationId: dcim_console-ports_list
-export def "dcim-console-ports list" [
+export def "dcim-console-ports-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2091,7 +2091,7 @@ export def "dcim-console-ports list" [
 #
 # operationId: dcim_console-ports_create
 # --cable shape: {label?: string}
-export def "dcim-console-ports create" [
+export def "dcim-console-ports-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2134,7 +2134,7 @@ export def "dcim-console-ports create" [
 # DELETE /dcim/console-ports/{id}/
 #
 # operationId: dcim_console-ports_delete
-export def "dcim-console-ports delete" [
+export def "dcim-console-ports-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2170,7 +2170,7 @@ export def "dcim-console-ports delete" [
 #
 # GET /dcim/console-ports/{id}/
 # operationId: dcim_console-ports_read
-export def "dcim-console-ports get" [
+export def "dcim-console-ports-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2206,7 +2206,7 @@ export def "dcim-console-ports get" [
 #
 # operationId: dcim_console-ports_partial_update
 # --cable shape: {label?: string}
-export def "dcim-console-ports update-by-id" [
+export def "dcim-console-ports-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2252,7 +2252,7 @@ export def "dcim-console-ports update-by-id" [
 #
 # operationId: dcim_console-ports_update
 # --cable shape: {label?: string}
-export def "dcim-console-ports update-by-id-1" [
+export def "dcim-console-ports-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2298,7 +2298,7 @@ export def "dcim-console-ports update-by-id-1" [
 #
 # GET /dcim/console-ports/{id}/trace/
 # operationId: dcim_console-ports_trace
-export def "dcim-console-ports-trace get" [
+export def "dcim-console-ports-trace" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2334,7 +2334,7 @@ export def "dcim-console-ports-trace get" [
 #
 # GET /dcim/console-server-port-templates/
 # operationId: dcim_console-server-port-templates_list
-export def "dcim-console-server-port-templates list" [
+export def "dcim-console-server-port-templates-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2391,7 +2391,7 @@ export def "dcim-console-server-port-templates list" [
 # POST /dcim/console-server-port-templates/
 #
 # operationId: dcim_console-server-port-templates_create
-export def "dcim-console-server-port-templates create" [
+export def "dcim-console-server-port-templates-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2430,7 +2430,7 @@ export def "dcim-console-server-port-templates create" [
 # DELETE /dcim/console-server-port-templates/{id}/
 #
 # operationId: dcim_console-server-port-templates_delete
-export def "dcim-console-server-port-templates delete" [
+export def "dcim-console-server-port-templates-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2466,7 +2466,7 @@ export def "dcim-console-server-port-templates delete" [
 #
 # GET /dcim/console-server-port-templates/{id}/
 # operationId: dcim_console-server-port-templates_read
-export def "dcim-console-server-port-templates get" [
+export def "dcim-console-server-port-templates-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2501,7 +2501,7 @@ export def "dcim-console-server-port-templates get" [
 # PATCH /dcim/console-server-port-templates/{id}/
 #
 # operationId: dcim_console-server-port-templates_partial_update
-export def "dcim-console-server-port-templates update-by-id" [
+export def "dcim-console-server-port-templates-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2542,7 +2542,7 @@ export def "dcim-console-server-port-templates update-by-id" [
 # PUT /dcim/console-server-port-templates/{id}/
 #
 # operationId: dcim_console-server-port-templates_update
-export def "dcim-console-server-port-templates update-by-id-1" [
+export def "dcim-console-server-port-templates-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2584,7 +2584,7 @@ export def "dcim-console-server-port-templates update-by-id-1" [
 #
 # GET /dcim/console-server-ports/
 # operationId: dcim_console-server-ports_list
-export def "dcim-console-server-ports list" [
+export def "dcim-console-server-ports-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2667,7 +2667,7 @@ export def "dcim-console-server-ports list" [
 #
 # operationId: dcim_console-server-ports_create
 # --cable shape: {label?: string}
-export def "dcim-console-server-ports create" [
+export def "dcim-console-server-ports-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2710,7 +2710,7 @@ export def "dcim-console-server-ports create" [
 # DELETE /dcim/console-server-ports/{id}/
 #
 # operationId: dcim_console-server-ports_delete
-export def "dcim-console-server-ports delete" [
+export def "dcim-console-server-ports-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2746,7 +2746,7 @@ export def "dcim-console-server-ports delete" [
 #
 # GET /dcim/console-server-ports/{id}/
 # operationId: dcim_console-server-ports_read
-export def "dcim-console-server-ports get" [
+export def "dcim-console-server-ports-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2782,7 +2782,7 @@ export def "dcim-console-server-ports get" [
 #
 # operationId: dcim_console-server-ports_partial_update
 # --cable shape: {label?: string}
-export def "dcim-console-server-ports update-by-id" [
+export def "dcim-console-server-ports-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2828,7 +2828,7 @@ export def "dcim-console-server-ports update-by-id" [
 #
 # operationId: dcim_console-server-ports_update
 # --cable shape: {label?: string}
-export def "dcim-console-server-ports update-by-id-1" [
+export def "dcim-console-server-ports-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2874,7 +2874,7 @@ export def "dcim-console-server-ports update-by-id-1" [
 #
 # GET /dcim/console-server-ports/{id}/trace/
 # operationId: dcim_console-server-ports_trace
-export def "dcim-console-server-ports-trace get" [
+export def "dcim-console-server-ports-trace" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2910,7 +2910,7 @@ export def "dcim-console-server-ports-trace get" [
 #
 # GET /dcim/device-bay-templates/
 # operationId: dcim_device-bay-templates_list
-export def "dcim-device-bay-templates list" [
+export def "dcim-device-bay-templates-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2965,7 +2965,7 @@ export def "dcim-device-bay-templates list" [
 # POST /dcim/device-bay-templates/
 #
 # operationId: dcim_device-bay-templates_create
-export def "dcim-device-bay-templates create" [
+export def "dcim-device-bay-templates-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3003,7 +3003,7 @@ export def "dcim-device-bay-templates create" [
 # DELETE /dcim/device-bay-templates/{id}/
 #
 # operationId: dcim_device-bay-templates_delete
-export def "dcim-device-bay-templates delete" [
+export def "dcim-device-bay-templates-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3039,7 +3039,7 @@ export def "dcim-device-bay-templates delete" [
 #
 # GET /dcim/device-bay-templates/{id}/
 # operationId: dcim_device-bay-templates_read
-export def "dcim-device-bay-templates get" [
+export def "dcim-device-bay-templates-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3074,7 +3074,7 @@ export def "dcim-device-bay-templates get" [
 # PATCH /dcim/device-bay-templates/{id}/
 #
 # operationId: dcim_device-bay-templates_partial_update
-export def "dcim-device-bay-templates update-by-id" [
+export def "dcim-device-bay-templates-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3114,7 +3114,7 @@ export def "dcim-device-bay-templates update-by-id" [
 # PUT /dcim/device-bay-templates/{id}/
 #
 # operationId: dcim_device-bay-templates_update
-export def "dcim-device-bay-templates update-by-id-1" [
+export def "dcim-device-bay-templates-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3155,7 +3155,7 @@ export def "dcim-device-bay-templates update-by-id-1" [
 #
 # GET /dcim/device-bays/
 # operationId: dcim_device-bays_list
-export def "dcim-device-bays list" [
+export def "dcim-device-bays-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3232,7 +3232,7 @@ export def "dcim-device-bays list" [
 # POST /dcim/device-bays/
 #
 # operationId: dcim_device-bays_create
-export def "dcim-device-bays create" [
+export def "dcim-device-bays-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3273,7 +3273,7 @@ export def "dcim-device-bays create" [
 # DELETE /dcim/device-bays/{id}/
 #
 # operationId: dcim_device-bays_delete
-export def "dcim-device-bays delete" [
+export def "dcim-device-bays-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3309,7 +3309,7 @@ export def "dcim-device-bays delete" [
 #
 # GET /dcim/device-bays/{id}/
 # operationId: dcim_device-bays_read
-export def "dcim-device-bays get" [
+export def "dcim-device-bays-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3344,7 +3344,7 @@ export def "dcim-device-bays get" [
 # PATCH /dcim/device-bays/{id}/
 #
 # operationId: dcim_device-bays_partial_update
-export def "dcim-device-bays update-by-id" [
+export def "dcim-device-bays-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3387,7 +3387,7 @@ export def "dcim-device-bays update-by-id" [
 # PUT /dcim/device-bays/{id}/
 #
 # operationId: dcim_device-bays_update
-export def "dcim-device-bays update-by-id-1" [
+export def "dcim-device-bays-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3431,7 +3431,7 @@ export def "dcim-device-bays update-by-id-1" [
 #
 # GET /dcim/device-roles/
 # operationId: dcim_device-roles_list
-export def "dcim-device-roles list" [
+export def "dcim-device-roles-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3505,7 +3505,7 @@ export def "dcim-device-roles list" [
 # POST /dcim/device-roles/
 #
 # operationId: dcim_device-roles_create
-export def "dcim-device-roles create" [
+export def "dcim-device-roles-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3546,7 +3546,7 @@ export def "dcim-device-roles create" [
 # DELETE /dcim/device-roles/{id}/
 #
 # operationId: dcim_device-roles_delete
-export def "dcim-device-roles delete" [
+export def "dcim-device-roles-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3582,7 +3582,7 @@ export def "dcim-device-roles delete" [
 #
 # GET /dcim/device-roles/{id}/
 # operationId: dcim_device-roles_read
-export def "dcim-device-roles get" [
+export def "dcim-device-roles-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3617,7 +3617,7 @@ export def "dcim-device-roles get" [
 # PATCH /dcim/device-roles/{id}/
 #
 # operationId: dcim_device-roles_partial_update
-export def "dcim-device-roles update-by-id" [
+export def "dcim-device-roles-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3660,7 +3660,7 @@ export def "dcim-device-roles update-by-id" [
 # PUT /dcim/device-roles/{id}/
 #
 # operationId: dcim_device-roles_update
-export def "dcim-device-roles update-by-id-1" [
+export def "dcim-device-roles-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3704,7 +3704,7 @@ export def "dcim-device-roles update-by-id-1" [
 #
 # GET /dcim/device-types/
 # operationId: dcim_device-types_list
-export def "dcim-device-types list" [
+export def "dcim-device-types-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3805,7 +3805,7 @@ export def "dcim-device-types list" [
 # POST /dcim/device-types/
 #
 # operationId: dcim_device-types_create
-export def "dcim-device-types create" [
+export def "dcim-device-types-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3851,7 +3851,7 @@ export def "dcim-device-types create" [
 # DELETE /dcim/device-types/{id}/
 #
 # operationId: dcim_device-types_delete
-export def "dcim-device-types delete" [
+export def "dcim-device-types-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3887,7 +3887,7 @@ export def "dcim-device-types delete" [
 #
 # GET /dcim/device-types/{id}/
 # operationId: dcim_device-types_read
-export def "dcim-device-types get" [
+export def "dcim-device-types-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3922,7 +3922,7 @@ export def "dcim-device-types get" [
 # PATCH /dcim/device-types/{id}/
 #
 # operationId: dcim_device-types_partial_update
-export def "dcim-device-types update-by-id" [
+export def "dcim-device-types-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3970,7 +3970,7 @@ export def "dcim-device-types update-by-id" [
 # PUT /dcim/device-types/{id}/
 #
 # operationId: dcim_device-types_update
-export def "dcim-device-types update-by-id-1" [
+export def "dcim-device-types-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4019,7 +4019,7 @@ export def "dcim-device-types update-by-id-1" [
 #
 # GET /dcim/devices/
 # operationId: dcim_devices_list
-export def "dcim-devices list" [
+export def "dcim-devices-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4175,7 +4175,7 @@ export def "dcim-devices list" [
 #
 # operationId: dcim_devices_create
 # --parent_device shape: {name?: string}
-export def "dcim-devices create" [
+export def "dcim-devices-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4234,7 +4234,7 @@ export def "dcim-devices create" [
 # DELETE /dcim/devices/{id}/
 #
 # operationId: dcim_devices_delete
-export def "dcim-devices delete" [
+export def "dcim-devices-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4270,7 +4270,7 @@ export def "dcim-devices delete" [
 #
 # GET /dcim/devices/{id}/
 # operationId: dcim_devices_read
-export def "dcim-devices get" [
+export def "dcim-devices-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4306,7 +4306,7 @@ export def "dcim-devices get" [
 #
 # operationId: dcim_devices_partial_update
 # --parent_device shape: {name?: string}
-export def "dcim-devices update-by-id" [
+export def "dcim-devices-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4368,7 +4368,7 @@ export def "dcim-devices update-by-id" [
 #
 # operationId: dcim_devices_update
 # --parent_device shape: {name?: string}
-export def "dcim-devices update-by-id-1" [
+export def "dcim-devices-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4430,7 +4430,7 @@ export def "dcim-devices update-by-id-1" [
 #
 # GET /dcim/devices/{id}/graphs/
 # operationId: dcim_devices_graphs
-export def "dcim-devices-graphs get" [
+export def "dcim-devices-graphs" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4466,7 +4466,7 @@ export def "dcim-devices-graphs get" [
 #
 # GET /dcim/devices/{id}/napalm/
 # operationId: dcim_devices_napalm
-export def "dcim-devices-napalm get" [
+export def "dcim-devices-napalm" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4504,7 +4504,7 @@ export def "dcim-devices-napalm get" [
 #
 # GET /dcim/front-port-templates/
 # operationId: dcim_front-port-templates_list
-export def "dcim-front-port-templates list" [
+export def "dcim-front-port-templates-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4561,7 +4561,7 @@ export def "dcim-front-port-templates list" [
 # POST /dcim/front-port-templates/
 #
 # operationId: dcim_front-port-templates_create
-export def "dcim-front-port-templates create" [
+export def "dcim-front-port-templates-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4602,7 +4602,7 @@ export def "dcim-front-port-templates create" [
 # DELETE /dcim/front-port-templates/{id}/
 #
 # operationId: dcim_front-port-templates_delete
-export def "dcim-front-port-templates delete" [
+export def "dcim-front-port-templates-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4638,7 +4638,7 @@ export def "dcim-front-port-templates delete" [
 #
 # GET /dcim/front-port-templates/{id}/
 # operationId: dcim_front-port-templates_read
-export def "dcim-front-port-templates get" [
+export def "dcim-front-port-templates-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4673,7 +4673,7 @@ export def "dcim-front-port-templates get" [
 # PATCH /dcim/front-port-templates/{id}/
 #
 # operationId: dcim_front-port-templates_partial_update
-export def "dcim-front-port-templates update-by-id" [
+export def "dcim-front-port-templates-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4716,7 +4716,7 @@ export def "dcim-front-port-templates update-by-id" [
 # PUT /dcim/front-port-templates/{id}/
 #
 # operationId: dcim_front-port-templates_update
-export def "dcim-front-port-templates update-by-id-1" [
+export def "dcim-front-port-templates-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4760,7 +4760,7 @@ export def "dcim-front-port-templates update-by-id-1" [
 #
 # GET /dcim/front-ports/
 # operationId: dcim_front-ports_list
-export def "dcim-front-ports list" [
+export def "dcim-front-ports-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4841,7 +4841,7 @@ export def "dcim-front-ports list" [
 #
 # operationId: dcim_front-ports_create
 # --cable shape: {label?: string}
-export def "dcim-front-ports create" [
+export def "dcim-front-ports-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4885,7 +4885,7 @@ export def "dcim-front-ports create" [
 # DELETE /dcim/front-ports/{id}/
 #
 # operationId: dcim_front-ports_delete
-export def "dcim-front-ports delete" [
+export def "dcim-front-ports-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4921,7 +4921,7 @@ export def "dcim-front-ports delete" [
 #
 # GET /dcim/front-ports/{id}/
 # operationId: dcim_front-ports_read
-export def "dcim-front-ports get" [
+export def "dcim-front-ports-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4957,7 +4957,7 @@ export def "dcim-front-ports get" [
 #
 # operationId: dcim_front-ports_partial_update
 # --cable shape: {label?: string}
-export def "dcim-front-ports update-by-id" [
+export def "dcim-front-ports-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5004,7 +5004,7 @@ export def "dcim-front-ports update-by-id" [
 #
 # operationId: dcim_front-ports_update
 # --cable shape: {label?: string}
-export def "dcim-front-ports update-by-id-1" [
+export def "dcim-front-ports-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5051,7 +5051,7 @@ export def "dcim-front-ports update-by-id-1" [
 #
 # GET /dcim/front-ports/{id}/trace/
 # operationId: dcim_front-ports_trace
-export def "dcim-front-ports-trace get" [
+export def "dcim-front-ports-trace" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5086,7 +5086,7 @@ export def "dcim-front-ports-trace get" [
 # GET /dcim/interface-connections/
 #
 # operationId: dcim_interface-connections_list
-export def "dcim-interface-connections list" [
+export def "dcim-interface-connections-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5128,7 +5128,7 @@ export def "dcim-interface-connections list" [
 #
 # GET /dcim/interface-templates/
 # operationId: dcim_interface-templates_list
-export def "dcim-interface-templates list" [
+export def "dcim-interface-templates-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5186,7 +5186,7 @@ export def "dcim-interface-templates list" [
 # POST /dcim/interface-templates/
 #
 # operationId: dcim_interface-templates_create
-export def "dcim-interface-templates create" [
+export def "dcim-interface-templates-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5226,7 +5226,7 @@ export def "dcim-interface-templates create" [
 # DELETE /dcim/interface-templates/{id}/
 #
 # operationId: dcim_interface-templates_delete
-export def "dcim-interface-templates delete" [
+export def "dcim-interface-templates-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5262,7 +5262,7 @@ export def "dcim-interface-templates delete" [
 #
 # GET /dcim/interface-templates/{id}/
 # operationId: dcim_interface-templates_read
-export def "dcim-interface-templates get" [
+export def "dcim-interface-templates-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5297,7 +5297,7 @@ export def "dcim-interface-templates get" [
 # PATCH /dcim/interface-templates/{id}/
 #
 # operationId: dcim_interface-templates_partial_update
-export def "dcim-interface-templates update-by-id" [
+export def "dcim-interface-templates-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5339,7 +5339,7 @@ export def "dcim-interface-templates update-by-id" [
 # PUT /dcim/interface-templates/{id}/
 #
 # operationId: dcim_interface-templates_update
-export def "dcim-interface-templates update-by-id-1" [
+export def "dcim-interface-templates-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5382,7 +5382,7 @@ export def "dcim-interface-templates update-by-id-1" [
 #
 # GET /dcim/interfaces/
 # operationId: dcim_interfaces_list
-export def "dcim-interfaces list" [
+export def "dcim-interfaces-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5488,7 +5488,7 @@ export def "dcim-interfaces list" [
 #
 # operationId: dcim_interfaces_create
 # --cable shape: {label?: string}
-export def "dcim-interfaces create" [
+export def "dcim-interfaces-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5539,7 +5539,7 @@ export def "dcim-interfaces create" [
 # DELETE /dcim/interfaces/{id}/
 #
 # operationId: dcim_interfaces_delete
-export def "dcim-interfaces delete" [
+export def "dcim-interfaces-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5575,7 +5575,7 @@ export def "dcim-interfaces delete" [
 #
 # GET /dcim/interfaces/{id}/
 # operationId: dcim_interfaces_read
-export def "dcim-interfaces get" [
+export def "dcim-interfaces-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5611,7 +5611,7 @@ export def "dcim-interfaces get" [
 #
 # operationId: dcim_interfaces_partial_update
 # --cable shape: {label?: string}
-export def "dcim-interfaces update-by-id" [
+export def "dcim-interfaces-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5665,7 +5665,7 @@ export def "dcim-interfaces update-by-id" [
 #
 # operationId: dcim_interfaces_update
 # --cable shape: {label?: string}
-export def "dcim-interfaces update-by-id-1" [
+export def "dcim-interfaces-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5719,7 +5719,7 @@ export def "dcim-interfaces update-by-id-1" [
 #
 # GET /dcim/interfaces/{id}/graphs/
 # operationId: dcim_interfaces_graphs
-export def "dcim-interfaces-graphs get" [
+export def "dcim-interfaces-graphs" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5755,7 +5755,7 @@ export def "dcim-interfaces-graphs get" [
 #
 # GET /dcim/interfaces/{id}/trace/
 # operationId: dcim_interfaces_trace
-export def "dcim-interfaces-trace get" [
+export def "dcim-interfaces-trace" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5791,7 +5791,7 @@ export def "dcim-interfaces-trace get" [
 #
 # GET /dcim/inventory-items/
 # operationId: dcim_inventory-items_list
-export def "dcim-inventory-items list" [
+export def "dcim-inventory-items-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5886,7 +5886,7 @@ export def "dcim-inventory-items list" [
 # POST /dcim/inventory-items/
 #
 # operationId: dcim_inventory-items_create
-export def "dcim-inventory-items create" [
+export def "dcim-inventory-items-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5932,7 +5932,7 @@ export def "dcim-inventory-items create" [
 # DELETE /dcim/inventory-items/{id}/
 #
 # operationId: dcim_inventory-items_delete
-export def "dcim-inventory-items delete" [
+export def "dcim-inventory-items-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5968,7 +5968,7 @@ export def "dcim-inventory-items delete" [
 #
 # GET /dcim/inventory-items/{id}/
 # operationId: dcim_inventory-items_read
-export def "dcim-inventory-items get" [
+export def "dcim-inventory-items-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6003,7 +6003,7 @@ export def "dcim-inventory-items get" [
 # PATCH /dcim/inventory-items/{id}/
 #
 # operationId: dcim_inventory-items_partial_update
-export def "dcim-inventory-items update-by-id" [
+export def "dcim-inventory-items-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6051,7 +6051,7 @@ export def "dcim-inventory-items update-by-id" [
 # PUT /dcim/inventory-items/{id}/
 #
 # operationId: dcim_inventory-items_update
-export def "dcim-inventory-items update-by-id-1" [
+export def "dcim-inventory-items-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6100,7 +6100,7 @@ export def "dcim-inventory-items update-by-id-1" [
 #
 # GET /dcim/manufacturers/
 # operationId: dcim_manufacturers_list
-export def "dcim-manufacturers list" [
+export def "dcim-manufacturers-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6173,7 +6173,7 @@ export def "dcim-manufacturers list" [
 # POST /dcim/manufacturers/
 #
 # operationId: dcim_manufacturers_create
-export def "dcim-manufacturers create" [
+export def "dcim-manufacturers-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6212,7 +6212,7 @@ export def "dcim-manufacturers create" [
 # DELETE /dcim/manufacturers/{id}/
 #
 # operationId: dcim_manufacturers_delete
-export def "dcim-manufacturers delete" [
+export def "dcim-manufacturers-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6248,7 +6248,7 @@ export def "dcim-manufacturers delete" [
 #
 # GET /dcim/manufacturers/{id}/
 # operationId: dcim_manufacturers_read
-export def "dcim-manufacturers get" [
+export def "dcim-manufacturers-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6283,7 +6283,7 @@ export def "dcim-manufacturers get" [
 # PATCH /dcim/manufacturers/{id}/
 #
 # operationId: dcim_manufacturers_partial_update
-export def "dcim-manufacturers update-by-id" [
+export def "dcim-manufacturers-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6324,7 +6324,7 @@ export def "dcim-manufacturers update-by-id" [
 # PUT /dcim/manufacturers/{id}/
 #
 # operationId: dcim_manufacturers_update
-export def "dcim-manufacturers update-by-id-1" [
+export def "dcim-manufacturers-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6366,7 +6366,7 @@ export def "dcim-manufacturers update-by-id-1" [
 #
 # GET /dcim/platforms/
 # operationId: dcim_platforms_list
-export def "dcim-platforms list" [
+export def "dcim-platforms-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6453,7 +6453,7 @@ export def "dcim-platforms list" [
 # POST /dcim/platforms/
 #
 # operationId: dcim_platforms_create
-export def "dcim-platforms create" [
+export def "dcim-platforms-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6495,7 +6495,7 @@ export def "dcim-platforms create" [
 # DELETE /dcim/platforms/{id}/
 #
 # operationId: dcim_platforms_delete
-export def "dcim-platforms delete" [
+export def "dcim-platforms-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6531,7 +6531,7 @@ export def "dcim-platforms delete" [
 #
 # GET /dcim/platforms/{id}/
 # operationId: dcim_platforms_read
-export def "dcim-platforms get" [
+export def "dcim-platforms-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6566,7 +6566,7 @@ export def "dcim-platforms get" [
 # PATCH /dcim/platforms/{id}/
 #
 # operationId: dcim_platforms_partial_update
-export def "dcim-platforms update-by-id" [
+export def "dcim-platforms-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6610,7 +6610,7 @@ export def "dcim-platforms update-by-id" [
 # PUT /dcim/platforms/{id}/
 #
 # operationId: dcim_platforms_update
-export def "dcim-platforms update-by-id-1" [
+export def "dcim-platforms-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6654,7 +6654,7 @@ export def "dcim-platforms update-by-id-1" [
 # GET /dcim/power-connections/
 #
 # operationId: dcim_power-connections_list
-export def "dcim-power-connections list" [
+export def "dcim-power-connections-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6706,7 +6706,7 @@ export def "dcim-power-connections list" [
 #
 # GET /dcim/power-feeds/
 # operationId: dcim_power-feeds_list
-export def "dcim-power-feeds list" [
+export def "dcim-power-feeds-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6805,7 +6805,7 @@ export def "dcim-power-feeds list" [
 # POST /dcim/power-feeds/
 #
 # operationId: dcim_power-feeds_create
-export def "dcim-power-feeds create" [
+export def "dcim-power-feeds-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6854,7 +6854,7 @@ export def "dcim-power-feeds create" [
 # DELETE /dcim/power-feeds/{id}/
 #
 # operationId: dcim_power-feeds_delete
-export def "dcim-power-feeds delete" [
+export def "dcim-power-feeds-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6890,7 +6890,7 @@ export def "dcim-power-feeds delete" [
 #
 # GET /dcim/power-feeds/{id}/
 # operationId: dcim_power-feeds_read
-export def "dcim-power-feeds get" [
+export def "dcim-power-feeds-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6925,7 +6925,7 @@ export def "dcim-power-feeds get" [
 # PATCH /dcim/power-feeds/{id}/
 #
 # operationId: dcim_power-feeds_partial_update
-export def "dcim-power-feeds update-by-id" [
+export def "dcim-power-feeds-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6976,7 +6976,7 @@ export def "dcim-power-feeds update-by-id" [
 # PUT /dcim/power-feeds/{id}/
 #
 # operationId: dcim_power-feeds_update
-export def "dcim-power-feeds update-by-id-1" [
+export def "dcim-power-feeds-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7028,7 +7028,7 @@ export def "dcim-power-feeds update-by-id-1" [
 #
 # GET /dcim/power-outlet-templates/
 # operationId: dcim_power-outlet-templates_list
-export def "dcim-power-outlet-templates list" [
+export def "dcim-power-outlet-templates-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7087,7 +7087,7 @@ export def "dcim-power-outlet-templates list" [
 # POST /dcim/power-outlet-templates/
 #
 # operationId: dcim_power-outlet-templates_create
-export def "dcim-power-outlet-templates create" [
+export def "dcim-power-outlet-templates-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7128,7 +7128,7 @@ export def "dcim-power-outlet-templates create" [
 # DELETE /dcim/power-outlet-templates/{id}/
 #
 # operationId: dcim_power-outlet-templates_delete
-export def "dcim-power-outlet-templates delete" [
+export def "dcim-power-outlet-templates-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7164,7 +7164,7 @@ export def "dcim-power-outlet-templates delete" [
 #
 # GET /dcim/power-outlet-templates/{id}/
 # operationId: dcim_power-outlet-templates_read
-export def "dcim-power-outlet-templates get" [
+export def "dcim-power-outlet-templates-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7199,7 +7199,7 @@ export def "dcim-power-outlet-templates get" [
 # PATCH /dcim/power-outlet-templates/{id}/
 #
 # operationId: dcim_power-outlet-templates_partial_update
-export def "dcim-power-outlet-templates update-by-id" [
+export def "dcim-power-outlet-templates-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7242,7 +7242,7 @@ export def "dcim-power-outlet-templates update-by-id" [
 # PUT /dcim/power-outlet-templates/{id}/
 #
 # operationId: dcim_power-outlet-templates_update
-export def "dcim-power-outlet-templates update-by-id-1" [
+export def "dcim-power-outlet-templates-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7286,7 +7286,7 @@ export def "dcim-power-outlet-templates update-by-id-1" [
 #
 # GET /dcim/power-outlets/
 # operationId: dcim_power-outlets_list
-export def "dcim-power-outlets list" [
+export def "dcim-power-outlets-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7371,7 +7371,7 @@ export def "dcim-power-outlets list" [
 #
 # operationId: dcim_power-outlets_create
 # --cable shape: {label?: string}
-export def "dcim-power-outlets create" [
+export def "dcim-power-outlets-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7416,7 +7416,7 @@ export def "dcim-power-outlets create" [
 # DELETE /dcim/power-outlets/{id}/
 #
 # operationId: dcim_power-outlets_delete
-export def "dcim-power-outlets delete" [
+export def "dcim-power-outlets-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7452,7 +7452,7 @@ export def "dcim-power-outlets delete" [
 #
 # GET /dcim/power-outlets/{id}/
 # operationId: dcim_power-outlets_read
-export def "dcim-power-outlets get" [
+export def "dcim-power-outlets-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7488,7 +7488,7 @@ export def "dcim-power-outlets get" [
 #
 # operationId: dcim_power-outlets_partial_update
 # --cable shape: {label?: string}
-export def "dcim-power-outlets update-by-id" [
+export def "dcim-power-outlets-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7536,7 +7536,7 @@ export def "dcim-power-outlets update-by-id" [
 #
 # operationId: dcim_power-outlets_update
 # --cable shape: {label?: string}
-export def "dcim-power-outlets update-by-id-1" [
+export def "dcim-power-outlets-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7584,7 +7584,7 @@ export def "dcim-power-outlets update-by-id-1" [
 #
 # GET /dcim/power-outlets/{id}/trace/
 # operationId: dcim_power-outlets_trace
-export def "dcim-power-outlets-trace get" [
+export def "dcim-power-outlets-trace" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7620,7 +7620,7 @@ export def "dcim-power-outlets-trace get" [
 #
 # GET /dcim/power-panels/
 # operationId: dcim_power-panels_list
-export def "dcim-power-panels list" [
+export def "dcim-power-panels-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7683,7 +7683,7 @@ export def "dcim-power-panels list" [
 # POST /dcim/power-panels/
 #
 # operationId: dcim_power-panels_create
-export def "dcim-power-panels create" [
+export def "dcim-power-panels-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7722,7 +7722,7 @@ export def "dcim-power-panels create" [
 # DELETE /dcim/power-panels/{id}/
 #
 # operationId: dcim_power-panels_delete
-export def "dcim-power-panels delete" [
+export def "dcim-power-panels-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7758,7 +7758,7 @@ export def "dcim-power-panels delete" [
 #
 # GET /dcim/power-panels/{id}/
 # operationId: dcim_power-panels_read
-export def "dcim-power-panels get" [
+export def "dcim-power-panels-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7793,7 +7793,7 @@ export def "dcim-power-panels get" [
 # PATCH /dcim/power-panels/{id}/
 #
 # operationId: dcim_power-panels_partial_update
-export def "dcim-power-panels update-by-id" [
+export def "dcim-power-panels-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7834,7 +7834,7 @@ export def "dcim-power-panels update-by-id" [
 # PUT /dcim/power-panels/{id}/
 #
 # operationId: dcim_power-panels_update
-export def "dcim-power-panels update-by-id-1" [
+export def "dcim-power-panels-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7876,7 +7876,7 @@ export def "dcim-power-panels update-by-id-1" [
 #
 # GET /dcim/power-port-templates/
 # operationId: dcim_power-port-templates_list
-export def "dcim-power-port-templates list" [
+export def "dcim-power-port-templates-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7945,7 +7945,7 @@ export def "dcim-power-port-templates list" [
 # POST /dcim/power-port-templates/
 #
 # operationId: dcim_power-port-templates_create
-export def "dcim-power-port-templates create" [
+export def "dcim-power-port-templates-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7986,7 +7986,7 @@ export def "dcim-power-port-templates create" [
 # DELETE /dcim/power-port-templates/{id}/
 #
 # operationId: dcim_power-port-templates_delete
-export def "dcim-power-port-templates delete" [
+export def "dcim-power-port-templates-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8022,7 +8022,7 @@ export def "dcim-power-port-templates delete" [
 #
 # GET /dcim/power-port-templates/{id}/
 # operationId: dcim_power-port-templates_read
-export def "dcim-power-port-templates get" [
+export def "dcim-power-port-templates-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8057,7 +8057,7 @@ export def "dcim-power-port-templates get" [
 # PATCH /dcim/power-port-templates/{id}/
 #
 # operationId: dcim_power-port-templates_partial_update
-export def "dcim-power-port-templates update-by-id" [
+export def "dcim-power-port-templates-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8100,7 +8100,7 @@ export def "dcim-power-port-templates update-by-id" [
 # PUT /dcim/power-port-templates/{id}/
 #
 # operationId: dcim_power-port-templates_update
-export def "dcim-power-port-templates update-by-id-1" [
+export def "dcim-power-port-templates-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8144,7 +8144,7 @@ export def "dcim-power-port-templates update-by-id-1" [
 #
 # GET /dcim/power-ports/
 # operationId: dcim_power-ports_list
-export def "dcim-power-ports list" [
+export def "dcim-power-ports-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8239,7 +8239,7 @@ export def "dcim-power-ports list" [
 #
 # operationId: dcim_power-ports_create
 # --cable shape: {label?: string}
-export def "dcim-power-ports create" [
+export def "dcim-power-ports-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8284,7 +8284,7 @@ export def "dcim-power-ports create" [
 # DELETE /dcim/power-ports/{id}/
 #
 # operationId: dcim_power-ports_delete
-export def "dcim-power-ports delete" [
+export def "dcim-power-ports-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8320,7 +8320,7 @@ export def "dcim-power-ports delete" [
 #
 # GET /dcim/power-ports/{id}/
 # operationId: dcim_power-ports_read
-export def "dcim-power-ports get" [
+export def "dcim-power-ports-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8356,7 +8356,7 @@ export def "dcim-power-ports get" [
 #
 # operationId: dcim_power-ports_partial_update
 # --cable shape: {label?: string}
-export def "dcim-power-ports update-by-id" [
+export def "dcim-power-ports-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8404,7 +8404,7 @@ export def "dcim-power-ports update-by-id" [
 #
 # operationId: dcim_power-ports_update
 # --cable shape: {label?: string}
-export def "dcim-power-ports update-by-id-1" [
+export def "dcim-power-ports-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8452,7 +8452,7 @@ export def "dcim-power-ports update-by-id-1" [
 #
 # GET /dcim/power-ports/{id}/trace/
 # operationId: dcim_power-ports_trace
-export def "dcim-power-ports-trace get" [
+export def "dcim-power-ports-trace" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8488,7 +8488,7 @@ export def "dcim-power-ports-trace get" [
 #
 # GET /dcim/rack-groups/
 # operationId: dcim_rack-groups_list
-export def "dcim-rack-groups list" [
+export def "dcim-rack-groups-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8573,7 +8573,7 @@ export def "dcim-rack-groups list" [
 # POST /dcim/rack-groups/
 #
 # operationId: dcim_rack-groups_create
-export def "dcim-rack-groups create" [
+export def "dcim-rack-groups-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8614,7 +8614,7 @@ export def "dcim-rack-groups create" [
 # DELETE /dcim/rack-groups/{id}/
 #
 # operationId: dcim_rack-groups_delete
-export def "dcim-rack-groups delete" [
+export def "dcim-rack-groups-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8650,7 +8650,7 @@ export def "dcim-rack-groups delete" [
 #
 # GET /dcim/rack-groups/{id}/
 # operationId: dcim_rack-groups_read
-export def "dcim-rack-groups get" [
+export def "dcim-rack-groups-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8685,7 +8685,7 @@ export def "dcim-rack-groups get" [
 # PATCH /dcim/rack-groups/{id}/
 #
 # operationId: dcim_rack-groups_partial_update
-export def "dcim-rack-groups update-by-id" [
+export def "dcim-rack-groups-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8728,7 +8728,7 @@ export def "dcim-rack-groups update-by-id" [
 # PUT /dcim/rack-groups/{id}/
 #
 # operationId: dcim_rack-groups_update
-export def "dcim-rack-groups update-by-id-1" [
+export def "dcim-rack-groups-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8772,7 +8772,7 @@ export def "dcim-rack-groups update-by-id-1" [
 #
 # GET /dcim/rack-reservations/
 # operationId: dcim_rack-reservations_list
-export def "dcim-rack-reservations list" [
+export def "dcim-rack-reservations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8843,7 +8843,7 @@ export def "dcim-rack-reservations list" [
 # POST /dcim/rack-reservations/
 #
 # operationId: dcim_rack-reservations_create
-export def "dcim-rack-reservations create" [
+export def "dcim-rack-reservations-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8884,7 +8884,7 @@ export def "dcim-rack-reservations create" [
 # DELETE /dcim/rack-reservations/{id}/
 #
 # operationId: dcim_rack-reservations_delete
-export def "dcim-rack-reservations delete" [
+export def "dcim-rack-reservations-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8920,7 +8920,7 @@ export def "dcim-rack-reservations delete" [
 #
 # GET /dcim/rack-reservations/{id}/
 # operationId: dcim_rack-reservations_read
-export def "dcim-rack-reservations get" [
+export def "dcim-rack-reservations-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8955,7 +8955,7 @@ export def "dcim-rack-reservations get" [
 # PATCH /dcim/rack-reservations/{id}/
 #
 # operationId: dcim_rack-reservations_partial_update
-export def "dcim-rack-reservations update-by-id" [
+export def "dcim-rack-reservations-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8998,7 +8998,7 @@ export def "dcim-rack-reservations update-by-id" [
 # PUT /dcim/rack-reservations/{id}/
 #
 # operationId: dcim_rack-reservations_update
-export def "dcim-rack-reservations update-by-id-1" [
+export def "dcim-rack-reservations-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9042,7 +9042,7 @@ export def "dcim-rack-reservations update-by-id-1" [
 #
 # GET /dcim/rack-roles/
 # operationId: dcim_rack-roles_list
-export def "dcim-rack-roles list" [
+export def "dcim-rack-roles-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9115,7 +9115,7 @@ export def "dcim-rack-roles list" [
 # POST /dcim/rack-roles/
 #
 # operationId: dcim_rack-roles_create
-export def "dcim-rack-roles create" [
+export def "dcim-rack-roles-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9155,7 +9155,7 @@ export def "dcim-rack-roles create" [
 # DELETE /dcim/rack-roles/{id}/
 #
 # operationId: dcim_rack-roles_delete
-export def "dcim-rack-roles delete" [
+export def "dcim-rack-roles-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9191,7 +9191,7 @@ export def "dcim-rack-roles delete" [
 #
 # GET /dcim/rack-roles/{id}/
 # operationId: dcim_rack-roles_read
-export def "dcim-rack-roles get" [
+export def "dcim-rack-roles-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9226,7 +9226,7 @@ export def "dcim-rack-roles get" [
 # PATCH /dcim/rack-roles/{id}/
 #
 # operationId: dcim_rack-roles_partial_update
-export def "dcim-rack-roles update-by-id" [
+export def "dcim-rack-roles-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9268,7 +9268,7 @@ export def "dcim-rack-roles update-by-id" [
 # PUT /dcim/rack-roles/{id}/
 #
 # operationId: dcim_rack-roles_update
-export def "dcim-rack-roles update-by-id-1" [
+export def "dcim-rack-roles-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9311,7 +9311,7 @@ export def "dcim-rack-roles update-by-id-1" [
 #
 # GET /dcim/racks/
 # operationId: dcim_racks_list
-export def "dcim-racks list" [
+export def "dcim-racks-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9444,7 +9444,7 @@ export def "dcim-racks list" [
 # POST /dcim/racks/
 #
 # operationId: dcim_racks_create
-export def "dcim-racks create" [
+export def "dcim-racks-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9499,7 +9499,7 @@ export def "dcim-racks create" [
 # DELETE /dcim/racks/{id}/
 #
 # operationId: dcim_racks_delete
-export def "dcim-racks delete" [
+export def "dcim-racks-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9535,7 +9535,7 @@ export def "dcim-racks delete" [
 #
 # GET /dcim/racks/{id}/
 # operationId: dcim_racks_read
-export def "dcim-racks get" [
+export def "dcim-racks-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9570,7 +9570,7 @@ export def "dcim-racks get" [
 # PATCH /dcim/racks/{id}/
 #
 # operationId: dcim_racks_partial_update
-export def "dcim-racks update-by-id" [
+export def "dcim-racks-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9627,7 +9627,7 @@ export def "dcim-racks update-by-id" [
 # PUT /dcim/racks/{id}/
 #
 # operationId: dcim_racks_update
-export def "dcim-racks update-by-id-1" [
+export def "dcim-racks-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9685,7 +9685,7 @@ export def "dcim-racks update-by-id-1" [
 #
 # GET /dcim/racks/{id}/elevation/
 # operationId: dcim_racks_elevation
-export def "dcim-racks-elevation get" [
+export def "dcim-racks-elevation" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9731,7 +9731,7 @@ export def "dcim-racks-elevation get" [
 #
 # GET /dcim/rear-port-templates/
 # operationId: dcim_rear-port-templates_list
-export def "dcim-rear-port-templates list" [
+export def "dcim-rear-port-templates-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9794,7 +9794,7 @@ export def "dcim-rear-port-templates list" [
 # POST /dcim/rear-port-templates/
 #
 # operationId: dcim_rear-port-templates_create
-export def "dcim-rear-port-templates create" [
+export def "dcim-rear-port-templates-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9834,7 +9834,7 @@ export def "dcim-rear-port-templates create" [
 # DELETE /dcim/rear-port-templates/{id}/
 #
 # operationId: dcim_rear-port-templates_delete
-export def "dcim-rear-port-templates delete" [
+export def "dcim-rear-port-templates-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9870,7 +9870,7 @@ export def "dcim-rear-port-templates delete" [
 #
 # GET /dcim/rear-port-templates/{id}/
 # operationId: dcim_rear-port-templates_read
-export def "dcim-rear-port-templates get" [
+export def "dcim-rear-port-templates-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9905,7 +9905,7 @@ export def "dcim-rear-port-templates get" [
 # PATCH /dcim/rear-port-templates/{id}/
 #
 # operationId: dcim_rear-port-templates_partial_update
-export def "dcim-rear-port-templates update-by-id" [
+export def "dcim-rear-port-templates-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9947,7 +9947,7 @@ export def "dcim-rear-port-templates update-by-id" [
 # PUT /dcim/rear-port-templates/{id}/
 #
 # operationId: dcim_rear-port-templates_update
-export def "dcim-rear-port-templates update-by-id-1" [
+export def "dcim-rear-port-templates-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9990,7 +9990,7 @@ export def "dcim-rear-port-templates update-by-id-1" [
 #
 # GET /dcim/rear-ports/
 # operationId: dcim_rear-ports_list
-export def "dcim-rear-ports list" [
+export def "dcim-rear-ports-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10077,7 +10077,7 @@ export def "dcim-rear-ports list" [
 #
 # operationId: dcim_rear-ports_create
 # --cable shape: {label?: string}
-export def "dcim-rear-ports create" [
+export def "dcim-rear-ports-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10120,7 +10120,7 @@ export def "dcim-rear-ports create" [
 # DELETE /dcim/rear-ports/{id}/
 #
 # operationId: dcim_rear-ports_delete
-export def "dcim-rear-ports delete" [
+export def "dcim-rear-ports-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10156,7 +10156,7 @@ export def "dcim-rear-ports delete" [
 #
 # GET /dcim/rear-ports/{id}/
 # operationId: dcim_rear-ports_read
-export def "dcim-rear-ports get" [
+export def "dcim-rear-ports-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10192,7 +10192,7 @@ export def "dcim-rear-ports get" [
 #
 # operationId: dcim_rear-ports_partial_update
 # --cable shape: {label?: string}
-export def "dcim-rear-ports update-by-id" [
+export def "dcim-rear-ports-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10238,7 +10238,7 @@ export def "dcim-rear-ports update-by-id" [
 #
 # operationId: dcim_rear-ports_update
 # --cable shape: {label?: string}
-export def "dcim-rear-ports update-by-id-1" [
+export def "dcim-rear-ports-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10284,7 +10284,7 @@ export def "dcim-rear-ports update-by-id-1" [
 #
 # GET /dcim/rear-ports/{id}/trace/
 # operationId: dcim_rear-ports_trace
-export def "dcim-rear-ports-trace get" [
+export def "dcim-rear-ports-trace" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10320,7 +10320,7 @@ export def "dcim-rear-ports-trace get" [
 #
 # GET /dcim/regions/
 # operationId: dcim_regions_list
-export def "dcim-regions list" [
+export def "dcim-regions-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10397,7 +10397,7 @@ export def "dcim-regions list" [
 # POST /dcim/regions/
 #
 # operationId: dcim_regions_create
-export def "dcim-regions create" [
+export def "dcim-regions-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10437,7 +10437,7 @@ export def "dcim-regions create" [
 # DELETE /dcim/regions/{id}/
 #
 # operationId: dcim_regions_delete
-export def "dcim-regions delete" [
+export def "dcim-regions-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10473,7 +10473,7 @@ export def "dcim-regions delete" [
 #
 # GET /dcim/regions/{id}/
 # operationId: dcim_regions_read
-export def "dcim-regions get" [
+export def "dcim-regions-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10508,7 +10508,7 @@ export def "dcim-regions get" [
 # PATCH /dcim/regions/{id}/
 #
 # operationId: dcim_regions_partial_update
-export def "dcim-regions update-by-id" [
+export def "dcim-regions-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10550,7 +10550,7 @@ export def "dcim-regions update-by-id" [
 # PUT /dcim/regions/{id}/
 #
 # operationId: dcim_regions_update
-export def "dcim-regions update-by-id-1" [
+export def "dcim-regions-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10593,7 +10593,7 @@ export def "dcim-regions update-by-id-1" [
 #
 # GET /dcim/sites/
 # operationId: dcim_sites_list
-export def "dcim-sites list" [
+export def "dcim-sites-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10736,7 +10736,7 @@ export def "dcim-sites list" [
 # POST /dcim/sites/
 #
 # operationId: dcim_sites_create
-export def "dcim-sites create" [
+export def "dcim-sites-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10791,7 +10791,7 @@ export def "dcim-sites create" [
 # DELETE /dcim/sites/{id}/
 #
 # operationId: dcim_sites_delete
-export def "dcim-sites delete" [
+export def "dcim-sites-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10827,7 +10827,7 @@ export def "dcim-sites delete" [
 #
 # GET /dcim/sites/{id}/
 # operationId: dcim_sites_read
-export def "dcim-sites get" [
+export def "dcim-sites-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10862,7 +10862,7 @@ export def "dcim-sites get" [
 # PATCH /dcim/sites/{id}/
 #
 # operationId: dcim_sites_partial_update
-export def "dcim-sites update-by-id" [
+export def "dcim-sites-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10919,7 +10919,7 @@ export def "dcim-sites update-by-id" [
 # PUT /dcim/sites/{id}/
 #
 # operationId: dcim_sites_update
-export def "dcim-sites update-by-id-1" [
+export def "dcim-sites-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10977,7 +10977,7 @@ export def "dcim-sites update-by-id-1" [
 #
 # GET /dcim/sites/{id}/graphs/
 # operationId: dcim_sites_graphs
-export def "dcim-sites-graphs get" [
+export def "dcim-sites-graphs" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11013,7 +11013,7 @@ export def "dcim-sites-graphs get" [
 #
 # GET /dcim/virtual-chassis/
 # operationId: dcim_virtual-chassis_list
-export def "dcim-virtual-chassis list" [
+export def "dcim-virtual-chassis-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11080,7 +11080,7 @@ export def "dcim-virtual-chassis list" [
 # POST /dcim/virtual-chassis/
 #
 # operationId: dcim_virtual-chassis_create
-export def "dcim-virtual-chassis create" [
+export def "dcim-virtual-chassis-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11119,7 +11119,7 @@ export def "dcim-virtual-chassis create" [
 # DELETE /dcim/virtual-chassis/{id}/
 #
 # operationId: dcim_virtual-chassis_delete
-export def "dcim-virtual-chassis delete" [
+export def "dcim-virtual-chassis-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11155,7 +11155,7 @@ export def "dcim-virtual-chassis delete" [
 #
 # GET /dcim/virtual-chassis/{id}/
 # operationId: dcim_virtual-chassis_read
-export def "dcim-virtual-chassis get" [
+export def "dcim-virtual-chassis-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11190,7 +11190,7 @@ export def "dcim-virtual-chassis get" [
 # PATCH /dcim/virtual-chassis/{id}/
 #
 # operationId: dcim_virtual-chassis_partial_update
-export def "dcim-virtual-chassis update-by-id" [
+export def "dcim-virtual-chassis-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11231,7 +11231,7 @@ export def "dcim-virtual-chassis update-by-id" [
 # PUT /dcim/virtual-chassis/{id}/
 #
 # operationId: dcim_virtual-chassis_update
-export def "dcim-virtual-chassis update-by-id-1" [
+export def "dcim-virtual-chassis-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11272,7 +11272,7 @@ export def "dcim-virtual-chassis update-by-id-1" [
 # GET /extras/_custom_field_choices/
 #
 # operationId: extras__custom_field_choices_list
-export def "extras-custom-field-choices list" [
+export def "extras-custom-field-choices-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11305,7 +11305,7 @@ export def "extras-custom-field-choices list" [
 # GET /extras/_custom_field_choices/{id}/
 #
 # operationId: extras__custom_field_choices_read
-export def "extras-custom-field-choices get" [
+export def "extras-custom-field-choices-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11341,7 +11341,7 @@ export def "extras-custom-field-choices get" [
 #
 # GET /extras/config-contexts/
 # operationId: extras_config-contexts_list
-export def "extras-config-contexts list" [
+export def "extras-config-contexts-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11427,7 +11427,7 @@ export def "extras-config-contexts list" [
 # POST /extras/config-contexts/
 #
 # operationId: extras_config-contexts_create
-export def "extras-config-contexts create" [
+export def "extras-config-contexts-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11477,7 +11477,7 @@ export def "extras-config-contexts create" [
 # DELETE /extras/config-contexts/{id}/
 #
 # operationId: extras_config-contexts_delete
-export def "extras-config-contexts delete" [
+export def "extras-config-contexts-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11513,7 +11513,7 @@ export def "extras-config-contexts delete" [
 #
 # GET /extras/config-contexts/{id}/
 # operationId: extras_config-contexts_read
-export def "extras-config-contexts get" [
+export def "extras-config-contexts-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11548,7 +11548,7 @@ export def "extras-config-contexts get" [
 # PATCH /extras/config-contexts/{id}/
 #
 # operationId: extras_config-contexts_partial_update
-export def "extras-config-contexts update-by-id" [
+export def "extras-config-contexts-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11600,7 +11600,7 @@ export def "extras-config-contexts update-by-id" [
 # PUT /extras/config-contexts/{id}/
 #
 # operationId: extras_config-contexts_update
-export def "extras-config-contexts update-by-id-1" [
+export def "extras-config-contexts-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11653,7 +11653,7 @@ export def "extras-config-contexts update-by-id-1" [
 #
 # GET /extras/export-templates/
 # operationId: extras_export-templates_list
-export def "extras-export-templates list" [
+export def "extras-export-templates-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11709,7 +11709,7 @@ export def "extras-export-templates list" [
 # POST /extras/export-templates/
 #
 # operationId: extras_export-templates_create
-export def "extras-export-templates create" [
+export def "extras-export-templates-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11752,7 +11752,7 @@ export def "extras-export-templates create" [
 # DELETE /extras/export-templates/{id}/
 #
 # operationId: extras_export-templates_delete
-export def "extras-export-templates delete" [
+export def "extras-export-templates-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11788,7 +11788,7 @@ export def "extras-export-templates delete" [
 #
 # GET /extras/export-templates/{id}/
 # operationId: extras_export-templates_read
-export def "extras-export-templates get" [
+export def "extras-export-templates-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11823,7 +11823,7 @@ export def "extras-export-templates get" [
 # PATCH /extras/export-templates/{id}/
 #
 # operationId: extras_export-templates_partial_update
-export def "extras-export-templates update-by-id" [
+export def "extras-export-templates-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11868,7 +11868,7 @@ export def "extras-export-templates update-by-id" [
 # PUT /extras/export-templates/{id}/
 #
 # operationId: extras_export-templates_update
-export def "extras-export-templates update-by-id-1" [
+export def "extras-export-templates-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11914,7 +11914,7 @@ export def "extras-export-templates update-by-id-1" [
 #
 # GET /extras/graphs/
 # operationId: extras_graphs_list
-export def "extras-graphs list" [
+export def "extras-graphs-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11970,7 +11970,7 @@ export def "extras-graphs list" [
 # POST /extras/graphs/
 #
 # operationId: extras_graphs_create
-export def "extras-graphs create" [
+export def "extras-graphs-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12012,7 +12012,7 @@ export def "extras-graphs create" [
 # DELETE /extras/graphs/{id}/
 #
 # operationId: extras_graphs_delete
-export def "extras-graphs delete" [
+export def "extras-graphs-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12048,7 +12048,7 @@ export def "extras-graphs delete" [
 #
 # GET /extras/graphs/{id}/
 # operationId: extras_graphs_read
-export def "extras-graphs get" [
+export def "extras-graphs-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12083,7 +12083,7 @@ export def "extras-graphs get" [
 # PATCH /extras/graphs/{id}/
 #
 # operationId: extras_graphs_partial_update
-export def "extras-graphs update-by-id" [
+export def "extras-graphs-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12127,7 +12127,7 @@ export def "extras-graphs update-by-id" [
 # PUT /extras/graphs/{id}/
 #
 # operationId: extras_graphs_update
-export def "extras-graphs update-by-id-1" [
+export def "extras-graphs-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12172,7 +12172,7 @@ export def "extras-graphs update-by-id-1" [
 #
 # GET /extras/image-attachments/
 # operationId: extras_image-attachments_list
-export def "extras-image-attachments list" [
+export def "extras-image-attachments-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12208,7 +12208,7 @@ export def "extras-image-attachments list" [
 # POST /extras/image-attachments/
 #
 # operationId: extras_image-attachments_create
-export def "extras-image-attachments create" [
+export def "extras-image-attachments-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12249,7 +12249,7 @@ export def "extras-image-attachments create" [
 # DELETE /extras/image-attachments/{id}/
 #
 # operationId: extras_image-attachments_delete
-export def "extras-image-attachments delete" [
+export def "extras-image-attachments-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12285,7 +12285,7 @@ export def "extras-image-attachments delete" [
 #
 # GET /extras/image-attachments/{id}/
 # operationId: extras_image-attachments_read
-export def "extras-image-attachments get" [
+export def "extras-image-attachments-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12320,7 +12320,7 @@ export def "extras-image-attachments get" [
 # PATCH /extras/image-attachments/{id}/
 #
 # operationId: extras_image-attachments_partial_update
-export def "extras-image-attachments update-by-id" [
+export def "extras-image-attachments-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12363,7 +12363,7 @@ export def "extras-image-attachments update-by-id" [
 # PUT /extras/image-attachments/{id}/
 #
 # operationId: extras_image-attachments_update
-export def "extras-image-attachments update-by-id-1" [
+export def "extras-image-attachments-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12407,7 +12407,7 @@ export def "extras-image-attachments update-by-id-1" [
 #
 # GET /extras/object-changes/
 # operationId: extras_object-changes_list
-export def "extras-object-changes list" [
+export def "extras-object-changes-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12485,7 +12485,7 @@ export def "extras-object-changes list" [
 #
 # GET /extras/object-changes/{id}/
 # operationId: extras_object-changes_read
-export def "extras-object-changes get" [
+export def "extras-object-changes-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12521,7 +12521,7 @@ export def "extras-object-changes get" [
 #
 # GET /extras/reports/
 # operationId: extras_reports_list
-export def "extras-reports list" [
+export def "extras-reports-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12555,7 +12555,7 @@ export def "extras-reports list" [
 #
 # GET /extras/reports/{id}/
 # operationId: extras_reports_read
-export def "extras-reports get" [
+export def "extras-reports-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12591,7 +12591,7 @@ export def "extras-reports get" [
 #
 # POST /extras/reports/{id}/run/
 # operationId: extras_reports_run
-export def "extras-reports-run create" [
+export def "extras-reports-run" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12626,7 +12626,7 @@ export def "extras-reports-run create" [
 # GET /extras/scripts/
 #
 # operationId: extras_scripts_list
-export def "extras-scripts list" [
+export def "extras-scripts-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12659,7 +12659,7 @@ export def "extras-scripts list" [
 # GET /extras/scripts/{id}/
 #
 # operationId: extras_scripts_read
-export def "extras-scripts get" [
+export def "extras-scripts-read" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12695,7 +12695,7 @@ export def "extras-scripts get" [
 #
 # GET /extras/tags/
 # operationId: extras_tags_list
-export def "extras-tags list" [
+export def "extras-tags-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12768,7 +12768,7 @@ export def "extras-tags list" [
 # POST /extras/tags/
 #
 # operationId: extras_tags_create
-export def "extras-tags create" [
+export def "extras-tags-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12808,7 +12808,7 @@ export def "extras-tags create" [
 # DELETE /extras/tags/{id}/
 #
 # operationId: extras_tags_delete
-export def "extras-tags delete" [
+export def "extras-tags-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12844,7 +12844,7 @@ export def "extras-tags delete" [
 #
 # GET /extras/tags/{id}/
 # operationId: extras_tags_read
-export def "extras-tags get" [
+export def "extras-tags-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12879,7 +12879,7 @@ export def "extras-tags get" [
 # PATCH /extras/tags/{id}/
 #
 # operationId: extras_tags_partial_update
-export def "extras-tags update-by-id" [
+export def "extras-tags-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12921,7 +12921,7 @@ export def "extras-tags update-by-id" [
 # PUT /extras/tags/{id}/
 #
 # operationId: extras_tags_update
-export def "extras-tags update-by-id-1" [
+export def "extras-tags-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12964,7 +12964,7 @@ export def "extras-tags update-by-id-1" [
 #
 # GET /ipam/aggregates/
 # operationId: ipam_aggregates_list
-export def "ipam-aggregates list" [
+export def "ipam-aggregates-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13027,7 +13027,7 @@ export def "ipam-aggregates list" [
 # POST /ipam/aggregates/
 #
 # operationId: ipam_aggregates_create
-export def "ipam-aggregates create" [
+export def "ipam-aggregates-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13069,7 +13069,7 @@ export def "ipam-aggregates create" [
 # DELETE /ipam/aggregates/{id}/
 #
 # operationId: ipam_aggregates_delete
-export def "ipam-aggregates delete" [
+export def "ipam-aggregates-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13105,7 +13105,7 @@ export def "ipam-aggregates delete" [
 #
 # GET /ipam/aggregates/{id}/
 # operationId: ipam_aggregates_read
-export def "ipam-aggregates get" [
+export def "ipam-aggregates-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13140,7 +13140,7 @@ export def "ipam-aggregates get" [
 # PATCH /ipam/aggregates/{id}/
 #
 # operationId: ipam_aggregates_partial_update
-export def "ipam-aggregates update-by-id" [
+export def "ipam-aggregates-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13184,7 +13184,7 @@ export def "ipam-aggregates update-by-id" [
 # PUT /ipam/aggregates/{id}/
 #
 # operationId: ipam_aggregates_update
-export def "ipam-aggregates update-by-id-1" [
+export def "ipam-aggregates-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13229,7 +13229,7 @@ export def "ipam-aggregates update-by-id-1" [
 #
 # GET /ipam/ip-addresses/
 # operationId: ipam_ip-addresses_list
-export def "ipam-ip-addresses list" [
+export def "ipam-ip-addresses-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13321,7 +13321,7 @@ export def "ipam-ip-addresses list" [
 # POST /ipam/ip-addresses/
 #
 # operationId: ipam_ip-addresses_create
-export def "ipam-ip-addresses create" [
+export def "ipam-ip-addresses-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13369,7 +13369,7 @@ export def "ipam-ip-addresses create" [
 # DELETE /ipam/ip-addresses/{id}/
 #
 # operationId: ipam_ip-addresses_delete
-export def "ipam-ip-addresses delete" [
+export def "ipam-ip-addresses-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13405,7 +13405,7 @@ export def "ipam-ip-addresses delete" [
 #
 # GET /ipam/ip-addresses/{id}/
 # operationId: ipam_ip-addresses_read
-export def "ipam-ip-addresses get" [
+export def "ipam-ip-addresses-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13440,7 +13440,7 @@ export def "ipam-ip-addresses get" [
 # PATCH /ipam/ip-addresses/{id}/
 #
 # operationId: ipam_ip-addresses_partial_update
-export def "ipam-ip-addresses update-by-id" [
+export def "ipam-ip-addresses-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13490,7 +13490,7 @@ export def "ipam-ip-addresses update-by-id" [
 # PUT /ipam/ip-addresses/{id}/
 #
 # operationId: ipam_ip-addresses_update
-export def "ipam-ip-addresses update-by-id-1" [
+export def "ipam-ip-addresses-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13541,7 +13541,7 @@ export def "ipam-ip-addresses update-by-id-1" [
 #
 # GET /ipam/prefixes/
 # operationId: ipam_prefixes_list
-export def "ipam-prefixes list" [
+export def "ipam-prefixes-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13628,7 +13628,7 @@ export def "ipam-prefixes list" [
 # POST /ipam/prefixes/
 #
 # operationId: ipam_prefixes_create
-export def "ipam-prefixes create" [
+export def "ipam-prefixes-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13675,7 +13675,7 @@ export def "ipam-prefixes create" [
 # DELETE /ipam/prefixes/{id}/
 #
 # operationId: ipam_prefixes_delete
-export def "ipam-prefixes delete" [
+export def "ipam-prefixes-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13711,7 +13711,7 @@ export def "ipam-prefixes delete" [
 #
 # GET /ipam/prefixes/{id}/
 # operationId: ipam_prefixes_read
-export def "ipam-prefixes get" [
+export def "ipam-prefixes-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13746,7 +13746,7 @@ export def "ipam-prefixes get" [
 # PATCH /ipam/prefixes/{id}/
 #
 # operationId: ipam_prefixes_partial_update
-export def "ipam-prefixes update-by-id" [
+export def "ipam-prefixes-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13795,7 +13795,7 @@ export def "ipam-prefixes update-by-id" [
 # PUT /ipam/prefixes/{id}/
 #
 # operationId: ipam_prefixes_update
-export def "ipam-prefixes update-by-id-1" [
+export def "ipam-prefixes-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13845,7 +13845,7 @@ export def "ipam-prefixes update-by-id-1" [
 #
 # GET /ipam/prefixes/{id}/available-ips/
 # operationId: ipam_prefixes_available-ips_read
-export def "ipam-prefixes-available-ips get" [
+export def "ipam-prefixes-available-ips-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13881,7 +13881,7 @@ export def "ipam-prefixes-available-ips get" [
 #
 # POST /ipam/prefixes/{id}/available-ips/
 # operationId: ipam_prefixes_available-ips_create
-export def "ipam-prefixes-available-ips create" [
+export def "ipam-prefixes-available-ips-create" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13921,7 +13921,7 @@ export def "ipam-prefixes-available-ips create" [
 #
 # GET /ipam/prefixes/{id}/available-prefixes/
 # operationId: ipam_prefixes_available-prefixes_read
-export def "ipam-prefixes-available-prefixes get" [
+export def "ipam-prefixes-available-prefixes-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13957,7 +13957,7 @@ export def "ipam-prefixes-available-prefixes get" [
 #
 # POST /ipam/prefixes/{id}/available-prefixes/
 # operationId: ipam_prefixes_available-prefixes_create
-export def "ipam-prefixes-available-prefixes create" [
+export def "ipam-prefixes-available-prefixes-create" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14007,7 +14007,7 @@ export def "ipam-prefixes-available-prefixes create" [
 #
 # GET /ipam/rirs/
 # operationId: ipam_rirs_list
-export def "ipam-rirs list" [
+export def "ipam-rirs-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14081,7 +14081,7 @@ export def "ipam-rirs list" [
 # POST /ipam/rirs/
 #
 # operationId: ipam_rirs_create
-export def "ipam-rirs create" [
+export def "ipam-rirs-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14121,7 +14121,7 @@ export def "ipam-rirs create" [
 # DELETE /ipam/rirs/{id}/
 #
 # operationId: ipam_rirs_delete
-export def "ipam-rirs delete" [
+export def "ipam-rirs-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14157,7 +14157,7 @@ export def "ipam-rirs delete" [
 #
 # GET /ipam/rirs/{id}/
 # operationId: ipam_rirs_read
-export def "ipam-rirs get" [
+export def "ipam-rirs-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14192,7 +14192,7 @@ export def "ipam-rirs get" [
 # PATCH /ipam/rirs/{id}/
 #
 # operationId: ipam_rirs_partial_update
-export def "ipam-rirs update-by-id" [
+export def "ipam-rirs-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14234,7 +14234,7 @@ export def "ipam-rirs update-by-id" [
 # PUT /ipam/rirs/{id}/
 #
 # operationId: ipam_rirs_update
-export def "ipam-rirs update-by-id-1" [
+export def "ipam-rirs-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14277,7 +14277,7 @@ export def "ipam-rirs update-by-id-1" [
 #
 # GET /ipam/roles/
 # operationId: ipam_roles_list
-export def "ipam-roles list" [
+export def "ipam-roles-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14340,7 +14340,7 @@ export def "ipam-roles list" [
 # POST /ipam/roles/
 #
 # operationId: ipam_roles_create
-export def "ipam-roles create" [
+export def "ipam-roles-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14380,7 +14380,7 @@ export def "ipam-roles create" [
 # DELETE /ipam/roles/{id}/
 #
 # operationId: ipam_roles_delete
-export def "ipam-roles delete" [
+export def "ipam-roles-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14416,7 +14416,7 @@ export def "ipam-roles delete" [
 #
 # GET /ipam/roles/{id}/
 # operationId: ipam_roles_read
-export def "ipam-roles get" [
+export def "ipam-roles-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14451,7 +14451,7 @@ export def "ipam-roles get" [
 # PATCH /ipam/roles/{id}/
 #
 # operationId: ipam_roles_partial_update
-export def "ipam-roles update-by-id" [
+export def "ipam-roles-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14493,7 +14493,7 @@ export def "ipam-roles update-by-id" [
 # PUT /ipam/roles/{id}/
 #
 # operationId: ipam_roles_update
-export def "ipam-roles update-by-id-1" [
+export def "ipam-roles-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14536,7 +14536,7 @@ export def "ipam-roles update-by-id-1" [
 #
 # GET /ipam/services/
 # operationId: ipam_services_list
-export def "ipam-services list" [
+export def "ipam-services-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14613,7 +14613,7 @@ export def "ipam-services list" [
 # POST /ipam/services/
 #
 # operationId: ipam_services_create
-export def "ipam-services create" [
+export def "ipam-services-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14658,7 +14658,7 @@ export def "ipam-services create" [
 # DELETE /ipam/services/{id}/
 #
 # operationId: ipam_services_delete
-export def "ipam-services delete" [
+export def "ipam-services-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14694,7 +14694,7 @@ export def "ipam-services delete" [
 #
 # GET /ipam/services/{id}/
 # operationId: ipam_services_read
-export def "ipam-services get" [
+export def "ipam-services-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14729,7 +14729,7 @@ export def "ipam-services get" [
 # PATCH /ipam/services/{id}/
 #
 # operationId: ipam_services_partial_update
-export def "ipam-services update-by-id" [
+export def "ipam-services-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14776,7 +14776,7 @@ export def "ipam-services update-by-id" [
 # PUT /ipam/services/{id}/
 #
 # operationId: ipam_services_update
-export def "ipam-services update-by-id-1" [
+export def "ipam-services-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14824,7 +14824,7 @@ export def "ipam-services update-by-id-1" [
 #
 # GET /ipam/vlan-groups/
 # operationId: ipam_vlan-groups_list
-export def "ipam-vlan-groups list" [
+export def "ipam-vlan-groups-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14905,7 +14905,7 @@ export def "ipam-vlan-groups list" [
 # POST /ipam/vlan-groups/
 #
 # operationId: ipam_vlan-groups_create
-export def "ipam-vlan-groups create" [
+export def "ipam-vlan-groups-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14945,7 +14945,7 @@ export def "ipam-vlan-groups create" [
 # DELETE /ipam/vlan-groups/{id}/
 #
 # operationId: ipam_vlan-groups_delete
-export def "ipam-vlan-groups delete" [
+export def "ipam-vlan-groups-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14981,7 +14981,7 @@ export def "ipam-vlan-groups delete" [
 #
 # GET /ipam/vlan-groups/{id}/
 # operationId: ipam_vlan-groups_read
-export def "ipam-vlan-groups get" [
+export def "ipam-vlan-groups-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15016,7 +15016,7 @@ export def "ipam-vlan-groups get" [
 # PATCH /ipam/vlan-groups/{id}/
 #
 # operationId: ipam_vlan-groups_partial_update
-export def "ipam-vlan-groups update-by-id" [
+export def "ipam-vlan-groups-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15058,7 +15058,7 @@ export def "ipam-vlan-groups update-by-id" [
 # PUT /ipam/vlan-groups/{id}/
 #
 # operationId: ipam_vlan-groups_update
-export def "ipam-vlan-groups update-by-id-1" [
+export def "ipam-vlan-groups-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15101,7 +15101,7 @@ export def "ipam-vlan-groups update-by-id-1" [
 #
 # GET /ipam/vlans/
 # operationId: ipam_vlans_list
-export def "ipam-vlans list" [
+export def "ipam-vlans-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15194,7 +15194,7 @@ export def "ipam-vlans list" [
 # POST /ipam/vlans/
 #
 # operationId: ipam_vlans_create
-export def "ipam-vlans create" [
+export def "ipam-vlans-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15240,7 +15240,7 @@ export def "ipam-vlans create" [
 # DELETE /ipam/vlans/{id}/
 #
 # operationId: ipam_vlans_delete
-export def "ipam-vlans delete" [
+export def "ipam-vlans-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15276,7 +15276,7 @@ export def "ipam-vlans delete" [
 #
 # GET /ipam/vlans/{id}/
 # operationId: ipam_vlans_read
-export def "ipam-vlans get" [
+export def "ipam-vlans-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15311,7 +15311,7 @@ export def "ipam-vlans get" [
 # PATCH /ipam/vlans/{id}/
 #
 # operationId: ipam_vlans_partial_update
-export def "ipam-vlans update-by-id" [
+export def "ipam-vlans-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15359,7 +15359,7 @@ export def "ipam-vlans update-by-id" [
 # PUT /ipam/vlans/{id}/
 #
 # operationId: ipam_vlans_update
-export def "ipam-vlans update-by-id-1" [
+export def "ipam-vlans-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15408,7 +15408,7 @@ export def "ipam-vlans update-by-id-1" [
 #
 # GET /ipam/vrfs/
 # operationId: ipam_vrfs_list
-export def "ipam-vrfs list" [
+export def "ipam-vrfs-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15488,7 +15488,7 @@ export def "ipam-vrfs list" [
 # POST /ipam/vrfs/
 #
 # operationId: ipam_vrfs_create
-export def "ipam-vrfs create" [
+export def "ipam-vrfs-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15531,7 +15531,7 @@ export def "ipam-vrfs create" [
 # DELETE /ipam/vrfs/{id}/
 #
 # operationId: ipam_vrfs_delete
-export def "ipam-vrfs delete" [
+export def "ipam-vrfs-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15567,7 +15567,7 @@ export def "ipam-vrfs delete" [
 #
 # GET /ipam/vrfs/{id}/
 # operationId: ipam_vrfs_read
-export def "ipam-vrfs get" [
+export def "ipam-vrfs-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15602,7 +15602,7 @@ export def "ipam-vrfs get" [
 # PATCH /ipam/vrfs/{id}/
 #
 # operationId: ipam_vrfs_partial_update
-export def "ipam-vrfs update-by-id" [
+export def "ipam-vrfs-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15647,7 +15647,7 @@ export def "ipam-vrfs update-by-id" [
 # PUT /ipam/vrfs/{id}/
 #
 # operationId: ipam_vrfs_update
-export def "ipam-vrfs update-by-id-1" [
+export def "ipam-vrfs-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15693,7 +15693,7 @@ export def "ipam-vrfs update-by-id-1" [
 #
 # GET /secrets/generate-rsa-key-pair/
 # operationId: secrets_generate-rsa-key-pair_list
-export def "secrets-generate-rsa-key-pair list" [
+export def "secrets-generate-rsa-key-pair-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15727,7 +15727,7 @@ export def "secrets-generate-rsa-key-pair list" [
 #
 # POST /secrets/get-session-key/
 # operationId: secrets_get-session-key_create
-export def "secrets-get-session-key create" [
+export def "secrets-get-session-key-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15761,7 +15761,7 @@ export def "secrets-get-session-key create" [
 #
 # GET /secrets/secret-roles/
 # operationId: secrets_secret-roles_list
-export def "secrets-secret-roles list" [
+export def "secrets-secret-roles-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15824,7 +15824,7 @@ export def "secrets-secret-roles list" [
 # POST /secrets/secret-roles/
 #
 # operationId: secrets_secret-roles_create
-export def "secrets-secret-roles create" [
+export def "secrets-secret-roles-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15863,7 +15863,7 @@ export def "secrets-secret-roles create" [
 # DELETE /secrets/secret-roles/{id}/
 #
 # operationId: secrets_secret-roles_delete
-export def "secrets-secret-roles delete" [
+export def "secrets-secret-roles-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15899,7 +15899,7 @@ export def "secrets-secret-roles delete" [
 #
 # GET /secrets/secret-roles/{id}/
 # operationId: secrets_secret-roles_read
-export def "secrets-secret-roles get" [
+export def "secrets-secret-roles-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15934,7 +15934,7 @@ export def "secrets-secret-roles get" [
 # PATCH /secrets/secret-roles/{id}/
 #
 # operationId: secrets_secret-roles_partial_update
-export def "secrets-secret-roles update-by-id" [
+export def "secrets-secret-roles-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15975,7 +15975,7 @@ export def "secrets-secret-roles update-by-id" [
 # PUT /secrets/secret-roles/{id}/
 #
 # operationId: secrets_secret-roles_update
-export def "secrets-secret-roles update-by-id-1" [
+export def "secrets-secret-roles-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16016,7 +16016,7 @@ export def "secrets-secret-roles update-by-id-1" [
 # GET /secrets/secrets/
 #
 # operationId: secrets_secrets_list
-export def "secrets-secrets list" [
+export def "secrets-secrets-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -16085,7 +16085,7 @@ export def "secrets-secrets list" [
 # POST /secrets/secrets/
 #
 # operationId: secrets_secrets_create
-export def "secrets-secrets create" [
+export def "secrets-secrets-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -16127,7 +16127,7 @@ export def "secrets-secrets create" [
 # DELETE /secrets/secrets/{id}/
 #
 # operationId: secrets_secrets_delete
-export def "secrets-secrets delete" [
+export def "secrets-secrets-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16162,7 +16162,7 @@ export def "secrets-secrets delete" [
 # GET /secrets/secrets/{id}/
 #
 # operationId: secrets_secrets_read
-export def "secrets-secrets get" [
+export def "secrets-secrets-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16197,7 +16197,7 @@ export def "secrets-secrets get" [
 # PATCH /secrets/secrets/{id}/
 #
 # operationId: secrets_secrets_partial_update
-export def "secrets-secrets update-by-id" [
+export def "secrets-secrets-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16241,7 +16241,7 @@ export def "secrets-secrets update-by-id" [
 # PUT /secrets/secrets/{id}/
 #
 # operationId: secrets_secrets_update
-export def "secrets-secrets update-by-id-1" [
+export def "secrets-secrets-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16286,7 +16286,7 @@ export def "secrets-secrets update-by-id-1" [
 #
 # GET /tenancy/tenant-groups/
 # operationId: tenancy_tenant-groups_list
-export def "tenancy-tenant-groups list" [
+export def "tenancy-tenant-groups-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -16363,7 +16363,7 @@ export def "tenancy-tenant-groups list" [
 # POST /tenancy/tenant-groups/
 #
 # operationId: tenancy_tenant-groups_create
-export def "tenancy-tenant-groups create" [
+export def "tenancy-tenant-groups-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -16403,7 +16403,7 @@ export def "tenancy-tenant-groups create" [
 # DELETE /tenancy/tenant-groups/{id}/
 #
 # operationId: tenancy_tenant-groups_delete
-export def "tenancy-tenant-groups delete" [
+export def "tenancy-tenant-groups-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16439,7 +16439,7 @@ export def "tenancy-tenant-groups delete" [
 #
 # GET /tenancy/tenant-groups/{id}/
 # operationId: tenancy_tenant-groups_read
-export def "tenancy-tenant-groups get" [
+export def "tenancy-tenant-groups-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16474,7 +16474,7 @@ export def "tenancy-tenant-groups get" [
 # PATCH /tenancy/tenant-groups/{id}/
 #
 # operationId: tenancy_tenant-groups_partial_update
-export def "tenancy-tenant-groups update-by-id" [
+export def "tenancy-tenant-groups-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16516,7 +16516,7 @@ export def "tenancy-tenant-groups update-by-id" [
 # PUT /tenancy/tenant-groups/{id}/
 #
 # operationId: tenancy_tenant-groups_update
-export def "tenancy-tenant-groups update-by-id-1" [
+export def "tenancy-tenant-groups-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16559,7 +16559,7 @@ export def "tenancy-tenant-groups update-by-id-1" [
 #
 # GET /tenancy/tenants/
 # operationId: tenancy_tenants_list
-export def "tenancy-tenants list" [
+export def "tenancy-tenants-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -16634,7 +16634,7 @@ export def "tenancy-tenants list" [
 # POST /tenancy/tenants/
 #
 # operationId: tenancy_tenants_create
-export def "tenancy-tenants create" [
+export def "tenancy-tenants-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -16677,7 +16677,7 @@ export def "tenancy-tenants create" [
 # DELETE /tenancy/tenants/{id}/
 #
 # operationId: tenancy_tenants_delete
-export def "tenancy-tenants delete" [
+export def "tenancy-tenants-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16713,7 +16713,7 @@ export def "tenancy-tenants delete" [
 #
 # GET /tenancy/tenants/{id}/
 # operationId: tenancy_tenants_read
-export def "tenancy-tenants get" [
+export def "tenancy-tenants-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16748,7 +16748,7 @@ export def "tenancy-tenants get" [
 # PATCH /tenancy/tenants/{id}/
 #
 # operationId: tenancy_tenants_partial_update
-export def "tenancy-tenants update-by-id" [
+export def "tenancy-tenants-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16793,7 +16793,7 @@ export def "tenancy-tenants update-by-id" [
 # PUT /tenancy/tenants/{id}/
 #
 # operationId: tenancy_tenants_update
-export def "tenancy-tenants update-by-id-1" [
+export def "tenancy-tenants-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16839,7 +16839,7 @@ export def "tenancy-tenants update-by-id-1" [
 #
 # GET /virtualization/cluster-groups/
 # operationId: virtualization_cluster-groups_list
-export def "virtualization-cluster-groups list" [
+export def "virtualization-cluster-groups-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -16912,7 +16912,7 @@ export def "virtualization-cluster-groups list" [
 # POST /virtualization/cluster-groups/
 #
 # operationId: virtualization_cluster-groups_create
-export def "virtualization-cluster-groups create" [
+export def "virtualization-cluster-groups-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -16951,7 +16951,7 @@ export def "virtualization-cluster-groups create" [
 # DELETE /virtualization/cluster-groups/{id}/
 #
 # operationId: virtualization_cluster-groups_delete
-export def "virtualization-cluster-groups delete" [
+export def "virtualization-cluster-groups-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16987,7 +16987,7 @@ export def "virtualization-cluster-groups delete" [
 #
 # GET /virtualization/cluster-groups/{id}/
 # operationId: virtualization_cluster-groups_read
-export def "virtualization-cluster-groups get" [
+export def "virtualization-cluster-groups-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17022,7 +17022,7 @@ export def "virtualization-cluster-groups get" [
 # PATCH /virtualization/cluster-groups/{id}/
 #
 # operationId: virtualization_cluster-groups_partial_update
-export def "virtualization-cluster-groups update-by-id" [
+export def "virtualization-cluster-groups-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17063,7 +17063,7 @@ export def "virtualization-cluster-groups update-by-id" [
 # PUT /virtualization/cluster-groups/{id}/
 #
 # operationId: virtualization_cluster-groups_update
-export def "virtualization-cluster-groups update-by-id-1" [
+export def "virtualization-cluster-groups-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17105,7 +17105,7 @@ export def "virtualization-cluster-groups update-by-id-1" [
 #
 # GET /virtualization/cluster-types/
 # operationId: virtualization_cluster-types_list
-export def "virtualization-cluster-types list" [
+export def "virtualization-cluster-types-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -17178,7 +17178,7 @@ export def "virtualization-cluster-types list" [
 # POST /virtualization/cluster-types/
 #
 # operationId: virtualization_cluster-types_create
-export def "virtualization-cluster-types create" [
+export def "virtualization-cluster-types-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -17217,7 +17217,7 @@ export def "virtualization-cluster-types create" [
 # DELETE /virtualization/cluster-types/{id}/
 #
 # operationId: virtualization_cluster-types_delete
-export def "virtualization-cluster-types delete" [
+export def "virtualization-cluster-types-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17253,7 +17253,7 @@ export def "virtualization-cluster-types delete" [
 #
 # GET /virtualization/cluster-types/{id}/
 # operationId: virtualization_cluster-types_read
-export def "virtualization-cluster-types get" [
+export def "virtualization-cluster-types-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17288,7 +17288,7 @@ export def "virtualization-cluster-types get" [
 # PATCH /virtualization/cluster-types/{id}/
 #
 # operationId: virtualization_cluster-types_partial_update
-export def "virtualization-cluster-types update-by-id" [
+export def "virtualization-cluster-types-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17329,7 +17329,7 @@ export def "virtualization-cluster-types update-by-id" [
 # PUT /virtualization/cluster-types/{id}/
 #
 # operationId: virtualization_cluster-types_update
-export def "virtualization-cluster-types update-by-id-1" [
+export def "virtualization-cluster-types-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17371,7 +17371,7 @@ export def "virtualization-cluster-types update-by-id-1" [
 #
 # GET /virtualization/clusters/
 # operationId: virtualization_clusters_list
-export def "virtualization-clusters list" [
+export def "virtualization-clusters-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -17456,7 +17456,7 @@ export def "virtualization-clusters list" [
 # POST /virtualization/clusters/
 #
 # operationId: virtualization_clusters_create
-export def "virtualization-clusters create" [
+export def "virtualization-clusters-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -17500,7 +17500,7 @@ export def "virtualization-clusters create" [
 # DELETE /virtualization/clusters/{id}/
 #
 # operationId: virtualization_clusters_delete
-export def "virtualization-clusters delete" [
+export def "virtualization-clusters-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17536,7 +17536,7 @@ export def "virtualization-clusters delete" [
 #
 # GET /virtualization/clusters/{id}/
 # operationId: virtualization_clusters_read
-export def "virtualization-clusters get" [
+export def "virtualization-clusters-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17571,7 +17571,7 @@ export def "virtualization-clusters get" [
 # PATCH /virtualization/clusters/{id}/
 #
 # operationId: virtualization_clusters_partial_update
-export def "virtualization-clusters update-by-id" [
+export def "virtualization-clusters-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17617,7 +17617,7 @@ export def "virtualization-clusters update-by-id" [
 # PUT /virtualization/clusters/{id}/
 #
 # operationId: virtualization_clusters_update
-export def "virtualization-clusters update-by-id-1" [
+export def "virtualization-clusters-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17664,7 +17664,7 @@ export def "virtualization-clusters update-by-id-1" [
 #
 # GET /virtualization/interfaces/
 # operationId: virtualization_interfaces_list
-export def "virtualization-interfaces list" [
+export def "virtualization-interfaces-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -17738,7 +17738,7 @@ export def "virtualization-interfaces list" [
 # POST /virtualization/interfaces/
 #
 # operationId: virtualization_interfaces_create
-export def "virtualization-interfaces create" [
+export def "virtualization-interfaces-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -17785,7 +17785,7 @@ export def "virtualization-interfaces create" [
 # DELETE /virtualization/interfaces/{id}/
 #
 # operationId: virtualization_interfaces_delete
-export def "virtualization-interfaces delete" [
+export def "virtualization-interfaces-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17821,7 +17821,7 @@ export def "virtualization-interfaces delete" [
 #
 # GET /virtualization/interfaces/{id}/
 # operationId: virtualization_interfaces_read
-export def "virtualization-interfaces get" [
+export def "virtualization-interfaces-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17856,7 +17856,7 @@ export def "virtualization-interfaces get" [
 # PATCH /virtualization/interfaces/{id}/
 #
 # operationId: virtualization_interfaces_partial_update
-export def "virtualization-interfaces update-by-id" [
+export def "virtualization-interfaces-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17905,7 +17905,7 @@ export def "virtualization-interfaces update-by-id" [
 # PUT /virtualization/interfaces/{id}/
 #
 # operationId: virtualization_interfaces_update
-export def "virtualization-interfaces update-by-id-1" [
+export def "virtualization-interfaces-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17955,7 +17955,7 @@ export def "virtualization-interfaces update-by-id-1" [
 #
 # GET /virtualization/virtual-machines/
 # operationId: virtualization_virtual-machines_list
-export def "virtualization-virtual-machines list" [
+export def "virtualization-virtual-machines-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -18083,7 +18083,7 @@ export def "virtualization-virtual-machines list" [
 # POST /virtualization/virtual-machines/
 #
 # operationId: virtualization_virtual-machines_create
-export def "virtualization-virtual-machines create" [
+export def "virtualization-virtual-machines-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -18134,7 +18134,7 @@ export def "virtualization-virtual-machines create" [
 # DELETE /virtualization/virtual-machines/{id}/
 #
 # operationId: virtualization_virtual-machines_delete
-export def "virtualization-virtual-machines delete" [
+export def "virtualization-virtual-machines-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18170,7 +18170,7 @@ export def "virtualization-virtual-machines delete" [
 #
 # GET /virtualization/virtual-machines/{id}/
 # operationId: virtualization_virtual-machines_read
-export def "virtualization-virtual-machines get" [
+export def "virtualization-virtual-machines-read" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18205,7 +18205,7 @@ export def "virtualization-virtual-machines get" [
 # PATCH /virtualization/virtual-machines/{id}/
 #
 # operationId: virtualization_virtual-machines_partial_update
-export def "virtualization-virtual-machines update-by-id" [
+export def "virtualization-virtual-machines-partial-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18258,7 +18258,7 @@ export def "virtualization-virtual-machines update-by-id" [
 # PUT /virtualization/virtual-machines/{id}/
 #
 # operationId: virtualization_virtual-machines_update
-export def "virtualization-virtual-machines update-by-id-1" [
+export def "virtualization-virtual-machines-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

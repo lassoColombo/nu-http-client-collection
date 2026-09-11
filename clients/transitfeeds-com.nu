@@ -102,7 +102,7 @@ def type-completer [] { ["gtfs" "gtfsrealtime"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-feed-versions get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-feed-versions" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -126,7 +126,7 @@ export def commands []: nothing -> table {
 #
 # GET /getFeedVersions
 # operationId: getFeedVersions
-export def "get-feed-versions get" [
+export def "get-feed-versions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -167,7 +167,7 @@ export def "get-feed-versions get" [
 #
 # GET /getFeeds
 # operationId: getFeeds
-export def "get-feeds get" [
+export def "get-feeds" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -208,7 +208,7 @@ export def "get-feeds get" [
 #
 # GET /getLatestFeedVersion
 # operationId: getLatestFeedVersion
-export def "get-latest-feed-version get" [
+export def "get-latest-feed-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -245,7 +245,7 @@ export def "get-latest-feed-version get" [
 #
 # GET /getLocations
 # operationId: getLocations
-export def "get-locations get" [
+export def "get-locations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

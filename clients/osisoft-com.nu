@@ -123,7 +123,7 @@ def accept-completer [] { ["application/json" "application/x-ms-application" "te
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "home get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "home-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -147,7 +147,7 @@ export def commands []: nothing -> table {
 #
 # GET /
 # operationId: Home_Get
-export def "home get" [
+export def "home-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -182,7 +182,7 @@ export def "home get" [
 #
 # GET /analyses
 # operationId: Analysis_GetByPath
-export def "analyses get-analysis-by-path" [
+export def "analysis-get-by-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -221,7 +221,7 @@ export def "analyses get-analysis-by-path" [
 #
 # GET /analyses/search
 # operationId: Analysis_GetAnalysesQuery
-export def "analyses-search get-analysis-list" [
+export def "analysis-get-analyses-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -263,7 +263,7 @@ export def "analyses-search get-analysis-list" [
 #
 # DELETE /analyses/{webId}
 # operationId: Analysis_Delete
-export def "analyses delete-analysis" [
+export def "analysis-delete" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -300,7 +300,7 @@ export def "analyses delete-analysis" [
 #
 # GET /analyses/{webId}
 # operationId: Analysis_Get
-export def "analyses get-analysis" [
+export def "analysis-get" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -342,7 +342,7 @@ export def "analyses get-analysis" [
 # operationId: Analysis_Update
 # --Links shape: {AnalysisRule?: string, AnalysisRulePlugIn?: string, Categories?: string, Database?: string, Security?: string, SecurityEntries?: string, Self?: string, Target?: string, Template?: string, TimeRule?: string, TimeRulePlugIn?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "analyses update-analysis" [
+export def "analysis-update" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -406,7 +406,7 @@ export def "analyses update-analysis" [
 #
 # GET /analyses/{webId}/categories
 # operationId: Analysis_GetCategories
-export def "analyses-categories get-analysis" [
+export def "analysis-get-categories" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -446,7 +446,7 @@ export def "analyses-categories get-analysis" [
 #
 # GET /analyses/{webId}/security
 # operationId: Analysis_GetSecurity
-export def "analyses-security get-analysis" [
+export def "analysis-get-security" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -488,7 +488,7 @@ export def "analyses-security get-analysis" [
 #
 # GET /analyses/{webId}/securityentries
 # operationId: Analysis_GetSecurityEntries
-export def "analyses-securityentries get-analysis-security-entries" [
+export def "analysis-get-security-entries" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -531,7 +531,7 @@ export def "analyses-securityentries get-analysis-security-entries" [
 # operationId: Analysis_CreateSecurityEntry
 # --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "analyses-securityentries create-analysis-security-entry" [
+export def "analysis-create-security-entry" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -580,7 +580,7 @@ export def "analyses-securityentries create-analysis-security-entry" [
 #
 # DELETE /analyses/{webId}/securityentries/{name}
 # operationId: Analysis_DeleteSecurityEntry
-export def "analyses-securityentries delete-analysis-security-entry" [
+export def "analysis-delete-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -621,7 +621,7 @@ export def "analyses-securityentries delete-analysis-security-entry" [
 #
 # GET /analyses/{webId}/securityentries/{name}
 # operationId: Analysis_GetSecurityEntryByName
-export def "analyses-securityentries get-analysis-security-entry" [
+export def "analysis-get-security-entry-by-name" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -665,7 +665,7 @@ export def "analyses-securityentries get-analysis-security-entry" [
 # operationId: Analysis_UpdateSecurityEntry
 # --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "analyses-securityentries update-analysis-security-entry" [
+export def "analysis-update-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -715,7 +715,7 @@ export def "analyses-securityentries update-analysis-security-entry" [
 #
 # GET /analysiscategories
 # operationId: AnalysisCategory_GetByPath
-export def "analysiscategories get-analysis-category-by-path" [
+export def "analysis-category-get-by-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -754,7 +754,7 @@ export def "analysiscategories get-analysis-category-by-path" [
 #
 # DELETE /analysiscategories/{webId}
 # operationId: AnalysisCategory_Delete
-export def "analysiscategories delete-analysis-category" [
+export def "analysis-category-delete" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -791,7 +791,7 @@ export def "analysiscategories delete-analysis-category" [
 #
 # GET /analysiscategories/{webId}
 # operationId: AnalysisCategory_Get
-export def "analysiscategories get-analysis-category" [
+export def "analysis-category-get" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -833,7 +833,7 @@ export def "analysiscategories get-analysis-category" [
 # operationId: AnalysisCategory_Update
 # --Links shape: {Database?: string, Security?: string, SecurityEntries?: string, Self?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "analysiscategories update-analysis-category" [
+export def "analysis-category-update" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -880,7 +880,7 @@ export def "analysiscategories update-analysis-category" [
 #
 # GET /analysiscategories/{webId}/security
 # operationId: AnalysisCategory_GetSecurity
-export def "analysiscategories-security get-analysis-category" [
+export def "analysis-category-get-security" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -922,7 +922,7 @@ export def "analysiscategories-security get-analysis-category" [
 #
 # GET /analysiscategories/{webId}/securityentries
 # operationId: AnalysisCategory_GetSecurityEntries
-export def "analysiscategories-securityentries get-analysis-category-security-entries" [
+export def "analysis-category-get-security-entries" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -965,7 +965,7 @@ export def "analysiscategories-securityentries get-analysis-category-security-en
 # operationId: AnalysisCategory_CreateSecurityEntry
 # --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "analysiscategories-securityentries create-analysis-category-security-entry" [
+export def "analysis-category-create-security-entry" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1014,7 +1014,7 @@ export def "analysiscategories-securityentries create-analysis-category-security
 #
 # DELETE /analysiscategories/{webId}/securityentries/{name}
 # operationId: AnalysisCategory_DeleteSecurityEntry
-export def "analysiscategories-securityentries delete-analysis-category-security-entry" [
+export def "analysis-category-delete-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1055,7 +1055,7 @@ export def "analysiscategories-securityentries delete-analysis-category-security
 #
 # GET /analysiscategories/{webId}/securityentries/{name}
 # operationId: AnalysisCategory_GetSecurityEntryByName
-export def "analysiscategories-securityentries get-analysis-category-security-entry" [
+export def "analysis-category-get-security-entry-by-name" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1099,7 +1099,7 @@ export def "analysiscategories-securityentries get-analysis-category-security-en
 # operationId: AnalysisCategory_UpdateSecurityEntry
 # --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "analysiscategories-securityentries update-analysis-category-security-entry" [
+export def "analysis-category-update-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1149,7 +1149,7 @@ export def "analysiscategories-securityentries update-analysis-category-security
 #
 # GET /analysisruleplugins
 # operationId: AnalysisRulePlugIn_GetByPath
-export def "analysisruleplugins get-analysis-rule-plug-in-by-path" [
+export def "analysis-rule-plug-in-get-by-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1188,7 +1188,7 @@ export def "analysisruleplugins get-analysis-rule-plug-in-by-path" [
 #
 # GET /analysisruleplugins/{webId}
 # operationId: AnalysisRulePlugIn_Get
-export def "analysisruleplugins get-analysis-rule-plug-in" [
+export def "analysis-rule-plug-in-get" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1228,7 +1228,7 @@ export def "analysisruleplugins get-analysis-rule-plug-in" [
 #
 # GET /analysisrules
 # operationId: AnalysisRule_GetByPath
-export def "analysisrules get-analysis-rule-by-path" [
+export def "analysis-rule-get-by-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1267,7 +1267,7 @@ export def "analysisrules get-analysis-rule-by-path" [
 #
 # DELETE /analysisrules/{webId}
 # operationId: AnalysisRule_Delete
-export def "analysisrules delete-analysis-rule" [
+export def "analysis-rule-delete" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1304,7 +1304,7 @@ export def "analysisrules delete-analysis-rule" [
 #
 # GET /analysisrules/{webId}
 # operationId: AnalysisRule_Get
-export def "analysisrules get-analysis-rule" [
+export def "analysis-rule-get" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1346,7 +1346,7 @@ export def "analysisrules get-analysis-rule" [
 # operationId: AnalysisRule_Update
 # --Links shape: {Analysis?: string, AnalysisRules?: string, AnalysisTemplate?: string, Parent?: string, PlugIn?: string, Self?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "analysisrules update-analysis-rule" [
+export def "analysis-rule-update" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1402,7 +1402,7 @@ export def "analysisrules update-analysis-rule" [
 #
 # GET /analysisrules/{webId}/analysisrules
 # operationId: AnalysisRule_GetAnalysisRules
-export def "analysisrules-analysisrules get-analysis-rule-analysis-rules" [
+export def "analysis-rule-get-analysis-rules" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1450,7 +1450,7 @@ export def "analysisrules-analysisrules get-analysis-rule-analysis-rules" [
 # operationId: AnalysisRule_CreateAnalysisRule
 # --Links shape: {Analysis?: string, AnalysisRules?: string, AnalysisTemplate?: string, Parent?: string, PlugIn?: string, Self?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "analysisrules-analysisrules create-analysis-rule-analysis-rule" [
+export def "analysis-rule-create-analysis-rule" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1508,7 +1508,7 @@ export def "analysisrules-analysisrules create-analysis-rule-analysis-rule" [
 #
 # GET /analysistemplates
 # operationId: AnalysisTemplate_GetByPath
-export def "analysistemplates get-analysis-template-by-path" [
+export def "analysis-template-get-by-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1547,7 +1547,7 @@ export def "analysistemplates get-analysis-template-by-path" [
 #
 # POST /analysistemplates
 # operationId: AnalysisTemplate_CreateFromAnalysis
-export def "analysistemplates create-analysis-template-from-analysis" [
+export def "analysis-template-create-from-analysis" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1586,7 +1586,7 @@ export def "analysistemplates create-analysis-template-from-analysis" [
 #
 # GET /analysistemplates/search
 # operationId: AnalysisTemplate_GetAnalysisTemplatesQuery
-export def "analysistemplates-search get-analysis-template-analysis-templates-list" [
+export def "analysis-template-get-analysis-templates-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1628,7 +1628,7 @@ export def "analysistemplates-search get-analysis-template-analysis-templates-li
 #
 # DELETE /analysistemplates/{webId}
 # operationId: AnalysisTemplate_Delete
-export def "analysistemplates delete-analysis-template" [
+export def "analysis-template-delete" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1665,7 +1665,7 @@ export def "analysistemplates delete-analysis-template" [
 #
 # GET /analysistemplates/{webId}
 # operationId: AnalysisTemplate_Get
-export def "analysistemplates get-analysis-template" [
+export def "analysis-template-get" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1707,7 +1707,7 @@ export def "analysistemplates get-analysis-template" [
 # operationId: AnalysisTemplate_Update
 # --Links shape: {AnalysisRule?: string, AnalysisRulePlugIn?: string, Categories?: string, Database?: string, Security?: string, SecurityEntries?: string, Self?: string, Target?: string, TimeRule?: string, TimeRulePlugIn?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "analysistemplates update-analysis-template" [
+export def "analysis-template-update" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1763,7 +1763,7 @@ export def "analysistemplates update-analysis-template" [
 #
 # GET /analysistemplates/{webId}/categories
 # operationId: AnalysisTemplate_GetCategories
-export def "analysistemplates-categories get-analysis-template" [
+export def "analysis-template-get-categories" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1803,7 +1803,7 @@ export def "analysistemplates-categories get-analysis-template" [
 #
 # GET /analysistemplates/{webId}/security
 # operationId: AnalysisTemplate_GetSecurity
-export def "analysistemplates-security get-analysis-template" [
+export def "analysis-template-get-security" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1845,7 +1845,7 @@ export def "analysistemplates-security get-analysis-template" [
 #
 # GET /analysistemplates/{webId}/securityentries
 # operationId: AnalysisTemplate_GetSecurityEntries
-export def "analysistemplates-securityentries get-analysis-template-security-entries" [
+export def "analysis-template-get-security-entries" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1888,7 +1888,7 @@ export def "analysistemplates-securityentries get-analysis-template-security-ent
 # operationId: AnalysisTemplate_CreateSecurityEntry
 # --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "analysistemplates-securityentries create-analysis-template-security-entry" [
+export def "analysis-template-create-security-entry" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1937,7 +1937,7 @@ export def "analysistemplates-securityentries create-analysis-template-security-
 #
 # DELETE /analysistemplates/{webId}/securityentries/{name}
 # operationId: AnalysisTemplate_DeleteSecurityEntry
-export def "analysistemplates-securityentries delete-analysis-template-security-entry" [
+export def "analysis-template-delete-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1978,7 +1978,7 @@ export def "analysistemplates-securityentries delete-analysis-template-security-
 #
 # GET /analysistemplates/{webId}/securityentries/{name}
 # operationId: AnalysisTemplate_GetSecurityEntryByName
-export def "analysistemplates-securityentries get-analysis-template-security-entry" [
+export def "analysis-template-get-security-entry-by-name" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2022,7 +2022,7 @@ export def "analysistemplates-securityentries get-analysis-template-security-ent
 # operationId: AnalysisTemplate_UpdateSecurityEntry
 # --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "analysistemplates-securityentries update-analysis-template-security-entry" [
+export def "analysis-template-update-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2072,7 +2072,7 @@ export def "analysistemplates-securityentries update-analysis-template-security-
 #
 # GET /assetdatabases
 # operationId: AssetDatabase_GetByPath
-export def "assetdatabases get-asset-database-by-path" [
+export def "asset-database-get-by-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2111,7 +2111,7 @@ export def "assetdatabases get-asset-database-by-path" [
 #
 # DELETE /assetdatabases/{webId}
 # operationId: AssetDatabase_Delete
-export def "assetdatabases delete-asset-database" [
+export def "asset-database-delete" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2148,7 +2148,7 @@ export def "assetdatabases delete-asset-database" [
 #
 # GET /assetdatabases/{webId}
 # operationId: AssetDatabase_Get
-export def "assetdatabases get-asset-database" [
+export def "asset-database-get" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2190,7 +2190,7 @@ export def "assetdatabases get-asset-database" [
 # operationId: AssetDatabase_Update
 # --Links shape: {AnalysisCategories?: string, AnalysisTemplates?: string, AssetServer?: string, AttributeCategories?: string, ElementCategories?: string, ElementTemplates?: string, Elements?: string, EnumerationSets?: string, EventFrames?: string, Security?: string, SecurityEntries?: string, Self?: string, TableCategories?: string, Tables?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "assetdatabases update-asset-database" [
+export def "asset-database-update" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2238,7 +2238,7 @@ export def "assetdatabases update-asset-database" [
 #
 # GET /assetdatabases/{webId}/analyses
 # operationId: AssetDatabase_FindAnalyses
-export def "assetdatabases-analyses find-asset-database" [
+export def "asset-database-find-analyses" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2284,7 +2284,7 @@ export def "assetdatabases-analyses find-asset-database" [
 #
 # GET /assetdatabases/{webId}/analysiscategories
 # operationId: AssetDatabase_GetAnalysisCategories
-export def "assetdatabases-analysiscategories get-asset-database-analysis-categories" [
+export def "asset-database-get-analysis-categories" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2326,7 +2326,7 @@ export def "assetdatabases-analysiscategories get-asset-database-analysis-catego
 # operationId: AssetDatabase_CreateAnalysisCategory
 # --Links shape: {Database?: string, Security?: string, SecurityEntries?: string, Self?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "assetdatabases-analysiscategories create-asset-database-analysis-category" [
+export def "asset-database-create-analysis-category" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2375,7 +2375,7 @@ export def "assetdatabases-analysiscategories create-asset-database-analysis-cat
 #
 # GET /assetdatabases/{webId}/analysistemplates
 # operationId: AssetDatabase_GetAnalysisTemplates
-export def "assetdatabases-analysistemplates get-asset-database-analysis-templates" [
+export def "asset-database-get-analysis-templates" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2422,7 +2422,7 @@ export def "assetdatabases-analysistemplates get-asset-database-analysis-templat
 # operationId: AssetDatabase_CreateAnalysisTemplate
 # --Links shape: {AnalysisRule?: string, AnalysisRulePlugIn?: string, Categories?: string, Database?: string, Security?: string, SecurityEntries?: string, Self?: string, Target?: string, TimeRule?: string, TimeRulePlugIn?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "assetdatabases-analysistemplates create-asset-database-analysis-template" [
+export def "asset-database-create-analysis-template" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2480,7 +2480,7 @@ export def "assetdatabases-analysistemplates create-asset-database-analysis-temp
 #
 # GET /assetdatabases/{webId}/attributecategories
 # operationId: AssetDatabase_GetAttributeCategories
-export def "assetdatabases-attributecategories get-asset-database-attribute-categories" [
+export def "asset-database-get-attribute-categories" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2522,7 +2522,7 @@ export def "assetdatabases-attributecategories get-asset-database-attribute-cate
 # operationId: AssetDatabase_CreateAttributeCategory
 # --Links shape: {Database?: string, Security?: string, SecurityEntries?: string, Self?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "assetdatabases-attributecategories create-asset-database-attribute-category" [
+export def "asset-database-create-attribute-category" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2571,7 +2571,7 @@ export def "assetdatabases-attributecategories create-asset-database-attribute-c
 #
 # GET /assetdatabases/{webId}/elementattributes
 # operationId: AssetDatabase_FindElementAttributes
-export def "assetdatabases-elementattributes find-asset-database-element-attributes" [
+export def "asset-database-find-element-attributes" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2626,7 +2626,7 @@ export def "assetdatabases-elementattributes find-asset-database-element-attribu
 #
 # GET /assetdatabases/{webId}/elementcategories
 # operationId: AssetDatabase_GetElementCategories
-export def "assetdatabases-elementcategories get-asset-database-element-categories" [
+export def "asset-database-get-element-categories" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2668,7 +2668,7 @@ export def "assetdatabases-elementcategories get-asset-database-element-categori
 # operationId: AssetDatabase_CreateElementCategory
 # --Links shape: {Database?: string, Security?: string, SecurityEntries?: string, Self?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "assetdatabases-elementcategories create-asset-database-element-category" [
+export def "asset-database-create-element-category" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2717,7 +2717,7 @@ export def "assetdatabases-elementcategories create-asset-database-element-categ
 #
 # GET /assetdatabases/{webId}/elements
 # operationId: AssetDatabase_GetElements
-export def "assetdatabases-elements get-asset-database" [
+export def "asset-database-get-elements" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2771,7 +2771,7 @@ export def "assetdatabases-elements get-asset-database" [
 # --Errors item shape: {FieldName?: string, Message?: list<string>}
 # --Links shape: {Analyses?: string, Attributes?: string, Categories?: string, Database?: string, DefaultAttribute?: string, Elements?: string, EndValue?: string, EventFrames?: string, InterpolatedData?: string, NotificationRules?: string, Parent?: string, PlotData?: string, RecordedData?: string, Security?: string, SecurityEntries?: string, Self?: string, SummaryData?: string, Template?: string, Value?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "assetdatabases-elements create-asset-database" [
+export def "asset-database-create-element" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2826,7 +2826,7 @@ export def "assetdatabases-elements create-asset-database" [
 #
 # GET /assetdatabases/{webId}/elementtemplates
 # operationId: AssetDatabase_GetElementTemplates
-export def "assetdatabases-elementtemplates get-asset-database-element-templates" [
+export def "asset-database-get-element-templates" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2873,7 +2873,7 @@ export def "assetdatabases-elementtemplates get-asset-database-element-templates
 # operationId: AssetDatabase_CreateElementTemplate
 # --Links shape: {AnalysisTemplates?: string, AttributeTemplates?: string, BaseTemplate?: string, BaseTemplates?: string, Categories?: string, Database?: string, DefaultAttribute?: string, DerivedTemplates?: string, NotificationRuleTemplates?: string, Security?: string, SecurityEntries?: string, Self?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "assetdatabases-elementtemplates create-asset-database-element-template" [
+export def "asset-database-create-element-template" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2930,7 +2930,7 @@ export def "assetdatabases-elementtemplates create-asset-database-element-templa
 #
 # GET /assetdatabases/{webId}/enumerationsets
 # operationId: AssetDatabase_GetEnumerationSets
-export def "assetdatabases-enumerationsets get-asset-database-enumeration-sets" [
+export def "asset-database-get-enumeration-sets" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2972,7 +2972,7 @@ export def "assetdatabases-enumerationsets get-asset-database-enumeration-sets" 
 # operationId: AssetDatabase_CreateEnumerationSet
 # --Links shape: {DataServer?: string, Database?: string, Security?: string, SecurityEntries?: string, Self?: string, Values?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "assetdatabases-enumerationsets create-asset-database-enumeration-update" [
+export def "asset-database-create-enumeration-set" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3022,7 +3022,7 @@ export def "assetdatabases-enumerationsets create-asset-database-enumeration-upd
 #
 # GET /assetdatabases/{webId}/eventframeattributes
 # operationId: AssetDatabase_FindEventFrameAttributes
-export def "assetdatabases-eventframeattributes find-asset-database-event-frame-attributes" [
+export def "asset-database-find-event-frame-attributes" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3080,7 +3080,7 @@ export def "assetdatabases-eventframeattributes find-asset-database-event-frame-
 #
 # GET /assetdatabases/{webId}/eventframes
 # operationId: AssetDatabase_GetEventFrames
-export def "assetdatabases-eventframes get-asset-database-event-frames" [
+export def "asset-database-get-event-frames" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3139,7 +3139,7 @@ export def "assetdatabases-eventframes get-asset-database-event-frames" [
 # --Links shape: {Annotations?: string, Attributes?: string, Categories?: string, Database?: string, DefaultAttribute?: string, EndValue?: string, EventFrames?: string, InterpolatedData?: string, Parent?: string, PlotData?: string, PrimaryReferencedElement?: string, RecordedData?: string, ReferencedElements?: string, Security?: string, SecurityEntries?: string, Self?: string, SummaryData?: string, Template?: string, Value?: string}
 # --Security shape: {CanAnnotate?: bool, CanDelete?: bool, CanExecute?: bool, CanRead?: bool, CanReadData?: bool, CanSubscribe?: bool, CanSubscribeOthers?: bool, CanWrite?: bool, CanWriteData?: bool, HasAdmin?: bool, Rights?: list<string>, WebException?: record}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "assetdatabases-eventframes create-asset-database-event-frame" [
+export def "asset-database-create-event-frame" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3204,7 +3204,7 @@ export def "assetdatabases-eventframes create-asset-database-event-frame" [
 #
 # GET /assetdatabases/{webId}/export
 # operationId: AssetDatabase_Export
-export def "assetdatabases-export export-asset-database" [
+export def "asset-database-export" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3245,7 +3245,7 @@ export def "assetdatabases-export export-asset-database" [
 #
 # POST /assetdatabases/{webId}/import
 # operationId: AssetDatabase_Import
-export def "assetdatabases-import import-asset-database" [
+export def "asset-database-import" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3284,7 +3284,7 @@ export def "assetdatabases-import import-asset-database" [
 #
 # DELETE /assetdatabases/{webId}/referencedelements
 # operationId: AssetDatabase_RemoveReferencedElement
-export def "assetdatabases-referencedelements delete-asset-database-referenced-element" [
+export def "asset-database-remove-referenced-element" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3323,7 +3323,7 @@ export def "assetdatabases-referencedelements delete-asset-database-referenced-e
 #
 # GET /assetdatabases/{webId}/referencedelements
 # operationId: AssetDatabase_GetReferencedElements
-export def "assetdatabases-referencedelements get-asset-database-referenced-elements" [
+export def "asset-database-get-referenced-elements" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3373,7 +3373,7 @@ export def "assetdatabases-referencedelements get-asset-database-referenced-elem
 #
 # POST /assetdatabases/{webId}/referencedelements
 # operationId: AssetDatabase_AddReferencedElement
-export def "assetdatabases-referencedelements create-asset-database-referenced-element" [
+export def "asset-database-add-referenced-element" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3413,7 +3413,7 @@ export def "assetdatabases-referencedelements create-asset-database-referenced-e
 #
 # GET /assetdatabases/{webId}/security
 # operationId: AssetDatabase_GetSecurity
-export def "assetdatabases-security get-asset-database" [
+export def "asset-database-get-security" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3456,7 +3456,7 @@ export def "assetdatabases-security get-asset-database" [
 #
 # GET /assetdatabases/{webId}/securityentries
 # operationId: AssetDatabase_GetSecurityEntries
-export def "assetdatabases-securityentries get-asset-database-security-entries" [
+export def "asset-database-get-security-entries" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3500,7 +3500,7 @@ export def "assetdatabases-securityentries get-asset-database-security-entries" 
 # operationId: AssetDatabase_CreateSecurityEntry
 # --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "assetdatabases-securityentries create-asset-database-security-entry" [
+export def "asset-database-create-security-entry" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3550,7 +3550,7 @@ export def "assetdatabases-securityentries create-asset-database-security-entry"
 #
 # DELETE /assetdatabases/{webId}/securityentries/{name}
 # operationId: AssetDatabase_DeleteSecurityEntry
-export def "assetdatabases-securityentries delete-asset-database-security-entry" [
+export def "asset-database-delete-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3592,7 +3592,7 @@ export def "assetdatabases-securityentries delete-asset-database-security-entry"
 #
 # GET /assetdatabases/{webId}/securityentries/{name}
 # operationId: AssetDatabase_GetSecurityEntryByName
-export def "assetdatabases-securityentries get-asset-database-security-entry" [
+export def "asset-database-get-security-entry-by-name" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3637,7 +3637,7 @@ export def "assetdatabases-securityentries get-asset-database-security-entry" [
 # operationId: AssetDatabase_UpdateSecurityEntry
 # --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "assetdatabases-securityentries update-asset-database-security-entry" [
+export def "asset-database-update-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3688,7 +3688,7 @@ export def "assetdatabases-securityentries update-asset-database-security-entry"
 #
 # GET /assetdatabases/{webId}/tablecategories
 # operationId: AssetDatabase_GetTableCategories
-export def "assetdatabases-tablecategories get-asset-database-table-categories" [
+export def "asset-database-get-table-categories" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3730,7 +3730,7 @@ export def "assetdatabases-tablecategories get-asset-database-table-categories" 
 # operationId: AssetDatabase_CreateTableCategory
 # --Links shape: {Database?: string, Security?: string, SecurityEntries?: string, Self?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "assetdatabases-tablecategories create-asset-database-table-category" [
+export def "asset-database-create-table-category" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3779,7 +3779,7 @@ export def "assetdatabases-tablecategories create-asset-database-table-category"
 #
 # GET /assetdatabases/{webId}/tables
 # operationId: AssetDatabase_GetTables
-export def "assetdatabases-tables get-asset-database" [
+export def "asset-database-get-tables" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3821,7 +3821,7 @@ export def "assetdatabases-tables get-asset-database" [
 # operationId: AssetDatabase_CreateTable
 # --Links shape: {Categories?: string, Data?: string, Database?: string, Security?: string, SecurityEntries?: string, Self?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "assetdatabases-tables create-asset-database" [
+export def "asset-database-create-table" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3873,7 +3873,7 @@ export def "assetdatabases-tables create-asset-database" [
 #
 # GET /assetservers
 # operationId: AssetServer_List
-export def "assetservers list-asset-server" [
+export def "asset-server-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3911,7 +3911,7 @@ export def "assetservers list-asset-server" [
 #
 # GET /assetservers
 # operationId: AssetServer_GetByName
-export def "assetservers get-asset-server-by-name" [
+export def "asset-server-get-by-name" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3950,7 +3950,7 @@ export def "assetservers get-asset-server-by-name" [
 #
 # GET /assetservers
 # operationId: AssetServer_GetByPath
-export def "assetservers get-asset-server-by-path" [
+export def "asset-server-get-by-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3989,7 +3989,7 @@ export def "assetservers get-asset-server-by-path" [
 #
 # GET /assetservers/{webId}
 # operationId: AssetServer_Get
-export def "assetservers get-asset-server" [
+export def "asset-server-get" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4029,7 +4029,7 @@ export def "assetservers get-asset-server" [
 #
 # GET /assetservers/{webId}/analysisruleplugins
 # operationId: AssetServer_GetAnalysisRulePlugIns
-export def "assetservers-analysisruleplugins get-asset-server-analysis-rule-plug-ins" [
+export def "asset-server-get-analysis-rule-plug-ins" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4069,7 +4069,7 @@ export def "assetservers-analysisruleplugins get-asset-server-analysis-rule-plug
 #
 # GET /assetservers/{webId}/assetdatabases
 # operationId: AssetServer_GetDatabases
-export def "assetservers-assetdatabases get-asset-server-databases" [
+export def "asset-server-get-databases" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4111,7 +4111,7 @@ export def "assetservers-assetdatabases get-asset-server-databases" [
 # operationId: AssetServer_CreateAssetDatabase
 # --Links shape: {AnalysisCategories?: string, AnalysisTemplates?: string, AssetServer?: string, AttributeCategories?: string, ElementCategories?: string, ElementTemplates?: string, Elements?: string, EnumerationSets?: string, EventFrames?: string, Security?: string, SecurityEntries?: string, Self?: string, TableCategories?: string, Tables?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "assetservers-assetdatabases create-asset-server-asset-database" [
+export def "asset-server-create-asset-database" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4161,7 +4161,7 @@ export def "assetservers-assetdatabases create-asset-server-asset-database" [
 #
 # GET /assetservers/{webId}/notificationcontacttemplates
 # operationId: AssetServer_GetNotificationContactTemplates
-export def "assetservers-notificationcontacttemplates get-asset-server-notification-contact-templates" [
+export def "asset-server-get-notification-contact-templates" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4203,7 +4203,7 @@ export def "assetservers-notificationcontacttemplates get-asset-server-notificat
 # operationId: AssetServer_CreateNotificationContactTemplate
 # --Links shape: {AssetServer?: string, NotificationContactTemplates?: string, NotificationPlugIn?: string, Security?: string, SecurityEntries?: string, Self?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "assetservers-notificationcontacttemplates create-asset-server-notification-contact-template" [
+export def "asset-server-create-notification-contact-template" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4262,7 +4262,7 @@ export def "assetservers-notificationcontacttemplates create-asset-server-notifi
 #
 # GET /assetservers/{webId}/notificationplugins
 # operationId: AssetServer_GetNotificationPlugIns
-export def "assetservers-notificationplugins get-asset-server-notification-plug-ins" [
+export def "asset-server-get-notification-plug-ins" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4302,7 +4302,7 @@ export def "assetservers-notificationplugins get-asset-server-notification-plug-
 #
 # GET /assetservers/{webId}/security
 # operationId: AssetServer_GetSecurity
-export def "assetservers-security get-asset-server" [
+export def "asset-server-get-security" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4345,7 +4345,7 @@ export def "assetservers-security get-asset-server" [
 #
 # GET /assetservers/{webId}/securityentries
 # operationId: AssetServer_GetSecurityEntries
-export def "assetservers-securityentries get-asset-server-security-entries" [
+export def "asset-server-get-security-entries" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4389,7 +4389,7 @@ export def "assetservers-securityentries get-asset-server-security-entries" [
 # operationId: AssetServer_CreateSecurityEntry
 # --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "assetservers-securityentries create-asset-server-security-entry" [
+export def "asset-server-create-security-entry" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4439,7 +4439,7 @@ export def "assetservers-securityentries create-asset-server-security-entry" [
 #
 # DELETE /assetservers/{webId}/securityentries/{name}
 # operationId: AssetServer_DeleteSecurityEntry
-export def "assetservers-securityentries delete-asset-server-security-entry" [
+export def "asset-server-delete-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4481,7 +4481,7 @@ export def "assetservers-securityentries delete-asset-server-security-entry" [
 #
 # GET /assetservers/{webId}/securityentries/{name}
 # operationId: AssetServer_GetSecurityEntryByName
-export def "assetservers-securityentries get-asset-server-security-entry" [
+export def "asset-server-get-security-entry-by-name" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4526,7 +4526,7 @@ export def "assetservers-securityentries get-asset-server-security-entry" [
 # operationId: AssetServer_UpdateSecurityEntry
 # --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "assetservers-securityentries update-asset-server-security-entry" [
+export def "asset-server-update-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4577,7 +4577,7 @@ export def "assetservers-securityentries update-asset-server-security-entry" [
 #
 # GET /assetservers/{webId}/securityidentities
 # operationId: AssetServer_GetSecurityIdentities
-export def "assetservers-securityidentities get-asset-server-security-identities" [
+export def "asset-server-get-security-identities" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4624,7 +4624,7 @@ export def "assetservers-securityidentities get-asset-server-security-identities
 # operationId: AssetServer_CreateSecurityIdentity
 # --Links shape: {AssetServer?: string, Security?: string, SecurityEntries?: string, SecurityMappings?: string, Self?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "assetservers-securityidentities create-asset-server-security-identity" [
+export def "asset-server-create-security-identity" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4674,7 +4674,7 @@ export def "assetservers-securityidentities create-asset-server-security-identit
 #
 # GET /assetservers/{webId}/securityidentities
 # operationId: AssetServer_GetSecurityIdentitiesForUser
-export def "assetservers-securityidentities get-asset-server-security-identities-for-user" [
+export def "asset-server-get-security-identities-for-user" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4715,7 +4715,7 @@ export def "assetservers-securityidentities get-asset-server-security-identities
 #
 # GET /assetservers/{webId}/securitymappings
 # operationId: AssetServer_GetSecurityMappings
-export def "assetservers-securitymappings get-asset-server-security-mappings" [
+export def "asset-server-get-security-mappings" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4762,7 +4762,7 @@ export def "assetservers-securitymappings get-asset-server-security-mappings" [
 # operationId: AssetServer_CreateSecurityMapping
 # --Links shape: {AssetServer?: string, Security?: string, SecurityEntries?: string, SecurityIdentity?: string, Self?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "assetservers-securitymappings create-asset-server-security-mapping" [
+export def "asset-server-create-security-mapping" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4813,7 +4813,7 @@ export def "assetservers-securitymappings create-asset-server-security-mapping" 
 #
 # GET /assetservers/{webId}/timeruleplugins
 # operationId: AssetServer_GetTimeRulePlugIns
-export def "assetservers-timeruleplugins get-asset-server-time-rule-plug-ins" [
+export def "asset-server-get-time-rule-plug-ins" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4853,7 +4853,7 @@ export def "assetservers-timeruleplugins get-asset-server-time-rule-plug-ins" [
 #
 # GET /assetservers/{webId}/unitclasses
 # operationId: AssetServer_GetUnitClasses
-export def "assetservers-unitclasses get-asset-server-unit-classes" [
+export def "asset-server-get-unit-classes" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4895,7 +4895,7 @@ export def "assetservers-unitclasses get-asset-server-unit-classes" [
 # operationId: AssetServer_CreateUnitClass
 # --Links shape: {AssetServer?: string, CanonicalUnit?: string, Self?: string, Units?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "assetservers-unitclasses create-asset-server-unit-class" [
+export def "asset-server-create-unit-class" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4946,7 +4946,7 @@ export def "assetservers-unitclasses create-asset-server-unit-class" [
 #
 # GET /attributecategories
 # operationId: AttributeCategory_GetByPath
-export def "attributecategories get-attribute-category-by-path" [
+export def "attribute-category-get-by-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4985,7 +4985,7 @@ export def "attributecategories get-attribute-category-by-path" [
 #
 # DELETE /attributecategories/{webId}
 # operationId: AttributeCategory_Delete
-export def "attributecategories delete-attribute-category" [
+export def "attribute-category-delete" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5022,7 +5022,7 @@ export def "attributecategories delete-attribute-category" [
 #
 # GET /attributecategories/{webId}
 # operationId: AttributeCategory_Get
-export def "attributecategories get-attribute-category" [
+export def "attribute-category-get" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5064,7 +5064,7 @@ export def "attributecategories get-attribute-category" [
 # operationId: AttributeCategory_Update
 # --Links shape: {Database?: string, Security?: string, SecurityEntries?: string, Self?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "attributecategories update-attribute-category" [
+export def "attribute-category-update" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5111,7 +5111,7 @@ export def "attributecategories update-attribute-category" [
 #
 # GET /attributecategories/{webId}/security
 # operationId: AttributeCategory_GetSecurity
-export def "attributecategories-security get-attribute-category" [
+export def "attribute-category-get-security" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5153,7 +5153,7 @@ export def "attributecategories-security get-attribute-category" [
 #
 # GET /attributecategories/{webId}/securityentries
 # operationId: AttributeCategory_GetSecurityEntries
-export def "attributecategories-securityentries get-attribute-category-security-entries" [
+export def "attribute-category-get-security-entries" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5196,7 +5196,7 @@ export def "attributecategories-securityentries get-attribute-category-security-
 # operationId: AttributeCategory_CreateSecurityEntry
 # --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "attributecategories-securityentries create-attribute-category-security-entry" [
+export def "attribute-category-create-security-entry" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5245,7 +5245,7 @@ export def "attributecategories-securityentries create-attribute-category-securi
 #
 # DELETE /attributecategories/{webId}/securityentries/{name}
 # operationId: AttributeCategory_DeleteSecurityEntry
-export def "attributecategories-securityentries delete-attribute-category-security-entry" [
+export def "attribute-category-delete-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5286,7 +5286,7 @@ export def "attributecategories-securityentries delete-attribute-category-securi
 #
 # GET /attributecategories/{webId}/securityentries/{name}
 # operationId: AttributeCategory_GetSecurityEntryByName
-export def "attributecategories-securityentries get-attribute-category-security-entry" [
+export def "attribute-category-get-security-entry-by-name" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5330,7 +5330,7 @@ export def "attributecategories-securityentries get-attribute-category-security-
 # operationId: AttributeCategory_UpdateSecurityEntry
 # --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "attributecategories-securityentries update-attribute-category-security-entry" [
+export def "attribute-category-update-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5380,7 +5380,7 @@ export def "attributecategories-securityentries update-attribute-category-securi
 #
 # GET /attributes
 # operationId: Attribute_GetByPath
-export def "attributes get-by-path" [
+export def "attribute-get-by-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5420,7 +5420,7 @@ export def "attributes get-by-path" [
 #
 # GET /attributes/multiple
 # operationId: Attribute_GetMultiple
-export def "attributes-multiple get" [
+export def "attribute-get-multiple" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5463,7 +5463,7 @@ export def "attributes-multiple get" [
 #
 # GET /attributes/search
 # operationId: Attribute_GetAttributesQuery
-export def "attributes-search get-list" [
+export def "attribute-get-attributes-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5506,7 +5506,7 @@ export def "attributes-search get-list" [
 #
 # DELETE /attributes/{webId}
 # operationId: Attribute_Delete
-export def "attributes delete" [
+export def "attribute-delete" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5543,7 +5543,7 @@ export def "attributes delete" [
 #
 # GET /attributes/{webId}
 # operationId: Attribute_Get
-export def "attributes get" [
+export def "attribute-get" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5587,7 +5587,7 @@ export def "attributes get" [
 # --DataReference shape: {PIPoint?: record, Type?: string, WebException?: record}
 # --Links shape: {Attributes?: string, Categories?: string, Element?: string, EndValue?: string, EnumerationSet?: string, EnumerationValues?: string, EventFrame?: string, InterpolatedData?: string, Parent?: string, PlotData?: string, Point?: string, RecordedData?: string, Self?: string, SummaryData?: string, Template?: string, Trait?: string, Value?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "attributes update" [
+export def "attribute-update" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5653,7 +5653,7 @@ export def "attributes update" [
 #
 # GET /attributes/{webId}/attributes
 # operationId: Attribute_GetAttributes
-export def "attributes-attributes get" [
+export def "attribute-get-attributes" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5710,7 +5710,7 @@ export def "attributes-attributes get" [
 # --DataReference shape: {PIPoint?: record, Type?: string, WebException?: record}
 # --Links shape: {Attributes?: string, Categories?: string, Element?: string, EndValue?: string, EnumerationSet?: string, EnumerationValues?: string, EventFrame?: string, InterpolatedData?: string, Parent?: string, PlotData?: string, Point?: string, RecordedData?: string, Self?: string, SummaryData?: string, Template?: string, Trait?: string, Value?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "attributes-attributes create" [
+export def "attribute-create-attribute" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5778,7 +5778,7 @@ export def "attributes-attributes create" [
 #
 # GET /attributes/{webId}/categories
 # operationId: Attribute_GetCategories
-export def "attributes-categories get" [
+export def "attribute-get-categories" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5818,7 +5818,7 @@ export def "attributes-categories get" [
 #
 # POST /attributes/{webId}/config
 # operationId: Attribute_CreateConfig
-export def "attributes-config create" [
+export def "attribute-create-config" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5857,7 +5857,7 @@ export def "attributes-config create" [
 #
 # GET /attributes/{webId}/value
 # operationId: Attribute_GetValue
-export def "attributes-value get" [
+export def "attribute-get-value" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5898,7 +5898,7 @@ export def "attributes-value get" [
 # operationId: Attribute_SetValue
 # --Errors item shape: {FieldName?: string, Message?: list<string>}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "attributes-value update" [
+export def "attribute-set-value" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5947,7 +5947,7 @@ export def "attributes-value update" [
 #
 # GET /attributetemplates
 # operationId: AttributeTemplate_GetByPath
-export def "attributetemplates get-attribute-template-by-path" [
+export def "attribute-template-get-by-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5986,7 +5986,7 @@ export def "attributetemplates get-attribute-template-by-path" [
 #
 # DELETE /attributetemplates/{webId}
 # operationId: AttributeTemplate_Delete
-export def "attributetemplates delete-attribute-template" [
+export def "attribute-template-delete" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6023,7 +6023,7 @@ export def "attributetemplates delete-attribute-template" [
 #
 # GET /attributetemplates/{webId}
 # operationId: AttributeTemplate_Get
-export def "attributetemplates get-attribute-template" [
+export def "attribute-template-get" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6065,7 +6065,7 @@ export def "attributetemplates get-attribute-template" [
 # operationId: AttributeTemplate_Update
 # --Links shape: {AttributeTemplates?: string, Categories?: string, ElementTemplate?: string, Parent?: string, Self?: string, Trait?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "attributetemplates update-attribute-template" [
+export def "attribute-template-update" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6126,7 +6126,7 @@ export def "attributetemplates update-attribute-template" [
 #
 # GET /attributetemplates/{webId}/attributetemplates
 # operationId: AttributeTemplate_GetAttributeTemplates
-export def "attributetemplates-attributetemplates get-attribute-template-attribute-templates" [
+export def "attribute-template-get-attribute-templates" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6168,7 +6168,7 @@ export def "attributetemplates-attributetemplates get-attribute-template-attribu
 # operationId: AttributeTemplate_CreateAttributeTemplate
 # --Links shape: {AttributeTemplates?: string, Categories?: string, ElementTemplate?: string, Parent?: string, Self?: string, Trait?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "attributetemplates-attributetemplates create-attribute-template-attribute-template" [
+export def "attribute-template-create-attribute-template" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6231,7 +6231,7 @@ export def "attributetemplates-attributetemplates create-attribute-template-attr
 #
 # GET /attributetemplates/{webId}/categories
 # operationId: AttributeTemplate_GetCategories
-export def "attributetemplates-categories get-attribute-template" [
+export def "attribute-template-get-categories" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6271,7 +6271,7 @@ export def "attributetemplates-categories get-attribute-template" [
 #
 # GET /attributetraits
 # operationId: AttributeTrait_GetByCategory
-export def "attributetraits get-attribute-trait-by-category" [
+export def "attribute-trait-get-by-category" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6309,7 +6309,7 @@ export def "attributetraits get-attribute-trait-by-category" [
 #
 # GET /attributetraits/{name}
 # operationId: AttributeTrait_Get
-export def "attributetraits get-attribute-trait" [
+export def "attribute-trait-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6348,7 +6348,7 @@ export def "attributetraits get-attribute-trait" [
 #
 # POST /batch
 # operationId: Batch_Execute
-export def "batch create-execute" [
+export def "batch-execute" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6387,7 +6387,7 @@ export def "batch create-execute" [
 #
 # GET /calculation/intervals
 # operationId: Calculation_GetAtIntervals
-export def "calculation-intervals get-at" [
+export def "calculation-get-at-intervals" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6429,7 +6429,7 @@ export def "calculation-intervals get-at" [
 #
 # GET /calculation/recorded
 # operationId: Calculation_GetAtRecorded
-export def "calculation-recorded get-at" [
+export def "calculation-get-at-recorded" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6470,7 +6470,7 @@ export def "calculation-recorded get-at" [
 #
 # GET /calculation/summary
 # operationId: Calculation_GetSummary
-export def "calculation-summary get" [
+export def "calculation-get-summary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6517,7 +6517,7 @@ export def "calculation-summary get" [
 #
 # GET /calculation/times
 # operationId: Calculation_GetAtTimes
-export def "calculation-times get-at" [
+export def "calculation-get-at-times" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6558,7 +6558,7 @@ export def "calculation-times get-at" [
 #
 # GET /channels/instances
 # operationId: Channel_Instances
-export def "channels-instances get" [
+export def "channel-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6593,7 +6593,7 @@ export def "channels-instances get" [
 #
 # GET /dataservers
 # operationId: DataServer_List
-export def "dataservers list-data-server" [
+export def "data-server-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6631,7 +6631,7 @@ export def "dataservers list-data-server" [
 #
 # GET /dataservers
 # operationId: DataServer_GetByName
-export def "dataservers get-data-server-by-name" [
+export def "data-server-get-by-name" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6670,7 +6670,7 @@ export def "dataservers get-data-server-by-name" [
 #
 # GET /dataservers
 # operationId: DataServer_GetByPath
-export def "dataservers get-data-server-by-path" [
+export def "data-server-get-by-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6709,7 +6709,7 @@ export def "dataservers get-data-server-by-path" [
 #
 # GET /dataservers/{webId}
 # operationId: DataServer_Get
-export def "dataservers get-data-server" [
+export def "data-server-get" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6749,7 +6749,7 @@ export def "dataservers get-data-server" [
 #
 # GET /dataservers/{webId}/enumerationsets
 # operationId: DataServer_GetEnumerationSets
-export def "dataservers-enumerationsets get-data-server-enumeration-sets" [
+export def "data-server-get-enumeration-sets" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6791,7 +6791,7 @@ export def "dataservers-enumerationsets get-data-server-enumeration-sets" [
 # operationId: DataServer_CreateEnumerationSet
 # --Links shape: {DataServer?: string, Database?: string, Security?: string, SecurityEntries?: string, Self?: string, Values?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "dataservers-enumerationsets create-data-server-enumeration-update" [
+export def "data-server-create-enumeration-set" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6841,7 +6841,7 @@ export def "dataservers-enumerationsets create-data-server-enumeration-update" [
 #
 # GET /dataservers/{webId}/license
 # operationId: DataServer_GetLicense
-export def "dataservers-license get-data-server" [
+export def "data-server-get-license" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6882,7 +6882,7 @@ export def "dataservers-license get-data-server" [
 #
 # GET /dataservers/{webId}/points
 # operationId: DataServer_GetPoints
-export def "dataservers-points get-data-server" [
+export def "data-server-get-points" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6927,7 +6927,7 @@ export def "dataservers-points get-data-server" [
 # operationId: DataServer_CreatePoint
 # --Links shape: {Attributes?: string, DataServer?: string, EndValue?: string, InterpolatedData?: string, PlotData?: string, RecordedData?: string, Self?: string, SummaryData?: string, Value?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "dataservers-points create-data-server" [
+export def "data-server-create-point" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6985,7 +6985,7 @@ export def "dataservers-points create-data-server" [
 #
 # GET /elementcategories
 # operationId: ElementCategory_GetByPath
-export def "elementcategories get-element-category-by-path" [
+export def "element-category-get-by-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7024,7 +7024,7 @@ export def "elementcategories get-element-category-by-path" [
 #
 # DELETE /elementcategories/{webId}
 # operationId: ElementCategory_Delete
-export def "elementcategories delete-element-category" [
+export def "element-category-delete" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7061,7 +7061,7 @@ export def "elementcategories delete-element-category" [
 #
 # GET /elementcategories/{webId}
 # operationId: ElementCategory_Get
-export def "elementcategories get-element-category" [
+export def "element-category-get" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7103,7 +7103,7 @@ export def "elementcategories get-element-category" [
 # operationId: ElementCategory_Update
 # --Links shape: {Database?: string, Security?: string, SecurityEntries?: string, Self?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "elementcategories update-element-category" [
+export def "element-category-update" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7150,7 +7150,7 @@ export def "elementcategories update-element-category" [
 #
 # GET /elementcategories/{webId}/security
 # operationId: ElementCategory_GetSecurity
-export def "elementcategories-security get-element-category" [
+export def "element-category-get-security" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7192,7 +7192,7 @@ export def "elementcategories-security get-element-category" [
 #
 # GET /elementcategories/{webId}/securityentries
 # operationId: ElementCategory_GetSecurityEntries
-export def "elementcategories-securityentries get-element-category-security-entries" [
+export def "element-category-get-security-entries" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7235,7 +7235,7 @@ export def "elementcategories-securityentries get-element-category-security-entr
 # operationId: ElementCategory_CreateSecurityEntry
 # --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "elementcategories-securityentries create-element-category-security-entry" [
+export def "element-category-create-security-entry" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7284,7 +7284,7 @@ export def "elementcategories-securityentries create-element-category-security-e
 #
 # DELETE /elementcategories/{webId}/securityentries/{name}
 # operationId: ElementCategory_DeleteSecurityEntry
-export def "elementcategories-securityentries delete-element-category-security-entry" [
+export def "element-category-delete-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7325,7 +7325,7 @@ export def "elementcategories-securityentries delete-element-category-security-e
 #
 # GET /elementcategories/{webId}/securityentries/{name}
 # operationId: ElementCategory_GetSecurityEntryByName
-export def "elementcategories-securityentries get-element-category-security-entry" [
+export def "element-category-get-security-entry-by-name" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7369,7 +7369,7 @@ export def "elementcategories-securityentries get-element-category-security-entr
 # operationId: ElementCategory_UpdateSecurityEntry
 # --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "elementcategories-securityentries update-element-category-security-entry" [
+export def "element-category-update-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7419,7 +7419,7 @@ export def "elementcategories-securityentries update-element-category-security-e
 #
 # GET /elements
 # operationId: Element_GetByPath
-export def "elements get-by-path" [
+export def "element-get-by-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7459,7 +7459,7 @@ export def "elements get-by-path" [
 #
 # GET /elements/multiple
 # operationId: Element_GetMultiple
-export def "elements-multiple get" [
+export def "element-get-multiple" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7502,7 +7502,7 @@ export def "elements-multiple get" [
 #
 # GET /elements/search
 # operationId: Element_GetElementsQuery
-export def "elements-search get-list" [
+export def "element-get-elements-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7548,7 +7548,7 @@ export def "elements-search get-list" [
 # operationId: Element_CreateSearchByAttribute
 # --ValueQueries item shape: {AttributeName?: string, AttributeUOM?: string, AttributeValue?: record, SearchOperator?: string, WebException?: record}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "elements-searchbyattribute create-list-by-attribute" [
+export def "element-create-search-by-attribute" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7594,7 +7594,7 @@ export def "elements-searchbyattribute create-list-by-attribute" [
 #
 # GET /elements/searchbyattribute/{searchId}
 # operationId: Element_ExecuteSearchByAttribute
-export def "elements-searchbyattribute list-execute-by-attribute" [
+export def "element-execute-search-by-attribute" [
   search_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7643,7 +7643,7 @@ export def "elements-searchbyattribute list-execute-by-attribute" [
 #
 # DELETE /elements/{webId}
 # operationId: Element_Delete
-export def "elements delete" [
+export def "element-delete" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7680,7 +7680,7 @@ export def "elements delete" [
 #
 # GET /elements/{webId}
 # operationId: Element_Get
-export def "elements get" [
+export def "element-get" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7724,7 +7724,7 @@ export def "elements get" [
 # --Errors item shape: {FieldName?: string, Message?: list<string>}
 # --Links shape: {Analyses?: string, Attributes?: string, Categories?: string, Database?: string, DefaultAttribute?: string, Elements?: string, EndValue?: string, EventFrames?: string, InterpolatedData?: string, NotificationRules?: string, Parent?: string, PlotData?: string, RecordedData?: string, Security?: string, SecurityEntries?: string, Self?: string, SummaryData?: string, Template?: string, Value?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "elements update" [
+export def "element-update" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7777,7 +7777,7 @@ export def "elements update" [
 #
 # GET /elements/{webId}/analyses
 # operationId: Element_GetAnalyses
-export def "elements-analyses get" [
+export def "element-get-analyses" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7823,7 +7823,7 @@ export def "elements-analyses get" [
 # operationId: Element_CreateAnalysis
 # --Links shape: {AnalysisRule?: string, AnalysisRulePlugIn?: string, Categories?: string, Database?: string, Security?: string, SecurityEntries?: string, Self?: string, Target?: string, Template?: string, TimeRule?: string, TimeRulePlugIn?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "elements-analyses create-analysis" [
+export def "element-create-analysis" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7889,7 +7889,7 @@ export def "elements-analyses create-analysis" [
 #
 # GET /elements/{webId}/attributes
 # operationId: Element_GetAttributes
-export def "elements-attributes get" [
+export def "element-get-attributes" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7946,7 +7946,7 @@ export def "elements-attributes get" [
 # --DataReference shape: {PIPoint?: record, Type?: string, WebException?: record}
 # --Links shape: {Attributes?: string, Categories?: string, Element?: string, EndValue?: string, EnumerationSet?: string, EnumerationValues?: string, EventFrame?: string, InterpolatedData?: string, Parent?: string, PlotData?: string, Point?: string, RecordedData?: string, Self?: string, SummaryData?: string, Template?: string, Trait?: string, Value?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "elements-attributes create" [
+export def "element-create-attribute" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8014,7 +8014,7 @@ export def "elements-attributes create" [
 #
 # GET /elements/{webId}/categories
 # operationId: Element_GetCategories
-export def "elements-categories get" [
+export def "element-get-categories" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8054,7 +8054,7 @@ export def "elements-categories get" [
 #
 # POST /elements/{webId}/config
 # operationId: Element_CreateConfig
-export def "elements-config create" [
+export def "element-create-config" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8093,7 +8093,7 @@ export def "elements-config create" [
 #
 # GET /elements/{webId}/elementattributes
 # operationId: Element_FindElementAttributes
-export def "elements-elementattributes find-attributes" [
+export def "element-find-element-attributes" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8148,7 +8148,7 @@ export def "elements-elementattributes find-attributes" [
 #
 # GET /elements/{webId}/elements
 # operationId: Element_GetElements
-export def "elements-elements get" [
+export def "element-get-elements" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8202,7 +8202,7 @@ export def "elements-elements get" [
 # --Errors item shape: {FieldName?: string, Message?: list<string>}
 # --Links shape: {Analyses?: string, Attributes?: string, Categories?: string, Database?: string, DefaultAttribute?: string, Elements?: string, EndValue?: string, EventFrames?: string, InterpolatedData?: string, NotificationRules?: string, Parent?: string, PlotData?: string, RecordedData?: string, Security?: string, SecurityEntries?: string, Self?: string, SummaryData?: string, Template?: string, Value?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "elements-elements create" [
+export def "element-create-element" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8257,7 +8257,7 @@ export def "elements-elements create" [
 #
 # GET /elements/{webId}/eventframes
 # operationId: Element_GetEventFrames
-export def "elements-eventframes get-event-frames" [
+export def "element-get-event-frames" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8310,7 +8310,7 @@ export def "elements-eventframes get-event-frames" [
 #
 # GET /elements/{webId}/notificationrules
 # operationId: Element_GetNotificationRules
-export def "elements-notificationrules get-notification-rules" [
+export def "element-get-notification-rules" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8351,7 +8351,7 @@ export def "elements-notificationrules get-notification-rules" [
 # POST /elements/{webId}/notificationrules
 # operationId: Element_CreateNotificationRule
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "elements-notificationrules create-notification-rule" [
+export def "element-create-notification-rule" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8407,7 +8407,7 @@ export def "elements-notificationrules create-notification-rule" [
 #
 # GET /elements/{webId}/paths
 # operationId: Element_GetPaths
-export def "elements-paths get" [
+export def "element-get-paths" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8446,7 +8446,7 @@ export def "elements-paths get" [
 #
 # DELETE /elements/{webId}/referencedelements
 # operationId: Element_RemoveReferencedElement
-export def "elements-referencedelements delete-referenced" [
+export def "element-remove-referenced-element" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8485,7 +8485,7 @@ export def "elements-referencedelements delete-referenced" [
 #
 # GET /elements/{webId}/referencedelements
 # operationId: Element_GetReferencedElements
-export def "elements-referencedelements get-referenced" [
+export def "element-get-referenced-elements" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8535,7 +8535,7 @@ export def "elements-referencedelements get-referenced" [
 #
 # POST /elements/{webId}/referencedelements
 # operationId: Element_AddReferencedElement
-export def "elements-referencedelements create-referenced" [
+export def "element-add-referenced-element" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8575,7 +8575,7 @@ export def "elements-referencedelements create-referenced" [
 #
 # GET /elements/{webId}/security
 # operationId: Element_GetSecurity
-export def "elements-security get" [
+export def "element-get-security" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8617,7 +8617,7 @@ export def "elements-security get" [
 #
 # GET /elements/{webId}/securityentries
 # operationId: Element_GetSecurityEntries
-export def "elements-securityentries get-security-entries" [
+export def "element-get-security-entries" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8660,7 +8660,7 @@ export def "elements-securityentries get-security-entries" [
 # operationId: Element_CreateSecurityEntry
 # --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "elements-securityentries create-security-entry" [
+export def "element-create-security-entry" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8709,7 +8709,7 @@ export def "elements-securityentries create-security-entry" [
 #
 # DELETE /elements/{webId}/securityentries/{name}
 # operationId: Element_DeleteSecurityEntry
-export def "elements-securityentries delete-security-entry" [
+export def "element-delete-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8750,7 +8750,7 @@ export def "elements-securityentries delete-security-entry" [
 #
 # GET /elements/{webId}/securityentries/{name}
 # operationId: Element_GetSecurityEntryByName
-export def "elements-securityentries get-security-entry" [
+export def "element-get-security-entry-by-name" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8794,7 +8794,7 @@ export def "elements-securityentries get-security-entry" [
 # operationId: Element_UpdateSecurityEntry
 # --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "elements-securityentries update-security-entry" [
+export def "element-update-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8844,7 +8844,7 @@ export def "elements-securityentries update-security-entry" [
 #
 # GET /elementtemplates
 # operationId: ElementTemplate_GetByPath
-export def "elementtemplates get-element-template-by-path" [
+export def "element-template-get-by-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8883,7 +8883,7 @@ export def "elementtemplates get-element-template-by-path" [
 #
 # DELETE /elementtemplates/{webId}
 # operationId: ElementTemplate_Delete
-export def "elementtemplates delete-element-template" [
+export def "element-template-delete" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8920,7 +8920,7 @@ export def "elementtemplates delete-element-template" [
 #
 # GET /elementtemplates/{webId}
 # operationId: ElementTemplate_Get
-export def "elementtemplates get-element-template" [
+export def "element-template-get" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8962,7 +8962,7 @@ export def "elementtemplates get-element-template" [
 # operationId: ElementTemplate_Update
 # --Links shape: {AnalysisTemplates?: string, AttributeTemplates?: string, BaseTemplate?: string, BaseTemplates?: string, Categories?: string, Database?: string, DefaultAttribute?: string, DerivedTemplates?: string, NotificationRuleTemplates?: string, Security?: string, SecurityEntries?: string, Self?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "elementtemplates update-element-template" [
+export def "element-template-update" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9017,7 +9017,7 @@ export def "elementtemplates update-element-template" [
 #
 # GET /elementtemplates/{webId}/analysistemplates
 # operationId: ElementTemplate_GetAnalysisTemplates
-export def "elementtemplates-analysistemplates get-element-template-analysis-templates" [
+export def "element-template-get-analysis-templates" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9057,7 +9057,7 @@ export def "elementtemplates-analysistemplates get-element-template-analysis-tem
 #
 # GET /elementtemplates/{webId}/attributetemplates
 # operationId: ElementTemplate_GetAttributeTemplates
-export def "elementtemplates-attributetemplates get-element-template-attribute-templates" [
+export def "element-template-get-attribute-templates" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9104,7 +9104,7 @@ export def "elementtemplates-attributetemplates get-element-template-attribute-t
 # operationId: ElementTemplate_CreateAttributeTemplate
 # --Links shape: {AttributeTemplates?: string, Categories?: string, ElementTemplate?: string, Parent?: string, Self?: string, Trait?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "elementtemplates-attributetemplates create-element-template-attribute-template" [
+export def "element-template-create-attribute-template" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9167,7 +9167,7 @@ export def "elementtemplates-attributetemplates create-element-template-attribut
 #
 # GET /elementtemplates/{webId}/baseelementtemplates
 # operationId: ElementTemplate_GetBaseElementTemplates
-export def "elementtemplates-baseelementtemplates get-element-template-base-element-templates" [
+export def "element-template-get-base-element-templates" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9208,7 +9208,7 @@ export def "elementtemplates-baseelementtemplates get-element-template-base-elem
 #
 # GET /elementtemplates/{webId}/categories
 # operationId: ElementTemplate_GetCategories
-export def "elementtemplates-categories get-element-template" [
+export def "element-template-get-categories" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9249,7 +9249,7 @@ export def "elementtemplates-categories get-element-template" [
 #
 # GET /elementtemplates/{webId}/derivedelementtemplates
 # operationId: ElementTemplate_GetDerivedElementTemplates
-export def "elementtemplates-derivedelementtemplates get-element-template-derived-element-templates" [
+export def "element-template-get-derived-element-templates" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9291,7 +9291,7 @@ export def "elementtemplates-derivedelementtemplates get-element-template-derive
 #
 # GET /elementtemplates/{webId}/notificationruletemplates
 # operationId: ElementTemplate_GetNotificationRuleTemplates
-export def "elementtemplates-notificationruletemplates get-element-template-notification-rule-templates" [
+export def "element-template-get-notification-rule-templates" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9332,7 +9332,7 @@ export def "elementtemplates-notificationruletemplates get-element-template-noti
 # POST /elementtemplates/{webId}/notificationruletemplates
 # operationId: ElementTemplate_CreateNotificationRuleTemplate
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "elementtemplates-notificationruletemplates create-element-template-notification-rule-template" [
+export def "element-template-create-notification-rule-template" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9387,7 +9387,7 @@ export def "elementtemplates-notificationruletemplates create-element-template-n
 #
 # GET /elementtemplates/{webId}/security
 # operationId: ElementTemplate_GetSecurity
-export def "elementtemplates-security get-element-template" [
+export def "element-template-get-security" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9429,7 +9429,7 @@ export def "elementtemplates-security get-element-template" [
 #
 # GET /elementtemplates/{webId}/securityentries
 # operationId: ElementTemplate_GetSecurityEntries
-export def "elementtemplates-securityentries get-element-template-security-entries" [
+export def "element-template-get-security-entries" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9472,7 +9472,7 @@ export def "elementtemplates-securityentries get-element-template-security-entri
 # operationId: ElementTemplate_CreateSecurityEntry
 # --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "elementtemplates-securityentries create-element-template-security-entry" [
+export def "element-template-create-security-entry" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9521,7 +9521,7 @@ export def "elementtemplates-securityentries create-element-template-security-en
 #
 # DELETE /elementtemplates/{webId}/securityentries/{name}
 # operationId: ElementTemplate_DeleteSecurityEntry
-export def "elementtemplates-securityentries delete-element-template-security-entry" [
+export def "element-template-delete-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9562,7 +9562,7 @@ export def "elementtemplates-securityentries delete-element-template-security-en
 #
 # GET /elementtemplates/{webId}/securityentries/{name}
 # operationId: ElementTemplate_GetSecurityEntryByName
-export def "elementtemplates-securityentries get-element-template-security-entry" [
+export def "element-template-get-security-entry-by-name" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9606,7 +9606,7 @@ export def "elementtemplates-securityentries get-element-template-security-entry
 # operationId: ElementTemplate_UpdateSecurityEntry
 # --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "elementtemplates-securityentries update-element-template-security-entry" [
+export def "element-template-update-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9656,7 +9656,7 @@ export def "elementtemplates-securityentries update-element-template-security-en
 #
 # GET /enumerationsets
 # operationId: EnumerationSet_GetByPath
-export def "enumerationsets update-enumeration-get-by-path" [
+export def "enumeration-set-get-by-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9695,7 +9695,7 @@ export def "enumerationsets update-enumeration-get-by-path" [
 #
 # DELETE /enumerationsets/{webId}
 # operationId: EnumerationSet_Delete
-export def "enumerationsets update-enumeration-delete" [
+export def "enumeration-set-delete" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9732,7 +9732,7 @@ export def "enumerationsets update-enumeration-delete" [
 #
 # GET /enumerationsets/{webId}
 # operationId: EnumerationSet_Get
-export def "enumerationsets update-enumeration-get" [
+export def "enumeration-set-get" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9774,7 +9774,7 @@ export def "enumerationsets update-enumeration-get" [
 # operationId: EnumerationSet_Update
 # --Links shape: {DataServer?: string, Database?: string, Security?: string, SecurityEntries?: string, Self?: string, Values?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "enumerationsets update-enumeration" [
+export def "enumeration-set-update" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9822,7 +9822,7 @@ export def "enumerationsets update-enumeration" [
 #
 # GET /enumerationsets/{webId}/enumerationvalues
 # operationId: EnumerationSet_GetValues
-export def "enumerationsets-enumerationvalues update-enumeration-get-values" [
+export def "enumeration-set-get-values" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9864,7 +9864,7 @@ export def "enumerationsets-enumerationvalues update-enumeration-get-values" [
 # operationId: EnumerationSet_CreateValue
 # --Links shape: {EnumerationSet?: string, Parent?: string, Self?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "enumerationsets-enumerationvalues update-enumeration-create-value" [
+export def "enumeration-set-create-value" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9920,7 +9920,7 @@ export def "enumerationsets-enumerationvalues update-enumeration-create-value" [
 #
 # GET /enumerationsets/{webId}/security
 # operationId: EnumerationSet_GetSecurity
-export def "enumerationsets-security update-enumeration-get" [
+export def "enumeration-set-get-security" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9962,7 +9962,7 @@ export def "enumerationsets-security update-enumeration-get" [
 #
 # GET /enumerationsets/{webId}/securityentries
 # operationId: EnumerationSet_GetSecurityEntries
-export def "enumerationsets-securityentries update-enumeration-get-security-entries" [
+export def "enumeration-set-get-security-entries" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10005,7 +10005,7 @@ export def "enumerationsets-securityentries update-enumeration-get-security-entr
 # operationId: EnumerationSet_CreateSecurityEntry
 # --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "enumerationsets-securityentries update-enumeration-create-security-entry" [
+export def "enumeration-set-create-security-entry" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10054,7 +10054,7 @@ export def "enumerationsets-securityentries update-enumeration-create-security-e
 #
 # DELETE /enumerationsets/{webId}/securityentries/{name}
 # operationId: EnumerationSet_DeleteSecurityEntry
-export def "enumerationsets-securityentries update-enumeration-delete-security-entry" [
+export def "enumeration-set-delete-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10095,7 +10095,7 @@ export def "enumerationsets-securityentries update-enumeration-delete-security-e
 #
 # GET /enumerationsets/{webId}/securityentries/{name}
 # operationId: EnumerationSet_GetSecurityEntryByName
-export def "enumerationsets-securityentries update-enumeration-get-security-entry" [
+export def "enumeration-set-get-security-entry-by-name" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10139,7 +10139,7 @@ export def "enumerationsets-securityentries update-enumeration-get-security-entr
 # operationId: EnumerationSet_UpdateSecurityEntry
 # --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "enumerationsets-securityentries update-enumeration-security-entry" [
+export def "enumeration-set-update-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10189,7 +10189,7 @@ export def "enumerationsets-securityentries update-enumeration-security-entry" [
 #
 # GET /enumerationvalues
 # operationId: EnumerationValue_GetByPath
-export def "enumerationvalues get-enumeration-value-by-path" [
+export def "enumeration-value-get-by-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10228,7 +10228,7 @@ export def "enumerationvalues get-enumeration-value-by-path" [
 #
 # DELETE /enumerationvalues/{webId}
 # operationId: EnumerationValue_DeleteEnumerationValue
-export def "enumerationvalues delete-enumeration-value-enumeration-value" [
+export def "enumeration-value-delete-enumeration-value" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10265,7 +10265,7 @@ export def "enumerationvalues delete-enumeration-value-enumeration-value" [
 #
 # GET /enumerationvalues/{webId}
 # operationId: EnumerationValue_Get
-export def "enumerationvalues get-enumeration-value" [
+export def "enumeration-value-get" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10307,7 +10307,7 @@ export def "enumerationvalues get-enumeration-value" [
 # operationId: EnumerationValue_UpdateEnumerationValue
 # --Links shape: {EnumerationSet?: string, Parent?: string, Self?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "enumerationvalues update-enumeration-value-enumeration-value" [
+export def "enumeration-value-update-enumeration-value" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10361,7 +10361,7 @@ export def "enumerationvalues update-enumeration-value-enumeration-value" [
 #
 # GET /eventframes
 # operationId: EventFrame_GetByPath
-export def "eventframes get-event-frame-by-path" [
+export def "event-frame-get-by-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10400,7 +10400,7 @@ export def "eventframes get-event-frame-by-path" [
 #
 # GET /eventframes/multiple
 # operationId: EventFrame_GetMultiple
-export def "eventframes-multiple get-event-frame" [
+export def "event-frame-get-multiple" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10442,7 +10442,7 @@ export def "eventframes-multiple get-event-frame" [
 #
 # GET /eventframes/search
 # operationId: EventFrame_GetEventFramesQuery
-export def "eventframes-search get-event-frame-event-frames-list" [
+export def "event-frame-get-event-frames-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10486,7 +10486,7 @@ export def "eventframes-search get-event-frame-event-frames-list" [
 # operationId: EventFrame_CreateSearchByAttribute
 # --ValueQueries item shape: {AttributeName?: string, AttributeUOM?: string, AttributeValue?: record, SearchOperator?: string, WebException?: record}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "eventframes-searchbyattribute create-event-frame-list-by-attribute" [
+export def "event-frame-create-search-by-attribute" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10532,7 +10532,7 @@ export def "eventframes-searchbyattribute create-event-frame-list-by-attribute" 
 #
 # GET /eventframes/searchbyattribute/{searchId}
 # operationId: EventFrame_ExecuteSearchByAttribute
-export def "eventframes-searchbyattribute list-event-frame-execute-by-attribute" [
+export def "event-frame-execute-search-by-attribute" [
   search_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10585,7 +10585,7 @@ export def "eventframes-searchbyattribute list-event-frame-execute-by-attribute"
 #
 # DELETE /eventframes/{webId}
 # operationId: EventFrame_Delete
-export def "eventframes delete-event-frame" [
+export def "event-frame-delete" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10622,7 +10622,7 @@ export def "eventframes delete-event-frame" [
 #
 # GET /eventframes/{webId}
 # operationId: EventFrame_Get
-export def "eventframes get-event-frame" [
+export def "event-frame-get" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10665,7 +10665,7 @@ export def "eventframes get-event-frame" [
 # --Links shape: {Annotations?: string, Attributes?: string, Categories?: string, Database?: string, DefaultAttribute?: string, EndValue?: string, EventFrames?: string, InterpolatedData?: string, Parent?: string, PlotData?: string, PrimaryReferencedElement?: string, RecordedData?: string, ReferencedElements?: string, Security?: string, SecurityEntries?: string, Self?: string, SummaryData?: string, Template?: string, Value?: string}
 # --Security shape: {CanAnnotate?: bool, CanDelete?: bool, CanExecute?: bool, CanRead?: bool, CanReadData?: bool, CanSubscribe?: bool, CanSubscribeOthers?: bool, CanWrite?: bool, CanWriteData?: bool, HasAdmin?: bool, Rights?: list<string>, WebException?: record}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "eventframes update-event-frame" [
+export def "event-frame-update" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10728,7 +10728,7 @@ export def "eventframes update-event-frame" [
 #
 # PATCH /eventframes/{webId}/acknowledge
 # operationId: EventFrame_Acknowledge
-export def "eventframes-acknowledge update-event-frame" [
+export def "event-frame-acknowledge" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10765,7 +10765,7 @@ export def "eventframes-acknowledge update-event-frame" [
 #
 # GET /eventframes/{webId}/annotations
 # operationId: EventFrame_GetAnnotations
-export def "eventframes-annotations list" [
+export def "event-frame-get-annotations" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10808,7 +10808,7 @@ export def "eventframes-annotations list" [
 # --Errors item shape: {FieldName?: string, Message?: list<string>}
 # --Links shape: {MediaData?: string, MediaMetadata?: string, Owner?: string, Self?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "eventframes-annotations create-event-frame" [
+export def "event-frame-create-annotation" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10861,7 +10861,7 @@ export def "eventframes-annotations create-event-frame" [
 #
 # DELETE /eventframes/{webId}/annotations/{id}
 # operationId: EventFrame_DeleteAnnotation
-export def "eventframes-annotations delete-event-frame" [
+export def "event-frame-delete-annotation" [
   web_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10900,7 +10900,7 @@ export def "eventframes-annotations delete-event-frame" [
 #
 # GET /eventframes/{webId}/annotations/{id}
 # operationId: EventFrame_GetAnnotationById
-export def "eventframes-annotations get-event-frame" [
+export def "event-frame-get-annotation-by-id" [
   web_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10945,7 +10945,7 @@ export def "eventframes-annotations get-event-frame" [
 # --Errors item shape: {FieldName?: string, Message?: list<string>}
 # --Links shape: {MediaData?: string, MediaMetadata?: string, Owner?: string, Self?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "eventframes-annotations update-event-frame" [
+export def "event-frame-update-annotation" [
   web_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10998,7 +10998,7 @@ export def "eventframes-annotations update-event-frame" [
 #
 # DELETE /eventframes/{webId}/annotations/{id}/attachment/media
 # operationId: EventFrame_DeleteAnnotationAttachmentMediaById
-export def "eventframes-annotations-attachment-media delete-event-frame" [
+export def "event-frame-delete-annotation-attachment-media-by-id" [
   web_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11037,7 +11037,7 @@ export def "eventframes-annotations-attachment-media delete-event-frame" [
 #
 # GET /eventframes/{webId}/annotations/{id}/attachment/media/metadata
 # operationId: EventFrame_GetAnnotationAttachmentMediaMetadataById
-export def "eventframes-annotations-attachment-media-metadata get-event-frame" [
+export def "event-frame-get-annotation-attachment-media-metadata-by-id" [
   web_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11079,7 +11079,7 @@ export def "eventframes-annotations-attachment-media-metadata get-event-frame" [
 #
 # GET /eventframes/{webId}/attributes
 # operationId: EventFrame_GetAttributes
-export def "eventframes-attributes get-event-frame" [
+export def "event-frame-get-attributes" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11136,7 +11136,7 @@ export def "eventframes-attributes get-event-frame" [
 # --DataReference shape: {PIPoint?: record, Type?: string, WebException?: record}
 # --Links shape: {Attributes?: string, Categories?: string, Element?: string, EndValue?: string, EnumerationSet?: string, EnumerationValues?: string, EventFrame?: string, InterpolatedData?: string, Parent?: string, PlotData?: string, Point?: string, RecordedData?: string, Self?: string, SummaryData?: string, Template?: string, Trait?: string, Value?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "eventframes-attributes create-event-frame" [
+export def "event-frame-create-attribute" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11204,7 +11204,7 @@ export def "eventframes-attributes create-event-frame" [
 #
 # POST /eventframes/{webId}/attributes/capture
 # operationId: EventFrame_CaptureValues
-export def "eventframes-attributes-capture create-event-frame-values" [
+export def "event-frame-capture-values" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11241,7 +11241,7 @@ export def "eventframes-attributes-capture create-event-frame-values" [
 #
 # GET /eventframes/{webId}/categories
 # operationId: EventFrame_GetCategories
-export def "eventframes-categories get-event-frame" [
+export def "event-frame-get-categories" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11281,7 +11281,7 @@ export def "eventframes-categories get-event-frame" [
 #
 # POST /eventframes/{webId}/config
 # operationId: EventFrame_CreateConfig
-export def "eventframes-config create-event-frame" [
+export def "event-frame-create-config" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11320,7 +11320,7 @@ export def "eventframes-config create-event-frame" [
 #
 # GET /eventframes/{webId}/eventframeattributes
 # operationId: EventFrame_FindEventFrameAttributes
-export def "eventframes-eventframeattributes find-event-frame-event-frame-attributes" [
+export def "event-frame-find-event-frame-attributes" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11378,7 +11378,7 @@ export def "eventframes-eventframeattributes find-event-frame-event-frame-attrib
 #
 # GET /eventframes/{webId}/eventframes
 # operationId: EventFrame_GetEventFrames
-export def "eventframes-eventframes get-event-frame-event-frames" [
+export def "event-frame-get-event-frames" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11437,7 +11437,7 @@ export def "eventframes-eventframes get-event-frame-event-frames" [
 # --Links shape: {Annotations?: string, Attributes?: string, Categories?: string, Database?: string, DefaultAttribute?: string, EndValue?: string, EventFrames?: string, InterpolatedData?: string, Parent?: string, PlotData?: string, PrimaryReferencedElement?: string, RecordedData?: string, ReferencedElements?: string, Security?: string, SecurityEntries?: string, Self?: string, SummaryData?: string, Template?: string, Value?: string}
 # --Security shape: {CanAnnotate?: bool, CanDelete?: bool, CanExecute?: bool, CanRead?: bool, CanReadData?: bool, CanSubscribe?: bool, CanSubscribeOthers?: bool, CanWrite?: bool, CanWriteData?: bool, HasAdmin?: bool, Rights?: list<string>, WebException?: record}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "eventframes-eventframes create-event-frame-event-frame" [
+export def "event-frame-create-event-frame" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11502,7 +11502,7 @@ export def "eventframes-eventframes create-event-frame-event-frame" [
 #
 # GET /eventframes/{webId}/referencedelements
 # operationId: EventFrame_GetReferencedElements
-export def "eventframes-referencedelements get-event-frame-referenced-elements" [
+export def "event-frame-get-referenced-elements" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11543,7 +11543,7 @@ export def "eventframes-referencedelements get-event-frame-referenced-elements" 
 #
 # GET /eventframes/{webId}/security
 # operationId: EventFrame_GetSecurity
-export def "eventframes-security get-event-frame" [
+export def "event-frame-get-security" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11585,7 +11585,7 @@ export def "eventframes-security get-event-frame" [
 #
 # GET /eventframes/{webId}/securityentries
 # operationId: EventFrame_GetSecurityEntries
-export def "eventframes-securityentries get-event-frame-security-entries" [
+export def "event-frame-get-security-entries" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11628,7 +11628,7 @@ export def "eventframes-securityentries get-event-frame-security-entries" [
 # operationId: EventFrame_CreateSecurityEntry
 # --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "eventframes-securityentries create-event-frame-security-entry" [
+export def "event-frame-create-security-entry" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11677,7 +11677,7 @@ export def "eventframes-securityentries create-event-frame-security-entry" [
 #
 # DELETE /eventframes/{webId}/securityentries/{name}
 # operationId: EventFrame_DeleteSecurityEntry
-export def "eventframes-securityentries delete-event-frame-security-entry" [
+export def "event-frame-delete-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11718,7 +11718,7 @@ export def "eventframes-securityentries delete-event-frame-security-entry" [
 #
 # GET /eventframes/{webId}/securityentries/{name}
 # operationId: EventFrame_GetSecurityEntryByName
-export def "eventframes-securityentries get-event-frame-security-entry" [
+export def "event-frame-get-security-entry-by-name" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11762,7 +11762,7 @@ export def "eventframes-securityentries get-event-frame-security-entry" [
 # operationId: EventFrame_UpdateSecurityEntry
 # --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "eventframes-securityentries update-event-frame-security-entry" [
+export def "event-frame-update-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11812,7 +11812,7 @@ export def "eventframes-securityentries update-event-frame-security-entry" [
 #
 # GET /notificationcontacttemplates
 # operationId: NotificationContactTemplate_GetByPath
-export def "notificationcontacttemplates get-notification-contact-template-by-path" [
+export def "notification-contact-template-get-by-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11851,7 +11851,7 @@ export def "notificationcontacttemplates get-notification-contact-template-by-pa
 #
 # GET /notificationcontacttemplates/search
 # operationId: NotificationContactTemplate_GetNotificationContactTemplatesQuery
-export def "notificationcontacttemplates-search get-notification-contact-template-notification-contact-templates-list" [
+export def "notification-contact-template-get-notification-contact-templates-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11893,7 +11893,7 @@ export def "notificationcontacttemplates-search get-notification-contact-templat
 #
 # DELETE /notificationcontacttemplates/{webId}
 # operationId: NotificationContactTemplate_Delete
-export def "notificationcontacttemplates delete-notification-contact-template" [
+export def "notification-contact-template-delete" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11930,7 +11930,7 @@ export def "notificationcontacttemplates delete-notification-contact-template" [
 #
 # GET /notificationcontacttemplates/{webId}
 # operationId: NotificationContactTemplate_Get
-export def "notificationcontacttemplates get-notification-contact-template" [
+export def "notification-contact-template-get" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11972,7 +11972,7 @@ export def "notificationcontacttemplates get-notification-contact-template" [
 # operationId: NotificationContactTemplate_Update
 # --Links shape: {AssetServer?: string, NotificationContactTemplates?: string, NotificationPlugIn?: string, Security?: string, SecurityEntries?: string, Self?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "notificationcontacttemplates update-notification-contact-template" [
+export def "notification-contact-template-update" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12029,7 +12029,7 @@ export def "notificationcontacttemplates update-notification-contact-template" [
 #
 # GET /notificationcontacttemplates/{webId}/notificationcontacttemplates
 # operationId: NotificationContactTemplate_GetNotificationContactTemplates
-export def "notificationcontacttemplates-notificationcontacttemplates get-notification-contact-template-notification-contact-templates" [
+export def "notification-contact-template-get-notification-contact-templates" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12069,7 +12069,7 @@ export def "notificationcontacttemplates-notificationcontacttemplates get-notifi
 #
 # GET /notificationcontacttemplates/{webId}/security
 # operationId: NotificationContactTemplate_GetSecurity
-export def "notificationcontacttemplates-security get-notification-contact-template" [
+export def "notification-contact-template-get-security" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12111,7 +12111,7 @@ export def "notificationcontacttemplates-security get-notification-contact-templ
 #
 # GET /notificationcontacttemplates/{webId}/securityentries
 # operationId: NotificationContactTemplate_GetSecurityEntries
-export def "notificationcontacttemplates-securityentries get-notification-contact-template-security-entries" [
+export def "notification-contact-template-get-security-entries" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12154,7 +12154,7 @@ export def "notificationcontacttemplates-securityentries get-notification-contac
 # operationId: NotificationContactTemplate_CreateSecurityEntry
 # --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "notificationcontacttemplates-securityentries create-notification-contact-template-security-entry" [
+export def "notification-contact-template-create-security-entry" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12203,7 +12203,7 @@ export def "notificationcontacttemplates-securityentries create-notification-con
 #
 # DELETE /notificationcontacttemplates/{webId}/securityentries/{name}
 # operationId: NotificationContactTemplate_DeleteSecurityEntry
-export def "notificationcontacttemplates-securityentries delete-notification-contact-template-security-entry" [
+export def "notification-contact-template-delete-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12244,7 +12244,7 @@ export def "notificationcontacttemplates-securityentries delete-notification-con
 #
 # GET /notificationcontacttemplates/{webId}/securityentries/{name}
 # operationId: NotificationContactTemplate_GetSecurityEntryByName
-export def "notificationcontacttemplates-securityentries get-notification-contact-template-security-entry" [
+export def "notification-contact-template-get-security-entry-by-name" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12288,7 +12288,7 @@ export def "notificationcontacttemplates-securityentries get-notification-contac
 # operationId: NotificationContactTemplate_UpdateSecurityEntry
 # --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "notificationcontacttemplates-securityentries update-notification-contact-template-security-entry" [
+export def "notification-contact-template-update-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12338,7 +12338,7 @@ export def "notificationcontacttemplates-securityentries update-notification-con
 #
 # GET /notificationplugIns
 # operationId: NotificationPlugIn_GetByPath
-export def "notificationplug-ins get-notification-plug-by-path" [
+export def "notification-plug-in-get-by-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12377,7 +12377,7 @@ export def "notificationplug-ins get-notification-plug-by-path" [
 #
 # GET /notificationplugins/{webId}
 # operationId: NotificationPlugIn_Get
-export def "notificationplugins get-notification-plug-in" [
+export def "notification-plug-in-get" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12417,7 +12417,7 @@ export def "notificationplugins get-notification-plug-in" [
 #
 # GET /notificationrules
 # operationId: NotificationRule_GetByPath
-export def "notificationrules get-notification-rule-by-path" [
+export def "notification-rule-get-by-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12456,7 +12456,7 @@ export def "notificationrules get-notification-rule-by-path" [
 #
 # GET /notificationrules/search
 # operationId: NotificationRule_GetNotificationRulesQuery
-export def "notificationrules-search get-notification-rule-notification-rules-list" [
+export def "notification-rule-get-notification-rules-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12498,7 +12498,7 @@ export def "notificationrules-search get-notification-rule-notification-rules-li
 #
 # DELETE /notificationrules/{webId}
 # operationId: NotificationRule_Delete
-export def "notificationrules delete-notification-rule" [
+export def "notification-rule-delete" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12535,7 +12535,7 @@ export def "notificationrules delete-notification-rule" [
 #
 # GET /notificationrules/{webId}
 # operationId: NotificationRule_Get
-export def "notificationrules get-notification-rule" [
+export def "notification-rule-get" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12576,7 +12576,7 @@ export def "notificationrules get-notification-rule" [
 # PATCH /notificationrules/{webId}
 # operationId: NotificationRule_Update
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "notificationrules update-notification-rule" [
+export def "notification-rule-update" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12630,7 +12630,7 @@ export def "notificationrules update-notification-rule" [
 #
 # GET /notificationrules/{webId}/notificationrulesubscribers
 # operationId: NotificationRule_GetNotificationRuleSubscribers
-export def "notificationrules-notificationrulesubscribers get-notification-rule-notification-rule-subscribers" [
+export def "notification-rule-get-notification-rule-subscribers" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12671,7 +12671,7 @@ export def "notificationrules-notificationrulesubscribers get-notification-rule-
 # POST /notificationrules/{webId}/notificationrulesubscribers
 # operationId: NotificationRule_CreateNotificationRuleSubscriber
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "notificationrules-notificationrulesubscribers create-notification-rule-notification-rule-subscriber" [
+export def "notification-rule-create-notification-rule-subscriber" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12728,7 +12728,7 @@ export def "notificationrules-notificationrulesubscribers create-notification-ru
 #
 # GET /notificationrules/{webId}/security
 # operationId: NotificationRule_GetSecurity
-export def "notificationrules-security get-notification-rule" [
+export def "notification-rule-get-security" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12770,7 +12770,7 @@ export def "notificationrules-security get-notification-rule" [
 #
 # GET /notificationrules/{webId}/securityentries
 # operationId: NotificationRule_GetSecurityEntries
-export def "notificationrules-securityentries get-notification-rule-security-entries" [
+export def "notification-rule-get-security-entries" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12813,7 +12813,7 @@ export def "notificationrules-securityentries get-notification-rule-security-ent
 # operationId: NotificationRule_CreateSecurityEntry
 # --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "notificationrules-securityentries create-notification-rule-security-entry" [
+export def "notification-rule-create-security-entry" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12862,7 +12862,7 @@ export def "notificationrules-securityentries create-notification-rule-security-
 #
 # DELETE /notificationrules/{webId}/securityentries/{name}
 # operationId: NotificationRule_DeleteSecurityEntry
-export def "notificationrules-securityentries delete-notification-rule-security-entry" [
+export def "notification-rule-delete-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12903,7 +12903,7 @@ export def "notificationrules-securityentries delete-notification-rule-security-
 #
 # GET /notificationrules/{webId}/securityentries/{name}
 # operationId: NotificationRule_GetSecurityEntryByName
-export def "notificationrules-securityentries get-notification-rule-security-entry" [
+export def "notification-rule-get-security-entry-by-name" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12947,7 +12947,7 @@ export def "notificationrules-securityentries get-notification-rule-security-ent
 # operationId: NotificationRule_UpdateSecurityEntry
 # --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "notificationrules-securityentries update-notification-rule-security-entry" [
+export def "notification-rule-update-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12997,7 +12997,7 @@ export def "notificationrules-securityentries update-notification-rule-security-
 #
 # GET /notificationrulesubscribers
 # operationId: NotificationRuleSubscriber_GetByPath
-export def "notificationrulesubscribers get-notification-rule-subscriber-by-path" [
+export def "notification-rule-subscriber-get-by-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13036,7 +13036,7 @@ export def "notificationrulesubscribers get-notification-rule-subscriber-by-path
 #
 # DELETE /notificationrulesubscribers/{webId}
 # operationId: NotificationRuleSubscriber_Delete
-export def "notificationrulesubscribers delete-notification-rule-subscriber" [
+export def "notification-rule-subscriber-delete" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13073,7 +13073,7 @@ export def "notificationrulesubscribers delete-notification-rule-subscriber" [
 #
 # GET /notificationrulesubscribers/{webId}
 # operationId: NotificationRuleSubscriber_Get
-export def "notificationrulesubscribers get-notification-rule-subscriber" [
+export def "notification-rule-subscriber-get" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13114,7 +13114,7 @@ export def "notificationrulesubscribers get-notification-rule-subscriber" [
 # PATCH /notificationrulesubscribers/{webId}
 # operationId: NotificationRuleSubscriber_Update
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "notificationrulesubscribers update-notification-rule-subscriber" [
+export def "notification-rule-subscriber-update" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13169,7 +13169,7 @@ export def "notificationrulesubscribers update-notification-rule-subscriber" [
 #
 # GET /notificationrulesubscribers/{webId}/notificationrulesubscribers
 # operationId: NotificationRuleSubscriber_GetNotificationRuleSubscribers
-export def "notificationrulesubscribers-notificationrulesubscribers get-notification-rule-subscriber-notification-rule-subscribers" [
+export def "notification-rule-subscriber-get-notification-rule-subscribers" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13209,7 +13209,7 @@ export def "notificationrulesubscribers-notificationrulesubscribers get-notifica
 #
 # GET /notificationruletemplates
 # operationId: NotificationRuleTemplate_GetByPath
-export def "notificationruletemplates get-notification-rule-template-by-path" [
+export def "notification-rule-template-get-by-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13248,7 +13248,7 @@ export def "notificationruletemplates get-notification-rule-template-by-path" [
 #
 # GET /notificationruletemplates/search
 # operationId: NotificationRuleTemplate_GetNotificationRuleTemplatesQuery
-export def "notificationruletemplates-search get-notification-rule-template-notification-rule-templates-list" [
+export def "notification-rule-template-get-notification-rule-templates-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13290,7 +13290,7 @@ export def "notificationruletemplates-search get-notification-rule-template-noti
 #
 # DELETE /notificationruletemplates/{webId}
 # operationId: NotificationRuleTemplate_Delete
-export def "notificationruletemplates delete-notification-rule-template" [
+export def "notification-rule-template-delete" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13327,7 +13327,7 @@ export def "notificationruletemplates delete-notification-rule-template" [
 #
 # GET /notificationruletemplates/{webId}
 # operationId: NotificationRuleTemplate_Get
-export def "notificationruletemplates get-notification-rule-template" [
+export def "notification-rule-template-get" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13368,7 +13368,7 @@ export def "notificationruletemplates get-notification-rule-template" [
 # PATCH /notificationruletemplates/{webId}
 # operationId: NotificationRuleTemplate_Update
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "notificationruletemplates update-notification-rule-template" [
+export def "notification-rule-template-update" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13421,7 +13421,7 @@ export def "notificationruletemplates update-notification-rule-template" [
 #
 # GET /notificationruletemplates/{webId}/notificationrulesubscribers
 # operationId: NotificationRuleTemplate_GetNotificationRuleTemplateSubscribers
-export def "notificationruletemplates-notificationrulesubscribers get-notification-rule-template-notification-rule-template-subscribers" [
+export def "notification-rule-template-get-notification-rule-template-subscribers" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13462,7 +13462,7 @@ export def "notificationruletemplates-notificationrulesubscribers get-notificati
 # POST /notificationruletemplates/{webId}/notificationrulesubscribers
 # operationId: NotificationRuleTemplate_CreateNotificationRuleTemplateSubscriber
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "notificationruletemplates-notificationrulesubscribers create-notification-rule-template-notification-rule-template-subscriber" [
+export def "notification-rule-template-create-notification-rule-template-subscriber" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13519,7 +13519,7 @@ export def "notificationruletemplates-notificationrulesubscribers create-notific
 #
 # GET /notificationruletemplates/{webId}/security
 # operationId: NotificationRuleTemplate_GetSecurity
-export def "notificationruletemplates-security get-notification-rule-template" [
+export def "notification-rule-template-get-security" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13561,7 +13561,7 @@ export def "notificationruletemplates-security get-notification-rule-template" [
 #
 # GET /notificationruletemplates/{webId}/securityentries
 # operationId: NotificationRuleTemplate_GetSecurityEntries
-export def "notificationruletemplates-securityentries get-notification-rule-template-security-entries" [
+export def "notification-rule-template-get-security-entries" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13604,7 +13604,7 @@ export def "notificationruletemplates-securityentries get-notification-rule-temp
 # operationId: NotificationRuleTemplate_CreateSecurityEntry
 # --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "notificationruletemplates-securityentries create-notification-rule-template-security-entry" [
+export def "notification-rule-template-create-security-entry" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13653,7 +13653,7 @@ export def "notificationruletemplates-securityentries create-notification-rule-t
 #
 # DELETE /notificationruletemplates/{webId}/securityentries/{name}
 # operationId: NotificationRuleTemplate_DeleteSecurityEntry
-export def "notificationruletemplates-securityentries delete-notification-rule-template-security-entry" [
+export def "notification-rule-template-delete-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13694,7 +13694,7 @@ export def "notificationruletemplates-securityentries delete-notification-rule-t
 #
 # GET /notificationruletemplates/{webId}/securityentries/{name}
 # operationId: NotificationRuleTemplate_GetSecurityEntryByName
-export def "notificationruletemplates-securityentries get-notification-rule-template-security-entry" [
+export def "notification-rule-template-get-security-entry-by-name" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13738,7 +13738,7 @@ export def "notificationruletemplates-securityentries get-notification-rule-temp
 # operationId: NotificationRuleTemplate_UpdateSecurityEntry
 # --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "notificationruletemplates-securityentries update-notification-rule-template-security-entry" [
+export def "notification-rule-template-update-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13788,7 +13788,7 @@ export def "notificationruletemplates-securityentries update-notification-rule-t
 #
 # GET /points
 # operationId: Point_GetByPath
-export def "points get-by-path" [
+export def "point-get-by-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13827,7 +13827,7 @@ export def "points get-by-path" [
 #
 # GET /points/multiple
 # operationId: Point_GetMultiple
-export def "points-multiple get" [
+export def "point-get-multiple" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13869,7 +13869,7 @@ export def "points-multiple get" [
 #
 # DELETE /points/{webId}
 # operationId: Point_Delete
-export def "points delete" [
+export def "point-delete" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13906,7 +13906,7 @@ export def "points delete" [
 #
 # GET /points/{webId}
 # operationId: Point_Get
-export def "points get" [
+export def "point-get" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13948,7 +13948,7 @@ export def "points get" [
 # operationId: Point_Update
 # --Links shape: {Attributes?: string, DataServer?: string, EndValue?: string, InterpolatedData?: string, PlotData?: string, RecordedData?: string, Self?: string, SummaryData?: string, Value?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "points update" [
+export def "point-update" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14004,7 +14004,7 @@ export def "points update" [
 #
 # GET /points/{webId}/attributes
 # operationId: Point_GetAttributes
-export def "points-attributes list" [
+export def "point-get-attributes" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14046,7 +14046,7 @@ export def "points-attributes list" [
 #
 # GET /points/{webId}/attributes/{name}
 # operationId: Point_GetAttributeByName
-export def "points-attributes get" [
+export def "point-get-attribute-by-name" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -14088,7 +14088,7 @@ export def "points-attributes get" [
 #
 # GET /securityidentities
 # operationId: SecurityIdentity_GetByPath
-export def "securityidentities get-security-identity-by-path" [
+export def "security-identity-get-by-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14127,7 +14127,7 @@ export def "securityidentities get-security-identity-by-path" [
 #
 # DELETE /securityidentities/{webId}
 # operationId: SecurityIdentity_Delete
-export def "securityidentities delete-security-identity" [
+export def "security-identity-delete" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14164,7 +14164,7 @@ export def "securityidentities delete-security-identity" [
 #
 # GET /securityidentities/{webId}
 # operationId: SecurityIdentity_Get
-export def "securityidentities get-security-identity" [
+export def "security-identity-get" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14206,7 +14206,7 @@ export def "securityidentities get-security-identity" [
 # operationId: SecurityIdentity_Update
 # --Links shape: {AssetServer?: string, Security?: string, SecurityEntries?: string, SecurityMappings?: string, Self?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "securityidentities update-security-identity" [
+export def "security-identity-update" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14254,7 +14254,7 @@ export def "securityidentities update-security-identity" [
 #
 # GET /securityidentities/{webId}/security
 # operationId: SecurityIdentity_GetSecurity
-export def "securityidentities-security get-identity" [
+export def "security-identity-get-security" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14296,7 +14296,7 @@ export def "securityidentities-security get-identity" [
 #
 # GET /securityidentities/{webId}/securityentries
 # operationId: SecurityIdentity_GetSecurityEntries
-export def "securityidentities-securityentries get-security-identity-security-entries" [
+export def "security-identity-get-security-entries" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14337,7 +14337,7 @@ export def "securityidentities-securityentries get-security-identity-security-en
 #
 # GET /securityidentities/{webId}/securityentries/{name}
 # operationId: SecurityIdentity_GetSecurityEntryByName
-export def "securityidentities-securityentries get-security-identity-security-entry" [
+export def "security-identity-get-security-entry-by-name" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -14379,7 +14379,7 @@ export def "securityidentities-securityentries get-security-identity-security-en
 #
 # GET /securityidentities/{webId}/securitymappings
 # operationId: SecurityIdentity_GetSecurityMappings
-export def "securityidentities-securitymappings get-security-identity-security-mappings" [
+export def "security-identity-get-security-mappings" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14419,7 +14419,7 @@ export def "securityidentities-securitymappings get-security-identity-security-m
 #
 # GET /securitymappings
 # operationId: SecurityMapping_GetByPath
-export def "securitymappings get-security-mapping-by-path" [
+export def "security-mapping-get-by-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14458,7 +14458,7 @@ export def "securitymappings get-security-mapping-by-path" [
 #
 # DELETE /securitymappings/{webId}
 # operationId: SecurityMapping_Delete
-export def "securitymappings delete-security-mapping" [
+export def "security-mapping-delete" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14495,7 +14495,7 @@ export def "securitymappings delete-security-mapping" [
 #
 # GET /securitymappings/{webId}
 # operationId: SecurityMapping_Get
-export def "securitymappings get-security-mapping" [
+export def "security-mapping-get" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14537,7 +14537,7 @@ export def "securitymappings get-security-mapping" [
 # operationId: SecurityMapping_Update
 # --Links shape: {AssetServer?: string, Security?: string, SecurityEntries?: string, SecurityIdentity?: string, Self?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "securitymappings update-security-mapping" [
+export def "security-mapping-update" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14586,7 +14586,7 @@ export def "securitymappings update-security-mapping" [
 #
 # GET /securitymappings/{webId}/security
 # operationId: SecurityMapping_GetSecurity
-export def "securitymappings-security get-mapping" [
+export def "security-mapping-get-security" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14628,7 +14628,7 @@ export def "securitymappings-security get-mapping" [
 #
 # GET /securitymappings/{webId}/securityentries
 # operationId: SecurityMapping_GetSecurityEntries
-export def "securitymappings-securityentries get-security-mapping-security-entries" [
+export def "security-mapping-get-security-entries" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14669,7 +14669,7 @@ export def "securitymappings-securityentries get-security-mapping-security-entri
 #
 # GET /securitymappings/{webId}/securityentries/{name}
 # operationId: SecurityMapping_GetSecurityEntryByName
-export def "securitymappings-securityentries get-security-mapping-security-entry" [
+export def "security-mapping-get-security-entry-by-name" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -14711,7 +14711,7 @@ export def "securitymappings-securityentries get-security-mapping-security-entry
 #
 # GET /streams/updates/{marker}
 # operationId: Stream_RetrieveStreamUpdate
-export def "streams-updates get" [
+export def "stream-retrieve-stream-update" [
   marker: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14752,7 +14752,7 @@ export def "streams-updates get" [
 #
 # GET /streams/{webId}/channel
 # operationId: Stream_GetChannel
-export def "streams-channel get" [
+export def "stream-get-channel" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14793,7 +14793,7 @@ export def "streams-channel get" [
 #
 # GET /streams/{webId}/end
 # operationId: Stream_GetEnd
-export def "streams-end get" [
+export def "stream-get-end" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14833,7 +14833,7 @@ export def "streams-end get" [
 #
 # GET /streams/{webId}/interpolated
 # operationId: Stream_GetInterpolated
-export def "streams-interpolated get" [
+export def "stream-get-interpolated" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14881,7 +14881,7 @@ export def "streams-interpolated get" [
 #
 # GET /streams/{webId}/interpolatedattimes
 # operationId: Stream_GetInterpolatedAtTimes
-export def "streams-interpolatedattimes get-interpolated-at-times" [
+export def "stream-get-interpolated-at-times" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14926,7 +14926,7 @@ export def "streams-interpolatedattimes get-interpolated-at-times" [
 #
 # GET /streams/{webId}/plot
 # operationId: Stream_GetPlot
-export def "streams-plot get" [
+export def "stream-get-plot" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14970,7 +14970,7 @@ export def "streams-plot get" [
 #
 # GET /streams/{webId}/recorded
 # operationId: Stream_GetRecorded
-export def "streams-recorded get" [
+export def "stream-get-recorded" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15018,7 +15018,7 @@ export def "streams-recorded get" [
 #
 # POST /streams/{webId}/recorded
 # operationId: Stream_UpdateValues
-export def "streams-recorded update-values" [
+export def "stream-update-values" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15062,7 +15062,7 @@ export def "streams-recorded update-values" [
 #
 # GET /streams/{webId}/recordedattime
 # operationId: Stream_GetRecordedAtTime
-export def "streams-recordedattime get-recorded-at-time" [
+export def "stream-get-recorded-at-time" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15106,7 +15106,7 @@ export def "streams-recordedattime get-recorded-at-time" [
 #
 # GET /streams/{webId}/recordedattimes
 # operationId: Stream_GetRecordedAtTimes
-export def "streams-recordedattimes get-recorded-at-times" [
+export def "stream-get-recorded-at-times" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15151,7 +15151,7 @@ export def "streams-recordedattimes get-recorded-at-times" [
 #
 # GET /streams/{webId}/summary
 # operationId: Stream_GetSummary
-export def "streams-summary get" [
+export def "stream-get-summary" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15200,7 +15200,7 @@ export def "streams-summary get" [
 #
 # POST /streams/{webId}/updates
 # operationId: Stream_RegisterStreamUpdate
-export def "streams-updates create" [
+export def "stream-register-stream-update" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15240,7 +15240,7 @@ export def "streams-updates create" [
 #
 # GET /streams/{webId}/value
 # operationId: Stream_GetValue
-export def "streams-value get" [
+export def "stream-get-value" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15284,7 +15284,7 @@ export def "streams-value get" [
 # operationId: Stream_UpdateValue
 # --Errors item shape: {FieldName?: string, Message?: list<string>}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "streams-value update" [
+export def "stream-update-value" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15337,7 +15337,7 @@ export def "streams-value update" [
 #
 # GET /streamsets/channel
 # operationId: StreamSet_GetChannelAdHoc
-export def "streamsets-channel update-stream-get-ad-hoc" [
+export def "stream-set-get-channel-ad-hoc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15377,7 +15377,7 @@ export def "streamsets-channel update-stream-get-ad-hoc" [
 #
 # GET /streamsets/end
 # operationId: StreamSet_GetEndAdHoc
-export def "streamsets-end update-stream-get-ad-hoc" [
+export def "stream-set-get-end-ad-hoc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15418,7 +15418,7 @@ export def "streamsets-end update-stream-get-ad-hoc" [
 #
 # GET /streamsets/interpolated
 # operationId: StreamSet_GetInterpolatedAdHoc
-export def "streamsets-interpolated update-stream-get-ad-hoc" [
+export def "stream-set-get-interpolated-ad-hoc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15467,7 +15467,7 @@ export def "streamsets-interpolated update-stream-get-ad-hoc" [
 #
 # GET /streamsets/interpolatedattimes
 # operationId: StreamSet_GetInterpolatedAtTimesAdHoc
-export def "streamsets-interpolatedattimes update-stream-get-interpolated-at-times-ad-hoc" [
+export def "stream-set-get-interpolated-at-times-ad-hoc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15511,7 +15511,7 @@ export def "streamsets-interpolatedattimes update-stream-get-interpolated-at-tim
 #
 # GET /streamsets/joined
 # operationId: StreamSet_GetJoined
-export def "streamsets-joined update-stream-get" [
+export def "stream-set-get-joined" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15558,7 +15558,7 @@ export def "streamsets-joined update-stream-get" [
 #
 # GET /streamsets/plot
 # operationId: StreamSet_GetPlotAdHoc
-export def "streamsets-plot update-stream-get-ad-hoc" [
+export def "stream-set-get-plot-ad-hoc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15603,7 +15603,7 @@ export def "streamsets-plot update-stream-get-ad-hoc" [
 #
 # GET /streamsets/recorded
 # operationId: StreamSet_GetRecordedAdHoc
-export def "streamsets-recorded update-stream-get-ad-hoc" [
+export def "stream-set-get-recorded-ad-hoc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15651,7 +15651,7 @@ export def "streamsets-recorded update-stream-get-ad-hoc" [
 #
 # POST /streamsets/recorded
 # operationId: StreamSet_UpdateValuesAdHoc
-export def "streamsets-recorded update-stream-values-ad-hoc" [
+export def "stream-set-update-values-ad-hoc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15693,7 +15693,7 @@ export def "streamsets-recorded update-stream-values-ad-hoc" [
 #
 # GET /streamsets/recordedattime
 # operationId: StreamSet_GetRecordedAtTimeAdHoc
-export def "streamsets-recordedattime update-stream-get-recorded-at-time-ad-hoc" [
+export def "stream-set-get-recorded-at-time-ad-hoc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15735,7 +15735,7 @@ export def "streamsets-recordedattime update-stream-get-recorded-at-time-ad-hoc"
 #
 # GET /streamsets/recordedattimes
 # operationId: StreamSet_GetRecordedAtTimesAdHoc
-export def "streamsets-recordedattimes update-stream-get-recorded-at-times-ad-hoc" [
+export def "stream-set-get-recorded-at-times-ad-hoc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15778,7 +15778,7 @@ export def "streamsets-recordedattimes update-stream-get-recorded-at-times-ad-ho
 #
 # GET /streamsets/summary
 # operationId: StreamSet_GetSummariesAdHoc
-export def "streamsets-summary update-stream-get-summaries-ad-hoc" [
+export def "stream-set-get-summaries-ad-hoc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15827,7 +15827,7 @@ export def "streamsets-summary update-stream-get-summaries-ad-hoc" [
 #
 # GET /streamsets/updates
 # operationId: StreamSet_RetrieveStreamSetUpdates
-export def "streamsets-updates update-stream-get-stream" [
+export def "stream-set-retrieve-stream-set-updates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15866,7 +15866,7 @@ export def "streamsets-updates update-stream-get-stream" [
 #
 # POST /streamsets/updates
 # operationId: StreamSet_RegisterStreamSetUpdates
-export def "streamsets-updates update-stream-create-stream" [
+export def "stream-set-register-stream-set-updates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15905,7 +15905,7 @@ export def "streamsets-updates update-stream-create-stream" [
 #
 # GET /streamsets/value
 # operationId: StreamSet_GetValuesAdHoc
-export def "streamsets-value update-stream-get-ad-hoc" [
+export def "stream-set-get-values-ad-hoc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15948,7 +15948,7 @@ export def "streamsets-value update-stream-get-ad-hoc" [
 #
 # POST /streamsets/value
 # operationId: StreamSet_UpdateValueAdHoc
-export def "streamsets-value update-stream-ad-hoc" [
+export def "stream-set-update-value-ad-hoc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15990,7 +15990,7 @@ export def "streamsets-value update-stream-ad-hoc" [
 #
 # GET /streamsets/{webId}/channel
 # operationId: StreamSet_GetChannel
-export def "streamsets-channel update-stream-get" [
+export def "stream-set-get-channel" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16037,7 +16037,7 @@ export def "streamsets-channel update-stream-get" [
 #
 # GET /streamsets/{webId}/end
 # operationId: StreamSet_GetEnd
-export def "streamsets-end update-stream-get" [
+export def "stream-set-get-end" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16085,7 +16085,7 @@ export def "streamsets-end update-stream-get" [
 #
 # GET /streamsets/{webId}/interpolated
 # operationId: StreamSet_GetInterpolated
-export def "streamsets-interpolated update-stream-get" [
+export def "stream-set-get-interpolated" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16141,7 +16141,7 @@ export def "streamsets-interpolated update-stream-get" [
 #
 # GET /streamsets/{webId}/interpolatedattimes
 # operationId: StreamSet_GetInterpolatedAtTimes
-export def "streamsets-interpolatedattimes update-stream-get-interpolated-at-times" [
+export def "stream-set-get-interpolated-at-times" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16192,7 +16192,7 @@ export def "streamsets-interpolatedattimes update-stream-get-interpolated-at-tim
 #
 # GET /streamsets/{webId}/plot
 # operationId: StreamSet_GetPlot
-export def "streamsets-plot update-stream-get" [
+export def "stream-set-get-plot" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16244,7 +16244,7 @@ export def "streamsets-plot update-stream-get" [
 #
 # GET /streamsets/{webId}/recorded
 # operationId: StreamSet_GetRecorded
-export def "streamsets-recorded update-stream-get" [
+export def "stream-set-get-recorded" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16299,7 +16299,7 @@ export def "streamsets-recorded update-stream-get" [
 #
 # POST /streamsets/{webId}/recorded
 # operationId: StreamSet_UpdateValues
-export def "streamsets-recorded update-stream-values" [
+export def "stream-set-update-values" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16343,7 +16343,7 @@ export def "streamsets-recorded update-stream-values" [
 #
 # GET /streamsets/{webId}/recordedattime
 # operationId: StreamSet_GetRecordedAtTime
-export def "streamsets-recordedattime update-stream-get-recorded-at-time" [
+export def "stream-set-get-recorded-at-time" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16392,7 +16392,7 @@ export def "streamsets-recordedattime update-stream-get-recorded-at-time" [
 #
 # GET /streamsets/{webId}/recordedattimes
 # operationId: StreamSet_GetRecordedAtTimes
-export def "streamsets-recordedattimes update-stream-get-recorded-at-times" [
+export def "stream-set-get-recorded-at-times" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16442,7 +16442,7 @@ export def "streamsets-recordedattimes update-stream-get-recorded-at-times" [
 #
 # GET /streamsets/{webId}/summary
 # operationId: StreamSet_GetSummaries
-export def "streamsets-summary update-stream-get-summaries" [
+export def "stream-set-get-summaries" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16498,7 +16498,7 @@ export def "streamsets-summary update-stream-get-summaries" [
 #
 # GET /streamsets/{webId}/value
 # operationId: StreamSet_GetValues
-export def "streamsets-value update-stream-get" [
+export def "stream-set-get-values" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16548,7 +16548,7 @@ export def "streamsets-value update-stream-get" [
 #
 # POST /streamsets/{webId}/value
 # operationId: StreamSet_UpdateValue
-export def "streamsets-value update-stream" [
+export def "stream-set-update-value" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16592,7 +16592,7 @@ export def "streamsets-value update-stream" [
 #
 # GET /system
 # operationId: System_Landing
-export def "system get-landing" [
+export def "system-landing" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -16627,7 +16627,7 @@ export def "system get-landing" [
 #
 # GET /system/cacheinstances
 # operationId: System_CacheInstances
-export def "system-cacheinstances get-cache-instances" [
+export def "system-cache-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -16662,7 +16662,7 @@ export def "system-cacheinstances get-cache-instances" [
 #
 # GET /system/configuration
 # operationId: Configuration_List
-export def "system-configuration list" [
+export def "configuration-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -16697,7 +16697,7 @@ export def "system-configuration list" [
 #
 # DELETE /system/configuration/{key}
 # operationId: Configuration_Delete
-export def "system-configuration delete" [
+export def "configuration-delete" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16734,7 +16734,7 @@ export def "system-configuration delete" [
 #
 # GET /system/configuration/{key}
 # operationId: Configuration_Get
-export def "system-configuration get" [
+export def "configuration-get" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16771,7 +16771,7 @@ export def "system-configuration get" [
 #
 # GET /system/status
 # operationId: System_Status
-export def "system-status get" [
+export def "system-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -16806,7 +16806,7 @@ export def "system-status get" [
 #
 # GET /system/userinfo
 # operationId: System_UserInfo
-export def "system-userinfo get-user" [
+export def "system-user-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -16841,7 +16841,7 @@ export def "system-userinfo get-user" [
 #
 # GET /system/versions
 # operationId: System_Versions
-export def "system-versions get" [
+export def "system-versions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -16876,7 +16876,7 @@ export def "system-versions get" [
 #
 # GET /tablecategories
 # operationId: TableCategory_GetByPath
-export def "tablecategories get-table-category-by-path" [
+export def "table-category-get-by-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -16915,7 +16915,7 @@ export def "tablecategories get-table-category-by-path" [
 #
 # DELETE /tablecategories/{webId}
 # operationId: TableCategory_Delete
-export def "tablecategories delete-table-category" [
+export def "table-category-delete" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16952,7 +16952,7 @@ export def "tablecategories delete-table-category" [
 #
 # GET /tablecategories/{webId}
 # operationId: TableCategory_Get
-export def "tablecategories get-table-category" [
+export def "table-category-get" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16994,7 +16994,7 @@ export def "tablecategories get-table-category" [
 # operationId: TableCategory_Update
 # --Links shape: {Database?: string, Security?: string, SecurityEntries?: string, Self?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "tablecategories update-table-category" [
+export def "table-category-update" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17041,7 +17041,7 @@ export def "tablecategories update-table-category" [
 #
 # GET /tablecategories/{webId}/security
 # operationId: TableCategory_GetSecurity
-export def "tablecategories-security get-table-category" [
+export def "table-category-get-security" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17083,7 +17083,7 @@ export def "tablecategories-security get-table-category" [
 #
 # GET /tablecategories/{webId}/securityentries
 # operationId: TableCategory_GetSecurityEntries
-export def "tablecategories-securityentries get-table-category-security-entries" [
+export def "table-category-get-security-entries" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17126,7 +17126,7 @@ export def "tablecategories-securityentries get-table-category-security-entries"
 # operationId: TableCategory_CreateSecurityEntry
 # --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "tablecategories-securityentries create-table-category-security-entry" [
+export def "table-category-create-security-entry" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17175,7 +17175,7 @@ export def "tablecategories-securityentries create-table-category-security-entry
 #
 # DELETE /tablecategories/{webId}/securityentries/{name}
 # operationId: TableCategory_DeleteSecurityEntry
-export def "tablecategories-securityentries delete-table-category-security-entry" [
+export def "table-category-delete-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -17216,7 +17216,7 @@ export def "tablecategories-securityentries delete-table-category-security-entry
 #
 # GET /tablecategories/{webId}/securityentries/{name}
 # operationId: TableCategory_GetSecurityEntryByName
-export def "tablecategories-securityentries get-table-category-security-entry" [
+export def "table-category-get-security-entry-by-name" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -17260,7 +17260,7 @@ export def "tablecategories-securityentries get-table-category-security-entry" [
 # operationId: TableCategory_UpdateSecurityEntry
 # --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "tablecategories-securityentries update-table-category-security-entry" [
+export def "table-category-update-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -17310,7 +17310,7 @@ export def "tablecategories-securityentries update-table-category-security-entry
 #
 # GET /tables
 # operationId: Table_GetByPath
-export def "tables get-by-path" [
+export def "table-get-by-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -17349,7 +17349,7 @@ export def "tables get-by-path" [
 #
 # DELETE /tables/{webId}
 # operationId: Table_Delete
-export def "tables delete" [
+export def "table-delete" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17386,7 +17386,7 @@ export def "tables delete" [
 #
 # GET /tables/{webId}
 # operationId: Table_Get
-export def "tables get" [
+export def "table-get" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17428,7 +17428,7 @@ export def "tables get" [
 # operationId: Table_Update
 # --Links shape: {Categories?: string, Data?: string, Database?: string, Security?: string, SecurityEntries?: string, Self?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "tables update" [
+export def "table-update" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17478,7 +17478,7 @@ export def "tables update" [
 #
 # GET /tables/{webId}/categories
 # operationId: Table_GetCategories
-export def "tables-categories get" [
+export def "table-get-categories" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17518,7 +17518,7 @@ export def "tables-categories get" [
 #
 # GET /tables/{webId}/data
 # operationId: Table_GetData
-export def "tables-data get" [
+export def "table-get-data" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17558,7 +17558,7 @@ export def "tables-data get" [
 # PUT /tables/{webId}/data
 # operationId: Table_UpdateData
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "tables-data update" [
+export def "table-update-data" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17601,7 +17601,7 @@ export def "tables-data update" [
 #
 # GET /tables/{webId}/security
 # operationId: Table_GetSecurity
-export def "tables-security get" [
+export def "table-get-security" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17643,7 +17643,7 @@ export def "tables-security get" [
 #
 # GET /tables/{webId}/securityentries
 # operationId: Table_GetSecurityEntries
-export def "tables-securityentries get-security-entries" [
+export def "table-get-security-entries" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17686,7 +17686,7 @@ export def "tables-securityentries get-security-entries" [
 # operationId: Table_CreateSecurityEntry
 # --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "tables-securityentries create-security-entry" [
+export def "table-create-security-entry" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17735,7 +17735,7 @@ export def "tables-securityentries create-security-entry" [
 #
 # DELETE /tables/{webId}/securityentries/{name}
 # operationId: Table_DeleteSecurityEntry
-export def "tables-securityentries delete-security-entry" [
+export def "table-delete-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -17776,7 +17776,7 @@ export def "tables-securityentries delete-security-entry" [
 #
 # GET /tables/{webId}/securityentries/{name}
 # operationId: Table_GetSecurityEntryByName
-export def "tables-securityentries get-security-entry" [
+export def "table-get-security-entry-by-name" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -17820,7 +17820,7 @@ export def "tables-securityentries get-security-entry" [
 # operationId: Table_UpdateSecurityEntry
 # --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "tables-securityentries update-security-entry" [
+export def "table-update-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -17870,7 +17870,7 @@ export def "tables-securityentries update-security-entry" [
 #
 # GET /timeruleplugins
 # operationId: TimeRulePlugIn_GetByPath
-export def "timeruleplugins get-time-rule-plug-in-by-path" [
+export def "time-rule-plug-in-get-by-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -17909,7 +17909,7 @@ export def "timeruleplugins get-time-rule-plug-in-by-path" [
 #
 # GET /timeruleplugins/{webId}
 # operationId: TimeRulePlugIn_Get
-export def "timeruleplugins get-time-rule-plug-in" [
+export def "time-rule-plug-in-get" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17949,7 +17949,7 @@ export def "timeruleplugins get-time-rule-plug-in" [
 #
 # GET /timerules
 # operationId: TimeRule_GetByPath
-export def "timerules get-time-rule-by-path" [
+export def "time-rule-get-by-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -17988,7 +17988,7 @@ export def "timerules get-time-rule-by-path" [
 #
 # DELETE /timerules/{webId}
 # operationId: TimeRule_Delete
-export def "timerules delete-time-rule" [
+export def "time-rule-delete" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18025,7 +18025,7 @@ export def "timerules delete-time-rule" [
 #
 # GET /timerules/{webId}
 # operationId: TimeRule_Get
-export def "timerules get-time-rule" [
+export def "time-rule-get" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18067,7 +18067,7 @@ export def "timerules get-time-rule" [
 # operationId: TimeRule_Update
 # --Links shape: {Analysis?: string, AnalysisTemplate?: string, PlugIn?: string, Self?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "timerules update-time-rule" [
+export def "time-rule-update" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18122,7 +18122,7 @@ export def "timerules update-time-rule" [
 #
 # GET /unitclasses
 # operationId: UnitClass_GetByPath
-export def "unitclasses get-unit-class-by-path" [
+export def "unit-class-get-by-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -18161,7 +18161,7 @@ export def "unitclasses get-unit-class-by-path" [
 #
 # DELETE /unitclasses/{webId}
 # operationId: UnitClass_Delete
-export def "unitclasses delete-unit-class" [
+export def "unit-class-delete" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18198,7 +18198,7 @@ export def "unitclasses delete-unit-class" [
 #
 # GET /unitclasses/{webId}
 # operationId: UnitClass_Get
-export def "unitclasses get-unit-class" [
+export def "unit-class-get" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18240,7 +18240,7 @@ export def "unitclasses get-unit-class" [
 # operationId: UnitClass_Update
 # --Links shape: {AssetServer?: string, CanonicalUnit?: string, Self?: string, Units?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "unitclasses update-unit-class" [
+export def "unit-class-update" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18289,7 +18289,7 @@ export def "unitclasses update-unit-class" [
 #
 # GET /unitclasses/{webId}/canonicalunit
 # operationId: UnitClass_GetCanonicalUnit
-export def "unitclasses-canonicalunit get-unit-class-canonical-unit" [
+export def "unit-class-get-canonical-unit" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18329,7 +18329,7 @@ export def "unitclasses-canonicalunit get-unit-class-canonical-unit" [
 #
 # GET /unitclasses/{webId}/units
 # operationId: UnitClass_GetUnits
-export def "unitclasses-units get-class" [
+export def "unit-class-get-units" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18371,7 +18371,7 @@ export def "unitclasses-units get-class" [
 # operationId: UnitClass_CreateUnit
 # --Links shape: {Class?: string, ReferenceUnit?: string, Self?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "unitclasses-units create-class" [
+export def "unit-class-create-unit" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18426,7 +18426,7 @@ export def "unitclasses-units create-class" [
 #
 # GET /units
 # operationId: Unit_GetByPath
-export def "units get-by-path" [
+export def "unit-get-by-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -18465,7 +18465,7 @@ export def "units get-by-path" [
 #
 # DELETE /units/{webId}
 # operationId: Unit_Delete
-export def "units delete" [
+export def "unit-delete" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18502,7 +18502,7 @@ export def "units delete" [
 #
 # GET /units/{webId}
 # operationId: Unit_Get
-export def "units get" [
+export def "unit-get" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18544,7 +18544,7 @@ export def "units get" [
 # operationId: Unit_Update
 # --Links shape: {Class?: string, ReferenceUnit?: string, Self?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "units update" [
+export def "unit-update" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

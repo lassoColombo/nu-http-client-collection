@@ -139,7 +139,7 @@ def status-completer [] { ["cleared" "pending_review" "rejected"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts-balance-get get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts-balance-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -165,7 +165,7 @@ export def commands []: nothing -> table {
 # Docs: /api/products/balance/#accountsbalanceget
 # operationId: accountsBalanceGet
 # --options shape: {account_ids?: list<string>, min_last_updated_datetime?: string}
-export def "accounts-balance-get get" [
+export def "accounts-balance-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -209,7 +209,7 @@ export def "accounts-balance-get get" [
 # Docs: /api/accounts/#accountsget
 # operationId: accountsGet
 # --options shape: {account_ids?: list<string>}
-export def "accounts-get get" [
+export def "accounts-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -251,7 +251,7 @@ export def "accounts-get get" [
 #
 # POST /application/get
 # operationId: applicationGet
-export def "application-get get" [
+export def "application-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -293,7 +293,7 @@ export def "application-get get" [
 # POST /asset_report/audit_copy/create
 # Docs: /api/products/assets/#asset_reportaudit_copycreate
 # operationId: assetReportAuditCopyCreate
-export def "asset-report-audit-copy-create copy" [
+export def "asset-report-audit-copy-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -336,7 +336,7 @@ export def "asset-report-audit-copy-create copy" [
 # POST /asset_report/audit_copy/get
 # Docs: /none/
 # operationId: assetReportAuditCopyGet
-export def "asset-report-audit-copy-get copy" [
+export def "asset-report-audit-copy-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -378,7 +378,7 @@ export def "asset-report-audit-copy-get copy" [
 # POST /asset_report/audit_copy/remove
 # Docs: /api/products/assets/#asset_reportaudit_copyremove
 # operationId: assetReportAuditCopyRemove
-export def "asset-report-audit-copy-remove copy" [
+export def "asset-report-audit-copy-remove" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -421,7 +421,7 @@ export def "asset-report-audit-copy-remove copy" [
 # Docs: /api/products/assets/#asset_reportcreate
 # operationId: assetReportCreate
 # --options shape: {add_ons?: list<string>, client_report_id?: string, include_fast_report?: bool, products?: list<string>, user?: record, webhook?: string}
-export def "asset-report-create create" [
+export def "asset-report-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -466,7 +466,7 @@ export def "asset-report-create create" [
 # POST /asset_report/filter
 # Docs: /api/products/assets/#asset_reportfilter
 # operationId: assetReportFilter
-export def "asset-report-filter create" [
+export def "asset-report-filter" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -510,7 +510,7 @@ export def "asset-report-filter create" [
 # Docs: /api/products/assets/#asset_reportget
 # operationId: assetReportGet
 # --options shape: {days_to_include?: int}
-export def "asset-report-get get" [
+export def "asset-report-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -556,7 +556,7 @@ export def "asset-report-get get" [
 # Docs: /api/products/assets/#asset_reportpdfget
 # operationId: assetReportPdfGet
 # --options shape: {days_to_include?: int}
-export def "asset-report-pdf-get get" [
+export def "asset-report-pdf-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -600,7 +600,7 @@ export def "asset-report-pdf-get get" [
 # Docs: /api/products/assets/#asset_reportrefresh
 # operationId: assetReportRefresh
 # --options shape: {client_report_id?: string, user?: record, webhook?: string}
-export def "asset-report-refresh refresh" [
+export def "asset-report-refresh" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -644,7 +644,7 @@ export def "asset-report-refresh refresh" [
 # POST /asset_report/remove
 # Docs: /api/products/assets/#asset_reportremove
 # operationId: assetReportRemove
-export def "asset-report-remove delete" [
+export def "asset-report-remove" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -687,7 +687,7 @@ export def "asset-report-remove delete" [
 # Docs: /api/products/auth/#authget
 # operationId: authGet
 # --options shape: {account_ids?: list<string>}
-export def "auth-get get" [
+export def "auth-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -730,7 +730,7 @@ export def "auth-get get" [
 # POST /bank_transfer/balance/get
 # Docs: /bank-transfers/reference#bank_transferbalanceget
 # operationId: bankTransferBalanceGet
-export def "bank-transfer-balance-get get" [
+export def "bank-transfer-balance-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -772,7 +772,7 @@ export def "bank-transfer-balance-get get" [
 # POST /bank_transfer/cancel
 # Docs: /bank-transfers/reference#bank_transfercancel
 # operationId: bankTransferCancel
-export def "bank-transfer-cancel cancel" [
+export def "bank-transfer-cancel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -815,7 +815,7 @@ export def "bank-transfer-cancel cancel" [
 # Docs: /bank-transfers/reference#bank_transfercreate
 # operationId: bankTransferCreate
 # --user shape: {email_address?: string, legal_name: string}
-export def "bank-transfer-create create" [
+export def "bank-transfer-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -869,7 +869,7 @@ export def "bank-transfer-create create" [
 # POST /bank_transfer/event/list
 # Docs: /api/products/auth#bank_transfereventlist
 # operationId: bankTransferEventList
-export def "bank-transfer-event-list list" [
+export def "bank-transfer-event-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -920,7 +920,7 @@ export def "bank-transfer-event-list list" [
 # POST /bank_transfer/event/sync
 # Docs: /api/products/auth/#bank_transfereventsync
 # operationId: bankTransferEventSync
-export def "bank-transfer-event-sync sync" [
+export def "bank-transfer-event-sync" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -963,7 +963,7 @@ export def "bank-transfer-event-sync sync" [
 # POST /bank_transfer/get
 # Docs: /bank-transfers/reference#bank_transferget
 # operationId: bankTransferGet
-export def "bank-transfer-get get" [
+export def "bank-transfer-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -1005,7 +1005,7 @@ export def "bank-transfer-get get" [
 # POST /bank_transfer/list
 # Docs: /bank-transfers/reference#bank_transferlist
 # operationId: bankTransferList
-export def "bank-transfer-list list" [
+export def "bank-transfer-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -1052,7 +1052,7 @@ export def "bank-transfer-list list" [
 # POST /bank_transfer/migrate_account
 # Docs: /bank-transfers/reference#bank_transfermigrate_account
 # operationId: bankTransferMigrateAccount
-export def "bank-transfer-migrate-account create" [
+export def "bank-transfer-migrate-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -1097,7 +1097,7 @@ export def "bank-transfer-migrate-account create" [
 # POST /bank_transfer/sweep/get
 # Docs: /api/products/transfer/#bank_transfersweepget
 # operationId: bankTransferSweepGet
-export def "bank-transfer-sweep-get get" [
+export def "bank-transfer-sweep-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -1139,7 +1139,7 @@ export def "bank-transfer-sweep-get get" [
 # POST /bank_transfer/sweep/list
 # Docs: /api/products/transfer/#bank_transfersweeplist
 # operationId: bankTransferSweepList
-export def "bank-transfer-sweep-list list" [
+export def "bank-transfer-sweep-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -1184,7 +1184,7 @@ export def "bank-transfer-sweep-list list" [
 # POST /beta/credit/v1/bank_employment/get
 # Docs: /api/products/income/#creditbank_employmentget
 # operationId: creditBankEmploymentGet
-export def "beta-credit-bank-employment-get get" [
+export def "credit-bank-employment-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -1226,7 +1226,7 @@ export def "beta-credit-bank-employment-get get" [
 # POST /beta/transactions/rules/v1/create
 # operationId: transactionsRulesCreate
 # --rule_details shape: {field: "TRANSACTION_ID"|"NAME", query: string, type: "EXACT_MATCH"|"SUBSTRING_MATCH"}
-export def "beta-transactions-rules-create create" [
+export def "transactions-rules-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -1269,7 +1269,7 @@ export def "beta-transactions-rules-create create" [
 #
 # POST /beta/transactions/rules/v1/list
 # operationId: transactionsRulesList
-export def "beta-transactions-rules-list list" [
+export def "transactions-rules-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -1310,7 +1310,7 @@ export def "beta-transactions-rules-list list" [
 #
 # POST /beta/transactions/rules/v1/remove
 # operationId: transactionsRulesRemove
-export def "beta-transactions-rules-remove delete" [
+export def "transactions-rules-remove" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -1353,7 +1353,7 @@ export def "beta-transactions-rules-remove delete" [
 # POST /beta/transactions/v1/enhance
 # operationId: transactionsEnhance
 # --transactions item shape: {amount: float, description: string, id: string, iso_currency_code: string}
-export def "beta-transactions-enhance create" [
+export def "transactions-enhance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -1396,7 +1396,7 @@ export def "beta-transactions-enhance create" [
 # POST /categories/get
 # Docs: /api/products/transactions/#categoriesget
 # operationId: categoriesGet
-export def "categories-get get" [
+export def "categories-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1435,7 +1435,7 @@ export def "categories-get get" [
 # POST /credit/asset_report/freddie_mac/get
 # Docs: /none/
 # operationId: creditAssetReportFreddieMacGet
-export def "credit-asset-report-freddie-mac-get get" [
+export def "credit-asset-report-freddie-mac-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -1477,7 +1477,7 @@ export def "credit-asset-report-freddie-mac-get get" [
 # POST /credit/audit_copy_token/create
 # Docs: /api/products/income/#creditaudit_copy_tokencreate
 # operationId: creditAuditCopyTokenCreate
-export def "credit-audit-copy-token-create copy" [
+export def "credit-audit-copy-token-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -1519,7 +1519,7 @@ export def "credit-audit-copy-token-create copy" [
 # POST /credit/audit_copy_token/remove
 # Docs: /api/products/income/#creditaudit_copy_tokenremove
 # operationId: creditReportAuditCopyRemove
-export def "credit-audit-copy-token-remove copy-report" [
+export def "credit-report-audit-copy-remove" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -1561,7 +1561,7 @@ export def "credit-audit-copy-token-remove copy-report" [
 # POST /credit/audit_copy_token/update
 # Docs: /none/
 # operationId: creditAuditCopyTokenUpdate
-export def "credit-audit-copy-token-update copy" [
+export def "credit-audit-copy-token-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -1605,7 +1605,7 @@ export def "credit-audit-copy-token-update copy" [
 # Docs: /api/products/income/#creditbank_incomeget
 # operationId: creditBankIncomeGet
 # --options shape: {count?: int}
-export def "credit-bank-income-get get" [
+export def "credit-bank-income-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -1648,7 +1648,7 @@ export def "credit-bank-income-get get" [
 # POST /credit/bank_income/pdf/get
 # Docs: /api/products/income/#creditbank_incomepdfget
 # operationId: creditBankIncomePdfGet
-export def "credit-bank-income-pdf-get get" [
+export def "credit-bank-income-pdf-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -1691,7 +1691,7 @@ export def "credit-bank-income-pdf-get get" [
 # Docs: /api/products/income/#creditbank_incomerefresh
 # operationId: creditBankIncomeRefresh
 # --options shape: {days_requested?: int, webhook?: string}
-export def "credit-bank-income-refresh refresh" [
+export def "credit-bank-income-refresh" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -1734,7 +1734,7 @@ export def "credit-bank-income-refresh refresh" [
 # POST /credit/employment/get
 # Docs: /api/products/income/#creditemploymentget
 # operationId: creditEmploymentGet
-export def "credit-employment-get get" [
+export def "credit-employment-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -1776,7 +1776,7 @@ export def "credit-employment-get get" [
 # POST /credit/freddie_mac/reports/get
 # Docs: /none/
 # operationId: creditFreddieMacReportsGet
-export def "credit-freddie-mac-reports-get get" [
+export def "credit-freddie-mac-reports-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -1818,7 +1818,7 @@ export def "credit-freddie-mac-reports-get get" [
 # POST /credit/payroll_income/get
 # Docs: /api/products/income/#creditpayroll_incomeget
 # operationId: creditPayrollIncomeGet
-export def "credit-payroll-income-get get" [
+export def "credit-payroll-income-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -1863,7 +1863,7 @@ export def "credit-payroll-income-get get" [
 # --employer shape: {address?: record, name?: string, tax_id?: string, url?: string}
 # --payroll_institution shape: {name?: string}
 # --us_military_info shape: {branch?: string, is_active_duty?: bool}
-export def "credit-payroll-income-precheck create" [
+export def "credit-payroll-income-precheck" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -1909,7 +1909,7 @@ export def "credit-payroll-income-precheck create" [
 # POST /credit/payroll_income/refresh
 # Docs: /api/products/income/#creditpayroll_incomerefresh
 # operationId: creditPayrollIncomeRefresh
-export def "credit-payroll-income-refresh refresh" [
+export def "credit-payroll-income-refresh" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -1951,7 +1951,7 @@ export def "credit-payroll-income-refresh refresh" [
 # POST /credit/relay/create
 # Docs: /api/products/assets/#creditrelaycreate
 # operationId: creditRelayCreate
-export def "credit-relay-create create" [
+export def "credit-relay-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -1995,7 +1995,7 @@ export def "credit-relay-create create" [
 # POST /credit/relay/get
 # Docs: /api/products/assets/#creditrelayget
 # operationId: creditRelayGet
-export def "credit-relay-get get" [
+export def "credit-relay-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -2038,7 +2038,7 @@ export def "credit-relay-get get" [
 # POST /credit/relay/refresh
 # Docs: /api/products/assets/#creditrelayrefresh
 # operationId: creditRelayRefresh
-export def "credit-relay-refresh refresh" [
+export def "credit-relay-refresh" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -2082,7 +2082,7 @@ export def "credit-relay-refresh refresh" [
 # POST /credit/relay/remove
 # Docs: /api/products/assets/#creditrelayremove
 # operationId: creditRelayRemove
-export def "credit-relay-remove delete" [
+export def "credit-relay-remove" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -2124,7 +2124,7 @@ export def "credit-relay-remove delete" [
 # POST /credit/sessions/get
 # Docs: /api/products/income/#creditsessionsget
 # operationId: creditSessionsGet
-export def "credit-sessions-get get" [
+export def "credit-sessions-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -2166,7 +2166,7 @@ export def "credit-sessions-get get" [
 # POST /dashboard_user/get
 # Docs: /api/products/monitor/#dashboard_userget
 # operationId: dashboardUserGet
-export def "dashboard-user-get get" [
+export def "dashboard-user-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -2208,7 +2208,7 @@ export def "dashboard-user-get get" [
 # POST /dashboard_user/list
 # Docs: /api/products/monitor/#dashboard_userlist
 # operationId: dashboardUserList
-export def "dashboard-user-list list" [
+export def "dashboard-user-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -2253,7 +2253,7 @@ export def "dashboard-user-list list" [
 # --options shape: {transaction_item_access_tokens?: list<string>, webhook?: string}
 # --target_account shape: {account_name: string, account_number: string, account_subtype: "checking"|"savings", routing_number: string}
 # --target_user shape: {address?: record, email: string, family_name: string, given_name: string, phone: string, tax_payer_id?: string}
-export def "deposit-switch-alt-create create" [
+export def "deposit-switch-alt-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -2299,7 +2299,7 @@ export def "deposit-switch-alt-create create" [
 # Docs: /deposit-switch/reference#deposit_switchcreate
 # operationId: depositSwitchCreate
 # --options shape: {transaction_item_access_tokens?: list<string>, webhook?: string}
-export def "deposit-switch-create create" [
+export def "deposit-switch-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -2344,7 +2344,7 @@ export def "deposit-switch-create create" [
 # POST /deposit_switch/get
 # Docs: /deposit-switch/reference#deposit_switchget
 # operationId: depositSwitchGet
-export def "deposit-switch-get get" [
+export def "deposit-switch-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -2386,7 +2386,7 @@ export def "deposit-switch-get get" [
 # POST /deposit_switch/token/create
 # Docs: /deposit-switch/reference#deposit_switchtokencreate
 # operationId: depositSwitchTokenCreate
-export def "deposit-switch-token-create create" [
+export def "deposit-switch-token-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -2428,7 +2428,7 @@ export def "deposit-switch-token-create create" [
 # POST /employers/search
 # Docs: /api/employers/#employerssearch
 # operationId: employersSearch
-export def "employers-search list" [
+export def "employers-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -2473,7 +2473,7 @@ export def "employers-search list" [
 # Docs: /api/products/income/#employmentverificationget
 # operationId: employmentVerificationGet
 @deprecated
-export def "employment-verification-get get" [
+export def "employment-verification-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -2519,7 +2519,7 @@ export def "employment-verification-get get" [
 # --publisher shape: {homeUri?: string, logoUri?: string, name: string, registeredEntityId?: string, registeredEntityName?: string, registry?: "FDX"|"GLEIF"|"ICANN"|"PRIVATE", type: "DATA_ACCESS_PLATFORM"|"DATA_PROVIDER"|"DATA_RECIPIENT"|"INDIVIDUAL"|"MERCHANT"|"VENDOR"}
 # --subscriber shape: {homeUri?: string, logoUri?: string, name: string, registeredEntityId?: string, registeredEntityName?: string, registry?: "FDX"|"GLEIF"|"ICANN"|"PRIVATE", type: "DATA_ACCESS_PLATFORM"|"DATA_PROVIDER"|"DATA_RECIPIENT"|"INDIVIDUAL"|"MERCHANT"|"VENDOR"}
 # --url shape: {action?: "GET"|"POST"|"PATCH"|"DELETE"|"PUT", href: string, rel?: string, types?: list<string>}
-export def "fdx-notifications create" [
+export def "fdx-notifications" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -2569,7 +2569,7 @@ export def "fdx-notifications create" [
 # Docs: /api/products/identity/#identityget
 # operationId: identityGet
 # --options shape: {account_ids?: list<string>}
-export def "identity-get get" [
+export def "identity-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -2614,7 +2614,7 @@ export def "identity-get get" [
 # operationId: identityMatch
 # --options shape: {account_ids?: list<string>}
 # --user shape: {address?: any, email_address?: string, legal_name?: string, phone_number?: string}
-export def "identity-match create" [
+export def "identity-match" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -2659,7 +2659,7 @@ export def "identity-match create" [
 # Docs: /api/products/identity-verification/#identity_verificationcreate
 # operationId: identityVerificationCreate
 # --user shape: {address?: record, client_user_id: string, date_of_birth?: string, email_address?: string, id_number?: record, name?: record, phone_number?: string}
-export def "identity-verification-create create" [
+export def "identity-verification-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -2705,7 +2705,7 @@ export def "identity-verification-create create" [
 # POST /identity_verification/get
 # Docs: /api/products/identity-verification/#identity_verificationget
 # operationId: identityVerificationGet
-export def "identity-verification-get get" [
+export def "identity-verification-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -2747,7 +2747,7 @@ export def "identity-verification-get get" [
 # POST /identity_verification/list
 # Docs: /api/products/identity-verification/#identity_verificationlist
 # operationId: identityVerificationList
-export def "identity-verification-list list" [
+export def "identity-verification-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -2792,7 +2792,7 @@ export def "identity-verification-list list" [
 # Docs: /api/products/identity-verification/#identity_verificationretry
 # operationId: identityVerificationRetry
 # --steps shape: {documentary_verification: bool, kyc_check: bool, selfie_check: bool, verify_sms: bool}
-export def "identity-verification-retry create" [
+export def "identity-verification-retry" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -2840,7 +2840,7 @@ export def "identity-verification-retry create" [
 # operationId: incomeVerificationCreate
 # --options shape: {access_tokens?: list<string>}
 @deprecated
-export def "income-verification-create create" [
+export def "income-verification-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -2887,7 +2887,7 @@ export def "income-verification-create create" [
 # operationId: incomeVerificationDocumentsDownload
 @deprecated
 @deprecated --flag income-verification-id
-export def "income-verification-documents-download download" [
+export def "income-verification-documents-download" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -2934,7 +2934,7 @@ export def "income-verification-documents-download download" [
 # operationId: incomeVerificationPaystubsGet
 @deprecated
 @deprecated --flag income-verification-id
-export def "income-verification-paystubs-get get" [
+export def "income-verification-paystubs-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -2984,7 +2984,7 @@ export def "income-verification-paystubs-get get" [
 # --user shape: {email_address?: string, first_name?: string, home_address?: record, last_name?: string}
 @deprecated
 @deprecated --flag transactions-access-token
-export def "income-verification-precheck create" [
+export def "income-verification-precheck" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -3034,7 +3034,7 @@ export def "income-verification-precheck create" [
 # operationId: incomeVerificationTaxformsGet
 @deprecated
 @deprecated --flag income-verification-id
-export def "income-verification-taxforms-get get" [
+export def "income-verification-taxforms-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -3078,7 +3078,7 @@ export def "income-verification-taxforms-get get" [
 # Docs: /api/institutions/#institutionsget
 # operationId: institutionsGet
 # --options shape: {include_auth_metadata?: bool, include_optional_metadata?: bool, include_payment_initiation_metadata?: bool, oauth?: bool, products?: list<string>, routing_numbers?: list<string>}
-export def "institutions-get get" [
+export def "institutions-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -3124,7 +3124,7 @@ export def "institutions-get get" [
 # Docs: /api/institutions/#institutionsget_by_id
 # operationId: institutionsGetById
 # --options shape: {include_auth_metadata?: bool, include_optional_metadata?: bool, include_payment_initiation_metadata?: bool, include_status?: bool}
-export def "institutions-get-by-id get" [
+export def "institutions-get-by-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -3169,7 +3169,7 @@ export def "institutions-get-by-id get" [
 # Docs: /api/institutions/#institutionssearch
 # operationId: institutionsSearch
 # --options shape: {include_auth_metadata?: bool, include_optional_metadata?: bool, include_payment_initiation_metadata?: bool, oauth?: bool, payment_initiation?: record}
-export def "institutions-search list" [
+export def "institutions-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -3215,7 +3215,7 @@ export def "institutions-search list" [
 # Docs: /api/products/investments/#investmentsholdingsget
 # operationId: investmentsHoldingsGet
 # --options shape: {account_ids?: list<string>}
-export def "investments-holdings-get get" [
+export def "investments-holdings-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -3259,7 +3259,7 @@ export def "investments-holdings-get get" [
 # Docs: /api/products/investments/#investmentstransactionsget
 # operationId: investmentsTransactionsGet
 # --options shape: {account_ids?: list<string>, count?: int, offset?: int}
-export def "investments-transactions-get get" [
+export def "investments-transactions-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -3304,7 +3304,7 @@ export def "investments-transactions-get get" [
 # POST /item/access_token/invalidate
 # Docs: /api/tokens/#itemaccess_tokeninvalidate
 # operationId: itemAccessTokenInvalidate
-export def "item-access-token-invalidate create" [
+export def "item-access-token-invalidate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -3345,7 +3345,7 @@ export def "item-access-token-invalidate create" [
 #
 # POST /item/activity/list
 # operationId: itemActivityList
-export def "item-activity-list list" [
+export def "item-activity-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -3388,7 +3388,7 @@ export def "item-activity-list list" [
 #
 # POST /item/application/list
 # operationId: itemApplicationList
-export def "item-application-list list" [
+export def "item-application-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -3430,7 +3430,7 @@ export def "item-application-list list" [
 # POST /item/application/scopes/update
 # operationId: itemApplicationScopesUpdate
 # --scopes shape: {accounts?: list, new_accounts?: bool, product_access?: record}
-export def "item-application-scopes-update update" [
+export def "item-application-scopes-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -3476,7 +3476,7 @@ export def "item-application-scopes-update update" [
 # POST /item/get
 # Docs: /api/items/#itemget
 # operationId: itemGet
-export def "item-get get" [
+export def "item-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -3519,7 +3519,7 @@ export def "item-get get" [
 # operationId: itemImport
 # --options shape: {webhook?: string}
 # --user_auth shape: {auth_token: string, user_id: string}
-export def "item-import import" [
+export def "item-import" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -3563,7 +3563,7 @@ export def "item-import import" [
 # POST /item/public_token/create
 # Docs: /api/tokens/#itempublic_tokencreate
 # operationId: itemCreatePublicToken
-export def "item-public-token-create create" [
+export def "item-create-public-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -3605,7 +3605,7 @@ export def "item-public-token-create create" [
 # POST /item/public_token/exchange
 # Docs: /api/tokens/#itempublic_tokenexchange
 # operationId: itemPublicTokenExchange
-export def "item-public-token-exchange create" [
+export def "item-public-token-exchange" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -3647,7 +3647,7 @@ export def "item-public-token-exchange create" [
 # POST /item/remove
 # Docs: /api/items/#itemremove
 # operationId: itemRemove
-export def "item-remove delete" [
+export def "item-remove" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -3689,7 +3689,7 @@ export def "item-remove delete" [
 # POST /item/webhook/update
 # Docs: /api/items/#itemwebhookupdate
 # operationId: itemWebhookUpdate
-export def "item-webhook-update update" [
+export def "item-webhook-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -3733,7 +3733,7 @@ export def "item-webhook-update update" [
 # Docs: /api/products/liabilities/#liabilitiesget
 # operationId: liabilitiesGet
 # --options shape: {account_ids?: list<string>}
-export def "liabilities-get get" [
+export def "liabilities-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -3776,7 +3776,7 @@ export def "liabilities-get get" [
 # POST /link/oauth/correlation_id/exchange
 # Docs: /api/oauth/#linkcorrelationid
 # operationId: linkOauthCorrelationIdExchange
-export def "link-oauth-correlation-id-exchange create" [
+export def "link-oauth-correlation-id-exchange" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -3831,7 +3831,7 @@ export def "link-oauth-correlation-id-exchange create" [
 # --transfer shape: {intent_id?: string, payment_profile_token?: string}
 # --update shape: {account_selection_enabled?: bool}
 # --user shape: {address?: record, client_user_id: string, date_of_birth?: string, email_address?: string, email_address_verified_time?: string, id_number?: record, legal_name?: string, name?: any, phone_number?: string, phone_number_verified_time?: string, ssn?: string}
-export def "link-token-create create" [
+export def "link-token-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -3897,7 +3897,7 @@ export def "link-token-create create" [
 # POST /link/token/get
 # Docs: /api/tokens/#linktokenget
 # operationId: linkTokenGet
-export def "link-token-get get" [
+export def "link-token-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -3940,7 +3940,7 @@ export def "link-token-get get" [
 # Docs: /docs/assets/waitlist/link-delivery/
 # operationId: linkDeliveryCreate
 # --communication_methods item shape: {address?: string, method?: "SMS"|"EMAIL"}
-export def "link-delivery-create create" [
+export def "link-delivery-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -3983,7 +3983,7 @@ export def "link-delivery-create create" [
 # POST /link_delivery/get
 # Docs: /docs/assets/waitlist/link-delivery/
 # operationId: linkDeliveryGet
-export def "link-delivery-get get" [
+export def "link-delivery-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -4030,7 +4030,7 @@ export def "link-delivery-get get" [
 # --billing_contact shape: {email?: string, family_name?: string, given_name?: string}
 # --customer_support_info shape: {contact_url?: string, email?: string, link_update_url?: string, phone_number?: string}
 # --technical_contact shape: {email?: string, family_name?: string, given_name?: string}
-export def "partner-customer-create create" [
+export def "partner-customer-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -4086,7 +4086,7 @@ export def "partner-customer-create create" [
 # POST /partner/customer/enable
 # Docs: /api/partner/#partnercustomerenable
 # operationId: partnerCustomerEnable
-export def "partner-customer-enable enable" [
+export def "partner-customer-enable" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -4128,7 +4128,7 @@ export def "partner-customer-enable enable" [
 # POST /partner/customer/get
 # Docs: /api/partner/#partnercustomerget
 # operationId: partnerCustomerGet
-export def "partner-customer-get get" [
+export def "partner-customer-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -4170,7 +4170,7 @@ export def "partner-customer-get get" [
 # POST /partner/customer/oauth_institutions/get
 # Docs: /api/partner/#partnercustomeroauth_institutionsget
 # operationId: partnerCustomerOauthInstitutionsGet
-export def "partner-customer-oauth-institutions-get get" [
+export def "partner-customer-oauth-institutions-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -4212,7 +4212,7 @@ export def "partner-customer-oauth-institutions-get get" [
 # POST /partner/customer/remove
 # Docs: /api/partner/#partnercustomerremove
 # operationId: partnerCustomerRemove
-export def "partner-customer-remove delete" [
+export def "partner-customer-remove" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -4256,7 +4256,7 @@ export def "partner-customer-remove delete" [
 # operationId: paymentInitiationConsentCreate
 # --constraints shape: {max_payment_amount: any, periodic_amounts: list, valid_date_time?: record}
 # --options shape: {bacs?: any, iban?: string, request_refund_details?: bool}
-export def "payment-initiation-consent-create create" [
+export def "payment-initiation-consent-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -4302,7 +4302,7 @@ export def "payment-initiation-consent-create create" [
 # POST /payment_initiation/consent/get
 # Docs: /api/products/payment-initiation/#payment_initiationconsentget
 # operationId: paymentInitiationConsentGet
-export def "payment-initiation-consent-get get" [
+export def "payment-initiation-consent-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -4345,7 +4345,7 @@ export def "payment-initiation-consent-get get" [
 # Docs: /api/products/payment-initiation/#payment_initiationconsentpaymentexecute
 # operationId: paymentInitiationConsentPaymentExecute
 # --amount shape: {currency: "GBP"|"EUR"|"PLN"|"SEK"|"DKK"|"NOK", value: float}
-export def "payment-initiation-consent-payment-execute create" [
+export def "payment-initiation-consent-payment-execute" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -4389,7 +4389,7 @@ export def "payment-initiation-consent-payment-execute create" [
 # POST /payment_initiation/consent/revoke
 # Docs: /api/products/payment-initiation/#payment_initiationconsentrevoke
 # operationId: paymentInitiationConsentRevoke
-export def "payment-initiation-consent-revoke delete" [
+export def "payment-initiation-consent-revoke" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -4433,7 +4433,7 @@ export def "payment-initiation-consent-revoke delete" [
 # operationId: paymentInitiationPaymentCreate
 # --amount shape: {currency: "GBP"|"EUR"|"PLN"|"SEK"|"DKK"|"NOK", value: float}
 # --options shape: {bacs?: any, iban?: string, request_refund_details?: bool, scheme?: ""|"LOCAL_DEFAULT"|"LOCAL_INSTANT"|"SEPA_CREDIT_TRANSFER"|"SEPA_CREDIT_TRANSFER_INSTANT"}
-export def "payment-initiation-payment-create create" [
+export def "payment-initiation-payment-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -4479,7 +4479,7 @@ export def "payment-initiation-payment-create create" [
 # POST /payment_initiation/payment/get
 # Docs: /api/products/payment-initiation/#payment_initiationpaymentget
 # operationId: paymentInitiationPaymentGet
-export def "payment-initiation-payment-get get" [
+export def "payment-initiation-payment-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -4521,7 +4521,7 @@ export def "payment-initiation-payment-get get" [
 # POST /payment_initiation/payment/list
 # Docs: /api/products/payment-initiation/#payment_initiationpaymentlist
 # operationId: paymentInitiationPaymentList
-export def "payment-initiation-payment-list list" [
+export def "payment-initiation-payment-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -4565,7 +4565,7 @@ export def "payment-initiation-payment-list list" [
 # POST /payment_initiation/payment/reverse
 # Docs: /api/products/payment-initiation/#payment_initiationpaymentreverse
 # operationId: paymentInitiationPaymentReverse
-export def "payment-initiation-payment-reverse create" [
+export def "payment-initiation-payment-reverse" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -4612,7 +4612,7 @@ export def "payment-initiation-payment-reverse create" [
 # Docs: /link/maintain-legacy-integration/#creating-a-payment-token
 # operationId: createPaymentToken
 @deprecated
-export def "payment-initiation-payment-token-create create" [
+export def "create-payment-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -4655,7 +4655,7 @@ export def "payment-initiation-payment-token-create create" [
 # Docs: /api/products/payment-initiation/#payment_initiationrecipientcreate
 # operationId: paymentInitiationRecipientCreate
 # --address shape: {city: string, country: string, postal_code: string, street: list<string>}
-export def "payment-initiation-recipient-create create" [
+export def "payment-initiation-recipient-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -4700,7 +4700,7 @@ export def "payment-initiation-recipient-create create" [
 # POST /payment_initiation/recipient/get
 # Docs: /api/products/payment-initiation/#payment_initiationrecipientget
 # operationId: paymentInitiationRecipientGet
-export def "payment-initiation-recipient-get get" [
+export def "payment-initiation-recipient-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -4742,7 +4742,7 @@ export def "payment-initiation-recipient-get get" [
 # POST /payment_initiation/recipient/list
 # Docs: /api/products/payment-initiation/#payment_initiationrecipientlist
 # operationId: paymentInitiationRecipientList
-export def "payment-initiation-recipient-list list" [
+export def "payment-initiation-recipient-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -4783,7 +4783,7 @@ export def "payment-initiation-recipient-list list" [
 # POST /payment_profile/create
 # Docs: /api/products/transfer/#payment_profilecreate
 # operationId: paymentProfileCreate
-export def "payment-profile-create create" [
+export def "payment-profile-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -4824,7 +4824,7 @@ export def "payment-profile-create create" [
 # POST /payment_profile/get
 # Docs: /api/products/transfer/#payment_profileget
 # operationId: paymentProfileGet
-export def "payment-profile-get get" [
+export def "payment-profile-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -4866,7 +4866,7 @@ export def "payment-profile-get get" [
 # POST /payment_profile/remove
 # Docs: /api/products/transfer/#payment_profileremove
 # operationId: paymentProfileRemove
-export def "payment-profile-remove delete" [
+export def "payment-profile-remove" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -4908,7 +4908,7 @@ export def "payment-profile-remove delete" [
 # POST /processor/apex/processor_token/create
 # Docs: /none/
 # operationId: processorApexProcessorTokenCreate
-export def "processor-apex-processor-token-create create" [
+export def "processor-apex-processor-token-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -4951,7 +4951,7 @@ export def "processor-apex-processor-token-create create" [
 # POST /processor/auth/get
 # Docs: /api/processors/#processorauthget
 # operationId: processorAuthGet
-export def "processor-auth-get get" [
+export def "processor-auth-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -4994,7 +4994,7 @@ export def "processor-auth-get get" [
 # Docs: /api/processors/#processorbalanceget
 # operationId: processorBalanceGet
 # --options shape: {min_last_updated_datetime?: string}
-export def "processor-balance-get get" [
+export def "processor-balance-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -5038,7 +5038,7 @@ export def "processor-balance-get get" [
 # Docs: /api/processors/#bank_transfercreate
 # operationId: processorBankTransferCreate
 # --user shape: {email_address?: string, legal_name: string}
-export def "processor-bank-transfer-create create" [
+export def "processor-bank-transfer-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -5091,7 +5091,7 @@ export def "processor-bank-transfer-create create" [
 # POST /processor/identity/get
 # Docs: /api/processors/#processoridentityget
 # operationId: processorIdentityGet
-export def "processor-identity-get get" [
+export def "processor-identity-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -5133,7 +5133,7 @@ export def "processor-identity-get get" [
 # POST /processor/signal/decision/report
 # Docs: /api/processors/#processorsignaldecisionreport
 # operationId: processorSignalDecisionReport
-export def "processor-signal-decision-report create" [
+export def "processor-signal-decision-report" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -5183,7 +5183,7 @@ export def "processor-signal-decision-report create" [
 # operationId: processorSignalEvaluate
 # --device shape: {ip_address?: string, user_agent?: string}
 # --user shape: {address?: record, email_address?: string, name?: record, phone_number?: string}
-export def "processor-signal-evaluate create" [
+export def "processor-signal-evaluate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -5233,7 +5233,7 @@ export def "processor-signal-evaluate create" [
 # POST /processor/signal/return/report
 # Docs: /api/processors/#processorsignalreturnreport
 # operationId: processorSignalReturnReport
-export def "processor-signal-return-report create" [
+export def "processor-signal-return-report" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -5278,7 +5278,7 @@ export def "processor-signal-return-report create" [
 # POST /processor/stripe/bank_account_token/create
 # Docs: /api/processors/#processorstripebank_account_tokencreate
 # operationId: processorStripeBankAccountTokenCreate
-export def "processor-stripe-bank-account-token-create create" [
+export def "processor-stripe-bank-account-token-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -5321,7 +5321,7 @@ export def "processor-stripe-bank-account-token-create create" [
 # POST /processor/token/create
 # Docs: /api/processors/#processortokencreate
 # operationId: processorTokenCreate
-export def "processor-token-create create" [
+export def "processor-token-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -5365,7 +5365,7 @@ export def "processor-token-create create" [
 # POST /sandbox/bank_transfer/fire_webhook
 # Docs: /bank-transfers/reference/#sandboxbank_transferfire_webhook
 # operationId: sandboxBankTransferFireWebhook
-export def "sandbox-bank-transfer-fire-webhook create" [
+export def "sandbox-bank-transfer-fire-webhook" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -5408,7 +5408,7 @@ export def "sandbox-bank-transfer-fire-webhook create" [
 # Docs: /bank-transfers/reference/#sandboxbank_transfersimulate
 # operationId: sandboxBankTransferSimulate
 # --failure_reason shape: {ach_return_code?: string, description?: string}
-export def "sandbox-bank-transfer-simulate create" [
+export def "sandbox-bank-transfer-simulate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -5452,7 +5452,7 @@ export def "sandbox-bank-transfer-simulate create" [
 # POST /sandbox/income/fire_webhook
 # Docs: /api/sandbox/#sandboxincomefire_webhook
 # operationId: sandboxIncomeFireWebhook
-export def "sandbox-income-fire-webhook create" [
+export def "sandbox-income-fire-webhook" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -5497,7 +5497,7 @@ export def "sandbox-income-fire-webhook create" [
 # POST /sandbox/item/fire_webhook
 # Docs: /api/sandbox/#sandboxitemfire_webhook
 # operationId: sandboxItemFireWebhook
-export def "sandbox-item-fire-webhook create" [
+export def "sandbox-item-fire-webhook" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -5541,7 +5541,7 @@ export def "sandbox-item-fire-webhook create" [
 # POST /sandbox/item/reset_login
 # Docs: /api/sandbox/#sandboxitemreset_login
 # operationId: sandboxItemResetLogin
-export def "sandbox-item-reset-login reset" [
+export def "sandbox-item-reset-login" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -5583,7 +5583,7 @@ export def "sandbox-item-reset-login reset" [
 # POST /sandbox/item/set_verification_status
 # Docs: /api/sandbox/#sandboxitemset_verification_status
 # operationId: sandboxItemSetVerificationStatus
-export def "sandbox-item-set-verification-status update" [
+export def "sandbox-item-set-verification-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -5626,7 +5626,7 @@ export def "sandbox-item-set-verification-status update" [
 #
 # POST /sandbox/oauth/select_accounts
 # operationId: sandboxOauthSelectAccounts
-export def "sandbox-oauth-select-accounts create" [
+export def "sandbox-oauth-select-accounts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -5667,7 +5667,7 @@ export def "sandbox-oauth-select-accounts create" [
 # POST /sandbox/payment_profile/reset_login
 # Docs: /api/sandbox/#sandboxpayment_profilereset_login
 # operationId: sandboxPaymentProfileResetLogin
-export def "sandbox-payment-profile-reset-login reset" [
+export def "sandbox-payment-profile-reset-login" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -5710,7 +5710,7 @@ export def "sandbox-payment-profile-reset-login reset" [
 # Docs: /api/sandbox/#sandboxprocessor_tokencreate
 # operationId: sandboxProcessorTokenCreate
 # --options shape: {override_password?: string, override_username?: string}
-export def "sandbox-processor-token-create create" [
+export def "sandbox-processor-token-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -5754,7 +5754,7 @@ export def "sandbox-processor-token-create create" [
 # Docs: /api/sandbox/#sandboxpublic_tokencreate
 # operationId: sandboxPublicTokenCreate
 # --options shape: {income_verification?: record, override_password?: string, override_username?: string, transactions?: record, webhook?: string}
-export def "sandbox-public-token-create create" [
+export def "sandbox-public-token-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -5799,7 +5799,7 @@ export def "sandbox-public-token-create create" [
 # POST /sandbox/transfer/fire_webhook
 # Docs: /api/sandbox/#sandboxtransferfire_webhook
 # operationId: sandboxTransferFireWebhook
-export def "sandbox-transfer-fire-webhook create" [
+export def "sandbox-transfer-fire-webhook" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -5841,7 +5841,7 @@ export def "sandbox-transfer-fire-webhook create" [
 # POST /sandbox/transfer/repayment/simulate
 # Docs: /api/sandbox/#sandboxtransferrepaymentsimulate
 # operationId: sandboxTransferRepaymentSimulate
-export def "sandbox-transfer-repayment-simulate create" [
+export def "sandbox-transfer-repayment-simulate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -5883,7 +5883,7 @@ export def "sandbox-transfer-repayment-simulate create" [
 # Docs: /api/sandbox/#sandboxtransfersimulate
 # operationId: sandboxTransferSimulate
 # --failure_reason shape: {ach_return_code?: string, description?: string}
-export def "sandbox-transfer-simulate create" [
+export def "sandbox-transfer-simulate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -5927,7 +5927,7 @@ export def "sandbox-transfer-simulate create" [
 # POST /sandbox/transfer/sweep/simulate
 # Docs: /api/sandbox/#sandboxtransfersweepsimulate
 # operationId: sandboxTransferSweepSimulate
-export def "sandbox-transfer-sweep-simulate create" [
+export def "sandbox-transfer-sweep-simulate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -5968,7 +5968,7 @@ export def "sandbox-transfer-sweep-simulate create" [
 # POST /sandbox/transfer/test_clock/advance
 # Docs: /api/sandbox/#sandboxtransfertest_clockadvance
 # operationId: sandboxTransferTestClockAdvance
-export def "sandbox-transfer-test-clock-advance test" [
+export def "sandbox-transfer-test-clock-advance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -6011,7 +6011,7 @@ export def "sandbox-transfer-test-clock-advance test" [
 # POST /sandbox/transfer/test_clock/create
 # Docs: /api/sandbox/#sandboxtransfertest_clockcreate
 # operationId: sandboxTransferTestClockCreate
-export def "sandbox-transfer-test-clock-create test" [
+export def "sandbox-transfer-test-clock-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -6053,7 +6053,7 @@ export def "sandbox-transfer-test-clock-create test" [
 # POST /sandbox/transfer/test_clock/get
 # Docs: /api/sandbox/#sandboxtransfertest_clockget
 # operationId: sandboxTransferTestClockGet
-export def "sandbox-transfer-test-clock-get test" [
+export def "sandbox-transfer-test-clock-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -6095,7 +6095,7 @@ export def "sandbox-transfer-test-clock-get test" [
 # POST /sandbox/transfer/test_clock/list
 # Docs: /api/sandbox/#sandboxtransfertest_clocklist
 # operationId: sandboxTransferTestClockList
-export def "sandbox-transfer-test-clock-list test" [
+export def "sandbox-transfer-test-clock-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -6140,7 +6140,7 @@ export def "sandbox-transfer-test-clock-list test" [
 # POST /signal/decision/report
 # Docs: /api/products/signal#signaldecisionreport
 # operationId: signalDecisionReport
-export def "signal-decision-report create" [
+export def "signal-decision-report" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -6189,7 +6189,7 @@ export def "signal-decision-report create" [
 # operationId: signalEvaluate
 # --device shape: {ip_address?: string, user_agent?: string}
 # --user shape: {address?: record, email_address?: string, name?: record, phone_number?: string}
-export def "signal-evaluate create" [
+export def "signal-evaluate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -6240,7 +6240,7 @@ export def "signal-evaluate create" [
 # POST /signal/prepare
 # Docs: /api/products/signal#signalprepare
 # operationId: signalPrepare
-export def "signal-prepare create" [
+export def "signal-prepare" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -6282,7 +6282,7 @@ export def "signal-prepare create" [
 # POST /signal/return/report
 # Docs: /api/products/signal#signalreturnreport
 # operationId: signalReturnReport
-export def "signal-return-report create" [
+export def "signal-return-report" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -6328,7 +6328,7 @@ export def "signal-return-report create" [
 # operationId: transactionsEnrich
 # --options shape: {include_legacy_category?: bool}
 # --transactions item shape: {amount: float, date_posted?: string, description: string, direction: "INFLOW"|"OUTFLOW", id: string, iso_currency_code: string, location?: record, mcc?: string}
-export def "transactions-enrich create" [
+export def "transactions-enrich" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -6373,7 +6373,7 @@ export def "transactions-enrich create" [
 # Docs: /api/products/transactions/#transactionsget
 # operationId: transactionsGet
 # --options shape: {account_ids?: list<string>, count?: int, include_logo_and_counterparty_beta?: bool, include_original_description?: bool, include_personal_finance_category?: bool, include_personal_finance_category_beta?: bool, offset?: int}
-export def "transactions-get get" [
+export def "transactions-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -6419,7 +6419,7 @@ export def "transactions-get get" [
 # Docs: /api/products/transactions/#transactionsrecurringget
 # operationId: transactionsRecurringGet
 # --options shape: {include_personal_finance_category?: bool}
-export def "transactions-recurring-get get" [
+export def "transactions-recurring-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -6463,7 +6463,7 @@ export def "transactions-recurring-get get" [
 # POST /transactions/refresh
 # Docs: /api/products/transactions/#transactionsrefresh
 # operationId: transactionsRefresh
-export def "transactions-refresh refresh" [
+export def "transactions-refresh" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -6506,7 +6506,7 @@ export def "transactions-refresh refresh" [
 # Docs: /api/products/transactions/#transactionssync
 # operationId: transactionsSync
 # --options shape: {include_logo_and_counterparty_beta?: bool, include_original_description?: bool, include_personal_finance_category?: bool}
-export def "transactions-sync sync" [
+export def "transactions-sync" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -6554,7 +6554,7 @@ export def "transactions-sync sync" [
 # --device shape: {ip_address?: string, user_agent?: string}
 # --user shape: {address?: record, email_address?: string, legal_name: string, phone_number?: string}
 @deprecated --flag origination-account-id
-export def "transfer-authorization-create create" [
+export def "transfer-authorization-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -6612,7 +6612,7 @@ export def "transfer-authorization-create create" [
 # POST /transfer/cancel
 # Docs: /api/products/transfer/#transfercancel
 # operationId: transferCancel
-export def "transfer-cancel cancel" [
+export def "transfer-cancel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -6654,7 +6654,7 @@ export def "transfer-cancel cancel" [
 # POST /transfer/capabilities/get
 # Docs: /api/products/transfer/#transfercapabilitiesget
 # operationId: transferCapabilitiesGet
-export def "transfer-capabilities-get get" [
+export def "transfer-capabilities-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -6706,7 +6706,7 @@ export def "transfer-capabilities-get get" [
 @deprecated --flag origination-account-id
 @deprecated --flag type
 @deprecated --flag user
-export def "transfer-create create" [
+export def "transfer-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -6762,7 +6762,7 @@ export def "transfer-create create" [
 # Docs: /api/products/transfer/#transfereventlist
 # operationId: transferEventList
 @deprecated --flag origination-account-id
-export def "transfer-event-list list" [
+export def "transfer-event-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -6815,7 +6815,7 @@ export def "transfer-event-list list" [
 # POST /transfer/event/sync
 # Docs: /api/products/transfer/#transfereventsync
 # operationId: transferEventSync
-export def "transfer-event-sync sync" [
+export def "transfer-event-sync" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -6858,7 +6858,7 @@ export def "transfer-event-sync sync" [
 # POST /transfer/get
 # Docs: /api/products/transfer/#transferget
 # operationId: transferGet
-export def "transfer-get get" [
+export def "transfer-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -6902,7 +6902,7 @@ export def "transfer-get get" [
 # operationId: transferIntentCreate
 # --user shape: {address?: record, email_address?: string, legal_name: string, phone_number?: string}
 @deprecated --flag origination-account-id
-export def "transfer-intent-create create" [
+export def "transfer-intent-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -6955,7 +6955,7 @@ export def "transfer-intent-create create" [
 # POST /transfer/intent/get
 # Docs: /api/products/transfer/#transferintentget
 # operationId: transferIntentGet
-export def "transfer-intent-get get" [
+export def "transfer-intent-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -6998,7 +6998,7 @@ export def "transfer-intent-get get" [
 # Docs: /api/products/transfer/#transferlist
 # operationId: transferList
 @deprecated --flag origination-account-id
-export def "transfer-list list" [
+export def "transfer-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -7046,7 +7046,7 @@ export def "transfer-list list" [
 # POST /transfer/migrate_account
 # Docs: /api/products/transfer/#transfermigrate_account
 # operationId: transferMigrateAccount
-export def "transfer-migrate-account create" [
+export def "transfer-migrate-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -7091,7 +7091,7 @@ export def "transfer-migrate-account create" [
 # POST /transfer/originator/create
 # Docs: /api/products/transfer/#transferoriginatorcreate
 # operationId: transferOriginatorCreate
-export def "transfer-originator-create create" [
+export def "transfer-originator-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -7133,7 +7133,7 @@ export def "transfer-originator-create create" [
 # POST /transfer/originator/get
 # Docs: /api/products/transfer/#transferoriginatorget
 # operationId: transferOriginatorGet
-export def "transfer-originator-get get" [
+export def "transfer-originator-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -7175,7 +7175,7 @@ export def "transfer-originator-get get" [
 # POST /transfer/originator/list
 # Docs: /api/products/transfer/#transferoriginatorlist
 # operationId: transferOriginatorList
-export def "transfer-originator-list list" [
+export def "transfer-originator-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -7218,7 +7218,7 @@ export def "transfer-originator-list list" [
 # POST /transfer/questionnaire/create
 # Docs: /api/products/transfer/#transferquestionnairecreate
 # operationId: transferQuestionnaireCreate
-export def "transfer-questionnaire-create create" [
+export def "transfer-questionnaire-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -7261,7 +7261,7 @@ export def "transfer-questionnaire-create create" [
 # POST /transfer/recurring/cancel
 # Docs: /api/products/transfer/#transferrecurringcancel
 # operationId: transferRecurringCancel
-export def "transfer-recurring-cancel cancel" [
+export def "transfer-recurring-cancel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -7307,7 +7307,7 @@ export def "transfer-recurring-cancel cancel" [
 # --schedule shape: {end_date?: string, interval_count: int, interval_execution_day: int, interval_unit: "week"|"month", start_date: string}
 # --user shape: {address?: record, email_address?: string, legal_name: string, phone_number?: string}
 @deprecated --flag iso-currency-code
-export def "transfer-recurring-create create" [
+export def "transfer-recurring-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -7363,7 +7363,7 @@ export def "transfer-recurring-create create" [
 # POST /transfer/recurring/get
 # Docs: /api/products/transfer/#transferrecurringget
 # operationId: transferRecurringGet
-export def "transfer-recurring-get get" [
+export def "transfer-recurring-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -7405,7 +7405,7 @@ export def "transfer-recurring-get get" [
 # POST /transfer/recurring/list
 # Docs: /api/products/transfer/#transferrecurringlist
 # operationId: transferRecurringList
-export def "transfer-recurring-list list" [
+export def "transfer-recurring-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -7451,7 +7451,7 @@ export def "transfer-recurring-list list" [
 # POST /transfer/refund/cancel
 # Docs: /api/products/transfer/#transferrefundcancel
 # operationId: transferRefundCancel
-export def "transfer-refund-cancel cancel" [
+export def "transfer-refund-cancel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -7493,7 +7493,7 @@ export def "transfer-refund-cancel cancel" [
 # POST /transfer/refund/create
 # Docs: /api/products/transfer/#transferrefundcreate
 # operationId: transferRefundCreate
-export def "transfer-refund-create create" [
+export def "transfer-refund-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -7537,7 +7537,7 @@ export def "transfer-refund-create create" [
 # POST /transfer/refund/get
 # Docs: /api/products/transfer/#transferrefundget
 # operationId: transferRefundGet
-export def "transfer-refund-get get" [
+export def "transfer-refund-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -7579,7 +7579,7 @@ export def "transfer-refund-get get" [
 # POST /transfer/repayment/list
 # Docs: /api/products/transfer/#transferrepaymentlist
 # operationId: transferRepaymentList
-export def "transfer-repayment-list list" [
+export def "transfer-repayment-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -7624,7 +7624,7 @@ export def "transfer-repayment-list list" [
 # POST /transfer/repayment/return/list
 # Docs: /api/products/transfer/#transferrepaymentreturnlist
 # operationId: transferRepaymentReturnList
-export def "transfer-repayment-return-list list" [
+export def "transfer-repayment-return-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -7668,7 +7668,7 @@ export def "transfer-repayment-return-list list" [
 # POST /transfer/sweep/get
 # Docs: /api/products/transfer/#transfersweepget
 # operationId: transferSweepGet
-export def "transfer-sweep-get get" [
+export def "transfer-sweep-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -7710,7 +7710,7 @@ export def "transfer-sweep-get get" [
 # POST /transfer/sweep/list
 # Docs: /api/products/transfer/#transfersweeplist
 # operationId: transferSweepList
-export def "transfer-sweep-list list" [
+export def "transfer-sweep-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -7757,7 +7757,7 @@ export def "transfer-sweep-list list" [
 # POST /user/create
 # Docs: /api/products/income/#usercreate
 # operationId: userCreate
-export def "user-create create" [
+export def "user-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -7799,7 +7799,7 @@ export def "user-create create" [
 # POST /wallet/create
 # Docs: /api/products/virtual-accounts/#walletcreate
 # operationId: walletCreate
-export def "wallet-create create" [
+export def "wallet-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -7841,7 +7841,7 @@ export def "wallet-create create" [
 # POST /wallet/get
 # Docs: /api/products/virtual-accounts/#walletget
 # operationId: walletGet
-export def "wallet-get get" [
+export def "wallet-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -7883,7 +7883,7 @@ export def "wallet-get get" [
 # POST /wallet/list
 # Docs: /api/products/virtual-accounts/#walletlist
 # operationId: walletList
-export def "wallet-list list" [
+export def "wallet-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -7929,7 +7929,7 @@ export def "wallet-list list" [
 # operationId: walletTransactionExecute
 # --amount shape: {iso_currency_code: "GBP"|"EUR", value: float}
 # --counterparty shape: {name: string, numbers: record}
-export def "wallet-transaction-execute create" [
+export def "wallet-transaction-execute" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -7975,7 +7975,7 @@ export def "wallet-transaction-execute create" [
 # POST /wallet/transaction/get
 # Docs: /api/products/virtual-accounts/#wallettransactionget
 # operationId: walletTransactionGet
-export def "wallet-transaction-get get" [
+export def "wallet-transaction-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -8018,7 +8018,7 @@ export def "wallet-transaction-get get" [
 # Docs: /api/products/virtual-accounts/#wallettransactionlist
 # operationId: walletTransactionList
 # --options shape: {end_time?: string, start_time?: string}
-export def "wallet-transaction-list list" [
+export def "wallet-transaction-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -8064,7 +8064,7 @@ export def "wallet-transaction-list list" [
 # Docs: /api/products/monitor/#watchlist_screeningentitycreate
 # operationId: watchlistScreeningEntityCreate
 # --search_terms shape: {country?: string, document_number?: string, email_address?: string, entity_watchlist_program_id: string, legal_name: string, phone_number?: string, url?: string}
-export def "watchlist-screening-entity-create create" [
+export def "watchlist-screening-entity-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -8107,7 +8107,7 @@ export def "watchlist-screening-entity-create create" [
 # POST /watchlist_screening/entity/get
 # Docs: /api/products/monitor/#watchlist_screeningentityget
 # operationId: watchlistScreeningEntityGet
-export def "watchlist-screening-entity-get get" [
+export def "watchlist-screening-entity-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -8149,7 +8149,7 @@ export def "watchlist-screening-entity-get get" [
 # POST /watchlist_screening/entity/history/list
 # Docs: /api/products/monitor/#watchlist_screeningentityhistorylist
 # operationId: watchlistScreeningEntityHistoryList
-export def "watchlist-screening-entity-history-list list" [
+export def "watchlist-screening-entity-history-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -8192,7 +8192,7 @@ export def "watchlist-screening-entity-history-list list" [
 # POST /watchlist_screening/entity/hit/list
 # Docs: /api/products/monitor/#watchlist_screeningentityhitlist
 # operationId: watchlistScreeningEntityHitList
-export def "watchlist-screening-entity-hit-list list" [
+export def "watchlist-screening-entity-hit-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -8235,7 +8235,7 @@ export def "watchlist-screening-entity-hit-list list" [
 # POST /watchlist_screening/entity/list
 # Docs: /api/products/monitor/#watchlist_screeningentitylist
 # operationId: watchlistScreeningEntityList
-export def "watchlist-screening-entity-list list" [
+export def "watchlist-screening-entity-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -8281,7 +8281,7 @@ export def "watchlist-screening-entity-list list" [
 # POST /watchlist_screening/entity/program/get
 # Docs: /api/products/monitor/#watchlist_screeningentityprogramget
 # operationId: watchlistScreeningEntityProgramGet
-export def "watchlist-screening-entity-program-get get" [
+export def "watchlist-screening-entity-program-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -8323,7 +8323,7 @@ export def "watchlist-screening-entity-program-get get" [
 # POST /watchlist_screening/entity/program/list
 # Docs: /api/products/monitor/#watchlist_screeningentityprogramlist
 # operationId: watchlistScreeningEntityProgramList
-export def "watchlist-screening-entity-program-list list" [
+export def "watchlist-screening-entity-program-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -8365,7 +8365,7 @@ export def "watchlist-screening-entity-program-list list" [
 # POST /watchlist_screening/entity/review/create
 # Docs: /api/products/monitor/#watchlist_screeningentityreviewcreate
 # operationId: watchlistScreeningEntityReviewCreate
-export def "watchlist-screening-entity-review-create create" [
+export def "watchlist-screening-entity-review-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -8410,7 +8410,7 @@ export def "watchlist-screening-entity-review-create create" [
 # POST /watchlist_screening/entity/review/list
 # Docs: /api/products/monitor/#watchlist_screeningentityreviewlist
 # operationId: watchlistScreeningEntityReviewList
-export def "watchlist-screening-entity-review-list list" [
+export def "watchlist-screening-entity-review-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -8454,7 +8454,7 @@ export def "watchlist-screening-entity-review-list list" [
 # Docs: /api/products/monitor/#watchlist_screeningentityupdate
 # operationId: watchlistScreeningEntityUpdate
 # --search_terms shape: {client_id: string, country?: string, document_number?: string, email_address?: string, entity_watchlist_program_id: string, legal_name?: string, phone_number?: string, secret: string, url?: string}
-export def "watchlist-screening-entity-update update" [
+export def "watchlist-screening-entity-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -8502,7 +8502,7 @@ export def "watchlist-screening-entity-update update" [
 # Docs: /api/products/monitor/#watchlist_screeningindividualcreate
 # operationId: watchlistScreeningIndividualCreate
 # --search_terms shape: {country?: string, date_of_birth?: string, document_number?: string, legal_name: string, watchlist_program_id: string}
-export def "watchlist-screening-individual-create create" [
+export def "watchlist-screening-individual-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -8545,7 +8545,7 @@ export def "watchlist-screening-individual-create create" [
 # POST /watchlist_screening/individual/get
 # Docs: /api/products/monitor/#watchlist_screeningindividualget
 # operationId: watchlistScreeningIndividualGet
-export def "watchlist-screening-individual-get get" [
+export def "watchlist-screening-individual-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -8587,7 +8587,7 @@ export def "watchlist-screening-individual-get get" [
 # POST /watchlist_screening/individual/history/list
 # Docs: /api/products/monitor/#watchlist_screeningindividualhistorylist
 # operationId: watchlistScreeningIndividualHistoryList
-export def "watchlist-screening-individual-history-list list" [
+export def "watchlist-screening-individual-history-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -8630,7 +8630,7 @@ export def "watchlist-screening-individual-history-list list" [
 # POST /watchlist_screening/individual/hit/list
 # Docs: /api/products/monitor/#watchlist_screeningindividualhitlist
 # operationId: watchlistScreeningIndividualHitList
-export def "watchlist-screening-individual-hit-list list" [
+export def "watchlist-screening-individual-hit-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -8673,7 +8673,7 @@ export def "watchlist-screening-individual-hit-list list" [
 # POST /watchlist_screening/individual/list
 # Docs: /api/products/monitor/#watchlist_screeningindividuallist
 # operationId: watchlistScreeningIndividualList
-export def "watchlist-screening-individual-list list" [
+export def "watchlist-screening-individual-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -8719,7 +8719,7 @@ export def "watchlist-screening-individual-list list" [
 # POST /watchlist_screening/individual/program/get
 # Docs: /api/products/monitor/#watchlist_screeningindividualprogramget
 # operationId: watchlistScreeningIndividualProgramGet
-export def "watchlist-screening-individual-program-get get" [
+export def "watchlist-screening-individual-program-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -8761,7 +8761,7 @@ export def "watchlist-screening-individual-program-get get" [
 # POST /watchlist_screening/individual/program/list
 # Docs: /api/products/monitor/#watchlist_screeningindividualprogramlist
 # operationId: watchlistScreeningIndividualProgramList
-export def "watchlist-screening-individual-program-list list" [
+export def "watchlist-screening-individual-program-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -8803,7 +8803,7 @@ export def "watchlist-screening-individual-program-list list" [
 # POST /watchlist_screening/individual/review/create
 # Docs: /api/products/monitor/#watchlist_screeningindividualreviewcreate
 # operationId: watchlistScreeningIndividualReviewCreate
-export def "watchlist-screening-individual-review-create create" [
+export def "watchlist-screening-individual-review-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -8848,7 +8848,7 @@ export def "watchlist-screening-individual-review-create create" [
 # POST /watchlist_screening/individual/review/list
 # Docs: /api/products/monitor/#watchlist_screeningindividualreviewlist
 # operationId: watchlistScreeningIndividualReviewList
-export def "watchlist-screening-individual-review-list list" [
+export def "watchlist-screening-individual-review-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -8892,7 +8892,7 @@ export def "watchlist-screening-individual-review-list list" [
 # Docs: /api/products/monitor/#watchlist_screeningindividualupdate
 # operationId: watchlistScreeningIndividualUpdate
 # --search_terms shape: {country?: string, date_of_birth?: string, document_number?: string, legal_name?: string, watchlist_program_id?: string}
-export def "watchlist-screening-individual-update update" [
+export def "watchlist-screening-individual-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
@@ -8939,7 +8939,7 @@ export def "watchlist-screening-individual-update update" [
 # POST /webhook_verification_key/get
 # Docs: /api/webhooks/webhook-verification/#get-webhook-verification-key
 # operationId: webhookVerificationKeyGet
-export def "webhook-verification-key-get get" [
+export def "webhook-verification-key-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
   --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)

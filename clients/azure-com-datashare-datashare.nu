@@ -127,7 +127,7 @@ def kind-completer-2 [] { ["AdlsGen1File" "AdlsGen1Folder" "AdlsGen2File" "AdlsG
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-data-share-list-invitations list-consumer" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "consumer-invitations-list-invitations" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -151,7 +151,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.DataShare/ListInvitations
 # operationId: ConsumerInvitations_ListInvitations
-export def "providers-microsoft-data-share-list-invitations list-consumer" [
+export def "consumer-invitations-list-invitations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -189,7 +189,7 @@ export def "providers-microsoft-data-share-list-invitations list-consumer" [
 # POST /providers/Microsoft.DataShare/locations/{location}/RejectInvitation
 # operationId: ConsumerInvitations_RejectInvitation
 # --properties shape: {invitationId: string}
-export def "providers-microsoft-data-share-locations-reject-invitation reject-consumer" [
+export def "consumer-invitations-reject-invitation" [
   location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -231,7 +231,7 @@ export def "providers-microsoft-data-share-locations-reject-invitation reject-co
 #
 # GET /providers/Microsoft.DataShare/locations/{location}/consumerInvitations/{invitationId}
 # operationId: ConsumerInvitations_Get
-export def "providers-microsoft-data-share-locations-consumer-invitations get" [
+export def "consumer-invitations-get" [
   location: string
   invitation_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -271,7 +271,7 @@ export def "providers-microsoft-data-share-locations-consumer-invitations get" [
 #
 # GET /providers/Microsoft.DataShare/operations
 # operationId: Operations_List
-export def "providers-microsoft-data-share-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -307,7 +307,7 @@ export def "providers-microsoft-data-share-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.DataShare/accounts
 # operationId: Accounts_ListBySubscription
-export def "subscriptions-providers-microsoft-data-share-accounts list" [
+export def "accounts-list-by-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -346,7 +346,7 @@ export def "subscriptions-providers-microsoft-data-share-accounts list" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts
 # operationId: Accounts_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts list" [
+export def "accounts-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -387,7 +387,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}
 # operationId: Accounts_Delete
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts delete" [
+export def "accounts-delete" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -429,7 +429,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}
 # operationId: Accounts_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts get" [
+export def "accounts-get" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -471,7 +471,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}
 # operationId: Accounts_Update
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts update" [
+export def "accounts-update" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -518,7 +518,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}
 # operationId: Accounts_Create
 # --identity shape: {type?: "SystemAssigned"}
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts create" [
+export def "accounts-create" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -567,7 +567,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shareSubscriptions
 # operationId: ShareSubscriptions_ListByAccount
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-share-subscriptions list" [
+export def "share-subscriptions-list-by-account" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -610,7 +610,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shareSubscriptions/{shareSubscriptionName}
 # operationId: ShareSubscriptions_Delete
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-share-subscriptions delete" [
+export def "share-subscriptions-delete" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -654,7 +654,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shareSubscriptions/{shareSubscriptionName}
 # operationId: ShareSubscriptions_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-share-subscriptions get" [
+export def "share-subscriptions-get" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -699,7 +699,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shareSubscriptions/{shareSubscriptionName}
 # operationId: ShareSubscriptions_Create
 # --properties shape: {invitationId: string, sourceShareLocation: string}
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-share-subscriptions create" [
+export def "share-subscriptions-create" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -747,7 +747,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shareSubscriptions/{shareSubscriptionName}/ConsumerSourceDataSets
 # operationId: ConsumerSourceDataSets_ListByShareSubscription
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-share-subscriptions-consumer-source-data-sets list" [
+export def "consumer-source-data-sets-list-by-share-subscription" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -792,7 +792,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shareSubscriptions/{shareSubscriptionName}/Synchronize
 # operationId: ShareSubscriptions_Synchronize
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-share-subscriptions-synchronize create" [
+export def "share-subscriptions-synchronize" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -840,7 +840,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shareSubscriptions/{shareSubscriptionName}/cancelSynchronization
 # operationId: ShareSubscriptions_CancelSynchronization
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-share-subscriptions-cancel-synchronization cancel" [
+export def "share-subscriptions-cancel-synchronization" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -888,7 +888,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shareSubscriptions/{shareSubscriptionName}/dataSetMappings
 # operationId: DataSetMappings_ListByShareSubscription
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-share-subscriptions-data-set-mappings list" [
+export def "data-set-mappings-list-by-share-subscription" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -933,7 +933,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shareSubscriptions/{shareSubscriptionName}/dataSetMappings/{dataSetMappingName}
 # operationId: DataSetMappings_Delete
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-share-subscriptions-data-set-mappings delete" [
+export def "data-set-mappings-delete" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -979,7 +979,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shareSubscriptions/{shareSubscriptionName}/dataSetMappings/{dataSetMappingName}
 # operationId: DataSetMappings_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-share-subscriptions-data-set-mappings get" [
+export def "data-set-mappings-get" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1026,7 +1026,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shareSubscriptions/{shareSubscriptionName}/dataSetMappings/{dataSetMappingName}
 # Discriminator (request): kind
 # operationId: DataSetMappings_Create
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-share-subscriptions-data-set-mappings create" [
+export def "data-set-mappings-create" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1076,7 +1076,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shareSubscriptions/{shareSubscriptionName}/listSourceShareSynchronizationSettings
 # operationId: ShareSubscriptions_ListSourceShareSynchronizationSettings
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-share-subscriptions-list-source-share-synchronization-settings list" [
+export def "share-subscriptions-list-source-share-synchronization-settings" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1121,7 +1121,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shareSubscriptions/{shareSubscriptionName}/listSynchronizationDetails
 # operationId: ShareSubscriptions_ListSynchronizationDetails
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-share-subscriptions-list-synchronization-details list" [
+export def "share-subscriptions-list-synchronization-details" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1170,7 +1170,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shareSubscriptions/{shareSubscriptionName}/listSynchronizations
 # operationId: ShareSubscriptions_ListSynchronizations
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-share-subscriptions-list-synchronizations list" [
+export def "share-subscriptions-list-synchronizations" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1215,7 +1215,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shareSubscriptions/{shareSubscriptionName}/triggers
 # operationId: Triggers_ListByShareSubscription
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-share-subscriptions-triggers list" [
+export def "triggers-list-by-share-subscription" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1260,7 +1260,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shareSubscriptions/{shareSubscriptionName}/triggers/{triggerName}
 # operationId: Triggers_Delete
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-share-subscriptions-triggers delete" [
+export def "triggers-delete" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1306,7 +1306,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shareSubscriptions/{shareSubscriptionName}/triggers/{triggerName}
 # operationId: Triggers_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-share-subscriptions-triggers get" [
+export def "triggers-get" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1353,7 +1353,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shareSubscriptions/{shareSubscriptionName}/triggers/{triggerName}
 # Discriminator (request): kind
 # operationId: Triggers_Create
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-share-subscriptions-triggers create" [
+export def "triggers-create" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1403,7 +1403,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shares
 # operationId: Shares_ListByAccount
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares list" [
+export def "shares-list-by-account" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1446,7 +1446,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shares/{shareName}
 # operationId: Shares_Delete
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares delete" [
+export def "shares-delete" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1490,7 +1490,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shares/{shareName}
 # operationId: Shares_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares get" [
+export def "shares-get" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1535,7 +1535,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shares/{shareName}
 # operationId: Shares_Create
 # --properties shape: {description?: string, shareKind?: "CopyBased"|"InPlace", terms?: string}
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares create" [
+export def "shares-create" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1583,7 +1583,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shares/{shareName}/dataSets
 # operationId: DataSets_ListByShare
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares-data-sets list" [
+export def "data-sets-list-by-share" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1628,7 +1628,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shares/{shareName}/dataSets/{dataSetName}
 # operationId: DataSets_Delete
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares-data-sets delete" [
+export def "data-sets-delete" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1674,7 +1674,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shares/{shareName}/dataSets/{dataSetName}
 # operationId: DataSets_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares-data-sets get" [
+export def "data-sets-get" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1721,7 +1721,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shares/{shareName}/dataSets/{dataSetName}
 # Discriminator (request): kind
 # operationId: DataSets_Create
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares-data-sets create" [
+export def "data-sets-create" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1771,7 +1771,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shares/{shareName}/invitations
 # operationId: Invitations_ListByShare
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares-invitations list" [
+export def "invitations-list-by-share" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1816,7 +1816,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shares/{shareName}/invitations/{invitationName}
 # operationId: Invitations_Delete
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares-invitations delete" [
+export def "invitations-delete" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1862,7 +1862,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shares/{shareName}/invitations/{invitationName}
 # operationId: Invitations_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares-invitations get" [
+export def "invitations-get" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1909,7 +1909,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shares/{shareName}/invitations/{invitationName}
 # operationId: Invitations_Create
 # --properties shape: {targetActiveDirectoryId?: string, targetEmail?: string, targetObjectId?: string}
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares-invitations create" [
+export def "invitations-create" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1959,7 +1959,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shares/{shareName}/listSynchronizationDetails
 # operationId: Shares_ListSynchronizationDetails
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares-list-synchronization-details list" [
+export def "shares-list-synchronization-details" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -2016,7 +2016,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shares/{shareName}/listSynchronizations
 # operationId: Shares_ListSynchronizations
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares-list-synchronizations list" [
+export def "shares-list-synchronizations" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -2061,7 +2061,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shares/{shareName}/providerShareSubscriptions
 # operationId: ProviderShareSubscriptions_ListByShare
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares-provider-share-subscriptions list" [
+export def "provider-share-subscriptions-list-by-share" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -2106,7 +2106,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shares/{shareName}/providerShareSubscriptions/{providerShareSubscriptionId}
 # operationId: ProviderShareSubscriptions_GetByShare
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares-provider-share-subscriptions get" [
+export def "provider-share-subscriptions-get-by-share" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -2152,7 +2152,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shares/{shareName}/providerShareSubscriptions/{providerShareSubscriptionId}/reinstate
 # operationId: ProviderShareSubscriptions_Reinstate
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares-provider-share-subscriptions-reinstate create" [
+export def "provider-share-subscriptions-reinstate" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -2198,7 +2198,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shares/{shareName}/providerShareSubscriptions/{providerShareSubscriptionId}/revoke
 # operationId: ProviderShareSubscriptions_Revoke
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares-provider-share-subscriptions-revoke delete" [
+export def "provider-share-subscriptions-revoke" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -2244,7 +2244,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shares/{shareName}/synchronizationSettings
 # operationId: SynchronizationSettings_ListByShare
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares-synchronization-settings list" [
+export def "synchronization-settings-list-by-share" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -2289,7 +2289,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shares/{shareName}/synchronizationSettings/{synchronizationSettingName}
 # operationId: SynchronizationSettings_Delete
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares-synchronization-settings delete" [
+export def "synchronization-settings-delete" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -2335,7 +2335,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shares/{shareName}/synchronizationSettings/{synchronizationSettingName}
 # operationId: SynchronizationSettings_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares-synchronization-settings get" [
+export def "synchronization-settings-get" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -2382,7 +2382,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shares/{shareName}/synchronizationSettings/{synchronizationSettingName}
 # Discriminator (request): kind
 # operationId: SynchronizationSettings_Create
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares-synchronization-settings create" [
+export def "synchronization-settings-create" [
   subscription_id: string
   resource_group_name: string
   account_name: string

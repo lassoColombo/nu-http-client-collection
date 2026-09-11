@@ -97,7 +97,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1-0-compare-station get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "compare-station" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -121,7 +121,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1.0/compareStation/{stationName}/
 # operationId: compareStation
-export def "v1-0-compare-station get" [
+export def "compare-station" [
   station_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -157,7 +157,7 @@ export def "v1-0-compare-station get" [
 #
 # GET /v1.0/getAemetStation/{stationName}/{period}/
 # operationId: getAemetStation
-export def "v1-0-get-aemet-station get" [
+export def "get-aemet-station" [
   station_name: string
   period: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -195,7 +195,7 @@ export def "v1-0-get-aemet-station get" [
 #
 # GET /v1.0/getEasyWind/{easywindId}/
 # operationId: getEasywind
-export def "v1-0-get-easy-wind get-easywind" [
+export def "get-easywind" [
   easywind_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -233,7 +233,7 @@ export def "v1-0-get-easy-wind get-easywind" [
 #
 # GET /v1.0/getEventStations/{eventId}/
 # operationId: getEventStations
-export def "v1-0-get-event-stations get" [
+export def "get-event-stations" [
   event_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -269,7 +269,7 @@ export def "v1-0-get-event-stations get" [
 #
 # GET /v1.0/getForecastPoints/{yatchclubid}/language/{language}
 # operationId: getForecastPoints
-export def "v1-0-get-forecast-points-language get" [
+export def "get-forecast-points" [
   yatchclubid: string
   language: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -307,7 +307,7 @@ export def "v1-0-get-forecast-points-language get" [
 #
 # GET /v1.0/getForecastTimeSeries/{latitude}/{longitude}/
 # operationId: getForecastTimeSeries
-export def "v1-0-get-forecast-time-series get" [
+export def "get-forecast-time-series" [
   latitude: float
   longitude: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -353,7 +353,7 @@ export def "v1-0-get-forecast-time-series get" [
 #
 # GET /v1.0/getForecastTimeSeriesWrf/{latitude}/{longitude}/
 # operationId: getForecastTimeSeriesWrf
-export def "v1-0-get-forecast-time-series-wrf get" [
+export def "get-forecast-time-series-wrf" [
   latitude: float
   longitude: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -399,7 +399,7 @@ export def "v1-0-get-forecast-time-series-wrf get" [
 #
 # GET /v1.0/getSocibWeatherStation/{stationName}/{period}/
 # operationId: getSocibWeatherStation
-export def "v1-0-get-socib-weather-station get" [
+export def "get-socib-weather-station" [
   station_name: string
   period: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -437,7 +437,7 @@ export def "v1-0-get-socib-weather-station get" [
 #
 # GET /v1.0/getWeatherDisplay/{stationName}/
 # operationId: getWeatherDisplay
-export def "v1-0-get-weather-display get" [
+export def "get-weather-display" [
   station_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -475,7 +475,7 @@ export def "v1-0-get-weather-display get" [
 #
 # GET /v1.0/getWebCams/
 # operationId: getWebCams
-export def "v1-0-get-web-cams get" [
+export def "get-web-cams" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

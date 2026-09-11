@@ -108,7 +108,7 @@ def delimiter-completer [] { ["," ";" "|"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "root get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-root" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -132,7 +132,7 @@ export def commands []: nothing -> table {
 #
 # GET /
 # operationId: getRoot
-export def "root get" [
+export def "get-root" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -166,7 +166,7 @@ export def "root get" [
 #
 # GET /pages
 # operationId: getPages
-export def "pages list" [
+export def "get-pages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -200,7 +200,7 @@ export def "pages list" [
 #
 # GET /pages/{slug}
 # operationId: getPage
-export def "pages get" [
+export def "get-page" [
   slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -236,7 +236,7 @@ export def "pages get" [
 #
 # GET /{source}
 # operationId: getSource
-export def "catalog get" [
+export def "get-source" [
   source: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -272,7 +272,7 @@ export def "catalog get" [
 #
 # GET /{source}/aggregates
 # operationId: aggregateDatasets
-export def "aggregates get-datasets" [
+export def "aggregate-datasets" [
   source: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -318,7 +318,7 @@ export def "aggregates get-datasets" [
 #
 # GET /{source}/datasets
 # operationId: getDatasets
-export def "datasets list" [
+export def "get-datasets" [
   source: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -369,7 +369,7 @@ export def "datasets list" [
 #
 # GET /{source}/datasets/{dataset_id}
 # operationId: getDataset
-export def "datasets get" [
+export def "get-dataset" [
   source: string
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -412,7 +412,7 @@ export def "datasets get" [
 #
 # GET /{source}/datasets/{dataset_id}/aggregates
 # operationId: aggregateRecords
-export def "datasets-aggregates get-records" [
+export def "aggregate-records" [
   source: string
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -460,7 +460,7 @@ export def "datasets-aggregates get-records" [
 #
 # GET /{source}/datasets/{dataset_id}/attachments
 # operationId: getDatasetAttachements
-export def "datasets-attachments get-attachements" [
+export def "get-dataset-attachements" [
   source: string
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -498,7 +498,7 @@ export def "datasets-attachments get-attachements" [
 #
 # GET /{source}/datasets/{dataset_id}/attachments/{attachment_id}
 # operationId: downloadDatasetAttachement
-export def "datasets-attachments download-attachement" [
+export def "download-dataset-attachement" [
   source: string
   dataset_id: string
   attachment_id: string
@@ -538,7 +538,7 @@ export def "datasets-attachments download-attachement" [
 #
 # GET /{source}/datasets/{dataset_id}/exports/csv
 # operationId: exportRecordsCSV
-export def "datasets-exports-csv export-records" [
+export def "export-records-csv" [
   source: string
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -588,7 +588,7 @@ export def "datasets-exports-csv export-records" [
 #
 # GET /{source}/datasets/{dataset_id}/exports/geojson
 # operationId: exportRecordsGEOJSON
-export def "datasets-exports-geojson export-records" [
+export def "export-records-geojson" [
   source: string
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -639,7 +639,7 @@ export def "datasets-exports-geojson export-records" [
 #
 # GET /{source}/datasets/{dataset_id}/exports/ical
 # operationId: exportRecordsICAL
-export def "datasets-exports-ical export-records" [
+export def "export-records-ical" [
   source: string
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -689,7 +689,7 @@ export def "datasets-exports-ical export-records" [
 #
 # GET /{source}/datasets/{dataset_id}/exports/json
 # operationId: exportRecordsJSON
-export def "datasets-exports-json export-records" [
+export def "export-records-json" [
   source: string
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -740,7 +740,7 @@ export def "datasets-exports-json export-records" [
 #
 # GET /{source}/datasets/{dataset_id}/exports/ov2
 # operationId: exportRecordsOV2
-export def "datasets-exports-ov2 export-records" [
+export def "export-records-ov2" [
   source: string
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -790,7 +790,7 @@ export def "datasets-exports-ov2 export-records" [
 #
 # GET /{source}/datasets/{dataset_id}/exports/shp
 # operationId: exportRecordsSHP
-export def "datasets-exports-shp export-records" [
+export def "export-records-shp" [
   source: string
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -840,7 +840,7 @@ export def "datasets-exports-shp export-records" [
 #
 # GET /{source}/datasets/{dataset_id}/exports/xls
 # operationId: exportRecordsXLS
-export def "datasets-exports-xls export-records" [
+export def "export-records-xls" [
   source: string
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -890,7 +890,7 @@ export def "datasets-exports-xls export-records" [
 #
 # GET /{source}/datasets/{dataset_id}/facets
 # operationId: getRecordsFacets
-export def "datasets-facets get-records" [
+export def "get-records-facets" [
   source: string
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -935,7 +935,7 @@ export def "datasets-facets get-records" [
 #
 # PUT /{source}/datasets/{dataset_id}/feedback
 # operationId: sendDatasetFeedback
-export def "datasets-feedback send" [
+export def "send-dataset-feedback" [
   source: string
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -980,7 +980,7 @@ export def "datasets-feedback send" [
 #
 # GET /{source}/datasets/{dataset_id}/files/{file_id}
 # operationId: getDatasetFile
-export def "datasets-files get" [
+export def "get-dataset-file" [
   source: string
   dataset_id: string
   file_id: string
@@ -1022,7 +1022,7 @@ export def "datasets-files get" [
 #
 # GET /{source}/datasets/{dataset_id}/records
 # operationId: getRecords
-export def "datasets-records list" [
+export def "get-records" [
   source: string
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1074,7 +1074,7 @@ export def "datasets-records list" [
 #
 # GET /{source}/datasets/{dataset_id}/records/{record_id}
 # operationId: getRecord
-export def "datasets-records get" [
+export def "get-record" [
   source: string
   dataset_id: string
   record_id: string
@@ -1118,7 +1118,7 @@ export def "datasets-records get" [
 #
 # GET /{source}/datasets/{dataset_id}/reuses
 # operationId: getDatasetReuses
-export def "datasets-reuses list" [
+export def "get-dataset-reuses" [
   source: string
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1160,7 +1160,7 @@ export def "datasets-reuses list" [
 #
 # GET /{source}/datasets/{dataset_id}/reuses/{reuse_id}
 # operationId: getDatasetReuse
-export def "datasets-reuses get" [
+export def "get-dataset-reuse" [
   source: string
   dataset_id: string
   reuse_id: string
@@ -1202,7 +1202,7 @@ export def "datasets-reuses get" [
 #
 # GET /{source}/datasets/{dataset_id}/snapshots
 # operationId: getDatasetSnapshots
-export def "datasets-snapshots get" [
+export def "get-dataset-snapshots" [
   source: string
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1242,7 +1242,7 @@ export def "datasets-snapshots get" [
 #
 # GET /{source}/datasets/{dataset_id}/snapshots/{snapshot_id}
 # operationId: downloadDatasetSnapshot
-export def "datasets-snapshots download" [
+export def "download-dataset-snapshot" [
   source: string
   dataset_id: string
   snapshot_id: string
@@ -1284,7 +1284,7 @@ export def "datasets-snapshots download" [
 #
 # GET /{source}/exports/csv
 # operationId: exportDatasetsCSV
-export def "exports-csv export-datasets" [
+export def "export-datasets-csv" [
   source: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1331,7 +1331,7 @@ export def "exports-csv export-datasets" [
 #
 # GET /{source}/exports/json
 # operationId: exportDatasetsJson
-export def "exports-json export-datasets" [
+export def "export-datasets-json" [
   source: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1378,7 +1378,7 @@ export def "exports-json export-datasets" [
 #
 # GET /{source}/exports/rdf
 # operationId: exportDatasetsRDF
-export def "exports-rdf export-datasets" [
+export def "export-datasets-rdf" [
   source: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1424,7 +1424,7 @@ export def "exports-rdf export-datasets" [
 #
 # GET /{source}/exports/rss
 # operationId: exportDatasetsRSS
-export def "exports-rss export-datasets" [
+export def "export-datasets-rss" [
   source: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1470,7 +1470,7 @@ export def "exports-rss export-datasets" [
 #
 # GET /{source}/exports/ttl
 # operationId: exportDatasetsTTL
-export def "exports-ttl export-datasets" [
+export def "export-datasets-ttl" [
   source: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1516,7 +1516,7 @@ export def "exports-ttl export-datasets" [
 #
 # GET /{source}/exports/xls
 # operationId: exportDatasetsXLS
-export def "exports-xls export-datasets" [
+export def "export-datasets-xls" [
   source: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1562,7 +1562,7 @@ export def "exports-xls export-datasets" [
 #
 # GET /{source}/facets
 # operationId: getDatasetsFacets
-export def "facets get-datasets" [
+export def "get-datasets-facets" [
   source: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1605,7 +1605,7 @@ export def "facets get-datasets" [
 #
 # GET /{source}/metadata_templates
 # operationId: getMetadataTemplatesTypes
-export def "metadata-templates get-types" [
+export def "get-metadata-templates-types" [
   source: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1641,7 +1641,7 @@ export def "metadata-templates get-types" [
 #
 # GET /{source}/metadata_templates/{metadata_template_type}
 # operationId: getMetadataTemplatesType
-export def "metadata-templates list" [
+export def "get-metadata-templates-type" [
   source: string
   metadata_template_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1679,7 +1679,7 @@ export def "metadata-templates list" [
 #
 # GET /{source}/metadata_templates/{metadata_template_type}/{metadata_template_name}
 # operationId: getMetadataTemplate
-export def "metadata-templates get" [
+export def "get-metadata-template" [
   source: string
   metadata_template_type: string
   metadata_template_name: string

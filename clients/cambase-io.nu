@@ -115,7 +115,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "models-json get-index" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api-v1-modelsindex" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -139,7 +139,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/v1/models.json
 # operationId: Api::V1::Models#index
-export def "models-json get-index" [
+export def "api-v1-modelsindex" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -176,7 +176,7 @@ export def "models-json get-index" [
 #
 # POST /api/v1/models.json
 # operationId: Api::V1::Models#create
-export def "models-json create" [
+export def "api-v1-modelscreate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -232,7 +232,7 @@ export def "models-json create" [
 #
 # GET /api/v1/models/search.json
 # operationId: Api::V1::Models#search
-export def "models-search-json list" [
+export def "api-v1-modelssearch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -281,7 +281,7 @@ export def "models-search-json list" [
 #
 # GET /api/v1/models/{id}.json
 # operationId: Api::V1::Models#show
-export def "models get-show" [
+export def "api-v1-modelsshow" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -316,7 +316,7 @@ export def "models get-show" [
 # Updates an existing Model
 #
 # PATCH /api/v1/models/{id}.json
-export def "models update-by-id" [
+export def "patch-api-v1-models-id-json" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -373,7 +373,7 @@ export def "models update-by-id" [
 # Updates an existing Model
 #
 # PUT /api/v1/models/{id}.json
-export def "models update-by-id-1" [
+export def "put-api-v1-models-id-json" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -431,7 +431,7 @@ export def "models update-by-id-1" [
 #
 # GET /api/v1/recorders.json
 # operationId: Api::V1::Recorders#index
-export def "recorders-json get-index" [
+export def "api-v1-recordersindex" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -468,7 +468,7 @@ export def "recorders-json get-index" [
 #
 # POST /api/v1/recorders.json
 # operationId: Api::V1::Recorders#create
-export def "recorders-json create" [
+export def "api-v1-recorderscreate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -538,7 +538,7 @@ export def "recorders-json create" [
 #
 # GET /api/v1/recorders/search.json
 # operationId: Api::V1::Recorders#search
-export def "recorders-search-json list" [
+export def "api-v1-recorderssearch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -592,7 +592,7 @@ export def "recorders-search-json list" [
 #
 # GET /api/v1/recorders/{id}.json
 # operationId: Api::V1::Recorders#show
-export def "recorders get-show" [
+export def "api-v1-recordersshow" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -627,7 +627,7 @@ export def "recorders get-show" [
 # Updates an existing Recorder
 #
 # PATCH /api/v1/recorders/{id}.json
-export def "recorders update-by-id" [
+export def "patch-api-v1-recorders-id-json" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -698,7 +698,7 @@ export def "recorders update-by-id" [
 # Updates an existing Recorder
 #
 # PUT /api/v1/recorders/{id}.json
-export def "recorders update-by-id-1" [
+export def "put-api-v1-recorders-id-json" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -770,7 +770,7 @@ export def "recorders update-by-id-1" [
 #
 # GET /api/v1/vendors.json
 # operationId: Api::V1::Vendors#index
-export def "vendors-json get-index" [
+export def "api-v1-vendorsindex" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -807,7 +807,7 @@ export def "vendors-json get-index" [
 #
 # POST /api/v1/vendors.json
 # operationId: Api::V1::Vendors#create
-export def "vendors-json create" [
+export def "api-v1-vendorscreate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -849,7 +849,7 @@ export def "vendors-json create" [
 #
 # GET /api/v1/vendors/{id}.json
 # operationId: Api::V1::Vendors#show
-export def "vendors get-show" [
+export def "api-v1-vendorsshow" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -886,7 +886,7 @@ export def "vendors get-show" [
 # Updates an existing Vendor
 #
 # PATCH /api/v1/vendors/{id}.json
-export def "vendors update-by-id" [
+export def "patch-api-v1-vendors-id-json" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -929,7 +929,7 @@ export def "vendors update-by-id" [
 # Updates an existing Vendor
 #
 # PUT /api/v1/vendors/{id}.json
-export def "vendors update-by-id-1" [
+export def "put-api-v1-vendors-id-json" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

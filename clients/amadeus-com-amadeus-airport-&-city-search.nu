@@ -100,7 +100,7 @@ def view-completer [] { ["FULL" "LIGHT"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "reference-data-locations get-airport-city-list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-airport-city-search" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -124,7 +124,7 @@ export def commands []: nothing -> table {
 #
 # GET /reference-data/locations
 # operationId: getAirportCitySearch
-export def "reference-data-locations get-airport-city-list" [
+export def "get-airport-city-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -166,7 +166,7 @@ export def "reference-data-locations get-airport-city-list" [
 #
 # GET /reference-data/locations/{locationId}
 # operationId: getAirportCity
-export def "reference-data-locations get-airport-city" [
+export def "get-airport-city" [
   location_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

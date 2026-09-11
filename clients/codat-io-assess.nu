@@ -113,7 +113,7 @@ def period-unit-completer [] { ["Day" "Month" "Week" "Year"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "companies-reports-enhanced-balance-sheet-accounts get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-accounts-for-enhanced-balance-sheet" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -137,7 +137,7 @@ export def commands []: nothing -> table {
 #
 # GET /companies/{companyId}/reports/enhancedBalanceSheet/accounts
 # operationId: get-accounts-for-enhanced-balance-sheet
-export def "companies-reports-enhanced-balance-sheet-accounts get" [
+export def "get-accounts-for-enhanced-balance-sheet" [
   company_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -176,7 +176,7 @@ export def "companies-reports-enhanced-balance-sheet-accounts get" [
 #
 # GET /companies/{companyId}/reports/enhancedCashFlow/transactions
 # operationId: get-enhanced-cash-flow-transactions
-export def "companies-reports-enhanced-cash-flow-transactions get" [
+export def "get-enhanced-cash-flow-transactions" [
   company_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -216,7 +216,7 @@ export def "companies-reports-enhanced-cash-flow-transactions get" [
 #
 # GET /companies/{companyId}/reports/enhancedInvoices
 # operationId: get-enhanced-invoices-report
-export def "companies-reports-enhanced-invoices get" [
+export def "get-enhanced-invoices-report" [
   company_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -256,7 +256,7 @@ export def "companies-reports-enhanced-invoices get" [
 #
 # GET /companies/{companyId}/reports/enhancedProfitAndLoss/accounts
 # operationId: get-accounts-for-enhanced-profit-and-loss
-export def "companies-reports-enhanced-profit-and-loss-accounts get" [
+export def "get-accounts-for-enhanced-profit-and-loss" [
   company_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -297,7 +297,7 @@ export def "companies-reports-enhanced-profit-and-loss-accounts get" [
 # DEPRECATED
 # operationId: list-available-account-categories
 @deprecated
-export def "data-assess-accounts-categories list-available" [
+export def "list-available-account-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -331,7 +331,7 @@ export def "data-assess-accounts-categories list-available" [
 #
 # GET /data/companies/{companyId}/assess/dataTypes/{dataType}/dataIntegrity/details
 # operationId: get-data-integrity-details
-export def "data-companies-assess-data-types-data-integrity-details get" [
+export def "get-data-integrity-details" [
   company_id: any
   data_type: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -374,7 +374,7 @@ export def "data-companies-assess-data-types-data-integrity-details get" [
 #
 # GET /data/companies/{companyId}/assess/dataTypes/{dataType}/dataIntegrity/status
 # operationId: get-data-integrity-status
-export def "data-companies-assess-data-types-data-integrity-status get" [
+export def "get-data-integrity-status" [
   company_id: string
   data_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -412,7 +412,7 @@ export def "data-companies-assess-data-types-data-integrity-status get" [
 #
 # GET /data/companies/{companyId}/assess/dataTypes/{dataType}/dataIntegrity/summaries
 # operationId: get-data-integrity-summaries
-export def "data-companies-assess-data-types-data-integrity-summaries get" [
+export def "get-data-integrity-summaries" [
   company_id: any
   data_type: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -452,7 +452,7 @@ export def "data-companies-assess-data-types-data-integrity-summaries get" [
 #
 # GET /data/companies/{companyId}/assess/excel
 # operationId: get-excel-report-generation-status
-export def "data-companies-assess-excel get-report-generation-status" [
+export def "get-excel-report-generation-status" [
   company_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -490,7 +490,7 @@ export def "data-companies-assess-excel get-report-generation-status" [
 #
 # POST /data/companies/{companyId}/assess/excel
 # operationId: generate-excel-report
-export def "data-companies-assess-excel generate-report" [
+export def "generate-excel-report" [
   company_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -528,7 +528,7 @@ export def "data-companies-assess-excel generate-report" [
 #
 # GET /data/companies/{companyId}/assess/excel/download
 # operationId: get-excel-report
-export def "data-companies-assess-excel-download get-report" [
+export def "get-excel-report" [
   company_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -568,7 +568,7 @@ export def "data-companies-assess-excel-download get-report" [
 # DEPRECATED
 # operationId: download-excel-report
 @deprecated
-export def "data-companies-assess-excel-download download-report" [
+export def "download-excel-report" [
   company_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -606,7 +606,7 @@ export def "data-companies-assess-excel-download download-report" [
 #
 # GET /data/companies/{companyId}/connections/{connectionId}/assess/accountingMetrics/marketing
 # operationId: get-accounting-marketing-metrics
-export def "data-companies-connections-assess-accounting-metrics-marketing get" [
+export def "get-accounting-marketing-metrics" [
   company_id: any
   connection_id: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -653,7 +653,7 @@ export def "data-companies-connections-assess-accounting-metrics-marketing get" 
 # DEPRECATED
 # operationId: list-accounts-categories
 @deprecated
-export def "data-companies-connections-assess-accounts-categories list" [
+export def "list-accounts-categories" [
   company_id: any
   connection_id: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -699,7 +699,7 @@ export def "data-companies-connections-assess-accounts-categories list" [
 # operationId: update-accounts-categories
 # --categories item shape: {accountRef?: record, confirmed?: record}
 @deprecated
-export def "data-companies-connections-assess-accounts-categories update" [
+export def "update-accounts-categories" [
   company_id: string
   connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -743,7 +743,7 @@ export def "data-companies-connections-assess-accounts-categories update" [
 # DEPRECATED
 # operationId: get-account-category
 @deprecated
-export def "data-companies-connections-assess-accounts-categories get-category" [
+export def "get-account-category" [
   company_id: string
   connection_id: string
   account_id: string
@@ -786,7 +786,7 @@ export def "data-companies-connections-assess-accounts-categories get-category" 
 # operationId: update-account-category
 # --confirmed shape: {detailType?: string, subtype?: string, type?: string}
 @deprecated
-export def "data-companies-connections-assess-accounts-categories update-category" [
+export def "update-account-category" [
   company_id: string
   connection_id: string
   account_id: string
@@ -830,7 +830,7 @@ export def "data-companies-connections-assess-accounts-categories update-categor
 #
 # GET /data/companies/{companyId}/connections/{connectionId}/assess/commerceMetrics/customerRetention
 # operationId: get-commerce-customer-retention-metrics
-export def "data-companies-connections-assess-commerce-metrics-customer-retention get" [
+export def "get-commerce-customer-retention-metrics" [
   company_id: any
   connection_id: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -874,7 +874,7 @@ export def "data-companies-connections-assess-commerce-metrics-customer-retentio
 #
 # GET /data/companies/{companyId}/connections/{connectionId}/assess/commerceMetrics/lifetimeValue
 # operationId: get-commerce-lifetime-value-metrics
-export def "data-companies-connections-assess-commerce-metrics-lifetime-value get" [
+export def "get-commerce-lifetime-value-metrics" [
   company_id: any
   connection_id: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -918,7 +918,7 @@ export def "data-companies-connections-assess-commerce-metrics-lifetime-value ge
 #
 # GET /data/companies/{companyId}/connections/{connectionId}/assess/commerceMetrics/orders
 # operationId: get-commerce-orders-metrics
-export def "data-companies-connections-assess-commerce-metrics-orders get" [
+export def "get-commerce-orders-metrics" [
   company_id: any
   connection_id: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -962,7 +962,7 @@ export def "data-companies-connections-assess-commerce-metrics-orders get" [
 #
 # GET /data/companies/{companyId}/connections/{connectionId}/assess/commerceMetrics/refunds
 # operationId: get-commerce-refunds-metrics
-export def "data-companies-connections-assess-commerce-metrics-refunds get" [
+export def "get-commerce-refunds-metrics" [
   company_id: any
   connection_id: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -1006,7 +1006,7 @@ export def "data-companies-connections-assess-commerce-metrics-refunds get" [
 #
 # GET /data/companies/{companyId}/connections/{connectionId}/assess/commerceMetrics/revenue
 # operationId: get-commerce-revenue-metrics
-export def "data-companies-connections-assess-commerce-metrics-revenue get" [
+export def "get-commerce-revenue-metrics" [
   company_id: any
   connection_id: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -1052,7 +1052,7 @@ export def "data-companies-connections-assess-commerce-metrics-revenue get" [
 # DEPRECATED
 # operationId: get-enhanced-balance-sheet
 @deprecated
-export def "data-companies-connections-assess-enhanced-balance-sheet get" [
+export def "get-enhanced-balance-sheet" [
   company_id: any
   connection_id: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -1097,7 +1097,7 @@ export def "data-companies-connections-assess-enhanced-balance-sheet get" [
 # DEPRECATED
 # operationId: get-enhanced-profit-and-loss
 @deprecated
-export def "data-companies-connections-assess-enhanced-profit-and-loss get" [
+export def "get-enhanced-profit-and-loss" [
   company_id: any
   connection_id: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -1142,7 +1142,7 @@ export def "data-companies-connections-assess-enhanced-profit-and-loss get" [
 # DEPRECATED
 # operationId: get-enhanced-financial-metrics
 @deprecated
-export def "data-companies-connections-assess-financial-metrics get-enhanced" [
+export def "get-enhanced-financial-metrics" [
   company_id: any
   connection_id: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -1185,7 +1185,7 @@ export def "data-companies-connections-assess-financial-metrics get-enhanced" [
 #
 # GET /data/companies/{companyId}/connections/{connectionId}/assess/subscriptions/mrr
 # operationId: get-recurring-revenue-metrics
-export def "data-companies-connections-assess-subscriptions-mrr get-recurring-revenue-metrics" [
+export def "get-recurring-revenue-metrics" [
   company_id: string
   connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1223,7 +1223,7 @@ export def "data-companies-connections-assess-subscriptions-mrr get-recurring-re
 #
 # GET /data/companies/{companyId}/connections/{connectionId}/assess/subscriptions/process
 # operationId: request-recurring-revenue-metrics
-export def "data-companies-connections-assess-subscriptions-process request-recurring-revenue-metrics" [
+export def "request-recurring-revenue-metrics" [
   company_id: string
   connection_id: string
   --base-url(-b): string@base-url-completer # API base URL

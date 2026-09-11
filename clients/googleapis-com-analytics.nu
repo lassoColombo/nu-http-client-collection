@@ -136,7 +136,7 @@ def sampling-level-completer [] { ["DEFAULT" "FASTER" "HIGHER_PRECISION"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "data-ga get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "analytics-data-ga-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -160,7 +160,7 @@ export def commands []: nothing -> table {
 #
 # GET /data/ga
 # operationId: analytics.data.ga.get
-export def "data-ga get" [
+export def "analytics-data-ga-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -215,7 +215,7 @@ export def "data-ga get" [
 #
 # GET /data/mcf
 # operationId: analytics.data.mcf.get
-export def "data-mcf get" [
+export def "analytics-data-mcf-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -267,7 +267,7 @@ export def "data-mcf get" [
 #
 # GET /data/realtime
 # operationId: analytics.data.realtime.get
-export def "data-realtime get" [
+export def "analytics-data-realtime-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -315,7 +315,7 @@ export def "data-realtime get" [
 #
 # GET /management/accountSummaries
 # operationId: analytics.management.accountSummaries.list
-export def "management-account-summaries list" [
+export def "analytics-management-account-summaries-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -359,7 +359,7 @@ export def "management-account-summaries list" [
 #
 # GET /management/accounts
 # operationId: analytics.management.accounts.list
-export def "management-accounts list" [
+export def "analytics-management-accounts-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -403,7 +403,7 @@ export def "management-accounts list" [
 #
 # GET /management/accounts/{accountId}/entityUserLinks
 # operationId: analytics.management.accountUserLinks.list
-export def "management-accounts-entity-user-links list" [
+export def "analytics-management-account-user-links-list" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -452,7 +452,7 @@ export def "management-accounts-entity-user-links list" [
 # --entity shape: {accountRef?: record, profileRef?: record, webPropertyRef?: record}
 # --permissions shape: {local?: list<string>}
 # --userRef shape: {email?: string, id?: string, kind?: string}
-export def "management-accounts-entity-user-links create" [
+export def "analytics-management-account-user-links-insert" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -505,7 +505,7 @@ export def "management-accounts-entity-user-links create" [
 #
 # DELETE /management/accounts/{accountId}/entityUserLinks/{linkId}
 # operationId: analytics.management.accountUserLinks.delete
-export def "management-accounts-entity-user-links delete" [
+export def "analytics-management-account-user-links-delete" [
   account_id: string
   link_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -554,7 +554,7 @@ export def "management-accounts-entity-user-links delete" [
 # --entity shape: {accountRef?: record, profileRef?: record, webPropertyRef?: record}
 # --permissions shape: {local?: list<string>}
 # --userRef shape: {email?: string, id?: string, kind?: string}
-export def "management-accounts-entity-user-links update" [
+export def "analytics-management-account-user-links-update" [
   account_id: string
   link_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -609,7 +609,7 @@ export def "management-accounts-entity-user-links update" [
 #
 # GET /management/accounts/{accountId}/filters
 # operationId: analytics.management.filters.list
-export def "management-accounts-filters list" [
+export def "analytics-management-filters-list" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -662,7 +662,7 @@ export def "management-accounts-filters list" [
 # --parentLink shape: {href?: string, type?: string}
 # --searchAndReplaceDetails shape: {caseSensitive?: bool, field?: string, fieldIndex?: int, replaceString?: string, searchString?: string}
 # --uppercaseDetails shape: {field?: string, fieldIndex?: int}
-export def "management-accounts-filters create" [
+export def "analytics-management-filters-insert" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -720,7 +720,7 @@ export def "management-accounts-filters create" [
 #
 # DELETE /management/accounts/{accountId}/filters/{filterId}
 # operationId: analytics.management.filters.delete
-export def "management-accounts-filters delete" [
+export def "analytics-management-filters-delete" [
   account_id: string
   filter_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -766,7 +766,7 @@ export def "management-accounts-filters delete" [
 #
 # GET /management/accounts/{accountId}/filters/{filterId}
 # operationId: analytics.management.filters.get
-export def "management-accounts-filters get" [
+export def "analytics-management-filters-get" [
   account_id: string
   filter_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -819,7 +819,7 @@ export def "management-accounts-filters get" [
 # --parentLink shape: {href?: string, type?: string}
 # --searchAndReplaceDetails shape: {caseSensitive?: bool, field?: string, fieldIndex?: int, replaceString?: string, searchString?: string}
 # --uppercaseDetails shape: {field?: string, fieldIndex?: int}
-export def "management-accounts-filters update-by-account-id-filter-id" [
+export def "analytics-management-filters-patch" [
   account_id: string
   filter_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -886,7 +886,7 @@ export def "management-accounts-filters update-by-account-id-filter-id" [
 # --parentLink shape: {href?: string, type?: string}
 # --searchAndReplaceDetails shape: {caseSensitive?: bool, field?: string, fieldIndex?: int, replaceString?: string, searchString?: string}
 # --uppercaseDetails shape: {field?: string, fieldIndex?: int}
-export def "management-accounts-filters update-by-account-id-filter-id-1" [
+export def "analytics-management-filters-update" [
   account_id: string
   filter_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -946,7 +946,7 @@ export def "management-accounts-filters update-by-account-id-filter-id-1" [
 #
 # GET /management/accounts/{accountId}/webproperties
 # operationId: analytics.management.webproperties.list
-export def "management-accounts-webproperties list" [
+export def "analytics-management-webproperties-list" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -994,7 +994,7 @@ export def "management-accounts-webproperties list" [
 # operationId: analytics.management.webproperties.insert
 # --childLink shape: {href?: string, type?: string}
 # --parentLink shape: {href?: string, type?: string}
-export def "management-accounts-webproperties create" [
+export def "analytics-management-webproperties-insert" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1053,7 +1053,7 @@ export def "management-accounts-webproperties create" [
 #
 # GET /management/accounts/{accountId}/webproperties/{webPropertyId}
 # operationId: analytics.management.webproperties.get
-export def "management-accounts-webproperties get" [
+export def "analytics-management-webproperties-get" [
   account_id: string
   web_property_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1101,7 +1101,7 @@ export def "management-accounts-webproperties get" [
 # operationId: analytics.management.webproperties.patch
 # --childLink shape: {href?: string, type?: string}
 # --parentLink shape: {href?: string, type?: string}
-export def "management-accounts-webproperties update-by-account-id-web-property-id" [
+export def "analytics-management-webproperties-patch" [
   account_id: string
   web_property_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1164,7 +1164,7 @@ export def "management-accounts-webproperties update-by-account-id-web-property-
 # operationId: analytics.management.webproperties.update
 # --childLink shape: {href?: string, type?: string}
 # --parentLink shape: {href?: string, type?: string}
-export def "management-accounts-webproperties update-by-account-id-web-property-id-1" [
+export def "analytics-management-webproperties-update" [
   account_id: string
   web_property_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1225,7 +1225,7 @@ export def "management-accounts-webproperties update-by-account-id-web-property-
 #
 # GET /management/accounts/{accountId}/webproperties/{webPropertyId}/customDataSources
 # operationId: analytics.management.customDataSources.list
-export def "management-accounts-webproperties-custom-data-sources list" [
+export def "analytics-management-custom-data-sources-list" [
   account_id: string
   web_property_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1273,7 +1273,7 @@ export def "management-accounts-webproperties-custom-data-sources list" [
 #
 # POST /management/accounts/{accountId}/webproperties/{webPropertyId}/customDataSources/{customDataSourceId}/deleteUploadData
 # operationId: analytics.management.uploads.deleteUploadData
-export def "management-accounts-webproperties-custom-data-sources-delete-upload-data delete" [
+export def "analytics-management-uploads-delete-upload-data" [
   account_id: string
   web_property_id: string
   custom_data_source_id: string
@@ -1325,7 +1325,7 @@ export def "management-accounts-webproperties-custom-data-sources-delete-upload-
 #
 # GET /management/accounts/{accountId}/webproperties/{webPropertyId}/customDataSources/{customDataSourceId}/uploads
 # operationId: analytics.management.uploads.list
-export def "management-accounts-webproperties-custom-data-sources-uploads list" [
+export def "analytics-management-uploads-list" [
   account_id: string
   web_property_id: string
   custom_data_source_id: string
@@ -1375,7 +1375,7 @@ export def "management-accounts-webproperties-custom-data-sources-uploads list" 
 #
 # POST /management/accounts/{accountId}/webproperties/{webPropertyId}/customDataSources/{customDataSourceId}/uploads
 # operationId: analytics.management.uploads.uploadData
-export def "management-accounts-webproperties-custom-data-sources-uploads upload" [
+export def "analytics-management-uploads-upload-data" [
   account_id: string
   web_property_id: string
   custom_data_source_id: string
@@ -1423,7 +1423,7 @@ export def "management-accounts-webproperties-custom-data-sources-uploads upload
 #
 # GET /management/accounts/{accountId}/webproperties/{webPropertyId}/customDataSources/{customDataSourceId}/uploads/{uploadId}
 # operationId: analytics.management.uploads.get
-export def "management-accounts-webproperties-custom-data-sources-uploads get" [
+export def "analytics-management-uploads-get" [
   account_id: string
   web_property_id: string
   custom_data_source_id: string
@@ -1473,7 +1473,7 @@ export def "management-accounts-webproperties-custom-data-sources-uploads get" [
 #
 # GET /management/accounts/{accountId}/webproperties/{webPropertyId}/customDimensions
 # operationId: analytics.management.customDimensions.list
-export def "management-accounts-webproperties-custom-dimensions list" [
+export def "analytics-management-custom-dimensions-list" [
   account_id: string
   web_property_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1522,7 +1522,7 @@ export def "management-accounts-webproperties-custom-dimensions list" [
 # POST /management/accounts/{accountId}/webproperties/{webPropertyId}/customDimensions
 # operationId: analytics.management.customDimensions.insert
 # --parentLink shape: {href?: string, type?: string}
-export def "management-accounts-webproperties-custom-dimensions create" [
+export def "analytics-management-custom-dimensions-insert" [
   account_id: string
   web_property_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1578,7 +1578,7 @@ export def "management-accounts-webproperties-custom-dimensions create" [
 #
 # GET /management/accounts/{accountId}/webproperties/{webPropertyId}/customDimensions/{customDimensionId}
 # operationId: analytics.management.customDimensions.get
-export def "management-accounts-webproperties-custom-dimensions get" [
+export def "analytics-management-custom-dimensions-get" [
   account_id: string
   web_property_id: string
   custom_dimension_id: string
@@ -1627,7 +1627,7 @@ export def "management-accounts-webproperties-custom-dimensions get" [
 # PATCH /management/accounts/{accountId}/webproperties/{webPropertyId}/customDimensions/{customDimensionId}
 # operationId: analytics.management.customDimensions.patch
 # --parentLink shape: {href?: string, type?: string}
-export def "management-accounts-webproperties-custom-dimensions update-by-account-id-web-property-id-custom-dimension-id" [
+export def "analytics-management-custom-dimensions-patch" [
   account_id: string
   web_property_id: string
   custom_dimension_id: string
@@ -1687,7 +1687,7 @@ export def "management-accounts-webproperties-custom-dimensions update-by-accoun
 # PUT /management/accounts/{accountId}/webproperties/{webPropertyId}/customDimensions/{customDimensionId}
 # operationId: analytics.management.customDimensions.update
 # --parentLink shape: {href?: string, type?: string}
-export def "management-accounts-webproperties-custom-dimensions update-by-account-id-web-property-id-custom-dimension-id-1" [
+export def "analytics-management-custom-dimensions-update" [
   account_id: string
   web_property_id: string
   custom_dimension_id: string
@@ -1746,7 +1746,7 @@ export def "management-accounts-webproperties-custom-dimensions update-by-accoun
 #
 # GET /management/accounts/{accountId}/webproperties/{webPropertyId}/customMetrics
 # operationId: analytics.management.customMetrics.list
-export def "management-accounts-webproperties-custom-metrics list" [
+export def "analytics-management-custom-metrics-list" [
   account_id: string
   web_property_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1795,7 +1795,7 @@ export def "management-accounts-webproperties-custom-metrics list" [
 # POST /management/accounts/{accountId}/webproperties/{webPropertyId}/customMetrics
 # operationId: analytics.management.customMetrics.insert
 # --parentLink shape: {href?: string, type?: string}
-export def "management-accounts-webproperties-custom-metrics create" [
+export def "analytics-management-custom-metrics-insert" [
   account_id: string
   web_property_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1854,7 +1854,7 @@ export def "management-accounts-webproperties-custom-metrics create" [
 #
 # GET /management/accounts/{accountId}/webproperties/{webPropertyId}/customMetrics/{customMetricId}
 # operationId: analytics.management.customMetrics.get
-export def "management-accounts-webproperties-custom-metrics get" [
+export def "analytics-management-custom-metrics-get" [
   account_id: string
   web_property_id: string
   custom_metric_id: string
@@ -1903,7 +1903,7 @@ export def "management-accounts-webproperties-custom-metrics get" [
 # PATCH /management/accounts/{accountId}/webproperties/{webPropertyId}/customMetrics/{customMetricId}
 # operationId: analytics.management.customMetrics.patch
 # --parentLink shape: {href?: string, type?: string}
-export def "management-accounts-webproperties-custom-metrics update-by-account-id-web-property-id-custom-metric-id" [
+export def "analytics-management-custom-metrics-patch" [
   account_id: string
   web_property_id: string
   custom_metric_id: string
@@ -1966,7 +1966,7 @@ export def "management-accounts-webproperties-custom-metrics update-by-account-i
 # PUT /management/accounts/{accountId}/webproperties/{webPropertyId}/customMetrics/{customMetricId}
 # operationId: analytics.management.customMetrics.update
 # --parentLink shape: {href?: string, type?: string}
-export def "management-accounts-webproperties-custom-metrics update-by-account-id-web-property-id-custom-metric-id-1" [
+export def "analytics-management-custom-metrics-update" [
   account_id: string
   web_property_id: string
   custom_metric_id: string
@@ -2028,7 +2028,7 @@ export def "management-accounts-webproperties-custom-metrics update-by-account-i
 #
 # GET /management/accounts/{accountId}/webproperties/{webPropertyId}/entityAdWordsLinks
 # operationId: analytics.management.webPropertyAdWordsLinks.list
-export def "management-accounts-webproperties-entity-ad-words-links list" [
+export def "analytics-management-web-property-ad-words-links-list" [
   account_id: string
   web_property_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2078,7 +2078,7 @@ export def "management-accounts-webproperties-entity-ad-words-links list" [
 # operationId: analytics.management.webPropertyAdWordsLinks.insert
 # --adWordsAccounts item shape: {autoTaggingEnabled?: bool, customerId?: string, kind?: string}
 # --entity shape: {webPropertyRef?: record}
-export def "management-accounts-webproperties-entity-ad-words-links create" [
+export def "analytics-management-web-property-ad-words-links-insert" [
   account_id: string
   web_property_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2134,7 +2134,7 @@ export def "management-accounts-webproperties-entity-ad-words-links create" [
 #
 # DELETE /management/accounts/{accountId}/webproperties/{webPropertyId}/entityAdWordsLinks/{webPropertyAdWordsLinkId}
 # operationId: analytics.management.webPropertyAdWordsLinks.delete
-export def "management-accounts-webproperties-entity-ad-words-links delete" [
+export def "analytics-management-web-property-ad-words-links-delete" [
   account_id: string
   web_property_id: string
   web_property_ad_words_link_id: string
@@ -2182,7 +2182,7 @@ export def "management-accounts-webproperties-entity-ad-words-links delete" [
 #
 # GET /management/accounts/{accountId}/webproperties/{webPropertyId}/entityAdWordsLinks/{webPropertyAdWordsLinkId}
 # operationId: analytics.management.webPropertyAdWordsLinks.get
-export def "management-accounts-webproperties-entity-ad-words-links get" [
+export def "analytics-management-web-property-ad-words-links-get" [
   account_id: string
   web_property_id: string
   web_property_ad_words_link_id: string
@@ -2232,7 +2232,7 @@ export def "management-accounts-webproperties-entity-ad-words-links get" [
 # operationId: analytics.management.webPropertyAdWordsLinks.patch
 # --adWordsAccounts item shape: {autoTaggingEnabled?: bool, customerId?: string, kind?: string}
 # --entity shape: {webPropertyRef?: record}
-export def "management-accounts-webproperties-entity-ad-words-links update-by-account-id-web-property-id-web-property-ad-words-link-id" [
+export def "analytics-management-web-property-ad-words-links-patch" [
   account_id: string
   web_property_id: string
   web_property_ad_words_link_id: string
@@ -2292,7 +2292,7 @@ export def "management-accounts-webproperties-entity-ad-words-links update-by-ac
 # operationId: analytics.management.webPropertyAdWordsLinks.update
 # --adWordsAccounts item shape: {autoTaggingEnabled?: bool, customerId?: string, kind?: string}
 # --entity shape: {webPropertyRef?: record}
-export def "management-accounts-webproperties-entity-ad-words-links update-by-account-id-web-property-id-web-property-ad-words-link-id-1" [
+export def "analytics-management-web-property-ad-words-links-update" [
   account_id: string
   web_property_id: string
   web_property_ad_words_link_id: string
@@ -2350,7 +2350,7 @@ export def "management-accounts-webproperties-entity-ad-words-links update-by-ac
 #
 # GET /management/accounts/{accountId}/webproperties/{webPropertyId}/entityUserLinks
 # operationId: analytics.management.webpropertyUserLinks.list
-export def "management-accounts-webproperties-entity-user-links list" [
+export def "analytics-management-webproperty-user-links-list" [
   account_id: string
   web_property_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2401,7 +2401,7 @@ export def "management-accounts-webproperties-entity-user-links list" [
 # --entity shape: {accountRef?: record, profileRef?: record, webPropertyRef?: record}
 # --permissions shape: {local?: list<string>}
 # --userRef shape: {email?: string, id?: string, kind?: string}
-export def "management-accounts-webproperties-entity-user-links create" [
+export def "analytics-management-webproperty-user-links-insert" [
   account_id: string
   web_property_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2456,7 +2456,7 @@ export def "management-accounts-webproperties-entity-user-links create" [
 #
 # DELETE /management/accounts/{accountId}/webproperties/{webPropertyId}/entityUserLinks/{linkId}
 # operationId: analytics.management.webpropertyUserLinks.delete
-export def "management-accounts-webproperties-entity-user-links delete" [
+export def "analytics-management-webproperty-user-links-delete" [
   account_id: string
   web_property_id: string
   link_id: string
@@ -2507,7 +2507,7 @@ export def "management-accounts-webproperties-entity-user-links delete" [
 # --entity shape: {accountRef?: record, profileRef?: record, webPropertyRef?: record}
 # --permissions shape: {local?: list<string>}
 # --userRef shape: {email?: string, id?: string, kind?: string}
-export def "management-accounts-webproperties-entity-user-links update" [
+export def "analytics-management-webproperty-user-links-update" [
   account_id: string
   web_property_id: string
   link_id: string
@@ -2564,7 +2564,7 @@ export def "management-accounts-webproperties-entity-user-links update" [
 #
 # GET /management/accounts/{accountId}/webproperties/{webPropertyId}/profiles
 # operationId: analytics.management.profiles.list
-export def "management-accounts-webproperties-profiles list" [
+export def "analytics-management-profiles-list" [
   account_id: string
   web_property_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2614,7 +2614,7 @@ export def "management-accounts-webproperties-profiles list" [
 # operationId: analytics.management.profiles.insert
 # --childLink shape: {href?: string, type?: string}
 # --parentLink shape: {href?: string, type?: string}
-export def "management-accounts-webproperties-profiles create" [
+export def "analytics-management-profiles-insert" [
   account_id: string
   web_property_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2683,7 +2683,7 @@ export def "management-accounts-webproperties-profiles create" [
 #
 # DELETE /management/accounts/{accountId}/webproperties/{webPropertyId}/profiles/{profileId}
 # operationId: analytics.management.profiles.delete
-export def "management-accounts-webproperties-profiles delete" [
+export def "analytics-management-profiles-delete" [
   account_id: string
   web_property_id: string
   profile_id: string
@@ -2731,7 +2731,7 @@ export def "management-accounts-webproperties-profiles delete" [
 #
 # GET /management/accounts/{accountId}/webproperties/{webPropertyId}/profiles/{profileId}
 # operationId: analytics.management.profiles.get
-export def "management-accounts-webproperties-profiles get" [
+export def "analytics-management-profiles-get" [
   account_id: string
   web_property_id: string
   profile_id: string
@@ -2781,7 +2781,7 @@ export def "management-accounts-webproperties-profiles get" [
 # operationId: analytics.management.profiles.patch
 # --childLink shape: {href?: string, type?: string}
 # --parentLink shape: {href?: string, type?: string}
-export def "management-accounts-webproperties-profiles update-by-account-id-web-property-id-profile-id" [
+export def "analytics-management-profiles-patch" [
   account_id: string
   web_property_id: string
   profile_id: string
@@ -2854,7 +2854,7 @@ export def "management-accounts-webproperties-profiles update-by-account-id-web-
 # operationId: analytics.management.profiles.update
 # --childLink shape: {href?: string, type?: string}
 # --parentLink shape: {href?: string, type?: string}
-export def "management-accounts-webproperties-profiles update-by-account-id-web-property-id-profile-id-1" [
+export def "analytics-management-profiles-update" [
   account_id: string
   web_property_id: string
   profile_id: string
@@ -2925,7 +2925,7 @@ export def "management-accounts-webproperties-profiles update-by-account-id-web-
 #
 # GET /management/accounts/{accountId}/webproperties/{webPropertyId}/profiles/{profileId}/entityUserLinks
 # operationId: analytics.management.profileUserLinks.list
-export def "management-accounts-webproperties-profiles-entity-user-links list" [
+export def "analytics-management-profile-user-links-list" [
   account_id: string
   web_property_id: string
   profile_id: string
@@ -2978,7 +2978,7 @@ export def "management-accounts-webproperties-profiles-entity-user-links list" [
 # --entity shape: {accountRef?: record, profileRef?: record, webPropertyRef?: record}
 # --permissions shape: {local?: list<string>}
 # --userRef shape: {email?: string, id?: string, kind?: string}
-export def "management-accounts-webproperties-profiles-entity-user-links create" [
+export def "analytics-management-profile-user-links-insert" [
   account_id: string
   web_property_id: string
   profile_id: string
@@ -3035,7 +3035,7 @@ export def "management-accounts-webproperties-profiles-entity-user-links create"
 #
 # DELETE /management/accounts/{accountId}/webproperties/{webPropertyId}/profiles/{profileId}/entityUserLinks/{linkId}
 # operationId: analytics.management.profileUserLinks.delete
-export def "management-accounts-webproperties-profiles-entity-user-links delete" [
+export def "analytics-management-profile-user-links-delete" [
   account_id: string
   web_property_id: string
   profile_id: string
@@ -3088,7 +3088,7 @@ export def "management-accounts-webproperties-profiles-entity-user-links delete"
 # --entity shape: {accountRef?: record, profileRef?: record, webPropertyRef?: record}
 # --permissions shape: {local?: list<string>}
 # --userRef shape: {email?: string, id?: string, kind?: string}
-export def "management-accounts-webproperties-profiles-entity-user-links update" [
+export def "analytics-management-profile-user-links-update" [
   account_id: string
   web_property_id: string
   profile_id: string
@@ -3147,7 +3147,7 @@ export def "management-accounts-webproperties-profiles-entity-user-links update"
 #
 # GET /management/accounts/{accountId}/webproperties/{webPropertyId}/profiles/{profileId}/experiments
 # operationId: analytics.management.experiments.list
-export def "management-accounts-webproperties-profiles-experiments list" [
+export def "analytics-management-experiments-list" [
   account_id: string
   web_property_id: string
   profile_id: string
@@ -3199,7 +3199,7 @@ export def "management-accounts-webproperties-profiles-experiments list" [
 # operationId: analytics.management.experiments.insert
 # --parentLink shape: {href?: string, type?: string}
 # --variations item shape: {name?: string, status?: string, url?: string, weight?: float, won?: bool}
-export def "management-accounts-webproperties-profiles-experiments create" [
+export def "analytics-management-experiments-insert" [
   account_id: string
   web_property_id: string
   profile_id: string
@@ -3278,7 +3278,7 @@ export def "management-accounts-webproperties-profiles-experiments create" [
 #
 # DELETE /management/accounts/{accountId}/webproperties/{webPropertyId}/profiles/{profileId}/experiments/{experimentId}
 # operationId: analytics.management.experiments.delete
-export def "management-accounts-webproperties-profiles-experiments delete" [
+export def "analytics-management-experiments-delete" [
   account_id: string
   web_property_id: string
   profile_id: string
@@ -3328,7 +3328,7 @@ export def "management-accounts-webproperties-profiles-experiments delete" [
 #
 # GET /management/accounts/{accountId}/webproperties/{webPropertyId}/profiles/{profileId}/experiments/{experimentId}
 # operationId: analytics.management.experiments.get
-export def "management-accounts-webproperties-profiles-experiments get" [
+export def "analytics-management-experiments-get" [
   account_id: string
   web_property_id: string
   profile_id: string
@@ -3380,7 +3380,7 @@ export def "management-accounts-webproperties-profiles-experiments get" [
 # operationId: analytics.management.experiments.patch
 # --parentLink shape: {href?: string, type?: string}
 # --variations item shape: {name?: string, status?: string, url?: string, weight?: float, won?: bool}
-export def "management-accounts-webproperties-profiles-experiments update-by-account-id-web-property-id-profile-id-experiment-id" [
+export def "analytics-management-experiments-patch" [
   account_id: string
   web_property_id: string
   profile_id: string
@@ -3463,7 +3463,7 @@ export def "management-accounts-webproperties-profiles-experiments update-by-acc
 # operationId: analytics.management.experiments.update
 # --parentLink shape: {href?: string, type?: string}
 # --variations item shape: {name?: string, status?: string, url?: string, weight?: float, won?: bool}
-export def "management-accounts-webproperties-profiles-experiments update-by-account-id-web-property-id-profile-id-experiment-id-1" [
+export def "analytics-management-experiments-update" [
   account_id: string
   web_property_id: string
   profile_id: string
@@ -3544,7 +3544,7 @@ export def "management-accounts-webproperties-profiles-experiments update-by-acc
 #
 # GET /management/accounts/{accountId}/webproperties/{webPropertyId}/profiles/{profileId}/goals
 # operationId: analytics.management.goals.list
-export def "management-accounts-webproperties-profiles-goals list" [
+export def "analytics-management-goals-list" [
   account_id: string
   web_property_id: string
   profile_id: string
@@ -3599,7 +3599,7 @@ export def "management-accounts-webproperties-profiles-goals list" [
 # --urlDestinationDetails shape: {caseSensitive?: bool, firstStepRequired?: bool, matchType?: string, steps?: list, url?: string}
 # --visitNumPagesDetails shape: {comparisonType?: string, comparisonValue?: string}
 # --visitTimeOnSiteDetails shape: {comparisonType?: string, comparisonValue?: string}
-export def "management-accounts-webproperties-profiles-goals create" [
+export def "analytics-management-goals-insert" [
   account_id: string
   web_property_id: string
   profile_id: string
@@ -3668,7 +3668,7 @@ export def "management-accounts-webproperties-profiles-goals create" [
 #
 # GET /management/accounts/{accountId}/webproperties/{webPropertyId}/profiles/{profileId}/goals/{goalId}
 # operationId: analytics.management.goals.get
-export def "management-accounts-webproperties-profiles-goals get" [
+export def "analytics-management-goals-get" [
   account_id: string
   web_property_id: string
   profile_id: string
@@ -3723,7 +3723,7 @@ export def "management-accounts-webproperties-profiles-goals get" [
 # --urlDestinationDetails shape: {caseSensitive?: bool, firstStepRequired?: bool, matchType?: string, steps?: list, url?: string}
 # --visitNumPagesDetails shape: {comparisonType?: string, comparisonValue?: string}
 # --visitTimeOnSiteDetails shape: {comparisonType?: string, comparisonValue?: string}
-export def "management-accounts-webproperties-profiles-goals update-by-account-id-web-property-id-profile-id-goal-id" [
+export def "analytics-management-goals-patch" [
   account_id: string
   web_property_id: string
   profile_id: string
@@ -3799,7 +3799,7 @@ export def "management-accounts-webproperties-profiles-goals update-by-account-i
 # --urlDestinationDetails shape: {caseSensitive?: bool, firstStepRequired?: bool, matchType?: string, steps?: list, url?: string}
 # --visitNumPagesDetails shape: {comparisonType?: string, comparisonValue?: string}
 # --visitTimeOnSiteDetails shape: {comparisonType?: string, comparisonValue?: string}
-export def "management-accounts-webproperties-profiles-goals update-by-account-id-web-property-id-profile-id-goal-id-1" [
+export def "analytics-management-goals-update" [
   account_id: string
   web_property_id: string
   profile_id: string
@@ -3870,7 +3870,7 @@ export def "management-accounts-webproperties-profiles-goals update-by-account-i
 #
 # GET /management/accounts/{accountId}/webproperties/{webPropertyId}/profiles/{profileId}/profileFilterLinks
 # operationId: analytics.management.profileFilterLinks.list
-export def "management-accounts-webproperties-profiles-profile-filter-links list" [
+export def "analytics-management-profile-filter-links-list" [
   account_id: string
   web_property_id: string
   profile_id: string
@@ -3922,7 +3922,7 @@ export def "management-accounts-webproperties-profiles-profile-filter-links list
 # operationId: analytics.management.profileFilterLinks.insert
 # --filterRef shape: {href?: string, id?: string, kind?: string}
 # --profileRef shape: {accountId?: string, href?: string, id?: string, internalWebPropertyId?: string, kind?: string, name?: string, webPropertyId?: string}
-export def "management-accounts-webproperties-profiles-profile-filter-links create" [
+export def "analytics-management-profile-filter-links-insert" [
   account_id: string
   web_property_id: string
   profile_id: string
@@ -3977,7 +3977,7 @@ export def "management-accounts-webproperties-profiles-profile-filter-links crea
 #
 # DELETE /management/accounts/{accountId}/webproperties/{webPropertyId}/profiles/{profileId}/profileFilterLinks/{linkId}
 # operationId: analytics.management.profileFilterLinks.delete
-export def "management-accounts-webproperties-profiles-profile-filter-links delete" [
+export def "analytics-management-profile-filter-links-delete" [
   account_id: string
   web_property_id: string
   profile_id: string
@@ -4027,7 +4027,7 @@ export def "management-accounts-webproperties-profiles-profile-filter-links dele
 #
 # GET /management/accounts/{accountId}/webproperties/{webPropertyId}/profiles/{profileId}/profileFilterLinks/{linkId}
 # operationId: analytics.management.profileFilterLinks.get
-export def "management-accounts-webproperties-profiles-profile-filter-links get" [
+export def "analytics-management-profile-filter-links-get" [
   account_id: string
   web_property_id: string
   profile_id: string
@@ -4079,7 +4079,7 @@ export def "management-accounts-webproperties-profiles-profile-filter-links get"
 # operationId: analytics.management.profileFilterLinks.patch
 # --filterRef shape: {href?: string, id?: string, kind?: string}
 # --profileRef shape: {accountId?: string, href?: string, id?: string, internalWebPropertyId?: string, kind?: string, name?: string, webPropertyId?: string}
-export def "management-accounts-webproperties-profiles-profile-filter-links update-by-account-id-web-property-id-profile-id-link-id" [
+export def "analytics-management-profile-filter-links-patch" [
   account_id: string
   web_property_id: string
   profile_id: string
@@ -4138,7 +4138,7 @@ export def "management-accounts-webproperties-profiles-profile-filter-links upda
 # operationId: analytics.management.profileFilterLinks.update
 # --filterRef shape: {href?: string, id?: string, kind?: string}
 # --profileRef shape: {accountId?: string, href?: string, id?: string, internalWebPropertyId?: string, kind?: string, name?: string, webPropertyId?: string}
-export def "management-accounts-webproperties-profiles-profile-filter-links update-by-account-id-web-property-id-profile-id-link-id-1" [
+export def "analytics-management-profile-filter-links-update" [
   account_id: string
   web_property_id: string
   profile_id: string
@@ -4195,7 +4195,7 @@ export def "management-accounts-webproperties-profiles-profile-filter-links upda
 #
 # GET /management/accounts/{accountId}/webproperties/{webPropertyId}/profiles/{profileId}/unsampledReports
 # operationId: analytics.management.unsampledReports.list
-export def "management-accounts-webproperties-profiles-unsampled-reports list" [
+export def "analytics-management-unsampled-reports-list" [
   account_id: string
   web_property_id: string
   profile_id: string
@@ -4247,7 +4247,7 @@ export def "management-accounts-webproperties-profiles-unsampled-reports list" [
 # operationId: analytics.management.unsampledReports.insert
 # --cloudStorageDownloadDetails shape: {bucketId?: string, objectId?: string}
 # --driveDownloadDetails shape: {documentId?: string}
-export def "management-accounts-webproperties-profiles-unsampled-reports create" [
+export def "analytics-management-unsampled-reports-insert" [
   account_id: string
   web_property_id: string
   profile_id: string
@@ -4309,7 +4309,7 @@ export def "management-accounts-webproperties-profiles-unsampled-reports create"
 #
 # DELETE /management/accounts/{accountId}/webproperties/{webPropertyId}/profiles/{profileId}/unsampledReports/{unsampledReportId}
 # operationId: analytics.management.unsampledReports.delete
-export def "management-accounts-webproperties-profiles-unsampled-reports delete" [
+export def "analytics-management-unsampled-reports-delete" [
   account_id: string
   web_property_id: string
   profile_id: string
@@ -4359,7 +4359,7 @@ export def "management-accounts-webproperties-profiles-unsampled-reports delete"
 #
 # GET /management/accounts/{accountId}/webproperties/{webPropertyId}/profiles/{profileId}/unsampledReports/{unsampledReportId}
 # operationId: analytics.management.unsampledReports.get
-export def "management-accounts-webproperties-profiles-unsampled-reports get" [
+export def "analytics-management-unsampled-reports-get" [
   account_id: string
   web_property_id: string
   profile_id: string
@@ -4409,7 +4409,7 @@ export def "management-accounts-webproperties-profiles-unsampled-reports get" [
 #
 # GET /management/accounts/{accountId}/webproperties/{webPropertyId}/remarketingAudiences
 # operationId: analytics.management.remarketingAudience.list
-export def "management-accounts-webproperties-remarketing-audiences list" [
+export def "analytics-management-remarketing-audience-list" [
   account_id: string
   web_property_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4461,7 +4461,7 @@ export def "management-accounts-webproperties-remarketing-audiences list" [
 # --audienceDefinition shape: {includeConditions?: record}
 # --linkedAdAccounts item shape: {accountId?: string, id?: string, kind?: string, linkedAccountId?: string, remarketingAudienceId?: string, status?: string, type?: string, webPropertyId?: string}
 # --stateBasedAudienceDefinition shape: {excludeConditions?: record, includeConditions?: record}
-export def "management-accounts-webproperties-remarketing-audiences create" [
+export def "analytics-management-remarketing-audience-insert" [
   account_id: string
   web_property_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4520,7 +4520,7 @@ export def "management-accounts-webproperties-remarketing-audiences create" [
 #
 # DELETE /management/accounts/{accountId}/webproperties/{webPropertyId}/remarketingAudiences/{remarketingAudienceId}
 # operationId: analytics.management.remarketingAudience.delete
-export def "management-accounts-webproperties-remarketing-audiences delete" [
+export def "analytics-management-remarketing-audience-delete" [
   account_id: string
   web_property_id: string
   remarketing_audience_id: string
@@ -4568,7 +4568,7 @@ export def "management-accounts-webproperties-remarketing-audiences delete" [
 #
 # GET /management/accounts/{accountId}/webproperties/{webPropertyId}/remarketingAudiences/{remarketingAudienceId}
 # operationId: analytics.management.remarketingAudience.get
-export def "management-accounts-webproperties-remarketing-audiences get" [
+export def "analytics-management-remarketing-audience-get" [
   account_id: string
   web_property_id: string
   remarketing_audience_id: string
@@ -4619,7 +4619,7 @@ export def "management-accounts-webproperties-remarketing-audiences get" [
 # --audienceDefinition shape: {includeConditions?: record}
 # --linkedAdAccounts item shape: {accountId?: string, id?: string, kind?: string, linkedAccountId?: string, remarketingAudienceId?: string, status?: string, type?: string, webPropertyId?: string}
 # --stateBasedAudienceDefinition shape: {excludeConditions?: record, includeConditions?: record}
-export def "management-accounts-webproperties-remarketing-audiences update-by-account-id-web-property-id-remarketing-audience-id" [
+export def "analytics-management-remarketing-audience-patch" [
   account_id: string
   web_property_id: string
   remarketing_audience_id: string
@@ -4683,7 +4683,7 @@ export def "management-accounts-webproperties-remarketing-audiences update-by-ac
 # --audienceDefinition shape: {includeConditions?: record}
 # --linkedAdAccounts item shape: {accountId?: string, id?: string, kind?: string, linkedAccountId?: string, remarketingAudienceId?: string, status?: string, type?: string, webPropertyId?: string}
 # --stateBasedAudienceDefinition shape: {excludeConditions?: record, includeConditions?: record}
-export def "management-accounts-webproperties-remarketing-audiences update-by-account-id-web-property-id-remarketing-audience-id-1" [
+export def "analytics-management-remarketing-audience-update" [
   account_id: string
   web_property_id: string
   remarketing_audience_id: string
@@ -4744,7 +4744,7 @@ export def "management-accounts-webproperties-remarketing-audiences update-by-ac
 #
 # POST /management/clientId:hashClientId
 # operationId: analytics.management.clientId.hashClientId
-export def "management-client-id-hash-client-id create" [
+export def "analytics-management-client-id-hash-client-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -4792,7 +4792,7 @@ export def "management-client-id-hash-client-id create" [
 #
 # GET /management/segments
 # operationId: analytics.management.segments.list
-export def "management-segments list" [
+export def "analytics-management-segments-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -4836,7 +4836,7 @@ export def "management-segments list" [
 #
 # GET /metadata/{reportType}/columns
 # operationId: analytics.metadata.columns.list
-export def "metadata-columns list" [
+export def "analytics-metadata-columns-list" [
   report_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4883,7 +4883,7 @@ export def "metadata-columns list" [
 # --account shape: {childLink?: record, created?: string, id?: string, kind?: string, name?: string, permissions?: record, selfLink?: string, starred?: bool, updated?: string}
 # --profile shape: {accountId?: string, botFilteringEnabled?: bool, childLink?: record, currency?: string, defaultPage?: string, eCommerceTracking?: bool, enhancedECommerceTracking?: bool, excludeQueryParameters?: string, id?: string, name?: string, parentLink?: record, permissions?: record, siteSearchCategoryParameters?: string, siteSearchQueryParameters?: string, starred?: bool, stripSiteSearchCategoryParameters?: bool, stripSiteSearchQueryParameters?: bool, timezone?: string, type?: string, websiteUrl?: string}
 # --webproperty shape: {accountId?: string, childLink?: record, dataRetentionResetOnNewActivity?: bool, dataRetentionTtl?: string, defaultProfileId?: string, id?: string, industryVertical?: string, name?: string, parentLink?: record, permissions?: record, starred?: bool, websiteUrl?: string}
-export def "provisioning-create-account-ticket create" [
+export def "analytics-provisioning-create-account-ticket" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -4934,7 +4934,7 @@ export def "provisioning-create-account-ticket create" [
 #
 # POST /provisioning/createAccountTree
 # operationId: analytics.provisioning.createAccountTree
-export def "provisioning-create-account-tree create" [
+export def "analytics-provisioning-create-account-tree" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -4986,7 +4986,7 @@ export def "provisioning-create-account-tree create" [
 # POST /userDeletion/userDeletionRequests:upsert
 # operationId: analytics.userDeletion.userDeletionRequest.upsert
 # --id shape: {type?: string, userId?: string}
-export def "user-deletion-user-deletion-requests-upsert update" [
+export def "analytics-user-deletion-user-deletion-request-upsert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)

@@ -110,7 +110,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-software-update-configurations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "software-update-configurations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -135,7 +135,7 @@ export def commands []: nothing -> table {
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/softwareUpdateConfigurations
 # Docs: http://aka.ms/azureautomationsdk/softwareupdateconfigurationoperations
 # operationId: SoftwareUpdateConfigurations_List
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-software-update-configurations list" [
+export def "software-update-configurations-list" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -182,7 +182,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/softwareUpdateConfigurations/{softwareUpdateConfigurationName}
 # Docs: http://aka.ms/azureautomationsdk/softwareupdateconfigurationoperations
 # operationId: SoftwareUpdateConfigurations_Delete
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-software-update-configurations delete" [
+export def "software-update-configurations-delete" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -230,7 +230,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/softwareUpdateConfigurations/{softwareUpdateConfigurationName}
 # Docs: http://aka.ms/azureautomationsdk/softwareupdateconfigurationoperations
 # operationId: SoftwareUpdateConfigurations_GetByName
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-software-update-configurations get-by-name" [
+export def "software-update-configurations-get-by-name" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -279,7 +279,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # Docs: http://aka.ms/azureautomationsdk/softwareupdateconfigurationoperations
 # operationId: SoftwareUpdateConfigurations_Create
 # --properties shape: {error?: record, scheduleInfo: any, tasks?: record, updateConfiguration: record}
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-software-update-configurations create" [
+export def "software-update-configurations-create" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string

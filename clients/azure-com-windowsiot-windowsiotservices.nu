@@ -122,7 +122,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-windows-io-t-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.WindowsIoT/operations
 # operationId: Operations_List
-export def "providers-microsoft-windows-io-t-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -182,7 +182,7 @@ export def "providers-microsoft-windows-io-t-operations list" [
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.WindowsIoT/checkDeviceServiceNameAvailability
 # operationId: Services_CheckDeviceServiceNameAvailability
-export def "subscriptions-providers-microsoft-windows-io-t-check-device-service-name-availability check" [
+export def "services-check-device-service-name-availability" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -224,7 +224,7 @@ export def "subscriptions-providers-microsoft-windows-io-t-check-device-service-
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.WindowsIoT/deviceServices
 # operationId: Services_List
-export def "subscriptions-providers-microsoft-windows-io-t-device-services list" [
+export def "services-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -262,7 +262,7 @@ export def "subscriptions-providers-microsoft-windows-io-t-device-services list"
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.WindowsIoT/deviceServices
 # operationId: Services_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-windows-io-t-device-services list" [
+export def "services-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -302,7 +302,7 @@ export def "subscriptions-resource-groups-providers-microsoft-windows-io-t-devic
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.WindowsIoT/deviceServices/{deviceName}
 # operationId: Services_Delete
-export def "subscriptions-resource-groups-providers-microsoft-windows-io-t-device-services delete" [
+export def "services-delete" [
   subscription_id: string
   resource_group_name: string
   device_name: string
@@ -344,7 +344,7 @@ export def "subscriptions-resource-groups-providers-microsoft-windows-io-t-devic
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.WindowsIoT/deviceServices/{deviceName}
 # operationId: Services_Get
-export def "subscriptions-resource-groups-providers-microsoft-windows-io-t-device-services get" [
+export def "services-get" [
   subscription_id: string
   resource_group_name: string
   device_name: string
@@ -386,7 +386,7 @@ export def "subscriptions-resource-groups-providers-microsoft-windows-io-t-devic
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.WindowsIoT/deviceServices/{deviceName}
 # operationId: Services_Update
-export def "subscriptions-resource-groups-providers-microsoft-windows-io-t-device-services update" [
+export def "services-update" [
   subscription_id: string
   resource_group_name: string
   device_name: string
@@ -438,7 +438,7 @@ export def "subscriptions-resource-groups-providers-microsoft-windows-io-t-devic
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.WindowsIoT/deviceServices/{deviceName}
 # operationId: Services_CreateOrUpdate
-export def "subscriptions-resource-groups-providers-microsoft-windows-io-t-device-services create-or-update" [
+export def "services-create-or-update" [
   subscription_id: string
   resource_group_name: string
   device_name: string

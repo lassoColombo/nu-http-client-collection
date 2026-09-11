@@ -129,7 +129,7 @@ def type-completer-4 [] { ["accounts_payable" "accounts_payable_credit" "account
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounting-balance-sheet get-one" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "balance-sheet-one" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -153,7 +153,7 @@ export def commands []: nothing -> table {
 #
 # GET /accounting/balance-sheet
 # operationId: balanceSheetOne
-export def "accounting-balance-sheet get-one" [
+export def "balance-sheet-one" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -196,7 +196,7 @@ export def "accounting-balance-sheet get-one" [
 #
 # GET /accounting/bills
 # operationId: billsAll
-export def "accounting-bills list" [
+export def "bills-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -245,7 +245,7 @@ export def "accounting-bills list" [
 # --ledger_account shape: {code?: string, id?: string, nominal_code?: string}
 # --line_items item shape: {code?: string, department_id?: string, description?: string, discount_percentage?: float, item?: record, ledger_account?: record, line_number?: int, location_id?: string, quantity?: float, row_id?: string, row_version?: string, tax_amount?: float, tax_rate?: record, total_amount?: float, type?: "expense_item"|"expense_account", unit_of_measure?: string, unit_price?: float}
 # --supplier shape: {address?: record, display_name?: string, id: string}
-export def "accounting-bills create" [
+export def "bills-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -311,7 +311,7 @@ export def "accounting-bills create" [
 #
 # DELETE /accounting/bills/{id}
 # operationId: billsDelete
-export def "accounting-bills delete" [
+export def "bills-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -354,7 +354,7 @@ export def "accounting-bills delete" [
 #
 # GET /accounting/bills/{id}
 # operationId: billsOne
-export def "accounting-bills get-one" [
+export def "bills-one" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -401,7 +401,7 @@ export def "accounting-bills get-one" [
 # --ledger_account shape: {code?: string, id?: string, nominal_code?: string}
 # --line_items item shape: {code?: string, department_id?: string, description?: string, discount_percentage?: float, item?: record, ledger_account?: record, line_number?: int, location_id?: string, quantity?: float, row_id?: string, row_version?: string, tax_amount?: float, tax_rate?: record, total_amount?: float, type?: "expense_item"|"expense_account", unit_of_measure?: string, unit_price?: float}
 # --supplier shape: {address?: record, display_name?: string, id: string}
-export def "accounting-bills update" [
+export def "bills-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -469,7 +469,7 @@ export def "accounting-bills update" [
 #
 # GET /accounting/company-info
 # operationId: companyInfoOne
-export def "accounting-company-info get-one" [
+export def "company-info-one" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -511,7 +511,7 @@ export def "accounting-company-info get-one" [
 #
 # GET /accounting/credit-notes
 # operationId: creditNotesAll
-export def "accounting-credit-notes list" [
+export def "credit-notes-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -560,7 +560,7 @@ export def "accounting-credit-notes list" [
 # --allocations item shape: {amount?: float, id?: string, type?: "invoice"|"order"|"expense"|"credit_memo"|"over_payment"|"pre_payment"}
 # --customer shape: {display_name?: string, id: string, name?: string}
 # --line_items item shape: {code?: string, department_id?: string, description?: string, discount_amount?: float, discount_percentage?: float, item?: record, ledger_account?: record, line_number?: int, location_id?: string, quantity?: float, row_id?: string, row_version?: string, tax_amount?: float, tax_rate?: record, total_amount?: float, type?: "sales_item"|"discount"|"info"|"sub_total", unit_of_measure?: string, unit_price?: float}
-export def "accounting-credit-notes create" [
+export def "credit-notes-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -626,7 +626,7 @@ export def "accounting-credit-notes create" [
 #
 # DELETE /accounting/credit-notes/{id}
 # operationId: creditNotesDelete
-export def "accounting-credit-notes delete" [
+export def "credit-notes-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -669,7 +669,7 @@ export def "accounting-credit-notes delete" [
 #
 # GET /accounting/credit-notes/{id}
 # operationId: creditNotesOne
-export def "accounting-credit-notes get-one" [
+export def "credit-notes-one" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -717,7 +717,7 @@ export def "accounting-credit-notes get-one" [
 # --allocations item shape: {amount?: float, id?: string, type?: "invoice"|"order"|"expense"|"credit_memo"|"over_payment"|"pre_payment"}
 # --customer shape: {display_name?: string, id: string, name?: string}
 # --line_items item shape: {code?: string, department_id?: string, description?: string, discount_amount?: float, discount_percentage?: float, item?: record, ledger_account?: record, line_number?: int, location_id?: string, quantity?: float, row_id?: string, row_version?: string, tax_amount?: float, tax_rate?: record, total_amount?: float, type?: "sales_item"|"discount"|"info"|"sub_total", unit_of_measure?: string, unit_price?: float}
-export def "accounting-credit-notes update" [
+export def "credit-notes-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -785,7 +785,7 @@ export def "accounting-credit-notes update" [
 #
 # GET /accounting/customers
 # operationId: customersAll
-export def "accounting-customers list" [
+export def "customers-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -839,7 +839,7 @@ export def "accounting-customers list" [
 # --phone_numbers item shape: {area_code?: string, country_code?: string, extension?: string, id?: string, number: string, type?: "primary"|"secondary"|"home"|"work"|"office"|"mobile"|"assistant"|"fax"|"direct-dial-in"|"personal"|"other"}
 # --tax_rate shape: {id?: string}
 # --websites item shape: {id?: string, type?: "primary"|"secondary"|"work"|"personal"|"other", url: string}
-export def "accounting-customers create" [
+export def "customers-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -906,7 +906,7 @@ export def "accounting-customers create" [
 #
 # DELETE /accounting/customers/{id}
 # operationId: customersDelete
-export def "accounting-customers delete" [
+export def "customers-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -949,7 +949,7 @@ export def "accounting-customers delete" [
 #
 # GET /accounting/customers/{id}
 # operationId: customersOne
-export def "accounting-customers get-one" [
+export def "customers-one" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1001,7 +1001,7 @@ export def "accounting-customers get-one" [
 # --phone_numbers item shape: {area_code?: string, country_code?: string, extension?: string, id?: string, number: string, type?: "primary"|"secondary"|"home"|"work"|"office"|"mobile"|"assistant"|"fax"|"direct-dial-in"|"personal"|"other"}
 # --tax_rate shape: {id?: string}
 # --websites item shape: {id?: string, type?: "primary"|"secondary"|"work"|"personal"|"other", url: string}
-export def "accounting-customers update" [
+export def "customers-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1070,7 +1070,7 @@ export def "accounting-customers update" [
 #
 # GET /accounting/invoice-items
 # operationId: invoiceItemsAll
-export def "accounting-invoice-items list" [
+export def "invoice-items-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1121,7 +1121,7 @@ export def "accounting-invoice-items list" [
 # --income_account shape: {code?: string, id?: string, nominal_code?: string}
 # --purchase_details shape: {tax_inclusive?: bool, tax_rate?: record, unit_of_measure?: string, unit_price?: float}
 # --sales_details shape: {tax_inclusive?: bool, tax_rate?: record, unit_of_measure?: string, unit_price?: float}
-export def "accounting-invoice-items create" [
+export def "invoice-items-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1183,7 +1183,7 @@ export def "accounting-invoice-items create" [
 #
 # DELETE /accounting/invoice-items/{id}
 # operationId: invoiceItemsDelete
-export def "accounting-invoice-items delete" [
+export def "invoice-items-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1226,7 +1226,7 @@ export def "accounting-invoice-items delete" [
 #
 # GET /accounting/invoice-items/{id}
 # operationId: invoiceItemsOne
-export def "accounting-invoice-items get-one" [
+export def "invoice-items-one" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1275,7 +1275,7 @@ export def "accounting-invoice-items get-one" [
 # --income_account shape: {code?: string, id?: string, nominal_code?: string}
 # --purchase_details shape: {tax_inclusive?: bool, tax_rate?: record, unit_of_measure?: string, unit_price?: float}
 # --sales_details shape: {tax_inclusive?: bool, tax_rate?: record, unit_of_measure?: string, unit_price?: float}
-export def "accounting-invoice-items update" [
+export def "invoice-items-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1339,7 +1339,7 @@ export def "accounting-invoice-items update" [
 #
 # GET /accounting/invoices
 # operationId: invoicesAll
-export def "accounting-invoices list" [
+export def "invoices-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1389,7 +1389,7 @@ export def "accounting-invoices list" [
 # --customer shape: {display_name?: string, id: string, name?: string}
 # --line_items item shape: {code?: string, department_id?: string, description?: string, discount_amount?: float, discount_percentage?: float, item?: record, ledger_account?: record, line_number?: int, location_id?: string, quantity?: float, row_id?: string, row_version?: string, tax_amount?: float, tax_rate?: record, total_amount?: float, type?: "sales_item"|"discount"|"info"|"sub_total", unit_of_measure?: string, unit_price?: float}
 # --shipping_address shape: {city?: string, contact_name?: string, country?: string, county?: string, email?: string, fax?: string, id?: string, latitude?: string, line1?: string, line2?: string, line3?: string, line4?: string, longitude?: string, name?: string, phone_number?: string, postal_code?: string, row_version?: string, salutation?: string, state?: string, street_number?: string, string?: string, type?: "primary"|"secondary"|"home"|"office"|"shipping"|"billing"|"other", website?: string}
-export def "accounting-invoices create" [
+export def "invoices-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1461,7 +1461,7 @@ export def "accounting-invoices create" [
 #
 # DELETE /accounting/invoices/{id}
 # operationId: invoicesDelete
-export def "accounting-invoices delete" [
+export def "invoices-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1504,7 +1504,7 @@ export def "accounting-invoices delete" [
 #
 # GET /accounting/invoices/{id}
 # operationId: invoicesOne
-export def "accounting-invoices get-one" [
+export def "invoices-one" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1552,7 +1552,7 @@ export def "accounting-invoices get-one" [
 # --customer shape: {display_name?: string, id: string, name?: string}
 # --line_items item shape: {code?: string, department_id?: string, description?: string, discount_amount?: float, discount_percentage?: float, item?: record, ledger_account?: record, line_number?: int, location_id?: string, quantity?: float, row_id?: string, row_version?: string, tax_amount?: float, tax_rate?: record, total_amount?: float, type?: "sales_item"|"discount"|"info"|"sub_total", unit_of_measure?: string, unit_price?: float}
 # --shipping_address shape: {city?: string, contact_name?: string, country?: string, county?: string, email?: string, fax?: string, id?: string, latitude?: string, line1?: string, line2?: string, line3?: string, line4?: string, longitude?: string, name?: string, phone_number?: string, postal_code?: string, row_version?: string, salutation?: string, state?: string, street_number?: string, string?: string, type?: "primary"|"secondary"|"home"|"office"|"shipping"|"billing"|"other", website?: string}
-export def "accounting-invoices update" [
+export def "invoices-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1626,7 +1626,7 @@ export def "accounting-invoices update" [
 #
 # GET /accounting/journal-entries
 # operationId: journalEntriesAll
-export def "accounting-journal-entries list" [
+export def "journal-entries-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1672,7 +1672,7 @@ export def "accounting-journal-entries list" [
 # POST /accounting/journal-entries
 # operationId: journalEntriesAdd
 # --line_items item shape: {description?: string, ledger_account: record, tax_amount?: float, tax_rate?: record, total_amount: float, tracking_category?: record, type: "debit"|"credit"}
-export def "accounting-journal-entries create" [
+export def "journal-entries-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1724,7 +1724,7 @@ export def "accounting-journal-entries create" [
 #
 # DELETE /accounting/journal-entries/{id}
 # operationId: journalEntriesDelete
-export def "accounting-journal-entries delete" [
+export def "journal-entries-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1767,7 +1767,7 @@ export def "accounting-journal-entries delete" [
 #
 # GET /accounting/journal-entries/{id}
 # operationId: journalEntriesOne
-export def "accounting-journal-entries get-one" [
+export def "journal-entries-one" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1812,7 +1812,7 @@ export def "accounting-journal-entries get-one" [
 # PATCH /accounting/journal-entries/{id}
 # operationId: journalEntriesUpdate
 # --line_items item shape: {description?: string, ledger_account: record, tax_amount?: float, tax_rate?: record, total_amount: float, tracking_category?: record, type: "debit"|"credit"}
-export def "accounting-journal-entries update" [
+export def "journal-entries-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1866,7 +1866,7 @@ export def "accounting-journal-entries update" [
 #
 # GET /accounting/ledger-accounts
 # operationId: ledgerAccountsAll
-export def "accounting-ledger-accounts list" [
+export def "ledger-accounts-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1915,7 +1915,7 @@ export def "accounting-ledger-accounts list" [
 # --parent_account shape: {display_id?: string, id?: string, name?: string}
 # --tax_rate shape: {id?: string}
 @deprecated --flag nominal-code
-export def "accounting-ledger-accounts create" [
+export def "ledger-accounts-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1982,7 +1982,7 @@ export def "accounting-ledger-accounts create" [
 #
 # DELETE /accounting/ledger-accounts/{id}
 # operationId: ledgerAccountsDelete
-export def "accounting-ledger-accounts delete" [
+export def "ledger-accounts-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2025,7 +2025,7 @@ export def "accounting-ledger-accounts delete" [
 #
 # GET /accounting/ledger-accounts/{id}
 # operationId: ledgerAccountsOne
-export def "accounting-ledger-accounts get-one" [
+export def "ledger-accounts-one" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2073,7 +2073,7 @@ export def "accounting-ledger-accounts get-one" [
 # --parent_account shape: {display_id?: string, id?: string, name?: string}
 # --tax_rate shape: {id?: string}
 @deprecated --flag nominal-code
-export def "accounting-ledger-accounts update" [
+export def "ledger-accounts-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2142,7 +2142,7 @@ export def "accounting-ledger-accounts update" [
 #
 # GET /accounting/payments
 # operationId: paymentsAll
-export def "accounting-payments list" [
+export def "payments-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2193,7 +2193,7 @@ export def "accounting-payments list" [
 # --supplier shape: {address?: record, display_name?: string, id: string}
 @deprecated --flag accounts-receivable-account-id
 @deprecated --flag accounts-receivable-account-type
-export def "accounting-payments create" [
+export def "payments-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2257,7 +2257,7 @@ export def "accounting-payments create" [
 #
 # DELETE /accounting/payments/{id}
 # operationId: paymentsDelete
-export def "accounting-payments delete" [
+export def "payments-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2300,7 +2300,7 @@ export def "accounting-payments delete" [
 #
 # GET /accounting/payments/{id}
 # operationId: paymentsOne
-export def "accounting-payments get-one" [
+export def "payments-one" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2350,7 +2350,7 @@ export def "accounting-payments get-one" [
 # --supplier shape: {address?: record, display_name?: string, id: string}
 @deprecated --flag accounts-receivable-account-id
 @deprecated --flag accounts-receivable-account-type
-export def "accounting-payments update" [
+export def "payments-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2416,7 +2416,7 @@ export def "accounting-payments update" [
 #
 # GET /accounting/profit-and-loss
 # operationId: profitAndLossOne
-export def "accounting-profit-and-loss get-one" [
+export def "profit-and-loss-one" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2460,7 +2460,7 @@ export def "accounting-profit-and-loss get-one" [
 #
 # GET /accounting/suppliers
 # operationId: suppliersAll
-export def "accounting-suppliers list" [
+export def "suppliers-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2513,7 +2513,7 @@ export def "accounting-suppliers list" [
 # --phone_numbers item shape: {area_code?: string, country_code?: string, extension?: string, id?: string, number: string, type?: "primary"|"secondary"|"home"|"work"|"office"|"mobile"|"assistant"|"fax"|"direct-dial-in"|"personal"|"other"}
 # --tax_rate shape: {id?: string}
 # --websites item shape: {id?: string, type?: "primary"|"secondary"|"work"|"personal"|"other", url: string}
-export def "accounting-suppliers create" [
+export def "suppliers-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2578,7 +2578,7 @@ export def "accounting-suppliers create" [
 #
 # DELETE /accounting/suppliers/{id}
 # operationId: suppliersDelete
-export def "accounting-suppliers delete" [
+export def "suppliers-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2621,7 +2621,7 @@ export def "accounting-suppliers delete" [
 #
 # GET /accounting/suppliers/{id}
 # operationId: suppliersOne
-export def "accounting-suppliers get-one" [
+export def "suppliers-one" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2672,7 +2672,7 @@ export def "accounting-suppliers get-one" [
 # --phone_numbers item shape: {area_code?: string, country_code?: string, extension?: string, id?: string, number: string, type?: "primary"|"secondary"|"home"|"work"|"office"|"mobile"|"assistant"|"fax"|"direct-dial-in"|"personal"|"other"}
 # --tax_rate shape: {id?: string}
 # --websites item shape: {id?: string, type?: "primary"|"secondary"|"work"|"personal"|"other", url: string}
-export def "accounting-suppliers update" [
+export def "suppliers-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2739,7 +2739,7 @@ export def "accounting-suppliers update" [
 #
 # GET /accounting/tax-rates
 # operationId: taxRatesAll
-export def "accounting-tax-rates list" [
+export def "tax-rates-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2786,7 +2786,7 @@ export def "accounting-tax-rates list" [
 # POST /accounting/tax-rates
 # operationId: taxRatesAdd
 # --components item shape: {compound?: bool, id?: string, name?: string, rate?: float}
-export def "accounting-tax-rates create" [
+export def "tax-rates-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2844,7 +2844,7 @@ export def "accounting-tax-rates create" [
 #
 # DELETE /accounting/tax-rates/{id}
 # operationId: taxRatesDelete
-export def "accounting-tax-rates delete" [
+export def "tax-rates-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2887,7 +2887,7 @@ export def "accounting-tax-rates delete" [
 #
 # GET /accounting/tax-rates/{id}
 # operationId: taxRatesOne
-export def "accounting-tax-rates get-one" [
+export def "tax-rates-one" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2932,7 +2932,7 @@ export def "accounting-tax-rates get-one" [
 # PATCH /accounting/tax-rates/{id}
 # operationId: taxRatesUpdate
 # --components item shape: {compound?: bool, id?: string, name?: string, rate?: float}
-export def "accounting-tax-rates update" [
+export def "tax-rates-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

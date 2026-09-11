@@ -123,7 +123,7 @@ def action-completer [] { ["START" "STOP"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "chargestations get-charge-stations" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-charge-stations" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -147,7 +147,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/chargestations
 # operationId: getChargeStations
-export def "chargestations get-charge-stations" [
+export def "get-charge-stations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -199,7 +199,7 @@ export def "chargestations get-charge-stations" [
 #
 # POST /v1/chargestations
 # operationId: postChargeStations
-export def "chargestations create-charge-stations" [
+export def "post-charge-stations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -241,7 +241,7 @@ export def "chargestations create-charge-stations" [
 #
 # DELETE /v1/chargestations/{id}
 # operationId: deleteChargeStation
-export def "chargestations delete-charge-station" [
+export def "delete-charge-station" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -277,7 +277,7 @@ export def "chargestations delete-charge-station" [
 #
 # GET /v1/chargestations/{id}
 # operationId: getChargeStation
-export def "chargestations get-charge-station" [
+export def "get-charge-station" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -317,7 +317,7 @@ export def "chargestations get-charge-station" [
 #
 # PATCH /v1/chargestations/{id}
 # operationId: patchChargeStation
-export def "chargestations update-charge-station" [
+export def "patch-charge-station" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -361,7 +361,7 @@ export def "chargestations update-charge-station" [
 #
 # GET /v1/chargestations/{id}/connectors
 # operationId: getChargeStationConnectors
-export def "chargestations-connectors get-charge-station" [
+export def "get-charge-station-connectors" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -400,7 +400,7 @@ export def "chargestations-connectors get-charge-station" [
 #
 # GET /v1/commands
 # operationId: getCommands
-export def "commands get" [
+export def "get-commands" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -448,7 +448,7 @@ export def "commands get" [
 #
 # POST /v1/commands/cancelreservation
 # operationId: cancelreservation
-export def "commands-cancelreservation create" [
+export def "cancelreservation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -486,7 +486,7 @@ export def "commands-cancelreservation create" [
 #
 # DELETE /v1/commands/chargingschedule
 # operationId: deletechargingschedule
-export def "commands-chargingschedule delete" [
+export def "deletechargingschedule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -525,7 +525,7 @@ export def "commands-chargingschedule delete" [
 # POST /v1/commands/chargingschedule
 # operationId: setchargingschedule
 # --schedule item shape: {endDate?: string, limit?: float, startDate?: string, unit?: string}
-export def "commands-chargingschedule create-setchargingschedule" [
+export def "setchargingschedule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -564,7 +564,7 @@ export def "commands-chargingschedule create-setchargingschedule" [
 #
 # POST /v1/commands/remotestart
 # operationId: remotestart
-export def "commands-remotestart create" [
+export def "remotestart" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -605,7 +605,7 @@ export def "commands-remotestart create" [
 #
 # POST /v1/commands/remotestop
 # operationId: remotestop
-export def "commands-remotestop create" [
+export def "remotestop" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -645,7 +645,7 @@ export def "commands-remotestop create" [
 #
 # POST /v1/commands/reserve
 # operationId: reserve
-export def "commands-reserve create" [
+export def "reserve" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -687,7 +687,7 @@ export def "commands-reserve create" [
 #
 # POST /v1/commands/reset
 # operationId: reset
-export def "commands-reset reset" [
+export def "reset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -726,7 +726,7 @@ export def "commands-reset reset" [
 #
 # POST /v1/commands/unlockconnector
 # operationId: unlockconnector
-export def "commands-unlockconnector create" [
+export def "unlockconnector" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -765,7 +765,7 @@ export def "commands-unlockconnector create" [
 #
 # GET /v1/commands/{id}/variables
 # operationId: getVariables
-export def "commands-variables get" [
+export def "get-variables" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -801,7 +801,7 @@ export def "commands-variables get" [
 #
 # PATCH /v1/commands/{id}/variables
 # operationId: patchChargeStationVariable
-export def "commands-variables update-charge-station" [
+export def "patch-charge-station-variable" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -842,7 +842,7 @@ export def "commands-variables update-charge-station" [
 #
 # GET /v1/configurations
 # operationId: getConfigurations
-export def "configurations list" [
+export def "get-configurations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -886,7 +886,7 @@ export def "configurations list" [
 #
 # POST /v1/configurations
 # operationId: postConfigurations
-export def "configurations create" [
+export def "post-configurations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -925,7 +925,7 @@ export def "configurations create" [
 #
 # GET /v1/configurations/{id}
 # operationId: getConfiguration
-export def "configurations get" [
+export def "get-configuration" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -961,7 +961,7 @@ export def "configurations get" [
 #
 # GET /v1/connectors
 # operationId: getConnectors
-export def "connectors list" [
+export def "get-connectors" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1008,7 +1008,7 @@ export def "connectors list" [
 #
 # POST /v1/connectors
 # operationId: postConnectors
-export def "connectors create" [
+export def "post-connectors" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1051,7 +1051,7 @@ export def "connectors create" [
 #
 # DELETE /v1/connectors/{id}
 # operationId: deleteConnector
-export def "connectors delete" [
+export def "delete-connector" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1087,7 +1087,7 @@ export def "connectors delete" [
 #
 # GET /v1/connectors/{id}
 # operationId: getConnector
-export def "connectors get" [
+export def "get-connector" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1127,7 +1127,7 @@ export def "connectors get" [
 #
 # PATCH /v1/connectors/{id}
 # operationId: patchConnector
-export def "connectors update" [
+export def "patch-connector" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1172,7 +1172,7 @@ export def "connectors update" [
 #
 # GET /v1/drivers
 # operationId: getDrivers
-export def "drivers list" [
+export def "get-drivers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1222,7 +1222,7 @@ export def "drivers list" [
 # operationId: postDrivers
 # --address shape: {city?: string, country?: string, postalCode?: string, streetAndNumber?: string}
 # --phone shape: {home?: string, mobile?: string, work?: string}
-export def "drivers create" [
+export def "post-drivers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1266,7 +1266,7 @@ export def "drivers create" [
 #
 # DELETE /v1/drivers/{id}
 # operationId: deleteDriver
-export def "drivers delete" [
+export def "delete-driver" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1302,7 +1302,7 @@ export def "drivers delete" [
 #
 # GET /v1/drivers/{id}
 # operationId: getDriver
-export def "drivers get" [
+export def "get-driver" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1344,7 +1344,7 @@ export def "drivers get" [
 # operationId: patchDriver
 # --address shape: {city?: string, country?: string, postalCode?: string, streetAndNumber?: string}
 # --phone shape: {home?: string, mobile?: string, work?: string}
-export def "drivers update" [
+export def "patch-driver" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1391,7 +1391,7 @@ export def "drivers update" [
 #
 # DELETE /v1/location/{id}
 # operationId: deleteLocation
-export def "location delete" [
+export def "delete-location" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1427,7 +1427,7 @@ export def "location delete" [
 #
 # GET /v1/location/{id}
 # operationId: getLocation
-export def "location get" [
+export def "get-location" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1469,7 +1469,7 @@ export def "location get" [
 # --address shape: {city?: string, country?: string, postalCode?: string, state?: string, streetAndNumber?: string}
 # --coordinates shape: {latitude?: float, longitude?: float}
 # --openingHours shape: {0?: list, 1?: list, 2?: list, 3?: list, 4?: list, 5?: list, 6?: list}
-export def "location update" [
+export def "patch-location" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1515,7 +1515,7 @@ export def "location update" [
 #
 # GET /v1/locations
 # operationId: getLocations
-export def "locations get" [
+export def "get-locations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1562,7 +1562,7 @@ export def "locations get" [
 # operationId: postLocations
 # --address shape: {city?: string, country?: string, postalCode?: string, streetAndNumber?: string}
 # --coordinates shape: {latitude?: float, longitude?: float}
-export def "locations create" [
+export def "post-locations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1604,7 +1604,7 @@ export def "locations create" [
 #
 # GET /v1/organizations
 # operationId: getOrganizations
-export def "organizations list" [
+export def "get-organizations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1649,7 +1649,7 @@ export def "organizations list" [
 #
 # GET /v1/organizations/{id}
 # operationId: getOrganization
-export def "organizations get" [
+export def "get-organization" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1694,7 +1694,7 @@ export def "organizations get" [
 # --support shape: {business_hours?: string, chat?: record, contact_number?: string, email?: string}
 # --supportChat shape: {id?: string, name?: string}
 # --theme shape: {colors?: record}
-export def "organizations update" [
+export def "patch-organization" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1749,7 +1749,7 @@ export def "organizations update" [
 #
 # GET /v1/realtime
 # operationId: getRealtime
-export def "realtime get" [
+export def "get-realtime" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1786,7 +1786,7 @@ export def "realtime get" [
 #
 # GET /v1/reservations
 # operationId: getReservations
-export def "reservations list" [
+export def "get-reservations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1832,7 +1832,7 @@ export def "reservations list" [
 #
 # GET /v1/reservations/{id}
 # operationId: getReservation
-export def "reservations get" [
+export def "get-reservation" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1871,7 +1871,7 @@ export def "reservations get" [
 #
 # PATCH /v1/reservations/{id}
 # operationId: updatereservation
-export def "reservations update" [
+export def "updatereservation" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1914,7 +1914,7 @@ export def "reservations update" [
 #
 # GET /v1/tokens
 # operationId: getTokens
-export def "tokens list" [
+export def "get-tokens" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1960,7 +1960,7 @@ export def "tokens list" [
 #
 # POST /v1/tokens
 # operationId: postTokens
-export def "tokens create" [
+export def "post-tokens" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2002,7 +2002,7 @@ export def "tokens create" [
 #
 # DELETE /v1/tokens/{id}
 # operationId: deleteToken
-export def "tokens delete" [
+export def "delete-token" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2038,7 +2038,7 @@ export def "tokens delete" [
 #
 # GET /v1/tokens/{id}
 # operationId: getToken
-export def "tokens get" [
+export def "get-token" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2077,7 +2077,7 @@ export def "tokens get" [
 #
 # PATCH /v1/tokens/{id}
 # operationId: patchToken
-export def "tokens update" [
+export def "patch-token" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2121,7 +2121,7 @@ export def "tokens update" [
 #
 # GET /v1/transactions
 # operationId: getTransactions
-export def "transactions list" [
+export def "get-transactions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2174,7 +2174,7 @@ export def "transactions list" [
 #
 # GET /v1/transactions/{id}
 # operationId: getTransaction
-export def "transactions get" [
+export def "get-transaction" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2219,7 +2219,7 @@ export def "transactions get" [
 #
 # GET /v1/transactions/{id}/cost
 # operationId: getTransactionCost
-export def "transactions-cost get" [
+export def "get-transaction-cost" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2255,7 +2255,7 @@ export def "transactions-cost get" [
 #
 # GET /v1/vehicles
 # operationId: getVehicles
-export def "vehicles list" [
+export def "get-vehicles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2303,7 +2303,7 @@ export def "vehicles list" [
 #
 # GET /v1/vehicles/{id}
 # operationId: getVehicle
-export def "vehicles get" [
+export def "get-vehicle" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2343,7 +2343,7 @@ export def "vehicles get" [
 #
 # GET /v1/vehicles/{id}/battery
 # operationId: getVehicleBattery
-export def "vehicles-battery get" [
+export def "get-vehicle-battery" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2379,7 +2379,7 @@ export def "vehicles-battery get" [
 #
 # GET /v1/vehicles/{id}/charge
 # operationId: getVehicleCharge
-export def "vehicles-charge get" [
+export def "get-vehicle-charge" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2415,7 +2415,7 @@ export def "vehicles-charge get" [
 #
 # POST /v1/vehicles/{id}/charge
 # operationId: postCharge
-export def "vehicles-charge create" [
+export def "post-charge" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2455,7 +2455,7 @@ export def "vehicles-charge create" [
 #
 # GET /v1/vehicles/{id}/location
 # operationId: getVehicleLocation
-export def "vehicles-location get" [
+export def "get-vehicle-location" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2491,7 +2491,7 @@ export def "vehicles-location get" [
 #
 # GET /v1/vehicles/{id}/odometer
 # operationId: getVehicleOdometer
-export def "vehicles-odometer get" [
+export def "get-vehicle-odometer" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

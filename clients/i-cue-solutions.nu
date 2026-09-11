@@ -148,7 +148,7 @@ def method-completer-1 [] { ["AutoBestPick" "BoxJenkins" "Croston" "DoubleExpone
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "administration-entity get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-administration-entity" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -171,7 +171,7 @@ export def commands []: nothing -> table {
 # Get all organizations
 #
 # GET /administration/entity
-export def "administration-entity get" [
+export def "get-administration-entity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -208,7 +208,7 @@ export def "administration-entity get" [
 # Create organization
 #
 # POST /administration/entity
-export def "administration-entity create" [
+export def "post-administration-entity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -251,7 +251,7 @@ export def "administration-entity create" [
 # Pause organization
 #
 # PUT /administration/entity
-export def "administration-entity update" [
+export def "put-administration-entity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -292,7 +292,7 @@ export def "administration-entity update" [
 # Delete organization
 #
 # DELETE /administration/entity/{id}
-export def "administration-entity delete" [
+export def "delete-administration-entity-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -330,7 +330,7 @@ export def "administration-entity delete" [
 # Transform data file to JSON format
 #
 # POST /administration/file-to-json
-export def "administration-file-to-json create" [
+export def "post-administration-file-to-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -374,7 +374,7 @@ export def "administration-file-to-json create" [
 # Get all common Models
 #
 # GET /administration/model
-export def "administration-model list" [
+export def "get-administration-model" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -411,7 +411,7 @@ export def "administration-model list" [
 # Register new forecasting model
 #
 # POST /administration/model
-export def "administration-model create" [
+export def "post-administration-model" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -453,7 +453,7 @@ export def "administration-model create" [
 # Get Models for Organization
 #
 # GET /administration/model/{entityId}
-export def "administration-model get" [
+export def "get-administration-model-entity-id" [
   entity_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -492,7 +492,7 @@ export def "administration-model get" [
 # Register new forecasting model
 #
 # POST /administration/model/{entityId}
-export def "administration-model create-by-entity-id" [
+export def "post-administration-model-entity-id" [
   entity_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -536,7 +536,7 @@ export def "administration-model create-by-entity-id" [
 # Lock planning level
 #
 # POST /administration/planning-level/lock
-export def "administration-planning-level-lock create" [
+export def "post-administration-planning-level-lock" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -572,7 +572,7 @@ export def "administration-planning-level-lock create" [
 # Delete planning level
 #
 # DELETE /administration/planning-level/{entityId}/{id}
-export def "administration-planning-level delete" [
+export def "delete-administration-planning-level-entity-id-id" [
   entity_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -612,7 +612,7 @@ export def "administration-planning-level delete" [
 # Issue a token
 #
 # POST /administration/token
-export def "administration-token create" [
+export def "post-administration-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -655,7 +655,7 @@ export def "administration-token create" [
 # Create user
 #
 # POST /administration/user
-export def "administration-user create" [
+export def "post-administration-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -700,7 +700,7 @@ export def "administration-user create" [
 # Update user
 #
 # PUT /administration/user
-export def "administration-user update" [
+export def "put-administration-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -736,7 +736,7 @@ export def "administration-user update" [
 # Lock user
 #
 # PUT /administration/user/lock
-export def "administration-user-lock update" [
+export def "put-administration-user-lock" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -778,7 +778,7 @@ export def "administration-user-lock update" [
 # Get all users
 #
 # GET /administration/user/{entityId}
-export def "administration-user get" [
+export def "get-administration-user-entity-id" [
   entity_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -816,7 +816,7 @@ export def "administration-user get" [
 # Delete user
 #
 # DELETE /administration/user/{entityId}/{id}
-export def "administration-user delete" [
+export def "delete-administration-user-entity-id-id" [
   entity_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -858,7 +858,7 @@ export def "administration-user delete" [
 # POST /forecast
 # --data item shape: {historyValues?: list<float>, timeSeriesId?: string}
 # --params shape: {discardData: bool, errorType: "MeanAbsolutePercentageError"|"MeanSquaredError"|"MeanAbsoluteError"|"MedianAbsoluteDeviation"|"None", holdOutPeriod: int, noFcst: int, outlierDetection: bool, periodicity: int}
-export def "forecast create" [
+export def "post-forecast" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -906,7 +906,7 @@ export def "forecast create" [
 # POST /forecast/AI
 # --data item shape: {historyValues?: list<float>, timeSeriesId?: string}
 # --params shape: {discardData: bool, errorType: "MeanAbsolutePercentageError"|"MeanSquaredError"|"MeanAbsoluteError"|"MedianAbsoluteDeviation"|"None", holdOutPeriod: int, noFcst: int, outlierDetection: bool, periodicity: int}
-export def "forecast-ai create" [
+export def "post-forecast-ai" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -953,7 +953,7 @@ export def "forecast-ai create" [
 # POST /forecast/AI/history-and-forecast
 # --data item shape: {historyValues?: list<float>, timeSeriesId?: string}
 # --params shape: {discardData: bool, errorType: "MeanAbsolutePercentageError"|"MeanSquaredError"|"MeanAbsoluteError"|"MedianAbsoluteDeviation"|"None", holdOutPeriod: int, noFcst: int, outlierDetection: bool, periodicity: int}
-export def "forecast-ai-history-and-forecast create" [
+export def "post-forecast-ai-history-and-forecast" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -998,7 +998,7 @@ export def "forecast-ai-history-and-forecast create" [
 # Forecast from file
 #
 # POST /forecast/file-to-forecast
-export def "forecast-file-to-forecast create" [
+export def "post-forecast-file-to-forecast" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1050,7 +1050,7 @@ export def "forecast-file-to-forecast create" [
 # POST /forecast/forecast-bottom-up
 # --data item shape: {historyValues?: list<float>, timeSeriesId?: string}
 # --params shape: {discardData: bool, errorType: "MeanAbsolutePercentageError"|"MeanSquaredError"|"MeanAbsoluteError"|"MedianAbsoluteDeviation"|"None", holdOutPeriod: int, noFcst: int, outlierDetection: bool, periodicity: int}
-export def "forecast-forecast-bottom-up create" [
+export def "post-forecast-forecast-bottom-up" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1098,7 +1098,7 @@ export def "forecast-forecast-bottom-up create" [
 # POST /forecast/forecast-top-down
 # --data item shape: {historyValues?: list<float>, timeSeriesId?: string}
 # --params shape: {discardData: bool, errorType: "MeanAbsolutePercentageError"|"MeanSquaredError"|"MeanAbsoluteError"|"MedianAbsoluteDeviation"|"None", holdOutPeriod: int, noFcst: int, outlierDetection: bool, periodicity: int}
-export def "forecast-forecast-top-down create" [
+export def "post-forecast-forecast-top-down" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1145,7 +1145,7 @@ export def "forecast-forecast-top-down create" [
 # POST /forecast/full-detail
 # --data item shape: {historyValues?: list<float>, timeSeriesId?: string}
 # --params shape: {discardData: bool, errorType: "MeanAbsolutePercentageError"|"MeanSquaredError"|"MeanAbsoluteError"|"MedianAbsoluteDeviation"|"None", holdOutPeriod: int, noFcst: int, outlierDetection: bool, periodicity: int}
-export def "forecast-full-detail create" [
+export def "post-forecast-full-detail" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1193,7 +1193,7 @@ export def "forecast-full-detail create" [
 # POST /forecast/history-and-forecast
 # --data item shape: {historyValues?: list<float>, timeSeriesId?: string}
 # --params shape: {discardData: bool, errorType: "MeanAbsolutePercentageError"|"MeanSquaredError"|"MeanAbsoluteError"|"MedianAbsoluteDeviation"|"None", holdOutPeriod: int, noFcst: int, outlierDetection: bool, periodicity: int}
-export def "forecast-history-and-forecast create" [
+export def "post-forecast-history-and-forecast" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1241,7 +1241,7 @@ export def "forecast-history-and-forecast create" [
 # POST /forecast/optimal-parameter
 # --data item shape: {historyValues?: list<float>, timeSeriesId?: string}
 # --params shape: {discardData: bool, errorType: "MeanAbsolutePercentageError"|"MeanSquaredError"|"MeanAbsoluteError"|"MedianAbsoluteDeviation"|"None", holdOutPeriod: int, noFcst: int, outlierDetection: bool, periodicity: int}
-export def "forecast-optimal-parameter create" [
+export def "post-forecast-optimal-parameter" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1288,7 +1288,7 @@ export def "forecast-optimal-parameter create" [
 #
 # POST /forecast/rerun
 # --params shape: {discardData: bool, errorType: "MeanAbsolutePercentageError"|"MeanSquaredError"|"MeanAbsoluteError"|"MedianAbsoluteDeviation"|"None", holdOutPeriod: int, noFcst: int, outlierDetection: bool, periodicity: int}
-export def "forecast-rerun create" [
+export def "post-forecast-rerun" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1331,7 +1331,7 @@ export def "forecast-rerun create" [
 # Forecast result
 #
 # GET /forecast/result/{jobId}
-export def "forecast-result get" [
+export def "get-forecast-result-job-id" [
   job_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1369,7 +1369,7 @@ export def "forecast-result get" [
 # Forecast status
 #
 # GET /forecast/status/{jobId}
-export def "forecast-status get" [
+export def "get-forecast-status-job-id" [
   job_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1407,7 +1407,7 @@ export def "forecast-status get" [
 # Get hyperparameters
 #
 # GET /hyperparameter
-export def "hyperparameter get" [
+export def "get-hyperparameter" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1444,7 +1444,7 @@ export def "hyperparameter get" [
 # Set hyperparameters
 #
 # POST /hyperparameter
-export def "hyperparameter create" [
+export def "post-hyperparameter" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1495,7 +1495,7 @@ export def "hyperparameter create" [
 # Calculate Amazon Inventory Performance Index (IPI)
 #
 # POST /inventory/amazon-ipi
-export def "inventory-amazon-ipi create" [
+export def "post-inventory-amazon-ipi" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1531,7 +1531,7 @@ export def "inventory-amazon-ipi create" [
 # Carrying Cost
 #
 # POST /inventory/caryying-cost
-export def "inventory-caryying-cost create" [
+export def "post-inventory-caryying-cost" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1567,7 +1567,7 @@ export def "inventory-caryying-cost create" [
 # Calculate economic order quantity
 #
 # POST /inventory/eoq
-export def "inventory-eoq create" [
+export def "post-inventory-eoq" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1603,7 +1603,7 @@ export def "inventory-eoq create" [
 # Calculate fill rate
 #
 # POST /inventory/fill-rate
-export def "inventory-fill-rate create" [
+export def "post-inventory-fill-rate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1639,7 +1639,7 @@ export def "inventory-fill-rate create" [
 # Calculate financial impact of forecast accuracy
 #
 # POST /inventory/financial-imapct-forecast-accuracy
-export def "inventory-financial-imapct-forecast-accuracy create" [
+export def "post-inventory-financial-imapct-forecast-accuracy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1675,7 +1675,7 @@ export def "inventory-financial-imapct-forecast-accuracy create" [
 # Inventroy Turn-over
 #
 # POST /inventory/inventory-turnover
-export def "inventory-inventory-turnover create" [
+export def "post-inventory-inventory-turnover" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1711,7 +1711,7 @@ export def "inventory-inventory-turnover create" [
 # Calculate lead time demand
 #
 # POST /inventory/ltd
-export def "inventory-ltd create" [
+export def "post-inventory-ltd" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1747,7 +1747,7 @@ export def "inventory-ltd create" [
 # Calculate minimum order quantity
 #
 # POST /inventory/moq
-export def "inventory-moq create" [
+export def "post-inventory-moq" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1783,7 +1783,7 @@ export def "inventory-moq create" [
 # Calculate optimal service level
 #
 # POST /inventory/optimal-service-level
-export def "inventory-optimal-service-level create" [
+export def "post-inventory-optimal-service-level" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1819,7 +1819,7 @@ export def "inventory-optimal-service-level create" [
 # Re-order Point
 #
 # POST /inventory/reorder-point
-export def "inventory-reorder-point create" [
+export def "post-inventory-reorder-point" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1855,7 +1855,7 @@ export def "inventory-reorder-point create" [
 # Safety Stock
 #
 # POST /inventory/safety-stock
-export def "inventory-safety-stock create" [
+export def "post-inventory-safety-stock" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1891,7 +1891,7 @@ export def "inventory-safety-stock create" [
 # Calculate service level
 #
 # POST /inventory/service-level
-export def "inventory-service-level create" [
+export def "post-inventory-service-level" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1927,7 +1927,7 @@ export def "inventory-service-level create" [
 # Calculate inventory turns
 #
 # POST /inventory/turns
-export def "inventory-turns create" [
+export def "post-inventory-turns" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1964,7 +1964,7 @@ export def "inventory-turns create" [
 #
 # POST /lifecycle/many-to-one
 # --data item shape: {historyValues?: list<float>, timeSeriesId?: string}
-export def "lifecycle-many-to-one create" [
+export def "post-lifecycle-many-to-one" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2008,7 +2008,7 @@ export def "lifecycle-many-to-one create" [
 #
 # POST /lifecycle/one-to-one
 # --data shape: {historyValues?: list<float>, timeSeriesId?: string}
-export def "lifecycle-one-to-one create" [
+export def "post-lifecycle-one-to-one" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2052,7 +2052,7 @@ export def "lifecycle-one-to-one create" [
 #
 # POST /outlier
 # --data item shape: {historyValues?: list<float>, timeSeriesId?: string}
-export def "outlier create" [
+export def "post-outlier" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2096,7 +2096,7 @@ export def "outlier create" [
 #
 # POST /portfolio
 # --data item shape: {historyValues?: list<float>, timeSeriesId?: string}
-export def "portfolio create" [
+export def "post-portfolio" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2140,7 +2140,7 @@ export def "portfolio create" [
 #
 # POST /portfolio/abc
 # --data item shape: {historyValues?: list<float>, timeSeriesId?: string}
-export def "portfolio-abc create" [
+export def "post-portfolio-abc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2183,7 +2183,7 @@ export def "portfolio-abc create" [
 # ABCxyz Analysis
 #
 # POST /portfolio/file-to-portfolio
-export def "portfolio-file-to-portfolio create" [
+export def "post-portfolio-file-to-portfolio" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2227,7 +2227,7 @@ export def "portfolio-file-to-portfolio create" [
 # POST /portfolio/forecast-performance-rewind
 # --data item shape: {forecastValues?: list<float>, historyValues?: list<float>, timeSeriesId?: string}
 # --params shape: {discardData: bool, errorType: "MeanAbsolutePercentageError"|"MeanSquaredError"|"MeanAbsoluteError"|"MedianAbsoluteDeviation"|"None", holdOutPeriod: int, noFcst: int, outlierDetection: bool, periodicity: int}
-export def "portfolio-forecast-performance-rewind create" [
+export def "post-portfolio-forecast-performance-rewind" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2275,7 +2275,7 @@ export def "portfolio-forecast-performance-rewind create" [
 #
 # POST /portfolio/xyz
 # --data item shape: {historyValues?: list<float>, timeSeriesId?: string}
-export def "portfolio-xyz create" [
+export def "post-portfolio-xyz" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2318,7 +2318,7 @@ export def "portfolio-xyz create" [
 # Bundle pricing
 #
 # POST /pricing/bundle-pricing
-export def "pricing-bundle-pricing create" [
+export def "post-pricing-bundle-pricing" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2352,7 +2352,7 @@ export def "pricing-bundle-pricing create" [
 }
 
 # POST /pricing/competitive-pricing
-export def "pricing-competitive-pricing create" [
+export def "post-pricing-competitive-pricing" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2386,7 +2386,7 @@ export def "pricing-competitive-pricing create" [
 }
 
 # POST /pricing/cost-plus-pricing
-export def "pricing-cost-plus-pricing create" [
+export def "post-pricing-cost-plus-pricing" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2420,7 +2420,7 @@ export def "pricing-cost-plus-pricing create" [
 }
 
 # POST /pricing/decoy-pricing
-export def "pricing-decoy-pricing create" [
+export def "post-pricing-decoy-pricing" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2454,7 +2454,7 @@ export def "pricing-decoy-pricing create" [
 }
 
 # POST /pricing/odd-pricing
-export def "pricing-odd-pricing create" [
+export def "post-pricing-odd-pricing" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2488,7 +2488,7 @@ export def "pricing-odd-pricing create" [
 }
 
 # POST /pricing/penetration-pricing
-export def "pricing-penetration-pricing create" [
+export def "post-pricing-penetration-pricing" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2522,7 +2522,7 @@ export def "pricing-penetration-pricing create" [
 }
 
 # POST /pricing/price-elasticity-of-demand
-export def "pricing-price-elasticity-of-demand create" [
+export def "post-pricing-price-elasticity-of-demand" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2558,7 +2558,7 @@ export def "pricing-price-elasticity-of-demand create" [
 # SKU rationalization report
 #
 # GET /report/performance/sku-rationalization/{planningLevelId}
-export def "report-performance-sku-rationalization get" [
+export def "get-report-performance-sku-rationalization-planning-level-id" [
   planning_level_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2597,7 +2597,7 @@ export def "report-performance-sku-rationalization get" [
 # Month over month performance per planning level
 #
 # GET /report/performance/{planningLevelId}
-export def "report-performance get" [
+export def "get-report-performance-planning-level-id" [
   planning_level_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2635,7 +2635,7 @@ export def "report-performance get" [
 # Get list of plannign levels by organization
 #
 # GET /report/planning-level/organization
-export def "report-planning-level-organization get" [
+export def "get-report-planning-level-organization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2671,7 +2671,7 @@ export def "report-planning-level-organization get" [
 # Get list of plannign levels by user
 #
 # GET /report/planning-level/user
-export def "report-planning-level-user get" [
+export def "get-report-planning-level-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2707,7 +2707,7 @@ export def "report-planning-level-user get" [
 # Get usage statistics per user
 #
 # GET /report/user
-export def "report-user get" [
+export def "get-report-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -112,7 +112,7 @@ def op-completer [] { ["full" "summary"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "custom-models list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-custom-models" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -136,7 +136,7 @@ export def commands []: nothing -> table {
 #
 # GET /custom/models
 # operationId: GetCustomModels
-export def "custom-models list" [
+export def "get-custom-models" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -173,7 +173,7 @@ export def "custom-models list" [
 # POST /custom/models
 # operationId: TrainCustomModelAsync
 # --sourceFilter shape: {includeSubFolders?: bool, prefix?: string}
-export def "custom-models create-train-async" [
+export def "train-custom-model-async" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -213,7 +213,7 @@ export def "custom-models create-train-async" [
 #
 # DELETE /custom/models/{modelId}
 # operationId: DeleteCustomModel
-export def "custom-models delete" [
+export def "delete-custom-model" [
   model_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -249,7 +249,7 @@ export def "custom-models delete" [
 #
 # GET /custom/models/{modelId}
 # operationId: GetCustomModel
-export def "custom-models get" [
+export def "get-custom-model" [
   model_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -287,7 +287,7 @@ export def "custom-models get" [
 #
 # POST /custom/models/{modelId}/analyze
 # operationId: AnalyzeWithCustomModel
-export def "custom-models-analyze create" [
+export def "analyze-with-custom-model" [
   model_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -329,7 +329,7 @@ export def "custom-models-analyze create" [
 #
 # GET /custom/models/{modelId}/analyzeResults/{resultId}
 # operationId: GetAnalyzeFormResult
-export def "custom-models-analyze-results get-form" [
+export def "get-analyze-form-result" [
   model_id: string
   result_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -367,7 +367,7 @@ export def "custom-models-analyze-results get-form" [
 #
 # POST /layout/analyze
 # operationId: AnalyzeLayoutAsync
-export def "layout-analyze create-async" [
+export def "analyze-layout-async" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -405,7 +405,7 @@ export def "layout-analyze create-async" [
 #
 # GET /layout/analyzeResults/{resultId}
 # operationId: GetAnalyzeLayoutResult
-export def "layout-analyze-results get" [
+export def "get-analyze-layout-result" [
   result_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -441,7 +441,7 @@ export def "layout-analyze-results get" [
 #
 # POST /prebuilt/receipt/analyze
 # operationId: AnalyzeReceiptAsync
-export def "prebuilt-receipt-analyze create-async" [
+export def "analyze-receipt-async" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -481,7 +481,7 @@ export def "prebuilt-receipt-analyze create-async" [
 #
 # GET /prebuilt/receipt/analyzeResults/{resultId}
 # operationId: GetAnalyzeReceiptResult
-export def "prebuilt-receipt-analyze-results get" [
+export def "get-analyze-receipt-result" [
   result_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

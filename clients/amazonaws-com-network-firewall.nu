@@ -136,7 +136,7 @@ def x-amz-target-completer-35 [] { ["NetworkFirewall_20201112.UpdateTLSInspectio
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-associate-firewall-policy" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associate-firewall-policy" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -160,7 +160,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AssociateFirewallPolicy
-export def "api create-associate-firewall-policy" [
+export def "associate-firewall-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -211,7 +211,7 @@ export def "api create-associate-firewall-policy" [
 #
 # POST /
 # operationId: AssociateSubnets
-export def "api create-associate-subnets" [
+export def "associate-subnets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -262,7 +262,7 @@ export def "api create-associate-subnets" [
 #
 # POST /
 # operationId: CreateFirewall
-export def "api create-firewall" [
+export def "create-firewall" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -319,7 +319,7 @@ export def "api create-firewall" [
 #
 # POST /
 # operationId: CreateFirewallPolicy
-export def "api create-firewall-policy" [
+export def "create-firewall-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -372,7 +372,7 @@ export def "api create-firewall-policy" [
 #
 # POST /
 # operationId: CreateRuleGroup
-export def "api create-rule-group" [
+export def "create-rule-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -430,7 +430,7 @@ export def "api create-rule-group" [
 # POST /
 # operationId: CreateTLSInspectionConfiguration
 # --EncryptionConfiguration shape: {KeyId?: any, Type: any}
-export def "api create-tls-inspection-configuration" [
+export def "create-tls-inspection-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -482,7 +482,7 @@ export def "api create-tls-inspection-configuration" [
 #
 # POST /
 # operationId: DeleteFirewall
-export def "api delete-firewall" [
+export def "delete-firewall" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -531,7 +531,7 @@ export def "api delete-firewall" [
 #
 # POST /
 # operationId: DeleteFirewallPolicy
-export def "api delete-firewall-policy" [
+export def "delete-firewall-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -580,7 +580,7 @@ export def "api delete-firewall-policy" [
 #
 # POST /
 # operationId: DeleteResourcePolicy
-export def "api delete-resource-policy" [
+export def "delete-resource-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -628,7 +628,7 @@ export def "api delete-resource-policy" [
 #
 # POST /
 # operationId: DeleteRuleGroup
-export def "api delete-rule-group" [
+export def "delete-rule-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -678,7 +678,7 @@ export def "api delete-rule-group" [
 #
 # POST /
 # operationId: DeleteTLSInspectionConfiguration
-export def "api delete-tls-inspection-configuration" [
+export def "delete-tls-inspection-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -727,7 +727,7 @@ export def "api delete-tls-inspection-configuration" [
 #
 # POST /
 # operationId: DescribeFirewall
-export def "api get-firewall" [
+export def "describe-firewall" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -776,7 +776,7 @@ export def "api get-firewall" [
 #
 # POST /
 # operationId: DescribeFirewallPolicy
-export def "api get-firewall-policy" [
+export def "describe-firewall-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -825,7 +825,7 @@ export def "api get-firewall-policy" [
 #
 # POST /
 # operationId: DescribeLoggingConfiguration
-export def "api get-logging-configuration" [
+export def "describe-logging-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -874,7 +874,7 @@ export def "api get-logging-configuration" [
 #
 # POST /
 # operationId: DescribeResourcePolicy
-export def "api get-resource-policy" [
+export def "describe-resource-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -922,7 +922,7 @@ export def "api get-resource-policy" [
 #
 # POST /
 # operationId: DescribeRuleGroup
-export def "api get-rule-group" [
+export def "describe-rule-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -972,7 +972,7 @@ export def "api get-rule-group" [
 #
 # POST /
 # operationId: DescribeRuleGroupMetadata
-export def "api get-rule-group-metadata" [
+export def "describe-rule-group-metadata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1022,7 +1022,7 @@ export def "api get-rule-group-metadata" [
 #
 # POST /
 # operationId: DescribeTLSInspectionConfiguration
-export def "api get-tls-inspection-configuration" [
+export def "describe-tls-inspection-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1071,7 +1071,7 @@ export def "api get-tls-inspection-configuration" [
 #
 # POST /
 # operationId: DisassociateSubnets
-export def "api create-disassociate-subnets" [
+export def "disassociate-subnets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1122,7 +1122,7 @@ export def "api create-disassociate-subnets" [
 #
 # POST /
 # operationId: ListFirewallPolicies
-export def "api list-firewall-policies" [
+export def "list-firewall-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1174,7 +1174,7 @@ export def "api list-firewall-policies" [
 #
 # POST /
 # operationId: ListFirewalls
-export def "api list-firewalls" [
+export def "list-firewalls" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1227,7 +1227,7 @@ export def "api list-firewalls" [
 #
 # POST /
 # operationId: ListRuleGroups
-export def "api list-rule-groups" [
+export def "list-rule-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1282,7 +1282,7 @@ export def "api list-rule-groups" [
 #
 # POST /
 # operationId: ListTLSInspectionConfigurations
-export def "api list-tls-inspection-configurations" [
+export def "list-tls-inspection-configurations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1334,7 +1334,7 @@ export def "api list-tls-inspection-configurations" [
 #
 # POST /
 # operationId: ListTagsForResource
-export def "api list-tags-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1387,7 +1387,7 @@ export def "api list-tags-for-resource" [
 #
 # POST /
 # operationId: PutResourcePolicy
-export def "api update-resource-policy" [
+export def "put-resource-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1436,7 +1436,7 @@ export def "api update-resource-policy" [
 #
 # POST /
 # operationId: TagResource
-export def "api tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1485,7 +1485,7 @@ export def "api tag-resource" [
 #
 # POST /
 # operationId: UntagResource
-export def "api untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1534,7 +1534,7 @@ export def "api untag-resource" [
 #
 # POST /
 # operationId: UpdateFirewallDeleteProtection
-export def "api update-firewall-delete-protection" [
+export def "update-firewall-delete-protection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1585,7 +1585,7 @@ export def "api update-firewall-delete-protection" [
 #
 # POST /
 # operationId: UpdateFirewallDescription
-export def "api update-firewall-description" [
+export def "update-firewall-description" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1637,7 +1637,7 @@ export def "api update-firewall-description" [
 # POST /
 # operationId: UpdateFirewallEncryptionConfiguration
 # --EncryptionConfiguration shape: {KeyId?: any, Type: any}
-export def "api update-firewall-encryption-configuration" [
+export def "update-firewall-encryption-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1688,7 +1688,7 @@ export def "api update-firewall-encryption-configuration" [
 #
 # POST /
 # operationId: UpdateFirewallPolicy
-export def "api update-firewall-policy" [
+export def "update-firewall-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1742,7 +1742,7 @@ export def "api update-firewall-policy" [
 #
 # POST /
 # operationId: UpdateFirewallPolicyChangeProtection
-export def "api update-firewall-policy-change-protection" [
+export def "update-firewall-policy-change-protection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1793,7 +1793,7 @@ export def "api update-firewall-policy-change-protection" [
 #
 # POST /
 # operationId: UpdateLoggingConfiguration
-export def "api update-logging-configuration" [
+export def "update-logging-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1843,7 +1843,7 @@ export def "api update-logging-configuration" [
 #
 # POST /
 # operationId: UpdateRuleGroup
-export def "api update-rule-group" [
+export def "update-rule-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1899,7 +1899,7 @@ export def "api update-rule-group" [
 # POST /
 #
 # operationId: UpdateSubnetChangeProtection
-export def "api update-subnet-change-protection" [
+export def "update-subnet-change-protection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1950,7 +1950,7 @@ export def "api update-subnet-change-protection" [
 #
 # POST /
 # operationId: UpdateTLSInspectionConfiguration
-export def "api update-tls-inspection-configuration" [
+export def "update-tls-inspection-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

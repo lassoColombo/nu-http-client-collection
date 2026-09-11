@@ -97,7 +97,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "jobs list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-jobs" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -120,7 +120,7 @@ export def commands []: nothing -> table {
 # Job Titles and Descriptions
 #
 # GET /jobs
-export def "jobs list" [
+export def "get-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -156,7 +156,7 @@ export def "jobs list" [
 # Job Title Autocomplete
 #
 # GET /jobs/autocomplete
-export def "jobs-autocomplete get" [
+export def "get-jobs-autocomplete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -193,7 +193,7 @@ export def "jobs-autocomplete get" [
 # Job Title Normalization
 #
 # GET /jobs/normalize
-export def "jobs-normalize get" [
+export def "get-jobs-normalize" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -229,7 +229,7 @@ export def "jobs-normalize get" [
 # Unusual Job Titles
 #
 # GET /jobs/unusual_titles
-export def "jobs-unusual-titles get" [
+export def "get-jobs-unusual-titles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -262,7 +262,7 @@ export def "jobs-unusual-titles get" [
 # Job Title and Description
 #
 # GET /jobs/{id}
-export def "jobs get" [
+export def "get-jobs-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -299,7 +299,7 @@ export def "jobs get" [
 # Jobs Associated with a Job
 #
 # GET /jobs/{id}/related_jobs
-export def "jobs-related-jobs get" [
+export def "get-jobs-id-related-jobs" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -334,7 +334,7 @@ export def "jobs-related-jobs get" [
 # Skills Associated with a Job
 #
 # GET /jobs/{id}/related_skills
-export def "jobs-related-skills get" [
+export def "get-jobs-id-related-skills" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -369,7 +369,7 @@ export def "jobs-related-skills get" [
 # Skill Names and Descriptions
 #
 # GET /skills
-export def "skills list" [
+export def "get-skills" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -405,7 +405,7 @@ export def "skills list" [
 # Skill Name Autocomplete
 #
 # GET /skills/autocomplete
-export def "skills-autocomplete get" [
+export def "get-skills-autocomplete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -442,7 +442,7 @@ export def "skills-autocomplete get" [
 # Skill Name Normalization
 #
 # GET /skills/normalize
-export def "skills-normalize get" [
+export def "get-skills-normalize" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -477,7 +477,7 @@ export def "skills-normalize get" [
 # Skill Name and Description
 #
 # GET /skills/{id}
-export def "skills get" [
+export def "get-skills-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -512,7 +512,7 @@ export def "skills get" [
 # Jobs Associated with a Skill
 #
 # GET /skills/{id}/related_jobs
-export def "skills-related-jobs get" [
+export def "get-skills-id-related-jobs" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -547,7 +547,7 @@ export def "skills-related-jobs get" [
 # Skills Associated with a Skill
 #
 # GET /skills/{id}/related_skills
-export def "skills-related-skills get" [
+export def "get-skills-id-related-skills" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

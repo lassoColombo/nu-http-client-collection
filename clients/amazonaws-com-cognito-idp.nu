@@ -201,7 +201,7 @@ def x-amz-target-completer-100 [] { ["AWSCognitoIdentityProviderService.VerifyUs
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-custom-attributes" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "add-custom-attributes" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -225,7 +225,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AddCustomAttributes
-export def "api create-custom-attributes" [
+export def "add-custom-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -274,7 +274,7 @@ export def "api create-custom-attributes" [
 #
 # POST /
 # operationId: AdminAddUserToGroup
-export def "api create-admin-user-to-group" [
+export def "admin-add-user-to-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -324,7 +324,7 @@ export def "api create-admin-user-to-group" [
 #
 # POST /
 # operationId: AdminConfirmSignUp
-export def "api confirm-admin-sign-up" [
+export def "admin-confirm-sign-up" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -374,7 +374,7 @@ export def "api confirm-admin-sign-up" [
 #
 # POST /
 # operationId: AdminCreateUser
-export def "api create-admin-user" [
+export def "admin-create-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -430,7 +430,7 @@ export def "api create-admin-user" [
 #
 # POST /
 # operationId: AdminDeleteUser
-export def "api delete-admin-user" [
+export def "admin-delete-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -479,7 +479,7 @@ export def "api delete-admin-user" [
 #
 # POST /
 # operationId: AdminDeleteUserAttributes
-export def "api delete-admin-user-attributes" [
+export def "admin-delete-user-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -529,7 +529,7 @@ export def "api delete-admin-user-attributes" [
 #
 # POST /
 # operationId: AdminDisableProviderForUser
-export def "api disable-admin-provider-for-user" [
+export def "admin-disable-provider-for-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -578,7 +578,7 @@ export def "api disable-admin-provider-for-user" [
 #
 # POST /
 # operationId: AdminDisableUser
-export def "api disable-admin-user" [
+export def "admin-disable-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -627,7 +627,7 @@ export def "api disable-admin-user" [
 #
 # POST /
 # operationId: AdminEnableUser
-export def "api enable-admin-user" [
+export def "admin-enable-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -676,7 +676,7 @@ export def "api enable-admin-user" [
 #
 # POST /
 # operationId: AdminForgetDevice
-export def "api create-admin-forget-device" [
+export def "admin-forget-device" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -726,7 +726,7 @@ export def "api create-admin-forget-device" [
 #
 # POST /
 # operationId: AdminGetDevice
-export def "api get-admin-device" [
+export def "admin-get-device" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -776,7 +776,7 @@ export def "api get-admin-device" [
 #
 # POST /
 # operationId: AdminGetUser
-export def "api get-admin-user" [
+export def "admin-get-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -825,7 +825,7 @@ export def "api get-admin-user" [
 #
 # POST /
 # operationId: AdminInitiateAuth
-export def "api create-admin-initiate-auth" [
+export def "admin-initiate-auth" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -879,7 +879,7 @@ export def "api create-admin-initiate-auth" [
 #
 # POST /
 # operationId: AdminLinkProviderForUser
-export def "api create-admin-link-provider-for-user" [
+export def "admin-link-provider-for-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -929,7 +929,7 @@ export def "api create-admin-link-provider-for-user" [
 #
 # POST /
 # operationId: AdminListDevices
-export def "api list-admin-devices" [
+export def "admin-list-devices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -980,7 +980,7 @@ export def "api list-admin-devices" [
 #
 # POST /
 # operationId: AdminListGroupsForUser
-export def "api list-admin-groups-for-user" [
+export def "admin-list-groups-for-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1034,7 +1034,7 @@ export def "api list-admin-groups-for-user" [
 #
 # POST /
 # operationId: AdminListUserAuthEvents
-export def "api list-admin-user-auth-events" [
+export def "admin-list-user-auth-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1088,7 +1088,7 @@ export def "api list-admin-user-auth-events" [
 #
 # POST /
 # operationId: AdminRemoveUserFromGroup
-export def "api delete-admin-user-from-group" [
+export def "admin-remove-user-from-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1138,7 +1138,7 @@ export def "api delete-admin-user-from-group" [
 #
 # POST /
 # operationId: AdminResetUserPassword
-export def "api reset-admin-user-password" [
+export def "admin-reset-user-password" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1188,7 +1188,7 @@ export def "api reset-admin-user-password" [
 #
 # POST /
 # operationId: AdminRespondToAuthChallenge
-export def "api create-admin-respond-to-auth-challenge" [
+export def "admin-respond-to-auth-challenge" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1243,7 +1243,7 @@ export def "api create-admin-respond-to-auth-challenge" [
 #
 # POST /
 # operationId: AdminSetUserMFAPreference
-export def "api update-admin-user-mfa-preference" [
+export def "admin-set-user-mfa-preference" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1294,7 +1294,7 @@ export def "api update-admin-user-mfa-preference" [
 #
 # POST /
 # operationId: AdminSetUserPassword
-export def "api update-admin-user-password" [
+export def "admin-set-user-password" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1345,7 +1345,7 @@ export def "api update-admin-user-password" [
 #
 # POST /
 # operationId: AdminSetUserSettings
-export def "api update-admin-user-settings" [
+export def "admin-set-user-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1395,7 +1395,7 @@ export def "api update-admin-user-settings" [
 #
 # POST /
 # operationId: AdminUpdateAuthEventFeedback
-export def "api update-admin-auth-event-feedback" [
+export def "admin-update-auth-event-feedback" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1446,7 +1446,7 @@ export def "api update-admin-auth-event-feedback" [
 #
 # POST /
 # operationId: AdminUpdateDeviceStatus
-export def "api update-admin-device-status" [
+export def "admin-update-device-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1497,7 +1497,7 @@ export def "api update-admin-device-status" [
 #
 # POST /
 # operationId: AdminUpdateUserAttributes
-export def "api update-admin-user-attributes" [
+export def "admin-update-user-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1548,7 +1548,7 @@ export def "api update-admin-user-attributes" [
 #
 # POST /
 # operationId: AdminUserGlobalSignOut
-export def "api create-admin-user-global-sign-out" [
+export def "admin-user-global-sign-out" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1597,7 +1597,7 @@ export def "api create-admin-user-global-sign-out" [
 #
 # POST /
 # operationId: AssociateSoftwareToken
-export def "api create-associate-software-token" [
+export def "associate-software-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1646,7 +1646,7 @@ export def "api create-associate-software-token" [
 #
 # POST /
 # operationId: ChangePassword
-export def "api create-change-password" [
+export def "change-password" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1696,7 +1696,7 @@ export def "api create-change-password" [
 #
 # POST /
 # operationId: ConfirmDevice
-export def "api confirm-device" [
+export def "confirm-device" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1747,7 +1747,7 @@ export def "api confirm-device" [
 #
 # POST /
 # operationId: ConfirmForgotPassword
-export def "api confirm-forgot-password" [
+export def "confirm-forgot-password" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1802,7 +1802,7 @@ export def "api confirm-forgot-password" [
 #
 # POST /
 # operationId: ConfirmSignUp
-export def "api confirm-sign-up" [
+export def "confirm-sign-up" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1857,7 +1857,7 @@ export def "api confirm-sign-up" [
 #
 # POST /
 # operationId: CreateGroup
-export def "api create-group" [
+export def "create-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1909,7 +1909,7 @@ export def "api create-group" [
 #
 # POST /
 # operationId: CreateIdentityProvider
-export def "api create-identity-provider" [
+export def "create-identity-provider" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1962,7 +1962,7 @@ export def "api create-identity-provider" [
 #
 # POST /
 # operationId: CreateResourceServer
-export def "api create-resource-server" [
+export def "create-resource-server" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2013,7 +2013,7 @@ export def "api create-resource-server" [
 #
 # POST /
 # operationId: CreateUserImportJob
-export def "api create-user-import-job" [
+export def "create-user-import-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2063,7 +2063,7 @@ export def "api create-user-import-job" [
 #
 # POST /
 # operationId: CreateUserPool
-export def "api create-user-pool" [
+export def "create-user-pool" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2133,7 +2133,7 @@ export def "api create-user-pool" [
 #
 # POST /
 # operationId: CreateUserPoolClient
-export def "api create-user-pool-client" [
+export def "create-user-pool-client" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2202,7 +2202,7 @@ export def "api create-user-pool-client" [
 #
 # POST /
 # operationId: CreateUserPoolDomain
-export def "api create-user-pool-domain" [
+export def "create-user-pool-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2252,7 +2252,7 @@ export def "api create-user-pool-domain" [
 #
 # POST /
 # operationId: DeleteGroup
-export def "api delete-group" [
+export def "delete-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2301,7 +2301,7 @@ export def "api delete-group" [
 #
 # POST /
 # operationId: DeleteIdentityProvider
-export def "api delete-identity-provider" [
+export def "delete-identity-provider" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2350,7 +2350,7 @@ export def "api delete-identity-provider" [
 #
 # POST /
 # operationId: DeleteResourceServer
-export def "api delete-resource-server" [
+export def "delete-resource-server" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2399,7 +2399,7 @@ export def "api delete-resource-server" [
 #
 # POST /
 # operationId: DeleteUser
-export def "api delete-user" [
+export def "delete-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2447,7 +2447,7 @@ export def "api delete-user" [
 #
 # POST /
 # operationId: DeleteUserAttributes
-export def "api delete-user-attributes" [
+export def "delete-user-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2496,7 +2496,7 @@ export def "api delete-user-attributes" [
 #
 # POST /
 # operationId: DeleteUserPool
-export def "api delete-user-pool" [
+export def "delete-user-pool" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2544,7 +2544,7 @@ export def "api delete-user-pool" [
 #
 # POST /
 # operationId: DeleteUserPoolClient
-export def "api delete-user-pool-client" [
+export def "delete-user-pool-client" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2593,7 +2593,7 @@ export def "api delete-user-pool-client" [
 #
 # POST /
 # operationId: DeleteUserPoolDomain
-export def "api delete-user-pool-domain" [
+export def "delete-user-pool-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2642,7 +2642,7 @@ export def "api delete-user-pool-domain" [
 #
 # POST /
 # operationId: DescribeIdentityProvider
-export def "api get-identity-provider" [
+export def "describe-identity-provider" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2691,7 +2691,7 @@ export def "api get-identity-provider" [
 #
 # POST /
 # operationId: DescribeResourceServer
-export def "api get-resource-server" [
+export def "describe-resource-server" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2740,7 +2740,7 @@ export def "api get-resource-server" [
 #
 # POST /
 # operationId: DescribeRiskConfiguration
-export def "api get-risk-configuration" [
+export def "describe-risk-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2789,7 +2789,7 @@ export def "api get-risk-configuration" [
 #
 # POST /
 # operationId: DescribeUserImportJob
-export def "api get-user-import-job" [
+export def "describe-user-import-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2838,7 +2838,7 @@ export def "api get-user-import-job" [
 #
 # POST /
 # operationId: DescribeUserPool
-export def "api get-user-pool" [
+export def "describe-user-pool" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2886,7 +2886,7 @@ export def "api get-user-pool" [
 #
 # POST /
 # operationId: DescribeUserPoolClient
-export def "api get-user-pool-client" [
+export def "describe-user-pool-client" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2935,7 +2935,7 @@ export def "api get-user-pool-client" [
 #
 # POST /
 # operationId: DescribeUserPoolDomain
-export def "api get-user-pool-domain" [
+export def "describe-user-pool-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2983,7 +2983,7 @@ export def "api get-user-pool-domain" [
 #
 # POST /
 # operationId: ForgetDevice
-export def "api create-forget-device" [
+export def "forget-device" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3032,7 +3032,7 @@ export def "api create-forget-device" [
 #
 # POST /
 # operationId: ForgotPassword
-export def "api create-forgot-password" [
+export def "forgot-password" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3085,7 +3085,7 @@ export def "api create-forgot-password" [
 #
 # POST /
 # operationId: GetCSVHeader
-export def "api get-csv-header" [
+export def "get-csv-header" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3133,7 +3133,7 @@ export def "api get-csv-header" [
 #
 # POST /
 # operationId: GetDevice
-export def "api get-device" [
+export def "get-device" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3182,7 +3182,7 @@ export def "api get-device" [
 #
 # POST /
 # operationId: GetGroup
-export def "api get-group" [
+export def "get-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3231,7 +3231,7 @@ export def "api get-group" [
 #
 # POST /
 # operationId: GetIdentityProviderByIdentifier
-export def "api get-identity-provider-by-identifier" [
+export def "get-identity-provider-by-identifier" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3280,7 +3280,7 @@ export def "api get-identity-provider-by-identifier" [
 #
 # POST /
 # operationId: GetSigningCertificate
-export def "api get-signing-certificate" [
+export def "get-signing-certificate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3328,7 +3328,7 @@ export def "api get-signing-certificate" [
 #
 # POST /
 # operationId: GetUICustomization
-export def "api get-ui-customization" [
+export def "get-ui-customization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3377,7 +3377,7 @@ export def "api get-ui-customization" [
 #
 # POST /
 # operationId: GetUser
-export def "api get-user" [
+export def "get-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3425,7 +3425,7 @@ export def "api get-user" [
 #
 # POST /
 # operationId: GetUserAttributeVerificationCode
-export def "api get-user-attribute-verification-code" [
+export def "get-user-attribute-verification-code" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3475,7 +3475,7 @@ export def "api get-user-attribute-verification-code" [
 #
 # POST /
 # operationId: GetUserPoolMfaConfig
-export def "api get-user-pool-mfa-config" [
+export def "get-user-pool-mfa-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3523,7 +3523,7 @@ export def "api get-user-pool-mfa-config" [
 #
 # POST /
 # operationId: GlobalSignOut
-export def "api create-global-sign-out" [
+export def "global-sign-out" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3571,7 +3571,7 @@ export def "api create-global-sign-out" [
 #
 # POST /
 # operationId: InitiateAuth
-export def "api create-initiate-auth" [
+export def "initiate-auth" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3624,7 +3624,7 @@ export def "api create-initiate-auth" [
 #
 # POST /
 # operationId: ListDevices
-export def "api list-devices" [
+export def "list-devices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3674,7 +3674,7 @@ export def "api list-devices" [
 #
 # POST /
 # operationId: ListGroups
-export def "api list-groups" [
+export def "list-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3727,7 +3727,7 @@ export def "api list-groups" [
 #
 # POST /
 # operationId: ListIdentityProviders
-export def "api list-identity-providers" [
+export def "list-identity-providers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3780,7 +3780,7 @@ export def "api list-identity-providers" [
 #
 # POST /
 # operationId: ListResourceServers
-export def "api list-resource-servers" [
+export def "list-resource-servers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3833,7 +3833,7 @@ export def "api list-resource-servers" [
 #
 # POST /
 # operationId: ListTagsForResource
-export def "api list-tags-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3881,7 +3881,7 @@ export def "api list-tags-for-resource" [
 #
 # POST /
 # operationId: ListUserImportJobs
-export def "api list-user-import-jobs" [
+export def "list-user-import-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3931,7 +3931,7 @@ export def "api list-user-import-jobs" [
 #
 # POST /
 # operationId: ListUserPoolClients
-export def "api list-user-pool-clients" [
+export def "list-user-pool-clients" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3984,7 +3984,7 @@ export def "api list-user-pool-clients" [
 #
 # POST /
 # operationId: ListUserPools
-export def "api list-user-pools" [
+export def "list-user-pools" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4036,7 +4036,7 @@ export def "api list-user-pools" [
 #
 # POST /
 # operationId: ListUsers
-export def "api list-users" [
+export def "list-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4091,7 +4091,7 @@ export def "api list-users" [
 #
 # POST /
 # operationId: ListUsersInGroup
-export def "api list-users-in-group" [
+export def "list-users-in-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4145,7 +4145,7 @@ export def "api list-users-in-group" [
 #
 # POST /
 # operationId: ResendConfirmationCode
-export def "api resend-confirmation-code" [
+export def "resend-confirmation-code" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4198,7 +4198,7 @@ export def "api resend-confirmation-code" [
 #
 # POST /
 # operationId: RespondToAuthChallenge
-export def "api create-respond-to-auth-challenge" [
+export def "respond-to-auth-challenge" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4252,7 +4252,7 @@ export def "api create-respond-to-auth-challenge" [
 #
 # POST /
 # operationId: RevokeToken
-export def "api delete-token" [
+export def "revoke-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4302,7 +4302,7 @@ export def "api delete-token" [
 #
 # POST /
 # operationId: SetRiskConfiguration
-export def "api update-risk-configuration" [
+export def "set-risk-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4354,7 +4354,7 @@ export def "api update-risk-configuration" [
 #
 # POST /
 # operationId: SetUICustomization
-export def "api update-ui-customization" [
+export def "set-ui-customization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4405,7 +4405,7 @@ export def "api update-ui-customization" [
 #
 # POST /
 # operationId: SetUserMFAPreference
-export def "api update-user-mfa-preference" [
+export def "set-user-mfa-preference" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4455,7 +4455,7 @@ export def "api update-user-mfa-preference" [
 #
 # POST /
 # operationId: SetUserPoolMfaConfig
-export def "api update-user-pool-mfa-config" [
+export def "set-user-pool-mfa-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4506,7 +4506,7 @@ export def "api update-user-pool-mfa-config" [
 #
 # POST /
 # operationId: SetUserSettings
-export def "api update-user-settings" [
+export def "set-user-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4555,7 +4555,7 @@ export def "api update-user-settings" [
 #
 # POST /
 # operationId: SignUp
-export def "api create-sign-up" [
+export def "sign-up" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4611,7 +4611,7 @@ export def "api create-sign-up" [
 #
 # POST /
 # operationId: StartUserImportJob
-export def "api start-user-import-job" [
+export def "start-user-import-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4660,7 +4660,7 @@ export def "api start-user-import-job" [
 #
 # POST /
 # operationId: StopUserImportJob
-export def "api stop-user-import-job" [
+export def "stop-user-import-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4709,7 +4709,7 @@ export def "api stop-user-import-job" [
 #
 # POST /
 # operationId: TagResource
-export def "api tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4758,7 +4758,7 @@ export def "api tag-resource" [
 #
 # POST /
 # operationId: UntagResource
-export def "api untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4807,7 +4807,7 @@ export def "api untag-resource" [
 #
 # POST /
 # operationId: UpdateAuthEventFeedback
-export def "api update-auth-event-feedback" [
+export def "update-auth-event-feedback" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4859,7 +4859,7 @@ export def "api update-auth-event-feedback" [
 #
 # POST /
 # operationId: UpdateDeviceStatus
-export def "api update-device-status" [
+export def "update-device-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4909,7 +4909,7 @@ export def "api update-device-status" [
 #
 # POST /
 # operationId: UpdateGroup
-export def "api update-group" [
+export def "update-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4961,7 +4961,7 @@ export def "api update-group" [
 #
 # POST /
 # operationId: UpdateIdentityProvider
-export def "api update-identity-provider" [
+export def "update-identity-provider" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5013,7 +5013,7 @@ export def "api update-identity-provider" [
 #
 # POST /
 # operationId: UpdateResourceServer
-export def "api update-resource-server" [
+export def "update-resource-server" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5064,7 +5064,7 @@ export def "api update-resource-server" [
 #
 # POST /
 # operationId: UpdateUserAttributes
-export def "api update-user-attributes" [
+export def "update-user-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5114,7 +5114,7 @@ export def "api update-user-attributes" [
 #
 # POST /
 # operationId: UpdateUserPool
-export def "api update-user-pool" [
+export def "update-user-pool" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5180,7 +5180,7 @@ export def "api update-user-pool" [
 #
 # POST /
 # operationId: UpdateUserPoolClient
-export def "api update-user-pool-client" [
+export def "update-user-pool-client" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5249,7 +5249,7 @@ export def "api update-user-pool-client" [
 #
 # POST /
 # operationId: UpdateUserPoolDomain
-export def "api update-user-pool-domain" [
+export def "update-user-pool-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5299,7 +5299,7 @@ export def "api update-user-pool-domain" [
 #
 # POST /
 # operationId: VerifySoftwareToken
-export def "api verify-software-token" [
+export def "verify-software-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5350,7 +5350,7 @@ export def "api verify-software-token" [
 #
 # POST /
 # operationId: VerifyUserAttribute
-export def "api verify-user-attribute" [
+export def "verify-user-attribute" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

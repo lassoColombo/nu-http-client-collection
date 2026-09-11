@@ -129,7 +129,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "workstations-projects-locations-workstation-clusters-workstation-configs-workstations-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -153,7 +153,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1beta/{name}
 # operationId: workstations.projects.locations.workstationClusters.workstationConfigs.workstations.delete
-export def "v1beta delete" [
+export def "workstations-projects-locations-workstation-clusters-workstation-configs-workstations-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -203,7 +203,7 @@ export def "v1beta delete" [
 #
 # GET /v1beta/{name}
 # operationId: workstations.projects.locations.workstationClusters.workstationConfigs.workstations.get
-export def "v1beta get" [
+export def "workstations-projects-locations-workstation-clusters-workstation-configs-workstations-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -251,7 +251,7 @@ export def "v1beta get" [
 #
 # PATCH /v1beta/{name}
 # operationId: workstations.projects.locations.workstationClusters.workstationConfigs.workstations.patch
-export def "v1beta update" [
+export def "workstations-projects-locations-workstation-clusters-workstation-configs-workstations-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -311,7 +311,7 @@ export def "v1beta update" [
 #
 # GET /v1beta/{name}/operations
 # operationId: workstations.projects.locations.operations.list
-export def "v1beta-operations list" [
+export def "workstations-projects-locations-operations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -362,7 +362,7 @@ export def "v1beta-operations list" [
 #
 # POST /v1beta/{name}:cancel
 # operationId: workstations.projects.locations.operations.cancel
-export def "v1beta cancel" [
+export def "workstations-projects-locations-operations-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -414,7 +414,7 @@ export def "v1beta cancel" [
 #
 # POST /v1beta/{name}:start
 # operationId: workstations.projects.locations.workstationClusters.workstationConfigs.workstations.start
-export def "v1beta start" [
+export def "workstations-projects-locations-workstation-clusters-workstation-configs-workstations-start" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -467,7 +467,7 @@ export def "v1beta start" [
 #
 # POST /v1beta/{name}:stop
 # operationId: workstations.projects.locations.workstationClusters.workstationConfigs.workstations.stop
-export def "v1beta stop" [
+export def "workstations-projects-locations-workstation-clusters-workstation-configs-workstations-stop" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -520,7 +520,7 @@ export def "v1beta stop" [
 #
 # GET /v1beta/{parent}/workstationClusters
 # operationId: workstations.projects.locations.workstationClusters.list
-export def "v1beta-workstation-clusters list" [
+export def "workstations-projects-locations-workstation-clusters-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -572,7 +572,7 @@ export def "v1beta-workstation-clusters list" [
 # operationId: workstations.projects.locations.workstationClusters.create
 # --conditions item shape: {code?: int, details?: list, message?: string}
 # --privateClusterConfig shape: {allowedProjects?: list<string>, enablePrivateEndpoint?: bool}
-export def "v1beta-workstation-clusters create" [
+export def "workstations-projects-locations-workstation-clusters-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -633,7 +633,7 @@ export def "v1beta-workstation-clusters create" [
 #
 # GET /v1beta/{parent}/workstationConfigs
 # operationId: workstations.projects.locations.workstationClusters.workstationConfigs.list
-export def "v1beta-workstation-configs list" [
+export def "workstations-projects-locations-workstation-clusters-workstation-configs-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -688,7 +688,7 @@ export def "v1beta-workstation-configs list" [
 # --encryptionKey shape: {kmsKey?: string, kmsKeyServiceAccount?: string}
 # --host shape: {gceInstance?: record}
 # --persistentDirectories item shape: {gcePd?: record, mountPath?: string}
-export def "v1beta-workstation-configs create" [
+export def "workstations-projects-locations-workstation-clusters-workstation-configs-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -753,7 +753,7 @@ export def "v1beta-workstation-configs create" [
 #
 # GET /v1beta/{parent}/workstationConfigs:listUsable
 # operationId: workstations.projects.locations.workstationClusters.workstationConfigs.listUsable
-export def "v1beta-workstation-configs-list-usable list" [
+export def "workstations-projects-locations-workstation-clusters-workstation-configs-list-usable" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -803,7 +803,7 @@ export def "v1beta-workstation-configs-list-usable list" [
 #
 # GET /v1beta/{parent}/workstations
 # operationId: workstations.projects.locations.workstationClusters.workstationConfigs.workstations.list
-export def "v1beta-workstations list" [
+export def "workstations-projects-locations-workstation-clusters-workstation-configs-workstations-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -853,7 +853,7 @@ export def "v1beta-workstations list" [
 #
 # POST /v1beta/{parent}/workstations
 # operationId: workstations.projects.locations.workstationClusters.workstationConfigs.workstations.create
-export def "v1beta-workstations create" [
+export def "workstations-projects-locations-workstation-clusters-workstation-configs-workstations-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -912,7 +912,7 @@ export def "v1beta-workstations create" [
 #
 # GET /v1beta/{parent}/workstations:listUsable
 # operationId: workstations.projects.locations.workstationClusters.workstationConfigs.workstations.listUsable
-export def "v1beta-workstations-list-usable list" [
+export def "workstations-projects-locations-workstation-clusters-workstation-configs-workstations-list-usable" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -962,7 +962,7 @@ export def "v1beta-workstations-list-usable list" [
 #
 # GET /v1beta/{resource}:getIamPolicy
 # operationId: workstations.projects.locations.workstationClusters.workstationConfigs.workstations.getIamPolicy
-export def "v1beta get-iam-policy" [
+export def "workstations-projects-locations-workstation-clusters-workstation-configs-workstations-get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1012,7 +1012,7 @@ export def "v1beta get-iam-policy" [
 # POST /v1beta/{resource}:setIamPolicy
 # operationId: workstations.projects.locations.workstationClusters.workstationConfigs.workstations.setIamPolicy
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
-export def "v1beta update-iam-policy" [
+export def "workstations-projects-locations-workstation-clusters-workstation-configs-workstations-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1065,7 +1065,7 @@ export def "v1beta update-iam-policy" [
 #
 # POST /v1beta/{resource}:testIamPermissions
 # operationId: workstations.projects.locations.workstationClusters.workstationConfigs.workstations.testIamPermissions
-export def "v1beta test-iam-permissions" [
+export def "workstations-projects-locations-workstation-clusters-workstation-configs-workstations-test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1117,7 +1117,7 @@ export def "v1beta test-iam-permissions" [
 #
 # POST /v1beta/{workstation}:generateAccessToken
 # operationId: workstations.projects.locations.workstationClusters.workstationConfigs.workstations.generateAccessToken
-export def "v1beta generate-access-token" [
+export def "workstations-projects-locations-workstation-clusters-workstation-configs-workstations-generate-access-token" [
   workstation: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

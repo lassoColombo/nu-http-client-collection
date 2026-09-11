@@ -119,7 +119,7 @@ def type-completer-1 [] { ["email"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "actions get-list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-all-actions" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -143,7 +143,7 @@ export def commands []: nothing -> table {
 #
 # GET /actions
 # operationId: getAllActions
-export def "actions get-list" [
+export def "get-all-actions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -178,7 +178,7 @@ export def "actions get-list" [
 # POST /actions
 # operationId: addAction
 # --config shape: {number: string, text: string}
-export def "actions create" [
+export def "add-action" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -219,7 +219,7 @@ export def "actions create" [
 #
 # DELETE /actions/{action}
 # operationId: deleteAction
-export def "actions delete" [
+export def "delete-action" [
   action: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -256,7 +256,7 @@ export def "actions delete" [
 # PUT /actions/{action}
 # operationId: updateAction
 # --config shape: {number: string, text: string}
-export def "actions update" [
+export def "update-action" [
   action: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -299,7 +299,7 @@ export def "actions update" [
 #
 # GET /addresses
 # operationId: getAllAddresses
-export def "addresses get-list" [
+export def "get-all-addresses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -333,7 +333,7 @@ export def "addresses get-list" [
 #
 # POST /addresses
 # operationId: addAddress
-export def "addresses create-address" [
+export def "add-address" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -371,7 +371,7 @@ export def "addresses create-address" [
 #
 # DELETE /addresses/{address}
 # operationId: deleteAddress
-export def "addresses delete" [
+export def "delete-address" [
   address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -407,7 +407,7 @@ export def "addresses delete" [
 #
 # GET /addresses/{address}/keys
 # operationId: getAllKeys
-export def "addresses-keys get-list" [
+export def "get-all-keys" [
   address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -443,7 +443,7 @@ export def "addresses-keys get-list" [
 #
 # POST /addresses/{address}/keys
 # operationId: addKey
-export def "addresses-keys create" [
+export def "add-key" [
   address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -485,7 +485,7 @@ export def "addresses-keys create" [
 #
 # DELETE /addresses/{address}/keys/{key}
 # operationId: deleteKey
-export def "addresses-keys delete" [
+export def "delete-key" [
   address: string
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -523,7 +523,7 @@ export def "addresses-keys delete" [
 #
 # GET /addresses/{address}/keys/{key}
 # operationId: getKey
-export def "addresses-keys get" [
+export def "get-key" [
   address: string
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -561,7 +561,7 @@ export def "addresses-keys get" [
 #
 # PUT /addresses/{address}/keys/{key}
 # operationId: updateKey
-export def "addresses-keys update" [
+export def "update-key" [
   address: string
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -605,7 +605,7 @@ export def "addresses-keys update" [
 #
 # GET /daemons/{daemon}/token
 # operationId: getDaemonToken
-export def "daemons-token get" [
+export def "get-daemon-token" [
   daemon: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -641,7 +641,7 @@ export def "daemons-token get" [
 #
 # GET /domains
 # operationId: getAllDomains
-export def "domains get-list" [
+export def "get-all-domains" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -675,7 +675,7 @@ export def "domains get-list" [
 #
 # POST /domains
 # operationId: addDomain
-export def "domains create" [
+export def "add-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -713,7 +713,7 @@ export def "domains create" [
 #
 # GET /domains/verify/{domain}
 # operationId: getDomainVerify
-export def "domains-verify get" [
+export def "get-domain-verify" [
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -749,7 +749,7 @@ export def "domains-verify get" [
 #
 # POST /domains/verify/{domain}
 # operationId: CheckDomainVerify
-export def "domains-verify check" [
+export def "check-domain-verify" [
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -785,7 +785,7 @@ export def "domains-verify check" [
 #
 # DELETE /domains/{domain}
 # operationId: removeDomainVerify
-export def "domains delete-verify" [
+export def "remove-domain-verify" [
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -821,7 +821,7 @@ export def "domains delete-verify" [
 #
 # GET /inputs
 # operationId: getAllInputs
-export def "inputs get-list" [
+export def "get-all-inputs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -857,7 +857,7 @@ export def "inputs get-list" [
 #
 # GET /integrations
 # operationId: getAllIntegrations
-export def "integrations get-list" [
+export def "get-all-integrations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -891,7 +891,7 @@ export def "integrations get-list" [
 #
 # DELETE /integrations/{integration}
 # operationId: deleteIntegration
-export def "integrations delete" [
+export def "delete-integration" [
   integration: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -927,7 +927,7 @@ export def "integrations delete" [
 #
 # POST /send
 # operationId: send
-export def "send create" [
+export def "send" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -969,7 +969,7 @@ export def "send create" [
 #
 # GET /triggers
 # operationId: getAllTriggers
-export def "triggers get-list" [
+export def "get-all-triggers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1003,7 +1003,7 @@ export def "triggers get-list" [
 #
 # POST /triggers
 # operationId: addTrigger
-export def "triggers create" [
+export def "add-trigger" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1042,7 +1042,7 @@ export def "triggers create" [
 #
 # DELETE /triggers/{trigger}
 # operationId: deleteTrigger
-export def "triggers delete" [
+export def "delete-trigger" [
   trigger: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1078,7 +1078,7 @@ export def "triggers delete" [
 #
 # PUT /triggers/{trigger}
 # operationId: updateTrigger
-export def "triggers update" [
+export def "update-trigger" [
   trigger: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1119,7 +1119,7 @@ export def "triggers update" [
 #
 # GET /user
 # operationId: getAuthenticatedUser
-export def "user get-authenticated" [
+export def "get-authenticated-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1153,7 +1153,7 @@ export def "user get-authenticated" [
 #
 # PUT /user
 # operationId: updateUser
-export def "user update" [
+export def "update-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1191,7 +1191,7 @@ export def "user update" [
 #
 # GET /verifications
 # operationId: getAllVerifications
-export def "verifications get-list" [
+export def "get-all-verifications" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1225,7 +1225,7 @@ export def "verifications get-list" [
 #
 # POST /verifications
 # operationId: addVerification
-export def "verifications create" [
+export def "add-verification" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1265,7 +1265,7 @@ export def "verifications create" [
 #
 # POST /verifications/{verification}/verify
 # operationId: verify
-export def "verifications-verify verify" [
+export def "verify" [
   verification: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1307,7 +1307,7 @@ export def "verifications-verify verify" [
 #
 # GET /workflows
 # operationId: getAllWorkflows
-export def "workflows get-list" [
+export def "get-all-workflows" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1341,7 +1341,7 @@ export def "workflows get-list" [
 #
 # POST /workflows
 # operationId: addWorkflow
-export def "workflows create" [
+export def "add-workflow" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1383,7 +1383,7 @@ export def "workflows create" [
 #
 # POST /workflows/set
 # operationId: setWorkflow
-export def "workflows-set update" [
+export def "set-workflow" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1422,7 +1422,7 @@ export def "workflows-set update" [
 #
 # DELETE /workflows/{workflow}
 # operationId: deleteWorkflow
-export def "workflows delete" [
+export def "delete-workflow" [
   workflow: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1458,7 +1458,7 @@ export def "workflows delete" [
 #
 # PUT /workflows/{workflow}
 # operationId: updateWorkflow
-export def "workflows update" [
+export def "update-workflow" [
   workflow: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1502,7 +1502,7 @@ export def "workflows update" [
 #
 # GET /workspaces
 # operationId: getAllWorkspaces
-export def "workspaces get-list" [
+export def "get-all-workspaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1536,7 +1536,7 @@ export def "workspaces get-list" [
 #
 # POST /workspaces
 # operationId: addWorkspace
-export def "workspaces create" [
+export def "add-workspace" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

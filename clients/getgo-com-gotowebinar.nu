@@ -118,7 +118,7 @@ def type-completer [] { ["Hybrid" "PSTN" "Private" "VOIP"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts-webinars get-list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-all-account-webinars" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -142,7 +142,7 @@ export def commands []: nothing -> table {
 #
 # GET /accounts/{accountKey}/webinars
 # operationId: getAllAccountWebinars
-export def "accounts-webinars get-list" [
+export def "get-all-account-webinars" [
   account_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -186,7 +186,7 @@ export def "accounts-webinars get-list" [
 #
 # GET /organizers/{organizerKey}/historicalWebinars
 # operationId: getHistoricalWebinars
-export def "organizers-historical-webinars get" [
+export def "get-historical-webinars" [
   organizer_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -228,7 +228,7 @@ export def "organizers-historical-webinars get" [
 #
 # GET /organizers/{organizerKey}/sessions
 # operationId: getOrganizerSessions
-export def "organizers-sessions get" [
+export def "get-organizer-sessions" [
   organizer_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -270,7 +270,7 @@ export def "organizers-sessions get" [
 #
 # GET /organizers/{organizerKey}/upcomingWebinars
 # operationId: getUpcomingWebinars
-export def "organizers-upcoming-webinars get" [
+export def "get-upcoming-webinars" [
   organizer_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -309,7 +309,7 @@ export def "organizers-upcoming-webinars get" [
 #
 # GET /organizers/{organizerKey}/webinars
 # operationId: getAllWebinars
-export def "organizers-webinars get-list" [
+export def "get-all-webinars" [
   organizer_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -349,7 +349,7 @@ export def "organizers-webinars get-list" [
 # POST /organizers/{organizerKey}/webinars
 # operationId: createWebinar
 # --times item shape: {endTime: string, startTime: string}
-export def "organizers-webinars create" [
+export def "create-webinar" [
   organizer_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -397,7 +397,7 @@ export def "organizers-webinars create" [
 #
 # DELETE /organizers/{organizerKey}/webinars/{webinarKey}
 # operationId: cancelWebinar
-export def "organizers-webinars cancel" [
+export def "cancel-webinar" [
   organizer_key: int
   webinar_key: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -440,7 +440,7 @@ export def "organizers-webinars cancel" [
 #
 # GET /organizers/{organizerKey}/webinars/{webinarKey}
 # operationId: getWebinar
-export def "organizers-webinars get" [
+export def "get-webinar" [
   organizer_key: int
   webinar_key: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -482,7 +482,7 @@ export def "organizers-webinars get" [
 # PUT /organizers/{organizerKey}/webinars/{webinarKey}
 # operationId: updateWebinar
 # --times item shape: {endTime: string, startTime: string}
-export def "organizers-webinars update" [
+export def "update-webinar" [
   organizer_key: int
   webinar_key: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -533,7 +533,7 @@ export def "organizers-webinars update" [
 #
 # GET /organizers/{organizerKey}/webinars/{webinarKey}/attendees
 # operationId: getAttendeesForAllWebinarSessions
-export def "organizers-webinars-attendees get-for-list-sessions" [
+export def "get-attendees-for-all-webinar-sessions" [
   organizer_key: int
   webinar_key: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -574,7 +574,7 @@ export def "organizers-webinars-attendees get-for-list-sessions" [
 #
 # GET /organizers/{organizerKey}/webinars/{webinarKey}/audio
 # operationId: getAudioInformation
-export def "organizers-webinars-audio get-information" [
+export def "get-audio-information" [
   organizer_key: int
   webinar_key: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -617,7 +617,7 @@ export def "organizers-webinars-audio get-information" [
 # operationId: updateAudioInformation
 # --privateInfo shape: {attendee: string, organizer?: string, panelist?: string}
 # --pstnInfo shape: {tollCountries?: list<string>, tollFreeCountries?: list<string>}
-export def "organizers-webinars-audio update-information" [
+export def "update-audio-information" [
   organizer_key: int
   webinar_key: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -666,7 +666,7 @@ export def "organizers-webinars-audio update-information" [
 #
 # GET /organizers/{organizerKey}/webinars/{webinarKey}/coorganizers
 # operationId: getCoorganizers
-export def "organizers-webinars-coorganizers get" [
+export def "get-coorganizers" [
   organizer_key: int
   webinar_key: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -707,7 +707,7 @@ export def "organizers-webinars-coorganizers get" [
 #
 # POST /organizers/{organizerKey}/webinars/{webinarKey}/coorganizers
 # operationId: createCoorganizers
-export def "organizers-webinars-coorganizers create" [
+export def "create-coorganizers" [
   organizer_key: int
   webinar_key: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -752,7 +752,7 @@ export def "organizers-webinars-coorganizers create" [
 #
 # DELETE /organizers/{organizerKey}/webinars/{webinarKey}/coorganizers/{coorganizerKey}
 # operationId: deleteCoorganizer
-export def "organizers-webinars-coorganizers delete" [
+export def "delete-coorganizer" [
   organizer_key: int
   webinar_key: int
   coorganizer_key: int
@@ -797,7 +797,7 @@ export def "organizers-webinars-coorganizers delete" [
 #
 # POST /organizers/{organizerKey}/webinars/{webinarKey}/coorganizers/{coorganizerKey}/resendInvitation
 # operationId: resendCoorganizerInvitation
-export def "organizers-webinars-coorganizers-resend-invitation resend" [
+export def "resend-coorganizer-invitation" [
   organizer_key: int
   webinar_key: int
   coorganizer_key: int
@@ -842,7 +842,7 @@ export def "organizers-webinars-coorganizers-resend-invitation resend" [
 #
 # GET /organizers/{organizerKey}/webinars/{webinarKey}/meetingtimes
 # operationId: getWebinarMeetingTimes
-export def "organizers-webinars-meetingtimes get-meeting-times" [
+export def "get-webinar-meeting-times" [
   organizer_key: int
   webinar_key: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -883,7 +883,7 @@ export def "organizers-webinars-meetingtimes get-meeting-times" [
 #
 # GET /organizers/{organizerKey}/webinars/{webinarKey}/panelists
 # operationId: getPanelists
-export def "organizers-webinars-panelists get" [
+export def "get-panelists" [
   organizer_key: int
   webinar_key: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -924,7 +924,7 @@ export def "organizers-webinars-panelists get" [
 #
 # POST /organizers/{organizerKey}/webinars/{webinarKey}/panelists
 # operationId: createPanelists
-export def "organizers-webinars-panelists create" [
+export def "create-panelists" [
   organizer_key: int
   webinar_key: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -969,7 +969,7 @@ export def "organizers-webinars-panelists create" [
 #
 # DELETE /organizers/{organizerKey}/webinars/{webinarKey}/panelists/{panelistKey}
 # operationId: deleteWebinarPanelist
-export def "organizers-webinars-panelists delete" [
+export def "delete-webinar-panelist" [
   organizer_key: int
   webinar_key: int
   panelist_key: int
@@ -1012,7 +1012,7 @@ export def "organizers-webinars-panelists delete" [
 #
 # POST /organizers/{organizerKey}/webinars/{webinarKey}/panelists/{panelistKey}/resendInvitation
 # operationId: resendPanelistInvitation
-export def "organizers-webinars-panelists-resend-invitation resend" [
+export def "resend-panelist-invitation" [
   organizer_key: int
   webinar_key: int
   panelist_key: int
@@ -1055,7 +1055,7 @@ export def "organizers-webinars-panelists-resend-invitation resend" [
 #
 # GET /organizers/{organizerKey}/webinars/{webinarKey}/performance
 # operationId: getPerformanceForAllWebinarSessions
-export def "organizers-webinars-performance get-for-list-sessions" [
+export def "get-performance-for-all-webinar-sessions" [
   organizer_key: int
   webinar_key: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1096,7 +1096,7 @@ export def "organizers-webinars-performance get-for-list-sessions" [
 #
 # GET /organizers/{organizerKey}/webinars/{webinarKey}/registrants
 # operationId: getAllRegistrantsForWebinar
-export def "organizers-webinars-registrants get-list" [
+export def "get-all-registrants-for-webinar" [
   organizer_key: int
   webinar_key: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1138,7 +1138,7 @@ export def "organizers-webinars-registrants get-list" [
 # POST /organizers/{organizerKey}/webinars/{webinarKey}/registrants
 # operationId: createRegistrant
 # --responses item shape: {answerKey?: int, questionKey: int, responseText?: string}
-export def "organizers-webinars-registrants create" [
+export def "create-registrant" [
   organizer_key: int
   webinar_key: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1203,7 +1203,7 @@ export def "organizers-webinars-registrants create" [
 #
 # GET /organizers/{organizerKey}/webinars/{webinarKey}/registrants/fields
 # operationId: getRegistrationFields
-export def "organizers-webinars-registrants-fields get-registration" [
+export def "get-registration-fields" [
   organizer_key: int
   webinar_key: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1244,7 +1244,7 @@ export def "organizers-webinars-registrants-fields get-registration" [
 #
 # DELETE /organizers/{organizerKey}/webinars/{webinarKey}/registrants/{registrantKey}
 # operationId: deleteRegistrant
-export def "organizers-webinars-registrants delete" [
+export def "delete-registrant" [
   organizer_key: int
   webinar_key: int
   registrant_key: int
@@ -1287,7 +1287,7 @@ export def "organizers-webinars-registrants delete" [
 #
 # GET /organizers/{organizerKey}/webinars/{webinarKey}/registrants/{registrantKey}
 # operationId: getRegistrant
-export def "organizers-webinars-registrants get" [
+export def "get-registrant" [
   organizer_key: int
   webinar_key: int
   registrant_key: int
@@ -1330,7 +1330,7 @@ export def "organizers-webinars-registrants get" [
 #
 # GET /organizers/{organizerKey}/webinars/{webinarKey}/sessions
 # operationId: getAllSessions
-export def "organizers-webinars-sessions get-list" [
+export def "get-all-sessions" [
   organizer_key: int
   webinar_key: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1371,7 +1371,7 @@ export def "organizers-webinars-sessions get-list" [
 #
 # GET /organizers/{organizerKey}/webinars/{webinarKey}/sessions/{sessionKey}
 # operationId: getWebinarSession
-export def "organizers-webinars-sessions get" [
+export def "get-webinar-session" [
   organizer_key: int
   webinar_key: int
   session_key: int
@@ -1414,7 +1414,7 @@ export def "organizers-webinars-sessions get" [
 #
 # GET /organizers/{organizerKey}/webinars/{webinarKey}/sessions/{sessionKey}/attendees
 # operationId: getAttendees
-export def "organizers-webinars-sessions-attendees list" [
+export def "get-attendees" [
   organizer_key: int
   webinar_key: int
   session_key: int
@@ -1457,7 +1457,7 @@ export def "organizers-webinars-sessions-attendees list" [
 #
 # GET /organizers/{organizerKey}/webinars/{webinarKey}/sessions/{sessionKey}/attendees/{registrantKey}
 # operationId: getAttendee
-export def "organizers-webinars-sessions-attendees get" [
+export def "get-attendee" [
   organizer_key: int
   webinar_key: int
   session_key: int
@@ -1502,7 +1502,7 @@ export def "organizers-webinars-sessions-attendees get" [
 #
 # GET /organizers/{organizerKey}/webinars/{webinarKey}/sessions/{sessionKey}/attendees/{registrantKey}/polls
 # operationId: getAttendeePollAnswers
-export def "organizers-webinars-sessions-attendees-polls get-answers" [
+export def "get-attendee-poll-answers" [
   organizer_key: int
   webinar_key: int
   session_key: int
@@ -1547,7 +1547,7 @@ export def "organizers-webinars-sessions-attendees-polls get-answers" [
 #
 # GET /organizers/{organizerKey}/webinars/{webinarKey}/sessions/{sessionKey}/attendees/{registrantKey}/questions
 # operationId: getAttendeeQuestions
-export def "organizers-webinars-sessions-attendees-questions get" [
+export def "get-attendee-questions" [
   organizer_key: int
   webinar_key: int
   session_key: int
@@ -1592,7 +1592,7 @@ export def "organizers-webinars-sessions-attendees-questions get" [
 #
 # GET /organizers/{organizerKey}/webinars/{webinarKey}/sessions/{sessionKey}/attendees/{registrantKey}/surveys
 # operationId: getAttendeeSurveyAnswers
-export def "organizers-webinars-sessions-attendees-surveys get-answers" [
+export def "get-attendee-survey-answers" [
   organizer_key: int
   webinar_key: int
   session_key: int
@@ -1637,7 +1637,7 @@ export def "organizers-webinars-sessions-attendees-surveys get-answers" [
 #
 # GET /organizers/{organizerKey}/webinars/{webinarKey}/sessions/{sessionKey}/performance
 # operationId: getPerformance
-export def "organizers-webinars-sessions-performance get" [
+export def "get-performance" [
   organizer_key: int
   webinar_key: int
   session_key: int
@@ -1680,7 +1680,7 @@ export def "organizers-webinars-sessions-performance get" [
 #
 # GET /organizers/{organizerKey}/webinars/{webinarKey}/sessions/{sessionKey}/polls
 # operationId: getPolls
-export def "organizers-webinars-sessions-polls get" [
+export def "get-polls" [
   organizer_key: int
   webinar_key: int
   session_key: int
@@ -1723,7 +1723,7 @@ export def "organizers-webinars-sessions-polls get" [
 #
 # GET /organizers/{organizerKey}/webinars/{webinarKey}/sessions/{sessionKey}/questions
 # operationId: getQuestions
-export def "organizers-webinars-sessions-questions get" [
+export def "get-questions" [
   organizer_key: int
   webinar_key: int
   session_key: int
@@ -1766,7 +1766,7 @@ export def "organizers-webinars-sessions-questions get" [
 #
 # GET /organizers/{organizerKey}/webinars/{webinarKey}/sessions/{sessionKey}/surveys
 # operationId: getSurveys
-export def "organizers-webinars-sessions-surveys get" [
+export def "get-surveys" [
   organizer_key: int
   webinar_key: int
   session_key: int

@@ -99,7 +99,7 @@ def incident-type-completer [] { ["chop_shop" "crash" "hazard" "infrastructure_i
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "incidents list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-version-incidents-format" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -123,7 +123,7 @@ export def commands []: nothing -> table {
 #
 # GET /v2/incidents
 # operationId: GET--version-incidents---format-
-export def "incidents list" [
+export def "get-version-incidents-format" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -165,7 +165,7 @@ export def "incidents list" [
 # GET /v2/incidents/{id}
 #
 # operationId: GET--version-incidents--id---format-
-export def "incidents get-version-format" [
+export def "get-version-incidents-id-format" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -201,7 +201,7 @@ export def "incidents get-version-format" [
 #
 # GET /v2/locations
 # operationId: GET--version-locations---format-
-export def "locations get-version-format" [
+export def "get-version-locations-format" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -244,7 +244,7 @@ export def "locations get-version-format" [
 #
 # GET /v2/locations/markers
 # operationId: GET--version-locations-markers---format-
-export def "locations-markers get-version-format" [
+export def "get-version-locations-markers-format" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

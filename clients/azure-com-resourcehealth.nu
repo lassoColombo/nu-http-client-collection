@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-resource-health-emerging-issues list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "emerging-issues-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -122,7 +122,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.ResourceHealth/emergingIssues
 # operationId: EmergingIssues_List
-export def "providers-microsoft-resource-health-emerging-issues list" [
+export def "emerging-issues-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -158,7 +158,7 @@ export def "providers-microsoft-resource-health-emerging-issues list" [
 #
 # GET /providers/Microsoft.ResourceHealth/emergingIssues/{issueName}
 # operationId: EmergingIssues_Get
-export def "providers-microsoft-resource-health-emerging-issues get" [
+export def "emerging-issues-get" [
   issue_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -196,7 +196,7 @@ export def "providers-microsoft-resource-health-emerging-issues get" [
 #
 # GET /providers/Microsoft.ResourceHealth/operations
 # operationId: Operations_List
-export def "providers-microsoft-resource-health-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -232,7 +232,7 @@ export def "providers-microsoft-resource-health-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.ResourceHealth/availabilityStatuses
 # operationId: AvailabilityStatuses_ListBySubscriptionId
-export def "subscriptions-providers-microsoft-resource-health-availability-statuses list" [
+export def "availability-statuses-list-by-subscription-id" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -272,7 +272,7 @@ export def "subscriptions-providers-microsoft-resource-health-availability-statu
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ResourceHealth/availabilityStatuses
 # operationId: AvailabilityStatuses_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-resource-health-availability-statuses list" [
+export def "availability-statuses-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -314,7 +314,7 @@ export def "subscriptions-resource-groups-providers-microsoft-resource-health-av
 #
 # GET /{resourceUri}/providers/Microsoft.ResourceHealth/availabilityStatuses
 # operationId: AvailabilityStatuses_List
-export def "providers-microsoft-resource-health-availability-statuses list" [
+export def "availability-statuses-list" [
   resource_uri: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -354,7 +354,7 @@ export def "providers-microsoft-resource-health-availability-statuses list" [
 #
 # GET /{resourceUri}/providers/Microsoft.ResourceHealth/availabilityStatuses/current
 # operationId: AvailabilityStatuses_GetByResource
-export def "providers-microsoft-resource-health-availability-statuses-current get" [
+export def "availability-statuses-get-by-resource" [
   resource_uri: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -394,7 +394,7 @@ export def "providers-microsoft-resource-health-availability-statuses-current ge
 #
 # GET /{resourceUri}/providers/Microsoft.ResourceHealth/childAvailabilityStatuses
 # operationId: ChildAvailabilityStatuses_List
-export def "providers-microsoft-resource-health-child-availability-statuses list" [
+export def "child-availability-statuses-list" [
   resource_uri: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -434,7 +434,7 @@ export def "providers-microsoft-resource-health-child-availability-statuses list
 #
 # GET /{resourceUri}/providers/Microsoft.ResourceHealth/childAvailabilityStatuses/current
 # operationId: ChildAvailabilityStatuses_GetByResource
-export def "providers-microsoft-resource-health-child-availability-statuses-current get" [
+export def "child-availability-statuses-get-by-resource" [
   resource_uri: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -474,7 +474,7 @@ export def "providers-microsoft-resource-health-child-availability-statuses-curr
 #
 # GET /{resourceUri}/providers/Microsoft.ResourceHealth/childResources
 # operationId: ChildResources_List
-export def "providers-microsoft-resource-health-child-resources list" [
+export def "child-resources-list" [
   resource_uri: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

@@ -106,7 +106,7 @@ def output-completer [] { ["JSON" "JSONP" "XML"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "eff-rest-services-download-effluent-chart get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-eff-rest-services-download-effluent-chart" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -129,7 +129,7 @@ export def commands []: nothing -> table {
 # Effluent Charts Download Service
 #
 # GET /eff_rest_services.download_effluent_chart
-export def "eff-rest-services-download-effluent-chart get" [
+export def "get-eff-rest-services-download-effluent-chart" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -169,7 +169,7 @@ export def "eff-rest-services-download-effluent-chart get" [
 # Effluent Charts Download Service
 #
 # POST /eff_rest_services.download_effluent_chart
-export def "eff-rest-services-download-effluent-chart create" [
+export def "post-eff-rest-services-download-effluent-chart" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -212,7 +212,7 @@ export def "eff-rest-services-download-effluent-chart create" [
 # Detailed Effluent Chart Service
 #
 # GET /eff_rest_services.get_effluent_chart
-export def "eff-rest-services-get-effluent-chart get" [
+export def "get-eff-rest-services-get-effluent-chart" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -254,7 +254,7 @@ export def "eff-rest-services-get-effluent-chart get" [
 # Detailed Effluent Chart Service
 #
 # POST /eff_rest_services.get_effluent_chart
-export def "eff-rest-services-get-effluent-chart create" [
+export def "post-eff-rest-services-get-effluent-chart" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -299,7 +299,7 @@ export def "eff-rest-services-get-effluent-chart create" [
 # Summary Effluent Chart Service
 #
 # GET /eff_rest_services.get_summary_chart
-export def "eff-rest-services-get-summary-chart get" [
+export def "get-eff-rest-services-get-summary-chart" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -339,7 +339,7 @@ export def "eff-rest-services-get-summary-chart get" [
 # Summary Effluent Chart Service
 #
 # POST /eff_rest_services.get_summary_chart
-export def "eff-rest-services-get-summary-chart create" [
+export def "post-eff-rest-services-get-summary-chart" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -382,7 +382,7 @@ export def "eff-rest-services-get-summary-chart create" [
 # ECHO CWA Parameter Lookup Service
 #
 # GET /rest_lookups.cwa_parameters
-export def "rest-lookups-cwa-parameters get" [
+export def "get-rest-lookups-cwa-parameters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -421,7 +421,7 @@ export def "rest-lookups-cwa-parameters get" [
 # ECHO CWA Parameter Lookup Service
 #
 # POST /rest_lookups.cwa_parameters
-export def "rest-lookups-cwa-parameters create" [
+export def "post-rest-lookups-cwa-parameters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

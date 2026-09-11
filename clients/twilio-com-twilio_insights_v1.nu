@@ -114,7 +114,7 @@ def processing-state-completer-1 [] { ["complete" "partial"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "conferences list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-conference" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -138,7 +138,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/Conferences
 # operationId: ListConference
-export def "conferences list" [
+export def "list-conference" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -186,7 +186,7 @@ export def "conferences list" [
 #
 # GET /v1/Conferences/{ConferenceSid}
 # operationId: FetchConference
-export def "conferences get" [
+export def "fetch-conference" [
   conference_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -222,7 +222,7 @@ export def "conferences get" [
 #
 # GET /v1/Conferences/{ConferenceSid}/Participants
 # operationId: ListConferenceParticipant
-export def "conferences-participants list" [
+export def "list-conference-participant" [
   conference_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -265,7 +265,7 @@ export def "conferences-participants list" [
 #
 # GET /v1/Conferences/{ConferenceSid}/Participants/{ParticipantSid}
 # operationId: FetchConferenceParticipant
-export def "conferences-participants get" [
+export def "fetch-conference-participant" [
   conference_sid: string
   participant_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -306,7 +306,7 @@ export def "conferences-participants get" [
 #
 # GET /v1/Video/Rooms
 # operationId: ListVideoRoomSummary
-export def "video-rooms list-summary" [
+export def "list-video-room-summary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -349,7 +349,7 @@ export def "video-rooms list-summary" [
 #
 # GET /v1/Video/Rooms/{RoomSid}
 # operationId: FetchVideoRoomSummary
-export def "video-rooms get-summary" [
+export def "fetch-video-room-summary" [
   room_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -385,7 +385,7 @@ export def "video-rooms get-summary" [
 #
 # GET /v1/Video/Rooms/{RoomSid}/Participants
 # operationId: ListVideoParticipantSummary
-export def "video-rooms-participants list-summary" [
+export def "list-video-participant-summary" [
   room_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -425,7 +425,7 @@ export def "video-rooms-participants list-summary" [
 #
 # GET /v1/Video/Rooms/{RoomSid}/Participants/{ParticipantSid}
 # operationId: FetchVideoParticipantSummary
-export def "video-rooms-participants get-summary" [
+export def "fetch-video-participant-summary" [
   room_sid: string
   participant_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -462,7 +462,7 @@ export def "video-rooms-participants get-summary" [
 # GET /v1/Voice/Settings
 #
 # operationId: FetchAccountSettings
-export def "voice-settings get-account" [
+export def "fetch-account-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -497,7 +497,7 @@ export def "voice-settings get-account" [
 # POST /v1/Voice/Settings
 #
 # operationId: UpdateAccountSettings
-export def "voice-settings update-account" [
+export def "update-account-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -537,7 +537,7 @@ export def "voice-settings update-account" [
 # GET /v1/Voice/Summaries
 #
 # operationId: ListCallSummaries
-export def "voice-summaries list-call" [
+export def "list-call-summaries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -594,7 +594,7 @@ export def "voice-summaries list-call" [
 #
 # GET /v1/Voice/{CallSid}/Annotation
 # operationId: FetchAnnotation
-export def "voice-annotation get" [
+export def "fetch-annotation" [
   call_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -630,7 +630,7 @@ export def "voice-annotation get" [
 #
 # POST /v1/Voice/{CallSid}/Annotation
 # operationId: UpdateAnnotation
-export def "voice-annotation update" [
+export def "update-annotation" [
   call_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -676,7 +676,7 @@ export def "voice-annotation update" [
 # GET /v1/Voice/{CallSid}/Events
 #
 # operationId: ListEvent
-export def "voice-events list" [
+export def "list-event" [
   call_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -716,7 +716,7 @@ export def "voice-events list" [
 # GET /v1/Voice/{CallSid}/Metrics
 #
 # operationId: ListMetric
-export def "voice-metrics list" [
+export def "list-metric" [
   call_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -757,7 +757,7 @@ export def "voice-metrics list" [
 # GET /v1/Voice/{CallSid}/Summary
 #
 # operationId: FetchSummary
-export def "voice-summary get" [
+export def "fetch-summary" [
   call_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -794,7 +794,7 @@ export def "voice-summary get" [
 # GET /v1/Voice/{Sid}
 #
 # operationId: FetchCall
-export def "voice get-call" [
+export def "fetch-call" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

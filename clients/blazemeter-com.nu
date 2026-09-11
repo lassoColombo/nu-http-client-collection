@@ -118,7 +118,7 @@ def accept-completer [] { ["application/json" "text/csv" "text/html" "text/javas
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "user-active-sessions get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "active-sessions" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -141,7 +141,7 @@ export def commands []: nothing -> table {
 # GET /user/active/sessions
 #
 # operationId: active_sessions
-export def "user-active-sessions get" [
+export def "active-sessions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -175,7 +175,7 @@ export def "user-active-sessions get" [
 # POST /user/active/terminate
 #
 # operationId: panic_terminate
-export def "user-active-terminate create-panic" [
+export def "panic-terminate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -214,7 +214,7 @@ export def "user-active-terminate create-panic" [
 #
 # GET /user/collections
 # operationId: retrieveCollections
-export def "user-collections get" [
+export def "retrieve-collections" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -251,7 +251,7 @@ export def "user-collections get" [
 # GET /user/invites
 #
 # operationId: retrieveInvites
-export def "user-invites get" [
+export def "retrieve-invites" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -286,7 +286,7 @@ export def "user-invites get" [
 #
 # GET /user/locations
 # operationId: retrieveLocations
-export def "user-locations get" [
+export def "retrieve-locations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -321,7 +321,7 @@ export def "user-locations get" [
 #
 # GET /user/masters
 # operationId: retrieveMasters
-export def "user-masters get" [
+export def "retrieve-masters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -358,7 +358,7 @@ export def "user-masters get" [
 # Update user name
 #
 # PATCH /user/password
-export def "user-password update" [
+export def "patch-user-password" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -396,7 +396,7 @@ export def "user-password update" [
 # Update user name
 #
 # POST /user/password
-export def "user-password create" [
+export def "post-user-password" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -434,7 +434,7 @@ export def "user-password create" [
 # Update user name
 #
 # PUT /user/password
-export def "user-password update-1" [
+export def "put-user-password" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -473,7 +473,7 @@ export def "user-password update-1" [
 #
 # GET /user/projects
 # operationId: retrieveProjects
-export def "user-projects get" [
+export def "retrieve-projects" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -508,7 +508,7 @@ export def "user-projects get" [
 #
 # GET /user/register
 # operationId: register_retrieve
-export def "user-register get" [
+export def "register-retrieve" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -548,7 +548,7 @@ export def "user-register get" [
 #
 # POST /user/register
 # operationId: register
-export def "user-register create" [
+export def "register" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -587,7 +587,7 @@ export def "user-register create" [
 #
 # GET /user/tests
 # operationId: retrieveTests
-export def "user-tests get" [
+export def "retrieve-tests" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -624,7 +624,7 @@ export def "user-tests get" [
 # GET /user/top
 #
 # operationId: top
-export def "user-top top" [
+export def "top" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

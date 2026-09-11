@@ -192,7 +192,7 @@ def x-amz-target-completer-91 [] { ["StarlingDoveService.UntagResource"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api get-batch-aggregate-resource-config" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "batch-get-aggregate-resource-config" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -216,7 +216,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: BatchGetAggregateResourceConfig
-export def "api get-batch-aggregate-resource-config" [
+export def "batch-get-aggregate-resource-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -265,7 +265,7 @@ export def "api get-batch-aggregate-resource-config" [
 #
 # POST /
 # operationId: BatchGetResourceConfig
-export def "api get-batch-resource-config" [
+export def "batch-get-resource-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -313,7 +313,7 @@ export def "api get-batch-resource-config" [
 #
 # POST /
 # operationId: DeleteAggregationAuthorization
-export def "api delete-aggregation-authorization" [
+export def "delete-aggregation-authorization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -362,7 +362,7 @@ export def "api delete-aggregation-authorization" [
 #
 # POST /
 # operationId: DeleteConfigRule
-export def "api delete-config-rule" [
+export def "delete-config-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -410,7 +410,7 @@ export def "api delete-config-rule" [
 #
 # POST /
 # operationId: DeleteConfigurationAggregator
-export def "api delete-configuration-aggregator" [
+export def "delete-configuration-aggregator" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -458,7 +458,7 @@ export def "api delete-configuration-aggregator" [
 #
 # POST /
 # operationId: DeleteConfigurationRecorder
-export def "api delete-configuration-recorder" [
+export def "delete-configuration-recorder" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -506,7 +506,7 @@ export def "api delete-configuration-recorder" [
 #
 # POST /
 # operationId: DeleteConformancePack
-export def "api delete-conformance-pack" [
+export def "delete-conformance-pack" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -554,7 +554,7 @@ export def "api delete-conformance-pack" [
 #
 # POST /
 # operationId: DeleteDeliveryChannel
-export def "api delete-delivery-channel" [
+export def "delete-delivery-channel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -602,7 +602,7 @@ export def "api delete-delivery-channel" [
 #
 # POST /
 # operationId: DeleteEvaluationResults
-export def "api delete-evaluation-results" [
+export def "delete-evaluation-results" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -650,7 +650,7 @@ export def "api delete-evaluation-results" [
 #
 # POST /
 # operationId: DeleteOrganizationConfigRule
-export def "api delete-organization-config-rule" [
+export def "delete-organization-config-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -698,7 +698,7 @@ export def "api delete-organization-config-rule" [
 #
 # POST /
 # operationId: DeleteOrganizationConformancePack
-export def "api delete-organization-conformance-pack" [
+export def "delete-organization-conformance-pack" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -746,7 +746,7 @@ export def "api delete-organization-conformance-pack" [
 #
 # POST /
 # operationId: DeletePendingAggregationRequest
-export def "api delete-pending-aggregation-request" [
+export def "delete-pending-aggregation-request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -795,7 +795,7 @@ export def "api delete-pending-aggregation-request" [
 #
 # POST /
 # operationId: DeleteRemediationConfiguration
-export def "api delete-remediation-configuration" [
+export def "delete-remediation-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -844,7 +844,7 @@ export def "api delete-remediation-configuration" [
 #
 # POST /
 # operationId: DeleteRemediationExceptions
-export def "api delete-remediation-exceptions" [
+export def "delete-remediation-exceptions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -893,7 +893,7 @@ export def "api delete-remediation-exceptions" [
 #
 # POST /
 # operationId: DeleteResourceConfig
-export def "api delete-resource-config" [
+export def "delete-resource-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -942,7 +942,7 @@ export def "api delete-resource-config" [
 #
 # POST /
 # operationId: DeleteRetentionConfiguration
-export def "api delete-retention-configuration" [
+export def "delete-retention-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -990,7 +990,7 @@ export def "api delete-retention-configuration" [
 #
 # POST /
 # operationId: DeleteStoredQuery
-export def "api delete-stored-list" [
+export def "delete-stored-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1038,7 +1038,7 @@ export def "api delete-stored-list" [
 #
 # POST /
 # operationId: DeliverConfigSnapshot
-export def "api create-deliver-config-snapshot" [
+export def "deliver-config-snapshot" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1086,7 +1086,7 @@ export def "api create-deliver-config-snapshot" [
 #
 # POST /
 # operationId: DescribeAggregateComplianceByConfigRules
-export def "api get-aggregate-compliance-by-config-rules" [
+export def "describe-aggregate-compliance-by-config-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1140,7 +1140,7 @@ export def "api get-aggregate-compliance-by-config-rules" [
 #
 # POST /
 # operationId: DescribeAggregateComplianceByConformancePacks
-export def "api get-aggregate-compliance-by-conformance-packs" [
+export def "describe-aggregate-compliance-by-conformance-packs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1194,7 +1194,7 @@ export def "api get-aggregate-compliance-by-conformance-packs" [
 #
 # POST /
 # operationId: DescribeAggregationAuthorizations
-export def "api get-aggregation-authorizations" [
+export def "describe-aggregation-authorizations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1246,7 +1246,7 @@ export def "api get-aggregation-authorizations" [
 #
 # POST /
 # operationId: DescribeComplianceByConfigRule
-export def "api get-compliance-by-config-rule" [
+export def "describe-compliance-by-config-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1298,7 +1298,7 @@ export def "api get-compliance-by-config-rule" [
 #
 # POST /
 # operationId: DescribeComplianceByResource
-export def "api get-compliance-by-resource" [
+export def "describe-compliance-by-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1353,7 +1353,7 @@ export def "api get-compliance-by-resource" [
 #
 # POST /
 # operationId: DescribeConfigRuleEvaluationStatus
-export def "api get-config-rule-evaluation-status" [
+export def "describe-config-rule-evaluation-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1406,7 +1406,7 @@ export def "api get-config-rule-evaluation-status" [
 #
 # POST /
 # operationId: DescribeConfigRules
-export def "api get-config-rules" [
+export def "describe-config-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1458,7 +1458,7 @@ export def "api get-config-rules" [
 #
 # POST /
 # operationId: DescribeConfigurationAggregatorSourcesStatus
-export def "api get-configuration-aggregator-sources-status" [
+export def "describe-configuration-aggregator-sources-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1512,7 +1512,7 @@ export def "api get-configuration-aggregator-sources-status" [
 #
 # POST /
 # operationId: DescribeConfigurationAggregators
-export def "api get-configuration-aggregators" [
+export def "describe-configuration-aggregators" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1565,7 +1565,7 @@ export def "api get-configuration-aggregators" [
 #
 # POST /
 # operationId: DescribeConfigurationRecorderStatus
-export def "api get-configuration-recorder-status" [
+export def "describe-configuration-recorder-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1613,7 +1613,7 @@ export def "api get-configuration-recorder-status" [
 #
 # POST /
 # operationId: DescribeConfigurationRecorders
-export def "api get-configuration-recorders" [
+export def "describe-configuration-recorders" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1661,7 +1661,7 @@ export def "api get-configuration-recorders" [
 #
 # POST /
 # operationId: DescribeConformancePackCompliance
-export def "api get-conformance-pack-compliance" [
+export def "describe-conformance-pack-compliance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1715,7 +1715,7 @@ export def "api get-conformance-pack-compliance" [
 #
 # POST /
 # operationId: DescribeConformancePackStatus
-export def "api get-conformance-pack-status" [
+export def "describe-conformance-pack-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1768,7 +1768,7 @@ export def "api get-conformance-pack-status" [
 #
 # POST /
 # operationId: DescribeConformancePacks
-export def "api get-conformance-packs" [
+export def "describe-conformance-packs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1821,7 +1821,7 @@ export def "api get-conformance-packs" [
 #
 # POST /
 # operationId: DescribeDeliveryChannelStatus
-export def "api get-delivery-channel-status" [
+export def "describe-delivery-channel-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1869,7 +1869,7 @@ export def "api get-delivery-channel-status" [
 #
 # POST /
 # operationId: DescribeDeliveryChannels
-export def "api get-delivery-channels" [
+export def "describe-delivery-channels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1917,7 +1917,7 @@ export def "api get-delivery-channels" [
 #
 # POST /
 # operationId: DescribeOrganizationConfigRuleStatuses
-export def "api get-organization-config-rule-statuses" [
+export def "describe-organization-config-rule-statuses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1970,7 +1970,7 @@ export def "api get-organization-config-rule-statuses" [
 #
 # POST /
 # operationId: DescribeOrganizationConfigRules
-export def "api get-organization-config-rules" [
+export def "describe-organization-config-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2023,7 +2023,7 @@ export def "api get-organization-config-rules" [
 #
 # POST /
 # operationId: DescribeOrganizationConformancePackStatuses
-export def "api get-organization-conformance-pack-statuses" [
+export def "describe-organization-conformance-pack-statuses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2076,7 +2076,7 @@ export def "api get-organization-conformance-pack-statuses" [
 #
 # POST /
 # operationId: DescribeOrganizationConformancePacks
-export def "api get-organization-conformance-packs" [
+export def "describe-organization-conformance-packs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2129,7 +2129,7 @@ export def "api get-organization-conformance-packs" [
 #
 # POST /
 # operationId: DescribePendingAggregationRequests
-export def "api get-pending-aggregation-requests" [
+export def "describe-pending-aggregation-requests" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2181,7 +2181,7 @@ export def "api get-pending-aggregation-requests" [
 #
 # POST /
 # operationId: DescribeRemediationConfigurations
-export def "api get-remediation-configurations" [
+export def "describe-remediation-configurations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2229,7 +2229,7 @@ export def "api get-remediation-configurations" [
 #
 # POST /
 # operationId: DescribeRemediationExceptions
-export def "api get-remediation-exceptions" [
+export def "describe-remediation-exceptions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2283,7 +2283,7 @@ export def "api get-remediation-exceptions" [
 #
 # POST /
 # operationId: DescribeRemediationExecutionStatus
-export def "api get-remediation-execution-status" [
+export def "describe-remediation-execution-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2337,7 +2337,7 @@ export def "api get-remediation-execution-status" [
 #
 # POST /
 # operationId: DescribeRetentionConfigurations
-export def "api get-retention-configurations" [
+export def "describe-retention-configurations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2388,7 +2388,7 @@ export def "api get-retention-configurations" [
 #
 # POST /
 # operationId: GetAggregateComplianceDetailsByConfigRule
-export def "api get-aggregate-compliance-details-by-config-rule" [
+export def "get-aggregate-compliance-details-by-config-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2445,7 +2445,7 @@ export def "api get-aggregate-compliance-details-by-config-rule" [
 #
 # POST /
 # operationId: GetAggregateConfigRuleComplianceSummary
-export def "api get-aggregate-config-rule-compliance-summary" [
+export def "get-aggregate-config-rule-compliance-summary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2500,7 +2500,7 @@ export def "api get-aggregate-config-rule-compliance-summary" [
 #
 # POST /
 # operationId: GetAggregateConformancePackComplianceSummary
-export def "api get-aggregate-conformance-pack-compliance-summary" [
+export def "get-aggregate-conformance-pack-compliance-summary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2555,7 +2555,7 @@ export def "api get-aggregate-conformance-pack-compliance-summary" [
 #
 # POST /
 # operationId: GetAggregateDiscoveredResourceCounts
-export def "api get-aggregate-discovered-resource-counts" [
+export def "get-aggregate-discovered-resource-counts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2610,7 +2610,7 @@ export def "api get-aggregate-discovered-resource-counts" [
 #
 # POST /
 # operationId: GetAggregateResourceConfig
-export def "api get-aggregate-resource-config" [
+export def "get-aggregate-resource-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2659,7 +2659,7 @@ export def "api get-aggregate-resource-config" [
 #
 # POST /
 # operationId: GetComplianceDetailsByConfigRule
-export def "api get-compliance-details-by-config-rule" [
+export def "get-compliance-details-by-config-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2713,7 +2713,7 @@ export def "api get-compliance-details-by-config-rule" [
 #
 # POST /
 # operationId: GetComplianceDetailsByResource
-export def "api get-compliance-details-by-resource" [
+export def "get-compliance-details-by-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2767,7 +2767,7 @@ export def "api get-compliance-details-by-resource" [
 #
 # POST /
 # operationId: GetComplianceSummaryByConfigRule
-export def "api get-compliance-summary-by-config-rule" [
+export def "get-compliance-summary-by-config-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2811,7 +2811,7 @@ export def "api get-compliance-summary-by-config-rule" [
 #
 # POST /
 # operationId: GetComplianceSummaryByResourceType
-export def "api get-compliance-summary-by-resource-type" [
+export def "get-compliance-summary-by-resource-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2859,7 +2859,7 @@ export def "api get-compliance-summary-by-resource-type" [
 #
 # POST /
 # operationId: GetConformancePackComplianceDetails
-export def "api get-conformance-pack-compliance-details" [
+export def "get-conformance-pack-compliance-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2913,7 +2913,7 @@ export def "api get-conformance-pack-compliance-details" [
 #
 # POST /
 # operationId: GetConformancePackComplianceSummary
-export def "api get-conformance-pack-compliance-summary" [
+export def "get-conformance-pack-compliance-summary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2966,7 +2966,7 @@ export def "api get-conformance-pack-compliance-summary" [
 #
 # POST /
 # operationId: GetCustomRulePolicy
-export def "api get-custom-rule-policy" [
+export def "get-custom-rule-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3014,7 +3014,7 @@ export def "api get-custom-rule-policy" [
 #
 # POST /
 # operationId: GetDiscoveredResourceCounts
-export def "api get-discovered-resource-counts" [
+export def "get-discovered-resource-counts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3067,7 +3067,7 @@ export def "api get-discovered-resource-counts" [
 #
 # POST /
 # operationId: GetOrganizationConfigRuleDetailedStatus
-export def "api get-organization-config-rule-detailed-status" [
+export def "get-organization-config-rule-detailed-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3121,7 +3121,7 @@ export def "api get-organization-config-rule-detailed-status" [
 #
 # POST /
 # operationId: GetOrganizationConformancePackDetailedStatus
-export def "api get-organization-conformance-pack-detailed-status" [
+export def "get-organization-conformance-pack-detailed-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3175,7 +3175,7 @@ export def "api get-organization-conformance-pack-detailed-status" [
 #
 # POST /
 # operationId: GetOrganizationCustomRulePolicy
-export def "api get-organization-custom-rule-policy" [
+export def "get-organization-custom-rule-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3223,7 +3223,7 @@ export def "api get-organization-custom-rule-policy" [
 #
 # POST /
 # operationId: GetResourceConfigHistory
-export def "api get-resource-config-history" [
+export def "get-resource-config-history" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3280,7 +3280,7 @@ export def "api get-resource-config-history" [
 #
 # POST /
 # operationId: GetResourceEvaluationSummary
-export def "api get-resource-evaluation-summary" [
+export def "get-resource-evaluation-summary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3328,7 +3328,7 @@ export def "api get-resource-evaluation-summary" [
 #
 # POST /
 # operationId: GetStoredQuery
-export def "api get-stored-list" [
+export def "get-stored-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3376,7 +3376,7 @@ export def "api get-stored-list" [
 #
 # POST /
 # operationId: ListAggregateDiscoveredResources
-export def "api list-aggregate-discovered-resources" [
+export def "list-aggregate-discovered-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3431,7 +3431,7 @@ export def "api list-aggregate-discovered-resources" [
 #
 # POST /
 # operationId: ListConformancePackComplianceScores
-export def "api list-conformance-pack-compliance-scores" [
+export def "list-conformance-pack-compliance-scores" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3486,7 +3486,7 @@ export def "api list-conformance-pack-compliance-scores" [
 #
 # POST /
 # operationId: ListDiscoveredResources
-export def "api list-discovered-resources" [
+export def "list-discovered-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3542,7 +3542,7 @@ export def "api list-discovered-resources" [
 #
 # POST /
 # operationId: ListResourceEvaluations
-export def "api list-resource-evaluations" [
+export def "list-resource-evaluations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3595,7 +3595,7 @@ export def "api list-resource-evaluations" [
 #
 # POST /
 # operationId: ListStoredQueries
-export def "api list-stored-queries" [
+export def "list-stored-queries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3647,7 +3647,7 @@ export def "api list-stored-queries" [
 #
 # POST /
 # operationId: ListTagsForResource
-export def "api list-tags-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3700,7 +3700,7 @@ export def "api list-tags-for-resource" [
 #
 # POST /
 # operationId: PutAggregationAuthorization
-export def "api update-aggregation-authorization" [
+export def "put-aggregation-authorization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3750,7 +3750,7 @@ export def "api update-aggregation-authorization" [
 #
 # POST /
 # operationId: PutConfigRule
-export def "api update-config-rule" [
+export def "put-config-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3799,7 +3799,7 @@ export def "api update-config-rule" [
 #
 # POST /
 # operationId: PutConfigurationAggregator
-export def "api update-configuration-aggregator" [
+export def "put-configuration-aggregator" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3850,7 +3850,7 @@ export def "api update-configuration-aggregator" [
 #
 # POST /
 # operationId: PutConfigurationRecorder
-export def "api update-configuration-recorder" [
+export def "put-configuration-recorder" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3898,7 +3898,7 @@ export def "api update-configuration-recorder" [
 #
 # POST /
 # operationId: PutConformancePack
-export def "api update-conformance-pack" [
+export def "put-conformance-pack" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3952,7 +3952,7 @@ export def "api update-conformance-pack" [
 #
 # POST /
 # operationId: PutDeliveryChannel
-export def "api update-delivery-channel" [
+export def "put-delivery-channel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4000,7 +4000,7 @@ export def "api update-delivery-channel" [
 #
 # POST /
 # operationId: PutEvaluations
-export def "api update-evaluations" [
+export def "put-evaluations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4050,7 +4050,7 @@ export def "api update-evaluations" [
 #
 # POST /
 # operationId: PutExternalEvaluation
-export def "api update-external-evaluation" [
+export def "put-external-evaluation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4099,7 +4099,7 @@ export def "api update-external-evaluation" [
 #
 # POST /
 # operationId: PutOrganizationConfigRule
-export def "api update-organization-config-rule" [
+export def "put-organization-config-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4151,7 +4151,7 @@ export def "api update-organization-config-rule" [
 #
 # POST /
 # operationId: PutOrganizationConformancePack
-export def "api update-organization-conformance-pack" [
+export def "put-organization-conformance-pack" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4205,7 +4205,7 @@ export def "api update-organization-conformance-pack" [
 #
 # POST /
 # operationId: PutRemediationConfigurations
-export def "api update-remediation-configurations" [
+export def "put-remediation-configurations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4253,7 +4253,7 @@ export def "api update-remediation-configurations" [
 #
 # POST /
 # operationId: PutRemediationExceptions
-export def "api update-remediation-exceptions" [
+export def "put-remediation-exceptions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4304,7 +4304,7 @@ export def "api update-remediation-exceptions" [
 #
 # POST /
 # operationId: PutResourceConfig
-export def "api update-resource-config" [
+export def "put-resource-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4357,7 +4357,7 @@ export def "api update-resource-config" [
 #
 # POST /
 # operationId: PutRetentionConfiguration
-export def "api update-retention-configuration" [
+export def "put-retention-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4405,7 +4405,7 @@ export def "api update-retention-configuration" [
 #
 # POST /
 # operationId: PutStoredQuery
-export def "api update-stored-list" [
+export def "put-stored-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4454,7 +4454,7 @@ export def "api update-stored-list" [
 #
 # POST /
 # operationId: SelectAggregateResourceConfig
-export def "api create-select-aggregate-resource-config" [
+export def "select-aggregate-resource-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4509,7 +4509,7 @@ export def "api create-select-aggregate-resource-config" [
 #
 # POST /
 # operationId: SelectResourceConfig
-export def "api create-select-resource-config" [
+export def "select-resource-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4562,7 +4562,7 @@ export def "api create-select-resource-config" [
 #
 # POST /
 # operationId: StartConfigRulesEvaluation
-export def "api start-config-rules-evaluation" [
+export def "start-config-rules-evaluation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4610,7 +4610,7 @@ export def "api start-config-rules-evaluation" [
 #
 # POST /
 # operationId: StartConfigurationRecorder
-export def "api start-configuration-recorder" [
+export def "start-configuration-recorder" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4658,7 +4658,7 @@ export def "api start-configuration-recorder" [
 #
 # POST /
 # operationId: StartRemediationExecution
-export def "api start-remediation-execution" [
+export def "start-remediation-execution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4707,7 +4707,7 @@ export def "api start-remediation-execution" [
 #
 # POST /
 # operationId: StartResourceEvaluation
-export def "api start-resource-evaluation" [
+export def "start-resource-evaluation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4759,7 +4759,7 @@ export def "api start-resource-evaluation" [
 #
 # POST /
 # operationId: StopConfigurationRecorder
-export def "api stop-configuration-recorder" [
+export def "stop-configuration-recorder" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4807,7 +4807,7 @@ export def "api stop-configuration-recorder" [
 #
 # POST /
 # operationId: TagResource
-export def "api tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4856,7 +4856,7 @@ export def "api tag-resource" [
 #
 # POST /
 # operationId: UntagResource
-export def "api untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
